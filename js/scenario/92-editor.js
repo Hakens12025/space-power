@@ -1,4 +1,32 @@
 "use strict";
+/* RF1: 合并 js/03-ships.js L184-201(applyClsTier),L274-282(edit* 全局) + js/19-editor.js 全文。纯移动无逻辑改动。 */
+function applyClsTier(s,cls,tier){ // TIER1 就地改一艘现有舰的舰种/分级并重刷全部烘焙字段。编辑器(P3)改舰种或分级必须走这里——直接写 s.cls 会留下与所选舰种不符的 hp/ciws/传感器,而编辑器的范围圈读的正是这些实例字段
+  if(!s)return s;
+  const c=normCls(cls||s.cls);
+  const t=(tier===1||tier===2||tier===3)?tier:2;
+  const st=shipStats(c,t);
+  s.cls=c; s.tier=t;
+  s.thrust=st.thrust; s.turnRate=st.turnRate; s.speedGears=(st.speedGears||[0,250,500,800,-1]).slice();
+  s.hp=st.hp; s.maxHp=st.hp; // 编辑器里的舰是待放置的满血单位,不做按比例保血——这个函数只服务编辑期,不要拿去改战斗中的舰
+  s.ammo=st.ammo; s.macDmg=st.macDmg; s.missDmg=st.missDmg; s.macReload=st.mac; s.macCd=0;
+  s.interceptor=st.inter||0; s.interMax=st.inter||0;
+  s.cells=(st.cells||4); s.cellTimer=Array(st.cells||4).fill(0);
+  s.guideChan=st.guideChan||4; s.chaffRate=(st.chaffRate!==undefined?st.chaffRate:0.25); s.value=st.value; // TIER1 chaffRate 口径与 makeShip 一致:0 是合法值,不能被 || 吞掉
+  s.ciws={outer:st.outer,outerIntercept:st.outerIntercept,inner:st.inner,innerIntercept:st.innerIntercept};
+  s.sensorRange=st.sensorRange; s.detPower=st.detPower; s.esmQual=st.esmQual; s.sigBase=st.sigBase;
+  s.rcs=st.rcs; s.pPing=st.pPing; s.floorIr=st.floorIr; s.floorEsm=st.floorEsm; s.ecmPower=(st.ecmPower!==undefined?st.ecmPower:0.4); // TIER1 ecmPower 口径与 makeShip 一致:0 是合法值
+  s.beaconMax=(st.beacon||0); s.beaconCount=(st.beacon||0);
+  return s;
+}
+let editMode=false, editScene=null;   // 场景编辑器:编辑中标记 + 编辑副本 {name,ships:[ship],enemy:[ship]}
+let editSel=null;                     // 编辑器选中 {side:'ships'|'enemy',idx}
+let editPlace=null;                   // 待放置 {side,cls,px,py}
+let editDrag=null;                    // 拖拽 {side,idx}
+let editSetTgt=null;                  // 设定动靶目标 {side,idx,s}
+let editWpDrag=null;                  // 编辑器:拖拽动靶路径点 {idx,wpIdx}
+let editAddWp=null;                   // 编辑器:连续添加路径点 {side,idx,s}
+let editPrevRun=true;                 // 进入编辑前 running
+let editTier=2;                       // TIER1 编辑器当前放置分级(1/2/3,默认 T2=基准档)。放这里而不是 19-editor.js,是与 editMode/editScene/editPlace 等编辑器全局的既有归属保持一致
 /* ================= 场景编辑器 ================= */
 const editorPanel=document.getElementById('editorPanel');
 function loadCustomScene(){try{const r=localStorage.getItem('sp_custom_scene');if(r)customScene=JSON.parse(r);}catch(e){}}

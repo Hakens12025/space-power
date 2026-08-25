@@ -1,4 +1,5 @@
 "use strict";
+/* RF1: 拆自 js/18-replay.js 全文,仅去掉 L60-62 的 adminMode/selfPlay/selfPlayPrevAdmin 声明(已收编 core/01-state)。其余纯移动。 */
 /* ================= 回放 / 倒带(快照式) ================= */
 const rpBar=document.getElementById('replayBar'),rpTime=document.getElementById('rpTime'),rpSlider=document.getElementById('rpSlider'),rpExit=document.getElementById('rpExit');
 function fmtT(t){const m=String(Math.floor(t/60)).padStart(2,'0'),s=String(Math.floor(t%60)).padStart(2,'0');return m+':'+s;}
@@ -57,9 +58,6 @@ on('btnEnv','pointerdown',e=>{if(e.button!==0)return;e.preventDefault();renderSc
   const open=scenePanel.style.display==='none';
   if(open){const tp=document.getElementById('trPanel');if(tp)tp.style.display='none';} // UI1 场景菜单与靶场面板同占左轨,开菜单时先收起靶场面板
   scenePanel.style.display=open?'block':'none';});
-let adminMode=true; // 管理员模式:默认全显(敌方数据/武器轨迹)
-let selfPlay=false; // 左右脑互搏模式(v124):关敌军AI,双方全玩家操控(自身强制GM全显)
-let selfPlayPrevAdmin=true; // KIMI146:进入互搏前的GM状态(关闭时还原,原永久留在GM全显)
 on('btnAdmin','pointerdown',e=>{if(e.button!==0)return;e.preventDefault();toggleAdmin();}); // 顶栏按钮已弃用,安全挂载
 on('btnSelfPlay','pointerdown',e=>{if(e.button!==0)return;e.preventDefault();toggleSelfPlay();});
 

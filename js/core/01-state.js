@@ -1,4 +1,5 @@
 "use strict";
+/* RF1: 拆自 js/02-state.js 全文,并收编 09 的 cv,ctx 与 18-replay 的 adminMode/selfPlay/selfPlayPrevAdmin(跨系统全局集中声明)。纯移动无逻辑改动。 */
 /* ================= 全局状态 ================= */
 let ships=[], groups={}, selected=[], simTime=0, projectiles=[], victoryShown=false, defeatShown=false;
 let running=false, rate=1, acc=0, last=0; // 默认开局暂停,按空格开始
@@ -39,4 +40,7 @@ let pendingBeacon=null;               // 信标发射点选(侦察舰等待点�
 let pendingIntercept=null;            // 拦截弹主动发射点选({ship,mode:'fire'|'screen'})
 let demoRec={on:false,data:[],lastT:-1}; // demo录制:本局数据快照,导出供分析
 const RPL_INTERVAL=1.0;               // 每1秒存一次回放快照
-
+let cv,ctx; // RF1 收编自 09-render-bg.js:全局 canvas 句柄(声明集中到 core,init() 里赋值)
+let adminMode=true; // 管理员模式:默认全显(敌方数据/武器轨迹)。RF1 收编自 18-replay.js
+let selfPlay=false; // 左右脑互搏模式(v124):关敌军AI,双方全玩家操控(自身强制GM全显)。RF1 收编自 18-replay.js
+let selfPlayPrevAdmin=true; // KIMI146:进入互搏前的GM状态(关闭时还原,原永久留在GM全显)。RF1 收编自 18-replay.js

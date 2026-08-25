@@ -1,4 +1,5 @@
 "use strict";
+/* RF1: 拆自 js/04-targeting.js L2-79(网分配器/recomputeNetOff)+ js/07-missiles.js L87-103(NET_COMM/updateNets)。纯移动无逻辑改动。 */
 /* ================= DS147 智能目标分配器:网按"目标所需网数"协同 ================= */
 let netAllocT=0; // DS147:分配器节流计时(每0.5s平衡一次)
 function netDemand(t){ // 目标需要几个网来打(舰种威胁:巡洋核心3网/护卫2网/巡游1网)
@@ -77,34 +78,20 @@ function recomputeNetOff(p,target){ // v135:目标转移后重算组网偏移(�
   }
   p.netOffR=R;p.netD0=D0;
 }
-function applyDamage(s,dmg,src,kind){ // RANGE1 加第 4 形参 kind('mac'/'missile'):靶场按武器分栏统计伤害,两个调用点(07-missiles 的 MAC 命中与导弹组命中)各传一个字面量
-  if(s.dead)return;
-  if(s.invuln){ // RANGE1 靶血量无限:守卫放在这里而不是两个调用点——上游那条完整命中结算链(扇面统计/近防过载/内圈近防/干扰弹掷骰/survHit×missDmg×扇面倍增)照常跑完,只是最后一步不扣血,而那条链正是靶场要测的东西
-    if(dmg>0){
-      if(typeof rangeTally==='function')rangeTally(s,dmg,kind,src); // 伤害不落到 hp,落到统计
-      s.roeCd=8; // 保留 ROE tight 语义(受击还击冷却),将来想做"会还击的活靶"不用再动这里
+const NET_COMM=150000; // v125:网内通信距离(15万)——断网超过此距离计时自毁
+function updateNets(dt){ // v125:网内连接检查(仅地雷网)——雷组离网中心>15万=断网,计时10s没回自毁;清理空网(飞行攻击不要求组间通信)
+  for(const [netId,net] of nets){
+    const members=net.groups.map(g=>projectiles.find(p=>p.group===g&&p.type==='missile'&&!p.done&&p.mine)).filter(Boolean);
+    if(members.length<=1){continue;} // DS160:v125遗留bug——此处删网会误删普通攻击网(members只算雷导弹,攻击网恒0→每tick被删→网卡片/DS147分配器/组网转移全失效);删除交给下方alive检查(1129)
+    let cx=0,cy=0,cz=0;
+    members.forEach(p=>{cx+=p.pos[0];cy+=p.pos[1];cz+=p.pos[2];});
+    cx/=members.length;cy/=members.length;cz/=members.length;
+    for(const p of members){
+      if(V.len(V.sub(p.pos,[cx,cy,cz]))>NET_COMM){ // 离网中心超通信距离=断网
+        p.netBroken=(p.netBroken||0)+dt;
+        if(p.netBroken>10){p.done=true;if(!(p.shooter&&p.shooter.side==='red'&&!adminMode))log(`🕸 网${netId}导弹断网超10s自毁`,'');}
+      }else p.netBroken=0; // 回网(飞回中心)恢复
     }
-    return;
   }
-  s.hp-=dmg;
-  if(dmg>0)s.roeCd=8; // v125 ROE:受击触发还击冷却(tight克制模式被攻击才还击)
-  if(s.hp<=0){
-    s.hp=0;s.dead=true;s.orders=[];s.formation=null;s.brake=false;
-    s.vel=[0,0,0];s.flame=0;s.sideFlame=0;s.turnAim=null;s.speedCmd=null;s.turnTarget=null; // 残骸冻结,不再移动
-    if(s.lockedTarget)s.lockedTarget=null;
-    selected=selected.filter(id=>id!==s.id); // 残骸不可选中
-    spawnHit(s.pos,'missile'); // v127:击毁生成大爆炸特效
-    const bh=hitFX[hitFX.length-1];if(bh)bh.big=true;
-    log(`☠ ${s.name} 被击毁,化作残骸!`,'hit');
-  }
+  for(const [netId,net] of nets){const alive=net.groups.some(g=>projectiles.some(p=>p.group===g&&p.type==='missile'&&!p.done));if(!alive)nets.delete(netId);}
 }
-function selectedShips(){return selected.map(id=>ships.find(s=>s.id===id)).filter(Boolean);}
-function controlledShips(){ // 可控制目标:GM(管理员)下敌我皆可,普通模式只控制我方
-  const sel=selectedShips().filter(s=>!s.dead);
-  return adminMode?sel:sel.filter(s=>s.side==='blue');
-}
-function engageable(t,sh,minQ){ // 能否攻击:敌方 + 攻击方阵营已探测到足够质量(minQ:2识别/3火控,默认2)
-  minQ=minQ||2;
-  return t&&!t.dead&&t.side!==sh.side&&(sh.side==='blue'?t.litBlue:t.litRed)>=minQ;
-}
-

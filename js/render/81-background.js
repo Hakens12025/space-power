@@ -1,6 +1,6 @@
 "use strict";
+/* RF1: 拆自 js/09-render-bg.js 全文,仅去掉 L3 的 cv,ctx 声明(已收编 core/01-state)。其余纯移动。 */
 /* ================= 渲染 ================= */
-let cv,ctx;
 let gridStepCache=null; // 网格步长迟滞缓存(v111):一格在屏幕 26~140px 内保持不变,缩放幅度大才跳档
 function drawGrid(){
   // 选"好看"的网格间距(世界 km),带迟滞——不要稍微一滚就变比例

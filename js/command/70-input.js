@@ -1,4 +1,5 @@
 "use strict";
+/* RF1: 拆自 js/13-input.js 全文 + js/04-targeting.js L101-109(选择谓词 selectedShips/controlledShips/engageable)。纯移动无逻辑改动。 */
 /* ================= 输入 ================= */
 function shipAt(sx,sy){
   const w=worldAt(sx,sy);
@@ -394,3 +395,12 @@ function onContextMenu(e){e.preventDefault();}
 function onWheel(e){e.preventDefault();zoomAt(e.clientX,e.clientY,Math.pow(1.0016,-e.deltaY));}
 window.addEventListener('blur',()=>{panning=null;selDrag=null;rmbClick=null;dragOrder=null;clearTimeout(rmbTimer);rmbTimer=null;for(const k in camKeys)camKeys[k]=false;}); // v119:失焦清相机键位,防切窗后镜头卡移动
 
+function selectedShips(){return selected.map(id=>ships.find(s=>s.id===id)).filter(Boolean);}
+function controlledShips(){ // 可控制目标:GM(管理员)下敌我皆可,普通模式只控制我方
+  const sel=selectedShips().filter(s=>!s.dead);
+  return adminMode?sel:sel.filter(s=>s.side==='blue');
+}
+function engageable(t,sh,minQ){ // 能否攻击:敌方 + 攻击方阵营已探测到足够质量(minQ:2识别/3火控,默认2)
+  minQ=minQ||2;
+  return t&&!t.dead&&t.side!==sh.side&&(sh.side==='blue'?t.litBlue:t.litRed)>=minQ;
+}
