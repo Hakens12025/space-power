@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>舰体图标预览</title>
+<style>
+body{background:#05070c;color:#c7d0dc;font:13px "Microsoft YaHei",sans-serif;margin:0;padding:18px}
+h2{font-size:14px;color:#4aa8ff;letter-spacing:1px;margin:0 0 4px}
+p.n{color:#5f7083;font-size:12px;margin:0 0 14px}
+canvas{display:block;border:1px solid #1c2634;background:#05070c}
+</style>
+</head>
+<body>
+<h2>舰体图标系统 · 4 舰种 × T1/T2/T3</h2>
+<p class="n">上区=游戏内实际尺寸(屏幕固定 px) · 下区=6× 放大看轮廓 · 船头朝右</p>
+<canvas id="c"></canvas>
+<script src="js/10a-ship-hulls.js"></script>
+<script>
+const c=document.getElementById('c'),g=c.getContext('2d');
+const DPR=2; const W=980,H=820;
+c.width=W*DPR;c.height=H*DPR;c.style.width=W+'px';c.style.height=H+'px';g.setTransform(DPR,0,0,DPR,0,0);
+const BLUE='#5aa7ff', RED='#ff6b6b';
+function label(t,x,y,col,sz){g.fillStyle=col||'#5f7083';g.font=(sz||11)+'px "Microsoft YaHei"';g.textAlign='center';g.textBaseline='middle';g.fillText(t,x,y);}
+function cell(cls,tier,x,y,color,mode,mag,ang){
+  g.save();g.translate(x,y);g.scale(mag,mag);g.rotate(ang||0);
+  drawHull(g,cls,tier,color,mode);
+  g.restore();
+}
+// ---- 上区:实际尺寸 ----
+let y0=52;
+label('实际尺寸(1×)',60,y0-26,'#4aa8ff',12);
+HULL_ORDER.concat(['SC']).forEach((cls,ci)=>{
+  const x=150+ci*168;
+  label(HULL_LABEL[cls]+'  '+cls,x+52,y0-26,'#c7d0dc',12);
+  TIER_ORDER.forEach((t,ti)=>{
+    const cx=x+ti*52, cy=y0+8;
+    cell(cls,t,cx,cy,BLUE,'fill',1,0);
+    label('T'+t,cx,cy+26);
+  });
+});
+// 敌方色 + 残骸
+label('敌方色',60,y0+78);
+HULL_ORDER.concat(['SC']).forEach((cls,ci)=>{
+  const x=150+ci*168;
+  TIER_ORDER.forEach((t,ti)=>cell(cls,t,x+ti*52,y0+78,RED,'fill',1,0));
+});
+label('残骸',60,y0+126);
+HULL_ORDER.concat(['SC']).forEach((cls,ci)=>{
+  const x=150+ci*168;
+  TIER_ORDER.forEach((t,ti)=>cell(cls,t,x+ti*52,y0+126,BLUE,'outline',1,0));
+});
+// ---- 下区:6× 放大 ----
+let y1=270;
+g.strokeStyle='#1c2634';g.beginPath();g.moveTo(20,y1-40);g.lineTo(W-20,y1-40);g.stroke();
+label('6× 放大 · 轮廓细节',110,y1-22,'#4aa8ff',12);
+HULL_ORDER.concat(['SC']).forEach((cls,ci)=>{
+  const cy=y1+42+ci*102;
+  label(HULL_LABEL[cls],54,cy,'#c7d0dc',13);
+  label(cls,54,cy+18,'#5f7083',11);
+  TIER_ORDER.forEach((t,ti)=>{
+    const cx=190+ti*180;
+    cell(cls,t,cx,cy,BLUE,'fill',6,0);
+    label('T'+t+'  '+hullSize(cls,t).toFixed(1)+'px',cx,cy+42);
+  });
+  // 旋转检查(45°/135°)
+  cell(cls,3,760,cy,BLUE,'fill',4,-Math.PI/4);
+  cell(cls,3,880,cy,RED,'fill',4,Math.PI*0.75);
+});
+label('航向检查',820,y1+8,'#5f7083',11);
+</script>
+</body>
+</html>

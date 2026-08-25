@@ -1,0 +1,320 @@
+/* ==================== UI1 设计 token(战术态势显示器) ====================
+   本轮只动 DOM/CSS(css/app.css + index.html),canvas 绘制层的战术色一行未改。
+   三条判据:平面硬边(圆角只留 2/3px、阴影只给菜单层)、颜色即语义(战场色只描述
+   战术要素,chrome 一律灰阶 + 一个强调蓝)、读数至上(等宽 + tabular-nums + 右对齐)。 */
+:root{
+  /* ---- 面(由底到浮) ---- */
+  --void:#05070c;                 /* 页面底,与 canvas 的 #05070c 同值 */
+  --srf-panel:rgba(9,13,20,.94);  /* 浮在战场上的常驻面板底,半透明保留态势透出 */
+  --srf-modal:#0a0e16;            /* 模态卡片实底 */
+  --srf-raise:#0e1420;            /* 抬起面:按钮/芯片静息底、面板标题栏 */
+  --srf-hover:#16202f;            /* hover 行/按钮底 */
+  --srf-sunk:#0a0f17;             /* 下陷面:输入框、列表卡片、进度槽 */
+  --srf-sel:#141a26;              /* 选中行底 */
+  --scrim:rgba(3,5,9,.72);        /* 模态遮罩,一个值收掉原来四种 */
+  /* ---- 线 ---- */
+  --line-hair:#141c27;            /* 面板内部行间分隔线 */
+  --line:#1e2836;                 /* 面板外框/区块分隔(旧 --line 提亮 2 阶) */
+  --line-ctl:#2a3a50;             /* 控件边框,与旧 --line2 同值 */
+  --line-acc:#34527d;             /* 控件 hover 边框,补上原来直接跳到 --acc 的中间档 */
+  /* ---- 字 ---- */
+  --txt-hi:#e8eef7;               /* 标题/强调正文,替原来 12 处 #fff(纯白在近黑底上晕光) */
+  --txt:#c7d0dc;                  /* 正文 */
+  --txt-read:#dbe6f2;             /* 读数专用,原来硬编码 10 次终于进 token */
+  --txt-dim:#6a7d92;              /* 标签/单位/次要说明(旧 --dim 提亮一档) */
+  --txt-mute:#46566a;             /* 禁用态、空状态 */
+  --ink:#03121e;                  /* 实心强调底上的字色,收掉 #04121f / #06121f 的分裂 */
+  /* ---- 强调(UI chrome 唯一彩色) ---- */
+  --acc:#5aa7ff;                  /* 与 canvas 友军蓝对齐;旧 --acc #4aa8ff 与 --blue 合并 */
+  --acc-lite:#9fd4ff;
+  --acc-dim:#2f6fae;
+  --acc-wash:rgba(90,167,255,.14);/* 持续开启态的淡填充:开=淡填充,按下=实心 */
+  /* ---- 战术语义色(只描述战术要素,不做 chrome) ---- */
+  --side-friend:#5aa7ff;
+  --side-hostile:#ff6b6b;
+  --side-neutral:#a0aab9;
+  --state-select:#ffe066;         /* 我选中的 / 我下的命令 */
+  --state-active:#54e0d0;         /* 功能开启 / 数据链在线 */
+  --state-warn:#ff9a55;           /* 告警 / 威胁范围 */
+  --state-ok:#3fbf6f;             /* 成功 / 命中 / 就绪 */
+  --state-danger:#ff6b6b;         /* 破坏性动作,刻意与敌方同值:红=敌意/危险是同一语义 */
+  --gold:#ffc94d;                 /* 特权模式(左右脑互搏)。UI1 修 bug:js/20-quickbar.js:19
+                                     引用 var(--gold),但全项目从未定义过,开关两态几乎无差别 */
+  /* ---- 间距阶 ---- */
+  --sp-0:2px; --sp-1:4px; --sp-2:6px; --sp-3:8px; --sp-4:12px; --sp-5:16px; --sp-6:24px;
+  /* ---- 圆角 / 边框 ---- */
+  --r-sm:2px;                     /* 控件:收掉原来 4/5/6 三档 */
+  --r-md:3px;                     /* 面板/卡片/模态:收掉原来 8/10 两档 */
+  --r-dot:50%;                    /* 状态圆点是唯一保留的圆形 */
+  --bw:1px;                       /* 全项目唯一边框宽度,粗细变化改用颜色阶 */
+  /* ---- 字体 / 字号 / 行高 / 字距 ---- */
+  --ff-ui:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;
+  --ff-mono:Consolas,"Cascadia Mono","DejaVu Sans Mono",monospace;
+  --fs-micro:10px; --fs-label:11px; --fs-body:12px; --fs-read:13px; --fs-title:15px; --fs-hero:18px;
+  --lh-tight:1.2; --lh-body:1.6;
+  --ls-label:.08em;               /* 中文标签字距展开 */
+  --ls-caps:.06em;                /* 拉丁缩写 MAC/ESM/EMCON/LADAR */
+  --ls-read:0;                    /* 读数强制零字距:等宽字加字距会破坏数字列对齐 */
+  /* ---- 层级阶(唤出者必须低于被唤出者) ---- */
+  --z-canvas:1;
+  --z-panel:10;                   /* 常驻信息面板 #fleet/#log */
+  --z-bar:20;                     /* 底部指令栏 #qbar */
+  --z-hud:30;                     /* 顶栏 */
+  --z-flyout:40;                  /* 由控件唤出的浮层 #trPanel/#editorPanel/#ringPanel */
+  --z-flyout-hi:45;               /* 同车道内的瞬态选择器,允许压住常驻工具面板(#scenePanel) */
+  --z-transient:50;               /* 临时状态条 #replayBar/#statusTip */
+  --z-menu:60;                    /* 右键菜单 */
+  --z-modal:70;                   /* 模态底层 #overlay(设置遮罩) */
+  --z-modal-hi:75;                /* UI1 模态上层 #exportBox/#specView。必须高于 --z-modal:三者同级时由 DOM 顺序决定胜负,
+                                     而 exportBox 在 index.html 里排在 overlay 之前 → 开着导出框按 Esc 唤出设置,导出框整个被压死点不到。
+                                     改前是 overlay:200 / exportBox:210,本轮 z 收敛把两者并成同级才出的回归 */
+  /* ---- 栅格(面板互不重叠的唯一真相源) ---- */
+  --gut:10px;                     /* 视口边距 */
+  --bar-h:48px;                   /* 顶栏实际高度 = 32px 按钮 + 8px*2 内边距 */
+  --rail-top:calc(var(--bar-h) + var(--gut)*2);   /* 侧轨顶边,替掉三处硬编码 top:58px */
+  --rail-w:260px;                 /* 侧轨统一宽度,收掉 250/250/290 三种 */
+  --log-h:150px;                  /* 事件框高度 */
+  --dock-b:206px;                 /* 底部指令栏预留净空:#log/#fleet/#replayBar 全部由它派生 */
+  --tray-b:calc(var(--dock-b) + var(--log-h) + var(--gut)); /* 底部居中浮层锚点(#replayBar) */
+  --sh-menu:0 6px 24px rgba(0,0,0,.55);  /* 唯一允许的阴影,只给菜单层及以上 */
+
+  /* ---- 旧 token 别名(勿删) ----
+     js 里 52 处内联 var(--x) 写入靠这段零改动跟随新色板;
+     等哪天把 js 的 style.color 改成 classList 之后才能删。 */
+  --bg:var(--void); --panel:var(--srf-modal); --line2:var(--line-ctl);
+  --dim:var(--txt-dim); --blue:var(--side-friend); --sel:var(--state-select);
+  --teal:var(--state-active); --org:var(--state-warn); --grn:var(--state-ok);
+  --red:var(--side-hostile);
+}
+@media (max-width:1100px){:root{--dock-b:240px}} /* UI1 窄视口:快捷栏必然多换一行,只改这一个值,#log/#fleet/#replayBar 一起让开 */
+@media (max-height:600px){:root{--log-h:110px}}   /* UI1 矮视口:事件框收一档,否则 --tray-b 会把回放条顶到任务提示上 */
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden}
+body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:var(--fs-read);line-height:var(--lh-tight);-webkit-font-smoothing:antialiased}
+#cv{position:fixed;inset:0;display:block;cursor:crosshair;z-index:var(--z-canvas)}
+
+/* ==================== UI1 控件基座 ====================
+   原来 .hbtn/.qbtn/.ed-btn/.ed-chip/.sbtn/.tr-tab/.tr-stp/#info .mini/.ring-btn 九套写法
+   在做同一件事。这里用「选择器列表」把公共部分合成一套,旧类名全部保留为别名,
+   所以 index.html 与 js 里的 class 一个都不用改。变体只写差量。 */
+.btn,.hbtn,.qbtn,.ed-btn,.ed-chip,.sbtn,.tr-tab,.tr-stp,.ring-btn,#info .mini{
+  display:inline-flex;align-items:center;justify-content:center;gap:var(--sp-1);
+  background:var(--srf-raise);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);
+  color:var(--txt-dim);font-family:var(--ff-ui);font-size:var(--fs-body);line-height:var(--lh-tight);
+  padding:var(--sp-2) var(--sp-3);cursor:pointer;user-select:none;touch-action:manipulation;
+  white-space:nowrap;pointer-events:auto}
+.btn:hover,.hbtn:hover,.qbtn:hover,.ed-btn:hover,.ed-chip:hover,.sbtn:hover,.tr-tab:hover,.tr-stp:hover,.ring-btn:hover,#info .mini:hover{
+  color:var(--txt-hi);border-color:var(--line-acc);background:var(--srf-hover)}
+/* 按下 = 实心强调(手指正按着),与下面的「开启态」是两件事 */
+.btn:active,.hbtn:active,.qbtn:active,.ed-btn:active,.ed-chip:active,.sbtn:active,.tr-tab:active,.tr-stp:active,.ring-btn:active,#info .mini:active{
+  background:var(--acc);border-color:var(--acc);color:var(--ink)}
+/* 开启态 = 淡填充 + 彩边彩字(功能持续开着)。原项目根本没有这一态,
+   开/关只靠 js 写内联 style.color,于是「按下」比「开着」还醒目 */
+.btn.on,.ed-chip.on,.tr-tab.on{background:var(--acc-wash);border-color:var(--acc);color:var(--acc)}
+.btn.on:hover,.ed-chip.on:hover,.tr-tab.on:hover{background:var(--srf-hover);border-color:var(--acc);color:var(--acc-lite)}
+.btn.is-dis,.qbtn.is-dis,.ed-btn.is-dis{color:var(--txt-mute);border-color:var(--line);cursor:default;pointer-events:none}
+
+/* --- 变体 --- */
+/* 图标钮:UI1 从死板的 32×32 改成 min-width + auto 宽,修 REC/GM/🧠互搏 三个文字钮撑破方框 */
+.hbtn{min-width:32px;height:32px;padding:0 var(--sp-2);font-size:var(--fs-title);line-height:1;flex:none;position:relative}
+/* 密集小钮 */
+.qbtn,.ring-btn{padding:var(--sp-1) var(--sp-3);flex:none}
+.ed-chip{background:none;font-size:var(--fs-label);padding:var(--sp-0) var(--sp-2);flex:none}
+.tr-stp{width:20px;height:20px;padding:0;flex:none}
+/* 整宽钮:.ring-btn 原来在 css 里零规则,10 个范围圈开关全靠 .qbtn 兜底 + js 写内联色 */
+.ring-btn{width:100%;justify-content:flex-start;text-align:left}
+/* 网格钮 */
+.ed-btn{flex:1;min-width:46%;padding:var(--sp-2) var(--sp-1)}
+/* 页签:要 ellipsis 所以退回 block */
+.tr-tab{display:block;flex:1;padding:var(--sp-1) var(--sp-0);text-align:center;overflow:hidden;text-overflow:ellipsis}
+#info .mini{padding:var(--sp-1) var(--sp-3)}
+/* 主行动钮:原 .sbtn 无边框、既无 :hover 也无 :active —— 全项目唯一没有交互反馈的主按钮 */
+.sbtn,.ed-btn.acc{background:var(--acc);border-color:var(--acc);color:var(--ink);font-weight:bold}
+.sbtn{padding:var(--sp-2) var(--sp-5)}
+.sbtn:hover,.ed-btn.acc:hover{background:var(--acc-lite);border-color:var(--acc-lite);color:var(--ink)}
+.sbtn:active,.ed-btn.acc:active{background:var(--acc-dim);border-color:var(--acc-dim);color:var(--txt-hi)}
+/* 幽灵钮 */
+.sbtn.ghost{background:none;border-color:var(--line-ctl);color:var(--txt-dim);font-weight:normal}
+.sbtn.ghost:hover{background:var(--srf-hover);border-color:var(--line-acc);color:var(--txt-hi)} /* 原写法把 border-color 设成它自己原值,是一条空转声明 */
+/* 危险钮:.qbtn.qstop 与 .ed-btn.danger 原来是同一配方写两遍 */
+.qbtn.qstop,.ed-btn.danger,.sbtn.danger{background:var(--srf-raise);border-color:var(--state-danger);color:var(--state-danger)}
+.qbtn.qstop:hover,.ed-btn.danger:hover,.sbtn.danger:hover{background:var(--state-danger);border-color:var(--state-danger);color:var(--ink)}
+
+/* ==================== UI1 输入面 ====================
+   原来 .ed-name input / .ed-sel .row input / #qSpd / .krow .k / textarea 各写一遍同一配方 */
+.field,.ed-name input,.ed-sel .row input,#qSpd,#qSalvo,.krow .k,#exportBox textarea{
+  background:var(--srf-sunk);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);
+  color:var(--txt-read);font-family:var(--ff-mono);font-size:var(--fs-body);
+  letter-spacing:var(--ls-read);font-variant-numeric:tabular-nums;
+  padding:var(--sp-1) var(--sp-2);outline:none;min-width:0}
+.field:focus,.ed-name input:focus,.ed-sel .row input:focus,#qSpd:focus,#qSalvo:focus,#exportBox textarea:focus{border-color:var(--acc)}
+.krow .k:hover{border-color:var(--line-acc);color:var(--txt-hi)}
+
+/* ==================== UI1 读数行 ====================
+   中文标签(YaHei 11px 暗灰)+ 等宽读数(Consolas 12px 亮灰,右对齐 tabular-nums)。
+   不靠加粗分层,靠字形 + 亮度分层 —— 11px 中文伪粗会糊成一团。 */
+.kv,#info .row{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:var(--sp-1);padding:1px 0;font-size:var(--fs-body)}
+#info .row:has(.mini){justify-content:flex-start} /* 指令钮行左起排,不要被 space-between 抻开 */
+.kv>.k,#info .row b{font-family:var(--ff-ui);font-size:var(--fs-label);letter-spacing:var(--ls-label);color:var(--txt-dim);font-weight:normal;flex:none}
+.kv>.v,#info .row span{font-family:var(--ff-mono);font-size:var(--fs-body);letter-spacing:var(--ls-read);font-variant-numeric:tabular-nums;color:var(--txt-read);text-align:right}
+.kv .u{font-size:var(--fs-micro);color:var(--txt-dim);margin-left:2px}
+
+/* ---------- 面板通用 ---------- */
+.panel{position:fixed;background:var(--srf-panel);border:var(--bw) solid var(--line);border-radius:var(--r-md);overflow:hidden;z-index:var(--z-panel);pointer-events:auto}
+.panel .p-title{display:flex;justify-content:space-between;align-items:center;padding:var(--sp-2) var(--sp-3);font-size:var(--fs-label);color:var(--txt-dim);border-bottom:var(--bw) solid var(--line);letter-spacing:var(--ls-label);user-select:none;flex:none}
+.panel .p-title b{color:var(--acc);font-weight:normal}
+.panel.hidden{display:none}
+
+/* ---------- 顶栏 ---------- */
+#hud{top:var(--gut);left:var(--gut);right:var(--gut);min-height:var(--bar-h);display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-3) var(--sp-4);overflow:hidden;z-index:var(--z-hud);pointer-events:auto}
+#hud .logo{font-size:var(--fs-title);color:var(--txt-hi);letter-spacing:var(--ls-caps);font-weight:bold;white-space:nowrap;flex:none}
+#hud .logo span{color:var(--acc)}
+#clock{font-family:var(--ff-mono);font-size:var(--fs-title);color:var(--txt-read);letter-spacing:var(--ls-read);font-variant-numeric:tabular-nums;min-width:70px;flex:none}
+#rate{font-family:var(--ff-mono);font-size:var(--fs-body);color:var(--txt-dim);letter-spacing:var(--ls-read);min-width:30px;flex:none}
+.hudTag{font-size:var(--fs-label);color:var(--txt-dim);padding:var(--sp-0) var(--sp-2);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);flex:none;user-select:none}
+#hudGM.on{color:var(--acc);border-color:var(--acc)}
+#hud .spacer{flex:1;min-width:8px;pointer-events:none} /* UI1 纯占位不该吞画布点击 */
+
+/* ---------- 舰队卡片面板(右) ---------- */
+#fleet{top:var(--rail-top);right:var(--gut);width:var(--rail-w);max-height:calc(100% - var(--rail-top) - var(--dock-b));display:flex;flex-direction:column}
+#info{padding:var(--sp-3);border-bottom:var(--bw) solid var(--line);flex:0 1 auto;overflow-y:auto;max-height:62%} /* UI1 选中一艘船时详情能吃掉整块面板,原来舰船列表只剩 12px */
+#info h3{font-size:var(--fs-read);color:var(--txt-hi);margin-bottom:var(--sp-1)}
+#fleetList{overflow-y:auto;flex:1 1 auto;min-height:96px;padding:var(--sp-2)}
+.card{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-1) var(--sp-3);border:var(--bw) solid var(--line);border-radius:var(--r-sm);margin-bottom:var(--sp-1);cursor:pointer;background:var(--srf-sunk);user-select:none}
+.card:hover{border-color:var(--line-ctl)}
+.card.sel{border-color:var(--state-select);background:var(--srf-sel)}
+.card .dot{width:9px;height:9px;border-radius:var(--r-dot);background:var(--txt-dim);flex:none}
+.card .dot.sail{background:var(--acc)}
+.card .nm{flex:1;font-size:var(--fs-body);color:var(--txt-read)}
+.card .st{font-size:var(--fs-label);color:var(--txt-dim)}
+.group{border:var(--bw) dashed var(--line-ctl);border-radius:var(--r-sm);margin-top:var(--sp-1);padding:var(--sp-1) var(--sp-3);font-size:var(--fs-label);color:var(--txt-dim);cursor:pointer}
+.group b{color:var(--acc);font-weight:normal}
+.group:hover{border-color:var(--line-acc)}
+.group .g-tac{font-size:var(--fs-label);color:var(--txt-dim);margin-top:3px;line-height:1.4;font-family:var(--ff-mono);letter-spacing:var(--ls-read)}
+.group .g-tac .mv{color:var(--state-warn)}
+
+/* ---------- 事件框(底,抬到快捷栏上方 v118) ---------- */
+#log{left:calc(var(--gut)*2 + var(--rail-w));bottom:var(--dock-b);width:min(560px,calc(100% - var(--rail-w)*2 - var(--gut)*3));height:var(--log-h);display:flex;flex-direction:column} /* UI1 事件框让出左轨:原来 left:10 + bottom:104 与左轨面板整块重叠(实测 260x150),而净空 104/300 是围着快捷栏拍的魔法数 */
+#logBody{flex:1;overflow-y:auto;padding:var(--sp-2) var(--sp-3);font-size:var(--fs-body);font-family:var(--ff-mono);letter-spacing:var(--ls-read);line-height:var(--lh-tight)} /* UI1 日志是密集遥测不是段落,行高用 tight 保住可见行数 */
+#logBody .li{padding:var(--sp-0) 0;border-bottom:var(--bw) solid var(--line-hair);color:var(--txt)}
+#logBody .li .t{color:var(--txt-dim);margin-right:var(--sp-2)}
+#logBody .li.hit{color:var(--state-ok)} #logBody .li.warn{color:var(--state-warn)}
+
+/* ---------- 右键菜单 ---------- */
+#ctx{position:fixed;min-width:150px;max-height:calc(100% - var(--gut)*2);overflow-y:auto;background:var(--srf-modal);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-md);padding:var(--sp-1);z-index:var(--z-menu);box-shadow:var(--sh-menu);pointer-events:auto}
+#ctx .it{padding:var(--sp-2) var(--sp-4);font-size:var(--fs-read);border-radius:var(--r-sm);cursor:pointer;user-select:none}
+#ctx .it:hover{background:var(--srf-hover);color:var(--txt-hi)}
+#ctx .it.dis{color:var(--txt-mute);cursor:default}
+#ctx .it.dis:hover{background:none}
+#ctx .sep{height:1px;background:var(--line);margin:var(--sp-1) var(--sp-2)}
+
+/* ---------- 设置 ---------- */
+#overlay{position:fixed;inset:0;background:var(--scrim);z-index:var(--z-modal);display:none;align-items:center;justify-content:center}
+#overlay.on{display:flex}
+#settings{width:460px;max-width:calc(100% - var(--gut)*2);max-height:calc(100% - var(--gut)*4);background:var(--srf-modal);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-md);overflow:hidden;display:flex;flex-direction:column} /* UI1 原来卡片 80% 与内部 .body 60vh 两套上限互相打架 */
+#settings .h{flex:none;display:flex;justify-content:space-between;align-items:center;padding:var(--sp-4) var(--sp-5);border-bottom:var(--bw) solid var(--line)}
+#settings .h h2{font-size:var(--fs-title);color:var(--txt-hi)}
+#settings .body{flex:1 1 auto;min-height:0;overflow-y:auto;padding:var(--sp-2) var(--sp-4)}
+.krow{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);padding:var(--sp-2);border-bottom:var(--bw) solid var(--line-hair)}
+.krow .lb{font-size:var(--fs-read);color:var(--txt)}
+.krow .k{padding:var(--sp-1) var(--sp-4);cursor:pointer;min-width:90px;text-align:center;flex:none}
+.krow .k.rec{background:var(--srf-hover);border-color:var(--state-select);color:var(--state-select);animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.4}}
+.sfoot{flex:none;padding:var(--sp-4) var(--sp-5);border-top:var(--bw) solid var(--line);display:flex;gap:var(--sp-3);justify-content:space-between}
+
+/* ==================== UI1 左轨车道 ====================
+   #scenePanel / #trPanel / #editorPanel 三块共用左轨:同顶边、同宽、同净空规则。
+   它们同时最多显示两块(选场景时会盖住靶场面板),所以瞬态选择器排 --z-flyout-hi。 */
+.rail-l,#scenePanel,#trPanel,#editorPanel{
+  top:var(--rail-top);left:var(--gut);width:var(--rail-w);
+  max-height:calc(100% - var(--rail-top) - var(--dock-b));
+  z-index:var(--z-flyout)}
+#scenePanel{z-index:var(--z-flyout-hi)} /* 选完场景就收,允许它盖住靶场面板 */
+#sceneList{padding:var(--sp-2);overflow-y:auto;max-height:calc(100vh - var(--rail-top) - var(--dock-b) - 32px)} /* 32 = .p-title 高度;原来完全无上限,场景一多就顶穿视口且不给滚动条 */
+
+/* ---------- 场景编辑器 ---------- */
+#editorPanel{display:flex;flex-direction:column;overflow-y:auto} /* UI1 兜底:属性区收到最小后仍装不下时整块可滚,底部按钮行不会被裁掉够不着 */
+.ed-name{padding:var(--sp-3);border-bottom:var(--bw) solid var(--line);flex:none}
+.ed-name input{width:100%;padding:var(--sp-1) var(--sp-3);font-family:var(--ff-ui)} /* 场景名是中文,回到 UI 字体 */
+.ed-h{padding:var(--sp-1) var(--sp-3);font-size:var(--fs-label);color:var(--txt-dim);border-bottom:var(--bw) solid var(--line);letter-spacing:var(--ls-label);flex:none}
+.ed-h b{color:var(--acc);font-weight:normal}
+.ed-list{flex:none;max-height:120px;overflow-y:auto;padding:var(--sp-2);border-bottom:var(--bw) solid var(--line)}
+.ed-it{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-1) var(--sp-2);border:var(--bw) solid var(--line);border-radius:var(--r-sm);margin-bottom:3px;cursor:pointer;font-size:var(--fs-label);background:var(--srf-sunk);user-select:none}
+.ed-it:hover{border-color:var(--line-ctl)}
+.ed-it.sel{border-color:var(--state-select);background:var(--srf-sel)}
+.ed-it .dot{width:8px;height:8px;border-radius:var(--r-dot);flex:none}
+.ed-it .nm{flex:1;color:var(--txt-read);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ed-it .st{font-size:var(--fs-micro);color:var(--txt-dim);flex:none}
+.ed-sel{flex:1 1 auto;min-height:64px;padding:var(--sp-3);border-bottom:var(--bw) solid var(--line);max-height:190px;overflow-y:auto} /* UI1 面板到顶时只让属性区收缩,底部按钮行不会被 .panel 的 overflow:hidden 裁掉 */
+.ed-sel .row{display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-1);font-size:var(--fs-body)}
+.ed-sel .row input{flex:1}
+.ed-btns{padding:var(--sp-3);display:flex;flex-wrap:wrap;gap:var(--sp-1);flex:none}
+
+/* ---------- 靶场参数面板(RANGE1) ---------- */
+#trPanel{display:flex;flex-direction:column;overflow-y:auto} /* UI1 兜底:视口再矮也能滚到底部按钮行,否则 820x620 起「关闭」按钮被硬裁掉点不到 */
+.tr-tabs{display:flex;gap:var(--sp-1);padding:var(--sp-2);border-bottom:var(--bw) solid var(--line);flex:none}
+.tr-body{padding:var(--sp-1) var(--sp-3);overflow-y:auto;flex:1 1 auto;min-height:120px} /* UI1 修 P0:原来 min-height:0 + 读数区 flex:none/190px,常见窗口高度下旋钮区被压成 8px,13 个旋钮一个都点不到 */
+.tr-row{display:flex;align-items:center;gap:var(--sp-1);padding:var(--sp-0) 0;font-size:var(--fs-body)}
+.tr-row .tr-nm{flex:1;color:var(--txt-dim);font-size:var(--fs-label);letter-spacing:var(--ls-label);white-space:nowrap}
+.tr-row .tr-v{font-family:var(--ff-mono);letter-spacing:var(--ls-read);font-variant-numeric:tabular-nums;color:var(--txt-read);min-width:58px;text-align:right}
+.tr-note{font-size:var(--fs-label);color:var(--txt-dim);padding:var(--sp-1) 0 var(--sp-2);line-height:var(--lh-body)}
+.tr-read{border-top:var(--bw) solid var(--line);padding:var(--sp-2) var(--sp-3);font-family:var(--ff-mono);letter-spacing:var(--ls-read);font-variant-numeric:tabular-nums;font-size:var(--fs-label);color:var(--txt);line-height:1.55;min-height:76px;max-height:150px;overflow-y:auto;flex:0 1 auto} /* UI1 读数区可收缩但给下限:靶场的产出就是这块,实测 900x650 下会被压到 19px 等于看不见 */
+.tr-read b{color:var(--state-select);font-weight:normal}
+.tr-read .tr-sum{color:var(--state-active)}
+.tr-btns{padding:var(--sp-2);display:flex;flex-wrap:wrap;gap:var(--sp-1);border-top:var(--bw) solid var(--line);flex:none}
+.tr-btns .ed-btn{min-width:30%}
+
+/* ---------- 导出代码弹窗 ---------- */
+#exportBox{position:fixed;inset:0;background:var(--scrim);z-index:var(--z-modal-hi);display:none;align-items:center;justify-content:center}
+#exportBox.on{display:flex}
+#exportBox .box{background:var(--srf-modal);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-md);padding:var(--sp-4);width:600px;max-width:92%}
+#exportBox textarea{width:100%;height:280px;background:var(--void);padding:var(--sp-3);font-size:var(--fs-label);resize:vertical}
+#exportBox .brow{display:flex;justify-content:flex-end;margin-top:var(--sp-3)}
+
+/* ---------- 快捷指令栏(右下) ---------- */
+#qbar .qbar-rows{display:flex;flex-wrap:wrap;gap:var(--sp-2);align-items:stretch;justify-content:center}
+#qbar .qlb{font-size:var(--fs-label);color:var(--txt-dim);margin-bottom:var(--sp-1);letter-spacing:var(--ls-label)}
+#qbar .qrow{display:flex;gap:var(--sp-1)}
+.qsep{width:1px;height:22px;background:var(--line-ctl);margin:0 var(--sp-1);flex:none}
+#qSpd,#qSalvo{width:100%;box-sizing:border-box;text-align:right}
+#qbar .qrow input::-webkit-outer-spin-button,#qbar .qrow input::-webkit-inner-spin-button{-webkit-appearance:none}
+#qbar .qsp{font-size:var(--fs-label);color:var(--txt-dim);width:30px;flex:none}
+#qbar .qval{display:flex;align-items:center;justify-content:center;font-family:var(--ff-mono);letter-spacing:var(--ls-read);font-variant-numeric:tabular-nums;color:var(--txt-read);font-size:var(--fs-label);min-width:38px;text-align:center} /* UI1 原来同一选择器写了两遍(color/font-size 互相覆盖),合并为一条 */
+#qbar .qgroup{display:flex;flex-direction:column;gap:3px;padding:var(--sp-0) var(--sp-3);border-left:var(--bw) solid var(--line)} /* v133:快捷栏功能分区 */
+#qbar .qgroup:first-child{border-left:none;padding-left:var(--sp-0)}
+.ring-group{font-size:var(--fs-micro);color:var(--txt-dim);letter-spacing:var(--ls-label);text-align:center;padding-top:var(--sp-1);border-top:var(--bw) solid var(--line);margin-top:var(--sp-0)} /* v133:范围圈面板船/导弹分组 */
+
+/* ==================== UI1 底坞与浮层车道 ====================
+   原来 #qbar/#ringPanel/#replayBar/#statusTip 的几何与层级全写在 index.html 的内联
+   style 里,四个弹层各自把 .panel 的 z=80 改小,反而钻到了 #fleet/#log 底下。 */
+#qbar{left:50%;transform:translateX(-50%);bottom:var(--gut);
+  width:min(980px,calc(100% - var(--gut)*2));padding:var(--sp-2) var(--sp-3);
+  z-index:var(--z-bar)} /* UI1 放宽到 980:原来 760px 装不下 5 组,实测换成 3 行、高 188px,直接顶穿净空;980 下实测 2 行、高 117px */
+#ringPanel{right:calc(var(--gut)*2 + var(--rail-w));top:var(--rail-top);
+  max-height:calc(100% - var(--rail-top) - var(--dock-b));overflow-y:auto;
+  padding:var(--sp-4);z-index:var(--z-flyout)} /* 原来 z=59,被它自己的唤出者 #qbar(60) 和 #log(80) 双双压住;纵向居中还会顶到顶栏 */
+#ringPanel .ring-wrap{display:flex;flex-direction:column;gap:var(--sp-2)}
+#ringPanel .ring-hd{font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label);text-align:center;margin-bottom:var(--sp-3)}
+#ringPanel .ring-sep{height:1px;background:var(--line);margin:var(--sp-0) 0}
+#replayBar{left:50%;transform:translateX(-50%);bottom:var(--tray-b);
+  width:440px;max-width:calc(100% - var(--gut)*2);padding:var(--sp-3) var(--sp-4);
+  z-index:var(--z-transient)} /* 原来 bottom:266px 是围着快捷栏拍的魔法数,且 z=30 全场最低 */
+#replayBar .rp-row{display:flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-body)}
+#replayBar .rp-row b{color:var(--acc);font-weight:normal}
+#replayBar .rp-hint{font-size:var(--fs-label);color:var(--txt-dim);margin-top:var(--sp-1)}
+#rpTime{font-family:var(--ff-mono);letter-spacing:var(--ls-read);font-variant-numeric:tabular-nums;color:var(--txt-read)}
+#rpSlider{flex:1;accent-color:var(--acc);min-width:0}
+/* 任务提示移到顶栏下方:它与 #replayBar 原来锚点完全相同(都是 bottom:266 + 居中),同时显示必撞 */
+#statusTip{top:var(--rail-top);left:50%;transform:translateX(-50%);
+  max-width:calc(100% - var(--gut)*2);padding:var(--sp-2) var(--sp-5);
+  color:var(--state-select);font-size:var(--fs-read);
+  pointer-events:none;z-index:var(--z-transient)} /* 只是一行字,不该在屏幕中央挖个洞 */
+/* 规范阅读页:整页文档,底不透明 */
+#specView{position:fixed;inset:0;z-index:var(--z-modal-hi);background:var(--void);padding:var(--sp-6);overflow-y:auto}
+#specView .spec-wrap{max-width:900px;margin:0 auto}
+#specView .spec-hd{display:flex;align-items:center;gap:var(--sp-4);margin-bottom:var(--sp-4)}
+#specView h2{font-size:var(--fs-hero);color:var(--txt-hi)}
+#specBody{background:var(--srf-modal);border:var(--bw) solid var(--line);border-radius:var(--r-md);padding:var(--sp-5) var(--sp-6);line-height:var(--lh-body);color:var(--txt);font-size:var(--fs-read)}
+/* 面板标题右侧的 [F] 隐藏 一类提示 */
+.hint{font-size:var(--fs-label);color:var(--txt-mute);letter-spacing:var(--ls-label)} /* 面板标题右侧的 [F] 隐藏、空态补充说明 */

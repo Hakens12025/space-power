@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Space Power · 骨架</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div id="hud" class="panel">
+  <div class="logo">SPACE POWER<span> · 骨架</span></div>
+  <div id="clock">00:00</div>
+  <div id="rate">x1</div>
+  <button class="hbtn" id="btnPause" title="暂停/继续(空格)">⏸</button>
+  <button class="hbtn" id="btnSlow" title="减速(-)">−</button>
+  <button class="hbtn" id="btnFast" title="加速(+)">+</button>
+  <div class="spacer"></div>
+  <button class="hbtn" id="btnRec" title="录制本局数据到demo文件(REC)" style="color:var(--red)">REC</button>
+  <button class="hbtn" id="btnAdmin" title="管理员模式:显示敌方数据/弹药轨迹(GM)" style="color:var(--acc)">GM</button>
+  <button class="hbtn" id="btnSelfPlay" title="左右脑互搏:关敌军AI,双方全玩家操控(自己跟自己下棋)">🧠互搏</button>
+  <button class="hbtn" id="btnRange" title="靶场参数面板(逐靶可调:闪避/拦截/干扰/诱饵/信号)">🎯</button><!-- RANGE1 -->
+  <button class="hbtn" id="btnEnv" title="切换场景:靶场 / 6 条测试预设 / 自定义">◎</button><!-- RANGE1 靶场插在预设最前面,文案跟着改 -->
+  <button class="hbtn" id="btnReplay" title="回放/倒带(R)">⏪</button>
+  <button class="hbtn" id="btnSet" title="设置(Esc)">⚙</button>
+</div>
+
+<div id="fleet" class="panel">
+  <div class="p-title"><b>舰队</b><span class="hint">[F] 隐藏</span></div>
+  <div id="info">
+    <div style="text-align:center;color:var(--dim);padding:14px 0">未选中舰船<br><span class="hint">左键点选 · 拖拽框选</span></div>
+  </div>
+  <div id="fleetList"></div>
+</div>
+
+<div id="log" class="panel">
+  <div class="p-title"><b>事件</b><span class="hint">[L] 隐藏</span></div>
+  <div id="logBody"></div>
+</div>
+
+<div id="scenePanel" class="panel" style="display:none"><!-- UI1 几何/层级见 css/app.css 的左轨车道 -->
+  <div class="p-title"><b>选择场景</b></div>
+  <div id="sceneList"></div>
+</div>
+
+<!-- RANGE1 靶场参数面板:与 #scenePanel 同占左上角。UI1 改为左轨车道统一定位,scenePanel 排 --z-flyout-hi 会盖在它上面,选完场景就收 -->
+<div id="trPanel" class="panel" style="display:none"><!-- UI1 原来这里写死 max-height:calc(100% - 316px),把旋钮区压成 8px;现由 --rail-top/--dock-b 派生 -->
+  <div class="p-title"><b>🎯 靶场参数</b><span class="hint">逐靶可调</span></div>
+  <div class="tr-tabs" id="trTabs"></div>
+  <div class="tr-body" id="trBody"></div>
+  <div class="tr-read" id="trRead"></div>
+  <div class="tr-btns">
+    <button class="ed-btn" id="trSyncBtn" title="打开后改任一旋钮同时作用于三个靶">同步全靶:关</button>
+    <button class="ed-btn" id="trReset" title="伤害/命中/防御链读数全部归零并重新计时">归零统计</button>
+    <button class="ed-btn danger" id="trClose">✕ 关闭</button>
+  </div>
+</div>
+
+<div id="editorPanel" class="panel" style="display:none">
+  <div class="p-title"><b>✏️ 场景编辑器</b><span class="hint">[布局/属性]</span></div>
+  <div class="ed-name"><input id="edName" placeholder="场景名称"></div>
+  <div class="ed-h">我方舰队 <b id="edCnt0">0</b>艘</div>
+  <div class="ed-list" id="edList0"></div>
+  <div class="ed-h">敌方舰队 <b id="edCnt1">0</b>艘</div>
+  <div class="ed-list" id="edList1"></div>
+  <div class="ed-sel" id="edSel"></div>
+  <div class="ed-btns">
+    <button class="ed-btn acc" id="edApply" title="立即用当前编辑阵容开打">▶ 应用并战斗</button>
+    <button class="ed-btn" id="edSave" title="存到浏览器,场景菜单可选">保存场景</button>
+    <button class="ed-btn" id="edExport" title="生成 TEST_ENVS.push 代码">导出代码</button>
+    <button class="ed-btn" id="edClr0" title="清空我方舰队">清空我方</button>
+    <button class="ed-btn" id="edClr1" title="清空敌方舰队">清空敌方</button>
+    <button class="ed-btn danger" id="edExit">✕ 退出编辑</button>
+  </div>
+</div>
+
+<div id="exportBox">
+  <div class="box">
+    <div style="font-size:var(--fs-read);color:var(--txt-hi);margin-bottom:var(--sp-3)"><b>导出场景代码</b> — 复制后给我,我帮你固化进 index.html</div>
+    <textarea id="exportText" spellcheck="false"></textarea>
+    <div class="brow"><button class="sbtn ghost" id="exportClose">关闭</button></div>
+  </div>
+</div>
+
+<div id="qbar" class="panel"><!-- UI1 几何/层级见 css/app.css 的底坞车道 -->
+  <div class="qbar-rows">
+    <div class="qgroup"><div class="qlb">航速</div><div class="qrow">
+      <button class="qbtn" data-sp="0">停</button>
+      <button class="qbtn" data-sp="1">慢</button>
+      <button class="qbtn" data-sp="2">中</button>
+      <button class="qbtn" data-sp="3">高</button>
+      <button class="qbtn" data-sp="4">不限</button>
+      <input id="qSpd" type="number" min="0" max="30000" step="50" placeholder="自定速">
+      <button class="qbtn" id="qSpdSet">定速</button>
+    </div></div>
+    <div class="qgroup"><div class="qlb">火力</div><div class="qrow">
+      <button class="qbtn qstop" id="qCease">🛑停火</button>
+      <button class="qbtn" data-salvo="1">齐射1</button>
+      <button class="qbtn" data-salvo="2">齐射2</button>
+      <button class="qbtn" data-salvo="3">齐射3</button>
+      <button class="qbtn" data-salvo="4">齐射4</button>
+      <span class="qval" id="qSalvoLbl" style="color:var(--teal)">×1</span>
+      <button class="qbtn" id="qMissileMode">🎯自动</button>
+    </div></div>
+    <div class="qgroup"><div class="qlb">编队</div><div class="qrow">
+      <button class="qbtn" id="qFanMinus">扇面窄</button>
+      <span class="qval" id="qFanLbl">±120°</span>
+      <button class="qbtn" id="qFanPlus">扇面宽</button>
+      <button class="qbtn" id="qDenMinus">密度疏</button>
+      <span class="qval" id="qDenLbl">1.0</span>
+      <button class="qbtn" id="qDenPlus">密度密</button>
+      <button class="qbtn" id="qPreset1">档1连</button>
+      <button class="qbtn" id="qPreset2">档2叠</button>
+      <button class="qbtn" id="qPreset3">档3漏</button>
+    </div></div>
+    <div class="qgroup"><div class="qlb">感知</div><div class="qrow">
+      <button class="qbtn" id="qLidar">📡雷达</button>
+      <button class="qbtn" id="qEmcon">🌐EMCON静默</button>
+      <button class="qbtn" id="qScreen">🛡布防</button>
+    </div></div>
+    <div class="qgroup"><div class="qlb">视图</div><div class="qrow">
+      <button class="qbtn" id="qRange">◉范围</button>
+      <button class="qbtn" id="qRingSet">🎚圈</button>
+    </div></div>
+  </div>
+</div>
+
+<div id="replayBar" class="panel" style="display:none">
+  <div class="rp-row">
+    <b>回放</b>
+    <span id="rpTime">00:00</span>
+    <input type="range" id="rpSlider" min="0" max="0" value="0">
+    <button class="hbtn" id="rpExit" title="退出回放">✕</button>
+  </div>
+  <div class="rp-hint">拖动时间轴查看历史 · 模拟已暂停</div>
+</div>
+
+<div id="statusTip" class="panel" style="display:none">点击地图选择目标位置</div><!-- UI1 与 #replayBar 原来同锚点必撞,移到顶栏下方并加 pointer-events:none -->
+
+<div id="ctx" style="display:none"></div>
+<div id="ringPanel" class="panel" style="display:none">
+  <div class="ring-hd">范围圈显示 ◉</div>
+  <div class="ring-wrap">
+    <div class="ring-group">舰船圈</div>
+    <button class="qbtn ring-btn" data-ring="sensor">📡传感器</button>
+    <button class="qbtn ring-btn" data-ring="warn">预警</button>
+    <button class="qbtn ring-btn" data-ring="outer">外圈拦</button>
+    <button class="qbtn ring-btn" data-ring="inner">内圈炮</button>
+    <div class="ring-group">导弹圈</div>
+    <button class="qbtn ring-btn" data-ring="seek">🛰自导</button>
+    <button class="qbtn ring-btn" data-ring="mine">雷触发</button>
+    <button class="qbtn ring-btn" data-ring="screen">防空屏</button>
+    <button class="qbtn ring-btn" data-ring="beacon">信标</button>
+    <div class="ring-sep"></div>
+    <button class="qbtn ring-btn" data-ring="all">全开</button>
+    <button class="qbtn ring-btn" data-ring="none">全关</button>
+  </div>
+</div>
+
+<div id="overlay"><div id="settings">
+  <div class="h"><h2>设置 · 键位</h2><button class="hbtn" id="setClose">✕</button></div>
+  <div class="body" id="setBody"></div>
+  <div class="sfoot"><button class="sbtn ghost" id="setReset">恢复默认键位</button><button class="sbtn ghost" id="setSpec">📖 导弹设计规范</button><button class="sbtn" id="setDone">完成</button></div>
+</div>
+</div>
+<div id="specView" style="display:none">
+  <div class="spec-wrap">
+    <div class="spec-hd">
+      <button class="sbtn" id="specClose">← 返回</button><h2>📖 导弹设计规范(定稿)</h2>
+    </div>
+    <div id="specBody"></div>
+  </div>
+</div>
+
+<script src="js/00-missile-spec.js"></script>
+<script src="js/01-config.js"></script>
+<script src="js/02-state.js"></script>
+<script src="js/03-ships.js"></script>
+<script src="js/04-targeting.js"></script>
+<script src="js/05-motion.js"></script>
+<script src="js/06-sensors.js"></script>
+<script src="js/07-missiles.js"></script>
+<script src="js/08-camera.js"></script>
+<script src="js/09-render-bg.js"></script>
+<script src="js/10a-ship-hulls.js"></script>
+<script src="js/10b-ship-icons.js"></script>
+<script src="js/11-render-hud.js"></script>
+<script src="js/12-render-main.js"></script>
+<script src="js/13-input.js"></script>
+<script src="js/14-contextmenu.js"></script>
+<script src="js/15-ai.js"></script>
+<script src="js/16-keys.js"></script>
+<script src="js/17-settings.js"></script>
+<script src="js/18-replay.js"></script>
+<script src="js/19-editor.js"></script>
+<script src="js/20-quickbar.js"></script>
+<script src="js/21-demo.js"></script>
+<script src="js/22-log.js"></script>
+<script src="js/23-fleetcards.js"></script>
+<script src="js/23a-range.js"></script><!-- RANGE1 位置是硬约束:必须在 24-main.js 之前(init() 顶层调 loadRangeCfg),且在 03/05/20/22 之后(用 fireDecoy/speedGearsOf/selfPlay/log) -->
+<script src="js/24-main.js"></script>
+</body>
+</html>
