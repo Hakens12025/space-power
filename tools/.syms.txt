@@ -377,6 +377,7 @@ stepProjectiles
 stepShipsMotion
 stepSim
 stepWeaponSystems
+targetAt
 taskCancel
 taskCreate
 taskIcon
@@ -416,6 +417,7 @@ updQbarHighlight
 updQbarSensors
 updRangePanel
 updSalvoLbl
+updSelWeaponTip
 updateCardsStatus
 updateCmdBar
 updateCmdBarVis

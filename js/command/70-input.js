@@ -12,6 +12,22 @@ function shipAt(sx,sy){
   }
   return best;
 }
+function targetAt(sx,sy){ // RF4b 敌舰命中测试(右键指定目标/T·R点击攻击用)。感知门控沿用旧 shipAt 红舰规则:普通模式只可点已点亮敌舰,GM 全可
+  const w=worldAt(sx,sy);
+  let best=null,bd=1e18;
+  for(const s of ships){
+    if(s.dead||s.side!=='red')continue;
+    if(!adminMode&&!s.litBlue)continue;
+    const d=Math.hypot(s.pos[0]-w[0],s.pos[1]-w[1]);
+    if(d<60/cam.zoom && d<bd){bd=d;best=s;}
+  }
+  return best;
+}
+function updSelWeaponTip(){ // RF4b selWeapon 待命提示(原 #statusTip 已被简化UI隐藏,改用底栏上方 #cmdTip 常显)
+  const tip=document.getElementById('cmdTip');if(!tip)return;
+  if(selWeapon){tip.textContent=(selWeapon==='mac'?'主炮攻击:点击敌舰(漂移射击60s,对准即发)':'导弹攻击:点击敌舰齐射 · 点空地=区域齐射')+' · 右键取消';tip.style.display='block';}
+  else tip.style.display='none';
+}
 function groupAt(sx,sy){ // 命中最近的导弹组/信标实体(屏幕距离,可点选,半径30px)
   const w=worldAt(sx,sy);
   let best=null,bd=30/cam.zoom;
@@ -100,7 +116,7 @@ function onMouseDown(e){
     }
   }
   if(e.button===0&&selWeapon){ // 选定武器攻击:点击目标/空位置指定
-    const t=shipAt(sx,sy);
+    const t=targetAt(sx,sy)||shipAt(sx,sy); // RF4b 敌舰优先(shipAt 已限定蓝方,原路径在简化UI后点敌舰落空)
     const atk=controlledShips();
     if(t&&!t.dead){ // 点中舰船:按攻击方各自阵营探测门控(GM能指挥敌方,但各边只能打自己探测到的)
       {
@@ -120,7 +136,7 @@ function onMouseDown(e){
     }else{ // MAC需要目标
       log('🎯 MAC 需锁定敌舰(点中舰船)','warn');
     }
-    selWeapon=null;hideTip();
+    selWeapon=null;hideTip();updSelWeaponTip();
     return;
   }
   if(pendingTaskPatrol){ // DS150:巡逻任务画点链(左键加点,右键结束)
@@ -250,7 +266,7 @@ function onMouseDown(e){
     hideCtx();
   }else if(e.button===2&&e.ctrlKey){ // Ctrl+右键:锁定/取消自动开火(清全弹臂,避免松Ctrl误发射)
     ctrlArm=false;
-    const t=shipAt(sx,sy);
+    const t=targetAt(sx,sy)||shipAt(sx,sy); // RF4b 敌舰优先(原 shipAt 在简化UI后点敌舰落空)
     if(t&&!t.dead){ // 锁定需各自阵营探测到(GM能指挥敌方,但各边只能打自己看到的)
       const sel=selectedShips().filter(s=>!s.dead).filter(s=>engageable(t,s));
       if(sel.length){
@@ -266,11 +282,11 @@ function onMouseDown(e){
     hideCtx();
   }else if(e.button===2){ // 右键:单击=直接移动,按住350ms=呼出命令菜单,拖动=平移
     if(pendingMine||pendingBeacon||pendingIntercept||pendingManual||pendingMove||pendingTurn||selWeapon){ // 点选待命状态:右键取消(原只覆盖布雷/信标/拦截,pendingManual提示"右键取消"却不生效反而发出移动命令)
-      pendingMine=null;pendingBeacon=null;pendingIntercept=null;pendingManual=null;pendingMove=null;pendingTurn=null;pendingTurnNoFm=false;selWeapon=null;
+      pendingMine=null;pendingBeacon=null;pendingIntercept=null;pendingManual=null;pendingMove=null;pendingTurn=null;pendingTurnNoFm=false;selWeapon=null;updSelWeaponTip();
       hideTip();log('取消','');return;
     }
     panning={sx,sy,cx:cam.x,cy:cam.y,moved:false};
-    rmbClick={sx,sy,onShip:shipAt(sx,sy),shift:e.shiftKey};
+    rmbClick={sx,sy,onShip:shipAt(sx,sy),etgt:targetAt(sx,sy),shift:e.shiftKey}; // RF4b etgt=右键点中的敌舰(指定目标用)
     clearTimeout(rmbTimer);
     rmbTimer=setTimeout(()=>{ // 按住呼出菜单
       if(rmbClick&&!panning.moved){
@@ -370,8 +386,24 @@ window.addEventListener('mouseup',e=>{
   if(e.button===2&&rmbClick){
     clearTimeout(rmbTimer);rmbTimer=null; // 松开:取消长按(已弹菜单则rmbClick已清,这里是单击)
     const rMoved=panning&&panning.moved;
-    if(!rMoved){ // 右键:未拖拽平移 → 直接移动(Shift=追加,直接=清空重设)
+    if(!rMoved){ // 右键:未拖拽平移 → 点中敌舰=指定打击目标(RF4b,再点同目标=解除),点空地/友舰=移动
       const w=worldAt(rmbClick.sx,rmbClick.sy);
+      const etgt=(rmbClick.etgt&&!rmbClick.etgt.dead)?rmbClick.etgt:null;
+      if(etgt&&!rmbClick.shift){
+        const sel=controlledShips();
+        if(!sel.length)log('先选中舰船,再右键敌舰指定目标','warn');
+        else{
+          const can=sel.filter(s=>engageable(etgt,s));
+          if(!can.length)log(`⚠ ${etgt.name} 未被探测到,无法锁定(需识别级点亮)`,'warn');
+          else{
+            const allLocked=sel.every(s=>s.lockedTarget===etgt);
+            sel.forEach(s=>{s.lockedTarget=allLocked?null:etgt;s.driftFire=!allLocked;s.driftFireT=allLocked?0:60;}); // 语义同旧 Ctrl+右键:锁定+漂移射击60s(命令照走,对准即发)
+            log(allLocked?`🔓 取消锁定 ${etgt.name}`:`🔒 ${can.length} 艘锁定 ${etgt.name} · 火控开即自动开火/齐射(右栏可见目标)`,'');
+          }
+        }
+        hideCtx();if(typeof updateSelPanel==='function')updateSelPanel();
+        rmbClick=null;return;
+      }
       // DS191(用户令):雷是网的一种形态,不是不能动——选中雷 + 右键点地图 = 重新布位(飞向新点再次布雷,网身份保留)
       if(selMissile&&selMissile.mine&&!selMissile.done){
         selMissile.mine=false;selMissile.park=true;selMissile.parkPt=[w[0],w[1],0];selMissile.target=null;

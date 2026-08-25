@@ -57,9 +57,10 @@ function endRange(){ // 结束测距:清除线
   rangeA=null;rangeB=null;
 }
 function toggleWeapon(w){ // T/R:选定武器进行攻击选择(点击敌舰攻击),再按取消
-  if(selWeapon===w){selWeapon=null;hideTip();log('取消选定武器','');return;}
+  if(selWeapon===w){selWeapon=null;hideTip();updSelWeaponTip();log('取消选定武器','');return;}
   selWeapon=w;
   showTip(w==='mac'?'⚔ MAC已选定 · 点击敌舰攻击(再按T取消)':'🚀 射手已选定 · 点击敌舰攻击(再按R取消)');
+  updSelWeaponTip(); // RF4b 可见提示(原 #statusTip 已被简化UI隐藏,改走底栏上方 #cmdTip)
 }
 function ceaseFire(){ // X/快捷栏:停火,解除所有选中舰锁定
   const sel=controlledShips();
