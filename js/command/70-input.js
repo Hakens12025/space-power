@@ -230,17 +230,17 @@ function onMouseDown(e){
     const sh=shipAt(sx,sy);
     if(e.shiftKey){ // Shift=选导弹(单击选最近的,拖动框选导弹群)
       const g=groupAt(sx,sy);
-      if(g){selMissile=g;selNet=g.netId||null;selected=[];selDrag=null;hideCtx();updateInfo();updateCardsStatus();return;}
-      selMissile=null;selNet=null;
+      if(g){selMissile=g;selNet=g.netId||null;selMissileHits=[g];selected=[];selDrag=null;hideCtx();updateInfo();updateCardsStatus();return;}
+      selMissile=null;selNet=null;selMissileHits=[];
       selDrag={x0:sx,y0:sy,x1:sx,y1:sy,missileMode:true};
       hideCtx();
       return;
     }
     if(!sh){ // 没点中船 → 看导弹组(导弹组可点选;v125点中组=选整个网)
       const g=groupAt(sx,sy);
-      if(g){selMissile=g;selNet=g.netId||null;selected=[];selDrag=null;hideCtx();updateInfo();updateCardsStatus();return;}
+      if(g){selMissile=g;selNet=g.netId||null;selMissileHits=[g];selected=[];selDrag=null;hideCtx();updateInfo();updateCardsStatus();return;}
     }
-    selMissile=null;selNet=null; // 没点中导弹组 → 取消导弹组选中
+    selMissile=null;selNet=null;selMissileHits=[]; // 没点中导弹组 → 取消导弹组选中
     if(e.ctrlKey){
       if(sh){selected.includes(sh.id)?selected.splice(selected.indexOf(sh.id),1):selected.push(sh.id);}
     }else{
@@ -351,8 +351,12 @@ window.addEventListener('mouseup',e=>{
       const hits=inBox.filter(p=>{const sp=toScreen(p.pos[0],p.pos[1]);return sp[0]>=x&&sp[0]<=x+w&&sp[1]>=y&&sp[1]<=y+h;});
       if(hits.length){
         selected=[]; // KIMI146修:清掉拖拽过程中误选的舰船,导弹信息面板才显示得出来
-        selMissile=hits[0]; // 选中框内最近一个(可布雷/设置),其余看数量
-        log(`🎯 框选 ${hits.length} 个导弹/信标组(选中其一,可在信息面板操作)`,'');
+        // RF4a 框选聚合:全部存活组进 selMissileHits(右栏汇总视图);代表组=剩余弹头最多者(原为"数组第一个",旧注释写的"最近"名不副实)
+        const alive=hits.filter(p=>!p.done);
+        selMissileHits=alive;
+        selMissile=alive.slice().sort((a,b)=>(b.count||0)-(a.count||0))[0]||hits[0];
+        selNet=alive.length===1&&selMissile?(selMissile.netId||null):null; // 多组时网选中无意义;单组保持"点中组=选整个网"语义
+        log(alive.length>1?`🎯 框选 ${alive.length} 组 · ${alive.reduce((n,p)=>n+(p.count||0),0)} 枚(右栏汇总)`:'🎯 选中导弹组','');
       }else log('框内没有导弹/信标','warn');
     }
     selDrag=null;

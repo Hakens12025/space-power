@@ -11,7 +11,7 @@ function initFleet(){
   // ④回放历史混入旧局快照 ⑤demo录制跨局污染
   simTime=0;history=[];if(replay.active)exitReplay();replay.idx=0;
   threatCorridors=[];hitFX=[];esmFixes.clear();nets.clear();
-  selMissile=null;selNet=null;victoryShown=false;defeatShown=false;
+  selMissile=null;selNet=null;selMissileHits=[];victoryShown=false;defeatShown=false; // RF4a 框选聚合态一并清(否则引用旧局弹丸对象)
   selWeapon=null;pendingMove=null;pendingTurn=null;pendingTurnNoFm=false; // KIMI146:交互pending态也清——原pendingBeacon/pendingManual等引用旧局舰对象(点地图把信标挂到已不存在的船上)
   pendingManual=null;pendingMine=null;pendingBeacon=null;pendingIntercept=null;rangeFollow=null;hideTip();
   nextSnapT=RPL_INTERVAL; // 回放快照计时同步重置

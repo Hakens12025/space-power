@@ -33,6 +33,7 @@ const esmFixes=new Map(); // ESM反推修复(本体->误差圈半径):连续探�
 let rangeView=false;                 // 范围模式:显示所有范围圈(GM下含敌方逻辑圈)
 let rangeShow={sensor:true,warn:true,outer:true,inner:true,mine:true,screen:true,beacon:true,seek:true}; // v127:范围圈显示开关(🎚圈面板);v129加seek=导弹自导圈
 let selMissile=null;                  // 选中的导弹组实体(可点选/布设伏击雷/设置)
+let selMissileHits=[];                // RF4a Shift框选导弹群:框内全部存活组(右栏聚合视图用);单点选中时=[该组],取消选中时=[]
 let selNet=null;                      // v125:选中的导弹网(点中网内任一组=选整个网)
 let pendingManual=null;               // v125:手动模式点选(选中网→点目标舰,网内所有组强制打该目标)
 let pendingMine=null;                 // 布雷点选状态(选中的导弹组等待点击地图定布雷点)

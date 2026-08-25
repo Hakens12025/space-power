@@ -326,6 +326,7 @@ selBlue
 selDrag
 selEvts
 selMissile
+selMissileHits
 selNet
 selWeapon
 selectMissileAction

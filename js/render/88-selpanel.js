@@ -97,7 +97,41 @@ function updateSelPanel(){ // frame 低频调用(每20帧,与 updateCardsStatus 
   const title=document.getElementById('selTitle');
   const ciN=document.getElementById('ciName'),ciC=document.getElementById('ciCls'),ciSp=document.getElementById('ciSpec');
   if(!box||!title)return;
-  // 导弹组/信标视图:Shift+点选或框选导弹(selMissile,选择机制在 70-input 不变) → 右栏切实时弹道数据,底栏切固定参数,按钮组置灰
+  // 导弹群/导弹组/信标视图:Shift+点选或框选导弹(选择机制在 70-input) → 右栏切实时弹道数据,底栏切固定参数,按钮组置灰
+  // RF4a 框选聚合:selMissileHits 里存活组>1 → 汇总视图(状态/目标/引导分布);代表组=剩余弹头最多者
+  const aliveHits=(selMissileHits||[]).filter(p=>!p.done&&p.type==='missile');
+  if(aliveHits.length>1){
+    const rep=aliveHits.slice().sort((a,b)=>(b.count||0)-(a.count||0))[0];
+    const total=aliveHits.reduce((n,p)=>n+(p.count||0),0);
+    const dmgSum=aliveHits.reduce((n,p)=>n+(p.dmg||0),0);
+    const dist=list=>{const m={};list.forEach(k=>m[k]=(m[k]||0)+1);return Object.keys(m).map(k=>k+' ×'+m[k]).join(' · ');};
+    const stts=dist(aliveHits.map(p=>p.mine?'伏击雷':p.park?'布雷中':(p.netOff?'组网包抄':((p.coastT>0||p.guideMode==='coast')?'脱锁':'突击'))));
+    const tgts=dist(aliveHits.map(p=>p.target?(p.target.name||'区域'):'无'));
+    const gds=dist(aliveHits.map(p=>p.guideMode==='self'?'自主':p.guideMode==='link'?'数据链':p.guideMode==='coast'?'脱锁':'本地'));
+    const minFuel=Math.min(...aliveHits.map(p=>p.fuel||0));
+    const maxSpd=Math.max(...aliveHits.map(p=>V.len(p.vel)));
+    const shooters=[...new Set(aliveHits.map(p=>p.shooter&&p.shooter.name).filter(Boolean))];
+    title.textContent='导弹群';
+    if(ciN)ciN.textContent=`导弹群 ${aliveHits.length} 组`;
+    if(ciC)ciC.textContent='射手 '+(shooters.join(' · ')||'—');
+    if(ciSp)ciSp.innerHTML=[
+      ['单枚伤',rep.missDmg||12],
+      ['合计伤',Math.round(dmgSum)],
+      ['总枚数',total],
+      ['最紧燃料',Math.ceil(Math.max(0,minFuel))+'s'],
+    ].map(it=>`<span class="fi"><i>${it[0]}</i><b>${it[1]}</b></span>`).join('');
+    const fu=Math.max(0,Math.min(100,minFuel));
+    box.innerHTML=`
+      <div class="hpbar"><i style="width:${fu}%;background:${fu>30?'var(--state-active)':'var(--state-warn)'}"></i></div>
+      <div class="row"><span class="k">剩余</span><span class="v">${aliveHits.length} 组 · ${total} 枚</span></div>
+      <div class="row"><span class="k">状态</span><span class="v">${stts}</span></div>
+      <div class="row"><span class="k">目标</span><span class="v">${tgts}</span></div>
+      <div class="row"><span class="k">引导</span><span class="v">${gds}</span></div>
+      <div class="row"><span class="k">速度</span><span class="v">${Math.round(maxSpd)} km/s(最快)</span></div>
+      <div class="row"><span class="k">燃料</span><span class="v">最紧 ${minFuel>0?Math.ceil(minFuel)+'s':'耗尽(滑行)'}</span></div>`;
+    updateCmdBar([]);
+    return;
+  }
   const m=(selMissile&&!selMissile.done)?selMissile:null;
   if(m&&m.type==='missile'){
     title.textContent='导弹组';
