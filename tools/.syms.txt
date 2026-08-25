@@ -12,6 +12,7 @@ CLS_SENS
 CLS_TIER_MUL
 CLS_VALUE
 CLS_WPN
+CMDS
 DEFAULT_ENEMY
 GEAR_NAMES
 GUIDE_EFF
@@ -32,6 +33,7 @@ RANGE_SLOTS
 RATES
 RPL_INTERVAL
 SENS
+SIMPLE_UI
 SPD_UNCAP
 SPEC_TEXT
 SPEED_NAMES
@@ -57,6 +59,7 @@ applyRangeOne
 applyScene
 applyTier
 assignGroup
+bindCmdBar
 bindOf
 bindings
 brakeCurveSpd
@@ -178,6 +181,7 @@ hideCtx
 hideTip
 history
 hitFX
+hoverRing
 hullRow
 hullSize
 hullTint
@@ -249,6 +253,7 @@ placeEditUnit
 prevRunning
 projVisibleTo
 projectiles
+pushEvt
 pushSnap
 qSalvoBtns
 qSpdBtns
@@ -312,7 +317,9 @@ sceneList
 scenePanel
 secTxt
 sectorOf
+selBlue
 selDrag
+selEvts
 selMissile
 selNet
 selWeapon
@@ -403,12 +410,14 @@ updQbarSensors
 updRangePanel
 updSalvoLbl
 updateCardsStatus
+updateCmdBar
 updateDragSel
 updateESMFixes
 updateInfo
 updateNets
 updateReplayLabel
 updateRingBtns
+updateSelPanel
 updateTop
 victoryShown
 worldAt

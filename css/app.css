@@ -318,3 +318,30 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #specBody{background:var(--srf-modal);border:var(--bw) solid var(--line);border-radius:var(--r-md);padding:var(--sp-5) var(--sp-6);line-height:var(--lh-body);color:var(--txt);font-size:var(--fs-read)}
 /* 面板标题右侧的 [F] 隐藏 一类提示 */
 .hint{font-size:var(--fs-label);color:var(--txt-mute);letter-spacing:var(--ls-label)} /* 面板标题右侧的 [F] 隐藏、空态补充说明 */
+
+/* ==================== RF2 简化 UI(2026-08) ====================
+   方案:只藏不删——DOM 与全部 js 绑定保留,复活旧界面 = 删掉本节隐藏规则。
+   !important 用于压过 applyPanelState/#overlay.on 一类内联 display。 */
+#qbar,#fleet,#log,#scenePanel,#trPanel,#editorPanel,#replayBar,#overlay,#specView,#ringPanel,#statusTip,
+#btnRec,#btnAdmin,#btnSelfPlay,#btnRange,#btnEnv,#btnReplay,#btnSet{display:none!important}
+
+/* 选中舰实时信息面板(右轨,几何抄 #fleet) */
+#selPanel{top:var(--rail-top);right:var(--gut);width:var(--rail-w);max-height:calc(100% - var(--rail-top) - var(--gut));display:flex;flex-direction:column}
+#selInfo{padding:var(--sp-3);border-bottom:var(--bw) solid var(--line);flex:0 1 auto;overflow-y:auto}
+#selInfo h3{font-size:var(--fs-title);color:var(--txt-hi);margin:0 0 2px}
+#selInfo .sub{font-size:var(--fs-label);color:var(--txt-dim);margin-bottom:var(--sp-2)}
+#selInfo .row{display:flex;justify-content:space-between;align-items:center;padding:2px 0;font-size:var(--fs-body)}
+#selInfo .row .k{color:var(--txt-dim)}
+#selInfo .row .v{font-family:var(--ff-mono);letter-spacing:var(--ls-read);font-variant-numeric:tabular-nums;color:var(--txt-read);text-align:right}
+.hpbar{height:6px;border-radius:var(--r-sm);background:var(--srf-sunk);border:var(--bw) solid var(--line);overflow:hidden;margin:var(--sp-1) 0 var(--sp-2)}
+.hpbar i{display:block;height:100%;background:var(--state-ok)}
+#selEvents{padding:var(--sp-2) var(--sp-3);overflow-y:auto;flex:1 1 auto;min-height:56px;font-family:var(--ff-mono);font-size:var(--fs-label);letter-spacing:var(--ls-read);line-height:var(--lh-tight)}
+#selEvents .li{padding:2px 0;border-bottom:var(--bw) solid var(--line-hair);color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#selEvents .li .t{color:var(--txt-dim);margin-right:var(--sp-2)}
+#selEvents .li.hit{color:var(--state-ok)}
+#selEvents .li.warn{color:var(--state-warn)}
+
+/* 底部操作栏(底坞居中,几何仿 #qbar;开关=纯文字标签+·开/·关后缀,状态色用 .btn.on/.is-dis) */
+#cmdBar{left:50%;transform:translateX(-50%);bottom:var(--gut);display:flex;gap:var(--sp-2);padding:var(--sp-2) var(--sp-3);z-index:var(--z-bar)}
+#cmdBar .cbtn{min-width:92px;font-size:var(--fs-body)}
+#cmdTip{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);background:var(--srf-modal);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);padding:var(--sp-2) var(--sp-4);font-size:var(--fs-label);color:var(--txt);pointer-events:none;z-index:var(--z-transient);display:none;white-space:nowrap}

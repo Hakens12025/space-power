@@ -6,7 +6,7 @@ function shipAt(sx,sy){
   let best=null,bd=1e18;
   for(const s of ships){
     if(s.dead)continue; // 残骸不可选中
-    if(!adminMode&&s.side==='red'&&!s.litBlue)continue; // 感知层:未点亮的敌舰不可点选
+    if(s.side!=='blue')continue; // RF2 简化UI:只可选己方舰(GM 也不例外;原为未点亮敌舰不可选/GM 可选敌)
     const d=Math.hypot(s.pos[0]-w[0],s.pos[1]-w[1]);
     if(d<60/cam.zoom && d<bd){bd=d;best=s;}
   }
@@ -331,7 +331,7 @@ function updateDragSel(){
   const w=Math.abs(selDrag.x1-selDrag.x0),h=Math.abs(selDrag.y1-selDrag.y0);
   selected=[];
   for(const s of ships){
-    if((s.side==='red'&&!adminMode)||s.dead)continue; // GM框选含敌
+    if(s.side!=='blue'||s.dead)continue; // RF2 简化UI:框选仅己方(原 GM 框选含敌)
     const p=toScreen(s.pos[0],s.pos[1]);
     if(p[0]>=x&&p[0]<=x+w&&p[1]>=y&&p[1]<=y+h)selected.push(s.id);
   }

@@ -39,6 +39,13 @@
   <div id="logBody"></div>
 </div>
 
+<!-- RF2 简化UI:选中舰实时信息面板(右轨,#fleet/#log 已隐藏,事件流内嵌于此) -->
+<div id="selPanel" class="panel">
+  <div class="p-title"><b id="selTitle">未选中</b><span class="hint">左键点选 · 拖拽框选</span></div>
+  <div id="selInfo"></div>
+  <div id="selEvents"></div>
+</div>
+
 <div id="scenePanel" class="panel" style="display:none"><!-- UI1 几何/层级见 css/app.css 的左轨车道 -->
   <div class="p-title"><b>选择场景</b></div>
   <div id="sceneList"></div>
@@ -173,6 +180,16 @@
   </div>
 </div>
 
+<!-- RF2 简化UI:底部操作栏(选中舰的火控/雷达/武器开关,纯文字,状态由 .on 着色) + hover 提示 -->
+<div id="cmdBar" class="panel">
+  <button class="btn cbtn" id="cbFire">火控·关</button>
+  <button class="btn cbtn" id="cbRadar">雷达·关</button>
+  <button class="btn cbtn" id="cbMac">主炮·开</button>
+  <button class="btn cbtn" id="cbMsl">导弹·开</button>
+  <button class="btn cbtn" id="cbCiws">拦截·开</button>
+</div>
+<div id="cmdTip"></div>
+
 <!-- RF1: 目录=系统。编号十位是系统层(0core/1ships/2sensors/3physics/4formation/5weapons/6bots/7command/8render/9scenario)。
      硬约束仅两条:core/00 定义 on() 必须最先(85/93/94/95 顶层调用它);core/99 顶层执行 init() 必须最后(且 init 调 loadRangeCfg,
      故 scenario/95 必须在它之前)。其余跨文件引用全在运行期解析,层序排列只为可读性。 -->
@@ -210,6 +227,7 @@
 <script src="js/render/85-settings.js"></script>
 <script src="js/render/86-log.js"></script>
 <script src="js/render/87-fleetcards.js"></script>
+<script src="js/render/88-selpanel.js"></script>
 <script src="js/scenario/90-envs.js"></script>
 <script src="js/scenario/91-init.js"></script>
 <script src="js/scenario/92-editor.js"></script>

@@ -10,7 +10,7 @@ let frameN=0;
 function frame(t){
   requestAnimationFrame(frame);
   const dt=Math.min(0.1,(t-last)/1000||0);last=t;
-  if(!editMode&&++frameN%20===0)updateCardsStatus(); // 低频刷新卡片状态与信息面板(编辑器下面板自刷)
+  if(!editMode&&++frameN%20===0){updateCardsStatus();updateSelPanel();} // 低频刷新卡片状态与信息面板(编辑器下面板自刷);RF2 +选中舰面板
   camHeld(dt);
   if(running){
     acc+=dt*rate;let n=0;

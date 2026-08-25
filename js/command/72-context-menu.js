@@ -3,6 +3,7 @@
 const ctxEl=document.getElementById('ctx');
 function hideCtx(){ctxEl.style.display='none';}
 function showCtx(items,sx,sy){
+  if(SIMPLE_UI)return; // RF2 简化UI:菜单整体停用(藏不删)。长按定时器照跑,openCtx 构建后被这里拦下;短按右键移动不经菜单不受影响
   ctxEl.innerHTML='';
   items.forEach(it=>{
     if(it.sep){const d=document.createElement('div');d.className='sep';ctxEl.appendChild(d);return;}

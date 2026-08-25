@@ -11,5 +11,6 @@ function log(msg,cls){
   logBody.appendChild(li);
   while(logBody.children.length>80)logBody.removeChild(logBody.firstChild);
   logBody.scrollTop=logBody.scrollHeight;
+  if(typeof pushEvt==='function')pushEvt(msg,cls); // RF2 简化UI:右栏事件流(88 可选模块,typeof 守卫)
 }
 
