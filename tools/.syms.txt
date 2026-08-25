@@ -11,7 +11,6 @@ CLS_SENS
 CLS_STRUCT
 CLS_TIER_MUL
 CLS_VALUE
-CMDS
 DEFAULT_ENEMY
 GEAR_NAMES
 GUIDE_EFF
@@ -22,6 +21,7 @@ HULL_BASE
 HULL_LABEL
 HULL_ORDER
 KEY_NAME
+KIND_INFO
 MMODE
 MSL_CFG
 NET_COMM
@@ -74,6 +74,7 @@ ciwsDefOf
 ciwsOf
 ciwsOverload
 ciwsSectorOverload
+cmdList
 contactAge
 contactState
 controlledShips
@@ -416,6 +417,7 @@ updRangePanel
 updSalvoLbl
 updateCardsStatus
 updateCmdBar
+updateCmdBarVis
 updateDragSel
 updateESMFixes
 updateInfo
@@ -425,5 +427,6 @@ updateRingBtns
 updateSelPanel
 updateTop
 victoryShown
+weaponRows
 worldAt
 zoomAt

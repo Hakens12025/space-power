@@ -89,7 +89,7 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
   if(rounds<=0)return; // 无就绪发射单元或弹药不足
   // 占用 rounds 个发射单元(独立装填60s)
   let used=0;
-  if(shooter.cellTimer)for(let i=0;i<shooter.cellTimer.length&&used<rounds;i++){if(shooter.cellTimer[i]<=0){shooter.cellTimer[i]=60;used++;}}
+  if(shooter.cellTimer)for(let i=0;i<shooter.cellTimer.length&&used<rounds;i++){if(shooter.cellTimer[i]<=0){shooter.cellTimer[i]=shooter.mslReload||60;used++;}} // RF3 装填秒读烘焙字段(原字面量60,定义在 weapons/51-defs)
   // 组间散布(v111):同舰同目标多组不再 0km 叠加成"一发",按组序横散布成扇面(前置追踪会让各道在目标附近收拢)
   const axis=V.norm(V.sub(target.pos,shooter.pos));
   let perp=V.norm([-axis[1],axis[0],0]);
@@ -141,10 +141,10 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
     const pvPeak=ng2?ng2.vPeak:baseVPeak;
     const pDecel=(pvPeak*pvPeak-vTerm*vTerm)/(2*150); // DS190:减速点按 150 km/s² 反推(仍用 200 算会晚刹车→到点速度收不回 vTerm)
     nets.get(netId).groups.push(gid);
-    projectiles.push({type:'missile',group:gid,count:12, // KIMI154:每组16→12颗(用户令砍射手:齐射密度-25%,拦截需求同步降,反清屏延续)
+    projectiles.push({type:'missile',group:gid,count:shooter.mslPer||12, // KIMI154:每组16→12颗(用户令砍射手:齐射密度-25%,拦截需求同步降,反清屏延续);RF3 枚数读烘焙字段(定义在 weapons/51-defs)
       pos:[shooter.pos[0]+perp[0]*off,shooter.pos[1]+perp[1]*off,shooter.pos[2]+perp[2]*off],
       vel:[shooter.vel[0]+perp[0]*lane*10,shooter.vel[1]+perp[1]*lane*10,shooter.vel[2]+perp[2]*lane*10], // 继承载机速度矢量+轻微侧向发散
-      target:isShip?target:null, shooter, dmg:shooter.missDmg*12, missDmg:shooter.missDmg, // 组总伤害 + 单颗伤害(v119,命中按单颗算)
+      target:isShip?target:null, shooter, dmg:shooter.missDmg*(shooter.mslPer||12), missDmg:shooter.missDmg, // 组总伤害 + 单颗伤害(v119,命中按单颗算)
       spd:Math.max(200,V.len(shooter.vel)), // 初始速率=载机速率
       fuel:100, age:0, // 燃料(秒) + 飞行年龄(近防发射判定)
       park:!isShip, parkPt:isShip?null:target.pos.slice(), mine:false, trigRadius:isShip?120000:80000, trigMode:'any', // 区域齐射:飞到点位,到了等敌舰进圈自主攻击(盲射);雷触发圈放大v118
@@ -155,7 +155,7 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
       chaffed:false,chaffT:0,lastTarget:null, // v125 干扰弹脱锁
       visBlue:false,visRed:false,
     });
-    shooter.ammo-=12; // KIMI154:每组12颗
+    shooter.ammo-=shooter.mslPer||12; // KIMI154:每组12颗;RF3 枚数读烘焙字段
   }
   if(!(shooter.side==='red'&&!adminMode))log(`${shooter.name} ${isShip?'射手齐射×':'区域齐射×'}${rounds}组(${rounds*12}枚) → ${isShip?target.name:Math.round(target.pos[0]/1000)+'k,'+Math.round(target.pos[1]/1000)+'k'}${netGeom?' · 组网'+netGeom.dirs+'方同时弹着':''}${isNet?' · '+missileMode:'直射'}`,''); // 普通模式隐藏敌方开火
 }

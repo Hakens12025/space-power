@@ -63,7 +63,8 @@ function taskProcess(dt){ // 任务处理器(每2s):意图级检查——巡逻�
     if(t.type==='strike'){
       const target=ships.find(x=>x.id===t.strikeId&&!x.dead);
       if(!target){tasks.delete(id);log('⚔ 打击任务完成(目标已灭)','');continue;}
-      const engageD=350000*(t.aggression?1.3:0.7); // DS150 T4:攻击性旋钮(攻击接战远/隐蔽接战近)
+      const firstShip=ships.find(x=>x.id===t.ships[0]);
+      const engageD=(firstShip&&firstShip.mslRange||350000)*(t.aggression?1.3:0.7); // DS150 T4:攻击性旋钮(攻击接战远/隐蔽接战近);RF3 基距读首舰烘焙射程(原字面量35万)
       t.ships.forEach(sid=>{
         const s=ships.find(x=>x.id===sid);if(!s)return;
         s.lidar=!!t.aggression;

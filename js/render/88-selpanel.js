@@ -1,8 +1,10 @@
 "use strict";
-/* RF2: 简化UI核心——右栏 #selPanel 只放【变化信息】(结构/目标/武器库就绪/事件);
-   底栏 #cmdBar = 【固定信息】(舰名/舰种·等级 + 舰船类数据规格条 specItems,直读烘焙字段)+ 五个纯文字开关。
+/* RF3: 简化UI核心——全部武器相关 UI 由 s.weapons 清单(weapons/51-defs 配装解析产物)驱动生成:
+   底栏武器按钮/规格条武器段/右栏武器状态/hover 射程圈,加新武器种类这些地方零改动。
+   右栏 #selPanel 只放【变化信息】(结构/目标/武器库状态/事件);
+   底栏 #cmdBar = 【固定信息】(舰名/舰种·等级 + 规格条 specItems)+ 开关组(火控/雷达两个舰级开关 + 每件武器一个)。
    开关语义:火控=autoEngage+roe 合一(开=free+自动索敌,关=hold+解除锁定);雷达=lidar;
-   主炮/导弹/拦截=macOn/mslOn/ciwsOn 三个舰载字段。操作作用于【全部选中蓝舰】,状态读第一艘。
+   武器开关=macOn/mslOn/ciwsOn(按 kind 映射)。操作作用于【全部选中蓝舰】,状态读第一艘。
    事件流:86-log 的 log() 末尾 typeof 守卫调 pushEvt(最近5条)。 */
 let selEvts=[]; // 最近5条事件 {t:'mm:ss',msg,cls}
 function pushEvt(msg,cls){ // 事件流写入点(86-log 调;不持久化,换局由 initFleet 全量重置语义顺带处理——面板每次全量重渲)
@@ -13,53 +15,82 @@ function pushEvt(msg,cls){ // 事件流写入点(86-log 调;不持久化,换局�
   if(box)box.innerHTML=selEvts.map(e=>`<div class="li ${e.cls||''}"><span class="t">[${e.t}]</span>${e.msg}</div>`).join('');
 }
 function selBlue(){return selectedShips().filter(s=>s.side==='blue'&&!s.dead);}
-/* 五个开关的统一描述表:get 读第一艘当前态,set 写全部选中,ring=hover 时画射程圈的类型,tip=hover 说明文案 */
-const CMDS=[
-  {id:'cbFire',label:'火控',ring:null,
-    get:s=>!!(s.autoEngage&&s.roe!=='hold'),
-    set:(s,v)=>{s.autoEngage=v;s.roe=v?'free':'hold';if(!v)s.lockedTarget=null;}, // 关=停火+解除锁定,开=自动索敌+自动开火
-    tip:()=>'火控总开关:开=自动锁定已点亮敌舰,各武器进射程自动发射;关=停火并解除锁定'},
-  {id:'cbRadar',label:'雷达',ring:null,
-    get:s=>!!s.lidar,
-    set:(s,v)=>{s.lidar=v;},
-    tip:()=>'LADAR主动探测:开=快速点亮敌舰(识别/火控级),代价=本舰成辐射源,被敌方ESM嗅到方位'},
-  {id:'cbMac',label:'主炮',ring:'mac',
-    get:s=>s.macOn!==false,
-    set:(s,v)=>{s.macOn=v;},
-    tip:s=>`MAC轴炮 · 射程150k · 伤害${s.macDmg||0} · 装填${Math.round(s.macReload||30)}s · 需火控开+机头对准`},
-  {id:'cbMsl',label:'导弹',ring:'msl',
-    get:s=>s.mslOn!==false,
-    set:(s,v)=>{s.mslOn=v;},
-    tip:s=>`导弹齐射 · 射程350k · 每组12枚×${s.cells||4}单元 · 单元装填60s · 需火控开+目标识别级`},
-  {id:'cbCiws',label:'拦截',ring:'ciws',
-    get:s=>s.ciwsOn!==false,
-    set:(s,v)=>{s.ciwsOn=v;},
+/* kind → 开关字段/射程/hover 文案 的映射(武器机制数据从烘焙字段读,源头在 weapons/51-defs) */
+const KIND_INFO={
+  mac:{on:'macOn',
+    range:s=>s.macRange||150000,
+    tip:s=>`MAC轴炮 · 射程${Math.round((s.macRange||150000)/1000)}k · 伤害${s.macDmg||0} · 装填${Math.round(s.macReload||30)}s · 需火控开+机头对准`},
+  msl:{on:'mslOn',
+    range:s=>s.mslRange||350000,
+    tip:s=>`导弹齐射 · 射程${Math.round((s.mslRange||350000)/1000)}k · 每组${s.mslPer||12}枚×${s.cells||4}单元 · 单元装填${s.mslReload||60}s · 需火控开+目标识别级`},
+  ciws:{on:'ciwsOn',
+    range:s=>ciwsOf(s).outer,
     tip:s=>{const c=ciwsOf(s);return `近防 · 外圈${Math.round(c.outer/1000)}k拦截弹 · 内圈${Math.round(c.inner/1000)}k近防炮 · 库存${s.interceptor}枚(被动防御,来袭才发射)`;}},
-];
-function updateCmdBar(sel){
-  for(const c of CMDS){
-    const b=document.getElementById(c.id);if(!b)continue;
-    if(!sel.length){b.classList.add('is-dis');b.classList.remove('on');b.textContent=c.label+'·—';continue;}
-    b.classList.remove('is-dis');
-    const on=c.get(sel[0]);
-    b.classList.toggle('on',on);
-    b.textContent=c.label+(on?'·开':'·关');
+};
+/* 开关描述表:舰级开关(火控/雷达)固定 + 武器开关由旗舰 s.weapons 清单动态追加(无该武器的舰不显示对应钮) */
+function cmdList(s){
+  const cmds=[
+    {id:'cbFire',label:'火控',ring:null,
+      get:x=>!!(x.autoEngage&&x.roe!=='hold'),
+      set:(x,v)=>{x.autoEngage=v;x.roe=v?'free':'hold';if(!v)x.lockedTarget=null;}, // 关=停火+解除锁定,开=自动索敌+自动开火
+      tip:()=>'火控总开关:开=自动锁定已点亮敌舰,各武器进射程自动发射;关=停火并解除锁定'},
+    {id:'cbRadar',label:'雷达',ring:null,
+      get:x=>!!x.lidar,
+      set:(x,v)=>{x.lidar=v;},
+      tip:()=>'LADAR主动探测:开=快速点亮敌舰(识别/火控级),代价=本舰成辐射源,被敌方ESM嗅到方位'},
+  ];
+  if(s)for(const w of (s.weapons||[])){
+    const ki=KIND_INFO[w.kind];if(!ki)continue;
+    cmds.push({id:'cb_'+w.kind,label:w.label,ring:w.kind,
+      get:x=>x[ki.on]!==false,
+      set:(x,v)=>{x[ki.on]=v;},
+      tip:ki.tip});
   }
+  return cmds;
 }
-/* 底栏固定规格条:舰船类数据(makeShip 烘焙字段)直接读直接放,零加工 */
+/* 底栏规格条:舰船类数据直接读直接放,零加工;武器段按清单生成 */
 function specItems(s){
-  const c=ciwsOf(s);
-  return [
+  const items=[
     ['结构',s.maxHp],
     ['加速',s.thrust],
     ['转向',s.turnRate],
     ['传感器',Math.round(s.sensorRange/1000)+'k'],
     ['火控通道',s.guideChan],
-    ['主炮',s.macDmg>0?(s.macDmg+'×'+Math.round(s.macReload)+'s'):'无'],
-    ['导弹',s.ammo+'枚×'+s.cells+'组'],
-    ['拦截弹',s.interMax+'枚'],
-    ['近防',Math.round(c.outer/1000)+'k/'+Math.round(c.inner/1000)+'k'],
   ];
+  for(const w of (s.weapons||[])){
+    if(w.kind==='mac')items.push(['主炮',s.macDmg>0?(s.macDmg+'×'+Math.round(s.macReload)+'s'):'无']);
+    else if(w.kind==='msl')items.push(['导弹',s.ammo+'枚×'+s.cells+'组']);
+    else if(w.kind==='ciws'){const c=ciwsOf(s);items.push(['拦截弹',s.interMax+'枚'],['近防',Math.round(c.outer/1000)+'k/'+Math.round(c.inner/1000)+'k']);}
+  }
+  return items;
+}
+/* 右栏武器库状态行:按清单生成 */
+function weaponRows(s){
+  let h='';
+  for(const w of (s.weapons||[])){
+    if(w.kind==='mac')h+=`<div class="row"><span class="k">主炮</span><span class="v">${s.macCd<=0?'就绪':Math.ceil(s.macCd)+'s'}</span></div>`;
+    else if(w.kind==='msl')h+=`<div class="row"><span class="k">导弹</span><span class="v">${readyCells(s)}/${s.cells}组 · 弹${s.ammo}枚</span></div>`;
+    else if(w.kind==='ciws')h+=`<div class="row"><span class="k">拦截弹</span><span class="v">${s.interceptor}/${s.interMax}枚</span></div>`;
+  }
+  return h;
+}
+function updateCmdBar(sel){
+  const s=sel[0];
+  for(const c of cmdList(s)){
+    const b=document.getElementById(c.id);if(!b)continue;
+    if(!s){b.classList.add('is-dis');b.classList.remove('on');b.textContent=c.label+'·—';continue;}
+    b.classList.remove('is-dis');
+    const on=c.get(s);
+    b.classList.toggle('on',on);
+    b.textContent=c.label+(on?'·开':'·关');
+  }
+  updateCmdBarVis(s); // 武器钮按旗舰配装显隐(CV 无主炮则无主炮钮)
+}
+function updateCmdBarVis(s){
+  for(const kind in KIND_INFO){
+    const b=document.getElementById('cb_'+kind);if(!b)continue;
+    b.style.display=(!s||!(s.weapons||[]).some(w=>w.kind===kind))?'none':'';
+  }
 }
 function updateSelPanel(){ // frame 低频调用(每20帧,与 updateCardsStatus 同拍)
   const box=document.getElementById('selInfo');
@@ -87,32 +118,39 @@ function updateSelPanel(){ // frame 低频调用(每20帧,与 updateCardsStatus 
     <div class="hpbar"><i style="width:${fr*100}%;background:${fr>0.35?'var(--state-ok)':'var(--state-warn)'}"></i></div>
     <div class="row"><span class="k">结构</span><span class="v">${Math.max(0,Math.round(s.hp))} / ${s.maxHp}</span></div>
     <div class="row"><span class="k">目标</span><span class="v">${t?t.name+' · '+Math.round(dist/1000)+'k':'—'}</span></div>
-    <div class="row"><span class="k">主炮</span><span class="v">${s.macCd<=0?'就绪':Math.ceil(s.macCd)+'s'}</span></div>
-    <div class="row"><span class="k">导弹</span><span class="v">${readyCells(s)}/${s.cells}组 · 弹${s.ammo}枚</span></div>
-    <div class="row"><span class="k">拦截弹</span><span class="v">${s.interceptor}/${s.interMax}枚</span></div>`;
+    ${weaponRows(s)}`;
   updateCmdBar(sel);
 }
-function bindCmdBar(){ // 88 在 body 末尾加载,五个按钮由 index.html 保证存在(裸绑前仍带 null 防护)
-  for(const c of CMDS){
-    const b=document.getElementById(c.id);if(!b)continue;
+function bindCmdBar(){ // 按钮一次性预生成(舰级2个 + KIND_INFO 每种武器一个);显隐随旗舰配装,事件按下时现查命令表
+  const wrap=document.querySelector('#cmdBar .cmd-btns');
+  if(!wrap)return;
+  const ensure=(id)=>{ // 生成(或复用)按钮并挂事件;事件里按当前旗舰重新解析 cmd(不闭包捕获创建期对象)
+    let b=document.getElementById(id);
+    if(b)return b;
+    b=document.createElement('button');b.className='btn cbtn';b.id=id;wrap.appendChild(b);
     b.addEventListener('click',()=>{
       const sel=selBlue();if(!sel.length)return;
-      const nv=!c.get(sel[0]); // 以第一艘当前态取反,全队统一置为目标态
-      sel.forEach(s=>c.set(s,nv));
-      log(`${sel.length} 艘 ${c.label}${nv?'开':'关'}`,'');
+      const cmd=cmdList(sel[0]).find(x=>x.id===b.id);if(!cmd||!cmd.set)return;
+      const nv=!cmd.get(sel[0]); // 以第一艘当前态取反,全队统一置为目标态
+      sel.forEach(s=>cmd.set(s,nv));
+      log(`${sel.length} 艘 ${cmd.label}${nv?'开':'关'}`,'');
       updateSelPanel();
     });
     b.addEventListener('mouseenter',()=>{
       const sel=selBlue();
-      hoverRing=sel.length?c.ring:null; // 83-hud drawHoverRings 读
+      const cmd=sel.length?cmdList(sel[0]).find(x=>x.id===b.id):null;
+      hoverRing=(cmd&&cmd.ring)?cmd.ring:null; // 83-hud drawHoverRings 读
       const tip=document.getElementById('cmdTip');
-      if(tip)tip.style.display=sel.length?'block':'none';
-      if(tip&&sel.length)tip.textContent=c.tip(sel[0]);
+      if(tip)tip.style.display=(cmd&&cmd.tip)?'block':'none';
+      if(tip&&cmd&&cmd.tip)tip.textContent=cmd.tip(sel[0]);
     });
     b.addEventListener('mouseleave',()=>{
       hoverRing=null;
       const tip=document.getElementById('cmdTip');if(tip)tip.style.display='none';
     });
-  }
+    return b;
+  };
+  for(const c of cmdList(null))ensure(c.id); // cbFire/cbRadar
+  for(const kind in KIND_INFO)ensure('cb_'+kind); // cb_mac/cb_msl/cb_ciws
 }
 bindCmdBar();

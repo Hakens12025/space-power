@@ -33,7 +33,7 @@ function stepWeaponSystems(dt){
     const t=s.lockedTarget;
     if(!t||t.dead||t.side===s.side)continue;
     if((s.side==='blue'?t.litBlue:t.litRed)<2)continue; // 与手动齐射同一识别级门控
-    if(V.len(V.sub(t.pos,s.pos))>=350000)continue;
+    if(V.len(V.sub(t.pos,s.pos))>=(s.mslRange||350000))continue; // RF3 射程读烘焙字段(定义在 weapons/51-defs)
     const ready=readyCells(s);
     if(ready<Math.ceil((s.cells||4)/2))continue; // 过半就绪才打,自然成波(导弹Arm/弹药不足由 orderMissileSalvo 内部兜底)
     orderMissileSalvo(s,t,Math.min(2,ready));

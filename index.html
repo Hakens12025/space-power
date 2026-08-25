@@ -180,17 +180,11 @@
   </div>
 </div>
 
-<!-- RF2 简化UI:底部操作栏 = 选中舰固定信息(舰名/舰种·等级 + 舰船类数据规格条,直接读烘焙字段) + 火控/雷达/武器开关(纯文字);右侧 #selPanel 只放变化信息(武器库状态) -->
+<!-- RF3 简化UI:底部操作栏 = 固定信息(舰名/舰种·等级 + 规格条) + 开关组(88-selpanel 按 s.weapons 配装动态生成:火控/雷达 + 每件武器一个按钮) -->
 <div id="cmdBar" class="panel">
   <div id="cmdInfo"><b id="ciName">—</b><span id="ciCls">—</span><span id="ciSpec"></span></div>
   <div class="cmd-sep"></div>
-  <div class="cmd-btns">
-    <button class="btn cbtn" id="cbFire">火控·关</button>
-    <button class="btn cbtn" id="cbRadar">雷达·关</button>
-    <button class="btn cbtn" id="cbMac">主炮·开</button>
-    <button class="btn cbtn" id="cbMsl">导弹·开</button>
-    <button class="btn cbtn" id="cbCiws">拦截·开</button>
-  </div>
+  <div class="cmd-btns"></div>
 </div>
 <div id="cmdTip"></div>
 

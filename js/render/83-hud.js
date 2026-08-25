@@ -426,8 +426,8 @@ function drawHoverRings(){
   for(const id of selected){
     const s=ships.find(x=>x.id===id);if(!s||s.dead||s.side!=='blue')continue;
     const p=toScreen(s.pos[0],s.pos[1]);
-    if(hoverRing==='mac')ring(p,150000,'主炮 150k');
-    else if(hoverRing==='msl')ring(p,350000,'导弹 350k');
+    if(hoverRing==='mac')ring(p,s.macRange||150000,'主炮 '+Math.round((s.macRange||150000)/1000)+'k'); // RF3 射程读烘焙字段(定义在 weapons/51-defs)
+    else if(hoverRing==='msl')ring(p,s.mslRange||350000,'导弹 '+Math.round((s.mslRange||350000)/1000)+'k');
     else if(hoverRing==='ciws'){const c=ciwsOf(s);ring(p,c.outer,'外圈拦截 '+Math.round(c.outer/1000)+'k');ring(p,c.inner,'内圈 '+Math.round(c.inner/1000)+'k');}
   }
 }
