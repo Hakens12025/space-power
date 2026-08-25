@@ -412,3 +412,22 @@ function drawRanges(){ // 范围模式:显示所有范围圈(传感器/CIWS/拦�
     if(p.type==='beacon'&&p.arrived&&rangeShow.beacon)ringLabel(sp[0],sp[1],300000*cam.zoom,'信标 300k','rgba(255,154,85,.9)');
   }
 }
+/* RF2 简化UI:hover 底栏武器钮时给选中蓝舰画对应射程圈(独立于 rangeView 总开关;
+   不复用 drawRanges 内嵌的 ringLabel——那是它的局部闭包,这里自画同款 arc+顶标) */
+function drawHoverRings(){
+  if(!hoverRing)return;
+  const ring=(p,r,text)=>{
+    if(r*cam.zoom<4)return; // 缩太小就不画(弧长不足1px,只剩噪点)
+    ctx.strokeStyle='rgba(90,167,255,.6)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.arc(p[0],p[1],r*cam.zoom,0,6.283);ctx.stroke();
+    ctx.fillStyle='rgba(143,208,255,.85)';ctx.font='10px Consolas';ctx.textAlign='center';ctx.textBaseline='bottom';
+    ctx.fillText(text,p[0],p[1]-r*cam.zoom-2);
+  };
+  for(const id of selected){
+    const s=ships.find(x=>x.id===id);if(!s||s.dead||s.side!=='blue')continue;
+    const p=toScreen(s.pos[0],s.pos[1]);
+    if(hoverRing==='mac')ring(p,150000,'主炮 150k');
+    else if(hoverRing==='msl')ring(p,350000,'导弹 350k');
+    else if(hoverRing==='ciws'){const c=ciwsOf(s);ring(p,c.outer,'外圈拦截 '+Math.round(c.outer/1000)+'k');ring(p,c.inner,'内圈 '+Math.round(c.inner/1000)+'k');}
+  }
+}

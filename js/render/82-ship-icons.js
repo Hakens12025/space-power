@@ -119,6 +119,10 @@ function drawShip(s){
   if(isSel){
     ctx.strokeStyle='#ffe066';ctx.lineWidth=1.6;
     ctx.beginPath();ctx.arc(p[0],p[1],r+6,0,6.283);ctx.stroke();
+    // RF2 简化UI:选中舰头顶小血条(实时信息画在地图上看的位置,与右栏面板互补)
+    const bw=26,bh=3,bx=p[0]-bw/2,by=p[1]-r-14,fr=Math.max(0,Math.min(1,s.hp/s.maxHp));
+    ctx.fillStyle='rgba(10,14,20,.7)';ctx.fillRect(bx-1,by-1,bw+2,bh+2);
+    ctx.fillStyle=fr>0.35?'#54e0d0':'#ffb454';ctx.fillRect(bx,by,bw*fr,bh);
   }
   ctx.restore();
 

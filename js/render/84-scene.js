@@ -16,6 +16,7 @@ function render(){
   drawProjectiles();
   drawCorridors(); // v126:来袭走廊(敌方导弹发射预告弹道)
   drawRanges(); // 范围模式:所有范围圈(GM下含敌方逻辑圈)
+  drawHoverRings(); // RF2 简化UI:底栏武器钮 hover 时选中舰的射程圈
   drawHits();
   drawLocks();
   drawRange();
