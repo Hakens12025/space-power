@@ -26,10 +26,22 @@ function stepWeaponSystems(dt){
     }
     if(best){s.lockedTarget=best;s.lockPlayer=false;}
   }
+  // RF2 导弹自动齐射(底栏"导弹"开关的自动行为):火控开+导弹开+锁定活目标+识别级+35万内+就绪单元过半 → 下令。
+  // 波次节流靠发射单元 60s 独立装填天然限流,无需定时器;敌方不受影响(red 的 autoEngage 恒 false,enemyAI 走自己的 8% 掷骰)。
+  for(const s of ships){
+    if(s.dead||!s.autoEngage||s.mslOn===false)continue;
+    const t=s.lockedTarget;
+    if(!t||t.dead||t.side===s.side)continue;
+    if((s.side==='blue'?t.litBlue:t.litRed)<2)continue; // 与手动齐射同一识别级门控
+    if(V.len(V.sub(t.pos,s.pos))>=350000)continue;
+    const ready=readyCells(s);
+    if(ready<Math.ceil((s.cells||4)/2))continue; // 过半就绪才打,自然成波(导弹Arm/弹药不足由 orderMissileSalvo 内部兜底)
+    orderMissileSalvo(s,t,Math.min(2,ready));
+  }
   // 近防自动发射拦截导弹实体(智能按需:1颗拦1颗,防过剩/防多舰重复)
   for(const x of ships){
     if(x.dead)continue;
-    const ciws=ciwsOf(x);if(!ciws||ciws.outer<=0||x.interceptor<=0)continue; // TIER1 近防回表改访问器(每 tick 近防循环)
+    const ciws=ciwsOf(x);if(x.ciwsOn===false||!ciws||ciws.outer<=0||x.interceptor<=0)continue; // TIER1 近防回表改访问器(每 tick 近防循环);RF2 拦截开关:关=整段不走(连冷却都不耗)
     if(x.ciwsCd===undefined)x.ciwsCd=0;
     if(x.ciwsCd>0){x.ciwsCd-=dt;continue;}
     for(const p of projectiles){
@@ -61,7 +73,7 @@ function stepWeaponSystems(dt){
   }
   // 锁定自动开火(10秒一轮):机头摆到对准窗口的瞬间才开炮(不盲射);v125 ROE门控
   for(const s of ships){
-    const roeOK=s.roe==='free'||(s.roe==='tight'&&s.roeCd>0); // free自由/tight被攻击才还击(roeCd=受击冷却)/hold不开火
+    const roeOK=s.macOn!==false&&(s.roe==='free'||(s.roe==='tight'&&s.roeCd>0)); // free自由/tight被攻击才还击(roeCd=受击冷却)/hold不开火;RF2 主炮开关:关=不参与自动开火
     if(roeOK&&!s.dead&&s.lockedTarget&&!s.lockedTarget.dead&&s.lockedTarget.side!==s.side&&s.macCd<=0&&hasMAC(s)&&macAligned(s,s.lockedTarget))fireMAC(s,s.lockedTarget); // TIER1 MAC 舰种门改能力谓词
     if(s.roeCd>0)s.roeCd-=dt;
   }

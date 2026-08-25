@@ -65,6 +65,14 @@ t('SOAK',function(){
   projectiles.forEach(function(p){if(!isFinite(p.pos[0]+p.pos[1]+p.pos[2]))np++;});
   return 'steps=$SOAK NaNships='+nb+' NaNproj='+np+' maxLive='+maxp+' seen='+JSON.stringify(seen);
 });
+/* 6b. RF2 自动火控链:全蓝舰开火控,步进60s,靶场记账应>0(索敌→锁定→MAC/导弹→命中→rangeTally 全自动链) */
+t('FLOW2',function(){
+  ships.forEach(function(s){if(s.side==='blue'){s.autoEngage=true;s.roe='free';}});
+  for(var i=0;i<3000;i++){stepSim(CFG.step);simTime+=CFG.step;}
+  var hits=0,dmg=0;
+  ships.forEach(function(s){if(s.rangeStat){hits+=s.rangeStat.hits;dmg+=s.rangeStat.dmg;}});
+  return 'autoHits='+hits+' autoDmg='+Math.round(dmg);
+});
 /* 7. 渲染不炸 */
 t('RENDER',function(){render();return 'ok';});
 r.push('ERRORS='+(errs.length?errs.join(' | '):'none'));
@@ -87,4 +95,5 @@ grep -q 'SYMS_MISSING=none' "$OUT" || { echo "✗ 符号缺失"; fail=1; }
 grep -q 'SYMS_THREW=none' "$OUT" || { echo "✗ 符号 TDZ/异常"; fail=1; }
 grep -q '^ERRORS=none' "$OUT" || { echo "✗ 运行期错误"; fail=1; }
 grep -q '=THREW:' "$OUT" && { echo "✗ 有检查项抛异常"; fail=1; }
+grep -qE 'FLOW2=autoHits=[1-9]' "$OUT" || { echo "✗ 自动火控链未命中(索敌→开火→记账断链)"; fail=1; }
 [ $fail -eq 0 ] && echo "✓ 全部通过" || exit 1

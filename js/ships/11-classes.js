@@ -116,6 +116,7 @@ function makeShip(cls,name,pos,facing,vel,side,tier){ // TIER1 加第 7 参 tier
     orders:[], st:'待机', brake:false, crawling:false, flame:0, sideFlame:0, speedCmd:800, turnTarget:null, formation:null,
     roe:'free', roeCd:0, // v125 ROE交战规则:free自由开火/tight克制(被攻击才还击)/hold锁定(禁止开火);roeCd=受击还击冷却
     autoEngage:false, // v125 自动索敌交战:自动锁定感知层点亮的最近敌舰并开火(目标导向指挥)
+    macOn:true, mslOn:true, ciwsOn:true, // RF2 简化UI武器开关(底栏·主炮/导弹/拦截):默认全开与既有自动化一致;火控默认关=autoEngage:false
     driftFire:false,driftFireT:0, // DS171 M3:漂移射击(60s限时)——命令照走,非硬机动段机头找窗口对准即发;承接KIMI148 lockPlayer 职能
     // 感知层 v4:传感器/信号/阵营点亮状态 + LADAR开关 + 信标
     sensorRange:st.sensorRange, detPower:st.detPower,

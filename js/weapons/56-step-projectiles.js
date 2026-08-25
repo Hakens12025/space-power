@@ -301,7 +301,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         const sectorDmgMult=1+Math.max(0,sects.size-1)*0.5;
         for(const x of ships){ // 命中点附近每艘近防舰逐层拦截(拦截率×过载因子)
           if(x.side===p.shooter.side||x.dead)continue;
-          const ciws=ciwsOf(x);if(!ciws)continue; // TIER1 近防回表改访问器(导弹命中判定热路径,tier 影响防空圈的必经通路)
+          const ciws=ciwsOf(x);if(!ciws||x.ciwsOn===false)continue; // TIER1 近防回表改访问器(导弹命中判定热路径,tier 影响防空圈的必经通路);RF2 拦截开关:关=内圈近防炮也不参与
           const d0=V.len(V.sub(x.pos,p.pos));
           // 外圈由拦截导弹实体负责(飞行中拦截);命中时只剩内圈近防炮
           if(ciws.inner>0&&d0<ciws.inner){ // 内圈:近防炮(免费,近距离才开火)
