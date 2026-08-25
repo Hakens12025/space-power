@@ -1,17 +1,16 @@
-AA_RING_REF
 ACTIONS
 CAM_MULT
 CFG
 CLS_ALIAS
-CLS_CIWS
 CLS_HULL
+CLS_LOADOUT
 CLS_MOB
 CLS_NAME
 CLS_ROLE
 CLS_SENS
+CLS_STRUCT
 CLS_TIER_MUL
 CLS_VALUE
-CLS_WPN
 CMDS
 DEFAULT_ENEMY
 GEAR_NAMES
@@ -48,6 +47,8 @@ TIER_ORDER
 TIER_SCALE
 V
 W
+WPN
+aaRingRef
 acc
 addWaypoint
 adminMode
@@ -69,6 +70,7 @@ camKeys
 captureKey
 ceaseFire
 cellsText
+ciwsDefOf
 ciwsOf
 ciwsOverload
 ciwsSectorOverload
@@ -296,6 +298,7 @@ replayData
 resetForNewOrders
 resetRangeStat
 resize
+resolveLoadout
 returnToFormation
 ringBtns
 rmbClick

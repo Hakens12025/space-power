@@ -1,6 +1,8 @@
 "use strict";
 /* RF1: 拆自 js/14-contextmenu.js L3-16,L23-70,L188-190(阵型参数/槽位数学,含 formationTargets)+ 03-ships.js L27(AA_RING_REF)。纯移动无逻辑改动。 */
-const AA_RING_REF=(CLS_CIWS.DD&&CLS_CIWS.DD.outer)||25000; // TIER1 阵型用防空圈基准半径:收拢 14/17 两处重复字面量(值仍是 25000)
+function aaRingRef(){ // TIER1 阵型用防空圈基准半径(收拢两处重复字面量,值 25000)。RF3 改惰性函数:原为载入期读 CLS_CIWS.DD.outer,武器表移到 weapons/51-defs 后本文件先于它加载,顶层引用会拿不到
+  return (typeof WPN!=='undefined'&&WPN.ciws_core&&WPN.ciws_core.outer)||25000;
+}
 let formationFan=2.0944; // 编队前卫扇面半角(rad),默认±120°,设置里可调(30°~150°)
 let formationSpacing=1;  // 阵型疏密(0.5~2,小=密,大=疏)
 let fmGap=50000;         // v144:护卫目标间距(防空圈直径5万)——快捷档1连/2叠/3漏设它,密度缩放乘上
@@ -34,7 +36,7 @@ function formationSlots(list){ // v134:智能阵型——按舰种分槽位;护�
   const slots=[];
   // v125:主力舰(巡洋)横队——垂直航向并排(不纵队),间距20k:蹭护卫防空圈且不挤(避免脱锁导弹复锁隔壁船)
   cru.forEach((s,i)=>slots.push({s,offset:[0,(i-(cru.length-1)/2)*20000,0]}));
-  const friOuter=AA_RING_REF; // 防空圈大小;TIER1 改用统一基准常量(原为字面量取 CLS_CIWS.FRIGATE.outer,值不变)
+  const friOuter=aaRingRef(); // 防空圈大小;TIER1 统一基准常量(原为字面量取 CLS_CIWS.FRIGATE.outer,值不变);RF3 改惰性函数
   const sp=formationSpacing;
   const gap=fmGap; // v144:护卫目标间距(fmGap,快捷档设)——圈连/叠/漏的目标弦距
   const nFri=fri.length;

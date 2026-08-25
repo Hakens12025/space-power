@@ -1,6 +1,13 @@
 "use strict";
 /* RF1: 拆自 js/03-ships.js L26,L28-34,L145-150(近防谓词/过载/转向油耗/扇面)。纯移动无逻辑改动。 */
-function ciwsOf(s){return (s&&s.ciws)||CLS_CIWS[s&&s.cls]||CLS_CIWS.DD;} // TIER1 近防参数查询:实例优先(makeShip 已烘焙 s.ciws),表查询与 DD 兜底只留给非 makeShip 造出来的对象
+function ciwsOf(s){ // TIER1 近防参数查询:实例优先(makeShip 已烘焙 s.ciws),定义兜底只留给非 makeShip 造出来的对象
+  return (s&&s.ciws)||ciwsDefOf(s&&s.cls);
+}
+function ciwsDefOf(cls){ // RF3 兜底改读 weapons/51-defs 定义表(原 CLS_CIWS[cls]||CLS_CIWS.DD):取该舰种配装里的 ciws 件,无则 DD 的
+  const ids=(typeof CLS_LOADOUT!=='undefined'&&CLS_LOADOUT[cls])||CLS_LOADOUT.DD;
+  const d=(typeof WPN!=='undefined'&&WPN[ids.find(id=>WPN[id]&&WPN[id].kind==='ciws')])||WPN.ciws_core;
+  return {outer:d.outer,outerIntercept:d.outerIntercept,inner:d.inner,innerIntercept:d.innerIntercept};
+}
 function ciwsOverload(groups){ // 近防过载:同时来袭组数越多,每组拦截越弱(火力被摊薄)
   return 1/(1+(groups-1)*0.6);
 }

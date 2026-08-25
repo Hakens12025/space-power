@@ -72,9 +72,9 @@ const RANGE_KNOBS=[
   {k:'ecm',        nm:'ECM',      type:'bool'},
   {k:'ecmPower',   nm:'ECM强度',   type:'num', min:0.2,max:1,step:0.1,   fmt:v=>Math.round(v*100)+'%'},
 ];
-function rangeDefaults(){ // 缺省 = DD(靶用的舰种)的类表基线,这样面板开箱即是"未改动"的对照组
-  const c=(typeof CLS_CIWS!=='undefined'&&CLS_CIWS.DD)||{innerIntercept:0.85,chaffRate:0.25};
-  const w=(typeof CLS_WPN!=='undefined'&&CLS_WPN.DD)||{inter:384};
+function rangeDefaults(){ // 缺省 = DD(靶用的舰种)的武器定义基线,这样面板开箱即是"未改动"的对照组。RF3 改读 weapons/51-defs(原 CLS_CIWS.DD/CLS_WPN.DD)
+  const c=(typeof WPN!=='undefined'&&WPN.ciws_core)||{innerIntercept:0.85,chaffRate:0.25};
+  const w=(typeof WPN!=='undefined'&&WPN.ciws_core)||{inter:384};
   const sn=(typeof CLS_SENS!=='undefined'&&CLS_SENS.DD)||{sigBase:0.7,ecmPower:0.3};
   return {evadeOn:false,evadeR:30000,evadeT:20,speedCmd:2,
     inter:w.inter,interHitMul:1,inner:c.innerIntercept,chaff:c.chaffRate,

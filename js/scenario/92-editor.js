@@ -5,14 +5,17 @@ function applyClsTier(s,cls,tier){ // TIER1 就地改一艘现有舰的舰种/�
   const c=normCls(cls||s.cls);
   const t=(tier===1||tier===2||tier===3)?tier:2;
   const st=shipStats(c,t);
+  const lw=resolveLoadout(c,t); // RF3 武器字段走 weapons/51-defs(与 makeShip 同一通路)
   s.cls=c; s.tier=t;
   s.thrust=st.thrust; s.turnRate=st.turnRate; s.speedGears=(st.speedGears||[0,250,500,800,-1]).slice();
   s.hp=st.hp; s.maxHp=st.hp; // 编辑器里的舰是待放置的满血单位,不做按比例保血——这个函数只服务编辑期,不要拿去改战斗中的舰
-  s.ammo=st.ammo; s.macDmg=st.macDmg; s.missDmg=st.missDmg; s.macReload=st.mac; s.macCd=0;
-  s.interceptor=st.inter||0; s.interMax=st.inter||0;
-  s.cells=(st.cells||4); s.cellTimer=Array(st.cells||4).fill(0);
-  s.guideChan=st.guideChan||4; s.chaffRate=(st.chaffRate!==undefined?st.chaffRate:0.25); s.value=st.value; // TIER1 chaffRate 口径与 makeShip 一致:0 是合法值,不能被 || 吞掉
-  s.ciws={outer:st.outer,outerIntercept:st.outerIntercept,inner:st.inner,innerIntercept:st.innerIntercept};
+  s.ammo=lw.ammo; s.macDmg=lw.macDmg; s.missDmg=lw.missDmg; s.macReload=lw.mac||0; s.macRange=lw.macRange||150000; s.macCd=0;
+  s.interceptor=lw.inter||0; s.interMax=lw.inter||0;
+  s.cells=(lw.cells||4); s.cellTimer=Array(lw.cells||4).fill(0);
+  s.mslPer=lw.mslPer||12; s.mslReload=lw.mslReload||60; s.mslRange=lw.mslRange||350000;
+  s.guideChan=st.guideChan||4; s.chaffRate=(lw.chaffRate!==undefined?lw.chaffRate:0.25); s.value=st.value; // TIER1 chaffRate 口径与 makeShip 一致:0 是合法值,不能被 || 吞掉
+  s.weapons=lw.weapons; // RF3 武器清单同步重刷
+  s.ciws={outer:lw.outer,outerIntercept:lw.outerIntercept,inner:lw.inner,innerIntercept:lw.innerIntercept};
   s.sensorRange=st.sensorRange; s.detPower=st.detPower; s.esmQual=st.esmQual; s.sigBase=st.sigBase;
   s.rcs=st.rcs; s.pPing=st.pPing; s.floorIr=st.floorIr; s.floorEsm=st.floorEsm; s.ecmPower=(st.ecmPower!==undefined?st.ecmPower:0.4); // TIER1 ecmPower 口径与 makeShip 一致:0 是合法值
   s.beaconMax=(st.beacon||0); s.beaconCount=(st.beacon||0);

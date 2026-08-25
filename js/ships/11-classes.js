@@ -10,13 +10,9 @@ const CLS_MOB={ // 舰种差异化机动:转向率 / 推进加速度(太空无�
   DD:{turnRate:0.26,thrust:20,speedGears:[0,250,500,800,-1]}, // TIER1 原 FRIGATE 巴黎级:均衡(基准档),数值原样搬;SCOUT 折进 DD,其 0.4/25/[0,300,600,1000] 一并退役
   CA:{turnRate:0.16,thrust:15,speedGears:[0,200,400,700,-1]}, // TIER1 原 CRUISER 马拉松级:重,加速适中;DS148速度档按舰种(巡洋偏慢)
 };
-const CLS_WPN={ // 舰种武器配置:结构/装填秒/射手弹数(总枚)/MAC伤害/导弹伤害/拦截导弹载弹/发射单元/信标载量
-  DD:{hp:550, mac:30, ammo:192, macDmg:220, missDmg:12, inter:384, cells:4, beacon:2}, // TIER1 原 FRIGATE 护卫:16组×12,4发射单元;beacon 由 makeShip 里无条件 2 枚改表驱动 TODO(TIER-BAL) 载量待定
-  CA:{hp:900, mac:30, ammo:240, macDmg:400, missDmg:15, inter:320, cells:6, beacon:0}, // TIER1 原 CRUISER 巡洋:射手20组×12颗(KIMI154:每组16→12,组数不变),6发射单元 TODO(TIER-BAL) beacon 载量待定
-};
-const CLS_CIWS={ // 近防系统:外圈(远程拦截来袭导弹)/ 内圈(近防炮)/ 干扰弹chaffRate(数值概念:命中时导弹再丢随机数判被勾走)
-  DD:{outer:25000,outerIntercept:0.40,inner:8000,innerIntercept:0.85,chaffRate:0.25}, // TIER1 原 FRIGATE 护卫:防空核心,干扰中(键序统一成 DD,CA)
-  CA:{outer:15000,outerIntercept:0.25,inner:5000,innerIntercept:0.40,chaffRate:0.15}, // TIER1 原 CRUISER 巡洋:自防御,干扰弱(大目标)
+const CLS_STRUCT={ // RF3 舰体表:结构/信标载量(非武器数据,从原 CLS_WPN 拆出;武器数值已移 weapons/51-defs 的 WPN 定义表)
+  DD:{hp:550, beacon:2}, // TIER1 原 FRIGATE 护卫:beacon 由 makeShip 里无条件 2 枚改表驱动 TODO(TIER-BAL) 载量待定
+  CA:{hp:900, beacon:0}, // TIER1 原 CRUISER 巡洋 TODO(TIER-BAL) beacon 载量待定
 };
 /* ===== TIER1 能力谓词层:把逻辑层散落的 cls==='XXX' 硬编码换成数据驱动查询(P0 建的安全垫,P1 随五张表一起换成 DD/CA/BB/CV 键) ===== */
 const CLS_ROLE={DD:'screen',CA:'line',BB:'line',CV:'line'}; // TIER1 舰种战术角色:主力线/屏护——阵型分槽按角色不认舰种字符串;CV 先并入主力线 TODO(TIER-BAL) 航母后置护航槽位要一个未标定的后置距离,平衡阶段再加
@@ -26,10 +22,8 @@ function hasMAC(s){return ((s&&s.macDmg)||0)>0;} // TIER1 是否装备 MAC 主�
 /* ===== TIER1 BB/CV 占位:显式克隆 CA,克隆语句本身就是"这不是设计过的数值"的声明;grep TODO(TIER-BAL) 一次全能捞出来 ===== */
 CLS_MOB.BB={...CLS_MOB.CA,speedGears:CLS_MOB.CA.speedGears.slice()};   // TODO(TIER-BAL) 战列机动待标定;speedGears 单独拷副本,否则 BB/CV/CA 共用同一个数组引用
 CLS_MOB.CV={...CLS_MOB.CA,speedGears:CLS_MOB.CA.speedGears.slice()};   // TODO(TIER-BAL) 航母机动待标定
-CLS_WPN.BB={...CLS_WPN.CA};                                            // TODO(TIER-BAL) 战列武备待标定
-CLS_WPN.CV={...CLS_WPN.CA,mac:0,macDmg:0};                             // 航母无主炮=结构事实(不是待平衡数值),hasMAC 按 macDmg>0 自动把 CV 排除在 6 处 MAC 门控外;其余字段 TODO(TIER-BAL)
-CLS_CIWS.BB={...CLS_CIWS.CA};                                          // TODO(TIER-BAL) 战列近防待标定
-CLS_CIWS.CV={...CLS_CIWS.CA};                                          // TODO(TIER-BAL) 航母近防待标定
+CLS_STRUCT.BB={...CLS_STRUCT.CA};                                          // TODO(TIER-BAL) 战列舰体待标定
+CLS_STRUCT.CV={...CLS_STRUCT.CA};                                          // TODO(TIER-BAL) 航母舰体待标定(武器差异在 CLS_LOADOUT.CV:不装主炮)
 /* ==== TIER-BAL:START —— 4 舰种 × T1/T2/T3 数值层(未平衡) ====
    形状:base 表(按舰种,上面那五张)× tier 乘数层(按分级,可按舰种覆盖)→ shipStats(cls,tier) → makeShip 一次性烘焙到实例。
    平衡阶段只编辑这一段连续区域:改 TIER_MUL / CLS_TIER_MUL 两个对象即可,任何调用点都不用碰。
@@ -85,8 +79,7 @@ function shipStats(cls,tier){ // TIER1 (舰种,分级) → 扁平属性对象:�
   if(hit)return hit;
   const src=Object.assign({},
     CLS_MOB[c]||{turnRate:CFG.turnRate,thrust:CFG.thrust},
-    CLS_WPN[c]||{hp:500,mac:30,ammo:40,macDmg:250,missDmg:12},
-    CLS_CIWS[c]||CLS_CIWS.DD,
+    CLS_STRUCT[c]||{hp:500,beacon:0}, // RF3 武器数值已移 weapons/51-defs(resolveLoadout 单独解析),这里只剩舰体/机动/感知
     CLS_SENS[c]||CLS_SENS.DD,
     {value:CLS_VALUE[c]||1,                                       // 威胁权重进 tier 层:04-targeting:6 网分配与 07-missiles:297 伏击雷阈值读的就是它(经 shipValue 实例优先)
      rcs:SENS.RCS[c]||1.0, pPing:SENS.P_PING[c]||1.0,             // SENS 四张按舰种子表也并进来,烘焙后 06-sensors 每 tick 每对舰不再回表
@@ -100,19 +93,22 @@ function makeShip(cls,name,pos,facing,vel,side,tier){ // TIER1 加第 7 参 tier
   shipSeq++;
   const c=normCls(cls); // TIER1 舰种归一化入口:旧存档里的 CRUISER/FRIGATE/SCOUT 在这里转成新名,cls 落库即新名,下游几十个 .cls 读取点一行兼容代码都不用写
   const t=(tier===1||tier===2||tier===3)?tier:2; // TIER1 分级归一化:旧场景元组缺项(undefined)、脏数据一律安全降级 T2——这是旧存档向后兼容的唯一依赖点
-  const st=shipStats(c,t); // TIER1 所有数值字段的唯一来源:五张 base 表 × tier 乘数层。TIER_MUL 全空时 st 与 P1 的表逐字段相同
+  const st=shipStats(c,t); // TIER1 机动/舰体/感知字段的来源:base 表 × tier 乘数层。TIER_MUL 全空时 st 与 P1 的表逐字段相同
+  const lw=resolveLoadout(c,t); // RF3 武器字段来源:weapons/51-defs 的 WPN 定义 × tier 乘数(舰船组合武器,不再自持武器数值)
   return {id:'s'+shipSeq, cls:c, name, side:side||'blue', tier:t, // TIER1 cls 存归一化后的新名;TIER1 tier 由第 7 参决定(原来写死 2)
 
     pos:pos.slice(), vel:(vel||[0,0,0]).slice(), facing:V.norm(facing), // KIMI146修:vel原直接用传入引用→物理积分原地改写TEST_ENVS/自定义场景预设初速,重开场景继承上局残速
     thrust:st.thrust, turnRate:st.turnRate,
     speedGears:(st.speedGears||[0,250,500,800,-1]).slice(), // TIER1 速度档烘焙到实例(05-motion:13 speedGearsOf 改实例优先):tier 影响速度档的唯一通路;拷副本防表被原地改写
-    hp:st.hp, maxHp:st.hp, macCd:0, missileArm:null, ammo:st.ammo, macDmg:st.macDmg, missDmg:st.missDmg, interceptor:st.inter||0, interMax:st.inter||0, lockedTarget:null, lockPlayer:false, dead:false, // DS167:interMax=拦截弹库存上限(资源纪律判定用)
-    macReload:st.mac, // TIER1 MAC 装填秒烘焙到实例:fireMAC 原来回表 CLS_WPN[cls].mac 且无兜底,舰种漏表就 TypeError 崩整帧
-    cells:(st.cells||4), cellTimer:Array(st.cells||4).fill(0), // 发射单元(v119):巴黎4单元/同时4组/每组独立装填60s
+    hp:st.hp, maxHp:st.hp, macCd:0, missileArm:null, ammo:lw.ammo, macDmg:lw.macDmg, missDmg:lw.missDmg, interceptor:lw.inter||0, interMax:lw.inter||0, lockedTarget:null, lockPlayer:false, dead:false, // DS167:interMax=拦截弹库存上限(资源纪律判定用)
+    macReload:lw.mac||0, macRange:lw.macRange||150000, // RF3 MAC 装填秒/射程烘焙(原 CLS_WPN.mac,射程原为散落字面量)
+    cells:(lw.cells||4), cellTimer:Array(lw.cells||4).fill(0), // 发射单元(v119):巴黎4单元/同时4组/每组独立装填
+    mslPer:lw.mslPer||12, mslReload:lw.mslReload||60, mslRange:lw.mslRange||350000, // RF3 导弹每组枚数/单元装填秒/射程烘焙(原为 fireMissiles/S15b/enemyAI 散落字面量)
     guideChan:st.guideChan||4, // T1数据链引导通道(CA 3网/DD 1网;TIER1 顺手修了与实际值不符的过期注释"巡洋8/护卫4/巡游8"):同时引导超自导范围的导弹数
-    chaffRate:(st.chaffRate!==undefined?st.chaffRate:0.25), // 干扰弹(v119):数值概念——命中时导弹再丢随机数判被勾走。TIER1 用 !==undefined 而不是 ||:chaffRate 是 'prob' 字段、钳到 [0,1] 就明确允许 0(本舰不带干扰弹),|| 会把这个合法 0 悄悄换成 DD 的 0.25(等于给 CA/BB/CV 凭空调强)
+    chaffRate:(lw.chaffRate!==undefined?lw.chaffRate:0.25), // 干扰弹(v119):数值概念——命中时导弹再丢随机数判被勾走。!==undefined 口径:chaffRate 是 'prob' 字段、钳到 [0,1] 就明确允许 0(本舰不带干扰弹),|| 会把这个合法 0 悄悄换成 DD 的 0.25(等于给 CA/BB/CV 凭空调强)
     value:st.value, // TIER1 威胁权重烘焙到实例:shipValue(s) 已是实例优先,落地后 04-targeting 网分配与 07:297 伏击雷阈值才吃得到 tier
-    ciws:{outer:st.outer,outerIntercept:st.outerIntercept,inner:st.inner,innerIntercept:st.innerIntercept}, // TIER1 近防参数烘焙到实例(ciwsOf 实例优先):07:489 命中判定 / 07:627 每 tick 近防 / 11:394 每帧范围圈三条热路径不再回表,tier 才进得来
+    weapons:lw.weapons, // RF3 武器清单(配装解析产物):[{kind:'mac'|'msl'|'ciws',label}]——88-selpanel 由它驱动生成底栏按钮/规格条/右栏状态
+    ciws:{outer:lw.outer,outerIntercept:lw.outerIntercept,inner:lw.inner,innerIntercept:lw.innerIntercept}, // TIER1 近防参数烘焙到实例(ciwsOf 实例优先):07:489 命中判定 / 07:627 每 tick 近防 / 11:394 每帧范围圈三条热路径不再回表,tier 才进得来
     orders:[], st:'待机', brake:false, crawling:false, flame:0, sideFlame:0, speedCmd:800, turnTarget:null, formation:null,
     roe:'free', roeCd:0, // v125 ROE交战规则:free自由开火/tight克制(被攻击才还击)/hold锁定(禁止开火);roeCd=受击还击冷却
     autoEngage:false, // v125 自动索敌交战:自动锁定感知层点亮的最近敌舰并开火(目标导向指挥)

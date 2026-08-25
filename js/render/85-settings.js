@@ -68,7 +68,7 @@ function setSpacing(v){ // 阵型疏密(0.5~2,小=密大=疏);v144:标签显示�
 }
 function setFormationPreset(n){ // v144:快捷档1/2/3——直接设护卫目标间距fmGap(连/叠/漏),不再反推密度(旧逻辑与v134弧线双重缩放致防空圈漏)
   const fri=ships.filter(s=>s.side==='blue'&&!s.dead&&s.cls==='FRIGATE');
-  const friOuter=AA_RING_REF; // TIER1 改用统一基准常量(原为字面量取 CLS_CIWS.FRIGATE.outer,值不变)
+  const friOuter=aaRingRef(); // TIER1 统一基准常量(原为字面量取 CLS_CIWS.FRIGATE.outer,值不变);RF3 改惰性函数
   fmGap=friOuter*2*(n===1?1.0:n===2?0.7:1.4); // 目标护卫间距=防空圈直径×系数(1连/0.7叠/1.4漏)
   rebuildFormations();
   const lbl=document.getElementById('qDenLbl');if(lbl)lbl.textContent='间距'+Math.round(fmGap*formationSpacing/1000)+'k';
