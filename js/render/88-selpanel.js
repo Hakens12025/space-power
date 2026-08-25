@@ -97,6 +97,46 @@ function updateSelPanel(){ // frame 低频调用(每20帧,与 updateCardsStatus 
   const title=document.getElementById('selTitle');
   const ciN=document.getElementById('ciName'),ciC=document.getElementById('ciCls'),ciSp=document.getElementById('ciSpec');
   if(!box||!title)return;
+  // 导弹组/信标视图:Shift+点选或框选导弹(selMissile,选择机制在 70-input 不变) → 右栏切实时弹道数据,底栏切固定参数,按钮组置灰
+  const m=(selMissile&&!selMissile.done)?selMissile:null;
+  if(m&&m.type==='missile'){
+    title.textContent='导弹组';
+    if(ciN)ciN.textContent='导弹组 #'+(m.group||'?');
+    if(ciC)ciC.textContent='射手 '+(m.shooter?m.shooter.name:'—')+(m.netId?' · 网'+m.netId:'直射');
+    if(ciSp)ciSp.innerHTML=[
+      ['单枚伤',m.missDmg||12],
+      ['组伤',Math.round(m.dmg||((m.count||12)*(m.missDmg||12)))],
+      ...(m.vPeak?[['巡航',Math.round(m.vPeak)],['终端',Math.round(m.vTerm)]]:[]),
+      ['触发圈',Math.round((m.trigRadius||60000)/1000)+'k'],
+    ].map(it=>`<span class="fi"><i>${it[0]}</i><b>${it[1]}</b></span>`).join('');
+    const stt=m.mine?'伏击雷 · 静默待命':m.park?'飞向布雷点':(m.netOff?'组网包抄':(m.coastT>0?'脱锁滑行':'突击中'));
+    const tgt=m.target?(m.target.name||(m.target.pos?'区域点':'—')):(m.mine?'无(待触发)':'无');
+    const tdist=(m.target&&m.target.pos)?V.len(V.sub(m.target.pos,m.pos)):0;
+    const fu=Math.max(0,Math.min(100,m.fuel||0)); // 燃料满值100s,直接当百分比
+    box.innerHTML=`
+      <div class="hpbar"><i style="width:${fu}%;background:${fu>30?'var(--state-active)':'var(--state-warn)'}"></i></div>
+      <div class="row"><span class="k">燃料</span><span class="v">${m.fuel>0?Math.ceil(m.fuel)+'s':'耗尽(滑行)'}</span></div>
+      <div class="row"><span class="k">状态</span><span class="v">${stt}</span></div>
+      <div class="row"><span class="k">剩余</span><span class="v">${m.count||12} 颗</span></div>
+      <div class="row"><span class="k">速度</span><span class="v">${Math.round(V.len(m.vel))} km/s</span></div>
+      <div class="row"><span class="k">目标</span><span class="v">${tgt}${tdist?' · '+Math.round(tdist/1000)+'k':''}</span></div>
+      <div class="row"><span class="k">引导</span><span class="v">${guideDesc(m)}</span></div>`;
+    updateCmdBar([]); // 导弹不可开关操作
+    return;
+  }
+  if(m&&m.type==='beacon'){ // 侦察信标(groupAt 也能命中)
+    title.textContent='侦察信标';
+    if(ciN)ciN.textContent='侦察信标';
+    if(ciC)ciC.textContent=(m.shooter?m.shooter.name:'—');
+    if(ciSp)ciSp.innerHTML=[['探测半径','300k'],['部署点',m.parkPt?Math.round(m.parkPt[0]/1000)+'k':'—']].map(it=>`<span class="fi"><i>${it[0]}</i><b>${it[1]}</b></span>`).join('');
+    const stt=m.arrived?(m.on?'开机 · 探测中':'静默待机'):'飞行中';
+    box.innerHTML=`
+      <div class="row"><span class="k">状态</span><span class="v">${stt}</span></div>
+      <div class="row"><span class="k">开机时间</span><span class="v">${m.on&&m.life>0?Math.round(m.life)+'s':(m.arrived?'关机':'—')}</span></div>
+      <div class="row"><span class="k">速度</span><span class="v">${Math.round(V.len(m.vel))} km/s</span></div>`;
+    updateCmdBar([]);
+    return;
+  }
   const sel=selBlue();
   if(!sel.length){
     title.textContent='未选中';
