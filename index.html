@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Space Power · 骨架</title>
-<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/app.css?v=20260826">
 </head>
 <body>
 <canvas id="cv"></canvas>
@@ -193,48 +193,48 @@
 <!-- RF1: 目录=系统。编号十位是系统层(0core/1ships/2sensors/3physics/4formation/5weapons/6bots/7command/8render/9scenario)。
      硬约束仅两条:core/00 定义 on() 必须最先(85/93/94/95 顶层调用它);core/99 顶层执行 init() 必须最后(且 init 调 loadRangeCfg,
      故 scenario/95 必须在它之前)。其余跨文件引用全在运行期解析,层序排列只为可读性。 -->
-<script src="js/core/00-config.js"></script>
-<script src="js/core/01-state.js"></script>
-<script src="js/ships/10-hull-geometry.js"></script>
-<script src="js/ships/11-classes.js"></script>
-<script src="js/sensors/20-signature.js"></script>
-<script src="js/sensors/21-detect.js"></script>
-<script src="js/physics/30-motion.js"></script>
-<script src="js/physics/31-step-ships.js"></script>
-<script src="js/formation/40-slots.js"></script>
-<script src="js/formation/41-groups.js"></script>
-<script src="js/formation/42-step.js"></script>
-<script src="js/weapons/50-missile-spec.js"></script>
-<script src="js/weapons/51-defs.js"></script>
-<script src="js/weapons/51-ciws.js"></script>
-<script src="js/weapons/52-fire.js"></script>
-<script src="js/weapons/53-nets.js"></script>
-<script src="js/weapons/54-missiles.js"></script>
-<script src="js/weapons/55-damage.js"></script>
-<script src="js/weapons/56-step-projectiles.js"></script>
-<script src="js/weapons/57-step-weapons.js"></script>
-<script src="js/core/05-sim.js"></script>
-<script src="js/bots/60-tasks.js"></script>
-<script src="js/bots/61-enemy.js"></script>
-<script src="js/command/70-input.js"></script>
-<script src="js/command/71-keys.js"></script>
-<script src="js/command/72-context-menu.js"></script>
-<script src="js/command/73-quickbar.js"></script>
-<script src="js/render/80-camera.js"></script>
-<script src="js/render/81-background.js"></script>
-<script src="js/render/82-ship-icons.js"></script>
-<script src="js/render/83-hud.js"></script>
-<script src="js/render/84-scene.js"></script>
-<script src="js/render/85-settings.js"></script>
-<script src="js/render/86-log.js"></script>
-<script src="js/render/87-fleetcards.js"></script>
-<script src="js/render/88-selpanel.js"></script>
-<script src="js/scenario/90-envs.js"></script>
-<script src="js/scenario/91-init.js"></script>
-<script src="js/scenario/92-editor.js"></script>
-<script src="js/scenario/93-replay.js"></script>
-<script src="js/scenario/94-demo.js"></script>
-<script src="js/scenario/95-range.js"></script>
-<script src="js/core/99-main.js"></script>
+<script src="js/core/00-config.js?v=20260826"></script>
+<script src="js/core/01-state.js?v=20260826"></script>
+<script src="js/ships/10-hull-geometry.js?v=20260826"></script>
+<script src="js/ships/11-classes.js?v=20260826"></script>
+<script src="js/sensors/20-signature.js?v=20260826"></script>
+<script src="js/sensors/21-detect.js?v=20260826"></script>
+<script src="js/physics/30-motion.js?v=20260826"></script>
+<script src="js/physics/31-step-ships.js?v=20260826"></script>
+<script src="js/formation/40-slots.js?v=20260826"></script>
+<script src="js/formation/41-groups.js?v=20260826"></script>
+<script src="js/formation/42-step.js?v=20260826"></script>
+<script src="js/weapons/50-missile-spec.js?v=20260826"></script>
+<script src="js/weapons/51-defs.js?v=20260826"></script>
+<script src="js/weapons/51-ciws.js?v=20260826"></script>
+<script src="js/weapons/52-fire.js?v=20260826"></script>
+<script src="js/weapons/53-nets.js?v=20260826"></script>
+<script src="js/weapons/54-missiles.js?v=20260826"></script>
+<script src="js/weapons/55-damage.js?v=20260826"></script>
+<script src="js/weapons/56-step-projectiles.js?v=20260826"></script>
+<script src="js/weapons/57-step-weapons.js?v=20260826"></script>
+<script src="js/core/05-sim.js?v=20260826"></script>
+<script src="js/bots/60-tasks.js?v=20260826"></script>
+<script src="js/bots/61-enemy.js?v=20260826"></script>
+<script src="js/command/70-input.js?v=20260826"></script>
+<script src="js/command/71-keys.js?v=20260826"></script>
+<script src="js/command/72-context-menu.js?v=20260826"></script>
+<script src="js/command/73-quickbar.js?v=20260826"></script>
+<script src="js/render/80-camera.js?v=20260826"></script>
+<script src="js/render/81-background.js?v=20260826"></script>
+<script src="js/render/82-ship-icons.js?v=20260826"></script>
+<script src="js/render/83-hud.js?v=20260826"></script>
+<script src="js/render/84-scene.js?v=20260826"></script>
+<script src="js/render/85-settings.js?v=20260826"></script>
+<script src="js/render/86-log.js?v=20260826"></script>
+<script src="js/render/87-fleetcards.js?v=20260826"></script>
+<script src="js/render/88-selpanel.js?v=20260826"></script>
+<script src="js/scenario/90-envs.js?v=20260826"></script>
+<script src="js/scenario/91-init.js?v=20260826"></script>
+<script src="js/scenario/92-editor.js?v=20260826"></script>
+<script src="js/scenario/93-replay.js?v=20260826"></script>
+<script src="js/scenario/94-demo.js?v=20260826"></script>
+<script src="js/scenario/95-range.js?v=20260826"></script>
+<script src="js/core/99-main.js?v=20260826"></script>
 </body>
 </html>
