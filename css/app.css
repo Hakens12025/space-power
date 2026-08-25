@@ -341,14 +341,19 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #selEvents .li.hit{color:var(--state-ok)}
 #selEvents .li.warn{color:var(--state-warn)}
 
-/* 底部操作栏(底坞居中,几何仿 #qbar) = 固定信息条(舰名+舰船类规格,可换行) + 开关组;开关=纯文字标签+·开/·关后缀,状态色用 .btn.on/.is-dis */
-#cmdBar{left:50%;transform:translateX(-50%);bottom:var(--gut);display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:var(--sp-2) var(--sp-3);padding:var(--sp-2) var(--sp-3);z-index:var(--z-bar);max-width:min(1120px,calc(100% - var(--gut)*2))}
-#cmdInfo{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-1) var(--sp-3);white-space:nowrap}
-#cmdInfo>b{font-size:var(--fs-body);color:var(--txt-hi);font-weight:normal}
-#cmdInfo #ciCls{font-size:var(--fs-label);color:var(--txt-dim)}
-#cmdInfo .fi{font-size:var(--fs-label);color:var(--txt-dim)}
-#cmdInfo .fi b{font-family:var(--ff-mono);letter-spacing:var(--ls-read);font-variant-numeric:tabular-nums;font-weight:normal;color:var(--txt-read)}
-.cmd-sep{width:1px;height:20px;background:var(--line-ctl);flex:none}
-.cmd-btns{display:flex;gap:var(--sp-2)}
-#cmdBar .cbtn{min-width:92px;font-size:var(--fs-body)}
-#cmdTip{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);background:var(--srf-modal);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);padding:var(--sp-2) var(--sp-4);font-size:var(--fs-label);color:var(--txt);pointer-events:none;z-index:var(--z-transient);display:none;white-space:nowrap}
+/* 底部操作栏(底坞居中)三区:舰名区 | 规格读数列 | 开关组。窄窗时规格列换行,按钮组不拆散 */
+#cmdBar{left:50%;transform:translateX(-50%);bottom:var(--gut);display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:var(--sp-2) var(--sp-4);padding:var(--sp-2) var(--sp-4);z-index:var(--z-bar);width:min(1160px,calc(100% - var(--gut)*2))} /* 显式宽度:shrink-to-fit 下带 flex:1 子项会把整条压成窄柱(实测381px全叠起来) */
+.cmd-ship{display:flex;flex-direction:column;justify-content:center;min-width:132px;max-width:210px;line-height:1.35}
+.cmd-ship b{font-size:var(--fs-title);color:var(--txt-hi);font-weight:normal;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cmd-ship span{font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cmd-sep{width:1px;align-self:stretch;margin:2px 0;background:var(--line-ctl);flex:none}
+#ciSpec{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:var(--sp-1) var(--sp-4);flex:1;min-width:280px}
+#ciSpec .fi{display:flex;flex-direction:column;align-items:center;line-height:1.3;min-width:44px}
+#ciSpec .fi i{font-style:normal;font-size:var(--fs-micro);color:var(--txt-dim);letter-spacing:var(--ls-label)}
+#ciSpec .fi b{font-family:var(--ff-mono);font-size:var(--fs-body);font-weight:normal;color:var(--txt-read);letter-spacing:var(--ls-read);font-variant-numeric:tabular-nums}
+.cmd-btns{display:flex;gap:var(--sp-2);flex-wrap:wrap;justify-content:center}
+#cmdBar .cbtn{min-width:76px;padding:4px var(--sp-3);display:flex;flex-direction:column;align-items:center;gap:1px;line-height:1.25}
+#cmdBar .cbtn .l{font-size:var(--fs-body)}
+#cmdBar .cbtn .s{font-size:var(--fs-label);letter-spacing:.3em;margin-right:-.3em;color:var(--txt-mute)}
+#cmdBar .cbtn.on .s{color:var(--state-active)}
+#cmdTip{position:fixed;bottom:72px;left:50%;transform:translateX(-50%);background:var(--srf-modal);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);padding:var(--sp-2) var(--sp-4);font-size:var(--fs-label);color:var(--txt);pointer-events:none;z-index:var(--z-transient);display:none;white-space:nowrap}

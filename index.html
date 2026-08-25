@@ -180,9 +180,11 @@
   </div>
 </div>
 
-<!-- RF3 简化UI:底部操作栏 = 固定信息(舰名/舰种·等级 + 规格条) + 开关组(88-selpanel 按 s.weapons 配装动态生成:火控/雷达 + 每件武器一个按钮) -->
+<!-- RF3 简化UI:底部操作栏三区 = 舰名区 | 规格读数列(标签上/数值下) | 开关组(88-selpanel 按 s.weapons 配装动态生成) -->
 <div id="cmdBar" class="panel">
-  <div id="cmdInfo"><b id="ciName">—</b><span id="ciCls">—</span><span id="ciSpec"></span></div>
+  <div class="cmd-ship"><b id="ciName">—</b><span id="ciCls">—</span></div>
+  <div class="cmd-sep"></div>
+  <div id="ciSpec"></div>
   <div class="cmd-sep"></div>
   <div class="cmd-btns"></div>
 </div>

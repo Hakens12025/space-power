@@ -78,11 +78,11 @@ function updateCmdBar(sel){
   const s=sel[0];
   for(const c of cmdList(s)){
     const b=document.getElementById(c.id);if(!b)continue;
-    if(!s){b.classList.add('is-dis');b.classList.remove('on');b.textContent=c.label+'·—';continue;}
+    if(!s){b.classList.add('is-dis');b.classList.remove('on');b.innerHTML=`<span class="l">${c.label}</span><span class="s">—</span>`;continue;}
     b.classList.remove('is-dis');
     const on=c.get(s);
     b.classList.toggle('on',on);
-    b.textContent=c.label+(on?'·开':'·关');
+    b.innerHTML=`<span class="l">${c.label}</span><span class="s">${on?'开':'关'}</span>`; // 双行:名称+状态(状态色由 .on 驱动)
   }
   updateCmdBarVis(s); // 武器钮按旗舰配装显隐(CV 无主炮则无主炮钮)
 }
@@ -109,7 +109,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧,与 updateCardsStatus 
   // 固定信息(舰船类数据,整局不变) → 底栏
   if(ciN)ciN.textContent=s.name;
   if(ciC)ciC.textContent=(CLS_NAME[s.cls]||s.cls)+' · '+(TIER_LABEL[s.tier]||'T2');
-  if(ciSp)ciSp.innerHTML=specItems(s).map(it=>`<span class="fi">${it[0]} <b>${it[1]}</b></span>`).join('');
+  if(ciSp)ciSp.innerHTML=specItems(s).map(it=>`<span class="fi"><i>${it[0]}</i><b>${it[1]}</b></span>`).join(''); // 标签上/数值下的读数柱
   // 变化信息(武器库状态) → 右栏
   const t=s.lockedTarget&&!s.lockedTarget.dead?s.lockedTarget:null;
   const dist=t?V.len(V.sub(t.pos,s.pos)):0;
