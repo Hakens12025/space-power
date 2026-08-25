@@ -1,5 +1,6 @@
 "use strict";
-/* RF2: 简化UI核心——选中舰实时信息面板(#selPanel)+底部操作栏(#cmdBar,纯文字开关)。
+/* RF2: 简化UI核心——右栏 #selPanel 只放【变化信息】(结构/目标/速度/武器就绪/事件);
+   底栏 #cmdBar = 【固定信息】(舰名/舰种·等级/传感器大小,整局不变)+ 五个纯文字开关。
    开关语义:火控=autoEngage+roe 合一(开=free+自动索敌,关=hold+解除锁定);雷达=lidar;
    主炮/导弹/拦截=macOn/mslOn/ciwsOn 三个舰载字段。操作作用于【全部选中蓝舰】,状态读第一艘。
    事件流:86-log 的 log() 末尾 typeof 守卫调 pushEvt(最近5条)。 */
@@ -48,21 +49,26 @@ function updateCmdBar(sel){
 function updateSelPanel(){ // frame 低频调用(每20帧,与 updateCardsStatus 同拍)
   const box=document.getElementById('selInfo');
   const title=document.getElementById('selTitle');
+  const ciN=document.getElementById('ciName'),ciC=document.getElementById('ciCls'),ciS=document.getElementById('ciSens');
   if(!box||!title)return;
   const sel=selBlue();
   if(!sel.length){
     title.textContent='未选中';
+    if(ciN)ciN.textContent='—';if(ciC)ciC.textContent='—';if(ciS)ciS.textContent='—';
     box.innerHTML='<div class="sub" style="text-align:center;padding:14px 0">左键点选 · 拖拽框选<br>右键移动 · Shift+右键路径点</div>';
     updateCmdBar(sel);return;
   }
-  const s=sel[0]; // 多选时信息栏显示第一艘,标题注明数量;操作走 updateCmdBar 的全选语义
-  title.textContent=sel.length>1?`已选 ${sel.length} 艘`:'已选中';
+  const s=sel[0]; // 多选时信息显示第一艘,标题注明数量;操作走 updateCmdBar 的全选语义
+  title.textContent=sel.length>1?`已选 ${sel.length} 艘`:'实时状态';
+  // 固定信息(整局不变):舰名 / 舰种·等级 / 传感器大小 → 底栏左侧
+  if(ciN)ciN.textContent=s.name;
+  if(ciC)ciC.textContent=(CLS_NAME[s.cls]||s.cls)+' · '+(TIER_LABEL[s.tier]||'T2');
+  if(ciS)ciS.textContent='传感器 '+Math.round(s.sensorRange/1000)+'k';
+  // 变化信息(每帧变):结构/目标/速度/武器就绪 → 右栏
   const t=s.lockedTarget&&!s.lockedTarget.dead?s.lockedTarget:null;
   const dist=t?V.len(V.sub(t.pos,s.pos)):0;
   const fr=Math.max(0,Math.min(1,s.hp/s.maxHp));
   box.innerHTML=`
-    <h3>${s.name}</h3>
-    <div class="sub">${CLS_NAME[s.cls]||s.cls} · ${TIER_LABEL[s.tier]||'T2'}</div>
     <div class="hpbar"><i style="width:${fr*100}%;background:${fr>0.35?'var(--state-ok)':'var(--state-warn)'}"></i></div>
     <div class="row"><span class="k">结构</span><span class="v">${Math.max(0,Math.round(s.hp))} / ${s.maxHp}</span></div>
     <div class="row"><span class="k">目标</span><span class="v">${t?t.name+' · '+Math.round(dist/1000)+'k':'—'}</span></div>

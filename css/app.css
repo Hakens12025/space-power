@@ -341,7 +341,12 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #selEvents .li.hit{color:var(--state-ok)}
 #selEvents .li.warn{color:var(--state-warn)}
 
-/* 底部操作栏(底坞居中,几何仿 #qbar;开关=纯文字标签+·开/·关后缀,状态色用 .btn.on/.is-dis) */
+/* 底部操作栏(底坞居中,几何仿 #qbar) = 固定信息条 + 开关组;开关=纯文字标签+·开/·关后缀,状态色用 .btn.on/.is-dis */
 #cmdBar{left:50%;transform:translateX(-50%);bottom:var(--gut);display:flex;gap:var(--sp-2);padding:var(--sp-2) var(--sp-3);z-index:var(--z-bar)}
+#cmdInfo{display:flex;align-items:center;gap:var(--sp-3);padding:0 var(--sp-2);white-space:nowrap}
+#cmdInfo b{font-size:var(--fs-body);color:var(--txt-hi);font-weight:normal}
+#cmdInfo span{font-size:var(--fs-label);color:var(--txt-dim)}
+#ciSens{font-family:var(--ff-mono);letter-spacing:var(--ls-read);color:var(--txt-read)}
+.cmd-sep{width:1px;height:20px;background:var(--line-ctl);flex:none}
 #cmdBar .cbtn{min-width:92px;font-size:var(--fs-body)}
 #cmdTip{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);background:var(--srf-modal);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);padding:var(--sp-2) var(--sp-4);font-size:var(--fs-label);color:var(--txt);pointer-events:none;z-index:var(--z-transient);display:none;white-space:nowrap}

@@ -1,0 +1,12 @@
+SYMS_TOTAL=425
+SYMS_MISSING=none
+SYMS_THREW=none
+BOOT=ships=6 blue=3 red=3
+RANGE_ON=true
+FORM=moved=3 fm=3 g=0
+SALVO=armed=1
+DMG=dmg=25(before=0) hp=550
+SOAK=steps=5000 NaNships=0 NaNproj=0 maxLive=5 seen={"missile":5550,"interceptor":748}
+FLOW2=autoHits=2 autoDmg=245
+RENDER=ok
+ERRORS=none
