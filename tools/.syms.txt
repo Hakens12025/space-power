@@ -353,8 +353,16 @@ speedGearsOf
 stars
 startRange
 steerToVel
+stepBeaconProj
+stepDecoyProj
 stepFormation
+stepInterceptorProj
+stepMacProj
+stepMissileProj
+stepProjectiles
+stepShipsMotion
 stepSim
+stepWeaponSystems
 taskCancel
 taskCreate
 taskIcon
