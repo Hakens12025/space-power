@@ -1,6 +1,6 @@
 "use strict";
-/* RF2: 简化UI核心——右栏 #selPanel 只放【变化信息】(结构/目标/速度/武器就绪/事件);
-   底栏 #cmdBar = 【固定信息】(舰名/舰种·等级/传感器大小,整局不变)+ 五个纯文字开关。
+/* RF2: 简化UI核心——右栏 #selPanel 只放【变化信息】(结构/目标/武器库就绪/事件);
+   底栏 #cmdBar = 【固定信息】(舰名/舰种·等级 + 舰船类数据规格条 specItems,直读烘焙字段)+ 五个纯文字开关。
    开关语义:火控=autoEngage+roe 合一(开=free+自动索敌,关=hold+解除锁定);雷达=lidar;
    主炮/导弹/拦截=macOn/mslOn/ciwsOn 三个舰载字段。操作作用于【全部选中蓝舰】,状态读第一艘。
    事件流:86-log 的 log() 末尾 typeof 守卫调 pushEvt(最近5条)。 */
@@ -46,25 +46,40 @@ function updateCmdBar(sel){
     b.textContent=c.label+(on?'·开':'·关');
   }
 }
+/* 底栏固定规格条:舰船类数据(makeShip 烘焙字段)直接读直接放,零加工 */
+function specItems(s){
+  const c=ciwsOf(s);
+  return [
+    ['结构',s.maxHp],
+    ['加速',s.thrust],
+    ['转向',s.turnRate],
+    ['传感器',Math.round(s.sensorRange/1000)+'k'],
+    ['火控通道',s.guideChan],
+    ['主炮',s.macDmg>0?(s.macDmg+'×'+Math.round(s.macReload)+'s'):'无'],
+    ['导弹',s.ammo+'枚×'+s.cells+'组'],
+    ['拦截弹',s.interMax+'枚'],
+    ['近防',Math.round(c.outer/1000)+'k/'+Math.round(c.inner/1000)+'k'],
+  ];
+}
 function updateSelPanel(){ // frame 低频调用(每20帧,与 updateCardsStatus 同拍)
   const box=document.getElementById('selInfo');
   const title=document.getElementById('selTitle');
-  const ciN=document.getElementById('ciName'),ciC=document.getElementById('ciCls'),ciS=document.getElementById('ciSens');
+  const ciN=document.getElementById('ciName'),ciC=document.getElementById('ciCls'),ciSp=document.getElementById('ciSpec');
   if(!box||!title)return;
   const sel=selBlue();
   if(!sel.length){
     title.textContent='未选中';
-    if(ciN)ciN.textContent='—';if(ciC)ciC.textContent='—';if(ciS)ciS.textContent='—';
+    if(ciN)ciN.textContent='—';if(ciC)ciC.textContent='—';if(ciSp)ciSp.innerHTML='';
     box.innerHTML='<div class="sub" style="text-align:center;padding:14px 0">左键点选 · 拖拽框选<br>右键移动 · Shift+右键路径点</div>';
     updateCmdBar(sel);return;
   }
   const s=sel[0]; // 多选时信息显示第一艘,标题注明数量;操作走 updateCmdBar 的全选语义
   title.textContent=sel.length>1?`已选 ${sel.length} 艘`:'实时状态';
-  // 固定信息(整局不变):舰名 / 舰种·等级 / 传感器大小 → 底栏左侧
+  // 固定信息(舰船类数据,整局不变) → 底栏
   if(ciN)ciN.textContent=s.name;
   if(ciC)ciC.textContent=(CLS_NAME[s.cls]||s.cls)+' · '+(TIER_LABEL[s.tier]||'T2');
-  if(ciS)ciS.textContent='传感器 '+Math.round(s.sensorRange/1000)+'k';
-  // 变化信息(每帧变):结构/目标/速度/武器就绪 → 右栏
+  if(ciSp)ciSp.innerHTML=specItems(s).map(it=>`<span class="fi">${it[0]} <b>${it[1]}</b></span>`).join('');
+  // 变化信息(武器库状态) → 右栏
   const t=s.lockedTarget&&!s.lockedTarget.dead?s.lockedTarget:null;
   const dist=t?V.len(V.sub(t.pos,s.pos)):0;
   const fr=Math.max(0,Math.min(1,s.hp/s.maxHp));
@@ -72,10 +87,9 @@ function updateSelPanel(){ // frame 低频调用(每20帧,与 updateCardsStatus 
     <div class="hpbar"><i style="width:${fr*100}%;background:${fr>0.35?'var(--state-ok)':'var(--state-warn)'}"></i></div>
     <div class="row"><span class="k">结构</span><span class="v">${Math.max(0,Math.round(s.hp))} / ${s.maxHp}</span></div>
     <div class="row"><span class="k">目标</span><span class="v">${t?t.name+' · '+Math.round(dist/1000)+'k':'—'}</span></div>
-    <div class="row"><span class="k">速度</span><span class="v">${Math.round(V.len(s.vel))} km/s</span></div>
     <div class="row"><span class="k">主炮</span><span class="v">${s.macCd<=0?'就绪':Math.ceil(s.macCd)+'s'}</span></div>
-    <div class="row"><span class="k">导弹</span><span class="v">${readyCells(s)}/${s.cells}组 · ${s.ammo}枚</span></div>
-    <div class="row"><span class="k">拦截</span><span class="v">${s.interceptor}枚</span></div>`;
+    <div class="row"><span class="k">导弹</span><span class="v">${readyCells(s)}/${s.cells}组 · 弹${s.ammo}枚</span></div>
+    <div class="row"><span class="k">拦截弹</span><span class="v">${s.interceptor}/${s.interMax}枚</span></div>`;
   updateCmdBar(sel);
 }
 function bindCmdBar(){ // 88 在 body 末尾加载,五个按钮由 index.html 保证存在(裸绑前仍带 null 防护)
