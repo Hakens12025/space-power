@@ -23,11 +23,11 @@
      验算:L_TOP + 2π = (-π/2 - RAD_GAP) + 2π = 3π/2 - RAD_GAP = A_TOP ✓ */
 const RAD_RI=62;             // 整圆 / 右半环内半径(内洞)。> 最大 shipIconR(82:20,BB T3 约 20px),目标图标始终露在洞里
 const RAD_RO=132;            // 整圆 / 右半环外半径。带宽 70px
-const RAD_L_IN=72;           // 左半环(序列级)内半径 = RAD_RI+10
-const RAD_L_OUT=122;         // 左半环外半径 = RAD_RO-10。带宽 50px —— 左半【物理更窄 + 更暗 + 换色相】,三层判据比只调暗一层稳
-const RAD_RM=97;             // 两侧共用中线半径 (62+132)/2 = (72+122)/2,文字/状态方块都钉在它上面
-const RAD_GAP=Math.PI/22.5;  // 8.000° 断口半角;上下各一个断口,单个断口全宽 = 2*RAD_GAP = 16°
-const RAD_FADE=Math.PI/30;   // 6.000° 断口两端描边 alpha 渐隐范围
+const RAD_L_IN=62;           // 左半环(序列级)内半径。RF7 与右半对齐(原 72=RAD_RI+10):内缩 10px 让两半读成两个不同的控件,用户裁定要贴合;层级仍由更暗填充+作用域标签承担
+const RAD_L_OUT=132;         // 左半环外半径。RF7 与右半对齐(原 122=RAD_RO-10):层级判据从「更窄+更暗+换色相」三层收成「更暗+换色相」两层,视觉贴合优先
+const RAD_RM=97;             // 两侧共用中线半径 (62+132)/2(RF7 起左右半径已对齐,只剩一套),文字/状态方块都钉在它上面
+const RAD_GAP=Math.PI/45;    // 4.000° 断口半角;上下各一个断口,单个断口全宽 = 2*RAD_GAP = 8°。RF7 由 16° 收窄:两半要贴合,断口只留翻页箭头的位置
+const RAD_FADE=Math.PI/60;   // 3.000° 断口两端描边 alpha 渐隐范围(RF7 随断口减半,渐隐不能宽过断口本身)
 const RAD_SEAM=Math.PI/150;  // 1.200° 相邻扇区绘制时各自内缩的缝(纯视觉;命中测试【不】内缩,否则留 1.2° 死区,点在缝上没反应这种 bug 极难复现)
 const RAD_CAP=6;             // 单侧扇区容量,超出翻页
 const RAD_WHEEL_PAD=8;       // 滚轮/左键路由的宽容量(px)
@@ -265,7 +265,8 @@ function drawRadial(){
     const so=radSolve(sub,tgt,it.kind);solved.push(so);
     const allow=!!it.allow;
     const hov=!!(rad.hover&&rad.hover.side==='R'&&rad.hover.idx===abs);
-    radWedgePath(cx,cy,RAD_RI,RAD_RO,a0+RAD_SEAM,a1-RAD_SEAM);
+    const sm=split?RAD_SEAM:0; // RF7 整圆模式取消缝:楔子边线互相贴住、双描成一条径向分隔线,整个环读成一体(原 1.2° 缝露出底色,两瓣像两个支架);分环模式保留缝
+    radWedgePath(cx,cy,RAD_RI,RAD_RO,a0+sm,a1-sm);
     ctx.globalAlpha=.90;ctx.fillStyle='#090d14';ctx.fill(); // ≈ --srf-panel
     ctx.globalAlpha=1;
     if(allow){ctx.globalAlpha=.13;ctx.fillStyle='#54e0d0';ctx.fill();ctx.globalAlpha=1;} // --state-active:许可 = 青色 wash
@@ -278,7 +279,7 @@ function drawRadial(){
        否则玩家分不出"我许可了没"和"现在打不打得到"。 */
     if(!so.ok){
       ctx.globalAlpha=.9;ctx.strokeStyle='#46566a';ctx.lineWidth=1;ctx.setLineDash([4,3]);
-      ctx.beginPath();ctx.arc(cx,cy,RAD_RO-3,a0+RAD_SEAM,a1-RAD_SEAM);ctx.stroke();
+      ctx.beginPath();ctx.arc(cx,cy,RAD_RO-3,a0+sm,a1-sm);ctx.stroke();
       ctx.setLineDash([]);ctx.globalAlpha=1;
     }
     /* 扇区内容:横排不旋转,按信息档 */
@@ -314,7 +315,7 @@ function drawRadial(){
     ctx.globalAlpha=.5;ctx.strokeStyle='#141c27';ctx.lineWidth=1; // --line-hair
     for(let i=nR;i<nS;i++){
       const a0=split?(A0R+i*wR):(-Math.PI/2-wR/2+i*wR);
-      radWedgePath(cx,cy,RAD_RI,RAD_RO,a0+RAD_SEAM,a0+wR-RAD_SEAM);
+      radWedgePath(cx,cy,RAD_RI,RAD_RO,a0+(split?RAD_SEAM:0),a0+wR-(split?RAD_SEAM:0)); // RF7 空槽同口径:整圆无缝
       ctx.stroke();
     }
     ctx.globalAlpha=1;

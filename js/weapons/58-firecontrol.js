@@ -24,6 +24,7 @@
    命名注意:weapons/52-fire 的网实体有个属性叫 fctrl('auto'|'hold' 连接模式),那是「网的火控」,与本文件的 fc*
    火控序列同域不同义,别看串(同类先例见 54-missiles 的 parkFctrl vs fctrl)。 */
 const FC_PT_SALVOS=2; // RF5 指定点目标的齐射组数上限:打满 2 组即视为完成并出队。空地没有「死亡」判据,必须给个收敛条件,否则序列永远卡在这一项
+const FC_MAX_SEQS=5;  // RF7 每舰序列上限 = 火控计算机的方条数(88-selpanel 画五根竖条,一条一槽)。不封顶方条就得滚动,违背"简单"的要求
 let fireSeqs=[];      // RF5 全部火控序列(扁平数组,创建顺序即 UI 显示顺序与执行器下标口径)
 let fcSeqSeq=0;       // RF5 序列 id 自增源;91-init 换局时与 fireSeqs 一起归零
 function fcShip(id){ // RF5 按 id 取舰(序列存 id 不存引用,每次用时现解析)
@@ -56,9 +57,10 @@ function fcPush(seq,tgt,allow){ // RF5 内部:把一个目标追加进序列(两
   seq.targets.push(fcTgtItem(tgt,allow));
   return seq;
 }
-function fcNew(s,tgt,allow){ // RF5 新建序列并置为该舰的编辑上下文,返回序列 id
+function fcNew(s,tgt,allow){ // RF5 新建序列并置为该舰的编辑上下文,返回序列 id;RF7 起达到 FC_MAX_SEQS 返回 null(调用方必须处理)
   if(!s)return null;
   fcInit(s);
+  if(fcSeqsOf(s).length>=FC_MAX_SEQS){if(typeof log==='function')log(`⚠ ${s.name} 火控序列已达上限 ${FC_MAX_SEQS} 条(火控计算机里删一条再建)`,'warn');return null;} // RF7 上限=方条数
   s.fcFired.mac=false;s.fcFired.msl=false;s.fcTgt.mac=null;s.fcTgt.msl=null;s.fcFrom.mac=-1;s.fcFrom.msl=-1; // RF5 建序列前先清账:fireSeqs 曾清空时 stepFireControl/Post 两段都在首行早退,上一轮的开火标记与解算残留会留在舰上,新序列的第一发会被这面陈旧标记凭空推进一格指针(首发打成第二个目标)
   const seq={id:++fcSeqSeq, shipId:s.id, name:'火控序列'+(fcSeqsOf(s).length+1),
     targets:[], mode:'seq', rot:{mac:0,msl:0}, paused:false}; // mode:'seq'=依次(集火) / 'rr'=轮询(散布)

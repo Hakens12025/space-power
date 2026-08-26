@@ -371,11 +371,12 @@ window.addEventListener('mouseup',e=>{
     // 旧时间戳留在 mmb 里,下一次真正的短按 held 算出来是几秒 → 被判成长按而静默什么都不做,快速交战被吞掉一次(第二下才生效),屏幕上还没有任何提示。
     const held=(typeof performance!=='undefined'?performance.now():Date.now())-mmb.t;
     const moved=Math.abs(e.clientX-mmb.sx)+Math.abs(e.clientY-mmb.sy)>5; // 中键已不置 panning,位移直接比坐标(不依赖 mousemove 的 panning.moved)
+    const mShift=!!mmb.shift; // RF7 取【按下瞬间】的 Shift(与长按轮盘同口径),下一行 mmb 就清了
     mmb=null; // 计时一律就地清账,与下面走不走得到无关
     clearTimeout(mmbTimer);mmbTimer=null; // RF5 Phase C 同理就地清表:位置必须仍在下面 editMode / dragOrder 两条早退之前,否则抬手后轮盘还会迟到 350ms 弹出来
     if(!editMode&&!dragOrder&&held<MMB_HOLD_MS&&!moved){ // editMode/dragOrder 原本就靠早退吃掉中键,语义照旧;长按(>=MMB_HOLD_MS)这里天然什么都不做——轮盘已由 mousedown 的定时器弹出,不必再加互斥
       if(typeof rad!=='undefined'&&rad.open){if(typeof radClose==='function')radClose();} // RF5 Phase C 轮盘开着:短按中键=关
-      else if(typeof xhQuickEngage==='function')xhQuickEngage();                          // RF5 Phase B 原语义一行未动
+      else if(typeof xhQuickEngage==='function')xhQuickEngage(mShift);                    // RF5 Phase B 快速交战;RF7 带上 Shift:按住=追加进当前编辑序列(选定手势),不按=新建
     }
   }
   if(editMode){editDrag=null;editWpDrag=null;panning=null;rmbClick=null;clearTimeout(rmbTimer);rmbTimer=null;return;}

@@ -87,7 +87,7 @@ function updateCmdBar(sel){
     b.classList.remove('is-dis');
     const on=c.get(s);
     b.classList.toggle('on',on);
-    b.innerHTML=`<span class="l">${c.label}</span><span class="s">${on?'开':'关'}</span>`; // 双行:名称+状态(状态色由 .on 驱动)
+    setHTMLStable(b,`<span class="l">${c.label}</span><span class="s">${on?'开':'关'}</span>`,false); // 双行:名称+状态(状态色由 .on 驱动)。RF7c 走稳定写入:按钮节点本身不换(所以 .btn:hover 一直稳),但内层 span 每拍换新的是纯 churn
   }
   updateCmdBarVis(s); // 武器钮按旗舰配装显隐(CV 无主炮则无主炮钮)
 }
@@ -109,6 +109,20 @@ function updateCmdBarVis(s){
    是 command/74-targeting 的 xhQuickEngage(中键短按 → fcNew),72 一行未动。所以真实对局里本面板会长出序列,
    「无火控序列」不再是常态,建不出来就是回归。fcAppend 至今仍无生产调用点(只有探针在调),
    一条序列多目标 / rr 轮询 / fcRemoveTarget 要等 Phase C 的追加入口 —— 它不是死代码,是等入口的引擎 API。 */
+/* RF7c 稳定写入。整体 innerHTML= 会销毁并重建全部子节点:光标下那个节点每拍都换新的,:hover 立刻丢失又重新命中,
+   在 20 帧一拍(60fps 下约 3Hz)的重渲里表现就是按钮高频闪烁;更隐蔽的是 mousedown 与 mouseup 之间若发生重建,
+   click 事件会落到两者的共同祖先(也就是容器)上,事件委托里 e.target.closest('[data-fc-act]') 取到 null,
+   这一下点击被静默吃掉——"菜单有时按不动"与"按钮闪烁"是同一个根因的两个面。
+   两道防线:①内容一模一样就一个节点都不动(绝大多数帧如此);②光标正停在某个可点元素上时推迟重建,
+   离开后下一拍自然补上——只挡"指着按钮"的那一刻,单纯把光标放在面板空白处不影响读数刷新。
+   点击后需要立即回显(方条高亮要跟手),由 force 绕过第②道:一次重建换一帧,不构成闪烁。 */
+function setHTMLStable(el,html,force){
+  if(!el)return false;
+  if(el._lastHTML===html)return false;                                        // ① 内容未变
+  if(!force&&el.querySelector&&el.querySelector('[data-fc-act]:hover'))return false; // ② 光标正指着可点元素
+  el.innerHTML=html;el._lastHTML=html;
+  return true;
+}
 function fcUiName(t){ // 目标项 → 显示名(舰目标现查 ships 表,指定点显示 k 坐标)
   if(t&&t.tid!=null){
     const o=(typeof ships!=='undefined')?ships.find(x=>String(x.id)===String(t.tid)):null;
@@ -127,40 +141,50 @@ function fcUiSeq(s,sid){ // 按 id 字符串取回序列对象(id 类型不确�
   if(!s||typeof fcSeqsOf!=='function')return null;
   return (fcSeqsOf(s)||[]).find(q=>String(q.id)===String(sid))||null;
 }
-function updateFcPanel(){ // 由 updateSelPanel 每 20 帧全量重渲(与卡片状态同拍)
+function updateFcPanel(force){ // 由 updateSelPanel 每 20 帧重渲(与卡片状态同拍);写入一律走 setHTMLStable,force=点击后必须立即回显
+  // RF7 重做:五根竖直方条 = 五个序列槽(上限 FC_MAX_SEQS,一条一槽,空槽画暗不可点),点方条 = 进入该序列的【序列态】
+  // (面板高亮 + 地图亮蓝色数据链,见 83-hud drawFcChain),再点同一根 = 退出。方条下方只放当前序列的简要详情。
   const list=document.getElementById('fcList');
   if(!list)return;
   const s=selBlue()[0];
-  if(!s){list.innerHTML='<div class="fc-empty">未选中我方舰船</div>';return;}
-  if(typeof fcSeqsOf!=='function'){list.innerHTML='<div class="fc-empty">火控引擎未就绪</div>';return;}
+  if(!s){setHTMLStable(list,'<div class="fc-empty">未选中我方舰船</div>',force);return;}
+  if(typeof fcSeqsOf!=='function'){setHTMLStable(list,'<div class="fc-empty">火控引擎未就绪</div>',force);return;}
   const seqs=fcSeqsOf(s)||[];
-  if(!seqs.length){list.innerHTML='<div class="fc-empty">无火控序列</div>';return;}
-  let h='';
-  for(const q of seqs){
-    const sid=String(q.id),edit=String(s.fcEditId)===sid,rr=(q.mode==='rr');
-    h+=`<div class="fc-seq${edit?' edit':''}${q.paused?' paused':''}">`
-      +`<div class="fc-row" data-fc-act="edit" data-seq="${sid}" title="点击设为当前编辑序列(追加目标待 Phase C)">`
-      +`<span class="nm">${q.name||('火控序列'+sid)}</span>`
-      +`<span class="fc-btn${rr?' on':''}" data-fc-act="mode" data-seq="${sid}" title="依次=打死一个再换;轮询=每次齐射换一个">${rr?'轮询':'依次'}</span>`
-      +(q.paused?'<span class="fc-tag">暂停</span>':'')
-      +(edit?'<span class="fc-tag on">编辑</span>':'')
+  const cap=(typeof FC_MAX_SEQS==='number')?FC_MAX_SEQS:5;
+  let h='<div class="fc-bars">';
+  for(let i=0;i<cap;i++){
+    const q=seqs[i];
+    if(!q){h+=`<div class="fc-bar empty" title="空序列槽(Shift+中键点敌舰建序列)"><span class="no">${i+1}</span></div>`;continue;}
+    const sid=String(q.id),edit=String(s.fcEditId)===sid;
+    h+=`<div class="fc-bar${edit?' edit':''}${q.paused?' paused':''}" data-fc-act="bar" data-seq="${sid}" title="${q.name} · ${q.mode==='rr'?'轮询':'依次'} · ${(q.targets||[]).length}个目标 · 点击进入/退出序列态(地图显示数据链)">`
+      +`<span class="no">${i+1}</span><span class="md">${q.mode==='rr'?'轮':'依'}</span><span class="ct">${(q.targets||[]).length}</span>`
       +`</div>`;
-    (q.targets||[]).forEach((t,i)=>{
+  }
+  h+='</div>';
+  const cur=seqs.find(q=>String(q.id)===String(s.fcEditId))||null; // 详情只画序列态那一条,不再全量铺开(用户定案:信息简单即可)
+  if(!seqs.length)h+='<div class="fc-empty">无火控序列 · Shift+中键点敌舰即可选定</div>';
+  else if(!cur)h+='<div class="fc-empty">点方条进入序列态 · 地图显示数据链</div>';
+  else{
+    const sid=String(cur.id),rr=(cur.mode==='rr');
+    h+=`<div class="fc-det"><div class="fc-row">`
+      +`<span class="nm">${cur.name||('火控序列'+sid)}</span>`
+      +`<span class="fc-btn${rr?' on':''}" data-fc-act="mode" data-seq="${sid}" title="依次=打死一个再换;轮询=每次齐射换一个">${rr?'轮询':'依次'}</span>`
+      +`<span class="fc-btn" data-fc-act="pause" data-seq="${sid}" title="暂停后该序列不参与解算">${cur.paused?'恢复':'暂停'}</span>`
+      +`<span class="fc-btn danger" data-fc-act="del" data-seq="${sid}" title="删除整条序列">删除</span>`
+      +`</div>`;
+    (cur.targets||[]).forEach((t,i)=>{
       const am=!t.allow||t.allow.mac!==false,ms=!t.allow||t.allow.msl!==false;
       h+=`<div class="fc-it">`
-        +`<span class="nm">${fcUiName(t)}</span>`
+        +`<span class="nm">${i+1}. ${fcUiName(t)}</span>`
         +`<span class="hp">${fcUiHp(t)}</span>`
         +`<span class="fc-btn${am?' on':''}" data-fc-act="mac" data-seq="${sid}" data-idx="${i}" title="主炮许可">炮</span>`
         +`<span class="fc-btn${ms?' on':''}" data-fc-act="msl" data-seq="${sid}" data-idx="${i}" title="导弹许可">弹</span>`
         +`<span class="fc-btn danger" data-fc-act="delt" data-seq="${sid}" data-idx="${i}" title="从序列移除该目标">✕</span>`
         +`</div>`;
     });
-    h+=`<div class="fc-ft">`
-      +`<span class="fc-btn" data-fc-act="pause" data-seq="${sid}" title="暂停后该序列不参与解算">${q.paused?'恢复':'暂停'}</span>`
-      +`<span class="fc-btn danger" data-fc-act="del" data-seq="${sid}" title="删除整条序列">删除</span>`
-      +`</div></div>`;
+    h+='</div>';
   }
-  list.innerHTML=h;
+  setHTMLStable(list,h,force);
 }
 function updateSelPanel(){ // frame 低频调用(每20帧,与 updateCardsStatus 同拍)
   const box=document.getElementById('selInfo');
@@ -308,7 +332,7 @@ on('fcList','click',e=>{
   const seq=fcUiSeq(s,el.dataset.seq);if(!seq)return;
   const idx=Number(el.dataset.idx),t=(seq.targets||[])[idx];
   switch(el.dataset.fcAct){
-    case 'edit':if(typeof fcSetEdit==='function')fcSetEdit(s,seq.id);break;
+    case 'bar':if(typeof fcSetEdit==='function')fcSetEdit(s,String(s.fcEditId)===String(seq.id)?null:seq.id);break; // RF7 点方条:进入序列态,再点同一根=退出(fcSetEdit 传 null 即清编辑态,地图蓝链随之熄灭)
     case 'mode':if(typeof fcSetMode==='function')fcSetMode(seq.id,seq.mode==='rr'?'seq':'rr');break;
     case 'pause':if(typeof fcTogglePause==='function')fcTogglePause(seq.id);break;
     case 'del':if(typeof fcRemove==='function')fcRemove(seq.id);break;
@@ -318,5 +342,5 @@ on('fcList','click',e=>{
       if(t&&typeof fcSetAllow==='function')fcSetAllow(seq.id,idx,k,!(!t.allow||t.allow[k]!==false));
       break;}
   }
-  updateFcPanel(); // 立即回显,不等下一个 20 帧拍子
+  updateFcPanel(true); // 立即回显,不等下一个 20 帧拍子;force 绕过 setHTMLStable 的 hover 推迟——此刻光标必然正停在刚点的那个元素上
 });

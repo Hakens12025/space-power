@@ -12,6 +12,7 @@ CLS_STRUCT
 CLS_TIER_MUL
 CLS_VALUE
 DEFAULT_ENEMY
+FC_MAX_SEQS
 FC_PT_SALVOS
 FIRE_ALL_ON
 GEAR_NAMES
@@ -121,6 +122,7 @@ drawCorridors
 drawESM
 drawEditPreview
 drawEditWps
+drawFcChain
 drawFlame
 drawGrid
 drawHits
@@ -174,6 +176,7 @@ exportDemo
 exportScene
 fcActive
 fcAppend
+fcEditFollowSel
 fcGate
 fcInit
 fcNew
@@ -413,6 +416,7 @@ setEditSel
 setEnemyBehavior
 setFan
 setFormationPreset
+setHTMLStable
 setSpacing
 shipAction
 shipAt

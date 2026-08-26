@@ -354,6 +354,17 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #fcSec{padding:var(--sp-2) var(--sp-3);overflow-y:auto;flex:1 1 auto;min-height:52px} /* 口径与原 #selEvents 一致。basis 必须是 auto:#selPanel 只有 max-height 没有 height(高度按内容撑),basis:0 会让本区永远塌到 min-height;同理百分比 max-height 在这种父容器里退化成 none,两条都实测过 */
 #fcSec .fc-hd{font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label);margin-bottom:var(--sp-1)}
 #fcSec .fc-empty{font-size:var(--fs-label);color:var(--txt-mute);line-height:var(--lh-tight);padding:var(--sp-2) 0;text-align:center}
+/* RF7 火控计算机重做:五根竖直方条=五个序列槽,点击进入/退出序列态;.fc-seq 三条为旧富列表样式,只藏不删(html 不再产出该 class) */
+#fcList .fc-bars{display:flex;gap:var(--sp-1);margin-bottom:var(--sp-1)}
+#fcList .fc-bar{flex:1 1 0;min-width:0;height:46px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;border:var(--bw) solid var(--line);border-radius:var(--r-sm);background:var(--srf-sunk);cursor:pointer;user-select:none}
+#fcList .fc-bar.empty{opacity:.35;cursor:default}
+#fcList .fc-bar.edit{border-color:var(--state-select);background:var(--srf-sel)} /* 序列态高亮,配方抄 .card.sel */
+#fcList .fc-bar.paused{opacity:.55}
+#fcList .fc-bar:not(.empty):hover{border-color:var(--line-acc);background:var(--srf-hover)}
+#fcList .fc-bar .no{font-family:var(--ff-mono);font-size:var(--fs-label);letter-spacing:var(--ls-read);color:var(--txt-hi);line-height:1}
+#fcList .fc-bar .md{font-size:var(--fs-micro);color:var(--txt-dim);line-height:1}
+#fcList .fc-bar .ct{font-family:var(--ff-mono);font-size:var(--fs-micro);font-variant-numeric:tabular-nums;color:var(--txt-mute);line-height:1}
+#fcList .fc-det{border:var(--bw) solid var(--line);border-radius:var(--r-sm);background:var(--srf-sunk);padding:var(--sp-1) var(--sp-2)}
 #fcList .fc-seq{border:var(--bw) solid var(--line);border-radius:var(--r-sm);background:var(--srf-sunk);margin-bottom:var(--sp-1);padding:var(--sp-1) var(--sp-2)}
 #fcList .fc-seq.edit{border-color:var(--state-select);background:var(--srf-sel)} /* 当前编辑序列高亮,配方抄 .card.sel */
 #fcList .fc-seq.paused{opacity:.6}

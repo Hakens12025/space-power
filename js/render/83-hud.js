@@ -475,3 +475,34 @@ function drawTargeting(){
   }
   ctx.restore();
 }
+function drawFcChain(){ // RF7 火控序列态的数据链(蓝色铁路线):主体舰 → T1 → T2 …,只画当前编辑序列的链。
+  // 序列态 = 主体舰(selBlue()[0])选中 且 fcEditId 指向自己的序列 —— Shift+中键选定与火控计算机点方条都会置它;
+  // 再点同一根方条 fcSetEdit(s,null) 退出,链随之熄灭。铁路线画法:主线 + 垂直短刺(枕木),数据链蓝 #4fe0ff(canvas 侧既有的强调青,83:218 传感器圈同款,不新造颜色)。
+  if(typeof fcSeq!=='function'||typeof selBlue!=='function')return; // 58 缺席时整段静默(typeof 守卫口径同 drawRadial)
+  const s=selBlue()[0];if(!s||s.dead)return;
+  const q=fcSeq(s.fcEditId);if(!q||q.shipId!==s.id||!(q.targets||[]).length)return;
+  const pts=[toScreen(s.pos[0],s.pos[1])];
+  for(const it of q.targets){ // 链节点按序列顺序:死目标由 58 的清理段 splice,这里只管画活着的;指定点直接连坐标
+    if(it.tid){const t=(typeof fcShip==='function')?fcShip(it.tid):null;if(t&&!t.dead)pts.push(toScreen(t.pos[0],t.pos[1]));}
+    else if(it.pt)pts.push(toScreen(it.pt[0],it.pt[1]));
+  }
+  if(pts.length<2)return;
+  ctx.save();
+  ctx.strokeStyle='#4fe0ff';ctx.globalAlpha=q.paused?.3:.65;ctx.lineWidth=1.4; // 暂停的序列链压暗:还在但不参与解算
+  ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);
+  for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i][0],pts[i][1]);
+  ctx.stroke();
+  ctx.lineWidth=1.1;ctx.globalAlpha=q.paused?.35:.8;
+  for(let i=1;i<pts.length;i++){ // 枕木:每段每 16px 一根 8px 垂直短刺(铁路/数据链质感);段太短(<24px,大缩放下两舰贴住)不画,免得糊成毛虫
+    const ax=pts[i-1][0],ay=pts[i-1][1],dx=pts[i][0]-ax,dy=pts[i][1]-ay,L=Math.hypot(dx,dy);
+    if(L<24)continue;
+    const ux=dx/L,uy=dy/L,px=-uy,py=ux;
+    for(let d=12;d<L-8;d+=16){
+      const x=ax+ux*d,y=ay+uy*d;
+      ctx.beginPath();ctx.moveTo(x-px*4,y-py*4);ctx.lineTo(x+px*4,y+py*4);ctx.stroke();
+    }
+  }
+  ctx.globalAlpha=q.paused?.35:.9; // 节点圈:每个目标一个小空心圈,链的"站点"
+  for(let i=1;i<pts.length;i++){ctx.beginPath();ctx.arc(pts[i][0],pts[i][1],4,0,6.283);ctx.stroke();}
+  ctx.restore();
+}

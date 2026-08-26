@@ -565,6 +565,113 @@ t('FLOW5_CLOSE',function(){
     +' | 重开(编辑上下文):open='+o2+' seqs='+n2+' | Esc:open='+o3
     +' | 目标死亡:open='+o4+'→'+o5+' rad.tid='+tid5+' items='+it5+' hoverRing='+(rg5||'null');
 });
+/* ===== RF7 FLOW6:Shift+中键选定链 / 序列上限 / 方条面板 / 数据链渲染 ===== */
+function fc6tap(p,shift){ /* RF7 一次短按(可带 Shift):照抄 fc5tap 的骨架,只多 mods。调用方负责先把准星吸上 */
+  fc4down(1,p[0],p[1],{shift:!!shift});
+  FC4.clk+=120;
+  fc4up(1,p[0],p[1],{shift:!!shift});
+}
+t('FLOW6_DESIG',function(){ /* Shift+中键=选定链:首按新建并入编辑态,再按追加,重复按去重;无 Shift 仍是快速交战(新建) */
+  var e=fc5reset();
+  var C=ships.filter(function(x){return x.side==='red';})[2];
+  C.pos=[60000,-100000,0];C.vel=[0,0,0];C.orders=[];C.rangeAnchor=[60000,-100000,0];C.litBlue=3; /* 第三靶:与 A/B 都隔十万,吸附不串 */
+  fc4clock(true);fc5timer(true);
+  var pA=fc4at(e.A);fc4move(pA[0],pA[1]);fc4frames(400);
+  fc6tap(pA,true);                                        /* ① Shift+A:无编辑序列 → fcAppend 等价新建 */
+  var n1=fireSeqs.length,q1=fireSeqs[0],ed1=(q1&&String(e.S.fcEditId)===String(q1.id));
+  var pB=fc4at(e.B);fc4move(pB[0],pB[1]);fc4frames(400);
+  fc6tap(pB,true);                                        /* ② Shift+B:追加进同一序列 */
+  var n2=fireSeqs.length,t2=q1?q1.targets.length:0;
+  fc6tap(pB,true);                                        /* ③ 重复 Shift+B:去重,链不变 */
+  var t3=q1?q1.targets.length:0;
+  var pC=fc4at(C);fc4move(pC[0],pC[1]);fc4frames(400);
+  fc6tap(pC,false);                                       /* ④ 对照:无 Shift+C → 快速交战新建第二条 */
+  var n4=fireSeqs.length;
+  fc5timer(false);fc4clock(false);
+  var chain=q1?q1.targets.map(function(x){return x.tid;}).join('→'):'-';
+  var ok=(n1===1&&ed1&&n2===1&&t2===2&&t3===2&&n4===2
+    &&q1.targets[0].tid===e.A.id&&q1.targets[1].tid===e.B.id);
+  return (ok?'ok':'fail')+' Shift+A:seqs 0→'+n1+'(编辑态='+ed1+') Shift+B:seqs='+n2+' 链长1→'+t2
+    +' 重复B去重='+t3+'(须2) 无Shift C(对照):seqs→'+n4+'(快速交战新建) 链='+chain+'(须'+e.A.id+'→'+e.B.id+')';
+});
+t('FLOW6_CAP',function(){ /* RF7 序列上限 FC_MAX_SEQS=5:第 6 条 fcNew 返回 null 且总数不涨 */
+  var e=fc5reset();
+  var made=[];for(var i=0;i<5;i++)made.push(fcNew(e.S,{tid:e.A.id}));
+  var six=fcNew(e.S,{tid:e.B.id});
+  var n=(typeof fcSeqsOf==='function')?fcSeqsOf(e.S).length:-1;
+  var ok=(made.every(function(x){return x!=null;})&&six===null&&n===5);
+  return (ok?'ok':'fail')+' 前5条=均成功 第6条='+six+'(须null) 总数='+n+'/5';
+});
+t('FLOW6_BARS',function(){ /* RF7 方条面板:5 槽渲染 / 点击退出与再进入序列态 / 详情只画编辑序列 */
+  var e=fc5reset();
+  var s1=fcNew(e.S,{tid:e.A.id});fcAppend(e.S,{tid:e.B.id});
+  updateSelPanel();
+  var nBars=document.querySelectorAll('#fcList .fc-bar').length;
+  var nEmpty=document.querySelectorAll('#fcList .fc-bar.empty').length;
+  var b=document.querySelector('#fcList .fc-bar[data-fc-act="bar"]');
+  if(b)b.click();                                          /* 已是编辑态 → 点击=退出 */
+  var exited=(e.S.fcEditId===null);
+  updateSelPanel();
+  b=document.querySelector('#fcList .fc-bar[data-fc-act="bar"]');
+  if(b)b.click();                                          /* 再点=重新进入 */
+  var entered=(String(e.S.fcEditId)===String(s1));
+  updateSelPanel();
+  var det=document.querySelectorAll('#fcList .fc-det .fc-it').length;
+  var ok=(nBars===5&&nEmpty===4&&exited&&entered&&det===2);
+  return (ok?'ok':'fail')+' 方条='+nBars+'/5(空'+nEmpty+') 点击退出='+exited+' 再点进入='+entered+' 详情目标行='+det+'(须2)';
+});
+t('FLOW6_NOAUTO',function(){ /* RF7b 序列态跟随选中:建完序列后取消选中→再选回同一艘舰,不得自动回到序列态;点方条才进 */
+  var e=fc5reset();
+  var sid=fcNew(e.S,{tid:e.A.id});          /* 建序列会置 fcEditId(这一步进序列态是设计如此) */
+  var inAfterNew=(String(e.S.fcEditId)===String(sid));
+  selected=[];xhTick();                      /* 取消选中:跟随逻辑应清掉上下文 */
+  var afterDesel=e.S.fcEditId;
+  selected=[e.S.id];xhTick();                /* 重新选中同一艘舰:不得自动复原 */
+  var afterResel=e.S.fcEditId;
+  updateSelPanel();
+  var lit0=document.querySelectorAll('#fcList .fc-bar.edit').length; /* 面板不该有高亮方条 */
+  var b=document.querySelector('#fcList .fc-bar[data-fc-act="bar"]');
+  if(b)b.click();                            /* 显式点方条 → 才进序列态 */
+  var afterClick=e.S.fcEditId;
+  updateSelPanel();
+  var lit1=document.querySelectorAll('#fcList .fc-bar.edit').length;
+  /* 开火不受序列态影响:清掉上下文后序列仍应可解算(fcActive 与 fcEditId 无关) */
+  fcSetEdit(e.S,null);
+  var stillActive=(typeof fcActive==='function')?fcActive(e.S):null;
+  var ok=(inAfterNew&&afterDesel===null&&afterResel===null&&lit0===0
+    &&String(afterClick)===String(sid)&&lit1===1&&stillActive===true);
+  return (ok?'ok':'fail')+' 建序列后进序列态='+inAfterNew+' 取消选中→'+afterDesel+'(须null) 重新选中→'+afterResel
+    +'(须null,不自动进) 面板高亮方条='+lit0+'(须0) 点方条→'+(String(afterClick)===String(sid))+' 高亮='+lit1
+    +'(须1) 退出序列态后 fcActive='+stillActive+'(须true:序列态只管显示,不管开火)';
+});
+t('FLOW6_STABLE',function(){ /* RF7c 面板稳定写入:内容不变时不得重建节点(重建=hover闪烁+click被吃) */
+  var e=fc5reset();
+  fcNew(e.S,{tid:e.A.id});fcAppend(e.S,{tid:e.B.id});
+  updateSelPanel();
+  var bar0=document.querySelector('#fcList .fc-bar');
+  var n0=document.querySelectorAll('#fcList .fc-bar').length;
+  for(var i=0;i<10;i++)updateSelPanel();          /* 连刷 10 拍,状态没变 */
+  var bar1=document.querySelector('#fcList .fc-bar');
+  var same=(bar0===bar1);                          /* 同一个 DOM 节点 = 一次都没重建 */
+  /* 内容真的变了就必须重建(不能因为缓存而永远不刷新) */
+  fcSetMode(fireSeqs[0].id,'rr');
+  updateSelPanel();
+  var bar2=document.querySelector('#fcList .fc-bar');
+  var rebuilt=(bar2!==bar1);
+  var md=bar2?(bar2.textContent.indexOf('轮')>=0):false;
+  var ok=(n0===5&&same&&rebuilt&&md);
+  return (ok?'ok':'fail')+' 连刷10拍节点未换='+same+'(须true:内容不变不重建) 改模式后重建='+rebuilt
+    +'(须true) 新内容含"轮"='+md+' 方条数='+n0;
+});
+t('FLOW6_CHAIN',function(){ /* RF7 数据链渲染:函数存在;编辑态/退出态 render 均不炸(像素断言不做,ERRORS 层兜底) */
+  var e=fc5reset();
+  fcNew(e.S,{tid:e.A.id});fcAppend(e.S,{tid:e.B.id});
+  var okFn=(typeof drawFcChain==='function');
+  render();
+  fcSetEdit(e.S,null);render();
+  fcSetEdit(e.S,fireSeqs[0]?fireSeqs[0].id:null);
+  return (okFn?'ok':'fail')+' drawFcChain='+(okFn?'存在':'缺失')+' 编辑态/退出态渲染均完成';
+});
 /* 7. 渲染不炸 */
 t('RENDER',function(){render();return 'ok';});
 r.push('ERRORS='+(errs.length?errs.join(' | '):'none'));

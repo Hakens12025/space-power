@@ -64,6 +64,19 @@ function xhFeed(sx,sy){ // RF5 鼠标位置喂入:由 70-input 那个【唯一�
   if(Math.abs(sx-xh.pt[0])+Math.abs(sy-xh.pt[1])>XH_JUMP){xh.dwellT=0;xh.cand=null;} // 大跳跃(甩鼠标/刚从编辑器回来):停留计时重来
   xh.pt[0]=sx;xh.pt[1]=sy;xh.act=true;
 }
+function fcEditFollowSel(sub){ // RF7b 序列态是【瞬时 UI 模式】,不是舰船的持久属性:非当前主体舰一律清掉编辑上下文。
+  // 改前 fcEditId 挂在舰上跨选中持久,于是上一次建序列留下的上下文会在你下次点这艘舰时被当成序列态复原 —— 表现就是
+  // "点一下舰船自动进了火力通道"。现在进入序列态只有两个显式入口:点火控计算机的方条、或 Shift+中键选定(建链那一下)。
+  // 【不影响开火】:fcEditId 是纯 UI 编辑上下文,weapons/58 的 stepFireControl/fcSolve 一处都不读它 ——
+  // 退出序列态只是面板不高亮、地图不画蓝链,序列照常解算照常开火。
+  if(typeof rad!=='undefined'&&rad&&rad.open)return; // 轮盘开着不动上下文:radOpen 的三种上下文判定依赖它,交互中途抽走会让"追加"静默变成"新建"
+  if(typeof ships==='undefined')return;
+  for(const s of ships){
+    if(s.fcEditId==null)continue;
+    if(sub&&s===sub)continue;
+    s.fcEditId=null;
+  }
+}
 function xhTick(dt){ // RF5 准星每帧状态机:命中测试 → 停留累加 → 吸附/失效 → 刷信息卡。由 core/99-main 的 frame() 每帧调(dt 可缺省:探针直接调时不传)
   const now=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
   const d=xh._t?Math.min(0.1,(now-xh._t)/1000):(dt||0); // 墙钟差值优先:停留门槛要的是真实 250ms(不吃 rate),且暂停时准星必须照常工作
@@ -72,6 +85,7 @@ function xhTick(dt){ // RF5 准星每帧状态机:命中测试 → 停留累加 
   if(typeof ships==='undefined'||typeof targetAt!=='function')return; // 加载期保护(74 早于 render/80 加载)
   if((typeof editMode!=='undefined'&&editMode)||(typeof rangeMode!=='undefined'&&rangeMode)){xhOff();return;} // 模式可以被键盘/按钮切换,不只在 mousemove 里变,所以这道守卫两边都要
   const sub=xhSubject();
+  fcEditFollowSel(sub); // RF7b 序列态跟随选中(必须排在下面那条早退【之前】:没选中任何舰时 sub=null,那才是最该全清的一种情况)
   if(!sub||!xh.act){xhReset();return;} // 只在存在主体舰时激活(pt 不动:鼠标还在画面上,回头选中一艘舰准星就该立刻回来)
   const hit=targetAt(xh.pt[0],xh.pt[1]); // 吸附半径与战争迷雾门控全在 targetAt 里,这里不重复一套
   if(hit!==xh.cand){xh.cand=hit;xh.dwellT=0;} // 换目标/没命中 → 计时清零
@@ -132,13 +146,31 @@ function xhCardHide(){ // RF5 收起信息卡(用 _shown 记账,免得每帧都�
   if(el)el.style.display='none';
   xh._shown=false;xh._html='';xh._w=0;
 }
-function xhQuickEngage(){ // RF5 中键短按 = 快速交战:主体舰 + 当前吸附目标 → 新建一条火控序列(allow 缺省 = 全武器许可)
+function xhQuickEngage(append){ // RF5 中键短按 = 快速交战:主体舰 + 当前吸附目标 → 新建一条火控序列(allow 缺省 = 全武器许可)
+  // RF7 append=按下中键那一瞬 Shift 在按:目标【追加】进当前编辑序列(无编辑序列则等价新建)。这是火控序列的选定手势:
+  // Shift+中键点 T1 建序列并进入序列态(地图亮数据链),再 Shift+中键点 T2、T3 依次入链。改前短按压根不看 Shift,
+  // 按住 Shift 点第二个目标照样走 fcNew 新建 —— 玩家要的追加从来没触发过,这正是"Shift 选择没做好"的根因。
   const sub=xhSubject();
   if(!sub){if(typeof log==='function')log('快速交战:先选中一艘蓝舰(准星以它为主体舰)','warn');return false;}
   const t=xh.snap;
   if(!t||t.dead){if(typeof log==='function')log('快速交战:准星未吸附敌舰(把光标停在敌舰上 0.25s)','warn');return false;}
   if(typeof fcNew!=='function')return false;
-  fcNew(sub,{tid:t.id}); // 建序列会顺带暂停该舰任务并打开火控(58-firecontrol 的两个副作用),这是预期行为
+  if(append){
+    const q0=(typeof fcSeq==='function')?fcSeq(sub.fcEditId):null;
+    const cur=(q0&&q0.shipId===sub.id)?q0:null; // 编辑上下文可能指向别舰/已删序列(与 radOpen 同一道防线)
+    if(cur&&(cur.targets||[]).some(x=>x.tid&&String(x.tid)===String(t.id))){ // 去重:已在链里,再按只是确认,不重复入队
+      if(typeof log==='function')log(`🔗 ${xhName(t)} 已在 ${cur.name} 中(第${cur.targets.findIndex(x=>String(x.tid)===String(t.id))+1}位)`,'');
+      if(typeof updateSelPanel==='function')updateSelPanel();
+      return true;
+    }
+    const sid=(typeof fcAppend==='function')?fcAppend(sub,{tid:t.id}):null; // 无编辑序列时 fcAppend 内部等价 fcNew
+    if(sid==null)return false; // RF7 fcNew 触顶(上限 FC_MAX_SEQS)返回 null,58 已打过警告日志
+    const q=(typeof fcSeq==='function')?fcSeq(sid):null;
+    if(typeof log==='function')log(`🔗 ${sub.name} ${q?q.name:'序列'} 追加目标 → ${xhName(t)}(第${q?q.targets.length:'?'}位,地图数据链已连)`,'');
+    if(typeof updateSelPanel==='function')updateSelPanel();
+    return true;
+  }
+  if(fcNew(sub,{tid:t.id})==null)return false; // 建序列会顺带暂停该舰任务并打开火控(58-firecontrol 的两个副作用),这是预期行为;RF7 触顶返回 null
   // RF5 按接触等级追加提示:targetAt 的吸附门槛只要求 litBlue>=1,而 fcGate(58)对导弹要 >=2、主炮要 >=3。
   // 只到探测级就建序列 = 一发不响,玩家却付出了"任务被暂停 + ROE 被改成自由开火"的代价,不说一句等于静默失效
   // (被拆掉的旧右键锁定分支在同一情况下会明确警告"未被探测到,无法锁定")。不阻止建序列 —— 等级上来后这条序列本来就该自动开火。
