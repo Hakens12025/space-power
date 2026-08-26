@@ -478,7 +478,8 @@ function drawTargeting(){
 /* RF7d 数据链流动:虚线段长 + 间隔,周期 = 两者之和(lineDashOffset 按周期取模才不会随时间累积成大数丢精度) */
 const FC_FLOW_DASH=[9,15];                                     // 亮段 9px / 暗段 15px
 const FC_FLOW_PERIOD=FC_FLOW_DASH[0]+FC_FLOW_DASH[1];          // 24px
-const FC_FLOW_PXPS=30;                                         // 流动速度(像素/秒):约 0.8 秒走完一个周期,看得出方向又不晃眼
+const FC_FLOW_PXPS=30;
+const FC_TIE_MAX=48;   // RF10 单段枕木数上限:防止段长极大时循环次数失控(见 drawFcChain 内注释)                                         // 流动速度(像素/秒):约 0.8 秒走完一个周期,看得出方向又不晃眼
 function drawFcChain(){ // RF7 火控序列态的数据链(蓝色铁路线):主体舰 → T1 → T2 …,只画当前编辑序列的链。
   // 序列态 = 主体舰(selBlue()[0])选中 且 fcEditId 指向自己的序列 —— Shift+中键选定与火控计算机点方条都会置它;
   // 再点同一根方条 fcSetEdit(s,null) 退出,链随之熄灭。铁路线画法:主线 + 垂直短刺(枕木),数据链蓝 #4fe0ff(canvas 侧既有的强调青,83:218 传感器圈同款,不新造颜色)。
@@ -511,9 +512,13 @@ function drawFcChain(){ // RF7 火控序列态的数据链(蓝色铁路线):主�
   ctx.lineWidth=1.1;ctx.globalAlpha=q.paused?.35:.8;
   for(let i=1;i<pts.length;i++){ // 枕木:每段每 16px 一根 8px 垂直短刺(铁路/数据链质感);段太短(<24px,大缩放下两舰贴住)不画,免得糊成毛虫
     const ax=pts[i-1][0],ay=pts[i-1][1],dx=pts[i][0]-ax,dy=pts[i][1]-ay,L=Math.hypot(dx,dy);
-    if(L<24)continue;
+    if(!isFinite(L)||L<24)continue; // RF10 修:非有限长度(NaN/Infinity)直接跳过 —— 下面的 for 以 L 为上界,Infinity 会让它【永不退出】
     const ux=dx/L,uy=dy/L,px=-uy,py=ux;
-    for(let d=12;d<L-8;d+=16){
+    // RF10 修:枕木步长由固定 16px 改为"至少 16px,且整段最多 FC_TIE_MAX 根"。
+    // 原写法循环次数正比于屏幕段长 L,而 L 没有上限(玩家拉近镜头 cam.zoom 变大、或两舰屏幕距离很远时轻易到几十万像素),
+    // 每段每帧几十万次迭代会把整帧卡死 —— 实测能让页面完全无响应,探针也是这么挂住的。这是 RF7 引入、已上线的实时 bug。
+    const step=Math.max(16,L/FC_TIE_MAX);
+    for(let d=12;d<L-8;d+=step){
       const x=ax+ux*d,y=ay+uy*d;
       ctx.beginPath();ctx.moveTo(x-px*4,y-py*4);ctx.lineTo(x+px*4,y+py*4);ctx.stroke();
     }

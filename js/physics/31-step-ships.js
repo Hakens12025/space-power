@@ -7,7 +7,7 @@ function stepShipsMotion(dt){
     if(!isFinite(s.pos[0])||!isFinite(s.pos[1])||!isFinite(s.pos[2])){s.pos=[0,0,0];s.vel=[0,0,0];s.facing=[1,0,0];} // NaN防护
     if(s.dead){s.vel=[0,0,0];s.flame=0;s.sideFlame=0;continue;} // 残骸冻结
     s.flame=0;s.sideFlame=0; // 本步推进器状态默认无焰
-    s.accNow=0;s.engMain=false;s.engRetro=false;s.engSide=false; // RF9 同拍清零:这四个是"本 tick 实际在推什么"的读数,由 30-motion 的 steerToVel 当场置位。
+    s.accNow=0;s.accLat=0;s.engMain=false;s.engRetro=false;s.engSide=false;s.engLv=[0,0,0];s.aimHeading=null; // RF9 同拍清零;RF10 追加三推开度 engLv / 横向副作用 accLat / 期望朝向 aimHeading:这四个是"本 tick 实际在推什么"的读数,由 30-motion 的 steerToVel 当场置位。
     // 必须在【这里】清而不是在 steerToVel 里清 —— 有几条分支(空闲锁定漂移/编队旗舰调头)整拍不调 steerToVel,在那里清的话读数会冻在上一拍。
     if(s.formation){ // KIMI146:取本编队已结算的共享上下文;解散则落入普通分支(走各自落位命令)
       const FC=formTickCtx.get(s.formation)||stepFormation(s.formation,dt);
@@ -21,8 +21,8 @@ function stepShipsMotion(dt){
       const isFlag=s===flag;
       if(isFlag&&s.turnTarget){ // v132:旗舰V转向→滑行调头(机头朝调头方向,速度不变);阵型朝向fmAng平滑跟随,整队旋转
         const tDesired=V.norm(V.sub(s.turnTarget,s.pos));
-        const tang=V.angle(s.facing,tDesired);
-        if(tang>1e-6){s.facing=V.slerp(s.facing,tDesired,Math.min(1,s.turnRate*dt/tang));if(tang>0.03){s.sideFlame=1;s.turnAim=tDesired.slice();}}
+        applyHeading(s,tDesired,dt); // RF10 经 applyHeading(torque 模式改为登记期望朝向)
+        stepAttitude(s,dt);          // RF10 本支自带 continue,姿态积分要在这里补一次,否则 torque 下旗舰调头永远转不动
         if(V.angle(s.facing,tDesired)<0.02){s.turnTarget=null;s.turnNoFm=false;} // KIMI151修:调头完成清除——原终身残留,旗舰永卡本分支(continue跳过dest导引),编队不机动/冲过目标点不停(用户报"编队不动弹"主根因)
         s.pos[0]+=s.vel[0]*dt;s.pos[1]+=s.vel[1]*dt;s.pos[2]+=s.vel[2]*dt;
         continue;
@@ -74,8 +74,7 @@ function stepShipsMotion(dt){
     // (旗舰永卡本分支→编队不机动/冲过目标点不停),没有编队专项回归就动它是在同一个坑上重演。
     if(s.turnTarget&&!(s.formation&&formTickCtx.get(s.formation)&&formTickCtx.get(s.formation).flag===s)){
       const tDesired=V.norm(V.sub(s.turnTarget,s.pos));
-      const tang=V.angle(s.facing,tDesired);
-      if(tang>1e-6){s.facing=V.slerp(s.facing,tDesired,Math.min(1,s.turnRate*dt/tang));if(tang>0.03){s.sideFlame=1;s.turnAim=tDesired.slice();}}
+      applyHeading(s,tDesired,dt); // RF10
       if(V.angle(s.facing,tDesired)<0.02){s.turnTarget=null;s.turnNoFm=false;} // KIMI151修:调头完成清除(同旗舰分支根因——原残留导致航线走完后做陈旧调头)
     }
     // 战斗转向(v118,移动+攻击一体):锁定目标且MAC可用 → 运动不冻结。
@@ -84,11 +83,10 @@ function stepShipsMotion(dt){
       if(s.driftFire){s.driftFireT=(s.driftFireT||0)-dt;if(s.driftFireT<=0){s.driftFire=false;}} // 60s限时
       const idle=!s.orders.length&&!s.formation&&!s.turnTarget&&!s.brake;
       if(idle||(s.driftFire&&!s.crawling&&!s.turnTarget&&!s.brake)){ // 硬机动段让位
-        const aim=V.norm(V.sub(macPred(s,s.lockedTarget),s.pos));
-        const tang=V.angle(s.facing,aim);
-        if(tang>1e-6){s.facing=V.slerp(s.facing,aim,Math.min(1,s.turnRate*dt/tang));if(tang>0.03){s.sideFlame=1;s.turnAim=aim.slice();}}
+        applyHeading(s,V.norm(V.sub(macPred(s,s.lockedTarget),s.pos)),dt); // RF10
       }
     }
+    stepAttitude(s,dt); // RF10 torque 姿态积分:必须排在【全部朝向决策之后】(它读本 tick 最后登记的 aimHeading)、位置积分之前(它会改 s.vel)。classic/tri 下是空转
     s.pos[0]+=s.vel[0]*dt; s.pos[1]+=s.vel[1]*dt; s.pos[2]+=s.vel[2]*dt;
   }
 }

@@ -175,7 +175,13 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #rate{font-family:var(--ff-mono);font-size:var(--fs-body);color:var(--txt-dim);letter-spacing:var(--ls-read);min-width:30px;flex:none}
 .hudTag{font-size:var(--fs-label);color:var(--txt-dim);padding:var(--sp-0) var(--sp-2);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);flex:none;user-select:none}
 #hudGM.on{color:var(--acc);border-color:var(--acc)}
-#hud .spacer{flex:1;min-width:8px;pointer-events:none} /* UI1 纯占位不该吞画布点击 */
+#hud .spacer{flex:1;min-width:8px;pointer-events:none}
+/* RF10 引擎模型三选一:连成一组,只有当前模型亮 .on */
+#engSw{display:inline-flex;flex:none;gap:0}
+#engSw .eng-b{font-size:var(--fs-label);padding:0 var(--sp-2);border-radius:0;margin-left:-1px}
+#engSw .eng-b:first-child{border-radius:var(--r-sm) 0 0 var(--r-sm);margin-left:0}
+#engSw .eng-b:last-child{border-radius:0 var(--r-sm) var(--r-sm) 0}
+#engSw .eng-b.on{background:var(--acc-wash);border-color:var(--acc);color:var(--acc);z-index:1} /* UI1 纯占位不该吞画布点击 */
 
 /* ---------- 舰队卡片面板(右) ---------- */
 #fleet{top:var(--rail-top);right:var(--gut);width:var(--rail-w);max-height:calc(100% - var(--rail-top) - var(--dock-b));display:flex;flex-direction:column}
