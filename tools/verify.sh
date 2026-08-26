@@ -874,23 +874,32 @@ t('FLOW12_HYS',function(){ /* RF12 熄火/点火迟滞:减速段不许频闪,但
   return (ok?'ok':'fail')+' 减速段引擎跃迁='+hz.toFixed(2)+' 次/秒(须<5;改前 27.9=每秒闪 14 个来回) 停点偏差='+Math.round(err)+'km(须<'+(CFG.arrive*2)+',迟滞不许换精度)'
     +' | 死区@10km/s='+lowOn+'(须=ENG_HYS_OFF='+ENG_HYS_OFF+':低速/保位行为与改前一致) @800km/s='+hiOn+'(须>4:只有高速才放宽)';
 });
-t('FLOW12_CORNER',function(){ /* RF12 拐角限速:掉头必须真减速,直行【不许】被限速——只测一边的话,"把 pass 点做成 stop 点"也能骗过 */
+t('FLOW12_CORNER',function(){ /* RF12/RF13 拐角限速。判据取【拐点被消费那一拍的实际速度】而不是全程峰值:
+  峰值只是代理量(RF13 把 GUIDE_EFF 调到 0.85 后接近段变快,峰值 610->694 就会撞上旧阈值,而拐角行为其实没变坏)。
+  双向 —— 掉头拐点速度必须接近 0,同时直线对照组必须仍满巡航,否则"把每个 pass 点都当 stop 点"也能骗过 */
   var e=fc5reset(),s=e.S;
   function run(pts){
     s.formation=null;s.brake=false;s.lockedTarget=null;s.turnTarget=null;s.turnNoFm=false;s.crawling=false;s.coasting=false;
     s.pos=[0,0,0];s.vel=[0,0,0];s.facing=[1,0,0];s.orders=[];
     for(var k=0;k<pts.length;k++)addWaypoint([s],pts[k]);
-    var maxV=0,tt=0,last=pts[pts.length-1];
-    for(var i=0;i<60000;i++){stepShipsMotion(0.02);tt+=0.02;var v=V.len(s.vel);if(v>maxV)maxV=v;
-      if(!s.orders.length&&v<1)break;}
-    return {v:maxV,t:tt,err:Math.hypot(s.pos[0]-last[0],s.pos[1]-last[1]),left:s.orders.length};
+    var n=pts.length,left=n,vCorner=-1,maxV=0,tt=0;
+    for(var i=0;i<80000;i++){
+      stepShipsMotion(0.02);tt+=0.02;
+      var v=V.len(s.vel);if(v>maxV)maxV=v;
+      if(s.orders.length<left){if(vCorner<0)vCorner=v;left=s.orders.length;} /* 第一个 pass 点被消费那一拍的速度 */
+      if(!s.orders.length&&v<1)break;
+    }
+    return {vc:vCorner,v:maxV,t:tt,left:s.orders.length,
+            err:Math.hypot(s.pos[0]-pts[n-1][0],s.pos[1]-pts[n-1][1])};
   }
-  var U=run([[40000,0,0],[10000,0,0]]);   /* 掉头:偏折 180° */
-  var L=run([[40000,0,0],[80000,0,0]]);   /* 直线:偏折 0°(对照组) */
+  var U=run([[40000,0,0],[10000,0,0]]);   /* 掉头:偏折 180°,拐点速度必须被压到接近 0 */
+  var L=run([[40000,0,0],[80000,0,0]]);   /* 直线:偏折 0°,拐点速度必须仍是满巡航 */
   var cr=cruiseOf(s);
-  var ok=(U.v<cr*0.85 && U.err<CFG.arrive*2 && U.left===0 && L.v>cr*0.95 && L.err<CFG.arrive*2 && L.left===0);
-  return (ok?'ok':'fail')+' 掉头两点:峰值v='+Math.round(U.v)+'(须<'+Math.round(cr*0.85)+';改前满 '+cr+'=不减速冲过拐点) 停点偏差='+Math.round(U.err)+'km 耗时'+Math.round(U.t)+'s'
-    +' | 直线两点(对照组):峰值v='+Math.round(L.v)+'(须>'+Math.round(cr*0.95)+':直行不许限速) 停点偏差='+Math.round(L.err)+'km';
+  var ok=(U.vc>=0 && U.vc<cr*0.15 && U.err<CFG.arrive*2 && U.left===0
+        && L.vc>cr*0.95 && L.err<CFG.arrive*2 && L.left===0);
+  return (ok?'ok':'fail')+' 掉头:拐点速度='+Math.round(U.vc)+'(须<'+Math.round(cr*0.15)+'=真被压住;无限速时为满 '+cr+') 峰值='+Math.round(U.v)
+    +' 用时'+Math.round(U.t)+'s 终点误差='+Math.round(U.err)+'km'
+    +' | 直线对照组:拐点速度='+Math.round(L.vc)+'(须>'+Math.round(cr*0.95)+':直行不许限速) 峰值='+Math.round(L.v);
 });
 t('FLOW12_GHOST2',function(){ /* RF12 虚影持久层:命令带 face 才画,且跟着选中走。命令点的黄 X 本身就是 #ffe066(83:40),
   颜色测不出差别,所以做【像素差分】;墙钟要冻住,否则数据链流动与告警脉冲会让两次渲染天然不同 */

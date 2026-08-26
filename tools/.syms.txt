@@ -346,6 +346,7 @@ pushEvt
 pushSnap
 qSalvoBtns
 qSpdBtns
+r
 rad
 radArcFade
 radArcText

@@ -104,7 +104,7 @@ for(var q=0;q<ROUTES.length;q++){
   push('     分段: '+d.join(' | '));
 }
 push('总损失 = '+tot.toFixed(3)+' (六条航线等权相加,全无量纲)   权重 α='+AL+' β='+BE+'  评估容差 TOL='+TOL+'km(钉死,不读控制器参数)  VC='+VC+'km/s');
-push('当前控制器参数: GUIDE_EFF='+GUIDE_EFF+'  ROUTE_TOL='+ROUTE_TOL()+'km  ROUTE_MARGIN='+ROUTE_MARGIN()+'km  (这三个是待搜的自由度)');
+push('当前控制器参数: GUIDE_EFF='+GUIDE_EFF+'  ROUTE_TOL='+ROUTE_TOL+'km  ROUTE_MARGIN='+ROUTE_MARGIN+'km  (这三个是待搜的自由度)');
 }catch(e){push('THREW '+e.message+' @'+(e.stack||'').split('\n')[1]);}
 var pre=document.createElement('pre');pre.id='RE';pre.textContent=R.join('\n');document.body.appendChild(pre);
 })();

@@ -94,13 +94,15 @@ const ENG_HYS_K=0.02, ENG_HYS_MAX=8; // 点火阈值 = 速度x2%,上限 8km/s(80
 // 这不是控制器调得不好,是信息在错误的时刻才被使用。RF13 补上 CNC/机器人轨迹规划里的标准解:反向速度传播。
 // 【为什么只要反向遍不要正向遍】:教科书的两遍规划里,正向遍是为了让【离线生成的速度剖面】不超过加速能力;
 // 这里是闭环反馈控制,能加多快就加多快,正向约束由 steerToVel 的推力钳位天然满足,写出来是多余的一遍。
-const ROUTE_TOL=()=>CFG.passBy;      // 切角容差:允许航迹离拐点多远(几何限速用)。默认借用接受半径,是三个可调参数之一
-const ROUTE_MARGIN=()=>CFG.passBy;   // 刹车距离扣减:每段可用于减速的距离按 L-此值 计,保守裕度。同为可调参数
+// RF13 两个航线规划参数。写成 let 而不是 const/函数:它们【就是】要被离线搜索改写的自由度(tools/route_eval.sh),
+// const 的话连扫一遍取舍曲线都做不到。默认取 CFG.passBy(接受半径),但语义是独立的三件事,不要再合并回去。
+let ROUTE_TOL=CFG.passBy;      // 切角容差:允许航迹离拐点多远。它单独决定过弯速度 sqrt(a*r),r=tol*c/(1-c)
+let ROUTE_MARGIN=CFG.passBy;   // 刹车距离扣减:每段可用于减速的距离按 L-此值 计,保守裕度
 function cornerSpd(s,vIn,vOut){ // 拐角几何限速:以 tol 为允许的切角偏差,偏折角 phi 的过弯圆弧半径 r=tol/(sec(phi/2)-1),v=sqrt(a*r)
   if(V.len(vIn)<1||V.len(vOut)<1)return Infinity;
   const c=Math.cos(V.angle(vIn,vOut)/2);
   if(c>=0.999999)return Infinity;                       // 直行 phi=0 -> r 无穷 -> 【不限速】(限了就等于把 pass 点做成 stop 点)
-  const r=c>0?ROUTE_TOL()*c/(1-c):0;                    // sec(phi/2)-1 = (1-c)/c;phi=90 度 -> 316km/s,phi=180 度 -> 0
+  const r=c>0?ROUTE_TOL*c/(1-c):0;                    // sec(phi/2)-1 = (1-c)/c;phi=90 度 -> 316km/s,phi=180 度 -> 0
   return Math.sqrt(Math.max(0,s.thrust*GUIDE_EFF*r));
 }
 function routeCap(s,dist){ // 反向传播:从末点(必为 stop,速度 0)倒推回当前段,返回本 tick 的速度上限
@@ -109,11 +111,11 @@ function routeCap(s,dist){ // 反向传播:从末点(必为 stop,速度 0)倒推
   let U=(od[n-1].type==='pass')?cruiseOf(s):0;          // 末点速度:stop -> 0(正常航线恒走这一支)
   for(let j=n-2;j>=0;j--){
     const L=V.len(V.sub(od[j+1].pos,od[j].pos));
-    const reach=Math.sqrt(U*U+2*s.thrust*GUIDE_EFF*Math.max(0,L-ROUTE_MARGIN())); // 从 od[j] 出发,这一段减得下来的最快速度
+    const reach=Math.sqrt(U*U+2*s.thrust*GUIDE_EFF*Math.max(0,L-ROUTE_MARGIN)); // 从 od[j] 出发,这一段减得下来的最快速度
     const prev=(j===0)?s.pos:od[j-1].pos;               // 首点的入射方向用【当前船位】:切过角之后入射角会变,让限速跟着适应
     U=Math.min(cornerSpd(s,V.sub(od[j].pos,prev),V.sub(od[j+1].pos,od[j].pos)),reach);
   }
-  return Math.sqrt(U*U+2*s.thrust*GUIDE_EFF*Math.max(0,dist-ROUTE_MARGIN())); // 再把"从这里减到 U"的接近段并进去
+  return Math.sqrt(U*U+2*s.thrust*GUIDE_EFF*Math.max(0,dist-ROUTE_MARGIN)); // 再把"从这里减到 U"的接近段并进去
 }
 function cruiseOf(s){return s.speedCmd===-1?SPD_UNCAP:(s.speedCmd===0?0:(s.speedCmd>0?s.speedCmd:800));} // v119:速度令0=定速停→返回0让内核刹停(原回退800致"按停反而加速")
 function applyHeading(s,dir,dt){ // RF10 朝向的唯一出口。改造前五个地方各自 slerp 到 s.facing;现在统一走这里:
@@ -203,7 +205,17 @@ function steerToVel(s,want,dt){ // v119运动内核:期望速度导引——推�
   s.accNow=a;
   s.vel[0]+=td[0]*a*dt;s.vel[1]+=td[1]*a*dt;s.vel[2]+=td[2]*a*dt;
 }
-const GUIDE_EFF=0.55; // DS191:统一导引有效减速比(含机头对齐折扣的诚实值;实际反推可达1.0->从上方贴合曲线单调收敛;原0.7高估实际能力,贴不到曲线=振荡根因)
+// 统一导引有效减速比:刹车曲线按 thrust*此值 规划,而实际反推是满推力 1.0,所以它是一份保守裕度。
+// DS191 原注:"含机头对齐折扣的诚实值;原 0.7 高估实际能力,贴不到曲线=振荡根因",取 0.55。
+// RF13 改 0.85 —— 【推翻的是 DS191 的结论,不是它的观察】:当年 0.7 会振荡,根因是船贴着刹车曲线走时
+// 推力在 need<0.5 这个单阈值上反复跨越(RF12 实测 27.9 次/秒),而那个阈值已经在 RF12 加了迟滞。
+// 条件变了,结论跟着失效。实测 0.55 -> 0.85 引擎跃迁【全线下降】:单点 1.10->0.43 / 锯齿 0.49->0.09 /
+// 对抗例 2.41->0.75 / 掉头 2.06->0.66,曲线放陡后船改成"晚刹、狠刹",反而不必一直微调。
+// 时间:单点 114->102s、对抗例 291->259s、掉头 206->184s,只有 15k 段的锯齿慢 5%(258->271s)。
+// 终点误差同步改善(615->537 / 610->249)。编队已单独验:收敛 261->249s,到位后 40 秒槽位漂移 0km。
+// 【这是三处共用的常量】(单舰航点/旗舰 dest/编队槽位),再动它之前先跑 tools/route_eval.sh 与编队回归。
+// 1.0 不能取:它假设推力永远满额,而机头没对齐时不成立 —— 实测终点误差顶到 800km 容差上限。
+let GUIDE_EFF=0.85;
 function brakeCurveSpd(s,dist){return Math.sqrt(2*s.thrust*GUIDE_EFF*Math.max(0,dist-CFG.arrive));} // DS191:统一刹车曲线(单舰航点/旗舰dest/成员槽位三处共用)
 function guideTo(s,pT,vT,cap,useCurve,dt){ // DS191:统一导引律--有界推力下把(pos,vel)导向(目标点pT,目标速度vT);vT前馈=终点相对速度归零;cap为巡航上限(成员传Infinity,曲线自带追赶);useCurve=false为pass掠过不刹
   const r=V.sub(pT,s.pos);const err=V.len(r);
