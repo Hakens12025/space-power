@@ -355,11 +355,21 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #fcSec .fc-hd{font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label);margin-bottom:var(--sp-1)}
 #fcSec .fc-empty{font-size:var(--fs-label);color:var(--txt-mute);line-height:var(--lh-tight);padding:var(--sp-2) 0;text-align:center}
 /* RF7 火控计算机重做:五根竖直方条=五个序列槽,点击进入/退出序列态;.fc-seq 三条为旧富列表样式,只藏不删(html 不再产出该 class) */
+#fcList .fc-big{display:flex;justify-content:flex-end;margin-bottom:var(--sp-1)} /* RF8 大序列(舰级:轮询/选择)开关,放方条上方 */
 #fcList .fc-bars{display:flex;gap:var(--sp-1);margin-bottom:var(--sp-1)}
 #fcList .fc-bar{flex:1 1 0;min-width:0;height:46px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;border:var(--bw) solid var(--line);border-radius:var(--r-sm);background:var(--srf-sunk);cursor:pointer;user-select:none}
 #fcList .fc-bar.empty{opacity:.35;cursor:default}
+/* RF8 方条最多同时叠三种状态,各占【不同视觉通道】,不许抢同一个属性:
+   pick(唯一开火序列)=★与序号变青 / edit(序列态)=黄边+选中底 / paused(已暂停)=红边+红底+红字。
+   同名属性靠【书写顺序】定优先级,paused 排最后 —— "这条不在打"比"我正看着它"更该被看见。
+   原先 pick 与 edit 都写 border-color,而选择模式下点方条会同时置这两个类,后写的 edit 恒赢,
+   ★ 的颜色提示恰好在最常见的路径上失效。 */
+#fcList .fc-bar.pick .no{color:var(--state-active)}
 #fcList .fc-bar.edit{border-color:var(--state-select);background:var(--srf-sel)} /* 序列态高亮,配方抄 .card.sel */
-#fcList .fc-bar.paused{opacity:.55}
+/* RF8 暂停:原为 opacity:.55 —— 变灰在这个本来就偏暗的面板上几乎看不出来。改成红色实态(边框+淡红底+红字),
+   与 .fc-btn.danger 同一个 --state-danger,语义是"这条序列停着、一发不打"。刻意不叠 opacity:压暗会把红一起压掉。 */
+#fcList .fc-bar.paused{border-color:var(--state-danger);background:rgba(255,107,107,.10)}
+#fcList .fc-bar.paused .no,#fcList .fc-bar.paused .md,#fcList .fc-bar.paused .ct{color:var(--state-danger)}
 #fcList .fc-bar:not(.empty):hover{border-color:var(--line-acc);background:var(--srf-hover)}
 #fcList .fc-bar .no{font-family:var(--ff-mono);font-size:var(--fs-label);letter-spacing:var(--ls-read);color:var(--txt-hi);line-height:1}
 #fcList .fc-bar .md{font-size:var(--fs-micro);color:var(--txt-dim);line-height:1}
@@ -372,6 +382,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #fcList .fc-row .nm{flex:1;min-width:0;color:var(--txt-hi);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #fcList .fc-tag{flex:none;font-size:var(--fs-micro);letter-spacing:var(--ls-label);color:var(--txt-dim);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);padding:0 3px}
 #fcList .fc-tag.on{color:var(--state-active);border-color:var(--state-active)}
+#fcList .fc-tag.paused{color:var(--state-danger);border-color:var(--state-danger)} /* RF8 与方条的红同一个 token */
 #fcList .fc-btn{flex:none;font-size:var(--fs-micro);letter-spacing:var(--ls-label);color:var(--txt-mute);background:none;border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);padding:0 4px;cursor:pointer;user-select:none;font-family:var(--ff-ui);line-height:1.45}
 #fcList .fc-btn.on{color:var(--state-active);border-color:var(--state-active)}
 #fcList .fc-btn:hover{color:var(--txt-hi);border-color:var(--line-acc);background:var(--srf-hover)}

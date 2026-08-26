@@ -151,13 +151,17 @@ function updateFcPanel(force){ // 由 updateSelPanel 每 20 帧重渲(与卡片�
   if(typeof fcSeqsOf!=='function'){setHTMLStable(list,'<div class="fc-empty">火控引擎未就绪</div>',force);return;}
   const seqs=fcSeqsOf(s)||[];
   const cap=(typeof FC_MAX_SEQS==='number')?FC_MAX_SEQS:5;
-  let h='<div class="fc-bars">';
+  const big=(s.fcBig==='pick');
+  // RF8 大序列按钮:作用域前缀写死在标签里 —— 序列【内】也有一个叫"轮询"的模式(依次/轮询,管这条序列先打哪个目标),
+  // 两级同名会把人绕晕,所以这里恒读作「大序列:xx」,与轮盘左半环那两个作用域标签(整条序列/仅此目标)同一手法。
+  let h=`<div class="fc-big"><span class="fc-btn${big?' on':''}" data-fc-act="big" title="${big?'选择:只用选中的那一条序列反复打(序列即火力模板)':'轮询:多条序列轮流开火,一条打一次换下一条'}">大序列:${big?'选择':'轮询'}</span></div>`;
+  h+='<div class="fc-bars">';
   for(let i=0;i<cap;i++){
     const q=seqs[i];
     if(!q){h+=`<div class="fc-bar empty" title="空序列槽(Shift+中键点敌舰建序列)"><span class="no">${i+1}</span></div>`;continue;}
-    const sid=String(q.id),edit=String(s.fcEditId)===sid;
-    h+=`<div class="fc-bar${edit?' edit':''}${q.paused?' paused':''}" data-fc-act="bar" data-seq="${sid}" title="${q.name} · ${q.mode==='rr'?'轮询':'依次'} · ${(q.targets||[]).length}个目标 · 点击进入/退出序列态(地图显示数据链)">`
-      +`<span class="no">${i+1}</span><span class="md">${q.mode==='rr'?'轮':'依'}</span><span class="ct">${(q.targets||[]).length}</span>`
+    const sid=String(q.id),edit=String(s.fcEditId)===sid,pick=big&&String(s.fcPick)===sid;
+    h+=`<div class="fc-bar${edit?' edit':''}${pick?' pick':''}${q.paused?' paused':''}" data-fc-act="bar" data-seq="${sid}" title="${q.name} · ${q.mode==='rr'?'轮询':'依次'} · ${(q.targets||[]).length}个目标${pick?' · ★当前唯一开火序列':(big?' · 点击改为用这条打':'')} · 点击进入序列态(地图显示数据链)">`
+      +`<span class="no">${pick?'★':''}${i+1}</span><span class="md">${q.mode==='rr'?'轮':'依'}</span><span class="ct">${(q.targets||[]).length}</span>`
       +`</div>`;
   }
   h+='</div>';
@@ -169,7 +173,8 @@ function updateFcPanel(force){ // 由 updateSelPanel 每 20 帧重渲(与卡片�
     h+=`<div class="fc-det"><div class="fc-row">`
       +`<span class="nm">${cur.name||('火控序列'+sid)}</span>`
       +`<span class="fc-btn${rr?' on':''}" data-fc-act="mode" data-seq="${sid}" title="依次=打死一个再换;轮询=每次齐射换一个">${rr?'轮询':'依次'}</span>`
-      +`<span class="fc-btn" data-fc-act="pause" data-seq="${sid}" title="暂停后该序列不参与解算">${cur.paused?'恢复':'暂停'}</span>`
+      +(cur.paused?'<span class="fc-tag paused">已暂停 · 不开火</span>':'') // RF8 详情区也给一条红标:方条变红了,展开的详情里却没有对应提示会显得断裂
+      +`<span class="fc-btn${cur.paused?' on':''}" data-fc-act="pause" data-seq="${sid}" title="暂停后该序列不参与解算">${cur.paused?'恢复':'暂停'}</span>`
       +`<span class="fc-btn danger" data-fc-act="del" data-seq="${sid}" title="删除整条序列">删除</span>`
       +`</div>`;
     (cur.targets||[]).forEach((t,i)=>{
@@ -332,7 +337,20 @@ on('fcList','click',e=>{
   const seq=fcUiSeq(s,el.dataset.seq);if(!seq)return;
   const idx=Number(el.dataset.idx),t=(seq.targets||[])[idx];
   switch(el.dataset.fcAct){
-    case 'bar':if(typeof fcSetEdit==='function')fcSetEdit(s,String(s.fcEditId)===String(seq.id)?null:seq.id);break; // RF7 点方条:进入序列态,再点同一根=退出(fcSetEdit 传 null 即清编辑态,地图蓝链随之熄灭)
+    case 'big':if(typeof fcSetBig==='function'){fcSetBig(s,s.fcBig==='pick'?'rr':'pick');
+      if(typeof log==='function')log(`🎛 ${s.name} 大序列 → ${s.fcBig==='pick'?('选择('+((fcUiSeq(s,s.fcPick)||{}).name||'—')+' 一直打)'):'轮询(多条轮流)'}`,'');}
+      break; // RF8 舰级:轮询 ⇄ 选择
+    case 'bar':
+      if(s.fcBig==='pick'&&typeof fcSetPick==='function'&&String(s.fcPick)!==String(seq.id)){ // RF8 选择模式下点别的方条 = 改选它来打(顺带进序列态,看得见链)
+        fcSetPick(s,seq.id);
+        if(typeof fcSetEdit==='function')fcSetEdit(s,seq.id);
+        if(typeof log==='function')log(`🎛 ${s.name} 改用 ${seq.name} 开火`,'');
+        break;
+      }
+      // RF8 选择模式下点【已选中】那条只切序列态显示,【不清 fcPick】—— 清了就等于这艘舰一条序列都不打,而按钮上还写着"选择",
+      // 玩家看不出自己刚把火力关了。要停火用底栏火控开关或暂停该序列,不该是"再点一下方条"的副作用。
+      if(typeof fcSetEdit==='function')fcSetEdit(s,String(s.fcEditId)===String(seq.id)?null:seq.id);
+      break; // RF7 点方条:进入序列态,再点同一根=退出(fcSetEdit 传 null 即清编辑态,地图蓝链随之熄灭)
     case 'mode':if(typeof fcSetMode==='function')fcSetMode(seq.id,seq.mode==='rr'?'seq':'rr');break;
     case 'pause':if(typeof fcTogglePause==='function')fcTogglePause(seq.id);break;
     case 'del':if(typeof fcRemove==='function')fcRemove(seq.id);break;

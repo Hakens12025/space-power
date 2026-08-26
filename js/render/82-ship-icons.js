@@ -1,4 +1,5 @@
 "use strict";
+const LADAR_WARN_W=6; // RF7e 被照射告警圈的脉冲角频率(rad/【墙钟】秒)。abs 折半波形,视觉闪烁约 1.9 次/秒 —— 数值沿用改前的 6,只把时基从 simTime 换成墙钟,手感不变
 /* ================= 舰体图标:游戏适配层 =================
    纯几何在 10a-ship-hulls.js。这里只做"游戏舰船 → (轮廓, Tier)"的映射,
    以及 drawShip / drawWreck / drawFlame 的绘制流程。 */
@@ -70,7 +71,11 @@ function drawShip(s){
   if(!editMode&&!s.dead){
     const myTrk=s.side==='blue'?s.trkR:s.trkB;
     if(myTrk&&myTrk.lad>0.3){
-      const pulse=0.45+0.35*Math.abs(Math.sin(simTime*6));
+      // RF7e 相位改挂【墙钟】,原来挂 simTime。simTime 按倍速推进(core/99 的 acc+=dt*rate),于是倍速一提闪烁跟着提:
+      // x50 下每帧相位推进约 5 弧度,远超 60fps 的采样极限,呼吸退化成高频乱闪——这就是"闪动频率随时间越来越快"的来源。
+      // 告警圈是给人看的 UI 指示,不是模拟实体,理应恒定 1 次/秒左右,与数据链流动(83-hud FC_FLOW)、准星停留门同一口径。
+      const twms=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+      const pulse=0.45+0.35*Math.abs(Math.sin(twms*0.001*LADAR_WARN_W));
       ctx.save();
       ctx.strokeStyle=`rgba(255,209,102,${pulse})`;ctx.lineWidth=1.5;
       ctx.beginPath();ctx.arc(p[0],p[1],13,0,6.283);ctx.stroke();

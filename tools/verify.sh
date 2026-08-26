@@ -688,6 +688,87 @@ t('FLOW6_FLOW',function(){ /* RF7d 数据链流动【方向】:亮段必须朝�
   return (ok?'ok':'fail')+' 链方向=屏幕左(舰)→右(靶) 亮段起点 x:'+a0+' →(推进0.3s)→ '+a1
     +' 位移='+(a1-a0)+'px(须>0=朝目标流;30px/s×0.3s≈9px) 周期='+FC_FLOW_PERIOD+'px';
 });
+t('FLOW6_PULSE',function(){ /* RF7e 被照射告警黄圈:脉冲必须挂墙钟,与 simTime/倍速解耦(原来挂 simTime,x50 下退化成高频乱闪) */
+  var e=fc5reset();
+  var S=e.S;S.pos=[0,0,0];S.vel=[0,0,0];cam.x=0;cam.y=0;
+  var p=toScreen(0,0),px=Math.round(p[0]),py=Math.round(p[1]-13); /* 告警圈半径 13,取正上方那一点采样 */
+  function warnPix(){ /* 每次重画前把驻留值按回去:detectLoop 不在本判定里跑,但 fc5reset 之后要保证条件成立 */
+    S.trkR={ir:0,esm:0,lad:1};                                    /* >0.3 才画告警圈(82:73) */
+    render();
+    var d=ctx.getImageData(px,py,1,1).data;
+    return d[0]+d[1]+d[2];                                        /* 亮度和:圈的 alpha 越高越亮 */
+  }
+  fc4clock(true);
+  var st0=simTime;
+  var a0=warnPix();
+  simTime=st0+7.3;                                                /* 只推 simTime、墙钟不动:改前这会让相位跑掉,改后必须纹丝不动 */
+  var a1=warnPix();
+  simTime=st0;
+  FC4.clk+=260;                                                   /* 只推墙钟:必须变(否则就是彻底不动了) */
+  var a2=warnPix();
+  fc4clock(false);
+  simTime=st0;
+  var indep=(a0===a1), alive=(a0!==a2);
+  var ok=(indep&&alive&&a0>0);
+  return (ok?'ok':'fail')+' 采样('+px+','+py+') 亮度:基准='+a0
+    +' | simTime +7.3s(墙钟不动)='+a1+(indep?'(相同=已与倍速解耦)':'(不同=仍挂 simTime)')
+    +' | 墙钟 +260ms='+a2+(alive?'(不同=仍在呼吸)':'(相同=不动了)');
+});
+t('FLOW7_BIG',function(){ /* RF8 大序列:轮询(默认,多条轮流) vs 选择(只用选中那条一直打) */
+  var e=fc5reset();
+  var C=ships.filter(function(x){return x.side==='red';})[2];
+  C.pos=[60000,-100000,0];C.vel=[0,0,0];C.orders=[];C.rangeAnchor=[60000,-100000,0];
+  var S=e.S;
+  var s1=fcNew(S,{tid:e.A.id});          /* 序列1 → 靶A */
+  fcSetEdit(S,null);
+  var s2=fcNew(S,{tid:e.B.id});          /* 序列2 → 靶B */
+  var dflt=S.fcBig;                       /* 默认必须是轮询 */
+  /* ① 轮询:两条序列都该被解算到(逐武器各扫一圈,from 会落在不同序列上) */
+  var seen={};
+  for(var i=0;i<300;i++){stepSim(0.02);
+    if(S.fcFrom&&S.fcFrom.msl>=0)seen[S.fcFrom.msl]=1;
+    if(S.fcFrom&&S.fcFrom.mac>=0)seen[S.fcFrom.mac]=1;}
+  var rrSeen=Object.keys(seen).length;
+  /* ② 切选择模式,选序列2:from 必须恒定落在序列2 那一条上 */
+  fcSetBig(S,'pick');fcSetPick(S,s2);
+  var idx2=fcSeqsOf(S).findIndex(function(q){return q.id===s2;});
+  var seen2={},act=fcActive(S);
+  for(var j=0;j<300;j++){stepSim(0.02);
+    if(S.fcFrom&&S.fcFrom.msl>=0)seen2[S.fcFrom.msl]=1;
+    if(S.fcFrom&&S.fcFrom.mac>=0)seen2[S.fcFrom.mac]=1;}
+  var pickKeys=Object.keys(seen2);
+  var onlyPicked=(pickKeys.length===1&&Number(pickKeys[0])===idx2);
+  /* ③ 删掉被选中的那条:不得留下"哪条都不打"的哑火态 */
+  fcRemove(s2);
+  var afterDel=(S.fcPick!==null&&String(S.fcPick)===String(s1))||S.fcBig==='rr';
+  var actAfter=fcActive(S);
+  /* ④ 切回轮询 */
+  fcSetBig(S,'rr');
+  var ok=(dflt==='rr'&&rrSeen>=2&&act===true&&onlyPicked&&afterDel&&actAfter===true&&S.fcBig==='rr');
+  return (ok?'ok':'fail')+' 默认='+dflt+'(须rr) 轮询300步命中序列下标数='+rrSeen+'(须≥2=真的在轮转)'
+    +' | 选择序列2:命中下标='+pickKeys.join(',')+'(须只有 '+idx2+') fcActive='+act
+    +' | 删掉选中那条后 fcPick/模式已兜底='+afterDel+' fcActive='+actAfter+'(须true,不许哑火)';
+});
+t('FLOW8_STATES',function(){ /* RF8 方条三状态各占独立视觉通道:pick=文字色 / edit=边框 / paused=红边红字,叠加时互不吞噬 */
+  var e=fc5reset(),S=e.S;
+  var s1=fcNew(S,{tid:e.A.id}); fcSetEdit(S,null);
+  var s2=fcNew(S,{tid:e.B.id});
+  fcTogglePause(s1);                       /* 序列1 暂停 */
+  fcSetBig(S,'pick'); fcSetPick(S,s2); fcSetEdit(S,s2); /* 序列2 同时 pick + edit */
+  updateSelPanel(true);
+  var bars=document.querySelectorAll('#fcList .fc-bar');
+  var b1=bars[0],b2=bars[1];
+  var c1=getComputedStyle(b1),c2=getComputedStyle(b2);
+  var red=(c1.borderTopColor.indexOf('255, 107, 107')>=0);
+  var notFaded=(parseFloat(c1.opacity)>0.95);            /* 不许再靠变灰:opacity 必须是 1 */
+  var redTxt=(getComputedStyle(b1.querySelector('.no')).color.indexOf('255, 107, 107')>=0);
+  var editBorder=(c2.borderTopColor.indexOf('255, 224, 102')>=0); /* --state-select 黄边仍在 */
+  var pickTxt=(getComputedStyle(b2.querySelector('.no')).color.indexOf('84, 224, 208')>=0); /* --state-active 青字,没被 edit 吞掉 */
+  var star=(b2.querySelector('.no').textContent.indexOf('★')>=0);
+  var ok=(red&&notFaded&&redTxt&&editBorder&&pickTxt&&star);
+  return (ok?'ok':'fail')+' 暂停条:红边='+red+' 红字='+redTxt+' opacity='+c1.opacity+'(须1,不靠变灰)'
+    +' | pick+edit 同条:黄边='+editBorder+' 青字★='+(pickTxt&&star)+'(两通道并存,互不吞噬)';
+});
 t('FLOW6_CHAIN',function(){ /* RF7 数据链渲染:函数存在;编辑态/退出态 render 均不炸(像素断言不做,ERRORS 层兜底) */
   var e=fc5reset();
   fcNew(e.S,{tid:e.A.id});fcAppend(e.S,{tid:e.B.id});

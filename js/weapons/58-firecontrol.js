@@ -38,6 +38,8 @@ function fcInit(s){ // RF5 惰性初始化舰上的火控字段(makeShip 不用�
   if(!s.fcFrom)s.fcFrom={mac:-1,msl:-1};     // 本次解算来自哪条序列(下标)
   if(!s.fcFired)s.fcFired={mac:false,msl:false}; // 开火来源标记,52-fire 打、Post 段读后清零
   if(s.fcEditId===undefined)s.fcEditId=null; // 该舰最后编辑的序列 id(每舰各记各的编辑上下文)
+  if(s.fcBig===undefined)s.fcBig='rr';        // RF8【大序列】= 舰级的"用哪几条序列":'rr'=轮询(默认,各条轮流打) / 'pick'=选择(只用 fcPick 那一条,序列当火力模板使)
+  if(s.fcPick===undefined)s.fcPick=null;      // RF8 选择模式下唯一开火的那条序列 id
   return s;
 }
 function fcSeqsOf(s){ // RF5 该舰的全部序列(保持创建顺序;UI 列表与执行器下标必须是同一个口径)
@@ -115,6 +117,10 @@ function fcRemove(seqId){ // RF5 撤销整条序列
   fireSeqs.splice(i,1);
   const s=fcShip(q.shipId);
   if(s&&s.fcEditId===seqId)s.fcEditId=null; // 编辑上下文跟着撤,否则 fcAppend 会往已删的序列里追加(目标凭空消失)
+  if(s&&String(s.fcPick)===String(seqId)){ // RF8 被删的正是选择模式选中的那条:清掉并退回轮询,否则 fcRuns 恒 false,这艘舰既不按序列打、fcActive 又是 false 让出了自动索敌 —— 表现是彻底哑火
+    s.fcPick=null;
+    if(s.fcBig==='pick'){const rest=fcSeqsOf(s);if(rest.length)s.fcPick=rest[0].id;else s.fcBig='rr';}
+  }
 }
 function fcTogglePause(seqId){ // RF5 暂停/恢复:暂停的序列解算时整条跳过(不删,保留排好的队)
   const q=fcSeq(seqId);if(!q)return;
@@ -126,10 +132,33 @@ function fcSetEdit(s,seqId){ // RF5 切换该舰的编辑序列
   const q=fcSeq(seqId);
   s.fcEditId=(q&&q.shipId===s.id)?seqId:null;
 }
-function fcActive(s){ // RF5 该舰是否有可执行序列(非暂停且目标非空)—— 57 用它决定要不要让出 lockedTarget
+function fcRuns(s,q){ // RF8【单一真相】某条序列此刻参不参与解算。fcSolve / fcActive / stepFireControl 的"全暂停"早退三处共用它,
+  // 分家就会出现"fcActive 说有得打、fcSolve 绕一圈返回 null"这种舰船站着不动又不肯让出自动索敌的死局。
+  if(!q||q.shipId!==s.id||q.paused||!q.targets.length)return false;
+  if(s.fcBig==='pick')return String(q.id)===String(s.fcPick); // 选择模式:只有被选中的那条在打
+  return true;                                               // 轮询模式(默认):全部参与,序列间轮转
+}
+function fcActive(s){ // RF5 该舰是否有可执行序列 —— 57 用它决定要不要让出 lockedTarget。RF8 起口径收进 fcRuns
   if(!s)return false;
-  for(const q of fireSeqs)if(q.shipId===s.id&&!q.paused&&q.targets.length)return true;
+  for(const q of fireSeqs)if(fcRuns(s,q))return true;
   return false;
+}
+function fcSetBig(s,mode){ // RF8 切大序列模式。切进 'pick' 时若还没选过,默认取当前序列态那条、否则第一条 —— 不给一个"选了却没选中"的空档
+  if(!s)return;
+  fcInit(s);
+  s.fcBig=(mode==='pick')?'pick':'rr';
+  if(s.fcBig==='pick'){
+    const list=fcSeqsOf(s);
+    const cur=list.find(q=>String(q.id)===String(s.fcPick));
+    if(!cur){const pref=list.find(q=>String(q.id)===String(s.fcEditId))||list[0];s.fcPick=pref?pref.id:null;}
+  }
+}
+function fcSetPick(s,seqId){ // RF8 指定唯一开火序列(只在 pick 模式下有意义;顺手把模式切过去,免得"点了没反应")
+  if(!s)return;
+  fcInit(s);
+  const q=fcSeq(seqId);
+  if(!q||q.shipId!==s.id)return;
+  s.fcPick=q.id;s.fcBig='pick';
 }
 function fcGate(s,it,kind){ // RF5 单个目标项对某类武器的全部门:许可→存活→接触等级→射程。任一不过返回 null(调用方跳到下一个,两种模式都不许停摆)
   if(!it||!it.allow||!it.allow[kind])return null;
@@ -159,7 +188,7 @@ function fcSolve(s,seqs,kind){ // RF5 逐武器解算:从 fcSeqCur[kind] 起最�
   for(let k=0;k<n;k++){
     const si=(start+k)%n;
     const q=seqs[si];
-    if(q.paused||!q.targets.length)continue;
+    if(!fcRuns(s,q))continue; // RF8 走 fcRuns(含 pick 模式过滤)。注意这里【只跳过、不过滤数组】:fcFrom 存的是 fcSeqsOf(s) 的下标,Post 段会重新取同一个数组按下标回找,过滤后下标会整体前移、rot 推到别条序列头上
     const m=q.targets.length;
     const base=(q.mode==='rr')?((((q.rot[kind]||0)%m)+m)%m):0; // 'seq' 每次都从下标 0 开始扫(所以「打死才换」自然成立);'rr' 从 rot[kind] 开始扫
     for(let j=0;j<m;j++){
@@ -191,7 +220,7 @@ function stepFireControl(dt){ // RF5 每 tick 前置决策:清理失效序列 �
     const seqs=fcSeqsOf(s);
     if(!seqs.length)continue;
     fcInit(s);
-    if(!seqs.some(q=>!q.paused&&q.targets.length)){ // 序列全暂停:把 lockedTarget 还给 57 的自动索敌,本舰一个字段都不写
+    if(!seqs.some(q=>fcRuns(s,q))){ // 序列全暂停 / 选择模式下选中的那条不可用:把 lockedTarget 还给 57 的自动索敌,本舰一个字段都不写。判据必须与 fcActive 同源(都走 fcRuns),否则 57 那边让出了锁定、这边又解算不出目标,舰会站着不动
       s.fcTgt.mac=null;s.fcTgt.msl=null;s.fcFrom.mac=-1;s.fcFrom.msl=-1;
       continue;
     }

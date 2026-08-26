@@ -28,6 +28,7 @@ HULL_LABEL
 HULL_ORDER
 KEY_NAME
 KIND_INFO
+LADAR_WARN_W
 MAC_FALLOFF
 MAC_SPREAD_CAP
 MAC_SPREAD_K
@@ -186,12 +187,15 @@ fcNew
 fcPush
 fcRemove
 fcRemoveTarget
+fcRuns
 fcSeq
 fcSeqSeq
 fcSeqsOf
 fcSetAllow
+fcSetBig
 fcSetEdit
 fcSetMode
+fcSetPick
 fcShip
 fcSolve
 fcTgtItem
