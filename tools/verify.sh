@@ -663,6 +663,31 @@ t('FLOW6_STABLE',function(){ /* RF7c 面板稳定写入:内容不变时不得重
   return (ok?'ok':'fail')+' 连刷10拍节点未换='+same+'(须true:内容不变不重建) 改模式后重建='+rebuilt
     +'(须true) 新内容含"轮"='+md+' 方条数='+n0;
 });
+t('FLOW6_FLOW',function(){ /* RF7d 数据链流动【方向】:亮段必须朝目标走。方向反了画面同样自然,只有测出来才算数 */
+  var e=fc5reset();
+  fcNew(e.S,{tid:e.A.id});
+  /* 把舰与靶摆成一条水平线,链就是 屏幕左→右;沿链采样像素,看亮段随时间往哪边移 */
+  e.S.pos=[0,0,0];e.S.vel=[0,0,0];e.A.pos=[200000,0,0];e.A.vel=[0,0,0];e.A.rangeAnchor=[200000,0,0];
+  cam.x=100000;cam.y=0;
+  var p0=toScreen(e.S.pos[0],e.S.pos[1]),p1=toScreen(e.A.pos[0],e.A.pos[1]);
+  var y=Math.round((p0[1]+p1[1])/2),x0=Math.round(Math.min(p0[0],p1[0]))+20,x1=Math.round(Math.max(p0[0],p1[0]))-20;
+  if(!(x1-x0>80))return 'fail 采样区间太短 x0='+x0+' x1='+x1;
+  /* 用可控墙钟推进:drawFcChain 读 performance.now(),fc4clock 正是改写它的 */
+  function litRun(){ /* 返回采样行上第一个"亮段起点"的 x(亮段=流动层,底轨太暗被阈值滤掉) */
+    render();
+    var d=ctx.getImageData(x0,y,x1-x0,1).data,prev=0;
+    for(var i=0;i<x1-x0;i++){var v=d[i*4+1];if(v>110&&prev<=110)return x0+i;prev=v;}
+    return -1;
+  }
+  fc4clock(true);
+  var a0=litRun();
+  FC4.clk+=300;                 /* 推进 0.3 秒:30px/s → 约 9px 位移,小于一个周期 24px,不会绕回来产生歧义 */
+  var a1=litRun();
+  fc4clock(false);
+  var ok=(a0>0&&a1>0&&a1>a0);   /* 亮段起点 x 增大 = 朝右 = 朝目标 */
+  return (ok?'ok':'fail')+' 链方向=屏幕左(舰)→右(靶) 亮段起点 x:'+a0+' →(推进0.3s)→ '+a1
+    +' 位移='+(a1-a0)+'px(须>0=朝目标流;30px/s×0.3s≈9px) 周期='+FC_FLOW_PERIOD+'px';
+});
 t('FLOW6_CHAIN',function(){ /* RF7 数据链渲染:函数存在;编辑态/退出态 render 均不炸(像素断言不做,ERRORS 层兜底) */
   var e=fc5reset();
   fcNew(e.S,{tid:e.A.id});fcAppend(e.S,{tid:e.B.id});

@@ -475,6 +475,10 @@ function drawTargeting(){
   }
   ctx.restore();
 }
+/* RF7d 数据链流动:虚线段长 + 间隔,周期 = 两者之和(lineDashOffset 按周期取模才不会随时间累积成大数丢精度) */
+const FC_FLOW_DASH=[9,15];                                     // 亮段 9px / 暗段 15px
+const FC_FLOW_PERIOD=FC_FLOW_DASH[0]+FC_FLOW_DASH[1];          // 24px
+const FC_FLOW_PXPS=30;                                         // 流动速度(像素/秒):约 0.8 秒走完一个周期,看得出方向又不晃眼
 function drawFcChain(){ // RF7 火控序列态的数据链(蓝色铁路线):主体舰 → T1 → T2 …,只画当前编辑序列的链。
   // 序列态 = 主体舰(selBlue()[0])选中 且 fcEditId 指向自己的序列 —— Shift+中键选定与火控计算机点方条都会置它;
   // 再点同一根方条 fcSetEdit(s,null) 退出,链随之熄灭。铁路线画法:主线 + 垂直短刺(枕木),数据链蓝 #4fe0ff(canvas 侧既有的强调青,83:218 传感器圈同款,不新造颜色)。
@@ -488,10 +492,22 @@ function drawFcChain(){ // RF7 火控序列态的数据链(蓝色铁路线):主�
   }
   if(pts.length<2)return;
   ctx.save();
-  ctx.strokeStyle='#4fe0ff';ctx.globalAlpha=q.paused?.3:.65;ctx.lineWidth=1.4; // 暂停的序列链压暗:还在但不参与解算
-  ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);
-  for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i][0],pts[i][1]);
-  ctx.stroke();
+  const path=()=>{ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i][0],pts[i][1]);}; // 整条链一次成 path:虚线相位沿路径自动连续,分段画会让每段从头开始、节点处流断
+  // ① 底轨:暗实线,链的本体(RF7d 起从原来的主线降为底色,亮度让给上面的流动层)
+  ctx.strokeStyle='#4fe0ff';ctx.globalAlpha=q.paused?.18:.3;ctx.lineWidth=1.4; // 暂停的序列链压暗:还在但不参与解算
+  path();ctx.stroke();
+  // ② 流动层(RF7d):亮虚线,相位随墙钟递减 —— 【负的 lineDashOffset 让虚线朝路径终点走】,方向即 舰→T1→T2,与 pts 的构造顺序一致。
+  //    符号是离屏 canvas 实测定的(off=0 首个亮点 x=10,off=-8 变 x=18,即向终点位移),不是推出来的:正负搞反了画面同样自然,方向却恰好相反。
+  //    用墙钟不用 simTime:这是命令可视化不是模拟实体,暂停时该继续流动(与准星停留门同一口径),x50 倍速下也不该变成频闪。
+  //    暂停的序列不流动 —— "在但不参与解算"要一眼看出来,静止本身就是最清楚的表达。
+  if(!q.paused){
+    const tms=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+    ctx.globalAlpha=.85;ctx.lineWidth=1.6;
+    ctx.setLineDash(FC_FLOW_DASH);
+    ctx.lineDashOffset=-(tms*0.001*FC_FLOW_PXPS)%FC_FLOW_PERIOD;
+    path();ctx.stroke();
+    ctx.setLineDash([]);ctx.lineDashOffset=0;
+  }
   ctx.lineWidth=1.1;ctx.globalAlpha=q.paused?.35:.8;
   for(let i=1;i<pts.length;i++){ // 枕木:每段每 16px 一根 8px 垂直短刺(铁路/数据链质感);段太短(<24px,大缩放下两舰贴住)不画,免得糊成毛虫
     const ax=pts[i-1][0],ay=pts[i-1][1],dx=pts[i][0]-ax,dy=pts[i][1]-ay,L=Math.hypot(dx,dy);
