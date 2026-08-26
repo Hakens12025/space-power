@@ -680,8 +680,15 @@ t('FLOW6_FLOW',function(){ /* RF7d 数据链流动【方向】:亮段必须朝�
     return -1;
   }
   fc4clock(true);
+  /* RF12 相位必须钉死:fc4clock 用【真实墙钟】给 FC4.clk 播种(见 186 行),而"第一个亮段起点"这个测法在
+     虚线周期内是分段的 —— 位移 9px、周期 24px,起始相位落在中段时,窗口左边会挤进上一段、读数整体翻负。
+     实测扫满 24 个相位:9 个读到负位移(37.5% 概率随机翻红),与被测代码毫无关系。钉到周期起点即消除。
+     注:钉住后原始读数约 +3px 而非注释里的 9px —— 链是一条正好水平的 1.4px 线,阈值判边受抗锯齿影响,
+     量值本就不准;这条判定守的是【符号】,偏移数学(53 行 -(tms*0.001*30)%24)才是位移量的真相。 */
+  var FCPH=FC_FLOW_PERIOD/FC_FLOW_PXPS*1000;   /* 一个虚线周期对应的毫秒数 = 24/30*1000 = 800ms */
+  FC4.clk=Math.ceil(FC4.clk/FCPH)*FCPH;
   var a0=litRun();
-  FC4.clk+=300;                 /* 推进 0.3 秒:30px/s → 约 9px 位移,小于一个周期 24px,不会绕回来产生歧义 */
+  FC4.clk+=300;                 /* 推进 0.3 秒:30px/s → 9px 位移,小于一个周期 24px */
   var a1=litRun();
   fc4clock(false);
   var ok=(a0>0&&a1>0&&a1>a0);   /* 亮段起点 x 增大 = 朝右 = 朝目标 */
@@ -851,6 +858,64 @@ t('FLOW11_GHOST',function(){ /* RF11 移动虚影:到达【形态】必须与虚
     +' 转90°:起转@'+A.pre+'<到位@'+A.arr+' 到位朝向误差'+A.errArr.toFixed(2)+'° 对准后回飘'+A.back.toFixed(2)+'° 位置'+Math.round(A.dArr)+'km'
     +' | 转180°:起转@'+B.pre+'<到位@'+B.arr+' 误差'+B.errArr.toFixed(2)+'° 回飘'+B.back.toFixed(2)+'°(须<3,锁不住会到19°) 位置'+Math.round(B.dArr)+'km';
 });
+t('FLOW12_HYS',function(){ /* RF12 熄火/点火迟滞:减速段不许频闪,但低速端死区必须收敛回原值(否则编队保位会晃) */
+  var e=fc5reset(),s=e.S;
+  s.formation=null;s.brake=false;s.lockedTarget=null;s.turnTarget=null;s.turnNoFm=false;s.crawling=false;s.coasting=false;
+  s.pos=[0,0,0];s.vel=[0,0,0];s.facing=[1,0,0];
+  s.orders=[{pos:[40000,0,0],type:'stop'}];resetForNewOrders(s);
+  var stOf=function(){return s.engMain?1:(s.engRetro?2:(s.engSide?3:0));};
+  var prev=stOf(),n=0,tt=0;
+  for(var i=0;i<12000;i++){stepShipsMotion(0.02);tt+=0.02;var c=stOf();if(c!==prev){n++;prev=c;}
+    if(!s.orders.length&&V.len(s.vel)<1)break;}
+  var hz=n/Math.max(0.01,tt), err=Math.hypot(s.pos[0]-40000,s.pos[1]);
+  var lowOn=Math.max(ENG_HYS_OFF,Math.min(ENG_HYS_MAX,10*ENG_HYS_K));   /* 10km/s 时的点火阈值 */
+  var hiOn =Math.max(ENG_HYS_OFF,Math.min(ENG_HYS_MAX,800*ENG_HYS_K));  /* 800km/s 时的点火阈值 */
+  var ok=(hz<5 && err<CFG.arrive*2 && s.orders.length===0 && lowOn===ENG_HYS_OFF && hiOn>4);
+  return (ok?'ok':'fail')+' 减速段引擎跃迁='+hz.toFixed(2)+' 次/秒(须<5;改前 27.9=每秒闪 14 个来回) 停点偏差='+Math.round(err)+'km(须<'+(CFG.arrive*2)+',迟滞不许换精度)'
+    +' | 死区@10km/s='+lowOn+'(须=ENG_HYS_OFF='+ENG_HYS_OFF+':低速/保位行为与改前一致) @800km/s='+hiOn+'(须>4:只有高速才放宽)';
+});
+t('FLOW12_CORNER',function(){ /* RF12 拐角限速:掉头必须真减速,直行【不许】被限速——只测一边的话,"把 pass 点做成 stop 点"也能骗过 */
+  var e=fc5reset(),s=e.S;
+  function run(pts){
+    s.formation=null;s.brake=false;s.lockedTarget=null;s.turnTarget=null;s.turnNoFm=false;s.crawling=false;s.coasting=false;
+    s.pos=[0,0,0];s.vel=[0,0,0];s.facing=[1,0,0];s.orders=[];
+    for(var k=0;k<pts.length;k++)addWaypoint([s],pts[k]);
+    var maxV=0,tt=0,last=pts[pts.length-1];
+    for(var i=0;i<60000;i++){stepShipsMotion(0.02);tt+=0.02;var v=V.len(s.vel);if(v>maxV)maxV=v;
+      if(!s.orders.length&&v<1)break;}
+    return {v:maxV,t:tt,err:Math.hypot(s.pos[0]-last[0],s.pos[1]-last[1]),left:s.orders.length};
+  }
+  var U=run([[40000,0,0],[10000,0,0]]);   /* 掉头:偏折 180° */
+  var L=run([[40000,0,0],[80000,0,0]]);   /* 直线:偏折 0°(对照组) */
+  var cr=cruiseOf(s);
+  var ok=(U.v<cr*0.85 && U.err<CFG.arrive*2 && U.left===0 && L.v>cr*0.95 && L.err<CFG.arrive*2 && L.left===0);
+  return (ok?'ok':'fail')+' 掉头两点:峰值v='+Math.round(U.v)+'(须<'+Math.round(cr*0.85)+';改前满 '+cr+'=不减速冲过拐点) 停点偏差='+Math.round(U.err)+'km 耗时'+Math.round(U.t)+'s'
+    +' | 直线两点(对照组):峰值v='+Math.round(L.v)+'(须>'+Math.round(cr*0.95)+':直行不许限速) 停点偏差='+Math.round(L.err)+'km';
+});
+t('FLOW12_GHOST2',function(){ /* RF12 虚影持久层:命令带 face 才画,且跟着选中走。命令点的黄 X 本身就是 #ffe066(83:40),
+  颜色测不出差别,所以做【像素差分】;墙钟要冻住,否则数据链流动与告警脉冲会让两次渲染天然不同 */
+  var e=fc5reset(),s=e.S;
+  fc4clock(true);
+  s.formation=null;s.brake=false;s.lockedTarget=null;s.turnTarget=null;s.crawling=false;s.vel=[0,0,0];s.facing=[1,0,0];
+  var wS=worldAt(180,242), wD=worldAt(520,242);      /* 用屏幕坐标反推世界坐标:采样区必定在视口内,与缩放/视口大小无关 */
+  s.pos=[wS[0],wS[1],0];
+  var d=[wD[0],wD[1],0], pp=toScreen(d[0],d[1]);
+  var X=Math.round(pp[0])-20, Y=Math.round(pp[1])-20;
+  if(X<0||Y<0||X+40>cv.width||Y+40>cv.height){fc4clock(false);return 'fail 采样区出界 X='+X+' Y='+Y+' cv='+cv.width+'x'+cv.height;}
+  function grab(){render();return ctx.getImageData(X,Y,40,40).data;}
+  function dif(a,b){var n=0;for(var i=0;i<1600;i++){if(Math.abs(a[i*4]-b[i*4])+Math.abs(a[i*4+1]-b[i*4+1])+Math.abs(a[i*4+2]-b[i*4+2])>24)n++;}return n;}
+  selected=[s.id];
+  s.orders=[{pos:d.slice(),type:'stop'}];                  var A1=grab(), A2=grab();
+  s.orders=[{pos:d.slice(),type:'stop',face:[0,-1,0]}];    var B=grab();
+  selected=[];                                             var C=grab();
+  s.orders=[{pos:d.slice(),type:'stop'}];                  var D=grab();
+  fc4clock(false);
+  var dNoise=dif(A1,A2), dFace=dif(A1,B), dUnsel=dif(C,D);
+  var ok=(dNoise===0 && dFace>60 && dUnsel===0);
+  return (ok?'ok':'fail')+' 同态连拍差异='+dNoise+'px(须0:测量本身无噪声,否则下面两条不作数)'
+    +' | 带face比无face多出='+dFace+'px(须>60=确实画了半透明船影)'
+    +' | 未选中时 带face与无face差异='+dUnsel+'px(须0:命令可视化跟着选中走,同 drawFcChain 口径)';
+});
 t('FLOW6_CHAIN',function(){ /* RF7 数据链渲染:函数存在;编辑态/退出态 render 均不炸(像素断言不做,ERRORS 层兜底) */
   var e=fc5reset();
   fcNew(e.S,{tid:e.A.id});fcAppend(e.S,{tid:e.B.id});
@@ -895,4 +960,23 @@ done
 for k in HOLD TAP CTX PICK NOSEL SPLIT OVER CLOSE; do
   grep -q "FLOW5_${k}=ok" "$OUT" || { echo "✗ FLOW5_${k} 未通过(RF5 Phase C 目标轮盘)"; fail=1; }
 done
+# RF12 补齐:以下各层原先【不在总判定里】,出 fail 也照样打印"✓ 全部通过" ——
+# 一条永远不会变红的探针比没有探针更危险(本轮 FLOW6_FLOW 真的 fail 了,底下却仍是全绿)。
+# RF7 选定链六条 / RF8 大序列与状态通道两条 / RF9 引擎读数 / RF11 移动虚影 / RF7 链渲染不炸
+for k in DESIG CAP BARS NOAUTO STABLE FLOW PULSE CHAIN; do
+  grep -q "FLOW6_${k}=ok" "$OUT" || { echo "✗ FLOW6_${k} 未通过(RF7 选定链/数据链)"; fail=1; }
+done
+for k in BIG; do
+  grep -q "FLOW7_${k}=ok" "$OUT" || { echo "✗ FLOW7_${k} 未通过(RF8 大序列)"; fail=1; }
+done
+for k in STATES PICKBTN; do
+  grep -q "FLOW8_${k}=ok" "$OUT" || { echo "✗ FLOW8_${k} 未通过(RF8 状态视觉通道)"; fail=1; }
+done
+grep -q "FLOW9_ENG=ok" "$OUT" || { echo "✗ FLOW9_ENG 未通过(RF9 引擎读数)"; fail=1; }
+grep -q "FLOW11_GHOST=ok" "$OUT" || { echo "✗ FLOW11_GHOST 未通过(RF11 移动虚影)"; fail=1; }
+# RF12 三条:熄火迟滞 / 拐角限速 / 虚影持久层
+for k in HYS CORNER GHOST2; do
+  grep -q "FLOW12_${k}=ok" "$OUT" || { echo "✗ FLOW12_${k} 未通过(RF12 减速抖动/拐角限速/持久虚影)"; fail=1; }
+done
+grep -q "^RENDER=ok" "$OUT" || { echo "✗ RENDER 未通过"; fail=1; }
 [ $fail -eq 0 ] && echo "✓ 全部通过" || exit 1

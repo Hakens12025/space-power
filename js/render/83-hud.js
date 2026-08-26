@@ -480,29 +480,50 @@ const FC_FLOW_DASH=[9,15];                                     // 亮段 9px / �
 const FC_FLOW_PERIOD=FC_FLOW_DASH[0]+FC_FLOW_DASH[1];          // 24px
 const FC_FLOW_PXPS=30;
 const FC_TIE_MAX=48;   // RF10 单段枕木数上限:防止段长极大时循环次数失控(见 drawFcChain 内注释)                                         // 流动速度(像素/秒):约 0.8 秒走完一个周期,看得出方向又不晃眼
-function drawGhost(){ // RF11 移动虚影:右键长按时在目的地画一个半透明舰体,朝向随鼠标转;附一条预演航线
-  if(typeof ghostMove==='undefined'||!ghostMove)return;
-  const s=(typeof ships!=='undefined')?ships.find(x=>x.id===ghostMove.id):null;
-  if(!s||s.dead){return;} // 船没了就不画(清账在 70-input 的 blur/mouseup)
-  const g=toScreen(ghostMove.wx,ghostMove.wy), p=toScreen(s.pos[0],s.pos[1]);
-  if(!isFinite(g[0])||!isFinite(p[0]))return; // 与 drawFcChain 同一道防线:非有限坐标不进绘制
+function ghostAt(s,wx,wy,face,alpha,route){ // RF12 虚影的唯一画法(实时虚影与已下达命令共用,免得两处漂移)
+  const g=toScreen(wx,wy);
+  if(!isFinite(g[0])||!isFinite(g[1]))return; // 与 drawFcChain 同一道防线:非有限坐标不进绘制
   ctx.save();
-  // 预演航线:当前位置 → 目的地。虚线,压得比命令点连线更淡,免得和已有航线抢
-  ctx.setLineDash([7,6]);ctx.strokeStyle='#ffe066';ctx.globalAlpha=.45;ctx.lineWidth=1.2;
-  ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(g[0],g[1]);ctx.stroke();
-  ctx.setLineDash([]);
+  if(route){ // 预演航线:当前位置 -> 目的地。虚线,压得比命令点连线更淡,免得和已有航线抢
+    const p=toScreen(s.pos[0],s.pos[1]);
+    if(isFinite(p[0])&&isFinite(p[1])){
+      ctx.setLineDash([7,6]);ctx.strokeStyle='#ffe066';ctx.globalAlpha=alpha*.9;ctx.lineWidth=1.2;
+      ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(g[0],g[1]);ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
   // 目的地十字(与 drawOrders 的目标点 X 同形,让人认出这就是一个 stop 令)
-  ctx.globalAlpha=.7;ctx.lineWidth=1.4;
+  ctx.strokeStyle='#ffe066';ctx.globalAlpha=alpha*1.4;ctx.lineWidth=1.4;
   ctx.beginPath();
   ctx.moveTo(g[0]-5,g[1]-5);ctx.lineTo(g[0]+5,g[1]+5);
   ctx.moveTo(g[0]+5,g[1]-5);ctx.lineTo(g[0]-5,g[1]+5);
   ctx.stroke();
   // 半透明舰体:走 10-hull-geometry 的 outline 模式,尺寸用【真实 tier】—— 自己的船不做情报遮蔽
-  const ang=Math.atan2(ghostMove.face[1],ghostMove.face[0]);
-  ctx.globalAlpha=.5;
-  ctx.translate(g[0],g[1]);ctx.rotate(ang);
+  ctx.globalAlpha=alpha;
+  ctx.translate(g[0],g[1]);ctx.rotate(Math.atan2(face[1],face[0]));
   if(typeof drawHull==='function'&&typeof shipHull==='function')drawHull(ctx,shipHull(s),(s.tier||2),'#ffe066','outline');
   ctx.restore();
+}
+function drawGhost(){ // RF11 移动虚影;RF12 拆成【已下达的到达朝向】与【正在长按调整】两层
+  // (1) RF12 持久层(用户令:"调整过船头就要一直显示舰船模型"):命令点带 face 的才画 —— 普通右键下的令没有 face,
+  //     所以"选中舰船直接右键星图"仍然干干净净,只有用过虚影手势、真的指定了到达朝向的命令才留一个半透明船。
+  //     到位时 31-step-ships 会 shift 掉这条令,虚影随之自然消失,不需要另设生命周期。
+  //     只画选中舰的(与 drawFcChain 的蓝链同口径:命令可视化跟着选中走,否则满屏都是别人的承诺)。
+  if(typeof selBlue==='function'){
+    for(const s of selBlue()){
+      if(!s||s.dead)continue;
+      for(const od of (s.orders||[])){
+        if(!od.face)continue;
+        if(typeof ghostMove!=='undefined'&&ghostMove&&ghostMove.id===s.id)continue; // 正在长按重下令:让位给下面的实时层,免得两个船影叠着
+        ghostAt(s,od.pos[0],od.pos[1],od.face,.3,false); // 比实时层淡:它是"已经答应你的事",不该抢注意力
+      }
+    }
+  }
+  // (2) 实时层:右键长按调整中,朝向随鼠标转,附预演航线
+  if(typeof ghostMove==='undefined'||!ghostMove)return;
+  const s=(typeof ships!=='undefined')?ships.find(x=>x.id===ghostMove.id):null;
+  if(!s||s.dead)return; // 船没了就不画(清账在 70-input 的 blur/mouseup)
+  ghostAt(s,ghostMove.wx,ghostMove.wy,ghostMove.face,.5,true);
 }
 function drawFcChain(){ // RF7 火控序列态的数据链(蓝色铁路线):主体舰 → T1 → T2 …,只画当前编辑序列的链。
   // 序列态 = 主体舰(selBlue()[0])选中 且 fcEditId 指向自己的序列 —— Shift+中键选定与火控计算机点方条都会置它;

@@ -80,6 +80,30 @@ function speedGearsOf(s){ // DS148:舰种速度档位表(索引0停/1慢/2中/3�
   const g=(s&&s.speedGears)||(s&&s.cls?(CLS_MOB[s.cls]&&CLS_MOB[s.cls].speedGears):null); // TIER1 改实例优先(makeShip 已烘焙 s.speedGears),回表只作兜底——否则烘焙了没人读,tier 对速度档就是彻底的 no-op
   return g||[0,250,500,800,-1];
 }
+// RF12 熄火/点火迟滞:单阈值 need<0.5 会在减速段每 tick 反复跨越 —— 每 tick 的推力权限 thrust*dt=0.3km/s,
+// 恰好和阈值同量级,实测 CA 减速 114.7 秒里【熄火 <-> 反推】往返 1601 次(27.9 次/秒),尾焰与右栏读数一起频闪。
+// 修法是给"该不该点火"加迟滞:熄火后要攒到 onT 才重新点火,点着之后掉到 OFF 才熄。这正是 RF10 调研里
+// 开关式喷口必须留死区那一条(DV: Rings of Saturn 的 leeway tolerance),只不过那条管朝向、这条管推力。
+// onT 取【当前速度的百分比】而不是常数:高速刹车时带宽大(把频闪拉成约 1 秒一次的脉冲),
+// 低速定位/编队保位时自动收敛回 0.5(原行为),不会让成员在槽位上晃。
+const ENG_HYS_OFF=0.5;              // 熄火阈值(原来的唯一阈值,保持不变 —— 停稳判据挂在它上面)
+const ENG_HYS_K=0.02, ENG_HYS_MAX=8; // 点火阈值 = 速度x2%,上限 8km/s(800km/s 巡航时约 1%,位置极限环仅约 4km)
+// RF12 拐角限速:pass 点原本恒取满巡航(useCurve=false),【完全不看下一段要往哪拐】。船以 800km/s 冲到拐点,
+// 横向动量要几十秒才杀得掉,于是甩出一个巨大的弧 —— 玩家读到的就是"不减速、疯狗航行、每次都冲过头"。
+// 实测掉头两点:Shift 追加要 257 秒/峰值 800,而同一终点走普通右键只要 53 秒/峰值 319。
+// 按标准的拐角圆弧混合来定速:以 CFG.passBy 为允许的切角偏差 tol,偏折角 phi 的过弯半径 r=tol/(sec(phi/2)-1),
+// 过弯速度 v=sqrt(a*r)。直行 phi=0 -> r 无穷 -> 不限速;phi=90 度 -> 316km/s;掉头 phi=180 度 -> 0(掉头本来就该停)。
+// 返回值已经把"从这里减到过弯速度"的接近段并进去了,所以 guideTo 那边仍走 useCurve=false 直接当 cap 用。
+function cornerCap(s,cur,nxt,dist){
+  if(!nxt||!nxt.pos)return Infinity;
+  const a=V.sub(cur.pos,s.pos), b=V.sub(nxt.pos,cur.pos);
+  if(V.len(a)<1||V.len(b)<1)return Infinity;
+  const c=Math.cos(V.angle(a,b)/2);
+  if(c>=0.999999)return Infinity;                 // 直行:不限速
+  const r=c>0?CFG.passBy*c/(1-c):0;               // sec(phi/2)-1 = (1-c)/c
+  const vC2=Math.max(0,s.thrust*GUIDE_EFF*r);     // 过弯速度的平方
+  return Math.sqrt(vC2+2*s.thrust*GUIDE_EFF*Math.max(0,dist-CFG.passBy)); // 并进接近段:v^2 = vC^2 + 2*a*剩余距离
+}
 function cruiseOf(s){return s.speedCmd===-1?SPD_UNCAP:(s.speedCmd===0?0:(s.speedCmd>0?s.speedCmd:800));} // v119:速度令0=定速停→返回0让内核刹停(原回退800致"按停反而加速")
 function applyHeading(s,dir,dt){ // RF10 朝向的唯一出口。改造前五个地方各自 slerp 到 s.facing;现在统一走这里:
   // classic/tri 保持原样(运动学插值,与推力无关);torque 不直接改 facing,只登记【期望朝向】,由 stepAttitude 用角速度积分过去。
@@ -114,13 +138,16 @@ function steerToVel(s,want,dt){ // v119运动内核:期望速度导引——推�
   const dx=want[0]-s.vel[0],dy=want[1]-s.vel[1],dz=want[2]-s.vel[2];
   const need=Math.sqrt(dx*dx+dy*dy+dz*dz);
   s.flame=0;s.sideFlame=0;
-  if(need<0.5){ // 达标:熄火滑行/停稳
+  const onT=Math.max(ENG_HYS_OFF,Math.min(ENG_HYS_MAX,V.len(s.vel)*ENG_HYS_K)); // RF12 迟滞:熄火中要攒到 onT 才重新点火
+  if(need<(s.coasting?onT:ENG_HYS_OFF)){ // 达标:熄火滑行/停稳(点着火时仍用原 0.5 熄火,停稳判据不变)
+    s.coasting=true;
     if(V.len(s.vel)<1&&Math.abs(want[0])+Math.abs(want[1])+Math.abs(want[2])<0.5)s.vel=[0,0,0];
     else if(V.len(s.vel)>5&&!s.turnTarget&&!(s.driftFire&&s.lockedTarget&&!s.lockedTarget.dead)){ // DS192:滑行段顺航向对齐--机头以转向率追平速度方向,消除"速度贴住指令后姿态冻结"的持续漂移;战斗占用(driftFire瞄准/V调头令)不抢机头
       applyHeading(s,V.norm(s.vel),dt); // RF10 经 applyHeading:torque 模式下改为登记期望朝向
     }
     return;
   }
+  s.coasting=false;
   const td=[dx/need,dy/need,dz/need]; // 推力方向(独立于机头)
   const wantSpd=V.len(want);
   const velSpd=V.len(s.vel);

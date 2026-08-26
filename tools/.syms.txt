@@ -14,6 +14,9 @@ CLS_VALUE
 DEFAULT_ENEMY
 ENG_ALPHA
 ENG_DEAD
+ENG_HYS_K
+ENG_HYS_MAX
+ENG_HYS_OFF
 ENG_KD
 ENG_KP
 ENG_LABEL
@@ -117,6 +120,7 @@ cmdList
 contactAge
 contactState
 controlledShips
+cornerCap
 cruiseOf
 ctrlArm
 ctx
@@ -243,6 +247,7 @@ formationSpacing
 formationTargets
 frame
 frameN
+ghostAt
 ghostMove
 gridStepCache
 groupAt

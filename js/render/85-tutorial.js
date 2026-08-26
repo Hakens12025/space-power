@@ -171,7 +171,7 @@ const TUT_HTML=`
 
     <h3 class="tut-h3">移动与航线</h3>
 
-    <p>右键点在空地上，整个选区清空原有航线，移动到那个点。想走折线就按住 <code class="key">Shift</code> 右键，把点一个个追加上去，中间的点是经过、最后一个点是停车。下错了按 <code class="key">Backspace</code> 删掉最后一个命令点；如果这支编队是整体受令的，<code class="key">Backspace</code> 的语义不同，它会把整条编队命令一次删光并让全组刹车。</p>
+    <p>右键点在空地上，整个选区清空原有航线，移动到那个点。想走折线就按住 <code class="key">Shift</code> 右键，把点一个个追加上去，中间的点是经过、最后一个点是停车。经过点不停车，但会按下一段要拐多大的弯提前减速：直行的点全速掠过，拐直角要压到三百多，掉头则几乎要先停下来——掉头本来就得把原来的速度整个杀干净，冲过拐点再回头只会更慢。下错了按 <code class="key">Backspace</code> 删掉最后一个命令点；如果这支编队是整体受令的，<code class="key">Backspace</code> 的语义不同，它会把整条编队命令一次删光并让全组刹车。</p>
 
     <p>还有两条局部指令。按 <code class="key">V</code> 之后左键点地图，是给船头指一个方向：它清掉航线、原地把机头转过去，速度不变，事件流里写的是「调头」；再按一次 <code class="key">V</code> 取消。按 <code class="key">G</code> 是倒车，它在船头正后方 <code class="num">30k 公里</code>处放一个停车点，让舰反推着退出去；倒车会清掉编队与蠕行状态，等于主动脱离编队。</p>
 
@@ -211,7 +211,7 @@ const TUT_HTML=`
   <section class="tut-sec" id="tut-cmdbar">
     <h2 class="tut-h2">底栏五个开关</h2>
 
-    <p>顺带说一下右栏「实时状态」里的两行读数。<strong>速度</strong>是当前速度矢量的长度；<strong>加速度</strong>是这一拍<em>实际</em>产生的加速度，不是舰船的额定推力——接近期望速度时推力会自动收小，读数跟着降，画面上尾焰也在收，两者是一致的。数值下面列着此刻在用的推进器，多个同时在推就逐行列出：<code class="ui">主推</code>是船尾蓝焰，<code class="ui">反推</code>是船头橙焰（刹车用，推力与主推相同），<code class="ui">侧推</code>是横向机动、只有六成推力，而<code class="ui">姿态</code>指的是纯转向——它同样点着侧向推进器，但只改朝向不改速度矢量，所以那一行的加速度是零。看见"姿态"就知道船在转头而不是在变速。</p>
+    <p>顺带说一下右栏「实时状态」里的两行读数。<strong>速度</strong>是当前速度矢量的长度；<strong>加速度</strong>是这一拍<em>实际</em>产生的加速度，不是舰船的额定推力——接近期望速度时推力会自动收小，读数跟着降，画面上尾焰也在收，两者是一致的。数值下面列着此刻在用的推进器，多个同时在推就逐行列出：<code class="ui">主推</code>是船尾蓝焰，<code class="ui">反推</code>是船头橙焰（刹车用，推力与主推相同），<code class="ui">侧推</code>是横向机动、只有六成推力，而<code class="ui">姿态</code>指的是纯转向——它同样点着侧向推进器，但只改朝向不改速度矢量，所以那一行的加速度是零。看见"姿态"就知道船在转头而不是在变速。还有一件事值得先知道：减速段的引擎是一下一下脉冲着烧的。速度已经贴着期望值时，点火和熄火之间留着一条死区，速度越高这条死区越宽，所以尾焰会按秒级的节奏点了又熄——那是正常的，不是画面在抖。</p>
 
     <p>底栏这一排开关作用于当前选中的全部蓝舰，而显示出来的状态读的是第一艘。三个武器开关默认全开，火控总开关默认是关的——这就是你开局要做的第一件事。</p>
 
@@ -257,7 +257,7 @@ const TUT_HTML=`
         <tr><td><code class="key">W</code> <code class="key">A</code> <code class="key">S</code> <code class="key">D</code></td><td>相机平移</td><td>按住持续移动，不是单次</td></tr>
         <tr><td><code class="key">1</code> … <code class="key">4</code></td><td>选择编组</td><td><code class="num">400 毫秒</code>内连按两次，镜头跳到该组质心</td></tr>
         <tr><td><code class="key">Ctrl</code> + <code class="key">1</code> … <code class="key">4</code></td><td>编组</td><td>覆盖式，重编会踢出原有成员</td></tr>
-        <tr><td>右键长按（选中单舰）</td><td>移动虚影</td><td>按住不动约 <code class="num">0.35 秒</code>弹出半透明舰影，转动鼠标改到达朝向，松手下令；船会提前起转，到位时姿态与虚影一致</td></tr>
+        <tr><td>右键长按（选中单舰）</td><td>移动虚影</td><td>按住不动约 <code class="num">0.35 秒</code>弹出半透明舰影，转动鼠标改到达朝向，松手下令；船会提前起转，到位时姿态与虚影一致；下完令后这个半透明舰影会一直留在目的地，直到船到位为止</td></tr>
         <tr><td><code class="key">V</code></td><td>船头转向命令</td><td>按下后左键点地图给方向，再按一次取消；转向与移动是并行的，下了转向令航线照走</td></tr>
         <tr><td><code class="key">G</code></td><td>倒车</td><td>船头正后方 <code class="num">30k 公里</code>放一个停车点，脱离编队</td></tr>
         <tr><td><code class="key">C</code></td><td>测距</td><td>按住不放；只选中一艘时起点跟着该舰，多选或未选则钉在按键那一刻的光标处</td></tr>
@@ -278,7 +278,7 @@ const TUT_HTML=`
         <tr><td>左键拖框</td><td>框选</td><td>只收框内存活的己方舰</td></tr>
         <tr><td><code class="key">Ctrl</code> + 左键</td><td>加选 / 取消该艘</td><td>再点一次就把它从选区里去掉</td></tr>
         <tr><td>右键点空地</td><td>整队移动</td><td>清空原有航线</td></tr>
-        <tr><td><code class="key">Shift</code> + 右键</td><td>追加路径点</td><td>中间点是经过，末点是停车</td></tr>
+        <tr><td><code class="key">Shift</code> + 右键</td><td>追加路径点</td><td>中间点是经过（按拐弯角度提前减速），末点是停车</td></tr>
         <tr><td>右键拖动</td><td>平移视角</td><td>位移超过 <code class="num">5 像素</code>算拖动，抬手不下命令</td></tr>
         <tr><td>滚轮</td><td>缩放</td><td>轮盘开着时在盘外照常缩放</td></tr>
         <tr><td>光标停在敌舰上 <code class="num">0.25 秒</code></td><td>准星吸附</td><td>走真实时间，暂停时照走</td></tr>

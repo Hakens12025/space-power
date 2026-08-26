@@ -47,10 +47,15 @@ function stepShipsMotion(dt){
       const toWp=V.sub(cur.pos,s.pos);
       const dist=V.len(toWp);
       const vn=V.len(s.vel);
-      if(cur.type==='pass'){ // 路径点:掠过即继续,不减速
+      let cap=cruiseOf(s);
+      if(cur.type==='pass'){ // 路径点:掠过即继续,不停车
         if(dist<CFG.passBy){
           s.orders.shift(); log(`${s.name} 经过路径点`,''); continue;
         }
+        // RF12 拐角限速(用户报"Shift+右键像疯狗一样不减速、每次都冲过头"):
+        // 原来这里一律满巡航,拐点只判"进没进 passBy",完全不看下一段的方向 —— 掉头这种 180 度偏折也照 800km/s 冲。
+        // 现在按下一段的偏折角给一个过弯速度上限(详见 30-motion 的 cornerCap),直行时返回 Infinity、行为与改前一致。
+        cap=Math.min(cap,cornerCap(s,cur,s.orders[1],dist));
       }else{ // 目标点:到位停(DS191:曲线单调收敛,原v124冲过头检测+KIMI151c爬行滞回+120限速补丁全删,不再振荡)
         // RF11 到达朝向(右键长按虚影下的令带 cur.face):【提前起转】——虚影承诺的是"到达即如此",
         // 若等到位再原地转,巡洋舰掉头 180° 要 19.6 秒(turnRate 0.16),那段时间玩家看到的和虚影不一致。
@@ -78,7 +83,7 @@ function stepShipsMotion(dt){
           s.orders.shift(); log(`${s.name} 到位`,''); continue;
         }
       }
-      guideTo(s,cur.pos,[0,0,0],cruiseOf(s),cur.type!=='pass',dt); // DS191:统一导引律(pass全速掠过/stop曲线停靠)
+      guideTo(s,cur.pos,[0,0,0],cap,cur.type!=='pass',dt); // DS191:统一导引律(stop 曲线停靠);RF12:pass 的 cap 已含拐角限速+接近段
     }
     else if(s.turnTarget){ // RF6 有调头令但无移动令:只保持惯性滑行(不推进不刹车),转机头的事已移交下方【朝向层】
       // 改前这一支自己转机头,而它排在 s.orders.length 之后 —— 有移动命令时整支走不到,所以 V 转向必须先清空 orders 才生效

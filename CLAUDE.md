@@ -48,7 +48,7 @@ CHROME="/c/Program Files/Google/Chrome/Application/chrome.exe"
 - `function` 提升只在单个 script 内生效:某文件顶层**立即执行**的语句(裸 `getElementById` 绑定、`on(...)` 调用)只受同文件顺序与上述两条硬约束限制。新增文件插到 index.html 时按系统目录归位。
 - 新增 DOM 后**不要顶层裸调 `document.elementFromPoint` 之类的 `getElementById(x).addEventListener`** —— 元素不存在时会抛错并中断该文件后续所有顶层语句(静默丢绑定)。用 `core/00-config.js` 的 `on(id,ev,fn)` 安全挂载。重灾区:scenario/92(8 条裸绑定)、command/73(约 18 条)——**改 HTML id 必须同步这两处**。
 - 全是顶层全局函数/变量,没有模块化(`import/export` 在 `file://` 下被 CORS 拦死)。每个 js 文件自带 `"use strict";`。
-- 行内 `DS195`/`KIMI155`/`TIER1`/`RANGE1`/`UI1` 标记记录"这行哪一版改的、为什么",很多注释写了被替换的旧做法和踩过的坑。**不要清理**;自己改动按同格式补标记 + 一句原因。`RF1` = 2026-08 目录解耦重构(纯移动/纯提取,行为零改变);`RF5` = 2026-08 火控序列(Phase A:引擎 weapons/58 + 面板 render/88;Phase B:入口 command/74;Phase C:目标轮盘 = render/89 几何 + command/74 数据;Phase D:教程模态 render/85-tutorial + 顶栏 `#btnTut`,标记写 `RF5-D`);`RF6` = 2026-08 主炮射程分两块 + 运动分层并行 + 三处既有 bug 修复;`RF7` = 2026-08 Shift+中键选定链 + 数据链渲染 + 火控计算机方条 + 轮盘贴合(RF7b 序列态跟随选中 / RF7c 面板稳定写入 / RF7d 数据链流动 / RF7e 告警脉冲改墙钟);`RF8` = 2026-08 大序列(舰级 轮询/选择)+ 暂停红态。
+- 行内 `DS195`/`KIMI155`/`TIER1`/`RANGE1`/`UI1` 标记记录"这行哪一版改的、为什么",很多注释写了被替换的旧做法和踩过的坑。**不要清理**;自己改动按同格式补标记 + 一句原因。`RF1` = 2026-08 目录解耦重构(纯移动/纯提取,行为零改变);`RF5` = 2026-08 火控序列(Phase A:引擎 weapons/58 + 面板 render/88;Phase B:入口 command/74;Phase C:目标轮盘 = render/89 几何 + command/74 数据;Phase D:教程模态 render/85-tutorial + 顶栏 `#btnTut`,标记写 `RF5-D`);`RF6` = 2026-08 主炮射程分两块 + 运动分层并行 + 三处既有 bug 修复;`RF7` = 2026-08 Shift+中键选定链 + 数据链渲染 + 火控计算机方条 + 轮盘贴合(RF7b 序列态跟随选中 / RF7c 面板稳定写入 / RF7d 数据链流动 / RF7e 告警脉冲改墙钟);`RF8` = 2026-08 大序列(舰级 轮询/选择)+ 暂停红态;`RF12` = 2026-08 减速抖动/拐角限速/虚影持久层 + 探针两处自身缺陷。
 - **RF5 交互模型**(改了鼠标语义,接手前先看这条):
   - **中键短按(<350ms 且位移≤5px)= 快速交战** —— 主体舰(`selBlue()[0]`)对准星吸附的敌舰 `fcNew` 建一条火控序列。
   - **中键长按(≥350ms、无位移、准星已吸附)= 目标轮盘**。长按判定在 **mousedown 起的 `mmbTimer` 定时器里**做,**松手前就弹**(手柄轮盘的手感),不是等 mouseup。三种上下文按当前编辑序列 `fcSeq(sub.fcEditId)` 分岔,且**都在开盘那一瞬就提交 fc\***(误触也不丢进度,序列立刻出现在右栏火控计算机里):目标**已在**该序列 → 只编辑;**不在 + Shift** → `fcAppend` 追加到末尾;**不在 + 无 Shift** → `fcNew` 新建(自带暂停该舰任务 + 强开 `autoEngage`/`roe='free'` 两个副作用,是预期行为,所以三种上下文的日志刻意分开写)。武器项只有一件时(CV)**不开轮盘**,直接一条日志 —— 且**取反只在编辑上下文做**,新建/追加时保留刚提交的缺省许可。
@@ -72,7 +72,7 @@ CHROME="/c/Program Files/Google/Chrome/Application/chrome.exe"
 | `render/` | `80-camera` · `81-background`(星云/网格)· `82-ship-icons` · `83-hud`(+RF5 `drawTargeting`:准星/吸附圈/按射程着色的预览线)· `84-scene`(render 图层管线)· `85-settings` · `85-tutorial`(**RF5-D 教程模态**:`TUT_HTML` 全文 + `tutToggle`/`tutIsOpen`,与 `85-settings` **共用编号 85**,先例是 weapons/51-defs 与 51-ciws)· `86-log` · `87-fleetcards` · `88-selpanel`(RF2 选中舰面板+底栏开关;+RF5 火控计算机面板 `#fcSec`/`#fcList`,`updateFcPanel`;`KIND_INFO` 是 kind→开关字段/射程/文案的**唯一映射**)· `89-radial`(**RF5 Phase C 目标轮盘的几何唯一真相**:半径/角度/容量常量 + `drawRadial`/`radialHit`/`radialInBand`/`radPages`/`radSlots`,只读 `rad` 从不写) | 呈现 |
 | `scenario/` | `90-envs`(TEST_ENVS/curEnv/DEFAULT_ENEMY)· `91-init`(initFleet/initEnemy)· `92-editor`(编辑器+applyClsTier)· `93-replay`(回放+场景菜单+GM/互搏按钮)· `94-demo` · `95-range`(靶场全部) | 对局生命周期 |
 
-**全局状态归属表**(改某个全局前先看它声明在哪):模拟核心+相机+交互 pending\*+回放+卡片引用+`cv,ctx`+`adminMode/selfPlay/selfPlayPrevAdmin` → `core/01-state`;`shipSeq` → ships/11;`detT` → sensors/21;`hitFX/threatCorridors/missileGroupSeq/netSeq/nets` → weapons/52;`netAllocT` → weapons/53;`fireSeqs/fcSeqSeq/FC_PT_SALVOS` → weapons/58;`formationFan/formationSpacing/fmGap/fmSeq` → formation/40、41;`tasks/taskSeq/pendingTask*` → bots/60;`camKeys/bindings` → command/71;`envIdx/customScene/edit*` → scenario/90、92;`rangeCfg/tr*` → scenario/95;`tutOn/tutPrevRun/TUT_HTML` → render/85-tutorial;`xh/XH_DWELL/XH_JUMP`、`rad/RAD_MODES` → command/74(`rad` 是与 render/89 的两方契约,字段名不得擅自更名);`RAD_RI/RAD_RO/RAD_L_IN/RAD_L_OUT/RAD_RM/RAD_GAP/RAD_FADE/RAD_SEAM/RAD_CAP/RAD_WHEEL_PAD/_radNameCache` → render/89(几何常量只在这一份);`MAC_FALLOFF/MAC_SPREAD_K/MAC_SPREAD_CAP` 与谓词 `macEffRange()` → weapons/52(有效射程的唯一定义点);`FIRE_ALL_ON` → command/71;`mmb/MMB_HOLD_MS/mmbTimer` → command/70(就近声明,`mmb` 被本文件 down/move/up/blur **四处**读写,`mmbTimer` 同;与 core/01-state 的 `rmbTimer` 是两回事,不要复用)。
+**全局状态归属表**(改某个全局前先看它声明在哪):模拟核心+相机+交互 pending\*+回放+卡片引用+`cv,ctx`+`adminMode/selfPlay/selfPlayPrevAdmin` → `core/01-state`;`shipSeq` → ships/11;`detT` → sensors/21;`hitFX/threatCorridors/missileGroupSeq/netSeq/nets` → weapons/52;`netAllocT` → weapons/53;`fireSeqs/fcSeqSeq/FC_PT_SALVOS` → weapons/58;`formationFan/formationSpacing/fmGap/fmSeq` → formation/40、41;`tasks/taskSeq/pendingTask*` → bots/60;`camKeys/bindings` → command/71;`envIdx/customScene/edit*` → scenario/90、92;`rangeCfg/tr*` → scenario/95;`tutOn/tutPrevRun/TUT_HTML` → render/85-tutorial;`xh/XH_DWELL/XH_JUMP`、`rad/RAD_MODES` → command/74(`rad` 是与 render/89 的两方契约,字段名不得擅自更名);`RAD_RI/RAD_RO/RAD_L_IN/RAD_L_OUT/RAD_RM/RAD_GAP/RAD_FADE/RAD_SEAM/RAD_CAP/RAD_WHEEL_PAD/_radNameCache` → render/89(几何常量只在这一份);`MAC_FALLOFF/MAC_SPREAD_K/MAC_SPREAD_CAP` 与谓词 `macEffRange()` → weapons/52(有效射程的唯一定义点);`FIRE_ALL_ON` → command/71;`ENG_HYS_OFF/ENG_HYS_K/ENG_HYS_MAX` 与 `cornerCap()` → physics/30(推力迟滞与拐角限速的唯一定义点,舰上的 `s.coasting` 由 `steerToVel` 独占读写);`mmb/MMB_HOLD_MS/mmbTimer` → command/70(就近声明,`mmb` 被本文件 down/move/up/blur **四处**读写,`mmbTimer` 同;与 core/01-state 的 `rmbTimer` 是两回事,不要复用)。
 
 ## 核心架构
 
@@ -327,6 +327,25 @@ S1 感知节拍(每秒) → S2 网分配节拍(0.5s) → S3 任务AI
 实测(CA,turnRate 0.16):转 90° 起转@5250 < 到位@5734、到位朝向误差 1.26°;转 180° 起转@3951、误差 0.00°;两者对准后回飘均 <2°(锁不住会到 19°),位置误差 613km 均在 `CFG.arrive*2=800km` 容差内。探针 FLOW11_GHOST 三条判据:提前起转确实在到位【之前】/ 到位时朝向已对上 / 对准后不许再飘走。
 
 **范围**:仅单舰。多舰要另一套(阵位与朝向分配),未做。
+
+## RF12 减速抖动 / 拐角限速 / 虚影持久层 备忘(2026-08)
+
+三条都是用户实报,三条都先量后改 —— 其中一条量完发现根本不是 bug 而是设计缺口,另有两条量出的是**探针自己的毛病**。
+
+**① 熄火与点火之间必须有迟滞。** `steerToVel` 原来只有 `need<0.5` 这一个阈值,而每 tick 的推力权限是 `thrust*dt = 0.3 km/s`,与阈值同量级 —— 减速段贴着刹车曲线走时,`need` 每一两拍就跨一次线。实测 CA 减速 114.7 秒里【熄火 ↔ 反推】往返 **1601 次(27.9 次/秒)**,尾焰与右栏读数一起频闪。跃迁明细也证实了这一点:`熄火→反推 ×1601`、`反推→熄火 ×1601`,而 `主推` 相关只有 1 次,抖动**全部**集中在这一个阈值上。
+改法是给"该不该点火"加迟滞:熄火后要攒到 `onT` 才重新点火,点着之后掉回 `ENG_HYS_OFF=0.5` 才熄(**熄火阈值刻意不动** —— 停稳判据挂在它上面)。`onT` 取**当前速度的 2%**、上限 `8 km/s`,不是常数:高速刹车时带宽大,把频闪拉成约 1 秒一次的脉冲;低速定位与编队保位时自动收敛回 0.5,行为与改前逐位相同。用常数会让编队成员在槽位上晃(位置极限环 ≈ v²/2a,8 km/s 对应约 4 km,而 800 km/s 巡航时这点位置误差可以忽略、静止保位时却不行)。实测 27.9 → **1.10 次/秒**,停点偏差 615km、耗时 114s 与改前逐项一致 —— **迟滞没有拿精度去换**。
+
+**② `pass` 点原本完全不看下一段要往哪拐。** 用户报"Shift+右键像疯狗一样不减速、每次都冲过头"。前后测了六组合成场景(普通右键 / Shift 单点 / 三点链 / 先普通再中途 Shift 追加 / 纯 Shift 连点 / 掠过精度)**一组都没复现出终点超出** —— 直线上 Shift 与普通右键的落点完全一样(都是 `x=39386`,超出 0km)。真正的差别在**拐角**:掉头两点 Shift 要 `257 秒`、峰值 `800 km/s`,而同一终点走普通右键只要 `53 秒`、峰值 `319`。根因是 `guideTo(...,cur.type!=='pass',dt)` 对 pass 点传 `useCurve=false`,期望速度恒等于满巡航;船以 800 km/s 冲到拐点,横向动量要几十秒才杀得掉,于是甩出一个巨大的弧 —— 玩家读到的就是"不减速、冲过头"。**它不是 bug,是 pass 点的设计缺口**。
+按标准的拐角圆弧混合定速(`cornerCap`,physics/30):以 `CFG.passBy` 为允许的切角偏差 `tol`,偏折角 `phi` 的过弯半径 `r = tol/(sec(phi/2)-1)`,过弯速度 `v = sqrt(a*r)`,返回值再把"从这里减到过弯速度"的接近段并进去,所以 `guideTo` 那边仍走 `useCurve=false` 直接当 cap 用、一行没改。直行 `phi=0` 返回 `Infinity`(**直行不许限速**,否则等于把 pass 点做成了 stop 点);`phi=90°` → 316 km/s;掉头 `phi=180°` → 0。实测掉头峰值 800 → 610、耗时 257 → 206 秒,直线对照组仍是满 800。
+
+**③ 虚影的持久层挂在命令的 `face` 字段上,不另设生命周期。** 用户令:"普通右键可以不显示,但调整过船头就要一直显示"。恰好 RF11 的命令点已经带 `face`(且**只有**走过虚影手势的命令才有),所以判据现成:`drawGhost` 遍历选中蓝舰的 `orders`,带 `face` 的画一个更淡的船影(alpha .3,比实时层的 .5 淡 —— 它是"已经答应你的事",不该抢注意力)。到位时 physics/31 会 `shift` 掉这条令,虚影随之自然消失。只画**选中舰**的,与 `drawFcChain` 同口径。实时层与持久层共用 `ghostAt()`,免得两处画法漂移;同一艘舰正在长按重下令时持久层让位,不然两个船影会叠着。
+**探针不能靠颜色测** —— 命令点的黄 X 本来就是 `#ffe066`(83:40),和虚影同色。改用**像素差分**,并且必须先 `fc4clock(true)` 冻住墙钟,否则数据链流动与告警脉冲会让两次渲染天然不同。
+
+**④ 探针自己的两个缺陷(比上面三条更值得记)。**
+- **`FLOW6_FLOW` 一直是条会随机翻红的判定。** `fc4clock` 用**真实墙钟**给 `FC4.clk` 播种(verify.sh:188),而"找第一个亮段起点"这个测法在虚线周期内是分段的:位移 9px、周期 24px,起始相位落在中段时窗口左边会挤进上一段、读数整体翻负。扫满 24 个相位实测 **9 个读到负位移(37.5% 概率)**,与被测代码毫无关系。修法是把相位钉到周期起点(`FC4.clk` 上取整到 800ms 的倍数)。顺带记下:钉住后原始读数约 `+3px` 而非注释里的 9px —— 链是一条正好水平的 1.4px 线,阈值判边受抗锯齿影响,**量值本就不准,这条判定守的只是符号**;位移量的真相是 83:553 的 `-(tms*0.001*30)%24`。
+- **总判定只 grep 到 FLOW5。** `FLOW6/7/8/9/11` 全部不在判定列表里,所以本轮 `FLOW6_FLOW=fail` 明晃晃印在结果里,底下仍然打印 `✓ 全部通过`。**一条永远不会变红的探针比没有探针更危险。** 已补齐 FLOW6/7/8/9/11/12 与 `RENDER`。往探针里加判定层时,**记得同时往底部的判定段加一行** —— 这一步没有任何东西会提醒你。
+
+**刻意没动的**:编队路径(`F.queue`)不走 `cornerCap` —— 它的 `curType` 与 queue 是另一套结构,而编队旗舰的转向本身还是串行的(physics/31 L20,RF6 备忘里记着那次真实事故),要一起改得先有编队专项回归。多舰移动虚影同样未做(RF11 起就写明仅单舰)。
 
 ## 发布(GitHub Pages)
 
