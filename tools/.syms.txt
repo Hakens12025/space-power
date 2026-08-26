@@ -165,6 +165,7 @@ emcon
 endRange
 enemyAI
 enemyToArr
+engRows
 engageable
 engineSig
 enterEditor

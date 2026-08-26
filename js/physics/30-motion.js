@@ -49,11 +49,15 @@ function steerToVel(s,want,dt){ // v119运动内核:期望速度导引——推�
   let power;
   const braking=wantSpd<velSpd;
   const decel=V.dot(td,s.vel);
-  if(along>0.5){power=along;s.flame=1;} // 主推(船尾蓝焰)
-  else if(along<-0.5){power=-along;s.flame=-1;} // 反推(船头橙焰,与主推同推力——否则刹车距离比加速长1.67倍,近距离停靠刹不住)
-  else if(braking&&decel<-velSpd*0.5){power=1;s.flame=-1;} // v130:减速阶段推力逆着速度→全功率刹(解决斜向/横向刹不住:原侧推25%制动距离×4)
-  else{power=0.6;s.sideFlame=1;s.turnAim=td.slice();} // v130:侧推25%→60%(黄焰),转向/横向机动更快
+  if(along>0.5){power=along;s.flame=1;s.engMain=true;} // 主推(船尾蓝焰)
+  else if(along<-0.5){power=-along;s.flame=-1;s.engRetro=true;} // 反推(船头橙焰,与主推同推力——否则刹车距离比加速长1.67倍,近距离停靠刹不住)
+  else if(braking&&decel<-velSpd*0.5){power=1;s.flame=-1;s.engRetro=true;} // v130:减速阶段推力逆着速度→全功率刹(解决斜向/横向刹不住:原侧推25%制动距离×4)
+  else{power=0.6;s.sideFlame=1;s.turnAim=td.slice();s.engSide=true;} // v130:侧推25%→60%(黄焰),转向/横向机动更快
   const a=Math.min(s.thrust*power,need/dt); // 钳位:永不冲过期望速度
+  // RF9 记下本步【真实】加速度与在用引擎,供右栏读数。取的是钳位【之后】的 a:钳位一生效(接近期望速度时)实际推力就小于额定,
+  // 面板若显示额定 thrust 会与画面上"焰在收"矛盾。engSide 只标【横向机动】那一支 —— 转向也点侧推(设 sideFlame),
+  // 但它只改朝向不改速度矢量,加速度是 0,不能算进这一栏(面板据此把二者分成"侧推"与"姿态")。
+  s.accNow=a;
   s.vel[0]+=td[0]*a*dt;s.vel[1]+=td[1]*a*dt;s.vel[2]+=td[2]*a*dt;
 }
 const GUIDE_EFF=0.55; // DS191:统一导引有效减速比(含机头对齐折扣的诚实值;实际反推可达1.0->从上方贴合曲线单调收敛;原0.7高估实际能力,贴不到曲线=振荡根因)

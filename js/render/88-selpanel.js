@@ -69,6 +69,22 @@ function specItems(s){
   }
   return items;
 }
+/* RF9 加速度读数:数值 + 当前在用的引擎,多个引擎同时在推就【逐行】列(用户定案)。
+   数据来自 physics/30-motion 每 tick 记的 s.accNow / engMain / engRetro / engSide(见那里的注释),
+   取的是钳位【之后】的真实加速度 —— 接近期望速度时推力自动收小,显示额定 thrust 会与画面上"焰在收"矛盾。
+   侧推与姿态刻意分开:两者都点亮 sideFlame,但转向只改朝向、不改速度矢量,加速度是 0,
+   混在一起会让玩家以为"在转向 = 在加速"。姿态那行不计入加速度,只作说明。 */
+function engRows(s){
+  const a=s.accNow||0;
+  const eng=[];
+  if(s.engMain)eng.push(['主推','var(--side-friend)']);      // 与 82-ship-icons 尾焰同色:蓝=主推
+  if(s.engRetro)eng.push(['反推','var(--state-warn)']);      // 橙=反推(船头喷焰)
+  if(s.engSide)eng.push(['侧推','var(--state-select)']);     // 黄=横向机动
+  if(s.sideFlame&&!s.engSide)eng.push(['姿态','var(--txt-dim)']); // sideFlame 亮着但 steerToVel 没标横推 = 纯转向,不产生加速度
+  const head=`${a>0.05?a.toFixed(1):'0'} km/s²`;
+  if(!eng.length)return head+' <span class="eng-off">熄火</span>';
+  return head+eng.map(e=>`<div class="eng" style="color:${e[1]}">${e[0]}</div>`).join('');
+}
 /* 右栏武器库状态行:按清单生成 */
 function weaponRows(s){
   let h='';
@@ -289,6 +305,8 @@ function updateSelPanel(){ // frame 低频调用(每20帧,与 updateCardsStatus 
   box.innerHTML=`
     <div class="hpbar"><i style="width:${fr*100}%;background:${fr>0.35?'var(--state-ok)':'var(--state-warn)'}"></i></div>
     <div class="row"><span class="k">结构</span><span class="v">${Math.max(0,Math.round(s.hp))} / ${s.maxHp}</span></div>
+    <div class="row"><span class="k">速度</span><span class="v">${Math.round(V.len(s.vel))} km/s</span></div>
+    <div class="row"><span class="k">加速度</span><span class="v">${engRows(s)}</span></div>
     <div class="row"><span class="k">目标</span><span class="v">${t?t.name+' · '+Math.round(dist/1000)+'k':'—'}</span></div>
     ${weaponRows(s)}`;
   updateCmdBar(sel);

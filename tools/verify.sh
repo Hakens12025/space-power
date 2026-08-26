@@ -798,6 +798,33 @@ t('FLOW8_PICKBTN',function(){ /* RF8b「选择」钮必须【真的点得动】�
   return (ok?'ok':'fail')+' 初始='+big0+' 点一下→'+big1+'(pick='+(String(pick1)===String(s2)?'序列2':pick1)+',按钮on='+on1+')'
     +' 再点→'+big2+'(on='+on2+') | 无序列态时点→'+big3+'(须rr,只提示不改状态) | 方条仍可点='+barWorks;
 });
+t('FLOW9_ENG',function(){ /* RF9 实时状态的速度/加速度读数:数值取【钳位后】的真实加速度,引擎种类要分得清主推/反推/侧推/姿态 */
+  var e=fc5reset(),s=e.S;
+  function run(setup){
+    s.formation=null;s.brake=false;s.lockedTarget=null;s.turnTarget=null;s.pos=[0,0,0];s.pos[2]=0;s.facing=[1,0,0];s.orders=[];
+    setup();
+    for(var i=0;i<20;i++)stepShipsMotion(0.02);
+    selected=[s.id];updateSelPanel();
+    var v=document.querySelector('#selInfo .row:nth-child(4) .v');
+    return {txt:v?v.textContent.replace(/\s+/g,' ').trim():'?',acc:s.accNow||0,side:!!s.engSide,sf:s.sideFlame};
+  }
+  var A=run(function(){s.vel=[0,0,0];s.orders=[{pos:[600000,0,0],type:'stop'}];});          /* 主推 */
+  var B=run(function(){s.vel=[400,0,0];s.brake=true;});                                      /* 反推 */
+  var C=run(function(){s.vel=[400,0,0];s.orders=[{pos:[20000,600000,0],type:'pass'}];});     /* 侧推(横向机动) */
+  var D=run(function(){s.vel=[0,0,0];s.turnTarget=[0,600000,0];});                           /* 纯转向:姿态,加速度须为 0 */
+  var thr=s.thrust;
+  var okA=(A.txt.indexOf('主推')>=0&&Math.abs(A.acc-thr)<0.1);
+  var okB=(B.txt.indexOf('反推')>=0&&Math.abs(B.acc-thr)<0.1);
+  var okC=(C.txt.indexOf('侧推')>=0&&Math.abs(C.acc-thr*0.6)<0.1);  /* 侧推 power=0.6,数值必须跟着打折,不能显示额定 */
+  var okD=(D.txt.indexOf('姿态')>=0&&D.acc===0&&D.sf===1&&!D.side); /* 姿态不算加速度:sideFlame 亮着但 engSide 为 false */
+  var spd=document.querySelector('#selInfo .row:nth-child(3) .v');
+  var okS=(spd&&/km\/s/.test(spd.textContent));
+  var ok=(okA&&okB&&okC&&okD&&okS);
+  return (ok?'ok':'fail')+' 额定推力='+thr
+    +' | 主推「'+A.txt+'」 反推「'+B.txt+'」 侧推「'+C.txt+'」(须≈'+(thr*0.6).toFixed(1)+'=打六折,不是额定)'
+    +' 纯转向「'+D.txt+'」(须 0 且标姿态:sideFlame='+D.sf+' engSide='+D.side+')'
+    +' | 速度行='+(okS?'有':'缺');
+});
 t('FLOW6_CHAIN',function(){ /* RF7 数据链渲染:函数存在;编辑态/退出态 render 均不炸(像素断言不做,ERRORS 层兜底) */
   var e=fc5reset();
   fcNew(e.S,{tid:e.A.id});fcAppend(e.S,{tid:e.B.id});

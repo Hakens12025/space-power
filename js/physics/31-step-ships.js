@@ -7,6 +7,8 @@ function stepShipsMotion(dt){
     if(!isFinite(s.pos[0])||!isFinite(s.pos[1])||!isFinite(s.pos[2])){s.pos=[0,0,0];s.vel=[0,0,0];s.facing=[1,0,0];} // NaN防护
     if(s.dead){s.vel=[0,0,0];s.flame=0;s.sideFlame=0;continue;} // 残骸冻结
     s.flame=0;s.sideFlame=0; // 本步推进器状态默认无焰
+    s.accNow=0;s.engMain=false;s.engRetro=false;s.engSide=false; // RF9 同拍清零:这四个是"本 tick 实际在推什么"的读数,由 30-motion 的 steerToVel 当场置位。
+    // 必须在【这里】清而不是在 steerToVel 里清 —— 有几条分支(空闲锁定漂移/编队旗舰调头)整拍不调 steerToVel,在那里清的话读数会冻在上一拍。
     if(s.formation){ // KIMI146:取本编队已结算的共享上下文;解散则落入普通分支(走各自落位命令)
       const FC=formTickCtx.get(s.formation)||stepFormation(s.formation,dt);
       formTickCtx.set(s.formation,FC);

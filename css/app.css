@@ -353,6 +353,9 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
    接手原 #selEvents 的 flex:1 1 auto 角色:序列多了在面板内部滚动,不外溢也不顶穿。
    #selInfo 已带 border-bottom,这里不再补 border-top,避免两条线叠成 2px。 */
 #fcSec{padding:var(--sp-2) var(--sp-3);overflow-y:auto;flex:1 1 auto;min-height:52px} /* 口径与原 #selEvents 一致。basis 必须是 auto:#selPanel 只有 max-height 没有 height(高度按内容撑),basis:0 会让本区永远塌到 min-height;同理百分比 max-height 在这种父容器里退化成 none,两条都实测过 */
+/* RF9 加速度栏:引擎逐行列(多个同时在推时),行高压紧,不撑高整条读数行 */
+#selInfo .row .v .eng{display:block;font-size:var(--fs-micro);letter-spacing:var(--ls-label);line-height:1.35;text-align:right}
+#selInfo .row .v .eng-off{color:var(--txt-mute);font-size:var(--fs-micro);letter-spacing:var(--ls-label)}
 #fcSec .fc-hd{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-2);font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label);margin-bottom:var(--sp-1)}
 #fcSec .fc-hd .fc-btn{flex:none;letter-spacing:var(--ls-label)} /* RF8b 标题栏里的"选择"钮,沿用 #fcList .fc-btn 的配方(下面那条选择器已含 #fcSec 后代,这里只补 flex 行为) */
 #fcSec .fc-empty{font-size:var(--fs-label);color:var(--txt-mute);line-height:var(--lh-tight);padding:var(--sp-2) 0;text-align:center}

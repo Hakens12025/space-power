@@ -1,4 +1,4 @@
-SYMS_TOTAL=538
+SYMS_TOTAL=539
 SYMS_MISSING=none
 SYMS_THREW=none
 BOOT=ships=6 blue=3 red=3
@@ -7,7 +7,7 @@ FORM=moved=3 fm=3 g=0
 SALVO=armed=1
 DMG=dmg=25(before=0) hp=550
 SOAK=steps=2000 NaNships=0 NaNproj=0 maxLive=2 seen={"missile":3902}
-FLOW2=autoHits=3 autoDmg=355
+FLOW2=autoHits=1 autoDmg=25
 FLOW3_ALLOW=ok macHits=0 macShots=0 mslHits=8 mslShots=4 fcTgtMac=null locked=靶·A
 FLOW3_SEQ=ok A=12(mac4/msl8) B=0 shots=mac4/msl4
 FLOW3_RR=ok A=6(mac2/msl4) B=6(mac2/msl4) shots=mac4/msl4 macSplit=ok mslSplit=ok
@@ -34,10 +34,11 @@ FLOW6_BARS=ok 方条=5/5(空4) 点击退出=true 再点进入=true 详情目标�
 FLOW6_NOAUTO=ok 建序列后进序列态=true 取消选中→null(须null) 重新选中→null(须null,不自动进) 面板高亮方条=0(须0) 点方条→true 高亮=1(须1) 退出序列态后 fcActive=true(须true:序列态只管显示,不管开火)
 FLOW6_STABLE=ok 连刷10拍节点未换=true(须true:内容不变不重建) 改模式后重建=true(须true) 新内容含"轮"=true 方条数=5
 FLOW6_FLOW=ok 链方向=屏幕左(舰)→右(靶) 亮段起点 x:301 →(推进0.3s)→ 307 位移=6px(须&gt;0=朝目标流;30px/s×0.3s≈9px) 周期=24px
-FLOW6_PULSE=ok 采样(381,229) 亮度:基准=266 | simTime +7.3s(墙钟不动)=266(相同=已与倍速解耦) | 墙钟 +260ms=370(不同=仍在呼吸)
+FLOW6_PULSE=ok 采样(381,229) 亮度:基准=255 | simTime +7.3s(墙钟不动)=255(相同=已与倍速解耦) | 墙钟 +260ms=370(不同=仍在呼吸)
 FLOW7_BIG=ok 默认=rr(须rr) 轮询300步命中序列下标数=2(须≥2=真的在轮转) | 选择序列2:命中下标=1(须只有 1) fcActive=true | 删掉选中那条后 fcPick/模式已兜底=true fcActive=true(须true,不许哑火)
 FLOW8_STATES=ok 暂停条:红边=true 虚线=true 斜线=true 红字=true opacity=1(须1,不靠变灰) | pick+edit 同条:黄边=true 青字★=true(两通道并存,互不吞噬)
 FLOW8_PICKBTN=ok 初始=rr 点一下→pick(pick=序列2,按钮on=true) 再点→rr(on=false) | 无序列态时点→rr(须rr,只提示不改状态) | 方条仍可点=true
+FLOW9_ENG=ok 额定推力=15 | 主推「15.0 km/s²主推」 反推「15.0 km/s²反推」 侧推「9.0 km/s²侧推」(须≈9.0=打六折,不是额定) 纯转向「0 km/s²姿态」(须 0 且标姿态:sideFlame=1 engSide=false) | 速度行=有
 FLOW6_CHAIN=ok drawFcChain=存在 编辑态/退出态渲染均完成
 RENDER=ok
 ERRORS=none
