@@ -36,7 +36,7 @@ function resetForNewOrders(s){ // KIMI151:移动命令发布收口——防"傻�
 }
 function moveShips(list,dest,type){ // 编组→编队移动;散船/单艘→各自移动(脱离队形)
   if(list.length<=1||sameGroupShips(list)!==null)moveFormation(list,dest,type);
-  else list.forEach(s=>{s.formation=null;s.orders.push({pos:dest,type});resetForNewOrders(s);});
+  else list.forEach(s=>{s.formation=null;s.orders.push({pos:dest,type});resetForNewOrders(s);if(typeof rrStart==='function')rrStart(s);}); // RF14 同上
 }
 function addWaypoint(list,w){ // Shift+右键快捷追加:末点=停车,原末点降为经过(菜单"路径点"不受影响)
   const targets=list.filter(s=>!s.dead);
@@ -59,6 +59,7 @@ function addWaypoint(list,w){ // Shift+右键快捷追加:末点=停车,原末�
       if(s.orders.length)s.orders[s.orders.length-1].type='pass'; // 原末点降为经过
       s.orders.push({pos:[w[0],w[1],0],type:'stop'}); // 新点=停车
       resetForNewOrders(s); // KIMI151:追加也是"要船动",清龟速/恢复速度档
+      if(typeof rrStart==='function')rrStart(s); // RF14 追加路径点后重挂细化(rrStart 会先撤掉这艘船的旧任务)
     });
     log(`${targets.length} 艘 追加路径点(末点停车,中间经过)`,'');
   }
@@ -108,7 +109,7 @@ let fmSeq=0;
 function moveFormation(targets,dest,type){ // 编队整体移动(按功能排保护圈)
   const list=targets.filter(Boolean);
   if(!list.length)return;
-  if(list.length<=1){list.forEach(s=>{s.formation=null;s.orders.push({pos:dest,type});resetForNewOrders(s);});return;} // 单艘:脱离编队单独走
+  if(list.length<=1){list.forEach(s=>{s.formation=null;s.orders.push({pos:dest,type});resetForNewOrders(s);if(typeof rrStart==='function')rrStart(s);});return;} // RF14 单舰下令后挂一项航线细化 // 单艘:脱离编队单独走
   const existing=list.find(s=>s.formation);
   if(existing&&list.every(s=>s.formation===existing.formation)){ // 整队同编队:追加路径点(KIMI146:共享对象,只追加一次——原每船副本各push一次);KIMI151修:原只find一个就追加,list里无编队/别编队的船被无视→不动弹;混合选择落入else重建
     list.forEach(s=>{s.orders=[];resetForNewOrders(s);}); // DS186+DS193:追加=组令优先,清旗舰个人令(队长模式让位刚体移动);DS186原注:收口防speedCmd=0/crawling残留拉停(用户报"编队旗舰到不了正确位置")

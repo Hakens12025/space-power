@@ -961,6 +961,43 @@ t('FLOW13_LOOK',function(){ /* RF13 反向速度传播:1 步前瞻在"长直段�
     +'k(须<'+Math.round(CFG.passBy*1.5/1000)+'k;1步前瞻时为 16k) 峰值v='+Math.round(B.v)+' 终点误差='+Math.round(B.err)+'km'
     +' | 直线对照组:峰值v='+Math.round(S.v)+'(须>'+Math.round(cr*0.95)+':不许退化成逐点停车)';
 });
+t('FLOW14_REFINE',function(){ /* RF14 航线细化(下令后分帧微调瞄准点让船能切角)。
+  四条判据,缺一不可:开着要更快且合规 / 关掉要【逐位回到基线】(可回退) /
+  没余量的航线必须原样退回(兜底) / 沙盘绝不能污染全局 ships */
+  var e=fc5reset(),s=e.S;
+  function run(pts,on){
+    rrOn=on; rrJobs.length=0;
+    s.formation=null;s.brake=false;s.lockedTarget=null;s.turnTarget=null;s.turnNoFm=false;
+    s.crawling=false;s.coasting=false;s.pos=[0,0,0];s.vel=[0,0,0];s.facing=[1,0,0];s.orders=[];
+    for(var k=0;k<pts.length;k++)addWaypoint([s],pts[k]);
+    var miss=pts.map(function(){return 1e18;}),t=0,left=pts.length,frames=0;
+    for(var i=0;i<60000;i++){
+      if(rrJobs.length){rrTick();frames++;}
+      stepShipsMotion(0.02);t+=0.02;
+      var act=Math.min(pts.length-1,pts.length-s.orders.length);
+      for(var k=Math.max(0,act-1);k<=act;k++){
+        var d=Math.hypot(s.pos[0]-pts[k][0],s.pos[1]-pts[k][1]); if(d<miss[k])miss[k]=d;}
+      if(s.orders.length<left)left=s.orders.length;
+      if(!s.orders.length&&V.len(s.vel)<1)break;
+    }
+    var worst=0; for(var k=0;k<miss.length;k++) if(miss[k]>worst)worst=miss[k];
+    return {t:t,worst:worst,frames:frames,left:s.orders.length,
+            err:Math.hypot(s.pos[0]-pts[pts.length-1][0],s.pos[1]-pts[pts.length-1][1])};
+  }
+  var A=[[15000,0,0],[15000,15000,0],[30000,15000,0],[30000,30000,0],[45000,30000,0]];
+  var B=[[60000,0,0],[63000,0,0],[20000,0,0]];   /* 中段仅 3000km,没有切角余地 */
+  var nShips=ships.length;
+  var a0=run(A,false), a1=run(A,true);
+  var b0=run(B,false), b1=run(B,true);
+  var clean=(ships.length===nShips)&&!ships.some(function(x){return x.id==='__rr';});
+  rrOn=true;
+  var ok=(a1.t<a0.t*0.97 && a1.worst<=5000 && a1.left===0 && a1.err<CFG.arrive*2
+        && Math.abs(b1.t-b0.t)<0.05 && clean);
+  return (ok?'ok':'fail')+' 锯齿5点:关 '+a0.t.toFixed(1)+'s → 开 '+a1.t.toFixed(1)+'s('
+    +((1-a1.t/a0.t)*100).toFixed(1)+'%,须>3%) 偏靠 '+Math.round(a1.worst)+'km(须<=5000) 终点误差 '+Math.round(a1.err)+'km 细化 '+a1.frames+' 帧'
+    +' | 无余量航线(对照):关 '+b0.t.toFixed(1)+'s 开 '+b1.t.toFixed(1)+'s(须相等=兜底原样退回)'
+    +' | 沙盘未污染全局 ships='+clean;
+});
 t('FLOW6_CHAIN',function(){ /* RF7 数据链渲染:函数存在;编辑态/退出态 render 均不炸(像素断言不做,ERRORS 层兜底) */
   var e=fc5reset();
   fcNew(e.S,{tid:e.A.id});fcAppend(e.S,{tid:e.B.id});
@@ -1024,5 +1061,6 @@ for k in HYS CORNER GHOST2; do
   grep -q "FLOW12_${k}=ok" "$OUT" || { echo "✗ FLOW12_${k} 未通过(RF12 减速抖动/拐角限速/持久虚影)"; fail=1; }
 done
 grep -q "FLOW13_LOOK=ok" "$OUT" || { echo "✗ FLOW13_LOOK 未通过(RF13 反向速度传播)"; fail=1; }
+grep -q "FLOW14_REFINE=ok" "$OUT" || { echo "✗ FLOW14_REFINE 未通过(RF14 航线细化)"; fail=1; }
 grep -q "^RENDER=ok" "$OUT" || { echo "✗ RENDER 未通过"; fail=1; }
 [ $fail -eq 0 ] && echo "✓ 全部通过" || exit 1

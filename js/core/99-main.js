@@ -23,6 +23,9 @@ function frame(t){
     demoRec.lastT=simTime;
     if(demoRec.data.length>900)demoRec.data.shift(); // 只保留最近~30分钟,不保存自动删
   }
+  if(typeof rrTick==='function')rrTick(); // RF14 航线细化:分帧推进沙盘搜索。必须排在 stepSim 【之后】——
+  // 沙盘会把全局 ships 临时换成单条克隆船,在 stepSim 中途做这件事会让本 tick 剩下的舰船凭空消失。
+  // 每帧只烧 RR_BUDGET 步(约 3~5ms),船还在第一段加速时就算完了,玩家看不到卡顿。
   if(typeof xhTick==='function')xhTick(dt); // RF5 悬停准星每帧状态机(command/74):敌舰在动、相机也会被 WASD/右键拖动平移,只靠 mousemove 喂命中会留下陈旧吸附,所以每帧重跑一次。放在 render() 之前——83-hud 的 drawTargeting 读 xh.snap,晚一行吸附圈就比 #xhTip 信息卡慢一帧;typeof 守卫与 stepSim 里 stepFireControl 同口径(74 缺席也不崩)
   render();
   updateTop();
