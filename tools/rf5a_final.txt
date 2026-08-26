@@ -1,0 +1,17 @@
+SYMS_TOTAL=461
+SYMS_MISSING=none
+SYMS_THREW=none
+BOOT=ships=6 blue=3 red=3
+RANGE_ON=true
+FORM=moved=3 fm=3 g=0
+SALVO=armed=1
+DMG=dmg=25(before=0) hp=550
+SOAK=steps=5000 NaNships=0 NaNproj=0 maxLive=5 seen={"missile":5550,"interceptor":749}
+FLOW2=autoHits=2 autoDmg=245
+FLOW3_ALLOW=ok macHits=0 macShots=0 mslHits=8 mslShots=4 fcTgtMac=null locked=靶·A
+FLOW3_SEQ=ok A=12(mac4/msl8) B=0 shots=mac4/msl4
+FLOW3_RR=ok A=6(mac2/msl4) B=6(mac2/msl4) shots=mac4/msl4 macSplit=ok mslSplit=ok
+FLOW3_GATE=ok base=6 off:hits6→6,mac2→2,msl2→2 mslOff:mac2→5,msl2→2,hits6→9
+FLOW3_DRIFT=ok t=112s macShots=0→3→4 driftFire=true driftFireT=5.0 orders=1 hits=12
+RENDER=ok
+ERRORS=none

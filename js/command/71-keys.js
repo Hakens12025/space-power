@@ -190,6 +190,22 @@ function applyPanelState(){
 }
 window.addEventListener('keydown',e=>{
   if(e.target&&(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'))return; // v119:输入框内不触发快捷键
+  if(e.key==='Escape'&&typeof rad!=='undefined'&&rad.open){ // RF5 Phase C 轮盘抢 Esc:必须早于下面的 ACTIONS 匹配——settings 绑的就是 Escape,放它跑到 doAction 会去翻那个被 RF2 用 display:none!important 藏死的 #overlay 的 .on,而 overlayOn 那道门会把其余全部快捷键 break 掉。放在 editMode 块之前是「任何模式下 Esc 先关轮盘」的一行保险(零耦合;正常情况下 radTick 在编辑器/测距里已自关)
+    e.preventDefault();
+    if(typeof radClose==='function')radClose();
+    return;
+  }
+  if(e.key==='Escape'&&typeof tutIsOpen==='function'&&tutIsOpen()){ // RF5-D 教程接 Esc:排在轮盘【之后】——轮盘开着 Esc 先关轮盘(RF5 Phase C 那条语义一行未动),它关掉了才轮到教程。同样必须早于下面的 ACTIONS 匹配:settings 绑的就是 Escape,放它跑到 doAction 会去开那个被 RF2 藏死的 #overlay,而 overlayOn 那道门会把其余全部快捷键 break 掉
+    e.preventDefault();
+    tutToggle(false);
+    return;
+  }
+  // RF5-D 补:教程打开期间全拦快捷键。原来只分岔了 Esc,其余每一个键都穿过遮罩打在战场上 —— 面板自称「打开期间模拟暂停」,
+  // 而读到「第一个必须按的键是 Space」时顺手按一下,pause 就会把 running 翻成 true,战斗在不透明遮罩后面按当前倍速(最高 50x)继续跑,
+  // 关闭时 tutPrevRun 记的是打开那一瞬的 false,还原分支不会把它按回去,玩家回到一个已经打了几分钟的战场;
+  // 同一条路径上 C 开测距、G 下倒车令、Backspace 删命令点、F8 切 GM 全都发生在看不见的地方。
+  // 排在两条 Esc 分岔【之后】:Esc 在上面已经处理完并 return,所以这里直接全拦,不必像 overlayOn 那样留白名单。
+  if(typeof tutIsOpen==='function'&&tutIsOpen())return;
   if(editMode){ // 编辑器快捷键
     if(e.key==='Delete'||e.code==='Delete'){ // 删除选中单位
       if(editSel){const u=editUnitOf(editSel);if(u)deleteEditUnit(u);}
@@ -218,7 +234,7 @@ window.addEventListener('keydown',e=>{
 });
 // WASD 相机持续移动
 const camKeys={};
-window.addEventListener('keydown',e=>{if(e.target&&(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'))return;camKeys[e.code]=true;}); // v119:输入框内不触发快捷键
+window.addEventListener('keydown',e=>{if(e.target&&(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'))return;if(typeof tutIsOpen==='function'&&tutIsOpen())return;camKeys[e.code]=true;}); // v119:输入框内不触发快捷键。RF5-D 补同一道教程门:上面那条 keydown 拦住了功能键,这条是独立注册的,不补的话遮罩后面相机还在被 WASD 推着走
 window.addEventListener('keyup',e=>{
   camKeys[e.code]=false;
   if(bindings.range&&eventKeyStr(e)===bindings.range&&rangeMode){ // 松开C:移动过则结束;没移动进入待命(点一下C也能测距)

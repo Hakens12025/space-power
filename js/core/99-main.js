@@ -23,6 +23,7 @@ function frame(t){
     demoRec.lastT=simTime;
     if(demoRec.data.length>900)demoRec.data.shift(); // 只保留最近~30分钟,不保存自动删
   }
+  if(typeof xhTick==='function')xhTick(dt); // RF5 悬停准星每帧状态机(command/74):敌舰在动、相机也会被 WASD/右键拖动平移,只靠 mousemove 喂命中会留下陈旧吸附,所以每帧重跑一次。放在 render() 之前——83-hud 的 drawTargeting 读 xh.snap,晚一行吸附圈就比 #xhTip 信息卡慢一帧;typeof 守卫与 stepSim 里 stepFireControl 同口径(74 缺席也不崩)
   render();
   updateTop();
 }
@@ -51,7 +52,7 @@ function init(){
   window.addEventListener('resize',resize);resize();
   if(!TIER_BALANCED)log('⚠ Tier 数值未平衡:T1/T2/T3 目前只有图标尺寸与亮度差异','warn'); // TIER1 开局提醒。TIER_MUL 三格全空时三个分级打起来完全一样,这条不写会被当成 bug 反复排查;数值填完把 03-ships.js 的 TIER_BALANCED 翻 true,这条与 info 面板的 ⚠ 一起消失
   log('固定步长模拟就绪 · '+CFG.step+'s/步','');
-  log('开局已暂停 · 空格 开始 · F9 回放 · 中键命令菜单','');
+  log('开局已暂停 · 空格 开始 · F9 回放 · 中键短按 快速交战 · 中键长按 目标轮盘','');   // RF5 文案跟拆改走:中键平移/命令菜单已拆,现在的语义是短按=快速交战、长按(>=MMB_HOLD_MS)=Phase C 的目标轮盘,旧文案会直接教错玩家。轮盘没有任何其他入口提示,这一行是它唯一的可发现性来源
   demoRec.on=true;demoRec.data=[];demoRec.lastT=-1; // 自动录制本局(环形缓冲,不保存自动删旧;点REC导出保存)
   last=performance.now();requestAnimationFrame(frame);
 }

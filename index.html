@@ -17,6 +17,7 @@
   <button class="hbtn" id="btnSlow" title="减速(-)">−</button>
   <button class="hbtn" id="btnFast" title="加速(+)">+</button>
   <div class="spacer"></div>
+  <button class="hbtn" id="btnTut" title="教程 · 指挥官手册(Esc 关闭)">教程</button><!-- RF5-D 顶栏唯一新增钮:排在 .spacer 之后 = 顶栏右端(其后那七个全在 RF2 隐藏清单里,不占位)。切勿把 #btnTut 加进 css 的 RF2 隐藏清单 -->
   <button class="hbtn" id="btnRec" title="录制本局数据到demo文件(REC)" style="color:var(--red)">REC</button>
   <button class="hbtn" id="btnAdmin" title="管理员模式:显示敌方数据/弹药轨迹(GM)" style="color:var(--acc)">GM</button>
   <button class="hbtn" id="btnSelfPlay" title="左右脑互搏:关敌军AI,双方全玩家操控(自己跟自己下棋)">🧠互搏</button>
@@ -39,10 +40,19 @@
   <div id="logBody"></div>
 </div>
 
-<!-- RF2 简化UI:选中舰实时信息面板(右轨,#fleet/#log 已隐藏,事件流内嵌于此) -->
+<!-- RF2 简化UI:选中舰实时信息面板(右轨,#fleet/#log 已隐藏)。RF5 事件流已迁出到下方 #evtFeed,腾出的纵向空间给 #fcSec -->
 <div id="selPanel" class="panel">
   <div class="p-title"><b id="selTitle">未选中</b><span class="hint">左键点选 · 拖拽框选</span></div>
   <div id="selInfo"></div>
+  <div id="fcSec"><!-- RF5 火控计算机:序列/目标解算列表。#fcList 必须是静态元素——on() 遇元素不存在会静默跳过,动态创建挂不上委托 -->
+    <div class="fc-hd">火控计算机</div>
+    <div id="fcList"></div>
+  </div>
+</div>
+
+<!-- RF5 事件流面板(右轨底部车道)。id="selEvents" 原样搬来,88-selpanel 的 pushEvt 靠 getElementById 取容器,零改动 -->
+<div id="evtFeed" class="panel">
+  <div class="p-title"><b>事件</b><span class="hint">最近 5 条</span></div>
   <div id="selEvents"></div>
 </div>
 
@@ -189,6 +199,21 @@
   <div class="cmd-btns"></div>
 </div>
 <div id="cmdTip"></div>
+<!-- RF5-D 教程模态(顶栏 #btnTut 唤出)。刻意【不复用 #overlay】:它在 css/app.css 的 RF2 隐藏清单里被 display:none!important 压死,
+     且 71-keys 的 overlayOn 门会在它 .on 时吃掉除设置外的全部快捷键。内容由 render/85-tutorial.js 惰性写进 #tutBody(打开过一次才存在),
+     所以常规画面下这里是三个空壳,零元素泄漏。同样:#tutOverlay 不属于 RF2 隐藏清单,别加进那两行 display:none!important。 -->
+<div id="tutOverlay">
+  <div id="tutPanel">
+    <div class="tut-hd">
+      <h2>指挥官手册</h2>
+      <span class="tut-hd-hint">Esc / 点遮罩 关闭 · 打开期间模拟暂停</span>
+      <button class="hbtn" id="tutCloseBtn" title="关闭教程(Esc)">✕</button>
+    </div>
+    <div class="tut-body" id="tutBody"></div>
+  </div>
+</div>
+
+<div id="xhTip"></div><!-- RF5 悬停敌舰信息卡:跟随光标,内容按 litBlue 接触等级分档(command/74-targeting 写 innerHTML)。刻意不给 class="panel":.panel 带 z-index:var(--z-panel) 与 overflow:hidden,会把层级压回面板档还裁掉内容,几何一律自带(抄 #cmdTip) -->
 
 <!-- RF1: 目录=系统。编号十位是系统层(0core/1ships/2sensors/3physics/4formation/5weapons/6bots/7command/8render/9scenario)。
      硬约束仅两条:core/00 定义 on() 必须最先(85/93/94/95 顶层调用它);core/99 顶层执行 init() 必须最后(且 init 调 loadRangeCfg,
@@ -213,6 +238,7 @@
 <script src="js/weapons/55-damage.js?v=20260826"></script>
 <script src="js/weapons/56-step-projectiles.js?v=20260826"></script>
 <script src="js/weapons/57-step-weapons.js?v=20260826"></script>
+<script src="js/weapons/58-firecontrol.js?v=20260826"></script><!-- RF5 火控计算机引擎:序列数据模型+stepFireControl/Post。位置只为目录编号可读性(编号 58 > 57,归位到 weapons 块末尾),跨文件引用全在运行期解析:本文件顶层只有 const/let/function 声明,零顶层执行 -->
 <script src="js/core/05-sim.js?v=20260826"></script>
 <script src="js/bots/60-tasks.js?v=20260826"></script>
 <script src="js/bots/61-enemy.js?v=20260826"></script>
@@ -220,15 +246,18 @@
 <script src="js/command/71-keys.js?v=20260826"></script>
 <script src="js/command/72-context-menu.js?v=20260826"></script>
 <script src="js/command/73-quickbar.js?v=20260826"></script>
+<script src="js/command/74-targeting.js?v=20260826"></script><!-- RF5 悬停准星/吸附状态 xh + #xhTip 信息卡。按目录编号序归位在 command 块末尾;顶层只有 let/const/function,零顶层执行,跨文件引用全在运行期解析 -->
 <script src="js/render/80-camera.js?v=20260826"></script>
 <script src="js/render/81-background.js?v=20260826"></script>
 <script src="js/render/82-ship-icons.js?v=20260826"></script>
 <script src="js/render/83-hud.js?v=20260826"></script>
 <script src="js/render/84-scene.js?v=20260826"></script>
 <script src="js/render/85-settings.js?v=20260826"></script>
+<script src="js/render/85-tutorial.js?v=20260826"></script><!-- RF5-D 教程面板。与 85-settings 共用编号 85(先例:weapons/51-defs 与 51-ciws),语义上教程与设置相邻。顶层调用 on(),故必须晚于 core/00;其余引用全在运行期解析 -->
 <script src="js/render/86-log.js?v=20260826"></script>
 <script src="js/render/87-fleetcards.js?v=20260826"></script>
 <script src="js/render/88-selpanel.js?v=20260826"></script>
+<script src="js/render/89-radial.js?v=20260826"></script><!-- RF5 Phase C 目标轮盘的几何与渲染:半径/角度/容量常量与 drawRadial/radialHit/radialInBand/radPages 全在这一份。必须晚于 88-selpanel(扇区射程读数走它的 KIND_INFO);顶层只有 const/let/function,零顶层执行 -->
 <script src="js/scenario/90-envs.js?v=20260826"></script>
 <script src="js/scenario/91-init.js?v=20260826"></script>
 <script src="js/scenario/92-editor.js?v=20260826"></script>

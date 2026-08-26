@@ -13,6 +13,7 @@ function stepWeaponSystems(dt){
   // DS147 自动索敌交战(船船协同):按目标所需火力缺口分配(巡洋需3艘/护卫2/巡游1),避免多船全锁同一艘
   for(const s of ships){
     if(s.dead||!s.autoEngage)continue;
+    if(typeof fcActive==='function'&&fcActive(s))continue; // RF5 有火控序列的舰:lockedTarget 归序列执行器所有(weapons/58 每 tick 重写),自动索敌整段让出,否则两边抢锁定
     if(s.lockedTarget&&!s.lockedTarget.dead)continue; // 已有锁定
     const litKey=s.side==='blue'?'litBlue':'litRed';
     const enemies=ships.filter(t=>t.side!==s.side&&!t.dead&&t[litKey]>=2);
@@ -30,9 +31,12 @@ function stepWeaponSystems(dt){
   // 波次节流靠发射单元 60s 独立装填天然限流,无需定时器;敌方不受影响(red 的 autoEngage 恒 false,enemyAI 走自己的 8% 掷骰)。
   for(const s of ships){
     if(s.dead||!s.autoEngage||s.mslOn===false)continue;
-    const t=s.lockedTarget;
-    if(!t||t.dead||t.side===s.side)continue;
-    if((s.side==='blue'?t.litBlue:t.litRed)<2)continue; // 与手动齐射同一识别级门控
+    if(s.fcFired&&s.fcFired.msl)continue; // RF5 核查修:本 tick 序列刚真发射过(S14 的 missileArm 倒计时就在本函数开头,发完立刻把 missileArm 清空),此刻 s.fcTgt.msl 还是本 tick 开头解算的【旧目标】—— rot 要等 tick 末的 S17b stepFireControlPost 才前进。这里若照排,下一发会继承旧目标,rr 轮询在导弹侧完全失效(实测一轮恰好 2 发,rot 0→1→0 归位,第二个目标永远轮不到)。让出一拍(0.02s)再排,下一 tick 解算出的就是前进后的目标;无序列的舰不长 fcFired 字段,不受影响
+    const t=(typeof fcActive==='function'&&fcActive(s))?(s.fcTgt&&s.fcTgt.msl):s.lockedTarget; // RF5 有序列则目标来源换成序列解算结果(fcTgt.msl 可能是舰,也可能是指定点 {pos});没序列沿用原锁定
+    if(!t)continue;
+    const isPt=(t.side===undefined); // RF5 指定点(空地)没有阵营也没有接触等级,跳过 side/litBlue 两道门(fcGate 已在序列侧查过射程,这里保留复查)
+    if(!isPt&&(t.dead||t.side===s.side))continue;
+    if(!isPt&&(s.side==='blue'?t.litBlue:t.litRed)<2)continue; // 与手动齐射同一识别级门控
     if(V.len(V.sub(t.pos,s.pos))>=(s.mslRange||350000))continue; // RF3 射程读烘焙字段(定义在 weapons/51-defs)
     const ready=readyCells(s);
     if(ready<Math.ceil((s.cells||4)/2))continue; // 过半就绪才打,自然成波(导弹Arm/弹药不足由 orderMissileSalvo 内部兜底)
@@ -74,7 +78,8 @@ function stepWeaponSystems(dt){
   // 锁定自动开火(10秒一轮):机头摆到对准窗口的瞬间才开炮(不盲射);v125 ROE门控
   for(const s of ships){
     const roeOK=s.macOn!==false&&(s.roe==='free'||(s.roe==='tight'&&s.roeCd>0)); // free自由/tight被攻击才还击(roeCd=受击冷却)/hold不开火;RF2 主炮开关:关=不参与自动开火
-    if(roeOK&&!s.dead&&s.lockedTarget&&!s.lockedTarget.dead&&s.lockedTarget.side!==s.side&&s.macCd<=0&&hasMAC(s)&&macAligned(s,s.lockedTarget))fireMAC(s,s.lockedTarget); // TIER1 MAC 舰种门改能力谓词
+    const mt=(typeof fcActive==='function'&&fcActive(s))?(s.fcTgt&&s.fcTgt.mac):s.lockedTarget; // RF5 有序列则打序列解算的主炮目标:序列可能只许导弹打(allow.mac=false),这时 lockedTarget 虽被写成导弹目标,主炮也不许跟着开
+    if(roeOK&&!s.dead&&mt&&!mt.dead&&mt.side!==s.side&&s.macCd<=0&&hasMAC(s)&&macAligned(s,mt))fireMAC(s,mt); // TIER1 MAC 舰种门改能力谓词
     if(s.roeCd>0)s.roeCd-=dt;
   }
 }

@@ -25,6 +25,7 @@ function fireMAC(shooter,target){ // MAC轴炮:沿船头方向直射(必须先�
   const hxy=Math.hypot(dir[0],dir[1]); // KIMI146修:xy分量按朝向的xy模长缩放——原直接用满macSpd再叠dir[2]·macSpd,合速度超0.1c且弹道≠机头轴线(带俯仰时必脱靶)
   projectiles.push({type:'mac',pos:shooter.pos.slice(),vel:[Math.cos(ang)*hxy*CFG.macSpd+shooter.vel[0],Math.sin(ang)*hxy*CFG.macSpd+shooter.vel[1],dir[2]*CFG.macSpd+shooter.vel[2]],target,shooter,pred,tt,age:0,dmg:shooter.macDmg,visBlue:false,visRed:false}); // KIMI151:弹丸继承舰速(出膛矢量=舰速+机头轴×0.1c,相对舰体初速仍0.1c)
   shooter.macCd=shooter.macReload||0; // TIER1 改读实例烘焙的装填秒:原 CLS_WPN[shooter.cls].mac 无兜底,舰种不在表里就 TypeError 崩整帧(加 BB/CV 后风险放大)
+  if(shooter.fcFired&&shooter.fcTgt&&shooter.fcTgt.mac===target)shooter.fcFired.mac=true; // RF5 开火来源标记(MAC 唯一的发射成功点,弹丸已入 projectiles、冷却已置位):火控序列的指针只认这个显式标记。绝不允许用 macCd/ammo 差分推断——任务系统/靶场AI/敌方AI/手动齐射都会动那两个字段,差分会让序列指针幽灵前进。RF5 核查修:标记再收窄成「打的正是本 tick 序列解算出来的那个目标」,否则玩家手动打第三方(71-keys/72-右键菜单)也会推动序列指针,序列自己那一发被白白跳过
   if(!(shooter.side==='red'&&!adminMode))log(`${shooter.name} MAC发射(轴炮) → ${target.name}`,''); // 普通模式隐藏敌方开火
 }
 let hitFX=[]; // 命中特效 {pos,t,type}  — MAC/导弹命中点的爆闪提示
@@ -157,5 +158,6 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
     });
     shooter.ammo-=shooter.mslPer||12; // KIMI154:每组12颗;RF3 枚数读烘焙字段
   }
+  if(shooter.fcFired&&shooter.fcTgt&&shooter.fcTgt.msl&&(shooter.fcTgt.msl===target||(target&&target.pos&&shooter.fcTgt.msl.pos===target.pos)))shooter.fcFired.msl=true; // RF5 开火来源标记(fireMissiles 的发射成功点:早退全在上面,到这里 rounds≥1 组弹丸已入 projectiles)。陷阱三:orderMissileSalvo 只写 missileArm、真发射晚 1s 且中途会被 noFire/dead/弹药不足吞掉,所以标记只能打在这里。RF5 核查修:再收窄成「打的正是序列解算出来的那个目标」,挡掉手动/任务/敌AI 齐射推动序列指针;指定点每 tick 是新 {pos} 对象,故按 pt 数组引用比(与 Post 段回找记账同一口径)
   if(!(shooter.side==='red'&&!adminMode))log(`${shooter.name} ${isShip?'射手齐射×':'区域齐射×'}${rounds}组(${rounds*12}枚) → ${isShip?target.name:Math.round(target.pos[0]/1000)+'k,'+Math.round(target.pos[1]/1000)+'k'}${netGeom?' · 组网'+netGeom.dirs+'方同时弹着':''}${isNet?' · '+missileMode:'直射'}`,''); // 普通模式隐藏敌方开火
 }

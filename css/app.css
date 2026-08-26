@@ -326,7 +326,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #btnRec,#btnAdmin,#btnSelfPlay,#btnRange,#btnEnv,#btnReplay,#btnSet{display:none!important}
 
 /* 选中舰实时信息面板(右轨,几何抄 #fleet) */
-#selPanel{top:var(--rail-top);right:var(--gut);width:var(--rail-w);max-height:calc(100% - var(--rail-top) - var(--gut));display:flex;flex-direction:column}
+#selPanel{top:var(--rail-top);right:var(--gut);width:var(--rail-w);max-height:calc(100% - var(--rail-top) - var(--tray-b));display:flex;flex-direction:column} /* RF5 末项 --gut → --tray-b(=dock-b+log-h+gut):给同一条右轨底部的 #evtFeed 让出车道,否则 #fcSec 撑高后会从上面压下来 */
 #selInfo{padding:var(--sp-3);border-bottom:var(--bw) solid var(--line);flex:0 1 auto;overflow-y:auto}
 #selInfo h3{font-size:var(--fs-title);color:var(--txt-hi);margin:0 0 2px}
 #selInfo .sub{font-size:var(--fs-label);color:var(--txt-dim);margin-bottom:var(--sp-2)}
@@ -340,6 +340,35 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #selEvents .li .t{color:var(--txt-dim);margin-right:var(--sp-2)}
 #selEvents .li.hit{color:var(--state-ok)}
 #selEvents .li.warn{color:var(--state-warn)}
+
+/* ---------- RF5 事件流面板(右轨底部车道) ----------
+   几何四值全部复用既有 token,配色/边框/层级由 .panel(--z-panel)继承,不写 z-index、不新增颜色。
+   bottom 用 --dock-b 而不是 --gut:实测 vw<1700px 时 #cmdBar(居中 min(1160px,100%-20px))会横向侵入右轨,
+   贴底就会被 --z-bar(20) 反压住,事件流点不到也看不全。height 用 --log-h 白送一条矮视口适配(vh≤600 自动收到 110px)。
+   注意:本面板不属于 RF2 隐藏清单,别加进上面那两行 display:none。 */
+#evtFeed{right:var(--gut);bottom:var(--dock-b);width:var(--rail-w);height:var(--log-h);display:flex;flex-direction:column}
+
+/* ---------- RF5 火控计算机(右栏 #selPanel 内,武器库状态之后) ----------
+   接手原 #selEvents 的 flex:1 1 auto 角色:序列多了在面板内部滚动,不外溢也不顶穿。
+   #selInfo 已带 border-bottom,这里不再补 border-top,避免两条线叠成 2px。 */
+#fcSec{padding:var(--sp-2) var(--sp-3);overflow-y:auto;flex:1 1 auto;min-height:52px} /* 口径与原 #selEvents 一致。basis 必须是 auto:#selPanel 只有 max-height 没有 height(高度按内容撑),basis:0 会让本区永远塌到 min-height;同理百分比 max-height 在这种父容器里退化成 none,两条都实测过 */
+#fcSec .fc-hd{font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label);margin-bottom:var(--sp-1)}
+#fcSec .fc-empty{font-size:var(--fs-label);color:var(--txt-mute);line-height:var(--lh-tight);padding:var(--sp-2) 0;text-align:center}
+#fcList .fc-seq{border:var(--bw) solid var(--line);border-radius:var(--r-sm);background:var(--srf-sunk);margin-bottom:var(--sp-1);padding:var(--sp-1) var(--sp-2)}
+#fcList .fc-seq.edit{border-color:var(--state-select);background:var(--srf-sel)} /* 当前编辑序列高亮,配方抄 .card.sel */
+#fcList .fc-seq.paused{opacity:.6}
+#fcList .fc-row{display:flex;align-items:center;gap:var(--sp-1);font-size:var(--fs-label);cursor:pointer;user-select:none}
+#fcList .fc-row .nm{flex:1;min-width:0;color:var(--txt-hi);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#fcList .fc-tag{flex:none;font-size:var(--fs-micro);letter-spacing:var(--ls-label);color:var(--txt-dim);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);padding:0 3px}
+#fcList .fc-tag.on{color:var(--state-active);border-color:var(--state-active)}
+#fcList .fc-btn{flex:none;font-size:var(--fs-micro);letter-spacing:var(--ls-label);color:var(--txt-mute);background:none;border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);padding:0 4px;cursor:pointer;user-select:none;font-family:var(--ff-ui);line-height:1.45}
+#fcList .fc-btn.on{color:var(--state-active);border-color:var(--state-active)}
+#fcList .fc-btn:hover{color:var(--txt-hi);border-color:var(--line-acc);background:var(--srf-hover)}
+#fcList .fc-btn.danger:hover{color:var(--state-warn);border-color:var(--state-warn)}
+#fcList .fc-it{display:flex;align-items:center;gap:var(--sp-1);padding:2px 0;margin-top:2px;border-top:var(--bw) solid var(--line-hair);font-size:var(--fs-label)}
+#fcList .fc-it .nm{flex:1;min-width:0;color:var(--txt-read);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#fcList .fc-it .hp{flex:none;min-width:30px;text-align:right;font-family:var(--ff-mono);font-size:var(--fs-micro);letter-spacing:var(--ls-read);font-variant-numeric:tabular-nums;color:var(--txt-dim)}
+#fcList .fc-ft{display:flex;align-items:center;gap:var(--sp-1);justify-content:flex-end;margin-top:var(--sp-1)}
 
 /* 底部操作栏(底坞居中)三区:舰名区 | 规格读数列 | 开关组。窄窗时规格列换行,按钮组不拆散 */
 #cmdBar{left:50%;transform:translateX(-50%);bottom:var(--gut);display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:var(--sp-2) var(--sp-4);padding:var(--sp-2) var(--sp-4);z-index:var(--z-bar);width:min(1160px,calc(100% - var(--gut)*2))} /* 显式宽度:shrink-to-fit 下带 flex:1 子项会把整条压成窄柱(实测381px全叠起来) */
@@ -357,3 +386,85 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #cmdBar .cbtn .s{font-size:var(--fs-label);letter-spacing:.3em;margin-right:-.3em;color:var(--txt-mute)}
 #cmdBar .cbtn.on .s{color:var(--state-active)}
 #cmdTip{position:fixed;bottom:72px;left:50%;transform:translateX(-50%);background:var(--srf-modal);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);padding:var(--sp-2) var(--sp-4);font-size:var(--fs-label);color:var(--txt);pointer-events:none;z-index:var(--z-transient);display:none;white-space:nowrap}
+
+/* ---------- RF5 悬停敌舰信息卡(跟随光标) ----------
+   面/线/圆角/字号整条抄 #cmdTip,读数三件套抄 #selInfo .row .v,不新写十六进制色。
+   z 取 --z-transient(50)整档:光标能掠过屏幕上任何东西,故必须高于 --z-panel/--z-bar/--z-hud/--z-flyout;
+   又必须低于 --z-menu(60)与 --z-modal(70),否则一张 pointer-events:none 的卡片会盖住可点的右键菜单。
+   位置由 js 每次 mousemove 写 left/top(靠边翻到光标另一侧),故这里 left/top 只给初值。
+   注意:本卡片不属于上面 RF2 隐藏清单,别加进那两行 display:none!important(同 #evtFeed)。 */
+#xhTip{position:fixed;left:0;top:0;background:var(--srf-modal);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);padding:var(--sp-2) var(--sp-3);font-size:var(--fs-label);color:var(--txt);pointer-events:none;z-index:var(--z-transient);display:none;white-space:nowrap;max-width:240px}
+#xhTip .nm{color:var(--txt-hi);font-size:var(--fs-body)}
+#xhTip .k{color:var(--txt-dim);margin-right:var(--sp-2)}
+#xhTip .v{font-family:var(--ff-mono);letter-spacing:var(--ls-read);font-variant-numeric:tabular-nums;color:var(--txt-read)}
+#xhTip .unk{color:var(--txt-mute)} /* 未达识别级的"未知接触"用禁用态色,与地图上的降级轮廓同一语义 */
+
+/* ==================== RF5-D 教程面板(2026-08) ====================
+   顶栏 #btnTut 唤出的独立模态。为什么另起一套而不复用 #overlay:#overlay 在上面 RF2 隐藏清单里被
+   display:none!important 压死,复用它等于给自己造一块永远显示不出来的面板。
+   z 取 --z-modal 整档 —— 与 #overlay 同档但两者永不共存(后者已藏),而遮罩必须压住 --z-menu(60)以下的一切,
+   包括 --z-transient(50) 的 #xhTip、--z-bar(20) 的 #cmdBar 与 --z-hud(30) 的顶栏本身。
+   注意:#tutOverlay 不属于上面那份 RF2 隐藏清单,别加进那两行 display:none!important(同 #evtFeed / #xhTip)。
+   排版分两条通道(narrative-style):叙述走人文字体散文(--ff-ui + --lh-body + 成段落),
+   读数/按键/界面标签走等宽(--ff-mono + tabular-nums),小节标题靠 --ls-label 宽字距立成扫读标签,
+   成组数据一律真 <table>。颜色全部取自 :root token,本节零十六进制色。 */
+#tutOverlay{position:fixed;inset:0;background:var(--scrim);z-index:var(--z-modal);display:none;align-items:center;justify-content:center;padding:var(--gut)}
+#tutOverlay.on{display:flex}
+/* 几何配方抄 #settings:外层 flex 居中 + 卡片定高 + 内层 .tut-body 独立滚动。
+   卡片本身 overflow:hidden,长内容只会在 .tut-body 里滚,永远顶不穿视口(#settings 那条注释踩过的坑:卡片与内容两套上限互相打架) */
+#tutPanel{width:min(820px,100%);max-height:100%;background:var(--srf-modal);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-md);display:flex;flex-direction:column;overflow:hidden}
+.tut-hd{flex:none;display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4) var(--sp-5);border-bottom:var(--bw) solid var(--line);background:var(--srf-raise)}
+.tut-hd h2{flex:none;font-size:var(--fs-title);color:var(--txt-hi);font-weight:bold;letter-spacing:var(--ls-label)}
+.tut-hd-hint{flex:1;min-width:0;font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* overflow-x 用 auto 不用 hidden:窄窗口下万一某个 nowrap 读数撑宽,它在本容器内横向滚,而不是被切掉半个数字 */
+/* RF5-D 复核修:滑块色 --line-ctl → --line-acc。前者压在 --srf-sunk 上要盯着才看得见,实拍复核记的是「确实在、确实可拖,只是低调过头」,而这份内容有六千多像素高,滚动条是唯一的进度指示 */
+.tut-body{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:auto;padding:var(--sp-5) var(--sp-6);scrollbar-width:thin;scrollbar-color:var(--line-acc) var(--srf-sunk)}
+
+/* ---------- 叙述:人文字体散文 ---------- */
+.tut-body p{font-family:var(--ff-ui);font-size:var(--fs-read);line-height:var(--lh-body);color:var(--txt);margin:0 0 var(--sp-4)}
+.tut-body .tut-sec{margin-bottom:var(--sp-6)}
+.tut-body .tut-sec+.tut-sec{border-top:var(--bw) solid var(--line);padding-top:var(--sp-5)}
+/* RF5-D 复核修:竖线 --acc-dim → --acc。1px 宽的线在近黑底上要靠亮度撑存在感,--acc-dim 在 1:1 下几乎看不见,导语与正文的分层就只剩字色一档 */
+.tut-body .tut-lede{color:var(--txt-hi);border-left:var(--bw) solid var(--acc);padding-left:var(--sp-4);margin-bottom:var(--sp-5)}
+.tut-body .tut-warn{border-left:var(--bw) solid var(--state-warn);background:var(--srf-sunk);padding:var(--sp-3) var(--sp-4);margin-bottom:0}
+
+/* ---------- 扫读标签:中文标签只加宽字距,不做全大写(全大写只给拉丁字母) ---------- */
+.tut-body .tut-h2{font-size:var(--fs-hero);font-weight:bold;color:var(--acc);letter-spacing:var(--ls-label);margin:0 0 var(--sp-4)}
+.tut-body .tut-h3{font-size:var(--fs-title);font-weight:normal;color:var(--txt-hi);letter-spacing:var(--ls-label);margin:var(--sp-5) 0 var(--sp-3);padding-left:var(--sp-3);border-left:var(--bw) solid var(--acc)}
+
+/* ---------- 数据:等距字体读数。三类语义各给一档颜色,读者一眼分得出"这是数值/这是界面上的字/这是键" ---------- */
+.tut-body code{font-family:var(--ff-mono);font-size:var(--fs-body);letter-spacing:var(--ls-read);font-variant-numeric:tabular-nums;white-space:nowrap}
+/* 读数:永远带单位,与右栏 #selInfo .row .v 同一副面孔。
+   RF5-D 复核修:原来只给 --txt-read 一个字色,与正文 --txt 差得太小;更要命的是等宽与人文两套字体在【汉字】上落到同一个 CJK 回退字族,
+   于是「20 万公里」里只有「20」看得出换了面孔,「万公里」和正文一模一样 —— 靠字体分不开中文单位,这是中文排版的固有账。
+   改用一层 --srf-raise 的底 + 内缩进:底色把整个 code 连同中文单位一起圈起来,不依赖字形差异,读数在散文里终于是一个整块。 */
+.tut-body code.num{color:var(--txt-read);background:var(--srf-raise);padding:0 var(--sp-1);border-radius:var(--r-sm)}
+.tut-body code.ui{color:var(--acc-lite)}    /* 界面上的字面标签 / 舰名 / 状态词 */
+.tut-body code.key{color:var(--state-select);background:var(--srf-raise);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);padding:0 var(--sp-2);margin:0 1px} /* 按键帽 */
+
+/* ---------- 成组数据用真表格 ---------- */
+.tut-body .tut-table{width:100%;border-collapse:collapse;background:var(--srf-sunk);margin:var(--sp-3) 0 var(--sp-5);font-size:var(--fs-body)}
+.tut-body .tut-cap{caption-side:top;text-align:left;font-family:var(--ff-mono);font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label);padding:0 0 var(--sp-2)}
+.tut-body .tut-table th{text-align:left;font-weight:normal;font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label);background:var(--srf-raise);border-bottom:var(--bw) solid var(--line-ctl);padding:var(--sp-2) var(--sp-3);white-space:nowrap}
+.tut-body .tut-table td{color:var(--txt);line-height:var(--lh-body);border-bottom:var(--bw) solid var(--line-hair);padding:var(--sp-2) var(--sp-3);vertical-align:top;overflow-wrap:anywhere}
+.tut-body .tut-table td:first-child{color:var(--txt-hi);white-space:nowrap}
+.tut-body .tut-table tbody tr:last-child td{border-bottom:none}
+.tut-body .tut-table tbody tr:hover{background:var(--srf-hover)}
+/* RF5-D 复核修:「键盘」与「鼠标」是上下相邻、要连着读的同一份按键表,auto 布局各算各的列宽(实测第二列一个从 620px 起、一个从 673px 起),
+   两张表的竖线对不齐,连读时会绊一下。改 table-layout:fixed 并把列宽百分比钉在 th 上,两表共用同一套刻度。
+   只钉这两张表:上面几张(接触四级/雷达耗时/舰种读数)列数与内容长度都不同,强行统一反而更差。
+   百分比按最长单元格留了余量(首列最长约 160px < 30%),窄窗口下 720px 媒体查询会把首列放开换行,不会切字。 */
+.tut-body .tut-keys,.tut-body .tut-mouse{table-layout:fixed}
+.tut-body .tut-keys th:first-child,.tut-body .tut-mouse th:first-child{width:30%}
+.tut-body .tut-keys th:nth-child(2),.tut-body .tut-mouse th:nth-child(2){width:22%}
+
+/* 窄窗口:标题降一档、表格收到标签字号并允许首列换行。RF5-D 复核修口径:原注释写「320px 宽下也读得完」是没验过的话——
+   headless Chrome 在 Windows 上把窗口钳到 504 CSS px 才排版,到不了 320。实测已验证的下界是 502px:首列与第三列各自换行,横向零溢出。 */
+@media (max-width:720px){
+  .tut-hd{padding:var(--sp-3) var(--sp-4)}
+  .tut-body{padding:var(--sp-4)}
+  .tut-body .tut-h2{font-size:var(--fs-title)}
+  .tut-body .tut-table{font-size:var(--fs-label)}
+  .tut-body .tut-table th,.tut-body .tut-table td{padding:var(--sp-1) var(--sp-2)}
+  .tut-body .tut-table td:first-child{white-space:normal}
+}

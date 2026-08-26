@@ -92,11 +92,77 @@ function updateCmdBarVis(s){
     b.style.display=(!s||!(s.weapons||[]).some(w=>w.kind===kind))?'none':'';
   }
 }
+/* ==================== RF5 火控计算机面板(#fcSec / #fcList) ====================
+   主体舰 = selBlue()[0];列出它的全部火控序列(fcSeqsOf)与每条序列下的目标项。
+   引擎在 js/weapons/58-firecontrol.js —— 对它的每一个符号都做 typeof 守卫:58 没加载好时本面板只显示占位,
+   绝不能让 88 整个文件的顶层语句连坐报废(项目已知失败模式)。
+   目标标识一律存 id 字符串进 dataset,不存对象引用(与 selected[] 口径一致)。
+   【范围】Phase A 只做引擎 + 本面板的「查看/编辑已有序列」(改模式/许可、暂停、删目标、删序列)。
+   建序列的入口(fcNew/fcAppend 的调用点)留给 Phase B 的 command/72 右键菜单 —— 所以实际对局里本面板
+   常年显示「无火控序列」是【当前预期】,不是回归;目前唯一能建序列的是 tools/verify.sh 的 FLOW3 探针。
+   【RF5 Phase B 更新 —— 修正上面这三行,原文保留只为留住当时的判断】建序列的入口已经接上,但【不在 command/72】:
+   是 command/74-targeting 的 xhQuickEngage(中键短按 → fcNew),72 一行未动。所以真实对局里本面板会长出序列,
+   「无火控序列」不再是常态,建不出来就是回归。fcAppend 至今仍无生产调用点(只有探针在调),
+   一条序列多目标 / rr 轮询 / fcRemoveTarget 要等 Phase C 的追加入口 —— 它不是死代码,是等入口的引擎 API。 */
+function fcUiName(t){ // 目标项 → 显示名(舰目标现查 ships 表,指定点显示 k 坐标)
+  if(t&&t.tid!=null){
+    const o=(typeof ships!=='undefined')?ships.find(x=>String(x.id)===String(t.tid)):null;
+    return o?(o.name||String(t.tid)):'目标丢失';
+  }
+  if(t&&t.pt)return `点 ${Math.round(t.pt[0]/1000)}k,${Math.round(t.pt[1]/1000)}k`;
+  return '—';
+}
+function fcUiHp(t){ // 目标项 → HP 百分比(指定点无 HP,显示破折号)
+  if(!t||t.tid==null)return '—';
+  const o=(typeof ships!=='undefined')?ships.find(x=>String(x.id)===String(t.tid)):null;
+  if(!o||o.dead||!o.maxHp)return '—';
+  return Math.max(0,Math.round(o.hp/o.maxHp*100))+'%';
+}
+function fcUiSeq(s,sid){ // 按 id 字符串取回序列对象(id 类型不确定,统一 String 比较)
+  if(!s||typeof fcSeqsOf!=='function')return null;
+  return (fcSeqsOf(s)||[]).find(q=>String(q.id)===String(sid))||null;
+}
+function updateFcPanel(){ // 由 updateSelPanel 每 20 帧全量重渲(与卡片状态同拍)
+  const list=document.getElementById('fcList');
+  if(!list)return;
+  const s=selBlue()[0];
+  if(!s){list.innerHTML='<div class="fc-empty">未选中我方舰船</div>';return;}
+  if(typeof fcSeqsOf!=='function'){list.innerHTML='<div class="fc-empty">火控引擎未就绪</div>';return;}
+  const seqs=fcSeqsOf(s)||[];
+  if(!seqs.length){list.innerHTML='<div class="fc-empty">无火控序列</div>';return;}
+  let h='';
+  for(const q of seqs){
+    const sid=String(q.id),edit=String(s.fcEditId)===sid,rr=(q.mode==='rr');
+    h+=`<div class="fc-seq${edit?' edit':''}${q.paused?' paused':''}">`
+      +`<div class="fc-row" data-fc-act="edit" data-seq="${sid}" title="点击设为当前编辑序列(追加目标待 Phase C)">`
+      +`<span class="nm">${q.name||('火控序列'+sid)}</span>`
+      +`<span class="fc-btn${rr?' on':''}" data-fc-act="mode" data-seq="${sid}" title="依次=打死一个再换;轮询=每次齐射换一个">${rr?'轮询':'依次'}</span>`
+      +(q.paused?'<span class="fc-tag">暂停</span>':'')
+      +(edit?'<span class="fc-tag on">编辑</span>':'')
+      +`</div>`;
+    (q.targets||[]).forEach((t,i)=>{
+      const am=!t.allow||t.allow.mac!==false,ms=!t.allow||t.allow.msl!==false;
+      h+=`<div class="fc-it">`
+        +`<span class="nm">${fcUiName(t)}</span>`
+        +`<span class="hp">${fcUiHp(t)}</span>`
+        +`<span class="fc-btn${am?' on':''}" data-fc-act="mac" data-seq="${sid}" data-idx="${i}" title="主炮许可">炮</span>`
+        +`<span class="fc-btn${ms?' on':''}" data-fc-act="msl" data-seq="${sid}" data-idx="${i}" title="导弹许可">弹</span>`
+        +`<span class="fc-btn danger" data-fc-act="delt" data-seq="${sid}" data-idx="${i}" title="从序列移除该目标">✕</span>`
+        +`</div>`;
+    });
+    h+=`<div class="fc-ft">`
+      +`<span class="fc-btn" data-fc-act="pause" data-seq="${sid}" title="暂停后该序列不参与解算">${q.paused?'恢复':'暂停'}</span>`
+      +`<span class="fc-btn danger" data-fc-act="del" data-seq="${sid}" title="删除整条序列">删除</span>`
+      +`</div></div>`;
+  }
+  list.innerHTML=h;
+}
 function updateSelPanel(){ // frame 低频调用(每20帧,与 updateCardsStatus 同拍)
   const box=document.getElementById('selInfo');
   const title=document.getElementById('selTitle');
   const ciN=document.getElementById('ciName'),ciC=document.getElementById('ciCls'),ciSp=document.getElementById('ciSpec');
   if(!box||!title)return;
+  updateFcPanel(); // RF5 火控面板刷新点放在这里(不是函数末尾):本函数下面有 5 个提前 return(导弹群/导弹组/信标/空选),放末尾会漏掉四条分支
   // 导弹群/导弹组/信标视图:Shift+点选或框选导弹(选择机制在 70-input) → 右栏切实时弹道数据,底栏切固定参数,按钮组置灰
   // RF4a 框选聚合:selMissileHits 里存活组>1 → 汇总视图(状态/目标/引导分布);代表组=剩余弹头最多者
   const aliveHits=(selMissileHits||[]).filter(p=>!p.done&&p.type==='missile');
@@ -228,3 +294,24 @@ function bindCmdBar(){ // 按钮一次性预生成(舰级2个 + KIND_INFO 每种
   for(const kind in KIND_INFO)ensure('cb_'+kind); // cb_mac/cb_msl/cb_ciws
 }
 bindCmdBar();
+/* RF5 火控面板事件委托:#fcList 每 20 帧全量重渲,只能把监听挂在稳定容器上,不给动态条目逐个 addEventListener。
+   用 core/00 的 on() 挂载(元素不存在会静默跳过,不会中断本文件后续顶层语句)。 */
+on('fcList','click',e=>{
+  const el=e.target&&e.target.closest?e.target.closest('[data-fc-act]'):null;
+  if(!el)return;
+  const s=selBlue()[0];if(!s)return;
+  const seq=fcUiSeq(s,el.dataset.seq);if(!seq)return;
+  const idx=Number(el.dataset.idx),t=(seq.targets||[])[idx];
+  switch(el.dataset.fcAct){
+    case 'edit':if(typeof fcSetEdit==='function')fcSetEdit(s,seq.id);break;
+    case 'mode':if(typeof fcSetMode==='function')fcSetMode(seq.id,seq.mode==='rr'?'seq':'rr');break;
+    case 'pause':if(typeof fcTogglePause==='function')fcTogglePause(seq.id);break;
+    case 'del':if(typeof fcRemove==='function')fcRemove(seq.id);break;
+    case 'delt':if(typeof fcRemoveTarget==='function')fcRemoveTarget(seq.id,idx);break;
+    case 'mac':case 'msl':{ // 许可徽标取反;allow 缺省视为 true,与 fcNew 的缺省口径一致
+      const k=el.dataset.fcAct;
+      if(t&&typeof fcSetAllow==='function')fcSetAllow(seq.id,idx,k,!(!t.allow||t.allow[k]!==false));
+      break;}
+  }
+  updateFcPanel(); // 立即回显,不等下一个 20 帧拍子
+});

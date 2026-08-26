@@ -1,0 +1,24 @@
+SYMS_TOTAL=477
+SYMS_MISSING=none
+SYMS_THREW=none
+BOOT=ships=6 blue=3 red=3
+RANGE_ON=true
+FORM=moved=3 fm=3 g=0
+SALVO=armed=1
+DMG=dmg=25(before=0) hp=550
+SOAK=steps=5000 NaNships=0 NaNproj=0 maxLive=5 seen={"missile":5549,"interceptor":746}
+FLOW2=autoHits=2 autoDmg=245
+FLOW3_ALLOW=ok macHits=0 macShots=0 mslHits=8 mslShots=4 fcTgtMac=null locked=靶·A
+FLOW3_SEQ=ok A=12(mac4/msl8) B=0 shots=mac4/msl4
+FLOW3_RR=ok A=6(mac2/msl4) B=6(mac2/msl4) shots=mac4/msl4 macSplit=ok mslSplit=ok
+FLOW3_GATE=ok base=6 off:hits6→6,mac2→2,msl2→2 mslOff:mac2→5,msl2→2,hits6→9
+FLOW3_DRIFT=ok t=112s macShots=0→3→4 driftFire=true driftFireT=5.0 orders=1 hits=12
+FLOW4_DWELL=ok snap:0ms=null 200ms=null 300ms=靶·A dwellT=0.29 card=on 卡片=靶·A舰种驱逐舰 · T2方位000° · 60k结构550/550速度0 m/ vp=762x484 snapR=49587
+FLOW4_FOG=ok 暗=null(cand=null) 点亮后=靶·A
+FLOW4_MMB=ok seqs=0→1 shipId=s1(主体舰s1) tid=s4(靶s4) allow={"mac":true,"msl":true} autoEngage=false→true roe=free mmb计时=有
+FLOW4_HOLD=ok 吸附=靶·A 按住=500ms seqs=0→0 mmb计时=有 抬起后 mmb=已清
+FLOW4_NOLOCK=ok 右键:locked=null driftFire=false 移动命令=1条 | Ctrl+右键:locked=null driftFire=false ctrlArm=false(须 false,否则松开 Ctrl 会误触全弹发射)
+FLOW4_PAN=ok 中键拖动:cam 不动 panning=false seqs=0→0 | 右键拖动(对照组):cam 位移=-99174,-66116 panning=true
+FLOW4_PD=ok 常规分支 defaultPrevented=true 编辑器分支 defaultPrevented=true 编辑器下 mmb=null
+RENDER=ok
+ERRORS=none

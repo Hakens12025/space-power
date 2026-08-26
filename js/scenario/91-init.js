@@ -11,6 +11,7 @@ function initFleet(){
   // ④回放历史混入旧局快照 ⑤demo录制跨局污染
   simTime=0;history=[];if(replay.active)exitReplay();replay.idx=0;
   threatCorridors=[];hitFX=[];esmFixes.clear();nets.clear();
+  if(typeof fireSeqs!=='undefined'){fireSeqs=[];fcSeqSeq=0;} // RF5 火控序列换局清空(与 nets.clear() 同族):shipSeq 每局归零重排,不清会让上一局的序列按 id 精准挂到新一局的另一艘船上
   selMissile=null;selNet=null;selMissileHits=[];victoryShown=false;defeatShown=false; // RF4a 框选聚合态一并清(否则引用旧局弹丸对象)
   selWeapon=null;pendingMove=null;pendingTurn=null;pendingTurnNoFm=false; // KIMI146:交互pending态也清——原pendingBeacon/pendingManual等引用旧局舰对象(点地图把信标挂到已不存在的船上)
   pendingManual=null;pendingMine=null;pendingBeacon=null;pendingIntercept=null;rangeFollow=null;hideTip();
@@ -22,7 +23,7 @@ function initFleet(){
   initEnemy();
   const eCnt=(env.enemy||DEFAULT_ENEMY).length;
   log(`测试环境:${env.name} · 我方${ships.length-eCnt}艘 / 目标${eCnt}艘`,'');
-  log('右键敌舰 → 锁定/开火','');
+  log('选中我方舰 → 光标停在敌舰上 → 中键短按 = 快速交战','');   // RF5 文案跟拆改走:「右键敌舰=锁定/开火」(RF4b)与 Ctrl+右键锁定两支已拆,右键现在只管移动,旧文案会直接教错玩家(它就印在开局事件面板上)
 }
 function initEnemy(){
   const env=curEnv();

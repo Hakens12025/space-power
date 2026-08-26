@@ -423,11 +423,55 @@ function drawHoverRings(){
     ctx.fillStyle='rgba(143,208,255,.85)';ctx.font='10px Consolas';ctx.textAlign='center';ctx.textBaseline='bottom';
     ctx.fillText(text,p[0],p[1]-r*cam.zoom-2);
   };
-  for(const id of selected){
+  const ids=selected.slice(); // RF5 Phase C:轮盘 hover 扇区画的射程圈属于【序列属主】,它未必在 selected 里(轮盘开着时玩家仍可改选/取消选中,74 与 89 都已改成认序列属主)。不并进来的话 hover 扇区一个圈都不画
+  if(typeof rad!=='undefined'&&rad&&rad.open&&typeof radSubject==='function'){const rs=radSubject();if(rs&&!rs.dead&&ids.indexOf(rs.id)<0)ids.push(rs.id);}
+  for(const id of ids){
     const s=ships.find(x=>x.id===id);if(!s||s.dead||s.side!=='blue')continue;
     const p=toScreen(s.pos[0],s.pos[1]);
     if(hoverRing==='mac')ring(p,s.macRange||150000,'主炮 '+Math.round((s.macRange||150000)/1000)+'k'); // RF3 射程读烘焙字段(定义在 weapons/51-defs)
     else if(hoverRing==='msl')ring(p,s.mslRange||350000,'导弹 '+Math.round((s.mslRange||350000)/1000)+'k');
     else if(hoverRing==='ciws'){const c=ciwsOf(s);ring(p,c.outer,'外圈拦截 '+Math.round(c.outer/1000)+'k');ring(p,c.inner,'内圈 '+Math.round(c.inner/1000)+'k');}
   }
+}
+/* RF5 悬停准星 / 吸附反馈 / 预览线:表达"我此刻正要下的命令",与 drawOrders/drawRange/drawHoverRings 同族,故归在 83-hud。
+   状态 xh(pt/snap/dwellT)由 command/74-targeting 维护,本文件只读不写——状态与绘制分家,同 RF5 Phase A「引擎在 weapons/58、面板在 render/88」的分工。
+   跨文件可选依赖一律 typeof 守卫(抄 95-range 六个接口的做法):74 万一整文件语法报废,不会把每帧渲染一起拖崩。
+   配色抄 CSS token 的十六进制原值(canvas 侧不解析 var(--x),先例见 82-ship-icons 残骸的 '#a0aab9'),行尾注明对应 token,日后统一 canvas 色板 grep 得到。 */
+function drawTargeting(){
+  if(typeof xh==='undefined'||!xh)return;
+  if(typeof rad!=='undefined'&&rad&&rad.open)return; // RF5 Phase C 轮盘开着时整体收起准星/吸附圈/预览线:轮盘锚在目标身上,那条按射程着色的黄预览线会直接横穿 hub 读数井,吸附圈也压在内洞边缘。目标是谁、打不打得到,轮盘自己全说了(hub 细读 + 每个扇区三格方块),留着只剩视觉噪声
+  const pt=xh.pt;
+  if(!pt||!isFinite(pt[0])||!isFinite(pt[1]))return;
+  if(pt[0]<=0&&pt[1]<=0)return; // RF5 鼠标从未进过画面时(74 若把 pt 初始化成 [0,0])不在左上角留一个假准星
+  const sub=(typeof selBlue==='function')?selBlue()[0]:null;
+  if(!sub||sub.dead)return; // RF5 只在存在主体舰(选中蓝舰第一艘)时激活,与 74 的门控同口径
+  const sx=pt[0],sy=pt[1];
+  const tgt=(xh.snap&&!xh.snap.dead)?xh.snap:null;
+  ctx.save();
+  // RF5 十字准星:中心留空,吸上目标就提亮成命令色——"吸附成功"这件事本身要有反馈
+  ctx.strokeStyle=tgt?'rgba(255,224,102,.9)':'rgba(160,170,185,.5)'; // 吸附=--state-select #ffe066 / 空载=--side-neutral #a0aab9(中性,不抢戏)
+  ctx.lineWidth=1;
+  ctx.beginPath();
+  ctx.moveTo(sx-11,sy);ctx.lineTo(sx-4,sy);
+  ctx.moveTo(sx+4,sy);ctx.lineTo(sx+11,sy);
+  ctx.moveTo(sx,sy-11);ctx.lineTo(sx,sy-4);
+  ctx.moveTo(sx,sy+4);ctx.lineTo(sx,sy+11);
+  ctx.stroke();
+  if(tgt){
+    const p=toScreen(sub.pos[0],sub.pos[1]),q=toScreen(tgt.pos[0],tgt.pos[1]);
+    // RF5 预览线按射程着色:缺省全武器许可,取射程最远那口(导弹)。射程【只】读实例烘焙字段(RF3,定义在 weapons/51-defs),不写字面量兜底——
+    // 上面 drawHoverRings 的 `s.mslRange||350000` 是 RF2/RF3 遗留写法,照抄会把烘不出导弹的舰(mslRange 缺失/为 0)当成一门 35 万射程的导弹,预览线照样着成活跃色,给出"这个目标打得着"的假象。
+    const R=sub.mslRange||0; // 无导弹语义显式化:R=0 一律画超程暗色
+    const inR=R>0&&V.len(V.sub(tgt.pos,sub.pos))<=R; // 判据是世界距离而非屏幕距离(屏幕距离随 zoom 变,同一目标会时内时外)
+    ctx.globalAlpha=inR?.75:.55; // 半透明一律 globalAlpha+rgba,全程只有 stroke/arc:每帧路径禁 shadowBlur/createRadialGradient
+    ctx.strokeStyle=inR?'#ffe066':'#46566a'; // 射程内=--state-select(我下的命令) / 超程=--txt-mute(禁用态:这个目标现在打不着)
+    ctx.lineWidth=inR?1.2:1;
+    ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();
+    // RF5 吸附外圈:必须是黄实线——drawLocks 的"已锁定"是红虚线+固定 r=13,两者会同时出现在同一艘敌舰上,颜色与线型都得一眼分开
+    ctx.globalAlpha=.9;
+    ctx.strokeStyle='#ffe066';ctx.lineWidth=1.4; // = --state-select
+    const r=((typeof shipIconR==='function')?shipIconR(tgt):10)+8; // 半径走 82 的图标半径:自动跟着 tier 情报遮蔽走,不靠圈的大小把等级泄漏出去
+    ctx.beginPath();ctx.arc(q[0],q[1],r,0,6.283);ctx.stroke();
+  }
+  ctx.restore();
 }
