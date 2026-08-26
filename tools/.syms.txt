@@ -67,6 +67,8 @@ RANGE_KEY
 RANGE_KNOBS
 RANGE_SLOTS
 RATES
+ROUTE_MARGIN
+ROUTE_TOL
 RPL_INTERVAL
 SENS
 SIMPLE_UI
@@ -120,7 +122,7 @@ cmdList
 contactAge
 contactState
 controlledShips
-cornerCap
+cornerSpd
 cruiseOf
 ctrlArm
 ctx
@@ -414,6 +416,7 @@ rmbClick
 rmbTimer
 rotAng
 rotSlot
+routeCap
 rpBar
 rpExit
 rpSlider

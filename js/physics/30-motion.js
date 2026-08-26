@@ -88,21 +88,32 @@ function speedGearsOf(s){ // DS148:舰种速度档位表(索引0停/1慢/2中/3�
 // 低速定位/编队保位时自动收敛回 0.5(原行为),不会让成员在槽位上晃。
 const ENG_HYS_OFF=0.5;              // 熄火阈值(原来的唯一阈值,保持不变 —— 停稳判据挂在它上面)
 const ENG_HYS_K=0.02, ENG_HYS_MAX=8; // 点火阈值 = 速度x2%,上限 8km/s(800km/s 巡航时约 1%,位置极限环仅约 4km)
-// RF12 拐角限速:pass 点原本恒取满巡航(useCurve=false),【完全不看下一段要往哪拐】。船以 800km/s 冲到拐点,
-// 横向动量要几十秒才杀得掉,于是甩出一个巨大的弧 —— 玩家读到的就是"不减速、疯狗航行、每次都冲过头"。
-// 实测掉头两点:Shift 追加要 257 秒/峰值 800,而同一终点走普通右键只要 53 秒/峰值 319。
-// 按标准的拐角圆弧混合来定速:以 CFG.passBy 为允许的切角偏差 tol,偏折角 phi 的过弯半径 r=tol/(sec(phi/2)-1),
-// 过弯速度 v=sqrt(a*r)。直行 phi=0 -> r 无穷 -> 不限速;phi=90 度 -> 316km/s;掉头 phi=180 度 -> 0(掉头本来就该停)。
-// 返回值已经把"从这里减到过弯速度"的接近段并进去了,所以 guideTo 那边仍走 useCurve=false 直接当 cap 用。
-function cornerCap(s,cur,nxt,dist){
-  if(!nxt||!nxt.pos)return Infinity;
-  const a=V.sub(cur.pos,s.pos), b=V.sub(nxt.pos,cur.pos);
-  if(V.len(a)<1||V.len(b)<1)return Infinity;
-  const c=Math.cos(V.angle(a,b)/2);
-  if(c>=0.999999)return Infinity;                 // 直行:不限速
-  const r=c>0?CFG.passBy*c/(1-c):0;               // sec(phi/2)-1 = (1-c)/c
-  const vC2=Math.max(0,s.thrust*GUIDE_EFF*r);     // 过弯速度的平方
-  return Math.sqrt(vC2+2*s.thrust*GUIDE_EFF*Math.max(0,dist-CFG.passBy)); // 并进接近段:v^2 = vC^2 + 2*a*剩余距离
+// RF12/RF13 航线速度规划。RF12 只做了【拐角几何限速】且只看下一段(1 步前瞻),多点航线上不够 ——
+// 实测对抗例"长直 60000km -> 短段 3000km -> 掉头":在 W1 看到下一段是直行、不限速,船以 800km/s 通过,
+// 到 W2 才发现要掉头,此时只剩 3000km 而 800km/s 的刹车距离是 38788km,物理上已经不可能 —— 多走 32k、偏离 16k。
+// 这不是控制器调得不好,是信息在错误的时刻才被使用。RF13 补上 CNC/机器人轨迹规划里的标准解:反向速度传播。
+// 【为什么只要反向遍不要正向遍】:教科书的两遍规划里,正向遍是为了让【离线生成的速度剖面】不超过加速能力;
+// 这里是闭环反馈控制,能加多快就加多快,正向约束由 steerToVel 的推力钳位天然满足,写出来是多余的一遍。
+const ROUTE_TOL=()=>CFG.passBy;      // 切角容差:允许航迹离拐点多远(几何限速用)。默认借用接受半径,是三个可调参数之一
+const ROUTE_MARGIN=()=>CFG.passBy;   // 刹车距离扣减:每段可用于减速的距离按 L-此值 计,保守裕度。同为可调参数
+function cornerSpd(s,vIn,vOut){ // 拐角几何限速:以 tol 为允许的切角偏差,偏折角 phi 的过弯圆弧半径 r=tol/(sec(phi/2)-1),v=sqrt(a*r)
+  if(V.len(vIn)<1||V.len(vOut)<1)return Infinity;
+  const c=Math.cos(V.angle(vIn,vOut)/2);
+  if(c>=0.999999)return Infinity;                       // 直行 phi=0 -> r 无穷 -> 【不限速】(限了就等于把 pass 点做成 stop 点)
+  const r=c>0?ROUTE_TOL()*c/(1-c):0;                    // sec(phi/2)-1 = (1-c)/c;phi=90 度 -> 316km/s,phi=180 度 -> 0
+  return Math.sqrt(Math.max(0,s.thrust*GUIDE_EFF*r));
+}
+function routeCap(s,dist){ // 反向传播:从末点(必为 stop,速度 0)倒推回当前段,返回本 tick 的速度上限
+  const od=s.orders, n=od.length;
+  if(!n)return Infinity;
+  let U=(od[n-1].type==='pass')?cruiseOf(s):0;          // 末点速度:stop -> 0(正常航线恒走这一支)
+  for(let j=n-2;j>=0;j--){
+    const L=V.len(V.sub(od[j+1].pos,od[j].pos));
+    const reach=Math.sqrt(U*U+2*s.thrust*GUIDE_EFF*Math.max(0,L-ROUTE_MARGIN())); // 从 od[j] 出发,这一段减得下来的最快速度
+    const prev=(j===0)?s.pos:od[j-1].pos;               // 首点的入射方向用【当前船位】:切过角之后入射角会变,让限速跟着适应
+    U=Math.min(cornerSpd(s,V.sub(od[j].pos,prev),V.sub(od[j+1].pos,od[j].pos)),reach);
+  }
+  return Math.sqrt(U*U+2*s.thrust*GUIDE_EFF*Math.max(0,dist-ROUTE_MARGIN())); // 再把"从这里减到 U"的接近段并进去
 }
 function cruiseOf(s){return s.speedCmd===-1?SPD_UNCAP:(s.speedCmd===0?0:(s.speedCmd>0?s.speedCmd:800));} // v119:速度令0=定速停→返回0让内核刹停(原回退800致"按停反而加速")
 function applyHeading(s,dir,dt){ // RF10 朝向的唯一出口。改造前五个地方各自 slerp 到 s.facing;现在统一走这里:

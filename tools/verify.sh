@@ -916,6 +916,42 @@ t('FLOW12_GHOST2',function(){ /* RF12 虚影持久层:命令带 face 才画,且�
     +' | 带face比无face多出='+dFace+'px(须>60=确实画了半透明船影)'
     +' | 未选中时 带face与无face差异='+dUnsel+'px(须0:命令可视化跟着选中走,同 drawFcChain 口径)';
 });
+t('FLOW13_LOOK',function(){ /* RF13 反向速度传播:1 步前瞻在"长直段接短段再掉头"上必然失败,这条是它的回归守卫。
+  同样双向 —— 只测对抗例的话,"把每个 pass 点都当 stop 点"(退化成逐点停车)也能通过,所以直线对照组必须仍满巡航 */
+  var e=fc5reset(),s=e.S;
+  function run(pts){
+    s.formation=null;s.brake=false;s.lockedTarget=null;s.turnTarget=null;s.turnNoFm=false;s.crawling=false;s.coasting=false;
+    s.pos=[0,0,0];s.vel=[0,0,0];s.facing=[1,0,0];s.orders=[];
+    for(var k=0;k<pts.length;k++)addWaypoint([s],pts[k]);
+    var poly=[[0,0,0]].concat(pts), ideal=0;
+    for(var k=1;k<poly.length;k++)ideal+=Math.hypot(poly[k][0]-poly[k-1][0],poly[k][1]-poly[k-1][1]);
+    var arc=0,pp=[0,0],maxV=0,dev=0,tt=0;
+    for(var i=0;i<80000;i++){
+      stepShipsMotion(0.02);tt+=0.02;
+      arc+=Math.hypot(s.pos[0]-pp[0],s.pos[1]-pp[1]);pp=[s.pos[0],s.pos[1]];
+      var v=V.len(s.vel);if(v>maxV)maxV=v;
+      var best=1e18;
+      for(var k=1;k<poly.length;k++){                     /* 点到线段距离,取全航线最小 = 对理想折线的偏离 */
+        var ax=poly[k-1][0],ay=poly[k-1][1],bx=poly[k][0],by=poly[k][1];
+        var vx=bx-ax,vy=by-ay,wx=s.pos[0]-ax,wy=s.pos[1]-ay,L2=vx*vx+vy*vy;
+        var u=L2<1?0:Math.max(0,Math.min(1,(wx*vx+wy*vy)/L2));
+        best=Math.min(best,Math.hypot(wx-u*vx,wy-u*vy));
+      }
+      if(best>dev)dev=best;
+      if(!s.orders.length&&v<1)break;
+    }
+    return {ex:arc-ideal,dev:dev,v:maxV,t:tt,left:s.orders.length,
+            err:Math.hypot(s.pos[0]-pts[pts.length-1][0],s.pos[1]-pts[pts.length-1][1])};
+  }
+  var B=run([[60000,0,0],[63000,0,0],[20000,0,0]]);   /* 对抗例:W1 看到的下一段是直行,真正的掉头在 W2,只剩 3000km */
+  var S=run([[40000,0,0],[80000,0,0]]);               /* 对照组:全程直行 */
+  var cr=cruiseOf(s);
+  var ok=(B.ex<8000 && B.dev<CFG.passBy*1.5 && B.left===0 && B.err<CFG.arrive*2
+        && S.v>cr*0.95 && S.left===0 && S.err<CFG.arrive*2);
+  return (ok?'ok':'fail')+' 对抗例:多走='+Math.round(B.ex/1000)+'k(须<8k;1步前瞻时为 +32k) 最大偏离='+Math.round(B.dev/1000)
+    +'k(须<'+Math.round(CFG.passBy*1.5/1000)+'k;1步前瞻时为 16k) 峰值v='+Math.round(B.v)+' 终点误差='+Math.round(B.err)+'km'
+    +' | 直线对照组:峰值v='+Math.round(S.v)+'(须>'+Math.round(cr*0.95)+':不许退化成逐点停车)';
+});
 t('FLOW6_CHAIN',function(){ /* RF7 数据链渲染:函数存在;编辑态/退出态 render 均不炸(像素断言不做,ERRORS 层兜底) */
   var e=fc5reset();
   fcNew(e.S,{tid:e.A.id});fcAppend(e.S,{tid:e.B.id});
@@ -978,5 +1014,6 @@ grep -q "FLOW11_GHOST=ok" "$OUT" || { echo "✗ FLOW11_GHOST 未通过(RF11 移�
 for k in HYS CORNER GHOST2; do
   grep -q "FLOW12_${k}=ok" "$OUT" || { echo "✗ FLOW12_${k} 未通过(RF12 减速抖动/拐角限速/持久虚影)"; fail=1; }
 done
+grep -q "FLOW13_LOOK=ok" "$OUT" || { echo "✗ FLOW13_LOOK 未通过(RF13 反向速度传播)"; fail=1; }
 grep -q "^RENDER=ok" "$OUT" || { echo "✗ RENDER 未通过"; fail=1; }
 [ $fail -eq 0 ] && echo "✓ 全部通过" || exit 1

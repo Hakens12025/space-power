@@ -52,10 +52,11 @@ function stepShipsMotion(dt){
         if(dist<CFG.passBy){
           s.orders.shift(); log(`${s.name} 经过路径点`,''); continue;
         }
-        // RF12 拐角限速(用户报"Shift+右键像疯狗一样不减速、每次都冲过头"):
-        // 原来这里一律满巡航,拐点只判"进没进 passBy",完全不看下一段的方向 —— 掉头这种 180 度偏折也照 800km/s 冲。
-        // 现在按下一段的偏折角给一个过弯速度上限(详见 30-motion 的 cornerCap),直行时返回 Infinity、行为与改前一致。
-        cap=Math.min(cap,cornerCap(s,cur,s.orders[1],dist));
+        // RF12/RF13 航线速度规划(用户报"Shift+右键像疯狗一样不减速、每次都冲过头"):
+        // 原来这里一律满巡航,拐点只判"进没进 passBy",完全不看后续 —— 掉头这种 180 度偏折也照 800km/s 冲。
+        // RF12 先按【下一段】的偏折角限速;RF13 换成从末点倒推的反向传播(详见 30-motion 的 routeCap),
+        // 因为 1 步前瞻在"长直段接一个短段再掉头"上必然失败:发现要掉头时物理上已经刹不住了。
+        cap=Math.min(cap,routeCap(s,dist));
       }else{ // 目标点:到位停(DS191:曲线单调收敛,原v124冲过头检测+KIMI151c爬行滞回+120限速补丁全删,不再振荡)
         // RF11 到达朝向(右键长按虚影下的令带 cur.face):【提前起转】——虚影承诺的是"到达即如此",
         // 若等到位再原地转,巡洋舰掉头 180° 要 19.6 秒(turnRate 0.16),那段时间玩家看到的和虚影不一致。

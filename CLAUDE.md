@@ -48,7 +48,7 @@ CHROME="/c/Program Files/Google/Chrome/Application/chrome.exe"
 - `function` 提升只在单个 script 内生效:某文件顶层**立即执行**的语句(裸 `getElementById` 绑定、`on(...)` 调用)只受同文件顺序与上述两条硬约束限制。新增文件插到 index.html 时按系统目录归位。
 - 新增 DOM 后**不要顶层裸调 `document.elementFromPoint` 之类的 `getElementById(x).addEventListener`** —— 元素不存在时会抛错并中断该文件后续所有顶层语句(静默丢绑定)。用 `core/00-config.js` 的 `on(id,ev,fn)` 安全挂载。重灾区:scenario/92(8 条裸绑定)、command/73(约 18 条)——**改 HTML id 必须同步这两处**。
 - 全是顶层全局函数/变量,没有模块化(`import/export` 在 `file://` 下被 CORS 拦死)。每个 js 文件自带 `"use strict";`。
-- 行内 `DS195`/`KIMI155`/`TIER1`/`RANGE1`/`UI1` 标记记录"这行哪一版改的、为什么",很多注释写了被替换的旧做法和踩过的坑。**不要清理**;自己改动按同格式补标记 + 一句原因。`RF1` = 2026-08 目录解耦重构(纯移动/纯提取,行为零改变);`RF5` = 2026-08 火控序列(Phase A:引擎 weapons/58 + 面板 render/88;Phase B:入口 command/74;Phase C:目标轮盘 = render/89 几何 + command/74 数据;Phase D:教程模态 render/85-tutorial + 顶栏 `#btnTut`,标记写 `RF5-D`);`RF6` = 2026-08 主炮射程分两块 + 运动分层并行 + 三处既有 bug 修复;`RF7` = 2026-08 Shift+中键选定链 + 数据链渲染 + 火控计算机方条 + 轮盘贴合(RF7b 序列态跟随选中 / RF7c 面板稳定写入 / RF7d 数据链流动 / RF7e 告警脉冲改墙钟);`RF8` = 2026-08 大序列(舰级 轮询/选择)+ 暂停红态;`RF12` = 2026-08 减速抖动/拐角限速/虚影持久层 + 探针两处自身缺陷。
+- 行内 `DS195`/`KIMI155`/`TIER1`/`RANGE1`/`UI1` 标记记录"这行哪一版改的、为什么",很多注释写了被替换的旧做法和踩过的坑。**不要清理**;自己改动按同格式补标记 + 一句原因。`RF1` = 2026-08 目录解耦重构(纯移动/纯提取,行为零改变);`RF5` = 2026-08 火控序列(Phase A:引擎 weapons/58 + 面板 render/88;Phase B:入口 command/74;Phase C:目标轮盘 = render/89 几何 + command/74 数据;Phase D:教程模态 render/85-tutorial + 顶栏 `#btnTut`,标记写 `RF5-D`);`RF6` = 2026-08 主炮射程分两块 + 运动分层并行 + 三处既有 bug 修复;`RF7` = 2026-08 Shift+中键选定链 + 数据链渲染 + 火控计算机方条 + 轮盘贴合(RF7b 序列态跟随选中 / RF7c 面板稳定写入 / RF7d 数据链流动 / RF7e 告警脉冲改墙钟);`RF8` = 2026-08 大序列(舰级 轮询/选择)+ 暂停红态;`RF12` = 2026-08 减速抖动/拐角限速/虚影持久层 + 探针两处自身缺陷;`RF13` = 2026-08 航线反向速度传播 + 航线质量评估台。
 - **RF5 交互模型**(改了鼠标语义,接手前先看这条):
   - **中键短按(<350ms 且位移≤5px)= 快速交战** —— 主体舰(`selBlue()[0]`)对准星吸附的敌舰 `fcNew` 建一条火控序列。
   - **中键长按(≥350ms、无位移、准星已吸附)= 目标轮盘**。长按判定在 **mousedown 起的 `mmbTimer` 定时器里**做,**松手前就弹**(手柄轮盘的手感),不是等 mouseup。三种上下文按当前编辑序列 `fcSeq(sub.fcEditId)` 分岔,且**都在开盘那一瞬就提交 fc\***(误触也不丢进度,序列立刻出现在右栏火控计算机里):目标**已在**该序列 → 只编辑;**不在 + Shift** → `fcAppend` 追加到末尾;**不在 + 无 Shift** → `fcNew` 新建(自带暂停该舰任务 + 强开 `autoEngage`/`roe='free'` 两个副作用,是预期行为,所以三种上下文的日志刻意分开写)。武器项只有一件时(CV)**不开轮盘**,直接一条日志 —— 且**取反只在编辑上下文做**,新建/追加时保留刚提交的缺省许可。
@@ -72,7 +72,7 @@ CHROME="/c/Program Files/Google/Chrome/Application/chrome.exe"
 | `render/` | `80-camera` · `81-background`(星云/网格)· `82-ship-icons` · `83-hud`(+RF5 `drawTargeting`:准星/吸附圈/按射程着色的预览线)· `84-scene`(render 图层管线)· `85-settings` · `85-tutorial`(**RF5-D 教程模态**:`TUT_HTML` 全文 + `tutToggle`/`tutIsOpen`,与 `85-settings` **共用编号 85**,先例是 weapons/51-defs 与 51-ciws)· `86-log` · `87-fleetcards` · `88-selpanel`(RF2 选中舰面板+底栏开关;+RF5 火控计算机面板 `#fcSec`/`#fcList`,`updateFcPanel`;`KIND_INFO` 是 kind→开关字段/射程/文案的**唯一映射**)· `89-radial`(**RF5 Phase C 目标轮盘的几何唯一真相**:半径/角度/容量常量 + `drawRadial`/`radialHit`/`radialInBand`/`radPages`/`radSlots`,只读 `rad` 从不写) | 呈现 |
 | `scenario/` | `90-envs`(TEST_ENVS/curEnv/DEFAULT_ENEMY)· `91-init`(initFleet/initEnemy)· `92-editor`(编辑器+applyClsTier)· `93-replay`(回放+场景菜单+GM/互搏按钮)· `94-demo` · `95-range`(靶场全部) | 对局生命周期 |
 
-**全局状态归属表**(改某个全局前先看它声明在哪):模拟核心+相机+交互 pending\*+回放+卡片引用+`cv,ctx`+`adminMode/selfPlay/selfPlayPrevAdmin` → `core/01-state`;`shipSeq` → ships/11;`detT` → sensors/21;`hitFX/threatCorridors/missileGroupSeq/netSeq/nets` → weapons/52;`netAllocT` → weapons/53;`fireSeqs/fcSeqSeq/FC_PT_SALVOS` → weapons/58;`formationFan/formationSpacing/fmGap/fmSeq` → formation/40、41;`tasks/taskSeq/pendingTask*` → bots/60;`camKeys/bindings` → command/71;`envIdx/customScene/edit*` → scenario/90、92;`rangeCfg/tr*` → scenario/95;`tutOn/tutPrevRun/TUT_HTML` → render/85-tutorial;`xh/XH_DWELL/XH_JUMP`、`rad/RAD_MODES` → command/74(`rad` 是与 render/89 的两方契约,字段名不得擅自更名);`RAD_RI/RAD_RO/RAD_L_IN/RAD_L_OUT/RAD_RM/RAD_GAP/RAD_FADE/RAD_SEAM/RAD_CAP/RAD_WHEEL_PAD/_radNameCache` → render/89(几何常量只在这一份);`MAC_FALLOFF/MAC_SPREAD_K/MAC_SPREAD_CAP` 与谓词 `macEffRange()` → weapons/52(有效射程的唯一定义点);`FIRE_ALL_ON` → command/71;`ENG_HYS_OFF/ENG_HYS_K/ENG_HYS_MAX` 与 `cornerCap()` → physics/30(推力迟滞与拐角限速的唯一定义点,舰上的 `s.coasting` 由 `steerToVel` 独占读写);`mmb/MMB_HOLD_MS/mmbTimer` → command/70(就近声明,`mmb` 被本文件 down/move/up/blur **四处**读写,`mmbTimer` 同;与 core/01-state 的 `rmbTimer` 是两回事,不要复用)。
+**全局状态归属表**(改某个全局前先看它声明在哪):模拟核心+相机+交互 pending\*+回放+卡片引用+`cv,ctx`+`adminMode/selfPlay/selfPlayPrevAdmin` → `core/01-state`;`shipSeq` → ships/11;`detT` → sensors/21;`hitFX/threatCorridors/missileGroupSeq/netSeq/nets` → weapons/52;`netAllocT` → weapons/53;`fireSeqs/fcSeqSeq/FC_PT_SALVOS` → weapons/58;`formationFan/formationSpacing/fmGap/fmSeq` → formation/40、41;`tasks/taskSeq/pendingTask*` → bots/60;`camKeys/bindings` → command/71;`envIdx/customScene/edit*` → scenario/90、92;`rangeCfg/tr*` → scenario/95;`tutOn/tutPrevRun/TUT_HTML` → render/85-tutorial;`xh/XH_DWELL/XH_JUMP`、`rad/RAD_MODES` → command/74(`rad` 是与 render/89 的两方契约,字段名不得擅自更名);`RAD_RI/RAD_RO/RAD_L_IN/RAD_L_OUT/RAD_RM/RAD_GAP/RAD_FADE/RAD_SEAM/RAD_CAP/RAD_WHEEL_PAD/_radNameCache` → render/89(几何常量只在这一份);`MAC_FALLOFF/MAC_SPREAD_K/MAC_SPREAD_CAP` 与谓词 `macEffRange()` → weapons/52(有效射程的唯一定义点);`FIRE_ALL_ON` → command/71;`ENG_HYS_OFF/ENG_HYS_K/ENG_HYS_MAX`、`ROUTE_TOL()/ROUTE_MARGIN()` 与 `cornerSpd()/routeCap()` → physics/30(推力迟滞与拐角限速的唯一定义点,舰上的 `s.coasting` 由 `steerToVel` 独占读写);`mmb/MMB_HOLD_MS/mmbTimer` → command/70(就近声明,`mmb` 被本文件 down/move/up/blur **四处**读写,`mmbTimer` 同;与 core/01-state 的 `rmbTimer` 是两回事,不要复用)。
 
 ## 核心架构
 
@@ -346,6 +346,35 @@ S1 感知节拍(每秒) → S2 网分配节拍(0.5s) → S3 任务AI
 - **总判定只 grep 到 FLOW5。** `FLOW6/7/8/9/11` 全部不在判定列表里,所以本轮 `FLOW6_FLOW=fail` 明晃晃印在结果里,底下仍然打印 `✓ 全部通过`。**一条永远不会变红的探针比没有探针更危险。** 已补齐 FLOW6/7/8/9/11/12 与 `RENDER`。往探针里加判定层时,**记得同时往底部的判定段加一行** —— 这一步没有任何东西会提醒你。
 
 **刻意没动的**:编队路径(`F.queue`)不走 `cornerCap` —— 它的 `curType` 与 queue 是另一套结构,而编队旗舰的转向本身还是串行的(physics/31 L20,RF6 备忘里记着那次真实事故),要一起改得先有编队专项回归。多舰移动虚影同样未做(RF11 起就写明仅单舰)。
+
+## RF13 航线反向速度传播 / 质量评估台 备忘(2026-08)
+
+**RF12 的拐角限速只看下一段,多点航线上必然失败。** 对抗例:`长直 60000km -> 短段 3000km -> 掉头`。在 W1 处下一段是直行、不限速,船以 `800km/s` 通过;到 W2 才发现要掉头,此时只剩 `3000km`,而 `800km/s` 的刹车距离是 `38788km` —— **物理上已经不可能**。实测多走 `32k`、对理想折线偏离 `16k`。这不是控制器调得不好,是信息在错误的时刻才被使用。
+
+**解法是 CNC/机器人轨迹规划的标准做法:反向速度传播**(`routeCap`,physics/30)。从末点(必为 stop,速度 0)倒推:`U_j = min(拐角几何限速_j, sqrt(U_{j+1}² + 2·a·(L_{j+1} − margin)))`,再把"从当前位置减到 `U_0`"的接近段并进去当 cap。`O(n)`、确定性、可证明可行。它顺带回答了"要看多远"这个问题 —— **看到刹车距离被覆盖为止**,倒推遇到限速自然压下来、压不动自然停止,不需要人为设前瞻步数。实测对抗例多走 `+32k -> -11k`(转为切角)、偏离 `16k -> 0k`,直线对照组仍满 `800`。
+
+**只要反向遍,不要正向遍。** 教科书的两遍规划里正向遍是为了让【离线生成的速度剖面】不超过加速能力;这里是闭环反馈控制,能加多快就加多快,正向约束由 `steerToVel` 的推力钳位天然满足,写出来是多余的一遍。
+
+### 质量评估台(tools/route_eval.sh)与损失函数
+
+用户要建一个损失函数做参数搜索。原始形式 `f = 路程差 + 时间`,**建不起来**,踩了四个坑,每个都会让搜索静默走偏:
+
+1. **路程差会变成负数。** 实测锯齿航线 `−7.6%`、密集航线 `−18.5%` —— 切内角比走折线短,而 `passBy=5000km` 的接受半径本来就允许抄近路。`min(路程差+时间)` 的全局最优解是**无视所有路径点直飞终点**。修法是用户定的:每段截断 `e_j = max(0, 弧长_j − 线段长_j)`(抄近路不给奖励,只罚多走)+ 每点偏靠 `m_j = min_t|p(t) − W_j|` 作为"差不多经过了"的硬度量。**注意光按线段拆开不解决问题** —— `Σ分段实走 = 全局实走`,求和后完全等价,起作用的是截断与偏靠约束这两条。
+2. **分段边界不能用"命令点被消费的那一拍"。** 消费发生在离拐点还有 `passBy=5000km` 处,每段被系统性记短 `5000km`、最后一段被记长 —— 症状是每条航线的"超出"都恰好只落在最后一段而前面全是 0。
+3. **改成"最近点"之后还要【按序单调】搜。** 航线会折返和自交叉:掉头航线 `(0,0)->W1(40000)->W2(10000)` 的出航段正好从 W2 头上碾过去(实测 `3km`),全局最小值落在出航段,算出 `cut=[35000,9997]`,第二段弧长成了 0。现只更新【当前目标】与【刚被消费的上一个】两个下标。
+4. **量纲相同不等于量级相同,而且评估容差不能读被搜的参数。**
+   - `t[s] + α·e[km]/VC[km/s] + β·m[km]/VC` 三项确实都是秒、可以相加,但实测 `α=1` 时距离项只是 `T` 的 `2~3%` 扰动(`VC` 是**最高**速度,不是航线的实际节奏),搜索会几乎无视它。
+   - `T` 本身不随航程线性增长(实测 `3.44/2.75/2.09 s/千km` @1x/2x/4x),各航线损失直接相加会让**长航线主导**。
+   - **最危险的一条**:评估用的 `TOL` 原本读 `CFG.passBy`,而那正是被搜的参数。搜索一旦调宽切角容差,`mPen` 恒为 0,于是"把容差调到无穷大"损失最低而指标全程绿灯。**评估基准必须独立于被评对象**,现已钉死为字面量 `5000`,并在注释里写明不得改回。
+   - 最终形式全部无量纲:`L = T·VC/S + α·Σe/S + β·Σmax(0,m−TOL)/TOL`。`T·VC/S` 读作"比理论最快直飞慢多少倍"(归一化只含航线几何与巡航上限,不含任何被搜参数),于是 `α=1` 读作"多走 10% 的路 ≡ 慢 10%"、`β=1` 读作"偏出容差一倍 ≡ 慢一倍" —— 可以凭直觉给,不用试。
+   - 另记:`α` 的中性值是 **0** 不是 1。多走的路必然花时间,那份时间**已经在 `T` 里**;`α>0` 表达的是"即使没多花时间我也不想它绕"这份额外的审美偏好。
+
+**基线(RF13 当日,六条航线等权相加)= `13.894`**,逐条 `A 2.748 / B 2.196 / C 2.645 / D 2.355 / E 1.669 / F 2.282`。`E`(直线两点,能跑满巡航)最低,`F`(单点停车)的 `2.282` 是纯加减速的地板。**当前 `Σe` 与 `Σ超容差偏靠` 六条全为 0**,即 `L ≡ 时间项` —— 反向传播之后控制器已经不冲过头也不偏出容差,`α/β` 暂时没有东西可罚。这意味着**真正的质量旋钮是 `TOL`,不是 `α/β`**:现在的形式等价于"在每个拐点都从 `5000km` 以内经过的前提下跑得最快"。
+
+**留给参数搜索的三个自由度**(都在 physics/30):`GUIDE_EFF=0.55`(刹车曲线只按 55% 推力规划,而实际反推是满推力 1.0)、`ROUTE_TOL()=CFG.passBy`(切角容差,只进 `cornerSpd` 的几何)、`ROUTE_MARGIN()=CFG.passBy`(每段可用刹车距离的保守扣减)。搜索尚未做。
+
+**探针 FLOW13_LOOK 双向判定**:对抗例多走 `<8k` 且偏离 `<7.5k`,**同时**直线对照组峰值仍 `>0.95×巡航` —— 只测对抗例的话,"把每个 pass 点都当 stop 点"(退化成逐点停车)也能通过。
+**顺带的教训**:往 verify.sh 插探针时 `assert src.count(锚点)==1` 是**不够的** —— 锚点唯一不代表探针没被插过。本轮一次被中断的调用里 python 已经执行完才中断,重跑一次就插了两份同名 `t('FLOW13_LOOK')`,两条都跑、都通过,只是结果里出现两遍。**校验要针对被插入的内容本身。**
 
 ## 发布(GitHub Pages)
 
