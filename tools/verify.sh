@@ -769,6 +769,32 @@ t('FLOW8_STATES',function(){ /* RF8 方条三状态各占独立视觉通道:pick
   return (ok?'ok':'fail')+' 暂停条:红边='+red+' 红字='+redTxt+' opacity='+c1.opacity+'(须1,不靠变灰)'
     +' | pick+edit 同条:黄边='+editBorder+' 青字★='+(pickTxt&&star)+'(两通道并存,互不吞噬)';
 });
+t('FLOW8_PICKBTN',function(){ /* RF8b「选择」钮必须【真的点得动】—— 上一版大序列钮逻辑全对,却被委托里的 if(!seq)return 静默吃掉,只测 API 抓不到 */
+  var e=fc5reset(),S=e.S;
+  var s1=fcNew(S,{tid:e.A.id}); fcSetEdit(S,null);
+  var s2=fcNew(S,{tid:e.B.id}); fcSetEdit(S,s2);   /* 序列态 = 序列2 */
+  updateSelPanel(true);
+  var btn=document.getElementById('fcPickBtn');
+  if(!btn)return 'fail #fcPickBtn 不存在';
+  var big0=S.fcBig;
+  btn.click();                                      /* ① 真点:序列2 → 唯一开火 */
+  var big1=S.fcBig,pick1=S.fcPick,on1=btn.classList.contains('on');
+  btn.click();                                      /* ② 再点:回轮询 */
+  var big2=S.fcBig,on2=btn.classList.contains('on');
+  /* ③ 无序列态时按下:只该给提示,不该静默改状态 */
+  fcSetEdit(S,null);
+  btn.click();
+  var big3=S.fcBig;
+  /* ④ 回归:确认旧的委托陷阱没换个地方复发 —— 带 data-seq 的方条动作仍然可点 */
+  fcSetEdit(S,s2);updateSelPanel(true);
+  var bar=document.querySelector('#fcList .fc-bar[data-fc-act="bar"]');
+  var beforeEdit=S.fcEditId; if(bar)bar.click();
+  var barWorks=(String(S.fcEditId)!==String(beforeEdit));
+  var ok=(big0==='rr'&&big1==='pick'&&String(pick1)===String(s2)&&on1
+    &&big2==='rr'&&!on2&&big3==='rr'&&barWorks);
+  return (ok?'ok':'fail')+' 初始='+big0+' 点一下→'+big1+'(pick='+(String(pick1)===String(s2)?'序列2':pick1)+',按钮on='+on1+')'
+    +' 再点→'+big2+'(on='+on2+') | 无序列态时点→'+big3+'(须rr,只提示不改状态) | 方条仍可点='+barWorks;
+});
 t('FLOW6_CHAIN',function(){ /* RF7 数据链渲染:函数存在;编辑态/退出态 render 均不炸(像素断言不做,ERRORS 层兜底) */
   var e=fc5reset();
   fcNew(e.S,{tid:e.A.id});fcAppend(e.S,{tid:e.B.id});

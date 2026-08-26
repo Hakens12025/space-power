@@ -152,10 +152,8 @@ function updateFcPanel(force){ // 由 updateSelPanel 每 20 帧重渲(与卡片�
   const seqs=fcSeqsOf(s)||[];
   const cap=(typeof FC_MAX_SEQS==='number')?FC_MAX_SEQS:5;
   const big=(s.fcBig==='pick');
-  // RF8 大序列按钮:作用域前缀写死在标签里 —— 序列【内】也有一个叫"轮询"的模式(依次/轮询,管这条序列先打哪个目标),
-  // 两级同名会把人绕晕,所以这里恒读作「大序列:xx」,与轮盘左半环那两个作用域标签(整条序列/仅此目标)同一手法。
-  let h=`<div class="fc-big"><span class="fc-btn${big?' on':''}" data-fc-act="big" title="${big?'选择:只用选中的那一条序列反复打(序列即火力模板)':'轮询:多条序列轮流开火,一条打一次换下一条'}">大序列:${big?'选择':'轮询'}</span></div>`;
-  h+='<div class="fc-bars">';
+  fcPickBtnSync(s); // RF8b「选择」钮在标题栏(#fcSec .fc-hd),不在本容器里,单独同步一次状态
+  let h='<div class="fc-bars">';
   for(let i=0;i<cap;i++){
     const q=seqs[i];
     if(!q){h+=`<div class="fc-bar empty" title="空序列槽(Shift+中键点敌舰建序列)"><span class="no">${i+1}</span></div>`;continue;}
@@ -328,19 +326,43 @@ function bindCmdBar(){ // 按钮一次性预生成(舰级2个 + KIND_INFO 每种
   for(const kind in KIND_INFO)ensure('cb_'+kind); // cb_mac/cb_msl/cb_ciws
 }
 bindCmdBar();
+function fcPickBtnSync(s){ // RF8b 同步标题栏「选择」钮:它在 #fcSec .fc-hd 里,是【静态元素】,所以直接改属性即可,不经 innerHTML
+  const b=document.getElementById('fcPickBtn');
+  if(!b)return;
+  const on=!!(s&&s.fcBig==='pick');
+  b.classList.toggle('on',on);
+  const q=(s&&on&&typeof fcSeq==='function')?fcSeq(s.fcPick):null;
+  b.title=on?`当前只用 ${q?q.name:'选中序列'} 开火;再按一次回到轮询(多条序列轮流)`
+            :'把当前序列态那条设为唯一开火序列(序列即火力模板);默认是轮询,多条轮流开火';
+}
+on('fcPickBtn','click',()=>{ // RF8b 舰级「选择」:序列态那条 → 唯一开火序列;再按回轮询
+  const s=selBlue()[0];
+  if(!s){if(typeof log==='function')log('选择:先选中一艘我方舰船','warn');return;}
+  if(typeof fcSetBig!=='function'||typeof fcSetPick!=='function')return;
+  if(s.fcBig==='pick'){
+    fcSetBig(s,'rr');
+    if(typeof log==='function')log(`🎛 ${s.name} 回到轮询(多条序列轮流开火)`,'');
+  }else{
+    const q=(typeof fcSeq==='function')?fcSeq(s.fcEditId):null;
+    if(!q||q.shipId!==s.id){if(typeof log==='function')log('选择:先点一根方条进入序列态,再按选择','warn');return;} // 没有序列态就没有"当前这条",给提示而不是静默
+    fcSetPick(s,q.id);
+    if(typeof log==='function')log(`🎛 ${s.name} 只用 ${q.name} 开火(其余序列暂不参与)`,'');
+  }
+  updateFcPanel(true);
+});
 /* RF5 火控面板事件委托:#fcList 每 20 帧全量重渲,只能把监听挂在稳定容器上,不给动态条目逐个 addEventListener。
    用 core/00 的 on() 挂载(元素不存在会静默跳过,不会中断本文件后续顶层语句)。 */
 on('fcList','click',e=>{
   const el=e.target&&e.target.closest?e.target.closest('[data-fc-act]'):null;
   if(!el)return;
   const s=selBlue()[0];if(!s)return;
-  const seq=fcUiSeq(s,el.dataset.seq);if(!seq)return;
-  const idx=Number(el.dataset.idx),t=(seq.targets||[])[idx];
+  // RF8b 这里【不能】统一 `if(!seq)return`:舰级动作(不带 data-seq)会在进 switch 之前被静默吃掉,
+  // 按钮渲染得好好的、title 也在,就是永远不响应 —— RF8 的大序列钮正是这么"按不动"的。改成逐分支自检。
+  const seq=fcUiSeq(s,el.dataset.seq);
+  const idx=Number(el.dataset.idx),t=(seq&&seq.targets||[])[idx];
   switch(el.dataset.fcAct){
-    case 'big':if(typeof fcSetBig==='function'){fcSetBig(s,s.fcBig==='pick'?'rr':'pick');
-      if(typeof log==='function')log(`🎛 ${s.name} 大序列 → ${s.fcBig==='pick'?('选择('+((fcUiSeq(s,s.fcPick)||{}).name||'—')+' 一直打)'):'轮询(多条轮流)'}`,'');}
-      break; // RF8 舰级:轮询 ⇄ 选择
     case 'bar':
+      if(!seq)return;
       if(s.fcBig==='pick'&&typeof fcSetPick==='function'&&String(s.fcPick)!==String(seq.id)){ // RF8 选择模式下点别的方条 = 改选它来打(顺带进序列态,看得见链)
         fcSetPick(s,seq.id);
         if(typeof fcSetEdit==='function')fcSetEdit(s,seq.id);
@@ -351,11 +373,11 @@ on('fcList','click',e=>{
       // 玩家看不出自己刚把火力关了。要停火用底栏火控开关或暂停该序列,不该是"再点一下方条"的副作用。
       if(typeof fcSetEdit==='function')fcSetEdit(s,String(s.fcEditId)===String(seq.id)?null:seq.id);
       break; // RF7 点方条:进入序列态,再点同一根=退出(fcSetEdit 传 null 即清编辑态,地图蓝链随之熄灭)
-    case 'mode':if(typeof fcSetMode==='function')fcSetMode(seq.id,seq.mode==='rr'?'seq':'rr');break;
-    case 'pause':if(typeof fcTogglePause==='function')fcTogglePause(seq.id);break;
-    case 'del':if(typeof fcRemove==='function')fcRemove(seq.id);break;
-    case 'delt':if(typeof fcRemoveTarget==='function')fcRemoveTarget(seq.id,idx);break;
-    case 'mac':case 'msl':{ // 许可徽标取反;allow 缺省视为 true,与 fcNew 的缺省口径一致
+    case 'mode':if(!seq)return;if(typeof fcSetMode==='function')fcSetMode(seq.id,seq.mode==='rr'?'seq':'rr');break;
+    case 'pause':if(!seq)return;if(typeof fcTogglePause==='function')fcTogglePause(seq.id);break;
+    case 'del':if(!seq)return;if(typeof fcRemove==='function')fcRemove(seq.id);break;
+    case 'delt':if(!seq)return;if(typeof fcRemoveTarget==='function')fcRemoveTarget(seq.id,idx);break;
+    case 'mac':case 'msl':{if(!seq)return; // 许可徽标取反;allow 缺省视为 true,与 fcNew 的缺省口径一致
       const k=el.dataset.fcAct;
       if(t&&typeof fcSetAllow==='function')fcSetAllow(seq.id,idx,k,!(!t.allow||t.allow[k]!==false));
       break;}

@@ -352,10 +352,10 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
    接手原 #selEvents 的 flex:1 1 auto 角色:序列多了在面板内部滚动,不外溢也不顶穿。
    #selInfo 已带 border-bottom,这里不再补 border-top,避免两条线叠成 2px。 */
 #fcSec{padding:var(--sp-2) var(--sp-3);overflow-y:auto;flex:1 1 auto;min-height:52px} /* 口径与原 #selEvents 一致。basis 必须是 auto:#selPanel 只有 max-height 没有 height(高度按内容撑),basis:0 会让本区永远塌到 min-height;同理百分比 max-height 在这种父容器里退化成 none,两条都实测过 */
-#fcSec .fc-hd{font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label);margin-bottom:var(--sp-1)}
+#fcSec .fc-hd{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-2);font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label);margin-bottom:var(--sp-1)}
+#fcSec .fc-hd .fc-btn{flex:none;letter-spacing:var(--ls-label)} /* RF8b 标题栏里的"选择"钮,沿用 #fcList .fc-btn 的配方(下面那条选择器已含 #fcSec 后代,这里只补 flex 行为) */
 #fcSec .fc-empty{font-size:var(--fs-label);color:var(--txt-mute);line-height:var(--lh-tight);padding:var(--sp-2) 0;text-align:center}
 /* RF7 火控计算机重做:五根竖直方条=五个序列槽,点击进入/退出序列态;.fc-seq 三条为旧富列表样式,只藏不删(html 不再产出该 class) */
-#fcList .fc-big{display:flex;justify-content:flex-end;margin-bottom:var(--sp-1)} /* RF8 大序列(舰级:轮询/选择)开关,放方条上方 */
 #fcList .fc-bars{display:flex;gap:var(--sp-1);margin-bottom:var(--sp-1)}
 #fcList .fc-bar{flex:1 1 0;min-width:0;height:46px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;border:var(--bw) solid var(--line);border-radius:var(--r-sm);background:var(--srf-sunk);cursor:pointer;user-select:none}
 #fcList .fc-bar.empty{opacity:.35;cursor:default}
@@ -383,10 +383,10 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #fcList .fc-tag{flex:none;font-size:var(--fs-micro);letter-spacing:var(--ls-label);color:var(--txt-dim);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);padding:0 3px}
 #fcList .fc-tag.on{color:var(--state-active);border-color:var(--state-active)}
 #fcList .fc-tag.paused{color:var(--state-danger);border-color:var(--state-danger)} /* RF8 与方条的红同一个 token */
-#fcList .fc-btn{flex:none;font-size:var(--fs-micro);letter-spacing:var(--ls-label);color:var(--txt-mute);background:none;border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);padding:0 4px;cursor:pointer;user-select:none;font-family:var(--ff-ui);line-height:1.45}
-#fcList .fc-btn.on{color:var(--state-active);border-color:var(--state-active)}
-#fcList .fc-btn:hover{color:var(--txt-hi);border-color:var(--line-acc);background:var(--srf-hover)}
-#fcList .fc-btn.danger:hover{color:var(--state-warn);border-color:var(--state-warn)}
+#fcList .fc-btn,#fcSec .fc-hd .fc-btn{flex:none;font-size:var(--fs-micro);letter-spacing:var(--ls-label);color:var(--txt-mute);background:none;border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);padding:0 4px;cursor:pointer;user-select:none;font-family:var(--ff-ui);line-height:1.45}
+#fcList .fc-btn.on,#fcSec .fc-hd .fc-btn.on{color:var(--state-active);border-color:var(--state-active)}
+#fcList .fc-btn:hover,#fcSec .fc-hd .fc-btn:hover{color:var(--txt-hi);border-color:var(--line-acc);background:var(--srf-hover)}
+#fcList .fc-btn.danger:hover,#fcSec .fc-hd .fc-btn.danger:hover{color:var(--state-warn);border-color:var(--state-warn)}
 #fcList .fc-it{display:flex;align-items:center;gap:var(--sp-1);padding:2px 0;margin-top:2px;border-top:var(--bw) solid var(--line-hair);font-size:var(--fs-label)}
 #fcList .fc-it .nm{flex:1;min-width:0;color:var(--txt-read);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #fcList .fc-it .hp{flex:none;min-width:30px;text-align:right;font-family:var(--ff-mono);font-size:var(--fs-micro);letter-spacing:var(--ls-read);font-variant-numeric:tabular-nums;color:var(--txt-dim)}

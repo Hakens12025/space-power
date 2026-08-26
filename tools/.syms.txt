@@ -184,6 +184,7 @@ fcEditFollowSel
 fcGate
 fcInit
 fcNew
+fcPickBtnSync
 fcPush
 fcRemove
 fcRemoveTarget
