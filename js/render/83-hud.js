@@ -480,6 +480,30 @@ const FC_FLOW_DASH=[9,15];                                     // 亮段 9px / �
 const FC_FLOW_PERIOD=FC_FLOW_DASH[0]+FC_FLOW_DASH[1];          // 24px
 const FC_FLOW_PXPS=30;
 const FC_TIE_MAX=48;   // RF10 单段枕木数上限:防止段长极大时循环次数失控(见 drawFcChain 内注释)                                         // 流动速度(像素/秒):约 0.8 秒走完一个周期,看得出方向又不晃眼
+function drawGhost(){ // RF11 移动虚影:右键长按时在目的地画一个半透明舰体,朝向随鼠标转;附一条预演航线
+  if(typeof ghostMove==='undefined'||!ghostMove)return;
+  const s=(typeof ships!=='undefined')?ships.find(x=>x.id===ghostMove.id):null;
+  if(!s||s.dead){return;} // 船没了就不画(清账在 70-input 的 blur/mouseup)
+  const g=toScreen(ghostMove.wx,ghostMove.wy), p=toScreen(s.pos[0],s.pos[1]);
+  if(!isFinite(g[0])||!isFinite(p[0]))return; // 与 drawFcChain 同一道防线:非有限坐标不进绘制
+  ctx.save();
+  // 预演航线:当前位置 → 目的地。虚线,压得比命令点连线更淡,免得和已有航线抢
+  ctx.setLineDash([7,6]);ctx.strokeStyle='#ffe066';ctx.globalAlpha=.45;ctx.lineWidth=1.2;
+  ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(g[0],g[1]);ctx.stroke();
+  ctx.setLineDash([]);
+  // 目的地十字(与 drawOrders 的目标点 X 同形,让人认出这就是一个 stop 令)
+  ctx.globalAlpha=.7;ctx.lineWidth=1.4;
+  ctx.beginPath();
+  ctx.moveTo(g[0]-5,g[1]-5);ctx.lineTo(g[0]+5,g[1]+5);
+  ctx.moveTo(g[0]+5,g[1]-5);ctx.lineTo(g[0]-5,g[1]+5);
+  ctx.stroke();
+  // 半透明舰体:走 10-hull-geometry 的 outline 模式,尺寸用【真实 tier】—— 自己的船不做情报遮蔽
+  const ang=Math.atan2(ghostMove.face[1],ghostMove.face[0]);
+  ctx.globalAlpha=.5;
+  ctx.translate(g[0],g[1]);ctx.rotate(ang);
+  if(typeof drawHull==='function'&&typeof shipHull==='function')drawHull(ctx,shipHull(s),(s.tier||2),'#ffe066','outline');
+  ctx.restore();
+}
 function drawFcChain(){ // RF7 火控序列态的数据链(蓝色铁路线):主体舰 → T1 → T2 …,只画当前编辑序列的链。
   // 序列态 = 主体舰(selBlue()[0])选中 且 fcEditId 指向自己的序列 —— Shift+中键选定与火控计算机点方条都会置它;
   // 再点同一根方条 fcSetEdit(s,null) 退出,链随之熄灭。铁路线画法:主线 + 垂直短刺(枕木),数据链蓝 #4fe0ff(canvas 侧既有的强调青,83:218 传感器圈同款,不新造颜色)。

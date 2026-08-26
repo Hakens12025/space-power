@@ -3,6 +3,10 @@
 /* ================= 输入 ================= */
 const MMB_HOLD_MS=350;  // RF5 中键短按/长按分界(毫秒):短按=快速交战,长按留给 Phase C 的目标轮盘
 let mmb=null;           // RF5 中键按下计时 {t:墙钟毫秒,sx,sy}。就近声明在 70-input 而不是 core/01-state:它只被本文件的 down/up/blur 三处读写,且 74-targeting 缺席时本文件仍要能独立工作
+let ghostMove=null;     // RF11 右键长按的移动虚影 {wx,wy,face:[dx,dy],id}。占用的是【右键长按】这条通道:
+                        // 它原本超时呼出命令菜单,而那个菜单被 RF2 的 SIMPLE_UI 在 showCtx 首行拦死了,通道一直空着。
+                        // 分流靠"按下就动=平移 / 按住不动满 350ms=虚影":想平移的人不会先停顿,所以右键拖动平移完好无损
+                        // (RF5 Phase B 拆掉中键平移后,右键拖动是【唯一】的鼠标平移方式,不能被这个功能吃掉)。
 let mmbTimer=null;      // RF5 Phase C 中键长按开轮盘的定时器句柄。同上就近声明(只被本文件 down/move/up/blur 四处读写);与 core/01-state 的 rmbTimer 是两回事,不要复用
 function shipAt(sx,sy){
   const w=worldAt(sx,sy);
@@ -299,9 +303,19 @@ function onMouseDown(e){
     panning={sx,sy,cx:cam.x,cy:cam.y,moved:false};
     rmbClick={sx,sy,onShip:shipAt(sx,sy),shift:e.shiftKey}; // RF5 拆掉 etgt(RF4b 右键点敌舰锁定的唯一喂料):锁定分支已移除,该字段零消费者,顺带省掉每次右键按下的一次全 ships 扫描
     clearTimeout(rmbTimer);
-    rmbTimer=setTimeout(()=>{ // 按住呼出菜单
+    rmbTimer=setTimeout(()=>{ // 按住:RF11 起进移动虚影(原为呼出命令菜单,该菜单被 SIMPLE_UI 拦死,通道空置)
       if(rmbClick&&!panning.moved){
-        openCtx(rmbClick.sx,rmbClick.sy,rmbClick.onShip||null);
+        // RF11 只在【恰好选中一艘蓝舰】且无 Shift 时进虚影:多舰编队要另一套(阵位/朝向分配),先做单舰;
+        // Shift+右键仍是追加路径点,两个功能都占长按会打架。任何 pending 待命态存在时也让位——那些是点选式命令,虚影会抢它们的点击。
+        const sel=(typeof selBlue==='function')?selBlue():[];
+        const busy=pendingMove||pendingTurn||pendingIntercept||pendingBeacon||pendingManual||pendingMine||selWeapon
+          ||pendingTaskPatrol||pendingTaskIntercept||pendingTaskDeny||pendingTaskEscort||pendingTaskStrike;
+        if(sel.length===1&&!rmbClick.shift&&!busy&&!editMode){
+          const w=worldAt(rmbClick.sx,rmbClick.sy);
+          ghostMove={wx:w[0],wy:w[1],face:sel[0].facing.slice(),id:sel[0].id};
+        }else{
+          openCtx(rmbClick.sx,rmbClick.sy,rmbClick.onShip||null); // 不满足条件时沿用旧行为(SIMPLE_UI 下 showCtx 自己会早退)
+        }
         rmbClick=null;rmbTimer=null;
       }
     },350);
@@ -350,6 +364,13 @@ window.addEventListener('mousemove',e=>{
     if(Math.abs(selDrag.x1-selDrag.x0)+Math.abs(selDrag.y1-selDrag.y0)>6)updateDragSel();}
   if(panning){
     const dx=e.clientX-panning.sx, dy=e.clientY-panning.sy;
+    if(ghostMove){ // RF11 虚影已弹出:鼠标移动改的是【到达朝向】,不再平移视角。
+      // 朝向 = 从目的地指向当前光标(RTS 通用手法:从落点拖出一个方向)。光标压在目的地上时方向未定义,保持上一次。
+      const w=worldAt(e.clientX,e.clientY);
+      const fx=w[0]-ghostMove.wx, fy=w[1]-ghostMove.wy, fl=Math.hypot(fx,fy);
+      if(fl>1e-6)ghostMove.face=[fx/fl,fy/fl,0];
+      return;
+    }
     if(Math.abs(dx)+Math.abs(dy)>5){panning.moved=true;if(rmbClick)rmbClick=null;clearTimeout(rmbTimer);rmbTimer=null;}
     panBy(dx,dy);panning.sx=e.clientX;panning.sy=e.clientY;
   }
@@ -409,6 +430,17 @@ window.addEventListener('mouseup',e=>{
     else log('巡逻至少需要2个点','warn');
     pendingTaskPatrol=null;taskPatrolPts=[];hideTip();rmbClick=null;return;
   }
+  if(e.button===2&&ghostMove){ // RF11 松开右键 = 虚影落地,下达【带到达朝向】的移动命令
+    const g=ghostMove;ghostMove=null;panning=null;rmbClick=null;clearTimeout(rmbTimer);rmbTimer=null;
+    const s=(typeof ships!=='undefined')?ships.find(x=>x.id===g.id):null;
+    if(s&&!s.dead){
+      s.orders=[];s.patrol=null;s.formation=null;s.brake=false;s.turnTarget=null;s.turnNoFm=false;
+      s.orders.push({pos:[g.wx,g.wy,0],type:'stop',face:g.face.slice()}); // face 是【新字段】:physics/31 的到位分支消费它
+      resetForNewOrders(s);
+      log(`${s.name} 移动 → ${Math.round(g.wx/1000)}k,${Math.round(g.wy/1000)}k · 到达朝向 ${Math.round((Math.atan2(g.face[1],g.face[0])*180/Math.PI+360)%360)}°`,'');
+    }
+    return;
+  }
   if(e.button===2&&rmbClick){
     clearTimeout(rmbTimer);rmbTimer=null; // 松开:取消长按(已弹菜单则rmbClick已清,这里是单击)
     const rMoved=panning&&panning.moved;
@@ -443,7 +475,7 @@ function onWheel(e){e.preventDefault(); // preventDefault 仍是第一句(注册
     if(typeof radPage==='function')radPage(e.deltaY>0?1:-1);return;} // 下滚=往后翻,与浏览器一致;只取符号
   zoomAt(e.clientX,e.clientY,Math.pow(1.0016,-e.deltaY));}
 // RF5 失焦清理 +mmb:不清的话切窗回来会残留一个"按下未抬起"的中键计时,回来随手一抬就误触快速交战
-window.addEventListener('blur',()=>{panning=null;selDrag=null;rmbClick=null;dragOrder=null;mmb=null;clearTimeout(rmbTimer);rmbTimer=null;clearTimeout(mmbTimer);mmbTimer=null;/* RF5 Phase C:不清的话切窗回来会凭空弹出轮盘 */for(const k in camKeys)camKeys[k]=false;}); // v119:失焦清相机键位,防切窗后镜头卡移动
+window.addEventListener('blur',()=>{ghostMove=null;panning=null;selDrag=null;rmbClick=null;dragOrder=null;mmb=null;clearTimeout(rmbTimer);rmbTimer=null;clearTimeout(mmbTimer);mmbTimer=null;/* RF5 Phase C:不清的话切窗回来会凭空弹出轮盘 */for(const k in camKeys)camKeys[k]=false;}); // v119:失焦清相机键位,防切窗后镜头卡移动
 
 function selectedShips(){return selected.map(id=>ships.find(s=>s.id===id)).filter(Boolean);}
 function controlledShips(){ // 可控制目标:GM(管理员)下敌我皆可,普通模式只控制我方

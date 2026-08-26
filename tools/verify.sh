@@ -825,6 +825,32 @@ t('FLOW9_ENG',function(){ /* RF9 实时状态的速度/加速度读数:数值取
     +' 纯转向「'+D.txt+'」(须 0 且标姿态:sideFlame='+D.sf+' engSide='+D.side+')'
     +' | 速度行='+(okS?'有':'缺');
 });
+t('FLOW11_GHOST',function(){ /* RF11 移动虚影:到达【形态】必须与虚影一致 —— 位置在容差内,且朝向不许对准后又飘走 */
+  var e=fc5reset(),s=e.S;
+  function run(dist,deg){
+    s.formation=null;s.brake=false;s.lockedTarget=null;s.turnTarget=null;s.turnNoFm=false;
+    s.pos=[0,0,0];s.vel=[0,0,0];s.facing=[1,0,0];s.crawling=false;s.orders=[];
+    var r=deg*Math.PI/180, face=[Math.cos(r),Math.sin(r),0];
+    s.orders=[{pos:[dist,0,0],type:'stop',face:face.slice()}];
+    var pre=-1,arr=-1,errArr=-1,dArr=-1,back=0,algd=false;
+    for(var i=1;i<=9000;i++){
+      stepShipsMotion(0.02);
+      if(pre<0&&s.turnTarget)pre=i;
+      var err=Math.acos(Math.max(-1,Math.min(1,s.facing[0]*face[0]+s.facing[1]*face[1])))*180/Math.PI;
+      if(!algd&&err<2)algd=true;
+      if(algd&&err>back)back=err;
+      if(s.orders.length===0){arr=i;errArr=err;dArr=Math.hypot(s.pos[0]-dist,s.pos[1]);break;}
+    }
+    return {pre:pre,arr:arr,errArr:errArr,dArr:dArr,back:back};
+  }
+  var A=run(40000,-90), B=run(40000,180);
+  /* 判据三条:①提前起转确实发生在到位【之前】 ②到位时朝向已对上 ③对准后不许再飘走(锁不住的话 steerToVel 会夺回机头) */
+  var ok=(A.pre>0&&A.pre<A.arr&&A.errArr<3&&A.back<3&&A.dArr<CFG.arrive*2
+        &&B.pre>0&&B.pre<B.arr&&B.errArr<3&&B.back<3&&B.dArr<CFG.arrive*2);
+  return (ok?'ok':'fail')
+    +' 转90°:起转@'+A.pre+'<到位@'+A.arr+' 到位朝向误差'+A.errArr.toFixed(2)+'° 对准后回飘'+A.back.toFixed(2)+'° 位置'+Math.round(A.dArr)+'km'
+    +' | 转180°:起转@'+B.pre+'<到位@'+B.arr+' 误差'+B.errArr.toFixed(2)+'° 回飘'+B.back.toFixed(2)+'°(须<3,锁不住会到19°) 位置'+Math.round(B.dArr)+'km';
+});
 t('FLOW6_CHAIN',function(){ /* RF7 数据链渲染:函数存在;编辑态/退出态 render 均不炸(像素断言不做,ERRORS 层兜底) */
   var e=fc5reset();
   fcNew(e.S,{tid:e.A.id});fcAppend(e.S,{tid:e.B.id});

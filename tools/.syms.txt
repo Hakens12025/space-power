@@ -141,6 +141,7 @@ drawEditPreview
 drawEditWps
 drawFcChain
 drawFlame
+drawGhost
 drawGrid
 drawHits
 drawHoverRings
@@ -242,6 +243,7 @@ formationSpacing
 formationTargets
 frame
 frameN
+ghostMove
 gridStepCache
 groupAt
 groupCards

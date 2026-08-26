@@ -52,8 +52,30 @@ function stepShipsMotion(dt){
           s.orders.shift(); log(`${s.name} 经过路径点`,''); continue;
         }
       }else{ // 目标点:到位停(DS191:曲线单调收敛,原v124冲过头检测+KIMI151c爬行滞回+120限速补丁全删,不再振荡)
+        // RF11 到达朝向(右键长按虚影下的令带 cur.face):【提前起转】——虚影承诺的是"到达即如此",
+        // 若等到位再原地转,巡洋舰掉头 180° 要 19.6 秒(turnRate 0.16),那段时间玩家看到的和虚影不一致。
+        // 触发判据:剩余航程时间 <= 需要的转向时间。转向由 RF6 的独立朝向层执行,与减速并行,不抢推进。
+        if(cur.face){
+          const fa=cur.face, ang=V.angle(s.facing,fa);
+          const turnT=ang/Math.max(1e-6,s.turnRate);          // 转到位所需秒数
+          const travelT=dist/Math.max(1,vn);                  // 按当前速度还要飞多久(vn 很小时这个值很大,自然不会提前触发)
+          if(!cur.pt&&ang>0.02&&travelT<=turnT*1.15)cur.pt=true; // 留 15% 余量:减速段速度还在降,travelT 会继续变大
+          // 【每 tick 重设,不能只设一次】:朝向层对准后会把 turnTarget 清掉,steerToVel 随即夺回机头、
+          // 把它转向减速推力方向 —— 实测 180° 那组会先对准、再飘走 18.65°,虚影承诺当场失效。
+          // 重设也顺带挡住 steerToVel(它的推进段带 !s.turnTarget 门,见 30-motion RF6 那条);
+          // 必须排在下面的 guideTo 之前,否则本 tick 的机头已被推力方向抢走。
+          if(cur.pt){
+            s.turnTarget=[s.pos[0]+fa[0]*1e7, s.pos[1]+fa[1]*1e7, 0]; // 朝向层读的是【世界点】,故把方向外推成远点(1e7 相对航程 ~1e4,方向漂移可忽略)
+            s.turnNoFm=true;                                  // 单舰令,不带动阵型
+          }
+        }
         if(dist<CFG.arrive*2 && vn<CFG.stopSpeed){
-          s.vel=[0,0,0]; s.crawling=false; s.orders.shift(); log(`${s.name} 到位`,''); continue;
+          s.vel=[0,0,0]; s.crawling=false;
+          // RF11 到位时若朝向还没对上(提前起转来不及,比如近距离大角度),补一次原地转 —— 虚影的承诺必须兑现
+          if(cur.face&&V.angle(s.facing,cur.face)>0.02&&!s.turnTarget){
+            s.turnTarget=[s.pos[0]+cur.face[0]*1e7, s.pos[1]+cur.face[1]*1e7, 0];s.turnNoFm=true;
+          }
+          s.orders.shift(); log(`${s.name} 到位`,''); continue;
         }
       }
       guideTo(s,cur.pos,[0,0,0],cruiseOf(s),cur.type!=='pass',dt); // DS191:统一导引律(pass全速掠过/stop曲线停靠)

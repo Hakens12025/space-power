@@ -257,6 +257,7 @@ const TUT_HTML=`
         <tr><td><code class="key">W</code> <code class="key">A</code> <code class="key">S</code> <code class="key">D</code></td><td>相机平移</td><td>按住持续移动，不是单次</td></tr>
         <tr><td><code class="key">1</code> … <code class="key">4</code></td><td>选择编组</td><td><code class="num">400 毫秒</code>内连按两次，镜头跳到该组质心</td></tr>
         <tr><td><code class="key">Ctrl</code> + <code class="key">1</code> … <code class="key">4</code></td><td>编组</td><td>覆盖式，重编会踢出原有成员</td></tr>
+        <tr><td>右键长按（选中单舰）</td><td>移动虚影</td><td>按住不动约 <code class="num">0.35 秒</code>弹出半透明舰影，转动鼠标改到达朝向，松手下令；船会提前起转，到位时姿态与虚影一致</td></tr>
         <tr><td><code class="key">V</code></td><td>船头转向命令</td><td>按下后左键点地图给方向，再按一次取消；转向与移动是并行的，下了转向令航线照走</td></tr>
         <tr><td><code class="key">G</code></td><td>倒车</td><td>船头正后方 <code class="num">30k 公里</code>放一个停车点，脱离编队</td></tr>
         <tr><td><code class="key">C</code></td><td>测距</td><td>按住不放；只选中一艘时起点跟着该舰，多选或未选则钉在按键那一刻的光标处</td></tr>
