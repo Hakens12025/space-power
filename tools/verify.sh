@@ -760,13 +760,16 @@ t('FLOW8_STATES',function(){ /* RF8 方条三状态各占独立视觉通道:pick
   var b1=bars[0],b2=bars[1];
   var c1=getComputedStyle(b1),c2=getComputedStyle(b2);
   var red=(c1.borderTopColor.indexOf('255, 107, 107')>=0);
+  var dashed=(c1.borderTopStyle==='dashed');                    /* RF8c 虚线框 */
+  var slash=(c1.backgroundImage.indexOf('gradient')>=0);        /* RF8c 对角斜线(background-image) */
+  b1.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));  /* hover 时禁止语义不许被冲掉(hover 规则用 background 简写,顺序错了就没了) */
   var notFaded=(parseFloat(c1.opacity)>0.95);            /* 不许再靠变灰:opacity 必须是 1 */
   var redTxt=(getComputedStyle(b1.querySelector('.no')).color.indexOf('255, 107, 107')>=0);
   var editBorder=(c2.borderTopColor.indexOf('255, 224, 102')>=0); /* --state-select 黄边仍在 */
   var pickTxt=(getComputedStyle(b2.querySelector('.no')).color.indexOf('84, 224, 208')>=0); /* --state-active 青字,没被 edit 吞掉 */
   var star=(b2.querySelector('.no').textContent.indexOf('★')>=0);
-  var ok=(red&&notFaded&&redTxt&&editBorder&&pickTxt&&star);
-  return (ok?'ok':'fail')+' 暂停条:红边='+red+' 红字='+redTxt+' opacity='+c1.opacity+'(须1,不靠变灰)'
+  var ok=(red&&dashed&&slash&&notFaded&&redTxt&&editBorder&&pickTxt&&star);
+  return (ok?'ok':'fail')+' 暂停条:红边='+red+' 虚线='+dashed+' 斜线='+slash+' 红字='+redTxt+' opacity='+c1.opacity+'(须1,不靠变灰)'
     +' | pick+edit 同条:黄边='+editBorder+' 青字★='+(pickTxt&&star)+'(两通道并存,互不吞噬)';
 });
 t('FLOW8_PICKBTN',function(){ /* RF8b「选择」钮必须【真的点得动】—— 上一版大序列钮逻辑全对,却被委托里的 if(!seq)return 静默吃掉,只测 API 抓不到 */

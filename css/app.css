@@ -29,6 +29,7 @@
   --acc-lite:#9fd4ff;
   --acc-dim:#2f6fae;
   --acc-wash:rgba(90,167,255,.14);/* 持续开启态的淡填充:开=淡填充,按下=实心 */
+  --danger-wash:rgba(255,107,107,.10);/* RF8c 禁止态的淡填充,照 --acc-wash 的先例;RGB 与 --state-danger 同源 */
   /* ---- 战术语义色(只描述战术要素,不做 chrome) ---- */
   --side-friend:#5aa7ff;
   --side-hostile:#ff6b6b;
@@ -368,9 +369,18 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #fcList .fc-bar.edit{border-color:var(--state-select);background:var(--srf-sel)} /* 序列态高亮,配方抄 .card.sel */
 /* RF8 暂停:原为 opacity:.55 —— 变灰在这个本来就偏暗的面板上几乎看不出来。改成红色实态(边框+淡红底+红字),
    与 .fc-btn.danger 同一个 --state-danger,语义是"这条序列停着、一发不打"。刻意不叠 opacity:压暗会把红一起压掉。 */
-#fcList .fc-bar.paused{border-color:var(--state-danger);background:rgba(255,107,107,.10)}
-#fcList .fc-bar.paused .no,#fcList .fc-bar.paused .md,#fcList .fc-bar.paused .ct{color:var(--state-danger)}
 #fcList .fc-bar:not(.empty):hover{border-color:var(--line-acc);background:var(--srf-hover)}
+/* RF8c 暂停 = 禁止语义三件套:虚线框(不是实的,表示"这条不在生效")+ 对角斜线(划掉)+ 红色。
+   只用红色实框实测仍读作"高亮/告警",区分不出"停用" —— 用户反馈"意思不是特别有效"。
+   斜线用 linear-gradient 画在 background-image 上,不加 DOM:`to top right` 的渐变线从左下角指向右上角,
+   50% 处那条窄带因此横跨【左上→右下】,正是禁止符号的斜杠方向。线宽 2px,压在序号上就是"划掉"的读法。
+   【必须排在 :hover 之后】—— hover 那条用的是 background 简写,会把 background-image(斜线)连同底色一起冲掉,
+   排在它前面的话鼠标一放上去禁止语义就整个消失。下面单独给 paused:hover 保留悬停反馈,但只动 background-color。 */
+#fcList .fc-bar.paused{border-style:dashed;border-color:var(--state-danger);
+  background-color:var(--danger-wash);
+  background-image:linear-gradient(to top right,transparent calc(50% - 1px),var(--state-danger) calc(50% - 1px),var(--state-danger) calc(50% + 1px),transparent calc(50% + 1px))}
+#fcList .fc-bar.paused:hover{border-color:var(--state-danger);background-color:var(--srf-hover)} /* 悬停仍给反馈,但虚线+斜线不许被冲掉 */
+#fcList .fc-bar.paused .no,#fcList .fc-bar.paused .md,#fcList .fc-bar.paused .ct{color:var(--state-danger)}
 #fcList .fc-bar .no{font-family:var(--ff-mono);font-size:var(--fs-label);letter-spacing:var(--ls-read);color:var(--txt-hi);line-height:1}
 #fcList .fc-bar .md{font-size:var(--fs-micro);color:var(--txt-dim);line-height:1}
 #fcList .fc-bar .ct{font-family:var(--ff-mono);font-size:var(--fs-micro);font-variant-numeric:tabular-nums;color:var(--txt-mute);line-height:1}
@@ -382,7 +392,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #fcList .fc-row .nm{flex:1;min-width:0;color:var(--txt-hi);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #fcList .fc-tag{flex:none;font-size:var(--fs-micro);letter-spacing:var(--ls-label);color:var(--txt-dim);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);padding:0 3px}
 #fcList .fc-tag.on{color:var(--state-active);border-color:var(--state-active)}
-#fcList .fc-tag.paused{color:var(--state-danger);border-color:var(--state-danger)} /* RF8 与方条的红同一个 token */
+#fcList .fc-tag.paused{color:var(--state-danger);border-color:var(--state-danger);border-style:dashed} /* RF8 与方条的红同一个 token;RF8c 同步改虚线 */
 #fcList .fc-btn,#fcSec .fc-hd .fc-btn{flex:none;font-size:var(--fs-micro);letter-spacing:var(--ls-label);color:var(--txt-mute);background:none;border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);padding:0 4px;cursor:pointer;user-select:none;font-family:var(--ff-ui);line-height:1.45}
 #fcList .fc-btn.on,#fcSec .fc-hd .fc-btn.on{color:var(--state-active);border-color:var(--state-active)}
 #fcList .fc-btn:hover,#fcSec .fc-hd .fc-btn:hover{color:var(--txt-hi);border-color:var(--line-acc);background:var(--srf-hover)}
