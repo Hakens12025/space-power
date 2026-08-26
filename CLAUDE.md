@@ -48,7 +48,7 @@ CHROME="/c/Program Files/Google/Chrome/Application/chrome.exe"
 - `function` 提升只在单个 script 内生效:某文件顶层**立即执行**的语句(裸 `getElementById` 绑定、`on(...)` 调用)只受同文件顺序与上述两条硬约束限制。新增文件插到 index.html 时按系统目录归位。
 - 新增 DOM 后**不要顶层裸调 `document.elementFromPoint` 之类的 `getElementById(x).addEventListener`** —— 元素不存在时会抛错并中断该文件后续所有顶层语句(静默丢绑定)。用 `core/00-config.js` 的 `on(id,ev,fn)` 安全挂载。重灾区:scenario/92(8 条裸绑定)、command/73(约 18 条)——**改 HTML id 必须同步这两处**。
 - 全是顶层全局函数/变量,没有模块化(`import/export` 在 `file://` 下被 CORS 拦死)。每个 js 文件自带 `"use strict";`。
-- 行内 `DS195`/`KIMI155`/`TIER1`/`RANGE1`/`UI1` 标记记录"这行哪一版改的、为什么",很多注释写了被替换的旧做法和踩过的坑。**不要清理**;自己改动按同格式补标记 + 一句原因。`RF1` = 2026-08 目录解耦重构(纯移动/纯提取,行为零改变);`RF5` = 2026-08 火控序列(Phase A:引擎 weapons/58 + 面板 render/88;Phase B:入口 command/74;Phase C:目标轮盘 = render/89 几何 + command/74 数据;Phase D:教程模态 render/85-tutorial + 顶栏 `#btnTut`,标记写 `RF5-D`)。
+- 行内 `DS195`/`KIMI155`/`TIER1`/`RANGE1`/`UI1` 标记记录"这行哪一版改的、为什么",很多注释写了被替换的旧做法和踩过的坑。**不要清理**;自己改动按同格式补标记 + 一句原因。`RF1` = 2026-08 目录解耦重构(纯移动/纯提取,行为零改变);`RF5` = 2026-08 火控序列(Phase A:引擎 weapons/58 + 面板 render/88;Phase B:入口 command/74;Phase C:目标轮盘 = render/89 几何 + command/74 数据;Phase D:教程模态 render/85-tutorial + 顶栏 `#btnTut`,标记写 `RF5-D`);`RF6` = 2026-08 主炮射程分两块 + 运动分层并行 + 三处既有 bug 修复。
 - **RF5 交互模型**(改了鼠标语义,接手前先看这条):
   - **中键短按(<350ms 且位移≤5px)= 快速交战** —— 主体舰(`selBlue()[0]`)对准星吸附的敌舰 `fcNew` 建一条火控序列。
   - **中键长按(≥350ms、无位移、准星已吸附)= 目标轮盘**。长按判定在 **mousedown 起的 `mmbTimer` 定时器里**做,**松手前就弹**(手柄轮盘的手感),不是等 mouseup。三种上下文按当前编辑序列 `fcSeq(sub.fcEditId)` 分岔,且**都在开盘那一瞬就提交 fc\***(误触也不丢进度,序列立刻出现在右栏火控计算机里):目标**已在**该序列 → 只编辑;**不在 + Shift** → `fcAppend` 追加到末尾;**不在 + 无 Shift** → `fcNew` 新建(自带暂停该舰任务 + 强开 `autoEngage`/`roe='free'` 两个副作用,是预期行为,所以三种上下文的日志刻意分开写)。武器项只有一件时(CV)**不开轮盘**,直接一条日志 —— 且**取反只在编辑上下文做**,新建/追加时保留刚提交的缺省许可。
@@ -72,7 +72,7 @@ CHROME="/c/Program Files/Google/Chrome/Application/chrome.exe"
 | `render/` | `80-camera` · `81-background`(星云/网格)· `82-ship-icons` · `83-hud`(+RF5 `drawTargeting`:准星/吸附圈/按射程着色的预览线)· `84-scene`(render 图层管线)· `85-settings` · `85-tutorial`(**RF5-D 教程模态**:`TUT_HTML` 全文 + `tutToggle`/`tutIsOpen`,与 `85-settings` **共用编号 85**,先例是 weapons/51-defs 与 51-ciws)· `86-log` · `87-fleetcards` · `88-selpanel`(RF2 选中舰面板+底栏开关;+RF5 火控计算机面板 `#fcSec`/`#fcList`,`updateFcPanel`;`KIND_INFO` 是 kind→开关字段/射程/文案的**唯一映射**)· `89-radial`(**RF5 Phase C 目标轮盘的几何唯一真相**:半径/角度/容量常量 + `drawRadial`/`radialHit`/`radialInBand`/`radPages`/`radSlots`,只读 `rad` 从不写) | 呈现 |
 | `scenario/` | `90-envs`(TEST_ENVS/curEnv/DEFAULT_ENEMY)· `91-init`(initFleet/initEnemy)· `92-editor`(编辑器+applyClsTier)· `93-replay`(回放+场景菜单+GM/互搏按钮)· `94-demo` · `95-range`(靶场全部) | 对局生命周期 |
 
-**全局状态归属表**(改某个全局前先看它声明在哪):模拟核心+相机+交互 pending\*+回放+卡片引用+`cv,ctx`+`adminMode/selfPlay/selfPlayPrevAdmin` → `core/01-state`;`shipSeq` → ships/11;`detT` → sensors/21;`hitFX/threatCorridors/missileGroupSeq/netSeq/nets` → weapons/52;`netAllocT` → weapons/53;`fireSeqs/fcSeqSeq/FC_PT_SALVOS` → weapons/58;`formationFan/formationSpacing/fmGap/fmSeq` → formation/40、41;`tasks/taskSeq/pendingTask*` → bots/60;`camKeys/bindings` → command/71;`envIdx/customScene/edit*` → scenario/90、92;`rangeCfg/tr*` → scenario/95;`tutOn/tutPrevRun/TUT_HTML` → render/85-tutorial;`xh/XH_DWELL/XH_JUMP`、`rad/RAD_MODES` → command/74(`rad` 是与 render/89 的两方契约,字段名不得擅自更名);`RAD_RI/RAD_RO/RAD_L_IN/RAD_L_OUT/RAD_RM/RAD_GAP/RAD_FADE/RAD_SEAM/RAD_CAP/RAD_WHEEL_PAD/_radNameCache` → render/89(几何常量只在这一份);`mmb/MMB_HOLD_MS/mmbTimer` → command/70(就近声明,`mmb` 被本文件 down/move/up/blur **四处**读写,`mmbTimer` 同;与 core/01-state 的 `rmbTimer` 是两回事,不要复用)。
+**全局状态归属表**(改某个全局前先看它声明在哪):模拟核心+相机+交互 pending\*+回放+卡片引用+`cv,ctx`+`adminMode/selfPlay/selfPlayPrevAdmin` → `core/01-state`;`shipSeq` → ships/11;`detT` → sensors/21;`hitFX/threatCorridors/missileGroupSeq/netSeq/nets` → weapons/52;`netAllocT` → weapons/53;`fireSeqs/fcSeqSeq/FC_PT_SALVOS` → weapons/58;`formationFan/formationSpacing/fmGap/fmSeq` → formation/40、41;`tasks/taskSeq/pendingTask*` → bots/60;`camKeys/bindings` → command/71;`envIdx/customScene/edit*` → scenario/90、92;`rangeCfg/tr*` → scenario/95;`tutOn/tutPrevRun/TUT_HTML` → render/85-tutorial;`xh/XH_DWELL/XH_JUMP`、`rad/RAD_MODES` → command/74(`rad` 是与 render/89 的两方契约,字段名不得擅自更名);`RAD_RI/RAD_RO/RAD_L_IN/RAD_L_OUT/RAD_RM/RAD_GAP/RAD_FADE/RAD_SEAM/RAD_CAP/RAD_WHEEL_PAD/_radNameCache` → render/89(几何常量只在这一份);`MAC_FALLOFF/MAC_SPREAD_K/MAC_SPREAD_CAP` 与谓词 `macEffRange()` → weapons/52(有效射程的唯一定义点);`FIRE_ALL_ON` → command/71;`mmb/MMB_HOLD_MS/mmbTimer` → command/70(就近声明,`mmb` 被本文件 down/move/up/blur **四处**读写,`mmbTimer` 同;与 core/01-state 的 `rmbTimer` 是两回事,不要复用)。
 
 ## 核心架构
 
@@ -218,6 +218,27 @@ S1 感知节拍(每秒) → S2 网分配节拍(0.5s) → S3 任务AI
 - **教程内容的事实来源是「回代码实测」,不是 ACTIONS 表**。写这一版时逐条回查过实现,发现的口径差包括:`CFG.arrive=400` 只是刹车曲线偏置,到位判据是 `arrive*2=800` **且** `vn<CFG.stopSpeed=60`;`engineSig` 的 2.2/1.5/0.5 只喂导弹被动导引头(54-missiles),舰船 IR 通道走 21-detect 的 `sigBase+E_ENG×{1.0/0.6/0}`,两套数完全不同;`innerIntercept` 是 `1-Math.random()*innerIntercept*ov` 的**随机上限**,期望只有它的一半;主炮自动开火(57 末尾)**一行射程判据都没有**,150k 只活在 `fcGate` 与 83-hud 的 hover 圈里;IR 与 ESM 双双越过 `LIT2=1.0` 就凑成交叉判据,**纯被动也能到识别级**,只有火控级非雷达不可。抄 ACTIONS 表或抄旧文档会把这几条全写反。
 - **刻意排除的东西**:未定型的 Tier 数值(`TIER_MUL` 的 T1/T3 是空对象、`TIER_BALANCED=false`,写进教程等于教错);`BB`/`CV` 两个舰种(靶场不出场,配装与数值都还没标定);玩家在 RF2 简化 UI 下够不到的功能(靶场参数面板 `#trPanel`、右键菜单、快捷指令栏 `#qbar`、任务系统 —— 都在隐藏清单里或被 `SIMPLE_UI` 拦死,所以靶的闪避机动、任务暂停这类只能提一句"没开给玩家"或干脆不提);已被 RF5 取代的旧路径(`T`/`R`/`X`/`Ctrl+T`/全弹发射,代码仍在但不是这一版的交互模型)。
 - **教程与代码会漂移,这是本项目最容易烂的一块**:它是一份静态字符串,改任何机制都不会让它报错,探针也测不出一个字的错。所以调 `SENS`/`WPN`/`CFG` 的数、改门控判据、改鼠标或按键语义之后,**回来同步 `TUT_HTML`**;尤其是上面那一串"实测口径"和「按键与鼠标」两张表,它们直接对着实现抄,实现一动就过期。
+
+
+## RF6 主炮射程两块 / 运动并行 备忘(2026-08)
+
+**主炮射程一分为二:炮和雷达是两个独立组件。** 炮自己有射程 `macRange`,雷达自己有照射范围 `sensorRange`;不开雷达时能打到的边界就是炮的射程,开了雷达则由雷达范围顶上(取 `max`,所以雷达短于炮时不会反而缩短)。唯一定义点是 weapons/52 的 `macEffRange(s)`,**别在任何调用点重新拼这个判断**。数值现状:DD 的 `sensorRange` 与 `macRange` 都是 15 万,开雷达零增益;只有 CA 是 15 万→25 万。
+
+**越过有效射程不是硬截断,而是散布增长。** 偏角 `MAC_SPREAD_K × (d/有效射程 − 1)`,脱靶距离约等于 `d × 偏角`,所以实际衰减是超线性的。实测(有效射程 15 万):`149k` 平均脱靶 `0km`、`225k` 为 `1023km`(命中判定半径 `2000km`,多半还中)、`290k` 为 `2367km`(基本不中)。`MAC_FALLOFF=2.0` 是硬上限,超出 `fireMAC` 静默拒发——主炮 `30s` 装填,不设上限 AI 会对着百万公里外空放。改前的散布锚在绝对距离上(`d/100000*0.0025`)、与射程概念无关且过于温和,`25 万公里`外照样八发八中,这正是"主炮射程形同虚设"的根因。
+
+**射程有两个阈值:门控比硬上限,读数画精确射程。** `KIND_INFO.mac` 现在同时给 `range`(精确射程,画圈与报数)与 `maxRange`(硬上限,门控)。`fcGate`(58)、`radItems`(74)、`radSolve`(89) 一律比 `maxRange` —— 比精确射程会让序列拒绝往衰减区下令,而 `fireMAC` 与敌AI 照打,又变成 RF5 备忘警告过的两份口径。衰减区**不**额外加提示档:扇区读数本来就是「距离/射程」,衰减区自己显示成 `270k/150k`(`radSolve` 留了 `o.fade` 字段备用,当前不改渲染)。无衰减机制的武器(msl/ciws)不写 `maxRange`,下游一律 `maxRange?maxRange(s):range(s)` 回退。**敌方 AI 用的是精确射程**(只打有把握的距离),这是刻意的不对称。
+
+**运动改成分层:移动层 + 朝向层并行。** `turnTarget` 原先是 physics/31 那条 if/else 链里的一支,且排在 `s.orders.length` **之后**,所以有移动命令时整支走不到 —— V 转向必须先清空 orders 才生效(70-input 确实是这么做的),真实语义是"取消移动、原地滑行调头"。现在朝向层单独排在链之后、战斗转向之前,与移动层并行,V 不再清 orders。
+
+- **配套的坑(踩过)**:光把 `turnTarget` 提出来不够。`steerToVel` 的**推进段**(30-motion)每步会把机头强行归到推力方向,朝向层转的那一点下一步就被抹掉,现象是"边走边转"只转出一步的量(实测 4 秒 `0.3°`)。它的**滑行段**(DS192)早就有 `!s.turnTarget` 让位,只有推进段没有 —— 因为 RF6 之前转向令与移动令不可能共存,这条不对称一直没机会暴露。**两处都要让位**。
+- **编队旗舰的转向仍是串行的**,physics/31 L20 那一支(自带 `continue`)**刻意未动**:它的注释记着一次真实事故(旗舰永卡本分支→编队不机动/冲过目标点不停)。而 `turn_cmd` 用 `expandToFleet`,所以编队场景下 V 仍走旧路径。要并行化它得先有编队专项回归(整队旋转 / `fmAng` 跟随 / `turnNoFm` 语义)。
+- 转向是**一次性重新定向**、不是持续航向保持:对准即清 `turnTarget`,之后 `steerToVel` 恢复接管、机头重新跟推力方向。这与改动前一致。实测转向于第 299 步完成(理论 302 步 = 满转速),完成时舰已位移 302km,移动令全程未被清空。
+
+**三处既有 bug 修复。** ①**导弹弹药口径**:每组实耗 `mslPer=12`,而 `orderMissileSalvo` 的弹药门与 `fireMissiles` 的组数上限都写死 `16`(KIMI154 把每组 16 改 12 时漏改),后果是每舰末尾 12 枚成死弹(DD 192 枚只能打 15 组)。②**`Esc` 静默锁死全部快捷键**:那道门只看 `.on` 类,而 `#overlay` 被 RF2 `display:none!important` 藏死 —— 类加上了、面板没显示、门却认定"设置开着",于是把除 Esc 外每个快捷键都 break 掉,屏幕上毫无提示。改成按**实际可见性**判断(`getComputedStyle(...).display!=='none'`),SIMPLE_UI 将来关掉时行为仍正确。③**`Shift+V` 迟一拍**:`turnCmdShift` 原先在 ACTIONS 循环**之后**赋值,而 `doAction` 在循环**之内**调用,`turn_cmd` 读到的永远是上一次按键的值。判据与循环无关,提前求值即可。
+
+**全弹发射已隐藏**(`FIRE_ALL_ON=false`,只藏不删,同 RF2 处理旧界面):它没有任何配置界面(打几组、用哪些武器全写死),且 `doAction` 的 `fire_all` 分支里计数 `n` 在门控**之前**自增,打未达识别级的目标照样打印「💥 2 次全弹发射」而 `projectiles` 恒 0。恢复前先修那个计数位置。
+
+**教程必须手动同步。** 本轮改了主炮射程、V 转向、`Esc` 三处机制,`render/85-tutorial` 里对应的四段文字已跟着改写(散布公式与两块射程、传感器半径的新职责、Esc 警告作废、V 的并行语义)。**改机制就要回来同步教程** —— 它是手写事实,不会跟着代码走,而探针只查语法不查内容。
 
 ## 发布(GitHub Pages)
 

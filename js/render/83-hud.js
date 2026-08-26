@@ -428,7 +428,7 @@ function drawHoverRings(){
   for(const id of ids){
     const s=ships.find(x=>x.id===id);if(!s||s.dead||s.side!=='blue')continue;
     const p=toScreen(s.pos[0],s.pos[1]);
-    if(hoverRing==='mac')ring(p,s.macRange||150000,'主炮 '+Math.round((s.macRange||150000)/1000)+'k'); // RF3 射程读烘焙字段(定义在 weapons/51-defs)
+    if(hoverRing==='mac'){const e=(typeof macEffRange==='function')?macEffRange(s):(s.macRange||150000);ring(p,e,'主炮 '+Math.round(e/1000)+'k'+(s.lidar?'(雷达)':''));} // RF3 射程读烘焙字段(定义在 weapons/51-defs);RF6 改画【精确射程】=有效射程(开雷达由雷达范围顶上),圈外到 ×MAC_FALLOFF 之间是衰减区,故意不画第二个圈——两个同心圈在战术图上读不出主次
     else if(hoverRing==='msl')ring(p,s.mslRange||350000,'导弹 '+Math.round((s.mslRange||350000)/1000)+'k');
     else if(hoverRing==='ciws'){const c=ciwsOf(s);ring(p,c.outer,'外圈拦截 '+Math.round(c.outer/1000)+'k');ring(p,c.inner,'内圈 '+Math.round(c.inner/1000)+'k');}
   }

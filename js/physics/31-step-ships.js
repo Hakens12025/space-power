@@ -56,18 +56,25 @@ function stepShipsMotion(dt){
       }
       guideTo(s,cur.pos,[0,0,0],cruiseOf(s),cur.type!=='pass',dt); // DS191:统一导引律(pass全速掠过/stop曲线停靠)
     }
-    else if(s.turnTarget){ // 无orders有调头命令:滑行调头(保持速度,只转机头,矢量不变)
-      const toV=V.sub(s.turnTarget,s.pos);
-      const tDesired=V.norm(toV);
-      const tang=V.angle(s.facing,tDesired);
-      if(tang>1e-6){s.facing=V.slerp(s.facing,tDesired,Math.min(1,s.turnRate*dt/tang));if(tang>0.03){s.sideFlame=1;s.turnAim=tDesired.slice();}}
-      if(V.angle(s.facing,tDesired)<0.02){s.turnTarget=null;s.turnNoFm=false;} // KIMI151修:调头完成清除(同旗舰分支根因——原残留导致航线走完后做陈旧调头)
+    else if(s.turnTarget){ // RF6 有调头令但无移动令:只保持惯性滑行(不推进不刹车),转机头的事已移交下方【朝向层】
+      // 改前这一支自己转机头,而它排在 s.orders.length 之后 —— 有移动命令时整支走不到,所以 V 转向必须先清空 orders 才生效
+      // (71-keys 的 turn_cmd 确实是这么做的),语义实际是"取消移动、原地滑行调头"。朝向与速度矢量在太空里本就解耦,没有理由串行。
     }else if(s.patrol&&s.patrol.length){ // 巡逻:路径点首尾循环
       s.orders=s.patrol.map(p=>({pos:p.slice(),type:'pass'}));
     }else if(s.lockedTarget&&!s.lockedTarget.dead){ // 空闲但锁定(v114):不刹车,保持漂移当移动炮台,机头找窗口
       // 不推进不刹车:速度保持(惯性滑行),下方战斗转向负责对准
     }else{ // 无orders无命令:默认停车(不漂移乱飞) v119:期望速度=0
       steerToVel(s,[0,0,0],dt);
+    }
+    // RF6 朝向层:与上面的移动层【并行】,所以"边移动边转头"成立(太空里朝向与速度矢量解耦,推进也不要求机头对准——
+    // 30-motion 只是让机头默认跟着推力方向走)。必须排在移动层之后:steerToVel 会把机头归到推力方向,朝向层要盖过它。
+    // 编队旗舰的转向仍走上面 L20 那一支(自带 continue),本轮【刻意未动】——那支的注释记着一次真实事故
+    // (旗舰永卡本分支→编队不机动/冲过目标点不停),没有编队专项回归就动它是在同一个坑上重演。
+    if(s.turnTarget&&!(s.formation&&formTickCtx.get(s.formation)&&formTickCtx.get(s.formation).flag===s)){
+      const tDesired=V.norm(V.sub(s.turnTarget,s.pos));
+      const tang=V.angle(s.facing,tDesired);
+      if(tang>1e-6){s.facing=V.slerp(s.facing,tDesired,Math.min(1,s.turnRate*dt/tang));if(tang>0.03){s.sideFlame=1;s.turnAim=tDesired.slice();}}
+      if(V.angle(s.facing,tDesired)<0.02){s.turnTarget=null;s.turnNoFm=false;} // KIMI151修:调头完成清除(同旗舰分支根因——原残留导致航线走完后做陈旧调头)
     }
     // 战斗转向(v118,移动+攻击一体):锁定目标且MAC可用 → 运动不冻结。
     // DS171 M3:driftFire 承接 lockPlayer 职能(60s限时)——命令照走,非硬机动段机头归瞄准(全向找窗口,对准1.1°即自动开火);硬机动段(刹车/爬行/调头)机头让位(v130机动可靠性不劣化);T收编为纯指定(有令船不抢机头,窗口自然出现才打)

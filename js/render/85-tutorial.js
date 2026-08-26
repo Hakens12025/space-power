@@ -101,9 +101,13 @@ const TUT_HTML=`
 
     <p>主炮是一门轴炮，炮口固定在船头轴线上，不能转。所以只要火控给这艘舰解算出一个主炮目标，你会看见它自己开始转向：锁定目标同时就是转向指令，舰体会把机头往提前量的方向压。对准窗口只有 <code class="num">0.02 弧度</code>，也就是半角 <code class="num">1.146°</code>、全宽约 <code class="num">2.29°</code>，机头进不了这个窗口就不击发。这解释了大多数「火控明明开着却不开炮」的情形：船还在转。</p>
 
-    <p>弹速 <code class="num">30000 公里/秒</code>，正好是光速的十分之一；提前量按你与目标的相对速度算，飞行时间就是距离除以炮速。装填 <code class="num">30 秒</code>，所以主炮的节奏天生是每 <code class="num">30 秒</code>一发，伤害驱逐舰 <code class="num">220</code>、巡洋舰 <code class="num">400</code>。远距离有散布，散布随距离线性增长：<code class="num">10 万公里</code>上大约 <code class="num">0.0025 弧度</code>，横向摊开约 <code class="num">250 公里</code>。</p>
+    <p>弹速 <code class="num">30000 公里/秒</code>，正好是光速的十分之一；提前量按你与目标的相对速度算，飞行时间就是距离除以炮速。装填 <code class="num">30 秒</code>，所以主炮的节奏天生是每 <code class="num">30 秒</code>一发，伤害驱逐舰 <code class="num">220</code>、巡洋舰 <code class="num">400</code>。</p>
 
-    <p>把光标停在底栏主炮钮上时画出的那个 <code class="num">150k 公里</code>圈，是主炮的名义射程，火控序列的射程门用的就是这个数。但真正决定这一炮打不打得出去的是接触等级：目标没被点到火控级，站在射程圈里也一发不发。</p>
+    <p>主炮的射程要分成两块看，因为炮和雷达是两个独立的组件。炮自己的射程是 <code class="num">150k 公里</code>，那是不开雷达时你能打到的边界；一旦开了雷达，边界就由雷达的照射范围顶上去，驱逐舰的雷达也是 <code class="num">150k 公里</code>所以没有增益，巡洋舰是 <code class="num">250k 公里</code>，等于开雷达就把主炮的有效射程拉长了三分之二。光标停在底栏主炮钮上时画出的那个圈，画的就是这个随雷达开关变化的有效射程。</p>
+
+    <p>越过有效射程并不是打不出去，而是开始散布。有效射程之内炮口没有附加偏差，越过之后偏角按超出比例增长，而脱靶距离又等于距离乘偏角，所以实际衰减是超线性的：以有效射程 <code class="num">150k 公里</code>为例，打到 <code class="num">225k</code>（一点五倍）平均脱靶约 <code class="num">1023 公里</code>，还在 <code class="num">2000 公里</code>的命中判定半径之内，多半打得中；打到 <code class="num">290k</code>（接近两倍）平均脱靶已是 <code class="num">2367 公里</code>，基本不中。到两倍有效射程就是硬上限，再远一发都不发——主炮 <code class="num">30 秒</code>装填，空放的代价太贵。</p>
+
+    <p>不过真正决定这一炮打不打得出去的，仍然是接触等级：目标没被点到火控级，站在射程圈正中间也一发不发。</p>
 
     <h3 class="tut-h3">导弹：为什么成波打</h3>
 
@@ -151,7 +155,7 @@ const TUT_HTML=`
       </tbody>
     </table>
 
-    <p>表里最后一行要单独交代一句：传感器半径管的是弹丸可见性和雷达「看固体」的判定，它不参与前面那套舰船接触等级的计算，别把它当成探测距离读。基础信号与雷达截面则是你的暴露面，驱逐舰在这两项上都比巡洋舰小，所以同样熄火滑行，驱逐舰躲得更久。</p>
+    <p>表里最后一行要单独交代一句：传感器半径管三件事——弹丸可见性、雷达「看固体」的判定，以及开着雷达时主炮的有效射程由它顶上；但它<strong>不</strong>参与前面那套舰船接触等级的计算，别把它当成探测距离读。基础信号与雷达截面则是你的暴露面，驱逐舰在这两项上都比巡洋舰小，所以同样熄火滑行，驱逐舰躲得更久。</p>
   </section>
 
   <section class="tut-sec" id="tut-command">
@@ -247,7 +251,7 @@ const TUT_HTML=`
         <tr><td><code class="key">W</code> <code class="key">A</code> <code class="key">S</code> <code class="key">D</code></td><td>相机平移</td><td>按住持续移动，不是单次</td></tr>
         <tr><td><code class="key">1</code> … <code class="key">4</code></td><td>选择编组</td><td><code class="num">400 毫秒</code>内连按两次，镜头跳到该组质心</td></tr>
         <tr><td><code class="key">Ctrl</code> + <code class="key">1</code> … <code class="key">4</code></td><td>编组</td><td>覆盖式，重编会踢出原有成员</td></tr>
-        <tr><td><code class="key">V</code></td><td>船头转向命令</td><td>按下后左键点地图给方向，再按一次取消</td></tr>
+        <tr><td><code class="key">V</code></td><td>船头转向命令</td><td>按下后左键点地图给方向，再按一次取消；转向与移动是并行的，下了转向令航线照走</td></tr>
         <tr><td><code class="key">G</code></td><td>倒车</td><td>船头正后方 <code class="num">30k 公里</code>放一个停车点，脱离编队</td></tr>
         <tr><td><code class="key">C</code></td><td>测距</td><td>按住不放；只选中一艘时起点跟着该舰，多选或未选则钉在按键那一刻的光标处</td></tr>
         <tr><td><code class="key">Backspace</code></td><td>删除最后一个命令点</td><td>编队整体受令时，整条命令一次删光并全组刹车</td></tr>
@@ -281,7 +285,7 @@ const TUT_HTML=`
       </tbody>
     </table>
 
-    <p class="tut-warn">最后留一条例外给你记：除了用来关轮盘、以及关掉你正在读的这份教程，<code class="key">Esc</code> 在这一版里没有别的用处，而误按一次会把除相机平移以外的全部快捷键静默吃掉，屏幕上不会有任何提示，连空格都按不动，看上去很像游戏卡死。再按一次 <code class="key">Esc</code> 就恢复。</p>
+    <p class="tut-warn">最后交代一句 <code class="key">Esc</code>：它在这一版里只用来关轮盘和关掉你正在读的这份教程，两者都开着时先关轮盘。早先版本里误按 <code class="key">Esc</code> 会把除相机平移以外的全部快捷键静默吃掉、连空格都按不动，那是隐藏的设置面板留下的副作用，现已修复，按错了不会再卡住。</p>
   </section>
 
 </article>

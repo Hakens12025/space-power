@@ -183,8 +183,8 @@ function onMouseDown(e){
   }
   if(e.button===0&&pendingTurn){ // V键转向:点地图设定方向(调头,速度不变);Shift+V单纯转头不变队形
     const w=worldAt(sx,sy);
-    pendingTurn.forEach(s=>{s.orders=[];s.turnTarget=[w[0],w[1],0];s.brake=false;if(pendingTurnNoFm)s.turnNoFm=true;}); // v139:Shift+V标记turnNoFm→阵型不跟随
-    log(`${pendingTurn.length} 艘 转向 → ${Math.round(w[0]/1000)}k,${Math.round(w[1]/1000)}k${pendingTurnNoFm?'(单纯转头)':'(调头,速度不变)'}`,'');
+    pendingTurn.forEach(s=>{s.turnTarget=[w[0],w[1],0];s.brake=false;if(pendingTurnNoFm)s.turnNoFm=true;}); // v139:Shift+V标记turnNoFm→阵型不跟随。RF6 去掉 s.orders=[]:朝向已移交 31-step-ships 的独立朝向层,与移动层并行,转向不必再取消航线
+    log(`${pendingTurn.length} 艘 转向 → ${Math.round(w[0]/1000)}k,${Math.round(w[1]/1000)}k${pendingTurnNoFm?'(单纯转头)':'(边走边转)'}`,''); // RF6 文案跟着改:原"调头,速度不变"描述的是被取消航线后的滑行态
     pendingTurn=null;pendingTurnNoFm=false;hideTip();
     return;
   }

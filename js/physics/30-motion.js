@@ -29,7 +29,10 @@ function steerToVel(s,want,dt){ // v119运动内核:期望速度导引——推�
   const td=[dx/need,dy/need,dz/need]; // 推力方向(独立于机头)
   const wantSpd=V.len(want);
   const velSpd=V.len(s.vel);
-  if(wantSpd>1&&!(s.driftFire&&s.lockedTarget&&!s.lockedTarget.dead&&!s.crawling&&!s.brake)){ // DS174(KIMI建议):driftFire激活且非硬机动→机头归战斗转向瞄准,加减速段不被推力方向拖(找窗口效率翻倍);其余走原逻辑
+  // RF6 补 !s.turnTarget:上面的滑行段(DS192)早就给 V 调头令让了位,推进段却没有——RF6 之前 turnTarget 与移动令不可能共存,
+  // 所以这条不对称一直没暴露。朝向层移出 if/else 链之后,推进段每步把机头强行归到推力方向,朝向层转的那一点下一步就被抹掉,
+  // 现象是"边走边转"只转出一步的量(实测 4 秒 0.3°)然后原地不动。玩家显式的转向令优先级高于推力方向对齐。
+  if(wantSpd>1&&!s.turnTarget&&!(s.driftFire&&s.lockedTarget&&!s.lockedTarget.dead&&!s.crawling&&!s.brake)){ // DS174(KIMI建议):driftFire激活且非硬机动→机头归战斗转向瞄准,加减速段不被推力方向拖(找窗口效率翻倍);其余走原逻辑
     const wd=[want[0]/wantSpd,want[1]/wantSpd,want[2]/wantSpd];
     let turn=true;
     if(velSpd>1&&wantSpd<velSpd&&!s.crawling){ // v130:减速中目标在身后不掉头(反推倒刹);crawl(冲过头)允许掉头回正,不反推飞离

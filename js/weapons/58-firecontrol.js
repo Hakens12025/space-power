@@ -141,7 +141,9 @@ function fcGate(s,it,kind){ // RF5 单个目标项对某类武器的全部门:�
   const lit=(s.side==='blue')?t.litBlue:t.litRed;
   if(kind==='mac'){
     if(lit<3)return null; // 与 fireMAC 内部 q<3 同一口径:MAC 是解算武器,要火控级(主动 LADAR 测距测速)才算得出提前量
-    if(V.len(V.sub(t.pos,s.pos))>=(s.macRange||150000))return null;
+    // RF6 门控比的是【硬上限】不是精确射程:精确射程到硬上限之间是射程外衰减区,能打(散布变大)。
+    // 这里若改回比精确射程,序列就拒绝往衰减区下令,而 fireMAC 与敌AI 照打——又变成"扇区说打不到、引擎照打"的两份口径。
+    if(V.len(V.sub(t.pos,s.pos))>=((typeof macEffRange==='function')?macEffRange(s)*MAC_FALLOFF:(s.macRange||150000)))return null;
   }else{
     if(lit<2)return null; // 与 orderMissileSalvo 内部 q<2 同一口径:导弹要识别级
     if(V.len(V.sub(t.pos,s.pos))>=(s.mslRange||350000))return null;

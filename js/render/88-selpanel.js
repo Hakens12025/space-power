@@ -17,9 +17,14 @@ function pushEvt(msg,cls){ // 事件流写入点(86-log 调;不持久化,换局�
 function selBlue(){return selectedShips().filter(s=>s.side==='blue'&&!s.dead);}
 /* kind → 开关字段/射程/hover 文案 的映射(武器机制数据从烘焙字段读,源头在 weapons/51-defs) */
 const KIND_INFO={
+  // RF6 射程一分为二:range=【精确射程】(画圈/报数用,主炮 = 有效射程,开雷达则由雷达范围顶上);
+  // maxRange=【硬上限】(门控用,超出它 fireMAC 静默拒发)。两者之间是射程外衰减区:能打、但散布随距离增长。
+  // 无衰减机制的武器不写 maxRange,下游一律 `maxRange?maxRange(s):range(s)` 回退,语义不变。
   mac:{on:'macOn',
-    range:s=>s.macRange||150000,
-    tip:s=>`MAC轴炮 · 射程${Math.round((s.macRange||150000)/1000)}k · 伤害${s.macDmg||0} · 装填${Math.round(s.macReload||30)}s · 需火控开+机头对准`},
+    range:s=>(typeof macEffRange==='function')?macEffRange(s):(s.macRange||150000),
+    maxRange:s=>((typeof macEffRange==='function')?macEffRange(s):(s.macRange||150000))*((typeof MAC_FALLOFF==='number')?MAC_FALLOFF:1),
+    tip:s=>{const e=(typeof macEffRange==='function')?macEffRange(s):(s.macRange||150000);
+      return `MAC轴炮 · 精确射程${Math.round(e/1000)}k${s.lidar?'(雷达顶上)':'(雷达关)'} · 衰减至${Math.round(e*((typeof MAC_FALLOFF==='number')?MAC_FALLOFF:1)/1000)}k · 伤害${s.macDmg||0} · 装填${Math.round(s.macReload||30)}s · 需火控开+机头对准`;}},
   msl:{on:'mslOn',
     range:s=>s.mslRange||350000,
     tip:s=>`导弹齐射 · 射程${Math.round((s.mslRange||350000)/1000)}k · 每组${s.mslPer||12}枚×${s.cells||4}单元 · 单元装填${s.mslReload||60}s · 需火控开+目标识别级`},

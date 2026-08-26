@@ -22,12 +22,12 @@ function enemyAI(dt){ // 叛军AI:朝玩家推进/锁定/开火/被MAC锁定时�
     if(hasMAC(e)){e.lockedTarget=visible.length?nearest:null;e.lockPlayer=false;} // 看得见才锁定(感知v4);TIER1 MAC 舰种门改能力谓词
     // DS149:敌AI MAC 找窗口纪律(方案A,设计师拍板)——进15万射程且mac就绪→停车找窗口(清orders变idle,战斗转向全向瞄准);开火冷却/失锁/超程恢复原推进命令
     if(hasMAC(e)){ // TIER1 MAC 舰种门改能力谓词(敌 AI 找窗口纪律)
-      const inZone=d<(e.macRange||150000)&&e.macCd<=0&&e.lockedTarget&&!e.lockedTarget.dead; // RF3 射程读烘焙字段(定义在 weapons/51-defs)
+      const inZone=d<((typeof macEffRange==='function')?macEffRange(e):(e.macRange||150000))&&e.macCd<=0&&e.lockedTarget&&!e.lockedTarget.dead; // RF3 射程读烘焙字段(定义在 weapons/51-defs)
       if(inZone&&e.aiHold===undefined){e.aiHold=e.orders.slice();e.orders=[];e.brake=false;e.turnTarget=null;} // 首次进射程:保存命令+停车
       else if(inZone&&e.aiHold!==undefined){e.orders=[];e.brake=false;e.turnTarget=null;} // 保持停车找窗口(1695每tick会重push,清掉)
       else if(e.aiHold!==undefined){e.orders=e.aiHold;e.aiHold=undefined;} // 开火/失锁/超程:恢复推进
     }
-    if(visible.length&&e.macCd<=0&&hasMAC(e)&&d<(e.macRange||150000)&&macAligned(e,nearest))fireMAC(e,nearest); // 敌MAC 近距精确;RF3 射程读烘焙字段;TIER1 MAC 舰种门改能力谓词
+    if(visible.length&&e.macCd<=0&&hasMAC(e)&&d<((typeof macEffRange==='function')?macEffRange(e):(e.macRange||150000))&&macAligned(e,nearest))fireMAC(e,nearest); // 敌MAC 近距精确;RF3 射程读烘焙字段;TIER1 MAC 舰种门改能力谓词
     // 敌导弹 = 远程主力:35万射程(只要能探测到就够得着),高概率持续齐射(2组/波,7s冷却)
     // 敌导弹 = 发射单元制(v119):就绪单元全发(护卫4组/巡洋6组),打完全部装填60s——自然形成"一波齐射/分钟",不再连续spam
     if(visible.length&&e.ammo>0&&d<(e.mslRange||350000)&&Math.random()<0.08)orderMissileSalvo(e,nearest,e.cells||4); // DS167(设计师拍板):2%→8%,对标bot节奏;RF3 射程读烘焙字段

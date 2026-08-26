@@ -26,6 +26,7 @@ const ACTIONS=[
   {id:'reverse',label:'倒车(反推倒退)',keys:['KeyG']},
   // fire_all(全弹发射)绑 Ctrl 单键:用臂逻辑处理(松开触发),避免与 Ctrl+右键锁定/编组冲突
 ];
+const FIRE_ALL_ON=false; // RF6 全弹发射总开关:暂时关掉(无配置界面 + 日志计数在门控之前自增会骗人)。doAction 的 fire_all 分支与 ctrlArm 臂逻辑【原样保留】,改回 true 即恢复
 for(let g=1;g<=4;g++){
   ACTIONS.push({id:'grp_assign_'+g,label:`编组 ${g}(选中舰)`,keys:['Ctrl+Digit'+g]});
   ACTIONS.push({id:'grp_sel_'+g,label:`选择编组 ${g}`,keys:['Digit'+g]});
@@ -217,17 +218,19 @@ window.addEventListener('keydown',e=>{
   if(recording){captureKey(e);e.preventDefault();return;}
   const ks=eventKeyStr(e);
   if(e.key==='Escape'&&!document.getElementById('overlay').classList.contains('on')){e.preventDefault();}
-  const overlayOn=document.getElementById('overlay').classList.contains('on');
-  let turnShiftMatch=false;
+  // RF6 修:这道门原先只看 .on 类,而 #overlay 被 RF2 用 display:none!important 藏死了 —— 按 Esc 把类加上、面板并不显示,
+  // 门却认定"设置开着",于是下面把除 Esc 外的每一个快捷键都 break 掉,屏幕上毫无提示,必须再按一次 Esc 才解锁。
+  // 改成按【实际可见性】判断:面板真显示才拦。SIMPLE_UI 将来关掉、设置面板复活时行为仍然正确。
+  const ovEl=document.getElementById('overlay');
+  const overlayOn=!!(ovEl&&ovEl.classList.contains('on')&&getComputedStyle(ovEl).display!=='none');
+  turnCmdShift=!!(bindings.turn_cmd&&ks==='Shift+'+bindings.turn_cmd); // RF6 修:原先在循环【之后】才赋值,而 doAction 在循环【之内】调用,turn_cmd 读到的永远是上一次按键的值(现象:Shift+V 第一次按走普通转向,第二次才是单纯转头)。判据本身与循环无关,提前求值即可
   for(const a of ACTIONS){
     const b=bindings[a.id];
     if(b===ks||(a.id==='turn_cmd'&&b&&ks==='Shift+'+b)){ // v139:Shift+转向键=单纯转头(不带动阵型)
-      if(a.id==='turn_cmd'&&b&&ks==='Shift+'+b)turnShiftMatch=true;
       if(overlayOn&&a.id!=='settings')break; // 设置打开时只放行 Esc
       e.preventDefault();doAction(a.id);break;
     }
   }
-  turnCmdShift=turnShiftMatch; // 供 turn_cmd 读取(Shift+V → 单纯转头)
   if(e.key>='1'&&e.key<='4'&&e.ctrlKey){ctrlArm=false;return;}// 已被grp_assign处理;KIMI146修:原未解除ctrlArm→Ctrl+数字编组后松开Ctrl误触发全弹发射
   if(e.code==='ControlLeft'||e.code==='ControlRight')ctrlArm=true; // Ctrl单独按下:待发全弹
   else if(e.ctrlKey)ctrlArm=false; // Ctrl组合其他键(编组/攻击):取消全弹臂
@@ -242,7 +245,9 @@ window.addEventListener('keyup',e=>{
     else rangeArm=false;
   }
   if(e.code==='ControlLeft'||e.code==='ControlRight'){ // Ctrl臂:松开时若未组合其他键 → 全弹发射
-    if(ctrlArm)doAction('fire_all');
+    if(ctrlArm&&FIRE_ALL_ON)doAction('fire_all'); // RF6 全弹发射暂时隐藏(只藏不删,同 RF2 处理旧界面):它没有任何配置界面(打几组/用哪些武器全写死),
+    // 且日志会骗人——doAction 的 fire_all 分支里计数 n 在门控之前自增,打未达识别级的目标照样打印"💥 2 次全弹发射"而 projectiles 恒 0。
+    // 要恢复:把下面的 FIRE_ALL_ON 改回 true,并先修那个计数位置。
     ctrlArm=false;
   }
 });

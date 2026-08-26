@@ -95,7 +95,12 @@ function radSolve(sub,tgt,kind){
   o.range=ki?ki.range(sub):0; // 射程唯一来源 = 88-selpanel:19 的 KIND_INFO(内部读 RF3 烘焙字段 macRange/mslRange),禁止在本文件写 150000/350000 字面量
   o.sw=!(ki&&ki.on&&sub[ki.on]===false); // RF5 单舰武器开关(同一份 KIND_INFO 的 .on 字段,不写 'macOn' 字面量)= 57 实际开火门的第一层:57:80 的 roeOK 与 57:33 的自动齐射都先看它。与 74 的 radItems 同一条判据
   if(tgt)o.dist=(typeof V!=='undefined'&&V.len&&V.sub)?V.len(V.sub(tgt.pos,sub.pos)):Math.hypot(tgt.pos[0]-sub.pos[0],tgt.pos[1]-sub.pos[1]); // 三维距离:与 fcGate 的 V.len(V.sub(...)) 同口径(带 z 的场景里平面距离会在射程边界上给出相反结论)
-  o.inR=!!(tgt&&o.range>0&&o.dist<o.range);
+  // RF6 可用性比【硬上限】,读数仍显示【精确射程】:精确射程到硬上限之间是射程外衰减区,能打但散布随距离增长。
+  // 不必额外加一档提示——扇区读数本来就是「距离/射程」,衰减区会自己显示成 270k/150k,超程一眼可见;
+  // 而 why 只在 !ok 时渲染(本文件:362),把衰减区判成 !ok 会让引擎照打、盘上却写"射程外",正是 RF5 备忘警告的两份口径。
+  o.maxRange=(ki&&ki.maxRange)?ki.maxRange(sub):o.range; // 无衰减机制的武器(msl/ciws)回退成精确射程,语义不变
+  o.inR=!!(tgt&&o.maxRange>0&&o.dist<o.maxRange);
+  o.fade=!!(tgt&&o.range>0&&o.dist>=o.range&&o.inR); // 在衰减区(留给将来想单独着色时用,当前不改渲染)
   if(kind==='mac'){
     o.rdy=((sub.macCd||0)<=0);
     o.readyTxt=o.rdy?'就绪':Math.ceil(sub.macCd)+'s'; // 文案照抄 88-selpanel 的 weaponRows,两处说法必须一样

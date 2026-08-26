@@ -9,17 +9,33 @@ function macAligned(s,t){ // 轴炮窗口:机头是否对准预测点(~1.1°容�
   if(!t||t.dead||t.side===s.side)return false;
   return V.angle(s.facing,V.norm(V.sub(macPred(s,t),s.pos)))<0.02;
 }
+/* RF6 主炮射程分两块:炮自己有射程(macRange),雷达自己有照射范围(sensorRange),两者是不同组件。
+   不开雷达 = 只能靠炮自己的射程;开了雷达 = 用雷达的范围顶上(取 max,所以雷达短于炮时不会反而缩短)。
+   超出有效射程不是硬截断,而是【散布随距离增长】——弹丸真的飞歪、屏幕上看得见,与既有的提前量脱靶自然叠加。
+   MAC_FALLOFF 是"再打就是浪费"的硬上限(30s 装填,不设上限 AI 会对着 100 万公里外空放)。
+   改前的散布锚在绝对距离上(d/100000*0.0025),与射程概念无关且过于温和:25 万公里处偏角才 0.00625rad、
+   脱靶约 1562km < 命中判定半径 2000km,所以 25 万外照样八发八中——这正是"主炮射程形同虚设"的根因。 */
+const MAC_FALLOFF=2.0;      // 硬上限 = 有效射程 × 此值,超出不开火
+const MAC_SPREAD_K=0.018;   // 每超出一倍有效射程增加的偏角(rad,约 1.0°)
+const MAC_SPREAD_CAP=0.05;  // 偏角上限,防极端距离下数值失控
+function macEffRange(s){ // RF6 有效射程:开雷达取雷达照射范围与炮射程的较大者,不开雷达就是炮自己的射程
+  const gun=s.macRange||150000;
+  return s.lidar?Math.max(gun,s.sensorRange||0):gun;
+}
 function fireMAC(shooter,target){ // MAC轴炮:沿船头方向直射(必须先对准),到预测时间失的
   if(shooter.noFire)return; // RANGE1 禁火总闸门 1/3:靶场的靶只挨打不还手。这是 MAC 发射的唯一实现,GM 手动锁定/自动索敌/AI 三条路径最终都落到这里。注意这是个【静默】开关(不报错不打日志),将来若误给蓝舰置了 noFire 会毫无线索,置位处只有 initEnemy 的靶语义包一处
   if(shooter.side===target.side||shooter.dead||target.dead)return;
   const q=shooter.side==='blue'?target.litBlue:target.litRed;
   if(q<3)return; // 火控门控(v123):MAC是解算武器,需火控级(主动LADAR测距测速)才能算提前量;被动/识别级打不出
   const d=V.len(V.sub(target.pos,shooter.pos));
+  const effR=macEffRange(shooter); // RF6 有效射程(开雷达则用雷达范围顶上)
+  if(d>=effR*MAC_FALLOFF)return; // RF6 射程外硬上限:与 q<3 同一层的静默闸门,三条发射路径(GM手动/自动索敌/敌AI)都落到这里,一处堵住即全堵
   const tt=d/CFG.macSpd; // 飞行时间(MAC 0.1c)
   const pred=macPred(shooter,target);
   const dir=V.norm(shooter.facing); // 轴炮:弹道=船头轴线(单位化防脏数据)
-  // 远距离散布:距离越远弹道偏差越大(远距离命中更严格)
-  const spread=Math.min(0.02,(d/100000)*0.0025); // 每10万km约0.0025rad
+  // RF6 射程外衰减:有效射程内零附加散布,超出后偏角随超出比例线性增长(脱靶距离 ≈ d×偏角,故实际衰减是超线性的)
+  const over=Math.max(0,d/effR-1);
+  const spread=Math.min(MAC_SPREAD_CAP,MAC_SPREAD_K*over);
   const da=(Math.random()*2-1)*spread;
   const ang=Math.atan2(dir[1],dir[0])+da;
   const hxy=Math.hypot(dir[0],dir[1]); // KIMI146修:xy分量按朝向的xy模长缩放——原直接用满macSpd再叠dir[2]·macSpd,合速度超0.1c且弹道≠机头轴线(带俯仰时必脱靶)
@@ -75,7 +91,7 @@ function orderMissileSalvo(shooter,target,n){ // 齐射指令(v119·单元制):�
   const isShip=target&&target.side!==undefined;
   if(isShip&&(shooter.side===target.side||target.dead))return;
   if(isShip){const q=shooter.side==='blue'?target.litBlue:target.litRed;if(q<2)return;} // 火控门控(v123):导弹需识别级(2,精确知道位置);探测级只知道大小,盲射走区域齐射
-  if(shooter.ammo<16)return; // 弹药不足
+  if(shooter.ammo<(shooter.mslPer||12))return; // 弹药不足。RF6 修:原写死 16,是每组 16 枚时代的遗留(KIMI154 把每组改 12 时漏改此处与 fireMissiles 的组数上限),后果是每舰末尾 12 枚永远打不出去(DD 192 枚只能打 15 组、CA 240 枚只能打 19 组)
   const avail=readyCells(shooter);
   if(avail<=0)return; // 发射单元全在装填
   shooter.missileArm={t:1,target,n:Math.min(n||salvoCount,avail)};
@@ -86,7 +102,7 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
   const isShip=target&&target.side!==undefined; // 有 side 才是舰船,否则当空位置(区域目标)
   if(shooter.dead)return;
   if(isShip&&(shooter.side===target.side||target.dead))return;
-  const rounds=Math.min(n||salvoCount,readyCells(shooter),Math.floor(shooter.ammo/16)); // 组数=min(请求,就绪单元,弹药)
+  const rounds=Math.min(n||salvoCount,readyCells(shooter),Math.floor(shooter.ammo/(shooter.mslPer||12))); // 组数=min(请求,就绪单元,弹药)。RF6 修:分母原写死 16 而每组实耗 mslPer=12(见下方 shooter.ammo-=shooter.mslPer),两处口径不一致导致末尾 12 枚成死弹
   if(rounds<=0)return; // 无就绪发射单元或弹药不足
   // 占用 rounds 个发射单元(独立装填60s)
   let used=0;
