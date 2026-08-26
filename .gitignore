@@ -1,3 +1,5 @@
 out.png
 __v.html
 demo_*.json
+tools/train/__pycache__/
+*.pyc
