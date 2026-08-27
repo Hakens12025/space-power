@@ -118,7 +118,11 @@ class RouteEnv:
         lv = self._len(vOut)
         ang = self._angle(vIn, vOut)
         c = torch.cos(ang / 2)
-        r = torch.where(c > 0, self.rtol * c / (1 - c).clamp_min(1e-12), torch.zeros_like(c))
+        # RF21 曲率限速:min(单拐角几何半径, 出段弦长/偏折角) —— 与 30-motion 的 cornerSpd 同步。
+        # 只用出段:入段在 j=0 时是船位实时距离,会人为收紧(见 30-motion 注释)
+        r_tol = torch.where(c > 0, self.rtol * c / (1 - c).clamp_min(1e-12), torch.zeros_like(c))
+        r_curv = lv / ang.clamp_min(1e-12)
+        r = torch.minimum(r_tol, r_curv)
         v = torch.sqrt((self.thrust * self.eff * r).clamp_min(0))
         bad = (lu < 1) | (lv < 1) | (c >= 0.999999)
         return torch.where(bad, torch.full_like(v, INF), v)

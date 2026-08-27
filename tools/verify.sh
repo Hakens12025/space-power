@@ -1078,6 +1078,41 @@ t('FLOW16_STRESS',function(){ /* RF16 压力航线(用户指定):20 点直线 / 
     +' | 之字20点:用时 '+Z.t.toFixed(1)+'s 最差偏靠 '+Math.round(Z.worst)+'km(须<=5000) 余令 '+Z.left
     +' 终点误差 '+Math.round(Z.err)+'km';
 });
+t('FLOW21_ARC',function(){ /* RF21 曲率限速(用户实报:密集点组成的弧形大概率冲过头)。
+  cornerSpd 原来只看单拐角偏折,弧离散成密集小角后每步都"接近直行"不限速,而累计曲率物理上跟不上 ——
+  实测 R=15k~25k 的弧偏靠饱和在 4998~4999(冲出去再绕回来碰点),R=20k 用时 234.6s(可跟速度下只要约 126s)。
+  双向判据:紧弧必须贴线且不再折返(偏靠与用时双收敛) / 平缓弧不许被误伤(仍要跑到接近巡航)。 */
+  var e=fc5reset(),s=e.S;
+  function arc(R,spanDeg,step){
+    var pts=[],dth=step/R,n=Math.max(2,Math.round(spanDeg*Math.PI/180/dth));
+    for(var k=1;k<=n;k++){var th=-Math.PI/2+k*dth;pts.push([Math.round(R*Math.cos(th)),Math.round(R+R*Math.sin(th)),0]);}
+    return pts;
+  }
+  function run(pts){
+    s.formation=null;s.brake=false;s.lockedTarget=null;s.turnTarget=null;s.turnNoFm=false;
+    s.crawling=false;s.coasting=false;s.pos=[0,0,0];s.vel=[0,0,0];s.facing=[1,0,0];s.orders=[];s.speedCmd=800;
+    for(var k=0;k<pts.length;k++)s.orders.push({pos:pts[k],type:(k===pts.length-1?'stop':'pass')});
+    var miss=pts.map(function(){return 1e18;}),t=0,peak=0;
+    for(var i=0;i<60000;i++){
+      stepShipsMotion(0.02);t+=0.02;
+      var v=V.len(s.vel); if(v>peak)peak=v;
+      var act=Math.min(pts.length-1,pts.length-s.orders.length);
+      for(var k=Math.max(0,act-1);k<=act;k++){
+        var d=Math.hypot(s.pos[0]-pts[k][0],s.pos[1]-pts[k][1]); if(d<miss[k])miss[k]=d;}
+      if(!s.orders.length&&v<1)break;
+    }
+    var worst=0; for(var k=0;k<miss.length;k++) if(miss[k]>worst)worst=miss[k];
+    return {t:t,worst:worst,peak:peak,left:s.orders.length,
+            err:Math.hypot(s.pos[0]-pts[pts.length-1][0],s.pos[1]-pts[pts.length-1][1])};
+  }
+  var T=run(arc(20000,180,4000));   /* 紧弧:修前 偏靠4999/用时234.6s(折返),修后 1284/175.8s */
+  var G=run(arc(80000,180,8000));   /* 平缓弧对照:曲率半径远大于 v²/a,不该被限 */
+  var ok=(T.worst<2500 && T.t<200 && T.left===0 && T.err<CFG.arrive*2
+        && G.peak>760 && G.left===0 && G.err<CFG.arrive*2);
+  return (ok?'ok':'fail')+' 紧弧R=20k:偏靠 '+Math.round(T.worst)+'km(须<2500;修前 4999=冲出再绕回) 用时 '+T.t.toFixed(1)
+    +'s(须<200;修前 234.6) 峰值 '+Math.round(T.peak)
+    +' | 平缓弧R=80k(对照):峰值 '+Math.round(G.peak)+'(须>760:不许误伤) 偏靠 '+Math.round(G.worst)+'km';
+});
 t('FLOW6_CHAIN',function(){ /* RF7 数据链渲染:函数存在;编辑态/退出态 render 均不炸(像素断言不做,ERRORS 层兜底) */
   var e=fc5reset();
   fcNew(e.S,{tid:e.A.id});fcAppend(e.S,{tid:e.B.id});
@@ -1143,5 +1178,6 @@ done
 grep -q "FLOW13_LOOK=ok" "$OUT" || { echo "✗ FLOW13_LOOK 未通过(RF13 反向速度传播)"; fail=1; }
 grep -q "FLOW14_REFINE=ok" "$OUT" || { echo "✗ FLOW14_REFINE 未通过(RF14 航线细化)"; fail=1; }
 grep -q "FLOW16_STRESS=ok" "$OUT" || { echo "✗ FLOW16_STRESS 未通过(RF16 压力航线:20点直线/20点之字)"; fail=1; }
+grep -q "FLOW21_ARC=ok" "$OUT" || { echo "✗ FLOW21_ARC 未通过(RF21 弧形曲率限速)"; fail=1; }
 grep -q "^RENDER=ok" "$OUT" || { echo "✗ RENDER 未通过"; fail=1; }
 [ $fail -eq 0 ] && echo "✓ 全部通过" || exit 1
