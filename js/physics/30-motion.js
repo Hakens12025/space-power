@@ -28,7 +28,13 @@
    状态归属:engMode 与 ENG_/EPOD_ 系列常量、求解器都在本文件;舰上 s.omega/s.aimHeading/s.engLv 由 31-step-ships 每 tick 复位。 */
 const ENG_MODES=['classic','tri','torque'];
 const ENG_LABEL={classic:'经典',tri:'三角',torque:'力矩'};
-let engMode='classic';                 // 默认经典:回归基线与既有手感都建立在它之上,切换是玩家的显式动作
+let engMode='tri';                     // RF19 定案:默认三角,且是唯一模式(顶栏切换已藏)。
+  // 三种模式在 75 条航线的全量评测台上实测:classic 6.0194 / tri 5.8552 / torque 5.8392。
+  // torque 只比 tri 好 0.16%(噪声级),却改变朝向动力学(角速度积分)—— 战斗瞄准的 macAligned 窗口、
+  // RF11 提前起转的 turnT=ang/turnRate 估计、刹车曲线的对齐折扣假设全建立在运动学转向上,RF10 起就标实验档。
+  // tri 的转向与经典完全同路(反作用轮=同一个 slerp),只换平移功率包络(0.866~1.0 替掉 0.6 侧推魔数),
+  // 赢的 2.7% 全部来自横向机动更有力,而所有依赖转向的代码路径行为不变 —— 风险不对称,选 tri。
+  // 且当前全部参数是在 classic 下调优的,tri 的 2.7% 是打了折扣的优势。
 const EPOD_AT=[180,60,300];            // 三个推进器舱的【安装方位】(度,舰体系):尾部 / 左前 / 右前
 const EPOD_TILT=60;                    // 每舱两个喷口相对"背离舱位"方向各倾这么多度 —— 倾角改变作用线,这才是打破秩 2 的关键
 const EPOD_ARM=Math.sin(EPOD_TILT*Math.PI/180); // 每喷口的力臂(单位圆舱位下 = sin60 ≈ 0.866)

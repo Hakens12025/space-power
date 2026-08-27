@@ -1,0 +1,51 @@
+SYMS_TOTAL=596
+SYMS_MISSING=none
+SYMS_THREW=none
+BOOT=ships=6 blue=3 red=3
+RANGE_ON=true
+FORM=moved=3 fm=3 g=0
+SALVO=armed=1
+DMG=dmg=25(before=0) hp=550
+SOAK=steps=5000 NaNships=0 NaNproj=0 maxLive=5 seen={"missile":5549,"interceptor":748}
+FLOW2=autoHits=1 autoDmg=25
+FLOW3_ALLOW=ok macHits=0 macShots=0 mslHits=8 mslShots=4 fcTgtMac=null locked=靶·A
+FLOW3_SEQ=ok A=12(mac4/msl8) B=0 shots=mac4/msl4
+FLOW3_RR=ok A=6(mac2/msl4) B=6(mac2/msl4) shots=mac4/msl4 macSplit=ok mslSplit=ok
+FLOW3_GATE=ok base=6 off:hits6→6,mac2→2,msl2→2 mslOff:mac2→5,msl2→2,hits6→9
+FLOW3_DRIFT=ok t=112s macShots=0→3→4 driftFire=true driftFireT=5.0 orders=1 hits=12
+FLOW4_DWELL=ok snap:0ms=null 200ms=null 300ms=靶·A dwellT=0.29 card=on 卡片=靶·A舰种驱逐舰 · T2方位000° · 60k结构550/550速度0 m/ vp=762x484 snapR=49587
+FLOW4_FOG=ok 暗=null(cand=null) 点亮后=靶·A
+FLOW4_MMB=ok seqs=0→1 shipId=s1(主体舰s1) tid=s4(靶s4) allow={"mac":true,"msl":true} autoEngage=false→true roe=free mmb计时=有
+FLOW4_HOLD=ok 吸附=靶·A 按住=500ms seqs=0→0 mmb计时=有 抬起后 mmb=已清
+FLOW4_NOLOCK=ok 右键:locked=null driftFire=false 移动命令=1条 | Ctrl+右键:locked=null driftFire=false ctrlArm=false(须 false,否则松开 Ctrl 会误触全弹发射)
+FLOW4_PAN=ok 中键拖动:cam 不动 panning=false seqs=0→0 | 右键拖动(对照组):cam 位移=-99174,-66116 panning=true
+FLOW4_PD=ok 常规分支 defaultPrevented=true 编辑器分支 defaultPrevented=true 编辑器下 mmb=null
+FLOW5_HOLD=ok 吸附=靶·A 注册延迟=350ms(MMB_HOLD_MS=350) 烧掉1条 松手前 open=true(mmb=仍按住) seqs=0→1 seqId=1/序列1 tid=s4(靶s4) tgtIdx=0 items=mac+msl split=false anchor=417,242(目标屏幕417,242) autoEngage=false→true roe=free 抬手后 open=true mmb=已清
+FLOW5_TAP=ok 吸附=靶·A 按住=120ms seqs=0→1 闹钟:注册350ms/抬手后已撤 抬手后再推500ms 迟到弹出=0次 rad.open=false 快速交战 tid=s4(靶s4)
+FLOW5_CTX=ok 新建:seqs1→2 seqId 1→2(新的一条,首项下标0,目标数1) | 追加(Shift):seqs1→1 seqId 1→1 目标数1→2 rad.tgtIdx=1 | 编辑(已在序列里):seqs1 seqId 1 目标数2 rad.tgtIdx=0
+FLOW5_PICK=ok litBlue=3 主炮扇区 idx=0@294,227 allow.mac true→false(rad.items 回显=false) 切许可前50s:macShots=2 macHits=2 mslShots=2 切许可后60s:macShots=2→2 macHits=2→2 mslShots=2→4(导弹仍在打=对照组) selected=未变
+FLOW5_NOSEL=ok 扇区点@320,242 selected s1→s1 selDrag=null selWeapon=mac(须 mac,被消费掉说明落进了攻击分支) orders=0条 locked=null seqs=1→1 | 盘外左键(对照组):selDrag=已启动
+FLOW5_SPLIT=ok 1个目标:split=false mode=null 目标数1 | 追加到2个:split=true mode=seq 目标数2 seqs=1 | 点左半环:轮询瓣@411,439 → 序列 mode=rr 依次瓣@320,342 → 序列 mode=seq
+FLOW5_OVER=ok items=8(注入9件含1件ciws,ciws须被滤掉) 总页数=2 RAD_CAP=6 第0页可点槽位=[0,1,2,3,4,5] 环带内滚轮→page 0→1(cam.zoom 未变) 第1页可点槽位=[6,7] 环带外滚轮→page=1 cam.zoom 照常缩放
+FLOW5_CLOSE=ok 开=true seqs=1 | 短按中键:open=false seqs=1(须不变:关盘那一下不许再触发快速交战) 盘开时中键排闹钟=没排 迟到弹出=0 | 重开(编辑上下文):open=true seqs=1 | Esc:open=false | 目标死亡:open=true→false rad.tid=null items=0 hoverRing=null
+FLOW6_DESIG=ok Shift+A:seqs 0→1(编辑态=true) Shift+B:seqs=1 链长1→2 重复B去重=2(须2) 无Shift C(对照):seqs→2(快速交战新建) 链=s4→s5(须s4→s5)
+FLOW6_CAP=ok 前5条=均成功 第6条=null(须null) 总数=5/5
+FLOW6_BARS=ok 方条=5/5(空4) 点击退出=true 再点进入=true 详情目标行=2(须2)
+FLOW6_NOAUTO=ok 建序列后进序列态=true 取消选中→null(须null) 重新选中→null(须null,不自动进) 面板高亮方条=0(须0) 点方条→true 高亮=1(须1) 退出序列态后 fcActive=true(须true:序列态只管显示,不管开火)
+FLOW6_STABLE=ok 连刷10拍节点未换=true(须true:内容不变不重建) 改模式后重建=true(须true) 新内容含"轮"=true 方条数=5
+FLOW6_FLOW=ok 链方向=屏幕左(舰)→右(靶) 整行互相关位移=9px(须 5~13,理论 30px/s×0.3s=9px) 采样宽度=160 周期=24px
+FLOW6_PULSE=ok 采样(381,229) 亮度:基准=268 | simTime +7.3s(墙钟不动)=268(相同=已与倍速解耦) | 墙钟 +260ms=369(不同=仍在呼吸)
+FLOW7_BIG=ok 默认=rr(须rr) 轮询300步命中序列下标数=2(须≥2=真的在轮转) | 选择序列2:命中下标=1(须只有 1) fcActive=true | 删掉选中那条后 fcPick/模式已兜底=true fcActive=true(须true,不许哑火)
+FLOW8_STATES=ok 暂停条:红边=true 虚线=true 斜线=true 红字=true opacity=1(须1,不靠变灰) | pick+edit 同条:黄边=true 青字★=true(两通道并存,互不吞噬)
+FLOW8_PICKBTN=ok 初始=rr 点一下→pick(pick=序列2,按钮on=true) 再点→rr(on=false) | 无序列态时点→rr(须rr,只提示不改状态) | 方条仍可点=true
+FLOW9_ENG=fail 额定推力=15 | 主推「15.0 km/s²主推」 反推「15.0 km/s²反推侧推」 侧推「13.9 km/s²主推侧推」(须≈9.0=打六折,不是额定) 纯转向「0 km/s²姿态」(须 0 且标姿态:sideFlame=1 engSide=false) | 速度行=有
+FLOW11_GHOST=ok 转90°:起转@4280&lt;到位@5070 到位朝向误差0.00° 对准后回飘1.99° 位置421km | 转180°:起转@3081&lt;到位@5036 误差0.00° 回飘1.97°(须&lt;3,锁不住会到19°) 位置529km
+FLOW12_HYS=ok 减速段引擎跃迁=0.28 次/秒(须&lt;5;改前 27.9=每秒闪 14 个来回) 停点偏差=530km(须&lt;800,迟滞不许换精度) | 死区@10km/s=0.5(须=ENG_HYS_OFF=0.5:低速/保位行为与改前一致) @800km/s=8(须&gt;4:只有高速才放宽)
+FLOW12_CORNER=ok 掉头:拐点速度=1(须&lt;120=真被压住;无限速时为满 800) 峰值=705 用时177s 终点误差=531km | 直线对照组:拐点速度=800(须&gt;760:直行不许限速) 峰值=800
+FLOW12_GHOST2=ok 同态连拍差异=0px(须0:测量本身无噪声,否则下面两条不作数) | 带face比无face多出=166px(须&gt;60=确实画了半透明船影) | 未选中时 带face与无face差异=0px(须0:命令可视化跟着选中走,同 drawFcChain 口径)
+FLOW13_LOOK=ok 对抗例:多走=-11k(须&lt;8k;1步前瞻时为 +32k) 最大偏离=0k(须&lt;8k;1步前瞻时为 16k) 峰值v=800 终点误差=529km | 直线对照组:峰值v=800(须&gt;760:不许退化成逐点停车)
+FLOW14_REFINE=ok 锯齿5点:关 232.2s → 开 215.4s(7.3%,须&gt;3%) 偏靠 4997km(须&lt;=5000) 终点误差 527km 细化 56 帧 | 无余量航线(对照):关 229.2s 开 229.2s(须相等=兜底原样退回) | 搬到(50万,30万)后提升=7.3%(须与原点的 7.3% 相差&lt;1个点=平移不变) 偏靠 4997km | 沙盘未污染全局 ships=true
+FLOW16_STRESS=ok 直线20点(段长5k):用时 190.1s vs 单点 175.9s = 1.08倍(须&lt;1.25;每段各扣一次 margin 的写法在此【死锁】) 峰值v 800(须&gt;700) 余令 0 | 之字20点:用时 1039.3s 最差偏靠 4185km(须&lt;=5000) 余令 0 终点误差 528km
+FLOW6_CHAIN=ok drawFcChain=存在 编辑态/退出态渲染均完成
+RENDER=ok
+ERRORS=none

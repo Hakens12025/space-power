@@ -29,6 +29,12 @@ function makeEnv(over) {
     if (Math.abs(got - Number(over[k])) > 1e-9) throw new Error('覆盖 ' + k + ' 失败:期望 ' + over[k] + ' 实得 ' + got);
   }
   if(process.env.THRUST)vm.runInContext('var __THRUST='+Number(process.env.THRUST)+';',ctx);
+  if(process.env.ENGMODE){                       // 引擎模型三选一(字符串,走白名单不走数值注入)
+    const m=process.env.ENGMODE;
+    if(['classic','tri','torque'].indexOf(m)<0)throw new Error('ENGMODE 非法: '+m);
+    vm.runInContext('engMode='+JSON.stringify(m)+';',ctx);
+    if(vm.runInContext('engMode',ctx)!==m)throw new Error('覆盖 engMode 失败');
+  }
   vm.runInContext(`
     var S = makeShip('CA','评测',[0,0,0],[1,0,0],[0,0,0],'blue',2); ships.push(S);
     if(typeof __THRUST!=='undefined'&&__THRUST>0)S.thrust=__THRUST;   // 平衡数值试算用
@@ -110,7 +116,7 @@ const env = makeEnv(over);
 const C = env.cst();
 const groups = [['HOLD', data.hold.map((r, i) => ['h' + i, r])], ['NAMED', NAMED], ['STRESS', STRESS]];
 const out = { cst: C };
-let line = 'MARGIN=' + C.margin + ' FRAC=' + C.frac + ' EFF=' + C.eff + ' K=' + C.ck + ' LOOK=' + C.look + ' | ';
+let line = (process.env.ENGMODE||'classic') + ' | MARGIN=' + C.margin + ' FRAC=' + C.frac + ' EFF=' + C.eff + ' K=' + C.ck + ' LOOK=' + C.look + ' | ';
 let deadNames = [];
 for (const [gname, list] of groups) {
   let sum = 0, dead = 0, tsum = 0, peaks = [];

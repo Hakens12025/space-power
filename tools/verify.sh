@@ -825,13 +825,17 @@ t('FLOW9_ENG',function(){ /* RF9 实时状态的速度/加速度读数:数值取
   var thr=s.thrust;
   var okA=(A.txt.indexOf('主推')>=0&&Math.abs(A.acc-thr)<0.1);
   var okB=(B.txt.indexOf('反推')>=0&&Math.abs(B.acc-thr)<0.1);
-  var okC=(C.txt.indexOf('侧推')>=0&&Math.abs(C.acc-thr*0.6)<0.1);  /* 侧推 power=0.6,数值必须跟着打折,不能显示额定 */
+  /* RF19 引擎定案为三角(tri):横向机动由三舱共模分解,功率包络 0.866~1.0(经典的 0.6 侧推魔数已随 classic 退役)。
+     多舱同时点火时面板会同时列出多行(反推时 ±120 两舱 → 「反推侧推」;横向时主舱也参与 → 「主推侧推」),
+     这是三角的真实行为不是 bug。判据:侧推行存在,且加速度落在包络带 [0.866,1.0]×额定内 —— 仍然守住
+     RF9 的本意「显示钳位后的真实值,不是额定值」(靠 D 的姿态零加速度那条一起守)。 */
+  var okC=(C.txt.indexOf('侧推')>=0&&C.acc>=thr*0.85&&C.acc<=thr+0.1);
   var okD=(D.txt.indexOf('姿态')>=0&&D.acc===0&&D.sf===1&&!D.side); /* 姿态不算加速度:sideFlame 亮着但 engSide 为 false */
   var spd=document.querySelector('#selInfo .row:nth-child(3) .v');
   var okS=(spd&&/km\/s/.test(spd.textContent));
   var ok=(okA&&okB&&okC&&okD&&okS);
   return (ok?'ok':'fail')+' 额定推力='+thr
-    +' | 主推「'+A.txt+'」 反推「'+B.txt+'」 侧推「'+C.txt+'」(须≈'+(thr*0.6).toFixed(1)+'=打六折,不是额定)'
+    +' | 主推「'+A.txt+'」 反推「'+B.txt+'」 侧推「'+C.txt+'」(须落在包络带 '+(thr*0.866).toFixed(1)+'~'+thr+')'
     +' 纯转向「'+D.txt+'」(须 0 且标姿态:sideFlame='+D.sf+' engSide='+D.side+')'
     +' | 速度行='+(okS?'有':'缺');
 });

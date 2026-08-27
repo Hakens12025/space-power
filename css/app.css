@@ -331,6 +331,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
    !important 用于压过 applyPanelState/#overlay.on 一类内联 display。 */
 #qbar,#fleet,#log,#scenePanel,#trPanel,#editorPanel,#replayBar,#overlay,#specView,#ringPanel,#statusTip,
 #btnRec,#btnAdmin,#btnSelfPlay,#btnRange,#btnEnv,#btnReplay,#btnSet{display:none!important}
+#engSw{display:none!important} /* RF19 引擎模型定案为三角(唯一模式),切换钮只藏不删(同 RF2 惯例);实测 classic 6.0194 / tri 5.8552 / torque 5.8392,复活切换 = 删本行 */
 
 /* 选中舰实时信息面板(右轨,几何抄 #fleet) */
 #selPanel{top:var(--rail-top);right:var(--gut);width:var(--rail-w);max-height:calc(100% - var(--rail-top) - var(--tray-b));display:flex;flex-direction:column} /* RF5 末项 --gut → --tray-b(=dock-b+log-h+gut):给同一条右轨底部的 #evtFeed 让出车道,否则 #fcSec 撑高后会从上面压下来 */

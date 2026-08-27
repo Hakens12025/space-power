@@ -42,6 +42,18 @@ class RouteEnv:
         self.HYS_OFF = 0.5
         self.HYS_K = 0.02
         self.HYS_MAX = 8.0
+        self.engMode = c.get('engMode', 'classic')
+        if self.engMode == 'torque':
+            raise ValueError('torque 未移植(游戏已定案 tri,torque 只藏不删)')
+        # tri 的三舱共模方向(逐算式复刻 30-motion 的 EPOD_DIR:先转度再转回弧度,保浮点同路)
+        import math as _m
+        _r = _m.pi / 180.0
+        dirs = []
+        for a_ in (180.0, 60.0, 300.0):
+            d0 = (a_ + 180.0 - 60.0) * _r
+            d1 = (a_ + 180.0 + 60.0) * _r
+            dirs.append(_m.atan2(_m.sin(d0) + _m.sin(d1), _m.cos(d0) + _m.cos(d1)) * 180.0 / _m.pi)
+        self._pod_u = [( _m.cos(d * _r), _m.sin(d * _r)) for d in dirs]
         # RF14 切换判据模式:
         #   'aim'  现状 —— 离【瞄准点】< passBy 就切。瞄准点内移 d 之后船在离真航点 passBy+d 处就切走,
         #          于是 偏靠 ~= passBy + d,这是常数 lam / 预算规则 / 逐拐点最优只敢切 0.47 的共同病根。
@@ -225,10 +237,32 @@ class RouteEnv:
         along = (td * f_p).sum(-1)
         braking = wantSpd < velSpd
         decel = (td * vel).sum(-1)
-        power = torch.where(along > 0.5, along,
-                torch.where(along < -0.5, -along,
-                torch.where(braking & (decel < -velSpd * 0.5),
-                            torch.ones_like(along), torch.full_like(along, 0.6))))
+        if self.engMode == 'tri':
+            # tri:功率 = 三舱共模包络 env(舰体系方位)。engSolveForce 的 m 只喂尾焰/面板,动力学只用 env。
+            # 逐算式复刻:先 *180/pi 转度、再 *pi/180 转回(JS 就是这么绕的,为浮点同路不化简)。
+            import math as _m
+            fa = torch.atan2(f_p[:, 1], f_p[:, 0]) * (180.0 / _m.pi)
+            ta = torch.atan2(td[:, 1], td[:, 0]) * (180.0 / _m.pi)
+            rad = (ta - fa) * (_m.pi / 180.0)
+            dx, dy = torch.cos(rad), torch.sin(rad)
+            env = torch.zeros_like(along)
+            for i in range(3):
+                j = (i + 1) % 3
+                uix, uiy = self._pod_u[i]
+                ujx, ujy = self._pod_u[j]
+                det = uix * ujy - uiy * ujx
+                ai = (dx * ujy - dy * ujx) / det
+                aj = (uix * dy - uiy * dx) / det
+                okd = (ai > -1e-9) & (aj > -1e-9)
+                inv = torch.maximum(ai.clamp_min(1e-9), aj.clamp_min(1e-9))
+                k = torch.where(okd, 1.0 / inv, torch.zeros_like(inv))
+                env = torch.maximum(env, k)
+            power = env
+        else:
+            power = torch.where(along > 0.5, along,
+                    torch.where(along < -0.5, -along,
+                    torch.where(braking & (decel < -velSpd * 0.5),
+                                torch.ones_like(along), torch.full_like(along, 0.6))))
         a = torch.minimum(torch.full_like(power, self.thrust) * power, need / self.dt)
         v_p = vel + td * (a * self.dt).unsqueeze(-1)
 
