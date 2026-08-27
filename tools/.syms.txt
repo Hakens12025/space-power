@@ -13,17 +13,9 @@ CLS_TIER_MUL
 CLS_VALUE
 CORNER_K
 DEFAULT_ENEMY
-ENG_ALPHA
-ENG_DEAD
 ENG_HYS_K
 ENG_HYS_MAX
 ENG_HYS_OFF
-ENG_KD
-ENG_KP
-ENG_LABEL
-ENG_MODES
-ENG_OMEGA_CAP
-EPOD_ARM
 EPOD_AT
 EPOD_DIR
 EPOD_TILT
@@ -198,7 +190,6 @@ emcon
 endRange
 enemyAI
 enemyToArr
-engMode
 engNozzles
 engRows
 engSolveForce
@@ -509,7 +500,6 @@ speedGearsOf
 stars
 startRange
 steerToVel
-stepAttitude
 stepBeaconProj
 stepDecoyProj
 stepFireControl

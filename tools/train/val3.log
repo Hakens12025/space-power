@@ -1,0 +1,13 @@
+参考常量: {'thrust': 15, 'turnRate': 0.16, 'cruise': 800, 'passBy': 5000, 'arrive': 400, 'stopSpeed': 60, 'guideEff': 0.9, 'routeTol': 1000, 'routeMargin': 5000, 'maxfrac': 0.35, 'look': 16, 'engMode': 'tri'}
+[CPU/float64  逻辑对表] 65 条 | 墙钟 187.08s = 0 episode/秒
+   用时相对误差:  中位 0.00e+00  最大 0.00e+00
+   最差偏靠绝对差: 中位 0.000 km  最大 0.000 km
+   合规判定不一致: 0 条 
+   最差用例 #0: JS t=232.24s / torch t=232.24s (航点 5)
+[GPU/float32  训练档] 65 条 | 墙钟 245.09s = 0 episode/秒
+   用时相对误差:  中位 5.51e-05  最大 2.10e-04
+   最差偏靠绝对差: 中位 0.063 km  最大 7.846 km
+   合规判定不一致: 0 条 
+   最差用例 #24: JS t=134.26s / torch t=134.23s (航点 3)
+
+判定: 逻辑档最大相对误差 0.00e+00 PASS(<1e-6)

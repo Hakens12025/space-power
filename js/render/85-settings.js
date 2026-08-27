@@ -143,20 +143,6 @@ function toggleSpec(){const v=document.getElementById('specView');if(v.style.dis
 document.getElementById('setSpec').addEventListener('click',toggleSpec);
 document.getElementById('specClose').addEventListener('click',()=>{document.getElementById('specView').style.display='none';});
 on('btnSet','pointerdown',e=>{if(e.button!==0)return;e.preventDefault();toggleSettings();});
-/* RF10 引擎模型切换:三个钮共用一个委托(挂在稳定的 #engSw 上,不逐钮绑)。
-   切换只改 engMode 一个变量 —— 三个模型共用 steerToVel 入口,不需要重置任何舰船状态;
-   但从 torque 切走时要把 omega 清零,否则残留角速度会在 classic/tri 下永远转下去(那两个模型不积分角速度,也就没人去衰减它)。 */
-on('engSw','click',e=>{
-  const b=e.target&&e.target.closest?e.target.closest('[data-eng]'):null;
-  if(!b)return;
-  const m=b.dataset.eng;
-  if(typeof ENG_MODES==='undefined'||ENG_MODES.indexOf(m)<0||m===engMode)return;
-  const from=engMode;
-  engMode=m;
-  if(from==='torque'&&typeof ships!=='undefined')for(const s of ships){s.omega=0;s.aimHeading=null;}
-  document.querySelectorAll('#engSw [data-eng]').forEach(x=>x.classList.toggle('on',x.dataset.eng===m));
-  log(`⚙ 引擎模型 → ${ENG_LABEL[m]}${m==='torque'?'(实验档:差模真力矩,转向由角速度积分,会打破制导律的对齐折扣假设)':(m==='tri'?'(三舱120°共模平移,包络 0.866~1.00;转向=反作用轮)':'(改造前的手调阈值)')}`,'');
-});
 on('btnPause','pointerdown',e=>{if(e.button!==0)return;e.preventDefault();doAction('pause');});
 on('btnSlow','pointerdown',e=>{if(e.button!==0)return;e.preventDefault();doAction('slower');});
 on('btnFast','pointerdown',e=>{if(e.button!==0)return;e.preventDefault();doAction('faster');});

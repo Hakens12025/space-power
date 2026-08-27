@@ -47,7 +47,7 @@ function makeEnv(){
     function shipConst(){return {thrust:__s.thrust,turnRate:__s.turnRate,cruise:cruiseOf(__s),
       passBy:CFG.passBy,arrive:CFG.arrive,stopSpeed:CFG.stopSpeed,guideEff:GUIDE_EFF,routeTol:ROUTE_TOL,routeMargin:ROUTE_MARGIN,
       maxfrac:(typeof ROUTE_MARGIN_MAXFRAC!=='undefined'?ROUTE_MARGIN_MAXFRAC:0.35),
-      look:(typeof ROUTE_LOOKAHEAD!=='undefined'?ROUTE_LOOKAHEAD:16),engMode:engMode};}
+      look:(typeof ROUTE_LOOKAHEAD!=='undefined'?ROUTE_LOOKAHEAD:16),engMode:'tri'};}  // RF19b:游戏侧 engMode 变量已随模式删除,tri 是唯一模型
   `,ctx);
   const call=(expr)=>vm.runInContext(expr,ctx);
   return {
