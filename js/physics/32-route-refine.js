@@ -27,6 +27,10 @@ const RR_REAL_DT = 0.02;          // 验收步长(必须与 CFG.step 一致)
 const RR_BUDGET = 3000;           // 每帧最多推进多少沙盘步(约 3~5ms)
 const RR_MAX_STEPS = 40000;       // 单次重放的步数上限,防病态航线把预算烧光
 const RR_MIN_WP = 3;              // 少于这么多航点不值得细化(单点/两点没有拐角可切)
+const RR_MAX_WP = 8;              // 多于这么多航点【直接不细化】。搜索规模是 (n-1)×档数×轮数 次后缀重放,
+                                  // 而每次重放长度又正比于 n —— 总成本 O(n^2),n=20 时会把分帧预算烧穿。
+                                  // 更完整的解是"只对接下来几个拐点开窗细化、随船推进重新触发",
+                                  // 但那要改评估口径(窗口末点不是停车点),是另一件事。当前先老实退出。
 
 /* ---------- 沙盘 ---------- */
 let rrBusy = false;               // 防重入:沙盘会临时改全局 ships
@@ -119,7 +123,7 @@ function rrAim(route, bis, lam) {
 function rrStart(ship) {
   if (!rrOn || !ship || ship.dead || ship.formation) return;      // 编队走另一套结构,本轮不碰
   const od = ship.orders || [];
-  if (od.length < RR_MIN_WP) return;
+  if (od.length < RR_MIN_WP || od.length > RR_MAX_WP) return;
   for (let i = rrJobs.length - 1; i >= 0; i--) if (rrJobs[i].shipId === ship.id) rrJobs.splice(i, 1);
   const route = od.map(o => [o.pos[0], o.pos[1]]);
   const job = {

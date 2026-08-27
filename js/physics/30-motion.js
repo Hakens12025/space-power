@@ -105,11 +105,28 @@ function cornerSpd(s,vIn,vOut){ // 拐角几何限速:以 tol 为允许的切角
   const r=c>0?ROUTE_TOL*c/(1-c):0;                    // sec(phi/2)-1 = (1-c)/c;phi=90 度 -> 316km/s,phi=180 度 -> 0
   return Math.sqrt(Math.max(0,s.thrust*GUIDE_EFF*r));
 }
-function routeCap(s,dist){ // 反向传播:从末点(必为 stop,速度 0)倒推回当前段,返回本 tick 的速度上限
+const ROUTE_LOOKAHEAD=8; // 前瞻硬上限(航点数)。见 routeCap 里的说明:段长正常时视界只要 2~3 个,
+                         // 这条只在极密集航线上才生效,且生效时偏保守(安全的那一边)
+function routeCap(s,dist){ // 反向传播:从视界处倒推回当前段,返回本 tick 的速度上限
   const od=s.orders, n=od.length;
   if(!n)return Infinity;
-  let U=(od[n-1].type==='pass')?cruiseOf(s):0;          // 末点速度:stop -> 0(正常航线恒走这一支)
-  for(let j=n-2;j>=0;j--){
+  /* RF15 前瞻视界:超过【从巡航刹停所需距离】之外的航点,不可能约束当前速度(总刹得住),
+     递推可以在那里截断。这不是近似 —— 截断处速度取 0 时,sqrt(2a*D) 在 D>=刹车距离时必 >= 巡航,
+     会被 cruiseOf 上限吃掉,结果与不截断【完全相同】。
+     【方向必须取 0 不能取巡航】:取巡航是高估后面的余地,船会以为刹得住、到拐点才发现来不及(冲过头);
+     取 0 是低估,最坏只是慢一点。截断永远要往安全那一侧。
+     实测:段长 30k 时视界 2 个航点、15k 时 3 个、6k 时 26 个 —— 所以再加一条硬上限 ROUTE_LOOKAHEAD,
+     只在极密集航线上生效,那时行为偏保守而非偏危险。原来这个循环是 O(剩余航点数) 且【每 tick 每船】跑一遍,
+     玩家画长航线时会线性变贵。 */
+  const brake=cruiseOf(s)*cruiseOf(s)/(2*s.thrust*GUIDE_EFF);
+  let acc=Math.max(0,dist-ROUTE_MARGIN), h=n-1;
+  if(acc>=brake)h=0;
+  else for(let k=0;k<n-1&&k<ROUTE_LOOKAHEAD;k++){
+    acc+=Math.max(0,V.len(V.sub(od[k+1].pos,od[k].pos))-ROUTE_MARGIN);
+    if(acc>=brake||k+1>=ROUTE_LOOKAHEAD){h=k+1;break;}
+  }
+  let U=(h===n-1&&od[n-1].type==='pass')?cruiseOf(s):0;  // 末点 stop -> 0;视界截断处也取 0(保守侧)
+  for(let j=h-1;j>=0;j--){
     const L=V.len(V.sub(od[j+1].pos,od[j].pos));
     const reach=Math.sqrt(U*U+2*s.thrust*GUIDE_EFF*Math.max(0,L-ROUTE_MARGIN)); // 从 od[j] 出发,这一段减得下来的最快速度
     const prev=(j===0)?s.pos:od[j-1].pos;               // 首点的入射方向用【当前船位】:切过角之后入射角会变,让限速跟着适应
