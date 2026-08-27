@@ -48,7 +48,7 @@ CHROME="/c/Program Files/Google/Chrome/Application/chrome.exe"
 - `function` 提升只在单个 script 内生效:某文件顶层**立即执行**的语句(裸 `getElementById` 绑定、`on(...)` 调用)只受同文件顺序与上述两条硬约束限制。新增文件插到 index.html 时按系统目录归位。
 - 新增 DOM 后**不要顶层裸调 `document.elementFromPoint` 之类的 `getElementById(x).addEventListener`** —— 元素不存在时会抛错并中断该文件后续所有顶层语句(静默丢绑定)。用 `core/00-config.js` 的 `on(id,ev,fn)` 安全挂载。重灾区:scenario/92(8 条裸绑定)、command/73(约 18 条)——**改 HTML id 必须同步这两处**。
 - 全是顶层全局函数/变量,没有模块化(`import/export` 在 `file://` 下被 CORS 拦死)。每个 js 文件自带 `"use strict";`。
-- 行内 `DS195`/`KIMI155`/`TIER1`/`RANGE1`/`UI1` 标记记录"这行哪一版改的、为什么",很多注释写了被替换的旧做法和踩过的坑。**不要清理**;自己改动按同格式补标记 + 一句原因。`RF1` = 2026-08 目录解耦重构(纯移动/纯提取,行为零改变);`RF5` = 2026-08 火控序列(Phase A:引擎 weapons/58 + 面板 render/88;Phase B:入口 command/74;Phase C:目标轮盘 = render/89 几何 + command/74 数据;Phase D:教程模态 render/85-tutorial + 顶栏 `#btnTut`,标记写 `RF5-D`);`RF6` = 2026-08 主炮射程分两块 + 运动分层并行 + 三处既有 bug 修复;`RF7` = 2026-08 Shift+中键选定链 + 数据链渲染 + 火控计算机方条 + 轮盘贴合(RF7b 序列态跟随选中 / RF7c 面板稳定写入 / RF7d 数据链流动 / RF7e 告警脉冲改墙钟);`RF8` = 2026-08 大序列(舰级 轮询/选择)+ 暂停红态;`RF12` = 2026-08 减速抖动/拐角限速/虚影持久层 + 探针两处自身缺陷;`RF13` = 2026-08 航线反向速度传播 + 航线质量评估台;`RF14` = 2026-08 下令后分帧细化瞄准点(切角过弯);`RF15` = 2026-08 前瞻视界封顶 + 长航线成本护栏。
+- 行内 `DS195`/`KIMI155`/`TIER1`/`RANGE1`/`UI1` 标记记录"这行哪一版改的、为什么",很多注释写了被替换的旧做法和踩过的坑。**不要清理**;自己改动按同格式补标记 + 一句原因。`RF1` = 2026-08 目录解耦重构(纯移动/纯提取,行为零改变);`RF5` = 2026-08 火控序列(Phase A:引擎 weapons/58 + 面板 render/88;Phase B:入口 command/74;Phase C:目标轮盘 = render/89 几何 + command/74 数据;Phase D:教程模态 render/85-tutorial + 顶栏 `#btnTut`,标记写 `RF5-D`);`RF6` = 2026-08 主炮射程分两块 + 运动分层并行 + 三处既有 bug 修复;`RF7` = 2026-08 Shift+中键选定链 + 数据链渲染 + 火控计算机方条 + 轮盘贴合(RF7b 序列态跟随选中 / RF7c 面板稳定写入 / RF7d 数据链流动 / RF7e 告警脉冲改墙钟);`RF8` = 2026-08 大序列(舰级 轮询/选择)+ 暂停红态;`RF12` = 2026-08 减速抖动/拐角限速/虚影持久层 + 探针两处自身缺陷;`RF13` = 2026-08 航线反向速度传播 + 航线质量评估台;`RF14` = 2026-08 下令后分帧细化瞄准点(切角过弯);`RF15` = 2026-08 前瞻视界封顶 + 长航线成本护栏;`RF16` = 2026-08 压力航线暴露的死锁 + 五参数自动调参。
 - **RF5 交互模型**(改了鼠标语义,接手前先看这条):
   - **中键短按(<350ms 且位移≤5px)= 快速交战** —— 主体舰(`selBlue()[0]`)对准星吸附的敌舰 `fcNew` 建一条火控序列。
   - **中键长按(≥350ms、无位移、准星已吸附)= 目标轮盘**。长按判定在 **mousedown 起的 `mmbTimer` 定时器里**做,**松手前就弹**(手柄轮盘的手感),不是等 mouseup。三种上下文按当前编辑序列 `fcSeq(sub.fcEditId)` 分岔,且**都在开盘那一瞬就提交 fc\***(误触也不丢进度,序列立刻出现在右栏火控计算机里):目标**已在**该序列 → 只编辑;**不在 + Shift** → `fcAppend` 追加到末尾;**不在 + 无 Shift** → `fcNew` 新建(自带暂停该舰任务 + 强开 `autoEngage`/`roe='free'` 两个副作用,是预期行为,所以三种上下文的日志刻意分开写)。武器项只有一件时(CV)**不开轮盘**,直接一条日志 —— 且**取反只在编辑上下文做**,新建/追加时保留刚提交的缺省许可。
@@ -72,7 +72,7 @@ CHROME="/c/Program Files/Google/Chrome/Application/chrome.exe"
 | `render/` | `80-camera` · `81-background`(星云/网格)· `82-ship-icons` · `83-hud`(+RF5 `drawTargeting`:准星/吸附圈/按射程着色的预览线)· `84-scene`(render 图层管线)· `85-settings` · `85-tutorial`(**RF5-D 教程模态**:`TUT_HTML` 全文 + `tutToggle`/`tutIsOpen`,与 `85-settings` **共用编号 85**,先例是 weapons/51-defs 与 51-ciws)· `86-log` · `87-fleetcards` · `88-selpanel`(RF2 选中舰面板+底栏开关;+RF5 火控计算机面板 `#fcSec`/`#fcList`,`updateFcPanel`;`KIND_INFO` 是 kind→开关字段/射程/文案的**唯一映射**)· `89-radial`(**RF5 Phase C 目标轮盘的几何唯一真相**:半径/角度/容量常量 + `drawRadial`/`radialHit`/`radialInBand`/`radPages`/`radSlots`,只读 `rad` 从不写) | 呈现 |
 | `scenario/` | `90-envs`(TEST_ENVS/curEnv/DEFAULT_ENEMY)· `91-init`(initFleet/initEnemy)· `92-editor`(编辑器+applyClsTier)· `93-replay`(回放+场景菜单+GM/互搏按钮)· `94-demo` · `95-range`(靶场全部) | 对局生命周期 |
 
-**全局状态归属表**(改某个全局前先看它声明在哪):模拟核心+相机+交互 pending\*+回放+卡片引用+`cv,ctx`+`adminMode/selfPlay/selfPlayPrevAdmin` → `core/01-state`;`shipSeq` → ships/11;`detT` → sensors/21;`hitFX/threatCorridors/missileGroupSeq/netSeq/nets` → weapons/52;`netAllocT` → weapons/53;`fireSeqs/fcSeqSeq/FC_PT_SALVOS` → weapons/58;`formationFan/formationSpacing/fmGap/fmSeq` → formation/40、41;`tasks/taskSeq/pendingTask*` → bots/60;`camKeys/bindings` → command/71;`envIdx/customScene/edit*` → scenario/90、92;`rangeCfg/tr*` → scenario/95;`tutOn/tutPrevRun/TUT_HTML` → render/85-tutorial;`xh/XH_DWELL/XH_JUMP`、`rad/RAD_MODES` → command/74(`rad` 是与 render/89 的两方契约,字段名不得擅自更名);`RAD_RI/RAD_RO/RAD_L_IN/RAD_L_OUT/RAD_RM/RAD_GAP/RAD_FADE/RAD_SEAM/RAD_CAP/RAD_WHEEL_PAD/_radNameCache` → render/89(几何常量只在这一份);`MAC_FALLOFF/MAC_SPREAD_K/MAC_SPREAD_CAP` 与谓词 `macEffRange()` → weapons/52(有效射程的唯一定义点);`FIRE_ALL_ON` → command/71;`ENG_HYS_OFF/ENG_HYS_K/ENG_HYS_MAX`、`ROUTE_TOL/ROUTE_MARGIN` 与 `cornerSpd()/routeCap()` → physics/30;`rrOn/rrJobs/RR_*` → physics/32;`ROUTE_LOOKAHEAD` → physics/30(推力迟滞与拐角限速的唯一定义点,舰上的 `s.coasting` 由 `steerToVel` 独占读写);`mmb/MMB_HOLD_MS/mmbTimer` → command/70(就近声明,`mmb` 被本文件 down/move/up/blur **四处**读写,`mmbTimer` 同;与 core/01-state 的 `rmbTimer` 是两回事,不要复用)。
+**全局状态归属表**(改某个全局前先看它声明在哪):模拟核心+相机+交互 pending\*+回放+卡片引用+`cv,ctx`+`adminMode/selfPlay/selfPlayPrevAdmin` → `core/01-state`;`shipSeq` → ships/11;`detT` → sensors/21;`hitFX/threatCorridors/missileGroupSeq/netSeq/nets` → weapons/52;`netAllocT` → weapons/53;`fireSeqs/fcSeqSeq/FC_PT_SALVOS` → weapons/58;`formationFan/formationSpacing/fmGap/fmSeq` → formation/40、41;`tasks/taskSeq/pendingTask*` → bots/60;`camKeys/bindings` → command/71;`envIdx/customScene/edit*` → scenario/90、92;`rangeCfg/tr*` → scenario/95;`tutOn/tutPrevRun/TUT_HTML` → render/85-tutorial;`xh/XH_DWELL/XH_JUMP`、`rad/RAD_MODES` → command/74(`rad` 是与 render/89 的两方契约,字段名不得擅自更名);`RAD_RI/RAD_RO/RAD_L_IN/RAD_L_OUT/RAD_RM/RAD_GAP/RAD_FADE/RAD_SEAM/RAD_CAP/RAD_WHEEL_PAD/_radNameCache` → render/89(几何常量只在这一份);`MAC_FALLOFF/MAC_SPREAD_K/MAC_SPREAD_CAP` 与谓词 `macEffRange()` → weapons/52(有效射程的唯一定义点);`FIRE_ALL_ON` → command/71;`ENG_HYS_OFF/ENG_HYS_K/ENG_HYS_MAX`、`ROUTE_TOL/ROUTE_MARGIN` 与 `cornerSpd()/routeCap()` → physics/30;`rrOn/rrJobs/RR_*` → physics/32;`ROUTE_LOOKAHEAD`/`ROUTE_MARGIN_MAXFRAC`/`CORNER_K` → physics/30(推力迟滞与拐角限速的唯一定义点,舰上的 `s.coasting` 由 `steerToVel` 独占读写);`mmb/MMB_HOLD_MS/mmbTimer` → command/70(就近声明,`mmb` 被本文件 down/move/up/blur **四处**读写,`mmbTimer` 同;与 core/01-state 的 `rmbTimer` 是两回事,不要复用)。
 
 ## 核心架构
 
@@ -471,6 +471,50 @@ S1 感知节拍(每秒) → S2 网分配节拍(0.5s) → S3 任务AI
 ### 一条稳定规律(三次实测支持)
 
 **在这个控制器里,更激进的速度规划几乎总是净亏** —— `ROUTE_TOL` 扫描、`ROUTE_MARGIN` 扫描都是"峰值涨、总时间变长",因为横向速度的代价大于纵向的收益。唯一的例外是 `GUIDE_EFF`(RF13b 的 `0.55→0.85` 是真赚),因为它改的是**对刹车能力的估计**,不是**进弯要多快**。这两类常数要分开看:前者放宽是纠正低估,后者放宽是自找麻烦。
+
+## RF16 压力航线 / 自动调参 备忘(2026-08)
+
+用户要求加两条极端航线:**20 点共线直线**与**20 点左右来回**。这两条立刻抓到了本项目最严重的一个 bug,而且是任何参数扫描都发现不了的那种。
+
+### 死锁:每段各扣一次 margin,扣减随段数线性累积
+
+`ROUTE_MARGIN=5000` 原本从**每段**里扣。20 个共线航点、段长 `5000km` 时,20 段共扣掉 `100000km` —— **正好等于整条航线长度**。于是 `usable` 处处为 0,反向递推把末点的 0 一路传回起点,`cap=0`,**船一步都不动**(实测跑满 400000 步、弧长 0、余令 20)。物理上它完全可以在这 100000km 里从巡航刹停,**是这个形式本身错了,不是数值没调好**。
+
+**为什么扫描发现不了**:随机航线段长中位 `11194km`,短于 margin 的只占 10%,压根碰不到那个区间。我扫过 `MARGIN=5000/2500/1000/0` 四档,全部"合规 1.000、现状最优"。**极端用例不是锦上添花,它补的是测量分布的盲区。**
+
+修法必须外科式:`routeUsable(L)=L-min(margin, L*MAXFRAC)` **只用于段间递推**。当前段那一项**不能**用比例式 —— 那里的折扣必须随 `dist→0` 归零,让船恰好以计划速度到达拐点;第一版两处都改,之字航线立刻从 `1152s` 劣化到 `1338s`。累积 bug 只存在于段间(每段各扣一次),当前段只扣一次、不累积。
+
+**顺带定死一条结构约束:`ROUTE_MARGIN <= CFG.passBy`**(代码里用 `routeMargin()` 强制)。当前段那一项是 `max(0,dist-margin)`,而 pass 点在 `dist<passBy` 才被消费 —— 若 `margin>passBy`,`dist` 落在 `(passBy, margin)` 区间时速度上限恒等于 `U`,遇到 `U=0` 的急拐角就当场停住。实测 `margin=6500/8000` 时各出 4 条死锁。
+
+### 五参数自动坐标下降(tools/train/autotune.js)
+
+统一评测台 `tools/train/bench_all.js` 分三组报分(HOLD 留出 64 条 / NAMED 命名 6 条 / STRESS 压力 5 条),**死锁一票否决**。收敛结果:
+
+| 参数 | 原 | 新 | 说明 |
+|---|---|---|---|
+| `ROUTE_TOL` | 5000 | **1000** | 原值只是"借用接受半径"的未检验默认。网格含 150~700 而它停在 1000,是真收敛不是撞边界 |
+| `GUIDE_EFF` | 0.85 | **0.90** | |
+| `ROUTE_MARGIN_MAXFRAC` | — | **0.35** | 新增 |
+| `ROUTE_LOOKAHEAD` | 8 | **16** | 8 会在密集航线上人为压低直线巡航速度(`sqrt(8×2a×2500)=714 < 800`) |
+
+三组均分之和 `6.5164 → 6.1152`(**−6.2%**)。压力航线:直线20点段长10k 慢 `5.1%→2.9%`、段长5k 由死锁变为慢 `8.0%` 且峰值达满巡航;之字20点 `1152.5→1088.9s`(−5.5%)。
+
+### 试过并退回:把 cornerSpd 换成"实测时间最优过弯速度律"
+
+单拐角扫描显示最优 `ROUTE_TOL` 随偏折角剧烈变化且**非单调**(`15度:400 / 90度:3200 / 175度:100`),现状(5000)在 **30~90 度这段玩家最常画的中等拐角**上比最优慢 `22%~42%`。据此在长段(70k)上量出 `v/巡航 = 1.00/1.00/1.00/0.881/0.539/0.301/0.084/0.010`,与 `(1+cos φ)/2` 吻合良好。**换上去实测更差**(6.3647 vs 本式调优后的 6.1216),已退回。
+
+两条原因值得记:①多拐角航线上拐点互相耦合,慢一点到达 k 号拐点对 k+1 号是更好的起始条件;②**更根本的是,反向递推算的是「最大可行速度」,而时间最优的剖面不是最大可行的那个** —— 高速进弯要多花的横向修正时间超过直道上省下的时间。所以过弯限速**不是可行性约束,是个权衡参数**,而权衡还依赖段长。留出集段长中位只有 11194km,在那个尺度上实测最优(L=15k 时 90 度为 218)远低于长段上的 431,而 `c/(1-c)` 随角度衰减更快,恰好更贴合真实分布。**全局评测台是权威,单拐角研究不是。**
+
+### 探针:FLOW6_FLOW 第三次重做
+
+前两版都在追踪"采样行上第一个亮段起点"的 x,而那个量是**分段**的:①起始相位随真实墙钟变(RF12 已钉死);②即便钉死,读数仍只有 `±3px` 余量,**一次 1px 的量化差就把 `+3` 变成 `0`**(RF16 实测,而被测代码一行没动)。现改为**整行互相关**求位移,对相位、量化、抗锯齿全免疫,读数正好 `9px` = 理论值 `30px/s × 0.3s`(旧测法读 3px 是阈值与抗锯齿的假象)。**往每帧渲染上做像素判定时,测"图案整体移了多少"远比测"某个特征点在哪"稳。**
+
+新增 `FLOW16_STRESS`:直线20点必须不死锁且 `<1.25` 倍单点用时、峰值 `>700`;之字20点必须跑完且偏靠合规。
+
+### 两个工具侧的坑
+
+`bench_all.js` 的参数覆盖原本 `try/catch` 后静默,而目标常量声明成了 `const` —— **八次扫描跑的全是同一组参数**,差点得出"这个参数没影响"的结论。现改为覆盖后**回读校验**,不一致直接抛错。
+另:注释里写 `v` 星号斜杠会**提前终止块注释**(`RF10` 记过一次,`RF16` 又踩一次)。
 
 ## 发布(GitHub Pages)
 

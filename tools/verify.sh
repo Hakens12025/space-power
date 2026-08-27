@@ -663,37 +663,40 @@ t('FLOW6_STABLE',function(){ /* RF7c 面板稳定写入:内容不变时不得重
   return (ok?'ok':'fail')+' 连刷10拍节点未换='+same+'(须true:内容不变不重建) 改模式后重建='+rebuilt
     +'(须true) 新内容含"轮"='+md+' 方条数='+n0;
 });
-t('FLOW6_FLOW',function(){ /* RF7d 数据链流动【方向】:亮段必须朝目标走。方向反了画面同样自然,只有测出来才算数 */
+t('FLOW6_FLOW',function(){ /* RF7d 数据链流动【方向】:亮段必须朝目标走。方向反了画面同样自然,只有测出来才算数。
+  RF16 第三次重做测法。前两版都在追踪"采样行上第一个亮段起点"的 x,而那个量是【分段】的:
+    ① 起始相位随真实墙钟变(RF12 已钉死相位);
+    ② 即便钉死,读数仍只有 ±3px 的余量,一次 1px 的量化差就能把 +3 变成 0(RF16 实测,代码根本没动)。
+  现在改为【整行互相关】:采两次整行灰度,找使二者最吻合的位移 d。对相位、量化、抗锯齿都免疫,
+  而且直接量的就是"图案往哪边移了多少",不需要任何关于亮段结构的假设。 */
   var e=fc5reset();
   fcNew(e.S,{tid:e.A.id});
-  /* 把舰与靶摆成一条水平线,链就是 屏幕左→右;沿链采样像素,看亮段随时间往哪边移 */
   e.S.pos=[0,0,0];e.S.vel=[0,0,0];e.A.pos=[200000,0,0];e.A.vel=[0,0,0];e.A.rangeAnchor=[200000,0,0];
   cam.x=100000;cam.y=0;
   var p0=toScreen(e.S.pos[0],e.S.pos[1]),p1=toScreen(e.A.pos[0],e.A.pos[1]);
   var y=Math.round((p0[1]+p1[1])/2),x0=Math.round(Math.min(p0[0],p1[0]))+20,x1=Math.round(Math.max(p0[0],p1[0]))-20;
-  if(!(x1-x0>80))return 'fail 采样区间太短 x0='+x0+' x1='+x1;
-  /* 用可控墙钟推进:drawFcChain 读 performance.now(),fc4clock 正是改写它的 */
-  function litRun(){ /* 返回采样行上第一个"亮段起点"的 x(亮段=流动层,底轨太暗被阈值滤掉) */
-    render();
-    var d=ctx.getImageData(x0,y,x1-x0,1).data,prev=0;
-    for(var i=0;i<x1-x0;i++){var v=d[i*4+1];if(v>110&&prev<=110)return x0+i;prev=v;}
-    return -1;
+  var W=x1-x0;
+  if(!(W>80))return 'fail 采样区间太短 W='+W;
+  function row(){ render(); var d=ctx.getImageData(x0,y,W,1).data,a=[];
+    for(var i=0;i<W;i++)a.push(d[i*4+1]); return a; }
+  function shiftOf(a,b){                      /* 找 d 使 b 与"a 平移 d"最吻合 */
+    var best=0,bestE=Infinity;
+    for(var d=-12;d<=12;d++){
+      var err=0,n=0;
+      for(var i=12;i<W-12;i++){var j=i+d; if(j<0||j>=W)continue; err+=Math.abs(b[j]-a[i]); n++;}
+      if(n>0&&err/n<bestE){bestE=err/n;best=d;}
+    }
+    return best;
   }
   fc4clock(true);
-  /* RF12 相位必须钉死:fc4clock 用【真实墙钟】给 FC4.clk 播种(见 186 行),而"第一个亮段起点"这个测法在
-     虚线周期内是分段的 —— 位移 9px、周期 24px,起始相位落在中段时,窗口左边会挤进上一段、读数整体翻负。
-     实测扫满 24 个相位:9 个读到负位移(37.5% 概率随机翻红),与被测代码毫无关系。钉到周期起点即消除。
-     注:钉住后原始读数约 +3px 而非注释里的 9px —— 链是一条正好水平的 1.4px 线,阈值判边受抗锯齿影响,
-     量值本就不准;这条判定守的是【符号】,偏移数学(53 行 -(tms*0.001*30)%24)才是位移量的真相。 */
-  var FCPH=FC_FLOW_PERIOD/FC_FLOW_PXPS*1000;   /* 一个虚线周期对应的毫秒数 = 24/30*1000 = 800ms */
-  FC4.clk=Math.ceil(FC4.clk/FCPH)*FCPH;
-  var a0=litRun();
-  FC4.clk+=300;                 /* 推进 0.3 秒:30px/s → 9px 位移,小于一个周期 24px */
-  var a1=litRun();
+  var a=row();
+  FC4.clk+=300;                 /* 推进 0.3 秒:30px/s -> 9px */
+  var b=row();
   fc4clock(false);
-  var ok=(a0>0&&a1>0&&a1>a0);   /* 亮段起点 x 增大 = 朝右 = 朝目标 */
-  return (ok?'ok':'fail')+' 链方向=屏幕左(舰)→右(靶) 亮段起点 x:'+a0+' →(推进0.3s)→ '+a1
-    +' 位移='+(a1-a0)+'px(须>0=朝目标流;30px/s×0.3s≈9px) 周期='+FC_FLOW_PERIOD+'px';
+  var d=shiftOf(a,b);
+  var ok=(d>=5&&d<=13);         /* 双向:必须朝目标(正)且量级对得上(约 9px);反向或不动都判失败 */
+  return (ok?'ok':'fail')+' 链方向=屏幕左(舰)→右(靶) 整行互相关位移='+d+'px(须 5~13,理论 30px/s×0.3s=9px)'
+    +' 采样宽度='+W+' 周期='+FC_FLOW_PERIOD+'px';
 });
 t('FLOW6_PULSE',function(){ /* RF7e 被照射告警黄圈:脉冲必须挂墙钟,与 simTime/倍速解耦(原来挂 simTime,x50 下退化成高频乱闪) */
   var e=fc5reset();
@@ -998,6 +1001,45 @@ t('FLOW14_REFINE',function(){ /* RF14 航线细化(下令后分帧微调瞄准�
     +' | 无余量航线(对照):关 '+b0.t.toFixed(1)+'s 开 '+b1.t.toFixed(1)+'s(须相等=兜底原样退回)'
     +' | 沙盘未污染全局 ships='+clean;
 });
+t('FLOW16_STRESS',function(){ /* RF16 压力航线(用户指定):20 点直线 / 20 点之字。
+  直线那条有【精确参照】—— 20 个共线航点应当与"只下一个终点"用时几乎相同,偏折角处处为 0、不需要任何减速。
+  它抓到过本项目最严重的一个 bug:ROUTE_MARGIN 从每段各扣一次、扣减随段数线性累积,
+  20 段 x 5000km 正好扣光整条航线,可用刹车距离处处为 0,指令速度恒 0 —— 【船一步都不动】,永久卡死。
+  参数扫描永远发现不了它:随机航线段长中位 11194km,压根碰不到那个区间。 */
+  var e=fc5reset(),s=e.S;
+  function run(pts){
+    s.formation=null;s.brake=false;s.lockedTarget=null;s.turnTarget=null;s.turnNoFm=false;
+    s.crawling=false;s.coasting=false;s.pos=[0,0,0];s.vel=[0,0,0];s.facing=[1,0,0];s.orders=[];
+    s.speedCmd=800;
+    for(var k=0;k<pts.length;k++)s.orders.push({pos:[pts[k][0],pts[k][1],0],type:(k===pts.length-1?'stop':'pass')});
+    var miss=[],t=0,peak=0,i=0;
+    for(var k=0;k<pts.length;k++)miss.push(1e18);
+    for(i=0;i<200000;i++){
+      stepShipsMotion(0.02);t+=0.02;
+      var v=V.len(s.vel); if(v>peak)peak=v;
+      var act=Math.min(pts.length-1,pts.length-s.orders.length);
+      for(var k=Math.max(0,act-1);k<=act;k++){
+        var d=Math.hypot(s.pos[0]-pts[k][0],s.pos[1]-pts[k][1]); if(d<miss[k])miss[k]=d;}
+      if(!s.orders.length&&V.len(s.vel)<1)break;
+    }
+    var worst=0; for(var k=0;k<miss.length;k++) if(miss[k]>worst)worst=miss[k];
+    return {t:t,peak:peak,worst:worst,left:s.orders.length,steps:i,
+            err:Math.hypot(s.pos[0]-pts[pts.length-1][0],s.pos[1]-pts[pts.length-1][1])};
+  }
+  var line=[],zz=[],x=0;
+  for(var k=1;k<=20;k++)line.push([k*5000,0]);                     /* 20 点共线,段长 5000(= passBy) */
+  for(var k=1;k<=20;k++){x+=8000;zz.push([x,(k%2?8000:-8000)]);}   /* 20 点左右来回 */
+  var L=run(line), Lref=run([[100000,0]]);                          /* 参照:同一终点只下一个点 */
+  var Z=run(zz);
+  var ratio=L.t/Lref.t;
+  var ok=(L.left===0 && L.steps<199999 && ratio<1.25 && L.peak>700 && L.err<CFG.arrive*2
+        && Z.left===0 && Z.steps<199999 && Z.worst<=5000 && Z.err<CFG.arrive*2);
+  return (ok?'ok':'fail')
+    +' 直线20点(段长5k):用时 '+L.t.toFixed(1)+'s vs 单点 '+Lref.t.toFixed(1)+'s = '+ratio.toFixed(2)
+    +'倍(须<1.25;每段各扣一次 margin 的写法在此【死锁】) 峰值v '+Math.round(L.peak)+'(须>700) 余令 '+L.left
+    +' | 之字20点:用时 '+Z.t.toFixed(1)+'s 最差偏靠 '+Math.round(Z.worst)+'km(须<=5000) 余令 '+Z.left
+    +' 终点误差 '+Math.round(Z.err)+'km';
+});
 t('FLOW6_CHAIN',function(){ /* RF7 数据链渲染:函数存在;编辑态/退出态 render 均不炸(像素断言不做,ERRORS 层兜底) */
   var e=fc5reset();
   fcNew(e.S,{tid:e.A.id});fcAppend(e.S,{tid:e.B.id});
@@ -1062,5 +1104,6 @@ for k in HYS CORNER GHOST2; do
 done
 grep -q "FLOW13_LOOK=ok" "$OUT" || { echo "✗ FLOW13_LOOK 未通过(RF13 反向速度传播)"; fail=1; }
 grep -q "FLOW14_REFINE=ok" "$OUT" || { echo "✗ FLOW14_REFINE 未通过(RF14 航线细化)"; fail=1; }
+grep -q "FLOW16_STRESS=ok" "$OUT" || { echo "✗ FLOW16_STRESS 未通过(RF16 压力航线:20点直线/20点之字)"; fail=1; }
 grep -q "^RENDER=ok" "$OUT" || { echo "✗ RENDER 未通过"; fail=1; }
 [ $fail -eq 0 ] && echo "✓ 全部通过" || exit 1

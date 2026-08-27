@@ -96,16 +96,44 @@ const ENG_HYS_K=0.02, ENG_HYS_MAX=8; // 点火阈值 = 速度x2%,上限 8km/s(80
 // 这里是闭环反馈控制,能加多快就加多快,正向约束由 steerToVel 的推力钳位天然满足,写出来是多余的一遍。
 // RF13 两个航线规划参数。写成 let 而不是 const/函数:它们【就是】要被离线搜索改写的自由度(tools/route_eval.sh),
 // const 的话连扫一遍取舍曲线都做不到。默认取 CFG.passBy(接受半径),但语义是独立的三件事,不要再合并回去。
-let ROUTE_TOL=CFG.passBy;      // 切角容差:允许航迹离拐点多远。它单独决定过弯速度 sqrt(a*r),r=tol*c/(1-c)
+let ROUTE_TOL=1000;   // RF16 自动坐标下降在 75 条航线上收敛的值(原 5000=接受半径,是个未经检验的默认)      // 切角容差:允许航迹离拐点多远。它单独决定过弯速度 sqrt(a*r),r=tol*c/(1-c)
 let ROUTE_MARGIN=CFG.passBy;   // 刹车距离扣减:每段可用于减速的距离按 L-此值 计,保守裕度
-function cornerSpd(s,vIn,vOut){ // 拐角几何限速:以 tol 为允许的切角偏差,偏折角 phi 的过弯圆弧半径 r=tol/(sec(phi/2)-1),v=sqrt(a*r)
-  if(V.len(vIn)<1||V.len(vOut)<1)return Infinity;
-  const c=Math.cos(V.angle(vIn,vOut)/2);
-  if(c>=0.999999)return Infinity;                       // 直行 phi=0 -> r 无穷 -> 【不限速】(限了就等于把 pass 点做成 stop 点)
-  const r=c>0?ROUTE_TOL*c/(1-c):0;                    // sec(phi/2)-1 = (1-c)/c;phi=90 度 -> 316km/s,phi=180 度 -> 0
+  // 【硬约束:ROUTE_MARGIN <= CFG.passBy】。当前段那一项是 max(0,dist-ROUTE_MARGIN),而 pass 点在
+  // dist<passBy 才被消费 —— 若 MARGIN>passBy,dist 落在 (passBy,MARGIN) 区间时速度上限恒等于 U,
+  // 遇到 U=0 的急拐角船就当场停住再也不动。实测 MARGIN=6500/8000 时各出 4 条死锁。
+function routeMargin(){return Math.min(ROUTE_MARGIN,CFG.passBy);}
+let ROUTE_MARGIN_MAXFRAC=0.35; // 【单段折扣上限比例】。RF16:扣减原来是"每段各扣一个固定值",
+  // 而它会随段数【线性累积】—— 20 个共线航点、段长 5000 时,20 段共扣掉 100000km,正好等于整条航线,
+  // 于是 usable 处处为 0、反向递推把末点的 0 一路传回起点、cap=0,【船一步都不动】(实测跑满 400000 步、弧长 0)。
+  // 物理上它完全可以在 20 段共 100000km 里从巡航刹停,是这个形式本身错了,不是数值调得不好。
+  // 改成"折扣不超过段长的一半":L>=2*ROUTE_MARGIN 时结果【逐位不变】(保住已扫优的区间),只有短段被救。
+// 【只用于段间递推】。当前段那一项【不能】用它:那里的折扣必须随 dist->0 归零,
+// 让船恰好以计划速度 U 到达拐点;用比例式会让 cap 在近处高于 U,船冲进拐角(实测之字航线 1152->1338s)。
+// 累积 bug 只存在于段间(每段各扣一次),当前段只扣一次、不累积。
+function routeUsable(L){return L-Math.min(routeMargin(),L*ROUTE_MARGIN_MAXFRAC);}
+let CORNER_K=1.0;   // 保留但当前不参与(见下)
+function cornerSpd(s,vIn,vOut){ // 拐角几何限速
+  /* v = sqrt(a_eff * r), r = ROUTE_TOL * c/(1-c), c = cos(偏折角/2)。
+     RF16 试过换成"实测时间最优过弯速度律" v = 巡航 * (1+cos phi)/2 * K,实测【更差】
+     (最好 6.3647 vs 本式调优后的 6.1216),已退回。教训值得记:
+     那条律是在单拐角、且段长 70k(段长不再是约束)下量的,而它测的是【孤立拐角的时间最优】。
+     两件事使它不能外推:
+       1. 多拐角航线上拐点互相耦合 —— 慢一点到达 k 号拐点,对 k+1 号是更好的起始条件;
+       2. 更根本的是,反向递推算的是【最大可行速度】,而时间最优的剖面【不是】最大可行的那个 ——
+          高速进弯要多花的横向修正时间超过直道上省下的时间。所以过弯限速不是可行性约束,
+          它是个【权衡参数】,而权衡还依赖段长(直道越长高速收益越大)。
+     留出集段长中位只有 11194km,在那个尺度上实测最优(L=15k 时 90 度为 218)远低于长段上的 431,
+     而本式的 c/(1-c) 随角度衰减更快,恰好更贴合真实分布。
+     【结论:全局评测台(tools/train/bench_all.js)是权威,单拐角研究不是。】 */
+  const lu=V.len(vIn), lv=V.len(vOut);
+  if(lu<1||lv<1)return Infinity;
+  const ang=V.angle(vIn,vOut);
+  const c=Math.cos(ang/2);
+  if(c>=0.999999)return Infinity;                       // 直行:不限速
+  const r=c>0?ROUTE_TOL*c/(1-c):0;
   return Math.sqrt(Math.max(0,s.thrust*GUIDE_EFF*r));
 }
-const ROUTE_LOOKAHEAD=8; // 前瞻硬上限(航点数)。见 routeCap 里的说明:段长正常时视界只要 2~3 个,
+let ROUTE_LOOKAHEAD=16; // 前瞻硬上限(航点数)。见 routeCap 里的说明:段长正常时视界只要 2~3 个,
                          // 这条只在极密集航线上才生效,且生效时偏保守(安全的那一边)
 function routeCap(s,dist){ // 反向传播:从视界处倒推回当前段,返回本 tick 的速度上限
   const od=s.orders, n=od.length;
@@ -119,20 +147,20 @@ function routeCap(s,dist){ // 反向传播:从视界处倒推回当前段,返回
      只在极密集航线上生效,那时行为偏保守而非偏危险。原来这个循环是 O(剩余航点数) 且【每 tick 每船】跑一遍,
      玩家画长航线时会线性变贵。 */
   const brake=cruiseOf(s)*cruiseOf(s)/(2*s.thrust*GUIDE_EFF);
-  let acc=Math.max(0,dist-ROUTE_MARGIN), h=n-1;
+  let acc=Math.max(0,dist-routeMargin()), h=n-1;
   if(acc>=brake)h=0;
   else for(let k=0;k<n-1&&k<ROUTE_LOOKAHEAD;k++){
-    acc+=Math.max(0,V.len(V.sub(od[k+1].pos,od[k].pos))-ROUTE_MARGIN);
+    acc+=routeUsable(V.len(V.sub(od[k+1].pos,od[k].pos)));
     if(acc>=brake||k+1>=ROUTE_LOOKAHEAD){h=k+1;break;}
   }
   let U=(h===n-1&&od[n-1].type==='pass')?cruiseOf(s):0;  // 末点 stop -> 0;视界截断处也取 0(保守侧)
   for(let j=h-1;j>=0;j--){
     const L=V.len(V.sub(od[j+1].pos,od[j].pos));
-    const reach=Math.sqrt(U*U+2*s.thrust*GUIDE_EFF*Math.max(0,L-ROUTE_MARGIN)); // 从 od[j] 出发,这一段减得下来的最快速度
+    const reach=Math.sqrt(U*U+2*s.thrust*GUIDE_EFF*routeUsable(L)); // 从 od[j] 出发,这一段减得下来的最快速度
     const prev=(j===0)?s.pos:od[j-1].pos;               // 首点的入射方向用【当前船位】:切过角之后入射角会变,让限速跟着适应
     U=Math.min(cornerSpd(s,V.sub(od[j].pos,prev),V.sub(od[j+1].pos,od[j].pos)),reach);
   }
-  return Math.sqrt(U*U+2*s.thrust*GUIDE_EFF*Math.max(0,dist-ROUTE_MARGIN)); // 再把"从这里减到 U"的接近段并进去
+  return Math.sqrt(U*U+2*s.thrust*GUIDE_EFF*Math.max(0,dist-routeMargin())); // 当前段:折扣随 dist->0 归零 // 再把"从这里减到 U"的接近段并进去
 }
 function cruiseOf(s){return s.speedCmd===-1?SPD_UNCAP:(s.speedCmd===0?0:(s.speedCmd>0?s.speedCmd:800));} // v119:速度令0=定速停→返回0让内核刹停(原回退800致"按停反而加速")
 function applyHeading(s,dir,dt){ // RF10 朝向的唯一出口。改造前五个地方各自 slerp 到 s.facing;现在统一走这里:
@@ -232,7 +260,7 @@ function steerToVel(s,want,dt){ // v119运动内核:期望速度导引——推�
 // 终点误差同步改善(615->537 / 610->249)。编队已单独验:收敛 261->249s,到位后 40 秒槽位漂移 0km。
 // 【这是三处共用的常量】(单舰航点/旗舰 dest/编队槽位),再动它之前先跑 tools/route_eval.sh 与编队回归。
 // 1.0 不能取:它假设推力永远满额,而机头没对齐时不成立 —— 实测终点误差顶到 800km 容差上限。
-let GUIDE_EFF=0.85;
+let GUIDE_EFF=0.90;
 function brakeCurveSpd(s,dist){return Math.sqrt(2*s.thrust*GUIDE_EFF*Math.max(0,dist-CFG.arrive));} // DS191:统一刹车曲线(单舰航点/旗舰dest/成员槽位三处共用)
 function guideTo(s,pT,vT,cap,useCurve,dt){ // DS191:统一导引律--有界推力下把(pos,vel)导向(目标点pT,目标速度vT);vT前馈=终点相对速度归零;cap为巡航上限(成员传Infinity,曲线自带追赶);useCurve=false为pass掠过不刹
   const r=V.sub(pT,s.pos);const err=V.len(r);
