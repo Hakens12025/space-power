@@ -355,8 +355,12 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
    #selInfo 已带 border-bottom,这里不再补 border-top,避免两条线叠成 2px。 */
 #fcSec{padding:var(--sp-2) var(--sp-3);overflow-y:auto;flex:1 1 auto;min-height:52px} /* 口径与原 #selEvents 一致。basis 必须是 auto:#selPanel 只有 max-height 没有 height(高度按内容撑),basis:0 会让本区永远塌到 min-height;同理百分比 max-height 在这种父容器里退化成 none,两条都实测过 */
 /* RF9 加速度栏:引擎逐行列(多个同时在推时),行高压紧,不撑高整条读数行 */
-#selInfo .row .v .eng{display:block;font-size:var(--fs-micro);letter-spacing:var(--ls-label);line-height:1.35;text-align:right}
-#selInfo .row .v .eng-off{color:var(--txt-mute);font-size:var(--fs-micro);letter-spacing:var(--ls-label)}
+/* RF20 引擎仪表灯:四灯常驻只变亮暗,行数恒为一(旧 .eng 是 display:block 逐行列,多舱同时点火时行数跳动带着面板蹦)。
+   暗灯保留本色但压到 .22 —— 全灰会读成"没有这个部件",半隐的色才读成"有但没点火"。不加 transition:
+   #selInfo 整块 innerHTML 周期重建,新节点不动画,写了也是假的。 */
+#selInfo .row .v .eng-l{display:inline-block;margin-left:var(--sp-2);font-size:var(--fs-micro);letter-spacing:var(--ls-label);opacity:.22}
+#selInfo .row .v .eng-l.on{opacity:1}
+#selInfo .row .v .eng-a{color:var(--txt)}
 #fcSec .fc-hd{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-2);font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label);margin-bottom:var(--sp-1)}
 #fcSec .fc-hd .fc-btn{flex:none;letter-spacing:var(--ls-label)} /* RF8b 标题栏里的"选择"钮,沿用 #fcList .fc-btn 的配方(下面那条选择器已含 #fcSec 后代,这里只补 flex 行为) */
 #fcSec .fc-empty{font-size:var(--fs-label);color:var(--txt-mute);line-height:var(--lh-tight);padding:var(--sp-2) 0;text-align:center}

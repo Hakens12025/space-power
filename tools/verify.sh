@@ -816,27 +816,31 @@ t('FLOW9_ENG',function(){ /* RF9 实时状态的速度/加速度读数:数值取
     for(var i=0;i<20;i++)stepShipsMotion(0.02);
     selected=[s.id];updateSelPanel();
     var v=document.querySelector('#selInfo .row:nth-child(4) .v');
-    return {txt:v?v.textContent.replace(/\s+/g,' ').trim():'?',acc:s.accNow||0,side:!!s.engSide,sf:s.sideFlame};
+    /* RF20 灯常驻后【文本包含"主推"】不再有判别力(四个灯的字永远都在),必须读 .on 灯组;
+       同时判灯总数恒为 4 —— 灯增灯减就是回到"版面跳动"的老毛病 */
+    var on=v?Array.prototype.map.call(v.querySelectorAll('.eng-l.on'),function(x){return x.textContent;}).join('+'):'?';
+    var nl=v?v.querySelectorAll('.eng-l').length:0;
+    return {txt:v?v.textContent.replace(/\s+/g,' ').trim():'?',on:on,nl:nl,acc:s.accNow||0,side:!!s.engSide,sf:s.sideFlame};
   }
   var A=run(function(){s.vel=[0,0,0];s.orders=[{pos:[600000,0,0],type:'stop'}];});          /* 主推 */
   var B=run(function(){s.vel=[400,0,0];s.brake=true;});                                      /* 反推 */
   var C=run(function(){s.vel=[400,0,0];s.orders=[{pos:[20000,600000,0],type:'pass'}];});     /* 侧推(横向机动) */
   var D=run(function(){s.vel=[0,0,0];s.turnTarget=[0,600000,0];});                           /* 纯转向:姿态,加速度须为 0 */
   var thr=s.thrust;
-  var okA=(A.txt.indexOf('主推')>=0&&Math.abs(A.acc-thr)<0.1);
-  var okB=(B.txt.indexOf('反推')>=0&&Math.abs(B.acc-thr)<0.1);
+  var okA=(A.on==='主推'&&Math.abs(A.acc-thr)<0.1&&A.nl===4);
+  var okB=(B.on.indexOf('反推')>=0&&B.on.indexOf('主推')<0&&Math.abs(B.acc-thr)<0.1&&B.nl===4);
   /* RF19 引擎定案为三角(tri):横向机动由三舱共模分解,功率包络 0.866~1.0(经典的 0.6 侧推魔数已随 classic 退役)。
      多舱同时点火时面板会同时列出多行(反推时 ±120 两舱 → 「反推侧推」;横向时主舱也参与 → 「主推侧推」),
      这是三角的真实行为不是 bug。判据:侧推行存在,且加速度落在包络带 [0.866,1.0]×额定内 —— 仍然守住
      RF9 的本意「显示钳位后的真实值,不是额定值」(靠 D 的姿态零加速度那条一起守)。 */
-  var okC=(C.txt.indexOf('侧推')>=0&&C.acc>=thr*0.85&&C.acc<=thr+0.1);
-  var okD=(D.txt.indexOf('姿态')>=0&&D.acc===0&&D.sf===1&&!D.side); /* 姿态不算加速度:sideFlame 亮着但 engSide 为 false */
+  var okC=(C.on.indexOf('侧推')>=0&&C.acc>=thr*0.85&&C.acc<=thr+0.1&&C.nl===4);
+  var okD=(D.on==='姿态'&&D.acc===0&&D.sf===1&&!D.side&&D.nl===4); /* 姿态不算加速度:只有姿态灯亮且数值 0 */
   var spd=document.querySelector('#selInfo .row:nth-child(3) .v');
   var okS=(spd&&/km\/s/.test(spd.textContent));
   var ok=(okA&&okB&&okC&&okD&&okS);
   return (ok?'ok':'fail')+' 额定推力='+thr
-    +' | 主推「'+A.txt+'」 反推「'+B.txt+'」 侧推「'+C.txt+'」(须落在包络带 '+(thr*0.866).toFixed(1)+'~'+thr+')'
-    +' 纯转向「'+D.txt+'」(须 0 且标姿态:sideFlame='+D.sf+' engSide='+D.side+')'
+    +' | 主推:亮灯['+A.on+'] '+A.acc.toFixed(1)+' | 反推:亮灯['+B.on+'] '+B.acc.toFixed(1)+' | 侧推:亮灯['+C.on+'] '+C.acc.toFixed(1)+'(须落在包络带 '+(thr*0.866).toFixed(1)+'~'+thr+')'
+    +' | 纯转向:亮灯['+D.on+'] acc='+D.acc+'(须 0) | 灯总数恒为 4:'+(A.nl===4&&B.nl===4&&C.nl===4&&D.nl===4)
     +' | 速度行='+(okS?'有':'缺');
 });
 t('FLOW11_GHOST',function(){ /* RF11 移动虚影:到达【形态】必须与虚影一致 —— 位置在容差内,且朝向不许对准后又飘走 */

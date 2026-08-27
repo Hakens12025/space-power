@@ -69,21 +69,24 @@ function specItems(s){
   }
   return items;
 }
-/* RF9 加速度读数:数值 + 当前在用的引擎,多个引擎同时在推就【逐行】列(用户定案)。
-   数据来自 physics/30-motion 每 tick 记的 s.accNow / engMain / engRetro / engSide(见那里的注释),
-   取的是钳位【之后】的真实加速度 —— 接近期望速度时推力自动收小,显示额定 thrust 会与画面上"焰在收"矛盾。
-   侧推与姿态刻意分开:两者都点亮 sideFlame,但转向只改朝向、不改速度矢量,加速度是 0,
-   混在一起会让玩家以为"在转向 = 在加速"。姿态那行不计入加速度,只作说明。 */
+/* RF9 加速度读数;RF20 改为【定行仪表灯】。原版把在用的推进器逐行列出(.eng 是 display:block),
+   而三角模型下多舱常同时点火、且随迟滞脉冲点/熄 —— 行数在 1~3 之间跳,下方整个面板跟着上下蹦(用户实报)。
+   仪表盘的老办法:【四个灯常驻、只变亮暗】,行数恒为一,布局几何永远不变,状态变化读成"灯亮了"而不是"版面动了"。
+   用户明确否掉"有几个推进器就留几行"的做法 —— 常驻空行同样是浪费,灯才是对的。
+   语义不变:数值仍是钳位【之后】的真实加速度 s.accNow(30-motion 每 tick 记);姿态与侧推仍分开 ——
+   两者都点亮 sideFlame,但纯转向只改朝向不改速度矢量,加速度是 0,姿态灯亮 + 数值 0 就是这个读法。
+   灯序固定 主推/反推/侧推/姿态,颜色与 82-ship-icons 尾焰同源(蓝/橙/黄/暗)。
+   .v 右对齐 + 灯排在数值之后 ⇒ 灯钉死在右缘,数值宽度变化只向左伸,右侧永不移动。 */
+const ENG_LAMPS=[
+  ['主推','var(--side-friend)', s=>!!s.engMain],
+  ['反推','var(--state-warn)',  s=>!!s.engRetro],
+  ['侧推','var(--state-select)',s=>!!s.engSide],
+  ['姿态','var(--txt-dim)',     s=>!!(s.sideFlame&&!s.engSide)]
+];
 function engRows(s){
   const a=s.accNow||0;
-  const eng=[];
-  if(s.engMain)eng.push(['主推','var(--side-friend)']);      // 与 82-ship-icons 尾焰同色:蓝=主推
-  if(s.engRetro)eng.push(['反推','var(--state-warn)']);      // 橙=反推(船头喷焰)
-  if(s.engSide)eng.push(['侧推','var(--state-select)']);     // 黄=横向机动
-  if(s.sideFlame&&!s.engSide)eng.push(['姿态','var(--txt-dim)']); // sideFlame 亮着但 steerToVel 没标横推 = 纯转向,不产生加速度
-  const head=`${a>0.05?a.toFixed(1):'0'} km/s²`;
-  if(!eng.length)return head+' <span class="eng-off">熄火</span>';
-  return head+eng.map(e=>`<div class="eng" style="color:${e[1]}">${e[0]}</div>`).join('');
+  const lamps=ENG_LAMPS.map(([t,c,on])=>`<span class="eng-l${on(s)?' on':''}" style="color:${c}">${t}</span>`).join('');
+  return `<span class="eng-a">${a.toFixed(1)} km/s²</span>${lamps}`;
 }
 /* 右栏武器库状态行:按清单生成 */
 function weaponRows(s){
