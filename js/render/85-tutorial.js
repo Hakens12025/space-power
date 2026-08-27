@@ -278,7 +278,7 @@ const TUT_HTML=`
         <tr><td>左键拖框</td><td>框选</td><td>只收框内存活的己方舰</td></tr>
         <tr><td><code class="key">Ctrl</code> + 左键</td><td>加选 / 取消该艘</td><td>再点一次就把它从选区里去掉</td></tr>
         <tr><td>右键点空地</td><td>整队移动</td><td>清空原有航线</td></tr>
-        <tr><td><code class="key">Shift</code> + 右键</td><td>追加路径点</td><td>中间点是经过（按拐弯角度提前减速），末点是停车</td></tr>
+        <tr><td><code class="key">Shift</code> + 右键</td><td>追加路径点</td><td>中间点是经过（按拐弯角度提前减速），末点是停车；<strong>按住不放</strong>同样能转鼠标定这一点的到达朝向</td></tr>
         <tr><td>右键拖动</td><td>平移视角</td><td>位移超过 <code class="num">5 像素</code>算拖动，抬手不下命令</td></tr>
         <tr><td>滚轮</td><td>缩放</td><td>轮盘开着时在盘外照常缩放</td></tr>
         <tr><td>光标停在敌舰上 <code class="num">0.25 秒</code></td><td>准星吸附</td><td>走真实时间，暂停时照走</td></tr>

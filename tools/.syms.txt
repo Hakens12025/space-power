@@ -28,6 +28,7 @@ FC_PT_SALVOS
 FC_TIE_MAX
 FIRE_ALL_ON
 GEAR_NAMES
+GHOST_MODES
 GUIDE_EFF
 GUIDE_SEEK
 H
@@ -254,7 +255,10 @@ formationSpacing
 formationTargets
 frame
 frameN
+ghostAim
+ghostArm
 ghostAt
+ghostCommit
 ghostMove
 gridStepCache
 groupAt

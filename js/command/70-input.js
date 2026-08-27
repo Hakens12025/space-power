@@ -7,6 +7,59 @@ let ghostMove=null;     // RF11 右键长按的移动虚影 {wx,wy,face:[dx,dy],
                         // 它原本超时呼出命令菜单,而那个菜单被 RF2 的 SIMPLE_UI 在 showCtx 首行拦死了,通道一直空着。
                         // 分流靠"按下就动=平移 / 按住不动满 350ms=虚影":想平移的人不会先停顿,所以右键拖动平移完好无损
                         // (RF5 Phase B 拆掉中键平移后,右键拖动是【唯一】的鼠标平移方式,不能被这个功能吃掉)。
+/* ── RF22 右键长按定朝向:把【机制】与【下达什么命令】解耦 ──────────────────────────
+   机制三步全在这里,两种模式共用:
+     ghostArm(sx,sy,shift)  决定要不要进虚影、记下模式与预演线起点
+     ghostAim(sx,sy)        鼠标移动 → 改到达朝向(朝向 = 目的地指向光标,RTS 通用手法)
+     ghostCommit()          抬手落地,按模式派发
+   两种模式【只差落地那一步】,所以差异收在 GHOST_MODES 一张表里,机制本身一行都不重复:
+     move   无 Shift —— 清空航线,下单点停车令(RF11 原行为)
+     append 有 Shift —— 追加路径点,直接复用 formation/41 的 addWaypoint(w,face),不另写一套追加逻辑
+   仍然只在【恰好选中一艘蓝舰】时进:多舰要另一套(阵位与朝向分配),未做。
+   任何 pending 待命态存在时让位 —— 那些是点选式命令,虚影会抢它们的点击。 */
+const GHOST_MODES={
+  move:{
+    from:s=>s.pos,                       // 预演线从船身画起
+    commit:(s,g)=>{
+      s.orders=[];s.patrol=null;s.formation=null;s.brake=false;s.turnTarget=null;s.turnNoFm=false;
+      s.orders.push({pos:[g.wx,g.wy,0],type:'stop',face:g.face.slice()}); // face 是 RF11 新字段:physics/31 到位分支消费
+      resetForNewOrders(s);
+      if(typeof rrStart==='function')rrStart(s);
+      return `${s.name} 移动 → ${Math.round(g.wx/1000)}k,${Math.round(g.wy/1000)}k`;
+    }
+  },
+  append:{
+    from:s=>(s.orders&&s.orders.length?s.orders[s.orders.length-1].pos:s.pos), // 预演线从【现有末点】画起,接着航线走
+    commit:(s,g)=>{
+      addWaypoint([s],[g.wx,g.wy],g.face);  // 复用既有追加逻辑(含末点降级/rrStart 重排),只多传一个 face
+      return `${s.name} 路径+1 → ${Math.round(g.wx/1000)}k,${Math.round(g.wy/1000)}k`;
+    }
+  }
+};
+function ghostArm(sx,sy,shift){
+  const sel=(typeof selBlue==='function')?selBlue():[];
+  const busy=pendingMove||pendingTurn||pendingIntercept||pendingBeacon||pendingManual||pendingMine||selWeapon
+    ||pendingTaskPatrol||pendingTaskIntercept||pendingTaskDeny||pendingTaskEscort||pendingTaskStrike;
+  if(sel.length!==1||busy||editMode)return false;
+  const s=sel[0], mode=shift?'append':'move';
+  const w=worldAt(sx,sy), f=GHOST_MODES[mode].from(s);
+  ghostMove={wx:w[0],wy:w[1],face:s.facing.slice(),id:s.id,mode:mode,from:[f[0],f[1]]};
+  return true;
+}
+function ghostAim(sx,sy){
+  if(!ghostMove)return;
+  const w=worldAt(sx,sy);
+  const fx=w[0]-ghostMove.wx, fy=w[1]-ghostMove.wy, fl=Math.hypot(fx,fy);
+  if(fl>1e-6)ghostMove.face=[fx/fl,fy/fl,0]; // 光标压在目的地上时保持上一次,不抖
+}
+function ghostCommit(){
+  const g=ghostMove;ghostMove=null;
+  if(!g)return;
+  const s=(typeof ships!=='undefined')?ships.find(x=>x.id===g.id):null;
+  if(!s||s.dead)return;
+  const msg=GHOST_MODES[g.mode].commit(s,g);
+  log(`${msg} · 到达朝向 ${Math.round((Math.atan2(g.face[1],g.face[0])*180/Math.PI+360)%360)}°`,'');
+}
 let mmbTimer=null;      // RF5 Phase C 中键长按开轮盘的定时器句柄。同上就近声明(只被本文件 down/move/up/blur 四处读写);与 core/01-state 的 rmbTimer 是两回事,不要复用
 function shipAt(sx,sy){
   const w=worldAt(sx,sy);
@@ -305,17 +358,8 @@ function onMouseDown(e){
     clearTimeout(rmbTimer);
     rmbTimer=setTimeout(()=>{ // 按住:RF11 起进移动虚影(原为呼出命令菜单,该菜单被 SIMPLE_UI 拦死,通道空置)
       if(rmbClick&&!panning.moved){
-        // RF11 只在【恰好选中一艘蓝舰】且无 Shift 时进虚影:多舰编队要另一套(阵位/朝向分配),先做单舰;
-        // Shift+右键仍是追加路径点,两个功能都占长按会打架。任何 pending 待命态存在时也让位——那些是点选式命令,虚影会抢它们的点击。
-        const sel=(typeof selBlue==='function')?selBlue():[];
-        const busy=pendingMove||pendingTurn||pendingIntercept||pendingBeacon||pendingManual||pendingMine||selWeapon
-          ||pendingTaskPatrol||pendingTaskIntercept||pendingTaskDeny||pendingTaskEscort||pendingTaskStrike;
-        if(sel.length===1&&!rmbClick.shift&&!busy&&!editMode){
-          const w=worldAt(rmbClick.sx,rmbClick.sy);
-          ghostMove={wx:w[0],wy:w[1],face:sel[0].facing.slice(),id:sel[0].id};
-        }else{
-          openCtx(rmbClick.sx,rmbClick.sy,rmbClick.onShip||null); // 不满足条件时沿用旧行为(SIMPLE_UI 下 showCtx 自己会早退)
-        }
+        if(!ghostArm(rmbClick.sx,rmbClick.sy,rmbClick.shift))
+          openCtx(rmbClick.sx,rmbClick.sy,rmbClick.onShip||null); // armed 不了时沿用旧行为(SIMPLE_UI 下 showCtx 自己会早退)
         rmbClick=null;rmbTimer=null;
       }
     },350);
@@ -364,11 +408,8 @@ window.addEventListener('mousemove',e=>{
     if(Math.abs(selDrag.x1-selDrag.x0)+Math.abs(selDrag.y1-selDrag.y0)>6)updateDragSel();}
   if(panning){
     const dx=e.clientX-panning.sx, dy=e.clientY-panning.sy;
-    if(ghostMove){ // RF11 虚影已弹出:鼠标移动改的是【到达朝向】,不再平移视角。
-      // 朝向 = 从目的地指向当前光标(RTS 通用手法:从落点拖出一个方向)。光标压在目的地上时方向未定义,保持上一次。
-      const w=worldAt(e.clientX,e.clientY);
-      const fx=w[0]-ghostMove.wx, fy=w[1]-ghostMove.wy, fl=Math.hypot(fx,fy);
-      if(fl>1e-6)ghostMove.face=[fx/fl,fy/fl,0];
+    if(ghostMove){ // RF11 虚影已弹出:鼠标移动改的是【到达朝向】,不再平移视角(机制见 ghostAim)
+      ghostAim(sx,sy);
       return;
     }
     if(Math.abs(dx)+Math.abs(dy)>5){panning.moved=true;if(rmbClick)rmbClick=null;clearTimeout(rmbTimer);rmbTimer=null;}
@@ -430,15 +471,9 @@ window.addEventListener('mouseup',e=>{
     else log('巡逻至少需要2个点','warn');
     pendingTaskPatrol=null;taskPatrolPts=[];hideTip();rmbClick=null;return;
   }
-  if(e.button===2&&ghostMove){ // RF11 松开右键 = 虚影落地,下达【带到达朝向】的移动命令
-    const g=ghostMove;ghostMove=null;panning=null;rmbClick=null;clearTimeout(rmbTimer);rmbTimer=null;
-    const s=(typeof ships!=='undefined')?ships.find(x=>x.id===g.id):null;
-    if(s&&!s.dead){
-      s.orders=[];s.patrol=null;s.formation=null;s.brake=false;s.turnTarget=null;s.turnNoFm=false;
-      s.orders.push({pos:[g.wx,g.wy,0],type:'stop',face:g.face.slice()}); // face 是【新字段】:physics/31 的到位分支消费它
-      resetForNewOrders(s);
-      log(`${s.name} 移动 → ${Math.round(g.wx/1000)}k,${Math.round(g.wy/1000)}k · 到达朝向 ${Math.round((Math.atan2(g.face[1],g.face[0])*180/Math.PI+360)%360)}°`,'');
-    }
+  if(e.button===2&&ghostMove){ // RF11 松开右键 = 虚影落地(RF22:按模式派发,见 ghostCommit)
+    panning=null;rmbClick=null;clearTimeout(rmbTimer);rmbTimer=null;
+    ghostCommit();
     return;
   }
   if(e.button===2&&rmbClick){

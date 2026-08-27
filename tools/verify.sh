@@ -861,13 +861,18 @@ t('FLOW11_GHOST',function(){ /* RF11 移动虚影:到达【形态】必须与虚
     }
     return {pre:pre,arr:arr,errArr:errArr,dArr:dArr,back:back};
   }
-  var A=run(40000,-90), B=run(40000,180);
+  /* RF22 补 45° 这一组:原来只测 90°/180°,而旧判据 dist/vn 在刹车曲线上有约 7.7s 的下限,
+     turnT×1.15 小于它的角度(约 <61°)【永远不会提前起转】—— 两个大角都在下限之上,恰好绕过了这个洞。
+     中等角度才是玩家最常用的,判据必须覆盖它。 */
+  var A=run(40000,-90), B=run(40000,180), M=run(40000,45);
   /* 判据三条:①提前起转确实发生在到位【之前】 ②到位时朝向已对上 ③对准后不许再飘走(锁不住的话 steerToVel 会夺回机头) */
   var ok=(A.pre>0&&A.pre<A.arr&&A.errArr<3&&A.back<3&&A.dArr<CFG.arrive*2
-        &&B.pre>0&&B.pre<B.arr&&B.errArr<3&&B.back<3&&B.dArr<CFG.arrive*2);
+        &&B.pre>0&&B.pre<B.arr&&B.errArr<3&&B.back<3&&B.dArr<CFG.arrive*2
+        &&M.pre>0&&M.pre<M.arr&&M.errArr<3&&M.back<3&&M.dArr<CFG.arrive*2);
   return (ok?'ok':'fail')
     +' 转90°:起转@'+A.pre+'<到位@'+A.arr+' 到位朝向误差'+A.errArr.toFixed(2)+'° 对准后回飘'+A.back.toFixed(2)+'° 位置'+Math.round(A.dArr)+'km'
-    +' | 转180°:起转@'+B.pre+'<到位@'+B.arr+' 误差'+B.errArr.toFixed(2)+'° 回飘'+B.back.toFixed(2)+'°(须<3,锁不住会到19°) 位置'+Math.round(B.dArr)+'km';
+    +' | 转180°:起转@'+B.pre+'<到位@'+B.arr+' 误差'+B.errArr.toFixed(2)+'° 回飘'+B.back.toFixed(2)+'°(须<3,锁不住会到19°) 位置'+Math.round(B.dArr)+'km'
+    +' | 转45°(中等角,旧判据下永不起转):起转@'+M.pre+'<到位@'+M.arr+' 误差'+M.errArr.toFixed(2)+'°';
 });
 t('FLOW12_HYS',function(){ /* RF12 熄火/点火迟滞:减速段不许频闪,但低速端死区必须收敛回原值(否则编队保位会晃) */
   var e=fc5reset(),s=e.S;
@@ -1113,6 +1118,44 @@ t('FLOW21_ARC',function(){ /* RF21 曲率限速(用户实报:密集点组成的�
     +'s(须<200;修前 234.6) 峰值 '+Math.round(T.peak)
     +' | 平缓弧R=80k(对照):峰值 '+Math.round(G.peak)+'(须>760:不许误伤) 偏靠 '+Math.round(G.worst)+'km';
 });
+t('FLOW22_APPEND',function(){ /* RF22 Shift+右键长按也能定到达朝向。机制(ghostArm/ghostAim/ghostCommit)两模式共用,
+  只有落地那一步按 GHOST_MODES 派发 —— 这条判定同时守住"复用"与"两模式都对"。
+  五条:append 确实追加而不是清空 / 只有末令带 face(降级为 pass 的旧末点必须清掉,否则持久虚影会画一个永不兑现的船影)
+      / 预演线起点接现有末点 / 实际飞完到位朝向对得上 / 多选时不进虚影(仍是单舰功能)。 */
+  var e=fc5reset(),s=e.S;
+  function P(wx,wy,shift){var p=toScreen(wx,wy);return ghostArm(p[0],p[1],shift);}
+  function A(wx,wy){var p=toScreen(wx,wy);ghostAim(p[0],p[1]);}
+  s.formation=null;s.orders=[];s.brake=false;s.turnTarget=null;s.turnNoFm=false;
+  s.crawling=false;s.coasting=false;s.pos=[200000,-150000,0];s.vel=[0,0,0];s.facing=[1,0,0];
+  s.rrNext=-1;rrJobs.length=0;ghostMove=null;selected=[s.id];
+  var a1=P(240000,-150000,false); A(240000,-110000); var m1=ghostMove?ghostMove.mode:'?'; ghostCommit();
+  var n1=s.orders.length;
+  var a2=P(300000,-90000,true); A(300000,-50000);
+  var m2=ghostMove?ghostMove.mode:'?';
+  var fromOK=!!(ghostMove&&Math.abs(ghostMove.from[0]-240000)<1&&Math.abs(ghostMove.from[1]+150000)<1);
+  ghostCommit();
+  var types=s.orders.map(function(o){return o.type;}).join(',');
+  var faceIdx=[]; s.orders.forEach(function(o,i){if(o.face)faceIdx.push(i);});
+  var want=s.orders[s.orders.length-1].face.slice();
+  for(var i=0;i<80000;i++){
+    if(rrJobs.length)rrTick();
+    stepShipsMotion(0.02);
+    if(!s.orders.length&&V.len(s.vel)<1)break;
+  }
+  var err=Math.acos(Math.max(-1,Math.min(1,s.facing[0]*want[0]+s.facing[1]*want[1])))*180/Math.PI;
+  selected=ships.filter(function(x){return x.side==='blue'&&!x.dead;}).map(function(x){return x.id;});
+  ghostMove=null;
+  var multi=P(400000,0,true);
+  selected=[s.id];ghostMove=null;
+  var ok=(a1&&m1==='move'&&n1===1
+        &&a2&&m2==='append'&&fromOK
+        &&types==='pass,stop'&&faceIdx.length===1&&faceIdx[0]===1
+        &&err<3&&multi===false);
+  return (ok?'ok':'fail')+' 无Shift:armed='+a1+' 模式='+m1+' 令数='+n1+'(须1=清空重下)'
+    +' | Shift:armed='+a2+' 模式='+m2+' 类型=['+types+'](须 pass,stop) 带face的令=['+faceIdx.join(',')+'](须只有末令1)'
+    +' 预演线起点接现有末点='+fromOK
+    +' | 飞完到位朝向误差='+err.toFixed(2)+'°(须<3) | 多选时 armed='+multi+'(须false)';
+});
 t('FLOW6_CHAIN',function(){ /* RF7 数据链渲染:函数存在;编辑态/退出态 render 均不炸(像素断言不做,ERRORS 层兜底) */
   var e=fc5reset();
   fcNew(e.S,{tid:e.A.id});fcAppend(e.S,{tid:e.B.id});
@@ -1179,5 +1222,6 @@ grep -q "FLOW13_LOOK=ok" "$OUT" || { echo "✗ FLOW13_LOOK 未通过(RF13 反向
 grep -q "FLOW14_REFINE=ok" "$OUT" || { echo "✗ FLOW14_REFINE 未通过(RF14 航线细化)"; fail=1; }
 grep -q "FLOW16_STRESS=ok" "$OUT" || { echo "✗ FLOW16_STRESS 未通过(RF16 压力航线:20点直线/20点之字)"; fail=1; }
 grep -q "FLOW21_ARC=ok" "$OUT" || { echo "✗ FLOW21_ARC 未通过(RF21 弧形曲率限速)"; fail=1; }
+grep -q "FLOW22_APPEND=ok" "$OUT" || { echo "✗ FLOW22_APPEND 未通过(RF22 Shift长按定朝向)"; fail=1; }
 grep -q "^RENDER=ok" "$OUT" || { echo "✗ RENDER 未通过"; fail=1; }
 [ $fail -eq 0 ] && echo "✓ 全部通过" || exit 1

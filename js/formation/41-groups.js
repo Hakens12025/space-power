@@ -38,7 +38,11 @@ function moveShips(list,dest,type){ // 编组→编队移动;散船/单艘→各
   if(list.length<=1||sameGroupShips(list)!==null)moveFormation(list,dest,type);
   else list.forEach(s=>{s.formation=null;s.orders.push({pos:dest,type});resetForNewOrders(s);if(typeof rrStart==='function')rrStart(s);}); // RF14 同上
 }
-function addWaypoint(list,w){ // Shift+右键快捷追加:末点=停车,原末点降为经过(菜单"路径点"不受影响)
+function addWaypoint(list,w,face){ // Shift+右键快捷追加:末点=停车,原末点降为经过(菜单"路径点"不受影响)
+  /* RF22 face 可选:右键长按定的【到达朝向】,由 physics/31 的到位分支消费。
+     只有【散船】那一支能带 —— 编队走 F.queue 是另一套结构,physics/31 的编队分支不读 face(同 RF14 rrStart 挡编队的口径)。
+     降级为 pass 的旧末点必须【删掉 face】:physics/31 只在 stop 分支消费它,留着的话 83-hud 的持久虚影
+     还会照画一个永不兑现的船影 —— 承诺与行为分家,比不画更糟。 */
   const targets=list.filter(s=>!s.dead);
   if(!targets.length)return;
   const gid=sameGroupShips(targets);
@@ -56,8 +60,8 @@ function addWaypoint(list,w){ // Shift+右键快捷追加:末点=停车,原末�
     }
   }else{ // 散船
     targets.forEach(s=>{
-      if(s.orders.length)s.orders[s.orders.length-1].type='pass'; // 原末点降为经过
-      s.orders.push({pos:[w[0],w[1],0],type:'stop'}); // 新点=停车
+      if(s.orders.length){const prev=s.orders[s.orders.length-1];prev.type='pass';delete prev.face;delete prev.pt;} // 原末点降为经过:face/pt(提前起转标记)一并清,pass 不兑现朝向
+      s.orders.push(face?{pos:[w[0],w[1],0],type:'stop',face:face.slice()}:{pos:[w[0],w[1],0],type:'stop'}); // 新点=停车
       resetForNewOrders(s); // KIMI151:追加也是"要船动",清龟速/恢复速度档
       if(typeof rrStart==='function')rrStart(s); // RF14 追加路径点后重挂细化(rrStart 会先撤掉这艘船的旧任务)
     });

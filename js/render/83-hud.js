@@ -480,12 +480,13 @@ const FC_FLOW_DASH=[9,15];                                     // 亮段 9px / �
 const FC_FLOW_PERIOD=FC_FLOW_DASH[0]+FC_FLOW_DASH[1];          // 24px
 const FC_FLOW_PXPS=30;
 const FC_TIE_MAX=48;   // RF10 单段枕木数上限:防止段长极大时循环次数失控(见 drawFcChain 内注释)                                         // 流动速度(像素/秒):约 0.8 秒走完一个周期,看得出方向又不晃眼
-function ghostAt(s,wx,wy,face,alpha,route){ // RF12 虚影的唯一画法(实时虚影与已下达命令共用,免得两处漂移)
+function ghostAt(s,wx,wy,face,alpha,route,from){ // RF12 虚影的唯一画法(实时虚影与已下达命令共用,免得两处漂移)
+  // RF22 from 可选:预演线的起点。追加模式下从【现有末点】画起才接得上航线,从船身画会横穿整条已下的路线
   const g=toScreen(wx,wy);
   if(!isFinite(g[0])||!isFinite(g[1]))return; // 与 drawFcChain 同一道防线:非有限坐标不进绘制
   ctx.save();
   if(route){ // 预演航线:当前位置 -> 目的地。虚线,压得比命令点连线更淡,免得和已有航线抢
-    const p=toScreen(s.pos[0],s.pos[1]);
+    const p=toScreen(from?from[0]:s.pos[0],from?from[1]:s.pos[1]);
     if(isFinite(p[0])&&isFinite(p[1])){
       ctx.setLineDash([7,6]);ctx.strokeStyle='#ffe066';ctx.globalAlpha=alpha*.9;ctx.lineWidth=1.2;
       ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(g[0],g[1]);ctx.stroke();
@@ -523,7 +524,7 @@ function drawGhost(){ // RF11 移动虚影;RF12 拆成【已下达的到达朝�
   if(typeof ghostMove==='undefined'||!ghostMove)return;
   const s=(typeof ships!=='undefined')?ships.find(x=>x.id===ghostMove.id):null;
   if(!s||s.dead)return; // 船没了就不画(清账在 70-input 的 blur/mouseup)
-  ghostAt(s,ghostMove.wx,ghostMove.wy,ghostMove.face,.5,true);
+  ghostAt(s,ghostMove.wx,ghostMove.wy,ghostMove.face,.5,true,ghostMove.from);
 }
 function drawFcChain(){ // RF7 火控序列态的数据链(蓝色铁路线):主体舰 → T1 → T2 …,只画当前编辑序列的链。
   // 序列态 = 主体舰(selBlue()[0])选中 且 fcEditId 指向自己的序列 —— Shift+中键选定与火控计算机点方条都会置它;

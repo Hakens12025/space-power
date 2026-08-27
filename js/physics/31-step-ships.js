@@ -63,8 +63,20 @@ function stepShipsMotion(dt){
         if(cur.face){
           const fa=cur.face, ang=V.angle(s.facing,fa);
           const turnT=ang/Math.max(1e-6,s.turnRate);          // 转到位所需秒数
-          const travelT=dist/Math.max(1,vn);                  // 按当前速度还要飞多久(vn 很小时这个值很大,自然不会提前触发)
-          if(!cur.pt&&ang>0.02&&travelT<=turnT*1.15)cur.pt=true; // 留 15% 余量:减速段速度还在降,travelT 会继续变大
+          /* RF22 判据从「按当前速度还要飞多久 dist/vn」换成「还要刹多久 vn/a_eff」。
+             原判据在刹车曲线上【有下限】:曲线速度 v≈sqrt(2a·dist) 使 dist/vn≈sqrt(dist/2a),
+             到位那一刻约 7.7s —— 而 turnT×1.15 对 53° 只有 6.67s,条件恒不成立。
+             后果:【小于约 61° 的转向从来没有提前起转过】,一律拖到到位后才原地转,虚影承诺当场失效。
+             RF11 的探针只测了 90°(11.3s)与 180°(22.6s),两个都在那条下限之上,恰好绕过了这个洞。
+             新判据比的是两个【都会单调归零】的时间:剩余刹车时间 vs 剩余转向时间,所以任何角度都必然触发一次。
+             远离目标时 vn=巡航 → 刹车时间 59s ≫ turnT,不会提前劫持机头(原设计意图保住)。 */
+          const aEff=Math.max(1e-6,s.thrust*GUIDE_EFF);
+          const stopT=Math.max(0,vn-CFG.stopSpeed)/aEff;      // 刹到【到位速度门槛】还要多久(不是刹到 0:到位判据是 vn<stopSpeed)
+          const braking=(dist-CFG.arrive)<=vn*vn/(2*aEff);    // 已经进入"必须为这个点刹车"的区间
+          /* 两道缺一不可:braking 管【方向】,stopT 管【时机】。
+             只有 stopT 会从出发那一刻就成立 —— 静止时 vn=0、剩余刹车时间也是 0,机头当场被锁死整段航程;
+             加速途中 vn 越过 stopSpeed 的那一瞬同样会误触发。braking 把这两种"还没开始接近"的情形挡在外面。 */
+          if(!cur.pt&&ang>0.02&&braking&&stopT<=turnT*1.15)cur.pt=true; // 留 15% 余量
           // 【每 tick 重设,不能只设一次】:朝向层对准后会把 turnTarget 清掉,steerToVel 随即夺回机头、
           // 把它转向减速推力方向 —— 实测 180° 那组会先对准、再飘走 18.65°,虚影承诺当场失效。
           // 重设也顺带挡住 steerToVel(它的推进段带 !s.turnTarget 门,见 30-motion RF6 那条);
