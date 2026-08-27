@@ -27,7 +27,28 @@ function genRoute(seed){
 }
 function trainSet(count){const a=[];for(let i=0;i<count;i++)a.push(genRoute(1000+i));return a;}
 function holdSet(count){const a=[];for(let i=0;i<count;i++)a.push(genRoute(900000+i));return a;} // 种子区间不重叠
-/* 手工对抗例:随机分布里出现概率极低,但正是 RF13 定位问题的那几条,必须一直在留出集里 */
+/* 直线型/之字型的【长航线】生成器(RF16)。随机分布里出现概率极低,但它们暴露过最严重的 bug:
+   20 点共线、段长 5000 时,"每段各扣一次 margin"的写法会让船一步都不动(死锁)。
+   现在让调参也见到这一类,免得优化器只对着中等长度的随机航线过拟合。 */
+function genStraight(seed){
+  const r=mulberry(seed);
+  const n=10+Math.floor(r()*12);                    // 10~21 个共线航点
+  const step=3000+r()*12000;                        // 段长 3k~15k(覆盖 margin 附近的危险区)
+  const dir=r()*Math.PI*2, a=[];
+  for(let k=1;k<=n;k++)a.push([Math.round(Math.cos(dir)*step*k),Math.round(Math.sin(dir)*step*k),0]);
+  return a;
+}
+function genZig(seed){
+  const r=mulberry(seed);
+  const n=10+Math.floor(r()*12);
+  const dx=4000+r()*12000, dy=4000+r()*12000;
+  const dir=r()*Math.PI*2, c=Math.cos(dir), s2=Math.sin(dir), a=[];
+  let x=0;
+  for(let k=1;k<=n;k++){x+=dx; const y=(k%2?dy:-dy);
+    a.push([Math.round(x*c-y*s2),Math.round(x*s2+y*c),0]);}
+  return a;
+}
+/* 手工对抗例:随机分布里出现概率极低,但正是 RF13/RF16 定位问题的那几条,必须一直在留出集里 */
 const FIXED=[
   [[15000,0,0],[15000,15000,0],[30000,15000,0],[30000,30000,0],[45000,30000,0]],  // A 锯齿
   [[60000,0,0],[63000,0,0],[20000,0,0]],                                          // B 长直+短段+掉头
@@ -35,4 +56,16 @@ const FIXED=[
   [[40000,0,0],[10000,0,0]],                                                      // D 掉头
   [[40000,0,0],[80000,0,0]]                                                       // E 直线
 ];
-module.exports={genRoute,trainSet,holdSet,FIXED};
+/* 混合集:8 成常规随机 + 1 成长直线 + 1 成长之字。比例刻意不高 —— 极端例的作用是【堵住盲区】,
+   不是让优化器围着它们转;权重过高会把常规航线的表现让出去。 */
+function mixSet(count,base){
+  const a=[];
+  for(let i=0;i<count;i++){
+    const m=i%10;
+    if(m===8)a.push(genStraight(base+i));
+    else if(m===9)a.push(genZig(base+i));
+    else a.push(genRoute(base+i));
+  }
+  return a;
+}
+module.exports={genRoute,genStraight,genZig,trainSet,holdSet,mixSet,FIXED};

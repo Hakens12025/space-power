@@ -968,6 +968,26 @@ t('FLOW14_REFINE',function(){ /* RF14 航线细化(下令后分帧微调瞄准�
   四条判据,缺一不可:开着要更快且合规 / 关掉要【逐位回到基线】(可回退) /
   没余量的航线必须原样退回(兜底) / 沙盘绝不能污染全局 ships */
   var e=fc5reset(),s=e.S;
+  function runAt(pts,on,ox,oy){
+    rrOn=on; rrJobs.length=0;
+    s.formation=null;s.brake=false;s.lockedTarget=null;s.turnTarget=null;s.turnNoFm=false;
+    s.crawling=false;s.coasting=false;s.pos=[ox,oy,0];s.vel=[0,0,0];s.facing=[1,0,0];s.orders=[];
+    for(var k=0;k<pts.length;k++)addWaypoint([s],pts[k]);
+    var miss=[],t=0,left=pts.length;
+    for(var k=0;k<pts.length;k++)miss.push(1e18);
+    for(var i=0;i<60000;i++){
+      if(rrJobs.length)rrTick();
+      stepShipsMotion(0.02);t+=0.02;
+      var act=Math.min(pts.length-1,pts.length-s.orders.length);
+      for(var k=Math.max(0,act-1);k<=act;k++){
+        var d=Math.hypot(s.pos[0]-pts[k][0],s.pos[1]-pts[k][1]); if(d<miss[k])miss[k]=d;}
+      if(s.orders.length<left)left=s.orders.length;
+      if(!s.orders.length&&V.len(s.vel)<1)break;
+    }
+    var worst=0; for(var k=0;k<miss.length;k++) if(miss[k]>worst)worst=miss[k];
+    return {t:t,worst:worst,left:s.orders.length,
+            err:Math.hypot(s.pos[0]-pts[pts.length-1][0],s.pos[1]-pts[pts.length-1][1])};
+  }
   function run(pts,on){
     rrOn=on; rrJobs.length=0;
     s.formation=null;s.brake=false;s.lockedTarget=null;s.turnTarget=null;s.turnNoFm=false;
@@ -992,13 +1012,23 @@ t('FLOW14_REFINE',function(){ /* RF14 航线细化(下令后分帧微调瞄准�
   var nShips=ships.length;
   var a0=run(A,false), a1=run(A,true);
   var b0=run(B,false), b1=run(B,true);
+  /* 【平移不变性】RF16:沙盘起点原来固定在世界原点,而航线是绝对坐标 —— 船不在原点时沙盘等于在模拟
+     另一段完全不同的航程,基线重放撞步数上限、任务被静默丢弃,这个功能在真实对局里是【死的】。
+     漏检原因:所有用例都先把船重置到 [0,0,0]。所以这条判定必须【把整条航线搬到远处】再测一遍。 */
+  var OX=500000, OY=300000;
+  var A2=A.map(function(p){return [p[0]+OX,p[1]+OY,0];});
+  var c0=runAt(A2,false,OX,OY), c1=runAt(A2,true,OX,OY);
+  var gainA=1-a1.t/a0.t, gainC=1-c1.t/c0.t;
   var clean=(ships.length===nShips)&&!ships.some(function(x){return x.id==='__rr';});
   rrOn=true;
   var ok=(a1.t<a0.t*0.97 && a1.worst<=5000 && a1.left===0 && a1.err<CFG.arrive*2
-        && Math.abs(b1.t-b0.t)<0.05 && clean);
+        && Math.abs(b1.t-b0.t)<0.05 && clean
+        && Math.abs(gainC-gainA)<0.01 && c1.worst<=5000 && c1.left===0);
   return (ok?'ok':'fail')+' 锯齿5点:关 '+a0.t.toFixed(1)+'s → 开 '+a1.t.toFixed(1)+'s('
     +((1-a1.t/a0.t)*100).toFixed(1)+'%,须>3%) 偏靠 '+Math.round(a1.worst)+'km(须<=5000) 终点误差 '+Math.round(a1.err)+'km 细化 '+a1.frames+' 帧'
     +' | 无余量航线(对照):关 '+b0.t.toFixed(1)+'s 开 '+b1.t.toFixed(1)+'s(须相等=兜底原样退回)'
+    +' | 搬到(50万,30万)后提升='+(gainC*100).toFixed(1)+'%(须与原点的 '+(gainA*100).toFixed(1)+'% 相差<1个点=平移不变)'
+    +' 偏靠 '+Math.round(c1.worst)+'km'
     +' | 沙盘未污染全局 ships='+clean;
 });
 t('FLOW16_STRESS',function(){ /* RF16 压力航线(用户指定):20 点直线 / 20 点之字。

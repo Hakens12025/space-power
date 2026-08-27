@@ -45,7 +45,9 @@ function makeEnv(){
       return {t:t,arc:arc,peak:peak,worst:worst,endErr:endErr,ok:ok,left:s.orders.length};
     }
     function shipConst(){return {thrust:__s.thrust,turnRate:__s.turnRate,cruise:cruiseOf(__s),
-      passBy:CFG.passBy,arrive:CFG.arrive,stopSpeed:CFG.stopSpeed,guideEff:GUIDE_EFF,routeTol:ROUTE_TOL,routeMargin:ROUTE_MARGIN};}
+      passBy:CFG.passBy,arrive:CFG.arrive,stopSpeed:CFG.stopSpeed,guideEff:GUIDE_EFF,routeTol:ROUTE_TOL,routeMargin:ROUTE_MARGIN,
+      maxfrac:(typeof ROUTE_MARGIN_MAXFRAC!=='undefined'?ROUTE_MARGIN_MAXFRAC:0.35),
+      look:(typeof ROUTE_LOOKAHEAD!=='undefined'?ROUTE_LOOKAHEAD:16)};}
   `,ctx);
   const call=(expr)=>vm.runInContext(expr,ctx);
   return {

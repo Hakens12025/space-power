@@ -78,8 +78,13 @@ function rrMakeShip(proto) {          // 只克隆运动内核会读到的字段
 }
 function rrStartRun(job, aim, k0, dt, from) {
   const s = job.sandShip, n = job.route.length;
-  const q = from || { pos: [0, 0, 0], vel: [0, 0, 0], facing: [1, 0, 0],
-                      coasting: false, crawling: false, brake: false };
+  /* 【起点必须是船的真实状态】。原来这里 from=null 时回退到世界原点静止,而 job.route 是【世界绝对坐标】——
+     等于让沙盘模拟"从原点飞到那批绝对坐标",只有船恰好在原点且静止时才对。
+     实战里船在任意位置、还带着速度,于是基线重放跑不完(撞 RR_MAX_STEPS)、ok=false、任务当场丢弃,
+     这个功能在真实对局里是【死的】。实测:船在 (500000,300000) 时改善 0.0%、细化只用 14 帧
+     (14×3000=42000 正好是步数上限);而船在原点时是 5.5%/56 帧。
+     测试一直没发现,是因为所有用例都先把船重置到 [0,0,0] 再下令。 */
+  const q = from || job.start;
   s.pos = q.pos.slice(); s.vel = q.vel.slice(); s.facing = q.facing.slice();
   s.coasting = q.coasting; s.crawling = q.crawling; s.brake = q.brake;
   s.formation = null; s.turnTarget = null; s.turnNoFm = false; s.lockedTarget = null;
@@ -130,6 +135,8 @@ function rrStart(ship) {
     shipId: ship.id, route: route, ordersLen: od.length,
     bis: rrBisectors(route, ship.pos), lam: new Array(route.length).fill(0),
     speedCmd: ship.speedCmd, sandShip: rrMakeShip(ship),
+    start: { pos: ship.pos.slice(), vel: ship.vel.slice(), facing: ship.facing.slice(),
+             coasting: !!ship.coasting, crawling: !!ship.crawling, brake: !!ship.brake },
     phase: 'base', pass: 0, j: route.length - 2, ci: -1,
     st: null, cache: null, bestT: Infinity, bestLam: 0, baseT: Infinity
   };
@@ -181,14 +188,13 @@ function rrTick() {
 function rrNextTrial(job) {
   const lam = job.lam.slice();
   if (job.ci >= 0) lam[job.j] = RR_CAND[job.ci];
-  const from = (job.j === 0) ? null : job.cache[job.j];
+  const from = (job.j === 0) ? job.start : job.cache[job.j];
   if (job.j > 0 && !from) {                      // 缓存缺失(该拐点没被走到):跳过这个拐点
     job.ci = RR_CAND.length; job.lam[job.j] = 0; job.j--;
     if (job.j < 0) { job.pass = RR_PASSES; }
     job.ci = -1;
   }
-  job.st = rrStartRun(job, rrAim(job.route, job.bis, lam), Math.max(0, job.j), RR_EVAL_DT,
-                      (job.j === 0) ? null : job.cache[job.j]);
+  job.st = rrStartRun(job, rrAim(job.route, job.bis, lam), Math.max(0, job.j), RR_EVAL_DT, from);
 }
 function rrApply(ship, job) {
   /* 只改【船还没走到】的那些命令点。船在细化期间可能已经吃掉了前几个航点,

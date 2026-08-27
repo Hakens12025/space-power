@@ -37,7 +37,6 @@ coasting = torch.zeros(1, dtype=torch.bool)
 oi = torch.zeros(1, dtype=torch.long)
 xhat = torch.tensor([1.0, 0.0, 0.0], dtype=dtype)
 
-Ustat = env.static_profile(aim, n)
 first_bad = None
 rows = []
 for i in range(len(js)):
@@ -54,7 +53,7 @@ for i in range(len(js)):
     vel = torch.where(cons_stop.unsqueeze(-1), torch.zeros_like(vel), vel)
     go = ~cons
     cap = torch.full_like(dist, env.cruise)
-    rc = env._route_cap(aim, pos, idx, n, dist, Ustat, cur, nxt)
+    rc = env._route_cap(aim, pos, idx, n, dist)
     cap = torch.where(isPass, torch.minimum(cap, rc), cap)
     brake = torch.sqrt((2 * env.thrust * env.eff * (dist - env.arrive).clamp_min(0)).clamp_min(0))
     spd = torch.where(isPass, cap, torch.minimum(cap, brake))

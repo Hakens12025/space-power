@@ -7,7 +7,8 @@ const fs=require('fs');
 const env=makeEnv();
 const TOL=5000;
 const routes=FIXED.concat(trainSet(40)).concat(holdSet(20));
-const out={consts:env.consts(),tol:TOL,cases:[]};
+const c=env.consts();
+const out={consts:c,tol:TOL,cases:[]};
 for(const R of routes){
   const aim=R.map(p=>[p[0],p[1]]);
   const r=env.rollout(R,aim,TOL);

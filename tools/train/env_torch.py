@@ -33,6 +33,12 @@ class RouteEnv:
         self.eff = float(c['guideEff'])
         self.rtol = float(c['routeTol'])
         self.rmargin = float(c['routeMargin'])
+        self.maxfrac = float(c.get('maxfrac', 0.35))     # RF16 单段折扣上限比例
+        self.look = int(c.get('look', 16))               # RF15 前瞻硬上限(航点数)
+        # routeMargin():硬约束 margin <= passBy。见 30-motion 的说明:否则 dist 落在两者之间时
+        # 速度上限恒等于 U,U=0 的急拐角当场停住。
+        self.margin = min(self.rmargin, self.passBy)
+        self.brake = self.cruise * self.cruise / (2 * self.thrust * self.eff)
         self.HYS_OFF = 0.5
         self.HYS_K = 0.02
         self.HYS_MAX = 8.0
@@ -122,33 +128,65 @@ class RouteEnv:
             U[:, g] = torch.where(g <= n - 2, torch.minimum(cs, reach), torch.zeros_like(reach))
         return U
 
-    def _route_cap(self, aim, pos, oi, n, dist, Ustat, cur, nxt):
-        """只算当前航点那一项,后面的直接读预计算表。cur/nxt 是已 gather 好的 aim[oi] / aim[oi+1]"""
-        oin = (oi + 1).clamp(max=aim.shape[1] - 1)
-        Unext = Ustat.gather(1, oin.view(-1, 1)).squeeze(1)
-        L = self._len(nxt - cur)
-        reach = torch.sqrt((Unext * Unext + 2 * self.thrust * self.eff *
-                            (L - self.rmargin).clamp_min(0)).clamp_min(0))
-        U = torch.minimum(self._corner(cur - pos, nxt - cur), reach)
-        U = torch.where(oi <= n - 2, U, torch.zeros_like(U))
+    def _usable(self, L):
+        """routeUsable:段间可用刹车距离。折扣不超过段长的 maxfrac —— 原来每段各扣一个固定值,
+        扣减随段数线性累积,20 段 x 5000km 正好扣光整条航线,导致【船一步都不动】的死锁。"""
+        return L - torch.minimum(torch.full_like(L, self.margin), L * self.maxfrac)
+
+    def _route_cap(self, aim, pos, oi, n, dist):
+        """RF15/RF16 版:先前向找视界(累计可用刹车距离够从巡航刹停就截断,并受 look 硬上限约束),
+        再从视界处以 U=0 反向递推回当前段。逐行对着 js/physics/30-motion.js 的 routeCap 写。
+        【注意】视界截断让原来的 static_profile 预计算失效了 —— 那是从末点算全程递推,
+        而现在递推从可变的视界处以 0 起步,两者不等价。为了逐位一致只能老实重算。"""
+        B, N, _ = aim.shape
+        dev = self.dev
+        ar = torch.arange(N, device=dev).unsqueeze(0)          # (1,N)
+        # ---- 前向找视界 h(全局下标)----
+        acc = (dist - self.margin).clamp_min(0)
+        h = (n - 1).clone()
+        found = acc >= self.brake
+        h = torch.where(found, oi, h)
+        for k in range(self.look):
+            g = oi + k
+            gc = g.clamp(max=N - 2)
+            L = self._len(aim.gather(1, (gc + 1).view(-1, 1, 1).expand(-1, 1, 3)).squeeze(1)
+                          - aim.gather(1, gc.view(-1, 1, 1).expand(-1, 1, 3)).squeeze(1))
+            inrange = (~found) & (g <= n - 2)
+            acc = acc + torch.where(inrange, self._usable(L), torch.zeros_like(L))
+            hit = inrange & ((acc >= self.brake) | torch.full_like(found, k + 1 >= self.look))
+            h = torch.where(hit, g + 1, h)
+            found = found | hit
+        # ---- 从 h 处以 U=0 反向递推回 oi ----
+        U = torch.zeros(B, device=dev, dtype=self.dtype)
+        for g in range(N - 2, -1, -1):
+            act = (torch.full_like(oi, g) >= oi) & (torch.full_like(oi, g) <= h - 1)
+            Pg = aim[:, g, :]
+            Pg1 = aim[:, g + 1, :]
+            L = self._len(Pg1 - Pg)
+            reach = torch.sqrt((U * U + 2 * self.thrust * self.eff * self._usable(L)).clamp_min(0))
+            prevP = torch.where((oi == g).unsqueeze(-1), pos, aim[:, max(g - 1, 0), :])
+            newU = torch.minimum(self._corner(Pg - prevP, Pg1 - Pg), reach)
+            U = torch.where(act, newU, U)
+        # 当前段:折扣随 dist->0 归零(不能用比例式,否则近处 cap 会高于 U,船冲进拐角)
         return torch.sqrt((U * U + 2 * self.thrust * self.eff *
-                           (dist - self.rmargin).clamp_min(0)).clamp_min(0))
+                           (dist - self.margin).clamp_min(0)).clamp_min(0))
 
     def _passed(self, orig, pos, idx, n):
-        """过点判据:船越过拐点处的角平分面即算经过。dot(pos-W, u_in_hat+u_out_hat) >= 0。
-        必然恰好触发一次(单调量),所以不会像"离真航点近"那样永远触发不了。"""
+        """过点判据(RF14 的失败实验,switch_mode='pass' 才用)。保留是为了记住它【为什么不行】:
+        角平分面无限延伸,侧向接近时会在横向还差两万公里时就跨过、当场切走、整个航点被跳过
+        (零偏移下基线就崩:合规 0.656、最差偏靠 29262km)。UAV 制导用它的前提是飞机已在航段走廊内。"""
         N = orig.shape[1]
         W = orig.gather(1, idx.view(-1, 1, 1).expand(-1, 1, 3)).squeeze(1)
         pi = (idx - 1).clamp_min(0)
         Wp = orig.gather(1, pi.view(-1, 1, 1).expand(-1, 1, 3)).squeeze(1)
-        Wp = torch.where((idx == 0).unsqueeze(-1), torch.zeros_like(Wp), Wp)   # 首段起点在原点
+        Wp = torch.where((idx == 0).unsqueeze(-1), torch.zeros_like(Wp), Wp)
         Wn = orig.gather(1, (idx + 1).clamp(max=N - 1).view(-1, 1, 1).expand(-1, 1, 3)).squeeze(1)
         uin = W - Wp
         uout = Wn - W
         uin = uin / self._len(uin).clamp_min(1e-9).unsqueeze(-1)
         uout = uout / self._len(uout).clamp_min(1e-9).unsqueeze(-1)
         bis = uin + uout
-        bis = torch.where((self._len(bis) < 1e-6).unsqueeze(-1), uin, bis)     # 恰好掉头:退回入射方向
+        bis = torch.where((self._len(bis) < 1e-6).unsqueeze(-1), uin, bis)
         return ((pos - W) * bis).sum(-1) >= 0
 
     def _steer(self, vel, facing, coasting, want, go):
@@ -219,7 +257,6 @@ class RouteEnv:
         arc = torch.zeros(B, device=dev, dtype=self.dtype)
         peak = torch.zeros(B, device=dev, dtype=self.dtype)
         ar = torch.arange(N, device=dev).unsqueeze(0)
-        Ustat = self.static_profile(aim, n)      # 每条航线一次,不进每步循环
         xhat = torch.tensor([1.0, 0.0, 0.0], device=dev, dtype=self.dtype)
 
         for step in range(max_steps):
@@ -233,11 +270,10 @@ class RouteEnv:
             isPass = idx < (n - 1)
             # 切换判据可锚在真航点(orig)而非瞄准点(aim);导引仍然用 aim
             curT = orig.gather(1, idx.view(-1, 1, 1).expand(-1, 1, 3)).squeeze(1)
-            passed = self._passed(orig, pos, idx, n)
             if self.switch_mode == 'true':
                 swp = self._len(curT - pos) < self.passBy
             elif self.switch_mode == 'pass':
-                swp = passed | (self._len(curT - pos) < self.passBy)
+                swp = self._passed(orig, pos, idx, n) | (self._len(curT - pos) < self.passBy)
             else:
                 swp = dist < self.passBy
             cons_pass = active & isPass & swp
@@ -247,7 +283,7 @@ class RouteEnv:
 
             go = active & (~cons)
             cap = torch.full_like(dist, self.cruise)
-            rc = self._route_cap(aim, pos, idx, n, dist, Ustat, cur, nxt)
+            rc = self._route_cap(aim, pos, idx, n, dist)
             cap = torch.where(isPass, torch.minimum(cap, rc), cap)
             brake = torch.sqrt((2 * self.thrust * self.eff *
                                 (dist - self.arrive).clamp_min(0)).clamp_min(0))
@@ -346,11 +382,10 @@ class GraphRollout:
         vn = env._len(self.vel)
         isPass = idx < (self.n - 1)
         curT = self.orig.gather(1, idx.view(-1, 1, 1).expand(-1, 1, 3)).squeeze(1)
-        passed = env._passed(self.orig, self.pos, idx, self.n)
         if env.switch_mode == 'true':
             swp = env._len(curT - self.pos) < env.passBy
         elif env.switch_mode == 'pass':
-            swp = passed | (env._len(curT - self.pos) < env.passBy)
+            swp = env._passed(self.orig, self.pos, idx, self.n) | (env._len(curT - self.pos) < env.passBy)
         else:
             swp = dist < env.passBy
         cons_pass = active & isPass & swp
@@ -359,7 +394,7 @@ class GraphRollout:
         vel0 = torch.where(cons_stop.unsqueeze(-1), torch.zeros_like(self.vel), self.vel)
         go = active & (~cons)
         cap = torch.full_like(dist, env.cruise)
-        rc = env._route_cap(self.aim, self.pos, idx, self.n, dist, self.Ustat, cur, nxt)
+        rc = env._route_cap(self.aim, self.pos, idx, self.n, dist)
         cap = torch.where(isPass, torch.minimum(cap, rc), cap)
         brake = torch.sqrt((2 * env.thrust * env.eff * (dist - env.arrive).clamp_min(0)).clamp_min(0))
         spd = torch.where(isPass, cap, torch.minimum(cap, brake))
@@ -402,12 +437,10 @@ class GraphRollout:
     @torch.no_grad()
     def run(self, orig, aim, n, max_steps=80000):
         self.orig.copy_(orig); self.aim.copy_(aim); self.n.copy_(n)
-        self.Ustat.copy_(self.env.static_profile(self.aim, self.n))
         self.reset_state()
         if self.graph is None:
             self.capture()
             self.orig.copy_(orig); self.aim.copy_(aim); self.n.copy_(n)
-            self.Ustat.copy_(self.env.static_profile(self.aim, self.n))
             self.reset_state()
         steps = 0
         while steps < max_steps:
