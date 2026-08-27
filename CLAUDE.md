@@ -48,7 +48,7 @@ CHROME="/c/Program Files/Google/Chrome/Application/chrome.exe"
 - `function` 提升只在单个 script 内生效:某文件顶层**立即执行**的语句(裸 `getElementById` 绑定、`on(...)` 调用)只受同文件顺序与上述两条硬约束限制。新增文件插到 index.html 时按系统目录归位。
 - 新增 DOM 后**不要顶层裸调 `document.elementFromPoint` 之类的 `getElementById(x).addEventListener`** —— 元素不存在时会抛错并中断该文件后续所有顶层语句(静默丢绑定)。用 `core/00-config.js` 的 `on(id,ev,fn)` 安全挂载。重灾区:scenario/92(8 条裸绑定)、command/73(约 18 条)——**改 HTML id 必须同步这两处**。
 - 全是顶层全局函数/变量,没有模块化(`import/export` 在 `file://` 下被 CORS 拦死)。每个 js 文件自带 `"use strict";`。
-- 行内 `DS195`/`KIMI155`/`TIER1`/`RANGE1`/`UI1` 标记记录"这行哪一版改的、为什么",很多注释写了被替换的旧做法和踩过的坑。**不要清理**;自己改动按同格式补标记 + 一句原因。`RF1` = 2026-08 目录解耦重构(纯移动/纯提取,行为零改变);`RF5` = 2026-08 火控序列(Phase A:引擎 weapons/58 + 面板 render/88;Phase B:入口 command/74;Phase C:目标轮盘 = render/89 几何 + command/74 数据;Phase D:教程模态 render/85-tutorial + 顶栏 `#btnTut`,标记写 `RF5-D`);`RF6` = 2026-08 主炮射程分两块 + 运动分层并行 + 三处既有 bug 修复;`RF7` = 2026-08 Shift+中键选定链 + 数据链渲染 + 火控计算机方条 + 轮盘贴合(RF7b 序列态跟随选中 / RF7c 面板稳定写入 / RF7d 数据链流动 / RF7e 告警脉冲改墙钟);`RF8` = 2026-08 大序列(舰级 轮询/选择)+ 暂停红态;`RF12` = 2026-08 减速抖动/拐角限速/虚影持久层 + 探针两处自身缺陷;`RF13` = 2026-08 航线反向速度传播 + 航线质量评估台;`RF14` = 2026-08 下令后分帧细化瞄准点(切角过弯);`RF15` = 2026-08 前瞻视界封顶 + 长航线成本护栏;`RF16` = 2026-08 压力航线暴露的死锁 + 五参数自动调参。
+- 行内 `DS195`/`KIMI155`/`TIER1`/`RANGE1`/`UI1` 标记记录"这行哪一版改的、为什么",很多注释写了被替换的旧做法和踩过的坑。**不要清理**;自己改动按同格式补标记 + 一句原因。`RF1` = 2026-08 目录解耦重构(纯移动/纯提取,行为零改变);`RF5` = 2026-08 火控序列(Phase A:引擎 weapons/58 + 面板 render/88;Phase B:入口 command/74;Phase C:目标轮盘 = render/89 几何 + command/74 数据;Phase D:教程模态 render/85-tutorial + 顶栏 `#btnTut`,标记写 `RF5-D`);`RF6` = 2026-08 主炮射程分两块 + 运动分层并行 + 三处既有 bug 修复;`RF7` = 2026-08 Shift+中键选定链 + 数据链渲染 + 火控计算机方条 + 轮盘贴合(RF7b 序列态跟随选中 / RF7c 面板稳定写入 / RF7d 数据链流动 / RF7e 告警脉冲改墙钟);`RF8` = 2026-08 大序列(舰级 轮询/选择)+ 暂停红态;`RF12` = 2026-08 减速抖动/拐角限速/虚影持久层 + 探针两处自身缺陷;`RF13` = 2026-08 航线反向速度传播 + 航线质量评估台;`RF14` = 2026-08 下令后分帧细化瞄准点(切角过弯);`RF15` = 2026-08 前瞻视界封顶 + 长航线成本护栏;`RF16` = 2026-08 压力航线暴露的死锁 + 五参数自动调参;`RF17` = 2026-08 修沙盘起点固定在原点(细化在实战里从未生效过);`RF18` = 2026-08 细化改开窗 + 天花板复测定案。
 - **RF5 交互模型**(改了鼠标语义,接手前先看这条):
   - **中键短按(<350ms 且位移≤5px)= 快速交战** —— 主体舰(`selBlue()[0]`)对准星吸附的敌舰 `fcNew` 建一条火控序列。
   - **中键长按(≥350ms、无位移、准星已吸附)= 目标轮盘**。长按判定在 **mousedown 起的 `mmbTimer` 定时器里**做,**松手前就弹**(手柄轮盘的手感),不是等 mouseup。三种上下文按当前编辑序列 `fcSeq(sub.fcEditId)` 分岔,且**都在开盘那一瞬就提交 fc\***(误触也不丢进度,序列立刻出现在右栏火控计算机里):目标**已在**该序列 → 只编辑;**不在 + Shift** → `fcAppend` 追加到末尾;**不在 + 无 Shift** → `fcNew` 新建(自带暂停该舰任务 + 强开 `autoEngage`/`roe='free'` 两个副作用,是预期行为,所以三种上下文的日志刻意分开写)。武器项只有一件时(CV)**不开轮盘**,直接一条日志 —— 且**取反只在编辑上下文做**,新建/追加时保留刚提交的缺省许可。
@@ -72,7 +72,7 @@ CHROME="/c/Program Files/Google/Chrome/Application/chrome.exe"
 | `render/` | `80-camera` · `81-background`(星云/网格)· `82-ship-icons` · `83-hud`(+RF5 `drawTargeting`:准星/吸附圈/按射程着色的预览线)· `84-scene`(render 图层管线)· `85-settings` · `85-tutorial`(**RF5-D 教程模态**:`TUT_HTML` 全文 + `tutToggle`/`tutIsOpen`,与 `85-settings` **共用编号 85**,先例是 weapons/51-defs 与 51-ciws)· `86-log` · `87-fleetcards` · `88-selpanel`(RF2 选中舰面板+底栏开关;+RF5 火控计算机面板 `#fcSec`/`#fcList`,`updateFcPanel`;`KIND_INFO` 是 kind→开关字段/射程/文案的**唯一映射**)· `89-radial`(**RF5 Phase C 目标轮盘的几何唯一真相**:半径/角度/容量常量 + `drawRadial`/`radialHit`/`radialInBand`/`radPages`/`radSlots`,只读 `rad` 从不写) | 呈现 |
 | `scenario/` | `90-envs`(TEST_ENVS/curEnv/DEFAULT_ENEMY)· `91-init`(initFleet/initEnemy)· `92-editor`(编辑器+applyClsTier)· `93-replay`(回放+场景菜单+GM/互搏按钮)· `94-demo` · `95-range`(靶场全部) | 对局生命周期 |
 
-**全局状态归属表**(改某个全局前先看它声明在哪):模拟核心+相机+交互 pending\*+回放+卡片引用+`cv,ctx`+`adminMode/selfPlay/selfPlayPrevAdmin` → `core/01-state`;`shipSeq` → ships/11;`detT` → sensors/21;`hitFX/threatCorridors/missileGroupSeq/netSeq/nets` → weapons/52;`netAllocT` → weapons/53;`fireSeqs/fcSeqSeq/FC_PT_SALVOS` → weapons/58;`formationFan/formationSpacing/fmGap/fmSeq` → formation/40、41;`tasks/taskSeq/pendingTask*` → bots/60;`camKeys/bindings` → command/71;`envIdx/customScene/edit*` → scenario/90、92;`rangeCfg/tr*` → scenario/95;`tutOn/tutPrevRun/TUT_HTML` → render/85-tutorial;`xh/XH_DWELL/XH_JUMP`、`rad/RAD_MODES` → command/74(`rad` 是与 render/89 的两方契约,字段名不得擅自更名);`RAD_RI/RAD_RO/RAD_L_IN/RAD_L_OUT/RAD_RM/RAD_GAP/RAD_FADE/RAD_SEAM/RAD_CAP/RAD_WHEEL_PAD/_radNameCache` → render/89(几何常量只在这一份);`MAC_FALLOFF/MAC_SPREAD_K/MAC_SPREAD_CAP` 与谓词 `macEffRange()` → weapons/52(有效射程的唯一定义点);`FIRE_ALL_ON` → command/71;`ENG_HYS_OFF/ENG_HYS_K/ENG_HYS_MAX`、`ROUTE_TOL/ROUTE_MARGIN` 与 `cornerSpd()/routeCap()` → physics/30;`rrOn/rrJobs/RR_*` → physics/32;`ROUTE_LOOKAHEAD`/`ROUTE_MARGIN_MAXFRAC`/`CORNER_K` → physics/30(推力迟滞与拐角限速的唯一定义点,舰上的 `s.coasting` 由 `steerToVel` 独占读写);`mmb/MMB_HOLD_MS/mmbTimer` → command/70(就近声明,`mmb` 被本文件 down/move/up/blur **四处**读写,`mmbTimer` 同;与 core/01-state 的 `rmbTimer` 是两回事,不要复用)。
+**全局状态归属表**(改某个全局前先看它声明在哪):模拟核心+相机+交互 pending\*+回放+卡片引用+`cv,ctx`+`adminMode/selfPlay/selfPlayPrevAdmin` → `core/01-state`;`shipSeq` → ships/11;`detT` → sensors/21;`hitFX/threatCorridors/missileGroupSeq/netSeq/nets` → weapons/52;`netAllocT` → weapons/53;`fireSeqs/fcSeqSeq/FC_PT_SALVOS` → weapons/58;`formationFan/formationSpacing/fmGap/fmSeq` → formation/40、41;`tasks/taskSeq/pendingTask*` → bots/60;`camKeys/bindings` → command/71;`envIdx/customScene/edit*` → scenario/90、92;`rangeCfg/tr*` → scenario/95;`tutOn/tutPrevRun/TUT_HTML` → render/85-tutorial;`xh/XH_DWELL/XH_JUMP`、`rad/RAD_MODES` → command/74(`rad` 是与 render/89 的两方契约,字段名不得擅自更名);`RAD_RI/RAD_RO/RAD_L_IN/RAD_L_OUT/RAD_RM/RAD_GAP/RAD_FADE/RAD_SEAM/RAD_CAP/RAD_WHEEL_PAD/_radNameCache` → render/89(几何常量只在这一份);`MAC_FALLOFF/MAC_SPREAD_K/MAC_SPREAD_CAP` 与谓词 `macEffRange()` → weapons/52(有效射程的唯一定义点);`FIRE_ALL_ON` → command/71;`ENG_HYS_OFF/ENG_HYS_K/ENG_HYS_MAX`、`ROUTE_TOL/ROUTE_MARGIN` 与 `cornerSpd()/routeCap()` → physics/30;`rrOn/rrJobs/RR_*` 与舰上的 `s.rrNext` → physics/32;`ROUTE_LOOKAHEAD`/`ROUTE_MARGIN_MAXFRAC`/`CORNER_K` → physics/30(推力迟滞与拐角限速的唯一定义点,舰上的 `s.coasting` 由 `steerToVel` 独占读写);`mmb/MMB_HOLD_MS/mmbTimer` → command/70(就近声明,`mmb` 被本文件 down/move/up/blur **四处**读写,`mmbTimer` 同;与 core/01-state 的 `rmbTimer` 是两回事,不要复用)。
 
 ## 核心架构
 
@@ -515,6 +515,34 @@ S1 感知节拍(每秒) → S2 网分配节拍(0.5s) → S3 任务AI
 
 `bench_all.js` 的参数覆盖原本 `try/catch` 后静默,而目标常量声明成了 `const` —— **八次扫描跑的全是同一组参数**,差点得出"这个参数没影响"的结论。现改为覆盖后**回读校验**,不一致直接抛错。
 另:注释里写 `v` 星号斜杠会**提前终止块注释**(`RF10` 记过一次,`RF16` 又踩一次)。
+
+## RF17/RF18 沙盘起点修复 / 开窗细化 / 天花板定案 备忘(2026-08)
+
+### RF17:RF14 的细化在实战里从未生效过
+
+`rrStartRun` 在 `from=null` 时回退到**世界原点静止**,而 `job.route` 是世界绝对坐标 —— 沙盘等于在模拟"从原点飞到那批绝对坐标",只有船恰好在原点且静止时才对。实战里船在任意位置,基线重放撞 `RR_MAX_STEPS` 上限、`ok=false`、任务**静默丢弃**。实测:船在 `(500000,300000)` 时改善 `0.0%`、细化只用 14 帧(`14×3000` 正好是步数上限);在原点时 `5.5%`/56 帧。**RF14 上线以来在真实对局中一次都没生效过。**
+
+漏检原因:所有测试用例都先把船重置到 `[0,0,0]` 再下令。修法:`rrStart` 时把船的真实状态存进 `job.start` 当沙盘起点。修后平移不变(原点/远处/负象限三处提升完全相同),带速度还更受益(带速 500 时 `15.1%`)。**FLOW14 第四条判据:把整条航线搬到 (50万,30万) 再测一遍,提升须与原点相差 <1 个百分点** —— "只在原点附近正确"的 bug 只有把用例搬远才测得到,与 RF16"极端用例补测量盲区"是同一条道理。
+
+### RF18:细化改开窗,长航线不再被一刀切拒绝
+
+原来 `n>8` 直接不细化(成本 `O(n²)`)。现在一次只细化接下来 `RR_WIN=6` 个航点(5 个拐角),船消费到只剩 `RR_RETRIG=2` 个时自动给下一段窗口重排(`s.rrNext` 记时机,`rrTick` 队列空时扫一遍)。窗口末点不是真末点时当 pass 处理、重放到它被消费即止,`ok` 判据也不查终点误差。成本钉死为常数。实测(船在非原点):密集8点 `4.5%→8.9%`(分 2 窗后算得完了,顺带修掉"船跑得比算得快");之字20点 `0%→1.6%`(原来被拒绝);直线20点 `0%→0%`(没角可切,正确)。之字只有约 1.5% 是因为其拐角约 117°、过弯速度本来就低,切角空间小。
+
+### 航线集与调参的稳健性结论
+
+`tools/train/routes.js` 加了长直线/长之字生成器,航线集改为混合(8 成常规随机 + 1 成直线 + 1 成之字,最长 21 航点;比例刻意不高 —— 极端例的作用是堵盲区,权重过高会把常规航线的表现让出去)。用新集重跑五参数自动调参:**最优点一个参数都没动**(仍 `RTOL=1000 EFF=0.90 MAXFRAC=0.35 LOOK=16`),两轮即收敛 —— RF16 那组参数不是对中等长度航线过拟合的。
+
+### 天花板复测定案(RF12→RF18 的总账)
+
+在与最初测量**同口径**的子集(≤8 航点,53 条)上逐条单独优化瞄准点:调优前天花板 `−24.6%`,调优后**约 `−18%`**(第 80 代 `−17.4%`,曲线已收敛,按用户要求提前停止;测量走 GraphRollout,移植后 float64 eager 对表精确为零、图版复验被中断未跑完,置信度打一点折)。解读:**约 7 个百分点已被 RF12→RF18 吃进控制器本身**;在线细化交付的 `5.5%~8.9%` 与约 18% 天花板之间的差距,来源是**搜索预算**(在线 3.2 次整程模拟 vs 天花板 15360 次),不是控制器 —— 要再往上抬该改在线搜索策略,不是改控制器。
+
+**舰船数值(thrust)定案不动**(用户令:只考虑算法)。已量过供日后平衡参考:`thrust 15→30` 可让三组全部跑满巡航、总分 `6.02→4.57`,加速到巡航距离从 `21333km` 降到 `10667km` —— "看着慢"的大头是 `thrust=15` 配 `巡航 800` 在战术尺度上够不到巡航,这是数值问题不是算法问题。`bench_all.js` 留了 `THRUST` 环境变量旋钮。
+
+### 流程教训(这一轮赔了约两小时,三条都写死成规矩)
+
+1. **`( cmd & )` 内联后台活不过工具调用**,进程组会被回收 —— 后台任务一律走 run_in_background 通道。
+2. **后台任务的输出不接任何管道**(`tail`/`grep` 的块缓冲会把输出攒到进程结束,一小时看不到进度,同一个坑一个会话踩了两次)—— `-u` 直接写文件。
+3. **改完环境先试跑几代实测每代耗时再报 ETA**:RF15/16 移植让 `_route_cap` 失去 static_profile 预计算(视界截断使其失效),每步成本涨约 3 倍,拿旧环境的数字报 ETA 错了 3 倍。
 
 ## 发布(GitHub Pages)
 

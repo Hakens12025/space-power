@@ -14,7 +14,12 @@ HERE=os.path.dirname(os.path.abspath(__file__))
 d=json.load(open(os.path.join(HERE,'routes.json'),'r',encoding='utf-8'))
 c=d['consts']; dev='cuda'; dt=torch.float32
 env=RouteEnv(c,device=dev,dtype=dt)
-pts,n=T.pack(d['hold'],dev,dt)
+# 只取 <=8 航点的航线:①与最初那次 22.5% 的测量【口径可比】(那时航线集最长就是 8 点);
+# ②新集里 21 点的长航线会把反向递推从 6 次迭代拉到 19 次、步数也翻几倍,一次测量要两小时。
+# 长航线的天花板另测,不和这个数混在一起。
+hold=[r for r in d['hold'] if len(r)<=8]
+print('留出集 %d 条中取 <=8 航点的 %d 条(与最初 22.5%% 那次口径可比)'%(len(d['hold']),len(hold)))
+pts,n=T.pack(hold,dev,dt)
 L,valid=T.seg_len(pts,n); S=L.sum(1)
 R,N,_=pts.shape
 TOL=T.TOL

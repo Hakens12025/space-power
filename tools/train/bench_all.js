@@ -28,8 +28,10 @@ function makeEnv(over) {
     const got = vm.runInContext(k, ctx);
     if (Math.abs(got - Number(over[k])) > 1e-9) throw new Error('覆盖 ' + k + ' 失败:期望 ' + over[k] + ' 实得 ' + got);
   }
+  if(process.env.THRUST)vm.runInContext('var __THRUST='+Number(process.env.THRUST)+';',ctx);
   vm.runInContext(`
     var S = makeShip('CA','评测',[0,0,0],[1,0,0],[0,0,0],'blue',2); ships.push(S);
+    if(typeof __THRUST!=='undefined'&&__THRUST>0)S.thrust=__THRUST;   // 平衡数值试算用
     function go(route){
       const s=S,n=route.length;
       s.pos=[0,0,0];s.vel=[0,0,0];s.facing=[1,0,0];s.orders=[];s.formation=null;
