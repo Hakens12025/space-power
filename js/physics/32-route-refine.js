@@ -27,10 +27,12 @@ const RR_REAL_DT = 0.02;          // 验收步长(必须与 CFG.step 一致)
 const RR_BUDGET = 3000;           // 每帧最多推进多少沙盘步(约 3~5ms)
 const RR_MAX_STEPS = 40000;       // 单次重放的步数上限,防病态航线把预算烧光
 const RR_MIN_WP = 3;              // 少于这么多航点不值得细化(单点/两点没有拐角可切)
-const RR_MAX_WP = 8;              // 多于这么多航点【直接不细化】。搜索规模是 (n-1)×档数×轮数 次后缀重放,
-                                  // 而每次重放长度又正比于 n —— 总成本 O(n^2),n=20 时会把分帧预算烧穿。
-                                  // 更完整的解是"只对接下来几个拐点开窗细化、随船推进重新触发",
-                                  // 但那要改评估口径(窗口末点不是停车点),是另一件事。当前先老实退出。
+const RR_WIN = 6;                 // 【开窗】一次只细化接下来这么多个航点(= RR_WIN-1 个拐角)。
+                                  // 搜索规模是 (n-1)×档数×轮数 次后缀重放、每次重放又正比于 n,总成本 O(n^2);
+                                  // 开窗把它钉死在常数,于是任意长的航线都能享受切角,而且【顺带修掉密集航线来不及算】
+                                  // (原来 20 点要算 19 个拐角,船早跑过去了;现在只算 5 个)。
+                                  // 窗口末点若不是真末点,就当 pass 处理,重放到它被消费即止 —— 目标是"穿过这段窗口的用时"。
+const RR_RETRIG = 2;              // 船把窗口消费到只剩这么多个航点时,给下一段窗口重新排一次细化
 
 /* ---------- 沙盘 ---------- */
 let rrBusy = false;               // 防重入:沙盘会临时改全局 ships
@@ -57,7 +59,7 @@ function rrSandbox(proto, orders, dt, budgetSteps, st) {
         const nx = n - st.left;
         if (nx < n) st.states[nx] = rrSnap(s);
       }
-      if (!s.orders.length && V.len(s.vel) < 1) { st.done = true; break; }
+      if (!s.orders.length && (st.tail ? V.len(s.vel) < 1 : true)) { st.done = true; break; }
     }
     if (st.steps >= RR_MAX_STEPS) st.done = true;
   } finally { ships = saveShips; log = saveLog; }
@@ -90,8 +92,8 @@ function rrStartRun(job, aim, k0, dt, from) {
   s.formation = null; s.turnTarget = null; s.turnNoFm = false; s.lockedTarget = null;
   s.speedCmd = job.speedCmd;
   s.orders = [];
-  for (let k = k0; k < n; k++) s.orders.push({ pos: [aim[k][0], aim[k][1], 0], type: (k === n - 1 ? 'stop' : 'pass') });
-  return { ship: s, route: job.route, k0: k0, dt: dt, t: 0, steps: 0, done: false,
+  for (let k = k0; k < n; k++) s.orders.push({ pos: [aim[k][0], aim[k][1], 0], type: (k === n - 1 && job.tail ? 'stop' : 'pass') });
+  return { ship: s, route: job.route, k0: k0, dt: dt, t: 0, steps: 0, done: false, tail: job.tail,
            left: n - k0, miss: new Array(n).fill(1e18), states: new Array(n).fill(null) };
 }
 function rrResult(st) {
@@ -101,7 +103,8 @@ function rrResult(st) {
   const s = st.ship;
   const endErr = Math.hypot(s.pos[0] - st.route[n - 1][0], s.pos[1] - st.route[n - 1][1]);
   return { t: st.t, worst: worst, endErr: endErr, states: st.states,
-           ok: (worst <= RR_TOL && endErr < CFG.arrive * 2 && s.orders.length === 0 && st.steps < RR_MAX_STEPS) };
+           ok: (worst <= RR_TOL && (st.tail ? endErr < CFG.arrive * 2 : true) &&
+                s.orders.length === 0 && st.steps < RR_MAX_STEPS) };
 }
 
 /* ---------- 几何 ---------- */
@@ -128,11 +131,14 @@ function rrAim(route, bis, lam) {
 function rrStart(ship) {
   if (!rrOn || !ship || ship.dead || ship.formation) return;      // 编队走另一套结构,本轮不碰
   const od = ship.orders || [];
-  if (od.length < RR_MIN_WP || od.length > RR_MAX_WP) return;
+  if (od.length < RR_MIN_WP) { ship.rrNext = -1; return; }
   for (let i = rrJobs.length - 1; i >= 0; i--) if (rrJobs[i].shipId === ship.id) rrJobs.splice(i, 1);
-  const route = od.map(o => [o.pos[0], o.pos[1]]);
+  const w = Math.min(RR_WIN, od.length);
+  const route = od.slice(0, w).map(o => [o.pos[0], o.pos[1]]);
+  ship.rrNext = (w < od.length) ? (od.length - (w - RR_RETRIG)) : -1;  // 还有后续窗口时,记下重排时机
   const job = {
     shipId: ship.id, route: route, ordersLen: od.length,
+    tail: (w === od.length),        // 窗口末点是不是真末点(决定它算 stop 还是 pass、以及重放何时结束)
     bis: rrBisectors(route, ship.pos), lam: new Array(route.length).fill(0),
     speedCmd: ship.speedCmd, sandShip: rrMakeShip(ship),
     start: { pos: ship.pos.slice(), vel: ship.vel.slice(), facing: ship.facing.slice(),
@@ -146,7 +152,13 @@ function rrStart(ship) {
 
 /* ---------- 每帧推进 ---------- */
 function rrTick() {
-  if (!rrOn || rrBusy || !rrJobs.length) return;
+  if (!rrOn || rrBusy) return;
+  if (!rrJobs.length) {                 // 队列空:看有没有船该排下一段窗口了(船少,每帧扫一遍可忽略)
+    if (typeof ships !== 'undefined') for (const sh of ships) {
+      if (sh.rrNext > 0 && !sh.dead && sh.orders && sh.orders.length <= sh.rrNext) { rrStart(sh); break; }
+    }
+    if (!rrJobs.length) return;
+  }
   if (typeof stepShipsMotion !== 'function') return;
   rrBusy = true;
   try {

@@ -1,8 +1,0 @@
-Traceback (most recent call last):
-  File "C:\Users\21472\Desktop\GAME\tools\train\graph_check.py", line 24, in <module>
-    r1=env.rollout(pts,aim,n,5000.0)
-  File "C:\Users\21472\Anaconda3\envs\pt_gpu\lib\site-packages\torch\utils\_contextlib.py", line 116, in decorate_context
-    return func(*args, **kwargs)
-  File "C:\Users\21472\Desktop\GAME\tools\train\env_torch.py", line 255, in rollout
-    passed = self._passed(orig, pos, idx, n)
-AttributeError: 'RouteEnv' object has no attribute '_passed'

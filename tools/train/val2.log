@@ -1,0 +1,6 @@
+参考常量: {'thrust': 15, 'turnRate': 0.16, 'cruise': 800, 'passBy': 5000, 'arrive': 400, 'stopSpeed': 60, 'guideEff': 0.9, 'routeTol': 1000, 'routeMargin': 5000, 'maxfrac': 0.35, 'look': 16}
+[CPU/float64  逻辑对表] 65 条 | 墙钟 93.35s = 1 episode/秒
+   用时相对误差:  中位 0.00e+00  最大 0.00e+00
+   最差偏靠绝对差: 中位 0.000 km  最大 0.000 km
+   合规判定不一致: 0 条 
+   最差用例 #0: JS t=239.82s / torch t=239.82s (航点 5)
