@@ -1118,43 +1118,69 @@ t('FLOW21_ARC',function(){ /* RF21 曲率限速(用户实报:密集点组成的�
     +'s(须<200;修前 234.6) 峰值 '+Math.round(T.peak)
     +' | 平缓弧R=80k(对照):峰值 '+Math.round(G.peak)+'(须>760:不许误伤) 偏靠 '+Math.round(G.worst)+'km';
 });
-t('FLOW22_APPEND',function(){ /* RF22 Shift+右键长按也能定到达朝向。机制(ghostArm/ghostAim/ghostCommit)两模式共用,
-  只有落地那一步按 GHOST_MODES 派发 —— 这条判定同时守住"复用"与"两模式都对"。
-  五条:append 确实追加而不是清空 / 只有末令带 face(降级为 pass 的旧末点必须清掉,否则持久虚影会画一个永不兑现的船影)
-      / 预演线起点接现有末点 / 实际飞完到位朝向对得上 / 多选时不进虚影(仍是单舰功能)。 */
+t('FLOW22_APPEND',function(){ /* RF22 Shift+右键长按也能定到达朝向。
+  【必须走真实 DOM 事件,不许直接调 ghostArm/ghostAim】—— 第一版就是直接调函数测的,全绿,
+  而真实游戏里朝向根本转不动:ghostAim 被写在 mousemove 里却传了 sx/sy(那是 mousedown 的局部量),
+  每次移动都抛 ReferenceError。【只测被抽出来的函数,测不到把它接上去的那几行。】
+  所以这里合成 mousedown → (假定时器烧掉 350ms 长按) → mousemove → mouseup 全链路。
+  五条:两模式都能被真实事件驱动 / 朝向确实随鼠标改 / append 是追加不是清空 /
+      只有末令带 face(降级为 pass 的旧末点必须清掉,否则持久虚影会画一个永不兑现的船影) / 多选时不进虚影。 */
   var e=fc5reset(),s=e.S;
-  function P(wx,wy,shift){var p=toScreen(wx,wy);return ghostArm(p[0],p[1],shift);}
-  function A(wx,wy){var p=toScreen(wx,wy);ghostAim(p[0],p[1]);}
+  function ev(type,wx,wy,btn,shift){
+    var p=toScreen(wx,wy);
+    var o={button:btn,clientX:Math.round(p[0]),clientY:Math.round(p[1]),shiftKey:!!shift,
+           preventDefault:function(){},stopPropagation:function(){}};
+    if(type==='down')onMouseDown(o); else window.dispatchEvent(new MouseEvent(type==='move'?'mousemove':'mouseup',
+      {clientX:o.clientX,clientY:o.clientY,button:btn,shiftKey:!!shift,bubbles:true}));
+    return o;
+  }
+  /* 一次完整手势:按下 → 烧掉长按闹钟 → 移动定向 → 抬手。返回长按是否真的弹出了虚影、以及抬手前的朝向 */
+  function gesture(dx,dy,ax,ay,shift){
+    fc4clock(true);fc5timer(true);
+    ev('down',dx,dy,2,shift);
+    fc5flush(360);                       // 烧掉 350ms 的长按闹钟(走生产路径上那条 setTimeout)
+    var armed=!!ghostMove, mode=ghostMove?ghostMove.mode:'?';
+    var f0=ghostMove?ghostMove.face.slice():null;
+    ev('move',ax,ay,2,shift);            // 真实 mousemove:朝向应当跟着变
+    var f1=ghostMove?ghostMove.face.slice():null;
+    var turned=!!(f0&&f1&&(Math.abs(f0[0]-f1[0])+Math.abs(f0[1]-f1[1])>0.01));
+    ev('up',ax,ay,2,shift);
+    fc5timer(false);fc4clock(false);
+    return {armed:armed,mode:mode,turned:turned,face:f1};
+  }
   s.formation=null;s.orders=[];s.brake=false;s.turnTarget=null;s.turnNoFm=false;
   s.crawling=false;s.coasting=false;s.pos=[200000,-150000,0];s.vel=[0,0,0];s.facing=[1,0,0];
-  s.rrNext=-1;rrJobs.length=0;ghostMove=null;selected=[s.id];
-  var a1=P(240000,-150000,false); A(240000,-110000); var m1=ghostMove?ghostMove.mode:'?'; ghostCommit();
+  s.rrNext=-1;rrJobs.length=0;ghostMove=null;selected=[s.id];panning=null;rmbClick=null;
+  var g1=gesture(240000,-150000,240000,-110000,false);   /* 无 Shift:清空重下 */
   var n1=s.orders.length;
-  var a2=P(300000,-90000,true); A(300000,-50000);
-  var m2=ghostMove?ghostMove.mode:'?';
-  var fromOK=!!(ghostMove&&Math.abs(ghostMove.from[0]-240000)<1&&Math.abs(ghostMove.from[1]+150000)<1);
-  ghostCommit();
+  var g2=gesture(300000,-90000,300000,-50000,true);      /* Shift:追加 */
   var types=s.orders.map(function(o){return o.type;}).join(',');
   var faceIdx=[]; s.orders.forEach(function(o,i){if(o.face)faceIdx.push(i);});
-  var want=s.orders[s.orders.length-1].face.slice();
-  for(var i=0;i<80000;i++){
-    if(rrJobs.length)rrTick();
-    stepShipsMotion(0.02);
-    if(!s.orders.length&&V.len(s.vel)<1)break;
+  var want=s.orders.length?s.orders[s.orders.length-1].face:null;
+  var err=-1;
+  if(want){
+    want=want.slice();
+    for(var i=0;i<80000;i++){
+      if(rrJobs.length)rrTick();
+      stepShipsMotion(0.02);
+      if(!s.orders.length&&V.len(s.vel)<1)break;
+    }
+    err=Math.acos(Math.max(-1,Math.min(1,s.facing[0]*want[0]+s.facing[1]*want[1])))*180/Math.PI;
   }
-  var err=Math.acos(Math.max(-1,Math.min(1,s.facing[0]*want[0]+s.facing[1]*want[1])))*180/Math.PI;
+  /* 多选时不进虚影(仍是单舰功能) */
   selected=ships.filter(function(x){return x.side==='blue'&&!x.dead;}).map(function(x){return x.id;});
-  ghostMove=null;
-  var multi=P(400000,0,true);
-  selected=[s.id];ghostMove=null;
-  var ok=(a1&&m1==='move'&&n1===1
-        &&a2&&m2==='append'&&fromOK
+  ghostMove=null;panning=null;rmbClick=null;
+  var g3=gesture(400000,0,400000,40000,true);
+  selected=[s.id];ghostMove=null;panning=null;rmbClick=null;
+  var ok=(g1.armed&&g1.mode==='move'&&g1.turned&&n1===1
+        &&g2.armed&&g2.mode==='append'&&g2.turned
         &&types==='pass,stop'&&faceIdx.length===1&&faceIdx[0]===1
-        &&err<3&&multi===false);
-  return (ok?'ok':'fail')+' 无Shift:armed='+a1+' 模式='+m1+' 令数='+n1+'(须1=清空重下)'
-    +' | Shift:armed='+a2+' 模式='+m2+' 类型=['+types+'](须 pass,stop) 带face的令=['+faceIdx.join(',')+'](须只有末令1)'
-    +' 预演线起点接现有末点='+fromOK
-    +' | 飞完到位朝向误差='+err.toFixed(2)+'°(须<3) | 多选时 armed='+multi+'(须false)';
+        &&err>=0&&err<3&&!g3.armed);
+  return (ok?'ok':'fail')
+    +' 无Shift(真实事件):弹出='+g1.armed+' 模式='+g1.mode+' 朝向随鼠标改='+g1.turned+'(须true) 令数='+n1+'(须1=清空重下)'
+    +' | Shift:弹出='+g2.armed+' 模式='+g2.mode+' 朝向随鼠标改='+g2.turned+' 类型=['+types+'](须 pass,stop)'
+    +' 带face的令=['+faceIdx.join(',')+'](须只有末令1)'
+    +' | 飞完到位朝向误差='+err.toFixed(2)+'°(须<3) | 多选时弹出='+g3.armed+'(须false)';
 });
 t('FLOW6_CHAIN',function(){ /* RF7 数据链渲染:函数存在;编辑态/退出态 render 均不炸(像素断言不做,ERRORS 层兜底) */
   var e=fc5reset();

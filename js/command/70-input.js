@@ -409,7 +409,7 @@ window.addEventListener('mousemove',e=>{
   if(panning){
     const dx=e.clientX-panning.sx, dy=e.clientY-panning.sy;
     if(ghostMove){ // RF11 虚影已弹出:鼠标移动改的是【到达朝向】,不再平移视角(机制见 ghostAim)
-      ghostAim(sx,sy);
+      ghostAim(e.clientX,e.clientY); // 【必须用 e.clientX/Y】:sx/sy 是 mousedown 里的局部量,本处用它会每次移动都抛 ReferenceError(朝向卡死不动)
       return;
     }
     if(Math.abs(dx)+Math.abs(dy)>5){panning.moved=true;if(rmbClick)rmbClick=null;clearTimeout(rmbTimer);rmbTimer=null;}
