@@ -9,35 +9,28 @@ function stepShipsMotion(dt){
     s.flame=0;s.sideFlame=0; // 本步推进器状态默认无焰
     s.accNow=0;s.engMain=false;s.engRetro=false;s.engSide=false;s.engLv=[0,0,0]; /* RF19b:accLat/aimHeading 随 torque 删除 */ // RF9 同拍清零;RF10 追加三推开度 engLv / 横向副作用 accLat / 期望朝向 aimHeading:这四个是"本 tick 实际在推什么"的读数,由 30-motion 的 steerToVel 当场置位。
     // 必须在【这里】清而不是在 steerToVel 里清 —— 有几条分支(空闲锁定漂移/编队旗舰调头)整拍不调 steerToVel,在那里清的话读数会冻在上一拍。
-    if(s.formation){ // KIMI146:取本编队已结算的共享上下文;解散则落入普通分支(走各自落位命令)
-      const FC=formTickCtx.get(s.formation)||stepFormation(s.formation,dt);
-      formTickCtx.set(s.formation,FC);
-      if(FC.dissolved)s.formation=null;
+    /* FM1 编队重做:编队【不再有自己的航线】。编队的路径就是旗舰的 s.orders,
+       所以旗舰在下面走的是【和散船一模一样的那一支】—— routeCap 速度倒推 / cornerSpd 曲率限速 /
+       rrStart 航线细化 / face 到达朝向,四样一行不改地对编队生效。
+       本分支只剩【成员跟随】一件事;改前的旗舰专用导引、旗舰转向 continue、leaderMode(DS193 队长模式)
+       连同 F.dest/F.queue/F.curType/F.arrived 一并删除。 */
+    let FC=null;
+    if(s.formation){ // KIMI146:同一编队每 tick 只结算一次,成员共享这一份上下文
+      FC=formTickCtx.get(s.formation);
+      if(!FC){FC=stepFormation(s.formation,dt);formTickCtx.set(s.formation,FC);}
+      if(FC.dissolved){if(typeof fmDisband==='function')fmDisband(s.formation);s.formation=null;s.fmSlot=null;FC=null;} // 编队塌了(只剩一艘/全灭):落回散船分支。必须走 fmDisband 而不是只清本舰 —— 编队实体挂在 groups[g].fm 上,不摘掉的话 fmGet 还会返回一个没有任何成员的僵尸 F,书签菜单会照着它报"已成队"
     }
-    const leaderMode=s.formation&&(formTickCtx.get(s.formation).flag===s)&&!s.formation.queue.length&&s.orders.length; // DS193:队长模式--静止编队(queue空)旗舰个人令优先:旗舰带路,成员槽位自动跟随其实时位置,落位后锚点闭合;原个人令被编队分支静默吞掉(卡片命令无效)
-    if(s.formation&&!leaderMode){ // v143编队整体移动(DS193:队长模式让位,落入orders分支);成员目标=旗舰+阵位偏移(跟随旗舰)
-      const F=s.formation,FC=formTickCtx.get(F);
+    if(FC&&FC.flag!==s){ // 成员:目标=旗舰实时位置+旋转后阵位
       const flag=FC.flag;
-      const isFlag=s===flag;
-      if(isFlag&&s.turnTarget){ // v132:旗舰V转向→滑行调头(机头朝调头方向,速度不变);阵型朝向fmAng平滑跟随,整队旋转
-        const tDesired=V.norm(V.sub(s.turnTarget,s.pos));
-        applyHeading(s,tDesired,dt); // RF10 经 applyHeading
-        if(V.angle(s.facing,tDesired)<0.02){s.turnTarget=null;s.turnNoFm=false;} // KIMI151修:调头完成清除——原终身残留,旗舰永卡本分支(continue跳过dest导引),编队不机动/冲过目标点不停(用户报"编队不动弹"主根因)
-        s.pos[0]+=s.vel[0]*dt;s.pos[1]+=s.vel[1]*dt;s.pos[2]+=s.vel[2]*dt;
-        continue;
-      }
       const off=rotSlot(s.fmSlot||[0,0,0],FC.ca,FC.sa); // KIMI146:阵位槽存在船上(fmSlot),编队对象只存共享状态
-      // DS191:统一导引律--旗舰=同一条刹车曲线+组速上限(组内最低语义保留);成员=旗舰速度前馈+曲线追赶(err->0时相对速度归零,曲线自动衰减修正量,替代原P控制器0.35增益/400上限,饱和极限环消除)
-      if(isFlag){
-        guideTo(s,F.dest,[0,0,0],FC.spd,F.curType!=='pass',dt);
-      }else{
-        const target=[flag.pos[0]+off[0],flag.pos[1]+off[1],flag.pos[2]+off[2]]; // 成员目标=旗舰+阵位(相对旗舰)
-        const w=FC.w||0; // DS195:阵型角速度
-        const slotVel=[flag.vel[0]-w*off[1],flag.vel[1]+w*off[0],flag.vel[2]]; // 槽位速度=旗舰平移+旋转切向
-        const err0=V.len(V.sub(target,s.pos));
-        const tau=err0/(brakeCurveSpd(s,err0)+50); // 前置时间约等于曲线接近时间
-        guideTo(s,[target[0]+slotVel[0]*tau,target[1]+slotVel[1]*tau,target[2]+slotVel[2]*tau],flag.vel,Infinity,true,dt); // DS195:拦截前置点导引--纯追踪横移槽位必画追踪圈,前置截获消除超大圈
-      }
+      const target=[flag.pos[0]+off[0],flag.pos[1]+off[1],flag.pos[2]+off[2]];
+      const w=FC.w||0; // DS195:阵型角速度
+      const slotVel=[flag.vel[0]-w*off[1],flag.vel[1]+w*off[0],flag.vel[2]]; // 槽位速度=旗舰平移+旋转切向
+      const err0=V.len(V.sub(target,s.pos));
+      const tau=err0/(brakeCurveSpd(s,err0)+50); // 前置时间约等于曲线接近时间
+      // DS191+DS195:旗舰速度前馈 + 刹车曲线追赶 + 拦截前置点。纯追踪横移槽位必画追踪圈,前置截获消除超大圈;
+      // cap 传 Infinity 是刻意的 —— 组速上限只加在旗舰身上(见下面 orders 分支),成员必须能超速才追得回队形。
+      guideTo(s,[target[0]+slotVel[0]*tau,target[1]+slotVel[1]*tau,target[2]+slotVel[2]*tau],flag.vel,Infinity,true,dt);
     }else if(s.brake){ // 停车指令:v119 期望速度=0,导引内核自动反推
       steerToVel(s,[0,0,0],dt);
       if(V.len(s.vel)<1){s.vel=[0,0,0];s.brake=false;log(`${s.name} 停稳`,'');}
@@ -47,6 +40,7 @@ function stepShipsMotion(dt){
       const dist=V.len(toWp);
       const vn=V.len(s.vel);
       let cap=cruiseOf(s);
+      if(FC)cap=Math.min(cap,FC.spd); // FM1:旗舰吃组速上限(组内最低档)。改前这一步在旗舰专用 guideTo 的 cap 参数里,现在旗舰走通用分支,只需在限速链上多接一段
       if(cur.type==='pass'){ // 路径点:掠过即继续,不停车
         if(dist<CFG.passBy){
           s.orders.shift(); log(`${s.name} 经过路径点`,''); continue;
@@ -109,9 +103,7 @@ function stepShipsMotion(dt){
     }
     // RF6 朝向层:与上面的移动层【并行】,所以"边移动边转头"成立(太空里朝向与速度矢量解耦,推进也不要求机头对准——
     // 30-motion 只是让机头默认跟着推力方向走)。必须排在移动层之后:steerToVel 会把机头归到推力方向,朝向层要盖过它。
-    // 编队旗舰的转向仍走上面 L20 那一支(自带 continue),本轮【刻意未动】——那支的注释记着一次真实事故
-    // (旗舰永卡本分支→编队不机动/冲过目标点不停),没有编队专项回归就动它是在同一个坑上重演。
-    if(s.turnTarget&&!(s.formation&&formTickCtx.get(s.formation)&&formTickCtx.get(s.formation).flag===s)){
+    if(s.turnTarget){ // FM1:排除条款删除——旗舰改走通用 orders 分支后,它的转向本来就该由本层处理(改前那支自带 continue,整拍不导引,是"编队不机动"事故的现场)
       const tDesired=V.norm(V.sub(s.turnTarget,s.pos));
       applyHeading(s,tDesired,dt); // RF10
       if(V.angle(s.facing,tDesired)<0.02){s.turnTarget=null;s.turnNoFm=false;} // KIMI151修:调头完成清除(同旗舰分支根因——原残留导致航线走完后做陈旧调头)

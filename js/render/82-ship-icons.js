@@ -144,13 +144,19 @@ function drawShip(s){
     ctx.fillStyle='rgba(215,226,240,.8)';ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';
     ctx.fillText(lbl,p[0],p[1]+r+6);
   }
-  // 当前目标连线(所有有命令/编队的船;v137:到位待命arrived不画——标记消失)
-  if(s.orders.length||(s.formation&&!s.formation.arrived)){
-    const tgt=s.orders.length
-      ?[s.orders[0].pos[0],s.orders[0].pos[1],s.orders[0].pos[2]]
-      :(function(){const off=formationOff(s);return [s.formation.dest[0]+off[0],s.formation.dest[1]+off[1],s.formation.dest[2]+off[2]];})();
-    const isPass=s.orders.length?s.orders[0].type==='pass':false;
-    const q=toScreen(tgt[0],tgt[1]);
+  // 当前目标连线(FM1:编队已无 dest/arrived,路径就是【旗舰的 s.orders】)
+  //   · 本舰有令(散船/旗舰都走这一支):画自己的 orders[0]
+  //   · 编队成员(不持令,orders 恒空):画"旗舰 orders[0] + 本舰阵位偏移"——这正是 31-step-ships 里成员在追的那个点;
+  //     旗舰无令 = 整队待命,不画(与散船待命不画标记同口径)
+  let tgtOrd=null,tgtOff=null;
+  if(s.orders.length)tgtOrd=s.orders[0];
+  else if(s.formation){
+    const flag=fmFlag(s.formation);
+    if(flag&&flag!==s&&flag.orders.length){tgtOrd=flag.orders[0];tgtOff=fmOffOf(s);}
+  }
+  if(tgtOrd){
+    const isPass=tgtOrd.type==='pass'; // pass/stop 读【被画的那条令】:成员画的是旗舰那条,符号跟着它走
+    const q=toScreen(tgtOrd.pos[0]+(tgtOff?tgtOff[0]:0),tgtOrd.pos[1]+(tgtOff?tgtOff[1]:0));
     ctx.strokeStyle='rgba(255,255,255,.15)';ctx.lineWidth=1;
     ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();
     ctx.strokeStyle=isPass?'rgba(150,175,215,.75)':'rgba(255,224,102,.85)';ctx.lineWidth=1.4;

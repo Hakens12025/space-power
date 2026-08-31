@@ -25,15 +25,10 @@ function render(){
   if(typeof drawRadial==='function')drawRadial(); // RF5 Phase C 目标轮盘:必须压在 drawTargeting 之上——它的黄吸附圈(r=shipIconR+8≈18~26)与 drawLocks 的红圈(r=13)都落在轮盘 RAD_RI=62 的内洞里,排下面会从洞里穿出来盖住 hub 读数(全图字最小、最需要干净背景的地方);又必须让位下面 drawRange/drawSelection/dragOrder 三项排他交互(测距读数该在最上,左键不被轮盘拦截故框选/拖命令点仍是全局交互)。89 是新文件,用 typeof 守卫而不照抄上面的裸调:顶层 const 万一撞名整文件语法报废时,每帧渲染不跟着一起崩
   drawRange();
   drawSelection();
-  if(dragOrder){ // 拖拽中的命令点高亮(支持编队点)
+  if(dragOrder){ // 拖拽中的命令点高亮(FM1:原来还有 kind==='cur'/'queue' 两支,读的是已删除的 F.dest/F.queue;
+    // 编队路径现在就是旗舰的 s.orders,拖的是旗舰身上的普通命令点,下面 dragOrder.ship 这一支天然覆盖)
     let hp=null;
-    if(dragOrder.kind==='cur'){
-      const fm=ships.find(x=>x.formation&&x.formation.id===dragOrder.fmId);
-      if(fm){const d=fm.formation.dest,off=formationOff(fm);hp=toScreen(d[0]+off[0],d[1]+off[1]);}
-    }else if(dragOrder.kind==='queue'){
-      const fm=ships.find(x=>x.formation&&x.formation.id===dragOrder.fmId);
-      if(fm&&fm.formation.queue[dragOrder.idx])hp=toScreen(fm.formation.queue[dragOrder.idx].pos[0],fm.formation.queue[dragOrder.idx].pos[1]);
-    }else if(dragOrder.ship){
+    if(dragOrder.ship){
       const od=dragOrder.ship.orders[dragOrder.index]; // KIMI146修:拖拽途中命令点可能被模拟端消费(到位/经过shift/退格删点),无防护每帧抛TypeError
       if(od)hp=toScreen(od.pos[0],od.pos[1]);
     }
@@ -52,9 +47,11 @@ function render(){
       ctx.beginPath();ctx.arc(p[0],p[1],r,0,6.283);ctx.stroke();
     }
     const n=ships.filter(s=>s.side==='red'&&s.litBlue).length;
-    ctx.fillStyle='rgba(5,7,12,.62)';ctx.fillRect(10,72,168,18);
+    // FM1:x 由 10 移到 280 —— 左轨面板车道是 left:10px / top:68px / width:260px,常驻编队书签栏就在这条车道上,
+    // 这块固定屏幕坐标的读数原地会被它压住。280 = --gut(10) + --rail-w(260) + --gut(10),即左轨之外第一列;文字同步 14→284。
+    ctx.fillStyle='rgba(5,7,12,.62)';ctx.fillRect(400,72,168,18);
     ctx.fillStyle=n?'#8fd0ff':'#667788';ctx.font='11px Consolas';ctx.textAlign='left';ctx.textBaseline='middle';
-    ctx.fillText(n?`🔭 已点亮 ${n} 艘敌舰`:'🔭 无接触',14,81);
+    ctx.fillText(n?`🔭 已点亮 ${n} 艘敌舰`:'🔭 无接触',404,81);
   }
 }
 

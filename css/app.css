@@ -508,3 +508,77 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
   .tut-body .tut-table th,.tut-body .tut-table td{padding:var(--sp-1) var(--sp-2)}
   .tut-body .tut-table td:first-child{white-space:normal}
 }
+
+/* ==================== FM1 编队书签栏 + 编队菜单(2026-09) ====================
+   SIMPLE_UI 把 #qbar/#fleet/右键菜单全按死之后,编队没有任何可见入口 —— 这一叠书签就是唯一入口,
+   所以它【常驻】(不属于上面那份 RF2 隐藏清单,别加进那两行 display:none!important)。
+   刻意【不给 #fmBar 用 class="panel"】:.panel 带 overflow:hidden + 边框背景,把一叠彼此独立的小条
+   圈成一整块面板会读错层级 —— 书签是贴在轨边上的标签,不是一块面板。
+   容器 pointer-events:none、只有书签本身 auto:没有编组时这块 96px 宽的区域必须对地图点击完全透明。 */
+/* 宽度自适应内容,但上限 110px 是硬约束:书签 hover/展开时右移 6px,而 #fmMenu 起于 calc(--gut + 120px),
+   110+6 = 116 < 120 才不会被层级更高的菜单啃掉右边一条(实拍验过 132px 时正好压掉 2px)。 */
+#fmBar{position:fixed;top:var(--rail-top);left:var(--gut);
+  min-width:96px;max-width:110px;
+  display:flex;flex-direction:column;gap:var(--sp-1);
+  z-index:var(--z-panel);pointer-events:none}
+/* 【本项目唯一一条 transition】。全库其余部分零 transition,hover 一律瞬时换色(战术显示器不该有过渡动画,
+   状态变化要立刻可读)。这一条是用户明确要求的书签滑出动效,且只作用于 transform ——
+   颜色仍然是瞬时的,所以"状态色即语义"那条判据没有被这条动画破坏。不要把它扩到别的选择器上。 */
+.fm-tab{pointer-events:auto;display:flex;align-items:center;gap:var(--sp-2);
+  padding:var(--sp-1) var(--sp-2);
+  background:var(--srf-panel);border:var(--bw) solid var(--line);border-radius:var(--r-sm);
+  font-size:var(--fs-label);letter-spacing:var(--ls-label);color:var(--txt-dim);
+  cursor:pointer;user-select:none;
+  transition:transform .15s ease}
+.fm-tab .fm-nm{flex:1;min-width:0;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fm-tab .fm-ct{flex:none;font-family:var(--ff-mono);letter-spacing:var(--ls-read);font-variant-numeric:tabular-nums;color:var(--txt-dim)}
+/* 状态左条做成【独立子元素】而不是 border-left:hover 那条用的是 border-color(会连左边一起冲掉),
+   两者抢同一个属性就会出现"鼠标一放上去状态色就没了"。RF8 方条那三种状态踩过同一个坑:
+   同时叠加的状态各占不同视觉通道,谁都不许抢别人的属性。 */
+.fm-tab .fm-edge{flex:none;width:3px;align-self:stretch;min-height:12px;border-radius:1px;background:var(--txt-dim)}
+.fm-tab.mv .fm-edge{background:var(--state-active)}   /* 旗舰有令 = 机动中 */
+.fm-tab:hover,.fm-tab.on{transform:translateX(6px);background:var(--srf-hover);border-color:var(--line-acc);color:var(--txt-hi)}
+.fm-tab:hover .fm-nm,.fm-tab.on .fm-nm{color:var(--txt-hi)}
+/* 战损排在 :hover 之后:同特异度靠书写顺序定优先级,"队里有人快没了"比"鼠标正指着"更该被看见(同 RF8 的 paused) */
+.fm-tab.hurt{border-color:var(--state-warn)}
+
+/* 编队菜单:几何抄 #selPanel,但 left 让开书签栏那一列。层级取 --z-flyout —— 它是由控件(书签)唤出的浮层,
+   必须高于唤出者所在的 --z-panel(#ringPanel 当年就是排低了被自己的唤出者压住)。 */
+#fmMenu{top:var(--rail-top);left:calc(var(--gut) + 120px);width:var(--rail-w);
+  max-height:calc(100% - var(--rail-top) - var(--dock-b));
+  display:flex;flex-direction:column;z-index:var(--z-flyout)}
+/* .panel 带 overflow:hidden,内容区必须自己写 overflow-y:auto,否则成员一多就被硬裁(#trPanel/#editorPanel 都栽过)。
+   flex 用 1 1 auto 不用 basis:0:本面板只有 max-height 没有 height(高度按内容撑),
+   basis:0 会让信息区永远塌到 min-height —— 与 #fcSec 那条注释同一个坑。 */
+#fmInfo{flex:1 1 auto;min-height:0;overflow-y:auto;padding:var(--sp-3);border-bottom:var(--bw) solid var(--line)}
+#fmInfo .row{display:flex;justify-content:space-between;align-items:center;gap:var(--sp-2);padding:2px 0;font-size:var(--fs-body)}
+#fmInfo .row .k{flex:none;color:var(--txt-dim)}
+#fmInfo .row .v{min-width:0;font-family:var(--ff-mono);letter-spacing:var(--ls-read);font-variant-numeric:tabular-nums;color:var(--txt-read);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#fmInfo .row .fm-lk{cursor:pointer}
+#fmInfo .row .fm-lk:hover{color:var(--acc-lite)}
+#fmInfo .fm-sub{margin:var(--sp-2) 0 var(--sp-1);font-size:var(--fs-label);color:var(--txt-mute);letter-spacing:var(--ls-label)}
+/* 成员行:配方抄 .card(点选/选中态),但压到 --fs-label 一档 —— 这里是从属列表,不该和右栏主读数抢注意力 */
+#fmInfo .fm-mem{display:flex;align-items:center;gap:var(--sp-2);padding:2px var(--sp-1);
+  border:var(--bw) solid transparent;border-radius:var(--r-sm);
+  font-size:var(--fs-label);cursor:pointer;user-select:none}
+#fmInfo .fm-mem:hover{background:var(--srf-hover);border-color:var(--line-ctl)}
+#fmInfo .fm-mem.sel{background:var(--srf-sel);border-color:var(--state-select)}
+#fmInfo .fm-mem .dot{flex:none;width:8px;height:8px;border-radius:var(--r-dot);background:var(--txt-dim)}
+#fmInfo .fm-mem .dot.sail{background:var(--acc)}
+#fmInfo .fm-mem .nm{flex:1;min-width:0;color:var(--txt-read);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#fmInfo .fm-mem .fg{flex:none;min-width:12px;font-size:var(--fs-micro);color:var(--state-select);letter-spacing:var(--ls-label)} /* 旗舰标记,占位固定宽度免得成员行左右跳 */
+#fmInfo .fm-mem .hpbar{flex:none;width:46px;margin:0} /* 复用 .hpbar,只改尺寸与外边距,不另起一套血条 */
+/* 操作区:结构恒定只建一次,所以这里不用管重渲。按钮沿用 .btn/.qbtn(.btn 是为了拿到 .btn.on 的开启态) */
+#fmActs{flex:none;padding:var(--sp-2)}
+#fmActs .fm-grp{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-1);margin-bottom:var(--sp-1)}
+#fmActs .fm-grp:last-child{margin-bottom:0}
+#fmActs .fm-lb{flex:none;font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label)}
+#fmActs .fm-v{flex:none;min-width:44px;text-align:center;font-family:var(--ff-mono);letter-spacing:var(--ls-read);font-variant-numeric:tabular-nums;color:var(--txt-read);font-size:var(--fs-label)}
+#fmActs .qbtn{flex:1 1 auto;min-width:44px;justify-content:center}
+/* 六个动作钮固定 3 列:flex-wrap 换行时末行元素会被 flex:1 抻满整行(实拍:"整队停车|解散编队"各占半屏宽)。
+   grid 的每行列数恒定,不存在"末行元素少所以更宽"这回事。 */
+#fmActs .fm-grp.g-act{display:grid;grid-template-columns:repeat(3,1fr)}
+#fmActs .fm-grp.g-act .qbtn{min-width:0}
+/* 参数行(扇面/密度/档位):一行放得下就不许换行;步进钮不参与伸缩,否则 260px 里它们会把中间的读数挤没 */
+#fmActs .fm-grp.g-par{flex-wrap:nowrap}
+#fmActs .fm-grp.g-par .qbtn{flex:0 0 auto;min-width:28px;padding:2px var(--sp-2)}

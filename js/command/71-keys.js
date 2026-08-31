@@ -71,19 +71,17 @@ function ceaseFire(){ // X/快捷栏:停火,解除所有选中舰锁定
 }
 function assignGroup(g,sel){ // v127 编组覆盖重编:Ctrl+数字 = 取消该编号原所有船,只按当前选中重新编组
   const newIds=sel.filter(s=>!s.dead).map(s=>s.id);
-  const oldShips=groups[g]?groups[g].ships.slice():[];
-  // 从该组移除所有旧船
-  if(groups[g])delete groups[g];
-  // 旧船若不再属于任何组 → 清除 formation(脱离编队)
-  for(const id of oldShips){
-    if(newIds.includes(id))continue;
-    const s=ships.find(x=>x.id===id);
-    if(!s)continue;
-    let still=Object.keys(groups).some(gk=>{const gp=groups[gk];return gp&&gp.ships.includes(id);});
-    if(!still&&s.formation)s.formation=null;
+  // FM1:删名册【之前】必须先解散编队实体 —— 编队实体挂在 groups[g].fm 上,delete groups[g] 之后
+  // 就再也没人找得到它,被踢出的旧船会留着 formation 指向一个没人管的孤儿 F。原先那段"逐船查还在不在别的组、
+  // 在就裸清 s.formation"的循环只清了 formation、不清 s.fmSlot(槽位残留),也不会让剩下的队重排。
+  // fmDisband 把成员的 formation/fmSlot 一并清干净,所以那段循环整体由它取代。
+  if(groups[g]){
+    if(typeof fmDisband==='function'&&groups[g].fm)fmDisband(groups[g].fm);
+    delete groups[g];
   }
   if(!newIds.length){log(`编组${g} 已清空`,'');renderFleet();return;}
-  groups[g]={ships:newIds,flagship:newIds[0]}; // 首艘默认旗舰
+  groups[g]={ships:newIds,flagship:newIds[0],name:'编队'+g}; // 首艘默认旗舰;name 供书签栏显示
+  if(typeof fmSyncGroup==='function')fmSyncGroup(g); // 名册变了让编队跟上(编组 >=2 艘跟上,<2 艘解散)
   log(`${newIds.length} 艘 → 编组${g}(覆盖重编)`,'');renderFleet();
 }
 function rateMove(dir){ // v131:变速在预设整数档位间移动(rate不在档位时就近归位)
@@ -140,7 +138,8 @@ function doAction(id){
       sel.forEach(s=>{
         const back=V.norm([-s.facing[0],-s.facing[1],-s.facing[2]]);
         const tgt=[s.pos[0]+back[0]*30000,s.pos[1]+back[1]*30000,s.pos[2]+back[2]*30000];
-        s.orders=[{pos:tgt,type:'stop'}];s.brake=false;s.formation=null;s.crawling=false;
+        if(typeof fmLeave==='function')fmLeave(s); // FM1:倒车是单舰机动,仍然脱队,但要走 fmLeave —— 裸 s.formation=null 不清 s.fmSlot,也不会让剩下的队重排(少一艘要重新分槽位)
+        s.orders=[{pos:tgt,type:'stop'}];s.brake=false;s.crawling=false;
       });
       if(sel.length)log(`⏪ ${sel.length} 艘倒车(反推倒退 30k)`,'');
       break;}
@@ -152,19 +151,25 @@ function doAction(id){
       log(n?`💥 ${n} 次全弹发射`:'全弹未发射(需锁定目标)','');
       break;}
     case 'del_last_order':{
-      const sel=selectedShips();let n=0;
+      const sel=selectedShips();let n=0;const halted=new Set();
       sel.forEach(s=>{
-        if(s.formation){ // 编队命令:删除整个编队的移动(全组停车)
-          const fid=s.formation.id;
-          ships.forEach(x=>{if(x.formation&&x.formation.id===fid){x.formation=null;x.brake=true;}});
-          n++;
+        if(s.formation){ // 编队命令:整队停车(编队【不解散】)
+          // FM1:原写法遍历全 ships 把同 id 的成员 formation=null + brake=true —— 那是把编队【拆了】才停下来,
+          // 且不清 s.fmSlot。新架构下编队的航线就是旗舰的 s.orders,停车交给 fmHalt(旗舰刹停,成员跟旗舰实时位置自然落回槽位)。
+          // FM1 复核修正:本动作叫"删除最后一个命令点",对散船是 orders.pop()。改前对编队调 fmHalt,
+          // 而 fmHalt 会 orderClear 旗舰 —— 玩家画 6 个点想撤掉最后一个,结果 6 个一次全没,且不可撤销。
+          // 新架构下编队航线就是旗舰的 orders,直接 pop 旗舰末令,两种选择语义终于一致。
+          if(halted.has(s.formation))return; // 多选同一编队只处理一次,免得 n 虚高
+          halted.add(s.formation);
+          const fl=(typeof fmFlag==='function')?fmFlag(s.formation):null;
+          if(fl&&fl.orders.length){fl.orders.pop();n++;}
         }else if(s.orders.length){ // 普通命令点:删最后一个
           s.orders.pop();
           if(!s.orders.length)s.brake=true;
           n++;
         }
       });
-      if(n)log(`删除 ${n} 个命令(编队已停车)`,'');
+      if(n)log(`删除 ${n} 个命令点`,''); // FM1:不再是"编队已停车"——编队与散船现在都只删末令
       else log('没有可删除的命令点','warn');
       break;}
   }

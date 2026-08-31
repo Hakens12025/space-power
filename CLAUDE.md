@@ -617,6 +617,114 @@ S1 感知节拍(每秒) → S2 网分配节拍(0.5s) → S3 任务AI
 
 **教训**:探针的角度只取了两个极端值,中间那一大段是盲区 —— 与 RF16"极端用例补测量盲区"正好相反的一面:**极端值同样会漏掉中间**。判据里出现"某个量的比值"时,先想清楚它在整个定义域上是否单调、有没有下限。
 
+## FM1 编队系统重做 备忘(2026-09)
+
+### 一句话
+
+**编队不再有自己的航线。编队的路径就是旗舰的 `s.orders`。**
+
+### 为什么要重做
+
+改前编队走 `F.queue` —— 一套**平行于 `s.orders` 的第二航线结构**(`F={id,dest,curType,queue,fmAng,arrived}`)。
+后果是编队被隔离在运动内核之外,**四样已经调好的东西一样都吃不到**:
+
+| 内核能力 | 改前编队 | 拦截点 |
+|---|---|---|
+| `routeCap` 速度倒推(RF13) | ✗ | 只在 `s.orders` 的 pass 分支里接 |
+| `cornerSpd` 曲率限速(RF21) | ✗ | 同上 |
+| `rrStart` 航线细化(RF14) | ✗ | `32-route-refine.js` 里 `\|\| ship.formation` 直接 return |
+| `face` 到达朝向(RF11/RF22) | ✗ | `addWaypoint` 的编队分支根本传不进 face |
+
+它同时也是四层补丁的根源:**`F.dest` 是玩家看不见也管不着的隐形点**,于是要 DS186 收口、DS193 锚点跟随 + 队长模式、DS194 到位判定补丁、KIMI151 清残留。四层叠完仍然留着"渲染锚 `F.dest`、仿真锚 `flag.pos`,两者只在锚点跟随生效那一瞬才对齐"的分家。
+
+### 新架构:五层,职责单一
+
+```
+40-slots.js     几何纯函数   不读全局 ships/groups,不写船状态。参数由调用方传入
+41-groups.js    编组名册     只管 groups[g]={ships,flagship,name,fm}
+42-formation.js 生命周期     建/散/换旗/重排/调参。F={id,gid,P,fmAng,n,flagId}
+43-step.js      每 tick 结算  stepFormation(F,dt)->{flag,ca,sa,spd,w,maxDev,formed}
+44-orders.js    命令层       【唯一】写 s.orders 的地方,散船与旗舰共用同一套原语
+```
+
+`F` 里**没有** `dest/queue/curType/arrived`。删掉的还有:`rotAng` `formationRot` `formationOff`
+`formationTargets` `formationOffsets` `findFlag` `moveFormation` `rebuildFormations`
+`setFan` `setSpacing` `setFormationPreset`,以及三个全局参数 `formationFan` `formationSpacing` `fmGap`。
+
+`31-step-ships.js` 的编队分支现在**只剩"成员跟随"一件事**:旗舰走的是和散船一模一样的 orders 分支,
+只在限速链上多接一句 `if(FC)cap=Math.min(cap,FC.spd)`(组速=组内最低档)。
+旗舰专用导引、旗舰转向那支 `continue`、`leaderMode` 全部删除 —— 那支 `continue` 的注释里记着一次真实事故
+(旗舰永卡该分支 → 编队不机动 / 冲过目标点不停),现在它连同产生它的结构一起消失了。
+
+### 三条刻意的行为变化(不是 bug)
+
+1. **编队 ⟺ 编组一一对应**。改前 `moveFormation` 的 else 支会把"异编队+散船的混合选择"强行重排成一个
+   **没有编组号的无名编队** —— 书签栏拿不到它,玩家也没法再选中它。现在混合选择一律各自散船移动,
+   要成队请先 `Ctrl+数字` 编组。
+2. **阵型参数每编队一份**(`F.P={fan,spacing,gap}`)。改前是三个全局变量,调一下扇面**全场编队一起变**。
+3. **走完不解散**。改前队列走完做"原子解散 + 成员各发落位令";现在旗舰令空了就停,成员继续跟旗舰实时位置,
+   队形自然保持。语义上等价于 v137 的"到位待命保留阵型",但不再需要 `arrived` 这个状态位。
+
+### 保住的核心思想(七条,都是踩坑换来的,动它们要有理由)
+
+1. 一个编队一个共享对象,每 tick 只结算一次(`formTickCtx`)—— KIMI146 从 O(船²) 副本同步救回来的
+2. 旗舰即编队原点(`recenterSlots` 归零),导引/绘制/成形判定共用一个锚 —— DS189
+3. 成员用**拦截前置点**而不是纯追踪(`slotVel*tau`)—— 纯追踪横移槽位必画追踪圈,DS195
+4. 阵型旋转限速按**最远槽位半径**缩放(`ω=1500/R`)—— 固定 0.5rad/s 会让远槽位以数万 km/s 横扫,成员物理追不上
+5. 组速取组内最低(`speedCmd===0` 拉停全队,`-1` 不参与 min)
+6. 阵型按 `CLS_ROLE` 三桶算出来(主力横队/护卫弧线/侦察外扇),不是玩家手摆
+7. 换旗兜底:名册是旗舰唯一真相源,`fmFlag` 找不到才顺位并回写,随后 `fmReslot` 按新锚点重排
+
+### 渲染锚点统一
+
+`fmOffOf(s)`(42 层)取代 `formationOff`,锚点改成**旗舰实时位置** —— 与 `31` 里成员真正在追的目标同锚。
+改前渲染锚 `F.dest`、仿真锚 `flag.pos`,**画出来的阵位点不是船在追的点**,靠 DS193 锚点跟随才偶然对齐。
+
+### 编队 UI 是从零补的,不是改的
+
+`js/core/01-state.js:48` 的 `SIMPLE_UI=true` 让右键菜单(`72-context-menu.js:6` 首行 return)、
+底部快捷栏 `#qbar`、舰队面板 `#fleet`、设置遮罩 `#overlay` **全部不可见**。
+也就是说重做之前**编队没有任何可见 UI**,玩家只能靠 `Ctrl+数字` + 画布右键盲操作。
+新增的左轨编队书签栏 `#fmBar` + 编队菜单 `#fmMenu`(`js/render/87-fmbar.js`)是唯一入口。
+
+两条几何坑:
+- `84-scene.js` 每帧在**固定屏幕坐标** `fillRect(10,72,168,18)` 画"🔭 已点亮 N 艘敌舰",
+  正好落在左轨车道(left:10 / top:68 / width:260)里。已把它右移到左轨之外。
+- `.fm-tab` 的 `transition` 是**全项目唯一一条** —— `css/app.css` 原本零 transition,hover 一律瞬时换色。
+  这条是用户明确要的"书签往右移动突出一下",别顺手给别的选择器也加。
+
+### 代价:换旗必须换航线(对抗式复核抓到的头号回归)
+
+"路径 = 旗舰的 orders" 有一个必然推论:**旗舰换人时,航线必须跟着换人**。第一版没写这段交接,于是三条路径全炸:
+
+| 路径 | 症状 |
+|---|---|
+| 旗舰战损(`55-damage`) | `s.orders=[]` 把航线连同旗舰一起清掉,顺位新旗舰 orders 为空 |
+| 设为旗舰(`setFlagship`) | 只改名册,新旗舰无令 |
+| 旗舰单舰脱队(`fmLeave`,长按定向/G 倒车/单选右键三处共用) | 同上 |
+
+三者的共同结局:新旗舰落到 `31-step-ships` 最后那个 `else` → `steerToVel(0)` → **整队在航线中段原地停死,航线无声蒸发,事件流一条日志都没有**;同时旧旗舰以成员身份继续持令,地图上画一条谁也不飞的幽灵航线,解散那一刻它独自飞走。改前 `F.queue` 属于编队实体,换旗天然不丢航线 —— 这是重做**引入**的回归,不是继承的。
+
+修法是 `42-formation` 的 `fmTakeRoute(to,from)`:**整条 orders 数组换主**(不是逐条复制),`pass/stop`、`face`、`pt`(提前起转锁存)一并带走,新旗舰接着当前这一段继续飞。三个调用点 + `43-step` 的换旗兜底(`F.flagId!==flag.id` 时从旧旗舰取)。探针 `FLOW26_FMHANDOFF`,做过反向对照:删掉那两句立刻变红成 `令=0 速度=0`。
+
+### 另外两条被复核钉死的不变量
+
+1. **成员不持令**。`31-step-ships` 的成员分支排在 orders 分支【之前】,所以写给成员的令永远不被消费、也不递减 —— 它冻在那里,直到脱队/解散那一刻突然复活,舰船自己飞向几分钟前的旧目标;`82`/`83` 还会照着它画幽灵航线。`fmMoveTo`/`fmAppend` 本来就清,漏的是**入队**这条路径(`fmEnsure`/`fmSyncGroup`,"就地成形"正走它)—— 现在统一走 `fmClearMemberOrders`(连 `patrol` 一起清)。
+   同源问题:`bots/60-tasks` 的五处 `!s.orders.length` 会给成员写任务令 → 加 `taskCanOrder(s)` 谓词,**编队里只有旗舰接任务令**,整队跟着它走。
+
+2. **不许有僵尸 F**。编队实体挂在 `groups[g].fm` 上,只清 `s.formation` 会留下一个零成员的 F:`fmGet` 恒真 → 书签栏永远显示"已成队",而整队停车/阵型参数按钮全都静默空转(`fmFlag` 返回 null)。三个漏点已堵:`fmOnDeath`(人数塌到 2 以下当场解散,兜住"最后一批同拍全灭"——`31` 那条兜底进不去)、`fmSyncGroup`(从别组挖人时先 `fmLeave` 摘旧 F)、`72-context-menu` 的"移动"(原来裸写 `s.formation=null`,`fmLeave` 因此当场早退,两个 F 都摘不掉)。
+
+### 已知未修(报给用户,没动)
+
+`40-slots` 的护卫弧线在 `nFri===2` 与 `nFri>2` 两支**张角口径不一致**:2 艘用 `±fan/2`,3 艘以上用 `±fan`。默认 `fan=±120°` 时,第 3 艘护卫入列会让原有两艘从 ±60° 甩到 ±120°,槽位瞬移约 2.9 万 km(`fmAng` 有 `wMax` 限速,**槽位重排没有**)。这是改前就有的几何,`_backup_before_tier_p2_p3` 里一模一样;但 FM1 新增的"人数变化即 `fmReslot`"让它从潜伏变成了每次战损都会触发。要修得先定 `fan` 到底是半角还是全角 —— 改哪一支都会挪动所有现存编队的形状,属于数值/手感调整,留给用户定夺。
+
+### 验证
+
+- **散船运动路径逐位不变**:`tools/train/bench_all.js` 改动前后都是 `5.8607`(拿 `git archive HEAD` 跑的对照)。
+  这条是本次重做最重要的护栏 —— 编队接进内核**不许动散船那条已经调了七轮的曲线**。
+- 编队专项探针见 `tools/verify.sh` 的 `FLOW23_FMCORE`(接内核) / `FLOW24_FMSLOT`(成员保位) / `FLOW25_FMFACE`(到达朝向) / `FLOW26_FMHANDOFF`(航线过继·带反向对照) / `FLOW27_FMBAR`(书签栏走真实 DOM 事件,13 个按钮全点一遍)。
+  改前**唯一**的编队探针是 `FORM`(一行 `moveFormation`,不步进不判定不进总判定),从基线到今天数值一字未变。
+
 ## 发布(GitHub Pages)
 
 线上地址 = GitHub Pages,仓库 `main` 分支根目录直接当站点根,`git push` 后约 1 分钟自动生效。纯静态站,无构建步骤——推什么就是什么。

@@ -7,6 +7,15 @@ let pendingTaskIntercept=null,pendingTaskDeny=null; // DS150 T2:拦截/拒止任
 let pendingTaskEscort=null,pendingTaskStrike=null; // DS150 T3:护航(点友舰)/打击(点敌舰)
 function taskIcon(t){return t==='patrol'?'🔄':t==='intercept'?'🏹':t==='escort'?'🛡':t==='strike'?'⚔':t==='deny'?'✋':'📋';}
 function taskCreate(ids,obj){const id=++taskSeq;tasks.set(id,Object.assign({ships:ids,state:'active',aggression:1,rangeMul:1},obj));return id;} // DS150 T4:旋钮默认(攻击优先/范围×1)
+function taskCanOrder(s){
+  /* FM1:任务处理器只能给【能真正执行令的船】写 orders。编队成员不行 —— 31-step-ships 的成员分支排在
+     orders 分支【之前】,写给成员的令永远不被消费,也不会递减,于是:任务自认为已下达(下一轮 !orders.length 为假),
+     实际拦截/护航/打击对成员形同虚设;而这条冻结的令会在编队解散那一刻突然复活,舰船自己飞向几分钟前的旧目标点。
+     编队里只有旗舰接令,整队跟着它走 —— 这正是"编队路径=旗舰 orders"想要的效果。 */
+  if(!s||s.orders.length)return false;
+  if(!s.formation)return true;
+  return (typeof fmFlag==='function')&&fmFlag(s.formation)===s;
+}
 function taskOf(sid){for(const t of tasks.values())if(t.ships.includes(sid))return t;return null;} // 找船所属任务
 function taskCancel(id){ // 取消:清任务写入的执行指令,删任务
   const t=tasks.get(id);if(!t)return;
@@ -35,8 +44,8 @@ function taskProcess(dt){ // 任务处理器(每2s):意图级检查——巡逻�
       else if(far&&t.phase==='engage')t.phase='idle';
       if(t.phase==='engage'&&inZone.length){
         const nr=inZone.reduce((b,e)=>V.len(V.sub(e.pos,t.center))<V.len(V.sub(b.pos,t.center))?e:b,inZone[0]);
-        t.ships.forEach(sid=>{const s=ships.find(x=>x.id===sid);if(s&&!s.orders.length){s.orders=[{pos:nr.pos.slice(),type:'stop'}];resetForNewOrders(s);s.autoEngage=true;s.roe='free';}}); // DS173
-      }else{t.ships.forEach(sid=>{const s=ships.find(x=>x.id===sid);if(s&&!s.orders.length){s.orders=[{pos:[t.center[0],t.center[1],0],type:'stop'}];resetForNewOrders(s);s.autoEngage=true;s.roe='tight';}});} // DS173
+        t.ships.forEach(sid=>{const s=ships.find(x=>x.id===sid);if(taskCanOrder(s)){s.orders=[{pos:nr.pos.slice(),type:'stop'}];resetForNewOrders(s);s.autoEngage=true;s.roe='free';}}); // DS173
+      }else{t.ships.forEach(sid=>{const s=ships.find(x=>x.id===sid);if(taskCanOrder(s)){s.orders=[{pos:[t.center[0],t.center[1],0],type:'stop'}];resetForNewOrders(s);s.autoEngage=true;s.roe='tight';}});} // DS173
     }
     // DS150 T2:拒止——敌进区域→区域齐射盲射(不追击);待命位=区域边缘
     if(t.type==='deny'){
@@ -45,7 +54,7 @@ function taskProcess(dt){ // 任务处理器(每2s):意图级检查——巡逻�
       if(ene.some(e=>V.len(V.sub(e.pos,t.center))<R)){ // 敌进区域:区域齐射
         t.ships.forEach(sid=>{const s=ships.find(x=>x.id===sid);if(s&&s.ammo>=16&&!s.missileArm)orderMissileSalvo(s,{pos:[t.center[0],t.center[1],0]},2);});
       }
-      t.ships.forEach(sid=>{const s=ships.find(x=>x.id===sid);if(s&&!s.orders.length){const ang=(parseInt(String(sid).replace(/\D/g,''))*1.7)%6.283;const R2=R*1.2;s.orders=[{pos:[t.center[0]+Math.cos(ang)*R2,t.center[1]+Math.sin(ang)*R2,0],type:'stop'}];resetForNewOrders(s);s.autoEngage=true;s.roe='tight';}}); // DS173
+      t.ships.forEach(sid=>{const s=ships.find(x=>x.id===sid);if(taskCanOrder(s)){const ang=(parseInt(String(sid).replace(/\D/g,''))*1.7)%6.283;const R2=R*1.2;s.orders=[{pos:[t.center[0]+Math.cos(ang)*R2,t.center[1]+Math.sin(ang)*R2,0],type:'stop'}];resetForNewOrders(s);s.autoEngage=true;s.roe='tight';}}); // DS173
     }
     // DS150 T3:护航——围绕目标环形阵位跟随,autoEngage优先打威胁者
     if(t.type==='escort'){
@@ -54,7 +63,7 @@ function taskProcess(dt){ // 任务处理器(每2s):意图级检查——巡逻�
       t.ships.forEach((sid,i)=>{
         const s=ships.find(x=>x.id===sid);if(!s)return;
         s.lidar=!!t.aggression; // DS150 T4:攻击性旋钮(隐蔽=雷达关)
-        if(!s.orders.length){const ang=i*2.1+0.3;const R=40000;
+        if(taskCanOrder(s)){const ang=i*2.1+0.3;const R=40000;
           s.orders=[{pos:[guard.pos[0]+Math.cos(ang)*R,guard.pos[1]+Math.sin(ang)*R,0],type:'stop'}];
           resetForNewOrders(s);s.autoEngage=true;s.roe='free';} // DS173
       });
@@ -69,7 +78,7 @@ function taskProcess(dt){ // 任务处理器(每2s):意图级检查——巡逻�
         const s=ships.find(x=>x.id===sid);if(!s)return;
         s.lidar=!!t.aggression;
         const d=V.len(V.sub(target.pos,s.pos));
-        if(d>engageD&&!s.orders.length){const dir=V.norm(V.sub(target.pos,s.pos));
+        if(d>engageD&&taskCanOrder(s)){const dir=V.norm(V.sub(target.pos,s.pos));
           s.orders=[{pos:[target.pos[0]-dir[0]*engageD*0.85,target.pos[1]-dir[1]*engageD*0.85,0],type:'stop'}];
           resetForNewOrders(s); // DS173
         }else if(d<engageD){

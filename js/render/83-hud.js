@@ -1,28 +1,10 @@
 "use strict";
 function drawOrders(s){
   if(!adminMode&&s.side==='red')return; // 普通模式:敌方航线/路径点不可见(情报)
-  if(s.formation&&!s.formation.arrived){ // 编队:画当前阵位点+后续路径点(v137:到位待命不画,标记消失)
-    const d=s.formation.dest,off=formationOff(s);
-    const cur=toScreen(d[0]+off[0],d[1]+off[1]);
-    ctx.save();
-    ctx.strokeStyle='rgba(255,224,102,.9)';ctx.lineWidth=1.6;
-    ctx.beginPath();
-    ctx.moveTo(cur[0]-5,cur[1]-5);ctx.lineTo(cur[0]+5,cur[1]+5);
-    ctx.moveTo(cur[0]+5,cur[1]-5);ctx.lineTo(cur[0]-5,cur[1]+5);
-    ctx.stroke();
-    if(s.formation.queue.length){ // 后续路径点折线
-      ctx.strokeStyle='rgba(255,255,255,.2)';ctx.lineWidth=1;
-      ctx.beginPath();
-      ctx.moveTo(cur[0],cur[1]);
-      const pts=s.formation.queue.map(q=>toScreen(q.pos[0],q.pos[1]));
-      pts.forEach(p=>ctx.lineTo(p[0],p[1]));
-      ctx.stroke();
-      ctx.strokeStyle='rgba(150,175,215,.85)';ctx.lineWidth=1.4;
-      pts.forEach(p=>{ctx.beginPath();ctx.arc(p[0],p[1],4,0,6.283);ctx.stroke();});
-    }
-    ctx.restore();
-    return;
-  }
+  // FM1:这里原有一段编队早退分支(读 F.dest/F.queue/F.arrived 画阵位点+队列折线,末尾 return)。
+  // 那三个字段连同整套"平行于 s.orders 的第二航线结构"已删除,而它的 return 还会把成员的 orders 一并挡掉。
+  // 现在编队路径就是【旗舰的 s.orders】,旗舰是一艘普通带令船,下面这套散船画法原样把整条航线画出来;
+  // 成员不持令(orders 恒空),走到这里天然什么都不画,它的阵位点由 82-ship-icons 的"当前目标连线"给出。
   if(!s.orders.length)return;
   ctx.save();
   // 折线(船 → 各命令点)

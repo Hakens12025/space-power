@@ -21,10 +21,10 @@ const GHOST_MODES={
   move:{
     from:s=>s.pos,                       // 预演线从船身画起
     commit:(s,g)=>{
-      s.orders=[];s.patrol=null;s.formation=null;s.brake=false;s.turnTarget=null;s.turnNoFm=false;
-      s.orders.push({pos:[g.wx,g.wy,0],type:'stop',face:g.face.slice()}); // face 是 RF11 新字段:physics/31 到位分支消费
-      resetForNewOrders(s);
-      if(typeof rrStart==='function')rrStart(s);
+      // FM1:改走命令层原语。fmLeave 而不是裸 s.formation=null —— 后者不清 fmSlot、也不让剩下的队重排。
+      // 长按定向是【单舰意图】(只对恰好选中 1 艘时才武装,见 ghostArm),所以这里临时脱队是对的。
+      fmLeave(s);
+      orderMoveTo(s,[g.wx,g.wy,0],'stop',g.face); // face 是 RF11 字段:physics/31 到位分支消费;orderMoveTo 内部已收口 resetForNewOrders + rrStart
       return `${s.name} 移动 → ${Math.round(g.wx/1000)}k,${Math.round(g.wy/1000)}k`;
     }
   },
@@ -98,31 +98,18 @@ function groupAt(sx,sy){ // 命中最近的导弹组/信标实体(屏幕距离,�
   }
   return best;
 }
-function orderAt(sx,sy){ // 命中最近的命令点(屏幕距离),含编队路径点(当前阵位/后续queue)
+function orderAt(sx,sy){ // 命中最近的命令点(屏幕距离)
   let best=null,bd=14;
+  // FM1:原先这里还有一段编队专用命中(读 F.arrived/F.queue/F.curType,算 F.dest+formationOff(s) 与 queue 各点,
+  // 产出 {fmId,kind:'cur'|'queue'}),连同 DS193 那套"到位/队长模式则锚点退役"的补丁一并删除。
+  // 新架构下编队的路径【就是旗舰的 s.orders】,旗舰是 ships 里一艘普通蓝舰,下面这个循环天然命中它;
+  // 成员不持令(orders 恒空)所以循环对它们空转,"隐形锚点也能拖"那类 bug 从源头上不存在了。
   for(const s of ships){
     if(s.side==='red')continue;
     for(let i=0;i<s.orders.length;i++){
       const p=toScreen(s.orders[i].pos[0],s.orders[i].pos[1]);
       const d=Math.hypot(p[0]-sx,p[1]-sy);
       if(d<bd){bd=d;best={ship:s,index:i};}
-    }
-    if(s.formation){ // DS193:命令点拖拽仅航行中开放;到位(arrived)或队长模式(锚=旗舰实时位置)时锚点退役不可拖(修"到位后隐形点仍可拖"bug)
-      let settled=s.formation.arrived;
-      if(!settled&&!s.formation.queue.length&&s.formation.curType!=='pass'){
-        for(const m of ships){if(m.formation===s.formation&&isFlagship(m)){settled=!!m.orders.length;break;}}
-      }
-      if(!settled){
-        const d=s.formation.dest,off=formationOff(s);
-        const cp=toScreen(d[0]+off[0],d[1]+off[1]);
-        const dc=Math.hypot(cp[0]-sx,cp[1]-sy);
-        if(dc<bd){bd=dc;best={fmId:s.formation.id,kind:'cur'};}
-        s.formation.queue.forEach((q,i)=>{
-          const qp=toScreen(q.pos[0],q.pos[1]);
-          const dq=Math.hypot(qp[0]-sx,qp[1]-sy);
-          if(dq<bd){bd=dq;best={fmId:s.formation.id,kind:'queue',idx:i};}
-        });
-      }
     }
   }
   return best;
@@ -248,11 +235,16 @@ function onMouseDown(e){
   if(e.button===0&&pendingMove){ // 卡片命令的目标点选(编组→编队,散船→各自)
     const w=worldAt(sx,sy);
     const tag=pendingType==='pass'?'路径点':'目标点';
-    if(pendingType==='stop')pendingMove.forEach(s=>{s.orders=[];s.patrol=null;s.formation=null;s.turnTarget=null;s.turnNoFm=false;}); // KIMI146修:卡片"移动(停靠)"与右键移动一致——先清旧航线(原只追加,船先走完旧航线);路径点保持追加语义
-    const useFormation=sameGroupShips(pendingMove)!==null;
-    const offs=useFormation?formationOffsets(pendingMove,[w[0],w[1],0]):pendingMove.map(s=>({id:s.id,dx:0,dy:0,dz:0}));
-    offs.forEach(o=>{const s=ships.find(x=>x.id===o.id);if(s){s.orders.push({pos:[w[0]+o.dx,w[1]+o.dy,o.dz],type:pendingType});resetForNewOrders(s);}}); // KIMI151:收口(原只解刹车,speedCmd=0/crawling被继承→船不动)
-    log(`${offs.length} 艘 → 新增${tag} ${Math.round(w[0]/1000)}k,${Math.round(w[1]/1000)}k`,'');
+    // FM1:原先靠 formationOffsets 给每艘算一个绝对目标点,等于把阵型烘死在各自的 orders 里(那函数已删)。
+    // 现在统一交给命令层:整组选中 → 编队(旗舰领令,成员跟阵位);非整组 → 各自散船走。口径与右键移动一致。
+    const n=pendingMove.length;
+    if(pendingType==='pass'){ // 路径点保持追加语义(orderPush=原样追加,不像 orderAppend 那样把新点定成 stop)
+      const gid=pendingMove.length>1?sameGroupShips(pendingMove):null;
+      const F=gid!==null?fmEnsure(gid):null;
+      if(F)fmPush(F,[w[0],w[1],0],'pass'); // 走命令层:fmPush 会顺带清成员残留令(自己拼 orderPush 会漏掉这步,44 文件头声明它是唯一写 orders 的地方)
+      else pendingMove.forEach(s=>{fmLeave(s);orderPush(s,[w[0],w[1],0],'pass');});
+    }else moveShips(pendingMove,[w[0],w[1],0],'stop');
+    log(`${n} 艘 → 新增${tag} ${Math.round(w[0]/1000)}k,${Math.round(w[1]/1000)}k`,'');
     pendingMove=null;hideTip();
     return;
   }
@@ -389,18 +381,12 @@ window.addEventListener('mousemove',e=>{
     return;
   }
   if(typeof xhFeed==='function')xhFeed(e.clientX,e.clientY); // RF5 悬停准星喂入(command/74)。放这里:编辑器三支与测距都在上面 return 了(准星不该在那些模式下出现),又早于 dragOrder 的 return(否则拖命令点时十字会冻在拖拽起点)
-  if(dragOrder){ // 拖拽命令点调整位置(编队共享点同步整队)
+  if(dragOrder){ // 拖拽命令点调整位置
+    // FM1:原先这里还有 kind:'cur'/'queue' 两支,分别写 F.dest 与 F.queue[i].pos。
+    // 编队路径现在就是旗舰的 orders,拖旗舰的点即拖整队航线,与散船共用下面这一支。
     const w=worldAt(e.clientX,e.clientY);
-    if(dragOrder.kind==='cur'){ // KIMI146:共享对象,改一次即全队生效(原逐船改副本)
-      const fm=ships.find(x=>x.formation&&x.formation.id===dragOrder.fmId);
-      if(fm)fm.formation.dest=[w[0],w[1],0];
-    }else if(dragOrder.kind==='queue'){
-      const fm=ships.find(x=>x.formation&&x.formation.id===dragOrder.fmId);
-      if(fm&&fm.formation.queue[dragOrder.idx])fm.formation.queue[dragOrder.idx].pos=[w[0],w[1],0];
-    }else{
-      const od=dragOrder.ship.orders[dragOrder.index]; // KIMI146修:存在性防护(拖拽途中点被消费)
-      if(od)od.pos=[w[0],w[1],0];
-    }
+    const od=dragOrder.ship.orders[dragOrder.index]; // KIMI146修:存在性防护(拖拽途中点被消费)
+    if(od)od.pos=[w[0],w[1],0];
     return;
   }
   if(selDrag){selDrag.x1=e.clientX;selDrag.y1=e.clientY;
@@ -493,7 +479,8 @@ window.addEventListener('mouseup',e=>{
         if(rmbClick.shift){
           addWaypoint(targets,w); // 快捷追加:末点停车,中间经过
         }else{
-          targets.forEach(s=>{s.orders=[];s.patrol=null;s.formation=null;s.brake=false;s.turnTarget=null;s.turnNoFm=false;});
+          // FM1:原先这里先逐船 s.formation=null,把刚要成队的船全部踢出编队,再调 moveShips ——
+          // 新架构下 moveShips 内部已经负责"整组走编队 / 非整组 fmLeave 后各自走",手工清反而拆队。
           moveShips(targets,[w[0],w[1],0],'stop');
           log(`${targets.length} 艘 移动 -> ${Math.round(w[0]/1000)}k,${Math.round(w[1]/1000)}k(清空航线)`,'');
         }

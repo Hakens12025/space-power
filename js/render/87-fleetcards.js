@@ -299,17 +299,19 @@ function updateCardsStatus(){
   for(const g in groupCards){const c=groupCards[g];const grp=groups[g];if(!grp||!grp.ships.length)continue;
     const gm=grp.ships.map(id=>ships.find(s=>s.id===id)).filter(Boolean);
     if(!gm.length)continue;
-    const fmActive=gm.some(m=>m.formation);
     let cx=0,cy=0,avgV=0;
     gm.forEach(m=>{cx+=m.pos[0];cy+=m.pos[1];avgV+=V.len(m.vel);});
     cx/=gm.length;cy/=gm.length;avgV/=gm.length;
-    const dest=gm.find(m=>m.formation);
-    const qLen=dest?dest.formation.queue.length:0;
-    const fmArrived=dest&&dest.formation.arrived; // v137:到位待命显示"待命"(阵型保留)
+    // FM1:编队的全部实时读数都从【旗舰的 s.orders】来 —— F.dest/F.queue/F.arrived 那套第二航线结构已删除。
+    // 原变量名 dest 实为"任一编队成员",改叫 flag(旗舰)才是它现在的含义。
+    const F=fmGet(g), flag=F?fmFlag(F):null;
+    const fmActive=!!F;                                     // 成队与否(改前是 gm.some(m=>m.formation),同义但绕一圈)
+    const fmMoving=!!(flag&&flag.orders.length);            // 在动还是待命 = 旗舰有没有令(取代 fmArrived)
+    const qLen=flag?Math.max(0,flag.orders.length-1):0;     // 还剩几段 = 当前段之外的余令数
     const arrived=!fmActive&&gm.every(m=>!m.orders.length&&V.len(m.vel)<30);
-    c.tacEl.innerHTML=((fmActive&&!fmArrived)?'<span class="mv">▶编队移动中</span>':'●待命')+
+    c.tacEl.innerHTML=(fmMoving?'<span class="mv">▶编队移动中</span>':'●待命')+
       ` ${Math.round(cx/1000)}k,${Math.round(cy/1000)}k · 速${Math.round(avgV)}`+
-      (dest?` → ${Math.round(dest.formation.dest[0]/1000)}k,${Math.round(dest.formation.dest[1]/1000)}k${qLen?` · 剩${qLen}段`:''}`:'');
+      (fmMoving?` → ${Math.round(flag.orders[0].pos[0]/1000)}k,${Math.round(flag.orders[0].pos[1]/1000)}k${qLen?` · 剩${qLen}段`:''}`:'');
   }
   updateInfo();
   if(typeof updRangePanel==='function')updRangePanel(); // RANGE1 靶场面板搭本函数的低频车(24-main 每 20 帧一次);编辑器下本函数不被调用,天然不刷——正确,编辑器里的舰是另一套对象

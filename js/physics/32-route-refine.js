@@ -129,7 +129,10 @@ function rrAim(route, bis, lam) {
 
 /* ---------- 对外:下令时挂一项 ---------- */
 function rrStart(ship) {
-  if (!rrOn || !ship || ship.dead || ship.formation) return;      // 编队走另一套结构,本轮不碰
+  if (!rrOn || !ship || ship.dead) return;
+  // FM1:原来这里还有 `|| ship.formation` —— 编队走 F.queue 那套平行航线,细化够不着。
+  // 现在编队路径就是【旗舰的 orders】,旗舰是一艘普通的带令船,直接细化即可(成员无令,天然跳过 RR_MIN_WP 门)。
+  // 沙盘本来就把克隆船的 formation 清成 null(见 rrMakeShip / rrEval),所以搜索期不会去动真实编队的 fmAng。
   const od = ship.orders || [];
   if (od.length < RR_MIN_WP) { ship.rrNext = -1; return; }
   for (let i = rrJobs.length - 1; i >= 0; i--) if (rrJobs[i].shipId === ship.id) rrJobs.splice(i, 1);

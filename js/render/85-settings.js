@@ -19,17 +19,8 @@ function renderSettings(){
     </span></div>
     <div style="font-size:11px;color:var(--dim);margin-top:4px">WASD / 拖拽平移速度 · 上限20x</div>`;
   body.appendChild(opt);
-  // 编队前卫扇面半角
-  const fanOpt=document.createElement('div');fanOpt.style.cssText='padding:10px 6px;border-bottom:1px solid var(--line)';
-  fanOpt.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px">
-    <span>编队前卫扇面(单侧)</span>
-    <span style="display:flex;gap:6px;align-items:center">
-      <button class="hbtn" id="fanMinus">−</button>
-      <span id="fanLbl" style="font-family:Consolas,monospace;min-width:78px;text-align:center;color:#dbe6f2">±${Math.round(formationFan*57.3)}°</span>
-      <button class="hbtn" id="fanPlus">+</button>
-    </span></div>
-    <div style="font-size:11px;color:var(--dim);margin-top:4px">护卫/侦察在船头方向展开的扇面半角 · 不含正后方 · 30°~150°</div>`;
-  body.appendChild(fanOpt);
+  // FM1:原先这里有一节"编队前卫扇面(单侧)"的加减控件(#fanMinus/#fanLbl/#fanPlus),已删除。
+  // 它调的 setFan 改的是【全局】阵型参数,而新架构下阵型参数是每编队一份(F.P),设置面板不该有一个改全场的旋钮。
   const sep=document.createElement('div');sep.style.cssText='padding:8px 6px;font-size:12px;color:var(--dim);border-bottom:1px solid var(--line)';
   sep.textContent='键位绑定(点击右侧按键重新绑定):';
   body.appendChild(sep);
@@ -47,58 +38,17 @@ function renderSettings(){
   });
   document.getElementById('camMinus').addEventListener('click',()=>setCamMult(CAM_MULT-(CAM_MULT<=1?0.5:1)));
   document.getElementById('camPlus').addEventListener('click',()=>setCamMult(CAM_MULT+(CAM_MULT<1?0.5:1)));
-  document.getElementById('fanMinus').addEventListener('click',()=>setFan(formationFan-0.2618));
-  document.getElementById('fanPlus').addEventListener('click',()=>setFan(formationFan+0.2618));
 }
 function setCamMult(v){
   CAM_MULT=Math.max(0.5,Math.min(20,Math.round(v*2)/2));
   try{localStorage.setItem('sp_camspd',CAM_MULT);}catch(e){}
   renderSettings();
 }
-function setFan(v){ // 编队前卫扇面半角(rad),限30°~150°(0.524~2.618)
-  formationFan=Math.max(0.5236,Math.min(2.618,v));
-  renderSettings();
-  rebuildFormations(); // 实时重排现有编队
-  const lbl=document.getElementById('qFanLbl');if(lbl)lbl.textContent='±'+Math.round(formationFan*57.3)+'°';
-}
-function setSpacing(v){ // 阵型疏密(0.5~2,小=密大=疏);v144:标签显示当前护卫间距(同步编队状况)
-  formationSpacing=Math.max(0.5,Math.min(2,v));
-  rebuildFormations(); // 实时重排现有编队
-  const lbl=document.getElementById('qDenLbl');if(lbl)lbl.textContent='间距'+Math.round(fmGap*formationSpacing/1000)+'k';
-}
-function setFormationPreset(n){ // v144:快捷档1/2/3——直接设护卫目标间距fmGap(连/叠/漏),不再反推密度(旧逻辑与v134弧线双重缩放致防空圈漏)
-  const fri=ships.filter(s=>s.side==='blue'&&!s.dead&&s.cls==='FRIGATE');
-  const friOuter=aaRingRef(); // TIER1 统一基准常量(原为字面量取 CLS_CIWS.FRIGATE.outer,值不变);RF3 改惰性函数
-  fmGap=friOuter*2*(n===1?1.0:n===2?0.7:1.4); // 目标护卫间距=防空圈直径×系数(1连/0.7叠/1.4漏)
-  rebuildFormations();
-  const lbl=document.getElementById('qDenLbl');if(lbl)lbl.textContent='间距'+Math.round(fmGap*formationSpacing/1000)+'k';
-  log(`📐 编队快捷档 ${n}:护卫防空圈${n===1?'刚好连上':n===2?'重合':'漏一点'}(间距~${Math.round(fmGap/1000)}k)`,'');
-}
-function rebuildFormations(){ // v127:调扇面/密度/快捷档 → 所有编组自动摆阵型(没有formation的自动在原地创建——没有路径点也能成队形)
-  const grpMap={};
-  for(const g in groups){
-    const grp=groups[g];if(!grp||!grp.ships)continue;
-    const ms=grp.ships.map(id=>ships.find(x=>x.id===id)).filter(Boolean);
-    if(ms.length>=2)grpMap[g]=ms;
-  }
-  for(const g in grpMap){
-    const ms=grpMap[g];
-    const existing=ms.find(s=>s.formation);
-    let cx=0,cy=0,cz=0;
-    ms.forEach(s=>{cx+=s.pos[0];cy+=s.pos[1];cz+=s.pos[2];});
-    cx/=ms.length;cy/=ms.length;cz/=ms.length;
-    if(existing){ // 已有编队:沿用
-      formationSlots(ms).forEach(({s:m2,offset})=>{if(m2.formation)m2.fmSlot=offset.slice();});
-    }else{ // 无formation:自动在原地创建编队(dest=组员中心,curType=stop)——无需路径点
-      const F={id:++fmSeq,dest:[cx,cy,cz],curType:'stop',queue:[],fmAng:NaN,arrived:false}; // KIMI146:共享对象
-      formationSlots(ms).forEach(({s:m2,offset})=>{
-        m2.formation=F;m2.fmSlot=offset.slice();
-        m2.orders=[];resetForNewOrders(m2); // KIMI151:原地摆阵也要船动,清龟速/恢复速度档
-      });
-      log(`🛰 ${ms.length} 艘编组 自动摆阵型(原地,可调扇面/密度/快捷档)`,'');
-    }
-  }
-}
+// FM1:setFan / setSpacing / setFormationPreset / rebuildFormations 四个函数已删除。
+// 前三个改的是 formationFan / formationSpacing / fmGap 三个【全局】阵型参数,新架构下阵型参数是每编队一份
+// (F.P,调参走 42-formation 的 fmSetParam / fmSetPreset),全局旋钮会把全场编队一起改掉。
+// rebuildFormations 是【第二个编队构造器】(唯一合法构造器是 fmEnsure):它 new 出来的 F 带 dest/curType/queue/arrived
+// 四个已删字段,新的 43-step/31-step-ships 都不认,留着必炸。
 function captureKey(e){
   if(e.code==='Escape'){recording.k.classList.remove('rec');recording.k.textContent=keyDisplay(bindOf(recording.action.id));recording=null;return;}
   const ks=eventKeyStr(e);

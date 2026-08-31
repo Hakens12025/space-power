@@ -3,7 +3,7 @@
 function snapshot(){
   return {
     t:Math.round(simTime*100)/100,
-    ships:ships.map(s=>({id:s.id,name:s.name,cls:s.cls,tier:s.tier,side:s.side,pos:s.pos.slice(),vel:s.vel.slice(),facing:s.facing.slice(),hp:Math.round(s.hp),spd:s.speedCmd,orders:s.orders.map(o=>({pos:o.pos.slice(),t:o.type})),fm:s.formation?{dest:s.formation.dest.slice(),slot:(s.fmSlot||[0,0,0]).slice()}:null,lock:s.lockedTarget&&!s.lockedTarget.dead?s.lockedTarget.name:null,lit:s.side==='red'?s.litBlue:s.litRed})), // TIER1 快照加 tier:F7 导出的 demo JSON 是离线分析用的,少了它分不清同舰种不同分级的表现差异
+    ships:ships.map(s=>({id:s.id,name:s.name,cls:s.cls,tier:s.tier,side:s.side,pos:s.pos.slice(),vel:s.vel.slice(),facing:s.facing.slice(),hp:Math.round(s.hp),spd:s.speedCmd,orders:s.orders.map(o=>({pos:o.pos.slice(),t:o.type})),fm:s.formation?{g:s.formation.gid,slot:(s.fmSlot||[0,0,0]).slice()}:null,lock:s.lockedTarget&&!s.lockedTarget.dead?s.lockedTarget.name:null,lit:s.side==='red'?s.litBlue:s.litRed})), // TIER1 快照加 tier:F7 导出的 demo JSON 是离线分析用的,少了它分不清同舰种不同分级的表现差异
     proj:projectiles.map(p=>({type:p.type,pos:p.pos.slice(),vel:p.vel.slice(),spd:Math.round(p.spd||0),count:p.count||0,fuel:p.fuel,age:p.age,tgt:p.target?(p.target.name||'弹'):null})),
   };
 }
