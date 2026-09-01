@@ -1903,6 +1903,55 @@ t('FLOW33_FOLSPEED',function(){
     +'km(理论 ('+cruiseOf(A)+'-'+capB+')×130s='+Math.round(want)+',须 0.7~1.4 倍 = 追不上就追不上)'
     +' | 反向对照(被跟随更慢):最终离跟随点='+Math.round(close)+'km(须<5000 = 仍收得拢)';
 });
+/* 6f-9 FL4 跟随态下折返【不许交叉航线】。用户报:跟随模式下依然有交叉。
+   根因不在跟随层,而在"槽位所有权认死":成员追的是 旗舰位置 + rotSlot(自己的 fmSlot, 平滑航向),
+   航向转过 180 度时那个点画着圆弧扫到对面 —— 想【保持在旗舰同一侧】,在世界坐标里就必须穿过对方。
+   fmFollowReslot 每 tick 带迟滞地重配槽位:允许换边,谁也不用穿过谁。
+   四条判据缺一不可:
+     ① 两条世界轨迹严格跨立次数 = 0(核心);
+     ② 相对旗舰的左右【确实换了】—— 这是"不交叉"的代价,没换就说明根本没重配、①只是没测到;
+     ③ 整段折返里槽位易主次数很小(迟滞够;不够会在临界角来回抖成几十上百次);
+     ④ 直线航行对照:一次都不许易主(不误触)。 */
+t('FLOW34_FOLCROSS',function(){
+  function cr(o,a,b){return (a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);}
+  function segX(p1,p2,p3,p4){var d1=cr(p3,p4,p1),d2=cr(p3,p4,p2),d3=cr(p1,p2,p3),d4=cr(p1,p2,p4);
+    return ((d1>0&&d2<0)||(d1<0&&d2>0))&&((d3>0&&d4<0)||(d3<0&&d4>0));}
+  var b=fm23reset(),F=fm23group(b),flag=fmFlag(F);
+  var w=b.filter(function(s){return s!==flag;});
+  if(w.length<2)return 'fail 需要至少两艘僚舰';
+  fmSetMode(F,'follow');
+  function side(m){
+    var h=V.len(flag.vel)>5?[flag.vel[0],flag.vel[1]]:[flag.facing[0],flag.facing[1]];
+    var hl=Math.hypot(h[0],h[1])||1;
+    var r=[m.pos[0]-flag.pos[0],m.pos[1]-flag.pos[1]];
+    return (h[0]/hl)*r[1]-(h[1]/hl)*r[0];
+  }
+  var i;
+  moveShips(b,[400000,0,0],'stop');                    /* 先直线飞一段把队形稳住 */
+  for(i=0;i<30000;i++)stepShipsMotion(0.02);
+  var s0=side(w[0])>0;
+  var t1=[],t2=[],flips=0,prev=w[0].fmSlot.join(',');
+  moveShips(b,[-400000,0,0],'stop');                   /* 180 度折返 */
+  for(i=0;i<60000;i++){stepShipsMotion(0.02);
+    var cur=w[0].fmSlot.join(','); if(cur!==prev){flips++;prev=cur;}
+    if(i%50===0){t1.push([w[0].pos[0],w[0].pos[1]]);t2.push([w[1].pos[0],w[1].pos[1]]);}}
+  var swapped=((side(w[0])>0)!==s0);
+  var hit=0,a2,b2;
+  for(a2=0;a2+1<t1.length;a2++)for(b2=0;b2+1<t2.length;b2++)
+    if(segX(t1[a2],t1[a2+1],t2[b2],t2[b2+1]))hit++;
+  var dev=Math.max(followDist(w[0]),followDist(w[1]));
+  /* 对照:笔直航线一次都不许易主 */
+  var f2=0,p2=w[0].fmSlot.join(',');
+  moveShips(b,[-1200000,0,0],'stop');
+  for(i=0;i<40000;i++){stepShipsMotion(0.02);var c2=w[0].fmSlot.join(',');if(c2!==p2){f2++;p2=c2;}}
+  var ok=(hit===0&&swapped&&flips>=1&&flips<=4&&f2===0&&dev>=0&&dev<5000);
+  return (ok?'ok':'fail')
+    +' 两条世界轨迹交叉次数='+hit+'(须0)'
+    +' | 相对旗舰换边='+swapped+'(须true —— 这是不交叉的代价,没换说明根本没重配、上一条只是没测到)'
+    +' | 整段折返槽位易主='+flips+'次(须 1~4:迟滞不够会抖成几十上百次)'
+    +' | 直线对照易主='+f2+'次(须0=不误触)'
+    +' | 折返后离阵位='+Math.round(dev)+'km(须<5000=保位没被重配打坏)';
+});
 t('FLOW6_CHAIN',function(){ /* RF7 数据链渲染:函数存在;编辑态/退出态 render 均不炸(像素断言不做,ERRORS 层兜底) */
   var e=fc5reset();
   fcNew(e.S,{tid:e.A.id});fcAppend(e.S,{tid:e.B.id});
@@ -1985,5 +2034,6 @@ grep -q "FLOW30_FMFOLLOWFM=ok" "$OUT" || { echo "✗ FLOW30_FMFOLLOWFM 未通过
 grep -q "FLOW31_FOLLINE=ok" "$OUT" || { echo "✗ FLOW31_FOLLINE 未通过(FL2 跟随连线:流动方向朝跟随舰/未选中不画/解除后消失)"; fail=1; }
 grep -q "FLOW32_FMCROSS=ok" "$OUT" || { echo "✗ FLOW32_FMCROSS 未通过(FL3 阵位态多点航线不许交叉)"; fail=1; }
 grep -q "FLOW33_FOLSPEED=ok" "$OUT" || { echo "✗ FLOW33_FOLSPEED 未通过(FL3 跟随速度不超自己的巡航档)"; fail=1; }
+grep -q "FLOW34_FOLCROSS=ok" "$OUT" || { echo "✗ FLOW34_FOLCROSS 未通过(FL4 跟随态折返不许交叉航线)"; fail=1; }
 grep -q "^RENDER=ok" "$OUT" || { echo "✗ RENDER 未通过"; fail=1; }
 [ $fail -eq 0 ] && echo "✓ 全部通过" || exit 1

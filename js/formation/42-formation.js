@@ -269,6 +269,57 @@ function fmReassign(F, mates, ca, sa, dest, from) {
   }
 }
 
+function fmFollowReslot(F, mates, flag) {
+  /* FL4【跟随态下连续重配对槽位】,消除折返时的交叉航线。
+     现象:跟随态编队掉头 180°,两艘僚舰的世界轨迹在折返点交叉一次(实测)。
+     根因不在跟随层,而在"槽位所有权认死":成员追的是 旗舰位置 + rotSlot(自己的 fmSlot, 平滑航向),
+     航向转过 180° 时那个点画着圆弧扫到对面去 —— 想【保持在旗舰右侧】,在世界坐标里就必须穿过对方。
+     所以正解是【允许换边】:每艘船去占离自己最近的那个槽位,谁也不用穿过谁。
+
+     与阵位态的 fmReassign 同一个思路(欧氏指派,2-opt 到无可改善 ⇒ 不动点无交叉),区别是:
+       · 阵位态在【下令那一刻】配一次(每段一次);跟随态没有"段",必须每 tick 连续配;
+       · 因此需要【迟滞】:只有收益超过 MARGIN 才换,否则航向在临界角附近抖一下就会来回换槽位。
+         临界点是两个候选代价相等处(对称阵型即航向转过 90°),迟滞把它变成一条 2×MARGIN 宽的带。
+     只在同角色桶内换、旗舰不参与,理由同 fmReassign。 */
+  if (!F || F.mode !== 'follow' || !flag) return;
+  const list = (mates || fmShips(F)).filter(m => m !== flag);
+  if (list.length < 2) return;
+  // 阵型当前朝向:取任一成员那份【已平滑】的跟随角(它们输入相同、限速相同,演化同步);拿不到就回落旗舰航向
+  let ang = NaN;
+  for (const m of list) { if (m.follow && isFinite(m.follow.ang)) { ang = m.follow.ang; break; } }
+  if (!isFinite(ang)) ang = (typeof followHeading === 'function') ? followHeading(flag) : 0;
+  const ca = Math.cos(ang), sa = Math.sin(ang);
+  const cost = (m, slot) => {
+    const o = rotSlot(slot, ca, sa);
+    return Math.hypot(m.pos[0] - (flag.pos[0] + o[0]), m.pos[1] - (flag.pos[1] + o[1]));
+  };
+  const byRole = {};
+  list.forEach((m, i) => {
+    const r = (typeof CLS_ROLE !== 'undefined' && CLS_ROLE[m.cls]) || 'recon';
+    (byRole[r] = byRole[r] || []).push(i);
+  });
+  let changed = false;
+  for (const r in byRole) {
+    const idx = byRole[r];
+    if (idx.length < 2) continue;
+    const slots = idx.map(i => (list[i].fmSlot || [0, 0, 0]).slice());
+    let R = 0; slots.forEach(sl => { R = Math.max(R, Math.hypot(sl[0], sl[1])); });
+    const MARGIN = Math.max(500, R * 0.1); // 迟滞带:临界角附近不许来回换
+    let improved = true, guard = 0;
+    while (improved && guard++ < 32) {
+      improved = false;
+      for (let a = 0; a < idx.length; a++) for (let b = a + 1; b < idx.length; b++) {
+        const cur = cost(list[idx[a]], slots[a]) + cost(list[idx[b]], slots[b]);
+        const swp = cost(list[idx[a]], slots[b]) + cost(list[idx[b]], slots[a]);
+        if (swp < cur - MARGIN) { const t = slots[a]; slots[a] = slots[b]; slots[b] = t; improved = true; changed = true; }
+      }
+    }
+    if (changed) idx.forEach((i, k) => { list[i].fmSlot = slots[k]; });
+  }
+  // 槽位换了主人 → 重建跟随偏移。followSet 在【目标不变】时会沿用已平滑的 ang,所以阵型朝向不会被打断
+  if (changed) fmApplyFollow(F);
+}
+
 function fmOffOf(s) { // 本舰在当前阵型里应处的偏移(锚点=旗舰实时位置)。编队读数用,纯读
   const F = s && s.formation;
   if (!F || !s.fmSlot) return [0, 0, 0];

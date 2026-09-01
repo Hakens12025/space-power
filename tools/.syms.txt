@@ -261,6 +261,7 @@ fmDelete
 fmDetach
 fmFlag
 fmFollowChainHas
+fmFollowReslot
 fmFollowShip
 fmFollowStop
 fmGet
