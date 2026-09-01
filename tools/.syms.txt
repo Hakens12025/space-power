@@ -33,6 +33,9 @@ FM_FAN_STEP
 FM_LIMIT
 FOLLOW_TIP_V
 FOLLOW_W_FLOOR
+FOL_FLOW_DASH
+FOL_FLOW_PERIOD
+FOL_FLOW_PXPS
 GEAR_NAMES
 GHOST_MODES
 GUIDE_EFF
@@ -160,6 +163,7 @@ drawEditPreview
 drawEditWps
 drawFcChain
 drawFlame
+drawFollowLinks
 drawGhost
 drawGrid
 drawHits

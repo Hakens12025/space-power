@@ -190,11 +190,6 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 .card .dot.sail{background:var(--acc)}
 .card .nm{flex:1;font-size:var(--fs-body);color:var(--txt-read)}
 .card .st{font-size:var(--fs-label);color:var(--txt-dim)}
-.group{border:var(--bw) dashed var(--line-ctl);border-radius:var(--r-sm);margin-top:var(--sp-1);padding:var(--sp-1) var(--sp-3);font-size:var(--fs-label);color:var(--txt-dim);cursor:pointer}
-.group b{color:var(--acc);font-weight:normal}
-.group:hover{border-color:var(--line-acc)}
-.group .g-tac{font-size:var(--fs-label);color:var(--txt-dim);margin-top:3px;line-height:1.4;font-family:var(--ff-mono);letter-spacing:var(--ls-read)}
-.group .g-tac .mv{color:var(--state-warn)}
 
 /* ---------- 事件框(底,抬到快捷栏上方 v118) ---------- */
 #log{left:calc(var(--gut)*2 + var(--rail-w));bottom:var(--dock-b);width:min(560px,calc(100% - var(--rail-w)*2 - var(--gut)*3));height:var(--log-h);display:flex;flex-direction:column} /* UI1 事件框让出左轨:原来 left:10 + bottom:104 与左轨面板整块重叠(实测 260x150),而净空 104/300 是围着快捷栏拍的魔法数 */

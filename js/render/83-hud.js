@@ -508,6 +508,38 @@ function drawGhost(){ // RF11 移动虚影;RF12 拆成【已下达的到达朝�
   if(!s||s.dead)return; // 船没了就不画(清账在 70-input 的 blur/mouseup)
   ghostAt(s,ghostMove.wx,ghostMove.wy,ghostMove.face,.5,true,ghostMove.from);
 }
+/* ---------- FL2 跟随连线:黄色流动细虚线,【流向跟随舰】 ----------
+   画法与常量口径全部照抄 drawFcChain(RF7d)那条已经验证过的:
+     · 【负的 lineDashOffset 让虚线朝路径终点走】—— 符号是当年在离屏 canvas 上实测定的,不是推出来的。
+       所以路径必须构造成 目标 → 跟随舰,终点是跟随舰,流向才对(用户要求:动画流向跟随舰)。
+     · 用墙钟不用 simTime:这是关系可视化不是模拟实体,暂停时该继续流动,x50 倍速下也不该变成频闪。
+     · 非有限坐标直接跳过(同 drawFcChain 的那道防线)。
+   颜色取 82-ship-icons 停车点那个黄(255,224,102),不新造颜色。虚线比数据链细一档(用户要求:细虚线)。
+   【只画与选中舰有关的】:跟随者被选中、或被跟随者被选中。同"命令可视化跟着选中走"的既有口径 ——
+   一支跟随态编队常年挂着 N-1 条跟随关系,常显会把地图糊满。 */
+const FOL_FLOW_DASH=[4,7];                              // 亮段 4px / 暗段 7px(比数据链的 9/15 细密一档)
+const FOL_FLOW_PERIOD=FOL_FLOW_DASH[0]+FOL_FLOW_DASH[1];// 11px
+const FOL_FLOW_PXPS=22;                                 // 流动速度(像素/秒):约半秒走完一个周期
+function drawFollowLinks(){
+  if(typeof followTargetOf!=='function')return;         // 41-follow 缺席时整段静默(typeof 守卫口径同 drawRadial)
+  if(!selected||!selected.length)return;
+  const tms=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+  const off=-(tms*0.001*FOL_FLOW_PXPS)%FOL_FLOW_PERIOD;
+  let began=false;
+  for(const s of ships){
+    if(s.dead||!s.follow)continue;
+    if(!adminMode&&s.side==='red')continue;             // 普通模式:敌方的跟随关系不可见(情报,同 drawOrders 口径)
+    const t=followTargetOf(s);                          // 纯读:只做 ships.find + dead 判定,不推进 s.follow.ang
+    if(!t)continue;
+    if(selected.indexOf(s.id)<0&&selected.indexOf(t.id)<0)continue;
+    const a=toScreen(t.pos[0],t.pos[1]),b=toScreen(s.pos[0],s.pos[1]);
+    if(!isFinite(a[0])||!isFinite(a[1])||!isFinite(b[0])||!isFinite(b[1]))continue;
+    if(Math.hypot(b[0]-a[0],b[1]-a[1])<6)continue;      // 贴到一起时不画,免得糊成一个点
+    if(!began){ctx.save();ctx.strokeStyle='rgba(255,224,102,.85)';ctx.lineWidth=1;ctx.setLineDash(FOL_FLOW_DASH);ctx.lineDashOffset=off;began=true;}
+    ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke(); // 目标 → 跟随舰
+  }
+  if(began){ctx.setLineDash([]);ctx.lineDashOffset=0;ctx.restore();}
+}
 function drawFcChain(){ // RF7 火控序列态的数据链(蓝色铁路线):主体舰 → T1 → T2 …,只画当前编辑序列的链。
   // 序列态 = 主体舰(selBlue()[0])选中 且 fcEditId 指向自己的序列 —— Shift+中键选定与火控计算机点方条都会置它;
   // 再点同一根方条 fcSetEdit(s,null) 退出,链随之熄灭。铁路线画法:主线 + 垂直短刺(枕木),数据链蓝 #4fe0ff(canvas 侧既有的强调青,83:218 传感器圈同款,不新造颜色)。

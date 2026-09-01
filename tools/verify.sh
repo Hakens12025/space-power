@@ -1756,6 +1756,61 @@ t('FLOW30_FMFOLLOWFM',function(){
     +' 两队中心距='+Math.round(sep)+'(须在 '+Math.round(band*0.6)+'~'+Math.round(band*2)+') 全队离跟随点='+Math.round(dev)+'(须<10000)'
     +' | fmFollowStop 后残留跟随='+folEnd+'艘(须0)';
 });
+/* 6f-6 FL2 跟随连线的【流动方向】。用户要求"动画流向跟随舰",而方向反了画面同样自然 —— 只有测出来才算数。
+   测法照抄 FLOW6_FLOW(RF16 第三次重做的那版):整行互相关。采两次整行灰度,找使二者最吻合的位移 d,
+   对相位、量化、抗锯齿都免疫,量的直接就是"图案往哪边移了多少",不需要任何关于亮段结构的假设。
+   摆位:被跟随舰在【左】、跟随舰在【右】,所以"流向跟随舰"= 图案朝屏幕右移 = d 为正。
+   双向:① 正向必须为正且量级对得上(22px/s × 0.3s ≈ 6.6px);② 反向对照 —— 解除跟随后线必须整条消失。
+   第三条对照:未选中时不许画(命令可视化跟着选中走的既有口径)。 */
+t('FLOW31_FOLLINE',function(){
+  var e=fc5reset();
+  var A=e.S, B=e.A;                       /* A=被跟随(左),B=跟随者(右)。fc5reset 已把两者摆成同一水平线上的主体舰/靶 */
+  A.side='blue';B.side='blue';A.dead=false;B.dead=false;
+  A.pos=[0,0,0];A.vel=[0,0,0];A.follow=null;A.formation=null;
+  B.pos=[200000,0,0];B.vel=[0,0,0];B.formation=null;
+  cam.x=100000;cam.y=0;
+  if(typeof followSet!=='function')return 'fail followSet 未定义(41-follow 没加载)';
+  followSet(B,A,[200000,0,0]);            /* B 跟 A,相对位在 A 的右侧 —— 与它当前所在处一致,免得它被判成"要动" */
+  selected=[B.id];
+  var p0=toScreen(A.pos[0],A.pos[1]),p1=toScreen(B.pos[0],B.pos[1]);
+  var y=Math.round((p0[1]+p1[1])/2),x0=Math.round(Math.min(p0[0],p1[0]))+20,x1=Math.round(Math.max(p0[0],p1[0]))-20;
+  var W=x1-x0;
+  if(!(W>80))return 'fail 采样区间太短 W='+W;
+  function row(){ render(); var d=ctx.getImageData(x0,y,W,1).data,a=[];
+    for(var i=0;i<W;i++)a.push(d[i*4+1]); return a; }
+  function lum(a){ var m=0; for(var i=0;i<a.length;i++)if(a[i]>m)m=a[i]; return m; }
+  /* 【搜索窗必须小于半个周期】。虚线是周期图案(period=11px),位移 x 与 x±11 的拟合度完全相同 ——
+     窗口一旦跨过一个周期,相关器会挑到混叠解。第一版照抄 FLOW6_FLOW 用了 ±12 与 0.3s(位移 6.6px),
+     于是真值 +6.6 与混叠 -4.4 同分,报了 -4,看上去像"方向反了",实际是测量歧义。
+     FLOW6_FLOW 不会踩:它周期 24px、位移 9px、窗 ±12,窗内只有一个解。
+     现在改 0.2s(位移 4.4px)+ 窗 ±5(<半周期 5.5),窗内唯一解。 */
+  function shiftOf(a,b){
+    var best=0,bestE=Infinity;
+    for(var d=-5;d<=5;d++){
+      var err=0,n=0;
+      for(var i=12;i<W-12;i++){var j=i+d; if(j<0||j>=W)continue; err+=Math.abs(b[j]-a[i]); n++;}
+      if(n>0&&err/n<bestE){bestE=err/n;best=d;}
+    }
+    return best;
+  }
+  fc4clock(true);
+  var r1=row(); var on=lum(r1);
+  FC4.clk+=200;                           /* 推进 0.2 秒:22px/s -> 约 4.4px */
+  var r2=row();
+  var d=shiftOf(r1,r2);
+  selected=[];                            /* 对照一:未选中不许画 */
+  var offSel=lum(row());
+  selected=[B.id];
+  followClear(B);                         /* 对照二:解除跟随后整条线消失 */
+  var offFol=lum(row());
+  fc4clock(false);
+  var ok=(on>60 && d>=2 && d<=5 && offSel<on*0.5 && offFol<on*0.5);
+  return (ok?'ok':'fail')
+    +' 有跟随且选中时线的峰值亮度='+on+'(须>60=确实画出来了)'
+    +' | 整行互相关位移='+d+'px(须 2~5;理论 22px/s×0.2s≈4.4px。被跟随在左、跟随者在右,所以【正=流向跟随舰】,反了就是负)'
+    +' | 未选中对照:峰值='+offSel+'(须<'+Math.round(on*0.5)+'=不画)'
+    +' | 解除跟随对照:峰值='+offFol+'(须<'+Math.round(on*0.5)+'=不画)';
+});
 t('FLOW6_CHAIN',function(){ /* RF7 数据链渲染:函数存在;编辑态/退出态 render 均不炸(像素断言不做,ERRORS 层兜底) */
   var e=fc5reset();
   fcNew(e.S,{tid:e.A.id});fcAppend(e.S,{tid:e.B.id});
@@ -1835,5 +1890,6 @@ grep -q "FLOW27_FMBAR=ok" "$OUT" || { echo "✗ FLOW27_FMBAR 未通过(编队书
 grep -q "FLOW28_FOLLOW=ok" "$OUT" || { echo "✗ FLOW28_FOLLOW 未通过(FL1 通用跟随层:局部系偏移/距离收敛/解除后不跟/目标阵亡不卡死/有令优先)"; fail=1; }
 grep -q "FLOW29_FMMODE=ok" "$OUT" || { echo "✗ FLOW29_FMMODE 未通过(FL1 编队两种模式:阵位态各持令且无跟随 vs 跟随态只有旗舰接令)"; fail=1; }
 grep -q "FLOW30_FMFOLLOWFM=ok" "$OUT" || { echo "✗ FLOW30_FMFOLLOWFM 未通过(FL1 编队跟编队:全员跟目标旗舰/队间偏移算式/跟到后方/解除后清空)"; fail=1; }
+grep -q "FLOW31_FOLLINE=ok" "$OUT" || { echo "✗ FLOW31_FOLLINE 未通过(FL2 跟随连线:流动方向朝跟随舰/未选中不画/解除后消失)"; fail=1; }
 grep -q "^RENDER=ok" "$OUT" || { echo "✗ RENDER 未通过"; fail=1; }
 [ $fail -eq 0 ] && echo "✓ 全部通过" || exit 1

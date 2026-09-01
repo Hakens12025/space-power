@@ -156,13 +156,22 @@ function doAction(id){
           // FM1 复核修正:本动作叫"删除最后一个命令点",对散船是 orders.pop()。改前对编队调 fmHalt,
           // 而 fmHalt 会 orderClear 旗舰 —— 玩家画 6 个点想撤掉最后一个,结果 6 个一次全没,且不可撤销。
           // 新架构下编队航线就是旗舰的 orders,直接 pop 旗舰末令,两种选择语义终于一致。
-          // FL1 口径更新:这条只对【跟随态】严格成立(成员 orders 恒空,航线确实只在旗舰身上);
-          // 【阵位态】下 fmSpread 在下令那一刻把终点展开给了每一艘船,各自持令,本分支只撤旗舰那一条 ——
-          // 语义缺口已报给用户,本轮不动(改它要连带定义"整队撤一个点"到底撤谁的,属于行为设计不是清理)。
-          if(halted.has(s.formation))return; // 多选同一编队只处理一次,免得 n 虚高
+          /* FL2 两种模式各撤各的,但撤的都是【一个编队级航点】:
+               跟随态:航线只在旗舰身上(成员 orders 恒空)→ pop 旗舰一条;
+               阵位态:fmSpread 在下令那一刻把同一个编队级航点展开成【每艘船各一条令】,各舰令数恒等 →
+                      整列各 pop 一条。只撤旗舰那一条的话,剩下的船会继续飞向那个已被撤销的点,编队当场分家。
+             n 按"编队级点"计数(每个编队记 1),不按舰数,免得日志里 3 艘编队撤一个点显示成"删除 3 个"。 */
+          if(halted.has(s.formation))return; // 多选同一编队只处理一次
           halted.add(s.formation);
-          const fl=fmFlag(s.formation); // FL1 新签名 fmFlag(F,mates?):mates 省略时它自己按名册取活船
-          if(fl&&fl.orders.length){fl.orders.pop();n++;}
+          const F=s.formation;
+          if(F.mode==='follow'){
+            const fl=fmFlag(F); // FL1 新签名 fmFlag(F,mates?):mates 省略时它自己按名册取活船
+            if(fl&&fl.orders.length){fl.orders.pop();if(!fl.orders.length)fl.brake=true;n++;}
+          }else{
+            let any=false;
+            fmShips(F).forEach(m=>{if(m.orders.length){m.orders.pop();if(!m.orders.length)m.brake=true;any=true;}});
+            if(any)n++;
+          }
         }else if(s.orders.length){ // 普通命令点:删最后一个
           s.orders.pop();
           if(!s.orders.length)s.brake=true;
