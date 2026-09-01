@@ -14,7 +14,8 @@ function initFleet(){
   if(typeof fireSeqs!=='undefined'){fireSeqs=[];fcSeqSeq=0;} // RF5 火控序列换局清空(与 nets.clear() 同族):shipSeq 每局归零重排,不清会让上一局的序列按 id 精准挂到新一局的另一艘船上
   selMissile=null;selNet=null;selMissileHits=[];victoryShown=false;defeatShown=false; // RF4a 框选聚合态一并清(否则引用旧局弹丸对象)
   selWeapon=null;pendingMove=null;pendingTurn=null;pendingTurnNoFm=false; // KIMI146:交互pending态也清——原pendingBeacon/pendingManual等引用旧局舰对象(点地图把信标挂到已不存在的船上)
-  pendingManual=null;pendingMine=null;pendingBeacon=null;pendingIntercept=null;rangeFollow=null;hideTip();
+  pendingManual=null;pendingMine=null;pendingBeacon=null;pendingIntercept=null;pendingFmFollow=null;rangeFollow=null;hideTip(); // FL1 补 pendingFmFollow
+  if(typeof fmbResetCache==='function')fmbResetCache(); // FL1:书签/信息区的 DOM 缓存按"编队id|旗舰id|成员id串"做签名,而 shipSeq 换局归零、舰 id 复用 —— 两局的同号编队签名可能逐字相同,不清会留着上一局的舰名
   nextSnapT=RPL_INTERVAL; // 回放快照计时同步重置
   demoRec={on:demoRec.on,data:[],lastT:-1}; // 保留自动录制开关(init()开局置on),只清数据缓冲
   // 初始集结仅预设场景(编辑器摆位的自定义场景不强制集结,船待原地)

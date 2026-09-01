@@ -82,8 +82,17 @@ function targetAt(sx,sy){ // RF4b 敌舰命中测试(右键指定目标/T·R点�
   }
   return best;
 }
-function updSelWeaponTip(){ // RF4b selWeapon 待命提示(原 #statusTip 已被简化UI隐藏,改用底栏上方 #cmdTip 常显)
+function clearPendings(){ // 所有【点选待命态】的统一清口。原来这份清单在右键取消与 91-init 各抄了一遍,漏一个就会留下幽灵待命态
+  selWeapon=null;pendingMove=null;pendingTurn=null;pendingTurnNoFm=false;
+  pendingIntercept=null;pendingBeacon=null;pendingManual=null;pendingMine=null;pendingFmFollow=null;
+  updSelWeaponTip();
+}
+function updSelWeaponTip(){ // RF4b 待命提示(原 #statusTip 已被简化UI隐藏,改用底栏上方 #cmdTip 常显)
+  /* FL1:本函数是 #cmdTip 的【唯一所有者】,所以跟随点选的提示也从这里出 ——
+     87-fmbar 原来走 showTip(#statusTip),而 #statusTip 就在 css 的 RF2 隐藏清单里,提示根本不显示,
+     玩家对"我正处在跟随点选待命态"完全无感知(同 toggleWeapon 当年踩过并改走 #cmdTip 的那条)。 */
   const tip=document.getElementById('cmdTip');if(!tip)return;
+  if(typeof pendingFmFollow!=='undefined'&&pendingFmFollow){tip.textContent='编队跟随:点击一艘我方舰船作为跟随目标 · 右键取消';tip.style.display='block';return;}
   if(selWeapon){tip.textContent=(selWeapon==='mac'?'主炮攻击:点击敌舰(漂移射击60s,对准即发)':'导弹攻击:点击敌舰齐射 · 点空地=区域齐射')+' · 右键取消';tip.style.display='block';}
   else tip.style.display='none';
 }
@@ -256,8 +265,9 @@ function onMouseDown(e){
   }
   if(e.button===0&&pendingFmFollow){ // FL1 编队跟随目标点选:书签菜单点【跟随目标】进入待命,再点一艘我方舰
     const t=(typeof shipAt==='function')?shipAt(sx,sy):null;
-    if(t&&!t.dead&&t.side==='blue'&&typeof fmbFollowPick==='function')fmbFollowPick(t); // 它自己清 pendingFmFollow + hideTip + updFmBar
-    else{pendingFmFollow=null;hideTip();log('跟随目标:请点一艘我方舰船','warn');}
+    if(t&&!t.dead&&t.side==='blue'&&typeof fmbFollowPick==='function')fmbFollowPick(t); // 它自己清 pendingFmFollow + updFmBar
+    else{pendingFmFollow=null;log('跟随目标:请点一艘我方舰船','warn');}
+    updSelWeaponTip(); // 收掉 #cmdTip 上的待命提示
     return;
   }
   if(e.button===0&&pendingBeacon){ // 信标部署点:点击地图发射
@@ -346,7 +356,7 @@ function onMouseDown(e){
   }else if(e.button===2){ // 右键:单击=直接移动,按住350ms=呼出命令菜单,拖动=平移
     if(e.ctrlKey){ctrlArm=false;hideCtx();return;} // RF5 Ctrl+右键退化成空操作(只清全弹臂):被拆的那一支既不置 panning 也不置 rmbClick,【从不下移动命令】;不在这里 return 的话它会掉进本分支,沿用旧习惯 Ctrl+右键点敌舰的玩家会整队清空航线直冲敌舰坐标。敌舰目标由中键快速交战独占。清全弹臂这一手必须留——不清,松开 Ctrl 会触发 fire_all(71-keys:229)误发射
     if(pendingMine||pendingBeacon||pendingIntercept||pendingManual||pendingMove||pendingTurn||selWeapon||pendingFmFollow){ // 点选待命状态:右键取消(原只覆盖布雷/信标/拦截,pendingManual提示"右键取消"却不生效反而发出移动命令);FL1 补 pendingFmFollow——不补的话右键会落到下面的 rmbClick 分支,反而给全队下一条移动令
-      pendingMine=null;pendingBeacon=null;pendingIntercept=null;pendingManual=null;pendingMove=null;pendingTurn=null;pendingTurnNoFm=false;selWeapon=null;pendingFmFollow=null;updSelWeaponTip();
+      clearPendings();
       if(typeof updFmBar==='function')updFmBar(); // 让【跟随目标】那个钮熄灭
       hideTip();log('取消','');return;
     }

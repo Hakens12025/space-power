@@ -130,6 +130,7 @@ ciwsDefOf
 ciwsOf
 ciwsOverload
 ciwsSectorOverload
+clearPendings
 cmdList
 contactAge
 contactState
@@ -293,6 +294,7 @@ fmbFollowTgt
 fmbInfo
 fmbList
 fmbRefreshSel
+fmbResetCache
 fmbStat
 fmbTabs
 fmbToggle

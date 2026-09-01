@@ -296,17 +296,30 @@ function updFmBar(){
 }
 
 /* ---------------- 动作 ---------------- */
+function fmbResetCache(){ // 换局时清 UI 缓存。签名是"编队id|旗舰id|成员id串",而 initFleet 会把 shipSeq 归零、
+  // 舰 id s1..sN 换局复用 —— 两局的同号编队签名可能【逐字相同】,fmbInfo 于是跳过重建,成员行留着上一局的舰名
+  // (名字只在重建时写一次 textContent),点它按 data-fms 选中的却是新局的另一艘船。
+  fmUi.infoSig=''; fmUi.leaf=null; fmUi.mem={}; fmUi.tabSig=''; fmUi.tabs={}; fmUi.open=null;
+}
 function fmbRefreshSel(){ // 改了 selected 之后把两个面板叫醒(不等下一个 20 帧拍子)
+  /* 【必须先清导弹选中态】。selected 与 selMissile/selMissileHits/selNet 本来是互斥的两套 ——
+     70-input 选导弹时会把 selected 清空,反向却没人做。而 88-selpanel 的"导弹群/导弹组"两条早退
+     【排在编队分支之前】,所以框选一批导弹之后再点【选中全队】,船确实选上了、右键也确实下的编队令,
+     但右栏会一直卡在"导弹群 N 组"、#selFm 停在 display:none —— 本按钮 title 承诺的"右栏切到编队数据"当场失效。
+     FL1 之前信息区在左边 #fmMenu 里不经过那道闸,所以这是本轮把信息区搬到右侧带出来的回归。 */
+  selMissile=null;selNet=null;selMissileHits=[];
   if(typeof updateInfo==='function')updateInfo();
   if(typeof updateSelPanel==='function')updateSelPanel();
 }
 function fmbArmFollow(F){
-  /* 【跟随目标】待命态。配方抄 pendingMove/pendingBeacon 一族:置一个全局标志 + showTip 提示,
+  if(typeof clearPendings==='function')clearPendings(); // 与其它点选待命态互斥:残留的 pendingTurn 会先吃掉那一次左键,而本待命态无声留到下一次左键——那时它下的是一条【整队跟随令】,不只是吃一次点击
+  /* 【跟随目标】待命态。配方抄 pendingMove/pendingBeacon 一族:置一个全局标志,
      真正"点地图哪一下算数"由 command/70-input 的左键分支消费(它调下面的 fmbFollowPick)。
-     70-input 不归本轮改动,接线要求写在交付报告里;没接上时表现为:提示出来了、点地图没反应、右键也取消不掉。 */
+     提示【不走 showTip】—— 那个走 #statusTip,而它就在 css 的 RF2 隐藏清单里,玩家一个字都看不到
+     (toggleWeapon 当年踩过同一条,改走了底栏上方的 #cmdTip)。这里交给 updSelWeaponTip 统一出。 */
   if(!F)return false;
   pendingFmFollow=String(F.id);
-  if(typeof showTip==='function')showTip('点击地图上任一友舰 → ' + fmName(F) + ' 整队跟随它(右键取消)');
+  if(typeof updSelWeaponTip==='function')updSelWeaponTip();
   if(typeof log==='function')log(fmName(F)+' 待选跟随目标 · 点一艘友舰','');
   return true;
 }
@@ -356,6 +369,7 @@ function fmbAct(a){
       if(typeof log==='function')log(fmName(F)+' 整队停车','');
       break;
     case 'disband':{
+      if(typeof pendingFmFollow!=='undefined'&&pendingFmFollow){pendingFmFollow=null;if(typeof updSelWeaponTip==='function')updSelWeaponTip();} // 待命中把编队解散了:标志不清的话下一次左键会被 70-input 的跟随分支静默吃掉
       if(typeof fmDelete!=='function')break;
       const nm=fmName(F);
       fmDelete(F.id); // FL1 一层化:编队就是唯一的一层,解散 = 整个删掉(不再有"编组名册保留"这回事)

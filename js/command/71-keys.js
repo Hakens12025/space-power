@@ -104,6 +104,7 @@ function doAction(id){
       if(pendingTurn){pendingTurn=null;pendingTurnNoFm=false;hideTip();log('取消转向命令','');break;}
       const sel=controlledShips(); // FM2:选中什么就转什么(原 expandToFleet 会把单选一艘扩成整组)
       if(sel.length){
+        if(typeof pendingFmFollow!=='undefined'&&pendingFmFollow){pendingFmFollow=null;if(typeof updFmBar==='function')updFmBar();} // FL1 反方向互斥:先点【跟随目标】再按 V,残留的跟随待命会在下一次左键无声下达整队跟随令
         pendingTurn=sel;pendingTurnNoFm=turnCmdShift; // v139:Shift+V → 单纯转头,阵型不跟随
         showTip(pendingTurnNoFm?'点击地图设定方向(单纯转头·不变队形) · 再按V取消':'点击地图设定转向方向 · 再按V取消');
         log(pendingTurnNoFm?'🧭 单纯转头(阵型不变):点击地图设定方向':'🧭 船头转向:点击地图设定方向','');
@@ -177,6 +178,7 @@ function doAction(id){
     if(lastDigit&&lastDigit.code===id&&now-lastDigit.time<400){ // 双击:跳镜头到编队几何中心
       let x=0,y=0;mates.forEach(s=>{x+=s.pos[0];y+=s.pos[1];});cam.x=x/mates.length;cam.y=y/mates.length;
     }else{
+      selMissile=null;selNet=null;selMissileHits=[]; // FL1:selected 与导弹选中态互斥(70-input 选导弹时会清 selected,反向原来没人做)——不清的话 88-selpanel 的导弹早退会挡在编队分支前面,右栏切不过来
       selected=mates.map(s=>s.id);renderFleet();
     }
     lastDigit={code:id,time:now};
