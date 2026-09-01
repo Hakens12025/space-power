@@ -7,7 +7,7 @@ FORM=ok 入队=3/3 有槽位=3 旗舰=马拉松-01 各持1条令=3/3(stop) 终�
 SALVO=armed=1
 DMG=dmg=25(before=0) hp=550
 SOAK=steps=2000 NaNships=0 NaNproj=0 maxLive=2 seen={"missile":3902}
-FLOW2=autoHits=6 autoDmg=721
+FLOW2=autoHits=6 autoDmg=925
 FLOW3_ALLOW=ok macHits=0 macShots=0 mslHits=8 mslShots=4 fcTgtMac=null locked=靶·A
 FLOW3_SEQ=ok A=12(mac4/msl8) B=0 shots=mac4/msl4
 FLOW3_RR=ok A=6(mac2/msl4) B=6(mac2/msl4) shots=mac4/msl4 macSplit=ok mslSplit=ok
@@ -34,7 +34,7 @@ FLOW6_BARS=ok 方条=5/5(空4) 点击退出=true 再点进入=true 详情目标�
 FLOW6_NOAUTO=ok 建序列后进序列态=true 取消选中→null(须null) 重新选中→null(须null,不自动进) 面板高亮方条=0(须0) 点方条→true 高亮=1(须1) 退出序列态后 fcActive=true(须true:序列态只管显示,不管开火)
 FLOW6_STABLE=ok 连刷10拍节点未换=true(须true:内容不变不重建) 改模式后重建=true(须true) 新内容含"轮"=true 方条数=5
 FLOW6_FLOW=ok 链方向=屏幕左(舰)→右(靶) 整行互相关位移=9px(须 5~13,理论 30px/s×0.3s=9px) 采样宽度=160 周期=24px
-FLOW6_PULSE=ok 采样(381,229) 亮度:基准=232 | simTime +7.3s(墙钟不动)=232(相同=已与倍速解耦) | 墙钟 +260ms=373(不同=仍在呼吸)
+FLOW6_PULSE=ok 采样(381,229) 亮度:基准=242 | simTime +7.3s(墙钟不动)=242(相同=已与倍速解耦) | 墙钟 +260ms=373(不同=仍在呼吸)
 FLOW7_BIG=ok 默认=rr(须rr) 轮询300步命中序列下标数=2(须≥2=真的在轮转) | 选择序列2:命中下标=1(须只有 1) fcActive=true | 删掉选中那条后 fcPick/模式已兜底=true fcActive=true(须true,不许哑火)
 FLOW8_STATES=ok 暂停条:红边=true 虚线=true 斜线=true 红字=true opacity=1(须1,不靠变灰) | pick+edit 同条:黄边=true 青字★=true(两通道并存,互不吞噬)
 FLOW8_PICKBTN=ok 初始=rr 点一下→pick(pick=序列2,按钮on=true) 再点→rr(on=false) | 无序列态时点→rr(须rr,只提示不改状态) | 方条仍可点=true
@@ -56,10 +56,11 @@ FLOW27_FMBAR=ok 书签数=1(须1) 初始菜单=none(须none) 点开后=flex(须f
 FLOW28_FOLLOW=ok 建立跟随=true off记在目标局部系=true | 第一段(A朝+x)末 B相对A=(-29600,0) 距离=29600 | 第二段(A朝+y)末 B相对A=(-213,-29600)(须 y&lt;-20000 且 |x|&lt;8000 = 局部正后方;世界系实现会仍在 x=-30000) 距离=29600(须30000±5000) | 解除跟随后:距离=199598(须&gt;120000=发散) B速度=0.00(须&lt;1=停住) | 目标阵亡:死前B在跟=true 死后B速度=0.00(须&lt;1) 位置有限=true | 有令优先:下令前跟随误差=0 单独下令数=1 最远离开目标=70227(须&gt;60000=真的走开了) 余令=0(须0=令被消费) 到位误差=496 办完后跟回来的误差=424(须&lt;5000)
 FLOW29_FMMODE=ok 阵位态:模式=slot 各舰令数=1/1/1(须1/1/1) 挂跟随的=0艘(须0) | 跟随态:模式=follow 成员tid=旗舰=true 成员off=自己的fmSlot=true 各舰令数=1/0/0(须1/0/0 = 只有旗舰接令) 航程中离位不发散:前段最大=29716km(78样) → 后段最大=28148km(78样,须&lt;=前段的1.05倍) 到位后=400km(须&lt;5000 —— 这条才是"跟随确实在保位"的证据;同档位时航程中收不拢是速度上限的必然) 落在自己阵位上的=3/3 | 切回阵位态:模式=slot 残留跟随=0艘(须0)
 FLOW30_FMFOLLOWFM=ok fmFollowShip=true F2全员(含旗舰)跟F1旗舰=true(旗舰单独确认=true) | 队间偏移 x=-128867(= -(R1 28867 + R2 50000 + 防空圈直径 50000)) 每艘 off = 队间偏移+自己的fmSlot:true | 跑完一段:F2中心相对F1中心 x 偏移=-138112(须&lt;-50000=在后方) 两队中心距=140358(须在 77320~257735) 全队离跟随点=400(须&lt;10000) | fmFollowStop 后残留跟随=0艘(须0)
-FLOW31_FOLLINE=ok 有跟随且选中时线的峰值亮度=109(须&gt;60=确实画出来了) | 整行互相关位移=4px(须 2~5;理论 22px/s×0.2s≈4.4px。被跟随在左、跟随者在右,所以【正=流向跟随舰】,反了就是负) | 未选中对照:峰值=24(须&lt;55=不画) | 解除跟随对照:峰值=24(须&lt;55=不画)
+FLOW31_FOLLINE=ok 有跟随且选中时线的峰值亮度=105(须&gt;60=确实画出来了) | 整行互相关位移=4px(须 2~5;理论 22px/s×0.2s≈4.4px。被跟随在左、跟随者在右,所以【正=流向跟随舰】,反了就是负) | 未选中对照:峰值=23(须&lt;53=不画) | 解除跟随对照:峰值=23(须&lt;53=不画)
 FLOW32_FMCROSS=ok 两翼航线相交=false(须false) | 对照(不重配对)相交=true(须true —— 为 false 说明本探针没测到东西) | 阵型未被改坏:两翼距旗舰 28867/28867(须相等) 分居两侧=true | 折返航线跑得完:全队余令=0
 FLOW33_FOLSPEED=ok 跟随者档位=700 全程峰值速度=700(须&lt;=档位;cap=Infinity 时会远超) | 被跟随更快:间距 40067 → 51160,拉大 11094km(理论 (800-700)×130s=13000,须 0.7~1.4 倍 = 追不上就追不上) | 反向对照(被跟随更慢):最终离跟随点=186km(须&lt;5000 = 仍收得拢)
 FLOW34_FOLCROSS=ok 两条世界轨迹交叉次数=0(须0) | 相对旗舰换边=true(须true —— 这是不交叉的代价,没换说明根本没重配、上一条只是没测到) | 整段折返槽位易主=1次(须 1~4:迟滞不够会抖成几十上百次) | 直线对照易主=0次(须0=不误触) | 折返后离阵位=400km(须&lt;5000=保位没被重配打坏)
+FLOW35_FMGEAR=ok 阵位态:档位800/250/800 → 峰值800/250/800(须各等于自己的档位;删上限前会被加权平均 617 压平) | 跟随态:档位800/250/800 → 峰值800/250/800 | 反向对照(调慢那艘真的慢):阵位=true 跟随=true
 FLOW6_CHAIN=ok drawFcChain=存在 编辑态/退出态渲染均完成
 RENDER=ok
 ERRORS=none

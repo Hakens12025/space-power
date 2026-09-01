@@ -29,7 +29,13 @@ function stepShipsMotion(dt){
       const dist=V.len(toWp);
       const vn=V.len(s.vel);
       let cap=cruiseOf(s);
-      if(FC&&isFinite(FC.spd))cap=Math.min(cap,FC.spd); // FM2:编队里的船吃一道编队速度上限(各舰速度档的按舰数加权平均,见 43-step 的 fmSpd)——途中保持队形用
+      /* FL5:【编队速度上限已去掉】,每艘船只吃自己的档位 cruiseOf(s)。
+         FM2 加它的理由是"途中保持队形",但两种模式都不需要:
+           · 阵位态每艘船有自己算死的终点、各飞各的,队形在【终点】成形,途中允许拉开正是那个设计;
+           · 跟随态是被动跟随,拿它去压旗舰等于变相的"旗舰让速",而那条已被明确否掉。
+         代价是它把【个体档位抹平了】——用户实测报的:两艘 800 档的船被加权平均 617 压到 616,
+         调档位在阵位态看不出任何效果。fmSpd 保留,但只当两件事用:编队菜单的读数,
+         以及跟随态槽位旋转限速的 tipV(那里需要一个【全队统一】的值,否则各成员转速不同、阵型会在转弯时扭曲)。 */
       if(cur.type==='pass'){ // 路径点:掠过即继续,不停车
         if(dist<CFG.passBy){
           s.orders.shift(); log(`${s.name} 经过路径点`,''); continue;

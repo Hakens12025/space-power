@@ -58,7 +58,9 @@ function fmbStat(F){ // 一个编队的全部读数,一次算完(书签与信息
     if(s.maxHp&&s.hp<s.maxHp*0.5)hurt=true; // 战损判据:任一成员掉到半血以下
   });
   const n=list.length;cx/=n;cy/=n;cz/=n;avgV/=n;
-  // 编队速度:直接调 43-step 的 fmSpd(纯函数,零副作用),避免两处口径分家。
+  /* 平均档位:各舰速度档的按舰数加权平均(43-step 的 fmSpd,纯函数零副作用)。
+     FL5 起它【不再是速度上限】—— 每艘船只吃自己的档位,这里只是一个"这支队大致跑多快"的读数。
+     标签从"编队速度"改成"平均档位"就是为了不让人以为调它能改速度(它是算出来的,不是设的)。 */
   const spd=(typeof fmSpd==='function')?fmSpd(F,list):Infinity;
   const uncap=!isFinite(spd);
   /* 离位 = 各成员离"自己此刻应处位置"的最大偏差。两种模式取数不同,但读数含义一样("队形散没散"):
@@ -141,7 +143,7 @@ function fmbInfo(st){
       '<div class="row"><span class="k">模式</span><span class="v" data-lf="mode">—</span></div>'+
       '<div class="row"><span class="k">跟随目标</span><span class="v" data-lf="ftgt">—</span></div>'+
       '<div class="row"><span class="k">中心 · 均速</span><span class="v" data-lf="ctr">—</span></div>'+
-      '<div class="row"><span class="k">编队速度</span><span class="v" data-lf="spd">—</span></div>'+
+      '<div class="row"><span class="k">平均档位</span><span class="v" data-lf="spd">—</span></div>'+
       '<div class="row"><span class="k">离位</span><span class="v" data-lf="dev">—</span></div>'+
       '<div class="row"><span class="k">战力</span><span class="v" data-lf="hp">—</span></div>'+
       '<div class="hpbar"><i data-lf="hpbar"></i></div>'+

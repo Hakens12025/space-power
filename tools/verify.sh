@@ -1952,6 +1952,40 @@ t('FLOW34_FOLCROSS',function(){
     +' | 直线对照易主='+f2+'次(须0=不误触)'
     +' | 折返后离阵位='+Math.round(dev)+'km(须<5000=保位没被重配打坏)';
 });
+/* 6f-10 FL5 速度档位【两种模式下都严格生效】。用户实测报:"档位在跟随的时候有用,在阵位的时候没用" ——
+   FM2 给编队里的船加了一道"编队速度上限"(全队档位的加权平均),把个体档位抹平了:
+   两艘 800 档的船会被平均值 617 压到 616,调档位在阵位态看不出任何效果。那道上限已删。
+   双向:① 每艘船的巡航峰值必须等于【自己的】档位(不被拉到全队平均);
+        ② 反向对照 —— 把一艘调慢,它必须【真的慢下来】(否则"删掉上限"会退化成"谁都不限速"). */
+t('FLOW35_FMGEAR',function(){
+  function run(mode){
+    var b=fm23reset(),F=fm23group(b),flag=fmFlag(F);
+    if(mode==='follow')fmSetMode(F,'follow');
+    var w=b.filter(function(s){return s!==flag;});
+    flag.speedCmd=800; w[0].speedCmd=250; w[1].speedCmd=800;   /* 故意让一艘拖后腿 */
+    var avg=fmSpd(F,fmShips(F));
+    moveShips(b,[900000,0,0],'stop');
+    var pk=b.map(function(){return 0;}),i;
+    for(i=0;i<20000;i++){stepShipsMotion(0.02);
+      b.forEach(function(s,k){var v=V.len(s.vel);if(v>pk[k])pk[k]=v;});}
+    return {pk:pk,avg:avg,gear:b.map(function(s){return cruiseOf(s);}),flagIdx:b.indexOf(flag)};
+  }
+  var A=run('slot'), B=run('follow');
+  function fits(R){ /* 每艘峰值 ≈ 自己的档位(±3%) */
+    for(var i=0;i<R.pk.length;i++){ if(Math.abs(R.pk[i]-R.gear[i])>R.gear[i]*0.03)return false; }
+    return true;
+  }
+  function slowOk(R){ /* 反向:被调慢那艘确实慢(明显低于其它两艘) */
+    var mn=Math.min.apply(null,R.pk), mx=Math.max.apply(null,R.pk);
+    return mn<mx*0.5;
+  }
+  var ok=(fits(A)&&fits(B)&&slowOk(A)&&slowOk(B));
+  return (ok?'ok':'fail')
+    +' 阵位态:档位'+A.gear.join('/')+' → 峰值'+A.pk.map(Math.round).join('/')
+    +'(须各等于自己的档位;删上限前会被加权平均 '+Math.round(A.avg)+' 压平)'
+    +' | 跟随态:档位'+B.gear.join('/')+' → 峰值'+B.pk.map(Math.round).join('/')
+    +' | 反向对照(调慢那艘真的慢):阵位='+slowOk(A)+' 跟随='+slowOk(B);
+});
 t('FLOW6_CHAIN',function(){ /* RF7 数据链渲染:函数存在;编辑态/退出态 render 均不炸(像素断言不做,ERRORS 层兜底) */
   var e=fc5reset();
   fcNew(e.S,{tid:e.A.id});fcAppend(e.S,{tid:e.B.id});
@@ -2035,5 +2069,6 @@ grep -q "FLOW31_FOLLINE=ok" "$OUT" || { echo "✗ FLOW31_FOLLINE 未通过(FL2 �
 grep -q "FLOW32_FMCROSS=ok" "$OUT" || { echo "✗ FLOW32_FMCROSS 未通过(FL3 阵位态多点航线不许交叉)"; fail=1; }
 grep -q "FLOW33_FOLSPEED=ok" "$OUT" || { echo "✗ FLOW33_FOLSPEED 未通过(FL3 跟随速度不超自己的巡航档)"; fail=1; }
 grep -q "FLOW34_FOLCROSS=ok" "$OUT" || { echo "✗ FLOW34_FOLCROSS 未通过(FL4 跟随态折返不许交叉航线)"; fail=1; }
+grep -q "FLOW35_FMGEAR=ok" "$OUT" || { echo "✗ FLOW35_FMGEAR 未通过(FL5 速度档位在两种模式下都严格生效)"; fail=1; }
 grep -q "^RENDER=ok" "$OUT" || { echo "✗ RENDER 未通过"; fail=1; }
 [ $fail -eq 0 ] && echo "✓ 全部通过" || exit 1
