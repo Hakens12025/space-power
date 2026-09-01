@@ -299,7 +299,16 @@ function updFmBar(){
 function fmbResetCache(){ // 换局时清 UI 缓存。签名是"编队id|旗舰id|成员id串",而 initFleet 会把 shipSeq 归零、
   // 舰 id s1..sN 换局复用 —— 两局的同号编队签名可能【逐字相同】,fmbInfo 于是跳过重建,成员行留着上一局的舰名
   // (名字只在重建时写一次 textContent),点它按 data-fms 选中的却是新局的另一艘船。
+  /* 【tabSig 与书签 DOM 必须同进同退】。fmbTabs 的重建判据是 sig!==tabSig,而 bar.innerHTML='' 只写在重建块【里面】——
+     换局时 formations 已清空 ⇒ 下一拍 sig='',若这里把 tabSig 也设成 '' 就 ''!=='' 为假、不重建,
+     上一局的 .fm-tab 节点原样留在 #fmBar 里(它 pointer-events:auto,还会继续吃掉左轨那一列的地图点击)。
+     所以要么别动 tabSig,要么像这里一样【连 DOM 一起拆干净】—— 三者(DOM/tabs/tabSig)保持一致就没有空档。
+     注意不能走"只清 tabs 不清 tabSig":新局同号编队 sig 又是 '1'、tabSig 也还是 '1' → 不重建,
+     而 tabs 是空的 → fmbTabs 的叶子更新 `if(!t)return` 全部早退 → 书签建出来了却永不更新。 */
+  const bar=document.getElementById('fmBar'); if(bar)bar.innerHTML='';
   fmUi.infoSig=''; fmUi.leaf=null; fmUi.mem={}; fmUi.tabSig=''; fmUi.tabs={}; fmUi.open=null;
+  // actsBuilt/act 刻意【不清】:它们指向静态的 #fmActs,initFleet 不碰那块 DOM。
+  // 只清 act 会让 fmbActsSync 首行 if(!fmUi.act)return 永久早退(读数与档位/模式高亮全死),而 actsBuilt 又门着不重建。
 }
 function fmbRefreshSel(){ // 改了 selected 之后把两个面板叫醒(不等下一个 20 帧拍子)
   /* 【必须先清导弹选中态】。selected 与 selMissile/selMissileHits/selNet 本来是互斥的两套 ——
@@ -369,7 +378,7 @@ function fmbAct(a){
       if(typeof log==='function')log(fmName(F)+' 整队停车','');
       break;
     case 'disband':{
-      if(typeof pendingFmFollow!=='undefined'&&pendingFmFollow){pendingFmFollow=null;if(typeof updSelWeaponTip==='function')updSelWeaponTip();} // 待命中把编队解散了:标志不清的话下一次左键会被 70-input 的跟随分支静默吃掉
+      if(typeof pendingFmFollow!=='undefined'&&String(pendingFmFollow)===String(F.id)){pendingFmFollow=null;if(typeof updSelWeaponTip==='function')updSelWeaponTip();} // 待命中把【这一支】解散了:标志不清的话下一次左键会被 70-input 的跟随分支静默吃掉。判 id:别把另一支编队正在进行的待命也清掉
       if(typeof fmDelete!=='function')break;
       const nm=fmName(F);
       fmDelete(F.id); // FL1 一层化:编队就是唯一的一层,解散 = 整个删掉(不再有"编组名册保留"这回事)

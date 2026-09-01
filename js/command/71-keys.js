@@ -59,6 +59,8 @@ function endRange(){ // 结束测距:清除线
 }
 function toggleWeapon(w){ // T/R:选定武器进行攻击选择(点击敌舰攻击),再按取消
   if(selWeapon===w){selWeapon=null;hideTip();updSelWeaponTip();log('取消选定武器','');return;}
+  if(typeof clearPendings==='function')clearPendings(); // FL1 与其它点选待命态互斥(与 fmbArmFollow 同构)。不清的话:T/R 与【跟随目标】并存 → updSelWeaponTip 里 pendingFmFollow 优先,MAC 提示一个字都出不来;而左键消费串里 selWeapon 排在前面,那一下真走 MAC 攻击,下一次左键才命中跟随分支、无声下达整队跟随令
+  if(typeof updFmBar==='function')updFmBar();
   selWeapon=w;
   showTip(w==='mac'?'⚔ MAC已选定 · 点击敌舰攻击(再按T取消)':'🚀 射手已选定 · 点击敌舰攻击(再按R取消)');
   updSelWeaponTip(); // RF4b 可见提示(原 #statusTip 已被简化UI隐藏,改走底栏上方 #cmdTip)
@@ -104,7 +106,7 @@ function doAction(id){
       if(pendingTurn){pendingTurn=null;pendingTurnNoFm=false;hideTip();log('取消转向命令','');break;}
       const sel=controlledShips(); // FM2:选中什么就转什么(原 expandToFleet 会把单选一艘扩成整组)
       if(sel.length){
-        if(typeof pendingFmFollow!=='undefined'&&pendingFmFollow){pendingFmFollow=null;if(typeof updFmBar==='function')updFmBar();} // FL1 反方向互斥:先点【跟随目标】再按 V,残留的跟随待命会在下一次左键无声下达整队跟随令
+        if(typeof pendingFmFollow!=='undefined'&&pendingFmFollow){pendingFmFollow=null;if(typeof updFmBar==='function')updFmBar();if(typeof updSelWeaponTip==='function')updSelWeaponTip();} // FL1 反方向互斥:先点【跟随目标】再按 V。必须同步刷 #cmdTip —— 只清标志不刷提示的话,屏幕上唯一可见的提示还挂着跟随文案(V 自己的 showTip 走的是被 RF2 藏死的 #statusTip),玩家以为还在选跟随目标,点下去下的却是转向令;而 updSelWeaponTip 是纯边沿触发、不在 frame 里,没有兜底刷新,会一直卡着
         pendingTurn=sel;pendingTurnNoFm=turnCmdShift; // v139:Shift+V → 单纯转头,阵型不跟随
         showTip(pendingTurnNoFm?'点击地图设定方向(单纯转头·不变队形) · 再按V取消':'点击地图设定转向方向 · 再按V取消');
         log(pendingTurnNoFm?'🧭 单纯转头(阵型不变):点击地图设定方向':'🧭 船头转向:点击地图设定方向','');

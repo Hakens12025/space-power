@@ -906,6 +906,35 @@ DS195 的槽位切向限速 `wMax = max(0.05, 1500/R)` 里,1500 是**硬编码�
 **教训**:第 1 条说明"把一块 UI 从 A 面板搬到 B 面板"不是纯搬运 —— B 面板的**早退链**是 A 面板没有的闸门,
 搬过去之后要把所有能到达该分支的入口重新走一遍。
 
+### 六c、第二轮复核:修法自身又引入三条 major(全部已修并复现验证)
+
+**修 bug 的补丁比 bug 本身更容易出错**,这一轮是活教材:
+
+1. **major 只清标志不刷提示**。V 转向那条反方向互斥清了 `pendingFmFollow` 却没调 `updSelWeaponTip()` ——
+   `#cmdTip` 一直挂着跟随文案,而 V 自己的 `showTip` 走的是被藏死的 `#statusTip`,
+   **屏幕上唯一可见的提示是错的**:玩家以为还在选跟随目标,点下去下的却是转向令。
+   而 `updSelWeaponTip` 是**纯边沿触发、不在 frame 里、没有兜底刷新**,会一直卡着。
+   → 凡是改了 `#cmdTip` 的输入(`selWeapon` / `pendingFmFollow`),就必须在同一处调它。
+2. **major 互斥只补了一半**。V 补了,`toggleWeapon`(T/R)没补;而我给 `updSelWeaponTip` 新加的首行
+   让 `pendingFmFollow` **无条件压过** `selWeapon` —— 于是 T/R 的提示一个字都出不来,
+   而左键消费串里 `selWeapon` 排在前面,那一下真走 MAC 攻击,**下一次**左键才命中跟随分支、无声下达整队跟随令。
+   → 加"优先级"的同时必须保证"两者不会同时置位",否则优先级本身就是新 bug。
+3. **major `fmbResetCache` 里的 `tabSig=''` 反而打坏了本来正确的拆除路径**。
+   `fmbTabs` 的重建判据是 `sig!==tabSig`,而 `bar.innerHTML=''` 只写在**重建块里面**。
+   换局时 `formations` 已清空 ⇒ 下一拍 `sig=''`,把 `tabSig` 也设成 `''` 就 `''!==''` 为假、不重建,
+   上一局的 `.fm-tab` 原样留在 `#fmBar` 里,还继续吃掉左轨那一列的地图点击。
+   **修之前反而是对的**(`tabSig='1'` ≠ `sig=''` → 重建 → 清空)。
+   → 缓存键与它守护的 DOM **必须同进同退**;单独清键 = 制造一个"以为已清、实则没清"的空档。
+   也不能走"只清 tabs 不清 tabSig":新局同号编队 `sig` 又是 `'1'`、`tabSig` 也还是 `'1'` → 不重建,
+   而 `tabs` 是空的 → 叶子更新的 `if(!t)return` 全部早退 → 书签建出来了却永不更新。
+4. **minor** `91-init` 是那份 pending 清单的**第三份手抄**,而且只调 `hideTip()` 不调 `updSelWeaponTip()` ——
+   收口只做了一半(右键那份换成了 `clearPendings()`,这份忘了)。现在三处统一。
+5. **minor** 清导弹选中态还漏一条活路径:**拖命令点**。`orderAt` 扫的是【全部】蓝舰的 orders(不限选中),
+   命中后直接 `selected=[...]` 并 return,走不到后面那行 `selMissile=null`。
+
+另外把 `clearPendings` 补成名副其实:原来不含 5 个 `pendingTask*`(当前被 SIMPLE_UI 挡着不可达,
+但漏掉的话开关一翻就是同一个 bug 类)。
+
 ### 七、UI 分工
 
 左轨编队菜单**只留操作区**;实时读数搬到右侧 `#selPanel` 的新容器 `#selFm`

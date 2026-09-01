@@ -82,9 +82,16 @@ function targetAt(sx,sy){ // RF4b 敌舰命中测试(右键指定目标/T·R点�
   }
   return best;
 }
-function clearPendings(){ // 所有【点选待命态】的统一清口。原来这份清单在右键取消与 91-init 各抄了一遍,漏一个就会留下幽灵待命态
+function clearPendings(){
+  /* 所有【点选待命态】的统一清口 —— 这些状态两两互斥:同时置位时,左键消费串里排在前面的那个会先吃掉
+     那一次点击并 return,后面那个【无声留到下一次左键】,而那时它下达的是一条真命令(不只是吃一次点击)。
+     清单原本在右键取消与 91-init 各手抄一遍,漏一个就留下幽灵待命态。任务那五个也收进来:
+     它们当前被 SIMPLE_UI 挡在右键菜单后面不可达,但漏掉的话 SIMPLE_UI 一翻开就是同一个 bug 类。 */
   selWeapon=null;pendingMove=null;pendingTurn=null;pendingTurnNoFm=false;
   pendingIntercept=null;pendingBeacon=null;pendingManual=null;pendingMine=null;pendingFmFollow=null;
+  if(typeof pendingTaskPatrol!=='undefined'){pendingTaskPatrol=null;taskPatrolPts=[];}
+  if(typeof pendingTaskIntercept!=='undefined'){pendingTaskIntercept=null;pendingTaskDeny=null;}
+  if(typeof pendingTaskEscort!=='undefined'){pendingTaskEscort=null;pendingTaskStrike=null;}
   updSelWeaponTip();
 }
 function updSelWeaponTip(){ // RF4b 待命提示(原 #statusTip 已被简化UI隐藏,改用底栏上方 #cmdTip 常显)
@@ -314,7 +321,7 @@ function onMouseDown(e){
     const ord=orderAt(sx,sy);
     if(ord){ // 命中命令点 → 拖拽调整位置
       dragOrder=ord;
-      if(ord.ship)selected=[ord.ship.id];
+      if(ord.ship){selected=[ord.ship.id];selMissile=null;selNet=null;selMissileHits=[];} // FL1:orderAt 扫的是全部蓝舰的 orders(不限选中),所以这条路径能在"导弹选中态"下把 selected 改成舰船;不清的话 88-selpanel 的导弹早退会挡在编队/单舰分支前面,右栏切不过来
       selDrag=null;hideCtx();
       updateInfo();updateCardsStatus();
       return;
