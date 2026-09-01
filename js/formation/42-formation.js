@@ -227,6 +227,48 @@ function fmTipV(s) { // 跟随限速用的"槽位切向线速度上限":编队�
   return cruiseOf(s);
 }
 
+function fmReassign(F, mates, ca, sa, dest, from) {
+  /* FL3【每段重新配对槽位】,消除航线交叉。
+     槽位所有权原本是认死的(s.fmSlot 建队时分好就不动),而 fmSpread 每段按航向旋转它 ——
+     航向反转 180° 时左翼槽位转到了世界坐标的右边,两艘僚舰于是必须互换位置:
+     用户看到的"本来 船A-旗舰-船B,下一个路径点变成 船B-旗舰-船A",两条航线在中间交叉。
+
+     解法是把它当【欧氏指派问题】:在平面上,若两条指派线段相交,交换这两个指派必定使总长变短
+     (三角不等式,两次严格不等相加)。所以反复做"能降低总代价就交换"直到无可改善 ——
+     不动点必然【无任何交叉】。N 很小(一支编队几艘船),O(n²) 一遍扫几轮就收敛,不需要匈牙利算法。
+
+     两条约束:
+       · 只在【同角色桶内】换。槽位是 40-slots 按 CLS_ROLE 分主力/护卫/侦察生成的,
+         跨桶交换会让驱逐舰去占主力舰的横队位,阵型形状当场变样。
+       · 旗舰不参与。recenterSlots 保证旗舰槽位恒为 [0,0,0](它是阵型锚点),换给别人就没锚了。 */
+  const flag = fmFlag(F, mates);
+  const byRole = {};
+  mates.forEach((m, i) => {
+    if (m === flag) return;
+    const r = (typeof CLS_ROLE !== 'undefined' && CLS_ROLE[m.cls]) || 'recon';
+    (byRole[r] = byRole[r] || []).push(i);
+  });
+  const cost = (i, slot) => {
+    const o = rotSlot(slot, ca, sa);
+    return Math.hypot(from[i][0] - (dest[0] + o[0]), from[i][1] - (dest[1] + o[1]));
+  };
+  for (const r in byRole) {
+    const idx = byRole[r];
+    if (idx.length < 2) continue;
+    const slots = idx.map(i => (mates[i].fmSlot || [0, 0, 0]).slice());
+    let improved = true, guard = 0;
+    while (improved && guard++ < 32) { // guard:防浮点抖动下的无限循环(每次交换都严格降代价,正常几轮就停)
+      improved = false;
+      for (let a = 0; a < idx.length; a++) for (let b = a + 1; b < idx.length; b++) {
+        const cur = cost(idx[a], slots[a]) + cost(idx[b], slots[b]);
+        const swp = cost(idx[a], slots[b]) + cost(idx[b], slots[a]);
+        if (swp < cur - 1e-6) { const t = slots[a]; slots[a] = slots[b]; slots[b] = t; improved = true; }
+      }
+    }
+    idx.forEach((i, k) => { mates[i].fmSlot = slots[k]; }); // 槽位所有权【落盘】:后续的跟随偏移与 UI 离位读数才跟得上
+  }
+}
+
 function fmOffOf(s) { // 本舰在当前阵型里应处的偏移(锚点=旗舰实时位置)。编队读数用,纯读
   const F = s && s.formation;
   if (!F || !s.fmSlot) return [0, 0, 0];

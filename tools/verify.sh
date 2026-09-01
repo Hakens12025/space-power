@@ -1672,11 +1672,19 @@ t('FLOW29_FMMODE',function(){
   moveShips(b2,DEST,'stop');
   var perB=b2.map(function(s){return s.orders.length;}).join('/');
   /* 3 跟随态步进:成员全程维持在阵位附近,全队到达终点区域 */
-  var i,maxDev=0,nDev=0,dev,WARM=8000; /* 前 160s 是"从散乱站位收队"的过渡段,不计入保位判据(旗舰约 240s 到位,巡航段与减速段都还在窗口里);真正紧的那条是下面的 devEnd */
+  /* FL3 判据换向。原判据 maxDev<20000 编码的是 FM1 遗留行为 —— 跟随者 cap=Infinity、能超速把队形一把追回来。
+     用户要求去掉那个超速(跟随速度不超自己的巡航档),于是航程中的行为变了,必须把判据改到新契约上:
+
+     【本探针的三艘船速度档相同(fm23reset 统一置 800)】,而旗舰在跟随态下也跑 800 ——
+     跟随者的 closing speed 恒为 0,航程中的初始散开【收不回来】,只有旗舰停下时才收拢。
+     这是"速度不超自己档位"的数学必然:同档位 = 零追赶余量。所以航程段能钉的只有【不发散】,
+     真正的收敛断言是下面那条 devEnd(到位后离位),它才是"跟随确实在保位"的证据。
+     刻意【不】把阈值放宽了事 —— 那会把一条"永远不会变红"的判据留在这里。 */
+  var i,dev,WARM=8000,devs=[];
   for(i=0;i<25000;i++){
     if(rrJobs.length)rrTick();
     stepShipsMotion(0.02);
-    if(i>WARM&&i%25===0){dev=fmFolDev(F2);nDev++;if(dev>maxDev)maxDev=dev;} /* nDev 必须>0:一次都没采到样的话 maxDev 恒 0,那条判据就成了永远不会变红的摆设 */
+    if(i>WARM&&i%25===0)devs.push(fmFolDev(F2)); /* 【先收集,事后对半分】——不能按步数算中点:循环在旗舰到位时就 break,预设中点永远到不了(第一版栽在这) */
     if(!fl2.orders.length&&V.len(fl2.vel)<1)break;
   }
   for(i=0;i<4000;i++){if(rrJobs.length)rrTick();stepShipsMotion(0.02);}
@@ -1688,15 +1696,19 @@ t('FLOW29_FMMODE',function(){
   /* 4 切回阵位态 -> 跟随关系必须被清干净 */
   fmSetMode(F2,'slot');
   var mode2=F2.mode,folC=b2.filter(function(s){return !!s.follow;}).length;
+  var mid=devs.length>>1, devA=0, devB=0, nA=mid, nB=devs.length-mid;
+  for(i=0;i<mid;i++)if(devs[i]>devA)devA=devs[i];
+  for(i=mid;i<devs.length;i++)if(devs[i]>devB)devB=devs[i];
   var ok=(mode0==='slot'&&perA==='1/1/1'&&folA===0
         &&mode1==='follow'&&setOk&&offOk&&perB==='1/0/0'
-        &&nDev>10&&maxDev>0&&maxDev<20000&&devEnd<5000&&arr===3
+        &&nA>5&&nB>5&&devA>0&&devB<=devA*1.05&&devEnd<5000&&arr===3
         &&mode2==='slot'&&folC===0);
   return (ok?'ok':'fail')
     +' 阵位态:模式='+mode0+' 各舰令数='+perA+'(须1/1/1) 挂跟随的='+folA+'艘(须0)'
     +' | 跟随态:模式='+mode1+' 成员tid=旗舰='+setOk+' 成员off=自己的fmSlot='+offOk
     +' 各舰令数='+perB+'(须1/0/0 = 只有旗舰接令)'
-    +' 收队后航程中最大离位='+Math.round(maxDev)+'km(采样'+nDev+'次,须>10次且离位<20000) 到位后离位='+Math.round(devEnd)+'km(须<5000)'
+    +' 航程中离位不发散:前段最大='+Math.round(devA)+'km('+nA+'样) → 后段最大='+Math.round(devB)+'km('+nB+'样,须<=前段的1.05倍)'
+    +' 到位后='+Math.round(devEnd)+'km(须<5000 —— 这条才是"跟随确实在保位"的证据;同档位时航程中收不拢是速度上限的必然)'
     +' 落在自己阵位上的='+arr+'/3'
     +' | 切回阵位态:模式='+mode2+' 残留跟随='+folC+'艘(须0)';
 });
@@ -1811,6 +1823,86 @@ t('FLOW31_FOLLINE',function(){
     +' | 未选中对照:峰值='+offSel+'(须<'+Math.round(on*0.5)+'=不画)'
     +' | 解除跟随对照:峰值='+offFol+'(须<'+Math.round(on*0.5)+'=不画)';
 });
+/* 6f-7 FL3 阵位态多点航线【不许交叉】。用户报的现象:"本来 船A-旗舰-船B,下一个路径点变成 船B-旗舰-船A",
+   两条航线在中间交叉。根因是槽位所有权认死(s.fmSlot 建队分好就不动),而每段按航向旋转它 ——
+   航向反转 180 度时左翼槽位转到世界坐标的右边,两翼必须互换。fmReassign 每段重配对(2-opt 到无可改善)后消失。
+   判据用【严格跨立的线段相交】,并且带一条【必须为真】的对照:同一场景下"不重配对"的朴素终点必须相交 ——
+   否则说明这条探针根本没测到东西(几何摆位不对时两条断言会同时为 false 而"通过")。 */
+t('FLOW32_FMCROSS',function(){
+  function cr(o,a,b){return (a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);}
+  function segX(p1,p2,p3,p4){
+    var d1=cr(p3,p4,p1),d2=cr(p3,p4,p2),d3=cr(p1,p2,p3),d4=cr(p1,p2,p4);
+    return ((d1>0&&d2<0)||(d1<0&&d2>0))&&((d3>0&&d4<0)||(d3<0&&d4>0));
+  }
+  var b=fm23reset(),F=fm23group(b);
+  var flag=fmFlag(F), w=b.filter(function(s){return s!==flag;});
+  if(w.length<2)return 'fail 需要至少两艘僚舰';
+  moveShips(b,[300000,0,0],'stop');
+  var e1=b.map(function(s){return s.orders[0].pos.slice();});
+  var slot1=b.map(function(s){return (s.fmSlot||[0,0,0]).slice();});
+  addWaypoint(b,[-300000,0,0]);                      /* 180 度折返 */
+  var e2=b.map(function(s){return s.orders[1].pos.slice();});
+  var ca=Math.cos(F.ang),sa=Math.sin(F.ang);
+  var nv=b.map(function(s,i){var o=rotSlot(slot1[i],ca,sa);return [-300000+o[0],o[1]];}); /* 不重配对时的终点 */
+  var i1=b.indexOf(w[0]),i2=b.indexOf(w[1]);
+  var real=segX(e1[i1],e2[i1],e1[i2],e2[i2]);
+  var naive=segX(e1[i1],nv[i1],e1[i2],nv[i2]);
+  /* 阵型形状不许被配对改坏:两翼到旗舰终点等距、且分居两侧 */
+  var fi=b.indexOf(flag);
+  var d1=Math.hypot(e2[i1][0]-e2[fi][0],e2[i1][1]-e2[fi][1]);
+  var d2=Math.hypot(e2[i2][0]-e2[fi][0],e2[i2][1]-e2[fi][1]);
+  var side=(e2[i1][1]-e2[fi][1])*(e2[i2][1]-e2[fi][1]);
+  var k,left=0;
+  for(k=0;k<200000;k++){if(rrJobs.length)rrTick();stepShipsMotion(0.02);
+    left=b.reduce(function(n,s){return n+s.orders.length;},0); if(!left)break;}
+  var ok=(real===false&&naive===true&&Math.abs(d1-d2)<1&&side<0&&left===0);
+  return (ok?'ok':'fail')
+    +' 两翼航线相交='+real+'(须false)'
+    +' | 对照(不重配对)相交='+naive+'(须true —— 为 false 说明本探针没测到东西)'
+    +' | 阵型未被改坏:两翼距旗舰 '+Math.round(d1)+'/'+Math.round(d2)+'(须相等) 分居两侧='+(side<0)
+    +' | 折返航线跑得完:全队余令='+left;
+});
+/* 6f-8 FL3 跟随速度【不超过跟随者自己的巡航档】。用户要求:"跟随时速度使用被跟随舰的速度,
+   如果被跟随舰的速度很快,那追不上就追不上"。FM1 给 guideTo 传的是 cap=Infinity(理由是"成员必须能超速才追得回队形"),
+   于是追赶时跟随者会飙到远超自己档位的速度。现在把【合成后的总速度】整体钳在 cruiseOf(跟随者) 上
+   (不能只靠 guideTo 的 cap —— 它的 vT 前馈那一项不受 cap 约束)。
+   双向:① 被跟随舰更快 → 间距按 (v快-v慢)·t 持续拉大,追不上;② 被跟随舰更慢 → 仍能收拢到跟随点。 */
+t('FLOW33_FOLSPEED',function(){
+  var e=fc5reset();
+  var A=e.S,B=e.A;
+  A.side='blue';B.side='blue';A.dead=false;B.dead=false;
+  [A,B].forEach(function(s){s.formation=null;s.fmSlot=null;s.follow=null;s.orders=[];s.patrol=null;
+    s.brake=false;s.crawling=false;s.coasting=false;s.turnTarget=null;s.turnNoFm=false;s.lockedTarget=null;
+    s.vel=[0,0,0];s.facing=[1,0,0];s.rrNext=-1;});
+  A.pos=[0,0,0];B.pos=[-40000,0,0];
+  A.speedCmd=800;B.speedCmd=700;                      /* 被跟随更快 */
+  followSet(B,A,[-40000,0,0]);
+  orderMoveTo(A,[900000,0,0],'stop');
+  var peak=0,g0=0,gN=0,i;
+  for(i=0;i<9000;i++){stepShipsMotion(0.02);var v=V.len(B.vel);if(v>peak)peak=v;
+    if(i===1500)g0=Math.hypot(A.pos[0]-B.pos[0],A.pos[1]-B.pos[1]);
+    if(i===8000)gN=Math.hypot(A.pos[0]-B.pos[0],A.pos[1]-B.pos[1]);}
+  var capB=cruiseOf(B), dGap=gN-g0, want=(cruiseOf(A)-capB)*130;
+  /* 反向:被跟随更慢 → 能收拢 */
+  var e2=fc5reset();
+  var C=e2.S,D=e2.A;
+  C.side='blue';D.side='blue';C.dead=false;D.dead=false;
+  [C,D].forEach(function(s){s.formation=null;s.fmSlot=null;s.follow=null;s.orders=[];s.patrol=null;
+    s.brake=false;s.crawling=false;s.coasting=false;s.turnTarget=null;s.turnNoFm=false;s.lockedTarget=null;
+    s.vel=[0,0,0];s.facing=[1,0,0];s.rrNext=-1;});
+  C.pos=[0,0,0];D.pos=[-150000,0,0];
+  C.speedCmd=400;D.speedCmd=800;
+  followSet(D,C,[-40000,0,0]);
+  orderMoveTo(C,[900000,0,0],'stop');
+  for(i=0;i<40000;i++)stepShipsMotion(0.02);
+  var close=followDist(D);
+  var ok=(peak<=capB+1 && dGap>want*0.7 && dGap<want*1.4 && close>=0 && close<5000);
+  return (ok?'ok':'fail')
+    +' 跟随者档位='+capB+' 全程峰值速度='+Math.round(peak)+'(须<=档位;cap=Infinity 时会远超)'
+    +' | 被跟随更快:间距 '+Math.round(g0)+' → '+Math.round(gN)+',拉大 '+Math.round(dGap)
+    +'km(理论 ('+cruiseOf(A)+'-'+capB+')×130s='+Math.round(want)+',须 0.7~1.4 倍 = 追不上就追不上)'
+    +' | 反向对照(被跟随更慢):最终离跟随点='+Math.round(close)+'km(须<5000 = 仍收得拢)';
+});
 t('FLOW6_CHAIN',function(){ /* RF7 数据链渲染:函数存在;编辑态/退出态 render 均不炸(像素断言不做,ERRORS 层兜底) */
   var e=fc5reset();
   fcNew(e.S,{tid:e.A.id});fcAppend(e.S,{tid:e.B.id});
@@ -1891,5 +1983,7 @@ grep -q "FLOW28_FOLLOW=ok" "$OUT" || { echo "✗ FLOW28_FOLLOW 未通过(FL1 通
 grep -q "FLOW29_FMMODE=ok" "$OUT" || { echo "✗ FLOW29_FMMODE 未通过(FL1 编队两种模式:阵位态各持令且无跟随 vs 跟随态只有旗舰接令)"; fail=1; }
 grep -q "FLOW30_FMFOLLOWFM=ok" "$OUT" || { echo "✗ FLOW30_FMFOLLOWFM 未通过(FL1 编队跟编队:全员跟目标旗舰/队间偏移算式/跟到后方/解除后清空)"; fail=1; }
 grep -q "FLOW31_FOLLINE=ok" "$OUT" || { echo "✗ FLOW31_FOLLINE 未通过(FL2 跟随连线:流动方向朝跟随舰/未选中不画/解除后消失)"; fail=1; }
+grep -q "FLOW32_FMCROSS=ok" "$OUT" || { echo "✗ FLOW32_FMCROSS 未通过(FL3 阵位态多点航线不许交叉)"; fail=1; }
+grep -q "FLOW33_FOLSPEED=ok" "$OUT" || { echo "✗ FLOW33_FOLSPEED 未通过(FL3 跟随速度不超自己的巡航档)"; fail=1; }
 grep -q "^RENDER=ok" "$OUT" || { echo "✗ RENDER 未通过"; fail=1; }
 [ $fail -eq 0 ] && echo "✓ 全部通过" || exit 1

@@ -85,7 +85,24 @@ function stepFollow(s, dt, tipV) {
      巡航 800 km/s 时约【2.1 万公里】—— 探针 FLOW28 实测跟随者顶到了跟随点前面,该跟 3 万只剩 2 万。
      cap 传 Infinity 是刻意的:跟随者必须能超过自己的巡航档才追得回队形,速度由刹车曲线单调收敛,不会飞掉。
      useCurve=true 让 brakeCurveSpd 自带的 CFG.arrive 偏置形成保位死区,跟随者到位后不会在槽位上抖。 */
-  guideTo(s, a.p, a.v, Infinity, true, dt);
+  /* 【跟随速度上限 = 跟随者自己的巡航档,钳的是总速度】。
+     FM1 那版传 cap=Infinity(理由:"成员必须能超速才追得回队形"),于是追赶时跟随者会飙到远超自己速度档的值 ——
+     用户明确要求去掉:跟随时就按被跟随舰的速度走,被跟随舰快就追不上,追不上就追不上。
+     实现上不能直接调 guideTo:它的 vT 前馈那一项【不受 cap 约束】(cap 只限制接近项),
+     所以要自己把合成后的 want 整体钳一次。结果就是:
+       · 队形已成时 want ≈ 跟随点速度,远在档位之下,不受影响;
+       · 被跟随舰跑得比自己档位快 → want 被钳在自己档上 → 间距持续拉大,永远追不回来(正是要的);
+       · 被跟随舰慢/静止 → 有富余,正常收拢。
+     speedCmd=-1(不限速)时 cruiseOf 返回 SPD_UNCAP,等于不钳;=0(定速停)返回 0,跟随者停住 —— 两条既有语义都自然继承。 */
+  const capV = cruiseOf(s);
+  const r = V.sub(a.p, s.pos);
+  const err = V.len(r);
+  const dir = err > 1e-6 ? [r[0] / err, r[1] / err, r[2] / err] : [0, 0, 0];
+  const spd = Math.min(capV, brakeCurveSpd(s, err)); // 接近项:刹车曲线自带 CFG.arrive 偏置,到位后形成保位死区,不抖
+  const want = [a.v[0] + dir[0] * spd, a.v[1] + dir[1] * spd, a.v[2] + dir[2] * spd];
+  const wl = Math.hypot(want[0], want[1], want[2]);
+  if (wl > capV && wl > 1e-6) { const k = capV / wl; want[0] *= k; want[1] *= k; want[2] *= k; }
+  steerToVel(s, want, dt);
   return true;
 }
 

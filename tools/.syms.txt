@@ -275,6 +275,7 @@ fmOnFollowTargetLost
 fmParamsNew
 fmPush
 fmRadius
+fmReassign
 fmReslot
 fmSameShips
 fmSeq

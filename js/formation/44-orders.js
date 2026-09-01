@@ -88,6 +88,11 @@ function fmSpread(F, dest, type, face, mode) {
   }
   const ang = fmAngOf(F, mates, dest);
   const ca = Math.cos(ang), sa = Math.sin(ang);
+  /* FL3:先按"各舰从哪儿出发"重新配对槽位,再算终点 —— 不配的话航向一反转,两翼互换、航线交叉。
+     起点取【上一段的终点】(追加时)或【当前位置】(新航线时);必须在下面的循环【之前】算完,
+     因为 orderMoveTo 会把 orders 清空,循环里再读末点就已经没了。 */
+  const from = mates.map(m => (mode !== 'move' && m.orders.length) ? m.orders[m.orders.length - 1].pos : m.pos);
+  if (typeof fmReassign === 'function') fmReassign(F, mates, ca, sa, dest, from);
   mates.forEach(s => {
     const o = rotSlot(s.fmSlot || [0, 0, 0], ca, sa);
     const p = [dest[0] + o[0], dest[1] + o[1], (dest[2] || 0) + (o[2] || 0)];
