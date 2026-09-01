@@ -103,11 +103,18 @@ function doAction(id){
       else startRange();
       break;
     case 'turn_cmd':{ // V:船头转向命令——点地图设定方向(调头,速度不变);Shift+V=单纯转头不变队形;再按V取消
-      if(pendingTurn){pendingTurn=null;pendingTurnNoFm=false;hideTip();log('取消转向命令','');break;}
+      if(pendingTurn){pendingTurn=null;pendingTurnNoFm=false;hideTip();if(typeof updSelWeaponTip==='function')updSelWeaponTip();log('取消转向命令','');break;} // FL1:同上,清 pendingTurn 必须同步刷 #cmdTip
       const sel=controlledShips(); // FM2:选中什么就转什么(原 expandToFleet 会把单选一艘扩成整组)
       if(sel.length){
-        if(typeof pendingFmFollow!=='undefined'&&pendingFmFollow){pendingFmFollow=null;if(typeof updFmBar==='function')updFmBar();if(typeof updSelWeaponTip==='function')updSelWeaponTip();} // FL1 反方向互斥:先点【跟随目标】再按 V。必须同步刷 #cmdTip —— 只清标志不刷提示的话,屏幕上唯一可见的提示还挂着跟随文案(V 自己的 showTip 走的是被 RF2 藏死的 #statusTip),玩家以为还在选跟随目标,点下去下的却是转向令;而 updSelWeaponTip 是纯边沿触发、不在 frame 里,没有兜底刷新,会一直卡着
+        /* FL1 三个 arm 点(fmbArmFollow / toggleWeapon / turn_cmd)写法一致:武装前先 clearPendings()。
+           上一版这里只手写清了 pendingFmFollow,于是互斥成了【单向】—— 按 T 再按 V 时 selWeapon 与 pendingTurn 并存,
+           而左键消费串里 selWeapon 在前:那一下被它吃掉(点空地也照样消费并清掉自己),
+           pendingTurn 就变成一个【零提示的幽灵待命态】,再点任何地方都会给全部原选中舰下一条真转向令。
+           取消那条早退排在本行之上,所以这里不会自清刚要设的 pendingTurn。 */
+        if(typeof clearPendings==='function')clearPendings();
+        if(typeof updFmBar==='function')updFmBar();
         pendingTurn=sel;pendingTurnNoFm=turnCmdShift; // v139:Shift+V → 单纯转头,阵型不跟随
+        if(typeof updSelWeaponTip==='function')updSelWeaponTip(); // 把 V 接进 #cmdTip 提示体系(它自己的 showTip 走的是被 RF2 藏死的 #statusTip,不接的话按 V 之后屏幕上一个字都没有)
         showTip(pendingTurnNoFm?'点击地图设定方向(单纯转头·不变队形) · 再按V取消':'点击地图设定转向方向 · 再按V取消');
         log(pendingTurnNoFm?'🧭 单纯转头(阵型不变):点击地图设定方向':'🧭 船头转向:点击地图设定方向','');
       }
