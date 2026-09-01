@@ -7,8 +7,9 @@
    【本文件只读仿真、不写仿真】(除了玩家按下按钮那一刻):
    updFmBar() 被 core/99-main 每 20 帧调一次,必须幂等、可高频调用、且一个仿真字段都不改。
    两条具体守则,都是对着已知陷阱写的:
-     · 【绝不调 stepFormation】—— 它会推进 F.fmAng、还可能 fmReslot。成形度自己按 fmOffOf 算(纯读)。
-       (43-step 的返回值只活在 31-step-ships 的 formTickCtx 局部 Map 里,外面本来也拿不到。)
+     · 【绝不调 stepFormation】—— 它会 fmReslot(写 s.fmSlot)。离位读数自己按 fmOffOf 算(纯读)。
+       (43-step 的返回值只活在 31-step-ships 的 formTickCtx 局部 Map 里,外面本来也拿不到。
+        fmSpd 是纯函数,可以直接调。)
      · 【绝不调 fmFlag】—— 它在名册里那艘旗舰没了时会顺位并【回写 groups[g].flagship】。刷新期不该改名册,
        所以本文件自带一个只读版 fmbFlag(读不到就顺位显示,但不落盘)。
    读数口径全部对着新契约:编队去哪儿 = 旗舰的 s.orders;还剩几段 = flag.orders.length-1;
@@ -56,16 +57,11 @@ function fmbStat(g){ // 一个编组的全部读数,一次算完(书签与菜单
     if(s.maxHp&&s.hp<s.maxHp*0.5)hurt=true; // 战损判据:任一成员掉到半血以下
   });
   const n=list.length;cx/=n;cy/=n;cz/=n;avgV/=n;
-  // 组速上限:口径抄 43-step 的 spd(>0 取 min;0=定速停拉停全队;-1 不参与 min;全 -1 给缺省 500)。
-  // 这里只是【显示】,一个字段都不写回去。
-  let spd=Infinity, uncap=true;
-  list.forEach(s=>{
-    if(s.speedCmd>0){uncap=false;spd=Math.min(spd,s.speedCmd);}
-    else if(s.speedCmd===0){uncap=false;spd=0;}
-  });
-  if(!isFinite(spd))spd=500;
-  // 成形度 = 各成员离自己阵位的最大偏差。锚点是【旗舰实时位置】+ fmOffOf(已旋转的阵位偏移),
-  // 与 31-step-ships 里成员真正在追的那个点同锚,所以这个数就是"离队多远"。
+  // 编队速度:直接调 43-step 的 fmSpd(纯函数,零副作用),避免两处口径分家。
+  const spd=(F&&typeof fmSpd==='function')?fmSpd(F,list.filter(x=>x.formation===F)):Infinity;
+  const uncap=!isFinite(spd);
+  // 离位 = 各成员离"自己在当前阵型里应处位置"的最大偏差(锚点=旗舰实时位置 + fmOffOf)。
+  // FM2 起这不再是船在追的点(每艘船追的是下令时算死的绝对终点),它纯粹是一个"队形散没散"的读数。
   let dev=null;
   if(F&&flag&&typeof fmOffOf==='function'){
     dev=0;
@@ -134,8 +130,8 @@ function fmbInfo(st){
       '<div class="row"><span class="k">旗舰</span><span class="v fm-lk" data-fma="selflag" data-lf="flag" title="点击选中旗舰;要改设旗舰请右键下面的成员行">—</span></div>'+
       '<div class="row"><span class="k">状态</span><span class="v" data-lf="state">—</span></div>'+
       '<div class="row"><span class="k">中心 · 均速</span><span class="v" data-lf="ctr">—</span></div>'+
-      '<div class="row"><span class="k">组速上限</span><span class="v" data-lf="spd">—</span></div>'+
-      '<div class="row"><span class="k">成形度</span><span class="v" data-lf="dev">—</span></div>'+
+      '<div class="row"><span class="k">编队速度</span><span class="v" data-lf="spd">—</span></div>'+
+      '<div class="row"><span class="k">离位</span><span class="v" data-lf="dev">—</span></div>'+
       '<div class="row"><span class="k">战力</span><span class="v" data-lf="hp">—</span></div>'+
       '<div class="hpbar"><i data-lf="hpbar"></i></div>'+
       '<div class="fm-sub">成员 · 左键选中 · 右键设为旗舰</div>'+
@@ -158,7 +154,7 @@ function fmbInfo(st){
   set(L.flag,st.flag?st.flag.name:'—');
   set(L.state,st.state);
   set(L.ctr,Math.round(st.cx/1000)+'k, '+Math.round(st.cy/1000)+'k · '+Math.round(st.avgV)+' km/s');
-  set(L.spd,st.uncap?'不限速 · 缺省 500':(st.spd===0?'0 · 定速停':Math.round(st.spd)+' km/s'));
+  set(L.spd,st.uncap?'不限速':(st.spd===0?'0 · 定速停':Math.round(st.spd)+' km/s')); // FM2:加权平均,不再是组内最低
   set(L.dev,st.dev===null?'未成队':(st.dev/1000).toFixed(1)+'k');
   set(L.hp,Math.round(st.hpFrac*100)+'% · '+Math.round(st.hp)+'/'+Math.round(st.mhp));
   if(L.hpbar){

@@ -209,7 +209,6 @@ estimateMissileTime
 eventKeyStr
 exitEditor
 exitReplay
-expandToFleet
 exportDemo
 exportScene
 fcActive
@@ -245,9 +244,9 @@ fireMAC
 fireMissiles
 fireSeqs
 fleetListEl
+fmAngOf
 fmAppend
 fmClamp
-fmClearMemberOrders
 fmDisband
 fmEnsure
 fmFlag
@@ -264,8 +263,9 @@ fmReslot
 fmSeq
 fmSetParam
 fmSetPreset
+fmSpd
+fmSpread
 fmSyncGroup
-fmTakeRoute
 fmUi
 fmbAct
 fmbActsBuild

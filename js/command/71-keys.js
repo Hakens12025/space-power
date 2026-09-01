@@ -114,7 +114,7 @@ function doAction(id){
       break;
     case 'turn_cmd':{ // V:船头转向命令——点地图设定方向(调头,速度不变);Shift+V=单纯转头不变队形;再按V取消
       if(pendingTurn){pendingTurn=null;pendingTurnNoFm=false;hideTip();log('取消转向命令','');break;}
-      const sel=expandToFleet(controlledShips()); // 编队转向整队
+      const sel=controlledShips(); // FM2:选中什么就转什么(原 expandToFleet 会把单选一艘扩成整组)
       if(sel.length){
         pendingTurn=sel;pendingTurnNoFm=turnCmdShift; // v139:Shift+V → 单纯转头,阵型不跟随
         showTip(pendingTurnNoFm?'点击地图设定方向(单纯转头·不变队形) · 再按V取消':'点击地图设定转向方向 · 再按V取消');
@@ -138,7 +138,6 @@ function doAction(id){
       sel.forEach(s=>{
         const back=V.norm([-s.facing[0],-s.facing[1],-s.facing[2]]);
         const tgt=[s.pos[0]+back[0]*30000,s.pos[1]+back[1]*30000,s.pos[2]+back[2]*30000];
-        if(typeof fmLeave==='function')fmLeave(s); // FM1:倒车是单舰机动,仍然脱队,但要走 fmLeave —— 裸 s.formation=null 不清 s.fmSlot,也不会让剩下的队重排(少一艘要重新分槽位)
         s.orders=[{pos:tgt,type:'stop'}];s.brake=false;s.crawling=false;
       });
       if(sel.length)log(`⏪ ${sel.length} 艘倒车(反推倒退 30k)`,'');

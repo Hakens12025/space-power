@@ -9,29 +9,18 @@ function stepShipsMotion(dt){
     s.flame=0;s.sideFlame=0; // 本步推进器状态默认无焰
     s.accNow=0;s.engMain=false;s.engRetro=false;s.engSide=false;s.engLv=[0,0,0]; /* RF19b:accLat/aimHeading 随 torque 删除 */ // RF9 同拍清零;RF10 追加三推开度 engLv / 横向副作用 accLat / 期望朝向 aimHeading:这四个是"本 tick 实际在推什么"的读数,由 30-motion 的 steerToVel 当场置位。
     // 必须在【这里】清而不是在 steerToVel 里清 —— 有几条分支(空闲锁定漂移/编队旗舰调头)整拍不调 steerToVel,在那里清的话读数会冻在上一拍。
-    /* FM1 编队重做:编队【不再有自己的航线】。编队的路径就是旗舰的 s.orders,
-       所以旗舰在下面走的是【和散船一模一样的那一支】—— routeCap 速度倒推 / cornerSpd 曲率限速 /
-       rrStart 航线细化 / face 到达朝向,四样一行不改地对编队生效。
-       本分支只剩【成员跟随】一件事;改前的旗舰专用导引、旗舰转向 continue、leaderMode(DS193 队长模式)
-       连同 F.dest/F.queue/F.curType/F.arrived 一并删除。 */
+    /* FM2 编队:运动层【只剩一件事】—— 给编队里的船加一道组速上限(见下面的 cap)。
+       编队级目标点在【下令那一刻】就被 44-orders 的 fmSpread 展开成了每艘船的绝对终点,
+       写进各自的 s.orders,所以每艘船走的都是下面那条散船分支的完整内核。
+       FM1 的成员跟随分支(旗舰实时位置 + 旋转槽位 + DS195 拦截前置点 + fmAng 限速旋转)整体删除:
+       它让成员终点随旗舰实时偏移(用户反馈"很奇怪"),而且成员追不上旋转槽位,180° 掉头时实测掉队 4.8 万 km。 */
     let FC=null;
     if(s.formation){ // KIMI146:同一编队每 tick 只结算一次,成员共享这一份上下文
       FC=formTickCtx.get(s.formation);
       if(!FC){FC=stepFormation(s.formation,dt);formTickCtx.set(s.formation,FC);}
-      if(FC.dissolved){if(typeof fmDisband==='function')fmDisband(s.formation);s.formation=null;s.fmSlot=null;FC=null;} // 编队塌了(只剩一艘/全灭):落回散船分支。必须走 fmDisband 而不是只清本舰 —— 编队实体挂在 groups[g].fm 上,不摘掉的话 fmGet 还会返回一个没有任何成员的僵尸 F,书签菜单会照着它报"已成队"
+      if(FC.dissolved){if(typeof fmDisband==='function')fmDisband(s.formation);s.formation=null;s.fmSlot=null;FC=null;} // 编队塌了(只剩一艘/全灭):必须走 fmDisband 而不是只清本舰——编队实体挂在 groups[g].fm 上,不摘掉的话 fmGet 还会返回一个没有任何成员的僵尸 F
     }
-    if(FC&&FC.flag!==s){ // 成员:目标=旗舰实时位置+旋转后阵位
-      const flag=FC.flag;
-      const off=rotSlot(s.fmSlot||[0,0,0],FC.ca,FC.sa); // KIMI146:阵位槽存在船上(fmSlot),编队对象只存共享状态
-      const target=[flag.pos[0]+off[0],flag.pos[1]+off[1],flag.pos[2]+off[2]];
-      const w=FC.w||0; // DS195:阵型角速度
-      const slotVel=[flag.vel[0]-w*off[1],flag.vel[1]+w*off[0],flag.vel[2]]; // 槽位速度=旗舰平移+旋转切向
-      const err0=V.len(V.sub(target,s.pos));
-      const tau=err0/(brakeCurveSpd(s,err0)+50); // 前置时间约等于曲线接近时间
-      // DS191+DS195:旗舰速度前馈 + 刹车曲线追赶 + 拦截前置点。纯追踪横移槽位必画追踪圈,前置截获消除超大圈;
-      // cap 传 Infinity 是刻意的 —— 组速上限只加在旗舰身上(见下面 orders 分支),成员必须能超速才追得回队形。
-      guideTo(s,[target[0]+slotVel[0]*tau,target[1]+slotVel[1]*tau,target[2]+slotVel[2]*tau],flag.vel,Infinity,true,dt);
-    }else if(s.brake){ // 停车指令:v119 期望速度=0,导引内核自动反推
+    if(s.brake){ // 停车指令:v119 期望速度=0,导引内核自动反推
       steerToVel(s,[0,0,0],dt);
       if(V.len(s.vel)<1){s.vel=[0,0,0];s.brake=false;log(`${s.name} 停稳`,'');}
     }else if(s.orders.length){
@@ -40,7 +29,7 @@ function stepShipsMotion(dt){
       const dist=V.len(toWp);
       const vn=V.len(s.vel);
       let cap=cruiseOf(s);
-      if(FC)cap=Math.min(cap,FC.spd); // FM1:旗舰吃组速上限(组内最低档)。改前这一步在旗舰专用 guideTo 的 cap 参数里,现在旗舰走通用分支,只需在限速链上多接一段
+      if(FC&&isFinite(FC.spd))cap=Math.min(cap,FC.spd); // FM2:编队里的船吃一道编队速度上限(各舰速度档的按舰数加权平均,见 43-step 的 fmSpd)——途中保持队形用
       if(cur.type==='pass'){ // 路径点:掠过即继续,不停车
         if(dist<CFG.passBy){
           s.orders.shift(); log(`${s.name} 经过路径点`,''); continue;

@@ -144,19 +144,12 @@ function drawShip(s){
     ctx.fillStyle='rgba(215,226,240,.8)';ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';
     ctx.fillText(lbl,p[0],p[1]+r+6);
   }
-  // 当前目标连线(FM1:编队已无 dest/arrived,路径就是【旗舰的 s.orders】)
-  //   · 本舰有令(散船/旗舰都走这一支):画自己的 orders[0]
-  //   · 编队成员(不持令,orders 恒空):画"旗舰 orders[0] + 本舰阵位偏移"——这正是 31-step-ships 里成员在追的那个点;
-  //     旗舰无令 = 整队待命,不画(与散船待命不画标记同口径)
-  let tgtOrd=null,tgtOff=null;
-  if(s.orders.length)tgtOrd=s.orders[0];
-  else if(s.formation){
-    const flag=fmFlag(s.formation);
-    if(flag&&flag!==s&&flag.orders.length){tgtOrd=flag.orders[0];tgtOff=fmOffOf(s);}
-  }
+  // 当前目标连线。FM2:每艘船(散船/旗舰/僚舰)都持有自己的令,所以这里【只读自己的 orders】——
+  // FM1 那段"僚舰去读旗舰 orders 再叠自己的阵位偏移"的特例整体删除,编队的每个终点现在天然各画各的。
+  const tgtOrd=s.orders.length?s.orders[0]:null;
   if(tgtOrd){
-    const isPass=tgtOrd.type==='pass'; // pass/stop 读【被画的那条令】:成员画的是旗舰那条,符号跟着它走
-    const q=toScreen(tgtOrd.pos[0]+(tgtOff?tgtOff[0]:0),tgtOrd.pos[1]+(tgtOff?tgtOff[1]:0));
+    const isPass=tgtOrd.type==='pass';
+    const q=toScreen(tgtOrd.pos[0],tgtOrd.pos[1]);
     ctx.strokeStyle='rgba(255,255,255,.15)';ctx.lineWidth=1;
     ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();
     ctx.strokeStyle=isPass?'rgba(150,175,215,.75)':'rgba(255,224,102,.85)';ctx.lineWidth=1.4;

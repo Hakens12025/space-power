@@ -54,7 +54,7 @@ r.push('SYMS_THREW='+(threw.length?threw.join(','):'none'));
 /* 2. 开局状态(init() 已在此前的 24/core-99 顶层跑完) */
 t('BOOT',function(){return 'ships='+ships.length+' blue='+ships.filter(function(s){return s.side==='blue';}).length+' red='+ships.filter(function(s){return s.side==='red';}).length;});
 t('RANGE_ON',function(){return (typeof rangeOn==='function')?rangeOn():'nofn';});
-/* 3. 编队链路:建编组 → fmEnsure 就地建队 → 整组下令(FM1 新 API;moveFormation 已删)。
+/* 3. 编队链路:建编组 → fmEnsure 就地建队 → 整组下令(FM2:下令那一刻展开成每艘船的绝对终点)。
    本条只做"链路通不通"的开局体检,真正的内核判定在下面的 FLOW23/24/25 三层。
    它必须留在这里而不是并进 FLOW23:此处【不复位】,建成的编队随后要被 SOAK/FLOW2 带着跑,
    等于顺带给编队做一次 100s 浸泡 + 60s 自动火控(改前 moveFormation 时代的基线也正是这么跑的)。 */
@@ -68,12 +68,16 @@ t('FORM',function(){
   var flag=fmFlag(F);
   var fm=b.filter(function(s){return s.formation===F;}).length;
   var slot=b.filter(function(s){return !!s.fmSlot;}).length;
-  var held=b.filter(function(s){return s!==flag&&s.orders.length>0;}).length;
-  var ord=flag?flag.orders.length:-1;
+  var withOrd=b.filter(function(s){return s.orders.length===1;}).length; /* FM2:每艘船各持【自己那条】令,不是只有旗舰 */
+  var ca=Math.cos(F.ang),sa=Math.sin(F.ang),geo=true;
+  for(var q=0;q<b.length;q++){
+    var o=rotSlot(b[q].fmSlot||[0,0,0],ca,sa);
+    if(!b[q].orders[0]||Math.hypot(b[q].orders[0].pos[0]-(250000+o[0]),b[q].orders[0].pos[1]-(60000+o[1]))>1e-6)geo=false;
+  }
   var typ=(flag&&flag.orders[0])?flag.orders[0].type:'-';
-  var ok=(fm===b.length&&slot===b.length&&flag===b[0]&&ord===1&&typ==='stop'&&held===0&&Object.keys(groups).length===1);
+  var ok=(fm===b.length&&slot===b.length&&flag===b[0]&&withOrd===b.length&&typ==='stop'&&geo&&Object.keys(groups).length===1);
   return (ok?'ok':'fail')+' 入队='+fm+'/'+b.length+' 有槽位='+slot+' 旗舰='+(flag?flag.name:'null')
-    +' 旗舰令='+ord+'条('+typ+') 成员持令='+held+'艘(须0:成员不持令,追的是旗舰阵位) 编组数='+Object.keys(groups).length;
+    +' 各持1条令='+withOrd+'/'+b.length+'('+typ+') 终点=目标点+自己的旋转槽位:'+geo+' 编组数='+Object.keys(groups).length;
 });
 /* 4. 齐射链路:区域齐射(非舰船目标,绕开 litBlue>=2 门控,确定性) */
 t('SALVO',function(){var sh=ships.filter(function(s){return s.side==='blue'&&s.ammo>=16;})[0];if(!sh)return'no-ammo';var tg=ships.filter(function(s){return s.side==='red';})[0];orderMissileSalvo(sh,{pos:tg.pos.slice()},2);return 'armed='+(sh.missileArm?1:0);});
@@ -1230,8 +1234,8 @@ function fm23group(b){ /* 建编组 1(旗舰=b[0],CA 主力,阵型里居中)并�
   groups['1']={ships:b.map(function(s){return s.id;}),flagship:b[0].id,name:'编队1'};
   return fmEnsure('1');
 }
-function fm23dev(F){ /* 全队最大阵位偏差。刻意【自己算】而不是调 stepFormation 取返回值:后者会把 F.fmAng
-  多推进一拍,测量本身就扰动了被测对象。口径与 43-step 完全同源:锚点=旗舰实时位置,偏移=fmOffOf(已旋转) */
+function fm23dev(F){ /* 全队"离位"读数:各成员离它在当前阵型里应处位置的最大距离。刻意【自己算】而不是调
+  stepFormation:后者会 fmReslot(写 s.fmSlot),测量本身就扰动了被测对象。口径与 87-fmbar 的编队菜单同源。 */
   var mates=fmMembers(F),flag=fmFlag(F,mates),d=0;
   if(!flag)return -1;
   for(var i=0;i<mates.length;i++){
@@ -1261,69 +1265,86 @@ function fm23run(lead,pts,maxStep,settle,F){ /* 步进到 lead 走完航线,再�
           dev:F?fm23dev(F):-1,
           err:Math.hypot(lead.pos[0]-last[0],lead.pos[1]-last[1])};
 }
-/* 6f-1 内核接入(本次重做的核心断言)。三向:
-   ① 实验组 = 编队跑一条含 180 度折返的三点航线 —— 拐点速度必须被压住(cornerSpd/routeCap 真的作用到编队上),
-      且全队到位、余令 0、不死锁;
-   ② 对照组 = 同一条航线、同一艘船,以【散船】跑 —— 拐点行为必须一致,且编队峰值 <= 散船峰值
-      (编队只多一个组速上限,而上限只做减法)。只测编队一边的话,"编队分支什么都不做"也能通过;
-   ③ 反向对照 = 直线航线 —— 拐点速度必须仍是满巡航,不许把 pass 点退化成 stop 点来蒙混。 */
+/* 6f-1 内核接入(本次重做的核心断言)。FM2 起【每一艘船】都走完整内核,不再只有旗舰。三向:
+   ① 实验组 = 编队跑一条含 180 度折返的三点航线 —— 每艘船的拐点速度都必须被压住(cornerSpd/routeCap
+      真的作用到编队的每一艘上),且全队到位、余令 0、不死锁;
+   ② 对照组 = 同一条航线以【散船】跑 —— 拐点行为必须一致(编队只多一道编队速度上限,而上限只做减法);
+   ③ 反向对照 = 同样是编队,但航线处处直行 —— 拐点速度必须仍是满巡航,不许误伤直行。
+   FM2 新增的两条结构断言:航线在【每艘船】自己的 orders 上(不是只在旗舰上),
+   且每艘船的终点 = 编队目标点 + 自己那个已旋转的槽位偏移(下令那一刻算死,不随任何东西实时偏移)。 */
 t('FLOW23_FMCORE',function(){
   var TURN=[[40000,0,0],[10000,0,0],[10000,30000,0]]; /* W0 偏折 180 度(cornerSpd 给 0),W1 偏折 90 度 */
   var LINE=[[40000,0,0],[80000,0,0],[120000,0,0]];    /* 处处直行:cornerSpd 返回 Infinity,不许限速 */
   var b=fm23reset(),F=fm23group(b),flag=fmFlag(F);
   moveShips(b,TURN[0],'stop');addWaypoint(b,TURN[1]);addWaypoint(b,TURN[2]);
-  var ordF=flag.orders.length,held=0;
-  fmMembers(F).forEach(function(m){if(m!==flag)held+=m.orders.length;});
-  var A=fm23run(flag,TURN,40000,12000,F); /* 收队留 240s:掉头那一段 fmAng 要限速转过 180 度、成员追不上是设计内的(DS195),这里看的是最终收不收得回来 */
+  /* 结构:三艘各持 3 条令(FM1 时是"旗舰3条/成员0条",FM2 反过来) */
+  var per=b.map(function(s){return s.orders.length;}).join('/');
+  /* 终点静态且等于 目标点+旋转槽位 */
+  var ca=Math.cos(F.ang),sa=Math.sin(F.ang),geo=true;
+  for(var q=0;q<b.length;q++){
+    var o=rotSlot(b[q].fmSlot||[0,0,0],ca,sa);
+    var last=b[q].orders[b[q].orders.length-1];
+    if(Math.hypot(last.pos[0]-(TURN[2][0]+o[0]),last.pos[1]-(TURN[2][1]+o[1]))>1e-6)geo=false;
+  }
+  var snap=b.map(function(s){return s.orders[0].pos.slice();});
+  var A=fm23run(flag,TURN,40000,12000,F);
+  var drift=0;
+  for(q=0;q<b.length;q++){ /* 跑完之后回头看:令已经被消费光了,拿"曾经的第一个终点"没法比,改判全队到位误差 */
+    var d=Math.hypot(b[q].pos[0]-(TURN[2][0]+rotSlot(b[q].fmSlot||[0,0,0],ca,sa)[0]),
+                     b[q].pos[1]-(TURN[2][1]+rotSlot(b[q].fmSlot||[0,0,0],ca,sa)[1]));
+    if(d>drift)drift=d;
+  }
+  var leftAll=b.reduce(function(a,s){return a+s.orders.length;},0);
   var nA=fmMembers(F).length;
-  var b2=fm23reset(),s=b2[0];
-  moveShips([s],TURN[0],'stop');addWaypoint([s],TURN[1]);addWaypoint([s],TURN[2]); /* 单艘 → sameGroupShips 返回 null → 走散船那一支 */
-  var S=fm23run(s,TURN,40000,0,null);
+  var b2=fm23reset(),s2=b2[0];
+  moveShips([s2],TURN[0],'stop');addWaypoint([s2],TURN[1]);addWaypoint([s2],TURN[2]); /* 单艘 → sameGroupShips 返回 null → 走散船那一支 */
+  var S=fm23run(s2,TURN,40000,0,null);
   var b3=fm23reset(),F3=fm23group(b3),fl3=fmFlag(F3);
   moveShips(b3,LINE[0],'stop');addWaypoint(b3,LINE[1]);addWaypoint(b3,LINE[2]);
   var L=fm23run(fl3,LINE,40000,0,F3);
   var cr=cruiseOf(flag);
-  var ok=(ordF===3&&held===0&&flag===b[0]
-        &&A.vc>=0&&A.vc<cr*0.15&&A.left===0&&A.err<CFG.arrive*2&&nA===3&&A.dev>=0&&A.dev<CFG.arrive*2+50
+  var ok=(per==='3/3/3'&&geo&&snap.length===3
+        &&A.vc>=0&&A.vc<cr*0.15&&leftAll===0&&drift<CFG.arrive*2&&nA===3
         &&S.vc>=0&&S.vc<cr*0.15&&S.left===0&&S.err<CFG.arrive*2
         &&Math.abs(A.vc-S.vc)<cr*0.05&&A.peak<=S.peak+1
-        &&L.vc>cr*0.95&&L.left===0&&L.err<CFG.arrive*2);
+        &&L.vc>cr*0.95&&L.left===0);
   return (ok?'ok':'fail')
-    +' 航线归属:旗舰'+ordF+'条令/成员合计'+held+'条(须 3/0:编队没有第二航线结构)'
-    +' | 编队掉头航线:拐点v='+Math.round(A.vc)+'(须<'+Math.round(cr*0.15)+' = 拐角限速确实作用在编队上;不限速时为满 '+cr+')'
-    +' 峰值='+Math.round(A.peak)+' 到位用时'+A.arrT.toFixed(1)+'s 余令'+A.left+' 终点误差'+Math.round(A.err)
-    +'km 在队'+nA+'艘 收队后maxDev='+Math.round(A.dev)+'km(须<'+(CFG.arrive*2+50)+')'
+    +' 航线归属:各舰令数='+per+'(须 3/3/3:每艘船都持有自己那条航线,不是只有旗舰)'
+    +' 终点=编队目标点+自己的旋转槽位:'+geo
+    +' | 编队掉头航线:拐点v='+Math.round(A.vc)+'(须<'+Math.round(cr*0.15)+' = 拐角限速作用在编队的每一艘上;不限速时为满 '+cr+')'
+    +' 峰值='+Math.round(A.peak)+' 到位用时'+A.arrT.toFixed(1)+'s 全队余令'+leftAll+' 最差到位误差'+Math.round(drift)
+    +'km(须<'+(CFG.arrive*2)+') 在队'+nA+'艘'
     +' | 散船对照(同一条航线):拐点v='+Math.round(S.vc)+' 峰值='+Math.round(S.peak)
-    +'(编队峰值须<=它:组速上限只做减法) 拐点差='+Math.round(Math.abs(A.vc-S.vc))
+    +'(编队峰值须<=它:编队速度上限只做减法) 拐点差='+Math.round(Math.abs(A.vc-S.vc))
     +' | 直线反向对照:拐点v='+Math.round(L.vc)+'(须>'+Math.round(cr*0.95)+':不许误伤直行) 余令'+L.left;
 });
-/* 6f-2 成员保位:成员不持令,追的是【旗舰实时位置 + 已旋转阵位】。
-   双向 —— 出发瞬间队形没成形(maxDev 必须很大)→ 航程中段收敛 → 到位后收进阈值。
-   只判"到位后很小"的话,一个把成员一开始就摆在阵位上的探针写法自己就能骗过它。
-   末尾再拿 stepFormation 的返回值对表:43-step 里算的 maxDev 必须与 flag.pos+fmOffOf 这条口径【逐位相同】,
-   两份算法分家的话,编队菜单读到的成形度就不是成员真正在追的那个点。 */
-t('FLOW24_FMSLOT',function(){
-  var DEST=[300000,0,0]; /* 刻意用长直线:掉头/转向会让 fmAng 限速旋转(DS195),那是 FLOW23 的事,这条只看保位本身 */
+/* 6f-2 FM2:终点【静态】。用户明确要求"不要做成实时路径点的形式,直接计算且显示所有船的终点"。
+   本条钉死两件事:下令那一刻每艘船就拿到自己的绝对终点;此后不论旗舰怎么动、队形怎么散,
+   那个终点坐标一个字节都不许变(FM1 的成员终点是 flag.pos+旋转槽位,每 tick 都在漂)。
+   双向:同时给一个【会漂才会红】的判据 —— 途中把旗舰硬拽走 20 万公里,终点仍须纹丝不动。 */
+t('FLOW24_FMSTATIC',function(){
+  var DEST=[300000,0,0];
   var b=fm23reset(),F=fm23group(b),flag=fmFlag(F);
-  var slots=fmMembers(F).map(function(m){return m.fmSlot?Math.round(Math.hypot(m.fmSlot[0],m.fmSlot[1])):-1;}).join('/');
   moveShips(b,DEST,'stop');
-  var d0=fm23dev(F); /* 出发瞬间:僚舰在 fm23reset 里被刻意摆离阵位 */
-  var R=fm23run(flag,[DEST],40000,6000,F);
-  var n=R.devs.length,mid=0;
-  for(var k=Math.floor(n/3);k<Math.floor(2*n/3);k++)if(R.devs[k]>mid)mid=R.devs[k];
-  var sf=stepFormation(F,0.02); /* 放在全部测量【之后】:它会推进 F.fmAng */
-  var d1=fm23dev(F);            /* 与 sf 同一拍、同一个 fmAng,故两者必须完全相等 */
-  var same=(sf&&typeof sf.maxDev==='number')?Math.abs(sf.maxDev-d1):1e9;
-  var noOrd=fmMembers(F).every(function(m){return m===flag||m.orders.length===0;});
-  var ok=(d0>20000&&n>6&&mid<d0*0.5&&d1<CFG.arrive*2+50&&d1<d0*0.05
-        &&R.left===0&&R.err<CFG.arrive*2&&fmMembers(F).length===3
-        &&same<1e-6&&sf.formed===true&&!sf.dissolved&&noOrd);
-  return (ok?'ok':'fail')+' 槽位半径='+slots+'km 采样'+n+'拍'
-    +' | maxDev:出发'+Math.round(d0)+'km(须>20000=队形还没成形) → 航程中段'+Math.round(mid)
-    +'km(须<'+Math.round(d0*0.5)+'=在收敛) → 到位收队'+Math.round(d1)+'km(须<'+(CFG.arrive*2+50)+' 且 <出发的5%)'
-    +' 用时'+R.arrT.toFixed(1)+'s 余令'+R.left+' 终点误差'+Math.round(R.err)+'km'
-    +' | 与 stepFormation 对表:maxDev 差='+same.toFixed(6)+'(须 0) formed='+sf.formed
-    +' | 成员一条令都不持:'+noOrd;
+  var per=b.map(function(s){return s.orders.length;}).join('/');
+  var snap=b.map(function(s){return s.orders[0].pos.slice();});
+  var spread=0,i,q; /* 三个终点必须互不相同(真的按阵位散开了,不是三艘挤在同一点) */
+  for(q=1;q<snap.length;q++){var d=Math.hypot(snap[q][0]-snap[0][0],snap[q][1]-snap[0][1]);if(d>spread)spread=d;}
+  for(i=0;i<500;i++){if(rrJobs.length)rrTick();stepShipsMotion(0.02);}
+  var drift1=0;
+  for(q=0;q<b.length;q++){if(!b[q].orders.length){drift1=1e9;break;}
+    var d1=Math.hypot(b[q].orders[0].pos[0]-snap[q][0],b[q].orders[0].pos[1]-snap[q][1]);if(d1>drift1)drift1=d1;}
+  /* 反向对照:把旗舰硬拽到 20 万公里外。FM1 那套(终点=旗舰位置+槽位)会让成员终点当场跟着跑 20 万; */
+  flag.pos=[flag.pos[0]-200000,flag.pos[1]+200000,0];
+  for(i=0;i<50;i++){if(rrJobs.length)rrTick();stepShipsMotion(0.02);}
+  var drift2=0;
+  for(q=0;q<b.length;q++){if(!b[q].orders.length)continue;
+    var d2=Math.hypot(b[q].orders[0].pos[0]-snap[q][0],b[q].orders[0].pos[1]-snap[q][1]);if(d2>drift2)drift2=d2;}
+  var ok=(per==='1/1/1'&&spread>10000&&drift1<1e-6&&drift2<1e-6);
+  return (ok?'ok':'fail')+' 各舰令数='+per+'(须1/1/1) 三个终点最大间距='+Math.round(spread)
+    +'km(须>10000=真的按阵位散开)'
+    +' | 跑10秒后终点漂移='+drift1.toFixed(6)+'km(须0)'
+    +' | 把旗舰硬拽走20万km再跑1秒,终点漂移='+drift2.toFixed(6)+'km(须0;FM1 那套实时槽位会当场跟着漂 20 万)';
 });
 /* 6f-3 到达朝向 face:改前编队走 F.queue,addWaypoint 的编队分支连 face 参数都没有,
    长按定朝向对编队完全是空操作。现在编队命令与散船共用 44-orders 的同一套原语,face 直达旗舰的令。
@@ -1341,7 +1362,7 @@ t('FLOW25_FMFACE',function(){
   var b=fm23reset(),F=fm23group(b),flag=fmFlag(F);
   moveShips(b,DEST,'stop',FACE);
   var o=flag.orders[0],hasFace=!!(o&&o.face&&o.face[1]===-1),held=0;
-  fmMembers(F).forEach(function(m){if(m!==flag)held+=m.orders.length;});
+  fmMembers(F).forEach(function(m){if(m!==flag&&m.orders[0]&&m.orders[0].face&&m.orders[0].face[1]===-1)held++;}); /* FM2:face 展开到【每一艘】,不再只有旗舰 */
   var pre=-1,arr=-1,i;
   for(i=1;i<=40000;i++){
     if(rrJobs.length)rrTick();
@@ -1363,58 +1384,66 @@ t('FLOW25_FMFACE',function(){
     if(!fl2.orders.length)break;
   }
   var err2=Math.acos(Math.max(-1,Math.min(1,fl2.facing[0]*FACE[0]+fl2.facing[1]*FACE[1])))*180/Math.PI;
-  var ok=(ap&&hasFace&&held===0&&pre>0&&arr>0&&pre<arr&&err<3&&dErr<CFG.arrive*2
+  var ok=(ap&&hasFace&&held===2&&pre>0&&arr>0&&pre<arr&&err<3&&dErr<CFG.arrive*2
         &&noFace&&!hadTurn&&err2>10);
   return (ok?'ok':'fail')
     +' addWaypoint 带face:末令有face且旧末点降级后 face 已清='+ap
-    +' | moveShips 带face:令上有face='+hasFace+' 成员持令='+held+'条(须0)'
+    +' | moveShips 带face:令上有face='+hasFace+' 成员也带face='+held+'艘(须2:face 展开到每一艘)'
     +' 提前起转@'+pre+'<到位@'+arr+' 到位朝向误差='+err.toFixed(2)+'度(须<3) 位置误差='+Math.round(dErr)+'km'
     +' | 不带face对照:令上有face='+(!noFace)+' 全程出现过turnTarget='+hadTurn+'(须false)'
     +' 终态与该face夹角='+err2.toFixed(2)+'度(须>10:证明上面那 3 度不是碰巧朝对了)';
 });
-/* 6f-4 FM1 复核修正:【航线过继】。新架构"编队路径=旗舰 s.orders"的代价是——换旗必须换航线。
-   对抗式复核实跑抓到:旗舰战损/设为旗舰/旗舰单舰脱队三条路径都换旗,而三处都没有交接代码,
-   结果新旗舰拿到一个空 orders → 31 落到最后的 else → steerToVel(0) → 整队在航线中段原地停死,
-   航线随旧旗舰一起蒸发,事件流一条日志都没有。改前 F.queue 属于编队实体,换旗不丢航线,所以这是重做引入的回归。
-   做过反向对照:把 fmTakeRoute 那两句删掉,本条立刻变红(令=0 速度=0),正是复核描述的症状。
-   顺带钉死另外两条不变量:成员入队时残留令必须清干净(否则解散那一刻会突然复活自己飞走);
-   编队塌到 2 艘以下必须连 groups[g].fm 一起摘掉(僵尸 F 会让书签栏永远报"已成队",而所有按钮静默空转)。 */
-t('FLOW26_FMHANDOFF',function(){
-  var R=[[200000,0,0],[200000,200000,0],[400000,200000,0]];
-  function lay(){var b=fm23reset(),F=fm23group(b);moveShips(b,R[0],'stop');addWaypoint(b,R[1]);addWaypoint(b,R[2]);
-    for(var i=0;i<300;i++)stepShipsMotion(0.02);return {b:b,F:F};}
-  function run(n){for(var i=0;i<n;i++)stepShipsMotion(0.02);}
-  /* ① 旗舰战损 —— 走 55-damage 的真实口径(先 fmOnDeath 再清 orders/formation) */
-  var g=lay(),a=g.b[0],ord0=a.orders.length;
-  if(a.formation)fmOnDeath(a);
-  a.hp=0;a.dead=true;a.orders=[];a.formation=null;a.brake=false;
-  run(600);
-  var n1=fmFlag(g.F),d1=(n1&&n1!==a)?n1.orders.length:-1,v1=n1?V.len(n1.vel):-1;
-  /* ② 设为旗舰(书签栏右键成员那条路径) */
-  var g2=lay(),a2=g2.b[0],b2=g2.b[1],ord2=a2.orders.length;
-  setFlagship(b2);run(300);
-  var d2=b2.orders.length,gh2=a2.orders.length,v2=V.len(b2.vel);
-  /* ③ 旗舰单舰脱队(长按定向 / G 倒车 / 单选右键 三处共用 fmLeave 那条) */
-  var g3=lay(),a3=g3.b[0],ord3=a3.orders.length;
-  moveShips([a3],[-300000,0,0],'stop');run(300);
-  var n3=fmFlag(g3.F),d3=(n3&&n3!==a3)?n3.orders.length:-1,v3=n3?V.len(n3.vel):-1,own3=a3.orders.length;
-  /* ④ 入队清残留令:三艘各自持令 → 就地成形 → 解散,谁都不许偷跑 */
-  var b4=fm23reset();
-  orderMoveTo(b4[0],[100000,-50000,0],'stop');orderMoveTo(b4[1],[100000,0,0],'stop');orderMoveTo(b4[2],[100000,50000,0],'stop');
-  var F4=fm23group(b4),held4=b4[1].orders.length+b4[2].orders.length;
-  fmDisband(F4);run(800);
-  var run4=Math.max(V.len(b4[1].vel),V.len(b4[2].vel));
-  /* ⑤ 僵尸 F:先派走一艘,再让剩下两艘同一拍全灭 */
-  var g5=lay();fmLeave(g5.b[2]);
-  [g5.b[0],g5.b[1]].forEach(function(s){if(s.formation)fmOnDeath(s);s.hp=0;s.dead=true;s.orders=[];s.formation=null;});
-  run(20);
+/* 6f-4 FM2 的 RTS 语义(用户明确要求:"单独选中某一个舰船,不会导致全编队移动")。
+   改前 expandToFleet 把"选中编组里任何一艘"扩成整组,单独派一艘僚舰会把全队一起指挥走。
+   现在【选中什么就命令什么】,是不是编队命令由 sameGroupShips 的严格全等判定(选 2/3 艘不算)。
+   派走的那一艘【不脱队】—— 成员身份与"这一次去哪"无关,下次全队下令时它自动拿到阵位终点归位。
+   顺带把两条 FM1 复核抓到的、FM2 结构上已经消解的问题钉住不许回归:
+     · 旗舰战损后其余舰照常飞完各自航线(FM1 时航线只存在旗舰一艘身上,旗舰一死整队停死);
+     · 编队塌到 2 艘以下必须连 groups[g].fm 一起摘掉(僵尸 F 会让书签栏永远报"已成队")。 */
+t('FLOW26_FMRTS',function(){
+  /* ① 单选一艘:只有它拿到令,而且不脱队 */
+  var b=fm23reset(),F=fm23group(b);
+  moveShips([b[1]],[300000,0,0],'stop');
+  var one=b.map(function(s){return s.orders.length;}).join('/');
+  var stay=(b[1].formation===F&&fmMembers(F).length===3);
+  /* ② 选 3 艘里的 2 艘:第三艘不许动(严格全等的反向对照) */
+  var b2=fm23reset();fm23group(b2);
+  moveShips([b2[0],b2[1]],[300000,0,0],'stop');
+  var two=b2.map(function(s){return s.orders.length;}).join('/');
+  /* ③ 全选:三艘都拿到令(证明上面两条不是"编队命令整个失灵") */
+  var b3=fm23reset(),F3=fm23group(b3);
+  moveShips(b3,[300000,0,0],'stop');
+  var all=b3.map(function(s){return s.orders.length;}).join('/');
+  /* ④ 被派走的那一艘,下次全队下令时自动归位到自己的阵位终点 */
+  var b4=fm23reset(),F4=fm23group(b4);
+  moveShips([b4[2]],[-300000,0,0],'stop');
+  moveShips(b4,[300000,0,0],'stop');
+  var ca=Math.cos(F4.ang),sa=Math.sin(F4.ang);
+  var o4=rotSlot(b4[2].fmSlot||[0,0,0],ca,sa);
+  var back=(b4[2].orders.length===1
+    &&Math.hypot(b4[2].orders[0].pos[0]-(300000+o4[0]),b4[2].orders[0].pos[1]-o4[1])<1e-6);
+  /* ⑤ 旗舰战损:其余舰照常飞完自己的航线 */
+  var b5=fm23reset(),F5=fm23group(b5),f5=fmFlag(F5);
+  moveShips(b5,[300000,0,0],'stop');
+  var i;for(i=0;i<300;i++){if(rrJobs.length)rrTick();stepShipsMotion(0.02);}
+  var ord5=b5[1].orders.length;
+  if(f5.formation)fmOnDeath(f5);
+  f5.hp=0;f5.dead=true;f5.orders=[];f5.formation=null;
+  for(i=0;i<400;i++){if(rrJobs.length)rrTick();stepShipsMotion(0.02);}
+  var alive5=(b5[1].orders.length===ord5&&V.len(b5[1].vel)>50);
+  /* ⑥ 全员同拍阵亡:不许留零成员僵尸 F */
+  var b6=fm23reset(),F6=fm23group(b6);
+  fmLeave(b6[2]);
+  [b6[0],b6[1]].forEach(function(s){if(s.formation)fmOnDeath(s);s.hp=0;s.dead=true;s.orders=[];s.formation=null;});
+  for(i=0;i<20;i++)stepShipsMotion(0.02);
   var zomb=!!fmGet('1');
-  var ok=(d1===ord0&&v1>50 && d2===ord2&&gh2===0&&v2>50 && d3===ord3&&v3>50&&own3===1 && held4===0&&run4<1 && !zomb);
+  var ok=(one==='0/1/0'&&stay&&two==='1/1/0'&&all==='1/1/1'&&back&&alive5&&!zomb);
   return (ok?'ok':'fail')
-    +' 旗舰战损:新旗舰令='+d1+'(须'+ord0+') 速度='+Math.round(v1)+'(须>50=没停死)'
-    +' | 设为旗舰:新旗舰令='+d2+'(须'+ord2+') 旧旗舰残留令='+gh2+'(须0=不留幽灵航线) 速度='+Math.round(v2)
-    +' | 旗舰脱队:新旗舰令='+d3+'(须'+ord3+') 速度='+Math.round(v3)+' 脱队舰自己的令='+own3+'(须1)'
-    +' | 入队清令:成员残留='+held4+'条(须0) 解散16s后成员最大速度='+Math.round(run4)+'(须<1=没偷跑)'
+    +' 单选一艘:各舰令数='+one+'(须 0/1/0) 派走后仍在队='+stay
+    +' | 选2/3艘:'+two+'(须 1/1/0 = 第三艘不许被连带指挥)'
+    +' | 全选:'+all+'(须 1/1/1 = 编队命令本身没坏)'
+    +' | 派走的那艘下次全队下令自动归位到阵位终点='+back
+    +' | 旗舰战损后僚舰照常飞='+alive5+'(令='+b5[1].orders.length+' 速度='+Math.round(V.len(b5[1].vel))+')'
     +' | 全灭后僵尸F='+zomb+'(须false)';
 });
 /* 6f-5 编队书签栏(render/87-fmbar)的【运行期】覆盖。复核指出:FM1 新增代码里体量最大的这个文件
@@ -1540,9 +1569,9 @@ grep -q "FLOW22_APPEND=ok" "$OUT" || { echo "✗ FLOW22_APPEND 未通过(RF22 Sh
 # 四条全是双向判定(实验组 + 散船/直线/不带face 三组对照):只测一边会被"什么都不做"的实现骗过去。
 grep -q "^FORM=ok" "$OUT" || { echo "✗ FORM 未通过(FM1 建组+fmEnsure+整组移动:命令须落到旗舰 orders)"; fail=1; }
 grep -q "FLOW23_FMCORE=ok" "$OUT" || { echo "✗ FLOW23_FMCORE 未通过(FM1 编队接入运动内核:拐角限速/不死锁/不误伤直行)"; fail=1; }
-grep -q "FLOW24_FMSLOT=ok" "$OUT" || { echo "✗ FLOW24_FMSLOT 未通过(FM1 成员保位:maxDev 收敛)"; fail=1; }
+grep -q "FLOW24_FMSTATIC=ok" "$OUT" || { echo "✗ FLOW24_FMSTATIC 未通过(FM2 终点静态:下令即算死,不随旗舰实时偏移)"; fail=1; }
 grep -q "FLOW25_FMFACE=ok" "$OUT" || { echo "✗ FLOW25_FMFACE 未通过(FM1 编队吃到到达朝向 face)"; fail=1; }
-grep -q "FLOW26_FMHANDOFF=ok" "$OUT" || { echo "✗ FLOW26_FMHANDOFF 未通过(FM1 换旗/战损/脱队的航线过继、入队清残留令、僵尸F)"; fail=1; }
+grep -q "FLOW26_FMRTS=ok" "$OUT" || { echo "✗ FLOW26_FMRTS 未通过(FM2 RTS 语义:选中什么就命令什么;旗舰战损其余舰照常飞;无僵尸F)"; fail=1; }
 grep -q "FLOW27_FMBAR=ok" "$OUT" || { echo "✗ FLOW27_FMBAR 未通过(FM1 编队书签栏/菜单的真实事件全链路)"; fail=1; }
 grep -q "^RENDER=ok" "$OUT" || { echo "✗ RENDER 未通过"; fail=1; }
 [ $fail -eq 0 ] && echo "✓ 全部通过" || exit 1

@@ -31,11 +31,8 @@ function setFlagship(s){ // 设为旗舰:改名册 + 让编队按新锚点重排
   if(!s)return;
   const g=groupOf(s.id);
   if(g===null)return;
-  const old=ships.find(x=>x.id===groups[g].flagship);
   groups[g].flagship=s.id;
-  // 换旗必须【连航线一起交接】:新架构下编队路径就是旗舰的 s.orders,只改名册的话新旗舰拿到一个空 orders,
-  // 整队当场原地停车、航线无声丢失,同时旧旗舰以成员身份继续持令(地图上画幽灵航线,解散那一刻独自飞走)。
-  if(old&&old!==s&&typeof fmTakeRoute==='function')fmTakeRoute(s,old);
+  // FM2:不需要交接航线了 —— 每艘船在下令那一刻就拿到了自己的绝对终点,换旗只影响【下一条】编队令的阵位锚点。
   if(typeof fmSyncGroup==='function')fmSyncGroup(g);
   log(`${s.name} 设为旗舰`,'');
   if(typeof renderFleet==='function')renderFleet();
@@ -67,22 +64,22 @@ function returnToFormation(s){ // 归队:重新挂进本组编队并就地成形
   log(`${s.name} 返回编队`,'');
 }
 
-function sameGroupShips(list){ // list 是否全部属于同一编组;是则返回组号,否则 null。注意:只要求 list ⊆ grp.ships,不要求全等
+function sameGroupShips(list){
+  /* FM2【严格全等】:list 必须恰好是某个编组的全部活船,才算"这是一条编队命令"。
+     改前只要求 list ⊆ grp.ships —— 于是选中 3 艘里的 2 艘右键,也会被判成编队命令、连带把没选中的那一艘也指挥了。
+     RTS 语义是【选中什么就命令什么】,所以这里必须全等。选一部分 → 各自散船走(但不脱队,身份不变)。 */
   if(list.length<2)return null;
   for(const g in groups){
     const grp=groups[g];
-    if(grp&&grp.ships.length&&list.every(s=>grp.ships.includes(s.id)))return g;
+    if(!grp||!grp.ships.length)continue;
+    const alive=groupShips(g);
+    if(alive.length!==list.length)continue;
+    if(alive.every(s=>list.indexOf(s)>=0))return g;
   }
   return null;
 }
 
-function expandToFleet(list){ // 命令扩展到整队:选中编组里的任何一艘(旗舰/组员/多选)→ 所属组全部
-  const out=[];const seen=new Set();
-  list.forEach(s=>{
-    const g=groupOf(s.id);
-    if(g!==null){
-      groups[g].ships.forEach(id=>{if(!seen.has(id)){seen.add(id);const x=ships.find(y=>y.id===id);if(x&&!x.dead)out.push(x);}});
-    }else if(!seen.has(s.id)){seen.add(s.id);out.push(s);}
-  });
-  return out;
-}
+/* FM2 删除 expandToFleet(原本"选中编组里任何一艘 → 命令整组")。
+   它与 RTS 语义直接冲突:单独选中一艘僚舰右键,不该把整队都指挥走。
+   现在选中什么就命令什么,是不是编队命令由 sameGroupShips 的严格全等判定。
+   要指挥全队:数字键 1-4 选中整组 / 书签菜单的【选中全队】 / 框选。 */

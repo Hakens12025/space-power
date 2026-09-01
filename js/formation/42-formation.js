@@ -52,26 +52,12 @@ function fmEnsure(g) { // 取编组 g 的编队;没有就【就地建队】(不�
   if (list.length < 2) return null; // 单艘不成队(散船语义更可预测)
   let F = grp.fm;
   if (!F) {
-    F = { id: ++fmSeq, gid: String(g), P: fmParamsNew(), fmAng: NaN, n: 0, flagId: null };
+    F = { id: ++fmSeq, gid: String(g), P: fmParamsNew(), ang: NaN, n: 0, flagId: null };
     grp.fm = F;
   }
   list.forEach(s => { s.formation = F; });
   fmReslot(F, list);
-  fmClearMemberOrders(F, list);
   return F;
-}
-
-function fmClearMemberOrders(F, list) {
-  /* 【成员不持令】是被三处依赖的不变量:31-step-ships 的成员分支排在 orders 分支【之前】,所以成员的令
-     永远不会被消费、也不会被清 —— 它会一直冻在那里,直到编队解散那一刻突然复活,舰船自己飞向几分钟前的旧目标;
-     82-ship-icons 与 83-hud 也会照着这条谁都不飞的令画出幽灵航线。
-     fmMoveTo/fmAppend 本来就做这一步,但【入队】这条路径(fmEnsure/fmSyncGroup)漏了,而"就地成形"正走它。 */
-  const fl = fmFlag(F, list);
-  (list || fmMembers(F)).forEach(s => {
-    if (s === fl || !((s.orders && s.orders.length) || s.patrol)) return; // patrol 一并清:它同样住在成员分支够不到的地方,解散那一刻会让成员突然开始巡逻
-    if (typeof orderClear === 'function') { orderClear(s); resetForNewOrders(s); }
-    else s.orders = [];
-  });
 }
 
 function fmDisband(F) { // 解散:成员各自回散船态(不下令 —— 要不要停车由调用方决定)
@@ -81,49 +67,22 @@ function fmDisband(F) { // 解散:成员各自回散船态(不下令 —— 要�
   if (grp && grp.fm === F) delete grp.fm;
 }
 
-function fmTakeRoute(to, from) {
-  /* 【航线过继】—— 新架构里"编队路径 = 旗舰的 s.orders",所以【换旗必须换航线】,否则整队当场停死。
-     这是 FM1 复核抓到的头号回归:旗舰战损/设为旗舰/旗舰单舰脱队三条路径都会换旗,而改前 F.queue 属于
-     编队实体、换旗不丢航线。整条 orders 数组【换主】而不是逐条复制:pass/stop 类型、face 到达朝向、
-     pt(提前起转锁存)一并带走,新旗舰接着当前这一段继续飞,不会退回起点重走。 */
-  if (!to || !from || to === from) return false;
-  if (!from.orders || !from.orders.length) return false;
-  to.orders = from.orders; from.orders = [];
-  to.brake = false; to.crawling = false; // 新旗舰可能正处在保位刹车里,接令那一刻必须解开
-  return true;
-}
-
 function fmOnDeath(s) {
-  /* 由 weapons/55-damage 在把船判死【之前】调用。两件事:
-       · 人数塌到 2 艘以下 → 当场 fmDisband。31-step-ships 那条解散兜底只在"还有成员被遍历到"时才跑,
-         最后一批成员同拍全灭时它进不去,会留下一个零成员的僵尸 F 挂在 groups[g].fm 上(书签栏据此报"已成队")。
-       · 死的是旗舰 → 顺位换旗并过继航线。不接的话 55-damage 下一句就把 orders 清空,航线随旗舰一起消失。 */
+  /* 由 weapons/55-damage 在把船判死【之前】调用:人数塌到 2 艘以下就当场 fmDisband。
+     31-step-ships 那条解散兜底只在"还有成员被遍历到"时才跑,最后一批成员同拍全灭时它进不去,
+     会留下一个零成员的僵尸 F 挂在 groups[g].fm 上(书签栏据此报"已成队",而所有按钮静默空转)。
+     FM2 起【不需要航线过继】了 —— 每艘船在下令那一刻就拿到了自己的绝对终点,
+     旗舰阵亡对其余舰的航线毫无影响,它们照常飞完各自的那一条。 */
   const F = s && s.formation;
   if (!F) return;
   const rest = fmMembers(F).filter(x => x !== s);
-  const grp = groups[F.gid];
-  if (rest.length < 2) { fmDisband(F); return; }
-  if (!grp || grp.flagship !== s.id) return; // 阵亡的是成员:成员不持令,没什么要过继,槽位由 43-step 检出人数变化后重排
-  const nf = rest[0];
-  grp.flagship = nf.id;
-  fmTakeRoute(nf, s);
-  fmReslot(F, rest, nf);
-  if (typeof log === 'function') log(`${nf.name} 接任 ${groupName(F.gid)} 旗舰,续飞原航线`, 'warn');
+  if (rest.length < 2) fmDisband(F);
 }
 
-function fmLeave(s) { // 单舰临时脱队(不动名册:它还在编组里,只是这次不跟队走)
+function fmLeave(s) { // 单舰脱队(不动名册:它还在编组里,只是不再占阵位)
   if (!s || !s.formation) return;
   const F = s.formation;
   const rest = fmMembers(F).filter(x => x !== s);
-  const grp = groups[F.gid];
-  // 旗舰脱队 = 换旗。必须先过继航线再摘人,否则剩下的队拿到一个空 orders 的新旗舰,当场停死。
-  // (脱队的这一艘随后总会被调用方补一条新令:moveShips 单艘支 / 长按定向 / G 倒车,三处都是先 fmLeave 再下令。)
-  if (grp && grp.flagship === s.id && rest.length >= 2) {
-    const nf = rest[0];
-    grp.flagship = nf.id;
-    fmTakeRoute(nf, s);
-    if (typeof log === 'function') log(`${nf.name} 接任 ${groupName(F.gid)} 旗舰`, 'warn');
-  }
   s.formation = null; s.fmSlot = null;
   if (rest.length < 2) fmDisband(F); else fmReslot(F, rest);
 }
@@ -152,15 +111,13 @@ function fmSyncGroup(g) { // 名册变了(编组/换旗/脱离/战损)→ 让编
   list.forEach(s => { const old = s.formation; if (old && old !== F) fmLeave(s); });
   list.forEach(s => { s.formation = F; });
   fmReslot(F, list);
-  fmClearMemberOrders(F, list);
 }
 
-function fmOffOf(s) { // 本舰当前(已旋转)的阵位偏移。渲染/命中判定用
-  // 【锚点是旗舰实时位置】,与 31-step-ships 里成员真正在追的目标同锚。
-  // 改前的 formationOff 锚在 F.dest 上(一个玩家看不见的点),于是"画出来的阵位点不是船在追的点",
-  // 只有靠 DS193 的锚点跟随把 F.dest 抹成旗舰位置时才偶然对齐 —— 这是那套补丁存在的原因之一。
+function fmOffOf(s) { // 本舰在【当前阵型】里应处的偏移(锚点=旗舰实时位置)。只给编队菜单的"离位"读数用。
+  // FM2:运动上已经用不到它了 —— 每艘船在下令那一刻就拿到了自己的绝对终点,不再实时追随任何东西。
+  // F.ang 是【上次下令算出的阵型朝向】,不是每 tick 平滑的量(DS195 那套限速旋转随成员跟随一起删了)。
   const F = s && s.formation;
   if (!F || !s.fmSlot) return [0, 0, 0];
-  const a = isFinite(F.fmAng) ? F.fmAng : 0;
+  const a = isFinite(F.ang) ? F.ang : 0;
   return rotSlot(s.fmSlot, Math.cos(a), Math.sin(a));
 }

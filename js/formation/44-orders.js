@@ -49,44 +49,61 @@ function orderPush(s, w, type, face) { // 原样追加一条令(不降级旧末�
   if (typeof rrStart === 'function') rrStart(s);
 }
 
-/* ---------------- 编队命令:全部落到旗舰的 orders 上 ---------------- */
+/* ---------------- 编队命令:下令那一刻【展开】成每艘船的绝对终点 ---------------- */
+/* FM2 的核心。编队级目标点 dest 只是"旗舰要去哪";每艘船拿到的是 dest + 自己那个已旋转的槽位偏移,
+   写进它自己的 s.orders。此后每艘船各自走散船那条完整内核 —— routeCap 速度倒推 / cornerSpd 曲率限速 /
+   rrStart 航线细化 / face 到达朝向,四样对【每一艘】生效,不再只有旗舰吃到。
+   好处不止于此:所有终点在下令那一刻就确定并可见(82/83 的散船画法天然把每艘船的终点画出来、还能拖),
+   FM1 那种"成员终点随旗舰实时偏移"的动态语义整个消失。 */
 
-function fmMoveTo(F, dest, type, face) {
-  const flag = fmFlag(F); if (!flag) return null;
-  fmMembers(F).forEach(m => { if (m !== flag) { orderClear(m); resetForNewOrders(m); } }); // 成员不持令:它们跟旗舰阵位,残留令会在脱队那一刻突然复活
-  orderMoveTo(flag, dest, type, face);
-  return flag;
+function fmAngOf(F, mates, dest) {
+  /* 这一段的阵型朝向 = 从【编队锚点】指向本段目标点的方向。
+     锚点:追加路径点时是上一个编队级目标点 F.dest0(所以拐弯处阵型会跟着新航段转);
+     首次下令时是旗舰实时位置。两点重合(原地下令)就沿用上一次的朝向,没有上一次就用旗舰船头。 */
+  const flag = fmFlag(F, mates);
+  const from = F.dest0 || (flag ? flag.pos : [0, 0, 0]);
+  const dx = dest[0] - from[0], dy = dest[1] - from[1];
+  if (Math.hypot(dx, dy) < 1) return isFinite(F.ang) ? F.ang : (flag ? Math.atan2(flag.facing[1], flag.facing[0]) : 0);
+  return Math.atan2(dy, dx);
 }
 
-function fmAppend(F, w, face) {
-  const flag = fmFlag(F); if (!flag) return null;
-  fmMembers(F).forEach(m => { if (m !== flag) { orderClear(m); resetForNewOrders(m); } });
-  orderAppend(flag, w, face);
-  return flag;
+function fmSpread(F, dest, type, face, mode) {
+  const mates = fmMembers(F);
+  if (!mates.length) return null;
+  const ang = fmAngOf(F, mates, dest);
+  const ca = Math.cos(ang), sa = Math.sin(ang);
+  mates.forEach(s => {
+    const o = rotSlot(s.fmSlot || [0, 0, 0], ca, sa);
+    const p = [dest[0] + o[0], dest[1] + o[1], (dest[2] || 0) + (o[2] || 0)];
+    if (mode === 'append') orderAppend(s, p, face);
+    else if (mode === 'push') orderPush(s, p, type, face);
+    else orderMoveTo(s, p, type, face);
+  });
+  F.ang = ang;
+  F.dest0 = [dest[0], dest[1], dest[2] || 0]; // 【不是航线】,只是"上一个编队级目标点",用来算下一段的阵型朝向
+  return mates;
 }
 
-function fmPush(F, w, type, face) { // 原样追加一条令给旗舰(不降级旧末点)。与 fmMoveTo/fmAppend 同样负责清成员残留令
-  const flag = fmFlag(F); if (!flag) return null;
-  fmMembers(F).forEach(m => { if (m !== flag) { orderClear(m); resetForNewOrders(m); } });
-  orderPush(flag, w, type, face);
-  return flag;
-}
+function fmMoveTo(F, dest, type, face) { F.dest0 = null; return fmSpread(F, dest, type, face, 'move'); } // 新航线:锚点回到旗舰实时位置
+function fmAppend(F, w, face) { return fmSpread(F, w, null, face, 'append'); }
+function fmPush(F, w, type, face) { return fmSpread(F, w, type, face, 'push'); }
 
-function fmHalt(F) { // 整队停车:只需让旗舰刹停,成员跟的是旗舰实时位置,自然落回槽位
-  const flag = fmFlag(F); if (!flag) return;
-  fmMembers(F).forEach(m => { orderClear(m); });
-  flag.brake = true;
+function fmHalt(F) { // 整队停车:逐舰刹停(每艘船持有自己的令,没有"让旗舰停下别人就跟着停"这回事了)
+  fmMembers(F).forEach(m => { orderClear(m); m.brake = true; });
+  F.dest0 = null;
 }
 
 /* ---------------- 入口:UI 只调这两个 ---------------- */
 
-function moveShips(list, dest, type, face) { // 右键移动。整组选中 → 编队走;其余 → 各自散船走(并临时脱队)
+function moveShips(list, dest, type, face) {
+  /* 右键移动。【选中什么就命令什么】(RTS 语义):只有选中集合恰好等于某个编组的全部活船时才走编队,
+     否则各自散船走 —— 而且【不脱队】,编队成员身份与"这一次去哪"无关,下次全队下令时它照常拿到自己的阵位终点。 */
   const targets = (list || []).filter(s => s && !s.dead);
   if (!targets.length) return;
   const gid = targets.length > 1 ? sameGroupShips(targets) : null;
   const F = gid !== null ? fmEnsure(gid) : null;
   if (F) { fmMoveTo(F, dest, type, face); log(`${targets.length} 艘 编队移动`, ''); }
-  else { targets.forEach(s => { fmLeave(s); orderMoveTo(s, dest, type, face); }); }
+  else targets.forEach(s => orderMoveTo(s, dest, type, face));
 }
 
 function addWaypoint(list, w, face) { // Shift+右键追加:末点=停车,原末点降为经过
@@ -95,5 +112,5 @@ function addWaypoint(list, w, face) { // Shift+右键追加:末点=停车,原末
   const gid = targets.length > 1 ? sameGroupShips(targets) : null;
   const F = gid !== null ? fmEnsure(gid) : null;
   if (F) { fmAppend(F, w, face); log(`${targets.length} 艘 编队路径+1(末点停车,中间经过)`, ''); }
-  else { targets.forEach(s => { fmLeave(s); orderAppend(s, w, face); }); log(`${targets.length} 艘 追加路径点(末点停车,中间经过)`, ''); }
+  else { targets.forEach(s => orderAppend(s, w, face)); log(`${targets.length} 艘 追加路径点(末点停车,中间经过)`, ''); }
 }

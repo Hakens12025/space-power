@@ -8,13 +8,10 @@ let pendingTaskEscort=null,pendingTaskStrike=null; // DS150 T3:护航(点友舰)
 function taskIcon(t){return t==='patrol'?'🔄':t==='intercept'?'🏹':t==='escort'?'🛡':t==='strike'?'⚔':t==='deny'?'✋':'📋';}
 function taskCreate(ids,obj){const id=++taskSeq;tasks.set(id,Object.assign({ships:ids,state:'active',aggression:1,rangeMul:1},obj));return id;} // DS150 T4:旋钮默认(攻击优先/范围×1)
 function taskCanOrder(s){
-  /* FM1:任务处理器只能给【能真正执行令的船】写 orders。编队成员不行 —— 31-step-ships 的成员分支排在
-     orders 分支【之前】,写给成员的令永远不被消费,也不会递减,于是:任务自认为已下达(下一轮 !orders.length 为假),
-     实际拦截/护航/打击对成员形同虚设;而这条冻结的令会在编队解散那一刻突然复活,舰船自己飞向几分钟前的旧目标点。
-     编队里只有旗舰接令,整队跟着它走 —— 这正是"编队路径=旗舰 orders"想要的效果。 */
-  if(!s||s.orders.length)return false;
-  if(!s.formation)return true;
-  return (typeof fmFlag==='function')&&fmFlag(s.formation)===s;
+  /* FM2:编队成员现在【持有并执行自己的令】(编队级目标在下令那一刻就展开成每艘船的绝对终点),
+     所以任务令对成员照常生效,不需要再挡编队 —— FM1 时成员分支排在 orders 分支之前,写给成员的令
+     永远不被消费、还会在解散那一刻复活,那条限制随成员跟随分支一起没了。 */
+  return !!s && !s.orders.length;
 }
 function taskOf(sid){for(const t of tasks.values())if(t.ships.includes(sid))return t;return null;} // 找船所属任务
 function taskCancel(id){ // 取消:清任务写入的执行指令,删任务

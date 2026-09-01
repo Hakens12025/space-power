@@ -21,9 +21,8 @@ const GHOST_MODES={
   move:{
     from:s=>s.pos,                       // 预演线从船身画起
     commit:(s,g)=>{
-      // FM1:改走命令层原语。fmLeave 而不是裸 s.formation=null —— 后者不清 fmSlot、也不让剩下的队重排。
-      // 长按定向是【单舰意图】(只对恰好选中 1 艘时才武装,见 ghostArm),所以这里临时脱队是对的。
-      fmLeave(s);
+      // FM2:不再脱队。长按定向是【单舰意图】,但"这一次去哪"与编队成员身份无关 ——
+      // 下次全队下令时它照常拿到自己的阵位终点自动归位(RTS 控制组语义)。
       orderMoveTo(s,[g.wx,g.wy,0],'stop',g.face); // face 是 RF11 字段:physics/31 到位分支消费;orderMoveTo 内部已收口 resetForNewOrders + rrStart
       return `${s.name} 移动 → ${Math.round(g.wx/1000)}k,${Math.round(g.wy/1000)}k`;
     }
@@ -242,7 +241,7 @@ function onMouseDown(e){
       const gid=pendingMove.length>1?sameGroupShips(pendingMove):null;
       const F=gid!==null?fmEnsure(gid):null;
       if(F)fmPush(F,[w[0],w[1],0],'pass'); // 走命令层:fmPush 会顺带清成员残留令(自己拼 orderPush 会漏掉这步,44 文件头声明它是唯一写 orders 的地方)
-      else pendingMove.forEach(s=>{fmLeave(s);orderPush(s,[w[0],w[1],0],'pass');});
+      else pendingMove.forEach(s=>orderPush(s,[w[0],w[1],0],'pass')); // FM2:不脱队
     }else moveShips(pendingMove,[w[0],w[1],0],'stop');
     log(`${n} 艘 → 新增${tag} ${Math.round(w[0]/1000)}k,${Math.round(w[1]/1000)}k`,'');
     pendingMove=null;hideTip();
@@ -474,13 +473,12 @@ window.addEventListener('mouseup',e=>{
         log('💣 雷重新布位 → '+Math.round(w[0]/1000)+'k,'+Math.round(w[1]/1000)+'k(飞抵后再次布雷)','');
         hideCtx();rmbClick=null;return;
       }
-      const targets=expandToFleet(controlledShips()); // 旗舰→整队(编队移动),GM下可指挥敌方
+      const targets=controlledShips(); // FM2:【选中什么就命令什么】(RTS)——原来这里 expandToFleet 把单选一艘扩成整组,单独派一艘僚舰会把全队一起指挥走
       if(targets.length){
         if(rmbClick.shift){
           addWaypoint(targets,w); // 快捷追加:末点停车,中间经过
         }else{
-          // FM1:原先这里先逐船 s.formation=null,把刚要成队的船全部踢出编队,再调 moveShips ——
-          // 新架构下 moveShips 内部已经负责"整组走编队 / 非整组 fmLeave 后各自走",手工清反而拆队。
+          // moveShips 内部按 sameGroupShips 的【严格全等】决定走编队还是各自散船走,这里不做任何预处理。
           moveShips(targets,[w[0],w[1],0],'stop');
           log(`${targets.length} 艘 移动 -> ${Math.round(w[0]/1000)}k,${Math.round(w[1]/1000)}k(清空航线)`,'');
         }

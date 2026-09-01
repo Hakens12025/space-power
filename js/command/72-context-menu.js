@@ -25,7 +25,7 @@ function openCtx(sx,sy,onShip){
   const w=worldAt(sx,sy);
   const items=[];
   const rawTargets=onShip?[onShip]:selectedShips();
-  const targets=expandToFleet(rawTargets); // 旗舰命令扩展到整队
+  const targets=rawTargets.filter(Boolean); // FM2:选中什么就命令什么(原 expandToFleet 会把单选一艘扩成整组)
   const canMove=targets.length>0;
   if(onShip&&onShip.side==='red'&&!adminMode){ // 普通模式敌舰:交战菜单;GM下右键敌舰走控制菜单
     const attackers=selectedShips().filter(s=>s.side==='blue'&&!s.dead);
@@ -105,7 +105,7 @@ function openCtx(sx,sy,onShip){
 function openCardCtx(ships,e,opt){
   const rawTargets=ships.filter(Boolean);
   if(!rawTargets.length)return;
-  const targets=expandToFleet(rawTargets); // 旗舰命令扩展到整队
+  const targets=rawTargets.filter(Boolean); // FM2:选中什么就命令什么(原 expandToFleet 会把单选一艘扩成整组)
   const items=[];
   items.push({t:'移动…(停靠,点地图选目标)',run:()=>{pendingMove=targets;pendingType='stop';showTip('点击地图选择目标点(停靠)');}});
   items.push({t:'路径点…(经过,点地图选目标)',run:()=>{pendingMove=targets;pendingType='pass';showTip('点击地图选择路径点(经过)');}});
