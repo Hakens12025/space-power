@@ -77,32 +77,10 @@ function openCtx(sx,sy,onShip){
   items.push({t:'速度 → 不限速',enabled:canMove,run:()=>{targets.forEach(s=>{s.brake=false;s.speedCmd=-1;log(`${s.name} 不限速(保留航线)`,'');});}});
   items.push({sep:true});
   items.push({t:'转向(仅调头,速度不变)',enabled:canMove,run:()=>{targets.forEach(s=>{s.orders=[];s.turnTarget=[w[0],w[1],0];});log(`${targets.length} 艘 调头`,'');}});
-  for(let g=1;g<=4;g++)items.push({t:`加入编组 ${g}`,enabled:canMove,run:()=>{
-    const list=targets.filter(Boolean);
-    if(!groups[g])groups[g]={ships:[],flagship:null,name:'编队'+g}; // FM1:新建名册带 name(书签栏显示名)
-    list.forEach(s=>{if(!groups[g].ships.includes(s.id))groups[g].ships.push(s.id);});
-    if(!groups[g].flagship)groups[g].flagship=groups[g].ships[0];
-    if(list.length){
-      if(typeof fmSyncGroup==='function')fmSyncGroup(g); // FM1:名册加员后让编队跟上(已有编队则新成员就地入槽并全队重排)
-      log(`${list.length} 艘 → 编组${g}`,'');renderFleet();
-    }
-  }});
-  const gid=sameGroupShips(targets);
-  if(gid!==null){
-    items.push({sep:true});
-    items.push({t:'编队集结于此(追加路径点)',run:()=>{addWaypoint(targets,[w[0],w[1],0]);log(`编队${gid} 追加集结路径点 → ${Math.round(w[0]/1000)}k,${Math.round(w[1]/1000)}k(到位集结后继续)`,'');}}); // FM1:原来调的是 moveShips(...,'stop') —— 那是清空重下,玩家画好的多点航线会被这一下静默删光,而文案与日志都承诺"追加"。真正的追加原语是 addWaypoint
-  }
-  if(rawTargets.length===1){
-    items.push({sep:true});
-    items.push({t:'设为旗舰',run:()=>{setFlagship(rawTargets[0]);}}); // FM1:改走 41-groups 的 setFlagship —— 手写那版只改名册不重排槽位,换旗后全队按旧锚点错位(日志与 renderFleet 由它自带)
-    if(groupOf(rawTargets[0].id)!==null){
-      items.push({t:'返回编队',run:()=>{returnToFormation(rawTargets[0]);}});
-      items.push({t:'脱离编队',run:()=>{leaveGroup(rawTargets[0]);}});
-    }
-  }
+  /* FL1:编组菜单项(加入编组1-4/编队集结于此/设为旗舰/返回编队/脱离编队/解除编组N)整套删除 —— 它们全部走 showCtx,而 showCtx 首行 if(SIMPLE_UI)return 已经让它们完全不可达;所依赖的 groups/groupOf/setFlagship/returnToFormation/leaveGroup/sameGroupShips 也随一层化一并删除。编队入口现在只有左轨书签栏 #fmBar。 */
   showCtx(items,sx,sy);
 }
-function openCardCtx(ships,e,opt){
+function openCardCtx(ships,e){ // FL1:第三参 opt 随「解除编组N」一并删(唯一传它的调用点是编组卡右键,编组卡已删)
   const rawTargets=ships.filter(Boolean);
   if(!rawTargets.length)return;
   const targets=rawTargets.filter(Boolean); // FM2:选中什么就命令什么(原 expandToFleet 会把单选一艘扩成整组)
@@ -116,28 +94,6 @@ function openCardCtx(ships,e,opt){
   items.push({t:'速度 → 中等(500)',run:()=>{targets.forEach(s=>{s.brake=false;s.speedCmd=500;log(`${s.name} 中等(保留航线)`,'');});}});
   items.push({t:'速度 → 高速(800)',run:()=>{targets.forEach(s=>{s.brake=false;s.speedCmd=800;log(`${s.name} 高速(保留航线)`,'');});}});
   items.push({t:'速度 → 不限速',run:()=>{targets.forEach(s=>{s.brake=false;s.speedCmd=-1;log(`${s.name} 不限速(保留航线)`,'');});}});
-  for(let g=1;g<=4;g++)items.push({t:`加入编组 ${g}`,run:()=>{
-    if(!groups[g])groups[g]={ships:[],flagship:null,name:'编队'+g}; // FM1:新建名册带 name(书签栏显示名)
-    targets.forEach(s=>{if(!groups[g].ships.includes(s.id))groups[g].ships.push(s.id);});
-    if(!groups[g].flagship)groups[g].flagship=groups[g].ships[0];
-    if(typeof fmSyncGroup==='function')fmSyncGroup(g); // FM1:名册加员后让编队跟上(已有编队则新成员就地入槽并全队重排)
-    log(`${targets.length} 艘 → 编组${g}`,'');renderFleet();
-  }});
-  if(rawTargets.length===1){
-    items.push({sep:true});
-    items.push({t:'设为旗舰',run:()=>{setFlagship(rawTargets[0]);}}); // FM1:改走 41-groups 的 setFlagship —— 手写那版只改名册不重排槽位,换旗后全队按旧锚点错位(日志与 renderFleet 由它自带)
-    if(groupOf(rawTargets[0].id)!==null){
-      items.push({t:'返回编队',run:()=>{returnToFormation(rawTargets[0]);}});
-      items.push({t:'脱离编队',run:()=>{leaveGroup(rawTargets[0]);}});
-    }
-  }
-  if(opt&&opt.group!==undefined){
-    items.push({sep:true});
-    items.push({t:`解除编组${opt.group}`,run:()=>{ // FM1:先散编队再删名册 —— 编队实体挂在 groups[x].fm 上,直接 delete 会让成员留着 formation 指向一个没人管的孤儿编队(照样跟位、照样占槽位)
-      const grp=groups[opt.group];
-      if(grp&&grp.fm&&typeof fmDisband==='function')fmDisband(grp.fm);
-      delete groups[opt.group];renderFleet();}});
-  }
   showCtx(items,e.clientX,e.clientY);
 }
 const tipEl=document.getElementById('statusTip');

@@ -1,0 +1,61 @@
+SYMS_TOTAL=640
+SYMS_MISSING=none
+SYMS_THREW=none
+BOOT=ships=6 blue=3 red=3
+RANGE_ON=true
+FORM=ok 入队=3/3 有槽位=3 旗舰=马拉松-01 各持1条令=3/3(stop) 终点=目标点+自己的旋转槽位:true 模式=slot(须slot) 无跟随=3/3 编队数=1
+SALVO=armed=1
+DMG=dmg=25(before=0) hp=550
+SOAK=steps=2000 NaNships=0 NaNproj=0 maxLive=2 seen={"missile":3902}
+FLOW2=autoHits=6 autoDmg=757
+FLOW3_ALLOW=ok macHits=0 macShots=0 mslHits=8 mslShots=4 fcTgtMac=null locked=靶·A
+FLOW3_SEQ=ok A=12(mac4/msl8) B=0 shots=mac4/msl4
+FLOW3_RR=ok A=6(mac2/msl4) B=6(mac2/msl4) shots=mac4/msl4 macSplit=ok mslSplit=ok
+FLOW3_GATE=ok base=6 off:hits6→6,mac2→2,msl2→2 mslOff:mac2→5,msl2→2,hits6→9
+FLOW3_DRIFT=ok t=112s macShots=0→3→4 driftFire=true driftFireT=5.0 orders=1 hits=12
+FLOW4_DWELL=ok snap:0ms=null 200ms=null 300ms=靶·A dwellT=0.29 card=on 卡片=靶·A舰种驱逐舰 · T2方位000° · 60k结构550/550速度0 m/ vp=762x484 snapR=49587
+FLOW4_FOG=ok 暗=null(cand=null) 点亮后=靶·A
+FLOW4_MMB=ok seqs=0→1 shipId=s1(主体舰s1) tid=s4(靶s4) allow={"mac":true,"msl":true} autoEngage=false→true roe=free mmb计时=有
+FLOW4_HOLD=ok 吸附=靶·A 按住=500ms seqs=0→0 mmb计时=有 抬起后 mmb=已清
+FLOW4_NOLOCK=ok 右键:locked=null driftFire=false 移动命令=1条 | Ctrl+右键:locked=null driftFire=false ctrlArm=false(须 false,否则松开 Ctrl 会误触全弹发射)
+FLOW4_PAN=ok 中键拖动:cam 不动 panning=false seqs=0→0 | 右键拖动(对照组):cam 位移=-99174,-66116 panning=true
+FLOW4_PD=ok 常规分支 defaultPrevented=true 编辑器分支 defaultPrevented=true 编辑器下 mmb=null
+FLOW5_HOLD=ok 吸附=靶·A 注册延迟=350ms(MMB_HOLD_MS=350) 烧掉1条 松手前 open=true(mmb=仍按住) seqs=0→1 seqId=1/序列1 tid=s4(靶s4) tgtIdx=0 items=mac+msl split=false anchor=417,242(目标屏幕417,242) autoEngage=false→true roe=free 抬手后 open=true mmb=已清
+FLOW5_TAP=ok 吸附=靶·A 按住=120ms seqs=0→1 闹钟:注册350ms/抬手后已撤 抬手后再推500ms 迟到弹出=0次 rad.open=false 快速交战 tid=s4(靶s4)
+FLOW5_CTX=ok 新建:seqs1→2 seqId 1→2(新的一条,首项下标0,目标数1) | 追加(Shift):seqs1→1 seqId 1→1 目标数1→2 rad.tgtIdx=1 | 编辑(已在序列里):seqs1 seqId 1 目标数2 rad.tgtIdx=0
+FLOW5_PICK=ok litBlue=3 主炮扇区 idx=0@294,227 allow.mac true→false(rad.items 回显=false) 切许可前50s:macShots=2 macHits=2 mslShots=2 切许可后60s:macShots=2→2 macHits=2→2 mslShots=2→4(导弹仍在打=对照组) selected=未变
+FLOW5_NOSEL=ok 扇区点@320,242 selected s1→s1 selDrag=null selWeapon=mac(须 mac,被消费掉说明落进了攻击分支) orders=0条 locked=null seqs=1→1 | 盘外左键(对照组):selDrag=已启动
+FLOW5_SPLIT=ok 1个目标:split=false mode=null 目标数1 | 追加到2个:split=true mode=seq 目标数2 seqs=1 | 点左半环:轮询瓣@411,439 → 序列 mode=rr 依次瓣@320,342 → 序列 mode=seq
+FLOW5_OVER=ok items=8(注入9件含1件ciws,ciws须被滤掉) 总页数=2 RAD_CAP=6 第0页可点槽位=[0,1,2,3,4,5] 环带内滚轮→page 0→1(cam.zoom 未变) 第1页可点槽位=[6,7] 环带外滚轮→page=1 cam.zoom 照常缩放
+FLOW5_CLOSE=ok 开=true seqs=1 | 短按中键:open=false seqs=1(须不变:关盘那一下不许再触发快速交战) 盘开时中键排闹钟=没排 迟到弹出=0 | 重开(编辑上下文):open=true seqs=1 | Esc:open=false | 目标死亡:open=true→false rad.tid=null items=0 hoverRing=null
+FLOW6_DESIG=ok Shift+A:seqs 0→1(编辑态=true) Shift+B:seqs=1 链长1→2 重复B去重=2(须2) 无Shift C(对照):seqs→2(快速交战新建) 链=s4→s5(须s4→s5)
+FLOW6_CAP=ok 前5条=均成功 第6条=null(须null) 总数=5/5
+FLOW6_BARS=ok 方条=5/5(空4) 点击退出=true 再点进入=true 详情目标行=2(须2)
+FLOW6_NOAUTO=ok 建序列后进序列态=true 取消选中→null(须null) 重新选中→null(须null,不自动进) 面板高亮方条=0(须0) 点方条→true 高亮=1(须1) 退出序列态后 fcActive=true(须true:序列态只管显示,不管开火)
+FLOW6_STABLE=ok 连刷10拍节点未换=true(须true:内容不变不重建) 改模式后重建=true(须true) 新内容含"轮"=true 方条数=5
+FLOW6_FLOW=ok 链方向=屏幕左(舰)→右(靶) 整行互相关位移=9px(须 5~13,理论 30px/s×0.3s=9px) 采样宽度=160 周期=24px
+FLOW6_PULSE=ok 采样(381,229) 亮度:基准=272 | simTime +7.3s(墙钟不动)=272(相同=已与倍速解耦) | 墙钟 +260ms=369(不同=仍在呼吸)
+FLOW7_BIG=ok 默认=rr(须rr) 轮询300步命中序列下标数=2(须≥2=真的在轮转) | 选择序列2:命中下标=1(须只有 1) fcActive=true | 删掉选中那条后 fcPick/模式已兜底=true fcActive=true(须true,不许哑火)
+FLOW8_STATES=ok 暂停条:红边=true 虚线=true 斜线=true 红字=true opacity=1(须1,不靠变灰) | pick+edit 同条:黄边=true 青字★=true(两通道并存,互不吞噬)
+FLOW8_PICKBTN=ok 初始=rr 点一下→pick(pick=序列2,按钮on=true) 再点→rr(on=false) | 无序列态时点→rr(须rr,只提示不改状态) | 方条仍可点=true
+FLOW9_ENG=ok 额定推力=15 | 主推:亮灯[主推] 15.0 | 反推:亮灯[反推+侧推] 15.0 | 侧推:亮灯[主推+侧推] 13.9(须落在包络带 13.0~15) | 纯转向:亮灯[姿态] acc=0(须 0) | 灯总数恒为 4:true | 速度行=有
+FLOW11_GHOST=ok 转90°:起转@4477&lt;到位@5056 到位朝向误差0.00° 对准后回飘1.99° 位置472km | 转180°:起转@3928&lt;到位@5036 误差0.00° 回飘1.97°(须&lt;3,锁不住会到19°) 位置529km | 转45°(中等角,旧判据下永不起转):起转@4756&lt;到位@5049 误差0.00°
+FLOW12_HYS=ok 减速段引擎跃迁=0.28 次/秒(须&lt;5;改前 27.9=每秒闪 14 个来回) 停点偏差=530km(须&lt;800,迟滞不许换精度) | 死区@10km/s=0.5(须=ENG_HYS_OFF=0.5:低速/保位行为与改前一致) @800km/s=8(须&gt;4:只有高速才放宽)
+FLOW12_CORNER=ok 掉头:拐点速度=1(须&lt;120=真被压住;无限速时为满 800) 峰值=705 用时177s 终点误差=531km | 直线对照组:拐点速度=800(须&gt;760:直行不许限速) 峰值=800
+FLOW12_GHOST2=ok 同态连拍差异=0px(须0:测量本身无噪声,否则下面两条不作数) | 带face比无face多出=166px(须&gt;60=确实画了半透明船影) | 未选中时 带face与无face差异=0px(须0:命令可视化跟着选中走,同 drawFcChain 口径)
+FLOW13_LOOK=ok 对抗例:多走=-11k(须&lt;8k;1步前瞻时为 +32k) 最大偏离=0k(须&lt;8k;1步前瞻时为 16k) 峰值v=800 终点误差=529km | 直线对照组:峰值v=800(须&gt;760:不许退化成逐点停车)
+FLOW14_REFINE=ok 锯齿5点:关 232.2s → 开 215.4s(7.3%,须&gt;3%) 偏靠 4997km(须&lt;=5000) 终点误差 527km 细化 56 帧 | 无余量航线(对照):关 229.2s 开 229.2s(须相等=兜底原样退回) | 搬到(50万,30万)后提升=7.3%(须与原点的 7.3% 相差&lt;1个点=平移不变) 偏靠 4997km | 沙盘未污染全局 ships=true
+FLOW16_STRESS=ok 直线20点(段长5k):用时 190.1s vs 单点 175.9s = 1.08倍(须&lt;1.25;每段各扣一次 margin 的写法在此【死锁】) 峰值v 800(须&gt;700) 余令 0 | 之字20点:用时 1039.3s 最差偏靠 4185km(须&lt;=5000) 余令 0 终点误差 528km
+FLOW21_ARC=ok 紧弧R=20k:偏靠 1284km(须&lt;2500;修前 4999=冲出再绕回) 用时 175.8s(须&lt;200;修前 234.6) 峰值 446 | 平缓弧R=80k(对照):峰值 800(须&gt;760:不许误伤) 偏靠 529km
+FLOW22_APPEND=ok 无Shift(真实事件):弹出=true 模式=move 朝向随鼠标改=true(须true) 令数=1(须1=清空重下) | Shift:弹出=true 模式=append 朝向随鼠标改=true 类型=[pass,stop](须 pass,stop) 带face的令=[1](须只有末令1) | 飞完到位朝向误差=0.00°(须&lt;3) | 多选时弹出=false(须false)
+FLOW23_FMCORE=ok 航线归属:各舰令数=3/3/3(须 3/3/3:每艘船都持有自己那条航线,不是只有旗舰) 终点=编队目标点+自己的旋转槽位:true | 编队掉头航线:拐点v=19(须&lt;120 = 拐角限速作用在编队的每一艘上;不限速时为满 800) 峰值=705 到位用时245.3s 全队余令0 最差到位误差527km(须&lt;800) 在队3艘 | 散船对照(同一条航线):拐点v=19 峰值=705(编队峰值须&lt;=它:编队速度上限只做减法) 拐点差=0 | 直线反向对照:拐点v=800(须&gt;760:不许误伤直行) 余令0
+FLOW24_FMSTATIC=ok 各舰令数=1/1/1(须1/1/1) 三个终点最大间距=28867km(须&gt;10000=真的按阵位散开) | 跑10秒后终点漂移=0.000000km(须0) | 把旗舰硬拽走20万km再跑1秒,终点漂移=0.000000km(须0;FM1 那套实时槽位会当场跟着漂 20 万)
+FLOW25_FMFACE=ok addWaypoint 带face:末令有face且旧末点降级后 face 已清=true | moveShips 带face:令上有face=true 成员也带face=2艘(须2:face 展开到每一艘) 提前起转@4477&lt;到位@5056 到位朝向误差=0.00度(须&lt;3) 位置误差=472km | 不带face对照:令上有face=false 全程出现过turnTarget=false(须false) 终态与该face夹角=90.00度(须&gt;10:证明上面那 3 度不是碰巧朝对了)
+FLOW26_FMRTS=ok 单选一艘:各舰令数=0/1/0(须 0/1/0) 派走后仍在队=true | 选2/3艘:1/1/0(须 1/1/0 = 第三艘不许被连带指挥) | 全选:1/1/1(须 1/1/1 = 编队命令本身没坏) | 派走的那艘下次全队下令自动归位到阵位终点=true | 旗舰战损后僚舰照常飞=true(令=1 速度=280) | 全灭后僵尸F=false(须false)
+FLOW27_FMBAR=ok 书签数=1(须1) 初始菜单=none(须none) 点开后=flex(须flex) | #selFm 信息行=8(须&gt;=6) 成员行=3(须3;须先让 selected=全队才渲染) 成员行事件已走=true | 模式/跟随四钮齐全=true 模式:slot -点跟随-&gt; follow -点阵位-&gt; slot(须 slot/follow/slot) 跟随目标待命态已置位=true 兑现后F.follow指向该舰=true 点解除跟随后已清空=true | 操作钮点击=16/16(须全中且总数&gt;=14)清单=[sel,cam,form,halt,disband,m-slot,m-follow,fol,folx,fan-,fan+,den-,den+,p1,p2,p3] | 参数确实改到了本编队的 F.P:扇面 2.0944 -减-&gt; 1.8326 -加-&gt; 2.0944(须 减&lt;原&lt;=加) 档2叠间距 50000-&gt;35000(须变小) | 再点收起=none(须none) 解散后再刷10次 | 运行期错误=none
+FLOW28_FOLLOW=ok 建立跟随=true off记在目标局部系=true | 第一段(A朝+x)末 B相对A=(-29600,0) 距离=29600 | 第二段(A朝+y)末 B相对A=(-1506,-27342)(须 y&lt;-20000 且 |x|&lt;8000 = 局部正后方;世界系实现会仍在 x=-30000) 距离=27384(须30000±5000) | 解除跟随后:距离=199422(须&gt;120000=发散) B速度=0.00(须&lt;1=停住) | 目标阵亡:死前B在跟=true 死后B速度=0.00(须&lt;1) 位置有限=true | 有令优先:下令前跟随误差=0 单独下令数=1 最远离开目标=70227(须&gt;60000=真的走开了) 余令=0(须0=令被消费) 到位误差=496 办完后跟回来的误差=424(须&lt;5000)
+FLOW29_FMMODE=ok 阵位态:模式=slot 各舰令数=1/1/1(须1/1/1) 挂跟随的=0艘(须0) | 跟随态:模式=follow 成员tid=旗舰=true 成员off=自己的fmSlot=true 各舰令数=1/0/0(须1/0/0 = 只有旗舰接令) 收队后航程中最大离位=357km(采样156次,须&gt;10次且离位&lt;20000) 到位后离位=90km(须&lt;5000) 落在自己阵位上的=3/3 | 切回阵位态:模式=slot 残留跟随=0艘(须0)
+FLOW30_FMFOLLOWFM=ok fmFollowShip=true F2全员(含旗舰)跟F1旗舰=true(旗舰单独确认=true) | 队间偏移 x=-128867(= -(R1 28867 + R2 50000 + 防空圈直径 50000)) 每艘 off = 队间偏移+自己的fmSlot:true | 跑完一段:F2中心相对F1中心 x 偏移=-138115(须&lt;-50000=在后方) 两队中心距=140357(须在 77320~257735) 全队离跟随点=397(须&lt;10000) | fmFollowStop 后残留跟随=0艘(须0)
+FLOW6_CHAIN=ok drawFcChain=存在 编辑态/退出态渲染均完成
+RENDER=ok
+ERRORS=none

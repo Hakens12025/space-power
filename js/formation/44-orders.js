@@ -18,6 +18,9 @@ function resetForNewOrders(s) { // KIMI151:移动命令发布收口——防"傻
 function orderClear(s) { // 清空既有航线意图(不含 resetForNewOrders 管的那几个,两者配合使用)
   s.orders = []; s.patrol = null; s.brake = false; s.turnTarget = null; s.turnNoFm = false;
 }
+/* 【新令要不要取消跟随?】不取消。跟随分支排在 orders 之后,语义是"有令先走令、令空才跟随" ——
+   所以给一艘跟随中的舰单独下个令,它会去办完再自动跟回来,这正是 RTS 里想要的。
+   要真正解除跟随只有两条明路:编队切回阵位态 / fmFollowStop。 */
 
 function mkOrder(w, type, face) { // 一条令的唯一构造口。face 只挂在 stop 上:31-step-ships 只在到位分支消费它
   const o = { pos: [w[0], w[1], w[2] || 0], type: type || 'stop' };
@@ -56,7 +59,7 @@ function orderPush(s, w, type, face) { // 原样追加一条令(不降级旧末�
    好处不止于此:所有终点在下令那一刻就确定并可见(82/83 的散船画法天然把每艘船的终点画出来、还能拖),
    FM1 那种"成员终点随旗舰实时偏移"的动态语义整个消失。 */
 
-function fmAngOf(F, mates, dest) {
+function fmAngOf(F, mates, dest) { // 只在阵位态用得上
   /* 这一段的阵型朝向 = 从【编队锚点】指向本段目标点的方向。
      锚点:追加路径点时是上一个编队级目标点 F.dest0(所以拐弯处阵型会跟着新航段转);
      首次下令时是旗舰实时位置。两点重合(原地下令)就沿用上一次的朝向,没有上一次就用旗舰船头。 */
@@ -68,8 +71,21 @@ function fmAngOf(F, mates, dest) {
 }
 
 function fmSpread(F, dest, type, face, mode) {
-  const mates = fmMembers(F);
+  const mates = fmShips(F);
   if (!mates.length) return null;
+  if (F.mode === 'follow') { // 跟随态:只有旗舰接令,成员由 41-follow 持续跟随它的阵位
+    const flag = fmFlag(F, mates);
+    if (!flag) return null;
+    /* 成员的旧令必须清。跟随分支排在 orders 【之后】(有令先办事),所以成员身上但凡还留着阵位态那次下令的
+       终点,它就会先飞去那个点、把编队当场拆散。这是【编队级】命令,理应覆盖成员的一切既有航线;
+       而"给跟随中的某一艘单独下令、它办完再跟回来"走的是 orderMoveTo 那条路,不经过这里,语义不受影响。 */
+    mates.forEach(m => { if (m !== flag) { orderClear(m); resetForNewOrders(m); } });
+    if (mode === 'append') orderAppend(flag, dest, face);
+    else if (mode === 'push') orderPush(flag, dest, type, face);
+    else orderMoveTo(flag, dest, type, face);
+    F.dest0 = [dest[0], dest[1], dest[2] || 0];
+    return mates;
+  }
   const ang = fmAngOf(F, mates, dest);
   const ca = Math.cos(ang), sa = Math.sin(ang);
   mates.forEach(s => {
@@ -89,7 +105,7 @@ function fmAppend(F, w, face) { return fmSpread(F, w, null, face, 'append'); }
 function fmPush(F, w, type, face) { return fmSpread(F, w, type, face, 'push'); }
 
 function fmHalt(F) { // 整队停车:逐舰刹停(每艘船持有自己的令,没有"让旗舰停下别人就跟着停"这回事了)
-  fmMembers(F).forEach(m => { orderClear(m); m.brake = true; });
+  fmShips(F).forEach(m => { orderClear(m); m.brake = true; });
   F.dest0 = null;
 }
 
@@ -100,17 +116,15 @@ function moveShips(list, dest, type, face) {
      否则各自散船走 —— 而且【不脱队】,编队成员身份与"这一次去哪"无关,下次全队下令时它照常拿到自己的阵位终点。 */
   const targets = (list || []).filter(s => s && !s.dead);
   if (!targets.length) return;
-  const gid = targets.length > 1 ? sameGroupShips(targets) : null;
-  const F = gid !== null ? fmEnsure(gid) : null;
-  if (F) { fmMoveTo(F, dest, type, face); log(`${targets.length} 艘 编队移动`, ''); }
+  const F = fmSameShips(targets);
+  if (F) { fmMoveTo(F, dest, type, face); log(`${targets.length} 艘 ${fmName(F)}移动`, ''); }
   else targets.forEach(s => orderMoveTo(s, dest, type, face));
 }
 
 function addWaypoint(list, w, face) { // Shift+右键追加:末点=停车,原末点降为经过
   const targets = (list || []).filter(s => s && !s.dead);
   if (!targets.length) return;
-  const gid = targets.length > 1 ? sameGroupShips(targets) : null;
-  const F = gid !== null ? fmEnsure(gid) : null;
+  const F = fmSameShips(targets);
   if (F) { fmAppend(F, w, face); log(`${targets.length} 艘 编队路径+1(末点停车,中间经过)`, ''); }
   else { targets.forEach(s => orderAppend(s, w, face)); log(`${targets.length} 艘 追加路径点(末点停车,中间经过)`, ''); }
 }

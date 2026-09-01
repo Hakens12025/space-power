@@ -12,13 +12,13 @@ const fs = require('fs'), vm = require('vm'), path = require('path');
 const ROOT = path.resolve(__dirname, '..', '..');
 const FILES = ['js/core/00-config.js', 'js/ships/10-hull-geometry.js', 'js/ships/11-classes.js',
   'js/sensors/20-signature.js', 'js/weapons/51-defs.js', 'js/weapons/51-ciws.js',
-  'js/physics/30-motion.js', 'js/formation/40-slots.js', 'js/formation/41-groups.js',
+  'js/physics/30-motion.js', 'js/formation/40-slots.js', 'js/formation/41-follow.js', 'js/formation/42-formation.js', 'js/formation/43-step.js', 'js/formation/44-orders.js',
   'js/physics/31-step-ships.js'];
 
 function makeSandbox() {
   const ctx = { console, Math, JSON, performance: { now: () => 0 } };
   ctx.window = ctx; vm.createContext(ctx);
-  vm.runInContext('var ships=[],projectiles=[],selected=[],simTime=0,adminMode=true,editMode=false;' +
+  vm.runInContext('var ships=[],projectiles=[],selected=[],simTime=0,adminMode=true,editMode=false,formations={};' +
     'function log(){} function pushEvt(){} function shipAt(){return null;} var replay={active:false};', ctx);
   for (const f of FILES) vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
   vm.runInContext(`
@@ -29,7 +29,7 @@ function makeSandbox() {
       coasting:!!s.coasting,crawling:!!s.crawling,brake:!!s.brake}; }
     function restore(s,q){ s.pos=q.pos.slice();s.vel=q.vel.slice();s.facing=q.facing.slice();
       s.coasting=q.coasting;s.crawling=q.crawling;s.brake=q.brake;
-      s.formation=null;s.turnTarget=null;s.turnNoFm=false;s.lockedTarget=null;s.speedCmd=800; }
+      s.formation=null;s.follow=null;s.turnTarget=null;s.turnNoFm=false;s.lockedTarget=null;s.speedCmd=800; }
 
     /* 从状态 st 出发,按 aim[k0..] 跑到底。返回:用时、逐拐点最近距离、每次切换时的状态快照。
        ships 临时换成单条船 —— 走的是生产路径 stepShipsMotion,没有任何逻辑复制。 */

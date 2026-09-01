@@ -10,14 +10,14 @@ const fs = require('fs'), vm = require('vm'), path = require('path');
 const ROOT = path.resolve(__dirname, '..', '..');
 const FILES = ['js/core/00-config.js', 'js/ships/10-hull-geometry.js', 'js/ships/11-classes.js',
   'js/sensors/20-signature.js', 'js/weapons/51-defs.js', 'js/weapons/51-ciws.js',
-  'js/physics/30-motion.js', 'js/formation/40-slots.js', 'js/formation/41-groups.js',
+  'js/physics/30-motion.js', 'js/formation/40-slots.js', 'js/formation/41-follow.js', 'js/formation/42-formation.js', 'js/formation/43-step.js', 'js/formation/44-orders.js',
   'js/physics/31-step-ships.js'];
 const TOL = 5000, VC = 800, CAPSTEPS = 300000;
 
 function makeEnv(over) {
   const ctx = { console, Math, JSON, performance: { now: () => 0 } };
   ctx.window = ctx; vm.createContext(ctx);
-  vm.runInContext('var ships=[],projectiles=[],selected=[],simTime=0,adminMode=true,editMode=false;' +
+  vm.runInContext('var ships=[],projectiles=[],selected=[],simTime=0,adminMode=true,editMode=false,formations={};' +
     'function log(){} function pushEvt(){} function shipAt(){return null;} var replay={active:false};', ctx);
   for (const f of FILES) vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
   for (const k in over) {                       // 参数覆盖(let 声明的可以直接赋值)
@@ -35,7 +35,7 @@ function makeEnv(over) {
     if(typeof __THRUST!=='undefined'&&__THRUST>0)S.thrust=__THRUST;   // 平衡数值试算用
     function go(route){
       const s=S,n=route.length;
-      s.pos=[0,0,0];s.vel=[0,0,0];s.facing=[1,0,0];s.orders=[];s.formation=null;
+      s.pos=[0,0,0];s.vel=[0,0,0];s.facing=[1,0,0];s.orders=[];s.formation=null;s.follow=null;
       s.brake=false;s.turnTarget=null;s.turnNoFm=false;s.crawling=false;s.coasting=false;
       s.lockedTarget=null;s.speedCmd=800;
       for(let k=0;k<n;k++)s.orders.push({pos:[route[k][0],route[k][1],0],type:(k===n-1?'stop':'pass')});

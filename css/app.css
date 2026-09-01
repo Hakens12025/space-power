@@ -328,8 +328,13 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #btnRec,#btnAdmin,#btnSelfPlay,#btnRange,#btnEnv,#btnReplay,#btnSet{display:none!important}
 
 /* 选中舰实时信息面板(右轨,几何抄 #fleet) */
-#selPanel{top:var(--rail-top);right:var(--gut);width:var(--rail-w);max-height:calc(100% - var(--rail-top) - var(--tray-b));display:flex;flex-direction:column} /* RF5 末项 --gut → --tray-b(=dock-b+log-h+gut):给同一条右轨底部的 #evtFeed 让出车道,否则 #fcSec 撑高后会从上面压下来 */
-#selInfo{padding:var(--sp-3);border-bottom:var(--bw) solid var(--line);flex:0 1 auto;overflow-y:auto}
+#selPanel{top:var(--rail-top);right:var(--gut);width:var(--rail-w);max-height:calc(100% - var(--rail-top) - var(--tray-b));min-height:min(300px,calc(100% - var(--rail-top) - var(--tray-b)));display:flex;flex-direction:column} /* RF5 末项 --gut → --tray-b(=dock-b+log-h+gut):给同一条右轨底部的 #evtFeed 让出车道,否则 #fcSec 撑高后会从上面压下来 */
+/* FL1 面板高度稳定:#fcSec 原本是本面板【唯一】的撑高项(flex:1 1 auto),它按"有没有火控序列"显隐之后,
+   面板高度会随之塌到内容高、跟着跳。修法是两条配合 —— ①给 #selPanel 一个 min-height 造出自由空间
+   (只有 max-height 时高度是内容高,没有自由空间,flex-grow 写了也不生效);②把 #selInfo/#selFm 从
+   flex:0 1 auto 改成 1 1 auto 去吸收这份空间。#fcSec 在场时内容本就超过 min-height,增量为 0,原布局不变。
+   min() 兜住矮视口:min-height 在 CSS 里胜过 max-height,写死 300px 会在小窗口顶穿右轨。 */
+#selInfo{padding:var(--sp-3);border-bottom:var(--bw) solid var(--line);flex:1 1 auto;min-height:0;overflow-y:auto}
 #selInfo h3{font-size:var(--fs-title);color:var(--txt-hi);margin:0 0 2px}
 #selInfo .sub{font-size:var(--fs-label);color:var(--txt-dim);margin-bottom:var(--sp-2)}
 #selInfo .row{display:flex;justify-content:space-between;align-items:center;padding:2px 0;font-size:var(--fs-body)}
@@ -537,6 +542,10 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
    同时叠加的状态各占不同视觉通道,谁都不许抢别人的属性。 */
 .fm-tab .fm-edge{flex:none;width:3px;align-self:stretch;min-height:12px;border-radius:1px;background:var(--txt-dim)}
 .fm-tab.mv .fm-edge{background:var(--state-active)}   /* 旗舰有令 = 机动中 */
+/* FL1 跟随态左条:排在 .mv 之后,同特异度靠书写顺序定优先级 —— 一支编队可以同时在机动又在跟随,
+   而"它正跟着别人跑"比"它有令在身"更该被看见(整队的目的地不由自己决定)。判据是 F.follow 非空
+   (本编队整体跟随另一艘船/另一支编队);F.mode==='follow' 是队内编排,不占这条通道,只在菜单里用钮的 .on 表达。 */
+.fm-tab.fol .fm-edge{background:var(--state-warn)}
 .fm-tab:hover,.fm-tab.on{transform:translateX(6px);background:var(--srf-hover);border-color:var(--line-acc);color:var(--txt-hi)}
 .fm-tab:hover .fm-nm,.fm-tab.on .fm-nm{color:var(--txt-hi)}
 /* 战损排在 :hover 之后:同特异度靠书写顺序定优先级,"队里有人快没了"比"鼠标正指着"更该被看见(同 RF8 的 paused) */
@@ -547,27 +556,29 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #fmMenu{top:var(--rail-top);left:calc(var(--gut) + 120px);width:var(--rail-w);
   max-height:calc(100% - var(--rail-top) - var(--dock-b));
   display:flex;flex-direction:column;z-index:var(--z-flyout)}
-/* .panel 带 overflow:hidden,内容区必须自己写 overflow-y:auto,否则成员一多就被硬裁(#trPanel/#editorPanel 都栽过)。
-   flex 用 1 1 auto 不用 basis:0:本面板只有 max-height 没有 height(高度按内容撑),
+/* FL1 编队信息区【已搬到右轨 #selPanel 里】(html 里 #selFm 排在 #selInfo 之后、#fcSec 之前),
+   规则整组从 #fmInfo 改名而来,一条都没重写 —— 左边只放操作、右边只放实时数据。
+   .panel 带 overflow:hidden,内容区必须自己写 overflow-y:auto,否则成员一多就被硬裁(#trPanel/#editorPanel 都栽过)。
+   flex 用 1 1 auto 不用 basis:0:父面板只有 max-height 没有 height(高度按内容撑),
    basis:0 会让信息区永远塌到 min-height —— 与 #fcSec 那条注释同一个坑。 */
-#fmInfo{flex:1 1 auto;min-height:0;overflow-y:auto;padding:var(--sp-3);border-bottom:var(--bw) solid var(--line)}
-#fmInfo .row{display:flex;justify-content:space-between;align-items:center;gap:var(--sp-2);padding:2px 0;font-size:var(--fs-body)}
-#fmInfo .row .k{flex:none;color:var(--txt-dim)}
-#fmInfo .row .v{min-width:0;font-family:var(--ff-mono);letter-spacing:var(--ls-read);font-variant-numeric:tabular-nums;color:var(--txt-read);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#fmInfo .row .fm-lk{cursor:pointer}
-#fmInfo .row .fm-lk:hover{color:var(--acc-lite)}
-#fmInfo .fm-sub{margin:var(--sp-2) 0 var(--sp-1);font-size:var(--fs-label);color:var(--txt-mute);letter-spacing:var(--ls-label)}
+#selFm{flex:1 1 auto;min-height:0;overflow-y:auto;padding:var(--sp-3);border-bottom:var(--bw) solid var(--line)}
+#selFm .row{display:flex;justify-content:space-between;align-items:center;gap:var(--sp-2);padding:2px 0;font-size:var(--fs-body)}
+#selFm .row .k{flex:none;color:var(--txt-dim)}
+#selFm .row .v{min-width:0;font-family:var(--ff-mono);letter-spacing:var(--ls-read);font-variant-numeric:tabular-nums;color:var(--txt-read);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#selFm .row .fm-lk{cursor:pointer}
+#selFm .row .fm-lk:hover{color:var(--acc-lite)}
+#selFm .fm-sub{margin:var(--sp-2) 0 var(--sp-1);font-size:var(--fs-label);color:var(--txt-mute);letter-spacing:var(--ls-label)}
 /* 成员行:配方抄 .card(点选/选中态),但压到 --fs-label 一档 —— 这里是从属列表,不该和右栏主读数抢注意力 */
-#fmInfo .fm-mem{display:flex;align-items:center;gap:var(--sp-2);padding:2px var(--sp-1);
+#selFm .fm-mem{display:flex;align-items:center;gap:var(--sp-2);padding:2px var(--sp-1);
   border:var(--bw) solid transparent;border-radius:var(--r-sm);
   font-size:var(--fs-label);cursor:pointer;user-select:none}
-#fmInfo .fm-mem:hover{background:var(--srf-hover);border-color:var(--line-ctl)}
-#fmInfo .fm-mem.sel{background:var(--srf-sel);border-color:var(--state-select)}
-#fmInfo .fm-mem .dot{flex:none;width:8px;height:8px;border-radius:var(--r-dot);background:var(--txt-dim)}
-#fmInfo .fm-mem .dot.sail{background:var(--acc)}
-#fmInfo .fm-mem .nm{flex:1;min-width:0;color:var(--txt-read);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#fmInfo .fm-mem .fg{flex:none;min-width:12px;font-size:var(--fs-micro);color:var(--state-select);letter-spacing:var(--ls-label)} /* 旗舰标记,占位固定宽度免得成员行左右跳 */
-#fmInfo .fm-mem .hpbar{flex:none;width:46px;margin:0} /* 复用 .hpbar,只改尺寸与外边距,不另起一套血条 */
+#selFm .fm-mem:hover{background:var(--srf-hover);border-color:var(--line-ctl)}
+#selFm .fm-mem.sel{background:var(--srf-sel);border-color:var(--state-select)}
+#selFm .fm-mem .dot{flex:none;width:8px;height:8px;border-radius:var(--r-dot);background:var(--txt-dim)}
+#selFm .fm-mem .dot.sail{background:var(--acc)}
+#selFm .fm-mem .nm{flex:1;min-width:0;color:var(--txt-read);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#selFm .fm-mem .fg{flex:none;min-width:12px;font-size:var(--fs-micro);color:var(--state-select);letter-spacing:var(--ls-label)} /* 旗舰标记,占位固定宽度免得成员行左右跳 */
+#selFm .fm-mem .hpbar{flex:none;width:46px;margin:0} /* 复用 .hpbar,只改尺寸与外边距,不另起一套血条 */
 /* 操作区:结构恒定只建一次,所以这里不用管重渲。按钮沿用 .btn/.qbtn(.btn 是为了拿到 .btn.on 的开启态) */
 #fmActs{flex:none;padding:var(--sp-2)}
 #fmActs .fm-grp{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-1);margin-bottom:var(--sp-1)}
@@ -579,6 +590,9 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
    grid 的每行列数恒定,不存在"末行元素少所以更宽"这回事。 */
 #fmActs .fm-grp.g-act{display:grid;grid-template-columns:repeat(3,1fr)}
 #fmActs .fm-grp.g-act .qbtn{min-width:0}
+/* FL1 跟随两钮同理走 grid(2 列):flex-wrap 下两个 flex:1 的钮在窄轨里会被抻成各占半屏宽 */
+#fmActs .fm-grp.g-act2{display:grid;grid-template-columns:repeat(2,1fr)}
+#fmActs .fm-grp.g-act2 .qbtn{min-width:0}
 /* 参数行(扇面/密度/档位):一行放得下就不许换行;步进钮不参与伸缩,否则 260px 里它们会把中间的读数挤没 */
 #fmActs .fm-grp.g-par{flex-wrap:nowrap}
 #fmActs .fm-grp.g-par .qbtn{flex:0 0 auto;min-width:28px;padding:2px var(--sp-2)}

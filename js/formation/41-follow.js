@@ -1,0 +1,99 @@
+"use strict";
+/* ============ 通用跟随层 ============
+   FL1。本层【不认识"编队"这个概念】,它只回答一件事:"这艘船跟着谁、保持什么相对位置"。
+   三种用法都是同一个原语的特例:
+     · 船跟船       followSet(a, b, [dx,dy,0])
+     · 成员跟旗舰   编队 mode='follow' 时,每个成员 followSet(m, flag, m.fmSlot)
+     · 编队跟编队   跟随方每艘船 followSet(m, 目标旗舰, 队间偏移 + 自己的阵位偏移)
+   —— 所以"被动跟随旗舰"确实就是"编队约束下的一群跟随",而"编队跟编队"就是"带队间偏移的一群跟随"。
+
+   【数据】s.follow = {tid: 目标舰 id, off:[x,y,z] 目标局部系里的相对位, ang: 本跟随关系的平滑航向}
+   刻意存【舰 id 而不是对象引用】:94-demo 的快照要序列化,持对象会循环引用;目标阵亡后靠每次解析时判 dead。
+   ang 存在【跟随关系上】而不是目标舰上:同一编队的成员输入相同、限速相同,演化天然同步,又不污染被跟随者。
+
+   【相对位是"局部系"的】off 会按目标当前航向旋转。所以"跟在正后方"这件事在目标掉头后仍然成立。 */
+
+const FOLLOW_TIP_V = 600;   // 槽位切向线速度缺省上限(km/s)。调用方通常会传更贴切的值(编队传编队速度)
+const FOLLOW_W_FLOOR = 0.05; // 角速度地板(rad/s):半径极大时不至于慢到跟不上掉头
+
+function followSet(s, target, off) { // 建立/更新跟随关系。off 在目标的【局部系】里
+  if (!s || !target || s === target) return false;
+  /* 【ang 必须沿用】—— 只在关系【首次建立】或换了目标时才置 NaN。
+     fmApplyFollow 会对全体成员无条件重调本函数,而 fmReslot 尾部又无条件调 fmApplyFollow,
+     于是"成员阵亡 / 调阵型参数 / 设旗舰 / 就地成形 / 名册漂移兜底"五个触发点每次都会重建跟随关系。
+     若每次都把 ang 抹成 NaN,下一拍 followAim 直接把航向对齐到目标当前航向 —— wMax 限速整拍不参与,
+     跟随点沿半径 R 的圆瞬移 R·Δθ(默认参数 R≈2.9 万 km,Δθ=90° 时一拍跳 4.5 万 km),
+     stepFollow 又以 cap=Infinity 满推去追,正是本文件头注释记着的 DS195 现场。 */
+  const old = s.follow;
+  const keep = (old && old.tid === target.id && isFinite(old.ang)) ? old.ang : NaN;
+  s.follow = { tid: target.id, off: [off[0] || 0, off[1] || 0, off[2] || 0], ang: keep };
+  return true;
+}
+
+function followClear(s) { if (s) s.follow = null; }
+
+function followTargetOf(s) { // id → 舰对象。目标不存在/已阵亡都返回 null(悬空引用的唯一防线)
+  const f = s && s.follow;
+  if (!f) return null;
+  const t = ships.find(x => x.id === f.tid);
+  return (t && !t.dead && t !== s) ? t : null;
+}
+
+function followHeading(t) { // 目标当前航向:速度矢量优先,静止回落船头(全项目通用配方)
+  const v = V.len(t.vel);
+  return v > 5 ? Math.atan2(t.vel[1], t.vel[0]) : Math.atan2(t.facing[1], t.facing[0]);
+}
+
+function followAim(s, t, dt, tipV) {
+  /* 算这一拍的【跟随点】及其【世界速度】。
+     航向按 tipV 限速平滑 —— DS195 的核心教训:不限速的话,半径 R 的槽位在目标掉头时会以 ω·R 横扫,
+     跟随者物理上追不上,结果全队画超大圈。tipV 是"槽位切向线速度上限",由调用方按跟随者的实际能力给
+     (编队传编队速度)。FM1 那版把它硬编码成 1500 km/s,而 DD 巡航只有 800 —— 实测掉队 4.8 万 km。 */
+  const f = s.follow;
+  const aim = followHeading(t);
+  if (!isFinite(f.ang)) f.ang = aim;
+  let dA = aim - f.ang;
+  while (dA > Math.PI) dA -= 2 * Math.PI;
+  while (dA < -Math.PI) dA += 2 * Math.PI;
+  const R = Math.hypot(f.off[0], f.off[1]);
+  const cap = (isFinite(tipV) && tipV > 0) ? tipV : FOLLOW_TIP_V;
+  const wMax = R > 1 ? Math.max(FOLLOW_W_FLOOR, cap / R) : 0.5;
+  const prev = f.ang;
+  f.ang += Math.max(-wMax * dt, Math.min(wMax * dt, dA));
+  const w = dt > 0 ? (f.ang - prev) / dt : 0; // 本拍角速度,喂下面的刚体速度合成
+  const ca = Math.cos(f.ang), sa = Math.sin(f.ang);
+  const off = rotSlot(f.off, ca, sa);
+  return {
+    p: [t.pos[0] + off[0], t.pos[1] + off[1], t.pos[2] + off[2]],
+    // 跟随点的【世界速度】= 目标平移 + 刚体旋转切向 ω×r(二维展开)。z 不参与旋转,与 rotSlot 同口径。
+    v: [t.vel[0] - w * off[1], t.vel[1] + w * off[0], t.vel[2]],
+  };
+}
+
+function stepFollow(s, dt, tipV) {
+  /* 跟随的一拍。目标没了返回 false,调用方据此落回下一个分支(所以跟随不会把船卡死在一个不存在的目标上)。 */
+  const t = followTargetOf(s);
+  if (!t) return false;
+  const a = followAim(s, t, dt, tipV);
+  /* 【瞄准跟随点本身,不加拦截前置量】。
+     FM1 那版加了前置点 p + v·tau(tau = err/(brakeCurveSpd(err)+50)),理由是"纯追踪追一个横移的点必画追踪圈"。
+     但那个理由的真正病根是它的 vT 传错了 —— 传的是旗舰速度 flag.vel 而不是【跟随点自己的速度】(带 ω×r 那一项),
+     于是在跟随点的运动系里残留一个控制器抵消不掉的漂移,才画圈。
+     vT 传对之后,相对系里 want_rel = dir·brakeCurveSpd(err) —— 这是一个对 err 单调收敛的一阶系统,
+     根本不需要前置量;而前置量自己会形成一个稳态偏差:令 d 为稳态超前距离,平衡条件是
+       brakeCurveSpd(d) + 50 = |v|  ⇒  d = CFG.arrive + (|v|-50)² / (2·thrust·GUIDE_EFF)
+     巡航 800 km/s 时约【2.1 万公里】—— 探针 FLOW28 实测跟随者顶到了跟随点前面,该跟 3 万只剩 2 万。
+     cap 传 Infinity 是刻意的:跟随者必须能超过自己的巡航档才追得回队形,速度由刹车曲线单调收敛,不会飞掉。
+     useCurve=true 让 brakeCurveSpd 自带的 CFG.arrive 偏置形成保位死区,跟随者到位后不会在槽位上抖。 */
+  guideTo(s, a.p, a.v, Infinity, true, dt);
+  return true;
+}
+
+function followDist(s) { // 当前离跟随点还有多远(UI 读数用,纯读,不推进 ang)
+  const t = followTargetOf(s);
+  if (!t) return -1;
+  const f = s.follow;
+  const ang = isFinite(f.ang) ? f.ang : followHeading(t);
+  const off = rotSlot(f.off, Math.cos(ang), Math.sin(ang));
+  return Math.hypot(t.pos[0] + off[0] - s.pos[0], t.pos[1] + off[1] - s.pos[1], t.pos[2] + off[2] - s.pos[2]);
+}

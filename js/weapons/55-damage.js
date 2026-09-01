@@ -12,8 +12,8 @@ function applyDamage(s,dmg,src,kind){ // RANGE1 加第 4 形参 kind('mac'/'miss
   s.hp-=dmg;
   if(dmg>0)s.roeCd=8; // v125 ROE:受击触发还击冷却(tight克制模式被攻击才还击)
   if(s.hp<=0){
-    if(s.formation&&typeof fmOnDeath==='function')fmOnDeath(s); // FM1:必须在清 orders 之前——编队路径就是旗舰的 orders,旗舰阵亡要把整条航线过继给顺位旗舰(顺带处理"人数塌到2以下就地解散")
-    s.hp=0;s.dead=true;s.orders=[];s.formation=null;s.brake=false;
+    if(s.formation&&typeof fmOnDeath==='function')fmOnDeath(s); // FL1:把它从编队名册摘掉 + 人数收口(<2 艘整个删掉,防零成员僵尸编队)。必须在下面清 formation 之前
+    s.hp=0;s.dead=true;s.orders=[];s.formation=null;s.follow=null;s.brake=false; // FL1 清自己的跟随;【别人指向它的】跟随靠 followTargetOf 判 dead 兜底(同 lockedTarget 的口径)
     s.vel=[0,0,0];s.flame=0;s.sideFlame=0;s.turnAim=null;s.speedCmd=null;s.turnTarget=null; // 残骸冻结,不再移动
     if(s.lockedTarget)s.lockedTarget=null;
     selected=selected.filter(id=>id!==s.id); // 残骸不可选中

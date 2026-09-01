@@ -18,7 +18,7 @@ function stepShipsMotion(dt){
     if(s.formation){ // KIMI146:同一编队每 tick 只结算一次,成员共享这一份上下文
       FC=formTickCtx.get(s.formation);
       if(!FC){FC=stepFormation(s.formation,dt);formTickCtx.set(s.formation,FC);}
-      if(FC.dissolved){if(typeof fmDisband==='function')fmDisband(s.formation);s.formation=null;s.fmSlot=null;FC=null;} // 编队塌了(只剩一艘/全灭):必须走 fmDisband 而不是只清本舰——编队实体挂在 groups[g].fm 上,不摘掉的话 fmGet 还会返回一个没有任何成员的僵尸 F
+      if(FC.dissolved){if(typeof fmDelete==='function')fmDelete(s.formation.id);s.formation=null;s.fmSlot=null;FC=null;} // 编队塌了(只剩一艘/全灭):必须走 fmDelete 把整个槽位摘掉,而不是只清本舰——不摘的话 formations[k] 会留下一个零成员的僵尸编队,书签栏据此照常显示
     }
     if(s.brake){ // 停车指令:v119 期望速度=0,导引内核自动反推
       steerToVel(s,[0,0,0],dt);
@@ -80,7 +80,14 @@ function stepShipsMotion(dt){
       }
       guideTo(s,cur.pos,[0,0,0],cap,cur.type!=='pass',dt); // DS191:统一导引律(stop 曲线停靠);RF12:pass 的 cap 已含拐角限速+接近段
     }
-    else if(s.turnTarget){ // RF6 有调头令但无移动令:只保持惯性滑行(不推进不刹车),转机头的事已移交下方【朝向层】
+    else if(s.follow&&typeof stepFollow==='function'&&stepFollow(s,dt,typeof fmTipV==='function'?fmTipV(s):cruiseOf(s))){
+      /* FL1 跟随分支。位置是选出来的:必须排在 orders 【之后】——
+         FM1 把成员跟随排在 orders 之前,于是写给成员的令永远不被消费、冻在那里、脱队那一刻突然复活
+         (CLAUDE.md FM1 节的"成员不持令"不变量就是为这个打的补丁)。排在后面,语义是
+         【有令先走令,令空才跟随】,不产生僵尸令,也就不需要那条不变量了。
+         又必须排在 patrol / 空闲锁定漂移 / 默认停车三支【之前】,否则那三支会抢走速度指令。
+         stepFollow 返回 false(目标没了/已阵亡)时整个条件为假,自然落到下面的分支,不会把船卡死。 */
+    }else if(s.turnTarget){ // RF6 有调头令但无移动令:只保持惯性滑行(不推进不刹车),转机头的事已移交下方【朝向层】
       // 改前这一支自己转机头,而它排在 s.orders.length 之后 —— 有移动命令时整支走不到,所以 V 转向必须先清空 orders 才生效
       // (71-keys 的 turn_cmd 确实是这么做的),语义实际是"取消移动、原地滑行调头"。朝向与速度矢量在太空里本就解耦,没有理由串行。
     }else if(s.patrol&&s.patrol.length){ // 巡逻:路径点首尾循环
@@ -101,7 +108,7 @@ function stepShipsMotion(dt){
     // DS171 M3:driftFire 承接 lockPlayer 职能(60s限时)——命令照走,非硬机动段机头归瞄准(全向找窗口,对准1.1°即自动开火);硬机动段(刹车/爬行/调头)机头让位(v130机动可靠性不劣化);T收编为纯指定(有令船不抢机头,窗口自然出现才打)
     if(s.lockedTarget&&!s.lockedTarget.dead&&s.lockedTarget.side!==s.side&&s.macDmg>0){
       if(s.driftFire){s.driftFireT=(s.driftFireT||0)-dt;if(s.driftFireT<=0){s.driftFire=false;}} // 60s限时
-      const idle=!s.orders.length&&!s.formation&&!s.turnTarget&&!s.brake;
+      const idle=!s.orders.length&&!s.formation&&!s.follow&&!s.turnTarget&&!s.brake; // FL1:跟随中的舰不算空闲,不许被战斗转向抢机头
       if(idle||(s.driftFire&&!s.crawling&&!s.turnTarget&&!s.brake)){ // 硬机动段让位
         applyHeading(s,V.norm(V.sub(macPred(s,s.lockedTarget),s.pos)),dt); // RF10
       }

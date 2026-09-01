@@ -165,7 +165,19 @@ function updateFcPanel(force){ // 由 updateSelPanel 每 20 帧重渲(与卡片�
   // (面板高亮 + 地图亮蓝色数据链,见 83-hud drawFcChain),再点同一根 = 退出。方条下方只放当前序列的简要详情。
   const list=document.getElementById('fcList');
   if(!list)return;
-  const s=selBlue()[0];
+  /* FL1 火控计算机改成【条件显示】:只有"恰好选中一艘舰 且 这艘舰真有火控序列"时才出现。
+     开关放在这里而不是 updateSelPanel 里,是因为本函数是唯一每拍必经的火控入口 ——
+     updateSelPanel 有 6 个提前 return(导弹群/单导弹/信标/未选中/编队/单舰),而它在【函数开头】无条件调本函数,
+     所以那 6 支全都走得到这一段。放到 updateSelPanel 尾部的话有五支漏掉,面板会赖在屏幕上。
+     display 必须写 'block' 不能写 'flex':#fcSec 内部是块级的 .fc-hd + #fcList 两行,flex 会把它们挤成一行。
+     刻意【不早退】:隐藏期间照常把内容渲进 #fcList(setHTMLStable 内容没变就一个节点都不动,零开销),
+     好让它重新显示的那一瞬内容就是对的,而不是等下一个 20 帧拍子。
+     #fcList 的委托与 #fcPickBtn 都挂在静态节点上,父容器隐不隐藏与它们无关,不用动。 */
+  const _sb=selBlue();
+  const hasFc=_sb.length===1&&typeof fcSeqsOf==='function'&&(fcSeqsOf(_sb[0])||[]).length>0;
+  const sec=document.getElementById('fcSec');
+  if(sec){const d=hasFc?'block':'none';if(sec.style.display!==d)sec.style.display=d;}
+  const s=_sb[0];
   if(!s){setHTMLStable(list,'<div class="fc-empty">未选中我方舰船</div>',force);return;}
   if(typeof fcSeqsOf!=='function'){setHTMLStable(list,'<div class="fc-empty">火控引擎未就绪</div>',force);return;}
   const seqs=fcSeqsOf(s)||[];
@@ -213,7 +225,14 @@ function updateSelPanel(){ // frame 低频调用(每20帧,与 updateCardsStatus 
   const title=document.getElementById('selTitle');
   const ciN=document.getElementById('ciName'),ciC=document.getElementById('ciCls'),ciSp=document.getElementById('ciSpec');
   if(!box||!title)return;
-  updateFcPanel(); // RF5 火控面板刷新点放在这里(不是函数末尾):本函数下面有 5 个提前 return(导弹群/导弹组/信标/空选),放末尾会漏掉四条分支
+  updateFcPanel(); // RF5 火控面板刷新点放在这里(不是函数末尾):本函数下面有 6 个提前 return(导弹群/导弹组/信标/空选/编队),放末尾会漏掉五条分支
+  /* FL1 右栏两块信息区二选一:#selInfo(单舰/导弹/空选)与 #selFm(编队)。
+     先在【全部提前 return 之前】统一复位成"单舰那一套",下面只有编队那一支去翻过来 ——
+     否则每加一条早退分支都要记得关一次 #selFm,漏一处就会出现"选了导弹群,右栏还挂着上一支编队的读数"。
+     display 一律写具体值('block'),不能写 '':#selFm 的 html 内联 style 是 display:none,''会退回去。 */
+  const fmBox=document.getElementById('selFm');
+  if(fmBox&&fmBox.style.display!=='none')fmBox.style.display='none';
+  if(box.style.display!=='block')box.style.display='block';
   // 导弹群/导弹组/信标视图:Shift+点选或框选导弹(选择机制在 70-input) → 右栏切实时弹道数据,底栏切固定参数,按钮组置灰
   // RF4a 框选聚合:selMissileHits 里存活组>1 → 汇总视图(状态/目标/引导分布);代表组=剩余弹头最多者
   const aliveHits=(selMissileHits||[]).filter(p=>!p.done&&p.type==='missile');
@@ -289,10 +308,51 @@ function updateSelPanel(){ // frame 低频调用(每20帧,与 updateCardsStatus 
     return;
   }
   const sel=selBlue();
+  /* FL1【编队分支】:选中集合恰好等于某支编队的全部活船 → 右栏整块换成【编队实时数据】,不再显示单舰读数。
+     判据直接复用 44-orders 下命令时用的同一个 fmSameShips(RTS 语义:选中什么就是什么),
+     免得"面板认它是编队、右键下令却按散船走"这种两份口径。渲染交给 87-fmbar 的 fmbStat/fmbInfo ——
+     那两个函数是编队读数的唯一出处,书签栏与本面板共用,不在这里另抄一份算法。 */
+  const _F=(typeof fmSameShips==='function')?fmSameShips(sel):null;
+  if(_F&&typeof fmbStat==='function'&&typeof fmbInfo==='function'){
+    const st=fmbStat(_F);
+    if(st){
+      title.textContent=(typeof fmName==='function')?fmName(_F):('编队'+_F.id);
+      box.style.display='none';                       // 单舰信息区让位
+      if(fmBox)fmBox.style.display='block';           // 具体值,不能写 ''
+      fmbInfo(st);
+      if(ciN)ciN.textContent=(typeof fmName==='function')?fmName(_F):('编队'+_F.id);
+      if(ciC)ciC.textContent=st.list.length+' 艘 · '+(st.mode==='follow'?'跟随态':'阵位态');
+      if(ciSp)ciSp.innerHTML=[
+        ['舰数',st.list.length],
+        ['编队速度',st.uncap?'不限':Math.round(st.spd)],
+        ['战力',Math.round(st.hpFrac*100)+'%'],
+        ['离位',(st.dev/1000).toFixed(1)+'k'],
+      ].map(it=>`<span class="fi"><i>${it[0]}</i><b>${it[1]}</b></span>`).join('');
+      updateCmdBar(sel); // 开关仍作用于全部选中蓝舰(多选语义),编队自然也吃得到
+      return;
+    }
+  }
   if(!sel.length){
-    title.textContent='未选中';
+    /* FL1 未选中态从一句操作提示改成【舰队总览】—— 这块地方本来就常驻在屏幕上,空着是浪费。
+       五个读数全部现算现读,一个仿真字段都不写(本面板与 87-fmbar 同一条铁律)。
+       "已点亮敌舰"沿用 84-scene 那块画布读数的判据(side==='red' && litBlue),只多一个 !dead ——
+       战损舰不出 ships 数组(55-damage 只置 dead=true),不排掉的话打光了敌人读数还挂着。 */
+    const blue=ships.filter(s2=>s2.side==='blue'&&!s2.dead);
+    const fmN=(typeof fmAll==='function')?fmAll().length:0;
+    let hp=0,mhp=0;
+    blue.forEach(s2=>{hp+=Math.max(0,s2.hp);mhp+=s2.maxHp||0;});
+    const fr=mhp>0?Math.max(0,Math.min(1,hp/mhp)):0;
+    const lit=ships.filter(s2=>s2.side==='red'&&!s2.dead&&s2.litBlue).length;
+    title.textContent='舰队总览';
     if(ciN)ciN.textContent='—';if(ciC)ciC.textContent='—';if(ciSp)ciSp.innerHTML='';
-    box.innerHTML='<div class="sub" style="text-align:center;padding:14px 0">左键点选 · 拖拽框选<br>右键移动 · Shift+右键路径点</div>';
+    box.innerHTML=`
+      <div class="hpbar"><i style="width:${fr*100}%;background:${fr>0.35?'var(--state-ok)':'var(--state-warn)'}"></i></div>
+      <div class="row"><span class="k">我方舰船</span><span class="v">${blue.length} 艘</span></div>
+      <div class="row"><span class="k">编队</span><span class="v">${fmN} 支</span></div>
+      <div class="row"><span class="k">总结构</span><span class="v">${Math.round(fr*100)}% · ${Math.round(hp)}/${Math.round(mhp)}</span></div>
+      <div class="row"><span class="k">已点亮敌舰</span><span class="v">${lit} 艘</span></div>
+      <div class="row"><span class="k">时间倍速</span><span class="v">x${rate}${running?'':' · 暂停'}</span></div>
+      <div class="sub" style="text-align:center;padding:var(--sp-3) 0 2px">左键点选 · 拖拽框选<br>右键移动 · Shift+右键路径点</div>`;
     updateCmdBar(sel);return;
   }
   const s=sel[0]; // 多选时信息显示第一艘,标题注明数量;操作走 updateCmdBar 的全选语义

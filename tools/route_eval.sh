@@ -40,7 +40,7 @@ var ROUTES=[
 ];
 
 function evalRoute(pts){
-  s.formation=null;s.brake=false;s.lockedTarget=null;s.turnTarget=null;s.turnNoFm=false;
+  s.formation=null;s.follow=null;s.brake=false;s.lockedTarget=null;s.turnTarget=null;s.turnNoFm=false; // FL1 补 follow:残留跟随会让被复位的船去跟一艘真实舰,静默污染评测
   s.crawling=false;s.coasting=false;
   s.pos=[0,0,0];s.vel=[0,0,0];s.facing=[1,0,0];s.orders=[];
   for(var k=0;k<pts.length;k++)addWaypoint([s],pts[k]);

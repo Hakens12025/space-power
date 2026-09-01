@@ -15,7 +15,7 @@ function fmSpd(F, mates) {
      慢船本来就跑不到平均值(cruiseOf 会把它钳在自己的档位上),它只是晚一点到自己的终点;
      而终点位置【不受影响】—— 每艘船在下令那一刻就拿到了自己的绝对终点,不是实时算出来的。
      KIMI151b 的两条特殊语义保留:speedCmd===0(定速停)拉停全队;===-1(不限速)不参与平均。 */
-  const list = mates || fmMembers(F);
+  const list = mates || fmShips(F);
   let sum = 0, n = 0, stop = false;
   for (const m of list) {
     if (m.speedCmd === 0) { stop = true; continue; }
@@ -28,12 +28,12 @@ function fmSpd(F, mates) {
 }
 
 function stepFormation(F, dt) {
-  const mates = fmMembers(F);
+  const mates = fmShips(F);
   if (mates.length < 2) return { dissolved: true }; // 只剩一艘(或全灭)→ 不成队
   const flag = fmFlag(F, mates);
   if (!flag) return { dissolved: true };
-  // 名册漂移兜底:战损/加员/换旗后重排槽位,好让【下一条】编队令按新人数分配阵位。
-  // FM2 起这次重排不会让任何船动 —— 它们飞的是已经算死的绝对终点,不是实时槽位(FM1 时会当场瞬移)。
+  // 名册漂移兜底:战损/加员/换旗后重排槽位,好让【下一条】编队令按新人数分配阵位,并让跟随关系跟上。
+  // 阵位态下这次重排不会让任何船动(它们飞的是已经算死的绝对终点);跟随态下它会当场改变跟随点 —— 这是对的。
   if (F.flagId !== flag.id || F.n !== mates.length) fmReslot(F, mates, flag);
   return { mates, flag, spd: fmSpd(F, mates), dissolved: false };
 }

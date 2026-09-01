@@ -12,23 +12,7 @@ infoEl.addEventListener('pointerdown',e=>{ // 舰船状态栏按钮:按下即触
 function renderFleet(){
   updateInfo();
   // 卡片列表(结构变化才重建,避免周期性重建吞掉点击)
-  fleetListEl.innerHTML='';shipCards={};groupCards={}; // v119:同步清空编组卡引用
-  for(const g in groups){const grp=groups[g];if(grp&&grp.ships.length){const gd=document.createElement('div');gd.className='group';
-    const fsShip=ships.find(s=>s.id===grp.flagship);
-    gd.innerHTML=`<b>编组${g}</b> · ${grp.ships.length}艘${fsShip?' · 旗舰:'+fsShip.name:''}<div class="g-tac"></div><div style="font-size:10px;color:var(--dim);margin-top:2px">单击旗舰/双击全队/Ctrl跳镜</div>`;
-    groupCards[g]={root:gd,tacEl:gd.querySelector('.g-tac')};
-    gd.addEventListener('click',e=>{
-      if(e.ctrlKey){ // Ctrl点击:转镜头到组中心
-        const ss=grp.ships.map(i=>ships.find(s=>s.id===i)).filter(Boolean);
-        if(ss.length){let x=0,y=0;ss.forEach(s=>{x+=s.pos[0];y+=s.pos[1];});cam.x=x/ss.length;cam.y=y/ss.length;}
-        return;
-      }
-      selected=fsShip?[fsShip.id]:grp.ships.slice(); // 单击:选中旗舰
-      updateInfo();updateCardsStatus();
-    });
-    gd.addEventListener('dblclick',()=>{selected=grp.ships.slice();updateInfo();updateCardsStatus();}); // 双击:选中全舰队
-    gd.addEventListener('contextmenu',e=>{e.preventDefault();openCardCtx(selected.map(i=>ships.find(s=>s.id===i)).filter(Boolean),e,{group:g});});
-    fleetListEl.appendChild(gd);}}
+  fleetListEl.innerHTML='';shipCards={}; // FL1:编组卡整套已删(SIMPLE_UI 下被 css RF2 隐藏清单按死:DOM 照建、事件照挂、每 20 帧照算读数,玩家却看不到也点不到;职能已被左轨编队书签栏取代)
   ships.forEach(s=>{
     const c=document.createElement('div');c.className='card'+(selected.includes(s.id)?' sel':'');
     const st0=shipState(s); // v119:状态集合从无'待机',按停车/已毁判灭点
@@ -294,24 +278,6 @@ function updateCardsStatus(){
     c.stEl.textContent=(tk?(tk.state==='active'?taskIcon(tk.type):'⏸')+' ':'')+(s.driftFire&&s.driftFireT>0?'🎯'+Math.ceil(s.driftFireT)+'s ':'')+st; // DS171 M3:漂移射击倒计时标签
     c.dotEl.classList.toggle('sail',st!=='停车'&&st!=='☠已毁'); // v119:状态集合从无'待机'
     c.root.classList.toggle('sel',selected.includes(id));
-  }
-  // 编组卡战术信息(实时)
-  for(const g in groupCards){const c=groupCards[g];const grp=groups[g];if(!grp||!grp.ships.length)continue;
-    const gm=grp.ships.map(id=>ships.find(s=>s.id===id)).filter(Boolean);
-    if(!gm.length)continue;
-    let cx=0,cy=0,avgV=0;
-    gm.forEach(m=>{cx+=m.pos[0];cy+=m.pos[1];avgV+=V.len(m.vel);});
-    cx/=gm.length;cy/=gm.length;avgV/=gm.length;
-    // FM1:编队的全部实时读数都从【旗舰的 s.orders】来 —— F.dest/F.queue/F.arrived 那套第二航线结构已删除。
-    // 原变量名 dest 实为"任一编队成员",改叫 flag(旗舰)才是它现在的含义。
-    const F=fmGet(g), flag=F?fmFlag(F):null;
-    const fmActive=!!F;                                     // 成队与否(改前是 gm.some(m=>m.formation),同义但绕一圈)
-    const fmMoving=!!(flag&&flag.orders.length);            // 在动还是待命 = 旗舰有没有令(取代 fmArrived)
-    const qLen=flag?Math.max(0,flag.orders.length-1):0;     // 还剩几段 = 当前段之外的余令数
-    const arrived=!fmActive&&gm.every(m=>!m.orders.length&&V.len(m.vel)<30);
-    c.tacEl.innerHTML=(fmMoving?'<span class="mv">▶编队移动中</span>':'●待命')+
-      ` ${Math.round(cx/1000)}k,${Math.round(cy/1000)}k · 速${Math.round(avgV)}`+
-      (fmMoving?` → ${Math.round(flag.orders[0].pos[0]/1000)}k,${Math.round(flag.orders[0].pos[1]/1000)}k${qLen?` · 剩${qLen}段`:''}`:'');
   }
   updateInfo();
   if(typeof updRangePanel==='function')updRangePanel(); // RANGE1 靶场面板搭本函数的低频车(24-main 每 20 帧一次);编辑器下本函数不被调用,天然不刷——正确,编辑器里的舰是另一套对象

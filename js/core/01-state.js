@@ -1,7 +1,7 @@
 "use strict";
 /* RF1: 拆自 js/02-state.js 全文,并收编 09 的 cv,ctx 与 18-replay 的 adminMode/selfPlay/selfPlayPrevAdmin(跨系统全局集中声明)。纯移动无逻辑改动。 */
 /* ================= 全局状态 ================= */
-let ships=[], groups={}, selected=[], simTime=0, projectiles=[], victoryShown=false, defeatShown=false;
+let ships=[], formations={}, selected=[], simTime=0, projectiles=[], victoryShown=false, defeatShown=false; // FL1:groups 编组名册层已删除,编队是唯一的一层(formations['1'..'4'],见 js/formation/42-formation.js)
 let running=false, rate=1, acc=0, last=0; // 默认开局暂停,按空格开始
 const RATES=[0.5,1,2,5,10,20,50]; // v131:变速预设整数档位(不再二分出小数)
 const cam={x:0,y:0,zoom:1};
@@ -16,7 +16,7 @@ let bindings={}; let recording=null;
 let panelState={hud:true,fleet:true,log:true};
 let CAM_MULT=2;                       // 相机平移速度倍数(0.5x~20x)
 let history=[], replay={active:false,idx:0}, prevRunning=true, nextSnapT=1; // KIMI146:nextSnapT=下一快照时间(原snapAcc每帧只存一次,高倍率下快照密度塌陷)
-let shipCards={}, groupCards={};      // 卡片DOM引用,id -> {root,stEl,dotEl}; 编组卡 g -> {root,tacEl}
+let shipCards={};      // 卡片DOM引用,id -> {root,stEl,dotEl}。FL1:groupCards(编组卡)随编组名册层一并删除
 let pendingMove=null,pendingType='stop'; // 卡片右键命令后,等待地图点选目标(pass/stop)
 let pendingTurn=null;                    // V键:船头转向命令,等待地图点选方向
 let pendingTurnNoFm=false;               // v139:Shift+V 单纯转头(不带动编队阵型)
@@ -38,6 +38,9 @@ let selNet=null;                      // v125:选中的导弹网(点中网内任
 let pendingManual=null;               // v125:手动模式点选(选中网→点目标舰,网内所有组强制打该目标)
 let pendingMine=null;                 // 布雷点选状态(选中的导弹组等待点击地图定布雷点)
 let pendingBeacon=null;               // 信标发射点选(侦察舰等待点击地图定部署点)
+let pendingFmFollow=null;             // FL1 编队菜单【跟随目标】待命态:存编队 id('1'..'4'),等玩家点地图上任一友舰
+                                      // → command/70-input 的左键分支调 fmbFollowPick(舰)(render/87-fmbar 导出),右键取消。
+                                      // 与 pendingMove/pendingTurn/pendingBeacon 一族同一套配方(showTip 提示 + 点一下就消耗掉)
 let pendingIntercept=null;            // 拦截弹主动发射点选({ship,mode:'fire'|'screen'})
 let demoRec={on:false,data:[],lastT:-1}; // demo录制:本局数据快照,导出供分析
 const RPL_INTERVAL=1.0;               // 每1秒存一次回放快照

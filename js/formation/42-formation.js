@@ -1,123 +1,247 @@
 "use strict";
-/* ============ 编队生命周期层 ============
-   FM1 重做。本层【只做一件事】:维护"编组名册 → 编队实体"的映射,以及编队实体自身的建/散/换旗/重排/调参。
-   本层不碰运动、不写 s.orders、不认识鼠标 —— 下令是 44-orders 的事,每 tick 的共享量结算是 43-step 的事,
-   槽位数学是 40-slots 的事(纯函数)。
+/* ============ 编队实体层(单层) ============
+   FL1 一层化。改前是【编组名册 groups[g] + 编队实体 F】两层,靠 fmSyncGroup 来回同步,
+   还带出一个"编组存在但编队不存在"的中间态(12 处代码在处理它:未成队/就地成形/不足2艘/…)。
+   现在只有一层:
 
-   【编队实体 F】全队共享同一个对象(KIMI146 的核心思想,保留);成员各自只存自己的【未旋转槽位】s.fmSlot:
-     F = {id, gid, P:{fan,spacing,gap}, fmAng, n}
-   改前的 F 还有 dest / queue / curType / arrived —— 那是一套【平行于 s.orders 的第二航线结构】。
-   正是它把编队隔离在运动内核之外(routeCap 速度倒推 / cornerSpd 曲率限速 / rrStart 航线细化 / face 到达朝向
-   四样全都吃不到),也是 DS186/DS193/DS194/KIMI151 四层补丁("隐形 dest""锚点跟随""队长模式")的根源。
-   现在【编队路径的唯一真相 = 旗舰的 s.orders】,上述四个字段连同四层补丁一并删除。
+     formations['1'..'4'] = F = {
+       id,                       // '1'..'4',既是书签排序键也是 Ctrl+数字的槽位
+       name,                     // 书签显示名
+       ships:[shipId...],        // 名册(顺序即分槽顺序)
+       flagship,                 // 旗舰 id —— 阵型锚点,也是"跟随态"里被跟随的那一艘
+       P:{fan,spacing,gap},      // 阵型参数,每编队一份
+       mode:'slot'|'follow',     // 见下
+       follow:{tid,off}|null,    // 本编队整体跟随另一艘船/另一个编队(队间偏移在目标局部系里)
+       ang, dest0,               // 上次下令算出的阵型朝向 / 上一个编队级目标点(都只用来算下一段朝向)
+       n, flagId                 // 重排脏标记
+     }
 
-   【编队 ⟺ 编组】一一对应,F 挂在 groups[g].fm 上,F.gid 反查名册。
-   改前 moveFormation 的 else 分支还会把"异编队 + 散船的混合选择"强行重排成一个无名编队 —— 那种编队
-   没有编组号,书签栏拿不到它、玩家也没法再选中它。现在混合选择一律各自散船移动,要成队请先 Ctrl+数字编组。 */
+   【编队存在 ⟺ formations[k] 存在 ⟺ 名册里至少 2 艘活船】。少于 2 艘就整个删掉,没有中间态。
+
+   【两种模式】
+     slot   (FM2) 下令那一刻把编队级目标点展开成每艘船的绝对终点,各自走散船内核。精确、终点可见可拖。
+     follow (FL1) 只有旗舰接移动令,成员通过 41-follow 持续跟随旗舰阵位。像 RTS 里"跟着队长走"。
+   两种可随时切换(编队菜单)。切换只改 s.follow 的有无,不动任何已下的令。 */
 
 let fmSeq = 0;
 
-function fmGet(g) { // 取编组 g 的编队实体(没有则 null)
-  const grp = groups[g];
-  return (grp && grp.fm) || null;
+function fmGet(k) { const F = formations[String(k)]; return F || null; }
+
+function fmAll() { // 有活船的编队,按槽位号排序(书签顺序必须稳定,否则每拍抖)
+  const out = [];
+  for (const k in formations) { const F = formations[k]; if (F && fmShips(F).length) out.push(F); }
+  out.sort((a, b) => { const x = Number(a.id), y = Number(b.id); return (isFinite(x) && isFinite(y)) ? x - y : (a.id < b.id ? -1 : 1); });
+  return out;
 }
 
-function fmMembers(F) { // 编队现役成员(活着且 formation 指向本 F)
-  return ships.filter(x => !x.dead && x.formation === F);
-}
+function fmOf(s) { return (s && s.formation) || null; }
+function fmName(F) { return (F && F.name) || ('编队' + (F ? F.id : '?')); }
 
-function fmFlag(F, mates) { // 旗舰 = 名册里的 flagship;它没了就顺位取第一个并【回写名册】(名册是旗舰的唯一真相源)
-  const list = mates || fmMembers(F);
+function fmShips(F) { // 名册 → 活着的舰对象(顺序按名册)
+  if (!F) return [];
+  return F.ships.map(id => ships.find(x => x.id === id)).filter(x => x && !x.dead);
+}
+function fmMembers(F) { return ships.filter(x => !x.dead && x.formation === F); } // 实际挂着本编队的(战损那一拍会与名册短暂不同)
+
+function fmFlag(F, mates) { // 旗舰;它没了就顺位取第一个并回写(名册是旗舰的唯一真相源)
+  if (!F) return null;
+  const list = mates || fmShips(F);
   if (!list.length) return null;
-  const grp = groups[F.gid];
-  let flag = grp ? list.find(s => s.id === grp.flagship) : null;
-  if (!flag) { flag = list[0]; if (grp) grp.flagship = flag.id; }
-  return flag;
+  let f = list.find(s => s.id === F.flagship);
+  if (!f) { f = list[0]; F.flagship = f.id; }
+  return f;
 }
 
 function fmReslot(F, mates, flag) { // 重算槽位(建队/战损/加员/换旗/调参 五种情形共用)
-  const list = mates || fmMembers(F);
+  const list = mates || fmShips(F);
   if (!list.length) return;
   const fl = flag || fmFlag(F, list);
   if (!fl) return;
   formationSlots(list, F.P, fl.id).forEach(({ s, offset }) => { s.fmSlot = offset.slice(); });
   F.n = list.length;
-  F.flagId = fl.id; // 只作"换旗要重排"的脏标记用,不是旗舰真相源(真相在 groups[gid].flagship)
+  F.flagId = fl.id;
+  fmApplyFollow(F); // 槽位变了,跟随关系里的相对位也要跟着变
 }
 
-function fmEnsure(g) { // 取编组 g 的编队;没有就【就地建队】(不移动、不下令 —— 建队与下令解耦)
-  const grp = groups[g];
-  if (!grp || !grp.ships.length) return null;
-  const list = grp.ships.map(id => ships.find(x => x.id === id)).filter(x => x && !x.dead);
-  if (list.length < 2) return null; // 单艘不成队(散船语义更可预测)
-  let F = grp.fm;
-  if (!F) {
-    F = { id: ++fmSeq, gid: String(g), P: fmParamsNew(), ang: NaN, n: 0, flagId: null };
-    grp.fm = F;
-  }
-  list.forEach(s => { s.formation = F; });
-  fmReslot(F, list);
+function fmCreate(k, list) { // Ctrl+数字:按选中舰建/覆盖编队。少于 2 艘 = 清掉这个槽位
+  const alive = (list || []).filter(s => s && !s.dead);
+  fmDelete(k);
+  if (alive.length < 2) { if (typeof log === 'function') log('编队' + k + ' 已清空', ''); return null; }
+  const F = {
+    id: String(k), name: '编队' + k, ships: alive.map(s => s.id), flagship: alive[0].id,
+    P: fmParamsNew(), mode: 'slot', follow: null, ang: NaN, dest0: null, n: 0, flagId: null, seq: ++fmSeq,
+  };
+  alive.forEach(s => fmDetach(s)); // 先从各自的旧编队摘干净,再挂新的(一艘船只能在一个编队里)
+  formations[String(k)] = F;
+  alive.forEach(s => { s.formation = F; });
+  fmReslot(F, alive);
+  if (typeof log === 'function') log(alive.length + ' 艘 → ' + fmName(F), '');
   return F;
 }
 
-function fmDisband(F) { // 解散:成员各自回散船态(不下令 —— 要不要停车由调用方决定)
+function fmDetach(s) { // 把一艘船从它【当前】所属的编队里摘掉
+  const old = s && s.formation;
+  if (!old) return;
+  const i = old.ships.indexOf(s.id);
+  if (i >= 0) old.ships.splice(i, 1);
+  s.formation = null; s.fmSlot = null;
+  if (typeof followClear === 'function') followClear(s);
+  if (old.flagship === s.id) old.flagship = old.ships[0] || null;
+  fmSettle(old);
+}
+
+function fmSettle(F) { // 人数变化后收口:少于 2 艘就整个删掉,否则重排
   if (!F) return;
-  fmMembers(F).forEach(s => { s.formation = null; s.fmSlot = null; });
-  const grp = groups[F.gid];
-  if (grp && grp.fm === F) delete grp.fm;
+  const alive = fmShips(F);
+  if (alive.length < 2) { fmDelete(F.id); return; }
+  fmReslot(F, alive);
+}
+
+function fmDelete(k) { // 删除一个编队槽位(成员回散船态)
+  const F = formations[String(k)];
+  if (!F) return;
+  ships.forEach(s => { if (s.formation === F) { s.formation = null; s.fmSlot = null; if (typeof followClear === 'function') followClear(s); } });
+  delete formations[String(k)];
+}
+
+function fmFollowChainHas(startShip, F) {
+  /* 从 startShip 出发沿"它所属编队跟随谁"的链走下去,看会不会绕回 F。用来拒绝循环跟随。
+     A 跟 B、B 跟 A 时两边的 off 都是"我要在你正后方十万公里",几何上没有不动点:
+     stepFollow 的 cap 传 Infinity,速度只受刹车曲线约束(误差 1e5 时约 2300 km/s,是 DD 巡航的近 3 倍),
+     两队会互相追逐着以超巡航速度成对飘出战场且永不收敛。 */
+  let cur = startShip, guard = 0;
+  while (cur && guard++ < 16) {
+    const cf = cur.formation;
+    if (!cf) return false;
+    if (cf === F) return true;
+    if (!cf.follow) return false;
+    cur = ships.find(x => x.id === cf.follow.tid && !x.dead);
+  }
+  return true; // 走满 16 跳还没到头:当成有环,拒绝
+}
+
+function fmOnFollowTargetLost(dead) {
+  /* 某艘船阵亡时,把【别的编队指向它】的跟随关系收拾掉。
+     F.follow 存的是舰 id,而"跟随一个编队"实现成"跟随它的旗舰" —— 旗舰阵亡在战斗里是常态。
+     不处理的话:followTargetOf 因 t.dead 返回 null → stepFollow 返回 false → 跟随方全队一路落到
+     31-step-ships 最后的 else,steerToVel(0),当场原地刹停,而语义要求它改跟对方的新旗舰。 */
+  const wasF = dead.formation;                       // 它生前所属的编队(fmOnDeath 里已先调本函数)
+  const heir = wasF ? fmFlag(wasF, fmShips(wasF).filter(x => x !== dead)) : null;
+  for (const k in formations) {
+    const F = formations[k];
+    if (!F || !F.follow || F.follow.tid !== dead.id) continue;
+    if (heir && heir !== dead && fmShips(wasF).filter(x => x !== dead).length >= 2 && !fmFollowChainHas(heir, F)) {
+      F.follow.tid = heir.id;                        // 对方编队还在 → 改跟它的顺位新旗舰
+      if (typeof log === 'function') log(fmName(F) + ' 跟随目标阵亡,改跟 ' + heir.name, 'warn');
+    } else {
+      F.follow = null;                               // 对方编队也没了 → 解除跟随
+      if (typeof log === 'function') log(fmName(F) + ' 跟随目标已失,解除跟随', 'warn');
+    }
+    fmApplyFollow(F);
+  }
 }
 
 function fmOnDeath(s) {
-  /* 由 weapons/55-damage 在把船判死【之前】调用:人数塌到 2 艘以下就当场 fmDisband。
-     31-step-ships 那条解散兜底只在"还有成员被遍历到"时才跑,最后一批成员同拍全灭时它进不去,
-     会留下一个零成员的僵尸 F 挂在 groups[g].fm 上(书签栏据此报"已成队",而所有按钮静默空转)。
-     FM2 起【不需要航线过继】了 —— 每艘船在下令那一刻就拿到了自己的绝对终点,
-     旗舰阵亡对其余舰的航线毫无影响,它们照常飞完各自的那一条。 */
+  /* 由 weapons/55-damage 在把船判死【之前】调用。不需要"航线过继":
+     slot 模式下每艘船持有自己的绝对终点,旗舰死了别人照飞;follow 模式下顺位换旗后 fmApplyFollow 会把
+     成员改跟新旗舰。这里只做两件事:把它从名册摘掉、人数收口(<2 艘整个删掉,防零成员僵尸编队)。 */
+  fmOnFollowTargetLost(s); // 先收拾【别人指向它】的跟随(这时它的 formation 还在,能算出顺位继承者)
   const F = s && s.formation;
   if (!F) return;
-  const rest = fmMembers(F).filter(x => x !== s);
-  if (rest.length < 2) fmDisband(F);
+  const i = F.ships.indexOf(s.id);
+  if (i >= 0) F.ships.splice(i, 1);
+  if (F.flagship === s.id) F.flagship = F.ships[0] || null;
+  const rest = fmShips(F).filter(x => x !== s);
+  if (rest.length < 2) fmDelete(F.id); else fmReslot(F, rest);
 }
 
-function fmLeave(s) { // 单舰脱队(不动名册:它还在编组里,只是不再占阵位)
-  if (!s || !s.formation) return;
-  const F = s.formation;
-  const rest = fmMembers(F).filter(x => x !== s);
-  s.formation = null; s.fmSlot = null;
-  if (rest.length < 2) fmDisband(F); else fmReslot(F, rest);
-}
-
-function fmSetParam(F, k, v) { // 调阵型参数 → 立刻重排。参数【每编队一份】(改前是三个全局变量,一改全场编队一起变)
-  if (!F || !F.P || !(k in F.P)) return;
-  F.P[k] = fmClamp(k, v);
+function fmSetFlagship(F, s) { // 设为旗舰:改名册 + 按新锚点重排(跟随态下这一步会把成员改跟新旗舰)
+  if (!F || !s || F.ships.indexOf(s.id) < 0) return;
+  F.flagship = s.id;
   fmReslot(F);
+  if (typeof log === 'function') log(s.name + ' 设为 ' + fmName(F) + ' 旗舰', '');
 }
 
-function fmSetPreset(F, n) { // 快捷档:护卫防空圈 1连 / 2叠 / 3漏 —— 只设间距 gap,不碰扇面与疏密
-  if (!F) return;
-  fmSetParam(F, 'gap', aaRingRef() * 2 * (n === 1 ? 1.0 : n === 2 ? 0.7 : 1.4));
+function fmSetParam(F, k, v) { if (!F || !F.P || !(k in F.P)) return; F.P[k] = fmClamp(k, v); fmReslot(F); }
+function fmSetPreset(F, n) { if (F) fmSetParam(F, 'gap', aaRingRef() * 2 * (n === 1 ? 1.0 : n === 2 ? 0.7 : 1.4)); }
+
+/* ---------------- 模式与跟随 ---------------- */
+
+function fmSetMode(F, mode) {
+  if (!F || (mode !== 'slot' && mode !== 'follow')) return;
+  const was = F.mode;
+  F.mode = mode;
+  /* 切进跟随态要把成员的旧令清掉:那些令是阵位态下发的【编队级】终点,留着的话成员会先飞去旧终点
+     (跟随分支排在 orders 之后),模式切换看上去就"没生效"。旗舰的令保留 —— 跟随态下正是它在带路。 */
+  if (mode === 'follow' && was !== 'follow' && typeof orderClear === 'function') {
+    const flag = fmFlag(F);
+    fmShips(F).forEach(m => { if (m !== flag) { orderClear(m); resetForNewOrders(m); } });
+  }
+  fmApplyFollow(F);
+  if (typeof log === 'function') log(fmName(F) + ' → ' + (mode === 'follow' ? '跟随态(成员跟旗舰)' : '阵位态(下令即算终点)'), '');
 }
 
-function fmSyncGroup(g) { // 名册变了(编组/换旗/脱离/战损)→ 让编队跟上;编组塌到 1 艘以下就解散
-  const grp = groups[g];
-  if (!grp) return;
-  const F = grp.fm;
-  if (!F) return;
-  const list = grp.ships.map(id => ships.find(x => x.id === id)).filter(x => x && !x.dead);
-  if (list.length < 2) { fmDisband(F); return; }
-  fmMembers(F).forEach(s => { if (!grp.ships.includes(s.id)) { s.formation = null; s.fmSlot = null; } }); // 被踢出名册的
-  // 从【别的编队】挖过来的船:必须先把原编队摘干净。原来只改 s.formation,原 F 会变成零成员的僵尸 —— 它还挂在
-  // groups[旧组].fm 上,书签栏据此永远显示"已成队",而整队停车/阵型参数按钮全都静默空转(fmFlag 返回 null)。
-  list.forEach(s => { const old = s.formation; if (old && old !== F) fmLeave(s); });
-  list.forEach(s => { s.formation = F; });
-  fmReslot(F, list);
+function fmRadius(F) { let r = 0; fmShips(F).forEach(s => { const sl = s.fmSlot || [0, 0, 0]; r = Math.max(r, Math.hypot(sl[0], sl[1])); }); return r; }
+
+function fmFollowShip(F, target) {
+  /* 让整个编队 F 跟随一艘船(跟随一个编队 = 跟随它的旗舰)。
+     队间距自动算:两队阵型半径之和 + 一个防空圈直径。偏移在目标的【局部系】里,
+     所以目标掉头时跟随方绕到新的正后方,而不是留在原来的世界方位上。 */
+  if (!F || !target || target.formation === F) return false;      // 自跟随
+  if (fmFollowChainHas(target, F)) { if (typeof log === 'function') log(fmName(F) + ' 不能跟随:会形成循环跟随', 'warn'); return false; }
+  const tf = fmOf(target);
+  F.follow = { tid: target.id, off: [-(fmRadius(F) + (tf ? fmRadius(tf) : 0) + aaRingRef() * 2), 0, 0] };
+  fmApplyFollow(F);
+  if (typeof log === 'function') log(fmName(F) + ' 跟随 ' + (tf ? fmName(tf) : target.name), '');
+  return true;
 }
 
-function fmOffOf(s) { // 本舰在【当前阵型】里应处的偏移(锚点=旗舰实时位置)。只给编队菜单的"离位"读数用。
-  // FM2:运动上已经用不到它了 —— 每艘船在下令那一刻就拿到了自己的绝对终点,不再实时追随任何东西。
-  // F.ang 是【上次下令算出的阵型朝向】,不是每 tick 平滑的量(DS195 那套限速旋转随成员跟随一起删了)。
+function fmFollowStop(F) { if (!F) return; F.follow = null; fmApplyFollow(F); }
+
+function fmApplyFollow(F) {
+  /* 把编队的"跟随意图"翻译成每艘船的 s.follow。三种情形在这里收口:
+       · 编队整体跟随别人 → 全员(含旗舰)跟目标,相对位 = 队间偏移 + 自己的阵位偏移(两者同在目标局部系)
+       · 编队内部跟随态   → 成员跟旗舰,相对位 = 自己的阵位偏移;旗舰不跟随(它执行 orders)
+       · 阵位态且不跟别人 → 全员清掉跟随
+     两者可叠加:B 跟 A 且 B 内部是跟随态时,B 的旗舰跟 A、B 的成员跟 B 旗舰,天然成立(下面的分支顺序保证)。 */
+  if (!F || typeof followSet !== 'function') return;
+  const mates = fmShips(F);
+  if (!mates.length) return;
+  const flag = fmFlag(F, mates);
+  let tgt = null;
+  if (F.follow) {
+    tgt = ships.find(x => x.id === F.follow.tid && !x.dead) || null;
+    if (!tgt || tgt.formation === F) F.follow = null; // 目标没了、或目标就在本队里(自跟随)→ 自动解除
+  }
+  mates.forEach(m => {
+    const slot = m.fmSlot || [0, 0, 0];
+    if (F.mode === 'follow' && m !== flag) followSet(m, flag, slot);          // 内部跟随优先:成员永远跟自家旗舰
+    else if (F.follow && tgt) followSet(m, tgt, [F.follow.off[0] + slot[0], F.follow.off[1] + slot[1], F.follow.off[2] + (slot[2] || 0)]);
+    else followClear(m);
+  });
+}
+
+function fmTipV(s) { // 跟随限速用的"槽位切向线速度上限":编队里的船用编队速度,散船用自己的巡航档
+  const F = fmOf(s);
+  if (F && typeof fmSpd === 'function') { const v = fmSpd(F, fmShips(F)); if (isFinite(v) && v > 0) return v; }
+  return cruiseOf(s);
+}
+
+function fmOffOf(s) { // 本舰在当前阵型里应处的偏移(锚点=旗舰实时位置)。编队读数用,纯读
   const F = s && s.formation;
   if (!F || !s.fmSlot) return [0, 0, 0];
   const a = isFinite(F.ang) ? F.ang : 0;
   return rotSlot(s.fmSlot, Math.cos(a), Math.sin(a));
+}
+
+function fmSameShips(list) {
+  /* list 恰好等于某个编队的全部活船 → 返回该编队。RTS 语义:选中什么就命令什么,选一部分不算编队命令。 */
+  if (!list || list.length < 2) return null;
+  for (const k in formations) {
+    const F = formations[k]; if (!F) continue;
+    const alive = fmShips(F);
+    if (alive.length !== list.length) continue;
+    if (alive.every(s => list.indexOf(s) >= 0)) return F;
+  }
+  return null;
 }

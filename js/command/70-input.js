@@ -38,7 +38,7 @@ const GHOST_MODES={
 function ghostArm(sx,sy,shift){
   const sel=(typeof selBlue==='function')?selBlue():[];
   const busy=pendingMove||pendingTurn||pendingIntercept||pendingBeacon||pendingManual||pendingMine||selWeapon
-    ||pendingTaskPatrol||pendingTaskIntercept||pendingTaskDeny||pendingTaskEscort||pendingTaskStrike;
+    ||pendingTaskPatrol||pendingTaskIntercept||pendingTaskDeny||pendingTaskEscort||pendingTaskStrike||pendingFmFollow; // FL1 跟随点选待命时不许右键长按虚影插进来
   if(sel.length!==1||busy||editMode)return false;
   const s=sel[0], mode=shift?'append':'move';
   const w=worldAt(sx,sy), f=GHOST_MODES[mode].from(s);
@@ -238,9 +238,8 @@ function onMouseDown(e){
     // 现在统一交给命令层:整组选中 → 编队(旗舰领令,成员跟阵位);非整组 → 各自散船走。口径与右键移动一致。
     const n=pendingMove.length;
     if(pendingType==='pass'){ // 路径点保持追加语义(orderPush=原样追加,不像 orderAppend 那样把新点定成 stop)
-      const gid=pendingMove.length>1?sameGroupShips(pendingMove):null;
-      const F=gid!==null?fmEnsure(gid):null;
-      if(F)fmPush(F,[w[0],w[1],0],'pass'); // 走命令层:fmPush 会顺带清成员残留令(自己拼 orderPush 会漏掉这步,44 文件头声明它是唯一写 orders 的地方)
+      const F=fmSameShips(pendingMove); // FL1:sameGroupShips/fmEnsure 已删,判定收口到 fmSameShips(严格全等)
+      if(F)fmPush(F,[w[0],w[1],0],'pass'); // 走命令层:跟随态下 fmPush 只给旗舰下令并清成员残留令(自己拼 orderPush 会漏掉这步)
       else pendingMove.forEach(s=>orderPush(s,[w[0],w[1],0],'pass')); // FM2:不脱队
     }else moveShips(pendingMove,[w[0],w[1],0],'stop');
     log(`${n} 艘 → 新增${tag} ${Math.round(w[0]/1000)}k,${Math.round(w[1]/1000)}k`,'');
@@ -253,6 +252,12 @@ function onMouseDown(e){
     if(launchInterceptors(pi.ship,w))log(`🛡 ${pi.ship.name} 布设防空屏@${Math.round(w[0]/1000)}k,${Math.round(w[1]/1000)}k(剩${Math.round(pi.ship.interceptor/16)}组)`,'');
     else log(`${pi.ship.name} 拦截弹不足`,'warn');
     pendingIntercept=null;hideTip();
+    return;
+  }
+  if(e.button===0&&pendingFmFollow){ // FL1 编队跟随目标点选:书签菜单点【跟随目标】进入待命,再点一艘我方舰
+    const t=(typeof shipAt==='function')?shipAt(sx,sy):null;
+    if(t&&!t.dead&&t.side==='blue'&&typeof fmbFollowPick==='function')fmbFollowPick(t); // 它自己清 pendingFmFollow + hideTip + updFmBar
+    else{pendingFmFollow=null;hideTip();log('跟随目标:请点一艘我方舰船','warn');}
     return;
   }
   if(e.button===0&&pendingBeacon){ // 信标部署点:点击地图发射
@@ -340,8 +345,9 @@ function onMouseDown(e){
     hideCtx();
   }else if(e.button===2){ // 右键:单击=直接移动,按住350ms=呼出命令菜单,拖动=平移
     if(e.ctrlKey){ctrlArm=false;hideCtx();return;} // RF5 Ctrl+右键退化成空操作(只清全弹臂):被拆的那一支既不置 panning 也不置 rmbClick,【从不下移动命令】;不在这里 return 的话它会掉进本分支,沿用旧习惯 Ctrl+右键点敌舰的玩家会整队清空航线直冲敌舰坐标。敌舰目标由中键快速交战独占。清全弹臂这一手必须留——不清,松开 Ctrl 会触发 fire_all(71-keys:229)误发射
-    if(pendingMine||pendingBeacon||pendingIntercept||pendingManual||pendingMove||pendingTurn||selWeapon){ // 点选待命状态:右键取消(原只覆盖布雷/信标/拦截,pendingManual提示"右键取消"却不生效反而发出移动命令)
-      pendingMine=null;pendingBeacon=null;pendingIntercept=null;pendingManual=null;pendingMove=null;pendingTurn=null;pendingTurnNoFm=false;selWeapon=null;updSelWeaponTip();
+    if(pendingMine||pendingBeacon||pendingIntercept||pendingManual||pendingMove||pendingTurn||selWeapon||pendingFmFollow){ // 点选待命状态:右键取消(原只覆盖布雷/信标/拦截,pendingManual提示"右键取消"却不生效反而发出移动命令);FL1 补 pendingFmFollow——不补的话右键会落到下面的 rmbClick 分支,反而给全队下一条移动令
+      pendingMine=null;pendingBeacon=null;pendingIntercept=null;pendingManual=null;pendingMove=null;pendingTurn=null;pendingTurnNoFm=false;selWeapon=null;pendingFmFollow=null;updSelWeaponTip();
+      if(typeof updFmBar==='function')updFmBar(); // 让【跟随目标】那个钮熄灭
       hideTip();log('取消','');return;
     }
     panning={sx,sy,cx:cam.x,cy:cam.y,moved:false};

@@ -69,20 +69,8 @@ function ceaseFire(){ // X/快捷栏:停火,解除所有选中舰锁定
   sel.forEach(s=>{s.lockedTarget=null;s.lockPlayer=false;});
   log(`${sel.length} 艘 停火(解除锁定)`,'');
 }
-function assignGroup(g,sel){ // v127 编组覆盖重编:Ctrl+数字 = 取消该编号原所有船,只按当前选中重新编组
-  const newIds=sel.filter(s=>!s.dead).map(s=>s.id);
-  // FM1:删名册【之前】必须先解散编队实体 —— 编队实体挂在 groups[g].fm 上,delete groups[g] 之后
-  // 就再也没人找得到它,被踢出的旧船会留着 formation 指向一个没人管的孤儿 F。原先那段"逐船查还在不在别的组、
-  // 在就裸清 s.formation"的循环只清了 formation、不清 s.fmSlot(槽位残留),也不会让剩下的队重排。
-  // fmDisband 把成员的 formation/fmSlot 一并清干净,所以那段循环整体由它取代。
-  if(groups[g]){
-    if(typeof fmDisband==='function'&&groups[g].fm)fmDisband(groups[g].fm);
-    delete groups[g];
-  }
-  if(!newIds.length){log(`编组${g} 已清空`,'');renderFleet();return;}
-  groups[g]={ships:newIds,flagship:newIds[0],name:'编队'+g}; // 首艘默认旗舰;name 供书签栏显示
-  if(typeof fmSyncGroup==='function')fmSyncGroup(g); // 名册变了让编队跟上(编组 >=2 艘跟上,<2 艘解散)
-  log(`${newIds.length} 艘 → 编组${g}(覆盖重编)`,'');renderFleet();
+function fmAssign(g,sel){ // Ctrl+数字:按当前选中舰建/覆盖编队 g。FL1 一层化后建队只有 fmCreate 一个入口 —— 它自己处理"删旧槽位 / 把船从旧队摘干净 / 分槽 / 不足2艘则清空"并打日志,这里只做转发
+  fmCreate(g,sel);
 }
 function rateMove(dir){ // v131:变速在预设整数档位间移动(rate不在档位时就近归位)
   let i=RATES.indexOf(rate);
@@ -158,9 +146,12 @@ function doAction(id){
           // FM1 复核修正:本动作叫"删除最后一个命令点",对散船是 orders.pop()。改前对编队调 fmHalt,
           // 而 fmHalt 会 orderClear 旗舰 —— 玩家画 6 个点想撤掉最后一个,结果 6 个一次全没,且不可撤销。
           // 新架构下编队航线就是旗舰的 orders,直接 pop 旗舰末令,两种选择语义终于一致。
+          // FL1 口径更新:这条只对【跟随态】严格成立(成员 orders 恒空,航线确实只在旗舰身上);
+          // 【阵位态】下 fmSpread 在下令那一刻把终点展开给了每一艘船,各自持令,本分支只撤旗舰那一条 ——
+          // 语义缺口已报给用户,本轮不动(改它要连带定义"整队撤一个点"到底撤谁的,属于行为设计不是清理)。
           if(halted.has(s.formation))return; // 多选同一编队只处理一次,免得 n 虚高
           halted.add(s.formation);
-          const fl=(typeof fmFlag==='function')?fmFlag(s.formation):null;
+          const fl=fmFlag(s.formation); // FL1 新签名 fmFlag(F,mates?):mates 省略时它自己按名册取活船
           if(fl&&fl.orders.length){fl.orders.pop();n++;}
         }else if(s.orders.length){ // 普通命令点:删最后一个
           s.orders.pop();
@@ -174,16 +165,19 @@ function doAction(id){
   }
   if(/^grp_assign_/.test(id)){
     const g=+id.slice(-1);
-    assignGroup(g,selectedShips());
+    fmAssign(g,selectedShips());
   }
   if(/^grp_sel_/.test(id)){
     const g=+id.slice(-1);
+    const F=fmGet(g);
+    if(!F)return; // FL1:该槽位没有编队就什么都不做(改前会把 selected 清成空数组——按到空槽位等于取消选中,是个误操作陷阱)
+    const mates=fmShips(F); // 名册里还活着的船,顺序即分槽顺序
+    if(!mates.length)return;
     const now=performance.now();
-    if(lastDigit&&lastDigit.code===id&&now-lastDigit.time<400){ // 双击:跳镜头
-      const ids=(groups[g]&&groups[g].ships)||[];if(ids.length){const ss=ids.map(i=>ships.find(s=>s.id===i)).filter(Boolean);
-        let x=0,y=0;ss.forEach(s=>{x+=s.pos[0];y+=s.pos[1];});cam.x=x/ss.length;cam.y=y/ss.length;}
+    if(lastDigit&&lastDigit.code===id&&now-lastDigit.time<400){ // 双击:跳镜头到编队几何中心
+      let x=0,y=0;mates.forEach(s=>{x+=s.pos[0];y+=s.pos[1];});cam.x=x/mates.length;cam.y=y/mates.length;
     }else{
-      selected=((groups[g]&&groups[g].ships)||[]).slice();renderFleet();
+      selected=mates.map(s=>s.id);renderFleet();
     }
     lastDigit={code:id,time:now};
   }
