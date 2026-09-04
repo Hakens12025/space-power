@@ -1526,17 +1526,11 @@ t('FLOW27_FMBAR',function(){
      解散留到最后 —— 前面每一条都需要 F 还活着。 */
   var all=document.querySelectorAll('#fmActs [data-fma]'),names=[],q;
   for(q=0;q<all.length;q++)names.push(all[q].getAttribute('data-fma'));
-  var later=[],clicked=0;
-  var spBefore=F.P.spacing,spDen=spBefore,sp1=-1,sp2=-1,sp3=-1; /* FM3-2:参数只剩 spacing(防空环站距乘数);疏 ×1.25 / 三档预设 0.6 / 1.0 / 1.6(简报第 90 行;FM3-2b 由 0.2 改回)。疏密一减一加会转回原值,所以按钮各自取样 */
+  var later=[],clicked=0; /* FM4b 菜单重排删了密度/档位/站位行(F.P.spacing 的旋钮全在编组控制页 #fmPage),这里不再采 spacing 样 */
   for(q=0;q<names.length;q++){
     var n=names[q];
     if(n==='disband'){later.push(n);continue;}
-    if(!fm27hit(document.querySelector('#fmActs [data-fma="'+n+'"]')))continue;
-    clicked++;
-    if(n==='den-')spDen=F.P.spacing;
-    if(n==='p1')sp1=F.P.spacing;
-    if(n==='p2')sp2=F.P.spacing;
-    if(n==='p3')sp3=F.P.spacing;
+    if(fm27hit(document.querySelector('#fmActs [data-fma="'+n+'"]')))clicked++;
   }
   for(q=0;q<later.length;q++){if(fm27hit(document.querySelector('#fmActs [data-fma="'+later[q]+'"]')))clicked++;}
   /* 遍历里又点了一次 fol,会把待命态重新挂上;不清掉的话它会带着一条 tip 漏进后面的 RENDER */
@@ -1551,16 +1545,14 @@ t('FLOW27_FMBAR',function(){
   var ok=(tabs0===1&&closed0==='none'&&open1==='flex'&&rows>=6&&mems===3
         &&!!mem&&acts4&&!!elFixed&&mode0==='slot'&&modeF==='follow'&&modeS==='slot'&&armed&&folSet&&folGone
         &&srcX==='snapshot'&&modeX==='fixed'&&noRetake&&motionY==='static'&&srcY==='snapshot'&&modeY==='fixed'&&modeZ==='slot'&&srcZ==='generated'
-        &&names.length>=14&&clicked===names.length /* 当前 15 个(sel cam form halt disband / m-fixed m-slot m-follow / fol folx / den± p1 p2 p3;FM3-2 删了 fan±);下限留一个余量,真正的判据是 clicked===names.length —— 每个钮都点得动、都不抛错 */
-        &&spDen>spBefore+1e-9&&Math.abs(sp1-0.6)<1e-9&&Math.abs(sp2-1.0)<1e-9&&Math.abs(sp3-1.6)<1e-9
+        &&names.length>=9&&clicked===names.length /* FM4b 后 9 个(m-fixed m-slot m-follow / resnap page / fol folx / halt disband);下限留一个余量,真正的判据是 clicked===names.length —— 每个钮都点得动、都不抛错 */
         &&closed1==='none'&&!errs.length);
   return (ok?'ok':'fail')+' 书签数='+tabs0+'(须1) 初始菜单='+closed0+'(须none) 点开后='+open1+'(须flex)'
     +' | #selFm 信息行='+rows+'(须>=6) 成员行='+mems+'(须3;须先让 selected=全队才渲染) 成员行事件已走='+(!!mem)
     +' | 模式/跟随四钮齐全='+acts4+' 模式:'+mode0+' -点跟随-> '+modeF+' -点阵位-> '+modeS+'(须 slot/follow/slot)'
     +' | 固定钮:static下点固定 src='+srcX+'/mode='+modeX+'(须 snapshot/fixed) 跟随中点固定 未重拍='+noRetake+' motion='+motionY+' src='+srcY+' mode='+modeY+'(须 true/static/snapshot/fixed) 再点阵型 mode='+modeZ+' src='+srcZ+'(须 slot/generated)'
     +' 跟随目标待命态已置位='+armed+' 兑现后F.follow指向该舰='+folSet+' 点解除跟随后已清空='+folGone
-    +' | 操作钮点击='+clicked+'/'+names.length+'(须全中且总数>=14)清单=['+names.join(',')+']'
-    +' | 参数确实改到了本编队的 F.P.spacing:'+spBefore.toFixed(2)+' -疏-> '+spDen.toFixed(2)+'(须变大) 三档 '+sp1.toFixed(2)+'/'+sp2.toFixed(2)+'/'+sp3.toFixed(2)+'(须 0.60/1.00/1.60)'
+    +' | 操作钮点击='+clicked+'/'+names.length+'(须全中且总数>=9)清单=['+names.join(',')+']'
     +' | 再点收起='+closed1+'(须none) 解散后再刷10次'
     +' | 运行期错误='+(errs.length?errs.join(' / '):'none');
 });

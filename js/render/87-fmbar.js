@@ -204,87 +204,62 @@ function fmbActsBuild(){
   if(!acts||fmUi.actsBuilt)return;
   // 动作钮走 grid 固定列数:flex-wrap 换行时末行只剩一两个,flex:1 会把它们【各抻成半屏宽】(实拍见过)。
   // grid 每行列数恒定,不存在"末行元素少所以更宽"这回事。参数行是 g-par,一行放得下,禁止换行。
+  /* FM4b 菜单重排(用户令)。三条结构原则:
+       ① 模式在最上面 —— 它决定下面出现什么,读的顺序就该是"先选模式,再看这个模式有什么可调"。
+       ② 中间是【随模式变化】的区域:固定→重拍队形 / 阵型→编组控制 / 跟随→空。
+          用 .fm-hide 类切显隐,不写 style.display —— .fm-grp 有 flex 与 grid 两种布局(g-act/g-act2 是 grid),
+          用 style.display='' 复原会退回 CSS 值倒也对,但 'none'↔'' 这条路在本项目栽过(92/95 都留了注释),类切换没有这个坑。
+       ③ 底部是【三种模式都能用】的固定区:整队跟随另一艘友舰 / 整队停车 / 解散编队(最下)。
+     删掉的:站位四钮(交给编组控制页统一管)、选中全队、跳镜头、就地成形、密度疏/密、档位三挡。
+       · 选中全队 / 跳镜头 有键盘等价物(数字键 1-4 选中编队,双击同一数字键跳镜头),删了不丢功能;
+       · 密度与档位写的是同一个 P.spacing,而它只乘在 st.off(同一插槽内第 2、3 艘船向两侧展开的角步)上 ——
+         舰数不超过插槽数时 st.off 恒为 0,实测 3/6/10/15 艘下 0.6/1.0/1.6/3.0 四挡槽位【逐位相同】,16 艘起才有差别;
+         固定模式更彻底:snapshot 分支根本不读 P,20 艘调 1.0→3.0 槽位变化 0.000000 km。两个都是死钮,一并删。
+         真正管疏密的旋钮是【插槽数量与方位】,那已经在编组控制页里。 */
   acts.innerHTML=
-    '<div class="fm-grp g-act">'+
-      '<button class="btn qbtn" data-fma="sel" title="选中本编队全部舰船(右栏随即切到本编队的实时数据)">选中全队</button>'+
-      '<button class="btn qbtn" data-fma="cam" title="镜头移到编队中心">跳镜头</button>'+
-      '<button class="btn qbtn" data-fma="form" title="按旗舰当前位置重排阵位并让各舰归位(不改航向,只把队形收拢)">就地成形</button>'+
-      '<button class="btn qbtn" data-fma="halt" title="整队停车:逐舰刹停">整队停车</button>'+
-      '<button class="btn qbtn qstop" data-fma="disband" title="解散编队:书签消失,成员回散船态">解散编队</button>'+
-    '</div>'+
-    // FM3-1 模式三选一(改前 FL1 是阵位/跟随两钮):固定=snapshot+static(建队快照,谁站哪认死,到达朝向带各自的朝向差);
-    // 阵型=generated+static(40-slots 条令站位);跟随=*+follow(只有旗舰接令,成员持续跟旗舰阵位)。三者都是 42 两个轴的组合
     '<div class="fm-grp g-par">'+
       '<span class="fm-lb">模式</span>'+
-      '<button class="btn qbtn" data-fma="m-fixed" title="固定 · 保持建队时的相对位置与朝向(再点一次 = 按此刻各舰的相对位置重拍)">固定</button>'+
-      '<button class="btn qbtn" data-fma="m-slot" title="阵型 · 条令站位:下令即把编队目标点展开成每艘船的绝对终点,各自走完整航线内核">阵型</button>'+
-      '<button class="btn qbtn" data-fma="m-follow" title="跟随 · 成员跟旗舰:只有旗舰接移动令,成员持续跟随旗舰的阵位">跟随</button>'+
+      '<button class="btn qbtn" data-fma="m-fixed" title="固定 · 保持建队时的相对位置与朝向">固定</button>'+
+      '<button class="btn qbtn" data-fma="m-slot" title="阵型 · 能力站位:每个插槽 = 一个方位 + 一种能力,按最优指派分配">阵型</button>'+
+      '<button class="btn qbtn" data-fma="m-follow" title="跟随 · 只有旗舰接移动令,成员持续跟随旗舰的阵位">跟随</button>'+
     '</div>'+
-    // FL1 整队跟随另一艘友舰/另一支编队(跟随一支编队 = 跟随它的旗舰)
+    // 随模式变化:固定
+    '<div class="fm-grp g-act2 fm-mode fm-hide" data-fmm="fixed">'+
+      '<button class="btn qbtn" data-fma="resnap" title="按各舰【此刻】的相对位置与朝向重拍队形快照。手动把船摆好之后按它,这个布局就被固定下来">重拍队形</button>'+
+    '</div>'+
+    // 随模式变化:阵型
+    '<div class="fm-grp g-act2 fm-mode fm-hide" data-fmm="slot">'+
+      '<button class="btn qbtn" data-fma="page" title="打开舰队编组控制页:阵型图 / 全队能力评估 / 站位选择 / 逐舰能力表 / 方位盘改插槽">编组控制</button>'+
+    '</div>'+
+    // 随模式变化:跟随 —— 暂时不放东西(用户令)。空块仍然建出来,免得将来要加时又得改结构
+    '<div class="fm-grp g-act2 fm-mode fm-hide" data-fmm="follow"></div>'+
+    // 底部固定区:整队跟随另一艘友舰/另一支编队(跟随一支编队 = 跟随它的旗舰)。三种模式下都能用,所以不随模式显隐
     '<div class="fm-grp g-act2">'+
       '<button class="btn qbtn" data-fma="fol" title="按下后进入点选态,再点地图上任一友舰 → 本编队整队跟着它走(右键取消)">跟随目标</button>'+
       '<button class="btn qbtn" data-fma="folx" title="解除整队跟随,回到自己走">解除跟随</button>'+
     '</div>'+
-    // FM3-2:条令站位改成防空环,参数只剩站距乘数 P.spacing(圈半径由环上舰近防外圈定,不随它变)—— 扇面(fan±)行删掉;密度与档位都作用在它上面。密度与档位各占一行:
-    // 挤在同一行时窄轨(260px)下必然换行,换行后 flex:1 的按钮会被抻成整条(实拍验过)
-    // FM4 站位四选一:每套 = 一张插槽表(方位+能力)+ 一组几何参数。切换会把站距乘数拨到该站位的预设值,
-    // 并丢掉在编组控制页方位盘上改出来的自定义插槽(它是按上一套布局改的,套到新布局上没有意义)。
-    // 只在【阵型】模式下生效 —— 固定模式的槽位来自建队快照,不读站位模板。
-    '<div class="fm-grp g-par">'+
-      '<span class="fm-lb">站位</span>'+
-      '<button class="btn qbtn" data-fma="sc-fixed" title="固定模板 · 14 槽通用布局:5 屏护 + 2 贴身 + 电战 + 3 哨戒 + 主力/硬屏/副中枢">通用</button>'+
-      '<button class="btn qbtn" data-fma="sc-air" title="空中为主 · 圆形屏护:8 个防空位均分 360°,带半径 ×1.15(USF 10B §3232)">空</button>'+
-      '<button class="btn qbtn" data-fma="sc-surf" title="水面为主 · 收拢集火:插槽压向正前,火力位前置,纵深拉长">面</button>'+
-      '<button class="btn qbtn" data-fma="sc-sub" title="水下为主 · 宽而不深:插槽压在两舷,横向拉开 1.85 倍(USF 10B §3231)">下</button>'+
-    '</div>'+
     '<div class="fm-grp g-act2">'+
-      '<button class="btn qbtn" data-fma="page" title="打开舰队编组控制页:阵型图 / 全队能力评估 / 站位选择 / 逐舰能力表 / 方位盘改插槽">编组控制</button>'+
-    '</div>'+
-    '<div class="fm-grp g-par">'+
-      '<span class="fm-lb">密度</span>'+
-      '<button class="btn qbtn" data-fma="den-" title="疏:防空环站距 ×1.25(站更稀,半径不变)">疏</button>'+
-      '<span class="fm-v" data-lf="den">—</span>'+
-      '<button class="btn qbtn" data-fma="den+" title="密:防空环站距 ×0.8(站更密,半径不变)">密</button>'+
-    '</div>'+
-    '<div class="fm-grp g-par">'+
-      '<span class="fm-lb">档位</span>'+
-      '<button class="btn qbtn" data-fma="p1" title="贴身:防空环站距 ×0.6,护卫在环上挤得更密">贴身</button>'+
-      '<button class="btn qbtn" data-fma="p2" title="标准:防空环站距 ×1.0(= 环上最弱近防内圈的直径)">标准</button>'+
-      '<button class="btn qbtn" data-fma="p3" title="疏开:防空环站距 ×1.6,环上站位稀、覆盖面大">疏开</button>'+
+      '<button class="btn qbtn" data-fma="halt" title="整队停车:逐舰刹停">整队停车</button>'+
+      '<button class="btn qbtn qstop" data-fma="disband" title="解散编队:书签消失,成员回散船态">解散编队</button>'+
     '</div>';
   fmUi.actsBuilt=true;
   fmUi.act={
-    den:acts.querySelector('[data-lf="den"]'),
-    p:[1,2,3].map(n=>acts.querySelector('[data-fma="p'+n+'"]')),
     mFixed:acts.querySelector('[data-fma="m-fixed"]'), // FM3-1
     mSlot:acts.querySelector('[data-fma="m-slot"]'),
     mFollow:acts.querySelector('[data-fma="m-follow"]'),
-    sc:FM_STANCE_KEYS.map(k=>acts.querySelector('[data-fma="sc-'+k+'"]')), // FM4 站位四钮,顺序与 FM_STANCE_KEYS 一一对应
+    modes:{}, // FM4b 随模式显隐的三个块,键就是 F.mode 的三个值
     fol:acts.querySelector('[data-fma="fol"]')
   };
+  acts.querySelectorAll('.fm-mode').forEach(el=>{fmUi.act.modes[el.getAttribute('data-fmm')]=el;});
 }
-function fmbActsSync(F){ // 阵型参数【每编队一份】(F.P),所以读数、档位高亮与模式高亮都跟着当前展开的那个编队走
+function fmbActsSync(F){ // 模式高亮与随模式显隐都跟着【当前展开的那个编队】走(阵型参数每编队一份)
   if(!fmUi.act)return;
-  const P=(F&&F.P)?F.P:null;
-  const set=(el,txt)=>{if(el&&el.textContent!==txt)el.textContent=txt;};
-  set(fmUi.act.den,P?P.spacing.toFixed(2):'—');
-  // 档位高亮:FM3-2 三档是 spacing 预设 0.6/1.0/1.6(见 42 的 fmSetPreset),按 spacing 反查落在哪一档;密度钮把它调离预设值就熄灭(改前三档改 gap,按 gap 反查)
-  let which=0;
-  if(P){
-    if(Math.abs(P.spacing-0.6)<1e-9)which=1;
-    else if(Math.abs(P.spacing-1.0)<1e-9)which=2;
-    else if(Math.abs(P.spacing-1.6)<1e-9)which=3;
-  }
-  fmUi.act.p.forEach((b,i)=>{if(b)b.classList.toggle('on',which===i+1);});
-  /* FM4 站位高亮:按 F.P.stance 点亮其中一个。固定模式(snapshot 槽位来源)下四个钮整体压暗 ——
-     那时槽位来自建队快照,站位模板一个字都读不到,点了没有任何可见效果,不压暗会让人以为坏了。 */
-  const stKey=(F&&F.P)?F.P.stance:null, stLive=(F&&F.src==='generated');
-  if(fmUi.act.sc)fmUi.act.sc.forEach((b,i)=>{
-    if(!b)return;
-    b.classList.toggle('on',stLive&&stKey===FM_STANCE_KEYS[i]);
-    b.classList.toggle('qdim',!stLive);
-  });
   const md=F?F.mode:null; // FM3-1 模式三选一:当前那个钮点亮(F.mode 是 42 派生给 UI 的 fixed/slot/follow)
+  // FM4b 随模式显隐:只有与当前模式同名的那个块留下。md 为 null(编队没了)时三块全藏
+  for(const k in fmUi.act.modes){
+    const el=fmUi.act.modes[k];
+    if(el)el.classList.toggle('fm-hide',k!==md);
+  }
   if(fmUi.act.mFixed)fmUi.act.mFixed.classList.toggle('on',md==='fixed');
   if(fmUi.act.mSlot)fmUi.act.mSlot.classList.toggle('on',md==='slot');
   if(fmUi.act.mFollow)fmUi.act.mFollow.classList.toggle('on',md==='follow');
