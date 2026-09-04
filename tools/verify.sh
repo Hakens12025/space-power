@@ -1493,6 +1493,17 @@ t('FLOW27_FMBAR',function(){
   var closed0=menu?menu.style.display:'?';
   fm27hit(tab);
   var open1=menu?menu.style.display:'?';
+  /* FM5b 点书签 = 选中并展开:收起 → 清空选中 → 再点开,selected 必须恰为本编队全部成员。
+     同时 FM5a 的聚合战力条此刻应是满血宽度(fmbStat.hpFrac=1 → '100.0%';条的颜色阈值路径与 #selFm hpbar 同源,这里只验宽度写叶子) */
+  fm27hit(tab);
+  var closedMid=menu?menu.style.display:'?';
+  selected=[];
+  fm27hit(tab);
+  var open2=menu?menu.style.display:'?';
+  var a1=F.ships.slice().sort(),a2=selected.slice().sort();
+  var selSync=a1.length===a2.length&&a1.every(function(x,i){return x===a2[i];});
+  var hpEl=tab?tab.querySelector('.fm-hp'):null;
+  var hpW=hpEl?hpEl.style.width:'?';
   updFmBar();fm27sel();
   var rows=document.querySelectorAll('#selFm .row').length;
   var mems=document.querySelectorAll('#selFm .fm-mem').length;
@@ -1508,6 +1519,8 @@ t('FLOW27_FMBAR',function(){
   var elFol=fm27act(['m-follow']),elSlot=fm27act(['m-slot']),elFtgt=fm27act(['fol']),elFstop=fm27act(['folx']),elFixed=fm27act(['m-fixed']);
   var mode0=F.mode;
   fm27hit(elFol); var modeF=F.mode;
+  var mdEl=document.querySelector('#fmActs [data-lf="mdesc"]'); /* FM5b 模式说明行:文案与 fmbModeText 唯一出处同源 */
+  var mdFol=mdEl?mdEl.textContent:'?';
   fm27hit(elSlot); var modeS=F.mode;
   /* FM3-2:固定钮的行为断言(阶段 1 审查遗留)。static 下点固定 = fmSetSrc('snapshot') 重拍 → src/mode 必须真的翻过去;
      跟随中点固定 = 只切运动轴回 static、【不】重拍(跟随态的实时布局带滞后,不是玩家手调)—— F.snap 引用必须原样、来源不变。
@@ -1543,12 +1556,14 @@ t('FLOW27_FMBAR',function(){
   window.removeEventListener('error',onerr);
   var acts4=!!(elFol&&elSlot&&elFtgt&&elFstop);
   var ok=(tabs0===1&&closed0==='none'&&open1==='flex'&&rows>=6&&mems===3
+        &&closedMid==='none'&&open2==='flex'&&selSync&&parseFloat(hpW)===100&&mdFol==='跟随 · 成员跟旗舰'
         &&!!mem&&acts4&&!!elFixed&&mode0==='slot'&&modeF==='follow'&&modeS==='slot'&&armed&&folSet&&folGone
         &&srcX==='snapshot'&&modeX==='fixed'&&noRetake&&motionY==='static'&&srcY==='snapshot'&&modeY==='fixed'&&modeZ==='slot'&&srcZ==='generated'
         &&names.length>=9&&clicked===names.length /* FM4b 后 9 个(m-fixed m-slot m-follow / resnap page / fol folx / halt disband);下限留一个余量,真正的判据是 clicked===names.length —— 每个钮都点得动、都不抛错 */
         &&closed1==='none'&&!errs.length);
   return (ok?'ok':'fail')+' 书签数='+tabs0+'(须1) 初始菜单='+closed0+'(须none) 点开后='+open1+'(须flex)'
     +' | #selFm 信息行='+rows+'(须>=6) 成员行='+mems+'(须3;须先让 selected=全队才渲染) 成员行事件已走='+(!!mem)
+    +' | FM5a/b 点书签=选中并展开:收起='+closedMid+' 清选后再点开='+open2+' selected同步='+selSync+' 战力条宽='+hpW+'(须none/flex/true/100.0%) 模式说明行='+mdFol+'(须 跟随 · 成员跟旗舰)'
     +' | 模式/跟随四钮齐全='+acts4+' 模式:'+mode0+' -点跟随-> '+modeF+' -点阵位-> '+modeS+'(须 slot/follow/slot)'
     +' | 固定钮:static下点固定 src='+srcX+'/mode='+modeX+'(须 snapshot/fixed) 跟随中点固定 未重拍='+noRetake+' motion='+motionY+' src='+srcY+' mode='+modeY+'(须 true/static/snapshot/fixed) 再点阵型 mode='+modeZ+' src='+srcZ+'(须 slot/generated)'
     +' 跟随目标待命态已置位='+armed+' 兑现后F.follow指向该舰='+folSet+' 点解除跟随后已清空='+folGone
