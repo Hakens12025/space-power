@@ -65,7 +65,7 @@ CHROME="/c/Program Files/Google/Chrome/Application/chrome.exe"
 | `ships/` | `10-hull-geometry`(舰体纯几何,icons_preview 唯一依赖)· `11-classes`(舰种表+TIER 层+`shipStats`/`makeShip`;RF3 后只持舰体/机动/感知,武器数值在 weapons/51-defs) | 舰船属性 |
 | `sensors/` | `20-signature`(CLS_SENS/SENS/engineSig/curSig)· `21-detect`(detectLoop/接触等级/ESM,detT) | 感知模拟 |
 | `physics/` | `30-motion`(steerToVel/guideTo/刹车曲线)· `31-step-ships`(**stepShipsMotion**=每 tick 舰船运动主循环) | 运动内核 |
-| `formation/` | `40-slots`(阵型参数/槽位数学/AA_RING_REF)· `41-groups`(编组管理/moveFormation)· `42-step`(stepFormation 编队级结算) | 编队 |
+| `formation/` | `40-slots`(阵型参数/槽位数学/FM3-2 防空环条令站位 `fmDoctrineSplit`/`screenBearings`)· `41-groups`(编组管理/moveFormation)· `42-step`(stepFormation 编队级结算) | 编队 |
 | `weapons/` | `50-missile-spec` · `51-defs`(**RF3 WPN 定义表+CLS_LOADOUT 配装+resolveLoadout**)· `51-ciws`(ciwsOf/扇面/过载/转向油耗)· `52-fire`(macPred→fireMissiles 发射链+hitFX/threatCorridors/nets 实体)· `53-nets`(网分配器/recomputeNetOff/updateNets)· `54-missiles`(导弹引导 guideSide)· `55-damage`(applyDamage)· `56-step-projectiles`(**stepProjectiles** 五弹型子函数)· `57-step-weapons`(**stepWeaponSystems** 冷却/自动索敌/近防/MAC 自动开火)· `58-firecontrol`(**RF5 火控序列引擎**:fireSeqs 数据模型+fc\* API+`stepFireControl`/`stepFireControlPost`) | 武器 |
 | `bots/` | `60-tasks`(任务系统+taskProcess)· `61-enemy`(enemyAI) | 决策 AI |
 | `command/` | `70-input`(鼠标+选择谓词)· `71-keys`(键位+doAction)· `72-context-menu`(右键菜单+tip)· `73-quickbar` · `74-targeting`(**RF5 Phase B**:悬停准星/吸附状态机 `xh`+`xhTick`、`#xhTip` 敌舰信息卡、中键短按快速交战 `xhQuickEngage`→`fcNew`;**RF5 Phase C 目标轮盘的数据侧**:状态对象 `rad`、开关与三种上下文 `radOpen`/`radClose`、每帧维护 `radTick`(搭 `xhTick` 的车)、扇区解算 `radItems`、提交 `radPick`、翻页 `radPage`——**几何一律调 render/89,自己不算角度**) | 玩家指令 |
@@ -105,7 +105,7 @@ S1 感知节拍(每秒) → S2 网分配节拍(0.5s) → S3 任务AI
 
 **运动内核是期望速度导引。** `steerToVel(s,want,dt)`(physics/30)统一处理推进:推力方向=Δv 方向,加速度对 `need/dt` 钳位所以永不过冲。编队跟随(stepShipsMotion 调 guideTo 前置点)、路径点、刹停三条分支最终都落到它。
 
-**行为门控一律用谓词,不要写 `cls==='XXX'`。** `hasMAC(s)`/`shipValue(s)`/`ciwsOf(s)`/`CLS_ROLE` 在 ships/11 与 weapons/51。舰种改名时硬编码的 `cls===` 会**静默变成永远 false**——不报错,玩法悄悄坏掉,这是本项目踩过的最危险失败模式。
+**行为门控一律用谓词,不要写 `cls==='XXX'`。** `hasMAC(s)`/`shipValue(s)`/`ciwsOf(s)` 在 ships/11 与 weapons/51(FM3-2 起编队的居中/环上分桶也走 40-slots 的 `fmDoctrineSplit(list,anchorId)`,按实例 ciwsOf 能力分与 hasMAC 现算,舰种角色表已删)。舰种改名时硬编码的 `cls===` 会**静默变成永远 false**——不报错,玩法悄悄坏掉,这是本项目踩过的最危险失败模式。
 
 ## 舰种与 Tier 系统
 
@@ -1095,6 +1095,279 @@ FL3 报的"同档位编队航程中收不拢",我提的解法是让旗舰在队�
 
 探针 `FLOW35_FMGEAR` 双向:① 每艘峰值必须等于自己的档位(不被拉到全队平均);
 ② 反向对照 —— 把一艘调慢它必须真的慢,否则"删掉上限"会退化成"谁都不限速"。
+
+## FM3-0 编队两轴解耦(不改行为)(2026-09)
+
+编队三模式重构的阶段 0:**只拆耦合,不改任何行为**。为后面"固定(建队快照)/阵型(条令站位)/跟随"三模式铺路。
+
+### 一、`F.mode` 拆成两个正交轴
+
+```
+F.src    槽位来源  'generated'(条令站位表,本阶段恒此值)| 'snapshot'(建队时相对位置,阶段 1 加)
+F.motion 运动方式  'static'(下令即算终点,走 orders)      | 'follow'(成员持续跟旗舰)
+F.mode   派生值    generated+static→'slot'  snapshot+static→'fixed'  *+follow→'follow'
+```
+
+改前一个 `F.mode` 字符串在**四处各自 if**(42 的 `fmApplyFollow`、`fmFollowReslot` 守卫、43-step、44 的 `fmSpread`),没有统一分发点。
+现在:**逻辑模块(40/41/42 非 UI 函数/43/44)一律只读 `F.src`/`F.motion`,不读 `F.mode`**;`F.mode` 由 `fmModeOf(F)` 派生、在 `fmCreate` 与每次 `fmSetMode` 后同步写入,**只给 UI 读**(87-fmbar / 88-selpanel / 71-keys / 94-demo 快照)。
+`fmSetMode(F,'slot'|'follow')` 入参不变(UI 钮与全部探针都这么调),落盘写的是 `F.motion`。
+分发点收成两处:tick 侧 `43-step` 一处、下令侧 `44 fmSpread` 一处;`fmApplyFollow` 与 `fmFollowReslot` 的守卫改读 `F.motion`。
+硬约束:`grep -rn "\.mode\s*===" js/formation js/physics` 必须为空(注释里也不许出现这个字面,防将来 grep 误报)。
+
+### 二、`fmReassign` 从 42 搬到 44-orders
+
+它是**阵位态下令那一刻**的槽位配对,唯一调用者是 `fmSpread`,放在实体层让 42 成了杂物间。函数体一行未改(python 切块原样粘贴)。
+跟随态的持续配对 `fmFollowReslot` **仍留在 42**(43-step 每 tick 调),`87-fmbar:373` UI 直调 `fmReslot` 那处**刻意未动**(不在阶段 0 范围)。
+
+### 三、删 `turnNoFm` 整套
+
+`s.turnNoFm` 是 v139 遗留的**写-only 死标志**(8 处赋值、0 处读取):44-orders 两处、70-input、31-step-ships 三处、32-route-refine 两处,连同 `core/01-state` 的 `pendingTurnNoFm` 与 71-keys 的 Shift+V"单纯转头"文案分支一并删除(用户批准)。**V 键转向本身保留**,行为不变 —— 两种转向本来就走同一条朝向层。
+`grep -rn turnNoFm js/` 必须为空(所以改动处的注释也用"单纯转头死标志"指代,不写那个字面)。
+
+### 四、验证
+
+- `node tools/train/bench_all.js` 三组均分之和 **5.8607**(散船路径位级不变;31/32 的改动只是删一个无人读的字段赋值)。
+- `bash tools/verify.sh` **✓ 全部通过**(`SYMS_TOTAL=648`,`SYMS_MISSING/THREW=none`,56 条 `=ok`,`ERRORS=none`)。FLOW27 的"模式:slot→follow→slot"与 FLOW29/34 的 `fmSetMode` 路径即本阶段的回归护栏:`F.mode` 仍要真的翻过去。
+- 本阶段**没有新探针**(规格未要求;行为零改变靠 bench + 既有 55 探针兜底)。
+
+### 五、刻意没动 / 新失效的死代码
+
+- `tools/` 下的 `s.turnNoFm=false` 复位语句(bench_all/env/stress/corner_study/refine_node/trace_ref2/route_eval/verify.sh 的 reset helper)**未动**:它们只是给沙盘船多写一个无人读的字段,不影响任何路径;而 bench 脚本是"位级不变"的对照基准,不在阶段 0 改动范围。
+- **新死代码**:`turnCmdShift`(`core/01-state.js:22` 声明、`command/71-keys.js` keydown 末尾赋值)—— 它唯一的消费者是被删的 `pendingTurnNoFm=turnCmdShift`。现在是写-only,未删,等确认。(FM3-1 已删。)
+
+## FM3-1 方法3 固定模式(snapshot 槽位来源)(2026-09)
+
+编队三模式重构的阶段 1:第二个槽位来源 **snapshot** 落地,用户的"方法3 固定 = 保持建队时的相对位置与朝向"。**建队默认改为 snapshot+static → `F.mode='fixed'`**(FM3-0 时恒 generated → 'slot')。
+
+### 一、槽位来源是纯函数,两种来源同形
+
+- `40-slots` 新增 `snapshotSlots(list, flagId)`:`off_i = rotSlot(pos_i − flag.pos, cos(−h), sin(−h))`,`hdg_i = wrap(θ_i − h)`(h/θ 一律取 **facing** 船头角,不取速度矢量:建队那一刻船可能静止,而"固定"固定的是船头)。返回 `[{s, offset, hdg}]` 与 `formationSlots` 同形。`fmWrapAng(a)` 归一到 (−π, π]。
+- **旋转符号**:拍时转 −h、`44-orders` 展开时 `rotSlot(off, cos(ang), sin(ang))` 转 +ang,二者互逆 —— ang=h 时原样还原当前布局,这是 FLOW36 的第一条判据(几何不变量,不抄实现公式)。
+- 每舰现在有两个槽位字段:`s.fmSlot`(偏移,旗舰局部系)+ **`s.fmHdg`**(相对旗舰的朝向差,弧度)。旗舰恒 `[0,0,0]/0`;generated 源下 `fmHdg` 恒 0。`fmDetach/fmDelete` 清 `fmSlot` 时顺带清 `fmHdg`。
+
+### 二、`F.snap` 是建队快照,`fmReslot` 只读它
+
+- `F.snap = {shipId:{off,hdg}}` 在 `fmCreate` 时由 `fmSnapTake` 拍一次(以建队时的旗舰为原点)。
+- `fmReslot` 按 `F.src` 分发:snapshot → 从 `F.snap` 重算,**绝不从实时位置重拍**(战损/换旗时形状不能变);generated → `formationSlots` 照旧。
+- **换旗重心化现场算、不改写快照**:新旗舰 `[0,0,0]/0`,其余 `fmSlot = rotSlot(off_i − off_new, cos(−hdg_new), sin(−hdg_new))`、`fmHdg = wrap(hdg_i − hdg_new)`。快照仍以建队旗舰为原点,所以换旗再换回来精确可逆。
+- `fmSetSrc(F,'snapshot'|'generated')` 新增:切到 snapshot 时**重拍**当前相对位置与朝向为新快照 —— 这是"玩家手调完各舰位置再按固定"的入口,也是唯一改写 `F.snap` 的地方。切到 generated 不动 `F.snap`。
+- `fmSetParam/fmSetPreset`(扇面/密度/档位)在 snapshot 源下**无可见效果**(`fmReslot` 不读 `P`),按钮仍在、改的 `F.P` 仍留着,切回阵型模式即生效。刻意未藏。
+
+### 三、`fmSpread` 的两条行为差异(固定 vs 阵型)
+
+1. **snapshot 源下不调 `fmReassign`** —— 谁站哪认死。阵型模式的槽位是条令算出来的可互换位置,固定模式的槽位就是"这艘船建队时在旗舰的哪儿",换给别人就不是固定了。折返时航线会交叉,这是固定模式的定义决定的,不是 bug。
+2. **snapshot 源下每舰令带 `face_i = [cos(ang+hdg_i), sin(ang+hdg_i)]`**,即到达朝向 = 阵型朝向 + 自己的朝向差。零新机制:`31-step-ships` 到位补转(RF11)本来就吃每舰令上的 `face`。generated 源刻意**不**走这条(沿用调用方传入的 `face`,通常 null → 到位不转,与 FM3-0 前一致)。调用方传入的 `face` 在固定模式下暂被 `face_i` 覆盖 —— 今天没有调用方会对编队传 face(`ghostArm` 多选早返),阶段 3 编队虚影会改成"有 face 时 ang 取 face 方向",届时统一。
+
+### 四、UI 三选一
+
+`87-fmbar` 模式钮 `m-slot/m-follow` → **`m-fixed/m-slot/m-follow`**(固定 · 保持建队时的相对位置与朝向 / 阵型 · 条令站位 / 跟随 · 成员跟旗舰),落到 42 的两个轴上:固定/阵型先 `fmSetSrc`(固定会重拍)再把运动轴切回 static;跟随只切运动轴、不动来源。三处文案(信息区 `mode` 行 / 菜单副标题 / `88-selpanel` 右栏)统一走新增的 `fmbModeText(mode, short)`。`fmbStat.mode` 直接透传 `F.mode`(fixed/slot/follow)。`71-keys` Backspace 撤点那处 `F.mode==='follow'` 的 else 分支天然覆盖 fixed(static 下各舰各持令),未改。
+
+### 五、删 `turnCmdShift`(FM3-0 列出的写-only 死变量)
+
+`core/01-state` 声明与 `command/71-keys` keydown 里的赋值一并删除。`grep -rn turnCmdShift js/` 为空(改动处注释也不写这个字面)。Shift+V 仍映射到 `turn_cmd`(与 V 相同),行为不变。
+
+### 六、验证
+
+- `node tools/train/bench_all.js` 三组均分之和 **5.8607**(散船路径位级不变;31/32 未动)。
+- `bash tools/verify.sh` **✓ 全部通过**(`SYMS_TOTAL=652` = 648 + 新增 5 个符号 − 删 1;57 条 `=ok`;`ERRORS=none`)。
+- 新探针 **`FLOW36_FMSNAP`**(verdict 块已加 grep 行):三舰**不对称**摆放(`[0,0,0]/[-30k,-12k]/[-15k,25k]`,船头 0.3/−0.7/1.9 rad)建队 → ①快照可逆 3.6e-12 ②下令终点布局 = 原布局旋转到行进方向,误差 0(须<1),槽位未被配对改动 ③`orders[0].face` 误差 0(须<0.02) ④跑到位后船头差保持误差 0(须<0.05)、相对位置保持误差 59(须<2000) ⑤跑完 `fmReslot` 不重拍 ⑥换旗重心化 4.1e-12(期望用建队时的世界几何算) ⑦战损后其余舰槽位不变;**负对照** `fmSetSrc(G,'generated')`:终点偏离任意布局 51741(须>5000)、`fmHdg` 全 0、令上无 face、槽位=条令表;再 `fmSetSrc(G,'snapshot')` 重拍误差 3.6e-12。
+- 既有探针的两处适配:`FORM` 的默认模式断言 `'slot'→'fixed'`;helper `fm23group` 建队后显式 `fmSetSrc(F,'generated')` —— FLOW23..35 测的全是条令站位 + 配对那条路,本阶段语义未变(FM3-2 重写条令站位后,FLOW23 的收队步数与 FLOW32/34 的形状判据随几何改写,见 FM3-2 备忘)。`FLOW27` 遍历操作钮现为 17 个(多了 `m-fixed`),点得动、不抛错。
+
+### 七、刻意没动 / 需复核
+
+- **建队默认改成 fixed 是全局行为变化**(Ctrl+数字建队后不点任何钮就是固定模式):简报"目标架构"一节明写"建队默认 snapshot+static",阶段 1 规格没单独重申,按目标架构做了。要退回 generated 默认只改 `fmCreate` 一个字面量 + `FORM` 探针断言 + `fm23group` 那一行。
+- `fmFollowReslot`(跟随态每 tick 配对)在 snapshot 源下**仍会按 CLS_ROLE 桶换槽** —— snapshot+follow 组合阶段 4 才让它能跑,本阶段没有 UI 能进入这个组合(点"跟随"不动来源,所以从固定切跟随会进入 snapshot+follow!)。**复核点**:固定态点跟随钮 → 成员按 `fmSlot` 跟旗舰(位置对)但 `fmHdg` 不参与(41 还不认识朝向差)且折返时可能换槽。阶段 4 收。
+- `physics/31` 编队塌陷那行的 `s.fmSlot=null` 没顺带清 `fmHdg`(不碰运动文件);残留的 `fmHdg` 只在 `s.formation` 非空时被读,无影响。
+- `94-demo` 快照的 `fm.mode` 现在会出现 `'fixed'`,离线分析脚本若按 slot/follow 二分需自查。
+- **本阶段无新增死代码**。
+
+### 八、审查修复 FM3-1b(同日)
+
+1. **建队/重拍后"离位"读数错**(只影响 87/88 读数与"成形中/待命"文案,不影响运动)。`fmOffOf` 按 `F.ang` 旋转 `fmSlot`,而快照槽位是在**拍照时旗舰船头角 h** 的局部系里拍的;`fmCreate` 置 `ang:NaN`(fmOffOf 回落 0 rad)、`fmSetSrc('snapshot')` 重拍不动 `F.ang`(仍是上一段行进方向)。旗舰船头≠0 时刚建好的固定编队按定义成形,却显示几万 km 离位、"成形中",下一道令写入 `F.ang` 才归零。修法:`fmSnapTake(F, list, flag)` 改成同时写 `F.snap` **与 `F.ang = h`**(两处调用点共用一条规则,与 `44 fmAngOf` 原地下令回落到旗舰船头的口径同源)。副作用:建队后 `F.ang` 总是有限值,`fmOffOf` 的 `: 0` 回退与 `fmAngOf` 的船头回落在 `fmCreate` 建的编队里都不再走到(留作防御,未删);建队→V 转向→原地下令这个角落,阵型朝向现取建队时船头而非此刻船头(固定模式下这恰好是"船不动")。
+2. **FLOW36 的"下令不配对"断言没有区分度**:探针摆位 + 顺向 DEST 下 `fmReassign` 本来就不换槽(不换比换省 1106),把 `fmSpread` 的 `!fixed &&` 守卫删掉探针照样绿。补 **③b 折返段**:`addWaypoint` 到反向 `[-600000,-350000]`,断言各舰 `fmSlot` 与 `slot0` 一字不变、`orders[1].pos` = 自己槽位旋转到新航向(误差 0,须<1),测完 `moveShips` 恢复单段再跑 ④;**负对照**同一折返在 generated 源下换槽舰数 = 2(须≥2,否则③b没测到东西)。vm 沙盘实测(scratchpad/fix36.js):守卫被删 → `lay2=39925 / slotKept2=4e4`,探针转红;守卫在 → 全 0。另加 ①a 与重拍两处 `offDev`(照抄 87 的 dev 公式)断言离位 < 1e-6、`F.ang` = 船头,兜住第 1 条。
+3. 验证:bench **5.8607** 不变;verify **✓ 全部通过**,`SYMS_TOTAL=652`,57 条 `=ok`,`ERRORS=none`。verdict 行文案同步。无新增死代码。
+
+### 九、审查修复 FM3-1c(同日):snapshot 源换旗时 `F.ang` 也要换参考系
+
+- **缺口**:FM3-1b 把 `F.ang` 定义成"`fmSlot` 所在局部系里的旗舰船头角",但 `fmReslot` 的 snapshot 分支换旗时只把 `fmSlot/fmHdg` 转进新旗舰局部系(转 −hdg_new),`F.ang` 留在旧旗舰局部系。三条换旗路径(`fmSetFlagship` 右键设旗舰 / `fmOnDeath` 顺位 / `43-step` 名册漂移兜底)全经这里。症状:固定编队船一步没动、一换旗 87/88"离位"跳到 57281 km、状态"成形中";此时点"就地成形"(`fmReslot`+`fmMoveTo(旗舰位)`,`fmAngOf` 原地回落到 `F.ang`)整队绕新旗舰转 −hdg_new 并各自调头(1.6 rad),与"固定 = 保持相对位置与朝向"相反。下远令不受影响(`fmAngOf` 走行进方向)。FLOW36 ⑥ 原先只断言槽位重心化,没查换旗后的离位,所以探针绿。
+- **修法**(只在 `42-formation`):同一世界几何在两套局部系里的 `F.ang` 相差 `hdg_new − hdg_old`(两者都是快照里相对建队旗舰的朝向差)。`fmReslot` snapshot 分支在重算槽位前,若 `F.flagId`(上一次重排用的旗舰)≠ 本次旗舰且 `F.ang` 有限,`F.ang = wrap(F.ang + snap[new].hdg − snap[old].hdg)`。`fmSnapTake` 同时写 `F.flagId = flag.id` —— 快照与 `F.ang` 都以那艘旗舰为参考系,不标记的话紧随的 `fmReslot` 会把"重拍"当"换旗"多换算一次。快照仍不改写,换回去精确可逆。generated 分支**不动 `F.ang`**(条令槽位全员 hdg=0,阵型朝向是世界角)。`F.flagId` 原本只是 43-step 的脏标记,现在兼作参考系记号(顶部结构注释已注明)。
+- **验证**:bench **5.8607** 不变;verify **✓ 全部通过**,`SYMS_TOTAL=652`,57 条 `=ok`,`ERRORS=none`。`FLOW36_FMSNAP` 扩两处:⑥ 加"换旗前后成员两两世界偏移差 `fmOffOf(i)−fmOffOf(j)` 不变"(3.6e-12,须<1e-6;船已跑过一段,是与位置无关的几何不变量);新 ⑥b 用一组一步没动的船:设旗舰后离位 4.1e-12 / `F.ang`=新旗舰船头 0 / 就地成形位移 4.1e-12 / 到达朝向=当前船头 2.2e-16 / 换回可逆 4.1e-12 / 阵亡顺位(`fmOnDeath` 路径)7.5e-12;**负对照** generated 源换旗 `F.ang` 变化 0(须 0)。verdict 行文案同步。突变检查(scratchpad/fix_fm31c_mut.js,把换算条件改成 `if(false)`):阵亡顺位/漂移兜底离位 3.8e4、两两偏移差 4.6e4 —— 断言有区分度。
+- **刻意没动**:`87-fmbar` 的 form 钮仍直调 `fmReslot`(阶段 0 就注明不在范围);`fmFollowReslot` 在 snapshot 源下的换槽问题仍留阶段 4。无新增死代码;`turnCmdShift` 在第五节已删,本轮复核 `grep -rn turnCmdShift js/` 为空。
+
+## FM3-2 方法1 条令阵型:防空环站位(2026-09)
+
+编队三模式重构的阶段 2:`generated` 槽位来源从 v134 的"按舰种角色表分三桶(主力横排 20k / 护卫按 fan·gap 排弧线 / 侦察桶)"改成 **USF 1945 屏护条令的防空环**。`40-slots formationSlots(list,P,anchorId)` 整个重写,返回形状不变(`[{s,offset,hdg}]`,hdg 全 0)。
+
+### 一、站位算法(`40-slots`)
+
+- `screenBearings(n)`:步长 360/n,从 000 起**左右交替向后**展开 `[0, 360−step, step, 360−2step, …]`,次序 = 填充优先级(已与 USF 10B 1945 表 N=4..9 逐位核对)。
+- `fmAaScore(s) = ciwsOf(s).inner × ciwsOf(s).innerIntercept`(读**实例**,DD=6800、CA/BB/CV=2000)。`outerIntercept` 是全库零读取的死字段,刻意不用。
+- `fmDoctrineSplit(list,anchorId)` → `{flag, center, ring}`:居中 = 旗舰 ∪ `score ≤ 0` ∪ `!hasMAC`(简报第 85 行的"航母类居中":CV 的 ciws_self 分 2000>0,靠 hasMAC 认)(FM3-2b 回改:原先还多一条 `score < 0.5×maxScore` 居中,简报没有,已删);环上舰按 score **降序稳定排序**(最高分占 000)。它是条令分桶的**唯一定义点**:`formationSlots` 排位、`44 fmReassign` 与 `42 fmFollowReslot` 的换槽分桶都调它(改前三处各自查舰种角色表)。
+- 居中舰以旗舰为原点、沿阵型朝向的**垂直**方向 −20k、+20k、−40k、+40k … 交替对称横排(旗舰恒 `[0,0,0]`)。
+- 环上舰:`R = min(ciwsOf.outer×2)`(**不**乘 P.spacing),`spacing = min(ciwsOf.inner×2) × P.spacing`,`n = max(环上舰数, ceil(2πR/spacing))`,按 score 降序填进 `screenBearings(n)` 的前 k 站。舰少站多时后方自然空。(FM3-2b 回改:原先把 P.spacing 乘到 R 上,简报第 86 行是乘在站距上。)
+- **左右符号约定**(写在 formationSlots 头注):局部 +x = 阵型朝向(000);世界 +y 在 `80-camera toScreen` 里是屏幕向下,船头朝 +x 时 +y 在船的右手边 = 右舷,所以方位角 θ(顺时针为正 = 右舷)直接落成 `[R·cos θ, R·sin θ]`;第二站 360−step = −step → y<0 = 左舷,与旧代码"两翼"先左后右、与 44 展开时 `rotSlot(off, cos ang, sin ang)` 的旋转方向一致。实测 CA+2DD:DD 在 `[50000,0]` 与 `[47553,−15451]`(000 与 −18°,n=20)。
+- `P.spacing` 是**环上站距乘数**(半径不动、站数变),`FM_LIMIT.spacing` 仍是 `[0.5, 2]`;`fmParamsNew()` 只剩 `{spacing:1}`。(FM3-2b 回改:原先改成圈半径乘数并把区间扩到 `[0.15, 2.5]`,简报都没要。)
+
+### 二、删掉的东西
+
+`P.fan`/`P.gap`/`FM_LIMIT.fan/gap`、`aaRingRef()`、舰种角色表 `CLS_ROLE`(`11-classes`)与 recon 桶、`87-fmbar` 的 `fan-/fan+` 钮及其读数与 `FM_FAN_STEP`。`grep -rnE "CLS_ROLE|aaRingRef|P\.fan|P\.gap|FM_LIMIT\.(fan|gap)" js/ tools/verify.sh` 为空(注释里也不写这些字面;verify.sh verdict 块的源码级负对照用字符串拼接写模式,免得自己被抓到)。
+`42 fmFollowShip` 的队间"一个防空圈直径"改成字面量 `50000`(= 改前 `aaRingRef()*2` = DD 近防外圈 25000×2,值不变);FLOW30 的 `GAP` 同步。
+
+### 三、UI(`87-fmbar`)
+
+档位 `p1/p2/p3` → spacing 预设 **0.6 / 1.0 / 1.6**(简报第 90 行;FM3-2b 由 0.2 改回),文案 **贴身/标准/疏开**,`fmSetPreset` 同步,档位高亮按 `P.spacing` 反查;密度钮 `den±` 仍是 ×1.25/×0.8,现在作用在站距乘数上(title 写明"半径不变")。
+
+### 四、阶段 1 审查遗留四条(本阶段一并做)
+
+1. `fmSetSrc(F,'generated')` 把 `F.ang` 复位为 **NaN**(恢复 FM3-0 的 generated 行为:首道令前原地下令/就地成形回落到旗舰**此刻**船头,`fmOffOf` 按 0 rad 读数)。FM3-1b 说的"`fmOffOf` 的 `:0` 回退与 `fmAngOf` 的船头回落不再走到"在 generated 源下重新走到了。
+2. FLOW30 两处裸 `fmCreate` 后显式 `fmSetSrc(F,'generated')`;FM3-1 备忘"语义一字不变"那句已改为如实。
+3. FLOW27 给 `m-fixed` 加行为断言:static 下点它 → `F.src==='snapshot'&&F.mode==='fixed'`;跟随中点它 → `F.motion==='static'`、`F.snap` 引用不变(未重拍)、来源不变;再点阵型 → `slot/generated`。
+4. `87-fmbar` 的 `m-fixed`:**若 `F.motion==='follow'` 只切运动轴回 static、不重拍**(跟随中的实时布局是 41-follow 带滞后追出来的过渡态,不是玩家手调);static 下照旧 `fmSetSrc(F,'snapshot')` 重拍(这才是"手调后固定"的入口)。注释已写。**复核点**:generated+follow 下点"固定"按规格只切运动轴,结果是 `slot` 而不是 `fixed`(来源没变);要变成"回到上一次快照"需要一个不重拍的 `fmSetSrc`,规格没要,没做。
+
+### 五、验证
+
+- `node tools/train/bench_all.js` 三组均分之和 **5.8607**(散船路径位级不变;physics/30/31/32 一行未动)。
+- `bash tools/verify.sh` **✓ 全部通过**(`SYMS_TOTAL=652` = 删 3 个符号 CLS_ROLE/aaRingRef/FM_FAN_STEP + 加 3 个 screenBearings/fmAaScore/fmDoctrineSplit;58 条 `=ok`;`ERRORS=none`)。
+- 新探针 **`FLOW37_FMDOCTRINE`**(verdict 块已加 grep 行 + 源码级负对照 grep):全部用局部系断言 `s.fmSlot` 并列印实值。① CA+2DD:两 DD `|slot|=50000`、站 000 与 −18°(n=20)、局部 x>0、旗舰 `[0,0,0]`、fmHdg 全 0;② CA+5DD:最大 |θ|=36°(须≤40)、后方 60° 内 0 舰;③ CA+CV+2DD:CV 居中 `[0,−20000]`,两 DD 上环;④ CA+2CA:R=30000、站 000 与 −18.95°(n=19);⑤ CA+DD+CA(简报第 91 行的负对照):CA 也上环,R 缩到 30000 < ① 的 50000,**按身份** DD 在 000、CA 在 −18.95°;⑥ 贴身档 0.6:R 仍 50000、n=33,站 000 与 −10.91°,回标准档 n=20、−18°;负对照:`Object.keys(fmParamsNew())` 恰为 `['spacing']`;把一艘 DD 的 `s.ciws.inner` 手改 4000 再 `fmReslot` → **按身份**分高的 b[2] 在 000、被改弱的 b[1] 在 −9°(站距 8000、n=40),R 不变,`WPN.ciws_core.inner` 仍 8000(读实例不读表)。(⑤⑥与负对照的身份断言均为 FM3-2b 改写。)
+- 既有探针因几何改变的三处适配(都是新条令的必然后果,机制判据不变):
+  - **FLOW23** 收队步数 12000→40000:防空环把两艘 DD 放到旗舰前方 50000(改前弧线阵 28868),旗舰 40k/30k/30k 的航线展开到成员是 110k/130k/120k 含一次 180° 停车折返,旗舰到位后 240s 收不完队(实测余令 2、误差 14094);600s 后误差 527。
+  - **FLOW32** "两翼分居两侧"改成"两站不重合(间距 15643)":CA+2DD 的两站 000/342 同在环上但不左右对称;交叉判据(实验 false / 对照 true)照旧成立。
+  - **FLOW34** 多造一艘 DD(`makeShip` 现造,三艘环上舰占 000/342/018),拿 ±18° 那一对当"两翼";两艘时换站只省 2462 < 迟滞带 5000,"允许换边"机制根本不触发。**两翼必须在直线段飞完之后取**(沙盘实测起步那一拍 fmFollowReslot 就会把 000 站与一翼互换,建队时挑的"两翼"里会混进 000 站那艘 → side≈0 无区分度)。结果:交叉 0 / 换边 true / 易主 1 次 / 直线对照 0。
+
+### 六、刻意没动 / 需复核
+
+- `physics/30/31/32` 一行未动;`43-step` 未动(它只调 `fmReslot`/`fmFollowReslot`)。
+- `88-selpanel`/`71-keys`/`94-demo` 不读 `P.fan/gap`,未动。`73-quickbar`/`85-settings` 里提到 `setFan` 的旧注释未动(只是历史说明)。
+- `fmFollowReslot` 在 snapshot 源下仍会按(现在是居中/环上)桶换槽,阶段 4 收(同 FM3-1 复核点)。
+- **CA 旗舰不上环**(旗舰恒居中);BB/CV 当旗舰同理。CA 当护卫一律上环(有近防、有主炮),混编 DD 时它是环上最弱、R 由它定为 30000。
+- **新增死代码**:`40-slots recenterSlots(slots,anchorId)`——唯一调用者是旧 `formationSlots`(新实现自己把旗舰放 `[0,0,0]`),现零调用,未删,等确认。`tools/.syms.txt` 由 verify.sh 重生成。
+
+### 七、审查修复 FM3-2b(同日):三处规格偏离回改 + 探针按身份断言
+
+第三轮审查抓到本阶段三处没有简报依据的改动,全部回改到简报原文;探针改成能抓住这些偏离的形状。
+
+1. **`P.spacing` 回到站距乘数**(`40-slots formationSlots`):`R = min(outer×2)` 不再乘 spacing,`spacing = min(inner×2) × P.spacing`。改前把乘数乘在 R 上,贴身档会把 DD 拉到旗舰 10000 处(在 CA 自己 15000 的近防外圈之内,n 掉到 4 时第二艘护卫站到 −90° 甚至后方),被护卫的居中舰(±20000 横排)反而落到环外。现在 R 只由环上最弱外圈定(单艘 CA 护卫也有 30000 > 20000),疏密只改站数:贴身 0.6 → CA+2DD n=33 站距 10.9°,疏开 1.6 → n=13 站距 27.7°,区间两端 0.5/2.0 → n=40/10。
+2. **贴身档 0.6、`FM_LIMIT.spacing` 回 `[0.5,2]`**(`42 fmSetPreset`、`40 FM_LIMIT`、`87-fmbar` 三个档位 title + `den±` title + 高亮反查 0.6、FLOW27 三档断言 0.60/1.00/1.60)。0.2 与 [0.15,2.5] 都是为"半径乘数"语义配的,语义回改后没有存在理由。
+3. **`fmDoctrineSplit` 删 `score < 0.5×maxScore` 居中规则**:居中 = 旗舰 ∪ `score ≤ 0` ∪ `!hasMAC`,与简报第 85 行一致(hasMAC 仍保留:简报要"航母类居中"而 CV 的 ciws_self 分 2000 > 0,只能靠它认)。直接后果是简报第 91 行的负对照"把一艘 DD 换成 CA 护卫 → R 变小"现在真的成立:CA+DD+CA → CA 上环、R=30000、DD 在 000、CA 在 −18.95°。`maxScore`/`armed` 两个局部变量随之删掉。`44 fmReassign`/`42 fmFollowReslot` 只消费 `ring` 桶,未动。
+4. **FLOW37 改按身份断言**:⑤ 断言 `TH(b[1])≈0`(DD)且 `|TH(b[2])|≈360/19`(CA)、两舰 R=30000;⑥ 断言贴身 0.6 下 R 仍 50000、第二站 ±360/33,回标准档 ±18°(证明半径不随 spacing 动、站数随);负对照 inner=4000 断言 `TH(b[2])≈0`、`|TH(b[1])|≈9`(不再 `sort(|θ|)` 把身份抹掉)。**沙盘突变验证**(scratchpad `fm32b_mut.js`):把 `ring.sort` 改成升序 → okN 与 ok5 都翻 false;改前的探针形状对这个突变是绿的。
+5. 验证:`bench_all` **5.8607**;`verify.sh` **✓ 全部通过**(FLOW27 三档 0.60/1.00/1.60;FLOW37 ①..⑥ + 负对照全 true,实值见探针输出)。`physics/30/31/32` 未动。
+6. 刻意没动 / 复核点:居中横排半宽 `20000·ceil(k/2)` 与 R 仍互不约束 —— 简报没要,且回改后只有"居中非旗舰舰 ≥ 2 艘且环上全是 CA"时第二艘居中舰(±40000)才会出到 30000 环外,属条令本身的边界,记下不改。`88-selpanel`/`71-keys` 不读 spacing 语义,未动。**新增死代码:无**(`recenterSlots` 仍是 FM3-2 §六 那条,状态不变)。
+
+### 八、审查修复 FM3-2c(同日):`fmSetSrc` 不再置 `F.ang=NaN`;`fmReassign` 只许同分互换
+
+第四轮审查的两条(四条发现里有三条是同一个 `F.ang` 问题的不同复现)。
+
+1. **`fmSetSrc(F,'generated')` 无条件 `F.ang=NaN`**(`42-formation`)。§四.1 的理由只覆盖"首道令之前"这一种情形,实现却对所有情形复位;而 `87-fmbar` 的"阵型"钮(`m-slot` 分支)对当前 `src` **没有守卫**,每点一次都调它。后果:一支已按条令成形、一步没动的编队,`fmOffOf` 退回 0 rad 参考系,87/88 的"离位"从 43 km 跳到 80938 km、状态由"待命"翻成"成形中",要等下一道移动令写回 `F.ang` 才恢复。**不只是读数**:此时读数系(0 rad)与"就地成形"实际使用的系(`fmAngOf` 在 NaN 时回落到旗舰**此刻**船头)分家,旗舰被战斗转向/V 转向摆离航向后按"就地成形",整支编队会绕旗舰转过去(审查沙盘实测:保留 `F.ang` 时终点相对旗舰 `[[0,0],[15451,47553],[0,50000]]`,点过"阵型"之后变成 `[[0,0],[50000,0],[47553,-15451]]`,整队转 90°)。这是 FM3-1b/FM3-1c 在 snapshot 侧修过的同一类症状,在 generated 路径上被本阶段重新引入。
+   **修法**(对齐 FM3-1b 的规则):切到 generated 时把 `F.ang` 写成**旗舰此刻船头角**,而不是 NaN —— 对 `fmAngOf` 的原地下令语义**等价**(那条回退本来就取旗舰此刻船头),同时让 `fmOffOf` 与它同系;并且**只在来源真的变了时写**(`F.src` 已是 generated 时整个是空操作),这样反复点"阵型"钮不会把上一道令写入的行进方向覆盖成此刻船头。
+2. **`fmReassign` 把条令映射整个打乱**(`44-orders`)。§一 说"环上舰按能力分降序填 `screenBearings`,最高分占 000",但下令时 `fmReassign` 把环上当成**一整桶可互换位置**按欧氏距离自由交换。审查沙盘实测(CA 旗舰 + DD + CA 护卫):`fmReslot` 后 DD(6800)在 000、CA(2000)在 −18.95°,一发 `moveShips` 之后两者对调 —— 分最低的 CA 站到了正前方;五舰例里两艘 DD 全被换到侧后。而且交换结果**落盘**进 `s.fmSlot`,到下一次 `fmReslot` 才恢复。旧弧线阵的两翼确实可互换(FL3 那时的写法成立),防空环条令下不再成立。
+   **修法**:环上桶再按 `fmAaScore` 细分一层,**只允许同分舰互换**;居中舰仍自由交换(±20000 横排没有条令次序)。同型护卫(最常见的情形)照旧消交叉,FL3 的收益全保留;跨能力档不再换,条令映射稳定。这也化解了简报"snapshot 源不调 `fmReassign`"与"最高分在 000"的表面冲突 —— 配对机制仍在,只是不再跨能力档,无须二选一。
+3. **探针**(都在既有探针里扩,verdict 行文案同步):
+   - `FLOW36_FMSNAP` 负对照:`切generated后F.ang复位NaN=true` 这条断言**把 bug 钉成了期望值**,改为 `F.ang` = 切换那一刻的旗舰船头角(误差 0,须 <1e-9 且不许 NaN);换旗仍不许动它(0)。同一探针里"同一折返换槽舰数=2"(CA+2DD 同分)现在兼作第 2 条的反向守卫 —— 若把同分也一并禁掉,它会掉到 0 而转红。
+   - `FLOW37_FMDOCTRINE` 新增 ⑦⑧,用**混编** CA 旗舰 + DD + CA 护卫(分 6800/2000,两舰都上环、R=30000):⑦ 顺向一段与 180° 折返各测一次,两舰 `fmSlot` 一字不变、DD 仍在 000;⑧ 同一组船跑到位(离位 60)后再调一次 `fmSetSrc(F,'generated')`(= 再点一次"阵型"钮),`F.ang`/离位/槽位全不变、船位移 0。
+   - **突变验证**:把 `F.ang` 改回无条件 NaN → FLOW36 的 `F.ang` 断言与 FLOW37 ⑧ 双双转红(`F.ang变化=NaN`);把环上桶改回不分能力档 → FLOW37 ⑦ 转红(顺向那一段实测就变成 `DD[-18.95°] / CA[000°]`,与审查沙盘一致),FLOW36 仍绿(它的同分对照本就该绿)。
+4. **验证**:`node tools/train/bench_all.js` 三组均分之和 **5.8607**(`physics/30/31/32` 一行未动);`bash tools/verify.sh` **✓ 全部通过**(`SYMS_TOTAL=652`,`SYMS_MISSING/THREW=none`,58 条 `=ok`,`ERRORS=none`)。
+5. **刻意没动 / 复核点**:
+   - `87-fmbar` 的 `m-slot` 分支仍不判当前 `src`(UI 侧不加守卫,空操作在 `fmSetSrc` 里兜)—— 只在一处兜,免得两处判据分家。
+   - `42 fmFollowReslot`(跟随态每 tick 的持续配对)**同样只按居中/环上分桶**,generated+follow 下仍会跨能力档换站。本轮没动:它是 FM3-1 §七与 FM3-2 §六 已记的阶段 4 收口项,且 FLOW34 依赖它在跟随态换边(三艘 DD 同分,同分交换不受本轮修改影响)。要一并统一的话,改法与第 2 条同形。
+   - `fmSetSrc(F,'snapshot')` 仍每次都重拍(那是"手调后固定"的入口,不是空操作),只有 generated 方向加了守卫。
+   - **新增死代码:无**(`recenterSlots` 仍是 FM3-2 §六 那条,状态不变)。
+
+### 九、审查修复 FM3-2c(第二轮,同日):`fmSetSrc` 的尾部重排也要吃"空操作"守卫
+
+第五轮审查的两条发现是同一个:FM3-2c 第 1 条只把守卫加在 `F.ang` 那条腿上,`fmSetSrc` 尾部的 `fmReslot(F, mates, flag)` 仍无条件跑。
+
+1. **症状**(`42-formation fmSetSrc`)。generated 分支的 `fmReslot` 用 `formationSlots` 重算并覆盖 `s.fmSlot`,而下令时 `44 fmReassign` 已经把**同分舰之间消交叉的配对落盘**进了 `s.fmSlot`。一支已成形、一步没动的编队再点一次"阵型"钮(`87-fmbar` 的 `m-slot` 分支无条件调 `fmSetSrc(F,'generated')`),两艘同型护卫的槽位被抹回条令原序当场对调:沙盘实测 CA 旗舰 + 2 DD(同分 6800)跑到位后,槽位 `m1:[47553,−15451]/m2:[50000,0]` 换回 `[50000,0]/[47553,−15451]`,87/88 的"离位"从 38 km 跳到 15649 km、状态由"待命"翻成"成形中"(`tol=CFG.arrive*2+50=850`),而 `F.ang` 一动不动 —— 证明走的不是第 1 条修过的那条腿。这与 FM3-1b/FM3-1c/FM3-2c 第 1 条是同一类症状的第四次复发,只是这次的载体是槽位而不是阵型朝向。
+2. **修法**(只在 `42-formation fmSetSrc`,三行):函数开头取 `const changed = (F.src !== src)`,`F.ang` 那条改读它,尾部的 `fmReslot` + 日志包进 `if (changed || src === 'snapshot')`。切到 snapshot 每次都要重拍(那是"手调后固定"的入口,本来就不是空操作),所以只有 generated 方向按 `changed` 守。`87-fmbar` 的 `m-slot` 分支仍不判 `src`(守卫继续只在 42 一处兜);follow→slot 那条路径的 `fmApplyFollow` 由紧随其后的 `fmSetMode(F,'slot')` 负责,不受影响。
+3. **探针**:`FLOW37_FMDOCTRINE` ⑧ 原先复用 ⑦ 的**混编** CA+DD+CA —— 两舰分 6800/2000,`fmReassign` 结构上就换不了槽,"槽位不变"恒真,对本 bug 零区分度(`probe_out.txt` 里"离位变化=0.0e+0"一直是绿的)。⑧ 改成自己建一组**同分** CA+2DD,并补前置断言"下令时配对确实换过槽 `swap8=15643`(须>1000)",再断言点一次之后 `F.ang`/离位/槽位/船位移全为 0 —— 两半合起来才是有牙齿的双向断言。⑦ 保持混编(它测的是跨能力档不许换),FLOW36 的 `gSwap>=2` 仍守着"同分仍可换"。verdict 行文案同步。
+   **突变验证**:把守卫改回 `if (true)`(即无条件 reslot)→ `FLOW37_FMDOCTRINE=fail`、判定块打印 ✗,`FLOW36_FMSNAP` 仍绿(它的同分对照本就该绿);改回后全绿。
+4. **验证**:`node tools/train/bench_all.js` 三组均分之和 **5.8607**(`physics/30/31/32` 一行未动);`bash tools/verify.sh` **✓ 全部通过**(`SYMS_TOTAL=652`,`SYMS_MISSING/THREW=none`,58 条 `=ok`,`ERRORS=none`)。
+5. **刻意没动 / 复核点**:
+   - **档位/密度钮(`fmSetParam`/`fmSetPreset`)仍是每点必 `fmReslot`**,值一字不变地点"标准档"照样把离位从 38 打到 15649。那是 FL3 期就有的老行为(改参数本来就该重排几何),本轮发现里也注明不属本阶段;要一并收口的话是在 `fmSetParam` 加一条"clamp 后的值与当前相等则整个返回"的守卫,等确认。
+   - `fmSetSrc(F,'snapshot')` 仍每次都重拍,语义不变。
+   - `42 fmFollowReslot` 跨能力档换站仍留阶段 4(同 FM3-2c 第 5 条)。
+   - **新增死代码:无**(`recenterSlots` 仍是 FM3-2 §六 那条,状态不变)。
+
+## FM4 能力插槽 + 最优指派 + 舰队编组控制页(2026-09)
+
+把独立沙盘《阵型控制台》的编成模型整体接进游戏。**唯一的接入点是 `40-slots formationSlots(list,P,anchorId)`**,返回形状不变,
+下游(`fmReslot` → `s.fmSlot` → 运动/跟随/绘制)一行未动。
+
+### 一、为什么换掉防空环
+
+FM3-2 的条令站位按**单一维度**(`inner×innerIntercept`)降序填一个圆环 —— 那是贪心:一艘舰在"通道"上最强、在"贴身"上垫底,
+单维排序看不见这件事,它照样被排到贴身站位去。沙盘上实测(异构舰队):**贪心比最优平均差 8.2%、最坏 25%,96% 的轮次不是最优解**。
+
+### 二、模型层 `js/formation/39-fmcaps.js`(新文件,纯函数)
+
+| 块 | 内容 |
+|---|---|
+| 能力维度 `FM_DIM` | **9 维**,全部由【配装实例字段】算出,与舰种 tag 无关:贴身/通道/主炮/红外/射频/隐蔽/网络/电战/生存 |
+| 站位模板 `FM_STANCE` | 四套:固定模板 14 槽 / 空中为主 12 槽(圆形屏护)/ 水面为主 11 槽(收拢集火)/ 水下为主 12 槽(宽而不深) |
+| 带半径 `fmBandRadii` | 五条带 core/close/body/screen/picket,半径全从**护卫自己的近防射程**算,旗舰不参与 min |
+| 插槽扩容 `fmGenStations` | 插槽数**不随舰数变**;多出来的舰沿同一插槽方位向两侧轮转(off=0,−1,+1,−2,+2),超 16 艘分任务群 |
+| 最优指派 `fmHungarian` | Kuhn–Munkres 最大权二分匹配,O(N³)。探针 `FLOW37` 用穷举对小编队钉死"差恰为 0" |
+| 可互换签名 `fmSwapKey` | 九维读数 + inner 全同才同签名 —— 下游两处槽位重配对的分桶键 |
+
+**曾有 13 维,砍掉齐射/照射/机动/信标**:它们在本作里是舰种常量(全队只有两档取值),且齐射↔照射、机动↔信标的秩相关都是 1.000,
+从模板里删掉总契合度**损失 0.0%**。保留九维的影响力排序:通道 > 贴身 > 主炮 = 红外 = 网络 > 电战 = 生存 > 射频 > 隐蔽。
+**贴身与通道不能合并**:秩相关只有 0.675,且几何相反(贴身要求站位落进该舰 inner 之内,通道要求沿环摊开)。
+
+### 三、`fmReassign` / `fmFollowReslot` 的分桶键必须跟着换(否则最优解被静默推翻)
+
+这两处按欧氏距离重配对槽位以消除航线交叉(FL3/FL4)。防空环时代的桶是"居中/环上 + 能力分",在能力插槽下**粒度不够**:
+每个站位各要一种能力,按距离自由交换等于当场推翻匈牙利的解,而且**结果落盘进 `s.fmSlot`**,到下一次 `fmReslot` 才恢复。
+现在两处都改用 `fmSwapKey`:**同签名交换是目标函数中性的**(总契合度分毫不变),消交叉的收益照拿;不同签名一律不换。
+同型护卫(最常见)照旧可换,FL3/FL4 的收益全保留 —— 反向由 `FLOW36` 的 `gSwap>=2` 守着。
+
+### 四、参数与状态
+
+`F.P` 从 `{spacing}` 扩成 **`{stance, spacing, slots}`**:`stance` 选四套站位之一;`slots` 是**每编队一份**的自定义插槽表
+(编组控制页方位盘改出来的,null = 用站位预设)。`fmSetStance(F,k)` 换站位时把 `spacing` 拨到该站位的预设 gap 并丢掉 `P.slots`
+(它是按上一套布局改的,套到新布局上没有意义),**自带"值没变就整个返回"的空操作守卫**(同 `fmSetSrc`,免得反复点把已成形的编队踢翻)。
+
+- **`FM_LIMIT.spacing` 上界 2 → 3**:空中为主的预设 gap 是 3.00,不放宽的话切过去会被 clamp 成 2.00。
+- **新增展示字段 `s.fmStn = {nm,cap,band,fit,r}`**:`fmReslot` 的 generated 分支写、snapshot 分支清(**两条分支都要清,旗舰那条早退分支曾漏过**)。
+  纯展示,任何逻辑分支都不许读它 —— 它保证"画出来的站位"与"船真正要去的站位"是同一份数据。
+
+### 五、UI 三处
+
+1. **编队菜单**(`87-fmbar`)加一行「站位」四钮(通用/空/面/下)+ 一个「编组控制」钮。固定模式下站位钮整体压暗(`.qbtn.qdim`):
+   那时槽位来自建队快照,站位模板一个字都读不到,不压暗会让人以为坏了。
+2. **地图站位可视化**(`js/render/84-fmplot.js`,新文件):选中编队里任一舰 → 画五条带半径圈 + 站位小圈(按契合度着色)+ 站位到实船的细线。
+   **只读**,不调任何会写状态的函数;**按 `s.formation === F` 判成员而不是按名册** —— 名册与归属在战损那一拍会短暂不一致,
+   按名册会给一艘已经不在队里的船画出站位(它顶着的是上一次 `fmReslot` 留下的旧 `s.fmStn`)。
+3. **舰队编组控制页**(`js/render/89-fmpage.js` + `#fmPage`,新文件):阵型图(方位盘,可拖可点)/ 全队能力评估 F·A·L·X /
+   站位选择 / 逐舰九维能力表。几何配方抄 `#tutOverlay`,**不属于 RF2 隐藏清单**。Esc 优先级排在教程之后,打开期间全拦快捷键。
+   **本页不进 frame 循环**:只在打开、玩家改动、按「刷新读数」时重渲 —— 周期性整体重渲会让拖动中的插槽每拍换新节点、点击被静默吃掉(RF7c 那条)。
+
+**沙盘里那一堆调参滑块、仿真舰生成器、算法对比、维度分析都没有搬进来**(用户令:去掉管理员那套设置和 UI)。
+张角(spread)/带半径倍数(bm)/扁率(widen)/能力偏向强度(bstr)四个参数只作为站位预设存在,不给玩家滑块。
+
+### 六、行为变化(不是 bug,但请复核)
+
+1. **舰少时航母会被派上屏护环**。固定模板的前 5 个插槽全是屏护(通道),而插槽按次序填 —— 4 舰编队只生成 3 个站位,全在屏护带,
+   CV 无处可去。改前 `fmDoctrineSplit` 是**按舰种谓词**强制把无主炮的舰放居中。匈牙利会把它放进三个里最不要害的那个(优先级最低),
+   但它确实上了环。要改的是**插槽表次序**(把 body 带的槽提前),那是设计决定,没动。
+2. **贴身站位的几何门几乎不触发**。`close = 0.9 × bm × min(inner)`,而 `min(inner) ≤ 任何一舰的 inner`,所以 `bm ≤ 1.111` 时它对谁都不生效 ——
+   固定/水面/水下三套(bm=1.00)恒不生效,只有空中为主(bm=1.15 ⇒ close = 1.035×min)会把内圈最小的那几艘拦在贴身站位外。
+3. **水下为主的编队很大**:哨戒带 = 2×屏护半径,再乘扁率 1.85,8 舰编队横向铺到约 ±18.5 万 km。这是"宽而不深"的直接后果。
+4. **匈牙利是 O(N³)**,只在 `fmReslot`(建队/战损/加员/换旗/调参)跑,不在每帧路径上。20 舰约 8000 次内层运算,200 舰约 8×10⁶ —— 后者会有可感的一拍卡顿。
+
+### 七、新增死代码(未删,等确认)
+
+`40-slots` 的 `formationSlotsOld`(FM3-2 防空环的原实现,留作对照)与它专用的 `screenBearings` / `fmAaScore` / `fmDoctrineSplit` ——
+四个现在互相引用、对外零调用点。加上 FM3-2 就已死的 `recenterSlots`,共 5 个。
+
+### 八、验证
+
+- `node tools/train/bench_all.js` 三组均分之和 **5.8607**(散船路径位级不变;physics/30/31/32 一行未动)。
+- `bash tools/verify.sh` **✓ 全部通过**,`SYMS_TOTAL=700`(652 + 新增),`ERRORS=none`,连跑 3 次稳定。
+- `FLOW37_FMDOCTRINE` → **`FLOW37_FMCAPSLOT`** 整条改写(旧判据测的是已被替换的防空环几何):固定模板前两槽 000/±45° ·
+  切站位真的改形状(水下横向展开 3.96 倍于水面)· 空中为主后方有舰 · **匈牙利总契合度 = 穷举最大值(差恰为 0)** ·
+  贴身几何门(用空中为主才咬得住)· 20 舰时插槽数仍 14、位置不重合 · 下令后只许同签名互换 · 再点一次阵型/同站位都是空操作。
+- 新增 **`FLOW38_FMPAGE`**:全程走**真实 DOM 事件**(编队菜单钮开页 → 点插槽 → 派 change 改能力 → window pointermove 拖方位 →
+  页内切站位 → 增删插槽 → 恢复默认 → 点 ✕ 关闭)。拖动那条判的是**拖到哪就是哪(±3°)**,不是"随便动了一下" ——
+  后者连坐标映射反了都能通过。RF22b 的规矩:抽成函数的重构必须至少有一条判定走真实调用点。
 
 ## 发布(GitHub Pages)
 

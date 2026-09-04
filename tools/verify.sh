@@ -78,10 +78,10 @@ t('FORM',function(){
   var typ=(flag&&flag.orders[0])?flag.orders[0].type:'-';
   var noFol=b.filter(function(s){return !s.follow;}).length; /* FL1:默认阵位态,全员不许有跟随关系(跟随态才挂 s.follow) */
   var ok=(fm===b.length&&slot===b.length&&flag===b[0]&&withOrd===b.length&&typ==='stop'&&geo
-        &&F.mode==='slot'&&noFol===b.length&&Object.keys(formations).length===1);
+        &&F.mode==='fixed'&&noFol===b.length&&Object.keys(formations).length===1); /* FM3-1:建队默认 snapshot+static → 'fixed'(改前 'slot') */
   return (ok?'ok':'fail')+' 入队='+fm+'/'+b.length+' 有槽位='+slot+' 旗舰='+(flag?flag.name:'null')
     +' 各持1条令='+withOrd+'/'+b.length+'('+typ+') 终点=目标点+自己的旋转槽位:'+geo
-    +' 模式='+F.mode+'(须slot) 无跟随='+noFol+'/'+b.length+' 编队数='+Object.keys(formations).length;
+    +' 模式='+F.mode+'(须fixed) 无跟随='+noFol+'/'+b.length+' 编队数='+Object.keys(formations).length;
 });
 /* 4. 齐射链路:区域齐射(非舰船目标,绕开 litBlue>=2 门控,确定性) */
 t('SALVO',function(){var sh=ships.filter(function(s){return s.side==='blue'&&s.ammo>=16;})[0];if(!sh)return'no-ammo';var tg=ships.filter(function(s){return s.side==='red';})[0];orderMissileSalvo(sh,{pos:tg.pos.slice()},2);return 'armed='+(sh.missileArm?1:0);});
@@ -1235,8 +1235,12 @@ function fm23reset(){ /* 三舰摆位 + 无编队 + 无跟随 + 无残留细化�
   }); /* 红方挪去天边:本层只测运动,别让它们掺进任何判定(也不走 stepSim,故无靶场AI、无随机数) */
   return b;
 }
-function fm23group(b){ /* 建编队 1(旗舰=b[0],CA 主力,阵型里居中)。fmCreate 只分槽位,不下令、不移动 */
-  return fmCreate('1',b);
+function fm23group(b){ /* 建编队 1(旗舰=b[0],CA 主力,阵型里居中)。fmCreate 只分槽位,不下令、不移动。
+  FM3-1:建队默认改成 snapshot(固定模式),本层 FLOW23..35 测的全是【条令站位 + 配对】那条路,所以这里显式切回 generated;
+  固定模式自己的判定在 FLOW36。FM3-2:条令站位改成防空环(CA+2DD 的两站是 000/342,不再是对称两翼),FLOW32/34 的形状判据随之改写,其余探针只依赖"终点=目标点+旋转槽位"这类与形状无关的契约。 */
+  var F=fmCreate('1',b);
+  if(F&&typeof fmSetSrc==='function')fmSetSrc(F,'generated');
+  return F;
 }
 function fm23dev(F){ /* 全队"离位"读数:各成员离它在当前阵型里应处位置的最大距离。刻意【自己算】而不是调
   stepFormation:后者会 fmReslot(写 s.fmSlot),测量本身就扰动了被测对象。口径与 87-fmbar 的编队菜单同源。 */
@@ -1291,7 +1295,7 @@ t('FLOW23_FMCORE',function(){
     if(Math.hypot(last.pos[0]-(TURN[2][0]+o[0]),last.pos[1]-(TURN[2][1]+o[1]))>1e-6)geo=false;
   }
   var snap=b.map(function(s){return s.orders[0].pos.slice();});
-  var A=fm23run(flag,TURN,40000,12000,F);
+  var A=fm23run(flag,TURN,40000,40000,F); /* FM3-2:收队步数 12000→40000。防空环把两艘 DD 放到旗舰前方 50000(改前弧线阵 28868),同一条 40k/30k/30k 的旗舰航线展开到成员是 110k/130k/120k,含一次 180° 停车折返,旗舰到位后 240s 收不完队 */
   var drift=0;
   for(q=0;q<b.length;q++){ /* 跑完之后回头看:令已经被消费光了,拿"曾经的第一个终点"没法比,改判全队到位误差 */
     var d=Math.hypot(b[q].pos[0]-(TURN[2][0]+rotSlot(b[q].fmSlot||[0,0,0],ca,sa)[0]),
@@ -1501,10 +1505,16 @@ t('FLOW27_FMBAR',function(){
   selected=F.ships.slice();
   updFmBar();fm27sel();
   /* 四个新动作,全部验【行为】而不只是"点得动" */
-  var elFol=fm27act(['m-follow']),elSlot=fm27act(['m-slot']),elFtgt=fm27act(['fol']),elFstop=fm27act(['folx']);
+  var elFol=fm27act(['m-follow']),elSlot=fm27act(['m-slot']),elFtgt=fm27act(['fol']),elFstop=fm27act(['folx']),elFixed=fm27act(['m-fixed']);
   var mode0=F.mode;
   fm27hit(elFol); var modeF=F.mode;
   fm27hit(elSlot); var modeS=F.mode;
+  /* FM3-2:固定钮的行为断言(阶段 1 审查遗留)。static 下点固定 = fmSetSrc('snapshot') 重拍 → src/mode 必须真的翻过去;
+     跟随中点固定 = 只切运动轴回 static、【不】重拍(跟随态的实时布局带滞后,不是玩家手调)—— F.snap 引用必须原样、来源不变。
+     最后点回阵型,后面的遍历与判定仍按阵型态跑 */
+  fm27hit(elFixed); var srcX=F.src,modeX=F.mode;
+  fm27hit(elFol); var snapRef=F.snap; fm27hit(elFixed); var noRetake=(F.snap===snapRef),motionY=F.motion,srcY=F.src,modeY=F.mode;
+  fm27hit(elSlot); var modeZ=F.mode,srcZ=F.src;
   fm27hit(elFtgt);
   var armed=(typeof pendingFmFollow!=='undefined'&&pendingFmFollow!=null&&String(pendingFmFollow)===String(F.id));
   var redT=ships.filter(function(x){return x.side==='red'&&!x.dead;})[0];
@@ -1517,16 +1527,16 @@ t('FLOW27_FMBAR',function(){
   var all=document.querySelectorAll('#fmActs [data-fma]'),names=[],q;
   for(q=0;q<all.length;q++)names.push(all[q].getAttribute('data-fma'));
   var later=[],clicked=0;
-  var fanBefore=F.P.fan,gapBefore=F.P.gap;
-  var fanDown=fanBefore,fanUp=fanBefore,gapAfter=gapBefore; /* 一减一加会转回原值,所以两步分别取样 */
+  var spBefore=F.P.spacing,spDen=spBefore,sp1=-1,sp2=-1,sp3=-1; /* FM3-2:参数只剩 spacing(防空环站距乘数);疏 ×1.25 / 三档预设 0.6 / 1.0 / 1.6(简报第 90 行;FM3-2b 由 0.2 改回)。疏密一减一加会转回原值,所以按钮各自取样 */
   for(q=0;q<names.length;q++){
     var n=names[q];
     if(n==='disband'){later.push(n);continue;}
     if(!fm27hit(document.querySelector('#fmActs [data-fma="'+n+'"]')))continue;
     clicked++;
-    if(n==='fan-')fanDown=F.P.fan;
-    if(n==='fan+')fanUp=F.P.fan;
-    if(n==='p2')gapAfter=F.P.gap;
+    if(n==='den-')spDen=F.P.spacing;
+    if(n==='p1')sp1=F.P.spacing;
+    if(n==='p2')sp2=F.P.spacing;
+    if(n==='p3')sp3=F.P.spacing;
   }
   for(q=0;q<later.length;q++){if(fm27hit(document.querySelector('#fmActs [data-fma="'+later[q]+'"]')))clicked++;}
   /* 遍历里又点了一次 fol,会把待命态重新挂上;不清掉的话它会带着一条 tip 漏进后面的 RENDER */
@@ -1539,17 +1549,18 @@ t('FLOW27_FMBAR',function(){
   window.removeEventListener('error',onerr);
   var acts4=!!(elFol&&elSlot&&elFtgt&&elFstop);
   var ok=(tabs0===1&&closed0==='none'&&open1==='flex'&&rows>=6&&mems===3
-        &&!!mem&&acts4&&mode0==='slot'&&modeF==='follow'&&modeS==='slot'&&armed&&folSet&&folGone
-        &&names.length>=14&&clicked===names.length /* 当前 16 个(sel cam form halt disband / m-slot m-follow / fol folx / fan± den± p1 p2 p3);下限留两个余量,真正的判据是 clicked===names.length —— 每个钮都点得动、都不抛错 */
-        &&fanDown<fanBefore-1e-9&&fanUp>fanDown+1e-9&&gapAfter<gapBefore
+        &&!!mem&&acts4&&!!elFixed&&mode0==='slot'&&modeF==='follow'&&modeS==='slot'&&armed&&folSet&&folGone
+        &&srcX==='snapshot'&&modeX==='fixed'&&noRetake&&motionY==='static'&&srcY==='snapshot'&&modeY==='fixed'&&modeZ==='slot'&&srcZ==='generated'
+        &&names.length>=14&&clicked===names.length /* 当前 15 个(sel cam form halt disband / m-fixed m-slot m-follow / fol folx / den± p1 p2 p3;FM3-2 删了 fan±);下限留一个余量,真正的判据是 clicked===names.length —— 每个钮都点得动、都不抛错 */
+        &&spDen>spBefore+1e-9&&Math.abs(sp1-0.6)<1e-9&&Math.abs(sp2-1.0)<1e-9&&Math.abs(sp3-1.6)<1e-9
         &&closed1==='none'&&!errs.length);
   return (ok?'ok':'fail')+' 书签数='+tabs0+'(须1) 初始菜单='+closed0+'(须none) 点开后='+open1+'(须flex)'
     +' | #selFm 信息行='+rows+'(须>=6) 成员行='+mems+'(须3;须先让 selected=全队才渲染) 成员行事件已走='+(!!mem)
     +' | 模式/跟随四钮齐全='+acts4+' 模式:'+mode0+' -点跟随-> '+modeF+' -点阵位-> '+modeS+'(须 slot/follow/slot)'
+    +' | 固定钮:static下点固定 src='+srcX+'/mode='+modeX+'(须 snapshot/fixed) 跟随中点固定 未重拍='+noRetake+' motion='+motionY+' src='+srcY+' mode='+modeY+'(须 true/static/snapshot/fixed) 再点阵型 mode='+modeZ+' src='+srcZ+'(须 slot/generated)'
     +' 跟随目标待命态已置位='+armed+' 兑现后F.follow指向该舰='+folSet+' 点解除跟随后已清空='+folGone
     +' | 操作钮点击='+clicked+'/'+names.length+'(须全中且总数>=14)清单=['+names.join(',')+']'
-    +' | 参数确实改到了本编队的 F.P:扇面 '+fanBefore.toFixed(4)+' -减-> '+fanDown.toFixed(4)+' -加-> '+fanUp.toFixed(4)+'(须 减<原<=加)'
-    +' 档2叠间距 '+Math.round(gapBefore)+'->'+Math.round(gapAfter)+'(须变小)'
+    +' | 参数确实改到了本编队的 F.P.spacing:'+spBefore.toFixed(2)+' -疏-> '+spDen.toFixed(2)+'(须变大) 三档 '+sp1.toFixed(2)+'/'+sp2.toFixed(2)+'/'+sp3.toFixed(2)+'(须 0.60/1.00/1.60)'
     +' | 再点收起='+closed1+'(须none) 解散后再刷10次'
     +' | 运行期错误='+(errs.length?errs.join(' / '):'none');
 });
@@ -1729,8 +1740,9 @@ t('FLOW30_FMFOLLOWFM',function(){
     s.turnTarget=null;s.turnNoFm=false;s.lockedTarget=null;s.driftFire=false;s.speedCmd=800;s.rrNext=-1;
   });
   var F1=fmCreate('1',b),F2=fmCreate('2',reds);
+  fmSetSrc(F1,'generated');fmSetSrc(F2,'generated'); /* FM3-2:建队默认是 snapshot(FM3-1),本条测的是条令站位 + 编队跟编队,显式切回 generated(与 fm23group 同口径) */
   var fl1=fmFlag(F1),fl2=fmFlag(F2);
-  var R1=fmRadius(F1),R2=fmRadius(F2),GAP=aaRingRef()*2;
+  var R1=fmRadius(F1),R2=fmRadius(F2),GAP=50000; /* FM3-2:队间那个"防空圈直径"是 42 fmFollowShip 里的字面量 50000(= DD 近防外圈 25000×2,值与改前相同) */
   var okFol=fmFollowShip(F2,fl1);
   var m2=fmShips(F2);
   var tidOk=(m2.length===2&&m2.every(function(m){return !!m.follow&&m.follow.tid===fl1.id;})); /* 含 F2 旗舰在内 */
@@ -1847,19 +1859,20 @@ t('FLOW32_FMCROSS',function(){
   var i1=b.indexOf(w[0]),i2=b.indexOf(w[1]);
   var real=segX(e1[i1],e2[i1],e1[i2],e2[i2]);
   var naive=segX(e1[i1],nv[i1],e1[i2],nv[i2]);
-  /* 阵型形状不许被配对改坏:两翼到旗舰终点等距、且分居两侧 */
+  /* 阵型形状不许被配对改坏:两艘僚舰到旗舰终点等距(都在防空环上)、且占的是两个不同的站。
+     FM3-2:条令站位改成防空环,CA+2DD 的两站是 000 与 342(同在半径 R 上、不再左右对称分居两侧),所以"分居两侧"改成"两站不重合" */
   var fi=b.indexOf(flag);
   var d1=Math.hypot(e2[i1][0]-e2[fi][0],e2[i1][1]-e2[fi][1]);
   var d2=Math.hypot(e2[i2][0]-e2[fi][0],e2[i2][1]-e2[fi][1]);
-  var side=(e2[i1][1]-e2[fi][1])*(e2[i2][1]-e2[fi][1]);
+  var apart=Math.hypot(e2[i1][0]-e2[i2][0],e2[i1][1]-e2[i2][1]);
   var k,left=0;
   for(k=0;k<200000;k++){if(rrJobs.length)rrTick();stepShipsMotion(0.02);
     left=b.reduce(function(n,s){return n+s.orders.length;},0); if(!left)break;}
-  var ok=(real===false&&naive===true&&Math.abs(d1-d2)<1&&side<0&&left===0);
+  var ok=(real===false&&naive===true&&Math.abs(d1-d2)<1&&apart>1000&&left===0);
   return (ok?'ok':'fail')
-    +' 两翼航线相交='+real+'(须false)'
+    +' 两僚舰航线相交='+real+'(须false)'
     +' | 对照(不重配对)相交='+naive+'(须true —— 为 false 说明本探针没测到东西)'
-    +' | 阵型未被改坏:两翼距旗舰 '+Math.round(d1)+'/'+Math.round(d2)+'(须相等) 分居两侧='+(side<0)
+    +' | 阵型未被改坏:两僚舰距旗舰 '+Math.round(d1)+'/'+Math.round(d2)+'(须相等=同在环上) 两站间距='+Math.round(apart)+'(须>1000=不重合)'
     +' | 折返航线跑得完:全队余令='+left;
 });
 /* 6f-8 FL3 跟随速度【不超过跟随者自己的巡航档】。用户要求:"跟随时速度使用被跟随舰的速度,
@@ -1916,9 +1929,12 @@ t('FLOW34_FOLCROSS',function(){
   function cr(o,a,b){return (a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);}
   function segX(p1,p2,p3,p4){var d1=cr(p3,p4,p1),d2=cr(p3,p4,p2),d3=cr(p1,p2,p3),d4=cr(p1,p2,p4);
     return ((d1>0&&d2<0)||(d1<0&&d2>0))&&((d3>0&&d4<0)||(d3<0&&d4>0));}
-  var b=fm23reset(),F=fm23group(b),flag=fmFlag(F);
-  var w=b.filter(function(s){return s!==flag;});
-  if(w.length<2)return 'fail 需要至少两艘僚舰';
+  /* FM3-2:条令站位改成防空环后 CA+2DD 的两站是 000 与 342,不再是左右对称的两翼 —— 折返时换站只省 2462,低于迟滞带 MARGIN=5000,
+     "允许换边"这条机制在两艘僚舰上根本不会触发。所以本条多造一艘 DD(三艘环上舰占 000/342/018),拿 ±18° 那一对当"两翼"测,机制与判据不变 */
+  var b=fm23reset();
+  var x4=makeShip('DD','探针·DD4',[-40000,0,0],[1,0,0],[0,0,0],'blue',2);x4.speedCmd=800;x4.rrNext=-1;ships.push(x4);b.push(x4);
+  var F=fm23group(b),flag=fmFlag(F);
+  if(b.length<4)return 'fail 需要至少三艘僚舰';
   fmSetMode(F,'follow');
   function side(m){
     var h=V.len(flag.vel)>5?[flag.vel[0],flag.vel[1]]:[flag.facing[0],flag.facing[1]];
@@ -1929,6 +1945,10 @@ t('FLOW34_FOLCROSS',function(){
   var i;
   moveShips(b,[400000,0,0],'stop');                    /* 先直线飞一段把队形稳住 */
   for(i=0;i<30000;i++)stepShipsMotion(0.02);
+  /* 两翼 = 直线段【飞完之后】槽位 y≠0 的那两艘(000 站那艘在轴线上,换边无从谈起)。必须在这一刻取而不是建队时取:
+     起步那一拍 fmFollowReslot 就会按出发位置把 000 站与一翼互换(沙盘实测),建队时挑的"两翼"里会混进 000 站那艘 */
+  var w=b.filter(function(s){return s!==flag&&Math.abs((s.fmSlot||[0,0,0])[1])>1;});
+  if(w.length<2)return 'fail 直线段飞完后不足两艘在翼站上';
   var s0=side(w[0])>0;
   var t1=[],t2=[],flips=0,prev=w[0].fmSlot.join(',');
   moveShips(b,[-400000,0,0],'stop');                   /* 180 度折返 */
@@ -1985,6 +2005,382 @@ t('FLOW35_FMGEAR',function(){
     +'(须各等于自己的档位;删上限前会被加权平均 '+Math.round(A.avg)+' 压平)'
     +' | 跟随态:档位'+B.gear.join('/')+' → 峰值'+B.pk.map(Math.round).join('/')
     +' | 反向对照(调慢那艘真的慢):阵位='+slowOk(A)+' 跟随='+slowOk(B);
+});
+/* 6f-13 FM3-1 固定模式(snapshot 源)。三舰【不对称】摆放 + 各自任意朝向建队(默认 snapshot+static),
+   判据全部用【几何不变量】而不是照抄实现里的公式(公式抄一遍等于没测):
+     ① 建队快照可逆:pos_i − flag.pos == rotSlot(fmSlot_i, cos h, sin h)(h=旗舰船头角)—— 拍时转 −h、展开转 +h 必须互逆,符号错一处就不等;
+     ② 下令后终点相对布局 = 原相对布局整体旋转 (ang − h)(容差 1;ang=行进方向),且槽位不经 fmReassign 改动(谁站哪认死);
+     ③ 每艘 orders[0].face 的方向角 = ang + (θ_i − h)(容差 0.02);
+     ④ 跑到位后各舰船头差 = 建队时的船头差(容差 0.05),相对位置也保持(容差 2000:到位判据是 800 以内停);
+     ⑤ 跑完直接 fmReslot,槽位一字不变(snapshot 源下不从实时位置重拍);
+     ⑥ 换旗重心化:新旗舰 [0,0,0]/0,其余 = 建队时相对新旗舰的偏移(按新旗舰建队船头角反转)、朝向差同理;
+     ⑦ 战损一艘后其余舰 fmSlot/fmHdg 不变;
+   负对照:同一摆放 fmSetSrc(F,'generated') → 终点不再保留任意布局(偏差 > 5000)、fmHdg 全 0、令上无 face、槽位=40-slots 条令表;
+           再 fmSetSrc(F,'snapshot') 重拍 → 槽位等于【此刻】的相对布局(重拍入口生效)。 */
+t('FLOW36_FMSNAP',function(){
+  var TH=[0.3,-0.7,1.9], PS=[[0,0,0],[-30000,-12000,0],[-15000,25000,0]]; /* 不共线、不镜像对称:对称摆放会让旋转符号错了也碰巧过 */
+  function wrap(a){while(a>Math.PI)a-=2*Math.PI;while(a<=-Math.PI)a+=2*Math.PI;return a;}
+  function hd(s){return Math.atan2(s.facing[1],s.facing[0]);}
+  function rot(v,a){var c=Math.cos(a),s=Math.sin(a);return [v[0]*c-v[1]*s,v[0]*s+v[1]*c];}
+  function place(){var b=fm23reset();b.forEach(function(s,i){s.pos=PS[i].slice();s.facing=[Math.cos(TH[i]),Math.sin(TH[i]),0];});return b;}
+  function maxDev(b,fn){var d=0;for(var i=0;i<b.length;i++){var e=fn(b[i],i);if(e>d)d=e;}return d;}
+  var b=place(),F=fmCreate('1',b),flag=fmFlag(F);
+  var srcOk=(F.src==='snapshot'&&F.mode==='fixed'&&flag===b[0]);
+  var h=hd(flag);
+  /* ①a 建队即成形:87-fmbar 的"离位"走 fmOffOf(按 F.ang 旋转 fmSlot),旗舰船头 0.3≠0,所以 F.ang 若不是拍照时的船头角,
+     这里会读出几千公里、菜单标"成形中"(FM3-1b 修的读数 bug)。下面 offDev 就是 87 的 dev 公式,原样照抄 */
+  function offDev(list,fl){return maxDev(list,function(s){if(s===fl)return 0;var o=fmOffOf(s);return Math.hypot(fl.pos[0]+o[0]-s.pos[0],fl.pos[1]+o[1]-s.pos[1]);});}
+  var dev0=offDev(b,flag), ang0=Math.abs(wrap(F.ang-h));
+  /* ① 快照可逆 */
+  var inv=maxDev(b,function(s){var o=rotSlot(s.fmSlot||[0,0,0],Math.cos(h),Math.sin(h));return Math.hypot(flag.pos[0]+o[0]-s.pos[0],flag.pos[1]+o[1]-s.pos[1]);});
+  var hdg0=maxDev(b,function(s,i){return Math.abs(wrap((s.fmHdg||0)-(TH[i]-TH[0])));});
+  var rel0=b.map(function(s){return [s.pos[0]-flag.pos[0],s.pos[1]-flag.pos[1]];});
+  var slot0=b.map(function(s){return (s.fmSlot||[0,0,0]).slice();}),hdgA=b.map(function(s){return s.fmHdg||0;});
+  /* ② ③ 下令 */
+  var DEST=[600000,350000,0],ang=Math.atan2(DEST[1]-flag.pos[1],DEST[0]-flag.pos[0]);
+  moveShips(b,DEST,'stop');
+  var fo=flag.orders[0]?flag.orders[0].pos:[0,0,0];
+  var lay=maxDev(b,function(s,i){var e=rot(rel0[i],ang-h);var p=s.orders[0]?s.orders[0].pos:[1e9,1e9];return Math.hypot(p[0]-fo[0]-e[0],p[1]-fo[1]-e[1]);});
+  var faceErr=maxDev(b,function(s,i){var f=s.orders[0]&&s.orders[0].face;if(!f)return 9;return Math.abs(wrap(Math.atan2(f[1],f[0])-(ang+TH[i]-TH[0])));});
+  var slotKept=maxDev(b,function(s,i){return Math.hypot(s.fmSlot[0]-slot0[i][0],s.fmSlot[1]-slot0[i][1]);}); /* 下令不配对:槽位一字不动 */
+  /* ③b 折返仍不配对(谁站哪认死的真正判据)。顺向 DEST 下 fmReassign 本来就不会换槽(不换比换省 1106),上面 slotKept/lay
+     对"fmSpread 漏掉 !fixed 守卫"零区分度;180° 折返时阵型模式会交换两艘僚舰(见下面负对照),固定模式必须一字不动、
+     每舰第二段终点仍是【自己】的槽位旋转到新航向。测完把航线恢复成单段,④ 照旧跑 */
+  var DEST2=[-600000,-350000,0],ang2=Math.atan2(DEST2[1]-DEST[1],DEST2[0]-DEST[0]);
+  addWaypoint(b,DEST2);
+  var fo2=flag.orders[1]?flag.orders[1].pos:[0,0,0];
+  var lay2=maxDev(b,function(s,i){var e=rot(rel0[i],ang2-h);var p=s.orders[1]?s.orders[1].pos:[1e9,1e9];return Math.hypot(p[0]-fo2[0]-e[0],p[1]-fo2[1]-e[1]);});
+  var slotKept2=maxDev(b,function(s,i){return Math.hypot(s.fmSlot[0]-slot0[i][0],s.fmSlot[1]-slot0[i][1]);});
+  moveShips(b,DEST,'stop');
+  /* ④ 跑到位 + 收敛(到位后补转:CA 0.16 rad/s 转半圈要 20s) */
+  var i,k,left=1;
+  for(i=0;i<60000;i++){if(rrJobs.length)rrTick();stepShipsMotion(0.02);left=0;b.forEach(function(s){if(s.orders.length||V.len(s.vel)>1)left++;});if(!left)break;}
+  for(k=0;k<3000;k++)stepShipsMotion(0.02);
+  var arrived=(left===0);
+  var fdiff=maxDev(b,function(s,i){return Math.abs(wrap(hd(s)-hd(flag)-(TH[i]-TH[0])));});
+  var flagFace=Math.abs(wrap(hd(flag)-ang));
+  var posKept=maxDev(b,function(s,i){var e=rot(rel0[i],ang-h);return Math.hypot(s.pos[0]-flag.pos[0]-e[0],s.pos[1]-flag.pos[1]-e[1]);});
+  /* ⑤ 不从实时位置重拍 */
+  fmReslot(F);
+  var reslotKept=maxDev(b,function(s,i){return Math.hypot(s.fmSlot[0]-slot0[i][0],s.fmSlot[1]-slot0[i][1])+Math.abs(wrap((s.fmHdg||0)-hdgA[i]));});
+  /* ⑥ 换旗重心化(期望用建队时的世界几何算,不抄实现里的减法) */
+  /* FM3-1c:换旗前后【成员两两的世界偏移差】fmOffOf(i)−fmOffOf(j) 必须不变 —— 槽位换了参考系,F.ang 不跟着换算的话整套世界几何绕新旗舰转 hdg_new */
+  function pairOff(list){var o=list.map(function(s){return fmOffOf(s);});return [o[1][0]-o[0][0],o[1][1]-o[0][1],o[2][0]-o[0][0],o[2][1]-o[0][1]];}
+  var pairA=pairOff(b);
+  var nf=b[2];fmSetFlagship(F,nf);
+  var pairB=pairOff(b),pairKept=0;for(k=0;k<4;k++)pairKept=Math.max(pairKept,Math.abs(pairA[k]-pairB[k]));
+  var nfOk=(fmFlag(F)===nf&&Math.hypot(nf.fmSlot[0],nf.fmSlot[1],nf.fmSlot[2])<1e-9&&Math.abs(nf.fmHdg)<1e-9);
+  var reOk=maxDev(b,function(s,i){var d=[PS[i][0]-PS[2][0],PS[i][1]-PS[2][1]];var o=rotSlot(s.fmSlot,Math.cos(TH[2]),Math.sin(TH[2]));return Math.hypot(o[0]-d[0],o[1]-d[1])+Math.abs(wrap((s.fmHdg||0)-(TH[i]-TH[2])));});
+  /* ⑦ 战损后其余舰槽位不变(fmOnDeath 由 55-damage 在判死之前调,这里照那个顺序) */
+  var s0slot=b[0].fmSlot.slice(),s0hdg=b[0].fmHdg;
+  fmOnDeath(b[1]);b[1].hp=0;b[1].dead=true;
+  var deathOk=(fmGet('1')===F&&fmShips(F).length===2&&Math.hypot(b[0].fmSlot[0]-s0slot[0],b[0].fmSlot[1]-s0slot[1])<1e-9&&Math.abs(b[0].fmHdg-s0hdg)<1e-9);
+  /* ⑥b FM3-1c 换旗后 F.ang 换参考系(三条换旗路径:fmSetFlagship / fmOnDeath 顺位 / 43-step 漂移兜底都经 fmReslot)。
+     用一组【一步没动】的新船:建队 → 设旗舰到船头 1.9 的 S2 → 87 的离位读数必须仍为 0、F.ang = 新旗舰船头;
+     此时"就地成形"(87 form 钮原样复刻:fmReslot + fmMoveTo(旗舰位))每舰终点 = 当前位置、到达朝向 = 当前船头(船不该动);
+     换回 S0 精确可逆;再让旗舰阵亡顺位(fmOnDeath 路径)同样成立。改前这里离位 57281 km、就地成形整队绕新旗舰转 1.6 rad。 */
+  var w=place(),Wf=fmCreate('1',w),w2=w[2];
+  fmSetFlagship(Wf,w2);
+  var swDev=offDev(w,w2), swAng=Math.abs(wrap(Wf.ang-hd(w2)));
+  fmReslot(Wf,fmShips(Wf),w2);fmMoveTo(Wf,[w2.pos[0],w2.pos[1],w2.pos[2]],'stop');
+  var swMove=maxDev(w,function(s){var p=s.orders[0]?s.orders[0].pos:[1e9,1e9];return Math.hypot(p[0]-s.pos[0],p[1]-s.pos[1]);});
+  var swFace=maxDev(w,function(s){var f=s.orders[0]&&s.orders[0].face;if(!f)return 9;return Math.abs(wrap(Math.atan2(f[1],f[0])-hd(s)));});
+  fmSetFlagship(Wf,w[0]);
+  var swBack=offDev(w,w[0])+Math.abs(wrap(Wf.ang-hd(w[0])));
+  fmOnDeath(w[0]);w[0].hp=0;w[0].dead=true;var wh=fmFlag(Wf);
+  var swDie=(wh===w[1])?(offDev(w.slice(1),wh)+Math.abs(wrap(Wf.ang-hd(wh)))):9;
+  /* 负对照:generated 源下换旗【不许】动 F.ang(条令槽位全员 hdg=0,阵型朝向是世界角,与参考系无关) */
+  var v=place(),Vf=fmCreate('1',v),vfl=fmFlag(Vf);fmSetSrc(Vf,'generated');var vAng0=Vf.ang;fmSetFlagship(Vf,v[2]);
+  /* FM3-2c:fmSetSrc('generated') 把阵型朝向写成【切换那一刻的旗舰船头角】,不再复位成 NaN ——
+     NaN 会让 fmOffOf 退回 0 rad 参考系(读数系与 fmAngOf 的回落系分家),已成形的编队离位当场跳几万公里。换旗后仍不许动它。 */
+  var vAngOk=Math.abs(wrap(vAng0-hd(vfl)));
+  var vKept=Math.abs(wrap(Vf.ang-vAng0));
+  /* 负对照:同一摆放切到 generated 源 */
+  var c=place(),G=fmCreate('1',c),gf=fmFlag(G);
+  fmSetSrc(G,'generated');
+  var gMode=G.mode;
+  var gDoc=formationSlots(fmShips(G),G.P,gf.id),gGeo=maxDev(gDoc,function(x){return Math.hypot(x.s.fmSlot[0]-x.offset[0],x.s.fmSlot[1]-x.offset[1]);}); /* 必须在下令之前比:fmReassign 会换槽 */
+  var gh=hd(gf),grel=c.map(function(s){return [s.pos[0]-gf.pos[0],s.pos[1]-gf.pos[1]];});
+  var gang=Math.atan2(DEST[1]-gf.pos[1],DEST[0]-gf.pos[0]);
+  moveShips(c,DEST,'stop');
+  var gfo=gf.orders[0]?gf.orders[0].pos:[0,0,0];
+  var gLay=maxDev(c,function(s,i){var e=rot(grel[i],gang-gh);var p=s.orders[0]?s.orders[0].pos:[1e9,1e9];return Math.hypot(p[0]-gfo[0]-e[0],p[1]-gfo[1]-e[1]);});
+  var gHdg=maxDev(c,function(s){return Math.abs(s.fmHdg||0);});
+  var gFace=c.filter(function(s){return s.orders[0]&&s.orders[0].face;}).length;
+  /* 同一折返在阵型模式下【必须】换槽(复用 FLOW32 的判据:两翼 180° 折返,不换航线就交叉)—— 这是 ③b 的负对照,
+     证明"固定模式折返槽位不动"是 !fixed 守卫在起作用,不是这个摆位本来就不会换 */
+  var gslot1=c.map(function(s){return s.fmSlot.slice();});
+  addWaypoint(c,DEST2);
+  var gSwap=0;c.forEach(function(s,i){if(Math.hypot(s.fmSlot[0]-gslot1[i][0],s.fmSlot[1]-gslot1[i][1])>1e-6)gSwap++;});
+  moveShips(c,DEST,'stop');
+  /* 重拍入口:飞一段之后切回 snapshot,槽位要等于【此刻】的相对布局;重拍后离位读数也要归零(F.ang 要跟着重拍写成此刻船头,不能留上一段行进方向) */
+  for(i=0;i<300;i++)stepShipsMotion(0.02);
+  fmSetSrc(G,'snapshot');
+  var gh2=hd(gf);
+  var reTake=maxDev(c,function(s){var o=rotSlot(s.fmSlot||[0,0,0],Math.cos(gh2),Math.sin(gh2));return Math.hypot(gf.pos[0]+o[0]-s.pos[0],gf.pos[1]+o[1]-s.pos[1]);});
+  var reMode=G.mode, reDev=offDev(c,gf), reAng=Math.abs(wrap(G.ang-gh2));
+  var ok=(srcOk&&dev0<1e-6&&ang0<1e-9&&inv<1e-6&&hdg0<1e-9&&lay<1&&faceErr<0.02&&slotKept<1e-9&&lay2<1&&slotKept2<1e-9&&arrived&&fdiff<0.05&&flagFace<0.05&&posKept<2000
+        &&reslotKept<1e-9&&nfOk&&reOk<1e-6&&pairKept<1e-6&&deathOk
+        &&swDev<1e-6&&swAng<1e-9&&swMove<1e-6&&swFace<1e-9&&swBack<1e-6&&swDie<1e-6&&vAngOk<1e-9&&vKept<1e-12
+        &&gMode==='slot'&&gLay>5000&&gHdg===0&&gFace===0&&gGeo<1e-9&&gSwap>=2&&reTake<1e-6&&reMode==='fixed'&&reDev<1e-6&&reAng<1e-9);
+  return (ok?'ok':'fail')+' 默认src=snapshot/mode=fixed='+srcOk+' 建队即成形:离位='+dev0.toExponential(1)+'(须<1e-6) F.ang=船头误差='+ang0.toExponential(1)
+    +' 快照可逆误差='+inv.toExponential(1)+' 朝向差误差='+hdg0.toExponential(1)
+    +' | 下令:终点布局=原布局旋转到行进方向 误差='+lay.toFixed(3)+'(须<1) face误差='+faceErr.toFixed(4)+'(须<0.02) 槽位未被配对改动='+(slotKept<1e-9)
+    +' | 折返:第二段终点=自己槽位旋转到新航向 误差='+lay2.toFixed(3)+'(须<1) 槽位仍未被配对改动='+(slotKept2<1e-9)
+    +' | 到位='+arrived+' 船头差保持误差='+fdiff.toFixed(4)+'(须<0.05) 旗舰对准行进方向误差='+flagFace.toFixed(4)+' 相对位置保持误差='+Math.round(posKept)+'(须<2000)'
+    +' | 跑完 fmReslot 不重拍='+(reslotKept<1e-9)+' 换旗:新旗舰归零='+nfOk+' 其余重心化误差='+reOk.toExponential(1)+' 成员两两世界偏移差不变='+pairKept.toExponential(1)+'(须<1e-6) 战损后槽位不变='+deathOk
+    +' | 换旗F.ang换参考系:船未动设旗舰后离位='+swDev.toExponential(1)+'(须<1e-6) F.ang=新旗舰船头误差='+swAng.toExponential(1)+' 就地成形位移='+swMove.toExponential(1)+'(须<1e-6) 到达朝向=当前船头误差='+swFace.toExponential(1)
+    +' 换回可逆='+swBack.toExponential(1)+' 阵亡顺位='+swDie.toExponential(1)+'(须<1e-6) 切generated后F.ang=旗舰船头误差='+vAngOk.toExponential(1)+'(须<1e-9,不许NaN) 换旗F.ang不动='+vKept.toExponential(1)+'(须0)'
+    +' | 负对照 generated:mode='+gMode+' 终点偏离任意布局='+Math.round(gLay)+'(须>5000) fmHdg全0='+(gHdg===0)+' 带face的令='+gFace+'(须0) 槽位=条令表='+(gGeo<1e-9)
+    +' 同一折返换槽舰数='+gSwap+'(须>=2,否则③b没测到东西)'
+    +' 切回snapshot重拍误差='+reTake.toExponential(1)+' mode='+reMode+'(须fixed) 重拍后离位='+reDev.toExponential(1)+'(须<1e-6) F.ang=船头误差='+reAng.toExponential(1);
+});
+/* 6f-14 FM3-2 条令站位【防空环】(40-slots formationSlots 重写)。全部用【局部系】断言(读 s.fmSlot,局部 +x = 阵型朝向,+y = 右舷),
+   并列印实际数值。舰用 makeShip 现造(靶场三舰是 CA+2DD,凑不出 CV / 双 CA 护卫这些组合),测完从 ships 里摘掉。
+     ① CA 旗舰 + 2 DD:两 DD 都上环 |slot|=50000±1(= DD 近防外圈 25000×2 × spacing 1.0),站 000 与 −18°(n=20:站距 = DD 内圈 8000×2,ceil(2π·50000/16000)=20),
+        两舰局部 x>0(在前方);旗舰 [0,0,0];fmHdg 全 0;src/mode = generated/slot。
+     ② CA + 5 DD:五舰全在前方 ±40° 内,后方 |θ−180°|<60° 无舰(舰少站多时后方自然空);
+     ③ CA + CV + 2 DD:CV 无主炮 → 居中(局部 x≈0、|y|=20000),两 DD 上环;
+     ④ CA + 2 CA 护卫:两 CA 上环,R=15000×2=30000、站距 5000×2=10000 → n=19,站 000 与 −360/19;
+     ⑤ CA + 1 DD + 1 CA 护卫(简报第 91 行"把一艘 DD 换成 CA 护卫 → R 变小"):CA 也上环(有近防、有主炮),R=min(50000,30000)=30000 < ① 的 50000,
+        站距 min(16000,10000)=10000 → n=19;【按身份】断言 DD(6800)在 000、CA(2000)在 −360/19(FM3-2b:原先多了条 0.5×maxScore 居中规则把 CA 塞进横排,已删);
+     ⑦ FM3-2c 混编 CA + DD + CA 护卫【下令之后】条令映射仍在(fmReassign 只许同分互换):顺向一段与 180° 折返各测一次,
+        两舰 fmSlot 一字不变、DD 仍在 000;同分仍可换那一边由 FLOW36 负对照 gSwap>=2 守着;
+     ⑧ FM3-2c 换一组【同分】的 CA + 2 DD 跑到位后【再点一次"阵型"钮】(fmSetSrc(F,'generated'))是空操作:先断言下令时 fmReassign 确实换过槽,
+        再断言 F.ang/离位/槽位全不变、船一步没动(改前两条腿都会踢翻它:无条件 F.ang=NaN → fmOffOf 退回 0 rad;尾部无条件 fmReslot → 抹掉落盘的配对,
+        槽位对调、离位 38→15649 km、状态翻成"成形中"。⑧ 原先复用 ⑦ 的混编组,分不同换不了槽,"槽位不变"恒真,漏掉了第二条腿);
+     ⑥ fmSetPreset 贴身(0.6)→ R 仍 50000(半径不随 spacing 变)、站距 16000×0.6=9600 → n=33,两 DD 落在 000 与 −360/33;回标准档 n=20、−18°
+        (FM3-2b:原先把 spacing 乘到 R 上、贴身 0.2 → R=10000,与简报第 86 行相反,已回改);
+     负对照:Object.keys(fmParamsNew()) 恰为 ['spacing'];把一艘 DD 的 s.ciws.inner 手改成 4000 再 fmReslot → 站距变 8000、n 变 40,
+             【按身份】断言分高的 b[2](6800)在 000、被改弱的 b[1](3400)在 −9°(简报第 87/91 行"最高 score 的舰在 000";FM3-2b 前只按 |θ| 排序、身份被抹掉),
+             R 不变,而武器定义表里的 inner 仍是 8000 —— 证明读的是实例不是表。旧弧线阵四样东西(角色表/防空圈基准/扇面/弦距)的源码级负对照在 verdict 块 grep。 */
+function fm37grp(cls){ /* 造 cls 列表对应的蓝舰、建编队 1、显式切 generated;返回 {b,F}。舰上打 __p37 标记供 fm37drop 摘除 */
+  var b=cls.map(function(c,i){var s=makeShip(c,'探针·'+c+i,[-30000*i,12000*i,0],[1,0,0],[0,0,0],'blue',2);s.speedCmd=800;s.rrNext=-1;s.__p37=true;ships.push(s);return s;});
+  var F=fmCreate('1',b);fmSetSrc(F,'generated');
+  return {b:b,F:F};
+}
+function fm37drop(){fmDelete('1');for(var i=ships.length-1;i>=0;i--)if(ships[i].__p37)ships.splice(i,1);}
+t('FLOW37_FMCAPSLOT',function(){ /* FM4 能力插槽 + 最优指派。改前这条测的是 FM3-2 防空环(单维能力分降序填一个圆环),整套几何已被替换 */
+  function R(s){return Math.hypot(s.fmSlot[0],s.fmSlot[1]);}
+  function TH(s){return Math.atan2(s.fmSlot[1],s.fmSlot[0])*180/Math.PI;}
+  function fmt(b){return b.map(function(s){return s.cls+'['+(s.fmStn?s.fmStn.nm:'?')+'|r'+Math.round(R(s))+'|'+TH(s).toFixed(1)+'°]';}).join(' ');}
+  fm23reset();
+  /* ① 固定模板:插槽表次序 = 填充次序(条令 §3223)。CA+2DD 只够填前两槽:正前屏护(screen 000)与左翼屏护(screen 315) */
+  var g=fm37grp(['CA','DD','DD']),b=g.b,F=g.F;
+  var t1=fmt(b);
+  var BR1=fmBandRadii(b,b[0],1);
+  var flagZero=(R(b[0])<1e-9&&b[0].fmStn&&b[0].fmStn.band==='core');
+  var th1=[TH(b[1]),TH(b[2])].sort(function(x,y){return Math.abs(x)-Math.abs(y);});
+  var ring1=(Math.abs(R(b[1])-BR1.screen)<1&&Math.abs(R(b[2])-BR1.screen)<1);
+  var st1=(Math.abs(th1[0])<0.01&&Math.abs(Math.abs(th1[1])-45)<0.01); /* 315° 即 −45°;固定模板 spread=1 不改方位 */
+  var side1=th1[1]<0?'左舷(y<0)':'右舷(y>0)';
+  var cap1=(b[1].fmStn.cap==='aaChan'&&b[2].fmStn.cap==='aaChan'&&b[1].fmStn.band==='screen');
+  var hdg1=b.every(function(s){return s.fmHdg===0;});
+  var src1=(F.src==='generated'&&F.mode==='slot'&&F.P.stance==='fixed');
+  var keys=Object.keys(fmParamsNew()).sort().join(',');
+  var okKeys=(keys==='slots,spacing,stance');
+  /* ② 站位换布局:水下「宽而不深」的横向展开必须【明显】大于水面「收拢集火」。用同一组船,只切 stance */
+  function shape(){var mx=0,my=0;b.slice(1).forEach(function(s){mx=Math.max(mx,Math.abs(s.fmSlot[1]));my=Math.max(my,Math.abs(s.fmSlot[0]));});return {x:mx,y:my};}
+  fm37drop();
+  g=fm37grp(['CA','DD','DD','DD','DD','DD','DD','DD']);b=g.b;F=g.F;
+  fmSetStance(F,'surf');var shSurf=shape(),tSurf=fmt(b),spSurf=F.P.spacing;
+  fmSetStance(F,'sub'); var shSub =shape(),tSub =fmt(b),spSub =F.P.spacing;
+  fmSetStance(F,'air'); var shAir =shape(),tAir =fmt(b),spAir =F.P.spacing;
+  var wide=(shSub.x/Math.max(1,shSurf.x));
+  var ok2=(wide>1.5&&Math.abs(spSurf-1.00)<1e-9&&Math.abs(spSub-1.60)<1e-9&&Math.abs(spAir-3.00)<1e-9); /* 切站位把站距乘数拨到该站位预设;air 的 3.00 正是 FM_LIMIT 上界从 2 放宽到 3 的原因 */
+  /* ③ 空中为主 = 圆形屏护:八个防空位均分 360°,所以【后方 60° 内必须有舰】—— 与固定模板的前重后轻正好相反 */
+  var rearAir=0;b.slice(1).forEach(function(s){var a=Math.abs(TH(s));if(a>150)rearAir++;});
+  fmSetStance(F,'fixed');var rearFix=0;b.slice(1).forEach(function(s){var a=Math.abs(TH(s));if(a>150)rearFix++;});
+  var ok3=(rearAir>=1);
+  fm37drop();
+  /* ④ 【最优指派】对 4 舰编队穷举全部 3!=6 种指派,断言匈牙利拿到的总契合度就是最大值。
+     这是本次重做的全部理由:改前按单维能力分降序填站(贪心),一艘舰在通道上最强、贴身上垫底,单维排序看不见。 */
+  g=fm37grp(['CA','DD','DD','CV']);b=g.b;F=g.F;
+  var PL=fmPlanStations(b,F.P,b[0].id);
+  var rest=b.filter(function(s){return s!==PL.flag;});
+  var FREE=[];PL.sta.forEach(function(st,j){if(j!==PL.coreIdx)FREE.push(st);});
+  var got=0;PL.pairs.forEach(function(p){got+=p.v;});
+  var best=-1,perm=[0,1,2],cnt=0;
+  (function go(cur,used){
+    if(cur.length===rest.length){var sum=0;cur.forEach(function(j,i){sum+=PL.fit(rest[i],FREE[j]);});cnt++;if(sum>best)best=sum;return;}
+    for(var j=0;j<FREE.length;j++){if(used[j])continue;used[j]=1;cur.push(j);go(cur,used);cur.pop();used[j]=0;}
+  })([],{});
+  var ok4=(cnt===6&&best-got<1e-9&&got>0); /* got 必须【等于】穷举最大值,不是接近 */
+  var t4=fmt(b);
+  fm37drop();
+  /* ⑥ 贴身站位的几何门:站位半径超出该舰 inner 时该维归零（够不到旗舰就拿不到内圈叠乘）。
+     【何时才咬得住】close = 0.9 × bm × min(inner)，而 min(inner) ≤ 任一舰的 inner，
+     所以 bm ≤ 1.111 时这道门对谁都不会触发——固定/水面/水下三套站位（bm=1.00）它恒不生效，
+     只有空中为主（bm=1.15 ⇒ close = 1.035×min(inner)）会把内圈最小的那几艘拦在贴身站位外。
+     下面就用空中为主 ± 把 inner 调大两个方向各验一次。 */
+  var ca12=[];for(var ci=0;ci<12;ci++)ca12.push('CA');   /* 空中为主前 8 槽全是防空，第 9 槽才是「左贴身」——护卫不够 9 艘的话根本不存在贴身站位 */
+  g=fm37grp(ca12);b=g.b;F=g.F;
+  fmSetStance(F,'air');
+  var PL5=fmPlanStations(b,F.P,b[0].id);
+  var close5=PL5.bands.close, ca5=b[1], inner5=ciwsOf(ca5).inner;
+  var stClose=null;PL5.sta.forEach(function(st){if(st.cap==='aaClose'&&!stClose)stClose=st;});
+  var fitGated=stClose?PL5.fit(ca5,stClose):-1;
+  ca5.ciws.inner=close5*2;                       /* 罩得住了（只改这一艘，min(inner) 不变，close 不动）*/
+  var PL5b=fmPlanStations(b,F.P,b[0].id);
+  var stClose2=null;PL5b.sta.forEach(function(st){if(st.cap==='aaClose'&&!stClose2)stClose2=st;});
+  var fitOpen=stClose2?PL5b.fit(ca5,stClose2):-1;
+  ca5.ciws.inner=inner5;
+  var ok5=(!!stClose&&close5>inner5&&fitGated===0&&fitOpen>0.5);
+  fm37drop();
+  /* ⑥ 插槽扩容:舰数超过插槽数时【插槽数量不变】,多出来的船沿同一插槽的方位向两侧轮转展开(off=0,−1,+1,…)。
+     固定模板 14 槽,20 艘 = 旗舰 + 19,所以前 5 个插槽各有 2 艘、其余各 1 艘;不同的位置不许重合。 */
+  var STA6=fmGenStations(20,FM_STANCE.fixed.slots);
+  var si6={},grp6=0;
+  STA6.forEach(function(st){if(st.si>=0)si6[st.si]=1;grp6=Math.max(grp6,st.grp);});
+  var nSlot=Object.keys(si6).length, nSta6=STA6.length;
+  var many=[];for(var mi=0;mi<20;mi++)many.push(mi?'DD':'CA');
+  g=fm37grp(many);b=g.b;F=g.F;
+  var byNm={},dup6=0,seen6={};
+  b.slice(1).forEach(function(s){
+    var n=s.fmStn?s.fmStn.nm:'?';byNm[n]=(byNm[n]||0)+1;
+    var k=Math.round(s.fmSlot[0])+','+Math.round(s.fmSlot[1]);
+    if(seen6[k])dup6++;seen6[k]=1;
+  });
+  var maxPer=0;for(var kk in byNm)maxPer=Math.max(maxPer,byNm[kk]);
+  var ok6=(nSlot===14&&nSta6===20&&grp6===1&&maxPer<=2&&dup6===0);
+  fm37drop();
+  /* ⑦ 下令后指派不许被打乱:44 fmReassign 的分桶键是【可互换性签名】fmSwapKey(九维能力 + inner 全同才同桶)。
+     混编 CA 旗舰 + DD + CV:三舰能力签名互不相同,所以顺向与 180° 折返(欧氏配对最想换的一段)都一槽不许动。
+     同签名仍可换那一边由 FLOW36 的负对照 gSwap>=2 守着(CA+2DD 同签名,折返必换槽)—— 两条合起来才是双向断言。 */
+  g=fm37grp(['CA','DD','CV']);b=g.b;F=g.F;
+  var s7=[b[1].fmSlot.slice(),b[2].fmSlot.slice()],nm7=[b[1].fmStn.nm,b[2].fmStn.nm];
+  function kept7(){return Math.max(Math.hypot(b[1].fmSlot[0]-s7[0][0],b[1].fmSlot[1]-s7[0][1]),Math.hypot(b[2].fmSlot[0]-s7[1][0],b[2].fmSlot[1]-s7[1][1]));}
+  var D7=[400000,240000,0];
+  moveShips(b,D7,'stop');
+  var t7a=fmt(b),keep7=kept7();
+  addWaypoint(b,[-400000,-240000,0]);
+  var t7b=fmt(b),keep7b=kept7();
+  var ok7=(keep7<1e-9&&keep7b<1e-9);
+  fm37drop();
+  /* ⑧ FM3-2c(第二轮修复)的回归:再点一次"阵型"钮是【空操作】。用【同签名】的 CA+2DD(fmReassign 允许互换),
+     先断言 fmReassign 确实换过槽(证明这组材料真会被 fmReslot 抹掉),再断言点一次之后读数/朝向/槽位全不变 + 船一步没动。 */
+  g=fm37grp(['CA','DD','DD']);b=g.b;F=g.F;
+  var f8=fmFlag(F),sl0=b.map(function(s){return s.fmSlot.slice();});
+  moveShips(b,D7,'stop');
+  var swap8=0;b.forEach(function(s,i){swap8=Math.max(swap8,Math.hypot(s.fmSlot[0]-sl0[i][0],s.fmSlot[1]-sl0[i][1]));});
+  var i7,left7=1;
+  for(i7=0;i7<60000;i7++){if(rrJobs.length)rrTick();stepShipsMotion(0.02);left7=0;b.forEach(function(s){if(s.orders.length||V.len(s.vel)>1)left7++;});if(!left7)break;}
+  function odev(){var d=0;b.forEach(function(s){if(s===f8)return;var o=fmOffOf(s);var e=Math.hypot(f8.pos[0]+o[0]-s.pos[0],f8.pos[1]+o[1]-s.pos[1]);if(e>d)d=e;});return d;}
+  var t8=fmt(b);
+  var ang8=F.ang,dev8=odev(),pos8=b.map(function(s){return s.pos.slice();}),sl8=b.map(function(s){return s.fmSlot.slice();});
+  fmSetSrc(F,'generated');
+  var idAng=Math.abs(F.ang-ang8),idDev=Math.abs(odev()-dev8),idPos=0,idSlot=0;
+  b.forEach(function(s,i){idPos=Math.max(idPos,Math.hypot(s.pos[0]-pos8[i][0],s.pos[1]-pos8[i][1]));idSlot=Math.max(idSlot,Math.hypot(s.fmSlot[0]-sl8[i][0],s.fmSlot[1]-sl8[i][1]));});
+  /* 同一组船上再验一次 fmSetStance 的空操作守卫(值没变就不重排) */
+  var slA=b.map(function(s){return s.fmSlot.slice();});
+  fmSetStance(F,'fixed');
+  var idStance=0;b.forEach(function(s,i){idStance=Math.max(idStance,Math.hypot(s.fmSlot[0]-slA[i][0],s.fmSlot[1]-slA[i][1]));});
+  var ok8=(swap8>1000&&left7===0&&dev8<2000&&idAng<1e-12&&idDev<1e-6&&idPos<1e-9&&idSlot<1e-9&&idStance<1e-9);
+  fm37drop();
+  var ok=(flagZero&&ring1&&st1&&cap1&&hdg1&&src1&&okKeys&&ok2&&ok3&&ok4&&ok5&&ok6&&ok7&&ok8);
+  return (ok?'ok':'fail')
+    +' ①固定模板 CA+2DD:'+t1+' 旗舰占阵心='+flagZero+' 两DD在屏护带(r='+Math.round(BR1.screen)+')='+ring1+' 站000与±45°(模板前两槽)='+st1+' 第二站在'+side1+' 需求都是通道/屏护='+cap1+' fmHdg全0='+hdg1+' src/mode/stance=generated/slot/fixed='+src1+' fmParamsNew键=['+keys+'](须 slots,spacing,stance)='+okKeys
+    +' | ②切站位(8舰同组):水面'+tSurf+' → 水下'+tSub+' 横向展开比 水下/水面='+wide.toFixed(2)+'(须>1.5=「宽而不深」真的更宽) 站距乘数 水面/水下/空中='+spSurf.toFixed(2)+'/'+spSub.toFixed(2)+'/'+spAir.toFixed(2)+'(须 1.00/1.60/3.00)='+ok2
+    +' | ③空中为主'+tAir+' 后方150°外舰数='+rearAir+'(须>=1=圆形屏护,固定模板同规模为'+rearFix+')='+ok3
+    +' | ④最优指派(CA+2DD+CV 穷举 '+cnt+' 种):匈牙利总契合='+got.toFixed(6)+' 穷举最大='+best.toFixed(6)+' 差='+(best-got).toExponential(1)+'(须=0,不是接近)='+ok4+' '+t4
+    +' | ⑤贴身几何门(空中为主 bm=1.15):贴身带 r='+Math.round(close5)+' > 该舰 inner='+Math.round(inner5)+'，契合='+fitGated+'(须恰为0) 把 inner 调到 '+Math.round(close5*2)+' 后='+fitOpen.toFixed(3)+'(须>0.5)='+ok5
+    +' | ⑥插槽扩容(20舰):不同插槽数='+nSlot+'(须14=不随舰数变) 站位总数='+nSta6+'(须20=人人有站) 任务群='+(grp6+1)+'个(须2：FM_GROUP_CAP=16) 单槽最多='+maxPer+'艘 位置重合='+dup6+'处(须0)='+ok6
+    +' | ⑦下令后指派保住(fmReassign 只许同签名互换):顺向'+t7a+' 槽位不变='+(keep7<1e-9)+' | 折返'+t7b+' 槽位不变='+(keep7b<1e-9)+'(起始槽:'+nm7.join('/')+') → '+ok7
+    +' | ⑧同签名CA+2DD跑到位后再点"阵型"/"固定模板"是空操作:'+t8+' 下令时配对换槽='+Math.round(swap8)+'(须>1000,否则本条没测到东西) 到位='+(left7===0)+' 离位='+Math.round(dev8)+' F.ang变化='+idAng.toExponential(1)+' 离位变化='+idDev.toExponential(1)+' 槽位变化='+idSlot.toExponential(1)+' 船位移='+idPos.toExponential(1)+' 再点同一站位槽位变化='+idStance.toExponential(1)+' → '+ok8;
+});
+t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DOM 事件】。只调 fmPageOpen/fmPgAct 这类函数的话,委托接线错了照样全绿(RF22b 的教训) */
+  if(typeof fmPageOpen!=='function')return 'fail fmPageOpen 未定义(89-fmpage 没加载或顶层抛错)';
+  var errs=[];var onerr=function(e){errs.push(e.message||String(e));};
+  window.addEventListener('error',onerr);
+  function hit(el,ev,x,y){ if(!el)return false; el.dispatchEvent(new MouseEvent(ev,{bubbles:true,button:0,clientX:x||0,clientY:y||0})); return true; }
+  var b=fm23reset(),F=fm23group(b);
+  fmSetSrc(F,'generated');
+  selected=F.ships.slice();
+  updFmBar();
+  /* ① 入口:编队菜单的「编组控制」钮 —— 真的点它,不是直接调 fmPageOpen */
+  var tab=document.querySelector('#fmBar .fm-tab');
+  hit(tab,'pointerdown');
+  updFmBar();
+  var btn=document.querySelector('#fmActs [data-fma="page"]');
+  var had=!!btn;
+  hit(btn,'pointerdown');
+  var pg=document.getElementById('fmPage');
+  var opened=!!(pg&&pg.classList.contains('on')&&fmPageIsOpen());
+  var body=document.getElementById('fpBody');
+  var len1=body?body.innerHTML.length:0;
+  var dial=document.getElementById('fpDial');
+  var slotN=document.querySelectorAll('#fpDial [data-fps]').length;
+  var shipDots=dial?dial.querySelectorAll('circle[fill-opacity=".9"]').length:0;
+  var rows=document.querySelectorAll('#fpBody .fp-row').length;
+  var tds=document.querySelectorAll('#fpBody .fp-t tbody tr').length;
+  var slots0=fmPageSlots(F).length;
+  var ok1=(had&&opened&&len1>2000&&!!dial&&slotN===slots0&&slotN>=11&&rows>=2&&tds===b.length);
+  /* ② 点一个插槽 → 选中 + 出配置条(select 真的建出来了) */
+  var g0=document.querySelector('#fpDial [data-fps]');
+  hit(g0,'pointerdown');
+  var selIdx=fmPg.sel;
+  var capSel=document.querySelector('#fpBody select[data-fp="cap"]');
+  var bandSel=document.querySelector('#fpBody select[data-fp="band"]');
+  var ok2=(selIdx===0&&!!capSel&&!!bandSel&&capSel.value===fmPageSlots(F)[0].cap);
+  /* ③ 改能力(真的派 change 事件)→ 插槽表落到 F.P.slots、槽位重排、地图侧的 s.fmStn 跟着变 */
+  var cap0=fmPageSlots(F)[0].cap;
+  var capTo=(cap0==='ew')?'gun':'ew';
+  capSel.value=capTo;
+  capSel.dispatchEvent(new Event('change',{bubbles:true}));
+  var custom=!!(F.P.slots&&F.P.slots.length);
+  var capNow=fmPageSlots(F)[0].cap;
+  var stnHas=b.some(function(s){return s.fmStn&&s.fmStn.cap===capTo;}); /* 改完立刻有舰被派到这个能力的站位上 */
+  var ok3=(custom&&capNow===capTo&&stnHas);
+  /* ④ 拖动改方位:pointerdown 在插槽上 → window pointermove 到盘面另一处 → pointerup。
+     判据是【方位真的变了】且【变到鼠标指的那个角】(±3°),不是"随便动了一下" —— 后者连坐标映射反了都能通过。 */
+  var brg0=fmPageSlots(F)[0].brg;
+  var rc=document.getElementById('fpDial').getBoundingClientRect();
+  var okRect=(rc.width>50&&rc.height>50);
+  /* 目标:盘面正右方 = 局部 +y = 右舷 = 方位 090(固定模板 spread=1,扁率 1,所以展开前后同角) */
+  var tx=rc.left+rc.width*0.90, ty=rc.top+rc.height*0.5;
+  hit(document.querySelector('#fpDial [data-fps="0"]'),'pointerdown');
+  window.dispatchEvent(new MouseEvent('pointermove',{bubbles:true,clientX:tx,clientY:ty}));
+  window.dispatchEvent(new MouseEvent('pointerup',{bubbles:true}));
+  var brg1=fmPageSlots(F)[0].brg;
+  var dAim=Math.abs(((brg1-90)%360+360)%360);if(dAim>180)dAim=360-dAim;
+  var ok4=(okRect&&Math.abs(brg1-brg0)>1&&dAim<3);
+  /* ⑤ 站位钮:页内切站位 = 编队菜单那一行的同一个 fmSetStance;切完自定义插槽被丢掉(它是按上一套布局改的) */
+  var scBtn=document.querySelector('#fpBody [data-fp="sc-sub"]');
+  hit(scBtn,'pointerdown');
+  var ok5=(F.P.stance==='sub'&&!F.P.slots&&Math.abs(F.P.spacing-1.60)<1e-9&&fmPageSlots(F).length===FM_STANCE.sub.slots.length);
+  /* ⑥ 新增 / 删除插槽,并守住"不许删到空" */
+  var n6=fmPageSlots(F).length;
+  hit(document.querySelector('#fpBody [data-fp="add"]'),'pointerdown');
+  var nAdd=fmPageSlots(F).length;
+  hit(document.querySelector('#fpBody [data-fp="del"]'),'pointerdown');
+  var nDel=fmPageSlots(F).length;
+  F.P.slots=[{nm:'仅剩一个',cap:'aaChan',band:'screen',brg:0}];fmReslot(F);fmPg.sel=0;fmPageRender();
+  hit(document.querySelector('#fpBody [data-fp="del"]'),'pointerdown');
+  var nLast=fmPageSlots(F).length;
+  var ok6=(nAdd===n6+1&&nDel===n6&&nLast===1);
+  /* ⑦ 恢复默认 + 关闭(真的点 ✕) */
+  hit(document.querySelector('#fpBody [data-fp="reset"]'),'pointerdown');
+  var okReset=(!F.P.slots&&fmPageSlots(F).length===FM_STANCE.sub.slots.length);
+  hit(document.getElementById('fpClose'),'pointerdown');
+  var closed=!(pg.classList.contains('on'))&&!fmPageIsOpen();
+  /* ⑧ 固定模式下本页不画能力站位(槽位来自建队快照);地图侧的 s.fmStn 也必须被清掉 */
+  fmSetSrc(F,'snapshot');
+  var stnCleared=b.every(function(s){return !s.fmStn;});
+  var ok7=(okReset&&closed&&stnCleared);
+  /* ⑨ 编队没了要能自己收摊,不能留一个指着空编队的页面 */
+  fmPageOpen(F.id);fmDelete(F.id);fmPageRender();
+  var ok8=!fmPageIsOpen();
+  window.removeEventListener('error',onerr);
+  var ok=(ok1&&ok2&&ok3&&ok4&&ok5&&ok6&&ok7&&ok8&&!errs.length);
+  return (ok?'ok':'fail')
+    +' ①入口(真点「编组控制」钮):钮存在='+had+' 页已开='+opened+' 正文='+len1+'字符 方位盘='+(!!dial)+' 插槽圈='+slotN+'个(须=插槽表 '+slots0+') 舰位点='+shipDots+' 评估行='+rows+' 能力表行='+tds+'(须='+b.length+')='+ok1
+    +' | ②点插槽:选中下标='+selIdx+'(须0) 能力/带下拉都建出='+(!!capSel&&!!bandSel)+'='+ok2
+    +' | ③改能力 '+cap0+'→'+capTo+':落到F.P.slots='+custom+' 插槽表已变='+(capNow===capTo)+' 有舰被派到该能力站位(s.fmStn)='+stnHas+'='+ok3
+    +' | ④拖动改方位:'+Math.round(brg0)+'° → '+Math.round(brg1)+'°(拖到盘面正右方,须≈090±3;偏差='+dAim.toFixed(1)+'°)='+ok4
+    +' | ⑤页内切站位→水下:stance='+F.P.stance+' 自定义插槽已丢='+(!F.P.slots)+' 站距乘数='+F.P.spacing.toFixed(2)+'(须1.60)='+ok5
+    +' | ⑥增删插槽:'+n6+' -增-> '+nAdd+' -删-> '+nDel+' 只剩1个时再删='+nLast+'(须仍1=不许删到空)='+ok6
+    +' | ⑦恢复默认='+okReset+' 点✕关闭='+closed+' 切固定模式后 s.fmStn 已清='+stnCleared+'='+ok7
+    +' | ⑧编队被删后自动收摊='+ok8+' 运行期错误='+(errs.length?errs.join(' / '):'none');
 });
 t('FLOW6_CHAIN',function(){ /* RF7 数据链渲染:函数存在;编辑态/退出态 render 均不炸(像素断言不做,ERRORS 层兜底) */
   var e=fc5reset();
@@ -2070,5 +2466,12 @@ grep -q "FLOW32_FMCROSS=ok" "$OUT" || { echo "✗ FLOW32_FMCROSS 未通过(FL3 �
 grep -q "FLOW33_FOLSPEED=ok" "$OUT" || { echo "✗ FLOW33_FOLSPEED 未通过(FL3 跟随速度不超自己的巡航档)"; fail=1; }
 grep -q "FLOW34_FOLCROSS=ok" "$OUT" || { echo "✗ FLOW34_FOLCROSS 未通过(FL4 跟随态折返不许交叉航线)"; fail=1; }
 grep -q "FLOW35_FMGEAR=ok" "$OUT" || { echo "✗ FLOW35_FMGEAR 未通过(FL5 速度档位在两种模式下都严格生效)"; fail=1; }
+grep -q "FLOW36_FMSNAP=ok" "$OUT" || { echo "✗ FLOW36_FMSNAP 未通过(FM3-1 固定模式:建队/重拍即成形(离位0)/快照可逆/终点布局与到达朝向/折返不配对/换旗重心化+F.ang换参考系(船未动换旗离位0、就地成形不动、换回可逆、阵亡顺位)/战损不变 + generated 负对照(折返必换槽=同分仍可配对、切generated后F.ang=旗舰船头不再是NaN、换旗F.ang不动))"; fail=1; }
+grep -q "FLOW37_FMCAPSLOT=ok" "$OUT" || { echo "✗ FLOW37_FMCAPSLOT 未通过(FM4 能力插槽+最优指派:固定模板前两槽 000/±45°·屏护带 / 切站位改形状(水下横向展开>1.5倍水面、站距乘数拨到预设) / 空中为主后方有舰 / 匈牙利总契合度 = 穷举最大值(差恰为 0) / 贴身几何门 / 20 舰时插槽数仍 14·位置不重合 / 下令后 fmReassign 只许同签名互换 / 再点一次阵型与同站位都是空操作)"; fail=1; }
+grep -q "FLOW38_FMPAGE=ok" "$OUT" || { echo "✗ FLOW38_FMPAGE 未通过(FM4 舰队编组控制页，全程真实 DOM 事件:编队菜单钮开页 / 点插槽出配置条 / 改能力落到 F.P.slots 且 s.fmStn 跟着变 / 拖动改方位拖到哪就是哪(±3°) / 页内切站位 / 增删插槽且不许删到空 / 恢复默认+关闭 / 固定模式清 s.fmStn / 编队被删后自动收摊)"; fail=1; }
+# FM3-2 源码级负对照:旧弧线阵的四样东西(舰种角色表 / 防空圈基准半径函数 / 扇面参数 / 弦距参数)必须从 js/ 里消失。
+# 模式用字符串拼接写,免得本文件自己被同一条 grep 抓到。
+FM32_DEAD="CLS_""ROLE|aaRing""Ref|P\\.f""an|P\\.g""ap|FM_LIMIT\\.f""an|FM_LIMIT\\.g""ap"
+if grep -rnE "$FM32_DEAD" js/ >/dev/null 2>&1; then echo "✗ FM3-2 负对照:js/ 里仍有旧弧线阵残留"; grep -rnE "$FM32_DEAD" js/; fail=1; fi
 grep -q "^RENDER=ok" "$OUT" || { echo "✗ RENDER 未通过"; fail=1; }
 [ $fail -eq 0 ] && echo "✓ 全部通过" || exit 1

@@ -76,7 +76,7 @@ function rrMakeShip(proto) {          // 只克隆运动内核会读到的字段
   s.orders = []; s.formation = null; s.patrol = null; s.lockedTarget = null;
   s.follow = null; // FL1:必须清 —— 上面是 for(const k in proto) 全量浅拷,跟随关系会被一起拷进来,
                    // 沙盘船于是去跟随一艘【真实舰】,航线细化的搜索结果被静默污染(同 formation/patrol 那几条的理由)
-  s.turnTarget = null; s.turnNoFm = false; s.brake = false; s.crawling = false; s.coasting = false;
+  s.turnTarget = null; s.brake = false; s.crawling = false; s.coasting = false; // FM3-0:删"单纯转头"死标志复位
   s.dead = false; s.id = '__rr';
   return s;
 }
@@ -91,7 +91,7 @@ function rrStartRun(job, aim, k0, dt, from) {
   const q = from || job.start;
   s.pos = q.pos.slice(); s.vel = q.vel.slice(); s.facing = q.facing.slice();
   s.coasting = q.coasting; s.crawling = q.crawling; s.brake = q.brake;
-  s.formation = null; s.follow = null; s.turnTarget = null; s.turnNoFm = false; s.lockedTarget = null; // FL1 同上:每次重放都要清跟随
+  s.formation = null; s.follow = null; s.turnTarget = null; s.lockedTarget = null; // FM3-0:删"单纯转头"死标志复位。FL1 同上:每次重放都要清跟随
   s.speedCmd = job.speedCmd;
   s.orders = [];
   for (let k = k0; k < n; k++) s.orders.push({ pos: [aim[k][0], aim[k][1], 0], type: (k === n - 1 && job.tail ? 'stop' : 'pass') });

@@ -18,9 +18,7 @@ let CAM_MULT=2;                       // 相机平移速度倍数(0.5x~20x)
 let history=[], replay={active:false,idx:0}, prevRunning=true, nextSnapT=1; // KIMI146:nextSnapT=下一快照时间(原snapAcc每帧只存一次,高倍率下快照密度塌陷)
 let shipCards={};      // 卡片DOM引用,id -> {root,stEl,dotEl}。FL1:groupCards(编组卡)随编组名册层一并删除
 let pendingMove=null,pendingType='stop'; // 卡片右键命令后,等待地图点选目标(pass/stop)
-let pendingTurn=null;                    // V键:船头转向命令,等待地图点选方向
-let pendingTurnNoFm=false;               // v139:Shift+V 单纯转头(不带动编队阵型)
-let turnCmdShift=false;                  // v139:keydown 记录 Shift+转向键
+let pendingTurn=null;                    // V键:船头转向命令,等待地图点选方向。FM3-0:pendingTurnNoFm(v139 Shift+V 单纯转头)已删——它只喂过船上一个写-only 的死标志
 let dragOrder=null;                    // 拖拽中的命令点 {ship,index}
 let rangeMode=false,rangeA=null,rangeB=null,rangeFollow=null,mouseX=0,mouseY=0; // 测距工具(按住C/点C待命) + 鼠标位置
 let rangeMoved=false,rangeArm=false; // 测距:是否移动过/是否按住中(待命判定)

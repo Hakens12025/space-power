@@ -72,14 +72,14 @@ function stepShipsMotion(dt){
           // 必须排在下面的 guideTo 之前,否则本 tick 的机头已被推力方向抢走。
           if(cur.pt){
             s.turnTarget=[s.pos[0]+fa[0]*1e7, s.pos[1]+fa[1]*1e7, 0]; // 朝向层读的是【世界点】,故把方向外推成远点(1e7 相对航程 ~1e4,方向漂移可忽略)
-            s.turnNoFm=true;                                  // 单舰令,不带动阵型
+            // FM3-0:原此处置位 v139 的"单舰令,不带动阵型"标志已删 —— 该标志全库无读取点,是写-only 死标志
           }
         }
         if(dist<CFG.arrive*2 && vn<CFG.stopSpeed){
           s.vel=[0,0,0]; s.crawling=false;
           // RF11 到位时若朝向还没对上(提前起转来不及,比如近距离大角度),补一次原地转 —— 虚影的承诺必须兑现
           if(cur.face&&V.angle(s.facing,cur.face)>0.02&&!s.turnTarget){
-            s.turnTarget=[s.pos[0]+cur.face[0]*1e7, s.pos[1]+cur.face[1]*1e7, 0];s.turnNoFm=true;
+            s.turnTarget=[s.pos[0]+cur.face[0]*1e7, s.pos[1]+cur.face[1]*1e7, 0]; // FM3-0:删"单纯转头"死标志置位
           }
           s.orders.shift(); log(`${s.name} 到位`,''); continue;
         }
@@ -108,7 +108,7 @@ function stepShipsMotion(dt){
     if(s.turnTarget){ // FM1:排除条款删除——旗舰改走通用 orders 分支后,它的转向本来就该由本层处理(改前那支自带 continue,整拍不导引,是"编队不机动"事故的现场)
       const tDesired=V.norm(V.sub(s.turnTarget,s.pos));
       applyHeading(s,tDesired,dt); // RF10
-      if(V.angle(s.facing,tDesired)<0.02){s.turnTarget=null;s.turnNoFm=false;} // KIMI151修:调头完成清除(同旗舰分支根因——原残留导致航线走完后做陈旧调头)
+      if(V.angle(s.facing,tDesired)<0.02){s.turnTarget=null;} // FM3-0:删"单纯转头"死标志复位。KIMI151修:调头完成清除(同旗舰分支根因——原残留导致航线走完后做陈旧调头)
     }
     // 战斗转向(v118,移动+攻击一体):锁定目标且MAC可用 → 运动不冻结。
     // DS171 M3:driftFire 承接 lockPlayer 职能(60s限时)——命令照走,非硬机动段机头归瞄准(全向找窗口,对准1.1°即自动开火);硬机动段(刹车/爬行/调头)机头让位(v130机动可靠性不劣化);T收编为纯指定(有令船不抢机头,窗口自然出现才打)

@@ -321,7 +321,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧,与 updateCardsStatus 
       if(fmBox)fmBox.style.display='block';           // 具体值,不能写 ''
       fmbInfo(st);
       if(ciN)ciN.textContent=(typeof fmName==='function')?fmName(_F):('编队'+_F.id);
-      if(ciC)ciC.textContent=st.list.length+' 艘 · '+(st.mode==='follow'?'跟随态':'阵位态');
+      if(ciC)ciC.textContent=st.list.length+' 艘 · '+((typeof fmbModeText==='function')?fmbModeText(st.mode,true):st.mode); // FM3-1 三模式,文案与 87 同源
       if(ciSp)ciSp.innerHTML=[
         ['舰数',st.list.length],
         ['编队速度',st.uncap?'不限':Math.round(st.spd)],

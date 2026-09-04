@@ -87,7 +87,7 @@ function clearPendings(){
      那一次点击并 return,后面那个【无声留到下一次左键】,而那时它下达的是一条真命令(不只是吃一次点击)。
      清单原本在右键取消与 91-init 各手抄一遍,漏一个就留下幽灵待命态。任务那五个也收进来:
      它们当前被 SIMPLE_UI 挡在右键菜单后面不可达,但漏掉的话 SIMPLE_UI 一翻开就是同一个 bug 类。 */
-  selWeapon=null;pendingMove=null;pendingTurn=null;pendingTurnNoFm=false;
+  selWeapon=null;pendingMove=null;pendingTurn=null; // FM3-0:删 pendingTurnNoFm(Shift+V"单纯转头"整套删除,它只喂过船上那个写-only 的"单纯转头"死标志)
   pendingIntercept=null;pendingBeacon=null;pendingManual=null;pendingMine=null;pendingFmFollow=null;
   if(typeof pendingTaskPatrol!=='undefined'){pendingTaskPatrol=null;taskPatrolPts=[];}
   if(typeof pendingTaskIntercept!=='undefined'){pendingTaskIntercept=null;pendingTaskDeny=null;}
@@ -242,11 +242,11 @@ function onMouseDown(e){
     else log('请点中红方敌舰','warn');
     pendingTaskStrike=null;hideTip();return;
   }
-  if(e.button===0&&pendingTurn){ // V键转向:点地图设定方向(调头,速度不变);Shift+V单纯转头不变队形
+  if(e.button===0&&pendingTurn){ // V键转向:点地图设定方向(调头,速度不变)。FM3-0:Shift+V"单纯转头"分支删除(它设的船上标志全库无读取点,两种转向行为本就一样)
     const w=worldAt(sx,sy);
-    pendingTurn.forEach(s=>{s.turnTarget=[w[0],w[1],0];s.brake=false;if(pendingTurnNoFm)s.turnNoFm=true;}); // v139:Shift+V标记turnNoFm→阵型不跟随。RF6 去掉 s.orders=[]:朝向已移交 31-step-ships 的独立朝向层,与移动层并行,转向不必再取消航线
-    log(`${pendingTurn.length} 艘 转向 → ${Math.round(w[0]/1000)}k,${Math.round(w[1]/1000)}k${pendingTurnNoFm?'(单纯转头)':'(边走边转)'}`,''); // RF6 文案跟着改:原"调头,速度不变"描述的是被取消航线后的滑行态
-    pendingTurn=null;pendingTurnNoFm=false;hideTip();updSelWeaponTip(); // FL1:V 已接进 #cmdTip,清标志就必须同步刷提示(updSelWeaponTip 是边沿触发、无兜底刷新)
+    pendingTurn.forEach(s=>{s.turnTarget=[w[0],w[1],0];s.brake=false;}); // RF6 去掉 s.orders=[]:朝向已移交 31-step-ships 的独立朝向层,与移动层并行,转向不必再取消航线
+    log(`${pendingTurn.length} 艘 转向 → ${Math.round(w[0]/1000)}k,${Math.round(w[1]/1000)}k(边走边转)`,''); // RF6 文案跟着改:原"调头,速度不变"描述的是被取消航线后的滑行态
+    pendingTurn=null;hideTip();updSelWeaponTip(); // FL1:V 已接进 #cmdTip,清标志就必须同步刷提示(updSelWeaponTip 是边沿触发、无兜底刷新)
     return;
   }
   if(e.button===0&&pendingMove){ // 卡片命令的目标点选(编组→编队,散船→各自)

@@ -102,8 +102,8 @@ function doAction(id){
       if(rangeMode&&!rangeArm){endRange();} // 待命(点一下C)时再按C退出
       else startRange();
       break;
-    case 'turn_cmd':{ // V:船头转向命令——点地图设定方向(调头,速度不变);Shift+V=单纯转头不变队形;再按V取消
-      if(pendingTurn){pendingTurn=null;pendingTurnNoFm=false;hideTip();if(typeof updSelWeaponTip==='function')updSelWeaponTip();log('取消转向命令','');break;} // FL1:同上,清 pendingTurn 必须同步刷 #cmdTip
+    case 'turn_cmd':{ // V:船头转向命令——点地图设定方向(调头,速度不变);再按V取消。FM3-0:Shift+V"单纯转头"分支删除(pendingTurnNoFm 只喂船上一个写-only 的死标志)
+      if(pendingTurn){pendingTurn=null;hideTip();if(typeof updSelWeaponTip==='function')updSelWeaponTip();log('取消转向命令','');break;} // FL1:同上,清 pendingTurn 必须同步刷 #cmdTip
       const sel=controlledShips(); // FM2:选中什么就转什么(原 expandToFleet 会把单选一艘扩成整组)
       if(sel.length){
         /* FL1 三个 arm 点(fmbArmFollow / toggleWeapon / turn_cmd)写法一致:武装前先 clearPendings()。
@@ -113,10 +113,10 @@ function doAction(id){
            取消那条早退排在本行之上,所以这里不会自清刚要设的 pendingTurn。 */
         if(typeof clearPendings==='function')clearPendings();
         if(typeof updFmBar==='function')updFmBar();
-        pendingTurn=sel;pendingTurnNoFm=turnCmdShift; // v139:Shift+V → 单纯转头,阵型不跟随
+        pendingTurn=sel; // FM3-0:原此处给"单纯转头"待命标志赋值(v139 Shift+V)已删;FM3-1 连它读的那个 Shift 记录全局也一并删了
         if(typeof updSelWeaponTip==='function')updSelWeaponTip(); // 把 V 接进 #cmdTip 提示体系(它自己的 showTip 走的是被 RF2 藏死的 #statusTip,不接的话按 V 之后屏幕上一个字都没有)
-        showTip(pendingTurnNoFm?'点击地图设定方向(单纯转头·不变队形) · 再按V取消':'点击地图设定转向方向 · 再按V取消');
-        log(pendingTurnNoFm?'🧭 单纯转头(阵型不变):点击地图设定方向':'🧭 船头转向:点击地图设定方向','');
+        showTip('点击地图设定转向方向 · 再按V取消');
+        log('🧭 船头转向:点击地图设定方向','');
       }
       else log('未选中舰船','warn');
       break;}
@@ -225,6 +225,12 @@ window.addEventListener('keydown',e=>{
   // 同一条路径上 C 开测距、G 下倒车令、Backspace 删命令点、F8 切 GM 全都发生在看不见的地方。
   // 排在两条 Esc 分岔【之后】:Esc 在上面已经处理完并 return,所以这里直接全拦,不必像 overlayOn 那样留白名单。
   if(typeof tutIsOpen==='function'&&tutIsOpen())return;
+  /* FM4 舰队编组控制页:Esc 优先级插在教程【之后】——两者不会同时开,顺序只是把链接下去;
+     同样必须早于下面的 ACTIONS 匹配(settings 绑的就是 Escape,放它跑到 doAction 会去开那个被 RF2 藏死的 #overlay)。
+     全拦一条同教程:不拦的话每个键都穿过遮罩打在战场上——尤其本页带输入控件(select),
+     而 Ctrl+数字建队/Backspace 撤点这些发生在看不见的地方比看得见更难查。 */
+  if(e.key==='Escape'&&typeof fmPageIsOpen==='function'&&fmPageIsOpen()){e.preventDefault();fmPageClose();return;}
+  if(typeof fmPageIsOpen==='function'&&fmPageIsOpen())return;
   if(editMode){ // 编辑器快捷键
     if(e.key==='Delete'||e.code==='Delete'){ // 删除选中单位
       if(editSel){const u=editUnitOf(editSel);if(u)deleteEditUnit(u);}
@@ -241,7 +247,7 @@ window.addEventListener('keydown',e=>{
   // 改成按【实际可见性】判断:面板真显示才拦。SIMPLE_UI 将来关掉、设置面板复活时行为仍然正确。
   const ovEl=document.getElementById('overlay');
   const overlayOn=!!(ovEl&&ovEl.classList.contains('on')&&getComputedStyle(ovEl).display!=='none');
-  turnCmdShift=!!(bindings.turn_cmd&&ks==='Shift+'+bindings.turn_cmd); // RF6 修:原先在循环【之后】才赋值,而 doAction 在循环【之内】调用,turn_cmd 读到的永远是上一次按键的值(现象:Shift+V 第一次按走普通转向,第二次才是单纯转头)。判据本身与循环无关,提前求值即可
+  // FM3-1:原此处 v139 的"keydown 记录 Shift+转向键"全局(RF6 曾修过它的赋值时机)已随 FM3-0 删掉的"单纯转头"分支一并删除 —— 它唯一的消费者就是那条分支,删后写-only
   for(const a of ACTIONS){
     const b=bindings[a.id];
     if(b===ks||(a.id==='turn_cmd'&&b&&ks==='Shift+'+b)){ // v139:Shift+转向键=单纯转头(不带动阵型)
@@ -255,7 +261,7 @@ window.addEventListener('keydown',e=>{
 });
 // WASD 相机持续移动
 const camKeys={};
-window.addEventListener('keydown',e=>{if(e.target&&(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'))return;if(typeof tutIsOpen==='function'&&tutIsOpen())return;camKeys[e.code]=true;}); // v119:输入框内不触发快捷键。RF5-D 补同一道教程门:上面那条 keydown 拦住了功能键,这条是独立注册的,不补的话遮罩后面相机还在被 WASD 推着走
+window.addEventListener('keydown',e=>{if(e.target&&(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'))return;if(typeof tutIsOpen==='function'&&tutIsOpen())return;if(typeof fmPageIsOpen==='function'&&fmPageIsOpen())return;camKeys[e.code]=true;}); // v119:输入框内不触发快捷键。RF5-D 补同一道教程门:上面那条 keydown 拦住了功能键,这条是独立注册的,不补的话遮罩后面相机还在被 WASD 推着走
 window.addEventListener('keyup',e=>{
   camKeys[e.code]=false;
   if(bindings.range&&eventKeyStr(e)===bindings.range&&rangeMode){ // 松开C:移动过则结束;没移动进入待命(点一下C也能测距)

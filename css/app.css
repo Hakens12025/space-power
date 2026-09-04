@@ -591,3 +591,59 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 /* 参数行(扇面/密度/档位):一行放得下就不许换行;步进钮不参与伸缩,否则 260px 里它们会把中间的读数挤没 */
 #fmActs .fm-grp.g-par{flex-wrap:nowrap}
 #fmActs .fm-grp.g-par .qbtn{flex:0 0 auto;min-width:28px;padding:2px var(--sp-2)}
+
+/* ==================== FM4 舰队编组控制页 #fmPage ====================
+   几何配方抄 #tutOverlay:外层 flex 居中 + 卡片定高 + 内层 .fp-body 独立滚动,卡片 overflow:hidden
+   所以长内容永远顶不穿视口。颜色全部取自 :root token,本节的十六进制只出现在 svg 里(canvas 侧战术色同源)。
+   注意:#fmPage 不属于 css 上方那份 RF2 隐藏清单,别加进那两行 display:none!important(同 #tutOverlay / #evtFeed / #xhTip)。 */
+#fmPage{position:fixed;inset:0;background:var(--scrim);z-index:var(--z-modal);display:none;align-items:center;justify-content:center;padding:var(--gut)}
+#fmPage.on{display:flex}
+#fmPagePanel{width:min(1180px,100%);max-height:100%;background:var(--srf-modal);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-md);display:flex;flex-direction:column;overflow:hidden}
+.fp-hd{flex:none;display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4) var(--sp-5);border-bottom:var(--bw) solid var(--line);background:var(--srf-raise)}
+.fp-hd h2{flex:none;font-size:var(--fs-title);color:var(--txt-hi);font-weight:bold;letter-spacing:var(--ls-label)}
+.fp-hd-hint{flex:1;min-width:0;font-size:var(--fs-label);color:var(--txt-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fp-body{flex:1;min-height:0;overflow:auto;padding:var(--sp-4) var(--sp-5) var(--sp-6)}
+/* 工具条:标签 + 按钮 + 读数横排。.fp-sp 是弹性隔断,把它右边的东西推到行尾 */
+.fp-bar{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2);padding:var(--sp-3) 0;border-bottom:var(--bw) solid var(--line-hair)}
+.fp-cfg{border-bottom:none;border-top:var(--bw) solid var(--line-hair);margin-top:var(--sp-2)}
+.fp-sp{flex:1;min-width:var(--sp-3)}
+.fp-lb{font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label);margin-left:var(--sp-3)}
+.fp-lb:first-child{margin-left:0}
+.fp-v{font-family:var(--ff-mono);font-size:var(--fs-body);color:var(--txt-read);font-variant-numeric:tabular-nums}
+.fp-dim{font-size:var(--fs-label);color:var(--txt-mute)}
+.fp-bar select{background:var(--srf-sunk);color:var(--txt);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);font-size:var(--fs-label);padding:2px 4px}
+/* 两栏:左阵型图 + 右评估。窄窗口下自动落成一栏(阵型图是正方形 svg,挤窄了就没法读) */
+.fp-grid{display:grid;grid-template-columns:minmax(420px,1fr) minmax(320px,1fr);gap:var(--sp-5);margin-top:var(--sp-4)}
+@media (max-width:1000px){.fp-grid{grid-template-columns:1fr}}
+.fp-col{min-width:0}
+#fpDial{width:100%;height:auto;display:block;background:var(--srf-sunk);border:var(--bw) solid var(--line);border-radius:var(--r-sm)}
+/* 插槽圈:整组做命中区(circle 与 text 一起),所以 text 要 pointer-events:none 否则拖在字上会丢焦点 */
+.fp-slot{cursor:grab}
+.fp-slot text{pointer-events:none;user-select:none}
+.fp-slot:hover circle{stroke-width:2}
+.fp-note{font-size:var(--fs-label);color:var(--txt-dim);line-height:var(--lh-body);margin-top:var(--sp-2)}
+.fp-note b{color:var(--txt)}
+.fp-hd2{font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label);padding-bottom:var(--sp-2);border-bottom:var(--bw) solid var(--line-hair);margin-bottom:var(--sp-2)}
+/* 评估行:等级徽标 + 插槽名 + 说明。说明会很长,让它自己换行而不是撑宽整栏 */
+.fp-rows{display:flex;flex-direction:column;gap:var(--sp-1)}
+.fp-row{display:grid;grid-template-columns:18px 96px 1fr;gap:var(--sp-2);align-items:start;padding:var(--sp-2);background:var(--srf-sunk);border-radius:var(--r-sm);font-size:var(--fs-label);line-height:var(--lh-body)}
+.fp-row.sum{background:var(--srf-raise)}
+.fp-g{font-family:var(--ff-mono);font-weight:bold;text-align:center}
+.fp-g.g-f{color:var(--state-ok)}
+.fp-g.g-a{color:var(--state-warn)}
+.fp-g.g-l{color:var(--state-danger)}
+.fp-g.g-x{color:var(--txt-mute)}
+.fp-n{color:var(--txt-hi);overflow-wrap:anywhere}
+.fp-r{color:var(--txt);overflow-wrap:anywhere}
+/* 能力表:列多,容器自己横向滚(页面 body 绝不横向滚) */
+.fp-tw{overflow-x:auto;margin-top:var(--sp-5)}
+.fp-t{border-collapse:collapse;width:100%;font-size:var(--fs-label)}
+.fp-t th,.fp-t td{padding:3px var(--sp-2);border-bottom:var(--bw) solid var(--line-hair);white-space:nowrap;text-align:left}
+.fp-t th{color:var(--txt-dim);font-weight:normal;letter-spacing:var(--ls-label);position:sticky;top:0;background:var(--srf-modal)}
+.fp-t td{color:var(--txt)}
+.fp-t td.nm{color:var(--txt-hi)}
+.fp-t td.num{font-family:var(--ff-mono);text-align:right;font-variant-numeric:tabular-nums;color:var(--txt-read)}
+.fp-t td.num[data-top]{color:var(--state-active)}
+.fp-t tr.flagrow td{background:var(--srf-sel)}
+/* 站位钮在固定模式下压暗:那时槽位来自建队快照,站位模板一个字都读不到,点了没有可见效果 */
+.qbtn.qdim{opacity:.4}

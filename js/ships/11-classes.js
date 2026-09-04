@@ -15,7 +15,8 @@ const CLS_STRUCT={ // RF3 舰体表:结构/信标载量(非武器数据,从原 C
   CA:{hp:900, beacon:0}, // TIER1 原 CRUISER 巡洋 TODO(TIER-BAL) beacon 载量待定
 };
 /* ===== TIER1 能力谓词层:把逻辑层散落的 cls==='XXX' 硬编码换成数据驱动查询(P0 建的安全垫,P1 随五张表一起换成 DD/CA/BB/CV 键) ===== */
-const CLS_ROLE={DD:'screen',CA:'line',BB:'line',CV:'line'}; // TIER1 舰种战术角色:主力线/屏护——阵型分槽按角色不认舰种字符串;CV 先并入主力线 TODO(TIER-BAL) 航母后置护航槽位要一个未标定的后置距离,平衡阶段再加
+/* FM3-2:原先这里还有一张"舰种战术角色表"(DD 屏护 / CA·BB·CV 主力线),给 40-slots 旧弧线阵与 42/44 换槽分桶用。
+   条令站位改成防空环后,居中/环上按实例 ciwsOf 能力分与 hasMAC 现算(40-slots 的 fmDoctrineSplit),那张表连同它的名字一起删了 —— 不要再按舰种写角色表。 */
 const CLS_VALUE={DD:2,CA:3,BB:3,CV:3}; // TIER1 舰种威胁权重 TODO(TIER-BAL)。注意 3 在这里是个阈值:07-missiles.js:297 伏击雷 trigMode 'big' 按 shipValue(s)<3 放行,改这里的数会静默改变伏击名单
 function shipValue(s){return (s&&s.value)||CLS_VALUE[s&&s.cls]||1;} // TIER1 威胁权重查询:实例优先(s.value 待 P2 tier 烘焙,现阶段恒走表),未知舰种回 1——与 ciwsOf/hasMAC 的实例优先口径对齐
 function hasMAC(s){return ((s&&s.macDmg)||0)>0;} // TIER1 是否装备 MAC 主炮:按实例 macDmg>0 判定(CV 的 macDmg=0 自动被排除),等价于旧的 cls==='CRUISER'||cls==='FRIGATE'

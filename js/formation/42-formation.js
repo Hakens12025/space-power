@@ -9,19 +9,26 @@
        name,                     // 书签显示名
        ships:[shipId...],        // 名册(顺序即分槽顺序)
        flagship,                 // 旗舰 id —— 阵型锚点,也是"跟随态"里被跟随的那一艘
-       P:{fan,spacing,gap},      // 阵型参数,每编队一份
-       mode:'slot'|'follow',     // 见下
+       P:{spacing},              // 阵型参数,每编队一份。FM3-2:只剩 spacing(防空环站距乘数,1.0=环上最弱内圈直径;圈半径不随它变);fan/gap 随旧弧线阵删除
+       src:'snapshot'|'generated', // FM3-0 槽位来源:'snapshot'(建队快照,刚体;FM3-1 起为建队默认)| 'generated'(40-slots 条令站位表)
+       snap:{shipId:{off,hdg}},  // FM3-1 建队那一刻各舰相对旗舰的偏移(旗舰局部系)与朝向差。snapshot 源下 fmReslot 只从它重算,【绝不从实时位置重拍】;
+                                 //        fmSetSrc(F,'snapshot') 是唯一的重拍入口。以【建队时的旗舰】为原点存,换旗时按新旗舰的 snap 现场重心化
+       motion:'static'|'follow', // FM3-0 运动方式:static=下令即算终点走 orders;follow=成员持续跟旗舰。【逻辑层只读这两个轴】
+       mode:'fixed'|'slot'|'follow', // 派生值,只给 UI 读(87/88/71):每次 fmSetMode/fmSetSrc 后由 fmModeOf 同步写入。逻辑模块一律不读它
        follow:{tid,off}|null,    // 本编队整体跟随另一艘船/另一个编队(队间偏移在目标局部系里)
        ang, dest0,               // 上次下令算出的阵型朝向 / 上一个编队级目标点(都只用来算下一段朝向)
-       n, flagId                 // 重排脏标记
+       n, flagId                 // 重排脏标记。FM3-1c:flagId 同时是"当前 s.fmSlot / F.ang 以哪艘旗舰为参考系"的记号,snapshot 源换旗时靠它算 F.ang 的换算量
      }
 
    【编队存在 ⟺ formations[k] 存在 ⟺ 名册里至少 2 艘活船】。少于 2 艘就整个删掉,没有中间态。
 
-   【两种模式】
-     slot   (FM2) 下令那一刻把编队级目标点展开成每艘船的绝对终点,各自走散船内核。精确、终点可见可拖。
-     follow (FL1) 只有旗舰接移动令,成员通过 41-follow 持续跟随旗舰阵位。像 RTS 里"跟着队长走"。
-   两种可随时切换(编队菜单)。切换只改 s.follow 的有无,不动任何已下的令。 */
+   【两个正交轴】(FM3-0 解耦;改前只有一个 F.mode 字符串,四处各自 if,没有统一分发点)
+     src    槽位来源:给定 (mates, flag) 写每舰 s.fmSlot(偏移,旗舰局部系)与 s.fmHdg(相对旗舰的朝向差,弧度;旗舰恒 [0,0,0]/0)。
+                     snapshot(FM3-1)= 建队快照,谁站哪认死、到达朝向 = 阵型朝向 + 自己的朝向差;generated = 40-slots 条令站位表,fmHdg 恒 0
+     motion 运动方式:static (FM2) 下令那一刻把编队级目标点展开成每艘船的绝对终点,各自走散船内核。精确、终点可见可拖。
+                     follow (FL1) 只有旗舰接移动令,成员通过 41-follow 持续跟随旗舰阵位。像 RTS 里"跟着队长走"。
+   运动方式只消费 s.fmSlot / s.fmHdg,不关心来源。两者可随时切换(编队菜单)。切换 motion 只改 s.follow 的有无,不动任何已下的令。
+   mode 是给 UI 读的派生值:snapshot+static → 'fixed',generated+static → 'slot',*+follow → 'follow'。 */
 
 let fmSeq = 0;
 
@@ -52,12 +59,57 @@ function fmFlag(F, mates) { // 旗舰;它没了就顺位取第一个并回写(�
   return f;
 }
 
-function fmReslot(F, mates, flag) { // 重算槽位(建队/战损/加员/换旗/调参 五种情形共用)
+function fmSnapTake(F, list, flag) { // FM3-1:把此刻的相对布局拍成 F.snap 形状 {shipId:{off,hdg}}。只在 fmCreate 与 fmSetSrc('snapshot') 两处调
+  const snap = {};
+  snapshotSlots(list, flag.id).forEach(({ s, offset, hdg }) => { snap[s.id] = { off: offset.slice(), hdg }; });
+  F.snap = snap;
+  /* FM3-1b:拍照的同时把阵型朝向 F.ang 写成【此刻旗舰船头角】—— 快照槽位就是在这个局部系里拍的,所以"拍完那一瞬编队按定义成形"
+     只在 F.ang=h 时成立。改前 fmCreate 置 ang:NaN、fmSetSrc 重拍不动 F.ang,而 fmOffOf 在 NaN 时按 0 rad 旋转、重拍后按上一段行进方向旋转,
+     87-fmbar/88-selpanel 的"离位"读数在旗舰船头≠0 时刚建好的固定编队就显示几万公里、状态标成"成形中",下一道令写入 F.ang 才归零。
+     只影响读数与 fmAngOf 原地下令的回落值(那条本来就回落到旗舰船头,口径一致),不影响任何舰船运动。 */
+  F.ang = Math.atan2(flag.facing[1], flag.facing[0]);
+  F.flagId = flag.id; // FM3-1c:快照与 F.ang 都以这艘旗舰为参考系,同步标记,免得紧随其后的 fmReslot 把"重拍"误判成"换旗"再做一次角度换算
+}
+
+function fmReslot(F, mates, flag) { // 重算槽位(建队/战损/加员/换旗/调参 五种情形共用)。FM3-1:按 F.src 分发,同时写 s.fmSlot 与 s.fmHdg
   const list = mates || fmShips(F);
   if (!list.length) return;
   const fl = flag || fmFlag(F, list);
   if (!fl) return;
-  formationSlots(list, F.P, fl.id).forEach(({ s, offset }) => { s.fmSlot = offset.slice(); });
+  if (F.src === 'snapshot') {
+    /* 固定模式:从【建队快照】F.snap 重算,绝不从实时位置重拍 —— 战损/换旗时形状不能变
+       (从实时位置重拍的话,一艘船正在机动中战损,其余舰的"应处位置"会当场跳成它们此刻的散乱位置)。
+       换旗 = 以新旗舰的 snap 为原点重心化:减它的 off、反转它的 hdg。快照本身不改写(仍以建队时的旗舰为原点),
+       所以换旗再换回来是精确可逆的。快照里没有的舰(理论上不会发生:名册只减不增)按与旗舰重合处理。 */
+    const snap = F.snap || {};
+    const base = snap[fl.id] || { off: [0, 0, 0], hdg: 0 };
+    /* FM3-1c:换旗时 F.ang 也要换参考系。F.ang 的定义(FM3-1b)是"fmSlot 所在局部系里的旗舰船头角",下面把槽位从旧旗舰局部系
+       转进新旗舰局部系(转 −hdg_new),F.ang 不跟着换算的话 fmOffOf / fmAngOf 原地回落 展开出来的世界几何会整体绕新旗舰转 −hdg_new:
+       改前固定编队一换旗(右键设旗舰 / 旗舰阵亡顺位 / 43-step 名册漂移兜底 三条路都经这里),船一步没动、87/88"离位"就跳到几万 km、
+       状态"成形中",此时点"就地成形"整队绕新旗舰旋转并各自调头。
+       换算量:同一世界几何在两套局部系里的 F.ang 相差 hdg_new − hdg_old(两者都是快照里相对建队旗舰的朝向差),
+       F.flagId 记着上一次重排用的旗舰(fmSnapTake 也写它),它与 fl 不同就是换旗。快照本身仍不改写,换回去精确可逆。 */
+    if (F.flagId && F.flagId !== fl.id && isFinite(F.ang)) {
+      const prev = snap[F.flagId] || { off: [0, 0, 0], hdg: 0 };
+      F.ang = fmWrapAng(F.ang + base.hdg - prev.hdg);
+    }
+    const ca = Math.cos(-base.hdg), sa = Math.sin(-base.hdg);
+    list.forEach(s => {
+      if (s === fl) { s.fmSlot = [0, 0, 0]; s.fmHdg = 0; s.fmStn = null; return; } // fmStn 也要清:旗舰这条【早退】在下面那行之前,漏了它就会顶着上一次条令站位的标签
+      const o = snap[s.id] || { off: [0, 0, 0], hdg: 0 };
+      s.fmSlot = rotSlot([o.off[0] - base.off[0], o.off[1] - base.off[1], o.off[2] - base.off[2]], ca, sa);
+      s.fmHdg = fmWrapAng(o.hdg - base.hdg);
+      s.fmStn = null; // 固定模式的槽位来自建队快照,没有"能力站位"这回事;不清的话地图上会画着上一次条令站位的标签
+    });
+  } else {
+    /* 条令站位:全员船头随阵型朝向。FM4 起额外把站位的【展示元数据】落到 s.fmStn ——
+       地图上的站位绘制(84-fmplot)与编组控制页(89-fmpage)读它,保证"画出来的站位"与"船真正要去的站位"
+       永远是同一份数据,不会因为两处各算一遍而漂移。纯展示,任何逻辑分支都不许读它。 */
+    formationSlots(list, F.P, fl.id).forEach(({ s, offset, stn, cap, band, fit, r }) => {
+      s.fmSlot = offset.slice(); s.fmHdg = 0;
+      s.fmStn = { nm: stn, cap, band, fit, r };
+    });
+  }
   F.n = list.length;
   F.flagId = fl.id;
   fmApplyFollow(F); // 槽位变了,跟随关系里的相对位也要跟着变
@@ -69,8 +121,12 @@ function fmCreate(k, list) { // Ctrl+数字:按选中舰建/覆盖编队。少�
   if (alive.length < 2) { if (typeof log === 'function') log('编队' + k + ' 已清空', ''); return null; }
   const F = {
     id: String(k), name: '编队' + k, ships: alive.map(s => s.id), flagship: alive[0].id,
-    P: fmParamsNew(), mode: 'slot', follow: null, ang: NaN, dest0: null, n: 0, flagId: null, seq: ++fmSeq,
+    P: fmParamsNew(), src: 'snapshot', motion: 'static', follow: null, ang: NaN, dest0: null, n: 0, flagId: null, seq: ++fmSeq,
   };
+  /* FM3-1:建队默认 snapshot+static → 'fixed'(用户的方法3:保持建队时的相对位置与朝向)。改前(FM3-0)恒 generated → 'slot'。
+     快照必须在 fmDetach 之前拍:fmDetach 会触发旧编队的 fmSettle→fmReslot,不影响 pos/facing,但拍在这里最直白 —— "建队那一刻"。 */
+  fmSnapTake(F, alive, alive[0]); // 写 F.snap 与 F.ang(FM3-1b:上面字面量里的 ang:NaN 在这里被建队旗舰船头角覆盖)
+  F.mode = fmModeOf(F); // FM3-0:src/motion 是真相,mode 是它们的派生
   alive.forEach(s => fmDetach(s)); // 先从各自的旧编队摘干净,再挂新的(一艘船只能在一个编队里)
   formations[String(k)] = F;
   alive.forEach(s => { s.formation = F; });
@@ -84,7 +140,7 @@ function fmDetach(s) { // 把一艘船从它【当前】所属的编队里摘掉
   if (!old) return;
   const i = old.ships.indexOf(s.id);
   if (i >= 0) old.ships.splice(i, 1);
-  s.formation = null; s.fmSlot = null;
+  s.formation = null; s.fmSlot = null; s.fmHdg = 0; // FM3-1:朝向差随槽位一起清
   if (typeof followClear === 'function') followClear(s);
   if (old.flagship === s.id) old.flagship = old.ships[0] || null;
   fmSettle(old);
@@ -100,7 +156,7 @@ function fmSettle(F) { // 人数变化后收口:少于 2 艘就整个删掉,否�
 function fmDelete(k) { // 删除一个编队槽位(成员回散船态)
   const F = formations[String(k)];
   if (!F) return;
-  ships.forEach(s => { if (s.formation === F) { s.formation = null; s.fmSlot = null; if (typeof followClear === 'function') followClear(s); } });
+  ships.forEach(s => { if (s.formation === F) { s.formation = null; s.fmSlot = null; s.fmHdg = 0; if (typeof followClear === 'function') followClear(s); } }); // FM3-1:fmHdg 随 fmSlot 一起清
   delete formations[String(k)];
 }
 
@@ -163,22 +219,77 @@ function fmSetFlagship(F, s) { // 设为旗舰:改名册 + 按新锚点重排(�
 }
 
 function fmSetParam(F, k, v) { if (!F || !F.P || !(k in F.P)) return; F.P[k] = fmClamp(k, v); fmReslot(F); }
-function fmSetPreset(F, n) { if (F) fmSetParam(F, 'gap', aaRingRef() * 2 * (n === 1 ? 1.0 : n === 2 ? 0.7 : 1.4)); }
+/* FM4 切站位:四套站位(固定模板/空中为主/水面为主/水下为主)各带一套插槽表与几何参数。
+   与沙盘同口径 —— 选中一种就把【站距乘数】拨到该站位的预设值(玩家之后仍可用疏/密与档位钮手调),
+   同时丢掉上一套站位遗留的自定义插槽表(P.slots):它是按上一套布局在方位盘上改出来的,套到新布局上没有意义。
+   张角/带半径/扁率/能力偏向不给滑块 —— 那几个是沙盘调参用的,不进游戏(用户令:去掉管理员那套设置)。 */
+function fmSetStance(F, k) {
+  if (!F || !F.P || !FM_STANCE[k]) return;
+  if (F.P.stance === k) return;   // 空操作守卫,同 fmSetSrc:值没变就不重排(重排会抹掉 fmReassign 落盘的配对,离位读数当场跳)
+  F.P.stance = k; F.P.slots = null;
+  F.P.spacing = fmClamp('spacing', FM_STANCE[k].gap);
+  fmReslot(F);
+}
+function fmSetPreset(F, n) { if (F) fmSetParam(F, 'spacing', n === 1 ? 0.6 : n === 2 ? 1.0 : 1.6); } // FM3-2:三档改成站距乘数 贴身 0.6 / 标准 1.0 / 疏开 1.6(简报第 90 行;FM3-2b 把曾写成 0.2 的贴身档改回 0.6。改前是护卫弦距 gap = 防空圈直径 × 1.0/0.7/1.4)
 
 /* ---------------- 模式与跟随 ---------------- */
 
+function fmModeOf(F) { // FM3-0:UI 读的模式名,由两个轴派生。逻辑模块不要调它 —— 直接读 F.src / F.motion
+  if (!F) return 'slot';
+  if (F.motion === 'follow') return 'follow';
+  return F.src === 'snapshot' ? 'fixed' : 'slot';
+}
+
 function fmSetMode(F, mode) {
+  /* FM3-0:入参仍是 UI 的 'slot'|'follow'(87-fmbar 的 m-slot/m-follow 钮与探针都这么调),
+     但落盘写的是运动轴 F.motion('slot' → 'static'),F.mode 随后由 fmModeOf 同步成派生值。
+     改前直接写 F.mode,四个逻辑点各自拿 F.mode 判跟随 —— 现在它们全读 F.motion。 */
   if (!F || (mode !== 'slot' && mode !== 'follow')) return;
-  const was = F.mode;
-  F.mode = mode;
+  const motion = (mode === 'follow') ? 'follow' : 'static';
+  const was = F.motion;
+  F.motion = motion;
+  F.mode = fmModeOf(F);
   /* 切进跟随态要把成员的旧令清掉:那些令是阵位态下发的【编队级】终点,留着的话成员会先飞去旧终点
      (跟随分支排在 orders 之后),模式切换看上去就"没生效"。旗舰的令保留 —— 跟随态下正是它在带路。 */
-  if (mode === 'follow' && was !== 'follow' && typeof orderClear === 'function') {
+  if (motion === 'follow' && was !== 'follow' && typeof orderClear === 'function') {
     const flag = fmFlag(F);
     fmShips(F).forEach(m => { if (m !== flag) { orderClear(m); resetForNewOrders(m); } });
   }
   fmApplyFollow(F);
-  if (typeof log === 'function') log(fmName(F) + ' → ' + (mode === 'follow' ? '跟随态(成员跟旗舰)' : '阵位态(下令即算终点)'), '');
+  if (typeof log === 'function') log(fmName(F) + ' → ' + (mode === 'follow' ? '跟随态(成员跟旗舰)' : (F.src === 'snapshot' ? '固定态(保持建队时的相对位置与朝向)' : '阵位态(下令即算终点)')), ''); // FM3-1:切回 static 时按槽位来源报固定/阵位
+}
+
+function fmSetSrc(F, src) {
+  /* FM3-1:切换槽位来源。切到 snapshot 时【重拍】当前相对位置与朝向为新快照 —— 这是"玩家手调完各舰位置再按固定"的入口,
+     也是唯一会改写 F.snap 的地方(fmReslot 只读它)。切到 generated 不动 F.snap(下次切回 snapshot 反正会重拍)。
+     重排后 F.mode 同步成派生值;跟随态下 fmReslot 尾部的 fmApplyFollow 会把新槽位灌进成员的 s.follow。 */
+  if (!F || (src !== 'snapshot' && src !== 'generated')) return;
+  const mates = fmShips(F);
+  const flag = fmFlag(F, mates);
+  if (!flag) return;
+  const changed = (F.src !== src);
+  if (src === 'snapshot') fmSnapTake(F, mates, flag); // 写 F.snap 与 F.ang(FM3-1b:重拍以此刻船头为局部系,阵型朝向随之改写)
+  /* FM3-2c 审查修复:切到 generated 时把阵型朝向写成【旗舰此刻船头角】,而不是复位成 NaN。
+     FM3-2 的原意("首道令前原地下令/就地成形回落到旗舰此刻船头")只覆盖"从未下过令"这一种情形,而实现是无条件复位:
+     NaN 会让 fmOffOf 退回 0 rad 参考系,一支已按条令成形、一步没动的编队,离位读数当场从几十公里跳到几万公里、
+     87/88 的状态由"待命"翻成"成形中"(FM3-1b 在 snapshot 侧修过的同一类症状);更糟的是读数系(0 rad)与"就地成形"
+     实际使用的系(fmAngOf 在 NaN 时回落到旗舰船头)分家,旗舰被战斗转向摆头后按"就地成形"会把整支编队绕旗舰转过去。
+     写船头角对 fmAngOf 的原地下令语义【等价】(那条回退本来就取旗舰此刻船头),同时让 fmOffOf 与它同系。
+     并且只在【来源真的变了】时写:87-fmbar 的"阵型"钮对当前 src 没有守卫,每点一次都会调到这里,
+     已在阵型模式的编队再点一次必须是空操作,不能把上一道令写入的行进方向覆盖成此刻船头。 */
+  else if (changed) F.ang = Math.atan2(flag.facing[1], flag.facing[0]);
+  F.src = src;
+  F.mode = fmModeOf(F);
+  /* FM3-2c 审查修复(第二轮):尾部的重排也要吃"空操作"守卫,不能只守 F.ang。
+     fmReslot 在 generated 分支会用 formationSlots 重算并覆盖 s.fmSlot,而下令时 44 的 fmReassign 已经把
+     同分舰之间消交叉的配对【落盘】进了 s.fmSlot;已成形的编队再点一次"阵型"钮,配对被抹回条令原序,
+     两艘同分护卫的槽位当场对调 —— 船一步没动,87/88 的离位读数从 38 km 跳到 15649 km、状态由"待命"翻成"成形中"
+     (与本节第 1 条同一类症状,只是走的是槽位而不是 F.ang 这条腿)。
+     切到 snapshot 每次都要重拍(那是"手调后固定"的入口,本来就不是空操作),所以只有 generated 方向按 changed 守。 */
+  if (changed || src === 'snapshot') {
+    fmReslot(F, mates, flag);
+    if (typeof log === 'function') log(fmName(F) + ' 槽位 → ' + (src === 'snapshot' ? '固定(已按当前相对位置与朝向重拍)' : '阵型(条令站位)'), '');
+  }
 }
 
 function fmRadius(F) { let r = 0; fmShips(F).forEach(s => { const sl = s.fmSlot || [0, 0, 0]; r = Math.max(r, Math.hypot(sl[0], sl[1])); }); return r; }
@@ -190,7 +301,7 @@ function fmFollowShip(F, target) {
   if (!F || !target || target.formation === F) return false;      // 自跟随
   if (fmFollowChainHas(target, F)) { if (typeof log === 'function') log(fmName(F) + ' 不能跟随:会形成循环跟随', 'warn'); return false; }
   const tf = fmOf(target);
-  F.follow = { tid: target.id, off: [-(fmRadius(F) + (tf ? fmRadius(tf) : 0) + aaRingRef() * 2), 0, 0] };
+  F.follow = { tid: target.id, off: [-(fmRadius(F) + (tf ? fmRadius(tf) : 0) + 50000), 0, 0] }; // FM3-2:队间那一个"防空圈直径"改成字面量 50000(= 改前 防空圈基准半径函数()×2 = DD 近防外圈 25000×2,值不变);那个函数随旧弧线阵删除
   fmApplyFollow(F);
   if (typeof log === 'function') log(fmName(F) + ' 跟随 ' + (tf ? fmName(tf) : target.name), '');
   return true;
@@ -215,7 +326,7 @@ function fmApplyFollow(F) {
   }
   mates.forEach(m => {
     const slot = m.fmSlot || [0, 0, 0];
-    if (F.mode === 'follow' && m !== flag) followSet(m, flag, slot);          // 内部跟随优先:成员永远跟自家旗舰
+    if (F.motion === 'follow' && m !== flag) followSet(m, flag, slot);        // 内部跟随优先:成员永远跟自家旗舰(FM3-0:读运动轴,不读派生的 F.mode)
     else if (F.follow && tgt) followSet(m, tgt, [F.follow.off[0] + slot[0], F.follow.off[1] + slot[1], F.follow.off[2] + (slot[2] || 0)]);
     else followClear(m);
   });
@@ -225,48 +336,6 @@ function fmTipV(s) { // 跟随限速用的"槽位切向线速度上限":编队�
   const F = fmOf(s);
   if (F && typeof fmSpd === 'function') { const v = fmSpd(F, fmShips(F)); if (isFinite(v) && v > 0) return v; }
   return cruiseOf(s);
-}
-
-function fmReassign(F, mates, ca, sa, dest, from) {
-  /* FL3【每段重新配对槽位】,消除航线交叉。
-     槽位所有权原本是认死的(s.fmSlot 建队时分好就不动),而 fmSpread 每段按航向旋转它 ——
-     航向反转 180° 时左翼槽位转到了世界坐标的右边,两艘僚舰于是必须互换位置:
-     用户看到的"本来 船A-旗舰-船B,下一个路径点变成 船B-旗舰-船A",两条航线在中间交叉。
-
-     解法是把它当【欧氏指派问题】:在平面上,若两条指派线段相交,交换这两个指派必定使总长变短
-     (三角不等式,两次严格不等相加)。所以反复做"能降低总代价就交换"直到无可改善 ——
-     不动点必然【无任何交叉】。N 很小(一支编队几艘船),O(n²) 一遍扫几轮就收敛,不需要匈牙利算法。
-
-     两条约束:
-       · 只在【同角色桶内】换。槽位是 40-slots 按 CLS_ROLE 分主力/护卫/侦察生成的,
-         跨桶交换会让驱逐舰去占主力舰的横队位,阵型形状当场变样。
-       · 旗舰不参与。recenterSlots 保证旗舰槽位恒为 [0,0,0](它是阵型锚点),换给别人就没锚了。 */
-  const flag = fmFlag(F, mates);
-  const byRole = {};
-  mates.forEach((m, i) => {
-    if (m === flag) return;
-    const r = (typeof CLS_ROLE !== 'undefined' && CLS_ROLE[m.cls]) || 'recon';
-    (byRole[r] = byRole[r] || []).push(i);
-  });
-  const cost = (i, slot) => {
-    const o = rotSlot(slot, ca, sa);
-    return Math.hypot(from[i][0] - (dest[0] + o[0]), from[i][1] - (dest[1] + o[1]));
-  };
-  for (const r in byRole) {
-    const idx = byRole[r];
-    if (idx.length < 2) continue;
-    const slots = idx.map(i => (mates[i].fmSlot || [0, 0, 0]).slice());
-    let improved = true, guard = 0;
-    while (improved && guard++ < 32) { // guard:防浮点抖动下的无限循环(每次交换都严格降代价,正常几轮就停)
-      improved = false;
-      for (let a = 0; a < idx.length; a++) for (let b = a + 1; b < idx.length; b++) {
-        const cur = cost(idx[a], slots[a]) + cost(idx[b], slots[b]);
-        const swp = cost(idx[a], slots[b]) + cost(idx[b], slots[a]);
-        if (swp < cur - 1e-6) { const t = slots[a]; slots[a] = slots[b]; slots[b] = t; improved = true; }
-      }
-    }
-    idx.forEach((i, k) => { mates[i].fmSlot = slots[k]; }); // 槽位所有权【落盘】:后续的跟随偏移与 UI 离位读数才跟得上
-  }
 }
 
 function fmFollowReslot(F, mates, flag) {
@@ -281,7 +350,7 @@ function fmFollowReslot(F, mates, flag) {
        · 因此需要【迟滞】:只有收益超过 MARGIN 才换,否则航向在临界角附近抖一下就会来回换槽位。
          临界点是两个候选代价相等处(对称阵型即航向转过 90°),迟滞把它变成一条 2×MARGIN 宽的带。
      只在同角色桶内换、旗舰不参与,理由同 fmReassign。 */
-  if (!F || F.mode !== 'follow' || !flag) return;
+  if (!F || F.motion !== 'follow' || !flag) return; // FM3-0:守卫改读运动轴(43-step 已按 F.motion 分发,这里是双保险)
   const list = (mates || fmShips(F)).filter(m => m !== flag);
   if (list.length < 2) return;
   // 阵型当前朝向:取任一成员那份【已平滑】的跟随角(它们输入相同、限速相同,演化同步);拿不到就回落旗舰航向
@@ -295,7 +364,7 @@ function fmFollowReslot(F, mates, flag) {
   };
   const byRole = {};
   list.forEach((m, i) => {
-    const r = (typeof CLS_ROLE !== 'undefined' && CLS_ROLE[m.cls]) || 'recon';
+    const r = (typeof fmSwapKey === 'function') ? fmSwapKey(m) : 'x'; // FM4:桶 = 可互换性签名,与 44 fmReassign 同一定义点(39-fmcaps)。改前是条令的居中/环上,粒度对能力插槽不够用
     (byRole[r] = byRole[r] || []).push(i);
   });
   let changed = false;

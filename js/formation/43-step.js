@@ -36,6 +36,7 @@ function stepFormation(F, dt) {
   // 阵位态下这次重排不会让任何船动(它们飞的是已经算死的绝对终点);跟随态下它会当场改变跟随点 —— 这是对的。
   if (F.flagId !== flag.id || F.n !== mates.length) fmReslot(F, mates, flag);
   // FL4:跟随态下每 tick 重配一次槽位(带迟滞),否则掉头时成员为了"保持在旗舰同一侧"必须在世界坐标里穿过对方
-  if (F.mode === 'follow' && typeof fmFollowReslot === 'function') fmFollowReslot(F, mates, flag);
+  // FM3-0:tick 侧按运动轴 F.motion 分发的【唯一】一处(改前读 F.mode;F.mode 现在是只给 UI 的派生值)。static 下本层无事可做
+  if (F.motion === 'follow' && typeof fmFollowReslot === 'function') fmFollowReslot(F, mates, flag);
   return { mates, flag, spd: fmSpd(F, mates), dissolved: false };
 }
