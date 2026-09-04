@@ -106,14 +106,15 @@ function fmbTabs(fms){
   if(sig!==fmUi.tabSig){ // 只有编队集合变了才重建(重建会吃掉正在进行的 pointerdown)
     bar.innerHTML='';fmUi.tabs={};fmUi.tabSig=sig;
     fms.forEach(F=>{
-      const el=document.createElement('div');
-      el.className='fm-tab';el.dataset.fmg=F.id;
-      const edge=document.createElement('i');edge.className='fm-edge'; // 状态左条:独立视觉通道,不与 hover 的 border-color 抢同一个属性
-      const nm=document.createElement('span');nm.className='fm-nm';
-      const ct=document.createElement('span');ct.className='fm-ct';
-      el.appendChild(edge);el.appendChild(nm);el.appendChild(ct);
-      bar.appendChild(el);
-      fmUi.tabs[F.id]={root:el,nm:nm,ct:ct};
+    const el=document.createElement('div');
+    el.className='fm-tab';el.dataset.fmg=F.id;
+    const edge=document.createElement('i');edge.className='fm-edge'; // 状态左条:独立视觉通道,不与 hover 的 border-color 抢同一个属性
+    const nm=document.createElement('span');nm.className='fm-nm';
+    const ct=document.createElement('span');ct.className='fm-ct';
+    const hp=document.createElement('i');hp.className='fm-hp'; // FM5a 底部聚合战力条(填充层;底槽是 .fm-tab::before)
+    el.appendChild(edge);el.appendChild(nm);el.appendChild(ct);el.appendChild(hp);
+    bar.appendChild(el);
+    fmUi.tabs[F.id]={root:el,nm:nm,ct:ct,hp:hp};
     });
   }
   fms.forEach(F=>{ // 内容只改叶子
@@ -123,6 +124,11 @@ function fmbTabs(fms){
     if(t.nm.textContent!==nm)t.nm.textContent=nm;
     const ct='· '+st.list.length+'艘';
     if(t.ct.textContent!==ct)t.ct.textContent=ct;
+    // FM5a 聚合战力条:只写叶子(width/background),阈值与配色和 fmbInfo 的 hpbar 逐字相同 —— 两处读数同一副面孔
+    const hw=(st.hpFrac*100).toFixed(1)+'%';
+    if(t.hp.style.width!==hw)t.hp.style.width=hw;
+    const hc=st.hpFrac>0.35?'var(--state-ok)':'var(--state-warn)';
+    if(t.hp.style.background!==hc)t.hp.style.background=hc;
     // 书签宽度上限 110px,长名字会被 ellipsis 截掉 —— 把全名放进 title,悬停仍读得出是哪一支
     const tt=nm+' · '+st.list.length+'艘 · '+st.state+(st.fol?(' → '+st.ftName):'')+'\n点击展开编队菜单 · 再点收起';
     if(t.root.title!==tt)t.root.title=tt;
@@ -216,13 +222,21 @@ function fmbActsBuild(){
          舰数不超过插槽数时 st.off 恒为 0,实测 3/6/10/15 艘下 0.6/1.0/1.6/3.0 四挡槽位【逐位相同】,16 艘起才有差别;
          固定模式更彻底:snapshot 分支根本不读 P,20 艘调 1.0→3.0 槽位变化 0.000000 km。两个都是死钮,一并删。
          真正管疏密的旋钮是【插槽数量与方位】,那已经在编组控制页里。 */
+  /* FM5b 菜单三级层次(用户定案:书签仪表化+轻菜单):
+       ① 模式 = 连体分段控件(.fm-seg,当前段点亮)+ 一行暗色模式说明(文案唯一出处仍是 fmbModeText,零新词);
+       ② 编队行动 = 随模式块(固定→重拍队形 / 阵型→编组控制 / 跟随→空)+ 跟随两钮 + 整队停车(整行);
+       ③ 危险区 = 发丝线隔开,解散编队(红描边 .qstop)独占一行 —— 与日常行动拉开,防误触。
+     data-fma 九个全部沿用 FM4b,事件委托零改动。 */
   acts.innerHTML=
     '<div class="fm-grp g-par">'+
       '<span class="fm-lb">模式</span>'+
-      '<button class="btn qbtn" data-fma="m-fixed" title="固定 · 保持建队时的相对位置与朝向">固定</button>'+
-      '<button class="btn qbtn" data-fma="m-slot" title="阵型 · 能力站位:每个插槽 = 一个方位 + 一种能力,按最优指派分配">阵型</button>'+
-      '<button class="btn qbtn" data-fma="m-follow" title="跟随 · 只有旗舰接移动令,成员持续跟随旗舰的阵位">跟随</button>'+
+      '<div class="fm-seg">'+
+        '<button class="btn" data-fma="m-fixed" title="固定 · 保持建队时的相对位置与朝向">固定</button>'+
+        '<button class="btn" data-fma="m-slot" title="阵型 · 能力站位:每个插槽 = 一个方位 + 一种能力,按最优指派分配">阵型</button>'+
+        '<button class="btn" data-fma="m-follow" title="跟随 · 只有旗舰接移动令,成员持续跟随旗舰的阵位">跟随</button>'+
+      '</div>'+
     '</div>'+
+    '<div class="fm-mdesc" data-lf="mdesc">—</div>'+
     // 随模式变化:固定
     '<div class="fm-grp g-act2 fm-mode fm-hide" data-fmm="fixed">'+
       '<button class="btn qbtn" data-fma="resnap" title="按各舰【此刻】的相对位置与朝向重拍队形快照。手动把船摆好之后按它,这个布局就被固定下来">重拍队形</button>'+
@@ -233,13 +247,16 @@ function fmbActsBuild(){
     '</div>'+
     // 随模式变化:跟随 —— 暂时不放东西(用户令)。空块仍然建出来,免得将来要加时又得改结构
     '<div class="fm-grp g-act2 fm-mode fm-hide" data-fmm="follow"></div>'+
-    // 底部固定区:整队跟随另一艘友舰/另一支编队(跟随一支编队 = 跟随它的旗舰)。三种模式下都能用,所以不随模式显隐
-    '<div class="fm-grp g-act2">'+
+    // 通用行动:整队跟随另一艘友舰/另一支编队(跟随一支编队 = 跟随它的旗舰)。三种模式下都能用,所以不随模式显隐
+    '<div class="fm-grp g-act2 fm-sec">'+
       '<button class="btn qbtn" data-fma="fol" title="按下后进入点选态,再点地图上任一友舰 → 本编队整队跟着它走(右键取消)">跟随目标</button>'+
       '<button class="btn qbtn" data-fma="folx" title="解除整队跟随,回到自己走">解除跟随</button>'+
     '</div>'+
-    '<div class="fm-grp g-act2">'+
+    '<div class="fm-grp g-act1 fm-sec">'+
       '<button class="btn qbtn" data-fma="halt" title="整队停车:逐舰刹停">整队停车</button>'+
+    '</div>'+
+    // 危险区:解散编队独占一行
+    '<div class="fm-grp g-act1 fm-sec fm-danger">'+
       '<button class="btn qbtn qstop" data-fma="disband" title="解散编队:书签消失,成员回散船态">解散编队</button>'+
     '</div>';
   fmUi.actsBuilt=true;
@@ -247,6 +264,7 @@ function fmbActsBuild(){
     mFixed:acts.querySelector('[data-fma="m-fixed"]'), // FM3-1
     mSlot:acts.querySelector('[data-fma="m-slot"]'),
     mFollow:acts.querySelector('[data-fma="m-follow"]'),
+    mDesc:acts.querySelector('[data-lf="mdesc"]'), // FM5b 模式说明行:叶子节点,只改 textContent
     modes:{}, // FM4b 随模式显隐的三个块,键就是 F.mode 的三个值
     fol:acts.querySelector('[data-fma="fol"]')
   };
@@ -263,6 +281,8 @@ function fmbActsSync(F){ // 模式高亮与随模式显隐都跟着【当前展�
   if(fmUi.act.mFixed)fmUi.act.mFixed.classList.toggle('on',md==='fixed');
   if(fmUi.act.mSlot)fmUi.act.mSlot.classList.toggle('on',md==='slot');
   if(fmUi.act.mFollow)fmUi.act.mFollow.classList.toggle('on',md==='follow');
+  // FM5b 分段控件下的模式说明行:长文案走 fmbModeText 唯一出处(与右栏 #selFm 的"模式"读数同一句话)
+  if(fmUi.act.mDesc){const d=md?fmbModeText(md):'—';if(fmUi.act.mDesc.textContent!==d)fmUi.act.mDesc.textContent=d;}
   // 待命态下把"跟随目标"钮点亮:showTip 在屏幕上方,钮上再给一个"还等着你点地图"的落点
   const armed=(typeof pendingFmFollow!=='undefined')&&pendingFmFollow!=null&&F&&String(pendingFmFollow)===String(F.id);
   if(fmUi.act.fol)fmUi.act.fol.classList.toggle('on',!!armed);
@@ -427,8 +447,18 @@ function fmbAct(a){
   updFmBar(); // 立即回显,不等下一个 20 帧拍子
   if(typeof updateSelPanel==='function')updateSelPanel(); // 信息区在右轨,得连它一起叫醒
 }
-function fmbToggle(g){ // 点书签:再点同一个 = 收起
-  fmUi.open=(String(fmUi.open)===String(g))?null:String(g);
+function fmbToggle(g){ // FM5b 点书签 = 选中全队 + 展开;再点同一个 = 收起(选中保留)
+  const same=String(fmUi.open)===String(g);
+  fmUi.open=same?null:String(g);
+  if(!same){ // 刚展开:顺带选中这支编队 —— 右栏/底栏立即切到它的实时数据(用户定案:选中并展开)
+    const F=(typeof fmGet==='function')?fmGet(g):null;
+    const list=(F&&typeof fmShips==='function')?fmShips(F):[];
+    if(list.length){
+      selected=list.map(s=>s.id);
+      fmbRefreshSel(); // 清导弹选中态 + 唤醒右栏/底栏(FL1 之前那个按钮的职责挪到了这里)
+      if(typeof log==='function')log(fmName(F)+' 选中全队 '+list.length+' 艘','');
+    }
+  }
   updFmBar();
 }
 

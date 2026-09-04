@@ -524,7 +524,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 /* 【本项目唯一一条 transition】。全库其余部分零 transition,hover 一律瞬时换色(战术显示器不该有过渡动画,
    状态变化要立刻可读)。这一条是用户明确要求的书签滑出动效,且只作用于 transform ——
    颜色仍然是瞬时的,所以"状态色即语义"那条判据没有被这条动画破坏。不要把它扩到别的选择器上。 */
-.fm-tab{pointer-events:auto;display:flex;align-items:center;gap:var(--sp-2);
+.fm-tab{position:relative;pointer-events:auto;display:flex;align-items:center;gap:var(--sp-2);
   padding:var(--sp-1) var(--sp-2);
   background:var(--srf-panel);border:var(--bw) solid var(--line);border-radius:var(--r-sm);
   font-size:var(--fs-label);letter-spacing:var(--ls-label);color:var(--txt-dim);
@@ -545,6 +545,12 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 .fm-tab:hover .fm-nm,.fm-tab.on .fm-nm{color:var(--txt-hi)}
 /* 战损排在 :hover 之后:同特异度靠书写顺序定优先级,"队里有人快没了"比"鼠标正指着"更该被看见(同 RF8 的 paused) */
 .fm-tab.hurt{border-color:var(--state-warn)}
+/* FM5a 书签仪表化:底部 3px 全宽聚合战力条 = 底槽(.fm-tab::before) + 填充(.fm-hp,宽度%由 87-fmbar 每 20 帧写叶子)。
+   颜色口径与 #selFm 的 hpbar 相同(>35% --state-ok / 否则 --state-warn),读数同源 fmbStat.hpFrac。
+   ::before 是第一个子盒、绘制在 .fm-hp 之前 —— 底槽必须在 ::before,反过来填充会被底槽盖住。
+   第三条状态通道:机动/跟随占左条、战损占边框、战力占底条,同时叠加互不抢属性(同 .fm-edge 那条注释的纪律)。 */
+.fm-tab::before{content:'';position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--line-hair)}
+.fm-tab .fm-hp{position:absolute;left:0;bottom:0;height:3px;width:100%;background:var(--state-ok)}
 
 /* 编队菜单:几何抄 #selPanel,但 left 让开书签栏那一列。层级取 --z-flyout —— 它是由控件(书签)唤出的浮层,
    必须高于唤出者所在的 --z-panel(#ringPanel 当年就是排低了被自己的唤出者压住)。 */
@@ -591,6 +597,21 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 /* 参数行(扇面/密度/档位):一行放得下就不许换行;步进钮不参与伸缩,否则 260px 里它们会把中间的读数挤没 */
 #fmActs .fm-grp.g-par{flex-wrap:nowrap}
 #fmActs .fm-grp.g-par .qbtn{flex:0 0 auto;min-width:28px;padding:2px var(--sp-2)}
+/* FM5b 菜单三级层次:
+   ① 模式分段控件 .fm-seg —— 连体三段,共享外框与内分隔线;段是 .btn 但【去边框去底色】,当前段靠 .on 的
+      accent 洗色点亮。放在 g-par 行里与「模式」标签同排,flex:1 吃满余宽(260px 轨下每段约 60px,两字标签放得下)。 */
+#fmActs .fm-seg{flex:1;min-width:0;display:grid;grid-template-columns:repeat(3,1fr);
+  background:var(--srf-sunk);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);overflow:hidden}
+#fmActs .fm-seg .btn{border:none;border-radius:0;background:transparent;min-width:0;justify-content:center;color:var(--txt-dim)}
+#fmActs .fm-seg .btn+.btn{border-left:var(--bw) solid var(--line-ctl)}
+#fmActs .fm-seg .btn:hover{background:var(--srf-hover);color:var(--txt-hi)}
+#fmActs .fm-seg .btn.on{background:var(--acc-wash);color:var(--acc-lite)}
+/* 模式说明行:分段控件下的一行暗色小字(当前模式的长文案,fmbModeText 唯一出处;三条文案都是单行,不占 min-height) */
+#fmActs .fm-mdesc{margin:2px 0 var(--sp-2);font-size:var(--fs-label);color:var(--txt-mute);line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* ②/③ 分区:二级行动区与三级危险区用发丝线隔开;单列行(整队停车/解散编队)整行独占,读作"终段动作" */
+#fmActs .fm-grp.g-act1{display:grid;grid-template-columns:1fr}
+#fmActs .fm-grp.g-act1 .qbtn{min-width:0;justify-content:center}
+#fmActs .fm-grp.fm-sec{border-top:var(--bw) solid var(--line-hair);padding-top:var(--sp-2);margin-top:var(--sp-1)}
 
 /* ==================== FM4 舰队编组控制页 #fmPage ====================
    几何配方抄 #tutOverlay:外层 flex 居中 + 卡片定高 + 内层 .fp-body 独立滚动,卡片 overflow:hidden
