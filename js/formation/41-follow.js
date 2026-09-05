@@ -114,3 +114,81 @@ function followDist(s) { // 当前离跟随点还有多远(UI 读数用,纯读,�
   const off = rotSlot(f.off, Math.cos(ang), Math.sin(ang));
   return Math.hypot(t.pos[0] + off[0] - s.pos[0], t.pos[1] + off[1] - s.pos[1], t.pos[2] + off[2] - s.pos[2]);
 }
+
+/* ============ FM6 跟随:一个函数,两端各自可以是单舰或编队 ============
+   用户定案:跟随不是编队的一种模式,而是一个标准控件 —— `a 跟随 b`,而 a 与 b 各自既可以是一艘舰,
+   也可以是一支编队(四种组合)。所以这里【不按四种组合分四条路】,而是先把两端归一成同一个形状:
+
+     单舰 ≡ 成员只有自己、半径 0、内部阵位偏移 [0,0,0] 的编队
+
+   归一之后偏移只有一个公式,四种组合都是它的特例:
+
+     off_i = [−(半径(A) + 半径(B) + 净空), 0, 0] + A 内部第 i 位的阵位偏移
+
+   半径为 0、阵位偏移为 0 的那一端自动退化成"单舰"。偏移在【目标的局部系】里(followSet 的既有语义),
+   所以目标掉头时跟随方绕到新的正后方,而不是留在原来的世界方位上。 */
+
+const FOLLOW_GAP = 50000; // 两端之间的净空(= DD 近防外圈 25000 的直径)。与 fmFollowShip 改前那个字面量同值
+
+function followUnitOf(list) {
+  /* 跟随的一方 → 归一形状。【按选中集合判,不按 fmOf】:选中恰好等于某支编队的全部活船才算编队,
+     选中其中一艘就只是那一艘 —— 与右键移动"选中什么就命令什么"(FM2)同一条口径,不另立一套。 */
+  const src = (list || []).filter(s => s && !s.dead);
+  const F = (src.length > 1 && typeof fmSameShips === 'function') ? fmSameShips(src) : null;
+  if (F) return { F, list: fmShips(F), r: (typeof fmRadius === 'function') ? fmRadius(F) : 0, slot: s => s.fmSlot || [0, 0, 0] };
+  /* 散船:没有阵位表,就地合成一个 —— 多艘一起跟随时横向错开一个净空,免得叠成一摞抢同一个点。
+     单舰时它恒为 [0,0,0],于是公式退化成"正后方 净空 处",这正是单舰跟随该有的样子。 */
+  return {
+    F: null, list: src, r: 0,
+    slot: s => { const i = src.indexOf(s); return i <= 0 ? [0, 0, 0] : [0, (i % 2 ? -1 : 1) * Math.ceil(i / 2) * FOLLOW_GAP, 0]; },
+  };
+}
+function followAnchorOf(target) {
+  /* 被跟随的一方 → 归一形状。【跟随一支编队 = 跟随它的旗舰】:点到编队里的任一艘都算跟随那支编队,
+     与 fmFollowShip 改前的口径一致,不另立第二种解释。 */
+  const F = (typeof fmOf === 'function') ? fmOf(target) : null;
+  if (F) return { F, anchor: (typeof fmFlag === 'function' ? fmFlag(F) : null) || target, r: (typeof fmRadius === 'function') ? fmRadius(F) : 0 };
+  return { F: null, anchor: target, r: 0 };
+}
+
+function followAssign(srcList, target) { // a 跟随 b。两端各自可以是单舰或编队,共用同一个偏移公式
+  if (!target || target.dead) return false;
+  const A = followUnitOf(srcList), B = followAnchorOf(target);
+  if (!A.list.length || !B.anchor) return false;
+  if (A.list.indexOf(B.anchor) >= 0) { if (typeof log === 'function') log('跟随:不能跟随自己', 'warn'); return false; }
+  /* 同队算自跟随,一律拒绝。不拦的话会走到下面的散船分支:它为了让跟随关系不被 fmApplyFollow 每次重排
+     覆盖掉会先 fmDetach —— 于是"让本队一艘去跟本队旗舰"这个看起来无害的操作会【静默把它踢出编队】。 */
+  if (B.F && A.list.every(s => s.formation === B.F)) { if (typeof log === 'function') log('跟随:不能跟随自己队里的船', 'warn'); return false; }
+  if (A.F && typeof fmFollowChainHas === 'function' && fmFollowChainHas(B.anchor, A.F)) {
+    if (typeof log === 'function') log(fmName(A.F) + ' 不能跟随:会形成循环跟随', 'warn');
+    return false;
+  }
+  const off0 = [-(A.r + B.r + FOLLOW_GAP), 0, 0];
+  /* 编队源:把【意图】记在 F 上,由 fmApplyFollow 用同一个公式落到每艘船。
+     记这一笔不是为了换个算法,而是为了让战损/换旗/调参触发的 fmReslot 之后还能重算出同一批偏移 ——
+     只写 s.follow 的话,下一次重排会把它整片覆盖掉。 */
+  if (A.F) { A.F.follow = { tid: B.anchor.id, off: off0 }; fmApplyFollow(A.F); }
+  else A.list.forEach(s => {
+    /* 单舰去跟别队/散船:必须先摘出自己的编队,否则 fmApplyFollow 每次重排都会把这条跟随覆盖掉。
+       这是一次真正的脱队,所以打日志说清楚 —— 静默脱队是最难查的那种"我没让它这么干"。 */
+    if (s.formation && typeof fmDetach === 'function') {
+      if (typeof log === 'function') log(s.name + ' 脱离 ' + ((typeof fmName === 'function') ? fmName(s.formation) : '编队') + ' 去跟随', '');
+      fmDetach(s);
+    }
+    const sl = A.slot(s);
+    followSet(s, B.anchor, [off0[0] + sl[0], off0[1] + sl[1], off0[2] + (sl[2] || 0)]);
+  });
+  if (typeof log === 'function') {
+    const who = A.F ? fmName(A.F) : (A.list.length === 1 ? A.list[0].name : A.list.length + ' 艘');
+    log(who + ' 跟随 ' + (B.F ? fmName(B.F) : B.anchor.name), '');
+  }
+  return true;
+}
+function followStopList(srcList) { // 解除。编队源要连 F.follow 一起清(否则下一次 fmApplyFollow 又给挂回来)
+  const A = followUnitOf(srcList);
+  if (!A.list.length) return 0;
+  if (A.F) { if (A.F.follow) { A.F.follow = null; fmApplyFollow(A.F); return A.list.length; } return 0; }
+  let n = 0;
+  A.list.forEach(s => { if (s.follow) { followClear(s); n++; } });
+  return n;
+}

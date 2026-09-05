@@ -109,6 +109,7 @@ function updateCmdBar(sel){
     setHTMLStable(b,`<span class="l">${c.label}</span><span class="s">${on?'开':'关'}</span>`,false); // 双行:名称+状态(状态色由 .on 驱动)。RF7c 走稳定写入:按钮节点本身不换(所以 .btn:hover 一直稳),但内层 span 每拍换新的是纯 churn
   }
   updateCmdBarVis(s); // 武器钮按旗舰配装显隐(CV 无主炮则无主炮钮)
+  if(typeof followBtnSync==='function')followBtnSync(); // FM6 跟随两钮不在 cmdList 里(形状不同),显式同步一次
 }
 function updateCmdBarVis(s){
   for(const kind in KIND_INFO){
@@ -465,3 +466,69 @@ on('fcList','click',e=>{
   }
   updateFcPanel(true); // 立即回显,不等下一个 20 帧拍子;force 绕过 setHTMLStable 的 hover 推迟——此刻光标必然正停在刚点的那个元素上
 });
+
+/* ============ FM6 底栏【跟随】标准控件 ============
+   用户令:跟随不再是编队的一种模式,而是一个标准控件,作用域四选一 ——
+     舰队→舰队 / 舰队→单舰 / 单舰→舰队 / 单舰→单舰。
+   放在底栏而不是编队菜单里,正是因为它对散船同样成立;作用域解析(谁跟/跟谁)在 41-follow 的 followAssign,
+   本文件只管"武装 → 提示 → 兑现"三步,与既有的 selWeapon / pendingTurn 两个待命态同构。
+   两个钮【不进 cmdList】:那张表是"每舰一个布尔开关"的形状(get/set + 全选统一置值),
+   而跟随是一次性动作、且作用域是【整个选中集合】而不是逐舰 —— 硬塞进去会像 RF8 那个大序列钮一样,
+   在 `if(!cmd.set)return` 那行被静默吃掉。所以自己建、自己挂事件。 */
+function followArm() {
+  if (typeof clearPendings === 'function') clearPendings(); // 与其它点选待命态互斥(三个 arm 点同一条纪律:FL1 六d 那条"互斥必须对称")
+  const sel = selBlue();
+  if (!sel.length) { if (typeof log === 'function') log('跟随:先选中我方舰船', 'warn'); return false; }
+  pendingFollow = true;
+  if (typeof updSelWeaponTip === 'function') updSelWeaponTip(); // 提示走 #cmdTip:#statusTip 在 RF2 隐藏清单里,玩家一个字看不到
+  updateSelPanel();
+  return true;
+}
+function followPick(target) { // 由 70-input 在待命态下点中一艘我方舰时调用。无论成败都消耗掉待命态,免得留一个幽灵
+  pendingFollow = null;
+  const sel = selBlue();
+  const ok = (typeof followAssign === 'function') && followAssign(sel, target); // 日志由 followAssign / fmFollowShip 打
+  if (typeof updSelWeaponTip === 'function') updSelWeaponTip();
+  if (typeof updFmBar === 'function') updFmBar();
+  updateSelPanel();
+  return !!ok;
+}
+function followBtnSync() { // 两个钮的可用态与高亮:武装中点亮「跟随」;当前没有跟随关系时「解除」压暗
+  const sel = selBlue();
+  const b1 = document.getElementById('cbFollow'), b2 = document.getElementById('cbUnfollow');
+  if (b1) {
+    b1.classList.toggle('is-dis', !sel.length);
+    b1.classList.toggle('on', !!pendingFollow);
+    setHTMLStable(b1, '<span class="l">跟随</span><span class="s">' + (pendingFollow ? '选目标' : (sel.length ? '待命' : '—')) + '</span>', false);
+  }
+  if (b2) {
+    const any = sel.some(s => !!s.follow);
+    b2.classList.toggle('is-dis', !any);
+    setHTMLStable(b2, '<span class="l">解除</span><span class="s">' + (any ? '跟随中' : '—') + '</span>', false);
+  }
+}
+(function bindFollowBtns() {
+  const wrap = document.querySelector('#cmdBar .cmd-btns');
+  if (!wrap) return;
+  const mk = (id, fn, tip) => {
+    let b = document.getElementById(id);
+    if (b) return;
+    b = document.createElement('button'); b.className = 'btn cbtn'; b.id = id; wrap.appendChild(b);
+    b.addEventListener('click', fn);
+    b.addEventListener('mouseenter', () => {
+      hoverRing = null;
+      const t = document.getElementById('cmdTip');
+      if (t) { t.style.display = 'block'; t.textContent = tip; }
+    });
+    b.addEventListener('mouseleave', () => { hoverRing = null; if (typeof updSelWeaponTip === 'function') updSelWeaponTip(); });
+  };
+  mk('cbFollow', () => { followArm(); },
+    '跟随:按下后点一艘我方舰 → 当前选中的去跟着它走。作用域看你选了什么 —— 选中整支编队 = 整队跟随,选中单舰 = 这一艘跟随;点到编队里的任一艘 = 跟随那支编队(即它的旗舰)');
+  mk('cbUnfollow', () => {
+    const sel = selBlue();
+    const n = (typeof followStopList === 'function') ? followStopList(sel) : 0;
+    if (typeof log === 'function') log(n ? (n + ' 艘 解除跟随') : '解除跟随:当前没有跟随关系', n ? '' : 'warn');
+    if (typeof updFmBar === 'function') updFmBar();
+    updateSelPanel();
+  }, '解除跟随:把当前选中的跟随关系清掉,回到各自走');
+})();

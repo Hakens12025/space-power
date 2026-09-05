@@ -10,9 +10,13 @@
    FM3-2:条令站位改成【防空环】(见 formationSlots 头注),阵型参数只剩 spacing(环上站距乘数,圈半径不随它变);
      删掉的:防空圈基准半径函数(环半径改按各舰实例 ciwsOf 取)/ 扇面与弦距两个参数 / 舰种角色表分桶(主力横排/护卫弧线/侦察桶)。 */
 
-const FM_LIMIT={spacing:[0.5,3]}; // 参数合法区间,UI 与代码共用这一份。FM3-2:只剩 spacing(环上站距乘数),区间 [0.5,2] 不变(FM3-2b:审查退回了曾扩到 [0.15,2.5] 的改动,简报没要)
+/* 参数合法区间,UI 与代码共用这一份。FM6:五个几何旋钮全部开放给玩家(编组控制页 + 编队菜单的带半径滑块),
+   所以每一个都得有区间 —— 滑块只是 UI,越界防线在 fmClamp 这一处。
+     spread 张角(<1 向前收拢 / >1 向后张开)· spacing 同簇站距乘数 · bm 带半径倍数 ·
+     widen 扁率(>1 = 条令的「宽而不深」)· bstr 能力偏向强度(0 = 完全不偏向,合法) */
+const FM_LIMIT={spread:[0.4,2.5], spacing:[0.5,3], bm:[0.3,3], widen:[0.3,3], bstr:[0,2]};
 function fmClamp(k,v){const r=FM_LIMIT[k];const n=Number(v);if(!isFinite(n))return r?r[0]:0;return r?Math.max(r[0],Math.min(r[1],n)):n;}
-function fmParamsNew(){return {stance:'fixed', spacing:1, slots:null};} // FM3-2:默认站距乘数 1.0(= 环上站距取环上舰近防内圈直径的最小值)。改前还有 fan(扇面)/gap(护卫弦距),随旧弧线阵一起删
+function fmParamsNew(){return {stance:'fixed', spread:1, spacing:1, bm:1, widen:1, bstr:1, slots:null};} // FM6:五个几何旋钮都落在 P 上(每编队一份),站位预设只是初值 —— 取数一律走 39 的 fmGeoOf
 
 function rotSlot(slot,ca,sa){return [slot[0]*ca-slot[1]*sa, slot[0]*sa+slot[1]*ca, slot[2]];}
 

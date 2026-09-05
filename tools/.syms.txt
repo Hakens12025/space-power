@@ -39,6 +39,7 @@ FM_LIMIT
 FM_PRIO_FALL
 FM_STANCE
 FM_STANCE_KEYS
+FOLLOW_GAP
 FOLLOW_TIP_V
 FOLLOW_W_FLOOR
 FOL_FLOW_DASH
@@ -46,6 +47,7 @@ FOL_FLOW_PERIOD
 FOL_FLOW_PXPS
 FP_C
 FP_DIAL
+FP_KNOBS
 GEAR_NAMES
 GHOST_MODES
 GUIDE_EFF
@@ -278,10 +280,10 @@ fmDetach
 fmDoctrineSplit
 fmFlag
 fmFollowChainHas
-fmFollowReslot
 fmFollowShip
 fmFollowStop
 fmGenStations
+fmGeoOf
 fmGet
 fmHalt
 fmHungarian
@@ -309,6 +311,7 @@ fmPgCapTable
 fmPgDial
 fmPgDown
 fmPgEsc
+fmPgKnob
 fmPgMove
 fmPgSlotCfg
 fmPgStanceRow
@@ -322,7 +325,6 @@ fmReslot
 fmSameShips
 fmSeq
 fmSetFlagship
-fmSetMode
 fmSetParam
 fmSetPreset
 fmSetSrc
@@ -342,9 +344,7 @@ fmWrapAng
 fmbAct
 fmbActsBuild
 fmbActsSync
-fmbArmFollow
 fmbFlag
-fmbFollowPick
 fmbFollowTgt
 fmbInfo
 fmbList
@@ -358,11 +358,18 @@ fmpSelFormations
 fmtK
 fmtT
 followAim
+followAnchorOf
+followArm
+followAssign
+followBtnSync
 followClear
 followDist
 followHeading
+followPick
 followSet
+followStopList
 followTargetOf
+followUnitOf
 formationSlots
 formationSlotsOld
 formations
@@ -372,6 +379,7 @@ ghostAim
 ghostArm
 ghostAt
 ghostCommit
+ghostFm
 ghostMove
 gridStepCache
 groupAt
@@ -447,7 +455,7 @@ panBy
 panelState
 panning
 pendingBeacon
-pendingFmFollow
+pendingFollow
 pendingIntercept
 pendingManual
 pendingMine

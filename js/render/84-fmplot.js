@@ -43,7 +43,7 @@ function drawFmStations() {
     if (!isFinite(fp[0]) || !isFinite(fp[1])) continue;
 
     /* ---- 带半径圈 ---- */
-    const T = (typeof fmStanceOf === 'function') ? fmStanceOf(F.P) : null;
+    const T = (typeof fmGeoOf === 'function') ? fmGeoOf(F.P) : null; // FM6:必须与 fmPlanStations 同源,直读站位预设会与玩家调过的 bm 分家
     const BR = (typeof fmBandRadii === 'function') ? fmBandRadii(list, flag, T ? T.bm : 1) : null;
     if (BR) {
       ctx.lineWidth = 1;

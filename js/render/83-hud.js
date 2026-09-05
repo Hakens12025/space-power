@@ -506,6 +506,23 @@ function drawGhost(){ // RF11 移动虚影;RF12 拆成【已下达的到达朝�
   if(typeof ghostMove==='undefined'||!ghostMove)return;
   const s=(typeof ships!=='undefined')?ships.find(x=>x.id===ghostMove.id):null;
   if(!s||s.dead)return; // 船没了就不画(清账在 70-input 的 blur/mouseup)
+  /* FM6 编队虚影:整支编队一起画。落地走的是 fmMoveTo(把编队级目标点展开成每艘船的绝对终点),
+     所以这里也必须【按同一套几何】把每艘船画在它自己的终点上 —— 只画旗舰一个船影的话,
+     玩家看到的承诺(一艘船朝某个方向)与实际发生的事(整队按该朝向摆开)对不上。
+     几何直接复用 rotSlot(s.fmSlot, ang):与 44-orders fmSpread 的展开式逐字同形。
+     旗舰画在编队级目标点上(它的 fmSlot 恒为 [0,0,0]),预演线仍从 ghostMove.from 画起。 */
+  const gF=(typeof ghostFm==='function')?ghostFm(ghostMove):null;
+  if(gF){
+    const ang=Math.atan2(ghostMove.face[1],ghostMove.face[0]);
+    const ca=Math.cos(ang),sa=Math.sin(ang);
+    const fixed=(gF.src==='snapshot');
+    for(const m of fmShips(gF)){
+      const o=rotSlot(m.fmSlot||[0,0,0],ca,sa);
+      const fc=fixed?[Math.cos(ang+(m.fmHdg||0)),Math.sin(ang+(m.fmHdg||0)),0]:ghostMove.face;
+      ghostAt(m,ghostMove.wx+o[0],ghostMove.wy+o[1],fc,.5,m===s,m===s?ghostMove.from:null); // 预演线只画一条(旗舰那条),N 条线会把星图糊满
+    }
+    return;
+  }
   ghostAt(s,ghostMove.wx,ghostMove.wy,ghostMove.face,.5,true,ghostMove.from);
 }
 /* ---------- FL2 跟随连线:黄色流动细虚线,【流向跟随舰】 ----------

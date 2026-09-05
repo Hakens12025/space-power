@@ -14,7 +14,7 @@
    —— 那是 RF7c 在 #fcList 上踩过的坑,这里的插槽圈同时满足"重建 + hover + 事件委托"三条,更躲不过。
    所以舰船血量变化引起的评估变动不会自动反映,标题栏写明了读数时刻。 */
 
-const fmPg = { open: null, sel: -1, drag: -1, moved: false }; // 纯 UI 状态,不进任何存档/快照
+const fmPg = { open: null, sel: -1, drag: -1, moved: false, knobDirty: false }; // 纯 UI 状态,不进任何存档/快照
 /* 本页整块走 innerHTML 拼串,而舰名是玩家可改的(场景编辑器)——拼进去前必须转义。
    全库没有现成的转义函数(其余面板都走 textContent),所以在这里自带一个,名字加 fmPg 前缀防撞名。 */
 function fmPgEsc(v) { return String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
@@ -62,7 +62,7 @@ function fmPageRender() {
   const list = fmShips(F), flag = fmFlag(F, list);
   if (!flag) { fmPageClose(); return; }
   const PL = fmPlanStations(list, F.P, flag.id);
-  const T = fmStanceOf(F.P);
+  const T = fmGeoOf(F.P);   // FM6:几何读数走 fmGeoOf(玩家可调的那一份),不是站位预设
   if (hint) hint.textContent = fmName(F) + ' · ' + list.length + '艘 · 旗舰 ' + flag.name
     + ' · ' + fmbModeText(F.mode, true) + (F.src === 'generated' ? '' : '（固定模式:槽位来自建队快照,站位模板与插槽编排均不生效）');
   body.innerHTML =
@@ -74,26 +74,43 @@ function fmPageRender() {
     + fmPgCapTable(list, PL);
 }
 
+/* FM6 五个几何旋钮全部开放给玩家(用户令:这是完整的阵型算法页,允许玩家操控)。
+   站位预设只是它们的初值 —— 切站位会把整组拷进 F.P,之后逐项手调的就是编队自己那一份。
+   每个滑块只调一个参数,值域来自 40-slots 的 FM_LIMIT(UI 与代码共用同一份区间,越界防线在 fmClamp)。
+   【为什么带半径也在编队菜单里另放一个滑块】用户实测判断:它是唯一恒生效、且改动最直观的几何量
+   (spacing 只在舰数超过插槽数时才有效,spread/widen 改的是形状不是尺度),所以给它一条快捷通道。
+   两处滑块写的是同一个 F.P.bm,同一个 fmSetParam,不存在两份状态。 */
+const FP_KNOBS = [
+  { k: 'bm', nm: '带半径', tip: '五条带的半径整体缩放。恒生效;>1.11 时贴身带会超出内圈最小那几艘的 inner,它们在贴身站位上的契合度归零' },
+  { k: 'widen', nm: '扁率', tip: '横向拉伸。>1 = 条令的「宽而不深」(水下为主取 1.85),<1 = 拉长纵深' },
+  { k: 'spread', nm: '张角', tip: '把插槽方位相对正前张开(>1)或收拢(<1)。0° 与 180° 是不动点' },
+  { k: 'spacing', nm: '站距', tip: '同一插槽内第 2、3 艘船向两侧展开的角步。【只在舰数超过插槽数时才有效】' },
+  { k: 'bstr', nm: '偏向强度', tip: '该站位的能力偏向(boost)施加多少。0 = 完全不偏向,只看插槽本身要什么' },
+];
+function fmPgKnob(F, d) {
+  const r = FM_LIMIT[d.k] || [0, 2], v = isFinite(F.P[d.k]) ? F.P[d.k] : 1;
+  return '<span class="fp-knob" title="' + fmPgEsc(d.tip) + '">'
+    + '<span class="fp-lb">' + d.nm + '</span>'
+    + '<input type="range" data-fpk="' + d.k + '" min="' + r[0] + '" max="' + r[1] + '" step="0.05" value="' + v + '">'
+    + '<span class="fp-v">' + v.toFixed(2) + '</span></span>';
+}
 function fmPgStanceRow(F, T) {
   const btn = FM_STANCE_KEYS.map(k =>
     '<button class="btn qbtn' + (F.P.stance === k ? ' on' : '') + '" data-fp="sc-' + k + '">' + fmPgEsc(FM_STANCE[k].nm) + '</button>').join('');
   return '<div class="fp-bar">'
     + '<span class="fp-lb">站位</span>' + btn
     + '<span class="fp-sp"></span>'
-    + '<span class="fp-lb">站距乘数</span><span class="fp-v">' + F.P.spacing.toFixed(2) + '</span>'
-    + '<span class="fp-lb">扁率</span><span class="fp-v">' + T.widen.toFixed(2) + '</span>'
-    + '<span class="fp-lb">带半径</span><span class="fp-v">×' + T.bm.toFixed(2) + '</span>'
-    + '<span class="fp-sp"></span>'
-    + '<button class="btn qbtn" data-fp="reset">恢复本站位默认插槽</button>'
+    + '<button class="btn qbtn" data-fp="reset">恢复本站位默认</button>'
     + '<button class="btn qbtn" data-fp="refresh">刷新读数</button>'
-    + '</div>';
+    + '</div>'
+    + '<div class="fp-bar fp-knobs">' + FP_KNOBS.map(d => fmPgKnob(F, d)).join('') + '</div>';
 }
 
 /* 阵型图 = 方位盘。前进方向朝【上】(战术显示器的惯例);局部系 +x 是前进方向、+y 是右舷,
    所以 屏幕x = cx + ly·k、屏幕y = cy − lx·k。带半径圈因扁率而成椭圆(rx = r·widen, ry = r)。 */
 const FP_DIAL = 560, FP_C = 280;
 function fmPgDial(F, PL) {
-  const slots = fmPageSlots(F), T = fmStanceOf(F.P), BR = PL.bands;
+  const slots = fmPageSlots(F), T = fmGeoOf(F.P), BR = PL.bands; // FM6:盘上画的张角/扁率必须与 fmPlanStations 同源,否则拖到哪船站哪就对不上
   /* 缩放必须同时罩住【实际站位】与【插槽圈】。只按 PL.sta 算的话,舰少的时候只生成前几个站位,
      而插槽表里那些还没人去的槽(哨戒带在 2×屏护半径上)照样要画 —— 它们会被画到 viewBox 外面,
      玩家看到的是"我的模板明明有 14 个槽,盘上只剩 11 个"。 */
@@ -224,7 +241,7 @@ function fmPgAngAt(ev) { // 鼠标位置 → 插槽表里该存的 brg(度,0..36
   if (!rc.width || !rc.height) return null;
   const x = (ev.clientX - rc.left) / rc.width * FP_DIAL - FP_C;
   const y = (ev.clientY - rc.top) / rc.height * FP_DIAL - FP_C;
-  const T = fmStanceOf(F.P);
+  const T = fmGeoOf(F.P);   // FM6:反解要用与正解同一份 spread/widen
   const w = T.widen || 1;
   // 屏幕 → 局部:lx = −y, ly = x;再把扁率除掉,才是"没有被拉扁之前"的方位
   const deg = Math.atan2(x / w, -y) * 180 / Math.PI;
@@ -254,6 +271,7 @@ function fmPgMove(ev) {
   fmPageEdit(F, cur => { cur[fmPg.drag].brg = a; return cur; });
 }
 function fmPgUp() {
+  if (fmPg.knobDirty) { fmPg.knobDirty = false; fmPageRender(); } // 松开滑块才整页重渲:拖动中重渲会把 <input> 换成新节点、拖拽当场断掉
   if (fmPg.drag < 0) return;
   fmPg.drag = -1;
   if (fmPg.moved) fmPageRender();
@@ -262,7 +280,16 @@ function fmPgUp() {
 function fmPgAct(a) {
   const F = fmPageF(); if (!F) return;
   if (a === 'refresh') { fmPageRender(); return; }
-  if (a === 'reset') { F.P.slots = null; if (typeof fmReslot === 'function') fmReslot(F); fmPg.sel = -1; fmPageRender(); return; }
+  if (a === 'reset') {
+    /* 恢复本站位默认 = 丢掉自定义插槽表 + 把五个几何旋钮拨回该站位的预设。
+       走 fmSetStance 会被它的"值没变就整个返回"守卫挡住(stance 没变),所以这里直接重写一遍。 */
+    const T0 = FM_STANCE[F.P.stance] || FM_STANCE.fixed;
+    F.P.slots = null;
+    F.P.spread = fmClamp('spread', T0.spread); F.P.spacing = fmClamp('spacing', T0.gap);
+    F.P.bm = fmClamp('bm', T0.bm); F.P.widen = fmClamp('widen', T0.widen); F.P.bstr = fmClamp('bstr', T0.bstr);
+    if (typeof fmReslot === 'function') fmReslot(F);
+    fmPg.sel = -1; fmPageRender(); return;
+  }
   if (a.indexOf('sc-') === 0) {
     if (typeof fmSetStance === 'function') fmSetStance(F, a.slice(3));
     fmPg.sel = -1; fmPageRender();
@@ -290,6 +317,19 @@ on('fmPage', 'pointerdown', e => {
   const b = t && t.closest ? t.closest('[data-fp]') : null;
   if (b && b.tagName !== 'SELECT') { if (e.button !== 0) return; e.preventDefault(); fmPgAct(b.getAttribute('data-fp')); return; }
   fmPgDown(e);
+});
+/* 滑块走 input 事件(拖动中连续生效);fmSetParam 自带"值没变就返回"的空操作守卫,所以连续触发不会
+   反复 fmReslot 把 44 fmReassign 落盘的配对抹掉。刻意【不整页重渲】—— 那会把正在拖的 <input> 换成新节点、
+   拖拽当场断掉(同 RF7c 那条);只就地更新读数,松手后由 pointerup 补一次整页重渲把阵型图刷新。 */
+on('fmPage', 'input', e => {
+  const el = e.target && e.target.closest ? e.target.closest('input[data-fpk]') : null;
+  if (!el) return;
+  const F = fmPageF(); if (!F) return;
+  if (typeof fmSetParam === 'function') fmSetParam(F, el.getAttribute('data-fpk'), Number(el.value));
+  const out = el.parentNode && el.parentNode.querySelector('.fp-v');
+  const now = F.P[el.getAttribute('data-fpk')];
+  if (out && isFinite(now)) out.textContent = now.toFixed(2);
+  fmPg.knobDirty = true;
 });
 on('fmPage', 'change', e => {
   const sel = e.target && e.target.closest ? e.target.closest('select[data-fp]') : null;

@@ -59,7 +59,7 @@ function endRange(){ // 结束测距:清除线
 }
 function toggleWeapon(w){ // T/R:选定武器进行攻击选择(点击敌舰攻击),再按取消
   if(selWeapon===w){selWeapon=null;hideTip();updSelWeaponTip();log('取消选定武器','');return;}
-  if(typeof clearPendings==='function')clearPendings(); // FL1 与其它点选待命态互斥(与 fmbArmFollow 同构)。不清的话:T/R 与【跟随目标】并存 → updSelWeaponTip 里 pendingFmFollow 优先,MAC 提示一个字都出不来;而左键消费串里 selWeapon 排在前面,那一下真走 MAC 攻击,下一次左键才命中跟随分支、无声下达整队跟随令
+  if(typeof clearPendings==='function')clearPendings(); // FL1 与其它点选待命态互斥(与 fmbArmFollow 同构)。不清的话:T/R 与【跟随目标】并存 → updSelWeaponTip 里 pendingFollow 优先,MAC 提示一个字都出不来;而左键消费串里 selWeapon 排在前面,那一下真走 MAC 攻击,下一次左键才命中跟随分支、无声下达整队跟随令
   if(typeof updFmBar==='function')updFmBar();
   selWeapon=w;
   showTip(w==='mac'?'⚔ MAC已选定 · 点击敌舰攻击(再按T取消)':'🚀 射手已选定 · 点击敌舰攻击(再按R取消)');
@@ -107,7 +107,7 @@ function doAction(id){
       const sel=controlledShips(); // FM2:选中什么就转什么(原 expandToFleet 会把单选一艘扩成整组)
       if(sel.length){
         /* FL1 三个 arm 点(fmbArmFollow / toggleWeapon / turn_cmd)写法一致:武装前先 clearPendings()。
-           上一版这里只手写清了 pendingFmFollow,于是互斥成了【单向】—— 按 T 再按 V 时 selWeapon 与 pendingTurn 并存,
+           上一版这里只手写清了 pendingFollow,于是互斥成了【单向】—— 按 T 再按 V 时 selWeapon 与 pendingTurn 并存,
            而左键消费串里 selWeapon 在前:那一下被它吃掉(点空地也照样消费并清掉自己),
            pendingTurn 就变成一个【零提示的幽灵待命态】,再点任何地方都会给全部原选中舰下一条真转向令。
            取消那条早退排在本行之上,所以这里不会自清刚要设的 pendingTurn。 */
@@ -164,14 +164,11 @@ function doAction(id){
           if(halted.has(s.formation))return; // 多选同一编队只处理一次
           halted.add(s.formation);
           const F=s.formation;
-          if(F.mode==='follow'){
-            const fl=fmFlag(F); // FL1 新签名 fmFlag(F,mates?):mates 省略时它自己按名册取活船
-            if(fl&&fl.orders.length){fl.orders.pop();if(!fl.orders.length)fl.brake=true;n++;}
-          }else{
-            let any=false;
-            fmShips(F).forEach(m=>{if(m.orders.length){m.orders.pop();if(!m.orders.length)m.brake=true;any=true;}});
-            if(any)n++;
-          }
+          /* FM6:原先这里按 F.mode==='follow' 分岔(跟随态只 pop 旗舰一条,成员 orders 恒空)。
+             跟随模式删掉之后编队恒是"各舰各持一条令",只剩下面这一支。 */
+          let any=false;
+          fmShips(F).forEach(m=>{if(m.orders.length){m.orders.pop();if(!m.orders.length)m.brake=true;any=true;}});
+          if(any)n++;
         }else if(s.orders.length){ // 普通命令点:删最后一个
           s.orders.pop();
           if(!s.orders.length)s.brake=true;

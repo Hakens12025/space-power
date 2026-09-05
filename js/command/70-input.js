@@ -17,12 +17,20 @@ let ghostMove=null;     // RF11 右键长按的移动虚影 {wx,wy,face:[dx,dy],
      append 有 Shift —— 追加路径点,直接复用 formation/41 的 addWaypoint(w,face),不另写一套追加逻辑
    仍然只在【恰好选中一艘蓝舰】时进:多舰要另一套(阵位与朝向分配),未做。
    任何 pending 待命态存在时让位 —— 那些是点选式命令,虚影会抢它们的点击。 */
+/* 两种落地方式 × 两种作用域。作用域由 ghostArm 判定后记在 g.fid 上:
+     单舰(g.fid 为空)—— 原样,RF11/RF22 的行为一字未动;
+     编队(g.fid 有值)—— FM6 新增,长按右键定的是【阵型朝向】。
+   编队那一支不能逐舰调 orderMoveTo:那样每艘船都会朝同一个点跑、阵型当场塌成一堆。
+   必须走 fmMoveTo/fmAppend —— 它们把编队级目标点展开成每艘船的绝对终点,而 44-orders 的 fmAngOf
+   在有 face 时【取 face 方向当阵型朝向】(FM6 改),于是"鼠标指哪、整个阵型就朝哪"。 */
 const GHOST_MODES={
   move:{
     from:s=>s.pos,                       // 预演线从船身画起
     commit:(s,g)=>{
       // FM2:不再脱队。长按定向是【单舰意图】,但"这一次去哪"与编队成员身份无关 ——
       // 下次全队下令时它照常拿到自己的阵位终点自动归位(RTS 控制组语义)。
+      const F=ghostFm(g);
+      if(F){ fmMoveTo(F,[g.wx,g.wy,0],'stop',g.face); return `${fmName(F)} 整队移动 → ${Math.round(g.wx/1000)}k,${Math.round(g.wy/1000)}k`; }
       orderMoveTo(s,[g.wx,g.wy,0],'stop',g.face); // face 是 RF11 字段:physics/31 到位分支消费;orderMoveTo 内部已收口 resetForNewOrders + rrStart
       return `${s.name} 移动 → ${Math.round(g.wx/1000)}k,${Math.round(g.wy/1000)}k`;
     }
@@ -30,19 +38,31 @@ const GHOST_MODES={
   append:{
     from:s=>(s.orders&&s.orders.length?s.orders[s.orders.length-1].pos:s.pos), // 预演线从【现有末点】画起,接着航线走
     commit:(s,g)=>{
+      const F=ghostFm(g);
+      if(F){ fmAppend(F,[g.wx,g.wy,0],g.face); return `${fmName(F)} 整队路径+1 → ${Math.round(g.wx/1000)}k,${Math.round(g.wy/1000)}k`; }
       addWaypoint([s],[g.wx,g.wy],g.face);  // 复用既有追加逻辑(含末点降级/rrStart 重排),只多传一个 face
       return `${s.name} 路径+1 → ${Math.round(g.wx/1000)}k,${Math.round(g.wy/1000)}k`;
     }
   }
 };
+function ghostFm(g){ // 虚影作用于哪支编队(单舰虚影返回 null)。落地与绘制共用这一个解析口,免得两处判据分家
+  return (g&&g.fid!=null&&typeof fmGet==='function')?fmGet(g.fid):null;
+}
 function ghostArm(sx,sy,shift){
   const sel=(typeof selBlue==='function')?selBlue():[];
   const busy=pendingMove||pendingTurn||pendingIntercept||pendingBeacon||pendingManual||pendingMine||selWeapon
-    ||pendingTaskPatrol||pendingTaskIntercept||pendingTaskDeny||pendingTaskEscort||pendingTaskStrike||pendingFmFollow; // FL1 跟随点选待命时不许右键长按虚影插进来
-  if(sel.length!==1||busy||editMode)return false;
-  const s=sel[0], mode=shift?'append':'move';
+    ||pendingTaskPatrol||pendingTaskIntercept||pendingTaskDeny||pendingTaskEscort||pendingTaskStrike||pendingFollow; // FL1 跟随点选待命时不许右键长按虚影插进来
+  if(busy||editMode)return false;
+  /* FM6 作用域扩到编队:选中集合恰好等于某支编队的全部活船时,长按右键定的是【阵型朝向】。
+     判据复用 fmSameShips —— 与右键移动"选中什么就命令什么"(FM2)完全同一个口径,不另立一套,
+     否则会出现"右键当编队走、长按却当单舰走"这种同一批选中两种语义。
+     锚点取旗舰:预演线与船影都以它为参考,而 fmMoveTo 的编队级目标点本来就是旗舰要去的地方。 */
+  const F=(sel.length>1&&typeof fmSameShips==='function')?fmSameShips(sel):null;
+  if(!F&&sel.length!==1)return false;
+  const s=F?(fmFlag(F,sel)||sel[0]):sel[0];
+  const mode=shift?'append':'move';
   const w=worldAt(sx,sy), f=GHOST_MODES[mode].from(s);
-  ghostMove={wx:w[0],wy:w[1],face:s.facing.slice(),id:s.id,mode:mode,from:[f[0],f[1]]};
+  ghostMove={wx:w[0],wy:w[1],face:s.facing.slice(),id:s.id,fid:F?F.id:null,mode:mode,from:[f[0],f[1]]};
   return true;
 }
 function ghostAim(sx,sy){
@@ -88,7 +108,7 @@ function clearPendings(){
      清单原本在右键取消与 91-init 各手抄一遍,漏一个就留下幽灵待命态。任务那五个也收进来:
      它们当前被 SIMPLE_UI 挡在右键菜单后面不可达,但漏掉的话 SIMPLE_UI 一翻开就是同一个 bug 类。 */
   selWeapon=null;pendingMove=null;pendingTurn=null; // FM3-0:删 pendingTurnNoFm(Shift+V"单纯转头"整套删除,它只喂过船上那个写-only 的"单纯转头"死标志)
-  pendingIntercept=null;pendingBeacon=null;pendingManual=null;pendingMine=null;pendingFmFollow=null;
+  pendingIntercept=null;pendingBeacon=null;pendingManual=null;pendingMine=null;pendingFollow=null;
   if(typeof pendingTaskPatrol!=='undefined'){pendingTaskPatrol=null;taskPatrolPts=[];}
   if(typeof pendingTaskIntercept!=='undefined'){pendingTaskIntercept=null;pendingTaskDeny=null;}
   if(typeof pendingTaskEscort!=='undefined'){pendingTaskEscort=null;pendingTaskStrike=null;}
@@ -100,7 +120,15 @@ function updSelWeaponTip(){ // RF4b 待命提示(原 #statusTip 已被简化UI�
      玩家对"我正处在跟随点选待命态"完全无感知(同 toggleWeapon 当年踩过并改走 #cmdTip 的那条)。 */
   const tip=document.getElementById('cmdTip');if(!tip)return;
   /* 三支互斥(三个 arm 点都先 clearPendings),所以判定顺序不影响正确性,只影响可读性。 */
-  if(typeof pendingFmFollow!=='undefined'&&pendingFmFollow){tip.textContent='编队跟随:点击一艘我方舰船作为跟随目标 · 右键取消';tip.style.display='block';return;}
+  if(typeof pendingFollow!=='undefined'&&pendingFollow){
+    /* FM6 提示要说清【当前作用域】—— 四种组合(舰队/单舰 × 舰队/单舰)里玩家最容易搞混的
+       就是"我这一下是整队跟还是这一艘跟"。作用域按此刻的 selected 现算,判据与 followAssign 落地时同源(fmSameShips)。 */
+    const fsel=(typeof selBlue==='function')?selBlue():[];
+    const fF=(fsel.length>1&&typeof fmSameShips==='function')?fmSameShips(fsel):null;
+    const who=fF?((typeof fmName==='function')?fmName(fF):'编队'):(fsel.length===1?fsel[0].name:(fsel.length+' 艘'));
+    tip.textContent='跟随:'+who+' → 点一艘我方舰(点编队里任一艘 = 跟随那支编队) · 右键取消';
+    tip.style.display='block';return;
+  }
   if(selWeapon){tip.textContent=(selWeapon==='mac'?'主炮攻击:点击敌舰(漂移射击60s,对准即发)':'导弹攻击:点击敌舰齐射 · 点空地=区域齐射')+' · 右键取消';tip.style.display='block';return;}
   if(pendingTurn){tip.textContent='转向:点击地图设定方向(速度不变) · 再按 V 取消 · 右键取消';tip.style.display='block';return;} // FL1 把 V 也接进来:它原本只有 showTip(#statusTip),而那个在 RF2 隐藏清单里,按 V 之后玩家看不到任何提示
   tip.style.display='none';
@@ -272,10 +300,10 @@ function onMouseDown(e){
     pendingIntercept=null;hideTip();
     return;
   }
-  if(e.button===0&&pendingFmFollow){ // FL1 编队跟随目标点选:书签菜单点【跟随目标】进入待命,再点一艘我方舰
+  if(e.button===0&&pendingFollow){ // FM6 跟随点选:底栏点【跟随】进入待命,再点一艘我方舰兑现(作用域按【此刻】的 selected 现算)
     const t=(typeof shipAt==='function')?shipAt(sx,sy):null;
-    if(t&&!t.dead&&t.side==='blue'&&typeof fmbFollowPick==='function')fmbFollowPick(t); // 它自己清 pendingFmFollow + updFmBar
-    else{pendingFmFollow=null;log('跟随目标:请点一艘我方舰船','warn');}
+    if(t&&!t.dead&&t.side==='blue'&&typeof followAssign==='function')followPick(t);
+    else{pendingFollow=null;log('跟随:请点一艘我方舰船','warn');}
     updSelWeaponTip(); // 收掉 #cmdTip 上的待命提示
     return;
   }
@@ -367,8 +395,8 @@ function onMouseDown(e){
     /* FL1:门要与 clearPendings 的覆盖面对齐,否则"提示说右键取消、实际却发出一条移动令"(本行原注释记的正是这个坑)。
        【巡逻刻意排除】—— 画点链的右键语义是"结束并建任务"(在 mouseup 的 pendingTaskPatrol 分支),不是取消,
        所以它必须让路让右键落下去;把它放进门里会让画好的点被静默丢弃。 */
-    if(!pendingTaskPatrol&&(pendingMine||pendingBeacon||pendingIntercept||pendingManual||pendingMove||pendingTurn||selWeapon||pendingFmFollow
-       ||pendingTaskIntercept||pendingTaskDeny||pendingTaskEscort||pendingTaskStrike)){ // 点选待命状态:右键取消(原只覆盖布雷/信标/拦截,pendingManual提示"右键取消"却不生效反而发出移动命令);FL1 补 pendingFmFollow——不补的话右键会落到下面的 rmbClick 分支,反而给全队下一条移动令
+    if(!pendingTaskPatrol&&(pendingMine||pendingBeacon||pendingIntercept||pendingManual||pendingMove||pendingTurn||selWeapon||pendingFollow
+       ||pendingTaskIntercept||pendingTaskDeny||pendingTaskEscort||pendingTaskStrike)){ // 点选待命状态:右键取消(原只覆盖布雷/信标/拦截,pendingManual提示"右键取消"却不生效反而发出移动命令);FL1 补 pendingFollow——不补的话右键会落到下面的 rmbClick 分支,反而给全队下一条移动令
       clearPendings();
       if(typeof updFmBar==='function')updFmBar(); // 让【跟随目标】那个钮熄灭
       hideTip();log('取消','');return;

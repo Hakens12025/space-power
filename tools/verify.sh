@@ -1516,17 +1516,19 @@ t('FLOW27_FMBAR',function(){
   selected=F.ships.slice();
   updFmBar();fm27sel();
   /* 四个新动作,全部验【行为】而不只是"点得动" */
-  var elFol=fm27act(['m-follow']),elSlot=fm27act(['m-slot']),elFtgt=fm27act(['fol']),elFstop=fm27act(['folx']),elFixed=fm27act(['m-fixed']);
+  var elSlot=fm27act(['m-slot']),elFixed=fm27act(['m-fixed']);
+  var noFolBtn=!fm27act(['fol'])&&!fm27act(['folx']); /* FM6:跟随两钮已下沉到底栏,编队菜单里必须不存在 */
+  var noFollowBtn=!fm27act(['m-follow']); /* FM6:跟随不再是编队的一种模式,那个钮必须【不存在】 */
   var mode0=F.mode;
-  fm27hit(elFol); var modeF=F.mode;
+  fm27hit(elFixed); var modeF=F.mode;
   var mdEl=document.querySelector('#fmActs [data-lf="mdesc"]'); /* FM5b 模式说明行:文案与 fmbModeText 唯一出处同源 */
-  var mdFol=mdEl?mdEl.textContent:'?';
+  var mdFix=mdEl?mdEl.textContent:'?';
   fm27hit(elSlot); var modeS=F.mode;
   /* FM3-2:固定钮的行为断言(阶段 1 审查遗留)。static 下点固定 = fmSetSrc('snapshot') 重拍 → src/mode 必须真的翻过去;
      跟随中点固定 = 只切运动轴回 static、【不】重拍(跟随态的实时布局带滞后,不是玩家手调)—— F.snap 引用必须原样、来源不变。
      最后点回阵型,后面的遍历与判定仍按阵型态跑 */
   fm27hit(elFixed); var srcX=F.src,modeX=F.mode;
-  fm27hit(elFol); var snapRef=F.snap; fm27hit(elFixed); var noRetake=(F.snap===snapRef),motionY=F.motion,srcY=F.src,modeY=F.mode;
+  var snapRef=F.snap; fm27hit(elFixed); var noRetake=(F.snap===snapRef); /* 已在固定态再点固定 = 空操作,不许重拍 */
   fm27hit(elSlot); var modeZ=F.mode,srcZ=F.src;
   /* FM4b【随模式显隐】必须验【算出来的 display】,不是"类加上了没有"。
      线上曾有过一次:JS 一直在 classList.toggle('fm-hide'),而 css 里【压根没有这条规则】——
@@ -1535,9 +1537,8 @@ t('FLOW27_FMBAR',function(){
   function fm27vis(){var o=[];document.querySelectorAll('#fmActs .fm-mode').forEach(function(el){
     if(getComputedStyle(el).display!=='none')o.push(el.getAttribute('data-fmm'));});return o.join(',');}
   fm27hit(elFixed); var visFix=fm27vis();
-  fm27hit(elFol);   var visFol=fm27vis();
   fm27hit(elSlot);  var visSlot=fm27vis();
-  var okVis=(visFix==='fixed'&&visFol==='follow'&&visSlot==='slot');
+  var okVis=(visFix==='fixed'&&visSlot==='slot');
   /* FM4b【重拍队形】必须真的重拍。它在 FM4b 那一版有钮无 case(点了什么都不发生),
      而"钮点得动不抛错"那条判定对死钮天生免疫 —— 所以这里判 F.snap 引用是否真的换了新对象。 */
   fm27hit(elFixed);
@@ -1548,13 +1549,21 @@ t('FLOW27_FMBAR',function(){
   /* 反向:已经在固定态时点「固定」是空操作(重拍只走显式钮),否则"再点一下当前模式"会把队形按此刻散乱位置重钉 */
   var snapR1=F.snap; fm27hit(elFixed); var noReOnMode=(F.snap===snapR1);
   fm27hit(elSlot);
-  fm27hit(elFtgt);
-  var armed=(typeof pendingFmFollow!=='undefined'&&pendingFmFollow!=null&&String(pendingFmFollow)===String(F.id));
-  var redT=ships.filter(function(x){return x.side==='red'&&!x.dead;})[0];
-  if(typeof fmbFollowPick==='function'&&redT)fmbFollowPick(redT); /* 补上 70-input 点地图那一下 */
-  var folSet=!!(F.follow&&String(F.follow.tid)===String(redT&&redT.id));
-  fm27hit(elFstop);
-  var folGone=!F.follow;
+  /* FM6【带半径滑块】走真实 input 事件。只调 fmSetParam 的话,"滑块建了出来但没挂 input 监听"这种接线错
+     一个都抓不到(FM5d 那个"有钮无 case"就是同一类)。判据是三件事同时成立:F.P.bm 真的变了、
+     槽位几何真的跟着变了(带半径是唯一恒生效的几何量)、旁边那个读数叶子也跟着变了。 */
+  var knob=document.querySelector('#fmActs input[data-fmk="bm"]');
+  var bm0=F.P.bm, R0=0;
+  fmShips(F).forEach(function(m){var sl=m.fmSlot||[0,0,0];R0=Math.max(R0,Math.hypot(sl[0],sl[1]));});
+  if(knob){knob.value='1.6';knob.dispatchEvent(new Event('input',{bubbles:true}));}
+  var bm1=F.P.bm, R1=0;
+  fmShips(F).forEach(function(m){var sl=m.fmSlot||[0,0,0];R1=Math.max(R1,Math.hypot(sl[0],sl[1]));});
+  var bmOutEl=document.querySelector('#fmActs [data-lf="bm"]');
+  var bmOut=bmOutEl?bmOutEl.textContent:'?';
+  var okKnob=(!!knob&&Math.abs(bm1-1.6)<1e-9&&bm1!==bm0&&R1>R0*1.3&&bmOut==='1.60');
+  if(knob){knob.value='1';knob.dispatchEvent(new Event('input',{bubbles:true}));} /* 还原,免得影响后面的断言 */
+  /* FM6:跟随的兑现判定整体搬到 FLOW40_FOLLOWCTL(底栏标准控件,四种作用域)。这里只剩一条留守:
+     编队菜单里【不许】再出现跟随钮(noFolBtn,已并入 acts4)。 */
   /* 其余操作钮:遍历【当前真实存在的】data-fma 全点一遍(按钮清单会随 UI 改,写死清单会年久失修),
      解散留到最后 —— 前面每一条都需要 F 还活着。 */
   var all=document.querySelectorAll('#fmActs [data-fma]'),names=[],q;
@@ -1574,23 +1583,24 @@ t('FLOW27_FMBAR',function(){
   var closed1=menu?menu.style.display:'?';
   for(i=0;i<200;i++){stepShipsMotion(0.02);if(i%20===0){updFmBar();fm27sel();}} /* 解散之后再刷 10 次,查空态崩不崩 */
   window.removeEventListener('error',onerr);
-  var acts4=!!(elFol&&elSlot&&elFtgt&&elFstop);
+  var acts4=!!(elSlot&&elFixed&&noFolBtn);
   var ok=(tabs0===1&&closed0==='none'&&open1==='flex'&&rows>=6&&mems===3
-        &&closedMid==='none'&&open2==='flex'&&selSync&&parseFloat(hpW)===100&&mdFol==='跟随 · 成员跟旗舰'
-        &&!!mem&&acts4&&!!elFixed&&mode0==='slot'&&modeF==='follow'&&modeS==='slot'&&armed&&folSet&&folGone
-        &&srcX==='snapshot'&&modeX==='fixed'&&noRetake&&motionY==='static'&&srcY==='snapshot'&&modeY==='fixed'&&modeZ==='slot'&&srcZ==='generated'
-        &&okVis&&reTook&&noReOnMode
-        &&names.length>=9&&clicked===names.length /* FM4b 后 9 个(m-fixed m-slot m-follow / resnap page / fol folx / halt disband);下限留一个余量,真正的判据是 clicked===names.length —— 每个钮都点得动、都不抛错 */
+        &&closedMid==='none'&&open2==='flex'&&selSync&&parseFloat(hpW)===100&&mdFix==='固定 · 保持建队时的相对位置与朝向'
+        &&!!mem&&acts4&&noFollowBtn&&mode0==='slot'&&modeF==='fixed'&&modeS==='slot'
+        &&srcX==='snapshot'&&modeX==='fixed'&&noRetake&&modeZ==='slot'&&srcZ==='generated'
+        &&okVis&&reTook&&noReOnMode&&okKnob
+        &&names.length>=6&&clicked===names.length /* FM4b 后 9 个(m-fixed m-slot m-follow / resnap page / fol folx / halt disband);下限留一个余量,真正的判据是 clicked===names.length —— 每个钮都点得动、都不抛错 */
         &&closed1==='none'&&!errs.length);
   return (ok?'ok':'fail')+' 书签数='+tabs0+'(须1) 初始菜单='+closed0+'(须none) 点开后='+open1+'(须flex)'
     +' | #selFm 信息行='+rows+'(须>=6) 成员行='+mems+'(须3;须先让 selected=全队才渲染) 成员行事件已走='+(!!mem)
-    +' | FM5a/b 点书签=选中并展开:收起='+closedMid+' 清选后再点开='+open2+' selected同步='+selSync+' 战力条宽='+hpW+'(须none/flex/true/100.0%) 模式说明行='+mdFol+'(须 跟随 · 成员跟旗舰)'
-    +' | 模式/跟随四钮齐全='+acts4+' 模式:'+mode0+' -点跟随-> '+modeF+' -点阵位-> '+modeS+'(须 slot/follow/slot)'
-    +' | 固定钮:static下点固定 src='+srcX+'/mode='+modeX+'(须 snapshot/fixed) 跟随中点固定 未重拍='+noRetake+' motion='+motionY+' src='+srcY+' mode='+modeY+'(须 true/static/snapshot/fixed) 再点阵型 mode='+modeZ+' src='+srcZ+'(须 slot/generated)'
-    +' | FM4b 随模式显隐(问的是 computed display,不是类名):固定→['+visFix+'] 跟随→['+visFol+'] 阵型→['+visSlot+'](须各只剩同名那一块)='+okVis
+    +' | FM5a/b 点书签=选中并展开:收起='+closedMid+' 清选后再点开='+open2+' selected同步='+selSync+' 战力条宽='+hpW+'(须none/flex/true/100.0%) 模式说明行='+mdFix+'(须 固定 · 保持建队时的相对位置与朝向)'
+    +' | FM6 模式只剩两段:m-follow 钮已不存在='+noFollowBtn+' 其余四钮齐全='+acts4+' 模式:'+mode0+' -点固定-> '+modeF+' -点阵型-> '+modeS+'(须 slot/fixed/slot)'
+    +' | 固定钮:阵型态下点固定 src='+srcX+'/mode='+modeX+'(须 snapshot/fixed) 已在固定态再点一次 未重拍='+noRetake+' 再点阵型 mode='+modeZ+' src='+srcZ+'(须 slot/generated)'
+    +' | FM4b 随模式显隐(问的是 computed display,不是类名):固定→['+visFix+'] 阵型→['+visSlot+'](须各只剩同名那一块)='+okVis
     +' 重拍队形真的换了新快照='+reTook+' 已在固定态时点固定是空操作='+noReOnMode
-    +' 跟随目标待命态已置位='+armed+' 兑现后F.follow指向该舰='+folSet+' 点解除跟随后已清空='+folGone
-    +' | 操作钮点击='+clicked+'/'+names.length+'(须全中且总数>=9)清单=['+names.join(',')+']'
+    +' | FM6 带半径滑块(真实 input 事件):F.P.bm '+bm0.toFixed(2)+'→'+bm1.toFixed(2)+'(须1.60) 最大槽位半径 '+Math.round(R0)+'→'+Math.round(R1)+'(须放大>1.3倍) 读数叶子='+bmOut+'(须1.60)='+okKnob
+    +' 编队菜单已无跟随钮(已下沉底栏)='+noFolBtn
+    +' | 操作钮点击='+clicked+'/'+names.length+'(须全中且总数>=6)清单=['+names.join(',')+']'
     +' | 再点收起='+closed1+'(须none) 解散后再刷10次'
     +' | 运行期错误='+(errs.length?errs.join(' / '):'none');
 });
@@ -1686,73 +1696,9 @@ t('FLOW28_FOLLOW',function(){
     +'(须>60000=真的走开了) 余令='+leftB3+'(须0=令被消费) 到位误差='+Math.round(arrErr)
     +' 办完后跟回来的误差='+Math.round(back)+'(须<5000)';
 });
-/* 6f-7 FL1 编队两种模式(42-formation 的 fmSetMode + 44-orders 的 fmSpread 分岔)。
-   两种模式的判据【互为反向对照】,这是本条的设计要点:
-     阵位态 —— 整队下令,每艘船各持自己的绝对终点(N/N/N),成员 s.follow 必须为空;
-     跟随态 —— 只有旗舰接令(1/0/0),成员 s.follow 必须非空且 tid=旗舰、off=自己的 fmSlot。
-   只测其中一边的话,"模式开关根本没接上"的实现都能骗过去:阵位态那半对一个恒不跟随的实现恒真,
-   跟随态那半对一个恒跟随的实现恒真。 */
-t('FLOW29_FMMODE',function(){
-  var DEST=[150000,0,0];
-  /* 1 阵位态(默认) */
-  var b=fm23reset(),F=fm23group(b);
-  var mode0=F.mode;
-  moveShips(b,DEST,'stop');
-  var perA=b.map(function(s){return s.orders.length;}).join('/');
-  var folA=b.filter(function(s){return !!s.follow;}).length;
-  /* 2 跟随态:切模式 -> 成员挂跟随、旗舰不挂;再整队下令 -> 只有旗舰拿到令 */
-  var b2=fm23reset(),F2=fm23group(b2),fl2=fmFlag(F2);
-  fmSetMode(F2,'follow');
-  var mode1=F2.mode,setOk=true,offOk=true,sl;
-  b2.forEach(function(m){
-    if(m===fl2){if(m.follow)setOk=false;return;} /* 旗舰不跟随:它执行 orders,带着全队走 */
-    if(!m.follow||m.follow.tid!==fl2.id){setOk=false;return;}
-    sl=m.fmSlot||[0,0,0];
-    if(Math.hypot(m.follow.off[0]-sl[0],m.follow.off[1]-sl[1],m.follow.off[2]-(sl[2]||0))>1e-9)offOk=false;
-  });
-  moveShips(b2,DEST,'stop');
-  var perB=b2.map(function(s){return s.orders.length;}).join('/');
-  /* 3 跟随态步进:成员全程维持在阵位附近,全队到达终点区域 */
-  /* FL3 判据换向。原判据 maxDev<20000 编码的是 FM1 遗留行为 —— 跟随者 cap=Infinity、能超速把队形一把追回来。
-     用户要求去掉那个超速(跟随速度不超自己的巡航档),于是航程中的行为变了,必须把判据改到新契约上:
-
-     【本探针的三艘船速度档相同(fm23reset 统一置 800)】,而旗舰在跟随态下也跑 800 ——
-     跟随者的 closing speed 恒为 0,航程中的初始散开【收不回来】,只有旗舰停下时才收拢。
-     这是"速度不超自己档位"的数学必然:同档位 = 零追赶余量。所以航程段能钉的只有【不发散】,
-     真正的收敛断言是下面那条 devEnd(到位后离位),它才是"跟随确实在保位"的证据。
-     刻意【不】把阈值放宽了事 —— 那会把一条"永远不会变红"的判据留在这里。 */
-  var i,dev,WARM=8000,devs=[];
-  for(i=0;i<25000;i++){
-    if(rrJobs.length)rrTick();
-    stepShipsMotion(0.02);
-    if(i>WARM&&i%25===0)devs.push(fmFolDev(F2)); /* 【先收集,事后对半分】——不能按步数算中点:循环在旗舰到位时就 break,预设中点永远到不了(第一版栽在这) */
-    if(!fl2.orders.length&&V.len(fl2.vel)<1)break;
-  }
-  for(i=0;i<4000;i++){if(rrJobs.length)rrTick();stepShipsMotion(0.02);}
-  var devEnd=fmFolDev(F2),arr=0;
-  b2.forEach(function(m){ /* 旗舰停在 DEST、机头朝 +x(followHeading 静止时回落船头),故每艘的落点应是 DEST + 自己的槽位(未旋转) */
-    var s2=m.fmSlot||[0,0,0];
-    if(Math.hypot(m.pos[0]-(DEST[0]+s2[0]),m.pos[1]-(DEST[1]+s2[1]))<10000)arr++;
-  });
-  /* 4 切回阵位态 -> 跟随关系必须被清干净 */
-  fmSetMode(F2,'slot');
-  var mode2=F2.mode,folC=b2.filter(function(s){return !!s.follow;}).length;
-  var mid=devs.length>>1, devA=0, devB=0, nA=mid, nB=devs.length-mid;
-  for(i=0;i<mid;i++)if(devs[i]>devA)devA=devs[i];
-  for(i=mid;i<devs.length;i++)if(devs[i]>devB)devB=devs[i];
-  var ok=(mode0==='slot'&&perA==='1/1/1'&&folA===0
-        &&mode1==='follow'&&setOk&&offOk&&perB==='1/0/0'
-        &&nA>5&&nB>5&&devA>0&&devB<=devA*1.05&&devEnd<5000&&arr===3
-        &&mode2==='slot'&&folC===0);
-  return (ok?'ok':'fail')
-    +' 阵位态:模式='+mode0+' 各舰令数='+perA+'(须1/1/1) 挂跟随的='+folA+'艘(须0)'
-    +' | 跟随态:模式='+mode1+' 成员tid=旗舰='+setOk+' 成员off=自己的fmSlot='+offOk
-    +' 各舰令数='+perB+'(须1/0/0 = 只有旗舰接令)'
-    +' 航程中离位不发散:前段最大='+Math.round(devA)+'km('+nA+'样) → 后段最大='+Math.round(devB)+'km('+nB+'样,须<=前段的1.05倍)'
-    +' 到位后='+Math.round(devEnd)+'km(须<5000 —— 这条才是"跟随确实在保位"的证据;同档位时航程中收不拢是速度上限的必然)'
-    +' 落在自己阵位上的='+arr+'/3'
-    +' | 切回阵位态:模式='+mode2+' 残留跟随='+folC+'艘(须0)';
-});
+/* 6f-7 FM6:FLOW29_FMMODE(编队两种模式)与 FLOW34_FOLCROSS(跟随态折返不交叉)整条删除 ——
+   两者测的都是【编队跟随模式】,该模式已随用户定案去掉(编队只剩"下令即算终点"一种运动方式)。
+   通用跟随层本身没有削弱,它的判定仍在 FLOW28_FOLLOW(局部系/有令优先/目标阵亡)与 FLOW33_FOLSPEED(不超自己档位)。 */
 /* 6f-8 FL1 编队跟编队(fmFollowShip / fmApplyFollow)。语义:跟随一个编队 = 跟随它的旗舰,
    而跟随方【全员含旗舰】都挂上跟随,相对位 = 队间偏移 + 自己的阵位偏移,两者同在目标的局部系里。
    队间偏移由两队阵型半径 + 一个防空圈直径自动算出 —— 本条把这个算式钉死:写成常数或漏掉某一项,
@@ -1823,6 +1769,22 @@ t('FLOW31_FOLLINE',function(){
   A.pos=[0,0,0];A.vel=[0,0,0];A.follow=null;A.formation=null;
   B.pos=[200000,0,0];B.vel=[0,0,0];B.formation=null;
   cam.x=100000;cam.y=0;
+  /* 【测量期把场景清成只有这两艘】。本条测的是"跟随连线画没画",判据是采样行的峰值亮度 ——
+     而 render() 会把全场的舰船图标/命令点/虚影/弹丸一起画上,前面几十条探针留下的东西随时可能压在采样行上。
+     实测过一次:删掉两条无关探针改变了此处的场景残留,对照组峰值从 19 跳到 76,判据当场翻红而被测代码一行没动。
+     绝对/相对阈值都救不了这种污染,唯一可靠的做法是把测量对象隔离出来(同 32-route-refine 换 ships 的沙盘手法)。
+     必须在 finally 里还原,否则本条抛异常会把整个 ships 掏空、后面全部探针陪葬。 */
+  var _shipsBak=ships, _projBak=projectiles, _hitBak=(typeof hitFX!=='undefined')?hitFX:null;
+  var _seqBak=(typeof fireSeqs!=='undefined')?fireSeqs:null;
+  ships=[A,B]; projectiles=[];
+  if(typeof hitFX!=='undefined')hitFX=[];
+  /* 【火控序列也要清】。本条的 helper 是 fc5reset —— 它就是给 FLOW5 建火控序列用的,而 83-hud 的 drawFcChain
+     会在"舰 → 目标"之间画一条蓝色数据链;A 与 B 恰好是那条序列的两端,链正好压在采样行上,亮度与跟随线同量级。
+     它画不画取决于 fcEditId 这个跨探针残留的 UI 上下文,所以症状是"偶发"——三跑一红,而被测代码一行没动。
+     同理清掉两舰自己的航线/锁定:命令点与锁定虚线也会落在这一行。 */
+  if(typeof fireSeqs!=='undefined')fireSeqs=[];
+  [A,B].forEach(function(x){ if(typeof orderClear==='function')orderClear(x); x.lockedTarget=null; x.brake=false; x.fcEditId=null; });
+  try{
   if(typeof followSet!=='function')return 'fail followSet 未定义(41-follow 没加载)';
   followSet(B,A,[200000,0,0]);            /* B 跟 A,相对位在 A 的右侧 —— 与它当前所在处一致,免得它被判成"要动" */
   selected=[B.id];
@@ -1864,6 +1826,7 @@ t('FLOW31_FOLLINE',function(){
     +' | 整行互相关位移='+d+'px(须 2~5;理论 22px/s×0.2s≈4.4px。被跟随在左、跟随者在右,所以【正=流向跟随舰】,反了就是负)'
     +' | 未选中对照:峰值='+offSel+'(须<'+Math.round(on*0.5)+'=不画)'
     +' | 解除跟随对照:峰值='+offFol+'(须<'+Math.round(on*0.5)+'=不画)';
+  } finally { ships=_shipsBak; projectiles=_projBak; if(_hitBak!==null)hitFX=_hitBak; if(_seqBak!==null)fireSeqs=_seqBak; }
 });
 /* 6f-7 FL3 阵位态多点航线【不许交叉】。用户报的现象:"本来 船A-旗舰-船B,下一个路径点变成 船B-旗舰-船A",
    两条航线在中间交叉。根因是槽位所有权认死(s.fmSlot 建队分好就不动),而每段按航向旋转它 ——
@@ -1955,53 +1918,6 @@ t('FLOW33_FOLSPEED',function(){
      ② 相对旗舰的左右【确实换了】—— 这是"不交叉"的代价,没换就说明根本没重配、①只是没测到;
      ③ 整段折返里槽位易主次数很小(迟滞够;不够会在临界角来回抖成几十上百次);
      ④ 直线航行对照:一次都不许易主(不误触)。 */
-t('FLOW34_FOLCROSS',function(){
-  function cr(o,a,b){return (a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);}
-  function segX(p1,p2,p3,p4){var d1=cr(p3,p4,p1),d2=cr(p3,p4,p2),d3=cr(p1,p2,p3),d4=cr(p1,p2,p4);
-    return ((d1>0&&d2<0)||(d1<0&&d2>0))&&((d3>0&&d4<0)||(d3<0&&d4>0));}
-  /* FM3-2:条令站位改成防空环后 CA+2DD 的两站是 000 与 342,不再是左右对称的两翼 —— 折返时换站只省 2462,低于迟滞带 MARGIN=5000,
-     "允许换边"这条机制在两艘僚舰上根本不会触发。所以本条多造一艘 DD(三艘环上舰占 000/342/018),拿 ±18° 那一对当"两翼"测,机制与判据不变 */
-  var b=fm23reset();
-  var x4=makeShip('DD','探针·DD4',[-40000,0,0],[1,0,0],[0,0,0],'blue',2);x4.speedCmd=800;x4.rrNext=-1;ships.push(x4);b.push(x4);
-  var F=fm23group(b),flag=fmFlag(F);
-  if(b.length<4)return 'fail 需要至少三艘僚舰';
-  fmSetMode(F,'follow');
-  function side(m){
-    var h=V.len(flag.vel)>5?[flag.vel[0],flag.vel[1]]:[flag.facing[0],flag.facing[1]];
-    var hl=Math.hypot(h[0],h[1])||1;
-    var r=[m.pos[0]-flag.pos[0],m.pos[1]-flag.pos[1]];
-    return (h[0]/hl)*r[1]-(h[1]/hl)*r[0];
-  }
-  var i;
-  moveShips(b,[400000,0,0],'stop');                    /* 先直线飞一段把队形稳住 */
-  for(i=0;i<30000;i++)stepShipsMotion(0.02);
-  /* 两翼 = 直线段【飞完之后】槽位 y≠0 的那两艘(000 站那艘在轴线上,换边无从谈起)。必须在这一刻取而不是建队时取:
-     起步那一拍 fmFollowReslot 就会按出发位置把 000 站与一翼互换(沙盘实测),建队时挑的"两翼"里会混进 000 站那艘 */
-  var w=b.filter(function(s){return s!==flag&&Math.abs((s.fmSlot||[0,0,0])[1])>1;});
-  if(w.length<2)return 'fail 直线段飞完后不足两艘在翼站上';
-  var s0=side(w[0])>0;
-  var t1=[],t2=[],flips=0,prev=w[0].fmSlot.join(',');
-  moveShips(b,[-400000,0,0],'stop');                   /* 180 度折返 */
-  for(i=0;i<60000;i++){stepShipsMotion(0.02);
-    var cur=w[0].fmSlot.join(','); if(cur!==prev){flips++;prev=cur;}
-    if(i%50===0){t1.push([w[0].pos[0],w[0].pos[1]]);t2.push([w[1].pos[0],w[1].pos[1]]);}}
-  var swapped=((side(w[0])>0)!==s0);
-  var hit=0,a2,b2;
-  for(a2=0;a2+1<t1.length;a2++)for(b2=0;b2+1<t2.length;b2++)
-    if(segX(t1[a2],t1[a2+1],t2[b2],t2[b2+1]))hit++;
-  var dev=Math.max(followDist(w[0]),followDist(w[1]));
-  /* 对照:笔直航线一次都不许易主 */
-  var f2=0,p2=w[0].fmSlot.join(',');
-  moveShips(b,[-1200000,0,0],'stop');
-  for(i=0;i<40000;i++){stepShipsMotion(0.02);var c2=w[0].fmSlot.join(',');if(c2!==p2){f2++;p2=c2;}}
-  var ok=(hit===0&&swapped&&flips>=1&&flips<=4&&f2===0&&dev>=0&&dev<5000);
-  return (ok?'ok':'fail')
-    +' 两条世界轨迹交叉次数='+hit+'(须0)'
-    +' | 相对旗舰换边='+swapped+'(须true —— 这是不交叉的代价,没换说明根本没重配、上一条只是没测到)'
-    +' | 整段折返槽位易主='+flips+'次(须 1~4:迟滞不够会抖成几十上百次)'
-    +' | 直线对照易主='+f2+'次(须0=不误触)'
-    +' | 折返后离阵位='+Math.round(dev)+'km(须<5000=保位没被重配打坏)';
-});
 /* 6f-10 FL5 速度档位【两种模式下都严格生效】。用户实测报:"档位在跟随的时候有用,在阵位的时候没用" ——
    FM2 给编队里的船加了一道"编队速度上限"(全队档位的加权平均),把个体档位抹平了:
    两艘 800 档的船会被平均值 617 压到 616,调档位在阵位态看不出任何效果。那道上限已删。
@@ -2010,7 +1926,6 @@ t('FLOW34_FOLCROSS',function(){
 t('FLOW35_FMGEAR',function(){
   function run(mode){
     var b=fm23reset(),F=fm23group(b),flag=fmFlag(F);
-    if(mode==='follow')fmSetMode(F,'follow');
     var w=b.filter(function(s){return s!==flag;});
     flag.speedCmd=800; w[0].speedCmd=250; w[1].speedCmd=800;   /* 故意让一艘拖后腿 */
     var avg=fmSpd(F,fmShips(F));
@@ -2020,7 +1935,8 @@ t('FLOW35_FMGEAR',function(){
       b.forEach(function(s,k){var v=V.len(s.vel);if(v>pk[k])pk[k]=v;});}
     return {pk:pk,avg:avg,gear:b.map(function(s){return cruiseOf(s);}),flagIdx:b.indexOf(flag)};
   }
-  var A=run('slot'), B=run('follow');
+  var A=run('slot'); /* FM6:原先还跑一次 run('follow') —— 编队跟随模式已删,那一半移除;
+    "跟随者速度不超自己档位"由 FLOW33_FOLSPEED 直接测 41-follow,不重复。 */
   function fits(R){ /* 每艘峰值 ≈ 自己的档位(±3%) */
     for(var i=0;i<R.pk.length;i++){ if(Math.abs(R.pk[i]-R.gear[i])>R.gear[i]*0.03)return false; }
     return true;
@@ -2029,12 +1945,11 @@ t('FLOW35_FMGEAR',function(){
     var mn=Math.min.apply(null,R.pk), mx=Math.max.apply(null,R.pk);
     return mn<mx*0.5;
   }
-  var ok=(fits(A)&&fits(B)&&slowOk(A)&&slowOk(B));
+  var ok=(fits(A)&&slowOk(A));
   return (ok?'ok':'fail')
     +' 阵位态:档位'+A.gear.join('/')+' → 峰值'+A.pk.map(Math.round).join('/')
     +'(须各等于自己的档位;删上限前会被加权平均 '+Math.round(A.avg)+' 压平)'
-    +' | 跟随态:档位'+B.gear.join('/')+' → 峰值'+B.pk.map(Math.round).join('/')
-    +' | 反向对照(调慢那艘真的慢):阵位='+slowOk(A)+' 跟随='+slowOk(B);
+    +' | 反向对照(调慢那艘真的慢):'+slowOk(A);
 });
 /* 6f-13 FM3-1 固定模式(snapshot 源)。三舰【不对称】摆放 + 各自任意朝向建队(默认 snapshot+static),
    判据全部用【几何不变量】而不是照抄实现里的公式(公式抄一遍等于没测):
@@ -2208,7 +2123,7 @@ t('FLOW37_FMCAPSLOT',function(){ /* FM4 能力插槽 + 最优指派。改前这�
   var hdg1=b.every(function(s){return s.fmHdg===0;});
   var src1=(F.src==='generated'&&F.mode==='slot'&&F.P.stance==='fixed');
   var keys=Object.keys(fmParamsNew()).sort().join(',');
-  var okKeys=(keys==='slots,spacing,stance');
+  var okKeys=(keys==='bm,bstr,slots,spacing,spread,stance,widen'); /* FM6:五个几何旋钮全部落在 P 上 */
   /* ② 站位换布局:水下「宽而不深」的横向展开必须【明显】大于水面「收拢集火」。用同一组船,只切 stance */
   function shape(){var mx=0,my=0;b.slice(1).forEach(function(s){mx=Math.max(mx,Math.abs(s.fmSlot[1]));my=Math.max(my,Math.abs(s.fmSlot[0]));});return {x:mx,y:my};}
   fm37drop();
@@ -2309,7 +2224,7 @@ t('FLOW37_FMCAPSLOT',function(){ /* FM4 能力插槽 + 最优指派。改前这�
   fm37drop();
   var ok=(flagZero&&ring1&&st1&&cap1&&hdg1&&src1&&okKeys&&ok2&&ok3&&ok4&&ok5&&ok6&&ok7&&ok8);
   return (ok?'ok':'fail')
-    +' ①固定模板 CA+2DD:'+t1+' 旗舰占阵心='+flagZero+' 两DD在屏护带(r='+Math.round(BR1.screen)+')='+ring1+' 站000与±45°(模板前两槽)='+st1+' 第二站在'+side1+' 需求都是通道/屏护='+cap1+' fmHdg全0='+hdg1+' src/mode/stance=generated/slot/fixed='+src1+' fmParamsNew键=['+keys+'](须 slots,spacing,stance)='+okKeys
+    +' ①固定模板 CA+2DD:'+t1+' 旗舰占阵心='+flagZero+' 两DD在屏护带(r='+Math.round(BR1.screen)+')='+ring1+' 站000与±45°(模板前两槽)='+st1+' 第二站在'+side1+' 需求都是通道/屏护='+cap1+' fmHdg全0='+hdg1+' src/mode/stance=generated/slot/fixed='+src1+' fmParamsNew键=['+keys+'](须 bm,bstr,slots,spacing,spread,stance,widen)='+okKeys
     +' | ②切站位(8舰同组):水面'+tSurf+' → 水下'+tSub+' 横向展开比 水下/水面='+wide.toFixed(2)+'(须>1.5=「宽而不深」真的更宽) 站距乘数 水面/水下/空中='+spSurf.toFixed(2)+'/'+spSub.toFixed(2)+'/'+spAir.toFixed(2)+'(须 1.00/1.60/3.00)='+ok2
     +' | ③空中为主'+tAir+' 后方150°外舰数='+rearAir+'(须>=1=圆形屏护,固定模板同规模为'+rearFix+')='+ok3
     +' | ④最优指派(CA+2DD+CV 穷举 '+cnt+' 种):匈牙利总契合='+got.toFixed(6)+' 穷举最大='+best.toFixed(6)+' 差='+(best-got).toExponential(1)+'(须=0,不是接近)='+ok4+' '+t4
@@ -2374,6 +2289,19 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   var brg1=fmPageSlots(F)[0].brg;
   var dAim=Math.abs(((brg1-90)%360+360)%360);if(dAim>180)dAim=360-dAim;
   var ok4=(okRect&&Math.abs(brg1-brg0)>1&&dAim<3);
+  /* ④b FM6【五个几何旋钮】各派一次真实 input 事件,断言 F.P 上对应那一项真的变了。
+     这是"完整的阵型算法页"那条需求的落地判据 —— 少接一根线,页面看着一样、拖了没反应。 */
+  var knobs=document.querySelectorAll('#fpBody input[data-fpk]');
+  var kNames=[],kOk=(knobs.length===5);
+  for(var ki=0;ki<knobs.length;ki++){
+    var kEl=knobs[ki], kk=kEl.getAttribute('data-fpk'), before=F.P[kk];
+    kNames.push(kk);
+    var lim=FM_LIMIT[kk], want=Math.min(lim[1],Math.max(lim[0],(before===lim[1]?lim[0]:before+0.5)));
+    kEl.value=String(want);
+    kEl.dispatchEvent(new Event('input',{bubbles:true}));
+    if(!(Math.abs(F.P[kk]-want)<1e-9&&F.P[kk]!==before))kOk=false;
+  }
+  var ok4b=(kOk&&kNames.join(',')==='bm,widen,spread,spacing,bstr');
   /* ⑤ 站位钮:页内切站位 = 编队菜单那一行的同一个 fmSetStance;切完自定义插槽被丢掉(它是按上一套布局改的) */
   var scBtn=document.querySelector('#fpBody [data-fp="sc-sub"]');
   hit(scBtn,'pointerdown');
@@ -2401,16 +2329,204 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   fmPageOpen(F.id);fmDelete(F.id);fmPageRender();
   var ok8=!fmPageIsOpen();
   window.removeEventListener('error',onerr);
-  var ok=(ok1&&ok2&&ok3&&ok4&&ok5&&ok6&&ok7&&ok8&&!errs.length);
+  var ok=(ok1&&ok2&&ok3&&ok4&&ok4b&&ok5&&ok6&&ok7&&ok8&&!errs.length);
   return (ok?'ok':'fail')
     +' ①入口(真点「编组控制」钮):钮存在='+had+' 页已开='+opened+' 正文='+len1+'字符 方位盘='+(!!dial)+' 插槽圈='+slotN+'个(须=插槽表 '+slots0+') 舰位点='+shipDots+' 评估行='+rows+' 能力表行='+tds+'(须='+b.length+')='+ok1
     +' | ②点插槽:选中下标='+selIdx+'(须0) 能力/带下拉都建出='+(!!capSel&&!!bandSel)+'='+ok2
     +' | ③改能力 '+cap0+'→'+capTo+':落到F.P.slots='+custom+' 插槽表已变='+(capNow===capTo)+' 有舰被派到该能力站位(s.fmStn)='+stnHas+'='+ok3
     +' | ④拖动改方位:'+Math.round(brg0)+'° → '+Math.round(brg1)+'°(拖到盘面正右方,须≈090±3;偏差='+dAim.toFixed(1)+'°)='+ok4
+    +' | ④b五个几何旋钮(真实 input 事件):['+kNames.join(',')+'] 逐个拖动后 F.P 对应项都变了='+kOk+'='+ok4b
     +' | ⑤页内切站位→水下:stance='+F.P.stance+' 自定义插槽已丢='+(!F.P.slots)+' 站距乘数='+F.P.spacing.toFixed(2)+'(须1.60)='+ok5
     +' | ⑥增删插槽:'+n6+' -增-> '+nAdd+' -删-> '+nDel+' 只剩1个时再删='+nLast+'(须仍1=不许删到空)='+ok6
     +' | ⑦恢复默认='+okReset+' 点✕关闭='+closed+' 切固定模式后 s.fmStn 已清='+stnCleared+'='+ok7
     +' | ⑧编队被删后自动收摊='+ok8+' 运行期错误='+(errs.length?errs.join(' / '):'none');
+});
+t('FLOW39_FMGHOST',function(){ /* FM6 编队级长按右键定阵型朝向。全程走【真实 DOM 事件】(RF22b 的规矩:抽出来的函数越干净,接线错越隐蔽) */
+  if(typeof ghostArm!=='function')return 'fail ghostArm 未定义';
+  var errs=[];var onerr=function(e){errs.push(e.message||String(e));};
+  window.addEventListener('error',onerr);
+  var b=fm23reset(),F=fm23group(b),flag=fmFlag(F);
+  fmSetSrc(F,'generated');
+  selected=F.ships.slice();
+  /* 目标点取正右方(世界 +x),鼠标停在目标点【正上方】(世界 −y)⇒ 到达朝向应为 −90°,
+     而行进方向是 0° —— 两者刻意差 90°,这样"阵型朝向到底取 face 还是取行进方向"才有区分度。 */
+  var DEST=[400000,0,0], AIM=[400000,-200000];
+  var sp=toScreen(DEST[0],DEST[1]), sa=toScreen(AIM[0],AIM[1]);
+  /* 【必须先清待命态】。70-input 的右键分支首段是"有任何 pending 就当取消",前面几十条探针留下的
+     pendingFmFollow / selWeapon 会把这一击整个吃掉,长按闹钟压根不会挂上 —— 症状是"弹出=false"而代码没问题。 */
+  if(typeof clearPendings==='function')clearPendings();
+  /* 【必须装假定时器】。350ms 的长按闹钟走 setTimeout,而探针是同步跑完的 —— 不装 fc5timer 的话
+     真定时器永远等不到,fc5flush 也无从烧起。FLOW5/FLOW22 都是这个配方(fc5timer(true) → 派事件 → fc5flush)。
+     用 try/finally 卸掉:半路抛异常而不还原的话,后面所有探针的 setTimeout 都会被登记而不执行。 */
+  fc5timer(true);
+  try{
+  /* 真实事件链:mousedown(右键,直调 onMouseDown —— 它挂在 canvas 上且要读 rect,同 FLOW22 的配方)
+     → 烧掉 350ms 长按闹钟 → window mousemove 改朝向 → window mouseup 落地 */
+  function gev(type,x,y,btn){
+    var o={button:btn||0,clientX:x,clientY:y,shiftKey:false,ctrlKey:false,
+           target:cv,currentTarget:cv,preventDefault:function(){},stopPropagation:function(){}};
+    if(type==='down')onMouseDown(o);
+    else window.dispatchEvent(new MouseEvent(type==='move'?'mousemove':'mouseup',{bubbles:true,button:btn||0,clientX:x,clientY:y}));
+  }
+  gev('down',sp[0],sp[1],2);
+  fc5flush(360);
+  var armed=(typeof ghostMove!=='undefined'&&!!ghostMove), fid=armed?ghostMove.fid:null;
+  gev('move',sa[0],sa[1],0);
+  var faceDeg=armed&&ghostMove?Math.atan2(ghostMove.face[1],ghostMove.face[0])*180/Math.PI:NaN;
+  /* 落地【之前】先测一次绘制:编队虚影必须把每艘船都画出来,不能只画旗舰一个 */
+  var ghN=0;
+  if(typeof ghostFm==='function'&&ghostFm(ghostMove)){
+    var angG=Math.atan2(ghostMove.face[1],ghostMove.face[0]),cG=Math.cos(angG),sG=Math.sin(angG),seen={};
+    fmShips(F).forEach(function(m){var o=rotSlot(m.fmSlot||[0,0,0],cG,sG);seen[Math.round(o[0])+','+Math.round(o[1])]=1;});
+    ghN=Object.keys(seen).length;
+  }
+  gev('up',sa[0],sa[1],2);
+  var landed=(typeof ghostMove==='undefined'||!ghostMove);
+  /* ① 每艘船各持一条令(编队命令展开到每一艘,不是只有旗舰) */
+  var per=b.map(function(s){return s.orders.length;}).join('/');
+  /* ② 阵型朝向 = face 方向(−90°),不是行进方向(0°)。判据用几何不变量:
+        每艘船的终点 = 编队级目标点 + rotSlot(自己的槽位, ang_face),而不是 rotSlot(…, ang_行进)。 */
+  /* 参考角取【虚影当时承诺的那个 face】而不是理论上的 −90°:鼠标落点换算回世界角有零点几度的量化差,
+     而半径 5 万公里上 0.2° 就是 175 km。用承诺角当参考,断言才是"船摆的方向 = 虚影答应的方向"这件事本身
+     (face 来自鼠标位置,不是来自 F.ang,所以不循环);−90±3° 那条已经在 ① 里单独守着。 */
+  var angF=faceDeg*Math.PI/180, cf=Math.cos(angF), sf=Math.sin(angF);
+  var angM=0, cm=Math.cos(angM), sm=Math.sin(angM);
+  var devF=0, devM=0;
+  b.forEach(function(s){
+    if(!s.orders.length){devF=1e9;return;}
+    var p=s.orders[s.orders.length-1].pos, sl=s.fmSlot||[0,0,0];
+    var of_=rotSlot(sl,cf,sf), om=rotSlot(sl,cm,sm);
+    devF=Math.max(devF,Math.hypot(p[0]-(DEST[0]+of_[0]),p[1]-(DEST[1]+of_[1])));
+    devM=Math.max(devM,Math.hypot(p[0]-(DEST[0]+om[0]),p[1]-(DEST[1]+om[1])));
+  });
+  var okAng=(devF<1&&devM>5000); /* 双向:既要贴 face 解,又要【明显不是】行进方向解,否则"face 根本没接上"也能过 */
+  var angRec=F.ang*180/Math.PI;
+  /* ③ 飞完之后整队真的按那个朝向摆开 */
+  var i,left=1;
+  for(i=0;i<60000;i++){if(rrJobs.length)rrTick();stepShipsMotion(0.02);left=0;b.forEach(function(s){if(s.orders.length||V.len(s.vel)>1)left++;});if(!left)break;}
+  var arrDev=0;
+  b.forEach(function(s){
+    var sl=s.fmSlot||[0,0,0], o=rotSlot(sl,cf,sf);
+    arrDev=Math.max(arrDev,Math.hypot(s.pos[0]-(DEST[0]+o[0]),s.pos[1]-(DEST[1]+o[1])));
+  });
+  /* ④ 负对照:选一部分(不等于全队)时【不许】进编队虚影 —— 与右键移动"选中什么就命令什么"同口径 */
+  selected=[b[0].id,b[1].id];
+  var armed2=ghostArm(sp[0],sp[1],false); /* 既不是整队也不是单舰 → 与 RF22 一致:整个不进虚影 */
+  ghostMove=null;
+  /* ⑤ 单舰仍是单舰(RF11/RF22 行为不许被改坏) */
+  selected=[b[1].id];
+  var armed3=ghostArm(sp[0],sp[1],false), fid3=(typeof ghostMove!=='undefined'&&ghostMove)?ghostMove.fid:'x';
+  ghostMove=null;
+  window.removeEventListener('error',onerr);
+  } finally { fc5timer(false); }
+  var ok=(armed&&String(fid)===String(F.id)&&Math.abs(faceDeg+90)<3&&ghN===b.length&&landed
+        &&per==='1/1/1'&&okAng&&left===0&&arrDev<2000
+        &&!armed2&&armed3&&fid3===null&&!errs.length);
+  return (ok?'ok':'fail')
+    +' ①真实事件链:长按弹出='+armed+' 作用域=编队'+fid+'(须'+F.id+') 朝向随鼠标='+(isFinite(faceDeg)?faceDeg.toFixed(1):'NaN')+'°(须-90±3) 虚影船影数='+ghN+'(须'+b.length+'=每艘都画,不是只画旗舰) 抬手已落地='+landed
+    +' | ②各舰令数='+per+'(须1/1/1) 终点贴 face 解误差='+devF.toFixed(1)+'(须<1) 距行进方向解='+Math.round(devM)+'(须>5000=确实不是那个解)='+okAng+' F.ang='+angRec.toFixed(1)+'°'
+    +' | ③飞完:余令0='+(left===0)+' 到位后与 face 阵型的最大偏差='+Math.round(arrDev)+'(须<2000)'
+    +' | ④负对照 选2/3艘:弹出='+armed2+'(须 false=既不是整队也不是单舰,与 RF22 一致不进虚影)'
+    +' | ⑤单舰:弹出='+armed3+' 作用域='+fid3+'(须 null)'
+    +' | 运行期错误='+(errs.length?errs.join(' / '):'none');
+});
+t('FLOW40_FOLLOWCTL',function(){ /* FM6 底栏跟随标准控件:四种作用域(舰队/单舰 × 舰队/单舰)。全程走【真实 DOM 事件】——
+     只调 followAssign 的话,"钮建了出来但没挂 click"或"70-input 的点选分支没接上"这两类接线错一个都抓不到。 */
+  if(typeof followAssign!=='function')return 'fail followAssign 未定义(41-follow 没加载)';
+  var errs=[];var onerr=function(e){errs.push(e.message||String(e));};
+  window.addEventListener('error',onerr);
+  var b=fm23reset();                                   /* 蓝方 3 艘 */
+  if(typeof clearPendings==='function')clearPendings();
+  /* 两个钮必须真的建在底栏里 */
+  var bF=document.getElementById('cbFollow'), bU=document.getElementById('cbUnfollow');
+  var built=(!!bF&&!!bU&&bF.parentNode===document.querySelector('#cmdBar .cmd-btns'));
+  /* 兑现一次跟随:选中 sel → 真点「跟随」钮 → 真派一次左键 mousedown 到目标船所在的屏幕位置 */
+  function doFollow(sel,tgt){
+    selected=sel.map(function(x){return x.id;});
+    if(typeof updateSelPanel==='function')updateSelPanel();
+    bF.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+    var armed=!!pendingFollow;
+    cam.x=tgt.pos[0];cam.y=tgt.pos[1];                 /* 把目标挪到屏心,保证 shipAt 命中 */
+    var p=toScreen(tgt.pos[0],tgt.pos[1]);
+    onMouseDown({button:0,clientX:p[0],clientY:p[1],shiftKey:false,ctrlKey:false,
+      target:cv,currentTarget:cv,preventDefault:function(){},stopPropagation:function(){}});
+    return {armed:armed,left:!!pendingFollow};
+  }
+  function folOf(x){return x.follow?String(x.follow.tid):'-';}
+  /* ── ① 单舰 → 单舰 ── */
+  var r1=doFollow([b[1]],b[2]);
+  var s2s=(folOf(b[1])===String(b[2].id)&&!b[0].follow);
+  followStopList([b[1]]);
+  /* ── ② 单舰 → 舰队(点编队里的任一艘 = 跟随那支编队,即它的旗舰) ── */
+  var loner=makeShip('DD','探针·散船',[-500000,-300000,0],[1,0,0],[0,0,0],'blue',2);
+  loner.speedCmd=800;loner.rrNext=-1;ships.push(loner);
+  var F=fm23group(b);                                   /* b 三艘成队 */
+  var flag=fmFlag(F);
+  var notFlag=b.filter(function(x){return x!==flag;})[0];
+  var r2=doFollow([loner],notFlag);                     /* 刻意点【非旗舰】那一艘 */
+  var s2f=(folOf(loner)===String(flag.id));             /* 必须落到旗舰身上,不是被点的那一艘 */
+  followStopList([loner]);
+  /* ── ③ 舰队 → 单舰 ── */
+  selected=F.ships.slice();
+  var r3=doFollow(fmShips(F),loner);
+  var f2s=(!!F.follow&&String(F.follow.tid)===String(loner.id)&&fmShips(F).every(function(m){return folOf(m)===String(loner.id);}));
+  /* ── ④ 舰队 → 舰队(用红方两艘另建一支) ── */
+  var red=ships.filter(function(x){return x.side==='red'&&!x.dead;}).slice(0,2);
+  var f4=null,f2f=false,r4={armed:false,left:true};
+  if(red.length===2){
+    red.forEach(function(x){x.side='blue';});
+    f4=fmCreate('2',red);
+    var rflag=fmFlag(f4);
+    r4=doFollow(fmShips(F),red.filter(function(x){return x!==rflag;})[0]||rflag); /* 点它的非旗舰 */
+    f2f=(!!F.follow&&String(F.follow.tid)===String(rflag.id)&&fmShips(F).every(function(m){return folOf(m)===String(rflag.id);}));
+  }
+  /* ── ④b【同一个公式】的直接判据 ── 这是本次重构的全部主张:单舰 ≡ 半径 0、阵位偏移 0 的编队,
+     所以四种组合的纵向间距都应等于 −(半径A + 半径B + FOLLOW_GAP)。逐个量出来对表,而不是只看"跟上了没有"。 */
+  followStopList(fmShips(F)); followStopList([loner]);
+  function backOf(x){ return x.follow?-x.follow.off[0]:NaN; }
+  /* 单舰→单舰要用【两艘散船】:b[1]/b[2] 此刻都在 F 里,同队自跟随会被守卫挡掉(那是对的,见负对照⑥) */
+  var loner2=makeShip('DD','探针·散船2',[-520000,-320000,0],[1,0,0],[0,0,0],'blue',2);
+  loner2.speedCmd=800;loner2.rrNext=-1;ships.push(loner2);
+  doFollow([loner],loner2);         var g11=backOf(loner);     /* 单舰→单舰:0 + 0 + GAP */
+  followStopList([loner]);
+  doFollow([loner],flag);           var g1F=backOf(loner);     /* 单舰→舰队:0 + R(F) + GAP */
+  followStopList([loner]);
+  doFollow(fmShips(F),loner);       var gF1=backOf(flag);      /* 舰队→单舰:R(F) + 0 + GAP */
+  followStopList(fmShips(F));
+  var RF=fmRadius(F), G=FOLLOW_GAP;
+  var okFormula=(Math.abs(g11-G)<1&&Math.abs(g1F-(RF+G))<1&&Math.abs(gF1-(RF+G))<1&&RF>1000);
+  /* ── ⑤ 解除:真点「解除」钮 ── */
+  doFollow(fmShips(F),loner);
+  selected=F.ships.slice();
+  if(typeof updateSelPanel==='function')updateSelPanel();
+  bU.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+  var cleared=(!F.follow&&fmShips(F).every(function(m){return !m.follow;}));
+  /* ── ⑥ 负对照:不能跟随自己 ── */
+  selected=[b[1].id];
+  var r6=doFollow([b[1]],b[1]);
+  var selfNo=!b[1].follow;
+  /* ── ⑦ 负对照:循环跟随必须被拒(F 跟 f4 之后,f4 不许再跟 F) ── */
+  var loopNo=true;
+  if(f4){
+    followStopList(fmShips(F));
+    doFollow(fmShips(F),fmFlag(f4));
+    doFollow(fmShips(f4),fmFlag(F));
+    loopNo=!f4.follow;
+    followStopList(fmShips(F));
+  }
+  if(f4)fmDelete('2');
+  for(var i=ships.length-1;i>=0;i--)if(ships[i]===loner||ships[i]===loner2)ships.splice(i,1);
+  window.removeEventListener('error',onerr);
+  var okArm=(r1.armed&&r2.armed&&r3.armed&&(!f4||r4.armed)&&!r1.left&&!r2.left&&!r3.left); /* 武装了、且点完就消耗掉(不留幽灵待命态) */
+  var ok=(built&&okArm&&s2s&&s2f&&f2s&&(!f4||f2f)&&okFormula&&cleared&&selfNo&&loopNo&&!errs.length);
+  return (ok?'ok':'fail')
+    +' 两钮建在底栏='+built+' 武装后点一下就消耗掉(不留幽灵待命态)='+okArm
+    +' | ①单舰→单舰='+s2s+' ②单舰→舰队(点的是非旗舰,须落到旗舰)='+s2f
+    +' | ③舰队→单舰(全员含旗舰都挂上)='+f2s+' ④舰队→舰队(点的是非旗舰,须落到对方旗舰)='+(f4?f2f:'跳过·红方不足2艘')
+    +' | ④b同一个公式(单舰≡半径0的编队):单舰→单舰='+Math.round(g11)+'(须 GAP '+G+') 单舰→舰队='+Math.round(g1F)+' 舰队→单舰='+Math.round(gF1)+'(两者都须 R(F)'+Math.round(RF)+'+GAP='+Math.round(RF+G)+')='+okFormula
+    +' | ⑤真点「解除」钮后 F.follow 与全员 s.follow 都清空='+cleared
+    +' | 负对照:跟随自己被拒='+selfNo+' 循环跟随被拒='+loopNo
+    +' | 运行期错误='+(errs.length?errs.join(' / '):'none');
 });
 t('FLOW6_CHAIN',function(){ /* RF7 数据链渲染:函数存在;编辑态/退出态 render 均不炸(像素断言不做,ERRORS 层兜底) */
   var e=fc5reset();
@@ -2489,16 +2605,16 @@ grep -q "FLOW25_FMFACE=ok" "$OUT" || { echo "✗ FLOW25_FMFACE 未通过(FM1 编
 grep -q "FLOW26_FMRTS=ok" "$OUT" || { echo "✗ FLOW26_FMRTS 未通过(FM2 RTS 语义:选中什么就命令什么;旗舰战损其余舰照常飞;无僵尸F)"; fail=1; }
 grep -q "FLOW27_FMBAR=ok" "$OUT" || { echo "✗ FLOW27_FMBAR 未通过(编队书签栏/菜单 + #selFm 信息区的真实事件全链路;含模式两钮的行为断言)"; fail=1; }
 grep -q "FLOW28_FOLLOW=ok" "$OUT" || { echo "✗ FLOW28_FOLLOW 未通过(FL1 通用跟随层:局部系偏移/距离收敛/解除后不跟/目标阵亡不卡死/有令优先)"; fail=1; }
-grep -q "FLOW29_FMMODE=ok" "$OUT" || { echo "✗ FLOW29_FMMODE 未通过(FL1 编队两种模式:阵位态各持令且无跟随 vs 跟随态只有旗舰接令)"; fail=1; }
 grep -q "FLOW30_FMFOLLOWFM=ok" "$OUT" || { echo "✗ FLOW30_FMFOLLOWFM 未通过(FL1 编队跟编队:全员跟目标旗舰/队间偏移算式/跟到后方/解除后清空)"; fail=1; }
 grep -q "FLOW31_FOLLINE=ok" "$OUT" || { echo "✗ FLOW31_FOLLINE 未通过(FL2 跟随连线:流动方向朝跟随舰/未选中不画/解除后消失)"; fail=1; }
 grep -q "FLOW32_FMCROSS=ok" "$OUT" || { echo "✗ FLOW32_FMCROSS 未通过(FL3 阵位态多点航线不许交叉)"; fail=1; }
 grep -q "FLOW33_FOLSPEED=ok" "$OUT" || { echo "✗ FLOW33_FOLSPEED 未通过(FL3 跟随速度不超自己的巡航档)"; fail=1; }
-grep -q "FLOW34_FOLCROSS=ok" "$OUT" || { echo "✗ FLOW34_FOLCROSS 未通过(FL4 跟随态折返不许交叉航线)"; fail=1; }
-grep -q "FLOW35_FMGEAR=ok" "$OUT" || { echo "✗ FLOW35_FMGEAR 未通过(FL5 速度档位在两种模式下都严格生效)"; fail=1; }
+grep -q "FLOW35_FMGEAR=ok" "$OUT" || { echo "✗ FLOW35_FMGEAR 未通过(FL5 速度档位严格生效:每艘峰值=自己的档位，不被全队加权平均压平)"; fail=1; }
 grep -q "FLOW36_FMSNAP=ok" "$OUT" || { echo "✗ FLOW36_FMSNAP 未通过(FM3-1 固定模式:建队/重拍即成形(离位0)/快照可逆/终点布局与到达朝向/折返不配对/换旗重心化+F.ang换参考系(船未动换旗离位0、就地成形不动、换回可逆、阵亡顺位)/战损不变 + generated 负对照(折返必换槽=同分仍可配对、切generated后F.ang=旗舰船头不再是NaN、换旗F.ang不动))"; fail=1; }
 grep -q "FLOW37_FMCAPSLOT=ok" "$OUT" || { echo "✗ FLOW37_FMCAPSLOT 未通过(FM4 能力插槽+最优指派:固定模板前两槽 000/±45°·屏护带 / 切站位改形状(水下横向展开>1.5倍水面、站距乘数拨到预设) / 空中为主后方有舰 / 匈牙利总契合度 = 穷举最大值(差恰为 0) / 贴身几何门 / 20 舰时插槽数仍 14·位置不重合 / 下令后 fmReassign 只许同签名互换 / 再点一次阵型与同站位都是空操作)"; fail=1; }
 grep -q "FLOW38_FMPAGE=ok" "$OUT" || { echo "✗ FLOW38_FMPAGE 未通过(FM4 舰队编组控制页，全程真实 DOM 事件:编队菜单钮开页 / 点插槽出配置条 / 改能力落到 F.P.slots 且 s.fmStn 跟着变 / 拖动改方位拖到哪就是哪(±3°) / 页内切站位 / 增删插槽且不许删到空 / 恢复默认+关闭 / 固定模式清 s.fmStn / 编队被删后自动收摊)"; fail=1; }
+grep -q "FLOW39_FMGHOST=ok" "$OUT" || { echo "✗ FLOW39_FMGHOST 未通过(FM6 编队级长按右键定阵型朝向，全程真实事件:长按弹出且作用域=本编队 / 虚影把每艘舰都画出来 / 终点贴 face 解而不是行进方向解 / 飞完真的按那个朝向摆开 / 选一部分与单舰仍走单舰语义)"; fail=1; }
+grep -q "FLOW40_FOLLOWCTL=ok" "$OUT" || { echo "✗ FLOW40_FOLLOWCTL 未通过(FM6 底栏跟随标准控件四种作用域，全程真实事件:单舰→单舰 / 单舰→舰队 / 舰队→单舰 / 舰队→舰队（点非旗舰须落到旗舰）/ 真点解除钮清干净 / 跟随自己与循环跟随被拒)"; fail=1; }
 # FM3-2 源码级负对照:旧弧线阵的四样东西(舰种角色表 / 防空圈基准半径函数 / 扇面参数 / 弦距参数)必须从 js/ 里消失。
 # 模式用字符串拼接写,免得本文件自己被同一条 grep 抓到。
 FM32_DEAD="CLS_""ROLE|aaRing""Ref|P\\.f""an|P\\.g""ap|FM_LIMIT\\.f""an|FM_LIMIT\\.g""ap"

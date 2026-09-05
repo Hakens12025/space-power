@@ -109,10 +109,15 @@ function fmReassign(F, mates, ca, sa, dest, from) {
   }
 }
 
-function fmAngOf(F, mates, dest) { // 只在阵位态用得上
-  /* 这一段的阵型朝向 = 从【编队锚点】指向本段目标点的方向。
+function fmAngOf(F, mates, dest, face) {
+  /* 这一段的阵型朝向。
+     【face 优先】(FM6):调用方显式给了到达朝向(编队级长按右键虚影),阵型就朝那个方向 ——
+     这正是 FM3-1 备忘里预告的"阶段 3 编队虚影会改成:有 face 时 ang 取 face 方向"。
+     不这么做的话,编队虚影画的朝向与船真正摆出的阵型朝向分家:虚影承诺一个方向、队形却按行进方向摆。
+     没给 face 时照旧:阵型朝向 = 从【编队锚点】指向本段目标点的方向。
      锚点:追加路径点时是上一个编队级目标点 F.dest0(所以拐弯处阵型会跟着新航段转);
      首次下令时是旗舰实时位置。两点重合(原地下令)就沿用上一次的朝向,没有上一次就用旗舰船头。 */
+  if (face && isFinite(face[0]) && isFinite(face[1]) && Math.hypot(face[0], face[1]) > 1e-9) return Math.atan2(face[1], face[0]);
   const flag = fmFlag(F, mates);
   const from = F.dest0 || (flag ? flag.pos : [0, 0, 0]);
   const dx = dest[0] - from[0], dy = dest[1] - from[1];
@@ -123,20 +128,9 @@ function fmAngOf(F, mates, dest) { // 只在阵位态用得上
 function fmSpread(F, dest, type, face, mode) {
   const mates = fmShips(F);
   if (!mates.length) return null;
-  if (F.motion === 'follow') { // 跟随态:只有旗舰接令,成员由 41-follow 持续跟随它的阵位。FM3-0:下令侧按运动轴分发的【唯一】一处(改前读 F.mode)
-    const flag = fmFlag(F, mates);
-    if (!flag) return null;
-    /* 成员的旧令必须清。跟随分支排在 orders 【之后】(有令先办事),所以成员身上但凡还留着阵位态那次下令的
-       终点,它就会先飞去那个点、把编队当场拆散。这是【编队级】命令,理应覆盖成员的一切既有航线;
-       而"给跟随中的某一艘单独下令、它办完再跟回来"走的是 orderMoveTo 那条路,不经过这里,语义不受影响。 */
-    mates.forEach(m => { if (m !== flag) { orderClear(m); resetForNewOrders(m); } });
-    if (mode === 'append') orderAppend(flag, dest, face);
-    else if (mode === 'push') orderPush(flag, dest, type, face);
-    else orderMoveTo(flag, dest, type, face);
-    F.dest0 = [dest[0], dest[1], dest[2] || 0];
-    return mates;
-  }
-  const ang = fmAngOf(F, mates, dest);
+  /* FM6:这里原有一条"跟随态只让旗舰接令"的分支,随【编队跟随模式】一并删除。
+     编队现在恒走下面这条:下令那一刻把编队级目标点展开成每艘船的绝对终点。 */
+  const ang = fmAngOf(F, mates, dest, face); // FM6:有 face(编队虚影)时阵型朝向取 face 方向
   const ca = Math.cos(ang), sa = Math.sin(ang);
   /* FL3:先按"各舰从哪儿出发"重新配对槽位,再算终点 —— 不配的话航向一反转,两翼互换、航线交叉。
      起点取【上一段的终点】(追加时)或【当前位置】(新航线时);必须在下面的循环【之前】算完,
@@ -153,6 +147,8 @@ function fmSpread(F, dest, type, face, mode) {
        零新机制 —— 31-step-ships 到位时看 cur.face 补一次原地转(RF11),编队每艘船本来就各持一条带 face 的令。
        阵型模式(generated,fmHdg 恒 0)刻意【不】走这条:它沿用调用方传入的 face(通常为 null → 到位不转),行为与 FM3-0 前一致。
        调用方传入的 face 在固定模式下暂被本舰的 face_i 覆盖;阶段 3 编队虚影会改成"有 face 时 ang 取 face 方向",届时两者统一。 */
+    /* 固定模式:到达朝向 = 阵型朝向 + 自己建队时的朝向差。ang 现在可能来自调用方的 face(FM6),
+       于是"虚影指哪 → 整个刚体转到哪、每艘船各自的相对船头也跟着转",两条语义在这里统一了。 */
     const fi = fixed ? [Math.cos(ang + (s.fmHdg || 0)), Math.sin(ang + (s.fmHdg || 0)), 0] : face;
     if (mode === 'append') orderAppend(s, p, fi);
     else if (mode === 'push') orderPush(s, p, type, fi);

@@ -41,8 +41,7 @@ function fmbFlag(F,list){ // 只读版旗舰:名册优先;名册里那艘没了�
   return f||l[0]||null;
 }
 function fmbList(){return (typeof fmAll==='function')?fmAll():[];} // 有活船的编队,顺序由 42 保证稳定
-function fmbModeText(mode,short){ // FM3-1 三模式文案的唯一出处(信息区 / 菜单副标题 / 88 右栏共用,免得三处各写各的)
-  if(mode==='follow')return short?'跟随态':'跟随 · 成员跟旗舰';
+function fmbModeText(mode,short){ // 模式文案的唯一出处(信息区 / 菜单副标题 / 88 右栏共用,免得三处各写各的)。FM6:'follow' 这一档随编队跟随模式删除
   if(mode==='fixed')return short?'固定态':'固定 · 保持建队时的相对位置与朝向';
   return short?'阵型态':'阵型 · 能力站位';  // FM4:机制从「条令防空环」换成「能力插槽 + 最优指派」，文案跟着改 —— 本函数是三处模式文案的唯一出处(左轨菜单/右轨 #selFm/书签副标题)
 }
@@ -94,7 +93,7 @@ function fmbStat(F){ // 一个编队的全部读数,一次算完(书签与信息
   else state='待命';
   const ftName=ftgt?(((typeof fmOf==='function')&&fmOf(ftgt))?fmName(fmOf(ftgt)):ftgt.name):'—';
   return {F,g:F.id,list,flag,cx,cy,cz,avgV,hp,mhp,hurt,spd,uncap,dev,moving,segs,state,
-          fol,ftgt,ftName,mode:(F.mode==='follow'||F.mode==='fixed')?F.mode:'slot', // FM3-1 三选一:fixed/slot/follow(F.mode 是 42 的派生值,UI 只读)
+          fol,ftgt,ftName,mode:(F.mode==='fixed')?'fixed':'slot', // FM6 两选一:fixed/slot(F.mode 是 42 的派生值,UI 只读)
           hpFrac:mhp>0?Math.max(0,Math.min(1,hp/mhp)):0};
 }
 
@@ -224,7 +223,8 @@ function fmbActsBuild(){
          真正管疏密的旋钮是【插槽数量与方位】,那已经在编组控制页里。 */
   /* FM5b 菜单三级层次(用户定案:书签仪表化+轻菜单):
        ① 模式 = 连体分段控件(.fm-seg,当前段点亮)+ 一行暗色模式说明(文案唯一出处仍是 fmbModeText,零新词);
-       ② 编队行动 = 随模式块(固定→重拍队形 / 阵型→编组控制 / 跟随→空)+ 跟随两钮 + 整队停车(整行);
+          FM6:模式只剩【固定 / 阵型】两段 —— "跟随"不再是编队的一种模式,它下沉成了底栏的通用跟随控件(作用域含单舰);
+       ② 编队行动 = 随模式块(固定→重拍队形 / 阵型→编组控制)+ 跟随两钮 + 整队停车(整行);
        ③ 危险区 = 发丝线隔开,解散编队(红描边 .qstop)独占一行 —— 与日常行动拉开,防误触。
      data-fma 九个全部沿用 FM4b,事件委托零改动。 */
   acts.innerHTML=
@@ -233,7 +233,6 @@ function fmbActsBuild(){
       '<div class="fm-seg">'+
         '<button class="btn" data-fma="m-fixed" title="固定 · 保持建队时的相对位置与朝向">固定</button>'+
         '<button class="btn" data-fma="m-slot" title="阵型 · 能力站位:每个插槽 = 一个方位 + 一种能力,按最优指派分配">阵型</button>'+
-        '<button class="btn" data-fma="m-follow" title="跟随 · 只有旗舰接移动令,成员持续跟随旗舰的阵位">跟随</button>'+
       '</div>'+
     '</div>'+
     '<div class="fm-mdesc" data-lf="mdesc">—</div>'+
@@ -243,15 +242,19 @@ function fmbActsBuild(){
     '</div>'+
     // 随模式变化:阵型
     '<div class="fm-grp g-act2 fm-mode fm-hide" data-fmm="slot">'+
-      '<button class="btn qbtn" data-fma="page" title="打开舰队编组控制页:阵型图 / 全队能力评估 / 站位选择 / 逐舰能力表 / 方位盘改插槽">编组控制</button>'+
+      '<button class="btn qbtn" data-fma="page" title="打开舰队编组控制页:阵型图 / 全队能力评估 / 站位选择 / 逐舰能力表 / 方位盘改插槽 / 五个几何旋钮">编组控制</button>'+
     '</div>'+
-    // 随模式变化:跟随 —— 暂时不放东西(用户令)。空块仍然建出来,免得将来要加时又得改结构
-    '<div class="fm-grp g-act2 fm-mode fm-hide" data-fmm="follow"></div>'+
-    // 通用行动:整队跟随另一艘友舰/另一支编队(跟随一支编队 = 跟随它的旗舰)。三种模式下都能用,所以不随模式显隐
-    '<div class="fm-grp g-act2 fm-sec">'+
-      '<button class="btn qbtn" data-fma="fol" title="按下后进入点选态,再点地图上任一友舰 → 本编队整队跟着它走(右键取消)">跟随目标</button>'+
-      '<button class="btn qbtn" data-fma="folx" title="解除整队跟随,回到自己走">解除跟随</button>'+
+    /* FM6 带半径滑块直接放进编队菜单(用户令:"这个用处多")。它是五个几何旋钮里唯一【恒生效】的一个 ——
+       spacing 只在舰数超过插槽数时才有效,spread/widen 改的是形状而不是尺度,只有 bm 一动整个阵型的尺寸就变。
+       与编组控制页里那个滑块写的是【同一个 F.P.bm、同一个 fmSetParam】,不存在两份状态。
+       随模式显隐:固定模式下槽位来自建队快照,几何参数一个字都读不到,所以它跟「编组控制」同属阵型块。 */
+    '<div class="fm-grp fm-knob fm-mode fm-hide" data-fmm="slot">'+
+      '<span class="fm-lb">带半径</span>'+
+      '<input type="range" data-fmk="bm" min="'+FM_LIMIT.bm[0]+'" max="'+FM_LIMIT.bm[1]+'" step="0.05" value="1" title="五条带的半径整体缩放。>1.11 时贴身带会超出内圈最小那几艘的 inner,它们在贴身站位上的契合度归零">'+
+      '<span class="fm-v" data-lf="bm">1.00</span>'+
     '</div>'+
+    // FM6:跟随两钮下沉到底栏,成为【标准控件】—— 作用域由选中集合决定(舰队/单舰 × 舰队/单舰 四种),
+    // 不再是编队专属功能,所以不该只住在编队菜单里。入口见 88-selpanel 的 cbFollow / cbUnfollow。
     '<div class="fm-grp g-act1 fm-sec">'+
       '<button class="btn qbtn" data-fma="halt" title="整队停车:逐舰刹停">整队停车</button>'+
     '</div>'+
@@ -263,10 +266,9 @@ function fmbActsBuild(){
   fmUi.act={
     mFixed:acts.querySelector('[data-fma="m-fixed"]'), // FM3-1
     mSlot:acts.querySelector('[data-fma="m-slot"]'),
-    mFollow:acts.querySelector('[data-fma="m-follow"]'),
     mDesc:acts.querySelector('[data-lf="mdesc"]'), // FM5b 模式说明行:叶子节点,只改 textContent
-    modes:{}, // FM4b 随模式显隐的三个块,键就是 F.mode 的三个值
-    fol:acts.querySelector('[data-fma="fol"]')
+    modes:{}, // FM4b 随模式显隐的块,键就是 F.mode 的两个值(FM6:跟随那一块随跟随模式一并删)
+    bm:acts.querySelector('[data-fmk="bm"]'), bmV:acts.querySelector('[data-lf="bm"]') // FM6 带半径滑块与它的读数
   };
   acts.querySelectorAll('.fm-mode').forEach(el=>{fmUi.act.modes[el.getAttribute('data-fmm')]=el;});
 }
@@ -280,12 +282,15 @@ function fmbActsSync(F){ // 模式高亮与随模式显隐都跟着【当前展�
   }
   if(fmUi.act.mFixed)fmUi.act.mFixed.classList.toggle('on',md==='fixed');
   if(fmUi.act.mSlot)fmUi.act.mSlot.classList.toggle('on',md==='slot');
-  if(fmUi.act.mFollow)fmUi.act.mFollow.classList.toggle('on',md==='follow');
+  /* FM6 带半径滑块回显。【拖动中不回写 value】—— 那会把玩家正在拖的滑块拨回去(updFmBar 每 20 帧跑一次,
+     拖到一半就被弹回,手感是"拖不动")。判据是 document.activeElement:滑块拿着焦点就说明玩家正在操作它。 */
+  if(fmUi.act.bm&&F&&F.P&&isFinite(F.P.bm)){
+    const v=F.P.bm.toFixed(2);
+    if(document.activeElement!==fmUi.act.bm&&fmUi.act.bm.value!==v)fmUi.act.bm.value=v;
+    if(fmUi.act.bmV&&fmUi.act.bmV.textContent!==v)fmUi.act.bmV.textContent=v;
+  }
   // FM5b 分段控件下的模式说明行:长文案走 fmbModeText 唯一出处(与右栏 #selFm 的"模式"读数同一句话)
   if(fmUi.act.mDesc){const d=md?fmbModeText(md):'—';if(fmUi.act.mDesc.textContent!==d)fmUi.act.mDesc.textContent=d;}
-  // 待命态下把"跟随目标"钮点亮:showTip 在屏幕上方,钮上再给一个"还等着你点地图"的落点
-  const armed=(typeof pendingFmFollow!=='undefined')&&pendingFmFollow!=null&&F&&String(pendingFmFollow)===String(F.id);
-  if(fmUi.act.fol)fmUi.act.fol.classList.toggle('on',!!armed);
 }
 
 /* ---------------- 总刷新(core/99-main 每 20 帧调一次;幂等、只读仿真) ---------------- */
@@ -339,31 +344,10 @@ function fmbRefreshSel(){ // 改了 selected 之后把两个面板叫醒(不等�
   if(typeof updateInfo==='function')updateInfo();
   if(typeof updateSelPanel==='function')updateSelPanel();
 }
-function fmbArmFollow(F){
-  if(typeof clearPendings==='function')clearPendings(); // 与其它点选待命态互斥:残留的 pendingTurn 会先吃掉那一次左键,而本待命态无声留到下一次左键——那时它下的是一条【整队跟随令】,不只是吃一次点击
-  /* 【跟随目标】待命态。配方抄 pendingMove/pendingBeacon 一族:置一个全局标志,
-     真正"点地图哪一下算数"由 command/70-input 的左键分支消费(它调下面的 fmbFollowPick)。
-     提示【不走 showTip】—— 那个走 #statusTip,而它就在 css 的 RF2 隐藏清单里,玩家一个字都看不到
-     (toggleWeapon 当年踩过同一条,改走了底栏上方的 #cmdTip)。这里交给 updSelWeaponTip 统一出。 */
-  if(!F)return false;
-  pendingFmFollow=String(F.id);
-  if(typeof updSelWeaponTip==='function')updSelWeaponTip();
-  if(typeof log==='function')log(fmName(F)+' 待选跟随目标 · 点一艘友舰','');
-  return true;
-}
-function fmbFollowPick(target){
-  /* 由 70-input 在待命态下点中一艘舰时调用。目标的阵营/存活由调用方判,这里只做编队侧的事,
-     并且【无论成败都消耗掉待命态】—— 半吊子的待命态会让下一次左键点选莫名其妙变成"设跟随"。 */
-  const F=(typeof pendingFmFollow!=='undefined'&&pendingFmFollow!=null&&typeof fmGet==='function')?fmGet(pendingFmFollow):null;
-  pendingFmFollow=null;
-  if(typeof hideTip==='function')hideTip();
-  if(!F||!target){if(typeof log==='function')log('跟随目标:编队已不存在','warn');updFmBar();return false;}
-  if(target.formation===F){if(typeof log==='function')log(fmName(F)+' 不能跟随自己队里的船','warn');updFmBar();return false;}
-  const ok=(typeof fmFollowShip==='function')&&fmFollowShip(F,target); // 日志由 fmFollowShip 打
-  updFmBar();
-  if(typeof updateSelPanel==='function')updateSelPanel();
-  return !!ok;
-}
+/* FM6:fmbArmFollow / fmbFollowPick 整个删除 —— 跟随已下沉成底栏的标准控件,
+   武装与兑现都在 88-selpanel(followArm / followPick),作用域解析在 41-follow 的 followAssign。
+   编队仍然可以整队跟随(fmFollowShip),那只是 followAssign 的四种作用域之一。 */
+
 function fmbAct(a){
   const F=(fmUi.open!==null&&typeof fmGet==='function')?fmGet(fmUi.open):null;
   const st=F?fmbStat(F):null;
@@ -386,39 +370,23 @@ function fmbAct(a){
       if(typeof log==='function')log(fmName(F)+' 整队停车','');
       break;
     case 'disband':{
-      if(typeof pendingFmFollow!=='undefined'&&String(pendingFmFollow)===String(F.id)){pendingFmFollow=null;if(typeof updSelWeaponTip==='function')updSelWeaponTip();} // 待命中把【这一支】解散了:标志不清的话下一次左键会被 70-input 的跟随分支静默吃掉。判 id:别把另一支编队正在进行的待命也清掉
+      /* 待命中把编队解散了:标志不清的话下一次左键会被 70-input 的跟随分支静默吃掉。
+         FM6:pendingFollow 不再存编队 id(作用域按点下去那一刻的 selected 现算),所以这里无条件清 —— 
+         解散之后那次待命的来源(本编队全员)已经不成立了,留着它只会让下一次左键下一条意料之外的跟随令。 */
+      if(typeof pendingFollow!=='undefined'&&pendingFollow){pendingFollow=null;if(typeof updSelWeaponTip==='function')updSelWeaponTip();}
       if(typeof fmDelete!=='function')break;
       const nm=fmName(F);
       fmDelete(F.id); // FL1 一层化:编队就是唯一的一层,解散 = 整个删掉(不再有"编组名册保留"这回事)
       fmUi.open=null;
       if(typeof log==='function')log(nm+' 已解散','');
       break;}
-    case 'm-fixed':case 'm-slot':case 'm-follow':
-      /* FM3-1 三选一落到 42 的两个轴上:固定/阵型先写槽位来源(fmSetSrc,固定会重拍当前相对位置),再把运动轴切回 static;
-         跟随只切运动轴、不动来源(snapshot+follow 组合阶段 4 才让它能跑,这里不做专门 UI)。日志由 fmSetSrc/fmSetMode 打 */
-      if(a==='m-follow'){if(typeof fmSetMode==='function')fmSetMode(F,'follow');break;}
-      if(a==='m-fixed'&&F.motion==='follow'){
-        /* FM3-2:跟随中点"固定"只把运动轴切回 static、【不】重拍。跟随态的实时布局是 41-follow 带滞后追出来的(拐弯时成员还在往阵位上收),
-           那不是玩家手调的结果,拍下来会把过渡态钉成新快照;槽位来源保持原样(snapshot 的沿用旧快照,generated 的仍是条令表)。
-           static 下点"固定"则照旧 fmSetSrc 重拍 —— 那才是"手调完各舰位置再按固定"的入口。 */
-        if(typeof fmSetMode==='function')fmSetMode(F,'slot');
-        break;
-      }
-      /* FM4b:已经在固定态时点「固定」是【空操作】。改前这里会 fmSetSrc(F,'snapshot') 重拍一次 ——
-         而 fmSetSrc 对 snapshot 方向【每次都重拍】(那是它的定义),于是"再点一下当前模式"这个最无害的动作
-         会把队形按此刻的散乱位置重钉。重拍现在有自己的显式钮 resnap,这条隐藏路径去掉。
+    case 'm-fixed':case 'm-slot':
+      /* FM6 两选一:直接写槽位来源(F.src)。运动方式那个轴已随【编队跟随模式】删除,不再有第二步。
+         【已经在固定态时点「固定」是空操作】(FM4b):fmSetSrc 对 snapshot 方向【每次都重拍】(那是它的定义),
+         于是"再点一下当前模式"这个最无害的动作会把队形按此刻的散乱位置重钉。重拍有自己的显式钮 resnap。
          阵型方向不用判:fmSetSrc 对 generated 方向本来就带 changed 守卫(FM3-2c 第二轮修的)。 */
-      if(a==='m-fixed'&&F.src==='snapshot'&&F.motion==='static')break;
+      if(a==='m-fixed'&&F.src==='snapshot')break;
       if(typeof fmSetSrc==='function')fmSetSrc(F,a==='m-fixed'?'snapshot':'generated');
-      if(F.motion==='follow'&&typeof fmSetMode==='function')fmSetMode(F,'slot');
-      break;
-    case 'fol':
-      fmbArmFollow(F);
-      break;
-    case 'folx':
-      if(!F.follow){if(typeof log==='function')log(fmName(F)+' 当前没有跟随目标','warn');break;}
-      if(typeof fmFollowStop==='function')fmFollowStop(F);
-      if(typeof log==='function')log(fmName(F)+' 解除跟随','');
       break;
   }
   updFmBar(); // 立即回显,不等下一个 20 帧拍子
@@ -447,6 +415,17 @@ on('fmBar','pointerdown',e=>{
   if(!el)return;
   e.preventDefault();
   fmbToggle(el.dataset.fmg);
+});
+/* FM6 带半径滑块:走 input 事件(拖动中连续生效)。fmSetParam 自带"值没变就返回"的空操作守卫,
+   所以连续触发不会反复 fmReslot 把 44 fmReassign 落盘的配对抹掉。读数就地更新,不整块重建 ——
+   #fmActs 只建一次、平时只改叶子,这里也守同一条。 */
+on('fmActs','input',e=>{
+  const el=e.target&&e.target.closest?e.target.closest('input[data-fmk]'):null;
+  if(!el)return;
+  const F=(fmUi.open!==null&&typeof fmGet==='function')?fmGet(fmUi.open):null;
+  if(!F||typeof fmSetParam!=='function')return;
+  fmSetParam(F,el.getAttribute('data-fmk'),Number(el.value));
+  if(fmUi.act&&fmUi.act.bmV&&isFinite(F.P.bm))fmUi.act.bmV.textContent=F.P.bm.toFixed(2);
 });
 on('fmActs','pointerdown',e=>{
   if(e.button!==0)return;

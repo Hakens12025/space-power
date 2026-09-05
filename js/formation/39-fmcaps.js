@@ -118,6 +118,21 @@ const FM_STANCE = {
 };
 const FM_STANCE_KEYS = ['fixed', 'air', 'surf', 'sub'];
 function fmStanceOf(P) { return FM_STANCE[(P && P.stance)] || FM_STANCE.fixed; }
+/* FM6【有效几何参数】。五个几何旋钮现在是【每编队一份】的可调值(F.P),站位预设只是它们的初值 ——
+   切站位时 fmSetStance 把预设整组拷进 P,之后玩家在编组控制页/编队菜单上调的就是 P 自己那一份。
+   P 上没有数(旧存档 / 手工构造的 P)才回落到站位预设,所以这个函数是"参数从哪来"的唯一定义点:
+   几何计算(fmPlanStations)、地图绘制(84-fmplot)、编组控制页的方位盘与反解(89-fmpage)必须全部走它,
+   任何一处直接读 fmStanceOf(P).bm 都会与玩家实际调的值分家 —— 盘上拖到哪、船就该站到哪,靠的就是同源。
+   bstr 允许合法取 0(不加能力偏向),所以判据用 isFinite 而不是真值判断。 */
+function fmGeoOf(P) {
+  const T = fmStanceOf(P);
+  const pick = k => (P && isFinite(P[k])) ? P[k] : T[k];
+  return {
+    spread: pick('spread'), gap: (P && isFinite(P.spacing)) ? P.spacing : T.gap,
+    bm: pick('bm'), widen: pick('widen'), bstr: pick('bstr'),
+    boost: T.boost || {}, nm: T.nm,
+  };
+}
 /* 每编队的自定义插槽表:P.slots(= F.P.slots)存在且非空就用它,否则用站位预设的那套。
    在编组控制页的方位盘上拖动改插槽,写的就是 P.slots —— 放进 P 而不是 F 上另开一个字段,
    是为了让 formationSlots(list, P, anchorId) 的签名不用改:阵型参数本来就是"每编队一份"的那一份。 */
@@ -232,14 +247,13 @@ function fmPlanStations(list, P, flagId, slotsOverride) {
   if (!list || !list.length) return null;
   const flag = list.find(s => s.id === flagId) || list[0];
   const rest = list.filter(s => s !== flag);
-  const T = fmStanceOf(P);
-  const gapMul = (P && isFinite(P.spacing)) ? P.spacing : T.gap;
-  const bstr = (T.bstr === undefined) ? 1 : T.bstr;
+  const T = fmGeoOf(P);                    // FM6:几何参数一律走 fmGeoOf(每编队可调),不再直读站位预设
+  const bstr = isFinite(T.bstr) ? T.bstr : 1;
   const D2R = Math.PI / 180;
 
   const STA = fmGenStations(list.length, slotsOverride || fmSlotsOf(P));
   const BR = fmBandRadii(list, flag, T.bm);
-  const gap = BR.baseGap * gapMul;
+  const gap = BR.baseGap * T.gap;
   BR.gap = gap; BR.widen = T.widen || 1; BR.step = {};
   /* 弦长 gap 在半径 r 上张的圆心角 step = 2·asin(gap/2r)。半径越大同样间距占角越小。
      钳到 120°:再大说明该带按此间距根本放不下几艘。 */

@@ -671,3 +671,12 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 /* FM4b 编队菜单里随模式显隐的块。用类而不是 style.display:.fm-grp 有 flex 与 grid 两种布局
    (g-act2 是 grid),style.display='' 复原虽然也对,但 'none'↔'' 这条路在本项目栽过(92/95 都留了注释) */
 #fmActs .fm-grp.fm-hide{display:none}
+/* FM6 编组控制页的几何滑块行。滑块自带一个读数,拖动中只改这个叶子(整页重渲会把 input 换成新节点、拖拽当场断掉) */
+.fp-knobs{gap:var(--sp-4)}
+.fp-knob{display:inline-flex;align-items:center;gap:var(--sp-2)}
+.fp-knob input[type=range]{width:96px;accent-color:var(--acc);background:transparent}
+.fp-knob .fp-v{min-width:34px;text-align:right}
+/* FM6 编队菜单里的带半径滑块:窄轨(260px)一行放得下「标签 + 滑块 + 读数」,滑块吃掉剩余宽度 */
+#fmActs .fm-knob{display:flex;align-items:center;gap:var(--sp-2)}
+#fmActs .fm-knob input[type=range]{flex:1;min-width:0;accent-color:var(--acc);background:transparent}
+#fmActs .fm-knob .fm-v{min-width:34px;text-align:right;font-family:var(--ff-mono);font-size:var(--fs-label);color:var(--txt-read)}

@@ -36,8 +36,8 @@ let selNet=null;                      // v125:选中的导弹网(点中网内任
 let pendingManual=null;               // v125:手动模式点选(选中网→点目标舰,网内所有组强制打该目标)
 let pendingMine=null;                 // 布雷点选状态(选中的导弹组等待点击地图定布雷点)
 let pendingBeacon=null;               // 信标发射点选(侦察舰等待点击地图定部署点)
-let pendingFmFollow=null;             // FL1 编队菜单【跟随目标】待命态:存编队 id('1'..'4'),等玩家点地图上任一友舰
-                                      // → command/70-input 的左键分支调 fmbFollowPick(舰)(render/87-fmbar 导出),右键取消。
+let pendingFollow=null;             // FM6 底栏【跟随】待命态：置 true 后等玩家点一艘我方舰；作用域由【点下去那一刻的 selected】决定(舰队/单舰 × 舰队/单舰 四种)，不预存来源 —— 预存的话选中一变它就过期了
+                                      // → command/70-input 的左键分支调 followPick(舰)（render/88-selpanel），它再调 41-follow 的 followAssign 做作用域解析
                                       // 与 pendingMove/pendingTurn/pendingBeacon 一族同一套配方(showTip 提示 + 点一下就消耗掉)
 let pendingIntercept=null;            // 拦截弹主动发射点选({ship,mode:'fire'|'screen'})
 let demoRec={on:false,data:[],lastT:-1}; // demo录制:本局数据快照,导出供分析

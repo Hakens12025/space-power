@@ -13,8 +13,7 @@
        src:'snapshot'|'generated', // FM3-0 槽位来源:'snapshot'(建队快照,刚体;FM3-1 起为建队默认)| 'generated'(40-slots 条令站位表)
        snap:{shipId:{off,hdg}},  // FM3-1 建队那一刻各舰相对旗舰的偏移(旗舰局部系)与朝向差。snapshot 源下 fmReslot 只从它重算,【绝不从实时位置重拍】;
                                  //        fmSetSrc(F,'snapshot') 是唯一的重拍入口。以【建队时的旗舰】为原点存,换旗时按新旗舰的 snap 现场重心化
-       motion:'static'|'follow', // FM3-0 运动方式:static=下令即算终点走 orders;follow=成员持续跟旗舰。【逻辑层只读这两个轴】
-       mode:'fixed'|'slot'|'follow', // 派生值,只给 UI 读(87/88/71):每次 fmSetMode/fmSetSrc 后由 fmModeOf 同步写入。逻辑模块一律不读它
+       mode:'fixed'|'slot',      // 派生值,只给 UI 读(87/88/71):每次 fmSetSrc 后由 fmModeOf 同步写入。逻辑模块一律读 F.src
        follow:{tid,off}|null,    // 本编队整体跟随另一艘船/另一个编队(队间偏移在目标局部系里)
        ang, dest0,               // 上次下令算出的阵型朝向 / 上一个编队级目标点(都只用来算下一段朝向)
        n, flagId                 // 重排脏标记。FM3-1c:flagId 同时是"当前 s.fmSlot / F.ang 以哪艘旗舰为参考系"的记号,snapshot 源换旗时靠它算 F.ang 的换算量
@@ -22,13 +21,12 @@
 
    【编队存在 ⟺ formations[k] 存在 ⟺ 名册里至少 2 艘活船】。少于 2 艘就整个删掉,没有中间态。
 
-   【两个正交轴】(FM3-0 解耦;改前只有一个 F.mode 字符串,四处各自 if,没有统一分发点)
-     src    槽位来源:给定 (mates, flag) 写每舰 s.fmSlot(偏移,旗舰局部系)与 s.fmHdg(相对旗舰的朝向差,弧度;旗舰恒 [0,0,0]/0)。
-                     snapshot(FM3-1)= 建队快照,谁站哪认死、到达朝向 = 阵型朝向 + 自己的朝向差;generated = 40-slots 条令站位表,fmHdg 恒 0
-     motion 运动方式:static (FM2) 下令那一刻把编队级目标点展开成每艘船的绝对终点,各自走散船内核。精确、终点可见可拖。
-                     follow (FL1) 只有旗舰接移动令,成员通过 41-follow 持续跟随旗舰阵位。像 RTS 里"跟着队长走"。
-   运动方式只消费 s.fmSlot / s.fmHdg,不关心来源。两者可随时切换(编队菜单)。切换 motion 只改 s.follow 的有无,不动任何已下的令。
-   mode 是给 UI 读的派生值:snapshot+static → 'fixed',generated+static → 'slot',*+follow → 'follow'。 */
+   【只剩槽位来源一个轴】(FM6:运动方式那个轴随【编队跟随模式】一并去掉)
+     src 槽位来源:给定 (mates, flag) 写每舰 s.fmSlot(偏移,旗舰局部系)与 s.fmHdg(相对旗舰的朝向差,弧度;旗舰恒 [0,0,0]/0)。
+         snapshot(FM3-1)= 建队快照,谁站哪认死、到达朝向 = 阵型朝向 + 自己的朝向差;generated = 能力插槽表(FM4),fmHdg 恒 0
+     运动方式恒为"下令那一刻把编队级目标点展开成每艘船的绝对终点,各自走散船内核"(FM2)——精确、终点可见可拖。
+   mode 是给 UI 读的派生值:snapshot → 'fixed',generated → 'slot'。
+   【跟随没有消失】它下沉成 41-follow 的通用能力,由底栏跟随控件驱动,作用域含单舰;编队整体跟随另一目标(F.follow)也照旧。 */
 
 let fmSeq = 0;
 
@@ -121,12 +119,12 @@ function fmCreate(k, list) { // Ctrl+数字:按选中舰建/覆盖编队。少�
   if (alive.length < 2) { if (typeof log === 'function') log('编队' + k + ' 已清空', ''); return null; }
   const F = {
     id: String(k), name: '编队' + k, ships: alive.map(s => s.id), flagship: alive[0].id,
-    P: fmParamsNew(), src: 'snapshot', motion: 'static', follow: null, ang: NaN, dest0: null, n: 0, flagId: null, seq: ++fmSeq,
+    P: fmParamsNew(), src: 'snapshot', follow: null, ang: NaN, dest0: null, n: 0, flagId: null, seq: ++fmSeq, // FM6:motion 轴已删
   };
   /* FM3-1:建队默认 snapshot+static → 'fixed'(用户的方法3:保持建队时的相对位置与朝向)。改前(FM3-0)恒 generated → 'slot'。
      快照必须在 fmDetach 之前拍:fmDetach 会触发旧编队的 fmSettle→fmReslot,不影响 pos/facing,但拍在这里最直白 —— "建队那一刻"。 */
   fmSnapTake(F, alive, alive[0]); // 写 F.snap 与 F.ang(FM3-1b:上面字面量里的 ang:NaN 在这里被建队旗舰船头角覆盖)
-  F.mode = fmModeOf(F); // FM3-0:src/motion 是真相,mode 是它们的派生
+  F.mode = fmModeOf(F); // F.src 是真相,mode 是它的派生
   alive.forEach(s => fmDetach(s)); // 先从各自的旧编队摘干净,再挂新的(一艘船只能在一个编队里)
   formations[String(k)] = F;
   alive.forEach(s => { s.formation = F; });
@@ -218,7 +216,16 @@ function fmSetFlagship(F, s) { // 设为旗舰:改名册 + 按新锚点重排(�
   if (typeof log === 'function') log(s.name + ' 设为 ' + fmName(F) + ' 旗舰', '');
 }
 
-function fmSetParam(F, k, v) { if (!F || !F.P || !(k in F.P)) return; F.P[k] = fmClamp(k, v); fmReslot(F); }
+/* 调一个几何参数(编组控制页的五个滑块 + 编队菜单的带半径滑块都走这里)。
+   FM6 起它重新有了调用点 —— FM5d 时因为密度/档位两个钮被删而一度零调用。
+   【空操作守卫】值 clamp 之后与当前相同就整个返回:不守的话拖滑块每一帧都 fmReslot,
+   而 fmReslot 会把 44 fmReassign 落盘的同签名配对抹回原序,离位读数当场乱跳(FM3-2c 第二轮那个坑)。 */
+function fmSetParam(F, k, v) {
+  if (!F || !F.P || !(k in F.P)) return;
+  const nv = fmClamp(k, v);
+  if (F.P[k] === nv) return;
+  F.P[k] = nv; fmReslot(F);
+}
 /* FM4 切站位:四套站位(固定模板/空中为主/水面为主/水下为主)各带一套插槽表与几何参数。
    与沙盘同口径 —— 选中一种就把【站距乘数】拨到该站位的预设值(玩家之后仍可用疏/密与档位钮手调),
    同时丢掉上一套站位遗留的自定义插槽表(P.slots):它是按上一套布局在方位盘上改出来的,套到新布局上没有意义。
@@ -226,38 +233,31 @@ function fmSetParam(F, k, v) { if (!F || !F.P || !(k in F.P)) return; F.P[k] = f
 function fmSetStance(F, k) {
   if (!F || !F.P || !FM_STANCE[k]) return;
   if (F.P.stance === k) return;   // 空操作守卫,同 fmSetSrc:值没变就不重排(重排会抹掉 fmReassign 落盘的配对,离位读数当场跳)
+  /* 切站位 = 把该站位的整组几何预设拷进 P(玩家之后可以逐项手调),并丢掉自定义插槽表
+     —— 它是按上一套布局在方位盘上改出来的,套到新布局上没有意义。 */
+  const T = FM_STANCE[k];
   F.P.stance = k; F.P.slots = null;
-  F.P.spacing = fmClamp('spacing', FM_STANCE[k].gap);
+  F.P.spread = fmClamp('spread', T.spread);
+  F.P.spacing = fmClamp('spacing', T.gap);
+  F.P.bm = fmClamp('bm', T.bm);
+  F.P.widen = fmClamp('widen', T.widen);
+  F.P.bstr = fmClamp('bstr', T.bstr);
   fmReslot(F);
 }
 function fmSetPreset(F, n) { if (F) fmSetParam(F, 'spacing', n === 1 ? 0.6 : n === 2 ? 1.0 : 1.6); } // FM3-2:三档改成站距乘数 贴身 0.6 / 标准 1.0 / 疏开 1.6(简报第 90 行;FM3-2b 把曾写成 0.2 的贴身档改回 0.6。改前是护卫弦距 gap = 防空圈直径 × 1.0/0.7/1.4)
 
 /* ---------------- 模式与跟随 ---------------- */
 
-function fmModeOf(F) { // FM3-0:UI 读的模式名,由两个轴派生。逻辑模块不要调它 —— 直接读 F.src / F.motion
+function fmModeOf(F) { // UI 读的模式名。FM6:运动方式那个轴删掉之后它只剩槽位来源一个自变量,是个纯别名
   if (!F) return 'slot';
-  if (F.motion === 'follow') return 'follow';
   return F.src === 'snapshot' ? 'fixed' : 'slot';
 }
 
-function fmSetMode(F, mode) {
-  /* FM3-0:入参仍是 UI 的 'slot'|'follow'(87-fmbar 的 m-slot/m-follow 钮与探针都这么调),
-     但落盘写的是运动轴 F.motion('slot' → 'static'),F.mode 随后由 fmModeOf 同步成派生值。
-     改前直接写 F.mode,四个逻辑点各自拿 F.mode 判跟随 —— 现在它们全读 F.motion。 */
-  if (!F || (mode !== 'slot' && mode !== 'follow')) return;
-  const motion = (mode === 'follow') ? 'follow' : 'static';
-  const was = F.motion;
-  F.motion = motion;
-  F.mode = fmModeOf(F);
-  /* 切进跟随态要把成员的旧令清掉:那些令是阵位态下发的【编队级】终点,留着的话成员会先飞去旧终点
-     (跟随分支排在 orders 之后),模式切换看上去就"没生效"。旗舰的令保留 —— 跟随态下正是它在带路。 */
-  if (motion === 'follow' && was !== 'follow' && typeof orderClear === 'function') {
-    const flag = fmFlag(F);
-    fmShips(F).forEach(m => { if (m !== flag) { orderClear(m); resetForNewOrders(m); } });
-  }
-  fmApplyFollow(F);
-  if (typeof log === 'function') log(fmName(F) + ' → ' + (mode === 'follow' ? '跟随态(成员跟旗舰)' : (F.src === 'snapshot' ? '固定态(保持建队时的相对位置与朝向)' : '阵位态(下令即算终点)')), ''); // FM3-1:切回 static 时按槽位来源报固定/阵位
-}
+/* FM6:fmSetMode 整个删除。它的职责是写【运动方式】这个轴(static / follow),而"编队内部跟随态"
+   这一层已随用户定案去掉 —— 编队只剩"下令即算终点"一种运动方式,那个轴退化成常量,函数也就没有存在意义。
+   跟随本身【没有消失】:它下沉成了 41-follow 的通用能力(followSet/stepFollow),由底栏的跟随控件驱动,
+   作用域是 舰队↔舰队 / 舰队↔单舰 / 单舰↔舰队 / 单舰↔单舰 四种,不再是编队的一种"模式"。
+   编队整体跟随另一个目标(F.follow)也照旧,由 fmFollowShip / fmApplyFollow 管。 */
 
 function fmSetSrc(F, src) {
   /* FM3-1:切换槽位来源。切到 snapshot 时【重拍】当前相对位置与朝向为新快照 —— 这是"玩家手调完各舰位置再按固定"的入口,
@@ -294,27 +294,22 @@ function fmSetSrc(F, src) {
 
 function fmRadius(F) { let r = 0; fmShips(F).forEach(s => { const sl = s.fmSlot || [0, 0, 0]; r = Math.max(r, Math.hypot(sl[0], sl[1])); }); return r; }
 
+/* 编队整体跟随。FM6 起它只是 41-follow 那个【唯一】跟随函数的一个调用点 ——
+   偏移公式(两端半径 + 净空 + 内部阵位)只在 followAssign 里写一份,这里不再自己拼一遍。
+   改前这里有一份独立的 `-(fmRadius(F) + tfRadius + 50000)`,与散船那条路各算各的:
+   同一个"队间距"概念两处实现,改一处忘另一处就是两种跟随行为。 */
 function fmFollowShip(F, target) {
-  /* 让整个编队 F 跟随一艘船(跟随一个编队 = 跟随它的旗舰)。
-     队间距自动算:两队阵型半径之和 + 一个防空圈直径。偏移在目标的【局部系】里,
-     所以目标掉头时跟随方绕到新的正后方,而不是留在原来的世界方位上。 */
-  if (!F || !target || target.formation === F) return false;      // 自跟随
-  if (fmFollowChainHas(target, F)) { if (typeof log === 'function') log(fmName(F) + ' 不能跟随:会形成循环跟随', 'warn'); return false; }
-  const tf = fmOf(target);
-  F.follow = { tid: target.id, off: [-(fmRadius(F) + (tf ? fmRadius(tf) : 0) + 50000), 0, 0] }; // FM3-2:队间那一个"防空圈直径"改成字面量 50000(= 改前 防空圈基准半径函数()×2 = DD 近防外圈 25000×2,值不变);那个函数随旧弧线阵删除
-  fmApplyFollow(F);
-  if (typeof log === 'function') log(fmName(F) + ' 跟随 ' + (tf ? fmName(tf) : target.name), '');
-  return true;
+  if (!F) return false;
+  return (typeof followAssign === 'function') ? followAssign(fmShips(F), target) : false;
 }
 
-function fmFollowStop(F) { if (!F) return; F.follow = null; fmApplyFollow(F); }
+function fmFollowStop(F) { if (!F) return; F.follow = null; fmApplyFollow(F); } // 解除编队整体跟随。散船侧走 41 的 followStopList,两者最终都落到 followClear
 
 function fmApplyFollow(F) {
-  /* 把编队的"跟随意图"翻译成每艘船的 s.follow。三种情形在这里收口:
+  /* 把编队的"跟随意图"翻译成每艘船的 s.follow。FM6 之后只剩两种情形:
        · 编队整体跟随别人 → 全员(含旗舰)跟目标,相对位 = 队间偏移 + 自己的阵位偏移(两者同在目标局部系)
-       · 编队内部跟随态   → 成员跟旗舰,相对位 = 自己的阵位偏移;旗舰不跟随(它执行 orders)
-       · 阵位态且不跟别人 → 全员清掉跟随
-     两者可叠加:B 跟 A 且 B 内部是跟随态时,B 的旗舰跟 A、B 的成员跟 B 旗舰,天然成立(下面的分支顺序保证)。 */
+       · 不跟别人         → 全员清掉跟随
+     删掉的是"编队内部跟随态"(成员跟自家旗舰)那一支 —— 它属于已被去掉的【跟随模式】。 */
   if (!F || typeof followSet !== 'function') return;
   const mates = fmShips(F);
   if (!mates.length) return;
@@ -326,8 +321,7 @@ function fmApplyFollow(F) {
   }
   mates.forEach(m => {
     const slot = m.fmSlot || [0, 0, 0];
-    if (F.motion === 'follow' && m !== flag) followSet(m, flag, slot);        // 内部跟随优先:成员永远跟自家旗舰(FM3-0:读运动轴,不读派生的 F.mode)
-    else if (F.follow && tgt) followSet(m, tgt, [F.follow.off[0] + slot[0], F.follow.off[1] + slot[1], F.follow.off[2] + (slot[2] || 0)]);
+    if (F.follow && tgt) followSet(m, tgt, [F.follow.off[0] + slot[0], F.follow.off[1] + slot[1], F.follow.off[2] + (slot[2] || 0)]);
     else followClear(m);
   });
 }
@@ -338,56 +332,10 @@ function fmTipV(s) { // 跟随限速用的"槽位切向线速度上限":编队�
   return cruiseOf(s);
 }
 
-function fmFollowReslot(F, mates, flag) {
-  /* FL4【跟随态下连续重配对槽位】,消除折返时的交叉航线。
-     现象:跟随态编队掉头 180°,两艘僚舰的世界轨迹在折返点交叉一次(实测)。
-     根因不在跟随层,而在"槽位所有权认死":成员追的是 旗舰位置 + rotSlot(自己的 fmSlot, 平滑航向),
-     航向转过 180° 时那个点画着圆弧扫到对面去 —— 想【保持在旗舰右侧】,在世界坐标里就必须穿过对方。
-     所以正解是【允许换边】:每艘船去占离自己最近的那个槽位,谁也不用穿过谁。
-
-     与阵位态的 fmReassign 同一个思路(欧氏指派,2-opt 到无可改善 ⇒ 不动点无交叉),区别是:
-       · 阵位态在【下令那一刻】配一次(每段一次);跟随态没有"段",必须每 tick 连续配;
-       · 因此需要【迟滞】:只有收益超过 MARGIN 才换,否则航向在临界角附近抖一下就会来回换槽位。
-         临界点是两个候选代价相等处(对称阵型即航向转过 90°),迟滞把它变成一条 2×MARGIN 宽的带。
-     只在同角色桶内换、旗舰不参与,理由同 fmReassign。 */
-  if (!F || F.motion !== 'follow' || !flag) return; // FM3-0:守卫改读运动轴(43-step 已按 F.motion 分发,这里是双保险)
-  const list = (mates || fmShips(F)).filter(m => m !== flag);
-  if (list.length < 2) return;
-  // 阵型当前朝向:取任一成员那份【已平滑】的跟随角(它们输入相同、限速相同,演化同步);拿不到就回落旗舰航向
-  let ang = NaN;
-  for (const m of list) { if (m.follow && isFinite(m.follow.ang)) { ang = m.follow.ang; break; } }
-  if (!isFinite(ang)) ang = (typeof followHeading === 'function') ? followHeading(flag) : 0;
-  const ca = Math.cos(ang), sa = Math.sin(ang);
-  const cost = (m, slot) => {
-    const o = rotSlot(slot, ca, sa);
-    return Math.hypot(m.pos[0] - (flag.pos[0] + o[0]), m.pos[1] - (flag.pos[1] + o[1]));
-  };
-  const byRole = {};
-  list.forEach((m, i) => {
-    const r = (typeof fmSwapKey === 'function') ? fmSwapKey(m) : 'x'; // FM4:桶 = 可互换性签名,与 44 fmReassign 同一定义点(39-fmcaps)。改前是条令的居中/环上,粒度对能力插槽不够用
-    (byRole[r] = byRole[r] || []).push(i);
-  });
-  let changed = false;
-  for (const r in byRole) {
-    const idx = byRole[r];
-    if (idx.length < 2) continue;
-    const slots = idx.map(i => (list[i].fmSlot || [0, 0, 0]).slice());
-    let R = 0; slots.forEach(sl => { R = Math.max(R, Math.hypot(sl[0], sl[1])); });
-    const MARGIN = Math.max(500, R * 0.1); // 迟滞带:临界角附近不许来回换
-    let improved = true, guard = 0;
-    while (improved && guard++ < 32) {
-      improved = false;
-      for (let a = 0; a < idx.length; a++) for (let b = a + 1; b < idx.length; b++) {
-        const cur = cost(list[idx[a]], slots[a]) + cost(list[idx[b]], slots[b]);
-        const swp = cost(list[idx[a]], slots[b]) + cost(list[idx[b]], slots[a]);
-        if (swp < cur - MARGIN) { const t = slots[a]; slots[a] = slots[b]; slots[b] = t; improved = true; changed = true; }
-      }
-    }
-    if (changed) idx.forEach((i, k) => { list[i].fmSlot = slots[k]; });
-  }
-  // 槽位换了主人 → 重建跟随偏移。followSet 在【目标不变】时会沿用已平滑的 ang,所以阵型朝向不会被打断
-  if (changed) fmApplyFollow(F);
-}
+/* FM6:fmFollowReslot(跟随态下每 tick 连续重配槽位,带迟滞)整个删除 —— 它只服务于已去掉的【编队跟随模式】。
+   它解决的是"跟随态折返时成员为了保持在旗舰同一侧、必须在世界坐标里穿过对方"那个问题(FL4);
+   编队现在只有"下令即算终点"一种运动方式,槽位配对在【下令那一刻】由 44-orders 的 fmReassign 做一次就够。
+   通用跟随层 41-follow 一行未动:它是底栏跟随控件的地基,作用域 舰队↔舰队 / 舰队↔单舰 / 单舰↔舰队 / 单舰↔单舰。 */
 
 function fmOffOf(s) { // 本舰在当前阵型里应处的偏移(锚点=旗舰实时位置)。编队读数用,纯读
   const F = s && s.formation;
