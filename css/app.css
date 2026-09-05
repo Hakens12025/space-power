@@ -668,3 +668,6 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 .fp-t tr.flagrow td{background:var(--srf-sel)}
 /* 站位钮在固定模式下压暗:那时槽位来自建队快照,站位模板一个字都读不到,点了没有可见效果 */
 .qbtn.qdim{opacity:.4}
+/* FM4b 编队菜单里随模式显隐的块。用类而不是 style.display:.fm-grp 有 flex 与 grid 两种布局
+   (g-act2 是 grid),style.display='' 复原虽然也对,但 'none'↔'' 这条路在本项目栽过(92/95 都留了注释) */
+#fmActs .fm-grp.fm-hide{display:none}

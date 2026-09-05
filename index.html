@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Space Power · 骨架</title>
-<link rel="stylesheet" href="css/app.css?v=20260905">
+<link rel="stylesheet" href="css/app.css?v=202609051">
 </head>
 <body>
 <canvas id="cv"></canvas>
@@ -241,59 +241,59 @@
 <!-- RF1: 目录=系统。编号十位是系统层(0core/1ships/2sensors/3physics/4formation/5weapons/6bots/7command/8render/9scenario)。
      硬约束仅两条:core/00 定义 on() 必须最先(85/93/94/95 顶层调用它);core/99 顶层执行 init() 必须最后(且 init 调 loadRangeCfg,
      故 scenario/95 必须在它之前)。其余跨文件引用全在运行期解析,层序排列只为可读性。 -->
-<script src="js/core/00-config.js?v=20260905"></script>
-<script src="js/core/01-state.js?v=20260905"></script>
-<script src="js/ships/10-hull-geometry.js?v=20260905"></script>
-<script src="js/ships/11-classes.js?v=20260905"></script>
-<script src="js/sensors/20-signature.js?v=20260905"></script>
-<script src="js/sensors/21-detect.js?v=20260905"></script>
-<script src="js/physics/30-motion.js?v=20260905"></script>
-<script src="js/physics/31-step-ships.js?v=20260905"></script>
-<script src="js/physics/32-route-refine.js?v=20260905"></script>
-<script src="js/formation/39-fmcaps.js?v=20260905"></script><!-- FM4 编队能力模型层:9 维能力(读配装实例字段)/四套站位模板/五条带半径/插槽扩容/匈牙利最优指派。纯函数,零顶层执行;排在 40 之前只为可读性,跨文件引用全在运行期解析 -->
-<script src="js/formation/40-slots.js?v=20260905"></script>
-<script src="js/formation/41-follow.js?v=20260905"></script>
-<script src="js/formation/42-formation.js?v=20260905"></script>
-<script src="js/formation/43-step.js?v=20260905"></script>
-<script src="js/formation/44-orders.js?v=20260905"></script><!-- FM1 编队重做:40几何(纯函数)/41通用跟随层/42编队实体(生命周期)/43每tick结算/44命令层。顶层只有 const/let/function,零顶层执行,跨文件引用全在运行期解析 -->
-<script src="js/weapons/50-missile-spec.js?v=20260905"></script>
-<script src="js/weapons/51-defs.js?v=20260905"></script>
-<script src="js/weapons/51-ciws.js?v=20260905"></script>
-<script src="js/weapons/52-fire.js?v=20260905"></script>
-<script src="js/weapons/53-nets.js?v=20260905"></script>
-<script src="js/weapons/54-missiles.js?v=20260905"></script>
-<script src="js/weapons/55-damage.js?v=20260905"></script>
-<script src="js/weapons/56-step-projectiles.js?v=20260905"></script>
-<script src="js/weapons/57-step-weapons.js?v=20260905"></script>
-<script src="js/weapons/58-firecontrol.js?v=20260905"></script><!-- RF5 火控计算机引擎:序列数据模型+stepFireControl/Post。位置只为目录编号可读性(编号 58 > 57,归位到 weapons 块末尾),跨文件引用全在运行期解析:本文件顶层只有 const/let/function 声明,零顶层执行 -->
-<script src="js/core/05-sim.js?v=20260905"></script>
-<script src="js/bots/60-tasks.js?v=20260905"></script>
-<script src="js/bots/61-enemy.js?v=20260905"></script>
-<script src="js/command/70-input.js?v=20260905"></script>
-<script src="js/command/71-keys.js?v=20260905"></script>
-<script src="js/command/72-context-menu.js?v=20260905"></script>
-<script src="js/command/73-quickbar.js?v=20260905"></script>
-<script src="js/command/74-targeting.js?v=20260905"></script><!-- RF5 悬停准星/吸附状态 xh + #xhTip 信息卡。按目录编号序归位在 command 块末尾;顶层只有 let/const/function,零顶层执行,跨文件引用全在运行期解析 -->
-<script src="js/render/80-camera.js?v=20260905"></script>
-<script src="js/render/81-background.js?v=20260905"></script>
-<script src="js/render/82-ship-icons.js?v=20260905"></script>
-<script src="js/render/83-hud.js?v=20260905"></script>
-<script src="js/render/84-scene.js?v=20260905"></script>
-<script src="js/render/84-fmplot.js?v=20260905"></script><!-- FM4 编队能力站位的地图可视化。与 84-scene 共用编号 84(先例:weapons/51-defs 与 51-ciws),都属于“场景图层”;顶层只有 const/function,零顶层执行,由 84-scene 的 render() 运行期调用 -->
-<script src="js/render/85-settings.js?v=20260905"></script>
-<script src="js/render/85-tutorial.js?v=20260905"></script><!-- RF5-D 教程面板。与 85-settings 共用编号 85(先例:weapons/51-defs 与 51-ciws),语义上教程与设置相邻。顶层调用 on(),故必须晚于 core/00;其余引用全在运行期解析 -->
-<script src="js/render/86-log.js?v=20260905"></script>
-<script src="js/render/87-fleetcards.js?v=20260905"></script>
-<script src="js/render/87-fmbar.js?v=20260905"></script><!-- FM1 编队书签栏 + 编队菜单。与 87-fleetcards 共用编号 87(先例:weapons/51-defs 与 51-ciws、render/85-settings 与 85-tutorial),语义上都是"舰队编成"的呈现。顶层只有 on(...) 委托挂载,故必须晚于 core/00;updFmBar() 由 core/99 每 20 帧调用,其余跨文件引用全在运行期解析 -->
-<script src="js/render/88-selpanel.js?v=20260905"></script>
-<script src="js/render/89-radial.js?v=20260905"></script>
-<script src="js/render/89-fmpage.js?v=20260905"></script><!-- FM4 舰队编组控制页。与 89-radial 共用编号 89(先例:render/85-settings 与 85-tutorial)。顶层有 on(...) 委托挂载与两条 window 监听,故必须晚于 core/00;其余跨文件引用全在运行期解析 --><!-- RF5 Phase C 目标轮盘的几何与渲染:半径/角度/容量常量与 drawRadial/radialHit/radialInBand/radPages 全在这一份。必须晚于 88-selpanel(扇区射程读数走它的 KIND_INFO);顶层只有 const/let/function,零顶层执行 -->
-<script src="js/scenario/90-envs.js?v=20260905"></script>
-<script src="js/scenario/91-init.js?v=20260905"></script>
-<script src="js/scenario/92-editor.js?v=20260905"></script>
-<script src="js/scenario/93-replay.js?v=20260905"></script>
-<script src="js/scenario/94-demo.js?v=20260905"></script>
-<script src="js/scenario/95-range.js?v=20260905"></script>
-<script src="js/core/99-main.js?v=20260905"></script>
+<script src="js/core/00-config.js?v=202609051"></script>
+<script src="js/core/01-state.js?v=202609051"></script>
+<script src="js/ships/10-hull-geometry.js?v=202609051"></script>
+<script src="js/ships/11-classes.js?v=202609051"></script>
+<script src="js/sensors/20-signature.js?v=202609051"></script>
+<script src="js/sensors/21-detect.js?v=202609051"></script>
+<script src="js/physics/30-motion.js?v=202609051"></script>
+<script src="js/physics/31-step-ships.js?v=202609051"></script>
+<script src="js/physics/32-route-refine.js?v=202609051"></script>
+<script src="js/formation/39-fmcaps.js?v=202609051"></script><!-- FM4 编队能力模型层:9 维能力(读配装实例字段)/四套站位模板/五条带半径/插槽扩容/匈牙利最优指派。纯函数,零顶层执行;排在 40 之前只为可读性,跨文件引用全在运行期解析 -->
+<script src="js/formation/40-slots.js?v=202609051"></script>
+<script src="js/formation/41-follow.js?v=202609051"></script>
+<script src="js/formation/42-formation.js?v=202609051"></script>
+<script src="js/formation/43-step.js?v=202609051"></script>
+<script src="js/formation/44-orders.js?v=202609051"></script><!-- FM1 编队重做:40几何(纯函数)/41通用跟随层/42编队实体(生命周期)/43每tick结算/44命令层。顶层只有 const/let/function,零顶层执行,跨文件引用全在运行期解析 -->
+<script src="js/weapons/50-missile-spec.js?v=202609051"></script>
+<script src="js/weapons/51-defs.js?v=202609051"></script>
+<script src="js/weapons/51-ciws.js?v=202609051"></script>
+<script src="js/weapons/52-fire.js?v=202609051"></script>
+<script src="js/weapons/53-nets.js?v=202609051"></script>
+<script src="js/weapons/54-missiles.js?v=202609051"></script>
+<script src="js/weapons/55-damage.js?v=202609051"></script>
+<script src="js/weapons/56-step-projectiles.js?v=202609051"></script>
+<script src="js/weapons/57-step-weapons.js?v=202609051"></script>
+<script src="js/weapons/58-firecontrol.js?v=202609051"></script><!-- RF5 火控计算机引擎:序列数据模型+stepFireControl/Post。位置只为目录编号可读性(编号 58 > 57,归位到 weapons 块末尾),跨文件引用全在运行期解析:本文件顶层只有 const/let/function 声明,零顶层执行 -->
+<script src="js/core/05-sim.js?v=202609051"></script>
+<script src="js/bots/60-tasks.js?v=202609051"></script>
+<script src="js/bots/61-enemy.js?v=202609051"></script>
+<script src="js/command/70-input.js?v=202609051"></script>
+<script src="js/command/71-keys.js?v=202609051"></script>
+<script src="js/command/72-context-menu.js?v=202609051"></script>
+<script src="js/command/73-quickbar.js?v=202609051"></script>
+<script src="js/command/74-targeting.js?v=202609051"></script><!-- RF5 悬停准星/吸附状态 xh + #xhTip 信息卡。按目录编号序归位在 command 块末尾;顶层只有 let/const/function,零顶层执行,跨文件引用全在运行期解析 -->
+<script src="js/render/80-camera.js?v=202609051"></script>
+<script src="js/render/81-background.js?v=202609051"></script>
+<script src="js/render/82-ship-icons.js?v=202609051"></script>
+<script src="js/render/83-hud.js?v=202609051"></script>
+<script src="js/render/84-scene.js?v=202609051"></script>
+<script src="js/render/84-fmplot.js?v=202609051"></script><!-- FM4 编队能力站位的地图可视化。与 84-scene 共用编号 84(先例:weapons/51-defs 与 51-ciws),都属于“场景图层”;顶层只有 const/function,零顶层执行,由 84-scene 的 render() 运行期调用 -->
+<script src="js/render/85-settings.js?v=202609051"></script>
+<script src="js/render/85-tutorial.js?v=202609051"></script><!-- RF5-D 教程面板。与 85-settings 共用编号 85(先例:weapons/51-defs 与 51-ciws),语义上教程与设置相邻。顶层调用 on(),故必须晚于 core/00;其余引用全在运行期解析 -->
+<script src="js/render/86-log.js?v=202609051"></script>
+<script src="js/render/87-fleetcards.js?v=202609051"></script>
+<script src="js/render/87-fmbar.js?v=202609051"></script><!-- FM1 编队书签栏 + 编队菜单。与 87-fleetcards 共用编号 87(先例:weapons/51-defs 与 51-ciws、render/85-settings 与 85-tutorial),语义上都是"舰队编成"的呈现。顶层只有 on(...) 委托挂载,故必须晚于 core/00;updFmBar() 由 core/99 每 20 帧调用,其余跨文件引用全在运行期解析 -->
+<script src="js/render/88-selpanel.js?v=202609051"></script>
+<script src="js/render/89-radial.js?v=202609051"></script>
+<script src="js/render/89-fmpage.js?v=202609051"></script><!-- FM4 舰队编组控制页。与 89-radial 共用编号 89(先例:render/85-settings 与 85-tutorial)。顶层有 on(...) 委托挂载与两条 window 监听,故必须晚于 core/00;其余跨文件引用全在运行期解析 --><!-- RF5 Phase C 目标轮盘的几何与渲染:半径/角度/容量常量与 drawRadial/radialHit/radialInBand/radPages 全在这一份。必须晚于 88-selpanel(扇区射程读数走它的 KIND_INFO);顶层只有 const/let/function,零顶层执行 -->
+<script src="js/scenario/90-envs.js?v=202609051"></script>
+<script src="js/scenario/91-init.js?v=202609051"></script>
+<script src="js/scenario/92-editor.js?v=202609051"></script>
+<script src="js/scenario/93-replay.js?v=202609051"></script>
+<script src="js/scenario/94-demo.js?v=202609051"></script>
+<script src="js/scenario/95-range.js?v=202609051"></script>
+<script src="js/core/99-main.js?v=202609051"></script>
 </body>
 </html>

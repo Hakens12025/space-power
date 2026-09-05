@@ -1528,6 +1528,26 @@ t('FLOW27_FMBAR',function(){
   fm27hit(elFixed); var srcX=F.src,modeX=F.mode;
   fm27hit(elFol); var snapRef=F.snap; fm27hit(elFixed); var noRetake=(F.snap===snapRef),motionY=F.motion,srcY=F.src,modeY=F.mode;
   fm27hit(elSlot); var modeZ=F.mode,srcZ=F.src;
+  /* FM4b【随模式显隐】必须验【算出来的 display】,不是"类加上了没有"。
+     线上曾有过一次:JS 一直在 classList.toggle('fm-hide'),而 css 里【压根没有这条规则】——
+     三个模式块于是常年同时显示,"点每个模式下面看到的东西不一样"整条需求静默失效,而按钮遍历那条判定全绿。
+     类名对不上 CSS 是纯字符串契约,只有问浏览器要 computed display 才抓得住。 */
+  function fm27vis(){var o=[];document.querySelectorAll('#fmActs .fm-mode').forEach(function(el){
+    if(getComputedStyle(el).display!=='none')o.push(el.getAttribute('data-fmm'));});return o.join(',');}
+  fm27hit(elFixed); var visFix=fm27vis();
+  fm27hit(elFol);   var visFol=fm27vis();
+  fm27hit(elSlot);  var visSlot=fm27vis();
+  var okVis=(visFix==='fixed'&&visFol==='follow'&&visSlot==='slot');
+  /* FM4b【重拍队形】必须真的重拍。它在 FM4b 那一版有钮无 case(点了什么都不发生),
+     而"钮点得动不抛错"那条判定对死钮天生免疫 —— 所以这里判 F.snap 引用是否真的换了新对象。 */
+  fm27hit(elFixed);
+  var snapR0=F.snap;
+  var elRe=fm27act(['resnap']);
+  fm27hit(elRe);
+  var reTook=(!!elRe&&F.snap!==snapR0);
+  /* 反向:已经在固定态时点「固定」是空操作(重拍只走显式钮),否则"再点一下当前模式"会把队形按此刻散乱位置重钉 */
+  var snapR1=F.snap; fm27hit(elFixed); var noReOnMode=(F.snap===snapR1);
+  fm27hit(elSlot);
   fm27hit(elFtgt);
   var armed=(typeof pendingFmFollow!=='undefined'&&pendingFmFollow!=null&&String(pendingFmFollow)===String(F.id));
   var redT=ships.filter(function(x){return x.side==='red'&&!x.dead;})[0];
@@ -1559,6 +1579,7 @@ t('FLOW27_FMBAR',function(){
         &&closedMid==='none'&&open2==='flex'&&selSync&&parseFloat(hpW)===100&&mdFol==='跟随 · 成员跟旗舰'
         &&!!mem&&acts4&&!!elFixed&&mode0==='slot'&&modeF==='follow'&&modeS==='slot'&&armed&&folSet&&folGone
         &&srcX==='snapshot'&&modeX==='fixed'&&noRetake&&motionY==='static'&&srcY==='snapshot'&&modeY==='fixed'&&modeZ==='slot'&&srcZ==='generated'
+        &&okVis&&reTook&&noReOnMode
         &&names.length>=9&&clicked===names.length /* FM4b 后 9 个(m-fixed m-slot m-follow / resnap page / fol folx / halt disband);下限留一个余量,真正的判据是 clicked===names.length —— 每个钮都点得动、都不抛错 */
         &&closed1==='none'&&!errs.length);
   return (ok?'ok':'fail')+' 书签数='+tabs0+'(须1) 初始菜单='+closed0+'(须none) 点开后='+open1+'(须flex)'
@@ -1566,6 +1587,8 @@ t('FLOW27_FMBAR',function(){
     +' | FM5a/b 点书签=选中并展开:收起='+closedMid+' 清选后再点开='+open2+' selected同步='+selSync+' 战力条宽='+hpW+'(须none/flex/true/100.0%) 模式说明行='+mdFol+'(须 跟随 · 成员跟旗舰)'
     +' | 模式/跟随四钮齐全='+acts4+' 模式:'+mode0+' -点跟随-> '+modeF+' -点阵位-> '+modeS+'(须 slot/follow/slot)'
     +' | 固定钮:static下点固定 src='+srcX+'/mode='+modeX+'(须 snapshot/fixed) 跟随中点固定 未重拍='+noRetake+' motion='+motionY+' src='+srcY+' mode='+modeY+'(须 true/static/snapshot/fixed) 再点阵型 mode='+modeZ+' src='+srcZ+'(须 slot/generated)'
+    +' | FM4b 随模式显隐(问的是 computed display,不是类名):固定→['+visFix+'] 跟随→['+visFol+'] 阵型→['+visSlot+'](须各只剩同名那一块)='+okVis
+    +' 重拍队形真的换了新快照='+reTook+' 已在固定态时点固定是空操作='+noReOnMode
     +' 跟随目标待命态已置位='+armed+' 兑现后F.follow指向该舰='+folSet+' 点解除跟随后已清空='+folGone
     +' | 操作钮点击='+clicked+'/'+names.length+'(须全中且总数>=9)清单=['+names.join(',')+']'
     +' | 再点收起='+closed1+'(须none) 解散后再刷10次'

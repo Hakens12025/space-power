@@ -44,7 +44,7 @@ function fmbList(){return (typeof fmAll==='function')?fmAll():[];} // 有活船�
 function fmbModeText(mode,short){ // FM3-1 三模式文案的唯一出处(信息区 / 菜单副标题 / 88 右栏共用,免得三处各写各的)
   if(mode==='follow')return short?'跟随态':'跟随 · 成员跟旗舰';
   if(mode==='fixed')return short?'固定态':'固定 · 保持建队时的相对位置与朝向';
-  return short?'阵型态':'阵型 · 条令站位';
+  return short?'阵型态':'阵型 · 能力站位';  // FM4:机制从「条令防空环」换成「能力插槽 + 最优指派」，文案跟着改 —— 本函数是三处模式文案的唯一出处(左轨菜单/右轨 #selFm/书签副标题)
 }
 function fmbFollowTgt(F){ // 本编队整体跟随的那艘船(纯读;目标没了返回 null,不像 fmApplyFollow 那样顺手解除)
   if(!F||!F.follow||typeof ships==='undefined')return null;
@@ -369,36 +369,16 @@ function fmbAct(a){
   const st=F?fmbStat(F):null;
   if(!st){fmUi.open=null;updFmBar();return;}
   switch(a){
-    case 'sel':
-      selected=st.list.map(s=>s.id);
-      fmbRefreshSel();
-      if(typeof log==='function')log(fmName(F)+' 选中全队 '+st.list.length+' 艘','');
-      break;
-    case 'selflag':
-      if(!st.flag)break;
-      selected=[st.flag.id];
-      fmbRefreshSel();
-      break;
     case 'page': // FM4 打开舰队编组控制页(render/89-fmpage)。typeof 守卫:该文件加载晚于本文件时也不至于抛
       if(typeof fmPageOpen==='function')fmPageOpen(F.id);
       break;
-    case 'cam': // 只动相机,不动仿真
-      cam.x=st.cx;cam.y=st.cy;
-      break;
-    case 'form':{
-      /* 就地成形:按旗舰【当前位置】重排阵位,并让每艘船各自归位。
-         fmReslot 只改槽位不下令(船一步都不会动),所以必须再来一发 fmMoveTo(F, 旗舰位) 把槽位展开成绝对终点。
-         目标点与锚点重合时 fmAngOf 沿用上一次的阵型朝向,不会把队形凭空转一圈。 */
-      if(!st.flag||typeof fmReslot!=='function'||typeof fmMoveTo!=='function')break;
-      fmReslot(F,st.list,st.flag);
-      fmMoveTo(F,[st.flag.pos[0],st.flag.pos[1],st.flag.pos[2]],'stop');
-      if(typeof log==='function')log(fmName(F)+' 就地成形 · '+st.list.length+'艘','');
-      break;}
-    case 'sc-fixed': case 'sc-air': case 'sc-surf': case 'sc-sub':{ // FM4 切站位。fmSetStance 自带"值没变就整个返回"的空操作守卫,所以反复点同一个钮不会把已成形的编队踢翻
-      if(typeof fmSetStance!=='function')break;
-      const k=a.slice(3);
-      fmSetStance(F,k);
-      if(typeof log==='function')log(fmName(F)+' 站位 → '+FM_STANCE[k].nm,'');
+    case 'resnap':{ // FM4b 重拍队形:把各舰【此刻】的相对位置与朝向拍成新快照。这是固定模式下唯一真正有用的动作
+      /* 改前它没有自己的钮 —— 在固定态下【再点一次「固定」钮】才会重拍,是个隐藏动作:
+         玩家以为"我已经在固定模式了,再点一下没事",结果队形被当场按此刻的散乱位置重钉。
+         现在做成显式钮,同时把「固定」钮在已是固定态时改成空操作(见 m-fixed 分支)。 */
+      if(F.src!=='snapshot'){if(typeof log==='function')log(fmName(F)+' 重拍队形只在固定模式下有效','warn');break;}
+      if(typeof fmSetSrc!=='function')break;
+      fmSetSrc(F,'snapshot');
       break;}
     case 'halt':
       if(typeof fmHalt!=='function')break;
@@ -424,6 +404,11 @@ function fmbAct(a){
         if(typeof fmSetMode==='function')fmSetMode(F,'slot');
         break;
       }
+      /* FM4b:已经在固定态时点「固定」是【空操作】。改前这里会 fmSetSrc(F,'snapshot') 重拍一次 ——
+         而 fmSetSrc 对 snapshot 方向【每次都重拍】(那是它的定义),于是"再点一下当前模式"这个最无害的动作
+         会把队形按此刻的散乱位置重钉。重拍现在有自己的显式钮 resnap,这条隐藏路径去掉。
+         阵型方向不用判:fmSetSrc 对 generated 方向本来就带 changed 守卫(FM3-2c 第二轮修的)。 */
+      if(a==='m-fixed'&&F.src==='snapshot'&&F.motion==='static')break;
       if(typeof fmSetSrc==='function')fmSetSrc(F,a==='m-fixed'?'snapshot':'generated');
       if(F.motion==='follow'&&typeof fmSetMode==='function')fmSetMode(F,'slot');
       break;
@@ -434,14 +419,6 @@ function fmbAct(a){
       if(!F.follow){if(typeof log==='function')log(fmName(F)+' 当前没有跟随目标','warn');break;}
       if(typeof fmFollowStop==='function')fmFollowStop(F);
       if(typeof log==='function')log(fmName(F)+' 解除跟随','');
-      break;
-    case 'den-':case 'den+': // FM3-2:fan± 两个 case 随扇面行删除;密度改的 spacing 现在是防空环站距乘数,越界仍由 fmClamp 兜
-      if(typeof fmSetParam!=='function')break;
-      fmSetParam(F,'spacing',F.P.spacing*(a==='den-'?FM_DEN_UP:FM_DEN_DN));
-      break;
-    case 'p1':case 'p2':case 'p3':
-      if(typeof fmSetPreset!=='function')break;
-      fmSetPreset(F,Number(a.slice(1)));
       break;
   }
   updFmBar(); // 立即回显,不等下一个 20 帧拍子
