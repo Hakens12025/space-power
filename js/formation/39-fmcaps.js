@@ -139,7 +139,7 @@ function fmGeoOf(P) {
 function fmSlotsOf(P) { return (P && P.slots && P.slots.length) ? P.slots : fmStanceOf(P).slots; }
 
 /* 【可互换性签名】两艘舰只有在这九维读数与 inner 都相同时,才可以互换站位而不改变最优指派的总契合度。
-   下游的两处槽位重配对(44 fmReassign 下令时消交叉 / 42 fmFollowReslot 跟随态连续消交叉)用它分桶:
+   下游的槽位重配对(44 fmReassign,下令时消交叉)用它分桶:
    同签名 = 交换是目标函数中性的,可以放心按欧氏距离换以消除航线交叉;不同签名 = 换了就等于推翻匈牙利的解。
    inner 单独进签名是因为贴身站位有一道几何门(站位半径 > 该舰 inner 则该维归零),
    两艘 inner×innerIntercept 相同但 inner 不同的舰,在贴身站位上的契合度并不相同。 */

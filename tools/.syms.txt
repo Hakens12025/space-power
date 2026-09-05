@@ -31,8 +31,6 @@ FMP_BAND_ORDER
 FM_BANDS
 FM_BAND_NM
 FM_CAPS
-FM_DEN_DN
-FM_DEN_UP
 FM_DIM
 FM_GROUP_CAP
 FM_LIMIT
@@ -262,7 +260,6 @@ fireMAC
 fireMissiles
 fireSeqs
 fleetListEl
-fmAaScore
 fmAll
 fmAngOf
 fmAppend
@@ -277,7 +274,6 @@ fmClamp
 fmCreate
 fmDelete
 fmDetach
-fmDoctrineSplit
 fmFlag
 fmFollowChainHas
 fmFollowShip
@@ -326,7 +322,6 @@ fmSameShips
 fmSeq
 fmSetFlagship
 fmSetParam
-fmSetPreset
 fmSetSrc
 fmSetStance
 fmSettle
@@ -371,7 +366,6 @@ followStopList
 followTargetOf
 followUnitOf
 formationSlots
-formationSlotsOld
 formations
 frame
 frameN
@@ -522,7 +516,6 @@ rate
 rateMove
 readyCells
 reassignNets
-recenterSlots
 recomputeNetOff
 refreshEdit
 render
@@ -573,7 +566,6 @@ saveScene
 sceneData
 sceneList
 scenePanel
-screenBearings
 secTxt
 sectorOf
 selBlue

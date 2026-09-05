@@ -46,7 +46,7 @@ function setCamMult(v){
 }
 // FM1:setFan / setSpacing / setFormationPreset / rebuildFormations 四个函数已删除。
 // 前三个改的是 formationFan / formationSpacing / fmGap 三个【全局】阵型参数,新架构下阵型参数是每编队一份
-// (F.P,调参走 42-formation 的 fmSetParam / fmSetPreset),全局旋钮会把全场编队一起改掉。
+// (F.P,调参走 42-formation 的 fmSetParam),全局旋钮会把全场编队一起改掉。
 // rebuildFormations 是【第二个编队构造器】(唯一合法构造器是 fmCreate):它 new 出来的 F 带 dest/curType/queue/arrived
 // 四个已删字段,新的 43-step/31-step-ships 都不认,留着必炸。
 function captureKey(e){

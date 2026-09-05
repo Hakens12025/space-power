@@ -41,7 +41,7 @@ document.getElementById('qSpdSet').addEventListener('pointerdown',e=>{if(e.butto
   log(`${sel.length} 艘 速度 → 自定义 ${v} km/s(上限30000)`,'');
 });
 // FM1:原先这里有 6 个编队按钮(qFanMinus/qFanPlus/qDenMinus/qDenPlus/qPreset1..3)的监听,已删除。
-// 它们调的 setFan/setSpacing/setFormationPreset 改的是【全局】阵型参数,而新架构下阵型参数是每编队一份(F.P,见 42-formation 的 fmSetParam/fmSetPreset),
+// 它们调的 setFan/setSpacing/setFormationPreset 改的是【全局】阵型参数,而新架构下阵型参数是每编队一份(F.P,见 42-formation 的 fmSetParam),
 // 一个全局旋钮会把全场编队一起改掉。这几项功能改由编队菜单提供。index.html 里那 6 个按钮 + 2 个读数 span 现已成孤儿 DOM(由改 index.html 的那一路处理)。
 function updSalvoLbl(){const l=document.getElementById('qSalvoLbl');if(l)l.textContent='×'+salvoCount;}
 document.getElementById('qbar').querySelectorAll('.qbtn[data-salvo]').forEach(b=>{ // 齐射轮数预设

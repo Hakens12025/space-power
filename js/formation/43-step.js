@@ -35,6 +35,6 @@ function stepFormation(F, dt) {
   // 名册漂移兜底:战损/加员/换旗后重排槽位,好让【下一条】编队令按新人数分配阵位,并让跟随关系跟上。
   // 阵位态下这次重排不会让任何船动(它们飞的是已经算死的绝对终点);跟随态下它会当场改变跟随点 —— 这是对的。
   if (F.flagId !== flag.id || F.n !== mates.length) fmReslot(F, mates, flag);
-  // FM6:这里原本按运动轴分发跟随态的每 tick 重配槽位(fmFollowReslot)。跟随模式去掉后本层无事可做,整条删除
+  // FM6:这里原本按运动轴分发跟随态的每 tick 重配槽位。跟随模式去掉后本层无事可做,整条删除
   return { mates, flag, spd: fmSpd(F, mates), dissolved: false };
 }

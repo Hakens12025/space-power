@@ -29,7 +29,8 @@
    其余时候只改叶子的 textContent 与 classList —— 同样是 RF7c 那条:每拍换新节点会让 :hover 闪、让点击落空。
    #fmActs 的按钮结构恒定,【只建一次】,之后只同步读数与档位/模式钮的 .on。 */
 
-const FM_DEN_UP=1.25, FM_DEN_DN=0.8; // 密度步进:疏 ×1.25 / 密 ×0.8(FM3-2 起作用在防空环站距乘数 P.spacing 上;扇面步进常量随 fan± 钮一起删)
+/* FM6 清理:密度步进的两个常量已删 —— 疏/密两个按钮在 FM5d 去掉(实测它们与档位写同一个 P.spacing,
+   而该值只在舰数超过插槽数时才影响几何),常量随之零引用。 */
 
 /* fmUi:纯 UI 缓存(DOM 引用 + 结构签名 + 当前展开的编队 id)。不进任何存档/快照。 */
 const fmUi={open:null, tabSig:'', tabs:{}, infoSig:'', leaf:null, mem:{}, actsBuilt:false, act:null};
@@ -344,7 +345,7 @@ function fmbRefreshSel(){ // 改了 selected 之后把两个面板叫醒(不等�
   if(typeof updateInfo==='function')updateInfo();
   if(typeof updateSelPanel==='function')updateSelPanel();
 }
-/* FM6:fmbArmFollow / fmbFollowPick 整个删除 —— 跟随已下沉成底栏的标准控件,
+/* FM6:编队菜单里那两个「武装/兑现跟随」的函数整个删除 —— 跟随已下沉成底栏的标准控件,
    武装与兑现都在 88-selpanel(followArm / followPick),作用域解析在 41-follow 的 followAssign。
    编队仍然可以整队跟随(fmFollowShip),那只是 followAssign 的四种作用域之一。 */
 

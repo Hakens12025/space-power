@@ -4,11 +4,10 @@
    与改前的两点差别,都是为了解耦:
      · 阵型参数由调用方【显式传入】(P),不再读 formationFan / formationSpacing / fmGap 三个全局变量 ——
        "每个编队各自一套参数"是本次重做的目标之一,全局变量做不到(改前改一下扇面,全场编队一起变)。
-     · recenterSlots 的锚点由调用方给 id,不再自己去 ships 里 findFlag —— 纯函数不该认识全局状态。
-   删掉的:rotAng / formationRot / formationOff / formationTargets / formationOffsets。
-     formationRot 改前就已零调用者;另外四个的职责搬去了 42-formation 的 fmOffOf(锚点统一到旗舰实时位置)。
-   FM3-2:条令站位改成【防空环】(见 formationSlots 头注),阵型参数只剩 spacing(环上站距乘数,圈半径不随它变);
-     删掉的:防空圈基准半径函数(环半径改按各舰实例 ciwsOf 取)/ 扇面与弦距两个参数 / 舰种角色表分桶(主力横排/护卫弧线/侦察桶)。 */
+     · 槽位重心化的锚点由调用方给 id,不再自己去 ships 里找旗舰 —— 纯函数不该认识全局状态。
+   FM6 清理:FM3-2 那套【防空环】条令站位的原实现,连同它专用的三个函数(环上方位表 / 近防能力分 / 居中环上分桶)
+   与已无人调用的槽位重心化函数,一并删除 —— 它们在 FM4 换成能力插槽之后就只剩互相引用,对外零调用点。
+   要回看那套几何请查 git 历史(FM6 之前的 40-slots.js)。 */
 
 /* 参数合法区间,UI 与代码共用这一份。FM6:五个几何旋钮全部开放给玩家(编组控制页 + 编队菜单的带半径滑块),
    所以每一个都得有区间 —— 滑块只是 UI,越界防线在 fmClamp 这一处。
@@ -45,40 +44,6 @@ function snapshotSlots(list,flagId){
   });
 }
 
-function recenterSlots(slots,anchorId){ // DS189:旗舰居中——槽位整体平移使旗舰归 [0,0,0]。旗舰=编队原点,子舰相对旗舰布阵;导引/绘制/成形判定三处语义由此统一
-  const fs=slots.find(x=>x.s&&x.s.id===anchorId);
-  if(fs){const o=fs.offset.slice();slots.forEach(x=>{x.offset[0]-=o[0];x.offset[1]-=o[1];x.offset[2]-=o[2];});}
-  return slots;
-}
-
-/* ---------------- FM3-2 条令站位:防空环 ---------------- */
-
-function screenBearings(n){
-  /* 环上 n 个站位的方位角(度),从 000 起【左右交替向后】展开:[0, 360−step, step, 360−2step, 2step, …],step=360/n。
-     返回次序 = 填充优先级(舰少站多时先占正前方,后方自然空)。已与 USF 10B 1945 屏护表 N=4..9 逐位核对吻合。 */
-  const step=360/n,out=[0];
-  for(let i=1;out.length<n;i++){out.push((360-step*i)%360);if(out.length<n)out.push(step*i);}
-  return out;
-}
-
-function fmAaScore(s){ // 近防能力分 = 内圈半径 × 内圈拦截率(读【实例】ciwsOf,tier/靶场改过的数才进得来)。outerIntercept 是全库零读取的死字段,刻意不用
-  const c=ciwsOf(s);
-  return ((c&&c.inner)||0)*((c&&c.innerIntercept)||0);
-}
-
-function fmDoctrineSplit(list,anchorId){
-  /* 把一支编队分成【居中舰】与【环上舰】(条令分桶的唯一定义点:formationSlots 排位、44 fmReassign / 42 fmFollowReslot 换槽都按它分桶):
-       居中 = 旗舰 ∪ 能力分 ≤ 0(无近防)∪ 无主炮(hasMAC 为假,航母类:简报"航母类居中",CV 的 ciws_self 分 2000>0,靠 hasMAC 认)
-       FM3-2b:审查删掉了曾多加的"能力分 < 0.5×maxScore 也居中"——简报没这条,它让 CA 护卫混编 DD 时不上环、R 缩不下来(简报负对照要的正是 R 变小)
-     环上舰按能力分【降序】(稳定排序:同分保持名册序),最高分占 000 正前方。
-     返回 {flag, center:[旗舰在首], ring:[…]}。 */
-  const fl=list.find(s=>s.id===anchorId)||list[0];
-  const cand=list.filter(s=>s!==fl);
-  const center=fl?[fl]:[], ring=[];
-  cand.forEach(s=>{ if(fmAaScore(s)<=0||!hasMAC(s))center.push(s); else ring.push(s); });
-  ring.sort((a,b)=>fmAaScore(b)-fmAaScore(a));
-  return {flag:fl, center, ring};
-}
 
 function formationSlots(list,P,anchorId){
   /* FM4 条令站位【能力插槽 + 最优指派】。本函数现在只做"调 39-fmcaps 算一遍,把结果落成 offset",
@@ -108,36 +73,3 @@ function formationSlots(list,P,anchorId){
   return out;
 }
 
-function formationSlotsOld(list,P,anchorId){
-  /* FM3-2 条令站位【防空环】。改前(v134 起)按舰种角色表分三桶:主力横排 20k / 护卫按 fan·gap 排弧线 / 侦察桶,
-     "两翼"只存在于恰好两艘护卫的情形,舰数一变形状就换。现在按 USF 1945 屏护条令:
-       · 居中舰(旗舰 / 无主炮 / 近防弱)以旗舰为原点、沿阵型朝向的【垂直】方向 ±20000、±40000 … 交替对称横排(旗舰恒 [0,0,0]);
-       · 环上舰(fmDoctrineSplit 的 ring)按能力分降序填进 screenBearings(n) 的前 k 站:
-           R       = min(ciwsOf(s).outer × 2)                  圈半径:环上最弱外圈的直径(【不】乘 P.spacing,疏密只改站数)
-           spacing = min(ciwsOf(s).inner × 2) × P.spacing       站距:环上最弱内圈的直径 × 玩家疏密乘数
-           n       = max(环上舰数, ceil(2πR / spacing))         舰少站多时后方自然空;贴身(0.6)站更密、疏开(1.6)站更稀,半径不动
-         (FM3-2b:审查退回了曾把 P.spacing 乘到 R 上的写法 —— 简报第 86 行明写乘在站距上,乘到半径会把护卫拉进旗舰自己的近防圈)
-     返回 [{s, offset, hdg}] 与 snapshotSlots 同形,hdg 全 0(条令站位全员船头随阵型朝向)。
-     【左右符号约定】局部系 +x = 阵型朝向(000);世界 +y 在 80-camera 的 toScreen 里是屏幕向下,船头朝 +x 时 +y 在船的右手边 = 右舷。
-     所以方位角 θ(顺时针为正 = 右舷)直接落成 [R·cos θ, R·sin θ]:screenBearings 的第二站 360−step 即 −step → y<0 = 左舷,
-     与旧代码"两翼" a=(i===0?−1:1)·fan/2 先左后右、与 44 展开时 rotSlot(off, cos ang, sin ang) 的旋转方向一致。 */
-  const P0=P||fmParamsNew();
-  if(!list||!list.length)return [];
-  const {center,ring}=fmDoctrineSplit(list,anchorId);
-  const slots=[];
-  center.forEach((s,i)=>{ // i=0 旗舰归零;其余 −20k,+20k,−40k,+40k …(先左舷后右舷,与 screenBearings 同序)
-    if(i===0){slots.push({s,offset:[0,0,0],hdg:0});return;}
-    const k=Math.ceil(i/2), sg=(i%2===1)?-1:1;
-    slots.push({s,offset:[0,sg*k*20000,0],hdg:0});
-  });
-  if(ring.length){
-    let outer=Infinity, inner=Infinity;
-    ring.forEach(s=>{const c=ciwsOf(s);outer=Math.min(outer,(c.outer||0)*2);inner=Math.min(inner,(c.inner||0)*2);});
-    const R=outer;
-    const spacing=(inner>0?inner:R)*P0.spacing; // 内圈为 0 的舰(理论上不会:配装表里每种 ciws 都有 inner)兜底成"站距=半径",免得除零
-    const n=Math.max(ring.length, Math.ceil(2*Math.PI*R/spacing));
-    const br=screenBearings(n);
-    ring.forEach((s,i)=>{const th=br[i]*Math.PI/180;slots.push({s,offset:[R*Math.cos(th),R*Math.sin(th),0],hdg:0});});
-  }
-  return slots;
-}

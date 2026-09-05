@@ -1530,11 +1530,28 @@ UI 两处、状态一份:编组控制页五个滑块(`data-fpk`),编队菜单**�
 清空 `projectiles`/`hitFX`/`fireSeqs`,`finally` 里还原。五跑对照组稳定在 17~22。
 **规矩**:拿像素判定测"画了没画"时,采样区必须先隔离,否则测的是整个场景的历史。
 
-### 七、新增死代码(未删,等确认)
+### 七、死代码清理(FM6b,用户批准后执行)
 
-`fmSetPreset` / `fmSetParam`(42)—— `fmSetParam` **已复活**(滑块的 setter),`fmSetPreset` 仍零调用;
-`FM_DEN_UP` / `FM_DEN_DN`(87,密度步进常量)、`fmbArmFollow` / `fmbFollowPick`(87,已被 88 的 `followArm`/`followPick` 取代,函数体已删)。
-加上 FM4 就已死的 `formationSlotsOld` / `screenBearings` / `fmAaScore` / `fmDoctrineSplit` / `recenterSlots`。
+积压的死代码一次清空,**八个符号全部物理删除**:
+
+| 符号 | 文件 | 什么时候死的 |
+|---|---|---|
+| `formationSlotsOld` | 40-slots | FM4 换成能力插槽后留作对照 |
+| 环上方位表 / 近防能力分 / 居中环上分桶 | 40-slots | 只被上面那个调,同批 |
+| 槽位重心化函数 | 40-slots | FM3-2 起零调用(新实现自己把旗舰放 [0,0,0]) |
+| 站距三档预设的 setter | 42-formation | FM5d 删掉档位三钮之后 |
+| 密度步进两常量 | 87-fmbar | 同上,疏/密两钮一并删掉 |
+
+`fmSetParam` **不在删除之列** —— 它在 FM6 复活成了六个滑块的 setter。
+`40-slots.js` 从 143 行降到 75 行(只剩参数区间/钳位/参数对象/旋转/角度归一/建队快照/`formationSlots` 六个)。
+
+**注释里的字面也一并抹掉**:`grep -rho "<符号名>" js/ tools/verify.sh` 现在全部为 0。
+这条是 FM3-2 就定下的规矩 —— 留在注释里会让日后 `grep 符号名` 误报"还有引用",
+而"到底删干净没有"这件事只能靠 grep 判定。要回看被删的那套几何请查 git 历史。
+
+验证:`bench_all` **5.8607** 不变;`verify.sh` ✓ 全部通过,`SYMS_TOTAL` 708 → **700**(正好 8 个),`ERRORS=none`。
+`SYMS_MISSING/THREW=none` 是这里最关键的一条 —— 全符号扫描会逐个 eval 引用顶层符号,
+删掉还有人引用的东西会当场 `THREW`,而不是等到玩家碰到那条路径才炸。
 
 ## 发布(GitHub Pages)
 
