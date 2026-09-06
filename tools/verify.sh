@@ -1535,10 +1535,20 @@ t('FLOW27_FMBAR',function(){
      三个模式块于是常年同时显示,"点每个模式下面看到的东西不一样"整条需求静默失效,而按钮遍历那条判定全绿。
      类名对不上 CSS 是纯字符串契约,只有问浏览器要 computed display 才抓得住。 */
   function fm27vis(){var o=[];document.querySelectorAll('#fmActs .fm-mode').forEach(function(el){
-    if(getComputedStyle(el).display!=='none')o.push(el.getAttribute('data-fmm'));});return o.join(',');}
+    if(getComputedStyle(el).display!=='none')o.push(el.getAttribute('data-fmm'));});return o;}
+  function fm27decl(m){var n=0;document.querySelectorAll('#fmActs .fm-mode').forEach(function(el){
+    if(el.getAttribute('data-fmm')===m)n++;});return n;}
   fm27hit(elFixed); var visFix=fm27vis();
   fm27hit(elSlot);  var visSlot=fm27vis();
-  var okVis=(visFix==='fixed'&&visSlot==='slot');
+  /* FM6c 判据订正。改前写死"可见的那串必须恰好是 'fixed' / 'slot'",这句话把【一个模式只有一块】当成了前提;
+     阵型模式实际声明了两块(编组控制 / 带半径滑块),真相应该是 slot,slot。而当时的代码恰好只显示得出一块
+     (装块的容器以 data-fmm 为键,同键后者顶掉前者),bug 与判据互相印证,一起绿着发了版。
+     订正后的不变量与块数无关,两条:
+       ① 可见的块,data-fmm 必须【全部】等于当前模式 —— CSS 规则丢了会立刻冒出别的模式名(那次事故的原判据);
+       ② 可见块数必须等于该模式【声明了几块】—— 有块被吞掉会立刻少一个。 */
+  var nFix=fm27decl('fixed'), nSlot=fm27decl('slot');
+  function fm27all(a,m,n){return a.length===n&&a.every(function(x){return x===m;});}
+  var okVis=(fm27all(visFix,'fixed',nFix)&&fm27all(visSlot,'slot',nSlot));
   /* FM4b【重拍队形】必须真的重拍。它在 FM4b 那一版有钮无 case(点了什么都不发生),
      而"钮点得动不抛错"那条判定对死钮天生免疫 —— 所以这里判 F.snap 引用是否真的换了新对象。 */
   fm27hit(elFixed);
@@ -1596,7 +1606,7 @@ t('FLOW27_FMBAR',function(){
     +' | FM5a/b 点书签=选中并展开:收起='+closedMid+' 清选后再点开='+open2+' selected同步='+selSync+' 战力条宽='+hpW+'(须none/flex/true/100.0%) 模式说明行='+mdFix+'(须 固定 · 保持建队时的相对位置与朝向)'
     +' | FM6 模式只剩两段:m-follow 钮已不存在='+noFollowBtn+' 其余四钮齐全='+acts4+' 模式:'+mode0+' -点固定-> '+modeF+' -点阵型-> '+modeS+'(须 slot/fixed/slot)'
     +' | 固定钮:阵型态下点固定 src='+srcX+'/mode='+modeX+'(须 snapshot/fixed) 已在固定态再点一次 未重拍='+noRetake+' 再点阵型 mode='+modeZ+' src='+srcZ+'(须 slot/generated)'
-    +' | FM4b 随模式显隐(问的是 computed display,不是类名):固定→['+visFix+'] 阵型→['+visSlot+'](须各只剩同名那一块)='+okVis
+    +' | FM4b 随模式显隐(问的是 computed display,不是类名):固定→['+visFix.join(',')+'](声明 '+nFix+' 块) 阵型→['+visSlot.join(',')+'](声明 '+nSlot+' 块)(须全部同名且个数对得上)='+okVis
     +' 重拍队形真的换了新快照='+reTook+' 已在固定态时点固定是空操作='+noReOnMode
     +' | FM6 带半径滑块(真实 input 事件):F.P.bm '+bm0.toFixed(2)+'→'+bm1.toFixed(2)+'(须1.60) 最大槽位半径 '+Math.round(R0)+'→'+Math.round(R1)+'(须放大>1.3倍) 读数叶子='+bmOut+'(须1.60)='+okKnob
     +' 编队菜单已无跟随钮(已下沉底栏)='+noFolBtn
@@ -2248,6 +2258,12 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   updFmBar();
   var btn=document.querySelector('#fmActs [data-fma="page"]');
   var had=!!btn;
+  /* ①b 【可见性】:dispatchEvent 对 display:none 的元素照样生效,所以"钮建出来了"根本不算数 —— 得问浏览器它是不是真在屏上。
+     FM6c 就栽在这一条上:随模式显隐的块以 data-fmm 为键装进字典,而阵型模式下有两块同键(编组控制 / 带半径),
+     后写的把先写的顶掉 ⇒「编组控制」的 fm-hide 永远摘不掉,点得到、看不到,本条改前只断言 !!btn,一路全绿。
+     顺带把三块的显隐一起断言成【互斥】的:阵型模式下两块在、固定模式那块不在。 */
+  var seen=function(q){var e=document.querySelector(q);return !!(e&&e.offsetParent!==null);};
+  var visPage=seen('#fmActs [data-fma="page"]'), visBm=seen('#fmActs [data-fmk="bm"]'), visSnap=seen('#fmActs [data-fma="resnap"]');
   hit(btn,'pointerdown');
   var pg=document.getElementById('fmPage');
   var opened=!!(pg&&pg.classList.contains('on')&&fmPageIsOpen());
@@ -2259,7 +2275,7 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   var rows=document.querySelectorAll('#fpBody .fp-row').length;
   var tds=document.querySelectorAll('#fpBody .fp-t tbody tr').length;
   var slots0=fmPageSlots(F).length;
-  var ok1=(had&&opened&&len1>2000&&!!dial&&slotN===slots0&&slotN>=11&&rows>=2&&tds===b.length);
+  var ok1=(had&&visPage&&visBm&&!visSnap&&opened&&len1>2000&&!!dial&&slotN===slots0&&slotN>=11&&rows>=2&&tds===b.length);
   /* ② 点一个插槽 → 选中 + 出配置条(select 真的建出来了) */
   var g0=document.querySelector('#fpDial [data-fps]');
   hit(g0,'pointerdown');
@@ -2331,7 +2347,7 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   window.removeEventListener('error',onerr);
   var ok=(ok1&&ok2&&ok3&&ok4&&ok4b&&ok5&&ok6&&ok7&&ok8&&!errs.length);
   return (ok?'ok':'fail')
-    +' ①入口(真点「编组控制」钮):钮存在='+had+' 页已开='+opened+' 正文='+len1+'字符 方位盘='+(!!dial)+' 插槽圈='+slotN+'个(须=插槽表 '+slots0+') 舰位点='+shipDots+' 评估行='+rows+' 能力表行='+tds+'(须='+b.length+')='+ok1
+    +' ①入口(真点「编组控制」钮):钮存在='+had+' 【真在屏上】编组控制='+visPage+' 带半径='+visBm+' 固定态的重拍队形='+visSnap+'(须 false)'+' 页已开='+opened+' 正文='+len1+'字符 方位盘='+(!!dial)+' 插槽圈='+slotN+'个(须=插槽表 '+slots0+') 舰位点='+shipDots+' 评估行='+rows+' 能力表行='+tds+'(须='+b.length+')='+ok1
     +' | ②点插槽:选中下标='+selIdx+'(须0) 能力/带下拉都建出='+(!!capSel&&!!bandSel)+'='+ok2
     +' | ③改能力 '+cap0+'→'+capTo+':落到F.P.slots='+custom+' 插槽表已变='+(capNow===capTo)+' 有舰被派到该能力站位(s.fmStn)='+stnHas+'='+ok3
     +' | ④拖动改方位:'+Math.round(brg0)+'° → '+Math.round(brg1)+'°(拖到盘面正右方,须≈090±3;偏差='+dAim.toFixed(1)+'°)='+ok4
@@ -2612,7 +2628,7 @@ grep -q "FLOW33_FOLSPEED=ok" "$OUT" || { echo "✗ FLOW33_FOLSPEED 未通过(FL3
 grep -q "FLOW35_FMGEAR=ok" "$OUT" || { echo "✗ FLOW35_FMGEAR 未通过(FL5 速度档位严格生效:每艘峰值=自己的档位，不被全队加权平均压平)"; fail=1; }
 grep -q "FLOW36_FMSNAP=ok" "$OUT" || { echo "✗ FLOW36_FMSNAP 未通过(FM3-1 固定模式:建队/重拍即成形(离位0)/快照可逆/终点布局与到达朝向/折返不配对/换旗重心化+F.ang换参考系(船未动换旗离位0、就地成形不动、换回可逆、阵亡顺位)/战损不变 + generated 负对照(折返必换槽=同分仍可配对、切generated后F.ang=旗舰船头不再是NaN、换旗F.ang不动))"; fail=1; }
 grep -q "FLOW37_FMCAPSLOT=ok" "$OUT" || { echo "✗ FLOW37_FMCAPSLOT 未通过(FM4 能力插槽+最优指派:固定模板前两槽 000/±45°·屏护带 / 切站位改形状(水下横向展开>1.5倍水面、站距乘数拨到预设) / 空中为主后方有舰 / 匈牙利总契合度 = 穷举最大值(差恰为 0) / 贴身几何门 / 20 舰时插槽数仍 14·位置不重合 / 下令后 fmReassign 只许同签名互换 / 再点一次阵型与同站位都是空操作)"; fail=1; }
-grep -q "FLOW38_FMPAGE=ok" "$OUT" || { echo "✗ FLOW38_FMPAGE 未通过(FM4 舰队编组控制页，全程真实 DOM 事件:编队菜单钮开页 / 点插槽出配置条 / 改能力落到 F.P.slots 且 s.fmStn 跟着变 / 拖动改方位拖到哪就是哪(±3°) / 页内切站位 / 增删插槽且不许删到空 / 恢复默认+关闭 / 固定模式清 s.fmStn / 编队被删后自动收摊)"; fail=1; }
+grep -q "FLOW38_FMPAGE=ok" "$OUT" || { echo "✗ FLOW38_FMPAGE 未通过(FM4 舰队编组控制页，全程真实 DOM 事件:编队菜单钮开页(且那个钮真在屏上) / 点插槽出配置条 / 改能力落到 F.P.slots 且 s.fmStn 跟着变 / 拖动改方位拖到哪就是哪(±3°) / 页内切站位 / 增删插槽且不许删到空 / 恢复默认+关闭 / 固定模式清 s.fmStn / 编队被删后自动收摊)"; fail=1; }
 grep -q "FLOW39_FMGHOST=ok" "$OUT" || { echo "✗ FLOW39_FMGHOST 未通过(FM6 编队级长按右键定阵型朝向，全程真实事件:长按弹出且作用域=本编队 / 虚影把每艘舰都画出来 / 终点贴 face 解而不是行进方向解 / 飞完真的按那个朝向摆开 / 选一部分与单舰仍走单舰语义)"; fail=1; }
 grep -q "FLOW40_FOLLOWCTL=ok" "$OUT" || { echo "✗ FLOW40_FOLLOWCTL 未通过(FM6 底栏跟随标准控件四种作用域，全程真实事件:单舰→单舰 / 单舰→舰队 / 舰队→单舰 / 舰队→舰队（点非旗舰须落到旗舰）/ 真点解除钮清干净 / 跟随自己与循环跟随被拒)"; fail=1; }
 # FM3-2 源码级负对照:旧弧线阵的四样东西(舰种角色表 / 防空圈基准半径函数 / 扇面参数 / 弦距参数)必须从 js/ 里消失。

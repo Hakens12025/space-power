@@ -268,19 +268,19 @@ function fmbActsBuild(){
     mFixed:acts.querySelector('[data-fma="m-fixed"]'), // FM3-1
     mSlot:acts.querySelector('[data-fma="m-slot"]'),
     mDesc:acts.querySelector('[data-lf="mdesc"]'), // FM5b 模式说明行:叶子节点,只改 textContent
-    modes:{}, // FM4b 随模式显隐的块,键就是 F.mode 的两个值(FM6:跟随那一块随跟随模式一并删)
+    /* FM4b 随模式显隐的块。FM6c 改成【数组】:改前是以 data-fmm 为键的字典,而阵型模式下有两块
+       (编组控制 / 带半径滑块)共用 data-fmm="slot",后写的把先写的顶掉 —— 「编组控制」那一块
+       就此不在表里,fm-hide 永远摘不掉,按钮建了出来却一直不可见。装块的容器不该假设一模式一块。 */
+    modes:[],
     bm:acts.querySelector('[data-fmk="bm"]'), bmV:acts.querySelector('[data-lf="bm"]') // FM6 带半径滑块与它的读数
   };
-  acts.querySelectorAll('.fm-mode').forEach(el=>{fmUi.act.modes[el.getAttribute('data-fmm')]=el;});
+  fmUi.act.modes=Array.prototype.slice.call(acts.querySelectorAll('.fm-mode'));
 }
 function fmbActsSync(F){ // 模式高亮与随模式显隐都跟着【当前展开的那个编队】走(阵型参数每编队一份)
   if(!fmUi.act)return;
   const md=F?F.mode:null; // FM3-1 模式三选一:当前那个钮点亮(F.mode 是 42 派生给 UI 的 fixed/slot/follow)
   // FM4b 随模式显隐:只有与当前模式同名的那个块留下。md 为 null(编队没了)时三块全藏
-  for(const k in fmUi.act.modes){
-    const el=fmUi.act.modes[k];
-    if(el)el.classList.toggle('fm-hide',k!==md);
-  }
+  fmUi.act.modes.forEach(el=>{el.classList.toggle('fm-hide',el.getAttribute('data-fmm')!==md);});
   if(fmUi.act.mFixed)fmUi.act.mFixed.classList.toggle('on',md==='fixed');
   if(fmUi.act.mSlot)fmUi.act.mSlot.classList.toggle('on',md==='slot');
   /* FM6 带半径滑块回显。【拖动中不回写 value】—— 那会把玩家正在拖的滑块拨回去(updFmBar 每 20 帧跑一次,
