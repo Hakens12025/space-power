@@ -231,7 +231,7 @@ function fmPgSlotCfg(F) {
       + '<span class="fp-lb">方位</span><span class="fp-v">' + Math.round(sl.brg) + '°</span>'
       + '<button class="btn qbtn qstop" data-fp="del">删除本插槽</button>';
   }
-  s += '<span class="fp-sp"></span><button class="btn qbtn" data-fp="add">+ 新增插槽</button></div>';
+  s += '<span class="fp-sp"></span><button class="btn qbtn" data-fp="add" title="新增插槽(能力与带默认留空,选全了才出现在阵型图上)">+ 新</button></div>';
   return s;
 }
 
@@ -253,7 +253,7 @@ function fmPgBandCfg(F, BR) {
     + '<i>' + Math.round((BR[b.k] || 0) / 1000) + 'k</i>'
     + '<button class="btn qbtn qstop fp-bx" data-fp="bdel-' + b.k + '" title="删除这条轮带(用到它的插槽会变回未完成)">✕</button>'
     + '</span>').join('');
-  s += '<span class="fp-sp"></span><button class="btn qbtn" data-fp="badd">+ 新增轮带</button></div>';
+  s += '<span class="fp-sp"></span><button class="btn qbtn" data-fp="badd" title="新增轮带(半径 = 屏护 × 倍数,名字可改)">+ 新</button></div>';
   return s;
 }
 

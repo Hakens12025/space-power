@@ -631,7 +631,9 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 .fp-bar{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2);padding:var(--sp-3) 0;border-bottom:var(--bw) solid var(--line-hair)}
 /* FM6h 插槽设置【不许换行】(用户令):挤不下时整条横向滚动,而不是折成两行把方位盘往下顶。
    轮带那一条例外 —— 带可以一直加,不给它换行等于加到第五条就看不见了。 */
-.fp-cfg{border-bottom:none;border-top:var(--bw) solid var(--line-hair);margin-top:var(--sp-2);flex-wrap:nowrap;overflow-x:auto}
+.fp-cfg{border-bottom:none;border-top:var(--bw) solid var(--line-hair);margin-top:var(--sp-2);flex-wrap:nowrap;overflow-x:auto;gap:var(--sp-1)}
+/* 间距收到 sp-1:这一排的分组感本来就由 .fp-lb 的 margin-left 提供(标签前留白、标签与自己的控件贴紧),
+   flex 的 gap 再给一份等于把每个字之间都拉开,十一个元素平白多出四十来像素。 */
 .fp-cfg>*{flex:none}
 .fp-bands{flex-wrap:wrap;overflow-x:visible}
 /* 一条带 = 只读芯片(内置)或 名字+倍数+半径读数+删除(自定义)。<i> 是算出来的半径读数,等距字体 */
@@ -705,7 +707,10 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
   background:linear-gradient(to right,var(--acc) 0 var(--fp-fill,50%),var(--line-ctl) var(--fp-fill,50%) 100%)}
 .fp-krows .fp-knob input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:11px;height:11px;margin-top:-4px;border-radius:50%;background:var(--acc);border:none}
 /* FM6g 插槽名输入框 / 未完成插槽的小标签 / 新增插槽的星标 */
-.fp-nm{width:96px;background:var(--srf-sunk);color:var(--txt);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);font-size:var(--fs-label);padding:2px 4px}
+/* FM6i 插槽设置那一排整体收窄(用户令:太长了)。下拉默认宽度按【最长的那个选项】撑,
+   而能力里最长的是「防空·通道」——一个五字词把整排顶出去。给死宽度即可,选项在展开的列表里仍是全的。 */
+.fp-cfg select{width:88px;min-width:0}
+.fp-nm{width:80px;background:var(--srf-sunk);color:var(--txt);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);font-size:var(--fs-label);padding:2px 4px}
 .fp-nm:focus{outline:none;border-color:var(--acc)}
 .fp-chip{color:var(--state-select);border-color:var(--state-select)}
 .fp-star{pointer-events:none}
