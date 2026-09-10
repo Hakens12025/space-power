@@ -629,7 +629,19 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 .fp-body{flex:1;min-height:0;overflow:auto;padding:var(--sp-4) var(--sp-5) var(--sp-6)}
 /* 工具条:标签 + 按钮 + 读数横排。.fp-sp 是弹性隔断,把它右边的东西推到行尾 */
 .fp-bar{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2);padding:var(--sp-3) 0;border-bottom:var(--bw) solid var(--line-hair)}
-.fp-cfg{border-bottom:none;border-top:var(--bw) solid var(--line-hair);margin-top:var(--sp-2)}
+/* FM6h 插槽设置【不许换行】(用户令):挤不下时整条横向滚动,而不是折成两行把方位盘往下顶。
+   轮带那一条例外 —— 带可以一直加,不给它换行等于加到第五条就看不见了。 */
+.fp-cfg{border-bottom:none;border-top:var(--bw) solid var(--line-hair);margin-top:var(--sp-2);flex-wrap:nowrap;overflow-x:auto}
+.fp-cfg>*{flex:none}
+.fp-bands{flex-wrap:wrap;overflow-x:visible}
+/* 一条带 = 只读芯片(内置)或 名字+倍数+半径读数+删除(自定义)。<i> 是算出来的半径读数,等距字体 */
+.fp-bd{display:inline-flex;align-items:center;gap:4px;padding:1px 5px;border:var(--bw) solid var(--line-hair);border-radius:var(--r-sm);font-size:var(--fs-label);color:var(--txt-dim)}
+.fp-bd i{font-family:var(--ff-mono);font-style:normal;color:var(--txt-read);font-variant-numeric:tabular-nums}
+.fp-bd-ro{opacity:.75}
+.fp-bnm{width:74px}
+.fp-bmul{width:56px;background:var(--srf-sunk);color:var(--txt);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);font-size:var(--fs-label);padding:2px 4px}
+.fp-bmul:focus{outline:none;border-color:var(--acc)}
+.fp-bx{padding:0 5px;min-width:0}
 .fp-sp{flex:1;min-width:var(--sp-3)}
 .fp-lb{font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label);margin-left:var(--sp-3)}
 .fp-lb:first-child{margin-left:0}

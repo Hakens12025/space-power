@@ -69,7 +69,7 @@ function fmPageRender() {
      搬进右列压在「全队能力评估」上面(评估因此下移)。左列的方位盘与底部逐舰能力表不动。 */
   body.innerHTML =
     '<div class="fp-grid">'
-    + '<div class="fp-col">' + fmPgDial(F, PL) + fmPgSlotCfg(F) + '</div>'
+    + '<div class="fp-col">' + fmPgDial(F, PL) + fmPgSlotCfg(F) + fmPgBandCfg(F, PL.bands) + '</div>'
     + '<div class="fp-col">' + fmPgSetup(F, T) + fmPgAssess(PL) + '</div>'
     + '</div>'
     + fmPgCapTable(list, PL);
@@ -140,7 +140,7 @@ function fmPgDialInner(F, PL) {
   let maxR = 1;
   PL.sta.forEach(st => { maxR = Math.max(maxR, Math.abs(st.lx), Math.abs(st.ly)); });
   slots.forEach(sl => {
-    if (!fmSlotReady(sl)) return;   // FM6g 未完成的槽不画,也不能进缩放:BR[null] 是 undefined,算出来是 NaN,一个 NaN 就把整张盘的缩放毁掉
+    if (!fmSlotReady(sl, F.P)) return;   // FM6g 未完成的槽不画,也不能进缩放:BR[null] 是 undefined,算出来是 NaN,一个 NaN 就把整张盘的缩放毁掉
     const r = BR[sl.band] || 0;
     const t = fmSpreadBrg(sl.brg, T.spread) * Math.PI / 180;
     maxR = Math.max(maxR, Math.abs(r * Math.cos(t)), Math.abs(r * Math.sin(t) * BR.widen));
@@ -152,7 +152,11 @@ function fmPgDialInner(F, PL) {
      半径读数刻意【不贴在圈上】:贴在圈顶时会与正前方向标、以及方位 000 上的那几个插槽挤成一团(实拍见过),
      而带只有四条,做成固定图例反而更好扫读,也不会随缩放乱跑。 */
   let leg = 0;
-  [['picket', '#ffbe50'], ['screen', '#5aa7ff'], ['body', '#aa82ff'], ['close', '#5ad8a0']].forEach(([bn, col]) => {
+  /* FM6h 自定义带也要画圈与图例。颜色循环取用 —— 带的条数不再固定,写死配色表迟早不够用。 */
+  const FP_UCOL = ['#ff8fb0', '#7ee0d8', '#c8a86a', '#9fb4ff'];
+  const rings = [['picket', '#ffbe50'], ['screen', '#5aa7ff'], ['body', '#aa82ff'], ['close', '#5ad8a0']]
+    .concat(fmBandsOf(F.P).map((b, bi) => [b.k, FP_UCOL[bi % FP_UCOL.length]]));
+  rings.forEach(([bn, col]) => {
     const r = BR[bn] * k;
     if (!(r > 2)) return;
     g += '<ellipse cx="' + FP_C + '" cy="' + FP_C + '" rx="' + (r * BR.widen).toFixed(1) + '" ry="' + r.toFixed(1)
@@ -160,7 +164,7 @@ function fmPgDialInner(F, PL) {
     const ly = 16 + leg * 14; leg++;
     g += '<line x1="8" y1="' + (ly - 3) + '" x2="20" y2="' + (ly - 3) + '" stroke="' + col + '" stroke-opacity=".7" stroke-width="1.5"/>'
       + '<text x="25" y="' + ly + '" fill="' + col + '" fill-opacity=".75" font-size="10">'
-      + FM_BAND_NM[bn] + ' ' + Math.round(BR[bn] / 1000) + 'k km</text>';
+      + fmPgEsc(fmBandNm(F.P, bn)) + ' ' + Math.round(BR[bn] / 1000) + 'k km</text>';
   });
   /* 正前方向标 */
   g += '<line x1="' + FP_C + '" y1="' + FP_C + '" x2="' + FP_C + '" y2="18" stroke="#2a3a50" stroke-width="1" stroke-dasharray="3 4"/>'
@@ -178,7 +182,7 @@ function fmPgDialInner(F, PL) {
     + '<text x="' + FP_C + '" y="' + (FP_C + 18) + '" fill="#ffe066" font-size="9" text-anchor="middle">' + fmPgEsc(PL.flag.name) + '</text>';
   /* 插槽圈(可拖、可点选)。画在【展开后】的方位上,与站位点重合 —— 拖的就是它 */
   slots.forEach((sl, i) => {
-    if (!fmSlotReady(sl)) return;   // FM6g 能力或带还没选的新槽不上盘(用户令:选择之后才显示)。下标 i 仍是【整张表】的下标,选中与拖动对得上
+    if (!fmSlotReady(sl, F.P)) return;   // FM6g 能力或带还没选的新槽不上盘(用户令:选择之后才显示)。下标 i 仍是【整张表】的下标,选中与拖动对得上
     const deg = fmSpreadBrg(sl.brg, T.spread), t = deg * Math.PI / 180;
     const r = BR[sl.band] || 0;
     const q = px(r * Math.cos(t), r * Math.sin(t) * BR.widen);
@@ -208,7 +212,7 @@ function fmPgSlotCfg(F) {
     s += '<span class="fp-lb">未选中插槽</span><span class="fp-dim">点一个圆圈来编辑它</span>';
     /* FM6g 未完成的槽不上盘,于是【点不到】。在这里列成可点的小标签 —— 否则新加一个槽又点了别处,
        它就成了看不见也够不着的孤儿,只能靠「恢复默认」整表丢掉才清得掉。 */
-    const orphan = slots.map((sl, k) => ({ sl, k })).filter(x => !fmSlotReady(x.sl));
+    const orphan = slots.map((sl, k) => ({ sl, k })).filter(x => !fmSlotReady(x.sl, F.P));
     if (orphan.length) s += '<span class="fp-lb">未完成</span>'
       + orphan.map(x => '<button class="btn qbtn fp-chip" data-fp="pick-' + x.k + '">★ ' + fmPgEsc(x.sl.nm) + '</button>').join('');
   } else {
@@ -222,13 +226,34 @@ function fmPgSlotCfg(F) {
       + '</select>'
       + '<span class="fp-lb">带</span><select data-fp="band">'
       + '<option value=""' + (sl.band ? '' : ' selected') + '>— 未选择 —</option>'
-      + FM_BANDS.filter(b => b !== 'core').map(b => '<option value="' + b + '"' + (b === sl.band ? ' selected' : '') + '>' + FM_BAND_NM[b] + '</option>').join('')
+      + fmBandKeys(F.P).filter(b => b !== 'core').map(b => '<option value="' + b + '"' + (b === sl.band ? ' selected' : '') + '>' + fmPgEsc(fmBandNm(F.P, b)) + '</option>').join('')
       + '</select>'
       + '<span class="fp-lb">方位</span><span class="fp-v">' + Math.round(sl.brg) + '°</span>'
-      + (fmSlotReady(sl) ? '' : '<span class="fp-dim">能力与带都选了才会出现在阵型图上</span>')
       + '<button class="btn qbtn qstop" data-fp="del">删除本插槽</button>';
   }
   s += '<span class="fp-sp"></span><button class="btn qbtn" data-fp="add">+ 新增插槽</button></div>';
+  return s;
+}
+
+/* FM6h【轮带设置】。内置五条(阵心/贴身/被护/屏护/哨戒)是算出来的,不可改也不可删 ——
+   它们的半径全部来自护卫自己的近防射程,改了就不再是"够得着"的意思了,所以这里只列不给编辑。
+   自定义带 = 屏护 × 倍数,名字可改。删除时把引用它的插槽的 band 置空(那些槽变回"未完成",
+   会出现在插槽设置的未完成标签里)—— 不置空的话槽会指向一条不存在的带,半径查成 undefined。 */
+function fmPgBandCfg(F, BR) {
+  const ub = fmBandsOf(F.P);
+  let s = '<div class="fp-bar fp-cfg fp-bands">';
+  s += '<span class="fp-lb">轮带</span>';
+  s += FM_BANDS.filter(b => b !== 'core').map(b =>
+    '<span class="fp-bd fp-bd-ro" title="内置轮带:半径由护卫的近防射程算出,不可改">' + FM_BAND_NM[b]
+    + '<i>' + Math.round((BR[b] || 0) / 1000) + 'k</i></span>').join('');
+  s += ub.map((b, bi) =>
+    '<span class="fp-bd" data-fpb="' + b.k + '">'
+    + '<input class="fp-nm fp-bnm" type="text" data-fp="bnm-' + b.k + '" maxlength="10" value="' + fmPgEsc(b.nm) + '">'
+    + '<input class="fp-bmul" type="number" data-fp="bmul-' + b.k + '" min="' + FM_BAND_MUL[0] + '" max="' + FM_BAND_MUL[1] + '" step="0.05" value="' + (isFinite(b.mul) ? b.mul : 1) + '" title="屏护半径的倍数">'
+    + '<i>' + Math.round((BR[b.k] || 0) / 1000) + 'k</i>'
+    + '<button class="btn qbtn qstop fp-bx" data-fp="bdel-' + b.k + '" title="删除这条轮带(用到它的插槽会变回未完成)">✕</button>'
+    + '</span>').join('');
+  s += '<span class="fp-sp"></span><button class="btn qbtn" data-fp="badd">+ 新增轮带</button></div>';
   return s;
 }
 
@@ -337,6 +362,26 @@ function fmPgAct(a) {
     if (typeof updFmBar === 'function') updFmBar();
     return;
   }
+  if (a === 'badd') {
+    /* FM6h 新增轮带。默认 1.5 倍屏护 —— 落在屏护(1.0)与哨戒(2.0)之间的空档里,
+       一加出来就看得见一条新圈,不会和现成的圈重叠到看不出加没加。 */
+    const ub = fmBandsOf(F.P).map(x => ({ k: x.k, nm: x.nm, mul: x.mul }));
+    ub.push({ k: fmBandNewKey(F.P), nm: '自定义轮带', mul: 1.5 });
+    F.P.bands = ub;
+    if (typeof fmReslot === 'function') fmReslot(F);
+    fmPageRender(); return;
+  }
+  if (a.indexOf('bdel-') === 0) {
+    const bk = a.slice(5);
+    F.P.bands = fmBandsOf(F.P).filter(x => x.k !== bk).map(x => ({ k: x.k, nm: x.nm, mul: x.mul }));
+    if (!F.P.bands.length) F.P.bands = null;
+    /* 引用这条带的插槽:band 置空,变回"未完成"。必须落成 F.P.slots 的一份自定义表 ——
+       它可能还是站位预设(共享对象),就地改会污染所有编队。 */
+    const cur = fmPageSlots(F).map(x => ({ nm: x.nm, cap: x.cap, band: x.band === bk ? null : x.band, brg: x.brg, nw: x.nw }));
+    F.P.slots = cur;
+    if (typeof fmReslot === 'function') fmReslot(F);
+    fmPageRender(); return;
+  }
   if (a.indexOf('pick-') === 0) { fmPg.sel = Number(a.slice(5)); fmPageRender(); return; } // FM6g 未完成插槽的小标签:选中它
   if (a === 'add') {
     /* FM6g 新槽【能力与带留空】(用户令),所以它暂不进几何、也不上方位盘;nw 标记让它选全之后在盘上带一颗星。
@@ -369,6 +414,22 @@ on('fmPage', 'pointerdown', e => {
 on('fmPage', 'input', e => {
   /* FM6g 插槽改名。走 input(边打边生效)但【绝不整页重渲】—— 那会把正在输入的 <input> 换成新节点、
      光标当场丢失(同滑块那条)。只改数据 + 就地重画方位盘;整页重渲留给失焦时的 change。 */
+  /* FM6h 轮带改名与改倍数。与插槽改名同一条纪律:【绝不整页重渲】,只改数据 + 就地重画方位盘
+     (带名与半径读数都画在盘的图例里);整页重渲留给失焦时的 change。
+     倍数【只在 change 时钳位】—— 边打边钳会把 "0.05" 打到一半的 "0.0" 当场改写成 0.05,输入框跟人抢方向盘。 */
+  const bEl = e.target && e.target.closest ? e.target.closest('input[data-fp^="bnm-"],input[data-fp^="bmul-"]') : null;
+  if (bEl) {
+    const Fb = fmPageF(); if (!Fb || !Fb.P) return;
+    const key = bEl.getAttribute('data-fp'), isNm = key.indexOf('bnm-') === 0, bk = key.slice(isNm ? 4 : 5);
+    const ub = fmBandsOf(Fb.P).map(x => ({ k: x.k, nm: x.nm, mul: x.mul }));
+    const hit = ub.find(x => x.k === bk); if (!hit) return;
+    if (isNm) hit.nm = bEl.value;
+    else { const v = Number(bEl.value); if (!isFinite(v)) return; hit.mul = Math.max(FM_BAND_MUL[0], Math.min(FM_BAND_MUL[1], v)); }
+    Fb.P.bands = ub;
+    if (typeof fmReslot === 'function') fmReslot(Fb);
+    fmPgDialSync();
+    return;
+  }
   const nmEl = e.target && e.target.closest ? e.target.closest('input[data-fp="nm"]') : null;
   if (nmEl) {
     const Fn = fmPageF(), i = fmPg.sel;
@@ -395,8 +456,8 @@ on('fmPage', 'input', e => {
 on('fmPage', 'change', e => {
   /* FM6g 名字输入框失焦(或回车)时补一次整页重渲 —— 打字过程中只重画了方位盘,
      评估表与逐舰表里的站位名还是旧的。 */
-  const nmEl = e.target && e.target.closest ? e.target.closest('input[data-fp="nm"]') : null;
-  if (nmEl) { fmPageRender(); return; }
+  const nmEl = e.target && e.target.closest ? e.target.closest('input[data-fp="nm"],input[data-fp^="bnm-"],input[data-fp^="bmul-"]') : null;
+  if (nmEl) { fmPageRender(); return; }   // FM6h 轮带的名字/倍数同理:打字时只重画了盘,半径读数与带下拉里的名字还是旧的
   const sel = e.target && e.target.closest ? e.target.closest('select[data-fp]') : null;
   if (!sel) return;
   const F = fmPageF(), i = fmPg.sel;

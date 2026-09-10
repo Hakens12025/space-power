@@ -15,7 +15,7 @@
      widen 扁率(>1 = 条令的「宽而不深」)· bstr 能力偏向强度(0 = 完全不偏向,合法) */
 const FM_LIMIT={spread:[0.4,2.5], spacing:[0.5,3], bm:[0.3,3], widen:[0.3,3], bstr:[0,2]};
 function fmClamp(k,v){const r=FM_LIMIT[k];const n=Number(v);if(!isFinite(n))return r?r[0]:0;return r?Math.max(r[0],Math.min(r[1],n)):n;}
-function fmParamsNew(){return {stance:'fixed', spread:1, spacing:1, bm:1, widen:1, bstr:1, slots:null};} // FM6:五个几何旋钮都落在 P 上(每编队一份),站位预设只是初值 —— 取数一律走 39 的 fmGeoOf
+function fmParamsNew(){return {stance:'fixed', spread:1, spacing:1, bm:1, widen:1, bstr:1, slots:null, bands:null};} // FM6h bands = 本编队自定义的轮带(内置五条不进这里) // FM6:五个几何旋钮都落在 P 上(每编队一份),站位预设只是初值 —— 取数一律走 39 的 fmGeoOf
 
 function rotSlot(slot,ca,sa){return [slot[0]*ca-slot[1]*sa, slot[0]*sa+slot[1]*ca, slot[2]];}
 

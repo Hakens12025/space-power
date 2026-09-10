@@ -44,6 +44,26 @@ function fmCapAb(k) { const d = FM_DIM.find(x => x.k === k); return d ? d.ab : k
      picket screen × 2             哨戒带 */
 const FM_BANDS = ['core', 'close', 'body', 'screen', 'picket'];
 const FM_BAND_NM = { core: '阵心', close: '贴身', body: '被护', screen: '屏护', picket: '哨戒' };
+/* FM6h【自定义轮带】(用户令:轮带不再固定那几条)。每编队一份,存在 P.bands = [{k, nm, mul}]:
+     k   唯一键,形如 u1/u2 —— 不能与内置五条或 BR 上的 baseGap/gap/widen/step 撞名,那几个键与带同住一个对象;
+     mul 屏护半径的倍数。【刻意不用绝对公里数】:内置五条全都随「带半径」滑块(bm)整体缩放,
+         写死公里数会出现"拖 bm 别的带都动、就它不动"的分裂;挂在屏护上则天然跟着一起走。
+   哨戒带本身就是 screen×2,所以自定义带用同一套口径,读起来是一致的。 */
+const FM_BAND_MUL = [0.05, 5];
+const FM_BAND_RSV = { core: 1, close: 1, body: 1, screen: 1, picket: 1, baseGap: 1, gap: 1, widen: 1, step: 1 };
+function fmBandsOf(P) { return (P && P.bands && P.bands.length) ? P.bands : []; }
+function fmBandKeys(P) { return FM_BANDS.concat(fmBandsOf(P).map(b => b.k)); }
+function fmBandNm(P, k) {
+  if (FM_BAND_NM[k]) return FM_BAND_NM[k];
+  const b = fmBandsOf(P).find(x => x.k === k);
+  return b ? b.nm : k;
+}
+function fmBandNewKey(P) { // 取一个没被占用的键(删了再加也不会撞上还在用的旧键)
+  const used = {};
+  fmBandsOf(P).forEach(b => { used[b.k] = 1; });
+  for (let i = 1; i < 999; i++) { const k = 'u' + i; if (!used[k] && !FM_BAND_RSV[k]) return k; }
+  return 'u999';
+}
 
 /* 一个插槽 = 一个方位 + 一种能力 + 一个带。插槽代表的是一片【大致范围】:
    舰数超过插槽数时插槽数量不变,多出来的船沿该插槽的方位向两侧展开(fmGenStations 的 off)。
@@ -141,8 +161,14 @@ function fmGeoOf(P) {
    所以在【取插槽表】这唯一入口就滤掉,下游(fmGenStations / 方位盘 / 指派)一行都不用改。
    注意滤空之后可能一个都不剩(玩家把模板槽删光、只留新槽),那时 fmGenStations 只出阵心 ——
    刻意【不】回落到站位预设:回落会把玩家删掉的槽凭空变回来。 */
-function fmSlotReady(sl) { return !!(sl && sl.cap && sl.band); }
-function fmSlotsOf(P) { return (P && P.slots && P.slots.length) ? P.slots.filter(fmSlotReady) : fmStanceOf(P).slots; }
+function fmSlotReady(sl, P) {
+  if (!sl || !sl.cap || !sl.band) return false;
+  /* FM6h 带可能被删掉。给了 P 就顺带查一遍它还在不在 —— 不查的话槽会引用一条不存在的带,
+     半径查成 undefined、坐标变 NaN,与"带留空"是同一类事故,只是发生得更晚更难查。 */
+  if (P && !FM_BAND_NM[sl.band] && !fmBandsOf(P).some(b => b.k === sl.band)) return false;
+  return true;
+}
+function fmSlotsOf(P) { return (P && P.slots && P.slots.length) ? P.slots.filter(sl => fmSlotReady(sl, P)) : fmStanceOf(P).slots; }
 
 /* 【可互换性签名】两艘舰只有在这九维读数与 inner 都相同时,才可以互换站位而不改变最优指派的总契合度。
    下游的槽位重配对(44 fmReassign,下令时消交叉)用它分桶:
@@ -194,7 +220,7 @@ function fmGenStations(n, slots) {
 
 /* 五条带的半径,全部从【护卫】自己的近防参数算(旗舰不算进去:贴身带是护卫用来罩旗舰的,
    旗舰自己的内圈与它无关。把旗舰算进 min 会让 DD 护卫和 CA 护卫算出一样的半径)。 */
-function fmBandRadii(list, flag, bm) {
+function fmBandRadii(list, flag, bm, P) {
   const inns = [], outs = [];
   list.forEach(s => {
     if (s === flag) return;
@@ -208,7 +234,9 @@ function fmBandRadii(list, flag, bm) {
   const close = minIn * 0.9 * m;
   const body = (minIn * 0.9 + 12000) * m;
   const screen = Math.max(body + minIn * m, minOut * 2 * m);
-  return { core: 0, close, body, screen, picket: screen * 2, baseGap: minIn * 2 };
+  const BR = { core: 0, close, body, screen, picket: screen * 2, baseGap: minIn * 2 };
+  fmBandsOf(P).forEach(b => { if (!FM_BAND_RSV[b.k]) BR[b.k] = screen * (isFinite(b.mul) ? b.mul : 1); }); // FM6h 自定义带 = 屏护 × 倍数
+  return BR;
 }
 
 /* 最大权二分匹配(Kuhn–Munkres)。精确最优,不是贪心。返回 as[i] = 第 i 艘舰拿到的站位下标,−1 = 没派上。
@@ -258,12 +286,12 @@ function fmPlanStations(list, P, flagId, slotsOverride) {
   const D2R = Math.PI / 180;
 
   const STA = fmGenStations(list.length, slotsOverride || fmSlotsOf(P));
-  const BR = fmBandRadii(list, flag, T.bm);
+  const BR = fmBandRadii(list, flag, T.bm, P);
   const gap = BR.baseGap * T.gap;
   BR.gap = gap; BR.widen = T.widen || 1; BR.step = {};
   /* 弦长 gap 在半径 r 上张的圆心角 step = 2·asin(gap/2r)。半径越大同样间距占角越小。
      钳到 120°:再大说明该带按此间距根本放不下几艘。 */
-  FM_BANDS.forEach(bn => {
+  fmBandKeys(P).forEach(bn => {   // FM6h 自定义带也要有自己的 step,漏了的话它上面第 2、3 艘船的展开角是 undefined
     const r = BR[bn];
     BR.step[bn] = r > 0 ? Math.min(120, 2 * Math.asin(Math.min(1, gap / (2 * r))) / D2R) : 0;
   });

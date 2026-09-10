@@ -2165,7 +2165,7 @@ t('FLOW37_FMCAPSLOT',function(){ /* FM4 能力插槽 + 最优指派。改前这�
   var hdg1=b.every(function(s){return s.fmHdg===0;});
   var src1=(F.src==='generated'&&F.mode==='slot'&&F.P.stance==='fixed');
   var keys=Object.keys(fmParamsNew()).sort().join(',');
-  var okKeys=(keys==='bm,bstr,slots,spacing,spread,stance,widen'); /* FM6:五个几何旋钮全部落在 P 上 */
+  var okKeys=(keys==='bands,bm,bstr,slots,spacing,spread,stance,widen'); /* FM6:五个几何旋钮全部落在 P 上;FM6h 添 bands(本编队自定义的轮带) */
   /* ② 站位换布局:水下「宽而不深」的横向展开必须【明显】大于水面「收拢集火」。用同一组船,只切 stance */
   function shape(){var mx=0,my=0;b.slice(1).forEach(function(s){mx=Math.max(mx,Math.abs(s.fmSlot[1]));my=Math.max(my,Math.abs(s.fmSlot[0]));});return {x:mx,y:my};}
   fm37drop();
@@ -2266,7 +2266,7 @@ t('FLOW37_FMCAPSLOT',function(){ /* FM4 能力插槽 + 最优指派。改前这�
   fm37drop();
   var ok=(flagZero&&ring1&&st1&&cap1&&hdg1&&src1&&okKeys&&ok2&&ok3&&ok4&&ok5&&ok6&&ok7&&ok8);
   return (ok?'ok':'fail')
-    +' ①固定模板 CA+2DD:'+t1+' 旗舰占阵心='+flagZero+' 两DD在屏护带(r='+Math.round(BR1.screen)+')='+ring1+' 站000与±45°(模板前两槽)='+st1+' 第二站在'+side1+' 需求都是通道/屏护='+cap1+' fmHdg全0='+hdg1+' src/mode/stance=generated/slot/fixed='+src1+' fmParamsNew键=['+keys+'](须 bm,bstr,slots,spacing,spread,stance,widen)='+okKeys
+    +' ①固定模板 CA+2DD:'+t1+' 旗舰占阵心='+flagZero+' 两DD在屏护带(r='+Math.round(BR1.screen)+')='+ring1+' 站000与±45°(模板前两槽)='+st1+' 第二站在'+side1+' 需求都是通道/屏护='+cap1+' fmHdg全0='+hdg1+' src/mode/stance=generated/slot/fixed='+src1+' fmParamsNew键=['+keys+'](须 bands,bm,bstr,slots,spacing,spread,stance,widen)='+okKeys
     +' | ②切站位(8舰同组):水面'+tSurf+' → 水下'+tSub+' 横向展开比 水下/水面='+wide.toFixed(2)+'(须>1.5=「宽而不深」真的更宽) 站距乘数 水面/水下/空中='+spSurf.toFixed(2)+'/'+spSub.toFixed(2)+'/'+spAir.toFixed(2)+'(须 1.00/1.60/3.00)='+ok2
     +' | ③空中为主'+tAir+' 后方150°外舰数='+rearAir+'(须>=1=圆形屏护,固定模板同规模为'+rearFix+')='+ok3
     +' | ④最优指派(CA+2DD+CV 穷举 '+cnt+' 种):匈牙利总契合='+got.toFixed(6)+' 穷举最大='+best.toFixed(6)+' 差='+(best-got).toExponential(1)+'(须=0,不是接近)='+ok4+' '+t4
@@ -2424,6 +2424,56 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   hit(chip,'pointerdown');
   var okOrph=(!!chip&&fmPg.sel===orphIdx);
   var ok6b=(okNew&&okNm&&okBlank&&okHalf&&okGeo&&okDone&&okOrph);
+  /* ⑥c FM6h【自定义轮带】。内置五条是算出来的(半径来自护卫的近防射程),只列不给编辑;
+     自定义带 = 屏护 × 倍数 —— 刻意不用绝对公里数,那会出现"拖 bm 别的带都动、就它不动"的分裂。
+     判据串成一条完整的用户路径,每一步都带反向的一半:
+       · 新增 → 盘上多一圈、名字默认「自定义轮带」、半径 = 1.5×屏护;
+       · 改名 → 落到 P.bands 且【输入框节点不被换掉】(整页重渲会让光标丢失,同插槽改名那条);
+       · 改倍数 → 半径真的跟着变;越界要被钳住(不钳的话玩家打个 99 就把整张盘的缩放拽飞);
+       · 插槽能选到它 → 选完槽真的进几何;
+       · 删带 → 引用它的槽【自动变回未完成】(不置空的话槽指向一条不存在的带,半径查成 undefined)。 */
+  F.P.slots=null; F.P.bands=null; fmReslot(F); fmPg.sel=-1; fmPageRender();
+  var rings=function(){return document.querySelectorAll('#fpDial ellipse').length;};
+  var brOf=function(k){return fmBandRadii(fmShips(F),fmFlag(F),F.P.bm,F.P)[k]||0;};
+  var ro7=document.querySelectorAll('#fpBody .fp-bd-ro').length, ring7a=rings();
+  hit(document.querySelector('#fpBody [data-fp="badd"]'),'pointerdown');
+  var ub=F.P.bands||[], bk=ub.length?ub[0].k:'', ring7b=rings();
+  var okAdd=(ub.length===1&&ub[0].nm==='自定义轮带'&&ring7b===ring7a+1
+             &&Math.abs(brOf(bk)-brOf('screen')*1.5)<1&&ro7===4);
+  var bnm=document.querySelector('#fpBody input[data-fp^="bnm-"]');
+  var okBnm=false;
+  if(bnm){bnm.value='外环警戒';bnm.dispatchEvent(new Event('input',{bubbles:true}));
+    okBnm=(F.P.bands[0].nm==='外环警戒'&&document.querySelector('#fpBody input[data-fp^="bnm-"]')===bnm);}
+  var bmu=document.querySelector('#fpBody input[data-fp^="bmul-"]');
+  var r7a=brOf(bk), r7b=0, mulHi=0;
+  if(bmu){bmu.value='3';bmu.dispatchEvent(new Event('input',{bubbles:true}));r7b=brOf(bk);
+    bmu.value='99';bmu.dispatchEvent(new Event('input',{bubbles:true}));mulHi=F.P.bands[0].mul;
+    bmu.value='1.5';bmu.dispatchEvent(new Event('input',{bubbles:true}));}
+  var okMul=(Math.abs(r7b-r7a*2)<1&&Math.abs(mulHi-FM_BAND_MUL[1])<1e-9);
+  /* 插槽指到自定义带上,再把带删掉 */
+  hit(document.querySelector('#fpDial [data-fps="1"]'),'pointerdown');
+  var bsel=document.querySelector('#fpBody select[data-fp="band"]');
+  var okPick=false, geo7a=0;
+  if(bsel){
+    var hasOpt=Array.prototype.some.call(bsel.options,function(o){return o.value===bk;});
+    bsel.value=bk; bsel.dispatchEvent(new Event('change',{bubbles:true}));
+    geo7a=fmSlotsOf(F.P).length;
+    okPick=(hasOpt&&fmPageSlots(F)[1].band===bk&&geo7a===fmPageSlots(F).length);
+  }
+  hit(document.querySelector('#fpBody [data-fp^="bdel-"]'),'pointerdown');
+  var okDel=(!F.P.bands&&fmPageSlots(F)[1].band===null&&fmSlotsOf(F.P).length===geo7a-1&&rings()===ring7a);
+  /* ⑥c-2 直接打 fmSlotReady 里那道【带还在不在】的守卫。上面的删带路径会把槽的 band 主动置空,
+     所以那条守卫在正常操作里【走不到】—— 它守的是"槽引用了一条不存在的带"这件事本身(旧存档、
+     别的代码路径都可能造出来)。不直接构造一个,那道守卫就是一条永远测不到的代码。 */
+  F.P.slots=null; F.P.bands=null;   /* 先回到干净的站位预设:上面那条路径留了一个 band 已置空的槽,不清的话"少一个"会变成"少两个" */
+  F.P.slots=fmPageSlots(F).map(function(x){return {nm:x.nm,cap:x.cap,band:x.band,brg:x.brg,nw:x.nw};});
+  F.P.slots[2].band='u_不存在';
+  var ghostGeo=fmSlotsOf(F.P).length, ghostAll=F.P.slots.length;
+  var plG=fmPlanStations(fmShips(F),F.P,fmFlag(F).id), ghostNaN=0;
+  if(plG&&plG.sta)plG.sta.forEach(function(st){if(!isFinite(st.lx)||!isFinite(st.ly))ghostNaN++;});
+  var okGhost=(ghostGeo===ghostAll-1&&ghostNaN===0);
+  var ok6c=(okAdd&&okBnm&&okMul&&okPick&&okDel&&okGhost);
+  F.P.slots=null; F.P.bands=null; fmReslot(F); fmPg.sel=-1; fmPageRender();
   F.P.slots=null; fmReslot(F); fmPg.sel=-1; fmPageRender();
   /* ⑦ 恢复默认 + 关闭(真的点 ✕) */
   hit(document.querySelector('#fpBody [data-fp="reset"]'),'pointerdown');
@@ -2438,7 +2488,7 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   fmPageOpen(F.id);fmDelete(F.id);fmPageRender();
   var ok8=!fmPageIsOpen();
   window.removeEventListener('error',onerr);
-  var ok=(ok1&&ok2&&ok3&&ok4&&ok4b&&ok5&&ok6&&ok6b&&ok7&&ok8&&!errs.length);
+  var ok=(ok1&&ok2&&ok3&&ok4&&ok4b&&ok5&&ok6&&ok6b&&ok6c&&ok7&&ok8&&!errs.length);
   return (ok?'ok':'fail')
     +' ①入口(真点「编组控制」钮):钮存在='+had+' 【真在屏上】编组控制='+visPage+' 固定态的重新固定='+visSnap+'(须 false)'+' 页已开='+opened+' 正文='+len1+'字符 方位盘='+(!!dial)+' 插槽圈='+slotN+'个(须=插槽表 '+slots0+') 舰位点='+shipDots+' 评估行='+rows+' 能力表行='+tds+'(须='+b.length+')='+ok1
     +' | ②点插槽:选中下标='+selIdx+'(须0) 能力/带下拉都建出='+(!!capSel&&!!bandSel)+'='+ok2
@@ -2454,6 +2504,12 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
     +' 未完成的槽不进几何(几何'+geo6+'/表内'+raw6.length+',站位坐标 NaN 数='+nan6+')='+okGeo
     +' 选全后盘上 '+d6a+'→'+d6b+' 星标='+starN+' 星在右上角(dx='+sdx+',dy='+sdy+')='+okDone
     +' 未完成小标签点得回去='+okOrph+'='+ok6b
+    +' | ⑥c FM6h 自定义轮带:新增(内置只读'+ro7+'条,盘上圈 '+ring7a+'→'+ring7b+',半径=1.5×屏护)='+okAdd
+    +' 改名落盘且输入框未被换='+okBnm
+    +' 改倍数 '+Math.round(r7a/1000)+'k→'+Math.round(r7b/1000)+'k(须翻倍) 越界99被钳到'+mulHi+'='+okMul
+    +' 插槽能选到它且真进几何='+okPick
+    +' 删带后引用它的槽自动变回未完成='+okDel
+    +' 槽引用一条不存在的带时也被滤掉(几何'+ghostGeo+'/表内'+ghostAll+',NaN='+ghostNaN+')='+okGhost+'='+ok6c
     +' | ⑦恢复默认='+okReset+' 点✕关闭='+closed+' 切固定模式后 s.fmStn 已清='+stnCleared+'='+ok7
     +' | ⑧编队被删后自动收摊='+ok8+' 运行期错误='+(errs.length?errs.join(' / '):'none');
 });
