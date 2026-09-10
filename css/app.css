@@ -644,8 +644,12 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 .fp-bd-on{cursor:pointer;color:var(--txt);border-color:var(--line-ctl)}
 .fp-bd-on:hover{background:var(--srf-hover);border-color:var(--acc)}
 .fp-bd-ed{border-color:var(--acc)}
-.fp-br{width:64px;background:var(--srf-sunk);color:var(--txt);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);font-size:var(--fs-label);padding:2px 4px}
+.fp-br{width:52px;background:var(--srf-sunk);color:var(--txt);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);font-size:var(--fs-label);padding:2px 4px}
 .fp-br:focus{outline:none;border-color:var(--acc)}
+/* FM6m 去掉数字框的上下箭头(用户令)。配方与 #qbar .qrow input 那条同源:
+   两个伪元素都要写,只写 inner 的话 Firefox 之外仍会留一条占位。单位 K 挂在框【外面】。 */
+.fp-br::-webkit-outer-spin-button,.fp-br::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.fp-bu{font-style:normal;font-size:var(--fs-label);color:var(--txt-dim);margin-left:1px}
 .fp-bok{padding:0 5px;min-width:0;color:var(--state-ok);border-color:var(--state-ok)}
 .fp-bok:hover{background:var(--state-ok);border-color:var(--state-ok);color:var(--ink)}
 .fp-bx{padding:0 5px;min-width:0}

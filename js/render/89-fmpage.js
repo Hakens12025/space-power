@@ -300,7 +300,8 @@ function fmPgBandCfg(F, BR) {
     }
     return '<span class="fp-bd fp-bd-ed">'
       + '<input class="fp-nm fp-bnm" type="text" data-fp="bnm-' + b.k + '" maxlength="10" value="' + fmPgEsc(b.nm) + '">'
-      + '<input class="fp-br" type="number" data-fp="br-' + b.k + '" min="' + (FM_BAND_R[0] / 1000) + '" max="' + (FM_BAND_R[1] / 1000) + '" step="1" placeholder="---K" value="' + (rk === null ? '' : rk) + '" title="半径,单位千公里。留空 = 这条带还没成形,不会出现在阵型图上">'
+      + '<input class="fp-br" type="number" data-fp="br-' + b.k + '" min="' + (FM_BAND_R[0] / 1000) + '" max="' + (FM_BAND_R[1] / 1000) + '" step="1" value="' + (rk === null ? '' : rk) + '" title="半径,单位千公里。留空 = 这条带还没成形,不会出现在阵型图上">'
+      + '<i class="fp-bu">K</i>'
       + '<button class="btn qbtn fp-bok" data-fp="bok-' + b.k + '" title="确认,收起成小卡片">✓</button>'
       + '<button class="btn qbtn qstop fp-bx" data-fp="bdel-' + b.k + '" title="删除这条轮带(用到它的插槽会变回未完成)">✕</button>'
       + '</span>';

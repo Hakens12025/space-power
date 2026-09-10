@@ -2446,7 +2446,7 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   var noKey=!(bk in fmBandRadii(fmShips(F),fmFlag(F),F.P.bm,F.P));
   var okAdd=(ub.length===1&&ub[0].nm==='自定义轮带'&&ub[0].r===null&&ring7b===ring7a&&noKey
              &&fmPg.bedit===bk&&ro7===4&&!!document.querySelector('#fpBody .fp-bd-ed')
-             &&!!riEl&&riEl.value===''&&riEl.placeholder==='---K');
+             &&!!riEl&&riEl.value===''&&riEl.placeholder===''&&!!riEl.parentNode.querySelector('.fp-bu'));
   /* 半径:填 → 上盘且值对得上;清空 → 又消失;越界 → 钳住 */
   var r7fill=0, ring7c=0, ring7d=0, rHi=0;
   if(riEl){
