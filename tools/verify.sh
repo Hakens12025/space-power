@@ -1549,7 +1549,7 @@ t('FLOW27_FMBAR',function(){
   var nFix=fm27decl('fixed'), nSlot=fm27decl('slot');
   function fm27all(a,m,n){return a.length===n&&a.every(function(x){return x===m;});}
   var okVis=(fm27all(visFix,'fixed',nFix)&&fm27all(visSlot,'slot',nSlot));
-  /* FM4b【重拍队形】必须真的重拍。它在 FM4b 那一版有钮无 case(点了什么都不发生),
+  /* FM4b【重新固定】(FM6e 改名,原名重拍队形)必须真的重拍。它在 FM4b 那一版有钮无 case(点了什么都不发生),
      而"钮点得动不抛错"那条判定对死钮天生免疫 —— 所以这里判 F.snap 引用是否真的换了新对象。 */
   fm27hit(elFixed);
   var snapR0=F.snap;
@@ -1639,7 +1639,7 @@ t('FLOW27_FMBAR',function(){
     +' | FM6 模式只剩两段:m-follow 钮已不存在='+noFollowBtn+' 其余四钮齐全='+acts4+' 模式:'+mode0+' -点固定-> '+modeF+' -点阵型-> '+modeS+'(须 slot/fixed/slot)'
     +' | 固定钮:阵型态下点固定 src='+srcX+'/mode='+modeX+'(须 snapshot/fixed) 已在固定态再点一次 未重拍='+noRetake+' 再点阵型 mode='+modeZ+' src='+srcZ+'(须 slot/generated)'
     +' | FM4b 随模式显隐(问的是 computed display,不是类名):固定→['+visFix.join(',')+'](声明 '+nFix+' 块) 阵型→['+visSlot.join(',')+'](声明 '+nSlot+' 块)(须全部同名且个数对得上)='+okVis
-    +' 重拍队形真的换了新快照='+reTook+' 已在固定态时点固定是空操作='+noReOnMode
+    +' 重新固定真的换了新快照='+reTook+' 已在固定态时点固定是空操作='+noReOnMode
     +' | FM6d 布局(问的是 getBoundingClientRect):模式两段铺满率='+(segFill*100).toFixed(1)+'%(须>95;旧3列时2段为66.7) 两段等宽率='+(segEven*100).toFixed(1)+'%(须>90)='+okSeg+' 公共三钮同一排 top='+rowTop.join('/')+' left='+rowLeft.join('/')+'(须 top 三个相同、left 递增)='+okRow+' 菜单里已无带半径滑块='+noKnob+' | FM6d 原地重排(真实 pointerdown):到位后离位='+Math.round(devA)+'km → bm拉到2 后='+Math.round(devB)+'km(须>5倍且>20000=槽位真变了) → 不点钮空转60s 位置逐字不变='+idle+'(须 true=不点就真不动) → 点钮飞完后离位='+Math.round(devC)+'km(须<3000)='+okReform
     +' 编队菜单已无跟随钮(已下沉底栏)='+noFolBtn
     +' | 操作钮点击='+clicked+'/'+names.length+'(须全中且总数>=6)清单=['+names.join(',')+']'
@@ -2381,7 +2381,7 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   window.removeEventListener('error',onerr);
   var ok=(ok1&&ok2&&ok3&&ok4&&ok4b&&ok5&&ok6&&ok7&&ok8&&!errs.length);
   return (ok?'ok':'fail')
-    +' ①入口(真点「编组控制」钮):钮存在='+had+' 【真在屏上】编组控制='+visPage+' 固定态的重拍队形='+visSnap+'(须 false)'+' 页已开='+opened+' 正文='+len1+'字符 方位盘='+(!!dial)+' 插槽圈='+slotN+'个(须=插槽表 '+slots0+') 舰位点='+shipDots+' 评估行='+rows+' 能力表行='+tds+'(须='+b.length+')='+ok1
+    +' ①入口(真点「编组控制」钮):钮存在='+had+' 【真在屏上】编组控制='+visPage+' 固定态的重新固定='+visSnap+'(须 false)'+' 页已开='+opened+' 正文='+len1+'字符 方位盘='+(!!dial)+' 插槽圈='+slotN+'个(须=插槽表 '+slots0+') 舰位点='+shipDots+' 评估行='+rows+' 能力表行='+tds+'(须='+b.length+')='+ok1
     +' | ②点插槽:选中下标='+selIdx+'(须0) 能力/带下拉都建出='+(!!capSel&&!!bandSel)+'='+ok2
     +' | ③改能力 '+cap0+'→'+capTo+':落到F.P.slots='+custom+' 插槽表已变='+(capNow===capTo)+' 有舰被派到该能力站位(s.fmStn)='+stnHas+'='+ok3
     +' | ④拖动改方位:'+Math.round(brg0)+'° → '+Math.round(brg1)+'°(拖到盘面正右方,须≈090±3;偏差='+dAim.toFixed(1)+'°)='+ok4

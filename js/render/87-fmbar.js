@@ -212,7 +212,7 @@ function fmbActsBuild(){
   // grid 每行列数恒定,不存在"末行元素少所以更宽"这回事。参数行是 g-par,一行放得下,禁止换行。
   /* FM4b 菜单重排(用户令)。三条结构原则:
        ① 模式在最上面 —— 它决定下面出现什么,读的顺序就该是"先选模式,再看这个模式有什么可调"。
-       ② 中间是【随模式变化】的区域:固定→重拍队形 / 阵型→编组控制。
+       ② 中间是【随模式变化】的区域:固定→重新固定 / 阵型→编组控制。
           用 .fm-hide 类切显隐,不写 style.display —— .fm-grp 有 flex 与 grid 两种布局(g-act/g-act2 是 grid),
           用 style.display='' 复原会退回 CSS 值倒也对,但 'none'↔'' 这条路在本项目栽过(92/95 都留了注释),类切换没有这个坑。
        ③ 底部是【两种模式都能用】的公共区。FM6d 起是一排三钮(整队停车 / 原地重排 / 解散编队);
@@ -228,7 +228,7 @@ function fmbActsBuild(){
   /* FM5b 菜单三级层次(用户定案:书签仪表化+轻菜单):
        ① 模式 = 连体分段控件(.fm-seg,当前段点亮)+ 一行暗色模式说明(文案唯一出处仍是 fmbModeText,零新词);
           FM6:模式只剩【固定 / 阵型】两段 —— "跟随"不再是编队的一种模式,它下沉成了底栏的通用跟随控件(作用域含单舰);
-       ② 随模式块:固定→重拍队形 / 阵型→编组控制。
+       ② 随模式块:固定→重新固定 / 阵型→编组控制。
        ③ 公共区 = 发丝线隔开的一排三钮:整队停车 / 原地重排 / 解散编队(三档模式都能用)。
      FM6d 三处布局调整(用户令):
        · 分段控件铺满整行 —— 它的列数改前写死 repeat(3,1fr),FM6 删掉「跟随」那一段之后 CSS 没跟着改,
@@ -249,7 +249,7 @@ function fmbActsBuild(){
     '<div class="fm-mdesc" data-lf="mdesc">—</div>'+
     // 随模式变化:固定
     '<div class="fm-grp g-act2 fm-mode fm-hide" data-fmm="fixed">'+
-      '<button class="btn qbtn" data-fma="resnap" title="按各舰【此刻】的相对位置与朝向重拍队形快照。手动把船摆好之后按它,这个布局就被固定下来">重拍队形</button>'+
+      '<button class="btn qbtn" data-fma="resnap" title="把各舰【此刻】的相对位置与朝向重新固定下来(重拍快照)。手动把船摆好之后按它">重新固定</button>'+
     '</div>'+
     // 随模式变化:阵型
     '<div class="fm-grp g-act2 fm-mode fm-hide" data-fmm="slot">'+
@@ -348,11 +348,11 @@ function fmbAct(a){
     case 'page': // FM4 打开舰队编组控制页(render/89-fmpage)。typeof 守卫:该文件加载晚于本文件时也不至于抛
       if(typeof fmPageOpen==='function')fmPageOpen(F.id);
       break;
-    case 'resnap':{ // FM4b 重拍队形:把各舰【此刻】的相对位置与朝向拍成新快照。这是固定模式下唯一真正有用的动作
+    case 'resnap':{ // FM4b 「重新固定」(FM6e 改名,原名重拍队形;data-fma 不改):把各舰【此刻】的相对位置与朝向拍成新快照。这是固定模式下唯一真正有用的动作
       /* 改前它没有自己的钮 —— 在固定态下【再点一次「固定」钮】才会重拍,是个隐藏动作:
          玩家以为"我已经在固定模式了,再点一下没事",结果队形被当场按此刻的散乱位置重钉。
          现在做成显式钮,同时把「固定」钮在已是固定态时改成空操作(见 m-fixed 分支)。 */
-      if(F.src!=='snapshot'){if(typeof log==='function')log(fmName(F)+' 重拍队形只在固定模式下有效','warn');break;}
+      if(F.src!=='snapshot'){if(typeof log==='function')log(fmName(F)+' 重新固定只在固定模式下有效','warn');break;}
       if(typeof fmSetSrc!=='function')break;
       fmSetSrc(F,'snapshot');
       break;}
