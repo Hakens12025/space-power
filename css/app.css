@@ -585,7 +585,6 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #fmActs .fm-grp{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-1);margin-bottom:var(--sp-1)}
 #fmActs .fm-grp:last-child{margin-bottom:0}
 #fmActs .fm-lb{flex:none;font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label)}
-#fmActs .fm-v{flex:none;min-width:44px;text-align:center;font-family:var(--ff-mono);letter-spacing:var(--ls-read);font-variant-numeric:tabular-nums;color:var(--txt-read);font-size:var(--fs-label)}
 #fmActs .qbtn{flex:1 1 auto;min-width:44px;justify-content:center}
 /* 六个动作钮固定 3 列:flex-wrap 换行时末行元素会被 flex:1 抻满整行(实拍:"整队停车|解散编队"各占半屏宽)。
    grid 的每行列数恒定,不存在"末行元素少所以更宽"这回事。 */
@@ -611,9 +610,9 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #fmActs .fm-seg .btn.on{background:var(--acc-wash);color:var(--acc-lite)}
 /* 模式说明行:分段控件下的一行暗色小字(当前模式的长文案,fmbModeText 唯一出处;三条文案都是单行,不占 min-height) */
 #fmActs .fm-mdesc{margin:2px 0 var(--sp-2);font-size:var(--fs-label);color:var(--txt-mute);line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-/* ②/③ 分区:二级行动区与三级危险区用发丝线隔开;单列行(整队停车/解散编队)整行独占,读作"终段动作" */
-#fmActs .fm-grp.g-act1{display:grid;grid-template-columns:1fr}
-#fmActs .fm-grp.g-act1 .qbtn{min-width:0;justify-content:center}
+/* ②/③ 分区:公共区用发丝线与上面的随模式块隔开。
+   FM6j 清理:单列行那两条规则(整队停车/解散编队各占一整行时用的)与带半径滑块那三条,
+   都在 FM6d「三钮并成一排 + 滑块移回编组控制页」之后零使用者,已删。 */
 #fmActs .fm-grp.fm-sec{border-top:var(--bw) solid var(--line-hair);padding-top:var(--sp-2);margin-top:var(--sp-1)}
 
 /* ==================== FM4 舰队编组控制页 #fmPage ====================
@@ -717,7 +716,3 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 .fp-knob{display:inline-flex;align-items:center;gap:var(--sp-2)}
 .fp-knob input[type=range]{width:96px;accent-color:var(--acc);background:transparent}
 .fp-knob .fp-v{min-width:34px;text-align:right}
-/* FM6 编队菜单里的带半径滑块:窄轨(260px)一行放得下「标签 + 滑块 + 读数」,滑块吃掉剩余宽度 */
-#fmActs .fm-knob{display:flex;align-items:center;gap:var(--sp-2)}
-#fmActs .fm-knob input[type=range]{flex:1;min-width:0;accent-color:var(--acc);background:transparent}
-#fmActs .fm-knob .fm-v{min-width:34px;text-align:right;font-family:var(--ff-mono);font-size:var(--fs-label);color:var(--txt-read)}
