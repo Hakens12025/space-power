@@ -675,7 +675,15 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
    (g-act2 是 grid),style.display='' 复原虽然也对,但 'none'↔'' 这条路在本项目栽过(92/95 都留了注释) */
 #fmActs .fm-grp.fm-hide{display:none}
 /* FM6 编组控制页的几何滑块行。滑块自带一个读数,拖动中只改这个叶子(整页重渲会把 input 换成新节点、拖拽当场断掉) */
-.fp-knobs{gap:var(--sp-4)}
+/* FM6f「站位与几何」合并块:站位一行(恢复默认被 .fp-sp 推到行尾)+ 五个旋钮各占一行,
+   三列网格让标签/滑条/读数上下对齐 —— 右列只有 ~320px,原来那种横排五个旋钮在这里必然换行错位。 */
+.fp-setup{border:var(--bw) solid var(--line-hair);border-radius:var(--r-sm);padding:var(--sp-3);margin-bottom:var(--sp-4)}
+.fp-setup .fp-hd2{margin-top:0}
+.fp-srow{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-3)}
+.fp-krows{display:flex;flex-direction:column;gap:var(--sp-2)}
+.fp-krows .fp-knob{display:grid;grid-template-columns:56px 1fr 40px;align-items:center;gap:var(--sp-2)}
+.fp-krows .fp-knob .fp-lb{margin-left:0}
+.fp-krows .fp-knob input[type=range]{width:auto}
 .fp-knob{display:inline-flex;align-items:center;gap:var(--sp-2)}
 .fp-knob input[type=range]{width:96px;accent-color:var(--acc);background:transparent}
 .fp-knob .fp-v{min-width:34px;text-align:right}

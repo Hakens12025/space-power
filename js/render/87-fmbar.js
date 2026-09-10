@@ -253,7 +253,7 @@ function fmbActsBuild(){
     '</div>'+
     // 随模式变化:阵型
     '<div class="fm-grp g-act2 fm-mode fm-hide" data-fmm="slot">'+
-      '<button class="btn qbtn" data-fma="page" title="打开舰队编组控制页:阵型图 / 全队能力评估 / 站位选择 / 逐舰能力表 / 方位盘改插槽 / 五个几何旋钮">编组控制</button>'+
+      '<button class="btn qbtn" data-fma="page" title="打开舰队编组控制页:阵型图 / 全队能力评估 / 站位与几何 / 逐舰能力表 / 方位盘改插槽">舰队编组控制</button>'+
     '</div>'+
     /* FM6d 公共区:一排三钮,三档模式都在。跟随两钮不在这里 —— 它们在 FM6 下沉成了底栏的标准控件
        (作用域由选中集合决定:舰队/单舰 × 舰队/单舰 四种),入口见 88-selpanel 的 cbFollow / cbUnfollow。 */

@@ -2343,6 +2343,14 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
      这是"完整的阵型算法页"那条需求的落地判据 —— 少接一根线,页面看着一样、拖了没反应。 */
   var knobs=document.querySelectorAll('#fpBody input[data-fpk]');
   var kNames=[],kOk=(knobs.length===5);
+  /* FM6f 另外两条,判的是【拖动过程中】的行为(改前要松手才重画,那个手动「刷新读数」钮已删):
+       · 方位盘必须当场跟着变 —— 只有这样滑块才谈得上"看得见效果";
+       · 而正被拖的那个 <input> 节点必须【还是同一个】。整页重渲会把它换成新节点、拖拽当场断掉
+         (RF7c 在 #fcList 上踩过的坑),所以实现只换 #fpDial 的 innerHTML。两条缺一不可:
+         只判"图变了"的话,退回整页重渲照样绿,而拖拽已经坏了。 */
+  var dlEl=document.getElementById('fpDial');
+  var dl0=dlEl?dlEl.innerHTML:'';
+  var kSame=true, dlLive=false;
   for(var ki=0;ki<knobs.length;ki++){
     var kEl=knobs[ki], kk=kEl.getAttribute('data-fpk'), before=F.P[kk];
     kNames.push(kk);
@@ -2350,8 +2358,13 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
     kEl.value=String(want);
     kEl.dispatchEvent(new Event('input',{bubbles:true}));
     if(!(Math.abs(F.P[kk]-want)<1e-9&&F.P[kk]!==before))kOk=false;
+    if(kk==='bm'){ var d2=document.getElementById('fpDial');
+      dlLive=(!!d2&&d2.innerHTML!==dl0);                 /* 没松手,盘已经重画 */
+      if(document.querySelector('#fpBody input[data-fpk="bm"]')!==kEl)kSame=false; } /* 滑块节点没被换掉 */
+    if(document.querySelectorAll('#fpBody input[data-fpk]')[ki]!==kEl)kSame=false;
   }
-  var ok4b=(kOk&&kNames.join(',')==='bm,widen,spread,spacing,bstr');
+  var noRefresh=!document.querySelector('#fpBody [data-fp="refresh"]');
+  var ok4b=(kOk&&dlLive&&kSame&&noRefresh&&kNames.join(',')==='bm,widen,spread,spacing,bstr');
   /* ⑤ 站位钮:页内切站位 = 编队菜单那一行的同一个 fmSetStance;切完自定义插槽被丢掉(它是按上一套布局改的) */
   var scBtn=document.querySelector('#fpBody [data-fp="sc-sub"]');
   hit(scBtn,'pointerdown');
@@ -2385,7 +2398,7 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
     +' | ②点插槽:选中下标='+selIdx+'(须0) 能力/带下拉都建出='+(!!capSel&&!!bandSel)+'='+ok2
     +' | ③改能力 '+cap0+'→'+capTo+':落到F.P.slots='+custom+' 插槽表已变='+(capNow===capTo)+' 有舰被派到该能力站位(s.fmStn)='+stnHas+'='+ok3
     +' | ④拖动改方位:'+Math.round(brg0)+'° → '+Math.round(brg1)+'°(拖到盘面正右方,须≈090±3;偏差='+dAim.toFixed(1)+'°)='+ok4
-    +' | ④b五个几何旋钮(真实 input 事件):['+kNames.join(',')+'] 逐个拖动后 F.P 对应项都变了='+kOk+'='+ok4b
+    +' | ④b五个几何旋钮(真实 input 事件):['+kNames.join(',')+'] 逐个拖动后 F.P 对应项都变了='+kOk+' | FM6f 拖动中:方位盘当场重画='+dlLive+' 且滑块节点未被换掉='+kSame+' 「刷新读数」钮已删='+noRefresh+'='+ok4b
     +' | ⑤页内切站位→水下:stance='+F.P.stance+' 自定义插槽已丢='+(!F.P.slots)+' 站距乘数='+F.P.spacing.toFixed(2)+'(须1.60)='+ok5
     +' | ⑥增删插槽:'+n6+' -增-> '+nAdd+' -删-> '+nDel+' 只剩1个时再删='+nLast+'(须仍1=不许删到空)='+ok6
     +' | ⑦恢复默认='+okReset+' 点✕关闭='+closed+' 切固定模式后 s.fmStn 已清='+stnCleared+'='+ok7

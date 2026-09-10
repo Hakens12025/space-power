@@ -1,7 +1,7 @@
 "use strict";
 /* ============ FM4 舰队编组控制页(#fmPage) ============
    入口:左轨编队书签 → 编队菜单 → 「编组控制」钮。四块内容,全部对着【当前这支编队的真实舰船】算:
-     ① 站位选择   四套站位(通用/空中/水面/水下),与编队菜单里那一行是同一个 fmSetStance
+     ① 站位与几何 四套站位(通用/空中/水面/水下,同 fmSetStance)+ 五个几何旋钮。FM6f 起并成一个 block 放在右列上半
      ② 阵型图     以旗舰为心,五条带的半径圈 + 插槽圈 + 各舰实际站位。插槽圈可【拖动改方位、点选改能力】
      ③ 能力评估   逐插槽的 F/满足 · A/勉强 · L/受限 · X/空缺,受限行附一句"最弱的那艘只拿到多少"
      ④ 能力表     逐舰九维读数(按本队最大值归一),末列是它被指派到哪个站位
@@ -65,11 +65,12 @@ function fmPageRender() {
   const T = fmGeoOf(F.P);   // FM6:几何读数走 fmGeoOf(玩家可调的那一份),不是站位预设
   if (hint) hint.textContent = fmName(F) + ' · ' + list.length + '艘 · 旗舰 ' + flag.name
     + ' · ' + fmbModeText(F.mode, true) + (F.src === 'generated' ? '' : '（固定模式:槽位来自建队快照,站位模板与插槽编排均不生效）');
+  /* FM6f 版面(用户令):站位与五个几何旋钮原本是页顶两条【横条】,现在并成一个 block 列式排布,
+     搬进右列压在「全队能力评估」上面(评估因此下移)。左列的方位盘与底部逐舰能力表不动。 */
   body.innerHTML =
-    fmPgStanceRow(F, T)
-    + '<div class="fp-grid">'
+    '<div class="fp-grid">'
     + '<div class="fp-col">' + fmPgDial(F, PL) + fmPgSlotCfg(F) + '</div>'
-    + '<div class="fp-col">' + fmPgAssess(PL) + '</div>'
+    + '<div class="fp-col">' + fmPgSetup(F, T) + fmPgAssess(PL) + '</div>'
     + '</div>'
     + fmPgCapTable(list, PL);
 }
@@ -94,22 +95,39 @@ function fmPgKnob(F, d) {
     + '<input type="range" data-fpk="' + d.k + '" min="' + r[0] + '" max="' + r[1] + '" step="0.05" value="' + v + '">'
     + '<span class="fp-v">' + v.toFixed(2) + '</span></span>';
 }
-function fmPgStanceRow(F, T) {
+/* FM6f「站位与几何」合并块。加标题与细边框是为了与紧随其后的「全队能力评估」分开 —— 两块都在右列,
+   不划开的话读不出是两件事。恢复默认靠 .fp-sp(弹性隔断)推到行尾。
+   原来还有一个「刷新读数」钮,已删:它只是 fmPageRender() 一次,而本页不进 frame 循环、
+   数据会随交战变旧(九维里的「生存」直接读 s.hp)。现在改成【拖滑块时方位盘实时跟着变】,
+   松手再整页重渲一次把评估表与逐舰表也刷上,那个手动钮就没有存在理由了。 */
+function fmPgSetup(F, T) {
   const btn = FM_STANCE_KEYS.map(k =>
     '<button class="btn qbtn' + (F.P.stance === k ? ' on' : '') + '" data-fp="sc-' + k + '">' + fmPgEsc(FM_STANCE[k].nm) + '</button>').join('');
-  return '<div class="fp-bar">'
-    + '<span class="fp-lb">站位</span>' + btn
+  return '<div class="fp-setup">'
+    + '<div class="fp-hd2">站位与几何</div>'
+    + '<div class="fp-srow"><span class="fp-lb">站位</span>' + btn
     + '<span class="fp-sp"></span>'
-    + '<button class="btn qbtn" data-fp="reset">恢复本站位默认</button>'
-    + '<button class="btn qbtn" data-fp="refresh">刷新读数</button>'
-    + '</div>'
-    + '<div class="fp-bar fp-knobs">' + FP_KNOBS.map(d => fmPgKnob(F, d)).join('') + '</div>';
+    + '<button class="btn qbtn" data-fp="reset">恢复默认</button></div>'
+    + '<div class="fp-krows">' + FP_KNOBS.map(d => fmPgKnob(F, d)).join('') + '</div>'
+    + '</div>';
 }
 
 /* 阵型图 = 方位盘。前进方向朝【上】(战术显示器的惯例);局部系 +x 是前进方向、+y 是右舷,
    所以 屏幕x = cx + ly·k、屏幕y = cy − lx·k。带半径圈因扁率而成椭圆(rx = r·widen, ry = r)。 */
 const FP_DIAL = 560, FP_C = 280;
+/* FM6f 拆成【壳】与【内容】两层。拖滑块时只换内容(#fpDial 的 innerHTML),svg 节点与滑块节点都不动 ——
+   整页重渲会把玩家正按着的那个 <input> 换成新节点、拖拽当场断掉(RF7c 在 #fcList 上踩过的坑)。 */
 function fmPgDial(F, PL) {
+  return '<svg id="fpDial" viewBox="0 0 ' + FP_DIAL + ' ' + FP_DIAL + '">' + fmPgDialInner(F, PL) + '</svg>'
+    + '<div class="fp-note">圆圈=插槽，拖动改变方位，颜色=契合度，多出来的船向两侧展开。</div>';
+}
+function fmPgDialSync() { // 就地重画方位盘(拖滑块时用)。取不到编队/旗舰就什么都不做,由松手那次整页重渲兜底
+  const el = document.getElementById('fpDial'); if (!el) return;
+  const F = fmPageF(); if (!F) return;
+  const list = fmShips(F), flag = fmFlag(F, list); if (!flag) return;
+  el.innerHTML = fmPgDialInner(F, fmPlanStations(list, F.P, flag.id));
+}
+function fmPgDialInner(F, PL) {
   const slots = fmPageSlots(F), T = fmGeoOf(F.P), BR = PL.bands; // FM6:盘上画的张角/扁率必须与 fmPlanStations 同源,否则拖到哪船站哪就对不上
   /* 缩放必须同时罩住【实际站位】与【插槽圈】。只按 PL.sta 算的话,舰少的时候只生成前几个站位,
      而插槽表里那些还没人去的槽(哨戒带在 2×屏护半径上)照样要画 —— 它们会被画到 viewBox 外面,
@@ -163,9 +181,7 @@ function fmPgDial(F, PL) {
       + '<text x="' + q[0].toFixed(1) + '" y="' + (q[1] + 3.5).toFixed(1) + '" fill="' + (on ? '#ffe066' : '#9fd4ff') + '" font-size="9" text-anchor="middle">' + fmPgEsc(fmCapAb(sl.cap)) + '</text>'
       + '</g>';
   });
-  return '<svg id="fpDial" viewBox="0 0 ' + FP_DIAL + ' ' + FP_DIAL + '">' + g + '</svg>'
-    + '<div class="fp-note">圆圈 = 插槽(一个方位 + 一种能力)。<b>拖动</b>改方位,<b>点击</b>选中后在下面改能力与所在带。'
-    + '实心小点是各舰被指派到的实际站位,颜色 = 契合度。插槽数不随舰数变,多出来的船沿同一插槽向两侧展开。</div>';
+  return g;
 }
 
 function fmPgSlotCfg(F) {
@@ -199,8 +215,7 @@ function fmPgAssess(PL) {
       + '<span class="fp-n">' + fmPgEsc(r.n) + '</span>'
       + '<span class="fp-r">' + fmPgEsc(r.r) + '</span></div>';
   });
-  return s + '</div><div class="fp-note">F 满足 · A 勉强 · L 受限(必须说明受限在哪) · X 空缺。'
-    + '分档按该插槽内各舰的平均契合度:≥0.75 / ≥0.5 / 其余。</div>';
+  return s + '</div><div class="fp-note">F=满足，A=勉强，L=受限。</div>';
 }
 
 function fmPgCapTable(list, PL) {
@@ -279,7 +294,6 @@ function fmPgUp() {
 
 function fmPgAct(a) {
   const F = fmPageF(); if (!F) return;
-  if (a === 'refresh') { fmPageRender(); return; }
   if (a === 'reset') {
     /* 恢复本站位默认 = 丢掉自定义插槽表 + 把五个几何旋钮拨回该站位的预设。
        走 fmSetStance 会被它的"值没变就整个返回"守卫挡住(stance 没变),所以这里直接重写一遍。 */
@@ -329,6 +343,7 @@ on('fmPage', 'input', e => {
   const out = el.parentNode && el.parentNode.querySelector('.fp-v');
   const now = F.P[el.getAttribute('data-fpk')];
   if (out && isFinite(now)) out.textContent = now.toFixed(2);
+  fmPgDialSync();   // FM6f 拖动中实时重画方位盘(只换 svg 内容,不碰滑块节点)
   fmPg.knobDirty = true;
 });
 on('fmPage', 'change', e => {
