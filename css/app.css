@@ -600,7 +600,10 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 /* FM5b 菜单三级层次:
    ① 模式分段控件 .fm-seg —— 连体三段,共享外框与内分隔线;段是 .btn 但【去边框去底色】,当前段靠 .on 的
       accent 洗色点亮。放在 g-par 行里与「模式」标签同排,flex:1 吃满余宽(260px 轨下每段约 60px,两字标签放得下)。 */
-#fmActs .fm-seg{flex:1;min-width:0;display:grid;grid-template-columns:repeat(3,1fr);
+/* FM6d 列数【按子元素个数自适应】:改前写死 repeat(3,1fr),而 FM6 把「跟随」那一段删成两段之后
+   这里没跟着改,两段于是只铺满 2/3、右边空着一格。grid-auto-flow:column + grid-auto-columns:1fr
+   等分现有段数,以后加减模式段不必再回来动 CSS(那正是这次出问题的耦合)。 */
+#fmActs .fm-seg{flex:1;min-width:0;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
   background:var(--srf-sunk);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);overflow:hidden}
 #fmActs .fm-seg .btn{border:none;border-radius:0;background:transparent;min-width:0;justify-content:center;color:var(--txt-dim)}
 #fmActs .fm-seg .btn+.btn{border-left:var(--bw) solid var(--line-ctl)}

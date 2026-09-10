@@ -1559,19 +1559,51 @@ t('FLOW27_FMBAR',function(){
   /* 反向:已经在固定态时点「固定」是空操作(重拍只走显式钮),否则"再点一下当前模式"会把队形按此刻散乱位置重钉 */
   var snapR1=F.snap; fm27hit(elFixed); var noReOnMode=(F.snap===snapR1);
   fm27hit(elSlot);
-  /* FM6【带半径滑块】走真实 input 事件。只调 fmSetParam 的话,"滑块建了出来但没挂 input 监听"这种接线错
-     一个都抓不到(FM5d 那个"有钮无 case"就是同一类)。判据是三件事同时成立:F.P.bm 真的变了、
-     槽位几何真的跟着变了(带半径是唯一恒生效的几何量)、旁边那个读数叶子也跟着变了。 */
-  var knob=document.querySelector('#fmActs input[data-fmk="bm"]');
-  var bm0=F.P.bm, R0=0;
-  fmShips(F).forEach(function(m){var sl=m.fmSlot||[0,0,0];R0=Math.max(R0,Math.hypot(sl[0],sl[1]));});
-  if(knob){knob.value='1.6';knob.dispatchEvent(new Event('input',{bubbles:true}));}
-  var bm1=F.P.bm, R1=0;
-  fmShips(F).forEach(function(m){var sl=m.fmSlot||[0,0,0];R1=Math.max(R1,Math.hypot(sl[0],sl[1]));});
-  var bmOutEl=document.querySelector('#fmActs [data-lf="bm"]');
-  var bmOut=bmOutEl?bmOutEl.textContent:'?';
-  var okKnob=(!!knob&&Math.abs(bm1-1.6)<1e-9&&bm1!==bm0&&R1>R0*1.3&&bmOut==='1.60');
-  if(knob){knob.value='1';knob.dispatchEvent(new Event('input',{bubbles:true}));} /* 还原,免得影响后面的断言 */
+  /* ==== FM6d 三条布局判定 ====
+     布局这种东西只有【问浏览器要 getBoundingClientRect】才作数:类名写对了、CSS 里列数写了几,
+     都不等于屏幕上真的铺满了 —— 这次出问题的就是"HTML 只剩两段而 CSS 还写着三列",两边各自都"对"。 */
+  /* ①模式分段铺满整行。判据用【比例】不用绝对像素(轨宽会随视口变):两段等宽,且合起来≈控件内容宽。
+     改前 repeat(3,1fr) 而只有两段,这个比例是 2/3。 */
+  var seg=document.querySelector('#fmActs .fm-seg');
+  var segW=seg?seg.getBoundingClientRect().width:0;
+  var wF=elFixed?elFixed.getBoundingClientRect().width:0, wS=elSlot?elSlot.getBoundingClientRect().width:0;
+  var segFill=segW>0?(wF+wS)/segW:0;
+  var segEven=(wF>0&&wS>0)?Math.min(wF,wS)/Math.max(wF,wS):0;
+  var okSeg=(segFill>0.95&&segEven>0.9);
+  /* ②公共区三钮【同一排】:三个钮的 top 相同(同一行)、left 互不相同(真的并排,不是重叠)。
+     改前它们分住两块单列网格,一排一个钮。 */
+  var rowNm=['halt','reform','disband'];
+  var rowEl=rowNm.map(function(n){return document.querySelector('#fmActs [data-fma="'+n+'"]');});
+  var rowHas=rowEl.every(function(e){return !!e;});
+  var rowTop=rowHas?rowEl.map(function(e){return Math.round(e.getBoundingClientRect().top);}):[];
+  var rowLeft=rowHas?rowEl.map(function(e){return Math.round(e.getBoundingClientRect().left);}):[];
+  var okRow=(rowHas&&rowTop[0]===rowTop[1]&&rowTop[1]===rowTop[2]
+             &&rowLeft[0]<rowLeft[1]&&rowLeft[1]<rowLeft[2]);
+  /* ③带半径滑块已【不在】菜单里(移回编组控制页 —— 同一份 F.P.bm 不许开两个口子)。
+     它在页里仍受 FLOW38 ④b 那条五旋钮判定看着,功能没有失去覆盖。 */
+  var noKnob=!document.querySelector('#fmActs input[data-fmk]');
+  /* ==== FM6d 原地重排(reform),走真实 pointerdown ====
+     为什么要这个钮:改几何只重算槽位、【船一步都不会动】。判据必须双向,否则测的不是这个钮 ——
+       ·先证明"不点它船就真的不动"(空转 60 秒位置逐字不变),
+       ·再证明"点了它船真的去新站位"(离位收敛回到位容差)。 */
+  fm27hit(elSlot);
+  fmMoveTo(F,[300000,0,0],'stop',null);
+  function fm27fly(){var z,lf;for(z=0;z<60000;z++){if(rrJobs.length)rrTick();stepShipsMotion(0.02);
+    lf=0;fmShips(F).forEach(function(m){if(m.orders.length||V.len(m.vel)>1)lf++;});if(!lf)return true;}return false;}
+  var flew1=fm27fly();
+  function fm27dev(){var fl2=fmFlag(F),d=0;fmShips(F).forEach(function(m){if(m===fl2)return;var o=fmOffOf(m);
+    d=Math.max(d,Math.hypot(fl2.pos[0]+o[0]-m.pos[0],fl2.pos[1]+o[1]-m.pos[1]));});return d;}
+  function fm27pos(){return fmShips(F).map(function(m){return m.pos[0].toFixed(3)+','+m.pos[1].toFixed(3);}).join('|');}
+  var devA=fm27dev();
+  fmSetParam(F,'bm',2);                    /* 几何一变,槽位当场重算(这一步不该让任何船动) */
+  var devB=fm27dev(), pos0=fm27pos();
+  for(i=0;i<3000;i++)stepShipsMotion(0.02); /* 反向对照:不点钮,空转 60 秒 */
+  var idle=(fm27pos()===pos0);
+  fm27hit(document.querySelector('#fmActs [data-fma="reform"]'));
+  var flew2=fm27fly();
+  var devC=fm27dev();
+  fmSetParam(F,'bm',1);
+  var okReform=(flew1&&devA<3000&&devB>devA*5&&devB>20000&&idle&&flew2&&devC<3000);
   /* FM6:跟随的兑现判定整体搬到 FLOW40_FOLLOWCTL(底栏标准控件,四种作用域)。这里只剩一条留守:
      编队菜单里【不许】再出现跟随钮(noFolBtn,已并入 acts4)。 */
   /* 其余操作钮:遍历【当前真实存在的】data-fma 全点一遍(按钮清单会随 UI 改,写死清单会年久失修),
@@ -1598,8 +1630,8 @@ t('FLOW27_FMBAR',function(){
         &&closedMid==='none'&&open2==='flex'&&selSync&&parseFloat(hpW)===100&&mdFix==='固定 · 保持建队时的相对位置与朝向'
         &&!!mem&&acts4&&noFollowBtn&&mode0==='slot'&&modeF==='fixed'&&modeS==='slot'
         &&srcX==='snapshot'&&modeX==='fixed'&&noRetake&&modeZ==='slot'&&srcZ==='generated'
-        &&okVis&&reTook&&noReOnMode&&okKnob
-        &&names.length>=6&&clicked===names.length /* FM4b 后 9 个(m-fixed m-slot m-follow / resnap page / fol folx / halt disband);下限留一个余量,真正的判据是 clicked===names.length —— 每个钮都点得动、都不抛错 */
+        &&okVis&&reTook&&noReOnMode&&okSeg&&okRow&&noKnob&&okReform
+        &&names.length>=6&&clicked===names.length /* FM6d 后 7 个(m-fixed m-slot / resnap page / halt reform disband);下限留余量,真正的判据是 clicked===names.length —— 每个钮都点得动、都不抛错 */
         &&closed1==='none'&&!errs.length);
   return (ok?'ok':'fail')+' 书签数='+tabs0+'(须1) 初始菜单='+closed0+'(须none) 点开后='+open1+'(须flex)'
     +' | #selFm 信息行='+rows+'(须>=6) 成员行='+mems+'(须3;须先让 selected=全队才渲染) 成员行事件已走='+(!!mem)
@@ -1608,7 +1640,7 @@ t('FLOW27_FMBAR',function(){
     +' | 固定钮:阵型态下点固定 src='+srcX+'/mode='+modeX+'(须 snapshot/fixed) 已在固定态再点一次 未重拍='+noRetake+' 再点阵型 mode='+modeZ+' src='+srcZ+'(须 slot/generated)'
     +' | FM4b 随模式显隐(问的是 computed display,不是类名):固定→['+visFix.join(',')+'](声明 '+nFix+' 块) 阵型→['+visSlot.join(',')+'](声明 '+nSlot+' 块)(须全部同名且个数对得上)='+okVis
     +' 重拍队形真的换了新快照='+reTook+' 已在固定态时点固定是空操作='+noReOnMode
-    +' | FM6 带半径滑块(真实 input 事件):F.P.bm '+bm0.toFixed(2)+'→'+bm1.toFixed(2)+'(须1.60) 最大槽位半径 '+Math.round(R0)+'→'+Math.round(R1)+'(须放大>1.3倍) 读数叶子='+bmOut+'(须1.60)='+okKnob
+    +' | FM6d 布局(问的是 getBoundingClientRect):模式两段铺满率='+(segFill*100).toFixed(1)+'%(须>95;旧3列时2段为66.7) 两段等宽率='+(segEven*100).toFixed(1)+'%(须>90)='+okSeg+' 公共三钮同一排 top='+rowTop.join('/')+' left='+rowLeft.join('/')+'(须 top 三个相同、left 递增)='+okRow+' 菜单里已无带半径滑块='+noKnob+' | FM6d 原地重排(真实 pointerdown):到位后离位='+Math.round(devA)+'km → bm拉到2 后='+Math.round(devB)+'km(须>5倍且>20000=槽位真变了) → 不点钮空转60s 位置逐字不变='+idle+'(须 true=不点就真不动) → 点钮飞完后离位='+Math.round(devC)+'km(须<3000)='+okReform
     +' 编队菜单已无跟随钮(已下沉底栏)='+noFolBtn
     +' | 操作钮点击='+clicked+'/'+names.length+'(须全中且总数>=6)清单=['+names.join(',')+']'
     +' | 再点收起='+closed1+'(须none) 解散后再刷10次'
@@ -2261,9 +2293,11 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   /* ①b 【可见性】:dispatchEvent 对 display:none 的元素照样生效,所以"钮建出来了"根本不算数 —— 得问浏览器它是不是真在屏上。
      FM6c 就栽在这一条上:随模式显隐的块以 data-fmm 为键装进字典,而阵型模式下有两块同键(编组控制 / 带半径),
      后写的把先写的顶掉 ⇒「编组控制」的 fm-hide 永远摘不掉,点得到、看不到,本条改前只断言 !!btn,一路全绿。
-     顺带把三块的显隐一起断言成【互斥】的:阵型模式下两块在、固定模式那块不在。 */
+     顺带把两块的显隐一起断言成【互斥】的:阵型模式下编组控制在、固定模式那块不在。
+     FM6d:带半径滑块已从菜单移回本页(FP_KNOBS 第一项),所以这里不再要求它可见 —— 反过来要求菜单里没有它,
+     那条断言在 FLOW27 的 noKnob(菜单里已无 input[data-fmk])。 */
   var seen=function(q){var e=document.querySelector(q);return !!(e&&e.offsetParent!==null);};
-  var visPage=seen('#fmActs [data-fma="page"]'), visBm=seen('#fmActs [data-fmk="bm"]'), visSnap=seen('#fmActs [data-fma="resnap"]');
+  var visPage=seen('#fmActs [data-fma="page"]'), visSnap=seen('#fmActs [data-fma="resnap"]');
   hit(btn,'pointerdown');
   var pg=document.getElementById('fmPage');
   var opened=!!(pg&&pg.classList.contains('on')&&fmPageIsOpen());
@@ -2275,7 +2309,7 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   var rows=document.querySelectorAll('#fpBody .fp-row').length;
   var tds=document.querySelectorAll('#fpBody .fp-t tbody tr').length;
   var slots0=fmPageSlots(F).length;
-  var ok1=(had&&visPage&&visBm&&!visSnap&&opened&&len1>2000&&!!dial&&slotN===slots0&&slotN>=11&&rows>=2&&tds===b.length);
+  var ok1=(had&&visPage&&!visSnap&&opened&&len1>2000&&!!dial&&slotN===slots0&&slotN>=11&&rows>=2&&tds===b.length);
   /* ② 点一个插槽 → 选中 + 出配置条(select 真的建出来了) */
   var g0=document.querySelector('#fpDial [data-fps]');
   hit(g0,'pointerdown');
@@ -2347,7 +2381,7 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   window.removeEventListener('error',onerr);
   var ok=(ok1&&ok2&&ok3&&ok4&&ok4b&&ok5&&ok6&&ok7&&ok8&&!errs.length);
   return (ok?'ok':'fail')
-    +' ①入口(真点「编组控制」钮):钮存在='+had+' 【真在屏上】编组控制='+visPage+' 带半径='+visBm+' 固定态的重拍队形='+visSnap+'(须 false)'+' 页已开='+opened+' 正文='+len1+'字符 方位盘='+(!!dial)+' 插槽圈='+slotN+'个(须=插槽表 '+slots0+') 舰位点='+shipDots+' 评估行='+rows+' 能力表行='+tds+'(须='+b.length+')='+ok1
+    +' ①入口(真点「编组控制」钮):钮存在='+had+' 【真在屏上】编组控制='+visPage+' 固定态的重拍队形='+visSnap+'(须 false)'+' 页已开='+opened+' 正文='+len1+'字符 方位盘='+(!!dial)+' 插槽圈='+slotN+'个(须=插槽表 '+slots0+') 舰位点='+shipDots+' 评估行='+rows+' 能力表行='+tds+'(须='+b.length+')='+ok1
     +' | ②点插槽:选中下标='+selIdx+'(须0) 能力/带下拉都建出='+(!!capSel&&!!bandSel)+'='+ok2
     +' | ③改能力 '+cap0+'→'+capTo+':落到F.P.slots='+custom+' 插槽表已变='+(capNow===capTo)+' 有舰被派到该能力站位(s.fmStn)='+stnHas+'='+ok3
     +' | ④拖动改方位:'+Math.round(brg0)+'° → '+Math.round(brg1)+'°(拖到盘面正右方,须≈090±3;偏差='+dAim.toFixed(1)+'°)='+ok4

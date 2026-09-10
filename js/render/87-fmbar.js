@@ -212,11 +212,14 @@ function fmbActsBuild(){
   // grid 每行列数恒定,不存在"末行元素少所以更宽"这回事。参数行是 g-par,一行放得下,禁止换行。
   /* FM4b 菜单重排(用户令)。三条结构原则:
        ① 模式在最上面 —— 它决定下面出现什么,读的顺序就该是"先选模式,再看这个模式有什么可调"。
-       ② 中间是【随模式变化】的区域:固定→重拍队形 / 阵型→编组控制 / 跟随→空。
+       ② 中间是【随模式变化】的区域:固定→重拍队形 / 阵型→编组控制。
           用 .fm-hide 类切显隐,不写 style.display —— .fm-grp 有 flex 与 grid 两种布局(g-act/g-act2 是 grid),
           用 style.display='' 复原会退回 CSS 值倒也对,但 'none'↔'' 这条路在本项目栽过(92/95 都留了注释),类切换没有这个坑。
-       ③ 底部是【三种模式都能用】的固定区:整队跟随另一艘友舰 / 整队停车 / 解散编队(最下)。
-     删掉的:站位四钮(交给编组控制页统一管)、选中全队、跳镜头、就地成形、密度疏/密、档位三挡。
+       ③ 底部是【两种模式都能用】的公共区。FM6d 起是一排三钮(整队停车 / 原地重排 / 解散编队);
+          跟随不在其中 —— FM6 把它下沉成了底栏的标准控件。
+     删掉的:站位四钮(交给编组控制页统一管)、选中全队、跳镜头、密度疏/密、档位三挡。
+     (「就地成形」当时也在这份删除清单里,FM6d 又以 reform / 「原地重排」之名回到公共区 —— 因为那一版
+      菜单里还没有任何几何旋钮,而现在改几何是玩家的日常动作,不给它一个落地的钮,旋钮就是空转的。)
        · 选中全队 / 跳镜头 有键盘等价物(数字键 1-4 选中编队,双击同一数字键跳镜头),删了不丢功能;
        · 密度与档位写的是同一个 P.spacing,而它只乘在 st.off(同一插槽内第 2、3 艘船向两侧展开的角步)上 ——
          舰数不超过插槽数时 st.off 恒为 0,实测 3/6/10/15 艘下 0.6/1.0/1.6/3.0 四挡槽位【逐位相同】,16 艘起才有差别;
@@ -225,9 +228,16 @@ function fmbActsBuild(){
   /* FM5b 菜单三级层次(用户定案:书签仪表化+轻菜单):
        ① 模式 = 连体分段控件(.fm-seg,当前段点亮)+ 一行暗色模式说明(文案唯一出处仍是 fmbModeText,零新词);
           FM6:模式只剩【固定 / 阵型】两段 —— "跟随"不再是编队的一种模式,它下沉成了底栏的通用跟随控件(作用域含单舰);
-       ② 编队行动 = 随模式块(固定→重拍队形 / 阵型→编组控制)+ 跟随两钮 + 整队停车(整行);
-       ③ 危险区 = 发丝线隔开,解散编队(红描边 .qstop)独占一行 —— 与日常行动拉开,防误触。
-     data-fma 九个全部沿用 FM4b,事件委托零改动。 */
+       ② 随模式块:固定→重拍队形 / 阵型→编组控制。
+       ③ 公共区 = 发丝线隔开的一排三钮:整队停车 / 原地重排 / 解散编队(三档模式都能用)。
+     FM6d 三处布局调整(用户令):
+       · 分段控件铺满整行 —— 它的列数改前写死 repeat(3,1fr),FM6 删掉「跟随」那一段之后 CSS 没跟着改,
+         于是两段只占了 2/3、右边空着 1/3。改成 grid-auto-flow:column 按子元素个数自适应,以后加减段不用再动 CSS。
+       · 三个公共钮并成一排(复用本就存在却零引用的 .g-act 三列网格),不再一排一个钮。
+         代价:解散编队不再靠"独占一行 + 发丝线"与日常动作隔开,只剩 .qstop 的红描边区分,误触风险比改前高。
+       · 带半径滑块从菜单里【删掉】—— 编组控制页的 FP_KNOBS 第一项就是同一个 bm、同一个 fmSetParam,
+         两处并存是同一份状态开两个口子。
+     data-fma 沿用,新增一个 reform,事件委托零改动。 */
   acts.innerHTML=
     '<div class="fm-grp g-par">'+
       '<span class="fm-lb">模式</span>'+
@@ -245,22 +255,11 @@ function fmbActsBuild(){
     '<div class="fm-grp g-act2 fm-mode fm-hide" data-fmm="slot">'+
       '<button class="btn qbtn" data-fma="page" title="打开舰队编组控制页:阵型图 / 全队能力评估 / 站位选择 / 逐舰能力表 / 方位盘改插槽 / 五个几何旋钮">编组控制</button>'+
     '</div>'+
-    /* FM6 带半径滑块直接放进编队菜单(用户令:"这个用处多")。它是五个几何旋钮里唯一【恒生效】的一个 ——
-       spacing 只在舰数超过插槽数时才有效,spread/widen 改的是形状而不是尺度,只有 bm 一动整个阵型的尺寸就变。
-       与编组控制页里那个滑块写的是【同一个 F.P.bm、同一个 fmSetParam】,不存在两份状态。
-       随模式显隐:固定模式下槽位来自建队快照,几何参数一个字都读不到,所以它跟「编组控制」同属阵型块。 */
-    '<div class="fm-grp fm-knob fm-mode fm-hide" data-fmm="slot">'+
-      '<span class="fm-lb">带半径</span>'+
-      '<input type="range" data-fmk="bm" min="'+FM_LIMIT.bm[0]+'" max="'+FM_LIMIT.bm[1]+'" step="0.05" value="1" title="五条带的半径整体缩放。>1.11 时贴身带会超出内圈最小那几艘的 inner,它们在贴身站位上的契合度归零">'+
-      '<span class="fm-v" data-lf="bm">1.00</span>'+
-    '</div>'+
-    // FM6:跟随两钮下沉到底栏,成为【标准控件】—— 作用域由选中集合决定(舰队/单舰 × 舰队/单舰 四种),
-    // 不再是编队专属功能,所以不该只住在编队菜单里。入口见 88-selpanel 的 cbFollow / cbUnfollow。
-    '<div class="fm-grp g-act1 fm-sec">'+
+    /* FM6d 公共区:一排三钮,三档模式都在。跟随两钮不在这里 —— 它们在 FM6 下沉成了底栏的标准控件
+       (作用域由选中集合决定:舰队/单舰 × 舰队/单舰 四种),入口见 88-selpanel 的 cbFollow / cbUnfollow。 */
+    '<div class="fm-grp g-act fm-sec">'+
       '<button class="btn qbtn" data-fma="halt" title="整队停车:逐舰刹停">整队停车</button>'+
-    '</div>'+
-    // 危险区:解散编队独占一行
-    '<div class="fm-grp g-act1 fm-sec fm-danger">'+
+      '<button class="btn qbtn" data-fma="reform" title="原地重排:不下移动令,就让全队在当前位置摆成当前阵型。改完几何参数(带半径等)之后按它才看得到效果">原地重排</button>'+
       '<button class="btn qbtn qstop" data-fma="disband" title="解散编队:书签消失,成员回散船态">解散编队</button>'+
     '</div>';
   fmUi.actsBuilt=true;
@@ -272,24 +271,16 @@ function fmbActsBuild(){
        (编组控制 / 带半径滑块)共用 data-fmm="slot",后写的把先写的顶掉 —— 「编组控制」那一块
        就此不在表里,fm-hide 永远摘不掉,按钮建了出来却一直不可见。装块的容器不该假设一模式一块。 */
     modes:[],
-    bm:acts.querySelector('[data-fmk="bm"]'), bmV:acts.querySelector('[data-lf="bm"]') // FM6 带半径滑块与它的读数
   };
   fmUi.act.modes=Array.prototype.slice.call(acts.querySelectorAll('.fm-mode'));
 }
 function fmbActsSync(F){ // 模式高亮与随模式显隐都跟着【当前展开的那个编队】走(阵型参数每编队一份)
   if(!fmUi.act)return;
-  const md=F?F.mode:null; // FM3-1 模式三选一:当前那个钮点亮(F.mode 是 42 派生给 UI 的 fixed/slot/follow)
-  // FM4b 随模式显隐:只有与当前模式同名的那个块留下。md 为 null(编队没了)时三块全藏
+  const md=F?F.mode:null; // 模式两选一:当前那个钮点亮(F.mode 是 42 派生给 UI 的 fixed/slot)
+  // FM4b 随模式显隐:只有与当前模式同名的块留下。md 为 null(编队没了)时全藏
   fmUi.act.modes.forEach(el=>{el.classList.toggle('fm-hide',el.getAttribute('data-fmm')!==md);});
   if(fmUi.act.mFixed)fmUi.act.mFixed.classList.toggle('on',md==='fixed');
   if(fmUi.act.mSlot)fmUi.act.mSlot.classList.toggle('on',md==='slot');
-  /* FM6 带半径滑块回显。【拖动中不回写 value】—— 那会把玩家正在拖的滑块拨回去(updFmBar 每 20 帧跑一次,
-     拖到一半就被弹回,手感是"拖不动")。判据是 document.activeElement:滑块拿着焦点就说明玩家正在操作它。 */
-  if(fmUi.act.bm&&F&&F.P&&isFinite(F.P.bm)){
-    const v=F.P.bm.toFixed(2);
-    if(document.activeElement!==fmUi.act.bm&&fmUi.act.bm.value!==v)fmUi.act.bm.value=v;
-    if(fmUi.act.bmV&&fmUi.act.bmV.textContent!==v)fmUi.act.bmV.textContent=v;
-  }
   // FM5b 分段控件下的模式说明行:长文案走 fmbModeText 唯一出处(与右栏 #selFm 的"模式"读数同一句话)
   if(fmUi.act.mDesc){const d=md?fmbModeText(md):'—';if(fmUi.act.mDesc.textContent!==d)fmUi.act.mDesc.textContent=d;}
 }
@@ -370,6 +361,20 @@ function fmbAct(a){
       fmHalt(F);
       if(typeof log==='function')log(fmName(F)+' 整队停车','');
       break;
+    case 'reform':{
+      /* FM6d 原地重排(用户令)。为什么需要它:改几何参数(带半径 / 页内五旋钮 / 切站位)只会重算槽位,
+         【船一步都不会动】—— 实测把 bm 由 1.0 拖到 2.0,离位从 92km 跳到 73742km,空转 120 秒位移为 0,
+         只有下一次移动令才把新阵型落到地上。这个钮就是那条"不用挪窝的移动令"。
+         实现上零新机制:目标点取【旗舰当前位置】,其余全交给 fmSpread ——
+           · 目标点与锚点重合(距离<1),fmAngOf 于是沿用 F.ang,阵型朝向原地不变;
+           · 固定模式(src=snapshot)走它自己的分支:不重配对、到达朝向 = 阵型朝向 + 各舰建队时的朝向差,
+             所以固定态按它 = 回到建队快照的布局;阵型模式按它 = 摆成算出来的插槽站位。一个函数两种模式都对。
+         副作用照旧按"这是一条移动令"来:resetForNewOrders 会解除刹车,所以整队停车之后按它船会重新动起来。 */
+      if(typeof fmMoveTo!=='function')break;
+      const fl=st.flag; if(!fl)break;
+      fmMoveTo(F,[fl.pos[0],fl.pos[1],fl.pos[2]],'stop',null);
+      if(typeof log==='function')log(fmName(F)+' 原地重排','');
+      break;}
     case 'disband':{
       /* 待命中把编队解散了:标志不清的话下一次左键会被 70-input 的跟随分支静默吃掉。
          FM6:pendingFollow 不再存编队 id(作用域按点下去那一刻的 selected 现算),所以这里无条件清 —— 
@@ -417,17 +422,9 @@ on('fmBar','pointerdown',e=>{
   e.preventDefault();
   fmbToggle(el.dataset.fmg);
 });
-/* FM6 带半径滑块:走 input 事件(拖动中连续生效)。fmSetParam 自带"值没变就返回"的空操作守卫,
-   所以连续触发不会反复 fmReslot 把 44 fmReassign 落盘的配对抹掉。读数就地更新,不整块重建 ——
-   #fmActs 只建一次、平时只改叶子,这里也守同一条。 */
-on('fmActs','input',e=>{
-  const el=e.target&&e.target.closest?e.target.closest('input[data-fmk]'):null;
-  if(!el)return;
-  const F=(fmUi.open!==null&&typeof fmGet==='function')?fmGet(fmUi.open):null;
-  if(!F||typeof fmSetParam!=='function')return;
-  fmSetParam(F,el.getAttribute('data-fmk'),Number(el.value));
-  if(fmUi.act&&fmUi.act.bmV&&isFinite(F.P.bm))fmUi.act.bmV.textContent=F.P.bm.toFixed(2);
-});
+/* FM6d:#fmActs 上原有一条 input 委托,专为带半径滑块而设。滑块移回编组控制页之后,
+   #fmActs 里再没有任何 input[data-fmk],这条委托零可达,整条删除。
+   页内那五个旋钮走 89-fmpage 自己的 input[data-fpk] 委托,与本文件无关。 */
 on('fmActs','pointerdown',e=>{
   if(e.button!==0)return;
   const el=e.target&&e.target.closest?e.target.closest('[data-fma]'):null;
