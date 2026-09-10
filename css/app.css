@@ -683,7 +683,20 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 .fp-krows{display:flex;flex-direction:column;gap:var(--sp-2)}
 .fp-krows .fp-knob{display:grid;grid-template-columns:56px 1fr 40px;align-items:center;gap:var(--sp-2)}
 .fp-krows .fp-knob .fp-lb{margin-left:0}
-.fp-krows .fp-knob input[type=range]{width:auto}
+/* FM6g 滑条调细(用户令)。一旦写了 -webkit-appearance:none,accent-color 就不再生效,
+   轨道与滑块必须自己画 —— 少写任何一条都会变成一根看不见的透明线。 */
+.fp-krows .fp-knob input[type=range]{width:auto;height:12px;-webkit-appearance:none;appearance:none;background:transparent}
+/* 已走过的那一段仍要着色。accent-color 在 appearance:none 之后失效,所以改成渐变硬切:
+   --fp-fill 由 89-fmpage 写成百分比(渲染时一次、拖动时每次 input 更新)。缺省 50% 只是兜底,
+   正常路径永远带着值 —— 没有它的话滑块看起来像"进度永远在一半"。 */
+.fp-krows .fp-knob input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:2px;
+  background:linear-gradient(to right,var(--acc) 0 var(--fp-fill,50%),var(--line-ctl) var(--fp-fill,50%) 100%)}
+.fp-krows .fp-knob input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:11px;height:11px;margin-top:-4px;border-radius:50%;background:var(--acc);border:none}
+/* FM6g 插槽名输入框 / 未完成插槽的小标签 / 新增插槽的星标 */
+.fp-nm{width:96px;background:var(--srf-sunk);color:var(--txt);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);font-size:var(--fs-label);padding:2px 4px}
+.fp-nm:focus{outline:none;border-color:var(--acc)}
+.fp-chip{color:var(--state-select);border-color:var(--state-select)}
+.fp-star{pointer-events:none}
 .fp-knob{display:inline-flex;align-items:center;gap:var(--sp-2)}
 .fp-knob input[type=range]{width:96px;accent-color:var(--acc);background:transparent}
 .fp-knob .fp-v{min-width:34px;text-align:right}

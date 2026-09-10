@@ -2379,6 +2379,52 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   hit(document.querySelector('#fpBody [data-fp="del"]'),'pointerdown');
   var nLast=fmPageSlots(F).length;
   var ok6=(nAdd===n6+1&&nDel===n6&&nLast===1);
+  /* ⑥b FM6g【新增插槽的完整流程】,全程走真实事件。判据分三段,每一段都带反向的一半:
+       · 新槽的能力与带默认为空 ⇒ 它【不上盘】(盘上圈数一个不多),但已经在表里;
+       · 名字可以手打,且改名【不许换掉输入框节点】(整页重渲会让光标当场丢失,同滑块那条);
+         只选能力还不算完成 ⇒ 仍不上盘,而且手打的名字不许被"名字跟着能力走"冲掉;
+       · 能力与带都选了 ⇒ 上盘 +1 且带一颗星,星在圆圈的【右上角】(dx>0 且 dy<0)。
+     另有一条防孤儿:未完成的槽点不到,配置条必须把它列成可点的小标签,点了能选中。 */
+  F.P.slots=null; fmReslot(F); fmPg.sel=-1; fmPageRender();
+  var g6=function(){return document.querySelectorAll('#fpDial [data-fps]').length;};
+  var d6a=g6(), t6a=fmPageSlots(F).length;
+  hit(document.querySelector('#fpBody [data-fp="add"]'),'pointerdown');
+  var ni=fmPg.sel, nsl=fmPageSlots(F)[ni]||{};
+  var okNew=(fmPageSlots(F).length===t6a+1&&ni===t6a&&!nsl.cap&&!nsl.band&&nsl.nw===true&&/^新插槽\d+$/.test(nsl.nm||'')&&g6()===d6a);
+  var nmEl=document.querySelector('#fpBody input[data-fp="nm"]');
+  var okNm=false;
+  if(nmEl){
+    nmEl.value='前卫岗'; nmEl.dispatchEvent(new Event('input',{bubbles:true}));
+    okNm=(fmPageSlots(F)[ni].nm==='前卫岗'&&document.querySelector('#fpBody input[data-fp="nm"]')===nmEl);
+  }
+  var capS=document.querySelector('#fpBody select[data-fp="cap"]');
+  var okBlank=(!!capS&&capS.options.length===FM_CAPS.length+1&&capS.value==='');
+  if(capS){capS.value='ew';capS.dispatchEvent(new Event('change',{bubbles:true}));}
+  var okHalf=(g6()===d6a&&fmPageSlots(F)[fmPg.sel].nm==='前卫岗'); /* 只选一半仍不上盘;手打名不许被冲掉 */
+  /* ⑥b-2 未完成的槽也不许进【几何】。方位盘自己有一道 fmSlotReady 守卫,所以只看盘上圈数
+     测不出 fmSlotsOf 那道滤 —— 而少了它,带为空的槽会让半径查成 undefined、站位坐标变 NaN,
+     船会被指派到一个 NaN 位置上。判据两条:几何拿到的槽数 = 表内已完成的数;所有站位坐标有限。 */
+  var raw6=fmPageSlots(F), done6=raw6.filter(function(x){return x.cap&&x.band;}).length;
+  var geo6=fmSlotsOf(F.P).length;
+  var pl6=fmPlanStations(fmShips(F),F.P,fmFlag(F).id), nan6=0;
+  if(pl6&&pl6.sta)pl6.sta.forEach(function(st){if(!isFinite(st.lx)||!isFinite(st.ly)||!isFinite(st.r))nan6++;});
+  var okGeo=(geo6===done6&&done6<raw6.length&&nan6===0);
+  var bandS=document.querySelector('#fpBody select[data-fp="band"]');
+  if(bandS){bandS.value='picket';bandS.dispatchEvent(new Event('change',{bubbles:true}));}
+  var d6b=g6(), starN=document.querySelectorAll('#fpDial .fp-star').length;
+  var gN=document.querySelector('#fpDial [data-fps="'+fmPg.sel+'"]'), sdx=0, sdy=0;
+  if(gN){var cc=gN.querySelector('circle'), stx=gN.querySelector('.fp-star');
+    if(cc&&stx){sdx=(+stx.getAttribute('x'))-(+cc.getAttribute('cx'));sdy=(+stx.getAttribute('y'))-(+cc.getAttribute('cy'));}}
+  var okDone=(d6b===d6a+1&&starN===1&&sdx>0&&sdy<0);
+  /* 防孤儿:再加一个不填完的,取消选中之后必须还能从小标签点回来 */
+  hit(document.querySelector('#fpBody [data-fp="add"]'),'pointerdown');
+  var orphIdx=fmPg.sel;
+  fmPg.sel=-1; fmPageRender();
+  var chip=document.querySelector('#fpBody [data-fp^="pick-"]');
+  hit(chip,'pointerdown');
+  var okOrph=(!!chip&&fmPg.sel===orphIdx);
+  var ok6b=(okNew&&okNm&&okBlank&&okHalf&&okGeo&&okDone&&okOrph);
+  F.P.slots=null; fmReslot(F); fmPg.sel=-1; fmPageRender();
   /* ⑦ 恢复默认 + 关闭(真的点 ✕) */
   hit(document.querySelector('#fpBody [data-fp="reset"]'),'pointerdown');
   var okReset=(!F.P.slots&&fmPageSlots(F).length===FM_STANCE.sub.slots.length);
@@ -2392,7 +2438,7 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   fmPageOpen(F.id);fmDelete(F.id);fmPageRender();
   var ok8=!fmPageIsOpen();
   window.removeEventListener('error',onerr);
-  var ok=(ok1&&ok2&&ok3&&ok4&&ok4b&&ok5&&ok6&&ok7&&ok8&&!errs.length);
+  var ok=(ok1&&ok2&&ok3&&ok4&&ok4b&&ok5&&ok6&&ok6b&&ok7&&ok8&&!errs.length);
   return (ok?'ok':'fail')
     +' ①入口(真点「编组控制」钮):钮存在='+had+' 【真在屏上】编组控制='+visPage+' 固定态的重新固定='+visSnap+'(须 false)'+' 页已开='+opened+' 正文='+len1+'字符 方位盘='+(!!dial)+' 插槽圈='+slotN+'个(须=插槽表 '+slots0+') 舰位点='+shipDots+' 评估行='+rows+' 能力表行='+tds+'(须='+b.length+')='+ok1
     +' | ②点插槽:选中下标='+selIdx+'(须0) 能力/带下拉都建出='+(!!capSel&&!!bandSel)+'='+ok2
@@ -2401,6 +2447,13 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
     +' | ④b五个几何旋钮(真实 input 事件):['+kNames.join(',')+'] 逐个拖动后 F.P 对应项都变了='+kOk+' | FM6f 拖动中:方位盘当场重画='+dlLive+' 且滑块节点未被换掉='+kSame+' 「刷新读数」钮已删='+noRefresh+'='+ok4b
     +' | ⑤页内切站位→水下:stance='+F.P.stance+' 自定义插槽已丢='+(!F.P.slots)+' 站距乘数='+F.P.spacing.toFixed(2)+'(须1.60)='+ok5
     +' | ⑥增删插槽:'+n6+' -增-> '+nAdd+' -删-> '+nDel+' 只剩1个时再删='+nLast+'(须仍1=不许删到空)='+ok6
+    +' | ⑥b FM6g 新增插槽:默认空能力/空带且不上盘='+okNew
+    +' 改名生效且输入框节点未被换='+okNm
+    +' 下拉带「未选择」='+okBlank
+    +' 只选能力仍不上盘且不覆盖手打名='+okHalf
+    +' 未完成的槽不进几何(几何'+geo6+'/表内'+raw6.length+',站位坐标 NaN 数='+nan6+')='+okGeo
+    +' 选全后盘上 '+d6a+'→'+d6b+' 星标='+starN+' 星在右上角(dx='+sdx+',dy='+sdy+')='+okDone
+    +' 未完成小标签点得回去='+okOrph+'='+ok6b
     +' | ⑦恢复默认='+okReset+' 点✕关闭='+closed+' 切固定模式后 s.fmStn 已清='+stnCleared+'='+ok7
     +' | ⑧编队被删后自动收摊='+ok8+' 运行期错误='+(errs.length?errs.join(' / '):'none');
 });

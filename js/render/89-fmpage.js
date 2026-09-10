@@ -45,7 +45,7 @@ function fmPageSlots(F) {
 }
 function fmPageEdit(F, fn) { // 改插槽的唯一通道:取副本 → 改 → 落回 F.P.slots → 重排 → 重渲
   if (!F || !F.P) return;
-  const cur = fmPageSlots(F).map(x => ({ nm: x.nm, cap: x.cap, band: x.band, brg: x.brg }));
+  const cur = fmPageSlots(F).map(x => ({ nm: x.nm, cap: x.cap, band: x.band, brg: x.brg, nw: x.nw })); // nw 必须一起抄:漏了的话改任何一处都会把「新增」星标洗掉
   const next = fn(cur);
   if (!next || !next.length) return;   // 一个插槽都不剩的话 fmSlotsOf 会回落到站位预设,玩家会以为改动被吞了;直接不许改到空
   F.P.slots = next;
@@ -88,11 +88,16 @@ const FP_KNOBS = [
   { k: 'spacing', nm: '站距', tip: '同一插槽内第 2、3 艘船向两侧展开的角步。【只在舰数超过插槽数时才有效】' },
   { k: 'bstr', nm: '偏向强度', tip: '该站位的能力偏向(boost)施加多少。0 = 完全不偏向,只看插槽本身要什么' },
 ];
+function fmPgFill(k, v) { // 滑块已走过那一段的百分比(写进 --fp-fill 给 CSS 的渐变用)
+  const r = FM_LIMIT[k] || [0, 2], span = r[1] - r[0];
+  if (!(span > 0) || !isFinite(v)) return '50%';
+  return (Math.max(0, Math.min(1, (v - r[0]) / span)) * 100).toFixed(1) + '%';
+}
 function fmPgKnob(F, d) {
   const r = FM_LIMIT[d.k] || [0, 2], v = isFinite(F.P[d.k]) ? F.P[d.k] : 1;
   return '<span class="fp-knob" title="' + fmPgEsc(d.tip) + '">'
     + '<span class="fp-lb">' + d.nm + '</span>'
-    + '<input type="range" data-fpk="' + d.k + '" min="' + r[0] + '" max="' + r[1] + '" step="0.05" value="' + v + '">'
+    + '<input type="range" data-fpk="' + d.k + '" min="' + r[0] + '" max="' + r[1] + '" step="0.05" value="' + v + '" style="--fp-fill:' + fmPgFill(d.k, v) + '">'
     + '<span class="fp-v">' + v.toFixed(2) + '</span></span>';
 }
 /* FM6f「站位与几何」合并块。加标题与细边框是为了与紧随其后的「全队能力评估」分开 —— 两块都在右列,
@@ -135,6 +140,7 @@ function fmPgDialInner(F, PL) {
   let maxR = 1;
   PL.sta.forEach(st => { maxR = Math.max(maxR, Math.abs(st.lx), Math.abs(st.ly)); });
   slots.forEach(sl => {
+    if (!fmSlotReady(sl)) return;   // FM6g 未完成的槽不画,也不能进缩放:BR[null] 是 undefined,算出来是 NaN,一个 NaN 就把整张盘的缩放毁掉
     const r = BR[sl.band] || 0;
     const t = fmSpreadBrg(sl.brg, T.spread) * Math.PI / 180;
     maxR = Math.max(maxR, Math.abs(r * Math.cos(t)), Math.abs(r * Math.sin(t) * BR.widen));
@@ -172,6 +178,7 @@ function fmPgDialInner(F, PL) {
     + '<text x="' + FP_C + '" y="' + (FP_C + 18) + '" fill="#ffe066" font-size="9" text-anchor="middle">' + fmPgEsc(PL.flag.name) + '</text>';
   /* 插槽圈(可拖、可点选)。画在【展开后】的方位上,与站位点重合 —— 拖的就是它 */
   slots.forEach((sl, i) => {
+    if (!fmSlotReady(sl)) return;   // FM6g 能力或带还没选的新槽不上盘(用户令:选择之后才显示)。下标 i 仍是【整张表】的下标,选中与拖动对得上
     const deg = fmSpreadBrg(sl.brg, T.spread), t = deg * Math.PI / 180;
     const r = BR[sl.band] || 0;
     const q = px(r * Math.cos(t), r * Math.sin(t) * BR.widen);
@@ -179,26 +186,46 @@ function fmPgDialInner(F, PL) {
     g += '<g class="fp-slot' + (on ? ' on' : '') + '" data-fps="' + i + '">'
       + '<circle cx="' + q[0].toFixed(1) + '" cy="' + q[1].toFixed(1) + '" r="11" fill="#0a0e16" fill-opacity=".55" stroke="' + (on ? '#ffe066' : '#5aa7ff') + '" stroke-width="' + (on ? 2 : 1.2) + '"/>'
       + '<text x="' + q[0].toFixed(1) + '" y="' + (q[1] + 3.5).toFixed(1) + '" fill="' + (on ? '#ffe066' : '#9fd4ff') + '" font-size="9" text-anchor="middle">' + fmPgEsc(fmCapAb(sl.cap)) + '</text>'
+      /* FM6g 右上角小星 = 这个槽是玩家自己加的(模板里没有)。画在同一个 <g> 里,跟着一起被点中,
+         不会在圈边上留一块看得见点不着的死角。 */
+      + (sl.nw ? '<text class="fp-star" x="' + (q[0] + 9).toFixed(1) + '" y="' + (q[1] - 6).toFixed(1) + '" fill="#ffe066" font-size="10" text-anchor="middle">★</text>' : '')
       + '</g>';
   });
   return g;
 }
 
+/* 名字是不是【默认形状】(新插槽N / 某能力位)。改能力时只有默认名才跟着改 ——
+   FM6g 起名字可以手打,把玩家取的名字冲掉是最气人的一种"贴心"。 */
+function fmPgAutoNm(nm) {
+  if (!nm) return true;
+  if (/^新插槽\d+$/.test(nm)) return true;
+  return FM_DIM.some(d => nm === d.ab + '位');
+}
 function fmPgSlotCfg(F) {
   const slots = fmPageSlots(F), i = fmPg.sel;
   let s = '<div class="fp-bar fp-cfg">';
   if (i < 0 || i >= slots.length) {
     s += '<span class="fp-lb">未选中插槽</span><span class="fp-dim">点一个圆圈来编辑它</span>';
+    /* FM6g 未完成的槽不上盘,于是【点不到】。在这里列成可点的小标签 —— 否则新加一个槽又点了别处,
+       它就成了看不见也够不着的孤儿,只能靠「恢复默认」整表丢掉才清得掉。 */
+    const orphan = slots.map((sl, k) => ({ sl, k })).filter(x => !fmSlotReady(x.sl));
+    if (orphan.length) s += '<span class="fp-lb">未完成</span>'
+      + orphan.map(x => '<button class="btn qbtn fp-chip" data-fp="pick-' + x.k + '">★ ' + fmPgEsc(x.sl.nm) + '</button>').join('');
   } else {
     const sl = slots[i];
-    s += '<span class="fp-lb">插槽</span><span class="fp-v">' + fmPgEsc(sl.nm) + '</span>'
+    /* 名字走 <input>:FM6g 起可以手打。它【不能】走整页重渲那条路(会把正在输入的节点换掉、光标丢失),
+       所以 input 事件里只改数据 + 就地重画方位盘,失焦(change)才整页重渲。 */
+    s += '<span class="fp-lb">插槽</span><input class="fp-nm" type="text" data-fp="nm" maxlength="12" value="' + fmPgEsc(sl.nm) + '">'
       + '<span class="fp-lb">能力</span><select data-fp="cap">'
+      + '<option value=""' + (sl.cap ? '' : ' selected') + '>— 未选择 —</option>'
       + FM_CAPS.map(c => '<option value="' + c + '"' + (c === sl.cap ? ' selected' : '') + '>' + fmPgEsc(fmCapNm(c)) + '</option>').join('')
       + '</select>'
       + '<span class="fp-lb">带</span><select data-fp="band">'
+      + '<option value=""' + (sl.band ? '' : ' selected') + '>— 未选择 —</option>'
       + FM_BANDS.filter(b => b !== 'core').map(b => '<option value="' + b + '"' + (b === sl.band ? ' selected' : '') + '>' + FM_BAND_NM[b] + '</option>').join('')
       + '</select>'
       + '<span class="fp-lb">方位</span><span class="fp-v">' + Math.round(sl.brg) + '°</span>'
+      + (fmSlotReady(sl) ? '' : '<span class="fp-dim">能力与带都选了才会出现在阵型图上</span>')
       + '<button class="btn qbtn qstop" data-fp="del">删除本插槽</button>';
   }
   s += '<span class="fp-sp"></span><button class="btn qbtn" data-fp="add">+ 新增插槽</button></div>';
@@ -310,8 +337,11 @@ function fmPgAct(a) {
     if (typeof updFmBar === 'function') updFmBar();
     return;
   }
+  if (a.indexOf('pick-') === 0) { fmPg.sel = Number(a.slice(5)); fmPageRender(); return; } // FM6g 未完成插槽的小标签:选中它
   if (a === 'add') {
-    fmPageEdit(F, cur => { cur.push({ nm: '新插槽' + (cur.length + 1), cap: 'aaChan', band: 'screen', brg: 0 }); fmPg.sel = cur.length - 1; return cur; });
+    /* FM6g 新槽【能力与带留空】(用户令),所以它暂不进几何、也不上方位盘;nw 标记让它选全之后在盘上带一颗星。
+       名字给默认的「新插槽N」,玩家可以在配置条里改。 */
+    fmPageEdit(F, cur => { cur.push({ nm: '新插槽' + (cur.length + 1), cap: null, band: null, brg: 0, nw: true }); fmPg.sel = cur.length - 1; return cur; });
     return;
   }
   if (a === 'del') {
@@ -329,6 +359,7 @@ on('fmPage', 'pointerdown', e => {
   const t = e.target;
   if (t && t.id === 'fmPage') { fmPageClose(); return; }              // 点遮罩空白处关闭
   const b = t && t.closest ? t.closest('[data-fp]') : null;
+  if (b && b.tagName === 'INPUT') return;   // FM6g 名字输入框:preventDefault 会让它聚不了焦、打不了字
   if (b && b.tagName !== 'SELECT') { if (e.button !== 0) return; e.preventDefault(); fmPgAct(b.getAttribute('data-fp')); return; }
   fmPgDown(e);
 });
@@ -336,6 +367,20 @@ on('fmPage', 'pointerdown', e => {
    反复 fmReslot 把 44 fmReassign 落盘的配对抹掉。刻意【不整页重渲】—— 那会把正在拖的 <input> 换成新节点、
    拖拽当场断掉(同 RF7c 那条);只就地更新读数,松手后由 pointerup 补一次整页重渲把阵型图刷新。 */
 on('fmPage', 'input', e => {
+  /* FM6g 插槽改名。走 input(边打边生效)但【绝不整页重渲】—— 那会把正在输入的 <input> 换成新节点、
+     光标当场丢失(同滑块那条)。只改数据 + 就地重画方位盘;整页重渲留给失焦时的 change。 */
+  const nmEl = e.target && e.target.closest ? e.target.closest('input[data-fp="nm"]') : null;
+  if (nmEl) {
+    const Fn = fmPageF(), i = fmPg.sel;
+    if (!Fn || !Fn.P) return;
+    const cur = fmPageSlots(Fn).map(x => ({ nm: x.nm, cap: x.cap, band: x.band, brg: x.brg, nw: x.nw }));
+    if (i < 0 || i >= cur.length) return;
+    cur[i].nm = nmEl.value;
+    Fn.P.slots = cur;
+    if (typeof fmReslot === 'function') fmReslot(Fn);
+    fmPgDialSync();
+    return;
+  }
   const el = e.target && e.target.closest ? e.target.closest('input[data-fpk]') : null;
   if (!el) return;
   const F = fmPageF(); if (!F) return;
@@ -343,10 +388,15 @@ on('fmPage', 'input', e => {
   const out = el.parentNode && el.parentNode.querySelector('.fp-v');
   const now = F.P[el.getAttribute('data-fpk')];
   if (out && isFinite(now)) out.textContent = now.toFixed(2);
+  el.style.setProperty('--fp-fill', fmPgFill(el.getAttribute('data-fpk'), now)); // 已走过那一段跟着走(accent-color 在 appearance:none 之后不再生效)
   fmPgDialSync();   // FM6f 拖动中实时重画方位盘(只换 svg 内容,不碰滑块节点)
   fmPg.knobDirty = true;
 });
 on('fmPage', 'change', e => {
+  /* FM6g 名字输入框失焦(或回车)时补一次整页重渲 —— 打字过程中只重画了方位盘,
+     评估表与逐舰表里的站位名还是旧的。 */
+  const nmEl = e.target && e.target.closest ? e.target.closest('input[data-fp="nm"]') : null;
+  if (nmEl) { fmPageRender(); return; }
   const sel = e.target && e.target.closest ? e.target.closest('select[data-fp]') : null;
   if (!sel) return;
   const F = fmPageF(), i = fmPg.sel;
@@ -354,8 +404,10 @@ on('fmPage', 'change', e => {
   const key = sel.getAttribute('data-fp'), val = sel.value;
   fmPageEdit(F, cur => {
     if (i >= cur.length) return null;
-    cur[i][key] = val;
-    if (key === 'cap') cur[i].nm = fmCapAb(val) + '位';   // 名字跟着能力走,免得插槽叫"电战位"里面装的却是主炮
+    cur[i][key] = val || null;   // FM6g 空串 = 「未选择」,存 null(fmSlotReady 靠它判这个槽完没完成)
+    /* 名字跟着能力走,免得插槽叫"电战位"里面装的却是主炮。
+       FM6g 起【只在默认名上这么干】—— 名字可以手打之后,把玩家取的名字冲掉是最气人的一种"贴心"。 */
+    if (key === 'cap' && val && fmPgAutoNm(cur[i].nm)) cur[i].nm = fmCapAb(val) + '位';
     return cur;
   });
 });

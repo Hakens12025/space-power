@@ -136,7 +136,13 @@ function fmGeoOf(P) {
 /* 每编队的自定义插槽表:P.slots(= F.P.slots)存在且非空就用它,否则用站位预设的那套。
    在编组控制页的方位盘上拖动改插槽,写的就是 P.slots —— 放进 P 而不是 F 上另开一个字段,
    是为了让 formationSlots(list, P, anchorId) 的签名不用改:阵型参数本来就是"每编队一份"的那一份。 */
-function fmSlotsOf(P) { return (P && P.slots && P.slots.length) ? P.slots : fmStanceOf(P).slots; }
+/* FM6g【未完成的插槽不参与几何】。新增插槽时能力与带默认为空(玩家选了才算数):
+   带为空 ⇒ 半径查不到 ⇒ 站位坐标 NaN;能力为空 ⇒ 需求表挂一个不存在的维度 ⇒ 契合恒 0 还占掉一个站位。
+   所以在【取插槽表】这唯一入口就滤掉,下游(fmGenStations / 方位盘 / 指派)一行都不用改。
+   注意滤空之后可能一个都不剩(玩家把模板槽删光、只留新槽),那时 fmGenStations 只出阵心 ——
+   刻意【不】回落到站位预设:回落会把玩家删掉的槽凭空变回来。 */
+function fmSlotReady(sl) { return !!(sl && sl.cap && sl.band); }
+function fmSlotsOf(P) { return (P && P.slots && P.slots.length) ? P.slots.filter(fmSlotReady) : fmStanceOf(P).slots; }
 
 /* 【可互换性签名】两艘舰只有在这九维读数与 inner 都相同时,才可以互换站位而不改变最优指派的总契合度。
    下游的槽位重配对(44 fmReassign,下令时消交叉)用它分桶:
