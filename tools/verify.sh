@@ -2424,32 +2424,53 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   hit(chip,'pointerdown');
   var okOrph=(!!chip&&fmPg.sel===orphIdx);
   var ok6b=(okNew&&okNm&&okBlank&&okHalf&&okGeo&&okDone&&okOrph);
-  /* ⑥c FM6h【自定义轮带】。内置五条是算出来的(半径来自护卫的近防射程),只列不给编辑;
-     自定义带 = 屏护 × 倍数 —— 刻意不用绝对公里数,那会出现"拖 bm 别的带都动、就它不动"的分裂。
+  /* ⑥c FM6k【自定义轮带】。内置五条是算出来的(半径来自护卫的近防射程),只列不给编辑;
+     自定义带的半径是玩家【直接填的绝对值】(千公里),没填 = 这条带还没成形,不进几何也不上盘 ——
+     与"插槽的能力/带留空"同一套语义。自定义带有两态:编辑行(名字|半径|✓|✕)与小卡片,点卡片回编辑行。
      判据串成一条完整的用户路径,每一步都带反向的一半:
-       · 新增 → 盘上多一圈、名字默认「自定义轮带」、半径 = 1.5×屏护;
+       · 新增 → 半径为空、盘上【一圈都不多】、直接是编辑态;
+       · 填半径 → 盘上多一圈且半径正是填的那个数;清空 → 那一圈又消失;越界要被钳住;
        · 改名 → 落到 P.bands 且【输入框节点不被换掉】(整页重渲会让光标丢失,同插槽改名那条);
-       · 改倍数 → 半径真的跟着变;越界要被钳住(不钳的话玩家打个 99 就把整张盘的缩放拽飞);
+       · ✓ → 收成小卡片、编辑行消失、盘上不变;点小卡片 → 回到编辑行且两个框都回填;
        · 插槽能选到它 → 选完槽真的进几何;
        · 删带 → 引用它的槽【自动变回未完成】(不置空的话槽指向一条不存在的带,半径查成 undefined)。 */
-  F.P.slots=null; F.P.bands=null; fmReslot(F); fmPg.sel=-1; fmPageRender();
+  F.P.slots=null; F.P.bands=null; fmPg.bedit=null; fmReslot(F); fmPg.sel=-1; fmPageRender();
   var rings=function(){return document.querySelectorAll('#fpDial ellipse').length;};
   var brOf=function(k){return fmBandRadii(fmShips(F),fmFlag(F),F.P.bm,F.P)[k]||0;};
   var ro7=document.querySelectorAll('#fpBody .fp-bd-ro').length, ring7a=rings();
   hit(document.querySelector('#fpBody [data-fp="badd"]'),'pointerdown');
   var ub=F.P.bands||[], bk=ub.length?ub[0].k:'', ring7b=rings();
-  var okAdd=(ub.length===1&&ub[0].nm==='自定义轮带'&&ring7b===ring7a+1
-             &&Math.abs(brOf(bk)-brOf('screen')*1.5)<1&&ro7===4);
+  var riEl=document.querySelector('#fpBody input[data-fp^="br-"]');
+  /* 没填半径的带【连 BR 都不该有它的键】。只看"盘上没多一圈"测不到这一条:BR 里存个 null 的话
+     半径算出来是 0,画圈那一步的 r>2 守卫照样把它跳过 —— 两处各有守卫,判据要分别打。 */
+  var noKey=!(bk in fmBandRadii(fmShips(F),fmFlag(F),F.P.bm,F.P));
+  var okAdd=(ub.length===1&&ub[0].nm==='自定义轮带'&&ub[0].r===null&&ring7b===ring7a&&noKey
+             &&fmPg.bedit===bk&&ro7===4&&!!document.querySelector('#fpBody .fp-bd-ed')
+             &&!!riEl&&riEl.value===''&&riEl.placeholder==='---K');
+  /* 半径:填 → 上盘且值对得上;清空 → 又消失;越界 → 钳住 */
+  var r7fill=0, ring7c=0, ring7d=0, rHi=0;
+  if(riEl){
+    riEl.value='150'; riEl.dispatchEvent(new Event('input',{bubbles:true}));
+    r7fill=brOf(bk); ring7c=rings();
+    riEl.value=''; riEl.dispatchEvent(new Event('input',{bubbles:true}));
+    ring7d=rings();
+    riEl.value='99999999'; riEl.dispatchEvent(new Event('input',{bubbles:true}));
+    rHi=F.P.bands[0].r;
+    riEl.value='150'; riEl.dispatchEvent(new Event('input',{bubbles:true}));
+  }
+  var okR=(Math.abs(r7fill-150000)<1&&ring7c===ring7a+1&&ring7d===ring7a&&Math.abs(rHi-FM_BAND_R[1])<1e-9);
   var bnm=document.querySelector('#fpBody input[data-fp^="bnm-"]');
   var okBnm=false;
-  if(bnm){bnm.value='外环警戒';bnm.dispatchEvent(new Event('input',{bubbles:true}));
+  if(bnm){bnm.value='外环警戒'; bnm.dispatchEvent(new Event('input',{bubbles:true}));
     okBnm=(F.P.bands[0].nm==='外环警戒'&&document.querySelector('#fpBody input[data-fp^="bnm-"]')===bnm);}
-  var bmu=document.querySelector('#fpBody input[data-fp^="bmul-"]');
-  var r7a=brOf(bk), r7b=0, mulHi=0;
-  if(bmu){bmu.value='3';bmu.dispatchEvent(new Event('input',{bubbles:true}));r7b=brOf(bk);
-    bmu.value='99';bmu.dispatchEvent(new Event('input',{bubbles:true}));mulHi=F.P.bands[0].mul;
-    bmu.value='1.5';bmu.dispatchEvent(new Event('input',{bubbles:true}));}
-  var okMul=(Math.abs(r7b-r7a*2)<1&&Math.abs(mulHi-FM_BAND_MUL[1])<1e-9);
+  /* ✓ 收起 → 小卡片;再点卡片 → 回编辑行,两个框都回填 */
+  hit(document.querySelector('#fpBody [data-fp^="bok-"]'),'pointerdown');
+  var card=document.querySelector('#fpBody .fp-bd-on'), cardTx=card?card.textContent:'';
+  var okFold=(fmPg.bedit===null&&!document.querySelector('#fpBody .fp-bd-ed')&&!!card
+              &&cardTx.indexOf('外环警戒')===0&&cardTx.indexOf('150k')>0&&rings()===ring7a+1);
+  hit(card,'pointerdown');
+  var bnm2=document.querySelector('#fpBody input[data-fp^="bnm-"]'), br2=document.querySelector('#fpBody input[data-fp^="br-"]');
+  var okOpen=(fmPg.bedit===bk&&!!bnm2&&bnm2.value==='外环警戒'&&!!br2&&br2.value==='150');
   /* 插槽指到自定义带上,再把带删掉 */
   hit(document.querySelector('#fpDial [data-fps="1"]'),'pointerdown');
   var bsel=document.querySelector('#fpBody select[data-fp="band"]');
@@ -2472,7 +2493,7 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   var plG=fmPlanStations(fmShips(F),F.P,fmFlag(F).id), ghostNaN=0;
   if(plG&&plG.sta)plG.sta.forEach(function(st){if(!isFinite(st.lx)||!isFinite(st.ly))ghostNaN++;});
   var okGhost=(ghostGeo===ghostAll-1&&ghostNaN===0);
-  var ok6c=(okAdd&&okBnm&&okMul&&okPick&&okDel&&okGhost);
+  var ok6c=(okAdd&&okR&&okBnm&&okFold&&okOpen&&okPick&&okDel&&okGhost);
   F.P.slots=null; F.P.bands=null; fmReslot(F); fmPg.sel=-1; fmPageRender();
   F.P.slots=null; fmReslot(F); fmPg.sel=-1; fmPageRender();
   /* ⑦ 恢复默认 + 关闭(真的点 ✕) */
@@ -2504,9 +2525,10 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
     +' 未完成的槽不进几何(几何'+geo6+'/表内'+raw6.length+',站位坐标 NaN 数='+nan6+')='+okGeo
     +' 选全后盘上 '+d6a+'→'+d6b+' 星标='+starN+' 星在右上角(dx='+sdx+',dy='+sdy+')='+okDone
     +' 未完成小标签点得回去='+okOrph+'='+ok6b
-    +' | ⑥c FM6h 自定义轮带:新增(内置只读'+ro7+'条,盘上圈 '+ring7a+'→'+ring7b+',半径=1.5×屏护)='+okAdd
+    +' | ⑥c FM6k 自定义轮带:新增(内置只读'+ro7+'条,半径留空、盘上圈 '+ring7a+'→'+ring7b+'不变、BR 里无此键='+noKey+'、直接进编辑态)='+okAdd
+    +' 半径 填150→'+Math.round(r7fill/1000)+'k且圈'+ring7c+' / 清空→圈'+ring7d+' / 越界钳到'+rHi+'='+okR
     +' 改名落盘且输入框未被换='+okBnm
-    +' 改倍数 '+Math.round(r7a/1000)+'k→'+Math.round(r7b/1000)+'k(须翻倍) 越界99被钳到'+mulHi+'='+okMul
+    +' ✓收成小卡片["'+cardTx+'"]='+okFold+' 点卡片回编辑行且两框回填='+okOpen
     +' 插槽能选到它且真进几何='+okPick
     +' 删带后引用它的槽自动变回未完成='+okDel
     +' 槽引用一条不存在的带时也被滤掉(几何'+ghostGeo+'/表内'+ghostAll+',NaN='+ghostNaN+')='+okGhost+'='+ok6c

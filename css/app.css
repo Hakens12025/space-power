@@ -640,8 +640,14 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 .fp-bd i{font-family:var(--ff-mono);font-style:normal;color:var(--txt-read);font-variant-numeric:tabular-nums}
 .fp-bd-ro{opacity:.75}
 .fp-bnm{width:74px}
-.fp-bmul{width:56px;background:var(--srf-sunk);color:var(--txt);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);font-size:var(--fs-label);padding:2px 4px}
-.fp-bmul:focus{outline:none;border-color:var(--acc)}
+/* FM6k 自定义带两态:小卡片(可点,与内置那几个同形但亮一点)/ 编辑行(名字+半径+✓+✕) */
+.fp-bd-on{cursor:pointer;color:var(--txt);border-color:var(--line-ctl)}
+.fp-bd-on:hover{background:var(--srf-hover);border-color:var(--acc)}
+.fp-bd-ed{border-color:var(--acc)}
+.fp-br{width:64px;background:var(--srf-sunk);color:var(--txt);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);font-size:var(--fs-label);padding:2px 4px}
+.fp-br:focus{outline:none;border-color:var(--acc)}
+.fp-bok{padding:0 5px;min-width:0;color:var(--state-ok);border-color:var(--state-ok)}
+.fp-bok:hover{background:var(--state-ok);border-color:var(--state-ok);color:var(--ink)}
 .fp-bx{padding:0 5px;min-width:0}
 .fp-sp{flex:1;min-width:var(--sp-3)}
 .fp-lb{font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label);margin-left:var(--sp-3)}

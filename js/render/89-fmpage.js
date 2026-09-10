@@ -14,7 +14,7 @@
    —— 那是 RF7c 在 #fcList 上踩过的坑,这里的插槽圈同时满足"重建 + hover + 事件委托"三条,更躲不过。
    所以舰船血量变化引起的评估变动不会自动反映,标题栏写明了读数时刻。 */
 
-const fmPg = { open: null, sel: -1, drag: -1, moved: false, knobDirty: false }; // 纯 UI 状态,不进任何存档/快照
+const fmPg = { open: null, sel: -1, drag: -1, moved: false, knobDirty: false, bedit: null }; // bedit:正在展开编辑的那条自定义轮带(FM6k) // 纯 UI 状态,不进任何存档/快照
 /* 本页整块走 innerHTML 拼串,而舰名是玩家可改的(场景编辑器)——拼进去前必须转义。
    全库没有现成的转义函数(其余面板都走 textContent),所以在这里自带一个,名字加 fmPg 前缀防撞名。 */
 function fmPgEsc(v) { return String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
@@ -32,7 +32,7 @@ function fmPageOpen(id) {
 }
 function fmPageClose() {
   const el = document.getElementById('fmPage');
-  fmPg.open = null; fmPg.sel = -1; fmPg.drag = -1;
+  fmPg.open = null; fmPg.sel = -1; fmPg.drag = -1; fmPg.bedit = null;
   if (el) el.classList.remove('on');
 }
 
@@ -246,14 +246,25 @@ function fmPgBandCfg(F, BR) {
   s += FM_BANDS.filter(b => b !== 'core').map(b =>
     '<span class="fp-bd fp-bd-ro" title="内置轮带:半径由护卫的近防射程算出,不可改">' + FM_BAND_NM[b]
     + '<i>' + Math.round((BR[b] || 0) / 1000) + 'k</i></span>').join('');
-  s += ub.map((b, bi) =>
-    '<span class="fp-bd" data-fpb="' + b.k + '">'
-    + '<input class="fp-nm fp-bnm" type="text" data-fp="bnm-' + b.k + '" maxlength="10" value="' + fmPgEsc(b.nm) + '">'
-    + '<input class="fp-bmul" type="number" data-fp="bmul-' + b.k + '" min="' + FM_BAND_MUL[0] + '" max="' + FM_BAND_MUL[1] + '" step="0.05" value="' + (isFinite(b.mul) ? b.mul : 1) + '" title="屏护半径的倍数">'
-    + '<i>' + Math.round((BR[b.k] || 0) / 1000) + 'k</i>'
-    + '<button class="btn qbtn qstop fp-bx" data-fp="bdel-' + b.k + '" title="删除这条轮带(用到它的插槽会变回未完成)">✕</button>'
-    + '</span>').join('');
-  s += '<span class="fp-sp"></span><button class="btn qbtn" data-fp="badd" title="新增轮带(半径 = 屏护 × 倍数,名字可改)">+ 新</button></div>';
+  /* FM6k 自定义带有两态(用户令):
+       编辑行  名字 | 半径(千公里) | ✓确认 | ✕删除     —— 新增出来就是这一态
+       小卡片  名字 + 半径,与内置那几个长一样;点一下回到编辑行
+     半径没填 = 这条带还没成形,不上盘也不进几何(同插槽的能力/带留空)。小卡片这时显示「—」,
+     它同时也是这条带唯一的入口 —— 没有它,一条没填半径的带就成了看不见也够不着的孤儿。 */
+  s += ub.map(b => {
+    const rk = fmBandReady(b) ? (Math.round(b.r / 100) / 10) : null;
+    if (fmPg.bedit !== b.k) {
+      return '<span class="fp-bd fp-bd-on" data-fp="bedit-' + b.k + '" title="点一下改名字或半径">'
+        + fmPgEsc(b.nm) + '<i>' + (rk === null ? '—' : rk + 'k') + '</i></span>';
+    }
+    return '<span class="fp-bd fp-bd-ed">'
+      + '<input class="fp-nm fp-bnm" type="text" data-fp="bnm-' + b.k + '" maxlength="10" value="' + fmPgEsc(b.nm) + '">'
+      + '<input class="fp-br" type="number" data-fp="br-' + b.k + '" min="' + (FM_BAND_R[0] / 1000) + '" max="' + (FM_BAND_R[1] / 1000) + '" step="1" placeholder="---K" value="' + (rk === null ? '' : rk) + '" title="半径,单位千公里。留空 = 这条带还没成形,不会出现在阵型图上">'
+      + '<button class="btn qbtn fp-bok" data-fp="bok-' + b.k + '" title="确认,收起成小卡片">✓</button>'
+      + '<button class="btn qbtn qstop fp-bx" data-fp="bdel-' + b.k + '" title="删除这条轮带(用到它的插槽会变回未完成)">✕</button>'
+      + '</span>';
+  }).join('');
+  s += '<span class="fp-sp"></span><button class="btn qbtn" data-fp="badd" title="新增轮带(填半径才会出现在阵型图上,名字可改)">+ 新</button></div>';
   return s;
 }
 
@@ -363,18 +374,20 @@ function fmPgAct(a) {
     return;
   }
   if (a === 'badd') {
-    /* FM6h 新增轮带。默认 1.5 倍屏护 —— 落在屏护(1.0)与哨戒(2.0)之间的空档里,
-       一加出来就看得见一条新圈,不会和现成的圈重叠到看不出加没加。 */
-    const ub = fmBandsOf(F.P).map(x => ({ k: x.k, nm: x.nm, mul: x.mul }));
-    ub.push({ k: fmBandNewKey(F.P), nm: '自定义轮带', mul: 1.5 });
-    F.P.bands = ub;
+    /* FM6k 新增轮带:半径留空、直接展开成编辑行。留空 ⇒ 不进几何也不上盘,与"插槽的能力/带留空"同一套语义
+       —— 所以"加出来先看不见"是对的,填了半径才该出现。 */
+    const ub = fmBandsOf(F.P).map(x => ({ k: x.k, nm: x.nm, r: x.r }));
+    const nk = fmBandNewKey(F.P);
+    ub.push({ k: nk, nm: '自定义轮带', r: null });   // FM6k 半径【不给默认值】:填了才成形
+    F.P.bands = ub; fmPg.bedit = nk;
     if (typeof fmReslot === 'function') fmReslot(F);
     fmPageRender(); return;
   }
   if (a.indexOf('bdel-') === 0) {
     const bk = a.slice(5);
-    F.P.bands = fmBandsOf(F.P).filter(x => x.k !== bk).map(x => ({ k: x.k, nm: x.nm, mul: x.mul }));
+    F.P.bands = fmBandsOf(F.P).filter(x => x.k !== bk).map(x => ({ k: x.k, nm: x.nm, r: x.r }));
     if (!F.P.bands.length) F.P.bands = null;
+    if (fmPg.bedit === bk) fmPg.bedit = null;
     /* 引用这条带的插槽:band 置空,变回"未完成"。必须落成 F.P.slots 的一份自定义表 ——
        它可能还是站位预设(共享对象),就地改会污染所有编队。 */
     const cur = fmPageSlots(F).map(x => ({ nm: x.nm, cap: x.cap, band: x.band === bk ? null : x.band, brg: x.brg, nw: x.nw }));
@@ -382,6 +395,8 @@ function fmPgAct(a) {
     if (typeof fmReslot === 'function') fmReslot(F);
     fmPageRender(); return;
   }
+  if (a.indexOf('bedit-') === 0) { fmPg.bedit = a.slice(6); fmPageRender(); return; }  // FM6k 点小卡片 → 展开成编辑行
+  if (a.indexOf('bok-') === 0) { fmPg.bedit = null; fmPageRender(); return; }           // FM6k ✓ 确认 → 收起成小卡片(值本来就是边打边落盘的)
   if (a.indexOf('pick-') === 0) { fmPg.sel = Number(a.slice(5)); fmPageRender(); return; } // FM6g 未完成插槽的小标签:选中它
   if (a === 'add') {
     /* FM6g 新槽【能力与带留空】(用户令),所以它暂不进几何、也不上方位盘;nw 标记让它选全之后在盘上带一颗星。
@@ -416,15 +431,17 @@ on('fmPage', 'input', e => {
      光标当场丢失(同滑块那条)。只改数据 + 就地重画方位盘;整页重渲留给失焦时的 change。 */
   /* FM6h 轮带改名与改倍数。与插槽改名同一条纪律:【绝不整页重渲】,只改数据 + 就地重画方位盘
      (带名与半径读数都画在盘的图例里);整页重渲留给失焦时的 change。
-     倍数【只在 change 时钳位】—— 边打边钳会把 "0.05" 打到一半的 "0.0" 当场改写成 0.05,输入框跟人抢方向盘。 */
-  const bEl = e.target && e.target.closest ? e.target.closest('input[data-fp^="bnm-"],input[data-fp^="bmul-"]') : null;
+     半径钳位【不回写输入框】—— 边打边把框里的字改掉会跟人抢方向盘("7" 打到一半被改成 "1"),
+     所以只钳落盘的那个值,框里让玩家自己打完;失焦的 change 再整页重渲一次把两边对齐。 */
+  const bEl = e.target && e.target.closest ? e.target.closest('input[data-fp^="bnm-"],input[data-fp^="br-"]') : null;
   if (bEl) {
     const Fb = fmPageF(); if (!Fb || !Fb.P) return;
-    const key = bEl.getAttribute('data-fp'), isNm = key.indexOf('bnm-') === 0, bk = key.slice(isNm ? 4 : 5);
-    const ub = fmBandsOf(Fb.P).map(x => ({ k: x.k, nm: x.nm, mul: x.mul }));
+    const key = bEl.getAttribute('data-fp'), isNm = key.indexOf('bnm-') === 0, bk = key.slice(isNm ? 4 : 3);
+    const ub = fmBandsOf(Fb.P).map(x => ({ k: x.k, nm: x.nm, r: x.r }));
     const hit = ub.find(x => x.k === bk); if (!hit) return;
     if (isNm) hit.nm = bEl.value;
-    else { const v = Number(bEl.value); if (!isFinite(v)) return; hit.mul = Math.max(FM_BAND_MUL[0], Math.min(FM_BAND_MUL[1], v)); }
+    else if (bEl.value === '') hit.r = null;   // FM6k 清空 = 退回"还没成形",这条带随即从盘上消失
+    else { const v = Number(bEl.value); if (!isFinite(v)) return; hit.r = Math.max(FM_BAND_R[0], Math.min(FM_BAND_R[1], v * 1000)); }
     Fb.P.bands = ub;
     if (typeof fmReslot === 'function') fmReslot(Fb);
     fmPgDialSync();
@@ -456,7 +473,7 @@ on('fmPage', 'input', e => {
 on('fmPage', 'change', e => {
   /* FM6g 名字输入框失焦(或回车)时补一次整页重渲 —— 打字过程中只重画了方位盘,
      评估表与逐舰表里的站位名还是旧的。 */
-  const nmEl = e.target && e.target.closest ? e.target.closest('input[data-fp="nm"],input[data-fp^="bnm-"],input[data-fp^="bmul-"]') : null;
+  const nmEl = e.target && e.target.closest ? e.target.closest('input[data-fp="nm"],input[data-fp^="bnm-"],input[data-fp^="br-"]') : null;
   if (nmEl) { fmPageRender(); return; }   // FM6h 轮带的名字/倍数同理:打字时只重画了盘,半径读数与带下拉里的名字还是旧的
   const sel = e.target && e.target.closest ? e.target.closest('select[data-fp]') : null;
   if (!sel) return;

@@ -46,13 +46,15 @@ const FM_BANDS = ['core', 'close', 'body', 'screen', 'picket'];
 const FM_BAND_NM = { core: '阵心', close: '贴身', body: '被护', screen: '屏护', picket: '哨戒' };
 /* FM6h【自定义轮带】(用户令:轮带不再固定那几条)。每编队一份,存在 P.bands = [{k, nm, mul}]:
      k   唯一键,形如 u1/u2 —— 不能与内置五条或 BR 上的 baseGap/gap/widen/step 撞名,那几个键与带同住一个对象;
-     mul 屏护半径的倍数。【刻意不用绝对公里数】:内置五条全都随「带半径」滑块(bm)整体缩放,
-         写死公里数会出现"拖 bm 别的带都动、就它不动"的分裂;挂在屏护上则天然跟着一起走。
-   哨戒带本身就是 screen×2,所以自定义带用同一套口径,读起来是一致的。 */
-const FM_BAND_MUL = [0.05, 5];
+     r   半径(km),【绝对值】—— 玩家直接填多少千公里就是多少(用户令 FM6k)。
+         默认 null = 还没填,这条带不参与几何、也不上方位盘,与"插槽的能力/带留空"同一套语义。
+   【与内置五条的区别要知道】内置五条随「带半径」滑块 bm 整体缩放(它们是从近防射程算出来的),
+   自定义带是玩家写死的数,【不跟着 bm 走】—— 拖 bm 时内置的圈会动,自定义的不动,这是绝对值的必然结果。 */
+const FM_BAND_R = [1000, 2000000];   // 半径合法区间(km):1k ~ 200 万 km
 const FM_BAND_RSV = { core: 1, close: 1, body: 1, screen: 1, picket: 1, baseGap: 1, gap: 1, widen: 1, step: 1 };
 function fmBandsOf(P) { return (P && P.bands && P.bands.length) ? P.bands : []; }
-function fmBandKeys(P) { return FM_BANDS.concat(fmBandsOf(P).map(b => b.k)); }
+function fmBandReady(b) { return !!(b && isFinite(b.r) && b.r > 0); } // 填了半径才算成形
+function fmBandKeys(P) { return FM_BANDS.concat(fmBandsOf(P).filter(fmBandReady).map(b => b.k)); } // 没填半径的带不交出去:下游拿到也只会算出 undefined
 function fmBandNm(P, k) {
   if (FM_BAND_NM[k]) return FM_BAND_NM[k];
   const b = fmBandsOf(P).find(x => x.k === k);
@@ -165,7 +167,7 @@ function fmSlotReady(sl, P) {
   if (!sl || !sl.cap || !sl.band) return false;
   /* FM6h 带可能被删掉。给了 P 就顺带查一遍它还在不在 —— 不查的话槽会引用一条不存在的带,
      半径查成 undefined、坐标变 NaN,与"带留空"是同一类事故,只是发生得更晚更难查。 */
-  if (P && !FM_BAND_NM[sl.band] && !fmBandsOf(P).some(b => b.k === sl.band)) return false;
+  if (P && !FM_BAND_NM[sl.band] && !fmBandsOf(P).some(b => b.k === sl.band && fmBandReady(b))) return false;
   return true;
 }
 function fmSlotsOf(P) { return (P && P.slots && P.slots.length) ? P.slots.filter(sl => fmSlotReady(sl, P)) : fmStanceOf(P).slots; }
@@ -235,7 +237,7 @@ function fmBandRadii(list, flag, bm, P) {
   const body = (minIn * 0.9 + 12000) * m;
   const screen = Math.max(body + minIn * m, minOut * 2 * m);
   const BR = { core: 0, close, body, screen, picket: screen * 2, baseGap: minIn * 2 };
-  fmBandsOf(P).forEach(b => { if (!FM_BAND_RSV[b.k]) BR[b.k] = screen * (isFinite(b.mul) ? b.mul : 1); }); // FM6h 自定义带 = 屏护 × 倍数
+  fmBandsOf(P).forEach(b => { if (!FM_BAND_RSV[b.k] && fmBandReady(b)) BR[b.k] = b.r; }); // FM6k 自定义带 = 玩家填的绝对半径;没填的不进 BR
   return BR;
 }
 
