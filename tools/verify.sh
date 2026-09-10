@@ -2496,6 +2496,93 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   var ok6c=(okAdd&&okR&&okBnm&&okFold&&okOpen&&okPick&&okDel&&okGhost);
   F.P.slots=null; F.P.bands=null; fmReslot(F); fmPg.sel=-1; fmPageRender();
   F.P.slots=null; fmReslot(F); fmPg.sel=-1; fmPageRender();
+  /* ⑨ FM6l【方位盘的缩放与平移】。核心判据是那条【限位】:
+     不同阵型的尺度差着两个数量级(3 舰固定模板 vs 水下为主铺到 ±18 万公里),但基准缩放恒把它们
+     贴合到同一个半径,所以限位写成"贴合半径的倍数"对谁都成立 —— 判据也就该在【四档缩放 × 两个方向】
+     上一起验,而不是只测一个数。
+     判"没被拖消失"用的是【四条带圈是否仍与视口相交】,不是插槽圈数:高倍放大下拖到外圈本来就可能
+     一个插槽都不在画面里,那是对的;真正不该发生的是画面全空。 */
+  F.P.slots=null; F.P.bands=null; fmPg.bedit=null; fmReslot(F); fmPg.sel=-1;
+  fmPg.zoom=1; fmPg.pan=[0,0]; fmPageRender();
+  var zEl=document.querySelector('#fpBody input[data-fpz]');
+  var zBox=document.querySelector('#fpBody .fp-zoom'), dv=document.getElementById('fpDial');
+  var zPos='—', okZUi=false;
+  if(zEl&&zBox&&dv){
+    var zb=zBox.getBoundingClientRect(), db=dv.getBoundingClientRect();
+    var pm=[].slice.call(zBox.querySelectorAll('b'));
+    zPos='上'+Math.round(zb.top-db.top)+'/右'+Math.round(db.right-zb.right);
+    okZUi=(zb.top-db.top>=0&&zb.top-db.top<24&&db.right-zb.right>=0&&db.right-zb.right<24
+           &&pm.length===2&&pm[0].textContent==='+'&&pm[1].textContent==='−'
+           &&pm[0].getBoundingClientRect().top<pm[1].getBoundingClientRect().top);
+  }
+  /* 缩放:真实 input 事件;插槽的横跨必须跟着放大,且滑块节点不许被换掉 */
+  function fp9span(){var lo=1e9,hi=-1e9;document.querySelectorAll('#fpDial [data-fps] circle').forEach(function(c){
+    var x=+c.getAttribute('cx');lo=Math.min(lo,x);hi=Math.max(hi,x);});return Math.round(hi-lo);}
+  var sp1=fp9span(), sp2=0, zSame=false, zHi=0;
+  if(zEl){
+    zEl.value='2'; zEl.dispatchEvent(new Event('input',{bubbles:true}));
+    sp2=fp9span(); zSame=(document.querySelector('#fpBody input[data-fpz]')===zEl);
+    zEl.value='999'; zEl.dispatchEvent(new Event('input',{bubbles:true})); zHi=fmPg.zoom;
+    zEl.value='1'; zEl.dispatchEvent(new Event('input',{bubbles:true}));
+  }
+  var okZoom=(!!zEl&&sp1>0&&Math.abs(sp2-sp1*2)<=4&&zSame&&Math.abs(zHi-FP_ZOOM[1])<1e-9);
+  /* 平移:走真实 pointer 事件(不是直接写 fmPg.pan)。盘心按下 → 拖 → 抬手 */
+  function fp9drag(dx,dy){
+    var rc=document.getElementById('fpDial').getBoundingClientRect();
+    var cx=rc.left+rc.width/2, cy=rc.top+rc.height/2;
+    document.getElementById('fpDial').dispatchEvent(new MouseEvent('pointerdown',{bubbles:true,button:0,clientX:cx,clientY:cy}));
+    window.dispatchEvent(new MouseEvent('pointermove',{bubbles:true,clientX:cx+dx,clientY:cy+dy}));
+    window.dispatchEvent(new MouseEvent('pointerup',{bubbles:true}));
+  }
+  fmPg.pan=[0,0]; fmPageRender();
+  fp9drag(120,80);
+  var panned=(Math.abs(fmPg.pan[0])>10&&Math.abs(fmPg.pan[1])>10&&fmPg.pdrag===null);
+  /* 限位:四档缩放 × 轴向/对角,拖到底之后四条带圈都必须仍与视口相交 */
+  function fp9rings(){var n=0;document.querySelectorAll('#fpDial ellipse').forEach(function(el){
+    var cx=+el.getAttribute('cx'),cy=+el.getAttribute('cy'),rx=+el.getAttribute('rx'),ry=+el.getAttribute('ry');
+    var ddx=Math.max(0,Math.max(0-cx,cx-FP_DIAL)), ddy=Math.max(0,Math.max(0-cy,cy-FP_DIAL));
+    if(Math.hypot(ddx,ddy)<=Math.max(rx,ry))n++;});return n;}
+  var worst=99, lims=[];
+  [0.4,1,2,4].forEach(function(z){
+    [[1e9,0],[0,1e9],[1e9,1e9],[-1e9,-1e9]].forEach(function(pp){
+      fmPg.zoom=z; fmPg.pan=[pp[0],pp[1]]; fmPgClampPan(); fmPageRender();
+      worst=Math.min(worst,fp9rings());
+    });
+    lims.push(z+'→'+Math.round(FP_FIT*z+FP_C-FP_KEEP));
+  });
+  /* 判据是【至少还有一条带圈进得了视口】,不是四条都在。限位保的是最外那条边:高倍放大拖到外圈时,
+     里面几条圈本来就该跑出画面 —— 那是「我正在看外沿」而不是「图没了」。要求四条全在,等于把放大后的
+     平移几乎禁掉,与「放大了还能拖到外圈去看」这个目的直接冲突。 */
+  /* 【整张图必须一起动】。带圈、正前方向标、旗舰记号原本都写死在 FP_C 上,平移之后会钉在原地,
+     而插槽与舰位点跟着走 —— 图当场分家。上面那条「带圈还在不在视口里」抓不到这个:
+     一条【压根不动】的圈永远在视口里,反而显得更「安全」。所以直接判圆心 = 平移后的盘心。 */
+  fmPg.zoom=1; fmPg.pan=[90,-70]; fmPgClampPan(); fmPageRender();
+  var cOff=0, cN=0;
+  document.querySelectorAll('#fpDial ellipse').forEach(function(el){cN++;
+    cOff=Math.max(cOff,Math.abs((+el.getAttribute('cx'))-(FP_C+fmPg.pan[0])),
+                       Math.abs((+el.getAttribute('cy'))-(FP_C+fmPg.pan[1])));});
+  var fgC=document.querySelector('#fpDial circle[stroke="#ffe066"]');
+  if(fgC)cOff=Math.max(cOff,Math.abs((+fgC.getAttribute('cx'))-(FP_C+fmPg.pan[0])),
+                            Math.abs((+fgC.getAttribute('cy'))-(FP_C+fmPg.pan[1])));
+  var okCenter=(cN>=4&&!!fgC&&cOff<0.6);
+  var okLim=(worst>=1);
+  /* 平移之后拖插槽:反解必须把 pan 减掉,否则"拖到哪就是哪"当场失效 */
+  fmPg.zoom=1; fmPg.pan=[80,-60]; fmPageRender();
+  var rc9=document.getElementById('fpDial').getBoundingClientRect();
+  var g9=document.querySelector('#fpDial [data-fps="0"]');
+  hit(g9,'pointerdown');
+  window.dispatchEvent(new MouseEvent('pointermove',{bubbles:true,
+    clientX:rc9.left+rc9.width*(FP_C+80+120)/FP_DIAL, clientY:rc9.top+rc9.height*(FP_C-60-120)/FP_DIAL}));  /* 刻意取【斜向】(局部 +x +y 各 120):正右方那一点 y=0,atan2(x,0) 恒等于 90°,
+       x 上的平移误差改不动角度,那样的靶点对'反解有没有减 pan'零区分度(第一版就栽在这) */
+  window.dispatchEvent(new MouseEvent('pointerup',{bubbles:true}));
+  /* 期望值不能写死 90:插槽表里存的是【张开之前】的方位,而这一步测到的是屏幕上的 090。
+     两者只有 spread=1 时才相等,而此刻站位是水下为主(spread≠1)。所以拿同一个反解函数算出期望值 ——
+     判的是「拖到屏幕正右方 ⇒ 存进去的那个数,渲染出来正好落在屏幕正右方」。 */
+  var want9=fmPgUnspread(Math.atan2(120/(fmGeoOf(F.P).widen||1),120)*180/Math.PI, fmGeoOf(F.P).spread);
+  var brg9=fmPageSlots(F)[0].brg, d9=Math.abs(((brg9-want9)%360+360)%360); if(d9>180)d9=360-d9;
+  var okInv=(d9<3);
+  fmPg.zoom=1; fmPg.pan=[0,0]; F.P.slots=null; fmReslot(F); fmPg.sel=-1; fmPageRender();
+  var ok9=(okZUi&&okZoom&&panned&&okLim&&okCenter&&okInv);
   /* ⑦ 恢复默认 + 关闭(真的点 ✕) */
   hit(document.querySelector('#fpBody [data-fp="reset"]'),'pointerdown');
   var okReset=(!F.P.slots&&fmPageSlots(F).length===FM_STANCE.sub.slots.length);
@@ -2509,7 +2596,7 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   fmPageOpen(F.id);fmDelete(F.id);fmPageRender();
   var ok8=!fmPageIsOpen();
   window.removeEventListener('error',onerr);
-  var ok=(ok1&&ok2&&ok3&&ok4&&ok4b&&ok5&&ok6&&ok6b&&ok6c&&ok7&&ok8&&!errs.length);
+  var ok=(ok1&&ok2&&ok3&&ok4&&ok4b&&ok5&&ok6&&ok6b&&ok6c&&ok9&&ok7&&ok8&&!errs.length);
   return (ok?'ok':'fail')
     +' ①入口(真点「编组控制」钮):钮存在='+had+' 【真在屏上】编组控制='+visPage+' 固定态的重新固定='+visSnap+'(须 false)'+' 页已开='+opened+' 正文='+len1+'字符 方位盘='+(!!dial)+' 插槽圈='+slotN+'个(须=插槽表 '+slots0+') 舰位点='+shipDots+' 评估行='+rows+' 能力表行='+tds+'(须='+b.length+')='+ok1
     +' | ②点插槽:选中下标='+selIdx+'(须0) 能力/带下拉都建出='+(!!capSel&&!!bandSel)+'='+ok2
@@ -2532,6 +2619,12 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
     +' 插槽能选到它且真进几何='+okPick
     +' 删带后引用它的槽自动变回未完成='+okDel
     +' 槽引用一条不存在的带时也被滤掉(几何'+ghostGeo+'/表内'+ghostAll+',NaN='+ghostNaN+')='+okGhost+'='+ok6c
+    +' | ⑨ 缩放滑块(在盘右上角 '+zPos+',+在上−在下)='+okZUi
+    +' 拖缩放 1→2 插槽横跨 '+sp1+'→'+sp2+'(须≈翻倍) 滑块节点未被换='+zSame+' 越界钳到'+zHi+'='+okZoom
+    +' 盘面拖动真的平移了='+panned
+    +' 限位['+lims.join(' ')+'] 四档缩放×四个方向拖到底,带圈仍进视口最少='+worst+'/4(须>=1=画面永远不空；高倍拖到外沿时里面几条本就该跑出画面)='+okLim
+    +' 带圈与旗舰记号跟着一起平移(圆心偏差'+cOff.toFixed(1)+',须<0.6=整张图不分家)='+okCenter
+    +' 平移后拖插槽仍是拖到哪就是哪(存进去 '+Math.round(brg9)+'° 须 '+Math.round(want9)+'°,偏差'+d9.toFixed(1)+'°)='+okInv+'='+ok9
     +' | ⑦恢复默认='+okReset+' 点✕关闭='+closed+' 切固定模式后 s.fmStn 已清='+stnCleared+'='+ok7
     +' | ⑧编队被删后自动收摊='+ok8+' 运行期错误='+(errs.length?errs.join(' / '):'none');
 });

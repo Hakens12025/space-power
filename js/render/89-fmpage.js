@@ -14,7 +14,7 @@
    —— 那是 RF7c 在 #fcList 上踩过的坑,这里的插槽圈同时满足"重建 + hover + 事件委托"三条,更躲不过。
    所以舰船血量变化引起的评估变动不会自动反映,标题栏写明了读数时刻。 */
 
-const fmPg = { open: null, sel: -1, drag: -1, moved: false, knobDirty: false, bedit: null }; // bedit:正在展开编辑的那条自定义轮带(FM6k) // 纯 UI 状态,不进任何存档/快照
+const fmPg = { open: null, sel: -1, drag: -1, moved: false, knobDirty: false, bedit: null, zoom: 1, pan: [0, 0], pdrag: null }; // FM6l 方位盘的缩放与平移(纯 UI,不进存档) // bedit:正在展开编辑的那条自定义轮带(FM6k) // 纯 UI 状态,不进任何存档/快照
 /* 本页整块走 innerHTML 拼串,而舰名是玩家可改的(场景编辑器)——拼进去前必须转义。
    全库没有现成的转义函数(其余面板都走 textContent),所以在这里自带一个,名字加 fmPg 前缀防撞名。 */
 function fmPgEsc(v) { return String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
@@ -26,6 +26,7 @@ function fmPageOpen(id) {
   const el = document.getElementById('fmPage');
   if (!el) return false;
   fmPg.open = String(id); fmPg.sel = -1; fmPg.drag = -1;
+  fmPg.zoom = 1; fmPg.pan = [0, 0]; fmPg.pdrag = null;   // FM6l 每次打开都回到自适应视角
   el.classList.add('on');
   fmPageRender();
   return true;
@@ -120,10 +121,42 @@ function fmPgSetup(F, T) {
 /* 阵型图 = 方位盘。前进方向朝【上】(战术显示器的惯例);局部系 +x 是前进方向、+y 是右舷,
    所以 屏幕x = cx + ly·k、屏幕y = cy − lx·k。带半径圈因扁率而成椭圆(rx = r·widen, ry = r)。 */
 const FP_DIAL = 560, FP_C = 280;
+/* FM6l 方位盘的缩放与平移。
+   【限位为什么用"贴合后的单位"而不是公里】基准缩放 k 恒把该编队撑满到半径 FP_FIT ——
+   3 舰的固定模板和横向铺到 ±18 万公里的水下为主,贴合之后【都是 FP_FIT】。
+   所以限位写成 FP_FIT 的倍数,对任何阵型、任何舰数都自动成立,不需要按公里数分档。
+   规则:内容的包围盒至少要有 FP_KEEP 个单位留在视口里 —— 拖到底也只是剩一条边,不会整个消失;
+   放大之后 half 变大,可拖范围随之变大,所以放大了照样能拖到外圈去看。 */
+const FP_FIT = FP_C - 46;
+const FP_ZOOM = [0.4, 4];
+/* 限位取 FP_KEEP = FP_FIT,读作【至少留一个"贴合半径"的内容在视口里】。这个取值有个好性质:
+   zoom=1 时 lim 正好 = FP_C,也就是【阵心最远只能拖到视口边缘】,永远看得见半个阵型;
+   放大之后 half 跟着变大,可拖范围一起变大,所以放大了照样拖得到外圈去看。
+   改成更小的数(试过 120)会允许把阵型拖到只剩一条弧——十四个插槽圈里只剩一个,算"没消失"但没什么用。 */
+const FP_KEEP = FP_FIT;
+function fmPgClampPan() {
+  const half = FP_FIT * fmPg.zoom;
+  const lim = Math.max(0, half + FP_C - FP_KEEP);
+  /* 【按半径钳,不按两个轴各自钳】。盘上的内容是一张圆盘不是方块:逐轴钳住的话
+     沿对角线拖到底会落在包围盒的角上 —— 那里在最外圈之外,画面是空的(实测 zoom=2/4 时
+     十四个插槽圈一个都不剩)。按欧氏距离钳就没有这个角。 */
+  const d = Math.hypot(fmPg.pan[0], fmPg.pan[1]);
+  if (d > lim && d > 0) { const f = lim / d; fmPg.pan[0] *= f; fmPg.pan[1] *= f; }
+  return lim;
+}
 /* FM6f 拆成【壳】与【内容】两层。拖滑块时只换内容(#fpDial 的 innerHTML),svg 节点与滑块节点都不动 ——
    整页重渲会把玩家正按着的那个 <input> 换成新节点、拖拽当场断掉(RF7c 在 #fcList 上踩过的坑)。 */
 function fmPgDial(F, PL) {
-  return '<svg id="fpDial" viewBox="0 0 ' + FP_DIAL + ' ' + FP_DIAL + '">' + fmPgDialInner(F, PL) + '</svg>'
+  /* 缩放滑块【在 svg 外面】:fmPgDialSync 只换 #fpDial 的 innerHTML,所以拖缩放时滑块节点不会被换掉
+     (同 FM6f 那条:整页重渲会把正按着的 <input> 换掉、拖拽当场断)。竖直方向靠 CSS 旋转 −90°,
+     不用原生的竖直 range —— 那个在不同 Chrome 版本上 min/max 的上下方向不一致,旋转是确定的。 */
+  return '<div class="fp-dialwrap">'
+    + '<svg id="fpDial" viewBox="0 0 ' + FP_DIAL + ' ' + FP_DIAL + '">' + fmPgDialInner(F, PL) + '</svg>'
+    + '<div class="fp-zoom" title="缩放阵型图（拖动方位盘可平移）">'
+    + '<b>+</b>'
+    + '<span class="fp-zwrap"><input type="range" data-fpz="1" min="' + FP_ZOOM[0] + '" max="' + FP_ZOOM[1] + '" step="0.05" value="' + fmPg.zoom + '"></span>'
+    + '<b>−</b></div>'
+    + '</div>'
     + '<div class="fp-note">圆圈=插槽，拖动改变方位，颜色=契合度，多出来的船向两侧展开。</div>';
 }
 function fmPgDialSync() { // 就地重画方位盘(拖滑块时用)。取不到编队/旗舰就什么都不做,由松手那次整页重渲兜底
@@ -145,8 +178,14 @@ function fmPgDialInner(F, PL) {
     const t = fmSpreadBrg(sl.brg, T.spread) * Math.PI / 180;
     maxR = Math.max(maxR, Math.abs(r * Math.cos(t)), Math.abs(r * Math.sin(t) * BR.widen));
   });
-  const k = (FP_C - 46) / maxR;
-  const px = (lx, ly) => [FP_C + ly * k, FP_C - lx * k];
+  const k = FP_FIT / maxR * fmPg.zoom;          // FM6l 基准贴合 × 玩家的缩放
+  fmPgClampPan();
+  const P0 = fmPg.pan;
+  const px = (lx, ly) => [FP_C + ly * k + P0[0], FP_C - lx * k + P0[1]];
+  /* FM6l 盘心【不再是 FP_C 这个常量】。带圈、正前方向标、旗舰记号原来都直接写死在 FP_C 上,
+     加了平移之后它们会钉在原地不动,而插槽与舰位点跟着走 —— 整张图会当场分家。
+     统一取 px(0,0):它就是"局部系原点在屏幕上的位置",平移缩放都算进去了。 */
+  const C0 = px(0, 0), CX = C0[0].toFixed(1), CY = C0[1].toFixed(1);
   let g = '';
   /* 带半径圈 + 左上角图例。
      半径读数刻意【不贴在圈上】:贴在圈顶时会与正前方向标、以及方位 000 上的那几个插槽挤成一团(实拍见过),
@@ -159,7 +198,7 @@ function fmPgDialInner(F, PL) {
   rings.forEach(([bn, col]) => {
     const r = BR[bn] * k;
     if (!(r > 2)) return;
-    g += '<ellipse cx="' + FP_C + '" cy="' + FP_C + '" rx="' + (r * BR.widen).toFixed(1) + '" ry="' + r.toFixed(1)
+    g += '<ellipse cx="' + CX + '" cy="' + CY + '" rx="' + (r * BR.widen).toFixed(1) + '" ry="' + r.toFixed(1)
       + '" fill="none" stroke="' + col + '" stroke-opacity=".28" stroke-width="1"/>';
     const ly = 16 + leg * 14; leg++;
     g += '<line x1="8" y1="' + (ly - 3) + '" x2="20" y2="' + (ly - 3) + '" stroke="' + col + '" stroke-opacity=".7" stroke-width="1.5"/>'
@@ -167,8 +206,10 @@ function fmPgDialInner(F, PL) {
       + fmPgEsc(fmBandNm(F.P, bn)) + ' ' + Math.round(BR[bn] / 1000) + 'k km</text>';
   });
   /* 正前方向标 */
-  g += '<line x1="' + FP_C + '" y1="' + FP_C + '" x2="' + FP_C + '" y2="18" stroke="#2a3a50" stroke-width="1" stroke-dasharray="3 4"/>'
-    + '<text x="' + FP_C + '" y="12" fill="#6a7d92" font-size="10" text-anchor="middle">前进方向 000</text>';
+  /* 正前方向标:从盘心指向局部 +x(屏幕上方)。长度取"贴合半径 × 缩放",与带圈同一把尺子 */
+  const HY = (C0[1] - FP_FIT * fmPg.zoom - 12).toFixed(1);
+  g += '<line x1="' + CX + '" y1="' + CY + '" x2="' + CX + '" y2="' + HY + '" stroke="#2a3a50" stroke-width="1" stroke-dasharray="3 4"/>'
+    + '<text x="' + CX + '" y="' + (C0[1] - FP_FIT * fmPg.zoom - 18).toFixed(1) + '" fill="#6a7d92" font-size="10" text-anchor="middle">前进方向 000</text>';
   /* 各舰实际站位(在插槽圈之下画,免得盖住可点的插槽) */
   PL.pairs.forEach(p => {
     const st = PL.sta[p.j], q = px(st.lx, st.ly);
@@ -178,8 +219,8 @@ function fmPgDialInner(F, PL) {
       + fmPgEsc(p.s.name) + '</text>';
   });
   /* 旗舰 */
-  g += '<circle cx="' + FP_C + '" cy="' + FP_C + '" r="6" fill="none" stroke="#ffe066" stroke-width="1.4"/>'
-    + '<text x="' + FP_C + '" y="' + (FP_C + 18) + '" fill="#ffe066" font-size="9" text-anchor="middle">' + fmPgEsc(PL.flag.name) + '</text>';
+  g += '<circle cx="' + CX + '" cy="' + CY + '" r="6" fill="none" stroke="#ffe066" stroke-width="1.4"/>'
+    + '<text x="' + CX + '" y="' + (C0[1] + 18).toFixed(1) + '" fill="#ffe066" font-size="9" text-anchor="middle">' + fmPgEsc(PL.flag.name) + '</text>';
   /* 插槽圈(可拖、可点选)。画在【展开后】的方位上,与站位点重合 —— 拖的就是它 */
   slots.forEach((sl, i) => {
     if (!fmSlotReady(sl, F.P)) return;   // FM6g 能力或带还没选的新槽不上盘(用户令:选择之后才显示)。下标 i 仍是【整张表】的下标,选中与拖动对得上
@@ -317,8 +358,8 @@ function fmPgAngAt(ev) { // 鼠标位置 → 插槽表里该存的 brg(度,0..36
   if (!sv || !F) return null;
   const rc = sv.getBoundingClientRect();
   if (!rc.width || !rc.height) return null;
-  const x = (ev.clientX - rc.left) / rc.width * FP_DIAL - FP_C;
-  const y = (ev.clientY - rc.top) / rc.height * FP_DIAL - FP_C;
+  const x = (ev.clientX - rc.left) / rc.width * FP_DIAL - FP_C - fmPg.pan[0];   // FM6l 反解要把平移减掉
+  const y = (ev.clientY - rc.top) / rc.height * FP_DIAL - FP_C - fmPg.pan[1];
   const T = fmGeoOf(F.P);   // FM6:反解要用与正解同一份 spread/widen
   const w = T.widen || 1;
   // 屏幕 → 局部:lx = −y, ly = x;再把扁率除掉,才是"没有被拉扁之前"的方位
@@ -330,13 +371,31 @@ function fmPgAngAt(ev) { // 鼠标位置 → 插槽表里该存的 brg(度,0..36
 function fmPgDown(ev) {
   if (ev.button !== 0) return;
   const g = ev.target.closest ? ev.target.closest('[data-fps]') : null;
-  if (!g) return;
+  if (!g) {
+    /* FM6l 点在盘面空白处 = 平移。只认 #fpDial 里面的按下 —— 页面别处(评估表/能力表)按下不该拖动阵型图。 */
+    const sv = ev.target.closest ? ev.target.closest('#fpDial') : null;
+    if (!sv) return;
+    ev.preventDefault();
+    fmPg.pdrag = { x: ev.clientX, y: ev.clientY, p0: fmPg.pan[0], p1: fmPg.pan[1] };
+    return;
+  }
   ev.preventDefault();
   fmPg.sel = Number(g.getAttribute('data-fps'));
   fmPg.drag = fmPg.sel; fmPg.moved = false;
   fmPageRender();                                  // 立即回显选中框(拖动过程中不再整体重渲,见下)
 }
 function fmPgMove(ev) {
+  if (fmPg.pdrag) {
+    const sv = document.getElementById('fpDial');
+    const rc = sv ? sv.getBoundingClientRect() : null;
+    if (!rc || !rc.width) return;
+    const sc = FP_DIAL / rc.width;              // 屏幕像素 → svg 单位
+    fmPg.pan[0] = fmPg.pdrag.p0 + (ev.clientX - fmPg.pdrag.x) * sc;
+    fmPg.pan[1] = fmPg.pdrag.p1 + (ev.clientY - fmPg.pdrag.y) * sc;
+    fmPgClampPan();
+    fmPgDialSync();                             // 只换盘的内容:比整页重渲轻,也不碰缩放滑块那个节点
+    return;
+  }
   if (fmPg.drag < 0) return;
   const F = fmPageF(); if (!F) return;
   const a = fmPgAngAt(ev); if (a === null) return;
@@ -349,6 +408,7 @@ function fmPgMove(ev) {
   fmPageEdit(F, cur => { cur[fmPg.drag].brg = a; return cur; });
 }
 function fmPgUp() {
+  if (fmPg.pdrag) { fmPg.pdrag = null; return; }
   if (fmPg.knobDirty) { fmPg.knobDirty = false; fmPageRender(); } // 松开滑块才整页重渲:拖动中重渲会把 <input> 换成新节点、拖拽当场断掉
   if (fmPg.drag < 0) return;
   fmPg.drag = -1;
@@ -365,7 +425,7 @@ function fmPgAct(a) {
     F.P.spread = fmClamp('spread', T0.spread); F.P.spacing = fmClamp('spacing', T0.gap);
     F.P.bm = fmClamp('bm', T0.bm); F.P.widen = fmClamp('widen', T0.widen); F.P.bstr = fmClamp('bstr', T0.bstr);
     if (typeof fmReslot === 'function') fmReslot(F);
-    fmPg.sel = -1; fmPageRender(); return;
+    fmPg.sel = -1; fmPg.zoom = 1; fmPg.pan = [0, 0]; fmPageRender(); return;   // FM6l 视角一并复位
   }
   if (a.indexOf('sc-') === 0) {
     if (typeof fmSetStance === 'function') fmSetStance(F, a.slice(3));
@@ -433,6 +493,13 @@ on('fmPage', 'input', e => {
      (带名与半径读数都画在盘的图例里);整页重渲留给失焦时的 change。
      半径钳位【不回写输入框】—— 边打边把框里的字改掉会跟人抢方向盘("7" 打到一半被改成 "1"),
      所以只钳落盘的那个值,框里让玩家自己打完;失焦的 change 再整页重渲一次把两边对齐。 */
+  /* FM6l 缩放滑块。与几何旋钮同一条纪律:只换盘的内容,不整页重渲(那会把正按着的滑块换成新节点)。 */
+  const zEl = e.target && e.target.closest ? e.target.closest('input[data-fpz]') : null;
+  if (zEl) {
+    const zv = Number(zEl.value);
+    if (isFinite(zv)) { fmPg.zoom = Math.max(FP_ZOOM[0], Math.min(FP_ZOOM[1], zv)); fmPgClampPan(); fmPgDialSync(); }
+    return;
+  }
   const bEl = e.target && e.target.closest ? e.target.closest('input[data-fp^="bnm-"],input[data-fp^="br-"]') : null;
   if (bEl) {
     const Fb = fmPageF(); if (!Fb || !Fb.P) return;

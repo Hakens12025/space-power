@@ -659,7 +659,21 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 .fp-grid{display:grid;grid-template-columns:minmax(420px,1fr) minmax(320px,1fr);gap:var(--sp-5);margin-top:var(--sp-4)}
 @media (max-width:1000px){.fp-grid{grid-template-columns:1fr}}
 .fp-col{min-width:0}
-#fpDial{width:100%;height:auto;display:block;background:var(--srf-sunk);border:var(--bw) solid var(--line);border-radius:var(--r-sm)}
+#fpDial{width:100%;height:auto;display:block;background:var(--srf-sunk);border:var(--bw) solid var(--line);border-radius:var(--r-sm);cursor:grab;touch-action:none}
+#fpDial:active{cursor:grabbing}
+/* FM6l 缩放滑块:压在方位盘右上角。竖直方向靠 rotate(-90deg) 得到 —— 原生竖直 range
+   在不同 Chrome 版本上 min/max 的上下方向不一致,旋转是确定的(上=max=放大)。
+   .fp-zwrap 是固定尺寸的容器,里面那根 range 旋转后不占布局流,所以外框尺寸要写死。 */
+.fp-dialwrap{position:relative}
+.fp-zoom{position:absolute;top:8px;right:8px;display:flex;flex-direction:column;align-items:center;gap:2px;
+  padding:4px 3px;background:var(--srf-sunk);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);opacity:.85}
+.fp-zoom:hover{opacity:1}
+.fp-zoom b{font-size:var(--fs-label);color:var(--txt-dim);line-height:1;font-weight:normal}
+.fp-zwrap{position:relative;width:16px;height:96px}
+.fp-zwrap input[type=range]{position:absolute;top:50%;left:50%;width:96px;height:12px;margin:0;
+  transform:translate(-50%,-50%) rotate(-90deg);-webkit-appearance:none;appearance:none;background:transparent}
+.fp-zwrap input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:2px;background:var(--line-ctl)}
+.fp-zwrap input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:11px;height:11px;margin-top:-4px;border-radius:50%;background:var(--acc);border:none}
 /* 插槽圈:整组做命中区(circle 与 text 一起),所以 text 要 pointer-events:none 否则拖在字上会丢焦点 */
 .fp-slot{cursor:grab}
 .fp-slot text{pointer-events:none;user-select:none}
