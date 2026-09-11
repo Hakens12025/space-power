@@ -1604,6 +1604,38 @@ t('FLOW27_FMBAR',function(){
   var devC=fm27dev();
   fmSetParam(F,'bm',1);
   var okReform=(flew1&&devA<3000&&devB>devA*5&&devB>20000&&idle&&flew2&&devC<3000);
+  /* FM6o【切模式 → 原地重排】这条路,才是这个钮真正的用途(用户原话:在固定队列和阵型队列之间切换后,
+     手动更新队列使其满足"固定"或"阵型"的形式)。改前这条路是【死的】:切到固定会把此刻的散乱位置
+     当场钉成新快照,离位恒为 0,按原地重排什么都不会发生。
+     判据三段,缺一不可:
+       · 切到固定之后【离位必须 > 0】—— 快照没被抹掉,船确实不在位;
+       · 按原地重排、飞完,回到【建队时那个相对队形】(逐舰比,不是只看离位);
+       · 朝向:把旗舰船头拧过 90° 再按一次,F.ang 必须跟到 90°(不传 face 的话它会沿用上一道令的行进方向)。 */
+  fmSetParam(F,'bm',1);
+  /* 队形比对走【逐舰最大偏差】,不走字符串逐字比:到位容差本来就有几百公里,
+     四舍五入到千公里会在边界上翻一格,那不是行为问题而是比法问题。 */
+  function fm27rel(){var f=fmFlag(F);return fmShips(F).filter(function(m){return m!==f;}).map(function(m){
+    return [m.pos[0]-f.pos[0], m.pos[1]-f.pos[1]];});}
+  function fm27diff(u,v){var d=0;if(!u||!v||u.length!==v.length)return 1e9;
+    for(var q=0;q<u.length;q++)d=Math.max(d,Math.hypot(u[q][0]-v[q][0],u[q][1]-v[q][1]));return d;}
+  /* 参照必须自己钉:这支编队在前面几段里飞过、改过 bm、切过模式,「建队那一刻的队形」早就不是眼前这个。
+     所以先切固定 + 按「重新固定」把【此刻】钉成快照,那才是这一段要回到的那个队形。 */
+  fm27hit(elFixed); fm27hit(elRe); fm27fly();
+  var born27=fm27rel();
+  fm27hit(elSlot); fm27hit(document.querySelector('#fmActs [data-fma="reform"]')); fm27fly();
+  var slotShape27=fm27rel();
+  fm27hit(elFixed);
+  var devSw=fm27dev();
+  fm27hit(document.querySelector('#fmActs [data-fma="reform"]')); fm27fly();
+  var fl27b=fmFlag(F);
+  var back27=fm27rel();   // FM6o 与 born27 同一种表示(数组),不能一个数组一个字符串
+  /* 朝向:硬把旗舰船头拧到 +y */
+  fl27b.facing=[0,1,0];
+  fm27hit(document.querySelector('#fmActs [data-fma="reform"]')); fm27fly();
+  var angDeg=F.ang*180/Math.PI, dAng=Math.abs(((angDeg-90)%360+360)%360); if(dAng>180)dAng=360-dAng;
+  var dSame=fm27diff(back27,born27), dDiff=fm27diff(slotShape27,born27);
+  var okSwitch=(devSw>1000&&dDiff>20000&&dSame<3000&&dAng<3);  /* 阵型队形必须【确实不同于】固定队形,否则这一段没测到东西 */
+  fm27hit(elSlot);
   /* FM6:跟随的兑现判定整体搬到 FLOW40_FOLLOWCTL(底栏标准控件,四种作用域)。这里只剩一条留守:
      编队菜单里【不许】再出现跟随钮(noFolBtn,已并入 acts4)。 */
   /* 其余操作钮:遍历【当前真实存在的】data-fma 全点一遍(按钮清单会随 UI 改,写死清单会年久失修),
@@ -1630,7 +1662,7 @@ t('FLOW27_FMBAR',function(){
         &&closedMid==='none'&&open2==='flex'&&selSync&&parseFloat(hpW)===100&&mdFix==='固定 · 保持建队时的相对位置与朝向'
         &&!!mem&&acts4&&noFollowBtn&&mode0==='slot'&&modeF==='fixed'&&modeS==='slot'
         &&srcX==='snapshot'&&modeX==='fixed'&&noRetake&&modeZ==='slot'&&srcZ==='generated'
-        &&okVis&&reTook&&noReOnMode&&okSeg&&okRow&&noKnob&&okReform
+        &&okVis&&reTook&&noReOnMode&&okSeg&&okRow&&noKnob&&okReform&&okSwitch
         &&names.length>=6&&clicked===names.length /* FM6d 后 7 个(m-fixed m-slot / resnap page / halt reform disband);下限留余量,真正的判据是 clicked===names.length —— 每个钮都点得动、都不抛错 */
         &&closed1==='none'&&!errs.length);
   return (ok?'ok':'fail')+' 书签数='+tabs0+'(须1) 初始菜单='+closed0+'(须none) 点开后='+open1+'(须flex)'
@@ -1641,6 +1673,7 @@ t('FLOW27_FMBAR',function(){
     +' | FM4b 随模式显隐(问的是 computed display,不是类名):固定→['+visFix.join(',')+'](声明 '+nFix+' 块) 阵型→['+visSlot.join(',')+'](声明 '+nSlot+' 块)(须全部同名且个数对得上)='+okVis
     +' 重新固定真的换了新快照='+reTook+' 已在固定态时点固定是空操作='+noReOnMode
     +' | FM6d 布局(问的是 getBoundingClientRect):模式两段铺满率='+(segFill*100).toFixed(1)+'%(须>95;旧3列时2段为66.7) 两段等宽率='+(segEven*100).toFixed(1)+'%(须>90)='+okSeg+' 公共三钮同一排 top='+rowTop.join('/')+' left='+rowLeft.join('/')+'(须 top 三个相同、left 递增)='+okRow+' 菜单里已无带半径滑块='+noKnob+' | FM6d 原地重排(真实 pointerdown):到位后离位='+Math.round(devA)+'km → bm拉到2 后='+Math.round(devB)+'km(须>5倍且>20000=槽位真变了) → 不点钮空转60s 位置逐字不变='+idle+'(须 true=不点就真不动) → 点钮飞完后离位='+Math.round(devC)+'km(须<3000)='+okReform
+    +' | FM6o 切模式→原地重排(这个钮真正的用途):切到固定后离位='+Math.round(devSw)+'(须>1000=快照没被抹掉) 阵型队形与固定队形相距='+Math.round(dDiff)+'km(须>20000=这一段确实测到东西) 重排后回到固定那个队形 偏差='+Math.round(dSame)+'km(须<3000)'+' 旗舰拧到90°再按一次 F.ang='+angDeg.toFixed(0)+'°(须90±3)='+okSwitch
     +' 编队菜单已无跟随钮(已下沉底栏)='+noFolBtn
     +' | 操作钮点击='+clicked+'/'+names.length+'(须全中且总数>=6)清单=['+names.join(',')+']'
     +' | 再点收起='+closed1+'(须none) 解散后再刷10次'
@@ -2096,20 +2129,33 @@ t('FLOW36_FMSNAP',function(){
   var gFace=c.filter(function(s){return s.orders[0]&&s.orders[0].face;}).length;
   /* 同一折返在阵型模式下【必须】换槽(复用 FLOW32 的判据:两翼 180° 折返,不换航线就交叉)—— 这是 ③b 的负对照,
      证明"固定模式折返槽位不动"是 !fixed 守卫在起作用,不是这个摆位本来就不会换 */
+  var gsnap0={};                                 // FM6o:记下【进 generated 之前】的那份快照,用来验"模式钮不许改写它"
+  c.forEach(function(s){var o=(G.snap||{})[s.id];if(o)gsnap0[s.id]=[o.off[0],o.off[1]];});
   var gslot1=c.map(function(s){return s.fmSlot.slice();});
   addWaypoint(c,DEST2);
   var gSwap=0;c.forEach(function(s,i){if(Math.hypot(s.fmSlot[0]-gslot1[i][0],s.fmSlot[1]-gslot1[i][1])>1e-6)gSwap++;});
   moveShips(c,DEST,'stop');
-  /* 重拍入口:飞一段之后切回 snapshot,槽位要等于【此刻】的相对布局;重拍后离位读数也要归零(F.ang 要跟着重拍写成此刻船头,不能留上一段行进方向) */
+  /* FM6o【切回 snapshot 默认不重拍】。改前 fmSetSrc(G,'snapshot') 无条件重拍,于是「固定」这个模式钮
+     等于把此刻的散乱位置当场钉成新队形 —— 存了半天的建队队形被一次切换抹掉,而「原地重排」在这个方向上
+     永远是空操作(船已经"在位"了)。现在重拍只走显式的「重新固定」钮(retake=true)。
+     判据【两半都要】:不带 retake 切过去,槽位必须还是【老快照】那一套(离位不为零 = 船确实不在位,
+     等着玩家按原地重排);带 retake 再切一次,槽位才等于此刻的相对布局、离位归零。
+     只留后一半的话,"无条件重拍"这个改前的行为照样全绿。 */
   for(i=0;i<300;i++)stepShipsMotion(0.02);
-  fmSetSrc(G,'snapshot');
+  var noRetakeSlot=c.map(function(s){return (s.fmSlot||[0,0,0]).slice();});
+  fmSetSrc(G,'snapshot');                       // 模式钮那条路:不重拍
+  var keptSnap=0;
+  c.forEach(function(s,i2){var o=G.snap[s.id]||{off:[0,0,0]};
+    keptSnap=Math.max(keptSnap,Math.hypot(o.off[0]-(gsnap0[s.id]?gsnap0[s.id][0]:o.off[0]),o.off[1]-(gsnap0[s.id]?gsnap0[s.id][1]:o.off[1])));});
+  var noRetakeDev=offDev(c,gf);
+  fmSetSrc(G,'snapshot',true);                  // 「重新固定」那条路:重拍
   var gh2=hd(gf);
   var reTake=maxDev(c,function(s){var o=rotSlot(s.fmSlot||[0,0,0],Math.cos(gh2),Math.sin(gh2));return Math.hypot(gf.pos[0]+o[0]-s.pos[0],gf.pos[1]+o[1]-s.pos[1]);});
   var reMode=G.mode, reDev=offDev(c,gf), reAng=Math.abs(wrap(G.ang-gh2));
   var ok=(srcOk&&dev0<1e-6&&ang0<1e-9&&inv<1e-6&&hdg0<1e-9&&lay<1&&faceErr<0.02&&slotKept<1e-9&&lay2<1&&slotKept2<1e-9&&arrived&&fdiff<0.05&&flagFace<0.05&&posKept<2000
         &&reslotKept<1e-9&&nfOk&&reOk<1e-6&&pairKept<1e-6&&deathOk
         &&swDev<1e-6&&swAng<1e-9&&swMove<1e-6&&swFace<1e-9&&swBack<1e-6&&swDie<1e-6&&vAngOk<1e-9&&vKept<1e-12
-        &&gMode==='slot'&&gLay>5000&&gHdg===0&&gFace===0&&gGeo<1e-9&&gSwap>=2&&reTake<1e-6&&reMode==='fixed'&&reDev<1e-6&&reAng<1e-9);
+        &&gMode==='slot'&&gLay>5000&&gHdg===0&&gFace===0&&gGeo<1e-9&&gSwap>=2&&keptSnap<1e-6&&noRetakeDev>1000&&reTake<1e-6&&reMode==='fixed'&&reDev<1e-6&&reAng<1e-9);
   return (ok?'ok':'fail')+' 默认src=snapshot/mode=fixed='+srcOk+' 建队即成形:离位='+dev0.toExponential(1)+'(须<1e-6) F.ang=船头误差='+ang0.toExponential(1)
     +' 快照可逆误差='+inv.toExponential(1)+' 朝向差误差='+hdg0.toExponential(1)
     +' | 下令:终点布局=原布局旋转到行进方向 误差='+lay.toFixed(3)+'(须<1) face误差='+faceErr.toFixed(4)+'(须<0.02) 槽位未被配对改动='+(slotKept<1e-9)
@@ -2120,7 +2166,8 @@ t('FLOW36_FMSNAP',function(){
     +' 换回可逆='+swBack.toExponential(1)+' 阵亡顺位='+swDie.toExponential(1)+'(须<1e-6) 切generated后F.ang=旗舰船头误差='+vAngOk.toExponential(1)+'(须<1e-9,不许NaN) 换旗F.ang不动='+vKept.toExponential(1)+'(须0)'
     +' | 负对照 generated:mode='+gMode+' 终点偏离任意布局='+Math.round(gLay)+'(须>5000) fmHdg全0='+(gHdg===0)+' 带face的令='+gFace+'(须0) 槽位=条令表='+(gGeo<1e-9)
     +' 同一折返换槽舰数='+gSwap+'(须>=2,否则③b没测到东西)'
-    +' 切回snapshot重拍误差='+reTake.toExponential(1)+' mode='+reMode+'(须fixed) 重拍后离位='+reDev.toExponential(1)+'(须<1e-6) F.ang=船头误差='+reAng.toExponential(1);
+    +' | FM6o 切回snapshot:模式钮那条路【不重拍】—— 快照改动='+keptSnap.toExponential(1)+'(须<1e-6=一个字都没动) 离位='+Math.round(noRetakeDev)+'(须>1000=船确实不在位,等着按原地重排)'
+    +' 再走「重新固定」那条路:重拍误差='+reTake.toExponential(1)+' mode='+reMode+'(须fixed) 重拍后离位='+reDev.toExponential(1)+'(须<1e-6) F.ang=船头误差='+reAng.toExponential(1);
 });
 /* 6f-14 FM3-2 条令站位【防空环】(40-slots formationSlots 重写)。全部用【局部系】断言(读 s.fmSlot,局部 +x = 阵型朝向,+y = 右舷),
    并列印实际数值。舰用 makeShip 现造(靶场三舰是 CA+2DD,凑不出 CV / 双 CA 护卫这些组合),测完从 ships 里摘掉。

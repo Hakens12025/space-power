@@ -259,7 +259,7 @@ function fmbActsBuild(){
        (作用域由选中集合决定:舰队/单舰 × 舰队/单舰 四种),入口见 88-selpanel 的 cbFollow / cbUnfollow。 */
     '<div class="fm-grp g-act fm-sec">'+
       '<button class="btn qbtn" data-fma="halt" title="整队停车:逐舰刹停">整队停车</button>'+
-      '<button class="btn qbtn" data-fma="reform" title="原地重排:不下移动令,就让全队在当前位置摆成当前阵型。改完几何参数(带半径等)之后按它才看得到效果">原地重排</button>'+
+      '<button class="btn qbtn" data-fma="reform" title="原地重排:不下移动令,就让全队原地摆成【当前模式该有的队形】——固定态回到已存的队形,阵型态摆成算出来的插槽站位。阵型朝向取旗舰此刻的船头。切完模式、或改完几何参数之后按它">原地重排</button>'+
       '<button class="btn qbtn qstop" data-fma="disband" title="解散编队:书签消失,成员回散船态">解散编队</button>'+
     '</div>';
   fmUi.actsBuilt=true;
@@ -354,7 +354,7 @@ function fmbAct(a){
          现在做成显式钮,同时把「固定」钮在已是固定态时改成空操作(见 m-fixed 分支)。 */
       if(F.src!=='snapshot'){if(typeof log==='function')log(fmName(F)+' 重新固定只在固定模式下有效','warn');break;}
       if(typeof fmSetSrc!=='function')break;
-      fmSetSrc(F,'snapshot');
+      fmSetSrc(F,'snapshot',true);   // FM6o retake=true:这是【唯一】会改写 F.snap 的入口(模式钮不再重拍)
       break;}
     case 'halt':
       if(typeof fmHalt!=='function')break;
@@ -372,7 +372,11 @@ function fmbAct(a){
          副作用照旧按"这是一条移动令"来:resetForNewOrders 会解除刹车,所以整队停车之后按它船会重新动起来。 */
       if(typeof fmMoveTo!=='function')break;
       const fl=st.flag; if(!fl)break;
-      fmMoveTo(F,[fl.pos[0],fl.pos[1],fl.pos[2]],'stop',null);
+      /* FM6o 朝向取【旗舰此刻的船头】(用户实报:把旗舰转过 90° 再按它,整队还按老朝向摆)。
+         不传 face 的话 fmAngOf 会因为「目标点与锚点重合」而沿用 F.ang —— 那是上一道移动令留下的行进方向,
+         与玩家眼前看到的船头没有关系。传了 face 之后:阵型态整队转到船头方向;
+         固定态是刚体,整个队形绕旗舰转到船头方向,各舰再按自己建队时的朝向差归位。 */
+      fmMoveTo(F,[fl.pos[0],fl.pos[1],fl.pos[2]],'stop',[fl.facing[0],fl.facing[1]]);
       if(typeof log==='function')log(fmName(F)+' 原地重排','');
       break;}
     case 'disband':{

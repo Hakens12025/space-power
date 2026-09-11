@@ -260,16 +260,24 @@ function fmModeOf(F) { // UI 读的模式名。FM6:运动方式那个轴删掉�
    作用域是 舰队↔舰队 / 舰队↔单舰 / 单舰↔舰队 / 单舰↔单舰 四种,不再是编队的一种"模式"。
    编队整体跟随另一个目标(F.follow)也照旧,由 fmFollowShip / fmApplyFollow 管。 */
 
-function fmSetSrc(F, src) {
-  /* FM3-1:切换槽位来源。切到 snapshot 时【重拍】当前相对位置与朝向为新快照 —— 这是"玩家手调完各舰位置再按固定"的入口,
-     也是唯一会改写 F.snap 的地方(fmReslot 只读它)。切到 generated 不动 F.snap(下次切回 snapshot 反正会重拍)。
-     重排后 F.mode 同步成派生值;跟随态下 fmReslot 尾部的 fmApplyFollow 会把新槽位灌进成员的 s.follow。 */
+function fmSetSrc(F, src, retake) {
+  /* FM3-1:切换槽位来源。切到 generated 不动 F.snap。
+     FM6o【切到 snapshot 默认不再重拍】(用户实报)。改前是无条件重拍,后果是:
+       「固定」这个模式钮 = 把此刻的散乱位置当场钉成新队形 ⇒ 阵型→固定 切过去,离位恒为 0、
+       队形就是切换那一瞬的样子,存了半天的建队队形被一次切换抹掉,而「原地重排」在这个方向上
+       永远是空操作(船已经"在位"了)。用户要的是"切回固定 → 按原地重排 → 回到固定那个队形"。
+     现在重拍【只走显式的「重新固定」钮】(retake=true),三个钮各司其职:
+       固定(模式钮) = 切回已存的快照队形,不改快照;
+       重新固定     = 把此刻的相对位置拍成新快照;
+       原地重排     = 让船去它们此刻该在的位置。
+     retake 为假但编队还没有快照时仍要拍一次(兜底,正常路径里 fmCreate 已经拍过)。 */
   if (!F || (src !== 'snapshot' && src !== 'generated')) return;
   const mates = fmShips(F);
   const flag = fmFlag(F, mates);
   if (!flag) return;
   const changed = (F.src !== src);
-  if (src === 'snapshot') fmSnapTake(F, mates, flag); // 写 F.snap 与 F.ang(FM3-1b:重拍以此刻船头为局部系,阵型朝向随之改写)
+  const take = (src === 'snapshot' && (retake || !F.snap));
+  if (take) fmSnapTake(F, mates, flag); // 写 F.snap 与 F.ang(FM3-1b:重拍以此刻船头为局部系,阵型朝向随之改写)
   /* FM3-2c 审查修复:切到 generated 时把阵型朝向写成【旗舰此刻船头角】,而不是复位成 NaN。
      FM3-2 的原意("首道令前原地下令/就地成形回落到旗舰此刻船头")只覆盖"从未下过令"这一种情形,而实现是无条件复位:
      NaN 会让 fmOffOf 退回 0 rad 参考系,一支已按条令成形、一步没动的编队,离位读数当场从几十公里跳到几万公里、
@@ -287,9 +295,10 @@ function fmSetSrc(F, src) {
      两艘同分护卫的槽位当场对调 —— 船一步没动,87/88 的离位读数从 38 km 跳到 15649 km、状态由"待命"翻成"成形中"
      (与本节第 1 条同一类症状,只是走的是槽位而不是 F.ang 这条腿)。
      切到 snapshot 每次都要重拍(那是"手调后固定"的入口,本来就不是空操作),所以只有 generated 方向按 changed 守。 */
-  if (changed || src === 'snapshot') {
+  if (changed || take) {
     fmReslot(F, mates, flag);
-    if (typeof log === 'function') log(fmName(F) + ' 槽位 → ' + (src === 'snapshot' ? '固定(已按当前相对位置与朝向重拍)' : '阵型(条令站位)'), '');
+    if (typeof log === 'function') log(fmName(F) + ' 槽位 → '
+      + (src !== 'snapshot' ? '阵型(条令站位)' : (take ? '固定(已按当前相对位置与朝向重拍)' : '固定(回到已存的队形,按「原地重排」让船就位)')), '');
   }
 }
 
