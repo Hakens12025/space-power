@@ -535,6 +535,20 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 /* 状态左条做成【独立子元素】而不是 border-left:hover 那条用的是 border-color(会连左边一起冲掉),
    两者抢同一个属性就会出现"鼠标一放上去状态色就没了"。RF8 方条那三种状态踩过同一个坑:
    同时叠加的状态各占不同视觉通道,谁都不许抢别人的属性。 */
+/* FM7 测试用「加船」小条:贴在左轨书签栏下方,跟着它一起从上往下排。
+   与 #fmBar 同一条车道(left/width 对齐),但它是【固定在书签栏之下】的一条,不随编队数上下跑 ——
+   书签最多 4 条,所以给书签留 4×27px 的余量,加船条钉在那之下。 */
+#spawnBar{position:fixed;left:var(--gut);top:calc(var(--rail-top) + 118px);
+  display:flex;flex-wrap:wrap;align-items:center;gap:3px;max-width:110px;
+  z-index:var(--z-panel);padding:4px;border:var(--bw) solid var(--line-hair);border-radius:var(--r-sm);
+  background:var(--srf-sunk);opacity:.8}
+#spawnBar:hover{opacity:1}
+#spawnBar .sp-lb{flex:0 0 100%;font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label)}
+#spawnBar .qbtn{min-width:0;padding:1px 6px;font-size:var(--fs-label)}
+#spawnBar .sp-side.red{color:var(--state-danger);border-color:var(--state-danger)}
+/* FM7 成员行:此刻听别的编队的那几艘压暗,身份格里写 →N */
+#selFm .fm-mem.away{opacity:.5}
+#selFm .fm-mem.away .fg{color:var(--state-warn);font-size:var(--fs-label)}
 .fm-tab .fm-edge{flex:none;width:3px;align-self:stretch;min-height:12px;border-radius:1px;background:var(--txt-dim)}
 .fm-tab.mv .fm-edge{background:var(--state-active)}   /* 旗舰有令 = 机动中 */
 /* FL1 跟随态左条:排在 .mv 之后,同特异度靠书写顺序定优先级 —— 一支编队可以同时在机动又在跟随,

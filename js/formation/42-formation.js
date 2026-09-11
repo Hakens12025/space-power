@@ -39,7 +39,48 @@ function fmAll() { // 有活船的编队,按槽位号排序(书签顺序必须�
   return out;
 }
 
+/* ============ FM7【一艘船可归入多个编队】 ============
+   用户定案的语义是【命令覆盖】:A 在编队1 与编队2 里,编队1 令它去 D1、随后编队2 令它去 D2,
+   它跟编队2 走。落到数据上就是把原来那个单值反向引用【一分为二】:
+
+     s.fms       = [F, …]   归属:它在哪几个编队的名册里
+     s.formation = F        【当前听谁的】(单值,语义从"它属于谁"变成"谁最后指挥了它")
+     s.fmSlot    = 按 s.formation 算出来的那一个槽位
+
+   为什么不能让它同时站两个位置:一艘船只有一个 fmSlot,而 31-step-ships 每 tick 就是靠
+   s.formation 决定"这艘船听谁的"(FC=stepFormation(s.formation,dt))。运动内核因此【一行都不用改】——
+   多归属完全活在名册层,内核看到的永远是单值。
+   认领发生在【下令那一刻】(44 fmSpread 的 fmClaim),不是建队那一刻:建队只是入册。 */
 function fmOf(s) { return (s && s.formation) || null; }
+function fmFmsOf(s) { return (s && s.fms) || []; }                       // 它在哪几个编队里
+function fmHasShip(F, s) { return !!F && !!s && fmFmsOf(s).indexOf(F) >= 0; }
+function fmJoin(s, F) { if (!s || !F) return; if (!s.fms) s.fms = []; if (s.fms.indexOf(F) < 0) s.fms.push(F); }
+/* 从【某一个】编队里摘出去(不影响它在别的编队里的归属)。
+   摘的若正是它当前听的那一个,主编队顺位到 fms 里剩下的第一个;一个都不剩就回散船态。
+   槽位必须跟着清:那是按旧主算出来的,留着它会顶着一个不属于任何编队的位置走。 */
+function fmLeaveOne(s, F) {
+  if (!s || !F) return;
+  const i = fmFmsOf(s).indexOf(F);
+  if (i >= 0) s.fms.splice(i, 1);
+  if (s.formation === F) {
+    s.formation = (s.fms && s.fms[0]) || null;
+    s.fmSlot = null; s.fmHdg = 0; s.fmStn = null;
+    if (s.formation) fmReslot(s.formation);          // 顺位到新主就按新主重算槽位
+    else if (typeof followClear === 'function') followClear(s);
+  }
+}
+/* 【认领】:把这个编队名下的活船都改成"听我的",并按我重算槽位。
+   由 44 fmSpread 在下令那一刻调,也由编辑队形的那几条路径(切模式/改几何/原地重排)调 ——
+   不认领的话你改了编队1 的阵型,船却还按编队2 站着,眼睛看到的和改的东西对不上。
+   返回是否真的换了主(没换就不用重排,省掉 fmReslot 抹掉 fmReassign 落盘配对的那个坑)。 */
+function fmClaim(F, mates) {
+  if (!F) return false;
+  const list = mates || fmShips(F);
+  let changed = false;
+  list.forEach(s => { if (s.formation !== F) { s.formation = F; changed = true; } });
+  if (changed) fmReslot(F, list);
+  return changed;
+}
 function fmName(F) { return (F && F.name) || ('编队' + (F ? F.id : '?')); }
 
 function fmShips(F) { // 名册 → 活着的舰对象(顺序按名册)
@@ -113,10 +154,10 @@ function fmReslot(F, mates, flag) { // 重算槽位(建队/战损/加员/换旗/
   fmApplyFollow(F); // 槽位变了,跟随关系里的相对位也要跟着变
 }
 
-function fmCreate(k, list) { // Ctrl+数字:按选中舰建/覆盖编队。少于 2 艘 = 清掉这个槽位
+function fmCreate(k, list) { // Ctrl+数字:按选中舰建/覆盖编队。FM7:一艘都没选才清掉这个槽位(单舰也能建队)
   const alive = (list || []).filter(s => s && !s.dead);
   fmDelete(k);
-  if (alive.length < 2) { if (typeof log === 'function') log('编队' + k + ' 已清空', ''); return null; }
+  if (!alive.length) { if (typeof log === 'function') log('编队' + k + ' 已清空(没有选中任何舰)', ''); return null; }
   const F = {
     id: String(k), name: '编队' + k, ships: alive.map(s => s.id), flagship: alive[0].id,
     P: fmParamsNew(), src: 'snapshot', follow: null, ang: NaN, dest0: null, n: 0, flagId: null, seq: ++fmSeq, // FM6:motion 轴已删
@@ -125,36 +166,42 @@ function fmCreate(k, list) { // Ctrl+数字:按选中舰建/覆盖编队。少�
      快照必须在 fmDetach 之前拍:fmDetach 会触发旧编队的 fmSettle→fmReslot,不影响 pos/facing,但拍在这里最直白 —— "建队那一刻"。 */
   fmSnapTake(F, alive, alive[0]); // 写 F.snap 与 F.ang(FM3-1b:上面字面量里的 ang:NaN 在这里被建队旗舰船头角覆盖)
   F.mode = fmModeOf(F); // F.src 是真相,mode 是它的派生
-  alive.forEach(s => fmDetach(s)); // 先从各自的旧编队摘干净,再挂新的(一艘船只能在一个编队里)
+  /* FM7:不再把船从旧编队摘走 —— 一艘船可以同时在几个编队的名册里。
+     建队【顺带认领】(s.formation = F):刚建出来的编队理应是你眼下在指挥的那个,
+     否则新建的队一声不吭地按别的队站着。 */
   formations[String(k)] = F;
-  alive.forEach(s => { s.formation = F; });
+  alive.forEach(s => { fmJoin(s, F); s.formation = F; });
   fmReslot(F, alive);
   if (typeof log === 'function') log(alive.length + ' 艘 → ' + fmName(F), '');
   return F;
 }
 
-function fmDetach(s) { // 把一艘船从它【当前】所属的编队里摘掉
-  const old = s && s.formation;
-  if (!old) return;
+/* 把一艘船从【指定】编队里摘掉;不给 F 就摘它当前听的那一个(旧调用点的语义)。
+   FM7:这里只动这一个编队的名册与它的归属,别的编队不受影响。 */
+function fmDetach(s, F) {
+  const old = F || (s && s.formation);
+  if (!s || !old) return;
   const i = old.ships.indexOf(s.id);
   if (i >= 0) old.ships.splice(i, 1);
-  s.formation = null; s.fmSlot = null; s.fmHdg = 0; // FM3-1:朝向差随槽位一起清
-  if (typeof followClear === 'function') followClear(s);
+  if (typeof followClear === 'function' && s.formation === old) followClear(s);
+  fmLeaveOne(s, old);
   if (old.flagship === s.id) old.flagship = old.ships[0] || null;
   fmSettle(old);
 }
 
-function fmSettle(F) { // 人数变化后收口:少于 2 艘就整个删掉,否则重排
+function fmSettle(F) { // 人数变化后收口。FM7:一艘都不剩才删(单舰编队是合法的)
   if (!F) return;
   const alive = fmShips(F);
-  if (alive.length < 2) { fmDelete(F.id); return; }
+  if (!alive.length) { fmDelete(F.id); return; }
   fmReslot(F, alive);
 }
 
 function fmDelete(k) { // 删除一个编队槽位(成员回散船态)
   const F = formations[String(k)];
   if (!F) return;
-  ships.forEach(s => { if (s.formation === F) { s.formation = null; s.fmSlot = null; s.fmHdg = 0; if (typeof followClear === 'function') followClear(s); } }); // FM3-1:fmHdg 随 fmSlot 一起清
+  /* FM7:要从【每一艘在册的船】的归属里摘,不能只看 s.formation ——
+     一艘正听别的编队的船,名册里可能仍有它,漏摘就留下一个指向已删编队的悬空引用。 */
+  ships.forEach(s => { if (fmHasShip(F, s)) fmLeaveOne(s, F); });
   delete formations[String(k)];
 }
 
@@ -200,13 +247,18 @@ function fmOnDeath(s) {
      slot 模式下每艘船持有自己的绝对终点,旗舰死了别人照飞;follow 模式下顺位换旗后 fmApplyFollow 会把
      成员改跟新旗舰。这里只做两件事:把它从名册摘掉、人数收口(<2 艘整个删掉,防零成员僵尸编队)。 */
   fmOnFollowTargetLost(s); // 先收拾【别人指向它】的跟随(这时它的 formation 还在,能算出顺位继承者)
-  const F = s && s.formation;
-  if (!F) return;
-  const i = F.ships.indexOf(s.id);
-  if (i >= 0) F.ships.splice(i, 1);
-  if (F.flagship === s.id) F.flagship = F.ships[0] || null;
-  const rest = fmShips(F).filter(x => x !== s);
-  if (rest.length < 2) fmDelete(F.id); else fmReslot(F, rest);
+  /* FM7:阵亡要从【它所在的每一个】编队里摘,不只是它当前听的那一个。
+     取副本遍历:fmLeaveOne 会改 s.fms 本身。 */
+  const all = fmFmsOf(s).slice();
+  if (!all.length) return;
+  all.forEach(F => {
+    const i = F.ships.indexOf(s.id);
+    if (i >= 0) F.ships.splice(i, 1);
+    if (F.flagship === s.id) F.flagship = F.ships[0] || null;
+    fmLeaveOne(s, F);
+    const rest = fmShips(F).filter(x => x !== s);
+    if (!rest.length) fmDelete(F.id); else fmReslot(F, rest);
+  });
 }
 
 function fmSetFlagship(F, s) { // 设为旗舰:改名册 + 按新锚点重排(跟随态下这一步会把成员改跟新旗舰)
@@ -355,13 +407,19 @@ function fmOffOf(s) { // 本舰在当前阵型里应处的偏移(锚点=旗舰�
 }
 
 function fmSameShips(list) {
-  /* list 恰好等于某个编队的全部活船 → 返回该编队。RTS 语义:选中什么就命令什么,选一部分不算编队命令。 */
-  if (!list || list.length < 2) return null;
+  /* list 恰好等于某个编队的全部活船 → 返回该编队。RTS 语义:选中什么就命令什么,选一部分不算编队命令。
+     FM7 多归属之后【可能同时匹配好几个编队】(编队1 与编队3 名册一模一样是完全合法的)。
+     平手时取【这批船当前正在听的那一个】—— 一来它是玩家眼下看到的状态(书签高亮、右栏读数都指着它),
+     二来这样"给它下令"不会无缘无故把主编队换到另一个同名册的队上去。都不听时退回第一个匹配的。 */
+  if (!list || list.length < 1) return null;   // FM7:单舰编队也算数,门槛从 2 降到 1
+  let first = null;
   for (const k in formations) {
     const F = formations[k]; if (!F) continue;
     const alive = fmShips(F);
     if (alive.length !== list.length) continue;
-    if (alive.every(s => list.indexOf(s) >= 0)) return F;
+    if (!alive.every(s => list.indexOf(s) >= 0)) continue;
+    if (!first) first = F;
+    if (alive.every(s => s.formation === F)) return F;   // 正在听它 —— 优先
   }
-  return null;
+  return first;
 }

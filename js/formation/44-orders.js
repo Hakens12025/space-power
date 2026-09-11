@@ -136,6 +136,11 @@ function fmAngOf(F, mates, dest, face) {
 function fmSpread(F, dest, type, face, mode) {
   const mates = fmShips(F);
   if (!mates.length) return null;
+  /* FM7【命令覆盖】:下令那一刻把名下的船认领过来(s.formation = F,并按 F 重算槽位)。
+     这就是用户定的语义 —— A 同时在编队1、编队2 里,谁最后下令它就跟谁走。
+     fmClaim 自带"没换主就不重排"的守卫:没有多归属时它是空操作,单编队路径行为一位不变
+     (不守的话每次下令都 fmReslot,会把下面 fmReassign 落盘的配对抹回原序)。 */
+  if (typeof fmClaim === 'function') fmClaim(F, mates);
   /* FM6:这里原有一条"跟随态只让旗舰接令"的分支,随【编队跟随模式】一并删除。
      编队现在恒走下面这条:下令那一刻把编队级目标点展开成每艘船的绝对终点。 */
   const ang = fmAngOf(F, mates, dest, face); // FM6:有 face(编队虚影)时阵型朝向取 face 方向

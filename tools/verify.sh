@@ -2950,6 +2950,103 @@ t('FLOW40_FOLLOWCTL',function(){ /* FM6 底栏跟随标准控件:四种作用域
     +' | 负对照:跟随自己被拒='+selfNo+' 循环跟随被拒='+loopNo
     +' | 运行期错误='+(errs.length?errs.join(' / '):'none');
 });
+t('FLOW42_FMMULTI',function(){ /* FM7 一艘船可归入多个编队 + 命令覆盖 + 单舰编队 + 测试用加船小条。
+     语义(用户定案):s.fms 是【归属】(在哪几个编队的名册里),s.formation 是【当前听谁的】,
+     谁最后下令谁认领。运动内核一行没改 —— 它读的还是 s.formation 这个单值。
+     Ctrl+数字走【真实 doAction】,加船走【真实 pointerdown】。 */
+  if(typeof fmJoin!=='function'||typeof fmClaim!=='function')return 'fail FM7 原语未定义(42-formation 没加载)';
+  var errs=[];var onerr=function(e){errs.push(e.message||String(e));};
+  window.addEventListener('error',onerr);
+  var shipsBak=ships.slice(), selBak=selected.slice();
+  var out='';
+  try{
+    fmAll().slice().forEach(function(F){fmDelete(F.id);});
+    ships.length=0;
+    var A=makeShip('CA','多A',[0,0,0],[1,0,0],[0,0,0],'blue',2);
+    var B=makeShip('DD','多B',[-30000,10000,0],[1,0,0],[0,0,0],'blue',2);
+    var C=makeShip('DD','多C',[-30000,-10000,0],[1,0,0],[0,0,0],'blue',2);
+    ships.push(A,B,C);
+    function fms(x){return (x.fms||[]).map(function(F){return F.id;}).sort().join(',');}
+    function hear(x){return x.formation?x.formation.id:'-';}
+    /* ① AB→Ctrl+1,BC→Ctrl+2:两个编队都要在,B 同时在两个名册里 */
+    selected=[A.id,B.id]; doAction('grp_assign_1');
+    selected=[B.id,C.id]; doAction('grp_assign_2');
+    var n1=fmGet('1'), n2=fmGet('2');
+    /* 读数【当场】截取:下面 B 会阵亡、编队会被解散,到结尾再取全是终态,看着像判据错了(判据其实是对的)。
+       这类「读数与判据不同时刻」的行本文件栽过一次(ring7b),一律当场存变量。 */
+    var fmsB1=fms(B), fmsA1=fms(A), fmsC1=fms(C);
+    var ok1=(!!n1&&!!n2&&fmShips(n1).length===2&&fmShips(n2).length===2&&fmsB1==='1,2'&&fmsA1==='1'&&fmsC1==='2');
+    /* ② 命令覆盖:谁最后下令,B 就跟谁走。判据不是"字段变了",是【终点真的翻到另一边】 */
+    fmMoveTo(n1,[400000,0,0],'stop',null);
+    var h1=hear(B), x1=B.orders.length?B.orders[0].pos[0]:NaN;
+    fmMoveTo(n2,[-400000,0,0],'stop',null);
+    var h2=hear(B), x2=B.orders.length?B.orders[0].pos[0]:NaN;
+    var ok2=(h1==='1'&&h2==='2'&&x1>200000&&x2<-200000);
+    /* ③ 单舰也能建队(改前 <2 艘直接清掉这个槽位) */
+    selected=[A.id]; doAction('grp_assign_3');
+    var n3=fmGet('3');
+    var ok3=(!!n3&&fmShips(n3).length===1&&fms(A).indexOf('3')>=0);
+    /* ④ fmSameShips 平手:名册一样的两个编队,取【正在听的那个】 */
+    selected=[B.id,C.id]; doAction('grp_assign_4');   // 编队4 与编队2 名册相同
+    var tie1=fmSameShips([B,C]);
+    fmMoveTo(fmGet('2'),[0,300000,0],'stop',null);    // 给 2 下令 → B、C 改听 2
+    var tie2=fmSameShips([B,C]);
+    var ok4=(!!tie1&&tie1.id==='4'&&!!tie2&&tie2.id==='2');
+    /* ⑤ 解散一个编队:成员顺位到它还在的另一个,名册里不许留悬空 id */
+    fmDelete('4');
+    var fmsB5=fms(B), hearB5=hear(B);
+    var ok5=(fmsB5==='1,2'&&hearB5==='2'&&!fmAll().some(function(F){return F.ships.some(function(id){
+      return !ships.some(function(x){return String(x.id)===String(id);});});}));
+    /* ⑥ 阵亡:要从【每一个】编队的名册里摘干净 */
+    var beforeN=fmAll().map(function(F){return F.id+':'+fmShips(F).length;}).join(' ');
+    if(typeof fmOnDeath==='function')fmOnDeath(B);
+    B.dead=true; B.formation=null; B.fms=null;
+    var ok6=(!fmAll().some(function(F){return F.ships.indexOf(B.id)>=0;}));
+    var afterN=fmAll().map(function(F){return F.id+':'+fmShips(F).length;}).join(' ');
+    /* ⑦ 成员行要标出"此刻听别的队"(真渲染一次 #selFm,问 class) */
+    selected=[A.id,C.id];
+    var nA=fmCreate('1',[A,C]); fmCreate('2',[C]);      // C 归属 1 与 2,当前听 2
+    fmUi.infoSig=''; selected=fmShips(nA).map(function(x){return x.id;});
+    if(typeof updateSelPanel==='function')updateSelPanel();
+    if(typeof updFmBar==='function')updFmBar();
+    fmUi.open='1'; if(typeof fmbInfo==='function')fmbInfo(fmbStat(nA));
+    if(typeof updFmBar==='function')updFmBar();
+    var rowC=document.querySelector('#selFm .fm-mem[data-fms="'+C.id+'"]');
+    var rowA=document.querySelector('#selFm .fm-mem[data-fms="'+A.id+'"]');
+    var ok7=(!!rowC&&!!rowA&&rowC.classList.contains('away')&&!rowA.classList.contains('away'));
+    /* ⑧ 测试用加船小条:真点一下要真加一艘;「清」要清干净且不留悬空 id */
+    if(typeof spawnBarBuild==='function')spawnBarBuild();
+    var sb=document.getElementById('spawnBar');
+    var nS=ships.length;
+    if(sb){var bt=sb.querySelector('[data-sp="CA"]');
+      if(bt)bt.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true,button:0}));}
+    var added=ships.length-nS;
+    var spawned=ships.filter(function(x){return /^增援-/.test(x.name||'');}).length;
+    if(sb){var bc=sb.querySelector('[data-sp="clr"]');
+      if(bc)bc.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true,button:0}));}
+    var left=ships.filter(function(x){return /^增援-/.test(x.name||'');}).length;
+    var dangle=fmAll().some(function(F){return F.ships.some(function(id){
+      return !ships.some(function(x){return String(x.id)===String(id);});});});
+    var ok8=(!!sb&&added===1&&spawned>=1&&left===0&&!dangle);
+    var ok=(ok1&&ok2&&ok3&&ok4&&ok5&&ok6&&ok7&&ok8&&!errs.length);
+    out=(ok?'ok':'fail')
+      +' ①AB→Ctrl+1 / BC→Ctrl+2:两队都在='+(!!n1&&!!n2)+' B 的归属=['+fmsB1+'](须1,2) A=['+fmsA1+'] C=['+fmsC1+']='+ok1
+      +' | ②命令覆盖:编队1下令后 B 听'+h1+'、终点x='+Math.round(x1/1000)+'k;编队2下令后 B 听'+h2+'、终点x='+Math.round(x2/1000)+'k(须翻到负side)='+ok2
+      +' | ③单舰建队:编队3='+(n3?fmShips(n3).length+'艘':'没建起来')+'(须1艘)='+ok3
+      +' | ④fmSameShips 平手取「正在听的」:'+(tie1?tie1.id:'null')+' →给2下令后→ '+(tie2?tie2.id:'null')+'(须 4→2)='+ok4
+      +' | ⑤解散编队4:B 归属=['+fmsB5+'](须1,2) 听'+hearB5+'(须2)  无悬空id='+ok5
+      +' | ⑥阵亡从每个名册摘干净:'+beforeN+' → '+afterN+' ='+ok6
+      +' | ⑦成员行标出「听别的队」:C='+(rowC?(rowC.classList.contains('away')?'away':'未标'):'无行')+' A='+(rowA?(rowA.classList.contains('away')?'误标':'正常'):'无行')+'='+ok7
+      +' | ⑧加船小条(真实 pointerdown):加了'+added+'艘(须1) 清完剩'+left+'艘(须0) 名册悬空id='+dangle+'='+ok8
+      +' | 运行期错误='+(errs.length?errs.join(' / '):'none');
+  }finally{
+    fmAll().slice().forEach(function(F){fmDelete(F.id);});
+    ships.length=0; shipsBak.forEach(function(x){ships.push(x);});
+    selected=selBak;
+    window.removeEventListener('error',onerr);
+  }
+  return out;
+});
 t('FLOW41_FMPLOT',function(){ /* FM6p 地图上的站位图:画不画由一条【具名谓词】说了算,且不画"站位→实船"的连线。
      判据【不走像素】:那条线是 1px、35% 透明,压在会变的星云/网格上,实测采样值(508 vs 512)分不出有没有它 ——
      像素法在这里是测不准的。改走【canvas 指令级】:把 moveTo/lineTo/stroke 代成记录器,跑一次 render(),
@@ -3098,6 +3195,7 @@ grep -q "FLOW38_FMPAGE=ok" "$OUT" || { echo "✗ FLOW38_FMPAGE 未通过(FM4 舰
 grep -q "FLOW39_FMGHOST=ok" "$OUT" || { echo "✗ FLOW39_FMGHOST 未通过(FM6 编队级长按右键定阵型朝向，全程真实事件:长按弹出且作用域=本编队 / 虚影把每艘舰都画出来 / 终点贴 face 解而不是行进方向解 / 飞完真的按那个朝向摆开 / 选一部分与单舰仍走单舰语义)"; fail=1; }
 grep -q "FLOW40_FOLLOWCTL=ok" "$OUT" || { echo "✗ FLOW40_FOLLOWCTL 未通过(FM6 底栏跟随标准控件四种作用域，全程真实事件:单舰→单舰 / 单舰→舰队 / 舰队→单舰 / 舰队→舰队（点非旗舰须落到旗舰）/ 真点解除钮清干净 / 跟随自己与循环跟随被拒)"; fail=1; }
 grep -q "FLOW41_FMPLOT=ok" "$OUT" || { echo "✗ FLOW41_FMPLOT 未通过(FM6p 地图站位图:画不画由 fmpShowsStations 这一个谓词说了算 / 不画「站位→实船」连线(canvas 指令级计数,不走像素) / 固定模式整张图都不画)"; fail=1; }
+grep -q "FLOW42_FMMULTI=ok" "$OUT" || { echo "✗ FLOW42_FMMULTI 未通过(FM7 一艘船可归入多个编队:两队同时存在 / 命令覆盖(谁最后下令跟谁) / 单舰建队 / fmSameShips 平手取正在听的那个 / 解散与阵亡不留悬空id / 成员行标出听别的队 / 测试用加船小条)"; fail=1; }
 # FM3-2 源码级负对照:旧弧线阵的四样东西(舰种角色表 / 防空圈基准半径函数 / 扇面参数 / 弦距参数)必须从 js/ 里消失。
 # 模式用字符串拼接写,免得本文件自己被同一条 grep 抓到。
 FM32_DEAD="CLS_""ROLE|aaRing""Ref|P\\.f""an|P\\.g""ap|FM_LIMIT\\.f""an|FM_LIMIT\\.g""ap"

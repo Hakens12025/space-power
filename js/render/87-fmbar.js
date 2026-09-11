@@ -193,8 +193,15 @@ function fmbInfo(st){
     const m=fmUi.mem[s.id];if(!m)return;
     const stt=(typeof shipState==='function')?shipState(s):'';
     m.dot.classList.toggle('sail',stt!=='停车'&&stt!=='☠已毁'); // 状态点口径与 .card .dot 一致
-    const fg=(String(s.id)===flagId)?'旗':'';
+    /* FM7 多归属:一艘船可以同时在几个编队的名册里,但【只听一个】。名册里那些此刻听别人的,
+       要一眼看得出来 —— 否则你给这个编队下令,画面上有几艘纹丝不动,而成员列表里它们明明在。
+       标记写在旗舰那一格里(它本来就是"这艘船在本队的身份"那一列),顺带整行压暗。 */
+    const away=(s.formation&&s.formation!==st.F)?s.formation:null;
+    const fg=(String(s.id)===flagId)?'旗':(away?('→'+fmName(away).replace('编队','')):'');
     if(m.fg.textContent!==fg)m.fg.textContent=fg;
+    m.root.classList.toggle('away',!!away);
+    const tt=away?('当前听 '+fmName(away)+' 的命令 —— 给本队下令时它不会动。对本队下一次令就会把它认领回来'):'左键选中 · 右键设为旗舰';
+    if(m.root.title!==tt)m.root.title=tt;
     const fr=s.maxHp?Math.max(0,Math.min(1,s.hp/s.maxHp)):0;
     const w=(fr*100).toFixed(1)+'%';
     if(m.bar.style.width!==w)m.bar.style.width=w;
