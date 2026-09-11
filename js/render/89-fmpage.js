@@ -14,7 +14,7 @@
    —— 那是 RF7c 在 #fcList 上踩过的坑,这里的插槽圈同时满足"重建 + hover + 事件委托"三条,更躲不过。
    所以舰船血量变化引起的评估变动不会自动反映,标题栏写明了读数时刻。 */
 
-const fmPg = { open: null, sel: -1, drag: -1, moved: false, knobDirty: false, bedit: null, zoom: 1, pan: [0, 0], pdrag: null }; // FM6l 方位盘的缩放与平移(纯 UI,不进存档) // bedit:正在展开编辑的那条自定义轮带(FM6k) // 纯 UI 状态,不进任何存档/快照
+const fmPg = { open: null, sel: -1, drag: -1, moved: false, knobDirty: false, bedit: null, zoom: 1, pan: [0, 0], pdrag: null, ringView: 'out' }; // FM6l 方位盘的缩放与平移(纯 UI,不进存档) // bedit:正在展开编辑的那条自定义轮带(FM6k) // 纯 UI 状态,不进任何存档/快照
 /* 本页整块走 innerHTML 拼串,而舰名是玩家可改的(场景编辑器)——拼进去前必须转义。
    全库没有现成的转义函数(其余面板都走 textContent),所以在这里自带一个,名字加 fmPg 前缀防撞名。 */
 function fmPgEsc(v) { return String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
@@ -26,7 +26,7 @@ function fmPageOpen(id) {
   const el = document.getElementById('fmPage');
   if (!el) return false;
   fmPg.open = String(id); fmPg.sel = -1; fmPg.drag = -1;
-  fmPg.zoom = 1; fmPg.pan = [0, 0]; fmPg.pdrag = null;   // FM6l 每次打开都回到自适应视角
+  fmPg.zoom = 1; fmPg.pan = [0, 0]; fmPg.pdrag = null; fmPg.ringView = 'out';   // FM6l 每次打开都回到自适应视角(FM7b:也回到外圈)
   el.classList.add('on');
   fmPageRender();
   return true;
@@ -153,6 +153,11 @@ function fmPgDial(F, PL) {
   return '<div class="fp-dialwrap">'
     + '<svg id="fpDial" viewBox="0 0 ' + FP_DIAL + ' ' + FP_DIAL + '">' + fmPgDialInner(F, PL) + '</svg>'
     + '<div class="fp-zoom" title="缩放阵型图（拖动方位盘可平移）">'
+    /* FM7b 内外圈切换钮,压在缩放滑块上面(同一列)。它改的是【基准贴合半径】,不是缩放倍数 ——
+       所以玩家拖过的 zoom 在切换之后仍然生效,两者叠乘。 */
+    + '<button class="btn qbtn fp-ring' + (fmPg.ringView === 'in' ? ' on' : '') + '" data-fp="ring" title="'
+    + (fmPg.ringView === 'in' ? '当前:内圈视图（贴合被护带，看得清里圈插槽）。点一下回到外圈' : '当前:外圈视图（四条带都在画面里）。点一下切到内圈，放大到被护带')
+    + '">' + (fmPg.ringView === 'in' ? '内' : '外') + '</button>'
     + '<b>+</b>'
     + '<span class="fp-zwrap"><input type="range" data-fpz="1" min="' + FP_ZOOM[0] + '" max="' + FP_ZOOM[1] + '" step="0.05" value="' + fmPg.zoom + '"></span>'
     + '<b>−</b></div>'
@@ -178,7 +183,15 @@ function fmPgDialInner(F, PL) {
     const t = fmSpreadBrg(sl.brg, T.spread) * Math.PI / 180;
     maxR = Math.max(maxR, Math.abs(r * Math.cos(t)), Math.abs(r * Math.sin(t) * BR.widen));
   });
-  const k = FP_FIT / maxR * fmPg.zoom;          // FM6l 基准贴合 × 玩家的缩放
+  /* FM7b【内外圈切换】。外圈(缺省)= 贴合到最远的那个站位/插槽,四条带都在画面里;
+     内圈 = 改成贴合【被护带】,把屏护与哨戒挤出视野。
+     为什么需要它:带半径是从近防射程算出来的,贴身 7k 与哨戒 100k 差着十几倍 ——
+     全都塞进一个盘里时,内圈那几个插槽挤在中心一小撮里,方位根本读不出来、更别说拖。
+     用 body 而不是 close 当基准:只贴 close 的话被护带整圈落在视野外,看着像"图裂了";
+     贴 body 时贴身与被护两条都完整,屏护恰好在边缘露一段,还能看出自己在整体的什么位置。
+     乘 widen:扁率 >1 时横向铺得更开,不乘的话内圈视图会被横向截掉。 */
+  const fitR = (fmPg.ringView === 'in' && BR.body > 0) ? BR.body * Math.max(1, BR.widen || 1) : maxR;
+  const k = FP_FIT / fitR * fmPg.zoom;          // FM6l 基准贴合 × 玩家的缩放
   fmPgClampPan();
   const P0 = fmPg.pan;
   const px = (lx, ly) => [FP_C + ly * k + P0[0], FP_C - lx * k + P0[1]];
@@ -457,6 +470,10 @@ function fmPgAct(a) {
     fmPg.sel = -1; fmPageRender();
     if (typeof updFmBar === 'function') updFmBar();
     return;
+  }
+  if (a === 'ring') {   // FM7b 内外圈切换:只换基准贴合半径,缩放与平移都保留(平移要重新钳一次,内圈的可拖范围小得多)
+    fmPg.ringView = (fmPg.ringView === 'in') ? 'out' : 'in';
+    fmPgClampPan(); fmPageRender(); return;
   }
   if (a === 'badd') {
     /* FM6k 新增轮带:半径留空、直接展开成编辑行。留空 ⇒ 不进几何也不上盘,与"插槽的能力/带留空"同一套语义

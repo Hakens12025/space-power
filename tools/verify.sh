@@ -2714,7 +2714,34 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   var brg9=fmPageSlots(F)[0].brg, d9=Math.abs(((brg9-want9)%360+360)%360); if(d9>180)d9=360-d9;
   var okInv=(d9<3);
   fmPg.zoom=1; fmPg.pan=[0,0]; F.P.slots=null; fmReslot(F); fmPg.sel=-1; fmPageRender();
-  var ok9=(okZUi&&okZoom&&panned&&okLim&&okCenter&&okInv);
+  /* FM7b【内外圈切换钮】。它改的是【基准贴合半径】而不是缩放倍数:
+       外圈 = 贴合到最远的站位/插槽,四条带都在画面里(最大带圈 ry ≤ FP_FIT);
+       内圈 = 贴合被护带,屏护与哨戒被挤出视野(最大带圈 ry 远大于 FP_FIT,视口内的圈变少)。
+     判据打【画出来的圈】而不是打状态字段:字段改了但 fitR 没接上,那才是这类改动的典型坏法。
+     另判一条"缩放仍然叠乘" —— 两者是相乘关系,切内圈不该把玩家拖过的 zoom 吃掉。 */
+  fmPg.zoom=1; fmPg.pan=[0,0]; fmPageRender();
+  function fp9maxRing(){var mx=0;document.querySelectorAll('#fpDial ellipse').forEach(function(e){mx=Math.max(mx,+e.getAttribute('ry'));});return Math.round(mx);}
+  function fp9inView(){var n=0;document.querySelectorAll('#fpDial ellipse').forEach(function(e){if(+e.getAttribute('ry')<=FP_C)n++;});return n;}
+  var rBtn=document.querySelector('#fpBody [data-fp="ring"]');
+  let zIn=document.querySelector('#fpBody input[data-fpz]');
+  var rTop=(rBtn&&zIn)?(rBtn.getBoundingClientRect().top<zIn.getBoundingClientRect().top):false;
+  var rOutR=fp9maxRing(), rOutN=fp9inView(), rTxt0=rBtn?rBtn.textContent:'';
+  hit(rBtn,'pointerdown');
+  var rInR=fp9maxRing(), rInN=fp9inView(), rTxt1=(document.querySelector('#fpBody [data-fp="ring"]')||{}).textContent;
+  var spI=fp9span();
+  /* 点完切换钮走的是 fmPageRender(),整页节点都换过了 —— 上面那个 zIn 引用已经悬空,
+     对它赋值等于往一个脱离文档的 input 上写,什么都不会发生(第一版就栽在这:横跨两次读数一模一样)。 */
+  zIn=document.querySelector('#fpBody input[data-fpz]');
+  if(zIn){zIn.value='2';zIn.dispatchEvent(new Event('input',{bubbles:true}));}
+  var spI2=fp9span();
+  if(zIn){zIn.value='1';zIn.dispatchEvent(new Event('input',{bubbles:true}));}
+  hit(document.querySelector('#fpBody [data-fp="ring"]'),'pointerdown');
+  var rBackR=fp9maxRing();
+  var okRing=(!!rBtn&&rTop&&rTxt0==='外'&&rTxt1==='内'&&rOutR<=FP_FIT+2&&rInR>FP_FIT*1.5
+              &&rInN<rOutN&&rInN>=2&&Math.abs(spI2-spI*2)<=6&&rBackR===rOutR);
+  /* rInN>=2 钉的是【贴合到哪条带】这个选择:内圈视图要能同时看见贴身与被护两条。
+     贴 close 的话被护整圈落到视野外(实测只剩 1 圈),画面像"图裂了" —— 只判"圈变少了"抓不到这个。 */
+  var ok9=(okZUi&&okZoom&&panned&&okLim&&okCenter&&okInv&&okRing);
   /* ⑦ 恢复默认 + 关闭(真的点 ✕) */
   hit(document.querySelector('#fpBody [data-fp="reset"]'),'pointerdown');
   var okReset=(!F.P.slots&&fmPageSlots(F).length===FM_STANCE.sub.slots.length);
@@ -2759,6 +2786,7 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
     +' 盘面拖动真的平移了='+panned
     +' 限位['+lims.join(' ')+'] 四档缩放×四个方向拖到底,带圈仍进视口最少='+worst+'/4(须>=1=画面永远不空；高倍拖到外沿时里面几条本就该跑出画面)='+okLim
     +' 带圈与旗舰记号跟着一起平移(圆心偏差'+cOff.toFixed(1)+',须<0.6=整张图不分家)='+okCenter
+    +' | FM7b 内外圈切换(钮在缩放之上='+rTop+'):外「'+rTxt0+'」最大带圈 ry='+rOutR+'、视口内'+rOutN+'圈 → 内「'+rTxt1+'」ry='+rInR+'、视口内'+rInN+'圈(须挤出去、且须>=2=贴身与被护都还在) 内圈下 zoom 仍叠乘 '+spI+'→'+spI2+' 再点回外圈 ry='+rBackR+'='+okRing
     +' 平移后拖插槽仍是拖到哪就是哪(存进去 '+Math.round(brg9)+'° 须 '+Math.round(want9)+'°,偏差'+d9.toFixed(1)+'°)='+okInv+'='+ok9
     +' | ⑦恢复默认='+okReset+' 点✕关闭='+closed+' 切固定模式后 s.fmStn 已清='+stnCleared+'='+ok7
     +' | ⑧编队被删后自动收摊='+ok8+' 运行期错误='+(errs.length?errs.join(' / '):'none');

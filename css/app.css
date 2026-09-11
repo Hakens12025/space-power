@@ -690,6 +690,9 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
   padding:4px 3px;background:var(--srf-sunk);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);opacity:.85}
 .fp-zoom:hover{opacity:1}
 .fp-zoom b{font-size:var(--fs-label);color:var(--txt-dim);line-height:1;font-weight:normal}
+/* FM7b 内外圈切换钮:与缩放滑块同一列,压在 + 上面。切到内圈时点亮(与模式分段控件同一套 .on 洗色) */
+.fp-ring{padding:0 4px;min-width:0;font-size:var(--fs-label);margin-bottom:2px}
+.fp-ring.on{background:var(--acc-wash);border-color:var(--acc);color:var(--acc-lite)}
 .fp-zwrap{position:relative;width:16px;height:96px}
 .fp-zwrap input[type=range]{position:absolute;top:50%;left:50%;width:96px;height:12px;margin:0;
   transform:translate(-50%,-50%) rotate(-90deg);-webkit-appearance:none;appearance:none;background:transparent}
