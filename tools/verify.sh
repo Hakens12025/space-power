@@ -2931,6 +2931,66 @@ t('FLOW40_FOLLOWCTL',function(){ /* FM6 底栏跟随标准控件:四种作用域
     +' | 负对照:跟随自己被拒='+selfNo+' 循环跟随被拒='+loopNo
     +' | 运行期错误='+(errs.length?errs.join(' / '):'none');
 });
+t('FLOW41_FMPLOT',function(){ /* FM6p 地图上的站位图:画不画由一条【具名谓词】说了算,且不画"站位→实船"的连线。
+     判据【不走像素】:那条线是 1px、35% 透明,压在会变的星云/网格上,实测采样值(508 vs 512)分不出有没有它 ——
+     像素法在这里是测不准的。改走【canvas 指令级】:把 moveTo/lineTo/stroke 代成记录器,跑一次 render(),
+     数有多少条线段的两端恰好是(某个站位, 某艘实船)。这个量是确定的,没有噪声。 */
+  if(typeof drawFmStations!=='function')return 'fail drawFmStations 未定义(84-fmplot 没加载)';
+  var errs=[];var onerr=function(e){errs.push(e.message||String(e));};
+  window.addEventListener('error',onerr);
+  var shipsBak=ships.slice(), projBak=projectiles.slice(), fxBak=hitFX.slice(), seqBak=(typeof fireSeqs!=='undefined')?fireSeqs.slice():null;
+  var camBak={x:cam.x,y:cam.y,zoom:cam.zoom}, selBak=selected.slice();
+  var out='';
+  try{
+    /* 场景隔离:只留两艘,清掉弹丸/特效/火控序列 —— 同 FLOW31 那条规矩,不隔离的话量到的是整个场景的历史 */
+    var A=makeShip('CA','绘图旗',[0,0,0],[1,0,0],[0,0,0],'blue',2);
+    var B=makeShip('DD','绘图僚',[-60000,0,0],[1,0,0],[0,0,0],'blue',2);
+    ships.length=0;ships.push(A,B);projectiles.length=0;hitFX.length=0;
+    if(typeof fireSeqs!=='undefined')fireSeqs.length=0;
+    var F=fmCreate('9',[A,B]); fmSetSrc(F,'generated');
+    selected=F.ships.slice(); cam.x=0;cam.y=0;cam.zoom=0.0012;
+    /* canvas 记录器:只记 moveTo→lineTo 这一对(本文件的连线就是这么画的) */
+    var segs=[], mt=ctx.moveTo, lt=ctx.lineTo, cur=null;
+    ctx.moveTo=function(x,y){cur=[x,y];return mt.apply(ctx,arguments);};
+    ctx.lineTo=function(x,y){if(cur)segs.push([cur[0],cur[1],x,y]);return lt.apply(ctx,arguments);};
+    function near(ax,ay,bx,by){return Math.hypot(ax-bx,ay-by)<3;}
+    function countLinks(){ /* 两端恰好是(站位, 实船)的线段有几条 */
+      var f=fmFlag(F), n=0;
+      var pts=fmShips(F).filter(function(m){return m.fmStn&&m.fmStn.band!=='core';}).map(function(m){
+        var o=fmOffOf(m); return {p:toScreen(f.pos[0]+o[0],f.pos[1]+o[1]), q:toScreen(m.pos[0],m.pos[1])};});
+      segs.forEach(function(g){pts.forEach(function(u){
+        if((near(g[0],g[1],u.p[0],u.p[1])&&near(g[2],g[3],u.q[0],u.q[1]))||
+           (near(g[0],g[1],u.q[0],u.q[1])&&near(g[2],g[3],u.p[0],u.p[1])))n++;});});
+      return n;}
+    segs.length=0; render(); var linkSlot=countLinks(), segSlot=segs.length;
+    /* 站位小圈必须还在(否则"没连线"只是因为整张图没画) —— 这个像素信号是干净的:圈是实心描边、位置固定 */
+    var f9=fmFlag(F), o9=fmOffOf(fmShips(F).filter(function(m){return m!==f9;})[0]);
+    var pp=toScreen(f9.pos[0]+o9[0],f9.pos[1]+o9[1]);
+    function ringLum(){var mx=0;for(var a=0;a<6.28;a+=0.3){var d=ctx.getImageData(Math.round(pp[0]+4*Math.cos(a)),Math.round(pp[1]+4*Math.sin(a)),1,1).data;mx=Math.max(mx,d[0]+d[1]+d[2]);}return mx;}
+    var ringOn=ringLum();
+    /* 固定模式:整张站位图都不画 */
+    fmSetSrc(F,'snapshot'); segs.length=0; render();
+    var linkFix=countLinks(), ringOff=ringLum();
+    ctx.moveTo=mt; ctx.lineTo=lt;
+    var okPred=(typeof fmpShowsStations==='function'&&fmpShowsStations({src:'generated'})===true&&fmpShowsStations({src:'snapshot'})===false);
+    var ok=(okPred&&linkSlot===0&&linkFix===0&&segSlot>0&&ringOn>150&&ringOff<100&&!errs.length);
+    out=(ok?'ok':'fail')
+      +' 谓词 fmpShowsStations(阵型=true/固定=false)='+okPred
+      +' | 阵型态·船离站位 132px:站位→实船的线段='+linkSlot+'条(须0;该场景总线段='+segSlot+',>0=图确实画了)'
+      +' 站位小圈亮度='+ringOn+'(须>150=圈还在)'
+      +' | 固定态:线段='+linkFix+'条(须0) 站位小圈亮度='+ringOff+'(须<100=整张站位图都不画)'
+      +' | 运行期错误='+(errs.length?errs.join(' / '):'none');
+    fmDelete('9');
+  }finally{
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+    projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
+    hitFX.length=0;fxBak.forEach(function(x){hitFX.push(x);});
+    if(seqBak&&typeof fireSeqs!=='undefined'){fireSeqs.length=0;seqBak.forEach(function(x){fireSeqs.push(x);});}
+    cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;selected=selBak;
+    window.removeEventListener('error',onerr);
+  }
+  return out;
+});
 t('FLOW6_CHAIN',function(){ /* RF7 数据链渲染:函数存在;编辑态/退出态 render 均不炸(像素断言不做,ERRORS 层兜底) */
   var e=fc5reset();
   fcNew(e.S,{tid:e.A.id});fcAppend(e.S,{tid:e.B.id});
@@ -3018,6 +3078,7 @@ grep -q "FLOW37_FMCAPSLOT=ok" "$OUT" || { echo "✗ FLOW37_FMCAPSLOT 未通过(F
 grep -q "FLOW38_FMPAGE=ok" "$OUT" || { echo "✗ FLOW38_FMPAGE 未通过(FM4 舰队编组控制页，全程真实 DOM 事件:编队菜单钮开页(且那个钮真在屏上) / 点插槽出配置条 / 改能力落到 F.P.slots 且 s.fmStn 跟着变 / 拖动改方位拖到哪就是哪(±3°) / 页内切站位 / 增删插槽且不许删到空 / 恢复默认+关闭 / 固定模式清 s.fmStn / 编队被删后自动收摊)"; fail=1; }
 grep -q "FLOW39_FMGHOST=ok" "$OUT" || { echo "✗ FLOW39_FMGHOST 未通过(FM6 编队级长按右键定阵型朝向，全程真实事件:长按弹出且作用域=本编队 / 虚影把每艘舰都画出来 / 终点贴 face 解而不是行进方向解 / 飞完真的按那个朝向摆开 / 选一部分与单舰仍走单舰语义)"; fail=1; }
 grep -q "FLOW40_FOLLOWCTL=ok" "$OUT" || { echo "✗ FLOW40_FOLLOWCTL 未通过(FM6 底栏跟随标准控件四种作用域，全程真实事件:单舰→单舰 / 单舰→舰队 / 舰队→单舰 / 舰队→舰队（点非旗舰须落到旗舰）/ 真点解除钮清干净 / 跟随自己与循环跟随被拒)"; fail=1; }
+grep -q "FLOW41_FMPLOT=ok" "$OUT" || { echo "✗ FLOW41_FMPLOT 未通过(FM6p 地图站位图:画不画由 fmpShowsStations 这一个谓词说了算 / 不画「站位→实船」连线(canvas 指令级计数,不走像素) / 固定模式整张图都不画)"; fail=1; }
 # FM3-2 源码级负对照:旧弧线阵的四样东西(舰种角色表 / 防空圈基准半径函数 / 扇面参数 / 弦距参数)必须从 js/ 里消失。
 # 模式用字符串拼接写,免得本文件自己被同一条 grep 抓到。
 FM32_DEAD="CLS_""ROLE|aaRing""Ref|P\\.f""an|P\\.g""ap|FM_LIMIT\\.f""an|FM_LIMIT\\.g""ap"
