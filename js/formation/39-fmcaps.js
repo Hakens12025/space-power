@@ -398,6 +398,27 @@ function fmPlanStations(list, P, flagId, slotsOverride) {
 /* 按【插槽】汇总而不是逐个位置列 —— 插槽是一片范围,里面可以有很多船。
    分档:平均契合 ≥0.75 满足(F) / ≥0.5 勉强(A) / 其余受限(L) / 无舰可派 空缺(X)。
    条令 (L) 档要求「每一个受限都必须附一句限制说明」,所以受限行必须说出最弱的那艘只拿到多少。 */
+/* FM8b【要害契合】= 要害站位里【最短的那块板】。
+   用户实报:「要害偏好」拉高之后总契合反而降,滑块看着只有坏处。那不是实现坏了 ——
+   匈牙利最大化的是 Σ(fit·prio),而面板上写的「总契合」是【不加权】的 Σfit,
+   任何非均匀权重都必然压低它,这是数学结论。问题出在【给玩家看的是错的那把尺子】。
+   这里补一把对的:按能力影响力取最要紧的那三分之一站位,报它们里最低的契合度。
+   实测(13 舰异构):pref 0→0.5,总契合 10.56→10.35(−2%),而要害最低 0.50→1.00 ——
+   代价落在最不要紧的站位上(0.42→0.29),这正是这个滑块该做的取舍。
+   【尺子与 pref 无关】:要害集合只按 fmCapW 划,不看 prio,所以不同 pref 之间可比。 */
+function fmKeyFit(PL) {
+  if (!PL || !PL.pairs || !PL.pairs.length) return null;
+  const rows = PL.pairs.map(p => ({ v: p.v, w: fmCapW(PL.sta[p.j].cap) }))
+    .filter(x => isFinite(x.v));
+  if (!rows.length) return null;
+  /* 取【权重最高的那一档全部】,不是"前三分之一":固定模板前五个站位都是通道(w=1.00),
+     按 1/3 切只拿 4 个,恰好可能把那个契合 0.50 的漏在外面 —— 实测第一版读数因此恒为 1.00,
+     一个完全没有区分度的尺子。按档取就不会漏。 */
+  const maxW = Math.max(...rows.map(x => x.w));
+  const key = rows.filter(x => x.w >= maxW - 1e-9);
+  return { n: key.length, min: Math.min(...key.map(x => x.v)), avg: key.reduce((a, x) => a + x.v, 0) / key.length };
+}
+
 function fmAssess(PL) {
   if (!PL || !PL.sta) return [];
   const STA = PL.sta, nrm = PL.nrm, occ = {};
@@ -432,10 +453,13 @@ function fmAssess(PL) {
     rows.push({ g: gr, n: g.nm, r, f: avg });
   }
   const cnt = t => rows.filter(x => x.g === t).length;
+  const kf = fmKeyFit(PL);
   const out = [{
     g: (cnt('L') + cnt('X')) ? 'L' : 'F', n: '全队 ' + rows.length + ' 个插槽',
     r: 'F 满足 ' + cnt('F') + '　A 勉强 ' + cnt('A') + '　L 受限 ' + cnt('L') + '　X 空缺 ' + cnt('X')
-      + '　·　总契合 ' + PL.tot.toFixed(2) + '。下面按契合度从低到高列出,先补最短的板。',
+      + '　·　总契合 ' + PL.tot.toFixed(2)
+      + (kf ? ('　要害契合 ' + kf.min.toFixed(2) + '（最要紧的 ' + kf.n + ' 个站位里最低的一个；拉「要害偏好」看它，总契合会略降是预期的取舍）') : '')
+      + '。下面按契合度从低到高列出,先补最短的板。',
   }];
   rows.sort((a, b) => a.f - b.f).forEach(x => out.push(x));
   return out;
