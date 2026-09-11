@@ -376,7 +376,7 @@ function fmbAct(a){
          不传 face 的话 fmAngOf 会因为「目标点与锚点重合」而沿用 F.ang —— 那是上一道移动令留下的行进方向,
          与玩家眼前看到的船头没有关系。传了 face 之后:阵型态整队转到船头方向;
          固定态是刚体,整个队形绕旗舰转到船头方向,各舰再按自己建队时的朝向差归位。 */
-      fmMoveTo(F,[fl.pos[0],fl.pos[1],fl.pos[2]],'stop',[fl.facing[0],fl.facing[1]]);
+      fmMoveTo(F,[fl.pos[0],fl.pos[1],fl.pos[2]],'stop',[fl.facing[0],fl.facing[1],0]);   // 三元:见 mkOrder 里 FM6q 那段
       if(typeof log==='function')log(fmName(F)+' 原地重排','');
       break;}
     case 'disband':{

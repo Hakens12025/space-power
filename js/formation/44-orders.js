@@ -24,7 +24,15 @@ function orderClear(s) { // 清空既有航线意图(不含 resetForNewOrders �
 
 function mkOrder(w, type, face) { // 一条令的唯一构造口。face 只挂在 stop 上:31-step-ships 只在到位分支消费它
   const o = { pos: [w[0], w[1], w[2] || 0], type: type || 'stop' };
-  if (face && type !== 'pass') o.face = face.slice();
+  /* FM6q【face 一律补齐成三元】。V.dot / V.len 都读 a[2],喂一个二元数组进去 V.angle 返回 NaN,
+     而 31-step-ships 消费 face 的两处都是 `V.angle(...) > 阈值` —— NaN 比出来恒为 false,
+     于是提前起转与到位补转【双双静默失效】:令上明明挂着 face,船就是不转,一个错都不报。
+     (FM6o 的「原地重排」传了 [fx,fy] 两元,正是这么坏的:阵型态到位后各舰船头一片散乱。)
+     补齐放在这个唯一构造口,而不是去每个调用点数元素个数 —— 那种数法迟早再漏一个。
+     顺带挡掉非有限值:NaN 的 face 比没有 face 更糟(它会让那两处判据永远为 false,且查不出来)。 */
+  if (face && type !== 'pass' && isFinite(face[0]) && isFinite(face[1])) {
+    o.face = [face[0], face[1], isFinite(face[2]) ? face[2] : 0];
+  }
   return o;
 }
 

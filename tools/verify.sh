@@ -1392,9 +1392,21 @@ t('FLOW25_FMFACE',function(){
     if(!fl2.orders.length)break;
   }
   var err2=Math.acos(Math.max(-1,Math.min(1,fl2.facing[0]*FACE[0]+fl2.facing[1]*FACE[1])))*180/Math.PI;
-  var ok=(ap&&hasFace&&held===2&&pre>0&&arr>0&&pre<arr&&err<3&&dErr<CFG.arrive*2
+  /* ⑤ FM6q【mkOrder 把 face 补齐成三元】。V.dot/V.len 都读 a[2],喂二元进去 V.angle 返回 NaN,
+     而 31-step-ships 消费 face 的两处都是 `V.angle(...) > 阈值` —— NaN 恒为 false,于是提前起转与
+     到位补转【双双静默失效】:令上挂着 face、船就是不转、一个错都不报。补齐做在唯一构造口 mkOrder,
+     不去每个调用点数元素个数(那种数法迟早再漏一个)。四条:二元补齐、三元的 z 保留、NaN 不许挂上去、
+     pass 型不挂 face(那是 FM1 就有的语义,顺带钉住)。 */
+  var mk2=mkOrder([1,2,3],'stop',[0,1]);
+  var mk3=mkOrder([1,2,3],'stop',[0,1,0.5]);
+  var mkN=mkOrder([1,2,3],'stop',[NaN,1,0]);
+  var mkP=mkOrder([1,2,3],'pass',[1,0,0]);
+  var okMk=(!!mk2.face&&mk2.face.length===3&&mk2.face[2]===0&&isFinite(V.angle([1,0,0],mk2.face))
+          &&!!mk3.face&&mk3.face[2]===0.5&&!mkN.face&&!mkP.face);
+  var ok=(okMk&&ap&&hasFace&&held===2&&pre>0&&arr>0&&pre<arr&&err<3&&dErr<CFG.arrive*2
         &&noFace&&!hadTurn&&err2>10);
   return (ok?'ok':'fail')
+    +' | ⑤ mkOrder face 补齐:二元→'+JSON.stringify(mk2.face)+' 三元 z 保留='+(mk3.face&&mk3.face[2])+' NaN 不挂='+(!mkN.face)+' pass 不挂='+(!mkP.face)+'='+okMk
     +' addWaypoint 带face:末令有face且旧末点降级后 face 已清='+ap
     +' | moveShips 带face:令上有face='+hasFace+' 成员也带face='+held+'艘(须2:face 展开到每一艘)'
     +' 提前起转@'+pre+'<到位@'+arr+' 到位朝向误差='+err.toFixed(2)+'度(须<3) 位置误差='+Math.round(dErr)+'km'
@@ -1633,8 +1645,15 @@ t('FLOW27_FMBAR',function(){
   fl27b.facing=[0,1,0];
   fm27hit(document.querySelector('#fmActs [data-fma="reform"]')); fm27fly();
   var angDeg=F.ang*180/Math.PI, dAng=Math.abs(((angDeg-90)%360+360)%360); if(dAng>180)dAng=360-dAng;
+  /* FM6q 到位之后【全员船头要对齐阵型朝向】(阵型态 fmHdg 恒 0)。改前这条是静默坏的:
+     原地重排传的 face 是二元数组,而 V.dot/V.len 都读 a[2] ⇒ V.angle 返回 NaN ⇒
+     31-step-ships 里那两处 `V.angle(...) > 阈值` 恒为 false ⇒ 提前起转与到位补转双双不执行。
+     令上明明挂着 face、一个错都不报,船就是不转。所以判据不能只看 F.ang,必须看【每一艘的船头】。 */
+  var hdgMax=0;
+  fmShips(F).forEach(function(m){var d2=Math.abs(((Math.atan2(m.facing[1],m.facing[0])-F.ang)*180/Math.PI%360+360)%360);
+    if(d2>180)d2=360-d2; hdgMax=Math.max(hdgMax,d2);});
   var dSame=fm27diff(back27,born27), dDiff=fm27diff(slotShape27,born27);
-  var okSwitch=(devSw>1000&&dDiff>20000&&dSame<3000&&dAng<3);  /* 阵型队形必须【确实不同于】固定队形,否则这一段没测到东西 */
+  var okSwitch=(devSw>1000&&dDiff>20000&&dSame<3000&&dAng<3&&hdgMax<5);  /* 阵型队形必须【确实不同于】固定队形,否则这一段没测到东西 */
   fm27hit(elSlot);
   /* FM6:跟随的兑现判定整体搬到 FLOW40_FOLLOWCTL(底栏标准控件,四种作用域)。这里只剩一条留守:
      编队菜单里【不许】再出现跟随钮(noFolBtn,已并入 acts4)。 */
@@ -1673,7 +1692,7 @@ t('FLOW27_FMBAR',function(){
     +' | FM4b 随模式显隐(问的是 computed display,不是类名):固定→['+visFix.join(',')+'](声明 '+nFix+' 块) 阵型→['+visSlot.join(',')+'](声明 '+nSlot+' 块)(须全部同名且个数对得上)='+okVis
     +' 重新固定真的换了新快照='+reTook+' 已在固定态时点固定是空操作='+noReOnMode
     +' | FM6d 布局(问的是 getBoundingClientRect):模式两段铺满率='+(segFill*100).toFixed(1)+'%(须>95;旧3列时2段为66.7) 两段等宽率='+(segEven*100).toFixed(1)+'%(须>90)='+okSeg+' 公共三钮同一排 top='+rowTop.join('/')+' left='+rowLeft.join('/')+'(须 top 三个相同、left 递增)='+okRow+' 菜单里已无带半径滑块='+noKnob+' | FM6d 原地重排(真实 pointerdown):到位后离位='+Math.round(devA)+'km → bm拉到2 后='+Math.round(devB)+'km(须>5倍且>20000=槽位真变了) → 不点钮空转60s 位置逐字不变='+idle+'(须 true=不点就真不动) → 点钮飞完后离位='+Math.round(devC)+'km(须<3000)='+okReform
-    +' | FM6o 切模式→原地重排(这个钮真正的用途):切到固定后离位='+Math.round(devSw)+'(须>1000=快照没被抹掉) 阵型队形与固定队形相距='+Math.round(dDiff)+'km(须>20000=这一段确实测到东西) 重排后回到固定那个队形 偏差='+Math.round(dSame)+'km(须<3000)'+' 旗舰拧到90°再按一次 F.ang='+angDeg.toFixed(0)+'°(须90±3)='+okSwitch
+    +' | FM6o 切模式→原地重排(这个钮真正的用途):切到固定后离位='+Math.round(devSw)+'(须>1000=快照没被抹掉) 阵型队形与固定队形相距='+Math.round(dDiff)+'km(须>20000=这一段确实测到东西) 重排后回到固定那个队形 偏差='+Math.round(dSame)+'km(须<3000)'+' 旗舰拧到90°再按一次 F.ang='+angDeg.toFixed(0)+'°(须90±3) 全员船头离阵型朝向最大='+hdgMax.toFixed(1)+'°(须<5=到位真的转了)='+okSwitch
     +' 编队菜单已无跟随钮(已下沉底栏)='+noFolBtn
     +' | 操作钮点击='+clicked+'/'+names.length+'(须全中且总数>=6)清单=['+names.join(',')+']'
     +' | 再点收起='+closed1+'(须none) 解散后再刷10次'
