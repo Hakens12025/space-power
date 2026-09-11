@@ -3175,6 +3175,79 @@ t('FLOW42_FMMULTI',function(){ /* FM7 一艘船可归入多个编队 + 命令覆
   }
   return out;
 });
+t('FLOW43_FMPACE',function(){ /* FM10 按弧长配速:编队走多段航线时同时到达每个航点。
+     用户实报"舰队情况下的 Shift 路径点运动感觉不太对"。实测根因不是档位不同(全队同型同档照样散),
+     而是【每艘船各飞各的绝对航线】+ 转弯时外圈那几艘的折线明显更长 ⇒ 内圈先到、外圈落后,
+     中间航点上没有任何东西把他们重新对齐,于是一路散到最后一个点才成形。
+     判据【打到达时间差】,不打"离位":多段航线里"此刻的理想队形"本身在两段朝向之间过渡,
+     拿任一端去比都会把过渡本身算成误差(第一版就是这么被自己的尺子骗了,峰值只从 136k 降到 97k,
+     看着像没效果)。到达时间差没有这个歧义 —— 它就是"大家有没有一起到"。 */
+  if(typeof fmSpread!=='function')return 'fail fmSpread 未定义';
+  var errs=[];var onerr=function(e){errs.push(e.message||String(e));};
+  window.addEventListener('error',onerr);
+  var shipsBak=ships.slice(), selBak=selected.slice();
+  var out='';
+  try{
+    fmAll().slice().forEach(function(F0){fmDelete(F0.id);});
+    function build(){
+      ships.length=0;
+      var cls=['CA','DD','DD','DD','DD','DD'];
+      var arr=cls.map(function(c,i){return makeShip(c,'配速'+i,[-50000+i*15000,-30000,0],[1,0,0],[0,0,0],'blue',2);});
+      arr.forEach(function(x){ships.push(x);});
+      var F1=fmCreate('9',arr); fmSetSrc(F1,'generated');
+      return {F:F1,L:fmShips(F1)};
+    }
+    /* 跑一遍三点航线,返回每个航点的到达时间差(最晚−最早) */
+    function fly(strip){
+      var o=build(), L=o.L;
+      /* 先飞一段让它【真正成形】再走航点 —— 这才是真实用法,也是这条判据唯一有意义的起点:
+         从散乱位置直接走航点时,第一段(新航线)本来就不配速(归队该各自尽快赶到,不该互相等),
+         那个初始时间差会一路带着走,配速只能让它不再扩大、不能把它收回来。 */
+      moveShips(L,[150000,0,0],'stop');
+      for(var w0=0;w0<200000;w0++){if(rrJobs.length)rrTick();stepShipsMotion(0.02);
+        var q0=0;L.forEach(function(x){if(x.orders.length||V.len(x.vel)>1)q0++;});if(!q0)break;}
+      moveShips(L,[400000,0,0],'stop'); addWaypoint(L,[400000,300000,0]); addWaypoint(L,[100000,300000,0]);
+      if(strip)L.forEach(function(x){x.orders.forEach(function(od){delete od.pace;});});   // 对照组:把 pace 抹掉
+      var n=L[0].orders.length, arr=L.map(function(){return [];}), prev=L.map(function(x){return x.orders.length;}), t=0;
+      for(var i=0;i<300000;i++){
+        if(rrJobs.length)rrTick(); stepShipsMotion(0.02); t+=0.02;
+        L.forEach(function(x,j){if(x.orders.length<prev[j]){arr[j].push(t);prev[j]=x.orders.length;}});
+        var lf=0;L.forEach(function(x){if(x.orders.length||V.len(x.vel)>1)lf++;});
+        if(!lf)break;}
+      var gaps=[];
+      for(var w=0;w<n;w++){
+        var ts=arr.map(function(a){return a[w];}).filter(function(x){return x!==undefined;});
+        gaps.push(ts.length?(Math.max.apply(null,ts)-Math.min.apply(null,ts)):1e9);}
+      var paced=L[0].orders.length;  // 跑完应为 0
+      fmDelete('9');
+      return {gaps:gaps, t:t, left:paced};
+    }
+    var on=fly(false), off=fly(true);
+    /* pace 只能写在【编队】的令上,散船那条路一律没有 —— bench 5.8607 就是靠这条守住的 */
+    var lone=makeShip('DD','配速散船',[0,0,0],[1,0,0],[0,0,0],'blue',2); ships.push(lone);
+    moveShips([lone],[200000,0,0],'stop');
+    var loneNoPace=!(lone.orders[0]&&lone.orders[0].pace);
+    for(var q=ships.length-1;q>=0;q--)if(ships[q]===lone)ships.splice(q,1);
+    /* 只看【追加的那两个航点】(下标 1、2):第一个航点是新航线那一段,两边都不配速、本来就该一样。
+       判据双向:配速下要收敛(<60s),对照组要明显散开(>120s),且要收到对照的四成以内。 */
+    var maxOn=Math.max(on.gaps[1],on.gaps[2]), maxOff=Math.max(off.gaps[1],off.gaps[2]);
+    var ok=(maxOn<60&&maxOff>120&&maxOn<maxOff*0.4&&on.t<off.t*1.15&&loneNoPace&&!errs.length);
+    out=(ok?'ok':'fail')
+      +' 三点航线·各航点的【到达时间差】(最晚−最早,秒):'
+      +' 有配速=['+on.gaps.map(function(x){return x.toFixed(0);}).join(' ')+']'
+      +' 关掉配速=['+off.gaps.map(function(x){return x.toFixed(0);}).join(' ')+']'
+      +' | 追加那两点的最大差 '+maxOn.toFixed(1)+' vs '+maxOff.toFixed(1)+'(须<60、对照须>120、且须收到对照的四成以内;首点是新航线段,两边都不配速)'
+      +' | 全程 '+on.t.toFixed(0)+'s vs '+off.t.toFixed(0)+'s(须<1.15倍=保持队形的代价可接受)'
+      +' | 散船的令不带 pace='+loneNoPace+'(bench 逐位不变靠它)'
+      +' | 运行期错误='+(errs.length?errs.join(' / '):'none');
+  }finally{
+    fmAll().slice().forEach(function(F0){fmDelete(F0.id);});
+    ships.length=0; shipsBak.forEach(function(x){ships.push(x);});
+    selected=selBak;
+    window.removeEventListener('error',onerr);
+  }
+  return out;
+});
 t('FLOW41_FMPLOT',function(){ /* FM6p 地图上的站位图:画不画由一条【具名谓词】说了算,且不画"站位→实船"的连线。
      判据【不走像素】:那条线是 1px、35% 透明,压在会变的星云/网格上,实测采样值(508 vs 512)分不出有没有它 ——
      像素法在这里是测不准的。改走【canvas 指令级】:把 moveTo/lineTo/stroke 代成记录器,跑一次 render(),
@@ -3324,6 +3397,7 @@ grep -q "FLOW39_FMGHOST=ok" "$OUT" || { echo "✗ FLOW39_FMGHOST 未通过(FM6 �
 grep -q "FLOW40_FOLLOWCTL=ok" "$OUT" || { echo "✗ FLOW40_FOLLOWCTL 未通过(FM6 底栏跟随标准控件四种作用域，全程真实事件:单舰→单舰 / 单舰→舰队 / 舰队→单舰 / 舰队→舰队（点非旗舰须落到旗舰）/ 真点解除钮清干净 / 跟随自己与循环跟随被拒)"; fail=1; }
 grep -q "FLOW41_FMPLOT=ok" "$OUT" || { echo "✗ FLOW41_FMPLOT 未通过(FM6p 地图站位图:画不画由 fmpShowsStations 这一个谓词说了算 / 不画「站位→实船」连线(canvas 指令级计数,不走像素) / 固定模式整张图都不画)"; fail=1; }
 grep -q "FLOW42_FMMULTI=ok" "$OUT" || { echo "✗ FLOW42_FMMULTI 未通过(FM7 一艘船可归入多个编队:两队同时存在 / 命令覆盖(谁最后下令跟谁) / 单舰建队 / fmSameShips 平手取正在听的那个 / 解散与阵亡不留悬空id / 成员行标出听别的队 / 测试用加船小条)"; fail=1; }
+grep -q "FLOW43_FMPACE=ok" "$OUT" || { echo "✗ FLOW43_FMPACE 未通过(FM10 按弧长配速:编队走多段航线时同时到达每个航点 / 关掉配速的对照组到达时间差要大得多 / 散船的令不带 pace)"; fail=1; }
 # FM3-2 源码级负对照:旧弧线阵的四样东西(舰种角色表 / 防空圈基准半径函数 / 扇面参数 / 弦距参数)必须从 js/ 里消失。
 # 模式用字符串拼接写,免得本文件自己被同一条 grep 抓到。
 FM32_DEAD="CLS_""ROLE|aaRing""Ref|P\\.f""an|P\\.g""ap|FM_LIMIT\\.f""an|FM_LIMIT\\.g""ap"

@@ -22,8 +22,11 @@ function orderClear(s) { // 清空既有航线意图(不含 resetForNewOrders �
    所以给一艘跟随中的舰单独下个令,它会去办完再自动跟回来,这正是 RTS 里想要的。
    要真正解除跟随只有两条明路:编队切回阵位态 / fmFollowStop。 */
 
-function mkOrder(w, type, face) { // 一条令的唯一构造口。face 只挂在 stop 上:31-step-ships 只在到位分支消费它
+function mkOrder(w, type, face, pace) { // 一条令的唯一构造口。face 只挂在 stop 上:31-step-ships 只在到位分支消费它
   const o = { pos: [w[0], w[1], w[2] || 0], type: type || 'stop' };
+  /* FM10【按弧长配速】pace = 这一段该按自己档位的几成走(1 = 跑满)。
+     只有编队下令时会写它(44 fmSpread),散船那条路一律 undefined ⇒ 31-step-ships 按 1 处理,行为一位不变。 */
+  if (isFinite(pace) && pace > 0 && pace < 1) o.pace = pace;
   /* FM6q【face 一律补齐成三元】。V.dot / V.len 都读 a[2],喂一个二元数组进去 V.angle 返回 NaN,
      而 31-step-ships 消费 face 的两处都是 `V.angle(...) > 阈值` —— NaN 比出来恒为 false,
      于是提前起转与到位补转【双双静默失效】:令上明明挂着 face,船就是不转,一个错都不报。
@@ -36,26 +39,26 @@ function mkOrder(w, type, face) { // 一条令的唯一构造口。face 只挂�
   return o;
 }
 
-function orderMoveTo(s, dest, type, face) { // 下一条新航线(清旧令)
+function orderMoveTo(s, dest, type, face, pace) { // 下一条新航线(清旧令)
   orderClear(s);
-  s.orders.push(mkOrder(dest, type, face));
+  s.orders.push(mkOrder(dest, type, face, pace));
   resetForNewOrders(s);
   if (typeof rrStart === 'function') rrStart(s); // RF14 航线细化(会先撤掉这艘船的旧任务)
 }
 
-function orderAppend(s, w, face) { // 追加一个点:新点=停车,原末点降为经过
+function orderAppend(s, w, face, pace) { // 追加一个点:新点=停车,原末点降为经过
   if (s.orders.length) {
     const prev = s.orders[s.orders.length - 1];
     prev.type = 'pass';
     delete prev.face; delete prev.pt; // 降级必须删 face/pt:31 只在 stop 分支兑现 face,留着的话 83-hud 会画一个永不兑现的持久船影(承诺与行为分家,比不画更糟)
   }
-  s.orders.push(mkOrder(w, 'stop', face));
+  s.orders.push(mkOrder(w, 'stop', face, pace));
   resetForNewOrders(s);
   if (typeof rrStart === 'function') rrStart(s);
 }
 
-function orderPush(s, w, type, face) { // 原样追加一条令(不降级旧末点)。卡片菜单"路径点(经过)"用:它要的就是一个 pass 点
-  s.orders.push(mkOrder(w, type || 'pass', face));
+function orderPush(s, w, type, face, pace) { // 原样追加一条令(不降级旧末点)。卡片菜单"路径点(经过)"用:它要的就是一个 pass 点
+  s.orders.push(mkOrder(w, type || 'pass', face, pace));
   resetForNewOrders(s);
   if (typeof rrStart === 'function') rrStart(s);
 }
@@ -163,9 +166,31 @@ function fmSpread(F, dest, type, face, mode) {
   const fixed = (F.src === 'snapshot');
   const from = mates.map(m => (mode !== 'move' && m.orders.length) ? m.orders[m.orders.length - 1].pos : m.pos);
   if (!fixed && typeof fmReassign === 'function') fmReassign(F, mates, ca, sa, dest, from);
-  mates.forEach(s => {
+  /* FM10【按弧长配速】(用户定案)。改前每艘船各飞各的绝对航线、都跑满自己的档位 ——
+     转弯时外圈那几艘的折线明显更长,于是内圈先到、外圈落后,队形一路散着,
+     只有最后一个航点才收拢(实测全队同型同档时途中峰值离位仍有 103~136k km,而屏护半径才 50k)。
+     现在按【这一段各自要走多远】等比配速:走得最远的那艘跑满,其余按比例慢下来,于是同时到达每个航点。
+     这【不是】FL5 删掉的那个"取全队最低档"——档位仍然是各自的上限,只是内圈本来就不需要跑满;
+     整队的节奏由最长那一段决定,所以整体会比"都跑满"慢一点,那是保持队形的必然代价。
+     散船那条路不经过这里,pace 恒 undefined,行为一位不变(bench 5.8607 就是这么守住的)。 */
+  /* 【只对追加的航段配速】。两种情形要分开看:
+       · 新航线(mode==='move'):船此刻多半还没归位,各自离终点的距离差得很远。按那个差配速 =
+         让全队等最掉队的那一艘 —— 实测编队掉头航线峰值 705→288、用时 +57%,而且把 FL5 那条
+         「档位逐舰严格生效」也压没了(800 档的船峰值只剩 742)。归队本来就该各自尽快赶到,不该互相等。
+       · 追加航点(append/push):起点是【上一段的航点】,也就是各舰已经在队形里的位置 ——
+         这时「谁这一段要走得更远」纯粹来自转弯几何(外圈的折线更长),正是该配速的那一种。
+     所以只在追加时算 pace,新航线一律 1。这也把改动范围锁死在用户报的那个现象(Shift 路径点)上。 */
+  const legs = (mode === 'move') ? null : mates.map((s, i) => {
+    const o = rotSlot(s.fmSlot || [0, 0, 0], ca, sa);
+    return Math.hypot(dest[0] + o[0] - from[i][0], dest[1] + o[1] - from[i][1]);
+  });
+  const legMax = legs ? Math.max.apply(null, legs) : 0;
+  mates.forEach((s, mi) => {
     const o = rotSlot(s.fmSlot || [0, 0, 0], ca, sa);
     const p = [dest[0] + o[0], dest[1] + o[1], (dest[2] || 0) + (o[2] || 0)];
+    /* 地板 0.15:一艘这一段几乎不用动的船,pace 趋近 0 会让它慢到爬,反而在下一段起步时落后一大截。
+       legMax 极小(原地重排那种)时整队都给 1,不做无意义的配速。 */
+    const pace = (legs && legMax > 1000) ? Math.max(0.15, legs[mi] / legMax) : 1;
     /* FM3-1 固定模式的到达朝向 = 阵型朝向 + 自己建队时的朝向差:face_i = rotate([cos hdg_i, sin hdg_i], ang)。
        零新机制 —— 31-step-ships 到位时看 cur.face 补一次原地转(RF11),编队每艘船本来就各持一条带 face 的令。
        阵型模式(generated,fmHdg 恒 0)刻意【不】走这条:它沿用调用方传入的 face(通常为 null → 到位不转),行为与 FM3-0 前一致。
@@ -180,9 +205,9 @@ function fmSpread(F, dest, type, face, mode) {
        而调用方给了 face 时 fmAngOf 的 face 优先分支已经让 ang = 那个方向(FM6),
        所以虚影那条路的结果【逐位不变】,只是普通移动令现在也对齐了。 */
     const fi = [Math.cos(ang + (s.fmHdg || 0)), Math.sin(ang + (s.fmHdg || 0)), 0];
-    if (mode === 'append') orderAppend(s, p, fi);
-    else if (mode === 'push') orderPush(s, p, type, fi);
-    else orderMoveTo(s, p, type, fi);
+    if (mode === 'append') orderAppend(s, p, fi, pace);
+    else if (mode === 'push') orderPush(s, p, type, fi, pace);
+    else orderMoveTo(s, p, type, fi, pace);
   });
   F.ang = ang;
   F.dest0 = [dest[0], dest[1], dest[2] || 0]; // 【不是航线】,只是"上一个编队级目标点",用来算下一段的阵型朝向

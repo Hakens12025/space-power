@@ -29,6 +29,11 @@ function stepShipsMotion(dt){
       const dist=V.len(toWp);
       const vn=V.len(s.vel);
       let cap=cruiseOf(s);
+      /* FM10【按弧长配速】:编队下令时,44 fmSpread 会按"这一段自己要走多远 ÷ 全队最长那一段"
+         在令上写一个 pace(0~1),这里乘上去 —— 走得最远的那艘跑满,内圈按比例慢,于是同时到达航点。
+         这【不是】FL5 删掉的那个"取全队最低档":档位仍是各自的上限(cruiseOf 没变),只是内圈本来就
+         不需要跑满。散船的令没有 pace ⇒ 恒等于 1,那条路一位不变(bench 5.8607 靠这条守住)。 */
+      if(cur.pace>0&&cur.pace<1)cap*=cur.pace;
       /* FL5:【编队速度上限已去掉】,每艘船只吃自己的档位 cruiseOf(s)。
          FM2 加它的理由是"途中保持队形",但两种模式都不需要:
            · 阵位态每艘船有自己算死的终点、各飞各的,队形在【终点】成形,途中允许拉开正是那个设计;
