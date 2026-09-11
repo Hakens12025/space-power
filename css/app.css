@@ -686,13 +686,16 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
    在不同 Chrome 版本上 min/max 的上下方向不一致,旋转是确定的(上=max=放大)。
    .fp-zwrap 是固定尺寸的容器,里面那根 range 旋转后不占布局流,所以外框尺寸要写死。 */
 .fp-dialwrap{position:relative}
-.fp-zoom{position:absolute;top:8px;right:8px;display:flex;flex-direction:column;align-items:center;gap:2px;
+/* FM9 三个覆盖层开关:方位盘右上角【单独一条横排】,缩放滑块让到它下面 */
+.fp-ovl{position:absolute;top:8px;right:8px;display:flex;gap:3px;
+  padding:3px;background:var(--srf-sunk);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);opacity:.85}
+.fp-ovl:hover{opacity:1}
+.fp-ovl .qbtn{min-width:0;padding:1px 6px;font-size:var(--fs-label)}
+.fp-ovl .qbtn.on{background:var(--acc-wash);border-color:var(--acc);color:var(--acc-lite)}
+.fp-zoom{position:absolute;top:38px;right:8px;display:flex;flex-direction:column;align-items:center;gap:2px;
   padding:4px 3px;background:var(--srf-sunk);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);opacity:.85}
 .fp-zoom:hover{opacity:1}
 .fp-zoom b{font-size:var(--fs-label);color:var(--txt-dim);line-height:1;font-weight:normal}
-/* FM7b 内外圈切换钮:与缩放滑块同一列,压在 + 上面。切到内圈时点亮(与模式分段控件同一套 .on 洗色) */
-.fp-ring{padding:0 4px;min-width:0;font-size:var(--fs-label);margin-bottom:2px}
-.fp-ring.on{background:var(--acc-wash);border-color:var(--acc);color:var(--acc-lite)}
 .fp-zwrap{position:relative;width:16px;height:96px}
 .fp-zwrap input[type=range]{position:absolute;top:50%;left:50%;width:96px;height:12px;margin:0;
   transform:translate(-50%,-50%) rotate(-90deg);-webkit-appearance:none;appearance:none;background:transparent}

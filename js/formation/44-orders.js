@@ -104,16 +104,26 @@ function fmReassign(F, mates, ca, sa, dest, from) {
     const idx = byRole[r];
     if (idx.length < 2) continue;
     const slots = idx.map(i => (mates[i].fmSlot || [0, 0, 0]).slice());
+    const stns = idx.map(i => mates[i].fmStn);   // FM9b 展示元数据要跟着槽位一起换,见下面落盘那一行
     let improved = true, guard = 0;
     while (improved && guard++ < 32) { // guard:防浮点抖动下的无限循环(每次交换都严格降代价,正常几轮就停)
       improved = false;
       for (let a = 0; a < idx.length; a++) for (let b = a + 1; b < idx.length; b++) {
         const cur = cost(idx[a], slots[a]) + cost(idx[b], slots[b]);
         const swp = cost(idx[a], slots[b]) + cost(idx[b], slots[a]);
-        if (swp < cur - 1e-6) { const t = slots[a]; slots[a] = slots[b]; slots[b] = t; improved = true; }
+        if (swp < cur - 1e-6) {
+          const t = slots[a]; slots[a] = slots[b]; slots[b] = t;
+          const u = stns[a]; stns[a] = stns[b]; stns[b] = u;   // FM9b 一起换
+          improved = true;
+        }
       }
     }
-    idx.forEach((i, k) => { mates[i].fmSlot = slots[k]; }); // 槽位所有权【落盘】:后续的跟随偏移与 UI 离位读数才跟得上
+    /* FM9b【展示元数据必须与槽位同进同退】(用户实报:编组控制页显示的编组与地图上实际站位很不一致)。
+       改前这里只落盘 s.fmSlot,把 s.fmStn 留在原地 —— 于是一艘船的"名字/能力/带/契合度"还是交换【之前】
+       那个站位的,而它真正要去的是交换【之后】那个。症状很好认:名字对得上、坐标对不上
+       (实测下过一次移动令后 6/7 艘如此:"盘上=正前屏护(30,0) 实际=正前屏护(21,-21)")。
+       84-fmplot 与编组控制页都读 s.fmStn 画标签,所以两处标签一起错。 */
+    idx.forEach((i, k) => { mates[i].fmSlot = slots[k]; mates[i].fmStn = stns[k]; }); // 槽位所有权【落盘】:后续的跟随偏移与 UI 离位读数才跟得上
   }
 }
 
@@ -162,7 +172,14 @@ function fmSpread(F, dest, type, face, mode) {
        调用方传入的 face 在固定模式下暂被本舰的 face_i 覆盖;阶段 3 编队虚影会改成"有 face 时 ang 取 face 方向",届时两者统一。 */
     /* 固定模式:到达朝向 = 阵型朝向 + 自己建队时的朝向差。ang 现在可能来自调用方的 face(FM6),
        于是"虚影指哪 → 整个刚体转到哪、每艘船各自的相对船头也跟着转",两条语义在这里统一了。 */
-    const fi = fixed ? [Math.cos(ang + (s.fmHdg || 0)), Math.sin(ang + (s.fmHdg || 0)), 0] : face;
+    /* FM9c【两种模式统一】(用户实报:统一方位失效)。改前只有固定模式按 ang+fmHdg 给到达朝向,
+       阵型模式直接用调用方传进来的 face —— 而普通右键移动不带 face(只有长按虚影才带),
+       于是阵型态飞完之后各舰船头是各自的行进方向,实测 3/−2/−4/−4/−6/−9/−5/−4,散着。
+       而 42-formation 的注释白纸黑字写着「条令站位:全员船头随阵型朝向」—— 文档与实现分家了。
+       统一成同一个式子没有副作用:阵型态 fmHdg 恒 0 ⇒ ang+fmHdg = ang;
+       而调用方给了 face 时 fmAngOf 的 face 优先分支已经让 ang = 那个方向(FM6),
+       所以虚影那条路的结果【逐位不变】,只是普通移动令现在也对齐了。 */
+    const fi = [Math.cos(ang + (s.fmHdg || 0)), Math.sin(ang + (s.fmHdg || 0)), 0];
     if (mode === 'append') orderAppend(s, p, fi);
     else if (mode === 'push') orderPush(s, p, type, fi);
     else orderMoveTo(s, p, type, fi);

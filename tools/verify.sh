@@ -1381,9 +1381,14 @@ t('FLOW25_FMFACE',function(){
   for(var k=0;k<4000&&flag.turnTarget;k++)stepShipsMotion(0.02); /* 到位时若还没转完(近距离大角度走的是兜底那一支),让它转完再量 */
   var err=Math.acos(Math.max(-1,Math.min(1,flag.facing[0]*FACE[0]+flag.facing[1]*FACE[1])))*180/Math.PI;
   var dErr=Math.hypot(flag.pos[0]-DEST[0],flag.pos[1]-DEST[1]);
-  /* ③ 对照组:同一条命令不带 face —— 全程不许出现 turnTarget */
-  var b2=fm23reset(),F2=fm23group(b2),fl2=fmFlag(F2);
-  moveShips(b2,DEST,'stop');
+  /* ③ 对照组:同一条命令不带 face —— 全程不许出现 turnTarget。
+     FM9c:这一组必须用【散船】。编队走 fmSpread,而它现在恒给到达朝向(ang+fmHdg)——
+     「阵型态全员船头随阵型朝向」那条语义改前只写在注释里、实现没做,现在补上了。
+     所以拿编队当"不带 face"的对照已经不成立;这条判据要测的性质(没有 face ⇒ 全程不转头)
+     换成散船照样测得到,而且更纯粹 —— 散船那条路本来就不该有人给它塞 face。 */
+  var b2=fm23reset(),fl2=b2[0];
+  b2.forEach(function(x){x.formation=null;x.fms=null;x.fmSlot=null;});
+  moveShips([fl2],DEST,'stop');
   var noFace=!(fl2.orders[0]&&fl2.orders[0].face),hadTurn=false;
   for(i=1;i<=40000;i++){
     if(rrJobs.length)rrTick();
@@ -2145,7 +2150,14 @@ t('FLOW36_FMSNAP',function(){
   var gfo=gf.orders[0]?gf.orders[0].pos:[0,0,0];
   var gLay=maxDev(c,function(s,i){var e=rot(grel[i],gang-gh);var p=s.orders[0]?s.orders[0].pos:[1e9,1e9];return Math.hypot(p[0]-gfo[0]-e[0],p[1]-gfo[1]-e[1]);});
   var gHdg=maxDev(c,function(s){return Math.abs(s.fmHdg||0);});
+  /* FM9c:这条改前写的是「带face的令=0(须0)」—— 那是把 bug 当成了期望值。
+     42-formation 的注释一直写着「条令站位:全员船头随阵型朝向」,而实现只在固定模式下给到达朝向,
+     阵型模式直接用调用方的 face(普通右键为 null)⇒ 飞完各舰船头是各自的行进方向,散着。
+     现在两种模式统一,所以这里反过来判:每一条令都要带 face,且那个 face 就是阵型朝向。 */
   var gFace=c.filter(function(s){return s.orders[0]&&s.orders[0].face;}).length;
+  var gFaceErr=0;
+  c.forEach(function(s){var f=s.orders[0]&&s.orders[0].face;if(!f){gFaceErr=9;return;}
+    gFaceErr=Math.max(gFaceErr,Math.abs(wrap(Math.atan2(f[1],f[0])-G.ang)));});
   /* 同一折返在阵型模式下【必须】换槽(复用 FLOW32 的判据:两翼 180° 折返,不换航线就交叉)—— 这是 ③b 的负对照,
      证明"固定模式折返槽位不动"是 !fixed 守卫在起作用,不是这个摆位本来就不会换 */
   var gsnap0={};                                 // FM6o:记下【进 generated 之前】的那份快照,用来验"模式钮不许改写它"
@@ -2174,7 +2186,7 @@ t('FLOW36_FMSNAP',function(){
   var ok=(srcOk&&dev0<1e-6&&ang0<1e-9&&inv<1e-6&&hdg0<1e-9&&lay<1&&faceErr<0.02&&slotKept<1e-9&&lay2<1&&slotKept2<1e-9&&arrived&&fdiff<0.05&&flagFace<0.05&&posKept<2000
         &&reslotKept<1e-9&&nfOk&&reOk<1e-6&&pairKept<1e-6&&deathOk
         &&swDev<1e-6&&swAng<1e-9&&swMove<1e-6&&swFace<1e-9&&swBack<1e-6&&swDie<1e-6&&vAngOk<1e-9&&vKept<1e-12
-        &&gMode==='slot'&&gLay>5000&&gHdg===0&&gFace===0&&gGeo<1e-9&&gSwap>=2&&keptSnap<1e-6&&noRetakeDev>1000&&reTake<1e-6&&reMode==='fixed'&&reDev<1e-6&&reAng<1e-9);
+        &&gMode==='slot'&&gLay>5000&&gHdg===0&&gFace===c.length&&gFaceErr<1e-6&&gGeo<1e-9&&gSwap>=2&&keptSnap<1e-6&&noRetakeDev>1000&&reTake<1e-6&&reMode==='fixed'&&reDev<1e-6&&reAng<1e-9);
   return (ok?'ok':'fail')+' 默认src=snapshot/mode=fixed='+srcOk+' 建队即成形:离位='+dev0.toExponential(1)+'(须<1e-6) F.ang=船头误差='+ang0.toExponential(1)
     +' 快照可逆误差='+inv.toExponential(1)+' 朝向差误差='+hdg0.toExponential(1)
     +' | 下令:终点布局=原布局旋转到行进方向 误差='+lay.toFixed(3)+'(须<1) face误差='+faceErr.toFixed(4)+'(须<0.02) 槽位未被配对改动='+(slotKept<1e-9)
@@ -2183,7 +2195,7 @@ t('FLOW36_FMSNAP',function(){
     +' | 跑完 fmReslot 不重拍='+(reslotKept<1e-9)+' 换旗:新旗舰归零='+nfOk+' 其余重心化误差='+reOk.toExponential(1)+' 成员两两世界偏移差不变='+pairKept.toExponential(1)+'(须<1e-6) 战损后槽位不变='+deathOk
     +' | 换旗F.ang换参考系:船未动设旗舰后离位='+swDev.toExponential(1)+'(须<1e-6) F.ang=新旗舰船头误差='+swAng.toExponential(1)+' 就地成形位移='+swMove.toExponential(1)+'(须<1e-6) 到达朝向=当前船头误差='+swFace.toExponential(1)
     +' 换回可逆='+swBack.toExponential(1)+' 阵亡顺位='+swDie.toExponential(1)+'(须<1e-6) 切generated后F.ang=旗舰船头误差='+vAngOk.toExponential(1)+'(须<1e-9,不许NaN) 换旗F.ang不动='+vKept.toExponential(1)+'(须0)'
-    +' | 负对照 generated:mode='+gMode+' 终点偏离任意布局='+Math.round(gLay)+'(须>5000) fmHdg全0='+(gHdg===0)+' 带face的令='+gFace+'(须0) 槽位=条令表='+(gGeo<1e-9)
+    +' | 负对照 generated:mode='+gMode+' 终点偏离任意布局='+Math.round(gLay)+'(须>5000) fmHdg全0='+(gHdg===0)+' 带face的令='+gFace+'/'+c.length+'(须全带上;FM9c 前这里是 0,那是把 bug 当期望值) face 与阵型朝向的最大差='+gFaceErr.toExponential(1)+'(须<1e-6) 槽位=条令表='+(gGeo<1e-9)
     +' 同一折返换槽舰数='+gSwap+'(须>=2,否则③b没测到东西)'
     +' | FM6o 切回snapshot:模式钮那条路【不重拍】—— 快照改动='+keptSnap.toExponential(1)+'(须<1e-6=一个字都没动) 离位='+Math.round(noRetakeDev)+'(须>1000=船确实不在位,等着按原地重排)'
     +' 再走「重新固定」那条路:重拍误差='+reTake.toExponential(1)+' mode='+reMode+'(须fixed) 重拍后离位='+reDev.toExponential(1)+'(须<1e-6) F.ang=船头误差='+reAng.toExponential(1);
@@ -2683,7 +2695,9 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
     var zb=zBox.getBoundingClientRect(), db=dv.getBoundingClientRect();
     var pm=[].slice.call(zBox.querySelectorAll('b'));
     zPos='上'+Math.round(zb.top-db.top)+'/右'+Math.round(db.right-zb.right);
-    okZUi=(zb.top-db.top>=0&&zb.top-db.top<24&&db.right-zb.right>=0&&db.right-zb.right<24
+    /* FM9:覆盖层三钮占了盘右上角那一条,缩放列让到它下面(top:38),所以上边距阈值从 24 放宽到 60。
+       仍然要贴右缘、仍然 + 在上 − 在下。 */
+    okZUi=(zb.top-db.top>=0&&zb.top-db.top<60&&db.right-zb.right>=0&&db.right-zb.right<24
            &&pm.length===2&&pm[0].textContent==='+'&&pm[1].textContent==='−'
            &&pm[0].getBoundingClientRect().top<pm[1].getBoundingClientRect().top);
   }
@@ -2754,31 +2768,43 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   var brg9=fmPageSlots(F)[0].brg, d9=Math.abs(((brg9-want9)%360+360)%360); if(d9>180)d9=360-d9;
   var okInv=(d9<3);
   fmPg.zoom=1; fmPg.pan=[0,0]; F.P.slots=null; fmReslot(F); fmPg.sel=-1; fmPageRender();
-  /* FM7b【内外圈切换钮】。它改的是【基准贴合半径】而不是缩放倍数:
-       外圈 = 贴合到最远的站位/插槽,四条带都在画面里(最大带圈 ry ≤ FP_FIT);
-       内圈 = 贴合被护带,屏护与哨戒被挤出视野(最大带圈 ry 远大于 FP_FIT,视口内的圈变少)。
-     判据打【画出来的圈】而不是打状态字段:字段改了但 fitR 没接上,那才是这类改动的典型坏法。
-     另判一条"缩放仍然叠乘" —— 两者是相乘关系,切内圈不该把玩家拖过的 zoom 吃掉。 */
-  fmPg.zoom=1; fmPg.pan=[0,0]; fmPageRender();
-  function fp9maxRing(){var mx=0;document.querySelectorAll('#fpDial ellipse').forEach(function(e){mx=Math.max(mx,+e.getAttribute('ry'));});return Math.round(mx);}
-  function fp9inView(){var n=0;document.querySelectorAll('#fpDial ellipse').forEach(function(e){if(+e.getAttribute('ry')<=FP_C)n++;});return n;}
-  var rBtn=document.querySelector('#fpBody [data-fp="ring"]');
-  let zIn=document.querySelector('#fpBody input[data-fpz]');
-  var rTop=(rBtn&&zIn)?(rBtn.getBoundingClientRect().top<zIn.getBoundingClientRect().top):false;
-  var rOutR=fp9maxRing(), rOutN=fp9inView(), rTxt0=rBtn?rBtn.textContent:'';
-  hit(rBtn,'pointerdown');
-  var rInR=fp9maxRing(), rInN=fp9inView(), rTxt1=(document.querySelector('#fpBody [data-fp="ring"]')||{}).textContent;
-  var spI=fp9span();
-  /* 点完切换钮走的是 fmPageRender(),整页节点都换过了 —— 上面那个 zIn 引用已经悬空,
-     对它赋值等于往一个脱离文档的 input 上写,什么都不会发生(第一版就栽在这:横跨两次读数一模一样)。 */
-  zIn=document.querySelector('#fpBody input[data-fpz]');
-  if(zIn){zIn.value='2';zIn.dispatchEvent(new Event('input',{bubbles:true}));}
-  var spI2=fp9span();
-  if(zIn){zIn.value='1';zIn.dispatchEvent(new Event('input',{bubbles:true}));}
-  hit(document.querySelector('#fpBody [data-fp="ring"]'),'pointerdown');
-  var rBackR=fp9maxRing();
-  var okRing=(!!rBtn&&rTop&&rTxt0==='外'&&rTxt1==='内'&&rOutR<=FP_FIT+2&&rInR>FP_FIT*1.5
-              &&rInN<rOutN&&rInN>=2&&Math.abs(spI2-spI*2)<=6&&rBackR===rOutR);
+  /* FM9【三个覆盖层开关】(内圈/外圈/标注),与沙盘 阵型控制台.html 那三个钮同名同义:
+       内圈/外圈 = 各舰【自己的】近防圈(不是编队的带半径圈),标注 = 舰名与插槽的能力缩写。
+     判据打【画出来的东西】:开内圈要多出 N 个绿圈(N = 真的开着近防的舰数)且半径等于各舰自己的 inner;
+     关标注要让文字元素少掉;开外圈还要把贴合半径撑大(不撑的话圈一开就有半个落在画面外)。
+     它们必须【不在缩放那一列里】(用户令) —— 判 .fp-ovl 与 .fp-zoom 是两个不同的容器。 */
+  fmPg.zoom=1; fmPg.pan=[0,0]; fmPg.ovIn=false; fmPg.ovOu=false; fmPg.ovLb=true; fmPageRender();
+  function fp9circ(){return document.querySelectorAll('#fpDial circle[pointer-events="none"]').length;}
+  function fp9txt(){return document.querySelectorAll('#fpDial text').length;}
+  function fp9maxR(){var m=0;document.querySelectorAll('#fpDial ellipse').forEach(function(e){m=Math.max(m,+e.getAttribute('ry'));});return m;}
+  var ovBox=document.querySelector('#fpBody .fp-ovl'), zBox2=document.querySelector('#fpBody .fp-zoom');
+  var ovBtns=ovBox?[].slice.call(ovBox.querySelectorAll('button')).map(function(x){return x.textContent;}).join(','):'';
+  var sep=(!!ovBox&&!!zBox2&&!ovBox.contains(zBox2)&&!zBox2.contains(ovBox));
+  var c0=fp9circ(), t0=fp9txt(), r0=fp9maxR();
+  /* 只数【被指派到站位的】舰:旗舰占阵心、不在 pairs 里,也就没有覆盖圈可画。
+     第一版把旗舰也数进去,期望值多了 1(实测 0→2 而「须+3」)。 */
+  var PLc=fmPlanStations(fmShips(F),F.P,fmFlag(F).id);
+  var nCiws=PLc.pairs.filter(function(pp){return pp.s.ciwsOn&&ciwsOf(pp.s).inner>0;}).length;
+  hit(document.querySelector('#fpBody [data-fp="ov-in"]'),'pointerdown');
+  var c1=fp9circ();
+  /* 半径对不对:拿画出来的那个绿圈半径 ÷ 该舰真实 inner,应与整盘的 px/km 一致 */
+  var okR=false; var gIn=document.querySelector('#fpDial circle[stroke="rgba(110,231,168,.35)"]');
+  if(gIn){var BRz=fmBandRadii(fmShips(F),fmFlag(F),F.P.bm,F.P);
+    var scale=fp9maxR()/(BRz.picket||1);
+    var innSet={};fmShips(F).forEach(function(m){if(m.ciwsOn)innSet[Math.round(ciwsOf(m).inner*scale)]=1;});
+    okR=!!innSet[Math.round(+gIn.getAttribute('r'))];}
+  hit(document.querySelector('#fpBody [data-fp="ov-ou"]'),'pointerdown');
+  var c2=fp9circ(), r2=fp9maxR();
+  hit(document.querySelector('#fpBody [data-fp="ov-lb"]'),'pointerdown');
+  var t2=fp9txt();
+  hit(document.querySelector('#fpBody [data-fp="ov-lb"]'),'pointerdown');
+  hit(document.querySelector('#fpBody [data-fp="ov-in"]'),'pointerdown');
+  hit(document.querySelector('#fpBody [data-fp="ov-ou"]'),'pointerdown');
+  var c3=fp9circ(), t3=fp9txt();
+  var okRing=(!!ovBox&&sep&&ovBtns==='内圈,外圈,标注'&&nCiws>0
+  /* 方向别搞反:覆盖圈把【贴合半径】撑大 ⇒ k=FP_FIT/maxR 变小 ⇒ 画出来的哨戒圈【像素半径更小】。
+     第一版写成 r2>r0 是把因果读反了(实测 127→111,判据当场误报)。 */
+              &&c1===c0+nCiws&&okR&&c2>c1&&r2<r0*0.95&&t2<t0&&c3===c0&&t3===t0);
   /* rInN>=2 钉的是【贴合到哪条带】这个选择:内圈视图要能同时看见贴身与被护两条。
      贴 close 的话被护整圈落到视野外(实测只剩 1 圈),画面像"图裂了" —— 只判"圈变少了"抓不到这个。 */
   /* FM8b【比例尺】(用户实报:主视图没有比例尺,差点以为带半径滑块没起作用)。
@@ -2786,7 +2812,7 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
      判据不是"有没有这个元素",而是【它标的公里数与真实换算对不对】:
      拿哨戒带的圈半径(px)÷ 它的真实半径(km) 反推 px/km,与"条长 ÷ 标注公里数"比,
      两者必须一致。任一档缩放下都得成立,所以四种视图各测一次。 */
-  fmPg.zoom=1; fmPg.pan=[0,0]; fmPg.ringView='out'; fmPageRender();
+  fmPg.zoom=1; fmPg.pan=[0,0]; fmPageRender();
   function fp9scale(){
     var gsc=document.querySelector('#fpDial .fp-scale'); if(!gsc)return null;
     var rects=gsc.querySelectorAll('rect'), tx=gsc.querySelector('text');
@@ -2802,8 +2828,8 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   var scOK=[], scTxt=[];
   [['外圈zoom1',function(){}],
    ['外圈zoom2.5',function(){var z=document.querySelector('#fpBody input[data-fpz]');if(z){z.value='2.5';z.dispatchEvent(new Event('input',{bubbles:true}));}}],
-   ['内圈',function(){var z=document.querySelector('#fpBody input[data-fpz]');if(z){z.value='1';z.dispatchEvent(new Event('input',{bubbles:true}));}
-                      hit(document.querySelector('#fpBody [data-fp="ring"]'),'pointerdown');}],
+   ['开外圈覆盖',function(){var z=document.querySelector('#fpBody input[data-fpz]');if(z){z.value='1';z.dispatchEvent(new Event('input',{bubbles:true}));}
+                      hit(document.querySelector('#fpBody [data-fp="ov-ou"]'),'pointerdown');}],
    ['bm=3',function(){var kk=document.querySelector('#fpBody input[data-fpk="bm"]');if(kk){kk.value='3';kk.dispatchEvent(new Event('input',{bubbles:true}));}}]
   ].forEach(function(step){
     step[1]();
@@ -2812,7 +2838,7 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
     scTxt.push(step[0]+'「'+(q?q.lbl:'无')+'」');
   });
   var kk0=document.querySelector('#fpBody input[data-fpk="bm"]'); if(kk0){kk0.value='1';kk0.dispatchEvent(new Event('input',{bubbles:true}));}
-  hit(document.querySelector('#fpBody [data-fp="ring"]'),'pointerdown');
+  hit(document.querySelector('#fpBody [data-fp="ov-ou"]'),'pointerdown');
   var okScale=(!!sc1&&sc1.x<40&&sc1.y>FP_DIAL-40&&scOK.every(function(x){return x;}));
   var ok9=(okZUi&&okZoom&&panned&&okLim&&okCenter&&okInv&&okRing&&okScale);
   /* ⑦ 恢复默认 + 关闭(真的点 ✕) */
@@ -2859,7 +2885,7 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
     +' 盘面拖动真的平移了='+panned
     +' 限位['+lims.join(' ')+'] 四档缩放×四个方向拖到底,带圈仍进视口最少='+worst+'/4(须>=1=画面永远不空；高倍拖到外沿时里面几条本就该跑出画面)='+okLim
     +' 带圈与旗舰记号跟着一起平移(圆心偏差'+cOff.toFixed(1)+',须<0.6=整张图不分家)='+okCenter
-    +' | FM7b 内外圈切换(钮在缩放之上='+rTop+'):外「'+rTxt0+'」最大带圈 ry='+rOutR+'、视口内'+rOutN+'圈 → 内「'+rTxt1+'」ry='+rInR+'、视口内'+rInN+'圈(须挤出去、且须>=2=贴身与被护都还在) 内圈下 zoom 仍叠乘 '+spI+'→'+spI2+' 再点回外圈 ry='+rBackR+'='+okRing
+    +' | FM9 覆盖层三钮['+ovBtns+'](独立于缩放那一列='+sep+'):开内圈 圈数 '+c0+'→'+c1+'(须+'+nCiws+'=真开着近防的舰数) 半径=各舰自己的inner='+okR+' 再开外圈 '+c1+'→'+c2+'、哨戒圈像素半径 '+Math.round(r0)+'→'+Math.round(r2)+'(须变小=贴合半径被撑大了) 关标注 文字 '+t0+'→'+t2+' 全关回原样 圈'+c3+'/字'+t3+'='+okRing
     +' | FM8b 比例尺(左下角 x='+(sc1?sc1.x:'-')+' y='+(sc1?sc1.y:'-')+'):'+scTxt.join(' ')+' —— 标注公里数与「哨戒圈px÷真实km」反推出来的换算一致='+okScale
     +' 平移后拖插槽仍是拖到哪就是哪(存进去 '+Math.round(brg9)+'° 须 '+Math.round(want9)+'°,偏差'+d9.toFixed(1)+'°)='+okInv+'='+ok9
     +' | ⑦恢复默认='+okReset+' 点✕关闭='+closed+' 切固定模式后 s.fmStn 已清='+stnCleared+'='+ok7

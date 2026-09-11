@@ -14,7 +14,7 @@
    —— 那是 RF7c 在 #fcList 上踩过的坑,这里的插槽圈同时满足"重建 + hover + 事件委托"三条,更躲不过。
    所以舰船血量变化引起的评估变动不会自动反映,标题栏写明了读数时刻。 */
 
-const fmPg = { open: null, sel: -1, drag: -1, moved: false, knobDirty: false, bedit: null, zoom: 1, pan: [0, 0], pdrag: null, ringView: 'out' }; // FM6l 方位盘的缩放与平移(纯 UI,不进存档) // bedit:正在展开编辑的那条自定义轮带(FM6k) // 纯 UI 状态,不进任何存档/快照
+const fmPg = { open: null, sel: -1, drag: -1, moved: false, knobDirty: false, bedit: null, zoom: 1, pan: [0, 0], pdrag: null, ovIn: false, ovOu: false, ovLb: true }; // FM6l 方位盘的缩放与平移(纯 UI,不进存档) // bedit:正在展开编辑的那条自定义轮带(FM6k) // 纯 UI 状态,不进任何存档/快照
 /* 本页整块走 innerHTML 拼串,而舰名是玩家可改的(场景编辑器)——拼进去前必须转义。
    全库没有现成的转义函数(其余面板都走 textContent),所以在这里自带一个,名字加 fmPg 前缀防撞名。 */
 function fmPgEsc(v) { return String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
@@ -26,7 +26,7 @@ function fmPageOpen(id) {
   const el = document.getElementById('fmPage');
   if (!el) return false;
   fmPg.open = String(id); fmPg.sel = -1; fmPg.drag = -1;
-  fmPg.zoom = 1; fmPg.pan = [0, 0]; fmPg.pdrag = null; fmPg.ringView = 'out';   // FM6l 每次打开都回到自适应视角(FM7b:也回到外圈)
+  fmPg.zoom = 1; fmPg.pan = [0, 0]; fmPg.pdrag = null;   // FM6l 每次打开都回到自适应视角(三个覆盖层开关沿用上次,它们是看图习惯)
   el.classList.add('on');
   fmPageRender();
   return true;
@@ -35,6 +35,40 @@ function fmPageClose() {
   const el = document.getElementById('fmPage');
   fmPg.open = null; fmPg.sel = -1; fmPg.drag = -1; fmPg.bedit = null;
   if (el) el.classList.remove('on');
+}
+
+/* FM9b【配对以落盘的 s.fmSlot 为准,不用现算的那一份】(用户实报:页面显示的编组与地图上实际站位很不一致)。
+   站位【表】是确定的(只由 P 决定,与配对无关),所以照旧用 fmPlanStations 算;
+   但"哪艘船去哪个站位"在下令那一刻会被 44 fmReassign 按欧氏距离重新配过(同签名互换,消航线交叉),
+   并且【落盘】进 s.fmSlot —— 页面再算一遍 fmPlanStations 拿到的是交换【之前】的配对,于是显示与实际分家。
+   这正是 84-fmplot 头上那条规矩说的:"不在这里重算一遍几何,那样两处必然漂移"——
+   编组控制页改前违反了它。修法不是不算(页面还需要那张完整的站位表,含没人去的空槽),
+   而是算完之后按 s.fmSlot 把配对【对回去】。
+   匹配用坐标而不是站位名:名字可能重复(多任务群时带 G2· 前缀也可能撞),坐标是唯一的。 */
+function fmPgSyncPairs(PL, list, flag) {
+  if (!PL || !PL.sta || !PL.pairs) return;
+  const used = {};
+  const find = sl => {
+    if (!sl) return -1;
+    let best = -1, bd = 1e9;
+    for (let j = 0; j < PL.sta.length; j++) {
+      if (used[j] || j === PL.coreIdx) continue;
+      const d = Math.hypot(PL.sta[j].lx - sl[0], PL.sta[j].ly - sl[1]);
+      if (d < bd) { bd = d; best = j; }
+    }
+    return bd <= 1 ? best : -1;      // 1km 以内才算同一个站位;对不上就不动它(由下面的兜底保留原配对)
+  };
+  const out = [];
+  list.forEach(s => {
+    if (s === flag || !s.fmSlot) return;
+    const j = find(s.fmSlot);
+    if (j < 0) return;
+    used[j] = 1;
+    out.push({ s, j, v: PL.fit ? PL.fit(s, PL.sta[j]) : 0 });
+  });
+  /* 只有【全都对上】才替换:对不上说明落盘的槽位与这张表不是一套(刚切过站位、或固定模式),
+     那时现算的那份才是对的,不要拿一份残缺的配对去覆盖它。 */
+  if (out.length === PL.pairs.length) { out.sort((a, b) => a.j - b.j); PL.pairs = out; }
 }
 
 /* 当前生效的插槽表【副本】。改插槽一律改 F.P.slots(每编队一份):第一次改时从站位预设深拷一份下来,
@@ -63,6 +97,7 @@ function fmPageRender() {
   const list = fmShips(F), flag = fmFlag(F, list);
   if (!flag) { fmPageClose(); return; }
   const PL = fmPlanStations(list, F.P, flag.id);
+  fmPgSyncPairs(PL, list, flag);
   const T = fmGeoOf(F.P);   // FM6:几何读数走 fmGeoOf(玩家可调的那一份),不是站位预设
   if (hint) hint.textContent = fmName(F) + ' · ' + list.length + '艘 · 旗舰 ' + flag.name
     + ' · ' + fmbModeText(F.mode, true) + (F.src === 'generated' ? '' : '（固定模式:槽位来自建队快照,站位模板与插槽编排均不生效）');
@@ -154,12 +189,14 @@ function fmPgDial(F, PL) {
      不用原生的竖直 range —— 那个在不同 Chrome 版本上 min/max 的上下方向不一致,旋转是确定的。 */
   return '<div class="fp-dialwrap">'
     + '<svg id="fpDial" viewBox="0 0 ' + FP_DIAL + ' ' + FP_DIAL + '">' + fmPgDialInner(F, PL) + '</svg>'
+    /* FM9 三个覆盖层开关,【单独一条横排】放在缩放滑块上面 —— 不塞进缩放那一列里(用户令)。
+       与沙盘 阵型控制台.html 的那三个钮同名同义:内圈/外圈 = 各舰自己的近防圈,标注 = 舰名与能力缩写。 */
+    + '<div class="fp-ovl">'
+    + '<button class="btn qbtn' + (fmPg.ovIn ? ' on' : '') + '" data-fp="ov-in" title="画出各舰自己的近防【内圈】（绿）。贴身站位能不能罩住旗舰,看的就是它">内圈</button>'
+    + '<button class="btn qbtn' + (fmPg.ovOu ? ' on' : '') + '" data-fp="ov-ou" title="画出各舰自己的近防【外圈】（青）。相邻护卫的外圈搭不搭得上,决定通道有没有缺口">外圈</button>'
+    + '<button class="btn qbtn' + (fmPg.ovLb ? ' on' : '') + '" data-fp="ov-lb" title="舰名与插槽的能力缩写。圈多的时候关掉它画面清爽很多">标注</button>'
+    + '</div>'
     + '<div class="fp-zoom" title="缩放阵型图（拖动方位盘可平移）">'
-    /* FM7b 内外圈切换钮,压在缩放滑块上面(同一列)。它改的是【基准贴合半径】,不是缩放倍数 ——
-       所以玩家拖过的 zoom 在切换之后仍然生效,两者叠乘。 */
-    + '<button class="btn qbtn fp-ring' + (fmPg.ringView === 'in' ? ' on' : '') + '" data-fp="ring" title="'
-    + (fmPg.ringView === 'in' ? '当前:内圈视图（贴合被护带，看得清里圈插槽）。点一下回到外圈' : '当前:外圈视图（四条带都在画面里）。点一下切到内圈，放大到被护带')
-    + '">' + (fmPg.ringView === 'in' ? '内' : '外') + '</button>'
     + '<b>+</b>'
     + '<span class="fp-zwrap"><input type="range" data-fpz="1" min="' + FP_ZOOM[0] + '" max="' + FP_ZOOM[1] + '" step="0.05" value="' + fmPg.zoom + '"></span>'
     + '<b>−</b></div>'
@@ -185,15 +222,15 @@ function fmPgDialInner(F, PL) {
     const t = fmSpreadBrg(sl.brg, T.spread) * Math.PI / 180;
     maxR = Math.max(maxR, Math.abs(r * Math.cos(t)), Math.abs(r * Math.sin(t) * BR.widen));
   });
-  /* FM7b【内外圈切换】。外圈(缺省)= 贴合到最远的那个站位/插槽,四条带都在画面里;
-     内圈 = 改成贴合【被护带】,把屏护与哨戒挤出视野。
-     为什么需要它:带半径是从近防射程算出来的,贴身 7k 与哨戒 100k 差着十几倍 ——
-     全都塞进一个盘里时,内圈那几个插槽挤在中心一小撮里,方位根本读不出来、更别说拖。
-     用 body 而不是 close 当基准:只贴 close 的话被护带整圈落在视野外,看着像"图裂了";
-     贴 body 时贴身与被护两条都完整,屏护恰好在边缘露一段,还能看出自己在整体的什么位置。
-     乘 widen:扁率 >1 时横向铺得更开,不乘的话内圈视图会被横向截掉。 */
-  const fitR = (fmPg.ringView === 'in' && BR.body > 0) ? BR.body * Math.max(1, BR.widen || 1) : maxR;
-  const k = FP_FIT / fitR * fmPg.zoom;          // FM6l 基准贴合 × 玩家的缩放
+  /* FM9 覆盖圈(各舰自己的防空内圈/外圈)开着时,要把圈也算进贴合半径 ——
+     不然圈一开就有半个圈落在画面外,看着像画错了。与沙盘 阵型控制台.html 同一条处理。 */
+  if (fmPg.ovIn || fmPg.ovOu) PL.pairs.forEach(pr => {
+    const st = PL.sta[pr.j], c = (typeof ciwsOf === 'function') ? ciwsOf(pr.s) : null;
+    if (!st || !c || !pr.s.ciwsOn) return;
+    const rr = Math.max(fmPg.ovOu ? (c.outer || 0) : 0, fmPg.ovIn ? (c.inner || 0) : 0);
+    if (rr > 0) maxR = Math.max(maxR, Math.hypot(st.lx, st.ly) + rr);
+  });
+  const k = FP_FIT / maxR * fmPg.zoom;          // FM6l 基准贴合 × 玩家的缩放
   fmPgClampPan();
   const P0 = fmPg.pan;
   const px = (lx, ly) => [FP_C + ly * k + P0[0], FP_C - lx * k + P0[1]];
@@ -225,13 +262,27 @@ function fmPgDialInner(F, PL) {
   const HY = (C0[1] - FP_FIT * fmPg.zoom - 12).toFixed(1);
   g += '<line x1="' + CX + '" y1="' + CY + '" x2="' + CX + '" y2="' + HY + '" stroke="#2a3a50" stroke-width="1" stroke-dasharray="3 4"/>'
     + '<text x="' + CX + '" y="' + (C0[1] - FP_FIT * fmPg.zoom - 18).toFixed(1) + '" fill="#6a7d92" font-size="10" text-anchor="middle">前进方向 000</text>';
+  /* FM9【覆盖圈】= 各舰自己的近防内圈/外圈,画在最底下(它们是大面积的半透明区域,盖住谁都不好)。
+     配色抄沙盘 阵型控制台.html:外圈青、内圈绿,填充极淡、描边也淡 —— 它是"罩得住多大范围"的示意,
+     不是可点的东西,所以 pointer-events 全关掉,免得抢走插槽圈的拖拽。
+     只画【真的开着近防】的舰(s.ciwsOn):关了近防还画一个圈是骗人的。 */
+  if (fmPg.ovIn || fmPg.ovOu) PL.pairs.forEach(pr => {
+    const st = PL.sta[pr.j], c = (typeof ciwsOf === 'function') ? ciwsOf(pr.s) : null;
+    if (!st || !c || !pr.s.ciwsOn) return;
+    const q = px(st.lx, st.ly);
+    if (!isFinite(q[0]) || !isFinite(q[1])) return;
+    if (fmPg.ovOu && c.outer > 0) g += '<circle cx="' + q[0].toFixed(1) + '" cy="' + q[1].toFixed(1)
+      + '" r="' + (c.outer * k).toFixed(1) + '" fill="rgba(79,224,255,.035)" stroke="rgba(79,224,255,.22)" stroke-width="1" pointer-events="none"/>';
+    if (fmPg.ovIn && c.inner > 0) g += '<circle cx="' + q[0].toFixed(1) + '" cy="' + q[1].toFixed(1)
+      + '" r="' + (c.inner * k).toFixed(1) + '" fill="rgba(110,231,168,.06)" stroke="rgba(110,231,168,.35)" stroke-width="1" pointer-events="none"/>';
+  });
   /* 各舰实际站位(在插槽圈之下画,免得盖住可点的插槽) */
   PL.pairs.forEach(p => {
     const st = PL.sta[p.j], q = px(st.lx, st.ly);
     const col = p.v >= 0.75 ? '#5ad8a0' : p.v >= 0.5 ? '#ffc861' : '#e07a7a';
     g += '<circle cx="' + q[0].toFixed(1) + '" cy="' + q[1].toFixed(1) + '" r="3" fill="' + col + '" fill-opacity=".9"/>'
-      + '<text x="' + q[0].toFixed(1) + '" y="' + (q[1] + 14).toFixed(1) + '" fill="' + col + '" fill-opacity=".8" font-size="9" text-anchor="middle">'
-      + fmPgEsc(p.s.name) + '</text>';
+      + (fmPg.ovLb ? ('<text x="' + q[0].toFixed(1) + '" y="' + (q[1] + 14).toFixed(1) + '" fill="' + col + '" fill-opacity=".8" font-size="9" text-anchor="middle">'
+        + fmPgEsc(p.s.name) + '</text>') : '');
   });
   /* 旗舰 */
   g += '<circle cx="' + CX + '" cy="' + CY + '" r="6" fill="none" stroke="#ffe066" stroke-width="1.4"/>'
@@ -245,7 +296,7 @@ function fmPgDialInner(F, PL) {
     const on = (i === fmPg.sel);
     g += '<g class="fp-slot' + (on ? ' on' : '') + '" data-fps="' + i + '">'
       + '<circle cx="' + q[0].toFixed(1) + '" cy="' + q[1].toFixed(1) + '" r="11" fill="#0a0e16" fill-opacity=".55" stroke="' + (on ? '#ffe066' : '#5aa7ff') + '" stroke-width="' + (on ? 2 : 1.2) + '"/>'
-      + '<text x="' + q[0].toFixed(1) + '" y="' + (q[1] + 3.5).toFixed(1) + '" fill="' + (on ? '#ffe066' : '#9fd4ff') + '" font-size="9" text-anchor="middle">' + fmPgEsc(fmCapAb(sl.cap)) + '</text>'
+      + (fmPg.ovLb ? ('<text x="' + q[0].toFixed(1) + '" y="' + (q[1] + 3.5).toFixed(1) + '" fill="' + (on ? '#ffe066' : '#9fd4ff') + '" font-size="9" text-anchor="middle">' + fmPgEsc(fmCapAb(sl.cap)) + '</text>') : '')
       /* FM6g 右上角小星 = 这个槽是玩家自己加的(模板里没有)。画在同一个 <g> 里,跟着一起被点中,
          不会在圈边上留一块看得见点不着的死角。 */
       + (sl.nw ? '<text class="fp-star" x="' + (q[0] + 9).toFixed(1) + '" y="' + (q[1] - 6).toFixed(1) + '" fill="#ffe066" font-size="10" text-anchor="middle">★</text>' : '')
@@ -498,8 +549,11 @@ function fmPgAct(a) {
     if (typeof updFmBar === 'function') updFmBar();
     return;
   }
-  if (a === 'ring') {   // FM7b 内外圈切换:只换基准贴合半径,缩放与平移都保留(平移要重新钳一次,内圈的可拖范围小得多)
-    fmPg.ringView = (fmPg.ringView === 'in') ? 'out' : 'in';
+  if (a.indexOf('ov-') === 0) {   // FM9 三个覆盖层开关
+    const kk = a.slice(3);
+    if (kk === 'in') fmPg.ovIn = !fmPg.ovIn;
+    else if (kk === 'ou') fmPg.ovOu = !fmPg.ovOu;
+    else if (kk === 'lb') fmPg.ovLb = !fmPg.ovLb;
     fmPgClampPan(); fmPageRender(); return;
   }
   if (a === 'badd') {
