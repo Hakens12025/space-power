@@ -12,10 +12,13 @@
 /* 参数合法区间,UI 与代码共用这一份。FM6:五个几何旋钮全部开放给玩家(编组控制页 + 编队菜单的带半径滑块),
    所以每一个都得有区间 —— 滑块只是 UI,越界防线在 fmClamp 这一处。
      spread 张角(<1 向前收拢 / >1 向后张开)· spacing 同簇站距乘数 · bm 带半径倍数 ·
-     widen 扁率(>1 = 条令的「宽而不深」)· bstr 能力偏向强度(0 = 完全不偏向,合法) */
-const FM_LIMIT={spread:[0.4,2.5], spacing:[0.5,3], bm:[0.3,3], widen:[0.3,3], bstr:[0,2]};
+     widen 扁率(>1 = 条令的「宽而不深」)
+     FM8:bstr(能力偏向强度)已删 —— 实测它是数学上的空操作(偏向乘在 req 权重上会被 fit 的归一化约掉)。
+     顶上它的是 pref 要害偏好(0 = 所有站位等价,越大越把好舰往要紧的站位塞;偏向乘在 prio 上,不会被约掉),
+     以及 gcap 每群容量(超过就分任务群,原来是写死的 16)。 */
+const FM_LIMIT={spread:[0.4,2.5], spacing:[0.5,3], bm:[0.3,3], widen:[0.3,3], pref:[0,2], gcap:[4,32]};
 function fmClamp(k,v){const r=FM_LIMIT[k];const n=Number(v);if(!isFinite(n))return r?r[0]:0;return r?Math.max(r[0],Math.min(r[1],n)):n;}
-function fmParamsNew(){return {stance:'fixed', spread:1, spacing:1, bm:1, widen:1, bstr:1, slots:null, bands:null};} // FM6h bands = 本编队自定义的轮带(内置五条不进这里) // FM6:五个几何旋钮都落在 P 上(每编队一份),站位预设只是初值 —— 取数一律走 39 的 fmGeoOf
+function fmParamsNew(){return {stance:'fixed', spread:1, spacing:1, bm:1, widen:1, pref:0, gcap:16, slots:null, bands:null};} // FM6h bands = 本编队自定义的轮带(内置五条不进这里) // FM6:五个几何旋钮都落在 P 上(每编队一份),站位预设只是初值 —— 取数一律走 39 的 fmGeoOf
 
 function rotSlot(slot,ca,sa){return [slot[0]*ca-slot[1]*sa, slot[0]*sa+slot[1]*ca, slot[2]];}
 

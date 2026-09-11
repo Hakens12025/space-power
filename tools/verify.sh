@@ -2231,7 +2231,7 @@ t('FLOW37_FMCAPSLOT',function(){ /* FM4 能力插槽 + 最优指派。改前这�
   var hdg1=b.every(function(s){return s.fmHdg===0;});
   var src1=(F.src==='generated'&&F.mode==='slot'&&F.P.stance==='fixed');
   var keys=Object.keys(fmParamsNew()).sort().join(',');
-  var okKeys=(keys==='bands,bm,bstr,slots,spacing,spread,stance,widen'); /* FM6:五个几何旋钮全部落在 P 上;FM6h 添 bands(本编队自定义的轮带) */
+  var okKeys=(keys==='bands,bm,gcap,pref,slots,spacing,spread,stance,widen'); /* FM6:五个几何旋钮全部落在 P 上;FM6h 添 bands(本编队自定义的轮带) */
   /* ② 站位换布局:水下「宽而不深」的横向展开必须【明显】大于水面「收拢集火」。用同一组船,只切 stance */
   function shape(){var mx=0,my=0;b.slice(1).forEach(function(s){mx=Math.max(mx,Math.abs(s.fmSlot[1]));my=Math.max(my,Math.abs(s.fmSlot[0]));});return {x:mx,y:my};}
   fm37drop();
@@ -2330,15 +2330,52 @@ t('FLOW37_FMCAPSLOT',function(){ /* FM4 能力插槽 + 最优指派。改前这�
   var idStance=0;b.forEach(function(s,i){idStance=Math.max(idStance,Math.hypot(s.fmSlot[0]-slA[i][0],s.fmSlot[1]-slA[i][1]));});
   var ok8=(swap8>1000&&left7===0&&dev8<2000&&idAng<1e-12&&idDev<1e-6&&idPos<1e-9&&idSlot<1e-9&&idStance<1e-9);
   fm37drop();
-  var ok=(flagZero&&ring1&&st1&&cap1&&hdg1&&src1&&okKeys&&ok2&&ok3&&ok4&&ok5&&ok6&&ok7&&ok8);
+  /* ⑨ FM8【要害偏好 pref】与【每群容量 gcap】。
+     pref 顶掉的是原来那个「能力偏向强度 bstr」—— 实测它是【数学上的空操作】:偏向乘在 req 权重上,
+     而 fit = Σ(w·have)/Σw,每个可指派站位只要一维 ⇒ (w·have)/w = have,权重整个约掉
+     (四套站位 × bstr 0→2,总契合逐位相同)。现在偏向乘在【站位重要性 prio】上,那里不会被约掉。
+     判据三段:pref=0 必须与不偏向【逐位相同】(默认值不许动任何既有行为);
+     pref 拉满必须真的改指派;站位重要性要按【实测影响力】排序(通道最重、隐蔽最轻)。 */
+  var b9=[makeShip('CA','P旗',[0,0,0],[1,0,0],[0,0,0],'blue',2)];
+  ['DD','DD','CA','DD','CV','DD','BB','DD'].forEach(function(c,i){
+    b9.push(makeShip(c,'P'+i,[-20000-i*9000,12000*(i%2?1:-1),0],[1,0,0],[0,0,0],'blue',2));});
+  b9.forEach(function(x){ships.push(x);});
+  var F9=fmCreate('9',b9); fmSetSrc(F9,'generated');
+  var L9=fmShips(F9), f9=fmFlag(F9);
+  function sig9(){var PL=fmPlanStations(L9,F9.P,f9.id);
+    return {t:PL.tot, m:PL.pairs.map(function(x){return x.s.name+'>'+PL.sta[x.j].name;}).join(' '), sta:PL.sta};}
+  F9.P.pref=0; var s0=sig9();
+  F9.P.pref=2; var s2=sig9();
+  F9.P.pref=1; var s1=sig9();
+  /* 重要性排序:pref>0 时,通道那几个站位的 prio 必须【都高于】隐蔽/射频那几个 */
+  /* 9 舰只生成 8 个站位(n−1),固定模板前 8 个里没有哨戒带那几个(隐蔽/射频排在第 9 位之后)——
+     所以拿"最轻的那一维"比会取不到值(第一版 pDim 停在 1e9)。改成:与【本次真的生成出来的】
+     非通道站位里最轻的那个比,并且用通道站位的【最低】prio 去比(更强的主张:通道里最差的也比它重)。 */
+  var pChan=1e9, pDim=1e9, dimCap='—';
+  s1.sta.forEach(function(st){ if(st.band==='core')return;
+    if(st.cap==='aaChan')pChan=Math.min(pChan,st.prio);
+    else if(st.prio<pDim){pDim=st.prio;dimCap=st.cap;} });
+  var okPref=(s0.m!==s2.m&&isFinite(pChan)&&pChan<1e9&&pDim<1e9&&pChan>pDim*2
+              &&fmCapW('aaChan')>fmCapW('ew')&&fmCapW('ew')>fmCapW('stealth'));
+  /* gcap:改小必须真的拆出更多任务群 */
+  F9.P.pref=0;
+  function grp9(v){F9.P.gcap=v;var PL=fmPlanStations(L9,F9.P,f9.id);var g={};PL.sta.forEach(function(x){g[x.grp]=1;});return Object.keys(g).length;}
+  var g4=grp9(4), g8=grp9(8), g16=grp9(16);
+  F9.P.gcap=16;
+  var okGcap=(g4>g8&&g8>g16&&g16===1);
+  fmDelete('9');
+  for(var q9=ships.length-1;q9>=0;q9--)if(b9.indexOf(ships[q9])>=0)ships.splice(q9,1);
+  var ok=(flagZero&&ring1&&st1&&cap1&&hdg1&&src1&&okKeys&&ok2&&ok3&&ok4&&ok5&&ok6&&ok7&&ok8&&okPref&&okGcap);
   return (ok?'ok':'fail')
-    +' ①固定模板 CA+2DD:'+t1+' 旗舰占阵心='+flagZero+' 两DD在屏护带(r='+Math.round(BR1.screen)+')='+ring1+' 站000与±45°(模板前两槽)='+st1+' 第二站在'+side1+' 需求都是通道/屏护='+cap1+' fmHdg全0='+hdg1+' src/mode/stance=generated/slot/fixed='+src1+' fmParamsNew键=['+keys+'](须 bands,bm,bstr,slots,spacing,spread,stance,widen)='+okKeys
+    +' ①固定模板 CA+2DD:'+t1+' 旗舰占阵心='+flagZero+' 两DD在屏护带(r='+Math.round(BR1.screen)+')='+ring1+' 站000与±45°(模板前两槽)='+st1+' 第二站在'+side1+' 需求都是通道/屏护='+cap1+' fmHdg全0='+hdg1+' src/mode/stance=generated/slot/fixed='+src1+' fmParamsNew键=['+keys+'](须 bands,bm,gcap,pref,slots,spacing,spread,stance,widen)='+okKeys
     +' | ②切站位(8舰同组):水面'+tSurf+' → 水下'+tSub+' 横向展开比 水下/水面='+wide.toFixed(2)+'(须>1.5=「宽而不深」真的更宽) 站距乘数 水面/水下/空中='+spSurf.toFixed(2)+'/'+spSub.toFixed(2)+'/'+spAir.toFixed(2)+'(须 1.00/1.60/3.00)='+ok2
     +' | ③空中为主'+tAir+' 后方150°外舰数='+rearAir+'(须>=1=圆形屏护,固定模板同规模为'+rearFix+')='+ok3
     +' | ④最优指派(CA+2DD+CV 穷举 '+cnt+' 种):匈牙利总契合='+got.toFixed(6)+' 穷举最大='+best.toFixed(6)+' 差='+(best-got).toExponential(1)+'(须=0,不是接近)='+ok4+' '+t4
     +' | ⑤贴身几何门(空中为主 bm=1.15):贴身带 r='+Math.round(close5)+' > 该舰 inner='+Math.round(inner5)+'，契合='+fitGated+'(须恰为0) 把 inner 调到 '+Math.round(close5*2)+' 后='+fitOpen.toFixed(3)+'(须>0.5)='+ok5
     +' | ⑥插槽扩容(20舰):不同插槽数='+nSlot+'(须14=不随舰数变) 站位总数='+nSta6+'(须20=人人有站) 任务群='+(grp6+1)+'个(须2：FM_GROUP_CAP=16) 单槽最多='+maxPer+'艘 位置重合='+dup6+'处(须0)='+ok6
     +' | ⑦下令后指派保住(fmReassign 只许同签名互换):顺向'+t7a+' 槽位不变='+(keep7<1e-9)+' | 折返'+t7b+' 槽位不变='+(keep7b<1e-9)+'(起始槽:'+nm7.join('/')+') → '+ok7
+    +' | ⑨FM8 要害偏好:pref=0 与 pref=2 的指派不同='+(s0.m!==s2.m)+' pref=1 时 通道站位【最低】prio='+pChan.toFixed(3)+' vs 最轻的那个站位('+fmCapAb(dimCap)+')='+pDim.toFixed(3)+'(须>2倍) 影响力 通道'+fmCapW('aaChan')+'>电战'+fmCapW('ew')+'>隐蔽'+fmCapW('stealth')+'='+okPref
+    +' 每群容量:gcap 4/8/16 → 任务群 '+g4+'/'+g8+'/'+g16+'(须递减且16时为1)='+okGcap
     +' | ⑧同签名CA+2DD跑到位后再点"阵型"/"固定模板"是空操作:'+t8+' 下令时配对换槽='+Math.round(swap8)+'(须>1000,否则本条没测到东西) 到位='+(left7===0)+' 离位='+Math.round(dev8)+' F.ang变化='+idAng.toExponential(1)+' 离位变化='+idDev.toExponential(1)+' 槽位变化='+idSlot.toExponential(1)+' 船位移='+idPos.toExponential(1)+' 再点同一站位槽位变化='+idStance.toExponential(1)+' → '+ok8;
 });
 t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DOM 事件】。只调 fmPageOpen/fmPgAct 这类函数的话,委托接线错了照样全绿(RF22b 的教训) */
@@ -2408,7 +2445,7 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   /* ④b FM6【五个几何旋钮】各派一次真实 input 事件,断言 F.P 上对应那一项真的变了。
      这是"完整的阵型算法页"那条需求的落地判据 —— 少接一根线,页面看着一样、拖了没反应。 */
   var knobs=document.querySelectorAll('#fpBody input[data-fpk]');
-  var kNames=[],kOk=(knobs.length===5);
+  var kNames=[],kOk=(knobs.length===6);   // FM8:bstr(空操作)换成 pref,并加 gcap
   /* FM6f 另外两条,判的是【拖动过程中】的行为(改前要松手才重画,那个手动「刷新读数」钮已删):
        · 方位盘必须当场跟着变 —— 只有这样滑块才谈得上"看得见效果";
        · 而正被拖的那个 <input> 节点必须【还是同一个】。整页重渲会把它换成新节点、拖拽当场断掉
@@ -2420,7 +2457,10 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   for(var ki=0;ki<knobs.length;ki++){
     var kEl=knobs[ki], kk=kEl.getAttribute('data-fpk'), before=F.P[kk];
     kNames.push(kk);
-    var lim=FM_LIMIT[kk], want=Math.min(lim[1],Math.max(lim[0],(before===lim[1]?lim[0]:before+0.5)));
+    /* FM8 每群容量那根是【整数】滑块(step=1):给它 +0.5 的话浏览器会把 value 吸附回整数,
+       F.P 拿到的与 want 对不上,判据会以为"滑块没接上"。整数滑块用整数增量。 */
+    var lim=FM_LIMIT[kk], d=(kk==='gcap')?4:0.5;
+    var want=Math.min(lim[1],Math.max(lim[0],(before>=lim[1]?lim[0]:before+d)));
     kEl.value=String(want);
     kEl.dispatchEvent(new Event('input',{bubbles:true}));
     if(!(Math.abs(F.P[kk]-want)<1e-9&&F.P[kk]!==before))kOk=false;
@@ -2430,7 +2470,7 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
     if(document.querySelectorAll('#fpBody input[data-fpk]')[ki]!==kEl)kSame=false;
   }
   var noRefresh=!document.querySelector('#fpBody [data-fp="refresh"]');
-  var ok4b=(kOk&&dlLive&&kSame&&noRefresh&&kNames.join(',')==='bm,widen,spread,spacing,bstr');
+  var ok4b=(kOk&&dlLive&&kSame&&noRefresh&&kNames.join(',')==='bm,widen,spread,spacing,pref,gcap');
   /* ⑤ 站位钮:页内切站位 = 编队菜单那一行的同一个 fmSetStance;切完自定义插槽被丢掉(它是按上一套布局改的) */
   var scBtn=document.querySelector('#fpBody [data-fp="sc-sub"]');
   hit(scBtn,'pointerdown');
@@ -2741,7 +2781,40 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
               &&rInN<rOutN&&rInN>=2&&Math.abs(spI2-spI*2)<=6&&rBackR===rOutR);
   /* rInN>=2 钉的是【贴合到哪条带】这个选择:内圈视图要能同时看见贴身与被护两条。
      贴 close 的话被护整圈落到视野外(实测只剩 1 圈),画面像"图裂了" —— 只判"圈变少了"抓不到这个。 */
-  var ok9=(okZUi&&okZoom&&panned&&okLim&&okCenter&&okInv&&okRing);
+  /* FM8b【比例尺】(用户实报:主视图没有比例尺,差点以为带半径滑块没起作用)。
+     这张盘的缩放是自适应的 —— 换编队、切内外圈、拖缩放,像素与公里的换算就变一次。
+     判据不是"有没有这个元素",而是【它标的公里数与真实换算对不对】:
+     拿哨戒带的圈半径(px)÷ 它的真实半径(km) 反推 px/km,与"条长 ÷ 标注公里数"比,
+     两者必须一致。任一档缩放下都得成立,所以四种视图各测一次。 */
+  fmPg.zoom=1; fmPg.pan=[0,0]; fmPg.ringView='out'; fmPageRender();
+  function fp9scale(){
+    var gsc=document.querySelector('#fpDial .fp-scale'); if(!gsc)return null;
+    var rects=gsc.querySelectorAll('rect'), tx=gsc.querySelector('text');
+    if(rects.length<2||!tx)return null;
+    var w=+rects[1].getAttribute('width'), lbl=tx.textContent;
+    var km=parseFloat(lbl)*(/M/.test(lbl)?1e6:1e3);
+    var ring=0; document.querySelectorAll('#fpDial ellipse').forEach(function(e){ring=Math.max(ring,+e.getAttribute('ry'));});
+    var BRr=fmBandRadii(fmShips(F),fmFlag(F),F.P.bm,F.P);
+    var truth=ring/(BRr.picket||1);
+    return {w:w, lbl:lbl, mine:w/km, truth:truth, x:+rects[1].getAttribute('x'), y:+rects[1].getAttribute('y')};
+  }
+  var sc1=fp9scale();
+  var scOK=[], scTxt=[];
+  [['外圈zoom1',function(){}],
+   ['外圈zoom2.5',function(){var z=document.querySelector('#fpBody input[data-fpz]');if(z){z.value='2.5';z.dispatchEvent(new Event('input',{bubbles:true}));}}],
+   ['内圈',function(){var z=document.querySelector('#fpBody input[data-fpz]');if(z){z.value='1';z.dispatchEvent(new Event('input',{bubbles:true}));}
+                      hit(document.querySelector('#fpBody [data-fp="ring"]'),'pointerdown');}],
+   ['bm=3',function(){var kk=document.querySelector('#fpBody input[data-fpk="bm"]');if(kk){kk.value='3';kk.dispatchEvent(new Event('input',{bubbles:true}));}}]
+  ].forEach(function(step){
+    step[1]();
+    var q=fp9scale();
+    scOK.push(!!q&&Math.abs(q.mine-q.truth)/Math.max(q.truth,1e-12)<0.02);
+    scTxt.push(step[0]+'「'+(q?q.lbl:'无')+'」');
+  });
+  var kk0=document.querySelector('#fpBody input[data-fpk="bm"]'); if(kk0){kk0.value='1';kk0.dispatchEvent(new Event('input',{bubbles:true}));}
+  hit(document.querySelector('#fpBody [data-fp="ring"]'),'pointerdown');
+  var okScale=(!!sc1&&sc1.x<40&&sc1.y>FP_DIAL-40&&scOK.every(function(x){return x;}));
+  var ok9=(okZUi&&okZoom&&panned&&okLim&&okCenter&&okInv&&okRing&&okScale);
   /* ⑦ 恢复默认 + 关闭(真的点 ✕) */
   hit(document.querySelector('#fpBody [data-fp="reset"]'),'pointerdown');
   var okReset=(!F.P.slots&&fmPageSlots(F).length===FM_STANCE.sub.slots.length);
@@ -2787,6 +2860,7 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
     +' 限位['+lims.join(' ')+'] 四档缩放×四个方向拖到底,带圈仍进视口最少='+worst+'/4(须>=1=画面永远不空；高倍拖到外沿时里面几条本就该跑出画面)='+okLim
     +' 带圈与旗舰记号跟着一起平移(圆心偏差'+cOff.toFixed(1)+',须<0.6=整张图不分家)='+okCenter
     +' | FM7b 内外圈切换(钮在缩放之上='+rTop+'):外「'+rTxt0+'」最大带圈 ry='+rOutR+'、视口内'+rOutN+'圈 → 内「'+rTxt1+'」ry='+rInR+'、视口内'+rInN+'圈(须挤出去、且须>=2=贴身与被护都还在) 内圈下 zoom 仍叠乘 '+spI+'→'+spI2+' 再点回外圈 ry='+rBackR+'='+okRing
+    +' | FM8b 比例尺(左下角 x='+(sc1?sc1.x:'-')+' y='+(sc1?sc1.y:'-')+'):'+scTxt.join(' ')+' —— 标注公里数与「哨戒圈px÷真实km」反推出来的换算一致='+okScale
     +' 平移后拖插槽仍是拖到哪就是哪(存进去 '+Math.round(brg9)+'° 须 '+Math.round(want9)+'°,偏差'+d9.toFixed(1)+'°)='+okInv+'='+ok9
     +' | ⑦恢复默认='+okReset+' 点✕关闭='+closed+' 切固定模式后 s.fmStn 已清='+stnCleared+'='+ok7
     +' | ⑧编队被删后自动收摊='+ok8+' 运行期错误='+(errs.length?errs.join(' / '):'none');

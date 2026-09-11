@@ -17,21 +17,26 @@
    曾经有 13 维,砍掉了 齐射/照射/机动/信标 —— 它们在本作里是舰种常量(全队只有两档取值),
    且 齐射↔照射、机动↔信标 的秩相关都是 1.000(排名完全一样),从模板里删掉总契合度损失 0.0%。
    【贴身与通道不能合并】秩相关只有 0.675,且几何相反:贴身要求站位落进该舰 inner 之内,通道要求沿环摊开。 */
+/* FM8 每一维带上【影响力权重 w】。数值来自沙盘实测(饱和编成下,删掉该维全部插槽的总契合损失),
+   CLAUDE.md 的 FM4 一节记着原始读数:通道 −2.64 > 贴身 −1.15 > 主炮/红外/网络 −0.95 >
+   电战/生存 −0.64 > 射频 −0.28 > 隐蔽 −0.15。这里按通道归一(÷2.64)。
+   它【只进站位重要性 prio】,不进契合度 fit —— 见 fit() 里 FM8 那段:乘在 req 权重上会被归一化约掉。 */
 const FM_DIM = [
-  { k: 'aaClose', nm: '防空·贴身', ab: '贴身', f: s => { const c = ciwsOf(s); return (c.inner || 0) * (c.innerIntercept || 0); } },
-  { k: 'aaChan', nm: '防空·通道', ab: '通道', f: s => { const c = ciwsOf(s); return (s.interMax || 0) * (c.outer || 0); } },
-  { k: 'gun', nm: '主炮', ab: '主炮', f: s => s.macReload ? (s.macDmg || 0) / s.macReload : 0 },
-  { k: 'ir', nm: '被动·红外', ab: '红外', f: s => (s.detPower || 0) * (s.detPower || 0) },
-  { k: 'esm', nm: '被动·射频', ab: '射频', f: s => (s.esmQual || 0) * (s.esmQual || 0) },
-  { k: 'stealth', nm: '隐蔽', ab: '隐蔽', f: s => 1 / Math.max(0.01, (s.sigBase || 1) * (s.rcs || 1)) }, // 分母兜底 0.01:sigBase 被 tier 乘到 0 时不至于吐 Infinity 把归一化整列压成 0
-  { k: 'c2', nm: '网络中枢', ab: '网络', f: s => s.guideChan || 0 },
-  { k: 'ew', nm: '电子战', ab: '电战', f: s => s.ecmPower || 0 },
-  { k: 'surv', nm: '生存', ab: '生存', f: s => (s.hp || 0) / Math.max(0.05, 1 - (s.chaffRate || 0)) }, // 同上:chaffRate 是 'prob' 字段可以合法取到 1
+  { k: 'aaClose', nm: '防空·贴身', ab: '贴身', w: 0.44, f: s => { const c = ciwsOf(s); return (c.inner || 0) * (c.innerIntercept || 0); } },
+  { k: 'aaChan', nm: '防空·通道', ab: '通道', w: 1.00, f: s => { const c = ciwsOf(s); return (s.interMax || 0) * (c.outer || 0); } },
+  { k: 'gun', nm: '主炮', ab: '主炮', w: 0.36, f: s => s.macReload ? (s.macDmg || 0) / s.macReload : 0 },
+  { k: 'ir', nm: '被动·红外', ab: '红外', w: 0.36, f: s => (s.detPower || 0) * (s.detPower || 0) },
+  { k: 'esm', nm: '被动·射频', ab: '射频', w: 0.11, f: s => (s.esmQual || 0) * (s.esmQual || 0) },
+  { k: 'stealth', nm: '隐蔽', ab: '隐蔽', w: 0.06, f: s => 1 / Math.max(0.01, (s.sigBase || 1) * (s.rcs || 1)) }, // 分母兜底 0.01:sigBase 被 tier 乘到 0 时不至于吐 Infinity 把归一化整列压成 0
+  { k: 'c2', nm: '网络中枢', ab: '网络', w: 0.36, f: s => s.guideChan || 0 },
+  { k: 'ew', nm: '电子战', ab: '电战', w: 0.24, f: s => s.ecmPower || 0 },
+  { k: 'surv', nm: '生存', ab: '生存', w: 0.24, f: s => (s.hp || 0) / Math.max(0.05, 1 - (s.chaffRate || 0)) }, // 同上:chaffRate 是 'prob' 字段可以合法取到 1
 ];
 const FM_CAPS = FM_DIM.map(d => d.k);
 function fmCapOf(s, k) { for (let i = 0; i < FM_DIM.length; i++) if (FM_DIM[i].k === k) return FM_DIM[i].f(s) || 0; return 0; }
 function fmCapNm(k) { const d = FM_DIM.find(x => x.k === k); return d ? d.nm : k; }
 function fmCapAb(k) { const d = FM_DIM.find(x => x.k === k); return d ? d.ab : k; }
+function fmCapW(k) { const d = FM_DIM.find(x => x.k === k); return d && isFinite(d.w) ? d.w : 1; } // FM8 影响力权重,只进 prio
 /* 能力影响力排序(饱和编成下删掉该维全部插槽的总契合损失,由沙盘实测):
    通道 > 贴身 > 主炮 = 红外 = 网络 > 电战 = 生存 > 射频 > 隐蔽 */
 
@@ -78,10 +83,12 @@ function fmBandNewKey(P) { // 取一个没被占用的键(删了再加也不会�
    舰数超过插槽数时插槽数量不变,多出来的船沿该插槽的方位向两侧展开(fmGenStations 的 off)。
    四套站位各自一套插槽表 + 几何参数:
      spread 整体张角(>1 向后张开)  gap 同簇舰间距倍数  bm 带半径倍数  widen 扁率(>1 宽而不深)
-     boost  能力偏向(抬高某几维在契合度里的权重)      bstr 偏向强度(1=预设全量) */
+     boost  能力偏向(FM8 起它进【站位重要性 prio】,不再进契合度 —— 进 fit 会被归一化约掉)
+     pref   要害偏好(0=所有站位等价,越大越把好舰往要紧的站位上塞;0 时与改前逐位相同)
+     gcap   每群容量(超过就分任务群;缺省 FM_GROUP_CAP=16) */
 const FM_STANCE = {
   fixed: {
-    nm: '固定模板', spread: 1.00, gap: 1.00, bm: 1.00, widen: 1.00, bstr: 1.00, boost: {}, slots: [
+    nm: '固定模板', spread: 1.00, gap: 1.00, bm: 1.00, widen: 1.00, pref: 0, gcap: 16, boost: {}, slots: [
       { nm: '正前屏护', cap: 'aaChan', band: 'screen', brg: 0 },
       { nm: '左翼屏护', cap: 'aaChan', band: 'screen', brg: 315 },
       { nm: '右翼屏护', cap: 'aaChan', band: 'screen', brg: 45 },
@@ -98,7 +105,7 @@ const FM_STANCE = {
       { nm: '副中枢', cap: 'c2', band: 'body', brg: 270 }],
   },
   air: { /* 圆形屏护:八个防空位均分 360°(USF 10B §3232「完整环形屏护,等间隔」) */
-    nm: '空中为主', spread: 1.05, gap: 3.00, bm: 1.15, widen: 1.05, bstr: 1.00,
+    nm: '空中为主', spread: 1.05, gap: 3.00, bm: 1.15, widen: 1.05, pref: 0, gcap: 16,
     boost: { aaChan: 1.6, aaClose: 1.6, ew: 1.2 }, slots: [
       { nm: '防空 000', cap: 'aaChan', band: 'screen', brg: 0 },
       { nm: '防空 045', cap: 'aaChan', band: 'screen', brg: 45 },
@@ -114,7 +121,7 @@ const FM_STANCE = {
       { nm: '副中枢', cap: 'c2', band: 'body', brg: 180 }],
   },
   surf: { /* 收拢集火:插槽压向正前,张角 1.20 往前收、扁率 1.30 拉长纵深 */
-    nm: '水面为主', spread: 1.20, gap: 1.00, bm: 1.00, widen: 1.30, bstr: 1.00,
+    nm: '水面为主', spread: 1.20, gap: 1.00, bm: 1.00, widen: 1.30, pref: 0, gcap: 16,
     boost: { gun: 1.8, surv: 1.4, c2: 1.2 }, slots: [
       { nm: '正前火力', cap: 'gun', band: 'body', brg: 0 },
       { nm: '左火力', cap: 'gun', band: 'body', brg: 335 },
@@ -129,7 +136,7 @@ const FM_STANCE = {
       { nm: '副中枢', cap: 'c2', band: 'body', brg: 180 }],
   },
   sub: { /* 宽而不深:插槽压在两舷,扁率 1.85 横向拉开(USF 10B §3231「宽而不深」) */
-    nm: '水下为主', spread: 1.10, gap: 1.60, bm: 1.00, widen: 1.85, bstr: 1.00,
+    nm: '水下为主', spread: 1.10, gap: 1.60, bm: 1.00, widen: 1.85, pref: 0, gcap: 16,
     boost: { esm: 1.8, ir: 1.6, stealth: 1.3 }, slots: [
       { nm: '左远射频', cap: 'esm', band: 'picket', brg: 275 },
       { nm: '右远红外', cap: 'ir', band: 'picket', brg: 85 },
@@ -152,13 +159,13 @@ function fmStanceOf(P) { return FM_STANCE[(P && P.stance)] || FM_STANCE.fixed; }
    P 上没有数(旧存档 / 手工构造的 P)才回落到站位预设,所以这个函数是"参数从哪来"的唯一定义点:
    几何计算(fmPlanStations)、地图绘制(84-fmplot)、编组控制页的方位盘与反解(89-fmpage)必须全部走它,
    任何一处直接读 fmStanceOf(P).bm 都会与玩家实际调的值分家 —— 盘上拖到哪、船就该站到哪,靠的就是同源。
-   bstr 允许合法取 0(不加能力偏向),所以判据用 isFinite 而不是真值判断。 */
+   pref 允许合法取 0(完全不偏向),所以判据用 isFinite 而不是真值判断。 */
 function fmGeoOf(P) {
   const T = fmStanceOf(P);
   const pick = k => (P && isFinite(P[k])) ? P[k] : T[k];
   return {
     spread: pick('spread'), gap: (P && isFinite(P.spacing)) ? P.spacing : T.gap,
-    bm: pick('bm'), widen: pick('widen'), bstr: pick('bstr'),
+    bm: pick('bm'), widen: pick('widen'), pref: pick('pref'), gcap: pick('gcap'),
     boost: T.boost || {}, nm: T.nm,
   };
 }
@@ -190,8 +197,8 @@ function fmSwapKey(s) {
   return v.join('|');
 }
 
-const FM_GROUP_CAP = 16;  // 舰队级:超过这个数就分任务群,群心横向错开 2×屏护半径
-const FM_PRIO_FALL = 0.10; // 站位重要性衰减:0=全部等价,越大越偏向优先填前面的站位
+const FM_GROUP_CAP = 16;  // 舰队级:超过这个数就分任务群,群心横向错开 2×屏护半径(缺省值;每编队可用 P.gcap 覆盖)
+const FM_PRIO_FALL = 0.10; // 站位次序衰减:越大越偏向优先填前面的站位。它是【基准】,玩家那个滑块乘在它算出来的值上
 
 /* 整体张角:把插槽方位相对正前按倍数张开/收拢。保端点的幂映射,0° 与 180° 是不动点。
    sp=1 恒等;>1 向后张开;<1 向前收拢。 */
@@ -204,12 +211,13 @@ function fmSpreadBrg(b, sp) {
 
 /* 站位表:插槽数【不随舰数变】,多出来的舰沿同一插槽的方位向两侧轮转展开(off = 0,−1,+1,−2,+2 …)。
    条令 §3223「站位编号即填充次序」—— 这里的 prio 就是那个次序的连续化,越靠前的插槽越先被填满。 */
-function fmGenStations(n, slots) {
+function fmGenStations(n, slots, gcap) {
   const out = [{ name: '阵心', req: { c2: 1.0, surv: 0.4 }, band: 'core', brg: 0, off: 0, cap: 'c2', si: -1, grp: 0, prio: 1 }];
   if (!slots || !slots.length) return out;
+  const CAP = (isFinite(gcap) && gcap >= 2) ? Math.round(gcap) : FM_GROUP_CAP;   // FM8 每群容量:每编队可调
   let left = Math.max(0, n - 1), g = 0, k = 0;
   while (left > 0) {
-    let quota = Math.min(left, FM_GROUP_CAP - 1);
+    let quota = Math.min(left, CAP - 1);
     const tag = g ? ('G' + (g + 1) + '·') : '';
     for (let round = 0; quota > 0; round++) {
       for (let i = 0; i < slots.length && quota > 0; i++, k++) {
@@ -309,10 +317,21 @@ function fmPlanStations(list, P, flagId, slotsOverride) {
   const flag = list.find(s => s.id === flagId) || list[0];
   const rest = list.filter(s => s !== flag);
   const T = fmGeoOf(P);                    // FM6:几何参数一律走 fmGeoOf(每编队可调),不再直读站位预设
-  const bstr = isFinite(T.bstr) ? T.bstr : 1;
   const D2R = Math.PI / 180;
 
-  const STA = fmGenStations(list.length, slotsOverride || fmSlotsOf(P));
+  const STA = fmGenStations(list.length, slotsOverride || fmSlotsOf(P), T.gcap);
+  /* FM8【要害偏好】pref:把"哪些站位更要紧"合成【一个】滑块。
+     它同时吃两样东西 —— 该站位所需能力的【实测影响力权重】,与该站位所在站位表的【偏向表 boost】。
+     乘在 prio(站位重要性)上,不是乘在 req 权重上:后者会被 fit 的归一化整个约掉
+     (每个站位只要一维,Σ(w·have)/Σw = have),那正是改前「能力偏向强度」滑块拖了等于没拖的原因。
+     pref=0 时 wEff 恒为 1 ⇒ prio 与改前逐位相同,所以默认值不动任何既有行为;
+     往上拖才开始偏向要害站位(通道 1.00 最重,隐蔽 0.06 最轻)。 */
+  const pref = isFinite(T.pref) ? T.pref : 0;
+  if (pref > 0) STA.forEach(st => {
+    const w = fmCapW(st.cap) * ((T.boost && T.boost[st.cap]) || 1);
+    st.prio *= 1 + pref * (w - 1);
+    if (st.prio < 1e-6) st.prio = 1e-6;   // 不许压到 0:那会让匈牙利对该站位完全无差别,谁去都一样
+  });
   const BR = fmBandRadii(list, flag, T.bm, P);
   const gap = BR.baseGap * T.gap;
   BR.gap = gap; BR.widen = T.widen || 1; BR.step = {};
@@ -338,11 +357,14 @@ function fmPlanStations(list, P, flagId, slotsOverride) {
 
   /* 契合度 = 需求加权的达成度。贴身有一道额外的几何门:站位必须落在该舰 inner 之内,
      够不到旗舰就拿不到内圈叠乘,该维直接归零。 */
+  /* FM8:这里原来有一句 `w = req[k] × (1 + (boost[k]−1)×bstr)`。实测证明它是【数学上的空操作】——
+     每个可指派站位的 req 只有一个键,而 fit = Σ(w·have)/Σw,单键时 = (w·have)/w = have,权重整个约掉;
+     唯一有两个键的「阵心」由旗舰固定占据、不参与指派。四套站位 × bstr 0→2 总契合逐位相同(7.000000)。
+     所以把它删掉,偏向改为乘在 prio 上(见上面 FM8 那段)——那里不会被约掉。 */
   function fit(s, st) {
     let dot = 0, wsum = 0;
     for (const k in st.req) {
-      const bs = 1 + ((T.boost[k] || 1) - 1) * bstr;
-      const w = st.req[k] * bs;
+      const w = st.req[k];
       let have = (fmCapOf(s, k) || 0) / (nrm[k] || 1);
       if (k === 'aaClose' && st.r > ciwsOf(s).inner) have = 0;
       dot += w * Math.min(1, have); wsum += w;

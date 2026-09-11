@@ -293,7 +293,7 @@ function fmSetStance(F, k) {
   F.P.spacing = fmClamp('spacing', T.gap);
   F.P.bm = fmClamp('bm', T.bm);
   F.P.widen = fmClamp('widen', T.widen);
-  F.P.bstr = fmClamp('bstr', T.bstr);
+  F.P.pref = fmClamp('pref', T.pref); F.P.gcap = fmClamp('gcap', T.gcap);
   fmReslot(F);
 }
 /* FM6 清理:站距三档预设(贴身/标准/疏开)的 setter 已删 —— 它的三个按钮在 FM5d 随"密度/档位是死钮"

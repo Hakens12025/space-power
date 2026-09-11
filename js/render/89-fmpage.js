@@ -86,8 +86,9 @@ const FP_KNOBS = [
   { k: 'bm', nm: '带半径', tip: '五条带的半径整体缩放。恒生效;>1.11 时贴身带会超出内圈最小那几艘的 inner,它们在贴身站位上的契合度归零' },
   { k: 'widen', nm: '扁率', tip: '横向拉伸。>1 = 条令的「宽而不深」(水下为主取 1.85),<1 = 拉长纵深' },
   { k: 'spread', nm: '张角', tip: '把插槽方位相对正前张开(>1)或收拢(<1)。0° 与 180° 是不动点' },
-  { k: 'spacing', nm: '站距', tip: '同一插槽内第 2、3 艘船向两侧展开的角步。【只在舰数超过插槽数时才有效】' },
-  { k: 'bstr', nm: '偏向强度', tip: '该站位的能力偏向(boost)施加多少。0 = 完全不偏向,只看插槽本身要什么' },
+  { k: 'spacing', nm: '同簇间距', tip: '同一个插槽里第 2、3 艘船向两侧展开的角步（"同簇"=挤在同一个插槽上的那几艘）。【只在舰数超过插槽数时才有效】' },
+  { k: 'pref', nm: '要害偏好', tip: '0 = 所有站位一视同仁,谁去哪只看契合度;越大越把好舰往要紧的站位上塞。"要紧"= 该站位要的那一维的实测影响力(通道最重、隐蔽最轻) × 本站位表的偏向表。它替掉了原来的「偏向强度」——那个乘在契合度权重上,会被归一化整个约掉,拖了等于没拖' },
+  { k: 'gcap', nm: '每群容量', tip: '超过这个舰数就拆成多个任务群,群心横向错开 2×屏护半径。整数' },
 ];
 function fmPgFill(k, v) { // 滑块已走过那一段的百分比(写进 --fp-fill 给 CSS 的渐变用)
   const r = FM_LIMIT[k] || [0, 2], span = r[1] - r[0];
@@ -96,10 +97,11 @@ function fmPgFill(k, v) { // 滑块已走过那一段的百分比(写进 --fp-fi
 }
 function fmPgKnob(F, d) {
   const r = FM_LIMIT[d.k] || [0, 2], v = isFinite(F.P[d.k]) ? F.P[d.k] : 1;
+  const int = (d.k === 'gcap');   // FM8 每群容量是舰数,只能取整
   return '<span class="fp-knob" title="' + fmPgEsc(d.tip) + '">'
     + '<span class="fp-lb">' + d.nm + '</span>'
-    + '<input type="range" data-fpk="' + d.k + '" min="' + r[0] + '" max="' + r[1] + '" step="0.05" value="' + v + '" style="--fp-fill:' + fmPgFill(d.k, v) + '">'
-    + '<span class="fp-v">' + v.toFixed(2) + '</span></span>';
+    + '<input type="range" data-fpk="' + d.k + '" min="' + r[0] + '" max="' + r[1] + '" step="' + (int ? 1 : 0.05) + '" value="' + v + '" style="--fp-fill:' + fmPgFill(d.k, v) + '">'
+    + '<span class="fp-v">' + (int ? String(Math.round(v)) : v.toFixed(2)) + '</span></span>';
 }
 /* FM6f「站位与几何」合并块。加标题与细边框是为了与紧随其后的「全队能力评估」分开 —— 两块都在右列,
    不划开的话读不出是两件事。恢复默认靠 .fp-sp(弹性隔断)推到行尾。
@@ -249,6 +251,31 @@ function fmPgDialInner(F, PL) {
       + (sl.nw ? '<text class="fp-star" x="' + (q[0] + 9).toFixed(1) + '" y="' + (q[1] - 6).toFixed(1) + '" fill="#ffe066" font-size="10" text-anchor="middle">★</text>' : '')
       + '</g>';
   });
+  /* FM8b【比例尺】(用户实报:主视图没有比例尺,差点以为带半径滑块没起作用)。
+     这张盘的缩放是自适应的 —— 换一支编队、切内外圈、拖缩放,像素与公里的换算就变一次,
+     没有比例尺的话"圈变大了"到底是半径变了还是视野变近了根本分不出来。主地图早就有一条(81-background),
+     这里补上同一套读法:左下角,一根实心横条 + 它代表多少公里。
+     长度取【1/2/5 × 10ⁿ】里第一个能撑到 80px 以上的 —— 与主地图那条"翻倍到够看"同一个意思,
+     但用 1-2-5 阶梯,读数永远是个整齐的数(50k / 100k / 200k / 500k),不会出现 87k 这种。 */
+  const kmPerPx = 1 / k;
+  let unit = 1000;
+  const NICE = [1, 2, 5];
+  for (let e = 0; e < 12 && unit * k < 80; e++) {
+    const mant = NICE[e % 3], dec = Math.pow(10, Math.floor(e / 3));
+    unit = 1000 * mant * dec * 10;
+    if (unit * k >= 80) break;
+  }
+  if (!(unit > 0) || !isFinite(unit)) unit = 1000;
+  const barPx = Math.min(FP_DIAL - 40, unit * k);
+  const bx = 14, by = FP_DIAL - 16;
+  const lbl = unit >= 1000000 ? (Math.round(unit / 100000) / 10) + 'M km' : Math.round(unit / 1000) + 'k km';
+  g += '<g class="fp-scale" pointer-events="none">'
+    + '<rect x="' + (bx - 6) + '" y="' + (by - 17) + '" width="' + (barPx + 22) + '" height="26" rx="3" fill="#050912" fill-opacity=".62"/>'
+    + '<rect x="' + bx + '" y="' + by + '" width="' + barPx.toFixed(1) + '" height="3" fill="#8fd0ff"/>'
+    + '<rect x="' + bx + '" y="' + (by - 3) + '" width="1.5" height="9" fill="#8fd0ff"/>'
+    + '<rect x="' + (bx + barPx - 1.5).toFixed(1) + '" y="' + (by - 3) + '" width="1.5" height="9" fill="#8fd0ff"/>'
+    + '<text x="' + bx + '" y="' + (by - 7) + '" fill="#8fd0ff" font-size="10" font-family="Consolas,monospace">' + lbl + '</text>'
+    + '</g>';
   return g;
 }
 
@@ -461,7 +488,7 @@ function fmPgAct(a) {
     const T0 = FM_STANCE[F.P.stance] || FM_STANCE.fixed;
     F.P.slots = null;
     F.P.spread = fmClamp('spread', T0.spread); F.P.spacing = fmClamp('spacing', T0.gap);
-    F.P.bm = fmClamp('bm', T0.bm); F.P.widen = fmClamp('widen', T0.widen); F.P.bstr = fmClamp('bstr', T0.bstr);
+    F.P.bm = fmClamp('bm', T0.bm); F.P.widen = fmClamp('widen', T0.widen); F.P.pref = fmClamp('pref', T0.pref); F.P.gcap = fmClamp('gcap', T0.gcap);
     if (typeof fmReslot === 'function') fmReslot(F);
     fmPg.sel = -1; fmPg.zoom = 1; fmPg.pan = [0, 0]; fmPageRender(); return;   // FM6l 视角一并复位
   }
@@ -584,8 +611,8 @@ on('fmPage', 'input', e => {
   const F = fmPageF(); if (!F) return;
   if (typeof fmSetParam === 'function') fmSetParam(F, el.getAttribute('data-fpk'), Number(el.value));
   const out = el.parentNode && el.parentNode.querySelector('.fp-v');
-  const now = F.P[el.getAttribute('data-fpk')];
-  if (out && isFinite(now)) out.textContent = now.toFixed(2);
+  const kk = el.getAttribute('data-fpk'), now = F.P[kk];
+  if (out && isFinite(now)) out.textContent = (kk === 'gcap') ? String(Math.round(now)) : now.toFixed(2);
   el.style.setProperty('--fp-fill', fmPgFill(el.getAttribute('data-fpk'), now)); // 已走过那一段跟着走(accent-color 在 appearance:none 之后不再生效)
   fmPgDialSync();   // FM6f 拖动中实时重画方位盘(只换 svg 内容,不碰滑块节点)
   fmPg.knobDirty = true;
