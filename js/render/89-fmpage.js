@@ -281,33 +281,57 @@ function fmPgSlotCfg(F) {
    自定义带 = 屏护 × 倍数,名字可改。删除时把引用它的插槽的 band 置空(那些槽变回"未完成",
    会出现在插槽设置的未完成标签里)—— 不置空的话槽会指向一条不存在的带,半径查成 undefined。 */
 function fmPgBandCfg(F, BR) {
-  const ub = fmBandsOf(F.P);
+  /* FM6n 必须是 fmBandUser 不是 fmBandsOf:P.bands 现在同时装着【内置带的覆盖】,
+     用全量的话内置那条会被渲染两遍(一遍在下面的内置循环里、一遍在这里),
+     两个卡片指向同一条带、改一个另一个不跟着动。 */
+  const ub = fmBandUser(F.P);
   let s = '<div class="fp-bar fp-cfg fp-bands">';
   s += '<span class="fp-lb">轮带</span>';
-  s += FM_BANDS.filter(b => b !== 'core').map(b =>
-    '<span class="fp-bd fp-bd-ro" title="内置轮带:半径由护卫的近防射程算出,不可改">' + FM_BAND_NM[b]
-    + '<i>' + Math.round((BR[b] || 0) / 1000) + 'k</i></span>').join('');
+  /* FM6n 内置四条也做成可调(用户令),与自定义带共用同一个两态控件。两点差别:
+       · 内置带【不可删】—— 四套站位预设里的插槽全按 close/body/screen/picket 这几个键写死,
+         删掉等于把所有预设插槽一次性作废。所以它的第二个钮是「↺ 恢复自动」,清掉覆盖回到算出来的值。
+       · 贴身带带一条【超限提醒】:它是四条里唯一进契合度计算的(fit() 里那道 aaClose 几何门),
+         半径一旦越过护卫最小的近防内圈,贴身站位的契合度整片归零 —— 实测 9 舰编队 8000→8001
+         总契合 7.600 掉到 5.600。不拦,但标黄。 */
+  const cap = (typeof fmBandCloseCap === 'function') ? fmBandCloseCap(fmShips(F), fmFlag(F)) : 0;
+  s += FM_BANDS.filter(b => b !== 'core').map(b => fmPgBandOne(F, b, BR, b === 'close' && BR.close > cap ? cap : 0)).join('');
   /* FM6k 自定义带有两态(用户令):
        编辑行  名字 | 半径(千公里) | ✓确认 | ✕删除     —— 新增出来就是这一态
        小卡片  名字 + 半径,与内置那几个长一样;点一下回到编辑行
      半径没填 = 这条带还没成形,不上盘也不进几何(同插槽的能力/带留空)。小卡片这时显示「—」,
      它同时也是这条带唯一的入口 —— 没有它,一条没填半径的带就成了看不见也够不着的孤儿。 */
-  s += ub.map(b => {
-    const rk = fmBandReady(b) ? (Math.round(b.r / 100) / 10) : null;
-    if (fmPg.bedit !== b.k) {
-      return '<span class="fp-bd fp-bd-on" data-fp="bedit-' + b.k + '" title="点一下改名字或半径">'
-        + fmPgEsc(b.nm) + '<i>' + (rk === null ? '—' : rk + 'k') + '</i></span>';
-    }
-    return '<span class="fp-bd fp-bd-ed">'
-      + '<input class="fp-nm fp-bnm" type="text" data-fp="bnm-' + b.k + '" maxlength="10" value="' + fmPgEsc(b.nm) + '">'
-      + '<input class="fp-br" type="number" data-fp="br-' + b.k + '" min="' + (FM_BAND_R[0] / 1000) + '" max="' + (FM_BAND_R[1] / 1000) + '" step="1" value="' + (rk === null ? '' : rk) + '" title="半径,单位千公里。留空 = 这条带还没成形,不会出现在阵型图上">'
-      + '<i class="fp-bu">K</i>'
-      + '<button class="btn qbtn fp-bok" data-fp="bok-' + b.k + '" title="确认,收起成小卡片">✓</button>'
-      + '<button class="btn qbtn qstop fp-bx" data-fp="bdel-' + b.k + '" title="删除这条轮带(用到它的插槽会变回未完成)">✕</button>'
-      + '</span>';
-  }).join('');
+  s += ub.map(b => fmPgBandOne(F, b.k, BR, 0)).join('');
   s += '<span class="fp-sp"></span><button class="btn qbtn" data-fp="badd" title="新增轮带(填半径才会出现在阵型图上,名字可改)">+ 新</button></div>';
   return s;
+}
+
+/* 一条轮带的两态渲染。内置带(FM_BAND_NM 里有名字的)恒存在、不可删、半径留空 = 用算出来的值;
+   自定义带可删、半径留空 = 还没成形(不上盘、不进几何)。warn 非 0 时标黄并把上限写进 title。 */
+function fmPgBandOne(F, k, BR, warn) {
+  const built = !!FM_BAND_NM[k];
+  const ovr = fmBandOvr(F.P, k);
+  const nm = fmBandNm(F.P, k);
+  const eff = BR[k];                                   // 实际生效的半径(内置带恒有值)
+  const rk = built ? (isFinite(eff) ? Math.round(eff / 100) / 10 : null)
+                   : (fmBandReady(ovr) ? Math.round(ovr.r / 100) / 10 : null);
+  const cls = 'fp-bd' + (warn ? ' fp-bd-warn' : '') + (built && !fmBandHasR(F.P, k) ? ' fp-bd-auto' : '');
+  const tip = warn ? ('半径 ' + Math.round(BR.close / 1000) + 'k 已超过护卫最小的近防内圈 ' + Math.round(warn / 1000)
+                      + 'k —— 贴身站位的契合度会整片归零。这是四条内置带里唯一影响指派的一条。')
+                   : (built ? '内置轮带。半径默认由护卫的近防射程算出;手填一个数就按你填的来,↺ 可以还原'
+                            : '自定义轮带。留空 = 还没成形,不会出现在阵型图上');
+  if (fmPg.bedit !== k) {
+    return '<span class="' + cls + ' fp-bd-on" data-fp="bedit-' + k + '" title="' + fmPgEsc(tip) + '">'
+      + fmPgEsc(nm) + '<i>' + (rk === null ? '—' : rk + 'k') + '</i></span>';
+  }
+  return '<span class="' + cls + ' fp-bd-ed" title="' + fmPgEsc(tip) + '">'
+    + '<input class="fp-nm fp-bnm" type="text" data-fp="bnm-' + k + '" maxlength="10" value="' + fmPgEsc(nm) + '">'
+    + '<input class="fp-br" type="number" data-fp="br-' + k + '" min="' + (FM_BAND_R[0] / 1000) + '" max="' + (FM_BAND_R[1] / 1000) + '" step="1" value="' + (rk === null ? '' : rk) + '">'
+    + '<i class="fp-bu">K</i>'
+    + '<button class="btn qbtn fp-bok" data-fp="bok-' + k + '" title="确认,收起成小卡片">✓</button>'
+    + (built
+      ? '<button class="btn qbtn fp-bx" data-fp="brst-' + k + '" title="恢复自动:清掉手填的名字与半径,回到由护卫近防射程算出的值">↺</button>'
+      : '<button class="btn qbtn qstop fp-bx" data-fp="bdel-' + k + '" title="删除这条轮带(用到它的插槽会变回未完成)">✕</button>')
+    + '</span>';
 }
 
 function fmPgAssess(PL) {
@@ -456,6 +480,13 @@ function fmPgAct(a) {
     if (typeof fmReslot === 'function') fmReslot(F);
     fmPageRender(); return;
   }
+  if (a.indexOf('brst-') === 0) {   // FM6n 内置带:清掉覆盖条目 = 名字与半径都回到自动
+    const rk2 = a.slice(5);
+    F.P.bands = fmBandsOf(F.P).filter(x => x.k !== rk2).map(x => ({ k: x.k, nm: x.nm, r: x.r }));
+    if (!F.P.bands.length) F.P.bands = null;
+    if (typeof fmReslot === 'function') fmReslot(F);
+    fmPageRender(); return;
+  }
   if (a.indexOf('bedit-') === 0) { fmPg.bedit = a.slice(6); fmPageRender(); return; }  // FM6k 点小卡片 → 展开成编辑行
   if (a.indexOf('bok-') === 0) { fmPg.bedit = null; fmPageRender(); return; }           // FM6k ✓ 确认 → 收起成小卡片(值本来就是边打边落盘的)
   if (a.indexOf('pick-') === 0) { fmPg.sel = Number(a.slice(5)); fmPageRender(); return; } // FM6g 未完成插槽的小标签:选中它
@@ -506,7 +537,11 @@ on('fmPage', 'input', e => {
     const Fb = fmPageF(); if (!Fb || !Fb.P) return;
     const key = bEl.getAttribute('data-fp'), isNm = key.indexOf('bnm-') === 0, bk = key.slice(isNm ? 4 : 3);
     const ub = fmBandsOf(Fb.P).map(x => ({ k: x.k, nm: x.nm, r: x.r }));
-    const hit = ub.find(x => x.k === bk); if (!hit) return;
+    let hit = ub.find(x => x.k === bk);
+    /* FM6n 内置带第一次被编辑时还没有覆盖条目,现建一个。名字取当前显示的名字,
+       半径留空(= 仍用算出来的值)—— 只改名字不该顺带把半径钉死。 */
+    if (!hit && FM_BAND_NM[bk]) { hit = { k: bk, nm: FM_BAND_NM[bk], r: null }; ub.push(hit); }
+    if (!hit) return;
     if (isNm) hit.nm = bEl.value;
     else if (bEl.value === '') hit.r = null;   // FM6k 清空 = 退回"还没成形",这条带随即从盘上消失
     else { const v = Number(bEl.value); if (!isFinite(v)) return; hit.r = Math.max(FM_BAND_R[0], Math.min(FM_BAND_R[1], v * 1000)); }

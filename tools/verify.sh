@@ -2437,7 +2437,7 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   F.P.slots=null; F.P.bands=null; fmPg.bedit=null; fmReslot(F); fmPg.sel=-1; fmPageRender();
   var rings=function(){return document.querySelectorAll('#fpDial ellipse').length;};
   var brOf=function(k){return fmBandRadii(fmShips(F),fmFlag(F),F.P.bm,F.P)[k]||0;};
-  var ro7=document.querySelectorAll('#fpBody .fp-bd-ro').length, ring7a=rings();
+  var ro7=document.querySelectorAll('#fpBody .fp-bd').length, ring7a=rings();   // FM6n 内置四条现在也是可点的两态控件,不再是只读芯片
   hit(document.querySelector('#fpBody [data-fp="badd"]'),'pointerdown');
   var ub=F.P.bands||[], bk=ub.length?ub[0].k:'', ring7b=rings();
   var riEl=document.querySelector('#fpBody input[data-fp^="br-"]');
@@ -2445,7 +2445,7 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
      半径算出来是 0,画圈那一步的 r>2 守卫照样把它跳过 —— 两处各有守卫,判据要分别打。 */
   var noKey=!(bk in fmBandRadii(fmShips(F),fmFlag(F),F.P.bm,F.P));
   var okAdd=(ub.length===1&&ub[0].nm==='自定义轮带'&&ub[0].r===null&&ring7b===ring7a&&noKey
-             &&fmPg.bedit===bk&&ro7===4&&!!document.querySelector('#fpBody .fp-bd-ed')
+             &&fmPg.bedit===bk&&ro7===4&&document.querySelectorAll('#fpBody .fp-bd').length===5&&!!document.querySelector('#fpBody .fp-bd-ed')
              &&!!riEl&&riEl.value===''&&riEl.placeholder===''&&!!riEl.parentNode.querySelector('.fp-bu'));
   /* 半径:填 → 上盘且值对得上;清空 → 又消失;越界 → 钳住 */
   var r7fill=0, ring7c=0, ring7d=0, rHi=0;
@@ -2465,7 +2465,8 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
     okBnm=(F.P.bands[0].nm==='外环警戒'&&document.querySelector('#fpBody input[data-fp^="bnm-"]')===bnm);}
   /* ✓ 收起 → 小卡片;再点卡片 → 回编辑行,两个框都回填 */
   hit(document.querySelector('#fpBody [data-fp^="bok-"]'),'pointerdown');
-  var card=document.querySelector('#fpBody .fp-bd-on'), cardTx=card?card.textContent:'';
+  /* FM6n 起内置四条也是 .fp-bd-on,所以这里必须【按键取】自定义那一条 —— 取第一个会拿到「贴身」。 */
+  var card=document.querySelector('#fpBody [data-fp="bedit-'+bk+'"]'), cardTx=card?card.textContent:'';
   var okFold=(fmPg.bedit===null&&!document.querySelector('#fpBody .fp-bd-ed')&&!!card
               &&cardTx.indexOf('外环警戒')===0&&cardTx.indexOf('150k')>0&&rings()===ring7a+1);
   hit(card,'pointerdown');
@@ -2496,6 +2497,71 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   var ok6c=(okAdd&&okR&&okBnm&&okFold&&okOpen&&okPick&&okDel&&okGhost);
   F.P.slots=null; F.P.bands=null; fmReslot(F); fmPg.sel=-1; fmPageRender();
   F.P.slots=null; fmReslot(F); fmPg.sel=-1; fmPageRender();
+  /* ⑥d FM6n【内置四条轮带也可调】。与自定义带共用同一个两态控件,两点差别:
+       · 内置带【不可删】(四套站位预设的插槽全按 close/body/screen/picket 这几个键写死),
+         第二个钮是「↺ 恢复自动」;
+       · 半径覆盖按推导链逐级代入:改了屏护,哨戒的自动值(=屏护×2)跟着走。
+     还有一条【算法耦合】的判据,这是本次改动真正的风险点:四条带里只有【贴身】进契合度计算
+     (fit() 里 aaClose 那道几何门:站位半径 > 该舰近防内圈 ⇒ 该维归零,是阶跃不是渐变),
+     所以判据要两边都打 —— 改屏护总契合【必须一位不变】,改贴身越过门限【必须掉下来】。 */
+  F.P.slots=null; F.P.bands=null; fmPg.bedit=null; fmReslot(F); fmPg.sel=-1; fmPageRender();
+  var L8=fmShips(F), FL8=fmFlag(F);
+  var br8=function(k){return fmBandRadii(L8,FL8,F.P.bm,F.P)[k];};
+  var tot8=function(){return fmPlanStations(L8,F.P,FL8.id).tot;};
+  var nBd=function(){return document.querySelectorAll('#fpBody .fp-bd').length;};
+  var bd0=nBd(), t8a=tot8(), sc0=br8('screen'), pk0=br8('picket');
+  /* 改屏护 → 哨戒跟着;总契合一位不变(它只进几何) */
+  hit(document.querySelector('#fpBody [data-fp="bedit-screen"]'),'pointerdown');
+  var ed8=document.querySelector('#fpBody .fp-bd-ed');
+  var btn8=ed8?[].slice.call(ed8.querySelectorAll('button')).map(function(x){return x.textContent;}).join(''):'';
+  var ri8=document.querySelector('#fpBody input[data-fp^="br-"]');
+  var pre8=ri8?ri8.value:'';
+  if(ri8){ri8.value='120'; ri8.dispatchEvent(new Event('input',{bubbles:true}));}
+  var sc1=br8('screen'), pk1=br8('picket'), t8b=tot8();
+  var okBScreen=(bd0===4&&nBd()===4&&btn8==='✓↺'&&pre8===String(Math.round(sc0/100)/10)
+                 &&Math.abs(sc1-120000)<1&&Math.abs(pk1-240000)<1&&Math.abs(pk0-sc0*2)<1
+                 &&Math.abs(t8b-t8a)<1e-9);
+  /* 改名 → 卡片与方位盘图例都跟着;只改名不许把半径钉死 */
+  var ni8=document.querySelector('#fpBody input[data-fp^="bnm-"]');
+  if(ni8){ni8.value='中环'; ni8.dispatchEvent(new Event('input',{bubbles:true}));}
+  hit(document.querySelector('#fpBody [data-fp="bok-screen"]'),'pointerdown');
+  var chip8=document.querySelector('#fpBody [data-fp="bedit-screen"]');
+  var okBNm=(!!chip8&&chip8.textContent.indexOf('中环')===0&&chip8.textContent.indexOf('120k')>0
+             &&document.getElementById('fpDial').textContent.indexOf('中环')>=0);
+  /* ↺ 恢复自动 */
+  hit(chip8,'pointerdown');
+  hit(document.querySelector('#fpBody [data-fp="brst-screen"]'),'pointerdown');
+  var okBRst=(!F.P.bands&&Math.abs(br8('screen')-sc0)<1&&Math.abs(br8('picket')-pk0)<1
+              &&fmBandNm(F.P,'screen')==='屏护');
+  /* 只改名字不许把半径钉死 */
+  var ni8b=document.querySelector('#fpBody input[data-fp^="bnm-"]');
+  if(ni8b){ni8b.value='外环'; ni8b.dispatchEvent(new Event('input',{bubbles:true}));}
+  var ovr8=fmBandOvr(F.P,'screen');
+  var okBNmOnly=(!!ovr8&&ovr8.nm==='外环'&&!fmBandReady(ovr8)&&Math.abs(br8('screen')-sc0)<1);
+  hit(document.querySelector('#fpBody [data-fp="brst-screen"]'),'pointerdown');
+  /* 贴身:越过护卫最小内圈那一刻,总契合必须掉下来,且卡片标黄 */
+  /* 这支探针编队只有两艘护卫,按固定模板它们都落在屏护带上 —— 贴身站位【根本没被填过】,
+     拿总契合去打那道门会永远是"没变化"。所以用 slotsOverride 临时换一张【全是贴身】的插槽表,
+     把门摆到必经之路上。这不改 F.P,只是换一次算法的输入。 */
+  var capC=fmBandCloseCap(L8,FL8);
+  var slotsC=[{nm:'贴身位甲',cap:'aaClose',band:'close',brg:0},{nm:'贴身位乙',cap:'aaClose',band:'close',brg:180}];
+  var totC=function(){return fmPlanStations(L8,F.P,FL8.id,slotsC).tot;};
+  hit(document.querySelector('#fpBody [data-fp="bedit-close"]'),'pointerdown');
+  var rc8=document.querySelector('#fpBody input[data-fp^="br-"]');
+  var tIn=0,tOut=0,tGeoIn=0,tGeoOut=0;
+  if(rc8){
+    rc8.value=String(Math.round(capC/1000)); rc8.dispatchEvent(new Event('input',{bubbles:true}));
+    tIn=totC(); tGeoIn=tot8();
+    rc8.value=String(Math.round(capC/1000)+4); rc8.dispatchEvent(new Event('input',{bubbles:true}));
+    tOut=totC(); tGeoOut=tot8();
+  }
+  hit(document.querySelector('#fpBody [data-fp="bok-close"]'),'pointerdown');
+  var warn8=document.querySelector('#fpBody .fp-bd-warn');
+  /* 双向:贴身插槽表上必须【掉下来】(门真的咬住了),而固定模板那张表上【一位不变】
+     (那张表里没有船站到贴身带上,所以不该受影响)—— 只测前一半的话,"把 close 接到别处去了"也能过。 */
+  var okBGate=(tIn>tOut+0.5&&Math.abs(tGeoIn-tGeoOut)<1e-9&&!!warn8&&warn8.getAttribute('title').indexOf('归零')>0);
+  F.P.slots=null; F.P.bands=null; fmPg.bedit=null; fmReslot(F); fmPg.sel=-1; fmPageRender();
+  var ok6d=(okBScreen&&okBNm&&okBRst&&okBNmOnly&&okBGate);
   /* ⑨ FM6l【方位盘的缩放与平移】。核心判据是那条【限位】:
      不同阵型的尺度差着两个数量级(3 舰固定模板 vs 水下为主铺到 ±18 万公里),但基准缩放恒把它们
      贴合到同一个半径,所以限位写成"贴合半径的倍数"对谁都成立 —— 判据也就该在【四档缩放 × 两个方向】
@@ -2596,7 +2662,7 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
   fmPageOpen(F.id);fmDelete(F.id);fmPageRender();
   var ok8=!fmPageIsOpen();
   window.removeEventListener('error',onerr);
-  var ok=(ok1&&ok2&&ok3&&ok4&&ok4b&&ok5&&ok6&&ok6b&&ok6c&&ok9&&ok7&&ok8&&!errs.length);
+  var ok=(ok1&&ok2&&ok3&&ok4&&ok4b&&ok5&&ok6&&ok6b&&ok6c&&ok6d&&ok9&&ok7&&ok8&&!errs.length);
   return (ok?'ok':'fail')
     +' ①入口(真点「编组控制」钮):钮存在='+had+' 【真在屏上】编组控制='+visPage+' 固定态的重新固定='+visSnap+'(须 false)'+' 页已开='+opened+' 正文='+len1+'字符 方位盘='+(!!dial)+' 插槽圈='+slotN+'个(须=插槽表 '+slots0+') 舰位点='+shipDots+' 评估行='+rows+' 能力表行='+tds+'(须='+b.length+')='+ok1
     +' | ②点插槽:选中下标='+selIdx+'(须0) 能力/带下拉都建出='+(!!capSel&&!!bandSel)+'='+ok2
@@ -2612,13 +2678,16 @@ t('FLOW38_FMPAGE',function(){ /* FM4 舰队编组控制页:全程走【真实 DO
     +' 未完成的槽不进几何(几何'+geo6+'/表内'+raw6.length+',站位坐标 NaN 数='+nan6+')='+okGeo
     +' 选全后盘上 '+d6a+'→'+d6b+' 星标='+starN+' 星在右上角(dx='+sdx+',dy='+sdy+')='+okDone
     +' 未完成小标签点得回去='+okOrph+'='+ok6b
-    +' | ⑥c FM6k 自定义轮带:新增(内置只读'+ro7+'条,半径留空、盘上圈 '+ring7a+'→'+ring7b+'不变、BR 里无此键='+noKey+'、直接进编辑态)='+okAdd
+    +' | ⑥c FM6k 自定义轮带:新增(内置'+ro7+'条+自定义1条,半径留空、盘上圈 '+ring7a+'→'+ring7b+'不变、BR 里无此键='+noKey+'、直接进编辑态)='+okAdd
     +' 半径 填150→'+Math.round(r7fill/1000)+'k且圈'+ring7c+' / 清空→圈'+ring7d+' / 越界钳到'+rHi+'='+okR
     +' 改名落盘且输入框未被换='+okBnm
     +' ✓收成小卡片["'+cardTx+'"]='+okFold+' 点卡片回编辑行且两框回填='+okOpen
     +' 插槽能选到它且真进几何='+okPick
     +' 删带后引用它的槽自动变回未完成='+okDel
     +' 槽引用一条不存在的带时也被滤掉(几何'+ghostGeo+'/表内'+ghostAll+',NaN='+ghostNaN+')='+okGhost+'='+ok6c
+    +' | ⑥d FM6n 内置带可调:改屏护 '+Math.round(sc0/1000)+'k→'+Math.round(sc1/1000)+'k 哨戒跟着 '+Math.round(pk0/1000)+'k→'+Math.round(pk1/1000)+'k,框预填='+pre8+',钮=['+btn8+'](须✓↺,不可删),总契合 '+t8a.toFixed(6)+'→'+t8b.toFixed(6)+'(须一位不变=它只进几何)='+okBScreen
+    +' 改名落到卡片与盘上图例='+okBNm+' ↺恢复自动='+okBRst+' 只改名不把半径钉死='+okBNmOnly
+    +' 贴身越过护卫最小内圈'+Math.round(capC/1000)+'k:贴身插槽表上总契合 '+tIn.toFixed(3)+'→'+tOut.toFixed(3)+'(须掉下来=门真的咬住) 固定模板那张表 '+tGeoIn.toFixed(6)+'→'+tGeoOut.toFixed(6)+'(须一位不变=没船站贴身带就不该受影响) 卡片标黄='+(!!warn8)+'='+okBGate+'='+ok6d
     +' | ⑨ 缩放滑块(在盘右上角 '+zPos+',+在上−在下)='+okZUi
     +' 拖缩放 1→2 插槽横跨 '+sp1+'→'+sp2+'(须≈翻倍) 滑块节点未被换='+zSame+' 越界钳到'+zHi+'='+okZoom
     +' 盘面拖动真的平移了='+panned

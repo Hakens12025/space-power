@@ -638,7 +638,10 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 /* 一条带 = 只读芯片(内置)或 名字+倍数+半径读数+删除(自定义)。<i> 是算出来的半径读数,等距字体 */
 .fp-bd{display:inline-flex;align-items:center;gap:4px;padding:1px 5px;border:var(--bw) solid var(--line-hair);border-radius:var(--r-sm);font-size:var(--fs-label);color:var(--txt-dim)}
 .fp-bd i{font-family:var(--ff-mono);font-style:normal;color:var(--txt-read);font-variant-numeric:tabular-nums}
-.fp-bd-ro{opacity:.75}
+/* FM6n 内置带没被改过时(仍用算出来的值)压暗一点,与手填过的区分开;贴身超过护卫内圈时标黄 */
+.fp-bd-auto{opacity:.78}
+.fp-bd-warn{border-color:var(--state-warn);color:var(--state-warn)}
+.fp-bd-warn i{color:var(--state-warn)}
 .fp-bnm{width:74px}
 /* FM6k 自定义带两态:小卡片(可点,与内置那几个同形但亮一点)/ 编辑行(名字+半径+✓+✕) */
 .fp-bd-on{cursor:pointer;color:var(--txt);border-color:var(--line-ctl)}

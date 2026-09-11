@@ -54,11 +54,18 @@ const FM_BAND_R = [1000, 2000000];   // 半径合法区间(km):1k ~ 200 万 km
 const FM_BAND_RSV = { core: 1, close: 1, body: 1, screen: 1, picket: 1, baseGap: 1, gap: 1, widen: 1, step: 1 };
 function fmBandsOf(P) { return (P && P.bands && P.bands.length) ? P.bands : []; }
 function fmBandReady(b) { return !!(b && isFinite(b.r) && b.r > 0); } // 填了半径才算成形
-function fmBandKeys(P) { return FM_BANDS.concat(fmBandsOf(P).filter(fmBandReady).map(b => b.k)); } // 没填半径的带不交出去:下游拿到也只会算出 undefined
+/* FM6n:P.bands 现在装两种条目 —— 自定义带(k 是 u1/u2…)与【内置带的覆盖】(k 就是 close/body/screen/picket)。
+   内置带永远存在,覆盖只是"把算出来的那个数换掉";没有覆盖条目、或条目的 r 为空,就照旧用算出来的。 */
+function fmBandUser(P) { return fmBandsOf(P).filter(b => !FM_BAND_NM[b.k]); }        // 只有自定义的
+function fmBandOvr(P, k) { return fmBandsOf(P).find(b => b.k === k) || null; }        // 某条带的覆盖条目(可能只改了名字)
+function fmBandHasR(P, k) { const o = fmBandOvr(P, k); return fmBandReady(o); }       // 这条带的半径被改过没有
+function fmBandKeys(P) { return FM_BANDS.concat(fmBandUser(P).filter(fmBandReady).map(b => b.k)); } // 内置五条恒在;自定义的没填半径就不交出去(下游拿到也只会算出 undefined)
 function fmBandNm(P, k) {
-  if (FM_BAND_NM[k]) return FM_BAND_NM[k];
+  /* FM6n【覆盖优先】。改前是先看 FM_BAND_NM 再看覆盖,于是内置带改了名字一点反应都没有 ——
+     名字存进去了,读的时候被常量挡在门外。内置带能改名之后这个顺序就反了。 */
   const b = fmBandsOf(P).find(x => x.k === k);
-  return b ? b.nm : k;
+  if (b && b.nm) return b.nm;
+  return FM_BAND_NM[k] || k;
 }
 function fmBandNewKey(P) { // 取一个没被占用的键(删了再加也不会撞上还在用的旧键)
   const used = {};
@@ -167,7 +174,7 @@ function fmSlotReady(sl, P) {
   if (!sl || !sl.cap || !sl.band) return false;
   /* FM6h 带可能被删掉。给了 P 就顺带查一遍它还在不在 —— 不查的话槽会引用一条不存在的带,
      半径查成 undefined、坐标变 NaN,与"带留空"是同一类事故,只是发生得更晚更难查。 */
-  if (P && !FM_BAND_NM[sl.band] && !fmBandsOf(P).some(b => b.k === sl.band && fmBandReady(b))) return false;
+  if (P && !FM_BAND_NM[sl.band] && !fmBandUser(P).some(b => b.k === sl.band && fmBandReady(b))) return false;
   return true;
 }
 function fmSlotsOf(P) { return (P && P.slots && P.slots.length) ? P.slots.filter(sl => fmSlotReady(sl, P)) : fmStanceOf(P).slots; }
@@ -233,12 +240,30 @@ function fmBandRadii(list, flag, bm, P) {
   const minIn = inns.length ? Math.min(...inns) : 8000;
   const minOut = outs.length ? Math.min(...outs) : 25000;
   const m = bm || 1;
-  const close = minIn * 0.9 * m;
-  const body = (minIn * 0.9 + 12000) * m;
-  const screen = Math.max(body + minIn * m, minOut * 2 * m);
-  const BR = { core: 0, close, body, screen, picket: screen * 2, baseGap: minIn * 2 };
-  fmBandsOf(P).forEach(b => { if (!FM_BAND_RSV[b.k] && fmBandReady(b)) BR[b.k] = b.r; }); // FM6k 自定义带 = 玩家填的绝对半径;没填的不进 BR
+  /* FM6n 内置四条允许玩家【逐条覆盖】。覆盖是绝对值(千公里那个框),【不再乘 bm】——
+     bm 是"把算出来的整体缩放",玩家写死的数不该再被缩放一次。
+     覆盖按【推导链的顺序】逐级代入:body 换了,screen 的自动值就从新的 body 算;screen 换了,
+     picket 的自动值(= 屏护×2)也跟着走。这样「哨戒是屏护的两倍」这条含义在改了上游之后仍然成立;
+     玩家要是把下游也填了,那就以玩家填的为准。 */
+  const ovr = k => { const o = fmBandOvr(P, k); return fmBandReady(o) ? o.r : null; };
+  const close = ovr('close') !== null ? ovr('close') : minIn * 0.9 * m;
+  const body = ovr('body') !== null ? ovr('body') : (minIn * 0.9 + 12000) * m;
+  const screen = ovr('screen') !== null ? ovr('screen') : Math.max(body + minIn * m, minOut * 2 * m);
+  const picket = ovr('picket') !== null ? ovr('picket') : screen * 2;
+  const BR = { core: 0, close, body, screen, picket, baseGap: minIn * 2 };
+  fmBandUser(P).forEach(b => { if (!FM_BAND_RSV[b.k] && fmBandReady(b)) BR[b.k] = b.r; }); // FM6k 自定义带 = 玩家填的绝对半径;没填的不进 BR
   return BR;
+}
+
+/* FM6n【贴身带的可用上限】= 护卫里最小的那个近防内圈。贴身维在 fmPlanStations 的 fit() 里有一道
+   硬门:`st.r > ciwsOf(s).inner ⇒ 该维归零`,是个【阶跃】不是渐变 —— 实测 9 舰编队里贴身带
+   8000 时总契合 7.600,8001 时掉到 5.600(两个贴身站位从 1.00 变 0.00),指派也跟着重排。
+   自动值刻意取 minIn×0.9(留 10% 余量)就是为了永远落在门内。玩家手改超过这条线不拦,
+   但编组控制页会把那条带标黄提醒 —— 这是四条带里【唯一】与算法强相关的一条。 */
+function fmBandCloseCap(list, flag) {
+  let mn = Infinity;
+  list.forEach(s => { if (s === flag) return; const c = ciwsOf(s); if (s.ciwsOn && c.inner > 0) mn = Math.min(mn, c.inner); });
+  return isFinite(mn) ? mn : 8000;
 }
 
 /* 最大权二分匹配(Kuhn–Munkres)。精确最优,不是贪心。返回 as[i] = 第 i 艘舰拿到的站位下标,−1 = 没派上。
