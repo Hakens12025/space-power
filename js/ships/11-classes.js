@@ -42,14 +42,14 @@ const TIER_MUL={ // TIER1 全局分级乘数。空对象 = 该分级所有字段
   1:{ /* TODO(TIER-BAL) 逐项填,缺省=1。填法:把需要的项写成 `字段:数值,`,不需要的留在注释里
        hp: macDmg: missDmg: ammo: cells: inter: mac: beacon: value:
        turnRate: thrust: speedGears:
-       outer: outerIntercept: inner: innerIntercept: chaffRate:
-       sensorRange: detPower: esmQual: sigBase: guideChan: ecmPower: rcs: pPing: floorIr: floorEsm: */ },
+       outer: outerIntercept: inner: innerIntercept: chaffRate: guideChan:
+       sensorRange: detPower: esmQual: sigBase: ecmPower: rcs: pPing: floorIr: floorEsm: */ },
   2:{ /* T2 = 基准,永远保持空:所有字段乘 1,数值就是上面五张 CLS_* 表里写的那个 */ },
   3:{ /* TODO(TIER-BAL) 逐项填,缺省=1,字段清单同 T1:
        hp: macDmg: missDmg: ammo: cells: inter: mac: beacon: value:
        turnRate: thrust: speedGears:
-       outer: outerIntercept: inner: innerIntercept: chaffRate:
-       sensorRange: detPower: esmQual: sigBase: guideChan: ecmPower: rcs: pPing: floorIr: floorEsm: */ },
+       outer: outerIntercept: inner: innerIntercept: chaffRate: guideChan:
+       sensorRange: detPower: esmQual: sigBase: ecmPower: rcs: pPing: floorIr: floorEsm: */ },
 };
 const CLS_TIER_MUL={}; // TIER1 逃生舱:某个舰种的分级曲线与全局不同时才写,形如 BB:{3:{hp:1.6}};优先级高于 TIER_MUL TODO(TIER-BAL) 空着=四舰种共用同一条曲线
 /* ==== TIER-BAL:END ==== */
@@ -82,6 +82,7 @@ function shipStats(cls,tier){ // TIER1 (舰种,分级) → 扁平属性对象:�
     CLS_MOB[c]||{turnRate:CFG.turnRate,thrust:CFG.thrust},
     CLS_STRUCT[c]||{hp:500,beacon:0}, // RF3 武器数值已移 weapons/51-defs(resolveLoadout 单独解析),这里只剩舰体/机动/感知
     CLS_SENS[c]||CLS_SENS.DD,
+    CLS_LINK[c]||CLS_LINK.DD, // SN1 数据链表(guideChan)从 CLS_SENS 迁出后单独并进来,来源在 weapons/51-defs;函数体内引用=运行期解析,不受 51-defs 加载晚于本文件影响(同相邻 CLS_SENS 那行的先例)
     {value:CLS_VALUE[c]||1,                                       // 威胁权重进 tier 层:04-targeting:6 网分配与 07-missiles:297 伏击雷阈值读的就是它(经 shipValue 实例优先)
      rcs:SENS.RCS[c]||1.0, pPing:SENS.P_PING[c]||1.0,             // SENS 四张按舰种子表也并进来,烘焙后 06-sensors 每 tick 每对舰不再回表
      floorIr:SENS.FLOOR_IR[c]||3e-11, floorEsm:SENS.FLOOR_ESM[c]||2e-11}); // 兜底值与 06-sensors:83 原来的字面量一致(3e-11 / 2e-11)
@@ -105,7 +106,7 @@ function makeShip(cls,name,pos,facing,vel,side,tier){ // TIER1 加第 7 参 tier
     macReload:lw.mac||0, macRange:lw.macRange||150000, // RF3 MAC 装填秒/射程烘焙(原 CLS_WPN.mac,射程原为散落字面量)
     cells:(lw.cells||4), cellTimer:Array(lw.cells||4).fill(0), // 发射单元(v119):巴黎4单元/同时4组/每组独立装填
     mslPer:lw.mslPer||12, mslReload:lw.mslReload||60, mslRange:lw.mslRange||350000, // RF3 导弹每组枚数/单元装填秒/射程烘焙(原为 fireMissiles/S15b/enemyAI 散落字面量)
-    guideChan:st.guideChan||4, // T1数据链引导通道(CA 3网/DD 1网;TIER1 顺手修了与实际值不符的过期注释"巡洋8/护卫4/巡游8"):同时引导超自导范围的导弹数
+    guideChan:st.guideChan, // SN1 数据链引导通道(来源 weapons/51-defs 的 CLS_LINK,CA 3网/DD 1网):同时引导超自导范围的导弹数。原来的 ||4 是个假兜底 —— DD 真值就是 1,字段一旦丢了它会把 DD 悄悄涨到 4 而不是报错
     chaffRate:(lw.chaffRate!==undefined?lw.chaffRate:0.25), // 干扰弹(v119):数值概念——命中时导弹再丢随机数判被勾走。!==undefined 口径:chaffRate 是 'prob' 字段、钳到 [0,1] 就明确允许 0(本舰不带干扰弹),|| 会把这个合法 0 悄悄换成 DD 的 0.25(等于给 CA/BB/CV 凭空调强)
     value:st.value, // TIER1 威胁权重烘焙到实例:shipValue(s) 已是实例优先,落地后 04-targeting 网分配与 07:297 伏击雷阈值才吃得到 tier
     weapons:lw.weapons, // RF3 武器清单(配装解析产物):[{kind:'mac'|'msl'|'ciws',label}]——88-selpanel 由它驱动生成底栏按钮/规格条/右栏状态

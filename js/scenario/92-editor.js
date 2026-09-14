@@ -13,7 +13,7 @@ function applyClsTier(s,cls,tier){ // TIER1 就地改一艘现有舰的舰种/�
   s.interceptor=lw.inter||0; s.interMax=lw.inter||0;
   s.cells=(lw.cells||4); s.cellTimer=Array(lw.cells||4).fill(0);
   s.mslPer=lw.mslPer||12; s.mslReload=lw.mslReload||60; s.mslRange=lw.mslRange||350000;
-  s.guideChan=st.guideChan||4; s.chaffRate=(lw.chaffRate!==undefined?lw.chaffRate:0.25); s.value=st.value; // TIER1 chaffRate 口径与 makeShip 一致:0 是合法值,不能被 || 吞掉
+  s.guideChan=st.guideChan; s.chaffRate=(lw.chaffRate!==undefined?lw.chaffRate:0.25); s.value=st.value; // TIER1 chaffRate 口径与 makeShip 一致:0 是合法值,不能被 || 吞掉
   s.weapons=lw.weapons; // RF3 武器清单同步重刷
   s.ciws={outer:lw.outer,outerIntercept:lw.outerIntercept,inner:lw.inner,innerIntercept:lw.innerIntercept};
   s.sensorRange=st.sensorRange; s.detPower=st.detPower; s.esmQual=st.esmQual; s.sigBase=st.sigBase;

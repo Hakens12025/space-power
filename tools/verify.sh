@@ -3317,6 +3317,40 @@ t('FLOW6_CHAIN',function(){ /* RF7 数据链渲染:函数存在;编辑态/退出
   fcSetEdit(e.S,fireSeqs[0]?fireSeqs[0].id:null);
   return (okFn?'ok':'fail')+' drawFcChain='+(okFn?'存在':'缺失')+' 编辑态/退出态渲染均完成';
 });
+/* SN1 数据链通道数迁出感知表:钉死四舰种的 guideChan,并守住两份手抄同步。
+   为什么需要这条:迁出之前 makeShip 与 applyClsTier 两处都写着 st.guideChan||4,而 DD 的真值是 1 ——
+   字段一旦丢了,兜底会把 DD 悄悄涨到 4(超视距同时引导的导弹组数翻两番),不报错、不留痕。
+   摘掉 ||4 之后缺失会变成 undefined,本条当场转红。
+   双向:①四舰种的值逐位钉死(不是"非空"或">0",那样 4 也能过);②DD 必须严格 !==4 —— 4 正是旧兜底会产生的那个数;
+        ③走真实调用点 guideSide:它按 (s.guideChan||0)>0 筛引导舰,只测表不测调用点的话,
+          接线错了(比如 shipStats 漏并 CLS_LINK)照样绿;④applyClsTier 那份手抄必须与 makeShip 给出同一个值。 */
+t('FLOW45_LINK',function(){
+  var want={DD:1,CA:3,BB:3,CV:3},got={},ok=true,i;
+  var names=['DD','CA','BB','CV'];
+  for(i=0;i<names.length;i++){
+    var sh=makeShip(names[i],'L'+i,[0,0,0],[1,0,0],[0,0,0],'blue',2);
+    got[names[i]]=sh.guideChan;
+    if(sh.guideChan!==want[names[i]])ok=false;
+  }
+  if(got.DD===4)ok=false; /* 4 = 旧兜底的指纹 */
+  /* applyClsTier 是烘焙清单的第二份手抄,漏改不会报错,只是编辑器摆的舰带着另一个数进战场 */
+  var ed=makeShip('DD','Led',[0,0,0],[1,0,0],[0,0,0],'blue',2);
+  applyClsTier(ed,'CA',2);
+  var edOk=(ed.guideChan===want.CA);
+  if(!edOk)ok=false;
+  /* 真实调用点:guideSide 按 (s.guideChan||0)>0 筛引导舰。把全场蓝舰的通道数清零,引导舰应当一个都不剩 */
+  var blues=ships.filter(function(s){return s.side==='blue'&&!s.dead;});
+  var keep=blues.map(function(s){return s.guideChan;});
+  var live=blues.filter(function(s){return (s.guideChan||0)>0;}).length;
+  blues.forEach(function(s){s.guideChan=0;});
+  var dead0=blues.filter(function(s){return (s.guideChan||0)>0;}).length;
+  blues.forEach(function(s,k){s.guideChan=keep[k];});
+  var callOk=(live>0&&dead0===0);
+  if(!callOk)ok=false;
+  return (ok?'ok':'fail')+' 四舰种 guideChan=DD'+got.DD+'/CA'+got.CA+'/BB'+got.BB+'/CV'+got.CV+'(须 1/3/3/3,且 DD 不许是旧兜底的 4)'
+    +' | applyClsTier 手抄同步='+edOk+'(改成 CA 后='+ed.guideChan+')'
+    +' | 真实调用点 guideSide 的引导舰筛选:清零前='+live+'艘 清零后='+dead0+'艘(须 >0 → 0)';
+});
 /* 7. 渲染不炸 */
 t('RENDER',function(){render();return 'ok';});
 r.push('ERRORS='+(errs.length?errs.join(' | '):'none'));
@@ -3402,5 +3436,10 @@ grep -q "FLOW43_FMPACE=ok" "$OUT" || { echo "✗ FLOW43_FMPACE 未通过(FM10 �
 # 模式用字符串拼接写,免得本文件自己被同一条 grep 抓到。
 FM32_DEAD="CLS_""ROLE|aaRing""Ref|P\\.f""an|P\\.g""ap|FM_LIMIT\\.f""an|FM_LIMIT\\.g""ap"
 if grep -rnE "$FM32_DEAD" js/ >/dev/null 2>&1; then echo "✗ FM3-2 负对照:js/ 里仍有旧弧线阵残留"; grep -rnE "$FM32_DEAD" js/; fail=1; fi
+grep -q "FLOW45_LINK=ok" "$OUT" || { echo "✗ FLOW45_LINK 未通过(数据链通道数:四舰种须 1/3/3/3、两份烘焙手抄须同步、guideSide 真实调用点须吃到它)"; fail=1; }
+# SN1 源码级负对照:guideChan 已迁出感知表,不许再在 sensors/ 下出现;||4 那个假兜底不许复活。
+# 模式用字符串拼接写,免得本文件自己被 grep 抓到(同 FM32_DEAD 的写法)。
+if grep -rn "guide""Chan" js/sensors/ >/dev/null 2>&1; then echo "✗ SN1 负对照:数据链通道数又回到 js/sensors/ 了"; grep -rn "guide""Chan" js/sensors/; fail=1; fi
+if grep -rn "guideChan||""4" js/ >/dev/null 2>&1; then echo "✗ SN1 负对照:假兜底 ||4 复活了(字段丢失会把 DD 悄悄涨到 4)"; grep -rn "guideChan||""4" js/; fail=1; fi
 grep -q "^RENDER=ok" "$OUT" || { echo "✗ RENDER 未通过"; fail=1; }
 [ $fail -eq 0 ] && echo "✓ 全部通过" || exit 1

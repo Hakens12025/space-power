@@ -1,8 +1,8 @@
 "use strict";
 /* RF1: 拆自 js/03-ships.js L35-64,L72-77,L144(CLS_SENS/SENS/引擎信号/curSig)。纯移动无逻辑改动;注意 CLS_SENS.BB/CV 与 SENS.* 克隆语句必须跟在两张表之后(同文件顶层顺序)。 */
-const CLS_SENS={ // 感知层 v4:传感器范围(km)/探测力/ESM反推精度/基础信号(隐身性能,越小越难发现)/火控通道(v125=网数)/电子对抗ECM。数值待平衡
-  DD:{sensorRange:150000,detPower:0.8,esmQual:0.75,sigBase:0.7,guideChan:1,ecmPower:0.3}, // TIER1 原 FRIGATE 巴黎:防空,火控1网,ECM弱;SCOUT 折进 DD 后 40万传感器/0.45信号/1.0 ESM 那套电子侦察特性退役
-  CA:{sensorRange:250000,detPower:1.0,esmQual:0.6,sigBase:1.0,guideChan:3,ecmPower:0.5}, // TIER1 原 CRUISER 马拉松:主战,火控3网,ECM中
+const CLS_SENS={ // 感知层 v4:传感器范围(km)/探测力/ESM反推精度/基础信号(隐身性能,越小越难发现)/电子对抗ECM。数值待平衡。SN1:数据链通道数已迁出到 weapons/51-defs 的 CLS_LINK —— 它是数据链量,不是感知量
+  DD:{sensorRange:150000,detPower:0.8,esmQual:0.75,sigBase:0.7,ecmPower:0.3}, // TIER1 原 FRIGATE 巴黎:防空,ECM弱;SCOUT 折进 DD 后 40万传感器/0.45信号/1.0 ESM 那套电子侦察特性退役
+  CA:{sensorRange:250000,detPower:1.0,esmQual:0.6,sigBase:1.0,ecmPower:0.5}, // TIER1 原 CRUISER 马拉松:主战,ECM中
 };
 function engineSig(s){ // 发动机状态信号乘数:主推/反推最亮,转向次之,滑行熄火最暗
   return s.flame!==0?2.2:(s.sideFlame?1.5:0.5);

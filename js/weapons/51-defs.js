@@ -13,6 +13,17 @@ const WPN={ // 定义(Definition):全局一份的不变模板,数值原样搬自
   ciws_core:{kind:'ciws',label:'拦截',outer:25000,outerIntercept:0.40,inner:8000,innerIntercept:0.85,chaffRate:0.25,inter:384}, // DD 防空核心,干扰中
   ciws_self:{kind:'ciws',label:'拦截',outer:15000,outerIntercept:0.25,inner:5000,innerIntercept:0.40,chaffRate:0.15,inter:320}, // CA 自防御,干扰弱(大目标)
 };
+/* SN1 数据链表(Link):舰种 → 同时引导超自导范围的导弹数。从 sensors/20-signature 的 CLS_SENS 迁来 ——
+   guideChan 不是感知量,它只是搭 CLS_SENS 的车被 shipStats 烘焙:唯一的逻辑消费者是 weapons/54-missiles 的通道分配,
+   另有 render/87-fleetcards、render/88-selpanel 两处纯读数与 formation/39-fmcaps 的 c2 能力维。
+   留在 CLS_SENS 里的话,感知重做整表替换时它会一起陪葬,而下游的 ||4 兜底会把 DD 从真值 1 悄悄顶成 4(超视距引导能力凭空变强)。
+   TIER_FIELD 里的 guideChan:'int' 与表位置无关,原样生效(ships/11-classes)。 */
+const CLS_LINK={
+  DD:{guideChan:1}, // TIER1 原 FRIGATE 巴黎:1 网
+  CA:{guideChan:3}, // TIER1 原 CRUISER 马拉松:3 网
+};
+CLS_LINK.BB={...CLS_LINK.CA}; // TODO(TIER-BAL) 战列数据链待标定
+CLS_LINK.CV={...CLS_LINK.CA}; // TODO(TIER-BAL) 航母数据链待标定
 const CLS_LOADOUT={ // 配装(Loadout):舰种 → 武器 id 列表。CV 无主炮=结构事实(不装 mac 即可,hasMAC 按 macDmg=0 自动排除),不是待平衡数值
   DD:['mac_light','msl_light','ciws_core'],
   CA:['mac_heavy','msl_heavy','ciws_self'],
