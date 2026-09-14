@@ -36,4 +36,4 @@ SENS.FLOOR_IR.BB=SENS.FLOOR_IR.CA;   SENS.FLOOR_IR.CV=SENS.FLOOR_IR.CA;   // TOD
 SENS.FLOOR_ESM.BB=SENS.FLOOR_ESM.CA; SENS.FLOOR_ESM.CV=SENS.FLOOR_ESM.CA; // TODO(TIER-BAL)
 SENS.P_PING.BB=SENS.P_PING.CA;       SENS.P_PING.CV=SENS.P_PING.CA;       // TODO(TIER-BAL)
 SENS.RCS.BB=SENS.RCS.CA;             SENS.RCS.CV=SENS.RCS.CA;             // TODO(TIER-BAL)
-function curSig(s){ return (s.sigBase||1)*engineSig(s); } // 当前信号特征
+function curSig(s){ return sReq(s,'sigBase')*engineSig(s); } // 当前信号特征。SN2:||1 摘除——第二段删 sigBase 时这里要当场抛,不能静默按 1.0 算信号

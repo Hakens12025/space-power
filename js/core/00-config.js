@@ -3,6 +3,32 @@
 // 拆分单文件时从"快捷指令栏"段前移:17-settings/18-replay 在顶层就调用 on(),
 // 而 function 提升只在单个 script 内生效,留在原处会 ReferenceError。
 function on(id,ev,fn){const el=document.getElementById(id);if(el)el.addEventListener(ev,fn);} // 安全挂载:元素不存在不崩
+/* ================= SN2 严格取值 ================= */
+/* SN2:从一个对象上取【必须存在】的一格,缺失当场抛错,不返回哨兵值。感知重做第二段会删掉八个感知字段,
+   这个函数的职责是让那一刻的每一个漏改点【当场炸出来】,而不是静默降级。
+
+   为什么是抛错而不是哨兵值:哨兵正是本项目的头号静默失败模式。formation/39-fmcaps 的隐蔽维写成
+   1/max(0.01,(sigBase||1)*(rcs||1)),字段一旦没了它恒等于满分 1.00,然后一路走完匈牙利指派、落盘进
+   s.fmStn、画进方位盘,界面全绿、全库零报错,而编成已经错了。抛错还能穿过下游的第二层吞噬
+   (fmCapOf 末尾那个 ||0),哨兵穿不过去。
+   抛错在这个项目里是安全的:core/99 的 frame() 把 requestAnimationFrame(frame) 放在【第一行】,
+   所以 stepSim 里抛错不会永久卡死帧循环,只退化成每帧一个异常、控制台看得见;探针的 t() 又会把它
+   捕成 =THREW: 由 verify.sh 接住。
+
+   口径:0 是合法值(rcs=0 绝对隐身 / floorIr=0 无条件可探测 / ecmPower=0 不带 ECM),只有
+   undefined/null/NaN 算缺失。NaN 单独拦是因为它比 undefined 更难查——会一路算成 NaN 再被下游的 ||0 吞成 0。
+   【不许加 typeof==='number' 或 isFinite 检查】:调用点里有传整行表对象(sReq(CLS_SENS,c))与
+   trk 对象(sReq(t,trkKey))的用法,加了类型检查会在 makeShip 第一次调用时抛死、init() 整条链断掉、页面白屏。
+
+   ⚠ 只许在函数体/箭头函数体/运行期求值处调用,绝不许进任何文件的顶层立即执行语句:
+     顶层抛错会吃掉同一个 script 后续的全部顶层语句(某 script 中途抛错、后半文件静默丢失)。
+   ⚠ 用 function 声明而不是 const:跨 script 重名时 function 是静默覆盖,const 会让整个文件
+     SyntaxError 报废(RF3 撞名教训)。 */
+function sReq(o,k,where){
+  const v=(o==null)?undefined:o[k];
+  if(v===undefined||v===null||v!==v)throw new Error('SN2 字段缺失:'+(where?where+'.':'')+k+' @ '+((o&&o.name)||(o&&o.id)||String(o))); // v!==v 即 NaN
+  return v;
+}
 /* ================= 配置 ================= */
 const CFG={
   world: 500000,            // 战场半幅 km(直径约100万km)

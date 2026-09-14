@@ -17,7 +17,7 @@ function applyClsTier(s,cls,tier){ // TIER1 就地改一艘现有舰的舰种/�
   s.weapons=lw.weapons; // RF3 武器清单同步重刷
   s.ciws={outer:lw.outer,outerIntercept:lw.outerIntercept,inner:lw.inner,innerIntercept:lw.innerIntercept};
   s.sensorRange=st.sensorRange; s.detPower=st.detPower; s.esmQual=st.esmQual; s.sigBase=st.sigBase;
-  s.rcs=st.rcs; s.pPing=st.pPing; s.floorIr=st.floorIr; s.floorEsm=st.floorEsm; s.ecmPower=(st.ecmPower!==undefined?st.ecmPower:0.4); // TIER1 ecmPower 口径与 makeShip 一致:0 是合法值
+  s.rcs=st.rcs; s.pPing=st.pPing; s.floorIr=st.floorIr; s.floorEsm=st.floorEsm; s.ecmPower=sReq(st,'ecmPower','shipStats'); // SN2 ecmPower 口径与 makeShip 一致:sReq 放行合法 0、只拒字段缺失(这份烘焙清单是 makeShip 的第二份手抄,两边必须同步改)
   s.beaconMax=(st.beacon||0); s.beaconCount=(st.beacon||0);
   return s;
 }

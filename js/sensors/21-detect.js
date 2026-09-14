@@ -29,7 +29,7 @@ function updateESMFixes(){ // 红方辐射源的ESM不确定区:椭圆沿视线�
     if(!viewers.length)continue;
     let best=null,bd=1e18;
     for(const x of viewers){const dd=V.len(V.sub(s.pos,x.pos));if(dd<bd){bd=dd;best=x;}}
-    const bestQ=best?best.esmQual||0.5:0.5;
+    const bestQ=best?sReq(best,'esmQual'):0.5; // SN2:||0.5 摘除(best 恒是 makeShip 造的蓝舰);外层 best? 是空守卫,保留
     const f=esmFixes.get(s)||{err:1e18,track:0};
     f.track++;
     // v125 多站三角:方位分散的观测源交叉定位,err缩小(角度差越大越准)
@@ -65,22 +65,24 @@ function detectFor(detSide,tgtSide){ // KIMI155 S1:一方网络探测另一方�
   const seenPosKey=detSide==='blue'?'seenBluePos':'seenRedPos';
   const seenVelKey=detSide==='blue'?'seenBlueVel':'seenRedVel';
   const everLitKey=detSide==='blue'?'everLitBlue':'everLitRed';
+  const ladDets=dets.filter(d=>d.lidar).map(d=>({pos:d.pos,pP:sReq(d,'pPing')})); // SN2:照射方的 pPing 与目标无关,是本次结算内的常量——提到 t 循环外只读一次,内层不再每对舰查一次字段、也不再判一次 d.lidar。filter 保序,所以下面 Math.max 的累加顺序与改前逐位相同
   for(const t of ships){
     if(t.side!==tgtSide||t.dead)continue;
     const trk=t[trkKey]||(t[trkKey]={ir:0,esm:0,lad:0});
     // —— 辐射源(目标侧,复用现有状态)——
-    const E_ir=(t.sigBase||1)+SENS.E_ENG*(t.flame!==0?1.0:(t.sideFlame?0.6:0)); // IR:船体+引擎(主推/反推1.0·侧推0.6·熄火0)
-    const E_rf=SENS.E_LIDAR*(t.lidar?1:0)+SENS.E_ECM*(t.ecm?1:0)+SENS.E_HULL_LEAK*(t.sigBase||1); // ESM:射频(开LADAR/ECM+船体泄漏)
+    const sigB=sReq(t,'sigBase'); // SN2:本目标的船体信号,IR 辐射源与 ESM 泄漏共用一次读取(改前两行各带一个 ||1,两处口径必须同源)
+    const E_ir=sigB+SENS.E_ENG*(t.flame!==0?1.0:(t.sideFlame?0.6:0)); // IR:船体+引擎(主推/反推1.0·侧推0.6·熄火0)
+    const E_rf=SENS.E_LIDAR*(t.lidar?1:0)+SENS.E_ECM*(t.ecm?1:0)+SENS.E_HULL_LEAK*sigB; // ESM:射频(开LADAR/ECM+船体泄漏)
     // —— 通量(探测器侧取最大单源;IR/ESM=1/d²,LADAR回波=P×σ/d⁴)——
     const d2=tp=>{const dx=tp[0]-t.pos[0],dy=tp[1]-t.pos[1],dz=tp[2]-t.pos[2];return dx*dx+dy*dy+dz*dz;};
     let irFlux=0,esmFlux=0;
     for(const d of dets){const dd=d2(d.pos);if(dd<1)continue;irFlux=Math.max(irFlux,E_ir/dd);esmFlux=Math.max(esmFlux,E_rf/dd);}
     let ladFlux=0;
-    const rcs=(t.rcs!==undefined?t.rcs:(SENS.RCS[t.cls]||1.0)); // TIER1 改实例优先(makeShip 已烘焙 t.rcs),回表只作兜底:每 tick × 每对舰的热路径,回表拿的是"按舰种"值,tier 永远进不去。用 !==undefined 而不是 ||:rcs=0(绝对隐身)是分级层能合法产生的值,|| 会把它换回表里的 0.6/1.0
-    for(const d of dets){if(d.lidar){const dd=d2(d.pos);if(dd<1)continue;const pP=(d.pPing!==undefined?d.pPing:(SENS.P_PING[d.cls]||1.0));ladFlux=Math.max(ladFlux,pP*rcs/(dd*dd));}} // DS184:P_PING取照射方舰种(原取目标舰种→侦察1.6被当巡洋1.0,30万火控77s vs 沙盒11s);回波1/d⁴。TIER1 改实例优先,注意取的仍是【照射方 d】不是目标 t,别改回去;同 rcs 用 !==undefined,pPing=0(不发射照射)是合法值
+    const rcs=sReq(t,'rcs'); // TIER1 实例优先(makeShip 已烘焙 t.rcs):这是每 tick × 每对舰的热路径,回表拿的是"按舰种"的值、tier 永远进不去。SN2:回表兜底整条摘除——第二段删 rcs 时必须当场抛,不能静默回落成 0.6/1.0(回落的后果是雷达截面全场按舰种走、隐身分级彻底失效而无人察觉)。rcs=0(绝对隐身)是合法值,sReq 只拒 undefined 所以 0 照常穿过
+    for(const d of ladDets){const dd=d2(d.pos);if(dd<1)continue;ladFlux=Math.max(ladFlux,d.pP*rcs/(dd*dd));} // DS184:P_PING取【照射方】舰种(原取目标舰种→侦察1.6被当巡洋1.0,30万火控77s vs 沙盒11s);回波1/d⁴。TIER1 实例优先。SN2:回表兜底摘除,pPing 改由 ladDets 在 t 循环外 sReq 一次——ladDets 的元素来自 dets,取的仍是照射方不是目标 t,别改回去
     for(const b of bcons){const dd=d2(b.pos);if(dd<1)continue;ladFlux=Math.max(ladFlux,0.8*rcs/(dd*dd));} // 信标=LADAR平台(P_ping 0.8)
     // —— v1.1:持续衰减(LADAR 0.94/IR·ESM 0.90,每tick先衰减再积累——SNR>1 不能无限爬升,静默15万稳态<1.0 永点不亮);增益=g×min(2,√(SNR-1)) ——
-    const fIR=(t.floorIr!==undefined?t.floorIr:(SENS.FLOOR_IR[t.cls]||3e-11)),fESM=(t.floorEsm!==undefined?t.floorEsm:(SENS.FLOOR_ESM[t.cls]||2e-11)),fLAD=SENS.FLOOR_LAD; // TIER1 探测下限改实例优先(makeShip 已烘焙),回表只作兜底;注意这两个下限按【被探测方 t 的舰种】取,语义歧义见 design risks,本次只搬家不改语义。同 rcs 用 !==undefined:下限 0(无条件可探测)是合法值,下面 irFlux>fIR 的比较与 sqrt 都吃得住 0
+    const fIR=sReq(t,'floorIr'),fESM=sReq(t,'floorEsm'),fLAD=SENS.FLOOR_LAD; // TIER1 探测下限实例优先(makeShip 已烘焙);注意这两个下限按【被探测方 t 的舰种】取,语义歧义是历史遗留,本轮不改。SN2:回表兜底摘除——下限一旦静默回落成 3e-11/2e-11,分级的"更难被探"整层失效而 lit 照常派生、界面全绿。下限 0(无条件可探测)是合法值,sReq 只拒 undefined,下面的比较与 sqrt 都吃得住 0
     trk.ir*=SENS.TRK_DECAY;trk.esm*=SENS.TRK_DECAY;trk.lad*=SENS.TRK_DECAY_LAD;
     if(irFlux>fIR)trk.ir+=SENS.G_IR*Math.min(SENS.SNR_CAP,Math.sqrt(irFlux/fIR-1));
     if(esmFlux>fESM)trk.esm+=SENS.G_ESM*Math.min(SENS.SNR_CAP,Math.sqrt(esmFlux/fESM-1));
@@ -88,7 +90,7 @@ function detectFor(detSide,tgtSide){ // KIMI155 S1:一方网络探测另一方�
     if(irFlux>fIR||ladFlux>fLAD){ // DS183 v1.1:seenPos 只由 IR/LADAR 刷新(ESM 接触只驱动椭圆,不给坐标——泄漏修复)
       t[seenKey]=simTime;t[seenPosKey]=t.pos.slice();t[seenVelKey]=t.vel.slice();
     }
-    if(t.ecm){trk.ir*=(1-(t.ecmPower||0.4));trk.lad*=(1-(t.ecmPower||0.4));} // 目标ECM:对IR/LADAR积累减速(暴露换干扰)
+    if(t.ecm){const ep=sReq(t,'ecmPower');trk.ir*=(1-ep);trk.lad*=(1-ep);} // 目标ECM:对IR/LADAR积累减速(暴露换干扰)。SN2:||0.4 摘除,同一行读两次合并为一次——11-classes 早写明 ecmPower=0(不带ECM)是合法分级值,||0.4 会把"没有ECM"悄悄变成 40% 干扰
     // —— lit 派生(分级阈值全是挣来的;滞回保持防抖)——
     const cross=(trk.ir>=SENS.LIT2&&trk.esm>=SENS.LIT2)||(trk.ir>=SENS.LIT2&&trk.lad>=SENS.LIT2)||(trk.esm>=SENS.LIT2&&trk.lad>=SENS.LIT2);
     let lit=0;
@@ -103,7 +105,7 @@ function detectFor(detSide,tgtSide){ // KIMI155 S1:一方网络探测另一方�
   }
 }
 function sigClassLabel(s){ // 感知层 v5:被动探测级(质量1)只能判断信号亮度→大/中/小,识别级(2+)才知道舰种
-  const sb=s.sigBase||1;
+  const sb=sReq(s,'sigBase'); // SN2:||1 摘除——这是探测级(质量1)唯一能看到的情报,回落成 1 会让每个未识别接触都报"大型热源"
   if(sb>=0.9)return '▣ 大型热源';
   if(sb>=0.6)return '▣ 中型热源';
   return '▣ 小型热源';
@@ -129,7 +131,7 @@ function projVisibleTo(p,detSide){ // detSide 传感器能否看到弹丸 p(渲�
   for(const d of dets){
     if(isMac&&!d.lidar)continue;
     if(d.lidar&&V.len(V.sub(p.pos,d.pos))<d.sensorRange)return true; // LADAR 看固体
-    const eff=(d.sensorRange||1e5)*(d.detPower||1)*psig; // v138:隐蔽度配合舰船点亮能力(detPower)——探测强看更远
+    const eff=sReq(d,'sensorRange')*sReq(d,'detPower')*psig; // v138:隐蔽度配合舰船点亮能力(detPower)——探测强看更远。SN2:||1e5 与 ||1 摘除(d 恒是 detectorsOf 从 ships 里筛出的舰);上一行那处裸 d.sensorRange 缺失时只会静默为 false 不会抛,靠本行兜住——两个字段的任何一个缺失,每个 d 都必然走到这里
     if(V.len(V.sub(p.pos,d.pos))<eff)return true; // 被动看热
   }
   for(const b of bcons){if(V.len(V.sub(p.pos,b.pos))<300000)return true;} // 信标 LADAR

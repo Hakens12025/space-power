@@ -37,7 +37,7 @@ const TIER_FIELD={ // TIER1 字段 → applyTier 策略表。缺省是 'mul'(直
   speedGears:'gears', // 速度档数组:整条曲线乘同一个【标量】k(不是每档给一个乘数),逐项取整;负数=哨兵(-1 不限速)原样保留,不参与乘法
 };
 const TIER_MUL={ // TIER1 全局分级乘数。空对象 = 该分级所有字段乘 1;这份清单同时充当"tier 到底能改哪些量"的文档
-  // ⚠ TIER1 填数前先看两条不变量:①floorIr/floorEsm 是派生量(SENS:59/60 写着 =3e-11/detPower、=1.2e-11/esmQual),只填 detPower 不同步反向填 floorIr,这层关系会静默断掉;②detPower/esmQual 作用在【探测方】,floorIr/floorEsm 作用在【被探测方】(06-sensors:83),想让某个分级"探得更远"和"更难被探"是两笔账,别只写一边
+  // ⚠ TIER1 填数前先看两条不变量:①floorIr/floorEsm 是派生量(20-signature:27/28 写着 =3e-11/detPower、=1.2e-11/esmQual),只填 detPower 不同步反向填 floorIr,这层关系会静默断掉;②detPower/esmQual 作用在【探测方】,floorIr/floorEsm 作用在【被探测方】(21-detect:83),想让某个分级"探得更远"和"更难被探"是两笔账,别只写一边
   // ⚠ TIER1 乘数一律是【标量】。speedGears 也是整条曲线乘一个数,写成数组(想给每档一个乘数)会让全档变 NaN——applyTier 已加类型守卫挡住,但守卫只是不崩,填的数照样不生效
   1:{ /* TODO(TIER-BAL) 逐项填,缺省=1。填法:把需要的项写成 `字段:数值,`,不需要的留在注释里
        hp: macDmg: missDmg: ammo: cells: inter: mac: beacon: value:
@@ -72,6 +72,14 @@ function applyTier(key,val,k){ // TIER1 按 TIER_FIELD 策略把乘数 k 施加�
   if(mode==='prob')return Math.max(0,Math.min(1,val*k));           // 概率钳 [0,1]
   return val*k;
 }
+/* SN2 shipStats 的出口清单:合并完、过完 tier 之后【必须齐全】的字段。少一格当场抛,不许产出残缺的属性对象。
+   为什么单独立一道闸门:上面那几处 sReq 挡的是「表里少了一整行(某个舰种没了)」与「SENS 子表整张没了」,
+   而感知重做第二段的真实删除形态是【表还在、少一列】—— 那时 CLS_SENS[c] 有值、Object.assign 照常合并、
+   for-in 根本不会访问已删的键,out 里就是没有 sensorRange,makeShip 直接写 sensorRange:undefined,
+   上面每一处 sReq 都不会触发。之后带 sReq 的消费者会抛(好),不带的全部静默降级(正是本段要消灭的)。
+   所以列级删除只能在这里堵 —— 这是全库唯一一个「属性对象刚造好、还没散出去」的位置。
+   第二段删字段时必须同步改这份清单,那是刻意的:改清单是一个显式动作,忘了改就当场红。 */
+const SHIP_STATS_REQ=['sensorRange','detPower','esmQual','sigBase','ecmPower','rcs','pPing','floorIr','floorEsm','guideChan'];
 function shipStats(cls,tier){ // TIER1 (舰种,分级) → 扁平属性对象:四张 CLS_* 表 + SENS 四张按舰种子表 + 威胁权重合并后逐字段过 applyTier
   const c=normCls(cls);
   const t=(tier===1||tier===2||tier===3)?tier:2; // 缺项/脏数据一律降级 T2(与 10b:10 shipTier 的 ||2 同口径)
@@ -81,13 +89,14 @@ function shipStats(cls,tier){ // TIER1 (舰种,分级) → 扁平属性对象:�
   const src=Object.assign({},
     CLS_MOB[c]||{turnRate:CFG.turnRate,thrust:CFG.thrust},
     CLS_STRUCT[c]||{hp:500,beacon:0}, // RF3 武器数值已移 weapons/51-defs(resolveLoadout 单独解析),这里只剩舰体/机动/感知
-    CLS_SENS[c]||CLS_SENS.DD,
+    sReq(CLS_SENS,c,'CLS_SENS'), // SN2 摘舰种兜底:normCls 保证 c 是四舰种之一、CLS_SENS 四键齐全,||CLS_SENS.DD 今天不可达;它掩盖的是"表里少了一个舰种",而 Object.assign 对 undefined 源是静默空操作——不抛的话整船感知字段一次全缺,后面每个消费者各自兜底成不同的假值
     CLS_LINK[c]||CLS_LINK.DD, // SN1 数据链表(guideChan)从 CLS_SENS 迁出后单独并进来,来源在 weapons/51-defs;函数体内引用=运行期解析,不受 51-defs 加载晚于本文件影响(同相邻 CLS_SENS 那行的先例)
     {value:CLS_VALUE[c]||1,                                       // 威胁权重进 tier 层:04-targeting:6 网分配与 07-missiles:297 伏击雷阈值读的就是它(经 shipValue 实例优先)
-     rcs:SENS.RCS[c]||1.0, pPing:SENS.P_PING[c]||1.0,             // SENS 四张按舰种子表也并进来,烘焙后 06-sensors 每 tick 每对舰不再回表
-     floorIr:SENS.FLOOR_IR[c]||3e-11, floorEsm:SENS.FLOOR_ESM[c]||2e-11}); // 兜底值与 06-sensors:83 原来的字面量一致(3e-11 / 2e-11)
+     rcs:sReq(SENS.RCS,c,'SENS.RCS'), pPing:sReq(SENS.P_PING,c,'SENS.P_PING'), // SENS 按舰种子表并进来,烘焙后 21-detect 每 tick 每对舰不再回表。SN2 摘 ||1.0:两张子表今天四舰种齐全、兜底不可达,而兜底值 1.0 与 DD 真值 0.6 根本不相等——真生效就是数悄悄错了。rcs=0(绝对隐身)/pPing=0(不发射照射)是分级层能产生的合法值,sReq 只拒 undefined 所以 0 照常穿过
+     floorIr:sReq(SENS.FLOOR_IR,c,'SENS.FLOOR_IR'), floorEsm:sReq(SENS.FLOOR_ESM,c,'SENS.FLOOR_ESM')}); // SN2 摘 ||3e-11 / ||2e-11:那两个字面量是 21-detect 的历史兜底值,与表里真值并不相等(DD 是 3.75e-11 / 1.6e-11),兜底一旦真生效就是"看着还在跑、数已经错了";下限 0(无条件可探测)是合法值,sReq 只拒 undefined
   const out={};
   for(const k in src)out[k]=applyTier(k,src[k],tierMul(c,t,k));
+  for(const k of SHIP_STATS_REQ)sReq(out,k,'shipStats('+c+')'); // SN2 出口断言:见下方 SHIP_STATS_REQ 的注释
   STATS_CACHE.set(ck,out);
   return out;
 }
@@ -121,7 +130,7 @@ function makeShip(cls,name,pos,facing,vel,side,tier){ // TIER1 加第 7 参 tier
     esmQual:st.esmQual, sigBase:st.sigBase,
     rcs:st.rcs, pPing:st.pPing, floorIr:st.floorIr, floorEsm:st.floorEsm, // TIER1 SENS 四张按舰种子表烘焙到实例(06-sensors:79/80/83 改实例优先):这四个是每 tick × 每对舰的热路径,回表拿的永远是"按舰种"的值,tier 进不去
     lidar:false, // LADAR 主动探测开关(开=看一切固体,代价=被敌ESM反推)
-    ecm:false, ecmPower:(st.ecmPower!==undefined?st.ecmPower:0.4), // v125 电子对抗ECM(开=干扰敌方探测,代价=成辐射源暴露于ESM)。TIER1 同 chaffRate:ecmPower 也是 'prob',0(不带 ECM)是合法分级值,不能被 || 吞掉
+    ecm:false, ecmPower:sReq(st,'ecmPower','shipStats'), // v125 电子对抗ECM(开=干扰敌方探测,代价=成辐射源暴露于ESM)。SN2:原 !==undefined 三元同时干两件事——保住合法 0(对,ecmPower 是 'prob' 字段,0=不带 ECM)、字段缺失时悄悄给 0.4(错,这正是第二段要变响的那一类)。sReq 只拒 undefined,合法 0 照常穿过,两件事各归各
     litBlue:0,litRed:0,detBlue:0,detRed:0, // 阵营点亮质量等级(0未发现/1探测/2识别/3火控) + 探测积分
     trkB:{ir:0,esm:0,lad:0},trkR:{ir:0,esm:0,lad:0}, // KIMI155 S1:三通道驻留积分(蓝/红网络各自;IR红外/ESM射频/LADAR回波)
     everLitBlue:false,everLitRed:false, // 感知层 v5:是否曾点亮过(区分"从未点亮不显示" vs "点亮后失联=幽灵")
