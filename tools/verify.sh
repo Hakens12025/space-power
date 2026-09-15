@@ -3625,6 +3625,113 @@ t('FLOW52_COLD',function(){
   }
   return out;
 });
+/* SN5 雷达关系不变量。【本条一个数都不改】,它守的是今天已经成立、却没人写下来、也没有任何东西看着的几条关系。
+   为什么现在补:「CA 的照射圈越过一艘侧推中的 CA 的光学圈 5,249 km」这件事是手算发现的 —— 六十条判定一条都没红。
+   这一类「两张表相乘出来的关系」正是本项目最容易静默漂移的一类:改 SENS 的一个数、改 IR_REF、改 WPN 的射程,
+   都会让它悄悄翻面,而每一处单独看都对。
+   ---- 守的五条 ----
+   ① 被动先于主动,界划在【主推】档:一艘开着主推的船,永远先被看见、后被照到。
+      刻意【不】用侧推档当界 —— 对一艘熄火静默的冷目标,主动大幅先于被动是【设计意图】
+      (20-signature 的 IR_REF 锚点:"一艘完全静默的船,要等到进了主炮射程才刚被光学发现";FLOW52_COLD 守的正是反面)。
+      侧推是最弱的一档动力,几乎就是冷目标,那一段是过渡区,不强求。
+   ①b 反向对照:把界换成【侧推】就必须有格子越界。没有这一条,①"全过"可能只是因为界定得太松。
+   ② 基准舰锚点:ACT_REF 与 LIS_REF 的【定义】就挂在 DD 身上(基准舰 emit=recv=1 对反射 1.0 的目标)。
+      动 DD 的收发、或动那两个参考距离,都会让 20-signature 文件头整段推导变成假话,而没有任何东西会报错。
+   ③ 武器表:规格条上那个射程必须【至少对标准目标可达】。macRadar 大于照射圈的话,玩家永远拿不到火控级,
+      那个数就是虚标 —— 而 fcGate/轮盘/hover 圈三处都照着它画。顺带守住表级不变量 macRadar >= macRange。
+   ④ emit 与 recv 随体型单调不减;手电系数 4*(emit/recv)^(1/4) 不许低于 4(等价 emit >= recv)。
+      后者是「开雷达永远是我看得更清、但对方更早发现我」这条设计灵魂的充要条件:recv 一旦超过 emit,
+      那个舰种上就会反转成「雷达看得比被听见还远」,而上面四条没有一条会红。
+   ⑤ 靶场几何:开局直落的那个场景,蓝方 CA 开照射后至少要有一个靶够得到火控级。
+      这一条最有牙齿 —— 它把 SENS 与 90-envs 的坐标【乘】在一起,任何一边动了都会红。
+      坐标从 TEST_ENVS[0] 现读,不抄死数:靶挪了探针自动跟。 */
+t('FLOW53_RADAR',function(){
+  if(typeof SENS!=='object'||typeof WPN!=='object'||typeof CLS_LOADOUT!=='object')return 'fail 感知表/武器表未加载';
+  var CL=Object.keys(SENS.CLS);
+  var vis=function(c,eng){return Math.sqrt(SENS.K_IR*SENS.CLS[c].size*(1+eng));};   /* 目标 silent:最暗的一档,也是对①最严的一档 */
+  var act=function(dc,tc){var d=SENS.CLS[dc],x=SENS.CLS[tc];
+    return Math.sqrt(Math.sqrt(SENS.K_ACT*d.emit*d.recv*x.size*x.stealth));};
+  var actStd=function(dc){var d=SENS.CLS[dc];return Math.sqrt(Math.sqrt(SENS.K_ACT*d.emit*d.recv*1.0));};
+  var bcn=function(tc){var x=SENS.CLS[tc];
+    return Math.sqrt(Math.sqrt(SENS.K_ACT*SENS.BEACON_EMIT*SENS.BEACON_RECV*x.size*x.stealth));};
+
+  var bad1=[],mg1=1e9,i,j;
+  for(i=0;i<CL.length;i++)for(j=0;j<CL.length;j++){
+    var r1=act(CL[i],CL[j]),v1=vis(CL[j],SENS.P_ENG_MAIN);
+    mg1=Math.min(mg1,(v1-r1)/v1);
+    if(!(r1<v1))bad1.push(CL[i]+'照'+CL[j]+' '+Math.round(r1)+'>'+Math.round(v1));
+  }
+  for(j=0;j<CL.length;j++){                       /* 信标是第二类照方,而且恒在照射(detectorsOf 的 bcons) */
+    var rb=bcn(CL[j]),vb=vis(CL[j],SENS.P_ENG_MAIN);
+    mg1=Math.min(mg1,(vb-rb)/vb);
+    if(!(rb<vb))bad1.push('信标照'+CL[j]+' '+Math.round(rb)+'>'+Math.round(vb));
+  }
+  var bad2=[];
+  for(i=0;i<CL.length;i++)for(j=0;j<CL.length;j++)
+    if(!(act(CL[i],CL[j])<vis(CL[j],SENS.P_ENG_SIDE)))bad2.push(CL[i]+'照'+CL[j]);
+  var ok1=(bad1.length===0), okRev=(bad2.length>0);
+
+  var dd=SENS.CLS.DD;
+  var aDD=actStd('DD'), hDD=Math.sqrt(SENS.K_RF*dd.emit*SENS.EMIT_P.paint*1.0);
+  var okAnchor=(Math.abs(aDD-SENS.ACT_REF)<1e-6&&Math.abs(hDD-SENS.LIS_REF)<1e-6);
+
+  var badW=[],wRows=[],c,wi;
+  for(c in CLS_LOADOUT)for(wi=0;wi<CLS_LOADOUT[c].length;wi++){
+    var w=WPN[CLS_LOADOUT[c][wi]]; if(!w||w.kind!=='mac')continue;
+    var rr=actStd(c);
+    wRows.push(c+' macRadar='+w.macRadar+'/照射圈='+Math.round(rr));
+    if(!(w.macRadar>=w.macRange))badW.push(c+' macRadar<macRange');
+    if(!(w.macRadar<=rr+1e-6))badW.push(c+' macRadar超出照射圈 '+w.macRadar+'>'+Math.round(rr));
+  }
+  var ord=CL.slice().sort(function(x,y){return SENS.CLS[x].size-SENS.CLS[y].size;}),badM=[],m;
+  for(m=1;m<ord.length;m++){
+    var p0=SENS.CLS[ord[m-1]],q0=SENS.CLS[ord[m]];
+    if(q0.emit<p0.emit-1e-9)badM.push('emit反序 '+ord[m-1]+'>'+ord[m]);
+    if(q0.recv<p0.recv-1e-9)badM.push('recv反序 '+ord[m-1]+'>'+ord[m]);
+  }
+  var badF=[],fRows=[];
+  for(i=0;i<CL.length;i++){
+    var sx=SENS.CLS[CL[i]], fl=4*Math.pow(sx.emit/sx.recv,0.25);
+    fRows.push(CL[i]+' '+fl.toFixed(3));
+    if(fl<4-1e-9)badF.push(CL[i]+' '+fl.toFixed(3));
+  }
+
+  /* ⑤ 靶场:真跑 detectLoop,不算公式 */
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),detBak=detT;
+  var lit3=0,rows=[];
+  try{
+    var env=TEST_ENVS[0];
+    ships.length=0;projectiles.length=0;
+    var bl=[],rdl=[];
+    env.ships.forEach(function(d){var s=makeShip(d[0],'SN5-'+d[1],[d[2],d[3],d[4]],d[5].slice(),[0,0,0],'blue',d[7]||2);bl.push(s);ships.push(s);});
+    env.enemy.forEach(function(d){var s=makeShip(d[0],'SN5-'+d[1],[d[2],d[3],d[4]],d[5].slice(),[0,0,0],'red',d[9]||2);rdl.push(s);ships.push(s);});
+    ships.forEach(function(s){s.orders=[];s.vel=[0,0,0];s.follow=null;s.formation=null;s.autoEngage=false;s.roe='hold';s.macOn=false;s.mslOn=false;s.ciwsOn=false;});
+    bl.forEach(function(s){if(s.cls==='CA')setEmit(s,'paint');});   /* 玩家真要开主炮就会做这一步;不做的话全场没人照射,lit 永远上不到 3 */
+    detT=0;
+    for(i=0;i<40;i++)detectLoop();
+    rdl.forEach(function(tg){
+      var dCA=1e18;
+      bl.forEach(function(x){if(x.cls==='CA')dCA=Math.min(dCA,V.len(V.sub(tg.pos,x.pos)));});
+      rows.push(tg.name.replace('SN5-','')+' 距CA '+Math.round(dCA/1000)+'k lit'+tg.litBlue);
+      if(tg.litBlue>=3)lit3++;
+    });
+  }finally{
+    detT=detBak;
+    ships.forEach(function(x){if(typeof esmFixes!=='undefined')esmFixes.delete(x);});
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+    projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
+  }
+  var ok5=(lit3>=1);
+  var ok=(ok1&&okRev&&okAnchor&&badW.length===0&&badM.length===0&&badF.length===0&&ok5);
+  return (ok?'ok':'fail')
+    +' ① 被动先于主动(界=主推档,含信标共 '+(CL.length*CL.length+CL.length)+' 组):越界='+(bad1.length?bad1.join(','):'无')
+      +' 最薄余量='+(mg1*100).toFixed(1)+'%='+ok1
+    +' | ①b 反向对照(界换成侧推)须【有】越界:'+(bad2.length?bad2.join(',')+' 共'+bad2.length+'格':'一格都没有')+'='+okRev
+    +' | ② 基准舰锚点 DD照标准目标='+Math.round(aDD)+'(须=ACT_REF '+SENS.ACT_REF+') DD照射被基准耳朵听见='+Math.round(hDD)+'(须=LIS_REF '+SENS.LIS_REF+')='+okAnchor
+    +' | ③ 武器表 ['+wRows.join(' ')+'] 违反='+(badW.length?badW.join(','):'无')
+    +' | ④ 单调='+(badM.length?badM.join(','):'无')+' 手电系数['+fRows.join(' ')+'](须全>=4.000,等价 emit>=recv)违反='+(badF.length?badF.join(','):'无')
+    +' | ⑤ 靶场开局 CA 开照射后 40 拍:['+rows.join(' ')+'] 到火控级的靶数='+lit3+'(须>=1)='+ok5;
+});
 /* SN0 近防依赖弹丸可见性:敌方导弹可见 ⇒ 近防真的发得出拦截弹(双向)。
    为什么需要这条:57-step-weapons:58 那道近防门读的是弹丸的 visBlue/visRed(detectLoop 每秒写的缓存),
    失效形态是一个 continue —— 拦截弹不出膛、interceptor 库存不掉、日志一条不出,与「敌导弹还没进圈」读起来完全一样。
@@ -4310,6 +4417,7 @@ grep -q "FLOW51_PAIR=ok" "$OUT" || { echo "✗ FLOW51_PAIR 未通过(sensePairAt
 # ⇒ 主炮对所有不发光的目标静默哑火,而 litBlue 全程是合法的 0/1/2,没有 NaN、没有异常、没有一行日志。
 grep -q "FLOW52_COLD=ok" "$OUT" || { echo "✗ FLOW52_COLD 未通过(冷目标剪枝:探测方静默时 max2 须【等于】光学界、开照射后须【严格大于】光学界(照射界真的进了 max),且 40 拍后 lit 须到 3、照射驻留须涨、光学与静听须全程恒 0)"; fail=1; }
 grep -q "FLOW46_CIWS=ok" "$OUT" || { echo "✗ FLOW46_CIWS 未通过(近防依赖弹丸可见性:探测方照射+冷弹走照射支路(30000<126134)、静默+热弹走光学支路(30000<47997),两相都必须真发出拦截弹且库存下降;静默+冷弹那一相必须恰好0发、库存一颗不掉,且近防其余条件(弹丸存活/在2×外圈内/未脱锁/库存够/开关开/无冷却/威胁逼近)须逐条成立——否则这0发另有出处)"; fail=1; }
+grep -q "FLOW53_RADAR=ok" "$OUT" || { echo "✗ FLOW53_RADAR 未通过(雷达关系不变量:① 任一照方对任一【主推中】目标的照射圈须小于该目标的光学可见圈(被动先于主动,含信标为照方);①b 反向对照——界换成侧推档时必须【有】格子越界,否则这条判据没有区分度;② 基准舰 DD 对标准目标的照射量程须恰为 ACT_REF、其照射被基准接收机听见的距离须恰为 LIS_REF;③ 每件主炮的 macRadar 须落在 [macRange, 该舰对标准目标的照射圈] 之内(超出=规格条虚标,永远拿不到火控级);④ emit/recv 随体型单调不减,且手电系数 4*(emit/recv)^(1/4) 须 >=4(等价 emit>=recv,recv 反超会让那个舰种的雷达看得比被听见还远);⑤ 靶场开局蓝方 CA 开照射后须至少有一个靶到火控级——坐标从 TEST_ENVS[0] 现读,SENS 与靶距任一边动了都会红)"; fail=1; }
 grep -q "FLOW47_FOG=ok" "$OUT" || { echo "✗ FLOW47_FOG 未通过(战争迷雾·敌舰画在哪儿:陈旧/幽灵须画在「最后已知+速度×年龄」的外推点,真实位置与裸最后已知点都不许有图标 / 实况须画在真实位置 / 从未探到的一艘都不许画(非GM 总图标=4) / 蓝舰不迷雾 / GM 旁路时全部回到真实位置且总图标=5)"; fail=1; }
 grep -q "FLOW48_KEYS=ok" "$OUT" || { echo "✗ FLOW48_KEYS 未通过(SN0 键的静态检查:九维能力清单与五条功能带清单逐位钉死、四套站位模板 49 个插槽的 cap 与 band 全落在清单上、9 个 boost 键同样、阵心 req/cap 不悬空、三通道驻留对象的键集合恒为 ir/esm/lad;每组都带故意种坏的自检副本)"; fail=1; }
 # SN0 源码级普查:三通道驻留键的【读点计数】。JS 探针跑在浏览器里读不到源码文件,所以这一半只能在 bash 层做。

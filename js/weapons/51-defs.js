@@ -9,7 +9,7 @@
    只会静默给出一个更小的数,fcGate / 目标轮盘 / hover 圈 / 规格条跟着一起错。 */
 const WPN={ // 定义(Definition):全局一份的不变模板,数值原样搬自原 CLS_WPN/CLS_CIWS 表
   mac_light:{kind:'mac',label:'主炮',macDmg:220,mac:30,macRange:150000,macRadar:150000},  // DD(原FRIGATE)轴炮;SN4 macRadar=开照射时的火控射程,取旧感知半径原值 15 万(与炮同程,DD 开照射零增益——这与改前 max(炮,感知) 的结果逐位相同)
-  mac_heavy:{kind:'mac',label:'主炮',macDmg:400,mac:30,macRange:150000,macRadar:250000}, // CA/BB 轴炮(BB 靠下方 CLS_LOADOUT 克隆自动跟上);SN4 macRadar 取旧感知半径原值 25 万,正是 83-hud 一直在画的那个圈
+  mac_heavy:{kind:'mac',label:'主炮',macDmg:400,mac:30,macRange:150000,macRadar:250000}, // CA/BB 轴炮(BB 靠下方 CLS_LOADOUT 克隆自动跟上);SN4 macRadar 取旧感知半径原值 25 万,正是 83-hud 一直在画的那个圈。⚠ 注意它只对【标准目标】(反射 1.0,即巡洋级)可达:打一艘 DD(合成反射 0.42)时照射量程只有 209,153,拿不到火控级的话这 25 万就是虚标。FLOW53_RADAR ③ 守的是前一半(对标准目标必须可达),后一半是 stealth 在起作用的正确结果,不是 bug
   msl_light:{kind:'msl',label:'导弹',missDmg:12,ammo:192,cells:4,mslPer:12,mslReload:60,mslRange:350000},  // DD 射手:16组×12(KIMI154:每组16→12)
   msl_heavy:{kind:'msl',label:'导弹',missDmg:15,ammo:240,cells:6,mslPer:12,mslReload:60,mslRange:350000}, // CA 射手:20组×12(KIMI154)
   ciws_core:{kind:'ciws',label:'拦截',outer:25000,outerIntercept:0.40,inner:8000,innerIntercept:0.85,chaffRate:0.25,inter:384}, // DD 防空核心,干扰中
