@@ -25,11 +25,11 @@ const FM_DIM = [
   { k: 'aaClose', nm: '防空·贴身', ab: '贴身', w: 0.44, f: s => { const c = ciwsOf(s); return (c.inner || 0) * (c.innerIntercept || 0); } },
   { k: 'aaChan', nm: '防空·通道', ab: '通道', w: 1.00, f: s => { const c = ciwsOf(s); return (s.interMax || 0) * (c.outer || 0); } },
   { k: 'gun', nm: '主炮', ab: '主炮', w: 0.36, f: s => s.macReload ? (s.macDmg || 0) / s.macReload : 0 },
-  { k: 'ir', nm: '被动·红外', ab: '红外', w: 0.36, f: s => (s.detPower || 0) * (s.detPower || 0) },
-  { k: 'esm', nm: '被动·射频', ab: '射频', w: 0.11, f: s => (s.esmQual || 0) * (s.esmQual || 0) },
-  { k: 'stealth', nm: '隐蔽', ab: '隐蔽', w: 0.06, f: s => 1 / Math.max(0.01, (s.sigBase || 1) * (s.rcs || 1)) }, // 分母兜底 0.01:sigBase 被 tier 乘到 0 时不至于吐 Infinity 把归一化整列压成 0
-  { k: 'c2', nm: '网络中枢', ab: '网络', w: 0.36, f: s => s.guideChan || 0 },
-  { k: 'ew', nm: '电子战', ab: '电战', w: 0.24, f: s => s.ecmPower || 0 },
+  { k: 'ir', nm: '被动·红外', ab: '红外', w: 0.36, f: s => { const p = sReq(s, 'detPower'); return p * p; } }, // SN2:摘 ||0 —— 字段一没了这一维恒 0,红外哨戒那个插槽对谁都是 0 分、匈牙利完全无差别,而全库零报错
+  { k: 'esm', nm: '被动·射频', ab: '射频', w: 0.11, f: s => { const q = sReq(s, 'esmQual'); return q * q; } }, // SN2:摘 ||0,同 ir 那条
+  { k: 'stealth', nm: '隐蔽', ab: '隐蔽', w: 0.06, f: s => 1 / Math.max(0.01, sReq(s, 'sigBase') * sReq(s, 'rcs')) }, // 分母兜底 0.01:sigBase 被 tier 乘到 0 时不至于吐 Infinity 把归一化整列压成 0(那道守的是值不是字段,留着)。SN2:两个 ||1 摘掉 —— 它们是全库最危险的一处兜底,字段一缺这一维恒等于 1.00 = 全队满分,前出哨戒/侦察插槽全部评估为满足,而界面全绿
+  { k: 'c2', nm: '网络中枢', ab: '网络', w: 0.36, f: s => sReq(s, 'guideChan') }, // SN2:摘 ||0 —— guideChan 已被 SN1 迁到 weapons/51-defs 不随感知表陪葬,但这个 ||0 与 SN1 摘掉的那个 ||4 是同一类假兜底:字段一丢,副中枢插槽对谁都是 0 分而不是报错
+  { k: 'ew', nm: '电子战', ab: '电战', w: 0.24, f: s => sReq(s, 'ecmPower') }, // SN2:摘 ||0 —— ecmPower 不在第二段要换掉的八个字段里,但它【住在 CLS_SENS 这张表里】,整表替换时最容易陪葬(这正是 SN1 把 guideChan 迁出去的理由);0 是它的合法值,sReq 原样放行
   { k: 'surv', nm: '生存', ab: '生存', w: 0.24, f: s => (s.hp || 0) / Math.max(0.05, 1 - (s.chaffRate || 0)) }, // 同上:chaffRate 是 'prob' 字段可以合法取到 1
 ];
 const FM_CAPS = FM_DIM.map(d => d.k);

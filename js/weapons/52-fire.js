@@ -20,7 +20,7 @@ const MAC_SPREAD_K=0.018;   // 每超出一倍有效射程增加的偏角(rad,�
 const MAC_SPREAD_CAP=0.05;  // 偏角上限,防极端距离下数值失控
 function macEffRange(s){ // RF6 有效射程:开雷达取雷达照射范围与炮射程的较大者,不开雷达就是炮自己的射程
   const gun=s.macRange||150000;
-  return s.lidar?Math.max(gun,s.sensorRange||0):gun;
+  return s.lidar?Math.max(gun,sReq(s,'sensorRange')):gun; // SN2 摘兜底:||0 让字段一旦消失就静默退化成"开雷达零增益"——DD 的 sensorRange 与 macRange 恰好都是 15 万、本来就零增益,看不出来;CA 是 15 万→25 万,主炮有效射程会悄悄掉回 15 万,而 fcGate / radSolve / hover 圈 / 规格条全跟着一起错,没有一处会报错
 }
 function fireMAC(shooter,target){ // MAC轴炮:沿船头方向直射(必须先对准),到预测时间失的
   if(shooter.noFire)return; // RANGE1 禁火总闸门 1/3:靶场的靶只挨打不还手。这是 MAC 发射的唯一实现,GM 手动锁定/自动索敌/AI 三条路径最终都落到这里。注意这是个【静默】开关(不报错不打日志),将来若误给蓝舰置了 noFire 会毫无线索,置位处只有 initEnemy 的靶语义包一处

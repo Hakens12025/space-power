@@ -75,10 +75,10 @@ const RANGE_KNOBS=[
 function rangeDefaults(){ // 缺省 = DD(靶用的舰种)的武器定义基线,这样面板开箱即是"未改动"的对照组。RF3 改读 weapons/51-defs(原 CLS_CIWS.DD/CLS_WPN.DD)
   const c=(typeof WPN!=='undefined'&&WPN.ciws_core)||{innerIntercept:0.85,chaffRate:0.25};
   const w=(typeof WPN!=='undefined'&&WPN.ciws_core)||{inter:384};
-  const sn=(typeof CLS_SENS!=='undefined'&&CLS_SENS.DD)||{sigBase:0.7,ecmPower:0.3};
+  const sn=CLS_SENS.DD; // SN2 摘兜底:原 ||{sigBase:0.7,ecmPower:0.3} 是 CLS_SENS.DD 的【手抄副本】,表被换掉时它会原地顶上,面板照常显示 0.7/0.3 并把值写进一个已不存在的字段——最难查的一种静默。本文件头部那句"调用点全部带 typeof 守卫"说的是别人调 95,不是 95 调别人:rangeDefaults 只在运行期被调,而 sensors/20 在 index.html 里排在本文件之前
   return {evadeOn:false,evadeR:30000,evadeT:20,speedCmd:2,
     inter:w.inter,interHitMul:1,inner:c.innerIntercept,chaff:c.chaffRate,
-    decoyAuto:0,sig:sn.sigBase,lidar:true,ecm:false,ecmPower:sn.ecmPower};
+    decoyAuto:0,sig:sReq(sn,'sigBase'),lidar:true,ecm:false,ecmPower:sReq(sn,'ecmPower')}; // SN2 摘兜底:这两格是靶场「信号特征 / ECM强度」两个旋钮的缺省基线,字段没了必须当场炸——吐 undefined 的话会顺着 rangeClampOne 的 Number(undefined)=NaN 一路变成 out.sig=NaN,经 applyRangeOne 写进靶的 sigBase,curSig 全线 NaN 而面板只显示 "NaN"。⚠ 失败形态是【开局白屏】不是每帧一个异常:loadRangeCfg 在 init() 里、排在 requestAnimationFrame 之前,这里抛错会让 init 整个中止
 }
 function rangeClampOne(src){ // 逐字段钳位。localStorage 里的值可能被手改或来自旧版本:一个 NaN 顺着 speedCmd → cruiseOf → steerToVel 传进运动内核,表现是靶乱飞且一声不吭
   const d=rangeDefaults(),out={};

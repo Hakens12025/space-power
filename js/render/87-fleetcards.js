@@ -136,8 +136,11 @@ function cellsText(s){ // v129:火力单元独立装填时间(每个单元一格
   return t.map(x=>x<=0?'<span style="color:var(--teal)">✅就绪</span>':`<span style="color:var(--acc)">⏳${Math.round(x)}s</span>`).join(' ');
 }
 function sensorPanel(s){ // DS181 S3:辐射指示(我有多亮,IR/RF两格)+ 三通道lit进度条(被谁点亮一目了然)
-  const eIr=(s.sigBase||1)+SENS.E_ENG*(s.flame!==0?1.0:(s.sideFlame?0.6:0));
-  const eRf=SENS.E_LIDAR*(s.lidar?1:0)+SENS.E_ECM*(s.ecm?1:0)+SENS.E_HULL_LEAK*(s.sigBase||1);
+  // SN2:两处 (s.sigBase||1) 换成 sReq —— 不用裸读是因为裸读的响度寄生在相邻一行的求值顺序上(updateInfo 那行 s.sigBase.toFixed(2) 恰好先抛),
+  //     谁把两行的先后挪一下、或者给那行加个兜底,静默就回来了;而这块面板在 RF2 隐藏清单里,画坏了根本没人看得见。
+  // SN:这两行是 21-detect 里 E_ir/E_rf 的【逐字副本】(一处并行真值)。本段刻意不合并 —— 合并属于第二段,届时两处一起收进同一个出口。
+  const eIr=sReq(s,'sigBase')+SENS.E_ENG*(s.flame!==0?1.0:(s.sideFlame?0.6:0));
+  const eRf=SENS.E_LIDAR*(s.lidar?1:0)+SENS.E_ECM*(s.ecm?1:0)+SENS.E_HULL_LEAK*sReq(s,'sigBase');
   const bar=(v,max,col)=>`<span style="display:inline-block;width:${Math.max(2,Math.min(100,v/max*100))}%;height:8px;background:${v>max*0.5?col||'#ff8c42':'#4aa8ff'};border-radius:2px"></span>`;
   const trk=s.side==='blue'?s.trkR:s.trkB; // 我方被对方照明的进度(蓝舰看trkR=红网络对我的积分)
   const t3=trk?(trk.ir/1).toFixed(1):'-',t2=trk?(trk.esm/1).toFixed(1):'-',t1=trk?(trk.lad/2).toFixed(1):'-';
