@@ -131,13 +131,43 @@ function fc3reset(){
   return {S:S,A:ts[0],B:ts[1]};
 }
 function fc3hit(x){return x.rangeStat?x.rangeStat.hits:-1;}
-/* 6c-1 许可只做减法:序列只许导弹打 → 主炮一发不发(哪怕同一个目标已被写进 lockedTarget),导弹照常记账 */
+/* 6c-1 许可只做减法:序列只许导弹打 → 主炮一发不发(哪怕同一个目标已被写进 lockedTarget),导弹照常记账。
+   SN0 补牙齿:改前判据只有 macHits===0 && FC3.mac===0,而【MAC 根本解算不出目标】会给出一模一样的读数 ——
+   fcGate 的 mac 分支有三条静默 return null(58:164 许可 / 58:174 接触等级 lit>=3 / 58:177 射程),
+   外加 57 的舰级 macOn 一道闸;任何一条恒不过,"许可只做减法"这句话就一个字也没被测到。
+   fc3reset 的注释里本来就写着"MAC 要 litBlue>=3 才解算得出目标",但这条前提从来没被断言过,
+   而感知层一动,最先垮的正是接触等级那条。故补两样,缺一不可:
+   ① 前置条件直接断言 —— litBlue 全程 >=3、三维距离全程在 macEffRange*MAC_FALLOFF 之内、macOn/autoEngage/roe 都放行;
+   ② 正向对照 —— 同一艘舰、同一个靶、紧接着的同一段时间,只把 allow.mac 这一个比特翻成 true,主炮就必须真的开火。
+   只加 ① 的话,"序列层把 mac 也放行了"这种反向坏法仍测不出来(那时 macHits 照样是 0 才叫怪);
+   只加 ② 的话,判定确实会红,但读数说不清是"许可层坏了"还是"这一局根本打不着"。 */
 t('FLOW3_ALLOW',function(){
   var e=fc3reset();
   fcNew(e.S,{tid:e.A.id},{mac:false,msl:true});
-  fc3step(5000);
-  var st=e.A.rangeStat,ok=(st.macHits===0&&FC3.mac===0&&st.mslHits>0);
-  return (ok?'ok':'fail')+' macHits='+st.macHits+' macShots='+FC3.mac+' mslHits='+st.mslHits+' mslShots='+FC3.msl+' fcTgtMac='+(e.S.fcTgt.mac?'set':'null')+' locked='+(e.S.lockedTarget?e.S.lockedTarget.name:'null');
+  var cap=(typeof macEffRange==='function')?macEffRange(e.S)*MAC_FALLOFF:(e.S.macRange||150000); /* 与 fcGate 逐字同口径:比的是硬上限,不是精确射程 */
+  var lit0=e.A.litBlue,litMin=99,dMax=0;
+  for(var i=0;i<5000;i++){ /* 不走 fc3step:前置条件要在同一条循环里【逐拍】采样,只看首尾两拍的话中途掉级看不见 */
+    stepSim(CFG.step);simTime+=CFG.step;
+    if(e.A.litBlue<litMin)litMin=e.A.litBlue;
+    var dd=V.len(V.sub(e.A.pos,e.S.pos));if(dd>dMax)dMax=dd; /* 三维距离,别写平面 hypot(同 RF5 备忘第三条门) */
+  }
+  var st=e.A.rangeStat,mac1=FC3.mac,msl1=FC3.msl,h1=st.macHits,ml1=st.mslHits;
+  var pre=(lit0>=3&&litMin>=3&&dMax<cap&&e.S.macOn===true&&e.S.autoEngage===true&&e.S.roe==='free'); /* MAC 这一侧的另外三道门必须全部放行,否则"没开火"证明不了是许可挡的 */
+  var neg=(h1===0&&mac1===0&&ml1>0&&!e.S.fcTgt.mac); /* 不该发生的没发生:主炮零发射零记账;而导弹侧确实在打,证明引擎在跑、不是整条链死了 */
+  /* 正向对照:紧接着再建一条【允许 mac】的序列。刻意不另起一局 —— 另起一局就把"同一艘舰 / 同一个靶 / 同一段时间 /
+     只差一个比特"这个最强的对照条件丢了,还要多烧 1500 步预热。此刻机头已被上一段的 lockedTarget 归瞄到位、
+     macCd 也早归零(57:6 每 tick 无条件递减),40s 窗口 > macReload 30s,留够一整个装填周期。
+     两条序列共存是允许的(FC_MAX_SEQS=5);mac 在第一条被许可挡下后,fcSolve 会绕到第二条,这正是被测路径 */
+  fcNew(e.S,{tid:e.A.id},{mac:true,msl:false});
+  fc3step(2000);
+  var mac2=FC3.mac,h2=e.A.rangeStat.macHits;
+  var pos=(mac2>mac1&&!!e.S.fcTgt.mac); /* 该发生的发生了 */
+  var ok=(pre&&neg&&pos);
+  return (ok?'ok':'fail')
+    +' 前置='+pre+'(litBlue '+lit0+'/min'+litMin+' 须>=3, dMax='+Math.round(dMax/1000)+'k<硬上限'+Math.round(cap/1000)+'k, macOn='+e.S.macOn+' roe='+e.S.roe+')'
+    +' 禁mac='+neg+'(macHits='+h1+' macShots='+mac1+' mslHits='+ml1+' mslShots='+msl1+' fcTgtMac为空='+(!e.S.fcTgt.mac)+')'
+    +' 正向对照='+pos+'(放开许可后 macShots '+mac1+'→'+mac2+' macHits '+h1+'→'+h2+' fcTgtMac='+(e.S.fcTgt.mac?'set':'null')+')'
+    +' locked='+(e.S.lockedTarget?e.S.lockedTarget.name:'null');
 });
 /* 6c-2 依次模式=集火:两目标序列每次都从下标 0 扫起,第一个靶不死就绝不换靶(靶无敌 → 第二个靶必须一笔记账都没有) */
 t('FLOW3_SEQ',function(){
@@ -3351,6 +3381,514 @@ t('FLOW45_LINK',function(){
     +' | applyClsTier 手抄同步='+edOk+'(改成 CA 后='+ed.guideChan+')'
     +' | 真实调用点 guideSide 的引导舰筛选:清零前='+live+'艘 清零后='+dead0+'艘(须 >0 → 0)';
 });
+/* SN0 三通道接触等级阶梯(IR 红外 / ESM 射频 / LADAR 回波 → lit 0/1/2/3)。
+   【本条在第二段换引擎时必须整条改写】—— 它就是行为真的变了的证据,改不动说明新内核没真的换上去。
+   不要为了让它继续绿而去迁就它:距离常数、通道名(trk.ir/esm/lad)、阶梯形状全都钉死在【当前三通道模型】上,
+   换成 光学/雷达 两通道 + size/stealth/emit/recv 四字段之后,下面每一条判据都应该当场失效。
+
+   为什么非要有它:今天全部与感知相关的判据都把 lit 当成【不会变的背景前提】(手写 litBlue,
+   或靠 fc3reset 预热若干秒隐式依赖),FLOW4_FOG 之外没有一条直接断言 detectLoop 的输出。
+   尤其是 ① —— 没有这条上界的话,把探测能力整体放大十倍,全套判定只会【更容易】通过,
+   没有任何一条会说"某个距离上必须仍然是 0 级"。
+
+   跑法:不走 stepSim。建两艘临时舰、整体换掉 ships 之后【手动调 detectLoop()】,一次调用 = 一个感知节拍
+   (core/05-sim:9 detT 每游戏秒一次)。这样既没有运动/任务AI/武器的噪声,也没有一个随机数;
+   160 次调用(30/30/30/30/40)× 2 艘舰的开销可以忽略(0 步 stepSim)。
+   舰从不积分,所以 flame/sideFlame 恒 0 = "静默滑行"那一档,E_ir 就是 sigBase 本身。
+
+   ==== 距离常数的推算(稳态 trk = 增益/(1−衰减)) ====
+   IR/ESM:增益上限 G×SNR_CAP = 0.083×2 = 0.166,衰减 0.90 ⇒ 稳态上限 0.166/0.10 = 1.66
+   LADAR :增益上限 0.25 ×2 = 0.5  ,衰减 0.94 ⇒ 稳态上限 0.5 /0.06 = 8.33
+   被动通量 = 辐射功率/d²,与【被探测方】烘焙的下限比(DD:floorIr 3.75e-11 / floorEsm 1.6e-11):
+     静默 DD 的 E_ir = sigBase = 0.7、E_rf = E_HULL_LEAK×0.7 = 0.035
+     IR 越过探测下限:d ≤ sqrt(0.7/3.75e-11) = 136,626 km
+     IR 稳态够 LIT1=1.0 需 增益 ≥ 0.10 ⇒ SNR ≥ 2.45 ⇒ d ≤ 87,259 km
+     ESM(静默时只剩船体泄漏)越过下限只到 46,771 km,稳态够 1.0 只到 29,871 km
+   ⇒ ① 取 200,000:IR 通量只有下限的 0.467 倍 ⇒ 三通道一拍都积不起来。
+        余量 2.14 倍 —— 想打穿这条上界,得把探测能力提到现在的 2.14 倍以上(放大十倍当然穿)
+   ⇒ ②③④⑤ 取 60,000:IR 是下限的 5.19 倍(增益封顶 ⇒ 稳态 1.66)、ESM 只有 0.61 倍(连下限都没过 ⇒ 恒 0)
+        ⇒ 单通道过门、交叉不过 ⇒ 只到 lit=1
+   ③ 目标开 LADAR 后 E_rf = E_LIDAR + 泄漏 = 10.035 ⇒ 60k 处 ESM 为下限的 174 倍 ⇒ 稳态同样封顶
+        ⇒ IR 与 ESM 双双越过 LIT2=1.0 ⇒ cross 成立 ⇒ lit=2(纯被动也能到识别级)
+   ④ 照射回波 = pPing(【照射方】DD 0.7) × rcs(目标 DD 0.6) / d⁴ = 3.24e-20 = FLOOR_LAD(1e-22) 的 324 倍
+        ⇒ lad 稳态封顶 8.33,30 拍到 7.03 ≥ LIT3=2.0 ⇒ lit=3
+   ⑤ 断照后 lad 按 0.94 衰减,40 拍到 0.592 < LAD_DOWN=1.5 ⇒ 21-detect:104 的断照降级把 3 打回 2;
+        此时 IR/ESM 的 cross 仍在(1.66/1.66),所以是降回 2 而不是掉到 1
+
+   双向:①② 的负面(远处三通道恒 0 / 近处交叉不许过)与 ③④ 的正面(该升的真升了)缺一不可,
+   再加一条【阶梯序列必须恰好是 0,1,2,3,2】—— "什么都探不到"(全 0)与"什么都探得到"(全 3)
+   各会被两头的判据之一挡住,而序列判据把中间任何一级被跳过也一并挡掉。
+   读数把三通道的实测 trk 一并印出来:判据翻红时,是哪一级、差多少,不用重跑就能看出来。
+
+   场景隔离:整体换掉 ships/projectiles,finally 里逐条还原,并把两艘临时舰从 esmFixes 里摘掉
+   (FLOW31_FOLLINE 是像素判定、对场景残留敏感,不能给它留脏状态)。本条不 render、不读 DOM、不碰 adminMode。 */
+t('FLOW44_SENSE',function(){
+  var shipsBak=ships.slice(),projBak=projectiles.slice();
+  var DT,TG,L=[],K=[],seq='',ok=false,ok1=false,ok2=false,ok3=false,ok4=false,ok5=false,okSeq=false;
+  try{
+    DT=makeShip('DD','SN0-det',[0,0,0],[1,0,0],[0,0,0],'blue',2); /* 探测方:DD pPing 0.7 */
+    TG=makeShip('DD','SN0-tgt',[200000,0,0],[1,0,0],[0,0,0],'red',2); /* 被探方:DD sigBase 0.7 / rcs 0.6 / floorIr 3.75e-11 / floorEsm 1.6e-11 */
+    ships.length=0;ships.push(DT);ships.push(TG);
+    projectiles.length=0; /* 信标也是 LADAR 平台(21-detect:83),清空免得别条探针留下的信标凭空照亮目标 */
+    var step=function(n){ /* n 个感知节拍,末尾抓一次快照 */
+      for(var i=0;i<n;i++)detectLoop();
+      L.push(TG.litBlue);K.push({ir:TG.trkB.ir,esm:TG.trkB.esm,lad:TG.trkB.lad}); /* 蓝网络看红舰 ⇒ 读红舰身上的 litBlue/trkB */
+    };
+    step(30);                      /* ① 远距静默 200k:三通道通量全在探测下限之下 */
+    TG.pos[0]=60000;step(30);      /* ② 近距静默  60k:只有 IR 过门,ESM 连下限都没过 ⇒ 交叉不成立 */
+    TG.lidar=true;step(30);        /* ③ 目标开辐射:E_rf 从 0.035 跳到 10.035 ⇒ IR×ESM 交叉 */
+    DT.lidar=true;step(30);        /* ④ 探测方开照射:1/d⁴ 回波驻留 ⇒ 火控级 */
+    DT.lidar=false;step(40);       /* ⑤ 断照 40 拍:lad 衰减到 LAD_DOWN 之下 ⇒ 降回 2(cross 还在) */
+    seq=L.join(',');
+    okSeq=(seq==='0,1,2,3,2'); /* 反退化:全 0(什么都探不到)与全 3(什么都探得到)都出不了这条序列 */
+    ok1=(L[0]===0&&K[0].ir===0&&K[0].esm===0&&K[0].lad===0); /* 上界:不是"lit 小",是【一拍都没积起来】 */
+    ok2=(L[1]===1&&K[1].ir>=SENS.LIT1&&K[1].esm<SENS.LIT2&&K[1].lad===0); /* 单通道过门 + 交叉必须不过 */
+    ok3=(L[2]===2&&K[2].ir>=SENS.LIT2&&K[2].esm>=SENS.LIT2&&K[2].lad===0); /* 到 2 级必须是 IR×ESM 交叉挣来的,不许靠 LADAR */
+    ok4=(L[3]===3&&K[3].lad>=SENS.LIT3);
+    ok5=(L[4]===2&&K[4].lad<SENS.LAD_DOWN&&K[4].ir>=SENS.LIT2&&K[4].esm>=SENS.LIT2); /* 降回 2 而不是掉到 1:cross 仍在 */
+    ok=(okSeq&&ok1&&ok2&&ok3&&ok4&&ok5);
+  }finally{
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+    projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
+    if(typeof esmFixes!=='undefined'){esmFixes.delete(DT);esmFixes.delete(TG);} /* ESM 椭圆是按【舰对象】做键的 Map,临时舰不摘会一直挂在里面 */
+  }
+  function rd(i){var k=K[i]||{ir:-1,esm:-1,lad:-1};return ' ir='+k.ir.toFixed(3)+' esm='+k.esm.toFixed(3)+' lad='+k.lad.toFixed(3);}
+  return (ok?'ok':'fail')+' 阶梯 lit='+seq+'(须 0,1,2,3,2)='+okSeq
+    +' | 1 远距静默200k lit='+L[0]+rd(0)+' 三通道须全0(探测上界)='+ok1
+    +' | 2 近距静默60k lit='+L[1]+rd(1)+' IR单通道过门且ESM不到LIT2(交叉不过)='+ok2
+    +' | 3 目标开辐射 lit='+L[2]+rd(2)+' IR与ESM双双过LIT2(交叉)='+ok3
+    +' | 4 探测方开照射 lit='+L[3]+rd(3)+' LADAR驻留>=LIT3(2.0)='+ok4
+    +' | 5 断照40拍 lit='+L[4]+rd(4)+' lad<LAD_DOWN(1.5)降回2且cross仍在='+ok5;
+});
+/* SN0 近防依赖弹丸可见性:敌方导弹可见 ⇒ 近防真的发得出拦截弹(双向)。
+   为什么需要这条:57-step-weapons:58 那道近防门读的是弹丸的 visBlue/visRed(detectLoop 每秒写的缓存),
+   失效形态是一个 continue —— 拦截弹不出膛、interceptor 库存不掉、日志一条不出,与「敌导弹还没进圈」读起来完全一样。
+   第二段重写 projVisibleTo(sensorRange 换成 recv)时,重写得不对【不会抛错】,只会算出一个更小的可见半径,
+   近防几乎不发射,而现有六十条判定一条都不红;SOAK 那条的 interceptor 计数是纯打印,不进判定。
+   【可见性必须是 detectLoop 真写出来的】:手写 p.visBlue=true 会把被测链路整条绕过,
+   判定就退化成"我写了 true 然后读到了 true"。本条一个字都不碰 visBlue/visRed,只摆场景。
+   三相 + 两组【单变量】对照(几何/库存/威胁/装填/开关逐位相同,每组只翻一个字段):
+     A1 开灯+冷弹 → 走 LADAR 支路(30000 < d.sensorRange 150000)              → 必须发
+     A2 熄灯+热弹 → 走被动支路(30000 < 150000×0.8×0.4 = 48000)               → 必须发
+     B  熄灯+冷弹 → 两条支路都够不着(30000 > 150000×0.8×0.15 = 18000)        → 必须【恰好】0 发
+   A1↔B 只差探测方 lidar;A2↔B 只差来袭弹 fuel(psig 0.4/0.15)。两条支路各有一条正向判据咬着,
+   只咬 LADAR 那一支的话,被动那半边改坏了照样绿。
+   反向那一相还要把近防的【其余】条件逐条读出来(弹丸存活 / 在 2×外圈内 / 未脱锁 coastT=0 / 库存够 need /
+   开关开 / 无冷却 / 威胁逼近 dot>0),否则"0 发"可能来自别的原因,那就是一条假绿。
+   【几何钉死】:来袭弹每 tick 被按回 30000km 定点。不钉的话它必然一路逼近,反向那一相只是"晚一点拦"、
+   拿不到严格的 0。pin 排在 stepSim 之前,所以 S1 的 detectLoop 看到的就是这个定点;本 tick 弹丸随后只走
+   CLOSE×dt=60km,S14-17 的近防看到的仍是 29940,与可见半径的余量(1.6~1.7 倍)比可以忽略。
+   【发射速度要自己给】:出膛那一刻 vel 继承载机(静止=0),不给的话近防的威胁判定 dot(p.vel,...) 恒为 0
+   而被跳过,"0 发"就成了假绿 —— 所以三相一律先置 p.vel/p.spd,让威胁判定在三相里同样成立。
+   场景隔离(同 FLOW31_FOLLINE 的手法):自己造两艘船换掉 ships、清 projectiles/hitFX/threatCorridors/fireSeqs,
+   并 selfPlay=true 关掉 enemyAI(它会给红舰推命令、还有 8% 掷骰齐射,判定就不再确定);全部在 finally 里还原。 */
+t('FLOW46_CIWS',function(){
+  var PIN=30000,CLOSE=3000,N=150; /* 钉住的距离 / 逼近速度 / 每相步数(150×0.02=3s,detectLoop 每秒一拍 → 3 拍) */
+  var _shipsBak=ships,_projBak=projectiles,_selBak=selected,_selfBak=selfPlay,_detBak=detT,_fi=fireInterceptor;
+  var _fxBak=(typeof hitFX!=='undefined')?hitFX:null;
+  var _seqBak=(typeof fireSeqs!=='undefined')?fireSeqs:null;
+  var _corBak=(typeof threatCorridors!=='undefined')?threatCorridors:null;
+  var _netBak=(typeof netSeq!=='undefined')?netSeq:0;
+  var shots=0,out='';
+  function phase(lidarOn,cold){
+    var X=makeShip('DD','近防甲',[0,0,0],[1,0,0],[0,0,0],'blue',2);   /* DD:ciws outer 25000(近防窗口 2× = 50000)、拦截弹 384 */
+    var R=makeShip('DD','来袭乙',[200000,0,0],[-1,0,0],[0,0,0],'red',2);
+    ships=[X,R];projectiles=[];
+    if(typeof hitFX!=='undefined')hitFX=[];
+    if(typeof threatCorridors!=='undefined')threatCorridors=[];
+    [X,R].forEach(function(s){s.orders=[];s.brake=false;s.lockedTarget=null;s.autoEngage=false;s.roe='hold';s.macOn=false;s.mslOn=false;s.follow=null;s.formation=null;}); /* 除近防外全部闭嘴:多一发主炮/导弹就多一堆弹丸,场面就不干净了 */
+    X.ciwsOn=true;X.lidar=!!lidarOn;R.lidar=false;R.ciwsOn=false;
+    detT=0;                                        /* 感知节拍归零:detT 是全局的,跨探针残留会让第一拍 detectLoop 的时机说不清 */
+    fireMissiles(R,X,1);                           /* 真实发射链:count/fuel/target/coastT/netId 全由生产代码填,不手搓弹丸 */
+    var p=null,i;
+    for(i=0;i<projectiles.length;i++)if(projectiles[i].type==='missile')p=projectiles[i];
+    if(!p)return {err:'fireMissiles 一枚导弹都没生出来'};
+    if(cold)p.fuel=0;                              /* 滑行变冷:psig 0.4→0.15。56-step 的自毁条件是"燃料尽【且正在远离】",这里恒在逼近,弹丸不会消失 */
+    p.vel=[-CLOSE,0,0];p.spd=CLOSE;
+    var int0=X.interceptor,s0=shots,seen=false;
+    for(i=0;i<N;i++){
+      if(!p.done)p.pos=[PIN,0,0];
+      stepSim(CFG.step);simTime+=CFG.step;
+      if(p.visBlue)seen=true;                      /* 可见性只【读】,从不写 */
+    }
+    var cw=ciwsOf(X);
+    return {vis:seen,visEnd:!!p.visBlue,shots:shots-s0,int0:int0,int1:X.interceptor,
+      live:!p.done,d0:V.len(V.sub(p.pos,X.pos)),win:cw.outer*2,coast:(p.coastT||0),
+      need:Math.ceil((p.count||16)*1.2),on:(X.ciwsOn!==false),cd:(X.ciwsCd||0),
+      thr:V.dot(p.vel,V.norm(V.sub(X.pos,p.pos))),
+      ic:projectiles.filter(function(q){return q.type==='interceptor';}).length};
+  }
+  function diag(z){return '[存活='+z.live+' 距离='+Math.round(z.d0)+'<窗口'+z.win+' coastT='+z.coast+' 威胁='+Math.round(z.thr)+']';}
+  try{
+    fireInterceptor=function(a,b,c){shots++;return _fi(a,b,c);}; /* 以"真的调到了发射点"为准:库存差分会把别的路径算进来(同 FC3 包 fireMAC/fireMissiles 的理由) */
+    selfPlay=true;selected=[];
+    if(typeof fireSeqs!=='undefined')fireSeqs=[];  /* 火控序列清干净:stepFireControl 会去动别的探针留下的序列 */
+    var A1=phase(true,true),A2=phase(false,false),B=phase(false,true);
+    if(A1.err||A2.err||B.err)return 'fail '+(A1.err||A2.err||B.err);
+    var okA1=(A1.vis===true&&A1.shots>0&&A1.int1<A1.int0);
+    var okA2=(A2.vis===true&&A2.shots>0&&A2.int1<A2.int0);
+    var okB=(B.vis===false&&B.visEnd===false&&B.shots===0&&B.int1===B.int0&&B.ic===0
+      &&B.live&&B.d0<B.win&&B.coast===0&&B.int1>=B.need&&B.on&&B.cd<=0&&B.thr>0);
+    var ok=(okA1&&okA2&&okB);
+    out=(ok?'ok':'fail')
+      +' A1 开灯+冷弹(LADAR支路 30000<传感器150000):可见='+A1.vis+' 拦截弹='+A1.shots+'条 库存'+A1.int0+'→'+A1.int1+' '+diag(A1)
+      +' | A2 熄灯+热弹(被动支路 30000<150000×0.8×0.4=48000):可见='+A2.vis+' 拦截弹='+A2.shots+'条 库存'+A2.int0+'→'+A2.int1+' '+diag(A2)
+      +' | B 熄灯+冷弹(两支路都够不着 30000>150000×0.8×0.15=18000):可见='+B.vis+'(末拍'+B.visEnd+') 拦截弹='+B.shots+'条(须0) 库存'+B.int0+'→'+B.int1+'(须不掉) 场上拦截弹='+B.ic+'(须0)'
+      +' | B 的其余近防条件逐条(证明这 0 发只能来自可见性):弹丸存活='+B.live+' 距离'+Math.round(B.d0)+'<2×外圈'+B.win+'='+(B.d0<B.win)
+      +' 未脱锁coastT='+B.coast+' 库存'+B.int1+'>=需'+B.need+'='+(B.int1>=B.need)+' 开关='+B.on+' 冷却='+B.cd.toFixed(2)+' 威胁逼近='+Math.round(B.thr)
+      +' | 单变量对照:A1↔B 只差探测方 lidar,A2↔B 只差来袭弹 fuel';
+  }finally{
+    fireInterceptor=_fi;
+    ships=_shipsBak;projectiles=_projBak;selected=_selBak;selfPlay=_selfBak;detT=_detBak;
+    if(_seqBak)fireSeqs=_seqBak;
+    if(_fxBak)hitFX=_fxBak;
+    if(_corBak)threatCorridors=_corBak;
+    if(typeof nets!=='undefined'&&nets.forEach){var junk=[];nets.forEach(function(v,k){if(k>_netBak)junk.push(k);});junk.forEach(function(k){nets.delete(k);});} /* 本条自己造的网清掉,不给后面的探针留残留 */
+  }
+  return out;
+});
+
+/* SN0 战争迷雾:敌舰到底画在哪儿。
+   为什么需要:drawShip(82-ship-icons:41-53)对红方的陈旧/幽灵接触画的是【最后已知位置 + 速度×年龄】的外推点,
+   而 L48 那两个回落(||s.pos / ||s.vel)一旦被走到,幽灵就静默退化成"画在真实位置上"——
+   战争迷雾当场失效,而画面看起来完全正常,还多一个随年龄膨胀的不确定圈,显得格外可信。
+   这条路径【今天一条判定都没有】:FLOW4_FOG 只跑 xhTick、从不调 render();
+   而全部会调 render() 的判定都在 adminMode=true 下跑,L42 的非GM门第一行就把整块迷雾逻辑跳过 ——
+   所以改对改错都是绿的。SN2c 会把那两处回落改成"没有接触记录就不画",本条是它的前置护栏:
+   今天要绿(探针喂的 seenBluePos/seenBlueVel 是完整的,回落分支不可达)、SN2c 之后仍要绿、把外推改坏必须红。
+
+   判据【走 canvas 指令级,不走像素】:82-ship-icons:118-121 是 save→translate(p)→rotate→drawHull,
+   那一句 ctx.translate(p[0],p[1]) 就是"图标画在哪儿"的唯一真相,坐标是精确浮点、没有噪声。
+   像素法在这里测不准——星云/网格/弹丸都会落进采样区(FLOW31 与 FLOW41 各栽过一次,后者已改指令级)。
+   场景照例隔离(只留自造的 5 艘、清空 projectiles/hitFX/fireSeqs、selected 置空、editMode 关),
+   这样 render() 里唯一的 translate 来源就是 drawShip:总数 = 真正画出来的舰数,本身就是一条判据。
+
+   双向(缺一不可):
+     ① 陈旧/幽灵必须落在【外推点】,而【真实位置】与【裸最后已知点】上一个都不许有 ——
+        只判"在外推点"的话,去掉 +lv*ageV 那一项后图标落在 lp 上,离外推点不远却仍是错的;
+     ② 实况接触(lit=2、age=0)必须落在【真实位置】,且不许落到它那份故意写歪的 seenBluePos 上 ——
+        否则"坐标整体乱写"也能骗过第 ① 条;
+     ③ 从未探到(lit=0、ever=false)一艘都不许画,非GM 总 translate 须恰为 4;
+     ④ 蓝舰永不迷雾,必须在真实位置;
+     ⑤ 再以 GM 渲一遍:同样这几艘必须【全部回到真实位置】、总 translate 须恰为 5(连从未探到的那艘也画)——
+        这条把"今天全部探针都在 GM 下跑、于是这条路径怎么改都绿"这件事本身钉死在判定里。
+   成本:0 步 stepSim,2 次 render(),5 次 makeShip —— 毫秒级,不需要降级方案。 */
+t('FLOW47_FOG',function(){
+  var errs=[];var onerr=function(e){errs.push(e.message||String(e));};
+  window.addEventListener('error',onerr);
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),fxBak=hitFX.slice();
+  var seqBak=(typeof fireSeqs!=='undefined')?fireSeqs.slice():null;
+  var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},selBak=selected.slice(),edBak=editMode;
+  var otr=ctx.translate,out='';
+  try{
+    adminMode=false;editMode=false;selected=[];
+    projectiles.length=0;hitFX.length=0;
+    if(typeof fireSeqs!=='undefined')fireSeqs.length=0;
+    cam.x=0;cam.y=0;cam.zoom=0.0012; /* 1px = 833km。位置一律由 worldAt 从【屏幕比例】反算,与视口大小无关 */
+    var wa=function(sx,sy){var w=worldAt(sx,sy);return [w[0],w[1],0];};
+    /* 五艘自造舰:蓝方观测者 + 四种红方接触态。O 与 N 刻意不同位,否则两条计数会数到同一个 translate */
+    var O=makeShip('CA','雾观测',wa(W*0.50,H*0.12),[1,0,0],[0,0,0],'blue',2);
+    var S=makeShip('DD','雾陈旧',wa(W*0.75,H*0.28),[1,0,0],[0,0,0],'red',2);
+    var G=makeShip('DD','雾幽灵',wa(W*0.15,H*0.45),[1,0,0],[0,0,0],'red',2);
+    var L=makeShip('DD','雾实况',wa(W*0.85,H*0.85),[1,0,0],[0,0,0],'red',2);
+    var N=makeShip('DD','雾未探',wa(W*0.50,H*0.55),[1,0,0],[0,0,0],'red',2);
+    ships.length=0;ships.push(O,S,G,L,N);
+    /* 外推点先定在屏幕上,再反推 seenBluePos —— 这样"外推点离真实位置多远"是被设计出来的,不是撞运气撞出来的。
+       速度取真实量级(DD 巡航 800km/s),年龄靠 contactState 的两档:陈旧无年龄上限,幽灵必须 <=30s */
+    var Sv=[800,-300,0],Sage=100;   /* Sv*Sage = [80000,-30000] km = 屏幕 [+96,-36] px */
+    var Gv=[-600,500,0],Gage=20;    /* Gv*Gage = [-12000,10000] km = 屏幕 [-14.4,+12] px */
+    var Sext=wa(W*0.25,H*0.72),Gext=wa(W*0.55,H*0.20);
+    S.litBlue=2;S.everLitBlue=true;S.seenBlue=simTime-Sage;                       /* lit + age>5 => stale */
+    S.seenBlueVel=Sv.slice();S.seenBluePos=[Sext[0]-Sv[0]*Sage,Sext[1]-Sv[1]*Sage,0];
+    G.litBlue=0;G.everLitBlue=true;G.seenBlue=simTime-Gage;                       /* !lit + ever + age<=30 => ghost */
+    G.seenBlueVel=Gv.slice();G.seenBluePos=[Gext[0]-Gv[0]*Gage,Gext[1]-Gv[1]*Gage,0];
+    L.litBlue=2;L.everLitBlue=true;L.seenBlue=simTime;                            /* age=0 => live,不许外推 */
+    L.seenBluePos=wa(W*0.05,H*0.05);L.seenBlueVel=[0,0,0];                        /* 故意写歪:实况若误走外推会当场暴露 */
+    N.litBlue=0;N.everLitBlue=false;                                              /* seenBlue 保持 makeShip 的 -1e9 = 从未扫到 => none */
+    var tr=[];
+    ctx.translate=function(x,y){tr.push([x,y]);return otr.apply(ctx,arguments);};
+    function px(w){return toScreen(w[0],w[1]);}
+    function cnt(q){var n=0,i;for(i=0;i<tr.length;i++){if(Math.hypot(tr[i][0]-q[0],tr[i][1]-q[1])<3)n++;}return n;}
+    function sep(a,b){return Math.round(Math.hypot(a[0]-b[0],a[1]-b[1]));}
+    /* —— 第一遍:非 GM(玩家视角),迷雾块生效 —— */
+    tr.length=0;render();
+    var nS=cnt(px(Sext)),nSr=cnt(px(S.pos)),nSl=cnt(px(S.seenBluePos));
+    var nG=cnt(px(Gext)),nGr=cnt(px(G.pos)),nGl=cnt(px(G.seenBluePos));
+    var nL=cnt(px(L.pos)),nLx=cnt(px(L.seenBluePos));
+    var nN=cnt(px(N.pos)),nO=cnt(px(O.pos)),totN=tr.length;
+    /* 分离度读数:三个候选点互相离得够远,这条判定才有区分力(不是"碰巧都在 3px 容差里") */
+    var sepS=sep(px(Sext),px(S.pos)),sepG=sep(px(Gext),px(G.pos)),velS=sep(px(Sext),px(S.seenBluePos));
+    /* —— 第二遍:GM 旁路。同样这几艘必须全部回到真实位置,连"从未探到"的那艘也要画出来 —— */
+    adminMode=true;
+    tr.length=0;render();
+    var gSr=cnt(px(S.pos)),gSx=cnt(px(Sext)),gGr=cnt(px(G.pos)),gGx=cnt(px(Gext));
+    var gN=cnt(px(N.pos)),totG=tr.length;
+    ctx.translate=otr;
+    var okFog=(nS===1&&nSr===0&&nSl===0&&nG===1&&nGr===0&&nGl===0);
+    var okLive=(nL===1&&nLx===0);
+    var okNone=(nN===0&&totN===4);
+    var okBlue=(nO===1);
+    var okGM=(gSr===1&&gSx===0&&gGr===1&&gGx===0&&gN===1&&totG===5);
+    var okSep=(sepS>80&&sepG>80&&velS>40);
+    var ok=(okFog&&okLive&&okNone&&okBlue&&okGM&&okSep&&!errs.length);
+    out=(ok?'ok':'fail')
+      +' 非GM 陈旧(age100s):外推点='+nS+'(须1) 真实位='+nSr+'(须0) 裸最后已知位='+nSl+'(须0)'
+      +' | 非GM 幽灵(age20s):外推点='+nG+'(须1) 真实位='+nGr+'(须0) 裸最后已知位='+nGl+'(须0)'
+      +' | 实况(age0):真实位='+nL+'(须1) 误外推到歪坐标='+nLx+'(须0)'
+      +' | 从未探到:画出来='+nN+'(须0) 蓝舰真实位='+nO+'(须1) 非GM总图标='+totN+'(须4)'
+      +' | GM旁路:陈旧真实位='+gSr+'/外推点='+gSx+' 幽灵真实位='+gGr+'/外推点='+gGx
+      +' 从未探到='+gN+'(须1) GM总图标='+totG+'(须5,比非GM多的就是被迷雾挡掉的那一艘)'
+      +' | 分离度px:陈旧外推↔真实='+sepS+' 幽灵外推↔真实='+sepG+' 陈旧外推↔最后已知(=速度项)='+velS
+      +' vp='+W+'x'+H+' zoom='+cam.zoom
+      +' | 运行期错误='+(errs.length?errs.join(' / '):'none');
+  }finally{
+    ctx.translate=otr;
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+    projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
+    hitFX.length=0;fxBak.forEach(function(x){hitFX.push(x);});
+    if(seqBak&&typeof fireSeqs!=='undefined'){fireSeqs.length=0;seqBak.forEach(function(x){fireSeqs.push(x);});}
+    cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;selected=selBak;editMode=edBak;
+    adminMode=true; /* 【必须】硬复位成 GM(core/01 的默认值),不是"还原进入时的值" ——
+                       进入时若已经是 false,那本身就是上一条判定漏掉的污染,不该继续往后传;
+                       留着 false 会让后面每一条走 render()/日志打码/targetAt 的判定统统换一条分支。 */
+    window.removeEventListener('error',onerr);
+  }
+  return out;
+});
+/* SN0 给探针加牙齿:两组【运行期原理上测不出来】的键,只能靠静态检查守。
+   分层:能力维清单与站位模板是运行期可读的全局,这一半在 JS 里做;
+         三通道驻留键的【读点计数】读的是源码文件,浏览器拿不到,那一半在底部判定段用 grep 做(见 SN0 通道键普查)。
+   ① 站位模板的 cap / band / boost 键为什么运行期测不到:站位数 = 舰数 − 1,fixed 模板要 11 艘以上
+      才会生成「红外哨戒 / 射频哨戒」这两个插槽,玩家与全部探针的编队都到不了;而 boost 表缺键在运行期是
+      【合法】的(fixed.boost 就是空表)。第二段九维改八维(红外与射频合并成接收灵敏度)时,模板里的旧键会
+      变成悬空键,fmCapOf 末尾那个 return 0 与 fmCapW 的 : 1 会让它静默退化成中性 ——
+      「要害偏好」滑块拖满只剩一半作用,界面毫无提示,匈牙利照常跑完、照常落盘、照常画图。
+   ② 驻留通道键这里钉的是【数据模型】(键集合),读点计数由底部那条源码普查守。两边缺一不可:
+      悄悄加一个第四通道时 ir/esm/lad 一个没动,源码计数纹丝不动,只有这里的键集合断言看得见;
+      反过来读点被摘掉一处时键集合还是那三个,只有源码计数看得见。
+   双向:每一组都配了一个【故意种坏】的自检副本(坏 cap / 坏 band / 坏 boost / 第四通道 / 整套改名),
+        检查器必须真的把它们认出来 —— 只验真表通过的话,一个什么都没比的检查器同样全绿。
+   成本:零 stepSim。只读全局表 + 一次 makeShip(它不入 ships,只推进 shipSeq,与 FLOW45_LINK 同口径),
+        不改任何全局状态,跑完不留脏。 */
+t('FLOW48_KEYS',function(){
+  var ok=true;
+  /* ---- ① 站位模板的能力键(运行期可读,所以这一半在 JS 里做)---- */
+  var CAPS_WANT='aaClose,aaChan,gun,ir,esm,stealth,c2,ew,surv';
+  var BANDS_WANT='core,close,body,screen,picket';
+  var capsGot=FM_CAPS.join(','),bandsGot=FM_BANDS.join(',');
+  if(capsGot!==CAPS_WANT||bandsGot!==BANDS_WANT)ok=false;
+  var capSet={},bandSet={};
+  FM_CAPS.forEach(function(k){capSet[k]=1;});
+  FM_BANDS.forEach(function(k){bandSet[k]=1;});
+  function chk(ST,keys){
+    var out=[];
+    keys.forEach(function(sn){
+      var st=ST[sn];
+      if(!st||!st.slots){out.push(sn+':整套缺失');return;}
+      st.slots.forEach(function(sl){
+        if(!capSet[sl.cap])out.push(sn+'.slot('+sl.nm+').cap='+sl.cap);
+        if(!bandSet[sl.band])out.push(sn+'.slot('+sl.nm+').band='+sl.band);
+      });
+      var b=st.boost||{},k;
+      for(k in b)if(!capSet[k])out.push(sn+'.boost.'+k);
+    });
+    return out;
+  }
+  var stray=chk(FM_STANCE,FM_STANCE_KEYS);
+  if(stray.length)ok=false;
+  var nSlot=[],nBoost=[],capN={},bandN={},tot=0,btot=0;
+  FM_STANCE_KEYS.forEach(function(sn){
+    var st=FM_STANCE[sn],bk=Object.keys(st.boost||{});
+    nSlot.push(sn+':'+st.slots.length);nBoost.push(sn+':'+bk.length);
+    tot+=st.slots.length;btot+=bk.length;
+    st.slots.forEach(function(sl){capN[sl.cap]=(capN[sl.cap]||0)+1;bandN[sl.band]=(bandN[sl.band]||0)+1;});
+  });
+  var sigSlot=nSlot.join(',')+'/'+tot,sigBoost=nBoost.join(',')+'/'+btot;
+  var sigCap=Object.keys(capN).sort().map(function(k){return k+':'+capN[k];}).join(',');
+  var sigBand=Object.keys(bandN).sort().map(function(k){return k+':'+bandN[k];}).join(',');
+  var SLOT_WANT='fixed:14,air:12,surf:11,sub:12/49';
+  var BOOST_WANT='fixed:0,air:3,surf:3,sub:3/9';
+  var CAPN_WANT='aaChan:20,aaClose:7,c2:4,esm:2,ew:2,gun:4,ir:2,stealth:5,surv:3';
+  var BANDN_WANT='body:9,close:7,picket:9,screen:24';
+  if(sigSlot!==SLOT_WANT||sigBoost!==BOOST_WANT||sigCap!==CAPN_WANT||sigBand!==BANDN_WANT)ok=false;
+  var core=fmGenStations(1,[],16)[0],coreBad=[],ck;
+  for(ck in core.req)if(!capSet[ck])coreBad.push('req.'+ck);
+  if(!capSet[core.cap])coreBad.push('cap='+core.cap);
+  if(coreBad.length)ok=false;
+  var f1=chk({z:{slots:[{nm:'x',cap:'zzNope',band:'screen'}],boost:{}}},['z']);
+  var f2=chk({z:{slots:[{nm:'x',cap:'aaChan',band:'zzBand'}],boost:{}}},['z']);
+  var f3=chk({z:{slots:[],boost:{zzNope:1.6}}},['z']);
+  var selfCap=(f1.length===1&&f2.length===1&&f3.length===1);
+  if(!selfCap)ok=false;
+  /* ---- ② 三通道驻留键的【数据模型】(读点计数在底部判定段的源码普查里)---- */
+  var TRK_WANT='esm,ir,lad';
+  var kOf=function(o){return o?Object.keys(o).sort().join(','):'缺失';};
+  var fresh=makeShip('DD','SN0trk',[0,0,0],[1,0,0],[0,0,0],'blue',2);
+  var kNew=kOf(fresh.trkB)+'|'+kOf(fresh.trkR);
+  var liveS=null,i;
+  for(i=0;i<ships.length;i++)if(ships[i].trkB&&ships[i].trkR){liveS=ships[i];break;}
+  var kLive=liveS?(kOf(liveS.trkB)+'|'+kOf(liveS.trkR)):'无在场舰';
+  var trkOk=(kNew===TRK_WANT+'|'+TRK_WANT&&kLive===TRK_WANT+'|'+TRK_WANT);
+  if(!trkOk)ok=false;
+  var selfTrk=(kOf({ir:0,esm:0,lad:0,opt:0})!==TRK_WANT&&kOf({opt:0,rf:0,act:0})!==TRK_WANT);
+  if(!selfTrk)ok=false;
+  return (ok?'ok':'fail')
+    +' 能力维清单='+capsGot
+    +' | 功能带清单='+bandsGot
+    +' | 模板插槽数='+sigSlot+'(须 '+SLOT_WANT+')'
+    +' | boost 键数='+sigBoost+'(须 '+BOOST_WANT+')'
+    +' | 插槽 cap 直方图='+sigCap
+    +' | 插槽 band 直方图='+sigBand
+    +' | 模板悬空键='+(stray.length?stray.join('/'):'无')+'(须无)'
+    +' | 阵心 req/cap 悬空='+(coreBad.length?coreBad.join('/'):'无')+'(须无)'
+    +' | 检查器自检(种坏 cap/坏 band/坏 boost 各须抓到 1 个)='+f1.length+'/'+f2.length+'/'+f3.length
+    +' | 驻留通道键 新造舰='+kNew+' 在场舰='+kLive+'(须都是 '+TRK_WANT+')'
+    +' | 键集合自检(第四通道与整套改名都须被认出)='+selfTrk;
+});
+/* SN0 靶场参数链路:靶场是全库唯一用来测感知的场景,而它这条链路对【感知字段改名】完全无感 ——
+   ① rangeDefaults 里有一份 CLS_SENS.DD 的字面量影子副本(第二段删字段时它一路产出 undefined → NaN);
+   ② 旋钮写入端把值写到舰身上的【某个属性名】上,改名之后就写进一个死属性,旋钮空转、零提示;
+   ③ LADAR / ECM 这两个开关正是第二段要合并成 emitMode 三态的那两个;
+   ④ 持久化那一侧的 rangeClampOne 只认旋钮白名单,未知键整个丢弃、取不到值就回落默认;
+   ⑤ 它的 enum 分支首行是 Number(v) —— 字符串枚举必得 NaN 然后无声落回默认。
+   五处都不会报错,只会静默产出 NaN / 空转的旋钮 / 被丢弃的存档 / 被吞掉的枚举。
+   本条最要紧的一句:【靶身上"有个字段变了"抓不到写到死属性上】—— 死属性同样会出现在对象 diff 里,
+   diff 照样等于 1。只有让【真实消费者】(curSig / detectFor)读一遍,空转的旋钮才现形。
+   成本:零 stepSim。场景是探针自己 makeShip 造的两艘船(swap 进 ships),真实场上的舰一根毫毛都不碰;
+   旋钮一律【真的点 DOM 按钮】走委托,不直调 trStep(RF22b 的规矩:抽出来的函数越干净,接线错越隐蔽)。 */
+t('FLOW49_RANGE',function(){
+  if(typeof rangeDefaults!=='function'||typeof rangeClampOne!=='function'||typeof applyRangeOne!=='function')return 'fail 95-range 未加载';
+  if(typeof curSig!=='function'||typeof detectLoop!=='function')return 'fail 感知内核缺 curSig/detectLoop,② ③ 的消费者判据无处可打';
+  if(!rangeOn())return 'fail 当前不是靶场场景(rangeOn=false),旋钮链路测不了';
+  function hit(el){ if(!el)return false; el.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true,button:0})); return true; }
+  function btn(k,dir){ return trBodyEl?trBodyEl.querySelector('[data-knob="'+k+'"][data-dir="'+dir+'"]'):null; } /* 每次重新查:renderRangePanel 整块重建,存着旧引用会点到脱离文档的节点上 */
+  function scal(o){var m={},kk,vv,ty;for(kk in o){vv=o[kk];ty=typeof vv;if(ty==='number'||ty==='boolean'||ty==='string')m[kk]=vv;}return m;}
+  function dkeys(a,b){var o=[],kk;for(kk in b)if(a[kk]!==b[kk])o.push(kk);for(kk in a)if(!(kk in b))o.push(kk+'(消失)');return o;}
+  var i,kn,vv;
+  /* ① rangeDefaults 的影子副本。两条判据缺一不可:
+       有限性 —— 第二段把 sigBase 从 CLS_SENS.DD 删掉时,sn.sigBase 变 undefined,整条 sig 缺省链产出 NaN;
+       跟住活表 —— 只判 isFinite 的话,把 0.7 写死成字面量同样能过,而那正是"影子副本过期"的另一种形态。
+     第二段把 sigBase 换成 size/stealth 之后,下面这两个键名要【跟着改】—— 这条红了是在提醒你改它,不是叫你删它。 */
+  var D=rangeDefaults(),badDef=[];
+  for(i=0;i<RANGE_KNOBS.length;i++){
+    kn=RANGE_KNOBS[i];vv=D[kn.k];
+    if(kn.type==='bool'){ if(typeof vv!=='boolean')badDef.push(kn.k+'='+vv); }
+    else if(!isFinite(vv))badDef.push(kn.k+'='+vv);
+  }
+  var SN=(typeof CLS_SENS!=='undefined'&&CLS_SENS.DD)||{},CW=(typeof WPN!=='undefined'&&WPN.ciws_core)||{};
+  var liveTab=(D.sig===SN.sigBase)&&(D.ecmPower===SN.ecmPower)&&(D.inner===CW.innerIntercept)&&(D.chaff===CW.chaffRate)&&(D.inter===CW.inter);
+  var ok1=(badDef.length===0&&liveTab);
+  /* ④ clamp 的输出面:垃圾输入(字符串/NaN/null/越界/未知键)进去,出来的每一个字段都必须是合法值 ——
+     一个 NaN 顺着 speedCmd → cruiseOf → steerToVel 传进运动内核,表现是靶乱飞且一声不吭。
+     另两条是鉴定"旧存档读回来不许掉东西":键集恒等于旋钮清单(未知键被丢弃,在这里表现为 J 里没有它),且幂等。 */
+  var junk={evadeOn:'yes',evadeR:'paint',evadeT:NaN,speedCmd:'9',inter:-999,interHitMul:null,
+            inner:99,chaff:'x',decoyAuto:{},sig:undefined,lidar:1,ecm:0,ecmPower:1e9,emitMode:'paint'};
+  var J=rangeClampOne(junk),badJ=[];
+  for(i=0;i<RANGE_KNOBS.length;i++){
+    kn=RANGE_KNOBS[i];vv=J[kn.k];
+    if(kn.type==='bool'){ if(typeof vv!=='boolean')badJ.push(kn.k+'='+vv); }
+    else if(kn.type==='gear'){ if(!(vv===Math.round(vv)&&vv>=0&&vv<=4))badJ.push(kn.k+'='+vv); }
+    else if(kn.type==='enum'){ if(!kn.vals||kn.vals.indexOf(vv)<0)badJ.push(kn.k+'='+vv); }
+    else if(!(isFinite(vv)&&vv>=kn.min-1e-9&&vv<=kn.max+1e-9))badJ.push(kn.k+'='+vv);
+  }
+  var kList=RANGE_KNOBS.map(function(x){return x.k;});
+  var keyOk=(Object.keys(J).sort().join(',')===kList.slice().sort().join(','));
+  var J2=rangeClampOne(J),idem=true;
+  for(i=0;i<kList.length;i++)if(J[kList[i]]!==J2[kList[i]])idem=false;
+  var ok4=(badJ.length===0&&keyOk&&idem);
+  /* ⑤ enum 旋钮的字符串取值预警。今天断言的是【禁令】:RANGE_KNOBS 里所有 enum 的 vals 必须全是 number。
+     依据就在下面两行 —— clamp 的 enum 分支首行是 Number(v),所以数值字符串('30000',JSON 存档里就是这样)被接受,
+     而非数值字符串(第二段的 'silent'/'paint'/'jam')必得 NaN 然后无声落回默认,玩家选的那一档凭空消失。
+     第二段若要把发射开关做成字符串三态,这条会当场转红 —— 正确的做法是【先改 rangeClampOne 再加旋钮】,
+     而不是把这条判定放宽。第三条判据写成"落到一个合法枚举值"而不是"恒等于默认值",
+     所以将来 clamp 真支持了字符串,它仍然正确,不会把今天的行为钉成期望值。 */
+  var strVals=[],eKn=null;
+  for(i=0;i<RANGE_KNOBS.length;i++){
+    kn=RANGE_KNOBS[i];
+    if(kn.type!=='enum'||!kn.vals||!kn.vals.length)continue;
+    if(!eKn)eKn=kn;
+    for(var q=0;q<kn.vals.length;q++)if(typeof kn.vals[q]!=='number')strVals.push(kn.k+':'+kn.vals[q]);
+  }
+  var pv=null,numStr=null,badStr=null,ok5=false;
+  if(eKn){
+    for(i=0;i<eKn.vals.length;i++)if(eKn.vals[i]!==D[eKn.k]){pv=eKn.vals[i];break;} /* 刻意挑一个【不等于默认值】的档:否则"被接受"与"落回默认"读数一样,判据没有区分度 */
+    var o1={};o1[eKn.k]=String(pv);numStr=rangeClampOne(o1)[eKn.k];
+    var o2={};o2[eKn.k]='paint';badStr=rangeClampOne(o2)[eKn.k];
+    ok5=(strVals.length===0&&pv!==null&&numStr===pv&&eKn.vals.indexOf(badStr)>=0);
+  }
+  /* ② ③ 的隔离场景:探针自己造两艘船 swap 进 ships,真实场上的舰、弹丸一律不碰,跑完原样换回来。 */
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),tabBak=trTab;
+  var cfg=rangeCfgAll(),syncBak=cfg.sync;
+  var cfgBak=[rangeClampOne(cfg.targets[0]),rangeClampOne(cfg.targets[1]),rangeClampOne(cfg.targets[2])];
+  var dispBak=trPanelEl?trPanelEl.style.display:'';
+  var ok2=false,ok2b=false,ok3=false,clicked=false;
+  var c0=0,c1=0,g0=0,g1=0,dif=[],ic0=0,ic1=0,keptStock=false;
+  var eBase=-1,eLid=-1,eEcm=-1,lidOn=null,ecmOn=null;
+  try{
+    var OBS=makeShip('CA','P-观测',[0,0,0],[1,0,0],[0,0,0],'blue',2);
+    var TG =makeShip('DD','P-靶',[80000,0,0],[-1,0,0],[0,0,0],'red',2);
+    TG.isTarget=true;TG.invuln=true;TG.noFire=true;TG.rangeAnchor=TG.pos.slice();
+    if(typeof newRangeStat==='function')TG.rangeStat=newRangeStat();
+    OBS.lidar=false; /* 观测舰自己不照射:③ 测的是【靶自己的射频辐射】,掺进 LADAR 回波就说不清是谁在发光 */
+    ships.length=0;ships.push(OBS);ships.push(TG);
+    projectiles.length=0;
+    cfg.sync=false;trTab=0;                 /* 同步全靶会一次改三组,读数说不清;页签必须是 0,rangeTargets()[0] 才是 TG */
+    cfg.targets[0]=rangeClampOne(null);     /* 踢掉前面判定层与 localStorage 留下的手调值,回到缺省 */
+    applyRangeOne(TG,cfg.targets[0],true);  /* 先让舰与 cfg 对齐:此后 applyRangeOne 写的每一个字段都已存在,②的 diff 才能收到"恰好 1 个" */
+    renderRangePanel();                     /* 旋钮行由它建。下面一律真的点这些按钮,不直调 trStep */
+    /* ② 旋钮 → 靶身。先把弹匣打空:RANGE1 那条真实事故是"动任何一个旋钮都把靶的弹匣偷偷补满",
+       实测打空到 29 枚后按一下换点周期就跳回 384,「已用」读数当场归零 —— 靶场边打边调是常规用法。 */
+    TG.interceptor=10;
+    c0=cfg.targets[0].sig;g0=curSig(TG);
+    var s0=scal(TG);
+    clicked=hit(btn('sig',1));
+    c1=cfg.targets[0].sig;g1=curSig(TG);
+    dif=dkeys(s0,scal(TG));
+    keptStock=(TG.interceptor===10);
+    ok2=(clicked&&c1!==c0&&dif.length===1&&g1!==g0&&keptStock);
+    /* ②b 反向对照:调「拦截弹库存」本身【必须】补满 —— 只测 ② 的话,"applyRangeOne 整个不写舰"也能把 ② 骗过去 */
+    ic0=TG.interceptor;
+    hit(btn('inter',1));
+    ic1=TG.interceptor;
+    ok2b=(ic1>ic0&&ic1===cfg.targets[0].inter);
+    /* ③ 真实消费者:LADAR / ECM 两个开关必须真的改变【蓝方对靶的射频驻留】。
+       口径:8 万公里、10 拍(detectLoop 每游戏秒一拍,这里直接手摇,零 stepSim)。
+       两开关全关时靶只剩船体泄漏 0.05×sigBase=0.035,通量 5.5e-12 低于 DD 的 ESM 下限 1.6e-11,驻留必须涨不起来;
+       开 LADAR(+E_LIDAR=10)或开 ECM(+E_ECM=3.0)都远越过下限并顶到 SNR_CAP,10 拍攒到约 1.08。
+       双向:eBase 那一条挡住"什么都探得到"的退化实现,eLid/eEcm 两条挡住"什么都探不到"。
+       第二段把 lidar/ecm 合并成 emitMode 三态之后,这里的两次点击要改成三态的三次,判据形状不变。 */
+    cfg.targets[0]=rangeClampOne(null);cfg.targets[0].lidar=false;cfg.targets[0].ecm=false;
+    applyRangeOne(TG,cfg.targets[0],true);renderRangePanel();
+    var rgEsm=function(n){TG.trkB={ir:0,esm:0,lad:0};for(var w=0;w<n;w++)detectLoop();return TG.trkB.esm;};
+    eBase=rgEsm(10);
+    hit(btn('lidar',1));lidOn=cfg.targets[0].lidar;eLid=rgEsm(10);
+    hit(btn('lidar',1));                    /* 关回去,免得 ECM 那一测里两个辐射源叠在一起 */
+    hit(btn('ecm',1));  ecmOn=cfg.targets[0].ecm;eEcm=rgEsm(10);
+    ok3=(lidOn===true&&ecmOn===true&&cfg.targets[0].lidar===false&&eBase<0.2&&eLid>0.5&&eEcm>0.5);
+  }finally{
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+    projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
+    if(typeof esmFixes!=='undefined')esmFixes.clear(); /* ③ 里靶的 trk.esm 会爬过 ESM_ALERT,updateESMFixes 给它挂了一个椭圆条目,清掉免得漏进下一条判定 */
+    cfg.targets[0]=cfgBak[0];cfg.targets[1]=cfgBak[1];cfg.targets[2]=cfgBak[2];
+    cfg.sync=syncBak;trTab=tabBak;
+    if(typeof saveRangeCfg==='function')saveRangeCfg(); /* 点旋钮时每一下都写了 localStorage,还原回去免得跨次运行污染 */
+    renderRangePanel();
+    if(trPanelEl)trPanelEl.style.display=dispBak;
+  }
+  var ok=(ok1&&ok2&&ok2b&&ok3&&ok4&&ok5);
+  return (ok?'ok':'fail')
+    +' ① rangeDefaults 影子副本:非有限/类型错的缺省=['+(badDef.length?badDef.join(','):'无')+'] 跟住活表='+liveTab
+      +'(sig '+D.sig+'↔CLS_SENS.DD.sigBase '+SN.sigBase+' · ecmPower '+D.ecmPower+'↔'+SN.ecmPower
+      +' · inner '+D.inner+'↔'+CW.innerIntercept+' · chaff '+D.chaff+'↔'+CW.chaffRate+' · inter '+D.inter+'↔'+CW.inter+')'
+    +' | ② 真点「信号特征」:按钮在='+clicked+' cfg '+c0+'→'+c1+'(须变=委托接上了) 靶身变化字段=['+dif.join(',')+'](须恰好1个)'
+      +' 真实消费者 curSig '+g0.toFixed(3)+'→'+g1.toFixed(3)+'(须变——死属性同样会出现在 diff 里,只有这一条抓得到"旋钮空转")'
+      +' 弹匣未被偷偷补满='+keptStock
+    +' | ②b 反向:真点「拦截弹库存」必须补满 '+ic0+'→'+ic1+'(cfg='+cfg.targets[0].inter+')'
+    +' | ③ 真实消费者 detectFor(8万km/10拍):两开关全关 trkB.esm='+eBase.toFixed(3)+'(须<0.2) 点开LADAR='+eLid.toFixed(3)+'(须>0.5) 点开ECM='+eEcm.toFixed(3)+'(须>0.5) 开关真落到 cfg='+lidOn+'/'+ecmOn
+    +' | ④ clamp:垃圾输入产出的非法字段=['+(badJ.length?badJ.join(','):'无')+'] 键集=旋钮清单:'+keyOk+'(未知键 emitMode 被丢弃='+(J.emitMode===undefined)+') 幂等:'+idem
+    +' | ⑤ enum 旋钮的字符串取值=['+(strVals.length?strVals.join(','):'无')+'](须无:clamp 的 enum 分支首行是 Number(v),字符串枚举必得 NaN 然后无声落回默认)'
+      +' 数值字符串仍被接受:'+eKn.k+'='+numStr+'(须='+pv+',刻意取非默认档) 非法字符串落到合法值:'+badStr;
+});
 /* 7. 渲染不炸 */
 t('RENDER',function(){render();return 'ok';});
 r.push('ERRORS='+(errs.length?errs.join(' | '):'none'));
@@ -3373,6 +3911,25 @@ grep -q 'SYMS_MISSING=none' "$OUT" || { echo "✗ 符号缺失"; fail=1; }
 grep -q 'SYMS_THREW=none' "$OUT" || { echo "✗ 符号 TDZ/异常"; fail=1; }
 grep -q '^ERRORS=none' "$OUT" || { echo "✗ 运行期错误"; fail=1; }
 grep -q '=THREW:' "$OUT" && { echo "✗ 有检查项抛异常"; fail=1; }
+# SN0 补齐:以下六项原先【只打印、不进判定】—— 坏了照样打印"✓ 全部通过"。
+# 与 RF12 那次补齐是同一条教训:一条永远不会变红的探针比没有探针更危险。
+# ① SYMS_TOTAL 是"符号表本身还在不在"的唯一廉价信号。它由 verify.sh 每次从 js/ 现 grep 生成(第 25-32 行),
+#    grep/sed 管线一坏、js/ 路径一错,表就是空的 —— 而空表会让 SYMS_MISSING=none 与 SYMS_THREW=none 双双【白送】,
+#    第①层全符号扫描当场退化成空转却全程绿灯。当前 736;js/sensors 两个文件的顶层符号加起来只有 13 个,
+#    600 这条地板给感知层重做留了 130+ 的余量,只咬"整张表塌了",不咬正常删代码。
+ST=$(sed -n 's/^SYMS_TOTAL=//p' "$OUT" | head -1)
+case "$ST" in ''|*[!0-9]*) STN=0;; *) STN=$ST;; esac
+[ "$STN" -ge 600 ] || { echo "✗ SYMS_TOTAL=${ST:-缺失}(须>=600):符号表塌了,SYMS_MISSING/SYMS_THREW 的 none 是白送的"; fail=1; }
+# ② 浸泡【双向】:NaN 必须为 0,同时必须真的跑出过弹丸 —— 只判 NaN 的话,一个"什么都没发生"的退化浸泡
+#    (弹丸恒 0、船原地不动)零 NaN 完美通过。新感知内核要引入预乘表与 d2 / d2*d2 比较,除零与溢出正是最可能的坏法。
+grep -qE '^SOAK=steps=[0-9]+ NaNships=0 NaNproj=0 maxLive=[1-9]' "$OUT" || { echo "✗ SOAK 浸泡:出了 NaN,或者一发弹丸都没活过(maxLive=0 = 浸泡空转,零 NaN 是白送的)"; fail=1; }
+grep -qE '^SOAK=.*seen=.*"missile"' "$OUT" || { echo "✗ SOAK 浸泡里一发导弹都没生成(SALVO→fireMissiles 断链。区域齐射本就绕开 litBlue 门控,感知层改动不该影响这条)"; fail=1; }
+# ③ 开局体检四条。它们是下游【全部】判定的前提:没有船、或者靶不再无敌,FLOW3/FLOW5 那两层的"记账"读数就不成立了,
+#    而那时它们多半仍是绿的(打不死的靶与不存在的靶,记账读数都是 0)。
+grep -qE '^BOOT=ships=[0-9]+ blue=[1-9][0-9]* red=[1-9][0-9]*' "$OUT" || { echo "✗ BOOT 开局舰船数不对(蓝/红任一为 0:下游判定全部失去意义)"; fail=1; }
+grep -q '^RANGE_ON=true' "$OUT" || { echo "✗ RANGE_ON 不是靶场场景(靶的无敌/禁火/rangeTally 全部失效,FLOW3/FLOW5 的记账读数不成立)"; fail=1; }
+grep -q '^SALVO=armed=1' "$OUT" || { echo "✗ SALVO 齐射入口未武装(orderMissileSalvo 断链,SOAK 的弹丸也跟着没了)"; fail=1; }
+grep -qF 'DMG=dmg=25(before=0)' "$OUT" || { echo "✗ DMG 伤害记账不对(applyDamage→rangeTally 断链,或记账值不等于打进去的 25)"; fail=1; }
 grep -qE 'FLOW2=autoHits=[1-9]' "$OUT" || { echo "✗ 自动火控链未命中(索敌→开火→记账断链)"; fail=1; }
 # RF5 火控序列五条判定:许可只做减法 / 依次集火 / 轮询散布 / 门控优先级 / driftFire 续期
 for k in ALLOW SEQ RR GATE DRIFT; do
@@ -3440,6 +3997,101 @@ grep -q "FLOW45_LINK=ok" "$OUT" || { echo "✗ FLOW45_LINK 未通过(数据链�
 # SN1 源码级负对照:guideChan 已迁出感知表,不许再在 sensors/ 下出现;||4 那个假兜底不许复活。
 # 模式用字符串拼接写,免得本文件自己被 grep 抓到(同 FM32_DEAD 的写法)。
 if grep -rn "guide""Chan" js/sensors/ >/dev/null 2>&1; then echo "✗ SN1 负对照:数据链通道数又回到 js/sensors/ 了"; grep -rn "guide""Chan" js/sensors/; fail=1; fi
+# ================= SN0 感知重做删除清单:带开关的翻面负对照 =================
+# 第二段(三通道 IR/ESM/LADAR → 两通道 光学/红外 + 雷达)要物理删除下面这批名字。
+# 为什么非它不可:全符号扫描对【删除】天生免疫 —— 符号表是 verify.sh 每次从 js/ 现 grep 生成的,
+#   删掉的名字根本不在表里,SYMS_MISSING 不会变红;何况八个感知字段是【实例字段】,
+#   从来就不进符号表(表只收顶层 function/const/let)。物理删除只能靠源码级 grep 守。
+# 为什么现在就写:等第二段开工那天才想起来加这一段,正是最容易忘的一步。所以做成翻面开关 ——
+#   SN_STAGE2=0(今天) 断言这批名字【还在】js/ 里:删早了 / 改名没登记 / 清单被人删条目,当场红;
+#   SN_STAGE2=1(第二段) 断言它们【已不在】js/ 与 tools/verify.sh:没删干净当场红,
+#     注释里的字面也算(同 FM6b 那条规矩 —— 留在注释里会让日后 grep 误报"还有引用")。
+#   第二段只要把下面那个 0 改成 1,整段自动翻面,不用记得来写。
+# 模式串写法:一律用【裸标识符 + 词边界】,不写含运算符的表达式 —— SN1 那两条负对照
+#   ("guideChan||""4")是定长字面量匹配,对空白敏感,源码里写成 guideChan || 4 就抓不到了;
+#   裸标识符没有这个问题。字面量用字符串拼接切开("sig""Base"),免得 tools/verify.sh 自己
+#   被同一条 grep 抓到(同 FM32_DEAD / SN1 的写法)。字段分隔符用 ~(全部模式串里都不含它)。
+# 行尾的数字 = 今天的真实出现次数(grep -rhoE '<模式>' js/ | wc -l,连跑两次确认稳定,合计 278),
+#   它就是第二段的验收基准:第二段做完这 15 条必须全部归 0。
+#   计数与基准不符只打 ℹ 不判红(有人接了新线或删了一处都属正常演进),归 0 才判红。
+SN_STAGE2=0
+SN0_LIST=(
+  "感知字段·传感器半径~\\b""sensor""Range""\\b~24"
+  "感知字段·探测力~\\b""det""Power""\\b~15"
+  "感知字段·ESM反推精度~\\b""esm""Qual""\\b~15"
+  "感知字段·基础信号~\\b""sig""Base""\\b~26"
+  "感知字段·雷达截面~\\br""cs\\b~19"
+  "感知字段·照射功率~\\b""pP""ing""\\b~12"
+  "感知字段·IR探测下限~\\b""floor""Ir""\\b~13"
+  "感知字段·ESM探测下限~\\b""floor""Esm""\\b~11"
+  "SENS四张按舰种子表~\\b(FLOOR""_IR|FLOOR""_ESM|P""_PING|R""CS)\\b~28"
+  "引擎信号函数~\\b""engine""Sig""\\b~4"
+  "当前信号函数~\\b""cur""Sig""\\b~6"
+  "trk三通道键(ir/esm/lad)~""trk""[A-Za-z]*\\.(ir|esm|lad)\\b|[{]ir:[0-9]~31"
+  "LADAR开关布尔~\\b""li""dar""\\b~37"
+  "ECM开关布尔~\\be""cm\\b~14"
+  "SENS三通道常量~\\b(G""_IR|G""_ESM|G""_LAD|TRK_DECAY""_LAD|LIT2""_LAD|LAD""_DOWN|FLOOR""_LAD|ESM""_ALERT|E""_LIDAR)\\b~23"
+)
+SN0_N=0
+for ent in "${SN0_LIST[@]}"; do
+  nm="${ent%%~*}"; rest="${ent#*~}"; pat="${rest%~*}"; base="${rest##*~}"
+  SN0_N=$((SN0_N+1))
+  now=$(grep -rhoE "$pat" js/ 2>/dev/null | wc -l); now=$((now))
+  if [ "$SN_STAGE2" -eq 0 ]; then
+    if [ "$now" -eq 0 ]; then
+      echo "✗ SN0 负对照(开关=0,第二段未开工):「$nm」已经从 js/ 里消失了(基准 $base 处)——删早了,或者改名没登记进清单"; fail=1
+    elif [ "$now" -lt $((base/2)) ]; then
+      # SN0 下界:只判「归零」挡不住【删了一半】—— 而删到一半正是最危险的中间态(字段在部分路径上已经不存在,
+      # 带 sReq 的那些会抛,没抛到的继续用旧值)。掉过基准的一半就判红,小幅漂移仍只打 ℹ。
+      echo "✗ SN0 负对照(开关=0):「$nm」从基准 $base 掉到 $now(不足一半)——第二段删到一半就提交了,或者改名没登记进清单"; fail=1
+    elif [ "$now" -ne "$base" ]; then
+      echo "ℹ SN0 计数漂移:「$nm」基准 $base → 现在 $now(不判红;第二段的验收基准请跟着更新)"
+    fi
+  else
+    if [ "$now" -ne 0 ]; then
+      echo "✗ SN0 负对照(开关=1,第二段已落地):「$nm」在 js/ 里还剩 $now 处没删干净(基准 $base)"; grep -rnE "$pat" js/ | head -5; fail=1
+    fi
+    if grep -rnE "$pat" tools/verify.sh >/dev/null 2>&1; then
+      echo "✗ SN0 负对照:「$nm」还留在 tools/verify.sh 的探针脚手架里(已知两处:fc3reset/fc5reset 的 c.li""dar=true,与 FLOW4_FOG 那条的 S.trkR={...})"; fail=1
+    fi
+  fi
+done
 if grep -rn "guideChan||""4" js/ >/dev/null 2>&1; then echo "✗ SN1 负对照:假兜底 ||4 复活了(字段丢失会把 DD 悄悄涨到 4)"; grep -rn "guideChan||""4" js/; fail=1; fi
+# SN0 感知阶梯:全套判定里第一条【直接断言 detectLoop 输出】的判据(其余都把 lit 当不会变的背景前提)。
+# 第①档(远距静默须恒 0 级)是它的上界/反向面 —— 没有这一条,把探测能力整体放大十倍全套判定只会【更容易】通过。
+# 第二段换成两通道引擎时本条必须【整条改写】,改不动说明新内核没真的换上去。
+grep -q "FLOW44_SENSE=ok" "$OUT" || { echo "✗ FLOW44_SENSE 未通过(三通道接触等级阶梯须恰好 0/1/2/3/2:远距静默三通道全零 / 近距静默只到 1 级(单通道过门、交叉不过) / 目标开辐射 IR x ESM 交叉到 2 级 / 探测方开照射 LADAR 驻留到 3 级 / 断照 40 拍降回 2 级)"; fail=1; }
+grep -q "FLOW46_CIWS=ok" "$OUT" || { echo "✗ FLOW46_CIWS 未通过(近防依赖弹丸可见性:开灯走LADAR支路、熄灯热弹走被动支路,两相都必须真发出拦截弹且库存下降;熄灯冷弹那一相必须恰好0发、库存一颗不掉,且近防其余条件(弹丸存活/在2×外圈内/未脱锁/库存够/开关开/无冷却/威胁逼近)须逐条成立——否则这0发另有出处)"; fail=1; }
+grep -q "FLOW47_FOG=ok" "$OUT" || { echo "✗ FLOW47_FOG 未通过(战争迷雾·敌舰画在哪儿:陈旧/幽灵须画在「最后已知+速度×年龄」的外推点,真实位置与裸最后已知点都不许有图标 / 实况须画在真实位置 / 从未探到的一艘都不许画(非GM 总图标=4) / 蓝舰不迷雾 / GM 旁路时全部回到真实位置且总图标=5)"; fail=1; }
+grep -q "FLOW48_KEYS=ok" "$OUT" || { echo "✗ FLOW48_KEYS 未通过(SN0 键的静态检查:九维能力清单与五条功能带清单逐位钉死、四套站位模板 49 个插槽的 cap 与 band 全落在清单上、9 个 boost 键同样、阵心 req/cap 不悬空、三通道驻留对象的键集合恒为 ir/esm/lad;每组都带故意种坏的自检副本)"; fail=1; }
+# SN0 源码级普查:三通道驻留键的【读点计数】。JS 探针跑在浏览器里读不到源码文件,所以这一半只能在 bash 层做。
+# 为什么非静态查不可:通道键在四个文件里裸读(21-detect 的告警门与 ESM 椭圆门、82 的被照射告警圈、
+# 83 的椭圆门槛、87 的读数行),三通道换两通道之后那些「undefined 大于某数」的比较恒为 false ——
+# 告警圈永远不画、椭圆永远不出、面板读数变 NaN,全部零报错;而 adminMode 默认 true 让 drawShip 的迷雾块
+# 整块被跳过、FLOW4_FOG 又从不调 render(),渲染那一路今天改对改错都是绿的。通道键不是兜底,摘不掉,只能靠判定守。
+# 双向:计数写成【等号】,少一处(读点被摘掉)与多一处(冒出新的裸读)都转红;模式自己写坏成零匹配同样转红。
+#      注释里的出现点也算进计数 —— 改通道就要连注释一起改,与 FM6j「删符号要连注释里的字面一并抹掉」同一条规矩。
+#      模式刻意不带 \b:实测 \b 是 locale 敏感的,C.UTF-8 下「trk.esm驱动」这种紧挨中文的出现点会被漏掉(33 变 30)。
+# 模式用字符串拼接写,免得 verify.sh 自己被同一条 grep 抓到(同 FM32_DEAD / SN1 的写法)。
+SN0_TRK_PAT="[A-Za-z_]*[Tt]""rk[BR]?\.(ir|esm|lad)"
+SN0_TRK_WANT="js/render/82-ship-icons.js:1 js/render/83-hud.js:2 js/render/87-fleetcards.js:3 js/sensors/20-signature.js:1 js/sensors/21-detect.js:26 TOTAL:33"
+SN0_TRK_GOT="$(grep -rEo "$SN0_TRK_PAT" js/ --include='*.js' | sed -E 's/:[^:]*$//' | sort | uniq -c | awk '{printf "%s:%s ",$2,$1}')TOTAL:$(grep -rEoh "$SN0_TRK_PAT" js/ --include='*.js' | wc -l | tr -d ' ')"
+if [ "$SN0_TRK_GOT" != "$SN0_TRK_WANT" ]; then
+  echo "✗ SN0 负对照:三通道驻留键的读点计数变了(注释里的也算数——改通道就要连注释一起改)"
+  echo "   实测 $SN0_TRK_GOT"
+  echo "   期望 $SN0_TRK_WANT"
+  fail=1
+fi
+# 被照射告警的阈值 0.3 是【两份手抄】(21-detect 的日志门 + 82-ship-icons 的黄圈门),而且不在 SENS 表里。
+# 把它收进 SENS 是好事,但那会让这个数掉到 0 而转红 —— 这正是要的:动它必须是一次自觉的改动,不能顺手。
+SN0_WARN_N=$(grep -rEoh "lad>0""\.3" js/ --include='*.js' | wc -l | tr -d ' ')
+[ "$SN0_WARN_N" = "2" ] || { echo "✗ SN0 负对照:被照射告警阈值的手抄份数=$SN0_WARN_N(须 2:21-detect 的日志门 + 82-ship-icons 的黄圈门)"; fail=1; }
+# 驻留对象的字面初始化(makeShip 的 trkB/trkR 两处 + detectFor 的补建一处)。
+# 它与上面那条读点普查互补:悄悄加第四个通道时读点计数纹丝不动,这一条与 FLOW48_KEYS 的键集合断言才看得见。
+SN0_LIT_N=$(grep -rEoh "\{ir:0,esm:0,lad:0\}" js/ --include='*.js' | wc -l | tr -d ' ')
+[ "$SN0_LIT_N" = "3" ] || { echo "✗ SN0 负对照:驻留对象字面量份数=$SN0_LIT_N(须 3:makeShip 的 trkB/trkR + detectFor 的补建)"; fail=1; }
+grep -q "FLOW49_RANGE=ok" "$OUT" || { echo "✗ FLOW49_RANGE 未通过(靶场参数链路:rangeDefaults 影子副本须有限且跟住活表 / 真点旋钮后靶身恰好一个字段变且真实消费者 curSig 跟着变、不许顺手补满弹匣(反向:调库存必须补满) / LADAR·ECM 两开关须真的改变蓝方对靶的射频驻留(反向:两开关全关须涨不起来) / clamp 垃圾输入产出必须全合法·键集=旋钮清单·幂等 / enum 旋钮不许出现字符串取值)"; fail=1; }
+[ "$SN0_N" -eq 15 ] 2>/dev/null || { echo "✗ SN0 清单被改动或整段被删:应有 15 条,现在「$SN0_N」条(删条目/注释掉条目来消红不算修)"; fail=1; }
+case "$SN_STAGE2" in 0|1) ;; *) echo "✗ SN0 开关被改成了「$SN_STAGE2」(只许 0 或 1;写别的值等于把整段静默关掉)"; fail=1;; esac
 grep -q "^RENDER=ok" "$OUT" || { echo "✗ RENDER 未通过"; fail=1; }
 [ $fail -eq 0 ] && echo "✓ 全部通过" || exit 1

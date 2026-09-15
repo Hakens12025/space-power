@@ -103,6 +103,7 @@ RR_RETRIG
 RR_TOL
 RR_WIN
 SENS
+SHIP_STATS_REQ
 SIMPLE_UI
 SPD_UNCAP
 SPEC_TEXT
@@ -591,6 +592,7 @@ rrStart
 rrStartRun
 rrTick
 running
+sReq
 salvoCount
 saveBindings
 saveCustomScene
