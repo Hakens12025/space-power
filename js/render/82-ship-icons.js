@@ -44,8 +44,14 @@ function drawShip(s){
     const st=contactState(s,'blue');
     if(st==='none')return; // 蒸发(幽灵寿命到)
     ghost=st==='ghost'; stale=st==='stale';
+    // SN2c 战争迷雾泄漏:这两行原来是 s.seenBluePos||s.pos 与 s.seenBlueVel||s.vel —— 不是普通兜底,是【拿真值兜底】。
+    // 接触记录一缺,幽灵/陈旧接触就静默退化成"画在敌舰真实位置上",迷雾当场失效而画面看起来完全正常,
+    // 还多一个不确定圈显得更可信。渲染层不抛错(会打断整帧绘制),改成【没有接触记录就不画】——失效方向从 fail-open 翻成 fail-closed。
+    // 今天走不到:lit>=1 要求红外或回波通道有驻留积累,而那正是 21-detect 写 seenBluePos 的条件;ghost 要求 ever 为真,同理。
+    // 放在 ghost/stale 判定之后、外推之前,是为了同时罩住下面不确定圈那行对 seenBlueVel 的读取。
+    if((ghost||stale)&&(!s.seenBluePos||!s.seenBlueVel))return;
     if(ageV>0&&(ghost||stale)){ // 外推预测位置
-      const lp=s.seenBluePos||s.pos, lv=s.seenBlueVel||s.vel;
+      const lp=s.seenBluePos, lv=s.seenBlueVel;
       dispPos=[lp[0]+lv[0]*ageV,lp[1]+lv[1]*ageV,lp[2]+(lv[2]||0)*ageV];
     }
   }
@@ -56,7 +62,7 @@ function drawShip(s){
     ctx.save();
     ctx.globalAlpha=ghost?0.4:0.65;
     ctx.setLineDash([5,4]);
-    const uv=(s.seenBlueVel?V.len(s.seenBlueVel):V.len(s.vel))||0;
+    const uv=V.len(s.seenBlueVel)||0; // SN2c:原来是 s.seenBlueVel?V.len(s.seenBlueVel):V.len(s.vel) —— 同样是拿真值兜底,不确定圈会按【真实速度】定大小,圈看着完全正常而尺寸是偷来的。走到这里必有接触记录(上面那道 return 已挡住),||0 刻意保留:它防的是速度算出 NaN,不是防字段缺失
     const rad=Math.min(200000,Math.max(8000,uv*ageV))*cam.zoom;
     ctx.strokeStyle=ghost?'rgba(255,107,107,.28)':'rgba(255,209,102,.22)';
     ctx.lineWidth=1;

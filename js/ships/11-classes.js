@@ -131,7 +131,7 @@ function makeShip(cls,name,pos,facing,vel,side,tier){ // TIER1 加第 7 参 tier
     rcs:st.rcs, pPing:st.pPing, floorIr:st.floorIr, floorEsm:st.floorEsm, // TIER1 SENS 四张按舰种子表烘焙到实例(06-sensors:79/80/83 改实例优先):这四个是每 tick × 每对舰的热路径,回表拿的永远是"按舰种"的值,tier 进不去
     lidar:false, // LADAR 主动探测开关(开=看一切固体,代价=被敌ESM反推)
     ecm:false, ecmPower:sReq(st,'ecmPower','shipStats'), // v125 电子对抗ECM(开=干扰敌方探测,代价=成辐射源暴露于ESM)。SN2:原 !==undefined 三元同时干两件事——保住合法 0(对,ecmPower 是 'prob' 字段,0=不带 ECM)、字段缺失时悄悄给 0.4(错,这正是第二段要变响的那一类)。sReq 只拒 undefined,合法 0 照常穿过,两件事各归各
-    litBlue:0,litRed:0,detBlue:0,detRed:0, // 阵营点亮质量等级(0未发现/1探测/2识别/3火控) + 探测积分
+    litBlue:0,litRed:0, // 阵营点亮质量等级(0未发现/1探测/2识别/3火控)。SN3 这一行上原来还挂着两个阵营探测积分字段,全库零读取零写入、只有这一行声明,已删(名字不写进注释:verdict 段有条源码级负对照按名字 grep 守着,写进来会让它恒红——FM6b 的规矩);真正的驻留积分是下一行的 trkB/trkR
     trkB:{ir:0,esm:0,lad:0},trkR:{ir:0,esm:0,lad:0}, // KIMI155 S1:三通道驻留积分(蓝/红网络各自;IR红外/ESM射频/LADAR回波)
     everLitBlue:false,everLitRed:false, // 感知层 v5:是否曾点亮过(区分"从未点亮不显示" vs "点亮后失联=幽灵")
     seenBlue:-1e9,seenBluePos:null,seenBlueVel:null,seenRed:-1e9,seenRedPos:null,seenRedVel:null, // 信息年龄(最后被扫描时间戳/位置/速度,初始-1e9=从未扫到)

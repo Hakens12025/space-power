@@ -3994,6 +3994,14 @@ grep -q "FLOW43_FMPACE=ok" "$OUT" || { echo "✗ FLOW43_FMPACE 未通过(FM10 �
 FM32_DEAD="CLS_""ROLE|aaRing""Ref|P\\.f""an|P\\.g""ap|FM_LIMIT\\.f""an|FM_LIMIT\\.g""ap"
 if grep -rnE "$FM32_DEAD" js/ >/dev/null 2>&1; then echo "✗ FM3-2 负对照:js/ 里仍有旧弧线阵残留"; grep -rnE "$FM32_DEAD" js/; fail=1; fi
 grep -q "FLOW45_LINK=ok" "$OUT" || { echo "✗ FLOW45_LINK 未通过(数据链通道数:四舰种须 1/3/3/3、两份烘焙手抄须同步、guideSide 真实调用点须吃到它)"; fail=1; }
+# SN3 源码级负对照:三处已确认的死代码不许复活。删除【没有任何自动信号】——
+# 全符号扫描扫的是顶层 function/const/let,这三处一个是对象字面量的键、两个是函数体内的局部量,
+# 从来就不在符号表里;删干净没删干净只有 grep 知道。模式用字符串拼接写,免得本文件自己被抓到(同 FM32_DEAD)。
+SN3_DEAD="det""Blue|det""Red"
+if grep -rnE "$SN3_DEAD" js/ >/dev/null 2>&1; then echo "✗ SN3 负对照:js/ 里仍有已删的探测积分死字段(真正的驻留积分是 trkB/trkR)"; grep -rnE "$SN3_DEAD" js/; fail=1; fi
+if grep -n "best""Q" js/render/83-hud.js >/dev/null 2>&1; then echo "✗ SN3 负对照:83-hud 里那个算完从未使用的死变量又回来了(21-detect 里的同名量是真在用的,所以这条必须限定文件)"; fail=1; fi
+# 信标死分支用 con""cat 当指纹:本文件删完之后一处都不该再有(信标本身的绘制走 p.type 判断,不经数组拼接)
+if grep -n "con""cat" js/render/83-hud.js >/dev/null 2>&1; then echo "✗ SN3 负对照:83-hud 的信标辐射源死分支复活了(esmFixes 只以红方【舰】为键写入,信标永远取不到 fix、恒 continue)"; fail=1; fi
 # SN1 源码级负对照:guideChan 已迁出感知表,不许再在 sensors/ 下出现;||4 那个假兜底不许复活。
 # 模式用字符串拼接写,免得本文件自己被 grep 抓到(同 FM32_DEAD 的写法)。
 if grep -rn "guide""Chan" js/sensors/ >/dev/null 2>&1; then echo "✗ SN1 负对照:数据链通道数又回到 js/sensors/ 了"; grep -rn "guide""Chan" js/sensors/; fail=1; fi

@@ -284,9 +284,13 @@ function drawESM(){ // 感知层 v4:蓝方ESM反推红方辐射源(LADAR开机/�
   if(adminMode)return; // GM全显,不需要ESM
   const esm=ships.filter(s=>s.side==='blue'&&!s.dead);
   if(!esm.length)return;
-  const bestQ=Math.max(...esm.map(s=>s.esmQual||0.5));
-  const emitters=ships.filter(s=>s.side==='red'&&!s.dead&&(s.trkB&&s.trkB.esm>=SENS.ESM_ALERT&&s.litBlue<1)).concat( // DS180:与updateESMFixes同门槛(trk.esm驱动)
-    projectiles.filter(p=>p.type==='beacon'&&p.arrived&&p.on&&p.shooter&&p.shooter.side==='red'));
+  // SN3 这里删掉了两样(名字刻意不写进注释:verdict 段有一条源码级负对照按名字 grep 守着它们,写进来会让那条判定恒红 —— FM6b 的规矩)。
+  //   ① 一个算完从未被使用的局部量,它是 esmQual 在整个渲染层的唯一读取点,||0.5 那个假兜底随它一起消失
+  //      (21-detect 里有个同名局部量是真在用的,所以那条负对照必须限定本文件)
+  //   ② 一段把红方信标弹丸并进辐射源列表的分支:updateESMFixes 只对红【舰】写 esmFixes(它的 filter 限定 ships,
+  //      末尾那轮 key.side==='red' 的清理还会把非舰对象删掉),所以信标永远取不到 fix、下面第一行就恒 continue ——
+  //      一条从未画出过任何东西的死分支。删它而不是补它:补上等于新增一条从未存在过的行为
+  const emitters=ships.filter(s=>s.side==='red'&&!s.dead&&(s.trkB&&s.trkB.esm>=SENS.ESM_ALERT&&s.litBlue<1)); // DS180:与updateESMFixes同门槛(trk.esm驱动)
   for(const e of emitters){
     const fix=esmFixes.get(e);
     if(!fix||!fix.guess)continue; // 还没积累到反推修复
