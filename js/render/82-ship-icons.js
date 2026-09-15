@@ -73,10 +73,13 @@ function drawShip(s){
   }
   const r=Math.round(shipIconR(s)); // 图标半径:屏幕固定尺寸,但随舰种/Tier 变化(标签/选中圈/尾焰基准)
   if(s.dead){drawWreck(s,p,r);if(ghost||stale)ctx.restore();return;} // 残骸:空心图标,不再有舰体数据;KIMI146修:幽灵/陈旧残骸提前return,ctx.save()不配对→透明度/虚线泄漏到后续所有绘制
-  // DS181 S3:⚠被照射告警(敌LADAR对我驻留>0.3)→黄框闪烁(信息战灵魂提示)
+  // DS181 S3:⚠被照射告警(敌方雷达以照射模式对我驻留达阈值)→黄框闪烁(信息战灵魂提示)
+  // SN4:驻留键换成 act(雷达的【照射】模式;静听 lis 与它是同一部设备的两种模式,不是两条通道)。
+  //   键名一改,原来那句裸读就变成「undefined 大于某数」恒 false —— 告警圈永远不画、一行错都不报,所以必须与内核同一提交改完。
+  // SN4:阈值原来是本文件与 21-detect 告警日志门的两份手抄(同一个 0.3),现收进 SENS.ACT_WARN 一处定义,同「门控用谓词、不写字面量」那条铁律。
   if(!editMode&&!s.dead){
     const myTrk=s.side==='blue'?s.trkR:s.trkB;
-    if(myTrk&&myTrk.lad>0.3){
+    if(myTrk&&myTrk.act>=SENS.ACT_WARN){
       // RF7e 相位改挂【墙钟】,原来挂 simTime。simTime 按倍速推进(core/99 的 acc+=dt*rate),于是倍速一提闪烁跟着提:
       // x50 下每帧相位推进约 5 弧度,远超 60fps 的采样极限,呼吸退化成高频乱闪——这就是"闪动频率随时间越来越快"的来源。
       // 告警圈是给人看的 UI 指示,不是模拟实体,理应恒定 1 次/秒左右,与数据链流动(83-hud FC_FLOW)、准星停留门同一口径。

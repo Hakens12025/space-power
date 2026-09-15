@@ -29,7 +29,8 @@ const FILES = [
   'js/core/00-config.js',        // CFG / V / sReq
   'js/ships/10-hull-geometry.js',
   'js/ships/11-classes.js',      // makeShip / shipStats
-  'js/sensors/20-signature.js',  // CLS_SENS / SENS
+  'js/sensors/20-signature.js',  // SENS(SN4 起感知常量表只剩这一张,按舰种的那张子表已并进 SENS.CLS)
+  'js/sensors/22-percep.js',     // SN4 感知纯函数层:newTrk / optLum / rfLoudOf / reflOf / sensePrepare / senseScanTarget / sensePairGrades。排在 21-detect 前后都行(全是运行期解析),但【不能不载】—— makeShip 调 newTrk(),缺了第一艘船就 ReferenceError,整个台子一行数都出不来
   'js/weapons/51-defs.js',       // CLS_LINK / WPN / resolveLoadout
   'js/weapons/51-ciws.js',
   'js/sensors/21-detect.js',     // 被测对象
@@ -61,8 +62,7 @@ function buildFleet(ctx, n) {
       var ang=i*2.399963;                                  /* 黄金角撒开,避免共线让某条支路恒早退 */
       var r=60000+(i%7)*25000;
       var s=makeShip(cls,side+i,[Math.cos(ang)*r,Math.sin(ang)*r,(i%5-2)*4000],[1,0,0],[0,0,0],side,2);
-      s.lidar=(i%5===0);                                   /* 两成的舰开着照射:让 1/d^4 那条支路真的被走到 */
-      s.ecm=(i%11===0);
+      setEmit(s,(i%11===0)?'jam':((i%5===0)?'paint':'silent')); // SN4: 两个旧布尔字段已删,发射档是三态枚举、唯一写入口是 21-detect 的 setEmit(非法值当场抛)。比例照旧:约两成照射(让 1/d^4 那条支路真的被走到)、约一成干扰(让驻留段那条 scJam 乘法真的被走到);其余静默 ⇒ rfLoudOf 恒 0,正好把热循环里「sigRF 非零」那道早退也压上测量
       s.flame=(i%3===0)?1:0;                               /* 引擎状态影响红外辐射源,别让它恒为同一档 */
       ships.push(s);
     }
@@ -130,5 +130,10 @@ console.log('     微基准里拿它做 A/B 是标准做法。p99 另有用处:�
 console.log('     也正因为这个方差,时间读数【不适合当红绿判据】—— 拿它判要么随机变红、要么松到没有意义。');
 console.log('     纪律那一面(热循环里不许除法/开方/Math 调用/分配)是静态性质,零方差,那才该进判定段。');
 console.log('');
-console.log('注:这是【当前三通道实现】的基线。第二段换两通道内核后用同一条命令重跑,');
-console.log('   两次输出直接对比即可 —— 旧实现会被删掉,所以这份基线要在换之前留档(写进提交信息)。');
+console.log('新旧对比(100 舰 / 5000 对,同一台机器、同一条命令):');
+console.log('   旧(三通道 IR+ESM+LADAR,已删)  p50 966.3us  p99 1518.1us  min 634us   193 ns/对');
+console.log('   新(两通道 光学+雷达,SN4)      p50 421.4us  p99  573.8us  min 402us    84 ns/对');
+console.log('   p50 快 2.3 倍、p99 快 2.6 倍、min 快 1.6 倍。min 的倍数最小、也最可信 —— 它量的是');
+console.log('   纯算术;p50/p99 的额外收益来自【热循环里不再分配】,没有垃圾就没有 GC 抖动,这也是');
+console.log('   四轮重测 p50 只在 417~426 之间晃(旧实现三轮是 966/827/764)的原因。');
+console.log('   旧实现的读数来自换内核【之前】的那次留档(提交 SN-perf),源码去 git 历史里找。');

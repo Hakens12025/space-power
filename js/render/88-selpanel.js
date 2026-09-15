@@ -2,8 +2,8 @@
 /* RF3: 简化UI核心——全部武器相关 UI 由 s.weapons 清单(weapons/51-defs 配装解析产物)驱动生成:
    底栏武器按钮/规格条武器段/右栏武器状态/hover 射程圈,加新武器种类这些地方零改动。
    右栏 #selPanel 只放【变化信息】(结构/目标/武器库状态/事件);
-   底栏 #cmdBar = 【固定信息】(舰名/舰种·等级 + 规格条 specItems)+ 开关组(火控/雷达两个舰级开关 + 每件武器一个)。
-   开关语义:火控=autoEngage+roe 合一(开=free+自动索敌,关=hold+解除锁定);雷达=lidar;
+   底栏 #cmdBar = 【固定信息】(舰名/舰种·等级 + 规格条 specItems)+ 开关组(火控一个舰级布尔开关 + 每件武器一个)+ 三个形状不同的独立钮(发射档/跟随/解除)。
+   开关语义:火控=autoEngage+roe 合一(开=free+自动索敌,关=hold+解除锁定);发射档是三态循环,不在 cmdList 里(见本文件末尾 SN4 那一段);
    武器开关=macOn/mslOn/ciwsOn(按 kind 映射)。操作作用于【全部选中蓝舰】,状态读第一艘。
    事件流:86-log 的 log() 末尾 typeof 守卫调 pushEvt(最近5条)。 */
 let selEvts=[]; // 最近5条事件 {t:'mm:ss',msg,cls}
@@ -24,7 +24,7 @@ const KIND_INFO={
     range:s=>(typeof macEffRange==='function')?macEffRange(s):(s.macRange||150000),
     maxRange:s=>((typeof macEffRange==='function')?macEffRange(s):(s.macRange||150000))*((typeof MAC_FALLOFF==='number')?MAC_FALLOFF:1),
     tip:s=>{const e=(typeof macEffRange==='function')?macEffRange(s):(s.macRange||150000);
-      return `MAC轴炮 · 精确射程${Math.round(e/1000)}k${s.lidar?'(雷达顶上)':'(雷达关)'} · 衰减至${Math.round(e*((typeof MAC_FALLOFF==='number')?MAC_FALLOFF:1)/1000)}k · 伤害${s.macDmg||0} · 装填${Math.round(s.macReload||30)}s · 需火控开+机头对准`;}},
+      return `MAC轴炮 · 精确射程${Math.round(e/1000)}k${s.emitMode==='paint'?'(照射顶上)':'(未照射)'} · 衰减至${Math.round(e*((typeof MAC_FALLOFF==='number')?MAC_FALLOFF:1)/1000)}k · 伤害${s.macDmg||0} · 装填${Math.round(s.macReload||30)}s · 需火控开+机头对准`;}}, // SN4:后缀改读 emitMode —— macEffRange 已改成 paint→macRadar / 否则 macRange 的二选一(前提 9,不再与感知量程取 max)
   msl:{on:'mslOn',
     range:s=>s.mslRange||350000,
     tip:s=>`导弹齐射 · 射程${Math.round((s.mslRange||350000)/1000)}k · 每组${s.mslPer||12}枚×${s.cells||4}单元 · 单元装填${s.mslReload||60}s · 需火控开+目标识别级`},
@@ -39,10 +39,10 @@ function cmdList(s){
       get:x=>!!(x.autoEngage&&x.roe!=='hold'),
       set:(x,v)=>{x.autoEngage=v;x.roe=v?'free':'hold';if(!v)x.lockedTarget=null;}, // 关=停火+解除锁定,开=自动索敌+自动开火
       tip:()=>'火控总开关:开=自动锁定已点亮敌舰,各武器进射程自动发射;关=停火并解除锁定'},
-    {id:'cbRadar',label:'雷达',ring:null,
-      get:x=>!!x.lidar,
-      set:(x,v)=>{x.lidar=v;},
-      tip:()=>'LADAR主动探测:开=快速点亮敌舰(识别/火控级),代价=本舰成辐射源,被敌方ESM嗅到方位'},
+    // SN4 blocker C:这里原来有一条「雷达」布尔开关(读写的是那个已删的开关字段)。发射档换成三态 silent/paint/jam 之后塞不进这张表 ——
+    //   表的形状是「每舰一个布尔」:get/set 两个钩子 + bindCmdBar 里写死的点击语义(读第一艘、取反、全队统一置成【一个】布尔目标态),
+    //   三态既没有「取反」也没有单一目标态;硬塞进去会被那行 `if(!cmd.set)return` 静默吃掉(RF8 大序列钮那次的原样复刻:渲染正常、title 也在、就是按不动)。
+    //   照 FM6 跟随两钮的先例:自己建、自己挂事件、在 updateCmdBar 末尾显式同步一次。实现在本文件末尾的 emitBtnSync / bindEmitBtn。
   ];
   if(s)for(const w of (s.weapons||[])){
     const ki=KIND_INFO[w.kind];if(!ki)continue;
@@ -59,7 +59,13 @@ function specItems(s){
     ['结构',s.maxHp],
     ['加速',s.thrust],
     ['转向',s.turnRate],
-    ['传感器',Math.round(s.sensorRange/1000)+'k'],
+    // SN4:旧的「传感器」是舰船自己的一个标量半径,那个字段已删。新模型里一部雷达有两种模式,量程各不相同,所以分两条:
+    //   照射 = 我主动照【标准目标】(反射 1.0)能照多远;静听 = 我被动听一部【标准发射机】(emit 1、paint 档)能听多远。
+    //   静听那条靠合成对象取值(契约里 hearRangeOf({emit:1,emitMode:'paint'},recv) 那条先例),本文件不重排任何公式。
+    //   这里用裸读 s.recv 而不是 sReq:本函数在 frame 的 20 帧低频渲染里,抛出来只会每 20 帧刷一次控制台(rAF 已在 core/99 的函数首行排好,不会停循环),
+    //   但底栏整条规格会消失;字段缺失由 ships/11 的 SHIP_STATS_REQ 出口断言在造舰那一刻抓,不必在渲染层再抓一次。
+    ['照射',Math.round(actRangeOf(s)/1000)+'k'],
+    ['静听',Math.round(hearRangeOf({emit:1,emitMode:'paint'},s.recv)/1000)+'k'],
     ['火控通道',s.guideChan],
   ];
   for(const w of (s.weapons||[])){
@@ -88,6 +94,30 @@ function engRows(s){
   const lamps=ENG_LAMPS.map(([t,c,on])=>`<span class="eng-l${on(s)?' on':''}" style="color:${c}">${t}</span>`).join('');
   return `<span class="eng-a">${a.toFixed(1)} km/s²</span>${lamps}`;
 }
+/* SN4 blocker E【我此刻有多亮】。全库唯一的辐射读数原来在 87-fleetcards 的 sensorPanel,而 #fleet 整块在 RF2 隐藏清单里被
+   display:none 藏死 —— 玩家一个字都看不到,却要靠它决定开不开雷达:这是「隐蔽 vs 精确」这个三角唯一的决策依据。
+   #selPanel 正是 RF2 定位的【变化信息】栏,而这三个数每拍都在变(一点火就更亮、一开照射就更亮更吵),归这儿最对。
+   三个数全部调 22-percep 的函数,与 87 的 sensorPanel 同源,本文件一条公式都不重算 ——
+   感知量只要有两处并行真值就必然漂移(SN 第一段那份逐字副本的教训写在 87 的注释里)。
+   刻意【不给假兜底】:内核没加载好时整段不出行(fail-closed),而不是印一个看着完全正常的数字 ——
+   这块面板的全部价值就是这三个数可信。 */
+function senseRows(s){
+  if(typeof visRangeOf!=='function'||typeof hearRangeOf!=='function'||typeof actRangeOf!=='function')return '';
+  const k=v=>Math.round(v/1000)+'k';
+  // 光学:亮度 = 体型 ×(1 + 功耗),功耗 = 引擎档 + 发射档。档位字只拿 engPowerOf 的返回值与 SENS.P_ENG_MAIN 比 ——
+  //   不在这儿重排一遍引擎状态机(那会变成 ENG_LAMPS 之外的第三份「什么算满推」)。
+  const ep=(typeof engPowerOf==='function')?engPowerOf(s):0;
+  const est=(ep>=SENS.P_ENG_MAIN)?'满推':(ep>0?'机动':'熄火');
+  // 射频:silent 是【绝对静默】(rfLoud 恒 0,旧的船体泄漏圈已删),那一档没有「被听见的距离」可报,所以写字不写数。
+  //   hearRangeOf 缺省 recv=1(DD 级接收机);对方接收机更好只会听得更远,所以这是个乐观下界,措辞里不写成「安全距离」。
+  const silent=s.emitMode==='silent';
+  const lb=(typeof emitLabel==='function')?emitLabel(s.emitMode):String(s.emitMode);
+  const heard=silent?'静默 · 听不见':(k(hearRangeOf(s))+' 被听见 · '+lb);
+  // 照射:actRangeOf 缺省 refl=1 = 对【标准目标】那一档;打隐身舰更近。silent/jam 两档没在照射,标出来免得读成「此刻的覆盖」。
+  return `<div class="row"><span class="k">光学</span><span class="v">${k(visRangeOf(s))} 可见 · ${est}</span></div>
+    <div class="row"><span class="k">射频</span><span class="v">${heard}</span></div>
+    <div class="row"><span class="k">照射</span><span class="v">${k(actRangeOf(s))}(标准目标)${silent?' · 未开机':(s.emitMode==='jam'?' · 干扰中不照射':'')}</span></div>`;
+}
 /* 右栏武器库状态行:按清单生成 */
 function weaponRows(s){
   let h='';
@@ -110,6 +140,7 @@ function updateCmdBar(sel){
   }
   updateCmdBarVis(s); // 武器钮按旗舰配装显隐(CV 无主炮则无主炮钮)
   if(typeof followBtnSync==='function')followBtnSync(); // FM6 跟随两钮不在 cmdList 里(形状不同),显式同步一次
+  if(typeof emitBtnSync==='function')emitBtnSync();      // SN4 发射档三态钮同理(blocker C)。不在这儿同步的话,切换选中舰 / 别处改了 emitMode 都不会刷新,按钮会一直停在上一次点击后的字
 }
 function updateCmdBarVis(s){
   for(const kind in KIND_INFO){
@@ -372,7 +403,8 @@ function updateSelPanel(){ // frame 低频调用(每20帧,与 updateCardsStatus 
     <div class="row"><span class="k">速度</span><span class="v">${Math.round(V.len(s.vel))} km/s</span></div>
     <div class="row"><span class="k">加速度</span><span class="v">${engRows(s)}</span></div>
     <div class="row"><span class="k">目标</span><span class="v">${t?t.name+' · '+Math.round(dist/1000)+'k':'—'}</span></div>
-    ${weaponRows(s)}`;
+    ${senseRows(s)}
+    ${weaponRows(s)}`; // SN4 blocker E:三行辐射读数插在「我在哪儿怎么动」与「我能打什么」之间 —— 中间这一组回答的是「我被看见多少」
   updateCmdBar(sel);
 }
 function bindCmdBar(){ // 按钮一次性预生成(舰级2个 + KIND_INFO 每种武器一个);显隐随旗舰配装,事件按下时现查命令表
@@ -404,10 +436,50 @@ function bindCmdBar(){ // 按钮一次性预生成(舰级2个 + KIND_INFO 每种
     });
     return b;
   };
-  for(const c of cmdList(null))ensure(c.id); // cbFire/cbRadar
+  for(const c of cmdList(null))ensure(c.id); // 只剩 cbFire —— SN4 把原来那条布尔「雷达」摘出去做成三态钮了(见本文件末尾 bindEmitBtn)
   for(const kind in KIND_INFO)ensure('cb_'+kind); // cb_mac/cb_msl/cb_ciws
 }
 bindCmdBar();
+/* ============ SN4 底栏【发射档】三态循环钮(#cbEmit) ============
+   silent 静默 → paint 照射 → jam 干扰 → silent,作用于【全部选中蓝舰】(与 cmdList 的多选语义一致:读第一艘、全队统一置成同一档)。
+   刻意【不进 cmdList】(blocker C):那张表是「每舰一个布尔」的形状,点击语义写死在 bindCmdBar 里(取反 + 全队置一个布尔目标态),
+   三态既没有取反也没有单一布尔目标态;硬塞会被 `if(!cmd.set)return` 静默吃掉 —— RF8 那个大序列钮就是这么「看得见摸不着」的。
+   先例是 FM6 的跟随两钮:形状不同就自己建、自己挂事件、在 updateCmdBar 末尾显式同步一次。
+   写入一律走 21-detect 的 setEmit(唯一写入口,非法字面量当场抛);文案一律走 emitLabel(UI 文案唯一出处,与 87 同源)。
+   三态三色用【行内 style】给:内联优先级压得过 `#cmdBar .cbtn.on .s` 那条规则,所以本轮零 CSS 改动。 */
+function emitBtnSync(){
+  const b=document.getElementById('cbEmit');
+  if(!b)return;
+  const s=selBlue()[0];
+  if(!s){b.classList.add('is-dis');b.classList.remove('on');setHTMLStable(b,'<span class="l">发射档</span><span class="s">—</span>',false);return;}
+  b.classList.remove('is-dis');
+  const m=s.emitMode;
+  b.classList.toggle('on',m!=='silent');                       // .on 只表达「在辐射」这一件事;paint 与 jam 的区别交给下面的颜色,两个通道不抢同一个属性(同 RF8 方条那条纪律)
+  const col=(m==='jam')?'var(--state-warn)':((m==='paint')?'var(--state-active)':'var(--txt-mute)');
+  const lb=(typeof emitLabel==='function')?emitLabel(m):String(m);
+  setHTMLStable(b,`<span class="l">发射档</span><span class="s" style="color:${col}">${lb}</span>`,false);
+}
+(function bindEmitBtn(){
+  const wrap=document.querySelector('#cmdBar .cmd-btns');
+  if(!wrap||document.getElementById('cbEmit'))return;
+  const b=document.createElement('button');b.className='btn cbtn';b.id='cbEmit';
+  const fire=document.getElementById('cbFire');                // 位置:紧跟火控钮 —— 它接替的正是原来 cmdList 第二条的位置,不这么插会掉到武器钮后面,读起来像武器的一部分
+  if(fire&&fire.parentNode===wrap)wrap.insertBefore(b,fire.nextSibling);else wrap.appendChild(b);
+  b.addEventListener('click',()=>{
+    const sel=selBlue();if(!sel.length)return;
+    if(typeof emitNext!=='function'||typeof setEmit!=='function')return;
+    const nv=emitNext(sel[0]);                                 // 读第一艘的下一档当目标态,全队统一置过去(与 cmdList 的多选口径同源)
+    sel.forEach(x=>setEmit(x,nv));
+    log(`${sel.length} 艘 发射档 → ${(typeof emitLabel==='function')?emitLabel(nv):nv}`,nv==='silent'?'':'warn');
+    updateSelPanel();
+  });
+  b.addEventListener('mouseenter',()=>{
+    hoverRing=null;                                            // 发射档没有对应的射程圈可 hover(照射圈依赖目标反射,画不出单一半径),显式清掉免得留着上一个钮的圈
+    const t=document.getElementById('cmdTip');
+    if(t){t.style.display='block';t.textContent='发射档(三态循环):静默=一点不响,只靠光学看,对方听不见我;照射=雷达开机主动照,最准、也只有它上得到火控级,代价是被对方在约 4 倍距离上听见;干扰=发射机改去造噪声,压住对方对我的照射回波,但更吵、而且自己也照不了(火控级同样上不去)';}
+  });
+  b.addEventListener('mouseleave',()=>{hoverRing=null;if(typeof updSelWeaponTip==='function')updSelWeaponTip();});
+})();
 function fcPickBtnSync(s){ // RF8b 同步标题栏「选择」钮:它在 #fcSec .fc-hd 里,是【静态元素】,所以直接改属性即可,不经 innerHTML
   const b=document.getElementById('fcPickBtn');
   if(!b)return;

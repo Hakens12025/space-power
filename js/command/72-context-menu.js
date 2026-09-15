@@ -55,7 +55,7 @@ function openCtx(sx,sy,onShip){
   items.push({t:'📋 任务 → 打击(点敌舰,推进到35万环绕)',enabled:canMove,run:()=>{pendingTaskStrike=targets.map(s=>s.id);showTip('点击敌舰设为打击目标');}}); // DS150 T3
   const curTsk=targets.length?taskOf(targets[0].id):null; // DS150 T4:任务旋钮(攻击性/范围)
   items.push({t:'📋 任务 → 旋钮:攻击优先(雷达开,接战远)',enabled:!!curTsk,run:()=>{if(curTsk){curTsk.aggression=1;log('📋 任务旋钮 → 攻击优先','');}}});
-  items.push({t:'📋 任务 → 旋钮:隐蔽优先(雷达关,接战近)',enabled:!!curTsk,run:()=>{if(curTsk){curTsk.aggression=0;curTsk.ships.forEach(sid=>{const s=ships.find(x=>x.id===sid);if(s)s.lidar=false;});log('📋 任务旋钮 → 隐蔽优先','');}}});
+  items.push({t:'📋 任务 → 旋钮:隐蔽优先(不照射,接战近)',enabled:!!curTsk,run:()=>{if(curTsk){curTsk.aggression=0;curTsk.ships.forEach(sid=>{const s=ships.find(x=>x.id===sid);if(s)setEmit(s,'silent');});log('📋 任务旋钮 → 隐蔽优先','');}}}); // SN4 纯字段迁移 + 文案:新模型里雷达静听是一直开着的被动模式,说"雷达关"会把人教错,隐蔽优先关掉的只是照射
   items.push({t:'📋 任务 → 旋钮:范围×2',enabled:!!curTsk,run:()=>{if(curTsk){curTsk.rangeMul=2;log('📋 任务旋钮 → 范围×2','');}}});
   items.push({t:'📋 任务 → 旋钮:范围×0.5',enabled:!!curTsk,run:()=>{if(curTsk){curTsk.rangeMul=0.5;log('📋 任务旋钮 → 范围×0.5','');}}})
   items.push({t:'🔄 巡逻(沿路径点循环)',enabled:canMove,run:()=>{ // 现有路径点首尾循环走

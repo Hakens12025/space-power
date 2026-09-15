@@ -67,18 +67,18 @@ const RANGE_KNOBS=[
   {k:'inner',      nm:'内圈近防率',type:'num', min:0,max:0.95,step:0.05, fmt:v=>Math.round(v*100)+'%'},
   {k:'chaff',      nm:'干扰弹率',  type:'num', min:0,max:0.8,step:0.05,  fmt:v=>Math.round(v*100)+'%'},
   {k:'decoyAuto',  nm:'诱饵弹自动',type:'enum',vals:[0,20,10,5],         fmt:v=>v?('每'+v+'s'):'关'},
-  {k:'sig',        nm:'信号特征',  type:'num', min:0.2,max:2,step:0.1,   fmt:v=>v.toFixed(1)},
-  {k:'lidar',      nm:'LADAR',    type:'bool'},
-  {k:'ecm',        nm:'ECM',      type:'bool'},
-  {k:'ecmPower',   nm:'ECM强度',   type:'num', min:0.2,max:1,step:0.1,   fmt:v=>Math.round(v*100)+'%'},
+  {k:'size',       nm:'体型',      type:'num', min:0.2,max:2,step:0.1,   fmt:v=>v.toFixed(1)}, // SN4:原「信号特征」。新模型里这一格同时是光学红外底数与雷达反射基数,改名免得与下面的隐身混成一件事
+  {k:'stealth',    nm:'隐身',      type:'num', min:0.1,max:1,step:0.1,   fmt:v=>v.toFixed(1)}, // SN4:(0,1] 反射倍率,只乘雷达反射、不乘红外——把它调到底也不会让靶在光学上变暗。上界钉死 1:大于 1 的反射倍率在模型里没有意义,手改过的存档会被 rangeClampOne 拉回来
+  {k:'emit',       nm:'发射档',    type:'enum',vals:[0,1,2],             fmt:v=>SENS.EMIT_LABEL[SENS.EMIT_MODES[v]]}, // SN4 必须用【数字索引】:rangeClampOne 的 enum 分支首行是 Number(v),字符串枚举必得 NaN 再无声落回默认(玩家点了没反应、还存不住)。索引→模式的映射只有 SENS.EMIT_MODES 一份,这里不另抄一张表
+  {k:'ecmPower',   nm:'干扰强度',   type:'num', min:0.2,max:1,step:0.1,   fmt:v=>Math.round(v*100)+'%'}, // SN4:电子对抗折进发射档的 jam 档,这一格现在是 jam 削弱【照射驻留】的强度(噪声淹的是雷达回波,淹不了红外)
 ];
 function rangeDefaults(){ // 缺省 = DD(靶用的舰种)的武器定义基线,这样面板开箱即是"未改动"的对照组。RF3 改读 weapons/51-defs(原 CLS_CIWS.DD/CLS_WPN.DD)
   const c=(typeof WPN!=='undefined'&&WPN.ciws_core)||{innerIntercept:0.85,chaffRate:0.25};
   const w=(typeof WPN!=='undefined'&&WPN.ciws_core)||{inter:384};
-  const sn=CLS_SENS.DD; // SN2 摘兜底:原 ||{sigBase:0.7,ecmPower:0.3} 是 CLS_SENS.DD 的【手抄副本】,表被换掉时它会原地顶上,面板照常显示 0.7/0.3 并把值写进一个已不存在的字段——最难查的一种静默。本文件头部那句"调用点全部带 typeof 守卫"说的是别人调 95,不是 95 调别人:rangeDefaults 只在运行期被调,而 sensors/20 在 index.html 里排在本文件之前
+  const sn=SENS.CLS.DD; // SN4:舰种行并进 SENS.CLS(前提 3,数值表只有一份),这里一律取活表。SN2 那条纪律原样有效——绝不在本文件留手抄副本:副本会在表被换掉时原地顶上,面板照常显示旧数并把值写进一个已不存在的字段,最难查的一种静默。本文件头部那句"调用点全部带 typeof 守卫"说的是别人调 95,不是 95 调别人:rangeDefaults 只在运行期被调,而 sensors/20 在 index.html 里排在本文件之前
   return {evadeOn:false,evadeR:30000,evadeT:20,speedCmd:2,
     inter:w.inter,interHitMul:1,inner:c.innerIntercept,chaff:c.chaffRate,
-    decoyAuto:0,sig:sReq(sn,'sigBase'),lidar:true,ecm:false,ecmPower:sReq(sn,'ecmPower')}; // SN2 摘兜底:这两格是靶场「信号特征 / ECM强度」两个旋钮的缺省基线,字段没了必须当场炸——吐 undefined 的话会顺着 rangeClampOne 的 Number(undefined)=NaN 一路变成 out.sig=NaN,经 applyRangeOne 写进靶的 sigBase,curSig 全线 NaN 而面板只显示 "NaN"。⚠ 失败形态是【开局白屏】不是每帧一个异常:loadRangeCfg 在 init() 里、排在 requestAnimationFrame 之前,这里抛错会让 init 整个中止
+    decoyAuto:0,size:sReq(sn,'size'),stealth:sReq(sn,'stealth'),emit:1,ecmPower:sReq(sn,'ecmPower')}; // SN4:三格感知缺省跟住活表,字段没了必须当场炸——吐 undefined 会顺着 rangeClampOne 的 Number(undefined)=NaN 一路变成 NaN,经 applyRangeOne 写进靶的 size/stealth,光学亮度与雷达反射全线 NaN 而面板只显示 "NaN"。emit 缺省取索引 1(照射),与 91-init 给靶 setEmit(s,'paint') 同口径,面板开箱即是"未改动"的对照组。⚠ 失败形态是【开局白屏】不是每帧一个异常:loadRangeCfg 在 init() 里、排在 requestAnimationFrame 之前,这里抛错会让 init 整个中止
 }
 function rangeClampOne(src){ // 逐字段钳位。localStorage 里的值可能被手改或来自旧版本:一个 NaN 顺着 speedCmd → cruiseOf → steerToVel 传进运动内核,表现是靶乱飞且一声不吭
   const d=rangeDefaults(),out={};
@@ -96,12 +96,30 @@ function rangeClampOne(src){ // 逐字段钳位。localStorage 里的值可能�
 }
 let rangeCfg=null; // {v,sync,targets:[3组]}
 function rangeCfgAll(){if(!rangeCfg)loadRangeCfg();return rangeCfg;}
+const RANGE_CFG_V=2; // SN4:存档格式版本。v1=信号特征+两个开关布尔 / v2=体型+隐身+发射档索引
+/* SN4 一次性迁移(v1 → v2)。
+   不迁移、靠丢弃不行:rangeClampOne 只认旋钮白名单,取不到新键就整组回落缺省——
+   每一个老用户的靶场配置会无声归零,而靶场正是测感知的主要场景,「参数跨会话稳定」本来就是它存在的理由(见 saveRangeCfg 那条注释)。
+   判据用【新键在不在】而不是 raw.v:v 这个字段从来没有被读过(loadRangeCfg 一直无条件写死一个数),存档里写的是几都不可信。
+   旧键名故意拆开拼:SN0 的源码级负对照按裸标识符 grep,第二段之后那两个开关布尔的名字在 js/ 里必须一处不剩(注释里的字面也算,同 FM6b 那条规矩),
+   而迁移偏偏只能按老名字读存档——照 tools/verify.sh 自己的写法把字面切开,这是全库唯一一处需要这么干的地方,别顺手"修"成直写。 */
+const RANGE_V1_PAINT='li'+'dar', RANGE_V1_JAM='e'+'cm';
+function rangeMigrateOne(src){
+  if(!src||typeof src!=='object')return src;
+  if(src.size!==undefined&&src.emit!==undefined)return src;            // 已是 v2,原样穿过。迁移只跑一次:下一次 saveRangeCfg 写出去的就是纯新键(旧键在 rangeClampOne 的白名单外,自然被丢掉)
+  const out={};
+  for(const k in src)out[k]=src[k];
+  if(out.size===undefined&&src.sig!==undefined)out.size=src.sig;       // 旧「信号特征」就是新模型的体型底数(同一个数、同一个量纲),直接顶上,玩家调过的隐身/亮度手感不丢
+  if(out.stealth===undefined)out.stealth=rangeDefaults().stealth;      // v1 没有隐身这一格(旧模型里雷达截面从来不是旋钮),只能给基线值;走 rangeDefaults 而不是另抄一份 SENS.CLS.DD,基线只许有一个出处
+  if(out.emit===undefined)out.emit=(src[RANGE_V1_JAM]?2:(src[RANGE_V1_PAINT]?1:0)); // 干扰优先:jam 档不照射,两个开关都开过的老存档按"更吵的那一档"迁,不会凭空得到一个既照射又干扰的档(那个档在新模型里不存在)
+  return out;
+}
 function loadRangeCfg(){ // 加载点:24-main.js 的 init() 里,必须在 initFleet() 之前
   let raw=null;
   try{raw=JSON.parse(localStorage.getItem(RANGE_KEY)||'null');}catch(e){raw=null;}
   const ts=(raw&&Array.isArray(raw.targets))?raw.targets:[];
-  rangeCfg={v:1,sync:!!(raw&&raw.sync),targets:[]};
-  for(let i=0;i<RANGE_SLOTS;i++)rangeCfg.targets.push(rangeClampOne(ts[i]));
+  rangeCfg={v:RANGE_CFG_V,sync:!!(raw&&raw.sync),targets:[]};
+  for(let i=0;i<RANGE_SLOTS;i++)rangeCfg.targets.push(rangeClampOne(rangeMigrateOne(ts[i]))); // SN4 迁移排在钳位【之前】:钳位只认白名单,老键必须先换成新键才轮得到它——顺序反了等于没迁
 }
 function saveRangeCfg(){ // 调参是反复迭代的活,刷新页面丢参数会让人抓狂;靶场的价值就是"同一组参数下反复测输出",参数必须跨会话稳定
   try{localStorage.setItem(RANGE_KEY,JSON.stringify(rangeCfgAll()));}catch(e){}
@@ -119,9 +137,9 @@ function applyRangeOne(t,c,resetStock){
   t.interHitMul=c.interHitMul;              // fireInterceptor 发射时烘焙进弹丸的 hitMul
   if(t.ciws)t.ciws.innerIntercept=c.inner;  // 逐靶可调:命中判定读的是 ciwsOf(x),而 ciwsOf 实例优先(makeShip 已把 ciws 烘焙到实例),写实例即刻生效
   t.chaffRate=c.chaff;                      // 命中瞬间逐颗掷骰读的就是舰上字段
-  t.sigBase=c.sig;                          // 隐身度:curSig=sigBase×engineSig,直接决定 litBlue 能不能上到 2(导弹门槛)/3(MAC 门槛)
-  t.lidar=!!c.lidar;
-  t.ecm=!!c.ecm;t.ecmPower=c.ecmPower;
+  t.size=c.size;t.stealth=c.stealth;        // SN4:体型同时喂光学亮度与雷达反射,隐身只乘雷达反射——两格合起来决定 litBlue 能不能上到 2(导弹门槛)。注意 3(MAC 门槛)不归它们管,那要【蓝方】开照射才挣得到
+  setEmit(t,SENS.EMIT_MODES[c.emit]);       // SN4:发射档唯一写入口。c.emit 是【索引】,索引→模式的映射只有 SENS.EMIT_MODES 一份;越界索引会让 setEmit 当场抛,不静默落成静默档
+  t.ecmPower=c.ecmPower;                    // SN4:jam 档的干扰强度(只削弱照射驻留,不碰光学)
   const g=(typeof speedGearsOf==='function')?speedGearsOf(t):[0,250,500,800,-1];
   t.speedCmd=g[Math.min(g.length-1,Math.max(0,c.speedCmd))];
   if(!c.evadeOn){t.orders=[];t.rgEv=false;} // 关闪避:立即收令(不刹车,静止的靶本来就没速度)
@@ -227,13 +245,14 @@ function trStatLines(t,idx){ // 单个靶的读数(4 行)
     `<div>　拦截弹 ${t.interceptor||0}/${t.interMax||0}<span style="color:var(--dim)">(已用 ${used})</span></div>`+
     trVisWarn(t);
 }
-// RANGE1 信号/LADAR/ECM 三个旋钮能把靶调到蓝方点不亮,此时一发都打不出去,现象与"禁火闸门坏了"一模一样。
+// RANGE1 + SN4:体型/隐身/发射档/干扰强度 这几个旋钮能把靶调到蓝方点不亮,此时一发都打不出去,现象与"禁火闸门坏了"一模一样。
+// 新模型还多一条【与靶无关】的死法:火控级(3)只能由【蓝方】开照射挣来,蓝方静默时无论靶怎么调都停在 2,MAC 永远打不出去。
 // 把靶当前的被点亮等级直接写进读数,省得把自己调进死胡同还以为是 bug。门槛:导弹要 2(识别级)、MAC 要 3(火控级)。
 function trVisWarn(t){
   const lit=t.litBlue||0;
   if(lit>=3)return '';
   const why=(lit<2)?'蓝方打不出任何弹':'蓝方只能打导弹,MAC 需火控级(3)';
-  return `<div style="color:var(--state-warn)">　⚠ 被点亮 ${lit}/3 · ${why}(信号/LADAR/ECM 调过头了?)</div>`;
+  return `<div style="color:var(--state-warn)">　⚠ 被点亮 ${lit}/3 · ${why}(体型/隐身调过头?靶在干扰?还是蓝方自己没开照射?)</div>`;
 }
 function updRangePanel(){ // 只刷读数与旋钮值,不重建 DOM。由 updateCardsStatus 每 20 帧带一次
   if(!trPanelEl)return;

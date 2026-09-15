@@ -44,7 +44,7 @@ function render(){
     for(const id of selected){
       const s=ships.find(x=>x.id===id);if(!s||s.dead||s.side!=='blue')continue;
       const p=toScreen(s.pos[0],s.pos[1]);
-      const r=s.sensorRange*cam.zoom;
+      const r=((typeof actRangeOf==='function')?actRangeOf(s):0)*cam.zoom; // SN4:旧那个标量探测半径字段已物理删除,换成对【标准目标】(反射 1.0)的照射量程,与 83-hud 的照射圈同口径。注意语义:这圈现在表达【能力】(这部雷达照得到多远),不是【此刻的覆盖】——silent/jam 两档并没有在照射,而圈照画。要改成「只在 paint 档画」是一条产品决定,本轮没做
       ctx.strokeStyle='rgba(90,167,255,.15)';ctx.lineWidth=1;
       ctx.beginPath();ctx.arc(p[0],p[1],r,0,6.283);ctx.stroke();
     }

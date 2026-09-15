@@ -14,8 +14,8 @@ function enemyAI(dt){ // 叛军AI:朝玩家推进/锁定/开火/被MAC锁定时�
     const visible=my.filter(s=>s.litRed>=2); // 红网络识别级点亮的蓝舰(能锁定/打导弹;探测级只知道大小打不了;fireMAC/orderMissileSalvo内部再按质量门控)
     // DS182 S4(KIMI155):红AI EMCON纪律——无接触静默推进(被动IR积累探测),接触(litRed≥1)才开LADAR抢火控,打完(无接触5s)静默;手电效应:开LADAR=成辐射源被蓝ESM嗅
     const contactNow=my.some(s=>s.litRed>=1);
-    if(e.lidar&&!contactNow){e.lidarQuiet=(e.lidarQuiet||0)+dt;if(e.lidarQuiet>5){e.lidar=false;e.lidarQuiet=0;}} // 无接触5s→静默(dt累计,不依赖simTime)
-    else if(!e.lidar&&contactNow){e.lidar=true;e.lidarQuiet=0;} // 接触→开LADAR抢火控
+    if(e.emitMode!=='silent'&&!contactNow){e.emitQuiet=(e.emitQuiet||0)+dt;if(e.emitQuiet>5){setEmit(e,'silent');e.emitQuiet=0;}} // SN4 纯字段迁移:开关布尔→三态发射档,判据从"开着"改成"非静默"(红 AI 今天不会自己进 jam 档,两者等价);决策逻辑一行未动。无接触5s→静默(dt累计,不依赖simTime)
+    else if(e.emitMode==='silent'&&contactNow){setEmit(e,'paint');e.emitQuiet=0;} // SN4:接触→开照射抢火控。手电效应仍在,而且更强:照射自照 15 万,被对方静听嗅到却是 60 万(4 倍)
     const pool=visible.length?visible:my;
     const nearest=pool.reduce((b,s)=>V.len(V.sub(s.pos,e.pos))<V.len(V.sub(b.pos,e.pos))?s:b,pool[0]);
     const d=V.len(V.sub(nearest.pos,e.pos));

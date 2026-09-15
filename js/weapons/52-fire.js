@@ -9,8 +9,11 @@ function macAligned(s,t){ // 轴炮窗口:机头是否对准预测点(~1.1°容�
   if(!t||t.dead||t.side===s.side)return false;
   return V.angle(s.facing,V.norm(V.sub(macPred(s,t),s.pos)))<0.02;
 }
-/* RF6 主炮射程分两块:炮自己有射程(macRange),雷达自己有照射范围(sensorRange),两者是不同组件。
-   不开雷达 = 只能靠炮自己的射程;开了雷达 = 用雷达的范围顶上(取 max,所以雷达短于炮时不会反而缩短)。
+/* RF6 主炮射程分两块:炮自己有射程,雷达自己有照射范围,两者是不同组件。
+   SN4 把第二块从感知层摘下来,改成武器表自带的 macRadar:开照射(emitMode==='paint')用 macRadar,静默/干扰用 macRange,不取 max。
+   为什么不取 max:两通道内核里的照射量程是「按目标反射率现算」的动态量(同一门炮打 DD 和打 CA 得出的数不一样),
+   拿它当火控射程等于把武器与感知又焊回一起——射程会随着看谁而变,而 fcGate / 目标轮盘 / hover 圈三处读数没有「看谁」这个参数。
+   数值上对现有舰种是零变化:DD 两块都是 15 万,CA 是 15 万→25 万,与改前 max(炮,感知半径) 的结果逐位相同。
    超出有效射程不是硬截断,而是【散布随距离增长】——弹丸真的飞歪、屏幕上看得见,与既有的提前量脱靶自然叠加。
    MAC_FALLOFF 是"再打就是浪费"的硬上限(30s 装填,不设上限 AI 会对着 100 万公里外空放)。
    改前的散布锚在绝对距离上(d/100000*0.0025),与射程概念无关且过于温和:25 万公里处偏角才 0.00625rad、
@@ -18,9 +21,8 @@ function macAligned(s,t){ // 轴炮窗口:机头是否对准预测点(~1.1°容�
 const MAC_FALLOFF=2.0;      // 硬上限 = 有效射程 × 此值,超出不开火
 const MAC_SPREAD_K=0.018;   // 每超出一倍有效射程增加的偏角(rad,约 1.0°)
 const MAC_SPREAD_CAP=0.05;  // 偏角上限,防极端距离下数值失控
-function macEffRange(s){ // RF6 有效射程:开雷达取雷达照射范围与炮射程的较大者,不开雷达就是炮自己的射程
-  const gun=s.macRange||150000;
-  return s.lidar?Math.max(gun,sReq(s,'sensorRange')):gun; // SN2 摘兜底:||0 让字段一旦消失就静默退化成"开雷达零增益"——DD 的 sensorRange 与 macRange 恰好都是 15 万、本来就零增益,看不出来;CA 是 15 万→25 万,主炮有效射程会悄悄掉回 15 万,而 fcGate / radSolve / hover 圈 / 规格条全跟着一起错,没有一处会报错
+function macEffRange(s){ // SN4 有效射程唯一定义点:开照射用雷达那一块(macRadar),静默/干扰用炮自己那一块(macRange)。调用点一律调它,绝不在别处重拼这个判断
+  return s.emitMode==='paint'?sReq(s,'macRadar'):sReq(s,'macRange'); // 只有 paint 是在照射;jam 档发射机忙着造噪声、不照射,所以与 silent 同走炮射程。两块都走 sReq:字段一旦消失当场抛,不许静默退化成"零增益"(那正是 SN2 摘掉的那类兜底)。无主炮舰(CV)由 51-defs 的 resolveLoadout 显式烘成 0,所以这里不需要兜底也不会抛
 }
 function fireMAC(shooter,target){ // MAC轴炮:沿船头方向直射(必须先对准),到预测时间失的
   if(shooter.noFire)return; // RANGE1 禁火总闸门 1/3:靶场的靶只挨打不还手。这是 MAC 发射的唯一实现,GM 手动锁定/自动索敌/AI 三条路径最终都落到这里。注意这是个【静默】开关(不报错不打日志),将来若误给蓝舰置了 noFire 会毫无线索,置位处只有 initEnemy 的靶语义包一处

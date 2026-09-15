@@ -16,20 +16,31 @@
 /* 九个维度,每个都由【配装字段】算出,与舰种 tag 无关:同样是 DD,换了近防件读数就变。
    曾经有 13 维,砍掉了 齐射/照射/机动/信标 —— 它们在本作里是舰种常量(全队只有两档取值),
    且 齐射↔照射、机动↔信标 的秩相关都是 1.000(排名完全一样),从模板里删掉总契合度损失 0.0%。
-   【贴身与通道不能合并】秩相关只有 0.675,且几何相反:贴身要求站位落进该舰 inner 之内,通道要求沿环摊开。 */
+   【贴身与通道不能合并】秩相关只有 0.675,且几何相反:贴身要求站位落进该舰 inner 之内,通道要求沿环摊开。
+   SN4【照射与静听同样不合并】。今天四舰种恰好 emit===recv(DD 1/1、CA 3/3,BB/CV 还是 CA 的克隆),
+   两维读出的是同一个数,按上面那条「秩相关 1.000 就合并」的口径本该合并 —— 不合并的理由是:
+   被砍掉的那四维是【同一个量】的两种写法,而这两维读的是【两个独立字段】(发射机 emit / 接收机 recv),
+   今天相等是数值表还没标定,不是模型退化。合并等于把这层退化钉进模型:日后出一艘「安静的大耳朵」
+   (recv 高、emit 低)就再也表达不出来,而四套模板要再改一轮。代价是今天两维读数相同、指派对它俩无差别,零功能损失。
+   另:第 17 行那个被砍掉的旧维「照射」是 13 维时代的另一个东西,与这里的「主动·照射」无关。 */
 /* FM8 每一维带上【影响力权重 w】。数值来自沙盘实测(饱和编成下,删掉该维全部插槽的总契合损失),
-   CLAUDE.md 的 FM4 一节记着原始读数:通道 −2.64 > 贴身 −1.15 > 主炮/红外/网络 −0.95 >
-   电战/生存 −0.64 > 射频 −0.28 > 隐蔽 −0.15。这里按通道归一(÷2.64)。
+   CLAUDE.md 的 FM4 一节记着原始读数:通道 −2.64 > 贴身 −1.15 > 主炮/照射/网络 −0.95 >
+   电战/生存 −0.64 > 静听 −0.28 > 隐蔽 −0.15。这里按通道归一(÷2.64)。
+   SN4:换感知内核之后 w 一个数都没重测,也不需要重测 —— 这份读数量的是【这一维在四套模板里占了几个要紧插槽】,
+   而模板的插槽一个没增没删(只把两个维键 ir/esm 改成 act/lis、名字跟着改),那次实测的结构原封不动。
+   日后真要把两维合并,w 取【两者之和】(0.36+0.11=0.47)而不是取大的那个:影响力的定义就是
+   「删掉该维全部插槽的总契合损失」,两维的插槽集合不相交,删掉合并维 = 同时删掉两组插槽,
+   损失按定义可加 —— 这条不用回沙盘重测也成立。
    它【只进站位重要性 prio】,不进契合度 fit —— 见 fit() 里 FM8 那段:乘在 req 权重上会被归一化约掉。 */
 const FM_DIM = [
   { k: 'aaClose', nm: '防空·贴身', ab: '贴身', w: 0.44, f: s => { const c = ciwsOf(s); return (c.inner || 0) * (c.innerIntercept || 0); } },
   { k: 'aaChan', nm: '防空·通道', ab: '通道', w: 1.00, f: s => { const c = ciwsOf(s); return (s.interMax || 0) * (c.outer || 0); } },
   { k: 'gun', nm: '主炮', ab: '主炮', w: 0.36, f: s => s.macReload ? (s.macDmg || 0) / s.macReload : 0 },
-  { k: 'ir', nm: '被动·红外', ab: '红外', w: 0.36, f: s => { const p = sReq(s, 'detPower'); return p * p; } }, // SN2:摘 ||0 —— 字段一没了这一维恒 0,红外哨戒那个插槽对谁都是 0 分、匈牙利完全无差别,而全库零报错
-  { k: 'esm', nm: '被动·射频', ab: '射频', w: 0.11, f: s => { const q = sReq(s, 'esmQual'); return q * q; } }, // SN2:摘 ||0,同 ir 那条
-  { k: 'stealth', nm: '隐蔽', ab: '隐蔽', w: 0.06, f: s => 1 / Math.max(0.01, sReq(s, 'sigBase') * sReq(s, 'rcs')) }, // 分母兜底 0.01:sigBase 被 tier 乘到 0 时不至于吐 Infinity 把归一化整列压成 0(那道守的是值不是字段,留着)。SN2:两个 ||1 摘掉 —— 它们是全库最危险的一处兜底,字段一缺这一维恒等于 1.00 = 全队满分,前出哨戒/侦察插槽全部评估为满足,而界面全绿
+  { k: 'act', nm: '主动·照射', ab: '照射', w: 0.36, f: s => sReq(s, 'emit') * sReq(s, 'recv') }, // SN4:维键 ir→act。旧读数是探测力的平方,那个字段第二段删了;新模型里「能主动照多远」由发射机与接收机共同决定(照射量程正比于 emit·recv 的四次方根),这里取乘积本身 = 量程的四次方,与下面 lis 同口径、两维之间可比
+  { k: 'lis', nm: '被动·静听', ab: '静听', w: 0.11, f: s => { const r = sReq(s, 'recv'); return r * r; } }, // SN4:维键 esm→lis(与内核 trk 的 opt/lis/act 同一套词汇)。静听量程正比于 recv 的平方根,故读数取 recv 的平方,同为量程的四次方。act 与 lis 是同一部雷达的两种模式,但【读的是两个字段】—— 今天两列读数相等是四舰种 emit===recv 的数值退化,见顶部 SN4 那段
+  { k: 'stealth', nm: '隐蔽', ab: '隐蔽', w: 0.06, f: s => 1 / Math.max(0.01, sReq(s, 'size') * sReq(s, 'stealth')) }, // SN4:雷达反射 = 体型 × 反射倍率(与内核 reflOf 同一个乘积),取倒数 = 「越难被照到分越高」。分母兜底 0.01 保留:它守的是值不是字段(反射倍率被 tier 乘到 0 时不至于吐 Infinity 把归一化整列压成 0)。刻意【不】把光学亮度算进来 —— 亮度含 (1+功耗),是每 tick 都在变的动态量,进了这一维会让每次重排给出不一样的指派
   { k: 'c2', nm: '网络中枢', ab: '网络', w: 0.36, f: s => sReq(s, 'guideChan') }, // SN2:摘 ||0 —— guideChan 已被 SN1 迁到 weapons/51-defs 不随感知表陪葬,但这个 ||0 与 SN1 摘掉的那个 ||4 是同一类假兜底:字段一丢,副中枢插槽对谁都是 0 分而不是报错
-  { k: 'ew', nm: '电子战', ab: '电战', w: 0.24, f: s => sReq(s, 'ecmPower') }, // SN2:摘 ||0 —— ecmPower 不在第二段要换掉的八个字段里,但它【住在 CLS_SENS 这张表里】,整表替换时最容易陪葬(这正是 SN1 把 guideChan 迁出去的理由);0 是它的合法值,sReq 原样放行
+  { k: 'ew', nm: '电子战', ab: '电战', w: 0.24, f: s => sReq(s, 'ecmPower') }, // SN2:摘 ||0 —— 0 是它的合法值(不带干扰机),sReq 原样放行、只拒字段缺失。SN4:ecmPower 是【干扰强度不是感知量】,第二段整表替换时明确保留(仍住感知层的舰种行表里,新模型下它就是 jam 档的干扰强度),所以这一维一个字不用改
   { k: 'surv', nm: '生存', ab: '生存', w: 0.24, f: s => (s.hp || 0) / Math.max(0.05, 1 - (s.chaffRate || 0)) }, // 同上:chaffRate 是 'prob' 字段可以合法取到 1
 ];
 const FM_CAPS = FM_DIM.map(d => d.k);
@@ -38,7 +49,7 @@ function fmCapNm(k) { const d = FM_DIM.find(x => x.k === k); return d ? d.nm : k
 function fmCapAb(k) { const d = FM_DIM.find(x => x.k === k); return d ? d.ab : k; }
 function fmCapW(k) { const d = FM_DIM.find(x => x.k === k); return d && isFinite(d.w) ? d.w : 1; } // FM8 影响力权重,只进 prio
 /* 能力影响力排序(饱和编成下删掉该维全部插槽的总契合损失,由沙盘实测):
-   通道 > 贴身 > 主炮 = 红外 = 网络 > 电战 = 生存 > 射频 > 隐蔽 */
+   通道 > 贴身 > 主炮 = 照射 = 网络 > 电战 = 生存 > 静听 > 隐蔽 */
 
 /* ---------------- ② 站位模板 ---------------- */
 /* 五个功能带,半径各有各的物理依据(fmBandRadii 现算,不写死):
@@ -98,8 +109,8 @@ const FM_STANCE = {
       { nm: '右贴身', cap: 'aaClose', band: 'close', brg: 30 },
       { nm: '电战位', cap: 'ew', band: 'screen', brg: 135 },
       { nm: '前出哨戒', cap: 'stealth', band: 'picket', brg: 0 },
-      { nm: '红外哨戒', cap: 'ir', band: 'picket', brg: 320 },
-      { nm: '射频哨戒', cap: 'esm', band: 'picket', brg: 40 },
+      { nm: '照射哨戒', cap: 'act', band: 'picket', brg: 320 }, // SN4:维键 ir→act,插槽名跟着改(cap 键静默指向一个已换语义的维,正是本项目最怕的那种漂移)
+      { nm: '静听哨戒', cap: 'lis', band: 'picket', brg: 40 },   // SN4:维键 esm→lis
       { nm: '主力位', cap: 'gun', band: 'body', brg: 90 },
       { nm: '硬屏', cap: 'surv', band: 'screen', brg: 340 },
       { nm: '副中枢', cap: 'c2', band: 'body', brg: 270 }],
@@ -137,9 +148,9 @@ const FM_STANCE = {
   },
   sub: { /* 宽而不深:插槽压在两舷,扁率 1.85 横向拉开(USF 10B §3231「宽而不深」) */
     nm: '水下为主', spread: 1.10, gap: 1.60, bm: 1.00, widen: 1.85, pref: 0, gcap: 16,
-    boost: { esm: 1.8, ir: 1.6, stealth: 1.3 }, slots: [
-      { nm: '左远射频', cap: 'esm', band: 'picket', brg: 275 },
-      { nm: '右远红外', cap: 'ir', band: 'picket', brg: 85 },
+    boost: { lis: 1.8, act: 1.6, stealth: 1.3 }, slots: [ // SN4:只换维键,1.8/1.6/1.3 三个数一位没动 —— 它们从 FM4 起就没被重测过,本轮也不做数值平衡
+      { nm: '左远静听', cap: 'lis', band: 'picket', brg: 275 },
+      { nm: '右远照射', cap: 'act', band: 'picket', brg: 85 },
       { nm: '左哨戒', cap: 'stealth', band: 'picket', brg: 300 },
       { nm: '右哨戒', cap: 'stealth', band: 'picket', brg: 60 },
       { nm: '左翼屏护', cap: 'aaChan', band: 'screen', brg: 265 },

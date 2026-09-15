@@ -8,16 +8,16 @@ function on(id,ev,fn){const el=document.getElementById(id);if(el)el.addEventList
    这个函数的职责是让那一刻的每一个漏改点【当场炸出来】,而不是静默降级。
 
    为什么是抛错而不是哨兵值:哨兵正是本项目的头号静默失败模式。formation/39-fmcaps 的隐蔽维写成
-   1/max(0.01,(sigBase||1)*(rcs||1)),字段一旦没了它恒等于满分 1.00,然后一路走完匈牙利指派、落盘进
+   1/max(0.01,两个感知字段相乘、各自带 ||1 的假兜底),字段一旦没了它恒等于满分 1.00,然后一路走完匈牙利指派、落盘进
    s.fmStn、画进方位盘,界面全绿、全库零报错,而编成已经错了。抛错还能穿过下游的第二层吞噬
    (fmCapOf 末尾那个 ||0),哨兵穿不过去。
    抛错在这个项目里是安全的:core/99 的 frame() 把 requestAnimationFrame(frame) 放在【第一行】,
    所以 stepSim 里抛错不会永久卡死帧循环,只退化成每帧一个异常、控制台看得见;探针的 t() 又会把它
    捕成 =THREW: 由 verify.sh 接住。
 
-   口径:0 是合法值(rcs=0 绝对隐身 / floorIr=0 无条件可探测 / ecmPower=0 不带 ECM),只有
+   口径:0 是合法值(SN4: 举例换成新模型里仍然存在的合法零 —— EMIT_P.silent=0 绝对射频静默 / G_OPT[0]=0 无信号不积累 / ecmPower=0 不带 ECM),只有
    undefined/null/NaN 算缺失。NaN 单独拦是因为它比 undefined 更难查——会一路算成 NaN 再被下游的 ||0 吞成 0。
-   【不许加 typeof==='number' 或 isFinite 检查】:调用点里有传整行表对象(sReq(CLS_SENS,c))与
+   【不许加 typeof==='number' 或 isFinite 检查】:调用点里有传整行表对象(sReq(SENS.CLS,c))与
    trk 对象(sReq(t,trkKey))的用法,加了类型检查会在 makeShip 第一次调用时抛死、init() 整条链断掉、页面白屏。
 
    ⚠ 只许在函数体/箭头函数体/运行期求值处调用,绝不许进任何文件的顶层立即执行语句:

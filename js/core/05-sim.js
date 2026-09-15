@@ -6,7 +6,7 @@
    前段必须早于 S4(它写的 lockedTarget 同时是战斗转向的转向指令,同 tick 就要被机头归瞄消费)与 S14-S17;
    后段必须紧跟 S14-S17(只有这一段能看到本 tick 的发射结果)且早于 S18 靶场AI。详细理由见各自行内注释。 */
 function stepSim(dt){
-  detT+=dt;if(detT>=1){detT=0;detectLoop();} // 感知结算(每秒一次,阵营对称)
+  detT+=dt;if(detT>=SENS.TICK){const el=detT;detT=0;detectLoop(el);} // 感知结算(每模拟秒一次,阵营对称)。SN4: 节拍本身一点没变,变的是要把【距上次结算实际过去了多少模拟秒】交给 detectLoop —— 新内核的驻留衰减是解析跳步(x←x·D^dt + g·(1−D^dt)/(1−D)),传 CFG.step=0.02 会把一整秒的衰减当成 0.02 秒算、驻留一路涨穿,传常数 1 又会在倍速/长帧下把真实经过的时间抹平。detT 归零【之前】先存进 el,它就是那个真实秒数(恒 ≥ SENS.TICK,x50 倍速下约 1.00~1.02);阈值也从裸字面量 1 改读 SENS.TICK,节拍从此只有表里那一个定义点
   netAllocT=(netAllocT||0)+dt;if(netAllocT>=0.5){netAllocT=0;reassignNets('blue');reassignNets('red');} // DS147:智能目标分配每0.5s平衡(仅link网按需求)
   if(tasks.size)taskProcess(dt); // DS150:目标导向AI 任务处理器(每2s,意图级)
   if(typeof stepFireControl==='function')stepFireControl(dt); // RF5 S3b 火控序列前置决策(→ weapons/58):清理失效序列→逐武器解算目标→改写 lockedTarget/续期 driftFire。必须在 S4 之前(lockedTarget 同时是战斗转向的转向指令,同 tick 就要被机头归瞄消费),也必然在 S14-S17 之前(自动齐射与 MAC 自动开火同 tick 读到本段的结果)

@@ -9,15 +9,15 @@ function applyClsTier(s,cls,tier){ // TIER1 就地改一艘现有舰的舰种/�
   s.cls=c; s.tier=t;
   s.thrust=st.thrust; s.turnRate=st.turnRate; s.speedGears=(st.speedGears||[0,250,500,800,-1]).slice();
   s.hp=st.hp; s.maxHp=st.hp; // 编辑器里的舰是待放置的满血单位,不做按比例保血——这个函数只服务编辑期,不要拿去改战斗中的舰
-  s.ammo=lw.ammo; s.macDmg=lw.macDmg; s.missDmg=lw.missDmg; s.macReload=lw.mac||0; s.macRange=lw.macRange||150000; s.macCd=0;
+  s.ammo=lw.ammo; s.macDmg=lw.macDmg; s.missDmg=lw.missDmg; s.macReload=lw.mac||0; s.macRange=sReq(lw,'macRange','resolveLoadout'); s.macRadar=sReq(lw,'macRadar','resolveLoadout'); s.macCd=0; // SN4 macRadar 随 macRange 一起烘焙,口径与 makeShip 一致(这份清单是它的第二份手抄,两边必须同步改)
   s.interceptor=lw.inter||0; s.interMax=lw.inter||0;
   s.cells=(lw.cells||4); s.cellTimer=Array(lw.cells||4).fill(0);
   s.mslPer=lw.mslPer||12; s.mslReload=lw.mslReload||60; s.mslRange=lw.mslRange||350000;
   s.guideChan=st.guideChan; s.chaffRate=(lw.chaffRate!==undefined?lw.chaffRate:0.25); s.value=st.value; // TIER1 chaffRate 口径与 makeShip 一致:0 是合法值,不能被 || 吞掉
   s.weapons=lw.weapons; // RF3 武器清单同步重刷
   s.ciws={outer:lw.outer,outerIntercept:lw.outerIntercept,inner:lw.inner,innerIntercept:lw.innerIntercept};
-  s.sensorRange=st.sensorRange; s.detPower=st.detPower; s.esmQual=st.esmQual; s.sigBase=st.sigBase;
-  s.rcs=st.rcs; s.pPing=st.pPing; s.floorIr=st.floorIr; s.floorEsm=st.floorEsm; s.ecmPower=sReq(st,'ecmPower','shipStats'); // SN2 ecmPower 口径与 makeShip 一致:sReq 放行合法 0、只拒字段缺失(这份烘焙清单是 makeShip 的第二份手抄,两边必须同步改)
+  s.size=sReq(st,'size','shipStats'); s.stealth=sReq(st,'stealth','shipStats'); // SN4 被看方两字段(光学红外底数+雷达反射基数 / 反射倍率),与 makeShip 逐格对齐
+  s.emit=sReq(st,'emit','shipStats'); s.recv=sReq(st,'recv','shipStats'); s.ecmPower=sReq(st,'ecmPower','shipStats'); // SN4 探测方两字段 + 干扰强度。口径与 makeShip 一致:sReq 放行合法 0、只拒字段缺失(这份烘焙清单是 makeShip 的第二份手抄,两边必须同步改)。刻意【不】重置 emitMode / paintWarned / trkB / trkR:那是运行期状态不是烘焙数值,换个舰种不该让一艘正在照射的舰悄悄静默——与改前这里同样不碰那两个开关布尔的口径逐条一致
   s.beaconMax=(st.beacon||0); s.beaconCount=(st.beacon||0);
   return s;
 }

@@ -2,6 +2,7 @@
 /* ================= demo 录制(本局数据导出,供分析) ================= */
 function snapshot(){
   return {
+    sv:4,                                   // SN4 感知模型版本。快照里没有任何感知字段,唯一相关的是下面那个 lit —— 而它的字段名与取值(0/1/2/3)一个字没变、【阶梯语义】换了(1=光学或静听单独 / 2=光学与静听交叉或照射建立 / 3=照射驻留)。老 demo 与新 demo 形状完全一样、含义不同,离线分析不会有任何东西提醒你:缺 sv 的文件 = 三通道时代
     t:Math.round(simTime*100)/100,
     ships:ships.map(s=>({id:s.id,name:s.name,cls:s.cls,tier:s.tier,side:s.side,pos:s.pos.slice(),vel:s.vel.slice(),facing:s.facing.slice(),hp:Math.round(s.hp),spd:s.speedCmd,orders:s.orders.map(o=>({pos:o.pos.slice(),t:o.type})),fm:s.formation?{g:s.formation.id,slot:(s.fmSlot||[0,0,0]).slice(),mode:s.formation.mode}:null,fl:s.follow?{t:s.follow.tid,off:s.follow.off.slice()}:null,lock:s.lockedTarget&&!s.lockedTarget.dead?s.lockedTarget.name:null,lit:s.side==='red'?s.litBlue:s.litRed})), // TIER1 快照加 tier:F7 导出的 demo JSON 是离线分析用的,少了它分不清同舰种不同分级的表现差异。FL1:一层化后 F 没有 gid 了(编组名册层已删),编队号就是 F.id;同时补 mode(阵位/跟随)与 fl 跟随快照 —— 跟随态下成员 orders 恒空,不记 s.follow 的话离线分析看不出它为什么在动
     proj:projectiles.map(p=>({type:p.type,pos:p.pos.slice(),vel:p.vel.slice(),spd:Math.round(p.spd||0),count:p.count||0,fuel:p.fuel,age:p.age,tgt:p.target?(p.target.name||'弹'):null})),

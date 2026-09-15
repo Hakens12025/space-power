@@ -22,7 +22,7 @@ function initFleet(){
   demoRec={on:demoRec.on,data:[],lastT:-1}; // 保留自动录制开关(init()开局置on),只清数据缓冲
   // 初始集结仅预设场景(编辑器摆位的自定义场景不强制集结,船待原地)
   if(envIdx!==-1&&!env.range)ships.forEach(s=>s.orders.push({pos:[0,0,0],type:'stop'})); // RANGE1 靶场不压集结令:蓝方开局就朝原点跑会毁掉"静止发射"基线(此行在 initEnemy 之前,ships[] 只有蓝方)
-  if(env.range)ships.forEach(s=>{s.lidar=true;}); // RANGE1 靶场蓝方默认开 LADAR:靶静止熄火,IR 通量 0.7/d² 低于 DD 的探测下限 3.75e-11,不开 LADAR 蓝方连 lit=1 都到不了,导弹(需2)/MAC(需3)全打不出去,靶场直接测不了
+  if(env.range)ships.forEach(s=>setEmit(s,'paint')); // RANGE1 + SN4 靶场蓝方默认开照射。理由换了但这一行照旧要留:新模型里静默熄火的靶(体型 0.70)光学可见 150,599 km,蓝方光靠被动就能挣到 lit=1、甚至靠交叉到 2(能打导弹);但 MAC 需要火控级 3,而 3 只有照射驻留挣得到——不开照射靶场就测不了主炮
   initEnemy();
   const eCnt=(env.enemy||DEFAULT_ENEMY).length;
   log(`测试环境:${env.name} · 我方${ships.length-eCnt}艘 / 目标${eCnt}艘`,'');
@@ -39,7 +39,7 @@ function initEnemy(){
       s.invuln=true;   // 无敌在 applyDamage 顶部单点实现(不是 hp=Infinity:那会污染 info 面板显示与 demo JSON 序列化)
       s.noFire=true;   // 静默禁火总闸门,由 fireMAC / orderMissileSalvo / fireMissiles 三处守卫读取
       s.rangeAnchor=s.pos.slice(); // 闪避机动的圆心
-      s.lidar=true;    // 靶被 enemyAI 的 isTarget 早退跳过,拿不到 EMCON 开机逻辑;不开 LADAR 对来袭导弹的被动可见距离(15万×0.8×0.4=4.8万)小于近防预警的 5 万,拦截会晚一拍
+      setEmit(s,'paint'); // SN4:靶被 enemyAI 的 isTarget 早退跳过,拿不到 EMCON 开机逻辑;不开照射时对来袭燃烧弹只有光学的 47,996 km(新模型光学不看探测方,这是个常数),小于近防预警的 5 万,拦截会晚一拍;开照射后对导弹(反射 0.5)是 126,134 km
       if(typeof newRangeStat==='function')s.rangeStat=newRangeStat();
     }
     if(d[8]){const wps=Array.isArray(d[8][0])?d[8]:[d[8]];wps.forEach(wp=>s.orders.push({pos:wp.slice(),type:'stop'}));} // 动靶:沿路径点移动(可多点)

@@ -1,6 +1,6 @@
 "use strict";
 /* RF5-D 教程面板 —— 顶栏「教程」钮唤出的独立模态。TUT_HTML 就是全文的唯一副本(上一阶段的草稿 tools/tutorial_draft.html 已内联进来并删除,别再去找它)。
-   复核后按实测口径改过九处事实(到位判据 800km+60km/s、IR 用 21-detect 的 sigBase+E_ENG 而非 engineSig 的 2.2/1.5/0.5、
+   复核后按实测口径改过九处事实(到位判据 800km+60km/s、舰船 IR 走 21-detect 的舰体基线加引擎增量而不是导弹被动导引头那套 2.2/1.5/0.5、
    innerIntercept 是随机上限不是命中率、主炮自动开火不查射程、纯被动双通道交叉即识别级、ESM 椭圆 60 万硬边界、测距起点、靶不闪避、任务暂停玩家碰不到);
    这份文本是静态字符串,改机制不会让它报错、探针也测不出来 —— 动了 SENS/WPN/CFG 或门控判据就回来同步它(CLAUDE.md 的 RF5「Phase D 教程」那节记了同一条)。
    为什么另起一套而不复用 #overlay:#overlay 在 css/app.css 的 RF2 隐藏清单里被 display:none!important 压死,
@@ -10,6 +10,8 @@
    文件编号沿用本项目先例(weapons/51-defs 与 51-ciws 共用 51):教程与设置语义相邻,同用 85。 */
 const TUT_HTML=`
 <article class="tut">
+
+  <p class="tut-warn">⚠ 本章与实现已不同步，感知层正在重写：下面凡是讲「红外／电子侦察／雷达三个通道」「传感器半径」「雷达点亮耗时」的段落与表格，读数与判据都已作废。新的两通道模型（光学红外／雷达的静听与照射两种模式）与四个舰船字段还在落地中，这一章会在那之后整节重写；在此之前请以事件流与右栏读数为准。</p>
 
   <section class="tut-sec" id="tut-what">
     <h2 class="tut-h2">指挥席</h2>

@@ -285,12 +285,12 @@ function drawESM(){ // 感知层 v4:蓝方ESM反推红方辐射源(LADAR开机/�
   const esm=ships.filter(s=>s.side==='blue'&&!s.dead);
   if(!esm.length)return;
   // SN3 这里删掉了两样(名字刻意不写进注释:verdict 段有一条源码级负对照按名字 grep 守着它们,写进来会让那条判定恒红 —— FM6b 的规矩)。
-  //   ① 一个算完从未被使用的局部量,它是 esmQual 在整个渲染层的唯一读取点,||0.5 那个假兜底随它一起消失
+  //   ① 一个算完从未被使用的局部量,它是那个已删的 ESM 反推精度字段在整个渲染层的唯一读取点,||0.5 那个假兜底随它一起消失
   //      (21-detect 里有个同名局部量是真在用的,所以那条负对照必须限定本文件)
   //   ② 一段把红方信标弹丸并进辐射源列表的分支:updateESMFixes 只对红【舰】写 esmFixes(它的 filter 限定 ships,
   //      末尾那轮 key.side==='red' 的清理还会把非舰对象删掉),所以信标永远取不到 fix、下面第一行就恒 continue ——
   //      一条从未画出过任何东西的死分支。删它而不是补它:补上等于新增一条从未存在过的行为
-  const emitters=ships.filter(s=>s.side==='red'&&!s.dead&&(s.trkB&&s.trkB.esm>=SENS.ESM_ALERT&&s.litBlue<1)); // DS180:与updateESMFixes同门槛(trk.esm驱动)
+  const emitters=ships.filter(s=>s.side==='red'&&!s.dead&&(s.trkB&&s.trkB.lis>=SENS.LIS_ALERT&&s.litBlue<1)); // DS180:与updateESMFixes同门槛。SN4:改读【静听】通道驻留(被动侦听到对方发射机),阈值常量随之改名;函数名 updateESMFixes 与全局 esmFixes 刻意不改名——ESM 本来就是被动侦听的标准叫法
   for(const e of emitters){
     const fix=esmFixes.get(e);
     if(!fix||!fix.guess)continue; // 还没积累到反推修复
@@ -376,14 +376,19 @@ function drawRanges(){ // 范围模式:显示所有范围圈(传感器/CIWS/拦�
     for(const s of ships){
       if(s.dead||s.side!==side)continue;
       const p=toScreen(s.pos[0],s.pos[1]);
-      if(rangeShow.sensor)ringLabel(p[0],p[1],s.sensorRange*cam.zoom,`📡LADAR圈 ${Math.round(s.sensorRange/1000)}k`,'rgba(90,167,255,.8)'); // DS181:传感器圈改标LADAR圈(KIMI155三通道后sensorRange=火控照射距离语义)
+      // SN4:旧那个「舰船自己的一个标量探测半径」字段已物理删除。新模型下「我能照多远」= (emit×recv×目标反射)^(1/4) —— 依赖【目标】的体型与隐身,不是舰上的一个标量半径。
+      //   所以这个圈只能表达一档:对【标准目标】(反射 1.0,即一艘 CA)的照射量程,标注里写明。打 DD(反射 0.42)时实际只有它的约 0.80 倍。
+      //   ar 存一份复用:本函数在每帧每舰的循环里,actRangeOf 内部含四次方根,调两次就是每帧两次开方。
+      const ar=(typeof actRangeOf==='function')?actRangeOf(s):0;
+      if(rangeShow.sensor)ringLabel(p[0],p[1],ar*cam.zoom,`📡照射圈(标准目标) ${Math.round(ar/1000)}k`,'rgba(90,167,255,.8)');
       const ci=ciwsOf(s); // TIER1 近防回表改访问器(每帧范围圈;tier 上线后每舰按自身分级画圈自动生效)
       if(ci&&ci.outer>0){
         if(rangeShow.warn)ringLabel(p[0],p[1],ci.outer*2*cam.zoom,`预警 ${Math.round(ci.outer*2/1000)}k`,'rgba(84,224,208,.8)'); // 拦截预警(2×外圈)
         if(rangeShow.outer)ringLabel(p[0],p[1],ci.outer*cam.zoom,`外圈拦 ${Math.round(ci.outer/1000)}k`,'rgba(255,154,85,.9)'); // CIWS外圈
         if(rangeShow.inner)ringLabel(p[0],p[1],ci.inner*cam.zoom,`内圈炮 ${Math.round(ci.inner/1000)}k`,'rgba(255,107,107,.95)'); // CIWS内圈
       }
-      if(s.lidar){ctx.fillStyle='rgba(159,212,255,.6)';ctx.font='10px Consolas';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText('📡'+Math.round(s.sensorRange/1000)+'k',p[0],p[1]-12);}
+      // SN4:旧那个雷达开关布尔已删除。三态里只有 paint 在照射 —— jam 档发射机去造噪声了,照不了;silent 一点不响。读数复用上面的 ar(同一循环体内)
+      if(s.emitMode==='paint'){ctx.fillStyle='rgba(159,212,255,.6)';ctx.font='10px Consolas';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText('📡'+Math.round(ar/1000)+'k',p[0],p[1]-12);}
     }
   };
   drawSide('blue');
@@ -414,7 +419,7 @@ function drawHoverRings(){
   for(const id of ids){
     const s=ships.find(x=>x.id===id);if(!s||s.dead||s.side!=='blue')continue;
     const p=toScreen(s.pos[0],s.pos[1]);
-    if(hoverRing==='mac'){const e=(typeof macEffRange==='function')?macEffRange(s):(s.macRange||150000);ring(p,e,'主炮 '+Math.round(e/1000)+'k'+(s.lidar?'(雷达)':''));} // RF3 射程读烘焙字段(定义在 weapons/51-defs);RF6 改画【精确射程】=有效射程(开雷达由雷达范围顶上),圈外到 ×MAC_FALLOFF 之间是衰减区,故意不画第二个圈——两个同心圈在战术图上读不出主次
+    if(hoverRing==='mac'){const e=(typeof macEffRange==='function')?macEffRange(s):(s.macRange||150000);ring(p,e,'主炮 '+Math.round(e/1000)+'k'+(s.emitMode==='paint'?'(照射)':'(未照射)'));} // RF3 射程读烘焙字段(定义在 weapons/51-defs);RF6 改画【精确射程】,圈外到 ×MAC_FALLOFF 之间是衰减区,故意不画第二个圈——两个同心圈在战术图上读不出主次。SN4:后缀改读 emitMode,与 macEffRange 的新口径(paint→macRadar / 否则 macRange,二选一不取 max)同源
     else if(hoverRing==='msl')ring(p,s.mslRange||350000,'导弹 '+Math.round((s.mslRange||350000)/1000)+'k');
     else if(hoverRing==='ciws'){const c=ciwsOf(s);ring(p,c.outer,'外圈拦截 '+Math.round(c.outer/1000)+'k');ring(p,c.inner,'内圈 '+Math.round(c.inner/1000)+'k');}
   }

@@ -59,7 +59,7 @@ function taskProcess(dt){ // 任务处理器(每2s):意图级检查——巡逻�
       if(!guard){tasks.delete(id);log('🛡 护航任务结束(目标已灭)','');continue;}
       t.ships.forEach((sid,i)=>{
         const s=ships.find(x=>x.id===sid);if(!s)return;
-        s.lidar=!!t.aggression; // DS150 T4:攻击性旋钮(隐蔽=雷达关)
+        setEmit(s,t.aggression?'paint':'silent'); // SN4 纯字段迁移:开关布尔→三态发射档。DS150 T4 攻击性旋钮语义不变(隐蔽=不照射);AI 读图不在本轮范围,没给它 jam 档
         if(taskCanOrder(s)){const ang=i*2.1+0.3;const R=40000;
           s.orders=[{pos:[guard.pos[0]+Math.cos(ang)*R,guard.pos[1]+Math.sin(ang)*R,0],type:'stop'}];
           resetForNewOrders(s);s.autoEngage=true;s.roe='free';} // DS173
@@ -73,7 +73,7 @@ function taskProcess(dt){ // 任务处理器(每2s):意图级检查——巡逻�
       const engageD=(firstShip&&firstShip.mslRange||350000)*(t.aggression?1.3:0.7); // DS150 T4:攻击性旋钮(攻击接战远/隐蔽接战近);RF3 基距读首舰烘焙射程(原字面量35万)
       t.ships.forEach(sid=>{
         const s=ships.find(x=>x.id===sid);if(!s)return;
-        s.lidar=!!t.aggression;
+        setEmit(s,t.aggression?'paint':'silent'); // SN4:同护航那处,纯字段迁移
         const d=V.len(V.sub(target.pos,s.pos));
         if(d>engageD&&taskCanOrder(s)){const dir=V.norm(V.sub(target.pos,s.pos));
           s.orders=[{pos:[target.pos[0]-dir[0]*engageD*0.85,target.pos[1]-dir[1]*engageD*0.85,0],type:'stop'}];

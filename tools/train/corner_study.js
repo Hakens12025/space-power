@@ -7,7 +7,7 @@
 const fs=require('fs'),vm=require('vm'),path=require('path');
 const ROOT=path.resolve(__dirname,'..','..');
 const FILES=['js/core/00-config.js','js/ships/10-hull-geometry.js','js/ships/11-classes.js',
-  'js/sensors/20-signature.js','js/weapons/51-defs.js','js/weapons/51-ciws.js',
+  'js/sensors/20-signature.js','js/sensors/22-percep.js','js/weapons/51-defs.js','js/weapons/51-ciws.js', // SN4: makeShip 运行期调 newTrk(),22-percep 不载入第一艘船就 ReferenceError
   'js/physics/30-motion.js','js/formation/40-slots.js','js/formation/41-follow.js','js/formation/42-formation.js','js/formation/43-step.js','js/formation/44-orders.js','js/physics/31-step-ships.js'];
 function mk(tol){
   const ctx={console,Math,JSON,performance:{now:()=>0}};ctx.window=ctx;vm.createContext(ctx);

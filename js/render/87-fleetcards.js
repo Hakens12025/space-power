@@ -89,14 +89,16 @@ function launchBeacon(shooter,pt){ // 侦察舰发射信标(每舰2枚):飞向�
     shooter, fuel:80, age:0, park:true, parkPt:[pt[0],pt[1],0], arrived:false, on:false, life:300, done:false, visBlue:false, visRed:false});
   return true;
 }
-function shipAction(a){ // 舰船动作按钮(信息面板):LADAR开关 / 发射信标 / 布防屏
+function shipAction(a){ // 舰船动作按钮(信息面板):发射档 / 发射信标 / 布防屏
   const sel=selectedShips();
   if(!sel.length){log('未选中舰船(左键点选后再操作)','warn');return;}
-  if(a==='lidar'){
-    sel.forEach(s=>{s.lidar=!s.lidar;log(`${s.name} LADAR ${s.lidar?'开机(看一切固体,暴露于敌ESM)':'关机(静默)'}`,s.lidar?'':'')});
+  if(a==='emit'){
+    // SN4:原来这里是雷达开关与干扰机两个独立的布尔动作。新模型里一艘舰只有【一部】发射机 ——
+    //   照射与干扰是它的两种工作模式(发射机去造噪声的时候就没法照射),所以两个动作合成一个三态循环 silent→paint→jam。
+    //   写入一律走 21-detect 的 setEmit(唯一写入口,非法字面量当场抛);文案一律走 emitLabel(UI 文案唯一出处)。
+    //   逐舰各切各的(沿用原来「每艘各自取反」的口径,不是全队统一置成一个目标态)。
+    sel.forEach(s=>{const nv=emitNext(s);setEmit(s,nv);log(`${s.name} 发射档 → ${emitLabel(nv)}`,nv==='silent'?'':'warn');});
     if(typeof updQbarSensors==='function')updQbarSensors();
-  }else if(a==='ecm'){ // v125 电子对抗ECM:干扰敌方被动探测,代价成辐射源
-    sel.forEach(s=>{s.ecm=!s.ecm;log(`${s.name} 电子对抗ECM ${s.ecm?'开机(干扰敌方探测'+Math.round(s.ecmPower*100)+'%,暴露于ESM)':'关机'}`)});
   }else if(a==='decoy'){ // v125 诱饵弹:发射模拟信号骗拦截弹
     sel.forEach(s=>fireDecoy(s));
   }else if(a==='roe'){ // v125 ROE交战规则:自由/克制/锁定循环
@@ -135,17 +137,23 @@ function cellsText(s){ // v129:火力单元独立装填时间(每个单元一格
   if(!t.length)return '—';
   return t.map(x=>x<=0?'<span style="color:var(--teal)">✅就绪</span>':`<span style="color:var(--acc)">⏳${Math.round(x)}s</span>`).join(' ');
 }
-function sensorPanel(s){ // DS181 S3:辐射指示(我有多亮,IR/RF两格)+ 三通道lit进度条(被谁点亮一目了然)
-  // SN2:两处 (s.sigBase||1) 换成 sReq —— 不用裸读是因为裸读的响度寄生在相邻一行的求值顺序上(updateInfo 那行 s.sigBase.toFixed(2) 恰好先抛),
-  //     谁把两行的先后挪一下、或者给那行加个兜底,静默就回来了;而这块面板在 RF2 隐藏清单里,画坏了根本没人看得见。
-  // SN:这两行是 21-detect 里 E_ir/E_rf 的【逐字副本】(一处并行真值)。本段刻意不合并 —— 合并属于第二段,届时两处一起收进同一个出口。
-  const eIr=sReq(s,'sigBase')+SENS.E_ENG*(s.flame!==0?1.0:(s.sideFlame?0.6:0));
-  const eRf=SENS.E_LIDAR*(s.lidar?1:0)+SENS.E_ECM*(s.ecm?1:0)+SENS.E_HULL_LEAK*sReq(s,'sigBase');
+function sensorPanel(s){ // DS181 S3:辐射指示(我有多亮,光学/射频两格)+ 驻留进度条(被谁点亮一目了然)
+  // SN4:第一段刻意留着没合并的那两行【逐字副本】(21-detect 里 E_ir/E_rf 的手抄)本轮合并 ——
+  //   现在直接调 22-percep 的 optLum / rfLoudOf,与 21-detect 的热循环、与 88-selpanel 右栏读数同一个出口。
+  //   两处并行真值必然漂移,这是 SN 全程的主线;上一版那三行注释解释的正是「为什么暂时留着两份」,前提已经消失,一并删掉。
+  // SN4:满格基准也调函数算,不写魔数 —— 拿一条「这艘舰自己烧到头」的合成读数(满推 + 干扰档)当 100%,
+  //   于是进度条读成「我此刻有多接近自己的上限」,换舰种自动跟着变。合成对象的写法照抄契约里 hearRangeOf({emit:1,emitMode:'paint'},recv) 那条先例。
+  //   旧的 30 与 5 是压在旧常数上的满格,新模型的 lum 与 rfLoud 上限都只有约 6,照抄会让两个条永远贴着地板。
+  const eIr=optLum(s), eRf=rfLoudOf(s);
+  const maxIr=optLum({size:sReq(s,'size'),flame:1,sideFlame:0,emitMode:'jam'});
+  const maxRf=rfLoudOf({emit:sReq(s,'emit'),emitMode:'jam'});
   const bar=(v,max,col)=>`<span style="display:inline-block;width:${Math.max(2,Math.min(100,v/max*100))}%;height:8px;background:${v>max*0.5?col||'#ff8c42':'#4aa8ff'};border-radius:2px"></span>`;
   const trk=s.side==='blue'?s.trkR:s.trkB; // 我方被对方照明的进度(蓝舰看trkR=红网络对我的积分)
-  const t3=trk?(trk.ir/1).toFixed(1):'-',t2=trk?(trk.esm/1).toFixed(1):'-',t1=trk?(trk.lad/2).toFixed(1):'-';
-  return `<div class="row"><b>辐射</b><span style="flex:1">IR<span style="display:inline-block;width:34%;height:8px;background:#0a0f17;border:1px solid var(--line2);border-radius:2px;vertical-align:middle;margin:0 4px">${bar(eIr,30)}</span>· RF<span style="display:inline-block;width:34%;height:8px;background:#0a0f17;border:1px solid var(--line2);border-radius:2px;vertical-align:middle;margin:0 4px">${bar(eRf,5)}</span></span></div>
-    <div class="row"><b>敌方对我</b><span>IR ${t3} · ESM ${t2} · LAD ${t1}<span style="color:var(--dim)">(阈值:识别1.0/火控LAD2.0)</span></span></div>`;
+  // SN4 blocker F:通道键换成 opt/lis/act。键名一改,原来那三处裸读要么抛、要么静默变 NaN,而这块面板在 RF2 隐藏清单里没人看得见 ——
+  //   所以必须与内核同一提交改完。顺带摘掉 /1 与 /2 两个归一化除数:那是 LIT1 与 LIT3 的手抄,阈值改口径这里原来不会有任何反应。
+  const t3=trk?trk.opt.toFixed(1):'-',t2=trk?trk.lis.toFixed(1):'-',t1=trk?trk.act.toFixed(1):'-';
+  return `<div class="row"><b>辐射</b><span style="flex:1">光学<span style="display:inline-block;width:34%;height:8px;background:#0a0f17;border:1px solid var(--line2);border-radius:2px;vertical-align:middle;margin:0 4px">${bar(eIr,maxIr)}</span>· 射频<span style="display:inline-block;width:34%;height:8px;background:#0a0f17;border:1px solid var(--line2);border-radius:2px;vertical-align:middle;margin:0 4px">${bar(eRf,maxRf)}</span></span></div>
+    <div class="row"><b>敌方对我</b><span>光学 ${t3} · 静听 ${t2} · 照射 ${t1}<span style="color:var(--dim)">(阈值:探测${SENS.LIT1}/火控${SENS.LIT3})</span></span></div>`;
 }
 const GEAR_NAMES=['停','慢速','中等','高速','不限速']; // TIER1 速度档【按索引】取名(0停/1慢/2中/3高/4不限速),与 speedGearsOf 返回的数组同序
 function speedCmdLabel(s){ // TIER1 速度令显示:原来 03-ships.js:8 的 SPEED_NAMES 是按【数值】查名(只覆盖 DD 那一套 0/250/500/800),巡洋的 200/400/700 早就在显示裸数字;4 舰种 × 3 分级后按数值查名彻底失效
@@ -256,11 +264,10 @@ function updateInfo(){
       <div class="row"><b>武器</b><span>MAC ${s.macCd>0?'装填'+Math.round(s.macCd)+'s':'就绪'} · 射手 ${s.missileArm?'装填'+Math.round(s.missileArm.t*10)/10+'s':readyCells(s)+'/'+(s.cells||4)+'单元就绪'}<span style="color:var(--dim)">(${Math.floor(s.ammo/16)}组)</span> · 拦截弹 ${s.interceptor}/${Math.floor(s.interceptor/16)} · 干扰${Math.round((s.chaffRate||0)*100)}%</span></div>
       <div class="row"><b>火控</b><span>${guideChText(s)}</span></div>
       <div class="row"><b>单元</b><span>${cellsText(s)}</span></div>
-      <div class="row"><b>感知</b><span>LADAR ${s.lidar?'🟢开':'⚪关'} · 传感器${Math.round(s.sensorRange/1000)}k · 信号${s.sigBase.toFixed(2)}</span></div>
+      <div class="row"><b>感知</b><span>发射档 ${emitLabel(s.emitMode)} · 照射${Math.round(actRangeOf(s)/1000)}k · 体型${sReq(s,'size').toFixed(2)} · 隐身${sReq(s,'stealth').toFixed(2)}</span></div><!-- SN4:旧的雷达开关布尔、标量探测半径、船体信号基数三个字段都已删除;照射量程是【对标准目标(反射 1.0)】那一档,隐身只乘雷达反射、不乘光学 -->
       ${sensorPanel(s)}
       <div class="row" style="gap:4px">
-        <button class="mini" data-kind="ship" data-action="lidar">📡 LADAR ${s.lidar?'关':'开'}</button>
-        <button class="mini" data-kind="ship" data-action="ecm">📻 ECM ${s.ecm?'关':'开'}</button>
+        <button class="mini" data-kind="ship" data-action="emit">📡 发射档:${emitLabel(s.emitMode)}</button><!-- SN4:原来是 LADAR 与 ECM 两个布尔钮;一艘舰只有一部发射机,照射与干扰是它的两种模式,合成一个三态循环钮 -->
         <button class="mini" data-kind="ship" data-action="decoy">🎭 诱饵弹</button>
         <button class="mini" data-kind="ship" data-action="roe">⚖ ROE:${s.roe==='free'?'自由':s.roe==='tight'?'克制':'锁定'}</button>
         <button class="mini" data-kind="ship" data-action="autoEngage">${s.autoEngage?'🔄自动索敌:开':'🔄自动索敌:关'}</button>

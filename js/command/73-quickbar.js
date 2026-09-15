@@ -52,10 +52,10 @@ document.getElementById('qbar').querySelectorAll('.qbtn[data-salvo]').forEach(b=
 function updQbarSensors(){ // LADAR按钮显示选中舰状态(第一个选中舰为准)
   const sel=selectedShips();
   const l=document.getElementById('qLidar');
-  if(l){const s=sel.find(x=>!x.dead);l.textContent=s?(s.lidar?'📡 LADAR 开':'📡 LADAR 关'):'📡 LADAR';}
+  if(l){const s=sel.find(x=>!x.dead);l.textContent=s?('📡 '+emitLabel(s.emitMode)):'📡 发射档';} // SN4:两态开关→三态发射档,文案走 emitLabel(UI 文案唯一出处),不在这里抄第二张表
 }
-document.getElementById('qLidar').addEventListener('pointerdown',e=>{if(e.button!==0)return;e.preventDefault();shipAction('lidar');updQbarSensors();});
-document.getElementById('qEmcon').addEventListener('pointerdown',e=>{if(e.button!==0)return;e.preventDefault();emcon=emcon==='silent'?'active':'silent';const on=emcon==='active';ships.filter(s=>s.side==='blue'&&!s.dead).forEach(s=>s.lidar=on);updEmcon();log(on?'🌐 EMCON 全队雷达开机(全队主动LADAR,精确火控,但全队暴露于敌ESM)':'🌐 EMCON 全静默(被动-only,隐蔽但只有模糊方位)','');});
+document.getElementById('qLidar').addEventListener('pointerdown',e=>{if(e.button!==0)return;e.preventDefault();shipAction('emit');updQbarSensors();}); // SN4:shipAction 的两个旧动作(照射开关 / 电子对抗开关)已合并成一个三态循环 'emit'(实现在 87-fleetcards)。DOM id qLidar 不改——index.html 归另一路处理,改 id 要同步改那边
+document.getElementById('qEmcon').addEventListener('pointerdown',e=>{if(e.button!==0)return;e.preventDefault();emcon=emcon==='silent'?'active':'silent';const on=emcon==='active';ships.filter(s=>s.side==='blue'&&!s.dead).forEach(s=>setEmit(s,on?'paint':'silent'));updEmcon();log(on?'🌐 EMCON 全队照射开机(精确火控,但全队被敌方静听嗅到的距离是自照的 4 倍)':'🌐 EMCON 全静默(被动-only,隐蔽但只有模糊方位)','');}); // SN4:舰队级仍是两态(静默↔照射),刻意没加干扰档——jam 是逐舰的取舍,不该有一颗钮把全队一起变吵
 function updEmcon(){const b=document.getElementById('qEmcon');if(b){b.textContent=emcon==='active'?'🌐EMCON开机':'🌐EMCON静默';b.style.color=emcon==='active'?'var(--teal)':'var(--dim)';}}
 document.getElementById('qScreen').addEventListener('pointerdown',e=>{if(e.button!==0)return;e.preventDefault();shipAction('screen');});
 document.getElementById('qRange').addEventListener('pointerdown',e=>{if(e.button!==0)return;e.preventDefault();rangeView=!rangeView;const b=document.getElementById('qRange');if(b)b.style.color=rangeView?'var(--teal)':'var(--dim)';log(rangeView?'◉ 范围模式开(显示所有范围圈,GM下含敌方逻辑圈)':'◉ 范围模式关','');});
