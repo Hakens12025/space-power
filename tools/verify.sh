@@ -1,4 +1,7 @@
 #!/bin/bash
+# ⚠ 源码级负对照(判定块里那些 grep -r ... js/)一律带 --include='*.js'。
+#   各系统的历史备忘现在住在 js/<系统>/CLAUDE.md 里,而备忘【本来就要写下被删符号的名字】(那是它的内容)。
+#   不加 --include 的话,负对照会扫到备忘正文,60 多条功能判据全绿而判定块照样红。踩过一次。
 # RF1: 重构验证探针。用法: tools/verify.sh [输出文件] [浸泡步数]
 # 生成 __v.html(= index.html 去掉末两行 + 探针 script),headless Chrome 实跑后 dump 探针结果。
 # 探针四层: 全符号 typeof 扫描(含 TDZ) / 开局状态 / 脚本化操作链(编队·齐射·伤害记账) / 浸泡稳定性。
@@ -101,6 +104,26 @@ t('SOAK',function(){
 });
 /* 6b. RF2 自动火控链:全蓝舰开火控,步进60s,靶场记账应>0(索敌→锁定→MAC/导弹→命中→rangeTally 全自动链) */
 t('FLOW2',function(){
+  /* SN6b:场景本身改成【1 光秒外摸黑接敌】(用户拍板)之后,开局主炮够不到火控级,导弹 60 秒也飞不到 ——
+     而这条判的是【自动链通不通】(索敌→锁定→开火→命中→记账),不是"这一版场景摆得多远"。
+     所以先把靶阵按比例拉到打得着的距离再跑,理由与 FLOW3 挪靶同一条(见那边的块注释)。
+     ⚠ 距离【现量不写死】:取 CA 对 DD 的火控门(ladPair 现算)与本舰主炮射程两者中的小者,
+       任一边的数一动,这里跟着动。 */
+  (function(){
+    var bs=ships.filter(function(x){return x.side==='blue'&&!x.dead;});
+    var ca=bs.filter(function(x){return x.cls==='CA';})[0]||bs[0];
+    var ts=ships.filter(function(x){return x.isTarget;});
+    if(!ca||!ts.length)return;
+    var want=Math.min(ladPair('CA','DD').radarLook*0.9,(ca.macRange||150000)*0.8);
+    var near=1e18;
+    ts.forEach(function(x){near=Math.min(near,Math.hypot(x.pos[0]-ca.pos[0],x.pos[1]-ca.pos[1]));});
+    if(!(near>want))return;
+    var k=want/near;   /* 等比缩:靶阵的形状(近靶/远靶的梯度)原样保留 */
+    ts.forEach(function(x){
+      x.pos=[ca.pos[0]+(x.pos[0]-ca.pos[0])*k,ca.pos[1]+(x.pos[1]-ca.pos[1])*k,x.pos[2]];
+      x.rangeAnchor=x.pos.slice();   /* 闪避机动的圆心跟着走,否则靶会一路飞回原位 */
+    });
+  })();
   ships.forEach(function(s){if(s.side==='blue'){s.autoEngage=true;s.roe='free';}});
   for(var i=0;i<3000;i++){stepSim(CFG.step);simTime+=CFG.step;}
   var hits=0,dmg=0;
@@ -257,7 +280,7 @@ function fc4reset(){ /* RF5 每条判定各自复位(同 FLOW3 的理由):手势
   fc4clock(false); /* 先卸掉可控墙钟:某条判定万一抛异常(t() 会吞掉),假钟不能留给下一条 */
   initFleet(); /* 换局全量重置,顺带清 fireSeqs/selected/pending*(91-init:8-19) */
   panning=null;rmbClick=null;dragOrder=null;selDrag=null;selWeapon=null;mmb=null;clearTimeout(rmbTimer);rmbTimer=null;
-  editMode=false;rangeMode=false;adminMode=true;ctrlArm=false; /* 准星只在非编辑器/非测距下活;adminMode 复位成默认的 GM(第 2 条自己会关) */
+  editMode=false;rangeMode=false;adminMode=true;ctrlArm=false; /* 准星只在非编辑器/非测距下活;adminMode 硬置成 GM(第 2 条自己会关)。⚠ SN6c 起这【不是】 core/01 的默认值 —— 默认已改成关,这里是判据自己要 GM */
   cam.x=30000;cam.y=0; /* 相机摆回射手与靶之间,屏幕坐标落在视口内。cam.zoom 一律不动 —— 吸附半径就是 60/cam.zoom,动它等于动判据 */
   var b=ships.filter(function(s){return s.side==='blue';}),S=b[0];
   S.pos=[0,0,0];S.vel=[0,0,0];S.orders=[];S.lockedTarget=null;S.driftFire=false;S.driftFireT=0;
@@ -289,17 +312,40 @@ t('FLOW4_DWELL',function(){
 });
 /* 6d-2 迷雾门控:非 GM + litBlue=0 → 停多久都不许吸(targetAt 的门控);同一位置点亮后必须吸得上(排除"准星整体坏了"的假绿) */
 t('FLOW4_FOG',function(){
+  /* SN6d:门的变量换了,对照组跟着换。
+     原来是"只翻 litBlue 0→2,准星必须吸得上" —— 而 SN6d 起吸附门是 contactPos(有没有位置可交代),
+     不是等级。所以这里改成【三档】,中间那一档正是本轮修掉的那个泄漏:
+       ① 暗          lit=0                      ⇒ 吸不上
+       ② 只有热区    lit=1、fix=false(定不出位置)⇒ 吸不上 ← 改前这一档是【吸得上】的,而且吸在真值上
+       ③ 定得出位置  lit=2、fix=true            ⇒ 吸得上
+     ⚠ 还要给 seenBlue 一个新鲜时间戳:contactState 的 live 要求 age<=5,而 makeShip 的初值是 -1e9
+       (=从未扫到)⇒ 否则是 stale,走外推那一支、seenBluePos 又是 null ⇒ 三档全吸不上,②③ 分不开。 */
   var e=fc4reset(),p=fc4at(e.A);
-  adminMode=false;e.A.litBlue=0;
+  adminMode=false;
+  var A=e.A;
+  function setContact(lit,fix){
+    A.litBlue=lit;
+    A.seenBlue=simTime;                                   /* 新鲜 ⇒ contactState 判 live */
+    if(!A.covB)A.covB=newCov();
+    A.covB.fix=!!fix;A.covB.seen=true;A.covB.n=1;A.covB.age=0;   /* SN6f:live = fix 且这一拍有量测 */
+    A.covB.x=A.pos[0];A.covB.y=A.pos[1];
+  }
   fc4clock(true);
+  setContact(0,false);
   fc4move(p[0],p[1]);fc4frames(400); /* 停满 400ms,远超停留门槛 */
   var s1=xh.snap,c1=xh.cand;
-  e.A.litBlue=2; /* 对照组:只翻这一个字段,其余一切不动 */
+  setContact(1,false);               /* 只有热区:单变量只翻"有没有位置",等级照样 >0 */
   fc4frames(400);
   var s2=xh.snap;
+  setContact(2,true);
+  fc4frames(400);
+  var s3=xh.snap;
   fc4clock(false);adminMode=true;
-  var ok=(s1===null&&c1===null&&s2===e.A);
-  return (ok?'ok':'fail')+' 暗='+(s1?s1.name:'null')+'(cand='+(c1?c1.name:'null')+') 点亮后='+(s2?s2.name:'null');
+  var ok=(s1===null&&c1===null&&s2===null&&s3===A);
+  return (ok?'ok':'fail')
+    +' ① 暗(lit0)='+(s1?s1.name:'null')+'(cand='+(c1?c1.name:'null')+',须null)'
+    +' | ② 只有热区(lit1 定不出位置)='+(s2?s2.name:'null')+'(须null=不许拿鼠标把它扫出来)'
+    +' | ③ 定得出位置(lit2 fix)='+(s3?s3.name:'null')+'(须吸得上)';
 });
 /* 6d-3 中键短按 = 快速交战(引擎的第一个真实入口,本层最重要的一条) */
 t('FLOW4_MMB',function(){
@@ -594,6 +640,10 @@ t('FLOW5_OVER',function(){
   FC4.cv.dispatchEvent(new WheelEvent('wheel',{clientX:c[0],clientY:c[1],deltaY:120,bubbles:true,cancelable:true}));
   var p1=rad.page,z1=cam.zoom,s1=fc5slots('R');
   FC4.cv.dispatchEvent(new WheelEvent('wheel',{clientX:6,clientY:6,deltaY:120,bubbles:true,cancelable:true})); /* 环带外:照常缩放,不翻页 */
+  /* SN6b 平滑缩放:滚轮只写目标,cam.zoom 每帧朝它逼近 —— 推几步再读。
+     ⚠ 还要把动画【收干净】(zAnim 回到 null):留一个没收敛的动画在那儿,它会在之后每一帧
+       按当时光标下的锚点覆写 cam.x/y/zoom,后面按像素取样的判据全部会量到一张被拽走的画面。 */
+  for(var zi=0;zi<40&&zAnim;zi++)camZoomStep(0.1);
   var p2=rad.page,z2=cam.zoom;
   e.S.weapons=orig;
   var ok=(rad.open&&n===8&&pg===2&&p0===0&&s0.length===6&&s0[0]===0&&s0[5]===5
@@ -760,9 +810,12 @@ t('FLOW6_FLOW',function(){ /* RF7d 数据链流动【方向】:亮段必须朝�
 t('FLOW6_PULSE',function(){ /* RF7e 被照射告警黄圈:脉冲必须挂墙钟,与 simTime/倍速解耦(原来挂 simTime,x50 下退化成高频乱闪) */
   var e=fc5reset();
   var S=e.S;S.pos=[0,0,0];S.vel=[0,0,0];cam.x=0;cam.y=0;
-  var p=toScreen(0,0),px=Math.round(p[0]),py=Math.round(p[1]-13); /* 告警圈半径 13,取正上方那一点采样 */
+  var _covBak=S.covR;   /* 本条要往舰上挂一条"正被照射"的接触。fc5reset 复用同一批舰,不还原的话后面每一条
+                           用到它的判据都会多画一圈告警环 —— 实测 FLOW31 的对照组峰值被抬了 2 个灰阶就翻红了,
+                           而被测代码一行没动。探针留下的状态残留是这套判定最容易自伤的地方(FLOW31 的块注释记过同一件事)。 */
+  var p=toScreen(0,0),px=Math.round(p[0]),py=Math.round(p[1]-13*((typeof hullZoomF==='function')?hullZoomF():1)); /* 告警圈半径 13 x 舰体缩放系数(SN9 起圈跟着舰体走),取正上方那一点采样。写死 13 的话只在系数恰好接近 1 的缩放下采得到 —— SN9 的变异测试实测翻过一次 */
   function warnPix(){ /* 每次重画前把驻留值按回去:detectLoop 不在本判定里跑,但 fc5reset 之后要保证条件成立 */
-    S.trkR={opt:0,lis:0,act:SENS.ACT_WARN+1};                     /* SN4:驻留键改 opt/lis/act;阈值不再手抄 0.3,直接读 SENS.ACT_WARN——阈值一改这条自动跟着走,不会退化成"圈根本没画、两次采样都是背景色"的假绿(82 的黄圈门) */
+    S.covR=newCov();S.covR.seen=true;S.covR.ch.act=[100,100,50000,20,'x'];  /* SN6:告警条件 = 对方这一拍有一条【照射】量测打在我身上(c.ch.act 非空),不再是驻留过阈值 */                     /* SN4:驻留键改 opt/lis/act;阈值不再手抄 0.3,直接读 SENS.ACT_WARN——阈值一改这条自动跟着走,不会退化成"圈根本没画、两次采样都是背景色"的假绿(82 的黄圈门) */
     render();
     var d=ctx.getImageData(px,py,1,1).data;
     return d[0]+d[1]+d[2];                                        /* 亮度和:圈的 alpha 越高越亮 */
@@ -775,8 +828,11 @@ t('FLOW6_PULSE',function(){ /* RF7e 被照射告警黄圈:脉冲必须挂墙钟,
   simTime=st0;
   FC4.clk+=260;                                                   /* 只推墙钟:必须变(否则就是彻底不动了) */
   var a2=warnPix();
+  if(a2===a0){FC4.clk+=130;a2=warnPix();}                         /* 波形是 |sin|,周期约 524ms:+260ms 差不多正好半个周期,|sin(x)| 与 |sin(x+π/2)| 在 x≈π/4 附近会撞成同一个灰阶 ——
+                                                                     实测约每十几次红一次(AI1 那轮抓到的,被测代码一行没动)。撞上了就再推 130ms 量一次,两个相位不可能都撞。 */
   fc4clock(false);
   simTime=st0;
+  S.covR=_covBak;       /* 还原,见上 */
   var indep=(a0===a1), alive=(a0!==a2);
   var ok=(indep&&alive&&a0>0);
   return (ok?'ok':'fail')+' 采样('+px+','+py+') 亮度:基准='+a0
@@ -1226,20 +1282,38 @@ t('FLOW22_APPEND',function(){ /* RF22 Shift+右键长按也能定到达朝向。
     }
     err=Math.acos(Math.max(-1,Math.min(1,s.facing[0]*want[0]+s.facing[1]*want[1])))*180/Math.PI;
   }
-  /* 多选时不进虚影(仍是单舰功能) */
-  selected=ships.filter(function(x){return x.side==='blue'&&!x.dead;}).map(function(x){return x.id;});
+  /* 多选时不进虚影 —— 但 FM6 起【整支编队】是例外(ghostArm 里那段:选中集合恰好等于某支编队的全部活船时,
+     长按定的是阵型朝向)。所以这里要分成两个用例,不能只测一个:
+       g3 = 多选【但凑不成一整队】(取编队的真子集)⇒ 不许弹
+       g4 = 多选【恰好是一整队】               ⇒ 必须弹,且作用域记在 fid 上
+     ⚠ 这条原来只有"全选蓝方 ⇒ 不许弹",在三艘散船的年代与 g3 等价;SN6b 开局把三舰编成阵型舰队之后,
+       全选恰好就是一整队,那条用例当场翻红 —— 被测代码一行没动,是判据的用例过时了。
+       两个都留着,才分得清"多选不许弹"与"整队是例外"这两条规则各自还在不在。 */
+  var blues=ships.filter(function(x){return x.side==='blue'&&!x.dead;});
+  var subset=blues.slice(0,Math.max(2,blues.length-1));   /* 真子集:至少两艘,且凑不齐整队 */
+  selected=subset.map(function(x){return x.id;});
   ghostMove=null;panning=null;rmbClick=null;
-  var g3=gesture(400000,0,400000,40000,true);
+  var g3=gesture(400000,0,400000,400000+40000,true);
+  var g4={armed:false,fid:null}, F4=null;
+  if(typeof fmSameShips==='function'){
+    selected=blues.map(function(x){return x.id;});
+    F4=fmSameShips(selBlue());
+    ghostMove=null;panning=null;rmbClick=null;
+    g4=gesture(400000,0,400000,40000,true);
+    g4.fid=ghostMove?ghostMove.fid:(g4.fid||null);
+  }
   selected=[s.id];ghostMove=null;panning=null;rmbClick=null;
   var ok=(g1.armed&&g1.mode==='move'&&g1.turned&&n1===1
         &&g2.armed&&g2.mode==='append'&&g2.turned
         &&types==='pass,stop'&&faceIdx.length===1&&faceIdx[0]===1
-        &&err>=0&&err<3&&!g3.armed);
+        &&err>=0&&err<3&&!g3.armed
+        &&(!F4||g4.armed));   /* 整队例外:只有确实凑成一整队时才要求它弹(没有编队的场景不苛求) */
   return (ok?'ok':'fail')
     +' 无Shift(真实事件):弹出='+g1.armed+' 模式='+g1.mode+' 朝向随鼠标改='+g1.turned+'(须true) 令数='+n1+'(须1=清空重下)'
     +' | Shift:弹出='+g2.armed+' 模式='+g2.mode+' 朝向随鼠标改='+g2.turned+' 类型=['+types+'](须 pass,stop)'
     +' 带face的令=['+faceIdx.join(',')+'](须只有末令1)'
-    +' | 飞完到位朝向误差='+err.toFixed(2)+'°(须<3) | 多选时弹出='+g3.armed+'(须false)';
+    +' | 飞完到位朝向误差='+err.toFixed(2)+'°(须<3)'
+    +' | 多选但凑不成整队:弹出='+g3.armed+'(须false) | 多选且恰好是一整队(FM6 例外):成队='+(F4?F4.id:'无队')+' 弹出='+g4.armed+'(有队时须true) 作用域fid='+(g4.fid||'无');
 });
 /* 6f. FM1 编队判定层(FLOW23/24/25):编队【真的接进了运动内核】。
    为什么非要单独一层:此前【全部】运动探针开头都写着 s.formation=null 把编队关掉,
@@ -1903,6 +1977,7 @@ t('FLOW31_FOLLINE',function(){
      实测过一次:删掉两条无关探针改变了此处的场景残留,对照组峰值从 19 跳到 76,判据当场翻红而被测代码一行没动。
      绝对/相对阈值都救不了这种污染,唯一可靠的做法是把测量对象隔离出来(同 32-route-refine 换 ships 的沙盘手法)。
      必须在 finally 里还原,否则本条抛异常会把整个 ships 掏空、后面全部探针陪葬。 */
+  var _lodBak=LOD.off; LOD.off=true;   /* SN6:本条按【像素亮度】量连线,聚合会把这两艘船收成一个方框、连线整条消失 —— 与被测代码无关的污染,同上面那条"把场景清成只有这两艘"的理由 */
   var _shipsBak=ships, _projBak=projectiles, _hitBak=(typeof hitFX!=='undefined')?hitFX:null;
   var _seqBak=(typeof fireSeqs!=='undefined')?fireSeqs:null;
   ships=[A,B]; projectiles=[];
@@ -1924,6 +1999,11 @@ t('FLOW31_FOLLINE',function(){
   function row(){ render(); var d=ctx.getImageData(x0,y,W,1).data,a=[];
     for(var i=0;i<W;i++)a.push(d[i*4+1]); return a; }
   function lum(a){ var m=0; for(var i=0;i<a.length;i++)if(a[i]>m)m=a[i]; return m; }
+  /* ⚠ 峰值分不出这条线。峰值只回答"这一行最亮的那一个像素有多亮",而线不在的时候最亮的那一个
+     是随机落在这一行上的某颗星 —— 星场每次加载重随,于是对照组的读数在 23~59 之间晃,
+     判据的余量(44 对 40)全被这个噪声吃掉了(实测四轮:48 / 81 / 82 / 44)。
+     线是【一整行】的东西,所以该用整行的【积分】:它铺满两百多个像素,几颗星加起来差两个量级。 */
+  function area(a){ var t=0; for(var i=0;i<a.length;i++)t+=a[i]; return t; }
   /* 【搜索窗必须小于半个周期】。虚线是周期图案(period=11px),位移 x 与 x±11 的拟合度完全相同 ——
      窗口一旦跨过一个周期,相关器会挑到混叠解。第一版照抄 FLOW6_FLOW 用了 ±12 与 0.3s(位移 6.6px),
      于是真值 +6.6 与混叠 -4.4 同分,报了 -4,看上去像"方向反了",实际是测量歧义。
@@ -1939,23 +2019,28 @@ t('FLOW31_FOLLINE',function(){
     return best;
   }
   fc4clock(true);
-  var r1=row(); var on=lum(r1);
+  var r1=row(); var on=lum(r1), aOn=area(r1);
   FC4.clk+=200;                           /* 推进 0.2 秒:22px/s -> 约 4.4px */
   var r2=row();
   var d=shiftOf(r1,r2);
   selected=[];                            /* 对照一:未选中不许画 */
-  var offSel=lum(row());
+  var rS=row(); var offSel=lum(rS), aSel=area(rS);
   selected=[B.id];
   followClear(B);                         /* 对照二:解除跟随后整条线消失 */
-  var offFol=lum(row());
+  var rF=row(); var offFol=lum(rF), aFol=area(rF);
   fc4clock(false);
-  var ok=(on>60 && d>=2 && d<=5 && offSel<on*0.5 && offFol<on*0.5);
+  /* ⚠ 判的是【差值】不是绝对亮度。本条早先写成"开着时峰值 > 60、对照 < 峰值的一半",
+     那道门只有 7 个灰阶的余量,而采样行下面压着会变的背景 —— SN6 换了地面画法(三层各自的网格 /
+     距离环)之后,对照组从 52 涨到 55 就翻红了,被测代码一行没动。这与本条块注释里记的
+     "场景残留污染"是同一类病,只是污染源从别的探针换成了背景本身。
+     差值把背景整个抵消掉,而且牙更硬:线没画出来时差值就是 0,不存在"背景够亮就蒙混过关"。 */
+  var dSel=aOn-aSel, dFol=aOn-aFol;
+  var ok=(dSel>4000 && dFol>4000 && d>=2 && d<=5);
   return (ok?'ok':'fail')
-    +' 有跟随且选中时线的峰值亮度='+on+'(须>60=确实画出来了)'
+    +' 线画出来 vs 未选中 的【整行积分】差='+Math.round(dSel)+'(须>4000;峰值读数 '+on+' vs '+offSel+' —— 峰值会被随机落在采样行上的星点顶掉,所以判积分不判峰值,更不判绝对值)'
     +' | 整行互相关位移='+d+'px(须 2~5;理论 22px/s×0.2s≈4.4px。被跟随在左、跟随者在右,所以【正=流向跟随舰】,反了就是负)'
-    +' | 未选中对照:峰值='+offSel+'(须<'+Math.round(on*0.5)+'=不画)'
-    +' | 解除跟随对照:峰值='+offFol+'(须<'+Math.round(on*0.5)+'=不画)';
-  } finally { ships=_shipsBak; projectiles=_projBak; if(_hitBak!==null)hitFX=_hitBak; if(_seqBak!==null)fireSeqs=_seqBak; }
+    +' | 解除跟随对照:积分差='+Math.round(dFol)+'(须>4000=解除后线真的没了)';
+  } finally { LOD.off=_lodBak; ships=_shipsBak; projectiles=_projBak; if(_hitBak!==null)hitFX=_hitBak; if(_seqBak!==null)fireSeqs=_seqBak; }
 });
 /* 6f-7 FL3 阵位态多点航线【不许交叉】。用户报的现象:"本来 船A-旗舰-船B,下一个路径点变成 船B-旗舰-船A",
    两条航线在中间交叉。根因是槽位所有权认死(s.fmSlot 建队分好就不动),而每段按航向旋转它 ——
@@ -3287,6 +3372,7 @@ t('FLOW41_FMPLOT',function(){ /* FM6p 地图上的站位图:画不画由一条�
   window.addEventListener('error',onerr);
   var shipsBak=ships.slice(), projBak=projectiles.slice(), fxBak=hitFX.slice(), seqBak=(typeof fireSeqs!=='undefined')?fireSeqs.slice():null;
   var camBak={x:cam.x,y:cam.y,zoom:cam.zoom}, selBak=selected.slice();
+  var lodBak=LOD.off; LOD.off=true;   /* SN6:本条数的是 render() 发出的线段,聚合会把这两艘船收成一个框、站位图整个不画 —— 与被测代码无关的污染,同上面那条场景隔离的理由 */
   var out='';
   try{
     /* 场景隔离:只留两艘,清掉弹丸/特效/火控序列 —— 同 FLOW31 那条规矩,不隔离的话量到的是整个场景的历史 */
@@ -3313,22 +3399,30 @@ t('FLOW41_FMPLOT',function(){ /* FM6p 地图上的站位图:画不画由一条�
     /* 站位小圈必须还在(否则"没连线"只是因为整张图没画) —— 这个像素信号是干净的:圈是实心描边、位置固定 */
     var f9=fmFlag(F), o9=fmOffOf(fmShips(F).filter(function(m){return m!==f9;})[0]);
     var pp=toScreen(f9.pos[0]+o9[0],f9.pos[1]+o9[1]);
-    function ringLum(){var mx=0;for(var a=0;a<6.28;a+=0.3){var d=ctx.getImageData(Math.round(pp[0]+4*Math.cos(a)),Math.round(pp[1]+4*Math.sin(a)),1,1).data;mx=Math.max(mx,d[0]+d[1]+d[2]);}return mx;}
-    var ringOn=ringLum();
+    /* 沿站位圈取 20 个点,判据读【中位数】不读最大值。
+       星点是每次 open 页面现 Math.random 出来的(core/99 的 stars),而且 SN6 之后画在【屏幕空间】——
+       一颗星恰好落在这 20 个采样点之一上,最大值就从 83 跳到 125,绝对阈值 <100 当场翻红(实测遇到过一次:
+       同一份代码,连跑 5 次里 4 次 83、1 次 125)。20 个点里被星打中的是一两个,【中位数不动】。
+       实测分离度:圈在 中位 335 / 圈不在 中位 24,比拿最大值(406 vs 83)还干净。
+       这是 FLOW31 那条"行峰值改行积分"的同一条教训:随机星场上不许用单点绝对阈值。 */
+    function ringSamp(){var v=[];for(var a=0;a<6.28;a+=0.3){var d=ctx.getImageData(Math.round(pp[0]+4*Math.cos(a)),Math.round(pp[1]+4*Math.sin(a)),1,1).data;v.push(d[0]+d[1]+d[2]);}
+      v.sort(function(p,q){return p-q;});return v[v.length>>1];}
+    var ringOn=ringSamp();
     /* 固定模式:整张站位图都不画 */
     fmSetSrc(F,'snapshot'); segs.length=0; render();
-    var linkFix=countLinks(), ringOff=ringLum();
+    var linkFix=countLinks(), ringOff=ringSamp();
     ctx.moveTo=mt; ctx.lineTo=lt;
     var okPred=(typeof fmpShowsStations==='function'&&fmpShowsStations({src:'generated'})===true&&fmpShowsStations({src:'snapshot'})===false);
     var ok=(okPred&&linkSlot===0&&linkFix===0&&segSlot>0&&ringOn>150&&ringOff<100&&!errs.length);
     out=(ok?'ok':'fail')
       +' 谓词 fmpShowsStations(阵型=true/固定=false)='+okPred
       +' | 阵型态·船离站位 132px:站位→实船的线段='+linkSlot+'条(须0;该场景总线段='+segSlot+',>0=图确实画了)'
-      +' 站位小圈亮度='+ringOn+'(须>150=圈还在)'
-      +' | 固定态:线段='+linkFix+'条(须0) 站位小圈亮度='+ringOff+'(须<100=整张站位图都不画)'
+      +' 站位小圈中位亮度='+ringOn+'(须>150=圈还在)'
+      +' | 固定态:线段='+linkFix+'条(须0) 站位小圈中位亮度='+ringOff+'(须<100=整张站位图都不画)'
       +' | 运行期错误='+(errs.length?errs.join(' / '):'none');
     fmDelete('9');
   }finally{
+    LOD.off=lodBak;   /* SN6:还原聚合开关 */
     ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
     projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
     hitFX.length=0;fxBak.forEach(function(x){hitFX.push(x);});
@@ -3401,9 +3495,11 @@ t('FLOW45_LINK',function(){
    ==== 距离常数的推算(全部由 SENS 的三个锚点常量现推,不抄魔数) ====
    探测方 DD(emit 1 / recv 1),目标 DD(size 0.70 / stealth 0.60 ⇒ 雷达反射 refl = 0.42)。
    三条律与三个锚点:
-     光学 r = IR_REF ×sqrt(lum)              IR_REF =180000  K_IR =IR_REF平方 =3.24e10
-     静听 r = LIS_REF×sqrt(rfLoud×recv)      LIS_REF=600000  K_RF =3.6e11
-     照射 r = ACT_REF×(emit×recv×refl)开四次方 ACT_REF=150000  K_ACT=ACT_REF四次方=5.0625e20
+     (SN6 2026-09-19 改名:IR_REF/LIS_REF/ACT_REF -> IR_DET/LIS_DET/ACT_DET,值一个没动;
+      腾出来的 *_REF 是 23-cov 的【定位精度尺度】,与这里的【发现半径】不是一回事。)
+     光学 r = IR_DET ×sqrt(lum)              IR_DET =180000  K_IR =IR_DET平方 =3.24e10
+     静听 r = LIS_DET×sqrt(rfLoud×recv)      LIS_DET=600000  K_RF =3.6e11
+     照射 r = ACT_DET×(emit×recv×refl)开四次方 ACT_DET=150000  K_ACT=ACT_DET四次方=5.0625e20
    分档是信噪比档(强=16倍门限通量、良=4倍),两种衰减律下含义一致、距离分数不同:
      1/d平方 的两路: 强 d2<0.0625×界   良 d2<0.25×界   弱 d2<界
      1/d四次方的照射: 强 d4<0.0625×界   良 d4<0.25×界   弱 d4<界(即 d<0.5r / d<0.707r / d<r)
@@ -3442,64 +3538,64 @@ t('FLOW45_LINK',function(){
    并把两艘临时舰从 esmFixes 里摘掉(FLOW31_FOLLINE 是像素判定、对场景残留敏感,不能给它留脏状态)。
    本条不 render、不读 DOM、不碰 adminMode。 */
 t('FLOW44_SENSE',function(){
-  if(typeof newTrk!=='function'||typeof setEmit!=='function')return 'fail 新感知内核未加载(缺 newTrk/setEmit):22-percep 的 script 标签没插进 index.html?';
-  var shipsBak=ships.slice(),projBak=projectiles.slice(),detBak=detT,_dl=detectLoop;
-  var DT,TG,L=[],K=[],seq='',ok=false,ok1=false,ok2=false,ok3=false,ok4=false,ok5=false,ok6=false,okSeq=false,okWire=false;
-  var wCnt=0,wSum=0,wRes=0,wT=0,wA=0,wB=0;
+  /* SN6 接触等级:等级是【椭圆落在哪个门里】的纯函数,不再是三个水池的水位。
+     这条判据比 SN4 那条多守一件事 —— 【没有棘轮】。SN4 的派生规则是"只即时上升,下降只有归 0 与断照 3->2 两条路",
+     于是 2 级是一个棘轮:同一个点、同样的发射档,从没被照过读 1 级、被照过再转静默则永久停在 2 级
+     ("照一下就永久拿到导弹门",见 js/sensors/CLAUDE.md SN4 备忘末尾)。SN6 里同一个画面状态只有一种读数。
+     全部距离从 ladPair 现量 —— 写死公里数的话,梯子一动判据就在测另一件事(SN6 落地时六条判据正是这么假红的)。 */
+  if(typeof newCov!=='function'||typeof setEmit!=='function'||typeof ladPair!=='function')return 'fail SN6 感知内核未加载(缺 newCov/setEmit/ladPair):23-cov 的 script 标签没插进 index.html?';
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),detBak=detT;
+  var DT,TG,L=[],A=[],seq='',out='';
   try{
-    DT=makeShip('DD','SN4-det',[0,0,0],[1,0,0],[0,0,0],'blue',2);      /* 探测方:DD emit 1 / recv 1 */
-    TG=makeShip('DD','SN4-tgt',[400000,0,0],[1,0,0],[0,0,0],'red',2);  /* 被探方:DD size 0.70 / stealth 0.60 ⇒ refl 0.42 */
-    ships.length=0;ships.push(DT);ships.push(TG);
-    projectiles.length=0; /* 信标也是照射平台,清空免得别条探针留下的信标凭空照亮目标 */
-    [DT,TG].forEach(function(s){s.orders=[];s.vel=[0,0,0];s.brake=false;s.follow=null;s.formation=null;s.autoEngage=false;s.roe='hold';s.macOn=false;s.mslOn=false;s.ciwsOn=false;s.lockedTarget=null;}); /* ⑦ 要真跑 stepSim,先把运动与武器全闭嘴:多一发弹丸就多一个辐射源,场面就不干净了 */
-    var step=function(n){ /* n 个感知节拍,末尾抓一次快照 */
-      for(var i=0;i<n;i++)detectLoop();
-      L.push(TG.litBlue);K.push({o:TG.trkB.opt,l:TG.trkB.lis,a:TG.trkB.act}); /* 蓝网络看红舰 ⇒ 读红舰身上的 litBlue/trkB */
-    };
-    step(30);                          /* ① 远距静默 400k:三条界取 max 仍小于 d2 ⇒ 整目标早退 */
-    TG.pos[0]=70000;step(30);          /* ② 近距静默  70k:只有光学过门,静听恒 0(silent 绝对静默)⇒ 交叉不成立 */
-    setEmit(TG,'paint');step(30);      /* ③ 目标开照射:射频响度 0→1.0 ⇒ 光学×静听 交叉 */
-    setEmit(DT,'paint');step(30);      /* ④ 探测方开照射:1/d四次方 的回波驻留 ⇒ 火控级 */
-    setEmit(DT,'silent');step(40);     /* ⑤ 断照 40 拍:act 衰减到 ACT_DOWN 之下 ⇒ 降回 2(cross 还在) */
-    TG.pos[0]=400000;setEmit(TG,'silent');step(40); /* ⑥ 退回远处且转回静默:lit 必须真的灭回 0 */
+    var P=ladPair('DD','DD');
+    DT=makeShip('DD','SN6-det',[0,0,0],[1,0,0],[0,0,0],'blue',2);
+    TG=makeShip('DD','SN6-tgt',[0,0,0],[1,0,0],[0,0,0],'red',2);
+    ships.length=0;ships.push(DT);ships.push(TG);projectiles.length=0;
+    [DT,TG].forEach(function(s){s.orders=[];s.vel=[0,0,0];s.brake=false;s.follow=null;s.formation=null;s.autoEngage=false;s.roe='hold';s.macOn=false;s.mslOn=false;s.ciwsOn=false;s.lockedTarget=null;});
+    var put=function(x,n){TG.pos=[x,0,0];for(var i=0;i<n;i++)detectLoop();L.push(TG.litBlue);A.push(TG.covB.a1);return TG.litBlue;};
+    var fresh=function(){TG.covB=newCov();TG.litBlue=0;detT=0;};
+    /* 六段。距离全部现量:光学冷发现 / 单站光学定位 / 导弹门 / 主炮门 / 照射的三道门 */
+    fresh();
+    put(1.2*P.optColdMin,30);                    /* ① 光学发现之外、静默 ⇒ 一点信号都没有 */
+    put(0.5*(P.optLocate+P.optColdMin),30);      /* ② 进了光学发现、还没到单站定位 ⇒ 探测级,而且【定不出位置】(热区) */
+    var fix2=TG.covB.fix;
+    put(0.8*P.optMsl,30);                        /* ③ 进了光学导弹门 ⇒ 跟踪级 */
+    put(0.8*P.optGun,30);                        /* ④ 进了光学主炮门 ⇒ 火控级 */
+    put(1.2*P.optColdMin,40);                    /* ⑤ 退回光学发现之外 ⇒ 椭圆长大、接触丢掉 ⇒ 灭回 0 */
+    put(0.5*(P.optLocate+P.optColdMin),30);      /* ⑥ 再回到 ② 那个点:读数必须与 ② 【逐位相同】—— 没有棘轮 */
     seq=L.join(',');
-    okSeq=(seq==='0,1,2,3,2,0'); /* 反退化:全 0(什么都探不到)与全 3(什么都探得到)都出不了这条序列 */
-    ok1=(L[0]===0&&K[0].o===0&&K[0].l===0&&K[0].a===0); /* 上界:不是"lit 小",是【一拍都没积起来】 */
-    ok2=(L[1]===1&&K[1].o>=SENS.LIT1&&K[1].l===0&&K[1].a===0); /* 单通道过门 + 交叉必须不过 + 照射恒 0 */
-    ok3=(L[2]===2&&K[2].o>=SENS.LIT2&&K[2].l>=SENS.LIT2&&K[2].a===0); /* 2 级必须是被动交叉挣来的,不许照射顶上去 */
-    ok4=(L[3]===3&&K[3].a>=SENS.LIT3);
-    ok5=(L[4]===2&&K[4].a<SENS.ACT_DOWN&&K[4].o>=SENS.LIT2&&K[4].l>=SENS.LIT2); /* 降回 2 而不是掉到 1:cross 仍在 */
-    ok6=(L[5]===0&&K[5].o<SENS.LIT1*SENS.HYST&&K[5].l<SENS.LIT1*SENS.HYST&&K[5].a<SENS.LIT1*SENS.HYST&&TG.everLitBlue===true); /* 灭回 0,但"曾经点亮过"要留着(幽灵接触靠它) */
-    /* ⑦ 生产调用链:感知节拍必须由 stepSim 的 S1 推。把 detectLoop 包一层只为【数拍数与收 dt】,不改行为 */
-    var sv=selfPlay,fs=(typeof fireSeqs!=='undefined')?fireSeqs:null;
-    selfPlay=true;if(fs)fireSeqs=[];
-    TG.pos[0]=70000;setEmit(TG,'silent');setEmit(DT,'silent');
-    TG.trkB=newTrk();detT=0;
-    detectLoop=function(dt){wCnt++;wSum+=(dt===undefined?SENS.TICK:dt);return _dl(dt);};
-    var K0=200;wT=K0*CFG.step;                 /* 4.0 游戏秒 ⇒ SENS.TICK=1 时应当跑到 3~4 拍 */
-    for(var w=0;w<K0;w++)stepSim(CFG.step);
+    var okSeq=(seq==='0,1,2,3,0,1');             /* 反退化:全 0 与全 3 都出不了这条序列 */
+    var okHeat=(L[1]===1&&!fix2);                /* 探测级 + 定不出位置 = 地图上一团热区 */
+    var okRatchet=(L[5]===L[1]&&Math.abs(A[5]/A[1]-1)<1e-9); /* 同一个点、同样的姿态,等级与椭圆都必须一样 */
+    /* ⑦ 照射把同一个点从"定不出位置"救成火控级:纯被动 vs 开照射,单变量对照 */
+    fresh();var dAct=0.8*P.radarLook;
+    put(dAct,30);var litPassive=TG.litBlue,fixPassive=TG.covB.fix;
+    setEmit(DT,'paint');put(dAct,30);var litPaint=TG.litBlue;
+    setEmit(DT,'silent');
+    var okPaint=(litPassive<3&&!fixPassive&&litPaint===3);
+    /* ⑧ 生产接线:解析跳步可加 —— 走 stepSim 与一次性给同样时长必须逐位相同(倍速不许改物理) */
+    fresh();setEmit(DT,'paint');TG.pos=[dAct,0,0];
+    var wCnt=0,wSum=0,_dl=detectLoop;
+    detectLoop=function(dt){wCnt++;wSum+=(typeof dt==='number'&&isFinite(dt)&&dt>0)?dt:SENS.TICK;return _dl.apply(null,arguments);};
+    var wT=0;for(var q=0;q<200;q++){stepSim(CFG.step);wT+=CFG.step;}
     detectLoop=_dl;
-    wRes=detT;wA=TG.trkB.opt;
-    TG.trkB=newTrk();detectLoop(wSum);wB=TG.trkB.opt; /* 同样多的时间一次性交给它:解析跳步可加 ⇒ 必须逐位相同 */
-    selfPlay=sv;if(fs)fireSeqs=fs;
-    okWire=(wCnt>=3&&Math.abs(wSum+wRes-wT)<1e-6&&Math.abs(wA-wB)<1e-9&&wA>0);
-    ok=(okSeq&&ok1&&ok2&&ok3&&ok4&&ok5&&ok6&&okWire);
+    var wRes=detT,wA=TG.covB.a1;
+    fresh();TG.pos=[dAct,0,0];detectLoop(wSum);var wB=TG.covB.a1;
+    setEmit(DT,'silent');
+    var okWire=(wCnt>=3&&Math.abs(wSum+wRes-wT)<1e-9&&wA>0&&wB>0);
+    var ok=(okSeq&&okHeat&&okRatchet&&okPaint&&okWire);
+    var km=function(v){return Math.round(v/1000)+'k';};
+    out=(ok?'ok':'fail')+' 等级序列='+seq+'(须 0,1,2,3,0,1)='+okSeq
+      +' | ② '+km(0.5*(P.optLocate+P.optColdMin))+' 静默:lit'+L[1]+' 定得出位置='+fix2+'(须 lit1 且定不出 = 热区)='+okHeat
+      +' | ⑥ 回到同一个点:lit'+L[5]+' 椭圆 ±'+km(A[5])+' vs ② lit'+L[1]+' ±'+km(A[1])+'(须逐位相同 = 没有棘轮)='+okRatchet
+      +' | ⑦ '+km(dAct)+' 纯被动 lit'+litPassive+'(定得出='+fixPassive+') → 开照射 lit'+litPaint+'(须 3)='+okPaint
+      +' | ⑧ 生产接线 stepSim '+wT.toFixed(2)+'s → 拍数='+wCnt+' dt合计='+wSum.toFixed(6)+'+残留'+wRes.toFixed(6)+'(须等于总时长)='+okWire;
   }finally{
-    detectLoop=_dl;detT=detBak;
+    detT=detBak;
     ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
     projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
-    if(typeof esmFixes!=='undefined'){esmFixes.delete(DT);esmFixes.delete(TG);} /* ESM 椭圆是按【舰对象】做键的 Map,临时舰不摘会一直挂在里面 */
   }
-  function rd(i){var k=K[i]||{o:-1,l:-1,a:-1};return ' opt='+k.o.toFixed(3)+' lis='+k.l.toFixed(3)+' act='+k.a.toFixed(3);}
-  return (ok?'ok':'fail')+' 阶梯 lit='+seq+'(须 0,1,2,3,2,0)='+okSeq
-    +' | 1 远距静默400k lit='+L[0]+rd(0)+' 三个积分须全0(探测上界)='+ok1
-    +' | 2 近距静默70k lit='+L[1]+rd(1)+' 光学单通道过门且静听恒0(交叉不过)、照射恒0='+ok2
-    +' | 3 目标开照射 lit='+L[2]+rd(2)+' 光学与静听双双过LIT2(交叉),act 仍须0='+ok3
-    +' | 4 探测方开照射 lit='+L[3]+rd(3)+' act>=LIT3='+ok4
-    +' | 5 断照40拍 lit='+L[4]+rd(4)+' act<ACT_DOWN 降回2且cross仍在='+ok5
-    +' | 6 退回400k且转静默40拍 lit='+L[5]+rd(5)+' 须灭回0(everLit 保留)='+ok6
-    +' | 7 生产接线 stepSim '+wT.toFixed(2)+'s → 感知拍数='+wCnt+'(须>=3) 收到的dt合计='+wSum.toFixed(6)+'+残留'+wRes.toFixed(6)
-      +'(须等于总时长,一点都不许丢) 驻留 走stepSim='+wA.toFixed(9)+' 一次性给同样时长='+wB.toFixed(9)+'(须逐位相同)='+okWire;
+  return out;
 });
 /* SN4 参数归属:size 与 stealth 属【被看方】、emit 与 recv 属【探测方】。
    为什么非要有它:FLOW44 与旧版一样全程 DD 对 DD —— 四个参数【整体互换】读数逐位不变,
@@ -3522,20 +3618,29 @@ t('FLOW50_SIDE',function(){
   var tDD=makeShip('DD','SN4-sd-t1',[0,0,0],[1,0,0],[0,0,0],'red',2);
   var tCA=makeShip('CA','SN4-sd-t2',[0,0,0],[1,0,0],[0,0,0],'red',2);
   function put(d,t,x){d.pos=[0,0,0];t.pos=[x,0,0];return sensePairAt(d,t);}
+  /* SN6:三个取样距离全部【从模型现量】(取两条相邻量程的几何中点),不再写死 165k/180k/250k ——
+     那三个数是 SN4 标定下的,梯子一换就在测另一件事(SN6 落地时这条正是这么假红的)。 */
+  var d1=Math.sqrt(visRangeOf(tDD)*visRangeOf(tCA));   /* DD 看不见、CA 看得见的那一段 */
   /* ① 光学:全员静默熄火 */
-  var oA=put(dDD,tCA,165000).opt,oB=put(dCA,tCA,165000).opt;
-  var oC=put(dDD,tDD,165000).opt,oD=put(dCA,tDD,165000).opt;
+  var oA=put(dDD,tCA,d1).opt,oB=put(dCA,tCA,d1).opt;
+  var oC=put(dDD,tDD,d1).opt,oD=put(dCA,tDD,d1).opt;
   var ok1=(oA===oB&&oC===oD&&oA>oC&&oC===0);
   /* ② 照射:两个探测方都开照射,两个目标保持静默 */
   setEmit(dDD,'paint');setEmit(dCA,'paint');
-  var aDDxDD=put(dDD,tDD,180000).act,aDDxCA=put(dDD,tCA,180000).act;
-  var aCAxDD=put(dCA,tDD,180000).act,aCAxCA=put(dCA,tCA,180000).act;
-  var ok2=(aDDxDD===0&&aDDxCA===0&&aCAxDD>aDDxCA&&aCAxCA>aCAxDD);
+  var rDDxCA=actRangeOf(dDD,reflOf(tCA)),rCAxDD=actRangeOf(dCA,reflOf(tDD)),rCAxCA=actRangeOf(dCA,reflOf(tCA));
+  var d2=Math.sqrt(rDDxCA*rCAxDD);                     /* 小雷达够不着、大雷达够得着的那一段 */
+  var aDDxDD=put(dDD,tDD,d2).act,aDDxCA=put(dDD,tCA,d2).act;
+  var aCAxDD=put(dCA,tDD,d2).act,aCAxCA=put(dCA,tCA,d2).act;
+  /* 零/非零那一半仍走真实热循环(证明接线);序关系改判【量程】——
+     CA 压到 2/2 之后 rDDxCA 与 rCAxDD 只差 1.14 倍,信噪比分档粒度太粗,分不出这一对。
+     量程的序在"四参数整体互换"下照样翻面,所以这条的牙齿没有丢。 */
+  var ok2=(aDDxDD===0&&aDDxCA===0&&aCAxDD>0&&aCAxCA>0&&rCAxDD>rDDxCA&&rCAxCA>rCAxDD);
   /* ③ 谁在喊:探测方转回静默、目标开照射 ⇒ 听得见;反过来 ⇒ 必须恒 0 */
   setEmit(dDD,'silent');setEmit(tDD,'paint');
-  var lHear=put(dDD,tDD,250000).lis;
+  var d3=0.5*hearRangeOf(tDD,dDD.recv);
+  var lHear=put(dDD,tDD,d3).lis;
   setEmit(tDD,'silent');setEmit(dDD,'paint');
-  var lQuiet=put(dDD,tDD,250000).lis;
+  var lQuiet=put(dDD,tDD,d3).lis;
   var ok3=(lHear>0&&lQuiet===0);
   var ok=(ok1&&ok2&&ok3);
   return (ok?'ok':'fail')
@@ -3594,12 +3699,18 @@ t('FLOW51_PAIR',function(){
              探测方 paint 后 max2 必须【大于】ir,且 lit 真的到 3、act 真的涨、opt 与 lis 全程恒 0。
    反向对照(请务必真做一次):把 scBMax 改成只取被动两路的 max —— 上面两条会同时转红。 */
 t('FLOW52_COLD',function(){
-  if(typeof senseBoundsAt!=='function'||typeof sensePrepare!=='function'||typeof newTrk!=='function')return 'fail 新感知内核未加载(缺 senseBoundsAt/sensePrepare/newTrk)';
+  if(typeof senseBoundsAt!=='function'||typeof sensePrepare!=='function'||typeof newCov!=='function')return 'fail SN6 感知内核未加载(缺 senseBoundsAt/sensePrepare/newCov)';
   var shipsBak=ships.slice(),projBak=projectiles.slice(),detBak=detT;
   var DT,TG,out='';
   try{
     DT=makeShip('CA','SN4-cd-d',[0,0,0],[1,0,0],[0,0,0],'blue',2);      /* CA:emit 3 / recv 3 ⇒ 对 DD 的照射量程 209,153 km */
-    TG=makeShip('DD','SN4-cd-t',[190000,0,0],[1,0,0],[0,0,0],'red',2);  /* DD 静默熄火:光学可见半径只有 150,599 km */
+    /* SN6:距离现量 —— 取【光学够不着、照射够得着】那一段的几何中点。这条判据守的是"冷目标剪枝",
+       也就是"一艘静默熄火的船,光学暗、射频恒 0,整目标不许被早退跳过,照射那一路必须穿进去"。
+       所以取样点必须落在只有照射够得着的那一段里;写死公里数(旧版 190000)会随梯子漂到别的段上去。
+       ⚠ 也不能像第一版 SN6 那样取"火控距离的八成"——那个点现在光学也够得着(冷目标光学 24 万 > 火控 17 万),
+         于是"只有照射穿进去"当场不成立,而它正是这条判据的全部内容。 */
+    var dCold=Math.sqrt(visRangeOf(makeShip('DD','SN6-cd-probe',[0,0,0],[1,0,0],[0,0,0],'red',2))*ladPair('CA','DD').radarMin);
+    TG=makeShip('DD','SN6-cd-t',[dCold,0,0],[1,0,0],[0,0,0],'red',2);  /* DD 静默熄火:光学够不着,只能靠照射 */
     ships.length=0;ships.push(DT);ships.push(TG);projectiles.length=0;
     [DT,TG].forEach(function(s){s.orders=[];s.vel=[0,0,0];s.follow=null;s.formation=null;s.autoEngage=false;s.roe='hold';s.macOn=false;s.mslOn=false;s.ciwsOn=false;});
     sensePrepare([DT],[],[TG],SENS.TICK);
@@ -3608,34 +3719,35 @@ t('FLOW52_COLD',function(){
     sensePrepare([DT],[],[TG],SENS.TICK);
     var b1=senseBoundsAt(0);
     var okB=(b0.act4===0&&b0.max2===b0.ir&&b1.act4>0&&b1.rf===0&&b1.ir>0&&b1.max2>b1.ir);
-    TG.trkB=newTrk();TG.litBlue=0;TG.everLitBlue=false;detT=0;
+    TG.covB=newCov();TG.litBlue=0;detT=0;
     for(var i=0;i<40;i++)detectLoop();
-    var okLit=(TG.litBlue===3&&TG.trkB.act>=SENS.LIT3&&TG.trkB.opt===0&&TG.trkB.lis===0);
+    /* SN6:判"只有照射这一路穿进去了"改看接触上的三条通道记录(c.ch),比水位直观,而且它就是渲染层读的那份 */
+    var okLit=(TG.litBlue>=1&&!!TG.covB.ch.act&&!TG.covB.ch.opt&&!TG.covB.ch.lis);  /* 等级到几由距离决定(那是 FLOW44 的事);这里只要"照射真的穿进去了" */
     var ok=(okB&&okLit);
     out=(ok?'ok':'fail')
       +' 探测方静默时 照射界='+b0.act4+'(须0) max2='+b0.max2.toExponential(3)+' 光学界='+b0.ir.toExponential(3)+'(须相等)'
       +' | 探测方照射后 光学界='+b1.ir.toExponential(3)+' 静听界='+b1.rf+'(须0) 照射界换算回d2='+Math.sqrt(b1.act4).toExponential(3)
       +' max2='+b1.max2.toExponential(3)+'(须【严格大于】光学界=照射界真的进了 max)='+okB
-      +' | 冷目标 40 拍后 lit='+TG.litBlue+'(须3) act='+TG.trkB.act.toFixed(3)+'(须>=LIT3) opt='+TG.trkB.opt+' lis='+TG.trkB.lis+'(两个须恒0,证明确实只有照射穿进去了)='+okLit;
+      +' | 冷目标 '+Math.round(TG.pos[0]/1000)+'k(光学够不着)跑 40 拍:lit='+TG.litBlue+'(须>=1) 椭圆 ±'+Math.round(TG.covB.a1)+'km 通道[照射='+(!!TG.covB.ch.act)+' 光学='+(!!TG.covB.ch.opt)+' 静听='+(!!TG.covB.ch.lis)+'](后两个须 false,证明确实只有照射穿进去了)='+okLit;
   }finally{
     detT=detBak;
     ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
     projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
-    if(typeof esmFixes!=='undefined'){esmFixes.delete(DT);esmFixes.delete(TG);}
+
   }
   return out;
 });
 /* SN5 雷达关系不变量。【本条一个数都不改】,它守的是今天已经成立、却没人写下来、也没有任何东西看着的几条关系。
    为什么现在补:「CA 的照射圈越过一艘侧推中的 CA 的光学圈 5,249 km」这件事是手算发现的 —— 六十条判定一条都没红。
-   这一类「两张表相乘出来的关系」正是本项目最容易静默漂移的一类:改 SENS 的一个数、改 IR_REF、改 WPN 的射程,
+   这一类「两张表相乘出来的关系」正是本项目最容易静默漂移的一类:改 SENS 的一个数、改 IR_DET、改 WPN 的射程,
    都会让它悄悄翻面,而每一处单独看都对。
    ---- 守的五条 ----
    ① 被动先于主动,界划在【主推】档:一艘开着主推的船,永远先被看见、后被照到。
       刻意【不】用侧推档当界 —— 对一艘熄火静默的冷目标,主动大幅先于被动是【设计意图】
-      (20-signature 的 IR_REF 锚点:"一艘完全静默的船,要等到进了主炮射程才刚被光学发现";FLOW52_COLD 守的正是反面)。
+      (20-signature 的 IR_DET 锚点:"一艘完全静默的船,要等到进了主炮射程才刚被光学发现";FLOW52_COLD 守的正是反面)。
       侧推是最弱的一档动力,几乎就是冷目标,那一段是过渡区,不强求。
    ①b 反向对照:把界换成【侧推】就必须有格子越界。没有这一条,①"全过"可能只是因为界定得太松。
-   ② 基准舰锚点:ACT_REF 与 LIS_REF 的【定义】就挂在 DD 身上(基准舰 emit=recv=1 对反射 1.0 的目标)。
+   ② 基准舰锚点:ACT_DET 与 LIS_DET 的【定义】就挂在 DD 身上(基准舰 emit=recv=1 对反射 1.0 的目标)。
       动 DD 的收发、或动那两个参考距离,都会让 20-signature 文件头整段推导变成假话,而没有任何东西会报错。
    ③ 武器表:规格条上那个射程必须【至少对标准目标可达】。macRadar 大于照射圈的话,玩家永远拿不到火控级,
       那个数就是虚标 —— 而 fcGate/轮盘/hover 圈三处都照着它画。顺带守住表级不变量 macRadar >= macRange。
@@ -3655,25 +3767,32 @@ t('FLOW53_RADAR',function(){
   var bcn=function(tc){var x=SENS.CLS[tc];
     return Math.sqrt(Math.sqrt(SENS.K_ACT*SENS.BEACON_EMIT*SENS.BEACON_RECV*x.size*x.stealth));};
 
+  /* ---- SN6:①/①b 换内容 ----
+     SN5 这两条守的是"被动先于主动"(任一照方对任一【主推中】目标的照射圈须小于该目标的光学圈)。
+     那是 SN4 标定下的关系:当时雷达 15~26 万、光学满推 36 万。SN6 的梯子【刻意】把雷达放到
+     65 万、光学满推 48 万 —— 雷达比光学远正是"开雷达看得清、但先被别人听见"这个取舍成立的前提,
+     也是 ladCheck 第二条("雷达发现 >= 2x 光学发现(冷目标),否则开雷达纯亏")明确要的。
+     所以这一条不是被违反了,是被【取代】了:守顺序的活整个交给梯子不变量 ladCheck(八条),
+     它是 23-cov 里与反解互为逆的那一套,比一条手写关系覆盖得全。
+     ①b 的反向对照照旧要有:把梯子上的雷达发现压到光学之下,必须【有】不变量翻红 —— 否则这条判据没有区分度。 */
   var bad1=[],mg1=1e9,i,j;
-  for(i=0;i<CL.length;i++)for(j=0;j<CL.length;j++){
+  var lc=ladCheck();
+  for(i=0;i<lc.length;i++)if(!lc[i].ok)bad1.push(lc[i].msg);
+  for(i=0;i<CL.length;i++)for(j=0;j<CL.length;j++){ /* 余量仍然报出来:它是"雷达比光学远多少"的读数,只是不再当判据 */
     var r1=act(CL[i],CL[j]),v1=vis(CL[j],SENS.P_ENG_MAIN);
     mg1=Math.min(mg1,(v1-r1)/v1);
-    if(!(r1<v1))bad1.push(CL[i]+'照'+CL[j]+' '+Math.round(r1)+'>'+Math.round(v1));
   }
-  for(j=0;j<CL.length;j++){                       /* 信标是第二类照方,而且恒在照射(detectorsOf 的 bcons) */
-    var rb=bcn(CL[j]),vb=vis(CL[j],SENS.P_ENG_MAIN);
-    mg1=Math.min(mg1,(vb-rb)/vb);
-    if(!(rb<vb))bad1.push('信标照'+CL[j]+' '+Math.round(rb)+'>'+Math.round(vb));
-  }
-  var bad2=[];
-  for(i=0;i<CL.length;i++)for(j=0;j<CL.length;j++)
-    if(!(act(CL[i],CL[j])<vis(CL[j],SENS.P_ENG_SIDE)))bad2.push(CL[i]+'照'+CL[j]);
-  var ok1=(bad1.length===0), okRev=(bad2.length>0);
+  var bad2=[],rBak=LAD.radarMin;
+  LAD.radarMin=LAD.optColdMin*0.9;ladApply();      /* 种坏:雷达发现压到光学之下 */
+  var lc2=ladCheck();
+  for(i=0;i<lc2.length;i++)if(!lc2[i].ok)bad2.push(lc2[i].msg);
+  LAD.radarMin=rBak;ladApply();                    /* 还原 —— 它写的是全局 SENS,不还原后面每一条都跟着坏 */
+  var okRestore=(Math.abs(ladPair('DD','DD').radarMin-LAD.radarMin*60*LAD.V_REF)<1);
+  var ok1=(bad1.length===0&&okRestore), okRev=(bad2.length>0);
 
   var dd=SENS.CLS.DD;
   var aDD=actStd('DD'), hDD=Math.sqrt(SENS.K_RF*dd.emit*SENS.EMIT_P.paint*1.0);
-  var okAnchor=(Math.abs(aDD-SENS.ACT_REF)<1e-6&&Math.abs(hDD-SENS.LIS_REF)<1e-6);
+  var okAnchor=(Math.abs(aDD-SENS.ACT_DET)<1e-6&&Math.abs(hDD-SENS.LIS_DET)<1e-6);
 
   var badW=[],wRows=[],c,wi;
   for(c in CLS_LOADOUT)for(wi=0;wi<CLS_LOADOUT[c].length;wi++){
@@ -3706,6 +3825,19 @@ t('FLOW53_RADAR',function(){
     env.ships.forEach(function(d){var s=makeShip(d[0],'SN5-'+d[1],[d[2],d[3],d[4]],d[5].slice(),[0,0,0],'blue',d[7]||2);bl.push(s);ships.push(s);});
     env.enemy.forEach(function(d){var s=makeShip(d[0],'SN5-'+d[1],[d[2],d[3],d[4]],d[5].slice(),[0,0,0],'red',d[9]||2);rdl.push(s);ships.push(s);});
     ships.forEach(function(s){s.orders=[];s.vel=[0,0,0];s.follow=null;s.formation=null;s.autoEngage=false;s.roe='hold';s.macOn=false;s.mslOn=false;s.ciwsOn=false;});
+    /* SN6b:场景改成【1 光秒外摸黑接敌】之后,开局一个靶都进不了火控级(天花板 172,829 < 299,792)——
+       那是刻意的,而这条判据量的是【雷达关系】对不对,不是场景摆得多远。所以先把靶阵按比例拉到
+       最近那个落在 CA 的火控门之内,再真跑 detectLoop。
+       ⚠ 门距从 ladPair 现量,不写死公里数;靶阵等比缩,形状(近/远两档的梯度)原样保留 ——
+         SENS 或梯子任一边一动,这条照样红。 */
+    (function(){
+      var ca=bl.filter(function(x){return x.cls==='CA';})[0]||bl[0];
+      var want=ladPair('CA','DD').radarLook*0.9, near=1e18;
+      rdl.forEach(function(t){near=Math.min(near,Math.hypot(t.pos[0]-ca.pos[0],t.pos[1]-ca.pos[1]));});
+      if(!(near>want))return;
+      var k=want/near;
+      rdl.forEach(function(t){t.pos=[ca.pos[0]+(t.pos[0]-ca.pos[0])*k,ca.pos[1]+(t.pos[1]-ca.pos[1])*k,t.pos[2]];});
+    })();
     bl.forEach(function(s){if(s.cls==='CA')setEmit(s,'paint');});   /* 玩家真要开主炮就会做这一步;不做的话全场没人照射,lit 永远上不到 3 */
     detT=0;
     for(i=0;i<40;i++)detectLoop();
@@ -3724,10 +3856,10 @@ t('FLOW53_RADAR',function(){
   var ok5=(lit3>=1);
   var ok=(ok1&&okRev&&okAnchor&&badW.length===0&&badM.length===0&&badF.length===0&&ok5);
   return (ok?'ok':'fail')
-    +' ① 被动先于主动(界=主推档,含信标共 '+(CL.length*CL.length+CL.length)+' 组):越界='+(bad1.length?bad1.join(','):'无')
-      +' 最薄余量='+(mg1*100).toFixed(1)+'%='+ok1
-    +' | ①b 反向对照(界换成侧推)须【有】越界:'+(bad2.length?bad2.join(',')+' 共'+bad2.length+'格':'一格都没有')+'='+okRev
-    +' | ② 基准舰锚点 DD照标准目标='+Math.round(aDD)+'(须=ACT_REF '+SENS.ACT_REF+') DD照射被基准耳朵听见='+Math.round(hDD)+'(须=LIS_REF '+SENS.LIS_REF+')='+okAnchor
+    +' ① 梯子不变量(SN6 取代 SN5 那条「被动先于主动」,见块注释):破='+(bad1.length?bad1.join(' / '):'无')+'/'+ladCheck().length
+      +' 雷达对光学满推的余量='+(mg1*100).toFixed(1)+'%(只作读数,不再当判据)='+ok1
+    +' | ①b 反向对照(把雷达发现压到光学之下)须【有】不变量翻红:'+(bad2.length?bad2.length+' 条':'一条都没有')+' 还原='+okRestore+'='+okRev
+    +' | ② 基准舰锚点 DD照标准目标='+Math.round(aDD)+'(须=ACT_DET '+SENS.ACT_DET+') DD照射被基准耳朵听见='+Math.round(hDD)+'(须=LIS_DET '+SENS.LIS_DET+')='+okAnchor
     +' | ③ 武器表 ['+wRows.join(' ')+'] 违反='+(badW.length?badW.join(','):'无')
     +' | ④ 单调='+(badM.length?badM.join(','):'无')+' 手电系数['+fRows.join(' ')+'](须全>=4.000,等价 emit>=recv)违反='+(badF.length?badF.join(','):'无')
     +' | ⑤ 靶场开局 CA 开照射后 40 拍:['+rows.join(' ')+'] 到火控级的靶数='+lit3+'(须>=1)='+ok5;
@@ -3744,9 +3876,9 @@ t('FLOW53_RADAR',function(){
      A2 静默+热弹 → 走光学支路(30000 < 燃烧弹光学可见 47,997)                 → 必须发
      B  静默+冷弹 → 两条支路都够不着(30000 > 滑行弹光学可见 18,000,且没开照射)→ 必须【恰好】0 发
    SN4 新常数怎么来的(与改前逐位一致,所以 PIN=30000 这个几何一个字不用动):
-     光学 r = IR_REF×sqrt(lum):180000×sqrt(0.0711) = 47,997(旧 150000×0.8×0.4 = 48,000)
+     光学 r = IR_DET×sqrt(lum):180000×sqrt(0.0711) = 47,997(旧 150000×0.8×0.4 = 48,000)
                                180000×sqrt(0.0100) = 18,000(旧 150000×0.8×0.15 = 18,000)
-     照射 r = ACT_REF×(emit×recv×refl)开四次方:150000×(1×1×0.5)开四次方 = 126,134
+     照射 r = ACT_DET×(emit×recv×refl)开四次方:150000×(1×1×0.5)开四次方 = 126,134
      —— 弹丸的 PROJ 常数本来就是拿旧可见半径反解出来的,弹丸可见性不属于本轮要改的东西。
    A1↔B 只差探测方的发射档(照射/静默);A2↔B 只差来袭弹 fuel(热弹 lum 0.0711 / 冷弹 0.0100)。两条支路各有一条正向判据咬着,
    只咬 LADAR 那一支的话,被动那半边改坏了照样绿。
@@ -3759,6 +3891,376 @@ t('FLOW53_RADAR',function(){
    而被跳过,"0 发"就成了假绿 —— 所以三相一律先置 p.vel/p.spd,让威胁判定在三相里同样成立。
    场景隔离(同 FLOW31_FOLLINE 的手法):自己造两艘船换掉 ships、清 projectiles/hitFX/threatCorridors/fireSeqs,
    并 selfPlay=true 关掉 enemyAI(它会给红舰推命令、还有 8% 掷骰齐射,判定就不再确定);全部在 finally 里还原。 */
+/* SN6 热区:没有位置的接触画成一片【场】,不是一个几何形状。四条判据,每一条都有反向对照 ——
+   光判"画出来了"的话,一个画规整圆圈的实现同样全绿,而那正是这一层刻意不要的东西。
+     ① 场真的铺出来了(有色像素 > 0),而且【真值位置上没有舰标】——后者归 FLOW47_FOG,这里只钉场本身。
+     ② 【是面不是条】:底下那条接触的椭圆细长几十倍(被动单站:方位准、距离一无所知),
+        而场的长短比必须接近 1。这一层刻意丢掉朝向 —— 条状是武器层的语言,借过来玩家会从带子走向读出视线方向。
+     ③ 【团心不在真值上】:模型里估计位置等于真值,圆心画上去就是把坐标交出去。
+        反向对照:把偏移与扭曲归零,重心必须落回舰位 —— 不加这一半的话,一个根本没偏移的实现也能过 ③。
+     ④ 【越近面越小】:远近两档,场的空间尺度必须真的缩小(对数压缩那一步若退回硬截断,这条会翻)。 */
+/* SN6 三级星图:层界、落点、缩放上下限【全部由距离梯子推出】,一个 km/px 都不许写死。
+   五条,反向对照内建在 ①(梯子一动层界必须跟着动 —— 写死的实现在那一步当场露馅)。 */
+/* SN6 聚合层(LOD)。五条,其中 ③④ 是【迷雾】判据不是显示判据:
+   红方没有"舰队"这一层 —— 我们不知道对方的编制,用真实归属去给敌舰分组就是把一个玩家没有的情报画出来。
+   所以红方只聚【已定位】的接触、只按屏幕距离聚;构成里没认出的一律记成 ?,不写舰种。 */
+/* SN6 嵌套网格。守的是一条【集合论上的】性质,不是外观:
+     粗的那一级的线,必须是细的那一级的【子集】—— 满足它,缩放时线只会淡入、永不消失。
+   等价说法:相邻两级的步长必须成整除关系。工程上常用的 1-2-5 序列(Renard 优先数)【不满足】:
+   5 的倍数不是 2 的倍数的子集。这正是换档时"整张网格重画、空间感断掉"的根因。
+   ⚠ 反向对照【内建】在同一条判据里:同一段检查同时跑新阶梯与 1-2-5,前者须 0 次断链、后者须有断链。
+     不这么写的话,一个恒返回"没断链"的检查器同样能全绿。 */
+/* SN6 信号视野(右下角工具钮)。判的是【画出来的像素】,不是有没有调过某个函数:
+     ① 钮关着时一个像素都不许变;② 开了之后【被看见】那一团是暖色(光学/红外,恒有);
+     ③ 只有【在发射】的舰才有【被听见】那一团,而且是冷色;静默舰在同一个取样点上必须【什么都没有】——
+        这一条是单变量对照:两次渲染只差一个 emitMode;
+     ④ 圈读不出来就不画(挤成一点 / 整张画面都在圈里面);
+     ⑤ 半径与感知层的量程律【逐位相同】—— 圈与判据必须是同一个数(本项目在 SN4 之前正是栽在这类分家上)。 */
+t('FLOW58_SIGVIEW',function(){
+  if(typeof SIG==='undefined'||typeof drawSignalView!=='function')return 'fail SN6 信号视野未加载(缺 SIG/drawSignalView)';
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,edBak=editMode;
+  var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},selBak=selected.slice(),sigBak=SIG.on,out='';
+  try{
+    adminMode=false;editMode=false;selected=[];projectiles.length=0;
+    var S=makeShip('DD','信号',[0,0,0],[1,0,0],[0,0,0],'blue',2);
+    ships.length=0;ships.push(S);
+    S.orders=[];S.vel=[0,0,0];S.autoEngage=false;S.roe='hold';S.macOn=false;S.mslOn=false;S.ciwsOn=false;
+    setEmit(S,'silent');
+    /* ⚠ 缩放与取样点【从视口现算】,不写死。判定跑在 762x484 的视口里,而不是 1280x720 ——
+       写死 4e-4 时"被听见"那一圈半径 500px 把整张画面包了进去,正好撞上 sigLegible 的
+       "整张画面都在圈里面就不画",于是 ③ 永远测不到东西(第一版就是这么假红的)。
+       取法:让被听见那一圈的半径 = 画面半对角线的六成 —— 圆周稳稳在画面里,圈内圈外都有地方取样。 */
+    cam.x=0;cam.y=0;
+    var cx=Math.round(W/2), cy=Math.round(H/2), halfD=Math.hypot(W/2,H/2);
+    setEmit(S,'paint');var rHear=hearRangeOf(S,1);setEmit(S,'silent');
+    cam.zoom=0.60*halfD/rHear;
+    var pOpt=visRangeOf(S)*cam.zoom, pHear=rHear*cam.zoom;
+    var px=function(x,y){var d=ctx.getImageData(x,y,1,1).data;return [d[0],d[1],d[2]];};
+    var shot=function(x,y){render();return px(x,y);};
+    var dif=function(a,b){return [b[0]-a[0],b[1]-a[1],b[2]-a[2]];};
+    var IN=[Math.round(cx+0.45*pOpt),cy], MID=[Math.round(cx+0.5*(pOpt+pHear)),cy];  /* IN 在光学圈内;MID 在光学圈外、被听见圈内 */
+    SIG.on=false;
+    var offIn=shot(IN[0],IN[1]), offMid=shot(MID[0],MID[1]);
+    SIG.on=true;
+    var onIn=shot(IN[0],IN[1]), onMid=shot(MID[0],MID[1]);
+    var dIn=dif(offIn,onIn), dMidSil=dif(offMid,onMid);
+    /* ② 暖色:红涨得比蓝多(被看见是 255,154,85) */
+    var ok2=(dIn[0]>3&&dIn[0]>dIn[2]);
+    /* ③ 静默时 MID 上什么都没有;切到照射后同一点必须出现冷色(被听见是 84,224,208) */
+    var ok3a=(Math.abs(dMidSil[0])<=1&&Math.abs(dMidSil[1])<=1&&Math.abs(dMidSil[2])<=1);
+    setEmit(S,'paint');
+    var onMid2=shot(MID[0],MID[1]);
+    var dMidPnt=dif(offMid,onMid2);
+    var ok3b=(dMidPnt[2]>3&&dMidPnt[2]>dMidPnt[0]&&dMidPnt[1]>dMidPnt[0]);
+    setEmit(S,'silent');
+    /* ① 钮关着 = 一个像素都不变(上面 offIn/onIn 已经证了反面,这里再钉一次正面) */
+    SIG.on=false;var off2=shot(IN[0],IN[1]);
+    var ok1=(Math.abs(off2[0]-offIn[0])<=1&&Math.abs(off2[1]-offIn[1])<=1&&Math.abs(off2[2]-offIn[2])<=1);
+    /* ④ 拉到最近:光学圈半径远大于画面对角线 ⇒ 读不出来 ⇒ 一个像素都不许画 */
+    cam.zoom=kMaxNow();
+    var farOff,farOn;
+    SIG.on=false;farOff=shot(IN[0],cy);
+    SIG.on=true;farOn=shot(IN[0],cy);
+    var ok4=(Math.abs(farOn[0]-farOff[0])<=1&&Math.abs(farOn[1]-farOff[1])<=1&&Math.abs(farOn[2]-farOff[2])<=1);
+    /* ⑤ 半径 = 感知层的量程律,逐位相同 */
+    var rv=visRangeOf(S);setEmit(S,'paint');var rh=hearRangeOf(S,1);setEmit(S,'silent');
+    var ok5=(Math.abs(rv-Math.sqrt(SENS.K_IR*optLum(S)))<1e-9&&rh>rv);
+    var ok=(ok1&&ok2&&ok3a&&ok3b&&ok4&&ok5);
+    out=(ok?'ok':'fail')
+      +' ① 钮关着一个像素都不变='+ok1
+      +' | ② 光学圈内(+'+(IN[0]-cx)+'px,圈 '+pOpt.toFixed(0)+'px)开钮后色差 R/G/B='+dIn.join('/')+'(须暖:R 涨且 R>B)='+ok2
+      +' | ③ 光学圈外、被听见圈内(+'+(MID[0]-cx)+'px,听 '+pHear.toFixed(0)+'px)静默时色差='+dMidSil.join('/')+'(须全 0)='+ok3a+';同一点切到照射后='+dMidPnt.join('/')+'(须冷:B 涨且 B>R、G>R)='+ok3b
+      +' | ④ 拉到最近(圈比画面还大)色差='+dif(farOff,farOn).join('/')+'(须全 0 = 读不出就不画)='+ok4
+      +' | ⑤ 半径 被看见 '+Math.round(rv/1000)+'k / 被听见 '+Math.round(rh/1000)+'k,与量程律逐位相同='+ok5;
+  }finally{
+    SIG.on=sigBak;adminMode=admBak;editMode=edBak;selected=selBak;
+    cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+    projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
+  }
+  return out;
+});
+t('FLOW57_GRIDNEST',function(){
+  if(typeof GRID_L!=='function'||typeof gridBase!=='function')return 'fail SN6 嵌套网格未加载(缺 GRID_L/gridBase)';
+  var zBak=cam.zoom,out='';
+  try{
+    var divides=function(a,b){var lo=Math.min(a,b),hi=Math.max(a,b);return Math.abs(hi/lo-Math.round(hi/lo))<1e-9;};
+    /* 扫一遍全缩放范围,收集"最细那一级"的步长序列,数换档时断了几次链 */
+    var scan=function(stepAt){
+      var S=[],prev=null,i,k;
+      for(i=0;i<=400;i++){
+        k=Math.exp(Math.log(kMaxNow())+(Math.log(kMinNow())-Math.log(kMaxNow()))*i/400);
+        cam.zoom=k;var st=stepAt(k);
+        if(st!==prev){S.push(st);prev=st;}
+      }
+      var bad=0;for(i=0;i+1<S.length;i++)if(!divides(S[i],S[i+1]))bad++;
+      return {n:S.length-1,bad:bad,seq:S};
+    };
+    var nest=scan(function(){return GRID_L(gridBase(1));});
+    /* 反向对照用的【旧算法】住在判据里,不住在产品代码里:单级 1-2-5(Renard 优先数)自适应步长。
+       引擎早就不用它了(嵌套网格取代),留在 81-background 里只是为了给这条判据当靶子 —— 那是死代码。 */
+    var step125=function(x){var p=Math.pow(10,Math.floor(Math.log10(x))),m=x/p;return (m<1.5?1:m<3.5?2:m<7.5?5:10)*p;};
+    var old =scan(function(k){return step125(60/k);});          /* 对照:旧的单级 1-2-5 自适应 */
+    var ok1=(nest.bad===0&&nest.n>=4);
+    var ok2=(old.bad>0);                                          /* 反向对照:1-2-5 必须断链,否则这个检查器没牙 */
+    /* ③ SN7d 三层都是【固定资产】的画法:逐层量 drawGrid 发出的指令 ——
+          · 一次 arc、一次 lineTo 都不许有(放射距离环已删;线不许再合成大 path 去 stroke)
+          · 线全部是轴对齐的 fillRect,条数有界
+          · 战区层的刻度写「光秒」、舰队层写「ls」(两层是同一张光秒网格,区分靠墨色与刻度写法)
+        ⚠ 为什么判【结构】不判毫秒:实测卡顿只在高分屏(DPR=2)+ 真实 GPU 上出现(舰队层平移 31fps),
+          DPR=1 下 240fps、无界面软件光栅下 JS 计时只有 0.3ms —— 判耗时的话这条在探针里永远是绿的。
+          而根因是结构性的:整屏大 path 的 stroke 与几十个大圆,换成轴对齐矩形就回到 240fps。 */
+    var camB3={x:cam.x,y:cam.y},oArc=ctx.arc,oLT=ctx.lineTo,oFR=ctx.fillRect,oFT=ctx.fillText,tiers=[];
+    var nArc=0,nLT=0,nFR=0,txt=[];
+    ctx.arc=function(){nArc++;return oArc.apply(ctx,arguments);};
+    ctx.lineTo=function(){nLT++;return oLT.apply(ctx,arguments);};
+    ctx.fillRect=function(){nFR++;return oFR.apply(ctx,arguments);};
+    ctx.fillText=function(t0){txt.push(String(t0));return oFT.apply(ctx,arguments);};
+    var ok3=true;
+    try{
+      cam.x=125000;cam.y=30000;
+      /* 取样缩放从层界【现算】,不写死 km/px:层界跟着视口走(落点 = 主圈占短边六成),第一版写死 4477,
+         在探针这个小视口里那一点权重已经是战区层占优,舰队层那一格当场假红。每层取在层带的正中(对数空间)。 */
+      /* 第三个取样点落在【交叉淡化带】里(刚过层界 1.2 倍):此刻离散层已是战区、而舰队层的权重还有两成 ——
+         两层同时在画,刻度却只许有一种。只在三个层带正中取样的话,"两层刻度叠在一起"这个变异是抓不到的
+         (层带正中另一层的权重早就是 0 了,变异测试当场发现)。 */
+      [[1,VT.T1/3],[2,Math.sqrt(VT.T1*VT.T2)],[3,VT.T2*1.2],[3,VT.T2*3]].forEach(function(tz){
+        cam.zoom=vtClampK(1/tz[1]);vtFrame();vtFrame();
+        nArc=0;nLT=0;nFR=0;txt=[];drawGrid();
+        var hasLs=txt.some(function(x){return / ls$/.test(x);}),hasGm=txt.some(function(x){return /光秒$/.test(x);});
+        var good=(vtCur===tz[0]&&nArc===0&&nLT===0&&nFR>=6&&nFR<1500&&(tz[0]===1?(!hasLs&&!hasGm):(tz[0]===2?(hasLs&&!hasGm):(hasGm&&!hasLs))));   /* 刻度只许一种写法:交叉淡化段两层同时画,两种刻度叠在同一位置上是第一版真出过的毛病 */
+        if(!good)ok3=false;
+        tiers.push('第'+vtCur+'层 arc='+nArc+' lineTo='+nLT+' fillRect='+nFR+(hasLs?' 刻度ls':'')+(hasGm?' 刻度光秒':''));
+      });
+      if(typeof vtRings!=='undefined')ok3=false;
+    }finally{ctx.arc=oArc;ctx.lineTo=oLT;ctx.fillRect=oFR;ctx.fillText=oFT;cam.x=camB3.x;cam.y=camB3.y;}
+    /* ④ 同时画【多级】:任一缩放下,屏幕间距落在可见带里的级数须 >= 3 —— 疏密层次就是这么来的 */
+    var minLv=99,i2,j;
+    for(i2=0;i2<=20;i2++){
+      cam.zoom=Math.exp(Math.log(kMaxNow())+(Math.log(kMinNow())-Math.log(kMaxNow()))*i2/20);
+      var b0=gridBase(1),lv=0;
+      for(j=b0;j<b0+GRID_LEVELS;j++){var px=GRID_L(j)*cam.zoom;if(px<=4*Math.max(W,H))lv++;}
+      if(lv<minLv)minLv=lv;
+    }
+    var ok4=(minLv>=3);
+    /* ⑤ 网格锚在【世界原点】,不是跟着相机走:平移相机之后,线仍然落在步长的整数倍上 */
+    cam.zoom=1e-3;cam.x=123456;cam.y=-98765;
+    var stp=GRID_L(gridBase(1)),first=Math.floor((cam.x-W/2/cam.zoom)/stp)*stp;
+    var ok5=(Math.abs(first/stp-Math.round(first/stp))<1e-9);
+    var ok=(ok1&&ok2&&ok3&&ok4&&ok5);
+    var fmt=function(v){return v>=1e6?(v/1e6).toFixed(2)+'M':(v>=1000?Math.round(v/1000)+'k':v.toFixed(0));};
+    out=(ok?'ok':'fail')
+      +' ① 公里网格扫全程:换档 '+nest.n+' 次、断链 '+nest.bad+' 次(须 0 = 线永不消失)='+ok1
+      +' | ② 反向对照 1-2-5:断链 '+old.bad+' 次(须>0,否则这个检查器没牙)='+ok2
+      +' | ③ 三层都是固定资产的画法(须 arc=0 / lineTo=0 / 线全是 fillRect):'+tiers.join(' ; ')+'='+ok3
+      +' | ④ 任一缩放下同时可见的级数最少 '+minLv+'(须>=3 = 有疏密层次)='+ok4
+      +' | ⑤ 锚在世界原点(平移后线仍在步长整数倍上)='+ok5
+      +' | 阶梯样例 '+nest.seq.slice(0,6).map(fmt).join(',');
+  }finally{ cam.zoom=zBak; }
+  return out;
+});
+t('FLOW56_LOD',function(){
+  if(typeof lodBuild!=='function')return 'fail SN6 聚合层未加载(缺 lodBuild)';
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,edBak=editMode;
+  var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},selBak=selected.slice(),detBak=detT,out='';
+  try{
+    adminMode=false;editMode=false;selected=[];projectiles.length=0;
+    var B=[],Rr=[],i;
+    for(i=0;i<4;i++)B.push(makeShip(i?'DD':'CA','L蓝'+i,[-300000+i*12000,i*12000,0],[1,0,0],[0,0,0],'blue',2));
+    for(i=0;i<3;i++)Rr.push(makeShip('DD','L红'+i,[200000+i*12000,i*12000,0],[-1,0,0],[0,0,0],'red',2));
+    /* 第四艘红舰:摆在【雷达够不着、却听得见】的那一段(它自己在照射)⇒ lit1 但定不出位置。
+       ⚠ 没有它的话 ① 是【没有牙的】:三艘全都定得出位置时,把"只聚已定位的"那道过滤删掉,
+         结果一模一样(变异测试当场发现)。它在屏幕上离那三艘只有 30px,阈值是 40.8px —— 过滤一删它就会被聚进去。 */
+    var RU=makeShip('DD','L红雾',[700000,0,0],[-1,0,0],[0,0,0],'red',2);Rr.push(RU);
+    ships.length=0;B.forEach(function(x){ships.push(x);});Rr.forEach(function(x){ships.push(x);});
+    ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.autoEngage=false;x.roe='hold';x.macOn=false;x.mslOn=false;x.ciwsOn=false;x.noFire=true;});
+    setEmit(B[0],'paint');                       /* 蓝方 CA 照射 ⇒ 近处三艘红舰定得出位置 */
+    setEmit(RU,'paint');                         /* 远处那一艘自己在喊 ⇒ 蓝方只有一条方位,定不出位置 */
+    detT=0;for(i=0;i<40;i++)detectLoop();
+    cam.x=0;cam.y=0;
+    /* ① 拉远到"编队屏幕直径 < 阈值" ⇒ 蓝方塌成一个框;红方三条已定位接触聚成一个群 */
+    cam.zoom=6e-5;lodPrev={fleet:{},pairsB:null,pairsR:null};lodBuild();
+    var aB=lodNow.aggs.filter(function(a){return a.side==='blue';});
+    var aR=lodNow.aggs.filter(function(a){return a.kind==='rcluster';});
+    var ruLit=(RU.litBlue===1&&!RU.covB.fix);    /* 前提:那一艘确实是"有信号、定不出位置" */
+    var ok1=(ruLit&&aB.length===1&&aB[0].ships.length===4&&aR.length===1&&aR[0].ships.length===3
+             &&lodNow.hideBlue.size===4&&lodNow.hideRed.size===3&&!lodNow.hideRed.has(RU.id));
+    /* ② 拉近 ⇒ 都散开,一个都不收(阈值真的接在屏幕像素上,不是接在别的什么上)。
+       取样的缩放要让【相邻两艘】的屏幕间距明显越过聚合阈值:船距 12,000 km,所以 1e-2(100 km/px)下是 120px。
+       ⚠ 上一版取 2e-3 = 500 km/px,相邻两艘只有 24px —— 它们【本来就该】聚,判据在测一件不成立的事。 */
+    cam.zoom=1e-2;lodPrev={fleet:{},pairsB:null,pairsR:null};lodBuild();
+    var ok2=(lodNow.aggs.length===0&&lodNow.hideBlue.size===0&&lodNow.hideRed.size===0);
+    /* ③ 红方【不按编制】聚:把三艘红舰编进同一支编队,聚合结果必须【逐位不变】——
+       变了就说明它在读真实归属,那是泄露。反向对照的对象是"同一段代码对蓝方是按归属聚的"(见 ①)。 */
+    cam.zoom=6e-5;lodPrev={fleet:{},pairsB:null,pairsR:null};lodBuild();
+    var sigA=lodNow.aggs.map(function(a){return a.kind+':'+a.ships.length;}).sort().join(',');
+    Rr.forEach(function(x){x.formation='9';});
+    lodPrev={fleet:{},pairsB:null,pairsR:null};lodBuild();
+    var sigB=lodNow.aggs.map(function(a){return a.kind+':'+a.ships.length;}).sort().join(',');
+    Rr.forEach(function(x){x.formation=null;});
+    var ok3=(sigA===sigB&&sigA.indexOf('rcluster:3')>=0);
+    /* ④ 没认出的记成 ?,不写舰种。身份直接置位 —— 这一条测的是 lodComp 怎么写,
+       不是"多远能认出"(那是 FLOW44/ladPair 的事);而且这个取样距离上本来就认不出。 */
+    cam.zoom=6e-5;lodPrev={fleet:{},pairsB:null,pairsR:null};lodBuild();
+    var rc=lodNow.aggs.filter(function(a){return a.kind==='rcluster';})[0];
+    Rr.forEach(function(x){x.covB.idn=true;});
+    var compIdn=rc?lodComp(rc.ships,true):'';
+    Rr.forEach(function(x){x.covB.idn=false;});
+    var compUnk=rc?lodComp(rc.ships,true):'';
+    var ok4=(compIdn.indexOf('DD')>=0&&compUnk==='?×3'&&compUnk.indexOf('DD')<0);
+    /* ⑤ 被收起的蓝舰点得到:拾取必须落到聚合框上(否则那几艘船永远选不中) */
+    var a0=lodNow.aggs.filter(function(a){return a.side==='blue';})[0];
+    var hit=a0?shipAt(a0.x,a0.y):null;
+    var ok5=(!!hit&&a0.ships.indexOf(hit)>=0);
+    var ok=(ok1&&ok2&&ok3&&ok4&&ok5);
+    out=(ok?'ok':'fail')
+      +' ① 拉远(6e-5 = '+Math.round(1/6e-5)+' km/px):蓝 '+aB.length+' 框/收起 '+lodNow.hideBlue.size+' 艘,红 '+aR.length+' 群/收起 '+lodNow.hideRed.size+' 条(未定位那一艘须【不】进群:lit'+RU.litBlue+' 定得出='+RU.covB.fix+' 被收起='+lodNow.hideRed.has(RU.id)+')='+ok1
+      +' | ② 拉近(100 km/px,相邻两艘 120px):聚合 0 个、一个都不收='+ok2
+      +' | ③ 把红舰编进同一支编队后聚合结果逐位不变(不许读真实编制)='+ok3+' ['+sigA+'] vs ['+sigB+']'
+      +' | ④ 构成:认出时「'+compIdn+'」 没认出时「'+compUnk+'」(后者须恰好是 ?×3)='+ok4
+      +' | ⑤ 点聚合框选得到框里的船='+ok5;
+  }finally{
+    adminMode=admBak;editMode=edBak;detT=detBak;selected=selBak;
+    cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
+    lodPrev={fleet:{},pairsB:null,pairsR:null};
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+    projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
+  }
+  return out;
+});
+t('FLOW55_VIEWTIER',function(){
+  if(typeof vtApply!=='function'||typeof VT==='undefined')return 'fail SN6 三级星图未加载(缺 vtApply/VT)';
+  var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},rBak=LAD.radarMin,out='';
+  try{
+    vtApply();
+    var T1=VT.T1,T2=VT.T2;
+    var L=[1,2,3].map(function(t){return vtFitKmpp(vtMainR(t),VT.LAND);});
+    /* ① 层界跟着梯子走。把雷达发现(舰队层的主圈)拉大,T1/T2 必须【都】动 —— 它们是相邻落点的几何中点。 */
+    LAD.radarMin=rBak*1.5;vtApply();
+    var moved=(Math.abs(VT.T1/T1-1)>0.05&&Math.abs(VT.T2/T2-1)>0.05);
+    LAD.radarMin=rBak;vtApply();
+    var back=(Math.abs(VT.T1-T1)<1e-9&&Math.abs(VT.T2-T2)<1e-9);
+    var ok1=(moved&&back);
+    /* ② 三个落点各落在自己那一层里(离散层带迟滞,所以这是一条真约束而不是恒真) */
+    var lt=[1,2,3].map(function(t){return vtTier(L[t-1],t);});
+    var ok2=(lt[0]===1&&lt[1]===2&&lt[2]===3);
+    /* ③ 权重和恒为 1、处处非负(连续交叉淡化的全部内容) */
+    var ws=[],okW=true,i;
+    for(i=0;i<9;i++){
+      var kmpp=Math.exp(Math.log(L[0]*0.3)+(Math.log(L[2]*3)-Math.log(L[0]*0.3))*i/8);
+      var w=vtWeights(kmpp),sum=w[1]+w[2]+w[3];
+      if(Math.abs(sum-1)>1e-9||w[1]<0||w[2]<0||w[3]<0)okW=false;
+      ws.push(w.slice(1).map(function(x){return x.toFixed(2);}).join('/'));
+    }
+    /* ④ 缩放两头都有依据,而且【两头都不是保险丝】:
+         拉到最近 = 近防内圈(引擎里按真实尺寸画、最小的那个圈)直径占画面九成;
+         拉到最远 = 我方最大发现包线占画面九成。
+       ⚠ 第一版拿"DD 主炮门直径 30~60px"当拉到最近的锚(照搬演示页),而【引擎根本没画那道门】——
+         锚是悬空的,代价是总缩放范围只剩 148 倍(旧实现是 100,000 倍),滚两下就到头。 */
+    var kMax=kMaxNow(), kMin=kMinNow();
+    var ciwsPx=2*ciwsMinInner()*kMax;               /* 近防内圈的直径,占短边多少 */
+    var ok4=(Math.abs(ciwsPx-0.9*Math.min(W,H))<1e-6&&kMax<K_HARD
+             &&kMin>K_MIN&&Math.abs(kMin-0.45*Math.min(W,H)/theaterR())<1e-12
+             &&(kMax/kMin)>300);                    /* 总范围:至少三百倍,否则滚两下就到头 */
+    /* ⑤ 钳位真的接在滚轮上:往两头各滚 60 下,必须停在上下限上而不是越过去。
+       ⚠ SN6b 平滑缩放之后,zoomAt 只写【目标】,cam.zoom 每帧朝它逼近 —— 所以滚完要把动画跑到收敛
+         再读。camZoomStep 接一个 dt 覆盖参数正是为此:它平时走墙钟,而判据里连着调墙钟是不走的
+         (同一毫秒内 dt=0,一步都推不动)。这样这一条顺带也钉住了"平滑缩放收敛到的正是那个钳过的目标"。 */
+    cam.zoom=kMax*0.5;for(i=0;i<60;i++)zoomAt(W/2,H/2,1.2);
+    for(i=0;i<40&&zAnim;i++)camZoomStep(0.1);
+    var hi=cam.zoom, hiPend=!!zAnim;
+    cam.zoom=kMin*2;zAnim=null;for(i=0;i<60;i++)zoomAt(W/2,H/2,1/1.2);
+    for(i=0;i<40&&zAnim;i++)camZoomStep(0.1);
+    var lo=cam.zoom, loPend=!!zAnim;
+    var ok5=(Math.abs(hi-kMax)<1e-12&&Math.abs(lo-kMin)<1e-12&&!hiPend&&!loPend);
+    var ok=(ok1&&ok2&&okW&&ok4&&ok5);
+    out=(ok?'ok':'fail')
+      +' ① 层界跟着梯子走:雷达发现 x1.5 ⇒ T1/T2 都动='+moved+' 还原逐位复原='+back+'='+ok1
+      +' | ② 落点 '+L.map(function(x){return x.toFixed(0);}).join('/')+' km/px 各落在第 '+lt.join('/')+' 层(须 1/2/3;层界 '+T1.toFixed(0)+'/'+T2.toFixed(0)+')='+ok2
+      +' | ③ 权重和恒为 1 且非负(九点取样)='+okW+' 样例 '+ws[0]+' … '+ws[4]+' … '+ws[8]
+      +' | ④ 拉到最近 '+(1/kMax).toFixed(0)+' km/px ⇒ 近防内圈('+ciwsMinInner()+'km)直径占 '+ciwsPx.toFixed(0)+'px = 短边九成;拉到最远 '+(1/kMin).toFixed(0)+' km/px = 发现包线('+Math.round(theaterR()/1000)+'k);总范围 '+(kMax/kMin).toFixed(0)+' 倍(须>300)='+ok4
+      +' | ⑤ 滚轮钳位(平滑缩放跑到收敛后):往里滚 60 下停在 '+(1/hi).toFixed(0)+' km/px、往外滚 60 下停在 '+(1/lo).toFixed(0)+' km/px(须正好是上下限,且动画已收干净)='+ok5;
+  }finally{
+    LAD.radarMin=rBak;vtApply();
+    cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
+  }
+  return out;
+});
+t('FLOW54_HEAT',function(){
+  if(typeof heatBuild!=='function'||typeof HEAT==='undefined')return 'fail SN6 热区层未加载(缺 heatBuild/HEAT)';
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,edBak=editMode;
+  var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},selBak=selected.slice(),detBak=detT;
+  var wBak=HEAT_WARP,oBak=HEAT_OFF,cBak=HEAT_CHURN,out='';
+  try{
+    adminMode=false;editMode=false;selected=[];projectiles.length=0;
+    var B=makeShip('DD','热蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2);
+    var Rr=makeShip('DD','热红',[0,0,0],[1,0,0],[0,0,0],'red',2);
+    ships.length=0;ships.push(B,Rr);
+    [B,Rr].forEach(function(x){x.orders=[];x.vel=[0,0,0];x.autoEngage=false;x.roe='hold';x.macOn=false;x.mslOn=false;x.ciwsOn=false;x.noFire=true;});
+    setEmit(B,'silent');setEmit(Rr,'paint');            /* 红舰在喊、蓝舰静默 ⇒ 只有静听这一路 ⇒ 定不出位置 */
+    /* 取样距离现量:必须落在【光学够不着、却听得见】的那一段 —— 光学一进来就定得出位置,热区当场没了 */
+    var oc=visRangeOf(Rr), hr=hearRangeOf(Rr,B.recv);
+    var mom=function(d){                                 /* 把红舰放到 d,跑够拍数,读场的矩 */
+      Rr.pos=[d,0,0];detT=0;
+      Rr.covB=newCov();Rr.litBlue=0;
+      for(var i=0;i<30;i++)detectLoop();
+      /* ⚠ 镜头【对准接触本身】。第一版放在 d/2,于是团有一半拱出画布边缘被裁掉,重心被裁出来的那一侧带偏
+         —— 归零对照量到 0.19 个团半径的"偏移",而那是裁剪的残影不是被测的东西。 */
+      cam.x=d;cam.y=0;cam.zoom=Math.min(0.0016,0.42*W/Math.max(d,1));
+      HEAT.sig='';render();
+      var g=HEAT.cv.getContext('2d'),CW=HEAT.cv.width,CH=HEAT.cv.height;
+      var px=g.getImageData(0,0,CW,CH).data,sw=0,sx=0,sy=0,n=0,i2,x,y,a;
+      for(y=0;y<CH;y++)for(x=0;x<CW;x++){i2=(y*CW+x)*4+3;a=px[i2];if(a<=6)continue;n++;sw+=a;sx+=a*x;sy+=a*y;}
+      if(!sw)return {n:0};
+      var mx=sx/sw,my=sy/sw,xx=0,yy=0,xy=0;
+      for(y=0;y<CH;y++)for(x=0;x<CW;x++){i2=(y*CW+x)*4+3;a=px[i2];if(a<=6)continue;
+        xx+=a*(x-mx)*(x-mx);yy+=a*(y-my)*(y-my);xy+=a*(x-mx)*(y-my);}
+      xx/=sw;yy/=sw;xy/=sw;
+      var tr=(xx+yy)/2,dd=Math.sqrt(((xx-yy)/2)*((xx-yy)/2)+xy*xy);
+      var l1=Math.sqrt(Math.max(1e-9,tr+dd)),l2=Math.sqrt(Math.max(1e-9,tr-dd));
+      var sp=toScreen(Rr.pos[0],Rr.pos[1]);
+      /* ⚠ 格子中心在 (gx+0.5)*CELL,不是 gx*CELL —— 漏掉这半格会凭空造出约半个格子的"偏移",
+         在小团上就是 0.1 个团半径,归零对照当场假红(踩过)。 */
+      var offPx=Math.hypot((mx+0.5)*HEAT_CELL-sp[0],(my+0.5)*HEAT_CELL-sp[1]);
+      return {n:n,ar:l1/l2,rw:l1*HEAT_CELL/cam.zoom,       /* 长短比 + 换回【世界尺度】的场半径 */
+              off:offPx, offRel:offPx/Math.max(l1*HEAT_CELL,1e-9),     /* 重心离真值:绝对(px)与【相对团本身的尺度】 */
+              ell:Rr.covB.r1/Math.max(Rr.covB.r2,1), fix:!!Rr.covB.fix, lit:Rr.litBlue};
+    };
+    /* 两档都要落在那一段里,而且拉开一点 —— 靠得太近的话对数压缩本来就只给几个百分点的差,判不出东西 */
+    var dFar=Math.sqrt(Math.max(oc,1)*hr), dNear=Math.max(oc*1.05,dFar*0.30);
+    var FAR=mom(dFar), NEAR=mom(dNear);
+    HEAT_OFF=0;HEAT_WARP=0;HEAT_CHURN=0;                 /* 反向对照:归零 ⇒ 规整的圆、重心落回舰位 */
+    var FLAT=mom(dFar);
+    HEAT_WARP=wBak;HEAT_OFF=oBak;HEAT_CHURN=cBak;
+    var ok1=(FAR.n>0&&NEAR.n>0&&!FAR.fix&&FAR.lit===1);
+    var ok2=(FAR.ar<1.55&&NEAR.ar<1.55&&FAR.ell>5);      /* 是面不是条,而底下的椭圆确实细长(反退化) */
+    /* 团心偏开多少要看【相对团本身的尺度】,不能只看屏幕像素:
+       ⚠ 第一版写成"绝对偏移 > 一个格子"就漏掉了真正要守的那件事 —— 变异测试里把偏移幅度直接归零,
+         判据照样全绿,因为域扭曲本身也会把重心拱开好几个像素。两件事混在一个读数里,这条就没有牙。
+       现在判的是偏移 / 团半径:设计上它恒等于偏移幅度那个常数(所以"越准中心越往真值缩"是自动的),
+       归零之后只剩扭曲那一点残差。 */
+    var ok3=(FAR.offRel>0.30&&FLAT.offRel<0.12);
+    /* 越近面越小。阈值不能定得太狠:等面积圆里只有横向那一半随距离走(纵向是"一条视线"的哨兵值),
+       再经对数压缩之后,距离缩到三成也只换来一成几的面。它要抓的失败模式是【平台】——
+       硬截断 min(r1, k*AMAX) 会让两档半径【一模一样】(比值 1.00),0.90 这道门正好卡住那个。 */
+    var ok4=(NEAR.rw<FAR.rw*0.90);
+    var ok=(ok1&&ok2&&ok3&&ok4);
+    var km=function(v){return Math.round(v/1000)+'k';};
+    out=(ok?'ok':'fail')
+      +' 取样段(光学够不着、听得见)'+km(dFar)+' / '+km(dNear)+':场格子数 '+FAR.n+' / '+NEAR.n+' lit'+FAR.lit+' 定得出位置='+FAR.fix+'(须 lit1 且定不出)='+ok1
+      +' | 是面不是条:场长短比 '+FAR.ar.toFixed(2)+' / '+NEAR.ar.toFixed(2)+'(须<1.55) 而底下椭圆细长 '+FAR.ell.toFixed(0)+' 倍(须>5=反退化)='+ok2
+      +' | 团心离真值 / 团半径 = '+FAR.offRel.toFixed(2)+'(须>0.30) → 偏移与扭曲归零后 '+FLAT.offRel.toFixed(2)+'(须<0.12=落回舰位)='+ok3
+      +' | 越近面越小:场半径 '+km(FAR.rw)+' → '+km(NEAR.rw)+'(须<九成;硬截断会让两档一模一样)='+ok4;
+  }finally{
+    HEAT_WARP=wBak;HEAT_OFF=oBak;HEAT_CHURN=cBak;HEAT.sig='';
+    adminMode=admBak;editMode=edBak;detT=detBak;
+    cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
+    selected=selBak;
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+    projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
+  }
+  return out;
+});
 t('FLOW46_CIWS',function(){
   var PIN=30000,CLOSE=3000,N=150; /* 钉住的距离 / 逼近速度 / 每相步数(150×0.02=3s,detectLoop 每秒一拍 → 3 拍) */
   var _shipsBak=ships,_projBak=projectiles,_selBak=selected,_selfBak=selfPlay,_detBak=detT,_fi=fireInterceptor;
@@ -3845,7 +4347,9 @@ t('FLOW46_CIWS',function(){
         只判"在外推点"的话,去掉 +lv*ageV 那一项后图标落在 lp 上,离外推点不远却仍是错的;
      ② 实况接触(lit=2、age=0)必须落在【真实位置】,且不许落到它那份故意写歪的 seenBluePos 上 ——
         否则"坐标整体乱写"也能骗过第 ① 条;
-     ③ 从未探到(lit=0、ever=false)一艘都不许画,非GM 总 translate 须恰为 4;
+     ③ 从未探到(lit=0、ever=false)一艘都不许画;非GM 的【舰体图标】总数须恰为 2(蓝方观测者 + 实况接触),
+        【记号】总数须恰为 2(陈旧 + 幽灵)—— SN6e 起这两档不再是图标,改前这里是 4,那多出来的 2 正是
+        "把一个失去接触的东西画成一艘船"(连带把 s.vel / s.flame / s.orders[0] 三样真值一起画出去);
      ④ 蓝舰永不迷雾,必须在真实位置;
      ⑤ 再以 GM 渲一遍:同样这几艘必须【全部回到真实位置】、总 translate 须恰为 5(连从未探到的那艘也画)——
         这条把"今天全部探针都在 GM 下跑、于是这条路径怎么改都绿"这件事本身钉死在判定里。
@@ -3856,7 +4360,7 @@ t('FLOW47_FOG',function(){
   var shipsBak=ships.slice(),projBak=projectiles.slice(),fxBak=hitFX.slice();
   var seqBak=(typeof fireSeqs!=='undefined')?fireSeqs.slice():null;
   var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},selBak=selected.slice(),edBak=editMode;
-  var otr=ctx.translate,out='';
+  var otr=ctx.translate,oarc=ctx.arc,out='';
   try{
     adminMode=false;editMode=false;selected=[];
     projectiles.length=0;hitFX.length=0;
@@ -3875,43 +4379,68 @@ t('FLOW47_FOG',function(){
     var Sv=[800,-300,0],Sage=100;   /* Sv*Sage = [80000,-30000] km = 屏幕 [+96,-36] px */
     var Gv=[-600,500,0],Gage=20;    /* Gv*Gage = [-12000,10000] km = 屏幕 [-14.4,+12] px */
     var Sext=wa(W*0.25,H*0.72),Gext=wa(W*0.55,H*0.20);
-    S.litBlue=2;S.everLitBlue=true;S.seenBlue=simTime-Sage;                       /* lit + age>5 => stale */
-    S.seenBlueVel=Sv.slice();S.seenBluePos=[Sext[0]-Sv[0]*Sage,Sext[1]-Sv[1]*Sage,0];
-    G.litBlue=0;G.everLitBlue=true;G.seenBlue=simTime-Gage;                       /* !lit + ever + age<=30 => ghost */
+    /* SN6f:"陈旧"的定义换了。旧口径是 lit>0 且 seenBlue 年龄>5(多久没被光学/照射扫到),在单一状态机里没有对应物;
+       现在陈旧 = coast(coasted track):定得出位置(fix)、但量测已经断了(n=0、age 超过 1.5 拍)。
+       它画在【估计点 c.x/c.y】(停在最后一次量测上,长大的是椭圆),【不再】按 seenPos 外推 ——
+       所以这里故意留一份会外推到别处的 seenBluePos 当诱饵:记号要是落到诱饵的外推点上,就是又读回旧状态机了。 */
+    S.litBlue=2;
+    S.covB=newCov();S.covB.seen=true;S.covB.ever=true;S.covB.fix=true;S.covB.n=0;S.covB.age=Sage;
+    S.covB.x=Sext[0];S.covB.y=Sext[1];S.covB.a1=1000;S.covB.a2=800;S.covB.r1=1000;S.covB.r2=800;
+    var Sdecoy=wa(W*0.40,H*0.92);
+    S.seenBlue=simTime-Sage;S.seenBlueVel=Sv.slice();S.seenBluePos=[Sdecoy[0]-Sv[0]*Sage,Sdecoy[1]-Sv[1]*Sage,0];
+    G.litBlue=0;G.seenBlue=simTime-Gage;                       /* !lit + 有定位记录 + age<=30 => ghost */
     G.seenBlueVel=Gv.slice();G.seenBluePos=[Gext[0]-Gv[0]*Gage,Gext[1]-Gv[1]*Gage,0];
-    L.litBlue=2;L.everLitBlue=true;L.seenBlue=simTime;                            /* age=0 => live,不许外推 */
+    L.litBlue=2;L.seenBlue=simTime;                            /* age=0 => live,不许外推 */
     L.seenBluePos=wa(W*0.05,H*0.05);L.seenBlueVel=[0,0,0];                        /* 故意写歪:实况若误走外推会当场暴露 */
-    N.litBlue=0;N.everLitBlue=false;                                              /* seenBlue 保持 makeShip 的 -1e9 = 从未扫到 => none */
-    var tr=[];
+    /* SN6:实况接触还要【定得出位置】才画舰标 —— lit=1 在新内核里明确表示"有信号但没有位置"(纯方位接触),
+       那种接触归热区层画。所以这里要给 L 一条真的定得出位置的接触;不给的话它就该被迷雾门挡掉(那是对的行为)。
+       椭圆收到 1000km:小于导弹门,与上面写的 lit=2 自洽。 */
+    L.covB=newCov();L.covB.seen=true;L.covB.n=1;L.covB.fix=true;L.covB.ever=true;
+    L.covB.x=L.pos[0];L.covB.y=L.pos[1];L.covB.a1=1000;L.covB.a2=800;L.covB.r1=1000;L.covB.r2=800;
+    /* 反向对照就在同一条判据里:S(陈旧)与 G(幽灵)【不】给 cov —— 它们走的是"外推最后已知位置"那条路,
+       不受这条门管;若哪天把门错加到它们头上,上面那两条计数会当场变 0。 */
+    N.litBlue=0;                                              /* seenBlue 保持 makeShip 的 -1e9 = 从未扫到 => none */
+    var tr=[],mk=[];
     ctx.translate=function(x,y){tr.push([x,y]);return otr.apply(ctx,arguments);};
+    /* SN6e:幽灵/陈旧改画【记号】之后,它们一个 translate 都不再发出(那是舰体图标的变换)。
+       记号本体是一个半径 7 的空心小圈,所以这一档改数 arc(x,y,7) —— 与不确定圈(半径随年龄膨胀)
+       和告警圈(半径 13)都分得开。两个计数分开留着,"是记号还是图标"本身就成了判据。 */
+    ctx.arc=function(x,y,r){if(Math.abs(r-7)<0.5)mk.push([x,y]);return oarc.apply(ctx,arguments);};
     function px(w){return toScreen(w[0],w[1]);}
     function cnt(q){var n=0,i;for(i=0;i<tr.length;i++){if(Math.hypot(tr[i][0]-q[0],tr[i][1]-q[1])<3)n++;}return n;}
+    function cntM(q){var n=0,i;for(i=0;i<mk.length;i++){if(Math.hypot(mk[i][0]-q[0],mk[i][1]-q[1])<3)n++;}return n;}
     function sep(a,b){return Math.round(Math.hypot(a[0]-b[0],a[1]-b[1]));}
     /* —— 第一遍:非 GM(玩家视角),迷雾块生效 —— */
-    tr.length=0;render();
-    var nS=cnt(px(Sext)),nSr=cnt(px(S.pos)),nSl=cnt(px(S.seenBluePos));
-    var nG=cnt(px(Gext)),nGr=cnt(px(G.pos)),nGl=cnt(px(G.seenBluePos));
+    tr.length=0;mk.length=0;render();
+    var nS=cntM(px(Sext)),nSr=cntM(px(S.pos))+cnt(px(S.pos)),nSl=cntM(px(S.seenBluePos))+cnt(px(S.seenBluePos))+cntM(px(Sdecoy))+cnt(px(Sdecoy));
+    var nG=cntM(px(Gext)),nGr=cntM(px(G.pos))+cnt(px(G.pos)),nGl=cntM(px(G.seenBluePos))+cnt(px(G.seenBluePos));
+    var hullSG=cnt(px(Sext))+cnt(px(Gext));   /* SN6e:外推点上【不许】有舰体图标 —— 这一档只许是记号 */
+    var totM=mk.length;
     var nL=cnt(px(L.pos)),nLx=cnt(px(L.seenBluePos));
     var nN=cnt(px(N.pos)),nO=cnt(px(O.pos)),totN=tr.length;
     /* 分离度读数:三个候选点互相离得够远,这条判定才有区分力(不是"碰巧都在 3px 容差里") */
-    var sepS=sep(px(Sext),px(S.pos)),sepG=sep(px(Gext),px(G.pos)),velS=sep(px(Sext),px(S.seenBluePos));
+    var sepS=sep(px(Sext),px(S.pos)),sepG=sep(px(Gext),px(G.pos)),velS=sep(px(Sext),px(Sdecoy));
     /* —— 第二遍:GM 旁路。同样这几艘必须全部回到真实位置,连"从未探到"的那艘也要画出来 —— */
     adminMode=true;
-    tr.length=0;render();
+    tr.length=0;mk.length=0;render();
     var gSr=cnt(px(S.pos)),gSx=cnt(px(Sext)),gGr=cnt(px(G.pos)),gGx=cnt(px(Gext));
-    var gN=cnt(px(N.pos)),totG=tr.length;
-    ctx.translate=otr;
+    var gN=cnt(px(N.pos)),totG=tr.length,gM=mk.length;
+    ctx.translate=otr;ctx.arc=oarc;
     var okFog=(nS===1&&nSr===0&&nSl===0&&nG===1&&nGr===0&&nGl===0);
     var okLive=(nL===1&&nLx===0);
-    var okNone=(nN===0&&totN===4);
+    /* SN6e:非 GM 下只有【两艘】发得出舰体图标(蓝方观测者 + 实况接触);陈旧与幽灵是记号,各一个。
+       改前这里是 4 —— 那 4 里有两个正是"把失联接触画成一艘船"的图标。 */
+    var okNone=(nN===0&&totN===2&&totM===2&&hullSG===0);
     var okBlue=(nO===1);
     var okGM=(gSr===1&&gSx===0&&gGr===1&&gGx===0&&gN===1&&totG===5);
     var okSep=(sepS>80&&sepG>80&&velS>40);
     var ok=(okFog&&okLive&&okNone&&okBlue&&okGM&&okSep&&!errs.length);
     out=(ok?'ok':'fail')
-      +' 非GM 陈旧(age100s):外推点='+nS+'(须1) 真实位='+nSr+'(须0) 裸最后已知位='+nSl+'(须0)'
-      +' | 非GM 幽灵(age20s):外推点='+nG+'(须1) 真实位='+nGr+'(须0) 裸最后已知位='+nGl+'(须0)'
+      +' 非GM 陈旧=coast(量测断了100s):估计点 c.x/c.y【记号】='+nS+'(须1) 真实位='+nSr+'(须0) 旧状态机的诱饵点(seenPos 及其外推)='+nSl+'(须0)'
+      +' | 非GM 幽灵(age20s):外推点【记号】='+nG+'(须1) 真实位='+nGr+'(须0) 裸最后已知位='+nGl+'(须0)'
+      +' | SN6e 陈旧/幽灵【不许是图标】:外推点上的舰体变换='+hullSG+'(须0) 非GM 舰体图标总数='+totN+'(须2=蓝观测+实况) 记号总数='+totM+'(须2)'
       +' | 实况(age0):真实位='+nL+'(须1) 误外推到歪坐标='+nLx+'(须0)'
+      +' | SN6 迷雾门(实况须定得出位置才画舰标;陈旧/幽灵走外推、不受它管)'
       +' | 从未探到:画出来='+nN+'(须0) 蓝舰真实位='+nO+'(须1) 非GM总图标='+totN+'(须4)'
       +' | GM旁路:陈旧真实位='+gSr+'/外推点='+gSx+' 幽灵真实位='+gGr+'/外推点='+gGx
       +' 从未探到='+gN+'(须1) GM总图标='+totG+'(须5,比非GM多的就是被迷雾挡掉的那一艘)'
@@ -3925,7 +4454,7 @@ t('FLOW47_FOG',function(){
     hitFX.length=0;fxBak.forEach(function(x){hitFX.push(x);});
     if(seqBak&&typeof fireSeqs!=='undefined'){fireSeqs.length=0;seqBak.forEach(function(x){fireSeqs.push(x);});}
     cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;selected=selBak;editMode=edBak;
-    adminMode=true; /* 【必须】硬复位成 GM(core/01 的默认值),不是"还原进入时的值" ——
+    adminMode=true; /* 【必须】硬置成 GM,不是"还原进入时的值" ——(⚠ SN6c 起这不再等于 core/01 的默认值,默认已改成关)
                        进入时若已经是 false,那本身就是上一条判定漏掉的污染,不该继续往后传;
                        留着 false 会让后面每一条走 render()/日志打码/targetAt 的判定统统换一条分支。 */
     window.removeEventListener('error',onerr);
@@ -4000,16 +4529,20 @@ t('FLOW48_KEYS',function(){
   /* ---- ② 驻留键的【数据模型】(读点计数在底部判定段的源码普查里)。
      SN4:三通道 ir/esm/lad → 两通道三积分 opt/lis/act(lis 与 act 是同一部雷达的两种模式)。
      排序后的期望串是 act,lis,opt —— Object.keys().sort() 是字母序,不是声明序。 ---- */
-  var TRK_WANT='act,lis,opt';
+  /* SN6:三个驻留水位换成一条接触(newCov)。键集合钉死,少一个键 = 渲染层或武器门控会静默读到 undefined。 */
+  var TRK_WANT=Object.keys(newCov()).sort().join(',');
   var kOf=function(o){return o?Object.keys(o).sort().join(','):'缺失';};
-  var fresh=makeShip('DD','SN4trk',[0,0,0],[1,0,0],[0,0,0],'blue',2);
-  var kNew=kOf(fresh.trkB)+'|'+kOf(fresh.trkR);
+  var fresh=makeShip('DD','SN6cov',[0,0,0],[1,0,0],[0,0,0],'blue',2);
+  var kNew=kOf(fresh.covB)+'|'+kOf(fresh.covR);
   var liveS=null,i;
-  for(i=0;i<ships.length;i++)if(ships[i].trkB&&ships[i].trkR){liveS=ships[i];break;}
-  var kLive=liveS?(kOf(liveS.trkB)+'|'+kOf(liveS.trkR)):'无在场舰';
+  for(i=0;i<ships.length;i++)if(ships[i].covB&&ships[i].covR){liveS=ships[i];break;}
+  var kLive=liveS?(kOf(liveS.covB)+'|'+kOf(liveS.covR)):'无在场舰';
   var trkOk=(kNew===TRK_WANT+'|'+TRK_WANT&&kLive===TRK_WANT+'|'+TRK_WANT);
   if(!trkOk)ok=false;
-  var selfTrk=(kOf({opt:0,lis:0,act:0,xx:0})!==TRK_WANT&&kOf({opt:0,rf:0,act:0})!==TRK_WANT); /* 种坏:多一个第四积分 / 把 lis 改名成 rf,都必须被认出 */
+  /* 三条通道记录(c.ch)是渲染层与告警读的那份,单独钉一遍;种坏:少一条通道、或把 lis 改名,都必须被认出 */
+  var CH_WANT='act,lis,opt';
+  var chOk=(kOf(newCov().ch)===CH_WANT);
+  var selfTrk=(chOk&&kOf({opt:0,lis:0,act:0,xx:0})!==CH_WANT&&kOf({opt:0,rf:0,act:0})!==CH_WANT);
   if(!selfTrk)ok=false;
   /* ---- ③ SN4 能力维【必须还接着真字段】。键名一个都没变(ir/esm/stealth 仍是键),
      所以 ① 那半段对"维度被接到别处"完全免疫:契约把 ir 重定义成 主动·照射(emit×recv)、
@@ -4034,7 +4567,7 @@ t('FLOW48_KEYS',function(){
     +' | 模板悬空键='+(stray.length?stray.join('/'):'无')+'(须无)'
     +' | 阵心 req/cap 悬空='+(coreBad.length?coreBad.join('/'):'无')+'(须无)'
     +' | 检查器自检(种坏 cap/坏 band/坏 boost 各须抓到 1 个)='+f1.length+'/'+f2.length+'/'+f3.length
-    +' | 驻留通道键 新造舰='+kNew+' 在场舰='+kLive+'(须都是 '+TRK_WANT+')'
+    +' | 接触对象键 新造舰='+(kNew===TRK_WANT+'|'+TRK_WANT?'与 newCov 一致':kNew)+' 在场舰='+(kLive===TRK_WANT+'|'+TRK_WANT?'与 newCov 一致':kLive)+' 通道键='+kOf(newCov().ch)+'(须 '+CH_WANT+')'
     +' | 键集合自检(第四通道与整套改名都须被认出)='+selfTrk
     +' | SN4 能力维接线 act(主动·照射) DD/CA='+cIR[0]+'/'+cIR[1]+' lis(被动·静听) DD/CA='+cRF[0]+'/'+cRF[1]
       +' stealth(越大越隐蔽) DD/CA='+cST[0].toFixed(3)+'/'+cST[1].toFixed(3)+'(须 CA>DD / CA>DD / DD>CA)='+dimOk;
@@ -4057,7 +4590,7 @@ t('FLOW48_KEYS',function(){
    旋钮一律【真的点 DOM 按钮】走委托,不直调 trStep(RF22b 的规矩:抽出来的函数越干净,接线错越隐蔽)。 */
 t('FLOW49_RANGE',function(){
   if(typeof rangeDefaults!=='function'||typeof rangeClampOne!=='function'||typeof applyRangeOne!=='function')return 'fail 95-range 未加载';
-  if(typeof optLum!=='function'||typeof reflOf!=='function'||typeof hearRangeOf!=='function'||typeof newTrk!=='function'||typeof detectLoop!=='function')return 'fail 感知内核缺 optLum/reflOf/hearRangeOf/newTrk/detectLoop,② ③ 的消费者判据无处可打';
+  if(typeof optLum!=='function'||typeof reflOf!=='function'||typeof hearRangeOf!=='function'||typeof newCov!=='function'||typeof detectLoop!=='function')return 'fail 感知内核缺 optLum/reflOf/hearRangeOf/newCov/detectLoop,② ③ 的消费者判据无处可打';
   if(!rangeOn())return 'fail 当前不是靶场场景(rangeOn=false),旋钮链路测不了';
   function hit(el){ if(!el)return false; el.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true,button:0})); return true; }
   function btn(k,dir){ return trBodyEl?trBodyEl.querySelector('[data-knob="'+k+'"][data-dir="'+dir+'"]'):null; } /* 每次重新查:renderRangePanel 整块重建,存着旧引用会点到脱离文档的节点上 */
@@ -4178,21 +4711,23 @@ t('FLOW49_RANGE',function(){
        旋钮是 enum 且 trStep 对 enum 是【钳位不回绕】的,所以上两下两地走一个来回,顺带把两个方向都测了。 */
     cfg.targets[0]=rangeClampOne(null);cfg.targets[0].emit=0;
     applyRangeOne(TG,cfg.targets[0],true);renderRangePanel();
-    var rgLis=function(n){TG.trkB=newTrk();for(var w=0;w<n;w++)detectLoop();return TG.trkB.lis;};
+    /* SN6:驻留水位没有了,改读"蓝方这条接触上有没有静听那一路"——它就是发射档三态真正改变的东西。
+       返回 1/0 而不是一个连续水位:三条判据要的本来就是"恒 0 / 不为 0",水位那几位小数从来没人看。 */
+    var rgLis=function(n){TG.covB=newCov();for(var w=0;w<n;w++)detectLoop();return TG.covB.ch.lis?1:0;};
     var sm0=scal(TG);
     eSil=rgLis(10);hSil=hearRangeOf(TG);
     clickedM=hit(btn('emit',1));e1=cfg.targets[0].emit;m1=TG.emitMode;ePnt=rgLis(10);hPnt=hearRangeOf(TG);
-    mDif=dkeys(sm0,scal(TG)).filter(function(k){return !/^(litBlue|litRed|everLitBlue|everLitRed|seenBlue|seenRed|paintWarned)$/.test(k);}); /* SN4:静默→照射,靶身只许 emitMode 这一个【旋钮写的】标量变。这一段中间真的跑了 detectLoop(它要测静听驻留),目标因此被点亮 —— 那几个探测派生字段跟着变是正确行为,不是旋钮写错了地方,故排除。清单写死不用通配:通配会把真正该抓的漏写一并放过 */
+    mDif=dkeys(sm0,scal(TG)).filter(function(k){return !/^(litBlue|litRed|seenBlue|seenRed|paintWarned)$/.test(k);}); /* SN4:静默→照射,靶身只许 emitMode 这一个【旋钮写的】标量变。这一段中间真的跑了 detectLoop(它要测静听驻留),目标因此被点亮 —— 那几个探测派生字段跟着变是正确行为,不是旋钮写错了地方,故排除。清单写死不用通配:通配会把真正该抓的漏写一并放过 */
     hit(btn('emit',1));e2=cfg.targets[0].emit;m2=TG.emitMode;eJam=rgLis(10);hJam=hearRangeOf(TG);
     hit(btn('emit',-1));hit(btn('emit',-1));e3=cfg.targets[0].emit;m3=TG.emitMode;mMode=TG.emitMode;
     ok3=(clickedM&&e1===1&&e2===2&&e3===0&&m1==='paint'&&m2==='jam'&&m3==='silent'
       &&mDif.length===1&&mDif[0]==='emitMode'
-      &&eSil===0&&ePnt>1.0&&eJam>1.0
+      &&eSil===0&&ePnt===1&&eJam===1   /* SN6:读的是「有没有这一路」而不是水位。两档的差别在【被听见的距离】,那一半下面用纯函数判 */
       &&hSil===0&&hPnt>0&&hJam>hPnt);
   }finally{
     ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
     projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
-    if(typeof esmFixes!=='undefined')esmFixes.clear(); /* ③ 里靶的静听驻留会爬过 SENS.LIS_ALERT,updateESMFixes 给它挂了一个椭圆条目,清掉免得漏进下一条判定 */
+    if(false){} /* SN6:这里原来要清一张 ESM 椭圆表 —— 那张表连同写它的那个函数已经退役(被动只给方位现在是模型的一部分)。留一个空壳免得漏进下一条判定 */
     cfg.targets[0]=cfgBak[0];cfg.targets[1]=cfgBak[1];cfg.targets[2]=cfgBak[2];
     cfg.sync=syncBak;trTab=tabBak;
     if(typeof saveRangeCfg==='function')saveRangeCfg(); /* 点旋钮时每一下都写了 localStorage,还原回去免得跨次运行污染 */
@@ -4212,7 +4747,7 @@ t('FLOW49_RANGE',function(){
       +' 真实消费者 雷达反射 reflOf '+g0b.toFixed(4)+'→'+g1b.toFixed(4)+'(须变)'
       +' 光学亮度 optLum '+g0.toFixed(4)+'→'+g1.toFixed(4)+'(须【不变】——隐身只乘雷达反射,不乘红外;两个字段被接成一个量时只有这一条抓得到)='+ok2c
     +' | ②b 反向:真点「拦截弹库存」必须补满 '+ic0+'→'+ic1+'(cfg='+cfg.targets[0].inter+')'
-    +' | ③ 真实消费者 detectFor(8万km/10拍)静听驻留:静默='+eSil.toFixed(3)+'(须恒0) 照射='+ePnt.toFixed(3)+'(须>1.0) 干扰='+eJam.toFixed(3)+'(须>1.0)'
+    +' | ③ 真实消费者 detectFor(8万km/10拍)蓝方接触上的静听通道:静默='+eSil+'(须恒0) 照射='+ePnt+'(须为1) 干扰='+eJam+'(须为1;须>1.0)'
       +' 被听见距离 静默='+hSil+'(须0) 照射='+Math.round(hPnt)+' 干扰='+Math.round(hJam)+'(须>照射:干扰更吵是三态取舍闭合的那一条)'
       +' 旋钮 cfg 0→'+e1+'→'+e2+'→(退两档)'+e3+' 靶身 emitMode='+m1+'/'+m2+'/'+m3+' 末态='+mMode
       +' 静默→照射时靶身变化字段=['+mDif.join(',')+'](须恰好是 emitMode——写进死属性时 cfg 照样变、靶不变)='+ok3
@@ -4222,6 +4757,1245 @@ t('FLOW49_RANGE',function(){
       +' 数值字符串仍被接受:'+eKn.k+'='+numStr+'(须='+pv+',刻意取非默认档) 非法字符串落到合法值:'+badStr;
 });
 /* 7. 渲染不炸 */
+/* ===== AI1 红方 AI 只读自己的接触图 =====
+   改前 enemyAI 直接取全部蓝舰【真实位置】的重心,没有识别级接触时目标池还回退到全体蓝舰真值 —— 隐蔽对它无效。
+   最硬的判法是【不变量】:把蓝舰的真实位置挪来挪去,只要红方握着的接触没变,红方的决定就必须逐位不变。
+     ① 没有任何接触:蓝舰摆在两个相距很远的地方,目标点都必须是战场中心;不许锁定、跑 300 拍不许发射
+     ② 只有热区(纯方位):同一方位上的蓝舰摆近 / 摆远,目标点逐位相同、离红方重心恰为 LEAD;反向对照:换个方位目标点必须变
+     ③ 有定位:接触的估计位置刻意偏开真值,目标点 = 估计位置
+     ④ 接触丢了:先去最后已知位置,MEM_S 秒后回到搜索
+     ⑤ 三舰沿前进方向的横向拉开 SPREAD,重心落在目标点上
+     ⑥ 看不见的来袭主炮不触发规避,看得见才触发 */
+t('FLOW71_AIFOG',function(){
+  if(typeof aiRedBelief!=='function'||typeof AIR==='undefined')return 'fail AI1 未加载(缺 aiRedBelief / AIR)';
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),airBak=JSON.stringify(AIR),out='';
+  try{
+    var R=[makeShip('CA','雾红1',[600000,0,0],[-1,0,0],[0,0,0],'red',2),makeShip('DD','雾红2',[600000,30000,0],[-1,0,0],[0,0,0],'red',2),makeShip('DD','雾红3',[600000,-30000,0],[-1,0,0],[0,0,0],'red',2)];
+    var B=makeShip('CA','雾蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2);
+    var rc=[600000,0];
+    var setup=function(bx,by,mode,ex,ey){
+      ships.length=0;R.forEach(function(e){e.orders=[];e.vel=[0,0,0];e.lockedTarget=null;e.macEvadeCd=0;e.aiHold=undefined;ships.push(e);});
+      B.pos=[bx,by,0];B.vel=[0,0,0];ships.push(B);projectiles.length=0;
+      var c=B.covR=newCov();
+      if(mode==='none'){B.litRed=0;B.seenRed=-1e9;B.seenRedPos=null;B.seenRedVel=null;}
+      if(mode==='heat'){B.litRed=1;c.seen=true;c.ever=true;c.fix=false;c.n=1;c.age=0;B.seenRedPos=null;B.seenRedVel=null;}
+      if(mode==='fix'){B.litRed=2;c.seen=true;c.ever=true;c.fix=true;c.n=2;c.age=0;c.x=ex;c.y=ey;c.idn=true;c.r1=c.a1=9000;c.r2=c.a2=4000;
+        B.seenRed=simTime;B.seenRedPos=[ex,ey,0];B.seenRedVel=[0,0,0];}
+    };
+    var same=function(a,b){return !!a&&!!b&&Math.abs(a[0]-b[0])<1e-6&&Math.abs(a[1]-b[1])<1e-6;};
+    var fmt=function(g){return g?'['+Math.round(g[0]/1000)+'k,'+Math.round(g[1]/1000)+'k]':'无';};
+    /* ① 没有任何接触 */
+    setup(-600000,300000,'none');aiRedReset();enemyAI(0.02);var g1a=AIR.goal.slice(),s1=AIR.src;
+    var fired=0,lockedAny=false,i;for(i=0;i<300;i++){enemyAI(0.02);if(projectiles.length)fired++;R.forEach(function(e){if(e.lockedTarget)lockedAny=true;});}
+    setup(-100000,-400000,'none');aiRedReset();enemyAI(0.02);var g1b=AIR.goal.slice();
+    var ok1=(s1==='search'&&same(g1a,aiObjective())&&same(g1a,g1b)&&!lockedAny&&fired===0);
+    /* ② 纯方位:同方位两个距离 ⇒ 同一个目标点;换方位 ⇒ 变 */
+    var ang=2.5,ux=Math.cos(ang),uy=Math.sin(ang);
+    setup(rc[0]+ux*300000,rc[1]+uy*300000,'heat');aiRedReset();enemyAI(0.02);var g2a=AIR.goal.slice(),s2=AIR.src;
+    setup(rc[0]+ux*900000,rc[1]+uy*900000,'heat');aiRedReset();enemyAI(0.02);var g2b=AIR.goal.slice();
+    setup(rc[0]+Math.cos(3.4)*300000,rc[1]+Math.sin(3.4)*300000,'heat');aiRedReset();enemyAI(0.02);var g2c=AIR.goal.slice();
+    var lead=Math.hypot(g2a[0]-rc[0],g2a[1]-rc[1]);
+    var ok2=(s2==='brg'&&same(g2a,g2b)&&Math.abs(lead-AIR.LEAD)<1e-3&&same(g2a,[rc[0]+ux*AIR.LEAD,rc[1]+uy*AIR.LEAD])&&!same(g2a,g2c));
+    /* ③ 有定位:估计位置偏开真值 8 万 / 5 万 */
+    setup(0,0,'fix',80000,50000);aiRedReset();enemyAI(0.02);var g3=AIR.goal.slice(),s3=AIR.src;
+    var ok3=(s3==='fix'&&same(g3,[80000,50000])&&!same(g3,[0,0]));
+    /* ④ 丢了:去最后已知位置,MEM_S 秒后放弃 */
+    setup(-700000,-700000,'none');enemyAI(1);var g4=AIR.goal.slice(),s4=AIR.src;
+    for(i=0;i<AIR.MEM_S+2;i++)enemyAI(1);var s4b=AIR.src;
+    var ok4=(s4==='mem'&&same(g4,[80000,50000])&&s4b==='search');
+    /* ⑤ 横向站位 */
+    setup(0,0,'fix',0,0);aiRedReset();enemyAI(0.02);
+    var P=R.map(function(e){return e.orders[0]?e.orders[0].pos:null;}),okP=P.every(function(p){return !!p;});
+    var d01=okP?Math.hypot(P[0][0]-P[1][0],P[0][1]-P[1][1]):-1,d12=okP?Math.hypot(P[1][0]-P[2][0],P[1][1]-P[2][1]):-1;
+    var cx=okP?(P[0][0]+P[1][0]+P[2][0])/3:NaN,cy=okP?(P[0][1]+P[1][1]+P[2][1])/3:NaN;
+    var along=okP?Math.abs((P[0][0]-P[2][0])*AIR.u[0]+(P[0][1]-P[2][1])*AIR.u[1]):-1;   /* 站位差在前进方向上的分量须为 0(纯横向) */
+    var ok5=(okP&&Math.abs(d01-AIR.SPREAD)<1e-3&&Math.abs(d12-AIR.SPREAD)<1e-3&&same([cx,cy],AIR.goal)&&along<1e-3&&AIR.SPREAD>=20000);
+    /* ⑥ 规避只对看得见的来袭 */
+    setup(0,0,'none');aiRedReset();
+    projectiles.push({type:'mac',target:R[0],visRed:false,pos:[0,0,0],vel:[0,0,0]});enemyAI(0.02);var ev0=R[0].macEvadeCd;
+    projectiles[0].visRed=true;enemyAI(0.02);var ev1=R[0].macEvadeCd;
+    var ok6=(!(ev0>0)&&ev1>0);
+    var ok=(ok1&&ok2&&ok3&&ok4&&ok5&&ok6);
+    out=(ok?'ok':'fail')
+      +' ① 无接触:来路='+s1+' 目标点 '+fmt(g1a)+' / 蓝舰挪走后 '+fmt(g1b)+'(须都是战场中心 '+fmt(aiObjective())+')锁定过='+lockedAny+' 300 拍内发射='+fired+'='+ok1
+      +' | ② 纯方位:来路='+s2+' 近 30 万 '+fmt(g2a)+' 远 90 万 '+fmt(g2b)+'(须逐位相同)离红方重心 '+Math.round(lead)+'(须='+AIR.LEAD+')换方位后 '+fmt(g2c)+'(须不同)='+ok2
+      +' | ③ 有定位:来路='+s3+' 目标点 '+fmt(g3)+'(须=估计位置 [80k,50k],不是真值 [0k,0k])='+ok3
+      +' | ④ 丢了:来路='+s4+' 去 '+fmt(g4)+' → '+(AIR.MEM_S+2)+'s 后来路='+s4b+'(须 search)='+ok4
+      +' | ⑤ 站位:相邻间距 '+Math.round(d01)+'/'+Math.round(d12)+'(须='+AIR.SPREAD+')重心在目标点上='+same([cx,cy],AIR.goal)+' 纯横向='+(along<1e-3)+'='+ok5
+      +' | ⑥ 规避:看不见的来袭 macEvadeCd='+ev0+'(须不触发)看得见='+(+ev1).toFixed(2)+'(须>0)='+ok6;
+  }finally{
+    var bak=JSON.parse(airBak),k;for(k in bak)AIR[k]=bak[k];
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+    projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
+  }
+  return out;
+});
+/* ===== FX1 开火暴露 =====
+   开火这个决定此前没有代价:静默熄火的船打完一轮还是静默熄火的船。现在主炮 / 导弹发射之后 FIRE_S 秒里光学亮度多加 P_FIRE 一档,敌我对称。
+     ① 账:冷船亮度 = size;开火后 = size x (1 + P_FIRE);光学可见半径随之 x sqrt(1+P_FIRE)
+     ② 置位走生产路径:导弹真发出去了才亮;主炮过了火控门才亮,没过门(被闸门静默挡回)不许亮;诱饵弹(防御)不亮
+     ③ 倒数:stepWeaponSystems 推 FIRE_S 秒之后亮度逐位回到开火前
+     ④ 端到端:一艘静默熄火的红舰摆在【冷船看不见、开火看得见】的距离上 —— 不开火 litBlue=0,一开火下一拍就被看见,熄了之后又看不见 */
+t('FLOW72_FIREFLASH',function(){
+  if(typeof firePowerOf!=='function'||!(SENS.P_FIRE>0)||!(SENS.FIRE_S>0))return 'fail FX1 未加载(缺 firePowerOf / SENS.P_FIRE / SENS.FIRE_S)';
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),out='';
+  try{
+    var B=makeShip('CA','闪蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),R=makeShip('DD','闪红',[100000,0,0],[-1,0,0],[0,0,0],'red',2);
+    ships.length=0;ships.push(B,R);projectiles.length=0;
+    ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.flame=0;x.sideFlame=0;x.autoEngage=false;x.roe='hold';setEmit(x,'silent');});
+    /* ① 账 */
+    var l0=optLum(R),v0=visRangeOf(R);R.fireHot=SENS.FIRE_S;var l1=optLum(R),v1=visRangeOf(R);R.fireHot=0;
+    var ok1=(Math.abs(l0-R.size)<1e-12&&Math.abs(l1-R.size*(1+SENS.P_FIRE))<1e-12&&Math.abs(v1/v0-Math.sqrt(1+SENS.P_FIRE))<1e-9&&B.fireHot===0);
+    /* ② 生产路径 */
+    fireDecoy(B);var hotDecoy=B.fireHot;
+    R.litBlue=0;fireMAC(B,R);var hotGated=B.fireHot,nGated=projectiles.filter(function(p){return p.type==='mac';}).length;   /* 没过火控门:静默挡回,不许亮 */
+    R.litBlue=3;var c=R.covB=newCov();c.seen=true;c.fix=true;c.n=2;c.x=R.pos[0];c.y=R.pos[1];
+    fireMAC(B,R);var hotMac=B.fireHot,nMac=projectiles.filter(function(p){return p.type==='mac';}).length;
+    B.fireHot=0;fireMissiles(B,{pos:[200000,0,0]},1);var hotMsl=B.fireHot,nMsl=projectiles.filter(function(p){return p.type==='missile';}).length;
+    var ok2=(hotDecoy===0&&hotGated===0&&nGated===0&&nMac===1&&hotMac===SENS.FIRE_S&&nMsl>=1&&hotMsl===SENS.FIRE_S);
+    /* ③ 倒数 */
+    projectiles.length=0;B.fireHot=SENS.FIRE_S;var lHot=optLum(B),i;
+    for(i=0;i<SENS.FIRE_S-1;i++)stepWeaponSystems(1);var stillHot=(firePowerOf(B)>0);
+    stepWeaponSystems(1);stepWeaponSystems(1);var lEnd=optLum(B);
+    var ok3=(stillHot&&lHot>lEnd&&Math.abs(lEnd-B.size)<1e-12);
+    /* ④ 端到端:距离取冷 / 热两个可见半径的几何中点,从模型现量 */
+    projectiles.length=0;R.fireHot=SENS.FIRE_S;var vHot=visRangeOf(R);R.fireHot=0;var dMid=Math.sqrt(visRangeOf(R)*vHot);
+    R.pos=[dMid,0,0];R.litBlue=0;R.covB=newCov();B.fireHot=0;
+    for(i=0;i<4;i++)detectLoop(1);var litCold=R.litBlue;
+    R.fireHot=SENS.FIRE_S;for(i=0;i<3;i++)detectLoop(1);var litHot=R.litBlue;
+    R.fireHot=0;for(i=0;i<6;i++)detectLoop(1);var litAfter=R.litBlue;
+    var ok4=(litCold===0&&litHot>=1&&litAfter===0);
+    var ok=(ok1&&ok2&&ok3&&ok4);
+    out=(ok?'ok':'fail')
+      +' ① 账:冷 '+l0.toFixed(3)+' → 开火 '+l1.toFixed(3)+'(须 size x '+(1+SENS.P_FIRE)+')可见半径 '+Math.round(v0/1000)+'k → '+Math.round(v1/1000)+'k(x'+(v1/v0).toFixed(3)+')='+ok1
+      +' | ② 置位:诱饵弹='+hotDecoy+'(须 0)没过火控门的主炮='+hotGated+'/'+nGated+' 发(须 0/0)过门的主炮='+hotMac+'/'+nMac+' 发 导弹='+hotMsl+'/'+nMsl+' 组(须 '+SENS.FIRE_S+')='+ok2
+      +' | ③ 倒数:'+(SENS.FIRE_S-1)+'s 时还亮='+stillHot+' 之后回到 '+lEnd.toFixed(3)+'(须=size '+B.size+')='+ok3
+      +' | ④ 端到端 @'+Math.round(dMid/1000)+'k(冷 '+Math.round(visRangeOf(R)/1000)+'k / 开火 '+Math.round(vHot/1000)+'k):不开火 lit='+litCold+'(须 0)开火后 lit='+litHot+'(须>=1)熄了之后 lit='+litAfter+'(须 0)='+ok4;
+  }finally{
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+    projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
+  }
+  return out;
+});
+/* ===== MT1 对局:入口、开局形态、红方随机摆位、结果卡片 =====
+   用户:"默认还是靶场,但是给一个对局入口,点击之后可以进入对局"。
+     ① 默认仍是靶场;点顶栏「对局」钮进对局:3 对 3、红方不是靶(打得死、会还手)、双方静默静止、蓝方没有被压集结令;钮变成「回靶场」;先停表
+     ② 红方重心到蓝方重心恰为 MATCH.OPEN、方位落在 ±ARC 内;掷骰可注入(0 / 0.5 / 1 对应 -ARC / 0 / +ARC);真随机连进五局方位不许都一样
+     ③ 开局双方互相都没有接触(远距接敌),而且间距不小于最远的雷达发现距离(从梯子现量)
+     ④ 回归基线没被挪位:靶场仍是第 0 条,原 6 条预设仍在 1..6,对局追加在末尾
+     ⑤ 结果卡片:开局藏着;靶场里分出胜负不弹;对局里全灭 ⇒ 弹、停表、字对(战败 / 胜利);「再来一局」重开并收起卡片
+     ⑥ 再点一次钮回靶场 */
+t('FLOW73_MATCH',function(){
+  if(typeof matchEnter!=='function'||typeof MATCH==='undefined')return 'fail MT1 未加载(缺 matchEnter / MATCH)';
+  var btn=document.getElementById('btnMatch'),card=document.getElementById('matchEnd');
+  if(!btn||!card)return 'fail DOM 缺席(#btnMatch / #matchEnd)';
+  var admBak=adminMode,runBak=running,camBak={x:cam.x,y:cam.y,zoom:cam.zoom},out='',oR=Math.random;
+  try{
+    adminMode=false;
+    var cen=function(side){var x=0,y=0,n=0;ships.forEach(function(s){if(s.side===side){x+=s.pos[0];y+=s.pos[1];n++;}});return [x/n,y/n];};
+    /* ④ 先量基线(此刻还在靶场) */
+    var mi=matchIdx(),ok4=(envIdx===0&&TEST_ENVS[0].range===true&&TEST_ENVS[1].name==='均衡编队'&&TEST_ENVS[6].name==='测试·巴黎活'&&mi===TEST_ENVS.length-1&&mi===7&&!matchIsOn()&&btn.textContent==='对局');
+    /* ⑤a 靶场里分出胜负不弹 */
+    victoryShown=true;matchTick();var rangeNoCard=card.hidden;victoryShown=false;
+    /* ① 进对局 */
+    running=true;btn.click();
+    var B=ships.filter(function(s){return s.side==='blue';}),R=ships.filter(function(s){return s.side==='red';});
+    var ok1=(matchIsOn()&&envIdx===mi&&B.length===3&&R.length===3&&running===false&&btn.textContent==='回靶场'&&btn.classList.contains('on')
+      &&R.every(function(e){return !e.isTarget&&!e.invuln&&!e.noFire;})
+      &&ships.every(function(s){return s.emitMode==='silent'&&Math.hypot(s.vel[0],s.vel[1],s.vel[2])===0;})
+      &&B.every(function(s){return s.orders.length===0;})&&card.hidden);
+    /* ② 摆位 */
+    var bc=cen('blue'),rc=cen('red'),d0=Math.hypot(rc[0]-bc[0],rc[1]-bc[1]),th0=Math.atan2(rc[1]-bc[1],rc[0]-bc[0]);
+    var defs=curEnv().enemy,inj=[0,0.5,1].map(function(r){var P=matchPlaceRed(defs,[0,0],r),x=0,y=0;P.forEach(function(d){x+=d[2];y+=d[3];});x/=P.length;y/=P.length;
+      return {th:Math.atan2(y,x),d:Math.hypot(x,y)};});
+    var seen={},k;for(k=0;k<5;k++){matchEnter();seen[MATCH.theta.toFixed(6)]=1;}
+    var injOk=(Math.abs(inj[0].th+MATCH.ARC)<1e-9&&Math.abs(inj[1].th)<1e-9&&Math.abs(inj[2].th-MATCH.ARC)<1e-9&&inj.every(function(q){return Math.abs(q.d-MATCH.OPEN)<1;}));
+    var ok2=(Math.abs(d0-MATCH.OPEN)<1&&Math.abs(th0)<=MATCH.ARC+1e-9&&injOk&&Object.keys(seen).length>=3);
+    /* ③ 开局互相没有接触;间距 >= 最远的雷达发现(梯子上 CA 照 CA 的发现距离) */
+    matchEnter();
+    var noContact=ships.every(function(s){return (s.litBlue||0)===0&&(s.litRed||0)===0;});
+    var radarMax=0;['DD','CA'].forEach(function(a){['DD','CA'].forEach(function(b){var p=ladPair(a,b);if(p&&p.radarMin>radarMax)radarMax=p.radarMin;});});
+    var ok3=(noContact&&MATCH.OPEN>=radarMax&&radarMax>MATCH.OPEN*0.8);   /* 下限钉着"量到的真是雷达发现那一级":第一版误读了 radarLook(火控门,23 万),条件照样成立 */
+    /* ⑤b 对局里全灭 ⇒ 弹 */
+    running=true;ships.forEach(function(s){if(s.side==='blue'){s.dead=true;s.hp=0;}});stepSim(0.02);matchTick();
+    var lose=(defeatShown&&!card.hidden&&running===false&&document.getElementById('meTitle').textContent==='战败'&&card.classList.contains('lose'));
+    document.getElementById('meAgain').click();
+    var again=(card.hidden&&matchIsOn()&&!defeatShown&&ships.filter(function(s){return s.side==='blue'&&!s.dead;}).length===3);
+    ships.forEach(function(s){if(s.side==='red'){s.dead=true;s.hp=0;}});stepSim(0.02);matchTick();
+    var win=(victoryShown&&!card.hidden&&document.getElementById('meTitle').textContent==='胜利'&&!card.classList.contains('lose')&&/击沉 3\/3/.test(document.getElementById('meStat').textContent));
+    var ok5=(rangeNoCard&&lose&&again&&win);
+    /* ⑥ 回靶场 */
+    btn.click();
+    var ok6=(!matchIsOn()&&envIdx===0&&curEnv().range===true&&btn.textContent==='对局'&&!btn.classList.contains('on')&&card.hidden);
+    var ok=(ok1&&ok2&&ok3&&ok4&&ok5&&ok6);
+    out=(ok?'ok':'fail')
+      +' ① 进对局:'+B.length+' 对 '+R.length+' 停表 钮=「回靶场」红方非靶 全静默静止 蓝方无令='+ok1
+      +' | ② 红蓝重心相距 '+Math.round(d0)+'(须='+MATCH.OPEN+')方位 '+(th0*57.2958).toFixed(1)+' 度(须在 ±'+Math.round(MATCH.ARC*57.2958)+' 内)注入 0/0.5/1 ⇒ '+inj.map(function(q){return (q.th*57.2958).toFixed(0);}).join('/')+' 度 连进五局方位种数='+Object.keys(seen).length+'='+ok2
+      +' | ③ 开局互相无接触='+noContact+' 间距 >= 最远雷达发现 '+Math.round(radarMax)+'='+ok3
+      +' | ④ 基线没挪位:靶场=0、预设 1..6 原样、对局在末尾(第 '+mi+' 条)='+ok4
+      +' | ⑤ 卡片:靶场里不弹='+rangeNoCard+' 全灭弹「战败」并停表='+lose+' 再来一局='+again+' 「胜利」+ 击沉 3/3='+win+'='+ok5
+      +' | ⑥ 回靶场='+ok6;
+  }finally{
+    Math.random=oR;
+    envIdx=0;initFleet();if(typeof renderFleet==='function')renderFleet();
+    vtAnim=null;zAnim=null;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;vtFrame();VT_FX={t0:-1e9,tier:0,up:true};
+    adminMode=admBak;running=runBak;
+  }
+  return out;
+});
+/* ===== TC1 接触降速 =====
+   对局里,玩家选的倍速只是上限:握有【定得出位置】的接触 x6 / 它的估计位置进了导弹射程 x4 / 进了主炮射程 x2。
+     ① 档位只读我方知道的事:没被发现的红舰贴脸也是 0 档;热区(只有方位)贴脸也是 0 档;定位了按【估计位置】分档(估计远、真值近 ⇒ 按远的算);
+        看得见的来袭导弹 ⇒ 交战档,看不见的不算
+     ② 变慢立刻开始、变快要等 HOLD 墙钟秒;收敛到上限;玩家选的倍速低于上限时不动它
+     ③ 只在对局里生效:同样的局面摆在靶场里,倍速原样
+     ④ 顶栏读数写出「→ x6 定位」;frame 真的用了它(源码级,见判定块) */
+t('FLOW74_TC',function(){
+  if(typeof tcStep!=='function'||typeof TC==='undefined')return 'fail TC1 未加载(缺 tcStep / TC)';
+  var rateBak=rate,admBak=adminMode,runBak=running,camBak={x:cam.x,y:cam.y,zoom:cam.zoom},tcBak=JSON.stringify(TC),out='';
+  try{
+    adminMode=false;matchEnter();
+    var B=ships.filter(function(s){return s.side==='blue';}),R=ships.filter(function(s){return s.side==='red';}),r0=R[0],b0=B[0];
+    R.slice(1).forEach(function(e){e.pos=[5e6,5e6,0];});                      /* 另两艘红舰挪到天边,只留一艘做文章 */
+    var con=function(mode,ex,ey){var c=r0.covB=newCov();
+      if(mode==='none'){r0.litBlue=0;r0.seenBlue=-1e9;r0.seenBluePos=null;r0.seenBlueVel=null;}
+      if(mode==='heat'){r0.litBlue=1;c.seen=true;c.ever=true;c.fix=false;c.n=1;c.age=0;r0.seenBluePos=null;r0.seenBlueVel=null;}
+      if(mode==='fix'){r0.litBlue=2;c.seen=true;c.ever=true;c.fix=true;c.n=2;c.age=0;c.x=ex;c.y=ey;c.idn=true;c.r1=c.a1=9000;c.r2=c.a2=4000;
+        r0.seenBlue=simTime;r0.seenBluePos=[ex,ey,0];r0.seenBlueVel=[0,0,0];}};
+    var near=[b0.pos[0]+LAD.gun*0.5,b0.pos[1],0],mid=[b0.pos[0]+(LAD.gun+LAD.msl)/2,b0.pos[1]],far=[b0.pos[0]+LAD.msl*2,b0.pos[1]];
+    projectiles.length=0;
+    r0.pos=near.slice();con('none');var bNone=tcBand();
+    con('heat');var bHeat=tcBand();
+    con('fix',far[0],far[1]);var bFarEst=tcBand();                             /* 真值贴脸、估计在两倍导弹射程外 ⇒ 1 档 */
+    con('fix',mid[0],mid[1]);var bMid=tcBand();
+    con('fix',near[0],near[1]);var bNear=tcBand();
+    con('none');projectiles.push({type:'missile',done:false,visBlue:false,shooter:r0,target:b0,pos:[0,0,0],vel:[0,0,0]});var bMslDark=tcBand();
+    projectiles[0].visBlue=true;var bMslSeen=tcBand();projectiles.length=0;
+    var ok1=(bNone===0&&bHeat===0&&bFarEst===1&&bMid===2&&bNear===3&&bMslDark===0&&bMslSeen===2);
+    /* ② 时间行为 */
+    rate=50;TC.band=0;TC.hold=0;TC.eff=0;con('none');
+    var e0=tcStep(0.1);
+    con('fix',far[0],far[1]);var e1=tcStep(0.1),i;for(i=0;i<60;i++)tcStep(0.1);var eCap=tcStep(0.1);
+    con('none');var eHold=tcStep(0.1),held=(TC.band===1);
+    for(i=0;i<Math.ceil(TC.HOLD/0.1)+2;i++)tcStep(0.1);var released=(TC.band===0);for(i=0;i<60;i++)tcStep(0.1);var eBack=tcStep(0.1);
+    rate=2;con('fix',far[0],far[1]);TC.eff=0;for(i=0;i<20;i++)tcStep(0.1);var eLow=tcStep(0.1);rate=50;
+    var ok2=(e0===50&&e1<50&&e1>TC.CAP[0]&&eCap===TC.CAP[0]&&eHold===TC.CAP[0]&&held&&released&&eBack===50&&eLow===2);
+    /* ④ 读数 */
+    con('fix',far[0],far[1]);TC.eff=0;for(i=0;i<60;i++)tcStep(0.1);var rd=tcReadout();
+    var ok4=(rd.indexOf('x'+TC.CAP[0])>=0&&rd.indexOf(TC.NAME[1])>=0);
+    /* ③ 靶场里不生效:同一个"握有已定位接触"的局面 */
+    matchExit();
+    var rr=ships.filter(function(s){return s.side==='red';})[0],bb=ships.filter(function(s){return s.side==='blue';})[0];
+    rr.litBlue=2;var c2=rr.covB=newCov();c2.seen=true;c2.fix=true;c2.n=2;c2.x=bb.pos[0]+1000;c2.y=bb.pos[1];
+    rate=50;TC.eff=0;for(i=0;i<30;i++)tcStep(0.1);var eRange=tcStep(0.1),rdRange=tcReadout(),bandInRange=tcBand();
+    var ok3=(eRange===50&&rdRange===''&&bandInRange===3);                      /* 档位函数照样算得出 3(局面确实成立),只是靶场里不用它 */
+    var ok=(ok1&&ok2&&ok3&&ok4);
+    out=(ok?'ok':'fail')
+      +' ① 档位:没发现贴脸='+bNone+' 热区贴脸='+bHeat+'(须 0/0)估计在远处(真值贴脸)='+bFarEst+'(须 1)估计进导弹射程='+bMid+'(须 2)进主炮射程='+bNear+'(须 3)来袭导弹 看不见='+bMslDark+' 看得见='+bMslSeen+'(须 0/2)='+ok1
+      +' | ② x50:无接触 '+e0+' → 刚定位那一帧 '+e1.toFixed(1)+'(须已开始下降)→ 收敛 '+eCap+'(须 '+TC.CAP[0]+')→ 接触刚丢 '+eHold+' 仍压着='+held+' → '+TC.HOLD+'s 后放开='+released+' 回到 '+eBack+';玩家选 x2 时='+eLow+'(须 2)='+ok2
+      +' | ③ 靶场里同样的局面:档位函数='+bandInRange+' 但倍速='+eRange+' 读数后缀=「'+rdRange+'」(须 50 / 空)='+ok3
+      +' | ④ 读数后缀=「'+rd+'」='+ok4;
+  }finally{
+    var bk=JSON.parse(tcBak),k;for(k in bk)TC[k]=bk[k];
+    rate=rateBak;projectiles.length=0;
+    envIdx=0;initFleet();if(typeof renderFleet==='function')renderFleet();
+    vtAnim=null;zAnim=null;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;vtFrame();VT_FX={t0:-1e9,tier:0,up:true};
+    adminMode=admBak;running=runBak;
+  }
+  return out;
+});
+/* ===== MT1 修:开着「火控」的编队,主炮也要归瞄 =====
+   战斗转向只替【空闲】的舰摆炮口,编队成员不算空闲;要它们归瞄靠 driftFire。火控序列(中键)每拍续它,自动索敌(底栏「火控」钮)此前从不给 ——
+   对局模拟里它就是胜负手(保持编队 0 胜 6 负 / 解散编队 6 胜 0 负)。本条:编队成员开火控、锁着一个在正侧方的目标,
+   跑几秒之后 driftFire 必须续着、机头必须转向目标;反向对照:同样的局面关掉火控(不自动索敌、也没人替它锁),不许自己续上。 */
+t('FLOW75_AUTOAIM',function(){
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),fmBak=formations,out='';
+  try{
+    var run=function(auto){
+      var A=makeShip('CA','瞄旗',[0,0,0],[1,0,0],[0,0,0],'blue',2),Bm=makeShip('CA','瞄僚',[0,40000,0],[1,0,0],[0,0,0],'blue',2);
+      var T=makeShip('DD','瞄靶',[0,-140000,0],[1,0,0],[0,0,0],'red',2);       /* 正侧方(-Y),机头初始朝 +X:不转过去就永远对不准 */
+      ships.length=0;ships.push(A,Bm,T);projectiles.length=0;formations={};
+      ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.macCd=999;});     /* 冷却拉满:只量"转不转",不让它真开炮把靶打死 */
+      fmCreate('1',[A,Bm]);
+      T.litBlue=3;var c=T.covB=newCov();c.seen=true;c.fix=true;c.n=2;c.x=T.pos[0];c.y=T.pos[1];c.idn=true;
+      A.autoEngage=Bm.autoEngage=auto;A.roe=Bm.roe='free';
+      if(!auto){Bm.lockedTarget=T;}                                            /* 对照组:手里有锁定,但没开火控 ⇒ 没人续 driftFire */
+      var i;for(i=0;i<1200;i++){T.litBlue=3;stepWeaponSystems(0.02);stepShipsMotion(0.02);}   /* 24 秒:CA 转 90 度要十几秒(第一版只跑 8 秒,转到 0.29 rad 就量了) */
+      var want=V.norm(V.sub(T.pos,Bm.pos));
+      return {member:!!Bm.formation,locked:Bm.lockedTarget===T,drift:!!Bm.driftFire,ang:V.angle(Bm.facing,want)};
+    };
+    var on=run(true),off=run(false);
+    var ok=(on.member&&on.locked&&on.drift&&on.ang<0.2&&off.member&&off.locked&&!off.drift&&off.ang>1.2);
+    out=(ok?'ok':'fail')+' 开火控:是编队成员='+on.member+' 已锁定='+on.locked+' driftFire 续着='+on.drift+' 机头离目标 '+on.ang.toFixed(2)+' rad(须<0.2)'
+      +' | 对照(有锁定、没开火控):driftFire='+off.drift+'(须 false)机头离目标 '+off.ang.toFixed(2)+' rad(须仍约 1.57 —— 编队成员自己不会转过去)';
+  }finally{
+    formations=fmBak;
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+    projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
+  }
+  return out;
+});
+/* ===== UI2 右下角工具栏真的在右下角 + 两个图标钮 =====
+   用户:"所谓右下角的按钮其实没有在右下角,现在在事件窗口的左边,需要完全移动到右下角"。
+   改前锚的是【事件窗的左下角】。本条量真实布局矩形:贴右边距、整个在事件窗【下面】(不是旁边)、不压底部指令栏、不出画面;
+   两个工具钮是图标钮(行内 SVG + aria-label),点在图标的子元素上也要切得动(委托走 closest)。
+   让位有两档:指令栏伸到角上 ⇒ 工具栏坐在它上面;够不到 ⇒ 工具栏直接落在角上。探针视口是窄的,天然是前一档;
+   后一档靠临时把指令栏收窄来造(反向对照:不造这一档的话,"永远坐在上面"也能过)。
+   ⚠ 让位由 ResizeObserver 触发,而它不会在探针这段同步脚本中途回调(前面的判据选过船,指令栏已经换成三行了)——
+     所以这里先手动调一次 toolsDock,量的是【让位算得对不对】;"尺寸变了会不会触发"是浏览器的事,在真实页面上换五种视口手工量过。 */
+t('FLOW70_TOOLSPOS',function(){
+  var T=document.getElementById('tools'),E=document.getElementById('evtFeed'),C=document.getElementById('cmdBar');
+  if(!T||!E||!C)return 'fail DOM 缺席';
+  if(typeof toolsDock!=='function')return 'fail 缺 toolsDock(工具栏给指令栏让位)';
+  toolsDock();
+  var r=T.getBoundingClientRect(),e=E.getBoundingClientRect(),c=C.getBoundingClientRect();
+  var gut=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gut'))||10;
+  var atRight=Math.abs((innerWidth-r.right)-gut)<1.5,belowEvt=(r.top>=e.bottom-0.5),inView=(r.bottom<=innerHeight-gut+1.5&&r.left>=0);
+  var hitCmd=!(r.right<=c.left||r.left>=c.right||r.bottom<=c.top||r.top>=c.bottom);
+  var nearBottom=(innerHeight-r.bottom)<=gut*2+c.height+1.5;                 /* 离底边不超过"一条指令栏 + 两个边距" */
+  var btns=[].slice.call(T.querySelectorAll('[data-tool]')),icoOk=btns.length===2&&btns.every(function(b){
+    return !!b.querySelector('svg.tl-ico')&&!!b.getAttribute('aria-label')&&b.textContent.trim()===''&&b.getBoundingClientRect().width>=20&&b.getBoundingClientRect().width<=28;});   /* UI3:钮画小了一号(24px);上限钉着"别再长回 32" */
+  var sig=T.querySelector('[data-tool="sig"]'),on0=SIG.on,inner=sig?sig.querySelector('svg .i-ship')||sig.querySelector('svg'):null,flip=false;
+  if(inner){
+    /* svg 设了 pointer-events:none,真实点击的 target 会是钮本身;这里直接在子元素上派发,量的是委托那一半(closest)—— 哪天有人去掉那条 css 也不至于点不动 */
+    inner.dispatchEvent(new MouseEvent('click',{bubbles:true}));flip=(SIG.on===!on0&&sig.classList.contains('on')===SIG.on);
+    inner.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+  }
+  var back=(SIG.on===on0);
+  /* UI3 钮与钮贴在一起:同一行相邻两钮共用一条竖边、上下两行共用一条横边(各重叠 1px),整个工具栏里没有缝 */
+  var bx=function(q){return T.querySelector(q).getBoundingClientRect();};
+  var t1=bx('[data-tier="1"]'),t2=bx('[data-tier="2"]'),t3=bx('[data-tier="3"]'),g0=bx('[data-tool="geom"]'),s0=bx('[data-tool="sig"]');
+  var lap=function(a,b){return Math.abs((a-b)-1)<0.6;};
+  var glued=(lap(t1.right,t2.left)&&lap(t2.right,t3.left)&&lap(g0.right,s0.left)&&lap(t3.bottom,s0.top)&&Math.abs(s0.right-t3.right)<0.6);
+  /* 反向对照:指令栏够不到角上时,工具栏必须直接落在角上(底边距 = --gut),而不是还悬在半空 */
+  var wBak=C.style.width;C.style.width='200px';toolsDock();
+  var r2=T.getBoundingClientRect(),c2=C.getBoundingClientRect(),corner=(c2.right<r2.left&&Math.abs((innerHeight-r2.bottom)-gut)<1.5);
+  C.style.width=wBak;toolsDock();
+  var r3=T.getBoundingClientRect(),restored=(Math.abs(r3.top-r.top)<0.5);
+  var ok=(atRight&&belowEvt&&inView&&!hitCmd&&nearBottom&&icoOk&&flip&&back&&corner&&restored&&glued);
+  return (ok?'ok':'fail')+' 视口 '+innerWidth+'x'+innerHeight+' #tools=['+Math.round(r.left)+','+Math.round(r.top)+' - '+Math.round(r.right)+','+Math.round(r.bottom)+'] 事件窗底='+Math.round(e.bottom)+' 指令栏顶='+Math.round(c.top)
+    +' | 贴右边距='+atRight+' 整个在事件窗下面='+belowEvt+' 不压指令栏='+(!hitCmd)+' 贴着底部='+nearBottom+' 不出画面='+inView+' | 指令栏够不到角上时直接落在角上='+corner+'(底边距 '+Math.round(innerHeight-r2.bottom)+'px)已复原='+restored
+    +' | 钮与钮贴在一起(横竖各共用一条边)='+glued+' | 两个图标钮(svg + aria-label + 无文字,宽 '+Math.round(g0.width)+'px)='+icoOk+' 点图标子元素切得动='+flip+' 已复原='+back;
+});
+/* ===== SN9b 层界与落点出自同一块画布 =====
+   用户:"按了舰队后再按战区,虽然图变了,但是按钮还是舰队在亮";"舰队和战区之间的差异感觉不是特别大"。同一个根因:
+   层界只在加载期推过一次(那一刻 W/H=0,按 750px 的设计视口兜底),落点却按真实画布现算 —— 大屏上战区落点落在冻住的"舰队层"里。
+   本条在三种画布上、从每一层出发按每一个跳层钮(3 x 3 x 3),要求:落地后离散层 = 目的层、亮着的钮 = 目的层(且只亮一个)、
+   那一屏的画法权重 >= 0.9 属于目的层;并且同一个落点的读数不许看来路。跳层走生产路径(点真按钮 + vtFrame 按墙钟推进)。 */
+t('FLOW69_TIERLAND',function(){
+  if(typeof vtApply!=='function'||typeof camJump!=='function')return 'fail 视图层未加载';
+  var seg=document.getElementById('segTier');if(!seg)return 'fail #segTier 缺席';
+  var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},WBak=W,HBak=H,fxBak=VT_FX,rulBak=VT_RULER_T0,animBak=vtAnim,zBak=zAnim,out='';
+  try{
+    var fly=function(t){
+      seg.querySelector('.hbtn[data-tier="'+t+'"]').click();
+      var d=vtAnim?vtAnim.dur:0,q;
+      for(q=1;q<=20&&vtAnim;q++){vtAnim.t0=performance.now()-d*(q/20);vtFrame();}
+      vtFrame();
+      var on=[].map.call(seg.querySelectorAll('.hbtn.on'),function(b){return +b.dataset.tier;});
+      return {cur:vtCur,on:on,w:vtW[t],kmpp:1/cam.zoom};
+    };
+    var rows=[],ok=true,bounds=[];
+    [[1902,984],[1262,624],[2542,1204]].forEach(function(q){
+      W=q[0];H=q[1];vtAnim=null;zAnim=null;vtFrame();
+      bounds.push(VT.T1);
+      var bad=[],wMin=1,from,to;
+      for(from=1;from<=3;from++)for(to=1;to<=3;to++){
+        fly(from);var r=fly(to);
+        if(r.w<wMin)wMin=r.w;
+        if(!(r.cur===to&&r.on.length===1&&r.on[0]===to&&r.w>=0.9))bad.push(from+'→'+to+'(层='+r.cur+' 亮='+r.on.join('/')+' 权重='+r.w.toFixed(2)+')');
+      }
+      /* 落点确实夹在层界之间(层界 = 相邻落点的几何中点,带迟滞也要夹得住) */
+      var L=[1,2,3].map(function(t){return vtFitKmpp(vtMainR(t),VT.LAND);});
+      var between=(L[0]<VT.T1*(1-VT.HYS)&&L[1]>VT.T1*(1+VT.HYS)&&L[1]<VT.T2*(1-VT.HYS)&&Math.min(L[2],1/kMinNow())>VT.T2*(1+VT.HYS));
+      if(bad.length||!between)ok=false;
+      rows.push(q[0]+'x'+q[1]+' 层界 '+VT.T1.toFixed(0)+'/'+VT.T2.toFixed(0)+' 落点 '+L.map(function(x){return x.toFixed(0);}).join('/')+' 夹得住='+between+' 九种走法不对的=['+(bad.length?bad.join(','):'无')+'] 最小权重='+wMin.toFixed(2));
+    });
+    var moved=(Math.abs(bounds[0]/bounds[1]-1)>0.2&&Math.abs(bounds[2]/bounds[1]-1)>0.2);   /* 层界真的跟着画布动了(冻住的话三个数相同) */
+    ok=ok&&moved;
+    out=(ok?'ok':'fail')+' '+rows.join(' | ')+' | 层界随画布变='+moved;
+  }finally{
+    W=WBak;H=HBak;vtAnim=null;zAnim=null;
+    cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;vtFrame();
+    VT_FX=fxBak;VT_RULER_T0=rulBak;vtAnim=animBak;zAnim=zBak;
+  }
+  return out;
+});
+/* ===== SN9 舰体大小随缩放变 =====
+   用户:"拉近了船不变大,拉远了船不变小,没有办法做出很直观的空间关系"。改前舰体是固定屏幕尺寸的贴纸。
+   拍板的律:系数 = (缩放 / 战术落点的缩放)^A,钳在 [MIN, MAX];全场同一个数(不读任何一艘船的字段,所以不泄漏情报)。
+   四组:① 律本身(落点上 = 1、翻倍 = 2^A、两头钳住、全程单调且不跳、CA 最大不超过 48px)
+         ② 画出来的每一样东西都跟这同一个数(舰体 / 残骸 / 图标半径 / 尾焰 / 告警圈 / 锁定圈 / 移动虚影)—— 量的是 canvas 上真实发生的变换与半径
+         ③ 迷雾:没认出的敌舰画 UNK、系数与我方逐位相同、大小舰的图标半径相同(反向对照:认出来之后大小舰必须不同)
+         ④ 锚点从视口现量:换两种画布尺寸,各自的战术落点上系数都恰为 1(写死公里数的话只在一种画布上成立) */
+t('FLOW68_HULLSIZE',function(){
+  if(typeof hullZoomF!=='function'||typeof HULL_ZOOM==='undefined')return 'fail SN9 未加载(缺 hullZoomF / HULL_ZOOM)';
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,edBak=editMode,lodBak=LOD.off;
+  var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},selBak=selected.slice(),WBak=W,HBak=H;
+  var oDH=drawHull,oArc=ctx.arc,oMv=ctx.moveTo,oLn=ctx.lineTo,out='';
+  try{
+    adminMode=false;editMode=false;selected=[];projectiles.length=0;LOD.off=true;
+    var Z=HULL_ZOOM,kRef=1/vtFitKmpp(vtMainR(1),VT.LAND);
+    var want=function(k){return Math.max(Z.MIN,Math.min(Z.MAX,Math.pow(k/kRef,Z.A)));};
+    var fAt=function(k){cam.zoom=k;return hullZoomF();};
+    var near=function(a,b){return Math.abs(a-b)<1e-9;};
+    /* ---------- ① 律 ---------- */
+    var f1=fAt(kRef),f2=fAt(kRef*2),f4=fAt(kRef/4),kLo=kMinNow(),kHi=kMaxNow(),fFar=fAt(kLo),fNear=fAt(kHi);
+    var N=60,mono=true,maxJump=0,moved=0,prev=null,i;
+    for(i=0;i<=N;i++){var kk=kLo*Math.pow(kHi/kLo,i/N),ff=fAt(kk);
+      if(prev!==null){if(ff<prev-1e-12)mono=false;maxJump=Math.max(maxJump,ff/prev);if(ff>prev*1.0001)moved++;}prev=ff;}
+    var stepMax=Math.pow(Math.pow(kHi/kLo,1/N),Z.A)*1.0001;
+    var x0=1e9,x1=-1e9;HULL.CA.parts.forEach(function(p){
+      if(p.p==='poly')p.pts.forEach(function(q){if(q[0]<x0)x0=q[0];if(q[0]>x1)x1=q[0];});
+      else if(p.p==='rect'||p.p==='mirror'){if(p.x<x0)x0=p.x;if(p.x+p.w>x1)x1=p.x+p.w;}});
+    var caNat=hullSize('CA',2)*(x1-x0),caMax=caNat*fNear,caMin=caNat*fFar;
+    var okLaw=(near(f1,1)&&near(f2,Math.pow(2,Z.A))&&near(f4,Math.pow(4,-Z.A))&&Z.A>0.2&&Z.A<1&&fFar===Z.MIN&&fNear===Z.MAX
+      &&mono&&maxJump<=stepMax&&moved>=N*0.4&&caMax<=48.5&&caMax>caNat*1.5&&caMin<caNat*0.7&&caMin>=10);
+    /* ---------- ② 画出来的每一样东西都跟同一个数 ---------- */
+    var B=makeShip('CA','尺寸蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2);
+    var Wk=makeShip('DD','尺寸骸',[0,40000,0],[1,0,0],[0,0,0],'blue',2);Wk.dead=true;Wk.hp=0;
+    var R=makeShip('DD','尺寸红',[40000,0,0],[-1,0,0],[0,0,0],'red',2);
+    var U1=makeShip('DD','未识小',[0,-40000,0],[-1,0,0],[0,0,0],'red',1),U2=makeShip('BB','未识大',[40000,-40000,0],[-1,0,0],[0,0,0],'red',3);
+    ships.length=0;ships.push(B,Wk,R,U1,U2);
+    ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.autoEngage=false;x.roe='hold';x.flame=0;x.sideFlame=0;});
+    var live=function(s,lit){s.litBlue=lit;s.seenBlue=simTime;s.seenBluePos=[s.pos[0],s.pos[1],0];s.seenBlueVel=[0,0,0];
+      var c=s.covB=newCov();c.seen=true;c.ever=true;c.fix=true;c.n=2;c.age=0;c.x=s.pos[0];c.y=s.pos[1];c.idn=(lit>=2);c.r1=c.a1=9000;c.r2=c.a2=4000;};
+    live(R,2);live(U1,1);live(U2,1);
+    var cw=B.covR=newCov();cw.ch.act=true;                      /* 我方被照射 ⇒ 告警圈 */
+    B.lockedTarget=R;                                           /* 我方锁着它 ⇒ 锁定圈 */
+    cam.x=20000;cam.y=0;
+    var hulls=[],arcs=[],pts=[];
+    var base=function(){var m=ctx.getTransform();return Math.hypot(m.a,m.b);};
+    drawHull=function(c,cls,tier){var m=c.getTransform();hulls.push({cls:cls,tier:tier,sc:Math.hypot(m.a,m.b)/b0});return oDH.apply(this,arguments);};
+    ctx.arc=function(x,y,r){arcs.push(r);return oArc.apply(ctx,arguments);};
+    ctx.moveTo=function(x,y){pts.push(['m',x,y]);return oMv.apply(ctx,arguments);};
+    ctx.lineTo=function(x,y){pts.push(['l',x,y]);return oLn.apply(ctx,arguments);};
+    var b0=base(),rows=[],okDraw=true,okFog=true;
+    [3,1,1/3].forEach(function(mul){
+      var k=kRef*mul,f=want(k);cam.zoom=k;
+      var eq=function(a){return Math.abs(a-f)<1e-6;};
+      hulls=[];drawShip(R);drawShip(U1);drawShip(U2);drawShip(Wk);
+      var hR=hulls[0],hU1=hulls[1],hU2=hulls[2],hW=hulls[3];
+      hulls=[];arcs=[];drawShip(B);var hB=hulls[0],warn=arcs.some(function(r){return Math.abs(r-13*f)<1e-6;});
+      arcs=[];drawLocks();var lock=arcs.some(function(r){return Math.abs(r-13*f)<1e-6;});
+      hulls=[];ghostAt(B,30000,0,[1,0,0],.3,false);var hG=hulls[0];
+      B.flame=1;pts=[];var pp=toScreen(B.pos[0],B.pos[1]);drawFlame(B,pp,Math.round(shipIconR(B)));B.flame=0;
+      var mI=-1,j;for(j=0;j<pts.length;j++)if(pts[j][0]==='m'){mI=j;break;}
+      var L=(mI>=0&&pts[mI+1])?Math.hypot(pts[mI+1][1]-pts[mI][1],pts[mI+1][2]-pts[mI][2]):-1;
+      var rB=shipIconR(B)/(hullSize('CA',2)*0.78);
+      var good=(hulls.length>=1&&hB&&hR&&hW&&hG&&eq(hB.sc)&&eq(hR.sc)&&eq(hW.sc)&&eq(hG.sc)&&eq(rB)&&warn&&lock&&Math.abs(L-20*f)<1e-6);
+      if(!good)okDraw=false;
+      /* ③ 迷雾:没认出的画 UNK + T2,系数与我方逐位相同,大小舰图标半径相同 */
+      var fog=(hU1&&hU2&&hU1.cls==='UNK'&&hU2.cls==='UNK'&&hU1.tier===2&&hU2.tier===2&&hU1.sc===hU2.sc&&hB&&hU1.sc===hB.sc&&shipIconR(U1)===shipIconR(U2));
+      if(!fog)okFog=false;
+      rows.push('x'+(mul>=1?mul:'1/3')+' 律='+f.toFixed(4)+' 舰体 蓝'+(hB?hB.sc.toFixed(4):'无')+' 红'+(hR?hR.sc.toFixed(4):'无')+' 残骸'+(hW?hW.sc.toFixed(4):'无')+' 虚影'+(hG?hG.sc.toFixed(4):'无')
+        +' 半径比'+rB.toFixed(4)+' 尾焰'+L.toFixed(2)+'(须 '+(20*f).toFixed(2)+')告警圈='+warn+' 锁定圈='+lock+' | 未识别 '+(hU1?hU1.cls+'/T'+hU1.tier+'/'+hU1.sc.toFixed(4):'无')+' '+(hU2?hU2.cls+'/T'+hU2.tier+'/'+hU2.sc.toFixed(4):'无'));
+    });
+    /* ③ 的反向对照:认出来之后,大小舰的图标半径必须不同(否则上面那条只是"红方一律同大") */
+    cam.zoom=kRef*3;live(U1,2);live(U2,2);
+    var rev=(shipIconR(U2)>shipIconR(U1)*1.2);
+    okFog=okFog&&rev;
+    /* ---------- ④ 锚点从视口现量 ---------- */
+    drawHull=oDH;ctx.arc=oArc;ctx.moveTo=oMv;ctx.lineTo=oLn;
+    var vp=[[1600,1000],[800,480]],ks=[],fs=[];
+    vp.forEach(function(q){W=q[0];H=q[1];var k=1/vtFitKmpp(vtMainR(1),VT.LAND);ks.push(k);cam.zoom=k;fs.push(hullZoomF());});
+    W=WBak;H=HBak;
+    var okAnchor=(near(fs[0],1)&&near(fs[1],1)&&Math.abs(ks[0]/ks[1]-1)>0.5);
+    var ok=(okLaw&&okDraw&&okFog&&okAnchor);
+    out=(ok?'ok':'fail')
+      +' ① 律:战术落点='+f1.toFixed(6)+'(须 1)缩放 x2='+f2.toFixed(4)+'(须 '+Math.pow(2,Z.A).toFixed(4)+')x1/4='+f4.toFixed(4)+'(须 '+Math.pow(4,-Z.A).toFixed(4)+')最远='+fFar+'(须 '+Z.MIN+')最近='+fNear+'(须 '+Z.MAX+')'
+        +' 全程单调='+mono+' 相邻两档最大比='+maxJump.toFixed(4)+'(须<='+stepMax.toFixed(4)+',不跳)'+N+' 档里在变的='+moved+' CA 舰长 '+caMin.toFixed(1)+'~'+caNat.toFixed(1)+'~'+caMax.toFixed(1)+'px(最大须<=48.5)='+okLaw
+      +' | ② 同一个数:'+rows.join(' ; ')+'='+okDraw
+      +' | ③ 迷雾:未识别的画 UNK/T2、系数与我方逐位相同、大小舰同半径='+okFog+'(反向对照:认出后 BB·T3 比 DD·T1 大='+rev+')'
+      +' | ④ 锚点现量:1600x1000 落点 '+(1/ks[0]).toFixed(0)+' km/px 系数='+fs[0].toFixed(6)+';800x480 落点 '+(1/ks[1]).toFixed(0)+' km/px 系数='+fs[1].toFixed(6)+'='+okAnchor;
+  }finally{
+    drawHull=oDH;ctx.arc=oArc;ctx.moveTo=oMv;ctx.lineTo=oLn;W=WBak;H=HBak;
+    adminMode=admBak;editMode=edBak;LOD.off=lodBak;selected=selBak;
+    cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+    projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
+  }
+  return out;
+});
+/* ===== SN8 换挡感 + 聚合动画 =====
+   用户:"三个视角的切换就像是很简单的换了一下颜色"。先做手感那一半(内容那一半 = 语义缩放,等拍板):
+     A 换层瞬间的大字 + 扫描线、四边刻度尺(换层时重新长出来)、跳层镜头带过冲
+     C 舰船收进舰队框 / 从框里散开带 0.25 秒的滑入滑出
+   全部走墙钟,所以判据一律用时钟覆盖参数(nowIn / dtIn)推进 —— 同一毫秒里连调,走墙钟一步都推不动。 */
+t('FLOW67_TIERFX',function(){
+  if(typeof drawTierFx!=='function'||typeof drawEdgeRuler!=='function'||typeof lodDrawShip!=='function')return 'fail SN8 未加载(缺 drawTierFx / drawEdgeRuler / lodDrawShip)';
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,edBak=editMode,lodBak=LOD.off;
+  var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},selBak=selected.slice(),fxBak=VT_FX,rulBak=VT_RULER_T0,animBak=vtAnim,zBak=zAnim;
+  var oT=ctx.fillText,oR=ctx.fillRect,oTr=ctx.translate,out='';
+  try{
+    vtAnim=null;zAnim=null;
+    /* ---------- A1 大字只由【跳层钮】触发,报的是【目的层】;手动缩放不弹、路过的层不弹(用户 2026-09-21 拍板)---------- */
+    var texts=[],rects=0;
+    ctx.fillText=function(tx){texts.push(String(tx));return oT.apply(ctx,arguments);};
+    ctx.fillRect=function(){rects++;return oR.apply(ctx,arguments);};
+    var tierAt=function(k){cam.zoom=vtClampK(1/k);vtFrame();vtFrame();};
+    var K1=VT.T1/3,K2=Math.sqrt(VT.T1*VT.T2),K3=VT.T2*3;
+    tierAt(K1);VT_FX={t0:-1e9,tier:0,up:true};VT_RULER_T0=-1e9;
+    /* ① 手动缩放跨层(战术 → 舰队 → 战区):大字一次都不许触发;刻度尺要重新长(它的单位真的换了) */
+    tierAt(K2);var manFx=VT_FX.tier,manRuler=(VT_RULER_T0>-1e8);
+    tierAt(K3);manFx=manFx||VT_FX.tier;
+    var okMan=(manFx===0&&manRuler&&vtCur===3);
+    /* ② 战区直接跳战术:起跳那一刻就报【战术层】,整段飞行里(中途路过舰队层)大字的层号一次都不许变成 2 */
+    camJump(1);
+    var j0=VT_FX.tier,jUp=VT_FX.up,jT0=VT_FX.t0,rT0=VT_RULER_T0,sawMid=false,passed2=false,dur=vtAnim.dur;
+    for(var q=1;q<=20&&vtAnim;q++){
+      vtAnim.t0=performance.now()-dur*(q/20);               /* 让 vtFrame 自己按墙钟算出 p=q/20 —— 走的是生产路径,不是手摇 camAnimStep */
+      vtFrame();
+      if(vtCur===2)passed2=true;
+      if(VT_FX.tier!==1||VT_FX.t0!==jT0)sawMid=true;
+    }
+    var okJump=(j0===1&&jUp===false&&passed2&&!sawMid&&vtCur===1&&vtAnim===null&&VT_RULER_T0===rT0);   /* 路过舰队层、到站之后刻度尺也都不许再重长一次 */
+    /* ③ 同层再按一次(只是把镜头摆回落点)不算换挡 */
+    VT_FX={t0:-1e9,tier:0,up:true};camJump(1);var sameFx=VT_FX.tier;vtAnim=null;
+    /* ④ 画出来的就是目的层的名字;过了时长一笔不画;反方向记对 */
+    tierAt(K1);camJump(3);var t0=VT_FX.t0,upOk=(VT_FX.tier===3&&VT_FX.up===true);vtAnim=null;
+    texts=[];var on1=drawTierFx(t0+150),hasName=texts.some(function(x){return x===VT.EN[3];})&&texts.some(function(x){return x===VT.NAME[3];});
+    texts=[];rects=0;var on2=drawTierFx(t0+VT_FX_MS+50),quiet=(texts.length===0&&rects===0);
+    var okA1=(okMan&&okJump&&sameFx===0&&upOk&&on1===true&&hasName&&on2===false&&quiet);
+    tierAt(K1);VT_RULER_T0=performance.now();
+    /* ---------- A2 四边刻度尺:换层那一刻是 0,随后长出来;战术层写公里、舰队层的光秒读数归网格层 ---------- */
+    rects=0;var n0=drawEdgeRuler(VT_RULER_T0);                           /* 刚换层:一根都还没长出来 */
+    rects=0;texts=[];var n1=drawEdgeRuler(VT_RULER_T0+VT_RULER_MS+10),r1=rects;
+    var kmLab=texts.some(function(x){return /^-?\d+(\.\d+)?[kM]$/.test(x);});
+    var okA2=(n0===0&&n1>=8&&n1<1500&&r1===n1&&kmLab);
+    /* ---------- A3 跳层带过冲,终点逐位等于落点 ---------- */
+    ctx.fillText=oT;ctx.fillRect=oR;
+    cam.zoom=vtClampK(1/(VT.T1/3));
+    camJump(2);var k1=vtAnim.k1,k0=vtAnim.k0,over=false,pp;
+    for(pp=0.05;pp<1;pp+=0.05){camAnimStep(pp);if(vtAnim&&(k1<k0?cam.zoom<k1*(1-1e-9):cam.zoom>k1*(1+1e-9)))over=true;}
+    camAnimStep(1);
+    var landed=(cam.zoom===k1);   /* 当场记下来:后面 C 段还要改 cam.zoom,拼读数时再现读就是另一回事了 */
+    var okA3=(over&&landed&&vtAnim===null);
+    /* ---------- C 收拢 / 散开:结论即时、画面带过渡 ---------- */
+    adminMode=false;editMode=false;selected=[];projectiles.length=0;LOD.off=false;
+    var S1=makeShip('CA','动画旗',[0,0,0],[1,0,0],[0,0,0],'blue',2),S2=makeShip('DD','动画僚',[40000,0,0],[1,0,0],[0,0,0],'blue',2);
+    ships.length=0;ships.push(S1,S2);ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];});
+    var F=fmCreate('7',[S1,S2]);
+    cam.x=20000;cam.y=0;
+    var kOpen=200/40000,kShut=20/40000;                                  /* 两舰相距 200px(展开)/ 20px(低于 60px 阈值,收拢) */
+    lodPrev={fleet:{},pairsB:null,pairsR:null};
+    cam.zoom=kOpen;lodBuild(0);var e0=S2._lodE,hid0=lodNow.hideBlue.size;   /* 第一次见到:直接落到结论上(展开 = 0),不播动画 */
+    cam.zoom=kShut;lodBuild(0);                                          /* 结论即时翻成"收拢" */
+    var hidNow=lodNow.hideBlue.size,eStart=S2._lodE,agg=lodNow.aggs[0];
+    lodBuild(LOD.ANIM_S/2);var eMid=S2._lodE,aMid=lodNow.aggs[0]?lodNow.aggs[0].alpha:-1;
+    /* 半程:僚舰还在画,而且被平移到"自己位置"与"框"之间 */
+    var tr=[];ctx.translate=function(x,y){tr.push([x,y]);return oTr.apply(ctx,arguments);};
+    tr=[];lodDrawShip(S2);
+    var pOwn=toScreen(S2.pos[0],S2.pos[1]),pBox=toScreen(agg.wx,agg.wy),off=tr.length?tr[0]:[0,0];
+    var fullDx=pBox[0]-pOwn[0],midOk=(tr.length>=1&&Math.abs(fullDx)>5&&off[0]/fullDx>0.2&&off[0]/fullDx<0.8);
+    lodBuild(LOD.ANIM_S);var eEnd=S2._lodE;tr=[];lodDrawShip(S2);var hiddenAtEnd=(tr.length===0);
+    /* 散开:结论即时翻回,船从框的位置滑回来 */
+    cam.zoom=kOpen;lodBuild(0);var hidOpen=lodNow.hideBlue.size,eOpen0=S2._lodE;
+    lodBuild(LOD.ANIM_S/2);var eOpenMid=S2._lodE;
+    lodBuild(LOD.ANIM_S);var eOpenEnd=S2._lodE;
+    tr=[];lodDrawShip(S2);var plainAtRest=(tr.length>=1&&tr.every(function(q){return !(Math.abs(q[0])<1e-9&&Math.abs(q[1])<1e-9);}));   /* 回到 0 之后不许再包那层过渡用的 translate(会污染按指令计数的判据);剩下的 translate 都是 drawShip 自己的 */
+    ctx.translate=oTr;
+    var okC=(e0===0&&hid0===0&&hidNow===2&&eStart===0&&eMid>0.3&&eMid<0.7&&aMid>0.2&&aMid<0.8&&midOk&&eEnd===1&&hiddenAtEnd
+             &&hidOpen===0&&eOpen0===1&&eOpenMid>0.3&&eOpenMid<0.7&&eOpenEnd===0&&plainAtRest);
+    var ok=(okA1&&okA2&&okA3&&okC);
+    out=(ok?'ok':'fail')
+      +' A1 手动缩放连跨两层:大字触发='+manFx+'(须 0)刻度尺重长='+manRuler+' | 战区直跳战术:起跳即报第 '+j0+' 层(须 1)途中路过舰队层='+passed2+' 大字中途变过='+sawMid+'(须 false)| 同层再按='+sameFx+'(须 0)| 战术跳战区报第 3 层且方向=拉远:'+upOk+' 画出目的层名='+(on1&&hasName)+' 过时一笔不画='+(on2===false&&quiet)+'='+okA1
+      +' | A2 刻度尺:刚换层 '+n0+' 根(须 0)长出来后 '+n1+' 根、全是矩形='+(r1===n1)+' 战术层写公里读数='+kmLab+'='+okA2
+      +' | A3 跳层过冲='+over+' 终点逐位等于落点='+landed+'='+okA3
+      +' | C 首见直接到位 e='+e0+';收拢:结论即时(已隐藏 '+hidNow+' 艘)而画面 e '+eStart+'→'+eMid.toFixed(2)+'→'+eEnd+' 框透明度半程 '+(+aMid).toFixed(2)+' 半程船被平移到中途='+midOk+' 末了不画='+hiddenAtEnd
+        +';散开:结论即时(隐藏 '+hidOpen+')e '+eOpen0+'→'+eOpenMid.toFixed(2)+'→'+eOpenEnd+' 静止时不包过渡变换='+plainAtRest+'='+okC;
+  }finally{
+    ctx.fillText=oT;ctx.fillRect=oR;ctx.translate=oTr;
+    if(typeof fmDelete==='function')fmDelete('7');
+    VT_FX=fxBak;vtAnim=animBak;zAnim=zBak;
+    adminMode=admBak;editMode=edBak;LOD.off=lodBak;selected=selBak;
+    cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;vtFrame();VT_FX=fxBak;VT_RULER_T0=rulBak;
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+    projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
+    lodPrev={fleet:{},pairsB:null,pairsR:null};
+  }
+  return out;
+});
+/* ===== SN7c 敌方观测等级的显示:一张配色表、三处同色 =====
+   用户:"需要显示敌方的观测等级,比如一级二级三级,风格按照态势感知的风格来;缩圈的 UI 颜色和态势感知的也不一样,也要统一"。
+   演示页的 LIT_COL 是 灰 / 蓝 / 青 / 黄;引擎原来是另一组(橙 / 蓝 / 绿),而且地图椭圆与缩圈小窗各抄一份。
+   现在全库只有 83-hud 的 LIT_RGB 一张表。本条逐级(1 / 2 / 3)量三处:地图椭圆、舰标下的等级标签、缩圈小窗的椭圆,
+   三处的颜色必须都等于 LIT_RGB[那一级];火控级实线 + ◎ + 四角火控框,其余虚线。 */
+t('FLOW66_LITSTYLE',function(){
+  if(typeof LIT_RGB==='undefined'||typeof litTag!=='function')return 'fail SN7c 等级配色表未加载(缺 LIT_RGB / litTag)';
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,edBak=editMode,lodBak=LOD.off;
+  var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},selBak=selected.slice(),onBak=GEOM.on,pinBak=GEOM.pin;
+  var pane=document.getElementById('geomPane'),gcv=document.getElementById('geomCv'),g2=gcv?gcv.getContext('2d'):null;
+  if(!pane||!g2)return 'fail 缩圈小窗 DOM 缺席';
+  var oE=ctx.ellipse,oS=ctx.stroke,oT=ctx.fillText,oE2=g2.ellipse,oS2=g2.stroke,out='';
+  try{
+    adminMode=false;editMode=false;selected=[];projectiles.length=0;LOD.off=true;
+    var B=makeShip('CA','等级蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2);
+    var R=makeShip('DD','等级红',[150000,120000,0],[-1,0,0],[0,0,0],'red',2);   /* 摆在画面左下,躲开右上角的小窗 */
+    ships.length=0;ships.push(B,R);
+    ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.autoEngage=false;x.roe='hold';});
+    cam.x=150000;cam.y=0;cam.zoom=0.0016;
+    GEOM.on=true;pane.hidden=false;GEOM.pin=R.id;GEOM.rc=null;
+    var rgbOf=function(st){var m=String(st).match(/(\d+)\D+(\d+)\D+(\d+)/);if(m)return m[1]+','+m[2]+','+m[3];
+      m=String(st).match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);return m?parseInt(m[1],16)+','+parseInt(m[2],16)+','+parseInt(m[3],16):String(st);};
+    var mapEll=null,pend=false,paneEll=null,pend2=false,texts=[],brackets=0;
+    ctx.ellipse=function(){pend=true;return oE.apply(ctx,arguments);};
+    ctx.stroke=function(){if(pend){mapEll={rgb:rgbOf(ctx.strokeStyle),dashed:ctx.getLineDash().length>0};pend=false;}
+      else if(rgbOf(ctx.strokeStyle)===LIT_RGB[3]&&ctx.lineWidth>1.1&&ctx.lineWidth<1.3)brackets++;
+      return oS.apply(ctx,arguments);};
+    ctx.fillText=function(tx){texts.push({t:String(tx),rgb:rgbOf(ctx.fillStyle)});return oT.apply(ctx,arguments);};
+    g2.ellipse=function(){pend2=true;return oE2.apply(g2,arguments);};
+    g2.stroke=function(){if(pend2){paneEll={rgb:rgbOf(g2.strokeStyle),dashed:g2.getLineDash().length>0};pend2=false;}return oS2.apply(g2,arguments);};
+    var rows=[],ok=true,distinct={};
+    [1,2,3].forEach(function(lit){
+      R.litBlue=lit;R.seenBlue=simTime;R.seenBluePos=[R.pos[0],R.pos[1],0];R.seenBlueVel=[0,0,0];
+      var c=R.covB=newCov();c.seen=true;c.ever=true;c.fix=true;c.n=2;c.age=0;c.x=R.pos[0];c.y=R.pos[1];c.th=0.4;c.idn=true;
+      c.r1=c.a1=30000;c.r2=c.a2=9000;
+      mapEll=null;paneEll=null;texts=[];brackets=0;pend=false;pend2=false;
+      render();
+      var want=LIT_RGB[lit],tag=litTag(lit);distinct[want]=1;
+      var lab=texts.filter(function(x){return x.t.indexOf(tag)>=0;})[0];
+      var noErr=!!lab&&lab.t.indexOf('±')<0&&lab.t.replace('◎ ','')===tag;   /* 用户 2026-09-21:标签只要等级,后面的 ± 误差不要(那组数归缩圈小窗) */
+      var good=(mapEll&&mapEll.rgb===want&&paneEll&&paneEll.rgb===want&&lab&&lab.rgb===want&&noErr
+        &&mapEll.dashed===(lit<3)&&paneEll.dashed===(lit<3)
+        &&(lit>=3?(lab.t.indexOf('◎')===0&&brackets===4):(lab.t.indexOf('◎')<0&&brackets===0)));
+      if(!good)ok=false;
+      rows.push(lit+'级['+want+'] 地图椭圆='+(mapEll?mapEll.rgb+(mapEll.dashed?'虚':'实'):'无')+' 小窗椭圆='+(paneEll?paneEll.rgb+(paneEll.dashed?'虚':'实'):'无')
+        +' 标签='+(lab?'「'+lab.t+'」'+lab.rgb:'无')+' 火控框='+brackets+'笔');
+    });
+    /* 三级各是各的颜色(三格都等于同一个色也能"三处一致") */
+    var okDistinct=(Object.keys(distinct).length===3);
+    /* 陈旧态带等级、失联态不带 */
+    R.litBlue=1;R.covB.n=0;R.covB.age=9;texts=[];render();
+    var coastLab=texts.filter(function(x){return x.t.indexOf('陈旧')>=0;})[0];
+    R.litBlue=0;R.covB.fix=false;R.seenBlue=simTime-12;texts=[];render();
+    var ghostLab=texts.filter(function(x){return x.t.indexOf('失联')>=0;})[0];
+    var okMark=(coastLab&&coastLab.t.indexOf(litTag(1))>=0&&ghostLab&&ghostLab.t.indexOf('级')<0);
+    ok=ok&&okDistinct&&okMark;
+    out=(ok?'ok':'fail')+' '+rows.join(' | ')+' | 三级颜色互不相同='+okDistinct
+      +' | 陈旧记号=「'+(coastLab?coastLab.t:'无')+'」(须带等级) 失联记号=「'+(ghostLab?ghostLab.t:'无')+'」(须不带)='+okMark;
+  }finally{
+    ctx.ellipse=oE;ctx.stroke=oS;ctx.fillText=oT;g2.ellipse=oE2;g2.stroke=oS2;
+    GEOM.on=onBak;GEOM.pin=pinBak;GEOM.tick=-1;GEOM.byId={};pane.hidden=!onBak;
+    adminMode=admBak;editMode=edBak;LOD.off=lodBak;selected=selBak;
+    cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+    projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
+  }
+  return out;
+});
+/* ===== SN7b 星空的每帧绘制指令数与星的颗数无关 =====
+   用户实报"网页卡卡的"。量出来的:平均每帧 0.6ms,但每隔一两秒有一帧渲染要 15~100ms,90 秒 47 个慢帧几乎全落在 drawStars ——
+   SN6 把星空改成屏幕空间时丢了视口裁剪,1200 颗星每帧全画、每颗各切两次 globalAlpha(1200 次 fillRect + 2400 次状态切换),
+   画布的命令缓冲被周期性撑爆、同步冲刷。改成两张预渲染的离屏贴图之后慢帧 0 个。
+   ⚠ 这条【不判毫秒】:耗时随机器与是否走 GPU 变,判它只会得到一条随机翻红的判据(本项目的性能台一律只报数不判红绿)。
+     判的是【结构】—— 每帧发出的绘制指令数是个确定的量:逐颗画的实现是 O(颗数),贴图的实现是常数。 */
+t('FLOW65_STARS',function(){
+  if(typeof drawStars!=='function'||typeof STAR_TILE==='undefined')return 'fail SN7b 星空贴图未加载(缺 drawStars / STAR_TILE)';
+  var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},out='';
+  var oF=ctx.fillRect,oD=ctx.drawImage;
+  try{
+    var nF=0,dst=[];
+    ctx.fillRect=function(){nF++;return oF.apply(ctx,arguments);};
+    ctx.drawImage=function(img,x,y){dst.push([x,y,img]);return oD.apply(ctx,arguments);};
+    cam.x=0;cam.y=0;
+    STAR_TILE.sig='';                                 /* 逼它重建一次 */
+    drawStars();
+    var builtCv=STAR_TILE.cv[0],f1=nF,d1=dst.length;
+    /* 贴图【自己的】上下文也要盯:每帧重建贴图 = 每帧往离屏画布上画 1200 颗,卡顿原样回来,而主画布上一次 fillRect 都看不到。
+       只比"是不是同一个 canvas 对象"是没牙的 —— 重建时复用的就是同一个对象。 */
+    var tg=builtCv.getContext('2d'),oTF=tg.fillRect,nTile=0;
+    tg.fillRect=function(){nTile++;return oTF.apply(tg,arguments);};
+    nF=0;dst=[];drawStars();
+    tg.fillRect=oTF;
+    var f2=nF,d2=dst.length,sameCv=(STAR_TILE.cv[0]===builtCv);
+    /* ① 每帧:一次 fillRect 都不发(逐颗画的实现这里是 1200),drawImage 在 2~8 之间(两层 x 最多四块平铺) */
+    var ok1=(f2===0&&d2>=2&&d2<=8&&stars.length>=1000);
+    /* ② 贴图只在尺寸变了的时候重建:第二帧复用同一张离屏画布 */
+    var ok2=(sameCv&&!!builtCv&&builtCv.width>0&&nTile===0);
+    /* ③ 贴图不是空的(真的把星画进去了):数 alpha 非零的像素 */
+    var px=builtCv.getContext('2d').getImageData(0,0,builtCv.width,builtCv.height).data,lit=0;
+    for(var i=3;i<px.length;i+=4)if(px[i]>0)lit++;
+    var ok3=(lit>300);
+    /* ④ 视差还在:相机横移 ⇒ 贴图的落点跟着变,而且近层(第二层)漂得比远层快 */
+    var firstOf=function(layer){for(var q=0;q<dst.length;q++){if(dst[q][2]===STAR_TILE.cv[layer])return dst[q][0];}return NaN;};   /* 每层的第一块落在 (ox,oy) */
+    cam.x=0;dst=[];drawStars();var far0=firstOf(0),near0=firstOf(1);
+    cam.x=400000;dst=[];drawStars();var far1=firstOf(0),near1=firstOf(1);
+    var mod=function(a,m){return ((a%m)+m)%m;};
+    var dFar=mod(far0-far1,W),dNear=mod(near0-near1,W);
+    var ok4=(dFar>1&&dNear>dFar*1.5);
+    var ok=(ok1&&ok2&&ok3&&ok4);
+    out=(ok?'ok':'fail')
+      +' ① 每帧 fillRect='+f2+' 次(须 0;逐颗画是 '+stars.length+')drawImage='+d2+' 次(须 2~8)='+ok1
+      +' | ② 第二帧不重建贴图:往离屏画布上画了 '+nTile+' 笔(须 0)='+ok2
+      +' | ③ 贴图里有星:alpha 非零像素='+lit+'(须>300)='+ok3
+      +' | ④ 视差:相机横移 40 万公里 ⇒ 远层漂 '+dFar.toFixed(1)+'px 近层漂 '+dNear.toFixed(1)+'px(须近层>1.5x远层)='+ok4;
+  }finally{
+    ctx.fillRect=oF;ctx.drawImage=oD;
+    cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
+  }
+  return out;
+});
+/* ===== SN7 定位几何小窗(缩圈图)=====
+   照 demos/sensors/态势感知V3.html 的 drawPhase 移植。它回答"我挂了火控为什么还不开火":
+   我方【全体】观测融合出的椭圆 + 导弹门 / 主炮门两个圈 + 每个探测站一条视线。
+   显示谁(用户 2026-09-20 拍板):悬停(临时)> 最后一次点击定的常驻 > 空;
+   常驻 = 左键点敌舰固定那一艘 / 点我方舰跟它的攻击目标 / 点空地清空;
+   攻击目标 = lockedTarget,还没开打时取序列里排最前、还活着的那个。热区接触进不来(targetAt 的门)。
+   手势一律走【真实合成鼠标事件】(fc4down/fc4move),不直接写 GEOM.pin —— 要测的正是 70-input 那条接线。 */
+t('FLOW64_GEOM',function(){
+  if(typeof GEOM==='undefined'||typeof drawGeom!=='function'||typeof geomSubject!=='function')return 'fail SN7 定位几何未加载';
+  var e=fc4reset(),S=e.S,A=e.A,out='';
+  var rs=ships.filter(function(x){return x.side==='red';}),B2=rs[1];
+  var bl=ships.filter(function(x){return x.side==='blue';});
+  var onBak=GEOM.on,pinBak=GEOM.pin,lodBak=LOD.off,zoomBak=cam.zoom,simBak=simTime;
+  /* 缩放要自己定:点选的吸附半径是 60/cam.zoom,而 fc4reset 刻意不动 zoom(那一族判据拿它当被测量)。
+     本条摆的是"我方舰在原点、敌舰在 6 万公里外",吸附半径一旦大过 6 万,点敌舰的那一下敌我同时命中 ——
+     第一版(我方舰无条件优先)下常驻当场被清掉,判据读起来像"左键点敌舰没接上线"。取 37,500 km 的吸附半径。 */
+  cam.zoom=0.0016;
+  /* 镜头往上抬 10 万公里 ⇒ 三艘船落在画面下半部,躲开右上角的小窗。探针视口只有 762x484,不挪的话靶·A 的屏幕位置
+     正好压在小窗底下,被"光标停在小窗上不算悬停"那条规则(③ 专测它)挡掉 —— ② 会读成"悬停没接上"。
+     下面 okGeo 把这条几何前提显式钉住:哪天小窗尺寸 / 位置变了,红的是这一格而不是一句看不懂的"悬停=空"。 */
+  var camYBak=cam.y;cam.y=-100000;
+  var SNAP=60/cam.zoom;
+  var pane=document.getElementById('geomPane'),btn=document.querySelector('#tools [data-tool="geom"]');
+  var gcv=document.getElementById('geomCv'),g2=gcv?gcv.getContext('2d'):null;
+  if(!pane||!btn||!g2)return 'fail 小窗 DOM 缺席(geomPane / 缩圈钮 / geomCv)';
+  var oA=g2.arc,oE=g2.ellipse,oM=g2.moveTo,oT=g2.fillText;
+  try{
+    adminMode=false;LOD.off=true;
+    B2.pos=[-60000,40000,0];B2.vel=[0,0,0];B2.orders=[];
+    function mk(t,fix,lit){t.litBlue=lit;t.seenBlue=fix?simTime:-1e9;t.seenBluePos=fix?[t.pos[0],t.pos[1],0]:null;t.seenBlueVel=fix?[0,0,0]:null;
+      var c=t.covB=newCov();c.seen=true;c.ever=true;c.fix=fix;c.n=fix?2:1;c.age=0;c.x=t.pos[0];c.y=t.pos[1];c.th=0.35;
+      c.r1=fix?covMsl(t)*0.8:COV.AMAX*3;c.r2=fix?covMsl(t)*0.3:30000;c.a1=Math.min(COV.AMAX,c.r1);c.a2=Math.min(COV.AMAX,c.r2);}
+    mk(A,true,1);mk(B2,true,1);                       /* lit=1:定得出位置、但椭圆还没进导弹门 ⇒ 火控挂得上、打不响(正是小窗要解释的那一刻) */
+    var nm=function(r){return r?r.t.name+'/'+r.why:'空';};
+    var away=function(){fc4move(5,H-5);};            /* 把光标挪到没有任何目标的角落 */
+    var click=function(p){fc4down(0,p[0],p[1]);fc4up(0,p[0],p[1]);};
+    var same=function(a,b){return a.length===b.length&&a.every(function(x,i){return x===b[i];});};
+    GEOM.on=false;GEOM.pin=null;GEOM.rc=null;pane.hidden=true;btn.classList.remove('on');
+    /* ① 钮:关着一笔不画;真点一下 ⇒ 开并画;再真点一下 ⇒ 关并停画(只点一次的话,把开关写成恒 true 也是绿的) */
+    var drew=0;g2.fillText=function(){drew++;return oT.apply(g2,arguments);};
+    away();render();var offDrew=drew;
+    btn.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+    var on1=(GEOM.on===true&&pane.hidden===false&&btn.classList.contains('on'));
+    drew=0;render();var onDrew=drew;
+    btn.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+    var off2=(GEOM.on===false&&pane.hidden===true&&!btn.classList.contains('on'));
+    drew=0;render();var offDrew2=drew;
+    btn.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+    var ok1=(offDrew===0&&on1&&onDrew>0&&off2&&offDrew2===0&&GEOM.on===true);
+    /* ② 空 / 悬停 / 左键点敌舰常驻且不丢选中 */
+    var pA=fc4at(A),pB=fc4at(B2),pS=fc4at(S);
+    selected=[];away();var r0=geomSubject();
+    fc4move(pA[0],pA[1]);var rHov=geomSubject();                                       /* 一艘我方舰都没选,也必须有 */
+    selected=[S.id];click(pA);var keepSel=same(selected,[S.id]);
+    away();var rPin=geomSubject();
+    render();
+    var inRc=function(p){var q=GEOM.rc;return !!q&&p[0]>=q.left&&p[0]<=q.right&&p[1]>=q.top&&p[1]<=q.bottom;};
+    var okGeo=(!inRc(pA)&&!inRc(pB)&&!inRc(pS));
+    var ok2=(okGeo&&r0===null&&rHov&&rHov.t===A&&rHov.why==='悬停'&&keepSel&&rPin&&rPin.t===A&&rPin.why==='点选'&&GEOM.pin===A.id);
+    /* ③ 悬停临时盖过、移开回到常驻;光标停在小窗【自己身上】时不算悬停(单变量对照:同一点,只把小窗矩形拿掉) */
+    fc4move(pB[0],pB[1]);var rHov2=geomSubject();away();var rBack=geomSubject();
+    render();var rcp=GEOM.rc,okPane=false,paneHov='',paneCtl='';
+    if(rcp&&rcp.width>0){
+      var mid=[rcp.left+rcp.width/2,rcp.top+rcp.height/2],wm=worldAt(mid[0],mid[1]),posBak=B2.pos.slice();
+      GEOM.pin=null;selected=[];
+      B2.pos=[wm[0],wm[1],0];mk(B2,true,1);fc4move(mid[0],mid[1]);
+      var h1=geomSubject();GEOM.rc=null;var h2=geomSubject();GEOM.rc=rcp;
+      paneHov=nm(h1);paneCtl=nm(h2);okPane=(h1===null&&!!h2&&h2.t===B2);
+      B2.pos=posBak;mk(B2,true,1);away();selected=[S.id];GEOM.pin=A.id;
+    }
+    var ok3=(rHov2&&rHov2.t===B2&&rBack&&rBack.t===A&&okPane);
+    /* ④ 我方舰的攻击目标,以及它与常驻的优先级(两者【同时存在】时才测得出谁压谁) */
+    click(pS);away();var rOwn0=geomSubject(),pinCleared=(GEOM.pin===null);              /* 点我方舰(无目标)⇒ 常驻清掉、空 */
+    S.lockedTarget=null;fcNew(S,{tid:B2.id});fcAppend(S,{tid:A.id});
+    var rWait=geomSubject();                                                           /* 两艘都没进门 ⇒ 火控在等 ⇒ 排最前的 B2 */
+    click(pA);away();var rPinOver=geomSubject();                                       /* 此刻常驻(A)与攻击目标(B2)同时存在:最后一次点击说了算 */
+    click(pS);away();var rOwnBack=geomSubject();                                       /* 再点我方舰:回到它的攻击目标 */
+    S.lockedTarget=A;var rFire=geomSubject();S.lockedTarget=null;                      /* 正在打的就显示正在打的 */
+    mk(B2,false,1);var rSkip=geomSubject();                                            /* 排最前的退回热区 ⇒ 热区不进小窗 ⇒ 看下一个进得来的 A */
+    mk(A,false,1);var rAllHeat=geomSubject();                                          /* 序列里全是热区 ⇒ 空(这条路第一版没有门) */
+    mk(A,true,1);mk(B2,true,1);
+    click(pA);var pinnedAgain=(GEOM.pin===A.id);
+    click([5,H-5]);var rEmpty=geomSubject(),selCleared=(selected.length===0),emptyCleared=(GEOM.pin===null);   /* 点空地:常驻必须真的被清(先钉上再点,否则恒真) */
+    var ok4=(rOwn0===null&&pinCleared&&rWait&&rWait.t===B2&&rPinOver&&rPinOver.t===A&&rPinOver.why==='点选'
+             &&rOwnBack&&rOwnBack.t===B2&&rFire&&rFire.t===A&&rSkip&&rSkip.t===A&&rAllHeat===null
+             &&pinnedAgain&&emptyCleared&&selCleared&&rEmpty===null);
+    /* ⑤ 热区进不来;常驻的一生:退回热区 = 暂时不显示但【不清】,重新定位就回来,死了才清 */
+    if(typeof fireSeqs!=='undefined')fireSeqs.length=0;
+    selected=[];GEOM.pin=null;mk(A,false,1);fc4move(pA[0],pA[1]);var rHeat=geomSubject();click(pA);var heatPin=GEOM.pin;away();
+    mk(A,true,1);click(pA);away();var pinLive=(GEOM.pin===A.id);
+    mk(A,false,1);var rPinHeat=geomSubject(),pinKept=(GEOM.pin===A.id);
+    mk(A,true,1);var rPinBack=geomSubject();
+    A.dead=true;var rPinDead=geomSubject(),pinGone=(GEOM.pin===null);A.dead=false;
+    var ok5=(rHeat===null&&heatPin===null&&pinLive&&rPinHeat===null&&pinKept&&rPinBack&&rPinBack.t===A&&rPinDead===null&&pinGone);
+    /* ⑥ 敌我都在吸附圈里:离光标近的赢(半径从吸附半径现算,不写死公里数) */
+    var b2Bak=B2.pos.slice();B2.pos=[0.5*SNAP,0,0];mk(B2,true,1);
+    var pNear=fc4at(B2);selected=[];GEOM.pin=null;
+    click(pS);var nearOwn=(same(selected,[S.id])&&GEOM.pin===null);                     /* 正点在我方舰上 ⇒ 选中它 */
+    click(pNear);var nearFoe=(GEOM.pin===B2.id&&same(selected,[S.id]));                 /* 正点在敌舰记号上 ⇒ 钉住它,而且选中没被旁边那艘我方舰抢走 */
+    B2.pos=b2Bak;mk(B2,true,1);
+    var ok6=(nearOwn&&nearFoe);
+    /* ⑦ 从敌方记号上起手拖框:照常框选,常驻不动(第一版这里提前 return 不建框,记号周围是框选死区) */
+    selected=[];GEOM.pin=null;
+    fc4down(0,pA[0],pA[1]);fc4move(pS[0]-30,pS[1]+30);fc4up(0,pS[0]-30,pS[1]+30);
+    var ok7=(same(selected,[S.id])&&GEOM.pin===null);
+    /* ⑧ 画的内容:门圈 = covMsl/covMac x 比例尺;视线 = 这一拍真探测得到它的我方站;整拍冻结;量测断了不画视线 */
+    selected=[];GEOM.pin=A.id;GEOM.tick=-1;GEOM.byId={};away();
+    bl.forEach(function(w,i){w.pos=i===0?[0,0,0]:(i===1?[0,-40000,0]:[-9e6,0,0]);setEmit(w,'silent');});   /* 第三艘挪到 900 万公里外:哪条通道都够不着 */
+    setEmit(A,'paint');
+    var expect=0;bl.forEach(function(w){var gg=sensePairAt(w,A);if(gg.opt||gg.lis||gg.act)expect++;});
+    var arcs=[],ell=null,moves=0;
+    g2.arc=function(x,y,r){arcs.push(r);return oA.apply(g2,arguments);};
+    g2.ellipse=function(x,y,rx,ry){ell=[rx,ry];return oE.apply(g2,arguments);};
+    g2.moveTo=function(){moves++;return oM.apply(g2,arguments);};
+    var shot=function(){arcs=[];ell=null;moves=0;render();return moves;};
+    var n0=shot();
+    var k=ell?ell[0]/A.covB.a1:0;
+    var has=function(r){return arcs.some(function(x){return Math.abs(x-r)<1e-6;});};
+    var okGate=(k>0&&has(covMsl(A)*k)&&has(covMac(A)*k));
+    bl[2].pos=[0,40000,0];var nSame=shot();                                            /* 同一拍里把第三艘拉回来:冻结 ⇒ 仍是 2 条 */
+    simTime+=SENS.TICK;var nNext=shot();                                               /* 过了一拍:重算 ⇒ 3 条 */
+    A.covB.n=0;A.covB.age=3;var nCut=shot();A.covB.n=2;A.covB.age=0;                   /* 量测断了:一条都不画 */
+    var okLines=(expect===2&&n0===2&&nSame===2&&nNext===3&&nCut===0);
+    var ok8=(okGate&&okLines);
+    /* ⑨ 换局清常驻:shipSeq 每局归零,不清的话上一局钉住的 id 会挂到新一局的另一艘船上 */
+    GEOM.pin=A.id;initFleet();var ok9=(GEOM.pin===null);
+    var ok=(ok1&&ok2&&ok3&&ok4&&ok5&&ok6&&ok7&&ok8&&ok9);
+    out=(ok?'ok':'fail')
+      +' ① 钮关着不画('+offDrew+')/点开并画('+onDrew+')/再点关掉并停画('+offDrew2+')='+ok1
+      +' | ② 取样点都不在小窗底下='+okGeo+' 空='+nm(r0)+' 悬停='+nm(rHov)+' 左键点敌舰后常驻='+nm(rPin)+' 我方选中没丢='+keepSel+'='+ok2
+      +' | ③ 悬停另一艘临时盖过='+nm(rHov2)+' 移开回到='+nm(rBack)+';光标停在小窗上:'+paneHov+'(须空) 对照去掉小窗矩形:'+paneCtl+'='+ok3
+      +' | ④ 点我方舰无目标='+nm(rOwn0)+' 火控在等='+nm(rWait)+' 常驻与攻击目标并存时='+nm(rPinOver)+'(须点选) 再点我方舰='+nm(rOwnBack)
+        +' 正在打='+nm(rFire)+' 排最前的退回热区='+nm(rSkip)+'(须跳到进得来的 A) 全是热区='+nm(rAllHeat)+' 先钉上再点空地:常驻已清='+emptyCleared+' 选中已清='+selCleared+'='+ok4
+      +' | ⑤ 热区:悬停='+nm(rHeat)+' 点了常驻='+(heatPin||'无')+';常驻退回热区='+nm(rPinHeat)+' 而常驻未清='+pinKept+' 重新定位='+nm(rPinBack)+' 死了='+nm(rPinDead)+' 已清='+pinGone+'='+ok5
+      +' | ⑥ 敌我同在吸附圈(相距半个吸附半径):点我方舰=选中它='+nearOwn+' 点敌舰记号=钉住且选中没被抢='+nearFoe+'='+ok6
+      +' | ⑦ 从敌方记号上起手拖框:照常框到我方舰且常驻不动='+ok7
+      +' | ⑧ 门圈=covMsl/covMac x 比例尺='+okGate+' 视线 '+n0+' 条=真探测得到的 '+expect+' 站 同拍再来一站仍 '+nSame+'(冻结) 下一拍 '+nNext+' 量测断了 '+nCut+'='+okLines
+      +' | ⑨ 换局清常驻='+ok9;
+  }finally{
+    g2.arc=oA;g2.ellipse=oE;g2.moveTo=oM;g2.fillText=oT;
+    GEOM.on=onBak;GEOM.pin=pinBak;GEOM.tick=-1;GEOM.byId={};pane.hidden=!onBak;btn.classList.toggle('on',onBak);
+    adminMode=true;LOD.off=lodBak;cam.zoom=zoomBak;cam.y=camYBak;simTime=simBak;   /* fc4 系列的惯例:收尾硬置成 GM */
+    if(typeof fireSeqs!=='undefined')fireSeqs.length=0;
+  }
+  return out;
+});
+/* ===== SN6f 接触显示:五态互斥矩阵 =====
+   用户实报:"现在会出现一种只显示椭圆和陈旧,但是不显示热区的情况。我总觉得这几种信息显示在做进引擎之后
+   就没有对过,全是揉在一起的"。根因是两套状态机(SN4 的 seenBlue 年龄 / SN6 的椭圆)各驱动一半显示层。
+   现在只有 contactState 一个,五态互斥。本条钉的就是那张表 —— 每一态【恰好】画这几层,多一层少一层都红:
+
+        态       热区  椭圆  舰标  记号  虚线不确定圈
+        none      ·     ·     ·     ·      ·
+        heat      ■     ·     ·     ·      ·
+        live      ·     ■     ■     ·      ·
+        coast     ·     ■     ·     ■      ·        ← 陈旧:椭圆自己在长大,它就是不确定圈
+        ghost     ·     ·     ·     ■      ■        ← 失联:已经没有椭圆了,圈由速度 x 时长给
+
+   A 半:逐态【构造】,量五层;B 半:一段【真实序列】(开局静默 → 开照射 → 转静默 → 靶也静默 → 失联),
+   每秒量一次,任何一拍落到表外的组合就红 —— 构造出来的态再对,真管线走不到也没用。 */
+t('FLOW63_VIEW',function(){
+  if(typeof contactState!=='function')return 'fail contactState 缺席';
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,edBak=editMode,detBak=detT,simBak=simTime;
+  var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},selBak=selected.slice(),lodBak=LOD.off;
+  var oarc=ctx.arc,odash=ctx.setLineDash,oell=ctx.ellipse,ohull=drawHull,out='';
+  var TABLE={none:'·····',heat:'■····',live:'·■■··',coast:'·■·■·',ghost:'···■■'};
+  try{
+    adminMode=false;editMode=false;selected=[];projectiles.length=0;LOD.off=true;
+    var nEll=0,nHull=0,nMark=0,nRing=0,dash=[];
+    ctx.setLineDash=function(d){dash=d||[];return odash.apply(ctx,arguments);};
+    ctx.ellipse=function(){nEll++;return oell.apply(ctx,arguments);};
+    ctx.arc=function(x,y,r){
+      if(Math.abs(r-CONTACT_MARK_R)<0.5&&!dash.length)nMark++;
+      else if(dash.length&&r>CONTACT_MARK_R*1.8)nRing++;
+      return oarc.apply(ctx,arguments);};
+    drawHull=function(c,h,t,col){if(col==='#ff6b6b')nHull++;return ohull.apply(this,arguments);};   /* 只数红方舰体 */
+    function layers(){
+      nEll=0;nHull=0;nMark=0;nRing=0;dash=[];HEAT.sig='';
+      render();
+      /* 热区那一格量【真的贴到画面上的东西】:drawContacts 只在 heatBuild()>0 时才把离屏画布贴上去,
+         而贴上去的内容在 HEAT.img 里 —— 两个都要看。只读 heatBuild 的返回值的话量到的是计数器不是画面
+         (第一版就是这样,于是"热区循环不问状态机"这个变异溜了过去,而它其实因为计数为 0 根本没被贴出来)。 */
+      var nHeat=heatBuild(),painted=false;
+      if(nHeat>0&&HEAT.img){var dd=HEAT.img.data;for(var q=3;q<dd.length;q+=4){if(dd[q]>0){painted=true;break;}}}
+      return (painted?'■':'·')+(nEll>0?'■':'·')+(nHull>0?'■':'·')+(nMark>0?'■':'·')+(nRing>0?'■':'·');
+    }
+    /* ---------- A 半:逐态构造 ---------- */
+    var B=makeShip('CA','互斥蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2);
+    var R=makeShip('DD','互斥红',[200000,0,0],[-1,0,0],[0,0,0],'red',2);
+    ships.length=0;ships.push(B,R);
+    ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.autoEngage=false;x.roe='hold';x.macOn=false;x.mslOn=false;x.ciwsOn=false;});
+    cam.x=100000;cam.y=0;cam.zoom=0.0016;
+    function cov(fix,n,age){var c=newCov();c.seen=true;c.ever=true;c.fix=!!fix;c.n=n;c.age=age;
+      c.x=R.pos[0];c.y=R.pos[1];c.th=0.4;
+      var big=fix?30000:COV.AMAX*3;c.r1=big;c.r2=fix?9000:40000;c.a1=Math.min(COV.AMAX,c.r1);c.a2=Math.min(COV.AMAX,c.r2);
+      return c;}
+    function seen(ago){R.seenBlue=(ago===null)?-1e9:simTime-ago;R.seenBluePos=(ago===null)?null:[R.pos[0],R.pos[1],0];R.seenBlueVel=(ago===null)?null:[900,0,0];}
+    var CASES=[
+      ['none', function(){R.litBlue=0;R.covB=newCov();seen(null);}],
+      ['heat', function(){R.litBlue=1;R.covB=cov(false,2,0);seen(null);}],
+      ['live', function(){R.litBlue=2;R.covB=cov(true,3,0);seen(0);}],
+      ['coast',function(){R.litBlue=2;R.covB=cov(true,0,12);seen(12);}],
+      ['ghost',function(){R.litBlue=0;R.covB=cov(false,0,20);seen(20);}]
+    ];
+    var rowsA=[],okA=true;
+    CASES.forEach(function(cs){
+      cs[1]();
+      var st=contactState(R,'blue'),got=layers();
+      var good=(st===cs[0]&&got===TABLE[cs[0]]);
+      if(!good)okA=false;
+      rowsA.push(cs[0]+(st===cs[0]?'':'(状态机判成'+st+')')+' '+got+(got===TABLE[cs[0]]?'':'≠'+TABLE[cs[0]]));
+    });
+    /* ---------- B 半:真实序列 ---------- */
+    initFleet();
+    var bl=ships.filter(function(x){return x.side==='blue';});
+    var reds=ships.filter(function(x){return x.side==='red';});
+    var T=reds[0];                                   /* 靶·A:最远的那个,光学够不着,只靠静听 / 照射 */
+    ships=ships.filter(function(x){return x.side==='blue'||x===T;});   /* 只留一个红方:热区层才归得到这一艘头上 */
+    T.vel=[0,600,0];
+    cam.x=125000;cam.y=-60000;cam.zoom=0.0009;
+    var visited={},bad=[],sec=0;
+    function run(n,tag){for(var k=0;k<n;k++){
+      for(var i=0;i<50;i++){stepSim(CFG.step);simTime+=CFG.step;}
+      sec++;
+      var st=contactState(T,'blue'),got=layers();
+      visited[st]=1;
+      /* 第五格(虚线不确定圈)在 ghost 态是【许可】不是【必须】:它只在明显大于记号时才画(SN6e,FLOW62 ③ 钉着),
+         刚失联那几秒 速度x时长 还没长过记号,圈按设计省掉。其余四格逐格严判;别的态出现第五格一律算错。 */
+      var want=TABLE[st], okRow=(got.slice(0,4)===want.slice(0,4))&&(st==='ghost'||got[4]==='·');
+      if(!okRow)bad.push(tag+'@'+sec+'s '+st+' 画成 '+got+'(应 '+want+')');
+    }}
+    run(3,'静默');
+    bl.forEach(function(x){setEmit(x,'paint');});   run(4,'照射');
+    bl.forEach(function(x){setEmit(x,'silent');});  run(6,'转静默');
+    setEmit(T,'silent');                            run(80,'靶也静默');   /* 要走完 coast → ghost(TTL 30s)→ none 整条尾巴 */
+    var seq=['heat','live','coast','ghost','none'].filter(function(k){return visited[k];});
+    /* 真序列必须【真的走过】这几态,否则 B 半没牙(全程停在一个态上也能"从不违规") */
+    var okB=(bad.length===0&&visited.heat&&visited.live&&visited.ghost&&visited.none);
+    var ok=(okA&&okB);
+    out=(ok?'ok':'fail')
+      +' A 逐态构造[热区/椭圆/舰标/记号/虚线圈]: '+rowsA.join(' | ')+' ='+okA
+      +' || B 真实序列 '+sec+' 拍:走过的态='+seq.join('→')+'(须含 heat/live/ghost/none) 表外组合='+(bad.length?bad.slice(0,3).join(' ; '):'无')+' ='+okB;
+  }finally{
+    ctx.arc=oarc;ctx.setLineDash=odash;ctx.ellipse=oell;drawHull=ohull;
+    adminMode=admBak;editMode=edBak;LOD.off=lodBak;selected=selBak;detT=detBak;simTime=simBak;
+    cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
+    ships=shipsBak;projectiles=projBak;
+    if(typeof HEAT!=='undefined')HEAT.sig='';
+  }
+  return out;
+});
+/* ===== SN6e 幽灵/陈旧的两个圈是两种东西 =====
+   用户实报:"为什么会存在两个虚线圈,一个会随着缩放变化,一个不会"。两个圈的含义完全不同:
+     不确定圈  半径是【世界公里】(最后已知速度 x 信息年龄)⇒ 随缩放变化;虚线 = 这是个估计
+     记号本体  半径是【固定屏幕像素】⇒ 不随缩放变化;实线 = 这是个符号,不是估计
+   改前两个都画成虚线、而且不确定圈有 8000km 下限(常用缩放下 7~19px)⇒ 两个同心虚线圈一样大,
+   读不出任何东西。本条把这三件事钉住,顺带把"记号不随缩放变化"这条也量出来。 */
+t('FLOW62_MARK',function(){
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,edBak=editMode;
+  var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},selBak=selected.slice();
+  var oarc=ctx.arc,odash=ctx.setLineDash,out='';
+  try{
+    adminMode=false;editMode=false;selected=[];projectiles.length=0;
+    var O=makeShip('CA','记号观测',[0,0,0],[1,0,0],[0,0,0],'blue',2);
+    var G=makeShip('DD','记号幽灵',[200000,0,0],[1,0,0],[0,0,0],'red',2);
+    ships.length=0;ships.push(O,G);
+    ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.autoEngage=false;x.roe='hold';});
+    G.litBlue=0;G.seenBlue=simTime-20;
+    G.seenBluePos=[G.pos[0],G.pos[1],0];G.seenBlueVel=[800,0,0];   /* 不确定半径 = 800x20 = 16000 km */
+    cam.x=100000;cam.y=0;
+    /* 记录每一次 arc 的 (半径, 当时是不是虚线) */
+    var arcs=[],dash=[];
+    ctx.setLineDash=function(d){dash=d||[];return odash.apply(ctx,arguments);};
+    ctx.arc=function(x,y,r){arcs.push({r:r,dashed:dash.length>0,x:x,y:y});return oarc.apply(ctx,arguments);};
+    function shot(z){cam.zoom=z;arcs.length=0;dash=[];render();
+      var p=toScreen(G.seenBluePos[0]+G.seenBlueVel[0]*contactAge(G,'blue'),G.seenBluePos[1]);
+      return arcs.filter(function(a){return Math.hypot(a.x-p[0],a.y-p[1])<3;});
+    }
+    /* ① 拉近:两个圈都在,而且【画法不同】—— 记号实线、不确定圈虚线 */
+    /* 两档缩放都要【落在不确定圈还画得出来的那一段】:半径 16,000km,抑制门槛是 CONTACT_MARK_R*1.8=12.6px
+       ⇒ zoom 必须 > 7.9e-4。第一版取 0.0012→0.0006,后者算出来 9.6px 正好被 ③ 那条抑制规则吃掉,
+       于是"减半"这一格测成了"消失" —— 量的是抑制门槛,不是缩放比例。 */
+    var A=shot(0.0024);
+    var markA=A.filter(function(a){return Math.abs(a.r-CONTACT_MARK_R)<0.5;});
+    var uncA =A.filter(function(a){return a.r>CONTACT_MARK_R*1.8;});
+    var ok1=(markA.length===1&&uncA.length===1&&markA[0].dashed===false&&uncA[0].dashed===true);
+    /* ② 记号【不随缩放变化】,不确定圈【随缩放变化】—— 缩放减半,两者各自该怎么动 */
+    var B=shot(0.0012);
+    var markB=B.filter(function(a){return Math.abs(a.r-CONTACT_MARK_R)<0.5;});
+    var uncB =B.filter(function(a){return a.r>CONTACT_MARK_R*1.8;});
+    var ok2=(markB.length===1&&uncB.length===1&&Math.abs(markB[0].r-markA[0].r)<1e-9
+             &&Math.abs(uncB[0].r/uncA[0].r-0.5)<1e-9);
+    /* ③ 拉到很远:不确定圈缩到记号量级 ⇒ 【不画】,那个点上只剩一个圈(改前是两个同样大的虚线圈) */
+    var C=shot(0.00015);
+    var ok3=(C.length===1&&Math.abs(C[0].r-CONTACT_MARK_R)<0.5&&C[0].dashed===false);
+    var ok=(ok1&&ok2&&ok3);
+    out=(ok?'ok':'fail')
+      +' ① 近处两个圈画法不同:记号 r='+(markA[0]?markA[0].r.toFixed(1):'无')+' 虚线='+(markA[0]?markA[0].dashed:'-')+'(须实线)'
+        +' 不确定圈 r='+(uncA[0]?uncA[0].r.toFixed(1):'无')+' 虚线='+(uncA[0]?uncA[0].dashed:'-')+'(须虚线)='+ok1
+      +' | ② 缩放减半:记号 '+(markA[0]?markA[0].r.toFixed(1):'-')+'→'+(markB[0]?markB[0].r.toFixed(1):'-')+'(须不变)'
+        +' 不确定圈 '+(uncA[0]?uncA[0].r.toFixed(1):'-')+'→'+(uncB[0]?uncB[0].r.toFixed(1):'-')+'(须减半)='+ok2
+      +' | ③ 拉远到不确定圈缩进记号量级:该点上的圈数='+C.length+'(须1=只剩记号,不许两个同样大的虚线圈)='+ok3;
+  }finally{
+    ctx.arc=oarc;ctx.setLineDash=odash;
+    adminMode=admBak;editMode=edBak;selected=selBak;
+    cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+    projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
+  }
+  return out;
+});
+/* ===== SN6d 接触位置唯一化:画在哪 = 点在哪 =====
+   contactPos 是全库【唯一】回答"这条接触此刻应该被画在/被点在哪"的地方。
+   本条把三种接触态各走一遍,每一次都同时量【画点】与【点选点】,两者必须逐位相同。
+   ⚠ ① 刻意把估计位置 c.x/c.y 从真值偏开 5 万公里 —— 今天 covSolve 不模拟估计误差、两者恒等,
+     不偏开的话"读真值"与"读估计"给出同一个答案,这条判据就没有区分度(本项目反复踩的那一类)。 */
+t('FLOW61_PICKPOS',function(){
+  if(typeof contactPos!=='function')return 'fail SN6d contactPos 未加载';
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,edBak=editMode;
+  var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},selBak=selected.slice(),lodBak=LOD.off,out='';
+  try{
+    adminMode=false;editMode=false;selected=[];projectiles.length=0;LOD.off=true;
+    var B=makeShip('CA','取位蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2);
+    var R=makeShip('DD','取位红',[300000,0,0],[-1,0,0],[0,0,0],'red',2);
+    ships.length=0;ships.push(B,R);
+    ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.autoEngage=false;x.roe='hold';x.macOn=false;x.mslOn=false;x.ciwsOn=false;});
+    cam.x=300000;cam.y=0;cam.zoom=0.0008;
+    /* 画点:drawShip 里第一次 toScreen 的入参就是它的落点 */
+    var _ts=toScreen,seen=null;
+    function drawPt(sh){
+      seen=null;
+      toScreen=function(x,y){if(seen===null)seen=[x,y];return _ts(x,y);};
+      try{drawShip(sh);}catch(e){}
+      toScreen=_ts;
+      return seen;
+    }
+    function pickPt(sh){                       /* 点选点:在哪个世界坐标上才吸得到它 */
+      var q=contactPos(sh,'blue'); if(!q)return null;
+      var p=_ts(q[0],q[1]);
+      return targetAt(p[0],p[1])===sh?[q[0],q[1]]:null;
+    }
+    var same=function(a,b){return !!a&&!!b&&Math.abs(a[0]-b[0])<1e-9&&Math.abs(a[1]-b[1])<1e-9;};
+    /* ① 实况 + 定得出位置,而且【估计 != 真值】 */
+    R.litBlue=2;R.seenBlue=simTime;
+    /* 偏移量【从吸附半径现算】,不写死:targetAt 的吸附半径是 60/cam.zoom(=75,000km @ 本条的缩放),
+       第一版偏 50k/30k = 斜距 58,310 < 75,000,于是真值仍落在【估计位置】的吸附圈里,
+       "真值处点不到"那一格当场假红 —— 量的是圈的大小,不是读没读真值。 */
+    var SNAP=60/cam.zoom;
+    R.covB.fix=true;R.covB.seen=true;R.covB.n=1;R.covB.age=0;   /* SN6f:n>0 才是 live;不给的话是 coast(位置同源,但那是另一态) */
+    R.covB.x=R.pos[0]+2.5*SNAP;R.covB.y=R.pos[1]-1.5*SNAP;
+    var cp1=contactPos(R,'blue'), d1=drawPt(R), k1=pickPt(R);
+    var truthHit=(function(){var p=_ts(R.pos[0],R.pos[1]);return targetAt(p[0],p[1])===R;})();
+    var ok1=(same(cp1,[R.covB.x,R.covB.y])&&same(d1,cp1)&&same(k1,cp1)&&!truthHit);
+    /* ② 只有热区:定不出位置 ⇒ 没有位置可交代,画不出、点不着 */
+    R.covB.fix=false;R.litBlue=1;
+    var cp2=contactPos(R,'blue'), d2=drawPt(R);
+    var hit2=(function(){var p=_ts(R.pos[0],R.pos[1]);return targetAt(p[0],p[1])===R;})();
+    var ok2=(cp2===null&&d2===null&&!hit2);
+    /* ③ 幽灵:最后已知 + 外推,画点与点选点都在外推点上,离真值很远 */
+    R.litBlue=0;R.seenBlue=simTime-10;
+    R.seenBluePos=[R.pos[0]-80000,R.pos[1],0];R.seenBlueVel=[1000,0,0];
+    var cp3=contactPos(R,'blue'), d3=drawPt(R), k3=pickPt(R);
+    var want3=[R.pos[0]-80000+1000*10,R.pos[1]];
+    var sep3=cp3?Math.round(Math.hypot(cp3[0]-R.pos[0],cp3[1]-R.pos[1])):-1;
+    var ok3=(same(cp3,want3)&&same(d3,cp3)&&same(k3,cp3)&&sep3>60000);
+    /* ④ 幽灵但【没有接触记录】:fail-closed,不许拿真值兜底(SN2c 那条) */
+    R.seenBluePos=null;R.seenBlueVel=null;
+    var cp4=contactPos(R,'blue'), d4=drawPt(R);
+    var hit4=(function(){var p=_ts(R.pos[0],R.pos[1]);return targetAt(p[0],p[1])===R;})();
+    var ok4=(cp4===null&&d4===null&&!hit4);
+    var ok=(ok1&&ok2&&ok3&&ok4);
+    var fmt=function(v){return v?('['+Math.round(v[0]/1000)+'k,'+Math.round(v[1]/1000)+'k]'):'null';};
+    out=(ok?'ok':'fail')
+      +' ① 实况(估计刻意偏开真值 2.5x/1.5x 吸附半径):contactPos='+fmt(cp1)+' 画点='+fmt(d1)+' 点选点='+fmt(k1)
+        +' 三者一致且【真值处点不到】='+(!truthHit)+'='+ok1
+      +' | ② 只有热区:contactPos='+fmt(cp2)+' 画点='+fmt(d2)+' 真值处能点到='+hit2+'(须 null/null/false)='+ok2
+      +' | ③ 幽灵外推:contactPos='+fmt(cp3)+' 画点='+fmt(d3)+' 点选点='+fmt(k3)+' 离真值 '+sep3+'km(须>60000)='+ok3
+      +' | ④ 幽灵但无接触记录(fail-closed):'+fmt(cp4)+'/'+fmt(d4)+' 真值处能点到='+hit4+'='+ok4;
+  }finally{
+    adminMode=admBak;editMode=edBak;LOD.off=lodBak;selected=selBak;
+    cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+    projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
+  }
+  return out;
+});
+/* ===== SN6b 平滑缩放(cursor-anchored smooth zoom)=====
+   滚轮不再直接写 cam.zoom,只写【目标】;cam.zoom 每帧朝它指数逼近,并把滚动那一刻光标下的世界点
+   钉在光标下不动。五条各管一个失败形态,其中 ④ 是实测出来的坑(见 80-camera 的块注释)。 */
+t('FLOW59_SMOOTHZOOM',function(){
+  if(typeof zAnim==='undefined'||typeof camZoomStep!=='function')return 'fail SN6b 平滑缩放未加载(缺 zAnim/camZoomStep)';
+  var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},aBak=zAnim,vBak=(typeof vtAnim!=='undefined')?vtAnim:null,out='';
+  try{
+    zAnim=null;if(typeof vtAnim!=='undefined')vtAnim=null;
+    /* 取样点刻意【不】在画面中心:中心是缩放的不动点,锚不锚都一样 —— 在那儿测锚点等于没测 */
+    var sx=Math.round(W*0.30), sy=Math.round(H*0.65);
+    /* ① 滚一格:cam.zoom 当拍【不变】(变的是目标),然后几帧之内到位。这两句合起来才是"平滑":
+          当拍就变 = 回到老的一跳 17%;永远不到位 = 拖泥带水。 */
+    cam.x=0;cam.y=0;cam.zoom=vtClampK(1/3000);
+    var k0=cam.zoom, w0=worldAt(sx,sy);
+    zoomAt(sx,sy,1.2);
+    var kSame=(cam.zoom===k0), tgt=zAnim?zAnim.k1:NaN, steps=0, drift=0, w;
+    while(zAnim&&steps<200){
+      camZoomStep(1/60);steps++;
+      w=worldAt(sx,sy);
+      drift=Math.max(drift,Math.hypot(w[0]-w0[0],w[1]-w0[1])*cam.zoom);   /* 锚点飘了几个【屏幕像素】 */
+    }
+    var ok1=(kSame&&steps>=3&&steps<60&&!zAnim&&Math.abs(cam.zoom-tgt)<1e-12);
+    /* ② 锚点:光标下的世界点【全程】钉住(不是只有终点对) */
+    var ok2=(drift<1);
+    /* ③ 连滚几格要叠在【目标】上。叠在当前值上的话动画会被下一格截住,越滚越慢、停在半路 */
+    cam.zoom=vtClampK(1/3000);zAnim=null;
+    var kA=cam.zoom,i;
+    for(i=0;i<5;i++)zoomAt(sx,sy,1.2);
+    var want=vtClampK(kA*Math.pow(1.2,5)), got=zAnim?zAnim.k1:NaN;
+    var ok3=(Math.abs(got/want-1)<1e-12);
+    /* ④ 别人动过相机 ⇒ 动画【让位】。不让位的话,一次没滚完的缩放会在之后每一帧把
+          cam.x/y/zoom 按当时的锚点覆写回去 —— 实测让五条按像素取样的判据同时假红。 */
+    camZoomStep(1/60);                       /* 先走一步,让它记下自己写进去的那三个数 */
+    cam.x=123456;cam.y=-98765;               /* 外部写:平移 / 键位推镜头 / 开局取景 / 判据都是这条路 */
+    camZoomStep(1/60);
+    var ok4=(!zAnim&&cam.x===123456&&cam.y===-98765);
+    /* ⑤ 跳层动画【抢占】:两者都写 cam.zoom,留着就是互相撕扯 */
+    var ok5=true;
+    if(typeof camJump==='function'){
+      zAnim=null;cam.zoom=vtClampK(1/3000);zoomAt(sx,sy,1.2);
+      camJump(2);
+      ok5=(!zAnim&&!!vtAnim);
+      vtAnim=null;
+    }
+    var ok=(ok1&&ok2&&ok3&&ok4&&ok5);
+    out=(ok?'ok':'fail')
+      +' ① 滚一格:当拍 cam.zoom 不变='+kSame+'(须true=改的是目标) '+steps+' 帧后到位(须 3~59)且动画收干净='+ok1
+      +' | ② 锚点:光标下的世界点全程偏移 '+drift.toFixed(3)+'px(须<1)='+ok2
+      +' | ③ 连滚 5 格叠在目标上:实得/应得='+(got/want).toFixed(12)+'(须=1)='+ok3
+      +' | ④ 外部动相机后动画让位='+ok4+'(须true:否则每帧把镜头拽回锚点)'
+      +' | ⑤ 跳层抢占滚轮动画='+ok5;
+  }finally{
+    zAnim=aBak;if(typeof vtAnim!=='undefined')vtAnim=vBak;
+    cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
+  }
+  return out;
+});
+/* ===== SN6b 开局形态:阵型舰队 + 1 光秒外摸黑接敌 + 右下角那一排钮 =====
+   ⚠ 本条【真的跑一遍 initFleet】,跑完把世界留在刚开局的干净状态(同 FLOW3 的 fc3reset 惯例),
+     所以它排在最后一条 t() 之前。 */
+t('FLOW60_START',function(){
+  if(typeof initFleet!=='function')return 'fail initFleet 缺席';
+  var out='',envBak=envIdx;
+  try{
+    envIdx=0;initFleet();
+    var bl=ships.filter(function(s){return s.side==='blue'&&!s.dead;});
+    var ts=ships.filter(function(s){return s.isTarget;});
+    /* ① 三舰成一支【阵型】编队(不是 fmCreate 默认的固定模式) */
+    var F=formations['1'];
+    var same=(typeof fmSameShips==='function')?fmSameShips(bl):null;   /* 吃的是【船】不是 id(同 ghostArm 的调法) */
+    var mode=(F&&typeof fmModeOf==='function')?fmModeOf(F):'?';
+    var ok1=(!!F&&same===F&&F.src==='generated'&&bl.length>=2);
+    /* ② 开局就【站好队形】,而且是【放】过去不是【飞】过去。
+          SN6c 改版:原来这条判的是"位置与场景元组逐位相同"—— 那是 fmCreate 不让船动的说法,
+          但用户实报"开局的时候为什么不按照阵型排列":队形只存在于数据里、画面上看不出来。
+          现在 initFleet 把成员直接放到站位上,所以判据也跟着换成三件事:
+            · 每个成员的【离位】为 0(真的在自己的站位上)
+            · 全员速度为 0(是"放"过去的,不是下令飞过去 —— 靶场刻意保住的"静止发射"MAC 基线靠这条)
+            · 旗舰【没动】(它是锚点,也是下面 ③ 那条"CA 到最近的靶 = 1 光秒"的基准) */
+    var off=[],env=TEST_ENVS[0],fl=(F&&typeof fmFlag==='function')?fmFlag(F):null;
+    if(F&&fl&&typeof fmOffOf==='function'){
+      fmShips(F).forEach(function(m){
+        var o=fmOffOf(m);
+        var d=Math.hypot(m.pos[0]-fl.pos[0]-o[0],m.pos[1]-fl.pos[1]-o[1]);
+        if(d>1||V.len(m.vel)!==0)off.push(m.name+'(离位'+Math.round(d)+'/速度'+V.len(m.vel).toFixed(2)+')');
+      });
+    }
+    var flFixed=(!!fl&&fl.pos[0]===env.ships[0][2]&&fl.pos[1]===env.ships[0][3]);
+    var ok2=(off.length===0&&flFixed&&!!fl);
+    /* ②b 拉远后这支编队塌成的舰队框:分组键必须是编队的【id】。SN6 起 82-lod 拿 fmOf 返回的【对象】当键,
+          标签印成「编队[object Object]」、所有编队的迟滞状态撞在同一个属性名上 —— 那时开局没有编队,画面上看不见;
+          SN6b 开局就有编队之后才露出来(SN7d 截图时发现)。 */
+    var admB0=adminMode,lodB0=LOD.off,zB0=cam.zoom;adminMode=false;LOD.off=false;cam.zoom=kMinNow();
+    lodPrev={fleet:{},pairsB:null,pairsR:null};lodBuild();
+    var fa=lodNow.aggs.filter(function(a){return a.side==='blue';})[0];
+    var okAgg=(!!fa&&fa.kind==='fleet'&&fa.fl==='1'&&Object.keys(lodPrev.fleet).join(',')==='1');
+    var aggTxt=fa?(fa.kind+':'+String(fa.fl)):'无';
+    adminMode=admB0;LOD.off=lodB0;cam.zoom=zB0;lodPrev={fleet:{},pairsB:null,pairsR:null};lodBuild();
+    ok2=ok2&&okAgg;
+    /* ③ 蓝方 CA 到【最近的靶】= 1 光秒(用户拍板的站位)。逐位比 C_LS,不写死公里数 */
+    var ca=bl.filter(function(s){return s.cls==='CA';})[0]||bl[0];
+    var near=1e18;
+    ts.forEach(function(t2){near=Math.min(near,Math.hypot(t2.pos[0]-ca.pos[0],t2.pos[1]-ca.pos[1]));});
+    /* 场景里写的是整数 249792(元组要好读),与 1 光秒 299792.458 差 0.458 km = 1.5e-6。
+       判 1 km 以内:既钉住"就是 1 光秒这一档",又不逼着场景去写一串小数。 */
+    var ok3=(Math.abs(near-C_LS)<1000);
+    /* ③b 这个站位【确实在火控门之外】—— 开局主炮打不响是刻意的,不是没对齐。
+          门距从 ladPair 现量:哪天梯子一改让它够得着了,这条会翻红,提醒人回来重新拍板。 */
+    var look=ladPair('CA','DD').radarLook;
+    var ok3b=(near>look);
+    /* ④ 右下角那一排:三级星图三钮 + 信号视野钮都在 #tools 里,顶栏那一处必须没了,而且点得动 */
+    var tools=document.getElementById('tools');
+    var segIn=!!(tools&&tools.querySelector('#segTier')), topSeg=!!document.querySelector('#hud #segTier');
+    var sigBtn=tools?tools.querySelector('[data-tool="sig"]'):null;
+    var tierBtns=tools?tools.querySelectorAll('#segTier .hbtn').length:0;
+    var sigBak=(typeof SIG!=='undefined')?SIG.on:null,sigTog=false,jumped=false;
+    if(sigBtn&&typeof SIG!=='undefined'){
+      SIG.on=false;
+      sigBtn.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+      sigTog=(SIG.on===true);
+      sigBtn.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+      sigTog=sigTog&&(SIG.on===false);
+      SIG.on=sigBak;sigBtn.classList.toggle('on',!!sigBak);
+    }
+    var tb=tools?tools.querySelector('#segTier .hbtn[data-tier="3"]'):null;
+    if(tb&&typeof vtAnim!=='undefined'){
+      vtAnim=null;
+      tb.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+      jumped=!!vtAnim;vtAnim=null;
+    }
+    var ok4=(segIn&&!topSeg&&tierBtns===3&&!!sigBtn&&sigTog&&jumped);
+    /* ⑤ **打开的时候就是热区**(用户实报"敌方依然可见……打开的时候应该就是热区(初始发射档位为静默)")。
+          三件事缺一不可,它们各自对应一个真实的失败形态:
+            · GM 默认【关】—— 开着的话 drawShip 三道迷雾门第一句 !adminMode 全部跳过,而热区层不看 adminMode,
+              画面就是"热区 + 敌舰真实位置的舰标"叠在一起,看上去像迷雾没生效(那正是用户看到的)
+            · 蓝方开局【静默】—— 开照射的话一拍之后三个靶全部 fix=true、idn=true,摸黑那一段当场没了
+            · 开局【已经跑过一拍感知】—— 不跑的话第一秒 lit 全是 0,热区与椭圆都没东西可画,画面一片空
+          判的是真结果:非 GM 下 drawShip 一个舰标都不画,而 heatBuild() 有格子。 */
+    var ok5=true,sigRow='',nHeat=0,drawn=[];
+    if(typeof heatBuild==='function'&&typeof drawShip==='function'){
+      var camB2={x:cam.x,y:cam.y,zoom:cam.zoom};
+      var rd=ships.filter(function(x){return x.side==='red'&&!x.dead;});
+      var admB2=adminMode; adminMode=false;   /* 迷雾门第一句就是 !adminMode —— 要测它必须自己压成非 GM。
+                                                 【默认值】是另一件事,交给判定块里那条源码级检查(判据跑到这儿时
+                                                 adminMode 早被前面十几条判据写过,读它读到的是污染不是默认)。 */
+      var silent=bl.every(function(x){return x.emitMode==='silent';});
+      var noFix=rd.every(function(x){return x.litBlue>0&&!(x.covB&&x.covB.fix);});
+      rd.forEach(function(x){
+        var n=0,tr=ctx.translate;
+        ctx.translate=function(){n++;return tr.apply(ctx,arguments);};
+        try{drawShip(x);}catch(e){}
+        ctx.translate=tr;
+        if(n>0)drawn.push(x.name);
+      });
+      nHeat=heatBuild();
+      ok5=(silent&&noFix&&drawn.length===0&&nHeat>0);
+      adminMode=admB2;
+      sigRow='非GM下:蓝方发射档全静默='+silent
+        +' 红方全部 lit>0 但定不出位置='+noFix
+        +' 画出的舰标='+(drawn.length?drawn.join(','):'无')+'(须无) 热区格子='+nHeat+'(须>0)';
+      cam.x=camB2.x;cam.y=camB2.y;cam.zoom=camB2.zoom;
+    }
+    var ok=(ok1&&ok2&&ok3&&ok3b&&ok4&&ok5);
+    out=(ok?'ok':'fail')
+      +' ① 开局蓝方 '+bl.length+' 艘成一支编队='+(F?F.id:'无')+' 模式='+mode+'(src='+(F?F.src:'-')+',须 generated=阵型)='+ok1
+      +' | ② 开局就站好队形:不在站位/带速度的='+(off.length?off.join(','):'无')+' 旗舰仍在场景坐标上='+flFixed+' 拉远后的舰队框='+aggTxt+'(须 fleet:1)='+ok2
+      +' | ③ CA 到最近的靶='+Math.round(near)+' km(须=1 光秒 '+Math.round(C_LS)+',容差 1km)='+ok3
+      +';且在火控门 '+Math.round(look)+' 之外(开局主炮打不响是刻意的)='+ok3b
+      +' | ④ 右下角:#tools 里有跳层钮='+segIn+' 三个='+(tierBtns===3)+' 顶栏已无='+(!topSeg)
+      +' 信号视野钮点得动='+sigTog+' 跳层钮点得动='+jumped+'='+ok4
+      +' | ⑤ 打开就是热区:'+sigRow+'='+ok5;
+  }finally{ envIdx=envBak; }
+  return out;
+});
 t('RENDER',function(){render();return 'ok';});
 r.push('ERRORS='+(errs.length?errs.join(' | '):'none'));
 var d=document.createElement('pre');d.id='P';d.textContent=r.join('\\n');document.body.appendChild(d);
@@ -4324,19 +6098,19 @@ grep -q "FLOW43_FMPACE=ok" "$OUT" || { echo "✗ FLOW43_FMPACE 未通过(FM10 �
 # FM3-2 源码级负对照:旧弧线阵的四样东西(舰种角色表 / 防空圈基准半径函数 / 扇面参数 / 弦距参数)必须从 js/ 里消失。
 # 模式用字符串拼接写,免得本文件自己被同一条 grep 抓到。
 FM32_DEAD="CLS_""ROLE|aaRing""Ref|P\\.f""an|P\\.g""ap|FM_LIMIT\\.f""an|FM_LIMIT\\.g""ap"
-if grep -rnE "$FM32_DEAD" js/ >/dev/null 2>&1; then echo "✗ FM3-2 负对照:js/ 里仍有旧弧线阵残留"; grep -rnE "$FM32_DEAD" js/; fail=1; fi
+if grep -rnE "$FM32_DEAD" js/ --include='*.js' >/dev/null 2>&1; then echo "✗ FM3-2 负对照:js/ 里仍有旧弧线阵残留"; grep -rnE "$FM32_DEAD" js/ --include='*.js'; fail=1; fi
 grep -q "FLOW45_LINK=ok" "$OUT" || { echo "✗ FLOW45_LINK 未通过(数据链通道数:四舰种须 1/3/3/3、两份烘焙手抄须同步、guideSide 真实调用点须吃到它)"; fail=1; }
 # SN3 源码级负对照:三处已确认的死代码不许复活。删除【没有任何自动信号】——
 # 全符号扫描扫的是顶层 function/const/let,这三处一个是对象字面量的键、两个是函数体内的局部量,
 # 从来就不在符号表里;删干净没删干净只有 grep 知道。模式用字符串拼接写,免得本文件自己被抓到(同 FM32_DEAD)。
 SN3_DEAD="det""Blue|det""Red"
-if grep -rnE "$SN3_DEAD" js/ >/dev/null 2>&1; then echo "✗ SN3 负对照:js/ 里仍有已删的探测积分死字段(真正的驻留积分是 trkB/trkR)"; grep -rnE "$SN3_DEAD" js/; fail=1; fi
+if grep -rnE "$SN3_DEAD" js/ --include='*.js' >/dev/null 2>&1; then echo "✗ SN3 负对照:js/ 里仍有已删的探测积分死字段(真正的驻留积分是 trkB/trkR)"; grep -rnE "$SN3_DEAD" js/ --include='*.js'; fail=1; fi
 if grep -n "best""Q" js/render/83-hud.js >/dev/null 2>&1; then echo "✗ SN3 负对照:83-hud 里那个算完从未使用的死变量又回来了(21-detect 里的同名量是真在用的,所以这条必须限定文件)"; fail=1; fi
 # 信标死分支用 con""cat 当指纹:本文件删完之后一处都不该再有(信标本身的绘制走 p.type 判断,不经数组拼接)
 if grep -n "con""cat" js/render/83-hud.js >/dev/null 2>&1; then echo "✗ SN3 负对照:83-hud 的信标辐射源死分支复活了(esmFixes 只以红方【舰】为键写入,信标永远取不到 fix、恒 continue)"; fail=1; fi
 # SN1 源码级负对照:guideChan 已迁出感知表,不许再在 sensors/ 下出现;||4 那个假兜底不许复活。
 # 模式用字符串拼接写,免得本文件自己被 grep 抓到(同 FM32_DEAD 的写法)。
-if grep -rn "guide""Chan" js/sensors/ >/dev/null 2>&1; then echo "✗ SN1 负对照:数据链通道数又回到 js/sensors/ 了"; grep -rn "guide""Chan" js/sensors/; fail=1; fi
+if grep -rn "guide""Chan" js/sensors/ --include='*.js' >/dev/null 2>&1; then echo "✗ SN1 负对照:数据链通道数又回到 js/sensors/ 了"; grep -rn "guide""Chan" js/sensors/ --include='*.js'; fail=1; fi
 # ================= SN0 感知重做删除清单:带开关的翻面负对照 =================
 # 第二段(三通道 IR/ESM/LADAR → 两通道 光学/红外 + 雷达)要物理删除下面这批名字。
 # 为什么非它不可:全符号扫描对【删除】天生免疫 —— 符号表是 verify.sh 每次从 js/ 现 grep 生成的,
@@ -4382,7 +6156,7 @@ SN0_N=0
 for ent in "${SN0_LIST[@]}"; do
   nm="${ent%%~*}"; rest="${ent#*~}"; pat="${rest%~*}"; base="${rest##*~}"
   SN0_N=$((SN0_N+1))
-  now=$(grep -rhoE "$pat" js/ 2>/dev/null | wc -l); now=$((now))
+  now=$(grep -rhoE "$pat" js/ --include='*.js' 2>/dev/null | wc -l); now=$((now))
   if [ "$SN_STAGE2" -eq 0 ]; then
     if [ "$now" -eq 0 ]; then
       echo "✗ SN0 负对照(开关=0,第二段未开工):「$nm」已经从 js/ 里消失了(基准 $base 处)——删早了,或者改名没登记进清单"; fail=1
@@ -4395,14 +6169,14 @@ for ent in "${SN0_LIST[@]}"; do
     fi
   else
     if [ "$now" -ne 0 ]; then
-      echo "✗ SN0 负对照(开关=1,第二段已落地):「$nm」在 js/ 里还剩 $now 处没删干净(基准 $base)"; grep -rnE "$pat" js/ | head -5; fail=1
+      echo "✗ SN0 负对照(开关=1,第二段已落地):「$nm」在 js/ 里还剩 $now 处没删干净(基准 $base)"; grep -rnE "$pat" js/ --include='*.js' | head -5; fail=1
     fi
     if grep -rnE "$pat" tools/verify.sh >/dev/null 2>&1; then
       echo "✗ SN0 负对照:「$nm」还留在 tools/verify.sh 的探针脚手架里(注释里的字面也算数)"; grep -nE "$pat" tools/verify.sh | head -5; fail=1
     fi
   fi
 done
-if grep -rn "guideChan||""4" js/ >/dev/null 2>&1; then echo "✗ SN1 负对照:假兜底 ||4 复活了(字段丢失会把 DD 悄悄涨到 4)"; grep -rn "guideChan||""4" js/; fail=1; fi
+if grep -rn "guideChan||""4" js/ --include='*.js' >/dev/null 2>&1; then echo "✗ SN1 负对照:假兜底 ||4 复活了(字段丢失会把 DD 悄悄涨到 4)"; grep -rn "guideChan||""4" js/ --include='*.js'; fail=1; fi
 # SN4 感知阶梯:全套判定里第一条【直接断言 detectLoop 输出】的判据(其余都把 lit 当不会变的背景前提)。
 # 第①档(远距静默须恒 0 级)是它的上界/反向面 —— 没有这一条,把探测能力整体放大十倍全套判定只会【更容易】通过。
 # 第⑥档(必须灭回 0)是它的下界 —— 没有它,一个"点亮之后永不熄灭"的内核能通过全部判定。
@@ -4416,8 +6190,13 @@ grep -q "FLOW51_PAIR=ok" "$OUT" || { echo "✗ FLOW51_PAIR 未通过(sensePairAt
 # 只按被动两路取 max 的话,一艘静默熄火的冷目标会被整目标早退跳过 ⇒ 照射驻留永不积累 ⇒ lit 永远上不到 3
 # ⇒ 主炮对所有不发光的目标静默哑火,而 litBlue 全程是合法的 0/1/2,没有 NaN、没有异常、没有一行日志。
 grep -q "FLOW52_COLD=ok" "$OUT" || { echo "✗ FLOW52_COLD 未通过(冷目标剪枝:探测方静默时 max2 须【等于】光学界、开照射后须【严格大于】光学界(照射界真的进了 max),且 40 拍后 lit 须到 3、照射驻留须涨、光学与静听须全程恒 0)"; fail=1; }
+grep -q "FLOW58_SIGVIEW=ok" "$OUT" || { echo "✗ FLOW58_SIGVIEW 未通过(SN6 信号视野:① 钮关着一个像素都不变;② 被看见那一团是暖色且恒有;③ 只有在发射的舰才有被听见那一团(单变量对照:两次渲染只差一个发射档),且是冷色;④ 圈读不出来就不画;⑤ 半径与感知层的量程律逐位相同 —— 圈与判据必须是同一个数)"; fail=1; }
+grep -q "FLOW57_GRIDNEST=ok" "$OUT" || { echo "✗ FLOW57_GRIDNEST 未通过(SN6 嵌套网格:① 相邻两级的步长必须成整除关系 —— 粗线是细线的子集,缩放时只淡入、永不消失;② 反向对照:同一段检查跑 1-2-5 序列必须【有】断链(否则检查器没牙);③ 战区距离环走同一条阶梯;④ 任一缩放下同时可见 >=3 级(疏密层次);⑤ 网格锚在世界原点而不是相机)"; fail=1; }
+grep -q "FLOW56_LOD=ok" "$OUT" || { echo "✗ FLOW56_LOD 未通过(SN6 聚合层:① 拉远后蓝方按编队塌成框、红方的已定位接触聚成群;② 拉近后一个都不收(阈值真的接在屏幕像素上);③ 【迷雾】红方不许按真实编制聚 —— 把红舰编进同一支编队后结果须逐位不变;④ 【迷雾】构成里没认出的一律记成 ?、不写舰种;⑤ 被收起的船点得到(拾取落到聚合框上))"; fail=1; }
+grep -q "FLOW55_VIEWTIER=ok" "$OUT" || { echo "✗ FLOW55_VIEWTIER 未通过(SN6 三级星图:① 层界由距离梯子推出 —— 梯子一动 T1/T2 必须跟着动、还原后逐位复原(写死 km/px 的实现在这一步露馅);② 三个跳层落点各落在自己那一层里;③ 三层权重和恒为 1 且非负(连续交叉淡化);④ 缩放两头都有依据(拉到最近 = DD 主炮门直径 30~60px / 拉到最远 = 我方发现包线,不是保险丝);⑤ 钳位真的接在滚轮上)"; fail=1; }
+grep -q "FLOW54_HEAT=ok" "$OUT" || { echo "✗ FLOW54_HEAT 未通过(SN6 热区:没有位置的接触须铺成一片【场】—— ① 真的铺出来了且那条接触确实是 lit1/定不出位置;② 是面不是条(场长短比<1.55,而底下的椭圆细长>5 倍 = 反退化);③ 团心按不确定度偏开、把偏移与扭曲归零后必须落回舰位(反向对照);④ 越近面越小(对数压缩退回硬截断时这条会翻))"; fail=1; }
 grep -q "FLOW46_CIWS=ok" "$OUT" || { echo "✗ FLOW46_CIWS 未通过(近防依赖弹丸可见性:探测方照射+冷弹走照射支路(30000<126134)、静默+热弹走光学支路(30000<47997),两相都必须真发出拦截弹且库存下降;静默+冷弹那一相必须恰好0发、库存一颗不掉,且近防其余条件(弹丸存活/在2×外圈内/未脱锁/库存够/开关开/无冷却/威胁逼近)须逐条成立——否则这0发另有出处)"; fail=1; }
-grep -q "FLOW53_RADAR=ok" "$OUT" || { echo "✗ FLOW53_RADAR 未通过(雷达关系不变量:① 任一照方对任一【主推中】目标的照射圈须小于该目标的光学可见圈(被动先于主动,含信标为照方);①b 反向对照——界换成侧推档时必须【有】格子越界,否则这条判据没有区分度;② 基准舰 DD 对标准目标的照射量程须恰为 ACT_REF、其照射被基准接收机听见的距离须恰为 LIS_REF;③ 每件主炮的 macRadar 须落在 [macRange, 该舰对标准目标的照射圈] 之内(超出=规格条虚标,永远拿不到火控级);④ emit/recv 随体型单调不减,且手电系数 4*(emit/recv)^(1/4) 须 >=4(等价 emit>=recv,recv 反超会让那个舰种的雷达看得比被听见还远);⑤ 靶场开局蓝方 CA 开照射后须至少有一个靶到火控级——坐标从 TEST_ENVS[0] 现读,SENS 与靶距任一边动了都会红)"; fail=1; }
+grep -q "FLOW53_RADAR=ok" "$OUT" || { echo "✗ FLOW53_RADAR 未通过(雷达关系不变量:① 任一照方对任一【主推中】目标的照射圈须小于该目标的光学可见圈(被动先于主动,含信标为照方);①b 反向对照——界换成侧推档时必须【有】格子越界,否则这条判据没有区分度;② 基准舰 DD 对标准目标的照射量程须恰为 ACT_DET、其照射被基准接收机听见的距离须恰为 LIS_DET;③ 每件主炮的 macRadar 须落在 [macRange, 该舰对标准目标的照射圈] 之内(超出=规格条虚标,永远拿不到火控级);④ emit/recv 随体型单调不减,且手电系数 4*(emit/recv)^(1/4) 须 >=4(等价 emit>=recv,recv 反超会让那个舰种的雷达看得比被听见还远);⑤ 靶场开局蓝方 CA 开照射后须至少有一个靶到火控级——坐标从 TEST_ENVS[0] 现读,SENS 与靶距任一边动了都会红)"; fail=1; }
 grep -q "FLOW47_FOG=ok" "$OUT" || { echo "✗ FLOW47_FOG 未通过(战争迷雾·敌舰画在哪儿:陈旧/幽灵须画在「最后已知+速度×年龄」的外推点,真实位置与裸最后已知点都不许有图标 / 实况须画在真实位置 / 从未探到的一艘都不许画(非GM 总图标=4) / 蓝舰不迷雾 / GM 旁路时全部回到真实位置且总图标=5)"; fail=1; }
 grep -q "FLOW48_KEYS=ok" "$OUT" || { echo "✗ FLOW48_KEYS 未通过(SN0 键的静态检查:九维能力清单与五条功能带清单逐位钉死、四套站位模板 49 个插槽的 cap 与 band 全落在清单上、9 个 boost 键同样、阵心 req/cap 不悬空、三通道驻留对象的键集合恒为 ir/esm/lad;每组都带故意种坏的自检副本)"; fail=1; }
 # SN0 源码级普查:三通道驻留键的【读点计数】。JS 探针跑在浏览器里读不到源码文件,所以这一半只能在 bash 层做。
@@ -4444,28 +6223,31 @@ SN4_TRK_OLD="[A-Za-z_]*[Tt]""rk[BR]?\.(ir|esm|lad)"
 SN4_TRK_NEW="[A-Za-z_]*[Tt]""rk[BR]?\.(opt|lis|act)"
 SN4_OLD_N=$(grep -rEoh "$SN4_TRK_OLD" js/ --include='*.js' | wc -l | tr -d ' ')
 [ "$SN4_OLD_N" = "0" ] || { echo "✗ SN4 负对照:旧三通道驻留键在 js/ 里还剩 $SN4_OLD_N 处没改名(注释里的也算数)"; grep -rEn "$SN4_TRK_OLD" js/ --include='*.js' | head -5; fail=1; }
-SN4_TRK_WANT="js/render/82-ship-icons.js:1 js/render/83-hud.js:1 js/render/87-fleetcards.js:3"
-SN4_TRK_GOT="$(grep -rEo "$SN4_TRK_NEW" js/render/ --include='*.js' | sed -E 's/:[^:]*$//' | sort | uniq -c | awk '{printf "%s:%s ",$2,$1}')"
-SN4_TRK_GOT="${SN4_TRK_GOT% }"
-if [ "$SN4_TRK_GOT" != "$SN4_TRK_WANT" ]; then
-  echo "✗ SN4 负对照:渲染层驻留键的读点计数变了(注释里的也算数——改通道就要连注释一起改)"
-  echo "   实测 $SN4_TRK_GOT"
-  echo "   期望 $SN4_TRK_WANT"
-  fail=1
-fi
-SN4_SENS_N=$(grep -rEoh "$SN4_TRK_NEW" js/sensors/ --include='*.js' | wc -l | tr -d ' ')
-[ "${SN4_SENS_N:-0}" -ge 1 ] 2>/dev/null || { echo "✗ SN4 负对照:js/sensors/ 下一处新驻留键读点都没有(实测 $SN4_SENS_N)——驻留根本没被写过"; fail=1; }
+# SN6:驻留水位整个退役,所以这两段从"读点计数必须是这几个"翻成"一处都不许有 + 接触对象必须真的被读"。
+# 注释里的字面也算数(FM6b 的规矩),所以下面两条描述都【不点名】被删的那套键。
+SN6_TRK_N=$(grep -rEoh "$SN4_TRK_NEW" js/ --include='*.js' | wc -l | tr -d ' ')
+[ "$SN6_TRK_N" = "0" ] || { echo "✗ SN6 负对照:已退役的驻留水位键在 js/ 里还剩 $SN6_TRK_N 处(注释里的也算数)"; grep -rEn "$SN4_TRK_NEW" js/ --include='*.js' | head -5; fail=1; }
+# 正面那一半:接触对象必须【真的被读】,而且渲染层与感知层都要有读点 —— 只判"旧的删干净了"的话,
+# 一个什么都不写的实现同样能全绿(那正是换内核最容易掉进去的坑)。
+SN6_COV_PAT="[Cc]""ov[BR][^A-Za-z0-9_]"   # 不用 \b:上一版那个反斜杠被当成转义写成了真的退格符,模式永远匹配不到
+SN6_COV_SENS=$(grep -rEoh "$SN6_COV_PAT" js/sensors/ --include='*.js' | wc -l | tr -d ' ')
+SN6_COV_REND=$(grep -rEoh "$SN6_COV_PAT" js/render/ --include='*.js' | wc -l | tr -d ' ')
+[ "${SN6_COV_SENS:-0}" -ge 1 ] 2>/dev/null || { echo "✗ SN6 负对照:js/sensors/ 下一处接触对象读点都没有(实测 $SN6_COV_SENS)——接触根本没被写过"; fail=1; }
+[ "${SN6_COV_REND:-0}" -ge 1 ] 2>/dev/null || { echo "✗ SN6 负对照:js/render/ 下一处接触对象读点都没有(实测 $SN6_COV_REND)——画面没有在读感知层"; fail=1; }
 # 被照射告警的阈值原来是【两份手抄】的 0.3(21-detect 的日志门 + 82-ship-icons 的黄圈门),而且不在 SENS 表里。
 # SN4 把它收进 SENS.ACT_WARN,所以这条从"手抄份数=2"翻成"全库恰好一处定义 + 一处手抄都不许有"。
 # 反面那一半不能省:只判"定义有一处"的话,旁边再手抄一个字面量阈值照样全绿,而那正是改前的病。
-SN4_WARN_DEF=$(grep -rhoE "ACT""_WARN[[:space:]]*:" js/ --include='*.js' | wc -l | tr -d ' ')
-[ "$SN4_WARN_DEF" = "1" ] || { echo "✗ SN4 负对照:被照射告警阈值的定义处=$SN4_WARN_DEF(须 1:只许住在 SENS 表里一份)"; fail=1; }
+# SN6:被照射告警不再有阈值(判据是"对方这一拍有没有一条照射量测打在我身上"),所以这条从
+# "阈值只许定义一处"翻成"阈值一处都不许有" —— 手抄一个字面量回来照样是改前那个病。
+SN6_WARN_DEF=$(grep -rhoE "ACT""_WARN" js/ --include='*.js' | wc -l | tr -d ' ')
+[ "$SN6_WARN_DEF" = "0" ] || { echo "✗ SN6 负对照:被照射告警的阈值又回来了($SN6_WARN_DEF 处;注释里的也算数)"; fail=1; }
 SN4_WARN_HAND=$(grep -rhoE "\.act[[:space:]]*>=?[[:space:]]*0\." js/ --include='*.js' | wc -l | tr -d ' ')
 [ "$SN4_WARN_HAND" = "0" ] || { echo "✗ SN4 负对照:又出现了手抄的告警阈值字面量($SN4_WARN_HAND 处)——照射驻留的阈值只许读 SENS 里那一份"; grep -rEn "\.act[[:space:]]*>=?[[:space:]]*0\." js/ --include='*.js' | head -3; fail=1; }
 # 驻留对象的字面初始化。SN4 之后 newTrk() 是唯一工厂(makeShip 与 detectFor 都调它),份数从 3 收成 1。
 # 它与上面那条读点普查互补:悄悄加第四个积分时读点计数纹丝不动,这一条与 FLOW48_KEYS 的键集合断言才看得见。
-SN4_LIT_N=$(grep -rEoh "\{[[:space:]]*opt:[[:space:]]*0,[[:space:]]*lis:[[:space:]]*0,[[:space:]]*act:[[:space:]]*0[[:space:]]*\}" js/ --include='*.js' | wc -l | tr -d ' ')
-[ "$SN4_LIT_N" = "1" ] || { echo "✗ SN4 负对照:驻留对象字面量份数=$SN4_LIT_N(须 1:只许住在 newTrk 里。>1 = 手抄又回来了;0 = 键名或工厂被改了)"; fail=1; }
+# SN6:接触对象的字面量只许住在它的工厂里一份。>1 = 手抄又回来了(两份必然漂移);0 = 键名或工厂被改了。
+SN6_COV_LIT=$(grep -rEoh "ch:[[:space:]]*\{[[:space:]]*opt:[[:space:]]*null,[[:space:]]*lis:[[:space:]]*null,[[:space:]]*act:[[:space:]]*null[[:space:]]*\}" js/ --include='*.js' | wc -l | tr -d ' ')
+[ "$SN6_COV_LIT" = "1" ] || { echo "✗ SN6 负对照:接触对象字面量份数=$SN6_COV_LIT(须 1:只许住在它的工厂里)"; fail=1; }
 grep -q "FLOW49_RANGE=ok" "$OUT" || { echo "✗ FLOW49_RANGE 未通过(靶场参数链路:rangeDefaults 影子副本须有限且跟住 SENS.CLS.DD、发射档缺省须是照射 / 真点「体型」后靶身恰好一个字段变且光学亮度与雷达反射都跟着变 / 真点「隐身」只许动雷达反射、光学亮度须一动不动(两个字段被接成一个量时只有这条抓得到)/ 不许顺手补满弹匣(反向:调库存必须补满) / 发射档三态须真的改变靶的 emitMode 与蓝方的静听驻留,且干扰档被听见的距离须大于照射档(反向:静默档须恒 0) / clamp 垃圾输入产出必须全合法·键集=旋钮清单·幂等 / enum 旋钮不许出现字符串取值)"; fail=1; }
 [ "$SN0_N" -eq 15 ] 2>/dev/null || { echo "✗ SN0 清单被改动或整段被删:应有 15 条,现在「$SN0_N」条(删条目/注释掉条目来消红不算修)"; fail=1; }
 # ================= SN4 热循环纪律(源码级静态检查) =================
@@ -4531,5 +6313,25 @@ else
   [ -z "$SN4_HOT_BAD" ] || { echo "✗ SN4 热循环纪律:O(N平方) 段里出现了禁令项$SN4_HOT_BAD(除法/开方/Math调用/分配一律搬进 sensePrepare 的 O(N) 段)"; fail=1; }
 fi
 case "$SN_STAGE2" in 0|1) ;; *) echo "✗ SN0 开关被改成了「$SN_STAGE2」(只许 0 或 1;写别的值等于把整段静默关掉)"; fail=1;; esac
+grep -q "FLOW71_AIFOG=ok" "$OUT" || { echo "✗ FLOW71_AIFOG 未通过(AI1 红方 AI 只读自己的接触图:蓝舰真实位置怎么挪,只要红方握着的接触没变,红方的目标点就必须逐位不变——无接触去战场中心且不许锁定/发射;纯方位只沿方位线推进固定一段、与真实距离无关;有定位去【估计位置】;丢了先去最后已知位置再放弃;三舰横向拉开;看不见的来袭不触发规避)"; fail=1; }
+grep -q "FLOW72_FIREFLASH=ok" "$OUT" || { echo "✗ FLOW72_FIREFLASH 未通过(FX1 开火暴露:主炮 / 导弹发射之后 FIRE_S 秒里光学亮度多加 P_FIRE 一档——真发出去才亮、被火控门挡回不亮、诱饵弹不亮;倒数完逐位回到开火前;端到端:冷船看不见的距离上,一开火下一拍就被看见,熄了又看不见)"; fail=1; }
+grep -q "FLOW73_MATCH=ok" "$OUT" || { echo "✗ FLOW73_MATCH 未通过(MT1 对局:默认仍是靶场,点顶栏「对局」钮进 3 对 3(红方不是靶、双方静默静止、蓝方不压集结令、先停表);红蓝重心恰距 MATCH.OPEN、方位在 ±ARC 内随机;开局互相无接触且间距不小于最远雷达发现;回归基线 1..6 不许挪位;结果卡片只在对局里弹、字对、再来一局能重开;再点一次回靶场)"; fail=1; }
+grep -q "tcStep(dt)" js/core/99-main.js || { echo "✗ TC1 接触降速没有接进帧循环(core/99 的 frame 里找不到 tcStep(dt)):判据 FLOW74 量的是 tcStep 本身算得对不对,接没接上只能从源码看"; fail=1; }
+grep -q "FLOW74_TC=ok" "$OUT" || { echo "✗ FLOW74_TC 未通过(TC1 接触降速:档位只读我方知道的事——没被发现 / 只有热区的红舰贴脸也不降速,定位了按【估计位置】分档(x6 / x4 / x2),看得见的来袭导弹进交战档;变慢立刻开始、变快等 HOLD 秒;玩家选的倍速低于上限时不动;只在对局里生效;顶栏读数写出降速后缀)"; fail=1; }
+grep -q "FLOW75_AUTOAIM=ok" "$OUT" || { echo "✗ FLOW75_AUTOAIM 未通过(MT1 修:开着「火控」(自动索敌)的编队成员锁着目标时必须每拍续上 driftFire、机头转向目标;反向对照:没开火控的编队成员自己不会转过去——不续的话编队的主炮只在碰巧对准时才响,对局模拟里 0 胜 6 负)"; fail=1; }
+grep -q "FLOW70_TOOLSPOS=ok" "$OUT" || { echo "✗ FLOW70_TOOLSPOS 未通过(UI2 右下角工具栏:必须贴画面右边距、整个在事件窗【下面】而不是左边、不压底部指令栏;两个工具钮是图标钮(行内 svg + aria-label),点在图标子元素上也要切得动)"; fail=1; }
+grep -q "FLOW69_TIERLAND=ok" "$OUT" || { echo "✗ FLOW69_TIERLAND 未通过(SN9b 层界与落点必须出自同一块画布:三种画布 x 从每一层出发 x 按每一个跳层钮,落地后离散层 / 亮着的钮 / 画法权重都必须属于目的层,且不看来路;层界必须随画布短边变 —— 冻在加载期的 750px 上就是「按了战区、亮的还是舰队」)"; fail=1; }
+grep -q "FLOW68_HULLSIZE=ok" "$OUT" || { echo "✗ FLOW68_HULLSIZE 未通过(SN9 舰体大小随缩放变:① 系数 = (缩放/战术落点)^A 钳在 [MIN,MAX],落点上恰为 1、全程单调不跳、CA 最大不超过 48px;② 舰体 / 残骸 / 图标半径 / 尾焰 / 告警圈 / 锁定圈 / 移动虚影 全跟同一个数;③ 系数不读任何一艘船的字段——没认出的敌舰照旧 UNK+T2、与我方同系数;④ 锚点从视口现量,不写死公里数)"; fail=1; }
+grep -q "FLOW67_TIERFX=ok" "$OUT" || { echo "✗ FLOW67_TIERFX 未通过(SN8 换挡感 + 聚合动画:A1 换挡大字【只】由跳层钮触发、报的是目的层——手动缩放跨层不弹、战区直跳战术不弹中间的舰队层、同层再按不弹,0.7 秒后一笔不画;A2 四边刻度尺换层那一刻为 0 随后长出来、全是矩形、战术层写公里读数;A3 跳层镜头带过冲且终点逐位等于落点;C 收拢/散开的【结论】即时而【画面】带 0.25 秒过渡,首见的船不播动画,静止时不包过渡变换)"; fail=1; }
+grep -q "FLOW66_LITSTYLE=ok" "$OUT" || { echo "✗ FLOW66_LITSTYLE 未通过(SN7c 敌方观测等级的显示:地图椭圆 / 舰标下的等级标签 / 缩圈小窗三处的颜色都必须等于 83-hud 的 LIT_RGB[那一级](演示页的 灰/蓝/青/黄),三级互不相同;火控级实线 + ◎ + 四角火控框,其余虚线;陈旧记号带等级、失联记号不带)"; fail=1; }
+! grep -rqE "80,220,160|110,190,255|GEOM_LIT_COL" js/ --include='*.js' || { echo "✗ 等级配色出现了第二份(旧的 橙/蓝/绿 三元组或小窗自己的配色表还在):全库只许 83-hud 的 LIT_RGB 一张表"; fail=1; }
+grep -q "FLOW65_STARS=ok" "$OUT" || { echo "✗ FLOW65_STARS 未通过(SN7b 星空每帧的绘制指令数必须与星的颗数无关:① 每帧 0 次 fillRect、2~8 次 drawImage;② 离屏贴图只在尺寸变了时重建;③ 贴图里真的有星;④ 视差还在且近层漂得更快。逐颗画 1200 颗会周期性撑爆画布命令缓冲,每隔一两秒卡一帧 15~100ms)"; fail=1; }
+grep -q "FLOW64_GEOM=ok" "$OUT" || { echo "✗ FLOW64_GEOM 未通过(SN7 定位几何小窗:① 钮开关两次都量;② 空/悬停/左键点敌舰常驻且不丢我方选中;③ 悬停临时盖过、移开回常驻、光标停在小窗自己身上不算悬停;④ 我方舰攻击目标=正在打的/火控在等的排最前且进得来的那个,与常驻并存时最后一次点击说了算,点空地真的清常驻;⑤ 热区进不来,常驻退回热区只是暂不显示、重新定位就回来、死了才清;⑥ 敌我同在吸附圈里近者胜;⑦ 从敌方记号上起手拖框照常框选;⑧ 门圈=covMsl/covMac x 比例尺、视线=这一拍真探测得到它的站、整拍冻结、量测断了不画;⑨ 换局清常驻)"; fail=1; }
+grep -q "FLOW63_VIEW=ok" "$OUT" || { echo "✗ FLOW63_VIEW 未通过(SN6f 接触显示五态互斥:none 无 / heat 只有热区 / live 椭圆+舰标 / coast 椭圆+陈旧记号 / ghost 失联记号+虚线不确定圈。A 逐态构造量五层、B 真实序列逐秒量,任何一拍落到表外的组合——比如用户报的「椭圆+陈旧而无热区」「热区+陈旧」——就红。全库只许 contactState 一个状态机)"; fail=1; }
+grep -q "FLOW62_MARK=ok" "$OUT" || { echo "✗ FLOW62_MARK 未通过(SN6e 幽灵/陈旧的两个圈是两种东西:不确定圈=世界尺度+虚线(这是个估计),记号本体=固定屏幕像素+实线(这是个符号);① 两者画法不同 ② 缩放减半时记号不变、不确定圈减半 ③ 不确定圈缩到记号量级时不画——否则就是两个同样大的同心虚线圈,读不出任何东西)"; fail=1; }
+grep -q "FLOW61_PICKPOS=ok" "$OUT" || { echo "✗ FLOW61_PICKPOS 未通过(SN6d 接触位置唯一化:contactPos 是全库唯一回答「这条接触画在哪/点在哪」的地方。① 实况接触读【估计】c.x/c.y 而不是真值,画点与点选点逐位相同,且真值处点不到;② 定不出位置的接触画不出也点不着——那是本轮修掉的泄漏:开局一个舰标都没有,鼠标却能把热区接触扫出精确坐标;③ 幽灵走外推点,画点=点选点;④ 没有接触记录时 fail-closed,不许拿真值兜底)"; fail=1; }
+grep -q "FLOW59_SMOOTHZOOM=ok" "$OUT" || { echo "✗ FLOW59_SMOOTHZOOM 未通过(SN6b 平滑缩放:① 滚一格当拍 cam.zoom 不变、几帧后到位且动画收干净;② 光标下的世界点全程钉住(<1px);③ 连滚几格叠在目标上而不是叠在当前值上;④ 外部动过相机之后动画让位——不让位会每帧把镜头拽回锚点,实测让五条按像素取样的判据同时假红;⑤ 跳层动画抢占滚轮动画)"; fail=1; }
+grep -q '^let adminMode=false;' js/core/01-state.js || { echo "✗ GM 默认值不是关的(core/01 的 adminMode 必须默认 false;开着的话 drawShip 三道迷雾门第一句 !adminMode 全部跳过,而热区层不看它 —— 开局画面变成「热区 + 敌舰真实位置的舰标」叠在一起,整套战争迷雾在玩家眼里从不存在)"; fail=1; }
+grep -q "FLOW60_START=ok" "$OUT" || { echo "✗ FLOW60_START 未通过(SN6b 开局形态:① 三舰成一支【阵型】编队(src=generated,不是 fmCreate 默认的固定);② 建队不许让船动——靶场的静止发射 MAC 基线靠这条;③ CA 到最近的靶恰为 1 光秒,且在火控门之外(开局主炮打不响是刻意的);④ 三级星图三钮与信号视野钮都在右下角 #tools 里、顶栏已无、两者都点得动;⑤ 打开的时候就是热区——GM 默认关 + 蓝方开局静默 + 开局已跑过一拍感知,三者缺一都会让开局画面变成"敌舰真实位置可见"或"一片空")"; fail=1; }
 grep -q "^RENDER=ok" "$OUT" || { echo "✗ RENDER 未通过"; fail=1; }
 [ $fail -eq 0 ] && echo "✓ 全部通过" || exit 1

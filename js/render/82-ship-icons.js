@@ -18,13 +18,32 @@ function shipIdentTier(s){                                    // TIER1 分级遮
   // 于是尺寸也跟着按真实 tier 画,分级照漏。轮廓层的幽灵泄漏是拆分前就有的既有行为(残影保留舰型),本次不动它,只堵本轮 tier 带出来的这一半。
   return (s.side==='red'&&(s.litBlue||0)<2)?2:shipTier(s);
 }
-function shipIconR(s){return hullSize(shipIdentHull(s),shipIdentTier(s))*0.78;} // 图标半径:标签/选中圈/尾焰的基准 TIER1 tier 也走遮蔽口径,否则选中圈/标签间距照样把分级漏出去
+/* ================= SN9 舰体大小随缩放变(2026-09-21)=================
+   用户实报:"拉近了船不变大,拉远了船不变小,没有办法做出很直观的空间关系"。改前舰体是固定屏幕尺寸的贴纸,地图在它底下滑。
+   标准叫法:制图综合里的【夸张】算子(exaggeration,McMaster & Shea 1992)+ 按缩放插值的符号尺寸(Mapbox 样式规范的 interpolate / exponential)。
+   真实舰体约 1km、舰间距约 2 万 km,任何可用的缩放下船都是亚像素,所以船【必须】画得比真实大;问题只是夸张多少、随缩放怎么变。
+   缩放范围约 360 倍,而图标能接受的尺寸范围只有 4 倍左右(太小轮廓读不出,太大用户在演示页嫌过一次)——
+   按世界尺寸同步缩放(指数 1)只能在一个 4 倍的窗口里变,窗口外两头钳死;用户拍板取【亚线性、全程响应】:
+       系数 = (缩放 / 战术落点的缩放)^A,钳在 [MIN, MAX]
+   A=0.4 ⇒ 缩放每翻一倍船大 1.32 倍;从 139 km/px 到 3926 km/px(战术落点到舰队落点全盖住)每滚一格船都在变。
+   ⚠ 系数是【全场同一个数】,不读任何一艘船的字段 —— 所以它不泄漏情报:没认出的敌舰照旧是 UNK + T2,只是跟着大家一起变。
+      (演示页 lodHullLenPx 那一版按 size 放大,所以要专门给"没认出的不放大"立规矩;这一版没有这个口子。)
+   ⚠ 锚点 = 战术层的跳层落点,从 80-viewtier 现量,不抄死数:落点随画布短边变,而"落点上的船 = 改前的大小"这条要在任何视口下都成立。
+   ⚠ 陈旧 / 失联的【记号】(CONTACT_MARK_R)不跟着变:它不是船,是"我不知道这是什么"的记号。 */
+const HULL_ZOOM={A:0.4,MIN:0.5,MAX:1.9}; // MAX 1.9:CA(T2 图标长 25.3px)拉到最近时 48px —— 演示页预算 B5 的 HULL_PX
+function hullZoomF(){
+  if(typeof vtFitKmpp!=='function'||typeof vtMainR!=='function')return 1;
+  const kRef=1/vtFitKmpp(vtMainR(1),VT.LAND);
+  if(!(kRef>0)||!(cam.zoom>0))return 1;
+  return Math.max(HULL_ZOOM.MIN,Math.min(HULL_ZOOM.MAX,Math.pow(cam.zoom/kRef,HULL_ZOOM.A)));
+}
+function shipIconR(s){return hullSize(shipIdentHull(s),shipIdentTier(s))*0.78*hullZoomF();} // 图标半径:标签/选中圈/尾焰的基准 TIER1 tier 也走遮蔽口径,否则选中圈/标签间距照样把分级漏出去
 function drawWreck(s,p,r){ // 残骸:空心轮廓+裂纹+暗色,留名标记
   const ang=Math.atan2(s.facing[1],s.facing[0]);
   ctx.save();
   ctx.translate(p[0],p[1]);
   ctx.rotate(ang);
-  drawHull(ctx,shipHull(s),shipIdentTier(s),'#a0aab9','outline'); // 残骸:空心轮廓,不带阵营色。TIER1 残骸尺寸也走遮蔽口径(方案原文说残骸是已死舰可以保留真实 tier,但残骸在场上留很久,不遮蔽等于给"打死的是几级"留一个稳定读数)
+  ctx.save();{const zf=hullZoomF();ctx.scale(zf,zf);}drawHull(ctx,shipHull(s),shipIdentTier(s),'#a0aab9','outline');ctx.restore(); // SN9 残骸跟活船同一个系数;只包舰体这一笔 —— 下面的裂纹用的是传进来的 r(已含系数),一起包进来会被乘两次;原注: // 残骸:空心轮廓,不带阵营色。TIER1 残骸尺寸也走遮蔽口径(方案原文说残骸是已死舰可以保留真实 tier,但残骸在场上留很久,不遮蔽等于给"打死的是几级"留一个稳定读数)
   // 裂纹(断开感)
   ctx.strokeStyle='rgba(200,210,225,.5)';ctx.lineWidth=1;
   ctx.beginPath();ctx.moveTo(-r*0.7,-r*0.7);ctx.lineTo(r*0.3,r*0.3);ctx.stroke();
@@ -36,50 +55,74 @@ function drawWreck(s,p,r){ // 残骸:空心轮廓+裂纹+暗色,留名标记
     ctx.fillText(s.name+' ☠',p[0],p[1]+r+6);
   }
 }
+/* 幽灵/陈旧【记号】的半径,单位是屏幕像素(SN6e)。它是一个符号,不随缩放变化 ——
+   与它同心的那个不确定圈才是世界尺度的。判据 FLOW47_FOG 按这个数取样。 */
+const CONTACT_MARK_R=7;
 function drawShip(s){
-  // 感知层 v5:信息年龄——红方目标(玩家=蓝方视角)分实况/陈旧/幽灵三档,画"最后已知+外推"而非上帝视角真实位置
-  let dispPos=s.pos, ghost=false, stale=false, ageV=0;
+  /* ================= 红方接触:画什么只问 contactState(SN6f)=================
+     五态互斥,每一态只有一个显示层负责(总表在 render/CLAUDE.md 的 SN6f 一节):
+       none   不画
+       heat   不画 —— 归热区层(83-hud 的 drawContacts);这里画任何东西都会把"定不出位置"变成一个点
+       live   舰标(本函数后半段那一整条链)+ 椭圆(83-hud)
+       coast  【陈旧】记号 + 椭圆。⚠ 不另画不确定圈:椭圆自己就在长大(23-cov 的 FADE_LOST),
+              它就是"我有多不知道它在哪";再叠一个"速度x年龄"的圈,就又回到"两个圈各说各话"。
+       ghost  【失联】记号 + 虚线不确定圈(此时已经没有椭圆了,圈由最后已知速度 x 失联时长给)
+     位置一律从 contactPos 拿(画在哪 = 点在哪,SN6d)。
+     记号不是图标(SN6e):图标承诺的是"我知道这是什么、在哪、朝哪开";coast / ghost 这两态一样都不知道,
+     而且图标那条链会把 s.vel / s.flame / s.orders[0] / s.facing 四样【真值】实时画出去。
+     GM 与编辑器旁路:dispPos 保持真值、view 保持 live。 */
+  let dispPos=s.pos, view='live';
   if(!adminMode&&!editMode&&s.side==='red'){
-    ageV=contactAge(s,'blue');
-    const st=contactState(s,'blue');
-    if(st==='none')return; // 蒸发(幽灵寿命到)
-    ghost=st==='ghost'; stale=st==='stale';
-    // SN2c 战争迷雾泄漏:这两行原来是 s.seenBluePos||s.pos 与 s.seenBlueVel||s.vel —— 不是普通兜底,是【拿真值兜底】。
-    // 接触记录一缺,幽灵/陈旧接触就静默退化成"画在敌舰真实位置上",迷雾当场失效而画面看起来完全正常,
-    // 还多一个不确定圈显得更可信。渲染层不抛错(会打断整帧绘制),改成【没有接触记录就不画】——失效方向从 fail-open 翻成 fail-closed。
-    // 今天走不到:lit>=1 要求红外或回波通道有驻留积累,而那正是 21-detect 写 seenBluePos 的条件;ghost 要求 ever 为真,同理。
-    // 放在 ghost/stale 判定之后、外推之前,是为了同时罩住下面不确定圈那行对 seenBlueVel 的读取。
-    if((ghost||stale)&&(!s.seenBluePos||!s.seenBlueVel))return;
-    if(ageV>0&&(ghost||stale)){ // 外推预测位置
-      const lp=s.seenBluePos, lv=s.seenBlueVel;
-      dispPos=[lp[0]+lv[0]*ageV,lp[1]+lv[1]*ageV,lp[2]+(lv[2]||0)*ageV];
-    }
+    view=contactState(s,'blue');
+    if(view==='none'||view==='heat')return;
+    const cp=contactPos(s,'blue');
+    if(!cp)return;
+    dispPos=cp;
   }
-  if(!adminMode&&!editMode&&s.side==='red'&&!s.litBlue&&!ghost)return; // 未点亮且非幽灵不画
   const p=toScreen(dispPos[0],dispPos[1]);
   if(p[0]<-40||p[0]>W+40||p[1]<-40||p[1]>H+40)return;
-  if(ghost||stale){ // 幽灵/陈旧:半透明+虚线+不确定圈(圈随年龄膨胀)
+  if(view==='coast'||view==='ghost'){
+    const ghost=view==='ghost';
+    /* 过期时长:coast 读椭圆自己的 age(距最后一次量测),ghost 读 contactAge(距最后一次定位)—— 各是各那一态的"多久了" */
+    const ageV=ghost?contactAge(s,'blue'):((s.covB&&s.covB.age)||0);
     ctx.save();
-    ctx.globalAlpha=ghost?0.4:0.65;
-    ctx.setLineDash([5,4]);
-    const uv=V.len(s.seenBlueVel)||0; // SN2c:原来是 s.seenBlueVel?V.len(s.seenBlueVel):V.len(s.vel) —— 同样是拿真值兜底,不确定圈会按【真实速度】定大小,圈看着完全正常而尺寸是偷来的。走到这里必有接触记录(上面那道 return 已挡住),||0 刻意保留:它防的是速度算出 NaN,不是防字段缺失
-    const rad=Math.min(200000,Math.max(8000,uv*ageV))*cam.zoom;
-    ctx.strokeStyle=ghost?'rgba(255,107,107,.28)':'rgba(255,209,102,.22)';
+    ctx.globalAlpha=ghost?0.4:0.7;
+    const col=ghost?'255,107,107':'255,209,102';
     ctx.lineWidth=1;
-    ctx.beginPath();ctx.arc(p[0],p[1],rad,0,6.283);ctx.stroke();
-    ctx.fillStyle=ghost?'rgba(255,150,140,.75)':'rgba(255,209,102,.65)';
+    let top=CONTACT_MARK_R;
+    if(ghost){
+      /* 不确定圈:半径是【世界公里】(最后已知速度 x 失联时长)⇒ 随缩放变化;虚线 = 这是个估计。
+         只在明显大于记号时才画 —— 缩到记号量级时是两个同样大的同心圈,读不出任何东西(SN6e 订正)。 */
+      const uv=V.len(s.seenBlueVel)||0; // ||0 防的是速度算出 NaN,不是防字段缺失(contactPos 已经替它把过关;SN2c:这里绝不许回落到 s.vel 真值)
+      const rad=Math.min(200000,Math.max(8000,uv*ageV))*cam.zoom;
+      if(rad>CONTACT_MARK_R*1.8){
+        ctx.setLineDash([5,4]);
+        ctx.strokeStyle='rgba('+col+',.28)';
+        ctx.beginPath();ctx.arc(p[0],p[1],rad,0,6.283);ctx.stroke();
+        ctx.setLineDash([]);
+        top=rad;
+      }
+    }
+    /* 记号本体:【固定屏幕像素】的实线小圈 ⇒ 不随缩放变化;实线 = 这是个符号,不是估计 */
+    ctx.strokeStyle='rgba('+col+',.55)';
+    ctx.beginPath();ctx.arc(p[0],p[1],CONTACT_MARK_R,0,6.283);ctx.stroke();
+    ctx.fillStyle='rgba('+(ghost?'255,150,140':'255,209,102')+',.75)';
     ctx.font='9px Consolas';ctx.textAlign='center';ctx.textBaseline='bottom';
-    ctx.fillText(ghost?('⏳失联'+Math.round(ageV)+'s'):('⏳陈旧'+Math.round(ageV)+'s'),p[0],p[1]-rad-3);
+    /* 陈旧态航迹还在(lit>0、椭圆还在长大),等级照样要读;失联态 lit=0,没有等级可写 */
+    ctx.fillText((ghost?'⏳失联':'⏳陈旧')+Math.round(ageV)+'s'+((!ghost&&s.litBlue>0&&typeof litTag==='function')?(' · '+litTag(s.litBlue)):''),p[0],p[1]-top-3);
+    ctx.restore();
+    return;
   }
   const r=Math.round(shipIconR(s)); // 图标半径:屏幕固定尺寸,但随舰种/Tier 变化(标签/选中圈/尾焰基准)
-  if(s.dead){drawWreck(s,p,r);if(ghost||stale)ctx.restore();return;} // 残骸:空心图标,不再有舰体数据;KIMI146修:幽灵/陈旧残骸提前return,ctx.save()不配对→透明度/虚线泄漏到后续所有绘制
+  if(s.dead){drawWreck(s,p,r);return;} // 残骸:空心图标,不再有舰体数据(幽灵/陈旧已在上面 return,不会走到这儿)
   // DS181 S3:⚠被照射告警(敌方雷达以照射模式对我驻留达阈值)→黄框闪烁(信息战灵魂提示)
   // SN4:驻留键换成 act(雷达的【照射】模式;静听 lis 与它是同一部设备的两种模式,不是两条通道)。
   //   键名一改,原来那句裸读就变成「undefined 大于某数」恒 false —— 告警圈永远不画、一行错都不报,所以必须与内核同一提交改完。
-  // SN4:阈值原来是本文件与 21-detect 告警日志门的两份手抄(同一个 0.3),现收进 SENS.ACT_WARN 一处定义,同「门控用谓词、不写字面量」那条铁律。
   if(!editMode&&!s.dead){
-    const myTrk=s.side==='blue'?s.trkR:s.trkB;
-    if(myTrk&&myTrk.act>=SENS.ACT_WARN){
+    // SN6:判据换成【对方这一拍有没有一条照射量测打在我身上】。那正是 c.ch.act 记的东西,不需要阈值,
+    //      顺带解掉一桩旧账:那个阈值曾经是本文件与 21-detect 各手抄一份的字面量,SN4 把它收进感知表一处,SN6 连常数都不需要了。
+    const myCov=s.side==='blue'?s.covR:s.covB;   // 蓝舰看 covR = 红网络对我握着的那条接触
+    if(myCov&&myCov.ch&&myCov.ch.act){
       // RF7e 相位改挂【墙钟】,原来挂 simTime。simTime 按倍速推进(core/99 的 acc+=dt*rate),于是倍速一提闪烁跟着提:
       // x50 下每帧相位推进约 5 弧度,远超 60fps 的采样极限,呼吸退化成高频乱闪——这就是"闪动频率随时间越来越快"的来源。
       // 告警圈是给人看的 UI 指示,不是模拟实体,理应恒定 1 次/秒左右,与数据链流动(83-hud FC_FLOW)、准星停留门同一口径。
@@ -87,7 +130,7 @@ function drawShip(s){
       const pulse=0.45+0.35*Math.abs(Math.sin(twms*0.001*LADAR_WARN_W));
       ctx.save();
       ctx.strokeStyle=`rgba(255,209,102,${pulse})`;ctx.lineWidth=1.5;
-      ctx.beginPath();ctx.arc(p[0],p[1],13,0,6.283);ctx.stroke();
+      ctx.beginPath();ctx.arc(p[0],p[1],13*hullZoomF(),0,6.283);ctx.stroke(); // SN9 圈跟着舰体走:13px 是按改前的固定图标定的,船放大到 48px 时它会落进船身里
       ctx.restore();
     }
   }
@@ -127,6 +170,7 @@ function drawShip(s){
   ctx.save();
   ctx.translate(p[0],p[1]);
   ctx.rotate(ang);
+  {const zf=hullZoomF();ctx.scale(zf,zf);} // SN9 舰体随缩放变(见文件头 HULL_ZOOM);包在这一对 save/restore 里,不外溢
   drawHull(ctx,shipIdentHull(s),shipIdentTier(s),bodyColor,'fill'); // 4 舰种 × T1/T2/T3,几何见 10a-ship-hulls.js。TIER1 轮廓与尺寸同一个遮蔽口径,未识别接触画 UNK+T2
   ctx.restore();
   // 选中高亮
@@ -148,10 +192,32 @@ function drawShip(s){
     ctx.fillText(tag,p[0],p[1]-r-7);
   }
   // 名称(识别分层:探测级显示"大/中/小热源",识别级显示舰种名)
+  const foeLit=(s.side==='red'&&!editMode)?(s.litBlue||0):0;
   if(cam.zoom>0.0008){
     const lbl=(s.side==='red'&&identQ===1)?sigClassLabel(s):s.name;
     ctx.fillStyle='rgba(215,226,240,.8)';ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';
     ctx.fillText(lbl,p[0],p[1]+r+6);
+  }
+  /* SN7c 敌方接触的【观测等级】:「◎ 3级 火控」。
+     ⚠ 第一版照演示页在后面跟了误差读数(±2.7k x 1.1k),用户 2026-09-21 拍板去掉:地图上只要等级,
+       误差那组数归缩圈小窗管(它本来就是专门回答"椭圆现在多大"的地方),标签上再写一遍只是噪声。
+     · 颜色读 83-hud 的 LIT_RGB(与椭圆、缩圈小窗同一张表);火控级加 ◎ 前缀,并在舰标四角画黄色火控框 ——
+       火控框只看等级、不看身份:没认出的航迹照样可以有火控解(等级与身份是两栏)。
+     · 不受上面那道缩放门管:名字拉远了可以省,"这条接触现在几级"是随时要读的。
+     等级那行写在名字下面一行;名字被缩放门省掉时它就顶上去。 */
+  if(foeLit>0&&typeof LIT_RGB!=='undefined'){
+    const rgb=LIT_RGB[foeLit]||LIT_RGB[0];
+    ctx.save();
+    ctx.fillStyle='rgba('+rgb+',.95)';ctx.font='10px Consolas';ctx.textAlign='center';ctx.textBaseline='top';
+    ctx.fillText((foeLit>=3?'◎ ':'')+litTag(foeLit),p[0],p[1]+r+(cam.zoom>0.0008?19:6));
+    if(foeLit>=3){
+      ctx.strokeStyle='rgba('+rgb+',.9)';ctx.lineWidth=1.2;
+      const q=r+6;
+      for(const d of [[-1,-1],[1,-1],[-1,1],[1,1]]){
+        ctx.beginPath();ctx.moveTo(p[0]+d[0]*q,p[1]+d[1]*q-d[1]*5);ctx.lineTo(p[0]+d[0]*q,p[1]+d[1]*q);ctx.lineTo(p[0]+d[0]*q-d[0]*5,p[1]+d[1]*q);ctx.stroke();
+      }
+    }
+    ctx.restore();
   }
   // 当前目标连线。FM2:每艘船(散船/旗舰/僚舰)都持有自己的令,所以这里【只读自己的 orders】——
   // FM1 那段"僚舰去读旗舰 orders 再叠自己的阵位偏移"的特例整体删除,编队的每个终点现在天然各画各的。
@@ -166,15 +232,17 @@ function drawShip(s){
     else{ctx.beginPath();ctx.moveTo(q[0]-4,q[1]-4);ctx.lineTo(q[0]+4,q[1]+4);ctx.moveTo(q[0]+4,q[1]-4);ctx.lineTo(q[0]-4,q[1]+4);ctx.stroke();}
   }
   if(isSel)drawOrders(s); // 选中的船画完整航路
-  if(ghost||stale)ctx.restore(); // 恢复幽灵/陈旧的半透明+虚线
+  // SN6e:原来这里有一句 ctx.restore() 配上面幽灵/陈旧的 save() —— 那两档现在画完记号就 return 了,
+  //      save/restore 在那一支里自成一对,这里不再需要(留着就是一次不配对的 restore,会把状态栈掏穿)
 }
 function drawFlame(s,p,r){
   const fx=s.facing[0],fy=s.facing[1];
   const fl=Math.hypot(fx,fy);
   if(fl<0.05||(Math.abs(s.flame)<0.05&&Math.abs(s.sideFlame)<0.05))return; // v119:s.side是阵营字符串'blue'/'red',算术为NaN,应为sideFlame
   const ang=Math.atan2(fy,fx);
+  const zf=hullZoomF(); // SN9 尾焰长度跟舰体同一个系数:不跟的话拉远时 20px 的焰拖在 12px 的船后面
   if(s.flame>0.05){ // 后主推进:船尾喷焰
-    const L=10+10*s.flame;
+    const L=(10+10*s.flame)*zf;
     ctx.fillStyle='rgba(90,167,255,.45)';
     ctx.beginPath();
     ctx.moveTo(p[0]-Math.cos(ang)*r*0.8,p[1]-Math.sin(ang)*r*0.8);
@@ -183,7 +251,7 @@ function drawFlame(s,p,r){
     ctx.closePath();ctx.fill();
   }
   if(s.flame<-0.05){ // 前向反推(刹车):船头喷焰
-    const L=10+10*(-s.flame);
+    const L=(10+10*(-s.flame))*zf;
     ctx.fillStyle='rgba(255,154,85,.4)';
     ctx.beginPath();
     ctx.moveTo(p[0]+Math.cos(ang)*r*0.8,p[1]+Math.sin(ang)*r*0.8);
@@ -200,7 +268,7 @@ function drawFlame(s,p,r){
       const px=p[0]-perp[0]*r, py=p[1]-perp[1]*r; // 反侧(背离目标方向)
       ctx.fillStyle='rgba(255,224,102,.5)';
       ctx.beginPath();
-      ctx.arc(px,py,2+3*s.sideFlame,0,6.283); // v119:同上,side→sideFlame
+      ctx.arc(px,py,(2+3*s.sideFlame)*zf,0,6.283); // v119:同上,side→sideFlame
       ctx.fill();
     }
   }

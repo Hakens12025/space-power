@@ -4,6 +4,7 @@
 function stepWeaponSystems(dt){
   for(const s of ships){ // 武器冷却 + 发射单元装填 + 齐射开火延迟(v119:单元独立装填60s)
     if(s.macCd>0)s.macCd-=dt;
+    if(s.fireHot>0)s.fireHot-=dt; // FX1 开火暴露的倒数(置位在 weapons/52,读取在 sensors/22 的 firePowerOf)
     if(s.cellTimer)for(let i=0;i<s.cellTimer.length;i++)if(s.cellTimer[i]>0)s.cellTimer[i]-=dt;
     if(s.missileArm){ // 齐射装填倒计时
       s.missileArm.t-=dt;
@@ -14,7 +15,15 @@ function stepWeaponSystems(dt){
   for(const s of ships){
     if(s.dead||!s.autoEngage)continue;
     if(typeof fcActive==='function'&&fcActive(s))continue; // RF5 有火控序列的舰:lockedTarget 归序列执行器所有(weapons/58 每 tick 重写),自动索敌整段让出,否则两边抢锁定
-    if(s.lockedTarget&&!s.lockedTarget.dead)continue; // 已有锁定
+    if(s.lockedTarget&&!s.lockedTarget.dead){ // 已有锁定
+      /* MT1 修:自动索敌锁着目标时,每拍续上漂移射击(与火控序列 weapons/58 每拍续期是同一个动作)。
+         physics/31 的战斗转向只替【空闲】的舰摆炮口,而编队成员 / 跟随中的舰不算空闲 —— 要它们也归瞄,靠的就是 driftFire 这个标志。
+         中键快速交战(火控序列)一直在续它;底栏「火控」钮(autoEngage)却从来不给,于是开着火控的【编队】主炮只在碰巧对准时才响。
+         靶场里看不出来(靶不还手,导弹照样记账);对局里它就是胜负手:同一套替身策略,保持开局编队 0 胜 6 负(蓝炮每局 1~4 发、红炮 16~19 发),
+         解散编队 6 胜 0 负。语义沿用 DS171 M3:命令照走,非硬机动段机头归瞄准,刹车 / 爬行 / 调头时让位。 */
+      if(hasMAC(s)&&s.macOn!==false){s.driftFire=true;s.driftFireT=60;}
+      continue;
+    }
     const litKey=s.side==='blue'?'litBlue':'litRed';
     const enemies=ships.filter(t=>t.side!==s.side&&!t.dead&&t[litKey]>=2);
     if(!enemies.length)continue;

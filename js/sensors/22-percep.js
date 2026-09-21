@@ -51,9 +51,6 @@ let scKIR = null, scKRF = null, scKACT = null;      // 探测器侧三通道系�
 let scTX = null, scTY = null, scTZ = null;          // 目标位置
 let scSigIR = null, scSigRF = null, scRefl = null;  // 目标侧三通道源强
 let scBIR = null, scBRF = null, scBACT = null, scBMax = null; // 三条通道各自的界 + 取 max 的整目标界
-let scJam = null;                  // 目标干扰系数(1 = 不干扰),在驻留段乘到 act 上
-let scDecOpt = 1, scDecLis = 1, scDecAct = 1;       // 本次 dt 的解析衰减因子
-const scGOpt = new Float64Array(4), scGLis = new Float64Array(4), scGAct = new Float64Array(4); // 按档增益(已乘 dt 修正)
 let scGS = 0.0625, scGF = 0.25;    // 分档常数缓存(热循环不查 SENS.xxx)
 
 function senseGrowD(n) { // 探测器侧扩容:只在长度不够时整体重建
@@ -69,7 +66,6 @@ function senseGrowT(n) { // 目标侧扩容:同上
   scTX = new Float64Array(c); scTY = new Float64Array(c); scTZ = new Float64Array(c);
   scSigIR = new Float64Array(c); scSigRF = new Float64Array(c); scRefl = new Float64Array(c);
   scBIR = new Float64Array(c); scBRF = new Float64Array(c); scBACT = new Float64Array(c); scBMax = new Float64Array(c);
-  scJam = new Float64Array(c);
   scTCap = c;
 }
 
@@ -80,8 +76,16 @@ function emitPowerOf(s) { // 发射档的功率档位:既当【功耗】(进光�
 function engPowerOf(s) { // 引擎档:主推/反推最费电,姿态侧推次之,熄火滑行为 0(与 31-step-ships 每 tick 复位的 flame/sideFlame 同源)
   return s.flame !== 0 ? SENS.P_ENG_MAIN : (s.sideFlame ? SENS.P_ENG_SIDE : 0);
 }
+function firePowerOf(s) { // FX1 开火暴露:发射后的 FIRE_S 秒里多亮一档(s.fireHot 由 weapons/52 的两个发射成功点置位、weapons/57 的冷却循环倒数)
+  return s.fireHot > 0 ? SENS.P_FIRE : 0;
+}
 function optLum(s) { // 光学/红外亮度 = 体型 x (1 + 功耗)。取代已删的那两个旧亮度函数(船体信号 x 引擎乘数)
-  return sReq(s, 'size', 'ship') * (1 + engPowerOf(s) + emitPowerOf(s));
+  /* SN6:发射档进光学亮度时要乘废热系数 COV.HEAT_EMIT,不能原样加。
+     废热正比发射功率没错,但量级上雷达是几百千瓦、引擎是吉瓦级 —— 原样加等于说"开雷达和点主推一样亮",
+     于是照射一开光学量程就 x1.41,静默与照射在【光学】这条通道上几乎没区别。
+     乘 0.15 之后照射只把 DD 的光学量程抬 7.2%、干扰抬 14.0%:它是一句设计表态,不是一条机制。
+     ⚠ COV 住在 23-cov(加载晚于本文件),这里是运行期读取,安全;写成顶层常量就会撞 TDZ。 */
+  return sReq(s, 'size', 'ship') * (1 + engPowerOf(s) + COV.HEAT_EMIT * emitPowerOf(s) + firePowerOf(s));
 }
 function rfLoudOf(s) { // 射频响度 = 发射机档次 x 发射档。silent 恒为 0 —— 绝对静默,没有船体泄漏(旧模型那个泄漏系数已删)
   return sReq(s, 'emit', 'ship') * emitPowerOf(s);
@@ -105,21 +109,17 @@ function visRangeOf(s) { return Math.sqrt(SENS.K_IR * optLum(s)); }             
 function hearRangeOf(s, recv) { return Math.sqrt(SENS.K_RF * rfLoudOf(s) * (isFinite(recv) ? recv : 1)); } // 被一部 recv 档接收机听见的距离(缺省 1.0 = 基准 DD 的耳朵)
 function actRangeOf(s, refl) { const r = SENS.K_ACT * sReq(s, 'emit', 'ship') * sReq(s, 'recv', 'ship') * (isFinite(refl) ? refl : 1); return Math.sqrt(Math.sqrt(r)); } // 本舰对 refl 基准目标(缺省 1.0)的照射量程。取代旧那个标量探测半径字段,83-hud 的圈与 84-scene 的圈都读它
 
-/* ---------------- 驻留积分对象:全库唯一的一份字面量 ---------------- */
-function newTrk() { return { opt: 0, lis: 0, act: 0 }; } // opt=光学/红外;lis/act=雷达【这一部设备】的静听与照射两种模式各自的驻留。makeShip 与 detectFor 都调它,不许再手抄第二份
+/* SN6:接触对象的唯一工厂搬去了 23-cov(newCov);本文件不再持有任何"每目标的累积状态"。 */
 
-/* ---------------- O(N) 预计算 ---------------- */
 function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcons=开机信标 tgts=对方存活舰 dt=距上次结算的模拟秒数
   const nd = dets.length + bcons.length, nt = tgts.length;
   senseGrowD(nd); senseGrowT(nt);
   scDN = nd; scTN = nt;
   scGS = SENS.GRADE_STRONG; scGF = SENS.GRADE_FAIR;
-  /* 解析跳步:离散递推 x <- x*D + g 跑 dt 秒等价于 x <- x*D^dt + g*(1-D^dt)/(1-D)。
-     dt=1 时与逐秒步进逐位相同;dt 变了也不会因为"少跑了几步"而把驻留算矮。
-     pow 与除法只在这里各做一次,不进热循环。 */
-  scDecOpt = Math.pow(SENS.DEC_OPT, dt); scDecLis = Math.pow(SENS.DEC_LIS, dt); scDecAct = Math.pow(SENS.DEC_ACT, dt);
-  const kO = (1 - scDecOpt) / (1 - SENS.DEC_OPT), kL = (1 - scDecLis) / (1 - SENS.DEC_LIS), kA = (1 - scDecAct) / (1 - SENS.DEC_ACT);
-  for (let q = 0; q < 4; q++) { scGOpt[q] = SENS.G_OPT[q] * kO; scGLis[q] = SENS.G_LIS[q] * kL; scGAct[q] = SENS.G_ACT[q] * kA; }
+  /* SN6:这里原先还要算三条通道的解析衰减因子与按档增益表(驻留积分那一套的 O(N) 预备)。
+     误差椭圆没有"水位",时间的账在 23-cov 的 stepCov 里按【真实经过的秒数】取幂结算,
+     所以这一段整个删掉 —— dt 参数留着:sensePrepare 的签名是判定与 sensePairAt 的契约面,而且
+     将来若要把"这一拍盯了多久"喂进热循环,入口还在。 */
   let mIR = 0, mRF = 0, mACT = 0;
   for (let i = 0; i < nd; i++) {
     const d = i < dets.length ? dets[i] : bcons[i - dets.length];
@@ -138,7 +138,9 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
     const bA2 = Math.sqrt(bA4); // 照射的界在 d^4 空间,必须在这里开方换算到 d^2 空间才能和另两路取 max(见文件头 blocker A)
     scBIR[i] = bIR; scBRF[i] = bRF; scBACT[i] = bA4;
     scBMax[i] = bIR > bRF ? (bIR > bA2 ? bIR : bA2) : (bRF > bA2 ? bRF : bA2);
-    scJam[i] = sReq(t, 'emitMode', 'ship') === 'jam' ? (1 - sReq(t, 'ecmPower', 'ship')) : 1; // 干扰只削弱【照射回波】:噪声淹的是雷达回波,淹不了红外,也不可能让"正在大声喊"的自己变得难听见
+    /* SN6:干扰的落点从"每拍削弱照射水位"改成"把这一拍的回波误差按烧穿距离放大"(23-cov 的 covShape)。
+       后者能直接读成一个距离(贴到这么近干扰就压不住了),前者只是一个乘子;而且误差模型里干扰
+       本来就该糊【精度】而不是糊【有没有信号】—— 噪声抬高的是测量方差,不是让回波消失。 */
   }
 }
 
@@ -170,13 +172,10 @@ function senseScanTarget(ti) { // 对第 ti 个目标扫描全部探测器,逐�
   }
   return qo | (ql << 2) | (qa << 4);
 }
-function senseApplyDwell(trk, ti, g) { // 驻留积分:每目标只写一次(不是每对),衰减用本次 dt 的解析因子,增益按档查表
-  trk.opt = trk.opt * scDecOpt + scGOpt[g & 3];
-  trk.lis = trk.lis * scDecLis + scGLis[(g >> 2) & 3];
-  trk.act = trk.act * scDecAct + scGAct[(g >> 4) & 3];
-  const jm = scJam[ti];
-  if (jm !== 1) trk.act *= jm;
-}
+/* SN6:这里原先是驻留推进(衰减 + 按档增益 + 干扰削减,每目标写一次)。
+   整段删掉 —— 接触的推进现在是 23-cov 的 stepCov:先验按真实秒数增长,再把每一站的量测
+   逐条加进信息矩阵,最后解出椭圆。本文件只负责回答"这一对、这一拍、哪几条通道够得着"。 */
+
 /* 单点查询谓词:拿【同一组缓冲、同一组常量、同一个 sensePairGrades】跑一对。
    判定可以直接断言 sensePairAt(d,t) 与热循环对同一对给出相同的三档。
    注意重入:它会覆盖共享缓冲,所以【绝不许】在 senseScanTarget 的循环中途调用;

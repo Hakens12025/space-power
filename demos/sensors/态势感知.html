@@ -1,0 +1,2406 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>态势感知 · N 级接触演示</title>
+<style>
+:root{
+  --void:#05070c; --srf-raise:#0e1420; --srf-hover:#16202f; --srf-sunk:#0a0f17;
+  --line-hair:#141c27; --line:#1e2836; --line-ctl:#2a3a50; --line-acc:#34527d;
+  --txt-hi:#e8eef7; --txt:#c7d0dc; --txt-read:#dbe6f2; --txt-dim:#6a7d92; --txt-mute:#46566a;
+  --acc:#5aa7ff; --acc-lite:#9fd4ff; --acc-wash:rgba(90,167,255,.14);
+  --hostile:#ff6b6b; --warn:#ff9a55; --sel:#ffe066;
+  --opt:#ff9a55;      /* 光学/红外:被动,暖色 */
+  --lis:#54e0d0;      /* 雷达静听:被动,青 */
+  --act:#d68cff;      /* 雷达照射:主动,紫 */
+  --ff-ui:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;
+  --ff-mono:Consolas,"Cascadia Mono","DejaVu Sans Mono",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--void);color:var(--txt);font:13px/1.2 var(--ff-ui);-webkit-font-smoothing:antialiased}
+#app{display:grid;grid-template-rows:auto minmax(0,1fr);height:100vh;gap:8px;padding:8px 10px}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
+.brand{font-size:15px;color:var(--txt-hi);letter-spacing:.08em}
+.brand small{font:10px var(--ff-mono);color:var(--txt-mute);letter-spacing:.14em;margin-left:7px}
+.ctl{display:flex;align-items:center;gap:6px;color:var(--txt-dim);font-size:11px;letter-spacing:.08em}
+.ctl input[type=range]{width:96px;accent-color:var(--acc)}
+.rd{font:13px var(--ff-mono);color:var(--txt-read);letter-spacing:0;min-width:56px}
+.clock{margin-left:auto;display:flex;align-items:baseline;gap:8px;color:var(--txt-dim);font-size:11px;letter-spacing:.08em}
+.clock b{font:15px var(--ff-mono);color:var(--txt-hi);font-weight:normal;letter-spacing:0;min-width:104px;text-align:right}
+.btn{display:inline-flex;align-items:center;justify-content:center;background:var(--srf-raise);border:1px solid var(--line-ctl);
+  border-radius:2px;color:var(--txt-dim);font:12px var(--ff-ui);padding:5px 9px;cursor:pointer;white-space:nowrap;user-select:none}
+.btn:hover{color:var(--txt-hi);border-color:var(--line-acc);background:var(--srf-hover)}
+.btn.on{color:var(--acc-lite);background:var(--acc-wash);border-color:var(--acc)}
+.btn.chip{padding:3px 6px;font-size:11px}
+.btn.tiny{padding:2px 5px;font-size:10.5px}
+.seg{display:inline-flex}.seg .btn{border-radius:0;margin-left:-1px}
+.seg .btn:first-child{border-radius:2px 0 0 2px;margin-left:0}.seg .btn:last-child{border-radius:0 2px 2px 0}
+/* 战术图 3/5,右栏 2/5:场景/解说/编成/舰船卡片全部共享右栏并整体滚动 */
+/* 战术图吃掉所有多余宽度,右栏【钉死 600px】—— 屏幕越宽图越大,而卡片列宽恒定(两列各约 290px,
+   卡片内容就是照着这个宽度排的)。用 fr 的话右栏会跟着屏幕一起变宽,卡片反而越排越空。 */
+main{display:grid;grid-template-columns:minmax(0,1fr) 560px;gap:8px;min-height:0}
+#lcol{display:grid;min-height:0}   /* 相图已经叠进战术图里,左列只剩一块 */
+/* 三维相图 = 战术图右上角的叠加小窗。刻意【不】做成点击穿透:
+   穿透的话小窗底下压着的舰船看不见却拖得动,那比挡住更难受。 */
+#pPhase{position:absolute;right:8px;top:24px;width:340px;height:290px;z-index:2;
+  max-width:calc(100% - 16px);box-shadow:0 2px 14px rgba(0,0,0,.55)}
+.phbar{position:absolute;left:8px;right:8px;bottom:6px;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--txt-dim)}
+.phbar input{flex:1 1 90px;min-width:70px;accent-color:var(--acc)}
+.phbar b{font:11px var(--ff-mono);color:var(--txt-read);font-weight:normal;min-width:52px;text-align:right}
+.phbar .nt{color:var(--txt-mute);font-size:10px}
+#rcol{display:flex;flex-direction:column;gap:8px;min-height:0;overflow:auto}
+.card{border:1px solid var(--line);border-radius:3px;padding:8px 10px;background:var(--srf-sunk);flex:none}
+.card h3{font-size:11px;font-weight:normal;color:var(--txt-dim);letter-spacing:.08em;margin-bottom:7px}
+.card h3 small{font:10px var(--ff-mono);color:var(--txt-mute);letter-spacing:.14em;margin-left:6px}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:6px}
+.row:first-of-type{margin-top:0}
+.row>span.lb{font-size:11px;color:var(--txt-dim);letter-spacing:.08em;flex:none}
+.row.scenes{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.row.scenes .btn{padding:5px 2px;font-size:11px;letter-spacing:0}
+#narr{margin-top:8px;font-size:12.5px;line-height:1.65;color:var(--txt)}
+#live{margin-top:6px;font-size:12px;line-height:1.55;color:var(--sel)}
+.m{font-family:var(--ff-mono);color:var(--txt-read)}
+.pane{position:relative;border:1px solid var(--line);border-radius:3px;overflow:hidden;min-height:0;background:var(--void)}
+.pane canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#cvMap{touch-action:none}
+.tag{position:absolute;left:8px;top:6px;font-size:11px;letter-spacing:.08em;color:var(--txt-dim);pointer-events:none}
+.tag b{font:10px var(--ff-mono);letter-spacing:.14em;color:var(--txt-mute);margin-left:6px;font-weight:normal}
+.hint{position:absolute;right:8px;top:6px;font-size:11px;color:var(--txt-mute);pointer-events:none}
+.legend{position:absolute;left:8px;bottom:6px;display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:var(--txt-dim);pointer-events:none}
+.legend i{display:inline-block;width:10px;height:0;border-top:2px dashed currentColor;margin-right:5px;vertical-align:3px}
+.legend b.fl{display:inline-block;width:12px;height:12px;margin-right:4px;vertical-align:-2px;border-radius:50%;
+  background:radial-gradient(circle,currentColor 0%,rgba(0,0,0,0) 70%);opacity:.9}  /* 图例色块也得是渐隐的,不然它自己就是一个硬边界 */
+/* ---------- 舰船卡片 ---------- */
+/* 按阵营分两列:蓝方一列、红方一列。分了列之后每张卡上原来那个「红方对我 / 蓝方对它」的标签就多余了,
+   挪到列头说一次 —— 列头才是解释「这一列的阶梯到底在说什么」的地方。 */
+#cards{display:grid;grid-template-columns:1fr 1fr;gap:6px;align-items:start}
+.cards-bar{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:4px;
+  border:1px solid var(--line);border-radius:3px;padding:5px 8px;background:var(--srf-sunk)}
+.cards-bar>span{font:10px var(--ff-mono);color:var(--txt-mute);letter-spacing:.14em}
+.colhd{display:flex;align-items:center;gap:5px;padding:3px 2px 0;font-size:11px;color:var(--txt-dim);letter-spacing:.04em}
+.colhd b{font-weight:normal;font-size:12px}
+.colhd.blue b{color:var(--acc)}.colhd.red b{color:var(--hostile)}
+.colhd .wh{font-size:10px;color:var(--txt-mute)}
+.colhd .btn{margin-left:auto}
+.colwrap{display:flex;flex-direction:column;gap:6px;min-width:0}
+.sc{border:1px solid var(--line);border-left-width:3px;border-radius:3px;padding:6px 7px 7px;background:var(--srf-sunk);min-width:0}
+.sc.blue{border-left-color:var(--acc)}.sc.red{border-left-color:var(--hostile)}
+/* 选中态【不许用 border-color 简写】—— 它会连左边框一起冲掉,而左边框是阵营色。
+   新加一艘红舰时 addShip 顺手把它选中,于是那张卡的左边一直是蓝的(用户实报)。
+   同一条坑 CLAUDE.md 的 RF8 记过:简写属性会连带重置未提及的子属性。 */
+.sc.sel{background:#0d141f;border-top-color:var(--line-acc);border-right-color:var(--line-acc);border-bottom-color:var(--line-acc)}
+.sc-hd{display:flex;align-items:center;gap:6px;cursor:pointer}
+.sc-hd b{font:12.5px var(--ff-ui);font-weight:normal;color:var(--txt-hi);letter-spacing:.04em;flex:none}
+.sc-hd .wh{font-size:10px;color:var(--txt-mute);letter-spacing:.06em}
+.sc-hd .lvn{font-size:11px;letter-spacing:.06em}
+.sc-hd .dst{margin-left:auto;font:11px var(--ff-mono);color:var(--txt-dim)}
+.sc-hd .x{border:0;background:none;color:var(--txt-mute);cursor:pointer;font:13px var(--ff-ui);padding:0 2px;line-height:1}
+.sc-hd .x:hover{color:var(--hostile)}
+.lad{display:inline-flex;gap:2px}
+.lad i{display:block;width:14px;height:12px;border:1px solid var(--line-ctl);border-radius:1px;
+  font:9px/12px var(--ff-mono);font-style:normal;text-align:center;color:var(--txt-mute)}
+.lad i.on{color:#05070c;font-weight:bold}
+.sc-act{display:flex;flex-wrap:wrap;align-items:center;gap:3px;margin-top:6px}
+.sc-act .lb{font-size:10px;color:var(--txt-mute);letter-spacing:.04em;margin-left:2px}
+.sc-act .brk{flex-basis:100%;height:0}   /* 强制换行:两行排满比让它自由 wrap 稳定 */
+.ch{display:grid;grid-template-columns:28px 1fr 34px 20px;align-items:center;gap:4px;margin-top:3px;font-size:10.5px}
+.ch .k{color:var(--txt-dim);letter-spacing:.04em}
+.ch .bar{position:relative;height:8px;background:#080c13;border:1px solid var(--line-hair);border-radius:1px;overflow:hidden}
+.ch .bar u{position:absolute;left:0;top:0;bottom:0;display:block;opacity:.85}
+.ch .bar s{position:absolute;top:-1px;bottom:-1px;width:1px;background:var(--line-ctl);text-decoration:none}
+.ch .v{font:10.5px var(--ff-mono);color:var(--txt-read);text-align:right}
+.ch .g{font-size:10px;color:var(--txt-mute);text-align:center}
+.sc-mini{display:flex;flex-wrap:wrap;gap:2px 7px;margin-top:5px;font:10px var(--ff-mono);color:var(--txt-dim)}
+.sc-mini b{font-weight:normal;color:var(--txt-read)}
+.sc-mini .pt{color:var(--txt-mute)}.sc-mini .pt.y{color:var(--act)}.sc-mini .pt.y b{color:var(--act)}
+.sc-lock{display:flex;flex-wrap:wrap;gap:2px 8px;margin-top:3px;font:10px var(--ff-mono);color:var(--txt-mute)}
+.sc-lock b{font-weight:normal}
+.sc-gate{margin-top:4px;display:flex;gap:9px;font-size:10.5px;color:var(--txt-dim);letter-spacing:.04em}
+.sc-gate b{font-weight:normal}.sc-gate .y{color:var(--lis)}.sc-gate .n{color:var(--txt-mute)}
+.sc canvas{display:block;width:100%;height:40px;margin-top:5px;border-top:1px solid var(--line-hair)}
+#selftest{display:none;white-space:pre-wrap;padding:10px;font:12px var(--ff-mono);color:var(--txt-read)}
+@media (max-width:1180px){
+  html,body{height:auto} #app{height:auto} main{grid-template-columns:1fr}
+  #cards{grid-template-columns:1fr 1fr}
+  #rcol{overflow:visible} #pMap{height:520px} #pPhase{width:300px;height:250px}
+}
+</style>
+</head>
+<body>
+<!-- ⚠ 这一页已【冻结】。它的存在理由只剩一个:它是「方法2(三通道驻留 + 超椭球壳)」的设计记录,
+     那套东西在 态势感知V3.html 里被整体删掉了,只能来这里回看。
+     ⚠ 页内那份「椭圆·V3」是【旧版】,与 态势感知V3.html 已经差出很多(发现半径/定位尺度分开、
+     未定位接触、AMIN、干扰烧穿距离、识别可见性……全都只在 V2 里)。
+     所以:【任何数值、任何机制口径,一律以 态势感知V3.html 为准,不要从这一页读数】。
+     它自己的 ?selftest 仍然全绿 —— 那只说明它内部自洽,不说明它与 V2 一致。 -->
+<!-- 提示条走 position:fixed —— 它【绝不能占布局】。第一版做成了普通块元素,
+     把画布整体往下挤,本页 ?uitest 的"滚轮缩放锚在光标"当场变红(世界点漂移 130km):
+     视口尺寸是在 fit() 里缓存的,插一个占位元素就让屏幕↔世界的变换和缓存对不上。 -->
+<div style="position:fixed;right:8px;bottom:6px;z-index:9999;padding:4px 9px;background:#2a1a10;
+  border:1px solid #6b4a2a;border-radius:4px;color:#e0a86a;font-size:11px;pointer-events:none">
+  ⚠ 冻结页 · 仅作「方法2」设计记录 · 页内「椭圆·V3」是旧版 · 数值以 <b style="color:#ffd9a8">态势感知V3.html</b> 为准
+</div>
+<div id="app">
+<header>
+  <div class="brand">态势感知<small>N-LEVEL CONTACT</small></div>
+  <div class="ctl">时间倍率 <input id="inTs" type="range" min="1" max="40" step="1"><span class="rd" id="rdTs"></span></div>
+  <div class="seg" id="segLayer"><button class="btn" data-layer="obs">我方视角</button><button class="btn" data-layer="mix">叠加</button><button class="btn" data-layer="true">真值</button></div>
+  <div class="ctl">信号模型 <div class="seg" id="segModel"><button class="btn chip" data-model="band" title="4 档、每档 6dB。与游戏逐字相同 —— 照射三档全部越过火控门槛,所以进圈处处能锁">分档 · 现行</button><button class="btn chip" data-model="cont" title="12 档、每档 1.5dB,增益表重标定:照射圈内部分成 无/探测/识别/火控 四区;雷达废热从 +1.0 降到 +0.15">连续 · 提案</button><button class="btn chip" data-model="cov" title="等级没了。接触 = 一个位置估计 + 一个会长大的误差椭圆;三条通道压缩椭圆的不同方向,两站交会自动成立。主炮门 = 椭圆长半轴 &lt; 命中判定半径">椭圆 · V3</button></div></div>
+  <div class="ctl"><button class="btn" id="btnPause">暂停</button><button class="btn" id="btnReset">重置</button></div>
+  <div class="clock">模拟时间<b id="rdClock">T+0.0 s</b></div>
+</header>
+<main>
+  <div id="lcol">
+  <section class="pane" id="pMap"><canvas id="cvMap"></canvas>
+    <div class="tag">战术图<b>TACTICAL</b></div><div class="hint">点选舰船 · 拖动改位置 · 滚轮缩放 · 空地拖动平移 · 双击空地贴合</div>
+    <div class="legend">
+      <span style="color:var(--opt)"><b class="fl"></b>被看见</span><span style="color:var(--lis)"><b class="fl"></b>被听见</span>
+      <span style="color:var(--txt-mute)">← 渐隐 = 我的【被探测范围】(没有硬边界:概率是渐落的)</span>
+      <span style="color:var(--act)"><i></i>照射量程</span><span style="color:var(--txt-mute)">← 虚线 = 我的【探测范围】,进圈即在照射内</span>
+      <span style="color:var(--txt-mute)">实线细圈 = 锁定圈:进了它,对方【一部雷达都不开】也锁得住我</span>
+      <span style="color:var(--txt-mute)"><i></i>真实位置 · 圈只画选中那一艘</span></div>
+    <section class="pane" id="pPhase"><canvas id="cvPhase"></canvas>
+      <div class="tag" id="phTag">三维相图<b>PHASE</b></div>
+      <div class="hint" id="phHint"></div>
+      <div class="phbar"><span>距离</span><input id="inPhD" type="range" min="15000" max="620000" step="2000"><b id="rdPhD"></b>
+        <span class="nt">壳不动,只动流</span></div>
+    </section>
+  </section>
+  </div>
+  <aside id="rcol">
+    <section class="card"><h3>场景<small>SCENES</small></h3>
+      <div class="row scenes">
+        <button class="btn" data-scene="1">① 静默接近</button><button class="btn" data-scene="2">② 抢火控</button>
+        <button class="btn" data-scene="3">③ 手电效应</button><button class="btn" data-scene="4">④ 干扰</button>
+        <button class="btn" data-scene="5">⑤ 交会定位</button><button class="btn" data-scene="6">⑥ 光学锁定</button>
+        <button class="btn" data-scene="7">⑦ 交会 · V3</button></div>
+      <p id="narr"></p><p id="live"></p>
+    </section>
+    <div id="cards">
+      <div class="cards-bar"><span>ROSTER</span>
+        <div class="seg" id="segAdd"><button class="btn chip" data-acls="DD">DD</button><button class="btn chip" data-acls="CA">CA</button></div>
+        <button class="btn chip" id="btnClear" style="margin-left:auto">清空</button></div>
+      <div class="colhd blue">蓝方 <b id="nB">0</b><span class="wh">阶梯 = 我暴露了多少</span><button class="btn tiny" data-add="blue">+</button></div>
+      <div class="colhd red">红方 <b id="nR">0</b><span class="wh">阶梯 = 我看清了多少</span><button class="btn tiny" data-add="red">+</button></div>
+      <div class="colwrap" id="cardsB"></div><div class="colwrap" id="cardsR"></div>
+    </div>
+  </aside>
+</main>
+</div>
+<pre id="selftest"></pre>
+<script src="../../js/ships/10-hull-geometry.js"></script>
+<script>
+"use strict";
+/* ================= N 级态势感知演示 =================
+   演示《Space Power》SN4 两通道感知内核:一艘舰只有两种看见别人的方式 ——
+   光学/红外(纯被动)与雷达(一部设备两种模式:静听 / 照射)。接触等级 0/1/2/3 由三路驻留积分派生。
+
+   ---- 为什么每艘舰一张卡,而不是 N x N 张表 ----
+   引擎里探测是【按阵营】算的(detectFor(detSide,tgtSide)):蓝方全部传感器合起来看红方,
+   逐通道取最好的那一档。所以"蓝方对红舰 X 的接触等级"是【一个数】,不是每艘蓝舰一个。
+   于是正确的结构就是每艘舰一张卡,卡上那条阶梯 = 这艘舰【在对方眼里】的样子:
+     红舰卡 = 我看清了它多少      蓝舰卡 = 我自己暴露了多少
+   N 艘舰就是 N 条阶梯,不是 N x N —— 这和引擎的形状一致,也是唯一不随舰数爆炸的读法。
+
+   ---- 下面的常数与三条量程律逐字抄自 js/sensors/20-signature.js 与 js/sensors/22-percep.js ----
+   本页不是重新实现,是把同一套数搬进一个能拖能点的壳子里;两处分家演示就失去意义。 */
+
+/* ---- 常量:与 js/sensors/20-signature.js 的 SENS 逐字相同 ---- */
+const SENS={
+  CLS:{
+    DD:{size:0.70,stealth:0.60,emit:1.0,recv:1.0,ecmPower:0.3},
+    CA:{size:1.00,stealth:1.00,emit:3.0,recv:3.0,ecmPower:0.5},
+  },
+  IR_REF:180000, P_ENG_MAIN:3.0, P_ENG_SIDE:1.0,
+  EMIT_P:{silent:0,paint:1.0,jam:2.0},
+  LIS_REF:600000, ACT_REF:150000,
+  GRADE_STRONG:0.0625, GRADE_FAIR:0.25,
+  DEC_OPT:0.90, DEC_LIS:0.90, DEC_ACT:0.94,
+  G_OPT:[0,0.11,0.15,0.22], G_LIS:[0,0.11,0.15,0.22], G_ACT:[0,0.16,0.24,0.32],
+  LIT1:1.0, LIT2:1.0, LIT2_ACT:1.5, LIT3:2.0, ACT_DOWN:1.5, HYST:0.5,
+  LIS_ALERT:0.4, ACT_WARN:0.3, TICK:1.0,
+};
+SENS.K_IR=SENS.IR_REF*SENS.IR_REF;
+SENS.K_RF=SENS.LIS_REF*SENS.LIS_REF;
+SENS.K_ACT=SENS.ACT_REF*SENS.ACT_REF*SENS.ACT_REF*SENS.ACT_REF;
+
+/* 【删掉了「照一下」】。它在驻留积分模型里做不成一件事:3 秒脉冲只能给驻留加一个小增量然后开始衰减,
+   本质就是"把按钮按短一点",不产生任何离散的东西 —— 连按九下才到火控级,等价于按住九次三秒。
+   要让单次照射有意义,得让它输出【别的东西】(比如一次性的位置快照),而位置在本模型里进圈就免费给了。
+   所以它没有职位。与其给它硬凑一个理由,不如删掉。 */
+
+/* ================= 信号模型:现行(band) / 提案(cont) =================
+   两个模型【共用】同一套量程律与同一套阶梯阈值,只差「通量 → 增益」这一段,以及雷达废热那一个常数。
+
+   ---- 现行(band):与游戏逐字相同 ----
+   4 档(无/弱/良/强,每档 6dB)。问题在照射那一路:弱档稳态 0.16/0.06 = 2.667,
+   而火控门槛 LIT3 = 2.0 —— 三档【全部】越过它。于是【圈内任何距离最终都到火控级,距离只改快慢、不改结局】,
+   圈成了一条硬边界、里面是一片均质区。玩起来就是"进圈就死"。
+
+   ---- 提案(cont):12 档、每档 1.5dB,增益表重标定 ----
+   密到 1.5dB 之后量化肉眼看不出来,而热路径仍然只有比较、没有除法/开方/Math 调用(照搬得回游戏)。
+   关键不是"更密",是把增益表改成【能到哪一级随档位变】:
+     照射律 1/d^4 ⇒ 第 i 档的距离上界 = R x 0.917^(i-1)
+       >0.917R  稳态 0.90  什么都不够
+        0.771R  稳态 1.43  只到探测级
+        0.595R  稳态 2.10  才有火控级
+     于是照射圈内部有了四个分区,"要贴多近才锁得住"成了一个真决定,而不是"进圈即可"。
+   被动两路【刻意保留"圈边缘仍能探测到"】—— 那是 IR_REF 锚点的定义(静默 DD 恰在 15 万被看到),
+   梯度给在速度上:边缘 29 秒才到探测级,贴近 6 秒。
+
+   ---- 雷达废热 ----
+   现行用同一张 EMIT_P 既喂射频响度又喂光学亮度,照射给 +1.0(等于"全船其余部分"),
+   于是开雷达被【两条通道各罚一次】。雷达几百千瓦、引擎是吉瓦级,提案改成 +0.15。 */
+const B_STEP=0.7071067811865476;   /* 每档 1.5dB = 通量比 sqrt(2) */
+/* ---- 动力学:三条【互不耦合的一维响应】,各自三个旋钮 ----
+     CEIL[lo,hi]  天花板随距离从 lo 涨到 hi(按档位几何插值)。【hi/lo 的跨度就是"回报率"】:
+                  照射跨度小(进圈就够用) / 光学跨度大(贴到很近才够用) / 静听抬得再高也越不过 3 级壳的轴截距
+     DEC          衰减率(沿用 SENS 的三个数,照射衰减最慢 = 手电端着不放的余味)
+     K            耦合系数:别人给的"支撑度"能让我爬得更快
+   ⚠ 耦合【只有一个数】,不是六个函数,而且稳定性是结构保证的不用做谱分析:
+     支撑度归一化到 [0,1] ⇒ 增益上限 (1+2K) ⇒ 稳态上限 hi*(1+2K),不可能失控。
+     完整的 6 个耦合函数里绝大部分自由度【不可观测】—— 玩家只感知得到等级与等级变化的快慢。 */
+const PROP={
+  NB:12,
+  EMIT_HEAT:{silent:0,paint:0.15,jam:0.30},
+  /* 最外档必须 >= 1.0,否则"圈边缘仍能探测到"这句话是假的 —— 那是 IR_REF / LIS_REF 两个锚点的定义。
+     1.05 让最外档 28.9 秒爬到探测门槛(上面那段注释里写的"边缘 29 秒"从这儿来,不是拍的)。
+     照射刻意留在 0.90:它的最外档【本来就该够不到】,那是"照射圈内部有分区"的全部内容。 */
+  CEIL:{opt:[1.05,11.00], lis:[1.05,4.00], act:[0.90,5.33]},
+  K:{opt:0.60, lis:0.40, act:0.30},
+  /* 衰减率(每秒剩余比例)。游戏那套是 0.90/0.90/0.94,时间常数 9.5/9.5/16.2 秒 ——
+     "改一个发射档要盯着屏幕等二十秒才看见结果",慢到读不出因果。提案这里自带一套快的:
+     时间常数 3.0/3.0/4.5 秒,三倍速。
+     ⚠ 这【不改任何稳态】:增益是 ceil*(1-DEC),稳态 = 增益/(1-DEC) = ceil,DEC 被约掉了。
+     所以三条路的锁定距离、壳的形状、全部既有判据一个数都不变,变的只有"多久到位"。
+     band 那一档刻意不动 —— 它的职责是与游戏逐字相同,一改就不是对照组了。 */
+  DEC:{opt:0.72, lis:0.72, act:0.80},
+  /* 静听的【基线增益】:听得见同一个目标的探测器,两两方位夹角越大,天花板抬得越高。
+     单站恒 1.0(够不到火控),两站拉开 90 度 = x2.5。这是静听那条火控路径的代价 —— 编队站位。 */
+  BL:1.5,
+  /* 滞回:掉到当前这层壳的 75% 才降级。【不能沿用 SENS.HYST=0.5】——
+     那是布尔阶梯里给【单个阈值】用的,在三维壳上等于把整个相位点放大两倍再判,
+     一档 6dB 的滞回带,实测会让"断照之后仍挂在火控级"(光学那一点余量被放大两倍就够了)。 */
+  HOLD:0.75,
+};
+/* ---- 读出:三层超椭球壳 (opt/A)^p + (lis/B)^p + (act/C)^p = 1 ----
+     A/B/C 轴截距 = 单条曲线【单独】走到这一层要多少驻留 —— 代价不同
+     p     曲率   = 并进比单挑便宜多少;p 越小面越贴对角线 —— 逐层靠向对角线
+   p 只弯对角线方向、完全不动轴截距,所以"代价"与"协同"是两个互不打架的旋钮。
+   归一化对角线深度 3^(-1/p) = 0.577 → 0.333 → 0.208,单调下降。
+   ⚠ 壳【与距离无关】。距离不动壳,只动流 —— 这是整套结构的分界线:
+     壳的形状是玩法规则,流场是物理。 */
+/* ---- 三条通道【都】走得到火控级,代价是三种【不同的资源】 ----
+     照射 → 付出【暴露】:DD 自照 12.1 万,被听见 60 万,4 倍。火控在照射量程的 65% 以内。
+     光学 → 付出【距离】:静默 DD 之间要贴到 2.7 万(光学量程的 18%,也是主炮射程的 18%)。一声不吭。
+     静听 → 付出【编队】:单站天花板 4.0 够不到截距 6.0;两艘拉开 90 度基线 x2.5 = 10.0 才够。
+   这三样不是同一种货币 —— 都折算成距离的话,"走哪条路"就不是个决定了,永远选最远的那条。
+   天花板对各自的截距都留了余量(最内档 x1.38 / x1.67 / x2.67),不是最内一档擦边。 */
+const SHELL=[
+  {p:2.00, A:1.0, B:1.0, C:1.0},   /* 1 探测:面外凸,单条走到轴截距就够 */
+  {p:1.00, A:2.0, B:2.0, C:1.5},   /* 2 识别:平面。(1,1,0) 正好在面上 = 今天那条硬编码的交叉 */
+  {p:0.70, A:8.0, B:6.0, C:2.0},   /* 3 火控:面内凹。照射 2.0 / 光学 8(贴近) / 静听 6(要基线) */
+];
+/* ================= 版本3:误差椭圆(cov) =================
+   等级不再是一条被填满的进度条,而是【我把它的位置定到多准】的派生读数。
+
+   每个接触带一个二维误差椭圆(长半轴 a1、短半轴 a2、世界系朝向 th)。每一拍两件事:
+     ① 预测:目标可能机动了而我没在看 ⇒ 两轴各长 GROW*dt —— 信息有保质期,这是它的实现处。
+     ② 量测:每个探测器的每条通道各给一个【信息椭圆】,按 Fisher 信息相加(J = Σ Jᵢ),再求逆。
+   信息相加是标准做法(独立量测的 Fisher 信息可加),它有一个白送的性质:
+   **两条夹角大的方位线自动交会成一个小椭圆** —— 不需要为"多站定位"单写任何规则。
+
+   三条通道给的是【不同形状】的椭圆,这是整件事的关键:
+     光学  横向 = d × 角分辨(很细);纵向 = d²×角分辨/(目标尺寸) —— 靠分辨角尺寸反推距离,
+           所以误差按 d² 涨,只在很近处才给得出距离。单站光学 ⇒ 一根沿视线的雪茄。
+     静听  横向 = d × 测向精度(粗一个量级);纵向【没有】—— 被动射频给不出距离,
+           只能用"它总在我的听测量程之内"兜底(RCAP×量程)。单站 ⇒ 一根更粗更长的雪茄。
+     照射  横向细 + 纵向直接测距 ⇒ 一个小圆点。代价照旧:被听见的距离是自照的 4 倍。
+   于是三条路是三种【几何】,不是同一个数的三种涨速:
+     照射 = 单站即得(付暴露) / 光学 = 贴到 d² 律咬得住的地方(付距离) / 交会 = 拉基线(付编队)。
+
+   干扰也终于不是开关:J/S 比随距离平方涨,所以干扰把照射的两个误差乘上 1+ecm×(d/JD)² ——
+   远处几乎糊死、贴近了自然烧穿(burn-through)。 */
+/* 1 光秒 = 这么多公里。它在 COV 之前声明 —— COV 的 AMAX 要用它,
+   而 const 有 TDZ,声明在后面会在加载那一刻当场抛错。 */
+const C_LS=299792.458;
+const COV={
+  /* 方位精度(弧度),按信噪比档 强/良/弱。三条通道差一个量级是有据的:
+     光学是成像(亚毫弧级)、照射是窄波束、静听是干涉测向(度级) */
+  /* ---- 角精度【连续】,不再查 弱/良/强 三档表 ----
+     用的是测角精度的标准形式:σ_θ = 波束宽 / √(2·SNR)（Barton）。信噪比是连续量,
+     所以角精度也是连续量 —— 三档表是把它量化成三级,于是舰船一越过档边界
+     条就 2 倍 2 倍地跳。那个跳变不是物理,是量化。
+
+     本作里通量比就是量程比:被动 SNR ∝ (R/d)²、照射 ∝ (R/d)⁴。代进去:
+       被动  σ_θ = TH0 · (d/R)      —— 门限处 = TH0,往里走线性变细
+       照射  σ_θ = TH0 · (d/R)²     —— 四次方律,收敛快一倍
+     TH0 = 【探测门限上】的角精度(SNR=1 那一点),三个数就是全部旋钮。
+     刻意标定成与原来那三档表在各档中点几乎重合(光学 10 万处 2151 vs 原 2090 km),
+     所以所有既有结论一个都不动,变的只是它不再有台阶。 */
+  TH0:{opt:0.0324, lis:0.121, act:0.016},   /* 门限处的角精度(弧度):1.86° / 6.9° / 0.92° */
+  /* 门限处的测距误差(km),同样按 (d/R)² 收敛。
+     2700 那一版让照射稳态落在 1053km,而 DD 的主炮门是 1400km —— 只差 1.33 倍,
+     【这么薄的余量,任何增长率都会一秒跨过】,断照窗口短得不像决策。收到 900 之后
+     稳态 394km、余量 3.6 倍,断照才有几秒滑行。这也更像物理:火控解算本来就该
+     远好于"刚够开炮",不是擦着门槛。 */
+  RRES:900,
+  L_REF:2700,      /* 角尺寸测距的尺度常数。锚点:静默 DD 对静默 DD,单站光学恰在 2.7 万公里咬到主炮门 */
+  HUGE:1e7,         /* km:表示【这条通道给不出距离】的一个大到等于没有的数 */
+  RCAP:0.40,       /* 被动通道的纵向兜底 = 该通道量程的四成("它总在我听得见的范围内") */
+  /* 没有量测时椭圆怎么长。两项:
+       FADE 复利项 —— 越久没看,连"它往哪走"都开始不知道,所以误差是【加速】变糊的,不是匀速。
+       GROW 线性项 —— 就算速度估得很准,目标也随时可能机动,这是地板。
+     纯线性(第一版只有 GROW=300)的毛病是:断照 40 秒椭圆才 ±13k,在对数轴上几乎看不出动静,
+     "信息有保质期"这句话在画面上根本不成立。复利项一加,断照 2 秒掉出主炮门、十几秒彻底失联。 */
+  /* 没有量测时椭圆怎么长。三个数,分两档:
+       FADE_HOLD  【还握着接触】时的复利。航迹带着速度估计,误差只来自未知加速度 ⇒ 长得慢。
+                  它同时决定"盯着看能买到多少精度":稳态/单次量测 = √(1 − 1/(1+F)²)。
+                  0.10 ⇒ 0.42,即盯住不放最终收到单次量测的四成(买到 2.4 倍精度)。
+       FADE_LOST  【接触断了】之后的复利。coasting 的航迹连速度都开始烂 ⇒ 长得快。
+                  严格讲过程噪声不该因为"你在不在看"而变 —— 这是个玩法让步,
+                  但它对应一个真实区别:持续跟踪的航迹带速度,coasting 的不带(coasting 一词即由此来)。
+       GROW       线性地板。400 太大 —— 在几百公里量级的椭圆上它压倒一切,把复利那一档整个盖住。
+
+     ⚠ 这三个数管的是【两件相反的事】,所以一个旋钮调不动:
+       F 一升,丢失变快(好),积累跟着死(坏)。第一版 F=0 时静听积累到 0.34x,
+       F=0.80 时只剩 0.84x —— "多看几秒会更准"那句话当时已经是假的。分两档才两头都有。 */
+  FADE_HOLD:0.10,
+  FADE_LOST:0.18,
+  GROW:120,
+  AMIN:180,        /* km:再好的传感器也有下限 */
+  /* km:比这还糊就算没有接触,而且它同时是【椭圆能长到多大】的硬上限。
+     取 0.2 光秒 —— 这个尺度上真正有意义的单位是光秒(主炮射程 15 万 = 0.5 光秒),
+     而"位置误差超过 0.2 光秒"读作【连指令飞过去的那点时间里它能跑的范围都圈不住】,
+     这条接触支撑不了任何动作,应该当场丢掉(跟踪里叫 track deletion)。
+     ⚠ 上限落在【模型】上,不是画的时候偷偷裁 —— 裁的话圈与判据就不是一个数了,本项目栽过好几次。
+     代价已实测:紧解算(±400)失去量测后仍有 25 秒滑行才丢弃;
+     本来就贴着上限的方位接触 1 秒就掉 —— 那是对的,你本来就没有位置可外推。 */
+  AMAX:0.2*C_LS,
+  MAC:2000,        /* 主炮门 = 命中判定半径(weapons/55 的 2000km) */
+  MSL:30000,       /* 导弹门 = 导引头搜索篮 */
+  LOD_PX:80,        /* 屏幕上长轴超过它、又没被选中 ⇒ 退成字形 */
+  LOD_GLYPH:11,     /* 字形的屏幕长轴(px),扁率与朝向仍照实 */
+  JD:40000,        /* km:干扰的烧穿尺度。d=JD 时干扰因子 = 1+ecmPower */
+};
+const isProp=()=>U.model==='cont';
+const isCov=()=>U.model==='cov';
+const nBands=()=>isProp()?PROP.NB:3;
+/* 衰减率的唯一取数口:band 用游戏那套,提案用自己那套快的 */
+const decOfAt=(m,ch)=>m==='cont'?PROP.DEC[ch]:(ch==='opt'?SENS.DEC_OPT:ch==='lis'?SENS.DEC_LIS:SENS.DEC_ACT);
+const decOf=ch=>decOfAt(U.model,ch);
+function ceilOf(ch,i){   /* 第 i 档的天花板(= 该档的稳态驻留) */
+  if(i<=0)return 0;
+  const c=PROP.CEIL[ch];
+  return c[0]*Math.pow(c[1]/c[0],(i-1)/(PROP.NB-1));
+}
+function support(ch,trk){   /* 别的两条的归一化支撑度,恒在 [0,1] —— 耦合的有界性就靠这一行 */
+  const M=PROP.CEIL; let s=0,n=0;
+  if(ch!=='opt'){s+=Math.min(1,trk.opt/M.opt[1]);n++;}
+  if(ch!=='lis'){s+=Math.min(1,trk.lis/M.lis[1]);n++;}
+  if(ch!=='act'){s+=Math.min(1,trk.act/M.act[1]);n++;}
+  return n?s/n:0;
+}
+/* bl = 静听的基线因子(单站 1.0,两站 90 度 2.5)。只有静听吃它 —— 那是这条路的代价 */
+function gainOf(ch,i,trk,bl){
+  if(i<=0)return 0;
+  if(!isProp())return (ch==='opt'?SENS.G_OPT:ch==='lis'?SENS.G_LIS:SENS.G_ACT)[i];
+  const m=(ch==='lis'&&bl>1)?bl:1;
+  return ceilOf(ch,i)*m*(1-decOf(ch))*(1+PROP.K[ch]*support(ch,trk));
+}
+function shellF(s,o,l,a){return Math.pow(o/s.A,s.p)+Math.pow(l/s.B,s.p)+Math.pow(a/s.C,s.p);}
+/* 无记忆的等级:一个相位点落在哪一层壳里。滞回与断照降级另算(见 ladder) */
+function levelAt(o,l,a){
+  if(isProp()){for(let k=2;k>=0;k--)if(shellF(SHELL[k],o,l,a)>=1)return k+1;return 0;}
+  if(a>=SENS.LIT3)return 3;
+  if(a>=SENS.LIT2_ACT||(o>=SENS.LIT2&&l>=SENS.LIT2))return 2;
+  if(o>=SENS.LIT1||l>=SENS.LIT1||a>=SENS.LIT1)return 1;
+  return 0;
+}
+/* 第 i 档的外边界半径 / R。被动 x=d^2 ⇒ B^((i-1)/2);照射 x=d^4 ⇒ B^((i-1)/4) */
+const zoneFrac=(i,quad)=>Math.pow(B_STEP,(i-1)/(quad?4:2));
+function bandForCeil(ch,lv){   /* 天花板够到 lv 的最外档 */
+  for(let i=1;i<=PROP.NB;i++)if(ceilOf(ch,i)>=lv)return i;
+  return 0;
+}
+const EMIT_LABEL={silent:'静默',paint:'照射',jam:'干扰'};
+const LIT_NAME=['未发现','探测级','识别级','火控级'];
+const LIT_COL=['#7b8ea6','#5aa7ff','#54e0d0','#ffe066'];
+const GRADE_NAME=['—','弱','良','强'];
+const COL={blue:'#5aa7ff',red:'#ff6b6b',opt:'#ff9a55',lis:'#54e0d0',act:'#d68cff',
+  dim:'#46566a',read:'#dbe6f2',grid:'rgba(90,167,255,.06)'};
+const CSSF='Consolas,monospace';
+const HWIN=90;            // 时序窗口(模拟秒)
+
+/* ---- 源强与系数:与 22-percep 的 optLum / rfLoudOf / reflOf / senseK* 同式 ---- */
+const emitP=s=>SENS.EMIT_P[s.emitMode];                      /* 射频响度用的功率档 */
+const heatP=s=>U.model==='band'?SENS.EMIT_P[s.emitMode]:PROP.EMIT_HEAT[s.emitMode];  /* 光学亮度用的废热档;V3 沿用提案那个 +0.15 */
+const lumOf=s=>s.size*(1+s.eng+heatP(s));
+const loudOf=s=>s.emit*emitP(s);
+const reflOf=s=>s.size*s.stealth;
+const kRF=d=>SENS.K_RF*d.recv;
+const kACT=d=>d.emitMode==='paint'?SENS.K_ACT*d.emit*d.recv:0;
+const visRange=s=>Math.sqrt(SENS.K_IR*lumOf(s));
+const hearRange=(s,recv)=>Math.sqrt(SENS.K_RF*loudOf(s)*recv);
+const actRange=(d,refl)=>Math.sqrt(Math.sqrt(SENS.K_ACT*d.emit*d.recv*refl));
+
+/* ---- 信噪比分档:强 = 16 倍门限通量、良 = 4 倍。照射那一路比【四次方】以避开开方 ---- */
+/* 现行:4 档 6dB。提案:12 档 1.5dB。两者都只用比较与乘法,热循环里没有除法/开方/Math 调用 */
+function gradeAt(x,r){
+  if(!(r>0)||x>=r)return 0;
+  if(!isProp())return x<r*SENS.GRADE_STRONG?3:(x<r*SENS.GRADE_FAIR?2:1);
+  let i=1,t=r*B_STEP;
+  while(i<PROP.NB&&x<t){i++;t*=B_STEP;}
+  return i;
+}
+function gradesOf(det,tgt){
+  const dx=det.x-tgt.x, dy=det.y-tgt.y, d2=dx*dx+dy*dy;
+  const gOpt=gradeAt(d2,lumOf(tgt)*SENS.K_IR);
+  const sr=loudOf(tgt);
+  const gLis=sr===0?0:gradeAt(d2,sr*kRF(det));
+  const ra=reflOf(tgt)*kACT(det);
+  const gAct=ra===0?0:gradeAt(d2*d2,ra);
+  return {opt:gOpt,lis:gLis,act:gAct,d:Math.sqrt(d2)};
+}
+/* ---- 驻留积分:解析跳步 x <- x*D^dt + g*(1-D^dt)/(1-D)。dt=1 时与逐秒递推逐位相同 ---- */
+/* 耦合用【本拍更新前】的 trk 算支撑度:显式,不需要解隐式方程,也不会自我强化 */
+function stepDwell(trk,g,dt,jamMul,bl){
+  const cO=decOf('opt'), cL=decOf('lis'), cA=decOf('act');
+  const dO=Math.pow(cO,dt), dL=Math.pow(cL,dt), dA=Math.pow(cA,dt);
+  const gO=gainOf('opt',g.opt,trk), gL=gainOf('lis',g.lis,trk,bl), gA=gainOf('act',g.act,trk);
+  trk.opt=trk.opt*dO+gO*(1-dO)/(1-cO);
+  trk.lis=trk.lis*dL+gL*(1-dL)/(1-cL);
+  trk.act=trk.act*dA+gA*(1-dA)/(1-cA);
+  if(jamMul!==1)trk.act*=jamMul;
+}
+/* ---- 阶梯派生:与 21-detect 的 detectFor 尾段逐行相同 ---- */
+/* 等级 = 相位点落在哪一层壳 + 两条与历史有关的修正。
+   滞回统一写成【把点按 1/HYST 放大再判一次】—— 对布尔阶梯它退化成原来那两条分支(opt>=LIT1*HYST 等价于 opt/HYST>=LIT1),
+   对超椭球它自动成立,不用再各写一份。 */
+function ladder(prev,trk){
+  let lit=levelAt(trk.opt,trk.lis,trk.act);
+  if(lit<prev){
+    const h=1/(isProp()?PROP.HOLD:SENS.HYST), hl=levelAt(trk.opt*h,trk.lis*h,trk.act*h);
+    if(hl>=prev)lit=prev;
+  }
+  /* ⚠ 提案模型在这里【就地返回】,不走下面那两条。
+     下面 out===3 && act<ACT_DOWN 那一行是布尔阶梯的"断照即掉锁",它把"3 级"与【照射那一条轴】焊死了:
+     光学或静听单独把点顶进 3 级壳时 act 恒为 0,这一行会当场把它打回 2 级 —— 等于"只有雷达能火控"。
+     提案里降级本来就该由【壳】说了算(滞回已经算在上面那一段里):照射一停,act 衰减、点退出 3 级壳,
+     "断照即掉锁"是这个结构自己给出的结果,不需要单写一条规则;而光学/静听那两条路因此也就通了。 */
+  if(isProp())return lit;
+  let out=prev;
+  if(lit>prev)out=lit; else if(lit===0)out=0;
+  if(out===3&&trk.act<SENS.ACT_DOWN)out=2;
+  return out;
+}
+function newTrk(){return {opt:0,lis:0,act:0};}
+function newCov(){return {x:0,y:0,a1:1e9,a2:1e9,th:0,ever:false,age:1e9,seen:false,n:0,idn:false,idBy:'',ch:{opt:null,lis:null,act:null}};}
+
+/* 把一个椭圆(a1 沿 th、a2 垂直)累加进信息矩阵 J=[Jxx,Jxy,Jyy]。P=R·diag(a1²,a2²)·Rᵀ ⇒ J=P⁻¹ */
+function covAddEll(J,a1,a2,th){
+  const c=Math.cos(th), s=Math.sin(th), i1=1/(a1*a1), i2=1/(a2*a2);
+  J[0]+=i1*c*c+i2*s*s; J[1]+=(i1-i2)*c*s; J[2]+=i1*s*s+i2*c*c;
+}
+/* 一条量测:沿视线(ux,uy)纵向误差 sPar、横向误差 sPerp */
+function covAddMeas(J,ux,uy,sPar,sPerp){
+  const ip=1/(sPar*sPar), iq=1/(sPerp*sPerp);
+  J[0]+=ip*ux*ux+iq*uy*uy; J[1]+=(ip-iq)*ux*uy; J[2]+=ip*uy*uy+iq*ux*ux;
+}
+/* 信息矩阵求逆 + 主轴分解。返回 [a1,a2,th],a1>=a2 */
+function covSolve(J){
+  const det=J[0]*J[2]-J[1]*J[1];
+  if(!(det>0))return [1e9,1e9,0];
+  const Pxx=J[2]/det, Pxy=-J[1]/det, Pyy=J[0]/det;
+  const tr=(Pxx+Pyy)/2, dd=Math.sqrt(((Pxx-Pyy)/2)*((Pxx-Pyy)/2)+Pxy*Pxy);
+  const a1=Math.sqrt(Math.max(0,tr+dd)), a2=Math.sqrt(Math.max(0,tr-dd));
+  return [Math.max(COV.AMIN,a1), Math.max(COV.AMIN,a2), 0.5*Math.atan2(2*Pxy,Pxx-Pyy)];
+}
+/* 这一条通道、这一个探测器,给出什么形状的椭圆。返回 [纵向, 横向, 纵向那一项是不是真量测] 或 null
+
+   ⚠ 这里有一条订正,是实测抓出来的:被动通道的"距离"【不是量测,是一条界】。
+   "它在我听得见的范围之内"、"它的角尺寸不超过这么大" —— 这两句话每一拍说的都是【同一件事】,
+   把它当成每拍独立的新量测塞进信息矩阵,盯着看 60 拍就白得一个 √60 的测距精度(实测:
+   静听单站的长轴从 24 万缩到 3.7 万,长短比从 50 掉到 8)。那是双重计数。
+   所以:横向(方位)是真量测,逐拍独立、会随时间收紧;纵向对被动通道只当【上限】,解算完再钳。
+   照射不同 —— 它是真的在测距,每一拍都是一次独立测量,照常进信息矩阵。 */
+/* 这一条通道对这一对的探测量程。形状与信噪比读数共用它,两处分家就会出现"条说有信号、dB 说没有" */
+const covRangeOf=(ch,d,t)=>ch==='opt'?visRange(t):(ch==='lis'?hearRange(t,d.recv):actRange(d,reflOf(t)));
+/* 被动通道的【界】:"它总在我够得着的范围里"。还得再钳一次到 AMAX 以内 ——
+   不钳的话，对一艘【开着雷达的 CA】，0.4 x 1,039,230 = 415,692 已经超过 AMAX，
+   于是单站静听根本建立不了接触 —— 【越吵的船反而越难听住】，方向是反的。
+   钳完之后它坐在 0.9xAMAX，仍是一条合法的方位接触。 */
+const covBound=R=>Math.min(COV.RCAP*R, COV.AMAX*0.9);
+function covShape(ch,gi,d,t,dd){
+  if(!gi)return null;                                  /* gi 只当【在不在量程内】用,不再当档位用 */
+  const R=covRangeOf(ch,d,t);
+  if(!(R>0))return null;
+  const u=dd/R;                                        /* 到门限的归一化距离,连续 */
+  const th=COV.TH0[ch]*(ch==='act'?u*u:u);             /* σ_θ ∝ 1/√SNR，连续，没有台阶 */
+  const sPerp=dd*th;
+  if(ch==='act'){
+    let sPar=COV.RRES*u*u, sq=sPerp;
+    /* 干扰:J/S 比 ∝ d²,所以远处糊死、贴近了烧穿。这是"干扰不是开关"的实现处 */
+    if(t.emitMode==='jam'){const f=1+t.ecmPower*(dd/COV.JD)*(dd/COV.JD); sPar*=f; sq*=f;}
+    return [sPar,sq,true,sq<=t.size*COV.L_REF];
+  }
+  if(ch==='opt')   /* 角尺寸测距:σ_r = d²·θ/L。θ 现在也随距离变 ⇒ 实际按 d³ 涨,只在很近处才咬得住 */
+    return [Math.min(dd*dd*th/(t.size*COV.L_REF), covBound(R)), sPerp, false, sPerp<=t.size*COV.L_REF];
+  /* 静听【无条件给身份】—— 这是刻意的例外,也是本方案的要点之一:
+     被动射频认人靠的是波形指纹(条令里叫 SEI / EOB),不是角分辨,所以它认得比谁都远。
+     直接后果:开雷达 = 把自己的身份一起递出去。这是"静默"除了藏位置之外的第二个理由。 */
+  return [covBound(R), sPerp, false, true];             /* 被动射频:一条视线,没有距离,但有身份 */
+}
+/* 一拍:先预测(椭圆长大),再把所有量测按信息相加 */
+function stepCov(t,dets,el){
+  const c=t.cov;
+  /* c.n 此刻还是【上一拍】的量测数 —— 正好就是"我还握着这条接触吗"。
+     复利按真实经过的秒数取幂,所以 5 次 1 秒与 1 次 5 秒结果逐位相同(倍速不改物理,判据钉住了这条)。 */
+  const fd=c.n>0?COV.FADE_HOLD:COV.FADE_LOST;
+  /* da/dt = f·a + G 的【解析跳步】：a ← (a + G/f)·(1+f)^el − G/f。
+     写成 a*(1+f)^el + G*el 是错的 —— 实测 f=0.18/G=120/a₀=400 时，
+     跑 6 次 1 秒得 2213，跑 1 次 6 秒得 1800，差 23%。
+     那就是【倒速越高、椭圆长得越慢】，和 SN4 记过的"干扰乘子不随 dt 缩放"是同一类错。
+     改成解析形后两者逐位相同（判据 ⑫ 钉住了这一条）。 */
+  const gm=Math.pow(1+fd,el), off=COV.GROW/fd;
+  c.a1=Math.min(COV.AMAX,(c.a1+off)*gm-off); c.a2=Math.min(COV.AMAX,(c.a2+off)*gm-off);   /* 长不过 AMAX */
+  const J=[0,0,0]; covAddEll(J,c.a1,c.a2,c.th);      /* 先验也是信息 */
+  let n=0, rBound=1e9, idn=false, idBy=''; c.ch={opt:null,lis:null,act:null};
+  for(const d of dets){
+    const g=gradesOf(d,t), dd=g.d||1;
+    const ux=(t.x-d.x)/dd, uy=(t.y-d.y)/dd;
+    for(const ch of ['opt','lis','act']){
+      const sh=covShape(ch,g[ch],d,t,dd); if(!sh)continue;
+      /* 真量测进信息矩阵;界只钳上限(见 covShape 头上那条订正) */
+      covAddMeas(J,ux,uy,sh[2]?sh[0]:COV.HUGE,sh[1]); n++;
+      if(!sh[2]&&sh[0]<rBound)rBound=sh[0];
+      if(sh[3]&&!idn){idn=true;idBy=ch;}
+      const cur=c.ch[ch];
+      if(!cur||sh[1]<cur[1]){
+        const R=covRangeOf(ch,d,t);
+        const snr=(ch==='act'?4:2)*10*Math.log10(R/dd);   /* 被动 (R/d)²、照射 (R/d)⁴,折成 dB */
+        c.ch[ch]=[sh[0],sh[1],dd,snr];   /* 卡片上显示最好的那一个 */
+      }
+    }
+  }
+  const r=covSolve(J); c.a1=r[0]; c.a2=r[1]; c.th=r[2]; c.n=n;
+  if(c.a1>rBound)c.a1=Math.max(rBound,c.a2);            /* "它总在我够得着的范围里" */
+  /* 身份【闩住】:认出来之后,只要这条航迹还在就一直认得;航迹彻底断了(lit 归 0)才忘掉。
+     这与 coasting 的语义一致 —— 丢了航迹就不知道重新出现的是不是同一艘。 */
+  if(idn){c.idn=true;c.idBy=idBy;}
+  if(n>0){c.x=t.x; c.y=t.y; c.age=0; c.seen=true;} else c.age+=el;
+  const lit=covLit(c,t); if(lit>0)c.ever=true; else {c.idn=false;c.idBy='';}   /* 航迹断了就忘掉身份 */
+  return lit;
+}
+/* 等级退化成【派生的显示量】:它只是椭圆大小的三个分档,不再是任何东西的真相 */
+/* ---- 两条门【按目标】各不相同 ----
+   用户的观察:"每艘船的相图应该不一样"。在 V3 里"相图"就是这两条门 ——
+   低于主炮门 = 火控级、低于导弹门 = 识别级,它们就是那三层壳在这套模型里的化身。
+
+   凭什么随目标变:
+     主炮门 = 命中判定半径,而"我的解算够不够准"本来就该跟【目标有多大】比。
+              同样 ±1800km 的误差,打巡洋舰打得中,打驱逐舰打不中。size:CA 1.00 / DD 0.70。
+     导弹门 = 导引头搜索篮。导引头要在篮子里【自己找到】目标,所以跟【合成反射】走:
+              size×stealth,CA 1.00 / DD 0.42。开平方是为了不让差距大到离谱(1.00 vs 0.65)。
+   两个都读实例字段,所以编辑器改舰种、靶场调隐身,门跟着动,不用碰任何调用点。 */
+const covMac=t=>COV.MAC*t.size;
+const covMsl=t=>COV.MSL*Math.sqrt(reflOf(t));
+/* ---- 三段,各由【不同的东西】驱动(方案 C) ----
+     1 探测级  有位置估计(椭圆存在且没糊出界)
+     2 识别级  认出它了 + 位置够导引头找得着
+     3 火控级  认出它了 + 位置够主炮打得中
+
+   为什么把"认出"单拎出来:两站交会能把椭圆收到很紧,却【一点都不能帮你认出那是什么】。
+   实测过:25,000km 基线的两站光学,在整个 15 万光学量程里都能给出小于导弹门的椭圆 ——
+   于是"看见即识别",识别这一级完全没有梯度(用户实报)。
+   根因是两条门挂在同一个标量(椭圆长半轴)上,那是一维坍缩换了个地方。
+   现在识别由【角分辨到轮廓】或【听出辐射指纹】给,两者都是单站性质,交会帮不上忙。 */
+function covLit(c,t){
+  if(!c.seen||!(c.a1<COV.AMAX))return 0;
+  if(!c.idn)return 1;                        /* 有位置、认不出 = 探测级(地图上画成"大型热源") */
+  return c.a1<=covMac(t)?3:(c.a1<=covMsl(t)?2:1);
+}
+/* 某条通道【认出】目标的距离:σ⊥ = d·θ(d) 收到目标尺寸以内。
+   静听不走这条(它靠指纹,不靠角分辨),所以这里只回答光学与照射。 */
+function identDist(ch,d,t){
+  const R=covRangeOf(ch,d,t); if(!(R>0))return 0;
+  const L=t.size*COV.L_REF, T=COV.TH0[ch];
+  return ch==='act'?Math.pow(L*R*R/T,1/3):Math.sqrt(L*R/T);
+}
+
+/* ================= 状态 ================= */
+const U={ts:12, paused:false, layer:'mix', scene:0, addCls:'DD', sel:null, drag:null, pan:null, model:'band', noFill:false};
+const S={t:0, acc:0, ticks:0, ships:[], seq:0, k:0, cx:0, cy:0, nLit:0, sig:'', ref:{}};
+
+function mkShip(side,cls,x,y,o){
+  const r=SENS.CLS[cls];
+  const s={id:++S.seq, side, cls, x, y, ang:side==='blue'?0:Math.PI,
+    size:r.size, stealth:r.stealth, emit:r.emit, recv:r.recv, ecmPower:r.ecmPower,
+    emitMode:'silent', eng:0, mv:0,
+    trk:newTrk(), cov:newCov(), lit:0, ever:false, seen:null, age:1e9, track:0, bl:1, lock:{opt:0,lis:0,act:0},
+    g:{opt:0,lis:0,act:0,d:0}, hist:[]};
+  if(o)for(const k in o)s[k]=o[k];
+  return s;
+}
+function setCls(s,cls){ const r=SENS.CLS[cls]; s.cls=cls;
+  s.size=r.size; s.stealth=r.stealth; s.emit=r.emit; s.recv=r.recv; s.ecmPower=r.ecmPower; }
+const byId=id=>S.ships.find(s=>s.id===id)||null;
+const selShip=()=>byId(U.sel);
+const nameOf=s=>s.cls+'-'+s.id;
+
+function centroidAll(){
+  if(!S.ships.length)return [0,0];
+  let x=0,y=0; for(const s of S.ships){x+=s.x;y+=s.y;}
+  return [x/S.ships.length, y/S.ships.length];
+}
+function centroidOf(side){
+  const l=S.ships.filter(s=>s.side===side); if(!l.length)return null;
+  let x=0,y=0; for(const s of l){x+=s.x;y+=s.y;}
+  return [x/l.length, y/l.length];
+}
+function addShip(side,cls,pos){
+  let x,y;
+  if(pos){x=pos[0];y=pos[1];}
+  else{ // 绕全场质心按黄金角撒开,免得新船叠在一起(同 scenario/96-spawn 的做法)
+    const c=centroidAll(), n=S.ships.length, a=n*2.39996, r=90000+(n%4)*45000;
+    x=c[0]+Math.cos(a)*r; y=c[1]+Math.sin(a)*r;
+  }
+  const s=mkShip(side,cls,x,y);
+  S.ships.push(s); if(U.sel==null)U.sel=s.id; U.scene=0;
+  return s;
+}
+function delShip(id){
+  const i=S.ships.findIndex(s=>s.id===id); if(i<0)return;
+  S.ships.splice(i,1); U.scene=0;
+  if(U.sel===id)U.sel=S.ships.length?S.ships[0].id:null;
+}
+
+/* ================= 感知节拍 =================
+   与引擎同形:探测【按阵营】算,一方的全部传感器合起来扫对方每一艘,逐通道取最好的那一档。
+   写进去的是【目标】身上的 trk / lit —— 所以每艘舰身上那条阶梯,说的是它在对方眼里的样子。 */
+function detectFor(detSide,tgtSide,el){
+  const dets=S.ships.filter(s=>s.side===detSide);
+  const tgts=S.ships.filter(s=>s.side===tgtSide);
+  if(!dets.length||!tgts.length)return;
+  for(const t of tgts){
+    let qo=0,ql=0,qa=0,dmin=1e18;
+    for(const d of dets){
+      const g=gradesOf(d,t);
+      if(g.opt>qo)qo=g.opt; if(g.lis>ql)ql=g.lis; if(g.act>qa)qa=g.act;
+      if(g.d<dmin)dmin=g.d;
+    }
+    t.g={opt:qo,lis:ql,act:qa,d:dmin};
+    if(isCov()){
+      /* V3:没有驻留、没有壳。一拍 = 椭圆长大一点 + 把这一拍的量测按信息加进去 */
+      const p=t.lit; t.lit=stepCov(t,dets,el); if(t.lit>p)t.ever=true;
+      /* seen 仍然只在【有量测】时刷新 —— 判据是"我这一拍有没有拿到它的信息",不是"等级到几" */
+      if(t.cov.n>0){t.seen=[t.cov.x,t.cov.y];t.age=0;} else t.age+=el;
+      t.track=(t.cov.n>0)?t.track+1:0;
+      t.hist.push({t:S.t,l:t.lit,o:t.trk.opt,s:t.trk.lis,a:t.trk.act,e:t.cov.a1});
+      while(t.hist.length&&t.hist[0].t<S.t-HWIN)t.hist.shift();
+      continue;
+    }
+    t.bl=baselineOf(t,dets);
+    t.lock={opt:lockDist('opt',t,dets),lis:lockDist('lis',t,dets),act:lockDist('act',t,dets)};
+    stepDwell(t.trk,t.g,el,t.emitMode==='jam'?(1-t.ecmPower):1,t.bl);
+    // 最后已知位置只由【光学或照射】刷新,静听不刷新 —— 被动射频给的是一条视线,不是一个点
+    if(qo!==0||qa!==0){t.seen=[t.x,t.y];t.age=0;} else t.age+=el;
+    t.track=(t.trk.lis>=SENS.LIS_ALERT)?t.track+1:0;
+    const p=t.lit; t.lit=ladder(t.lit,t.trk); if(t.lit>p)t.ever=true;
+    t.hist.push({t:S.t,l:t.lit,o:t.trk.opt,s:t.trk.lis,a:t.trk.act});
+    while(t.hist.length&&t.hist[0].t<S.t-HWIN)t.hist.shift();
+  }
+}
+function senseTick(el){ S.ticks++; detectFor('blue','red',el); detectFor('red','blue',el); }
+
+/* 静听的【基线因子】:听得见同一个目标的探测器,两两方位夹角越大,天花板抬得越高。
+   与 esmFix 的交会因子同源(都是"分开站位买到了测距"),但它作用在【能不能锁定】上,不只是画个椭圆。
+   单站恒返回 1.0 —— 那正是"静听单站走不到火控"的实现处。 */
+function baselineOf(t,dets){
+  const ears=dets.filter(function(d){return gradesOf(d,t).lis>0;});
+  let mx=0;
+  for(let i=0;i<ears.length;i++)for(let j=i+1;j<ears.length;j++){
+    const a1=Math.atan2(t.y-ears[i].y,t.x-ears[i].x), a2=Math.atan2(t.y-ears[j].y,t.x-ears[j].x);
+    let da=Math.abs(a1-a2); if(da>Math.PI)da=2*Math.PI-da;
+    if(da>mx)mx=da;
+  }
+  return 1+PROP.BL*Math.min(1,mx/(Math.PI/2));
+}
+/* 某条通道【单独】走到火控级,要贴到多近。返回 0 = 这条路现在走不通。
+   算法:找出天花板够得到 3 级壳轴截距的最外那一档,再把档号换回距离(被动 ^(1/2)、照射 ^(1/4))。
+   这三个数就是整套设计的全部内容 —— 所以它们该显式出现在卡片上与地图上,而不是让人自己去猜。 */
+function lockDist(ch,t,dets){
+  if(!isProp())return 0;                       /* 现行模型里只有照射到得了火控级,不在这儿表达 */
+  const ic=ch==='opt'?SHELL[2].A:(ch==='lis'?SHELL[2].B:SHELL[2].C);
+  let R=0, m=1;
+  if(ch==='opt')R=visRange(t);
+  else if(ch==='lis'){
+    if(loudOf(t)<=0)return 0;                  /* 它一声不吭,静听这条路无从谈起 */
+    for(const d of dets){const r=hearRange(t,d.recv); if(r>R)R=r;}
+    m=t.bl||1;
+  }else{
+    for(const d of dets)if(d.emitMode==='paint'){const r=actRange(d,reflOf(t)); if(r>R)R=r;}
+  }
+  if(!(R>0))return 0;
+  for(let i=1;i<=PROP.NB;i++)if(ceilOf(ch,i)*m>=ic)return R*zoneFrac(i,ch==='act');
+  return 0;
+}
+
+/* 静听的产物是一片不确定区,不是一艘船。多站交会:方位越分散越准(与引擎 updateESMFixes 同式)。
+   这一段只有 N 舰才跑得起来 —— 分开站位于是成了一个【感知层的决策】,不只是队形好看。 */
+function esmFix(t){
+  const dets=S.ships.filter(s=>s.side!==t.side);
+  const viewers=dets.filter(d=>gradesOf(d,t).lis>0);
+  if(!viewers.length)return null;
+  let best=viewers[0], bd=1e18;
+  for(const v of viewers){const dd=Math.hypot(v.x-t.x,v.y-t.y); if(dd<bd){bd=dd;best=v;}}
+  let tri=1, maxAng=0;
+  if(viewers.length>=2){
+    for(let i=0;i<viewers.length;i++)for(let j=i+1;j<viewers.length;j++){
+      const a1=Math.atan2(t.y-viewers[i].y,t.x-viewers[i].x), a2=Math.atan2(t.y-viewers[j].y,t.x-viewers[j].x);
+      let da=Math.abs(a1-a2); if(da>Math.PI)da=2*Math.PI-da;
+      if(da>maxAng)maxAng=da;
+    }
+    tri=1/(1+maxAng*0.8);
+  }
+  const err=Math.max(15000,Math.min(200000,300000/(Math.sqrt(best.recv)*(0.5+t.track*0.15))*tri));
+  return {err,best,n:viewers.length,maxAng,tri};
+}
+
+/* ================= 推进 ================= */
+function stepShips(dt){
+  for(const s of S.ships){
+    if(!s.mv)continue;
+    const c=centroidOf(s.side==='blue'?'red':'blue'); if(!c)continue;   // 没有对手就没有"接近"可言
+    const dx=c[0]-s.x, dy=c[1]-s.y, L=Math.hypot(dx,dy);
+    if(L<1000){s.mv=0;continue;}
+    const v=800*(-s.mv);                      // 800 km/s = 游戏里 DD 的巡航档;mv=-1 接近 / +1 后退
+    s.x+=dx/L*v*dt; s.y+=dy/L*v*dt;
+    s.ang=Math.atan2(dy,dx)+(s.mv>0?Math.PI:0);
+    if(Math.hypot(s.x-c[0],s.y-c[1])>900000)s.mv=0;
+  }
+}
+function advance(sec){
+  let left=sec;
+  while(left>1e-9){
+    const dt=Math.min(left,0.25); left-=dt;
+    S.t+=dt; stepShips(dt);
+    S.acc+=dt; if(S.acc>=SENS.TICK){const el=S.acc;S.acc=0;senseTick(el);}
+  }
+}
+
+/* ================= 场景 ================= */
+const SCENES={
+  1:{nm:'静默接近',txt:'双方都静默、都熄火滑行,红舰匀速逼近。<b class="m">纯光学只能到探测级</b> —— 一艘完全静默的驱逐舰要等到进了 <b class="m">15 万公里</b>(正好是主炮射程)才刚被看见,而且永远停在 1 级:知道那儿有个热源,不知道是什么,更打不了主炮。这就是隐蔽接近有意义的前提。',
+     ships:[['blue','DD',0,0,null],['red','DD',260000,0,{mv:-1}]]},
+  2:{nm:'抢火控',txt:'7 万公里对峙,双方静默、都只有 1 级。把蓝舰的发射档切到<b class="m">「照射」</b>,看两张卡各自怎么走:红舰卡上的照射驻留往上爬;而蓝舰卡同一时刻也在动 —— 对面听见了它的发射机,又本来就看得见它的热辐射,两条被动通道一交叉就够识别级。<b class="m">切到【提案】模型再试一次:同样的距离,火控级可能根本够不到 —— 那才是「要贴多近」这个决定的样子。</b>',
+     ships:[['blue','DD',0,0,null],['red','DD',70000,0,null]]},
+  3:{nm:'手电效应',txt:'40 万公里。蓝舰已经开着照射,而 DD 打 DD 的照射量程只有 <b class="m">12 万公里</b> —— 回波根本回不来,红舰卡上三路全零、<b class="m">什么都没看到</b>。而蓝舰自己那张卡上,静听已经在涨:对面在 <b class="m">60 万公里</b>上就听见了它。<b class="m">照射量程正比 emit 的四次方根、被听见的距离正比平方根</b>,两条指数不同,差距就是这么来的。',
+     ships:[['blue','DD',0,0,{emitMode:'paint'}],['red','DD',400000,0,null]]},
+  4:{nm:'干扰',txt:'巡洋舰照射一艘驱逐舰。驱逐的合成反射只有 <b class="m">0.70 x 0.60 = 0.42</b>,所以同一部雷达照它比照巡洋近两成。把<b class="m">红舰切到「干扰」</b>:它每拍削掉 <b class="m">30%</b> 的照射驻留(只削回波,削不了红外),蓝舰可能掉出火控级;代价是它的射频响度翻倍,<b class="m">被听见的距离变成 1.414 倍</b>。试试靠贴近把它压回火控级。',
+     ships:[['blue','CA',0,0,{emitMode:'paint'}],['red','DD',90000,0,null]]},
+  5:{nm:'交会定位',txt:'<b class="m">这一条只有多艘舰才跑得起来。</b>两艘蓝舰上下分开 30 万公里,一艘红舰在照射 —— 它离得太远,光学够不到,所以蓝方只有静听:一条视线、没有距离,画成一片不确定区。<b class="m">两艘舰的方位越分散,那片区收得越紧</b>(交会因子 1/(1+夹角x0.8))。把其中一艘拖到另一艘旁边,看椭圆怎么胀回去 —— 分开站位是一个感知层的决策,不只是队形好看。',
+     ships:[['blue','DD',-150000,-150000,null],['blue','DD',-150000,150000,null],['red','CA',420000,0,{emitMode:'paint'}]]},
+  6:{nm:'光学锁定',txt:'<b class="m">一声不吭,也能拿到火控级。</b>双方都静默、都熄火,相距 <b class="m">2 万公里</b> —— 已经进了光学锁定圈(静默 DD 之间是 <b class="m">2.7 万</b>)。看卡片:光学那一条一路爬过 8,静听与照射<b class="m">全程为零</b>,等级照样上到 3,主炮可用。<b class="m">这条路的代价是距离</b>:2.7 万只有主炮射程的 18%,你得先活着贴进来。切到【分档·现行】对比 —— 那边光学的稳态天花板是死的 0.22/0.10=2.2,贴到鼻子底下也上不了火控。',
+     ships:[['blue','DD',0,0,null],['red','DD',20000,0,null]]},
+  7:{nm:'交会',mdl:'cov',
+     txt:'<b class="m">距离一公里都不变,只换站位。</b>两艘蓝舰站成一条直线 —— 它们对红舰的<b class="m">方位角几乎相同</b>,两条视线重合,交会等于没交会。此刻椭圆是一根 <b class="m">±2 万公里的针</b>:方位很准(±0.6k),距离几乎不知道 —— 被动通道给的是一条视线,不是一个点。导弹够了,主炮差两个数量级。<br>现在<b class="m">把下面那艘蓝舰拖到红舰的正下方</b>(方位差 90 度),看椭圆当场塌成一个点、主炮解锁。红舰一步没动,发射档一次没切 —— <b class="m">变的只是我方的站位</b>。这就是"分开站位是一个感知层的决策"的全部含义。',
+     ships:[['blue','DD',0,0,null],['blue','DD',-20000,0,null],['red','DD',60000,0,null]]},
+};
+function loadScene(list){
+  S.t=0;S.acc=0;S.ticks=0;S.ships=[];S.seq=0;S.k=0;U.sel=null;
+  for(const d of list)S.ships.push(mkShip(d[0],d[1],d[2],d[3],d[4]));
+  U.sel=S.ships.length?S.ships[0].id:null;
+  camFit();                      /* 换场景贴合一次(S.k=0 也会让 drawMap 兜底贴合) */
+}
+function runScene(n){
+  const sc=SCENES[n]; if(!sc)return;
+  /* 有的场景只在某个信号模型下才说得通(⑦ 讲的是椭圆怎么交会,分档模型里根本没有椭圆)。
+     只有写了 mdl 的场景才换模型 —— 不写就一个字不动,免得点场景把玩家正在看的模型顶掉。 */
+  if(sc.mdl&&U.model!==sc.mdl){U.model=sc.mdl;PH_CACHE.key='';}
+  loadScene(sc.ships); U.scene=n;
+  $('narr').innerHTML=sc.txt;
+  syncUI();
+}
+
+/* ================= 画布 ================= */
+const $=id=>document.getElementById(id);
+function mkView(cv){return {cv,g:cv.getContext('2d'),W:1,H:1,k:1,ox:0,oy:0};}
+const VM=mkView($('cvMap')), VP=mkView($('cvPhase'));
+function fit(v){
+  const dpr=window.devicePixelRatio||1, r=v.cv.getBoundingClientRect();
+  const w=Math.max(1,Math.round(r.width)), h=Math.max(1,Math.round(r.height));
+  if(v.cv.width!==w*dpr||v.cv.height!==h*dpr){v.cv.width=w*dpr;v.cv.height=h*dpr;}
+  v.g.setTransform(dpr,0,0,dpr,0,0); v.W=w; v.H=h;
+}
+const toS=(v,x,y)=>[v.W/2+(x-v.ox)*v.k, v.H/2+(y-v.oy)*v.k];
+const toW=(v,sx,sy)=>[(sx-v.W/2)/v.k+v.ox, (sy-v.H/2)/v.k+v.oy];
+function niceStep(x){const p=Math.pow(10,Math.floor(Math.log10(x))),m=x/p;return (m<1.5?1:m<3.5?2:m<7.5?5:10)*p;}
+/* V3 的椭圆经常落在一千公里以下，原来那一版把它们全写成 "0k" ——
+   一个进了主炮门的解算显示成 0，读起来像坏了。万以下留一位小数。 */
+const fmtK=v=>v>=1e6?(v/1e6).toFixed(2)+'M':(v>=10000?Math.round(v/1000)+'k':(v/1000).toFixed(1)+'k');
+
+/* 贴合:圈最多占到全场展开半径的 2.4 倍,再大就让它跑出画面 ——
+   否则一个 100 万公里的被听见圈会把整支舰队压成一个点(v1 实测过,截图才看出来) */
+function mapFit(){
+  if(!S.ships.length)return Math.min(VM.W,VM.H)*0.5/500000;
+  const c=centroidAll();
+  let sx=20000, sy=20000;
+  for(const s of S.ships){sx=Math.max(sx,Math.abs(s.x-c[0]));sy=Math.max(sy,Math.abs(s.y-c[1]));}
+  const sel=selShip(), rings=[];
+  if(sel){
+    rings.push(visRange(sel));
+    if(loudOf(sel)>0)rings.push(hearRange(sel,1));
+    if(sel.emitMode==='paint')rings.push(actRange(sel,1));
+  }
+  const cap=Math.max(sx,sy)*2.4;
+  const r=rings.length?Math.min(Math.max.apply(null,rings),cap):0;
+  /* 逐轴贴合。地图现在明显比高要宽,拿 min(W,H) 当分母会把横向那一大半白白浪费掉 ——
+     舰队一横排(场景①③)或一竖排(场景⑤)时差得最多,实测场景⑤ 能大 22%。
+     圈是圆的,所以它对两个方向同样要求;上面那个 2.4 倍上限仍然管着"别让一个巨圈把舰队压成一个点"。 */
+  const spanX=Math.max(sx*1.3,r)*1.12, spanY=Math.max(sy*1.3,r)*1.12;
+  return Math.min(VM.W*0.5/Math.max(1,spanX), VM.H*0.5/Math.max(1,spanY));
+}
+/* 两种圈用两种【视觉语言】,因为它们说的是相反的两件事:
+     被探测范围(光学 / 被听见)= 半透明【填充】——"进了这片区域,对方就发现得了我"。它是一片【领域】。
+     探测范围(照射)         = 【虚线环】——"我这部雷达打得到这么远"。它是一条【触及边界】。
+   改前三个圈都是虚线,读起来像三个同类的东西,而其中两个是我的暴露、一个是我的触及,方向正好相反。 */
+/* 标注要钳进视口。圈常常比画面大得多(被听见圈动辄上百万公里),那时候填充铺满全屏、
+   而标注挂在圆顶上早就跑到画外了 —— 信息当场消失,画面反而像"什么都没画"。
+   钳位之后至少还看得见"被听见 1.04M(圈在画外)"这一行。 */
+function ringLbl(v,g,txt,cx,cy,rr,col){
+  const y=cy-rr-3;
+  g.fillStyle=col; g.font='10px '+CSSF; g.textAlign='center'; g.textBaseline='bottom';
+  if(y>=14){ g.fillText(txt,Math.max(52,Math.min(v.W-52,cx)),y); return; }
+  /* 圆顶在画外:把这一行钉到画面上沿,并逐行错开(一帧里可能有三条都在画外) */
+  v.lblN=(v.lblN||0)+1;
+  g.fillText(txt+'(圈在画外)',Math.max(52,Math.min(v.W-52,cx)),14+(v.lblN-1)*13);
+}
+/* 被探测范围【没有硬边界】—— 探测概率是渐落的,画一条实边等于把一个连续量说成一道门槛。
+   色标照着 1/d^2 的样子走(alpha 正比 1-(d/R)^2):圆心最实,到名义半径归零。
+
+   实现上【每帧零分配】:渐变在【单位圆】里生成一次并缓存,落笔时 translate+scale 到目标半径。
+   canvas 渐变是在落笔那一刻按当前变换解算的,所以一份单位渐变能当任意半径用。
+   这条守的是 CLAUDE.md 那句"每帧路径禁用 createRadialGradient"(星云只生成一次是同一个做法)。
+   ⚠ 这条依赖我没去查规范的一个行为,所以 uitest 里有一条【像素判据】直接量:
+     沿半径采三点,亮度必须单调下降且外沿几乎归零 —— 硬边界填充在那条判据下会当场红。 */
+const FADE={};
+function fadeOf(g,rgb){
+  if(FADE[rgb])return FADE[rgb];
+  const gr=g.createRadialGradient(0,0,0,0,0,1);
+  gr.addColorStop(0,   'rgba('+rgb+',.125)');
+  gr.addColorStop(0.50,'rgba('+rgb+',.094)');
+  gr.addColorStop(0.70,'rgba('+rgb+',.064)');
+  gr.addColorStop(0.85,'rgba('+rgb+',.035)');
+  gr.addColorStop(1,   'rgba('+rgb+',0)');
+  FADE[rgb]=gr; return gr;
+}
+function ringFill(v,cx,cy,r,rgb,lbl){
+  if(U.noFill)return;                 /* uitest 的对照渲染用 */
+  const g=v.g,p=toS(v,cx,cy), rr=r*v.k;
+  if(!(rr>2)||rr>26000)return;
+  g.save();
+  g.translate(p[0],p[1]); g.scale(rr,rr);
+  g.fillStyle=fadeOf(g,rgb);
+  g.beginPath(); g.arc(0,0,1,0,Math.PI*2); g.fill();
+  g.restore();
+  /* 名义半径上不画线,但标注留着 —— 它是地图上唯一说得出"这个渐隐到哪儿为止"的东西 */
+  if(lbl){g.save();ringLbl(v,g,lbl,p[0],p[1],rr,'rgba('+rgb+',.8)');g.restore();}
+}
+function ring(v,cx,cy,r,col,dash,lbl){
+  const g=v.g,[sx,sy]=toS(v,cx,cy), rr=r*v.k;
+  if(!(rr>2)||rr>26000)return;
+  g.save(); g.strokeStyle=col; g.lineWidth=1; g.globalAlpha=.55; g.setLineDash(dash||[4,4]);
+  g.beginPath(); g.arc(sx,sy,rr,0,Math.PI*2); g.stroke(); g.setLineDash([]);
+  if(lbl){g.globalAlpha=.9;ringLbl(v,g,lbl,sx,sy,rr,col);}
+  g.restore();
+}
+function shipIcon(v,x,y,ang,cls,col,mode,alpha){
+  const g=v.g,[sx,sy]=toS(v,x,y);
+  g.save(); g.globalAlpha=alpha==null?1:alpha; g.translate(sx,sy); g.rotate(-ang);
+  if(typeof drawHull==='function')drawHull(g,cls,2,col,mode);
+  else{g.beginPath();g.moveTo(11,0);g.lineTo(-7,6);g.lineTo(-7,-6);g.closePath();g.fillStyle=col;g.fill();}
+  g.restore();
+}
+function label(v,x,y,txt,col,dy){
+  const g=v.g,[sx,sy]=toS(v,x,y);
+  g.save(); g.fillStyle=col; g.font='11px '+CSSF; g.textAlign='center'; g.textBaseline='top';
+  g.fillText(txt,sx,sy+(dy==null?12:dy)); g.restore();
+}
+/* 相机是【手动】的:滚轮缩放(锚在光标)、空地拖动平移、双击空地贴合一次。
+   刻意不再每帧自动贴合 —— 自动贴合会在加船/拖船时把全场悄悄缩放,
+   玩家读到的是"地图自己在动",而他只是想看一个固定的尺度(用户实报)。
+   只在【换场景 / 清空 / 双击空地】时贴合,那几个时刻旧视野本来就没有意义了。 */
+const K_MIN=8e-6, K_MAX=0.05;
+function camFit(){
+  fit(VM);
+  const c=centroidAll(); S.cx=c[0]; S.cy=c[1];
+  S.k=Math.max(K_MIN,Math.min(K_MAX,mapFit()));
+}
+function camApply(v){ v.ox=S.cx; v.oy=S.cy; v.k=S.k; }
+function drawMap(){
+  const v=VM,g=v.g; fit(v);
+  if(!S.k)camFit();
+  camApply(v);
+  g.fillStyle='#05070c'; g.fillRect(0,0,v.W,v.H); v.lblN=0;
+  const step=niceStep(120/v.k); g.strokeStyle=COL.grid; g.lineWidth=1; g.beginPath();
+  const x0=Math.floor((v.ox-v.W/2/v.k)/step)*step, y0=Math.floor((v.oy-v.H/2/v.k)/step)*step;
+  for(let x=x0;x<v.ox+v.W/2/v.k;x+=step){const sx=toS(v,x,0)[0];g.moveTo(sx,0);g.lineTo(sx,v.H);}
+  for(let y=y0;y<v.oy+v.H/2/v.k;y+=step){const sy=toS(v,0,y)[1];g.moveTo(0,sy);g.lineTo(v.W,sy);}
+  g.stroke();
+
+  // 圈只画选中那一艘 —— N 舰全画会糊成一锅。
+  // 光学与被听见圈画在【它自己】身上(那是"进了这圈就会被发现",与探测方无关);
+  // 照射圈也画在它身上(那是"我这部雷达打得到多远"),对【标准目标 反射 1.0】那一档。
+  const sel=selShip();
+  if(sel){
+    /* 先铺【被探测范围】的填充(大面积,压在最底下),再画【探测范围】的虚线环 */
+    if(loudOf(sel)>0)ringFill(v,sel.x,sel.y,hearRange(sel,1),'84,224,208','被听见 '+fmtK(hearRange(sel,1)));
+    ringFill(v,sel.x,sel.y,visRange(sel),'255,154,85','被看见 '+fmtK(visRange(sel)));
+    /* 锁定圈:进了它,对方【一部雷达都不开】也拿得到火控级。这是"光学也能锁定"唯一看得见的地方。
+       画在它自己身上,与"被看见 / 被听见"同一个语义(别人对我能做到什么),不是"我能做到什么"。 */
+    if(isProp()&&sel.lock){
+      if(sel.lock.opt>0)ring(v,sel.x,sel.y,sel.lock.opt,COL.opt,[1,0],'光学锁定 '+fmtK(sel.lock.opt));
+      if(sel.lock.lis>0)ring(v,sel.x,sel.y,sel.lock.lis,COL.lis,[1,0],'静听锁定 '+fmtK(sel.lock.lis)+(sel.bl>1.02?(' 基线x'+sel.bl.toFixed(2)):''));
+    }
+    /* 照射圈是【范围内外】一条线,不再把圈内部拆成识别/火控两道虚线 ——
+       三条同心虚线在地图上读不成"分区",只读成"三个圈"。分区仍然在(壳与天花板算的),
+       它的读数在卡片上("单独锁定 照射 78k"),那里是数字,比三条虚线清楚。 */
+    if(sel.emitMode==='paint'){
+      const rr=actRange(sel,1);
+      ring(v,sel.x,sel.y,rr,COL.act,[6,3],'照射量程 '+fmtK(rr)+'(标准目标)');
+    }
+    const p=toS(v,sel.x,sel.y);
+    g.save(); g.strokeStyle='rgba(159,212,255,.5)'; g.lineWidth=1; g.beginPath(); g.arc(p[0],p[1],15,0,Math.PI*2); g.stroke(); g.restore();
+  }
+  S.nLit=S.ships.filter(x=>x.side==='red'&&x.lit>0).length;   /* 每帧一次,别在 drawRed 里重复扫 */
+  for(const s of S.ships){ if(s.side==='blue')drawBlue(v,s); else drawRed(v,s); }
+  drawScale(v);
+}
+/* 比例尺。相机改手动之后它是必需的 —— 缩放随时在变,"这个圈变大了"到底是半径变了
+   还是视野变近了,没有比例尺根本分不出(同一条道理主地图 81-background 早就有一条)。
+
+   两条:公里、光秒。光秒才是这个尺度上真正有意义的单位 ——
+   主炮射程 15 万公里 = 0.50 光秒,意思是"指令与炮弹要飞半秒";
+   静默 DD 的光学可见半径 15.06 万 = 0.50 光秒;DD 被听见的 60 万 = 2.0 光秒。
+   两条【必须描述同一个 px/km】,判据里就是靠这一点交叉验的。 */
+function scalePick(v,perUnit){
+  let val=niceStep(130/v.k/perUnit), px=val*perUnit*v.k, n=0;
+  while(px>270&&n++<8){val=niceStep(val*0.45);px=val*perUnit*v.k;}
+  while(px<55&&n++<16){val=niceStep(val*2.2);px=val*perUnit*v.k;}
+  return [val,px];
+}
+function drawScale(v){
+  const g=v.g, km=scalePick(v,1), ls=scalePick(v,C_LS);
+  S.scale={km:km,ls:ls};                                /* 判据从这儿读,免得去像素里认条 */
+  /* 图例是 DOM、会换行，行数随宽度变 —— 写死一个偏移就会压上去（实拍过）。
+     每帧读一次它的高度，把比例尺钉在它之上。 */
+  const lgEl=document.querySelector('#pMap .legend'), lgH=lgEl?lgEl.offsetHeight:22;
+  const x1=v.W-12, yb=v.H-lgH-16;
+  g.save(); g.lineWidth=1; g.font='10px '+CSSF; g.textAlign='right'; g.textBaseline='middle';
+  const bar=function(len,y,txt,col){
+    g.strokeStyle=col; g.beginPath();
+    g.moveTo(x1-len,y-4); g.lineTo(x1-len,y+4);         /* 左端帽 */
+    g.moveTo(x1,y-4);     g.lineTo(x1,y+4);             /* 右端帽 */
+    g.moveTo(x1-len,y);   g.lineTo(x1,y);               /* 横杠 */
+    g.stroke();
+    g.fillStyle=col; g.textAlign='right'; g.fillText(txt,x1-len-6,y);
+  };
+  bar(km[1],yb,     (km[0]>=1000?fmtK(km[0]):Math.round(km[0]))+' km', 'rgba(106,125,146,.85)');
+  bar(ls[1],yb-14, (+ls[0].toPrecision(3))+' 光秒', 'rgba(159,212,255,.7)');
+  g.restore();
+}
+/* 蓝舰:自己人,永远画真身。头顶那一行是【红方对我】—— 本页最该一眼看到的数 */
+function drawBlue(v,s){
+  const g=v.g;
+  shipIcon(v,s.x,s.y,s.ang,s.cls,COL.blue,'fill',1);
+  label(v,s.x,s.y,nameOf(s)+' · '+EMIT_LABEL[s.emitMode],COL.blue);
+  const p=toS(v,s.x,s.y);
+  g.save(); g.font='11px '+CSSF; g.textAlign='center'; g.textBaseline='bottom';
+  g.fillStyle=LIT_COL[s.lit]; g.fillText('敌方对我 '+s.lit,p[0],p[1]-14);
+  if(s.trk.act>=SENS.ACT_WARN){g.fillStyle=COL.act;g.fillText('⚠ 被照射',p[0],p[1]-27);}
+  g.restore();
+}
+/* 红舰:按【我方知道多少】画。四种形态,等级不同画出来的根本不是一回事 */
+function drawRed(v,s){
+  const g=v.g;
+  if(U.layer!=='obs'){
+    shipIcon(v,s.x,s.y,s.ang,s.cls,COL.red,'outline',U.layer==='true'?1:.5);
+    if(U.layer==='true')label(v,s.x,s.y,'真实 '+nameOf(s),COL.dim);
+  }
+  if(U.layer==='true')return;
+  if(isCov()){drawRedCov(v,s);return;}
+  const lit=s.lit, sp=s.seen;
+  /* 判据是【有没有位置定位】,不是【等级到没到】—— 这一条错了就是迷雾泄漏。
+     静听单独也能把等级推到 1(探测级),而那一刻仍然一个坐标都没有:被动射频给的是一条视线,不是一个点。
+     按等级判的话,等级一到 1 椭圆就没了,而下面"按 seen 画图标"那一支的 seen 是 null、回落成真实坐标,
+     于是纯靠听就拿到了敌舰的精确位置。引擎里 seenPos 只由光学或照射刷新,就是为了堵这条。 */
+  if(!sp){
+    if(s.trk.lis<SENS.LIS_ALERT)return;          // 连方位都还没稳住,什么都不画
+    const fx=esmFix(s); if(!fx)return;
+    const b=fx.best, ang=Math.atan2(s.y-b.y,s.x-b.x), d=Math.hypot(s.x-b.x,s.y-b.y);
+    const cx=b.x+Math.cos(ang)*d*0.62, cy=b.y+Math.sin(ang)*d*0.62;
+    const p=toS(v,cx,cy);
+    g.save(); g.translate(p[0],p[1]); g.rotate(ang);
+    g.strokeStyle=COL.lis; g.globalAlpha=.75; g.lineWidth=1; g.setLineDash([3,3]);
+    g.beginPath(); g.ellipse(0,0,fx.err*v.k,fx.err*v.k*0.32,0,0,Math.PI*2); g.stroke();
+    g.restore();
+    for(const w of S.ships){                     // 每只听得见的耳朵画一条方位线,交会看得见
+      if(w.side===s.side||gradesOf(w,s).lis===0)continue;
+      g.save(); g.strokeStyle='rgba(84,224,208,.26)'; g.lineWidth=1; g.setLineDash([2,6]);
+      const bp=toS(v,w.x,w.y), a2=Math.atan2(s.y-w.y,s.x-w.x), L2=Math.hypot(s.x-w.x,s.y-w.y)*1.25;
+      const far=toS(v,w.x+Math.cos(a2)*L2,w.y+Math.sin(a2)*L2);
+      g.beginPath(); g.moveTo(bp[0],bp[1]); g.lineTo(far[0],far[1]); g.stroke(); g.restore();
+    }
+    label(v,cx,cy,'方位接触 · '+LIT_NAME[lit]+' ±'+fmtK(fx.err)+(fx.n>1?' · '+fx.n+'站交会':''),COL.lis,fx.err*v.k*0.32+4);
+    return;
+  }
+  if(lit<1){                                     // 有过定位又彻底失联 = 幽灵,只留一个记号
+    if(!s.ever)return;
+    const p=toS(v,sp[0],sp[1]);
+    g.save();g.globalAlpha=.35;g.strokeStyle=COL.red;g.lineWidth=1;
+    g.beginPath();g.arc(p[0],p[1],7,0,Math.PI*2);g.stroke();g.restore();
+    label(v,sp[0],sp[1],'幽灵 '+Math.round(s.age)+'s 前',COL.dim);
+    return;
+  }
+  const px=sp[0], py=sp[1], stale=s.age>5;
+  if(lit===1){
+    shipIcon(v,px,py,0,'UNK',COL.red,'fill',stale?.5:1);
+    const tag=s.size>=0.9?'大型热源':(s.size>=0.6?'中型热源':'小型热源');
+    label(v,px,py,'▣ '+tag+(stale?' · 陈旧':''),COL.red);
+  }else{
+    shipIcon(v,px,py,s.ang,s.cls,COL.red,'fill',stale?.55:1);
+    label(v,px,py,(lit===3?'◎ ':'')+nameOf(s)+' · '+LIT_NAME[lit]+(stale?' · 陈旧':''),lit===3?'#ffe066':COL.red,24);
+    if(lit===3){
+      const q=toS(v,px,py);
+      g.save();g.strokeStyle='#ffe066';g.lineWidth=1.2;g.globalAlpha=.9;
+      for(const d of [[-1,-1],[1,-1],[-1,1],[1,1]]){
+        g.beginPath();g.moveTo(q[0]+d[0]*13,q[1]+d[1]*13-d[1]*5);g.lineTo(q[0]+d[0]*13,q[1]+d[1]*13);g.lineTo(q[0]+d[0]*13-d[0]*5,q[1]+d[1]*13);g.stroke();}
+      g.restore();
+    }
+  }
+}
+
+/* ---- V3:接触 = 估计位置 + 误差椭圆。画的就是这两样,外加每只"耳朵/眼睛"的一条视线 ----
+   ⚠ 一处刻意的简化:估计位置直接取真实位置(椭圆是【它可能在这一圈里的哪儿】,圆心恰好是对的)。
+   给圆心加偏置更诚实,但那会让椭圆与图标分家、读图反而更难 —— 这是演示页的取舍,不是引擎的。 */
+function drawRedCov(v,s){
+  const g=v.g, c=s.cov, lit=s.lit;
+  if(lit===0){
+    if(!c.ever)return;                                  /* 从没发现过 = 什么都不画 */
+    const p=toS(v,c.x,c.y);
+    g.save();g.globalAlpha=.35;g.strokeStyle=COL.red;g.lineWidth=1;
+    g.beginPath();g.arc(p[0],p[1],7,0,Math.PI*2);g.stroke();g.restore();
+    label(v,c.x,c.y,'幽灵 '+Math.round(c.age)+'s 前',COL.dim);
+    return;
+  }
+  /* ---- 多舰时的降级(LOD) ----
+     一堆接触就是一堆椭圆,而糊住地图的恰恰是那些【最没用】的接触(椭圆最大的那些)。
+     所以:椭圆在屏幕上超过 LOD_PX 且没被选中时,退成一个【固定屏幕尺寸】的字形 ——
+     扁率与朝向照实画(那是"我缺什么"的全部信息),只是不再按真实尺寸铺开。
+     视线同理:少量接触时全画(交会几何是要看的),多了只画选中那一条。 */
+  const sel=(U.sel===s.id), r1=c.a1*v.k, r2=c.a2*v.k, glyph=(r1>COV.LOD_PX&&!sel);
+  if(sel||S.nLit<=3)for(const w of S.ships){
+    if(w.side===s.side)continue;
+    const gg=gradesOf(w,s); if(!gg.opt&&!gg.lis&&!gg.act)continue;
+    const col=gg.act?COL.act:(gg.opt?COL.opt:COL.lis);
+    g.save(); g.strokeStyle=col; g.globalAlpha=.20; g.lineWidth=1; g.setLineDash([2,6]);
+    const bp=toS(v,w.x,w.y), L2=gg.d*1.18, a2=Math.atan2(s.y-w.y,s.x-w.x);
+    const far=toS(v,w.x+Math.cos(a2)*L2,w.y+Math.sin(a2)*L2);
+    g.beginPath(); g.moveTo(bp[0],bp[1]); g.lineTo(far[0],far[1]); g.stroke(); g.restore();
+  }
+  const p=toS(v,c.x,c.y);
+  const e1=glyph?COV.LOD_GLYPH:Math.max(2,r1), e2=glyph?Math.max(2,COV.LOD_GLYPH*r2/r1):Math.max(1.5,r2);
+  g.save(); g.translate(p[0],p[1]); g.rotate(c.th);
+  g.strokeStyle=LIT_COL[lit]; g.globalAlpha=glyph?.55:.75; g.lineWidth=1.2; g.setLineDash(lit>=3?[1,0]:[3,3]);
+  g.beginPath(); g.ellipse(0,0,e1,e2,0,0,Math.PI*2); g.stroke();
+  if(!glyph){g.globalAlpha=.07; g.fillStyle=LIT_COL[lit]; g.fill();}
+  g.restore();
+  const stale=c.age>3;
+  if(lit===1){
+    shipIcon(v,c.x,c.y,0,'UNK',COL.red,'fill',stale?.5:1);
+    const tag=s.size>=0.9?'大型热源':(s.size>=0.6?'中型热源':'小型热源');
+    label(v,c.x,c.y,'▣ '+tag+' · '+LIT_NAME[lit]+' ±'+fmtK(c.a1)+(stale?' · 陈旧':''),COL.red);
+  }else{
+    shipIcon(v,c.x,c.y,s.ang,s.cls,COL.red,'fill',stale?.55:1);
+    label(v,c.x,c.y,(lit===3?'◎ ':'')+nameOf(s)+' · '+LIT_NAME[lit]+' ±'+fmtK(c.a1)+'x'+fmtK(c.a2)+(stale?' · 陈旧':''),
+      lit===3?'#ffe066':COL.red,Math.max(24,r2+8));
+    if(lit===3){
+      const q=toS(v,c.x,c.y);
+      g.save();g.strokeStyle='#ffe066';g.lineWidth=1.2;g.globalAlpha=.9;
+      for(const d of [[-1,-1],[1,-1],[-1,1],[1,1]]){
+        g.beginPath();g.moveTo(q[0]+d[0]*13,q[1]+d[1]*13-d[1]*5);g.lineTo(q[0]+d[0]*13,q[1]+d[1]*13);g.lineTo(q[0]+d[0]*13-d[0]*5,q[1]+d[1]*13);g.stroke();}
+      g.restore();
+    }
+  }
+}
+
+/* ---- 卡片里的小时序图:等级色块 + 三路驻留曲线 ---- */
+function drawSpark(cv,s){
+  const dpr=window.devicePixelRatio||1, r=cv.getBoundingClientRect();
+  const w=Math.max(1,Math.round(r.width)), h=Math.max(1,Math.round(r.height));
+  if(cv.width!==w*dpr||cv.height!==h*dpr){cv.width=w*dpr;cv.height=h*dpr;}
+  const g=cv.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0);
+  g.fillStyle='#070a10'; g.fillRect(0,0,w,h);
+  const padL=20,padR=3,padT=3,padB=3, lh=h-padT-padB;
+  const t1=Math.max(HWIN,S.t), t0=t1-HWIN;
+  const X=t=>padL+(t-t0)/HWIN*(w-padL-padR), Y=vv=>padT+lh-(Math.min(2.6,vv)/2.6)*lh;
+  for(let i=1;i<s.hist.length;i++){
+    const p=s.hist[i-1],q=s.hist[i]; if(q.t<t0||!p.l)continue;
+    g.fillStyle=LIT_COL[p.l]; g.globalAlpha=.17;
+    g.fillRect(X(p.t),padT+lh-p.l/3*lh,Math.max(1,X(q.t)-X(p.t)),p.l/3*lh); g.globalAlpha=1;
+  }
+  if(isCov()){
+    /* V3:画【误差随时间】。对数纵轴 —— 从 180km 到 40 万公里跨三个数量级。
+       两条阈值线(主炮 2k / 导弹 30k)就是这张图的全部读法:曲线在哪条线下面,就解锁到哪一档。 */
+    const lo=Math.log(COV.AMIN), hi=Math.log(COV.AMAX);
+    const YE=e=>padT+(Math.log(Math.max(COV.AMIN,Math.min(COV.AMAX,e)))-lo)/(hi-lo)*lh;
+    g.strokeStyle='rgba(106,125,146,.22)'; g.setLineDash([2,3]); g.lineWidth=1;
+    for(const th of [covMac(s),covMsl(s)]){g.beginPath();g.moveTo(padL,YE(th));g.lineTo(w-padR,YE(th));g.stroke();}
+    g.setLineDash([]);
+    g.strokeStyle=COL.read; g.lineWidth=1.2; g.beginPath(); let f1=true;
+    for(const hh of s.hist){ if(hh.t<t0||hh.e==null)continue; const x=X(hh.t),y=YE(hh.e);
+      if(f1){g.moveTo(x,y);f1=false;}else g.lineTo(x,y); }
+    g.stroke();
+    g.fillStyle='#46566a'; g.font='9px '+CSSF; g.textAlign='right'; g.textBaseline='middle';
+    g.fillText(fmtK(covMac(s)),padL-2,YE(covMac(s))); g.fillText(fmtK(covMsl(s)),padL-2,YE(covMsl(s)));
+    return;
+  }
+  g.strokeStyle='rgba(106,125,146,.22)'; g.setLineDash([2,3]); g.lineWidth=1;
+  for(const th of [SENS.LIT1,SENS.LIT3]){g.beginPath();g.moveTo(padL,Y(th));g.lineTo(w-padR,Y(th));g.stroke();}
+  g.setLineDash([]);
+  for(const kc of [['o',COL.opt],['s',COL.lis],['a',COL.act]]){
+    g.strokeStyle=kc[1]; g.lineWidth=1.2; g.globalAlpha=.9; g.beginPath(); let first=true;
+    for(const hh of s.hist){ if(hh.t<t0)continue; const x=X(hh.t),y=Y(hh[kc[0]]);
+      if(first){g.moveTo(x,y);first=false;}else g.lineTo(x,y); }
+    g.stroke(); g.globalAlpha=1;
+  }
+  g.fillStyle='#46566a'; g.font='9px '+CSSF; g.textAlign='right'; g.textBaseline='middle';
+  g.fillText('2.0',padL-2,Y(2)); g.fillText('1.0',padL-2,Y(1));
+}
+
+/* ================= 三维相图 =================
+   横轴两条(光学 / 静听)与竖轴(照射)构成目标 T 的状态空间;T 随距离与发射档在里面移动。
+   三层壳 = 三个接触等级的边界。
+
+   ---- 壳的边界是【量】出来的,不是照公式重画的 ----
+   沿从原点出发的射线二分,找 levelAt 刚好跨到 k 的半径。好处有两条:
+     ① 布尔阶梯与超椭球【同一段代码】就能画 —— 切模型时你看到的是两种真实的几何,不是两份实现;
+     ② 画出来的面与判定用的面不可能分家(本项目栽过太多次"圈与判据不是一个数")。
+   代价是每条曲线要几百次 levelAt,所以按【模型】缓存,只在切换时重算。 */
+const AX3={o:[-0.866,0.50], l:[0.866,0.50], a:[0,-1]};   /* 等轴测:光学左下 / 静听右下 / 照射朝上 */
+const PH_MAX=12;   /* 三根轴都画到 12:要装得下最高的那条天花板(光学 11)与最远的那个轴截距(光学 8)。
+                      装不下的话 3 级壳有一大半在盒子外,而「光学能不能单独进 3 级壳」恰恰就在那一段上。 */
+let PH_CACHE={key:'',curves:null};
+function phProj(v,o,l,a){
+  return [v.cx3+(AX3.o[0]*o+AX3.l[0]*l+AX3.a[0]*a)*v.k3,
+          v.cy3+(AX3.o[1]*o+AX3.l[1]*l+AX3.a[1]*a)*v.k3];
+}
+/* 沿射线 dir 二分找等级刚好 >= k 的半径;找不到(射线整段都不到 k)返回 -1 */
+function phRadius(k,dir){
+  const at=r=>levelAt(dir[0]*r,dir[1]*r,dir[2]*r);
+  if(at(PH_MAX*2.2)<k)return -1;
+  let lo=0,hi=PH_MAX*2.2;
+  for(let i=0;i<26;i++){const m=(lo+hi)/2;if(at(m)>=k)hi=m;else lo=m;}
+  return hi;
+}
+/* 三个坐标面上各取一条弧。第三个坐标恒 0,所以这三条弧就是壳与三个坐标面的交线 */
+function phCurves(){
+  const key=U.model;
+  if(PH_CACHE.key===key)return PH_CACHE.curves;
+  const out=[];
+  for(let k=1;k<=3;k++){
+    const arcs=[];
+    for(const pl of [[0,1],[1,2],[0,2]]){          /* 光学-静听 / 静听-照射 / 光学-照射 */
+      const pts=[];
+      for(let i=0;i<=40;i++){
+        const th=i/40*Math.PI/2, d=[0,0,0];
+        d[pl[0]]=Math.cos(th); d[pl[1]]=Math.sin(th);
+        const r=phRadius(k,d);
+        if(r<0){pts.push(null);continue;}
+        const q=[d[0]*r,d[1]*r,d[2]*r];
+        /* 裁到盒子里。布尔阶梯的 3 级面是 act=2 那个平面 —— 它在含照射的两个坐标面里是【无限长的直线】,
+           不裁就会沿轴射出画面。裁成 null 会把折线断开,正好表达"这一段在盒子外" */
+        pts.push((q[0]>PH_MAX*1.02||q[1]>PH_MAX*1.02||q[2]>PH_MAX*1.02)?null:q);
+      }
+      arcs.push(pts);
+    }
+    out.push(arcs);
+  }
+  PH_CACHE={key,curves:out};
+  return out;
+}
+/* V3 的小窗:定位几何(GDOP)。以选中舰为中心放大,把每条视线与融合后的椭圆画在一起 ——
+   "为什么这个椭圆是这个形状"只有在这张图上才看得出来:两条视线夹角越接近 90 度,椭圆越圆越小。 */
+function drawCovPane(v){
+  const g=v.g; fit(v);
+  g.fillStyle='#05070c'; g.fillRect(0,0,v.W,v.H);
+  /* 选中的那一艘若从未被发现，这张图就是空的 —— 退而画【此刻最清楚的那个接触】，
+     并在标题里写明白画的是谁 —— 不写的话它会被读成选中舰的读数。 */
+  let s=selShip(), sub=false;
+  if(!s||!s.cov||!s.cov.ever){
+    const cand=S.ships.filter(w=>w.cov&&w.cov.ever).sort((a,b)=>a.cov.a1-b.cov.a1)[0];
+    if(cand){s=cand;sub=true;}
+  }
+  if(!s||!s.cov||!s.cov.ever){
+    g.fillStyle='#46566a'; g.font='11px '+CSSF; g.textAlign='center'; g.textBaseline='middle';
+    g.fillText('还没有任何一艘被发现',v.W/2,v.H/2);
+    $('phHint').textContent='定位几何 · GDOP';
+    return;
+  }
+  const c=s.cov, foes=S.ships.filter(w=>w.side!==s.side&&(function(gg){return gg.opt||gg.lis||gg.act;})(gradesOf(w,s)));
+  const mT=18,mB=34,mS=12, R=Math.max(c.a1*1.35,1000);
+  const k=Math.min((v.W-2*mS)/(2*R),(v.H-mT-mB)/(2*R));
+  const cx=v.W/2, cy=mT+(v.H-mT-mB)/2;
+  const px=(x,y)=>[cx+(x-c.x)*k, cy+(y-c.y)*k];
+  for(const w of foes){                                  /* 视线:从本舰指向椭圆中心,只画进画面的那一段 */
+    const a=Math.atan2(c.y-w.y,c.x-w.x), gg=gradesOf(w,s);
+    const col=gg.act?COL.act:(gg.opt?COL.opt:COL.lis);
+    const p0=px(c.x-Math.cos(a)*R*2.2,c.y-Math.sin(a)*R*2.2), p1=px(c.x+Math.cos(a)*R*0.6,c.y+Math.sin(a)*R*0.6);
+    g.save(); g.strokeStyle=col; g.globalAlpha=.55; g.lineWidth=1; g.setLineDash([3,4]);
+    g.beginPath(); g.moveTo(p0[0],p0[1]); g.lineTo(p1[0],p1[1]); g.stroke();
+    g.setLineDash([]); g.globalAlpha=.85; g.font='10px '+CSSF; g.textAlign='left'; g.textBaseline='middle';
+    g.fillStyle=col; g.fillText(nameOf(w),p0[0]+4,p0[1]);
+    g.restore();
+  }
+  g.save(); g.translate(cx,cy); g.rotate(c.th);          /* 椭圆 */
+  g.strokeStyle=LIT_COL[s.lit]; g.lineWidth=1.4; g.globalAlpha=.9;
+  g.beginPath(); g.ellipse(0,0,Math.max(2,c.a1*k),Math.max(1.5,c.a2*k),0,0,Math.PI*2); g.stroke();
+  g.globalAlpha=.10; g.fillStyle=LIT_COL[s.lit]; g.fill(); g.restore();
+  g.save();                                              /* 两条阈值圈 */
+  g.setLineDash([2,4]); g.lineWidth=1;
+  for(const t of [[covMac(s),'主炮 '+fmtK(covMac(s))],[covMsl(s),'导弹 '+fmtK(covMsl(s))]]){
+    const rr=t[0]*k; if(rr<3||rr>Math.max(v.W,v.H))continue;
+    g.strokeStyle='rgba(106,125,146,.45)'; g.beginPath(); g.arc(cx,cy,rr,0,Math.PI*2); g.stroke();
+    g.fillStyle='rgba(106,125,146,.75)'; g.font='9px '+CSSF; g.textAlign='center'; g.textBaseline='bottom';
+    g.fillText(t[1],cx,cy-rr-2);
+  }
+  g.restore();
+  g.fillStyle='#e8eef6'; g.beginPath(); g.arc(cx,cy,2.5,0,Math.PI*2); g.fill();
+  g.save(); g.font='10px '+CSSF; g.textAlign='right'; g.textBaseline='top';
+  g.fillStyle=LIT_COL[s.lit];
+  g.fillText((sub?'↳ ':'')+nameOf(s)+'  ±'+fmtK(c.a1)+' x '+fmtK(c.a2),v.W-8,24);
+  g.fillStyle='rgba(106,125,146,.8)';
+  g.fillText(c.n?(foes.length+' 个探测源 · '+c.n+' 条量测'):('无量测 · 已 '+Math.round(c.age)+'s'),v.W-8,37);
+  g.fillText('比例 1 格 = '+fmtK(R/2),v.W-8,50);
+  g.restore();
+  $('phHint').textContent='定位几何 · 视线夹角越大椭圆越小';
+  const dsl=$('inPhD'), dn=(s.g&&s.g.d<1e17)?s.g.d:0;
+  $('rdPhD').textContent=dn?Math.round(dn/1000)+'k km':'—';
+  if(document.activeElement!==dsl&&dn)dsl.value=Math.round(dn);
+}
+function drawPhase(){
+  if(isCov())return drawCovPane(VP);
+  const v=VP,g=v.g; fit(v);
+  g.fillStyle='#05070c'; g.fillRect(0,0,v.W,v.H);
+  /* 等轴测的占位是算得出来的,别拍系数:竖向 = 上 M*k + 下 0.5*M*k = 1.5*M*k;横向 = 2*0.866*M*k。
+     下边留 34px 给距离滑条,上边留 16px 给标题。原来那版系数是拍的,结果两根横轴被切在画外。 */
+  const mT=16, mB=34, mS=14;
+  v.k3=Math.min((v.W-2*mS)/(1.732*PH_MAX), (v.H-mT-mB)/(1.5*PH_MAX));
+  v.cx3=v.W/2; v.cy3=mT+PH_MAX*v.k3;
+  /* 三根轴 + 刻度 */
+  g.save(); g.strokeStyle='rgba(106,125,146,.35)'; g.lineWidth=1; g.font='10px '+CSSF;
+  const O=phProj(v,0,0,0);
+  const ends=[[PH_MAX,0,0,'光学',COL.opt],[0,PH_MAX,0,'静听',COL.lis],[0,0,PH_MAX,'照射',COL.act]];
+  for(const e of ends){
+    const p=phProj(v,e[0],e[1],e[2]);
+    g.beginPath(); g.moveTo(O[0],O[1]); g.lineTo(p[0],p[1]); g.stroke();
+    g.fillStyle=e[4]; g.textAlign='center'; g.textBaseline='middle';
+    g.fillText(e[3],p[0]+(e[3]==='照射'?0:(e[0]?-14:14)),p[1]+(e[3]==='照射'?-8:6));
+    for(let t=1;t<=PH_MAX;t++){                    /* 刻度点 */
+      const q=phProj(v,e[0]?t:0,e[1]?t:0,e[2]?t:0);
+      g.fillStyle='rgba(106,125,146,.5)'; g.fillRect(q[0]-1,q[1]-1,2,2);
+    }
+  }
+  /* 盒子的线框:等轴测里只有三根轴的话读不出深度 */
+  g.save(); g.strokeStyle='rgba(106,125,146,.14)'; g.lineWidth=1;
+  const M=PH_MAX, C=[[0,0,0],[M,0,0],[M,M,0],[0,M,0],[0,0,M],[M,0,M],[M,M,M],[0,M,M]];
+  [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]].forEach(function(e){
+    const a=phProj(v,C[e[0]][0],C[e[0]][1],C[e[0]][2]), b=phProj(v,C[e[1]][0],C[e[1]][1],C[e[1]][2]);
+    g.beginPath(); g.moveTo(a[0],a[1]); g.lineTo(b[0],b[1]); g.stroke();
+  });
+  g.restore();
+  /* 对角线参考:"逐层靠向对角线"说的就是这条 */
+  g.setLineDash([2,5]); g.strokeStyle='rgba(159,212,255,.28)';
+  const dEnd=phProj(v,PH_MAX*0.62,PH_MAX*0.62,PH_MAX*0.62);
+  g.beginPath(); g.moveTo(O[0],O[1]); g.lineTo(dEnd[0],dEnd[1]); g.stroke(); g.setLineDash([]);
+  g.fillStyle='rgba(159,212,255,.45)'; g.textAlign='left'; g.textBaseline='bottom'; g.fillText('对角线',dEnd[0]+5,dEnd[1]-3);
+  g.restore();
+  /* 三层壳 */
+  const cur=phCurves();
+  for(let k=0;k<3;k++){
+    g.save(); g.strokeStyle=LIT_COL[k+1]; g.lineWidth=1.4; g.globalAlpha=.85;
+    for(const pts of cur[k]){
+      g.beginPath(); let pen=false;
+      for(const q of pts){
+        if(!q){pen=false;continue;}
+        const s=phProj(v,q[0],q[1],q[2]);
+        if(!pen){g.moveTo(s[0],s[1]);pen=true;}else g.lineTo(s[0],s[1]);
+      }
+      g.stroke();
+    }
+    g.restore();
+  }
+  /* 流场:当前几何(距离 + 双方发射档)驱动的【吸引子】。
+     三条曲线各自是一阶滞后,所以流永远是【直奔吸引子】—— 画出吸引子与那支箭头,流场就说完了。
+     距离一变,吸引子当场跳,而三层壳一个像素都不动。这就是"距离不动壳,只动流"。 */
+  const sh=selShip();
+  if(sh&&sh.g){
+    const A={opt:gainOf('opt',sh.g.opt,sh.trk)/(1-decOf('opt')),
+             lis:gainOf('lis',sh.g.lis,sh.trk)/(1-decOf('lis')),
+             act:gainOf('act',sh.g.act,sh.trk)/(1-decOf('act'))};
+    const cl=v=>Math.min(PH_MAX,v);
+    const Q=phProj(v,cl(A.opt),cl(A.lis),cl(A.act));
+    const T=phProj(v,cl(sh.trk.opt),cl(sh.trk.lis),cl(sh.trk.act));
+    g.save();
+    g.strokeStyle='rgba(90,167,255,.75)'; g.lineWidth=1.2;
+    g.beginPath(); g.arc(Q[0],Q[1],6,0,Math.PI*2); g.stroke();
+    const dx=Q[0]-T[0], dy=Q[1]-T[1], L=Math.hypot(dx,dy);
+    if(L>10){                                   /* 箭头:从当前点指向吸引子 */
+      const ux=dx/L, uy=dy/L, ex=Q[0]-ux*7, ey=Q[1]-uy*7;
+      g.beginPath(); g.moveTo(T[0]+ux*7,T[1]+uy*7); g.lineTo(ex,ey); g.stroke();
+      g.beginPath(); g.moveTo(ex,ey);
+      g.lineTo(ex-ux*7+uy*4, ey-uy*7-ux*4); g.lineTo(ex-ux*7-uy*4, ey-uy*7+ux*4);
+      g.closePath(); g.fillStyle='rgba(90,167,255,.75)'; g.fill();
+    }
+    g.fillStyle='rgba(159,212,255,.8)'; g.font='10px '+CSSF; g.textAlign='left'; g.textBaseline='top';
+    g.fillText('吸引子 '+A.opt.toFixed(2)+'/'+A.lis.toFixed(2)+'/'+A.act.toFixed(2),Q[0]+9,Q[1]+9);
+    g.restore();
+  }
+  /* 选中舰的相位点与轨迹 */
+  if(sh){
+    g.save();
+    g.strokeStyle='rgba(219,230,242,.45)'; g.lineWidth=1; g.beginPath(); let pen=false;
+    for(const h of sh.hist){
+      const s=phProj(v,Math.min(PH_MAX,h.o),Math.min(PH_MAX,h.s),Math.min(PH_MAX,h.a));
+      if(!pen){g.moveTo(s[0],s[1]);pen=true;}else g.lineTo(s[0],s[1]);
+    }
+    g.stroke();
+    const P=phProj(v,Math.min(PH_MAX,sh.trk.opt),Math.min(PH_MAX,sh.trk.lis),Math.min(PH_MAX,sh.trk.act));
+    /* 三条投影虚线,把这个点读回三个坐标 */
+    g.setLineDash([2,3]); g.globalAlpha=.5;
+    for(const q of [[sh.trk.opt,0,0],[0,sh.trk.lis,0],[0,0,sh.trk.act]]){
+      const s=phProj(v,Math.min(PH_MAX,q[0]),Math.min(PH_MAX,q[1]),Math.min(PH_MAX,q[2]));
+      g.strokeStyle='rgba(219,230,242,.35)'; g.beginPath(); g.moveTo(O[0],O[1]); g.lineTo(s[0],s[1]); g.stroke();
+    }
+    g.setLineDash([]); g.globalAlpha=1;
+    g.fillStyle=LIT_COL[sh.lit]; g.beginPath(); g.arc(P[0],P[1],5,0,Math.PI*2); g.fill();
+    g.strokeStyle='#05070c'; g.lineWidth=1.5; g.stroke();
+    g.fillStyle=COL.read; g.font='11px '+CSSF; g.textAlign='left'; g.textBaseline='bottom';
+    g.fillText(nameOf(sh)+' '+sh.trk.opt.toFixed(2)+'/'+sh.trk.lis.toFixed(2)+'/'+sh.trk.act.toFixed(2),P[0]+9,P[1]-6);
+    g.restore();
+  }
+  /* 图例。叠加小窗只有 340px 宽 —— 截距/天花板/耦合那三行会压在图上,
+     窄窗里只留三层的名字(那是读图必需的),宽了再把参数行补出来。 */
+  const wide=v.W>=430;
+  g.save(); g.font='10px '+CSSF; g.textAlign='right'; g.textBaseline='top';
+  for(let k=1;k<=3;k++){
+    g.fillStyle=LIT_COL[k];
+    g.fillText(k+' '+LIT_NAME[k]+((wide&&isProp())
+      ? ('  截距 '+SHELL[k-1].A+'/'+SHELL[k-1].B+'/'+SHELL[k-1].C+'  p='+SHELL[k-1].p.toFixed(2))
+      : ''),v.W-8,24+(k-1)*13);
+  }
+  if(wide&&isProp()){
+    g.fillStyle='rgba(106,125,146,.75)';
+    g.fillText('天花板 光学 '+PROP.CEIL.opt.join('~')+'  静听 '+PROP.CEIL.lis.join('~')+'  照射 '+PROP.CEIL.act.join('~'),v.W-8,24+3*13);
+    g.fillText('耦合 K 光学 '+PROP.K.opt+'  静听 '+PROP.K.lis+'  照射 '+PROP.K.act,v.W-8,24+4*13);
+  }
+  g.restore();
+  $('phHint').textContent=isProp()?'超椭球壳 · p 越小越贴对角线':'布尔阶梯 · 边界是直角,3 级面只垂直于照射轴';
+  const dsl=$('inPhD'), dnow=(sh&&sh.g&&sh.g.d<1e17)?sh.g.d:0;
+  $('rdPhD').textContent=dnow?Math.round(dnow/1000)+'k km':'—';
+  if(document.activeElement!==dsl&&dnow)dsl.value=Math.round(dnow);
+}
+
+/* ================= 舰船卡片 =================
+   只在【名册变化】时重建 DOM,其余时候只写叶子(textContent / style / classList)。
+   周期性整体重建 + :hover + 事件委托 三条凑在一起,会让光标下的按钮闪烁并静默吃掉点击(RF7c 那条)。 */
+function cardsSig(){return S.ships.map(s=>s.id+':'+s.side+':'+s.cls).join(',');}
+function segHTML(id,k,opts,cur){
+  return '<div class="seg">'+opts.map(function(o){
+    return '<button class="btn tiny'+(String(o[0])===String(cur)?' on':'')+'" data-sid="'+id+'" data-k="'+k+'" data-v="'+o[0]+'">'+o[1]+'</button>';
+  }).join('')+'</div>';
+}
+function chHTML(k,cls){
+  const tick=th=>'<s style="left:'+(th/2.6*100).toFixed(1)+'%"></s>';
+  return '<div class="ch"><div class="k">'+k+'</div><div class="bar"><u class="b-'+cls+'"></u>'+tick(1.0)+tick(1.5)+tick(2.0)+'</div>'+
+    '<div class="v v-'+cls+'">0.00</div><div class="g g-'+cls+'">—</div></div>';
+}
+function cardHTML(s){
+  /* 卡上不再写「红方对我 / 蓝方对它」—— 它已经由所在的那一列说过了。
+     动作钮排成固定两行(中间一个 .brk 强制断行):自由 wrap 会让行数随文字宽度跳,卡高跟着抖。 */
+  return '<section class="sc '+s.side+'" data-card="'+s.id+'">'+
+    '<div class="sc-hd" data-pick="'+s.id+'"><b>'+nameOf(s)+'</b>'+
+      '<span class="lad">'+[0,1,2,3].map(i=>'<i data-lv="'+i+'">'+i+'</i>').join('')+'</span>'+
+      '<span class="lvn"></span><span class="dst"></span>'+
+      '<button class="x" data-del="'+s.id+'" title="删除这艘舰">x</button></div>'+
+    '<div class="sc-act">'+
+      segHTML(s.id,'cls',[['DD','DD'],['CA','CA']],s.cls)+
+      segHTML(s.id,'emit',[['silent','静默'],['paint','照射'],['jam','干扰']],s.emitMode)+
+      '<i class="brk"></i>'+
+      '<span class="lb">引擎</span>'+segHTML(s.id,'eng',[[0,'熄'],[1,'机'],[3,'满']],s.eng)+
+      '<span class="lb">运动</span>'+segHTML(s.id,'mv',[[0,'静'],[-1,'近'],[1,'远']],s.mv)+
+    '</div>'+
+    chHTML('光学','opt')+chHTML('静听','lis')+chHTML('照射','act')+
+    '<div class="sc-mini"></div><div class="sc-lock"></div><div class="sc-gate"></div><canvas></canvas></section>';
+}
+function buildCards(){
+  const box=$('cards');
+  $('cardsB').innerHTML=S.ships.filter(s=>s.side==='blue').map(cardHTML).join('');
+  $('cardsR').innerHTML=S.ships.filter(s=>s.side==='red').map(cardHTML).join('');
+  S.ref={};
+  for(const s of S.ships){
+    const root=box.querySelector('[data-card="'+s.id+'"]');
+    S.ref[s.id]={root:root,
+      lad:Array.prototype.slice.call(root.querySelectorAll('.lad i')),
+      lvn:root.querySelector('.lvn'), dst:root.querySelector('.dst'),
+      bar:{opt:root.querySelector('.b-opt'),lis:root.querySelector('.b-lis'),act:root.querySelector('.b-act')},
+      val:{opt:root.querySelector('.v-opt'),lis:root.querySelector('.v-lis'),act:root.querySelector('.v-act')},
+      grd:{opt:root.querySelector('.g-opt'),lis:root.querySelector('.g-lis'),act:root.querySelector('.g-act')},
+      mini:root.querySelector('.sc-mini'), lock:root.querySelector('.sc-lock'), gate:root.querySelector('.sc-gate'),
+      cv:root.querySelector('canvas'),
+      segs:Array.prototype.slice.call(root.querySelectorAll('[data-k]'))};
+  }
+  S.sig=cardsSig();
+}
+const BARC={opt:'#ff9a55',lis:'#54e0d0',act:'#d68cff'};
+function updCards(){
+  if(cardsSig()!==S.sig)buildCards();
+  $('nB').textContent=S.ships.filter(s=>s.side==='blue').length;
+  $('nR').textContent=S.ships.filter(s=>s.side==='red').length;
+  for(const s of S.ships){
+    const R=S.ref[s.id]; if(!R)continue;
+    R.root.classList.toggle('sel',U.sel===s.id);
+    for(let i=0;i<4;i++){
+      const on=(i===s.lit); R.lad[i].classList.toggle('on',on);
+      R.lad[i].style.background=on?LIT_COL[i]:''; R.lad[i].style.borderColor=on?LIT_COL[i]:'';
+    }
+    R.lvn.textContent=LIT_NAME[s.lit]; R.lvn.style.color=LIT_COL[s.lit];
+    R.dst.textContent=(s.g.d>0&&s.g.d<1e17)?Math.round(s.g.d/1000)+'k':'—';
+    for(const k of ['opt','lis','act']){
+      const gr=s.g[k];
+      if(isCov()){
+        /* V3:这一行说的是【这条通道给出的椭圆有多细】。横向(方位)写在前面,纵向(距离)写在后面。
+           条长按横向误差取对数刻度 —— 从 200km 到 40 万公里跨三个数量级,线性刻度什么都看不出来。 */
+        const sh=s.cov.ch[k];
+        /* 条量的是【信噪比余量】，不是误差。两个理由：
+           ① 它在探测门限上【自然归零】—— 拿误差做条的话，出量程那一瞬会从 57% 直接掉到 0；
+           ② 条是个仪表，仪表该量"还剩多少余地"，具体误差多少公里写在右边的数字里。
+           24dB 满格 = 通量是门限的 251 倍。被动通道在量程的 25% 处刚好半格。 */
+        const w=sh?Math.max(0,Math.min(1,sh[3]/24)):0;
+        R.bar[k].style.width=(w*100).toFixed(1)+'%';
+        R.bar[k].style.background=BARC[k];
+        R.val[k].textContent=sh?fmtK(sh[1]):'—';
+        R.grd[k].textContent=sh?(sh[0]>=COV.AMAX*0.9?'无距离':fmtK(sh[0])):GRADE_NAME[0];
+        /* 报连续的信噪比(dB),不报"档" —— V3 里根本没有档了,报档会让人以为还有台阶 */
+        R.bar[k].title=sh?('方位向 ±'+fmtK(sh[1])+' · 距离向 ±'+fmtK(sh[0])+
+          ' · 信噪比 '+(sh[3]>=0?'+':'')+sh[3].toFixed(1)+'dB · 距 '+fmtK(sh[2])):'这条通道这一拍没有信号';
+        continue;
+      }
+      const v=s.trk[k];
+      R.bar[k].style.width=(Math.max(0,Math.min(1,v/2.6))*100).toFixed(1)+'%';
+      R.bar[k].style.background=BARC[k];
+      R.val[k].textContent=v.toFixed(2);
+      R.grd[k].textContent=isProp()?(gr?gr+'/'+PROP.NB:'—'):GRADE_NAME[gr];
+      R.bar[k].title=isProp()&&gr?('档 '+gr+'/'+PROP.NB+' 天花板 '+ceilOf(k,gr).toFixed(2)):'';
+    }
+    /* 这一行原来把【别人能多远发现我】(可见/被听)与【我的雷达能照多远】(照射)并排放,
+       方向相反的三个数挨在一起,最容易读反 —— 用户实报的"为什么更近的驱逐舰反而没被发现"
+       就是卡在这儿:他看的是"照射 XXX",而那是【我自己的】圈,不是【对方照到我】的圈。
+       现在方向写进标签,并补上真正决定那件事的那个数:对方的照射圈【对我】有多大。
+       为什么两艘船不一样:照射律 r⁴ ∝ 目标的合成反射(size×stealth),DD 是 0.42、CA 是 1.00,
+       开四次方根之后 = 1.242 倍量程差 —— 同一部雷达,照巡洋舰比照驱逐舰远 24%。 */
+    const vr=visRange(s), hr=loudOf(s)>0?hearRange(s,1):0, ar=s.emitMode==='paint'?actRange(s,1):0;
+    let pr=0, pd=0, pn='';                      /* 最够得着我的那一个照射源 */
+    for(const e of S.ships){
+      if(e.side===s.side||e.emitMode!=='paint')continue;
+      const rr=actRange(e,reflOf(s)), dd=Math.hypot(s.x-e.x,s.y-e.y);
+      if(!pn||rr-dd>pr-pd){pr=rr;pd=dd;pn=nameOf(e);}
+    }
+    const inR=!!pn&&pd<=pr, rf=reflOf(s), kq=1/Math.pow(rf,0.25);
+    const lit=pn?('<span class="pt'+(inR?' y':'')+'" title="'+pn+' 的照射圈【对我】是 '+fmtK(pr)+
+        ',我离它 '+fmtK(pd)+'。照射律 r⁴ ∝ 目标的合成反射(size×stealth='+rf.toFixed(2)+
+        '),所以同一部雷达照我与照标准目标差 '+kq.toFixed(3)+' 倍">被照到 <b>距'+fmtK(pd)+
+        (inR?' < ':' > ')+'圈'+fmtK(pr)+'</b></span>')
+      :'<span>被照到 <b>对方未照射</b></span>';
+    R.mini.innerHTML='<span>被看见 <b>'+fmtK(vr)+'</b></span><span>被听见 <b>'+(hr?fmtK(hr):'静默')+'</b></span>'+
+      lit+'<span>我的照射 <b>'+(ar?fmtK(ar):'未照射')+'</b></span><span>我的反射 <b>'+rf.toFixed(2)+'</b></span>';
+    /* 三条路各自【单独】走到火控级要多近。三条都写出来,"走哪条路"才成其为一个决定 */
+    if(isCov()&&!s.cov.ever){
+      R.lock.innerHTML='<span style="color:var(--txt-mute)">对方从未发现过这一艘 —— 没有椭圆可言</span>';
+    }else if(isCov()){
+      const c=s.cov, gM=covMac(s), gS=covMsl(s), ok3=c.a1<=gM, ok2=c.a1<=gS;
+      const IDN={opt:'光学认出轮廓',lis:'听出辐射指纹',act:'照射分辨轮廓'};
+      const dOp=identDist('opt',S.ships.filter(x=>x.side!==s.side)[0]||s,s);
+      R.lock.innerHTML='<span style="color:'+(c.idn?'var(--lis)':'var(--txt-mute)')+'" title="'+
+          (c.idn?('由'+(IDN[c.idBy]||'?')+'给出。识别【不看椭圆】—— 两站交会能把位置收紧,但一点都不能帮你认出那是什么'):
+                 ('认不出。光学要贴到 '+fmtK(dOp)+' 以内才分辨得出轮廓;或者它自己发射,就靠指纹认'))+
+          '">识别 <b>'+(c.idn?(IDN[c.idBy]||'已认出'):'未认出')+'</b></span>'+
+        '<span>定位 <b style="color:var(--txt-read)">±'+fmtK(c.a1)+' x '+fmtK(c.a2)+'</b></span>'+
+        '<span style="color:'+(ok3?'var(--lis)':'var(--txt-mute)')+'">主炮 需 &lt;'+fmtK(gM)+'</span>'+
+        '<span style="color:'+(ok2?'var(--lis)':'var(--txt-mute)')+'">导弹 需 &lt;'+fmtK(gS)+'</span>'+
+        (c.n?'':'<span style="color:var(--act)">失去接触 '+Math.round(c.age)+'s · 加速变糊</span>');
+    }else if(isProp()){
+      const L=s.lock||{}, f=function(v){return v?fmtK(v):'走不通';};
+      /* 静听那一格光写"走不通"会像个 bug —— 它是【差一点】还是【根本没这条路】,玩家看不出来。
+         把需要的基线倍数直接写出来:x1.49 差在 x1.50 上,是个能动手去改的读数,不是一堵墙。 */
+      const need=SHELL[2].B/ceilOf('lis',PROP.NB);
+      const lisNote=loudOf(s)<=0?'(它没在发射)'
+        :(L.lis?(s.bl>1.02?(' 基线x'+s.bl.toFixed(2)):' 单站')
+               :('(基线x'+s.bl.toFixed(2)+' · 需 x'+need.toFixed(2)+')'));
+      R.lock.innerHTML='<span>单独锁定</span>'+
+        '<span style="color:'+COL.opt+'">光学 <b>'+f(L.opt)+'</b></span>'+
+        '<span style="color:'+COL.lis+'">静听 <b>'+f(L.lis)+'</b>'+lisNote+'</span>'+
+        '<span style="color:'+COL.act+'">照射 <b>'+f(L.act)+'</b>'+(L.act?'':'(对方没开雷达)')+'</span>';
+    }else R.lock.innerHTML='<span>现行模型:只有照射够得到火控级</span>';
+    const mac=s.lit>=3, msl=s.lit>=2;
+    R.gate.innerHTML='<span>主炮 <b class="'+(mac?'y':'n')+'">'+(mac?'可用':'需火控级')+'</b></span>'+
+      '<span>导弹 <b class="'+(msl?'y':'n')+'">'+(msl?'可用':'需识别级')+'</b></span>'+
+      (s.trk.act>=SENS.ACT_WARN?'<span style="color:#d68cff">⚠ 正被照射</span>':'');
+    for(const el of R.segs){
+      const k=el.dataset.k, v=el.dataset.v;
+      const cur=k==='cls'?s.cls:(k==='emit'?s.emitMode:(k==='eng'?s.eng:s.mv));
+      el.classList.toggle('on',String(cur)===String(v));
+    }
+    drawSpark(R.cv,s);
+  }
+}
+
+/* ---- 实时解说:挑当前局面里最值得说的那一句 ---- */
+function updLive(){
+  const red=S.ships.filter(s=>s.side==='red'), blue=S.ships.filter(s=>s.side==='blue');
+  if(!red.length||!blue.length){$('live').textContent='双方各需要至少一艘舰,感知才会结算。用上面的「+ 蓝舰 / + 红舰」加。';return;}
+  const maxR=Math.max.apply(null,red.map(s=>s.lit)), maxB=Math.max.apply(null,blue.map(s=>s.lit));
+  const anyPaint=blue.some(s=>s.emitMode==='paint');
+  if(isCov()){
+    const w=red.slice().sort((a,b)=>a.cov.a1-b.cov.a1)[0], c=w?w.cov:null;
+    let tc;
+    if(!c||!c.ever)tc='双方都没发现对方。把舰拖近一点,或者在某张卡上把发射档切到「照射」。';
+    else if(!c.n)tc='没有任何量测进来已 '+Math.round(c.age)+' 秒 —— 椭圆在加速变糊,现在 ±'+fmtK(c.a1)+'。信息是有保质期的。';
+    else if(!c.idn)tc='位置有了(±'+fmtK(c.a1)+'),但【认不出那是什么】—— 交会只给位置,不给身份。'+
+      '要么贴到 '+fmtK(identDist('opt',blue[0],w))+' 以内看清轮廓,要么等它自己发射(指纹最好认)。';
+    else if(c.a1<=covMac(w))tc='椭圆收到 ±'+fmtK(c.a1)+' < 这一艘的命中判定半径 '+fmtK(covMac(w))+',主炮可用。松开就开始长大。';
+    else if(c.a1/c.a2>4)tc='细长椭圆:方位很准(±'+fmtK(c.a2)+')、距离几乎不知道(±'+fmtK(c.a1)+')。'+
+      '被动通道给的是一条视线不是一个点 —— 再派一艘舰从别的方位看,两条线一交会就收紧。';
+    else tc='椭圆 ±'+fmtK(c.a1)+':导弹够了,主炮还差。要么开照射直接测距,要么拉开基线交会。';
+    $('live').textContent=tc; return;
+  }
+  const fixes=red.filter(s=>s.lit<1&&s.trk.lis>=SENS.LIS_ALERT).map(esmFix).filter(Boolean);
+  let t;
+  if(maxR===0&&maxB>0)t='⚠ 你什么都没看到,对方已经发现你了 —— 这就是手电效应。';
+  else if(fixes.length&&fixes[0].n>1)t='多站交会:'+fixes[0].n+' 只耳朵、方位夹角 '+(fixes[0].maxAng*57.3).toFixed(0)+'°,不确定区收到 ±'+fmtK(fixes[0].err)+'。把两艘舰拖到一起看它怎么胀回去。';
+  else if(fixes.length)t='只有一只耳朵在听:给得出方位,给不出距离 —— 那片区就是"他在这条线上的某处"。再派一艘舰从别的方位听。';
+  else if(maxR===3){
+    /* 说清是【哪条路】把它顶上去的 —— 三条路都到得了火控级,不说的话玩家只会记住"雷达" */
+    const w=red.filter(s=>s.lit===3)[0];
+    const via=!w?'':(isProp()
+      ?(shellF(SHELL[2],0,0,w.trk.act)>=1?'照射':(shellF(SHELL[2],w.trk.opt,0,0)>=1?'光学'
+        :(shellF(SHELL[2],0,w.trk.lis,0)>=1?'静听':'几条合起来')))
+      :'照射');
+    if(via==='光学')t='火控级 —— 而你一部雷达都没开。这是【光学】单独把它顶上去的:代价是贴到光学量程的 18%(主炮射程的 18%)。';
+    else if(via==='静听')t='火控级 —— 靠【静听】。单站给不出距离,是两艘舰拉开的基线换来的:这条路的代价是编队站位,不是距离。';
+    else if(via==='几条合起来')t='火控级 —— 没有哪一条单独够,是几条合起来把点顶进了 3 级壳。这就是"回报率随别的曲线上升"。';
+    else if(maxB>=2)t='主炮解锁。代价是对方也到了'+LIT_NAME[maxB]+':照射是双向的交易,不是单向的优势。';
+    else t='照射驻留到顶 = 火控级。手一松,点退出 3 级壳就掉回识别级。';
+  }
+  else if(maxR===2)t='识别级:导弹可用,主炮还不行。要主炮就得把照射端住。';
+  else if(anyPaint&&isProp())t='正在照射,但够不到火控级 —— 提案里火控只在照射量程的【六成五】以内。再贴近些,或者换一条路:贴进光学锁定圈,一声不吭也锁得住。';
+  else if(anyPaint)t='正在照射。盯住红舰卡上的照射条涨得多快 —— 强档 0.32/秒、良档 0.24、弱档 0.16,涨速就是你在他的哪个档位。';
+  else if(maxR===1)t='探测级:知道那儿有东西,不知道是什么。轮廓画成 UNK、尺寸压成 T2,武器一件都用不了。';
+  else t='双方都没发现对方。把舰拖近一点,或者在某张卡上把发射档切到「照射」。';
+  $('live').textContent=t;
+}
+
+/* ================= UI ================= */
+function segSync(id,attr,val){
+  for(const b of $(id).querySelectorAll('.btn'))b.classList.toggle('on',b.dataset[attr]===String(val));
+}
+function syncUI(){
+  $('inTs').value=U.ts; $('rdTs').textContent='x'+U.ts;
+  $('btnPause').textContent=U.paused?'继续':'暂停'; $('btnPause').classList.toggle('on',U.paused);
+  segSync('segLayer','layer',U.layer); segSync('segAdd','acls',U.addCls); segSync('segModel','model',U.model);
+  $('phTag').innerHTML=isCov()?'定位几何<b>GEOMETRY</b>':'三维相图<b>PHASE</b>';
+  for(const b of document.querySelectorAll('[data-scene]'))b.classList.toggle('on',+b.dataset.scene===U.scene);
+}
+document.addEventListener('click',function(e){
+  const b=e.target.closest('.btn,.x');
+  if(!b){
+    const pick=e.target.closest('[data-pick]');
+    if(pick){U.sel=+pick.dataset.pick;}
+    return;
+  }
+  const D=b.dataset;
+  if(D.del){delShip(+D.del);syncUI();return;}
+  if(D.sid){
+    const s=byId(+D.sid); if(!s)return;
+    const k=D.k, v=D.v;
+    if(k==='cls')setCls(s,v);
+    else if(k==='emit')s.emitMode=v;
+    else if(k==='eng')s.eng=+v;
+    else if(k==='mv')s.mv=+v;
+    U.scene=0; syncUI(); return;
+  }
+  if(D.scene){runScene(+D.scene);return;}
+  if(D.add){const s=addShip(D.add,U.addCls);U.sel=s.id;syncUI();return;}
+  if(D.acls){U.addCls=D.acls;syncUI();return;}
+  if(D.layer){U.layer=D.layer;syncUI();return;}
+  if(D.model){U.model=D.model;PH_CACHE.key='';for(const s of S.ships){s.trk=newTrk();s.cov=newCov();s.lit=0;s.ever=false;s.seen=null;s.hist=[];}syncUI();return;}  /* 换模型必须清驻留:两套增益表的量纲不同,不清的话曲线会接出一个假的台阶 */
+  if(b.id==='btnPause'){U.paused=!U.paused;syncUI();return;}
+  if(b.id==='btnReset'){if(U.scene)runScene(U.scene);else{S.t=0;for(const s of S.ships){s.trk=newTrk();s.cov=newCov();s.lit=0;s.ever=false;s.hist=[];s.seen=null;s.age=1e9;s.track=0;}}return;}
+  if(b.id==='btnClear'){S.ships=[];U.sel=null;U.scene=0;camFit();syncUI();return;}
+});
+$('inTs').addEventListener('input',function(e){U.ts=+e.target.value;syncUI();});
+/* 距离滑条:沿【选中舰 ←→ 对方质心】那条线径向挪它。改的是几何(流场),壳一个字不动 */
+$('inPhD').addEventListener('input',function(e){
+  const s=selShip(); if(!s)return;
+  const c=centroidOf(s.side==='blue'?'red':'blue'); if(!c)return;
+  const dx=s.x-c[0], dy=s.y-c[1], L=Math.hypot(dx,dy)||1;
+  const d=+e.target.value;
+  s.x=c[0]+dx/L*d; s.y=c[1]+dy/L*d; s.mv=0; U.scene=0;
+});
+
+/* 点选 + 拖动。用 pointer 事件(触屏同路);拖动即停掉自动运动,否则手一松船又自己跑了 */
+(function bindMap(){
+  const cv=$('cvMap');
+  const at=e=>{const r=cv.getBoundingClientRect();return toW(VM,e.clientX-r.left,e.clientY-r.top);};
+  const hit=function(wx,wy){
+    let best=null,bd=1e18;
+    for(const s of S.ships){const d=Math.hypot(wx-s.x,wy-s.y);if(d<bd){bd=d;best=s;}}
+    return (best&&bd<30/VM.k)?best:null;
+  };
+  cv.addEventListener('pointerdown',function(e){
+    const w=at(e), s=hit(w[0],w[1]);
+    try{cv.setPointerCapture(e.pointerId);}catch(_){}
+    if(!s){U.pan=[e.clientX,e.clientY];return;}   /* 按在空地上 = 平移 */
+    U.sel=s.id; U.drag=s.id; s.mv=0; U.scene=0;
+    syncUI();
+  });
+  cv.addEventListener('pointermove',function(e){
+    if(U.pan){                                   /* 平移:屏幕位移换算回世界位移 */
+      S.cx-=(e.clientX-U.pan[0])/S.k; S.cy-=(e.clientY-U.pan[1])/S.k;
+      U.pan=[e.clientX,e.clientY]; return;
+    }
+    if(U.drag==null)return;
+    const s=byId(U.drag); if(!s)return;
+    const w=at(e); s.x=w[0]; s.y=w[1];
+  });
+  const up=function(e){U.pan=null;if(U.drag!=null){U.drag=null;}try{cv.releasePointerCapture(e.pointerId);}catch(_){}};
+  cv.addEventListener('pointerup',up); cv.addEventListener('pointercancel',up);
+  /* 滚轮缩放,锚在光标 —— 锚在画面中心的话,你想看的那一块会在放大过程中滑走。
+     做法是标准的:记下光标此刻的世界坐标,改完 k 之后把相机挪回去让它仍在同一个像素上。 */
+  cv.addEventListener('wheel',function(e){
+    e.preventDefault();
+    const r=cv.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
+    camApply(VM);
+    const w0=toW(VM,mx,my);
+    S.k=Math.max(K_MIN,Math.min(K_MAX,S.k*Math.pow(1.0018,-e.deltaY)));
+    camApply(VM);
+    const w1=toW(VM,mx,my);
+    S.cx+=w0[0]-w1[0]; S.cy+=w0[1]-w1[1];
+  },{passive:false});
+  cv.addEventListener('dblclick',function(e){    /* 双击空地 = 重新贴合(手动相机之后唯一的回家路) */
+    const w=at(e); if(hit(w[0],w[1]))return;
+    camFit();
+  });
+})();
+
+/* ================= 主循环 ================= */
+let last=0;
+function frame(ms){
+  const rdt=last?Math.min(0.1,(ms-last)/1000):0; last=ms;
+  if(!U.paused){
+    const dt=rdt*U.ts;
+    S.t+=dt; stepShips(dt);
+    S.acc+=dt; if(S.acc>=SENS.TICK){const el=S.acc;S.acc=0;senseTick(el);}
+  }
+  $('rdClock').textContent='T+'+S.t.toFixed(1)+' s';
+  drawMap(); drawPhase(); updCards(); updLive();
+  requestAnimationFrame(frame);
+}
+
+/* ================= 自检(?selftest):只验数值,不碰渲染 ================= */
+function runSelftest(){
+  const out=[]; let ok=true;
+  const chk=function(nm,pass,note){ok=ok&&pass;out.push((pass?'  ok  ':'  FAIL')+'  '+nm+(note?'   '+note:''));};
+  const near=function(a,b,tol){return Math.abs(a-b)<=(tol==null?1:tol);};
+  const mk=cls=>mkShip('blue',cls,0,0,null);
+  const B=()=>S.ships[0], R=()=>S.ships[S.ships.length-1];
+
+  out.push('== 量程锚点(与 20-signature 的推导对表) ==');
+  chk('DD 静默熄火 光学可见 150,599',near(visRange(mk('DD')),150599,2),Math.round(visRange(mk('DD')))+'');
+  chk('CA 静默熄火 光学可见 180,000',near(visRange(mk('CA')),180000,2),Math.round(visRange(mk('CA')))+'');
+  const dq=mk('DD'); dq.emitMode='paint';
+  chk('DD 照射 被 DD 听见 600,000',near(hearRange(dq,1),600000,2),Math.round(hearRange(dq,1))+'');
+  const dj=mk('DD'); dj.emitMode='jam';
+  chk('DD 干扰 被听见 = 照射的 1.414 倍',near(hearRange(dj,1)/hearRange(dq,1),Math.SQRT2,1e-9),(hearRange(dj,1)/hearRange(dq,1)).toFixed(6));
+  chk('DD 照 DD 量程 120,755',near(actRange(dq,reflOf(mk('DD'))),120755,3),Math.round(actRange(dq,reflOf(mk('DD'))))+'');
+  const e1=mk('DD'), e2=mk('DD'); e1.emitMode='paint'; e2.emitMode='paint'; e2.emit=2;
+  const gA=actRange(e2,1)/actRange(e1,1), gH=hearRange(e2,1)/hearRange(e1,1);
+  chk('emit 翻倍:照射量程 x1.189 / 被听见 x1.414',near(gA,Math.pow(2,.25),1e-9)&&near(gH,Math.SQRT2,1e-9),gA.toFixed(4)+' / '+gH.toFixed(4));
+
+  out.push('== 阶梯六段(与 FLOW44_SENSE 同一条路) ==');
+  loadScene([['blue','DD',0,0,null],['red','DD',400000,0,null]]);
+  advance(20); chk('① 远距 40 万双静默 = 0 级',R().lit===0,'opt '+R().trk.opt.toFixed(3));
+  loadScene([['blue','DD',0,0,null],['red','DD',70000,0,null]]);
+  advance(20); chk('② 近距 7 万双静默 = 1 级(光学单通道)',R().lit===1&&R().trk.lis===0&&R().trk.act===0,'opt '+R().trk.opt.toFixed(3));
+  R().emitMode='paint'; advance(20);
+  chk('③ 红舰开照射 = 2 级(光学与静听交叉)',R().lit===2&&R().trk.act===0,'opt '+R().trk.opt.toFixed(3)+' lis '+R().trk.lis.toFixed(3));
+  B().emitMode='paint'; advance(20);
+  chk('④ 蓝舰也开照射 = 3 级火控',R().lit===3&&R().trk.act>=SENS.LIT3,'act '+R().trk.act.toFixed(3));
+  B().emitMode='silent'; advance(40);
+  chk('⑤ 断照 = 掉回 2 级(不是掉到 1)',R().lit===2&&R().trk.act<SENS.ACT_DOWN,'act '+R().trk.act.toFixed(3));
+  R().emitMode='silent'; R().x=400000; advance(60);
+  chk('⑥ 退到 40 万并全静默 = 灭回 0 级',R().lit===0&&R().ever===true,'opt '+R().trk.opt.toFixed(3));
+
+  out.push('== 提案模型:照射圈内部必须有分区,不是"进圈就死" ==');
+  const mb=U.model;
+  /* 现行模型的病:三档稳态 2.67/4.00/5.33 全部越过火控门槛 2.0 —— 圈内处处能锁,距离只改快慢。
+     下面用【同一个距离】在两个模型下各跑一遍,差别必须是【结局不同】而不只是【快慢不同】。 */
+  U.model='band';
+  const bandSteady=[1,2,3].map(function(i){return SENS.G_ACT[i]/(1-SENS.DEC_ACT);});
+  chk('现行:照射三档【全部】>= 火控门槛(这就是"进圈就死"的根因)',
+    bandSteady.every(function(v){return v>=SENS.LIT3;}),bandSteady.map(function(v){return v.toFixed(2);}).join(' / '));
+  U.model='cont';
+  const contSteady=[];for(let i=1;i<=PROP.NB;i++)contSteady.push(ceilOf('act',i));
+  chk('提案:最外档【够不到】探测级',contSteady[0]<SHELL[0].C,contSteady[0].toFixed(2));
+  chk('提案:存在只到识别级、上不了火控的中间档',
+    contSteady.some(function(v){return v>=SHELL[1].C&&v<SHELL[2].C;}),
+    contSteady.filter(function(v){return v>=SHELL[1].C&&v<SHELL[2].C;}).length+' 档');
+  const iFC=bandForCeil('act',SHELL[2].C), fFC=zoneFrac(iFC,true);
+  const iID=bandForCeil('act',SHELL[1].C), fID=zoneFrac(iID,true);
+  chk('提案:火控只在照射量程的六成以内',fFC>0.5&&fFC<0.70,'火控 <'+(fFC*100).toFixed(1)+'%R · 识别 <'+(fID*100).toFixed(1)+'%R');
+  /* 同一距离两个模型跑同样久,结局必须不同 —— 这一条才是"改的是结局不是速度"的证据 */
+  /* ⚠ 这一格必须用【光学够不到】的几何,否则量的根本不是照射那条曲线。
+     DD 照 DD 的量程 12.1 万 < DD 的光学可见 15.1 万 —— 80% 处(9.7 万)光学正在贡献,
+     两条通道一合成照样进 3 级壳,判据就不是"照射圈内部有没有分区"了。
+     换成 CA 照 DD:量程 20.9 万,80% 处 16.7 万,已经在 DD 的光学可见半径【之外】,
+     这一格里于是只有照射那一条曲线在动 —— 单变量。 */
+  const rDDvis=visRange(mkShip('red','DD',0,0,null));
+  const RACT=actRange(mkShip('blue','CA',0,0,{emitMode:'paint'}),reflOf(mkShip('red','DD',0,0,null)));
+  const dFar=RACT*0.80;
+  chk('这一格确实只有照射在动(距离已在光学可见半径之外)',dFar>rDDvis,
+    Math.round(dFar/1000)+'k > 光学 '+Math.round(rDDvis/1000)+'k');
+  U.model='band'; loadScene([['blue','CA',0,0,{emitMode:'paint'}],['red','DD',dFar,0,null]]); advance(120);
+  const litBand=R().lit, actBand=R().trk.act;
+  U.model='cont'; loadScene([['blue','CA',0,0,{emitMode:'paint'}],['red','DD',dFar,0,null]]); advance(120);
+  const litCont=R().lit, actCont=R().trk.act;
+  chk('同一距离(照射量程的 80%)跑满 120 秒:现行到火控级、提案到不了',
+    litBand===3&&litCont<3,'现行 lit'+litBand+'(act '+actBand.toFixed(2)+') / 提案 lit'+litCont+'(act '+actCont.toFixed(2)+')');
+  /* 雷达废热:提案里开照射不该把光学圈顶掉四成 */
+  const hs=mkShip('blue','DD',0,0,null), hp=mkShip('blue','DD',0,0,{emitMode:'paint'});
+  U.model='band'; const rb=visRange(hp)/visRange(hs);
+  U.model='cont'; const rc=visRange(hp)/visRange(hs);
+  chk('雷达废热:现行开照射让光学圈涨 41%,提案只涨 7%',rb>1.4&&rc<1.08,
+    '现行 x'+rb.toFixed(3)+' / 提案 x'+rc.toFixed(3));
+
+  out.push('== 三条路【都】到得了火控级,代价是三种不同的资源 ==');
+  /* ① 光学:代价是距离。双方全程静默、熄火 —— 静听与照射【必须】一位不动 */
+  loadScene([['blue','DD',0,0,null],['red','DD',20000,0,null]]); advance(60);
+  chk('① 光学单独到火控级(全程静默,一部雷达都没开)',
+    R().lit===3&&R().trk.lis===0&&R().trk.act===0,
+    'lit'+R().lit+' opt '+R().trk.opt.toFixed(2)+' lis '+R().trk.lis.toFixed(2)+' act '+R().trk.act.toFixed(2));
+  const dOpt=R().lock.opt, iOpt=bandForCeil('opt',SHELL[2].A);
+  /* ①b1 守的是【读数不骗人】:卡片与地图上那个数,必须就是壳与天花板算出来的那个数 */
+  chk('①b1 光学锁定读数 = 量程 x【独立重算】的档边界(读数与判据同源)',
+    iOpt>0&&Math.abs(dOpt-visRange(R())*zoneFrac(iOpt,false))<1e-6,
+    '档'+iOpt+'/'+PROP.NB+'  '+Math.round(dOpt/1000)+'k');
+  /* ①b2 守的是【设计钉子】:光学那条路的代价就是这个数。
+     改 CEIL.opt 会挪动它 —— 那是一个设计决定,该在这里变红、让人重新拍一次板,不是回归。 */
+  chk('①b2 设计钉子:光学锁定 = 光学量程的 17.7%',
+    Math.abs(dOpt/visRange(R())-Math.pow(B_STEP,5))<1e-9,
+    (dOpt/visRange(R())*100).toFixed(1)+'%R  '+Math.round(dOpt/1000)+'k = 主炮射程 150k 的 '+(dOpt/150000*100).toFixed(0)+'%');
+  /* ①c 反向对照:退到锁定圈【外】必须上不去 —— 不测这条的话"处处能锁"也能骗过 ① */
+  loadScene([['blue','DD',0,0,null],['red','DD',Math.round(dOpt*1.25),0,null]]); advance(120);
+  chk('①c 退到锁定圈外 25%、跑满 120 秒:上不去',R().lit<3,'lit'+R().lit+' opt '+R().trk.opt.toFixed(2));
+  /* ② 静听:代价是编队。单站够不到,两站拉开基线才够 */
+  loadScene([['blue','DD',0,0,null],['red','DD',150000,0,{emitMode:'paint'}]]); advance(120);
+  const lit1=R().lit, bl1=R().bl, lk1=R().lock.lis;
+  chk('② 静听【单站】走不通(天花板 '+ceilOf('lis',PROP.NB).toFixed(2)+' < 截距 '+SHELL[2].B+')',
+    lit1<3&&Math.abs(bl1-1)<1e-9&&lk1===0,'lit'+lit1+' 基线x'+bl1.toFixed(2)+' 静听锁定 '+(lk1?fmtK(lk1):'走不通'));
+  loadScene([['blue','DD',0,-100000,null],['blue','DD',0,100000,null],['red','DD',100000,0,{emitMode:'paint'}]]);
+  advance(120);
+  /* 判据是【静听这一条单独就够】(把另外两条按零代进 3 级壳),不是"光学恰好为零" ——
+     静听锁定圈 17.8 万比光学可见 16.1 万还大一点,这个距离窗里光学必然也在贡献,
+     写成 opt===0 会逼着我去挑一个只有一万公里宽的距离,那是在迁就判据而不是在测东西。
+     配一条【同距离下光学单独不够】的对照,单通道归因才站得住。 */
+  const okLis=shellF(SHELL[2],0,R().trk.lis,0)>=1, okOpt=shellF(SHELL[2],R().trk.opt,0,0)>=1;
+  chk('②b 两艘蓝舰拉开 90 度基线:静听【单独】就够进 3 级壳(同距离下光学单独不够)',
+    R().lit===3&&R().bl>2&&okLis&&!okOpt,
+    'lit'+R().lit+' 基线x'+R().bl.toFixed(2)+' lis '+R().trk.lis.toFixed(2)+'(单独够)'+
+    ' opt '+R().trk.opt.toFixed(2)+'(单独'+(okOpt?'也够':'不够')+') 静听锁定 '+fmtK(R().lock.lis));
+  const lkLis=R().lock.lis;
+  /* ③ 照射:代价是暴露。手电效应仍在 —— 自照 12 万、被听见 60 万 */
+  loadScene([['blue','DD',0,0,{emitMode:'paint'}],['red','DD',70000,0,null]]); advance(120);
+  chk('③ 照射单独到火控级',R().lit===3&&R().trk.act>=SHELL[2].C,'lit'+R().lit+' act '+R().trk.act.toFixed(2)+' 照射锁定 '+fmtK(R().lock.act));
+  /* ⚠ 读数当场取:下面 ③c 要把蓝舰切回静默,那之后 lock.act 与 hearRange 都会归零 */
+  const lkAct=R().lock.act, expo=hearRange(B(),1)/actRange(B(),reflOf(R()));
+  chk('③b 代价是暴露:被听见的距离 / 自照量程 ~= 5 倍',expo>4,expo.toFixed(3)+' 倍');
+  /* ③c 拆掉那条硬编码之后,"断照即掉锁"必须仍然成立 —— 只不过现在是【壳】给的,不是单写的一条规则。
+     不测这一条的话,"提案里等级只升不降"同样能骗过 ③。 */
+  const a3=R().trk.act; B().emitMode='silent'; advance(30);
+  chk('③c 断照后掉出火控级(由壳给出,不是靠钉在照射轴上的那条规则)',
+    R().lit<3&&R().trk.act<a3,'act '+a3.toFixed(2)+' -> '+R().trk.act.toFixed(2)+'  lit'+R().lit);
+  /* ③d 滞回带必须是壳的 HOLD，不是把整个相位点放大两倍。
+     ③c 曾经兼着守过这一条，但提案的衰减快了三十倍之后，act 早衰成 0，
+     那个场景再也经不过滞回带 —— 判据没坏，是【不再路过被测代码】了。
+     所以直接打 ladder：拿一个落在壳外、但放大两倍就回到壳内的点，它必须降级。 */
+  const hp3=[2.47,0,0.39];
+  chk('③d 滞回带 = 壳的 '+(PROP.HOLD*100)+'%，不是把相位点放大两倍',
+    levelAt(hp3[0],hp3[1],hp3[2])<3 && ladder(3,{opt:hp3[0],lis:hp3[1],act:hp3[2]})<3
+    && levelAt(hp3[0]/PROP.HOLD,hp3[1]/PROP.HOLD,hp3[2]/PROP.HOLD)<3
+    && levelAt(hp3[0]*2,hp3[1]*2,hp3[2]*2)>=3,
+    '点(2.47/0/0.39):原位 '+levelAt(hp3[0],hp3[1],hp3[2])+' 级 / 放大 1÷'+PROP.HOLD+' 仍 '+
+    levelAt(hp3[0]/PROP.HOLD,hp3[1]/PROP.HOLD,hp3[2]/PROP.HOLD)+' 级 / 放大 2 倍就回到 '+
+    levelAt(hp3[0]*2,hp3[1]*2,hp3[2]*2)+' 级 —— 所以这两个带宽结论相反');
+  /* ④ 三条路的代价【不是同一种货币】—— 都折算成距离的话,永远选最远的那条,没有选择可言 */
+  chk('④ 三条路的锁定距离两两不同(不是同一个数换了三张皮)',
+    dOpt>0&&lkAct>0&&lkLis>0&&dOpt<lkAct&&lkAct<lkLis,
+    '光学 '+fmtK(dOpt)+'(贴近) < 照射 '+fmtK(lkAct)+'(暴露) < 静听 '+fmtK(lkLis)+'(要编队)');
+  U.model=mb;
+
+  out.push('== 时间变化率:提案与 V3 都提速,band 必须逐字不动 ==');
+  /* 稳态由 ceil 定、与 DEC 无关,所以提速【不许】动任何一条既有判据的结论 —— 只动"多久到位" */
+  chk('band 的衰减率仍是游戏那三个数(它是对照组,一改就不是了)',
+    decOfAt('band','opt')===SENS.DEC_OPT&&decOfAt('band','act')===SENS.DEC_ACT,
+    decOfAt('band','opt')+' / '+decOfAt('band','lis')+' / '+decOfAt('band','act'));
+  const tau=d=>(-1/Math.log(d)).toFixed(1);
+  chk('提案的时间常数比 band 快三倍上下',
+    PROP.DEC.opt<SENS.DEC_OPT*0.85&&PROP.DEC.act<SENS.DEC_ACT*0.9,
+    'band '+tau(SENS.DEC_OPT)+'/'+tau(SENS.DEC_LIS)+'/'+tau(SENS.DEC_ACT)+'s  ->  提案 '+
+    tau(PROP.DEC.opt)+'/'+tau(PROP.DEC.lis)+'/'+tau(PROP.DEC.act)+'s');
+  /* 同一格局,量两个模型各要多少秒爬到火控级 —— 这一条才是用户说的"要等好久" */
+  const climb=function(m){
+    U.model=m; loadScene([['blue','DD',0,0,{emitMode:'paint'}],['red','DD',70000,0,null]]);
+    for(let i=1;i<=120;i++){advance(1); if(R().lit>=3)return i;} return 0;};
+  const tBand=climb('band'), tCont=climb('cont');
+  chk('同一格局爬到火控级:提案明显比 band 快',tCont>0&&tBand>0&&tCont<tBand*0.6,
+    'band '+tBand+'s -> 提案 '+tCont+'s');
+  U.model=mb;
+
+  out.push('== V3 误差椭圆:三条路是三种【几何】,不是同一个数的三种涨速 ==');
+  U.model='cov';
+  const A=()=>R().cov, ax=()=>R().cov.a1, el=()=>R().cov.a1/R().cov.a2;
+  /* ① 照射:单站即得。一条视线同时给方位与距离 ⇒ 圆点 */
+  loadScene([['blue','DD',0,0,{emitMode:'paint'}],['red','DD',80000,0,null]]); advance(30);
+  chk('① 照射单站 8 万:一条视线同时给方位与距离 ⇒ 两轴同量级,直接进主炮门',ax()<=covMac(R())&&el()<4&&R().lit===3,
+    '±'+fmtK(ax())+' x '+fmtK(A().a2)+' 长短比 '+el().toFixed(2)+' lit'+R().lit);
+  /* ② 光学单站:方位很准、距离靠角尺寸反推(∝d²)⇒ 沿视线的雪茄 */
+  loadScene([['blue','DD',0,0,null],['red','DD',100000,0,null]]); advance(60);
+  chk('② 光学单站 10 万:被动单站【给不出距离】—— 一根沿视线的雪茄,只到探测级',el()>8&&R().lit===1,
+    '±'+fmtK(ax())+' x '+fmtK(A().a2)+' 长短比 '+el().toFixed(1)+' lit'+R().lit);
+  /* ②b 贴近:d² 律让距离误差急剧变小 —— 光学单站【也能】进主炮门,代价是距离 */
+  let dOptV3=0;
+  for(let d=60000;d>=8000;d-=2000){
+    loadScene([['blue','DD',0,0,null],['red','DD',d,0,null]]); advance(60);
+    if(ax()<=covMac(R())){dOptV3=d;break;}
+  }
+  chk('②b 光学单站贴近到某个距离必进主炮门(d² 律)',dOptV3>0&&dOptV3<80000,
+    dOptV3?(Math.round(dOptV3/1000)+'k km = 主炮射程 150k 的 '+(dOptV3/150000*100).toFixed(0)+'%'):'全程都进不去');
+  /* ③ 交会:同一距离,把一艘舰挪到 90 度方位 —— 两条雪茄一交,椭圆当场收圆 */
+  loadScene([['blue','DD',0,0,null],['red','DD',85000,0,null]]); advance(60);
+  const a1one=ax(), l1one=R().lit;
+  loadScene([['blue','DD',0,-60000,null],['blue','DD',0,60000,null],['red','DD',60000,0,null]]); advance(60);
+  chk('③ 两站 90 度交会:同距离下椭圆收紧一个量级,等级跟着跳',
+    ax()<a1one/4&&R().lit>l1one&&el()<2.5,
+    '单站 ±'+fmtK(a1one)+'(lit'+l1one+') -> 两站 ±'+fmtK(ax())+'(lit'+R().lit+') 长短比 '+el().toFixed(2));
+  /* ④ 静听:永远给不出距离。单站是一根极细极长的针,两站才收得住 */
+  loadScene([['blue','DD',0,0,null],['red','DD',260000,0,{emitMode:'paint'}]]); advance(60);
+  const lisOne=ax(), lisEl=el();
+  /* 长轴现在顶在 0.2 光秒那条硬上限上，所以"长短比 > 10"不再是它该守的性质。
+     要守的是【方向准、距离顶到丢弃阈值】：短轴远小于长轴，而长轴就是上限。 */
+  chk('④ 静听单站:方位准、距离顶到上限(没有距离信息)',A().a1>=COV.AMAX*0.85&&lisEl>5&&R().lit>=1,
+    '±'+fmtK(lisOne)+' x '+fmtK(A().a2)+' 长短比 '+lisEl.toFixed(0)+' lit'+R().lit);
+  loadScene([['blue','DD',0,-180000,null],['blue','DD',0,180000,null],['red','DD',180000,0,{emitMode:'paint'}]]);
+  advance(60);
+  chk('④b 静听两站拉开基线:长短比塌下来',el()<lisEl/3,
+    '长短比 '+lisEl.toFixed(0)+' -> '+el().toFixed(1)+'  ±'+fmtK(ax())+' lit'+R().lit);
+  /* ⑤ 信息有保质期:断照之后椭圆线性长大,几秒后掉出主炮门 */
+  loadScene([['blue','DD',0,0,{emitMode:'paint'}],['red','DD',80000,0,null]]); advance(30);
+  const a0=ax(); let tLose=0;
+  B().emitMode='silent';
+  for(let i=1;i<=30;i++){advance(1); if(!tLose&&ax()>covMac(R()))tLose=i;}
+  /* ⚠ 这一格里蓝舰【光学仍然看得见】红舰(8 万 < 光学 15 万),
+     所以它不该彻底失联 —— 接触掉回【只剩光学那一档】，椭圆被光学的距离界接住。
+     第一版在这儿断言"十几秒彻底失联",那是判据写错了，不是机制错了。 */
+  chk('⑤ 断照:3~7 秒的决策窗口(不是一拍就没),接触掉回只剩光学那一档',
+    tLose>=3&&tLose<=7&&R().lit===1&&ax()<COV.AMAX,
+    '断照时 ±'+fmtK(a0)+' -> '+tLose+'s 越过 '+fmtK(covMac(R()))+'(主炮) -> 30s 后 ±'+fmtK(ax())+' lit'+R().lit);
+  /* ⑤b 连光学也没了(退到 40 万):没有任何一条界接住它,椭圆复利涨到超界 = 彻底失联 */
+  R().x=400000; let tGone=0;
+  for(let i=1;i<=40;i++){advance(1); if(!tGone&&R().lit===0){tGone=i;break;}}
+  chk('⑤b 连光学也没了:十几秒内彻底失联(变成幽灵)',
+    tGone>0&&tGone<=20&&R().lit===0&&R().cov.ever,
+    tGone+'s 后 lit0,而 ever 仍为 true —— 地图上只剩一个幽灵记号');
+  /* ⑥ 干扰不再是开关:J/S 比 ∝ d²,所以远处糊死、贴近烧穿 */
+  const jf=function(d){
+    loadScene([['blue','CA',0,0,{emitMode:'paint'}],['red','DD',d,0,{emitMode:'jam'}]]); advance(40);
+    const j=ax();
+    loadScene([['blue','CA',0,0,{emitMode:'paint'}],['red','DD',d,0,null]]); advance(40);
+    return [j,ax()];
+  };
+  const jFar=jf(120000), jNear=jf(30000);
+  chk('⑥ 干扰在远处糊死、贴近了烧穿(同一 ecm,倍数随距离下降)',
+    jFar[0]/jFar[1]>jNear[0]/jNear[1]&&jNear[0]/jNear[1]<1.6,
+    '12 万 x'+(jFar[0]/jFar[1]).toFixed(2)+'(±'+fmtK(jFar[1])+'->'+fmtK(jFar[0])+')  /  3 万 x'+(jNear[0]/jNear[1]).toFixed(2));
+  /* ⑦ 等级只是派生显示量:三个门就是椭圆的三个分档 */
+  chk('⑦ 等级由椭圆派生,不再是任何东西的真相',
+    covLit({seen:true,idn:true,a1:covMac(R())*0.9},R())===3&&covLit({seen:true,idn:true,a1:covMsl(R())*0.9},R())===2&&
+    covLit({seen:true,idn:true,a1:COV.AMAX*0.9},R())===1&&covLit({seen:false,a1:1},R())===0&&
+    covLit({seen:true,idn:false,a1:covMac(R())*0.9},R())===1,
+    '认出了: 2k->3 / 30k->2 / 40万->1 / 无量测->0   【认不出】: 再准也只能 1 级');
+  /* ⑧ 场景⑦ 的钉子:距离一公里不变,只把一艘舰挪到 90 度方位 */
+  loadScene([['blue','DD',0,0,null],['blue','DD',-20000,0,null],['red','DD',60000,0,null]]); advance(60);
+  const beforeA=ax(), beforeL=R().lit, beforeD=Math.hypot(R().x-S.ships[0].x,R().y-S.ships[0].y);
+  S.ships[1].x=60000; S.ships[1].y=-60000; advance(60);
+  const afterD=Math.hypot(R().x-S.ships[0].x,R().y-S.ships[0].y);
+  chk('⑧ 场景⑦:只换站位、不换距离 —— 椭圆塌缩一个量级,主炮解锁',
+    beforeL<3&&R().lit===3&&ax()<beforeA/10&&Math.abs(beforeD-afterD)<1,
+    '门(主炮/导弹) '+fmtK(covMac(R()))+'/'+fmtK(covMsl(R()))+'  共线 ±'+fmtK(beforeA)+'(lit'+beforeL+') -> 90度 ±'+fmtK(ax())+'(lit'+R().lit+'),本舰距离 '+fmtK(beforeD)+' 未变');
+  /* ⑨ 连续性：把一艘舰从量程边缘扫到贴脸，量【相邻两步的比】。
+     连续 ⇒ 比值恒贴近 1；有台阶 ⇒ 跨过档边界那一步会跳出一个 2 倍。
+     反向对照用的是【改之前那张三档表】（只在这条判据里当字面量写一次，不是活常量）——
+     不配这一半的话，"最大跳变 1.0x"只证明我扫得够密，证明不了台阶真的没了。 */
+  const swB=mkShip('blue','DD',0,0,null), swR=mkShip('red','DD',0,0,null);
+  const swRng=visRange(swR), OLDTH=[0,0.0209,0.0105,0.0052];
+  let jNew=1, jOld=1, dNewAt=0, dOldAt=0;
+  let pN=0, pO=0;
+  for(let i=0;i<=240;i++){
+    const dd=swRng*(0.98-0.78*i/240);
+    const nw=covShape('opt',1,swB,swR,dd)[1];
+    const od=dd*OLDTH[gradeAt(dd*dd,swRng*swRng)];
+    if(i){const rN=Math.max(nw/pN,pN/nw), rO=Math.max(od/pO,pO/od);
+      if(rN>jNew){jNew=rN;dNewAt=dd;} if(rO>jOld){jOld=rO;dOldAt=dd;}}
+    pN=nw; pO=od;
+  }
+  chk('⑨ 方位精度随距离【连续】变化（反向对照：旧三档表必须有台阶）',
+    jNew<1.05&&jOld>1.8,
+    '新 最大相邻跳变 x'+jNew.toFixed(3)+'  /  旧三档表 x'+jOld.toFixed(2)+' （跳在 '+fmtK(dOldAt)+'，= 量程的 '+(dOldAt/swRng*100).toFixed(0)+'%）');
+  /* ⑩ 【每艘船的相图应该不一样】—— V3 里"相图"就是那两条门。
+     拿一个落在两条主炮门之间的椭圆，它必须在 DD 上判不进、在 CA 上判得进。
+     这条守的是"门真的绑到目标身上了"，而不是写了个函数却还读全局常量。 */
+  const tDD=mkShip('red','DD',0,0,null), tCA=mkShip('red','CA',0,0,null);
+  const mid=(covMac(tDD)+covMac(tCA))/2;
+  chk('⑩ 两条门按目标各不相同：同一个椭圆，DD 进不了火控、CA 进得了',
+    covMac(tDD)<covMac(tCA)&&covMsl(tDD)<covMsl(tCA)&&
+    covLit({seen:true,idn:true,a1:mid},tDD)===2&&covLit({seen:true,idn:true,a1:mid},tCA)===3,
+    '主炮门 DD '+fmtK(covMac(tDD))+' / CA '+fmtK(covMac(tCA))+
+    '   导弹门 DD '+fmtK(covMsl(tDD))+' / CA '+fmtK(covMsl(tCA))+
+    '   ±'+fmtK(mid)+' 处 lit '+covLit({seen:true,idn:true,a1:mid},tDD)+' vs '+covLit({seen:true,idn:true,a1:mid},tCA));
+  /* ⑩b 探测方那一半：同一个目标、同一个距离，只换看的人。
+     静听与照射本来就该差（recv / emit·recv 抬高量程 ⇒ 同一距离上信噪比更高 ⇒ 方位更准）；
+     光学【必须一样】—— SN4 定的规矩：可见半径与探测方无关，谁的眼睛都一样。
+     这一条同时是那条规矩的回归：哪天有人给光学加了口径字段，它会在这儿变红。 */
+  const oDD=mkShip('blue','DD',0,0,null), oCA=mkShip('blue','CA',0,0,null);
+  const tgt=mkShip('red','DD',0,0,{emitMode:'paint'}), DW=120000;
+  const sh=(o,ch)=>covShape(ch,1,o,tgt,DW);
+  const vpO=[sh(oDD,'opt')[1],sh(oCA,'opt')[1]], vpL=[sh(oDD,'lis')[1],sh(oCA,'lis')[1]], vpA=[sh(oDD,'act')[1],sh(oCA,'act')[1]];
+  chk('⑩b 换个看的人：静听与照射已经不一样，光学按 SN4 的规矩必须一样',
+    Math.abs(vpO[0]-vpO[1])<1e-9&&vpL[1]<vpL[0]*0.7&&vpA[1]<vpA[0]*0.7,
+    '12 万公里处的方位误差  光学 DD '+fmtK(vpO[0])+' = CA '+fmtK(vpO[1])+
+    '  静听 DD '+fmtK(vpL[0])+' -> CA '+fmtK(vpL[1])+'  照射 DD '+fmtK(vpA[0])+' -> CA '+fmtK(vpA[1]));
+  /* ⑪ 盯着看【真的】买到精度 —— 时间这一维的正面价值。
+     方位噪声逐拍独立，所以横向会随时间收紧；纵向是一条界，不收紧。
+     这条守的是 FADE_HOLD：把它调回 0.8，稳态/单次 从 0.45x 升到 0.84x，这条会变红。 */
+  loadScene([['blue','DD',0,0,null],['red','DD',260000,0,{emitMode:'paint'}]]);
+  advance(1); const w1=R().cov.a2;
+  advance(60); const wSS=R().cov.a2;
+  chk('⑪ 盯着看买到精度：横向随时间收紧（纵向是界，不收）',
+    wSS<w1/1.8&&R().cov.a1>COV.MSL,
+    '第1拍 ±'+fmtK(w1)+' -> 稳态 ±'+fmtK(wSS)+'（买到 '+(w1/wSS).toFixed(1)+' 倍），而纵向仍是 ±'+fmtK(R().cov.a1));
+  /* ⑫ 倍速不改物理：同样 6 秒，拆成 6 拍与一拍给完必须逐位相同。
+     这是解析跳步的全部意义 —— 不守它的话，x50 下椭圆会长得明显更慢，
+     "断照 6 秒掍锁"在不同倍速下结论不一样。SN4 记过同一类错（干扰乘子不随 dt 缩放）。 */
+  const ca=mkShip('red','DD',0,0,null), cb=mkShip('red','DD',0,0,null);
+  ca.cov.a1=ca.cov.a2=cb.cov.a1=cb.cov.a2=400; ca.cov.n=cb.cov.n=0;
+  for(let i=0;i<6;i++)stepCov(ca,[],1);
+  stepCov(cb,[],6);
+  chk('⑫ 倍速不改物理：6×1 秒 ≡ 1×6 秒（解析跳步）',
+    Math.abs(ca.cov.a1-cb.cov.a1)<1e-6,
+    '6×1s ±'+ca.cov.a1.toFixed(3)+'km  /  1×6s ±'+cb.cov.a1.toFixed(3)+'km  差 '+Math.abs(ca.cov.a1-cb.cov.a1).toExponential(1));
+  /* ⑬ 用户实报的那张图：更【远】的巡洋舰亮着，更近的驱逐舰黑着。
+     原因不在距离，在照射律 r⁴ ∝ 目标的合成反射：DD 0.42 / CA 1.00，
+     开四次方根 = 1.242 倍量程差。这一条把那张图固定成判据，免得日后又被当成 bug。 */
+  loadScene([['red','CA',0,0,{emitMode:'paint'}],['blue','DD',220000,0,null],['blue','CA',240000,0,null]]);
+  advance(30);
+  const zDD=S.ships[1], zCA=S.ships[2];
+  const rDD=actRange(S.ships[0],reflOf(zDD)), rCA=actRange(S.ships[0],reflOf(zCA));
+  chk('⑬ 更远的 CA 亮着、更近的 DD 黑着 —— 差的是合成反射不是距离',
+    zDD.lit===0&&zCA.lit>=1&&rCA/rDD>1.2&&rCA/rDD<1.3,
+    'DD 距 220k > 圈 '+fmtK(rDD)+' ⇒ lit'+zDD.lit+'   而 CA 距 240k < 圈 '+fmtK(rCA)+
+    ' ⇒ lit'+zCA.lit+'   圈比 '+(rCA/rDD).toFixed(3)+' = (1/0.42)^¼'+'   (CA 只到 1 级:照射认出轮廓要 '+fmtK(identDist('act',S.ships[0],zCA))+' 以内)');
+  /* ⑭ 方案 C 的核心：交会给【位置】，不给【身份】。
+     三段用同一对蓝舰（基线 10 万），只改目标的距离与发射档：
+       a 远处静默：椭圆已经比导弹门紧得多，却只能到 1 级 —— 因为认不出
+       b 贴近到光学能分辨轮廓：同样的两站，现在认得出了 ⇒ 跳到 2 级
+       c 回到远处但它自己开口：一步没挪，靠辐射指纹认出 ⇒ 也跳到 2 级
+     a 那一段的【椭圆已经够紧】是必须的反向对照 —— 不判它的话，
+     "只到 1 级"可能只是因为太远定位不准，根本没测到身份这件事。 */
+  const XF=[['blue','DD',0,-50000,null],['blue','DD',0,50000,null],['red','DD',120000,0,null]];
+  loadScene(XF); advance(40);
+  const xFar=R(), aFar=xFar.cov.a1, idFar=xFar.cov.idn, litFar=xFar.lit;
+  const dOptID=identDist('opt',S.ships[0],xFar);
+  loadScene([XF[0],XF[1],['red','DD',70000,0,null]]); advance(40);
+  const xNear=R(), litNear=xNear.lit, idNear=xNear.cov.idn, byNear=xNear.cov.idBy;
+  loadScene([XF[0],XF[1],['red','DD',120000,0,{emitMode:'paint'}]]); advance(40);
+  const xLoud=R(), litLoud=xLoud.lit, byLoud=xLoud.cov.idBy;
+  chk('⑭ 交会给位置、不给身份：椭圆已够紧但认不出 ⇒ 卡在 1 级',
+    aFar<covMsl(xFar)&&!idFar&&litFar===1&&idNear&&byNear==='opt'&&litNear>=2&&byLoud==='lis'&&litLoud>=2,
+    '远 12万静默 ±'+fmtK(aFar)+'(<导弹门 '+fmtK(covMsl(xFar))+')但未认出 ⇒ lit'+litFar+
+    '   贴到 7万(光学认出要 '+fmtK(dOptID)+' 以内) ⇒ lit'+litNear+
+    '   回 12万但它开口 ⇒ '+byLoud+' 认出 ⇒ lit'+litLoud);
+  /* ⑮ 椭圆的硬上限：失去量测后它不允许膨胀到比全图还大。
+     两半都要判：① 全程不超 AMAX；② AMAX 就是主炮射程（锚点，不是拍的）。
+     另外铉住那个 bug：对一艘开着雷达的 CA，单站静听必须建得起接触 ——
+     界不钳的话 0.4x1,039,230 = 415,692 超过 AMAX，【越吵的船反而越难听住】。 */
+  loadScene([['blue','DD',0,0,null],['red','DD',60000,0,{emitMode:'paint'}]]); advance(30);
+  const rr=R(); let aMax=0;
+  rr.x=900000; rr.y=900000;                       /* 一下子跑到全部量程之外 */
+  for(let i=0;i<60;i++){advance(1); if(rr.cov.a1>aMax)aMax=rr.cov.a1;}
+  loadScene([['blue','DD',0,0,null],['red','CA',700000,0,{emitMode:'paint'}]]); advance(20);
+  const loudCA=R();
+  chk('⑮ 椭圆有硬上限：长轴永远不超 0.2 光秒',
+    aMax<=COV.AMAX+1&&Math.abs(COV.AMAX/C_LS-0.2)<1e-9&&loudCA.lit>=1&&loudCA.cov.a1<=COV.AMAX,
+    '失联过程中最大 ±'+fmtK(aMax)+' ≤ AMAX '+fmtK(COV.AMAX)+'(='+(COV.AMAX/C_LS).toFixed(2)+' 光秒)'+
+    '   开着雷达的 CA 在 70 万外仍建得起接触 lit'+loudCA.lit+' ±'+fmtK(loudCA.cov.a1));
+  U.model=mb;
+
+  out.push('== N 舰:一方的传感器合起来算,逐通道取最好的那一档 ==');
+  loadScene([['blue','DD',0,0,null],['blue','DD',60000,0,null],['red','DD',130000,0,null]]);
+  advance(20); const twoEye=R().trk.opt;
+  loadScene([['blue','DD',0,0,null],['red','DD',130000,0,null]]);
+  advance(20); const oneEye=R().trk.opt;
+  chk('多一艘更近的蓝舰,光学驻留必须更高',twoEye>oneEye,'两只眼 '+twoEye.toFixed(3)+' vs 一只眼 '+oneEye.toFixed(3));
+  loadScene([['blue','DD',0,0,null],['red','DD',130000,0,null],['red','DD',131000,2000,null]]);
+  advance(20);
+  chk('两艘红舰各有自己的一条阶梯(不是共用一个)',S.ships[1].trk!==S.ships[2].trk&&S.ships[1].hist!==S.ships[2].hist);
+
+  out.push('== 多站交会:方位越分散,不确定区越紧 ==');
+  loadScene([['blue','DD',-150000,-150000,null],['blue','DD',-150000,150000,null],['red','CA',420000,0,{emitMode:'paint'}]]);
+  advance(25);
+  const fxWide=esmFix(S.ships[2]);
+  chk('两站都听得见',!!fxWide&&fxWide.n===2,fxWide?fxWide.n+' 站 夹角 '+(fxWide.maxAng*57.3).toFixed(1)+'°':'null');
+  S.ships[1].x=S.ships[0].x; S.ships[1].y=S.ships[0].y+8000;
+  const fxNarrow=esmFix(S.ships[2]);
+  chk('把两只耳朵并到一起,不确定区胀大',!!fxNarrow&&fxNarrow.err>fxWide.err,
+    fmtK(fxWide.err)+'(夹角 '+(fxWide.maxAng*57.3).toFixed(0)+'°) -> '+fmtK(fxNarrow.err)+'(夹角 '+(fxNarrow.maxAng*57.3).toFixed(0)+'°)');
+  loadScene([['blue','DD',0,0,null],['red','CA',420000,0,{emitMode:'paint'}]]);
+  advance(25);
+  const f1=esmFix(S.ships[1]);
+  chk('单站时交会因子恒为 1',!!f1&&f1.n===1&&f1.tri===1);
+  chk('静听单独【能】到探测级(光学够不到也一样)',S.ships[1].lit===1&&S.ships[1].trk.opt===0,'lit '+S.ships[1].lit+' opt '+S.ships[1].trk.opt.toFixed(3));
+  chk('但它【给不出位置】—— seen 必须仍是 null(迷雾泄漏就出在这一格)',S.ships[1].seen===null);
+  chk('等级到 1 之后不确定区还得继续画(按有没有位置判,不按等级判)',S.ships[1].trk.lis>=SENS.LIS_ALERT&&!!esmFix(S.ships[1]));
+
+  out.push('== 干扰只削回波 ==');
+  loadScene([['blue','DD',0,0,null],['red','DD',90000,0,null]]);
+  B().emitMode='paint'; advance(30);
+  const ac=R().trk.act, oc=R().trk.opt;
+  R().emitMode='jam'; advance(30);
+  chk('干扰后照射驻留下降',R().trk.act<ac,ac.toFixed(3)+' -> '+R().trk.act.toFixed(3));
+  chk('干扰不削光学(反而更亮:干扰档也算功耗)',R().trk.opt>=oc,oc.toFixed(3)+' -> '+R().trk.opt.toFixed(3));
+
+  out.push('== 解析跳步:dt 合并与逐秒递推逐位相同 ==');
+  const tA=newTrk(), tB=newTrk(), gg={opt:2,lis:1,act:3};
+  for(let i=0;i<8;i++)stepDwell(tA,gg,1,1);
+  stepDwell(tB,gg,8,1);
+  chk('逐秒 x8 == 一次给 8 秒',near(tA.opt,tB.opt,1e-12)&&near(tA.act,tB.act,1e-12),tA.act.toFixed(9)+' / '+tB.act.toFixed(9));
+
+  $('selftest').style.display='block'; $('selftest').textContent=out.join('\n');
+  document.title=ok?'SELFTEST:PASS':'SELFTEST:FAIL';
+  $('selftest').setAttribute('data-ok',ok?'1':'0');
+}
+
+/* ================= 交互自检(?uitest):全部走真实 click / input / pointer 事件 ================= */
+function runUitest(){
+  const out=[]; let ok=true;
+  const chk=function(nm,pass,note){ok=ok&&pass;out.push((pass?'  ok  ':'  FAIL')+'  '+nm+(note?'   '+note:''));};
+  const click=function(sel){const e=document.querySelector(sel);if(!e){chk('找不到 '+sel,false);return null;}
+    e.dispatchEvent(new MouseEvent('click',{bubbles:true}));return e;};
+
+  click('[data-scene="1"]'); updCards();
+  chk('场景① 两艘舰、两张卡',S.ships.length===2&&U.scene===1&&document.querySelectorAll('#cards .sc').length===2,S.ships.length+' 艘');
+
+  const n0=S.ships.length;
+  click('[data-acls="CA"]'); click('[data-add="blue"]'); updCards();
+  const added=S.ships[S.ships.length-1];
+  chk('加一艘蓝 CA',S.ships.length===n0+1&&added.cls==='CA'&&added.side==='blue');
+  chk('卡片跟着多一张',document.querySelectorAll('#cards .sc').length===n0+1);
+  chk('新舰不与已有舰重叠',S.ships.every(s=>s.id===added.id||Math.hypot(s.x-added.x,s.y-added.y)>20000));
+  click('[data-del="'+added.id+'"]'); updCards();
+  chk('按 x 删掉它',S.ships.length===n0&&!byId(added.id)&&document.querySelectorAll('#cards .sc').length===n0);
+
+  const rid=S.ships.filter(s=>s.side==='red')[0].id;
+  click('[data-sid="'+rid+'"][data-k="emit"][data-v="paint"]');
+  chk('卡上切照射(断言的是船身状态,不是类名)',byId(rid).emitMode==='paint');
+  click('[data-sid="'+rid+'"][data-k="eng"][data-v="3"]');
+  chk('卡上切满推,光学亮度跟着涨',byId(rid).eng===3&&Math.abs(visRange(byId(rid))-Math.sqrt(SENS.K_IR*0.7*5))<2,Math.round(visRange(byId(rid)))+'');
+  click('[data-sid="'+rid+'"][data-k="cls"][data-v="CA"]');
+  chk('卡上换 CA:四个感知字段一起换',byId(rid).cls==='CA'&&byId(rid).size===1&&byId(rid).emit===3);
+  click('[data-sid="'+rid+'"][data-k="cls"][data-v="DD"]');
+  click('[data-sid="'+rid+'"][data-k="emit"][data-v="silent"]');
+  click('[data-sid="'+rid+'"][data-k="eng"][data-v="0"]');
+
+  const bid=S.ships.filter(s=>s.side==='blue')[0].id;
+  byId(rid).x=byId(bid).x+70000; byId(rid).y=byId(bid).y; byId(rid).mv=0;
+  advance(12); const before=byId(rid).lit, a0=byId(rid).trk.act;
+  click('[data-sid="'+bid+'"][data-k="emit"][data-v="paint"]');
+  advance(40);
+  chk('蓝舰开照射后红舰到火控级(现行模型)',byId(rid).lit===3&&before<3,before+' -> '+byId(rid).lit);
+  chk('这一段确实推高了照射驻留',byId(rid).trk.act>a0,a0.toFixed(3)+' -> '+byId(rid).trk.act.toFixed(3));
+
+  updCards();
+  const on=document.querySelectorAll('[data-card="'+rid+'"] .lad i.on');
+  chk('阶梯四格恰好点亮一格,且是当前等级',on.length===1&&+on[0].dataset.lv===byId(rid).lit,on.length+' 格 / lv'+(on[0]?on[0].dataset.lv:'?'));
+  const gateTxt=document.querySelector('[data-card="'+rid+'"] .sc-gate').textContent;
+  chk('火控级时卡上两个门都写着可用',/主炮 可用/.test(gateTxt)&&/导弹 可用/.test(gateTxt),gateTxt.slice(0,28));
+
+  /* 切模型必须【清驻留】:两套增益表量纲不同,不清的话曲线会接出一个假台阶 */
+  click('[data-model="cont"]');
+  chk('切到提案模型:驻留被清零、等级归零',U.model==='cont'&&byId(rid).trk.act===0&&byId(rid).lit===0);
+  updCards();
+  chk('档位读数跟着换成 i/12',/\/12/.test(document.querySelector('[data-card="'+rid+'"] .g-opt').textContent)||
+    document.querySelector('[data-card="'+rid+'"] .g-opt').textContent==='—');
+  click('[data-model="cov"]');
+  advance(6); updCards(); drawMap(); drawPhase();
+  chk('切到 V3 椭圆:等级由椭圆派生,卡片与地图都不抛',U.model==='cov'&&byId(rid).cov&&byId(rid).cov.a1>0);
+  chk('V3 的通道读数是【公里】不是驻留值',/k|—/.test(document.querySelector('[data-card="'+rid+'"] .v-opt').textContent));
+  /* 条要连续长：每挪近 5000km 量一次，要单调变长且没有一步跳过 8 个百分点 */
+  (function(){
+    const bw=()=>parseFloat(document.querySelector('[data-card="'+rid+'"] .b-opt').style.width)||0;
+    const tgt=byId(rid), bx=byId(bid).x; let prev=-1, mono=true, maxJump=0;
+    for(let d=120000;d>=40000;d-=5000){
+      tgt.x=bx+d; tgt.y=byId(bid).y; advance(3); updCards();
+      const w=bw(); if(prev>=0){ if(w<prev-0.01)mono=false; maxJump=Math.max(maxJump,w-prev); } prev=w;
+    }
+    chk('V3 通道条随距离连续变长（单调且没有跳档）',mono&&maxJump<8&&prev>0,
+      '最终 '+prev.toFixed(1)+'% · 单步最大增量 '+maxJump.toFixed(1)+'个百分点');
+  })();
+  click('[data-model="band"]');
+  chk('切回现行',U.model==='band');
+
+  const other=S.ships.filter(s=>s.id!==U.sel)[0];
+  click('[data-pick="'+other.id+'"]');
+  chk('点卡片头选中它(圈只画选中那一艘,所以这条决定地图画什么)',U.sel===other.id);
+
+  click('[data-scene="1"]');
+  const cv=document.getElementById('cvMap'); fit(VM);
+  const c=centroidAll(); VM.ox=c[0]; VM.oy=c[1]; VM.k=mapFit(); S.k=VM.k;
+  const red=S.ships.filter(s=>s.side==='red')[0], r=cv.getBoundingClientRect();
+  const from=toS(VM,red.x,red.y), want=[red.x*0.5,90000], to=toS(VM,want[0],want[1]);
+  cv.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,clientX:r.left+from[0],clientY:r.top+from[1],pointerId:1}));
+  chk('按在红舰上进入拖动并选中它',U.drag===red.id&&U.sel===red.id);
+  cv.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:r.left+to[0],clientY:r.top+to[1],pointerId:1}));
+  chk('拖到哪就是哪(误差 <3%)',Math.hypot(red.x-want[0],red.y-want[1])/Math.hypot(want[0],want[1])<0.03,
+    Math.round(red.x/1000)+'k,'+Math.round(red.y/1000)+'k');
+  cv.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,pointerId:1}));
+  chk('抬手退出拖动',U.drag===null);
+
+  /* 渐隐填充:沿半径采三点,与【关掉填充】的同一帧相减,增量必须单调下降且外沿几乎归零。
+     做差分是因为背景有网格与星点,直接读绝对亮度会被它们污染(同 FLOW31_FOLLINE 那条规矩)。
+     硬边界填充在这条判据下会当场红:三点的增量几乎一样。 */
+  /* 用【静默】的那一方:照射中的舰会同时画出被听见的那一层渐隐,两层叠在一起量到的是和,
+     而被听见圈大得多(60 万 vs 21 万),在光学的名义半径外沿它还很实 —— 第一版就栽在这儿。
+     采样点也必须从【舰身】的屏幕位置往外走,不是从屏幕中心:圈是画在舰身上的,不在画面正中。
+     方向取远离对方那一侧,免得采到另一艘船的图标上。 */
+  click('[data-scene="1"]'); advance(2);
+  (function(){
+    const sh=S.ships.filter(x=>x.side==='blue')[0], foe=S.ships.filter(x=>x.side==='red')[0];
+    U.sel=sh.id;
+    fit(VM); const c=centroidAll(); VM.ox=c[0]; VM.oy=c[1]; VM.k=mapFit(); S.k=VM.k;
+    const o=toS(VM,sh.x,sh.y), away=(foe.x>=sh.x)?-1:1;
+    const R=visRange(sh)*VM.k, dpr=window.devicePixelRatio||1;
+    const at=f=>{const x=Math.round((o[0]+away*R*f)*dpr), y=Math.round((o[1]-R*f*0.18)*dpr);
+      const d=VM.g.getImageData(x,y,1,1).data; return d[0]+d[1]+d[2];};
+    U.noFill=false; drawMap(); const a=[at(0.25),at(0.60),at(0.92)];
+    U.noFill=true;  drawMap(); const b=[at(0.25),at(0.60),at(0.92)];
+    U.noFill=false;
+    const d0=a[0]-b[0], d1=a[1]-b[1], d2=a[2]-b[2];
+    chk('渐隐填充:沿半径增量单调下降',d0>d1&&d1>d2,'0.25R +'+d0+' / 0.60R +'+d1+' / 0.92R +'+d2);
+    chk('渐隐填充:圆心侧确实亮起来了(不是整片没画)',d0>=6,'+'+d0);
+    /* 判"没有硬边界"要用【相对】量:名义半径处的 alpha 本来就不是严格 0(色标 0.85 处 .035、
+       0.92 处插值约 .012),之前那条 d2<=2 是被量化碰巧凑对的,地图一改高度就露馅。
+       硬边界填充的话三点增量几乎相等(比值 ~1.0),所以这条仍然有牙齿。 */
+    chk('渐隐填充:外沿衰减到圆心侧的两成以下(没有硬边界)',d2<d0*0.25,
+      '外沿/圆心 = '+(d0?(d2/d0).toFixed(3):'?')+'  (硬边界会是 ~1.0)');
+  })();
+
+  /* 选中态不许把阵营色冲掉。必须问浏览要 computed 值 ——
+     类名加对了、CSS 里也写了那一条，都不等于屏幕上真的是红的（简写属性会后写后赢）。 */
+  (function(){
+    /* 对照必须是【同为红方、一选中一没选中】。
+       拿红卡去比蓝卡是没牙的 —— 退回 border-color 简写后两者依然不同，
+       只是都不对；突变测试里那一条就是这么漏过去的。 */
+    click('[data-scene="1"]'); click('[data-acls="CA"]');
+    click('[data-add="red"]'); click('[data-add="red"]'); updCards();
+    const reds=S.ships.filter(x=>x.side==='red'), nr=reds[reds.length-1], orr=reds[0];
+    const rc=document.querySelector('[data-card="'+nr.id+'"]');
+    const oc=document.querySelector('[data-card="'+orr.id+'"]');
+    const bs=S.ships.filter(x=>x.side==='blue')[0];
+    const bc=document.querySelector('[data-card="'+bs.id+'"]');
+    const cSel=getComputedStyle(rc).borderLeftColor, cUn=getComputedStyle(oc).borderLeftColor,
+          cBlue=getComputedStyle(bc).borderLeftColor;
+    chk('新加的红舰卡片：选中了，但左边框要与【没选中的红卡】一样',
+      rc.classList.contains('sel')&&!oc.classList.contains('sel')&&U.sel===nr.id&&cSel===cUn&&cSel!==cBlue,
+      '选中红 '+cSel+'  未选红 '+cUn+'  蓝 '+cBlue);
+    delShip(nr.id); updCards();
+  })();
+  /* 相机是手动的：加船不许再把全场缩放；滚轮缩放必须锚在光标。 */
+  (function(){
+    click('[data-scene="1"]'); camFit(); drawMap();
+    const k0=S.k;
+    const far=addShip('red','CA',[900000,600000]); updCards(); drawMap();
+    chk('加船不再自动缩放（相机已经交给玩家）',S.k===k0,
+      'k '+k0.toExponential(3)+' -> '+S.k.toExponential(3));
+    const cvm=document.getElementById('cvMap'), rr=cvm.getBoundingClientRect(), mx=220, my=160;
+    camApply(VM); const w0=toW(VM,mx,my);
+    cvm.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,
+      clientX:rr.left+mx,clientY:rr.top+my,deltaY:-400}));
+    camApply(VM); const w1=toW(VM,mx,my);
+    const drift=Math.hypot(w1[0]-w0[0],w1[1]-w0[1]);
+    chk('滚轮缩放且锚在光标（同一个像素仍是同一个世界点）',
+      S.k>k0*1.3&&drift<1e-6,
+      'k x'+(S.k/k0).toFixed(2)+'  光标处世界点漂移 '+drift.toExponential(1)+' km');
+    delShip(far.id); camFit(); updCards();
+  })();
+  /* 新加的【被照到】那一格：方向符号要和真实结果一致。
+     它存在的理由就是让"为什么我黑着他亮着"一眼能读，所以判的是读数与 lit 对不对得上。 */
+  (function(){
+    loadScene([['red','CA',0,0,{emitMode:'paint'}],['blue','DD',220000,0,null],['blue','CA',240000,0,null]]);
+    advance(30); updCards();
+    const q=id=>document.querySelector('[data-card="'+id+'"] .sc-mini .pt');
+    const dTx=q(S.ships[1].id).textContent, cTx=q(S.ships[2].id).textContent;
+    const dIn=q(S.ships[1].id).classList.contains('y'), cIn=q(S.ships[2].id).classList.contains('y');
+    chk('卡片【被照到】一格：远的 CA 写 <且亮，近的 DD 写 >且暗，与 lit 一致',
+      dTx.indexOf('>')>0&&!dIn&&S.ships[1].lit===0&&
+      cTx.indexOf('<')>0&&cIn&&S.ships[2].lit>=2,
+      'DD 「'+dTx.trim()+'」lit'+S.ships[1].lit+'   CA 「'+cTx.trim()+'」lit'+S.ships[2].lit);
+    click('[data-scene="1"]'); updCards();
+  })();
+  /* 比例尺：两条必须描述【同一个 px/km】，而且它必须等于地图变换自己的比例。
+     独立预言机取的是【两艘舰的屏幕距离 / 世界距离】—— 走 toS，不走比例尺那段代码，
+     所以"标注写死"、"光秒换算错"、"条长没跟缩放走"三类错都抳得住。
+     两档缩放各测一次 —— 只测一档的话，一个写死的条长也能蒙混过去。 */
+  (function(){
+    click('[data-scene="1"]'); camFit();
+    const A=S.ships[0], Bb=S.ships[1];
+    const wd=Math.hypot(A.x-Bb.x,A.y-Bb.y);
+    let ok=true, note=[];
+    for(const z of [1,3.5]){
+      S.k*=z; drawMap();
+      const p=toS(VM,A.x,A.y), q=toS(VM,Bb.x,Bb.y);
+      const truth=Math.hypot(p[0]-q[0],p[1]-q[1])/wd;          // px/km,独立预言机
+      const rKm=S.scale.km[1]/S.scale.km[0];
+      const rLs=S.scale.ls[1]/(S.scale.ls[0]*299792.458);
+      const e1=Math.abs(rKm/truth-1), e2=Math.abs(rLs/truth-1);
+      if(!(e1<0.001&&e2<0.001))ok=false;
+      note.push('x'+z+': '+fmtK(S.scale.km[0])+'km='+S.scale.km[1].toFixed(0)+'px / '+
+        (+S.scale.ls[0].toPrecision(3))+'光秒='+S.scale.ls[1].toFixed(0)+'px  误差 '+
+        (e1*100).toFixed(3)+'%/'+(e2*100).toFixed(3)+'%');
+    }
+    chk('比例尺：km 与光秒两条与地图真实比例一致（两档缩放）',ok,note.join('   '));
+    camFit();
+  })();
+  /* 红舰标签必须写出【几级】—— 改写 drawRedCov 时把它弄丢过（用户实报）。
+     判的是 canvas 指令级的文字，不是像素 —— 文字在不在是个确定量，像素不是。 */
+  (function(){
+    loadScene([['blue','DD',0,0,{emitMode:'paint'}],['red','DD',70000,0,null]]); advance(40);
+    const g=VM.g, orig=g.fillText, seen=[];
+    g.fillText=function(t){seen.push(String(t));return orig.apply(this,arguments);};
+    try{drawMap();}finally{g.fillText=orig;}
+    const lv=LIT_NAME[S.ships[1].lit];
+    chk('战术图上红舰标签写着接触等级',
+      S.ships[1].lit>=1&&seen.some(t=>t.indexOf(lv)>=0),
+      'lit'+S.ships[1].lit+'('+lv+')  标签：'+(seen.filter(t=>t.indexOf('DD-2')>=0||t.indexOf('热源')>=0)[0]||'没找到'));
+    click('[data-scene="1"]'); updCards();
+  })();
+  /* 多舰降级：椭圆大到糊地图且没选中时，退成固定屏幕尺寸的字形。
+     判据打 canvas 指令：数 ellipse() 的半轴。反向对照不能少 —— 选中那一条必须仍是真尺寸，
+     否则"全部退成字形"也能骗过去，而那等于把椭圆大小这个读数整个删了。 */
+  (function(){
+    /* 这条测的是椭圆渲染，所以得在椭圆模型下跑。
+       V2 没有模型钮，这一行自然空过 —— 两份判据因此可以逐字相同。 */
+    const hasMdl=!!document.querySelector('[data-model="cov"]');
+    if(hasMdl)click('[data-model="cov"]');
+    loadScene([['blue','DD',0,0,{emitMode:'paint'}],
+               ['red','DD',300000,0,{emitMode:'paint'}],['red','DD',310000,40000,{emitMode:'paint'}],
+               ['red','DD',320000,-40000,{emitMode:'paint'}],['red','DD',330000,80000,{emitMode:'paint'}]]);
+    advance(30); camFit();
+    const reds=S.ships.filter(x=>x.side==='red'&&x.lit>0);
+    U.sel=reds[0].id;
+    /* 镜头得拉到【降级真的会发生】的尺度上 —— camFit 缩得太远时椭圆才 30px，
+       全部低于阈值，这条判据什么都测不到(第一版就是这么假红的)。 */
+    S.k=COV.LOD_PX*2/reds[0].cov.a1;
+    const g=VM.g, orig=g.ellipse, rad=[];
+    g.ellipse=function(x,y,rx,ry){rad.push(rx);return orig.apply(this,arguments);};
+    try{drawMap();}finally{g.ellipse=orig;}
+    const selR=reds[0].cov.a1*VM.k, big=rad.filter(r=>r>COV.LOD_GLYPH+1).length,
+          gly=rad.filter(r=>Math.abs(r-COV.LOD_GLYPH)<0.01).length;
+    chk('多舰时大椭圆退成字形，而选中的仍是真尺寸',
+      reds.length>=4&&gly>=reds.length-1&&big===1&&Math.abs(rad.filter(r=>r>COV.LOD_GLYPH+1)[0]-selR)<0.5,
+      reds.length+' 条接触：'+gly+' 条退成 '+COV.LOD_GLYPH+'px 字形，'+big+
+      ' 条真尺寸('+rad.filter(r=>r>COV.LOD_GLYPH+1).map(r=>r.toFixed(0)+'px')+' = 选中的 ±'+fmtK(reds[0].cov.a1)+')');
+    if(hasMdl)click('[data-model="band"]');
+    click('[data-scene="1"]'); camFit(); updCards();
+  })();
+  /* 三个图层必须画出【不同的东西】。判据打 canvas 指令：
+       真实轮廓 = drawHull(...,'outline') 的次数；接触椭圆 = ellipse() 的次数；"真实"标签 = fillText。
+     三个挡位两两不同，这条才有牙 —— 只判"不报错"的话，三个挡位画得一模一样也能蒙混过去
+     （这正是 V2 里真实发生过的：图层那一段随旧函数被删掉，三个挡位完全一样）。 */
+  (function(){
+    const hasM=!!document.querySelector('[data-model="cov"]');
+    if(hasM)click('[data-model="cov"]');
+    loadScene([['blue','DD',0,0,{emitMode:'paint'}],['red','DD',70000,0,null]]); advance(30); camFit();
+    const probe=function(layer){
+      U.layer=layer;
+      const g=VM.g, oe=g.ellipse, of=g.fillText, od=(typeof drawHull==='function')?drawHull:null;
+      let ell=0, outl=0, real=0;
+      g.ellipse=function(){ell++;return oe.apply(this,arguments);};
+      g.fillText=function(t){if(String(t).indexOf('真实')===0)real++;return of.apply(this,arguments);};
+      if(od)drawHull=function(gg,cls,sc,col,mode){if(mode==='outline')outl++;return od.apply(this,arguments);};
+      try{drawMap();}finally{g.ellipse=oe;g.fillText=of;if(od)drawHull=od;}
+      return {ell:ell,outl:outl,real:real};
+    };
+    const o=probe('obs'), m=probe('mix'), t=probe('true');
+    U.layer='mix';
+    chk('图层三挡各画各的（我方视角 / 叠加 / 真值）',
+      o.outl===0&&o.ell>0&&o.real===0 && m.outl>0&&m.ell>0&&m.real===0 && t.outl>0&&t.ell===0&&t.real>0,
+      '我方视角 轮廓'+o.outl+'/椭圆'+o.ell+'/真实标'+o.real+
+      '   叠加 '+m.outl+'/'+m.ell+'/'+m.real+'   真值 '+t.outl+'/'+t.ell+'/'+t.real);
+    if(hasM)click('[data-model="band"]');
+    click('[data-scene="1"]'); camFit(); updCards();
+  })();
+  updCards(); const node0=document.querySelector('#cards .sc');
+  for(let i=0;i<8;i++){advance(1);updCards();}
+  chk('名册不变时卡片节点没被换掉(RF7c)',document.querySelector('#cards .sc')===node0);
+  const cnt0=document.querySelectorAll('#cards .sc').length;
+  click('[data-add="red"]'); updCards();
+  chk('名册变了就必须重建',document.querySelectorAll('#cards .sc').length===cnt0+1);
+
+  click('#btnClear'); updCards(); drawMap(); updLive();
+  chk('清空:零艘舰、零张卡、地图与解说都不抛',S.ships.length===0&&document.querySelectorAll('#cards .sc').length===0&&/至少一艘舰/.test(document.getElementById('live').textContent));
+
+  let err=null;
+  try{ for(const sc of [1,2,3,4,5,6,7]){ runScene(sc); for(let i=0;i<30;i++){advance(1.5);drawMap();drawPhase();updCards();updLive();} } }
+  catch(e){ err=e.message; }
+  chk('七个场景各推进 45 秒,逐帧重画不抛异常',!err,err||'210 帧 x7');
+
+  $('selftest').style.display='block'; $('selftest').textContent=out.join('\n');
+  document.title=ok?'UITEST:PASS':'UITEST:FAIL';
+  $('selftest').setAttribute('data-ok',ok?'1':'0');
+}
+
+/* ================= 启动:?scene=n&t=秒&layer=obs|mix|true ================= */
+const Q=new URLSearchParams(location.search);
+runScene(Q.has('scene')?+Q.get('scene'):1);
+if(Q.has('layer'))U.layer=Q.get('layer');
+if(['band','cont','cov'].indexOf(Q.get('model'))>=0)U.model=Q.get('model');   /* 截图用:?model=cont 直接开提案模型 */
+if(Q.has('t')){advance(+Q.get('t'));U.paused=true;}
+syncUI(); buildCards(); updCards();
+fit(VM); fit(VP); camFit();
+if(Q.has('selftest'))runSelftest();
+if(Q.has('uitest'))runUitest();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

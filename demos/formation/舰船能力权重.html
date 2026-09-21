@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>舰船能力权重</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --void:#070A10; --plot:#0C111A; --sunk:#090D15;
+  --line:#1D2735; --line-hi:#2C3B4F;
+  --ink:#C6D2E1; --ink-hi:#EAF1F9; --ink-dim:#7C8CA3; --ink-mute:#55637A;
+  --strike:#FFB03D;   /* 打击类 */
+  --guard:#4FE0FF;    /* 防护类 */
+  --sense:#6EE7A8;    /* 感知类 */
+  --net:#B49BFF;      /* 网络电子类 */
+  --hot:#FF6B5A;
+  --grid:rgba(79,224,255,.055);
+  --sp:clamp(16px,2.2vw,26px);
+  --ff:"IBM Plex Sans","PingFang SC","Microsoft YaHei","Hiragino Sans GB",sans-serif;
+  --fm:"IBM Plex Mono","Menlo",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--void);color:var(--ink);font-family:var(--ff);
+  font-size:15px;line-height:1.75;-webkit-font-smoothing:antialiased;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:64px 64px;
+}
+.wrap{max-width:1160px;margin:0 auto;padding:var(--sp) var(--sp) 96px}
+
+.mast{border-bottom:1px solid var(--line);padding-bottom:26px;margin-bottom:34px}
+.kick{font-family:var(--fm);font-size:11px;letter-spacing:.22em;color:var(--guard);text-transform:uppercase;margin-bottom:14px}
+h1{font-size:clamp(30px,5vw,46px);line-height:1.12;font-weight:600;letter-spacing:-.015em;color:var(--ink-hi);text-wrap:balance;margin-bottom:16px}
+.thesis{font-size:clamp(16px,1.9vw,19px);color:var(--ink);max-width:66ch;line-height:1.65}
+.thesis b{color:var(--strike);font-weight:600}
+
+section{margin-top:58px}
+.sec-hd{display:flex;align-items:baseline;gap:14px;margin-bottom:6px}
+.sec-no{font-family:var(--fm);font-size:12px;color:var(--guard);letter-spacing:.14em;flex:none;padding-top:4px}
+h2{font-size:clamp(20px,2.6vw,26px);font-weight:600;color:var(--ink-hi);letter-spacing:-.01em;text-wrap:balance}
+.sec-sub{color:var(--ink-dim);font-size:14px;margin:0 0 24px;max-width:72ch}
+p{max-width:70ch;margin-bottom:15px}
+p b,li b,td b{color:var(--ink-hi);font-weight:600}
+code{font-family:var(--fm);font-size:.9em;background:var(--sunk);border:1px solid var(--line);border-radius:2px;padding:1px 5px;color:var(--guard)}
+
+pre{background:var(--sunk);border:1px solid var(--line);border-radius:3px;padding:16px 18px;overflow-x:auto;margin:8px 0 20px;
+    font-family:var(--fm);font-size:12.5px;line-height:1.85;color:var(--ink)}
+pre .c{color:var(--ink-mute)} pre .k{color:var(--guard)} pre .v{color:var(--strike)} pre .r{color:var(--hot)}
+
+blockquote{margin:14px 0 18px;padding:14px 18px;background:var(--sunk);border-left:2px solid var(--guard);border-radius:0 2px 2px 0;max-width:70ch}
+blockquote p{font-size:13.5px;color:var(--ink);font-style:italic;margin:0;max-width:none}
+blockquote cite{display:block;margin-top:8px;font-family:var(--fm);font-size:10.5px;color:var(--ink-mute);font-style:normal;letter-spacing:.05em}
+
+/* 三层映射 */
+.map{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:3px;overflow:hidden;margin:10px 0 24px}
+.map > div{background:var(--plot);padding:16px 18px;font-size:13.5px}
+.map .hd{background:var(--sunk);font-family:var(--fm);font-size:10.5px;letter-spacing:.1em;color:var(--ink-mute);text-transform:uppercase;display:flex;align-items:center}
+.map .ar{background:var(--sunk);color:var(--guard);display:flex;align-items:center;justify-content:center;font-size:16px;padding:16px 10px}
+.map b{display:block;color:var(--ink-hi);font-size:14.5px;margin-bottom:3px}
+.map span{color:var(--ink-dim);font-size:12.5px}
+
+/* 维度卡 */
+.dims{display:grid;grid-template-columns:repeat(auto-fit,minmax(304px,1fr));gap:14px;margin:10px 0 26px}
+.dim{background:var(--plot);border:1px solid var(--line);border-left:2px solid var(--g);border-radius:0 3px 3px 0;padding:16px 19px}
+.dim h3{font-size:15px;font-weight:600;color:var(--ink-hi);margin-bottom:2px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.dim h3 em{font-style:normal;font-family:var(--fm);font-size:10px;letter-spacing:.1em;color:var(--g);text-transform:uppercase}
+.dim .f{font-family:var(--fm);font-size:11.5px;color:var(--g);background:var(--sunk);border:1px solid var(--line);border-radius:2px;padding:5px 9px;margin:9px 0 11px;overflow-x:auto;white-space:nowrap}
+.bars{display:flex;flex-direction:column;gap:5px;margin-bottom:11px}
+.bar{display:grid;grid-template-columns:30px 1fr 62px;gap:9px;align-items:center;font-family:var(--fm);font-size:10.5px}
+.bar i{color:var(--ink-mute);font-style:normal}
+.bar .t{height:6px;background:var(--sunk);border-radius:3px;overflow:hidden}
+.bar .t s{display:block;height:100%;background:var(--g);text-decoration:none}
+.bar b{color:var(--ink);text-align:right;font-weight:500}
+.dim .geo{font-size:12.5px;color:var(--ink-dim);border-top:1px dashed var(--line);padding-top:10px}
+.dim .geo b{color:var(--g);font-weight:600}
+.g-strike{--g:var(--strike)} .g-guard{--g:var(--guard)} .g-sense{--g:var(--sense)} .g-net{--g:var(--net)}
+
+.tw{overflow-x:auto;margin:6px 0 22px;border:1px solid var(--line);border-radius:3px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:560px}
+th{background:var(--sunk);text-align:left;font-weight:600;color:var(--ink-dim);font-family:var(--fm);
+   font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;padding:10px 15px;border-bottom:1px solid var(--line)}
+td{padding:10px 15px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:none}
+td:first-child{color:var(--ink-hi);font-weight:500}
+.mono{font-family:var(--fm);font-variant-numeric:tabular-nums}
+.up{color:var(--sense)} .dn{color:var(--hot)}
+.tag{display:inline-block;font-family:var(--fm);font-size:10px;letter-spacing:.08em;padding:2px 7px;border-radius:2px;border:1px solid;margin-left:6px;vertical-align:1px}
+.t-src{color:var(--guard);border-color:rgba(79,224,255,.4);background:rgba(79,224,255,.1);font-weight:600}
+.t-code{color:var(--sense);border-color:rgba(110,231,168,.35);background:rgba(110,231,168,.07)}
+.t-2nd{color:var(--ink-dim);border-color:var(--line-hi)}
+.t-non{color:var(--ink-mute);border-color:var(--line);border-style:dashed}
+
+.warn{background:var(--sunk);border:1px solid var(--line-hi);border-left:2px solid var(--hot);border-radius:0 3px 3px 0;padding:18px 22px;margin:14px 0 22px}
+.warn h4{font-size:14.5px;color:var(--hot);margin-bottom:8px;font-weight:600}
+.warn p{font-size:13.5px;color:var(--ink-dim);margin:0;max-width:68ch}
+.warn p + p{margin-top:8px}
+
+.ask{background:var(--sunk);border:1px solid var(--line-hi);border-radius:3px;padding:22px 25px;margin-top:12px}
+.ask h3{font-size:15px;color:var(--strike);margin-bottom:13px;font-weight:600}
+.ask ol{padding-left:20px;margin:0}
+.ask li{padding-left:6px;margin-bottom:12px}
+.ask li::before{display:none}
+.ask li::marker{font-family:var(--fm);color:var(--ink-mute);font-size:13px}
+
+ul{margin:0 0 18px;padding-left:0;list-style:none;max-width:70ch}
+li{position:relative;padding-left:20px;margin-bottom:9px}
+li::before{content:"";position:absolute;left:4px;top:.72em;width:5px;height:1px;background:var(--ink-mute)}
+
+footer{margin-top:66px;padding-top:20px;border-top:1px solid var(--line);font-family:var(--fm);font-size:11px;color:var(--ink-mute);letter-spacing:.05em;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+:focus-visible{outline:2px solid var(--guard);outline-offset:2px}
+@media (max-width:700px){ .map{grid-template-columns:1fr} .map .hd,.map .ar{display:none} }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<div class="mast">
+  <div class="kick">Space Power · 舰船能力权重 · 思路</div>
+  <h1>舰船能力权重</h1>
+  <p class="thesis">你想要的东西现实里真的存在，但它不是"每个维度一个分"——是一张<b>矩阵</b>：行是任务领域，列是戒备等级，格子里填的是四档达成度而不是数字。而游戏这边的数据基础已经够了，关键是有几个字段的强弱关系跟吨位<b>正好是反的</b>，所以一个总分排不出正确的站位。</p>
+</div>
+
+<div class="warn" style="margin-top:24px">
+  <h4>第二版更正了第一版的一处映射</h4>
+  <p>第一版把条令的 <b>P/S 标记</b>映射成"主责/兼职"，用来给站位分配排优先级。<b>这是错的。</b>通读原件后确认：P/S 是"这个舰级被设计来干什么"的静态标注，而它的用途在文件里写得很死——ROC 与 POE 一起"确立可产生<b>可测量工作量</b>的任务，用于计算舰员编制文件的人力需求"。<b>算编制员额用的，不是算战术优先级用的。</b></p>
+  <p>旁证：扫雷舰的 <code>MOS</code>（国家任务）也标 P，而 MOS 根本不是作战领域。替代品见第 02 节的 <b>F / L / A / E</b>，比我原来猜的"分数加受限标志"更好用。</p>
+</div>
+
+<section>
+  <div class="sec-hd"><div class="sec-no">01</div><h2>现实里的样子</h2></div>
+  <p class="sec-sub">下面每条都从本地一手原件读出来并自己核过。两份 PDF 与全文 txt 都在 scratchpad，可直接 grep。</p>
+
+  <p>框架文件 OPNAV C3501.2K 本身是保密的，但<b>各舰级的 ROC/POE 分册大量公开</b>，正文里就印着领域清单与定义。复仇者级扫雷舰那份的表 1-1 长这样：</p>
+
+  <blockquote>
+    <p>"the primary (P) and secondary (S) warfare mission areas are assigned as in table 1-1"</p>
+    <cite>OPNAVINST 3501.164E · 全文 txt 第 42 行 · 已自核</cite>
+  </blockquote>
+
+  <div class="tw"><table>
+    <thead><tr><th>码</th><th>全称</th><th>该舰</th><th>码</th><th>全称</th><th>该舰</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">CCC</td><td>指挥、控制、通信</td><td class="mono up">P</td><td class="mono">MIW</td><td>水雷战</td><td class="mono up">P</td></tr>
+      <tr><td class="mono">LOG</td><td>后勤</td><td class="mono up">P</td><td class="mono">MOB</td><td>机动</td><td class="mono up">P</td></tr>
+      <tr><td class="mono">MOS</td><td>国家任务</td><td class="mono up">P</td><td class="mono">EW</td><td>电子战</td><td class="mono">S</td></tr>
+      <tr><td class="mono">FHP</td><td>部队卫勤</td><td class="mono">S</td><td class="mono">FSO</td><td>舰队支援作业</td><td class="mono">S</td></tr>
+      <tr><td class="mono">INT</td><td>情报作业</td><td class="mono">S</td><td class="mono">IO</td><td>信息作战</td><td class="mono">S</td></tr>
+      <tr><td class="mono">NCO</td><td>非战斗行动</td><td class="mono">S</td><td class="mono">SUW</td><td>水面战</td><td class="mono">S</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>战斗舰艇另有 <code>AAW</code> 防空、<code>ASW</code> 反潜、<code>STW</code> 对陆打击、<code>AMW</code> 两栖；别的单位类型还会冒出 <code>EXW</code>、<code>CO</code> 网络空间作战等。<b>领域集合是按单位类型可扩展的，不是一张封闭表</b>——这一点对游戏很重要，意味着加新维度不需要推翻结构。</p>
+
+  <p>我特意问过"作战领域和支援职能怎么二分"，答案是<b>查不到成文的二分法</b>。条令只用 P/S 这一维，而 P/S 是按<b>这艘舰被设计来干什么</b>定的，不是按领域本身的性质。同一个 CCC 在扫雷舰是 P，在别的舰可能是 S。</p>
+
+  <h3 style="font-size:16px;color:var(--ink-hi);margin:26px 0 10px">派谁去干某件事，成文依据只有两个词</h3>
+  <blockquote>
+    <p>"…the specific duties of the radar guardship, fighter direction ship, radar picket, radar intercept ship or radar jamming ship are assigned to ships in the force <b>depending on the extent of equipment installed and the state of training of personnel</b>."</p>
+    <cite>USF 10B §6172 · 全文 txt 第 7141 行 · 已自核</cite>
+  </blockquote>
+  <p><b>装备完备程度 + 人员训练状态。</b>没有第三个。而现代实务里的归因更反直觉：防空指挥官通常由巡洋舰舰长担任，理由是"这些舰的作战情报中心是专门为内层空战设计的"——<b>防空指挥权跟着雷达与指挥中心走，不跟着导弹数量走</b>。</p>
+
+  <h3 style="font-size:16px;color:var(--ink-hi);margin:26px 0 10px">确实按领域打分，而且是两套</h3>
+  <p><b>战备版</b>：SORTS 的 M-Rating，M1 完全胜任到 M5 未准备好，五档。四类输入对每个领域独立评：人员、装备与补给在位量、装备状态、训练。<b>训练版</b>：四档，带公式——</p>
+  <pre><span class="c">// 该领域中评为 M-1/M-2/M-3/M-4 的演练科目数分别为 A/B/C/D</span>
+factor = (A + <span class="v">0.75</span>B + <span class="v">0.5</span>C) / (A + B + C + D)
+
+<span class="k">M-1</span> 1.000–0.850    <span class="k">M-2</span> 0.849–0.700
+<span class="k">M-3</span> 0.699–0.550    <span class="k">M-4</span> ≤0.549
+<span class="c">// 只有"合格完成"的科目计入</span></pre>
+
+  <h3 style="font-size:16px;color:var(--ink-hi);margin:26px 0 10px">但真正有启发的是 ROC 语句的形状：它是矩阵，不是清单</h3>
+  <p>领域之下不是一个数，是一棵<b>带编号的能力语句树</b>；而每条语句<b>横着还有一排格子</b>，对应不同戒备等级下这项能力剩多少。原件里 <code>CCC 6</code> 那段最干净：</p>
+  <pre><span class="c">                                                         戒备等级 →</span>
+<span class="k">CCC 6.1</span>  Maintain tactical voice communications.          <span class="v">F  F  F  F  F/A</span>
+<span class="k">CCC 6.2</span>  Maintain visual communications.                  <span class="r">L  L  L  L  L</span>
+         <span class="r">I (L)</span> - Maintain communications with one contact using
+                 a single operator-recorder watch stander.
+<span class="k">CCC 6.6</span>  Process messages.                                <span class="v">F  F  F  F  F</span>
+<span class="k">CCC 6.7</span>  Maintain underwater communications.              <span class="v">F  F/E</span>
+<span class="k">CCC 2.8</span>  <span class="v">I, II, III, IV</span> <span class="r">(L)</span> - Emergency initial response only
+                          until more capable unit arrives on scene.</pre>
+
+  <p><b>格子里填的是四档达成度，不是分数：</b></p>
+  <div class="tw"><table>
+    <thead><tr><th>符号</th><th>条令定义</th><th>关键含义</th></tr></thead>
+    <tbody>
+      <tr><td class="mono up">F</td><td>Full</td><td>完全达成，装备按设计满编值守，<b>并在该状态全程维持</b></td></tr>
+      <tr><td class="mono dn">L</td><td>Limited</td><td>只部分实现，<b>每一个 L 都必须附一句限制说明</b>（旧的 P = Partial 已废止）</td></tr>
+      <tr><td class="mono">A</td><td>Augmentation</td><td>该状态内<b>有限时间</b>达成，靠下更人员顶上。必附在 F 或 L 后</td></tr>
+      <tr><td class="mono">E</td><td>Special Team</td><td>有限时间达成，靠特勤组，<b>不需要连续值更</b>。必附在 F 或 L 后</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>所以现实的答案是：<b>不是标量，是四档达成度加强制说明，而且按戒备等级分列</b>。<code>F/A</code> 读作"平时满，紧张时靠抽人手才勉强满"。</p>
+
+  <p>最后那条 <code>CCC 2.8</code>——"在更有能力的单位到场前先顶一下"——正是 Total War 与 Distant Worlds 2 都被迫加的<b>兜底槽位</b>。三个互不相干的来源指向同一个工程约束，这条一定要抄。</p>
+</section>
+
+<section>
+  <div class="sec-hd"><div class="sec-no">02</div><h2>映射到游戏：三层，不是一层</h2></div>
+  <p class="sec-sub">照搬现实的三层结构，每层都在游戏里有明确对应物，而且都能从配装算出来。</p>
+
+  <div class="map">
+    <div class="hd">行</div><div><b>任务领域</b><span>AAW · EW · CCC · MOB · MIW…，按单位类型可扩展</span></div>
+    <div class="ar">→</div><div><b>能力维度</b><span>十一个，各自一个从配装算出的标量</span></div>
+
+    <div class="hd">格</div><div><b>F / L / A / E 达成度</b><span>满 / 受限必附说明 / 靠抽人手 / 靠特勤组</span></div>
+    <div class="ar">→</div><div><b>常备 · 受限 · 消耗品</b><span>见下方三行的对应关系</span></div>
+
+    <div class="hd">列</div><div><b>戒备等级</b><span>Condition I / IM / II / IIM / III / IV / V</span></div>
+    <div class="ar">→</div><div><b>当前开关状态</b><span>ciwsOn · lidar · ecm · ROE，能力是矩阵不是向量</span></div>
+  </div>
+
+  <p><b>F / L / A / E 这一层是最有用的，而且游戏里有个现成的、我原先没想到的对应物。</b>条令区分的是"常备装备就能持续做到"与"靠临时抽调、只能维持有限时间"。游戏里这条线就是<b>常备能力与消耗品能力的分界</b>：</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>档</th><th>游戏里的判据</th><th>实例</th></tr></thead>
+    <tbody>
+      <tr><td class="mono up">F</td><td>被动生效、不耗资源、参数达标</td><td>驱逐舰的贴身护航：<code>inner 8000</code> 够得着，命中瞬间自动叠乘，打多久都在</td></tr>
+      <tr><td class="mono dn">L</td><td>有该能力但关键参数够不到门槛<br><b>必须附一句为什么受限</b></td><td>巡洋舰的贴身护航：<code>inner 5000</code>，装了近防所以不是零，但贴不到位</td></tr>
+      <tr><td class="mono">A</td><td>靠库存，打光就没了</td><td>防空通道 <code>interMax 384</code>、导弹齐射 <code>ammo</code></td></tr>
+      <tr><td class="mono">E</td><td>库存极少，本来就不指望连续用</td><td>信标 <code>beaconMax 2</code>（巡洋舰是 0，连 E 都不是）</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>这个区分很要紧：<b>现在的权重公式把常备能力和消耗品能力混在一起算了</b>。"防空通道 = interMax × outer"里的 384 发拦截弹是会打光的，而"贴身 = inner × innerIntercept"永远在。两者不该用同一种数参与站位分配——前者应该随剩余库存衰减，后者不该。</p>
+
+  <p>第三层（列）顺带解掉了我原来列的一个开放问题："权重用能力还是当前状态"。<b>条令的答案是两个都要，做成矩阵</b>：能力是行，戒备等级是列，同一条能力在不同等级下各有一个达成度。游戏里 <code>ciwsOn=false</code> 就是防空维度整行归零，<code>lidar=true</code> 就是主动探测可用但暴露——这些本来就是列。</p>
+</section>
+
+<section>
+  <div class="sec-hd"><div class="sec-no">03</div><h2>八个维度与它们的公式</h2></div>
+  <p class="sec-sub">全部从实例字段算，不查舰种表。条形图是驱逐舰与巡洋舰的实算值，按各维度最大值归一。数值取自 51-defs / 20-signature / 11-classes。</p>
+
+  <div class="dims">
+
+    <div class="dim g-guard">
+      <h3>防空 · 贴身 <em>screen</em></h3>
+      <div class="f">inner × innerIntercept</div>
+      <div class="bars">
+        <div class="bar"><i>DD</i><div class="t"><s style="width:100%"></s></div><b>6 800</b></div>
+        <div class="bar"><i>CA</i><div class="t"><s style="width:29.4%"></s></div><b>2 000</b></div>
+      </div>
+      <div class="geo">要求 <b>距被护舰 ≤ 8 000</b>。内圈是命中瞬间逐舰叠乘，够不着就是零贡献。已在阶段 2 实装。</div>
+    </div>
+
+    <div class="dim g-guard">
+      <h3>防空 · 通道 <em>channel</em></h3>
+      <div class="f">interMax × outer</div>
+      <div class="bars">
+        <div class="bar"><i>DD</i><div class="t"><s style="width:100%"></s></div><b>9.6e6</b></div>
+        <div class="bar"><i>CA</i><div class="t"><s style="width:50%"></s></div><b>4.8e6</b></div>
+      </div>
+      <div class="geo">要求 <b>环上摊开、别重叠</b>。一组来袭只被拦一次，重叠是纯浪费。与贴身那条<b>直接冲突</b>。</div>
+    </div>
+
+    <div class="dim g-strike">
+      <h3>主炮 <em>gun</em></h3>
+      <div class="f">macDmg / macReload　（射程 150k）</div>
+      <div class="bars">
+        <div class="bar"><i>DD</i><div class="t"><s style="width:55%"></s></div><b>7.33</b></div>
+        <div class="bar"><i>CA</i><div class="t"><s style="width:100%"></s></div><b>13.33</b></div>
+      </div>
+      <div class="geo">射程 150k 是全场最短，理应 <b>压威胁轴前方</b>先接敌。但见下方那条警告。</div>
+    </div>
+
+    <div class="dim g-strike">
+      <h3>导弹齐射 <em>salvo</em></h3>
+      <div class="f">missDmg × mslPer × cells / mslReload</div>
+      <div class="bars">
+        <div class="bar"><i>DD</i><div class="t"><s style="width:53.3%"></s></div><b>9.6</b></div>
+        <div class="bar"><i>CA</i><div class="t"><s style="width:100%"></s></div><b>18.0</b></div>
+      </div>
+      <div class="geo">射程 350k，<b>站哪都够得着</b>，对站位没有约束力。齐射量决定的是"够不够跨过对方拦截池门槛"。</div>
+    </div>
+
+    <div class="dim g-sense">
+      <h3>被动探测 · 红外 <em>ir</em></h3>
+      <div class="f">detPower²　（floorIr = 3e-11 / detPower）</div>
+      <div class="bars">
+        <div class="bar"><i>DD</i><div class="t"><s style="width:64%"></s></div><b>0.64</b></div>
+        <div class="bar"><i>CA</i><div class="t"><s style="width:100%"></s></div><b>1.00</b></div>
+      </div>
+      <div class="geo">要求 <b>两翼拉开</b>：单站只有角度，双站才解得出距离。巡洋舰强 1.56 倍。</div>
+    </div>
+
+    <div class="dim g-sense">
+      <h3>被动探测 · 射频 <em>esm</em></h3>
+      <div class="f">esmQual²　（floorEsm = 1.2e-11 / esmQual）</div>
+      <div class="bars">
+        <div class="bar"><i>DD</i><div class="t"><s style="width:100%"></s></div><b>0.5625</b></div>
+        <div class="bar"><i>CA</i><div class="t"><s style="width:64%"></s></div><b>0.36</b></div>
+      </div>
+      <div class="geo"><b>驱逐舰反过来强 1.56 倍，与红外正好对称反转。</b>这就是一个总分排不出站位的根本原因。</div>
+    </div>
+
+    <div class="dim g-sense">
+      <h3>主动照射 <em>ladar</em></h3>
+      <div class="f">pPing　（自带暴露代价 E_LIDAR = 10）</div>
+      <div class="bars">
+        <div class="bar"><i>DD</i><div class="t"><s style="width:70%"></s></div><b>0.7</b></div>
+        <div class="bar"><i>CA</i><div class="t"><s style="width:100%"></s></div><b>1.0</b></div>
+      </div>
+      <div class="geo">要求 <b>前出且孤立</b>。开机就是全场最亮的辐射源，比 ECM 还亮三倍，站在队里等于把整队位置标出来。</div>
+    </div>
+
+    <div class="dim g-sense">
+      <h3>隐蔽 <em>signature</em></h3>
+      <div class="f">1 / (sigBase × rcs)　越大越隐蔽</div>
+      <div class="bars">
+        <div class="bar"><i>DD</i><div class="t"><s style="width:100%"></s></div><b>2.38</b></div>
+        <div class="bar"><i>CA</i><div class="t"><s style="width:42%"></s></div><b>1.00</b></div>
+      </div>
+      <div class="geo">决定 <b>派谁前出侦察</b>。驱逐舰强 2.38 倍——这是它最突出的一项。</div>
+    </div>
+
+    <div class="dim g-net">
+      <h3>网络中枢 <em>c2</em></h3>
+      <div class="f">guideChan　（同时引导超自导导弹数）</div>
+      <div class="bars">
+        <div class="bar"><i>DD</i><div class="t"><s style="width:33.3%"></s></div><b>1</b></div>
+        <div class="bar"><i>CA</i><div class="t"><s style="width:100%"></s></div><b>3</b></div>
+      </div>
+      <div class="geo">要求 <b>居中、被保护</b>。丢了它全队超视距引导能力崩掉。这一维度对应条令的 CCC，而且正好印证"防空指挥权跟着指挥中心走"。</div>
+    </div>
+
+    <div class="dim g-net">
+      <h3>电子战 <em>ew</em></h3>
+      <div class="f">ecmPower　（开机 E_ECM = 3.0）</div>
+      <div class="bars">
+        <div class="bar"><i>DD</i><div class="t"><s style="width:60%"></s></div><b>0.3</b></div>
+        <div class="bar"><i>CA</i><div class="t"><s style="width:100%"></s></div><b>0.5</b></div>
+      </div>
+      <div class="geo">要求 <b>偏离阵心</b>。开 ECM 等于举着灯站在队伍里。条令里 EMCON 是全编队级的统一限制，不是单舰决定。</div>
+    </div>
+
+    <div class="dim g-guard">
+      <h3>生存 <em>survivability</em></h3>
+      <div class="f">hp / (1 − chaffRate)　等效血量</div>
+      <div class="bars">
+        <div class="bar"><i>DD</i><div class="t"><s style="width:69.2%"></s></div><b>733</b></div>
+        <div class="bar"><i>CA</i><div class="t"><s style="width:100%"></s></div><b>1 059</b></div>
+      </div>
+      <div class="geo">与防空是<b>两回事</b>：防空是拦下来，生存是扛下来或骗过去。能扛的<b>挡在威胁轴上</b>。</div>
+    </div>
+
+    <div class="dim g-net">
+      <h3>机动 <em>mobility</em></h3>
+      <div class="f">thrust · turnRate · 顶档</div>
+      <div class="bars">
+        <div class="bar"><i>DD</i><div class="t"><s style="width:100%"></s></div><b>20 / .26 / 800</b></div>
+        <div class="bar"><i>CA</i><div class="t"><s style="width:64%"></s></div><b>15 / .16 / 700</b></div>
+      </div>
+      <div class="geo">条令明写扇区分配依据之一是<b>相对被护部队的速度优势</b>：快的吃更宽的扇区。对应领域码 MOB。</div>
+    </div>
+
+  </div>
+
+  <div class="warn">
+    <h4>打击这两维现在排不出站位，因为射程按舰种完全相同</h4>
+    <p>主炮 <code>macRange</code> 两型都是 150 000，导弹 <code>mslRange</code> 两型都是 350 000，只有伤害量的差别（巡洋舰约为驱逐舰的 1.85 倍，主炮与导弹这个比例几乎一样）。<b>所以"打击权重"只能排出强弱，排不出"谁该靠前"</b>——而站位分配需要的恰恰是后者。</p>
+    <p>要让打击维度真正影响站位，得先让射程按配装有差异。这是数值层的事，不在编队重构范围内，但如果你希望"炮舰靠前、导弹舰靠后"成立，就得先动它。</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-hd"><div class="sec-no">04</div><h2>为什么不能是一个总分</h2></div>
+  <p class="sec-sub">这是整份思路里最重要的一条：每个维度要求的几何不一样，有些还互相打架。所以正确用法不是算总分排序，是每个维度把船往不同方向推，最后解一个分配问题。</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>维度</th><th>它想要的位置</th><th>硬约束来自</th></tr></thead>
+    <tbody>
+      <tr><td>防空 · 贴身</td><td>距被护舰 ≤ 8 000</td><td class="mono">内圈叠乘门槛</td></tr>
+      <tr><td>防空 · 通道</td><td>环上摊开，间距 ≥ outer</td><td class="mono">一组只拦一次</td></tr>
+      <tr><td>主炮</td><td>威胁轴前方</td><td class="mono">射程 150k 最短</td></tr>
+      <tr><td>被动探测</td><td>两翼拉开</td><td class="mono">视差基线才有距离</td></tr>
+      <tr><td>主动照射</td><td>前出且孤立</td><td class="mono">自身是最亮辐射源</td></tr>
+      <tr><td>隐蔽</td><td>前出</td><td class="mono">侦察选派依据</td></tr>
+      <tr><td>网络中枢</td><td>阵心、被保护</td><td class="mono">失去即全队失能</td></tr>
+      <tr><td>电子战</td><td>偏离阵心</td><td class="mono">开机即暴露位置</td></tr>
+      <tr><td>生存</td><td>挡在威胁轴上</td><td class="mono">能扛的挡前面</td></tr>
+      <tr><td>机动</td><td>吃更宽的扇区</td><td class="mono">条令的扇区分配依据</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>看第一和第二行：<b>同一个"防空"里就已经自相矛盾</b>——贴身要 ≤8 000，通道要摊开。这正对应条令里"反潜屏护与防空屏护要求冲突时靠分层承担"那条。所以八个维度不是八个并列的分数，是一组<b>互相竞争的站位诉求</b>，而站位表恰好是解决竞争的机制：一个站位只能给一艘船。</p>
+
+  <p>落到实现上，形状大致是：每个维度对每个空站位打一个契合度分，然后解一个指派问题。这比现在的"按能力分降序填站"要重，但结构是同一个——现在那套是它<b>只有一个维度时的特例</b>，所以不是推翻重来。</p>
+
+  <h3 style="font-size:16px;color:var(--ink-hi);margin:28px 0 10px">冲突怎么裁：不是排序，是降级并说明</h3>
+  <p>我原以为条令里会有"领域优先级表"，追问下来<b>确认没有</b>。真正的机制是三条，而且第三条最有用：</p>
+  <ul>
+    <li><b>没有"一舰一职"的限制，兼任是常态。</b>但兼任的是<b>人和参谋班子</b>，不是舰——海上战斗指挥官一人同时戴八顶帽子，因为他有编制参谋可以分工。反例正好印证：防空指挥官<b>不</b>兼任，是全编队唯一不在航母上的作战指挥官，因为那些舰的作战情报中心是为内层空战专门设计的。</li>
+    <li><b>有冲突时由主威胁触发修改，不事前排序。</b>反潜流程是基准，"在其与防空保护要求冲突的情况下，可能有必要加以修改"；配合 CWC 的"否决式指挥"——不事前排序，靠事后否决。</li>
+    <li><b>真正的消解维度是达成度降级。</b>两个领域抢同一艘舰，解法是把其中一个<b>降为 L 并附一句限制说明</b>，或标成 A / E 表示只能靠临时抽调间歇实现。<b>这是人力冲突模型，不是优先级排序模型。</b></li>
+  </ul>
+
+  <p>第三条直接给出了游戏该怎么做。指派问题解完之后，输的那个维度<b>不是消失，是降级</b>，而且降级必须带理由。落到界面上就是编队面板可以显示：</p>
+  <pre><span class="c">编队 1  四舰</span>
+防空·贴身   <span class="v">F</span>   两艘驱逐舰在内圈带
+防空·通道   <span class="r">A</span>   拦截弹 512/768，按当前消耗约够 2 次饱和来袭
+网络中枢    <span class="v">F</span>   巡洋舰居中受护
+前出侦察    <span class="r">L</span>   <span class="c">唯一低信号舰已占贴身站位，改由巡洋舰前出，被发现距离 +138%</span>
+电子战      <span class="r">L</span>   <span class="c">ECM 舰在阵心，开机将暴露整队位置</span></pre>
+  <p>这比"算完总分闷头排站"信息量大得多，而且<b>每一条 L 都强制带出它为什么受限</b>——这正是条令要求"每一个 L 都必须附一句限制说明"的用意。玩家因此知道该补什么船，而不是只看到一个排好的队形。</p>
+</section>
+
+<section>
+  <div class="sec-hd"><div class="sec-no">05</div><h2>三个代码事实会咬人</h2></div>
+  <div class="tw"><table>
+    <thead><tr><th>事实</th><th>后果</th></tr></thead>
+    <tbody>
+      <tr><td><code>outerIntercept</code> 是死字段</td><td><code>52-fire.js:74</code> 明写"声明后全库零读取，面板绝不能放它"。任何权重公式碰它都等于调了个没人读的数。外圈拦截率的真实旋钮是 <code>interHitMul</code>。</td></tr>
+      <tr><td><code>CLS_VALUE</code> 就是那个 tag</td><td>DD 2 / CA 3，纯按舰种查表。它被 <code>07-missiles.js:297</code> 的伏击雷阈值 <code>shipValue(s) &lt; 3</code> 读——<b>换成算出来的权重会静默改变伏击名单</b>。这是替换它唯一的硬耦合点。</td></tr>
+      <tr><td>"雷达"不是一个东西</td><td>是红外、射频、激光雷达三条通道，前两条被动、第三条主动且自带暴露代价。所以"雷达权重"必须至少拆成被动与主动两个，否则表达不出"谁该去当那个暴露自己的人"。</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <div class="sec-hd"><div class="sec-no">06</div><h2>动手前要你定的</h2></div>
+  <div class="ask">
+    <h3>四个边界，不先定会跑偏</h3>
+    <ol>
+      <li><b>绝对值还是队内相对值？</b>条令是相对的（"能力较弱的防空舰放威胁轴 10 海里以内"），M-Rating 也是分档而不是原始分。<b>阶段 2 刚在这上面栽过</b>——实现私自加了条 <code>score &lt; 0.5 × maxScore</code> 的相对规则，被审查抓出来只因为规格没写。这次必须先说清，而且要写进规格。</li>
+      <li><s style="color:var(--ink-mute)">权重用能力还是当前状态？</s> <b>这条已由条令回答，不用你定</b>：两个都要，做成矩阵。能力是行，戒备等级是列，同一条能力在不同状态下各有一个达成度。<code>ecmPower</code> / <code>pPing</code> 是行，<code>ecm</code> / <code>lidar</code> / <code>ciwsOn</code> 是列。<b>换成要你定的新问题：游戏里的"戒备等级"取什么？</b>候选是武器开关三件套、ROE 三档、或另设一个编队级的戒备档。我倾向<b>直接用现有开关，不新造概念</b>。</li>
+      <li><b>要不要替换 <code>CLS_VALUE</code>？</b>替换后舰种 tag 就彻底消失，代价是动到伏击雷名单。可以先并存：新权重给编队用，<code>shipValue</code> 维持原样给武器系统用，等确认再合并。</li>
+      <li><b>先做几个维度？</b>十一个全上会让站位分配一次变得很重。我倾向先上<b>防空贴身、防空通道、网络中枢、生存</b>四个——它们各自的几何诉求最明确、互相冲突也最典型，足以把多维分配的骨架立起来；探测与电子战那几个等前四个跑顺再加。</li>
+    </ol>
+  </div>
+</section>
+
+<section>
+  <div class="sec-hd"><div class="sec-no">07</div><h2>还没查到的</h2></div>
+  <ul>
+    <li><b>NWP 3-56（复合战指挥官条令）正文没拿到。</b>四个托管点全部 403 或 429。所以"作战指挥官应是可用者中最够格的"这条只能算二手转述，不能当硬依据。</li>
+    <li><b>OPNAV C3501.2K 是保密件</b>，完整的领域码总表拿不到。现有清单是从两份公开舰级分册的正文里拼的，可能不完整。</li>
+    <li><b>两套 M-Rating 的档数对不上，衔接是推断。</b>战备版 M1–M5 五档，训练版只有 M-1–M-4 四档，<b>没有找到成文的换算表</b>。合理猜测是 M5 属于"无该领域任务/不适用"的行政档、训练侧不产生，但这是推断。</li>
+    <li><b>生存力在现实里没有独立领域，被并进 MOB 了</b>——<code>MOB 3 PREVENT AND CONTROL DAMAGE</code>（火灾、进水、结构与动力损伤），CBR 防护另拆到 <code>MOB 12</code> 与 <code>FHP 25</code>。<b>抗沉与结构完整性找不到独立条目</b>，最接近的就是 MOB 3.1 里的"进水"与"结构损伤"。战斗舰的 ROC 不公开，所以是否另有装甲/冗余/隔舱条款查不到。我在第 03 节把"生存"单列，现在可以明说：<b>这是我的设计判断，条令是把它并进机动的。</b></li>
+    <li><b>游戏侧全部未上手验证。</b>以上公式都是我从字段推的，数值也都是算出来的，但没有一条在实际对局里跑过。手感是另一回事。</li>
+  </ul>
+
+  <div class="warn" style="border-left-color:var(--net)">
+    <h4>一条暂时用不上但值得记着的：能力会随时间衰减</h4>
+    <p>训练版 M-Rating 的衰减规则内建在科目编号里，形如 <code>MOB-S-10-SF (6,12,18)</code>——括号里三个数就是衰减节点：录入即 M-1，6 个月降 M-2，12 个月降 M-3，18 个月降 M-4，<b>任何时候重做一次即恢复 M-1</b>。反向规则也写明：一次不合格的重做若显示熟练度已丧失，可直接把该科目重置为 M-4。</p>
+    <p>这个游戏里没有训练系统，所以现在用不上。但"能力不是常数、会衰减、重做即恢复"是个现成的机制原型，如果以后想做战役层或舰员疲劳，这套编号法可以直接搬。</p>
+  </div>
+</section>
+
+<footer>
+  <span>一手原件：USF 10B 1945 · OPNAVINST 3501.164E（均已下载到本地，可 grep）· 承重引文已逐条自核</span>
+  <span>2026-09 · Space Power</span>
+</footer>
+
+</div>
+
+</body>
+</html>

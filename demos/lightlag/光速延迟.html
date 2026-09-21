@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>光速延迟 · 观测演示</title>
+<style>
+:root{
+  --void:#05070c; --srf-raise:#0e1420; --srf-hover:#16202f; --srf-sunk:#0a0f17;
+  --line-hair:#141c27; --line:#1e2836; --line-ctl:#2a3a50; --line-acc:#34527d;
+  --txt-hi:#e8eef7; --txt:#c7d0dc; --txt-read:#dbe6f2; --txt-dim:#6a7d92; --txt-mute:#46566a;
+  --acc:#5aa7ff; --acc-lite:#9fd4ff; --acc-wash:rgba(90,167,255,.14);
+  --hostile:#ff6b6b; --warn:#ff9a55; --sel:#ffe066; --beam:#d68cff; --see:#54e0d0;
+  --ff-ui:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;
+  --ff-mono:Consolas,"Cascadia Mono","DejaVu Sans Mono",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--void);color:var(--txt);font:13px/1.2 var(--ff-ui);-webkit-font-smoothing:antialiased}
+#app{display:grid;grid-template-rows:auto minmax(0,1fr);height:100vh;gap:8px;padding:8px 10px}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
+.brand{font-size:15px;color:var(--txt-hi);letter-spacing:.08em}
+.ctl{display:flex;align-items:center;gap:6px;color:var(--txt-dim);font-size:11px;letter-spacing:.08em}
+.ctl input[type=range]{width:88px;accent-color:var(--acc)}
+.rd{font:13px var(--ff-mono);color:var(--txt-read);letter-spacing:0;min-width:64px}
+.clock{margin-left:auto;display:flex;align-items:baseline;gap:8px;color:var(--txt-dim);font-size:11px;letter-spacing:.08em}
+.clock b{font:15px var(--ff-mono);color:var(--txt-hi);font-weight:normal;letter-spacing:0;min-width:110px;text-align:right}
+.btn{display:inline-flex;align-items:center;justify-content:center;background:var(--srf-raise);border:1px solid var(--line-ctl);
+  border-radius:2px;color:var(--txt-dim);font:12px var(--ff-ui);padding:5px 9px;cursor:pointer;white-space:nowrap;user-select:none}
+.btn:hover{color:var(--txt-hi);border-color:var(--line-acc);background:var(--srf-hover)}
+.btn.on{color:var(--acc-lite);background:var(--acc-wash);border-color:var(--acc)}
+.btn.chip{padding:3px 7px;font-size:11px}
+.btn.fire-b{border-color:#5b3a74}.btn.fire-b:hover{border-color:var(--beam)}
+.btn.fire-s{border-color:#6b4a2a}.btn.fire-s:hover{border-color:var(--warn)}
+.seg{display:inline-flex}.seg .btn{border-radius:0;margin-left:-1px}
+.seg .btn:first-child{border-radius:2px 0 0 2px;margin-left:0}.seg .btn:last-child{border-radius:0 2px 2px 0}
+main{display:grid;grid-template-columns:300px minmax(0,1.25fr) minmax(0,1fr);gap:8px;min-height:0}
+#side{display:flex;flex-direction:column;gap:8px;min-height:0;overflow:auto}
+.card{border:1px solid var(--line);border-radius:3px;padding:8px 10px;background:var(--srf-sunk)}
+.card.grow{flex:1 1 auto;min-height:120px;overflow:auto}
+.card h3{font-size:11px;font-weight:normal;color:var(--txt-dim);letter-spacing:.08em;margin-bottom:7px}
+.card h3 small{font:10px var(--ff-mono);color:var(--txt-mute);letter-spacing:.14em;margin-left:6px}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:6px}
+.row:first-of-type{margin-top:0}
+.row>span{font-size:11px;color:var(--txt-dim);letter-spacing:.08em;width:52px}
+.row.scenes{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}   /* 场景四个按钮排一行:左栏内容只有约 278 px,内边距和字号收一点 */
+.row.scenes .btn{padding:5px 2px;font-size:11px;letter-spacing:0}
+#btnQuantum{padding:7px 9px}   /* 左栏里独占一行的通信设定开关,flex 列里自动撑满宽度 */
+#narr{font-size:12.5px;line-height:1.7;color:var(--txt)}
+#live{margin-top:8px;font-size:12px;line-height:1.6;color:var(--sel)}
+.m{font-family:var(--ff-mono);color:var(--txt-read)}
+.col{display:grid;grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:8px;min-height:0}
+.pane{position:relative;border:1px solid var(--line);border-radius:3px;overflow:hidden;min-height:0;background:var(--void)}
+.pane canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#cvWide{touch-action:none}   /* 触屏上拖机动舰时别让页面跟着滚 */
+.tag{position:absolute;left:8px;top:6px;font-size:11px;letter-spacing:.08em;color:var(--txt-dim);pointer-events:none}
+.tag b{font:10px var(--ff-mono);letter-spacing:.14em;color:var(--txt-mute);margin-left:6px;font-weight:normal}
+.readout{position:absolute;right:6px;top:6px;font:11px/1.55 var(--ff-mono);color:var(--txt-read);pointer-events:none;
+  background:rgba(5,7,12,.78);padding:4px 7px;border:1px solid var(--line-hair)}
+.readout div{display:flex;justify-content:space-between;gap:14px}
+.readout span{font-family:var(--ff-ui);color:var(--txt-dim);letter-spacing:.06em}
+.legend{position:absolute;left:8px;bottom:6px;display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:var(--txt-dim);pointer-events:none}
+.legend i{display:inline-block;width:9px;height:9px;margin-right:5px;vertical-align:-1px}
+.legend .g{background:var(--hostile)}
+.legend .t{border:1px dashed var(--hostile)}
+.legend .r{border:1px dashed var(--warn);border-radius:50%}
+.legend .c{height:0;border-top:2px solid var(--see);width:12px;vertical-align:3px}
+.legend .u{border:1px solid var(--warn);border-radius:50%;background:rgba(255,154,85,.12)}
+#cards{display:flex;flex-direction:column;gap:6px}
+.ev{border-left:2px solid var(--line-ctl);padding:2px 0 2px 8px}
+.ev .h{display:flex;justify-content:space-between;font-size:12px;color:var(--txt)}
+.ev .h b{font:12px var(--ff-mono);font-weight:normal;color:var(--sel)}
+.ev .l{display:flex;gap:10px;font:11px/1.55 var(--ff-mono);color:var(--txt-mute)}
+.ev .l span{font-family:var(--ff-ui);letter-spacing:.04em}
+.ev .l b{font-weight:normal;min-width:70px}
+.ev .l .on{color:var(--txt-read)}
+.ev .empty{color:var(--txt-mute)}
+#selftest{display:none}
+@media (max-width:1000px){
+  html,body{height:auto}
+  #app{height:auto}
+  main{grid-template-columns:1fr}
+  #side{overflow:visible}
+  #pWide{height:460px}
+  .col{grid-template-rows:auto auto}
+  .col .pane{height:320px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+<header>
+  <div class="brand">光速延迟</div>
+  <div class="ctl">距离 <input id="inD" type="range" min="0" max="1000" step="1"><span class="rd" id="rdD"></span>
+    <button class="btn chip" data-d="1">1 光秒</button><button class="btn chip" data-d="10">10 光秒</button>
+    <button class="btn chip" data-d="60">1 光分</button><button class="btn chip" data-d="180">3 光分</button></div>
+  <div class="ctl">时间倍率 <input id="inTs" type="range" min="0" max="1000" step="1"><span class="rd" id="rdTs"></span></div>
+  <div class="seg" id="segLayer"><button class="btn" data-layer="obs">观测</button><button class="btn" data-layer="mix">叠加</button><button class="btn" data-layer="true">真实</button></div>
+  <div class="ctl"><button class="btn" id="btnPause">暂停</button><button class="btn" id="btnReset">重置</button></div>
+  <div class="clock">真实时间<b id="rdClock">T+0.0 s</b></div>
+</header>
+<main>
+  <aside id="side">
+    <section class="card"><h3>场景<small>SCENES</small></h3>
+      <div class="row scenes"><button class="btn" data-scene="1">① 敌舰机动</button><button class="btn" data-scene="2">② 炮弹来袭</button><button class="btn" data-scene="3">③ 光束来袭</button><button class="btn" data-scene="4">④ 前哨预警</button></div>
+    </section>
+    <section class="card"><h3>解说<small>NOTES</small></h3><p id="narr"></p><p id="live"></p></section>
+    <button class="btn" id="btnQuantum" title="开:我方舰船之间量子实时通信,任何一艘看见的全舰同时知道。关:舰间只有光速通信,转报永远慢于主队直接看到,态势图就是主队自己看到的">量子通信版本</button>
+    <section class="card"><h3>下令<small>ORDERS</small></h3>
+      <div class="row"><span>我方</span><button class="btn" id="btnPicket">前出哨舰</button><button class="btn" id="btnRover" title="在星图随机位置放一艘可拖动的机动舰,加入我方观测网:量子通信下它就是一只眼;光速通信下它的转报永远慢于主队直接看到">随机舰船位置</button></div>
+      <div class="row"><span>敌舰</span><button class="btn" id="btnTurn">掉头</button><button class="btn" id="btnJink">随机规避</button></div>
+      <div class="row"><span>弹速</span><div class="seg" id="segShell"><button class="btn chip" data-shell="mac">主炮 0.1c</button><button class="btn chip" data-shell="c3">0.3c</button><button class="btn chip" data-shell="c5">0.5c</button><button class="btn chip" data-shell="c9">0.9c</button></div></div>
+      <div class="row"><span>炮弹</span><button class="btn fire-s" data-fire="shell:us">打主队</button><button class="btn fire-s" data-fire="shell:flank">打侧翼</button></div>
+      <div class="row"><span>光束</span><button class="btn fire-b" data-fire="beam:us">打主队</button><button class="btn fire-b" data-fire="beam:flank">打侧翼</button></div>
+    </section>
+    <section class="card grow"><h3>时刻表<small>TIMELINE</small></h3><div id="cards"></div></section>
+  </aside>
+  <section class="pane" id="pWide"><canvas id="cvWide"></canvas><div class="tag">全景<b>WIDE</b></div>
+    <div class="legend"><span><i class="g"></i>我方看到的影像</span><span><i class="t"></i>真实位置</span><span><i class="r"></i>消息光环</span><span><i class="c"></i>此刻所见</span></div></section>
+  <div class="col">
+    <section class="pane" id="pZoom"><canvas id="cvZoom"></canvas><div class="tag">敌旗舰特写<b>CLOSE-UP</b></div><div class="readout" id="rdZoom"></div>
+      <div class="legend"><span><i class="g"></i>影像</span><span><i class="t"></i>真实</span><span><i class="u"></i>可能位置圈</span></div></section>
+    <section class="pane" id="pST"><canvas id="cvST"></canvas><div class="tag">径向时空图<b>SPACETIME</b></div></section>
+  </div>
+</main>
+</div>
+<pre id="selftest"></pre>
+<script src="../../js/ships/10-hull-geometry.js"></script>
+<script>
+"use strict";
+/* ================= 光速延迟观测演示 =================
+   单位:km、s。每只眼(我方每艘船)都按同一条规则看东西:在时刻 t 看到的,是满足 |x(te) − P| = c·(t − te) 的那个 te 时刻的样子。
+   左栏「量子通信版本」切换舰间通信设定,两种设定只差「态势图由哪几只眼拼成」:
+   · 关(光速通信):别的船用光速转报,由三角不等式 |P−K|+|K−O| ≥ |P−O|,转报永远不会比主队自己看到的早,
+     所以态势图就是主队一只眼看到的——前出哨舰再近也改善不了主队的画面,只能改善它自己的。
+   · 开(量子通信):任何一艘看见的全舰同时知道,态势图是所有眼里最新的那一张——点状目标取 te 最大者,
+     光束逐点交给离它最近的那只眼,事件取最早被任何一只眼看见的时刻。 */
+const C=299792.458, LS=C, LM=60*C;
+const EN={a:15, vmax:700, v0:560};   // 敌旗舰按游戏里的巡洋 CA:推力 15 km/s²、最高档 700 km/s,巡航取八成
+const FORM=[{dx:0,dy:0,cls:'CA',nm:'旗舰'},{dx:-26000,dy:16000,cls:'DD',nm:'僚舰 A'},{dx:26000,dy:-16000,cls:'DD',nm:'僚舰 B'}];
+const SHELLS={
+  // 弹色只用橙到暖白一族:避开「此刻所见」的青、光束的紫和敌方的红;观测层的蓝移由 dopColor 另加
+  mac:{nm:'主炮 0.1c',u:0.1*C,col:'#ff8a3d'},  // 游戏里 CFG.macSpd = 30000 km/s
+  c3:{nm:'0.3c',u:0.3*C,col:'#ffab5e'},
+  c5:{nm:'0.5c',u:0.5*C,col:'#ffcb91'},
+  c9:{nm:'0.9c',u:0.9*C,col:'#ffeacc'},
+};
+const COL={friend:'#5aa7ff',host:'#ff6b6b',warn:'#ff9a55',sel:'#ffe066',see:'#54e0d0',beam:'#d68cff',hit:'#e8eef7',grid:'rgba(90,167,255,.07)'};
+const HREC=0.5;          // 敌舰航迹采样间隔 s
+const U={ts:6, layer:'mix', paused:false, jink:false, shellK:'mac', scene:0, picket:false, quantum:false, rover:null}; // UI 状态,重置不清;rover = 机动舰位置 {fx,fy}(以 D 为单位)
+const S={};              // 模拟状态,reset() 整个重建
+
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const hyp=Math.hypot;
+function dist(p,q){return hyp(p[0]-q[0],p[1]-q[1]);}
+
+const PK_POS=[-0.3,0.7];  // 前出哨舰站位(以 D 为单位):离敌舰 0.42 D,比主队近一大截
+function frBuild(d){
+  const fr=[{id:'main',nm:'主队',lb:'我方主队',p:[0,0],cls:'CA',ang:Math.PI/2},
+            {id:'flank',nm:'侧翼',lb:'侧翼友军',p:[0.8*d,0.2*d],cls:'DD',ang:Math.PI*0.8}];
+  if(U.picket)fr.push({id:'pk',nm:'前哨',lb:'前出哨舰',p:[PK_POS[0]*d,PK_POS[1]*d],cls:'DD',ang:Math.PI*0.4});
+  if(U.rover)fr.push({id:'rv',nm:'机动舰',lb:'机动舰 · 可拖动',p:[U.rover.fx*d,U.rover.fy*d],cls:'DD',ang:Math.PI*0.5,drag:true});
+  return fr;
+}
+function setPicket(on){U.picket=on;S.fr=frBuild(S.D);}
+function setRover(on){ // 随机找一个不压着敌舰、也不压着我方其他船的位置;用 Math.random,不动模拟用的种子随机数
+  if(on){
+    let fx=0.3, fy=0.5;
+    for(let k=0;k<60;k++){
+      fx=-0.28+Math.random()*1.23; fy=0.05+Math.random()*0.9;
+      if(hyp(fx,fy-1)<0.12)continue;
+      if(S.fr.some(f=>hyp(f.p[0]/S.D-fx,f.p[1]/S.D-fy)<0.1))continue;
+      break;
+    }
+    U.rover={fx,fy};
+  }else U.rover=null;
+  S.fr=frBuild(S.D);
+}   // 中途增减船或切通信设定都不必重置:态势图是逐帧从眼的名单现算的
+/* 态势图由哪几只眼拼成:量子通信是全部我方舰;光速通信下转报永远慢于主队直接看到,等价于只有主队一只眼 */
+function eyes(){return U.quantum?S.fr:[S.fr[0]];}
+function nearestEye(x,y){let e=null,d=Infinity;for(const f of eyes()){const q=hyp(x-f.p[0],y-f.p[1]);if(q<d){d=q;e=f;}}return {e,d};}
+function seeT(p,t){return t+nearestEye(p[0],p[1]).d/C;}
+function ringSee(r){return seeT([r.x,r.y],r.t);}
+/* 某艘我方舰自己最早何时知道 p 处在 t 时发生的事:量子通信下 = 全舰最早;光速通信下 = 它自己看见(转报赢不了直接看) */
+function knowAt(f,p,t){return U.quantum?seeT(p,t):t+dist(p,f.p)/C;}
+function reset(D){
+  const d=D||S.D||LM;
+  Object.assign(S,{t:0,D:d,O:[0,0],F:[0.8*d,0.2*d],fr:frBuild(d),
+    en:{x:0,y:d,vx:EN.v0,vy:0,dvx:EN.v0,dvy:0},
+    hist:[],rng:mulberry(20260911),nextJink:12,
+    shells:[],beams:[],rings:[],fx:[],cards:[],seq:0,sched:[]});
+  S.hist.push({t:0,x:S.en.x,y:S.en.y,vx:S.en.vx,vy:S.en.vy});
+}
+
+/* ---- 敌舰航迹:t<0 按初始匀速外推(开局就当它已经这样飞了很久),采样点之间线性插值 ---- */
+function histAt(t){
+  const h=S.hist, a=h[0];
+  if(t<=a.t)return {x:a.x+a.vx*(t-a.t),y:a.y+a.vy*(t-a.t),vx:a.vx,vy:a.vy};
+  const z=h[h.length-1];
+  if(t>=z.t){
+    const e=S.en, span=S.t-z.t;
+    if(span<=1e-9)return {x:z.x,y:z.y,vx:z.vx,vy:z.vy};
+    const f=Math.min(1,(t-z.t)/span);
+    return {x:z.x+(e.x-z.x)*f,y:z.y+(e.y-z.y)*f,vx:z.vx+(e.vx-z.vx)*f,vy:z.vy+(e.vy-z.vy)*f};
+  }
+  let lo=0,hi=h.length-1;
+  while(hi-lo>1){const m=(lo+hi)>>1;if(h[m].t<=t)lo=m;else hi=m;}
+  const p=h[lo],q=h[hi],f=(t-p.t)/(q.t-p.t);
+  return {x:p.x+(q.x-p.x)*f,y:p.y+(q.y-p.y)*f,vx:p.vx+(q.vx-p.vx)*f,vy:p.vy+(q.vy-p.vy)*f};
+}
+function shipTrue(i){const f=FORM[i],e=S.en;return {x:e.x+f.dx,y:e.y+f.dy,vx:e.vx,vy:e.vy};}
+/* 舰船的观测影像,全舰取最新那张。PERF1 两步提速:
+   ① 先按此刻距离筛眼:推迟光程只可能落在 d/(1+β)~d/(1−β) 之间(β = 舰速上限/c),
+     比最近那只眼远出 (1+β)/(1−β) 倍的眼不可能看得更新,直接跳过——这是严格的界,不是近似;
+   ② 对留下的眼用不动点迭代 te ← t − |x(te)−P|/c:舰速 ≪ c 时每步误差缩到 v/c 倍,几步就到机器精度,替掉原来的 56 步二分 */
+const RET_BETA=EN.vmax/C;
+function shipRet(i,t){
+  t=(t===undefined)?S.t:t;
+  const f=FORM[i], tr=shipTrue(i), E=eyes(), d=new Array(E.length); let dmin=Infinity, best=null;
+  for(let k=0;k<E.length;k++){d[k]=hyp(tr.x-E[k].p[0],tr.y-E[k].p[1]);if(d[k]<dmin)dmin=d[k];}
+  const lim=dmin*(1+RET_BETA)/(1-RET_BETA)+1e-6;
+  for(let k=0;k<E.length;k++){
+    if(d[k]>lim)continue;
+    const O=E[k].p; let te=t-d[k]/C;   // 从此刻距离冷启动
+    for(let n=0;n<10;n++){const q=histAt(te), nt=t-hyp(q.x+f.dx-O[0],q.y+f.dy-O[1])/C; const done=Math.abs(nt-te)<1e-10; te=nt; if(done)break;}
+    if(!best||te>best.te)best={te,e:E[k]};
+  }
+  const p=histAt(best.te);
+  return {x:p.x+f.dx,y:p.y+f.dy,vx:p.vx,vy:p.vy,te:best.te,age:t-best.te,via:best.e};
+}
+/* 按影像外推「此刻应该在哪」,以及推力可达圈:偏离外推点最多 ½·a·τ²(加速度有界的直接推论,与怎么机动无关) */
+function drOf(g){return {x:g.x+g.vx*g.age,y:g.y+g.vy*g.age,ru:0.5*EN.a*g.age*g.age};}
+
+/* ---- 消息光环 / 闪光 / 时刻表 ---- */
+function addRing(kind,p,t,lbl){
+  if(S.rings.some(r=>r.kind===kind&&Math.abs(r.t-t)<1e-9&&r.x===p[0]&&r.y===p[1]))return;
+  S.rings.push({kind,x:p[0],y:p[1],t,lbl});   // 何时被看见由 ringSee 现算:取决于此刻有哪些眼
+}
+function addFx(p,t,layer,col,big){S.fx.push({x:p[0],y:p[1],t,layer,col,big:!!big,started:0});}
+function addCard(c){S.cards.unshift(c);if(S.cards.length>6)S.cards.length=6;}
+
+function setDesired(vx,vy,why){
+  const e=S.en;e.dvx=vx;e.dvy=vy;
+  const p=[e.x,e.y];
+  addRing('turn',p,S.t,'敌舰'+why);
+  addCard({id:++S.seq,nm:'敌舰'+why,rows:[['机动',S.t,p]]});  // 行 = [名, 真实时刻, 事件位置];全舰看见的时刻在 updCards 里现算
+}
+function enemyTurn(){const e=S.en;setDesired(-e.dvx,-e.dvy,'掉头');}
+
+/* ---- 炮弹:匀速直线,观测位置解析求(二次方程,单位换成光秒防止大数相消) ---- */
+function fireShell(tgt,k){
+  const P=SHELLS[k||U.shellK], e=S.en, p0=[e.x,e.y], T=(tgt==='us'?S.O:S.F).slice();
+  const L=dist(p0,T), v=[(T[0]-p0[0])/L*P.u,(T[1]-p0[1])/L*P.u];
+  const sh={id:++S.seq,kind:'shell',k:k||U.shellK,nm:P.nm,col:P.col,u:P.u,t0:S.t,p0,v,T,L,tgt};
+  sh.tHit=S.t+L/P.u;
+  S.shells.push(sh);
+  addRing('fire',p0,S.t,'炮口闪光'); addRing('hit',T,sh.tHit,'命中闪光');
+  addFx(p0,S.t,'true',P.col); addFx(p0,S.t,'obs',P.col);   // 观测层闪光存事件时刻,等最近的那只眼看见才亮(fxTick)
+  addFx(T,sh.tHit,'true',COL.hit,true); addFx(T,sh.tHit,'obs',COL.hit,true);
+  addCard({id:sh.id,nm:'炮弹 '+P.nm+(tgt==='us'?' 打主队':' 打侧翼'),col:P.col,tgtP:T,
+    rows:[['开火',sh.t0,p0],['命中',sh.tHit,T]]});
+  return sh;
+}
+function shellTrue(sh,t){if(t<sh.t0||t>sh.tHit)return null;const d=t-sh.t0;return {x:sh.p0[0]+sh.v[0]*d,y:sh.p0[1]+sh.v[1]*d};}
+function shellTe(sh,t,O){ // 某只眼(位于 O)看这发弹的推迟时刻,相对开火;还看不见返回 null
+  const px=(sh.p0[0]-O[0])/C, py=(sh.p0[1]-O[1])/C, bx=sh.v[0]/C, by=sh.v[1]/C, T=t-sh.t0;
+  if(T<=0)return null;
+  const A=bx*bx+by*by-1, B=2*(px*bx+py*by+T), Cc=px*px+py*py-T*T, disc=B*B-4*A*Cc;
+  if(disc<0)return null;
+  const s=Math.sqrt(disc), te=B>=0?Cc/(-(B+s)/2):(-B+s)/(2*A);  // 推迟解;B≥0 时用稳定式免得相消
+  return te<0?null:te;
+}
+function shellObs(sh,t){ // 全舰所见 = 各只眼里最新的那一张;切换眼的那一刻两张重合,所以画面连续
+  let te=null, via=null;
+  for(const e of eyes()){const q=shellTe(sh,t,e.p);if(q!==null&&(te===null||q>te)){te=q;via=e;}}
+  if(te===null)return null;
+  if(te>=sh.L/sh.u)return {gone:true,via};
+  const O=via.p, x=sh.p0[0]+sh.v[0]*te, y=sh.p0[1]+sh.v[1]*te;
+  const nx=O[0]-x, ny=O[1]-y, nl=hyp(nx,ny)||1, beta=sh.u/C;
+  const cos=(sh.v[0]*nx+sh.v[1]*ny)/(sh.u*nl), gam=1/Math.sqrt(1-beta*beta);
+  const k=1/(1-beta*cos);                         // 视运动倍率:朝我方飞来的弹看上去被「压缩」
+  return {x,y,te:sh.t0+te,k,app:sh.u*k,dop:k/gam,via}; /* 视速度与多普勒都相对于看见它的那只眼 */ // te 返回绝对时刻(上面解的是开火后的相对时间)          // 多普勒因子 δ=1/(γ(1−β·cosθ))
+}
+
+/* ---- 光束:以光速推进的一段(脉冲时长 dur)。对位于 P 的一只眼,观测条件是 s+|P(s)−P| ∈ [c(t−t0−dur), c(t−t0)],
+        左边随 s 单调不减。全舰所见把光束逐点交给离它最近的那只眼(沃罗诺伊胞与直线交成一段区间),
+        所以每只眼负责的区间里看得见的仍是一整段,两端各二分一次;全舰所见是这几段的并 ---- */
+function fireBeam(tgt){
+  const e=S.en, p0=[e.x,e.y], T=(tgt==='us'?S.O:S.F).slice(), L=dist(p0,T);
+  const b={id:++S.seq,kind:'beam',nm:'光束',col:COL.beam,t0:S.t,p0,d:[(T[0]-p0[0])/L,(T[1]-p0[1])/L],L,T,tgt,
+    dur:Math.min(36,Math.max(2,0.12*S.D/C))};   // 脉冲时间尺度:平顶 BEAM_FLAT·dur,之后按指数拖尾(见 beamI)
+  b.tHit=S.t+L/C;
+  S.beams.push(b);
+  addRing('beam',p0,S.t,'光束闪光'); addRing('hit',T,b.tHit,'命中闪光');
+  addFx(p0,S.t,'true',COL.beam); addFx(p0,S.t,'obs',COL.beam);
+  addFx(T,b.tHit,'true',COL.hit,true); addFx(T,b.tHit,'obs',COL.hit,true);
+  addCard({id:b.id,nm:'光束'+(tgt==='us'?' 打主队':' 打侧翼'),col:COL.beam,tgtP:T,
+    rows:[['开火',b.t0,p0],['命中',b.tHit,T]]});
+  return b;
+}
+/* ---- 光束脉冲的时间剖面:前沿陡起,平顶 BEAM_FLAT·dur,之后按指数拖尾(像储能放完那样收掉),亮度跌到 BEAM_CUT 以下算看不见。
+        画面上某一点的亮度取决于「它此刻被看见的那一刻,脉冲前沿已经过去多久」(相位 φ),所以渐隐自带光速延迟:
+        迎头看的那一段 φ 处处相同,整段同步变暗;侧面看的一段 φ 沿光束变化,头亮尾暗像彗星。
+        不加尘埃余辉:微米级尘埃被加热后毫秒级就冷却,撑不起一条慢慢熄灭的亮线 ---- */
+const BEAM_FLAT=0.4, BEAM_TAIL=0.15, BEAM_CUT=0.04;   // 拖尾时间常数 0.45→0.3→0.15(用户定):1 光分时拖尾约 3.5 s
+function beamI(phi,dur){if(phi<-1e-6)return 0;const f=Math.max(0,phi)/dur; /* 1 µs 容差:前沿那一点按定义 φ=0,浮点会算出 −1e-12 */if(f<=BEAM_FLAT)return 1;const I=Math.exp(-(f-BEAM_FLAT)/BEAM_TAIL);return I<BEAM_CUT?0:I;}
+function beamSpan(b){return b.dur*(BEAM_FLAT+BEAM_TAIL*Math.log(1/BEAM_CUT));}   // 前沿过去之后多久彻底看不见
+function beamG(b,s,P){return s+hyp(b.p0[0]+b.d[0]*s-P[0],b.p0[1]+b.d[1]*s-P[1]);}
+function beamInv(b,X,P,lo,hi){for(let k=0;k<60;k++){const m=(lo+hi)/2;if(beamG(b,m,P)<=X)lo=m;else hi=m;}return (lo+hi)/2;}
+function beamCells(b){ // 每只眼负责光束上离它最近的那一段:|P(s)−e|² ≤ |P(s)−q|² 代入 P=p0+d·s 后是线性的 A·s ≤ B
+  if(b._cF===S.fr&&b._cQ===U.quantum)return b._cells;   // PERF1:眼没变就复用分区。S.fr 只整体替换、从不原地改,所以比引用就够
+  const out=[], E=eyes();
+  for(const e of E){
+    let lo=0, hi=b.L;
+    for(const q of E){
+      if(q===e)continue;
+      const wx=q.p[0]-e.p[0], wy=q.p[1]-e.p[1];
+      const A=2*(b.d[0]*wx+b.d[1]*wy), B=(q.p[0]*q.p[0]+q.p[1]*q.p[1])-(e.p[0]*e.p[0]+e.p[1]*e.p[1])-2*(b.p0[0]*wx+b.p0[1]*wy);
+      if(Math.abs(A)<1e-9){if(B<0){lo=1;hi=0;}}
+      else if(A>0)hi=Math.min(hi,B/A); else lo=Math.max(lo,B/A);
+    }
+    if(hi>lo)out.push({e,lo,hi});
+  }
+  b._cF=S.fr; b._cQ=U.quantum; b._cells=out;
+  return out;
+}
+function beamObs(b,t){ // 全舰此刻看得见的光束段(可能几段),每段带负责它的那只眼
+  if(b._oT===t&&b._oF===S.fr&&b._oQ===U.quantum)return b._obs;   // PERF1:同一帧里全景、特写、时空图各要一次,只算一次(调用方不许改返回的数组)
+  const X1=C*(t-b.t0), X0=C*(t-b.t0-beamSpan(b)), out=[];   // 可见窗口含拖尾,亮度由 beamI 按相位再分
+  for(const c of beamCells(b)){
+    const P=c.e.p, g0=beamG(b,c.lo,P), g1=beamG(b,c.hi,P);
+    if(X1<g0||X0>g1)continue;
+    const s1=g1<=X1?c.hi:beamInv(b,X1,P,c.lo,c.hi), s0=g0>=X0?c.lo:beamInv(b,X0,P,c.lo,c.hi);
+    if(s1>=s0)out.push({s0,s1,e:c.e});
+  }
+  b._oT=t; b._oF=S.fr; b._oQ=U.quantum; b._obs=out.length?out.sort((a,z)=>a.s0-z.s0):null;
+  return b._obs;
+}
+function beamTrue(b,t){const f=C*(t-b.t0),tl=C*(t-b.t0-beamSpan(b));if(f<=0||tl>=b.L)return null;return {s0:Math.max(0,tl),s1:Math.min(b.L,f)};}
+function beamPt(b,s){return {x:b.p0[0]+b.d[0]*s,y:b.p0[1]+b.d[1]*s};}
+/* 某只眼(位于 P)看到的光束前沿视速度 c/(1−cosφ),φ 是光束方向与「该点指向这只眼」的夹角 */
+/* 沿弹道方向第一艘挡在路上的我方舰(离轴线 1000 km 以内):只凭看见的开火点与方向就能认出它要打谁。
+   光束与炮弹都不会拐弯,所以认出目标之后,命中时刻 = 开火时刻 + 路程 / 速度,是精确的 */
+function rayTarget(p0,d){
+  let best=null;
+  for(const f of S.fr){
+    const wx=f.p[0]-p0[0], wy=f.p[1]-p0[1], s=wx*d[0]+wy*d[1];
+    if(s<=0)continue;
+    if(Math.abs(wx*d[1]-wy*d[0])<1000&&(!best||s<best.s))best={e:f,s};
+  }
+  return best;
+}
+function beamTarget(b){return rayTarget(b.p0,b.d);}
+function shellTarget(sh){return rayTarget(sh.p0,[sh.v[0]/sh.u,sh.v[1]/sh.u]);}
+function beamFrontSpeed(b,s,P){const p=beamPt(b,s),nx=P[0]-p.x,ny=P[1]-p.y,nl=hyp(nx,ny)||1;const cos=(b.d[0]*nx+b.d[1]*ny)/nl;return cos>1-1e-9?Infinity:C/(1-cos);}
+
+/* ---- 推进 ---- */
+function step(h){
+  while(S.sched.length&&S.sched[0].t<=S.t+1e-9)S.sched.shift().fn();
+  const e=S.en;
+  if(U.jink&&S.t>=S.nextJink){
+    const a=S.rng()*Math.PI*2;setDesired(Math.cos(a)*EN.v0,Math.sin(a)*EN.v0,'规避');
+    S.nextJink=S.t+15+S.rng()*25;
+  }
+  if(!U.jink&&Math.abs(e.x)>0.22*S.D&&Math.sign(e.dvx)===Math.sign(e.x))setDesired(-e.dvx,e.dvy,'折返'); // 小距离时别让它飞出画面
+  let ax=e.dvx-e.vx, ay=e.dvy-e.vy; const m=hyp(ax,ay), lim=EN.a*h;
+  if(m>lim){ax*=lim/m;ay*=lim/m;}
+  const vx0=e.vx,vy0=e.vy; e.vx+=ax; e.vy+=ay;
+  const sp=hyp(e.vx,e.vy); if(sp>EN.vmax){e.vx*=EN.vmax/sp;e.vy*=EN.vmax/sp;}
+  e.x+=(vx0+e.vx)/2*h; e.y+=(vy0+e.vy)/2*h;
+  S.t+=h;
+  const z=S.hist[S.hist.length-1];
+  if(S.t-z.t>=HREC)S.hist.push({t:S.t,x:e.x,y:e.y,vx:e.vx,vy:e.vy});
+}
+function advance(dt){
+  if(dt<=0)return;
+  const n=Math.ceil(dt/0.25), h=dt/n;
+  for(let i=0;i<n;i++)step(h);
+  const keep=2.4*S.D/C+150, h0=S.hist;
+  while(h0.length>2&&h0[1].t<S.t-keep)h0.shift();
+  const late=o=>o.tHit+dist(o.T,S.O)/C;   // 主队总是一只眼,所以最晚到它看见命中为止
+  S.shells=S.shells.filter(s=>S.t<late(s)+Math.max(30,0.5*S.D/C));
+  S.beams=S.beams.filter(b=>S.t<late(b)+beamSpan(b)+Math.max(30,0.5*S.D/C));
+  S.rings=S.rings.filter(r=>C*(S.t-r.t)<2.6*S.D);
+}
+/* ================= 渲染:公共件 ================= */
+function mkView(id){const cv=document.getElementById(id);return {cv,g:cv.getContext('2d'),W:1,H:1,cx:0,cy:0,k:1,snap:true};}
+const VW=mkView('cvWide'), VZ=mkView('cvZoom'), VS=mkView('cvST');
+function sizeView(v){
+  const r=v.cv.getBoundingClientRect(), dpr=window.devicePixelRatio||1;
+  const w=Math.max(1,Math.round(r.width*dpr)), h=Math.max(1,Math.round(r.height*dpr));
+  if(v.cv.width!==w||v.cv.height!==h){v.cv.width=w;v.cv.height=h;}
+  v.W=Math.max(1,r.width); v.H=Math.max(1,r.height); v.g.setTransform(dpr,0,0,dpr,0,0);
+}
+function toS(v,x,y){return [v.W/2+(x-v.cx)*v.k, v.H/2-(y-v.cy)*v.k];}
+function rgba(hex,a){const n=parseInt(hex.slice(1),16);return 'rgba('+(n>>16&255)+','+(n>>8&255)+','+(n&255)+','+a+')';}
+function niceStep(x){const p=Math.pow(10,Math.floor(Math.log10(x))),m=x/p;return (m<1.5?1:m<3.5?2:m<7.5?5:10)*p;}
+function fmtT(s){return Math.abs(s)<1000?s.toFixed(1)+' s':(s/60).toFixed(1)+' 分';}
+function fmtKm(km){const a=Math.abs(km);if(a<1e4)return km.toFixed(0)+' km';if(a<1e8)return (km/1e4).toFixed(a<1e6?2:1)+' 万 km';return (km/1e8).toFixed(2)+' 亿 km';}
+function fmtL(km){return km<LM*0.995?(km/LS).toFixed(km<10*LS?2:1)+' 光秒':(km/LM).toFixed(2)+' 光分';}
+function fmtC(v){return !isFinite(v)||v>99*C?'瞬间':(v/C).toFixed(2)+'c';}
+function unitL(){return S.D>=0.99*LM?LM:LS;}   // 同一张图的刻度只用一种光单位,免得「45.0 光秒」和「1.00 光分」混排
+function fmtU(km){const u=unitL(),n=km/u;return (n<10?n.toFixed(2):n.toFixed(1))+(u===LM?' 光分':' 光秒');}
+const FF_UI='11px "Microsoft YaHei","PingFang SC",sans-serif', FF_MONO='11px Consolas,"Cascadia Mono",monospace';
+function lbl(g,t,x,y,col,al,mono){
+  g.font=mono?FF_MONO:FF_UI; g.textAlign=al||'left'; g.textBaseline='middle';
+  g.lineWidth=3; g.strokeStyle='rgba(5,7,12,.9)'; g.strokeText(t,x,y); g.fillStyle=col; g.fillText(t,x,y);
+}
+/* 标注队列:一帧的字最后统一画在最上层,按优先级避让——后放的若压到先放的就上下挪一格,越界就往里推 */
+function lblQ(v,pri,t,x,y,col,al,mono){v.lq.push({pri,t,x,y,col,al,mono,i:v.lq.length});}
+const LBL_MAX=32, RING_MERGE=3, RING_LBL=4;   // PERF1:每个视图的标注上限 / 光环合并阈值(px) / 光环标注个数
+function flushLbl(v){
+  const g=v.g, placed=[], h=14;
+  v.lq.sort((a,b)=>b.pri-a.pri||a.i-b.i);
+  for(const q of v.lq){
+    if(placed.length>=LBL_MAX)break;   // PERF1:按优先级取前 LBL_MAX 个(舰船与倒计时在前),拥挤时多的只会叠成一团
+    g.font=q.mono?FF_MONO:FF_UI; const w=g.measureText(q.t).width;
+    let x0=q.al==='right'?q.x-w:q.al==='center'?q.x-w/2:q.x; x0=Math.max(4,Math.min(v.W-4-w,x0));
+    const hit=yc=>placed.some(r=>x0<r.x+r.w+4&&x0+w+4>r.x&&Math.abs(yc-r.y)<h);
+    let y=Math.max(10,Math.min(v.H-10,q.y));
+    for(const d of [0,14,-14,28,-28,42,-42]){const yc=Math.max(10,Math.min(v.H-10,q.y+d));if(!hit(yc)){y=yc;break;}}
+    placed.push({x:x0,y,w}); lbl(g,q.t,x0,y,q.col,'left',q.mono);
+  }
+  v.lq=[];
+}
+function drawShip(v,x,y,ang,cls,col,mode,alpha){
+  const g=v.g,[sx,sy]=toS(v,x,y);
+  g.save(); g.globalAlpha=alpha==null?1:alpha; g.translate(sx,sy); g.rotate(-ang);
+  if(typeof drawHull==='function')drawHull(g,cls,2,col,mode);
+  else{g.beginPath();g.moveTo(11,0);g.lineTo(-7,6);g.lineTo(-7,-6);g.closePath();
+    if(mode==='outline'){g.strokeStyle=col;g.lineWidth=1.2;g.stroke();}else{g.fillStyle=col;g.fill();}}
+  g.restore();
+}
+function bg(v){v.g.fillStyle='#05070c';v.g.fillRect(0,0,v.W,v.H);}
+function scaleBar(v,fmt,unit){
+  const g=v.g, u=unit||1, L=niceStep(v.W*0.2/v.k/u)*u, px=L*v.k, x1=v.W-12, x0=x1-px, y=v.H-12;
+  g.strokeStyle='rgba(106,125,146,.9)'; g.lineWidth=1; g.beginPath();
+  g.moveTo(x0,y-4);g.lineTo(x0,y);g.lineTo(x1,y);g.lineTo(x1,y-4);g.stroke();
+  lbl(g,fmt(L),(x0+x1)/2,y-10,'#6a7d92','center',true);
+}
+function layerFlags(){return {showT:U.layer!=='obs', showO:U.layer!=='true', aT:U.layer==='true'?0.95:0.5};}
+/* 多普勒示意:δ>1 时颜色向蓝白偏(蓝移),点也更大更亮 */
+function dopColor(hex,d){
+  const n=parseInt(hex.slice(1),16), f=Math.max(0,Math.min(1,(d-1)/3));
+  const r=(n>>16&255), gg=(n>>8&255), b=(n&255);
+  return 'rgb('+Math.round(r+(190-r)*f)+','+Math.round(gg+(228-gg)*f)+','+Math.round(b+(255-b)*f)+')';
+}
+const RING_COL={fire:COL.warn,beam:COL.beam,turn:COL.host,hit:COL.hit};
+
+/* ---- 闪光:模拟时刻一到就按墙钟亮 1.4 s(时间倍率很高时也看得见),层不可见也照样计时,免得切层时冒出陈年旧闪 ---- */
+function fxTick(now){
+  for(const f of S.fx){
+    if(f.started)continue;
+    const tt=f.layer==='obs'?seeT([f.x,f.y],f.t):f.t;   // 观测层:离它最近的那只眼看见的时刻
+    if(S.t>=tt)f.started=(S.t-tt>2*Math.max(1,U.ts))?now-1400:now; // 快进跳过去的旧闪光直接算过期
+  }
+  S.fx=S.fx.filter(f=>!f.started||now-f.started<1400);
+}
+function drawFx(v,now){
+  const g=v.g,{showT,showO}=layerFlags();
+  for(const f of S.fx){
+    if(!f.started||(f.layer==='true'?!showT:!showO))continue;
+    const a=(now-f.started)/1400, [x,y]=toS(v,f.x,f.y), r=(5+a*26)*(f.big?1.5:1);
+    g.strokeStyle=rgba(f.col,(1-a)*(f.layer==='true'?0.55:1)); g.lineWidth=f.layer==='true'?1:2;
+    if(f.layer==='true')g.setLineDash([3,3]);
+    g.beginPath(); g.arc(x,y,r,0,Math.PI*2); g.stroke(); g.setLineDash([]);
+    if(a<0.25&&f.layer==='obs'){g.fillStyle=rgba(f.col,0.9*(1-a*4));g.beginPath();g.arc(x,y,4*(f.big?1.6:1),0,Math.PI*2);g.fill();}
+  }
+}
+/* 平顶处偏白,拖尾里退回深紫:亮度掉下去时颜色也跟着沉 */
+function beamCol(I,a){const t=Math.max(0,Math.min(1,I));return 'rgba('+Math.round(138+102*t)+','+Math.round(79+135*t)+','+Math.round(214+41*t)+','+(a*Math.pow(t,0.8)).toFixed(3)+')';}
+/* 按脉冲剖面画一截观测到的光束;phiAt(s) 给出 s 处此刻的相位 φ。PERF1:原来切成最多 48 小段、每段描两笔,改成
+   一截只描两笔(光晕 + 芯线):亮度处处相同时(迎头那段相位全等)用纯色,否则用沿线的线性渐变,12 个色标采样剖面。
+   真实层不走这里,画普通纯色虚线(用户定案) */
+const BEAM_STOPS=12;
+function strokeBeamSpan(v,b,s0,s1,phiAt){
+  const g=v.g, A=beamPt(b,s0), B=beamPt(b,s1), [ax,ay]=toS(v,A.x,A.y), [bx,by]=toS(v,B.x,B.y), len=hyp(bx-ax,by-ay);
+  const I0=beamI(phiAt(s0),b.dur), I1=beamI(phiAt(s1),b.dur), Im=beamI(phiAt((s0+s1)/2),b.dur);
+  let glow, core;
+  if(len<2||(Math.abs(I0-I1)<0.01&&Math.abs(I0-Im)<0.01)){
+    if(Im<=0)return;
+    glow=rgba(COL.beam,0.24*Im); core=beamCol(Im,0.95);
+  }else{
+    glow=g.createLinearGradient(ax,ay,bx,by); core=g.createLinearGradient(ax,ay,bx,by);
+    for(let i=0;i<=BEAM_STOPS;i++){const I=beamI(phiAt(s0+(s1-s0)*i/BEAM_STOPS),b.dur);glow.addColorStop(i/BEAM_STOPS,rgba(COL.beam,0.24*I));core.addColorStop(i/BEAM_STOPS,beamCol(I,0.95));}
+  }
+  g.beginPath(); g.moveTo(ax,ay); g.lineTo(bx,by);
+  g.strokeStyle=glow; g.lineWidth=7; g.stroke();
+  g.strokeStyle=core; g.lineWidth=2; g.stroke();
+}
+function drawBeams(v,wide){
+  const g=v.g,{showT,showO,aT}=layerFlags();
+  for(const b of S.beams){
+    if(showT){const s=beamTrue(b,S.t);if(s){ // 真实层:普通纯色虚线,不做亮度渐变(用户定案)
+      const A=beamPt(b,s.s0), B=beamPt(b,s.s1), [ax,ay]=toS(v,A.x,A.y), [bx,by]=toS(v,B.x,B.y);
+      g.strokeStyle=rgba(COL.beam,aT); g.lineWidth=1.4; g.setLineDash([6,4]); g.beginPath(); g.moveTo(ax,ay); g.lineTo(bx,by); g.stroke(); g.setLineDash([]);}}
+    if(showO){const segs=beamObs(b,S.t);if(segs){
+      for(const s of segs)strokeBeamSpan(v,b,s.s0,s.s1,x=>{const p=beamPt(b,x);return S.t-hyp(p.x-s.e.p[0],p.y-s.e.p[1])/C-(b.t0+x/C);});
+      if(wide){
+        const tip=segs.reduce((a,c)=>c.s1>a.s1?c:a), fs=seeT(b.p0,b.t0);
+        const whole=segs[0].s0<=b.L*1e-4&&tip.s1>=b.L*(1-1e-4)&&S.t-fs<beamSpan(b)*0.999;
+        if(whole&&b.tHit-fs<1e-6){const m=beamPt(b,b.L/2),[mx,my]=toS(v,m.x,m.y);lblQ(v,2,'整根光束与命中同时出现,预警 0 s',mx+10,my,COL.beam);}
+        else if(tip.s1<b.L*(1-1e-4)){const q=beamPt(b,tip.s1),[qx,qy]=toS(v,q.x,q.y);
+          lblQ(v,2,'前沿视速度 '+fmtC(beamFrontSpeed(b,tip.s1,tip.e.p))+(tip.e.id!=='main'?'  经'+tip.e.nm:''),qx+10,qy,COL.beam,'left',true);}
+      }
+    }}
+  }
+}
+function drawShells(v,wide){
+  const g=v.g,{showT,showO,aT}=layerFlags();
+  for(const sh of S.shells){
+    const tp=showT?shellTrue(sh,S.t):null, op=showO?shellObs(sh,S.t):null;
+    let tx,ty;
+    if(tp){[tx,ty]=toS(v,tp.x,tp.y); g.strokeStyle=rgba(sh.col,aT); g.lineWidth=1.2; g.beginPath(); g.arc(tx,ty,3.5,0,Math.PI*2); g.stroke();}
+    if(op&&!op.gone){
+      const [ox,oy]=toS(v,op.x,op.y), r=2.4*Math.min(3.2,Math.sqrt(op.dop)), col=dopColor(sh.col,op.dop);
+      if(tp&&U.layer==='mix'){g.strokeStyle=rgba(sh.col,0.25);g.lineWidth=1;g.beginPath();g.moveTo(ox,oy);g.lineTo(tx,ty);g.stroke();}
+      g.fillStyle=col; g.globalAlpha=0.22; g.beginPath(); g.arc(ox,oy,r*2.4,0,Math.PI*2); g.fill();
+      g.globalAlpha=1; g.beginPath(); g.arc(ox,oy,r,0,Math.PI*2); g.fill();
+      if(wide)lblQ(v,2,sh.nm+'  视速度 '+fmtC(op.app)+(op.dop>1.15?'  δ='+op.dop.toFixed(1):'')+(op.via.id!=='main'?'  经'+op.via.nm:''),ox+r+8,oy,col,'left',true);
+    }else if(tp&&wide&&U.layer==='true')lblQ(v,2,sh.nm,tx+8,ty,rgba(sh.col,0.8),'left',true);
+  }
+}
+
+/* ---- 命中告警:态势图一看见开火(光束或炮弹),就能认出目标、算出命中时刻,在目标舰旁挂倒计时(不画弹道线)。
+        光速通信下态势图在主队手里,别的船要等通知走完光程才知道,来不及的直接写明;
+        命中时刻过了但态势图还没看见命中时,改挂「预计已命中」 ---- */
+function drawWarn(v){
+  if(!layerFlags().showO)return;
+  const items=[...S.beams.map(b=>({o:b,tg:beamTarget(b),spd:C,nm:'光束',col:COL.beam})),
+               ...S.shells.map(s=>({o:s,tg:shellTarget(s),spd:s.u,nm:s.nm,col:s.col}))];
+  for(const it of items){
+    const o=it.o, tg=it.tg; if(!tg||S.t<seeT(o.p0,o.t0))continue;   // 态势图还没看见开火
+    const tHit=o.t0+tg.s/it.spd, [tx,ty]=toS(v,tg.e.p[0],tg.e.p[1]);
+    let txt=it.nm+' → '+tg.e.nm+' ';
+    if(S.t<tHit){
+      txt+='命中倒计时 '+fmtT(tHit-S.t);
+      if(!U.quantum&&tg.e.id!=='main'){const cd=dist(tg.e.p,S.O)/C;txt+=tHit-S.t<cd?' · 来不及通知(要 '+fmtT(cd)+')':' · 通知要 '+fmtT(cd);}
+    }else{
+      const seen=seeT(tg.e.p,tHit); if(S.t>=seen)continue;          // 命中已被看见,交给闪光表现
+      txt+='预计已命中 · 确认还要 '+fmtT(seen-S.t);
+    }
+    lblQ(v,3,txt,tx+14,ty+16,it.col,'left',true);
+  }
+}
+
+/* PERF1:光环扩到几千像素后只有一小段弧落在画面里,但画布画虚线整圆时会沿整圈逐段生成虚线,这是全帧最大的开销。
+   求圆与画面四条边(外扩 2 px 免得切掉线宽)的交点,把圆周切成几段,中点落在画面里的段才画;圆心在画面里外都适用 */
+const TAU=Math.PI*2;
+function arcSpans(cx,cy,R,W,H){
+  const x0=-2, y0=-2, x1=W+2, y1=H+2, angs=[0,TAU], add=a=>angs.push(((a%TAU)+TAU)%TAU);
+  for(const X of [x0,x1]){const c=(X-cx)/R;if(Math.abs(c)<=1){const h=Math.acos(c);add(h);add(-h);}}          // 竖边:cos θ = (X−cx)/R
+  for(const Y of [y0,y1]){const s=(Y-cy)/R;if(Math.abs(s)<=1){const h=Math.asin(s);add(h);add(Math.PI-h);}}   // 横边:sin θ = (Y−cy)/R
+  angs.sort((a,b)=>a-b);
+  const out=[];
+  for(let i=0;i+1<angs.length;i++){
+    const a=angs[i], b=angs[i+1]; if(b-a<1e-9)continue;
+    const m=(a+b)/2, px=cx+R*Math.cos(m), py=cy+R*Math.sin(m);
+    if(px>=x0&&px<=x1&&py>=y0&&py<=y1){if(out.length&&out[out.length-1][1]===a)out[out.length-1][1]=b;else out.push([a,b]);}
+  }
+  return out;
+}
+
+/* ---- 量子链路:量子通信下每艘我方舰与主队之间一条浅色虚线(星形,全部连回主队),亮度随墙钟缓慢呼吸,
+        不随时间倍率与暂停变化。它是我方自己的设施、不是观测结果,所以三个图层都画 ---- */
+const LINK_PERIOD=3.2, LINK_A0=0.10, LINK_A1=0.10;   // 呼吸周期 s / 最暗时的透明度 / 呼吸幅度
+function drawLinks(v,now){
+  if(!U.quantum||S.fr.length<2)return;
+  const g=v.g, a=LINK_A0+LINK_A1*(0.5+0.5*Math.sin(TAU*now/1000/LINK_PERIOD)), m=S.fr[0].p, [mx,my]=toS(v,m[0],m[1]);
+  g.strokeStyle=rgba(COL.friend,a); g.lineWidth=1; g.setLineDash([5,11]);
+  for(const f of S.fr){if(f.id==='main')continue;const [x,y]=toS(v,f.p[0],f.p[1]);g.beginPath();g.moveTo(x,y);g.lineTo(mx,my);g.stroke();}
+  g.setLineDash([]);
+}
+
+/* ================= 全景 ================= */
+function drawWide(now){
+  const v=VW, g=v.g, D=S.D; sizeView(v); v.lq=[];
+  const x0=-0.34*D, x1=1.02*D, y0=-0.17*D, y1=1.17*D;
+  v.cx=(x0+x1)/2; v.cy=(y0+y1)/2; v.k=Math.min(v.W/(x1-x0),v.H/(y1-y0));
+  bg(v);
+  const {showT,showO,aT}=layerFlags(), [ox,oy]=toS(v,0,0);
+  g.lineWidth=1;
+  for(const f of [0.25,0.5,0.75,1]){
+    const R=f*D*v.k; g.strokeStyle=f===1?'rgba(90,167,255,.16)':COL.grid;
+    g.beginPath(); g.arc(ox,oy,R,0,Math.PI*2); g.stroke();
+    const a=Math.PI*0.555; lbl(g,fmtU(f*D),ox+R*Math.cos(a),oy-R*Math.sin(a),'#46566a','center',true);
+  }
+  drawLinks(v,now);   // 量子链路压在最底层,光环、光束、舰船都画在它上面
+  if(showT){
+    /* PERF1:同一处、同一类、半径差不到 RING_MERGE px 的光环画出来就是同一圈,只画一次(连射时几十个光环挤成一条带);
+       标注只给最快被看见的 RING_LBL 个——拥挤时多出来的标注只会压成一团,文字渲染又是最贵的那部分 */
+    const lastR={}, pend=[];
+    for(const r of S.rings){
+      const R=C*(S.t-r.t); if(R<=0)continue;
+      const col=RING_COL[r.kind], ne=nearestEye(r.x,r.y), tSee=r.t+ne.d/C, seen=S.t>=tSee, [rx,ry]=toS(v,r.x,r.y), Rp=R*v.k;
+      if(!seen)pend.push({r,R,ne,tSee,col});
+      const key=r.kind+(seen?'s':'u')+Math.round(rx)+','+Math.round(ry);
+      if(lastR[key]!==undefined&&Math.abs(lastR[key]-Rp)<RING_MERGE)continue;
+      lastR[key]=Rp;
+      g.strokeStyle=rgba(col,seen?0.16:0.6); g.lineWidth=1.2; g.setLineDash([5,5]);
+      for(const [a0,a1] of arcSpans(rx,ry,Rp,v.W,v.H)){ // 虚线相位对齐到整圆的 0 度,几段局部弧拼起来与原来整圆的花纹一致
+        g.lineDashOffset=a0*Rp%10; g.beginPath(); g.arc(rx,ry,Rp,a0,a1); g.stroke();
+      }
+      g.setLineDash([]); g.lineDashOffset=0;
+    }
+    pend.sort((a,b)=>a.tSee-b.tSee);
+    for(const {r,R,ne,tSee,col} of pend.slice(0,RING_LBL)){ // 标注落在光环上朝向「最先看见它的那艘」的那一点
+      const dd=ne.d||1, ux=(ne.e.p[0]-r.x)/dd, uy=(ne.e.p[1]-r.y)/dd, [lx,ly]=toS(v,r.x+ux*R,r.y+uy*R);
+      lblQ(v,1,r.lbl+'的消息,还要 '+fmtT(tSee-S.t)+' 才被'+ne.e.nm+'看见',lx+8,ly-9,rgba(col,0.95));
+    }
+  }
+  const G0=shipRet(0), T0=shipTrue(0);
+  if(showO){ // 此刻抵达我方的那束光:从影像到看见它的那艘我方舰
+    const [gx,gy]=toS(v,G0.x,G0.y), [ex,ey]=toS(v,G0.via.p[0],G0.via.p[1]); g.strokeStyle=rgba(COL.see,0.45); g.lineWidth=1; g.setLineDash([2,4]);
+    g.beginPath(); g.moveTo(gx,gy); g.lineTo(ex,ey); g.stroke(); g.setLineDash([]);
+  }
+  drawBeams(v,true); drawShells(v,true);
+  for(const f of S.fr){ // 我方各舰;量子通信下每艘都是一只眼,光速通信下只有主队的眼拼进态势图
+    const [sx,sy]=toS(v,f.p[0],f.p[1]);
+    drawShip(v,f.p[0],f.p[1],f.ang,f.cls,COL.friend,'fill',f.id==='main'?1:0.9);
+    if(f.drag){g.strokeStyle=rgba(COL.friend,drag.on?0.9:0.45);g.lineWidth=1;g.setLineDash([3,3]);g.beginPath();g.arc(sx,sy,14,0,Math.PI*2);g.stroke();g.setLineDash([]);} // 可拖动的提示圈
+    lblQ(v,3,f.lb,sx+14,sy+2,COL.friend);
+  }
+  if(showT){drawShip(v,T0.x,T0.y,Math.atan2(T0.vy,T0.vx),'CA',COL.host,'outline',aT);
+    if(U.layer==='true'){const [tx,ty]=toS(v,T0.x,T0.y);lblQ(v,3,'敌舰队 · 真实位置',tx+14,ty+2,COL.host);}}
+  if(showO){drawShip(v,G0.x,G0.y,Math.atan2(G0.vy,G0.vx),'CA',COL.host,'fill',1);
+    const [gx,gy]=toS(v,G0.x,G0.y); lblQ(v,3,'敌舰队 · 看到的是 '+fmtT(G0.age)+' 前的它'+(G0.via.id!=='main'?'(经'+G0.via.nm+')':''),gx+14,gy-12,COL.host);}
+  drawFx(v,now); drawWarn(v);
+  flushLbl(v);
+  scaleBar(v,fmtU,unitL());
+}
+
+/* ================= 敌旗舰特写:只对准旗舰取景,让「落后多少」在任何距离下都看得见 ================= */
+function trail(v,t0,t1,off){
+  const g=v.g, n=120; if(t1<=t0)return;
+  g.beginPath();
+  for(let i=0;i<=n;i++){const p=histAt(t0+(t1-t0)*i/n),[x,y]=toS(v,p.x+off.dx,p.y+off.dy);if(i)g.lineTo(x,y);else g.moveTo(x,y);}
+  g.stroke();
+}
+function drawZoom(now,dtr){
+  const v=VZ, g=v.g; sizeView(v); v.lq=[];
+  const {showT,showO,aT}=layerFlags();
+  const G=[0,1,2].map(i=>shipRet(i)), T=[0,1,2].map(i=>shipTrue(i)), dr=drOf(G[0]);
+  const xs=[G[0].x,T[0].x,dr.x-dr.ru,dr.x+dr.ru], ys=[G[0].y,T[0].y,dr.y-dr.ru,dr.y+dr.ru];
+  const bx0=Math.min(...xs),bx1=Math.max(...xs),by0=Math.min(...ys),by1=Math.max(...ys);
+  v.cx=(bx0+bx1)/2; v.cy=(by0+by1)/2;
+  const hx=Math.max((bx1-bx0)/2,1200)*1.35, hy=Math.max((by1-by0)/2,1200)*1.35;
+  const tk=Math.min(v.W/2/hx,(v.H/2-14)/hy);
+  if(v.snap||!isFinite(v.k)){v.k=tk;v.snap=false;}else v.k=Math.exp(Math.log(v.k)+(Math.log(tk)-Math.log(v.k))*(1-Math.exp(-dtr*4)));
+  bg(v);
+  const st=niceStep(70/v.k), wx0=v.cx-v.W/2/v.k, wx1=v.cx+v.W/2/v.k, wy0=v.cy-v.H/2/v.k, wy1=v.cy+v.H/2/v.k;
+  g.strokeStyle=COL.grid; g.lineWidth=1; g.beginPath();
+  for(let x=Math.floor(wx0/st)*st;x<=wx1;x+=st){const [sx]=toS(v,x,0);g.moveTo(sx,0);g.lineTo(sx,v.H);}
+  for(let y=Math.floor(wy0/st)*st;y<=wy1;y+=st){const [,sy]=toS(v,0,y);g.moveTo(0,sy);g.lineTo(v.W,sy);}
+  g.stroke();
+  const age=G[0].age, tA=G[0].te-Math.max(1.3*age,60);
+  g.lineWidth=1.4;
+  if(showO){g.strokeStyle=rgba(COL.host,0.75);trail(v,tA,G[0].te,FORM[0]);}
+  if(showT){g.strokeStyle=rgba(COL.host,aT*0.9);g.setLineDash([4,4]);trail(v,G[0].te,S.t,FORM[0]);g.setLineDash([]);}
+  for(const r of S.rings){ // 真实的掉头点;看见之后观测层也标出来
+    const sn=S.t>=ringSee(r);
+    if(r.kind!=='turn'||!(showT||(showO&&sn)))continue;
+    const [x,y]=toS(v,r.x,r.y); if(x<-20||x>v.W+20||y<-20||y>v.H+20)continue;
+    g.strokeStyle=rgba(COL.host,0.85); g.lineWidth=1.3; g.beginPath(); g.moveTo(x-4,y-4);g.lineTo(x+4,y+4);g.moveTo(x+4,y-4);g.lineTo(x-4,y+4);g.stroke();
+    lblQ(v,1,sn?'看见掉头':'真实掉头点(消息在路上)',x-8,y+12,rgba(COL.host,0.85),'right');
+  }
+  if(showO){
+    const [gx,gy]=toS(v,G[0].x,G[0].y),[dx,dy]=toS(v,dr.x,dr.y);
+    g.fillStyle='rgba(255,154,85,.07)'; g.strokeStyle='rgba(255,154,85,.6)'; g.lineWidth=1;
+    g.beginPath(); g.arc(dx,dy,Math.max(dr.ru*v.k,1.5),0,Math.PI*2); g.fill(); g.stroke();
+    g.setLineDash([3,4]); g.beginPath(); g.moveTo(gx,gy); g.lineTo(dx,dy); g.stroke(); g.setLineDash([]);
+    g.strokeStyle=COL.warn; g.lineWidth=1.5; g.beginPath(); g.moveTo(dx-6,dy);g.lineTo(dx+6,dy);g.moveTo(dx,dy-6);g.lineTo(dx,dy+6);g.stroke();
+    lblQ(v,2,'按影像外推的此刻位置',dx+10,dy,COL.warn);
+  }
+  if(showT)for(let i=0;i<3;i++){
+    drawShip(v,T[i].x,T[i].y,Math.atan2(T[i].vy,T[i].vx),FORM[i].cls,COL.host,'outline',aT);
+    if(showO){const [a,b]=toS(v,G[i].x,G[i].y),[c,d]=toS(v,T[i].x,T[i].y);g.strokeStyle=rgba(COL.host,0.2);g.lineWidth=1;g.beginPath();g.moveTo(a,b);g.lineTo(c,d);g.stroke();}
+  }
+  if(showO)for(let i=0;i<3;i++)drawShip(v,G[i].x,G[i].y,Math.atan2(G[i].vy,G[i].vx),FORM[i].cls,COL.host,'fill',1);
+  drawBeams(v,false); drawShells(v,false); drawFx(v,now);
+  if(showO)for(let i=0;i<3;i++){const [x,y]=toS(v,G[i].x,G[i].y);if(x<-8||x>v.W+8||y<-8||y>v.H+8)continue; /* 取景外的僚舰不标,免得标签被夹到图框边上 */ lblQ(v,i?1:3,(i?'':'影像年龄 ')+G[i].age.toFixed(2)+' s',x,y-16,i?'#9aa6b4':COL.host,'center',!!i);}
+  if(showT){const [x,y]=toS(v,T[0].x,T[0].y);lblQ(v,3,'真实位置',x,y+16,rgba(COL.host,0.85),'center');}
+  flushLbl(v); scaleBar(v,fmtKm);
+  return {G,T,dr};
+}
+/* ================= 径向时空图:横轴 = 离主队的距离,纵轴 = 时间(顶边是此刻)。
+   光在这张图上是一族平行斜线;青线是主队自己的「此刻所见」。量子通信下全舰所见取各只眼里最新的那张,
+   所以别的眼贡献的点会落在青线上方——离线越高,比主队自己看到的越新。 ================= */
+function drawST(){
+  const v=VS, g=v.g; sizeView(v); bg(v);
+  const Rmax=1.18*S.D, ml=48, mr=12, mt=26, mb=24, Wp=Math.max(10,v.W-ml-mr), Hp=Math.max(10,v.H-mt-mb);
+  const Ts=1.3*Rmax/C, t0w=S.t-Ts, O=S.O;   // 时间窗取 1.3 倍,「此刻所见」那条线总能完整穿过图面
+  const X=r=>ml+r/Rmax*Wp, Y=t=>mt+(S.t-t)/Ts*Hp;
+  g.lineWidth=1; g.strokeStyle=COL.grid; g.beginPath();
+  const u=unitL(), rs=niceStep(Rmax/4/u)*u, tsx=niceStep(Ts/4);
+  for(let r=0;r<=Rmax;r+=rs){g.moveTo(X(r),mt);g.lineTo(X(r),mt+Hp);}
+  for(let t=Math.floor(S.t/tsx)*tsx;t>=t0w;t-=tsx){g.moveTo(ml,Y(t));g.lineTo(ml+Wp,Y(t));}
+  g.stroke();
+  for(let r=rs;r<=Rmax*1.001;r+=rs)lbl(g,fmtU(r),X(r),mt+Hp+12,'#46566a','center',true);
+  for(let k=1;k*tsx<=Ts;k++)lbl(g,'−'+fmtT(k*tsx),ml-5,Y(S.t-k*tsx),'#46566a','right',true);
+  lbl(g,'此刻',ml-5,mt,'#6a7d92','right'); lbl(g,'离主队的距离',ml+Wp,mt-12,'#6a7d92','right');
+  const line=(pts,col,w,dash)=>{g.strokeStyle=col;g.lineWidth=w;g.setLineDash(dash||[]);g.beginPath();
+    pts.forEach(([r,t],i)=>i?g.lineTo(X(r),Y(t)):g.moveTo(X(r),Y(t)));g.stroke();g.setLineDash([]);};
+  const samp=(a,b,f,n)=>{const out=[];for(let i=0;i<=n;i++){const t=i===n?b:a+(b-a)*i/n;out.push([f(t),t]);}return out;};   // 终点直接取 b:a+(b−a)·n/n 会因舍入比 b 多一个 ulp,炮弹命中后 shellTrue 在那一刻返回 null,整页帧循环会死在这里
+  const rOf=p=>hyp(p.x-O[0],p.y-O[1]);
+  g.save(); g.beginPath(); g.rect(ml,mt,Wp,Hp); g.clip();
+  line([[0,t0w],[0,S.t]],COL.friend,2);
+  for(const f of S.fr){if(f.id==='main')continue;const rf=dist(f.p,O);line([[rf,t0w],[rf,S.t]],rgba(COL.friend,0.5),1,[4,4]);}
+  line(samp(t0w,S.t,t=>rOf(histAt(t)),80),COL.host,1.6);
+  for(const r of S.rings){                       // 每件事的消息:从事件点沿光线走向我方
+    if(r.t>S.t)continue;
+    const re=dist([r.x,r.y],O), te=Math.min(S.t,r.t+re/C);   // 画的是射向主队的那条光线
+    line([[re,r.t],[re-C*(te-r.t),te]],rgba(RING_COL[r.kind],0.55),1,[4,3]);
+  }
+  for(const sh of S.shells){const a=Math.max(sh.t0,t0w),b=Math.min(S.t,sh.tHit);if(b>a)line(samp(a,b,t=>rOf(shellTrue(sh,t)),30),sh.col,1.6);}
+  for(const bm of S.beams){
+    const a=Math.max(bm.t0,t0w), b=Math.min(S.t,bm.tHit); if(b<=a)continue;
+    line(samp(a,b,t=>rOf(beamPt(bm,Math.min(bm.L,C*(t-bm.t0)))),30),COL.beam,2);
+  }
+  line([[0,S.t],[Rmax,S.t-Rmax/C]],COL.see,1.6);   // 此刻所见
+  for(const bm of S.beams){                       // 全舰此刻看得见的光束段:主队负责的落在青线上,别的眼负责的在线上方
+    const segs=beamObs(bm,S.t); if(!segs)continue;
+    for(const o of segs){const pts=[];for(let i=0;i<=16;i++){const q=beamPt(bm,o.s0+(o.s1-o.s0)*i/16);pts.push([rOf(q),S.t-hyp(q.x-o.e.p[0],q.y-o.e.p[1])/C]);}
+      line(pts,rgba(COL.beam,0.9),5);}
+  }
+  g.restore();
+  const dot=(r,t,col,rad,via)=>{if(t<t0w)return;g.fillStyle=col;g.beginPath();g.arc(X(r),Y(t),rad,0,Math.PI*2);g.fill();
+    if(via&&via.id!=='main')lbl(g,'经'+via.nm,X(r)-7,Y(t)-9,col,'right');};   // 不在青线上的点:别的眼看到的,比主队自己看到的新
+  const G0=shipRet(0); dot(rOf(G0),G0.te,COL.host,4,G0.via);
+  for(const sh of S.shells){const o=shellObs(sh,S.t);if(o&&!o.gone)dot(rOf(o),o.te,sh.col,3.5,o.via);}
+  const lr=S.D*0.5; lbl(g,'主队此刻所见',X(lr)+8,Y(S.t-lr/C)-10,COL.see);
+  lbl(g,'敌舰',X(rOf(S.en))+5,mt+10,COL.host);
+  lbl(g,'主队',X(0)+6,mt+10,COL.friend);
+  let lk=0; for(const f of S.fr)if(f.id!=='main')lbl(g,f.nm,X(dist(f.p,O))+6,mt+10+14*(lk++),rgba(COL.friend,0.8));   // 逐艘错开一行,免得离主队距离相近时叠字
+}
+/* ================= 面板与交互 ================= */
+const $=id=>document.getElementById(id);
+const logMap=(a,b)=>({to:x=>Math.round(1000*Math.log(x/a)/Math.log(b/a)),from:i=>a*Math.pow(b/a,i/1000)});
+const MD=logMap(LS,5*LM), MT=logMap(0.5,2000);
+const M=s=>'<span class="m">'+s+'</span>';
+const NARR_Q={   // 量子通信设定下的解说
+  0:'这是量子通信版:我方舰船之间实时互通,任何一艘看见的,全舰同一瞬间都知道。所以我方看到的每样东西,都是经「离它光程最近的那艘我方舰」看到的样子,整支舰队的时差由离得最近的那只眼决定。红色实心是影像,红色虚线轮廓是真实位置;虚线圆环是某件事的消息,它扫过我方任何一艘船的那一刻,全舰就看见了这件事。关掉左栏的「量子通信版本」,就回到只有光速通信的对照。我方各舰连回主队的浅色呼吸虚线就是量子链路。',
+  1:'敌舰队在 '+M('1 光分')+' 外横向巡航,在真实时刻 '+M('T+8 s')+' 掉头。掉头的消息要走 '+M('60 s')+' 才到,所以这段时间里我方看到的影像仍按原航向前进,按影像速度外推出的此刻位置(橙色十字)也跟着错。真实位置始终落在橙色的可能位置圈里,圈的半径是 '+M('½·a·τ²')+',在 1 光分时约 '+M('2.7 万 km')+'、3 光分时约 '+M('24 万 km')+',只随距离的平方增长,与敌舰怎么机动无关。影像本身没有形变,因为 '+M('560 km/s')+' 只有光速的 '+M('0.19%')+',看到的就是一段准时播放、但已经过期的录像。侧翼离敌舰比主队还远,在这里帮不上忙,所以影像年龄和光速通信时一样是'+M('60 s')+';场景④放一艘前出哨舰,可以看到区别。',
+  2:'敌舰在 '+M('10 光秒')+' 外、真实时刻 '+M('T+3 s')+' 同时打出四发炮弹,弹速分别是 '+M('0.1c')+'(游戏主炮)、'+M('0.3c')+'、'+M('0.5c')+' 和 '+M('0.9c')+'。四发共用一道炮口闪光,闪光要 '+M('10 s')+' 才传到我方,在那之前我方什么都看不见,真实的炮弹却早已上路。看见闪光以后,弹影从敌舰影像处出发,以 '+M('u/(1−u/c)')+' 的视速度扑来:0.5c 那发看上去正好是光速,0.9c 那发看上去是 9 倍光速,并且因为多普勒效应显得更亮、更偏蓝。预警时间等于 '+M('D/u − D/c')+',弹越快越短:主炮那发还有 '+M('90 s')+',0.9c 那发只剩 '+M('1.1 s')+'。主炮弹要飞 '+M('100 s')+',想快进就把时间倍率拉高。四发都打主队,而主队本来就是离敌舰最近的那只眼,所以这一幕与光速通信时完全相同,主队旁边的四个命中倒计时就是各自的预警。',
+  3:'敌舰在 '+M('1 光分')+' 外、真实时刻 '+M('T+4 s')+' 同时向主队和侧翼各射出一道光束。打主队的那一道和光速通信时一样没有预警:主队本身就是离敌舰最近的那只眼,闪光、光束和命中在同一瞬间到达。打侧翼的那一道不一样了:主队在 '+M('T+64 s')+' 看见闪光,全舰同一瞬间知道,而光束要到 '+M('T+71.9 s')+' 才打到侧翼,所以侧翼有 '+M('7.9 s')+' 预警。这 '+M('7.9 s')+' 里光束的后半截虽然还看不见,但光束不会拐弯,看见了它从哪儿、朝哪儿、何时开火,剩下的路径和命中时刻就算得出来,画面上在侧翼旁挂着命中倒计时。画面上,光束先从敌舰影像处窜出约三成路程,这一段是主队看到的;剩下的一段连同命中同时出现,那是侧翼自己看到的,它就是目标,所以没法提前。命中本身,全舰在它发生的那一刻就知道了。真空里的光束其实看不见,这里按被星际尘埃散射的样子画出来。',
+  4:'主队前方多了一艘前出哨舰,它离敌舰只有 '+M('0.42 光分')+'。全舰看到的敌舰影像因此只旧 '+M('25.5 s')+',而不是 '+M('60 s')+':敌舰在 '+M('T+4 s')+' 掉头,全舰在 '+M('T+29.5 s')+' 就看见了。'+M('T+30 s')+' 敌舰向主队射出一道光束,前哨在 '+M('T+55.5 s')+' 看见闪光,全舰同时知道,而光束要到 '+M('T+90 s')+' 才打到主队,于是主队有 '+M('34.5 s')+' 预警,主队旁边挂着命中倒计时。这段时间里,画面上会看到一段光束从敌舰影像处朝主队飞来,前六成路程都是前哨看到的,视速度从 '+M('3.4c')+' 降到 '+M('0.59c')+';剩下的四成连同命中同时出现。按巡洋舰 '+M('15 km/s²')+' 的推力,'+M('34.5 s')+' 足够横移约 '+M('8900 km')+',超过游戏里 '+M('2000 km')+' 的命中判定半径,也就是说,有前哨时远距离光束是躲得开的。',
+};
+const NARR_L={   // 光速通信设定下的解说(原第一版)
+  0:'这是光速延迟演示,当前是光速通信设定:我方舰船之间只能用光速互相转报,而转报绕了路,永远不会比主队自己直接看到的更早(三角不等式),所以整张态势图就是主队一只眼看到的样子。红色实心是我方传感器此刻收到的敌舰影像,红色虚线轮廓是它此刻的真实位置,两者之间差着光在路上走的那段时间。虚线圆环是「某件事已经发生」的消息,它以光速向外扩散,扫过主队的那一刻我们才看见这件事。打开左栏的「量子通信版本」可以对比。',
+  1:'敌舰队在 '+M('1 光分')+' 外横向巡航,在真实时刻 '+M('T+8 s')+' 掉头。掉头的消息要走 '+M('60 s')+' 才到,所以这段时间里我方看到的影像仍按原航向前进,按影像速度外推出的此刻位置(橙色十字)也跟着错。真实位置始终落在橙色的可能位置圈里,圈的半径是 '+M('½·a·τ²')+',在 1 光分时约 '+M('2.7 万 km')+'、3 光分时约 '+M('24 万 km')+',只随距离的平方增长,与敌舰怎么机动无关。影像本身没有形变,因为 '+M('560 km/s')+' 只有光速的 '+M('0.19%')+',看到的就是一段准时播放、但已经过期的录像。',
+  2:'敌舰在 '+M('10 光秒')+' 外、真实时刻 '+M('T+3 s')+' 同时打出四发炮弹,弹速分别是 '+M('0.1c')+'(游戏主炮)、'+M('0.3c')+'、'+M('0.5c')+' 和 '+M('0.9c')+'。四发共用一道炮口闪光,闪光要 '+M('10 s')+' 才传到我方,在那之前我方什么都看不见,真实的炮弹却早已上路。看见闪光以后,弹影从敌舰影像处出发,以 '+M('u/(1−u/c)')+' 的视速度扑来:0.5c 那发看上去正好是光速,0.9c 那发看上去是 9 倍光速,并且因为多普勒效应显得更亮、更偏蓝。预警时间等于 '+M('D/u − D/c')+',弹越快越短:主炮那发还有 '+M('90 s')+',0.9c 那发只剩 '+M('1.1 s')+'。主炮弹要飞 '+M('100 s')+',想快进就把时间倍率拉高。主队旁边的四个命中倒计时就是各自的预警。',
+  3:'敌舰在 '+M('1 光分')+' 外、真实时刻 '+M('T+4 s')+' 同时向主队和侧翼各射出一道光束。光束和「它开火了」这条消息跑得一样快,所以打向主队的那一道没有任何预警:闪光、光束和命中在同一瞬间到达,整根光束同时亮起,而不是从远处射过来。打向侧翼的那一道会从敌舰影像处极快地窜出,越靠近侧翼越慢,视速度从约 '+M('3.4c')+' 降到约 '+M('0.66c')+',原因是光束上每一点离主队的远近不同。主队在 '+M('T+64 s')+' 看见闪光,能算出它会在 '+M('T+71.9 s')+' 打中侧翼,可是用光速通知侧翼要 '+M('49.5 s')+',来不及;侧翼自己要到被打中那一刻才看见,所以它的预警是 '+M('0 s')+',而主队要到 '+M('T+121.4 s')+' 才看见命中。真空里的光束本身其实看不见,这里按被星际尘埃散射的样子画出来。',
+  4:'主队前方有一艘前出哨舰,离敌舰只有 '+M('0.42 光分')+',它自己看到的敌舰只旧 '+M('25.5 s')+'。可是在光速通信下,它的报告还要再走 '+M('45.7 s')+' 才到主队,到的时候已经旧了约 '+M('71 s')+',比主队自己直接看到的 '+M('60 s')+' 还旧,所以态势图上的敌舰仍是 '+M('60 s')+' 前的样子,掉头也要到 '+M('T+64 s')+' 才看见。'+M('T+30 s')+' 敌舰向主队射出一道光束,前哨在 '+M('T+55.5 s')+' 看见闪光并立刻用光速报警,警报约在 '+M('T+101 s')+' 才到主队,比 '+M('T+90 s')+' 的命中晚了约 '+M('11 s')+',主队的预警仍是 '+M('0 s')+'。这就是三角不等式:转报绕的路永远不比光直接走的短,只有前哨恰好在敌舰与主队的连线上时才打平。所以光速通信下前哨帮不了主队的画面,唯一的用处在它自己身上——它看得比主队早,该给它自主开火和规避的权限。打开「量子通信版本」对比。',
+};
+function syncUI(){
+  $('inD').value=MD.to(S.D); $('rdD').textContent=fmtL(S.D);
+  $('inTs').value=MT.to(U.ts); $('rdTs').textContent='×'+(U.ts<10?U.ts.toFixed(1):Math.round(U.ts));
+  const tog=(sel,f)=>document.querySelectorAll(sel).forEach(b=>b.classList.toggle('on',f(b)));
+  tog('[data-layer]',b=>b.dataset.layer===U.layer);
+  tog('[data-shell]',b=>b.dataset.shell===U.shellK);
+  tog('[data-d]',b=>Math.abs(+b.dataset.d*LS-S.D)<1e-6*S.D);
+  tog('[data-scene]',b=>+b.dataset.scene===U.scene);
+  $('btnPause').textContent=U.paused?'继续':'暂停'; $('btnPause').classList.toggle('on',U.paused);
+  $('btnJink').classList.toggle('on',U.jink);
+  $('btnPicket').classList.toggle('on',U.picket);
+  $('btnRover').classList.toggle('on',!!U.rover);
+  const N=U.quantum?NARR_Q:NARR_L; $('narr').innerHTML=N[U.scene]||N[0];
+  $('btnQuantum').classList.toggle('on',U.quantum);
+}
+function updCards(){
+  if(!S.cards.length){$('cards').innerHTML='<div class="ev empty">还没有事件。开火或让敌舰掉头以后,这里会并排列出它在真实世界发生的时刻,和我方看见它的时刻。</div>';return;}
+  const who=U.quantum?'全舰看见':'主队看见';
+  $('cards').innerHTML=S.cards.map(c=>{  // 「看见」按此刻的眼现算,切通信设定或增减前哨时会跟着变
+    const rows=c.rows.map(([nm,tT,p])=>{const tS=seeT(p,tT);return '<div class="l"><span>'+nm+'</span><b class="'+(S.t>=tT?'on':'')+'">T+'+fmtT(tT)+'</b>'
+      +'<span>'+who+'</span><b class="'+(S.t>=tS?'on':'')+'">T+'+fmtT(tS)+'</b></div>';}).join('');
+    let w='';
+    if(c.tgtP){ // 预警 = 命中 − 目标舰自己最早知道开火的时刻(量子通信:全舰最早;光速通信:它自己看见)
+      const f=S.fr.find(x=>dist(x.p,c.tgtP)<1);
+      if(f)w='<b>预警 '+fmtT(c.rows[1][1]-knowAt(f,c.rows[0][2],c.rows[0][1]))+'</b>';
+    }
+    return '<div class="ev" style="border-color:'+(c.col||COL.host)+'"><div class="h">'+c.nm+w+'</div>'+rows+'</div>';
+  }).join('');
+}
+function updLive(){
+  const pend=S.rings.filter(r=>r.t<=S.t&&S.t<ringSee(r));
+  $('live').innerHTML=pend.length
+    ?'真实世界里已经发生、而'+(U.quantum?'全舰':'主队')+'还看不见的事有 '+M(pend.length+' 件')+',最近的一件还要 '+M(fmtT(Math.min(...pend.map(ringSee))-S.t))+' 才会被看见。'
+    :'此刻没有在路上的消息,我方看到的就是能看到的全部。';
+}
+function updZoomReadout(Z){
+  const {showT}=layerFlags(), G=Z.G[0], T=Z.T[0], dr=Z.dr;
+  const P=G.via.p, nx=P[0]-G.x, ny=P[1]-G.y, nl=hyp(nx,ny)||1, kk=1/(1-(G.vx*nx+G.vy*ny)/nl/C);
+  const hid='<i style="font-style:normal;color:#46566a">观测层不可知</i>';
+  const row=(a,b)=>'<div><span>'+a+'</span>'+b+'</div>';
+  $('rdZoom').innerHTML=row('影像来源',G.via.nm)+row('影像年龄',G.age.toFixed(2)+' s')+row('可能位置圈半径',fmtKm(dr.ru))
+    +row('影像落后真实',showT?fmtKm(hyp(T.x-G.x,T.y-G.y)):hid)+row('外推误差',showT?fmtKm(hyp(T.x-dr.x,T.y-dr.y)):hid)
+    +row('视运动倍率',kk.toFixed(4));
+}
+function runScene(n){
+  U.scene=n; U.jink=false; U.layer='mix'; U.paused=false; U.picket=(n===4);   // 前哨只在场景④出场,其余场景只有主队与侧翼
+  if(n===1){U.ts=6; reset(LM); S.sched.push({t:8,fn:enemyTurn});}
+  else if(n===2){U.ts=2; reset(10*LS); S.sched.push({t:3,fn:()=>{for(const k of ['mac','c3','c5','c9'])fireShell('us',k);}});}
+  else if(n===3){U.ts=8; reset(LM); S.sched.push({t:4,fn:()=>{fireBeam('us');fireBeam('flank');}});}
+  else if(n===4){U.ts=6; reset(LM); S.sched.push({t:4,fn:enemyTurn},{t:30,fn:()=>fireBeam('us')});}
+  else reset(S.D);
+  VZ.snap=true; syncUI(); updCards();
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return; const d=b.dataset;
+  if(d.d){U.scene=0;reset(+d.d*LS);VZ.snap=true;}
+  else if(d.layer)U.layer=d.layer;
+  else if(d.shell)U.shellK=d.shell;
+  else if(d.scene){runScene(+d.scene);return;}
+  else if(d.fire){const [w,t]=d.fire.split(':');if(w==='shell')fireShell(t);else fireBeam(t);}
+  else if(b.id==='btnPause')U.paused=!U.paused;
+  else if(b.id==='btnReset'){if(U.scene){runScene(U.scene);return;}reset(S.D);VZ.snap=true;}
+  else if(b.id==='btnTurn')enemyTurn();
+  else if(b.id==='btnJink'){U.jink=!U.jink;S.nextJink=S.t+2;}
+  else if(b.id==='btnPicket')setPicket(!U.picket);
+  else if(b.id==='btnRover')setRover(!U.rover);
+  else if(b.id==='btnQuantum')U.quantum=!U.quantum;
+  syncUI(); updCards();
+});
+$('inD').addEventListener('input',e=>{$('rdD').textContent=fmtL(MD.from(+e.target.value));});
+$('inD').addEventListener('change',e=>{U.scene=0;reset(MD.from(+e.target.value));VZ.snap=true;syncUI();updCards();});
+$('inTs').addEventListener('input',e=>{U.ts=MT.from(+e.target.value);syncUI();});
+window.addEventListener('keydown',e=>{if(e.code==='Space'&&e.target.tagName!=='INPUT'){e.preventDefault();U.paused=!U.paused;syncUI();}});
+
+/* ---- 机动舰拖动:只在全景里、只拖这一艘。按下在它 16 px 以内才开始拖;移动与松手挂在 window 上,拖出画布也不丢 ---- */
+const drag={on:false};
+function worldAt(v,sx,sy){return [v.cx+(sx-v.W/2)/v.k, v.cy-(sy-v.H/2)/v.k];}
+function roverHit(sx,sy){const f=S.fr.find(x=>x.drag);if(!f)return null;const [x,y]=toS(VW,f.p[0],f.p[1]);return hyp(sx-x,sy-y)<16?f:null;}
+function wideXY(e){const r=VW.cv.getBoundingClientRect();return [e.clientX-r.left,e.clientY-r.top];}
+VW.cv.addEventListener('pointerdown',e=>{const [sx,sy]=wideXY(e);if(!roverHit(sx,sy))return;drag.on=true;VW.cv.style.cursor='grabbing';e.preventDefault();});
+window.addEventListener('pointermove',e=>{
+  const [sx,sy]=wideXY(e);
+  if(drag.on){ // 夹在画面以内再换算回世界坐标,拖到画布外也不会把船拖丢
+    const qx=Math.max(8,Math.min(VW.W-8,sx)), qy=Math.max(8,Math.min(VW.H-8,sy)), [x,y]=worldAt(VW,qx,qy);
+    U.rover={fx:x/S.D,fy:y/S.D}; S.fr=frBuild(S.D);
+  }else if(e.target===VW.cv)VW.cv.style.cursor=roverHit(sx,sy)?'grab':'';
+});
+window.addEventListener('pointerup',()=>{if(drag.on){drag.on=false;VW.cv.style.cursor='';}});
+
+let lastMs=performance.now(), uiTick=0;
+function frame(now){
+  const dtr=Math.min(0.05,Math.max(0,(now-lastMs)/1000)); lastMs=now;
+  if(!U.paused)advance(dtr*U.ts);
+  fxTick(now);
+  drawWide(now); const Z=drawZoom(now,dtr); drawST();
+  $('rdClock').textContent='T+'+fmtT(S.t);
+  if(uiTick++%6===0){updZoomReadout(Z);updCards();updLive();}
+  requestAnimationFrame(frame);
+}
+
+/* ================= 自检(?selftest):只验物理,结果写进 #selftest 与标题 ================= */
+function runSelftest(){
+  const out=[]; let ok=true;
+  const chk=(nm,c,val)=>{out.push((c?'ok   ':'FAIL ')+nm+'  '+val);if(!c)ok=false;};
+  const pk0=U.picket, q0=U.quantum, rv0=U.rover; U.picket=false; U.quantum=true; U.rover=null;   // 先验量子通信,末尾再验光速通信
+  const still=()=>{Object.assign(S.en,{vx:0,vy:0,dvx:0,dvy:0});S.hist=[{t:0,x:0,y:S.D,vx:0,vy:0}];};
+  reset(LM); still(); advance(30);
+  const g0=shipRet(0); chk('静止敌舰:影像年龄 = 最近那只眼的光程(侧翼更远,仍是主队的 D/c)',Math.abs(g0.age-60)<1e-6&&g0.via.id==='main',g0.age.toFixed(9)+' s 经'+g0.via.nm);
+  reset(LM); advance(1); const s5=fireShell('us','c5'), f5=seeT(s5.p0,s5.t0);
+  chk('看见闪光之前没有弹影',shellObs(s5,f5-0.01)===null,'');
+  const a=shellObs(s5,f5+1), b=shellObs(s5,f5+2), app=dist([a.x,a.y],[b.x,b.y])/C;
+  chk('0.5c 正对主队,视速度 = 1c',Math.abs(app-1)<1e-3,app.toFixed(5)+'c');
+  const coneErr=C*(f5+1-a.te)-dist([a.x,a.y],a.via.p); // te 必须是绝对时刻,且落在看见它那只眼的「此刻所见」上
+  chk('弹影落在看见它那只眼的「此刻所见」上',Math.abs(coneErr)<1,coneErr.toFixed(3)+' km');
+  const h=shellObs(s5,s5.tHit-1e-3); chk('命中前 1 ms 弹影离主队约 300 km',h&&!h.gone&&Math.abs(hyp(h.x,h.y)-300)<5,h&&hyp(h.x,h.y).toFixed(1)+' km');
+  chk('预警时间 = D/u − D/c',Math.abs((s5.tHit-f5)-60)<1e-6,(s5.tHit-f5).toFixed(6)+' s');  reset(LM); advance(1); const s9=fireShell('us','c9'), q=shellObs(s9,seeT(s9.p0,s9.t0)+1);
+  chk('0.9c 正对:多普勒 δ ≈ 4.359',Math.abs(q.dop-4.3589)<0.001,q.dop.toFixed(4));
+  chk('0.9c 正对:视速度 ≈ 9c',Math.abs(q.app/C-9)<0.001,(q.app/C).toFixed(4)+'c');
+  const ts9=shellTarget(s9); chk('炮弹命中告警:只凭方向认出目标是主队,推算命中时刻与真实一致',ts9&&ts9.e.id==='main'&&Math.abs(s9.t0+ts9.s/s9.u-s9.tHit)<1e-6,ts9&&(ts9.e.nm+' '+(s9.t0+ts9.s/s9.u-s9.tHit).toExponential(1)+' s'));
+  reset(LM); advance(1); const b1=fireBeam('us'), f1=seeT(b1.p0,b1.t0);
+  chk('光束到达前看不见',beamObs(b1,f1-0.01)===null,'');
+  const o1=beamObs(b1,f1+b1.dur*0.5); chk('打主队的光束整根同时亮起',o1&&o1.length===1&&o1[0].s0<1&&o1[0].s1>b1.L-1,o1&&(o1.length+' 段'));
+  chk('打主队:预警 0 s(主队就是离敌最近的眼)',Math.abs(b1.tHit-f1)<1e-6,(b1.tHit-f1).toExponential(2)+' s');
+  reset(LM); advance(1); const b2=fireBeam('flank'), f2=seeT(b2.p0,b2.t0), w2=(dist(b2.p0,S.F)-dist(b2.p0,S.O))/C;
+  chk('打侧翼:预警 = (|E侧翼| − |E主队|)/c',Math.abs((b2.tHit-f2)-w2)<1e-6&&w2>7,(b2.tHit-f2).toFixed(3)+' s');
+  const v0=beamFrontSpeed(b2,0,S.O)/C, want=1/(1-(b2.d[0]*(0-b2.p0[0])+b2.d[1]*(0-b2.p0[1]))/dist(b2.p0,S.O));
+  chk('打侧翼:起步视速度 = c/(1−cosφ)',Math.abs(v0-want)<1e-6&&v0>3,v0.toFixed(3)+'c');
+  const cm=beamCells(b2).find(c=>c.e.id==='main');
+  chk('分界点上两只眼同时看见(全舰所见连续)',cm&&Math.abs(beamG(b2,cm.hi,S.O)-b2.L)<1,cm&&(beamG(b2,cm.hi,S.O)-b2.L).toFixed(3)+' km');
+  const oA=beamObs(b2,b2.tHit-0.5), oB=beamObs(b2,b2.tHit+0.01);
+  const aOK=oA&&oA.every(s=>s.e.id==='main'&&s.s1<cm.hi), bOK=oB&&oB.some(s=>s.e.id==='flank'&&Math.abs(s.s0-cm.hi)<1&&s.s1>=b2.L-1e-3);
+  chk('打侧翼:命中前只有主队那段在伸,命中那一刻侧翼那段连同命中同时出现',aOK&&bOK,'分界在全程 '+(cm.hi/b2.L*100).toFixed(1)+'% 处');
+  const tg2=beamTarget(b2); chk('光束命中告警:只凭方向认出目标是侧翼,推算命中时刻与真实一致',tg2&&tg2.e.id==='flank'&&Math.abs(b2.t0+tg2.s/C-b2.tHit)<1e-6,tg2&&(tg2.e.nm+' '+(b2.t0+tg2.s/C-b2.tHit).toExponential(1)+' s'));
+  const tt=b2.tHit+0.6*b2.dur, cf=beamCells(b2).find(c=>c.e.id==='flank');
+  const phF=s=>{const p=beamPt(b2,s);return tt-hyp(p.x-S.F[0],p.y-S.F[1])/C-(b2.t0+s/C);}, pf=[cf.lo+1,(cf.lo+cf.hi)/2,cf.hi-1].map(phF), If=beamI(pf[0],b2.dur);
+  chk('渐隐:侧翼迎头看的那一段整体同步变暗',Math.max(...pf)-Math.min(...pf)<1e-6&&If>0&&If<1,'亮度 '+If.toFixed(2)+',相位差 '+(Math.max(...pf)-Math.min(...pf)).toExponential(1)+' s');
+  const tq=f2+0.8*b2.dur, sq=beamObs(b2,tq)[0], phM=s=>{const p=beamPt(b2,s);return tq-hyp(p.x,p.y)/C-(b2.t0+s/C);};
+  const Ih=beamI(phM(sq.s1),b2.dur), It=beamI(phM(sq.s0+1),b2.dur);
+  chk('渐隐:主队从侧面看的一段头亮尾暗(彗星状)',sq.e.id==='main'&&Ih>0.99&&It<0.9&&It>0,'头 '+Ih.toFixed(2)+' / 尾 '+It.toFixed(2));
+  U.picket=true;
+  reset(LM); still(); advance(40); const gp=shipRet(0), agePk=dist([0,S.D],S.fr[2].p)/C;
+  chk('前哨在场:敌舰影像年龄 = 前哨到敌舰的光程',Math.abs(gp.age-agePk)<1e-6&&gp.via.id==='pk',gp.age.toFixed(3)+' s 经'+gp.via.nm);
+  reset(LM); advance(1); const b3=fireBeam('us'), f3=seeT(b3.p0,b3.t0), w3=(dist(b3.p0,S.O)-dist(b3.p0,S.fr[2].p))/C;
+  chk('前哨在场:打主队的光束预警 = (|E主队| − |E前哨|)/c',Math.abs((b3.tHit-f3)-w3)<1e-6&&w3>30,(b3.tHit-f3).toFixed(3)+' s');
+  const o4=beamObs(b3,f3+1);
+  chk('前哨在场:看见闪光后光束从敌舰处朝主队伸过来',o4&&o4.length===1&&o4[0].e.id==='pk'&&o4[0].s0<1&&o4[0].s1>0.02*b3.L,o4&&('已伸 '+(o4[0].s1/b3.L*100).toFixed(1)+'%'));
+  const tg3=beamTarget(b3); chk('光束命中告警:认出目标是主队(前哨不在弹道上),推算命中时刻与真实一致',tg3&&tg3.e.id==='main'&&Math.abs(b3.t0+tg3.s/C-b3.tHit)<1e-6,tg3&&(tg3.e.nm+' '+(b3.t0+tg3.s/C-b3.tHit).toExponential(1)+' s'));  U.picket=false;
+  /* PERF1 对照:筛眼 + 不动点迭代,与原来逐眼 56 步二分的结果逐时刻比(敌舰机动中,4 只眼) */
+  const refRet=i=>{const f=FORM[i],tr=shipTrue(i);let best=null;for(const e of eyes()){const O=e.p,gg=te=>{const p=histAt(te);return S.t-te-hyp(p.x+f.dx-O[0],p.y+f.dy-O[1])/C;};const r0=hyp(tr.x-O[0],tr.y-O[1]);let lo=S.t-2*r0/C-5,hi=S.t;for(let k=0;k<56;k++){const m=(lo+hi)/2;if(gg(m)>0)lo=m;else hi=m;}const te=(lo+hi)/2;if(!best||te>best.te)best={te,e};}return best;};
+  U.picket=true; U.rover={fx:0.2,fy:0.8}; reset(LM); advance(30); enemyTurn(); let wp=0, wv=0;
+  for(let k=0;k<60;k++){advance(1.7);for(let i=0;i<3;i++){const a=shipRet(i),r=refRet(i);wp=Math.max(wp,Math.abs(a.te-r.te));if(a.via!==r.e)wv++;}}
+  chk('PERF1:筛眼 + 不动点迭代与逐眼二分一致(机动中,4 只眼)',wp<1e-9&&!wv,'最大差 '+wp.toExponential(1)+' s,来源不一致 '+wv+' 次');
+  U.picket=false; U.rover=null; reset(LM); advance(1); const bx=fireBeam('flank'), tx=bx.t0+62, o8=beamObs(bx,tx);
+  U.rover={fx:0.55,fy:0.35}; S.fr=frBuild(S.D); const o9=beamObs(bx,tx);
+  chk('PERF1:眼变化后光束分区缓存失效重算',!!o8&&!o8.some(s=>s.e.id==='rv')&&!!o9&&o9.some(s=>s.e.id==='rv'),(o8?o8.length:0)+' 段 → '+(o9?o9.length:0)+' 段(含机动舰)');
+  const rr=mulberry(7); let arcBad=0;   // 性质测试:圆周上每个方向「在画面内」与「被画出来」必须一致(贴着画面边 3 px 内的不算)
+  for(let k=0;k<200;k++){
+    const W=800,H=600,cx=(rr()*3-1)*W,cy=(rr()*3-1)*H,R=rr()*2500, sp=arcSpans(cx,cy,R,W,H);
+    for(let j=0;j<360;j++){const a=j/360*TAU,px=cx+R*Math.cos(a),py=cy+R*Math.sin(a);
+      if(Math.min(Math.abs(px+2),Math.abs(px-W-2),Math.abs(py+2),Math.abs(py-H-2))<3)continue;
+      const inside=px>-2&&px<W+2&&py>-2&&py<H+2, cov=sp.some(([a0,a1])=>a>=a0-1e-9&&a<=a1+1e-9); if(inside!==cov)arcBad++;}
+  }
+  chk('PERF1:光环只画落进画面的弧段,与画面内的点逐一对得上',arcBad===0,'不一致 '+arcBad+' 处 / 72000 个方向');
+  U.rover={fx:0.1,fy:0.85}; reset(LM); still(); advance(40);   // 机动舰放到敌舰近旁
+  const gr=shipRet(0), ageR=dist([0,S.D],S.fr.find(f=>f.id==='rv').p)/C;
+  chk('机动舰加入观测网(量子通信):影像来自离敌最近的它',Math.abs(gr.age-ageR)<1e-6&&gr.via.id==='rv',gr.age.toFixed(3)+' s 经'+gr.via.nm);
+  U.quantum=false; const grl=shipRet(0);
+  chk('机动舰在光速通信下改善不了主队的画面',Math.abs(grl.age-60)<1e-6&&grl.via.id==='main',grl.age.toFixed(3)+' s 经'+grl.via.nm);
+  U.quantum=true; U.rover=null;
+  reset(LM); advance(200); let G=shipRet(0), d=drOf(G), T=shipTrue(0);
+  chk('匀速航行时外推误差 < 5 km',hyp(d.x-T.x,d.y-T.y)<5,hyp(d.x-T.x,d.y-T.y).toFixed(2)+' km');
+  enemyTurn(); let worst=0;
+  for(let k=0;k<400;k++){advance(0.5);G=shipRet(0);d=drOf(G);T=shipTrue(0);worst=Math.max(worst,(hyp(d.x-T.x,d.y-T.y)-2)/Math.max(d.ru,1));}
+  chk('掉头后真实位置始终在可能位置圈内',worst<=1,'最大占比 '+worst.toFixed(3));
+  /* 光速通信:态势图只有主队一只眼。前哨再近,转报也绕了路,改善不了主队的画面与预警 */
+  U.quantum=false; U.picket=true;
+  reset(LM); still(); advance(40); const gl=shipRet(0), K=S.fr[2].p, E0=[0,S.D], relay=(dist(E0,K)+dist(K,S.O))/C;
+  chk('光速通信 + 前哨:态势图上的敌舰仍是主队看到的 60 s',Math.abs(gl.age-60)<1e-6&&gl.via.id==='main',gl.age.toFixed(3)+' s 经'+gl.via.nm);
+  chk('光速通信:前哨转报的影像比主队直接看到的更旧(三角不等式)',relay>gl.age,'转报 '+relay.toFixed(2)+' s > 直接 '+gl.age.toFixed(2)+' s');
+  reset(LM); advance(1); const b5=fireBeam('us'), f5b=seeT(b5.p0,b5.t0), late5=b5.t0+(dist(b5.p0,K)+dist(K,S.O))/C-b5.tHit;
+  chk('光速通信 + 前哨:打主队的光束预警仍是 0 s',Math.abs(b5.tHit-f5b)<1e-6,(b5.tHit-f5b).toExponential(1)+' s');
+  chk('光速通信 + 前哨:前哨的光速警报比光束晚到',late5>10,'晚 '+late5.toFixed(2)+' s');
+  U.picket=false; reset(LM); advance(1); const b6=fireBeam('flank'), sh6=seeT(b6.T,b6.tHit);
+  const o6=beamObs(b6,sh6-0.5), o7=beamObs(b6,sh6+0.01);
+  chk('光速通信:打侧翼时,主队看见命中那一刻前沿恰好到达侧翼(与原版一致)',o6&&o6[0].s1<b6.L-1&&o7&&o7[o7.length-1].s1>=b6.L-1e-3,o6&&((b6.L-o6[0].s1).toFixed(0)+' km 之前未到'));
+  const own6=b6.tHit-knowAt(S.fr[1],b6.p0,b6.t0);
+  chk('光速通信:侧翼自己的光束预警 = 0 s',Math.abs(own6)<1e-6,own6.toExponential(1)+' s');
+  U.picket=pk0; U.quantum=q0; U.rover=rv0;
+  $('selftest').textContent=out.join('\n'); document.title=ok?'SELFTEST:PASS':'SELFTEST:FAIL';
+  $('selftest').setAttribute('data-ok',ok?'1':'0');
+}
+
+/* ================= 交互自检(?uitest):全部走真实的 click / input / change 事件,不直接调函数 ================= */
+function runUitest(){
+  const out=[]; let ok=true;
+  const chk=(nm,c,val)=>{out.push((c?'ok   ':'FAIL ')+nm+'  '+(val==null?'':val));if(!c)ok=false;};
+  const click=sel=>document.querySelector(sel).click();
+  click('[data-scene="3"]'); chk('场景③ 按钮',U.scene===3&&S.D===LM&&S.sched.length===1,'scene='+U.scene);
+  const n0=S.beams.length; advance(5); chk('场景③ 到点自动射出两道光束',S.beams.length===n0+2,S.beams.length+' 道');
+  click('[data-scene="4"]'); chk('场景④ 按钮带出前哨',U.scene===4&&U.picket&&S.fr.length===3,S.fr.map(f=>f.nm).join('/'));
+  click('#btnPicket'); chk('「前出哨舰」关',!U.picket&&S.fr.length===2&&!$('btnPicket').classList.contains('on'));
+  click('#btnPicket'); chk('「前出哨舰」开',U.picket&&S.fr.length===3&&$('btnPicket').classList.contains('on'));
+  click('#btnQuantum'); chk('「量子通信版本」开',U.quantum&&$('btnQuantum').classList.contains('on'));
+  click('#btnQuantum'); chk('「量子通信版本」关',!U.quantum&&!$('btnQuantum').classList.contains('on'));
+  click('#btnRover'); const rv=S.fr.find(f=>f.id==='rv');
+  chk('「随机舰船位置」开:星图里多了一艘机动舰',!!U.rover&&!!rv&&$('btnRover').classList.contains('on'),rv&&('('+(rv.p[0]/S.D).toFixed(2)+', '+(rv.p[1]/S.D).toFixed(2)+') D'));
+  drawWide(performance.now());   // 先画一帧,拿到全景的取景参数
+  const cr=VW.cv.getBoundingClientRect(), [rsx,rsy]=toS(VW,rv.p[0],rv.p[1]), tx=VW.W/2, ty=VW.H/2;
+  VW.cv.dispatchEvent(new PointerEvent('pointerdown',{clientX:cr.left+rsx,clientY:cr.top+rsy,pointerId:7,bubbles:true}));
+  chk('按在机动舰上开始拖',drag.on===true);
+  window.dispatchEvent(new PointerEvent('pointermove',{clientX:cr.left+tx,clientY:cr.top+ty,pointerId:7,bubbles:true}));
+  window.dispatchEvent(new PointerEvent('pointerup',{clientX:cr.left+tx,clientY:cr.top+ty,pointerId:7,bubbles:true}));
+  const want=worldAt(VW,tx,ty), rv2=S.fr.find(f=>f.id==='rv'), off=rv2?hyp(rv2.p[0]-want[0],rv2.p[1]-want[1]):Infinity;
+  chk('拖到画面中心就停在画面中心,松手结束',off<1e-6*S.D&&!drag.on,'偏差 '+fmtKm(off));
+  VW.cv.dispatchEvent(new PointerEvent('pointerdown',{clientX:cr.left+5,clientY:cr.top+5,pointerId:8,bubbles:true}));
+  chk('按在空白处不会开始拖',drag.on===false);
+  click('#btnRover'); chk('「随机舰船位置」关:机动舰移除',!U.rover&&!S.fr.some(f=>f.id==='rv'));
+  click('[data-shell="c9"]'); chk('弹速切到 0.9c',U.shellK==='c9'&&document.querySelector('[data-shell="c9"]').classList.contains('on'));
+  const s0=S.shells.length; click('[data-fire="shell:flank"]'); const sl=S.shells[S.shells.length-1];
+  chk('「炮弹 打侧翼」开出一发 0.9c',S.shells.length===s0+1&&sl.k==='c9'&&sl.tgt==='flank');
+  const b0=S.beams.length; click('[data-fire="beam:us"]'); chk('「光束 打主队」',S.beams.length===b0+1);
+  const r0=S.rings.filter(r=>r.kind==='turn').length; click('#btnTurn'); chk('「掉头」',S.rings.filter(r=>r.kind==='turn').length===r0+1);
+  click('#btnJink'); chk('「随机规避」开关',U.jink===true&&$('btnJink').classList.contains('on'));
+  click('[data-layer="obs"]'); chk('图层切到观测',U.layer==='obs');
+  click('#btnPause'); chk('暂停',U.paused===true&&$('btnPause').textContent==='继续');
+  click('[data-d="10"]'); chk('距离芯片 10 光秒',Math.abs(S.D-10*LS)<1e-6&&U.scene===0,fmtL(S.D));
+  const inD=$('inD'); inD.value=MD.to(3*LM); inD.dispatchEvent(new Event('change')); chk('距离滑块改到 3 光分',Math.abs(S.D/LM-3)<0.01,fmtL(S.D));
+  const inT=$('inTs'); inT.value=MT.to(100); inT.dispatchEvent(new Event('input')); chk('时间倍率滑块改到 ×100',Math.abs(U.ts/100-1)<0.01,'×'+U.ts.toFixed(1));
+  click('#btnReset'); chk('重置',S.t===0&&S.shells.length===0&&S.beams.length===0);
+  /* 量子链路呼吸灯:沿侧翼→主队那条线采样像素亮度。同一模拟时刻只换墙钟相位要有亮暗差;换时间倍率像素必须一模一样;关掉量子通信线必须消失 */
+  const qv=U.quantum, lv=U.layer, tv=U.ts; U.quantum=true; U.layer='mix';
+  const linkSum=nowMs=>{drawWide(nowMs);const dpr=window.devicePixelRatio||1,W=VW.cv.width,H=VW.cv.height,img=VW.g.getImageData(0,0,W,H).data,fp=S.fr[1].p,mp=S.fr[0].p;let sum=0;
+    for(let i=15;i<=45;i++){const [sx,sy]=toS(VW,fp[0]+(mp[0]-fp[0])*i/60,fp[1]+(mp[1]-fp[1])*i/60),X=Math.round(sx*dpr),Y=Math.round(sy*dpr);if(X<0||Y<0||X>=W||Y>=H)continue;const k=(Y*W+X)*4;sum+=img[k]+img[k+1]+img[k+2];}
+    return sum;};
+  const Pm=LINK_PERIOD*1000, pk=linkSum(Pm/4), tr=linkSum(Pm*3/4);
+  U.ts=1; const s1=linkSum(Pm/4); U.ts=1000; const s2=linkSum(Pm/4);
+  U.quantum=false; const soff=linkSum(Pm/4);
+  chk('量子链路:呼吸灯亮暗随墙钟变化',pk>tr,'峰 '+pk+' / 谷 '+tr);
+  chk('量子链路:亮度与时间倍率无关',s1===s2,'×1 '+s1+' / ×1000 '+s2);
+  chk('量子链路:只在量子通信下画',pk>soff,'开 '+pk+' / 关 '+soff);
+  U.quantum=qv; U.layer=lv; U.ts=tv;
+  /* 看见开火之后默认就挂出命中倒计时,不需要任何开关 */
+  runScene(2); advance(13.6); U.paused=true; VW.lq=[]; drawWarn(VW); const wq=VW.lq.length; VW.lq=[];
+  chk('看见开火后默认挂出命中倒计时',wq>0,wq+' 条');
+  /* 回归:时空图的采样终点不许越过命中时刻。a+(b−a)·n/n 会因舍入比 b 多一个 ulp,命中之后 shellTrue 在那一刻返回 null,
+     rOf(null) 抛错让 frame() 走不到末尾的 requestAnimationFrame,整页永久卡住(用户实报:炮弹来袭演示到一半卡住) */
+  runScene(2); let stErr=null, stN=0;
+  for(let k=0;k<1200&&!stErr;k++){advance(1/30);if(S.t<14)continue;try{drawST();stN++;}catch(e){stErr=e.message+' @T+'+S.t.toFixed(3);}}
+  chk('场景② 命中之后逐帧重画时空图不抛异常',!stErr,stErr||(stN+' 帧'));
+  $('selftest').textContent=out.join('\n'); document.title=ok?'UITEST:PASS':'UITEST:FAIL';
+}
+
+/* ================= 启动:?scene=n&t=秒&layer=obs|mix|true&quantum&rover=fx,fy 可直接跳到某一刻(截图用) ================= */
+const Q=new URLSearchParams(location.search);
+if(Q.has('selftest'))runSelftest();
+if(Q.has('quantum'))U.quantum=true;
+if(Q.has('rover')){const [a,b]=Q.get('rover').split(',').map(Number);if(isFinite(a)&&isFinite(b))U.rover={fx:a,fy:b};}   // 机动舰放在固定位置(以 D 为单位)
+runScene(Q.has('scene')?+Q.get('scene'):1);
+if(Q.has('layer'))U.layer=Q.get('layer');
+if(Q.has('t')){advance(+Q.get('t'));U.paused=true;}
+syncUI(); updCards(); updLive();
+if(Q.has('uitest'))runUitest();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

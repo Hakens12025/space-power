@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>舰体图标预览 · Z 系候选(zcode)</title>
+<style>
+body{background:#05070c;color:#c7d0dc;font:13px "Microsoft YaHei",sans-serif;margin:0;padding:18px}
+h2{font-size:14px;color:#5aa7ff;letter-spacing:1px;margin:0 0 4px}
+p.n{color:#5f7083;font-size:12px;margin:0 0 14px}
+canvas{display:block;border:1px solid #1e2836;background:#05070c}
+</style>
+</head>
+<body>
+<h2>舰体图标 · Z 系重设计候选</h2>
+<p class="n">上区=现状(游戏内 drawHull) vs Z 系 · 实际尺寸 · 船头朝右 | 中区=6× 细节 | 下区=实战语境模拟 | Z 系为自包含候选,未接入游戏</p>
+<!-- 引入游戏现行几何库,仅用于"现状"对照行;Z 系代码全部自包含在本文件,不与上面的全局名冲突(一律 Z_ 前缀) -->
+<script src="../../js/ships/10-hull-geometry.js"></script>
+<canvas id="c"></canvas>
+<script>
+const c=document.getElementById('c'),g=c.getContext('2d');
+const DPR=2; const W=1040,H=1330;
+c.width=W*DPR;c.height=H*DPR;c.style.width=W+'px';c.style.height=H+'px';g.setTransform(DPR,0,0,DPR,0,0);
+const BLUE='#5aa7ff', RED='#ff6b6b', DIM='#5f7083', TXT='#c7d0dc', ACC='#5aa7ff', LINE='#1e2836';
+
+/* ==================== Z 系舰体图标 v2(候选) ====================
+   设计目标:小尺寸(7~15px)下舰种一眼可辨;放大后有军事细节层次。
+   家族语言(四个舰种共享,读作"同一支舰队"):
+     · 舰首亮帽 —— 鼻尖一小块提亮三角,1× 下是一颗亮点,6× 下是装甲帽(所有舰种都有,是家族签名)
+     · 引擎光斑 —— 舰尾亮色块,数量 = 舰种排量(DD双/CA宽一/BB三/CV宽板/SC微一)
+     · 结构暗块 —— 压暗的舰桥/炮塔,叠在主色上形成层次(继承旧版的 dark 思路,但轮廓跟舰形走)
+   舰种识别(每舰一个主识别点,互不重复):
+     DD=后掠翼(尾部十字) | CA=单侧舰桥塔(不对称) | BB=装甲侧翼+三门主炮(最宽) | CV=斜角甲板+舰岛 | SC=前掠传感桁(前须)
+   Tier:尺寸(同游戏)+亮度(同游戏)+ 增量细节(T2 起脊线/桅杆,T3 起 BB 舷侧装甲纹)。
+   坐标约定与旧版一致:船头=+X,原点=几何中心,单位≈半长,绘制前 ctx.scale。
+   part 图元:poly(多边形,mirror 沿 X 轴补对称)/ rect(dark 压暗结构块)/ line(stripe 或桁)/ glow(引擎光斑);
+   标记:lt=N 提亮填充/描边;dark=N 压暗;t=N 只在 tier>=N 时画;wg=1 标记为翼(残骸态也画轮廓)。 */
+
+const Z_ORDER=['DD','CA','BB','CV','SC'];
+const Z_LABEL={DD:'驱逐',CA:'巡洋',BB:'战列',CV:'航母',SC:'侦察'};
+const Z_BASE={DD:7.0,CA:8.8,BB:11.0,CV:11.4,SC:7.4};   // 与游戏同尺寸基准:1× 行才是诚实对比
+const Z_TSCALE={1:1.00,2:1.13,3:1.28};
+const Z_TLIGHT={1:-0.22,2:0.00,3:0.34};
+
+const Z_HULL={
+  // 驱逐「矛」:最细的梭形 + 尾部后掠翼(1× 读作十字)+ 双引擎
+  DD:{parts:[
+    {p:'poly',pts:[[1.62,0],[1.04,0.13],[0.16,0.19],[-0.70,0.17],[-1.04,0]],mirror:true},
+    {p:'poly',pts:[[0.50,0.13],[-0.10,0.50],[-0.52,0.50],[-0.28,0.13]],mirror:true,wg:1},
+    {p:'poly',pts:[[1.62,0],[1.36,0.09],[1.36,-0.09]],lt:0.30},
+    {p:'rect',x:0.28,y:-0.08,w:0.34,h:0.16,dark:0.45},
+    {p:'line',x1:0.95,y1:0,x2:-0.55,y2:0,w:0.07,lt:0.28,t:2},
+    {p:'glow',x:-1.10,y:0.03,w:0.20,h:0.09,mirror:true},
+  ]},
+  // 巡洋「刃」:六棱舰体 + 单侧舰桥塔(不对称识别点)+ 前后主炮 + 宽单引擎
+  CA:{parts:[
+    {p:'poly',pts:[[1.56,0],[1.05,0.22],[0.50,0.33],[-0.44,0.33],[-0.98,0.15],[-1.08,0]],mirror:true},
+    {p:'rect',x:-0.12,y:0.30,w:0.52,h:0.14,mirror:true,dark:0.20},
+    {p:'rect',x:-0.30,y:-0.56,w:0.42,h:0.28},
+    {p:'rect',x:0.66,y:-0.13,w:0.26,h:0.26,dark:0.45},
+    {p:'rect',x:-0.66,y:-0.13,w:0.26,h:0.26,dark:0.45},
+    {p:'poly',pts:[[1.56,0],[1.30,0.11],[1.30,-0.11]],lt:0.30},
+    {p:'line',x1:0.55,y1:0,x2:-0.90,y2:0,w:0.06,lt:0.28,t:2},
+    {p:'glow',x:-1.12,y:-0.15,w:0.20,h:0.30},
+  ]},
+  // 战列「堡」:重装楔形 + 装甲侧翼(最宽)+ 三主炮 + 宽舰桥 + 三引擎
+  BB:{parts:[
+    {p:'poly',pts:[[1.46,0],[1.18,0.22],[0.72,0.45],[-0.40,0.49],[-0.94,0.36],[-1.08,0]],mirror:true},
+    {p:'poly',pts:[[0.66,0.42],[0.10,0.62],[-0.52,0.62],[-0.30,0.42]],mirror:true,wg:1},
+    {p:'rect',x:-0.42,y:-0.72,w:0.50,h:0.36},
+    {p:'rect',x:0.78,y:-0.17,w:0.30,h:0.34,dark:0.45},
+    {p:'rect',x:0.26,y:-0.17,w:0.30,h:0.34,dark:0.45},
+    {p:'rect',x:-0.72,y:-0.17,w:0.30,h:0.34,dark:0.45},
+    {p:'poly',pts:[[1.46,0],[1.22,0.12],[1.22,-0.12]],lt:0.30},
+    {p:'line',x1:0.66,y1:0.22,x2:-0.60,y2:0.22,w:0.06,lt:0.25,t:3,mirror:true},
+    {p:'glow',x:-1.12,y:-0.26,w:0.22,h:0.13,ys:[-0.26,-0.065,0.13]},
+  ]},
+  // 航母「方舟」:斜角首平甲板(切口与舰岛对角,平衡轮廓)+ 舰岛(单侧)+ 着舰跑道线 + 宽板引擎
+  CV:{parts:[
+    {p:'poly',pts:[[1.24,-0.40],[1.52,-0.14],[1.52,0.44],[-1.10,0.44],[-1.10,-0.40]]},
+    {p:'line',x1:1.05,y1:0,x2:-1.02,y2:0,w:0.10,dark:0.45},
+    {p:'line',x1:0.85,y1:0.24,x2:-0.95,y2:0.24,w:0.06,dark:0.35,mirror:true},
+    {p:'rect',x:-0.34,y:-0.74,w:0.36,h:0.32},
+    {p:'line',x1:-0.16,y1:-0.74,x2:-0.16,y2:-0.98,w:0.05,t:2},
+    {p:'line',x1:1.28,y1:-0.34,x2:1.46,y2:-0.18,w:0.08,lt:0.30},
+    {p:'glow',x:-1.14,y:-0.30,w:0.16,h:0.60},
+  ]},
+  // 侦察「哨」:细三角 + 前掠传感桁(与驱逐的识别差异:须在前,翼在后)
+  SC:{parts:[
+    {p:'poly',pts:[[1.54,0],[-0.50,0.20],[-0.86,0.05]],mirror:true},
+    {p:'line',x1:0.80,y1:0.10,x2:1.30,y2:0.44,w:0.06,mirror:true},
+    {p:'rect',x:0.10,y:-0.06,w:0.30,h:0.12,dark:0.40},
+    {p:'glow',x:-0.92,y:-0.05,w:0.16,h:0.10},
+  ]},
+};
+
+function zTint(hex,amt){ // 颜色混合:amt>0 向白混,<0 向黑混(与游戏 hullTint 同式,自包含副本)
+  const n=parseInt(hex.slice(1),16);
+  let r=(n>>16)&255,gg=(n>>8)&255,b=n&255;
+  if(amt>=0){r+=(255-r)*amt;gg+=(255-gg)*amt;b+=(255-b)*amt;}
+  else{const k=1+amt;r*=k;gg*=k;b*=k;}
+  return 'rgb('+Math.round(r)+','+Math.round(gg)+','+Math.round(b)+')';
+}
+
+function zYs(pt){ // 图元的 y 副本表:ys 显式多联 / mirror 上下对称 / 默认单份
+  if(pt.ys)return pt.ys;
+  if(pt.mirror)return pt.y<0?[pt.y,-pt.y-pt.h]:[pt.y,-pt.y-pt.h]; // rect 以左上角记 y,hull 内 y 可正可负
+  return [pt.y];
+}
+
+function drawHullZ(g,cls,tier,color,mode){
+  const def=Z_HULL[cls]||Z_HULL.DD;
+  const size=(Z_BASE[cls]||7)*(Z_TSCALE[tier]||1);
+  const col=zTint(color,Z_TLIGHT[tier]||0);
+  const outline=mode==='outline';
+  g.save();
+  g.scale(size,size);
+  g.lineJoin='round';g.lineCap='round';
+  for(const pt of def.parts){
+    if(pt.t&&tier<pt.t)continue;                     // Tier 增量细节:低阶不画
+    if(outline&&(pt.p!=='poly'&&pt.p!=='rect'))continue; // 残骸态只留轮廓骨架:线/光斑全灭
+    if(pt.p==='poly'){
+      g.beginPath();
+      g.moveTo(pt.pts[0][0],pt.pts[0][1]);
+      for(let i=1;i<pt.pts.length;i++)g.lineTo(pt.pts[i][0],pt.pts[i][1]);
+      if(pt.mirror){for(let i=pt.pts.length-1;i>=0;i--){if(Math.abs(pt.pts[i][1])<1e-9)continue;g.lineTo(pt.pts[i][0],-pt.pts[i][1]);}}
+      g.closePath();
+      g.lineWidth=1.3/size;
+      if(outline){g.fillStyle='rgba(45,52,64,.55)';g.fill();g.strokeStyle=col;g.stroke();}
+      else{
+        g.fillStyle=pt.lt?zTint(col,pt.lt):col;       // lt=舰首亮帽等提亮层
+        g.fill();
+      }
+    }else if(pt.p==='rect'){
+      const fill=pt.dark?zTint(col,-pt.dark):col;
+      for(const y of zYs(pt)){
+        if(outline){g.lineWidth=1.0/size;g.strokeStyle=col;g.strokeRect(pt.x,y,pt.w,pt.h);}
+        else{g.fillStyle=fill;g.fillRect(pt.x,y,pt.w,pt.h);}
+      }
+    }else if(pt.p==='line'){
+      g.strokeStyle=pt.lt?zTint(col,pt.lt):(pt.dark?zTint(col,-pt.dark):col);
+      g.lineWidth=pt.w||0.07;
+      const segs=pt.mirror?[[pt.y1,pt.y2],[-pt.y1,-pt.y2]]:[[pt.y1,pt.y2]]; // 线段镜像:直接翻转 y 端点(不走 rect 的 y/h 公式)
+      for(const s of segs){g.beginPath();g.moveTo(pt.x1,s[0]);g.lineTo(pt.x2,s[1]);g.stroke();}
+    }else if(pt.p==='glow'&&!outline){
+      g.fillStyle=zTint(col,0.55);                    // 引擎光斑:侧色调亮,残骸态不画
+      for(const y of zYs(pt))g.fillRect(pt.x,y,pt.w,pt.h);
+    }
+  }
+  if(outline){ // 残骸裂纹:一道斜向锯齿,读作"断了",不依赖舰种几何
+    g.strokeStyle=col;g.lineWidth=0.07;g.globalAlpha=0.9;
+    g.beginPath();g.moveTo(0.52,-0.36);g.lineTo(0.12,-0.06);g.lineTo(0.34,0.20);g.lineTo(-0.10,0.46);g.stroke();
+    g.globalAlpha=1;
+  }
+  g.restore();
+}
+
+/* ==================== 预览画布 ==================== */
+function label(t,x,y,col2,sz,align){g.fillStyle=col2||DIM;g.font=(sz||11)+'px "Microsoft YaHei"';g.textAlign=align||'center';g.textBaseline='middle';g.fillText(t,x,y);}
+function section(t,y){label(t,14,y,ACC,13,'left');g.strokeStyle=LINE;g.beginPath();g.moveTo(14,y+10);g.lineTo(W-14,y+10);g.stroke();}
+
+function cellZ(cls,tier,x,y,color,mode,mag,ang){
+  g.save();g.translate(x,y);g.scale(mag,mag);g.rotate(ang||0);
+  drawHullZ(g,cls,tier,color,mode);
+  g.restore();
+}
+function cellOld(cls,tier,x,y,color,mode,mag,ang){
+  g.save();g.translate(x,y);g.scale(mag,mag);g.rotate(ang||0);
+  drawHull(g,cls,tier,color,mode);
+  g.restore();
+}
+
+/* ---- A. 新旧对照 @1× ---- */
+let y0=64;
+section('A · 新旧对照(实际尺寸 1×,船头朝右)',y0);
+label('上行=现状(游戏内) 下行=Z 系候选',W-16,y0,DIM,11,'right');
+const colX=cls=>150+Z_ORDER.indexOf(cls)*172;
+y0+=38;
+[['蓝方',BLUE,'fill'],['红方',RED,'fill'],['残骸',BLUE,'outline']].forEach(([nm,color,mode],ri)=>{
+  label(nm,52,y0+18,TXT,12);
+  Z_ORDER.forEach(cls=>{
+    TIER_ORDER.forEach((t,ti)=>{
+      const x=colX(cls)+ti*52;
+      cellOld(cls,t,x,y0,color,mode,1,0);
+      cellZ(cls,t,x,y0+40,color,mode,1,0);
+    });
+  });
+  y0+=84;
+});
+Z_ORDER.forEach(cls=>label(Z_LABEL[cls]+' '+cls,colX(cls)+52,y0-64,TXT,12));
+
+/* ---- B. Z 系矩阵 @1×(Tier 全档,蓝/红/残骸) ---- */
+let y1=y0+26;
+section('B · Z 系全矩阵(1×:Tier × 阵营 × 存活)',y1);
+y1+=38;
+label('蓝方',52,y1+8,TXT,12);
+Z_ORDER.forEach(cls=>{TIER_ORDER.forEach((t,ti)=>{const x=colX(cls)+ti*52;cellZ(cls,t,x,y1+8,BLUE,'fill',1,0);});});
+y1+=32;
+label('红方',52,y1+8,TXT,12);
+Z_ORDER.forEach(cls=>{TIER_ORDER.forEach((t,ti)=>{const x=colX(cls)+ti*52;cellZ(cls,t,x,y1+8,RED,'fill',1,0);});});
+y1+=32;
+label('残骸',52,y1+8,TXT,12);
+Z_ORDER.forEach(cls=>{TIER_ORDER.forEach((t,ti)=>{const x=colX(cls)+ti*52;cellZ(cls,t,x,y1+8,BLUE,'outline',1,0);});});
+y1+=36;
+Z_ORDER.forEach(cls=>{TIER_ORDER.forEach((t,ti)=>label('T'+t,colX(cls)+ti*52,y1-6,DIM,10));});
+
+/* ---- C. 6× 细节 + 识别点标注 ---- */
+let y2=y1+22;
+section('C · 6× 放大细节(每舰种一个主识别点,互不重复)',y2);
+y2+=38;
+const NOTES={
+  DD:'识别:尾部后掠翼(1×读作十字) · 双引擎 · 舰首亮帽',
+  CA:'识别:单侧舰桥塔(不对称) · 前后双主炮 · 宽单引擎',
+  BB:'识别:装甲侧翼+三门主炮(全族最宽) · 三引擎 · 宽舰桥',
+  CV:'识别:斜角首平甲板 · 单侧舰岛 · 着舰跑道线 · 宽板引擎',
+  SC:'识别:前掠传感桁(须在前,驱逐的翼在后) · 微型引擎',
+};
+Z_ORDER.forEach((cls,ci)=>{
+  const cy=y2+ci*118+40;
+  label(Z_LABEL[cls],54,cy,TXT,13);label(cls,54,cy+17,DIM,11);
+  TIER_ORDER.forEach((t,ti)=>{
+    const cx=190+ti*180;
+    cellZ(cls,t,cx,cy,BLUE,'fill',6,0);
+    label('T'+t+' · '+((Z_BASE[cls]*Z_TSCALE[t]).toFixed(1))+'px',cx,cy+46,DIM,11);
+  });
+  cellZ(cls,3,760,cy,BLUE,'fill',4,-Math.PI/4);
+  cellZ(cls,3,880,cy,RED,'fill',4,Math.PI*0.75);
+  label(NOTES[cls],930,cy,DIM,11,'right');
+});
+label('航向检查(±45°/135°)',820,y2-14,DIM,11);
+
+/* ---- D. 实战语境模拟 @1× ---- */
+let y3=y2+5*118+30;
+section('D · 实战语境(1×,星野 + 选中环 + 敌我对峙 + 残骸)',y3);
+y3+=30;
+const fy=y3+130;
+// 星野
+for(let i=0;i<90;i++){const sx=14+Math.random()*(W-28),sy=y3+18+Math.random()*250;g.fillStyle=Math.random()<0.3?'#3a4a5f':'#1c2634';g.fillRect(sx,sy,1,1);}
+// 蓝方纵队(右航向):DD T1 / CA T2(选中) / BB T3 / CV T2 / SC T1
+[['DD',1,220],['CA',2,300],['BB',3,395],['CV',2,510],['SC',1,590]].forEach(([cls,t,x])=>{
+  const yy=fy+(cls==='CV'?46:(cls==='BB'?18:(cls==='DD'?-14:2)));
+  cellZ(cls,t,x,yy,BLUE,'fill',1,0);
+  if(cls==='CA'){ // 选中环 + 微型血条(游戏里的读法)
+    g.strokeStyle='#ffe066';g.lineWidth=1.2;g.beginPath();g.arc(x,yy,14,0,Math.PI*2);g.stroke();
+    g.fillStyle='#1a2230';g.fillRect(x-11,yy-22,22,3);
+    g.fillStyle='#3fbf6f';g.fillRect(x-11,yy-22,22*0.8,3);
+  }
+});
+// 红方(左航向,135° 来袭)
+[['BB',3,760],['CA',2,840],['DD',1,905]].forEach(([cls,t,x],i)=>{
+  const yy=fy-40+i*52;
+  cellZ(cls,t,x,yy,RED,'fill',1,Math.PI);
+});
+// 红方残骸一只
+cellZ('CA',2,860,fy+120,RED,'outline',1,0.6);
+// 锁定线
+g.strokeStyle='rgba(255,107,107,.6)';g.setLineDash([4,4]);g.lineWidth=1;
+g.beginPath();g.moveTo(300,fy+2);g.lineTo(760,fy-40);g.stroke();g.setLineDash([]);
+label('蓝:DD/CA(选中)/BB/CV/SC · 红:BB/CA/DD(120° 航向) · 残骸+锁定线',W/2,y3+262,DIM,11);
+</script>
+</body>
+</html>

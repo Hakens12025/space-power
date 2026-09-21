@@ -168,6 +168,76 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 .panel.hidden{display:none}
 
 /* ---------- 顶栏 ---------- */
+/* SN6 右下角工具钮:一排小开关,躲开右轨(--rail-w)与底部坞区(--dock-b) */
+/* SN6 右下角工具栏。SN6b 起装两组:上面是三级星图的跳层三钮(从顶栏搬来的),下面是工具开关。
+   形状照 demos/sensors/态势感知V3.html:.btn.tiny(padding 2px 5px / 10.5px)+ 连体 .seg(中缝共享一条边)。
+   ⚠ .hbtn 的底子是 32x32 的顶栏钮,这里整组压小 —— 右下角是给"随手点一下"用的,不该有顶栏那么重的分量。 */
+/* UI2(2026-09-21 用户实报:"所谓右下角的按钮其实没有在右下角,现在在事件窗口的左边")。
+   改前锚的是 right:右轨左侧 / bottom:--dock-b —— 那是【事件窗的左下角】,离画面底边还有 206px。
+   现在贴画面右下角。⚠ 底部指令栏 #cmdBar 是居中的、最宽 1160px:视口够宽时它够不到右下角,工具栏直接落在角上(下面这条 bottom);
+   视口窄时 #cmdBar 会伸到角上,工具栏要坐到它上面 —— 那个 bottom 由 render/85-settings 的 toolsDock【实测】#cmdBar 的矩形后写成行内样式。
+   第一版在这里用断点 + 写死的行高(49px / 65px)猜,判据 FLOW70 当场抓到:762px 宽时指令栏换成三行、高 95px,工具栏压了上去。 */
+#tools{position:absolute;right:var(--gut);bottom:var(--gut);z-index:var(--z-hud);
+  display:flex;flex-direction:row;flex-wrap:wrap;justify-content:flex-end;align-items:flex-end;gap:0;width:min-content;pointer-events:auto}
+#tools .seg{flex:0 0 100%;justify-content:flex-end}   /* 跳层三钮独占上面一行,两个图标钮并排在它下面 */
+/* UI3(用户:"按钮之间不要有间隔,贴在一起"):两行都是连体 .seg,行与行之间也共用一条边(下面那行上移 1px,同中缝 margin-left:-1px 的做法) */
+#segTool{margin-top:-1px}
+/* 图标钮:UI3 起 24x24(高度与上面那行跳层钮同一档),图标 18px,图标里的舰也画小了一号(约占图标的一半)。颜色只用 token,而且【不随开关态变色】—— 图标是多色的,变色就认不出了;
+   开关态由钮的边框 + 淡填充 + 图标的不透明度表达。舰 = --txt-hi,圆 / 视线 = --acc,误差椭圆 = --state-warn(与地图上的告警橙同源)。 */
+#tools .hbtn[data-tool]{padding:2px;line-height:0}
+.tl-ico{display:block;width:18px;height:18px;pointer-events:none;opacity:.72}
+#tools .hbtn[data-tool]:hover .tl-ico,#tools .hbtn[data-tool].on .tl-ico{opacity:1}
+.tl-ico .i-ship{fill:var(--txt-hi)}
+.tl-ico .i-r1{fill:var(--acc);fill-opacity:.78}
+.tl-ico .i-r2{fill:var(--acc);fill-opacity:.46}
+.tl-ico .i-r3{fill:var(--acc);fill-opacity:.22}
+.tl-ico .i-ell{fill:none;stroke:var(--state-warn);stroke-width:1.4;stroke-dasharray:2.6 1.5}
+.tl-ico .i-los{fill:none;stroke:var(--acc);stroke-width:1.4;stroke-dasharray:2.8 1.6}
+#tools .hbtn[data-tool="geom"] .i-ship{fill:var(--side-neutral);fill-opacity:.8}   /* 缩圈图标里舰是配角(主角是那个椭圆),压成中性灰 */
+#tools .hbtn[data-tool].on{background:var(--acc-wash)}
+#tools .hbtn{min-width:0;height:auto;padding:3px 7px;font-size:10.5px;line-height:1.45;letter-spacing:.02em}
+#tools .hbtn.on{color:var(--acc);border-color:var(--acc)}
+
+/* SN7 定位几何小窗(缩圈图):叠在地图右上角、紧贴右轨左侧,尺寸照演示页的 #pPhase(340x290 / 窄屏 300x250)。
+   ⚠ 刻意【不】做成点击穿透:穿透的话小窗底下压着的舰船看不见却点得动,那比挡住更难受(演示页同一条注释)。
+   [hidden] 要显式压过 .panel —— 全局 reset 里那条 [hidden] 规则不带 !important 时会输给后写的 display。 */
+#geomPane{top:var(--rail-top);right:calc(var(--gut)*2 + var(--rail-w));width:340px;height:290px;z-index:var(--z-hud);
+  box-shadow:0 2px 14px rgba(0,0,0,.55)}
+#geomPane[hidden]{display:none!important}
+#geomCv{display:block;width:100%;height:100%}
+#geomPane .gp-tag{position:absolute;left:8px;top:6px;font-size:11px;letter-spacing:.10em;color:var(--txt-dim);pointer-events:none}
+#geomPane .gp-tag b{font-weight:normal;margin-left:6px;font-size:10px;color:var(--txt-mute);letter-spacing:.16em}
+#geomPane .gp-hint{position:absolute;left:8px;right:8px;bottom:5px;font-size:10px;color:var(--txt-mute);text-align:right;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+@media (max-width:1100px){#geomPane{width:300px;height:250px}}
+
+/* 连体分段钮:中缝两条边重叠成一条(margin-left:-1px),只有最外侧两角是圆的 —— 三个钮读成一个控件 */
+#tools .seg{display:inline-flex}
+#tools .seg .hbtn{border-radius:0;margin-left:-1px}
+#tools .seg .hbtn:first-child{border-radius:var(--r-sm) 0 0 var(--r-sm);margin-left:0}
+#tools .seg .hbtn:last-child{border-radius:0 var(--r-sm) var(--r-sm) 0}
+#tools .seg .hbtn.on{position:relative;z-index:1}   /* 亮起来那个的边框压在邻居上面,否则中缝会把高亮边切掉一半 */
+
+/* MT1 对局:顶栏入口钮 + 结果卡片。#btnMatch 是文字钮(.hbtn 的底子是 15px 的图标字号,压回正文字号);进了对局亮成开启态。
+   结果卡片居中偏上,档位用 --z-modal(整档):它要压住右轨与工具栏,但不需要遮罩 —— 战场停在决出胜负那一刻,本来就该看得见。
+   注意:#btnMatch / #matchEnd 不属于上面那份 RF2 隐藏清单。 */
+#btnMatch{font-size:var(--fs-body);padding:0 var(--sp-3);letter-spacing:var(--ls-label)}
+#btnMatch.on{color:var(--acc);border-color:var(--acc);background:var(--acc-wash)}
+#matchEnd{left:50%;top:32%;transform:translate(-50%,-50%);min-width:340px;padding:var(--sp-6) var(--sp-6) var(--sp-5);text-align:center;z-index:var(--z-modal);
+  border-color:var(--state-ok);box-shadow:0 4px 28px rgba(0,0,0,.6)}
+#matchEnd[hidden]{display:none!important}
+#matchEnd.lose{border-color:var(--state-danger)}
+#matchEnd .me-title{font-size:30px;letter-spacing:.4em;text-indent:.4em;color:var(--state-ok);line-height:1.3}
+#matchEnd.lose .me-title{color:var(--state-danger)}
+#matchEnd .me-sub{font-size:var(--fs-read);color:var(--txt);margin-top:var(--sp-1)}
+#matchEnd .me-stat{font-family:var(--ff-mono);font-size:var(--fs-body);color:var(--txt-dim);margin-top:var(--sp-4)}
+#matchEnd .me-btns{display:flex;gap:var(--sp-3);justify-content:center;margin-top:var(--sp-5)}
+#matchEnd .me-btns .btn{padding:var(--sp-2) var(--sp-5)}
+
+/* SN6 画布左上角的层名读数 */
+#mapTag{position:absolute;left:14px;top:64px;z-index:var(--z-hud);font-size:11px;letter-spacing:.10em;
+  color:var(--txt-dim);pointer-events:none;text-shadow:0 0 6px #05070c}
+#mapTag b{font-weight:normal;margin-left:6px;font-size:10px;color:var(--txt-mute);letter-spacing:.16em}
 #hud{top:var(--gut);left:var(--gut);right:var(--gut);min-height:var(--bar-h);display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-3) var(--sp-4);overflow:hidden;z-index:var(--z-hud);pointer-events:auto}
 #hud .logo{font-size:var(--fs-title);color:var(--txt-hi);letter-spacing:var(--ls-caps);font-weight:bold;white-space:nowrap;flex:none}
 #hud .logo span{color:var(--acc)}

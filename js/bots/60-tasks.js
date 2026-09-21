@@ -26,6 +26,7 @@ function taskResume(id){ // 恢复:按任务重写执行指令
   t.state='active';log('📋 任务恢复','');
 }
 let taskProcT=0;
+const taskSeen=e=>(typeof contactPos==='function')?contactPos(e,'blue'):e.pos; // AI1 任务 AI 读接触的【估计位置】,交代不出位置就当没看见(原来过了 lit>=2 的门之后一律读 e.pos 真值)
 function taskProcess(dt){ // 任务处理器(每2s):意图级检查——巡逻船 patrol 被手动覆盖→暂停
   taskProcT+=dt;if(taskProcT<2)return;taskProcT=0;
   for(const [id,t] of tasks){
@@ -34,21 +35,21 @@ function taskProcess(dt){ // 任务处理器(每2s):意图级检查——巡逻�
     // DS150 T2:拦截——敌进2×半径扑最近,敌灭/逃出3×半径回待命位
     if(t.type==='intercept'){
       const R2=t.radius*t.rangeMul*2,R3=t.radius*t.rangeMul*3; // DS150 T4:范围旋钮
-      const ene=ships.filter(s=>s.side!=='blue'&&!s.dead&&s.litBlue>=2);
-      const inZone=ene.filter(e=>V.len(V.sub(e.pos,t.center))<R2);
-      const far=!ene.length||ene.every(e=>V.len(V.sub(e.pos,t.center))>R3);
+      const ene=ships.filter(s=>s.side!=='blue'&&!s.dead&&s.litBlue>=2&&taskSeen(s));
+      const inZone=ene.filter(e=>V.len(V.sub(taskSeen(e),t.center))<R2);
+      const far=!ene.length||ene.every(e=>V.len(V.sub(taskSeen(e),t.center))>R3);
       if(inZone.length&&t.phase!=='engage')t.phase='engage';
       else if(far&&t.phase==='engage')t.phase='idle';
       if(t.phase==='engage'&&inZone.length){
-        const nr=inZone.reduce((b,e)=>V.len(V.sub(e.pos,t.center))<V.len(V.sub(b.pos,t.center))?e:b,inZone[0]);
-        t.ships.forEach(sid=>{const s=ships.find(x=>x.id===sid);if(taskCanOrder(s)){s.orders=[{pos:nr.pos.slice(),type:'stop'}];resetForNewOrders(s);s.autoEngage=true;s.roe='free';}}); // DS173
+        const nr=inZone.reduce((b,e)=>V.len(V.sub(taskSeen(e),t.center))<V.len(V.sub(taskSeen(b),t.center))?e:b,inZone[0]);
+        t.ships.forEach(sid=>{const s=ships.find(x=>x.id===sid);if(taskCanOrder(s)){s.orders=[{pos:taskSeen(nr).slice(),type:'stop'}];resetForNewOrders(s);s.autoEngage=true;s.roe='free';}}); // DS173
       }else{t.ships.forEach(sid=>{const s=ships.find(x=>x.id===sid);if(taskCanOrder(s)){s.orders=[{pos:[t.center[0],t.center[1],0],type:'stop'}];resetForNewOrders(s);s.autoEngage=true;s.roe='tight';}});} // DS173
     }
     // DS150 T2:拒止——敌进区域→区域齐射盲射(不追击);待命位=区域边缘
     if(t.type==='deny'){
       const R=t.radius*t.rangeMul; // DS150 T4:范围旋钮
-      const ene=ships.filter(s=>s.side!=='blue'&&!s.dead);
-      if(ene.some(e=>V.len(V.sub(e.pos,t.center))<R)){ // 敌进区域:区域齐射
+      const ene=ships.filter(s=>s.side!=='blue'&&!s.dead&&taskSeen(s)); // AI1:原来这里连 lit 门都没有 —— 敌舰【真的】进了区域就齐射,看不看得见都打
+      if(ene.some(e=>V.len(V.sub(taskSeen(e),t.center))<R)){ // 敌进区域:区域齐射
         t.ships.forEach(sid=>{const s=ships.find(x=>x.id===sid);if(s&&s.ammo>=16&&!s.missileArm)orderMissileSalvo(s,{pos:[t.center[0],t.center[1],0]},2);});
       }
       t.ships.forEach(sid=>{const s=ships.find(x=>x.id===sid);if(taskCanOrder(s)){const ang=(parseInt(String(sid).replace(/\D/g,''))*1.7)%6.283;const R2=R*1.2;s.orders=[{pos:[t.center[0]+Math.cos(ang)*R2,t.center[1]+Math.sin(ang)*R2,0],type:'stop'}];resetForNewOrders(s);s.autoEngage=true;s.roe='tight';}}); // DS173
@@ -74,9 +75,10 @@ function taskProcess(dt){ // 任务处理器(每2s):意图级检查——巡逻�
       t.ships.forEach(sid=>{
         const s=ships.find(x=>x.id===sid);if(!s)return;
         setEmit(s,t.aggression?'paint':'silent'); // SN4:同护航那处,纯字段迁移
-        const d=V.len(V.sub(target.pos,s.pos));
-        if(d>engageD&&taskCanOrder(s)){const dir=V.norm(V.sub(target.pos,s.pos));
-          s.orders=[{pos:[target.pos[0]-dir[0]*engageD*0.85,target.pos[1]-dir[1]*engageD*0.85,0],type:'stop'}];
+        const tp=taskSeen(target);if(!tp)return; // AI1:目标此刻交代不出位置 ⇒ 这一拍不动(原来照着真值追)
+        const d=V.len(V.sub(tp,s.pos));
+        if(d>engageD&&taskCanOrder(s)){const dir=V.norm(V.sub(tp,s.pos));
+          s.orders=[{pos:[tp[0]-dir[0]*engageD*0.85,tp[1]-dir[1]*engageD*0.85,0],type:'stop'}];
           resetForNewOrders(s); // DS173
         }else if(d<engageD){
           const ready=readyCells(s);

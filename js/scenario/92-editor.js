@@ -17,7 +17,7 @@ function applyClsTier(s,cls,tier){ // TIER1 就地改一艘现有舰的舰种/�
   s.weapons=lw.weapons; // RF3 武器清单同步重刷
   s.ciws={outer:lw.outer,outerIntercept:lw.outerIntercept,inner:lw.inner,innerIntercept:lw.innerIntercept};
   s.size=sReq(st,'size','shipStats'); s.stealth=sReq(st,'stealth','shipStats'); // SN4 被看方两字段(光学红外底数+雷达反射基数 / 反射倍率),与 makeShip 逐格对齐
-  s.emit=sReq(st,'emit','shipStats'); s.recv=sReq(st,'recv','shipStats'); s.ecmPower=sReq(st,'ecmPower','shipStats'); // SN4 探测方两字段 + 干扰强度。口径与 makeShip 一致:sReq 放行合法 0、只拒字段缺失(这份烘焙清单是 makeShip 的第二份手抄,两边必须同步改)。刻意【不】重置 emitMode / paintWarned / trkB / trkR:那是运行期状态不是烘焙数值,换个舰种不该让一艘正在照射的舰悄悄静默——与改前这里同样不碰那两个开关布尔的口径逐条一致
+  s.emit=sReq(st,'emit','shipStats'); s.recv=sReq(st,'recv','shipStats'); s.ecmPower=sReq(st,'ecmPower','shipStats'); // SN4 探测方两字段 + 干扰强度。口径与 makeShip 一致:sReq 放行合法 0、只拒字段缺失(这份烘焙清单是 makeShip 的第二份手抄,两边必须同步改)。刻意【不】重置 emitMode / paintWarned / 两个阵营接触对象:那是运行期状态不是烘焙数值,换个舰种不该让一艘正在照射的舰悄悄静默——与改前这里同样不碰那两个开关布尔的口径逐条一致
   s.beaconMax=(st.beacon||0); s.beaconCount=(st.beacon||0);
   return s;
 }

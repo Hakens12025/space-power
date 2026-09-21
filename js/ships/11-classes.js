@@ -122,6 +122,7 @@ function makeShip(cls,name,pos,facing,vel,side,tier){ // TIER1 加第 7 参 tier
     orders:[], st:'待机', brake:false, crawling:false, flame:0, sideFlame:0, speedCmd:800, turnTarget:null, formation:null,
     roe:'free', roeCd:0, // v125 ROE交战规则:free自由开火/tight克制(被攻击才还击)/hold锁定(禁止开火);roeCd=受击还击冷却
     autoEngage:false, // v125 自动索敌交战:自动锁定感知层点亮的最近敌舰并开火(目标导向指挥)
+    fireHot:0, // FX1 开火暴露:>0 表示刚开过火,光学亮度多加一档(秒,weapons/57 倒数)
     macOn:true, mslOn:true, ciwsOn:true, // RF2 简化UI武器开关(底栏·主炮/导弹/拦截):默认全开与既有自动化一致;火控默认关=autoEngage:false
     driftFire:false,driftFireT:0, // DS171 M3:漂移射击(60s限时)——命令照走,非硬机动段机头找窗口对准即发;承接KIMI148 lockPlayer 职能
     // SN4 感知层两通道:光学/红外(纯被动)+ 雷达(一部设备两种模式:静听 / 照射)。四个新字段取代旧的八个 + 两个开关布尔
@@ -130,9 +131,8 @@ function makeShip(cls,name,pos,facing,vel,side,tier){ // TIER1 加第 7 参 tier
     emitMode:'silent', // SN4 发射档三态(静默/照射/干扰)。全库【只有这一处】写档位字面量初值,其余写入一律走 sensors/21 的 setEmit——它是唯一写入口、非法档位当场抛,不给"拼错一个字母悄悄变静默"留缝
     paintWarned:false, // SN4 被照射告警的上升沿标志:原来是 sensors/21 里凭空懒建的字段(实例形状随运行期分支变),顺手在这里声明出来
     ecmPower:sReq(st,'ecmPower','shipStats'), // SN4 干扰强度不再配一个开关布尔:它是 jam 档的强度(每拍削弱对方的照射驻留,只削回波、不削红外)。sReq 只拒 undefined,合法 0(不带干扰机)照常穿过
-    litBlue:0,litRed:0, // 阵营点亮质量等级(0未发现/1探测/2识别/3火控)。SN3 这一行上原来还挂着两个阵营探测积分字段,全库零读取零写入、只有这一行声明,已删(名字不写进注释:verdict 段有条源码级负对照按名字 grep 守着,写进来会让它恒红——FM6b 的规矩);真正的驻留积分是下一行的 trkB/trkR
-    trkB:newTrk(),trkR:newTrk(), // SN4 驻留积分:蓝/红网络各一份,工厂 newTrk() 在 sensors/22-percep,是全库【唯一】一处写这三个键的字面量(原来是三份手抄:这里两份 + detectFor 补建那份)。opt=光学 / lis=雷达静听 / act=雷达照射——lis 与 act 是【同一部设备的两种模式】,不是两条通道,别读成"又变回三通道了";运行期调用,不受 22-percep 的加载顺序影响
-    everLitBlue:false,everLitRed:false, // 感知层 v5:是否曾点亮过(区分"从未点亮不显示" vs "点亮后失联=幽灵")
+    litBlue:0,litRed:0, // 阵营点亮质量等级(0未发现/1探测/2跟踪/3火控)。SN6 起它是接触椭圆的派生量,派生在 21-detect。SN3 这一行上原来还挂着两个阵营探测积分字段,全库零读取零写入、只有这一行声明,已删(名字不写进注释:verdict 段有条源码级负对照按名字 grep 守着,写进来会让它恒红——FM6b 的规矩);真正的驻留积分是下一行的 两个阵营接触对象
+    covB:newCov(),covR:newCov(), // SN6 误差椭圆接触:蓝/红网络各一份(covB = 蓝网络【对这艘船】握着的那条接触)。工厂 newCov() 在 sensors/23-cov,是全库唯一一处写这些键的字面量。取代 SN4 驻留积分:蓝/红网络各一份,工厂 newCov() 在 sensors/23-cov,是全库【唯一】一处写这三个键的字面量(原来是三份手抄:这里两份 + detectFor 补建那份)。opt=光学 / lis=雷达静听 / act=雷达照射——lis 与 act 是【同一部设备的两种模式】,不是两条通道,别读成"又变回三通道了";运行期调用,不受 22-percep 的加载顺序影响
     seenBlue:-1e9,seenBluePos:null,seenBlueVel:null,seenRed:-1e9,seenRedPos:null,seenRedVel:null, // 信息年龄(最后被扫描时间戳/位置/速度,初始-1e9=从未扫到)
     beaconMax:(st.beacon||0), beaconCount:(st.beacon||0)}; // TIER1 信标载量改表驱动(CLS_WPN.beacon):原来无条件给 2 枚、只靠 UI 按 cls==='SCOUT' 开门,现在"谁能放信标"是表里一格
 }

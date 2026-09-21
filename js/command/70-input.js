@@ -81,6 +81,12 @@ function ghostCommit(){
 }
 let mmbTimer=null;      // RF5 Phase C 中键长按开轮盘的定时器句柄。同上就近声明(只被本文件 down/move/up/blur 四处读写);与 core/01-state 的 rmbTimer 是两回事,不要复用
 function shipAt(sx,sy){
+  /* SN6:先看点没点在【聚合框】上 —— 框里的船已经不画在自己的位置上了,不这么做就永远点不到它们。
+     框的判定矩形读的是 lodBuild 定好的同一个 a.x/a.y(画一处、点另一处是最难查的那种错)。 */
+  if(typeof lodAggAt==='function'){
+    const a=lodAggAt(sx,sy);
+    if(a&&a.side==='blue')return a.ships.find(function(x){return !x.dead;})||null;
+  }
   const w=worldAt(sx,sy);
   let best=null,bd=1e18;
   for(const s of ships){
@@ -91,13 +97,23 @@ function shipAt(sx,sy){
   }
   return best;
 }
-function targetAt(sx,sy){ // RF4b 敌舰命中测试(右键指定目标/T·R点击攻击用)。感知门控沿用旧 shipAt 红舰规则:普通模式只可点已点亮敌舰,GM 全可
+/* RF4b 敌舰命中测试(右键指定目标 / T·R 点击攻击 / RF5 悬停准星,三条路都只调它)。
+   SN6d:门与命中点【都】换成 contactPos —— 原来是"门看 litBlue>=1、命中测试打 s.pos(真值)"。
+   那道门与渲染层不同源,实测出来的后果是一个泄漏:开局画面是三坨热区、一个舰标都没有,
+   把光标扫过空处却能吸到敌舰【真实位置】,吸附半径 55px = 世界 16.5 万公里 —— 玩家可以拿鼠标
+   把一个"只听得见、定不出位置"的接触扫出精确坐标。渲染层 SN6 堵的正是这个洞,输入层没跟上。
+   contactPos 一个函数同时解决两件事:
+     · 交代不出位置就返回 null ⇒ 热区接触点不到(门)
+     · 画在哪就点在哪(实况读估计 c.x/c.y、幽灵陈旧读外推)⇒ 不会画一处点另一处
+   ⚠ GM 旁路留在调用方:contactPos 只讲感知事实,不读 adminMode。 */
+function targetAt(sx,sy){
   const w=worldAt(sx,sy);
   let best=null,bd=1e18;
   for(const s of ships){
     if(s.dead||s.side!=='red')continue;
-    if(!adminMode&&!s.litBlue)continue;
-    const d=Math.hypot(s.pos[0]-w[0],s.pos[1]-w[1]);
+    const q=adminMode?s.pos:((typeof contactPos==='function')?contactPos(s,'blue'):null);
+    if(!q)continue;
+    const d=Math.hypot(q[0]-w[0],q[1]-w[1]);
     if(d<60/cam.zoom && d<bd){bd=d;best=s;}
   }
   return best;
@@ -369,9 +385,19 @@ function onMouseDown(e){
       const g=groupAt(sx,sy);
       if(g){selMissile=g;selNet=g.netId||null;selMissileHits=[g];selected=[];selDrag=null;hideCtx();updateInfo();updateCardsStatus();return;}
     }
+    /* SN7 左键点敌方目标 = 把它挂进定位几何小窗(常驻),而且【不清空我方选中】。
+       改前点敌舰与点空地同一支:selected=[] —— 每看一次缩圈就丢一次选中(用户 2026-09-20 拍板改)。
+       ---- 这里只【判】,不写常驻 ----
+       常驻在 mouseup 确认这是一次【点击】之后才写(selDrag.pinId)。第一版在这里直接写、并且提前 return 不建 selDrag,
+       审查确认那是一个回归:每个敌方记号周围 60px 的圆都成了框选的起手死区(舰队层上那个圆有几十万公里,交战时我方舰基本都在里面),
+       拖不出框、还顺手把常驻换了。现在照样建框,只是不清选中;拖动 = 照常框选、常驻不动。
+       敌我都在吸附圈里时离光标近的那个赢(83-geom 的 geomPickAt);导弹组的点选排在它前面,既有语义优先;Ctrl 加选不碰常驻。 */
+    const pinT=(!e.ctrlKey&&typeof geomPickAt==='function')?geomPickAt(sx,sy,sh):null;
     selMissile=null;selNet=null;selMissileHits=[]; // 没点中导弹组 → 取消导弹组选中
     if(e.ctrlKey){
       if(sh){selected.includes(sh.id)?selected.splice(selected.indexOf(sh.id),1):selected.push(sh.id);}
+    }else if(pinT){
+      selDrag={x0:sx,y0:sy,x1:sx,y1:sy,pinId:pinT.id}; // 不清选中;是不是真的"点了敌舰"等 mouseup 再说
     }else{
       if((!sh||(sh.side==='red'&&!adminMode))&&!selDrag)selected=[]; // GM下可点选敌舰
       selDrag={x0:sx,y0:sy,x1:sx,y1:sy};
@@ -488,8 +514,15 @@ window.addEventListener('mouseup',e=>{
   if(e.button===0&&selDrag){ // 左键:判定点击 vs 框选
     const clicked=Math.abs(selDrag.x1-selDrag.x0)<5&&Math.abs(selDrag.y1-selDrag.y0)<5;
     if(clicked){
-      const s=shipAt(selDrag.x0,selDrag.y0);
-      if(s){selected=[s.id];}
+      /* SN7 最后一次【点击】决定定位几何小窗的常驻:点敌舰 = 固定那一艘;点我方舰 / 点空地 = 清掉。
+         拖框不是点击、Shift 点选导弹也不是,两者都不碰常驻。pinId 由 mousedown 判好(敌我都在吸附圈里时近者胜)——
+         那种情形下这里不能再走 shipAt,否则近在咫尺的那艘我方舰会反手把选中抢走。 */
+      if(selDrag.pinId){if(typeof GEOM!=='undefined')GEOM.pin=selDrag.pinId;}
+      else{
+        const s=shipAt(selDrag.x0,selDrag.y0);
+        if(s){selected=[s.id];}
+        if(!selDrag.missileMode&&typeof GEOM!=='undefined')GEOM.pin=null;
+      }
     }else if(selDrag.missileMode){ // Shift框选:选导弹群(不是船)
       const x=Math.min(selDrag.x0,selDrag.x1),y=Math.min(selDrag.y0,selDrag.y1);
       const w=Math.abs(selDrag.x1-selDrag.x0),h=Math.abs(selDrag.y1-selDrag.y0);

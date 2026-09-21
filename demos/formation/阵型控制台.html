@@ -1,0 +1,1330 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>阵型控制台</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --void:#070A10; --plot:#0C111A; --sunk:#090D15; --rise:#111926;
+  --line:#1D2735; --line-hi:#2C3B4F;
+  --ink:#C6D2E1; --ink-hi:#EAF1F9; --ink-dim:#7C8CA3; --ink-mute:#55637A;
+  --aa:#4FE0FF; --amb:#FFB03D; --ok:#6EE7A8; --hot:#FF6B5A; --vio:#B49BFF;
+  --ff:"IBM Plex Sans","PingFang SC","Microsoft YaHei",sans-serif;
+  --fm:"IBM Plex Mono",Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none!important}
+body{background:var(--void);color:var(--ink);font-family:var(--ff);font-size:13px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.app{max-width:1560px;margin:0 auto;padding:14px 14px 40px}
+
+/* 顶栏 */
+header{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid var(--line);margin-bottom:12px}
+h1{font-size:19px;font-weight:600;color:var(--ink-hi);letter-spacing:-.01em}
+.sub{font-size:11.5px;color:var(--ink-mute);font-family:var(--fm);letter-spacing:.04em}
+.geo{margin-left:auto;display:flex;gap:0;flex-wrap:wrap;border:1px solid var(--line);border-radius:3px;overflow:hidden}
+.geo div{padding:6px 13px;background:var(--plot);border-right:1px solid var(--line);text-align:center}
+.geo div:last-child{border-right:0}
+.geo b{display:block;font-family:var(--fm);font-size:14px;color:var(--aa);font-variant-numeric:tabular-nums;line-height:1.25}
+.geo s{display:block;text-decoration:none;font-size:9.5px;color:var(--ink-mute);letter-spacing:.08em;font-family:var(--fm)}
+
+.grid{display:grid;grid-template-columns:268px minmax(0,1fr) 320px;gap:12px;align-items:start}
+@media(max-width:1180px){.grid{grid-template-columns:1fr}}
+
+.panel{background:var(--plot);border:1px solid var(--line);border-radius:3px}
+.ph{padding:9px 13px;border-bottom:1px solid var(--line);font-family:var(--fm);font-size:10px;letter-spacing:.13em;
+    color:var(--ink-mute);text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.pb{padding:12px 13px}
+.pb.tight{padding:8px 10px}
+
+/* 按钮 */
+button{font-family:var(--ff);font-size:12px;background:var(--rise);color:var(--ink);border:1px solid var(--line-hi);
+       border-radius:3px;padding:5px 10px;cursor:pointer;transition:background .12s,border-color .12s}
+button:hover{background:#182234;border-color:#3d5170}
+button.on{background:rgba(79,224,255,.13);border-color:var(--aa);color:var(--aa)}
+button.mini{padding:2px 7px;font-size:11px;font-family:var(--fm)}
+button.danger:hover{border-color:var(--hot);color:var(--hot)}
+.row{display:flex;gap:6px;flex-wrap:wrap}
+
+/* 舰列表 */
+.shiplist{display:flex;flex-direction:column;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:3px;overflow:hidden;margin-bottom:10px}
+.sitem{background:var(--plot);padding:7px 10px;display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;cursor:pointer}
+.sitem:hover{background:#101827}
+.sitem.sel{background:rgba(79,224,255,.09);box-shadow:inset 2px 0 0 var(--aa)}
+.sitem .cls{font-family:var(--fm);font-size:11px;font-weight:600;color:var(--aa);width:22px}
+.sitem .nm{font-size:12px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sitem .nm em{font-style:normal;color:var(--amb);font-family:var(--fm);font-size:10px;margin-left:5px}
+.sitem .pos{font-family:var(--fm);font-size:10px;color:var(--ink-mute);white-space:nowrap}
+
+/* 参数字段 */
+.grp{margin-bottom:11px}
+.grp > h4{font-family:var(--fm);font-size:9.5px;letter-spacing:.12em;color:var(--ink-mute);text-transform:uppercase;
+          margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--line)}
+.f2{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.fld{display:grid;grid-template-columns:1fr 64px;gap:5px;align-items:center;font-size:11.5px;color:var(--ink-dim)}
+.fld input{width:100%;background:var(--sunk);border:1px solid var(--line);border-radius:2px;color:var(--ink-hi);
+           font-family:var(--fm);font-size:11.5px;padding:3px 6px;text-align:right;font-variant-numeric:tabular-nums}
+.fld input:focus{outline:none;border-color:var(--aa)}
+.fld.wide{grid-template-columns:1fr}
+.sw{display:flex;gap:5px;flex-wrap:wrap}
+.sw button{font-size:11px;padding:3px 9px;font-family:var(--fm)}
+
+/* 滑块 */
+.knob{margin-bottom:11px}
+.knob label{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-dim);margin-bottom:4px}
+.knob label b{font-family:var(--fm);color:var(--aa);font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;height:3px;background:var(--line-hi);border-radius:2px;appearance:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{appearance:none;width:13px;height:13px;border-radius:50%;background:var(--aa);cursor:pointer}
+input[type=range]::-moz-range-thumb{width:13px;height:13px;border:0;border-radius:50%;background:var(--aa);cursor:pointer}
+select{width:100%;background:var(--sunk);border:1px solid var(--line);border-radius:2px;color:var(--ink-hi);
+       font-family:var(--fm);font-size:11.5px;padding:4px 6px}
+select:focus{outline:none;border-color:var(--aa)}
+
+/* 图 */
+#plot{width:100%;height:auto;display:block;background:var(--sunk);border-radius:2px}
+
+/* 评估 */
+.assess{display:flex;flex-direction:column;gap:1px;background:var(--line)}
+.ar{background:var(--plot);padding:8px 11px;display:grid;grid-template-columns:auto 1fr;gap:9px;align-items:start}
+.ar .gr{font-family:var(--fm);font-size:12px;font-weight:600;width:20px;text-align:center;border-radius:2px;padding:1px 0}
+.gr-F{color:var(--ok);background:rgba(110,231,168,.11)}
+.gr-L{color:var(--hot);background:rgba(255,107,90,.11)}
+.gr-A{color:var(--amb);background:rgba(255,176,61,.11)}
+.gr-E{color:var(--vio);background:rgba(180,155,255,.11)}
+.gr-X{color:var(--ink-mute);background:rgba(85,99,122,.11)}
+.ar .tx b{display:block;font-size:12px;color:var(--ink-hi);font-weight:600}
+.ar .tx span{font-size:11px;color:var(--ink-dim);line-height:1.5}
+
+/* 权重表 */
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:11.5px;min-width:900px}
+th{background:var(--sunk);text-align:right;font-weight:500;color:var(--ink-mute);font-family:var(--fm);
+   font-size:9.5px;letter-spacing:.06em;padding:7px 9px;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:var(--sunk);z-index:1}
+td{padding:6px 9px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--fm);
+   font-variant-numeric:tabular-nums;color:var(--ink-dim);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td:first-child{background:var(--plot);color:var(--ink-hi);font-family:var(--ff);text-align:left}
+tr.selr td{background:rgba(79,224,255,.07)}
+tr.selr td:first-child{background:rgba(79,224,255,.1)}
+td.best{color:var(--aa);font-weight:600}
+td.zero{color:var(--ink-mute);opacity:.5}
+.wbar{display:inline-block;height:3px;background:var(--aa);border-radius:2px;vertical-align:middle;margin-right:6px;opacity:.45}
+
+.note{font-size:11.5px;color:var(--ink-dim);line-height:1.6;margin-top:10px;padding-top:9px;border-top:1px dashed var(--line)}
+.note b{color:var(--ink-hi)}
+.note code{font-family:var(--fm);font-size:10.5px;background:var(--sunk);border:1px solid var(--line);border-radius:2px;padding:0 4px;color:var(--aa)}
+textarea{width:100%;height:108px;background:var(--sunk);border:1px solid var(--line);border-radius:2px;color:var(--ink-dim);
+         font-family:var(--fm);font-size:10.5px;padding:7px;resize:vertical}
+textarea:focus{outline:none;border-color:var(--aa)}
+:focus-visible{outline:2px solid var(--aa);outline-offset:1px}
+#tplmodal[hidden]{display:none!important}
+#tplmodal{position:fixed;inset:0;background:rgba(4,6,12,.86);z-index:50;display:flex;align-items:center;justify-content:center;padding:18px}
+#tplmodal .box{background:var(--plot);border:1px solid var(--line-hi);border-radius:4px;max-width:1180px;width:100%;max-height:92vh;display:flex;flex-direction:column;overflow:hidden}
+#tplmodal .hd{padding:11px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#tplmodal .hd h3{font-size:14px;color:var(--ink-hi);font-weight:600}
+#tplmodal .hd .sp{margin-left:auto}
+#tplmodal .bd{overflow:auto;padding:14px 16px}
+#tplmodal .box{max-width:620px}
+#tplmap{width:100%;max-width:460px;margin:0 auto;height:auto;display:block;background:var(--sunk);border:1px solid var(--line);border-radius:3px}
+#slotcfg{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;padding:10px 12px;background:var(--sunk);border:1px solid var(--line);border-radius:3px;min-height:44px}
+#slotcfg label{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--ink-dim)}
+#slotcfg select,#slotcfg input{background:var(--plot);border:1px solid var(--line-hi);border-radius:2px;color:var(--ink-hi);font-family:var(--fm);font-size:11.5px;padding:3px 5px}
+#slotcfg input{width:56px;text-align:center}
+#tpltab{border-collapse:collapse;width:100%;font-size:11px;min-width:780px}
+#tpltab th{background:var(--sunk);color:var(--ink-mute);font-family:var(--fm);font-size:9px;letter-spacing:.05em;padding:5px 4px;border-bottom:1px solid var(--line);white-space:nowrap;text-align:center;position:sticky;top:0;z-index:2}
+#tpltab td{padding:3px 4px;border-bottom:1px solid var(--line);text-align:center}
+#tpltab td.nm{text-align:left;color:var(--ink-hi);white-space:nowrap}
+#tpltab input,#tpltab select{background:var(--sunk);border:1px solid var(--line);border-radius:2px;color:var(--ink-hi);font-family:var(--fm);font-size:10.5px;padding:2px 3px;text-align:center;width:100%}
+#tpltab input:focus,#tpltab select:focus{outline:none;border-color:var(--aa)}
+#tpltab input.w{width:40px}
+#tpltab tr.b-core td{box-shadow:inset 3px 0 0 var(--amb)}
+#tpltab tr.b-close td{box-shadow:inset 3px 0 0 var(--ok)}
+#tpltab tr.b-body td{box-shadow:inset 3px 0 0 var(--vio)}
+#tpltab tr.b-screen td{box-shadow:inset 3px 0 0 var(--aa)}
+#tpltab tr.b-picket td{box-shadow:inset 3px 0 0 var(--amb)}
+#tpltab tr.sel td{background:rgba(79,224,255,.10)}
+#tplmap .dslot:hover{filter:brightness(1.4)}
+</style>
+</head>
+<body>
+
+<div class="app">
+<header>
+  <h1>阵型控制台</h1>
+  <div class="sub">条令站位 · 多维权重 · F/L/A/E 评估 &nbsp;|&nbsp; 沙盘，不连游戏</div>
+  <div class="geo" id="geo"></div>
+</header>
+
+<div class="grid">
+
+  <!-- 左：编成与全局旋钮 -->
+  <div>
+    <div class="panel" style="margin-bottom:12px">
+      <div class="ph">舰队编成 <span id="fcount" style="color:var(--aa)"></span></div>
+      <div class="pb tight">
+        <div class="shiplist" id="ships"></div>
+        <div class="row" style="margin-bottom:6px">
+          <button class="mini" data-add="DD">+ DD</button>
+          <button class="mini" data-add="CA">+ CA</button>
+          <button class="mini" data-add="BB">+ BB</button>
+          <button class="mini" data-add="CV">+ CV</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:5px;margin-bottom:6px">
+          <select id="archsel" style="font-size:11px;padding:3px 5px"></select>
+          <button class="mini" id="addarch">+ 仿真</button>
+        </div>
+        <div class="row">
+          <button class="mini" id="preset1">编成 A</button>
+          <button class="mini" id="preset2">编成 B</button>
+          <button class="mini" id="preset3">全 DD</button>
+          <button class="mini" id="preset4">仿真 20 艘</button>
+          <button class="mini danger" id="reset">复位</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="ph">全队能力评估 <span style="color:var(--ink-mute);text-transform:none;letter-spacing:0">F/L/A/E</span></div>
+      <div class="assess" id="assess"></div>
+    </div>
+  </div>
+
+  <!-- 中：图 -->
+  <div>
+    <div class="panel">
+      <div class="ph">
+        阵型（局部系 · 正上方 = 行进方向）
+        <span class="row">
+          <button class="mini" id="t_st">站位点</button>
+          <button class="mini" id="t_in">内圈</button>
+          <button class="mini" id="t_ou">外圈</button>
+          <button class="mini" id="t_lb">标注</button>
+        </span>
+      </div>
+      <div class="pb tight"><svg id="plot" viewBox="0 0 760 620" role="img" aria-label="编队阵型俯视图"></svg></div>
+    </div>
+    <div class="panel" style="margin-top:12px">
+      <div class="ph">能力权重矩阵 <span style="color:var(--ink-mute);text-transform:none;letter-spacing:0">全部由左侧参数现算</span></div>
+      <div class="pb tight"><div class="tw"><table id="wt"></table></div></div>
+    </div>
+  </div>
+
+  <!-- 右：检视与评估 -->
+  <div>
+    <div class="panel" style="margin-bottom:12px">
+      <div class="ph">阵型算法</div>
+      <div class="pb">
+                <div class="row" style="margin-bottom:11px">
+          <button class="mini" id="opentpl">站位编排 …</button>
+          <span style="font-size:11px;color:var(--ink-mute);align-self:center">看/改每个坑位在哪、要什么能力</span>
+        </div>
+        <div class="knob">
+          <label>站位 <span style="color:var(--ink-mute);font-size:10px">条令 §3231 / §3232</span></label>
+          <select id="k_threat">
+            <option value="fixed">固定模板 — 手工编排的规整队形（默认）</option>
+            <option value="air">空中为主 — 圆形屏护，防空优先</option>
+            <option value="surf">水面为主 — 收拢集火，火力优先</option>
+            <option value="sub">水下为主 — 宽而不深，探测优先</option>
+          </select>
+        </div>
+        <div class="knob">
+          <label>整体张角 <span style="color:var(--ink-mute);font-size:10px">把插槽方位整体张开/收拢，1.00 = 原编排</span> <b id="v_sp"></b></label>
+          <input type="range" id="k_sp" min="0.3" max="2.5" step="0.05">
+        </div>
+        <div class="knob">
+          <label id="lb_gap">张角倍数 <span style="color:var(--ink-mute);font-size:10px">1.00 = 原样编排</span> <b id="v_gap"></b></label>
+          <input type="range" id="k_gap" min="0.3" max="3" step="0.05">
+        </div>
+        <div class="knob">
+          <label>带半径倍数 <span style="color:var(--ink-mute);font-size:10px">面积覆盖度：整体缩放五个带</span> <b id="v_bm"></b></label>
+          <input type="range" id="k_bm" min="0.3" max="2.5" step="0.05">
+        </div>
+        <div class="knob">
+          <label>横向扁率 <span style="color:var(--ink-mute);font-size:10px">&gt;1 宽而不深，&lt;1 收拢</span> <b id="v_wd"></b></label>
+          <input type="range" id="k_wd" min="0.4" max="2.5" step="0.05">
+        </div>
+        <div class="knob">
+          <label>能力偏向强度 <span style="color:var(--ink-mute);font-size:10px">0=各维度等价</span> <b id="v_bs"></b></label>
+          <input type="range" id="k_bs" min="0" max="1.5" step="0.05">
+        </div>
+        <div class="note" style="margin:-4px 0 11px;padding-top:7px">
+          当前抬高的维度 <b id="v_boost" style="color:var(--aa)">—</b>
+        </div>
+        <div id="kmulti">
+          <div class="note" style="margin:0 0 10px;padding-top:0;border-top:0">
+            <b>两个逻辑</b><br>
+            <span style="color:var(--ink-mute)">① 规模 → 站位表：舰多了宽需求的站会<b>分裂</b>成窄需求的站，专家才有位置可去。每 16 艘开一个新战术群。<br>
+            ② 舰能力 · 站需求 → <b>匈牙利精确最优</b>，不是贪心。</span>
+          </div>
+          <div class="note" style="margin:0 0 10px">
+            站位 <b id="v_it" style="font-family:var(--fm);color:var(--aa)">—</b> 个　总契合 <b id="v_tot" style="font-family:var(--fm);color:var(--aa)">—</b>　均值 <b id="v_avg" style="font-family:var(--fm);color:var(--aa)">—</b>
+          </div>
+          <div class="knob">
+            <label>要害站位偏好 <span style="color:var(--ink-mute);font-size:10px">0=站位等价；越大越优先保前排</span> <b id="v_pf"></b></label>
+            <input type="range" id="k_pf" min="0" max="0.4" step="0.02">
+          </div>
+          <div class="knob">
+            <label>视野半径 <span style="color:var(--ink-mute);font-size:10px">0=自动；图上可滚轮缩放 / 拖动平移 / 双击复位</span> <b id="v_vw"></b></label>
+            <input type="range" id="k_vw" min="0" max="120000" step="2000">
+          </div>
+          <div class="knob" style="margin-bottom:0">
+            <label>每群容量 <span style="color:var(--ink-mute);font-size:10px">超出即开新战术群</span> <b id="v_gc2"></b></label>
+            <input type="range" id="k_gc2" min="6" max="16" step="1">
+          </div>
+        </div>
+              </div>
+    </div>
+    <div class="panel" style="margin-bottom:12px">
+      <div class="ph">选中舰参数 <span id="selname" style="color:var(--aa);text-transform:none;letter-spacing:0"></span></div>
+      <div class="pb" id="insp"></div>
+    </div>
+    <div class="panel">
+      <div class="ph">导出 <button class="mini" id="dump">生成 JSON</button></div>
+      <div class="pb"><textarea id="out" readonly placeholder="点「生成 JSON」把当前编成与旋钮导出，可直接贴回对话让我按它实现。"></textarea></div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<div id="tplmodal" hidden>
+  <div class="box">
+    <div class="hd">
+      <h3>站位编排</h3>
+      <span style="font-size:11px;color:var(--ink-mute)">旗舰居中。<b style="color:var(--aa)">拖动圆点改方位</b>，下拉改能力与带。舰多了插槽会沿自己的方位向两侧扩容</span>
+      <span class="sp"></span>
+      <span id="slotcount" style="font-size:11px;color:var(--aa);font-family:var(--fm)"></span>
+      <button class="mini" id="slotadd">+ 插槽</button>
+      <button class="mini" id="tplreset">恢复默认</button>
+      <button class="mini" id="tplclose">关闭</button>
+    </div>
+    <div class="bd">
+      <svg id="tplmap" viewBox="0 0 460 460" role="img" aria-label="能力插槽方位盘"></svg>
+      <div id="slotcfg"></div>
+      <div class="note" style="margin-top:10px;padding-top:9px">
+        一个插槽 = <b>一个方位 + 一种能力</b>，它代表的是一片<b>大致范围</b>。
+        舰数超过插槽数时插槽数量不变，多出来的船就近落在同一个插槽里。<br>
+        圈的颜色代表距离：<span style="color:var(--ok)">贴身</span> ·
+        <span style="color:var(--vio)">被护</span> ·
+        <span style="color:var(--aa)">屏护</span> ·
+        <span style="color:var(--amb)">哨戒</span>
+      </div>
+      <div class="note" id="dimtip" style="margin-top:9px;padding-top:9px">
+        <span style="color:var(--ink-mute)">能力影响力排序</span>　<span style="font-family:var(--fm)">通道 &gt; 贴身 &gt; 主炮 = 红外 = 网络 &gt; 电战 = 生存 &gt; 射频 &gt; 隐蔽</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+var D2R=Math.PI/180, LS='sp_fmconsole_v1';
+
+/* ── 舰体模板：数值原样取自 js/weapons/51-defs.js 与 js/sensors/20-signature.js ── */
+var HULL={
+  DD:{nm:'驱逐舰',hp:550,chaffRate:.25,macDmg:220,macReload:30,macRange:150000,
+      missDmg:12,mslPer:12,cells:4,mslReload:60,mslRange:350000,
+      outer:25000,inner:8000,innerIntercept:.85,interMax:384,
+      detPower:.8,esmQual:.75,pPing:.7,sigBase:.7,rcs:.6,sensorRange:150000,
+      guideChan:1,ecmPower:.3,beacon:2,thrust:20,turnRate:.26,topGear:800},
+  CA:{nm:'巡洋舰',hp:900,chaffRate:.15,macDmg:400,macReload:30,macRange:150000,
+      missDmg:15,mslPer:12,cells:6,mslReload:60,mslRange:350000,
+      outer:15000,inner:5000,innerIntercept:.40,interMax:320,
+      detPower:1.0,esmQual:.6,pPing:1.0,sigBase:1.0,rcs:1.0,sensorRange:250000,
+      guideChan:3,ecmPower:.5,beacon:0,thrust:15,turnRate:.16,topGear:700}
+};
+HULL.BB=Object.assign({},HULL.CA,{nm:'战列舰'});                        // 仓库里 BB 是 CA 的克隆
+HULL.CV=Object.assign({},HULL.CA,{nm:'航母',macDmg:0,beacon:0});        // CV 不装主炮
+
+/* ── 权重定义：公式与「舰船能力权重」文档一致 ── */
+var DIM=[
+ {k:'aaClose',nm:'防空·贴身',ab:'贴身',f:function(s){return s.inner*s.innerIntercept},fx:'inner × innerIntercept',kind:'F'},
+ {k:'aaChan', nm:'防空·通道',ab:'通道',f:function(s){return s.interMax*s.outer},     fx:'interMax × outer',      kind:'A'},
+ {k:'gun',    nm:'主炮',      ab:'主炮',f:function(s){return s.macReload?s.macDmg/s.macReload:0},fx:'macDmg / macReload',kind:'F'},
+ {k:'salvo',  nm:'导弹齐射',  ab:'齐射',f:function(s){return s.mslReload?s.missDmg*s.mslPer*s.cells/s.mslReload:0},fx:'missDmg×mslPer×cells / mslReload',kind:'A'},
+ {k:'ir',     nm:'被动·红外',ab:'红外',f:function(s){return s.detPower*s.detPower},   fx:'detPower²',             kind:'F'},
+ {k:'esm',    nm:'被动·射频',ab:'射频',f:function(s){return s.esmQual*s.esmQual},     fx:'esmQual²',              kind:'F'},
+ {k:'ladar',  nm:'主动照射',  ab:'照射',f:function(s){return s.pPing},                fx:'pPing（自带暴露代价）', kind:'F'},
+ {k:'stealth',nm:'隐蔽',      ab:'隐蔽',f:function(s){return 1/((s.sigBase||1)*(s.rcs||1))},fx:'1 / (sigBase × rcs)',kind:'F'},
+ {k:'c2',     nm:'网络中枢',  ab:'网络',f:function(s){return s.guideChan},            fx:'guideChan',             kind:'F'},
+ {k:'ew',     nm:'电子战',    ab:'电战',f:function(s){return s.ecmPower},             fx:'ecmPower',              kind:'F'},
+ {k:'surv',   nm:'生存',      ab:'生存',f:function(s){return s.hp/(1-(s.chaffRate||0))},fx:'hp / (1 − chaffRate)',kind:'F'},
+ {k:'mob',    nm:'机动',      ab:'机动',f:function(s){return s.thrust*s.turnRate*10},  fx:'thrust × turnRate × 10',kind:'F'},
+ {k:'beac',   nm:'信标',      ab:'信标',f:function(s){return s.beacon},               fx:'beaconMax',             kind:'E'}
+];
+
+/* ═══ 逻辑一：站位模板。只看舰队规模，决定「存在哪些站、每站要什么」。
+   n 越大站位越多，且宽需求的站会分裂成窄需求的站（专家才有位置可去）。
+   rf = 半径相对主环 R 的倍数；brg = 方位角（0 = 行进方向）。
+   ★ 贴身站位 rf 很小是有意的：只有落在护卫自己 inner 内的站位才拿得到内圈叠乘。 ═══ */
+/* 五个功能带，半径各有各的物理依据：
+     core   0                     阵心。旗舰专属
+     close  min(inner) × 0.9      贴身带。护卫必须罩得住旗舰才拿得到内圈叠乘
+     body   贴身带外 + 主力横排间距  被护圈
+     screen body + 屏护间隔        屏护圈。条令 §3251：与被护圈间隔 ≥4000 码
+     picket screen × 2            哨戒带。条令 §6902：雷达哨戒部署在屏护之外 */
+var BANDS=['core','close','body','screen','picket'];
+
+/* ══ 能力插槽 ══
+   一个插槽 = 一个方位 + 一种能力 + 一个带。你调的是「什么能力放在哪个方向」。
+   舰多了插槽会【扩容】：同一插槽沿它的方位向两侧长出更多同类位，
+   扩容次序按插槽先后轮转（条令 §3223：站位编号即填充次序）。 */
+var SLOT=[
+  {nm:'正前屏护', cap:'aaChan',  band:'screen', brg:  0},
+  {nm:'左翼屏护', cap:'aaChan',  band:'screen', brg:315},
+  {nm:'右翼屏护', cap:'aaChan',  band:'screen', brg: 45},
+  {nm:'左后屏护', cap:'aaChan',  band:'screen', brg:225},
+  {nm:'后方屏护', cap:'aaChan',  band:'screen', brg:180},
+  {nm:'左贴身',   cap:'aaClose', band:'close',  brg:330},
+  {nm:'右贴身',   cap:'aaClose', band:'close',  brg: 30},
+  {nm:'电战位',   cap:'ew',      band:'screen', brg:135},
+  {nm:'前出哨戒', cap:'stealth', band:'picket', brg:  0},
+  {nm:'红外哨戒', cap:'ir',      band:'picket', brg:320},
+  {nm:'射频哨戒', cap:'esm',     band:'picket', brg: 40},
+  {nm:'主力位',   cap:'gun',     band:'body',   brg: 90},
+  {nm:'硬屏',     cap:'surv',    band:'screen', brg:340},
+  {nm:'副中枢',   cap:'c2',      band:'body',   brg:270}
+];
+/* 插槽可选的能力做过减法：13 → 9。
+   砍掉 salvo 齐射 / ladar 照射 / mob 机动 / beac 信标 —— 它们在游戏里是【舰种常量】，
+   全队只有两档取值；且 齐射↔照射、机动↔信标 的秩相关都是 1.000（排名完全一样）。
+   实测把它们从模板里删掉，最优指派的总契合度损失 0.0%。
+   这四维仍留在 DIM 里当权重表读数，只是不再能当插槽需求。 */
+var CAP_CUT=['salvo','ladar','mob','beac'];
+var CAPS=DIM.map(function(d){return d.k;}).filter(function(k){return CAP_CUT.indexOf(k)<0;});
+/* 整体张角：把插槽方位相对正前按倍数张开/收拢。
+   用保端点的幂映射 deg = sign(d)·180·(|d|/180)^(1/sp)，
+   sp=1 恒等；>1 向后张开；<1 向前收拢。0° 与 180° 是不动点，不会被推歪也不会挤成一堆。 */
+function spreadBrg(b,sp){
+  if(!(sp>0)) sp=1;
+  var d=((b+180)%360)-180; if(d<=-180) d=180;
+  return (d<0?-1:1)*180*Math.pow(Math.abs(d)/180, 1/sp);
+}
+function capNm(k){ var d=DIM.filter(function(x){return x.k===k})[0]; return d?d.nm:k; }
+function capAb(k){ var d=DIM.filter(function(x){return x.k===k})[0]; return d?d.ab:k; }
+
+/* 威胁类型 = 一组【滑块预设】，不是藏在几何里的隐形乘数。
+   选中一种就把 gap / bm / widen 三个滑块拨到对应值，玩家之后可以自由手调，
+   滑块上显示的永远是几何里真正用的数。boost 是分类量（哪几个维度被抬高），
+   没法用一个滑块表示，所以单独列出来并配一个「偏向强度」滑块。
+   条令依据：§3231 潜艇威胁为主 → 宽而不深；§3232 空中威胁为主 → 圆形屏护。 */
+var THREAT={
+  /* 站位 = 一套【插槽布局】+ 一组【滑块预设】+ 一组【能力偏向】。
+     选中就把插槽换成这套布局，之后你可以在方位盘上随便改。 */
+  fixed:{nm:'固定模板',spread:1.00,gap:1.00,bm:1.00,widen:1.00,bstr:1.00,boost:{},slots:[
+    {nm:'正前屏护',cap:'aaChan',band:'screen',brg:  0},
+    {nm:'左翼屏护',cap:'aaChan',band:'screen',brg:315},
+    {nm:'右翼屏护',cap:'aaChan',band:'screen',brg: 45},
+    {nm:'左后屏护',cap:'aaChan',band:'screen',brg:225},
+    {nm:'后方屏护',cap:'aaChan',band:'screen',brg:180},
+    {nm:'左贴身',  cap:'aaClose',band:'close', brg:330},
+    {nm:'右贴身',  cap:'aaClose',band:'close', brg: 30},
+    {nm:'电战位',  cap:'ew',    band:'screen',brg:135},
+    {nm:'前出哨戒',cap:'stealth',band:'picket',brg: 0},
+    {nm:'红外哨戒',cap:'ir',    band:'picket',brg:320},
+    {nm:'射频哨戒',cap:'esm',   band:'picket',brg: 40},
+    {nm:'主力位',  cap:'gun',   band:'body',  brg: 90},
+    {nm:'硬屏',    cap:'surv',  band:'screen',brg:340},
+    {nm:'副中枢',  cap:'c2',    band:'body',  brg:270}]},
+  air  :{nm:'空中为主',spread:1.05,gap:3.00,bm:1.15,widen:1.05,bstr:1.00,boost:{aaChan:1.6,aaClose:1.6,ew:1.2},slots:[
+    /* 圆形屏护：八个防空位均分 360°，条令 §3232「完整环形屏护，等间隔」 */
+    {nm:'防空 000',cap:'aaChan',band:'screen',brg:  0},
+    {nm:'防空 045',cap:'aaChan',band:'screen',brg: 45},
+    {nm:'防空 090',cap:'aaChan',band:'screen',brg: 90},
+    {nm:'防空 135',cap:'aaChan',band:'screen',brg:135},
+    {nm:'防空 180',cap:'aaChan',band:'screen',brg:180},
+    {nm:'防空 225',cap:'aaChan',band:'screen',brg:225},
+    {nm:'防空 270',cap:'aaChan',band:'screen',brg:270},
+    {nm:'防空 315',cap:'aaChan',band:'screen',brg:315},
+    {nm:'左贴身',  cap:'aaClose',band:'close', brg:315},
+    {nm:'右贴身',  cap:'aaClose',band:'close', brg: 45},
+    {nm:'电战位',  cap:'ew',    band:'screen',brg:200},
+    {nm:'副中枢',  cap:'c2',    band:'body',  brg:180}]},
+  surf :{nm:'水面为主',spread:1.20,gap:1.00,bm:1.00,widen:1.30,bstr:1.00,boost:{gun:1.8,surv:1.4,c2:1.2},slots:[
+    /* 收拢集火：插槽全压在正前 ±45°，张角 0.55 再往前收，扁率 0.70 拉长纵深 */
+    {nm:'正前火力',cap:'gun',   band:'body',  brg:  0},
+    {nm:'左火力',  cap:'gun',   band:'body',  brg:335},
+    {nm:'右火力',  cap:'gun',   band:'body',  brg: 25},
+    {nm:'近迫屏护',cap:'aaClose',band:'close', brg:  0},
+    {nm:'正前屏护',cap:'aaChan',band:'screen',brg:  0},
+    {nm:'左屏护',  cap:'aaChan',band:'screen',brg:325},
+    {nm:'右屏护',  cap:'aaChan',band:'screen',brg: 35},
+    {nm:'硬屏',    cap:'surv',  band:'screen',brg:345},
+    {nm:'前出侦察',cap:'stealth',band:'picket',brg:  0},
+    {nm:'贴身护卫',cap:'aaClose',band:'close', brg:180},
+    {nm:'副中枢',  cap:'c2',    band:'body',  brg:180}]},
+  sub  :{nm:'水下为主',spread:1.10,gap:1.60,bm:1.00,widen:1.85,bstr:1.00,boost:{esm:1.8,ir:1.6,stealth:1.3},slots:[
+    /* 宽而不深：插槽压在两舷 ±60~±100°，扁率 2.20 横向拉开，条令 §3231「宽而不深」 */
+    {nm:'左远射频',cap:'esm',   band:'picket',brg:275},
+    {nm:'右远红外',cap:'ir',    band:'picket',brg: 85},
+    {nm:'左哨戒',  cap:'stealth',band:'picket',brg:300},
+    {nm:'右哨戒',  cap:'stealth',band:'picket',brg: 60},
+    {nm:'左翼屏护',cap:'aaChan',band:'screen',brg:265},
+    {nm:'右翼屏护',cap:'aaChan',band:'screen',brg: 95},
+    {nm:'左后屏护',cap:'aaChan',band:'screen',brg:240},
+    {nm:'右后屏护',cap:'aaChan',band:'screen',brg:120},
+    {nm:'正前哨戒',cap:'stealth',band:'picket',brg:  0},
+    {nm:'贴身护卫',cap:'aaClose',band:'close', brg:180},
+    {nm:'前主力',  cap:'surv',  band:'body',  brg:  0},
+    {nm:'副中枢',  cap:'c2',    band:'body',  brg:180}]}
+};
+function applyThreat(t){   // 选一种站位 = 换插槽布局 + 写三个滑块
+  var T=THREAT[t]||THREAT.fixed;
+  ST.threat=t; ST.spread=(T.spread===undefined?1:T.spread); ST.gap=T.gap; ST.bm=T.bm; ST.widen=T.widen;
+  if(T.bstr!==undefined) ST.bstr=T.bstr;      // 能力偏向强度也归站位预设管
+  if(T.slots){                                  // 原地换内容，保持数组引用不变
+    SLOT.length=0;
+    JSON.parse(JSON.stringify(T.slots)).forEach(function(x){ SLOT.push(x); });
+    if(typeof dialSel!=='undefined') dialSel=-1;
+  }
+}
+var PRIO_FALL=0.10;   // 站位重要性衰减：0=全部等价，越大越偏向优先填前面的站位
+var GROUP_CAP=16;   // 舰队级：任务群本身也是站位单元，群心在 Circle 24（≈2×屏护半径）
+/* 把插槽扩容成具体站位。需要 n-1 个位置（旗舰占阵心）。
+   轮转分配：先给每个插槽第 1 个位置，再给每个插槽第 2 个……
+   同一插槽的第 j 轮沿它的方位交替偏 0 / -1 / +1 / -2 / +2 个角步。 */
+function genStations(n){
+  var out=[{name:'阵心',req:{c2:1.0,surv:0.4},band:'core',brg:0,off:0,cap:'c2',si:-1,grp:0,prio:1}];
+  if(!SLOT.length) return out;
+  var left=Math.max(0,n-1), g=0, k=0;
+  while(left>0){
+    var quota=Math.min(left,GROUP_CAP-1), tag=g?('G'+(g+1)+'·'):'';
+    for(var round=0; quota>0; round++){
+      for(var i=0;i<SLOT.length && quota>0;i++,k++){
+        var sl=SLOT[i], req={}; req[sl.cap]=1.0;
+        out.push({name:tag+sl.nm, req:req, band:sl.band, rd:round,
+                  brg:sl.brg, off:(round===0?0:(round%2?-Math.ceil(round/2):Math.ceil(round/2))),
+                  cap:sl.cap, si:i, grp:g, prio:1/(1+k*PRIO_FALL)/(1+g*0.5)});
+        quota--; left--;
+      }
+    }
+    g++;
+  }
+  return out;
+}
+/* 五个带的半径，全部从参与编队的舰自己的参数算 */
+function bandRadii(ships,flag){
+  /* 只看【护卫】的参数：贴身带是护卫用来罩旗舰的，旗舰自己的内圈与它无关。
+     上一版把旗舰也算进 min，导致 DD 护卫和 CA 护卫算出一样的半径。 */
+  var inns=[],outs=[];
+  ships.forEach(function(s){ if(s===flag)return;
+    if(s.ciwsOn&&s.inner>0)inns.push(s.inner); if(s.ciwsOn&&s.outer>0)outs.push(s.outer); });
+  var minIn = inns.length?Math.min.apply(null,inns):8000;
+  var minOut= outs.length?Math.min.apply(null,outs):25000;
+  var m=ST.bm||1;                        // 带半径倍数
+  var close = minIn*0.9*m;
+  var body  = (minIn*0.9+12000)*m;
+  var screen= Math.max(body+minIn*m, minOut*2*m);
+  return {core:0, close:close, body:body, screen:screen, picket:screen*2,
+          baseGap:minIn*2};              // 基准间距 = 内圈相接
+}
+/* ═══ 逻辑二：匈牙利算法，最大权二分匹配。精确最优，不是贪心。O(N³)。 ═══ */
+function hungarian(val){
+  var n=val.length; if(!n) return [];
+  var m=val[0].length, N=Math.max(n,m), INF=1e18, i,j;
+  var a=[]; for(i=0;i<=N;i++){ a.push(new Float64Array(N+1)); }
+  for(i=1;i<=N;i++)for(j=1;j<=N;j++) a[i][j]=(i<=n&&j<=m)?-val[i-1][j-1]:0;   // 最小化 −价值
+  var u=new Float64Array(N+1),v=new Float64Array(N+1),p=new Int32Array(N+1),way=new Int32Array(N+1);
+  for(i=1;i<=N;i++){
+    p[0]=i; var j0=0, minv=new Float64Array(N+1).fill(INF), used=new Uint8Array(N+1);
+    do{
+      used[j0]=1; var i0=p[j0], delta=INF, j1=0;
+      for(j=1;j<=N;j++) if(!used[j]){
+        var cur=a[i0][j]-u[i0]-v[j];
+        if(cur<minv[j]){minv[j]=cur;way[j]=j0;}
+        if(minv[j]<delta){delta=minv[j];j1=j;}
+      }
+      for(j=0;j<=N;j++){ if(used[j]){u[p[j]]+=delta;v[j]-=delta;} else minv[j]-=delta; }
+      j0=j1;
+    }while(p[j0]!==0);
+    do{ var jw=way[j0]; p[j0]=p[jw]; j0=jw; }while(j0);
+  }
+  var out=new Array(n).fill(-1);
+  for(j=1;j<=N;j++) if(p[j]>=1&&p[j]<=n&&j<=m) out[p[j]-1]=j-1;
+  return out;
+}
+
+/* ═══ 仿真舰型库：覆盖全强/全弱/单强/单弱/双强/三强/棘手通才 ═══ */
+var ARCH=(function(){
+  var K=['aaClose','aaChan','c2','ew','surv','stealth','ir','esm','gun'];
+  var CN={aaClose:'贴身',aaChan:'通道',c2:'中枢',ew:'电战',surv:'生存',stealth:'隐蔽',ir:'红外',esm:'射频',gun:'主炮'};
+  var L=[], f=function(v,over){var o={};K.forEach(function(k){o[k]=v});if(over)for(var k in over)o[k]=over[k];return o};
+  L.push(['全能舰 · 全项 0.9','全强',f(.9)]);
+  L.push(['废柴舰 · 全项 0.15','全弱',f(.15)]);
+  L.push(['均值通才 · 全项 0.55','通才',f(.55)]);
+  K.forEach(function(k){ L.push(['单强·'+CN[k],'一点强',f(.2,(function(){var o={};o[k]=1.0;return o})())]); });
+  K.forEach(function(k){ L.push(['单弱·'+CN[k],'一点弱',f(.7,(function(){var o={};o[k]=.1;return o})())]); });
+  L.push(['双强·防空(贴身+通道)','某几点强',f(.25,{aaClose:.95,aaChan:.95})]);
+  L.push(['双强·探测(红外+射频)','某几点强',f(.25,{ir:.95,esm:.95})]);
+  L.push(['双强·防空探(贴身+红外)','某几点强',f(.25,{aaClose:.9,ir:.9})]);
+  L.push(['双强·指挥(中枢+电战)','某几点强',f(.25,{c2:.95,ew:.95})]);
+  L.push(['双强·硬屏(生存+贴身)','某几点强',f(.25,{surv:.95,aaClose:.95})]);
+  L.push(['双强·潜侦(隐蔽+射频)','某几点强',f(.25,{stealth:.95,esm:.95})]);
+  L.push(['三强·屏护','偏科',f(.1,{aaClose:.9,aaChan:.9,surv:.9})]);
+  L.push(['三强·侦察','偏科',f(.1,{stealth:.9,ir:.9,esm:.9})]);
+  L.push(['三强·指挥','偏科',f(.1,{c2:.9,ew:.9,surv:.9})]);
+  L.push(['棘手通才·偏防空','棘手',f(.65,{aaClose:.85})]);
+  L.push(['棘手通才·偏探测','棘手',f(.65,{esm:.85})]);
+  L.push(['棘手通才·偏中枢','棘手',f(.65,{c2:.85})]);
+  L.push(['棘手通才·偏主炮','棘手',f(.65,{gun:.85})]);
+  return L;
+})();
+
+var seq=0;
+function mk(cls){
+  var h=HULL[cls]||HULL.DD, s=Object.assign({},h);
+  s.cls=cls; s.id=++seq; s.name=cls+'-'+seq;
+  s.ciwsOn=true; s.lidar=false; s.ecm=false;
+  s.interStock=1;                       // 拦截弹剩余比例（喂 A 档评估）
+  delete s.nm; return s;
+}
+/* 仿真舰型 → 真实字段：按各维度的「参考最大值」反解，
+   这样仿真舰和真实舰混在一队里数值同量纲，权重表和贴身门槛都照常成立。 */
+function mkArch(ai){
+  var A=ARCH[ai], c=A[2], s=mk('DD');
+  s.name=A[0].split(' ')[0].replace('·','·'); s.cls='SIM'; s.arch=A[0]; s.kind=A[1];
+  s.inner=Math.max(200,8000*c.aaClose); s.innerIntercept=0.85;          // 贴身：inner 随强度变 → 够不够得着旗舰会跟着变
+  s.interMax=Math.max(1,Math.round(384*c.aaChan)); s.outer=25000;       // 通道
+  s.guideChan=+(3*c.c2).toFixed(2);                                     // 中枢
+  s.ecmPower=Math.min(1,0.5*c.ew);                                      // 电战（0.5 = CA 的值，与其它维度同口径取真实最大值）
+  s.hp=Math.max(10,Math.round(550*c.surv)); s.chaffRate=0.25;           // 生存
+  s.rcs=1; s.sigBase=Math.max(.05,1/(2.38*c.stealth));                  // 隐蔽
+  s.detPower=Math.sqrt(Math.max(0,c.ir));                               // 红外
+  s.esmQual=Math.sqrt(Math.max(0,c.esm*0.5625));                        // 射频
+  s.macDmg=Math.round(400*c.gun); s.macReload=30;                       // 主炮
+  s.interStock=1; s.beacon=0;
+  return s;
+}
+var ST={ships:[],flag:null,sel:null,
+  threat:'fixed', spread:1.0, gap:1.0, bm:1.0, widen:1.0, bstr:1.0, vw:0, pf:0.10, panx:0, pany:0,
+  ctr:'base', k:0.5, cg:20000, sp:1, rb:'outer2', rm:20000,
+  showSt:true, showIn:false, showOu:false, showLb:true};
+
+function preset(which){
+  ST.ships=[];seq=0;
+  if(which===4){
+    /* 20 艘混编 = 真实 4 艘 + 仿真 16 艘，覆盖全强/全弱/通才/单强/单弱/双强/三强/棘手。
+       索引显式列出便于复核，末尾 filter 保证永远落在 ARCH 范围内（上一版越界过，静默少装了 5 艘）。 */
+    ['CA','DD','DD','CV'].forEach(function(c){ST.ships.push(mk(c))});
+    [0,1,2,      // 全能 / 废柴 / 均值通才
+     3,4,5,6,8,10,11,   // 单强：贴身 通道 中枢 电战 隐蔽 射频 主炮
+     16,         // 单弱：生存
+     21,23,      // 双强：防空 / 防空探
+     27,28,      // 三强：屏护 / 侦察
+     30]         // 棘手通才：偏防空
+    .filter(function(i){return i<ARCH.length})
+    .forEach(function(i){ ST.ships.push(mkArch(i)); });
+  }else{
+    var L = which===1 ? ['CA','DD','DD','DD','CV']
+          : which===2 ? ['CA','CA','DD','CA']
+          : ['DD','DD','DD','DD','DD','DD'];
+    L.forEach(function(c){ST.ships.push(mk(c))});
+  }
+  ST.flag=ST.ships[0].id; ST.sel=ST.ships[0].id;
+}
+
+/* ── 条令站位表：步长 360/n，从 000 起左右交替向后展开 ── */
+function bearings(n){
+  var step=360/n,out=[0];
+  for(var i=1;out.length<n;i++){out.push((360-step*i)%360);if(out.length<n)out.push(step*i);}
+  return out;
+}
+function W(s,k){ for(var i=0;i<DIM.length;i++) if(DIM[i].k===k) return DIM[i].f(s)||0; return 0; }
+function hasMAC(s){ return (s.macDmg||0)>0; }
+function aaOf(s){ return s.ciwsOn ? s.inner*s.innerIntercept : 0; }   // ciwsOn 关 = 防空整行归零（列维度）
+
+
+/* === 能力方位盘：旗舰居中，周围是能力插槽。拖动改方位，下拉改能力 === */
+var SLOT0=JSON.parse(JSON.stringify(SLOT));
+var BANDNM={core:'阵心',close:'贴身',body:'被护',screen:'屏护',picket:'哨戒'};
+var BANDCOL={core:'#FFB03D',close:'#6EE7A8',body:'#B49BFF',screen:'#4FE0FF',picket:'#FFB03D'};
+var dialSel=-1;
+
+function dialRadii(){
+  var fl=ST.ships.filter(function(s){return s.id===ST.flag})[0]||ST.ships[0];
+  return bandRadii(ST.ships,fl);
+}
+function drawDial(){
+  var BR=dialRadii(), cx=230, cy=234, b='';
+  var far=Math.max(BR.picket,1);
+  var sc=(230-52)/far, seen={};
+  BANDS.forEach(function(bn){
+    var r=BR[bn]; if(!(r>0))return;
+    b+='<circle cx="'+cx+'" cy="'+cy+'" r="'+(r*sc).toFixed(1)+'" fill="none" stroke="'+BANDCOL[bn]+'" stroke-width="1" opacity=".22"/>';
+  });
+  b+='<line x1="'+cx+'" y1="34" x2="'+cx+'" y2="14" stroke="#FFB03D" stroke-width="1.4"/>';
+  b+='<path d="M'+cx+' 9l-5 11 5-3.5 5 3.5z" fill="#FFB03D"/>';
+  b+='<text x="'+cx+'" y="'+(cy+16)+'" fill="#FFB03D" font-size="9" text-anchor="middle" font-family="IBM Plex Mono,monospace">旗舰</text>';
+  b+='<circle cx="'+cx+'" cy="'+cy+'" r="5" fill="#FFB03D"/>';
+  SLOT.forEach(function(sl,i){
+    var r=BR[sl.band]*sc, t=spreadBrg(sl.brg, ST.spread)*D2R;
+    var px=cx+r*Math.sin(t)*(ST.widen||1), py=cy-r*Math.cos(t);
+    var col=BANDCOL[sl.band], on=(i===dialSel);
+    b+='<line x1="'+cx+'" y1="'+cy+'" x2="'+px.toFixed(1)+'" y2="'+py.toFixed(1)+'" stroke="'+col+'" stroke-width="'+(on?1.4:0.7)+'" opacity="'+(on?.55:.2)+'"/>';
+    b+='<circle class="dslot" data-si="'+i+'" cx="'+px.toFixed(1)+'" cy="'+py.toFixed(1)+'" r="'+(on?15:13)+'" fill="#0C111A" stroke="'+col+'" stroke-width="'+(on?2:1.3)+'" style="cursor:grab"/>';
+    b+='<text pointer-events="none" x="'+px.toFixed(1)+'" y="'+py.toFixed(1)+'" fill="'+col+'" font-size="9" text-anchor="middle" dominant-baseline="central" font-family="IBM Plex Sans,sans-serif">'+esc(capAb(sl.cap))+'</text>';
+    b+='<text pointer-events="none" x="'+px.toFixed(1)+'" y="'+(py+24).toFixed(1)+'" fill="#55637A" font-size="8" text-anchor="middle" font-family="IBM Plex Mono,monospace">'+pad3(Math.round(sl.brg))+'</text>';
+  });
+  el('tplmap').innerHTML=b;
+}
+function drawSlotCfg(){
+  var box=el('slotcfg');
+  if(dialSel<0||dialSel>=SLOT.length){
+    box.innerHTML='<span style="color:var(--ink-mute);font-size:12px">点一个圆圈来设置它 · 拖动圆圈改方位</span>';
+    return;
+  }
+  var sl=SLOT[dialSel], BR=dialRadii();
+  box.innerHTML=
+     '<span style="color:'+BANDCOL[sl.band]+';font-family:var(--fm);font-size:12px;min-width:56px">插槽 '+(dialSel+1)+'</span>'
+    +'<label>能力<select data-sk="cap" data-i="'+dialSel+'">'+CAPS.map(function(c){
+        return '<option value="'+c+'"'+(c===sl.cap?' selected':'')+'>'+capNm(c)+'</option>';}).join('')+'</select></label>'
+    +'<label>距离<select data-sk="band" data-i="'+dialSel+'">'+BANDS.filter(function(b){return b!=='core';}).map(function(b){
+        return '<option value="'+b+'"'+(b===sl.band?' selected':'')+'>'+BANDNM[b]+' '+f0(BR[b])+'</option>';}).join('')+'</select></label>'
+    +'<label>方位<input type="number" step="5" min="0" max="359" data-sk="brg" data-i="'+dialSel+'" value="'+Math.round(sl.brg)+'"></label>'
+    +'<button class="mini danger" data-sdel="'+dialSel+'">删除这个插槽</button>';
+}
+function openTpl(){ el('tplmodal').hidden=false; drawDial(); drawSlotCfg(); }
+function closeTpl(){ el('tplmodal').hidden=true; }
+function slotEdit(t){
+  var i=+t.dataset.i, k=t.dataset.sk;
+  if(k==='nm') SLOT[i].nm=t.value;
+  else if(k==='cap'){ SLOT[i].cap=t.value; if(!SLOT[i].nmTouched) SLOT[i].nm=capNm(t.value); }
+  else if(k==='band') SLOT[i].band=t.value;
+  else if(k==='brg') SLOT[i].brg=((Math.round(+t.value||0)%360)+360)%360;
+  drawDial(); drawSlotCfg(); render();
+}
+function slotAdd(){
+  var used={}; SLOT.forEach(function(s2){used[s2.cap]=1;});
+  var cap=CAPS.filter(function(c){return !used[c];})[0]||'surv';
+  SLOT.push({nm:capNm(cap),cap:cap,band:'screen',brg:(SLOT.length*40)%360});
+  dialSel=SLOT.length-1; drawDial(); drawSlotCfg(); render();
+}
+function slotDel(i){
+  if(SLOT.length<=1) return;
+  SLOT.splice(i,1); dialSel=-1;
+  drawDial(); drawSlotCfg(); render();
+}
+/* 拖动圆点改方位 */
+(function(){
+  var dr=null;
+  document.addEventListener('mousedown',function(ev){
+    var c=ev.target.closest?ev.target.closest('.dslot'):null;
+    if(!c) return;
+    dr=+c.dataset.si; dialSel=dr; drawDial(); drawSlotCfg(); ev.preventDefault();
+  });
+  document.addEventListener('mousemove',function(ev){
+    if(dr===null) return;
+    var sv=el('tplmap'), r=sv.getBoundingClientRect();
+    var x=(ev.clientX-r.left)/r.width*460-230, y=(ev.clientY-r.top)/r.height*460-234;
+    var deg=Math.atan2(x,-y)/D2R;
+    SLOT[dr].brg=((Math.round(deg/5)*5)%360+360)%360;
+    drawDial(); drawSlotCfg(); render();
+  });
+  document.addEventListener('mouseup',function(){ dr=null; });
+})();
+/* ── 布局 ── */
+function layout(){
+  var ships=ST.ships, flag=ships.filter(function(s){return s.id===ST.flag})[0]||ships[0];
+  if(!flag) return null;
+  var rest=ships.filter(function(s){return s!==flag});
+
+  // 居中判据
+  var armed=rest.filter(function(s){return hasMAC(s)&&aaOf(s)>0});
+  var maxA=0; armed.forEach(function(s){maxA=Math.max(maxA,aaOf(s))});
+  function centered(s){
+    if(ST.ctr==='flagonly') return false;
+    if(!hasMAC(s)) return true;                 // 航母类：无主炮 → 居中
+    if(aaOf(s)<=0) return true;                 // 无近防 → 居中
+    if(ST.ctr==='rel' && maxA>0 && aaOf(s) < ST.k*maxA) return true;
+    return false;
+  }
+  var ctr=rest.filter(centered), ring=rest.filter(function(s){return !centered(s)});
+
+  // 半径与站距：都只看环上舰自己的参数
+  var R=0, sp=0;
+  if(ring.length){
+    var ro=Infinity, ri=Infinity;
+    ring.forEach(function(s){ro=Math.min(ro,s.outer);ri=Math.min(ri,s.inner)});
+    R = ST.rb==='outer2'?ro*2 : ST.rb==='outer1'?ro : ST.rb==='inner2'?ri*2 : ST.rb==='inner1'?ri : ST.rm;
+    sp = ri*2*ST.sp;
+  }
+  var n = ring.length ? Math.max(ring.length, Math.ceil(2*Math.PI*R/Math.max(1,sp))) : 0;
+  var brs = n?bearings(n):[];
+
+  /* 生成空槽表：居中槽（沿垂直方向 ∓cg 对称）+ 环上槽（条令站位表次序） */
+  function mkSlots(nc){
+    var out=[],i;
+    for(i=0;i<nc;i++){
+      var side=(i%2===0)?-1:1, step=Math.floor(i/2)+1;
+      out.push({lx:0,ly:side*ST.cg*step,r:ST.cg*step,brg:null,role:'center'});
+    }
+    for(i=0;i<n;i++){
+      var b=brs[i], t=b*D2R;
+      out.push({lx:R*Math.cos(t),ly:R*Math.sin(t),r:R,brg:b,role:'ring',st:i+1});
+    }
+    return out;
+  }
+
+  var slots=[{s:flag,lx:0,ly:0,role:'flag',brg:null}], sorted, assigned=null, tot=0, iters=0, bands=null;
+
+  {
+    /* ══ 两个逻辑 ══
+       逻辑一 genStations(n)：规模决定存在哪些站、每站要什么。舰多了宽需求的站会分裂。
+       逻辑二 匈牙利：舰能力向量 · 站需求向量 → 精确最优匹配。不用贪心。
+       条令本身填站是零维的（按编号顺序），这一步是超出条令的设计选择。 */
+    var STA=genStations(ST.ships.length), BR=bandRadii(ST.ships,flag);
+    var TH=THREAT[ST.threat]||THREAT.fixed;
+    var gap=BR.baseGap*(ST.gap||1);            // 只读滑块：威胁类型已在选中时写进滑块
+    BR.gap=gap; BR.widen=(ST.widen||1); BR.threat=TH.nm; BR.step={};
+    /* 弦长 gap 在半径 r 上张的圆心角 step = 2·asin(gap/2r)。半径越大同样间距占角越小。
+       钳到 120°：再大说明该带按此间距根本放不下几艘。 */
+    BANDS.forEach(function(bn){
+      var r=BR[bn];
+      BR.step[bn]= r>0 ? Math.min(120, 2*Math.asin(Math.min(1,gap/(2*r)))/D2R) : 0;
+    });
+    BR.mode='能力插槽';
+    STA.forEach(function(st){
+      var rr=BR[st.band];
+      var deg=spreadBrg(st.brg, ST.spread) + st.off*BR.step[st.band];   // 整体张角 + 同簇展开
+      var t=deg*D2R;
+      st.brg=((deg%360)+360)%360; st.r=rr;
+      st.lx=rr*Math.cos(t);
+      st.ly=rr*Math.sin(t)*BR.widen;        // 扁率 >1 = 条令的「宽而不深」
+      if(st.grp){ st.ly += (st.grp%2?1:-1)*Math.ceil(st.grp/2)*2*BR.screen; }
+    });
+    /* 旗舰占阵心，不参与指派——上一版旗舰另画在 (0,0)，与被指派到阵心的舰重叠 */
+    var coreIdx=-1;
+    STA.forEach(function(st,j){ if(st.band==='core'&&coreIdx<0) coreIdx=j; });
+    if(coreIdx>=0){ slots[0].stn=STA[coreIdx].name; slots[0].fit=1; slots[0].r=0; }
+    /* 归一：每个维度按【本队最大值】折算，与条令的相对口径一致 */
+    var nrm={};
+    DIM.forEach(function(d){
+      var mx=0; ST.ships.forEach(function(s){mx=Math.max(mx,d.f(s)||0)});
+      nrm[d.k]=mx||1;
+    });
+    /* 契合度 = 需求加权的达成度。贴身有额外的几何门：站位必须落在该舰 inner 之内 */
+    function fit(s,st){
+      var dot=0,wsum=0;
+      for(var k in st.req){
+        var bs=1+((TH.boost[k]||1)-1)*(ST.bstr===undefined?1:ST.bstr);   // 偏向强度 0=不抬高，1=预设全量
+        var w=st.req[k]*bs, have=(W(s,k)||0)/nrm[k];
+        if(k==='aaClose' && st.r>s.inner) have=0;      // 够不到旗舰 = 拿不到内圈叠乘
+        dot+=w*Math.min(1,have); wsum+=w;
+      }
+      return wsum? dot/wsum : 0;
+    }
+    /* 阵心已被旗舰占住，从可指派站位里剔除 */
+    var FREE=STA.map(function(st,j){return {st:st,j:j}}).filter(function(x){return x.j!==coreIdx});
+    /* 目标 = 契合度 × 站位优先级。不乘的话，弱舰会被停在「损失最小」的地方，
+       而那可能恰好是正前屏护这种要害站位——条令 §3223 的编号次序就是为了防这个。 */
+    var VAL=rest.map(function(s){ return FREE.map(function(x){ return fit(s,x.st)*x.st.prio }) });
+    var as=hungarian(VAL);
+    var pairs=[];
+    rest.forEach(function(s,i){ if(as[i]>=0){
+      var st0=FREE[as[i]].st;
+      pairs.push({s:s,j:FREE[as[i]].j,v:fit(s,st0)});   // 展示用原始契合度，不带优先级
+    }});
+    pairs.forEach(function(p){ tot+=p.v; });
+    pairs.sort(function(x,y){ return x.j-y.j });
+    pairs.forEach(function(p){
+      var st=STA[p.j];
+      slots.push({s:p.s,lx:st.lx,ly:st.ly,band:st.band,
+                  role:(st.band==='close'||st.band==='body')?'center':'ring',
+                  brg:st.brg,stn:st.name,fit:p.v,req:st.req,r:st.r});
+    });
+    assigned={pairs:pairs,STA:STA,VAL:VAL,fit:fit,nrm:nrm}; bands=BR;
+    iters=STA.length;
+    sorted=pairs.filter(function(p){return STA[p.j].band==='screen'||STA[p.j].band==='picket'}).map(function(p){return p.s});
+    ctr   =pairs.filter(function(p){return STA[p.j].band==='close' ||STA[p.j].band==='body'  }).map(function(p){return p.s});
+  }
+  var span=0;
+  slots.forEach(function(p){ if(p.role==='ring'&&p.brg!=null) span=Math.max(span,Math.min(p.brg,360-p.brg)); });
+  return {flag:flag,ctr:ctr,ring:sorted,R:R,sp:sp,n:n,brs:brs,slots:slots,span:span,maxA:maxA,tot:tot,iters:iters,assigned:assigned,bands:bands};
+}
+
+/* ── F/L/A/E 评估 ── */
+/* 模板模式的评估：逐站看契合度，短板必须说清「要什么、只拿到什么」——
+   这就是条令 (L) 档「每一个受限都必须附一句限制说明」的落地形式。 */
+function assess(L){
+  if(!L||!L.assigned||!L.assigned.STA) return [];
+  return assessTplBody(L);
+}
+function assessTplBody(L){
+  var out=[], A=L.assigned, STA=A.STA, nrm=A.nrm, all=ST.ships;
+  var occ={}; A.pairs.forEach(function(p){ occ[p.j]=p; });
+
+  /* 按【插槽】汇总，而不是逐个位置列 —— 插槽是一个范围，里面可以有很多船 */
+  var byS={};
+  STA.forEach(function(st,j){
+    var key=(st.si===undefined?-1:st.si)+'|'+st.grp;
+    var g=byS[key]||(byS[key]={nm:st.name,band:st.band,cap:st.cap,req:st.req,r:st.r,
+                               n:0,filled:0,sum:0,worst:null,ships:[]});
+    g.n++;
+    var p=occ[j];
+    if(p){ g.filled++; g.sum+=p.v; g.ships.push(p.s.name);
+           if(!g.worst||p.v<g.worst.v) g.worst={s:p.s,v:p.v}; }
+  });
+
+  var rows=[];
+  for(var k in byS){
+    var g=byS[k];
+    if(g.band==='core'){
+      rows.push({g:'F',n:g.nm,r:(L.flag?L.flag.name:'—')+'（旗舰）。阵心由旗舰固定占据，不参与指派。',f:2});
+      continue;
+    }
+    if(!g.filled){ rows.push({g:'X',n:g.nm,r:'空缺，无舰可派。',f:-1}); continue; }
+    var avg=g.sum/g.filled;
+    var gr = avg>=.75?'F' : avg>=.5?'A' : 'L';
+    var capnm=capAb(g.cap||'');
+    var r=g.filled+' 艘　平均契合 '+avg.toFixed(2)+'　需求：'+capnm;
+    if(g.ships.length<=4) r+='　（'+g.ships.join('、')+'）';
+    else r+='　（'+g.ships.slice(0,3).join('、')+' 等 '+g.ships.length+' 艘）';
+    if(gr!=='F'&&g.worst){
+      var have=(W(g.worst.s,g.cap)||0)/(nrm[g.cap]||1);
+      var gated=(g.cap==='aaClose'&&g.r>g.worst.s.inner);
+      r+='　← 最弱的 '+g.worst.s.name+' 只有 '+have.toFixed(2)
+        +(gated?('（站位 '+f0(g.r)+' 超出它的内圈 '+f0(g.worst.s.inner)+'，该维归零）'):'');
+    }
+    rows.push({g:gr,n:g.nm,r:r,f:avg});
+  }
+
+  var nF=rows.filter(function(x){return x.g==='F'}).length,
+      nA=rows.filter(function(x){return x.g==='A'}).length,
+      nL=rows.filter(function(x){return x.g==='L'}).length,
+      nX=rows.filter(function(x){return x.g==='X'}).length;
+  out.push({g:nL+nX?'L':'F',n:'全队 '+rows.length+' 个插槽',
+    r:'F 满足 '+nF+'　A 勉强 '+nA+'　L 受限 '+nL+'　X 空缺 '+nX+'　·　总契合 '+L.tot.toFixed(2)+
+      '。下面按契合度从低到高列出，先补最短的板。'});
+  rows.sort(function(a,b){return a.f-b.f}).forEach(function(x){ out.push(x); });
+
+  var chan=all.filter(function(s2){return s2.ciwsOn&&s2.outer>0});
+  if(chan.length){
+    var tot=0,cur=0; chan.forEach(function(s2){tot+=s2.interMax;cur+=s2.interMax*s2.interStock});
+    out.push({g:'A',n:'拦截弹库存',r:f0(cur)+'/'+f0(tot)+'（'+Math.round(cur/tot*100)+'%）。消耗品能力，打光即归零，与站位无关。'});
+  }
+  return out;
+}
+function assessOld(L){   /* 单维模式的评估，已随该模式删除，留档不调用 */
+  var out=[],i;
+  if(!L) return out;
+  var ring=L.ring, ctr=L.ctr, flag=L.flag, all=ST.ships;
+
+  // 1 防空·贴身：环上舰必须够得到旗舰，即 R ≤ 它自己的 inner
+  var reach=ring.filter(function(s){return s.ciwsOn && aaOf(s)>0 && L.R<=s.inner});
+  var have =ring.filter(function(s){return s.ciwsOn && aaOf(s)>0});
+  if(!have.length) out.push({g:'X',n:'防空·贴身',r:'环上没有带近防的舰。'});
+  else if(reach.length) out.push({g:'F',n:'防空·贴身',r:reach.length+' 艘罩得住旗舰（环半径 '+f0(L.R)+' ≤ 内圈 '+f0(reach[0].inner)+'），命中瞬间逐舰叠乘生效。代价是防空圈几乎完全重叠，通道数被浪费。'});
+  else{
+    var bi=Math.max.apply(null,have.map(function(s){return s.inner}));
+    out.push({g:'L',n:'防空·贴身',r:'环半径 '+f0(L.R)+' 是最强内圈 '+f0(bi)+' 的 '+(L.R/bi).toFixed(1)+' 倍，护卫罩不住旗舰，内圈叠乘一分拿不到。'+
+      '要拿到必须把「圈半径依据」改成 min(inner)——注意 min(inner×2) 不解决，那是让相邻护卫的内圈彼此相接，不是罩住旗舰。'});
+  }
+
+  // 2 防空·通道：靠库存 → A 档
+  var chan=all.filter(function(s){return s.ciwsOn&&s.outer>0});
+  if(!chan.length) out.push({g:'X',n:'防空·通道',r:'全队无可用近防（拦截开关全关？）。'});
+  else{
+    var tot=0,cur=0; chan.forEach(function(s){tot+=s.interMax;cur+=s.interMax*s.interStock});
+    var pct=tot?cur/tot:0;
+    out.push({g:pct>=.999?'A':'A',n:'防空·通道',
+      r:chan.length+' 个独立拦截通道，弹量 '+f0(cur)+'/'+f0(tot)+'（'+Math.round(pct*100)+'%）。'+
+        (pct<.35?'库存偏低，这是消耗品能力，打光即归零。':'重叠不叠加，通道数才是收益。')});
+  }
+
+  // 3 网络中枢：最高 guideChan 的舰应被保护
+  var c2=all.slice().sort(function(a,b){return b.guideChan-a.guideChan})[0];
+  if(!c2||!c2.guideChan) out.push({g:'X',n:'网络中枢',r:'全队无引导通道。'});
+  else{
+    var cs=null; L.slots.forEach(function(p){ if(p.s.id===c2.id) cs=p; });
+    var onRing=cs&&cs.role==='ring';
+    out.push({g:onRing?'L':'F',n:'网络中枢',
+      r:c2.name+'（'+c2.guideChan+' 通道）'+(onRing?'被排在环上 '+pad3(Math.round(cs.brg))+'，暴露在最外层；它掉了全队超视距引导失能。':'居中受护。')});
+  }
+
+  // 4 前出侦察：最隐蔽的舰是否被占用
+  var sc=all.slice().sort(function(a,b){return W(b,'stealth')-W(a,'stealth')})[0];
+  if(sc){
+    var busy=ring.indexOf(sc)>=0||sc===flag;
+    var worst=all.slice().sort(function(a,b){return W(a,'stealth')-W(b,'stealth')})[0];
+    var pen=W(sc,'stealth')/Math.max(1e-9,W(worst,'stealth'));
+    out.push({g:busy?'L':'F',n:'前出侦察',
+      r:busy?('最隐蔽的 '+sc.name+'（隐蔽 '+W(sc,'stealth').toFixed(2)+'）已占'+(sc===flag?'旗舰位':'环上站位')+'；改派最差的 '+worst.name+' 前出，被发现距离约 +'+Math.round((pen-1)*100)+'%。'
+            ):(sc.name+' 未占站位，可前出，隐蔽 '+W(sc,'stealth').toFixed(2)+'。')});
+  }
+
+  // 5 电子战：ECM 最强者若在阵心，开机会暴露整队
+  var ew=all.slice().sort(function(a,b){return b.ecmPower-a.ecmPower})[0];
+  if(ew&&ew.ecmPower>0){
+    var atCore=(ew===flag)||ctr.indexOf(ew)>=0;
+    out.push({g:atCore?'L':'F',n:'电子战',
+      r:ew.name+'（ECM '+ew.ecmPower.toFixed(2)+'）'+(atCore?'在阵心，开机等于把整队位置标出来。':'在外层，开机不暴露阵心。')+
+        (ew.ecm?' 当前已开机。':'')});
+  }
+
+  // 6 生存：最能扛的应挡在威胁轴一侧（读实际落到的站位，两种分配方式通用）
+  var slotOf={}; L.slots.forEach(function(p){ slotOf[p.s.id]=p; });
+  var sv=ring.slice().sort(function(a,b){return W(b,'surv')-W(a,'surv')})[0];
+  if(sv){
+    var b=(slotOf[sv.id]&&slotOf[sv.id].brg)||0, dev=Math.min(b,360-b);
+    out.push({g:dev<=25?'F':'L',n:'生存',
+      r:'环上最能扛的 '+sv.name+'（等效血 '+f0(W(sv,'surv'))+'）在 '+pad3(Math.round(b))+'（偏离威胁轴 '+Math.round(dev)+'°）。'+
+        (dev<=25?'挡在正面。':'不在正面，威胁轴上是更脆的舰。')});
+  }
+
+  // 7 主动照射：开了 LADAR 又站在队里
+  var lad=all.filter(function(s){return s.lidar});
+  if(lad.length){
+    var inFleet=lad.filter(function(s){return s===flag||ctr.indexOf(s)>=0||ring.indexOf(s)>=0});
+    out.push({g:'L',n:'主动照射',r:lad.map(function(s){return s.name}).join('、')+' 已开 LADAR，辐射强度是 ECM 的 3 倍。'+
+      (inFleet.length?'它就在编队里，等于把全队位置广播出去——应前出且孤立。':'')});
+  }
+
+  // 8 信标：E 档，库存极少
+  var bt=all.filter(function(s){return s.beacon>0});
+  if(bt.length) out.push({g:'E',n:'信标',r:bt.map(function(s){return s.name+' ×'+s.beacon}).join('、')+'。库存极少，本来就不指望连续用。'});
+  return out;
+}
+
+/* ── 工具 ── */
+function f0(v){ return (Math.round(v)).toLocaleString('en-US'); }
+function pad3(v){ v=((v%360)+360)%360; return (v<10?'00':v<100?'0':'')+v+'°'; }
+function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]}); }
+function el(id){ return document.getElementById(id); }
+
+/* ── 绘图 ── */
+function draw(L){
+  var W0=760,H0=620,cx=W0/2,cy=H0/2+14,b='';
+  if(!L){ el('plot').innerHTML='<text x="380" y="300" fill="#55637A" text-anchor="middle" font-size="13">编队为空</text>'; return; }
+  // 比例尺：把最远的东西塞进画面
+  var far=0;
+  L.slots.forEach(function(p){far=Math.max(far,Math.hypot(p.lx,p.ly))});
+  if(ST.showOu) L.slots.forEach(function(p){far=Math.max(far,Math.hypot(p.lx,p.ly)+p.s.outer)});
+  far=Math.max(far,1000);
+  if(ST.vw>0) far=ST.vw;
+  ST.lastFar=far;
+  cx-= (ST.panx||0)*0; cy-=(ST.pany||0)*0;
+  if(ST.vw>0) far=ST.vw;                 // 手动视野：把这个半径铺满画布，看得清内圈细节
+  var s=(Math.min(W0,H0)/2-56)/far;
+
+  function X(lx,ly){ return cx+ly*s } function Y(lx,ly){ return cy-lx*s }
+
+  // 网格环（每 25000）
+  var stepR=far>90000?50000:far>40000?25000:far>16000?10000:5000;
+  for(var r=stepR;r<=far*1.02;r+=stepR){
+    b+='<circle cx="'+cx+'" cy="'+cy+'" r="'+(r*s).toFixed(1)+'" fill="none" stroke="#1D2735" stroke-width="1"/>';
+    b+='<text x="'+cx+'" y="'+(cy-r*s-4)+'" fill="#2C3B4F" font-size="9" text-anchor="middle" font-family="IBM Plex Mono,monospace">'+f0(r)+'</text>';
+  }
+  // 威胁轴
+  b+='<line x1="'+cx+'" y1="'+(cy-far*s-30)+'" x2="'+cx+'" y2="'+(cy-far*s-48)+'" stroke="#FFB03D" stroke-width="1.6"/>';
+  b+='<path d="M'+cx+' '+(cy-far*s-53)+'l-4.5 10 4.5-3.2 4.5 3.2z" fill="#FFB03D"/>';
+  b+='<text x="'+cx+'" y="'+(cy-far*s-62)+'" fill="#FFB03D" font-size="10" text-anchor="middle" font-family="IBM Plex Mono,monospace">行进方向 / 威胁轴</text>';
+
+  // 功能带的圈：每条带一个圈 + 带名，让「从内到外」看得见
+  if(L.bands){
+    var BC={close:'#6EE7A8',body:'#B49BFF',screen:'#4FE0FF',picket:'#FFB03D'};
+    ['close','body','screen','picket'].forEach(function(k){
+      var rr=L.bands[k]; if(!(rr>0)) return;
+      b+='<circle cx="'+cx+'" cy="'+cy+'" r="'+(rr*s).toFixed(1)+'" fill="none" stroke="'+BC[k]+'" stroke-width="1" opacity=".28"/>';
+      var lx2=(cx+rr*s*0.707+3).toFixed(1), ly2=(cy-rr*s*0.707-5).toFixed(1);
+      b+='<text x="'+lx2+'" y="'+ly2+'" fill="'+BC[k]+'" font-size="9.5" font-family="IBM Plex Mono,monospace">'+
+         ({close:'贴身带',body:'被护圈',screen:'屏护圈',picket:'哨戒带'})[k]+' '+f0(rr)+'</text>';
+    });
+  }else if(L.R>0) b+='<circle cx="'+cx+'" cy="'+cy+'" r="'+(L.R*s).toFixed(1)+'" fill="none" stroke="#2C3B4F" stroke-width="1.4"/>';
+  // 空站位
+  if(L.assigned&&L.assigned.STA){
+    var taken={}; L.assigned.pairs.forEach(function(p){taken[p.j]=1});
+    L.assigned.STA.forEach(function(st,j){
+      if(taken[j])return;
+      var px=X(st.lx,st.ly),py=Y(st.lx,st.ly);
+      b+='<circle cx="'+px.toFixed(1)+'" cy="'+py.toFixed(1)+'" r="4" fill="none" stroke="#2C3B4F" stroke-width="1" stroke-dasharray="2,2"/>';
+      if(ST.showLb) b+='<text x="'+px.toFixed(1)+'" y="'+(py+15).toFixed(1)+
+        '" fill="#2C3B4F" font-size="9" text-anchor="middle" font-family="IBM Plex Mono,monospace">'+esc(st.name)+'</text>';
+    });
+  }else if(ST.showSt&&L.n) for(var i=0;i<L.n;i++){
+    var t=L.brs[i]*D2R, px=X(L.R*Math.cos(t),L.R*Math.sin(t)), py=Y(L.R*Math.cos(t),L.R*Math.sin(t));
+    var used=i<L.ring.length;
+    if(!used) b+='<circle cx="'+px.toFixed(1)+'" cy="'+py.toFixed(1)+'" r="2.6" fill="none" stroke="#2C3B4F" stroke-width="1"/>';
+  }
+  // 覆盖圈
+  L.slots.forEach(function(p){
+    var px=X(p.lx,p.ly),py=Y(p.lx,p.ly);
+    if(ST.showOu&&p.s.outer>0&&p.s.ciwsOn) b+='<circle cx="'+px.toFixed(1)+'" cy="'+py.toFixed(1)+'" r="'+(p.s.outer*s).toFixed(1)+'" fill="rgba(79,224,255,.035)" stroke="rgba(79,224,255,.22)" stroke-width="1"/>';
+    if(ST.showIn&&p.s.inner>0&&p.s.ciwsOn) b+='<circle cx="'+px.toFixed(1)+'" cy="'+py.toFixed(1)+'" r="'+(p.s.inner*s).toFixed(1)+'" fill="rgba(110,231,168,.06)" stroke="rgba(110,231,168,.35)" stroke-width="1"/>';
+  });
+  // 舰
+  L.slots.forEach(function(p){
+    var px=X(p.lx,p.ly),py=Y(p.lx,p.ly), isF=p.role==='flag', selq=(p.s.id===ST.sel);
+    var col=isF?'#FFB03D':p.role==='center'?'#B49BFF':'#4FE0FF';
+    var sz=isF?11:9.5;
+    var pts=[[0,-sz],[sz*.6,sz*.8],[0,sz*.4],[-sz*.6,sz*.8]]
+      .map(function(q){return (px+q[0]).toFixed(1)+','+(py+q[1]).toFixed(1)}).join(' ');
+    if(selq) b+='<circle cx="'+px.toFixed(1)+'" cy="'+py.toFixed(1)+'" r="'+(sz+7)+'" fill="none" stroke="#4FE0FF" stroke-width="1.2" stroke-dasharray="3,3"/>';
+    b+='<polygon points="'+pts+'" fill="'+(isF?col:'#0C111A')+'" stroke="'+col+'" stroke-width="1.5" stroke-linejoin="round"/>';
+    if(ST.showLb){
+      b+='<text x="'+px.toFixed(1)+'" y="'+(py+sz+13)+'" fill="'+col+'" font-size="10" text-anchor="middle" font-family="IBM Plex Mono,monospace">'+esc(p.s.name)+'</text>';
+      if(p.stn){
+        var fc=p.fit>=.75?'#6EE7A8':p.fit>=.5?'#FFB03D':'#FF6B5A';
+        b+='<text x="'+px.toFixed(1)+'" y="'+(py+sz+24)+'" fill="'+fc+'" font-size="9" text-anchor="middle" font-family="IBM Plex Mono,monospace">'+esc(p.stn)+' '+p.fit.toFixed(2)+'</text>';
+      }else if(p.role==='ring') b+='<text x="'+px.toFixed(1)+'" y="'+(py+sz+24)+'" fill="#55637A" font-size="9" text-anchor="middle" font-family="IBM Plex Mono,monospace">#'+p.st+' '+pad3(Math.round(p.brg))+'</text>';
+    }
+  });
+  el('plot').innerHTML=b;
+}
+
+/* ── 渲染 ── */
+function render(){
+  var L=layout();
+
+  // 顶栏读数
+  if(L){
+    el('v_tot').textContent=L.tot.toFixed(2); el('v_it').textContent=L.iters;
+    var occ=L.slots.filter(function(p){return p.fit!==undefined}).length;
+    el('v_avg').textContent=occ?(L.tot/occ).toFixed(2):'—';
+  }
+  el('geo').innerHTML = !L ? '' : [
+    ['威胁',(L.bands&&L.bands.threat)||'—'],
+    ['方位',(L.bands&&L.bands.mode)||'—'],
+    ['间距',L.bands?f0(L.bands.gap):'—'],
+    ['屏护带',L.bands?f0(L.bands.screen):'—'],
+    ['屏护角步',(L.bands&&L.bands.mode==='弦长反解')?L.bands.step.screen.toFixed(1)+'°':'—'],
+    ['张角',L.ring.length?'±'+Math.round(L.span)+'°':'—'],
+    ['外层',L.ring.length],['内层',L.ctr.length+1]
+  ].map(function(p){return '<div><b>'+p[1]+'</b><s>'+p[0]+'</s></div>'}).join('');
+
+  // 舰列表
+  el('fcount').textContent=ST.ships.length+' 艘';
+  var pos={}; if(L) L.slots.forEach(function(p){
+    pos[p.s.id]= p.role==='flag' ? '旗舰'
+               : p.stn ? (p.stn+' '+p.fit.toFixed(2))
+               : p.role==='center' ? '居中'
+               : ('#'+p.st+' '+pad3(Math.round(p.brg)));
+  });
+  el('ships').innerHTML=ST.ships.map(function(s){
+    return '<div class="sitem'+(s.id===ST.sel?' sel':'')+'" data-sel="'+s.id+'">'+
+      '<span class="cls">'+s.cls+'</span>'+
+      '<span class="nm">'+esc(s.name)+(s.id===ST.flag?'<em>旗</em>':'')+(!s.ciwsOn?'<em style="color:#FF6B5A">拦关</em>':'')+(s.lidar?'<em style="color:#B49BFF">LAD</em>':'')+(s.ecm?'<em style="color:#B49BFF">ECM</em>':'')+'</span>'+
+      '<span class="pos">'+(pos[s.id]||'—')+'</span></div>';
+  }).join('')||'<div class="sitem"><span class="nm" style="color:#55637A">空</span></div>';
+
+  // 权重表
+  var maxv={}; DIM.forEach(function(d){ maxv[d.k]=Math.max.apply(null,ST.ships.map(function(s){return d.f(s)||0}).concat([0])) });
+  var th='<tr><th>舰</th>'+DIM.map(function(d){return '<th title="'+esc(d.fx)+'">'+d.ab+'</th>'}).join('')+'</tr>';
+  var tb=ST.ships.map(function(s){
+    return '<tr'+(s.id===ST.sel?' class="selr"':'')+'><td>'+esc(s.name)+'</td>'+DIM.map(function(d){
+      var v=d.f(s)||0, mx=maxv[d.k]||1, best=(v>0&&v>=mx-1e-9);
+      var w=Math.max(0,Math.min(1,v/mx))*22;
+      return '<td class="'+(v<=0?'zero':best?'best':'')+'">'+
+        (v>0?'<i class="wbar" style="width:'+w.toFixed(0)+'px"></i>':'')+
+        (v>=1000?f0(v):v>=10?v.toFixed(1):v.toFixed(2))+'</td>';
+    }).join('')+'</tr>';
+  }).join('');
+  el('wt').innerHTML=th+tb;
+
+  // 评估
+  el('assess').innerHTML=assess(L).map(function(a){
+    return '<div class="ar"><span class="gr gr-'+a.g+'">'+a.g+'</span><span class="tx"><b>'+a.n+'</b><span>'+esc(a.r)+'</span></span></div>';
+  }).join('')||'<div class="ar"><span class="tx"><span>编队为空</span></span></div>';
+
+  inspector();
+  draw(L);
+  save();
+}
+
+/* ── 参数检视 ── */
+var GRP=[
+ ['近防',[['outer','外圈',1],['inner','内圈',1],['innerIntercept','内圈拦截率',.01],['interMax','拦截弹',1],['interStock','剩余比例',.05]]],
+ ['武器',[['macDmg','主炮伤害',1],['macReload','主炮装填',1],['missDmg','导弹伤害',1],['mslPer','每组枚数',1],['cells','发射单元',1],['mslReload','单元装填',1]]],
+ ['探测与信号',[['detPower','红外探测力',.05],['esmQual','射频精度',.05],['pPing','照射功率',.05],['sigBase','基础信号',.05],['rcs','雷达截面',.05],['sensorRange','传感器距离',10000]]],
+ ['网络与电子',[['guideChan','引导通道',1],['ecmPower','ECM 强度',.05],['beacon','信标载量',1]]],
+ ['舰体与机动',[['hp','结构',10],['chaffRate','干扰弹率',.05],['thrust','推力',1],['turnRate','转向率',.02],['topGear','顶速档',50]]]
+];
+function inspector(){
+  var s=ST.ships.filter(function(x){return x.id===ST.sel})[0];
+  el('selname').textContent=s?s.name+' · '+(HULL[s.cls]||{}).nm:'';
+  if(!s){ el('insp').innerHTML='<div style="color:#55637A;font-size:12px">左侧点一艘船</div>'; return; }
+  var h='<div class="row" style="margin-bottom:10px">'+
+    '<button class="mini'+(s.id===ST.flag?' on':'')+'" data-act="flag">设为旗舰</button>'+
+    '<button class="mini'+(s.ciwsOn?' on':'')+'" data-act="ciwsOn">拦截</button>'+
+    '<button class="mini'+(s.lidar?' on':'')+'" data-act="lidar">LADAR</button>'+
+    '<button class="mini'+(s.ecm?' on':'')+'" data-act="ecm">ECM</button>'+
+    '<button class="mini danger" data-act="del">删除</button></div>';
+  GRP.forEach(function(g){
+    h+='<div class="grp"><h4>'+g[0]+'</h4><div class="f2">';
+    g[1].forEach(function(f){
+      h+='<div class="fld"><span>'+f[1]+'</span><input type="number" step="'+f[2]+'" data-f="'+f[0]+'" value="'+(s[f[0]]!==undefined?s[f[0]]:0)+'"></div>';
+    });
+    h+='</div></div>';
+  });
+  h+='<div class="note" style="margin-top:2px"><b>列维度：</b>拦截关 = 防空整行归零；LADAR 开 = 主动探测可用但成为全场最亮辐射源；ECM 开 = 干扰敌方但暴露自己。这三个开关就是条令里的「戒备等级」在本游戏的对应物。</div>';
+  el('insp').innerHTML=h;
+}
+
+/* ── 存取 ── */
+function save(){ try{ localStorage.setItem(LS,JSON.stringify(ST)); }catch(e){} }
+function load(){
+  try{
+    var raw=localStorage.getItem(LS); if(!raw) return false;
+    var o=JSON.parse(raw); if(!o||!o.ships||!o.ships.length) return false;
+    Object.keys(o).forEach(function(k){ ST[k]=o[k] });
+    seq=0; ST.ships.forEach(function(s){ seq=Math.max(seq,s.id||0) });
+    return true;
+  }catch(e){ return false; }
+}
+
+/* ── 事件 ── */
+function bindKnob(id,key,fmt,after){
+  var e=el(id); if(!e) return;
+  e.value=ST[key];
+  var lab=el('v_'+id.split('_')[1]);
+  function upd(){ if(lab) lab.textContent=fmt?fmt(ST[key]):ST[key]; }
+  e.addEventListener('input',function(){
+    ST[key]=(e.type==='range')?parseFloat(e.value):e.value;
+    upd(); if(after) after(); render();
+  });
+  upd();
+}
+document.addEventListener('click',function(ev){
+  /* 用「任意按钮 或 带 data-sel 的行」兜住，不再逐个列 id ——
+     上一版漏了 #preset4 与 #addarch，两个按钮点了没反应就是因为这里早退。 */
+  var t=ev.target.closest('button,[data-sel]');
+  if(!t) return;
+  if(t.dataset.add){ var s=mk(t.dataset.add); ST.ships.push(s); if(!ST.flag)ST.flag=s.id; ST.sel=s.id; render(); return; }
+  if(t.dataset.sel){ ST.sel=+t.dataset.sel; render(); return; }
+  if(t.dataset.act){
+    var sh=ST.ships.filter(function(x){return x.id===ST.sel})[0]; if(!sh) return;
+    var a=t.dataset.act;
+    if(a==='flag') ST.flag=sh.id;
+    else if(a==='del'){ ST.ships=ST.ships.filter(function(x){return x!==sh}); if(ST.flag===sh.id)ST.flag=ST.ships[0]?ST.ships[0].id:null; if(ST.sel===sh.id)ST.sel=ST.ships[0]?ST.ships[0].id:null; }
+    else sh[a]=!sh[a];
+    render(); return;
+  }
+  if(t.id==='preset1'){preset(1);render();return}
+  if(t.id==='preset2'){preset(2);render();return}
+  if(t.id==='preset3'){preset(3);render();return}
+  if(t.id==='preset4'){preset(4);render();return}
+  if(t.id==='opentpl'){ openTpl(); return }
+  if(t.id==='tplclose'){ closeTpl(); return }
+  if(t.id==='tplreset'){ applyThreat(ST.threat); drawDial(); drawSlotCfg(); render(); return }
+  if(t.id==='slotadd'){ slotAdd(); return }
+  if(t.dataset.sdel!==undefined){ slotDel(+t.dataset.sdel); return }
+  if(t.id==='addarch'){
+    var ai=+el('archsel').value, s=mkArch(ai);
+    ST.ships.push(s); if(!ST.flag)ST.flag=s.id; ST.sel=s.id; render(); return;
+  }
+  if(t.id==='reset'){ try{localStorage.removeItem(LS)}catch(e){} preset(1); ST.sp=1;ST.rb='outer2';ST.ord='aaClose';ST.ctr='base';ST.k=.5;ST.cg=20000;
+    applyThreat('fixed');ST.pf=.10;ST.vw=0;ST.gc2=16;GROUP_CAP=16;PRIO_FALL=.10;
+    [['k_threat','threat'],['k_sp','spread'],['k_gap','gap'],['k_bm','bm'],['k_wd','widen'],
+     ['k_bs','bstr'],['k_pf','pf'],['k_vw','vw'],['k_gc2','gc2']].forEach(function(q){var e=el(q[0]); if(e)e.value=ST[q[1]];});
+    render(); return }
+  if(t.id==='dump'){
+    var L=layout();
+    el('out').value=JSON.stringify({
+      旋钮:{站位:ST.threat,插槽数:SLOT.length,整体张角:ST.spread,同簇间距:ST.gap,带半径倍数:ST.bm,横向扁率:ST.widen,能力偏向强度:ST.bstr,要害站位偏好:ST.pf,每群容量:ST.gc2},
+      几何:L?{R:L.R,站距:L.sp,n:L.n,步长:+(360/L.n).toFixed(2),张角:L.span}:null,
+      舰:ST.ships.map(function(s){
+        var w={}; DIM.forEach(function(d){w[d.ab]=+(d.f(s)||0).toFixed(3)});
+        return {名:s.name,舰种:s.cls,旗舰:s.id===ST.flag,开关:{拦截:s.ciwsOn,LADAR:s.lidar,ECM:s.ecm},权重:w};
+      }),
+      评估:assess(L).map(function(a){return a.g+' '+a.n+'：'+a.r})
+    },null,1);
+    el('out').select(); return;
+  }
+  var mp={t_st:'showSt',t_in:'showIn',t_ou:'showOu',t_lb:'showLb'};
+  if(mp[t.id]){ ST[mp[t.id]]=!ST[mp[t.id]]; t.classList.toggle('on',ST[mp[t.id]]); render(); }
+});
+document.addEventListener('mousedown',function(ev){
+  var m=el('tplmodal');
+  if(m && !m.hidden && ev.target===m) closeTpl();
+});
+document.addEventListener('keydown',function(ev){
+  if(ev.key==='Escape'){ var m=el('tplmodal'); if(m && !m.hidden) closeTpl(); }
+});
+document.addEventListener('change',function(ev){
+  var t=ev.target;
+  if(t.dataset&&(t.dataset.sk==='band'||t.dataset.sk==='cap')) slotEdit(t);
+});
+document.addEventListener('input',function(ev){
+  var t=ev.target;
+  if(t.dataset&&t.dataset.sk){ slotEdit(t); return; }
+  if(!t.dataset||!t.dataset.f) return;
+  var sh=ST.ships.filter(function(x){return x.id===ST.sel})[0]; if(!sh) return;
+  var v=parseFloat(t.value); if(!isFinite(v)) return;
+  sh[t.dataset.f]=v; render();
+});
+
+/* ── 起 ── */
+if(!load()) preset(1);
+if(!ST.gc2) ST.gc2=GROUP_CAP;
+GROUP_CAP=ST.gc2;
+if(!ST.threat||!THREAT[ST.threat]) ST.threat='fixed';
+if(!SLOT.length) applyThreat(ST.threat);   /* 存档里没插槽时按当前站位补一套 */
+el('archsel').innerHTML=ARCH.map(function(a,i){return '<option value="'+i+'">'+esc(a[0])+'</option>'}).join('');
+(function(){
+  function sync(){
+    el('v_sp').textContent=(+ST.spread).toFixed(2)+'\u00d7';
+    var multi=(ST.ships.length-1)>SLOT.length;   // 有插槽装了 2 艘以上，同簇间距才起作用
+    el('lb_gap').innerHTML='\u540c\u7c07\u95f4\u8ddd <span style="color:'+(multi?'var(--ink-mute)':'var(--hot)')+';font-size:10px">'
+      +(multi?'\u540c\u4e00\u63d2\u69fd\u5185\u591a\u8258\u8239\u7684\u5c55\u5f00\u6b65\u957f'
+             :'\u5f53\u524d\u6bcf\u69fd\u81f3\u591a 1 \u8258\uff0c\u6b64\u9879\u4e0d\u751f\u6548')+'</span> '
+      +'<b id="v_gap">'+(+ST.gap).toFixed(2)+'\u00d7</b>';
+    el('v_bm').textContent=(+ST.bm).toFixed(2)+'×';
+    el('v_pf').textContent=(+ST.pf).toFixed(2);
+    el('v_vw').textContent=ST.vw?f0(ST.vw):'自动';
+    el('v_gc2').textContent=ST.gc2;
+    el('v_wd').textContent=(+ST.widen).toFixed(2)+'×';
+    el('v_bs').textContent=(+ST.bstr).toFixed(2)+'×';
+    var B=(THREAT[ST.threat]||THREAT.fixed).boost, parts=[];
+    for(var k in B){
+      var d=DIM.filter(function(x){return x.k===k})[0];
+      parts.push((d?d.ab:k)+' ×'+(1+(B[k]-1)*ST.bstr).toFixed(2));
+    }
+    el('v_boost').textContent=!parts.length?'无（此站位不抬高任何维度）'
+                              :(ST.bstr>0?parts.join('　'):'无（强度 0）');
+  }
+  [['k_threat','threat','change'],['k_gap','gap','input'],['k_bm','bm','input'],
+   ['k_sp','spread','input'],['k_wd','widen','input'],['k_bs','bstr','input'],
+   ['k_pf','pf','input'],['k_gc2','gc2','input'],['k_vw','vw','input']].forEach(function(pr){
+    var e=el(pr[0]); if(!e) return;
+    e.value=ST[pr[1]];
+    e.addEventListener(pr[2],function(){
+      if(pr[1]==='threat'){
+        applyThreat(this.value);                       // 一次写进方位来源 + gap / bm / widen
+        ['k_sp','k_gap','k_bm','k_wd','k_bs'].forEach(function(id){
+          var q=el(id); if(q) q.value=({k_sp:ST.spread,k_gap:ST.gap,k_bm:ST.bm,k_wd:ST.widen,k_bs:ST.bstr})[id];
+        });
+      }else ST[pr[1]]=+this.value;
+      if(pr[1]==='gc2') GROUP_CAP=ST.gc2;
+      if(pr[1]==='pf')  PRIO_FALL=ST.pf;
+      sync(); render();
+    });
+  });
+  var pl=el('plot'), drag=null;
+  if(pl){
+    pl.addEventListener('wheel',function(ev){
+      ev.preventDefault();
+      var cur=ST.vw||ST.lastFar||60000;
+      ST.vw=Math.max(2000,Math.min(400000,cur*(ev.deltaY>0?1.15:0.87)));
+      el('k_vw').value=Math.min(120000,ST.vw); sync(); render();
+    },{passive:false});
+    pl.addEventListener('mousedown',function(ev){ drag={x:ev.clientX,y:ev.clientY,px:ST.panx,py:ST.pany}; });
+    pl.addEventListener('dblclick',function(){ ST.vw=0;ST.panx=0;ST.pany=0;el('k_vw').value=0;sync();render(); });
+    window.addEventListener('mousemove',function(ev){
+      if(!drag) return;
+      var f=(ST.lastFar||60000)/260;
+      ST.panx=drag.px-(ev.clientX-drag.x)*f; ST.pany=drag.py+(ev.clientY-drag.y)*f; render();
+    });
+    window.addEventListener('mouseup',function(){ drag=null; });
+  }
+  sync();
+})();
+['t_st','t_in','t_ou','t_lb'].forEach(function(id){ var m={t_st:'showSt',t_in:'showIn',t_ou:'showOu',t_lb:'showLb'}; el(id).classList.toggle('on',ST[m[id]]); });
+render();
+})();
+</script>
+
+
+</body>
+</html>

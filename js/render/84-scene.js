@@ -1,17 +1,25 @@
 "use strict";
 function render(){
-  ctx.fillStyle='#05070c';ctx.fillRect(0,0,cv.width,cv.height);
+  /* SN6 三级星图:先推进跳层动画、算出这一档缩放落在哪一层(连续权重 + 带迟滞的离散层),
+     底色再按权重交叉淡化 —— 换层是淡入淡出不是跳变。详见 render/80-viewtier。 */
+  vtFrame();
+  ctx.fillStyle=vtBg();ctx.fillRect(0,0,cv.width,cv.height);
   drawStars();
   drawGrid();
-  drawESM(); // 感知层:蓝方ESM反推红方辐射源(不确定区域+方位线)
   if(editMode){ // 编辑器:只画编辑场景单位(我方蓝/敌方红)+动靶路径点+放置预览
     [...editScene.ships,...editScene.enemy].forEach(drawShip);
     drawEditWps();
     drawEditPreview();
     return;
   }
+  drawSignalView(); // SN6 信号视野(右下角工具钮):我方每艘舰的【被探测范围】。画在最底下——它是底图
+  drawContacts(); // SN6 接触层:没有位置的画热区、有位置的画误差椭圆。画在舰标【之前】——它是底图,不该盖住图标
+  /* SN6 聚合层:先算出这一帧哪些船被收进了框(按屏幕像素,带迟滞),画的时候跳过它们,最后把框画上去。
+     ⚠ lodBuild 必须在 drawShip 之前跑完 —— 它读的是 toScreen,而 toScreen 依赖这一帧的 cam(vtFrame 刚调整过)。 */
+  lodBuild();
   const arr=replay.active?replayData():ships;
-  arr.forEach(drawShip);
+  arr.forEach(function(s){lodDrawShip(s);}); // SN8:收拢 / 散开带过渡(完全收进框里的不画;没在过渡的原样调 drawShip)
+  drawAggs();
   if(selNet)drawNetLinks(); // DS169:网内细线收进选中态(常态不画,选中网才连;信息分层)
   drawProjectiles();
   drawCorridors(); // v126:来袭走廊(敌方导弹发射预告弹道)
@@ -27,6 +35,9 @@ function render(){
   if(typeof drawRadial==='function')drawRadial(); // RF5 Phase C 目标轮盘:必须压在 drawTargeting 之上——它的黄吸附圈(r=shipIconR+8≈18~26)与 drawLocks 的红圈(r=13)都落在轮盘 RAD_RI=62 的内洞里,排下面会从洞里穿出来盖住 hub 读数(全图字最小、最需要干净背景的地方);又必须让位下面 drawRange/drawSelection/dragOrder 三项排他交互(测距读数该在最上,左键不被轮盘拦截故框选/拖命令点仍是全局交互)。89 是新文件,用 typeof 守卫而不照抄上面的裸调:顶层 const 万一撞名整文件语法报废时,每帧渲染不跟着一起崩
   drawRange();
   drawSelection();
+  if(typeof drawEdgeRuler==='function')drawEdgeRuler(); // SN8 四边刻度尺(屏幕空间的仪器边框;换层时刻度重新长出来)
+  if(typeof drawTierFx==='function')drawTierFx();       // SN8 换层瞬间的大字 + 扫描线,0.7 秒内淡出;平时首句就 return
+  if(typeof drawGeom==='function')drawGeom(); // SN7 定位几何小窗:画在【自己的】小 canvas 上,不碰主画布;钮关着时首句就 return。挂在 render 里是为了让调 render() 的判据也走得到它
   if(dragOrder){ // 拖拽中的命令点高亮(FM1:原来还有 kind==='cur'/'queue' 两支,读的是已删除的 F.dest/F.queue;
     // 编队路径现在就是旗舰的 s.orders,拖的是旗舰身上的普通命令点,下面 dragOrder.ship 这一支天然覆盖)
     let hp=null;

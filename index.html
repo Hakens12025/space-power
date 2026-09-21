@@ -8,6 +8,19 @@
 </head>
 <body>
 <canvas id="cv"></canvas>
+<!-- UI2:两个工具钮是图标钮(行内 SVG,颜色全走 css token),文字收进 title / aria-label。
+     SN6 右下角工具钮。刻意【不】属于 css 里那份 RF2 隐藏清单(同 #xhTip/#evtFeed/#mapTag),
+     别顺手加进那两行 display:none!important。钮的行为走 render/85-settings 的事件委托。 -->
+<div id="tools">
+  <div class="seg" id="segTier" title="三级星图:层界与落点由距离梯子推出(战术=主炮射程 / 舰队=雷达发现 / 战区=被听见,各占画面六成)"><button class="hbtn" data-tier="1">战术</button><button class="hbtn" data-tier="2">舰队</button><button class="hbtn" data-tier="3">战区</button></div><!-- SN6b 从顶栏搬到这儿(用户拍板"三按钮放在右下角,大小和形状参考态势感知V3")。id 未变 ⇒ render/85-settings 的委托与 80-viewtier 里写高亮的那行都不用改 -->
+  <div class="seg" id="segTool"><button class="hbtn" data-tool="geom" title="缩圈:地图右上角弹出【定位几何】小窗——我方全体观测合起来,对方那艘船的误差椭圆现在有多大、离导弹门/主炮门还差多少。悬停敌方目标临时看;左键点敌方目标常驻;点我方舰看它正在打(或正在等)的那个目标" aria-label="缩圈"><svg class="tl-ico" viewBox="0 0 24 24" aria-hidden="true"><path class="i-ship" d="M17.6 12.9 8 6.4 11 12.3 8.4 17.9Z"/><ellipse class="i-ell" cx="12" cy="12" rx="10.8" ry="5.4" transform="rotate(-13 12 12)"/><path class="i-los" d="M0 14.8 24 9.2"/></svg></button><button class="hbtn" data-tool="sig" title="信号视野:画出我方每艘舰的【被探测范围】——光学/红外恒有;开了雷达才有被听见的那一圈。半径直接读感知层的量程律,与判据同一个数" aria-label="信号视野"><svg class="tl-ico" viewBox="0 0 24 24" aria-hidden="true"><circle class="i-r3" cx="12" cy="12.6" r="11.4"/><circle class="i-r2" cx="12" cy="12.6" r="8.2"/><circle class="i-r1" cx="12" cy="12.6" r="5"/><path class="i-ship" d="M12 5.4 15.9 18 12 14.8 8.1 18Z"/></svg></button></div>
+</div>
+<!-- SN7 定位几何小窗:叠在地图右上角、紧贴右轨左侧(照 demos/sensors/态势感知V3.html 的 #pPhase)。自己的小 canvas,不进主画布;
+     不属于 css 里那份 RF2 隐藏清单。开关是右下角 #tools 的「缩圈」钮(render/85-settings 的委托)。 -->
+<div id="geomPane" class="panel" hidden><canvas id="geomCv"></canvas><div class="gp-tag">定位几何<b>GEOMETRY</b></div><div class="gp-hint" id="geomHint"></div></div>
+<!-- MT1 对局结果卡片:只在对局分出胜负时由 scenario/97-match 的 matchTick 显示。不属于 css 里那份 RF2 隐藏清单。 -->
+<div id="matchEnd" class="panel" hidden><div class="me-title" id="meTitle">胜利</div><div class="me-sub" id="meSub"></div><div class="me-stat" id="meStat"></div><div class="me-btns"><button class="btn" id="meAgain">再来一局</button><button class="btn" id="meRange">回靶场</button></div></div>
+<div id="mapTag">战术层<b>TACTICAL</b></div><!-- SN6 当前层的读数,只在【换层那一刻】写(render/80-viewtier 的 vtFrame) -->
 
 <div id="hud" class="panel">
   <div class="logo">SPACE POWER<span> · 骨架</span></div>
@@ -17,6 +30,7 @@
   <button class="hbtn" id="btnSlow" title="减速(-)">−</button>
   <button class="hbtn" id="btnFast" title="加速(+)">+</button>
   <div class="spacer"></div>
+  <button class="hbtn" id="btnMatch" title="进入对局">对局</button><!-- MT1 对局入口(scenario/97-match);进了对局它变成「回靶场」。同 #btnTut:不属于 RF2 隐藏清单 -->
   <button class="hbtn" id="btnTut" title="教程 · 指挥官手册(Esc 关闭)">教程</button><!-- RF5-D 顶栏唯一新增钮:排在 .spacer 之后 = 顶栏右端(其后那七个全在 RF2 隐藏清单里,不占位)。切勿把 #btnTut 加进 css 的 RF2 隐藏清单 -->
   <button class="hbtn" id="btnRec" title="录制本局数据到demo文件(REC)" style="color:var(--red)">REC</button>
   <button class="hbtn" id="btnAdmin" title="管理员模式:显示敌方数据/弹药轨迹(GM)" style="color:var(--acc)">GM</button>
@@ -251,6 +265,7 @@
 <script src="js/sensors/20-signature.js?v=202609151"></script>
 <script src="js/sensors/21-detect.js?v=202609151"></script>
 <script src="js/sensors/22-percep.js?v=202609151"></script><!-- SN4 感知纯函数层:零顶层执行(只声明模块私有的 Float64Array 缓冲与三个纯字面量常量,不读 SENS/sReq/ships 任何东西)、不调 on()、不是 core/99,所以两条加载顺序硬约束都不涉及;跨文件引用(SENS 在 20-signature、sReq 在 00-config)全部运行期解析,与 formation/39-fmcaps 同口径 —— 排在 21-detect 之后只为目录编号好读,换到别处也不会错 -->
+<script src="js/sensors/23-cov.js?v=202609151"></script><!-- SN6 误差椭圆感知内核:同样零顶层执行(只声明;ladApply 不在加载期跑) -->
 <script src="js/physics/30-motion.js?v=202609151"></script>
 <script src="js/physics/31-step-ships.js?v=202609151"></script>
 <script src="js/physics/32-route-refine.js?v=202609151"></script>
@@ -271,6 +286,7 @@
 <script src="js/weapons/57-step-weapons.js?v=202609151"></script>
 <script src="js/weapons/58-firecontrol.js?v=202609151"></script><!-- RF5 火控计算机引擎:序列数据模型+stepFireControl/Post。位置只为目录编号可读性(编号 58 > 57,归位到 weapons 块末尾),跨文件引用全在运行期解析:本文件顶层只有 const/let/function 声明,零顶层执行 -->
 <script src="js/core/05-sim.js?v=202609151"></script>
+<script src="js/core/06-timecomp.js?v=202609151"></script><!-- TC1 接触降速:frame() 每帧调 tcStep;依赖全部在运行期解析 -->
 <script src="js/bots/60-tasks.js?v=202609151"></script>
 <script src="js/bots/61-enemy.js?v=202609151"></script>
 <script src="js/command/70-input.js?v=202609151"></script>
@@ -278,10 +294,13 @@
 <script src="js/command/72-context-menu.js?v=202609151"></script>
 <script src="js/command/73-quickbar.js?v=202609151"></script>
 <script src="js/command/74-targeting.js?v=202609151"></script><!-- RF5 悬停准星/吸附状态 xh + #xhTip 信息卡。按目录编号序归位在 command 块末尾;顶层只有 let/const/function,零顶层执行,跨文件引用全在运行期解析 -->
+<script src="js/render/80-viewtier.js?v=202609151"></script><!-- SN6 三级星图:层界与缩放上下限由距离梯子推出;与 80-camera 共用编号(先例:85-settings/85-tutorial) -->
 <script src="js/render/80-camera.js?v=202609151"></script>
 <script src="js/render/81-background.js?v=202609151"></script>
 <script src="js/render/82-ship-icons.js?v=202609151"></script>
+<script src="js/render/82-lod.js?v=202609151"></script><!-- SN6 聚合层:舰 → 舰队框 → 舰队组;与 82-ship-icons 共用编号 -->
 <script src="js/render/83-hud.js?v=202609151"></script>
+<script src="js/render/83-geom.js?v=202609151"></script><!-- SN7 定位几何小窗(缩圈图)。与 83-hud 共用编号 83(先例:85-settings / 85-tutorial) -->
 <script src="js/render/84-scene.js?v=202609151"></script>
 <script src="js/render/84-fmplot.js?v=202609151"></script><!-- FM4 编队能力站位的地图可视化。与 84-scene 共用编号 84(先例:weapons/51-defs 与 51-ciws),都属于“场景图层”;顶层只有 const/function,零顶层执行,由 84-scene 的 render() 运行期调用 -->
 <script src="js/render/85-settings.js?v=202609151"></script>
@@ -299,6 +318,7 @@
 <script src="js/scenario/94-demo.js?v=202609151"></script>
 <script src="js/scenario/95-range.js?v=202609151"></script>
 <script src="js/scenario/96-spawn.js?v=202609151"></script><!-- FM7 测试用加船小条。放在 95 之后、core/99 之前:它顶层调 on(),而 on() 定义在 core/00 -->
+<script src="js/scenario/97-match.js?v=202609151"></script><!-- MT1 对局入口 / 红方摆位 / 结果卡片。顶层调 on(),须在 core/00 之后;matchPlaceRed 被 91-init 运行期调用 -->
 <script src="js/core/99-main.js?v=202609151"></script>
 </body>
 </html>

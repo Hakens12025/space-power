@@ -27,7 +27,6 @@ let selWeapon=null;                   // T/R选定武器('mac'/'missile'):点击
 let salvoCount=1;                     // 射手齐射轮数(组),快捷栏可调
 let missileMode='auto';               // 导弹模式(v122):auto=自动(正常船组网/noNet船直射) / net=强制组网 / direct=直射
 let emcon='silent';                   // EMCON舰队级(v123):silent全静默(被动-only) / active全队雷达(主动LADAR)
-const esmFixes=new Map(); // ESM反推修复(本体->误差圈半径):连续探测越追越准,圈越小
 let rangeView=false;                 // 范围模式:显示所有范围圈(GM下含敌方逻辑圈)
 let rangeShow={sensor:true,warn:true,outer:true,inner:true,mine:true,screen:true,beacon:true,seek:true}; // v127:范围圈显示开关(🎚圈面板);v129加seek=导弹自导圈
 let selMissile=null;                  // 选中的导弹组实体(可点选/布设伏击雷/设置)
@@ -43,7 +42,14 @@ let pendingIntercept=null;            // 拦截弹主动发射点选({ship,mode:
 let demoRec={on:false,data:[],lastT:-1}; // demo录制:本局数据快照,导出供分析
 const RPL_INTERVAL=1.0;               // 每1秒存一次回放快照
 let cv,ctx; // RF1 收编自 09-render-bg.js:全局 canvas 句柄(声明集中到 core,init() 里赋值)
-let adminMode=true; // 管理员模式:默认全显(敌方数据/武器轨迹)。RF1 收编自 18-replay.js
+/* 管理员模式(GM,F8):全显敌方数据与武器轨迹,旁路显示限制(**不**旁路火控门控)。RF1 收编自 18-replay.js。
+   SN6c(2026-09-19):**默认从 true 改成 false**。用户实报"开局敌方依然可见……打开的时候应该就是热区" ——
+   默认开着 GM 等于整套战争迷雾在玩家眼里从不存在:drawShip 的三道迷雾门第一句都是 !adminMode,
+   而热区层(83-hud 的 drawContacts)【不看】adminMode,于是开局画面是"热区 + 敌舰真实位置的舰标"叠在一起,
+   看上去就是"迷雾没生效"。默认开 GM 是早期调试留下的,不是产品形态。F8 照旧能开。
+   ⚠ 判据里凡是要 GM 的都自己显式置位(verify.sh 有十几处),不靠这个默认值;
+     反过来,靠"默认就是 GM"来看见红方的判据会在这里翻红 —— 那正是要它翻的。 */
+let adminMode=false;
 let selfPlay=false; // 左右脑互搏模式(v124):关敌军AI,双方全玩家操控(自身强制GM全显)。RF1 收编自 18-replay.js
 let selfPlayPrevAdmin=true; // KIMI146:进入互搏前的GM状态(关闭时还原,原永久留在GM全显)。RF1 收编自 18-replay.js
 let SIMPLE_UI=true;  // RF2 简化UI总开关:隐藏旧面板/停用右键菜单(藏不删,复活=置 false + 删 css RF2 隐藏节)

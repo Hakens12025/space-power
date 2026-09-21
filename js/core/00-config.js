@@ -15,7 +15,7 @@ function on(id,ev,fn){const el=document.getElementById(id);if(el)el.addEventList
    所以 stepSim 里抛错不会永久卡死帧循环,只退化成每帧一个异常、控制台看得见;探针的 t() 又会把它
    捕成 =THREW: 由 verify.sh 接住。
 
-   口径:0 是合法值(SN4: 举例换成新模型里仍然存在的合法零 —— EMIT_P.silent=0 绝对射频静默 / G_OPT[0]=0 无信号不积累 / ecmPower=0 不带 ECM),只有
+   口径:0 是合法值(SN4: 举例换成新模型里仍然存在的合法零 —— EMIT_P.silent=0 绝对射频静默 / ecmPower=0 不带 ECM),只有
    undefined/null/NaN 算缺失。NaN 单独拦是因为它比 undefined 更难查——会一路算成 NaN 再被下游的 ||0 吞成 0。
    【不许加 typeof==='number' 或 isFinite 检查】:调用点里有传整行表对象(sReq(SENS.CLS,c))与
    trk 对象(sReq(t,trkKey))的用法,加了类型检查会在 makeShip 第一次调用时抛死、init() 整条链断掉、页面白屏。

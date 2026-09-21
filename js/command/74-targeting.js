@@ -91,7 +91,7 @@ function xhTick(dt){ // RF5 准星每帧状态机:命中测试 → 停留累加 
   if(hit!==xh.cand){xh.cand=hit;xh.dwellT=0;} // 换目标/没命中 → 计时清零
   else if(hit)xh.dwellT+=d;
   const gm=(typeof adminMode!=='undefined'&&adminMode);
-  if(xh.snap&&(xh.snap.dead||(!gm&&!xh.snap.litBlue)))xh.snap=null; // 目标死亡或转为不可见:立即清(复查条件与 targetAt 的门控同源,不必另接 contactState)
+  if(xh.snap&&(xh.snap.dead||(!gm&&!(typeof contactPos==='function'&&contactPos(xh.snap,'blue')))))xh.snap=null; // 目标死亡或【位置交代不出来了】:立即清。SN6d:复查条件必须与 targetAt 的门同源 —— 原来这里复查的是 litBlue,于是一个吸住之后失去定位的接触会一直挂在准星上,而它本该退回热区
   if(!hit)xh.snap=null;
   else if(xh.dwellT>=XH_DWELL)xh.snap=hit;
   if(rad.open)xhCardHide(); // RF5 Phase C 轮盘开着时收起 #xhTip:长按开盘那一瞬光标必然停在目标身上,而目标正是轮盘圆心(radOpen 拿 toScreen(t.pos) 当 anchor),卡片钉在光标+16px 就必然糊进盘面右下象限,盖住 hub 读数井与右下扇区(八武器时整整盖住一瓣)。卡片上的目标名/方位/结构,hub 与扇区读数都有,收起不丢信息

@@ -148,12 +148,17 @@ function sensorPanel(s){ // DS181 S3:辐射指示(我有多亮,光学/射频两�
   const maxIr=optLum({size:sReq(s,'size'),flame:1,sideFlame:0,emitMode:'jam'});
   const maxRf=rfLoudOf({emit:sReq(s,'emit'),emitMode:'jam'});
   const bar=(v,max,col)=>`<span style="display:inline-block;width:${Math.max(2,Math.min(100,v/max*100))}%;height:8px;background:${v>max*0.5?col||'#ff8c42':'#4aa8ff'};border-radius:2px"></span>`;
-  const trk=s.side==='blue'?s.trkR:s.trkB; // 我方被对方照明的进度(蓝舰看trkR=红网络对我的积分)
+  const cov=s.side==='blue'?s.covR:s.covB; // 我方在对方眼里是什么样(蓝舰看 covR = 红网络对我握着的那条接触)
   // SN4 blocker F:通道键换成 opt/lis/act。键名一改,原来那三处裸读要么抛、要么静默变 NaN,而这块面板在 RF2 隐藏清单里没人看得见 ——
-  //   所以必须与内核同一提交改完。顺带摘掉 /1 与 /2 两个归一化除数:那是 LIT1 与 LIT3 的手抄,阈值改口径这里原来不会有任何反应。
-  const t3=trk?trk.opt.toFixed(1):'-',t2=trk?trk.lis.toFixed(1):'-',t1=trk?trk.act.toFixed(1):'-';
+  //   所以必须与内核同一提交改完。SN4 时这里还手抄过两个归一化除数(阶梯阈值的副本),阈值改口径时它们不会跟着动;SN6 连阶梯都没有了。
+  /* SN6:三个驻留水位换成"对方此刻拿我的哪几条通道 + 他那条接触有多准"。
+     水位是内部状态,玩家读不出意思;椭圆大小是他能不能打我,直接对应两道门。 */
+  const chN=cov&&cov.ch?['opt','lis','act'].filter(k=>cov.ch[k]):[];
+  const t3=chN.length?chN.map(k=>({opt:'光学',lis:'静听',act:'照射'})[k]).join('+'):'无',
+        t2=(cov&&cov.seen&&cov.fix)?('±'+Math.round(cov.a1/1000)+'k'):'未定位',
+        t1=SENS.LIT_NAME[(cov&&cov.seen)?(s.side==='blue'?s.litRed:s.litBlue):0];
   return `<div class="row"><b>辐射</b><span style="flex:1">光学<span style="display:inline-block;width:34%;height:8px;background:#0a0f17;border:1px solid var(--line2);border-radius:2px;vertical-align:middle;margin:0 4px">${bar(eIr,maxIr)}</span>· 射频<span style="display:inline-block;width:34%;height:8px;background:#0a0f17;border:1px solid var(--line2);border-radius:2px;vertical-align:middle;margin:0 4px">${bar(eRf,maxRf)}</span></span></div>
-    <div class="row"><b>敌方对我</b><span>光学 ${t3} · 静听 ${t2} · 照射 ${t1}<span style="color:var(--dim)">(阈值:探测${SENS.LIT1}/火控${SENS.LIT3})</span></span></div>`;
+    <div class="row"><b>敌方对我</b><span>通道 ${t3} · 他的解 ${t2} · ${t1}<span style="color:var(--dim)">(主炮需火控级/导弹需跟踪级)</span></span></div>`;
 }
 const GEAR_NAMES=['停','慢速','中等','高速','不限速']; // TIER1 速度档【按索引】取名(0停/1慢/2中/3高/4不限速),与 speedGearsOf 返回的数组同序
 function speedCmdLabel(s){ // TIER1 速度令显示:原来 03-ships.js:8 的 SPEED_NAMES 是按【数值】查名(只覆盖 DD 那一套 0/250/500/800),巡洋的 200/400/700 早就在显示裸数字;4 舰种 × 3 分级后按数值查名彻底失效
@@ -310,7 +315,7 @@ function updQbarHighlight(){ // v141:快捷栏高亮生效选项;DS148:速度按
 function updateTop(){ // 每帧轻量刷新
   const mm=String(Math.floor(simTime/60)).padStart(2,'0'),ss=String(Math.floor(simTime%60)).padStart(2,'0');
   document.getElementById('clock').textContent=`${mm}:${ss}`;
-  document.getElementById('rate').textContent=running?'x'+rate:'⏸ x'+rate;
+  document.getElementById('rate').textContent=(running?'x'+rate:'⏸ x'+rate)+((typeof tcReadout==='function')?tcReadout():''); // TC1 被接触降速压住时写出「→ x6 定位」
   const rec=document.getElementById('btnRec');if(rec)rec.style.color=demoRec&&demoRec.on?'var(--red)':'var(--dim)';
   updQbarHighlight(); // v141:快捷栏高亮生效选项
 }

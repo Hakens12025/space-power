@@ -86,7 +86,7 @@ function drawLocks(){ // 火力锁定:红色虚线
     ctx.setLineDash([6,4]);
     ctx.strokeStyle='rgba(255,80,80,.85)';ctx.lineWidth=1.5;
     ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();
-    ctx.beginPath();ctx.arc(q[0],q[1],13,0,6.283);ctx.stroke();
+    ctx.beginPath();ctx.arc(q[0],q[1],13*((typeof hullZoomF==='function')?hullZoomF():1),0,6.283);ctx.stroke(); // SN9 锁定圈跟着舰体大小走(同 82 的告警圈)
     ctx.restore();
   }
 }
@@ -280,41 +280,222 @@ function drawSelection(){
   ctx.strokeStyle='rgba(90,167,255,.8)';ctx.fillStyle='rgba(90,167,255,.08)';
   ctx.fillRect(x,y,w,h);ctx.strokeRect(x,y,w,h);
 }
-function drawESM(){ // 感知层 v4:蓝方ESM反推红方辐射源(LADAR开机/信标开机)→ 不确定区域+方位线(不是精确点)
-  if(adminMode)return; // GM全显,不需要ESM
-  const esm=ships.filter(s=>s.side==='blue'&&!s.dead);
-  if(!esm.length)return;
-  // SN3 这里删掉了两样(名字刻意不写进注释:verdict 段有一条源码级负对照按名字 grep 守着它们,写进来会让那条判定恒红 —— FM6b 的规矩)。
-  //   ① 一个算完从未被使用的局部量,它是那个已删的 ESM 反推精度字段在整个渲染层的唯一读取点,||0.5 那个假兜底随它一起消失
-  //      (21-detect 里有个同名局部量是真在用的,所以那条负对照必须限定本文件)
-  //   ② 一段把红方信标弹丸并进辐射源列表的分支:updateESMFixes 只对红【舰】写 esmFixes(它的 filter 限定 ships,
-  //      末尾那轮 key.side==='red' 的清理还会把非舰对象删掉),所以信标永远取不到 fix、下面第一行就恒 continue ——
-  //      一条从未画出过任何东西的死分支。删它而不是补它:补上等于新增一条从未存在过的行为
-  const emitters=ships.filter(s=>s.side==='red'&&!s.dead&&(s.trkB&&s.trkB.lis>=SENS.LIS_ALERT&&s.litBlue<1)); // DS180:与updateESMFixes同门槛。SN4:改读【静听】通道驻留(被动侦听到对方发射机),阈值常量随之改名;函数名 updateESMFixes 与全局 esmFixes 刻意不改名——ESM 本来就是被动侦听的标准叫法
-  for(const e of emitters){
-    const fix=esmFixes.get(e);
-    if(!fix||!fix.guess)continue; // 还没积累到反推修复
-    let minD=1e18,es=null;
-    for(const s of esm){const dd=V.len(V.sub(s.pos,e.pos));if(dd<minD){minD=dd;es=s;}}
-    if(minD>600000)continue; // ESM探测范围远(辐射传得远)
-    const p=toScreen(fix.guess[0],fix.guess[1]); // 椭圆心=猜测位置(船可能在椭圆内,不暴露真位置)
-    ctx.save();
-    if(es){ // 方位线(最近ESM舰 → 猜测位置)
-      const sp=toScreen(es.pos[0],es.pos[1]);
-      ctx.strokeStyle='rgba(255,140,60,.16)';ctx.lineWidth=1.5;
-      ctx.beginPath();ctx.moveTo(sp[0],sp[1]);ctx.lineTo(p[0],p[1]);ctx.stroke();
+/* ================= SN6 信号视野(右下角工具钮)=================
+   回答一句话:【此刻我方这支舰队有多亮】。画的是我方每艘舰的【被探测范围】——
+     被看见  光学/红外,纯被动,与对方是谁无关(谁的眼睛都一样)⇒ 恒画
+     被听见  只在这艘舰【在发射】时才有(silent 是绝对射频静默,响度恒 0)⇒ 开了雷达才画
+   两个半径都从感知层的量程律现取(visRangeOf / hearRangeOf),不另算一份 —— 圈与判据必须是同一个数,
+   本项目在 SN4 之前正是栽在"UI 画 150k/250k、判据却是 254k~316k"这类分家上。
+   被听见按【基准接收机】(recv = 1)算:它回答的是"一部标准的耳朵能在多远听见我",
+   而不是"某艘特定的敌舰能不能听见我" —— 后者要读敌舰的 recv,那是我方不知道的东西。
+
+   ---- 为什么是渐隐的填充而不是一圈线 ----
+   探测本来就没有硬边界:那个半径是信噪比过门限的【名义】距离,外面一点点并不是突然什么都收不到。
+   画成一圈实线会让玩家读成"跨过这条线就安全",那是假的。所以画成从中心往外渐隐的一团,
+   名义半径上不画线、只留标注 —— 标注是地图上唯一说得出"这个渐隐到哪儿为止"的东西。
+
+   ⚠ createRadialGradient 在 render/84 的红线里是【每帧路径禁用】的。这里不违反:
+     渐变按颜色【缓存】,而且建在单位空间(0..1)里,每次只是 translate + scale 变换过去 ——
+     全局一共建两个(被看见一个、被听见一个),此后一帧都不再建。 */
+const SIG = { on: false, lblN: 0 };
+const SIG_FADE = {};
+function sigFade(rgb) {
+  if (SIG_FADE[rgb]) return SIG_FADE[rgb];
+  const gr = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+  gr.addColorStop(0, 'rgba(' + rgb + ',.125)');
+  gr.addColorStop(0.50, 'rgba(' + rgb + ',.094)');
+  gr.addColorStop(0.70, 'rgba(' + rgb + ',.064)');
+  gr.addColorStop(0.85, 'rgba(' + rgb + ',.035)');
+  gr.addColorStop(1, 'rgba(' + rgb + ',0)');
+  SIG_FADE[rgb] = gr; return gr;
+}
+/* 一个圈【读不读得出】:挤成一点(直径 < 24px)不画;整张画面都在圈里面(圆周与画面没有交点)也不画 ——
+   后者画出来只是一片平涂的底色,读不出任何东西,还把别的东西压暗。 */
+function sigLegible(sx, sy, rr) {
+  if (!(rr >= 12)) return false;
+  const fx = Math.max(Math.abs(sx), Math.abs(sx - W)), fy = Math.max(Math.abs(sy), Math.abs(sy - H));
+  return rr < Math.hypot(fx, fy);
+}
+function sigFill(wx, wy, r, rgb, lbl) {
+  const p = toScreen(wx, wy), rr = r * cam.zoom;
+  if (!sigLegible(p[0], p[1], rr)) return;
+  ctx.save();
+  ctx.translate(p[0], p[1]); ctx.scale(rr, rr);
+  ctx.fillStyle = sigFade(rgb);
+  ctx.beginPath(); ctx.arc(0, 0, 1, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  if (lbl) {
+    /* 标注画在圈顶。⚠ 圈大到圆顶跑出画面时(被听见那一圈经常如此),直接写就是写到屏幕外 ——
+       那时把这一行【钉到画面上沿】并注明"圈在画外",一帧里可能有好几条,逐行错开。 */
+    ctx.save(); ctx.fillStyle = 'rgba(' + rgb + ',.8)'; ctx.font = '10px Consolas'; ctx.textAlign = 'center';
+    const x = Math.max(52, Math.min(W - 52, p[0])), y = p[1] - rr - 3;
+    if (y >= 14) { ctx.textBaseline = 'bottom'; ctx.fillText(lbl, x, y); }
+    else { ctx.textBaseline = 'bottom'; SIG.lblN++; ctx.fillText(lbl + '(圈在画外)', x, 14 + (SIG.lblN - 1) * 13); }
+    ctx.restore();
+  }
+}
+const sigKm = v => v >= 1e6 ? (v / 1e6).toFixed(2) + 'M' : (v >= 10000 ? Math.round(v / 1000) + 'k' : (v / 1000).toFixed(1) + 'k');
+function drawSignalView() {
+  if (!SIG.on || editMode || replay.active) return;
+  SIG.lblN = 0;                       // 每帧归零:圈在画外的那几行靠它逐行错开
+  for (const s of ships) {
+    if (s.side !== 'blue' || s.dead) continue;
+    /* 标注只给【选中】的那几艘 —— 整支舰队都标的话,一堆数字摞在一起,一个都读不出来 */
+    const sel = selected.indexOf(s.id) >= 0;
+    /* 被听见那一圈只在【在发射】时才有。这道守卫看着冗余(silent 的射频响度恒 0 ⇒ 半径 0 ⇒ 画不出东西),
+       留着是因为它写下了【意图】:是"这艘船此刻在不在喊"决定这一圈存不存在,不是"半径算出来碰巧是 0"。
+       ⚠ 变异测试提醒过:把这道守卫直接删掉是个【假变异】(行为不变),真要测的是"有没有读发射档"。 */
+    if (rfLoudOf(s) > 0) { const r = hearRangeOf(s, 1); sigFill(s.pos[0], s.pos[1], r, '84,224,208', sel ? ('被听见 ' + sigKm(r)) : null); }
+    const rv = visRangeOf(s);
+    sigFill(s.pos[0], s.pos[1], rv, '255,154,85', sel ? ('被看见 ' + sigKm(rv)) : null);
+  }
+}
+
+/* ================= SN6 接触层 =================
+   画的是【模型自己那条接触】(covB)。两种形态,分界线就是"定不出 / 定得出位置":
+
+     定不出(c.fix=false)——【热区】:一片弥散的场,一坨,没有轮廓线、没有中心点、不写坐标。
+        它对应的是"我知道那儿有反常信号,但不知道多远"。被动射频给的就是这个:一条视线,不是一个点。
+     定得出(c.fix=true) ——【误差椭圆】:一圈细线,长轴短轴按模型现取。玩家一眼看出这条解有多准:
+        椭圆收进导弹门就能发导弹、收进主炮门就能开炮,那两道门是同一套数(23-cov 的 covMsl / covMac)。
+
+   ---- 热区为什么是这么一套东西,而不是"把椭圆画淡一点" ----
+   ① 【各向同性】是硬规矩:一个半径,不读 c.a2、不读 c.th。
+      条状(细长椭圆)是【武器层】的语言 —— 它说的是"方位准、距离不准",那是给火控看的。
+      观测层只回答一句"这儿有反常热信号",借了另一层的形状,玩家就会从带子的走向去读视线方向,
+      而这一层根本没打算给出那个。半径取【等面积圆】sqrt(r1 x r2):椭圆的面积一分不差地留下,朝向丢掉。
+      ⚠ 不能只取长轴:被动单站的长轴在光学够不着之后【恒等于哨兵值】(一条视线本来就不含距离),
+        常数里榨不出梯度,"越近面越小"整段不发生。等面积圆里横向那一半一路在变,所以全程单调。
+   ② 【半径要对数压缩】。硬截断 min(r1, k*AMAX) 会让远处面积恒定 —— 又是一段没有梯度的平台。
+      R = AMAX x SIZE x ln(1 + geo/AMAX):把上千倍的动态范围压成十倍,全程单调、没有平台。
+      代价是图上这片比真相乐观,记下。
+   ③ 【团心刻意不放在估计位置上】。这是这一层存在的理由之一:模型里接触的估计位置【等于】真值
+      (covSolve 只算不确定度、不模拟估计误差),所以圆心画在 c.x/c.y 上就是把敌舰坐标直接交出去。
+      这里把团心按不确定度的量级挪开一段、方向随时间缓慢转,读法变成
+      "显示的是后验里的【一个采样】,不是它的均值",而采样偏多少正好就是你不知道多少。
+      偏移幅度正比于半径,所以【越准中心越往真值缩】,该准的时候就是准。
+   ④ 域扭曲 + 随模拟秒演化的相位 ⇒ 团块不规则、缓慢翻涌,读不成一个几何形状;峰值做饱和 ⇒ 最亮处是高原不是点。
+   ⚠ 说清楚:这是【读不出】,不是【没有】—— 场仍然是按真实后验铺的,长时间盯着仍能看出大概。
+     真正的口径在文字上("未定位 · 只有方位")。彻底的解法是把估计误差放进模型,那是另一轮的事。
+
+   ---- 性能 ----
+   场画在一张【低分辨率】离屏画布上(格子 7px),贴回来时靠浏览器的双线性插值当免费模糊 ——
+   所以这一层不违反 render/84 那条红线(每帧路径禁用 shadowBlur 与 createRadialGradient),它一个都没用。
+   而且按签名缓存:镜头、感知拍数、点亮数、GM 档任一没变就直接复用上一张。
+   ImageData 与浮点缓冲【跨帧复用】,不是每次重建 —— 那是 75KB 级的垃圾,热路径上不该产生。 */
+const HEAT={cv:null,img:null,f:null,sig:''};
+const HEAT_CELL=7;     /* 场的格子边长(屏幕 px) */
+const HEAT_A=1.05;     /* 场强总增益。按"一屏十几团叠起来"标定 */
+const HEAT_SIZE=0.75;  /* 对数半径的总缩放 */
+const HEAT_R0=0.35;    /* 半径小于 HEAT_R0 x AMAX 时亮度封顶(近了就该又小又亮) */
+const HEAT_RMAX=9;     /* 保险丝:半径最大 HEAT_RMAX x AMAX,防哨兵值爆表时铺满全屏 */
+const HEAT_MINPX=11;   /* 屏幕上最小半径(px)。拉远之后一团只有 2px,而热区恰恰是那种尺度下的主角。
+                          与舰体图标同一条规矩:max(真实 x 缩放, 最小像素)。亮度仍读真实半径,所以钳住的团不会变亮 */
+let HEAT_WARP=0.24;    /* ⚠ 这三个是 let 不是 const:判据要把它们归零做反向对照(归零 = 退回一个规整的圆、峰值落回舰位) */
+let HEAT_OFF=0.62;     /* 团心相对不确定度的偏移幅度(见上面 ③) */
+let HEAT_CHURN=0.018;  /* 翻涌速度(相位 / 模拟秒)。快了是沸腾,这个量级是缓缓呼吸 */
+function heatIdPhase(s){ /* 每艘船一组固定相位。引擎的 id 是 's12' 这样的字符串,取数字部分当种子 */
+  if(s._hp===undefined){let n=0,t=String(s.id||'');for(let i=0;i<t.length;i++)n=(n*31+t.charCodeAt(i))&0xffff;s._hp=n;}
+  return s._hp;
+}
+function heatBuild(){
+  if(!HEAT.cv)HEAT.cv=document.createElement('canvas');
+  const CW=Math.max(2,Math.ceil(W/HEAT_CELL)), CH=Math.max(2,Math.ceil(H/HEAT_CELL));
+  if(HEAT.cv.width!==CW||HEAT.cv.height!==CH){HEAT.cv.width=CW;HEAT.cv.height=CH;HEAT.sig='';HEAT.img=null;HEAT.f=null;}
+  let nLit=0;
+  for(const s of ships)if(s.side==='red'&&!s.dead&&contactState(s,'blue')==='heat')nLit++;   // SN6f:画不画只问 contactState,不在这里另写一份条件
+  const sig=CW+'|'+CH+'|'+cam.x.toFixed(1)+'|'+cam.y.toFixed(1)+'|'+cam.zoom.toExponential(6)+
+            '|'+Math.round(simTime/Math.max(SENS.TICK,1e-6))+'|'+nLit+'|'+(adminMode?1:0);
+  if(sig===HEAT.sig)return nLit;
+  /* 空场早退:一个未定位接触都没有时整段跳过 —— 这是最常见的情况(全都定得出位置,或者根本没发现谁),
+     而重建一次要填 ~75KB 的像素缓冲 + 扫一遍全部格子。签名也要一起更新,否则下一帧还会再进来一次。 */
+  if(nLit===0){HEAT.sig=sig;return 0;}
+  HEAT.sig=sig;
+  const hg=HEAT.cv.getContext('2d');
+  if(!HEAT.img||HEAT.img.width!==CW||HEAT.img.height!==CH){HEAT.img=hg.createImageData(CW,CH);HEAT.f=new Float32Array(CW*CH);}
+  const img=HEAT.img, px=img.data, f=HEAT.f;
+  px.fill(0); f.fill(0);
+  const T=simTime*HEAT_CHURN;
+  for(const s of ships){
+    if(s.side!=='red'||s.dead||contactState(s,'blue')!=='heat')continue;
+    const c=s.covB;
+    if(!c||!c.seen)continue;
+    const geo=Math.sqrt(Math.max(c.r1,1)*Math.max(c.r2,1));                 /* 等面积圆半径:面积留下,朝向丢掉 */
+    const Rw=Math.min(COV.AMAX*HEAT_RMAX,COV.AMAX*HEAT_SIZE*Math.log(1+geo/COV.AMAX));
+    const Rpx=Math.max(Rw*cam.zoom,HEAT_MINPX), Rc=Rpx/HEAT_CELL;
+    const ph=heatIdPhase(s), oa=ph*1.31+T*0.83, p=toScreen(c.x,c.y);
+    const cx=p[0]/HEAT_CELL+HEAT_OFF*Rc*Math.cos(oa);
+    const cy=p[1]/HEAT_CELL+HEAT_OFF*Rc*Math.sin(oa);
+    /* 多热跟距离走:面越小(越近 / 越确定)越热。
+       ⚠ 亮度必须读【画出来的那个半径】,不是原始长轴 —— 亮度与大小描述的得是同一件事。 */
+    const amp=HEAT_A*Math.sqrt(Math.min(1,COV.AMAX*HEAT_R0/Math.max(Rw,1)));
+    const q1=ph*1.7+T, q2=ph*2.9-T*0.8;
+    const rr=1.6*Rc*2.2;                                                     /* 扭曲会往外拱,包围盒放宽 */
+    const x0=Math.max(0,(cx-rr)|0), x1=Math.min(CW-1,(cx+rr)|0);
+    const y0=Math.max(0,(cy-rr)|0), y1=Math.min(CH-1,(cy+rr)|0);
+    for(let gy=y0;gy<=y1;gy++){
+      const dy=(gy+0.5-cy)/Rc;
+      for(let gx=x0;gx<=x1;gx++){
+        const dx=(gx+0.5-cx)/Rc;
+        /* 归一化之后是【圆】,不是椭圆。扭曲是各向同性的,只加不规则、拉不出方向性 */
+        const u0=dx, w0=dy;
+        const u=dx+HEAT_WARP*Math.sin(1.7*w0+q1), w=dy+HEAT_WARP*Math.sin(1.9*u0+q2);
+        const qd=u*u+w*w;
+        if(qd>6)continue;
+        f[gy*CW+gx]+=amp*Math.exp(-1.35*qd);
+      }
     }
-    // 椭圆:长轴沿视线(距离不确定大),短轴垂直(方位较准);大小随情报清晰度缩小(v118)
-    const ang=Math.atan2(fix.dir?fix.dir[1]:0,fix.dir?fix.dir[0]:1);
-    const ra=Math.min((fix.err||60000)*cam.zoom,300);
-    const rb=Math.min((fix.err||60000)*0.35*cam.zoom,110);
-    ctx.translate(p[0],p[1]);ctx.rotate(ang);
-    ctx.fillStyle='rgba(255,140,60,.16)';
-    ctx.strokeStyle='rgba(255,140,60,.25)';ctx.lineWidth=1;
-    ctx.beginPath();ctx.ellipse(0,0,ra,rb,0,0,Math.PI*2);ctx.fill();ctx.stroke();
-    ctx.rotate(-ang);ctx.translate(-p[0],-p[1]);
-    ctx.fillStyle='rgba(255,150,70,.55)';ctx.font='10px Consolas';ctx.textAlign='center';ctx.textBaseline='bottom';
-    ctx.fillText('⚠ ESM 辐射源',p[0],p[1]-rb-4);
+  }
+  /* 着色:饱和 + 热力色阶(暗红 → 橙 → 黄白)。饱和那一步同时把峰压成高原 */
+  for(let i=0,j=0;i<f.length;i++,j+=4){
+    const t=1-Math.exp(-f[i]);
+    if(t<0.012)continue;
+    px[j  ]=255*Math.min(1,0.55+t*1.1);
+    px[j+1]=255*Math.min(1,Math.max(0,(t-0.34)*1.5));
+    px[j+2]=255*Math.min(1,Math.max(0,(t-0.80)*1.8));
+    px[j+3]=255*Math.min(0.62,t*0.80);   /* 压低上限:它是背景态势,不该盖过任何一个可点的东西 */
+  }
+  hg.putImageData(img,0,0);
+  return nLit;
+}
+/* ================= 接触等级的【配色与叫法】:全库唯一出处(SN7c,2026-09-21)=================
+   用户:"需要显示敌方的观测等级,比如一级二级三级,风格按照态势感知的风格来;缩圈的 UI 颜色和态势感知的也不一样,也要统一"。
+   演示页(demos/sensors/态势感知V3.html)的那一组是 LIT_COL = 灰 / 蓝 / 青 / 黄:
+        0 未发现  #7b8ea6    1 探测  #5aa7ff    2 跟踪  #54e0d0    3 火控  #ffe066
+   引擎这边原来是另一组(橙 / 蓝 / 绿),而且是地图椭圆层与缩圈小窗【各抄一份】—— 两处抄的还是同一组错的。
+   现在只有这一张表:地图上的椭圆、舰标下面的等级标签、陈旧记号、缩圈小窗四处都读它。
+   写成 "r,g,b" 三元组是因为调用点都要自己配透明度(rgba(...,a))。
+   叫法 litTag:用户要的"一级二级三级" + 演示页的级名,合成 "2级 跟踪" —— 数字给排序,名字给含义。 */
+const LIT_RGB=['123,142,166','90,167,255','84,224,208','255,224,102'];
+const litTag=lit=>lit>0?(lit+'级 '+SENS.LIT_NAME[lit].replace('级','')):'未发现';
+function drawContacts(){
+  if(editMode||replay.active)return;
+  /* ---- 热区:没有位置的接触 ---- */
+  const nHeat=heatBuild();
+  if(nHeat>0&&HEAT.cv){
+    ctx.save();ctx.imageSmoothingEnabled=true;          /* 放大时的双线性插值就是这一层的模糊 */
+    ctx.drawImage(HEAT.cv,0,0,W,H);ctx.restore();
+  }
+  /* ---- 误差椭圆:定得出位置的接触。这里【可以】用椭圆 —— 它是武器层的语言,而这条接触确实进了武器的账 ---- */
+  for(const s of ships){
+    if(s.dead||s.side!=='red')continue;
+    const c=s.covB;
+    /* SN6f:live 与 coast 两态画椭圆。coast 时它就是那一态的不确定度 —— 量测断了,椭圆按 FADE_LOST 自己长大,
+       长过 AMAX 就定不出位置、等级归 0、转成失联记号。画不画只问 contactState,与舰标层 / 热区层同一个出处。 */
+    const st=contactState(s,'blue');
+    if(!c||(st!=='live'&&st!=='coast'))continue;
+    const a1=c.a1*cam.zoom, a2=c.a2*cam.zoom;
+    if(a1<2)continue;                                   /* 收得比两个像素还紧:舰标自己说明一切 */
+    const p=toScreen(c.x,c.y);
+    if(p[0]<-a1-40||p[0]>W+a1+40||p[1]<-a1-40||p[1]>H+a1+40)continue;
+    /* 配色读 LIT_RGB;线型照演示页:火控级【实线】、其余虚线 —— "这条解算稳了"一眼看得出,不用读数 */
+    const col=LIT_RGB[s.litBlue]||LIT_RGB[0];
+    ctx.save();
+    ctx.translate(p[0],p[1]);ctx.rotate(c.th);
+    ctx.fillStyle='rgba('+col+',.07)';
+    ctx.beginPath();ctx.ellipse(0,0,a1,a2,0,0,6.283);ctx.fill();
+    ctx.strokeStyle='rgba('+col+',.75)';ctx.lineWidth=1.2;ctx.setLineDash(s.litBlue>=3?[]:[3,3]);
+    ctx.beginPath();ctx.ellipse(0,0,a1,a2,0,0,6.283);ctx.stroke();ctx.setLineDash([]);
     ctx.restore();
   }
 }
@@ -493,6 +674,7 @@ function ghostAt(s,wx,wy,face,alpha,route,from){ // RF12 虚影的唯一画法(�
   // 半透明舰体:走 10-hull-geometry 的 outline 模式,尺寸用【真实 tier】—— 自己的船不做情报遮蔽
   ctx.globalAlpha=alpha;
   ctx.translate(g[0],g[1]);ctx.rotate(Math.atan2(face[1],face[0]));
+  if(typeof hullZoomF==='function'){const zf=hullZoomF();ctx.scale(zf,zf);} // SN9 虚影与真船同大:它演的就是「船到了那儿的样子」
   if(typeof drawHull==='function'&&typeof shipHull==='function')drawHull(ctx,shipHull(s),(s.tier||2),'#ffe066','outline');
   ctx.restore();
 }

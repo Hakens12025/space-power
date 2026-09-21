@@ -1,0 +1,584 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>编队三模式</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --void:#070A10; --plot:#0C111A; --sunk:#090D15;
+  --line:#1D2735; --line-hi:#2C3B4F;
+  --ink:#C6D2E1; --ink-hi:#EAF1F9; --ink-dim:#7C8CA3; --ink-mute:#55637A;
+  --fix:#6EE7A8;      /* 固定 */
+  --slot:#4FE0FF;     /* 阵型——游戏里的数据链青 */
+  --fol:#FFB03D;      /* 跟随——游戏里跟随连线就是这个黄 */
+  --hot:#FF6B5A;
+  --grid:rgba(79,224,255,.055);
+  --sp:clamp(16px,2.2vw,26px);
+  --ff:"IBM Plex Sans","PingFang SC","Microsoft YaHei","Hiragino Sans GB",sans-serif;
+  --fm:"IBM Plex Mono","Menlo",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--void);color:var(--ink);font-family:var(--ff);
+  font-size:15px;line-height:1.75;-webkit-font-smoothing:antialiased;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:64px 64px;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:var(--sp) var(--sp) 96px}
+
+.mast{border-bottom:1px solid var(--line);padding-bottom:26px;margin-bottom:34px}
+.kick{font-family:var(--fm);font-size:11px;letter-spacing:.22em;color:var(--slot);text-transform:uppercase;margin-bottom:14px}
+h1{font-size:clamp(30px,5vw,46px);line-height:1.12;font-weight:600;letter-spacing:-.015em;color:var(--ink-hi);text-wrap:balance;margin-bottom:16px}
+.thesis{font-size:clamp(16px,1.9vw,19px);color:var(--ink);max-width:66ch;line-height:1.65}
+.thesis b{color:var(--ink-hi);font-weight:600}
+
+section{margin-top:60px}
+.sec-hd{display:flex;align-items:baseline;gap:14px;margin-bottom:6px}
+.sec-no{font-family:var(--fm);font-size:12px;color:var(--slot);letter-spacing:.14em;flex:none;padding-top:4px}
+h2{font-size:clamp(20px,2.6vw,26px);font-weight:600;color:var(--ink-hi);letter-spacing:-.01em;text-wrap:balance}
+.sec-sub{color:var(--ink-dim);font-size:14px;margin:0 0 24px;max-width:72ch}
+p{max-width:70ch;margin-bottom:15px}
+p b,li b,td b{color:var(--ink-hi);font-weight:600}
+code{font-family:var(--fm);font-size:.9em;background:var(--sunk);border:1px solid var(--line);border-radius:2px;padding:1px 5px;color:var(--slot)}
+
+/* 三模式面板 */
+.modes{display:grid;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));gap:16px;margin:10px 0 26px}
+.mode{background:var(--plot);border:1px solid var(--line);border-radius:3px;overflow:hidden}
+.mode-hd{padding:16px 20px 12px;border-bottom:1px solid var(--line)}
+.mode-hd h3{font-size:17px;font-weight:600;margin-bottom:3px;display:flex;align-items:center;gap:9px}
+.dot{width:9px;height:9px;border-radius:50%;flex:none}
+.mode-hd .en{font-family:var(--fm);font-size:10.5px;letter-spacing:.1em;color:var(--ink-mute);text-transform:uppercase}
+.mode-hd p{font-size:13px;color:var(--ink-dim);margin:8px 0 0;max-width:none}
+.mode-fig{padding:6px 10px 0}
+.mode-fig svg{width:100%;height:auto;display:block}
+.mode-ft{padding:10px 20px 18px;font-size:12.5px;color:var(--ink-dim);border-top:1px solid var(--line);margin-top:6px}
+.mode-ft b{color:var(--ink)}
+.m-fix h3{color:var(--fix)} .m-fix .dot{background:var(--fix)}
+.m-slot h3{color:var(--slot)} .m-slot .dot{background:var(--slot)}
+.m-fol h3{color:var(--fol)} .m-fol .dot{background:var(--fol)}
+
+/* 通用图板 */
+.fig{background:var(--plot);border:1px solid var(--line);border-radius:3px;padding:22px 24px 18px;margin:10px 0 26px}
+.fig-hd{display:flex;justify-content:space-between;align-items:baseline;gap:16px;margin-bottom:18px;flex-wrap:wrap}
+.fig-hd h3{font-size:15px;font-weight:600;color:var(--ink-hi)}
+.fig-hd span{font-family:var(--fm);font-size:11px;color:var(--ink-mute);letter-spacing:.05em}
+.fig-cap{margin-top:14px;padding-top:13px;border-top:1px dashed var(--line);font-size:13px;color:var(--ink-dim);max-width:none}
+.fig-cap b{color:var(--ink)}
+.smalls{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:14px}
+.small{text-align:center}
+.small svg{width:100%;height:auto;display:block}
+.small h4{font-family:var(--fm);font-size:11.5px;color:var(--ink-hi);margin-top:9px;font-weight:600;letter-spacing:.02em}
+.small p{font-size:11.5px;color:var(--ink-mute);margin:3px 0 0;max-width:none;line-height:1.5}
+
+.tw{overflow-x:auto;margin:6px 0 22px;border:1px solid var(--line);border-radius:3px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:520px}
+th{background:var(--sunk);text-align:left;font-weight:600;color:var(--ink-dim);font-family:var(--fm);
+   font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;padding:10px 15px;border-bottom:1px solid var(--line)}
+td{padding:10px 15px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:none}
+td:first-child{color:var(--ink-hi);font-weight:500}
+.mono{font-family:var(--fm);font-variant-numeric:tabular-nums}
+
+/* 结构 2x2 */
+.axes{display:grid;grid-template-columns:auto 1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:3px;overflow:hidden;margin:8px 0 22px;font-size:13.5px}
+.axes > div{background:var(--plot);padding:15px 18px}
+.axes .hd{background:var(--sunk);font-family:var(--fm);font-size:10.5px;letter-spacing:.1em;color:var(--ink-mute);text-transform:uppercase;display:flex;align-items:center}
+.axes .cell b{display:block;font-size:15px;margin-bottom:3px}
+.axes .cell span{font-size:12.5px;color:var(--ink-dim)}
+.axes .c-fix b{color:var(--fix)} .axes .c-slot b{color:var(--slot)} .axes .c-fol b{color:var(--fol)}
+.axes .c-free b{color:var(--ink-dim)}
+
+.steps{display:flex;flex-direction:column;gap:10px;margin:8px 0 24px}
+.step{display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:start;background:var(--plot);border:1px solid var(--line);border-radius:3px;padding:15px 18px}
+.step .n{font-family:var(--fm);font-size:11px;color:var(--ink-mute);letter-spacing:.1em;padding-top:3px}
+.step h4{font-size:14.5px;color:var(--ink-hi);font-weight:600;margin-bottom:3px}
+.step p{font-size:13px;color:var(--ink-dim);margin:0;max-width:64ch}
+.st{font-family:var(--fm);font-size:10px;letter-spacing:.08em;padding:3px 9px;border-radius:2px;border:1px solid;white-space:nowrap;align-self:center}
+.st-done{color:var(--fix);border-color:rgba(110,231,168,.35);background:rgba(110,231,168,.08)}
+.st-run{color:var(--fol);border-color:rgba(255,176,61,.35);background:rgba(255,176,61,.08)}
+.st-todo{color:var(--ink-mute);border-color:var(--line-hi)}
+
+ul{margin:0 0 18px;padding-left:0;list-style:none;max-width:70ch}
+li{position:relative;padding-left:20px;margin-bottom:9px}
+li::before{content:"";position:absolute;left:4px;top:.72em;width:5px;height:1px;background:var(--ink-mute)}
+
+.warn{background:var(--sunk);border:1px solid var(--line-hi);border-left:2px solid var(--hot);border-radius:0 3px 3px 0;padding:18px 22px;margin:14px 0 22px}
+.warn h4{font-size:14.5px;color:var(--hot);margin-bottom:8px;font-weight:600}
+.warn p{font-size:13.5px;color:var(--ink-dim);margin:0;max-width:68ch}
+.warn p + p{margin-top:8px}
+
+footer{margin-top:70px;padding-top:20px;border-top:1px solid var(--line);font-family:var(--fm);font-size:11px;color:var(--ink-mute);letter-spacing:.05em;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+:focus-visible{outline:2px solid var(--slot);outline-offset:2px}
+@media (max-width:640px){ .axes{grid-template-columns:1fr} .axes .hd{display:none} }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<div class="mast">
+  <div class="kick">Space Power · 编队系统 · 改造预览</div>
+  <h1>编队三模式</h1>
+  <p class="thesis">现在编队只有一种说不清意图的队形。改完之后有三种，各自回答一个不同的问题：<b>固定</b>——我摆成什么样就是什么样；<b>阵型</b>——按防空条令自动排；<b>跟随</b>——都跟着旗舰走。下面每张图都是用改完后的真实公式现算的，不是示意画。</p>
+</div>
+
+<section>
+  <div class="sec-hd"><div class="sec-no">01</div><h2>同一道令，三种结果</h2></div>
+  <p class="sec-sub">三艘船随手摆在左下角，各自船头朝向也不一样。选中整队，右键点右上角同一个目标点。三种模式给出三种完全不同的东西。</p>
+
+  <div class="modes">
+    <div class="mode m-fix">
+      <div class="mode-hd">
+        <h3><i class="dot"></i>固定</h3>
+        <div class="en">snapshot · 建队默认</div>
+        <p>建队那一刻拍一张快照，之后整队像一块刚体，连每艘船的船头朝向差都一起转过去。</p>
+      </div>
+      <div class="mode-fig" id="fig-fix"></div>
+      <div class="mode-ft"><b>谁站哪认死。</b>不做配对交换，你手摆的意图不会被算法改掉。到点后各舰转到自己该有的朝向。</div>
+    </div>
+    <div class="mode m-slot">
+      <div class="mode-hd">
+        <h3><i class="dot"></i>阵型</h3>
+        <div class="en">generated · 条令站位表</div>
+        <p>无视你原来怎么摆，按 1945 年美军防空屏护条令重新发站位：护卫上环、主力居中、全员朝行进方向。</p>
+      </div>
+      <div class="mode-fig" id="fig-slot"></div>
+      <div class="mode-ft"><b>会重新配对。</b>哪艘船去哪个站由能力分和距离决定，换向时自动避免航线交叉。</div>
+    </div>
+    <div class="mode m-fol">
+      <div class="mode-hd">
+        <h3><i class="dot"></i>跟随</h3>
+        <div class="en">follow · 被动跟旗舰</div>
+        <p>只有旗舰接令。其余各舰不算自己的终点，而是持续追旗舰身上的相对位置，追不上就落在后面。</p>
+      </div>
+      <div class="mode-fig" id="fig-fol"></div>
+      <div class="mode-ft"><b>速度档在这里才有意义。</b>黄色流动虚线是游戏里已有的跟随连线，流向跟随舰。</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-hd"><div class="sec-no">02</div><h2>阵型模式：站位表怎么发</h2></div>
+  <p class="sec-sub">不是几何公式算角度，是发编号站位。这一条是整个改造的核心，也是同类游戏翻车的地方——按公式各算各的角，所有护卫会解出同一个角挤成一团；发编号站位则两艘船在数学上拿不到同一个。</p>
+
+  <div class="fig">
+    <div class="fig-hd">
+      <h3>站位表与填充顺序</h3>
+      <span>步长 360/n · 从正前 000 起左右交替向后展开 · 编号即优先级</span>
+    </div>
+    <div id="fig-ring"></div>
+    <p class="fig-cap"><b>有几艘船就从 1 号填几个，空的自然落在后方。</b>方向性、优先级、抗堆叠三件事一次解决，不需要额外规则。这张表与 USF 10B 1945 条令原件 N=4 到 9 各行逐位吻合。</p>
+  </div>
+
+  <div class="fig">
+    <div class="fig-hd">
+      <h3>五种编成的实际布局</h3>
+      <span>全部为探针实测值 · 局部系 · 正上方 = 行进方向</span>
+    </div>
+    <div class="smalls" id="fig-comps"></div>
+    <p class="fig-cap">圈半径与站距<b>都从参与编队的舰自己的近防参数算</b>，不再读死常量。驱逐舰外圈 25000、内圈 8000，巡洋舰只有 15000 / 5000——所以护卫里混进巡洋舰，整个环会缩小到 30000。航母没有主炮，永远居中。</p>
+  </div>
+
+  <div class="tw"><table>
+    <thead><tr><th>编成</th><th>谁上环</th><th>圈半径 R</th><th>站距</th><th>站位数 n</th><th>实际站位</th></tr></thead>
+    <tbody>
+      <tr><td>CA 旗舰 + 2 DD</td><td>2 DD</td><td class="mono">50 000</td><td class="mono">16 000</td><td class="mono">20</td><td class="mono">000 · 342</td></tr>
+      <tr><td>CA 旗舰 + 5 DD</td><td>5 DD</td><td class="mono">50 000</td><td class="mono">16 000</td><td class="mono">20</td><td class="mono">000 ±18 ±36</td></tr>
+      <tr><td>CA 旗舰 + CV + 2 DD</td><td>2 DD（CV 居中）</td><td class="mono">50 000</td><td class="mono">16 000</td><td class="mono">20</td><td class="mono">000 · 342</td></tr>
+      <tr><td>CA 旗舰 + 2 CA</td><td>2 CA</td><td class="mono">30 000</td><td class="mono">10 000</td><td class="mono">19</td><td class="mono">000 · 341</td></tr>
+      <tr><td>CA 旗舰 + DD + CA</td><td>DD 与 CA</td><td class="mono">30 000</td><td class="mono">10 000</td><td class="mono">19</td><td class="mono">DD 000 · CA 341</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <div class="sec-hd"><div class="sec-no">03</div><h2>疏密档的真实含义变了</h2></div>
+  <p class="sec-sub">原来有"扇面"和"疏密"两个旋钮，扇面被删掉了。剩下的疏密档现在控制的是<b>站距</b>——而站距决定站位数，站位数决定同样几艘船摊开多大的角。</p>
+
+  <div class="fig">
+    <div class="fig-hd">
+      <h3>五艘护卫在三个档位下的张角</h3>
+      <span>R 恒为 50 000，变的是站距与站位数</span>
+    </div>
+    <div class="smalls" id="fig-density"></div>
+    <p class="fig-cap">所以玩家侧的说法应该是：<b>贴身档 = 火力压在正前方，疏开档 = 覆盖更多方位</b>。这比"疏密"更接近它实际在做的事。</p>
+  </div>
+
+  <div class="warn">
+    <h4>一个你应该提前知道的后果：环基本不会合拢</h4>
+    <p>标准档 n=20，意味着要 20 艘护卫才能围成完整一圈。而实战编队通常 2 到 8 艘，所以<b>阵型模式看起来永远是一把朝前的扇子</b>，最宽也就 ±72°，不会变成教科书里那种包围圈。</p>
+    <p>这本身符合条令（船不够就空出后方弧），但如果你期待看到"环"，那得靠疏开档，或者接受它就是个前向屏护。<b>这是可调的</b>——把站距公式里的系数调大，同样的船数就能张得更开。要不要调、调到什么程度，等你看到实际效果再定。</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-hd"><div class="sec-no">04</div><h2>固定模式：手摆之后锁住</h2></div>
+  <p class="sec-sub">这是建队时的默认模式，也是你最初要的那个——"以编队前各舰船相对位置为基准"。</p>
+
+  <div class="fig">
+    <div class="fig-hd">
+      <h3>同一组船，两种布局，存成两个编队</h3>
+      <span>快照在建队那一刻拍下，之后只做刚体旋转</span>
+    </div>
+    <div class="smalls" id="fig-fixed"></div>
+    <p class="fig-cap">摆好按 <code>Ctrl+1</code> 存成编队 1，重新摆过再按 <code>Ctrl+2</code> 存成编队 2。<b>快照互不干扰</b>，同一组船可以有完全不同的两种阵势。已经建好的编队想重摆，手动挪好之后再点一次"固定"钮即可重拍。</p>
+  </div>
+
+  <p>几个刻意做成这样的细节：</p>
+  <ul>
+    <li><b>战损不改形状。</b>掉了一艘，其余各舰的站位一动不动——快照是权威，不会拿当前实际位置重拍。</li>
+    <li><b>换旗舰时整队不变形。</b>新旗舰成为新的原点，所有偏移与朝向差换算到它的参考系，各舰在世界坐标里一步不动。</li>
+    <li><b>跟随中点"固定"不会重拍。</b>跟随途中的布局带追赶滞后，不是你手调的意图，所以这一步只切回静态、保留原快照。</li>
+  </ul>
+</section>
+
+<section>
+  <div class="sec-hd"><div class="sec-no">05</div><h2>长按右键：整队虚影绕旗舰转</h2></div>
+  <p class="sec-sub">单舰已经有这个手势——右键按住不动 350 毫秒出虚影，拖动定到达朝向。扩展到编队之后，转的是整个队形，旋转轴是旗舰。</p>
+
+  <div class="fig">
+    <div class="fig-hd">
+      <h3>拖动光标 = 旋转整个队形</h3>
+      <span>旗舰槽位恒为原点，所以旋转轴天然就是它，不用另设</span>
+    </div>
+    <div id="fig-ghost"></div>
+    <p class="fig-cap">松手落地时，每艘船拿到自己的终点和到达朝向。<b>三种模式共用这一套</b>——虚影只消费槽位表，不关心槽位是快照来的还是条令算的。</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-hd"><div class="sec-no">06</div><h2>内部是两个轴，不是三个模式</h2></div>
+  <p class="sec-sub">你看到的是三个按钮，代码里是两个正交的轴。这样切的好处是每个轴只有一个接口，模式判断从原来散在四处收成一处。</p>
+
+  <div class="axes">
+    <div class="hd"></div>
+    <div class="hd">静态 · 下令即算终点</div>
+    <div class="hd">跟随 · 持续追旗舰</div>
+
+    <div class="hd">快照槽位</div>
+    <div class="cell c-fix"><b>固定</b><span>建队默认。手摆的形状 + 朝向差，刚体搬运。</span></div>
+    <div class="cell c-free"><b>（免费组合）</b><span>用我手摆的形状跟着旗舰走。能跑，不做专门按钮。</span></div>
+
+    <div class="hd">条令槽位</div>
+    <div class="cell c-slot"><b>阵型</b><span>站位表 + 能力打分，自动排布。</span></div>
+    <div class="cell c-fol"><b>跟随</b><span>条令队形下的被动跟随。</span></div>
+  </div>
+
+  <p>槽位来源是一个纯函数：给定成员与旗舰，写出每艘船的偏移和朝向差。运动方式只消费这两个字段，<b>不关心它们从哪来</b>。所以"阵型限制这套逻辑方法1和2都在用"这件事，在这个结构里就是同一个轴，天然共用，不会各写一份。</p>
+</section>
+
+<section>
+  <div class="sec-hd"><div class="sec-no">07</div><h2>做到哪了</h2></div>
+  <p class="sec-sub">五个阶段顺序做，每阶段都要过同一道关：散舰运动基准位级不变，全部探针绿。每阶段还要经过三个独立审查镜头，发现要先被一个怀疑者尝试推翻才算数。</p>
+
+  <div class="steps">
+    <div class="step"><div class="n">阶段 0</div><div><h4>解耦，不改行为</h4><p>立起两个轴，模式判断从四处收成一处；把配对函数搬到它唯一的调用方；删掉一个写了从来没人读的死标志。三个镜头零发现。</p></div><div class="st st-done">已完成</div></div>
+    <div class="step"><div class="n">阶段 1</div><div><h4>固定模式</h4><p>快照槽位、朝向差、换旗重心化、UI 三选一。两轮审查抓到两个真问题：建队后读数参考系错、换旗时阵型朝向没跟着换参考系。都已修。</p></div><div class="st st-done">已完成</div></div>
+    <div class="step"><div class="n">阶段 2</div><div><h4>条令阵型</h4><p>站位表、能力打分、半径与站距从实例算，删掉扇面/间隙/角色分桶。审查抓到实现私自偏离三处规格（已回改），最后一轮又抓到一个真 bug：<b>对已成形的编队再点一次"阵型"钮不是空操作</b>，会把配对好的槽位冲回名册次序，船一步没动而读数从 38km 跳到 15649km。待修。</p></div><div class="st st-run">待修</div></div>
+    <div class="step"><div class="n">阶段 3</div><div><h4>编队虚影</h4><p>把单舰的长按右键手势放开到编队，多舰虚影 + 到达朝向覆盖行进方向。</p></div><div class="st st-todo">待做</div></div>
+    <div class="step"><div class="n">阶段 4</div><div><h4>回补跟随</h4><p>让跟随层认识朝向差，并在快照来源下停用配对交换——固定模式的"谁站哪认死"在跟随态下也成立。</p></div><div class="st st-todo">待做</div></div>
+  </div>
+
+  <div class="warn">
+    <h4>还没被验证过的部分</h4>
+    <p>以上全部是<b>探针与基准脚本里跑出来的</b>，不是我在游戏里手玩过的。数值几何我有信心（探针带负对照，改错符号或改错排序它会转红），但<b>手感</b>没人验过：站距 16000 摆出来在屏幕上是紧是松、跟随的滞后看起来是不是别扭、虚影转起来跟不跟手，这些要你上手才知道。</p>
+    <p>另外阶段 3 和 4 还没写，所以现在的跟随模式在快照来源下仍会按条令桶换槽——固定 + 跟随这个组合暂时不成立，阶段 4 才收口。</p>
+  </div>
+</section>
+
+<footer>
+  <span>图形由页面内联脚本按改造后的真实公式现算 · 数值取自 FLOW36 / FLOW37 探针实测</span>
+  <span>2026-09 · Space Power</span>
+</footer>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var D2R = Math.PI/180;
+  var C = { fix:'#6EE7A8', slot:'#4FE0FF', fol:'#FFB03D', hot:'#FF6B5A',
+            line:'#1D2735', lineHi:'#2C3B4F', dim:'#7C8CA3', mute:'#55637A',
+            ink:'#C6D2E1', inkHi:'#EAF1F9', plot:'#0C111A' };
+
+  /* 条令站位表：步长 360/n，从 000 起左右交替向后展开。与 USF 10B 1945 表 N=4..9 逐位吻合 */
+  function bearings(n){
+    var step=360/n, out=[0];
+    for(var i=1; out.length<n; i++){
+      out.push((360-step*i)%360);
+      if(out.length<n) out.push(step*i);
+    }
+    return out;
+  }
+  /* 局部系(正前=+x, 右舷=+y) 落到屏幕：正前 = 屏幕正上 */
+  function place(fx,fy,H,lx,ly){
+    var h=H*D2R, ax=Math.sin(h), ay=-Math.cos(h), sx=Math.cos(h), sy=Math.sin(h);
+    return [fx+lx*ax+ly*sx, fy+lx*ay+ly*sy];
+  }
+  function ship(x,y,brg,sz,fill,stroke,op){
+    var p=[[0,-sz],[sz*0.6,sz*0.8],[0,sz*0.4],[-sz*0.6,sz*0.8]];
+    var c=Math.cos(brg*D2R), s=Math.sin(brg*D2R), out=[];
+    for(var i=0;i<p.length;i++){
+      out.push((x+p[i][0]*c-p[i][1]*s).toFixed(1)+','+(y+p[i][0]*s+p[i][1]*c).toFixed(1));
+    }
+    return '<polygon points="'+out.join(' ')+'" fill="'+fill+'" stroke="'+stroke+
+           '" stroke-width="1.3" stroke-linejoin="round" opacity="'+(op==null?1:op)+'"/>';
+  }
+  function svg(w,h,body,label){
+    return '<svg viewBox="0 0 '+w+' '+h+'" role="img" aria-label="'+label+'">'+body+'</svg>';
+  }
+  function txt(x,y,s,fill,size,anchor,fam){
+    return '<text x="'+x+'" y="'+y+'" fill="'+fill+'" font-size="'+(size||11)+
+      '" text-anchor="'+(anchor||'middle')+'" font-family="'+(fam||'IBM Plex Mono, monospace')+
+      '" dominant-baseline="central">'+s+'</text>';
+  }
+  function dash(x1,y1,x2,y2,col,op,pat){
+    return '<line x1="'+x1.toFixed(1)+'" y1="'+y1.toFixed(1)+'" x2="'+x2.toFixed(1)+'" y2="'+y2.toFixed(1)+
+      '" stroke="'+col+'" stroke-width="1.1" stroke-dasharray="'+(pat||'5,5')+'" opacity="'+(op||.5)+'"/>';
+  }
+  function cross(x,y,col){
+    var r=5;
+    return '<path d="M'+(x-r)+' '+(y-r)+'L'+(x+r)+' '+(y+r)+'M'+(x+r)+' '+(y-r)+'L'+(x-r)+' '+(y+r)+
+      '" stroke="'+col+'" stroke-width="1.4" opacity=".9"/>';
+  }
+
+  /* ---------- 01 三模式：同一道令 ---------- */
+  var W=252, H=310;
+  var F0=[62,252], DEST=[186,84];
+  var H0=300;                                  // 建队时旗舰船头
+  var TRAV=Math.atan2(DEST[0]-F0[0], -(DEST[1]-F0[1]))/D2R;   // 行进方位角(0=上)
+  /* 随手摆的不规则布局：局部偏移 + 各自朝向差 */
+  var SNAP=[{lx:0,ly:0,hd:0},{lx:-30,ly:-32,hd:52},{lx:-9,ly:38,hd:-34}];
+
+  function modePanel(mode){
+    var b='', i, p, e;
+    /* 起始态：淡 */
+    for(i=0;i<SNAP.length;i++){
+      p=place(F0[0],F0[1],H0,SNAP[i].lx,SNAP[i].ly);
+      b+=ship(p[0],p[1],H0+SNAP[i].hd,7.5,'#0C111A',C.mute,.85);
+    }
+    b+=txt(F0[0]-4,F0[1]+40,'建队时','#55637A',10.5);
+    b+=cross(DEST[0],DEST[1],C.fol);
+    b+=txt(DEST[0]+2,DEST[1]-18,'目标点','#7C8CA3',10.5);
+
+    var ends=[], col;
+    if(mode==='fix'){
+      col=C.fix;
+      for(i=0;i<SNAP.length;i++){
+        p=place(DEST[0],DEST[1],TRAV,SNAP[i].lx,SNAP[i].ly);
+        ends.push({p:p,brg:TRAV+SNAP[i].hd});
+      }
+    } else if(mode==='slot'){
+      col=C.slot;
+      var br=bearings(20), R=46;
+      ends.push({p:[DEST[0],DEST[1]],brg:TRAV});                       // 旗舰居中
+      for(i=1;i<3;i++){
+        var th=br[i-1]*D2R;                                            // 站 000 与 342
+        p=place(DEST[0],DEST[1],TRAV,R*Math.cos(th),R*Math.sin(th));
+        ends.push({p:p,brg:TRAV});
+      }
+    } else {
+      col=C.fol;
+      /* 跟随：旗舰到点，成员按快照槽位但落后一截 */
+      var lag=[0,26,20];
+      for(i=0;i<SNAP.length;i++){
+        p=place(DEST[0],DEST[1],TRAV,SNAP[i].lx-lag[i],SNAP[i].ly);
+        ends.push({p:p,brg:TRAV+(i?SNAP[i].hd*0.35:0)});
+      }
+    }
+    /* 航线 */
+    for(i=0;i<SNAP.length;i++){
+      p=place(F0[0],F0[1],H0,SNAP[i].lx,SNAP[i].ly);
+      b+=dash(p[0],p[1],ends[i].p[0],ends[i].p[1],col,.32,'4,6');
+    }
+    /* 跟随连线：旗舰 → 各成员，游戏里就是这个黄虚线 */
+    if(mode==='fol'){
+      for(i=1;i<ends.length;i++){
+        b+=dash(ends[0].p[0],ends[0].p[1],ends[i].p[0],ends[i].p[1],C.fol,.95,'3,5');
+      }
+    }
+    for(i=0;i<ends.length;i++){
+      b+=ship(ends[i].p[0],ends[i].p[1],ends[i].brg,8.5,i===0?col:'#0C111A',col,1);
+    }
+    var note = mode==='fix' ? '整块转过去' : (mode==='slot' ? '重排成条令队形' : '追着旗舰跑');
+    b+=txt(W/2,H-12,note,col,11);
+    return svg(W,H,b,'编队'+note);
+  }
+  document.getElementById('fig-fix').innerHTML=modePanel('fix');
+  document.getElementById('fig-slot').innerHTML=modePanel('slot');
+  document.getElementById('fig-fol').innerHTML=modePanel('fol');
+
+  /* ---------- 02 站位环与填充顺序 ---------- */
+  (function(){
+    var w=620,h=340,cx=310,cy=185,R=118,b='';
+    var n=20, br=bearings(n), i, th, p;
+    b+='<circle cx="'+cx+'" cy="'+cy+'" r="'+R+'" fill="none" stroke="'+C.line+'" stroke-width="1.5"/>';
+    /* 航向箭头 */
+    b+='<line x1="'+cx+'" y1="'+(cy-R-16)+'" x2="'+cx+'" y2="'+(cy-R-40)+'" stroke="'+C.fol+'" stroke-width="1.5"/>';
+    b+='<path d="M'+cx+' '+(cy-R-44)+'l-4 9 4-3 4 3z" fill="'+C.fol+'"/>';
+    b+=txt(cx,cy-R-56,'行进方向 / 威胁轴',C.fol,10.5);
+    /* 全部 20 个站位：淡点 */
+    for(i=0;i<n;i++){
+      th=br[i]*D2R;
+      p=[cx+R*Math.sin(th), cy-R*Math.cos(th)];
+      b+='<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="3" fill="none" stroke="'+C.lineHi+'" stroke-width="1"/>';
+    }
+    /* 前 8 个站位：编号 + 高亮 */
+    for(i=0;i<8;i++){
+      th=br[i]*D2R;
+      p=[cx+R*Math.sin(th), cy-R*Math.cos(th)];
+      var lp=[cx+(R+24)*Math.sin(th), cy-(R+24)*Math.cos(th)];
+      b+='<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="12" fill="'+C.plot+'" stroke="'+C.slot+'" stroke-width="1.4"/>';
+      b+=txt(p[0],p[1],String(i+1),C.slot,11.5);
+      b+=txt(lp[0],lp[1],(br[i]<10?'00':br[i]<100?'0':'')+Math.round(br[i]),C.mute,9.5);
+    }
+    b+='<circle cx="'+cx+'" cy="'+cy+'" r="7" fill="'+C.fol+'"/>';
+    b+=txt(cx,cy+22,'旗舰',C.fol,10.5);
+    /* 右侧图例 */
+    var lx=498, ly=76;
+    b+=txt(lx,ly,'填充顺序',C.inkHi,12,'start','IBM Plex Sans, sans-serif');
+    var seq=['1 → 正前 000','2 → 左舷 342','3 → 右舷 018','4 → 左舷 324','5 → 右舷 036','…左右交替向后'];
+    for(i=0;i<seq.length;i++){
+      b+=txt(lx,ly+24+i*19,seq[i],i===seq.length-1?C.mute:C.dim,11,'start');
+    }
+    b+=txt(lx,ly+24+seq.length*19+12,'空站落在后方',C.hot,11,'start');
+    return document.getElementById('fig-ring').innerHTML=svg(w,h,b,'20 个站位的环，前 8 个按左右交替顺序编号');
+  })();
+
+  /* ---------- 02b 五种编成 ---------- */
+  (function(){
+    var comps=[
+      {t:'CA + 2 DD',  d:'R 50 000 · n 20', R:50000, n:20, ring:[{k:'DD',s:6800}, {k:'DD',s:6800}], center:[]},
+      {t:'CA + 5 DD',  d:'张角 ±36°',       R:50000, n:20, ring:[{k:'DD'},{k:'DD'},{k:'DD'},{k:'DD'},{k:'DD'}], center:[]},
+      {t:'CA + CV + 2 DD', d:'CV 居中',     R:50000, n:20, ring:[{k:'DD'},{k:'DD'}], center:[{k:'CV'}]},
+      {t:'CA + 2 CA',  d:'R 缩到 30 000',   R:30000, n:19, ring:[{k:'CA'},{k:'CA'}], center:[]},
+      {t:'CA + DD + CA', d:'DD 分高占 000', R:30000, n:19, ring:[{k:'DD'},{k:'CA'}], center:[]}
+    ];
+    var out='';
+    for(var c=0;c<comps.length;c++){
+      var o=comps[c], w=190,h=176,cx=95,cy=96;
+      var px = o.R===50000 ? 62 : 40;             /* 50000→62px，30000→37px，同一比例尺 */
+      px = o.R/50000*62;
+      var br=bearings(o.n), b='', i, th, p;
+      b+='<circle cx="'+cx+'" cy="'+cy+'" r="'+px.toFixed(1)+'" fill="none" stroke="'+C.line+'" stroke-width="1.2"/>';
+      b+='<line x1="'+cx+'" y1="'+(cy-px-8)+'" x2="'+cx+'" y2="'+(cy-px-22)+'" stroke="'+C.fol+'" stroke-width="1.2" opacity=".7"/>';
+      for(i=0;i<o.n;i++){
+        th=br[i]*D2R;
+        p=[cx+px*Math.sin(th), cy-px*Math.cos(th)];
+        b+='<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="1.6" fill="'+C.lineHi+'"/>';
+      }
+      for(i=0;i<o.center.length;i++){
+        var yy = (i%2===0? -1:1) * (20000/50000*62) * (Math.floor(i/2)+1);
+        b+=ship(cx+yy, cy, 0, 8, '#0C111A', C.dim, 1);
+        b+=txt(cx+yy, cy+18, o.center[i].k, C.mute, 9);
+      }
+      for(i=0;i<o.ring.length;i++){
+        th=br[i]*D2R;
+        p=[cx+px*Math.sin(th), cy-px*Math.cos(th)];
+        var isDD = o.ring[i].k==='DD';
+        b+=ship(p[0],p[1],0,8.5,isDD?C.slot:'#0C111A',isDD?C.slot:C.dim,1);
+      }
+      b+='<circle cx="'+cx+'" cy="'+cy+'" r="5.5" fill="'+C.fol+'"/>';
+      out+='<div class="small">'+svg(w,h,b,o.t+' 的阵型布局')+
+           '<h4>'+o.t+'</h4><p>'+o.d+'</p></div>';
+    }
+    document.getElementById('fig-comps').innerHTML=out;
+  })();
+
+  /* ---------- 03 疏密档 ---------- */
+  (function(){
+    var base=16000, R=50000;
+    var lv=[{t:'贴身 0.6',m:0.6},{t:'标准 1.0',m:1.0},{t:'疏开 1.6',m:1.6}];
+    var out='';
+    for(var k=0;k<lv.length;k++){
+      var sp=base*lv[k].m;
+      var n=Math.max(5, Math.ceil(2*Math.PI*R/sp));
+      var step=360/n, span=2*step;                    /* 5 艘 → 000 ±step ±2step */
+      var br=bearings(n), w=200,h=182,cx=100,cy=100,px=64,b='',i,th,p;
+      b+='<circle cx="'+cx+'" cy="'+cy+'" r="'+px+'" fill="none" stroke="'+C.line+'" stroke-width="1.2"/>';
+      b+='<line x1="'+cx+'" y1="'+(cy-px-8)+'" x2="'+cx+'" y2="'+(cy-px-22)+'" stroke="'+C.fol+'" stroke-width="1.2" opacity=".7"/>';
+      /* 张角扇区 */
+      var a=span*D2R;
+      b+='<path d="M'+cx+' '+cy+' L'+(cx+px*Math.sin(-a)).toFixed(1)+' '+(cy-px*Math.cos(-a)).toFixed(1)+
+         ' A'+px+' '+px+' 0 0 1 '+(cx+px*Math.sin(a)).toFixed(1)+' '+(cy-px*Math.cos(a)).toFixed(1)+
+         ' Z" fill="rgba(79,224,255,.07)" stroke="none"/>';
+      for(i=0;i<n;i++){
+        th=br[i]*D2R;
+        p=[cx+px*Math.sin(th), cy-px*Math.cos(th)];
+        b+='<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="1.6" fill="'+C.lineHi+'"/>';
+      }
+      for(i=0;i<5;i++){
+        th=br[i]*D2R;
+        p=[cx+px*Math.sin(th), cy-px*Math.cos(th)];
+        b+=ship(p[0],p[1],0,8,C.slot,C.slot,1);
+      }
+      b+='<circle cx="'+cx+'" cy="'+cy+'" r="5.5" fill="'+C.fol+'"/>';
+      b+=txt(cx,cy+px+24,'±'+span.toFixed(0)+'°',C.slot,13);
+      out+='<div class="small">'+svg(w,h,b,lv[k].t+' 档五艘护卫的张角')+
+           '<h4>'+lv[k].t+'</h4><p>站距 '+(sp/1000).toFixed(1)+'k · n='+n+'</p></div>';
+    }
+    document.getElementById('fig-density').innerHTML=out;
+  })();
+
+  /* ---------- 04 固定：两种布局两个编队 ---------- */
+  (function(){
+    var lay=[
+      {t:'编队 1 · 楔形', k:'Ctrl+1', s:[{lx:0,ly:0,hd:0},{lx:-34,ly:-30,hd:0},{lx:-34,ly:30,hd:0},{lx:-64,ly:0,hd:0}]},
+      {t:'编队 2 · 横列', k:'Ctrl+2', s:[{lx:0,ly:0,hd:0},{lx:0,ly:-42,hd:0},{lx:0,ly:42,hd:0},{lx:-40,ly:0,hd:0}]},
+      {t:'编队 3 · 纵队', k:'Ctrl+3', s:[{lx:0,ly:0,hd:0},{lx:-38,ly:0,hd:0},{lx:-76,ly:0,hd:0},{lx:-114,ly:6,hd:0}]}
+    ];
+    var out='';
+    for(var k=0;k<lay.length;k++){
+      var w=200,h=182,cx=100,cy=112,b='',i,p;
+      b+='<line x1="'+cx+'" y1="26" x2="'+cx+'" y2="12" stroke="'+C.fol+'" stroke-width="1.2" opacity=".7"/>';
+      b+='<path d="M'+cx+' 8l-3.5 8 3.5-2.5 3.5 2.5z" fill="'+C.fol+'" opacity=".7"/>';
+      for(i=0;i<lay[k].s.length;i++){
+        p=place(cx,cy,0,lay[k].s[i].lx,lay[k].s[i].ly);
+        b+=ship(p[0],p[1],lay[k].s[i].hd,9,i===0?C.fix:'#0C111A',C.fix,1);
+      }
+      out+='<div class="small">'+svg(w,h,b,lay[k].t)+
+           '<h4>'+lay[k].t+'</h4><p>摆好后按 '+lay[k].k+'</p></div>';
+    }
+    document.getElementById('fig-fixed').innerHTML=out;
+  })();
+
+  /* ---------- 05 虚影绕旗舰旋转 ---------- */
+  (function(){
+    var w=620,h=300,b='';
+    var slots=[{lx:0,ly:0},{lx:-34,ly:-30},{lx:-34,ly:30},{lx:-66,ly:0}];
+    var dest=[300,150];
+    var states=[{H:0,op:.22,lab:null},{H:38,op:.4,lab:null},{H:76,op:1,lab:'当前光标'}];
+    var i,k,p;
+    /* 光标预演线 */
+    var cur=place(dest[0],dest[1],76,120,0);
+    b+=dash(dest[0],dest[1],cur[0],cur[1],C.fol,.55,'6,6');
+    b+='<circle cx="'+cur[0].toFixed(1)+'" cy="'+cur[1].toFixed(1)+'" r="4" fill="none" stroke="'+C.fol+'" stroke-width="1.3"/>';
+    b+=txt(cur[0]+34,cur[1]-2,'光标',C.fol,10.5);
+    /* 旋转轨迹 */
+    for(k=1;k<slots.length;k++){
+      var r=Math.hypot(slots[k].lx,slots[k].ly);
+      b+='<circle cx="'+dest[0]+'" cy="'+dest[1]+'" r="'+r.toFixed(1)+'" fill="none" stroke="'+C.lineHi+'" stroke-width="1" stroke-dasharray="2,4" opacity=".6"/>';
+    }
+    for(i=0;i<states.length;i++){
+      for(k=0;k<slots.length;k++){
+        p=place(dest[0],dest[1],states[i].H,slots[k].lx,slots[k].ly);
+        b+=ship(p[0],p[1],states[i].H,9,k===0?C.fol:'#0C111A',C.fol,states[i].op);
+      }
+    }
+    b+=cross(dest[0],dest[1],C.fol);
+    b+=txt(dest[0],dest[1]+26,'旗舰 = 旋转轴',C.fol,10.5);
+    /* 说明 */
+    var lx=452, ly=54;
+    b+=txt(lx,ly,'长按右键 350ms',C.inkHi,12,'start','IBM Plex Sans, sans-serif');
+    var ss=['① 出现整队半透明模型','② 拖动光标 → 队形绕旗舰转','③ 松手 → 各舰拿到','　 自己的终点与到达朝向'];
+    for(i=0;i<ss.length;i++) b+=txt(lx,ly+26+i*20,ss[i],C.dim,11,'start');
+    b+=txt(lx,ly+26+ss.length*20+14,'三种模式共用这一套',C.slot,11,'start');
+    document.getElementById('fig-ghost').innerHTML=svg(w,h,b,'编队虚影绕旗舰旋转的三个状态');
+  })();
+})();
+</script>
+
+</body>
+</html>
