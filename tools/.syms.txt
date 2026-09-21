@@ -215,6 +215,7 @@ contactPos
 contactState
 controlledShips
 cornerSpd
+corridorFrom
 covAddEll
 covAddMeas
 covDetOf

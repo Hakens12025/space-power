@@ -2,6 +2,16 @@
 /* RF1: 提取自 stepSim 的 S5-S11 段(原 07-missiles.js L236-631):弹丸上限裁剪→拦截弹预收集→引导分配→网检查→
    来袭走廊→五弹型主循环→过滤。各弹型分支提为子函数,原外层循环的 continue 早退定点转为 return(内层扫描循环的
    continue 保留原样),控制流与原版逐段一致。 */
+/* FG1 来袭走廊的来源线从哪儿画起。原来一律取发射舰的【真实位置】—— 哪怕那艘船我方根本没定位,橙虚线也直接指到它身上:
+   一轮齐射就把射手的坐标白送了(用户实报的"敌方的目标线")。现在只许用我方知道的事:
+     射手定得出位置(contactPos 非空:实况 / 陈旧 / 失联外推)⇒ 从那个【估计位置】画起;
+     否则 ⇒ 从我方【第一次看见这组导弹】的地方画起 —— "它是从那个方向来的"是合法情报,"它是谁、在哪打的"不是。
+   GM 下照旧取真值。走廊只在导弹被我方看见(visBlue)时才生成,所以 p.pos 此刻就是首见位置。 */
+function corridorFrom(p){
+  if(adminMode)return p.shooter.pos.slice();
+  const q=(typeof contactPos==='function')?contactPos(p.shooter,'blue'):null;
+  return (q||p.pos).slice();
+}
 function stepProjectiles(dt){
   // ===== 战斗更新 =====
   if(projectiles.length>400){ // v126(外援E):雷/信标/防空屏豁免;飞行弹按"剩余命中时间"保最迫近(脱靶/游魂优先砍,不再砍最老)
@@ -29,7 +39,7 @@ function stepProjectiles(dt){
     const nowT=simTime,ship=p.shooter;
     const dup=threatCorridors.find(c=>c.ship===ship&&nowT-c.fireT<2);
     if(dup){dup.p=p;dup.t=5;dup.fireT=nowT;continue;} // 同舰2s内:更新到最新导弹(淡出重置)
-    threatCorridors.push({p,from:p.shooter.pos.slice(),t:5,ship,fireT:nowT}); // t=淡出寿命(导弹done后5s消失)
+    threatCorridors.push({p,from:corridorFrom(p),t:5,ship,fireT:nowT}); // t=淡出寿命(导弹done后5s消失)
   }
   for(let i=threatCorridors.length-1;i>=0;i--){const c=threatCorridors[i];if(c.p.done){c.t-=dt;if(c.t<=0)threatCorridors.splice(i,1);}}
   for(const p of projectiles){ // 五弹型主循环(RF1:分支体在下方五个子函数)

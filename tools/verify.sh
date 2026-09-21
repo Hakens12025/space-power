@@ -5035,6 +5035,65 @@ t('FLOW75_AUTOAIM',function(){
   }
   return out;
 });
+/* ===== FG1 敌方的意图不上图:目的地线与来袭来源线 =====
+   用户:"我应该不能看到敌方的目标线和目的地线才对"。
+     ① 目的地线:一艘【实况定位】的红舰带着令,非 GM 下画它时不许有任何一笔落到它的命令点上;
+        反向对照:GM 下要画、我方的船要画(否则这条只是"谁的目的地线都没了")
+     ② 来袭来源线的起点:射手没定位 ⇒ 起点 = 导弹首见位置(不是射手真值);射手定位了 ⇒ 起点 = 估计位置(刻意偏开真值);GM ⇒ 真值
+     ③ 生产路径:一组看得见的红方导弹过一遍 stepProjectiles,生成的走廊起点不许等于没定位的射手的真实坐标 */
+t('FLOW76_REDINTENT',function(){
+  if(typeof corridorFrom!=='function')return 'fail FG1 未加载(缺 corridorFrom)';
+  var shipsBak=ships.slice(),projBak=projectiles,corrBak=threatCorridors,admBak=adminMode,edBak=editMode,lodBak=LOD.off,selBak=selected.slice();
+  var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},oLn=ctx.lineTo,oMv=ctx.moveTo,out='';
+  try{
+    editMode=false;selected=[];LOD.off=true;projectiles=[];threatCorridors=[];
+    var B=makeShip('CA','图蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),R=makeShip('DD','图红',[60000,20000,0],[-1,0,0],[0,0,0],'red',2);
+    ships.length=0;ships.push(B,R);
+    var DEST=[20000,-50000,0];
+    B.orders=[{pos:[-30000,40000,0],type:'stop'}];R.orders=[{pos:DEST.slice(),type:'stop'}];
+    var live=function(ex,ey){R.litBlue=2;R.seenBlue=simTime;R.seenBluePos=[ex,ey,0];R.seenBlueVel=[0,0,0];
+      var c=R.covB=newCov();c.seen=true;c.ever=true;c.fix=true;c.n=2;c.age=0;c.x=ex;c.y=ey;c.idn=true;c.r1=c.a1=9000;c.r2=c.a2=4000;};
+    var dark=function(){R.litBlue=0;R.covB=newCov();R.seenBlue=-1e9;R.seenBluePos=null;R.seenBlueVel=null;};
+    cam.x=20000;cam.y=0;cam.zoom=0.004;
+    var pts=[];ctx.lineTo=function(x,y){pts.push([x,y]);return oLn.apply(ctx,arguments);};ctx.moveTo=function(x,y){pts.push([x,y]);return oMv.apply(ctx,arguments);};
+    var touches=function(w){var q=toScreen(w[0],w[1]);return pts.some(function(p){return Math.hypot(p[0]-q[0],p[1]-q[1])<6;});};
+    /* ① */
+    live(R.pos[0],R.pos[1]);
+    adminMode=false;pts=[];drawShip(R);var drewShip=pts.length>0,redLine=touches(DEST);
+    pts=[];drawShip(B);var blueLine=touches(B.orders[0].pos);
+    adminMode=true;pts=[];drawShip(R);var gmLine=touches(DEST);adminMode=false;
+    ctx.lineTo=oLn;ctx.moveTo=oMv;
+    var ok1=(drewShip&&!redLine&&blueLine&&gmLine);
+    /* ② */
+    var P={type:'missile',shooter:R,target:B,pos:[45000,15000,0],vel:[-1000,0,0],done:false,visBlue:true};
+    var eq=function(a,b){return Math.abs(a[0]-b[0])<1e-6&&Math.abs(a[1]-b[1])<1e-6;};
+    dark();var fDark=corridorFrom(P);
+    live(R.pos[0]+25000,R.pos[1]-18000);var fLive=corridorFrom(P);
+    adminMode=true;var fGm=corridorFrom(P);adminMode=false;
+    var ok2=(eq(fDark,P.pos)&&!eq(fDark,R.pos)&&eq(fLive,[R.pos[0]+25000,R.pos[1]-18000])&&!eq(fLive,R.pos)&&eq(fGm,R.pos)&&fDark!==P.pos);
+    /* ③ 生产路径:真发一组导弹(区域齐射绕开火控门),标成我方看得见,过一拍 */
+    dark();R.noFire=false;projectiles=[];threatCorridors=[];
+    fireMissiles(R,{pos:[0,0,0]},1);
+    var nM=projectiles.filter(function(p){return p.type==='missile';}).length;
+    projectiles.forEach(function(p){p.visBlue=true;});
+    var truth=R.pos.slice();
+    stepProjectiles(0.02);
+    var cs=threatCorridors.slice(),leak=cs.some(function(c){return eq(c.from,truth);});
+    var ok3=(nM>=1&&cs.length>=1&&!leak);
+    var ok=(ok1&&ok2&&ok3);
+    out=(ok?'ok':'fail')
+      +' ① 目的地线:画了红舰='+drewShip+' 非 GM 有笔画落到红舰命令点上='+redLine+'(须 false)我方的照画='+blueLine+' GM 下红舰的照画='+gmLine+'='+ok1
+      +' | ② 来源线起点:射手没定位 ⇒ 导弹首见位置='+eq(fDark,P.pos)+' 射手定位了 ⇒ 估计位置(偏开真值 2.5 万 / 1.8 万)='+eq(fLive,[R.pos[0]+25000,R.pos[1]-18000])+' GM ⇒ 真值='+eq(fGm,R.pos)+'='+ok2
+      +' | ③ 生产路径:发射 '+nM+' 组 ⇒ 走廊 '+cs.length+' 条,起点等于没定位的射手真值='+leak+'(须 false)='+ok3;
+  }finally{
+    ctx.lineTo=oLn;ctx.moveTo=oMv;
+    adminMode=admBak;editMode=edBak;LOD.off=lodBak;selected=selBak;
+    cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
+    projectiles=projBak;threatCorridors=corrBak;
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+  }
+  return out;
+});
 /* ===== UI2 右下角工具栏真的在右下角 + 两个图标钮 =====
    用户:"所谓右下角的按钮其实没有在右下角,现在在事件窗口的左边,需要完全移动到右下角"。
    改前锚的是【事件窗的左下角】。本条量真实布局矩形:贴右边距、整个在事件窗【下面】(不是旁边)、不压底部指令栏、不出画面;
@@ -6319,6 +6378,7 @@ grep -q "FLOW73_MATCH=ok" "$OUT" || { echo "✗ FLOW73_MATCH 未通过(MT1 对�
 grep -q "tcStep(dt)" js/core/99-main.js || { echo "✗ TC1 接触降速没有接进帧循环(core/99 的 frame 里找不到 tcStep(dt)):判据 FLOW74 量的是 tcStep 本身算得对不对,接没接上只能从源码看"; fail=1; }
 grep -q "FLOW74_TC=ok" "$OUT" || { echo "✗ FLOW74_TC 未通过(TC1 接触降速:档位只读我方知道的事——没被发现 / 只有热区的红舰贴脸也不降速,定位了按【估计位置】分档(x6 / x4 / x2),看得见的来袭导弹进交战档;变慢立刻开始、变快等 HOLD 秒;玩家选的倍速低于上限时不动;只在对局里生效;顶栏读数写出降速后缀)"; fail=1; }
 grep -q "FLOW75_AUTOAIM=ok" "$OUT" || { echo "✗ FLOW75_AUTOAIM 未通过(MT1 修:开着「火控」(自动索敌)的编队成员锁着目标时必须每拍续上 driftFire、机头转向目标;反向对照:没开火控的编队成员自己不会转过去——不续的话编队的主炮只在碰巧对准时才响,对局模拟里 0 胜 6 负)"; fail=1; }
+grep -q "FLOW76_REDINTENT=ok" "$OUT" || { echo "✗ FLOW76_REDINTENT 未通过(FG1 敌方的意图不上图:非 GM 下实况红舰的目的地线不许画(我方的与 GM 下的照画);来袭导弹的来源线起点只许用我方知道的事——射手没定位就从导弹首见位置画起、定位了从估计位置画起,不许直接指到射手的真实坐标上)"; fail=1; }
 grep -q "FLOW70_TOOLSPOS=ok" "$OUT" || { echo "✗ FLOW70_TOOLSPOS 未通过(UI2 右下角工具栏:必须贴画面右边距、整个在事件窗【下面】而不是左边、不压底部指令栏;两个工具钮是图标钮(行内 svg + aria-label),点在图标子元素上也要切得动)"; fail=1; }
 grep -q "FLOW69_TIERLAND=ok" "$OUT" || { echo "✗ FLOW69_TIERLAND 未通过(SN9b 层界与落点必须出自同一块画布:三种画布 x 从每一层出发 x 按每一个跳层钮,落地后离散层 / 亮着的钮 / 画法权重都必须属于目的层,且不看来路;层界必须随画布短边变 —— 冻在加载期的 750px 上就是「按了战区、亮的还是舰队」)"; fail=1; }
 grep -q "FLOW68_HULLSIZE=ok" "$OUT" || { echo "✗ FLOW68_HULLSIZE 未通过(SN9 舰体大小随缩放变:① 系数 = (缩放/战术落点)^A 钳在 [MIN,MAX],落点上恰为 1、全程单调不跳、CA 最大不超过 48px;② 舰体 / 残骸 / 图标半径 / 尾焰 / 告警圈 / 锁定圈 / 移动虚影 全跟同一个数;③ 系数不读任何一艘船的字段——没认出的敌舰照旧 UNK+T2、与我方同系数;④ 锚点从视口现量,不写死公里数)"; fail=1; }

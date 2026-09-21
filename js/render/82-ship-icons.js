@@ -221,7 +221,11 @@ function drawShip(s){
   }
   // 当前目标连线。FM2:每艘船(散船/旗舰/僚舰)都持有自己的令,所以这里【只读自己的 orders】——
   // FM1 那段"僚舰去读旗舰 orders 再叠自己的阵位偏移"的特例整体删除,编队的每个终点现在天然各画各的。
-  const tgtOrd=s.orders.length?s.orders[0]:null;
+  /* FG1(2026-09-21,用户实报"我应该不能看到敌方的目标线和目的地线才对"):这条连线只画【我方】的船(GM 下照旧全画)。
+     红舰被定位之后,它此刻在哪我确实知道,但它【接下来要去哪】永远不该知道 —— 与 SN6e 堵掉的速度箭头 / 尾焰 / 朝向同类,
+     那一轮只堵了陈旧与失联两档,实况这一档漏了(todo-plan 2.11 F5 记过)。AI1 之后它更要命:红方的去向 = 它对你位置的【信念】,
+     画出来等于把"敌人以为我在哪"直接告诉玩家。口径与 83-hud 的 drawOrders / drawLocks 首行一致。 */
+  const tgtOrd=(s.orders.length&&(s.side==='blue'||adminMode))?s.orders[0]:null;
   if(tgtOrd){
     const isPass=tgtOrd.type==='pass';
     const q=toScreen(tgtOrd.pos[0],tgtOrd.pos[1]);
