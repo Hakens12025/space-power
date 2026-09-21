@@ -120,14 +120,16 @@ function camJump(t) {
      第一版挂在 vtFrame 的"离散层变了"那一处,两种情形都会弹。
      同层再按一次(只是把镜头摆回落点)不算换挡,不弹。 */
   if (t !== vtCur) {
-    const now0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const now0 = nowMs();
     VT_FX = { t0: now0, tier: t, up: t > vtCur };
     VT_RULER_T0 = now0;
   }
   const c = vtCentroid('blue') || [cam.x, cam.y];
-  const sel = (selected.length && typeof byId === 'function') ? byId(selected[0]) : null;
+  /* R2(2026-09-21 全库审查):这里原来写的是 typeof byId === 'function' ? byId(...) —— 而 byId 全库没有声明,守卫恒假,
+     "战术 / 舰队层跳到选中舰"这条自 SN6 起从来没生效过,一直静默走重心。verify.sh 现在有一条机械检查钉着"被守卫的符号必须存在"。 */
+  const sel = selected.length ? (ships.find(x => x.id === selected[0] && !x.dead && x.side === 'blue') || null) : null;
   const to = (t === 3 || !sel) ? c : [sel.pos[0], sel.pos[1]];
-  vtAnim = { k0: cam.zoom, k1: vtClampK(1 / vtFitKmpp(vtMainR(t), VT.LAND)), x0: cam.x, y0: cam.y, x1: to[0], y1: to[1], t0: (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(), dur: 420 };   // SN8:340 → 420,过冲要有地方坐回来
+  vtAnim = { k0: cam.zoom, k1: vtClampK(1 / vtFitKmpp(vtMainR(t), VT.LAND)), x0: cam.x, y0: cam.y, x1: to[0], y1: to[1], t0: nowMs(), dur: 420 };   // SN8:340 → 420,过冲要有地方坐回来
 }
 /* 缩放在【对数空间】里走才是匀速的(每一瞬放大同样的倍数);线性插 k 会开头一晃、后面磨蹭。
    ⚠ 走【墙钟】不走 simTime:它是镜头不是模拟,倍速一提不该跟着提(同 RF7e 的告警脉冲)。 */
@@ -149,7 +151,7 @@ function vtFrame() {
   if (vtShort() !== _vtShortAt) vtApply();   // SN9b 画布短边变了(含开局第一次量到真实尺寸)⇒ 层界跟着落点一起重推
   const jumping = !!vtAnim;            // 要在推进动画【之前】记:动画走完的那一帧 vtAnim 会被清掉,而那一帧的换层仍然属于这次跳层
   if (vtAnim) {
-    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const now = nowMs();
     camAnimStep((now - vtAnim.t0) / vtAnim.dur);
   }
   camZoomStep();                       // SN6b 平滑缩放:滚轮只改目标,这里每帧推一步(它自己会给跳层动画让位)
@@ -161,7 +163,7 @@ function vtFrame() {
     /* SN8b 这里【不再】触发换挡大字(见 camJump)。手动缩放跨层时只让四边刻度尺重新长一次 —— 它的单位真的换了(公里 ↔ 光秒),
        长出来是在说这件事,不是在"弹特效"。跳层途中路过的层不算(jumping):刻度尺在起跳那一刻已经长过了。
        开局那一次(vtShown 还是 0)也不算。 */
-    if (vtShown !== 0 && !jumping) VT_RULER_T0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    if (vtShown !== 0 && !jumping) VT_RULER_T0 = nowMs();
     vtShown = vtCur;
     const tag = document.getElementById('mapTag');
     if (tag) tag.innerHTML = VT.NAME[vtCur] + '<b>' + VT.EN[vtCur] + '</b>';
@@ -182,7 +184,7 @@ function vtFrame() {
 let VT_FX = { t0: -1e9, tier: 0, up: true };
 let VT_RULER_T0 = -1e9;                // 四边刻度尺上一次"重新长出来"的起点。与大字分开记:两者的触发条件不一样(SN8b)
 const VT_FX_MS = 700, VT_RULER_MS = 450;
-const _vtNow = nowIn => isFinite(nowIn) ? nowIn : ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now());
+const _vtNow = nowIn => isFinite(nowIn) ? nowIn : (nowMs());
 function drawEdgeRuler(nowIn) {
   const f0 = Math.max(0, Math.min(1, (_vtNow(nowIn) - VT_RULER_T0) / VT_RULER_MS)), f = 1 - Math.pow(1 - f0, 3);   // 换层后刻度重新长出来
   if (f <= 0) return 0;

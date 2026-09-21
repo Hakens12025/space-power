@@ -5,7 +5,6 @@ let shipSeq=0;
 const CLS_NAME={DD:'巴黎级驱逐舰 (Paris)',CA:'马拉松级巡洋舰 (Marathon)',BB:'战列舰 (BB)',CV:'航母 (CV)'}; // TIER1 4 舰种级名;BB/CV 是临时文案 TODO(NAME) 待定级名(会直接显示在 info 面板与编辑器菜单上)
 const CLS_ALIAS={CRUISER:'CA',FRIGATE:'DD',SCOUT:'DD'}; // TIER1 旧舰种名别名:全库唯一保留旧名的地方,只服务 localStorage 的 sp_custom_scene 与旧导出场景(SCOUT 按拍板折进 DD)
 function normCls(c){return CLS_ALIAS[c]||(CLS_MOB[c]?c:'DD');} // TIER1 舰种归一化:只在 makeShip 运行期调用,不在顶层求值,故不受同文件里 CLS_MOB 定义靠后的影响
-const SPEED_NAMES={0:'停',250:'慢速',500:'中等',800:'高速','-1':'不限速'};
 const CLS_MOB={ // 舰种差异化机动:转向率 / 推进加速度(太空无速度上限,持续加速) v119:drift参数已随旧内核删除
   DD:{turnRate:0.26,thrust:20,speedGears:[0,250,500,800,-1]}, // TIER1 原 FRIGATE 巴黎级:均衡(基准档),数值原样搬;SCOUT 折进 DD,其 0.4/25/[0,300,600,1000] 一并退役
   CA:{turnRate:0.16,thrust:15,speedGears:[0,200,400,700,-1]}, // TIER1 原 CRUISER 马拉松级:重,加速适中;DS148速度档按舰种(巡洋偏慢)

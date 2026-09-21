@@ -79,7 +79,7 @@ function geomSubject() {
     if (h) return { t: h, why: '悬停' };
   }
   if (GEOM.pin) {
-    const p = ships.find(x => x.id === GEOM.pin);
+    const p = shipById(GEOM.pin);
     /* 「此刻显示不显示」与「清不清常驻」是两个判据。只有死了 / 彻底失联(none)才清;
        退回热区只是【暂时不显示】—— 第一版一退成热区就永久清掉,重新定位之后小窗不回来。 */
     if (!p || p.dead || p.side !== 'red' || (!gm && typeof contactState === 'function' && contactState(p, 'blue') === 'none')) GEOM.pin = null;

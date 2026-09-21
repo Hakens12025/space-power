@@ -598,10 +598,10 @@ function drawHoverRings(){
   const ids=selected.slice(); // RF5 Phase C:轮盘 hover 扇区画的射程圈属于【序列属主】,它未必在 selected 里(轮盘开着时玩家仍可改选/取消选中,74 与 89 都已改成认序列属主)。不并进来的话 hover 扇区一个圈都不画
   if(typeof rad!=='undefined'&&rad&&rad.open&&typeof radSubject==='function'){const rs=radSubject();if(rs&&!rs.dead&&ids.indexOf(rs.id)<0)ids.push(rs.id);}
   for(const id of ids){
-    const s=ships.find(x=>x.id===id);if(!s||s.dead||s.side!=='blue')continue;
+    const s=shipById(id);if(!s||s.dead||s.side!=='blue')continue;
     const p=toScreen(s.pos[0],s.pos[1]);
-    if(hoverRing==='mac'){const e=(typeof macEffRange==='function')?macEffRange(s):(s.macRange||150000);ring(p,e,'主炮 '+Math.round(e/1000)+'k'+(s.emitMode==='paint'?'(照射)':'(未照射)'));} // RF3 射程读烘焙字段(定义在 weapons/51-defs);RF6 改画【精确射程】,圈外到 ×MAC_FALLOFF 之间是衰减区,故意不画第二个圈——两个同心圈在战术图上读不出主次。SN4:后缀改读 emitMode,与 macEffRange 的新口径(paint→macRadar / 否则 macRange,二选一不取 max)同源
-    else if(hoverRing==='msl')ring(p,s.mslRange||350000,'导弹 '+Math.round((s.mslRange||350000)/1000)+'k');
+    if(hoverRing==='mac'){const e=(typeof macEffRange==='function')?macEffRange(s):(s.macRange);ring(p,e,'主炮 '+Math.round(e/1000)+'k'+(s.emitMode==='paint'?'(照射)':'(未照射)'));} // RF3 射程读烘焙字段(定义在 weapons/51-defs);RF6 改画【精确射程】,圈外到 ×MAC_FALLOFF 之间是衰减区,故意不画第二个圈——两个同心圈在战术图上读不出主次。SN4:后缀改读 emitMode,与 macEffRange 的新口径(paint→macRadar / 否则 macRange,二选一不取 max)同源
+    else if(hoverRing==='msl')ring(p,s.mslRange,'导弹 '+Math.round((s.mslRange)/1000)+'k');
     else if(hoverRing==='ciws'){const c=ciwsOf(s);ring(p,c.outer,'外圈拦截 '+Math.round(c.outer/1000)+'k');ring(p,c.inner,'内圈 '+Math.round(c.inner/1000)+'k');}
   }
 }
@@ -632,7 +632,7 @@ function drawTargeting(){
   if(tgt){
     const p=toScreen(sub.pos[0],sub.pos[1]),q=toScreen(tgt.pos[0],tgt.pos[1]);
     // RF5 预览线按射程着色:缺省全武器许可,取射程最远那口(导弹)。射程【只】读实例烘焙字段(RF3,定义在 weapons/51-defs),不写字面量兜底——
-    // 上面 drawHoverRings 的 `s.mslRange||350000` 是 RF2/RF3 遗留写法,照抄会把烘不出导弹的舰(mslRange 缺失/为 0)当成一门 35 万射程的导弹,预览线照样着成活跃色,给出"这个目标打得着"的假象。
+    // 上面 drawHoverRings 的 `s.mslRange` 是 RF2/RF3 遗留写法,照抄会把烘不出导弹的舰(mslRange 缺失/为 0)当成一门 35 万射程的导弹,预览线照样着成活跃色,给出"这个目标打得着"的假象。
     const R=sub.mslRange||0; // 无导弹语义显式化:R=0 一律画超程暗色
     const inR=R>0&&V.len(V.sub(tgt.pos,sub.pos))<=R; // 判据是世界距离而非屏幕距离(屏幕距离随 zoom 变,同一目标会时内时外)
     ctx.globalAlpha=inR?.75:.55; // 半透明一律 globalAlpha+rgba,全程只有 stroke/arc:每帧路径禁 shadowBlur/createRadialGradient
@@ -695,7 +695,7 @@ function drawGhost(){ // RF11 移动虚影;RF12 拆成【已下达的到达朝�
   }
   // (2) 实时层:右键长按调整中,朝向随鼠标转,附预演航线
   if(typeof ghostMove==='undefined'||!ghostMove)return;
-  const s=(typeof ships!=='undefined')?ships.find(x=>x.id===ghostMove.id):null;
+  const s=(typeof ships!=='undefined')?shipById(ghostMove.id):null;
   if(!s||s.dead)return; // 船没了就不画(清账在 70-input 的 blur/mouseup)
   /* FM6 编队虚影:整支编队一起画。落地走的是 fmMoveTo(把编队级目标点展开成每艘船的绝对终点),
      所以这里也必须【按同一套几何】把每艘船画在它自己的终点上 —— 只画旗舰一个船影的话,
@@ -731,7 +731,7 @@ const FOL_FLOW_PXPS=22;                                 // 流动速度(像素/�
 function drawFollowLinks(){
   if(typeof followTargetOf!=='function')return;         // 41-follow 缺席时整段静默(typeof 守卫口径同 drawRadial)
   if(!selected||!selected.length)return;
-  const tms=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+  const tms=nowMs();
   const off=-(tms*0.001*FOL_FLOW_PXPS)%FOL_FLOW_PERIOD;
   let began=false;
   for(const s of ships){
@@ -770,7 +770,7 @@ function drawFcChain(){ // RF7 火控序列态的数据链(蓝色铁路线):主�
   //    用墙钟不用 simTime:这是命令可视化不是模拟实体,暂停时该继续流动(与准星停留门同一口径),x50 倍速下也不该变成频闪。
   //    暂停的序列不流动 —— "在但不参与解算"要一眼看出来,静止本身就是最清楚的表达。
   if(!q.paused){
-    const tms=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+    const tms=nowMs();
     ctx.globalAlpha=.85;ctx.lineWidth=1.6;
     ctx.setLineDash(FC_FLOW_DASH);
     ctx.lineDashOffset=-(tms*0.001*FC_FLOW_PXPS)%FC_FLOW_PERIOD;

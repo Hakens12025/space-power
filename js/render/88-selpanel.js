@@ -7,6 +7,7 @@
    武器开关=macOn/mslOn/ciwsOn(按 kind 映射)。操作作用于【全部选中蓝舰】,状态读第一艘。
    事件流:86-log 的 log() 末尾 typeof 守卫调 pushEvt(最近5条)。 */
 let selEvts=[]; // 最近5条事件 {t:'mm:ss',msg,cls}
+if(typeof onLog==='function')onLog(function(m,c){pushEvt(m,c);}); // R3 右轨事件流自己订阅日志(原来靠 86-log 末尾转发)。包一层是为了走【当前】的 pushEvt 绑定 —— 判据会临时换掉它来截消息
 function pushEvt(msg,cls){ // 事件流写入点(86-log 调;不持久化,换局由 initFleet 全量重置语义顺带处理——面板每次全量重渲)
   const mm=String(Math.floor(simTime/60)).padStart(2,'0'),ss=String(Math.floor(simTime%60)).padStart(2,'0');
   selEvts.push({t:`${mm}:${ss}`,msg,cls});
@@ -21,13 +22,13 @@ const KIND_INFO={
   // maxRange=【硬上限】(门控用,超出它 fireMAC 静默拒发)。两者之间是射程外衰减区:能打、但散布随距离增长。
   // 无衰减机制的武器不写 maxRange,下游一律 `maxRange?maxRange(s):range(s)` 回退,语义不变。
   mac:{on:'macOn',
-    range:s=>(typeof macEffRange==='function')?macEffRange(s):(s.macRange||150000),
-    maxRange:s=>((typeof macEffRange==='function')?macEffRange(s):(s.macRange||150000))*((typeof MAC_FALLOFF==='number')?MAC_FALLOFF:1),
-    tip:s=>{const e=(typeof macEffRange==='function')?macEffRange(s):(s.macRange||150000);
+    range:s=>(typeof macEffRange==='function')?macEffRange(s):(s.macRange),
+    maxRange:s=>((typeof macEffRange==='function')?macEffRange(s):(s.macRange))*((typeof MAC_FALLOFF==='number')?MAC_FALLOFF:1),
+    tip:s=>{const e=(typeof macEffRange==='function')?macEffRange(s):(s.macRange);
       return `MAC轴炮 · 精确射程${Math.round(e/1000)}k${s.emitMode==='paint'?'(照射顶上)':'(未照射)'} · 衰减至${Math.round(e*((typeof MAC_FALLOFF==='number')?MAC_FALLOFF:1)/1000)}k · 伤害${s.macDmg||0} · 装填${Math.round(s.macReload||30)}s · 需火控开+机头对准`;}}, // SN4:后缀改读 emitMode —— macEffRange 已改成 paint→macRadar / 否则 macRange 的二选一(前提 9,不再与感知量程取 max)
   msl:{on:'mslOn',
-    range:s=>s.mslRange||350000,
-    tip:s=>`导弹齐射 · 射程${Math.round((s.mslRange||350000)/1000)}k · 每组${s.mslPer||12}枚×${s.cells||4}单元 · 单元装填${s.mslReload||60}s · 需火控开+目标识别级`},
+    range:s=>s.mslRange,
+    tip:s=>`导弹齐射 · 射程${Math.round((s.mslRange)/1000)}k · 每组${s.mslPer||12}枚×${s.cells||4}单元 · 单元装填${s.mslReload||60}s · 需火控开+目标识别级`},
   ciws:{on:'ciwsOn',
     range:s=>ciwsOf(s).outer,
     tip:s=>{const c=ciwsOf(s);return `近防 · 外圈${Math.round(c.outer/1000)}k拦截弹 · 内圈${Math.round(c.inner/1000)}k近防炮 · 库存${s.interceptor}枚(被动防御,来袭才发射)`;}},

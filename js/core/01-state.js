@@ -52,5 +52,6 @@ let cv,ctx; // RF1 收编自 09-render-bg.js:全局 canvas 句柄(声明集中�
 let adminMode=false;
 let selfPlay=false; // 左右脑互搏模式(v124):关敌军AI,双方全玩家操控(自身强制GM全显)。RF1 收编自 18-replay.js
 let selfPlayPrevAdmin=true; // KIMI146:进入互搏前的GM状态(关闭时还原,原永久留在GM全显)。RF1 收编自 18-replay.js
+function shipById(id){for(let i=0;i<ships.length;i++)if(ships[i].id===id)return ships[i];return undefined;} // R7 按 id 查舰的唯一入口(原来 ships.find(x=>x.id===…) 各写各的有 21 处)。今天是线性查找,舰多了要建索引时只改这一处
 let SIMPLE_UI=true;  // RF2 简化UI总开关:隐藏旧面板/停用右键菜单(藏不删,复活=置 false + 删 css RF2 隐藏节)
 let hoverRing=null;  // RF2 底栏武器钮 hover 时给选中舰画射程圈:'mac'|'msl'|'ciws'(83-hud drawHoverRings 读)

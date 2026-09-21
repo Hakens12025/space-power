@@ -20,7 +20,7 @@ function renderFleet(){
     const nm=document.createElement('span');nm.className='nm';nm.textContent=s.name;
     const st=document.createElement('span');st.className='st';st.textContent=shipState(s);
     c.appendChild(dot);c.appendChild(nm);
-    if(s.side!=='red'||adminMode||s.litBlue>=2){ // TIER1 分级徽标 + 识别级门控:未达识别级(litBlue<2)的敌舰不能从舰队列表把分级漏出去,口径必须与 10b shipIdentTier 的图标遮蔽一致,否则堵了图标却从列表泄漏
+    if(s.side!=='red'||adminMode||contactIdn(s,'blue')){ // ID1:身份问 sensors/21 的 contactIdn(原判据 litBlue>=2)。TIER1 分级徽标 + 识别级门控:未达识别级(litBlue<2)的敌舰不能从舰队列表把分级漏出去,口径必须与 10b shipIdentTier 的图标遮蔽一致,否则堵了图标却从列表泄漏
       const tg=document.createElement('span');tg.textContent=TIER_LABEL[s.tier]||'';
       tg.style.cssText='font-size:10px;color:var(--dim);flex:none;letter-spacing:0.5px'; // 内联样式,不动 css/app.css
       c.appendChild(tg);
@@ -287,7 +287,7 @@ function updateInfo(){
 }
 function updateCardsStatus(){
   if(typeof updQbarSensors==='function')updQbarSensors(); // 快捷栏LADAR按钮状态刷新
-  for(const id in shipCards){const s=ships.find(x=>x.id===id);if(!s)continue;const c=shipCards[id];
+  for(const id in shipCards){const s=shipById(id);if(!s)continue;const c=shipCards[id];
     const st=shipState(s);
     const tk=[...tasks.values()].find(t=>t.ships.includes(id)); // DS150:任务标签(🔄巡逻/🏹拦截/🛡护航/⚔打击/✋拒止;暂停⏸)
     c.stEl.textContent=(tk?(tk.state==='active'?taskIcon(tk.type):'⏸')+' ':'')+(s.driftFire&&s.driftFireT>0?'🎯'+Math.ceil(s.driftFireT)+'s ':'')+st; // DS171 M3:漂移射击倒计时标签

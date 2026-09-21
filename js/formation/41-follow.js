@@ -35,7 +35,7 @@ function followClear(s) { if (s) s.follow = null; }
 function followTargetOf(s) { // id → 舰对象。目标不存在/已阵亡都返回 null(悬空引用的唯一防线)
   const f = s && s.follow;
   if (!f) return null;
-  const t = ships.find(x => x.id === f.tid);
+  const t = shipById(f.tid);
   return (t && !t.dead && t !== s) ? t : null;
 }
 

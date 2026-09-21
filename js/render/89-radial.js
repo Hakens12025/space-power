@@ -31,7 +31,6 @@ const RAD_FADE=Math.PI/60;   // 3.000° 断口两端描边 alpha 渐隐范围(RF
 const RAD_SEAM=Math.PI/150;  // 1.200° 相邻扇区绘制时各自内缩的缝(纯视觉;命中测试【不】内缩,否则留 1.2° 死区,点在缝上没反应这种 bug 极难复现)
 const RAD_CAP=6;             // 单侧扇区容量,超出翻页
 const RAD_WHEEL_PAD=8;       // 滚轮/左键路由的宽容量(px)
-let _radNameCache={k:'',w:[],tot:0}; // 89 私有:弧字逐字符宽度缓存(key=文本+字号)。89 每帧跑,逐字 measureText 是白烧
 
 /* ---------------- 分页:89 内部唯一的分页真相 ---------------- */
 function radPages(){ // RF5 契约外补的第四个导出:74 的 radMaxPage(74:185)要 clamp 就必须知道总页数,而容量常量只能住在这里
@@ -80,7 +79,7 @@ function radModes(){ // RF5 行动模式表【单一真相】= 74 的 RAD_MODES(
 function radTargetShip(){ // RF5 rad.tid 存 id 不存引用(目标可能中途死亡/被换局重建)
   if(typeof rad==='undefined'||!rad||!rad.tid)return null;
   if(typeof fcShip==='function')return fcShip(rad.tid);
-  if(typeof ships!=='undefined')return ships.find(x=>x.id===rad.tid)||null;
+  if(typeof ships!=='undefined')return shipById(rad.tid)||null;
   return null;
 }
 /* ---------------- 单个武器项对当前目标的解算 ----------------
@@ -135,34 +134,6 @@ function radArcFade(cx,cy,r,a0,a1,col,lw){ // 两端各 RAD_FADE 内 alpha 1→0
     ctx.beginPath();ctx.arc(cx,cy,r,a1-RAD_FADE*(k+1)/N,a1-RAD_FADE*k/N);ctx.stroke();
   }
   ctx.globalAlpha=1;
-}
-/* 弧线文字:canvas 2D 没有原生弧字,只能逐字符 translate/rotate/fillText。
-   方向与朝向一错就是上下颠倒,所以把推导钉死:局部 +x 是前进方向、局部 -y 是字头。
-   ctx.rotate(a + dir*π/2):dir=+1 沿角递增前进且【字头朝外】(标准圆形徽章那种);dir=-1 沿角递减前进且【字头朝内】。
-   验算(正左 a=π、dir=+1):θ=3π/2,局部 (0,-1) 经旋转 → (sinθ,-cosθ) = (-1,0) = 屏幕左 = 外法线方向 ✓,
-   局部 (1,0) → (cosθ,sinθ) = (0,-1) = 屏幕上,故左侧从下往上读。 */
-function radArcText(txt,cx,cy,r,midA,dir,size,col){
-  if(!txt)return;
-  ctx.save();
-  ctx.font=size+'px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=col;
-  const chars=[...String(txt)],key=txt+'|'+size;
-  if(_radNameCache.k!==key){ // 名字/字号没变就不重新量
-    const w=chars.map(c=>ctx.measureText(c).width);
-    _radNameCache={k:key,w:w,tot:w.reduce((p,q)=>p+q,0)};
-  }
-  const w=_radNameCache.w,tot=_radNameCache.tot;
-  let a=midA-dir*(tot/2)/r; // 弧长/半径 = 弧度;把整串居中在 midA
-  chars.forEach((ch,i)=>{
-    const half=((w[i]||size)/2)/r;
-    a+=dir*half;
-    ctx.save();
-    ctx.translate(cx+Math.cos(a)*r,cy+Math.sin(a)*r);
-    ctx.rotate(a+dir*Math.PI/2); // ← 唯一容易搞反的一行,改它之前先在纸上验一次上面那条
-    ctx.fillText(ch,0,0);
-    ctx.restore();
-    a+=dir*half;
-  });
-  ctx.restore();
 }
 /* 三格状态方块 [射程][就绪][接触]:5×5px、7px 节距、总宽 19px —— 19px 在满容量 46px 的扇区里也塞得下,
    这是它能对抗角宽塌缩的唯一原因。实心/空心与颜色【双编码】,承载完全相同的信息(满足=实心),色盲读形状即可。 */
@@ -234,7 +205,7 @@ function drawRadial(){
        原先只有一条弧字(序列名,11px 且字符旋转成字头朝圆心)在担这件事,1:1 下要放大 8 倍才认得全五个字,
        实测读到的印象是"四个并列的菜单项,左边两个颜色不一样",而不是两个不同作用域。横排比弧字好读一个数量级,
        且左右对照着放,范围差别一眼就出来 —— 这一层比"更暗/更窄/换色相"那三层加起来都管用。
-       radArcText / _radNameCache 自此没有调用点(保留未删,见 CLAUDE.md 的 RF5 备忘)。 */
+       那条弧字函数与它的逐字宽度缓存自此没有调用点,R5(2026-09-21 全库审查)已删。 */
     const vw=(typeof W==='number'&&W)?W:window.innerWidth;
     ctx.font='11px "Microsoft YaHei"';
     const wl=Math.max(ctx.measureText('行动模式').width,ctx.measureText('整条序列 '+(rad.seqName||'')).width);

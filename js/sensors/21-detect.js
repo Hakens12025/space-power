@@ -148,6 +148,19 @@ function emitLabel(mode){ // UI 文案的【唯一】出处:右栏 / 底栏 / �
 }
 
 /* ================= 接触情报的对外查询(语义不变) ================= */
+/* ID1(2026-09-21 全库审查 R1)接触的【身份】:我方有没有认出这艘船。全库唯一出处 —— 与 contactPos / contactState 是一家。
+   标准模型里航迹质量(等级)与识别(身份)是两个独立属性,内核也是这么做的(cov.idn:哪条通道在识别距离之内就锁存,接触丢了才清);
+   可显示层此前一直拿【等级】当身份用(lit===1 才打码、lit>=2 就给轮廓 / 真名 / 分级)—— 那是 SN4 驻留模型留下来的说法,当时第 2 级就叫"识别级"。
+   后果是梯子上"认出"那一级在引擎里是死的:CA 照一艘 DD,跟踪级(lit2)的门在 43.5 万,认出要到 15.1 万(雷达)/ 9.4 万(光学),
+   中间那 28 万公里里玩家白拿了舰种、舰名和分级,"贴近才认得出"这条玩法不存在;同一艘船在聚合框里(它读的是 idn)却记成"?"。
+   自己这一方的船恒为已识别。 */
+function litOf(s,side){return (side==='blue'?s.litBlue:s.litRed)||0;} // R7 某一方对这艘船握着的接触等级(0..3)。原来 side==='blue'?x.litBlue:x.litRed 这个三元各写各的
+function contactIdn(s,side){
+  if(!s)return false;
+  if(s.side===side)return true;
+  const c=side==='blue'?s.covB:s.covR,lit=side==='blue'?s.litBlue:s.litRed;
+  return !!(lit>0&&c&&c.idn);
+}
 function sigClassLabel(s){ // 探测级(等级 1)只看得出信号有多大 → 大/中/小;识别级(2+)才知道舰种
   const sz=sReq(s,'size','ship'); // SN4:旧的船体信号字段已删,改读 size —— 两张表的数值逐位相同(DD 0.70 / CA 1.00),所以下面三档阈值一个字不动。新模型里 size 同时喂光学亮度与雷达反射,"大船两头都显眼",这一档情报因此比改前更有分量
   if(sz>=0.9)return '▣ 大型热源';

@@ -13,7 +13,6 @@ CLS_TIER_MUL
 CLS_VALUE
 CONTACT_GHOST_TTL
 CONTACT_MARK_R
-CORNER_K
 COV
 C_LS
 DEFAULT_ENEMY
@@ -90,6 +89,7 @@ LAD
 LADAR_WARN_W
 LIT_RGB
 LOD
+LOG_SUBS
 MAC_FALLOFF
 MAC_SPREAD_CAP
 MAC_SPREAD_K
@@ -139,7 +139,6 @@ SIG_FADE
 SIMPLE_UI
 SPD_UNCAP
 SPEC_TEXT
-SPEED_NAMES
 SPWN
 STAR_DRIFT
 STAR_TILE
@@ -169,7 +168,6 @@ ZOOM_TAU
 _gs
 _ink
 _mod
-_radNameCache
 _vtNow
 _vtShortAt
 _zNow
@@ -211,6 +209,7 @@ ciwsSectorOverload
 clearPendings
 cmdList
 contactAge
+contactIdn
 contactPos
 contactState
 controlledShips
@@ -538,6 +537,7 @@ lastDigit
 launchBeacon
 launchInterceptors
 layoutNetMines
+litOf
 litTag
 loadBindings
 loadCamMult
@@ -553,6 +553,7 @@ lodNow
 lodPrev
 log
 logBody
+logDom
 macAligned
 macEffRange
 macPred
@@ -564,6 +565,13 @@ matchIsOn
 matchPlaceRed
 matchSync
 matchTick
+mdEditor
+mdLeft
+mdMiddle
+mdPending
+mdRadial
+mdRight
+mdWeaponPick
 missSee
 missileGroupSeq
 missileMode
@@ -582,8 +590,10 @@ newCov
 newRangeStat
 nextSnapT
 normCls
+nowMs
 on
 onContextMenu
+onLog
 onMouseDown
 onWheel
 openCardCtx
@@ -626,7 +636,6 @@ qSpdBtns
 r
 rad
 radArcFade
-radArcText
 radCap
 radCenter
 radClose
@@ -781,6 +790,7 @@ setEnemyBehavior
 setHTMLStable
 shipAction
 shipAt
+shipById
 shipCards
 shipHull
 shipIconR
@@ -831,7 +841,6 @@ stepSim
 stepWeaponSystems
 targetAt
 taskCanOrder
-taskCancel
 taskCreate
 taskIcon
 taskOf

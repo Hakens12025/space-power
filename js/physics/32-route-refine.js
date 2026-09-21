@@ -168,7 +168,7 @@ function rrTick() {
   rrBusy = true;
   try {
     const job = rrJobs[0];
-    const ship = ships.find(x => x.id === job.shipId);
+    const ship = shipById(job.shipId);
     if (!ship || ship.dead || !ship.orders || ship.orders.length > job.ordersLen) { rrJobs.shift(); return; }
     rrSandbox(ship, null, job.st.dt, RR_BUDGET, job.st);
     if (!job.st.done) return;                    // 这一趟还没跑完,下一帧接着跑

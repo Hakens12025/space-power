@@ -10,13 +10,14 @@ const CLS_HULL={DD:'DD',CA:'CA',BB:'BB',CV:'CV'};
 function shipHull(s){return CLS_HULL[s.cls]||'DD';}
 function shipTier(s){return s.tier||2;}                       // 未标 Tier 的舰按 T2(中性尺寸/亮度)
 function shipIdentHull(s){                                    // 识别分层:未达识别级的敌舰只给通用轮廓
-  const q=s.side==='red'?s.litBlue:3;
-  return (s.side==='red'&&q===1)?'UNK':shipHull(s);
+  // ID1:打码条件从"等级恰为 1"换成"握着接触(lit>0)但还没认出"—— 身份问 sensors/21 的 contactIdn,不再从等级推。
+  //      lit===0 那一档原样不打码(改前的 q===0 分支):编辑器与 GM 下画的是没有接触的红舰,那里要看真轮廓;非 GM 下 lit=0 的船根本不画舰体。
+  return (s.side==='red'&&(s.litBlue||0)>0&&!contactIdn(s,'blue'))?'UNK':shipHull(s);
 }
 function shipIdentTier(s){                                    // TIER1 分级遮蔽:轮廓已被降级成 UNK 的敌舰(未达识别级)一律按 T2 尺寸画
   // TIER1 判据用 litBlue<2 而不是 shipIdentHull(s)==='UNK':幽灵接触(曾点亮、现已失联,litBlue=0)走的是 q===0 分支,轮廓不会被降级成 UNK,
   // 于是尺寸也跟着按真实 tier 画,分级照漏。轮廓层的幽灵泄漏是拆分前就有的既有行为(残影保留舰型),本次不动它,只堵本轮 tier 带出来的这一半。
-  return (s.side==='red'&&(s.litBlue||0)<2)?2:shipTier(s);
+  return (s.side==='red'&&!contactIdn(s,'blue'))?2:shipTier(s); // ID1:原判据 litBlue<2;现在没认出一律 T2(lit=0 时 contactIdn 恒 false,与原来那一档逐位相同)
 }
 /* ================= SN9 舰体大小随缩放变(2026-09-21)=================
    用户实报:"拉近了船不变大,拉远了船不变小,没有办法做出很直观的空间关系"。改前舰体是固定屏幕尺寸的贴纸,地图在它底下滑。
@@ -126,7 +127,7 @@ function drawShip(s){
       // RF7e 相位改挂【墙钟】,原来挂 simTime。simTime 按倍速推进(core/99 的 acc+=dt*rate),于是倍速一提闪烁跟着提:
       // x50 下每帧相位推进约 5 弧度,远超 60fps 的采样极限,呼吸退化成高频乱闪——这就是"闪动频率随时间越来越快"的来源。
       // 告警圈是给人看的 UI 指示,不是模拟实体,理应恒定 1 次/秒左右,与数据链流动(83-hud FC_FLOW)、准星停留门同一口径。
-      const twms=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+      const twms=nowMs();
       const pulse=0.45+0.35*Math.abs(Math.sin(twms*0.001*LADAR_WARN_W));
       ctx.save();
       ctx.strokeStyle=`rgba(255,209,102,${pulse})`;ctx.lineWidth=1.5;
@@ -194,7 +195,7 @@ function drawShip(s){
   // 名称(识别分层:探测级显示"大/中/小热源",识别级显示舰种名)
   const foeLit=(s.side==='red'&&!editMode)?(s.litBlue||0):0;
   if(cam.zoom>0.0008){
-    const lbl=(s.side==='red'&&identQ===1)?sigClassLabel(s):s.name;
+    const lbl=(shipIdentHull(s)==='UNK')?sigClassLabel(s):s.name; // ID1:名字与轮廓同一个口径 —— 轮廓打码了,名字就不许是真名(原来各判各的:identQ===1)
     ctx.fillStyle='rgba(215,226,240,.8)';ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';
     ctx.fillText(lbl,p[0],p[1]+r+6);
   }

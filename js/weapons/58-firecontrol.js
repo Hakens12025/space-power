@@ -164,7 +164,7 @@ function fcGate(s,it,kind){ // RF5 单个目标项对某类武器的全部门:�
   if(!it||!it.allow||!it.allow[kind])return null;
   if(!it.tid&&it.pt){ // 指定点:fireMAC 要算提前量、必须有舰目标,所以指定点只对导弹有效
     if(kind!=='msl')return null;
-    if(V.len(V.sub(it.pt,s.pos))>=(s.mslRange||350000))return null; // 空地没有阵营也没有接触等级,只剩射程这一道门
+    if(V.len(V.sub(it.pt,s.pos))>=(s.mslRange))return null; // 空地没有阵营也没有接触等级,只剩射程这一道门
     return {pos:it.pt}; // orderMissileSalvo / fireMissiles 的第二参本来就接受 {pos}(区域齐射);共享 it.pt 数组,Post 段按引用回找记账
   }
   const t=fcShip(it.tid);
@@ -174,10 +174,10 @@ function fcGate(s,it,kind){ // RF5 单个目标项对某类武器的全部门:�
     if(lit<3)return null; // 与 fireMAC 内部 q<3 同一口径:MAC 是解算武器,要火控级(主动 LADAR 测距测速)才算得出提前量
     // RF6 门控比的是【硬上限】不是精确射程:精确射程到硬上限之间是射程外衰减区,能打(散布变大)。
     // 这里若改回比精确射程,序列就拒绝往衰减区下令,而 fireMAC 与敌AI 照打——又变成"扇区说打不到、引擎照打"的两份口径。
-    if(V.len(V.sub(t.pos,s.pos))>=((typeof macEffRange==='function')?macEffRange(s)*MAC_FALLOFF:(s.macRange||150000)))return null;
+    if(V.len(V.sub(t.pos,s.pos))>=((typeof macEffRange==='function')?macEffRange(s)*MAC_FALLOFF:(s.macRange)))return null;
   }else{
     if(lit<2)return null; // 与 orderMissileSalvo 内部 q<2 同一口径:导弹要识别级
-    if(V.len(V.sub(t.pos,s.pos))>=(s.mslRange||350000))return null;
+    if(V.len(V.sub(t.pos,s.pos))>=(s.mslRange))return null;
   }
   return t;
 }

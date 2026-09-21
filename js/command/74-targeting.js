@@ -78,7 +78,7 @@ function fcEditFollowSel(sub){ // RF7b 序列态是【瞬时 UI 模式】,不是
   }
 }
 function xhTick(dt){ // RF5 准星每帧状态机:命中测试 → 停留累加 → 吸附/失效 → 刷信息卡。由 core/99-main 的 frame() 每帧调(dt 可缺省:探针直接调时不传)
-  const now=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+  const now=nowMs();
   const d=xh._t?Math.min(0.1,(now-xh._t)/1000):(dt||0); // 墙钟差值优先:停留门槛要的是真实 250ms(不吃 rate),且暂停时准星必须照常工作
   xh._t=now;
   radTick(); // RF5 Phase C 目标轮盘的每帧维护搭 xhTick 的车:全库只能有 frame() 一条 rAF,而 frame() 已经每帧调 xhTick 了 —— 挂这里就不必再改 core/99-main,也天然排在 render() 之前(89 的 drawRadial 读的是本帧刚算好的 rad)
@@ -99,12 +99,13 @@ function xhTick(dt){ // RF5 准星每帧状态机:命中测试 → 停留累加 
 }
 function xhName(s){ // RF5 可外传的目标名:未达识别级的敌舰不吐真名(日志与卡片同一口径,免得卡片打码日志泄底)
   const gm=(typeof adminMode!=='undefined'&&adminMode);
-  return (!gm&&s.side==='red'&&(s.litBlue||0)<2)?'未知接触':s.name;
+  return (!gm&&s.side==='red'&&!contactIdn(s,'blue'))?'未知接触':s.name; // ID1:原判据 litBlue<2;身份问 contactIdn
 }
 function xhCardHTML(s,sub){ // RF5 信息卡内容:按接触等级分三档。只产 HTML 字符串,DOM 与样式属渲染侧
   const gm=(typeof adminMode!=='undefined'&&adminMode);
   const q=(s.side==='red')?(s.litBlue||0):3;
-  const dx=s.pos[0]-sub.pos[0],dy=s.pos[1]-sub.pos[1];
+  const cp=(!gm&&typeof contactPos==='function')?(contactPos(s,'blue')||s.pos):s.pos; // ID1 顺手:方位 / 距离按接触的【估计位置】报(与画出来、点得到的是同一个点),原来报的是真值
+  const dx=cp[0]-sub.pos[0],dy=cp[1]-sub.pos[1];
   const dist=Math.hypot(dx,dy);
   const brg=(Math.atan2(dy,dx)*180/Math.PI+360)%360; // 方位角:0°=+X(与"船头=+X"的几何约定同源),顺时针增
   // RF5 GM 分支绕开遮蔽再复用(仍然是 82 的函数,只是换成未遮蔽那一对):82 的 shipIdentHull/shipIdentTier 都【不看 adminMode】,
@@ -115,7 +116,7 @@ function xhCardHTML(s,sub){ // RF5 信息卡内容:按接触等级分三档。�
     :((typeof shipIdentTier==='function')?shipIdentTier(s):(s.tier||2));   // 非 GM:shipIdentTier 对 litBlue<2 一律返回 2,GM 下会把 T3 敌舰写成 T2
   // GM 全显是【信息卡独有】的偏差:82 的两个函数都不看 adminMode,GM 下地图图标依然遮蔽(litBlue===1 照画 UNK/T2),
   // 卡片这里会比图标多说一层。这是任务书拍板允许的唯一不一致——不要为了对齐去改 82。
-  const masked=!gm&&(hull==='UNK'||q<2); // hull==='UNK' 正是 82 的严格 litBlue===1 那一档;q<2 顺手兜住 litBlue===0 的幽灵接触(82 那一档故意漏着,见其 TIER1 注释;非 GM 下 targetAt 已把它挡在吸附之外,这里只是兜底)
+  const masked=!gm&&!contactIdn(s,'blue'); // ID1:原判据 hull==='UNK'||q<2; // hull==='UNK' 正是 82 的严格 litBlue===1 那一档;q<2 顺手兜住 litBlue===0 的幽灵接触(82 那一档故意漏着,见其 TIER1 注释;非 GM 下 targetAt 已把它挡在吸附之外,这里只是兜底)
   const rows=[];
   if(!masked)rows.push(['舰种',((typeof HULL_LABEL!=='undefined'&&HULL_LABEL[hull])||'未知')+'舰 · T'+tier]); // RF5 兜底文案改中文'未知'(原为直接吐 hull 代码):HULL_LABEL(ships/10)只有 DD/CA/BB/CV/SC 五个键,查不到时会渲染出 "UNK舰" 这种非中文串,违反 UI 全中文。识别级:舰种与分级解禁(与 82 放行真实轮廓/尺寸、87-fleetcards 的分级徽标同为 litBlue>=2)
   rows.push(['方位',String(Math.round(brg)%360).padStart(3,'0')+'° · '+Math.round(dist/1000)+'k']); // 探测级也给:这一档只有方位与距离是可信的

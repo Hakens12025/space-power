@@ -27,7 +27,7 @@ function macEffRange(s){ // SN4 有效射程唯一定义点:开照射用雷达�
 function fireMAC(shooter,target){ // MAC轴炮:沿船头方向直射(必须先对准),到预测时间失的
   if(shooter.noFire)return; // RANGE1 禁火总闸门 1/3:靶场的靶只挨打不还手。这是 MAC 发射的唯一实现,GM 手动锁定/自动索敌/AI 三条路径最终都落到这里。注意这是个【静默】开关(不报错不打日志),将来若误给蓝舰置了 noFire 会毫无线索,置位处只有 initEnemy 的靶语义包一处
   if(shooter.side===target.side||shooter.dead||target.dead)return;
-  const q=shooter.side==='blue'?target.litBlue:target.litRed;
+  const q=litOf(target,shooter.side);
   if(q<3)return; // 火控门控(v123):MAC是解算武器,需火控级(主动LADAR测距测速)才能算提前量;被动/识别级打不出
   const d=V.len(V.sub(target.pos,shooter.pos));
   const effR=macEffRange(shooter); // RF6 有效射程(开雷达则用雷达范围顶上)
@@ -93,7 +93,7 @@ function orderMissileSalvo(shooter,target,n){ // 齐射指令(v119·单元制):�
   if(shooter.missileArm)return; // 已在装填
   const isShip=target&&target.side!==undefined;
   if(isShip&&(shooter.side===target.side||target.dead))return;
-  if(isShip){const q=shooter.side==='blue'?target.litBlue:target.litRed;if(q<2)return;} // 火控门控(v123):导弹需识别级(2,精确知道位置);探测级只知道大小,盲射走区域齐射
+  if(isShip){const q=litOf(target,shooter.side);if(q<2)return;} // 火控门控(v123):导弹需识别级(2,精确知道位置);探测级只知道大小,盲射走区域齐射
   if(shooter.ammo<(shooter.mslPer||12))return; // 弹药不足。RF6 修:原写死 16,是每组 16 枚时代的遗留(KIMI154 把每组改 12 时漏改此处与 fireMissiles 的组数上限),后果是每舰末尾 12 枚永远打不出去(DD 192 枚只能打 15 组、CA 240 枚只能打 19 组)
   const avail=readyCells(shooter);
   if(avail<=0)return; // 发射单元全在装填

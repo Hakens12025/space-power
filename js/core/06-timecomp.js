@@ -14,7 +14,7 @@
    ⚠ 走墙钟(frame 给的 dt),不走模拟时间:它是"玩家坐在椅子上的感受",同 camZoomStep / 告警脉冲。 */
 const TC={on:true,band:0,hold:0,eff:0,HOLD:4,TAU:0.35,CAP:[6,4,2],NAME:['接敌','定位','交战','近战']};
 const tcCap=b=>b>0?TC.CAP[b-1]:Infinity;
-function tcActive(){return TC.on&&typeof matchIsOn==='function'&&matchIsOn();}
+function tcActive(){const env=(typeof curEnv==='function')?curEnv():null;return TC.on&&!!(env&&env.match);} // R4:读场景数据,不读界面模块 scenario/97 的 matchIsOn
 function tcBand(){
   let b=0;
   const mine=ships.filter(s=>s.side==='blue'&&!s.dead);

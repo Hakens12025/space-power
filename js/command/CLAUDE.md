@@ -1,5 +1,13 @@
 # js/command
 
+## R8 `onMouseDown` 纯提取(2026-09-21 全库审查)
+
+原来是一个 265 行的函数:两段轮盘早退 + 编辑器 + 选定武器 + 十二条 `pending*` + 左 / 中 / 右三个键位分支。按「谁接管这一击」拆成
+`mdRadial` / `mdEditor` / `mdWeaponPick` / `mdPending`(守卫段:返回 true = 吞掉这一击)与 `mdLeft` / `mdMiddle` / `mdRight`(键位分支),`onMouseDown` 只剩九行分发。
+**每一行代码与先后顺序原样不动**:守卫段里的 `return;` 机械换成 `return true;`、段尾补 `return false;`,与原来「段内 return = 整个函数结束、没 return = 掉到下一段」逐位等价;
+做了逐行对账(旧函数体 261 行规范化后全部按原顺序出现在新文件里)。⚠ **顺序就是优先级**:轮盘 > 编辑器 > 选定武器 > pending* > 常规键位。
+
+
 玩家指令层(`js/command/`)的历史备忘。总览、跨系统约定与文件地图在仓库根 `CLAUDE.md`。
 
 ## RF11 移动虚影(单舰) 备忘(2026-08)

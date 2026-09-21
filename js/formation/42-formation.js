@@ -85,7 +85,7 @@ function fmName(F) { return (F && F.name) || ('编队' + (F ? F.id : '?')); }
 
 function fmShips(F) { // 名册 → 活着的舰对象(顺序按名册)
   if (!F) return [];
-  return F.ships.map(id => ships.find(x => x.id === id)).filter(x => x && !x.dead);
+  return F.ships.map(id => shipById(id)).filter(x => x && !x.dead);
 }
 function fmMembers(F) { return ships.filter(x => !x.dead && x.formation === F); } // 实际挂着本编队的(战损那一拍会与名册短暂不同)
 

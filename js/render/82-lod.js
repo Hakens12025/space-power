@@ -130,7 +130,7 @@ function lodBuild(dtIn) {   // dtIn:判据用的时钟覆盖(同 camZoomStep);�
        散开  框当场消失,船从框原来的位置滑回自己的位置并淡入(_lodW 记着它上一次归属的框的【世界坐标】,镜头动了也不飘)
      ⚠ 第一次见到的船直接落到结论上(不播动画):开局、换局、判据里现造的船都不该先"收拢一次"。
      ⚠ 走墙钟:它是界面不是模拟,暂停时缩放地图照样要播。 */
-  const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  const now = nowMs();
   const dt = isFinite(dtIn) ? Math.max(0, dtIn) : Math.max(0, Math.min(0.1, (now - (LOD.t || now)) / 1000));
   LOD.t = now;
   const inAgg = new Map();

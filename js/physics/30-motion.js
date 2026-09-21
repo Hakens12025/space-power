@@ -83,7 +83,6 @@ let ROUTE_MARGIN_MAXFRAC=0.35; // 【单段折扣上限比例】。RF16:扣减�
 // 让船恰好以计划速度 U 到达拐点;用比例式会让 cap 在近处高于 U,船冲进拐角(实测之字航线 1152->1338s)。
 // 累积 bug 只存在于段间(每段各扣一次),当前段只扣一次、不累积。
 function routeUsable(L){return L-Math.min(routeMargin(),L*ROUTE_MARGIN_MAXFRAC);}
-let CORNER_K=1.0;   // 保留但当前不参与(见下)
 function cornerSpd(s,vIn,vOut){ // 拐角几何限速
   /* v = sqrt(a_eff * r), r = ROUTE_TOL * c/(1-c), c = cos(偏折角/2)。
      RF16 试过换成"实测时间最优过弯速度律" v = 巡航 * (1+cos phi)/2 * K,实测【更差】

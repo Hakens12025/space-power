@@ -479,3 +479,24 @@ SN8 只做了「换挡的手感」(A)和聚合动画(C)。真正让三层不只�
 没动的:`icons_preview.html` 留在仓库根 —— 它是已提交、已随 GitHub Pages 发布的项目文件(挪了会改线上地址),不是设计演示页。
 
 还没做的:几份 `.md`(本文件、`光速延迟接入计划.md`、`态势感知的问题.md`、`尺度预算.md`)还在仓库根;要不要也收进一个 `docs/`,等拍板。
+
+## 7. 全库代码审查(2026-09-21,只读;62 个文件 / 12,668 行 / 932 个顶层符号)
+
+方法:去注释后做静态分析(符号声明与引用、跨目录耦合矩阵、死符号、`typeof` 守卫的指向、重复写法、每帧路径),可疑点逐个读代码并实测。
+脚本没进仓库(一次性的);数字可复现的口径写在各条里。**只有证据的才记,猜的不记。**
+
+| # | 维度 | 发现 | 证据 | 建议 | 状态 |
+|---|---|---|---|---|---|
+| R1 | 身份 | **「认出」这一级在引擎里是死的**:显示层拿【等级】当【身份】用(`shipIdentHull` 的 `litBlue===1`、`shipIdentTier` / 舰队卡 / 信息卡的 `litBlue<2`、舰标名字的 `identQ===1`),而内核另有 `cov.idn`,只有 `82-lod` 与 `83-geom` 两处在读 | 梯子:CA 照 DD 跟踪级(lit2)门 435k,雷达认出 151k、光学认出 94k。实测 CA 照 30 万外的 DD:`litBlue=2`、`cov.idn=false` ⇒ 地图上画的是 DD 轮廓 + 真名,同一艘船在聚合框里却记成「?」 | 一个访问器 `contactIdn(s,side)`(同 `contactPos` / `contactState` 的做法),上面那几处全部改问它。这就是 2.11 B | ✓ ID1,`FLOW77_IDN` |
+| R2 | 逻辑 | **跳层钮「以选中舰为中心」从来没生效过**:`80-viewtier` 的 `camJump` 写的是 `typeof byId==='function' ? byId(...)`,而 `byId` 全库没有声明 ⇒ 守卫恒假、静默走重心 | 全库 429 处 `typeof` 守卫 / 183 个不同符号,指向不存在符号的只有这 1 个 | 改成 `ships.find`;并给 `verify.sh` 加一条机械检查:**守卫指向的符号必须在全库有声明**(符号扫描今天只查「声明了的都在」,不查「被守卫的存在」)| ✓ `FLOW78_JUMPSEL` + 判定块的守卫检查(带自检)|
+| R3 | 解耦 | **模拟层依赖呈现层的 `log`**:`sensors / physics / formation / weapons / bots` 五个模拟目录都直接调 `render/86-log` 的 `log()`(35 个文件),它每条做 5 次 DOM 操作,写的还是被 RF2 藏掉的 `#log` | 逆层引用表;`log()` 实测 0.06 ms/条 | 标准形态是观察者 / 事件总线:模拟只 `emit`,界面订阅。最小做法是把汇聚点挪进 `core`(纯移动),`86-log` 与 `88` 的 `pushEvt` 各自订阅 | ✓ `core/02-events`,`FLOW79_LOGBUS` + 判定块的分层检查(带自检)|
+| R4 | 解耦 | `bots/61` 与 `core/06` 读 `scenario/97` 的 `matchIsOn()`(MT1 / TC1 那轮我自己引进来的):模拟读了一个界面模块 | 逆层引用表 | 改读场景数据 `curEnv().match`,或在 `core/01` 放一个对局态 | ✓ 改读 `curEnv().match` |
+| R5 | 冗余 | 死符号 4 个:`taskCancel`、`CORNER_K`(根 CLAUDE.md 的状态归属表还写着它是「唯一定义点」)、`radArcText`、`SPEED_NAMES`;另有 6 个只被判据调用(`fmMembers` `fmFollowShip` `fmFollowStop` `senseScanTarget` `senseBoundsAt` `ladCheck`)| 全库只出现声明那一次 | 前 4 个删;后 6 个留(它们是判据的探针)| ✓ 已删(连 `_radNameCache`),这一轮过后顶层符号 932 → 942(删 5 个,新增访问器 / 订阅表 / 七个 md* 共 15 个)|
+| R6 | 冗余 | 约 **1,030 行(8%)在伺候被 RF2 藏掉的界面**:`72-context-menu` `73-quickbar` `60-tasks` `92-editor` `93-replay` `94-demo` `86-log` `87-fleetcards`。`updQbarHighlight` 每帧给 5 个看不见的钮写字 | 实测每帧 0.003 ms、`updateCardsStatus` 0.075 ms / 20 帧 —— **不是性能问题,是维护面**:改 HTML id、改舰字段都得照顾它们 | 「只藏不删」是 RF2 的拍板。垂直切片定型之后值得重新问一次:哪些永远不回来 | 等拍板 |
+| R7 | 冗余 | 重复写法:墙钟取时那个三元 11 处(已有 `_vtNow` / `_zNow` 两个 helper,还是各写各的);`side==='blue'?litBlue:litRed` 6 处;`||350000` / `||150000` 兜底字面量 18 处(烘焙字段缺失时静默给满射程,2.11 F1);`ships.find(x=>x.id===…)` 27 处(没有 id → 舰的索引)| 计数 | 顺手收,不单独排期 | ✓ `nowMs` / `shipById` / `litOf`;下游 16 处兜底字面量删掉(`makeShip` 已烘焙,下游兜底永远触发不了,方向还是 fail-open)|
+| R8 | 可维护 | 最大的函数:`onMouseDown` 310 行 / 1 万字符(输入状态机,全库最难改的一块)、`stepMissileProj` 253 行、`updateSelPanel` 156 行、`drawShip` 182 行 | 去注释后的字符数排序 | `onMouseDown` 按键位做一次 RF1 式的纯提取(左 / 中 / 右三个函数)| ✓ 七个 `md*`,逐行对账零差异 |
+| R9 | 可维护 | `tools/verify.sh` 6,397 行 / 101 条判据,单文件,已经是引擎的一半大 | 行数 | 判据按系统目录拆成 `tools/judge/*.js`,`verify.sh` 只管拼接与判定 | ✓ 6,537 → 424 行,11 个文件;拼出来的探针页与原来**逐字节相同**;多了一道 `node --check` |
+| R10 | 性能 | **没有问题。** 6 舰交战:`stepSim` 0.049 ms/步(x50 每帧 2.1 ms)、`detectLoop` 0.04 ms/拍;40 舰 13 ms / 帧 @x50;80 舰 22 ms(x50 会掉帧,x20 以下无碍)。O(N²) 的感知在 80 舰下才 2 ms / 模拟秒 | 无界面实测;渲染的真 GPU 数字见 `js/render/CLAUDE.md` SN7b / SN7d | 不动 | — |
+
+**健康的部分**(同一次审查量出来的,免得以后白查):`sensors` 只依赖 `core`(外加 `log`);`physics` / `formation` 同样干净;全库**零**处 `cls==='XX'` 硬编码舰种;
+没有同名的顶层声明;429 处 `typeof` 守卫里只有 1 处指空;注释与空白占 40%(这是本项目的约定,不是问题)。

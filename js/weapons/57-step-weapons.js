@@ -45,8 +45,8 @@ function stepWeaponSystems(dt){
     if(!t)continue;
     const isPt=(t.side===undefined); // RF5 指定点(空地)没有阵营也没有接触等级,跳过 side/litBlue 两道门(fcGate 已在序列侧查过射程,这里保留复查)
     if(!isPt&&(t.dead||t.side===s.side))continue;
-    if(!isPt&&(s.side==='blue'?t.litBlue:t.litRed)<2)continue; // 与手动齐射同一识别级门控
-    if(V.len(V.sub(t.pos,s.pos))>=(s.mslRange||350000))continue; // RF3 射程读烘焙字段(定义在 weapons/51-defs)
+    if(!isPt&&(litOf(t,s.side))<2)continue; // 与手动齐射同一识别级门控
+    if(V.len(V.sub(t.pos,s.pos))>=(s.mslRange))continue; // RF3 射程读烘焙字段(定义在 weapons/51-defs)
     const ready=readyCells(s);
     if(ready<Math.ceil((s.cells||4)/2))continue; // 过半就绪才打,自然成波(导弹Arm/弹药不足由 orderMissileSalvo 内部兜底)
     orderMissileSalvo(s,t,Math.min(2,ready));

@@ -74,7 +74,7 @@ function ghostAim(sx,sy){
 function ghostCommit(){
   const g=ghostMove;ghostMove=null;
   if(!g)return;
-  const s=(typeof ships!=='undefined')?ships.find(x=>x.id===g.id):null;
+  const s=(typeof ships!=='undefined')?shipById(g.id):null;
   if(!s||s.dead)return;
   const msg=GHOST_MODES[g.mode].commit(s,g);
   log(`${msg} · 到达朝向 ${Math.round((Math.atan2(g.face[1],g.face[0])*180/Math.PI+360)%360)}°`,'');
@@ -175,17 +175,23 @@ function orderAt(sx,sy){ // 命中最近的命令点(屏幕距离)
   }
   return best;
 }
-function onMouseDown(e){
-  const sx=e.clientX,sy=e.clientY;
+/* R8(2026-09-21 全库审查)onMouseDown 原来是一个 265 行的函数:两段轮盘早退 + 编辑器 + 选定武器 + 十二条 pending* + 左 / 中 / 右三个键位分支,
+   全库最难改的一块。这里按"谁接管这一击"做了一次 RF1 式的【纯提取】:每一行代码与先后顺序原样不动,只是各自进了函数。
+   前四个 md* 是守卫段 —— 返回 true = 这一击被它吞了(对应原来段内的 return),false = 掉到下一段(对应原来没有 return 的那些路径,
+   比如编辑器里按了既不是左中右的键、轮盘开着但点在盘外)。⚠ 顺序就是优先级:轮盘 > 编辑器 > 选定武器 > pending* > 常规键位,别调换。 */
+function mdRadial(e,sx,sy){ // RF5 Phase C 轮盘开着时的两段早退(盘内左键 / 盘内右键)
   if(e.button===0&&typeof rad!=='undefined'&&rad.open&&typeof radialHit==='function'){ // RF5 Phase C 轮盘命中早退:必须排在 editMode / selWeapon / 八条 pending* / L240 的选舰框选【全部之前】——selWeapon 那支会把点扇区变成对敌舰下真攻击命令,五条 pendingTask* 压根不判 e.button(任何键都吃)。这是本阶段最容易出的 bug
     const h=radialHit(sx,sy); // 几何与命中测试只在 render/89 里算一份,这里绝不自己算角度
-    if(h){if(typeof radPick==='function')radPick(h);return;} // 命中扇区:74 里提交 fcSetAllow/fcSetMode,然后 return,不落到 orderAt/shipAt/selDrag
-    if(typeof radialInBand==='function'&&radialInBand(sx,sy))return; // RF5 Phase C 落在盘内但不在扇区上(内洞/断口/两条环隙):这一击也吞掉。render/89 的 radialInBand 刻意取整个圆盘(含内洞)——内洞底下压着目标舰,不吞的话左键点洞会走 shipAt→selected=[] 把主体舰清掉,轮盘当场失去主体
+    if(h){if(typeof radPick==='function')radPick(h);return true;} // 命中扇区:74 里提交 fcSetAllow/fcSetMode,然后 return,不落到 orderAt/shipAt/selDrag
+    if(typeof radialInBand==='function'&&radialInBand(sx,sy))return true; // RF5 Phase C 落在盘内但不在扇区上(内洞/断口/两条环隙):这一击也吞掉。render/89 的 radialInBand 刻意取整个圆盘(含内洞)——内洞底下压着目标舰,不吞的话左键点洞会走 shipAt→selected=[] 把主体舰清掉,轮盘当场失去主体
     // 既没命中扇区、也不在盘内(点在轮盘【外】)刻意【不】早退:任务书要求轮盘开着时不拦截左右键,选舰/框选/移动照常
   }
   if(e.button===2&&typeof rad!=='undefined'&&rad.open&&typeof radialInBand==='function'&&radialInBand(sx,sy)){ // RF5 Phase C 盘内右键也吞掉,与盘内左键同口径:不吞的话这一击落到下面的常规右键分支置 rmbClick,抬手时 !rMoved 会给【整个受控编队】清空航线并 moveShips 到轮盘底下那个世界坐标——而轮盘正钉在敌舰身上,等于一手误触把全队送进敌舰怀里。盘【外】左右键仍照常(任务书:轮盘开着不拦截左右键)
-    hideCtx();return;
+    hideCtx();return true;
   }
+  return false;
+}
+function mdEditor(e,sx,sy){ // 场景编辑器接管左 / 右 / 中键
   if(editMode){ // 场景编辑器:接管左/右键
     if(e.button===0){
       const w=worldAt(sx,sy);
@@ -193,46 +199,49 @@ function onMouseDown(e){
         editSetTgt.s.orders=[{pos:[w[0],w[1],0],type:'stop'}];
         log(`${editSetTgt.s.name} 动靶目标设定 → ${Math.round(w[0]/1000)}k,${Math.round(w[1]/1000)}k`,'');
         editSetTgt=null;hideTip();refreshEdit();
-        return;
+        return true;
       }
       if(editAddWp){ // 连续添加路径点:左键每点一个
         editAddWp.s.orders.push({pos:[w[0],w[1],0],type:'stop'});
         log(`路径点+1 → ${Math.round(w[0]/1000)}k,${Math.round(w[1]/1000)}k(右键结束)`,'');
         refreshEdit();
-        return;
+        return true;
       }
       if(editPlace){ // 待放置:左键落定
         placeEditUnit(editPlace,w);
         editPlace=null;hideTip();
-        return;
+        return true;
       }
       const wp=editWpAt(sx,sy);
-      if(wp){editWpDrag=wp;return;} // 拖拽路径点
+      if(wp){editWpDrag=wp;return true;} // 拖拽路径点
       const t=editUnitAt(sx,sy);
       if(t){setEditSel(t);editDrag={side:t.side,idx:t.idx};}
       else{setEditSel(null);}
-      return;
+      return true;
     }
     if(e.button===2){ // 右键:空地=放置菜单 / 单位=编辑菜单 / 路径点=删除
-      if(editSetTgt){editSetTgt=null;hideTip();return;}
-      if(editAddWp){editAddWp=null;hideTip();log('结束添加路径点','');return;}
-      if(editPlace){editPlace=null;hideTip();return;}
+      if(editSetTgt){editSetTgt=null;hideTip();return true;}
+      if(editAddWp){editAddWp=null;hideTip();log('结束添加路径点','');return true;}
+      if(editPlace){editPlace=null;hideTip();return true;}
       const wp=editWpAt(sx,sy);
       if(wp){ // 右键路径点:删除该点
         editScene.enemy[wp.idx].orders.splice(wp.wpIdx,1);
         refreshEdit();
-        return;
+        return true;
       }
       const t=editUnitAt(sx,sy);
       if(t)openEditUnitMenu(t,sx,sy);
       else openEditPlaceMenu(sx,sy);
-      return;
+      return true;
     }
     if(e.button===1){ // RF5 中键平移已拆(平移交给右键拖动+WASD)。这一支必须留着且必须 return:if(editMode) 块没有兜底 return,删干净的话编辑器里按中键会掉穿到常规分支去触发快速交战
       if(e.preventDefault)e.preventDefault(); // 阻止浏览器中键自动滚动
-      hideCtx();return;
+      hideCtx();return true;
     }
   }
+  return false;
+}
+function mdWeaponPick(e,sx,sy){ // 选定武器攻击:点目标 / 点空位置
   if(e.button===0&&selWeapon){ // 选定武器攻击:点击目标/空位置指定
     const t=targetAt(sx,sy)||shipAt(sx,sy); // RF4b 敌舰优先(shipAt 已限定蓝方,原路径在简化UI后点敌舰落空)
     const atk=controlledShips();
@@ -255,43 +264,46 @@ function onMouseDown(e){
       log('🎯 MAC 需锁定敌舰(点中舰船)','warn');
     }
     selWeapon=null;hideTip();updSelWeaponTip();
-    return;
+    return true;
   }
+  return false;
+}
+function mdPending(e,sx,sy){ // 十二条 pending*(任务画点 / 转向 / 移动 / 布防 / 跟随 / 信标 / 手动 / 布雷)的点选兑现
   if(pendingTaskPatrol){ // DS150:巡逻任务画点链(左键加点,右键结束)
     const w=worldAt(sx,sy);taskPatrolPts.push([w[0],w[1],0]);
     log(`巡逻点+1(${taskPatrolPts.length}) · 右键结束`,'');
-    return;
+    return true;
   }
   if(pendingTaskIntercept){ // DS150 T2:点区域中心建拦截任务
     const w=worldAt(sx,sy);
     taskCreate(pendingTaskIntercept,{type:'intercept',center:[w[0],w[1],0],radius:100000,phase:'idle'});
     log(`🏹 拦截任务建立(中心${Math.round(w[0]/1000)}k,${Math.round(w[1]/1000)}k,半径10万)`,'');
-    pendingTaskIntercept=null;hideTip();return;
+    pendingTaskIntercept=null;hideTip();return true;
   }
   if(pendingTaskDeny){ // DS150 T2:点区域中心建拒止任务
     const w=worldAt(sx,sy);
     taskCreate(pendingTaskDeny,{type:'deny',center:[w[0],w[1],0],radius:80000});
     log(`✋ 拒止任务建立(中心${Math.round(w[0]/1000)}k,${Math.round(w[1]/1000)}k,半径8万)`,'');
-    pendingTaskDeny=null;hideTip();return;
+    pendingTaskDeny=null;hideTip();return true;
   }
   if(pendingTaskEscort){ // DS150 T3:点友舰建护航
     const t=shipAt(sx,sy);
     if(t&&t.side==='blue'){taskCreate(pendingTaskEscort,{type:'escort',escortId:t.id});log(`🛡 护航任务建立(${t.name})`,'');}
     else log('请点中蓝方友舰','warn');
-    pendingTaskEscort=null;hideTip();return;
+    pendingTaskEscort=null;hideTip();return true;
   }
   if(pendingTaskStrike){ // DS150 T3:点敌舰建打击
     const t=shipAt(sx,sy);
     if(t&&t.side==='red'){taskCreate(pendingTaskStrike,{type:'strike',strikeId:t.id});log(`⚔ 打击任务建立(${t.name})`,'');}
     else log('请点中红方敌舰','warn');
-    pendingTaskStrike=null;hideTip();return;
+    pendingTaskStrike=null;hideTip();return true;
   }
   if(e.button===0&&pendingTurn){ // V键转向:点地图设定方向(调头,速度不变)。FM3-0:Shift+V"单纯转头"分支删除(它设的船上标志全库无读取点,两种转向行为本就一样)
     const w=worldAt(sx,sy);
     pendingTurn.forEach(s=>{s.turnTarget=[w[0],w[1],0];s.brake=false;}); // RF6 去掉 s.orders=[]:朝向已移交 31-step-ships 的独立朝向层,与移动层并行,转向不必再取消航线
     log(`${pendingTurn.length} 艘 转向 → ${Math.round(w[0]/1000)}k,${Math.round(w[1]/1000)}k(边走边转)`,''); // RF6 文案跟着改:原"调头,速度不变"描述的是被取消航线后的滑行态
     pendingTurn=null;hideTip();updSelWeaponTip(); // FL1:V 已接进 #cmdTip,清标志就必须同步刷提示(updSelWeaponTip 是边沿触发、无兜底刷新)
-    return;
+    return true;
   }
   if(e.button===0&&pendingMove){ // 卡片命令的目标点选(编组→编队,散船→各自)
     const w=worldAt(sx,sy);
@@ -306,7 +318,7 @@ function onMouseDown(e){
     }else moveShips(pendingMove,[w[0],w[1],0],'stop');
     log(`${n} 艘 → 新增${tag} ${Math.round(w[0]/1000)}k,${Math.round(w[1]/1000)}k`,'');
     pendingMove=null;hideTip();
-    return;
+    return true;
   }
   if(e.button===0&&pendingIntercept){ // 拦截弹布防:点击地图布设防空屏
     const pi=pendingIntercept;
@@ -314,21 +326,21 @@ function onMouseDown(e){
     if(launchInterceptors(pi.ship,w))log(`🛡 ${pi.ship.name} 布设防空屏@${Math.round(w[0]/1000)}k,${Math.round(w[1]/1000)}k(剩${Math.round(pi.ship.interceptor/16)}组)`,'');
     else log(`${pi.ship.name} 拦截弹不足`,'warn');
     pendingIntercept=null;hideTip();
-    return;
+    return true;
   }
   if(e.button===0&&pendingFollow){ // FM6 跟随点选:底栏点【跟随】进入待命,再点一艘我方舰兑现(作用域按【此刻】的 selected 现算)
     const t=(typeof shipAt==='function')?shipAt(sx,sy):null;
     if(t&&!t.dead&&t.side==='blue'&&typeof followAssign==='function')followPick(t);
     else{pendingFollow=null;log('跟随:请点一艘我方舰船','warn');}
     updSelWeaponTip(); // 收掉 #cmdTip 上的待命提示
-    return;
+    return true;
   }
   if(e.button===0&&pendingBeacon){ // 信标部署点:点击地图发射
     const w=worldAt(sx,sy);
     const ok=launchBeacon(pendingBeacon,w);
     if(ok)log(`📡 ${pendingBeacon.name} 发射信标 → ${Math.round(w[0]/1000)}k,${Math.round(w[1]/1000)}k(剩${pendingBeacon.beaconCount}枚)`,'');
     pendingBeacon=null;hideTip();
-    return;
+    return true;
   }
   if(e.button===0&&pendingManual){ // v125 手动模式:点目标舰,网集中打击该目标
     const t=shipAt(sx,sy);
@@ -341,7 +353,7 @@ function onMouseDown(e){
       }
     }
     pendingManual=null;hideTip();
-    return;
+    return true;
   }
   if(e.button===0&&pendingMine){ // 布雷点选:点击地图定布雷点(选中导弹组/网→布设为雷)
     const w=worldAt(sx,sy);
@@ -361,84 +373,97 @@ function onMouseDown(e){
       log(`💣 ${p.shooter?p.shooter.name:'导弹'}组 → 布雷@${Math.round(w[0]/1000)}k,${Math.round(w[1]/1000)}k · 触发圈${Math.round(p.trigRadius/1000)}k`,'');
     }
     pendingMine=null;hideTip();
+    return true;
+  }
+  return false;
+}
+function mdLeft(e,sx,sy){ // 左键
+  const ord=orderAt(sx,sy);
+  if(ord){ // 命中命令点 → 拖拽调整位置
+    dragOrder=ord;
+    if(ord.ship){selected=[ord.ship.id];selMissile=null;selNet=null;selMissileHits=[];} // FL1:orderAt 扫的是全部蓝舰的 orders(不限选中),所以这条路径能在"导弹选中态"下把 selected 改成舰船;不清的话 88-selpanel 的导弹早退会挡在编队/单舰分支前面,右栏切不过来
+    selDrag=null;hideCtx();
+    updateInfo();updateCardsStatus();
     return;
   }
-  if(e.button===0){ // 左键
-    const ord=orderAt(sx,sy);
-    if(ord){ // 命中命令点 → 拖拽调整位置
-      dragOrder=ord;
-      if(ord.ship){selected=[ord.ship.id];selMissile=null;selNet=null;selMissileHits=[];} // FL1:orderAt 扫的是全部蓝舰的 orders(不限选中),所以这条路径能在"导弹选中态"下把 selected 改成舰船;不清的话 88-selpanel 的导弹早退会挡在编队/单舰分支前面,右栏切不过来
-      selDrag=null;hideCtx();
-      updateInfo();updateCardsStatus();
-      return;
-    }
-    const sh=shipAt(sx,sy);
-    if(e.shiftKey){ // Shift=选导弹(单击选最近的,拖动框选导弹群)
-      const g=groupAt(sx,sy);
-      if(g){selMissile=g;selNet=g.netId||null;selMissileHits=[g];selected=[];selDrag=null;hideCtx();updateInfo();updateCardsStatus();return;}
-      selMissile=null;selNet=null;selMissileHits=[];
-      selDrag={x0:sx,y0:sy,x1:sx,y1:sy,missileMode:true};
-      hideCtx();
-      return;
-    }
-    if(!sh){ // 没点中船 → 看导弹组(导弹组可点选;v125点中组=选整个网)
-      const g=groupAt(sx,sy);
-      if(g){selMissile=g;selNet=g.netId||null;selMissileHits=[g];selected=[];selDrag=null;hideCtx();updateInfo();updateCardsStatus();return;}
-    }
-    /* SN7 左键点敌方目标 = 把它挂进定位几何小窗(常驻),而且【不清空我方选中】。
-       改前点敌舰与点空地同一支:selected=[] —— 每看一次缩圈就丢一次选中(用户 2026-09-20 拍板改)。
-       ---- 这里只【判】,不写常驻 ----
-       常驻在 mouseup 确认这是一次【点击】之后才写(selDrag.pinId)。第一版在这里直接写、并且提前 return 不建 selDrag,
-       审查确认那是一个回归:每个敌方记号周围 60px 的圆都成了框选的起手死区(舰队层上那个圆有几十万公里,交战时我方舰基本都在里面),
-       拖不出框、还顺手把常驻换了。现在照样建框,只是不清选中;拖动 = 照常框选、常驻不动。
-       敌我都在吸附圈里时离光标近的那个赢(83-geom 的 geomPickAt);导弹组的点选排在它前面,既有语义优先;Ctrl 加选不碰常驻。 */
-    const pinT=(!e.ctrlKey&&typeof geomPickAt==='function')?geomPickAt(sx,sy,sh):null;
-    selMissile=null;selNet=null;selMissileHits=[]; // 没点中导弹组 → 取消导弹组选中
-    if(e.ctrlKey){
-      if(sh){selected.includes(sh.id)?selected.splice(selected.indexOf(sh.id),1):selected.push(sh.id);}
-    }else if(pinT){
-      selDrag={x0:sx,y0:sy,x1:sx,y1:sy,pinId:pinT.id}; // 不清选中;是不是真的"点了敌舰"等 mouseup 再说
-    }else{
-      if((!sh||(sh.side==='red'&&!adminMode))&&!selDrag)selected=[]; // GM下可点选敌舰
-      selDrag={x0:sx,y0:sy,x1:sx,y1:sy};
-    }
+  const sh=shipAt(sx,sy);
+  if(e.shiftKey){ // Shift=选导弹(单击选最近的,拖动框选导弹群)
+    const g=groupAt(sx,sy);
+    if(g){selMissile=g;selNet=g.netId||null;selMissileHits=[g];selected=[];selDrag=null;hideCtx();updateInfo();updateCardsStatus();return;}
+    selMissile=null;selNet=null;selMissileHits=[];
+    selDrag={x0:sx,y0:sy,x1:sx,y1:sy,missileMode:true};
     hideCtx();
-  }else if(e.button===1){ // RF5 中键:短按=快速交战(原「拖拽平移视角」整支已拆,平移改由右键拖动+WASD承担);长按 >=MMB_HOLD_MS 本阶段什么都不做,留给 Phase C 的目标轮盘
-    // RF5 这里原先还有一支 `else if(e.button===2&&e.ctrlKey)`(Ctrl+右键锁定),与 RF4b 的右键点敌舰锁定是同一套旧目标模型(直写 lockedTarget+driftFire),已随本阶段一并拆除
-    if(e.preventDefault)e.preventDefault(); // 阻止浏览器中键自动滚动
-    mmb={t:(typeof performance!=='undefined'?performance.now():Date.now()),sx,sy,shift:e.shiftKey}; // RF5 起计时:用墙钟(暂停时也要能交战);位移判定在 mouseup 直接比坐标,中键不再置 panning 所以不能用 panning.moved。RF5 Phase C 追加 shift:三种上下文要的是【按下瞬间】的 Shift,定时器回调里 e 已回收、键也可能松了
-    clearTimeout(mmbTimer);mmbTimer=null; // RF5 Phase C 连击防叠表(第四个清理点)
-    if(!(typeof rad!=='undefined'&&rad.open))                      // RF5 Phase C 轮盘已开时中键只承担「短按=关」,不再排新的开
-      mmbTimer=setTimeout(()=>{                                    // RF5 Phase C 长按 350ms 在【松手前】弹轮盘(手柄轮盘的手感),不能等 mouseup
-        mmbTimer=null;
-        if(!mmb)return;                                            // 已被 mouseup/blur 清账 = 抬手早于 350ms
-        if(editMode||rangeMode||dragOrder)return;                  // 与下面 mouseup 那条早退口径一致(编辑器/测距/拖命令点时中键无语义)
-        if(typeof radOpen==='function')radOpen(mmb.sx,mmb.sy,mmb.shift); // 上下文判定 + 提交 fcNew/fcAppend + 填 rad 全在 74 里(目标可能已死/已失接触,radOpen 自己兜底)
-      },MMB_HOLD_MS);
-    hideCtx();
-  }else if(e.button===2){ // 右键:单击=直接移动,按住350ms=呼出命令菜单,拖动=平移
-    if(e.ctrlKey){ctrlArm=false;hideCtx();return;} // RF5 Ctrl+右键退化成空操作(只清全弹臂):被拆的那一支既不置 panning 也不置 rmbClick,【从不下移动命令】;不在这里 return 的话它会掉进本分支,沿用旧习惯 Ctrl+右键点敌舰的玩家会整队清空航线直冲敌舰坐标。敌舰目标由中键快速交战独占。清全弹臂这一手必须留——不清,松开 Ctrl 会触发 fire_all(71-keys:229)误发射
-    /* FL1:门要与 clearPendings 的覆盖面对齐,否则"提示说右键取消、实际却发出一条移动令"(本行原注释记的正是这个坑)。
-       【巡逻刻意排除】—— 画点链的右键语义是"结束并建任务"(在 mouseup 的 pendingTaskPatrol 分支),不是取消,
-       所以它必须让路让右键落下去;把它放进门里会让画好的点被静默丢弃。 */
-    if(!pendingTaskPatrol&&(pendingMine||pendingBeacon||pendingIntercept||pendingManual||pendingMove||pendingTurn||selWeapon||pendingFollow
-       ||pendingTaskIntercept||pendingTaskDeny||pendingTaskEscort||pendingTaskStrike)){ // 点选待命状态:右键取消(原只覆盖布雷/信标/拦截,pendingManual提示"右键取消"却不生效反而发出移动命令);FL1 补 pendingFollow——不补的话右键会落到下面的 rmbClick 分支,反而给全队下一条移动令
-      clearPendings();
-      if(typeof updFmBar==='function')updFmBar(); // 让【跟随目标】那个钮熄灭
-      hideTip();log('取消','');return;
-    }
-    panning={sx,sy,cx:cam.x,cy:cam.y,moved:false};
-    rmbClick={sx,sy,onShip:shipAt(sx,sy),shift:e.shiftKey}; // RF5 拆掉 etgt(RF4b 右键点敌舰锁定的唯一喂料):锁定分支已移除,该字段零消费者,顺带省掉每次右键按下的一次全 ships 扫描
-    clearTimeout(rmbTimer);
-    rmbTimer=setTimeout(()=>{ // 按住:RF11 起进移动虚影(原为呼出命令菜单,该菜单被 SIMPLE_UI 拦死,通道空置)
-      if(rmbClick&&!panning.moved){
-        if(!ghostArm(rmbClick.sx,rmbClick.sy,rmbClick.shift))
-          openCtx(rmbClick.sx,rmbClick.sy,rmbClick.onShip||null); // armed 不了时沿用旧行为(SIMPLE_UI 下 showCtx 自己会早退)
-        rmbClick=null;rmbTimer=null;
-      }
-    },350);
-    hideCtx();
+    return;
   }
+  if(!sh){ // 没点中船 → 看导弹组(导弹组可点选;v125点中组=选整个网)
+    const g=groupAt(sx,sy);
+    if(g){selMissile=g;selNet=g.netId||null;selMissileHits=[g];selected=[];selDrag=null;hideCtx();updateInfo();updateCardsStatus();return;}
+  }
+  /* SN7 左键点敌方目标 = 把它挂进定位几何小窗(常驻),而且【不清空我方选中】。
+     改前点敌舰与点空地同一支:selected=[] —— 每看一次缩圈就丢一次选中(用户 2026-09-20 拍板改)。
+     ---- 这里只【判】,不写常驻 ----
+     常驻在 mouseup 确认这是一次【点击】之后才写(selDrag.pinId)。第一版在这里直接写、并且提前 return 不建 selDrag,
+     审查确认那是一个回归:每个敌方记号周围 60px 的圆都成了框选的起手死区(舰队层上那个圆有几十万公里,交战时我方舰基本都在里面),
+     拖不出框、还顺手把常驻换了。现在照样建框,只是不清选中;拖动 = 照常框选、常驻不动。
+     敌我都在吸附圈里时离光标近的那个赢(83-geom 的 geomPickAt);导弹组的点选排在它前面,既有语义优先;Ctrl 加选不碰常驻。 */
+  const pinT=(!e.ctrlKey&&typeof geomPickAt==='function')?geomPickAt(sx,sy,sh):null;
+  selMissile=null;selNet=null;selMissileHits=[]; // 没点中导弹组 → 取消导弹组选中
+  if(e.ctrlKey){
+    if(sh){selected.includes(sh.id)?selected.splice(selected.indexOf(sh.id),1):selected.push(sh.id);}
+  }else if(pinT){
+    selDrag={x0:sx,y0:sy,x1:sx,y1:sy,pinId:pinT.id}; // 不清选中;是不是真的"点了敌舰"等 mouseup 再说
+  }else{
+    if((!sh||(sh.side==='red'&&!adminMode))&&!selDrag)selected=[]; // GM下可点选敌舰
+    selDrag={x0:sx,y0:sy,x1:sx,y1:sy};
+  }
+  hideCtx();
+}
+function mdMiddle(e,sx,sy){ // RF5 中键:短按=快速交战(原「拖拽平移视角」整支已拆,平移改由右键拖动+WASD承担);长按 >=MMB_HOLD_MS 本阶段什么都不做,留给 Phase C 的目标轮盘
+  // RF5 这里原先还有一支 `else if(e.button===2&&e.ctrlKey)`(Ctrl+右键锁定),与 RF4b 的右键点敌舰锁定是同一套旧目标模型(直写 lockedTarget+driftFire),已随本阶段一并拆除
+  if(e.preventDefault)e.preventDefault(); // 阻止浏览器中键自动滚动
+  mmb={t:nowMs(),sx,sy,shift:e.shiftKey}; // RF5 起计时:用墙钟(暂停时也要能交战);位移判定在 mouseup 直接比坐标,中键不再置 panning 所以不能用 panning.moved。RF5 Phase C 追加 shift:三种上下文要的是【按下瞬间】的 Shift,定时器回调里 e 已回收、键也可能松了
+  clearTimeout(mmbTimer);mmbTimer=null; // RF5 Phase C 连击防叠表(第四个清理点)
+  if(!(typeof rad!=='undefined'&&rad.open))                      // RF5 Phase C 轮盘已开时中键只承担「短按=关」,不再排新的开
+    mmbTimer=setTimeout(()=>{                                    // RF5 Phase C 长按 350ms 在【松手前】弹轮盘(手柄轮盘的手感),不能等 mouseup
+      mmbTimer=null;
+      if(!mmb)return;                                            // 已被 mouseup/blur 清账 = 抬手早于 350ms
+      if(editMode||rangeMode||dragOrder)return;                  // 与下面 mouseup 那条早退口径一致(编辑器/测距/拖命令点时中键无语义)
+      if(typeof radOpen==='function')radOpen(mmb.sx,mmb.sy,mmb.shift); // 上下文判定 + 提交 fcNew/fcAppend + 填 rad 全在 74 里(目标可能已死/已失接触,radOpen 自己兜底)
+    },MMB_HOLD_MS);
+  hideCtx();
+}
+function mdRight(e,sx,sy){ // 右键:单击=直接移动,按住350ms=呼出命令菜单,拖动=平移
+  if(e.ctrlKey){ctrlArm=false;hideCtx();return;} // RF5 Ctrl+右键退化成空操作(只清全弹臂):被拆的那一支既不置 panning 也不置 rmbClick,【从不下移动命令】;不在这里 return 的话它会掉进本分支,沿用旧习惯 Ctrl+右键点敌舰的玩家会整队清空航线直冲敌舰坐标。敌舰目标由中键快速交战独占。清全弹臂这一手必须留——不清,松开 Ctrl 会触发 fire_all(71-keys:229)误发射
+  /* FL1:门要与 clearPendings 的覆盖面对齐,否则"提示说右键取消、实际却发出一条移动令"(本行原注释记的正是这个坑)。
+     【巡逻刻意排除】—— 画点链的右键语义是"结束并建任务"(在 mouseup 的 pendingTaskPatrol 分支),不是取消,
+     所以它必须让路让右键落下去;把它放进门里会让画好的点被静默丢弃。 */
+  if(!pendingTaskPatrol&&(pendingMine||pendingBeacon||pendingIntercept||pendingManual||pendingMove||pendingTurn||selWeapon||pendingFollow
+     ||pendingTaskIntercept||pendingTaskDeny||pendingTaskEscort||pendingTaskStrike)){ // 点选待命状态:右键取消(原只覆盖布雷/信标/拦截,pendingManual提示"右键取消"却不生效反而发出移动命令);FL1 补 pendingFollow——不补的话右键会落到下面的 rmbClick 分支,反而给全队下一条移动令
+    clearPendings();
+    if(typeof updFmBar==='function')updFmBar(); // 让【跟随目标】那个钮熄灭
+    hideTip();log('取消','');return;
+  }
+  panning={sx,sy,cx:cam.x,cy:cam.y,moved:false};
+  rmbClick={sx,sy,onShip:shipAt(sx,sy),shift:e.shiftKey}; // RF5 拆掉 etgt(RF4b 右键点敌舰锁定的唯一喂料):锁定分支已移除,该字段零消费者,顺带省掉每次右键按下的一次全 ships 扫描
+  clearTimeout(rmbTimer);
+  rmbTimer=setTimeout(()=>{ // 按住:RF11 起进移动虚影(原为呼出命令菜单,该菜单被 SIMPLE_UI 拦死,通道空置)
+    if(rmbClick&&!panning.moved){
+      if(!ghostArm(rmbClick.sx,rmbClick.sy,rmbClick.shift))
+        openCtx(rmbClick.sx,rmbClick.sy,rmbClick.onShip||null); // armed 不了时沿用旧行为(SIMPLE_UI 下 showCtx 自己会早退)
+      rmbClick=null;rmbTimer=null;
+    }
+  },350);
+  hideCtx();
+}
+function onMouseDown(e){
+  const sx=e.clientX,sy=e.clientY;
+  if(mdRadial(e,sx,sy))return;
+  if(mdEditor(e,sx,sy))return;
+  if(mdWeaponPick(e,sx,sy))return;
+  if(mdPending(e,sx,sy))return;
+  if(e.button===0)mdLeft(e,sx,sy);
+  else if(e.button===1)mdMiddle(e,sx,sy);
+  else if(e.button===2)mdRight(e,sx,sy);
 }
 window.addEventListener('mousemove',e=>{
   mouseX=e.clientX;mouseY=e.clientY; // 全程记录鼠标位置(测距起点/编辑器等用)
@@ -499,7 +524,7 @@ window.addEventListener('mouseup',e=>{
   if(e.button===1&&mmb){ // RF5 中键抬起:短按且未拖动 → 快速交战(准星吸附的敌舰建火控序列)
     // 必须排在下面 editMode / dragOrder 两条早退【之前】:它们都不分按键、也不清 mmb。拖命令点(或按下中键后切进编辑器)时抬中键会被那两条 return 吃掉,
     // 旧时间戳留在 mmb 里,下一次真正的短按 held 算出来是几秒 → 被判成长按而静默什么都不做,快速交战被吞掉一次(第二下才生效),屏幕上还没有任何提示。
-    const held=(typeof performance!=='undefined'?performance.now():Date.now())-mmb.t;
+    const held=nowMs()-mmb.t;
     const moved=Math.abs(e.clientX-mmb.sx)+Math.abs(e.clientY-mmb.sy)>5; // 中键已不置 panning,位移直接比坐标(不依赖 mousemove 的 panning.moved)
     const mShift=!!mmb.shift; // RF7 取【按下瞬间】的 Shift(与长按轮盘同口径),下一行 mmb 就清了
     mmb=null; // 计时一律就地清账,与下面走不走得到无关
@@ -587,12 +612,12 @@ function onWheel(e){e.preventDefault(); // preventDefault 仍是第一句(注册
 // RF5 失焦清理 +mmb:不清的话切窗回来会残留一个"按下未抬起"的中键计时,回来随手一抬就误触快速交战
 window.addEventListener('blur',()=>{ghostMove=null;panning=null;selDrag=null;rmbClick=null;dragOrder=null;mmb=null;clearTimeout(rmbTimer);rmbTimer=null;clearTimeout(mmbTimer);mmbTimer=null;/* RF5 Phase C:不清的话切窗回来会凭空弹出轮盘 */for(const k in camKeys)camKeys[k]=false;}); // v119:失焦清相机键位,防切窗后镜头卡移动
 
-function selectedShips(){return selected.map(id=>ships.find(s=>s.id===id)).filter(Boolean);}
+function selectedShips(){return selected.map(id=>shipById(id)).filter(Boolean);}
 function controlledShips(){ // 可控制目标:GM(管理员)下敌我皆可,普通模式只控制我方
   const sel=selectedShips().filter(s=>!s.dead);
   return adminMode?sel:sel.filter(s=>s.side==='blue');
 }
 function engageable(t,sh,minQ){ // 能否攻击:敌方 + 攻击方阵营已探测到足够质量(minQ:2识别/3火控,默认2)
   minQ=minQ||2;
-  return t&&!t.dead&&t.side!==sh.side&&(sh.side==='blue'?t.litBlue:t.litRed)>=minQ;
+  return t&&!t.dead&&t.side!==sh.side&&(litOf(t,sh.side))>=minQ;
 }

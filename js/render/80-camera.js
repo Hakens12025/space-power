@@ -30,7 +30,7 @@ function toScreen(x,y){return [(x-cam.x)*cam.zoom+W/2,(y-cam.y)*cam.zoom+H/2];}
      而它们被测的代码一行没动。跳层动画则是显式抢占(见 camJump)。 */
 let zAnim = null;
 const ZOOM_TAU = 0.085;   // 秒:指数逼近的时间常数。约 3x tau(0.25s)就收敛到看不出差别
-const _zNow = () => (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+const _zNow = () => nowMs();
 function zoomAt(sx,sy,f){
   const w=worldAt(sx,sy);
   /* SN6:上下限从梯子推(80-viewtier 的 vtClampK),不再是写死的 1e-5 与 1。
