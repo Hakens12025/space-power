@@ -205,7 +205,10 @@ t('FLOW56_LOD',function(){
     /* 第四艘红舰:摆在【雷达够不着、却听得见】的那一段(它自己在照射)⇒ lit1 但定不出位置。
        ⚠ 没有它的话 ① 是【没有牙的】:三艘全都定得出位置时,把"只聚已定位的"那道过滤删掉,
          结果一模一样(变异测试当场发现)。它在屏幕上离那三艘只有 30px,阈值是 40.8px —— 过滤一删它就会被聚进去。 */
-    var RU=makeShip('DD','L红雾',[700000,0,0],[-1,0,0],[0,0,0],'red',2);Rr.push(RU);
+    /* H1:这艘船原来写死在 x=70 万(离蓝方 CA 100 万)。形态 H 把雷达发现从 92 万拉到 226 万之后,100 万落进了雷达里,它被定位了,本条当场红 ——
+       正是"判据里放一艘远处的船不许写死公里数"那条规矩要防的事。现在从梯子现量:取【CA 照 DD 的雷达发现】与【DD 照射被 CA 听见】的几何中点。 */
+    var dFog=Math.sqrt(ladPair('CA','DD').radarMin*ladPair('DD','CA').heardMin);
+    var RU=makeShip('DD','L红雾',[B[0].pos[0]+dFog,0,0],[-1,0,0],[0,0,0],'red',2);Rr.push(RU);
     ships.length=0;B.forEach(function(x){ships.push(x);});Rr.forEach(function(x){ships.push(x);});
     ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.autoEngage=false;x.roe='hold';x.macOn=false;x.mslOn=false;x.ciwsOn=false;x.noFire=true;});
     setEmit(B[0],'paint');                       /* 蓝方 CA 照射 ⇒ 近处三艘红舰定得出位置 */
@@ -213,7 +216,8 @@ t('FLOW56_LOD',function(){
     detT=0;for(i=0;i<40;i++)detectLoop();
     cam.x=0;cam.y=0;
     /* ① 拉远到"编队屏幕直径 < 阈值" ⇒ 蓝方塌成一个框;红方三条已定位接触聚成一个群 */
-    cam.zoom=6e-5;lodPrev={fleet:{},pairsB:null,pairsR:null};lodBuild();
+    var kFar=30/(RU.pos[0]-Rr[0].pos[0]);        /* H1:缩放也跟着现量 —— 让那艘雾里的船在屏幕上离三艘已定位的恰好 30px(聚群阈值 40.8px 以内),①的牙才在 */
+    cam.zoom=kFar;lodPrev={fleet:{},pairsB:null,pairsR:null};lodBuild();
     var aB=lodNow.aggs.filter(function(a){return a.side==='blue';});
     var aR=lodNow.aggs.filter(function(a){return a.kind==='rcluster';});
     var ruLit=(RU.litBlue===1&&!RU.covB.fix);    /* 前提:那一艘确实是"有信号、定不出位置" */
@@ -248,7 +252,7 @@ t('FLOW56_LOD',function(){
     var ok5=(!!hit&&a0.ships.indexOf(hit)>=0);
     var ok=(ok1&&ok2&&ok3&&ok4&&ok5);
     out=(ok?'ok':'fail')
-      +' ① 拉远(6e-5 = '+Math.round(1/6e-5)+' km/px):蓝 '+aB.length+' 框/收起 '+lodNow.hideBlue.size+' 艘,红 '+aR.length+' 群/收起 '+lodNow.hideRed.size+' 条(未定位那一艘须【不】进群:lit'+RU.litBlue+' 定得出='+RU.covB.fix+' 被收起='+lodNow.hideRed.has(RU.id)+')='+ok1
+      +' ① 拉远('+Math.round(1/kFar)+' km/px,从梯子现量):蓝 '+aB.length+' 框/收起 '+lodNow.hideBlue.size+' 艘,红 '+aR.length+' 群/收起 '+lodNow.hideRed.size+' 条(未定位那一艘须【不】进群:lit'+RU.litBlue+' 定得出='+RU.covB.fix+' 被收起='+lodNow.hideRed.has(RU.id)+')='+ok1
       +' | ② 拉近(100 km/px,相邻两艘 120px):聚合 0 个、一个都不收='+ok2
       +' | ③ 把红舰编进同一支编队后聚合结果逐位不变(不许读真实编制)='+ok3+' ['+sigA+'] vs ['+sigB+']'
       +' | ④ 构成:认出时「'+compIdn+'」 没认出时「'+compUnk+'」(后者须恰好是 ?×3)='+ok4

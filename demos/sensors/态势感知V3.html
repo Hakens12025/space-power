@@ -153,7 +153,7 @@ main{display:grid;grid-template-columns:minmax(0,1fr) 560px;gap:8px;min-height:0
 <div id="app">
 <header>
   <div class="brand">态势感知<small>N-LEVEL CONTACT</small></div>
-  <div class="ctl">时间倍率 <input id="inTs" type="range" min="1" max="40" step="1"><span class="rd" id="rdTs"></span><button class="btn" id="btnTc" title="接触降速:滑块是【上限】。一旦我方握有【已定位】的接触,倍率自动压到 x6;它进了导弹射程 x4;进了主炮射程 x2。只读我方知道的事 —— 没被发现的船靠得再近,时间也不会变慢(否则降速本身就是一条情报)。热区不触发。">接触降速</button></div>
+  <div class="ctl">时间倍率 <input id="inTs" type="range" min="1" max="20" step="1"><span class="rd" id="rdTs"></span><button class="btn" id="btnTc" title="接触降速:滑块是【上限】。一旦我方握有【已定位】的接触,倍率自动压到 x6;它进了导弹射程 x4;进了主炮射程 x2。只读我方知道的事 —— 没被发现的船靠得再近,时间也不会变慢(否则降速本身就是一条情报)。热区不触发。">接触降速</button></div>
   <div class="seg" id="segLayer"><button class="btn" data-layer="obs">我方视角</button><button class="btn" data-layer="mix">叠加</button><button class="btn" data-layer="true">真值</button></div>
   <div class="ctl"><button class="btn" id="btnPause">暂停</button><button class="btn" id="btnReset">重置</button></div>
   <div class="ctl"><button class="btn" id="btnLad" title="数值的唯一真相:玩家看得见的每一级距离。模型常数由它反解,不是反过来">距离梯子</button></div>
@@ -362,14 +362,24 @@ const COV={
    参考对 = DD 看 DD(冷目标、单站)。别的舰种对由物理律从它缩放出去,梯子图上四行都画。 */
 const LAD={
   V_REF:1000,                 /* km/s。只用来把公里换成"分钟预警",不进任何判据 */
-  SESSION_MIN:60,             /* 一局的量级(分钟)。任何一级超过它 = 开局就跨过、整局不变 = 装饰 */
+  SESSION_MIN:120,            /* 一局的量级(分钟)。任何一级超过它 = 开局就跨过、整局不变 = 装饰。H1:60 → 120(形态 H 的一局本来就长:开局 300 万、接敌半小时) */
   /* -- 武器(来自武器表,这里只是抄一份给梯子图和不变量用)-- */
   gun:150000, msl:350000,
   /* -- 发现域:直接写【分钟预警】(1 分 = 6 万公里)。光学看见冷目标 24 万(满推 x2 = 48 万)· 雷达 65 万 · 开雷达被听见 125 万。
         每个数的来由见下面「设计选择」那一节的注释。沿革:旧标定换算过来是 62.75 / 139.54 / 200 分,三级全在一局之外;
         之后一度是 10 / 20 / 40 分(60 / 120 / 240 万,「现行」版)—— 每一级翻倍、很整齐,但雷达发现比引擎整个战场还大;
         2026-09-19 用户拍板只留这一组(原「合成」版),「现行」「zcode」两档与顶栏的版本旋钮一并去掉。 */
-  optColdMin:240000/60000, radarMin:650000/60000, heardMin:1250000/60000,
+  /* ==== H1(2026-09-22 用户拍板【形态 H】:"现在的交战非常的即时 RTS 化,我们需要扩大范围")====
+     形态 N / H 是 态势感知的问题.md 第 7 节那个挂了很久的品类级决定:传感器 : 武器 是 1.5~2.5 倍(N)还是 5~20 倍(H)。
+     原来这组(雷达 65 万 / 被听见 125 万 / 开局 120 万)量出来 雷达发现 / 导弹射程 = 1.86 ~ 3.26 —— 是形态 N 的数;
+     而热区、亮灯的代价、光速延迟这几样只在"发现得到、但还够不着"的那一段里才有戏,N 里这一段几乎不存在(双方一亮灯,100 秒内互相定位)。
+     H1 只动【发现域】两个数,武器与定位域(交会 / 认出 / 火控)一个不动 —— 拉长的正是中间那一段:
+       雷达 160 万   = 导弹射程的 4.6 倍(最强的 CA 照 CA 是 281 万 = 8.0 倍)。上限由唯一的那条硬规则钉着:开局 300 万 >= 最远的雷达发现 281 万
+       被听见 320 万 = 2 x 雷达(手电效应),且 > 开局间距 ⇒ 谁先亮灯,对面第 0 秒就听得见,但只有方位
+       光学冷 24 万  不动:仍小于导弹射程 ⇒ 熄火潜行 = 伏击这条设计选择原样成立
+     试过的另一组 H2(雷达 250 / 被听见 500 / 开局 450 万):账面同样只超 Z5 一条,但接敌全程 276 真实秒 @x20,开局之后四分半钟没有事发生,否了。
+     结果:CA 照 DD 从发现(226 万)到定位(64 万)之间有 162 万公里的"只有方位"—— 对头 1500 km/s 约 18 分钟模拟时间、x20 下约 55 真实秒。 */
+  optColdMin:240000/60000, radarMin:1600000/60000, heardMin:3200000/60000,
   /* -- 定位域:公里。从旧标定反解出来再取整(各动了不到 1%),交战手感不变 -- */
   optCross:300000,   /* 单条光学方位的横向误差 = 导弹门 的距离(决定交会多远有用) */
   lisCross:310000,   /* 单条静听方位的横向误差 = 导弹门 的距离 */
@@ -798,7 +808,7 @@ function ladFill(txt){
 }
 
 /* ================= 状态 ================= */
-const U={ts:12, paused:false, layer:'mix', scene:0, addCls:'DD', sel:null, drag:null, pan:null, noFill:false};
+const U={ts:20, paused:false, layer:'mix', scene:0, addCls:'DD', sel:null, drag:null, pan:null, noFill:false};
 const S={pulses:[], t:0, acc:0, ticks:0, ships:[], seq:0, k:0, cx:0, cy:0, nLit:0, sig:'', ref:{}};
 
 function mkShip(side,cls,x,y,o){
@@ -2267,12 +2277,12 @@ const BUD={
           ZOOM_PX:[30,60],/* 拉到最近时,最小的、要按真实尺寸读的东西该占多少像素 */
           HULL_PX:48,     /* 舰体最多画多大 */
           src:'本页:VT.FIT / VT.LAND / K_MAX / LOD'},
-  world:{W:2000000,       /* 战场全宽:用户已拍板的"战役感"档(仓库根 尺度预算.md)。⚠ 引擎现值是 100 万,落引擎时要改 CFG.world */
-         START:1200000,   /* 开局间距。⚠ 引擎现有预设约 60 万(BUD.scene.PRESET_START),落引擎时预设要重摆 */
+  world:{W:8000000,       /* 战场全宽。H1:200 万 → 800 万(>= 2.5 x 最远的雷达发现 281 万)。⚠ 引擎里没有战场边界(CFG.world 只管星空贴图与开局镜头),这个数在引擎侧只是"摆得开"的意思 */
+         START:3000000,   /* 开局间距。H1:120 万 → 300 万 = 10 光秒(光速延迟在这个距离上第一次有 10 秒的量级)。引擎侧 = scenario/97-match 的 MATCH.OPEN */
          K_WORLD:2.5,     /* 战场至少是"靠移动跨过的最大那一圈"的几倍 */
          src:'引擎 js/core/00-config.js CFG.world(半幅 50 万);js/scenario/90-envs.js 预设摆位'},
   time:{/* 记账用的接近速度、从哪记到哪、每带的真实秒窗口 —— 这三样是设计选择,住在 DSN.time 里 */
-        TS:12,            /* 缺省时间倍率(接敌阶段;也是滑块的缺省) */
+        TS:20,            /* 缺省时间倍率(接敌阶段;也是滑块的缺省)。H1:12 → 20 = 引擎倍速档位的上限(RT1:0.1 ~ 20) */
         CAP:[6,4,2],      /* 接触降速的三档上限:握有已定位的接触 / 它在导弹射程内 / 在主炮射程内 */
         src:'引擎 js/ships/11-classes.js speedGears(DD 800 / CA 700);本页缺省倍率 x12(引擎 x1~x50)'},
   weapon:{HIT:2000,       /* 命中判定半径,不分舰种 */
@@ -2416,7 +2426,7 @@ function budgetRows(){
         Z6(引擎 SN5 的靶场下限)在椭圆模型下不起作用,它要管的那件事现在是 B12。 */
   {const farR=maxOf('radarMin'), V=DSN.time.V, w=tcWall(BUD.world.START,LAD.gun,V,pairs[0].radarLocate);
    add('Z3','战场 x 感知','行动层:最远的雷达发现 <= 0.9 x 战场全宽',farR<=0.9*BUD.world.W,ladWan(farR)+' 对 '+ladWan(0.9*BUD.world.W));
-   add('Z5','时间 x 战场','接敌全程(开局→主炮射程)60~180 真实秒 @'+V+'km/s',w>=60&&w<=180,w.toFixed(1)+' 秒(对头 1600 时 '+(w*V/1600).toFixed(1)+' 秒)');}
+   add('Z5','时间 x 战场','接敌全程(开局→主炮射程)60~240 真实秒 @'+V+'km/s',w>=60&&w<=240,w.toFixed(1)+' 秒(对头 1600 时 '+(w*V/1600).toFixed(1)+' 秒)');}
   /* B11 梯子自己的顺序(武器 < 光学 < 雷达 < 被听见 ……)归 ladCheck,这里只引一个总数 */
   {const lc=ladCheck(); add('B11','武器 x 感知','距离梯子的顺序不变量',lc.every(x=>x.ok),lc.filter(x=>x.ok).length+'/'+lc.length);}
   return rows;
@@ -2456,8 +2466,8 @@ function piRows(){
       'B10.1 要求 <= 1(到了火控级就打得中)。现在正好等于 1,零余量:舰种再大一号、或命中半径按舰种缩小,这条就翻。留三成余量。');
   add('P5','导弹 / 主炮','导弹射程 / 主炮射程',LAD.msl/G,1.5,4,'推',
       '下限来自 B2.1(战术层与舰队层之间要有空档);上限是拍的 —— 太大则导弹带里主炮永远插不上手。');
-  add('P6','雷达发现 / 导弹射程','参考对的雷达发现 / 导弹射程',ra/LAD.msl,1.5,3,'拍',
-      '形态 N(Nebulous 一类:传感器约为武器的 2 倍)取 1.5~3;形态 H(接敌阶段很长)是 5~20。态势感知的问题.md 第 7 节。');
+  add('P6','雷达发现 / 导弹射程','参考对的雷达发现 / 导弹射程',ra/LAD.msl,4,20,'拍',
+      '形态 H(2026-09-22 用户拍板:接敌阶段很长,潜艇模拟 / Highfleet 一类)取 4~20;形态 N(Nebulous 一类:传感器约为武器的 2 倍)是 1.5~3,改前的 1.86 正落在那里。参考对 DD 照 DD 是 4.57,最强的 CA 照 CA 是 8.0。态势感知的问题.md 第 7 节。');
   add('P7','被听见 / 雷达发现','参考对的被听见 / 雷达发现',he/ra,1.5,3,'推',
       '单程对双程,物理上必然大于 1。它就是「亮灯」的价格:比值越大,开雷达之前对方知道得越早。小于 1.5 则亮灯几乎没有代价。');
   add('P8','姿态差','光学发现(满推) / 光学发现(冷)',Math.sqrt(1+SENS.P_ENG_MAIN),3,6,'拍',
@@ -2832,8 +2842,8 @@ function runSelftest(){
     const now=st(), fin=budgetRows().every(x=>typeof x.val==='string'&&x.val.indexOf('NaN')<0&&x.val.indexOf('undefined')<0);
     const ca=SENS.CLS.CA, e0=ca.emit, r0=ca.recv; ca.emit=3; ca.recv=3; const bad1=st().over; ca.emit=e0; ca.recv=r0;
     const back=st();
-    chk('尺度预算的账面:没有超支;挂着的只有【战场 200 万还小于 2.5 x 最远的雷达发现】与【引擎靶场的靶在火控距离之外】;改坏舰种差当场超支',
-      fin&&now.over.join()===''&&now.pend.join()==='B6.1,B12'&&now.ok.length===budgetRows().length-2&&
+    chk('尺度预算的账面:没有超支;挂着的只有【引擎靶场的靶在火控距离之外】(H1 起战场 800 万 >= 2.5 x 最远的雷达发现,B6.1 那条挂了很久的终于平了);改坏舰种差当场超支',
+      fin&&now.over.join()===''&&now.pend.join()==='B12'&&now.ok.length===budgetRows().length-1&&
       bad1.indexOf('B7.heardMin')>=0&&back.over.join()===now.over.join(),
       '成立 '+now.ok.length+' / 超支 ['+now.over.join(' ')+'] / 待定 ['+now.pend.join(' ')+']   CA 改回 3/3 时超支 ['+bad1.join(' ')+']');
   })();
@@ -2871,11 +2881,11 @@ function runSelftest(){
     const e1=tcStep(10), b1=TC.band;                                     /* 场上是"主炮带内已定位":立刻第 3 档,倍率压到 2 */
     sc(null,300000); tcStep(1); const b2=TC.band; tcStep(TC.HOLD); const b3=TC.band, e3=tcStep(10);   /* 接触没了:先撑住,过了 HOLD 才回第 0 档 */
     sc('paint',0.8*LAD.gun); tcStep(10); TC.on=false; const e4=tcStep(10), b4=TC.band; TC.on=true; TC.band=0; TC.hold=0; TC.eff=0; U.ts=ts0;
-    const Lc=p.radarLocate, hand=(650000-Lc)/1000/12+(Lc-480000)/1000/6, got=tcWall(650000,480000,1000,Lc);
+    const Lc=p.radarLocate, hand=(650000-Lc)/1000/BUD.time.TS+(Lc-480000)/1000/6, got=tcWall(650000,480000,1000,Lc);   /* H1:原来写死 /12(当时的缺省倍率);现在读 BUD.time.TS */
     const whole=tcWall(BUD.world.START,LAD.gun,1000,Lc), gunBand=tcWall(LAD.gun,0,1600,Lc);
     chk('接触降速:没发现的船进了导弹射程也不降速(不泄露)、同站位一照射就是第 2 档;热区不触发;变慢立刻、变快等 HOLD;记账 = 分段手算',
       hid.b===0&&hid.lit===0&&lit.b===2&&lit.fix&&heat.b===0&&heat.lit===1&&!heat.fix&&loc.b===1&&gun.b===3&&
-      b1===3&&e1===2&&b2===3&&b3===0&&e3===12&&e4===12&&b4===0&&Math.abs(got-hand)<1e-9&&whole>=60&&whole<=180&&gunBand>=10,
+      b1===3&&e1===2&&b2===3&&b3===0&&e3===12&&e4===12&&b4===0&&Math.abs(got-hand)<1e-9&&whole>=60&&whole<=240&&gunBand>=10,
       '冷船 30 万未发现 → 档 '+hid.b+';我方照射 → 档 '+lit.b+';热区 → 档 '+heat.b+';已定位·导弹射程外 → 档 '+loc.b+';主炮带 → 档 '+gun.b+
       '   迟滞:接触消失 1 秒后仍是档 '+b2+',过 HOLD 回档 '+b3+'   关开关 → x'+e4+
       '   记账 65→48 万 @1000:'+got.toFixed(1)+' 秒(手算 '+hand.toFixed(1)+');接敌全程 '+whole.toFixed(0)+' 秒;主炮带对头 '+gunBand.toFixed(0)+' 秒');
@@ -4061,9 +4071,9 @@ function runUitest(){
     const lc=ladCheck().filter(x=>!x.ok).length, ca=S.ships.filter(x=>x.cls==='CA')[0];
     U.sel=S.ships[0].id; click('[data-tier="2"]'); camAnimStep(1); drawMap();
     const radarPx=2*actRange(dq,reflOf(dd))*S.k, tier2=S.vt, knob=document.querySelectorAll('#segVer,[data-ver]').length;
-    chk('这一组数进了模型:24/48/65/125 万、CA 2/2、战场 200 万 / 开局 120 万;层界 = 相邻落点的几何中点;舰队落点上雷达发现整圈可见;梯子顺序全成立;预算无超支、只挂两条;没有版本旋钮',
-      Math.abs(got[0]-240000)<1&&Math.abs(got[1]-480000)<1&&Math.abs(got[2]-650000)<1&&Math.abs(got[3]-1250000)<1&&ca&&ca.emit===2&&ca.recv===2&&BUD.world.W===2000000&&BUD.world.START===1200000&&
-      Math.abs(T1m/Math.sqrt(L[0]*L[1])-1)<1e-9&&Math.abs(T2m/Math.sqrt(L[1]*L[2])-1)<1e-9&&L[0]<T1m*(1-VT.HYS)&&L[1]>T1m*(1+VT.HYS)&&L[1]<T2m*(1-VT.HYS)&&L[2]>T2m*(1+VT.HYS)&&lc===0&&over.length===0&&pend.join()==='B6.1,B12'&&zr.map(x=>x.id).join()==='Z3,Z5'&&zr.every(x=>x.ok)&&
+    chk('这一组数进了模型(H1 形态 H):24/48/160/320 万、CA 2/2、战场 800 万 / 开局 300 万;层界 = 相邻落点的几何中点;舰队落点上雷达发现整圈可见;梯子顺序全成立;预算无超支、只挂一条;没有版本旋钮',
+      Math.abs(got[0]-240000)<1&&Math.abs(got[1]-480000)<1&&Math.abs(got[2]-1600000)<1&&Math.abs(got[3]-3200000)<1&&ca&&ca.emit===2&&ca.recv===2&&BUD.world.W===8000000&&BUD.world.START===3000000&&
+      Math.abs(T1m/Math.sqrt(L[0]*L[1])-1)<1e-9&&Math.abs(T2m/Math.sqrt(L[1]*L[2])-1)<1e-9&&L[0]<T1m*(1-VT.HYS)&&L[1]>T1m*(1+VT.HYS)&&L[1]<T2m*(1-VT.HYS)&&L[2]>T2m*(1+VT.HYS)&&lc===0&&over.length===0&&pend.join()==='B12'&&zr.map(x=>x.id).join()==='Z3,Z5'&&zr.every(x=>x.ok)&&
       tier2===2&&radarPx<=VT.FIT*sh&&radarPx>=0.5*sh&&knob===0,
       '被看见 冷/热 '+fmtK(got[0])+'/'+fmtK(got[1])+' 照得到 '+fmtK(got[2])+' 被听见 '+fmtK(got[3])+'   落点 '+L.map(x=>x.toFixed(0)).join('/')+' 层界 '+T1m.toFixed(0)+'/'+T2m.toFixed(0)+
       '   梯子顺序破坏 '+lc+'   超支 ['+over.join(' ')+'] 待定 ['+pend.join(' ')+'] Z 行 '+zr.map(x=>x.id+(x.ok?'✓':'✗')).join(' ')+

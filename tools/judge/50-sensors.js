@@ -430,3 +430,49 @@ t('FLOW53_RADAR',function(){
     +' | ④ 单调='+(badM.length?badM.join(','):'无')+' 手电系数['+fRows.join(' ')+'](须全>=4.000,等价 emit>=recv)违反='+(badF.length?badF.join(','):'无')
     +' | ⑤ 靶场开局 CA 开照射后 40 拍:['+rows.join(' ')+'] 到火控级的靶数='+lit3+'(须>=1)='+ok5;
 });
+/* ===== RV1 反推的暴露等级高于主推 =====
+   用户 2026-09-22:"反推暴露等级更高"。改前主推与反推同档(flame 非零就是 P_ENG_MAIN)。
+     ① 四档:熄火 / 侧推 / 主推 / 反推 的亮度 = size x (1 + 0 / SIDE / MAIN / REV),反推必须比主推亮;可见半径随之 正比 sqrt(1 + 功耗)
+     ② 生产路径:一艘带着速度的船下刹车令,跑几拍之后 flame<0,engPowerOf 给出的是反推那一档;下前进令则是主推那一档
+     ③ 端到端:红舰摆在【主推看不见、反推看得见】的距离上(两个半径的几何中点,从模型现量)—— 主推 lit=0,一反推下一拍就被看见,停了又看不见
+     ④ 右栏读数写得出「反推」 */
+t('FLOW81_REVBURN',function(){
+  if(!(SENS.P_ENG_REV>0))return 'fail RV1 未加载(缺 SENS.P_ENG_REV)';
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),fmBak=formations,out='';
+  try{
+    var B=makeShip('CA','推蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),R=makeShip('DD','推红',[100000,0,0],[1,0,0],[0,0,0],'red',2);
+    ships.length=0;ships.push(B,R);projectiles.length=0;formations={};
+    ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.flame=0;x.sideFlame=0;x.fireHot=0;x.autoEngage=false;x.roe='hold';setEmit(x,'silent');});
+    /* ① */
+    var lum=function(f,sf){R.flame=f;R.sideFlame=sf;return optLum(R);},vr=function(f,sf){R.flame=f;R.sideFlame=sf;return visRangeOf(R);};
+    var l0=lum(0,0),lS=lum(0,1),lM=lum(1,0),lR=lum(-1,0),v0=vr(0,0),vM=vr(1,0),vR=vr(-1,0);
+    var ok1=(SENS.P_ENG_REV>SENS.P_ENG_MAIN&&Math.abs(l0-R.size)<1e-12&&Math.abs(lS-R.size*(1+SENS.P_ENG_SIDE))<1e-12&&Math.abs(lM-R.size*(1+SENS.P_ENG_MAIN))<1e-12
+      &&Math.abs(lR-R.size*(1+SENS.P_ENG_REV))<1e-12&&Math.abs(vR/v0-Math.sqrt(1+SENS.P_ENG_REV))<1e-9&&vR>vM*1.2);
+    /* ② 生产路径:走 physics/31 的主循环 */
+    R.flame=0;R.sideFlame=0;R.vel=[600,0,0];R.facing=[1,0,0];R.orders=[];R.brake=true;
+    var sawRev=false,i;for(i=0;i<150&&!sawRev;i++){stepShipsMotion(0.02);if(R.flame<0&&engPowerOf(R)===SENS.P_ENG_REV)sawRev=true;}
+    R.brake=false;R.vel=[0,0,0];R.pos=[100000,0,0];R.orders=[{pos:[900000,0,0],type:'stop'}];if(typeof resetForNewOrders==='function')resetForNewOrders(R);
+    var sawMain=false;for(i=0;i<150&&!sawMain;i++){stepShipsMotion(0.02);if(R.flame>0&&engPowerOf(R)===SENS.P_ENG_MAIN)sawMain=true;}
+    var ok2=(sawRev&&sawMain);
+    /* ③ 端到端 */
+    R.orders=[];R.vel=[0,0,0];R.brake=false;
+    var dMid=Math.sqrt(vM*vR);R.pos=[dMid,0,0];R.litBlue=0;R.covB=newCov();
+    R.flame=1;R.sideFlame=0;for(i=0;i<4;i++){R.flame=1;detectLoop(1);}var litMain=R.litBlue;
+    for(i=0;i<3;i++){R.flame=-1;detectLoop(1);}var litRev=R.litBlue;
+    for(i=0;i<6;i++){R.flame=0;detectLoop(1);}var litOff=R.litBlue;
+    var ok3=(litMain===0&&litRev>=1&&litOff===0);
+    /* ④ 读数 */
+    R.flame=-1;var rdRev=(typeof senseRows==='function')?senseRows(R):'';R.flame=1;var rdMain=(typeof senseRows==='function')?senseRows(R):'';R.flame=0;
+    var ok4=(rdRev.indexOf('反推')>=0&&rdMain.indexOf('满推')>=0&&rdMain.indexOf('反推')<0);
+    var ok=(ok1&&ok2&&ok3&&ok4);
+    out=(ok?'ok':'fail')+' ① 亮度 熄火 '+l0.toFixed(2)+' / 侧推 '+lS.toFixed(2)+' / 主推 '+lM.toFixed(2)+' / 反推 '+lR.toFixed(2)+';可见半径 '+Math.round(v0/1e4)+' / '+Math.round(vM/1e4)+' / '+Math.round(vR/1e4)+' 万(反推 x'+(vR/v0).toFixed(2)+')='+ok1
+      +' | ② 生产路径:刹车令跑出反推档='+sawRev+' 前进令跑出主推档='+sawMain+'='+ok2
+      +' | ③ 端到端 @'+Math.round(dMid/1e4)+' 万:主推 lit='+litMain+'(须 0)反推 lit='+litRev+'(须>=1)停了之后 lit='+litOff+'(须 0)='+ok3
+      +' | ④ 读数写得出「反推」='+ok4;
+  }finally{
+    formations=fmBak;
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+    projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
+  }
+  return out;
+});

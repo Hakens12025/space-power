@@ -215,13 +215,14 @@ t('FLOW74_TC',function(){
     projectiles[0].visBlue=true;var bMslSeen=tcBand();projectiles.length=0;
     var ok1=(bNone===0&&bHeat===0&&bFarEst===1&&bMid===2&&bNear===3&&bMslDark===0&&bMslSeen===2);
     /* ② 时间行为 */
-    rate=50;TC.band=0;TC.hold=0;TC.eff=0;con('none');
+    var RMAX=RATES[RATES.length-1];                                          /* RT1:不写死 50 —— 取档位表的上限 */
+    rate=RMAX;TC.band=0;TC.hold=0;TC.eff=0;con('none');
     var e0=tcStep(0.1);
     con('fix',far[0],far[1]);var e1=tcStep(0.1),i;for(i=0;i<60;i++)tcStep(0.1);var eCap=tcStep(0.1);
     con('none');var eHold=tcStep(0.1),held=(TC.band===1);
     for(i=0;i<Math.ceil(TC.HOLD/0.1)+2;i++)tcStep(0.1);var released=(TC.band===0);for(i=0;i<60;i++)tcStep(0.1);var eBack=tcStep(0.1);
-    rate=2;con('fix',far[0],far[1]);TC.eff=0;for(i=0;i<20;i++)tcStep(0.1);var eLow=tcStep(0.1);rate=50;
-    var ok2=(e0===50&&e1<50&&e1>TC.CAP[0]&&eCap===TC.CAP[0]&&eHold===TC.CAP[0]&&held&&released&&eBack===50&&eLow===2);
+    rate=2;con('fix',far[0],far[1]);TC.eff=0;for(i=0;i<20;i++)tcStep(0.1);var eLow=tcStep(0.1);rate=RMAX;
+    var ok2=(RMAX>TC.CAP[0]&&e0===RMAX&&e1<RMAX&&e1>TC.CAP[0]&&eCap===TC.CAP[0]&&eHold===TC.CAP[0]&&held&&released&&eBack===RMAX&&eLow===2);   /* RMAX>CAP:上限要是压到降速档以下,接触降速就没有东西可压了 */
     /* ④ 读数 */
     con('fix',far[0],far[1]);TC.eff=0;for(i=0;i<60;i++)tcStep(0.1);var rd=tcReadout();
     var ok4=(rd.indexOf('x'+TC.CAP[0])>=0&&rd.indexOf(TC.NAME[1])>=0);
@@ -229,13 +230,13 @@ t('FLOW74_TC',function(){
     matchExit();
     var rr=ships.filter(function(s){return s.side==='red';})[0],bb=ships.filter(function(s){return s.side==='blue';})[0];
     rr.litBlue=2;var c2=rr.covB=newCov();c2.seen=true;c2.fix=true;c2.n=2;c2.x=bb.pos[0]+1000;c2.y=bb.pos[1];
-    rate=50;TC.eff=0;for(i=0;i<30;i++)tcStep(0.1);var eRange=tcStep(0.1),rdRange=tcReadout(),bandInRange=tcBand();
-    var ok3=(eRange===50&&rdRange===''&&bandInRange===3);                      /* 档位函数照样算得出 3(局面确实成立),只是靶场里不用它 */
+    rate=RMAX;TC.eff=0;for(i=0;i<30;i++)tcStep(0.1);var eRange=tcStep(0.1),rdRange=tcReadout(),bandInRange=tcBand();
+    var ok3=(eRange===RMAX&&rdRange===''&&bandInRange===3);                      /* 档位函数照样算得出 3(局面确实成立),只是靶场里不用它 */
     var ok=(ok1&&ok2&&ok3&&ok4);
     out=(ok?'ok':'fail')
       +' ① 档位:没发现贴脸='+bNone+' 热区贴脸='+bHeat+'(须 0/0)估计在远处(真值贴脸)='+bFarEst+'(须 1)估计进导弹射程='+bMid+'(须 2)进主炮射程='+bNear+'(须 3)来袭导弹 看不见='+bMslDark+' 看得见='+bMslSeen+'(须 0/2)='+ok1
-      +' | ② x50:无接触 '+e0+' → 刚定位那一帧 '+e1.toFixed(1)+'(须已开始下降)→ 收敛 '+eCap+'(须 '+TC.CAP[0]+')→ 接触刚丢 '+eHold+' 仍压着='+held+' → '+TC.HOLD+'s 后放开='+released+' 回到 '+eBack+';玩家选 x2 时='+eLow+'(须 2)='+ok2
-      +' | ③ 靶场里同样的局面:档位函数='+bandInRange+' 但倍速='+eRange+' 读数后缀=「'+rdRange+'」(须 50 / 空)='+ok3
+      +' | ② x'+RMAX+':无接触 '+e0+' → 刚定位那一帧 '+e1.toFixed(1)+'(须已开始下降)→ 收敛 '+eCap+'(须 '+TC.CAP[0]+')→ 接触刚丢 '+eHold+' 仍压着='+held+' → '+TC.HOLD+'s 后放开='+released+' 回到 '+eBack+';玩家选 x2 时='+eLow+'(须 2)='+ok2
+      +' | ③ 靶场里同样的局面:档位函数='+bandInRange+' 但倍速='+eRange+' 读数后缀=「'+rdRange+'」(须 '+RMAX+' / 空)='+ok3
       +' | ④ 读数后缀=「'+rd+'」='+ok4;
   }finally{
     var bk=JSON.parse(tcBak),k;for(k in bk)TC[k]=bk[k];

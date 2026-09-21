@@ -13,7 +13,9 @@
       它不读距离 —— 判据 FLOW71 把同一方位上的蓝舰摆在两个距离,目标点必须逐位相同。
    ⚠ 热区的中心(cov.x / cov.y)今天仍等于真值(模型只算不确定度、不模拟估计误差,见 js/sensors/CLAUDE.md),
       所以这里【刻意不读】未定位接触的 cov.x / cov.y —— 读了就是从那个已知的口子作弊。 */
-const AIR={LEAD:200000,MEM_S:120,SPREAD:60000,RING:400000,REACH:60000,
+/* H1(形态 H):四个尺度常数跟着战场放大。LEAD 20 万 → 50 万(沿方位线一次推进多远:发现距离从 65 万变成 160~281 万,20 万一段太碎);
+   MEM_S 120 → 300 秒;SPREAD 6 万 → 15 万(纯方位交叉定位的基线:目标在 200 万开外时 6 万的基线几乎是一条线);RING 40 万 → 100 万;REACH 6 万 → 10 万。 */
+const AIR={LEAD:500000,MEM_S:300,SPREAD:150000,RING:1000000,REACH:100000,
   goal:null,src:'',memPos:null,memT:0,wp:0,u:[-1,0]};
 function aiRedReset(){AIR.goal=null;AIR.src='';AIR.memPos=null;AIR.memT=0;AIR.wp=0;AIR.u=[-1,0];}
 function aiObjective(){const env=(typeof curEnv==='function')?curEnv():null;return (env&&env.objective)?env.objective:[0,0];}
@@ -68,7 +70,10 @@ function enemyAI(dt){ // 叛军AI:朝【它认为】玩家在的地方推进/锁
     // AI1 搜索照射:到了战场中心还是什么都没有 ⇒ 【只有旗舰】开照射扫,两艘僚舰继续静默(哨舰战术:一盏灯、两双暗处的眼睛)。
     //      不加这条的话,一个静默熄火、一动不动的玩家永远不会被找到(红方冷船光学只有 24~29 万,搜索圈擦不到)—— 对局变成谁也不动的僵局;
     //      加了之后轮到玩家做题:你会先听见它(被听见的距离是它照射发现距离的近两倍),打不打、亮不亮、躲不躲。
-    const sweep=(AIR.src==='search'&&AIR.wp>=1&&e===reds[0]);
+    // H1:搜索照射从【开局】就开(原来要等走到战场中心)。形态 H 下走到中心要 36 分钟模拟时间,这一段里双方静默 = 什么都不发生;
+    //     而"被听见 320 万 > 开局 300 万"这条设计选择的本意正是"环境雾从第 0 秒就有":红方旗舰一亮灯,玩家第 0 秒就拿到一条方位(热区),
+    //     它却要到 226~281 万才发现得了你 —— 开局第一个决定(迎上去 / 绕开 / 也亮灯)立刻就有了。
+    const sweep=(AIR.src==='search'&&e===reds[0]);
     if(e.emitMode!=='silent'&&!contactNow&&!sweep){e.emitQuiet=(e.emitQuiet||0)+dt;if(e.emitQuiet>5){setEmit(e,'silent');e.emitQuiet=0;}} // SN4 纯字段迁移:开关布尔→三态发射档,判据从"开着"改成"非静默"(红 AI 今天不会自己进 jam 档,两者等价);决策逻辑一行未动。无接触5s→静默(dt累计,不依赖simTime)
     else if(e.emitMode==='silent'&&(contactNow||sweep)){setEmit(e,'paint');e.emitQuiet=0;} // SN4:接触→开照射抢火控。手电效应仍在,而且更强:照射自照 15 万,被对方静听嗅到却是 60 万(4 倍)
     // AI1:原来这里没有识别级接触时把目标池回退到【全体蓝舰真值】(pool=visible.length?visible:my),距离也按真实坐标量。

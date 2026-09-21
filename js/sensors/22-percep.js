@@ -74,7 +74,7 @@ function emitPowerOf(s) { // 发射档的功率档位:既当【功耗】(进光�
   return sReq(SENS.EMIT_P, sReq(s, 'emitMode', 'ship'), 'SENS.EMIT_P'); // 非法/缺失的 emitMode 当场抛:全库只许 silent/paint/jam 三个字面量
 }
 function engPowerOf(s) { // 引擎档:主推/反推最费电,姿态侧推次之,熄火滑行为 0(与 31-step-ships 每 tick 复位的 flame/sideFlame 同源)
-  return s.flame !== 0 ? SENS.P_ENG_MAIN : (s.sideFlame ? SENS.P_ENG_SIDE : 0);
+  return s.flame < 0 ? SENS.P_ENG_REV : (s.flame > 0 ? SENS.P_ENG_MAIN : (s.sideFlame ? SENS.P_ENG_SIDE : 0)); // RV1:反推(flame<0,physics/30 置位)单列一档,比主推更亮
 }
 function firePowerOf(s) { // FX1 开火暴露:发射后的 FIRE_S 秒里多亮一档(s.fireHot 由 weapons/52 的两个发射成功点置位、weapons/57 的冷却循环倒数)
   return s.fireHot > 0 ? SENS.P_FIRE : 0;

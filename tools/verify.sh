@@ -404,6 +404,8 @@ LAYER_SELF=$(printf '%s\n' "function f(){drawShip(s); /* updateSelPanel() 在注
 [ -z "$LAYER_BAD" ] || { echo "✗ R3 模拟目录引用了呈现 / 指令层的符号:$LAYER_BAD —— 模拟不该依赖界面(要发消息走 core/02 的 log / onLog)"; fail=1; }
 grep -q '^function log(' js/core/02-events.js || { echo "✗ R3 log() 不在 core/02-events.js 里了"; fail=1; }
 ! grep -rqE '^function log\(' js/render js/command || { echo "✗ R3 呈现 / 指令层里又出现了一个顶层 log() 定义(会与 core/02 的撞名,后加载的覆盖先加载的)"; fail=1; }
+grep -q "FLOW81_REVBURN=ok" "$OUT" || { echo "✗ FLOW81_REVBURN 未通过(RV1 反推的暴露等级高于主推:四档亮度 熄火 / 侧推 / 主推 / 反推,反推必须最亮;刹车令真的跑出反推档;主推看不见、反推看得见的距离上一反推就被看见;右栏读数写得出「反推」)"; fail=1; }
+grep -q "FLOW80_RATES=ok" "$OUT" || { echo "✗ FLOW80_RATES 未通过(RT1 倍速档位:上限 20、下限 0.1,两头钳住;上限必须高于接触降速的最高一档;x0.1 下帧循环的累加器照样推得动模拟)"; fail=1; }
 grep -q "FLOW79_LOGBUS=ok" "$OUT" || { echo "✗ FLOW79_LOGBUS 未通过(R3 日志汇聚点:一条 log 必须同时到达日志面板与右轨事件流,次序 面板在前、事件流在后;新订阅者收得到、重复订阅只算一次)"; fail=1; }
 grep -q "FLOW70_TOOLSPOS=ok" "$OUT" || { echo "✗ FLOW70_TOOLSPOS 未通过(UI2 右下角工具栏:必须贴画面右边距、整个在事件窗【下面】而不是左边、不压底部指令栏;两个工具钮是图标钮(行内 svg + aria-label),点在图标子元素上也要切得动)"; fail=1; }
 grep -q "FLOW69_TIERLAND=ok" "$OUT" || { echo "✗ FLOW69_TIERLAND 未通过(SN9b 层界与落点必须出自同一块画布:三种画布 x 从每一层出发 x 按每一个跳层钮,落地后离散层 / 亮着的钮 / 画法权重都必须属于目的层,且不看来路;层界必须随画布短边变 —— 冻在加载期的 750px 上就是「按了战区、亮的还是舰队」)"; fail=1; }

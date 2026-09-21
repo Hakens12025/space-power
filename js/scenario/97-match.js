@@ -7,9 +7,9 @@
      · 红方出生方位在 ±MATCH.ARC 内随机(scenario/91 的 initEnemy 调 matchPlaceRed)—— 位置固定的话就没有"找"这回事,迷雾形同虚设。
      · 战场中心(场景的 objective)双方都知道:那是遭遇战的标准假定,也是红方 AI 无接触时的去向(bots/61 的 aiObjective)。
      · 胜负 = 一方全灭(core/05 的 S20 原样)。结果卡片只在对局里弹;RF2 把 #log 藏了之后,胜负那两行日志玩家根本看不见。
-   开局间距 120 万:演示页尺度预算里的"开局间距 >= 最远的雷达发现(114 万)"那条单边硬规则 —— 再近的话一开雷达就互相定位,接敌阶段不存在。
+   开局间距 300 万 = 10 光秒(H1 形态 H;原 120 万):演示页尺度预算里的"开局间距 >= 最远的雷达发现(H1 下 281 万)"那条单边硬规则 —— 再近的话一开雷达就互相发现,接敌阶段不存在。
    ⚠ 引擎里没有战场边界(CFG.world 只管星空贴图与开局镜头),所以"战场 200 万"不是一个要改的数,摆得开就是了。 */
-const MATCH={OPEN:1200000,ARC:Math.PI/3,shown:false,t0:0,nBlue:0,nRed:0,theta:0};
+const MATCH={OPEN:3000000,ARC:Math.PI/3,shown:false,t0:0,nBlue:0,nRed:0,theta:0};
 function matchIdx(){for(let i=0;i<TEST_ENVS.length;i++)if(TEST_ENVS[i].match)return i;return -1;}
 function matchIsOn(){const e=curEnv();return !!(e&&e.match);}
 /* 红方出生点:以蓝方重心为圆心、MATCH.OPEN 为半径,方位在正前方(+X)±ARC 内随机;红方元组里写的是【相对本队重心】的坐标。

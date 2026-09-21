@@ -108,7 +108,7 @@ function senseRows(s){
   // 光学:亮度 = 体型 ×(1 + 功耗),功耗 = 引擎档 + 发射档。档位字只拿 engPowerOf 的返回值与 SENS.P_ENG_MAIN 比 ——
   //   不在这儿重排一遍引擎状态机(那会变成 ENG_LAMPS 之外的第三份「什么算满推」)。
   const ep=(typeof engPowerOf==='function')?engPowerOf(s):0;
-  const est=(ep>=SENS.P_ENG_MAIN)?'满推':(ep>0?'机动':'熄火');
+  const est=(ep>=SENS.P_ENG_REV)?'反推':((ep>=SENS.P_ENG_MAIN)?'满推':(ep>0?'机动':'熄火')); // RV1:反推单列一档(更亮),读数上也要分得出
   // 射频:silent 是【绝对静默】(rfLoud 恒 0,旧的船体泄漏圈已删),那一档没有「被听见的距离」可报,所以写字不写数。
   //   hearRangeOf 缺省 recv=1(DD 级接收机);对方接收机更好只会听得更远,所以这是个乐观下界,措辞里不写成「安全距离」。
   const silent=s.emitMode==='silent';

@@ -493,3 +493,22 @@ t('FLOW49_RANGE',function(){
     +' | ⑤ enum 旋钮的字符串取值=['+(strVals.length?strVals.join(','):'无')+'](须无:clamp 的 enum 分支首行是 Number(v),字符串枚举必得 NaN 然后无声落回默认)'
       +' 数值字符串仍被接受:'+eKn.k+'='+numStr+'(须='+pv+',刻意取非默认档) 非法字符串落到合法值:'+badStr;
 });
+/* ===== RT1 倍速档位:上限 20、下限 0.1 =====
+   用户 2026-09-22:"现在的交战非常的即时 RTS 化……倍数最高 20 倍,同时允许缩小倍数,倍数最低 0.1 倍"。
+   走生产路径(doAction 的加速 / 减速):从 x1 一路加到顶、一路减到底,两头钳住不越界;档位表升序、含 1;
+   上限高于接触降速的最高一档(否则降速没东西可压);x0.1 下帧循环的累加器照样推得动模拟(10 帧 x 1/60 秒 x 0.1 不到一步,120 帧必须推出步数)。 */
+t('FLOW80_RATES',function(){
+  var rateBak=rate,accBak=acc,out='';
+  try{
+    var asc=RATES.every(function(v,i){return i===0||v>RATES[i-1];}),lo=RATES[0],hi=RATES[RATES.length-1];
+    rate=1;var i;for(i=0;i<20;i++)doAction('faster');var top=rate;
+    for(i=0;i<40;i++)doAction('slower');var bot=rate;
+    doAction('faster');var up1=rate;
+    var capOk=(typeof TC==='undefined')||hi>TC.CAP[0];
+    /* 累加器:与 frame() 同一条式子(acc += dt * rate,够一步就推一步) */
+    var a=0,steps=0;for(i=0;i<120;i++){a+=(1/60)*lo;while(a>=CFG.step){a-=CFG.step;steps++;}}
+    var ok=(asc&&lo===0.1&&hi===20&&RATES.indexOf(1)>=0&&top===20&&bot===0.1&&up1===RATES[1]&&capOk&&steps>=8&&steps<=11);
+    out=(ok?'ok':'fail')+' 档位 ['+RATES.join(',')+'] 升序='+asc+' 加到顶='+top+'(须 20)减到底='+bot+'(须 0.1)再加一档='+up1+' 上限高于降速最高档='+capOk+' x'+lo+' 下 2 秒墙钟推出 '+steps+' 步(须约 10)';
+  }finally{rate=rateBak;acc=accBak;}
+  return out;
+});
