@@ -4,7 +4,7 @@
 
 ## SL1 瘦身(2026-09-22,用户拍板删掉 RF2 只藏不删的旧界面)
 
-本目录删了 `86-log`(日志面板订阅者)整文件;`87-fleetcards` 从「舰队卡片 / 信息面板」缩成三个函数(`updateTop` 顶栏读数,`launchBeacon` / `layoutNetMines` 两个被 70-input 引用的工具);
+本目录删了 `86-log`(日志面板订阅者)整文件;`87-fleetcards` 整文件删(舰队卡片 / 信息面板;SL1b 收尾:最后剩下的 `updateTop` 挪进 `88-selpanel`,`launchBeacon` 挪进 `weapons/52-fire` —— 信标是武器 / 载荷,而且留给红方 bot 做前出侦察,模拟层不许引用 render 里的符号;`layoutNetMines` 与 布防 / 信标 / 手动 / 布雷 四族点选待命态一起删:舰队卡没了它们就没有入口;`s.paintWarned` 只写不读也删);
 `88-selpanel` 删 `pushEvt/selEvts` 与 `onLog` 订阅(右轨 `#evtFeed` 事件流面板与 css 同删);`85-settings` 删到只剩 暂停 / 减速 / 加速 三钮、`#segTier`、`#tools`、`toolsDock`
 (`recording` 六处写点与整套键位重绑 UI `#overlay/#settings/.krow` 删;连带只被它用的 `keyDisplay/KEY_NAME/bindOf/saveBindings`);`83-hud` 删 `drawRanges` 整函数(总开关只在快捷栏里写,恒 return);
 `84-scene` 删回放数据分支与编辑器图层;`82-lod / 82-ship-icons / 83-geom / 83-hud` 的 `editMode` / `replay.active` 裸读全删;`85-tutorial` 的 `TUT_HTML` 删掉讲回放 / 编辑器 / 右键菜单 / 快捷栏 / 事件流的段落。
