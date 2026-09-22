@@ -6,7 +6,7 @@
    为什么这么设计:
    ① 序列只替换【目标来源】,不新增开火权。门控优先级恒为 火控总开关(autoEngage/roe) > 单舰武器开关
       (macOn/mslOn) > 序列目标许可(allow);57 里原有的三层检查一行不动 —— 序列只做减法不做加法。
-   ② 序列存【id 不存对象引用】(shipId / tid),与 bots/60 的 tasks 同口径。持对象引用的东西(弹丸/nets)
+   ② 序列存【id 不存对象引用】(shipId / tid)。持对象引用的东西(弹丸/nets)
       换局时会把上一局的舰拖进新一局(见 91-init 的 KIMI146 注释),而序列活得比弹丸久,更不能持引用。
    ③ 指针一律逐武器成对(rot / fcSeqCur / fcTgt / fcFrom / fcFired 全是 {mac,msl}):MAC 30s 一发、导弹 60s
       装填一组,两者节拍完全不同,共用一个指针会互相拖着走。
@@ -62,26 +62,15 @@ function fcPush(seq,tgt,allow){ // RF5 内部:把一个目标追加进序列(两
 function fcNew(s,tgt,allow){ // RF5 新建序列并置为该舰的编辑上下文,返回序列 id;RF7 起达到 FC_MAX_SEQS 返回 null(调用方必须处理)
   if(!s)return null;
   fcInit(s);
-  if(fcSeqsOf(s).length>=FC_MAX_SEQS){if(typeof log==='function')log(`⚠ ${s.name} 火控序列已达上限 ${FC_MAX_SEQS} 条(火控计算机里删一条再建)`,'warn');return null;} // RF7 上限=方条数
+  if(fcSeqsOf(s).length>=FC_MAX_SEQS)return null; // RF7 上限=方条数
   s.fcFired.mac=false;s.fcFired.msl=false;s.fcTgt.mac=null;s.fcTgt.msl=null;s.fcFrom.mac=-1;s.fcFrom.msl=-1; // RF5 建序列前先清账:fireSeqs 曾清空时 stepFireControl/Post 两段都在首行早退,上一轮的开火标记与解算残留会留在舰上,新序列的第一发会被这面陈旧标记凭空推进一格指针(首发打成第二个目标)
   const seq={id:++fcSeqSeq, shipId:s.id, name:'火控序列'+(fcSeqsOf(s).length+1),
     targets:[], mode:'seq', rot:{mac:0,msl:0}, paused:false}; // mode:'seq'=依次(集火) / 'rr'=轮询(散布)
   fireSeqs.push(seq);
   s.fcEditId=seq.id;
   fcPush(seq,tgt,allow);
-  // 副作用一:序列接管交战决策,原任务让位 —— 任务AI 每 2s 会往 orders/autoEngage 里写,两边抢会打架
-  if(typeof tasks!=='undefined'&&typeof taskOf==='function'&&typeof taskPause==='function'){
-    const t=taskOf(s.id);
-    if(t){
-      for(const [tid,v] of tasks)if(v===t){taskPause(tid);break;} // taskOf 返回的对象不带 id(taskCreate 没把 id 塞进值里),反查一次
-      if(typeof log==='function')log(`📋 ${s.name} 任务暂停(火控序列接管交战)`,'');
-    }
-  }
   // 副作用二:序列的目标最终仍要过 57 的 autoEngage/roe 总闸门,不打开就是排了队一发不响
-  if(!s.autoEngage||s.roe!=='free'){
-    s.autoEngage=true;s.roe='free';
-    if(typeof log==='function')log(`🎯 ${s.name} 火控开·自由开火(火控序列需要)`,'');
-  }
+  if(!s.autoEngage||s.roe!=='free'){s.autoEngage=true;s.roe='free';}
   return seq.id;
 }
 function fcAppend(s,tgt,allow){ // RF5 追加进该舰正在编辑的序列;该序列不存在则等价 fcNew

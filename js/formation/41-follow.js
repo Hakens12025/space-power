@@ -155,12 +155,11 @@ function followAssign(srcList, target) { // a 跟随 b。两端各自可以是�
   if (!target || target.dead) return false;
   const A = followUnitOf(srcList), B = followAnchorOf(target);
   if (!A.list.length || !B.anchor) return false;
-  if (A.list.indexOf(B.anchor) >= 0) { if (typeof log === 'function') log('跟随:不能跟随自己', 'warn'); return false; }
+  if (A.list.indexOf(B.anchor) >= 0) return false;
   /* 同队算自跟随,一律拒绝。不拦的话会走到下面的散船分支:它为了让跟随关系不被 fmApplyFollow 每次重排
      覆盖掉会先 fmDetach —— 于是"让本队一艘去跟本队旗舰"这个看起来无害的操作会【静默把它踢出编队】。 */
-  if (B.F && A.list.every(s => s.formation === B.F)) { if (typeof log === 'function') log('跟随:不能跟随自己队里的船', 'warn'); return false; }
+  if (B.F && A.list.every(s => s.formation === B.F)) return false;
   if (A.F && typeof fmFollowChainHas === 'function' && fmFollowChainHas(B.anchor, A.F)) {
-    if (typeof log === 'function') log(fmName(A.F) + ' 不能跟随:会形成循环跟随', 'warn');
     return false;
   }
   const off0 = [-(A.r + B.r + FOLLOW_GAP), 0, 0];
@@ -169,19 +168,13 @@ function followAssign(srcList, target) { // a 跟随 b。两端各自可以是�
      只写 s.follow 的话,下一次重排会把它整片覆盖掉。 */
   if (A.F) { A.F.follow = { tid: B.anchor.id, off: off0 }; fmApplyFollow(A.F); }
   else A.list.forEach(s => {
-    /* 单舰去跟别队/散船:必须先摘出自己的编队,否则 fmApplyFollow 每次重排都会把这条跟随覆盖掉。
-       这是一次真正的脱队,所以打日志说清楚 —— 静默脱队是最难查的那种"我没让它这么干"。 */
+    /* 单舰去跟别队/散船:必须先摘出自己的编队,否则 fmApplyFollow 每次重排都会把这条跟随覆盖掉。 */
     if (s.formation && typeof fmDetach === 'function') {
-      if (typeof log === 'function') log(s.name + ' 脱离 ' + ((typeof fmName === 'function') ? fmName(s.formation) : '编队') + ' 去跟随', '');
       fmDetach(s);
     }
     const sl = A.slot(s);
     followSet(s, B.anchor, [off0[0] + sl[0], off0[1] + sl[1], off0[2] + (sl[2] || 0)]);
   });
-  if (typeof log === 'function') {
-    const who = A.F ? fmName(A.F) : (A.list.length === 1 ? A.list[0].name : A.list.length + ' 艘');
-    log(who + ' 跟随 ' + (B.F ? fmName(B.F) : B.anchor.name), '');
-  }
   return true;
 }
 function followStopList(srcList) { // 解除。编队源要连 F.follow 一起清(否则下一次 fmApplyFollow 又给挂回来)

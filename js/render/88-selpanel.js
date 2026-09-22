@@ -5,16 +5,7 @@
    底栏 #cmdBar = 【固定信息】(舰名/舰种·等级 + 规格条 specItems)+ 开关组(火控一个舰级布尔开关 + 每件武器一个)+ 三个形状不同的独立钮(发射档/跟随/解除)。
    开关语义:火控=autoEngage+roe 合一(开=free+自动索敌,关=hold+解除锁定);发射档是三态循环,不在 cmdList 里(见本文件末尾 SN4 那一段);
    武器开关=macOn/mslOn/ciwsOn(按 kind 映射)。操作作用于【全部选中蓝舰】,状态读第一艘。
-   事件流:86-log 的 log() 末尾 typeof 守卫调 pushEvt(最近5条)。 */
-let selEvts=[]; // 最近5条事件 {t:'mm:ss',msg,cls}
-if(typeof onLog==='function')onLog(function(m,c){pushEvt(m,c);}); // R3 右轨事件流自己订阅日志(原来靠 86-log 末尾转发)。包一层是为了走【当前】的 pushEvt 绑定 —— 判据会临时换掉它来截消息
-function pushEvt(msg,cls){ // 事件流写入点(86-log 调;不持久化,换局由 initFleet 全量重置语义顺带处理——面板每次全量重渲)
-  const mm=String(Math.floor(simTime/60)).padStart(2,'0'),ss=String(Math.floor(simTime%60)).padStart(2,'0');
-  selEvts.push({t:`${mm}:${ss}`,msg,cls});
-  if(selEvts.length>5)selEvts.shift();
-  const box=document.getElementById('selEvents');
-  if(box)box.innerHTML=selEvts.map(e=>`<div class="li ${e.cls||''}"><span class="t">[${e.t}]</span>${e.msg}</div>`).join('');
-}
+   (右轨的事件流面板与它的写入点 2026-09-22 随事件系统整体删除。) */
 function selBlue(){return selectedShips().filter(s=>s.side==='blue'&&!s.dead);}
 /* kind → 开关字段/射程/hover 文案 的映射(武器机制数据从烘焙字段读,源头在 weapons/51-defs) */
 const KIND_INFO={
@@ -95,11 +86,11 @@ function engRows(s){
   const lamps=ENG_LAMPS.map(([t,c,on])=>`<span class="eng-l${on(s)?' on':''}" style="color:${c}">${t}</span>`).join('');
   return `<span class="eng-a">${a.toFixed(1)} km/s²</span>${lamps}`;
 }
-/* SN4 blocker E【我此刻有多亮】。全库唯一的辐射读数原来在 87-fleetcards 的 sensorPanel,而 #fleet 整块在 RF2 隐藏清单里被
-   display:none 藏死 —— 玩家一个字都看不到,却要靠它决定开不开雷达:这是「隐蔽 vs 精确」这个三角唯一的决策依据。
+/* SN4 blocker E【我此刻有多亮】。全库唯一的辐射读数原来在 87-fleetcards 那块被 RF2 藏死的舰队信息面板里(2026-09-22 已整块删除)——
+   玩家一个字都看不到,却要靠它决定开不开雷达:这是「隐蔽 vs 精确」这个三角唯一的决策依据。
    #selPanel 正是 RF2 定位的【变化信息】栏,而这三个数每拍都在变(一点火就更亮、一开照射就更亮更吵),归这儿最对。
-   三个数全部调 22-percep 的函数,与 87 的 sensorPanel 同源,本文件一条公式都不重算 ——
-   感知量只要有两处并行真值就必然漂移(SN 第一段那份逐字副本的教训写在 87 的注释里)。
+   三个数全部调 22-percep 的函数,本文件一条公式都不重算 ——
+   感知量只要有两处并行真值就必然漂移(SN 第一段那份逐字副本的教训)。
    刻意【不给假兜底】:内核没加载好时整段不出行(fail-closed),而不是印一个看着完全正常的数字 ——
    这块面板的全部价值就是这三个数可信。 */
 function senseRows(s){
@@ -155,10 +146,10 @@ function updateCmdBarVis(s){
    绝不能让 88 整个文件的顶层语句连坐报废(项目已知失败模式)。
    目标标识一律存 id 字符串进 dataset,不存对象引用(与 selected[] 口径一致)。
    【范围】Phase A 只做引擎 + 本面板的「查看/编辑已有序列」(改模式/许可、暂停、删目标、删序列)。
-   建序列的入口(fcNew/fcAppend 的调用点)留给 Phase B 的 command/72 右键菜单 —— 所以实际对局里本面板
+   建序列的入口(fcNew/fcAppend 的调用点)当时打算留给 Phase B 的右键菜单 —— 所以实际对局里本面板
    常年显示「无火控序列」是【当前预期】,不是回归;目前唯一能建序列的是 tools/verify.sh 的 FLOW3 探针。
-   【RF5 Phase B 更新 —— 修正上面这三行,原文保留只为留住当时的判断】建序列的入口已经接上,但【不在 command/72】:
-   是 command/74-targeting 的 xhQuickEngage(中键短按 → fcNew),72 一行未动。所以真实对局里本面板会长出序列,
+   【RF5 Phase B 更新 —— 修正上面这三行,原文保留只为留住当时的判断】建序列的入口已经接上,但【不在右键菜单】:
+   是 command/74-targeting 的 xhQuickEngage(中键短按 → fcNew)。所以真实对局里本面板会长出序列,
    「无火控序列」不再是常态,建不出来就是回归。fcAppend 至今仍无生产调用点(只有探针在调),
    一条序列多目标 / rr 轮询 / fcRemoveTarget 要等 Phase C 的追加入口 —— 它不是死代码,是等入口的引擎 API。 */
 /* RF7c 稳定写入。整体 innerHTML= 会销毁并重建全部子节点:光标下那个节点每拍都换新的,:hover 立刻丢失又重新命中,
@@ -253,7 +244,7 @@ function updateFcPanel(force){ // 由 updateSelPanel 每 20 帧重渲(与卡片�
   }
   setHTMLStable(list,h,force);
 }
-function updateSelPanel(){ // frame 低频调用(每20帧,与 updateCardsStatus 同拍)
+function updateSelPanel(){ // frame 低频调用(每20帧)
   const box=document.getElementById('selInfo');
   const title=document.getElementById('selTitle');
   const ciN=document.getElementById('ciName'),ciC=document.getElementById('ciCls'),ciSp=document.getElementById('ciSpec');
@@ -420,7 +411,6 @@ function bindCmdBar(){ // 按钮一次性预生成(舰级2个 + KIND_INFO 每种
       const cmd=cmdList(sel[0]).find(x=>x.id===b.id);if(!cmd||!cmd.set)return;
       const nv=!cmd.get(sel[0]); // 以第一艘当前态取反,全队统一置为目标态
       sel.forEach(s=>cmd.set(s,nv));
-      log(`${sel.length} 艘 ${cmd.label}${nv?'开':'关'}`,'');
       updateSelPanel();
     });
     b.addEventListener('mouseenter',()=>{
@@ -471,7 +461,6 @@ function emitBtnSync(){
     if(typeof emitNext!=='function'||typeof setEmit!=='function')return;
     const nv=emitNext(sel[0]);                                 // 读第一艘的下一档当目标态,全队统一置过去(与 cmdList 的多选口径同源)
     sel.forEach(x=>setEmit(x,nv));
-    log(`${sel.length} 艘 发射档 → ${(typeof emitLabel==='function')?emitLabel(nv):nv}`,nv==='silent'?'':'warn');
     updateSelPanel();
   });
   b.addEventListener('mouseenter',()=>{
@@ -492,16 +481,14 @@ function fcPickBtnSync(s){ // RF8b 同步标题栏「选择」钮:它在 #fcSec 
 }
 on('fcPickBtn','click',()=>{ // RF8b 舰级「选择」:序列态那条 → 唯一开火序列;再按回轮询
   const s=selBlue()[0];
-  if(!s){if(typeof log==='function')log('选择:先选中一艘我方舰船','warn');return;}
+  if(!s)return;
   if(typeof fcSetBig!=='function'||typeof fcSetPick!=='function')return;
   if(s.fcBig==='pick'){
     fcSetBig(s,'rr');
-    if(typeof log==='function')log(`🎛 ${s.name} 回到轮询(多条序列轮流开火)`,'');
   }else{
     const q=(typeof fcSeq==='function')?fcSeq(s.fcEditId):null;
-    if(!q||q.shipId!==s.id){if(typeof log==='function')log('选择:先点一根方条进入序列态,再按选择','warn');return;} // 没有序列态就没有"当前这条",给提示而不是静默
+    if(!q||q.shipId!==s.id)return; // 没有序列态就没有"当前这条"
     fcSetPick(s,q.id);
-    if(typeof log==='function')log(`🎛 ${s.name} 只用 ${q.name} 开火(其余序列暂不参与)`,'');
   }
   updateFcPanel(true);
 });
@@ -521,7 +508,6 @@ on('fcList','click',e=>{
       if(s.fcBig==='pick'&&typeof fcSetPick==='function'&&String(s.fcPick)!==String(seq.id)){ // RF8 选择模式下点别的方条 = 改选它来打(顺带进序列态,看得见链)
         fcSetPick(s,seq.id);
         if(typeof fcSetEdit==='function')fcSetEdit(s,seq.id);
-        if(typeof log==='function')log(`🎛 ${s.name} 改用 ${seq.name} 开火`,'');
         break;
       }
       // RF8 选择模式下点【已选中】那条只切序列态显示,【不清 fcPick】—— 清了就等于这艘舰一条序列都不打,而按钮上还写着"选择",
@@ -551,16 +537,16 @@ on('fcList','click',e=>{
 function followArm() {
   if (typeof clearPendings === 'function') clearPendings(); // 与其它点选待命态互斥(三个 arm 点同一条纪律:FL1 六d 那条"互斥必须对称")
   const sel = selBlue();
-  if (!sel.length) { if (typeof log === 'function') log('跟随:先选中我方舰船', 'warn'); return false; }
+  if (!sel.length) return false;
   pendingFollow = true;
-  if (typeof updSelWeaponTip === 'function') updSelWeaponTip(); // 提示走 #cmdTip:#statusTip 在 RF2 隐藏清单里,玩家一个字看不到
+  if (typeof updSelWeaponTip === 'function') updSelWeaponTip(); // 提示走 #cmdTip(旧的顶部状态条 RF2 起就被藏死,2026-09-22 连代码一起删)
   updateSelPanel();
   return true;
 }
 function followPick(target) { // 由 70-input 在待命态下点中一艘我方舰时调用。无论成败都消耗掉待命态,免得留一个幽灵
   pendingFollow = null;
   const sel = selBlue();
-  const ok = (typeof followAssign === 'function') && followAssign(sel, target); // 日志由 followAssign / fmFollowShip 打
+  const ok = (typeof followAssign === 'function') && followAssign(sel, target);
   if (typeof updSelWeaponTip === 'function') updSelWeaponTip();
   if (typeof updFmBar === 'function') updFmBar();
   updateSelPanel();
@@ -599,9 +585,14 @@ function followBtnSync() { // 两个钮的可用态与高亮:武装中点亮「�
     '跟随:按下后点一艘我方舰 → 当前选中的去跟着它走。作用域看你选了什么 —— 选中整支编队 = 整队跟随,选中单舰 = 这一艘跟随;点到编队里的任一艘 = 跟随那支编队(即它的旗舰)');
   mk('cbUnfollow', () => {
     const sel = selBlue();
-    const n = (typeof followStopList === 'function') ? followStopList(sel) : 0;
-    if (typeof log === 'function') log(n ? (n + ' 艘 解除跟随') : '解除跟随:当前没有跟随关系', n ? '' : 'warn');
+    if (typeof followStopList === 'function') followStopList(sel);
     if (typeof updFmBar === 'function') updFmBar();
     updateSelPanel();
   }, '解除跟随:把当前选中的跟随关系清掉,回到各自走');
 })();
+/* SL1b(2026-09-22)从 render/87-fleetcards【纯移动】过来:那文件删到只剩它一个函数。core/99 每帧调。 */
+function updateTop(){ // 每帧轻量刷新:顶栏时钟与倍速读数
+  const mm=String(Math.floor(simTime/60)).padStart(2,'0'),ss=String(Math.floor(simTime%60)).padStart(2,'0');
+  document.getElementById('clock').textContent=`${mm}:${ss}`;
+  document.getElementById('rate').textContent=(running?'x'+rate:'⏸ x'+rate)+((typeof tcReadout==='function')?tcReadout():''); // TC1 被接触降速压住时写出「→ x6 定位」
+}

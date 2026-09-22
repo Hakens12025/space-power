@@ -6,14 +6,14 @@
      · 3 对 3 镜像(CA + 2 DD),双方静默、熄火、静止开局,相距 MATCH.OPEN。
      · 红方出生方位在 ±MATCH.ARC 内随机(scenario/91 的 initEnemy 调 matchPlaceRed)—— 位置固定的话就没有"找"这回事,迷雾形同虚设。
      · 战场中心(场景的 objective)双方都知道:那是遭遇战的标准假定,也是红方 AI 无接触时的去向(bots/61 的 aiObjective)。
-     · 胜负 = 一方全灭(core/05 的 S20 原样)。结果卡片只在对局里弹;RF2 把 #log 藏了之后,胜负那两行日志玩家根本看不见。
+     · 胜负 = 一方全灭(core/05 的 S20 原样,只置 victoryShown / defeatShown 两个标志)。结果卡片只在对局里弹。
    开局间距 300 万 = 10 光秒(H1 形态 H;原 120 万):演示页尺度预算里的"开局间距 >= 最远的雷达发现(H1 下 281 万)"那条单边硬规则 —— 再近的话一开雷达就互相发现,接敌阶段不存在。
    ⚠ 引擎里没有战场边界(CFG.world 只管星空贴图与开局镜头),所以"战场 200 万"不是一个要改的数,摆得开就是了。 */
 const MATCH={OPEN:3000000,ARC:Math.PI/3,shown:false,t0:0,nBlue:0,nRed:0,theta:0};
 function matchIdx(){for(let i=0;i<TEST_ENVS.length;i++)if(TEST_ENVS[i].match)return i;return -1;}
 function matchIsOn(){const e=curEnv();return !!(e&&e.match);}
 /* 红方出生点:以蓝方重心为圆心、MATCH.OPEN 为半径,方位在正前方(+X)±ARC 内随机;红方元组里写的是【相对本队重心】的坐标。
-   rnd 可注入(判据要复现);平时用 Math.random —— 它只在开局摆位时掷一次,不进模拟,回放与 demo 录的是位置快照,不受影响。 */
+   rnd 可注入(判据要复现);平时用 Math.random —— 它只在开局摆位时掷一次,不进模拟。 */
 function matchPlaceRed(defs,blueC,rnd){
   const th=((rnd===undefined?Math.random():rnd)*2-1)*MATCH.ARC;
   MATCH.theta=th;
@@ -33,13 +33,12 @@ function matchSync(){ // 顶栏钮的字与提示跟着当前场景走(进 / 出
 }
 function matchEnter(){
   const i=matchIdx();if(i<0)return;
-  envIdx=i;initFleet();if(typeof renderFleet==='function')renderFleet();
+  envIdx=i;initFleet();
   running=false; // 与开局同口径:先看清局面,空格开始
   if(typeof camJump==='function')camJump(1);
-  if(typeof pushEvt==='function')pushEvt('对局开始 · 双方静默 · 敌方方位未知 · 空格 开始','warn');
 }
 function matchExit(){
-  envIdx=0;initFleet();if(typeof renderFleet==='function')renderFleet();
+  envIdx=0;initFleet();
   running=false;
   if(typeof camJump==='function')camJump(1);
 }

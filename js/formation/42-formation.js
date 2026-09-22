@@ -157,7 +157,7 @@ function fmReslot(F, mates, flag) { // 重算槽位(建队/战损/加员/换旗/
 function fmCreate(k, list) { // Ctrl+数字:按选中舰建/覆盖编队。FM7:一艘都没选才清掉这个槽位(单舰也能建队)
   const alive = (list || []).filter(s => s && !s.dead);
   fmDelete(k);
-  if (!alive.length) { if (typeof log === 'function') log('编队' + k + ' 已清空(没有选中任何舰)', ''); return null; }
+  if (!alive.length) return null;
   const F = {
     id: String(k), name: '编队' + k, ships: alive.map(s => s.id), flagship: alive[0].id,
     P: fmParamsNew(), src: 'snapshot', follow: null, ang: NaN, dest0: null, n: 0, flagId: null, seq: ++fmSeq, // FM6:motion 轴已删
@@ -172,7 +172,6 @@ function fmCreate(k, list) { // Ctrl+数字:按选中舰建/覆盖编队。FM7:�
   formations[String(k)] = F;
   alive.forEach(s => { fmJoin(s, F); s.formation = F; });
   fmReslot(F, alive);
-  if (typeof log === 'function') log(alive.length + ' 艘 → ' + fmName(F), '');
   return F;
 }
 
@@ -233,10 +232,8 @@ function fmOnFollowTargetLost(dead) {
     if (!F || !F.follow || F.follow.tid !== dead.id) continue;
     if (heir && heir !== dead && fmShips(wasF).filter(x => x !== dead).length >= 2 && !fmFollowChainHas(heir, F)) {
       F.follow.tid = heir.id;                        // 对方编队还在 → 改跟它的顺位新旗舰
-      if (typeof log === 'function') log(fmName(F) + ' 跟随目标阵亡,改跟 ' + heir.name, 'warn');
     } else {
       F.follow = null;                               // 对方编队也没了 → 解除跟随
-      if (typeof log === 'function') log(fmName(F) + ' 跟随目标已失,解除跟随', 'warn');
     }
     fmApplyFollow(F);
   }
@@ -265,7 +262,6 @@ function fmSetFlagship(F, s) { // 设为旗舰:改名册 + 按新锚点重排(�
   if (!F || !s || F.ships.indexOf(s.id) < 0) return;
   F.flagship = s.id;
   fmReslot(F);
-  if (typeof log === 'function') log(s.name + ' 设为 ' + fmName(F) + ' 旗舰', '');
 }
 
 /* 调一个几何参数(编组控制页的五个滑块 + 编队菜单的带半径滑块都走这里)。
@@ -349,8 +345,6 @@ function fmSetSrc(F, src, retake) {
      切到 snapshot 每次都要重拍(那是"手调后固定"的入口,本来就不是空操作),所以只有 generated 方向按 changed 守。 */
   if (changed || take) {
     fmReslot(F, mates, flag);
-    if (typeof log === 'function') log(fmName(F) + ' 槽位 → '
-      + (src !== 'snapshot' ? '阵型(条令站位)' : (take ? '固定(已按当前相对位置与朝向重拍)' : '固定(回到已存的队形,按「原地重排」让船就位)')), '');
   }
 }
 

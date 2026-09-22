@@ -7,6 +7,17 @@
 该做的东西叫**垂直切片**(vertical slice):一局完整、可输、可重玩的最小对局。题材范本是潜艇模拟的 TMA(Cold Waters)与 Nebulous: Fleet Command。
 用户拍板:四条都做,默认仍是靶场,给一个对局入口。
 
+## SL1 瘦身(2026-09-22,用户拍板删掉 RF2 只藏不删的旧界面)
+
+本目录删了 `92-editor`(场景编辑器 + `applyClsTier` + `sp_custom_scene`)、`93-replay`(回放 + 场景菜单 + GM / 互搏钮)、`94-demo`(demo 录制导出)三个文件;`bots/60-tasks`(任务系统 `tasks/taskSeq/taskProcess`)与 `core/02-events`(`log/onLog/LOG_SUBS` 总线)同轮删。
+`90-envs` 删 `customScene`,`curEnv` 简化为 `TEST_ENVS[envIdx]`;`91-init` 删回放 / demo / `envIdx===-1` 分支;`96-spawn` / `97-match` 删 `log` 与 `pushEvt`、`renderFleet` 守卫;`core/05` 删任务 AI 段,`enemyAI` 不再受 `selfPlay` 门控;`core/99` 删快照 / demoRec 两段与 `applyPanelState/renderFleet` 调用。
+`95-range`(靶场)**逻辑全保留**,只删了三条守卫 `log`、一条 `selfPlay` 让位、以及 `on('btnRange',...)`(它绑的顶栏钮已从 index.html 删掉,on() 本来就静默跳过)。
+
+- **`updRangePanel` 改由 core/99 的 20 帧低频车直调**(原来搭 87-fleetcards `updateCardsStatus` 的车,那函数删了)。面板本身仍被 css 压着不显示,与瘦身前一致。
+- 踩到的坑:`core/01` 一条注释写成「(command/70,RF11;单击仍=直接移动)」,verify.sh 生成符号表的 sed 把「逗号+标识符+分号」当多声明拆开,符号表凭空多出 `RF11`、`SYMS_MISSING` 判红。注释里别写这种形状。
+- 第二个坑:`physics/32-route-refine` 的沙盘把 `log` 存进局部再换成空函数(`saveLog = log`),grep `log(` 抓不到,strict 模式下读未声明全局直接 ReferenceError —— 删一个全局符号时要按 `名字` 再扫一遍,不能只扫调用形状。
+- 等拍板的死码:`s.paintWarned`(sensors/21 的上升沿循环 + ships/11 的初始化 + 判据 70-misc 排除正则里的名字)删 log 后只写不读,这一轮没动。
+
 ## AI1 红方 AI 只读自己的接触图(`bots/61-enemy`,连带 `bots/60-tasks`)
 
 改前 `enemyAI` 取**全部蓝舰真实位置的重心**当目标点,没有识别级接触时目标池还回退到全体蓝舰真值 —— 静默、熄火、分散站位对它全部无效。

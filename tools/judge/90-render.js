@@ -1,19 +1,19 @@
 /* ===== UI2 右下角工具栏真的在右下角 + 两个图标钮 =====
    用户:"所谓右下角的按钮其实没有在右下角,现在在事件窗口的左边,需要完全移动到右下角"。
-   改前锚的是【事件窗的左下角】。本条量真实布局矩形:贴右边距、整个在事件窗【下面】(不是旁边)、不压底部指令栏、不出画面;
+   改前锚的是右轨面板的左下角。本条量真实布局矩形:贴右边距、不压底部指令栏、不出画面;
    两个工具钮是图标钮(行内 SVG + aria-label),点在图标的子元素上也要切得动(委托走 closest)。
    让位有两档:指令栏伸到角上 ⇒ 工具栏坐在它上面;够不到 ⇒ 工具栏直接落在角上。探针视口是窄的,天然是前一档;
    后一档靠临时把指令栏收窄来造(反向对照:不造这一档的话,"永远坐在上面"也能过)。
    ⚠ 让位由 ResizeObserver 触发,而它不会在探针这段同步脚本中途回调(前面的判据选过船,指令栏已经换成三行了)——
      所以这里先手动调一次 toolsDock,量的是【让位算得对不对】;"尺寸变了会不会触发"是浏览器的事,在真实页面上换五种视口手工量过。 */
 t('FLOW70_TOOLSPOS',function(){
-  var T=document.getElementById('tools'),E=document.getElementById('evtFeed'),C=document.getElementById('cmdBar');
-  if(!T||!E||!C)return 'fail DOM 缺席';
+  var T=document.getElementById('tools'),C=document.getElementById('cmdBar');
+  if(!T||!C)return 'fail DOM 缺席';
   if(typeof toolsDock!=='function')return 'fail 缺 toolsDock(工具栏给指令栏让位)';
   toolsDock();
-  var r=T.getBoundingClientRect(),e=E.getBoundingClientRect(),c=C.getBoundingClientRect();
+  var r=T.getBoundingClientRect(),c=C.getBoundingClientRect();
   var gut=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gut'))||10;
-  var atRight=Math.abs((innerWidth-r.right)-gut)<1.5,belowEvt=(r.top>=e.bottom-0.5),inView=(r.bottom<=innerHeight-gut+1.5&&r.left>=0);
+  var atRight=Math.abs((innerWidth-r.right)-gut)<1.5,inView=(r.bottom<=innerHeight-gut+1.5&&r.left>=0);
   var hitCmd=!(r.right<=c.left||r.left>=c.right||r.bottom<=c.top||r.top>=c.bottom);
   var nearBottom=(innerHeight-r.bottom)<=gut*2+c.height+1.5;                 /* 离底边不超过"一条指令栏 + 两个边距" */
   var btns=[].slice.call(T.querySelectorAll('[data-tool]')),icoOk=btns.length===2&&btns.every(function(b){
@@ -35,9 +35,9 @@ t('FLOW70_TOOLSPOS',function(){
   var r2=T.getBoundingClientRect(),c2=C.getBoundingClientRect(),corner=(c2.right<r2.left&&Math.abs((innerHeight-r2.bottom)-gut)<1.5);
   C.style.width=wBak;toolsDock();
   var r3=T.getBoundingClientRect(),restored=(Math.abs(r3.top-r.top)<0.5);
-  var ok=(atRight&&belowEvt&&inView&&!hitCmd&&nearBottom&&icoOk&&flip&&back&&corner&&restored&&glued);
-  return (ok?'ok':'fail')+' 视口 '+innerWidth+'x'+innerHeight+' #tools=['+Math.round(r.left)+','+Math.round(r.top)+' - '+Math.round(r.right)+','+Math.round(r.bottom)+'] 事件窗底='+Math.round(e.bottom)+' 指令栏顶='+Math.round(c.top)
-    +' | 贴右边距='+atRight+' 整个在事件窗下面='+belowEvt+' 不压指令栏='+(!hitCmd)+' 贴着底部='+nearBottom+' 不出画面='+inView+' | 指令栏够不到角上时直接落在角上='+corner+'(底边距 '+Math.round(innerHeight-r2.bottom)+'px)已复原='+restored
+  var ok=(atRight&&inView&&!hitCmd&&nearBottom&&icoOk&&flip&&back&&corner&&restored&&glued);
+  return (ok?'ok':'fail')+' 视口 '+innerWidth+'x'+innerHeight+' #tools=['+Math.round(r.left)+','+Math.round(r.top)+' - '+Math.round(r.right)+','+Math.round(r.bottom)+'] 指令栏顶='+Math.round(c.top)
+    +' | 贴右边距='+atRight+' 不压指令栏='+(!hitCmd)+' 贴着底部='+nearBottom+' 不出画面='+inView+' | 指令栏够不到角上时直接落在角上='+corner+'(底边距 '+Math.round(innerHeight-r2.bottom)+'px)已复原='+restored
     +' | 钮与钮贴在一起(横竖各共用一条边)='+glued+' | 两个图标钮(svg + aria-label + 无文字,宽 '+Math.round(g0.width)+'px)='+icoOk+' 点图标子元素切得动='+flip+' 已复原='+back;
 });
 /* ===== SN9b 层界与落点出自同一块画布 =====
@@ -96,11 +96,11 @@ t('FLOW69_TIERLAND',function(){
             反向对照:回到战术落点 ⇒ 轮廓回来、记号不画 */
 t('FLOW68_HULLSIZE',function(){
   if(typeof hullZoomF!=='function'||typeof HULL_ZOOM==='undefined')return 'fail SN9 未加载(缺 hullZoomF / HULL_ZOOM)';
-  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,edBak=editMode,lodBak=LOD.off;
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,lodBak=LOD.off;
   var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},selBak=selected.slice(),WBak=W,HBak=H;
   var oDH=drawHull,oArc=ctx.arc,oMv=ctx.moveTo,oLn=ctx.lineTo,out='';
   try{
-    adminMode=false;editMode=false;selected=[];projectiles.length=0;LOD.off=true;
+    adminMode=false;selected=[];projectiles.length=0;LOD.off=true;
     var Z=HULL_ZOOM,kRef=1/vtLandKmpp(1);
     var want=function(k){return Math.max(Z.MARK,Math.min(Z.MAX,Z.LAND*Math.pow(k/kRef,Z.A)));};
     var fAt=function(k){cam.zoom=k;return hullZoomF();};
@@ -189,7 +189,7 @@ t('FLOW68_HULLSIZE',function(){
       +' | ⑤ 记号模式:拉远(落点 x1/3)换记号='+mFar+' 轮廓一个不画='+((pB.hull+pR.hull+pU1.hull+pU2.hull)===0)+' 我方箭头='+pB.arrow+' 敌方菱形(认出的 DD / 没认出的 DD·T1 / 认出的 BB·T3)='+pR.diamond+'/'+pU1.diamond+'/'+pU2.diamond+' 图标半径全同='+(pR.r===pU1.r&&pU1.r===pU2.r&&pB.r===pR.r)+'('+pR.r+'px);回到落点:轮廓回来='+(qB.hull===1&&qR.hull===1)+' 记号不画='+(!qB.arrow&&!qR.diamond)+'='+okMark;
   }finally{
     drawHull=oDH;ctx.arc=oArc;ctx.moveTo=oMv;ctx.lineTo=oLn;W=WBak;H=HBak;
-    adminMode=admBak;editMode=edBak;LOD.off=lodBak;selected=selBak;
+    adminMode=admBak;LOD.off=lodBak;selected=selBak;
     cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
     ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
     projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
@@ -203,7 +203,7 @@ t('FLOW68_HULLSIZE',function(){
    全部走墙钟,所以判据一律用时钟覆盖参数(nowIn / dtIn)推进 —— 同一毫秒里连调,走墙钟一步都推不动。 */
 t('FLOW67_TIERFX',function(){
   if(typeof drawTierFx!=='function'||typeof drawEdgeRuler!=='function'||typeof lodDrawShip!=='function')return 'fail SN8 未加载(缺 drawTierFx / drawEdgeRuler / lodDrawShip)';
-  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,edBak=editMode,lodBak=LOD.off;
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,lodBak=LOD.off;
   var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},selBak=selected.slice(),fxBak=VT_FX,rulBak=VT_RULER_T0,animBak=vtAnim,zBak=zAnim;
   var oT=ctx.fillText,oR=ctx.fillRect,oTr=ctx.translate,out='';
   try{
@@ -251,7 +251,7 @@ t('FLOW67_TIERFX',function(){
     var landed=(cam.zoom===k1);   /* 当场记下来:后面 C 段还要改 cam.zoom,拼读数时再现读就是另一回事了 */
     var okA3=(over&&landed&&vtAnim===null);
     /* ---------- C 收拢 / 散开:结论即时、画面带过渡 ---------- */
-    adminMode=false;editMode=false;selected=[];projectiles.length=0;LOD.off=false;
+    adminMode=false;selected=[];projectiles.length=0;LOD.off=false;
     var S1=makeShip('CA','动画旗',[0,0,0],[1,0,0],[0,0,0],'blue',2),S2=makeShip('DD','动画僚',[40000,0,0],[1,0,0],[0,0,0],'blue',2);
     ships.length=0;ships.push(S1,S2);ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];});
     var F=fmCreate('7',[S1,S2]);
@@ -287,7 +287,7 @@ t('FLOW67_TIERFX',function(){
     ctx.fillText=oT;ctx.fillRect=oR;ctx.translate=oTr;
     if(typeof fmDelete==='function')fmDelete('7');
     VT_FX=fxBak;vtAnim=animBak;zAnim=zBak;
-    adminMode=admBak;editMode=edBak;LOD.off=lodBak;selected=selBak;
+    adminMode=admBak;LOD.off=lodBak;selected=selBak;
     cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;vtFrame();VT_FX=fxBak;VT_RULER_T0=rulBak;
     ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
     projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
@@ -302,13 +302,13 @@ t('FLOW67_TIERFX',function(){
    三处的颜色必须都等于 LIT_RGB[那一级];火控级实线 + ◎ + 四角火控框,其余虚线。 */
 t('FLOW66_LITSTYLE',function(){
   if(typeof LIT_RGB==='undefined'||typeof litTag!=='function')return 'fail SN7c 等级配色表未加载(缺 LIT_RGB / litTag)';
-  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,edBak=editMode,lodBak=LOD.off;
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,lodBak=LOD.off;
   var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},selBak=selected.slice(),onBak=GEOM.on,pinBak=GEOM.pin;
   var pane=document.getElementById('geomPane'),gcv=document.getElementById('geomCv'),g2=gcv?gcv.getContext('2d'):null;
   if(!pane||!g2)return 'fail 缩圈小窗 DOM 缺席';
   var oE=ctx.ellipse,oS=ctx.stroke,oT=ctx.fillText,oE2=g2.ellipse,oS2=g2.stroke,out='';
   try{
-    adminMode=false;editMode=false;selected=[];projectiles.length=0;LOD.off=true;
+    adminMode=false;selected=[];projectiles.length=0;LOD.off=true;
     var B=makeShip('CA','等级蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2);
     var R=makeShip('DD','等级红',[150000,120000,0],[-1,0,0],[0,0,0],'red',2);   /* 摆在画面左下,躲开右上角的小窗 */
     ships.length=0;ships.push(B,R);
@@ -356,7 +356,7 @@ t('FLOW66_LITSTYLE',function(){
   }finally{
     ctx.ellipse=oE;ctx.stroke=oS;ctx.fillText=oT;g2.ellipse=oE2;g2.stroke=oS2;
     GEOM.on=onBak;GEOM.pin=pinBak;GEOM.tick=-1;GEOM.byId={};pane.hidden=!onBak;
-    adminMode=admBak;editMode=edBak;LOD.off=lodBak;selected=selBak;
+    adminMode=admBak;LOD.off=lodBak;selected=selBak;
     cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
     ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
     projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
@@ -577,12 +577,12 @@ t('FLOW64_GEOM',function(){
    每秒量一次,任何一拍落到表外的组合就红 —— 构造出来的态再对,真管线走不到也没用。 */
 t('FLOW63_VIEW',function(){
   if(typeof contactState!=='function')return 'fail contactState 缺席';
-  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,edBak=editMode,detBak=detT,simBak=simTime;
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,detBak=detT,simBak=simTime;
   var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},selBak=selected.slice(),lodBak=LOD.off;
   var oarc=ctx.arc,odash=ctx.setLineDash,oell=ctx.ellipse,ohull=drawHull,odimg=ctx.drawImage,nHeatBlit=0,out='';
   var TABLE={none:'·····',heat:'■····',live:'·■■··',coast:'·■·■·',ghost:'···■■'};
   try{
-    adminMode=false;editMode=false;selected=[];projectiles.length=0;LOD.off=true;
+    adminMode=false;selected=[];projectiles.length=0;LOD.off=true;
     var geomBak=GEOM.on;GEOM.on=true;   /* GM1:地图上的误差椭圆跟着右下角「缩圈」钮走(用户 2026-09-22 拍板,默认不画)。五态表里"椭圆"那一列量的是【开着钮】时的样子;关着的那一半见末尾的 C */
     var nEll=0,nHull=0,nMark=0,nRing=0,dash=[];
     ctx.setLineDash=function(d){dash=d||[];return odash.apply(ctx,arguments);};
@@ -672,7 +672,7 @@ t('FLOW63_VIEW',function(){
   }finally{
     if(typeof geomBak!=='undefined')GEOM.on=geomBak;
     ctx.arc=oarc;ctx.setLineDash=odash;ctx.ellipse=oell;ctx.drawImage=odimg;drawHull=ohull;
-    adminMode=admBak;editMode=edBak;LOD.off=lodBak;selected=selBak;detT=detBak;simTime=simBak;
+    adminMode=admBak;LOD.off=lodBak;selected=selBak;detT=detBak;simTime=simBak;
     cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
     ships=shipsBak;projectiles=projBak;
     if(typeof HEAT!=='undefined')HEAT.sig='';
@@ -686,11 +686,11 @@ t('FLOW63_VIEW',function(){
    改前两个都画成虚线、而且不确定圈有 8000km 下限(常用缩放下 7~19px)⇒ 两个同心虚线圈一样大,
    读不出任何东西。本条把这三件事钉住,顺带把"记号不随缩放变化"这条也量出来。 */
 t('FLOW62_MARK',function(){
-  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,edBak=editMode;
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode;
   var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},selBak=selected.slice();
   var oarc=ctx.arc,odash=ctx.setLineDash,out='';
   try{
-    adminMode=false;editMode=false;selected=[];projectiles.length=0;
+    adminMode=false;selected=[];projectiles.length=0;
     var O=makeShip('CA','记号观测',[0,0,0],[1,0,0],[0,0,0],'blue',2);
     var G=makeShip('DD','记号幽灵',[200000,0,0],[1,0,0],[0,0,0],'red',2);
     ships.length=0;ships.push(O,G);
@@ -732,7 +732,7 @@ t('FLOW62_MARK',function(){
       +' | ③ 拉远到不确定圈缩进记号量级:该点上的圈数='+C.length+'(须1=只剩记号,不许两个同样大的虚线圈)='+ok3;
   }finally{
     ctx.arc=oarc;ctx.setLineDash=odash;
-    adminMode=admBak;editMode=edBak;selected=selBak;
+    adminMode=admBak;selected=selBak;
     cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
     ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
     projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
@@ -746,10 +746,10 @@ t('FLOW62_MARK',function(){
      不偏开的话"读真值"与"读估计"给出同一个答案,这条判据就没有区分度(本项目反复踩的那一类)。 */
 t('FLOW61_PICKPOS',function(){
   if(typeof contactPos!=='function')return 'fail SN6d contactPos 未加载';
-  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,edBak=editMode;
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode;
   var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},selBak=selected.slice(),lodBak=LOD.off,out='';
   try{
-    adminMode=false;editMode=false;selected=[];projectiles.length=0;LOD.off=true;
+    adminMode=false;selected=[];projectiles.length=0;LOD.off=true;
     var B=makeShip('CA','取位蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2);
     var R=makeShip('DD','取位红',[300000,0,0],[-1,0,0],[0,0,0],'red',2);
     ships.length=0;ships.push(B,R);
@@ -807,7 +807,7 @@ t('FLOW61_PICKPOS',function(){
       +' | ③ 幽灵外推:contactPos='+fmt(cp3)+' 画点='+fmt(d3)+' 点选点='+fmt(k3)+' 离真值 '+sep3+'km(须>60000)='+ok3
       +' | ④ 幽灵但无接触记录(fail-closed):'+fmt(cp4)+'/'+fmt(d4)+' 真值处能点到='+hit4+'='+ok4;
   }finally{
-    adminMode=admBak;editMode=edBak;LOD.off=lodBak;selected=selBak;
+    adminMode=admBak;LOD.off=lodBak;selected=selBak;
     cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
     ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
     projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
@@ -996,9 +996,9 @@ t('FLOW60_START',function(){
      ④ 同时被选中:选中圈(闭合、黄)与告警弧(不闭合、橙)各画各的,两者没有一项相同 */
 t('FLOW83_RWR',function(){
   if(typeof drawRwrSpike!=='function'||typeof RWR==='undefined')return 'fail RWR1 未加载(缺 drawRwrSpike / RWR)';
-  var shipsBak=ships.slice(),admBak=adminMode,edBak=editMode,lodBak=LOD.off,selBak=selected.slice(),camBak={x:cam.x,y:cam.y,zoom:cam.zoom},oArc=ctx.arc,out='';
+  var shipsBak=ships.slice(),admBak=adminMode,lodBak=LOD.off,selBak=selected.slice(),camBak={x:cam.x,y:cam.y,zoom:cam.zoom},oArc=ctx.arc,out='';
   try{
-    adminMode=false;editMode=false;LOD.off=true;selected=[];
+    adminMode=false;LOD.off=true;selected=[];
     var B=makeShip('CA','告警蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),P=makeShip('DD','照射红',[0,0,0],[-1,0,0],[0,0,0],'red',2);
     ships.length=0;ships.push(B,P);ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.flame=0;x.sideFlame=0;});
     cam.x=0;cam.y=0;cam.zoom=1/vtLandKmpp(1);
@@ -1033,7 +1033,7 @@ t('FLOW83_RWR',function(){
       +' | ③ 没被照射 / 照射源已沉 / 找不到:画了 '+n0+'/'+nDead+'/'+nGone+' 段(须 0/0/0)='+ok3
       +' | ④ 同时被选中:选中圈(闭合)'+selRing.length+' 个 + 告警弧 '+s4.length+' 段,半径与颜色都不同='+ok4;
   }finally{
-    ctx.arc=oArc;adminMode=admBak;editMode=edBak;LOD.off=lodBak;selected=selBak;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
+    ctx.arc=oArc;adminMode=admBak;LOD.off=lodBak;selected=selBak;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
     ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
   }
   return out;
@@ -1047,9 +1047,9 @@ t('FLOW83_RWR',function(){
      ⑤ 敌方接触:只在我方这一拍【听见】它的雷达(covB.ch.lis)时画(红);它开着雷达但我方没听见 ⇒ 不画(不读它的真值);GM 下按真值 */
 t('FLOW84_EMITFX',function(){
   if(typeof drawEmitRipple!=='function'||typeof emitRippleRgb!=='function')return 'fail EM1 未加载(缺 drawEmitRipple / emitRippleRgb)';
-  var shipsBak=ships.slice(),admBak=adminMode,edBak=editMode,lodBak=LOD.off,selBak=selected.slice(),hrBak=hoverRing,camBak={x:cam.x,y:cam.y,zoom:cam.zoom},oArc=ctx.arc,oT=ctx.fillText,out='';
+  var shipsBak=ships.slice(),admBak=adminMode,lodBak=LOD.off,selBak=selected.slice(),hrBak=hoverRing,camBak={x:cam.x,y:cam.y,zoom:cam.zoom},oArc=ctx.arc,oT=ctx.fillText,out='';
   try{
-    adminMode=false;editMode=false;LOD.off=true;selected=[];hoverRing=null;
+    adminMode=false;LOD.off=true;selected=[];hoverRing=null;
     var B=makeShip('CA','辐射蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),R=makeShip('DD','辐射红',[120000,0,0],[-1,0,0],[0,0,0],'red',2);
     ships.length=0;ships.push(B,R);ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.flame=0;x.sideFlame=0;x.autoEngage=false;x.roe='hold';});
     cam.x=60000;cam.y=0;cam.zoom=1/vtLandKmpp(1);
@@ -1102,7 +1102,7 @@ t('FLOW84_EMITFX',function(){
       +' | ⑤ 敌方:听见它 ⇒ '+rh.length+' 段红='+rhRed+';它开着但没听见 ⇒ '+rNot+' 段(须 0);GM ⇒ '+rGm+';它静默但量测里有 lis ⇒ '+rSilentHeard+'(画我方的量测)='+ok5;
   }finally{
     ctx.arc=oArc;ctx.fillText=oT;hoverRing=hrBak;
-    adminMode=admBak;editMode=edBak;LOD.off=lodBak;selected=selBak;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
+    adminMode=admBak;LOD.off=lodBak;selected=selBak;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
     ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
   }
   return out;

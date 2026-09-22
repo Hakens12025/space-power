@@ -1,7 +1,7 @@
 "use strict";
 /* ================= RANGE1 靶场模块(P2) =================
    靶场的全部新逻辑集中在这一个文件:靶伤害统计 / 靶 AI(清交战态·闪避机动·自动诱饵) / 参数面板 / localStorage 持久化。
-   载入位置是硬约束:必须排在 24-main.js 之前(init() 顶层调 loadRangeCfg),且排在 03/05/20/22 之后(要用 fireDecoy / speedGearsOf / selfPlay / log)。
+   载入位置是硬约束:必须排在 core/99 之前(init() 顶层调 loadRangeCfg),且排在 weapons/52、ships/11 之后(要用 fireDecoy / speedGearsOf)。
    与其他文件的接口只有 6 个:newRangeStat / rangeTally / rangeDefTally / applyRangeCfg / rangeTargetAI / updRangePanel,调用点全部带 typeof 守卫。 */
 
 const RANGE_KEY='sp_range_v1';
@@ -51,7 +51,6 @@ function resetRangeStat(){ // 归零:调完一组参数不用重开场景就能�
   for(const t of rangeTargets())if(t.rangeStat)t.rangeStat=newRangeStat();
   if(typeof projectiles!=='undefined')for(const p of projectiles)if(p.rgSeen)p.rgSeen=null; // 复锁去重表一起清:否则归零后正在返场的那几组会被算成"复锁再入"
   renderRangePanel();
-  if(typeof log==='function')log('🎯 靶场统计已归零,重新计时','');
 }
 
 /* ---------- 参数定义 ---------- */
@@ -160,11 +159,10 @@ function rangeTargetAI(dt){ // 每 tick 跑一次,调用点在 stepSim 的 enemy
   const cfg=rangeCfgAll();
   for(let i=0;i<ts.length;i++){
     const t=ts[i];
-    // 清交战态:堵住信息面板的"自动索敌"按钮(shipAction 无阵营过滤)、Ctrl+右键锁定、Ctrl+T 漂移射击、以及 GM 把靶编进任务系统的情况。
+    // 清交战态:堵住 Ctrl+右键锁定、Ctrl+T 漂移射击这类会把靶拉进交战的入口(SL1 起信息面板与任务系统已删,这两条历史入口不再存在,守卫留着无害)。
     // 三道禁火闸门本来就让靶发不出弹,这里清的是"锁定线/瞄准姿态"这些会污染观测与闪避机动的残留状态。
     t.autoEngage=false;t.lockedTarget=null;t.lockPlayer=false;
     if(t.driftFire){t.driftFire=false;t.driftFireT=0;} // driftFire 会在运动内核里抢机头,直接干扰闪避机动
-    if(typeof selfPlay!=='undefined'&&selfPlay)continue; // 互搏模式让位:红方交给玩家手操,AI 不抢 orders(闸门仍在,靶依旧一发打不出)
     const c=(i<RANGE_SLOTS)?cfg.targets[i]:null;
     if(!c)continue; // 超过 3 个靶:只清交战态,机动不接管(面板管不到它们)
     if(c.evadeOn){
@@ -254,7 +252,7 @@ function trVisWarn(t){
   const why=(lit<2)?'蓝方打不出任何弹':'蓝方只能打导弹,MAC 需火控级(3)';
   return `<div style="color:var(--state-warn)">　⚠ 被点亮 ${lit}/3 · ${why}(体型/隐身调过头?靶在干扰?还是蓝方自己没开照射?)</div>`;
 }
-function updRangePanel(){ // 只刷读数与旋钮值,不重建 DOM。由 updateCardsStatus 每 20 帧带一次
+function updRangePanel(){ // 只刷读数与旋钮值,不重建 DOM。由 core/99 的 20 帧低频车直调(SL1 起)
   if(!trPanelEl)return;
   if(!rangeOn()){trPanelEl.style.display='none';return;}
   if(!trAutoShown){trAutoShown=true;trPanelEl.style.display='flex';} // 进靶场自动弹一次,之后用户关了就不再强开。必须是 flex 不是 block:index.html 的行内 display 优先级高于样式表里的 #trPanel{display:flex},写成 block 会让列式弹性布局失效——参数区不再收缩,读数区和按钮行被 .panel 的 overflow:hidden 整个裁掉
@@ -303,13 +301,6 @@ if(trBodyEl)trBodyEl.addEventListener('pointerdown',e=>{
   if(!b||e.button!==0)return;
   e.preventDefault();trStep(b.dataset.knob,+b.dataset.dir);
 });
-on('btnRange','pointerdown',e=>{if(e.button!==0)return;e.preventDefault();
-  if(!trPanelEl)return;
-  if(!rangeOn()){if(typeof log==='function')log('当前不是靶场场景(◎ 菜单第一条)','warn');return;}
-  trAutoShown=true;
-  trPanelEl.style.display=(trPanelEl.style.display==='none'?'flex':'none'); // 同上:必须 flex
-  if(trPanelEl.style.display==='flex')renderRangePanel();
-});
 on('trClose','pointerdown',e=>{if(e.button!==0)return;e.preventDefault();trAutoShown=true;if(trPanelEl)trPanelEl.style.display='none';});
 on('trReset','pointerdown',e=>{if(e.button!==0)return;e.preventDefault();resetRangeStat();});
 on('trSyncBtn','pointerdown',e=>{if(e.button!==0)return;e.preventDefault();
@@ -320,5 +311,4 @@ on('trSyncBtn','pointerdown',e=>{if(e.button!==0)return;e.preventDefault();
     for(let i=0;i<RANGE_SLOTS;i++){cfg.targets[i]=rangeClampOne(src);if(ts[i])applyRangeOne(ts[i],cfg.targets[i],false);} // 同步参数不算换弹匣,不补满
   }
   saveRangeCfg();renderRangePanel();
-  if(typeof log==='function')log(cfg.sync?'🎯 参数同步全靶:开(改一个 = 改三个)':'🎯 参数同步全靶:关(逐靶独立)','');
 });

@@ -24,7 +24,7 @@
    【发射速度要自己给】:出膛那一刻 vel 继承载机(静止=0),不给的话近防的威胁判定 dot(p.vel,...) 恒为 0
    而被跳过,"0 发"就成了假绿 —— 所以三相一律先置 p.vel/p.spd,让威胁判定在三相里同样成立。
    场景隔离(同 FLOW31_FOLLINE 的手法):自己造两艘船换掉 ships、清 projectiles/hitFX/threatCorridors/fireSeqs,
-   并 selfPlay=true 关掉 enemyAI(它会给红舰推命令、还有 8% 掷骰齐射,判定就不再确定);全部在 finally 里还原。 */
+   并把 enemyAI 换成空函数关掉它(它会给红舰推命令、还有 8% 掷骰齐射,判定就不再确定);全部在 finally 里还原。 */
 /* SN6 热区:没有位置的接触画成一片【场】,不是一个几何形状。四条判据,每一条都有反向对照 ——
    光判"画出来了"的话,一个画规整圆圈的实现同样全绿,而那正是这一层刻意不要的东西。
      ① 场真的铺出来了(有色像素 > 0),而且【真值位置上没有舰标】——后者归 FLOW47_FOG,这里只钉场本身。
@@ -52,10 +52,10 @@
      ⑤ 半径与感知层的量程律【逐位相同】—— 圈与判据必须是同一个数(本项目在 SN4 之前正是栽在这类分家上)。 */
 t('FLOW58_SIGVIEW',function(){
   if(typeof SIG==='undefined'||typeof drawSignalView!=='function')return 'fail SN6 信号视野未加载(缺 SIG/drawSignalView)';
-  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,edBak=editMode;
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode;
   var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},selBak=selected.slice(),sigBak=SIG.on,out='';
   try{
-    adminMode=false;editMode=false;selected=[];projectiles.length=0;
+    adminMode=false;selected=[];projectiles.length=0;
     var S=makeShip('DD','信号',[0,0,0],[1,0,0],[0,0,0],'blue',2);
     ships.length=0;ships.push(S);
     S.orders=[];S.vel=[0,0,0];S.autoEngage=false;S.roe='hold';S.macOn=false;S.mslOn=false;S.ciwsOn=false;
@@ -107,7 +107,7 @@ t('FLOW58_SIGVIEW',function(){
       +' | ④ 拉到最近(圈比画面还大)色差='+dif(farOff,farOn).join('/')+'(须全 0 = 读不出就不画)='+ok4
       +' | ⑤ 半径 被看见 '+Math.round(rv/1000)+'k / 被听见 '+Math.round(rh/1000)+'k,与量程律逐位相同='+ok5;
   }finally{
-    SIG.on=sigBak;adminMode=admBak;editMode=edBak;selected=selBak;
+    SIG.on=sigBak;adminMode=admBak;selected=selBak;
     cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
     ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
     projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
@@ -195,10 +195,10 @@ t('FLOW57_GRIDNEST',function(){
 });
 t('FLOW56_LOD',function(){
   if(typeof lodBuild!=='function')return 'fail SN6 聚合层未加载(缺 lodBuild)';
-  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,edBak=editMode;
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode;
   var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},selBak=selected.slice(),detBak=detT,out='';
   try{
-    adminMode=false;editMode=false;selected=[];projectiles.length=0;
+    adminMode=false;selected=[];projectiles.length=0;
     var B=[],Rr=[],i;
     for(i=0;i<4;i++)B.push(makeShip(i?'DD':'CA','L蓝'+i,[-300000+i*12000,i*12000,0],[1,0,0],[0,0,0],'blue',2));
     for(i=0;i<3;i++)Rr.push(makeShip('DD','L红'+i,[200000+i*12000,i*12000,0],[-1,0,0],[0,0,0],'red',2));
@@ -258,7 +258,7 @@ t('FLOW56_LOD',function(){
       +' | ④ 构成:认出时「'+compIdn+'」 没认出时「'+compUnk+'」(后者须恰好是 ?×3)='+ok4
       +' | ⑤ 点聚合框选得到框里的船='+ok5;
   }finally{
-    adminMode=admBak;editMode=edBak;detT=detBak;selected=selBak;
+    adminMode=admBak;detT=detBak;selected=selBak;
     cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
     lodPrev={fleet:{},pairsB:null,pairsR:null};
     ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
@@ -327,11 +327,11 @@ t('FLOW55_VIEWTIER',function(){
 });
 t('FLOW54_HEAT',function(){
   if(typeof heatBuild!=='function'||typeof HEAT==='undefined')return 'fail SN6 热区层未加载(缺 heatBuild/HEAT)';
-  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,edBak=editMode;
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode;
   var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},selBak=selected.slice(),detBak=detT;
   var wBak=HEAT_WARP,oBak=HEAT_OFF,cBak=HEAT_CHURN,out='';
   try{
-    adminMode=false;editMode=false;selected=[];projectiles.length=0;
+    adminMode=false;selected=[];projectiles.length=0;
     var B=makeShip('DD','热蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2);
     var Rr=makeShip('DD','热红',[0,0,0],[1,0,0],[0,0,0],'red',2);
     Rr.id='s901';   /* ID2 那轮实测:热区的偏移与扭曲按【舰 id 的数字】取固定相位(83-hud 的 heatIdPhase),而 id 来自全局 shipSeq ——
@@ -396,7 +396,7 @@ t('FLOW54_HEAT',function(){
       +' | 越近面越小:场半径 '+km(FAR.rw)+' → '+km(NEAR.rw)+'(须<九成;硬截断会让两档一模一样)='+ok4;
   }finally{
     HEAT_WARP=wBak;HEAT_OFF=oBak;HEAT_CHURN=cBak;HEAT.sig='';
-    adminMode=admBak;editMode=edBak;detT=detBak;
+    adminMode=admBak;detT=detBak;
     cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
     selected=selBak;
     ships.length=0;shipsBak.forEach(function(x){ships.push(x);});

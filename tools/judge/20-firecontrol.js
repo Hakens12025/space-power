@@ -124,7 +124,7 @@ function fc4reset(){ /* RF5 每条判定各自复位(同 FLOW3 的理由):手势
   fc4clock(false); /* 先卸掉可控墙钟:某条判定万一抛异常(t() 会吞掉),假钟不能留给下一条 */
   initFleet(); /* 换局全量重置,顺带清 fireSeqs/selected/pending*(91-init:8-19) */
   panning=null;rmbClick=null;dragOrder=null;selDrag=null;selWeapon=null;mmb=null;clearTimeout(rmbTimer);rmbTimer=null;
-  editMode=false;rangeMode=false;adminMode=true;ctrlArm=false; /* 准星只在非编辑器/非测距下活;adminMode 硬置成 GM(第 2 条自己会关)。⚠ SN6c 起这【不是】 core/01 的默认值 —— 默认已改成关,这里是判据自己要 GM */
+  rangeMode=false;adminMode=true;ctrlArm=false; /* 准星只在非测距下活;adminMode 硬置成 GM(第 2 条自己会关)。⚠ SN6c 起这【不是】 core/01 的默认值 —— 默认已改成关,这里是判据自己要 GM */
   cam.x=30000;cam.y=0; /* 相机摆回射手与靶之间,屏幕坐标落在视口内。cam.zoom 一律不动 —— 吸附半径就是 60/cam.zoom,动它等于动判据 */
   var b=ships.filter(function(s){return s.side==='blue';}),S=b[0];
   S.pos=[0,0,0];S.vel=[0,0,0];S.orders=[];S.lockedTarget=null;S.driftFire=false;S.driftFireT=0;
@@ -252,16 +252,12 @@ t('FLOW4_PAN',function(){
   return (ok?'ok':'fail')+' 中键拖动:cam '+(still?'不动':'被平移了 '+Math.round(c1[0]-c0[0])+','+Math.round(c1[1]-c0[1]))
     +' panning='+pan1+' seqs='+n0+'→'+n1+' | 右键拖动(对照组):cam 位移='+Math.round(c2[0]-c1[0])+','+Math.round(c2[1]-c1[1])+' panning='+pan2;
 });
-/* 6d-7 preventDefault 仍在:它挡的是浏览器中键自动滚动(删了每按一次中键就在画面上叠个滚动圆圈),与平移不是一回事。
-   顺带测编辑器那只空壳:拆平移后它仍必须 return,掉穿到常规分支就会在编辑器里按中键触发快速交战 */
+/* 6d-7 preventDefault 仍在:它挡的是浏览器中键自动滚动(删了每按一次中键就在画面上叠个滚动圆圈),与平移不是一回事。 */
 t('FLOW4_PD',function(){
   var e=fc4reset(),p=fc4at(e.A);
   var d1=fc4down(1,p[0],p[1]);var pd1=d1.defaultPrevented;mmb=null;
-  editMode=true;
-  var d2=fc4down(1,p[0],p[1]);var pd2=d2.defaultPrevented,mm=mmb;
-  editMode=false;
-  var ok=(pd1&&pd2&&mm===null);
-  return (ok?'ok':'fail')+' 常规分支 defaultPrevented='+pd1+' 编辑器分支 defaultPrevented='+pd2+' 编辑器下 mmb='+(mm?'被置上(掉穿了)':'null');
+  var ok=pd1;
+  return (ok?'ok':'fail')+' 常规分支 defaultPrevented='+pd1;
 });
 /* 6e. RF5 Phase C 轮盘手势链判定层(FLOW5):中键长按 → 开轮盘(松手前)→ 点扇区改许可 → 翻页 → 关闭。
    与 FLOW4 共用全部基座(fc4reset/fc4down/fc4up/fc4move/fc4frames/fc4clock/fc4at),只多一件东西:【假定时器】。

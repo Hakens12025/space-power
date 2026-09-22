@@ -123,7 +123,7 @@ function drawGeom() {
   g.fillStyle = '#05070c'; g.fillRect(0, 0, Wp, Hp);
   const hint = document.getElementById('geomHint');
   const say = s => { if (hint && hint.textContent !== s) hint.textContent = s; };
-  const sel = (editMode || replay.active) ? null : geomSubject();
+  const sel = geomSubject();
   const c = sel ? sel.t.covB : null;
   if (!sel || !c || !c.seen) {
     g.fillStyle = '#46566a'; g.font = '11px Consolas,monospace'; g.textAlign = 'center'; g.textBaseline = 'middle';

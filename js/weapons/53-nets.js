@@ -89,7 +89,7 @@ function updateNets(dt){ // v125:网内连接检查(仅地雷网)——雷组离
     for(const p of members){
       if(V.len(V.sub(p.pos,[cx,cy,cz]))>NET_COMM){ // 离网中心超通信距离=断网
         p.netBroken=(p.netBroken||0)+dt;
-        if(p.netBroken>10){p.done=true;if(!(p.shooter&&p.shooter.side==='red'&&!adminMode))log(`🕸 网${netId}导弹断网超10s自毁`,'');}
+        if(p.netBroken>10){p.done=true;}
       }else p.netBroken=0; // 回网(飞回中心)恢复
     }
   }

@@ -126,9 +126,9 @@ function drawShip(s){
      位置一律从 contactPos 拿(画在哪 = 点在哪,SN6d)。
      记号不是图标(SN6e):图标承诺的是"我知道这是什么、在哪、朝哪开";coast / ghost 这两态一样都不知道,
      而且图标那条链会把 s.vel / s.flame / s.orders[0] / s.facing 四样【真值】实时画出去。
-     GM 与编辑器旁路:dispPos 保持真值、view 保持 live。 */
+     GM 旁路:dispPos 保持真值、view 保持 live。 */
   let dispPos=s.pos, view='live';
-  if(!adminMode&&!editMode&&s.side==='red'){
+  if(!adminMode&&s.side==='red'){
     view=contactState(s,'blue');
     if(view==='none'||view==='heat')return;
     const cp=contactPos(s,'blue');
@@ -174,7 +174,7 @@ function drawShip(s){
   // DS181 S3:⚠被照射告警(敌方雷达以照射模式对我驻留达阈值)→黄框闪烁(信息战灵魂提示)
   // SN4:驻留键换成 act(雷达的【照射】模式;静听 lis 与它是同一部设备的两种模式,不是两条通道)。
   //   键名一改,原来那句裸读就变成「undefined 大于某数」恒 false —— 告警圈永远不画、一行错都不报,所以必须与内核同一提交改完。
-  if(!editMode&&!s.dead){
+  if(!s.dead){
     // SN6:判据换成【对方这一拍有没有一条照射量测打在我身上】。那正是 c.ch.act 记的东西,不需要阈值,
     //      顺带解掉一桩旧账:那个阈值曾经是本文件与 21-detect 各手抄一份的字面量,SN4 把它收进感知表一处,SN6 连常数都不需要了。
     const myCov=s.side==='blue'?s.covR:s.covB;   // 蓝舰看 covR = 红网络对我握着的那条接触
@@ -215,7 +215,7 @@ function drawShip(s){
 
   // 推进器尾焰(后主推进 / 前向反推 / 侧向辅助)
   drawFlame(s,p,r);
-  if(!editMode){const erg=emitRippleRgb(s);if(erg)drawEmitRipple(p,shipIconR(s),erg);} // EM1 发射机开着 ⇒ 涟漪(画在舰体之下)
+  {const erg=emitRippleRgb(s);if(erg)drawEmitRipple(p,shipIconR(s),erg);} // EM1 发射机开着 ⇒ 涟漪(画在舰体之下)
   // 舰体图标(wows式:按舰种形状,图标自身带朝向)
   ctx.save();
   ctx.strokeStyle=bodyColor; ctx.fillStyle=bodyColor;
@@ -249,7 +249,7 @@ function drawShip(s){
     ctx.fillText(tag,p[0],p[1]-r-7);
   }
   // 名称(识别分层:探测级显示"大/中/小热源",识别级显示舰种名)
-  const foeLit=(s.side==='red'&&!editMode)?(s.litBlue||0):0;
+  const foeLit=(s.side==='red')?(s.litBlue||0):0;
   if(cam.zoom>0.0008){
     const lbl=(shipIdentHull(s)==='UNK')?sigClassLabel(s):s.name; // ID1:名字与轮廓同一个口径 —— 轮廓打码了,名字就不许是真名(原来各判各的:identQ===1)
     ctx.fillStyle='rgba(215,226,240,.8)';ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';

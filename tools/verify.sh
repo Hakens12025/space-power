@@ -149,7 +149,7 @@ grep -q "FLOW43_FMPACE=ok" "$OUT" || { echo "✗ FLOW43_FMPACE 未通过(FM10 �
 # 模式用字符串拼接写,免得本文件自己被同一条 grep 抓到。
 FM32_DEAD="CLS_""ROLE|aaRing""Ref|P\\.f""an|P\\.g""ap|FM_LIMIT\\.f""an|FM_LIMIT\\.g""ap"
 if grep -rnE "$FM32_DEAD" js/ --include='*.js' >/dev/null 2>&1; then echo "✗ FM3-2 负对照:js/ 里仍有旧弧线阵残留"; grep -rnE "$FM32_DEAD" js/ --include='*.js'; fail=1; fi
-grep -q "FLOW45_LINK=ok" "$OUT" || { echo "✗ FLOW45_LINK 未通过(数据链通道数:四舰种须 1/3/3/3、两份烘焙手抄须同步、guideSide 真实调用点须吃到它)"; fail=1; }
+grep -q "FLOW45_LINK=ok" "$OUT" || { echo "✗ FLOW45_LINK 未通过(数据链通道数:四舰种须 1/3/3/3、guideSide 真实调用点须吃到它)"; fail=1; }
 # SN3 源码级负对照:三处已确认的死代码不许复活。删除【没有任何自动信号】——
 # 全符号扫描扫的是顶层 function/const/let,这三处一个是对象字面量的键、两个是函数体内的局部量,
 # 从来就不在符号表里;删干净没删干净只有 grep 知道。模式用字符串拼接写,免得本文件自己被抓到(同 FM32_DEAD)。
@@ -388,7 +388,7 @@ GUARD_SELF=$(printf '%s\n' "if(typeof __nope_guard__==='function')x(); /* typeof
 [ -z "$GUARD_MISS" ] || { echo "✗ R2 typeof 守卫指向全库没有声明的符号:$GUARD_MISS —— 这种守卫恒假,它后面那一支永远不跑"; fail=1; }
 grep -q "FLOW78_JUMPSEL=ok" "$OUT" || { echo "✗ FLOW78_JUMPSEL 未通过(R2 跳层钮以选中舰为中心:选中一艘离重心很远的蓝舰,跳战术 / 舰队层的落点必须是那艘船,战区层 / 没选中 / 选中的是死船落在重心——原实现的守卫指向一个不存在的函数,恒假,静默走重心)"; fail=1; }
 # R3 分层的方向:模拟目录不许引用呈现 / 指令目录里声明的符号(架构适应度函数,architectural fitness function)。
-#    全库审查(2026-09-21)量出来的唯一一处逆层依赖是 log():它原来住在 render/86,五个模拟目录、35 个文件都在调 —— 已搬进 core/02-events。
+#    全库审查(2026-09-21)量出来的唯一一处逆层依赖是日志总线:它原来住在 render/86,五个模拟目录、35 个文件都在调,先搬进 core 再于 2026-09-22 整体删除 —— 这条钉的是分层方向本身。
 #    这条检查钉住那个方向:以后谁在 sensors / physics / formation / weapons / bots / ships 里顺手调了一个 draw* / upd* / xh*,当场红。
 #    scenario 不在禁区里:weapons 调 rangeTally、bots 读 curEnv 是有意为之的数据接口(根 CLAUDE.md 靶场一节)。
 top_syms() {
@@ -401,16 +401,16 @@ layer_bad() { perl -0pe 's{/\*.*?\*/}{}gs; s{//[^\n]*}{}g' | grep -aowFf <(top_s
 LAYER_BAD=$(find js/sensors js/physics js/formation js/weapons js/bots js/ships -name '*.js' -print0 | xargs -0 cat | layer_bad)
 LAYER_SELF=$(printf '%s\n' "function f(){drawShip(s); /* updateSelPanel() 在注释里 */ stepSim(0.02); // toScreen 在行注释里" "}" | layer_bad)
 [ "$LAYER_SELF" = "drawShip" ] || { echo "✗ R3 分层检查(自检):种下的逆层引用没被认出来,或者注释 / 模拟层自己的符号被误报(实测=「$LAYER_SELF」)—— 检查器自己坏了"; fail=1; }
-[ -z "$LAYER_BAD" ] || { echo "✗ R3 模拟目录引用了呈现 / 指令层的符号:$LAYER_BAD —— 模拟不该依赖界面(要发消息走 core/02 的 log / onLog)"; fail=1; }
-grep -q '^function log(' js/core/02-events.js || { echo "✗ R3 log() 不在 core/02-events.js 里了"; fail=1; }
-! grep -rqE '^function log\(' js/render js/command || { echo "✗ R3 呈现 / 指令层里又出现了一个顶层 log() 定义(会与 core/02 的撞名,后加载的覆盖先加载的)"; fail=1; }
+[ -z "$LAYER_BAD" ] || { echo "✗ R3 模拟目录引用了呈现 / 指令层的符号:$LAYER_BAD —— 模拟不该依赖界面"; fail=1; }
+# 日志总线于 2026-09-22 整体删除:js/ 里不许再有裸 log( 调用(注释里的字面也算数;前缀排除 Math.log / console.log 这类带点号的)。
+LOG_LEFT=$(grep -rnE '(^|[^.A-Za-z0-9_$])log\(' js/ --include='*.js' | head -3)
+[ -z "$LOG_LEFT" ] || { echo "✗ 日志总线已删,js/ 里又出现了裸 log( 调用(注释里的也算数):"; echo "$LOG_LEFT"; fail=1; }
 grep -q "FLOW84_EMITFX=ok" "$OUT" || { echo "✗ FLOW84_EMITFX 未通过(EM1 开雷达后的表现:发射机开着的船画向外扩散的涟漪(照射蓝 / 干扰橙 / 静默无),敌方接触只在我方听见时画;B:选中蓝舰不再画雷达量程大圈,悬停发射档钮才画照射量程 + 被听见两圈)"; fail=1; }
 grep -q "FLOW83_RWR=ok" "$OUT" || { echo "✗ FLOW83_RWR 未通过(RWR1 被照射告警:朝照射源方位的一段不闭合的橙色弧,不是闭合黄圈;只带方位不带距离;没被照射 / 照射源已沉就不画;与选中圈没有一项相同)"; fail=1; }
 grep -q "FLOW82_ESMNOID=ok" "$OUT" || { echo "✗ FLOW82_ESMNOID 未通过(ID2 被动射频不给身份:开着雷达的船被听见、被定位之后仍是 UNK +「X 型热源」,贴近到光学认得出才变成真舰;反向对照:同距离静默的船结果一样——身份与它开不开雷达无关)"; fail=1; }
 grep -q "FLOW81_REVBURN=ok" "$OUT" || { echo "✗ FLOW81_REVBURN 未通过(RV1 反推的暴露等级高于主推:四档亮度 熄火 / 侧推 / 主推 / 反推,反推必须最亮;刹车令真的跑出反推档;主推看不见、反推看得见的距离上一反推就被看见;右栏读数写得出「反推」)"; fail=1; }
 grep -q "FLOW80_RATES=ok" "$OUT" || { echo "✗ FLOW80_RATES 未通过(RT1 倍速档位:上限 20、下限 0.1,两头钳住;上限必须高于接触降速的最高一档;x0.1 下帧循环的累加器照样推得动模拟)"; fail=1; }
-grep -q "FLOW79_LOGBUS=ok" "$OUT" || { echo "✗ FLOW79_LOGBUS 未通过(R3 日志汇聚点:一条 log 必须同时到达日志面板与右轨事件流,次序 面板在前、事件流在后;新订阅者收得到、重复订阅只算一次)"; fail=1; }
-grep -q "FLOW70_TOOLSPOS=ok" "$OUT" || { echo "✗ FLOW70_TOOLSPOS 未通过(UI2 右下角工具栏:必须贴画面右边距、整个在事件窗【下面】而不是左边、不压底部指令栏;两个工具钮是图标钮(行内 svg + aria-label),点在图标子元素上也要切得动)"; fail=1; }
+grep -q "FLOW70_TOOLSPOS=ok" "$OUT" || { echo "✗ FLOW70_TOOLSPOS 未通过(UI2 右下角工具栏:必须贴画面右边距、不压底部指令栏;两个工具钮是图标钮(行内 svg + aria-label),点在图标子元素上也要切得动)"; fail=1; }
 grep -q "FLOW69_TIERLAND=ok" "$OUT" || { echo "✗ FLOW69_TIERLAND 未通过(SN9b 层界与落点必须出自同一块画布:三种画布 x 从每一层出发 x 按每一个跳层钮,落地后离散层 / 亮着的钮 / 画法权重都必须属于目的层,且不看来路;层界必须随画布短边变 —— 冻在加载期的 750px 上就是「按了战区、亮的还是舰队」)"; fail=1; }
 grep -q "FLOW68_HULLSIZE=ok" "$OUT" || { echo "✗ FLOW68_HULLSIZE 未通过(SN9 舰体大小随缩放变:① 系数 = (缩放/战术落点)^A 钳在 [MIN,MAX],落点上恰为 1、全程单调不跳、CA 最大不超过 48px;② 舰体 / 残骸 / 图标半径 / 尾焰 / 告警圈 / 锁定圈 / 移动虚影 全跟同一个数;③ 系数不读任何一艘船的字段——没认出的敌舰照旧 UNK+T2、与我方同系数;④ 锚点从视口现量,不写死公里数)"; fail=1; }
 grep -q "FLOW67_TIERFX=ok" "$OUT" || { echo "✗ FLOW67_TIERFX 未通过(SN8 换挡感 + 聚合动画:A1 换挡大字【只】由跳层钮触发、报的是目的层——手动缩放跨层不弹、战区直跳战术不弹中间的舰队层、同层再按不弹,0.7 秒后一笔不画;A2 四边刻度尺换层那一刻为 0 随后长出来、全是矩形、战术层写公里读数;A3 跳层镜头带过冲且终点逐位等于落点;C 收拢/散开的【结论】即时而【画面】带 0.25 秒过渡,首见的船不播动画,静止时不包过渡变换)"; fail=1; }

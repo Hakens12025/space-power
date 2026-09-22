@@ -9,16 +9,15 @@
 <body>
 <canvas id="cv"></canvas>
 <!-- UI2:两个工具钮是图标钮(行内 SVG,颜色全走 css token),文字收进 title / aria-label。
-     SN6 右下角工具钮。刻意【不】属于 css 里那份 RF2 隐藏清单(同 #xhTip/#evtFeed/#mapTag),
-     别顺手加进那两行 display:none!important。钮的行为走 render/85-settings 的事件委托。 -->
+     SN6 右下角工具钮。钮的行为走 render/85-settings 的事件委托。 -->
 <div id="tools">
   <div class="seg" id="segTier" title="三级星图:星图自己的比例尺阶梯 —— 画面短边横跨 战术 2 / 舰队 15 / 战区 45 光秒"><button class="hbtn" data-tier="1">战术</button><button class="hbtn" data-tier="2">舰队</button><button class="hbtn" data-tier="3">战区</button></div><!-- SN6b 从顶栏搬到这儿(用户拍板"三按钮放在右下角,大小和形状参考态势感知V3")。id 未变 ⇒ render/85-settings 的委托与 80-viewtier 里写高亮的那行都不用改 -->
   <div class="seg" id="segTool"><button class="hbtn" data-tool="geom" title="缩圈:地图右上角弹出【定位几何】小窗——我方全体观测合起来,对方那艘船的误差椭圆现在有多大、离导弹门/主炮门还差多少。悬停敌方目标临时看;左键点敌方目标常驻;点我方舰看它正在打(或正在等)的那个目标" aria-label="缩圈"><svg class="tl-ico" viewBox="0 0 24 24" aria-hidden="true"><path class="i-ship" d="M17.6 12.9 8 6.4 11 12.3 8.4 17.9Z"/><ellipse class="i-ell" cx="12" cy="12" rx="10.8" ry="5.4" transform="rotate(-13 12 12)"/><path class="i-los" d="M0 14.8 24 9.2"/></svg></button><button class="hbtn" data-tool="sig" title="信号视野:画出我方每艘舰的【被探测范围】——光学/红外恒有;开了雷达才有被听见的那一圈。半径直接读感知层的量程律,与判据同一个数" aria-label="信号视野"><svg class="tl-ico" viewBox="0 0 24 24" aria-hidden="true"><circle class="i-r3" cx="12" cy="12.6" r="11.4"/><circle class="i-r2" cx="12" cy="12.6" r="8.2"/><circle class="i-r1" cx="12" cy="12.6" r="5"/><path class="i-ship" d="M12 5.4 15.9 18 12 14.8 8.1 18Z"/></svg></button></div>
 </div>
 <!-- SN7 定位几何小窗:叠在地图右上角、紧贴右轨左侧(照 demos/sensors/态势感知V3.html 的 #pPhase)。自己的小 canvas,不进主画布;
-     不属于 css 里那份 RF2 隐藏清单。开关是右下角 #tools 的「缩圈」钮(render/85-settings 的委托)。 -->
+     开关是右下角 #tools 的「缩圈」钮(render/85-settings 的委托)。 -->
 <div id="geomPane" class="panel" hidden><canvas id="geomCv"></canvas><div class="gp-tag">定位几何<b>GEOMETRY</b></div><div class="gp-hint" id="geomHint"></div></div>
-<!-- MT1 对局结果卡片:只在对局分出胜负时由 scenario/97-match 的 matchTick 显示。不属于 css 里那份 RF2 隐藏清单。 -->
+<!-- MT1 对局结果卡片:只在对局分出胜负时由 scenario/97-match 的 matchTick 显示。 -->
 <div id="matchEnd" class="panel" hidden><div class="me-title" id="meTitle">胜利</div><div class="me-sub" id="meSub"></div><div class="me-stat" id="meStat"></div><div class="me-btns"><button class="btn" id="meAgain">再来一局</button><button class="btn" id="meRange">回靶场</button></div></div>
 <div id="mapTag">战术层<b>TACTICAL</b></div><!-- SN6 当前层的读数,只在【换层那一刻】写(render/80-viewtier 的 vtFrame) -->
 
@@ -30,23 +29,15 @@
   <button class="hbtn" id="btnSlow" title="减速(-)">−</button>
   <button class="hbtn" id="btnFast" title="加速(+)">+</button>
   <div class="spacer"></div>
-  <button class="hbtn" id="btnMatch" title="进入对局">对局</button><!-- MT1 对局入口(scenario/97-match);进了对局它变成「回靶场」。同 #btnTut:不属于 RF2 隐藏清单 -->
-  <button class="hbtn" id="btnTut" title="教程 · 指挥官手册(Esc 关闭)">教程</button><!-- RF5-D 顶栏唯一新增钮:排在 .spacer 之后 = 顶栏右端(其后那七个全在 RF2 隐藏清单里,不占位)。切勿把 #btnTut 加进 css 的 RF2 隐藏清单 -->
-  <button class="hbtn" id="btnRec" title="录制本局数据到demo文件(REC)" style="color:var(--red)">REC</button>
-  <button class="hbtn" id="btnAdmin" title="管理员模式:显示敌方数据/弹药轨迹(GM)" style="color:var(--acc)">GM</button>
-  <button class="hbtn" id="btnSelfPlay" title="左右脑互搏:关敌军AI,双方全玩家操控(自己跟自己下棋)">🧠互搏</button>
-  <button class="hbtn" id="btnRange" title="靶场参数面板(逐靶可调:闪避/拦截/干扰/诱饵/信号)">🎯</button><!-- RANGE1 -->
-  <button class="hbtn" id="btnEnv" title="切换场景:靶场 / 6 条测试预设 / 自定义">◎</button><!-- RANGE1 靶场插在预设最前面,文案跟着改 -->
-  <button class="hbtn" id="btnReplay" title="回放/倒带(R)">⏪</button>
-  <button class="hbtn" id="btnSet" title="设置(Esc)">⚙</button>
+  <button class="hbtn" id="btnMatch" title="进入对局">对局</button><!-- MT1 对局入口(scenario/97-match);进了对局它变成「回靶场」 -->
+  <button class="hbtn" id="btnTut" title="教程 · 指挥官手册(Esc 关闭)">教程</button><!-- RF5-D 排在 .spacer 之后 = 顶栏右端。SL1(2026-09-22 瘦身):原来跟在它后面被藏着的七个旧钮(录制/GM/互搏/靶场参数/场景菜单/回放/设置)已整套删除;GM 仍走 F8 -->
 </div>
 
-<!-- FM1 编队书签栏(左轨顶部,常驻)。SIMPLE_UI 把 #qbar/#fleet/右键菜单全按死之后,这是编队的唯一可见入口,
-     所以它【不属于】css 里那份 RF2 隐藏清单(同 #evtFeed/#xhTip/#tutOverlay,别顺手加进那两行 display:none!important)。
+<!-- FM1 编队书签栏(左轨顶部,常驻)。这是编队的唯一可见入口。
      刻意不给 class="panel":.panel 带 overflow:hidden + 边框背景,会把一叠独立小条圈成一块面板。内容由 render/87-fmbar.js 填。 -->
 <div id="fmBar"></div>
 <!-- FM7 测试用「加船」小条:挂在左轨书签栏下方。靶场只有 3 艘蓝舰,凑不出两支编队,阵型没法手试。
-     内容由 scenario/96-spawn.js 建;它不属于 css 里那份 RF2 隐藏清单。 -->
+     内容由 scenario/96-spawn.js 建。 -->
 <div id="spawnBar"></div>
 <!-- FM1 编队菜单(点书签展开)。.p-title / #fmActs 两个容器必须是【静态元素】(信息区 #selFm 已搬到右轨 #selPanel 里)——
      事件全部委托到它们身上,而 on() 遇元素不存在只会静默跳过,动态创建的容器挂不上委托。
@@ -56,20 +47,7 @@
   <div id="fmActs"></div>
 </div>
 
-<div id="fleet" class="panel">
-  <div class="p-title"><b>舰队</b><span class="hint">[F] 隐藏</span></div>
-  <div id="info">
-    <div style="text-align:center;color:var(--dim);padding:14px 0">未选中舰船<br><span class="hint">左键点选 · 拖拽框选</span></div>
-  </div>
-  <div id="fleetList"></div>
-</div>
-
-<div id="log" class="panel">
-  <div class="p-title"><b>事件</b><span class="hint">[L] 隐藏</span></div>
-  <div id="logBody"></div>
-</div>
-
-<!-- RF2 简化UI:选中舰实时信息面板(右轨,#fleet/#log 已隐藏)。RF5 事件流已迁出到下方 #evtFeed,腾出的纵向空间给 #fcSec -->
+<!-- RF2 简化UI:选中舰实时信息面板(右轨)。SL1(2026-09-22 瘦身):旧舰队卡面板 / 事件面板 / 右轨底部的事件流面板已整套删除,右轨只剩这一块 -->
 <div id="selPanel" class="panel">
   <div class="p-title"><b id="selTitle">未选中</b><span class="hint">左键点选 · 拖拽框选</span></div>
   <div id="selInfo"></div>
@@ -83,18 +61,7 @@
   </div>
 </div>
 
-<!-- RF5 事件流面板(右轨底部车道)。id="selEvents" 原样搬来,88-selpanel 的 pushEvt 靠 getElementById 取容器,零改动 -->
-<div id="evtFeed" class="panel">
-  <div class="p-title"><b>事件</b><span class="hint">最近 5 条</span></div>
-  <div id="selEvents"></div>
-</div>
-
-<div id="scenePanel" class="panel" style="display:none"><!-- UI1 几何/层级见 css/app.css 的左轨车道 -->
-  <div class="p-title"><b>选择场景</b></div>
-  <div id="sceneList"></div>
-</div>
-
-<!-- RANGE1 靶场参数面板:与 #scenePanel 同占左上角。UI1 改为左轨车道统一定位,scenePanel 排 --z-flyout-hi 会盖在它上面,选完场景就收 -->
+<!-- RANGE1 靶场参数面板:左上角,UI1 左轨车道统一定位。SL1:顶栏那个开关钮已删,面板逻辑(scenario/95-range)保留,css 里仍按 RF2 的老样子藏着 -->
 <div id="trPanel" class="panel" style="display:none"><!-- UI1 原来这里写死 max-height:calc(100% - 316px),把旋钮区压成 8px;现由 --rail-top/--dock-b 派生 -->
   <div class="p-title"><b>🎯 靶场参数</b><span class="hint">逐靶可调</span></div>
   <div class="tr-tabs" id="trTabs"></div>
@@ -107,114 +74,6 @@
   </div>
 </div>
 
-<div id="editorPanel" class="panel" style="display:none">
-  <div class="p-title"><b>✏️ 场景编辑器</b><span class="hint">[布局/属性]</span></div>
-  <div class="ed-name"><input id="edName" placeholder="场景名称"></div>
-  <div class="ed-h">我方舰队 <b id="edCnt0">0</b>艘</div>
-  <div class="ed-list" id="edList0"></div>
-  <div class="ed-h">敌方舰队 <b id="edCnt1">0</b>艘</div>
-  <div class="ed-list" id="edList1"></div>
-  <div class="ed-sel" id="edSel"></div>
-  <div class="ed-btns">
-    <button class="ed-btn acc" id="edApply" title="立即用当前编辑阵容开打">▶ 应用并战斗</button>
-    <button class="ed-btn" id="edSave" title="存到浏览器,场景菜单可选">保存场景</button>
-    <button class="ed-btn" id="edExport" title="生成 TEST_ENVS.push 代码">导出代码</button>
-    <button class="ed-btn" id="edClr0" title="清空我方舰队">清空我方</button>
-    <button class="ed-btn" id="edClr1" title="清空敌方舰队">清空敌方</button>
-    <button class="ed-btn danger" id="edExit">✕ 退出编辑</button>
-  </div>
-</div>
-
-<div id="exportBox">
-  <div class="box">
-    <div style="font-size:var(--fs-read);color:var(--txt-hi);margin-bottom:var(--sp-3)"><b>导出场景代码</b> — 复制后给我,我帮你固化进 index.html</div>
-    <textarea id="exportText" spellcheck="false"></textarea>
-    <div class="brow"><button class="sbtn ghost" id="exportClose">关闭</button></div>
-  </div>
-</div>
-
-<div id="qbar" class="panel"><!-- UI1 几何/层级见 css/app.css 的底坞车道 -->
-  <div class="qbar-rows">
-    <div class="qgroup"><div class="qlb">航速</div><div class="qrow">
-      <button class="qbtn" data-sp="0">停</button>
-      <button class="qbtn" data-sp="1">慢</button>
-      <button class="qbtn" data-sp="2">中</button>
-      <button class="qbtn" data-sp="3">高</button>
-      <button class="qbtn" data-sp="4">不限</button>
-      <input id="qSpd" type="number" min="0" max="30000" step="50" placeholder="自定速">
-      <button class="qbtn" id="qSpdSet">定速</button>
-    </div></div>
-    <div class="qgroup"><div class="qlb">火力</div><div class="qrow">
-      <button class="qbtn qstop" id="qCease">🛑停火</button>
-      <button class="qbtn" data-salvo="1">齐射1</button>
-      <button class="qbtn" data-salvo="2">齐射2</button>
-      <button class="qbtn" data-salvo="3">齐射3</button>
-      <button class="qbtn" data-salvo="4">齐射4</button>
-      <span class="qval" id="qSalvoLbl" style="color:var(--teal)">×1</span>
-      <button class="qbtn" id="qMissileMode">🎯自动</button>
-    </div></div>
-    <!-- FM1:原"编队"组(扇面/密度/三个档位共 7 钮 + 2 个读数)已删除 —— 那三个参数从全局变量改成了【每编队一份】(F.P),
-         快捷栏这种全场一套的控件已经表达不了它;新入口是左轨书签栏的编队菜单(render/87-fmbar.js)。
-         对应的 js 监听由 command/73-quickbar 一并删除,留着就是孤儿 DOM。 -->
-    <div class="qgroup"><div class="qlb">感知</div><div class="qrow">
-      <button class="qbtn" id="qLidar">📡雷达</button>
-      <button class="qbtn" id="qEmcon">🌐EMCON静默</button>
-      <button class="qbtn" id="qScreen">🛡布防</button>
-    </div></div>
-    <div class="qgroup"><div class="qlb">视图</div><div class="qrow">
-      <button class="qbtn" id="qRange">◉范围</button>
-      <button class="qbtn" id="qRingSet">🎚圈</button>
-    </div></div>
-  </div>
-</div>
-
-<div id="replayBar" class="panel" style="display:none">
-  <div class="rp-row">
-    <b>回放</b>
-    <span id="rpTime">00:00</span>
-    <input type="range" id="rpSlider" min="0" max="0" value="0">
-    <button class="hbtn" id="rpExit" title="退出回放">✕</button>
-  </div>
-  <div class="rp-hint">拖动时间轴查看历史 · 模拟已暂停</div>
-</div>
-
-<div id="statusTip" class="panel" style="display:none">点击地图选择目标位置</div><!-- UI1 与 #replayBar 原来同锚点必撞,移到顶栏下方并加 pointer-events:none -->
-
-<div id="ctx" style="display:none"></div>
-<div id="ringPanel" class="panel" style="display:none">
-  <div class="ring-hd">范围圈显示 ◉</div>
-  <div class="ring-wrap">
-    <div class="ring-group">舰船圈</div>
-    <button class="qbtn ring-btn" data-ring="sensor">📡传感器</button>
-    <button class="qbtn ring-btn" data-ring="warn">预警</button>
-    <button class="qbtn ring-btn" data-ring="outer">外圈拦</button>
-    <button class="qbtn ring-btn" data-ring="inner">内圈炮</button>
-    <div class="ring-group">导弹圈</div>
-    <button class="qbtn ring-btn" data-ring="seek">🛰自导</button>
-    <button class="qbtn ring-btn" data-ring="mine">雷触发</button>
-    <button class="qbtn ring-btn" data-ring="screen">防空屏</button>
-    <button class="qbtn ring-btn" data-ring="beacon">信标</button>
-    <div class="ring-sep"></div>
-    <button class="qbtn ring-btn" data-ring="all">全开</button>
-    <button class="qbtn ring-btn" data-ring="none">全关</button>
-  </div>
-</div>
-
-<div id="overlay"><div id="settings">
-  <div class="h"><h2>设置 · 键位</h2><button class="hbtn" id="setClose">✕</button></div>
-  <div class="body" id="setBody"></div>
-  <div class="sfoot"><button class="sbtn ghost" id="setReset">恢复默认键位</button><button class="sbtn ghost" id="setSpec">📖 导弹设计规范</button><button class="sbtn" id="setDone">完成</button></div>
-</div>
-</div>
-<div id="specView" style="display:none">
-  <div class="spec-wrap">
-    <div class="spec-hd">
-      <button class="sbtn" id="specClose">← 返回</button><h2>📖 导弹设计规范(定稿)</h2>
-    </div>
-    <div id="specBody"></div>
-  </div>
-</div>
-
 <!-- RF3 简化UI:底部操作栏三区 = 舰名区 | 规格读数列(标签上/数值下) | 开关组(88-selpanel 按 s.weapons 配装动态生成) -->
 <div id="cmdBar" class="panel">
   <div class="cmd-ship"><b id="ciName">—</b><span id="ciCls">—</span></div>
@@ -224,9 +83,8 @@
   <div class="cmd-btns"></div>
 </div>
 <div id="cmdTip"></div>
-<!-- RF5-D 教程模态(顶栏 #btnTut 唤出)。刻意【不复用 #overlay】:它在 css/app.css 的 RF2 隐藏清单里被 display:none!important 压死,
-     且 71-keys 的 overlayOn 门会在它 .on 时吃掉除设置外的全部快捷键。内容由 render/85-tutorial.js 惰性写进 #tutBody(打开过一次才存在),
-     所以常规画面下这里是三个空壳,零元素泄漏。同样:#tutOverlay 不属于 RF2 隐藏清单,别加进那两行 display:none!important。 -->
+<!-- RF5-D 教程模态(顶栏 #btnTut 唤出)。内容由 render/85-tutorial.js 惰性写进 #tutBody(打开过一次才存在),
+     所以常规画面下这里是三个空壳,零元素泄漏。SL1:旧设置面板的遮罩已删,这是顶栏唯一的模态。 -->
 <div id="tutOverlay">
   <div id="tutPanel">
     <div class="tut-hd">
@@ -239,8 +97,7 @@
 </div>
 
 <!-- FM4 舰队编组控制页(编队菜单的「编组控制」钮唤出)。几何抄 #tutOverlay:外层 flex 居中 + 卡片定高 + 内层独立滚动。
-     同样【不复用 #overlay】(RF2 隐藏清单里被 display:none!important 压死 + overlayOn 门会吃掉快捷键),
-     也【不属于】那份隐藏清单——别把 #fmPage 加进 css 里那两行。内容由 render/89-fmpage.js 的 fmPageRender() 写进 #fpBody,
+     内容由 render/89-fmpage.js 的 fmPageRender() 写进 #fpBody,
      常规画面下这里是三个空壳。委托挂在 #fmPage / #fpClose 两个静态元素上,所以内容随便重渲都挂得住。 -->
 <div id="fmPage">
   <div id="fmPagePanel">
@@ -256,11 +113,10 @@
 <div id="xhTip"></div><!-- RF5 悬停敌舰信息卡:跟随光标,内容按 litBlue 接触等级分档(command/74-targeting 写 innerHTML)。刻意不给 class="panel":.panel 带 z-index:var(--z-panel) 与 overflow:hidden,会把层级压回面板档还裁掉内容,几何一律自带(抄 #cmdTip) -->
 
 <!-- RF1: 目录=系统。编号十位是系统层(0core/1ships/2sensors/3physics/4formation/5weapons/6bots/7command/8render/9scenario)。
-     硬约束仅两条:core/00 定义 on() 必须最先(85/93/94/95 顶层调用它);core/99 顶层执行 init() 必须最后(且 init 调 loadRangeCfg,
+     硬约束仅两条:core/00 定义 on() 必须最先(85/95/96/97 顶层调用它);core/99 顶层执行 init() 必须最后(且 init 调 loadRangeCfg,
      故 scenario/95 必须在它之前)。其余跨文件引用全在运行期解析,层序排列只为可读性。 -->
 <script src="js/core/00-config.js?v=20260922"></script>
 <script src="js/core/01-state.js?v=20260922"></script>
-<script src="js/core/02-events.js?v=20260922"></script><!-- R3 日志 / 事件汇聚点:log() 与 onLog()。必须早于所有会调 log 的文件 -->
 <script src="js/ships/10-hull-geometry.js?v=20260922"></script>
 <script src="js/ships/11-classes.js?v=20260922"></script>
 <script src="js/sensors/20-signature.js?v=20260922"></script>
@@ -288,12 +144,9 @@
 <script src="js/weapons/58-firecontrol.js?v=20260922"></script><!-- RF5 火控计算机引擎:序列数据模型+stepFireControl/Post。位置只为目录编号可读性(编号 58 > 57,归位到 weapons 块末尾),跨文件引用全在运行期解析:本文件顶层只有 const/let/function 声明,零顶层执行 -->
 <script src="js/core/05-sim.js?v=20260922"></script>
 <script src="js/core/06-timecomp.js?v=20260922"></script><!-- TC1 接触降速:frame() 每帧调 tcStep;依赖全部在运行期解析 -->
-<script src="js/bots/60-tasks.js?v=20260922"></script>
 <script src="js/bots/61-enemy.js?v=20260922"></script>
 <script src="js/command/70-input.js?v=20260922"></script>
 <script src="js/command/71-keys.js?v=20260922"></script>
-<script src="js/command/72-context-menu.js?v=20260922"></script>
-<script src="js/command/73-quickbar.js?v=20260922"></script>
 <script src="js/command/74-targeting.js?v=20260922"></script><!-- RF5 悬停准星/吸附状态 xh + #xhTip 信息卡。按目录编号序归位在 command 块末尾;顶层只有 let/const/function,零顶层执行,跨文件引用全在运行期解析 -->
 <script src="js/render/80-viewtier.js?v=20260922"></script><!-- SN6 三级星图:层界与缩放上下限由距离梯子推出;与 80-camera 共用编号(先例:85-settings/85-tutorial) -->
 <script src="js/render/80-camera.js?v=20260922"></script>
@@ -306,17 +159,12 @@
 <script src="js/render/84-fmplot.js?v=20260922"></script><!-- FM4 编队能力站位的地图可视化。与 84-scene 共用编号 84(先例:weapons/51-defs 与 51-ciws),都属于“场景图层”;顶层只有 const/function,零顶层执行,由 84-scene 的 render() 运行期调用 -->
 <script src="js/render/85-settings.js?v=20260922"></script>
 <script src="js/render/85-tutorial.js?v=20260922"></script><!-- RF5-D 教程面板。与 85-settings 共用编号 85(先例:weapons/51-defs 与 51-ciws),语义上教程与设置相邻。顶层调用 on(),故必须晚于 core/00;其余引用全在运行期解析 -->
-<script src="js/render/86-log.js?v=20260922"></script>
-<script src="js/render/87-fleetcards.js?v=20260922"></script>
 <script src="js/render/87-fmbar.js?v=20260922"></script><!-- FM1 编队书签栏 + 编队菜单。与 87-fleetcards 共用编号 87(先例:weapons/51-defs 与 51-ciws、render/85-settings 与 85-tutorial),语义上都是"舰队编成"的呈现。顶层只有 on(...) 委托挂载,故必须晚于 core/00;updFmBar() 由 core/99 每 20 帧调用,其余跨文件引用全在运行期解析 -->
 <script src="js/render/88-selpanel.js?v=20260922"></script>
 <script src="js/render/89-radial.js?v=20260922"></script>
 <script src="js/render/89-fmpage.js?v=20260922"></script><!-- FM4 舰队编组控制页。与 89-radial 共用编号 89(先例:render/85-settings 与 85-tutorial)。顶层有 on(...) 委托挂载与两条 window 监听,故必须晚于 core/00;其余跨文件引用全在运行期解析 --><!-- RF5 Phase C 目标轮盘的几何与渲染:半径/角度/容量常量与 drawRadial/radialHit/radialInBand/radPages 全在这一份。必须晚于 88-selpanel(扇区射程读数走它的 KIND_INFO);顶层只有 const/let/function,零顶层执行 -->
 <script src="js/scenario/90-envs.js?v=20260922"></script>
 <script src="js/scenario/91-init.js?v=20260922"></script>
-<script src="js/scenario/92-editor.js?v=20260922"></script>
-<script src="js/scenario/93-replay.js?v=20260922"></script>
-<script src="js/scenario/94-demo.js?v=20260922"></script>
 <script src="js/scenario/95-range.js?v=20260922"></script>
 <script src="js/scenario/96-spawn.js?v=20260922"></script><!-- FM7 测试用加船小条。放在 95 之后、core/99 之前:它顶层调 on(),而 on() 定义在 core/00 -->
 <script src="js/scenario/97-match.js?v=20260922"></script><!-- MT1 对局入口 / 红方摆位 / 结果卡片。顶层调 on(),须在 core/00 之后;matchPlaceRed 被 91-init 运行期调用 -->

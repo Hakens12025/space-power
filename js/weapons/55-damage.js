@@ -19,6 +19,5 @@ function applyDamage(s,dmg,src,kind){ // RANGE1 加第 4 形参 kind('mac'/'miss
     selected=selected.filter(id=>id!==s.id); // 残骸不可选中
     spawnHit(s.pos,'missile'); // v127:击毁生成大爆炸特效
     const bh=hitFX[hitFX.length-1];if(bh)bh.big=true;
-    log(`☠ ${s.name} 被击毁,化作残骸!`,'hit');
   }
 }

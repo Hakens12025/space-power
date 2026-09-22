@@ -22,7 +22,7 @@ function stepShipsMotion(dt){
     }
     if(s.brake){ // 停车指令:v119 期望速度=0,导引内核自动反推
       steerToVel(s,[0,0,0],dt);
-      if(V.len(s.vel)<1){s.vel=[0,0,0];s.brake=false;log(`${s.name} 停稳`,'');}
+      if(V.len(s.vel)<1){s.vel=[0,0,0];s.brake=false;}
     }else if(s.orders.length){
       const cur=s.orders[0];
       const toWp=V.sub(cur.pos,s.pos);
@@ -43,7 +43,7 @@ function stepShipsMotion(dt){
          以及跟随态槽位旋转限速的 tipV(那里需要一个【全队统一】的值,否则各成员转速不同、阵型会在转弯时扭曲)。 */
       if(cur.type==='pass'){ // 路径点:掠过即继续,不停车
         if(dist<CFG.passBy){
-          s.orders.shift(); log(`${s.name} 经过路径点`,''); continue;
+          s.orders.shift(); continue;
         }
         // RF12/RF13 航线速度规划(用户报"Shift+右键像疯狗一样不减速、每次都冲过头"):
         // 原来这里一律满巡航,拐点只判"进没进 passBy",完全不看后续 —— 掉头这种 180 度偏折也照 800km/s 冲。
@@ -86,7 +86,7 @@ function stepShipsMotion(dt){
           if(cur.face&&V.angle(s.facing,cur.face)>0.02&&!s.turnTarget){
             s.turnTarget=[s.pos[0]+cur.face[0]*1e7, s.pos[1]+cur.face[1]*1e7, 0]; // FM3-0:删"单纯转头"死标志置位
           }
-          s.orders.shift(); log(`${s.name} 到位`,''); continue;
+          s.orders.shift(); continue;
         }
       }
       guideTo(s,cur.pos,[0,0,0],cap,cur.type!=='pass',dt); // DS191:统一导引律(stop 曲线停靠);RF12:pass 的 cap 已含拐角限速+接近段

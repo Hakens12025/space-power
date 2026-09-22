@@ -231,7 +231,7 @@ function moveShips(list, dest, type, face) {
   const targets = (list || []).filter(s => s && !s.dead);
   if (!targets.length) return;
   const F = fmSameShips(targets);
-  if (F) { fmMoveTo(F, dest, type, face); log(`${targets.length} 艘 ${fmName(F)}移动`, ''); }
+  if (F) fmMoveTo(F, dest, type, face);
   else targets.forEach(s => orderMoveTo(s, dest, type, face));
 }
 
@@ -239,6 +239,6 @@ function addWaypoint(list, w, face) { // Shift+右键追加:末点=停车,原末
   const targets = (list || []).filter(s => s && !s.dead);
   if (!targets.length) return;
   const F = fmSameShips(targets);
-  if (F) { fmAppend(F, w, face); log(`${targets.length} 艘 编队路径+1(末点停车,中间经过)`, ''); }
-  else { targets.forEach(s => orderAppend(s, w, face)); log(`${targets.length} 艘 追加路径点(末点停车,中间经过)`, ''); }
+  if (F) fmAppend(F, w, face);
+  else targets.forEach(s => orderAppend(s, w, face));
 }

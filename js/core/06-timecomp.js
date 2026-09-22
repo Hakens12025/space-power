@@ -37,7 +37,6 @@ function tcStep(rdt){ // 每帧一次(core/99 的 frame):返回这一帧实际�
   if(!tcActive()){TC.band=0;TC.hold=0;TC.eff=rate;return rate;}
   const b=tcBand();
   if(b>=TC.band){
-    if(b>TC.band&&rate>tcCap(b)&&typeof pushEvt==='function')pushEvt('接触降速 · '+TC.NAME[b]+' · x'+rate+' → x'+tcCap(b),'warn');
     TC.band=b;TC.hold=TC.HOLD;
   }else{TC.hold-=rdt;if(TC.hold<=0){TC.band=b;TC.hold=TC.HOLD;}}
   const want=Math.min(rate,tcCap(TC.band));

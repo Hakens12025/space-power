@@ -53,16 +53,10 @@ function detectLoop(dt){ // 一个感知节拍:蓝网络探红(litBlue)、红网
   const el=(typeof dt==='number'&&isFinite(dt)&&dt>0)?dt:SENS.TICK; // SN4:core/05 透传实际累计的模拟秒;判定里手摇 detectLoop() 不传参,按标称节拍算
   detectFor('blue','red',el);
   detectFor('red','blue',el);
-  /* 被照射告警(上升沿)→ 图标闪烁 + 日志(信息战的灵魂提示)。
+  /* 被照射告警(上升沿)→ 图标闪烁(信息战的灵魂提示)。
      SN6:判据从"照射驻留越过一个阈值"换成【对方这一拍有没有一条照射量测打在我身上】——
      c.ch.act 就是那件事,不需要阈值。原来那个 0.3 是 21-detect 与 82-ship-icons 两份手抄,
      SN4 把它收进感知表一处;SN6 连这个常数都不需要了。 */
-  for(const s of ships){
-    const myCov=s.side==='blue'?s.covR:s.covB;   // 蓝舰看 covR = 红网络【对我】握着的那条接触
-    const lit=!!(myCov&&myCov.ch&&myCov.ch.act);
-    if(lit&&!s.paintWarned){s.paintWarned=true;if(!(s.side==='red'&&!adminMode))log(`⚠ ${s.name} 被敌雷达照射!`,'warn');}
-    else if(!lit&&s.paintWarned)s.paintWarned=false;
-  }
   // DS147:数据链纯单向(母舰→弹引导),导弹不把自己看到的敌人回传母舰——母舰视野 = 舰船网络自身
   /* SN6:updateESMFixes 已删。它做的事(被动射频只给方位、产物是一片不确定区)现在是模型本身的一部分:
      一条只有静听量测的接触,covSolve 解出来纵向就是 COV.HUGE,cov.fix=false —— 那就是"没有位置的接触",

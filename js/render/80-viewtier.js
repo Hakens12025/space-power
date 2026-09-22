@@ -112,7 +112,7 @@ function camJump(t) {
 const VT_BACK = 1.15;
 function camAnimStep(p) {
   const a = vtAnim; if (!a) return;
-  /* 到点就【直接落在】落点上,不再走一遍 exp(log(k1)):那一来一回会差出最后一两位,
+  /* 到点就【直接落在】落点上,不再走一遍 exp(ln k1):那一来一回会差出最后一两位,
      落点是从梯子推出来的数,别处(判据、下一次跳层的起点)拿它逐位比的时候对不上。 */
   if (p >= 1) { cam.zoom = a.k1; cam.x = a.x1; cam.y = a.y1; vtAnim = null; return; }
   const q = p - 1, e = 1 + (VT_BACK + 1) * q * q * q + VT_BACK * q * q;

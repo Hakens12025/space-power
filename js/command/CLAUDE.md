@@ -10,6 +10,20 @@
 
 玩家指令层(`js/command/`)的历史备忘。总览、跨系统约定与文件地图在仓库根 `CLAUDE.md`。
 
+## SL1 瘦身(2026-09-22,用户拍板删掉 RF2 只藏不删的旧界面)
+
+本目录删了两个文件、三块分支。`72-context-menu`(右键菜单 + 卡片右键菜单 + tip)与 `73-quickbar`(快捷栏:速度 / 齐射轮数 / 导弹模式 / 范围圈 / GM 钮)整文件删;
+`70-input` 删了 `mdEditor` 整支与 mousemove / mouseup 里的编辑器分支、五支 `pendingTask*` 兑现、`pendingMove/pendingType`(它们唯一的写入点是被删的卡片右键菜单)、
+全部 `showCtx/openCtx/hideCtx/hideTip` 调用;`71-keys` 删了 `recording/captureKey` 截键、`panelState/applyPanelState` 与 ui_simple / fleet_panel / log_panel / topbar / settings 五条 ACTIONS、
+replay(F9)/ rec(F7)两条、编辑器分支;F8 GM 改成就地一行 `adminMode=!adminMode`(原来住 73)。`74-targeting` 的 13 条 `log(...)` 与 4 处 editMode 守卫删掉。
+
+- **顺序就是优先级**这条(见上面 R8)少了一级:现在是 轮盘 > 选定武器 > pending* > 常规键位。`mdWeaponPick` / `selWeapon` **没删**:它由 71-keys 的 T/R 置位,不是只被快捷栏用。
+- `salvoCount` / `missileMode` 两个全局的写入点全在快捷栏,今后恒为 1 / 'auto';52-fire 与 70 仍读,声明留在 core/01 并注了明。
+- 只靠日志给的操作反馈(F8 切 GM、X 停火、V 转向、G 倒车、Backspace 删点、快速交战「准星未吸附」/「等级不足」、右键取消)随事件流一起没了。
+  `#cmdTip` 只覆盖 selWeapon / pendingTurn / pendingFollow 三种待命态。`xhQuickEngage` / `radOpen` 在「无主体舰 / 未吸附」时从「先 log 再 return false」改成静默 return false,返回值语义不变。
+- 等拍板的死码:`pendingBeacon / pendingIntercept / pendingManual / pendingMine` 四族 —— 唯一 UI 入口(舰队卡的 `shipAction` / `selectMissileAction`)随 87-fleetcards 删掉后再无写入点,
+  70-input 的四支兑现分支、`clearPendings` 与右键取消门里的四项、87 的 `launchBeacon` / `layoutNetMines`、core/01 的四个声明、core/05 的 `pendingMine.done` 一行全成死码。这一轮刻意没动。
+
 ## RF11 移动虚影(单舰) 备忘(2026-08)
 
 **手势占用的是【右键长按】那条空通道**:它原本超时呼出命令菜单,而该菜单被 RF2 的 `SIMPLE_UI` 在 `showCtx` 首行拦死,通道一直空着。分流靠"按下就动=平移 / 按住不动满 350ms=虚影" —— 想平移的人不会先停顿,所以**右键拖动平移完好无损**(RF5 Phase B 拆掉中键平移后它是【唯一】的鼠标平移方式,不能被这个功能吃掉)。只在**恰好选中一艘蓝舰**且无 Shift、无任何 pending 待命态时进虚影;`Shift+右键` 仍是追加路径点(两个都占长按会打架)。

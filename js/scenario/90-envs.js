@@ -1,5 +1,5 @@
 "use strict";
-/* RF1: 拆自 js/03-ships.js L202-273,L283,L308-314(TEST_ENVS/envIdx/customScene/curEnv/DEFAULT_ENEMY)。纯移动无逻辑改动。 */
+/* RF1: 拆自 js/03-ships.js L202-273,L283,L308-314(TEST_ENVS/envIdx/curEnv/DEFAULT_ENEMY)。纯移动无逻辑改动。SL1(2026-09-22 瘦身):场景编辑器的自定义场景整支已删,curEnv 只查预设表。 */
 const TEST_ENVS=[
   // RANGE1 靶场:插在数组最前面(envIdx 默认 0)→ 开局直落靶场;原 6 条预设整体下移成索引 1..6 一条不删(它们是后续改动的回归基线)
   // RANGE1 布局算的是拦截伞不重叠:靶间距 12 万 > 2×(CLS_CIWS.DD.outer×2)=2×5 万,三靶的近防预警圈互不覆盖,单靶读数才不会被邻靶替挡污染
@@ -109,8 +109,7 @@ const TEST_ENVS=[
   ]},
 ];
 let envIdx=0;
-let customScene=null;                 // 自定义场景 {name,ships,enemy}(localStorage持久)
-function curEnv(){return envIdx===-1&&customScene?customScene:(TEST_ENVS[envIdx]||TEST_ENVS[0]);}
+function curEnv(){return TEST_ENVS[envIdx]||TEST_ENVS[0];}
 const DEFAULT_ENEMY=[
   ['CA','叛军·巡洋-01',220000,-90000,0,[-1,0,0],[0,0,0],0,null],
   ['CA','叛军·巡洋-02',240000,90000,0,[-1,0,0],[0,0,0],0,null],

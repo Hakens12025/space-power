@@ -104,12 +104,10 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         }
         if(trig){
           p.mine=false;p.target=trig; // 二次点火:变普通追击导弹扑上去
-          log(`⚡ 伏击雷@${Math.round(p.pos[0]/1000)}k,${Math.round(p.pos[1]/1000)}k 锁定 ${trig.name} 点火!`,'hit');
         }else if(p.lastTarget&&!p.lastTarget.dead){ // DS156 脱锁雷复活:重新获得原目标信息(被网络点亮)且还在警戒圈→复活追击(未竟任务继续)
           const litKey=p.shooter.side==='blue'?'litBlue':'litRed';
           if(p.lastTarget[litKey]>=2&&V.len(V.sub(p.lastTarget.pos,p.pos))<=(p.trigRadius||60000)*2){
             p.mine=false;p.target=p.lastTarget;p.chaffed=false;p.lastKpos=null;p.guided=true; // 复活=重新入引导(目标在自导范围,网已点亮)
-            log(`⚡ 伏击雷@${Math.round(p.pos[0]/1000)}k,${Math.round(p.pos[1]/1000)}k 重新获得信息:复活追击 ${p.lastTarget.name}`,'hit');
           }
         }
         p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;
@@ -350,7 +348,7 @@ function stepInterceptorProj(p,dt){ // 拦截导弹(v114):燃料模式可出远�
           if(q.type!=='missile'||q.done||q.shooter.side===p.shooter.side)continue;
           if(V.len(V.sub(q.pos,p.pos))<(p.screenRange||100000)){tgt=q;break;}
         }
-        if(tgt){p.screen=false;p.target=tgt;p.spd=Math.max(p.spd,2000);if(!(p.shooter.side==='red'&&!adminMode))log(`🛡 防空屏拦截 ${tgt.shooter?tgt.shooter.name:'敌'} 导弹组`,'');}
+        if(tgt){p.screen=false;p.target=tgt;p.spd=Math.max(p.spd,2000);}
         return;
       }
       if(p.fuel<=0){p.done=true;return;} // 燃料耗尽自毁(v118:燃料=寿命,耗尽即失效)
@@ -411,8 +409,7 @@ function stepInterceptorProj(p,dt){ // 拦截导弹(v114):燃料模式可出远�
           p.target.dmg=Math.max(1,Math.round((p.target.dmg||0)*p.target.count/beforeCnt));
           p.count=Math.max(0,(p.count||16)-killed); // v114修复:拦截弹消耗自身(1颗换1颗)
           // 拦截成功不生成命中特效(减少防空弹幕视觉噪音)
-          if(p.target.count<=0){p.target.done=true;if(!(p.shooter.side==='red'&&!adminMode))log(`${p.shooter.name} 拦截导弹组全拦来袭组`,'');}
-          else if(!(p.shooter.side==='red'&&!adminMode))log(`${p.shooter.name} 拦截${killed}颗,突防${p.target.count}颗`,'');
+          if(p.target.count<=0){p.target.done=true;}
           if(p.count<=0){p.done=true;return;} // 拦截弹打光了
         }
         p.target=null; // 拦完/未拦完都重选下一个(继续往前,不掉头追)

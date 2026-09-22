@@ -336,7 +336,7 @@ function sigFill(wx, wy, r, rgb, lbl) {
 }
 const sigKm = v => v >= 1e6 ? (v / 1e6).toFixed(2) + 'M' : (v >= 10000 ? Math.round(v / 1000) + 'k' : (v / 1000).toFixed(1) + 'k');
 function drawSignalView() {
-  if (!SIG.on || editMode || replay.active) return;
+  if (!SIG.on) return;
   SIG.lblN = 0;                       // 每帧归零:圈在画外的那几行靠它逐行错开
   for (const s of ships) {
     if (s.side !== 'blue' || s.dead) continue;
@@ -469,7 +469,6 @@ function heatBuild(){
 const LIT_RGB=['123,142,166','90,167,255','84,224,208','255,224,102'];
 const litTag=lit=>lit>0?(lit+'级 '+SENS.LIT_NAME[lit].replace('级','')):'未发现';
 function drawContacts(){
-  if(editMode||replay.active)return;
   /* ---- 热区:没有位置的接触 ---- */
   const nHeat=heatBuild();
   if(nHeat>0&&HEAT.cv){
@@ -542,54 +541,8 @@ function drawMissileIntent(g){ // v129:选中导弹/网→显示目标虚线、�
     }
   }
 }
-function drawRanges(){ // 范围模式:显示所有范围圈(传感器/CIWS/拦截预警/雷触发/防空屏/信标),GM下含敌方逻辑圈
-  if(!rangeView)return;
-  const ringLabel=(cx,cy,r,text,color)=>{ // 范围圈顶部标注(名称+半径,半透明底;圈太小不标防糊)
-    ctx.strokeStyle=color;ctx.lineWidth=1;
-    ctx.beginPath();ctx.arc(cx,cy,r,0,6.283);ctx.stroke();
-    if(r<16)return; // 屏幕半径太小,标注挤成一团
-    ctx.save();
-    ctx.font='9px Consolas';ctx.textAlign='center';ctx.textBaseline='bottom';
-    const tw=(ctx.measureText?ctx.measureText(text).width:50)+8;
-    const ly=cy-r-2;
-    ctx.fillStyle='rgba(5,7,12,.72)';
-    ctx.fillRect(cx-tw/2,ly-11,tw,13);
-    ctx.fillStyle=color;ctx.fillText(text,cx,ly);
-    ctx.restore();
-  };
-  const drawSide=(side)=>{
-    for(const s of ships){
-      if(s.dead||s.side!==side)continue;
-      const p=toScreen(s.pos[0],s.pos[1]);
-      // SN4:旧那个「舰船自己的一个标量探测半径」字段已物理删除。新模型下「我能照多远」= (emit×recv×目标反射)^(1/4) —— 依赖【目标】的体型与隐身,不是舰上的一个标量半径。
-      //   所以这个圈只能表达一档:对【标准目标】(反射 1.0,即一艘 CA)的照射量程,标注里写明。打 DD(反射 0.42)时实际只有它的约 0.80 倍。
-      //   ar 存一份复用:本函数在每帧每舰的循环里,actRangeOf 内部含四次方根,调两次就是每帧两次开方。
-      const ar=(typeof actRangeOf==='function')?actRangeOf(s):0;
-      if(rangeShow.sensor)ringLabel(p[0],p[1],ar*cam.zoom,`📡照射圈(标准目标) ${Math.round(ar/1000)}k`,'rgba(90,167,255,.8)');
-      const ci=ciwsOf(s); // TIER1 近防回表改访问器(每帧范围圈;tier 上线后每舰按自身分级画圈自动生效)
-      if(ci&&ci.outer>0){
-        if(rangeShow.warn)ringLabel(p[0],p[1],ci.outer*2*cam.zoom,`预警 ${Math.round(ci.outer*2/1000)}k`,'rgba(84,224,208,.8)'); // 拦截预警(2×外圈)
-        if(rangeShow.outer)ringLabel(p[0],p[1],ci.outer*cam.zoom,`外圈拦 ${Math.round(ci.outer/1000)}k`,'rgba(255,154,85,.9)'); // CIWS外圈
-        if(rangeShow.inner)ringLabel(p[0],p[1],ci.inner*cam.zoom,`内圈炮 ${Math.round(ci.inner/1000)}k`,'rgba(255,107,107,.95)'); // CIWS内圈
-      }
-      // SN4:旧那个雷达开关布尔已删除。三态里只有 paint 在照射 —— jam 档发射机去造噪声了,照不了;silent 一点不响。读数复用上面的 ar(同一循环体内)
-      if(s.emitMode==='paint'){ctx.fillStyle='rgba(159,212,255,.6)';ctx.font='10px Consolas';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText('📡'+Math.round(ar/1000)+'k',p[0],p[1]-12);}
-    }
-  };
-  drawSide('blue');
-  if(adminMode)drawSide('red'); // GM下连敌方逻辑圈一起显示
-  for(const p of projectiles){
-    if(p.done)continue;
-    if(!adminMode&&p.shooter&&p.shooter.side==='red'&&!p.visBlue)continue; // KIMI146修:范围圈也要感知过滤——原把敌方未点亮的导弹自导圈/雷触发圈/信标圈全画出=免费标出敌雷位置(与drawProjectiles/drawNetLinks一致)
-    const sp=toScreen(p.pos[0],p.pos[1]);
-    if(p.type==='missile'&&p.mine&&rangeShow.mine)ringLabel(sp[0],sp[1],(p.trigRadius||60000)*cam.zoom,`触发 ${Math.round((p.trigRadius||60000)/1000)}k`,'rgba(255,107,107,.9)');
-    if(p.type==='missile'&&!p.mine&&rangeShow.seek)ringLabel(sp[0],sp[1],GUIDE_SEEK*cam.zoom,`自导 ${Math.round(GUIDE_SEEK/1000)}k`,'rgba(159,212,255,.85)'); // v129:导弹自导圈(15万,主动LADAR末端开启自主锁定)
-    if(p.type==='interceptor'&&p.screen&&rangeShow.screen)ringLabel(sp[0],sp[1],(p.screenRange||60000)*cam.zoom,`防空屏 ${Math.round((p.screenRange||60000)/1000)}k`,'rgba(84,224,208,.9)');
-    if(p.type==='beacon'&&p.arrived&&rangeShow.beacon)ringLabel(sp[0],sp[1],300000*cam.zoom,'信标 300k','rgba(255,154,85,.9)');
-  }
-}
-/* RF2 简化UI:hover 底栏武器钮时给选中蓝舰画对应射程圈(独立于 rangeView 总开关;
-   不复用 drawRanges 内嵌的 ringLabel——那是它的局部闭包,这里自画同款 arc+顶标) */
+/* RF2 简化UI:hover 底栏武器钮时给选中蓝舰画对应射程圈。
+   (原来这上面还有一个「范围模式」函数把全场所有范围圈一次画齐,它的总开关只在被删的快捷栏里写,2026-09-22 一并删了;这里自画同款 arc+顶标) */
 function drawHoverRings(){
   if(!hoverRing)return;
   const ring=(p,r,text)=>{

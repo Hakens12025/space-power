@@ -1,7 +1,7 @@
 "use strict";
 /* ==================== FM1 编队书签栏(#fmBar)+ 编队菜单(#fmMenu) ====================
-   为什么需要这一块:core/01-state 的 SIMPLE_UI=true 把右键菜单(72 首行 return)、底部快捷栏 #qbar、
-   舰队面板 #fleet、设置遮罩 #overlay 全部按死(css 的 RF2 隐藏清单),编队因此【没有任何可见入口】。
+   为什么需要这一块:RF2 简化 UI 把右键菜单、底部快捷栏、舰队面板、设置遮罩全部按死(2026-09-22 连代码一起删了),
+   编队因此【没有任何可见入口】。
    本文件就是玩家操作编队的唯一 UI:左轨顶部一叠常驻书签,点开是这支编队的操作区。
 
    【FL1 分工:左边只放操作,右边只放实时数据】
@@ -340,7 +340,6 @@ function fmbRefreshSel(){ // 改了 selected 之后把两个面板叫醒(不等�
      但右栏会一直卡在"导弹群 N 组"、#selFm 停在 display:none —— 本按钮 title 承诺的"右栏切到编队数据"当场失效。
      FL1 之前信息区在左边 #fmMenu 里不经过那道闸,所以这是本轮把信息区搬到右侧带出来的回归。 */
   selMissile=null;selNet=null;selMissileHits=[];
-  if(typeof updateInfo==='function')updateInfo();
   if(typeof updateSelPanel==='function')updateSelPanel();
 }
 /* FM6:编队菜单里那两个「武装/兑现跟随」的函数整个删除 —— 跟随已下沉成底栏的标准控件,
@@ -359,14 +358,13 @@ function fmbAct(a){
       /* 改前它没有自己的钮 —— 在固定态下【再点一次「固定」钮】才会重拍,是个隐藏动作:
          玩家以为"我已经在固定模式了,再点一下没事",结果队形被当场按此刻的散乱位置重钉。
          现在做成显式钮,同时把「固定」钮在已是固定态时改成空操作(见 m-fixed 分支)。 */
-      if(F.src!=='snapshot'){if(typeof log==='function')log(fmName(F)+' 重新固定只在固定模式下有效','warn');break;}
+      if(F.src!=='snapshot')break; // 重新固定只在固定模式下有效
       if(typeof fmSetSrc!=='function')break;
       fmSetSrc(F,'snapshot',true);   // FM6o retake=true:这是【唯一】会改写 F.snap 的入口(模式钮不再重拍)
       break;}
     case 'halt':
       if(typeof fmHalt!=='function')break;
       fmHalt(F);
-      if(typeof log==='function')log(fmName(F)+' 整队停车','');
       break;
     case 'reform':{
       /* FM6d 原地重排(用户令)。为什么需要它:改几何参数(带半径 / 页内五旋钮 / 切站位)只会重算槽位,
@@ -384,7 +382,6 @@ function fmbAct(a){
          与玩家眼前看到的船头没有关系。传了 face 之后:阵型态整队转到船头方向;
          固定态是刚体,整个队形绕旗舰转到船头方向,各舰再按自己建队时的朝向差归位。 */
       fmMoveTo(F,[fl.pos[0],fl.pos[1],fl.pos[2]],'stop',[fl.facing[0],fl.facing[1],0]);   // 三元:见 mkOrder 里 FM6q 那段
-      if(typeof log==='function')log(fmName(F)+' 原地重排','');
       break;}
     case 'disband':{
       /* 待命中把编队解散了:标志不清的话下一次左键会被 70-input 的跟随分支静默吃掉。
@@ -392,10 +389,8 @@ function fmbAct(a){
          解散之后那次待命的来源(本编队全员)已经不成立了,留着它只会让下一次左键下一条意料之外的跟随令。 */
       if(typeof pendingFollow!=='undefined'&&pendingFollow){pendingFollow=null;if(typeof updSelWeaponTip==='function')updSelWeaponTip();}
       if(typeof fmDelete!=='function')break;
-      const nm=fmName(F);
       fmDelete(F.id); // FL1 一层化:编队就是唯一的一层,解散 = 整个删掉(不再有"编组名册保留"这回事)
       fmUi.open=null;
-      if(typeof log==='function')log(nm+' 已解散','');
       break;}
     case 'm-fixed':case 'm-slot':
       /* FM6 两选一:直接写槽位来源(F.src)。运动方式那个轴已随【编队跟随模式】删除,不再有第二步。
@@ -418,7 +413,6 @@ function fmbToggle(g){ // FM5b 点书签 = 选中全队 + 展开;再点同一个
     if(list.length){
       selected=list.map(s=>s.id);
       fmbRefreshSel(); // 清导弹选中态 + 唤醒右栏/底栏(FL1 之前那个按钮的职责挪到了这里)
-      if(typeof log==='function')log(fmName(F)+' 选中全队 '+list.length+' 艘','');
     }
   }
   updFmBar();

@@ -3,15 +3,13 @@
    复核后按实测口径改过九处事实(到位判据 800km+60km/s、舰船 IR 走 21-detect 的舰体基线加引擎增量而不是导弹被动导引头那套 2.2/1.5/0.5、
    innerIntercept 是随机上限不是命中率、主炮自动开火不查射程、纯被动双通道交叉即识别级、ESM 椭圆 60 万硬边界、测距起点、靶不闪避、任务暂停玩家碰不到);
    这份文本是静态字符串,改机制不会让它报错、探针也测不出来 —— 动了 SENS/WPN/CFG 或门控判据就回来同步它(CLAUDE.md 的 RF5「Phase D 教程」那节记了同一条)。
-   为什么另起一套而不复用 #overlay:#overlay 在 css/app.css 的 RF2 隐藏清单里被 display:none!important 压死,
-   而且 71-keys 那道 overlayOn 门会在它带上 .on 时把除「设置」外的全部快捷键 break 掉 —— 复用等于把那个坑再踩一遍。
-   本文件只做三件事:惰性注入内容、开合时的副作用(暂停 / 收准星 / 关轮盘 / 日志)、四条 on() 绑定。
+   本文件只做三件事:惰性注入内容、开合时的副作用(暂停 / 收准星 / 关轮盘)、四条 on() 绑定。SL1(2026-09-22 瘦身):旧设置面板与它的遮罩已整套删除,本模态是顶栏唯一的模态。
    几何与配色全在 css/app.css 的「RF5-D 教程面板」节;Esc 由 71-keys 显式分岔接管,不走 ACTIONS(见那里的注释)。
    文件编号沿用本项目先例(weapons/51-defs 与 51-ciws 共用 51):教程与设置语义相邻,同用 85。 */
 const TUT_HTML=`
 <article class="tut">
 
-  <p class="tut-warn">⚠ 本章与实现已不同步，感知层正在重写：下面凡是讲「红外／电子侦察／雷达三个通道」「传感器半径」「雷达点亮耗时」的段落与表格，读数与判据都已作废。新的两通道模型（光学红外／雷达的静听与照射两种模式）与四个舰船字段还在落地中，这一章会在那之后整节重写；在此之前请以事件流与右栏读数为准。</p>
+  <p class="tut-warn">⚠ 本章与实现已不同步，感知层正在重写：下面凡是讲「红外／电子侦察／雷达三个通道」「传感器半径」「雷达点亮耗时」的段落与表格，读数与判据都已作废。新的两通道模型（光学红外／雷达的静听与照射两种模式）与四个舰船字段还在落地中，这一章会在那之后整节重写；在此之前请以右栏读数为准。</p>
 
   <section class="tut-sec" id="tut-what">
     <h2 class="tut-h2">指挥席</h2>
@@ -20,7 +18,7 @@ const TUT_HTML=`
 
     <p>打开页面直接落在靶场里。你手上是三艘蓝舰，巡洋舰 <code class="ui">马拉松-01</code> 和两艘驱逐舰 <code class="ui">巴黎-01</code>、<code class="ui">波长-01</code>，一字排开在战场左侧；对面 <code class="num">20 万公里</code>外是三个靶，<code class="ui">靶·A</code>、<code class="ui">靶·B</code>、<code class="ui">靶·C</code>，彼此纵向拉开 <code class="num">12 万公里</code>。靶有三个特点值得先记住：它血量无限，打不死；它不会向你开火；但它绝不是木桩，它会拦截你的导弹，也会掷干扰弹。至于位置，默认它停在原地不动，全程静止、熄火——闪避机动是靶场参数面板里的一个旋钮，而这一版没有把那个面板开给玩家，所以你看到的三个靶从头到尾都不会挪窝。因此靶场真正在测的不是你打出了多少伤害，而是你的火力能不能穿过对面那把拦截伞。</p>
 
-    <p>开局是暂停的，第一个必须按的键是 <code class="key">Space</code>。另外先记住屏幕右轨底部那个事件流：这一版里几乎所有操作反馈都从那里出，你按了什么、下了什么令、为什么没打出去，都写在那几行字里。遇到「好像没反应」，先去看它。</p>
+    <p>开局是暂停的，第一个必须按的键是 <code class="key">Space</code>。</p>
   </section>
 
   <section class="tut-sec" id="tut-space">
@@ -40,7 +38,7 @@ const TUT_HTML=`
   <section class="tut-sec" id="tut-sensing">
     <h2 class="tut-h2">看不见就打不了</h2>
 
-    <p>感知是这个游戏的核心，也是最容易卡住新玩家的地方。最常见的困惑是「我明明在屏幕上看得见那艘敌舰，为什么打不了它」。答案是：屏幕上画不画得出来，和武器许不许你开火，是两套完全不同的判据。默认开局在管理员模式下，敌舰会直接画给你看；但武器门控看的从来不是你的眼睛，而是这艘敌舰对你这一方的接触等级。按 <code class="key">F8</code> 切到普通模式，感知才真正开始约束你的视野与准星，事件流会打一行确认。</p>
+    <p>感知是这个游戏的核心，也是最容易卡住新玩家的地方。最常见的困惑是「我明明在屏幕上看得见那艘敌舰，为什么打不了它」。答案是：屏幕上画不画得出来，和武器许不许你开火，是两套完全不同的判据。默认开局在管理员模式下，敌舰会直接画给你看；但武器门控看的从来不是你的眼睛，而是这艘敌舰对你这一方的接触等级。按 <code class="key">F8</code> 切到普通模式，感知才真正开始约束你的视野与准星。</p>
 
     <h3 class="tut-h3">接触四级</h3>
 
@@ -175,7 +173,7 @@ const TUT_HTML=`
 
     <p>右键点在空地上，整个选区清空原有航线，移动到那个点。想走折线就按住 <code class="key">Shift</code> 右键，把点一个个追加上去，中间的点是经过、最后一个点是停车。经过点不停车，但会按下一段要拐多大的弯提前减速，而且下令之后系统会在后台花一两秒试算，把各个拐点的过弯路线稍微往内侧收一点——船会像赛车走弯心那样切进去，但保证仍从每个点附近经过；试算不出更快的走法时就原样保持。具体地说：直行的点全速掠过，拐直角要压到三百多，掉头则几乎要先停下来——掉头本来就得把原来的速度整个杀干净，冲过拐点再回头只会更慢。下错了按 <code class="key">Backspace</code> 删掉最后一个命令点；如果这支编队是整体受令的，<code class="key">Backspace</code> 的语义不同，它会把整条编队命令一次删光并让全组刹车。</p>
 
-    <p>还有两条局部指令。按 <code class="key">V</code> 之后左键点地图，是给船头指一个方向：它清掉航线、原地把机头转过去，速度不变，事件流里写的是「调头」；再按一次 <code class="key">V</code> 取消。按 <code class="key">G</code> 是倒车，它在船头正后方 <code class="num">30k 公里</code>处放一个停车点，让舰反推着退出去；倒车会清掉编队与蠕行状态，等于主动脱离编队。</p>
+    <p>还有两条局部指令。按 <code class="key">V</code> 之后左键点地图，是给船头指一个方向：它清掉航线、原地把机头转过去，速度不变；再按一次 <code class="key">V</code> 取消。按 <code class="key">G</code> 是倒车，它在船头正后方 <code class="num">30k 公里</code>处放一个停车点，让舰反推着退出去；倒车会清掉编队与蠕行状态，等于主动脱离编队。</p>
 
     <p>想量距离就按住 <code class="key">C</code>。起点分两种情况：恰好只选中一艘舰时，起点跟着那艘舰走；多选或者一艘都没选时，起点就钉在你按下 <code class="key">C</code> 那一刻的光标位置——第一局框选了三艘蓝舰再按 <code class="key">C</code>，量的就是从光标拉出去的那条线，不是从旗舰拉出去的。终点始终跟着鼠标，松开 <code class="key">C</code> 结束。测距期间准星会整体收起，中键也不会开轮盘。</p>
 
@@ -189,9 +187,9 @@ const TUT_HTML=`
 
     <h3 class="tut-h3">准星与目标轮盘</h3>
 
-    <p>一切从准星开始。把光标停在一艘敌舰上 <code class="num">0.25 秒</code>，准星会吸附到它身上；这个计时走的是真实时间，暂停时照样走，光标一次跳动超过 <code class="num">40 像素</code>则重新计时。没吸附上的时候中键的两个手势都不成立，事件流会告诉你「准星未吸附敌舰」。</p>
+    <p>一切从准星开始。把光标停在一艘敌舰上 <code class="num">0.25 秒</code>，准星会吸附到它身上；这个计时走的是真实时间，暂停时照样走，光标一次跳动超过 <code class="num">40 像素</code>则重新计时。没吸附上的时候中键的两个手势都不成立。</p>
 
-    <p>吸附之后，短按中键（不到 <code class="num">350 毫秒</code>、手不动）是快速交战：给选区里的第一艘舰对这个目标新建一条火控序列，缺省是全武器许可。它有一个你看得见的连带效果：强行打开这艘舰的火控总开关并置为自由开火，所以这一下同时也是「让它开始打」。（引擎里还会顺手暂停这艘舰原有的任务，不过这一版没有把任务系统开给玩家，你不会碰上。）</p>
+    <p>吸附之后，短按中键（不到 <code class="num">350 毫秒</code>、手不动）是快速交战：给选区里的第一艘舰对这个目标新建一条火控序列，缺省是全武器许可。它有一个你看得见的连带效果：强行打开这艘舰的火控总开关并置为自由开火，所以这一下同时也是「让它开始打」。</p>
 
     <p>按住中键超过 <code class="num">350 毫秒</code>且手不动，目标轮盘会在你松手之前就弹出来，而且序列在开盘那一瞬就已经提交，因此误触也不会丢进度。长按有三种上下文，取决于这个目标与你当前正在编辑的那条序列的关系：目标已经在这条序列里，就只是打开来编辑；目标不在、并且你按着 <code class="key">Shift</code>，它被追加到这条序列末尾；目标不在、也没按 <code class="key">Shift</code>，就新建一条序列，连带上面那两个副作用。</p>
 
@@ -264,9 +262,7 @@ const TUT_HTML=`
         <tr><td><code class="key">G</code></td><td>倒车</td><td>船头正后方 <code class="num">30k 公里</code>放一个停车点，脱离编队</td></tr>
         <tr><td><code class="key">C</code></td><td>测距</td><td>按住不放；只选中一艘时起点跟着该舰，多选或未选则钉在按键那一刻的光标处</td></tr>
         <tr><td><code class="key">Backspace</code></td><td>删除最后一个命令点</td><td>编队整体受令时，整条命令一次删光并全组刹车</td></tr>
-        <tr><td><code class="key">F6</code></td><td>顶栏开关</td><td>收起或展开顶部的时钟与倍速</td></tr>
-        <tr><td><code class="key">F8</code></td><td>管理员 / 普通模式</td><td>普通模式下感知点亮才生效，事件流打一行确认</td></tr>
-        <tr><td><code class="key">F7</code></td><td>导出 demo</td><td>开局就在自动录制，按一下存成 JSON 下载</td></tr>
+        <tr><td><code class="key">F8</code></td><td>管理员 / 普通模式</td><td>普通模式下感知点亮才生效</td></tr>
       </tbody>
     </table>
 
@@ -300,7 +296,7 @@ const TUT_HTML=`
 
 </article>
 `;
-let tutOn=false;      // RF5-D 教程模态显隐。刻意不进 panelState:那是 RF2 三块常驻面板的开关,教程是模态,不该被 Tab/F/L 一类面板键扫到
+let tutOn=false;      // RF5-D 教程模态显隐(教程是模态,不是常驻面板的开关)
 let tutPrevRun=false; // RF5-D 打开那一瞬的 running,关闭时按条件还原(见 tutToggle 的还原判据)
 function tutIsOpen(){return tutOn;} // RF5-D 对外只读入口(71-keys 的 Esc 分岔用):状态归本文件,外部不直接读 tutOn,与 rad.open 那套契约同口径
 function tutToggle(force){ // RF5-D 开合教程。force 缺省 = 切换,签名抄 85-settings 的 toggleSettings
@@ -318,12 +314,10 @@ function tutToggle(force){ // RF5-D 开合教程。force 缺省 = 切换,签名�
     tutPrevRun=(typeof running!=='undefined')&&running; // 打开即暂停:面板盖住整个战场,而倍速最高 50x,读完一节仗已经打完了
     running=false;
     if(typeof rad!=='undefined'&&rad.open&&typeof radClose==='function')radClose(); // 轮盘画在 canvas 上,DOM 的 z 序管不到它:不关就会从遮罩底下透出来,而它的鼠标语义此刻已经够不到
-    if(typeof xhOff==='function')xhOff(); // 收准星:沿用编辑器/测距那条既有约定(把 xh.pt 挪出屏幕,83-hud 的 drawTargeting 据此不画),否则遮罩后面冻着一个十字与吸附圈
-    if(typeof log==='function')log('📖 教程已打开 · 模拟暂停 · Esc 或点遮罩关闭','');
+    if(typeof xhOff==='function')xhOff(); // 收准星:沿用测距那条既有约定(把 xh.pt 挪出屏幕,83-hud 的 drawTargeting 据此不画),否则遮罩后面冻着一个十字与吸附圈
   }else{
     // 只在【是我们暂停的、且期间没人动过】时才还原:玩家在教程里按空格恢复了模拟(running 已 true),这里不该把它按回去
     if(tutPrevRun&&typeof running!=='undefined'&&!running)running=true;
-    if(typeof log==='function')log(tutPrevRun?'📖 教程已关闭 · 模拟继续':'📖 教程已关闭','');
   }
 }
 // 用 click 而不是同栏 #btnPause 那几个的 pointerdown:pointerdown 会让遮罩在同一次按压【中途】出现,

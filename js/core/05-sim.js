@@ -8,21 +8,19 @@
 function stepSim(dt){
   detT+=dt;if(detT>=SENS.TICK){const el=detT;detT=0;detectLoop(el);} // 感知结算(每模拟秒一次,阵营对称)。SN4: 节拍本身一点没变,变的是要把【距上次结算实际过去了多少模拟秒】交给 detectLoop —— 新内核的驻留衰减是解析跳步(x←x·D^dt + g·(1−D^dt)/(1−D)),传 CFG.step=0.02 会把一整秒的衰减当成 0.02 秒算、驻留一路涨穿,传常数 1 又会在倍速/长帧下把真实经过的时间抹平。detT 归零【之前】先存进 el,它就是那个真实秒数(恒 ≥ SENS.TICK,x50 倍速下约 1.00~1.02);阈值也从裸字面量 1 改读 SENS.TICK,节拍从此只有表里那一个定义点
   netAllocT=(netAllocT||0)+dt;if(netAllocT>=0.5){netAllocT=0;reassignNets('blue');reassignNets('red');} // DS147:智能目标分配每0.5s平衡(仅link网按需求)
-  if(tasks.size)taskProcess(dt); // DS150:目标导向AI 任务处理器(每2s,意图级)
   if(typeof stepFireControl==='function')stepFireControl(dt); // RF5 S3b 火控序列前置决策(→ weapons/58):清理失效序列→逐武器解算目标→改写 lockedTarget/续期 driftFire。必须在 S4 之前(lockedTarget 同时是战斗转向的转向指令,同 tick 就要被机头归瞄消费),也必然在 S14-S17 之前(自动齐射与 MAC 自动开火同 tick 读到本段的结果)
   stepShipsMotion(dt); // S4 舰船运动主循环(→ physics/31)
   stepProjectiles(dt); // S5-S11 弹丸:裁剪→预收集→引导→网检查→来袭走廊→五弹型主循环→过滤(→ weapons/56)
   if(selMissile&&selMissile.done)selMissile=null; // 选中的导弹组没了 → 取消选中
-  if(pendingMine&&pendingMine.done)pendingMine=null;
   for(const h of hitFX)h.t-=dt; // 命中特效寿命
   hitFX=hitFX.filter(h=>h.t>0);
   stepWeaponSystems(dt); // S14-S17 武器冷却/自动索敌/近防自动拦截/MAC 自动开火(→ weapons/57)
   if(typeof stepFireControlPost==='function')stepFireControlPost(dt); // RF5 S17b 火控序列后置收账(→ weapons/58):读 52-fire 打的 fcFired 开火标记,推进序列内(rr)与序列间指针、给指定点记齐射组数。必须紧跟 S14-S17(本 tick 的发射结果只在这一段有效),且必须早于 S18 靶场AI —— 后者每 tick 无条件覆写靶的 autoEngage/lockedTarget/driftFire
   if(typeof rangeTargetAI==='function')rangeTargetAI(dt); // RANGE1 靶场 AI:每 tick 清靶的交战态(autoEngage/lockedTarget/driftFire)+ 按面板参数刷闪避机动点 + 定时放诱饵弹。放在 enemyAI 之前,靶本来就被 enemyAI 的 isTarget 早退跳过,两者不冲突
-  if(!selfPlay)enemyAI(dt); // v124:左右脑互搏模式关敌军AI,红方全玩家操控
-  // 胜负
+  enemyAI(dt);
+  // 胜负(两个标志由 scenario/97-match 的 matchTick 读来弹结果卡片)
   const redA=ships.some(s=>s.side==='red'&&!s.dead);
   const blueA=ships.some(s=>s.side==='blue'&&!s.dead);
-  if(!redA&&!victoryShown&&ships.some(s=>s.side==='red')){victoryShown=true;log('🏆 叛军舰队全灭 —— 胜利!','hit');} // v119:空场景守卫
-  if(!blueA&&!defeatShown&&ships.some(s=>s.side==='blue')){defeatShown=true;log('💀 我方舰队全灭 —— 战败','hit');} // v119:空场景守卫
+  if(!redA&&!victoryShown&&ships.some(s=>s.side==='red')){victoryShown=true;} // v119:空场景守卫
+  if(!blueA&&!defeatShown&&ships.some(s=>s.side==='blue')){defeatShown=true;} // v119:空场景守卫
 }

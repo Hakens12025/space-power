@@ -179,7 +179,7 @@ t('FLOW73_MATCH',function(){
       +' | ⑥ 回靶场='+ok6;
   }finally{
     Math.random=oR;
-    envIdx=0;initFleet();if(typeof renderFleet==='function')renderFleet();
+    envIdx=0;initFleet();
     vtAnim=null;zAnim=null;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;vtFrame();VT_FX={t0:-1e9,tier:0,up:true};
     adminMode=admBak;running=runBak;
   }
@@ -241,7 +241,7 @@ t('FLOW74_TC',function(){
   }finally{
     var bk=JSON.parse(tcBak),k;for(k in bk)TC[k]=bk[k];
     rate=rateBak;projectiles.length=0;
-    envIdx=0;initFleet();if(typeof renderFleet==='function')renderFleet();
+    envIdx=0;initFleet();
     vtAnim=null;zAnim=null;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;vtFrame();VT_FX={t0:-1e9,tier:0,up:true};
     adminMode=admBak;running=runBak;
   }
@@ -286,10 +286,10 @@ t('FLOW75_AUTOAIM',function(){
      ③ 生产路径:一组看得见的红方导弹过一遍 stepProjectiles,生成的走廊起点不许等于没定位的射手的真实坐标 */
 t('FLOW76_REDINTENT',function(){
   if(typeof corridorFrom!=='function')return 'fail FG1 未加载(缺 corridorFrom)';
-  var shipsBak=ships.slice(),projBak=projectiles,corrBak=threatCorridors,admBak=adminMode,edBak=editMode,lodBak=LOD.off,selBak=selected.slice();
+  var shipsBak=ships.slice(),projBak=projectiles,corrBak=threatCorridors,admBak=adminMode,lodBak=LOD.off,selBak=selected.slice();
   var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},oLn=ctx.lineTo,oMv=ctx.moveTo,out='';
   try{
-    editMode=false;selected=[];LOD.off=true;projectiles=[];threatCorridors=[];
+    selected=[];LOD.off=true;projectiles=[];threatCorridors=[];
     var B=makeShip('CA','图蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),R=makeShip('DD','图红',[60000,20000,0],[-1,0,0],[0,0,0],'red',2);
     ships.length=0;ships.push(B,R);
     var DEST=[20000,-50000,0];
@@ -330,7 +330,7 @@ t('FLOW76_REDINTENT',function(){
       +' | ③ 生产路径:发射 '+nM+' 组 ⇒ 走廊 '+cs.length+' 条,起点等于没定位的射手真值='+leak+'(须 false)='+ok3;
   }finally{
     ctx.lineTo=oLn;ctx.moveTo=oMv;
-    adminMode=admBak;editMode=edBak;LOD.off=lodBak;selected=selBak;
+    adminMode=admBak;LOD.off=lodBak;selected=selBak;
     cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
     projectiles=projBak;threatCorridors=corrBak;
     ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
@@ -346,10 +346,10 @@ t('FLOW76_REDINTENT',function(){
         推到认出距离以内 ⇒ 轮廓变 DD */
 t('FLOW77_IDN',function(){
   if(typeof contactIdn!=='function')return 'fail ID1 未加载(缺 contactIdn)';
-  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,edBak=editMode,lodBak=LOD.off,selBak=selected.slice(),camBak={x:cam.x,y:cam.y,zoom:cam.zoom};
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,lodBak=LOD.off,selBak=selected.slice(),camBak={x:cam.x,y:cam.y,zoom:cam.zoom};
   var oT=ctx.fillText,oDH=drawHull,out='';
   try{
-    adminMode=false;editMode=false;selected=[];LOD.off=true;projectiles.length=0;
+    adminMode=false;selected=[];LOD.off=true;projectiles.length=0;
     var B=makeShip('CA','份蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),R=makeShip('BB','份红真名',[60000,0,0],[-1,0,0],[0,0,0],'red',3);
     ships.length=0;ships.push(B,R);ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];});
     cam.x=30000;cam.y=0;cam.zoom=0.004;
@@ -383,7 +383,7 @@ t('FLOW77_IDN',function(){
       +' | ③ 端到端 CA 照 DD:@'+Math.round(dMid/1000)+'k(跟踪门 '+Math.round(lp.radarMsl/1000)+'k 内、认出 '+Math.round(lp.radarIdent/1000)+'k 外)lit='+farLit+' 认出='+farIdn+' 轮廓='+farHull+' → @'+Math.round(lp.radarIdent*0.8/1000)+'k 认出='+nearIdn+' 轮廓='+nearHull+'='+ok3;
   }finally{
     ctx.fillText=oT;drawHull=oDH;
-    adminMode=admBak;editMode=edBak;LOD.off=lodBak;selected=selBak;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
+    adminMode=admBak;LOD.off=lodBak;selected=selBak;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
     ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
     projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
   }
@@ -411,33 +411,6 @@ t('FLOW78_JUMPSEL',function(){
   }finally{
     S.pos=posBak;S.dead=deadBak;selected=selBak;vtAnim=null;zAnim=null;
     cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;vtFrame();VT_FX=fxBak;VT_RULER_T0=rulBak;
-  }
-  return out;
-});
-/* ===== R3 日志汇聚点:模拟只发、界面自己订 =====
-   log() 从 render/86 搬进了 core/02-events。本条量行为没变:一条 log 同时到达日志面板(#logBody 多一行、文字对)与右轨事件流(pushEvt 收到同一条),
-   先后次序 = 面板在前、事件流在后;新订阅者收得到;重复订阅同一个函数只算一次。分层的方向由判定块里的源码级检查钉着。 */
-t('FLOW79_LOGBUS',function(){
-  if(typeof onLog!=='function'||typeof LOG_SUBS==='undefined')return 'fail R3 未加载(缺 onLog / LOG_SUBS)';
-  var body=document.getElementById('logBody');if(!body)return 'fail #logBody 缺席';
-  var oPE=pushEvt,nSub=LOG_SUBS.length,out='';
-  try{
-    var seq=[],got=null;
-    pushEvt=function(m,c){seq.push('evt');got=[m,c];return oPE.apply(this,arguments);};
-    var spy=function(m,c){seq.push('spy:'+m+':'+c);};
-    onLog(spy);onLog(spy);                                   /* 重复订阅只算一次 */
-    var n0=body.children.length,MSG='判据日志·'+Math.random().toString(36).slice(2,8);
-    var oAp=body.appendChild;body.appendChild=function(x){seq.push('dom');return oAp.call(body,x);};
-    log(MSG,'warn');
-    body.appendChild=oAp;
-    var last=body.lastElementChild,domOk=(body.children.length===Math.min(80,n0+1)||body.children.length===80)&&!!last&&last.textContent.indexOf(MSG)>=0&&last.className.indexOf('warn')>=0;
-    var evtOk=(!!got&&got[0]===MSG&&got[1]==='warn');
-    var order=(seq.indexOf('dom')>=0&&seq.indexOf('dom')<seq.indexOf('evt')&&seq.indexOf('evt')<seq.indexOf('spy:'+MSG+':warn'));
-    var once=(seq.filter(function(x){return x.indexOf('spy:')===0;}).length===1&&LOG_SUBS.length===nSub+1);
-    var ok=(domOk&&evtOk&&order&&once&&nSub>=2);
-    out=(ok?'ok':'fail')+' 常驻订阅者 '+nSub+' 个(须>=2:日志面板 + 事件流) 日志面板多一行且文字 / 样式对='+domOk+' 事件流收到同一条='+evtOk+' 次序 面板→事件流→新订阅者='+order+' 重复订阅只算一次='+once;
-  }finally{
-    pushEvt=oPE;LOG_SUBS.length=nSub;
   }
   return out;
 });

@@ -2,6 +2,18 @@
 
 呈现层(`js/render/`)的历史备忘。总览、跨系统约定与文件地图在仓库根 `CLAUDE.md`。
 
+## SL1 瘦身(2026-09-22,用户拍板删掉 RF2 只藏不删的旧界面)
+
+本目录删了 `86-log`(日志面板订阅者)整文件;`87-fleetcards` 从「舰队卡片 / 信息面板」缩成三个函数(`updateTop` 顶栏读数,`launchBeacon` / `layoutNetMines` 两个被 70-input 引用的工具);
+`88-selpanel` 删 `pushEvt/selEvts` 与 `onLog` 订阅(右轨 `#evtFeed` 事件流面板与 css 同删);`85-settings` 删到只剩 暂停 / 减速 / 加速 三钮、`#segTier`、`#tools`、`toolsDock`
+(`recording` 六处写点与整套键位重绑 UI `#overlay/#settings/.krow` 删;连带只被它用的 `keyDisplay/KEY_NAME/bindOf/saveBindings`);`83-hud` 删 `drawRanges` 整函数(总开关只在快捷栏里写,恒 return);
+`84-scene` 删回放数据分支与编辑器图层;`82-lod / 82-ship-icons / 83-geom / 83-hud` 的 `editMode` / `replay.active` 裸读全删;`85-tutorial` 的 `TUT_HTML` 删掉讲回放 / 编辑器 / 右键菜单 / 快捷栏 / 事件流的段落。
+
+- css:`#evtFeed` 走后 `#selPanel` 的 max/min-height 末项从 `--tray-b` 改成 `--dock-b`,收回原来让给事件流的右轨底部车道(不改会留一块永久空白);`--gold/--z-flyout-hi/--z-menu/--sh-menu/--z-modal-hi/--log-h/--tray-b` 七个 token 与 RF2 隐藏节整段删。
+  **留了一行 `#trPanel{display:none!important}`**:靶场参数面板的逻辑(scenario/95)保留,但它今天仍然不可见,与瘦身前一致 —— 否则它会在开局自动弹出,而唤它的顶栏钮已删、关掉后没入口再开。
+- `80-viewtier` 的一条数学注释 `exp(log(k1))` 改写成 `exp(ln k1)`:verify.sh 的裸 `log(` 负对照把注释也算数(与项目既有规矩一致)。
+- `updRangePanel` 原由 `updateCardsStatus` 每 20 帧带一次,那函数删了之后改挂 core/99 的 20 帧低频车 —— 是把调用搬家,不是加功能。
+
 ## RF7 选定链 / 火控计算机方条 备忘(2026-08)
 
 **Shift+中键短按 = 选定入链**(xhQuickEngage 的 append 参数,70-input 抬手时传 `mmb.shift`)。语义:目标追加进当前编辑序列(无编辑序列则等价新建),自动进入序列态;**重复点同一目标去重**(只提示位次,不重复入队)。改前短按压根不看 Shift,按住 Shift 点第二个目标照样 fcNew 新建——追加从来没触发过,这是"Shift 选择没做好"的根因。无 Shift 短按 = 快速交战(fcNew)、长按轮盘、右键(移动/路径点)全部不变。

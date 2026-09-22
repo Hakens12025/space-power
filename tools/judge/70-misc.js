@@ -1,6 +1,6 @@
 t('FLOW46_CIWS',function(){
   var PIN=30000,CLOSE=3000,N=150; /* 钉住的距离 / 逼近速度 / 每相步数(150×0.02=3s,detectLoop 每秒一拍 → 3 拍) */
-  var _shipsBak=ships,_projBak=projectiles,_selBak=selected,_selfBak=selfPlay,_detBak=detT,_fi=fireInterceptor;
+  var _shipsBak=ships,_projBak=projectiles,_selBak=selected,_eai=enemyAI,_detBak=detT,_fi=fireInterceptor;
   var _fxBak=(typeof hitFX!=='undefined')?hitFX:null;
   var _seqBak=(typeof fireSeqs!=='undefined')?fireSeqs:null;
   var _corBak=(typeof threatCorridors!=='undefined')?threatCorridors:null;
@@ -37,7 +37,7 @@ t('FLOW46_CIWS',function(){
   function diag(z){return '[存活='+z.live+' 距离='+Math.round(z.d0)+'<窗口'+z.win+' coastT='+z.coast+' 威胁='+Math.round(z.thr)+']';}
   try{
     fireInterceptor=function(a,b,c){shots++;return _fi(a,b,c);}; /* 以"真的调到了发射点"为准:库存差分会把别的路径算进来(同 FC3 包 fireMAC/fireMissiles 的理由) */
-    selfPlay=true;selected=[];
+    enemyAI=function(){};selected=[]; /* 关掉敌方 AI:stepSim 按全局名在运行期调它,换成空函数即生效(同下面包 fireInterceptor 的手法) */
     if(typeof fireSeqs!=='undefined')fireSeqs=[];  /* 火控序列清干净:stepFireControl 会去动别的探针留下的序列 */
     var A1=phase(true,true),A2=phase(false,false),B=phase(false,true);
     if(A1.err||A2.err||B.err)return 'fail '+(A1.err||A2.err||B.err);
@@ -55,7 +55,7 @@ t('FLOW46_CIWS',function(){
       +' | 单变量对照:A1↔B 只差探测方的发射档(照射/静默),A2↔B 只差来袭弹 fuel';
   }finally{
     fireInterceptor=_fi;
-    ships=_shipsBak;projectiles=_projBak;selected=_selBak;selfPlay=_selfBak;detT=_detBak;
+    ships=_shipsBak;projectiles=_projBak;selected=_selBak;enemyAI=_eai;detT=_detBak;
     if(_seqBak)fireSeqs=_seqBak;
     if(_fxBak)hitFX=_fxBak;
     if(_corBak)threatCorridors=_corBak;
@@ -76,7 +76,7 @@ t('FLOW46_CIWS',function(){
    判据【走 canvas 指令级,不走像素】:82-ship-icons:118-121 是 save→translate(p)→rotate→drawHull,
    那一句 ctx.translate(p[0],p[1]) 就是"图标画在哪儿"的唯一真相,坐标是精确浮点、没有噪声。
    像素法在这里测不准——星云/网格/弹丸都会落进采样区(FLOW31 与 FLOW41 各栽过一次,后者已改指令级)。
-   场景照例隔离(只留自造的 5 艘、清空 projectiles/hitFX/fireSeqs、selected 置空、editMode 关),
+   场景照例隔离(只留自造的 5 艘、清空 projectiles/hitFX/fireSeqs、selected 置空),
    这样 render() 里唯一的 translate 来源就是 drawShip:总数 = 真正画出来的舰数,本身就是一条判据。
 
    双向(缺一不可):
@@ -96,10 +96,10 @@ t('FLOW47_FOG',function(){
   window.addEventListener('error',onerr);
   var shipsBak=ships.slice(),projBak=projectiles.slice(),fxBak=hitFX.slice();
   var seqBak=(typeof fireSeqs!=='undefined')?fireSeqs.slice():null;
-  var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},selBak=selected.slice(),edBak=editMode;
+  var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},selBak=selected.slice();
   var otr=ctx.translate,oarc=ctx.arc,out='';
   try{
-    adminMode=false;editMode=false;selected=[];
+    adminMode=false;selected=[];
     projectiles.length=0;hitFX.length=0;
     if(typeof fireSeqs!=='undefined')fireSeqs.length=0;
     cam.x=0;cam.y=0;cam.zoom=0.0012; /* 1px = 833km。位置一律由 worldAt 从【屏幕比例】反算,与视口大小无关 */
@@ -190,7 +190,7 @@ t('FLOW47_FOG',function(){
     projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
     hitFX.length=0;fxBak.forEach(function(x){hitFX.push(x);});
     if(seqBak&&typeof fireSeqs!=='undefined'){fireSeqs.length=0;seqBak.forEach(function(x){fireSeqs.push(x);});}
-    cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;selected=selBak;editMode=edBak;
+    cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;selected=selBak;
     adminMode=true; /* 【必须】硬置成 GM,不是"还原进入时的值" ——(⚠ SN6c 起这不再等于 core/01 的默认值,默认已改成关)
                        进入时若已经是 false,那本身就是上一条判定漏掉的污染,不该继续往后传;
                        留着 false 会让后面每一条走 render()/日志打码/targetAt 的判定统统换一条分支。 */

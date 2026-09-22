@@ -7,13 +7,13 @@ t('FLOW6_CHAIN',function(){ /* RF7 数据链渲染:函数存在;编辑态/退出
   fcSetEdit(e.S,fireSeqs[0]?fireSeqs[0].id:null);
   return (okFn?'ok':'fail')+' drawFcChain='+(okFn?'存在':'缺失')+' 编辑态/退出态渲染均完成';
 });
-/* SN1 数据链通道数迁出感知表:钉死四舰种的 guideChan,并守住两份手抄同步。
-   为什么需要这条:迁出之前 makeShip 与 applyClsTier 两处都写着 st.guideChan||4,而 DD 的真值是 1 ——
+/* SN1 数据链通道数迁出感知表:钉死四舰种的 guideChan。
+   为什么需要这条:迁出之前 makeShip 里写着 st.guideChan||4,而 DD 的真值是 1 ——
    字段一旦丢了,兜底会把 DD 悄悄涨到 4(超视距同时引导的导弹组数翻两番),不报错、不留痕。
    摘掉 ||4 之后缺失会变成 undefined,本条当场转红。
    双向:①四舰种的值逐位钉死(不是"非空"或">0",那样 4 也能过);②DD 必须严格 !==4 —— 4 正是旧兜底会产生的那个数;
         ③走真实调用点 guideSide:它按 (s.guideChan||0)>0 筛引导舰,只测表不测调用点的话,
-          接线错了(比如 shipStats 漏并 CLS_LINK)照样绿;④applyClsTier 那份手抄必须与 makeShip 给出同一个值。 */
+          接线错了(比如 shipStats 漏并 CLS_LINK)照样绿。 */
 t('FLOW45_LINK',function(){
   var want={DD:1,CA:3,BB:3,CV:3},got={},ok=true,i;
   var names=['DD','CA','BB','CV'];
@@ -23,11 +23,6 @@ t('FLOW45_LINK',function(){
     if(sh.guideChan!==want[names[i]])ok=false;
   }
   if(got.DD===4)ok=false; /* 4 = 旧兜底的指纹 */
-  /* applyClsTier 是烘焙清单的第二份手抄,漏改不会报错,只是编辑器摆的舰带着另一个数进战场 */
-  var ed=makeShip('DD','Led',[0,0,0],[1,0,0],[0,0,0],'blue',2);
-  applyClsTier(ed,'CA',2);
-  var edOk=(ed.guideChan===want.CA);
-  if(!edOk)ok=false;
   /* 真实调用点:guideSide 按 (s.guideChan||0)>0 筛引导舰。把全场蓝舰的通道数清零,引导舰应当一个都不剩 */
   var blues=ships.filter(function(s){return s.side==='blue'&&!s.dead;});
   var keep=blues.map(function(s){return s.guideChan;});
@@ -38,7 +33,6 @@ t('FLOW45_LINK',function(){
   var callOk=(live>0&&dead0===0);
   if(!callOk)ok=false;
   return (ok?'ok':'fail')+' 四舰种 guideChan=DD'+got.DD+'/CA'+got.CA+'/BB'+got.BB+'/CV'+got.CV+'(须 1/3/3/3,且 DD 不许是旧兜底的 4)'
-    +' | applyClsTier 手抄同步='+edOk+'(改成 CA 后='+ed.guideChan+')'
     +' | 真实调用点 guideSide 的引导舰筛选:清零前='+live+'艘 清零后='+dead0+'艘(须 >0 → 0)';
 });
 /* SN4 两通道接触等级阶梯(光学/红外 opt / 雷达静听 lis / 雷达照射 act → lit 0/1/2/3)。
@@ -485,10 +479,10 @@ t('FLOW81_REVBURN',function(){
      ③ 反向对照:同一距离上红舰静默(不开雷达)结果必须一样 —— 身份与它开不开雷达无关 */
 t('FLOW82_ESMNOID',function(){
   if(typeof contactIdn!=='function')return 'fail 缺 contactIdn';
-  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,edBak=editMode,lodBak=LOD.off,selBak=selected.slice(),camBak={x:cam.x,y:cam.y,zoom:cam.zoom};
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,lodBak=LOD.off,selBak=selected.slice(),camBak={x:cam.x,y:cam.y,zoom:cam.zoom};
   var oT=ctx.fillText,oDH=drawHull,out='';
   try{
-    adminMode=false;editMode=false;selected=[];LOD.off=true;projectiles.length=0;
+    adminMode=false;selected=[];LOD.off=true;projectiles.length=0;
     var b1=makeShip('DD','无名蓝1',[0,-50000,0],[1,0,0],[0,0,0],'blue',2),b2=makeShip('DD','无名蓝2',[0,50000,0],[1,0,0],[0,0,0],'blue',2);
     var R=makeShip('DD','亮灯红真名',[0,0,0],[-1,0,0],[0,0,0],'red',2);
     var lp=ladPair('DD','DD'),dFar=Math.sqrt(lp.optIdent*lp.optColdMin),dNear=lp.optIdent*0.6;
@@ -516,7 +510,7 @@ t('FLOW82_ESMNOID',function(){
       +' | ③ 反向对照(同距离、红舰静默):状态='+quiet.st+' 认出='+quiet.idn+' 轮廓='+quiet.hull+'(须与开雷达时一样)='+ok3;
   }finally{
     ctx.fillText=oT;drawHull=oDH;
-    adminMode=admBak;editMode=edBak;LOD.off=lodBak;selected=selBak;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
+    adminMode=admBak;LOD.off=lodBak;selected=selBak;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
     ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
     projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
   }

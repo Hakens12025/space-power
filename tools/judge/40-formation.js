@@ -398,9 +398,8 @@ t('FLOW27_FMBAR',function(){
     if(fm27hit(document.querySelector('#fmActs [data-fma="'+n+'"]')))clicked++;
   }
   for(q=0;q<later.length;q++){if(fm27hit(document.querySelector('#fmActs [data-fma="'+later[q]+'"]')))clicked++;}
-  /* 遍历里又点了一次 fol,会把待命态重新挂上;不清掉的话它会带着一条 tip 漏进后面的 RENDER */
+  /* 遍历里又点了一次 fol,会把待命态重新挂上;不清掉的话它会漏进后面的 RENDER */
   if(typeof pendingFmFollow!=='undefined')pendingFmFollow=null;
-  if(typeof hideTip==='function')hideTip();
   updFmBar();fm27sel();
   fm27hit(tab); /* 再点一次收起 */
   var closed1=menu?menu.style.display:'?';

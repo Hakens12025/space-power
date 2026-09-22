@@ -8,22 +8,17 @@ function initFleet(){
   selected=[];formations={};projectiles=[];  // FL1:编组名册层已删,换局要清的是编队本身(formations['1'..'4'])
   // KIMI146:换局全量重置战斗状态。原只重置上面4个,导致:①来袭走廊引用旧局弹丸(done永不置位→橙锥永不消失)
   // ②victoryShown/defeatShown不重置→上一局歼灭后,新一局不再报胜/败 ③nets/ESM/导弹选中残留旧局引用
-  // ④回放历史混入旧局快照 ⑤demo录制跨局污染
-  simTime=0;history=[];if(replay.active)exitReplay();replay.idx=0;
+  simTime=0;
   threatCorridors=[];hitFX=[];nets.clear();
   if(typeof aiRedReset==='function')aiRedReset(); // AI1 换局清红方 AI 的信念(目标点 / 最后已知位置 / 搜索进度),否则带着上一局的记忆开局
   if(typeof GEOM!=='undefined'){GEOM.pin=null;GEOM.tick=-1;GEOM.byId={};} // SN7 换局清定位几何小窗的常驻与视线缓存:理由同下一行 —— shipSeq 每局归零,不清的话上一局钉住的 id 会挂到新一局的另一艘船上
   if(typeof fireSeqs!=='undefined'){fireSeqs=[];fcSeqSeq=0;} // RF5 火控序列换局清空(与 nets.clear() 同族):shipSeq 每局归零重排,不清会让上一局的序列按 id 精准挂到新一局的另一艘船上
   selMissile=null;selNet=null;selMissileHits=[];victoryShown=false;defeatShown=false; // RF4a 框选聚合态一并清(否则引用旧局弹丸对象)
   if(typeof clearPendings==='function')clearPendings(); // KIMI146:交互pending态也清——原 pendingBeacon/pendingManual 等引用旧局舰对象(点地图把信标挂到已不存在的船上)。
-  // FL1:这里原本是第三份手抄清单,且【不调 updSelWeaponTip】只调 hideTip(收的是被 RF2 藏死的 #statusTip)——
-  // 于是换局时若有 selWeapon 或跟随待命在,#cmdTip 会带着上一局的提示进新局,而它是边沿触发、没有兜底刷新,不自愈。
-  rangeFollow=null;hideTip();
+  rangeFollow=null;
   if(typeof fmbResetCache==='function')fmbResetCache(); // FL1:书签/信息区的 DOM 缓存按"编队id|旗舰id|成员id串"做签名,而 shipSeq 换局归零、舰 id 复用 —— 两局的同号编队签名可能逐字相同,不清会留着上一局的舰名
-  nextSnapT=RPL_INTERVAL; // 回放快照计时同步重置
-  demoRec={on:demoRec.on,data:[],lastT:-1}; // 保留自动录制开关(init()开局置on),只清数据缓冲
-  // 初始集结仅预设场景(编辑器摆位的自定义场景不强制集结,船待原地)
-  if(envIdx!==-1&&!env.range&&!env.match)ships.forEach(s=>s.orders.push({pos:[0,0,0],type:'stop'})); // RANGE1 靶场不压集结令:蓝方开局就朝原点跑会毁掉"静止发射"基线(此行在 initEnemy 之前,ships[] 只有蓝方)
+  // 初始集结
+  if(!env.range&&!env.match)ships.forEach(s=>s.orders.push({pos:[0,0,0],type:'stop'})); // RANGE1 靶场不压集结令:蓝方开局就朝原点跑会毁掉"静止发射"基线(此行在 initEnemy 之前,ships[] 只有蓝方)
   /* SN6c(2026-09-19,用户实报"初始发射档位为静默"):**靶场蓝方开局不再默认开照射**。
      原来这一行是 RANGE1 留下的(靶场要测主炮,而火控级只有照射挣得到)。那条理由在 1 光秒的开局下已经不成立:
      火控天花板 172,829,开局 299,792 —— 照射也打不出主炮,只换来"一开局就把三个靶全定位并认出"
@@ -37,9 +32,8 @@ function initFleet(){
      ⚠ 建队【不会让船动】:FM2 起成员只在下令那一刻才把编队级目标点展开成各自的绝对终点
        (js/formation/43-step.js 顶部那段),所以靶场刻意保住的"静止发射"MAC 基线一个字没动。
      ⚠ 用 fmSetSrc 显式切到 generated:fmCreate 的默认是 snapshot(固定模式,FM3-1 的用户拍板),
-       那是"把建队那一瞬的相对位置钉死",不是用户要的阵型队。
-     只在预设场景建;编辑器摆的自定义场景(envIdx===-1)不替玩家做主。 */
-  if(envIdx!==-1&&typeof fmCreate==='function'&&ships.length>=2){
+       那是"把建队那一瞬的相对位置钉死",不是用户要的阵型队。 */
+  if(typeof fmCreate==='function'&&ships.length>=2){
     const F1=fmCreate('1',ships.slice());   // 此刻 ships[] 里只有蓝方(initEnemy 还没跑)
     if(F1&&typeof fmSetSrc==='function')fmSetSrc(F1,'generated');
     /* SN6c:**开局就站好队形**(用户实报"开局的时候为什么不按照阵型排列")。
@@ -57,17 +51,14 @@ function initFleet(){
         m.vel=[0,0,0];m.facing=fl.facing.slice();   // 阵型模式下全员船头随阵型朝向(fmHdg 恒 0)
       });
     }
-    selected=[];                            // fmCreate 会 log 一行,但不该顺带把开局选中态也定了
+    selected=[];                            // fmCreate 不该顺带把开局选中态也定了
   }
   initEnemy();
   /* SN6c:**开局先跑一拍感知**。感知是每秒一拍的节拍(stepSim 的 S1),不先跑一拍的话开局第一秒
      所有接触都是 lit=0 —— 热区层与椭圆层都没东西可画,画面上是一片空,直到一秒后才"啪"地出现。
      用户实报的"需要走两步才能变成热区的形式"就是这一秒。放在 initEnemy 之后:红方得先在场上。 */
   if(typeof detectLoop==='function')detectLoop();
-  const eCnt=(env.enemy||DEFAULT_ENEMY).length;
-  log(`测试环境:${env.name} · 我方${ships.length-eCnt}艘 / 目标${eCnt}艘`,'');
-  log('选中我方舰 → 光标停在敌舰上 → 中键短按 = 快速交战','');
-  if(typeof matchSync==='function')matchSync(); // MT1 顶栏「对局 / 回靶场」钮与结果卡片跟着当前场景走:三条换局路径(入口钮 / 场景菜单 / 编辑器)都经过这里   // RF5 文案跟拆改走:「右键敌舰=锁定/开火」(RF4b)与 Ctrl+右键锁定两支已拆,右键现在只管移动,旧文案会直接教错玩家(它就印在开局事件面板上)
+  if(typeof matchSync==='function')matchSync(); // MT1 顶栏「对局 / 回靶场」钮与结果卡片跟着当前场景走:换局路径(对局入口钮 / 结果卡片的两个钮)都经过这里
 }
 function initEnemy(){
   const env=curEnv();
@@ -91,5 +82,5 @@ function initEnemy(){
     else if(!d[7])s.orders.push({pos:[0,0,0],type:'stop'}); // 活目标:朝玩家推进
     ships.push(s);
   });
-  if(typeof applyRangeCfg==='function')applyRangeCfg(); // RANGE1 应用点唯一化:开局 / 场景菜单切换 / 编辑器"应用并战斗"三条路径都经过 initEnemy,不用各自补调用
+  if(typeof applyRangeCfg==='function')applyRangeCfg(); // RANGE1 应用点唯一化:开局 / 进出对局 都经过 initEnemy,不用各自补调用
 }

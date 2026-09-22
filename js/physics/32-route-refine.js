@@ -40,9 +40,8 @@ function rrSandbox(proto, orders, dt, budgetSteps, st) {
   /* 从状态 st 出发重放 orders,最多烧 budgetSteps 步。返回 {done,t,worst,endErr,ok,states,steps}。
      未跑完时 done=false,调用方下一帧带着返回的状态继续 —— 这就是"分帧摊开"的实现方式。 */
   const s = st.ship;
-  const saveShips = ships, saveLog = log;
+  const saveShips = ships;               // SL1:原来这里还把事件流的写入口换成空函数(沙盘里的"经过路径点"不该刷出去),事件系统删掉后没有可拦的了
   ships = [s];
-  log = function () { };                 // 沙盘里的"经过路径点"不该刷进事件流
   let steps = 0;
   try {
     while (steps < budgetSteps && st.steps < RR_MAX_STEPS) {
@@ -62,7 +61,7 @@ function rrSandbox(proto, orders, dt, budgetSteps, st) {
       if (!s.orders.length && (st.tail ? V.len(s.vel) < 1 : true)) { st.done = true; break; }
     }
     if (st.steps >= RR_MAX_STEPS) st.done = true;
-  } finally { ships = saveShips; log = saveLog; }
+  } finally { ships = saveShips; }
   return steps;
 }
 function rrSnap(s) {

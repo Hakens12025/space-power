@@ -53,10 +53,10 @@ function lodCluster(items, prevPairs) {
 function lodBuild(dtIn) {   // dtIn:判据用的时钟覆盖(同 camZoomStep);平时不传,走墙钟
   const L = { hideBlue: new Set(), hideRed: new Set(), aggs: [], live: false };
   const prev = lodPrev, next = { fleet: {}, pairsB: null, pairsR: null };
-  /* 不聚合的几种情况:编辑 / 回放 / GM —— 那几种模式要的就是"每一艘都看得见";
+  /* 不聚合的情况:GM —— 那种模式要的就是"每一艘都看得见";
      LOD.off 是给【判定】用的显式开关:有几条探针按像素亮度量别的东西(跟随连线、站位图),
      聚合会把它们的采样场景收成一个框,于是被测代码一行没动、判据却红了。 */
-  if (LOD.off || editMode || replay.active || adminMode) { lodPrev = next; lodNow = L; return; }
+  if (LOD.off || adminMode) { lodPrev = next; lodNow = L; return; }
   /* -- 蓝方:舰 → 舰队(按引擎的编队归属;没编队的自成一支) -- */
   const fleets = new Map();
   for (const s of ships) {

@@ -15,15 +15,14 @@
    ⑤ 命中测试每帧重跑,而不是只在 mousemove 里判:敌舰在动、相机也会被 WASD/右键拖动平移,鼠标静止不动时
       世界会从光标底下滑走 —— 只靠 mousemove 喂命中会留下一个陈旧的 snap。mousemove 只负责更新 xh.pt。
    本阶段拆掉的旧交互(全在 70-input,只拆入口不删旧路径):
-   · 中键拖动平移(编辑器分支 + 常规分支两处)—— 平移职能交给右键拖动 + WASD,中键腾出来给交战。
-     编辑器那一支必须留一个仍然 return 的空壳,否则编辑器里按中键会掉穿到常规分支触发快速交战。
+   · 中键拖动平移 —— 平移职能交给右键拖动 + WASD,中键腾出来给交战。
    · RF4b「右键点敌舰=锁定」与旧「Ctrl+右键=锁定」—— 同一套旧目标模型(直写 lockedTarget+driftFire),
      与火控序列抢同一个字段。右键点空地/友舰=移动、Shift+右键=路径点两条保留。
    · T/R/X/Ctrl+T/全弹发射等旧路径【一行未动】(与 RF2 处理旧界面同做法:只藏不删),它们仍能用。
    留给 Phase C 的骨架:70-input 里中键按下记 mmb={t,sx,sy},抬起时按 MMB_HOLD_MS 分岔 —— 短按已接快速交战,
    长按(>=350ms)现在什么都不做,目标轮盘从那个 else 分支长出来即可。
    与渲染侧的接口(#xhTip 的 DOM 与 CSS、canvas 上的准星/吸附圈/预览线都由渲染侧负责,本文件不碰):
-   · xh.pt   —— 光标屏幕坐标 [sx,sy];编辑器/测距下写成 [-1,-1](83-hud 的 drawTargeting 用 pt<=0 判"鼠标没进过画面",借这条已有约定收准星)
+   · xh.pt   —— 光标屏幕坐标 [sx,sy];测距下写成 [-1,-1](83-hud 的 drawTargeting 用 pt<=0 判"鼠标没进过画面",借这条已有约定收准星)
    · xh.snap —— 已吸附的敌舰对象或 null;xh.dwellT —— 当前候选已停留秒数
    · #xhTip 的内容由本文件写:.nm 标题(未识别时加 .unk)+ 若干 <div><span class="k">键</span><span class="v">值</span></div>,
      类名对齐 css/app.css 的 #xhTip 节(.nm/.k/.v/.unk),显隐沿用行内 style.display(同 updSelWeaponTip) */
@@ -47,21 +46,20 @@ function xhSubject(){ // RF5 主体舰 = 选中蓝舰集的第一艘(与 88-selp
   const a=selBlue();
   return (a&&a.length)?a[0]:null;
 }
-function xhReset(){ // RF5 清准星:进出编辑器/测距、失去主体舰时调 —— 不清会留着上一帧的陈旧吸附,切回来时凭空吸着一艘船
+function xhReset(){ // RF5 清准星:进出测距、失去主体舰时调 —— 不清会留着上一帧的陈旧吸附,切回来时凭空吸着一艘船
   xh.snap=null;xh.cand=null;xh.dwellT=0;
   xhCardHide();
 }
-function xhOff(){ // RF5 准星整体收起(编辑器/测距):除了清吸附,还要把 pt 挪出屏幕
-  // 渲染侧 83-hud 的 drawTargeting 只按 pt<=0 判"鼠标没进过画面",不认 editMode/rangeMode。不挪 pt 的话,
-  // 进编辑器/测距后 pt 停在最后一次有效位置,屏幕上会冻着一个不跟鼠标走的十字。借它已有的这条约定收准星,免得 83 再加一道判断。
+function xhOff(){ // RF5 准星整体收起(测距):除了清吸附,还要把 pt 挪出屏幕
+  // 渲染侧 83-hud 的 drawTargeting 只按 pt<=0 判"鼠标没进过画面",不认 rangeMode。不挪 pt 的话,
+  // 进测距后 pt 停在最后一次有效位置,屏幕上会冻着一个不跟鼠标走的十字。借它已有的这条约定收准星,免得 83 再加一道判断。
   xh.pt[0]=-1;xh.pt[1]=-1;xh.act=false;
   xhReset();
 }
 function xhFeed(sx,sy){ // RF5 鼠标位置喂入:由 70-input 那个【唯一】的 window mousemove 监听调用,不另开监听
-  // editMode 本身没有无条件早退(70-input 的三支编辑器分支都要求正在拖某样东西),编辑器打开但没拖东西时会一路穿到这里,
-  // 所以守卫必须写在函数内第一行,而不是靠插入点位置。rangeMode 顺手带上:从测距切回来时不留陈旧 snap。
-  if((typeof editMode!=='undefined'&&editMode)||(typeof rangeMode!=='undefined'&&rangeMode)){xhOff();return;}
-  if(Math.abs(sx-xh.pt[0])+Math.abs(sy-xh.pt[1])>XH_JUMP){xh.dwellT=0;xh.cand=null;} // 大跳跃(甩鼠标/刚从编辑器回来):停留计时重来
+  // 守卫写在函数内第一行,不靠插入点位置:从测距切回来时不留陈旧 snap。
+  if(typeof rangeMode!=='undefined'&&rangeMode){xhOff();return;}
+  if(Math.abs(sx-xh.pt[0])+Math.abs(sy-xh.pt[1])>XH_JUMP){xh.dwellT=0;xh.cand=null;} // 大跳跃(甩鼠标/切窗回来):停留计时重来
   xh.pt[0]=sx;xh.pt[1]=sy;xh.act=true;
 }
 function fcEditFollowSel(sub){ // RF7b 序列态是【瞬时 UI 模式】,不是舰船的持久属性:非当前主体舰一律清掉编辑上下文。
@@ -83,7 +81,7 @@ function xhTick(dt){ // RF5 准星每帧状态机:命中测试 → 停留累加 
   xh._t=now;
   radTick(); // RF5 Phase C 目标轮盘的每帧维护搭 xhTick 的车:全库只能有 frame() 一条 rAF,而 frame() 已经每帧调 xhTick 了 —— 挂这里就不必再改 core/99-main,也天然排在 render() 之前(89 的 drawRadial 读的是本帧刚算好的 rad)
   if(typeof ships==='undefined'||typeof targetAt!=='function')return; // 加载期保护(74 早于 render/80 加载)
-  if((typeof editMode!=='undefined'&&editMode)||(typeof rangeMode!=='undefined'&&rangeMode)){xhOff();return;} // 模式可以被键盘/按钮切换,不只在 mousemove 里变,所以这道守卫两边都要
+  if(typeof rangeMode!=='undefined'&&rangeMode){xhOff();return;} // 模式可以被键盘切换,不只在 mousemove 里变,所以这道守卫两边都要
   const sub=xhSubject();
   fcEditFollowSel(sub); // RF7b 序列态跟随选中(必须排在下面那条早退【之前】:没选中任何舰时 sub=null,那才是最该全清的一种情况)
   if(!sub||!xh.act){xhReset();return;} // 只在存在主体舰时激活(pt 不动:鼠标还在画面上,回头选中一艘舰准星就该立刻回来)
@@ -97,7 +95,7 @@ function xhTick(dt){ // RF5 准星每帧状态机:命中测试 → 停留累加 
   if(rad.open)xhCardHide(); // RF5 Phase C 轮盘开着时收起 #xhTip:长按开盘那一瞬光标必然停在目标身上,而目标正是轮盘圆心(radOpen 拿 toScreen(t.pos) 当 anchor),卡片钉在光标+16px 就必然糊进盘面右下象限,盖住 hub 读数井与右下扇区(八武器时整整盖住一瓣)。卡片上的目标名/方位/结构,hub 与扇区读数都有,收起不丢信息
   else if(xh.snap)xhCard(sub);else xhCardHide();
 }
-function xhName(s){ // RF5 可外传的目标名:未达识别级的敌舰不吐真名(日志与卡片同一口径,免得卡片打码日志泄底)
+function xhName(s){ // RF5 可外传的目标名:未达识别级的敌舰不吐真名(卡片 / 轮盘 / 缩圈小窗同一口径,免得一处打码另一处泄底)
   const gm=(typeof adminMode!=='undefined'&&adminMode);
   return (!gm&&s.side==='red'&&!contactIdn(s,'blue'))?'未知接触':s.name; // ID1:原判据 litBlue<2;身份问 contactIdn
 }
@@ -152,32 +150,25 @@ function xhQuickEngage(append){ // RF5 中键短按 = 快速交战:主体舰 + �
   // Shift+中键点 T1 建序列并进入序列态(地图亮数据链),再 Shift+中键点 T2、T3 依次入链。改前短按压根不看 Shift,
   // 按住 Shift 点第二个目标照样走 fcNew 新建 —— 玩家要的追加从来没触发过,这正是"Shift 选择没做好"的根因。
   const sub=xhSubject();
-  if(!sub){if(typeof log==='function')log('快速交战:先选中一艘蓝舰(准星以它为主体舰)','warn');return false;}
+  if(!sub)return false;
   const t=xh.snap;
-  if(!t||t.dead){if(typeof log==='function')log('快速交战:准星未吸附敌舰(把光标停在敌舰上 0.25s)','warn');return false;}
+  if(!t||t.dead)return false;
   if(typeof fcNew!=='function')return false;
   if(append){
     const q0=(typeof fcSeq==='function')?fcSeq(sub.fcEditId):null;
     const cur=(q0&&q0.shipId===sub.id)?q0:null; // 编辑上下文可能指向别舰/已删序列(与 radOpen 同一道防线)
     if(cur&&(cur.targets||[]).some(x=>x.tid&&String(x.tid)===String(t.id))){ // 去重:已在链里,再按只是确认,不重复入队
-      if(typeof log==='function')log(`🔗 ${xhName(t)} 已在 ${cur.name} 中(第${cur.targets.findIndex(x=>String(x.tid)===String(t.id))+1}位)`,'');
       if(typeof updateSelPanel==='function')updateSelPanel();
       return true;
     }
     const sid=(typeof fcAppend==='function')?fcAppend(sub,{tid:t.id}):null; // 无编辑序列时 fcAppend 内部等价 fcNew
-    if(sid==null)return false; // RF7 fcNew 触顶(上限 FC_MAX_SEQS)返回 null,58 已打过警告日志
-    const q=(typeof fcSeq==='function')?fcSeq(sid):null;
-    if(typeof log==='function')log(`🔗 ${sub.name} ${q?q.name:'序列'} 追加目标 → ${xhName(t)}(第${q?q.targets.length:'?'}位,地图数据链已连)`,'');
+    if(sid==null)return false; // RF7 fcNew 触顶(上限 FC_MAX_SEQS)返回 null
     if(typeof updateSelPanel==='function')updateSelPanel();
     return true;
   }
-  if(fcNew(sub,{tid:t.id})==null)return false; // 建序列会顺带暂停该舰任务并打开火控(58-firecontrol 的两个副作用),这是预期行为;RF7 触顶返回 null
-  // RF5 按接触等级追加提示:targetAt 的吸附门槛只要求 litBlue>=1,而 fcGate(58)对导弹要 >=2、主炮要 >=3。
-  // 只到探测级就建序列 = 一发不响,玩家却付出了"任务被暂停 + ROE 被改成自由开火"的代价,不说一句等于静默失效
-  // (被拆掉的旧右键锁定分支在同一情况下会明确警告"未被探测到,无法锁定")。不阻止建序列 —— 等级上来后这条序列本来就该自动开火。
-  const lit=(t.side==='red')?(t.litBlue||0):3;
-  const hint=(lit<2)?'(当前接触等级不足识别级,导弹暂不齐射)':((lit<3)?'(主炮需火控级,当前只有导弹可用)':'');
-  if(typeof log==='function')log(`🎯 ${sub.name} 快速交战 → ${xhName(t)}(火控序列已建,右栏可编辑)${hint}`,'');
+  if(fcNew(sub,{tid:t.id})==null)return false; // 建序列会顺带打开火控(58-firecontrol 的副作用),这是预期行为;RF7 触顶返回 null
+  // RF5:targetAt 的吸附门槛只要求 litBlue>=1,而 fcGate(58)对导弹要 >=2、主炮要 >=3。只到探测级就建序列 = 暂时一发不响;
+  // 不阻止建序列 —— 等级上来后这条序列本来就该自动开火。(原来这里按等级打一条提示,2026-09-22 随日志系统整体删除。)
   if(typeof updateSelPanel==='function')updateSelPanel(); // 立刻刷右栏火控面板,不等 frame 的 20 帧低频刷新
   return true;
 }
@@ -228,19 +219,19 @@ function radRing(k){ // RF5 hover 武器扇区 → 复用 83-hud drawHoverRings 
   if(rad._ring&&hoverRing===rad._ring)hoverRing=null; // 只收自己设的那一份:底栏武器钮的 hover 圈(88-selpanel:282)写的是同一个全局,抢了就会互相闪
   rad._ring=null;
 }
-function radClose(){ // RF5 关轮盘(短按中键 / Esc / 目标或序列失效 / 进编辑器测距)
+function radClose(){ // RF5 关轮盘(短按中键 / Esc / 目标或序列失效 / 进测距)
   radRing(null);
   rad.open=false;rad.tid=null;rad.seqId=null;rad.tgtIdx=-1;
   rad.items=[];rad.split=false;rad.mode=null;rad.seqName='';rad.page=0;
   rad.hover.side=null;rad.hover.idx=-1;
 }
 function radOpen(sx,sy,shift){ // RF5 中键长按 = 开目标轮盘。三种上下文在【开的这一瞬间】就提交 fc*,误触也不丢进度(序列立刻出现在右栏火控计算机里)
-  if((typeof editMode!=='undefined'&&editMode)||(typeof rangeMode!=='undefined'&&rangeMode))return false; // 与 70-input 定时器里那道早退同口径:编辑器/测距下中键无语义
+  if(typeof rangeMode!=='undefined'&&rangeMode)return false; // 与 70-input 定时器里那道早退同口径:测距下中键无语义
   const sub=xhSubject();
-  if(!sub){if(typeof log==='function')log('目标轮盘:先选中一艘蓝舰(准星以它为主体舰)','warn');return false;}
+  if(!sub)return false;
   const t=xh.snap;
-  // 定时器跨了 350ms,这中间目标可能已死/已失去接触(xhTick 每帧会清 snap)。判不过就只打一条 warn,什么都不提交
-  if(!t||t.dead){if(typeof log==='function')log('目标轮盘:准星未吸附敌舰(把光标停在敌舰上 0.25s 再长按)','warn');return false;}
+  // 定时器跨了 350ms,这中间目标可能已死/已失去接触(xhTick 每帧会清 snap)。判不过就什么都不提交
+  if(!t||t.dead)return false;
   if(typeof fcSeq!=='function'||typeof fcNew!=='function')return false; // 沿用本库 typeof 守卫口径(58 缺席时本文件仍不崩)
   const q0=fcSeq(sub.fcEditId);                        // fcEditId 为 null 时 fcSeq 遍历一圈返回 null(id 由 ++fcSeqSeq 从 1 起,撞不上 null),安全
   const cur=(q0&&q0.shipId===sub.id)?q0:null;          // 与 fcAppend 同一道防线:编辑上下文可能指向别舰或已删的序列
@@ -250,7 +241,7 @@ function radOpen(sx,sy,shift){ // RF5 中键长按 = 开目标轮盘。三种上
   else if(shift&&cur&&typeof fcAppend==='function'){                    // ② Shift + 不在序列 → 追加进当前编辑序列
     seqId=fcAppend(sub,{tid:t.id});
     const qa=fcSeq(seqId);tgtIdx=qa?qa.targets.length-1:-1;ctx='append'; // 追加项恒在末尾
-  }else{seqId=fcNew(sub,{tid:t.id});tgtIdx=0;ctx='new';}                 // ③ 无 Shift(或压根没有有效编辑上下文)→ 新建下一条序列。fcNew 自带两个副作用(暂停该舰任务 / 强开 autoEngage+roe='free'),任务书确认为预期 —— 所以三种上下文的日志刻意分开写,误触长按不能静默改掉玩家的任务与 ROE
+  }else{seqId=fcNew(sub,{tid:t.id});tgtIdx=0;ctx='new';}                 // ③ 无 Shift(或压根没有有效编辑上下文)→ 新建下一条序列。fcNew 自带副作用(强开 autoEngage+roe='free'),任务书确认为预期
   const q=fcSeq(seqId);
   if(!q||tgtIdx<0||!q.targets[tgtIdx])return false;
   const p=(typeof toScreen==='function')?toScreen(t.pos[0],t.pos[1]):[sx,sy]; // 锚定:开启瞬间目标的屏幕位置,钉住不动(引线由 89 每帧连到目标当前位置)。这是 74 唯一一次自己碰坐标,再没有第二处
@@ -261,34 +252,22 @@ function radOpen(sx,sy,shift){ // RF5 中键长按 = 开目标轮盘。三种上
   rad.seqName=q.name||'';
   rad.page=0;rad.hover.side=null;rad.hover.idx=-1;
   rad.items=radItems(sub,t,q.targets[tgtIdx]);
-  const nm=(typeof xhName==='function')?xhName(t):t.name;
-  if(rad.items.length<=1){ // 单个武器项(CV 只有导弹)不画环:一瓣的圆盘没有意义 —— 直接切该武器许可 + 一条日志,轮盘不开
-    let msg='';
-    if(rad.items.length===1){
+  if(rad.items.length<=1){ // 单个武器项(CV 只有导弹)不画环:一瓣的圆盘没有意义 —— 直接切该武器许可,轮盘不开
+    if(rad.items.length===1&&ctx==='edit'){ // RF5 取反【只在编辑上下文】做。新建/追加那一瞬 fcTgtItem 刚把 allow 建成全许可,紧接着取反等于把刚下的命令当场撤销:fcGate:133 的 !it.allow[kind] 让这条序列恒返回 null,而 fcNew 的副作用(强开 autoEngage+roe='free')已经落地,57:16 的 if(fcActive(s))continue 又让这艘舰整段让出自动索敌 —— 单武器的 CV 从此一发不发。任务书要"误触也不丢进度",丢的不能是序列的全部效力。新建/追加:保留刚提交的缺省许可(要禁止就再长按一次,那时才是编辑上下文)
       const k=rad.items[0].kind;
-      if(ctx==='edit'){ // RF5 取反【只在编辑上下文】做。新建/追加那一瞬 fcTgtItem 刚把 allow 建成全许可,紧接着取反等于把刚下的命令当场撤销:fcGate:133 的 !it.allow[kind] 让这条序列恒返回 null,而 fcNew 的两个副作用(暂停任务/强开 autoEngage+roe='free')已经落地,57:16 的 if(fcActive(s))continue 又让这艘舰整段让出自动索敌 —— 单武器的 CV 从此一发不发。任务书要"误触也不丢进度",丢的不能是序列的全部效力
-        const on=!(!q.targets[tgtIdx].allow||q.targets[tgtIdx].allow[k]!==false);
-        if(typeof fcSetAllow==='function')fcSetAllow(q.id,tgtIdx,k,on);
-        msg=`${rad.items[0].label} ${on?'许可':'禁止'}`;
-      }else msg=`已${ctx==='append'?'追加进':'新建'} ${q.name} · ${rad.items[0].label}许可`; // 新建/追加:保留刚提交的缺省许可,只报事实(要禁止就再长按一次,那时才是编辑上下文)
-    }else msg='该舰没有可分配的攻击武器';
-    const one=rad.items.length===1;
+      const on=!(!q.targets[tgtIdx].allow||q.targets[tgtIdx].allow[k]!==false);
+      if(typeof fcSetAllow==='function')fcSetAllow(q.id,tgtIdx,k,on);
+    }
     radClose();
-    if(typeof log==='function')log(`🎯 ${sub.name} → ${nm}:${msg}(仅一件武器,不开轮盘)`,one?'':'warn');
     if(typeof updateSelPanel==='function')updateSelPanel();
     return false;
-  }
-  if(typeof log==='function'){
-    if(ctx==='new')log(`🎯 ${sub.name} 目标轮盘 → ${nm}(新建 ${q.name}:任务已暂停·火控已开)`,'');
-    else if(ctx==='append')log(`🎯 ${sub.name} 目标轮盘 → ${nm}(追加进 ${q.name} 第${tgtIdx+1}项)`,'');
-    else log(`🎯 ${sub.name} 目标轮盘 → ${nm}(编辑 ${q.name} 第${tgtIdx+1}项)`,'');
   }
   if(typeof updateSelPanel==='function')updateSelPanel(); // 立刻刷右栏火控面板,不等 frame 的 20 帧拍子(抄 xhQuickEngage 的做法)
   return true;
 }
 function radTick(){ // RF5 轮盘每帧维护:序列/目标失效自关 → 按 tid 复解算下标 → 重算 items → 更新 hover 与射程圈
   if(!rad.open)return;
-  if((typeof editMode!=='undefined'&&editMode)||(typeof rangeMode!=='undefined'&&rangeMode)){radClose();return;}
+  if(typeof rangeMode!=='undefined'&&rangeMode){radClose();return;}
   if(typeof fcSeq!=='function'||typeof fcShip!=='function'){radClose();return;}
   const q=fcSeq(rad.seqId);
   if(!q){radClose();return;}                       // 序列被删,或被 58 的清理段整条撤掉
@@ -316,7 +295,6 @@ function radPick(h){ // RF5 左键点扇区:右半=切该武器对该目标的�
     const m=RAD_MODES[h.idx];
     if(!m||!rad.split||typeof fcSetMode!=='function')return false; // 不分环时压根没有左半,拒掉
     fcSetMode(rad.seqId,m.id);rad.mode=m.id;
-    if(typeof log==='function')log(`🎯 ${rad.seqName} 行动模式 → ${m.label}${m.id==='rr'?'(打一次换一个·散布)':'(打死才换·集火)'}`,'');
   }else{
     const it=rad.items[h.idx];
     if(!it||typeof fcSetAllow!=='function'||typeof fcSeq!=='function')return false;
@@ -326,8 +304,6 @@ function radPick(h){ // RF5 左键点扇区:右半=切该武器对该目标的�
     const on=!(!tg.allow||tg.allow[it.kind]!==false); // 取反口径抄 88-selpanel:313 —— allow 缺省 undefined 语义为真,别写成 !tg.allow[k]
     fcSetAllow(rad.seqId,rad.tgtIdx,it.kind,on);
     it.allow=on; // 就地回显,不等下一帧 radTick 重算(点下去要立刻看见)
-    const tt=(typeof fcShip==='function')?fcShip(rad.tid):null;
-    if(typeof log==='function')log(`🎯 ${rad.seqName} → ${tt?((typeof xhName==='function')?xhName(tt):tt.name):'目标'}:${it.label} ${on?'许可':'禁止'}`,'');
   }
   if(typeof updateSelPanel==='function')updateSelPanel();
   return true;

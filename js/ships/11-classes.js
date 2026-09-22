@@ -3,7 +3,7 @@
 let shipSeq=0;
 // TIER1 删除死表 CLS_SHAPE(旧几何代号 blk/tri/trl):已被 10a/10b 的 HULL 轮廓系统完全取代,全库零读取点
 const CLS_NAME={DD:'巴黎级驱逐舰 (Paris)',CA:'马拉松级巡洋舰 (Marathon)',BB:'战列舰 (BB)',CV:'航母 (CV)'}; // TIER1 4 舰种级名;BB/CV 是临时文案 TODO(NAME) 待定级名(会直接显示在 info 面板与编辑器菜单上)
-const CLS_ALIAS={CRUISER:'CA',FRIGATE:'DD',SCOUT:'DD'}; // TIER1 旧舰种名别名:全库唯一保留旧名的地方,只服务 localStorage 的 sp_custom_scene 与旧导出场景(SCOUT 按拍板折进 DD)
+const CLS_ALIAS={CRUISER:'CA',FRIGATE:'DD',SCOUT:'DD'}; // TIER1 旧舰种名别名:全库唯一保留旧名的地方,只服务旧存档与旧导出场景(SCOUT 按拍板折进 DD)
 function normCls(c){return CLS_ALIAS[c]||(CLS_MOB[c]?c:'DD');} // TIER1 舰种归一化:只在 makeShip 运行期调用,不在顶层求值,故不受同文件里 CLS_MOB 定义靠后的影响
 const CLS_MOB={ // 舰种差异化机动:转向率 / 推进加速度(太空无速度上限,持续加速) v119:drift参数已随旧内核删除
   DD:{turnRate:0.26,thrust:20,speedGears:[0,250,500,800,-1]}, // TIER1 原 FRIGATE 巴黎级:均衡(基准档),数值原样搬;SCOUT 折进 DD,其 0.4/25/[0,300,600,1000] 一并退役
@@ -28,7 +28,6 @@ CLS_STRUCT.CV={...CLS_STRUCT.CA};                                          // TO
    形状:base 表(按舰种,上面那五张)× tier 乘数层(按分级,可按舰种覆盖)→ shipStats(cls,tier) → makeShip 一次性烘焙到实例。
    平衡阶段只编辑这一段连续区域:改 TIER_MUL / CLS_TIER_MUL 两个对象即可,任何调用点都不用碰。
    载入顺序红线:本区块顶层禁止引用 10a-ship-hulls.js 的 TIER_SCALE / TIER_ORDER / HULL_LABEL——index.html 里 10a(:172)排在 03(:165)之后,顶层引用会 ReferenceError;所以 tier 键 1/2/3 在这里自己写死。 */
-const TIER_BALANCED=false; // TIER1 数值是否已平衡:false=T1/T2/T3 目前只有图标尺寸与亮度差异。数值填完把这一个 const 翻 true,UI 的 ⚠ 提示(P3 接)随之消失
 const TIER_LABEL={1:'T1',2:'T2',3:'T3'}; // TIER1 分级短名。与 10a 的 TIER_SCALE/TIER_LIGHT 同键但不引用它(见上面的载入顺序说明)
 const TIER_FIELD={ // TIER1 字段 → applyTier 策略表。缺省是 'mul'(直乘),所以这里只列非 'mul' 的字段
   ammo:'int', cells:'int', inter:'int', guideChan:'int', beacon:'int', value:'int', // 整数量:乘完四舍五入、下限 1;但原值 ≤0 视为结构性零(如 CA/BB/CV 的 beacon:0)原样保留,绝不被抬成 1
@@ -52,7 +51,7 @@ const TIER_MUL={ // TIER1 全局分级乘数。空对象 = 该分级所有字段
 };
 const CLS_TIER_MUL={}; // TIER1 逃生舱:某个舰种的分级曲线与全局不同时才写,形如 BB:{3:{hp:1.6}};优先级高于 TIER_MUL TODO(TIER-BAL) 空着=四舰种共用同一条曲线
 /* ==== TIER-BAL:END ==== */
-/* ===== TIER1 tier 解析器三件套(纯函数,只在运行期被 makeShip / applyClsTier 调用,不在任何文件顶层求值) ===== */
+/* ===== TIER1 tier 解析器三件套(纯函数,只在运行期被 makeShip 调用,不在任何文件顶层求值) ===== */
 const STATS_CACHE=new Map(); // TIER1 shipStats 结果缓存,键 'cls|tier'。永久缓存、没有失效钩子:表全是源码里的静态字面量,改完刷新页面即生效;但在控制台运行期改 TIER_MUL 不会被看见,要手动 STATS_CACHE.clear()
 function tierMul(cls,tier,key){ // TIER1 取"某舰种某分级某字段"的乘数:CLS_TIER_MUL 优先 → TIER_MUL → 1
   const ct=CLS_TIER_MUL[cls]&&CLS_TIER_MUL[cls][tier];
@@ -128,7 +127,6 @@ function makeShip(cls,name,pos,facing,vel,side,tier){ // TIER1 加第 7 参 tier
     size:sReq(st,'size','shipStats'), stealth:sReq(st,'stealth','shipStats'), // SN4 被看方:size=光学红外底数 + 雷达反射基数;stealth=(0,1] 反射倍率,只乘雷达回波、不乘红外(外形骗得了雷达,骗不了热辐射)。走 sReq 而不是直读 st.x:这四个是每 tick × 每对舰热路径的输入,缺一格就是整条感知链静默算错而不是报错
     emit:sReq(st,'emit','shipStats'), recv:sReq(st,'recv','shipStats'), // SN4 探测方:emit=发射机(照射量程 ∝ 四次方根,被对方听见的距离 ∝ 平方根——手电效应就出在这两条指数不同上),recv=接收机(静听量程 ∝ 平方根,照射量程 ∝ 四次方根)
     emitMode:'silent', // SN4 发射档三态(静默/照射/干扰)。全库【只有这一处】写档位字面量初值,其余写入一律走 sensors/21 的 setEmit——它是唯一写入口、非法档位当场抛,不给"拼错一个字母悄悄变静默"留缝
-    paintWarned:false, // SN4 被照射告警的上升沿标志:原来是 sensors/21 里凭空懒建的字段(实例形状随运行期分支变),顺手在这里声明出来
     ecmPower:sReq(st,'ecmPower','shipStats'), // SN4 干扰强度不再配一个开关布尔:它是 jam 档的强度(每拍削弱对方的照射驻留,只削回波、不削红外)。sReq 只拒 undefined,合法 0(不带干扰机)照常穿过
     litBlue:0,litRed:0, // 阵营点亮质量等级(0未发现/1探测/2跟踪/3火控)。SN6 起它是接触椭圆的派生量,派生在 21-detect。SN3 这一行上原来还挂着两个阵营探测积分字段,全库零读取零写入、只有这一行声明,已删(名字不写进注释:verdict 段有条源码级负对照按名字 grep 守着,写进来会让它恒红——FM6b 的规矩);真正的驻留积分是下一行的 两个阵营接触对象
     covB:newCov(),covR:newCov(), // SN6 误差椭圆接触:蓝/红网络各一份(covB = 蓝网络【对这艘船】握着的那条接触)。工厂 newCov() 在 sensors/23-cov,是全库唯一一处写这些键的字面量。取代 SN4 驻留积分:蓝/红网络各一份,工厂 newCov() 在 sensors/23-cov,是全库【唯一】一处写这三个键的字面量(原来是三份手抄:这里两份 + detectFor 补建那份)。opt=光学 / lis=雷达静听 / act=雷达照射——lis 与 act 是【同一部设备的两种模式】,不是两条通道,别读成"又变回三通道了";运行期调用,不受 22-percep 的加载顺序影响
