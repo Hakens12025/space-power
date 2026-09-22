@@ -409,6 +409,7 @@ grep -q "FLOW85_WEAPONS=ok" "$OUT" || { echo "✗ FLOW85_WEAPONS 未通过(WR1 �
 ! grep -rnw --include='*.js' -E 'macRange|macRadar|mslRange|MAC_FALLOFF' js/ >/dev/null || { echo "✗ WR1 旧的射程字段 / 常量又出现在 js/ 里(macRange / macRadar / mslRange / MAC_FALLOFF):射程没有门,多远打得中由散布现算"; fail=1; }
 grep -q "FLOW84_EMITFX=ok" "$OUT" || { echo "✗ FLOW84_EMITFX 未通过(EM1 开雷达后的表现:发射机开着的船画向外扩散的涟漪(照射蓝 / 干扰橙 / 静默无),敌方接触只在我方听见时画;B:选中蓝舰不再画雷达量程大圈,悬停发射档钮才画照射量程 + 被听见两圈)"; fail=1; }
 grep -q "FLOW83_RWR=ok" "$OUT" || { echo "✗ FLOW83_RWR 未通过(RWR1 被照射告警:朝照射源方位的一段不闭合的橙色弧,不是闭合黄圈;只带方位不带距离;没被照射 / 照射源已沉就不画;与选中圈没有一项相同)"; fail=1; }
+grep -q "FLOW87_BOT=ok" "$OUT" || { echo "✗ FLOW87_BOT 未通过(BOT1 红方条令层:不冲进对方主炮带、交战态一直在动;集火同一个目标;一盏灯并轮换;齐射是决定不是骰子;挨打就撤、弹尽拼命;埋伏有时限;不偷看没认出的接触)"; fail=1; }
 grep -q "FLOW86_IDN3=ok" "$OUT" || { echo "✗ FLOW86_IDN3 未通过(ID3 认出重定:照射认出(NCTR)给轮廓与来路 act、认出距离之外仍是 UNK;四舰种逐对 光学<照射<静听;照射认出必须远于导弹动力射程与主炮过半把握距离 —— 别打完了还是热源;开雷达时认出与定位几乎同时发生)"; fail=1; }
 grep -q "FLOW82_ESMID=ok" "$OUT" || { echo "✗ FLOW82_ESMID 未通过(ID3 听出型号:静听量测的身份位有距离门 —— 听出型号以内认得出(来路 lis、但只有方位所以仍是热区)、以外认不出;反向对照:静默的船根本没有 lis 量测)"; fail=1; }
 grep -q "FLOW81_REVBURN=ok" "$OUT" || { echo "✗ FLOW81_REVBURN 未通过(RV1 反推的暴露等级高于主推:四档亮度 熄火 / 侧推 / 主推 / 反推,反推必须最亮;刹车令真的跑出反推档;主推看不见、反推看得见的距离上一反推就被看见;右栏读数写得出「反推」)"; fail=1; }

@@ -45,10 +45,11 @@ function macHitProb(s,d){ // 主炮在距离 d 上对标准命中判定半径的
   const sig=sReq(s,'macSigma'); if(!(sig>0)||!(d>0))return sig>0?1:0;
   return erfApprox(MAC_HIT_R/(sig*d*Math.SQRT2));
 }
-function macRangeAt(s,p){ // 命中率恰为 p 的距离;p 只支持 _Z 里的四档
-  const z=_Z[p]; if(!z)throw new Error('macRangeAt: p 只支持 0.9/0.5/0.3/0.1');
-  const sig=sReq(s,'macSigma'); return sig>0?MAC_HIT_R/(sig*z):0;
+function macRangeSig(sig,p){ // BOT1:按【给定的散布】反算命中率恰为 p 的距离。红方条令要问「对方那一型打我打得多准」,手里只有舰种不是实例
+  const z=_Z[p]; if(!z)throw new Error('macRangeSig: p 只支持 0.9/0.5/0.3/0.1');
+  return sig>0?MAC_HIT_R/(sig*z):0;
 }
+function macRangeAt(s,p){return macRangeSig(sReq(s,'macSigma'),p);} // 命中率恰为 p 的距离;p 只支持 _Z 里的四档
 function macEffRange(s){return macRangeAt(s,0.5);} // 有效射程 = 命中率 50% 的距离。调用点一律调它,绝不在别处重拼
 function mslReach(s){return MSL_ACC*(MSL_FUEL/2)*(MSL_FUEL/2);} // 动力射程:加速 fuel/2 秒再减速 fuel/2 秒 = 2 x 0.5 a t² = 375,000km(与旧的 35 万发射门几乎相同 —— 旧数就是这么来的)
 function fireMAC(shooter,target){ // MAC轴炮:沿船头方向直射(必须先对准),到预测时间失的

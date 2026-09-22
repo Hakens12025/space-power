@@ -115,6 +115,8 @@ RANGE_SLOTS
 RANGE_V1_JAM
 RANGE_V1_PAINT
 RATES
+RDOC
+RDOC_CFG
 ROUTE_LOOKAHEAD
 ROUTE_MARGIN
 ROUTE_MARGIN_MAXFRAC
@@ -162,6 +164,7 @@ XH_DWELL
 XH_JUMP
 ZOOM_TAU
 _Z
+_botWorstSig
 _gs
 _ink
 _mod
@@ -173,6 +176,7 @@ actAccOf
 actRangeOf
 addWaypoint
 adminMode
+aiDoctrine
 aiObjective
 aiRedBelief
 aiRedReset
@@ -184,6 +188,19 @@ applyRangeOne
 applyTier
 bindCmdBar
 bindings
+botCenter
+botContacts
+botFleet
+botFocus
+botFoeGunR
+botFoeSigma
+botFoeValue
+botGunShip
+botLamp
+botNeedPaint
+botRadius
+botTransit
+botWorstSigma
 brakeCurveSpd
 cam
 camAnimStep
@@ -509,6 +526,7 @@ macEffRange
 macHitProb
 macPred
 macRangeAt
+macRangeSig
 makeShip
 matchEnter
 matchExit

@@ -6,7 +6,9 @@
      ② 只有热区(纯方位):同一方位上的蓝舰摆近 / 摆远,目标点逐位相同、离红方重心恰为 LEAD;反向对照:换个方位目标点必须变
      ③ 有定位:接触的估计位置刻意偏开真值,目标点 = 估计位置
      ④ 接触丢了:先去最后已知位置,MEM_S 秒后回到搜索
-     ⑤ 三舰沿前进方向的横向拉开 SPREAD,重心落在目标点上
+     ⑤ 三舰沿前进方向的横向拉开 SPREAD,重心落在目标点上。**BOT1 起只在非交战态成立**(尾随 / 搜索 / 记忆):
+        那正是它要解决的事 —— 纯方位接触靠基线交叉定位,挤成一团永远定不出位置。
+        有了定位之后红方进交战态、改成绕着接触的估计位置走轨道(基线更大),那一半归 FLOW87_BOT 管
      ⑥ 看不见的来袭主炮不触发规避,看得见才触发 */
 t('FLOW71_AIFOG',function(){
   if(typeof aiRedBelief!=='function'||typeof AIR==='undefined')return 'fail AI1 未加载(缺 aiRedBelief / AIR)';
@@ -45,13 +47,14 @@ t('FLOW71_AIFOG',function(){
     setup(-700000,-700000,'none');enemyAI(1);var g4=AIR.goal.slice(),s4=AIR.src;
     for(i=0;i<AIR.MEM_S+2;i++)enemyAI(1);var s4b=AIR.src;
     var ok4=(s4==='mem'&&same(g4,[80000,50000])&&s4b==='search');
-    /* ⑤ 横向站位 */
-    setup(0,0,'fix',0,0);aiRedReset();enemyAI(0.02);
+    /* ⑤ 横向站位:用【只有方位】的局面(BOT1 的尾随态),那才是这条站位规则服务的场合 */
+    setup(rc[0]+ux*300000,rc[1]+uy*300000,'heat');aiRedReset();enemyAI(0.02);
     var P=R.map(function(e){return e.orders[0]?e.orders[0].pos:null;}),okP=P.every(function(p){return !!p;});
     var d01=okP?Math.hypot(P[0][0]-P[1][0],P[0][1]-P[1][1]):-1,d12=okP?Math.hypot(P[1][0]-P[2][0],P[1][1]-P[2][1]):-1;
     var cx=okP?(P[0][0]+P[1][0]+P[2][0])/3:NaN,cy=okP?(P[0][1]+P[1][1]+P[2][1])/3:NaN;
     var along=okP?Math.abs((P[0][0]-P[2][0])*AIR.u[0]+(P[0][1]-P[2][1])*AIR.u[1]):-1;   /* 站位差在前进方向上的分量须为 0(纯横向) */
-    var ok5=(okP&&Math.abs(d01-AIR.SPREAD)<1e-3&&Math.abs(d12-AIR.SPREAD)<1e-3&&same([cx,cy],AIR.goal)&&along<1e-3&&AIR.SPREAD>=20000);
+    var cOk=same([cx,cy],AIR.goal); /* 当场记下来:读数要到 ⑥ 跑完才拼,那时 AIR.goal 已经被改过了(陈读数看着像红的) */
+    var ok5=(okP&&Math.abs(d01-AIR.SPREAD)<1e-3&&Math.abs(d12-AIR.SPREAD)<1e-3&&cOk&&along<1e-3&&AIR.SPREAD>=20000);
     /* ⑥ 规避只对看得见的来袭 */
     setup(0,0,'none');aiRedReset();
     projectiles.push({type:'mac',target:R[0],visRed:false,pos:[0,0,0],vel:[0,0,0]});enemyAI(0.02);var ev0=R[0].macEvadeCd;
@@ -63,10 +66,124 @@ t('FLOW71_AIFOG',function(){
       +' | ② 纯方位:来路='+s2+' 近 30 万 '+fmt(g2a)+' 远 90 万 '+fmt(g2b)+'(须逐位相同)离红方重心 '+Math.round(lead)+'(须='+AIR.LEAD+')换方位后 '+fmt(g2c)+'(须不同)='+ok2
       +' | ③ 有定位:来路='+s3+' 目标点 '+fmt(g3)+'(须=估计位置 [80k,50k],不是真值 [0k,0k])='+ok3
       +' | ④ 丢了:来路='+s4+' 去 '+fmt(g4)+' → '+(AIR.MEM_S+2)+'s 后来路='+s4b+'(须 search)='+ok4
-      +' | ⑤ 站位:相邻间距 '+Math.round(d01)+'/'+Math.round(d12)+'(须='+AIR.SPREAD+')重心在目标点上='+same([cx,cy],AIR.goal)+' 纯横向='+(along<1e-3)+'='+ok5
+      +' | ⑤ 站位(尾随态):相邻间距 '+Math.round(d01)+'/'+Math.round(d12)+'(须='+AIR.SPREAD+')重心在目标点上='+cOk+' 纯横向='+(along<1e-3)+'='+ok5
       +' | ⑥ 规避:看不见的来袭 macEvadeCd='+ev0+'(须不触发)看得见='+(+ev1).toFixed(2)+'(须>0)='+ok6;
   }finally{
     var bak=JSON.parse(airBak),k;for(k in bak)AIR[k]=bak[k];
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+    projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
+  }
+  return out;
+});
+/* ===== BOT1 红方条令层(2026-09-22 用户:「bot 感觉做的很粗糙,需要完整重做,做的更聪明」)=====
+   改前是单层脚本:一个目标点 + 横排 + 各锁各的 + 每舰每 tick 掷 8% 的骰子发导弹 + 进 50% 把握距离就停车找窗口。
+   现在是指挥层(bots/60)+ 执行层(bots/61)。这条判据钉的是**指挥层的七个决定**,每一条都带反向对照:
+     ① 接触摆在对方主炮 50% 把握【以内】⇒ 红方退到条令半径上,而且【一直在动】(动着就开不出主炮、也难被主炮打中);
+        反向对照 ①b:把压上条件凑齐(用导弹打够 PRESS_AFTER_S + 以多打少)⇒ 必须冲进主炮带并且【停车】
+     ② 集火(WTA):两条接触 ⇒ 三艘红舰锁同一个,且是分数高的那个;它沉了 ⇒ 全队同一拍改口
+     ③ 一盏灯:交战态恰好一艘照射;LAMP_S 之后换人;反向对照在 ⑥(埋伏态零艘)
+     ④ 齐射是决定不是骰子:直接记 orderMissileSalvo 的调用 —— 同一拍多舰一起打、两波之间至少 SALVO_GAP 秒;
+        反向对照:发射单元全不就绪 ⇒ 一次都不下令
+     ⑤ 挨打就撤:结构压到阈值下 ⇒ 态转 withdraw、站位半径变大;弹再打光 ⇒ 转 press(撤着也收不了场,拼一把)
+     ⑥ 埋伏有时限:开局没接触 ⇒ 全静默、原地不动;AMBUSH_S 之后自动转搜索并亮灯扫;反向对照:一有接触立刻退出
+     ⑦ 不偷看:没认出的接触,对方主炮按【最危险的一型】算、价值记 1;认出之后才查它的舰种(ID3 的直接回报) */
+t('FLOW87_BOT',function(){
+  if(typeof aiDoctrine!=='function'||typeof RDOC==='undefined')return 'fail BOT1 未加载(缺 aiDoctrine / RDOC)';
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),airBak=JSON.stringify(AIR),oOMS=orderMissileSalvo,out='';
+  try{
+    var R=[makeShip('CA','令红1',[0,0,0],[-1,0,0],[0,0,0],'red',2),makeShip('DD','令红2',[0,0,0],[-1,0,0],[0,0,0],'red',2),makeShip('DD','令红3',[0,0,0],[-1,0,0],[0,0,0],'red',2)];
+    var B1=makeShip('CA','令蓝甲',[0,0,0],[1,0,0],[0,0,0],'blue',2),B2=makeShip('DD','令蓝乙',[0,0,0],[1,0,0],[0,0,0],'blue',2);
+    var con=function(b,lit,ex,ey,idn,a1){b.litRed=lit;var c=b.covR=newCov();
+      if(lit>0){c.seen=true;c.ever=true;c.fix=true;c.n=2;c.age=0;c.x=ex;c.y=ey;c.idn=!!idn;c.idBy=idn?'act':'';c.r1=c.a1=a1||9000;c.r2=c.a2=(a1||9000)/2;}
+      b.seenRed=lit>0?simTime:-1e9;b.seenRedPos=lit>0?[ex,ey,0]:null;b.seenRedVel=[0,0,0];};
+    var put=function(rx,ry,blues){ // 摆局:三艘红舰在 rx,ry 附近;blues=[[舰,lit,x,y,认出?,椭圆],...]
+      ships.length=0;projectiles.length=0;
+      R.forEach(function(e,k){e.pos=[rx,ry+k*20000,0];e.vel=[0,0,0];e.orders=[];e.lockedTarget=null;e.macEvadeCd=0;e.aiHold=undefined;e.brake=false;
+        e.hp=e.maxHp;e.ammo=240;e.cellTimer=e.cellTimer.map(function(){return 0;});e.macCd=0;e.noFire=false;e.roe='hold';e.dead=false;setEmit(e,'silent');ships.push(e);});
+      [B1,B2].forEach(function(b){b.vel=[0,0,0];b.orders=[];b.noFire=true;b.dead=false;b.litRed=0;b.covR=newCov();b.seenRedPos=null;b.seenRed=-1e9;setEmit(b,'silent');ships.push(b);});
+      for(var k=0;k<blues.length;k++){var q=blues[k];q[0].pos=[q[2],q[3],0];con(q[0],q[1],q[2],q[3],q[4],q[5]);}
+      aiRedReset();};
+    var run=function(n,dt){for(var k=0;k<n;k++){enemyAI(dt);stepShipsMotion(dt);}};
+    var dTo=function(x,y){var c=[0,0];R.forEach(function(e){c[0]+=e.pos[0]/3;c[1]+=e.pos[1]/3;});return Math.hypot(c[0]-x,c[1]-y);};
+    var spd=function(){var v=0;R.forEach(function(e){v+=V.len(e.vel)/3;});return v;};
+    var nLit=function(){var n=0;R.forEach(function(e){if(e.emitMode!=='silent')n++;});return n;};
+    /* ① 两条接触 ⇒ 压上条件不成立;接触摆在主炮 50% 把握以内 */
+    var gun=macRangeAt(R[0],0.5),dIn=gun*0.55;
+    put(0,0,[[B1,2,dIn,0,true],[B2,2,dIn,140000,true]]);
+    run(1,0.02);var st1=RDOC.st,r1=RDOC.r;
+    var d0=dTo(dIn,70000);run(3000,0.1);var d1=dTo(dIn,70000),v1=spd();
+    var moving=R.every(function(e){return e.orders.length>0;});
+    var ok1=(st1==='strike'&&d1>d0&&Math.abs(d1-r1)<r1*0.40&&v1>1&&moving);
+    /* ①b 反向对照:一条接触 + 用导弹打够一段 ⇒ 压上、冲进主炮带、停车 */
+    put(0,0,[[B1,2,gun*1.5,0,true]]);
+    run(Math.ceil((RDOC_CFG.PRESS_AFTER_S+30)/0.5),0.5);
+    var st1b=RDOC.st;run(1600,0.5);
+    var d1b=dTo(gun*1.5,0),held=R.filter(function(e){return !e.orders.length&&hasMAC(e);}).length;
+    var ok1b=(st1b==='press'&&d1b<gun&&held>0);
+    /* ② 集火 */
+    put(0,0,[[B1,2,600000,0,true,20000],[B2,2,600000,150000,true,60000]]); /* 甲:价值高 + 椭圆小 ⇒ 分数高 */
+    run(2,0.02);
+    var locks=R.map(function(e){return e.lockedTarget;}),one=(locks[0]&&locks[1]===locks[0]&&locks[2]===locks[0]);
+    var ok2a=(one&&locks[0]===B1);
+    B1.dead=true;B1.litRed=0;B1.covR=newCov();run(2,0.02);
+    var locks2=R.map(function(e){return e.lockedTarget;});
+    var ok2=(ok2a&&locks2[0]===B2&&locks2[1]===B2&&locks2[2]===B2);
+    B1.dead=false;
+    /* ③ 一盏灯 + 轮换 */
+    put(0,0,[[B1,2,600000,0,true]]);
+    run(2,0.02);var n3=nLit(),lamp1=RDOC.lamp;
+    run(Math.ceil(RDOC_CFG.LAMP_S/0.5)+6,0.5);var n3b=nLit(),lamp2=RDOC.lamp;
+    var ok3=(n3===1&&n3b===1&&!!lamp1&&!!lamp2&&lamp1!==lamp2);
+    /* ④ 齐射:直接记【下令】,不走弹丸(发射单元有装填延迟,数弹丸数的是另一件事) */
+    var calls=[],T=0;
+    orderMissileSalvo=function(sh,tg,n){calls.push({t:T,id:sh.id,n:n});};
+    put(0,0,[[B1,2,mslReach(R[0])*0.8,0,true]]);
+    for(var k=0;k<600;k++){T=k*0.5;enemyAI(0.5);stepShipsMotion(0.5);}
+    var waveT=[],byT={};
+    calls.forEach(function(c){if(byT[c.t]===undefined){byT[c.t]=0;waveT.push(c.t);}byT[c.t]++;});
+    var gaps=[];for(var k2=1;k2<waveT.length;k2++)gaps.push(waveT[k2]-waveT[k2-1]);
+    var minGap=gaps.length?Math.min.apply(null,gaps):1e9;
+    var firstN=waveT.length?byT[waveT[0]]:0;
+    /* 反向对照:单元全不就绪 ⇒ 一次都不许下令 */
+    calls=[];put(0,0,[[B1,2,mslReach(R[0])*0.8,0,true]]);
+    R.forEach(function(e){e.cellTimer=e.cellTimer.map(function(){return 999;});});
+    for(var k3=0;k3<200;k3++){T=k3*0.5;enemyAI(0.5);}
+    var noRdy=calls.length;
+    orderMissileSalvo=oOMS;
+    var ok4=(waveT.length>=2&&minGap>=RDOC_CFG.SALVO_GAP-0.6&&firstN>=2&&noRdy===0);
+    /* ⑤ 撤退 / 弹尽拼命 */
+    put(0,0,[[B1,2,mslReach(R[0])*0.8,0,true]]);
+    R.forEach(function(e){e.hp=e.maxHp*0.30;});
+    run(2,0.02);var st5=RDOC.st,r5=RDOC.r;
+    R.forEach(function(e){e.ammo=0;});run(2,0.02);var st5b=RDOC.st;
+    var ok5=(st5==='withdraw'&&r5>mslReach(R[0])&&st5b==='press');
+    /* ⑥ 埋伏有时限 */
+    put(0,0,[]);
+    run(20,0.5);var st6=RDOC.st,n6=nLit(),v6=spd();
+    run(Math.ceil(RDOC_CFG.AMBUSH_S/2)+10,2);var st6b=RDOC.st,n6b=nLit();
+    put(0,0,[[B1,1,900000,0,false]]);run(2,0.02);var st6c=RDOC.st;
+    var ok6=(st6==='ambush'&&n6===0&&v6<1&&st6b==='search'&&n6b===1&&st6c!=='ambush');
+    /* ⑦ 不偷看 */
+    put(0,0,[[B1,2,600000,0,false]]);
+    var sigU=botFoeSigma(B1),valU=botFoeValue(B1);
+    con(B1,2,600000,0,true);
+    var sigK=botFoeSigma(B1),valK=botFoeValue(B1);
+    var worst=botWorstSigma(),real=resolveLoadout('CA',2).macSigma;
+    var ok7=(sigU===worst&&valU===1&&sigK===real&&valK===shipValue(B1)&&valK>1);
+    var ok=(ok1&&ok1b&&ok2&&ok3&&ok4&&ok5&&ok6&&ok7);
+    out=(ok?'ok':'fail')
+      +' ① 接触在主炮 50% 把握的 '+Math.round(dIn/1000)+'k 上(炮 '+Math.round(gun/1000)+'k):态='+st1+' 条令半径 '+Math.round(r1/1000)+'k 队心距离 '+Math.round(d0/1000)+'k → '+Math.round(d1/1000)+'k(须退到半径上)舰速 '+Math.round(v1)+'(须>0)三舰都有命令在走='+moving+'='+ok1
+      +' | ①b 反向(导弹打够 '+RDOC_CFG.PRESS_AFTER_S+'s + 以多打少):态='+st1b+' 距离 '+Math.round(d1b/1000)+'k(须<炮 '+Math.round(gun/1000)+'k)停车的有炮舰='+held+'='+ok1b
+      +' | ② 集火:三舰锁同一个='+one+' 是分数高的甲='+ok2a+';甲沉后全队改口乙='+ok2+'='+ok2
+      +' | ③ 灯:交战态照射舰数 '+n3+'(须 1)轮换 '+lamp1+' → '+lamp2+'(须换人,换后仍 '+n3b+' 艘)='+ok3
+      +' | ④ 齐射:'+waveT.length+' 波,最小间隔 '+minGap.toFixed(1)+'s(须>='+RDOC_CFG.SALVO_GAP+')首波同拍 '+firstN+' 舰一起下令(须>=2);单元全不就绪时下令 '+noRdy+' 次(须 0)='+ok4
+      +' | ⑤ 结构 30%:态='+st5+' 半径 '+Math.round(r5/1000)+'k(须>导弹 '+Math.round(mslReach(R[0])/1000)+'k);弹尽后='+st5b+'='+ok5
+      +' | ⑥ 埋伏:态='+st6+' 照射 '+n6+' 艘 舰速 '+v6.toFixed(2)+'(须 ambush/0/静止)→ '+RDOC_CFG.AMBUSH_S+'s 后='+st6b+'(照射 '+n6b+' 艘);一有接触='+st6c+'='+ok6
+      +' | ⑦ 不偷看:没认出 σ='+sigU+'(须=最危险 '+worst+')价值='+valU+'(须 1);认出后 σ='+sigK+'(须=CA 真值 '+real+')价值='+valK+'='+ok7;
+  }finally{
+    orderMissileSalvo=oOMS;
+    var bak=JSON.parse(airBak),k4;for(k4 in bak)AIR[k4]=bak[k4];
+    if(typeof aiRedReset==='function')aiRedReset();
     ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
     projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
   }
