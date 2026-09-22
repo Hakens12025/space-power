@@ -69,7 +69,7 @@ t('FLOW69_TIERLAND',function(){
         if(!(r.cur===to&&r.on.length===1&&r.on[0]===to&&r.w>=0.9))bad.push(from+'→'+to+'(层='+r.cur+' 亮='+r.on.join('/')+' 权重='+r.w.toFixed(2)+')');
       }
       /* 落点确实夹在层界之间(层界 = 相邻落点的几何中点,带迟滞也要夹得住) */
-      var L=[1,2,3].map(function(t){return vtFitKmpp(vtMainR(t),VT.LAND);});
+      var L=[1,2,3].map(vtLandKmpp);
       var between=(L[0]<VT.T1*(1-VT.HYS)&&L[1]>VT.T1*(1+VT.HYS)&&L[1]<VT.T2*(1-VT.HYS)&&Math.min(L[2],1/kMinNow())>VT.T2*(1+VT.HYS));
       if(bad.length||!between)ok=false;
       rows.push(q[0]+'x'+q[1]+' 层界 '+VT.T1.toFixed(0)+'/'+VT.T2.toFixed(0)+' 落点 '+L.map(function(x){return x.toFixed(0);}).join('/')+' 夹得住='+between+' 九种走法不对的=['+(bad.length?bad.join(','):'无')+'] 最小权重='+wMin.toFixed(2));
@@ -86,11 +86,14 @@ t('FLOW69_TIERLAND',function(){
 });
 /* ===== SN9 舰体大小随缩放变 =====
    用户:"拉近了船不变大,拉远了船不变小,没有办法做出很直观的空间关系"。改前舰体是固定屏幕尺寸的贴纸。
-   拍板的律:系数 = (缩放 / 战术落点的缩放)^A,钳在 [MIN, MAX];全场同一个数(不读任何一艘船的字段,所以不泄漏情报)。
-   四组:① 律本身(落点上 = 1、翻倍 = 2^A、两头钳住、全程单调且不跳、CA 最大不超过 48px)
+   拍板的律:系数 = LAND x (缩放 / 战术落点的缩放)^A,钳在 [MARK, MAX];全场同一个数(不读任何一艘船的字段,所以不泄漏情报)。
+   SZ1(2026-09-22):落点上的系数从 1 调到 LAND=0.6(CA 25 → 15px);系数低于 MARK ⇒ 不画轮廓,换成 7px 的记号(我方小箭头 / 敌方接触小菱形)。
+   五组:① 律本身(落点上 = LAND、翻倍 = LAND x 2^A、两头钳住、全程单调且不跳、CA 最大不超过 48px)
          ② 画出来的每一样东西都跟这同一个数(舰体 / 残骸 / 图标半径 / 尾焰 / 告警圈 / 锁定圈 / 移动虚影)—— 量的是 canvas 上真实发生的变换与半径
          ③ 迷雾:没认出的敌舰画 UNK、系数与我方逐位相同、大小舰的图标半径相同(反向对照:认出来之后大小舰必须不同)
-         ④ 锚点从视口现量:换两种画布尺寸,各自的战术落点上系数都恰为 1(写死公里数的话只在一种画布上成立) */
+         ④ 锚点从视口现量:换两种画布尺寸,各自的战术落点上系数都恰为 LAND(写死公里数的话只在一种画布上成立)
+         ⑤ 记号模式:拉远到系数 < MARK ⇒ 一艘船的轮廓都不画,我方画箭头、敌方画菱形;大小舰 / 认没认出的敌舰记号与图标半径完全相同(切换时机与形状都不泄漏体型);
+            反向对照:回到战术落点 ⇒ 轮廓回来、记号不画 */
 t('FLOW68_HULLSIZE',function(){
   if(typeof hullZoomF!=='function'||typeof HULL_ZOOM==='undefined')return 'fail SN9 未加载(缺 hullZoomF / HULL_ZOOM)';
   var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,edBak=editMode,lodBak=LOD.off;
@@ -98,8 +101,8 @@ t('FLOW68_HULLSIZE',function(){
   var oDH=drawHull,oArc=ctx.arc,oMv=ctx.moveTo,oLn=ctx.lineTo,out='';
   try{
     adminMode=false;editMode=false;selected=[];projectiles.length=0;LOD.off=true;
-    var Z=HULL_ZOOM,kRef=1/vtFitKmpp(vtMainR(1),VT.LAND);
-    var want=function(k){return Math.max(Z.MIN,Math.min(Z.MAX,Math.pow(k/kRef,Z.A)));};
+    var Z=HULL_ZOOM,kRef=1/vtLandKmpp(1);
+    var want=function(k){return Math.max(Z.MARK,Math.min(Z.MAX,Z.LAND*Math.pow(k/kRef,Z.A)));};
     var fAt=function(k){cam.zoom=k;return hullZoomF();};
     var near=function(a,b){return Math.abs(a-b)<1e-9;};
     /* ---------- ① 律 ---------- */
@@ -112,8 +115,8 @@ t('FLOW68_HULLSIZE',function(){
       if(p.p==='poly')p.pts.forEach(function(q){if(q[0]<x0)x0=q[0];if(q[0]>x1)x1=q[0];});
       else if(p.p==='rect'||p.p==='mirror'){if(p.x<x0)x0=p.x;if(p.x+p.w>x1)x1=p.x+p.w;}});
     var caNat=hullSize('CA',2)*(x1-x0),caMax=caNat*fNear,caMin=caNat*fFar;
-    var okLaw=(near(f1,1)&&near(f2,Math.pow(2,Z.A))&&near(f4,Math.pow(4,-Z.A))&&Z.A>0.2&&Z.A<1&&fFar===Z.MIN&&fNear===Z.MAX
-      &&mono&&maxJump<=stepMax&&moved>=N*0.4&&caMax<=48.5&&caMax>caNat*1.5&&caMin<caNat*0.7&&caMin>=10);
+    var okLaw=(near(f1,Z.LAND)&&near(f2,Z.LAND*Math.pow(2,Z.A))&&near(f4,want(kRef/4))&&Z.A>0.2&&Z.A<1&&Z.MARK<Z.LAND&&Z.LAND<1&&fFar===Z.MARK&&fNear===Z.MAX
+      &&mono&&maxJump<=stepMax&&moved>=N*0.3&&caMax<=48.5&&caMax>caNat*1.5&&caMin<caNat*0.7&&caMin>=10&&caNat*Z.LAND<=16);   /* 末项 = SZ1-B:战术落点上 CA 不超过 16px */
     /* ---------- ② 画出来的每一样东西都跟同一个数 ---------- */
     var B=makeShip('CA','尺寸蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2);
     var Wk=makeShip('DD','尺寸骸',[0,40000,0],[1,0,0],[0,0,0],'blue',2);Wk.dead=true;Wk.hp=0;
@@ -124,7 +127,7 @@ t('FLOW68_HULLSIZE',function(){
     var live=function(s,lit){s.litBlue=lit;s.seenBlue=simTime;s.seenBluePos=[s.pos[0],s.pos[1],0];s.seenBlueVel=[0,0,0];
       var c=s.covB=newCov();c.seen=true;c.ever=true;c.fix=true;c.n=2;c.age=0;c.x=s.pos[0];c.y=s.pos[1];c.idn=(lit>=2);c.r1=c.a1=9000;c.r2=c.a2=4000;};
     live(R,2);live(U1,1);live(U2,1);
-    var cw=B.covR=newCov();cw.ch.act=true;                      /* 我方被照射 ⇒ 告警圈 */
+    var cw=B.covR=newCov();cw.ch.act=[0,0,40000,20,R.id];       /* 我方被照射 ⇒ 告警弧(RWR1:末位是照射源的 id,找不到就不画) */
     B.lockedTarget=R;                                           /* 我方锁着它 ⇒ 锁定圈 */
     cam.x=20000;cam.y=0;
     var hulls=[],arcs=[],pts=[];
@@ -134,12 +137,12 @@ t('FLOW68_HULLSIZE',function(){
     ctx.moveTo=function(x,y){pts.push(['m',x,y]);return oMv.apply(ctx,arguments);};
     ctx.lineTo=function(x,y){pts.push(['l',x,y]);return oLn.apply(ctx,arguments);};
     var b0=base(),rows=[],okDraw=true,okFog=true;
-    [3,1,1/3].forEach(function(mul){
+    [6,3,1].forEach(function(mul){   /* SZ1:三档都取在【画轮廓】的那一段(落点及更近);拉远换记号的那一段归 ⑤ */
       var k=kRef*mul,f=want(k);cam.zoom=k;
       var eq=function(a){return Math.abs(a-f)<1e-6;};
       hulls=[];drawShip(R);drawShip(U1);drawShip(U2);drawShip(Wk);
       var hR=hulls[0],hU1=hulls[1],hU2=hulls[2],hW=hulls[3];
-      hulls=[];arcs=[];drawShip(B);var hB=hulls[0],warn=arcs.some(function(r){return Math.abs(r-13*f)<1e-6;});
+      hulls=[];arcs=[];drawShip(B);var hB=hulls[0],warn=arcs.some(function(r){return Math.abs(r-(shipIconR(B)+RWR.GAP))<1e-6;});   /* RWR1:告警弧的半径 = 图标半径 + RWR.GAP(图标半径里已含舰体系数) */
       arcs=[];drawLocks();var lock=arcs.some(function(r){return Math.abs(r-13*f)<1e-6;});
       hulls=[];ghostAt(B,30000,0,[1,0,0],.3,false);var hG=hulls[0];
       B.flame=1;pts=[];var pp=toScreen(B.pos[0],B.pos[1]);drawFlame(B,pp,Math.round(shipIconR(B)));B.flame=0;
@@ -151,7 +154,7 @@ t('FLOW68_HULLSIZE',function(){
       /* ③ 迷雾:没认出的画 UNK + T2,系数与我方逐位相同,大小舰图标半径相同 */
       var fog=(hU1&&hU2&&hU1.cls==='UNK'&&hU2.cls==='UNK'&&hU1.tier===2&&hU2.tier===2&&hU1.sc===hU2.sc&&hB&&hU1.sc===hB.sc&&shipIconR(U1)===shipIconR(U2));
       if(!fog)okFog=false;
-      rows.push('x'+(mul>=1?mul:'1/3')+' 律='+f.toFixed(4)+' 舰体 蓝'+(hB?hB.sc.toFixed(4):'无')+' 红'+(hR?hR.sc.toFixed(4):'无')+' 残骸'+(hW?hW.sc.toFixed(4):'无')+' 虚影'+(hG?hG.sc.toFixed(4):'无')
+      rows.push('x'+mul+' 律='+f.toFixed(4)+' 舰体 蓝'+(hB?hB.sc.toFixed(4):'无')+' 红'+(hR?hR.sc.toFixed(4):'无')+' 残骸'+(hW?hW.sc.toFixed(4):'无')+' 虚影'+(hG?hG.sc.toFixed(4):'无')
         +' 半径比'+rB.toFixed(4)+' 尾焰'+L.toFixed(2)+'(须 '+(20*f).toFixed(2)+')告警圈='+warn+' 锁定圈='+lock+' | 未识别 '+(hU1?hU1.cls+'/T'+hU1.tier+'/'+hU1.sc.toFixed(4):'无')+' '+(hU2?hU2.cls+'/T'+hU2.tier+'/'+hU2.sc.toFixed(4):'无'));
     });
     /* ③ 的反向对照:认出来之后,大小舰的图标半径必须不同(否则上面那条只是"红方一律同大") */
@@ -161,16 +164,29 @@ t('FLOW68_HULLSIZE',function(){
     /* ---------- ④ 锚点从视口现量 ---------- */
     drawHull=oDH;ctx.arc=oArc;ctx.moveTo=oMv;ctx.lineTo=oLn;
     var vp=[[1600,1000],[800,480]],ks=[],fs=[];
-    vp.forEach(function(q){W=q[0];H=q[1];var k=1/vtFitKmpp(vtMainR(1),VT.LAND);ks.push(k);cam.zoom=k;fs.push(hullZoomF());});
+    vp.forEach(function(q){W=q[0];H=q[1];var k=1/vtLandKmpp(1);ks.push(k);cam.zoom=k;fs.push(hullZoomF());});
     W=WBak;H=HBak;
-    var okAnchor=(near(fs[0],1)&&near(fs[1],1)&&Math.abs(ks[0]/ks[1]-1)>0.5);
-    var ok=(okLaw&&okDraw&&okFog&&okAnchor);
+    var okAnchor=(near(fs[0],Z.LAND)&&near(fs[1],Z.LAND)&&Math.abs(ks[0]/ks[1]-1)>0.5);
+    /* ---------- ⑤ 记号模式 ---------- */
+    live(R,2);live(U1,1);live(U2,2);B.flame=0;
+    drawHull=function(c,cls,tier){hulls.push({cls:cls});return oDH.apply(this,arguments);};
+    ctx.moveTo=function(x,y){pts.push(['m',x,y]);return oMv.apply(ctx,arguments);};ctx.lineTo=function(x,y){pts.push(['l',x,y]);return oLn.apply(ctx,arguments);};
+    var has=function(kind,x,y){return pts.some(function(q){return q[0]===kind&&Math.abs(q[1]-x)<1e-9&&Math.abs(q[2]-y)<1e-9;});};
+    var probe=function(sh){hulls=[];pts=[];drawShip(sh);return {hull:hulls.length,arrow:has('m',SHIP_MARK_R,0)&&has('l',-SHIP_MARK_R+2.2,0),diamond:has('m',SHIP_MARK_R,0)&&has('l',0,SHIP_MARK_R)&&has('l',-SHIP_MARK_R,0),r:shipIconR(sh)};};
+    cam.zoom=kRef/3;var mFar=shipMarkMode(),pB=probe(B),pR=probe(R),pU1=probe(U1),pU2=probe(U2);
+    cam.zoom=kRef;var mLand=shipMarkMode(),qB=probe(B),qR=probe(R);
+    drawHull=oDH;ctx.moveTo=oMv;ctx.lineTo=oLn;
+    var okMark=(mFar===true&&pB.hull===0&&pR.hull===0&&pU1.hull===0&&pU2.hull===0&&pB.arrow&&!pB.diamond&&pR.diamond&&pU1.diamond&&pU2.diamond
+      &&pR.r===pU1.r&&pU1.r===pU2.r&&pB.r===pR.r&&pR.r===SHIP_MARK_R+1
+      &&mLand===false&&qB.hull===1&&qR.hull===1&&!qB.arrow&&!qR.diamond);
+    var ok=(okLaw&&okDraw&&okFog&&okAnchor&&okMark);
     out=(ok?'ok':'fail')
-      +' ① 律:战术落点='+f1.toFixed(6)+'(须 1)缩放 x2='+f2.toFixed(4)+'(须 '+Math.pow(2,Z.A).toFixed(4)+')x1/4='+f4.toFixed(4)+'(须 '+Math.pow(4,-Z.A).toFixed(4)+')最远='+fFar+'(须 '+Z.MIN+')最近='+fNear+'(须 '+Z.MAX+')'
+      +' ① 律:战术落点='+f1.toFixed(6)+'(须 '+Z.LAND+')缩放 x2='+f2.toFixed(4)+'(须 '+(Z.LAND*Math.pow(2,Z.A)).toFixed(4)+')x1/4='+f4.toFixed(4)+'(须钳在 '+Z.MARK+')最远='+fFar+'(须 '+Z.MARK+')最近='+fNear+'(须 '+Z.MAX+')'
         +' 全程单调='+mono+' 相邻两档最大比='+maxJump.toFixed(4)+'(须<='+stepMax.toFixed(4)+',不跳)'+N+' 档里在变的='+moved+' CA 舰长 '+caMin.toFixed(1)+'~'+caNat.toFixed(1)+'~'+caMax.toFixed(1)+'px(最大须<=48.5)='+okLaw
       +' | ② 同一个数:'+rows.join(' ; ')+'='+okDraw
       +' | ③ 迷雾:未识别的画 UNK/T2、系数与我方逐位相同、大小舰同半径='+okFog+'(反向对照:认出后 BB·T3 比 DD·T1 大='+rev+')'
-      +' | ④ 锚点现量:1600x1000 落点 '+(1/ks[0]).toFixed(0)+' km/px 系数='+fs[0].toFixed(6)+';800x480 落点 '+(1/ks[1]).toFixed(0)+' km/px 系数='+fs[1].toFixed(6)+'='+okAnchor;
+      +' | ④ 锚点现量:1600x1000 落点 '+(1/ks[0]).toFixed(0)+' km/px 系数='+fs[0].toFixed(6)+';800x480 落点 '+(1/ks[1]).toFixed(0)+' km/px 系数='+fs[1].toFixed(6)+'(须都是 '+Z.LAND+')='+okAnchor
+      +' | ⑤ 记号模式:拉远(落点 x1/3)换记号='+mFar+' 轮廓一个不画='+((pB.hull+pR.hull+pU1.hull+pU2.hull)===0)+' 我方箭头='+pB.arrow+' 敌方菱形(认出的 DD / 没认出的 DD·T1 / 认出的 BB·T3)='+pR.diamond+'/'+pU1.diamond+'/'+pU2.diamond+' 图标半径全同='+(pR.r===pU1.r&&pU1.r===pU2.r&&pB.r===pR.r)+'('+pR.r+'px);回到落点:轮廓回来='+(qB.hull===1&&qR.hull===1)+' 记号不画='+(!qB.arrow&&!qR.diamond)+'='+okMark;
   }finally{
     drawHull=oDH;ctx.arc=oArc;ctx.moveTo=oMv;ctx.lineTo=oLn;W=WBak;H=HBak;
     adminMode=admBak;editMode=edBak;LOD.off=lodBak;selected=selBak;
@@ -563,26 +579,30 @@ t('FLOW63_VIEW',function(){
   if(typeof contactState!=='function')return 'fail contactState 缺席';
   var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,edBak=editMode,detBak=detT,simBak=simTime;
   var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},selBak=selected.slice(),lodBak=LOD.off;
-  var oarc=ctx.arc,odash=ctx.setLineDash,oell=ctx.ellipse,ohull=drawHull,out='';
+  var oarc=ctx.arc,odash=ctx.setLineDash,oell=ctx.ellipse,ohull=drawHull,odimg=ctx.drawImage,nHeatBlit=0,out='';
   var TABLE={none:'·····',heat:'■····',live:'·■■··',coast:'·■·■·',ghost:'···■■'};
   try{
     adminMode=false;editMode=false;selected=[];projectiles.length=0;LOD.off=true;
+    var geomBak=GEOM.on;GEOM.on=true;   /* GM1:地图上的误差椭圆跟着右下角「缩圈」钮走(用户 2026-09-22 拍板,默认不画)。五态表里"椭圆"那一列量的是【开着钮】时的样子;关着的那一半见末尾的 C */
     var nEll=0,nHull=0,nMark=0,nRing=0,dash=[];
     ctx.setLineDash=function(d){dash=d||[];return odash.apply(ctx,arguments);};
     ctx.ellipse=function(){nEll++;return oell.apply(ctx,arguments);};
+    ctx.drawImage=function(im){if(im===HEAT.cv)nHeatBlit++;return odimg.apply(ctx,arguments);};   /* GM1:热区那一格还要量"这一帧真的把离屏画布贴上去了"—— 变异"缩圈钮关着时连热区也不画"第一版溜了过去:layers 自己调 heatBuild 看像素,量不到 drawContacts 提前 return */
     ctx.arc=function(x,y,r){
-      if(Math.abs(r-CONTACT_MARK_R)<0.5&&!dash.length)nMark++;
+      /* SZ1 那轮实测:我方舰身上的【被照射告警圈】半径是 13 x 舰体缩放系数,系数落到 0.57 附近时它是 7.46px,落进了原来 ±0.5 的容差,被当成失联 / 陈旧记号
+         (被测代码一行没动,B 半当场红)。按颜色排除不行 —— 陈旧记号本身就是同一种黄。记号的半径是【恰好】CONTACT_MARK_R 这个常数,改成精确相等。 */
+      if(r===CONTACT_MARK_R&&!dash.length)nMark++;
       else if(dash.length&&r>CONTACT_MARK_R*1.8)nRing++;
       return oarc.apply(ctx,arguments);};
     drawHull=function(c,h,t,col){if(col==='#ff6b6b')nHull++;return ohull.apply(this,arguments);};   /* 只数红方舰体 */
     function layers(){
-      nEll=0;nHull=0;nMark=0;nRing=0;dash=[];HEAT.sig='';
+      nEll=0;nHull=0;nMark=0;nRing=0;nHeatBlit=0;dash=[];HEAT.sig='';
       render();
       /* 热区那一格量【真的贴到画面上的东西】:drawContacts 只在 heatBuild()>0 时才把离屏画布贴上去,
          而贴上去的内容在 HEAT.img 里 —— 两个都要看。只读 heatBuild 的返回值的话量到的是计数器不是画面
          (第一版就是这样,于是"热区循环不问状态机"这个变异溜了过去,而它其实因为计数为 0 根本没被贴出来)。 */
       var nHeat=heatBuild(),painted=false;
-      if(nHeat>0&&HEAT.img){var dd=HEAT.img.data;for(var q=3;q<dd.length;q+=4){if(dd[q]>0){painted=true;break;}}}
+      if(nHeat>0&&HEAT.img&&nHeatBlit>0){var dd=HEAT.img.data;for(var q=3;q<dd.length;q+=4){if(dd[q]>0){painted=true;break;}}}
       return (painted?'■':'·')+(nEll>0?'■':'·')+(nHull>0?'■':'·')+(nMark>0?'■':'·')+(nRing>0?'■':'·');
     }
     /* ---------- A 半:逐态构造 ---------- */
@@ -637,12 +657,21 @@ t('FLOW63_VIEW',function(){
     var seq=['heat','live','coast','ghost','none'].filter(function(k){return visited[k];});
     /* 真序列必须【真的走过】这几态,否则 B 半没牙(全程停在一个态上也能"从不违规") */
     var okB=(bad.length===0&&visited.heat&&visited.live&&visited.ghost&&visited.none);
-    var ok=(okA&&okB);
+    /* ---------- C 半(GM1):「缩圈」钮关着 ⇒ 地图上一个椭圆都不画,其余四层原样(舰标 / 记号 / 虚线圈 / 热区都不归这个钮管) ---------- */
+    ships.length=0;ships.push(B,R);GEOM.on=false;
+    var rowsC=[],okC=true;
+    CASES.forEach(function(cs){cs[1]();var got=layers(),want=TABLE[cs[0]].charAt(0)+'·'+TABLE[cs[0]].slice(2);
+      if(got!==want)okC=false;rowsC.push(cs[0]+' '+got+(got===want?'':'≠'+want));});
+    GEOM.on=true;CASES[2][1]();var backOn=(layers()===TABLE.live);   /* 再打开:椭圆回来 */
+    okC=okC&&backOn;
+    var ok=(okA&&okB&&okC);
     out=(ok?'ok':'fail')
       +' A 逐态构造[热区/椭圆/舰标/记号/虚线圈]: '+rowsA.join(' | ')+' ='+okA
-      +' || B 真实序列 '+sec+' 拍:走过的态='+seq.join('→')+'(须含 heat/live/ghost/none) 表外组合='+(bad.length?bad.slice(0,3).join(' ; '):'无')+' ='+okB;
+      +' || B 真实序列 '+sec+' 拍:走过的态='+seq.join('→')+'(须含 heat/live/ghost/none) 表外组合='+(bad.length?bad.slice(0,3).join(' ; '):'无')+' ='+okB
+      +' || C 「缩圈」钮关着(椭圆那一列须全空,其余不变): '+rowsC.join(' | ')+' 再打开椭圆回来='+backOn+' ='+okC;
   }finally{
-    ctx.arc=oarc;ctx.setLineDash=odash;ctx.ellipse=oell;drawHull=ohull;
+    if(typeof geomBak!=='undefined')GEOM.on=geomBak;
+    ctx.arc=oarc;ctx.setLineDash=odash;ctx.ellipse=oell;ctx.drawImage=odimg;drawHull=ohull;
     adminMode=admBak;editMode=edBak;LOD.off=lodBak;selected=selBak;detT=detBak;simTime=simBak;
     cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
     ships=shipsBak;projectiles=projBak;
@@ -957,5 +986,124 @@ t('FLOW60_START',function(){
       +' 信号视野钮点得动='+sigTog+' 跳层钮点得动='+jumped+'='+ok4
       +' | ⑤ 打开就是热区:'+sigRow+'='+ok5;
   }finally{ envIdx=envBak; }
+  return out;
+});
+/* ===== RWR1 被照射告警:朝照射源方位的一段弧,不是闭合的黄圈 =====
+   用户 2026-09-22:"现在的黄圈一闪一闪不是特别好,感觉就像是我选中这艘船了一样"。
+     ① 被照射 ⇒ 画一段【不闭合】的弧:张角 = 2 x RWR.HALF、正中对着照射源的方位、半径 = 图标半径 + RWR.GAP、颜色是告警橙;改前那个闭合黄圈不许再出现
+     ② 方位跟着照射源走;而且【只有方位】:照射源沿同一方位挪到两倍远,弧的每一个参数逐位不变(不泄漏距离)
+     ③ 没被照射 / 照射源已沉 / 照射源找不到 ⇒ 不画
+     ④ 同时被选中:选中圈(闭合、黄)与告警弧(不闭合、橙)各画各的,两者没有一项相同 */
+t('FLOW83_RWR',function(){
+  if(typeof drawRwrSpike!=='function'||typeof RWR==='undefined')return 'fail RWR1 未加载(缺 drawRwrSpike / RWR)';
+  var shipsBak=ships.slice(),admBak=adminMode,edBak=editMode,lodBak=LOD.off,selBak=selected.slice(),camBak={x:cam.x,y:cam.y,zoom:cam.zoom},oArc=ctx.arc,out='';
+  try{
+    adminMode=false;editMode=false;LOD.off=true;selected=[];
+    var B=makeShip('CA','告警蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),P=makeShip('DD','照射红',[0,0,0],[-1,0,0],[0,0,0],'red',2);
+    ships.length=0;ships.push(B,P);ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.flame=0;x.sideFlame=0;});
+    cam.x=0;cam.y=0;cam.zoom=1/vtLandKmpp(1);
+    var arcs=[];ctx.arc=function(x,y,r,a0,a1){arcs.push({r:r,a0:a0,a1:a1,col:String(ctx.strokeStyle)});return oArc.apply(ctx,arguments);};
+    var paint=function(on,id){var c=B.covR=newCov();if(on)c.ch.act=[0,0,40000,20,id];};
+    var rgb=function(st){st=String(st);var h=st.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);   /* 不透明色 canvas 读回来是 #rrggbb(选中圈),带透明度的是 rgba(...)(告警弧)—— 两种都要认 */
+      if(h)return parseInt(h[1],16)+','+parseInt(h[2],16)+','+parseInt(h[3],16);
+      var m=st.match(/(\d+)\D+(\d+)\D+(\d+)/);return m?m[1]+','+m[2]+','+m[3]:st;};
+    var spike=function(){arcs=[];drawShip(B);return arcs.filter(function(q){return rgb(q.col)==='255,154,85';});};
+    var norm=function(a){a=a%(2*Math.PI);if(a>Math.PI)a-=2*Math.PI;if(a<-Math.PI)a+=2*Math.PI;return a;};
+    /* ① */
+    var TH=2.2;P.pos=[Math.cos(TH)*300000,Math.sin(TH)*300000,0];paint(true,P.id);
+    var s1=spike(),q=s1[0],yellowRing=arcs.some(function(x){return rgb(x.col)==='255,209,102'&&Math.abs((x.a1-x.a0)-6.283)<0.01;});
+    var ok1=(s1.length===1&&!!q&&Math.abs((q.a1-q.a0)-2*RWR.HALF)<1e-9&&(q.a1-q.a0)<Math.PI&&Math.abs(norm((q.a0+q.a1)/2-TH))<1e-9&&Math.abs(q.r-(shipIconR(B)+RWR.GAP))<1e-9&&!yellowRing);
+    /* ② */
+    P.pos=[Math.cos(TH)*600000,Math.sin(TH)*600000,0];var s2=spike(),q2=s2[0];
+    var sameFar=(!!q2&&q2.r===q.r&&q2.a0===q.a0&&q2.a1===q.a1);
+    var TH2=-0.7;P.pos=[Math.cos(TH2)*300000,Math.sin(TH2)*300000,0];var s3=spike(),q3=s3[0];
+    var follows=(!!q3&&Math.abs(norm((q3.a0+q3.a1)/2-TH2))<1e-9);
+    var ok2=(sameFar&&follows);
+    /* ③ */
+    paint(false);var n0=spike().length;
+    paint(true,P.id);P.dead=true;var nDead=spike().length;P.dead=false;
+    paint(true,'没有这艘');var nGone=spike().length;
+    var ok3=(n0===0&&nDead===0&&nGone===0);
+    /* ④ */
+    paint(true,P.id);selected=[B.id];var s4=spike(),selRing=arcs.filter(function(x){return rgb(x.col)==='255,224,102'&&Math.abs((x.a1-x.a0)-6.283)<0.01;});selected=[];
+    var ok4=(s4.length===1&&selRing.length===1&&selRing[0].r!==s4[0].r&&rgb(selRing[0].col)!==rgb(s4[0].col));
+    var ok=(ok1&&ok2&&ok3&&ok4);
+    out=(ok?'ok':'fail')+' ① 告警弧 '+s1.length+' 段 张角 '+(q?((q.a1-q.a0)*57.2958).toFixed(1):'?')+' 度(须 '+(2*RWR.HALF*57.2958).toFixed(1)+')正中对着照射源='+(q?Math.abs(norm((q.a0+q.a1)/2-TH))<1e-9:false)+' 半径 '+(q?q.r.toFixed(1):'?')+'px 改前的闭合黄圈还在='+yellowRing+'='+ok1
+      +' | ② 照射源沿同一方位挪到两倍远,弧逐位不变='+sameFar+' 换方位弧跟着走='+follows+'='+ok2
+      +' | ③ 没被照射 / 照射源已沉 / 找不到:画了 '+n0+'/'+nDead+'/'+nGone+' 段(须 0/0/0)='+ok3
+      +' | ④ 同时被选中:选中圈(闭合)'+selRing.length+' 个 + 告警弧 '+s4.length+' 段,半径与颜色都不同='+ok4;
+  }finally{
+    ctx.arc=oArc;adminMode=admBak;editMode=edBak;LOD.off=lodBak;selected=selBak;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+  }
+  return out;
+});
+/* ===== EM1 开雷达后的表现 + B 选中时不再画雷达量程圈 =====
+   用户 2026-09-22:选中蓝舰时那个淡蓝大圈(雷达照射量程)拍板 B = 不画;"增加一个开雷达后的表现"。
+     ① 选中一艘蓝舰、没悬停任何钮 ⇒ 整帧不许出现半径 = 照射量程 x 缩放 的圆
+     ② 悬停「发射档」钮(hoverRing='emit')⇒ 画两圈:照射量程 + 开雷达被听见,都带标签;静默的船照样画(那是做决定前要看的账)
+     ③ 涟漪:我方照射 ⇒ 三段同心弧、阵营蓝、半径在 [图标半径+2, 图标半径+2+SPAN];静默 ⇒ 一段都没有;干扰 ⇒ 橙
+     ④ 涟漪在动:同一艘船两个墙钟时刻画出来的半径不同、周期一到逐位复原
+     ⑤ 敌方接触:只在我方这一拍【听见】它的雷达(covB.ch.lis)时画(红);它开着雷达但我方没听见 ⇒ 不画(不读它的真值);GM 下按真值 */
+t('FLOW84_EMITFX',function(){
+  if(typeof drawEmitRipple!=='function'||typeof emitRippleRgb!=='function')return 'fail EM1 未加载(缺 drawEmitRipple / emitRippleRgb)';
+  var shipsBak=ships.slice(),admBak=adminMode,edBak=editMode,lodBak=LOD.off,selBak=selected.slice(),hrBak=hoverRing,camBak={x:cam.x,y:cam.y,zoom:cam.zoom},oArc=ctx.arc,oT=ctx.fillText,out='';
+  try{
+    adminMode=false;editMode=false;LOD.off=true;selected=[];hoverRing=null;
+    var B=makeShip('CA','辐射蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),R=makeShip('DD','辐射红',[120000,0,0],[-1,0,0],[0,0,0],'red',2);
+    ships.length=0;ships.push(B,R);ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.flame=0;x.sideFlame=0;x.autoEngage=false;x.roe='hold';});
+    cam.x=60000;cam.y=0;cam.zoom=1/vtLandKmpp(1);
+    var arcs=[],texts=[];
+    ctx.arc=function(x,y,r){arcs.push({r:r,col:String(ctx.strokeStyle)});return oArc.apply(ctx,arguments);};
+    ctx.fillText=function(tx){texts.push(String(tx));return oT.apply(ctx,arguments);};
+    var rgb=function(st){st=String(st);var h=st.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);if(h)return parseInt(h[1],16)+','+parseInt(h[2],16)+','+parseInt(h[3],16);var m=st.match(/(\d+)\D+(\d+)\D+(\d+)/);return m?m[1]+','+m[2]+','+m[3]:st;};
+    /* ① */
+    setEmit(B,'paint');selected=[B.id];arcs=[];render();
+    var big=actRangeOf(B)*cam.zoom,bigRing=arcs.some(function(q){return Math.abs(q.r-big)<1e-6;});
+    var ok1=(!bigRing&&big>50);
+    /* ② */
+    /* 走生产路径:真的把鼠标移到底栏「发射档」钮上(变异"钮 mouseenter 不设 hoverRing"第一版溜了过去 —— 判据自己设了 hoverRing) */
+    var eb=document.getElementById('cbEmit');if(!eb)return 'fail 底栏没有发射档钮 #cbEmit';
+    if(typeof updateCmdBar==='function')updateCmdBar(selBlue());   /* 它要一个选中舰数组 */
+    hoverRing=null;eb.dispatchEvent(new MouseEvent('mouseenter'));var viaBtn=(hoverRing==='emit');
+    arcs=[];texts=[];drawHoverRings();
+    var r1=actRangeOf(B)*cam.zoom,r2=hearRangeOf(Object.assign({},B,{emitMode:'paint'}),1)*cam.zoom;
+    var hasR1=arcs.some(function(q){return Math.abs(q.r-r1)<1e-6;}),hasR2=arcs.some(function(q){return Math.abs(q.r-r2)<1e-6;});
+    var lbl=texts.some(function(x){return x.indexOf('雷达 ')===0;})&&texts.some(function(x){return x.indexOf('被听见')>=0;});
+    setEmit(B,'silent');arcs=[];texts=[];drawHoverRings();var silentToo=arcs.some(function(q){return Math.abs(q.r-r2)<1e-6;})&&texts.some(function(x){return x.indexOf('现在静默')>=0;});
+    hoverRing=null;
+    eb.dispatchEvent(new MouseEvent('mouseleave'));var leftClean=(hoverRing===null);
+    var ok2=(viaBtn&&hasR1&&hasR2&&lbl&&silentToo&&r2>r1&&leftClean);
+    /* ③ */
+    var ripples=function(sh){arcs=[];drawShip(sh);var r0=shipIconR(sh);return arcs.filter(function(q){return q.r>=r0+2-1e-9&&q.r<=r0+2+EMIT_FX.SPAN+1e-9&&(q.col.indexOf('rgba')===0);});};
+    setEmit(B,'paint');var rp=ripples(B),rpBlue=rp.length===EMIT_FX.N&&rp.every(function(q){return rgb(q.col)==='90,167,255';});
+    setEmit(B,'silent');var rs=ripples(B).length;
+    setEmit(B,'jam');var rj=ripples(B),rjOrange=rj.length===EMIT_FX.N&&rj.every(function(q){return rgb(q.col)==='255,154,85';});
+    setEmit(B,'paint');
+    var ok3=(rpBlue&&rs===0&&rjOrange);
+    /* ④ */
+    var radii=function(now){arcs=[];drawEmitRipple([100,100],10,'90,167,255',now);return arcs.map(function(q){return q.r.toFixed(6);}).sort().join(',');};
+    var a0=radii(0),a1=radii(EMIT_FX.PERIOD_MS*0.37),a2=radii(EMIT_FX.PERIOD_MS);
+    var ok4=(a0!==a1&&a0===a2);
+    /* ⑤ */
+    var live=function(heard){R.litBlue=2;R.seenBlue=simTime;R.seenBluePos=[R.pos[0],R.pos[1],0];R.seenBlueVel=[0,0,0];
+      var c=R.covB=newCov();c.seen=true;c.ever=true;c.fix=true;c.n=2;c.age=0;c.x=R.pos[0];c.y=R.pos[1];c.idn=true;c.r1=c.a1=9000;c.r2=c.a2=4000;
+      c.ch.opt=[1,1,120000,10,B.id];if(heard)c.ch.lis=[1,1,120000,10,B.id];};
+    setEmit(R,'paint');live(true);var rh=ripples(R),rhRed=rh.length===EMIT_FX.N&&rh.every(function(q){return rgb(q.col)==='255,107,107';});
+    live(false);var rNot=ripples(R).length;                       /* 它开着雷达,但我方没听见 ⇒ 不画(不读真值) */
+    adminMode=true;var rGm=ripples(R).length;adminMode=false;
+    setEmit(R,'silent');live(true);var rSilentHeard=ripples(R).length;   /* 听见了(量测在)就画 —— 画的是我方的量测,不是它的档位 */
+    var ok5=(rhRed&&rNot===0&&rGm===EMIT_FX.N&&rSilentHeard===EMIT_FX.N);
+    var ok=(ok1&&ok2&&ok3&&ok4&&ok5);
+    out=(ok?'ok':'fail')+' ① 选中且没悬停:照射量程圈(半径 '+big.toFixed(0)+'px)出现='+bigRing+'(须 false)='+ok1
+      +' | ② 悬停发射档钮(真派发 mouseenter ⇒ hoverRing=emit)='+viaBtn+':照射量程圈='+hasR1+' 被听见圈='+hasR2+' 带标签='+lbl+' 静默时照画且标「现在静默」='+silentToo+' 移开后清干净='+leftClean+'='+ok2
+      +' | ③ 涟漪:照射 '+rp.length+' 段蓝='+rpBlue+' 静默 '+rs+' 段(须 0) 干扰橙='+rjOrange+'='+ok3
+      +' | ④ 在动:t=0 与 t=0.37T 半径不同='+(a0!==a1)+' 一个周期后逐位复原='+(a0===a2)+'='+ok4
+      +' | ⑤ 敌方:听见它 ⇒ '+rh.length+' 段红='+rhRed+';它开着但没听见 ⇒ '+rNot+' 段(须 0);GM ⇒ '+rGm+';它静默但量测里有 lis ⇒ '+rSilentHeard+'(画我方的量测)='+ok5;
+  }finally{
+    ctx.arc=oArc;ctx.fillText=oT;hoverRing=hrBak;
+    adminMode=admBak;editMode=edBak;LOD.off=lodBak;selected=selBak;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+  }
   return out;
 });

@@ -16,6 +16,7 @@ CONTACT_MARK_R
 COV
 C_LS
 DEFAULT_ENEMY
+EMIT_FX
 ENG_HYS_K
 ENG_HYS_MAX
 ENG_HYS_OFF
@@ -132,7 +133,9 @@ RR_REAL_DT
 RR_RETRIG
 RR_TOL
 RR_WIN
+RWR
 SENS
+SHIP_MARK_R
 SHIP_STATS_REQ
 SIG
 SIG_FADE
@@ -202,7 +205,6 @@ captureKey
 ceaseFire
 cellsText
 ciwsDefOf
-ciwsMinInner
 ciwsOf
 ciwsOverload
 ciwsSectorOverload
@@ -250,6 +252,7 @@ drawCorridors
 drawEdgeRuler
 drawEditPreview
 drawEditWps
+drawEmitRipple
 drawFcChain
 drawFlame
 drawFmStations
@@ -268,8 +271,10 @@ drawProjectiles
 drawRadial
 drawRange
 drawRanges
+drawRwrSpike
 drawSelection
 drawShip
+drawShipMark
 drawSignalView
 drawStars
 drawTargeting
@@ -296,6 +301,7 @@ emitBtnSync
 emitLabel
 emitNext
 emitPowerOf
+emitRippleRgb
 endRange
 enemyAI
 enemyToArr
@@ -516,6 +522,7 @@ hullRow
 hullSize
 hullTint
 hullZoomF
+hullZoomRaw
 identDist
 infoEl
 init
@@ -796,6 +803,7 @@ shipHull
 shipIconR
 shipIdentHull
 shipIdentTier
+shipMarkMode
 shipSeq
 shipState
 shipStats
@@ -856,7 +864,6 @@ tcBand
 tcCap
 tcReadout
 tcStep
-theaterR
 threatCorridors
 tierMul
 tipEl
@@ -912,13 +919,11 @@ vtBg
 vtCentroid
 vtClampK
 vtCur
-vtFitKmpp
 vtFrame
 vtGridKm
 vtGridLs
 vtInk
-vtMainR
-vtRungKm
+vtLandKmpp
 vtShort
 vtShown
 vtSmooth

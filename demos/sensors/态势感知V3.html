@@ -631,7 +631,13 @@ function covShape(ch,gi,d,t,dd){
      ⚠ 这里一度写成"发现半径的四成"当兜底界。实测那个界【从 0.02 到 1,000,000 倍结果完全一样】——
        因为界只有小于 AMAX(59,958) 才可能把接触从"未定位"救成"已定位",而任何合理的比例都远大于它。
        只有 <=0.01 才咬得住,而那时它做的事是错的:把一条纯方位接触伪装成有位置。所以整条去掉。 */
-  return [COV.HUGE, sPerp, false, true];
+  /* ID2(2026-09-22 用户实报:"为什么直接从热区变成直接的舰艇信号了,我的小热源、中热源、大热源的设定呢?")
+     被动射频:一条视线,没有距离,而且【不给身份】。原来这里无条件给身份(靠波形指纹,条令里叫 SEI / EOB,"开雷达 = 把自己的身份一起递出去")——
+     那是我定的规则,不是用户的。后果:任何开着雷达的船,从被听见的第一拍起就已经"认出"了(形态 H 下那是 320~640 万公里外);
+     等它终于被定位,地图上直接就是真轮廓 + 真名,"X 型热源"那一档(定位了、但还没认出)对它根本不存在 ——
+     而对局里红方旗舰开局就在照射,所以玩家看到的正是"热区 → 直接变成舰艇"。
+     现在身份只有两条来路:光学贴近到认得出轮廓,或者照射的回波够强(NCTR)。"贴近才认得出"对亮灯的船同样成立。 */
+  return [COV.HUGE, sPerp, false, false];
 }
 /* 一拍:先预测(椭圆长大),再把所有量测按信息相加 */
 function stepCov(t,dets,el){
@@ -720,7 +726,7 @@ const covMsl=t=>COV.MSL*Math.sqrt(reflOf(t));
        1 探测级  有信号;或有位置但还不够导引头用
        2 跟踪级  椭圆进了导弹门(导引头在篮子里自己找得到)
        3 火控级  椭圆进了主炮门
-     身份(c.idn / c.idBy)= 另一个属性,只回答"那是什么":由【角分辨到轮廓】或【听出辐射指纹】给,
+     身份(c.idn / c.idBy)= 另一个属性,只回答"那是什么":由【光学角分辨到轮廓】或【照射回波够强(NCTR)】给(ID2 起被动射频不再给身份),
        两者都是单站性质,交会帮不上忙。它决定图标画成未知还是舰种、标签写不写舰种、群构成里记不记成 ?。
    这是数据链航迹的标准形态(Link-16 / NTDS:每条航迹一个 Track Quality 数 + 一个独立的 Identity 字段)。
 
@@ -3156,7 +3162,7 @@ function runSelftest(){
      三段用同一对蓝舰(基线 10 万),只改目标的距离与发射档:
        a 远处静默:椭圆已进导弹门 ⇒ 等级 2;但认不出 ⇒ 身份仍是未知
        b 贴近到光学能分辨轮廓:身份由光学给出
-       c 回到远处但它自己开口:一步没挪,靠辐射指纹认出 */
+       c 回到远处但它自己开口:一步没挪,等级照样上得去,但【仍然认不出】(ID2:被动射频不给身份;原来这一段是"靠辐射指纹认出")*/
   const XF=[['blue','DD',0,-50000,null],['blue','DD',0,50000,null],['red','DD',120000,0,null]];
   loadScene(XF); advance(40);
   const xFar=R(), aFar=xFar.cov.a1, idFar=xFar.cov.idn, litFar=xFar.lit;
@@ -3165,11 +3171,11 @@ function runSelftest(){
   const xNear=R(), litNear=xNear.lit, idNear=xNear.cov.idn, byNear=xNear.cov.idBy;
   loadScene([XF[0],XF[1],['red','DD',120000,0,{emitMode:'paint'}]]); advance(40);
   const xLoud=R(), litLoud=xLoud.lit, byLoud=xLoud.cov.idBy;
-  chk('⑭ 交会给位置、不给身份:椭圆进了导弹门 ⇒ 2 级,而身份仍未知;贴近靠轮廓认、它开口靠指纹认',
-    aFar<covMsl(xFar)&&!idFar&&litFar===2&&idNear&&byNear==='opt'&&litNear>=2&&byLoud==='lis'&&litLoud>=2,
+  chk('⑭ 交会给位置、不给身份:椭圆进了导弹门 ⇒ 2 级,而身份仍未知;贴近靠轮廓认;它开口只抬等级、不给身份(ID2)',
+    aFar<covMsl(xFar)&&!idFar&&litFar===2&&idNear&&byNear==='opt'&&litNear>=2&&byLoud===''&&!xLoud.cov.idn&&litLoud>=2,
     '远 12万静默 ±'+fmtK(aFar)+'(<导弹门 '+fmtK(covMsl(xFar))+') ⇒ lit'+litFar+' 身份='+(idFar?'已认出':'未知')+
     '   贴到 7万(光学认出要 '+fmtK(dOptID)+' 以内) ⇒ '+byNear+' 认出 lit'+litNear+
-    '   回 12万但它开口 ⇒ '+byLoud+' 认出 lit'+litLoud);
+    '   回 12万但它开口 ⇒ 身份='+(xLoud.cov.idn?'已认出('+byLoud+')':'未知')+' lit'+litLoud);
   /* ⑭b 用户两次实报的那条路:从范围外走进来到 P1,再贴近、再退回 P1。
         同一个 P1,等级必须与来路无关,而且必须等于"椭圆此刻落在哪个圈里"(定位几何小窗画的就是这个)。
         反向对照:身份【确实】是路径的函数(进来时未知、退回来时已认出)—— 没有这一半的话,
@@ -3992,8 +3998,9 @@ function runUitest(){
     click('[data-scene="2"]'); S.ships[0].emitMode='paint'; S.ships[1].emitMode='paint'; advance(30);
     const bl=S.ships[0], l0=bl.lit; delShip(S.ships[1].id); advance(120); const l1=bl.lit;
     /* ⑤ 已被认出的舰换舰种:身份作废(远在认得出轮廓的距离之外,不许当场画成新舰种) */
-    loadScene([['blue','DD',0,0,null],['red','DD',150000,0,{emitMode:'paint'}]]); advance(20);
-    const rr=S.ships[1], id0=rr.cov.idn; rr.emitMode='silent'; advance(5);
+    /* ID2:原来靠"它开着雷达 ⇒ 被动射频给身份"拿到认出;那条规则已删,改成先贴到光学认得出轮廓的距离之内认出来,再退到 15 万(冷 DD 光学 24 万,航迹不断、身份锁存着) */
+    loadScene([['blue','DD',0,0,null],['red','DD',0.7*identDist('opt',ladShip('DD'),ladShip('DD')),0,null]]); advance(20);
+    const rr=S.ships[1], id0=rr.cov.idn; rr.x=150000; advance(5);
     click('#cards [data-sid="'+rr.id+'"][data-k="cls"][data-v="CA"]'); advance(3); const id1=rr.cov.idn;
     chk('第三轮:锁定圈真的画了 / 梯子记号拖到头不消失 / 距离滑条盖住整条梯子且设多少读多少 / 对面删光后接触自己失联 / 换舰种身份作废',
       ringOK&&ladOK&&slOK&&l0===3&&l1===0&&id0&&!id1&&rr.cls==='CA',

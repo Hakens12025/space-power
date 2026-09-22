@@ -657,9 +657,13 @@ t('FLOW6_PULSE',function(){ /* RF7e 被照射告警黄圈:脉冲必须挂墙钟,
   var _covBak=S.covR;   /* 本条要往舰上挂一条"正被照射"的接触。fc5reset 复用同一批舰,不还原的话后面每一条
                            用到它的判据都会多画一圈告警环 —— 实测 FLOW31 的对照组峰值被抬了 2 个灰阶就翻红了,
                            而被测代码一行没动。探针留下的状态残留是这套判定最容易自伤的地方(FLOW31 的块注释记过同一件事)。 */
-  var p=toScreen(0,0),px=Math.round(p[0]),py=Math.round(p[1]-13*((typeof hullZoomF==='function')?hullZoomF():1)); /* 告警圈半径 13 x 舰体缩放系数(SN9 起圈跟着舰体走),取正上方那一点采样。写死 13 的话只在系数恰好接近 1 的缩放下采得到 —— SN9 的变异测试实测翻过一次 */
+  /* RWR1:告警从闭合黄圈换成了【朝照射源方位的一段弧】,采样点跟着挪到弧的正中:船心 + (图标半径 + RWR.GAP) x 来波方向。
+     照射源取场上第一艘活着的红舰(内核把它的 id 记在 cov.ch.act 的末位;原来这里填的是一个不存在的 'x',新画法找不到照射源就不画)。 */
+  var PT=ships.filter(function(x){return x.side==='red'&&!x.dead;})[0];
+  if(!PT)return 'fail 场上没有红舰可当照射源';
+  var p=toScreen(0,0),pth=Math.atan2(PT.pos[1]-S.pos[1],PT.pos[0]-S.pos[0]),pR=shipIconR(S)+RWR.GAP,px=Math.round(p[0]+Math.cos(pth)*pR),py=Math.round(p[1]+Math.sin(pth)*pR);
   function warnPix(){ /* 每次重画前把驻留值按回去:detectLoop 不在本判定里跑,但 fc5reset 之后要保证条件成立 */
-    S.covR=newCov();S.covR.seen=true;S.covR.ch.act=[100,100,50000,20,'x'];  /* SN6:告警条件 = 对方这一拍有一条【照射】量测打在我身上(c.ch.act 非空),不再是驻留过阈值 */                     /* SN4:驻留键改 opt/lis/act;阈值不再手抄 0.3,直接读 SENS.ACT_WARN——阈值一改这条自动跟着走,不会退化成"圈根本没画、两次采样都是背景色"的假绿(82 的黄圈门) */
+    S.covR=newCov();S.covR.seen=true;S.covR.ch.act=[100,100,50000,20,PT.id];  /* SN6:告警条件 = 对方这一拍有一条【照射】量测打在我身上(c.ch.act 非空),不再是驻留过阈值 */                     /* SN4:驻留键改 opt/lis/act;阈值不再手抄 0.3,直接读 SENS.ACT_WARN——阈值一改这条自动跟着走,不会退化成"圈根本没画、两次采样都是背景色"的假绿(82 的黄圈门) */
     render();
     var d=ctx.getImageData(px,py,1,1).data;
     return d[0]+d[1]+d[2];                                        /* 亮度和:圈的 alpha 越高越亮 */

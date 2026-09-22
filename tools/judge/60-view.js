@@ -268,17 +268,23 @@ t('FLOW56_LOD',function(){
 });
 t('FLOW55_VIEWTIER',function(){
   if(typeof vtApply!=='function'||typeof VT==='undefined')return 'fail SN6 三级星图未加载(缺 vtApply/VT)';
-  var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},rBak=LAD.radarMin,out='';
+  var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},rBak=LAD.radarMin,gBak=LAD.gun,hBak=LAD.heardMin,spBak=VT.SPAN_LS.slice(),out='';
   try{
     vtApply();
     var T1=VT.T1,T2=VT.T2;
-    var L=[1,2,3].map(function(t){return vtFitKmpp(vtMainR(t),VT.LAND);});
-    /* ① 层界跟着梯子走。把雷达发现(舰队层的主圈)拉大,T1/T2 必须【都】动 —— 它们是相邻落点的几何中点。 */
-    LAD.radarMin=rBak*1.5;vtApply();
+    var L=[1,2,3].map(vtLandKmpp);
+    /* ① MAP1 星图的比例尺是星图自己的事(用户 2026-09-22:"以后武器主炮会变多,以这个做锚是不对的,星图距离显示应该独立的来")。
+          【不变量】:把主炮射程改成 10 倍、雷达发现改成 1.5 倍、被听见改成 3 倍 ⇒ 落点 / 层界 / 缩放两头必须【逐位】不变;
+          反向对照:动星图自己的阶梯(舰队层 15 → 30 光秒)⇒ 两条层界必须都动,还原后逐位复原。 */
+    var snap=function(){return [VT.T1,VT.T2,vtLandKmpp(1),vtLandKmpp(2),vtLandKmpp(3),kMinNow(),kMaxNow()].join('|');};
+    var s0=snap();LAD.gun=gBak*10;LAD.radarMin=rBak*1.5;LAD.heardMin=hBak*3;vtApply();var s1=snap();
+    LAD.gun=gBak;LAD.radarMin=rBak;LAD.heardMin=hBak;vtApply();
+    var indep=(s0===s1);
+    VT.SPAN_LS[2]=spBak[2]*2;vtApply();
     var moved=(Math.abs(VT.T1/T1-1)>0.05&&Math.abs(VT.T2/T2-1)>0.05);
-    LAD.radarMin=rBak;vtApply();
+    VT.SPAN_LS[2]=spBak[2];vtApply();
     var back=(Math.abs(VT.T1-T1)<1e-9&&Math.abs(VT.T2-T2)<1e-9);
-    var ok1=(moved&&back);
+    var ok1=(indep&&moved&&back&&Math.abs(L[0]-VT.SPAN_LS[1]*C_LS/Math.min(W,H))<1e-6);
     /* ② 三个落点各落在自己那一层里(离散层带迟滞,所以这是一条真约束而不是恒真) */
     var lt=[1,2,3].map(function(t){return vtTier(L[t-1],t);});
     var ok2=(lt[0]===1&&lt[1]===2&&lt[2]===3);
@@ -290,16 +296,11 @@ t('FLOW55_VIEWTIER',function(){
       if(Math.abs(sum-1)>1e-9||w[1]<0||w[2]<0||w[3]<0)okW=false;
       ws.push(w.slice(1).map(function(x){return x.toFixed(2);}).join('/'));
     }
-    /* ④ 缩放两头都有依据,而且【两头都不是保险丝】:
-         拉到最近 = 近防内圈(引擎里按真实尺寸画、最小的那个圈)直径占画面九成;
-         拉到最远 = 我方最大发现包线占画面九成。
-       ⚠ 第一版拿"DD 主炮门直径 30~60px"当拉到最近的锚(照搬演示页),而【引擎根本没画那道门】——
-         锚是悬空的,代价是总缩放范围只剩 148 倍(旧实现是 100,000 倍),滚两下就到头。 */
-    var kMax=kMaxNow(), kMin=kMinNow();
-    var ciwsPx=2*ciwsMinInner()*kMax;               /* 近防内圈的直径,占短边多少 */
-    var ok4=(Math.abs(ciwsPx-0.9*Math.min(W,H))<1e-6&&kMax<K_HARD
-             &&kMin>K_MIN&&Math.abs(kMin-0.45*Math.min(W,H)/theaterR())<1e-12
-             &&(kMax/kMin)>300);                    /* 总范围:至少三百倍,否则滚两下就到头 */
+    /* ④ 缩放两头用的是同一把尺(短边横跨多少光秒),而且【两头都不是保险丝】;总范围至少三百倍,否则滚两下就到头。
+       沿革:SN6 第一版拿"DD 主炮门直径 30~60px"当拉到最近的锚,总范围只剩 148 倍;之后换成近防内圈 / 最大发现包线;MAP1 起两头都归星图自己的阶梯。 */
+    var kMax=kMaxNow(), kMin=kMinNow(), sh=Math.min(W,H);
+    var ok4=(Math.abs(kMax-sh/(VT.SPAN_MIN_LS*C_LS))<1e-15&&kMax<K_HARD&&Math.abs(kMin-sh/(VT.SPAN_MAX_LS*C_LS))<1e-18&&kMin>K_MIN
+             &&(kMax/kMin)>300&&1/kMax<vtLandKmpp(1)&&1/kMin>vtLandKmpp(3));   /* 末两项:三个落点都在缩放范围之内 */
     /* ⑤ 钳位真的接在滚轮上:往两头各滚 60 下,必须停在上下限上而不是越过去。
        ⚠ SN6b 平滑缩放之后,zoomAt 只写【目标】,cam.zoom 每帧朝它逼近 —— 所以滚完要把动画跑到收敛
          再读。camZoomStep 接一个 dt 覆盖参数正是为此:它平时走墙钟,而判据里连着调墙钟是不走的
@@ -313,13 +314,13 @@ t('FLOW55_VIEWTIER',function(){
     var ok5=(Math.abs(hi-kMax)<1e-12&&Math.abs(lo-kMin)<1e-12&&!hiPend&&!loPend);
     var ok=(ok1&&ok2&&okW&&ok4&&ok5);
     out=(ok?'ok':'fail')
-      +' ① 层界跟着梯子走:雷达发现 x1.5 ⇒ T1/T2 都动='+moved+' 还原逐位复原='+back+'='+ok1
+      +' ① 星图独立:主炮 x10 / 雷达 x1.5 / 被听见 x3 之后 落点·层界·缩放两头逐位不变='+indep+';动星图自己的阶梯 ⇒ T1/T2 都动='+moved+' 还原逐位复原='+back+'='+ok1
       +' | ② 落点 '+L.map(function(x){return x.toFixed(0);}).join('/')+' km/px 各落在第 '+lt.join('/')+' 层(须 1/2/3;层界 '+T1.toFixed(0)+'/'+T2.toFixed(0)+')='+ok2
       +' | ③ 权重和恒为 1 且非负(九点取样)='+okW+' 样例 '+ws[0]+' … '+ws[4]+' … '+ws[8]
-      +' | ④ 拉到最近 '+(1/kMax).toFixed(0)+' km/px ⇒ 近防内圈('+ciwsMinInner()+'km)直径占 '+ciwsPx.toFixed(0)+'px = 短边九成;拉到最远 '+(1/kMin).toFixed(0)+' km/px = 发现包线('+Math.round(theaterR()/1000)+'k);总范围 '+(kMax/kMin).toFixed(0)+' 倍(须>300)='+ok4
+      +' | ④ 拉到最近 '+(1/kMax).toFixed(1)+' km/px(短边 '+VT.SPAN_MIN_LS+' 光秒)拉到最远 '+(1/kMin).toFixed(0)+' km/px(短边 '+VT.SPAN_MAX_LS+' 光秒)总范围 '+(kMax/kMin).toFixed(0)+' 倍(须>300)三个落点都在范围内='+ok4
       +' | ⑤ 滚轮钳位(平滑缩放跑到收敛后):往里滚 60 下停在 '+(1/hi).toFixed(0)+' km/px、往外滚 60 下停在 '+(1/lo).toFixed(0)+' km/px(须正好是上下限,且动画已收干净)='+ok5;
   }finally{
-    LAD.radarMin=rBak;vtApply();
+    LAD.radarMin=rBak;LAD.gun=gBak;LAD.heardMin=hBak;VT.SPAN_LS[1]=spBak[1];VT.SPAN_LS[2]=spBak[2];VT.SPAN_LS[3]=spBak[3];vtApply();
     cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
   }
   return out;
@@ -333,6 +334,9 @@ t('FLOW54_HEAT',function(){
     adminMode=false;editMode=false;selected=[];projectiles.length=0;
     var B=makeShip('DD','热蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2);
     var Rr=makeShip('DD','热红',[0,0,0],[1,0,0],[0,0,0],'red',2);
+    Rr.id='s901';   /* ID2 那轮实测:热区的偏移与扭曲按【舰 id 的数字】取固定相位(83-hud 的 heatIdPhase),而 id 来自全局 shipSeq ——
+                       前面每多一条会造船的判据,这里拿到的 id 就变一次,场的长短比跟着在 1.06 ~ 1.56 之间漂,②的阈值 1.55 迟早被漂过去(被测代码一行没动)。
+                       钉死 id ⇒ 相位固定 ⇒ 这条判据不再依赖它在文件里排第几。 */
     ships.length=0;ships.push(B,Rr);
     [B,Rr].forEach(function(x){x.orders=[];x.vel=[0,0,0];x.autoEngage=false;x.roe='hold';x.macOn=false;x.mslOn=false;x.ciwsOn=false;x.noFire=true;});
     setEmit(B,'silent');setEmit(Rr,'paint');            /* 红舰在喊、蓝舰静默 ⇒ 只有静听这一路 ⇒ 定不出位置 */
@@ -371,7 +375,8 @@ t('FLOW54_HEAT',function(){
     var FLAT=mom(dFar);
     HEAT_WARP=wBak;HEAT_OFF=oBak;HEAT_CHURN=cBak;
     var ok1=(FAR.n>0&&NEAR.n>0&&!FAR.fix&&FAR.lit===1);
-    var ok2=(FAR.ar<1.55&&NEAR.ar<1.55&&FAR.ell>5);      /* 是面不是条,而底下的椭圆确实细长(反退化) */
+    var ok2=(FAR.ar<2&&NEAR.ar<2&&FAR.ell>5);      /* 阈值 1.55 → 2:它要分的是"面"(长短比一点几)与"条"(底下那个椭圆是几十比一),2 已经绰绰有余;1.55 是贴着某一个 id 的读数定的 */
+    void 0;      /* 是面不是条,而底下的椭圆确实细长(反退化) */
     /* 团心偏开多少要看【相对团本身的尺度】,不能只看屏幕像素:
        ⚠ 第一版写成"绝对偏移 > 一个格子"就漏掉了真正要守的那件事 —— 变异测试里把偏移幅度直接归零,
          判据照样全绿,因为域扭曲本身也会把重心拱开好几个像素。两件事混在一个读数里,这条就没有牙。
@@ -386,7 +391,7 @@ t('FLOW54_HEAT',function(){
     var km=function(v){return Math.round(v/1000)+'k';};
     out=(ok?'ok':'fail')
       +' 取样段(光学够不着、听得见)'+km(dFar)+' / '+km(dNear)+':场格子数 '+FAR.n+' / '+NEAR.n+' lit'+FAR.lit+' 定得出位置='+FAR.fix+'(须 lit1 且定不出)='+ok1
-      +' | 是面不是条:场长短比 '+FAR.ar.toFixed(2)+' / '+NEAR.ar.toFixed(2)+'(须<1.55) 而底下椭圆细长 '+FAR.ell.toFixed(0)+' 倍(须>5=反退化)='+ok2
+      +' | 是面不是条:场长短比 '+FAR.ar.toFixed(2)+' / '+NEAR.ar.toFixed(2)+'(须<2) 而底下椭圆细长 '+FAR.ell.toFixed(0)+' 倍(须>5=反退化)='+ok2
       +' | 团心离真值 / 团半径 = '+FAR.offRel.toFixed(2)+'(须>0.30) → 偏移与扭曲归零后 '+FLAT.offRel.toFixed(2)+'(须<0.12=落回舰位)='+ok3
       +' | 越近面越小:场半径 '+km(FAR.rw)+' → '+km(NEAR.rw)+'(须<九成;硬截断会让两档一模一样)='+ok4;
   }finally{

@@ -476,7 +476,11 @@ function drawContacts(){
     ctx.save();ctx.imageSmoothingEnabled=true;          /* 放大时的双线性插值就是这一层的模糊 */
     ctx.drawImage(HEAT.cv,0,0,W,H);ctx.restore();
   }
-  /* ---- 误差椭圆:定得出位置的接触。这里【可以】用椭圆 —— 它是武器层的语言,而这条接触确实进了武器的账 ---- */
+  /* ---- 误差椭圆:定得出位置的接触。这里【可以】用椭圆 —— 它是武器层的语言,而这条接触确实进了武器的账 ----
+     GM1(2026-09-22 用户拍板:"如果我不点缩圈显示按钮,敌方在大地图上是默认不显示缩圈图标的"):这一层跟着右下角「缩圈」钮(GEOM.on)走,默认不画。
+     缩圈是同一件事的两个视图 —— 右上角小窗是放大的那一个,地图上的椭圆是原位的那一个 —— 一个钮管两处;平时地图上只留舰标 / 记号与等级标签。
+     热区不归这个钮管:它是"那边有东西"本身,不是解算质量。 */
+  if(typeof GEOM==='undefined'||!GEOM.on)return;
   for(const s of ships){
     if(s.dead||s.side!=='red')continue;
     const c=s.covB;
@@ -603,6 +607,11 @@ function drawHoverRings(){
     if(hoverRing==='mac'){const e=(typeof macEffRange==='function')?macEffRange(s):(s.macRange);ring(p,e,'主炮 '+Math.round(e/1000)+'k'+(s.emitMode==='paint'?'(照射)':'(未照射)'));} // RF3 射程读烘焙字段(定义在 weapons/51-defs);RF6 改画【精确射程】,圈外到 ×MAC_FALLOFF 之间是衰减区,故意不画第二个圈——两个同心圈在战术图上读不出主次。SN4:后缀改读 emitMode,与 macEffRange 的新口径(paint→macRadar / 否则 macRange,二选一不取 max)同源
     else if(hoverRing==='msl')ring(p,s.mslRange,'导弹 '+Math.round((s.mslRange)/1000)+'k');
     else if(hoverRing==='ciws'){const c=ciwsOf(s);ring(p,c.outer,'外圈拦截 '+Math.round(c.outer/1000)+'k');ring(p,c.inner,'内圈 '+Math.round(c.inner/1000)+'k');}
+    else if(hoverRing==='emit'&&typeof actRangeOf==='function'&&typeof hearRangeOf==='function'){ // EM1-B:雷达的账 —— 开了能照多远、开了会在多远被听见(两圈都按【开着照射】算,不管此刻开没开:这是做决定前要看的账)
+      const ifPaint=Object.assign({},s,{emitMode:'paint'});
+      ring(p,actRangeOf(s),'雷达 '+Math.round(actRangeOf(s)/1000)+'k(对标准目标)'+(s.emitMode==='silent'?' · 现在静默':''));
+      ring(p,hearRangeOf(ifPaint,1),'开雷达会在 '+Math.round(hearRangeOf(ifPaint,1)/1000)+'k 被听见');
+    }
   }
 }
 /* RF5 悬停准星 / 吸附反馈 / 预览线:表达"我此刻正要下的命令",与 drawOrders/drawRange/drawHoverRings 同族,故归在 83-hud。

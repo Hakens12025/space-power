@@ -476,3 +476,49 @@ t('FLOW81_REVBURN',function(){
   }
   return out;
 });
+/* ===== ID2 被动射频不给身份:"X 型热源"那一档对亮灯的船同样存在 =====
+   用户 2026-09-22:"为什么直接从热区变成直接的舰艇信号了,我的小热源、中热源、大热源的设定呢?"
+   根因:内核里被动射频【无条件给身份】(波形指纹),开着雷达的船从被听见的第一拍起就已经"认出"了;等它被定位,地图上直接是真轮廓 + 真名。
+     ① 内核:静听那条量测的"给不给身份"位恒为 false;光学 / 照射两条仍按各自的识别距离给
+     ② 端到端:两艘静默的蓝舰(有基线,能交叉定位)对一艘【开着雷达】的红 DD,摆在光学看得见、但认不出轮廓的距离上(两个距离从梯子现量)
+        ⇒ 定位了(舰标画出来)而身份未知:轮廓 UNK、名字是热源分类、不是真名;贴近到光学认得出的距离 ⇒ 才变成 DD + 真名
+     ③ 反向对照:同一距离上红舰静默(不开雷达)结果必须一样 —— 身份与它开不开雷达无关 */
+t('FLOW82_ESMNOID',function(){
+  if(typeof contactIdn!=='function')return 'fail 缺 contactIdn';
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,edBak=editMode,lodBak=LOD.off,selBak=selected.slice(),camBak={x:cam.x,y:cam.y,zoom:cam.zoom};
+  var oT=ctx.fillText,oDH=drawHull,out='';
+  try{
+    adminMode=false;editMode=false;selected=[];LOD.off=true;projectiles.length=0;
+    var b1=makeShip('DD','无名蓝1',[0,-50000,0],[1,0,0],[0,0,0],'blue',2),b2=makeShip('DD','无名蓝2',[0,50000,0],[1,0,0],[0,0,0],'blue',2);
+    var R=makeShip('DD','亮灯红真名',[0,0,0],[-1,0,0],[0,0,0],'red',2);
+    var lp=ladPair('DD','DD'),dFar=Math.sqrt(lp.optIdent*lp.optColdMin),dNear=lp.optIdent*0.6;
+    /* ① */
+    var shLis=covShape('lis',1,b1,Object.assign({},R,{emitMode:'paint',pos:[dFar,0,0]}),dFar);
+    var ok1=(!!shLis&&shLis[3]===false);
+    /* ②③ */
+    var texts=[],hull=null;
+    ctx.fillText=function(tx){texts.push(String(tx));return oT.apply(ctx,arguments);};
+    drawHull=function(c,cls,tier){hull=cls;return oDH.apply(this,arguments);};
+    var run=function(d,mode){
+      ships.length=0;ships.push(b1,b2,R);ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.flame=0;x.sideFlame=0;x.autoEngage=false;x.roe='hold';x.noFire=true;});
+      setEmit(b1,'silent');setEmit(b2,'silent');setEmit(R,mode);R.pos=[d,0,0];R.litBlue=0;R.covB=newCov();R.seenBlue=-1e9;R.seenBluePos=null;
+      for(var i=0;i<40;i++)detectLoop(1);
+      cam.x=d/2;cam.y=0;cam.zoom=0.004;texts=[];hull=null;drawShip(R);
+      return {st:contactState(R,'blue'),lit:R.litBlue,idn:contactIdn(R,'blue'),hull:hull,real:texts.indexOf(R.name)>=0,sig:texts.indexOf(sigClassLabel(R))>=0,heard:!!(R.covB.ch&&R.covB.ch.lis)};};
+    var loud=run(dFar,'paint'),quiet=run(dFar,'silent'),close=run(dNear,'paint');
+    var unk=function(q){return q.st==='live'&&q.idn===false&&q.hull==='UNK'&&!q.real&&q.sig;};
+    var ok2=(loud.heard&&unk(loud)&&close.idn===true&&close.hull==='DD'&&close.real&&!close.sig);
+    var ok3=(!quiet.heard&&unk(quiet));
+    var ok=(ok1&&ok2&&ok3);
+    out=(ok?'ok':'fail')+' ① 静听量测的身份位='+(shLis?shLis[3]:'无')+'(须 false)='+ok1
+      +' | ② 红舰开着雷达 @'+Math.round(dFar/1e4)+' 万(光学认出 '+Math.round(lp.optIdent/1e4)+' 万之外):被听见='+loud.heard+' 状态='+loud.st+' lit='+loud.lit+' 认出='+loud.idn+' 轮廓='+loud.hull+' 真名上图='+loud.real+' 热源标签='+loud.sig
+        +';贴到 '+Math.round(dNear/1e4)+' 万:认出='+close.idn+' 轮廓='+close.hull+' 真名='+close.real+'='+ok2
+      +' | ③ 反向对照(同距离、红舰静默):状态='+quiet.st+' 认出='+quiet.idn+' 轮廓='+quiet.hull+'(须与开雷达时一样)='+ok3;
+  }finally{
+    ctx.fillText=oT;drawHull=oDH;
+    adminMode=admBak;editMode=edBak;LOD.off=lodBak;selected=selBak;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+    projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
+  }
+  return out;
+});

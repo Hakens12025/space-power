@@ -404,6 +404,9 @@ LAYER_SELF=$(printf '%s\n' "function f(){drawShip(s); /* updateSelPanel() 在注
 [ -z "$LAYER_BAD" ] || { echo "✗ R3 模拟目录引用了呈现 / 指令层的符号:$LAYER_BAD —— 模拟不该依赖界面(要发消息走 core/02 的 log / onLog)"; fail=1; }
 grep -q '^function log(' js/core/02-events.js || { echo "✗ R3 log() 不在 core/02-events.js 里了"; fail=1; }
 ! grep -rqE '^function log\(' js/render js/command || { echo "✗ R3 呈现 / 指令层里又出现了一个顶层 log() 定义(会与 core/02 的撞名,后加载的覆盖先加载的)"; fail=1; }
+grep -q "FLOW84_EMITFX=ok" "$OUT" || { echo "✗ FLOW84_EMITFX 未通过(EM1 开雷达后的表现:发射机开着的船画向外扩散的涟漪(照射蓝 / 干扰橙 / 静默无),敌方接触只在我方听见时画;B:选中蓝舰不再画雷达量程大圈,悬停发射档钮才画照射量程 + 被听见两圈)"; fail=1; }
+grep -q "FLOW83_RWR=ok" "$OUT" || { echo "✗ FLOW83_RWR 未通过(RWR1 被照射告警:朝照射源方位的一段不闭合的橙色弧,不是闭合黄圈;只带方位不带距离;没被照射 / 照射源已沉就不画;与选中圈没有一项相同)"; fail=1; }
+grep -q "FLOW82_ESMNOID=ok" "$OUT" || { echo "✗ FLOW82_ESMNOID 未通过(ID2 被动射频不给身份:开着雷达的船被听见、被定位之后仍是 UNK +「X 型热源」,贴近到光学认得出才变成真舰;反向对照:同距离静默的船结果一样——身份与它开不开雷达无关)"; fail=1; }
 grep -q "FLOW81_REVBURN=ok" "$OUT" || { echo "✗ FLOW81_REVBURN 未通过(RV1 反推的暴露等级高于主推:四档亮度 熄火 / 侧推 / 主推 / 反推,反推必须最亮;刹车令真的跑出反推档;主推看不见、反推看得见的距离上一反推就被看见;右栏读数写得出「反推」)"; fail=1; }
 grep -q "FLOW80_RATES=ok" "$OUT" || { echo "✗ FLOW80_RATES 未通过(RT1 倍速档位:上限 20、下限 0.1,两头钳住;上限必须高于接触降速的最高一档;x0.1 下帧循环的累加器照样推得动模拟)"; fail=1; }
 grep -q "FLOW79_LOGBUS=ok" "$OUT" || { echo "✗ FLOW79_LOGBUS 未通过(R3 日志汇聚点:一条 log 必须同时到达日志面板与右轨事件流,次序 面板在前、事件流在后;新订阅者收得到、重复订阅只算一次)"; fail=1; }

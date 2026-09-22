@@ -475,7 +475,7 @@ function emitBtnSync(){
     updateSelPanel();
   });
   b.addEventListener('mouseenter',()=>{
-    hoverRing=null;                                            // 发射档没有对应的射程圈可 hover(照射圈依赖目标反射,画不出单一半径),显式清掉免得留着上一个钮的圈
+    hoverRing='emit';                                          // EM1-B:悬停发射档 ⇒ 83-hud 画【照射量程(对标准目标)+ 被听见】两圈,与武器射程同一个用法(选中时那个常驻的大圈已删)
     const t=document.getElementById('cmdTip');
     if(t){t.style.display='block';t.textContent='发射档(三态循环):静默=一点不响,只靠光学看,对方听不见我;照射=雷达开机主动照,最准、也只有它上得到火控级,代价是被对方在约 4 倍距离上听见;干扰=发射机改去造噪声,压住对方对我的照射回波,但更吵、而且自己也照不了(火控级同样上不去)';}
   });

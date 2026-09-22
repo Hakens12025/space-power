@@ -50,21 +50,10 @@ function render(){
       ctx.beginPath();ctx.arc(hp[0],hp[1],8,0,6.283);ctx.stroke();
     }
   }
-  // 感知层:选中蓝舰传感器范围圈 + 普通模式点亮状态
-  if(!adminMode){
-    for(const id of selected){
-      const s=shipById(id);if(!s||s.dead||s.side!=='blue')continue;
-      const p=toScreen(s.pos[0],s.pos[1]);
-      const r=((typeof actRangeOf==='function')?actRangeOf(s):0)*cam.zoom; // SN4:旧那个标量探测半径字段已物理删除,换成对【标准目标】(反射 1.0)的照射量程,与 83-hud 的照射圈同口径。注意语义:这圈现在表达【能力】(这部雷达照得到多远),不是【此刻的覆盖】——silent/jam 两档并没有在照射,而圈照画。要改成「只在 paint 档画」是一条产品决定,本轮没做
-      ctx.strokeStyle='rgba(90,167,255,.15)';ctx.lineWidth=1;
-      ctx.beginPath();ctx.arc(p[0],p[1],r,0,6.283);ctx.stroke();
-    }
-    const n=ships.filter(s=>s.side==='red'&&s.litBlue).length;
-    // FM1:x 由 10 移到 280 —— 左轨面板车道是 left:10px / top:68px / width:260px,常驻编队书签栏就在这条车道上,
-    // 这块固定屏幕坐标的读数原地会被它压住。280 = --gut(10) + --rail-w(260) + --gut(10),即左轨之外第一列;文字同步 14→284。
-    ctx.fillStyle='rgba(5,7,12,.62)';ctx.fillRect(400,72,168,18);
-    ctx.fillStyle=n?'#8fd0ff':'#667788';ctx.font='11px Consolas';ctx.textAlign='left';ctx.textBaseline='middle';
-    ctx.fillText(n?`🔭 已点亮 ${n} 艘敌舰`:'🔭 无接触',404,81);
-  }
+  /* EM1-B(2026-09-22 用户拍板):选中蓝舰时【不再】画雷达照射量程那一圈。它原来在这儿:`actRangeOf(s)` 对标准目标的照射量程,淡蓝、无标签、
+     静默时也画 —— 形态 H 之后 CA 是 226 万公里,只有战区层才看得全(用户:"会出现一个很大很大的圈,这个圈代表的是什么")。
+     雷达范围现在与武器射程同一个用法:悬停底栏「发射档」钮 ⇒ 83-hud 的 drawHoverRings 画照射量程 + 被听见两圈,带标签。
+     HUD1(同日):这里原来还在画布顶上写「🔭 已点亮 N 艘敌舰 / 无接触」,N 数的是 litBlue>0 —— 只有方位的热区也算,开局第 0 秒就写"已点亮 3 艘"。
+     "点亮"是驻留模型时代的说法;接触的状态由地图自己说(热区 / 记号 / 舰标 + 等级标签),不需要一句总括。 */
 }
 

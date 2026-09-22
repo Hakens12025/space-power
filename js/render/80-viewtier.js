@@ -3,69 +3,48 @@
    SN6 三级星图(view tier)。与 80-camera 共用编号 80 —— 它是相机的语义层
    (相机只管"怎么换算坐标",这里管"这一档缩放在看哪一带")。先例:85-settings 与 85-tutorial。
 
-   设计与推导在 demos/sensors/态势感知V3.html;本文件是移植。
+   设计最早出自 demos/sensors/态势感知V3.html;MAP1 起落点与层界的【来历】与演示页不同了,见下。
 
-   ---- 层按【读哪几个圈】分,不按"船画成什么样"分 ----
-   玩家在地图上读的是圈。三层 = 距离梯子上的三个带,层界放在带与带之间:
-
-     战术层(近战带)  命中判定、近防、编队、照射→火控、【主炮射程】
-     舰队层(交战带)  【导弹射程】、照射→跟踪级、光学发现 / 照射→定位
-     战区层(接敌带)  【雷达发现】、被听见
-
-   ⚠ 层界与落点【不在这里填】,由 vtApply 从梯子推出:
-     先定三个落点(各层主圈的直径占画布短边 LAND),层界取相邻两个落点的几何中点
-     ⇒ 落点必然落在自己那一层里。梯子一动、画布一变,层界自己跟着动。
-     写死 km/px 的后果是具体的:演示页那边原来按"舰体 / 舰队图标"定层界,实测战术层视野只有 15 万公里,
-     连主炮射程那一圈都放不进;而雷达发现 / 被听见读着舒服的那一段,两个跳层钮都落不到。
+   ---- MAP1(2026-09-22 用户拍板):星图的比例尺是星图自己的事 ----
+   改前三层的落点是从武器 / 感知的数推出来的:战术层 = 主炮射程那一圈占短边六成,舰队层 = 雷达发现,战区层 = 被听见;
+   缩放的两头也一样(最近 = 近防内圈占九成,最远 = 最大发现包线占九成)。用户的原话:
+     "关键是以后武器主炮会变多啊,以这个做锚是不对的,星图距离显示应该独立的来"。
+   他是对的,而且有一个量得出来的后果:落点跟着主炮射程走 ⇒ 把主炮射程改成 10 倍,战术落点就自动拉远 10 倍,
+   到了落点上画面一模一样 —— "射程相当于几个舰长"这个观感与公里数无关,怎么调武器都调不动它。
+   现在星图有自己的一张阶梯(VT.SPAN_LS):【画布短边横跨多少光秒】。武器表、感知梯子怎么改,星图都不动;
+   反过来,星图的比例尺也不再替任何一件武器背书。
+     战术层   2 光秒    主炮射程那一圈(直径 1 光秒)占画面一半;导弹圈(直径 2.3 光秒)横向放得进
+              (第一版取 3 光秒:比改前的战术落点远了 1.8 倍,把"舰标调小"的效果整个抵掉,实测落点上主炮射程仍是 10.8 个舰长;2 光秒是 17.7 个)
+     舰队层  15 光秒    对局开局间距 10 光秒的两支舰队同屏,雷达发现那一圈放得进
+     战区层  45 光秒    整个战场
+   层界照旧取相邻两个落点的几何中点 ⇒ 落点必然落在自己那一层里;画布一变,落点与层界一起按短边重算(SN9b)。
 
    ---- 不硬切 ----
    画法走【连续权重】(vtWeights,和恒为 1、处处连续),所以换层是交叉淡化不是跳变;
    只有标签与跳层钮的高亮用【离散层】(vtTier,带迟滞),免得停在层界上来回闪。
 
-   ---- 缩放的两头也是推出来的 ----
-   拉到最近 kMaxNow:让【近防内圈】的直径占画面九成 —— 引擎里真正按真实尺寸画出来、而且最小的那个圈。
-   拉到最远 kMinNow:我方【最大发现包线】占画面九成。
-   ⚠ 第一版的锚是"DD 的主炮门(命中判定半径)直径占 30~60px"(照搬演示页)。那条规矩在演示页成立,
-     因为那一页把主炮门画成一个你要读的圈;**引擎根本没画它** —— 锚是悬空的。
-     后果实测过:总缩放范围从旧实现的 100,000 倍塌到 148 倍,滚两下就到头(用户实报"缩放能力不足")。
-     换成近防内圈之后是 500 倍,而且这个锚是【实的】——那个圈真的画在屏幕上(83-hud 的 hover 圈)。
+   ---- 缩放的两头 ----
+   同一把尺:拉到最近 = 短边横跨 SPAN_MIN_LS(0.04 光秒,约 1.2 万公里,一艘船与它的近防圈),拉到最远 = SPAN_MAX_LS(60 光秒)。
    ⚠ 拉到最远【刻意不读任何接触的位置】:拿"最远那个接触"去定取景的话,缩放的尽头就会把它的距离漏出来,
-     而被动接触的距离正是模型说"不知道"的那个量。包线是我自己的属性,不泄露任何东西。
+     而被动接触的距离正是模型说"不知道"的那个量。
    ========================================================================= */
 const VT = {
-  T1: 0, T2: 0,          // 层界 km/px —— 由 vtApply 从距离梯子推出,不在这里填
-  FIT: 0.90,             // 一个圈"放得进画面" = 直径占短边九成
-  LAND: 0.60,            // 跳层钮的落点 = 该层主圈的直径占短边六成
+  T1: 0, T2: 0,          // 层界 km/px —— 由 vtApply 从下面的 SPAN_LS 推出(相邻落点的几何中点),不在这里填
+  SPAN_LS: [0, 2, 15, 45],   // MAP1 三层跳层落点:画布【短边】横跨多少光秒。星图自己的阶梯,不读武器表、不读感知梯子
+  SPAN_MIN_LS: 0.04,         // 拉到最近:短边 0.04 光秒(约 1.2 万公里)
+  SPAN_MAX_LS: 60,           // 拉到最远:短边 60 光秒
   HYS: 0.12,             // 离散层(标签、跳层钮)的迟滞
   BAND: 0.45,            // 交叉淡化的半宽(ln 空间)。两条层界相距远大于 2xBAND,两段淡化不会叠
-  /* 每一层的【主圈】—— 落点就是让它占短边 LAND 的那个比例尺。
-     它与 LAND 是这一层仅有的两处【设计选择】(不是从物理推出来的数),所以摆在表里而不是散在函数里。
-     战术看主炮射程、舰队看雷达发现、战区看被听见:各自是那一带里玩家真正要读的那一圈。 */
-  MAIN: ['gun', 'radar', 'heard'],
   NAME: ['', '战术层', '舰队层', '战区层'], EN: ['', 'TACTICAL', 'FLEET', 'THEATER'],
   BG: [null, [5, 7, 12], [4, 10, 16], [10, 7, 19]],               // 三层底色:冷蓝黑 / 偏青 / 偏紫
   INK: [null, [90, 167, 255], [84, 224, 208], [196, 160, 255]],   // 三层网格/刻度的墨色
 };
 /* 缩放的硬上下限。k = cam.zoom,单位是【屏幕 px / 世界 km】(与 toScreen 同口径)。
-   两头都是【推出来】的,下面那两个常量只是保险丝 —— 真实的界由 kMinNow / kMaxNow 现算。 */
+   真实的界由 kMinNow / kMaxNow 按 SPAN_MAX_LS / SPAN_MIN_LS 现算,下面那两个常量只是保险丝。 */
 const K_MIN = 8e-6;                     // 保险丝:再怎么样也不许缩过它
 const K_HARD = 1;                       // 保险丝:1 km/px。近防内圈那条式子在极小视口下会炸,这里兜住
-/* 近防内圈里最小的那个(从武器表现量,不抄死数 —— 表一改它自己跟)。
-   它是引擎里【按真实尺寸画、而且最小】的那个圈,所以拿它当"拉到最近"的锚。 */
-const ciwsMinInner = () => {
-  let m = Infinity;
-  for (const k in WPN) { const w = WPN[k]; if (w && w.kind === 'ciws' && w.inner > 0 && w.inner < m) m = w.inner; }
-  return isFinite(m) ? m : 5000;
-};
-
 const vtShort = () => { const m = Math.min(W || 0, H || 0); return m > 100 ? m : 750; };   // 画布短边;还没量过就按设计视口
-const vtFitKmpp = (R, frac) => 2 * R / ((frac || VT.FIT) * vtShort());                     // 半径 R 的圈,直径占短边 frac 时的 km/px
-/* 梯子上那几级的公里数。发现域在 LAD 里存的是【分钟预警】,这里换回公里 */
-const vtRungKm = k => {
-  const km = m => m * 60 * LAD.V_REF;
-  return k === 'gun' ? LAD.gun : (k === 'msl' ? LAD.msl : (k === 'optCold' ? km(LAD.optColdMin) : (k === 'radar' ? km(LAD.radarMin) : km(LAD.heardMin))));
-};
-const vtMainR = t => vtRungKm(VT.MAIN[t - 1]);        // 该层的【主圈】:战术=主炮 / 舰队=雷达发现 / 战区=被听见
+const vtLandKmpp = t => VT.SPAN_LS[t] * C_LS / vtShort();   // MAP1 第 t 层跳层落点的 km/px:短边横跨 SPAN_LS[t] 光秒。C_LS 住在 sensors/23-cov,运行期解析
 /* SN9b ⚠ 层界与落点必须出自【同一块画布】。落点(camJump)一直是按真实画布现算的,而层界原来只在加载期推一次 ——
    那一刻 W/H 还是 0,vtShort 退回 750px 的设计视口,于是层界被冻在 750px 上、落点跟着真实画布走,两者分了家:
    1080p 上战区落点 4234 km/px,冻住的层界带迟滞要 4487 才算进战区 ⇒ 按「舰队」再按「战区」,画面变了、亮着的钮还是「舰队」,
@@ -75,7 +54,7 @@ const vtMainR = t => vtRungKm(VT.MAIN[t - 1]);        // 该层的【主圈】:�
 let _vtShortAt = 0;
 function vtApply() {
   _vtShortAt = vtShort();
-  const L = [1, 2, 3].map(t => vtFitKmpp(vtMainR(t), VT.LAND));
+  const L = [1, 2, 3].map(vtLandKmpp);
   VT.T1 = Math.sqrt(L[0] * L[1]); VT.T2 = Math.sqrt(L[1] * L[2]);
 }
 const vtSmooth = x => { x = x < 0 ? 0 : (x > 1 ? 1 : x); return x * x * (3 - 2 * x); };
@@ -94,14 +73,8 @@ function vtTier(kmpp, prev) {
   }
   return t;
 }
-/* 战区半径 = 我方最大发现包线(静听上限:最吵的发射机 x 最好的耳朵),从舰种表现量 */
-const theaterR = () => {
-  let e = 0, r = 0;
-  for (const k in SENS.CLS) { e = Math.max(e, SENS.CLS[k].emit); r = Math.max(r, SENS.CLS[k].recv); }
-  return SENS.LIS_DET * Math.sqrt(e * SENS.EMIT_P.paint * r);
-};
-const kMinNow = () => Math.max(K_MIN, 0.45 * Math.min(W || 750, H || 750) / theaterR());
-const kMaxNow = () => Math.min(K_HARD, 0.45 * Math.min(W || 750, H || 750) / ciwsMinInner());
+const kMinNow = () => Math.max(K_MIN, vtShort() / (VT.SPAN_MAX_LS * C_LS));   // 拉到最远
+const kMaxNow = () => Math.min(K_HARD, vtShort() / (VT.SPAN_MIN_LS * C_LS));  // 拉到最近
 /* 相机缩放的唯一钳位口:zoomAt 与跳层都走它,免得两处各写一份上下限(那是本项目最爱漂移的一类) */
 const vtClampK = k => Math.max(kMinNow(), Math.min(kMaxNow(), k));
 
@@ -129,7 +102,7 @@ function camJump(t) {
      "战术 / 舰队层跳到选中舰"这条自 SN6 起从来没生效过,一直静默走重心。verify.sh 现在有一条机械检查钉着"被守卫的符号必须存在"。 */
   const sel = selected.length ? (ships.find(x => x.id === selected[0] && !x.dead && x.side === 'blue') || null) : null;
   const to = (t === 3 || !sel) ? c : [sel.pos[0], sel.pos[1]];
-  vtAnim = { k0: cam.zoom, k1: vtClampK(1 / vtFitKmpp(vtMainR(t), VT.LAND)), x0: cam.x, y0: cam.y, x1: to[0], y1: to[1], t0: nowMs(), dur: 420 };   // SN8:340 → 420,过冲要有地方坐回来
+  vtAnim = { k0: cam.zoom, k1: vtClampK(1 / vtLandKmpp(t)), x0: cam.x, y0: cam.y, x1: to[0], y1: to[1], t0: nowMs(), dur: 420 };   // SN8:340 → 420,过冲要有地方坐回来
 }
 /* 缩放在【对数空间】里走才是匀速的(每一瞬放大同样的倍数);线性插 k 会开头一晃、后面磨蹭。
    ⚠ 走【墙钟】不走 simTime:它是镜头不是模拟,倍速一提不该跟着提(同 RF7e 的告警脉冲)。 */

@@ -25,20 +25,75 @@ function shipIdentTier(s){                                    // TIER1 分级遮
    真实舰体约 1km、舰间距约 2 万 km,任何可用的缩放下船都是亚像素,所以船【必须】画得比真实大;问题只是夸张多少、随缩放怎么变。
    缩放范围约 360 倍,而图标能接受的尺寸范围只有 4 倍左右(太小轮廓读不出,太大用户在演示页嫌过一次)——
    按世界尺寸同步缩放(指数 1)只能在一个 4 倍的窗口里变,窗口外两头钳死;用户拍板取【亚线性、全程响应】:
-       系数 = (缩放 / 战术落点的缩放)^A,钳在 [MIN, MAX]
+       系数 = LAND x (缩放 / 战术落点的缩放)^A,钳在 [MARK, MAX](SZ1 起:落点上是 LAND=0.6 而不是 1;低于 MARK 换记号)
    A=0.4 ⇒ 缩放每翻一倍船大 1.32 倍;从 139 km/px 到 3926 km/px(战术落点到舰队落点全盖住)每滚一格船都在变。
    ⚠ 系数是【全场同一个数】,不读任何一艘船的字段 —— 所以它不泄漏情报:没认出的敌舰照旧是 UNK + T2,只是跟着大家一起变。
       (演示页 lodHullLenPx 那一版按 size 放大,所以要专门给"没认出的不放大"立规矩;这一版没有这个口子。)
    ⚠ 锚点 = 战术层的跳层落点,从 80-viewtier 现量,不抄死数:落点随画布短边变,而"落点上的船 = 改前的大小"这条要在任何视口下都成立。
    ⚠ 陈旧 / 失联的【记号】(CONTACT_MARK_R)不跟着变:它不是船,是"我不知道这是什么"的记号。 */
-const HULL_ZOOM={A:0.4,MIN:0.5,MAX:1.9}; // MAX 1.9:CA(T2 图标长 25.3px)拉到最近时 48px —— 演示页预算 B5 的 HULL_PX
-function hullZoomF(){
-  if(typeof vtFitKmpp!=='function'||typeof vtMainR!=='function')return 1;
-  const kRef=1/vtFitKmpp(vtMainR(1),VT.LAND);
-  if(!(kRef>0)||!(cam.zoom>0))return 1;
-  return Math.max(HULL_ZOOM.MIN,Math.min(HULL_ZOOM.MAX,Math.pow(cam.zoom/kRef,HULL_ZOOM.A)));
+/* SZ1(2026-09-22 用户实报:"武器射程与舰船在星图上的 size 比,感觉和大航海时代的火炮射程一样近")。量出来确实如此:
+   战术落点上主炮射程 = 11.8 个舰标长(风帆舰炮约 8~16 个舰长);拉到舰队层只剩 2.2 个。而且这个比值【与公里数无关】(见 80-viewtier 的 MAP1)。
+   根子是舰标画成了船的轮廓 —— 轮廓会被读成"船身那么大",而它其实夸张了一万多倍。两件事一起做:
+     B  战术落点上的舰标调小一档:LAND 0.55 ⇒ CA 25 → 14px。1080p 战术落点(609 km/px)上实测:主炮射程 17.7 个舰长、导弹 41 个(改前 11.8 / 27.6)
+     A  拉远到轮廓读不清(系数 < MARK)⇒ 不再画轮廓,换成 7px 的方向记号:我方小箭头、敌方接触小菱形。
+        制图综合里叫符号抽象(小比例尺下象形符号换成抽象点符号);记号读起来是"位置标记",不是"船身"。
+   ⚠ 换不换记号只看【全场同一个系数】,不看任何一艘船的字段 —— 所有舰在同一个缩放上一起换,切换时机不泄漏体型 / 分级。
+   ⚠ 菱形不带朝向:接触的朝向本来就只由轮廓承载,拉远之后读不出来;速度箭头照画。 */
+const HULL_ZOOM={A:0.4,LAND:0.55,MARK:0.45,MAX:1.9}; // LAND:战术落点上的系数(CA 14px);MARK:低于它换记号;MAX:CA 最大 48px(演示页预算 B5 的 HULL_PX)
+const SHIP_MARK_R=4;                                  // 记号的半径(px):箭头长 2R-1、菱形对角 2R
+function hullZoomRaw(){ // 未钳位的系数(判"该不该换记号"用)
+  if(typeof vtLandKmpp!=='function'||!(cam.zoom>0))return 1;
+  return HULL_ZOOM.LAND*Math.pow(cam.zoom*vtLandKmpp(1),HULL_ZOOM.A);
 }
-function shipIconR(s){return hullSize(shipIdentHull(s),shipIdentTier(s))*0.78*hullZoomF();} // 图标半径:标签/选中圈/尾焰的基准 TIER1 tier 也走遮蔽口径,否则选中圈/标签间距照样把分级漏出去
+function hullZoomF(){return Math.max(HULL_ZOOM.MARK,Math.min(HULL_ZOOM.MAX,hullZoomRaw()));} // 轮廓 / 尾焰 / 告警圈 / 锁定圈 / 虚影共用的系数;下限 = MARK(记号模式下那几样按这个尺寸画)
+function shipMarkMode(){return hullZoomRaw()<HULL_ZOOM.MARK;}
+function drawShipMark(s,p,color){ // A:拉远后的记号。我方 = 沿船头的小箭头;敌方接触 = 小菱形(不分舰种 / 分级 / 认没认出)
+  const R=SHIP_MARK_R;
+  ctx.save();ctx.translate(p[0],p[1]);ctx.fillStyle=color;
+  ctx.beginPath();
+  if(s.side==='blue'){ctx.rotate(Math.atan2(s.facing[1],s.facing[0]));ctx.moveTo(R,0);ctx.lineTo(-R+1,R-1);ctx.lineTo(-R+2.2,0);ctx.lineTo(-R+1,-R+1);}
+  else{ctx.moveTo(R,0);ctx.lineTo(0,R);ctx.lineTo(-R,0);ctx.lineTo(0,-R);}
+  ctx.closePath();ctx.fill();ctx.restore();
+}
+function shipIconR(s){return shipMarkMode()?SHIP_MARK_R+1:hullSize(shipIdentHull(s),shipIdentTier(s))*0.78*hullZoomF();} // 图标半径:标签/选中圈/尾焰的基准 TIER1 tier 也走遮蔽口径,否则选中圈/标签间距照样把分级漏出去
+/* RWR1(2026-09-22 用户实报:"我方被敌方雷达照射的黄圈一闪一闪不是特别好,感觉就像是我选中这艘船了一样")。
+   改前是一个闭合的黄色脉冲圈(半径 13 x 舰体系数)—— 与选中圈(黄、闭合、同心)只差粗细与闪不闪,一眼分不开。
+   换成雷达告警接收机(RWR,radar warning receiver)的读法:在船外侧、【朝着照射源的方位】画一小段弧 + 一个指向船身的小三角 ="波束从那边打过来"。
+   不闭合、有方向、告警橙(css 的 --state-warn 同色),与选中圈没有一处相同;而且多说了一件事:来波方位。
+   ⚠ 方位是合法情报:被照射的一方本来就测得到来波方向(与热区同源),它不带距离,不泄漏照射源的位置。
+   ⚠ 照射源取内核这一拍记下的那一艘(cov.ch.act 的末位 = 量测最好的那个探测方的 id),不在渲染期另查"还有谁在照我"—— 那是渲染期现查真值。
+      同时被几艘照射时只画最强的那一条;照射源找不到(已沉 / 已换局)就不画。 */
+/* EM1(2026-09-22 用户:"增加一个开雷达后的表现")发射机开着的船,舰标外面向外扩散的几圈涟漪 —— 与右下角「信号视野」钮的图标同一套语言(舰 + 同心圆)。
+   我方:emitMode 不是 silent 就画(照射 = 阵营蓝,干扰 = 告警橙);敌方接触:只在【我方这一拍听见了它的雷达】时画(covB.ch.lis 非空)——
+   那是我方自己的量测,不是它的真值;GM 下敌方按真值画。走墙钟(倍速一提不该变快);每艘三段圆弧,不进任何大 path。 */
+const EMIT_FX={N:3,SPAN:16,PERIOD_MS:1500};
+function emitRippleRgb(s){
+  const truth=(s.side==='blue'||adminMode);
+  if(truth)return s.emitMode==='silent'?null:(s.emitMode==='jam'?'255,154,85':'90,167,255');
+  return (s.covB&&s.covB.ch&&s.covB.ch.lis)?'255,107,107':null;
+}
+function drawEmitRipple(p,r0,rgb,nowIn){
+  const t=((isFinite(nowIn)?nowIn:nowMs())%EMIT_FX.PERIOD_MS)/EMIT_FX.PERIOD_MS;
+  ctx.save();ctx.lineWidth=1.2;
+  for(let i=0;i<EMIT_FX.N;i++){
+    const q=(t+i/EMIT_FX.N)%1,R=r0+2+q*EMIT_FX.SPAN;
+    ctx.strokeStyle='rgba('+rgb+','+((1-q)*0.5).toFixed(3)+')';
+    ctx.beginPath();ctx.arc(p[0],p[1],R,0,6.283);ctx.stroke();
+  }
+  ctx.restore();
+}
+const RWR={GAP:12,HALF:0.40,W:2,TRI:6}; // 弧离图标边缘的间隙(px;12 = 让开选中圈的 +6 再留一道缝,截图上 9 的时候两者贴着)/ 弧的半张角(rad,约 23 度)/ 线宽 / 小三角的高
+function drawRwrSpike(p,th,R,alpha){
+  const c=Math.cos(th),sn=Math.sin(th),col='rgba(255,154,85,'+alpha.toFixed(3)+')';
+  ctx.save();
+  ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=RWR.W;
+  ctx.beginPath();ctx.arc(p[0],p[1],R,th-RWR.HALF,th+RWR.HALF);ctx.stroke();
+  const tip=R+2,base=R+2+RWR.TRI,hw=RWR.TRI*0.55;                     // 三角:尖朝里(指向船),底在外
+  ctx.beginPath();ctx.moveTo(p[0]+c*tip,p[1]+sn*tip);
+  ctx.lineTo(p[0]+c*base-sn*hw,p[1]+sn*base+c*hw);ctx.lineTo(p[0]+c*base+sn*hw,p[1]+sn*base-c*hw);
+  ctx.closePath();ctx.fill();
+  ctx.restore();
+}
 function drawWreck(s,p,r){ // 残骸:空心轮廓+裂纹+暗色,留名标记
   const ang=Math.atan2(s.facing[1],s.facing[0]);
   ctx.save();
@@ -129,10 +184,9 @@ function drawShip(s){
       // 告警圈是给人看的 UI 指示,不是模拟实体,理应恒定 1 次/秒左右,与数据链流动(83-hud FC_FLOW)、准星停留门同一口径。
       const twms=nowMs();
       const pulse=0.45+0.35*Math.abs(Math.sin(twms*0.001*LADAR_WARN_W));
-      ctx.save();
-      ctx.strokeStyle=`rgba(255,209,102,${pulse})`;ctx.lineWidth=1.5;
-      ctx.beginPath();ctx.arc(p[0],p[1],13*hullZoomF(),0,6.283);ctx.stroke(); // SN9 圈跟着舰体走:13px 是按改前的固定图标定的,船放大到 48px 时它会落进船身里
-      ctx.restore();
+      // RWR1:闭合黄圈 → 朝照射源方位的告警弧(见文件头 drawRwrSpike)。呼吸相位照旧挂墙钟。
+      const painter=(typeof shipById==='function')?shipById(myCov.ch.act[4]):null;
+      if(painter&&!painter.dead)drawRwrSpike(p,Math.atan2(painter.pos[1]-s.pos[1],painter.pos[0]-s.pos[0]),shipIconR(s)+RWR.GAP,pulse);
     }
   }
   const isSel=selected.includes(s.id);
@@ -161,6 +215,7 @@ function drawShip(s){
 
   // 推进器尾焰(后主推进 / 前向反推 / 侧向辅助)
   drawFlame(s,p,r);
+  if(!editMode){const erg=emitRippleRgb(s);if(erg)drawEmitRipple(p,shipIconR(s),erg);} // EM1 发射机开着 ⇒ 涟漪(画在舰体之下)
   // 舰体图标(wows式:按舰种形状,图标自身带朝向)
   ctx.save();
   ctx.strokeStyle=bodyColor; ctx.fillStyle=bodyColor;
@@ -172,8 +227,9 @@ function drawShip(s){
   ctx.translate(p[0],p[1]);
   ctx.rotate(ang);
   {const zf=hullZoomF();ctx.scale(zf,zf);} // SN9 舰体随缩放变(见文件头 HULL_ZOOM);包在这一对 save/restore 里,不外溢
-  drawHull(ctx,shipIdentHull(s),shipIdentTier(s),bodyColor,'fill'); // 4 舰种 × T1/T2/T3,几何见 10a-ship-hulls.js。TIER1 轮廓与尺寸同一个遮蔽口径,未识别接触画 UNK+T2
+  if(!shipMarkMode())drawHull(ctx,shipIdentHull(s),shipIdentTier(s),bodyColor,'fill'); // 4 舰种 × T1/T2/T3,几何见 10a-ship-hulls.js。TIER1 轮廓与尺寸同一个遮蔽口径,未识别接触画 UNK+T2
   ctx.restore();
+  if(shipMarkMode())drawShipMark(s,p,bodyColor); // SZ1-A 拉远后换记号
   // 选中高亮
   if(isSel){
     ctx.strokeStyle='#ffe066';ctx.lineWidth=1.6;
