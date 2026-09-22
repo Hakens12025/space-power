@@ -225,10 +225,16 @@ function aiDoctrine(dt,reds,blues){ // 指挥层入口:写 RDOC(含每艘舰的 
       RDOC.orbit=Math.atan2(rc[1]-c[1],rc[0]-c[0]);
     }
   }
-  /* 舰队级齐射窗口(取代原来每舰每 tick 的 8% 骰子):有集火目标、够得着、就绪单元过半、距上次齐射够久 */
+  /* 齐射窗口(取代原来每舰每 tick 的 8% 骰子)。**时机是舰队级的(饱和),弹药就绪是每舰自己的**。
+     第一版两样都写成舰队级:连“全队就绪单元过半”也当成一道门 —— 打完一波全队一起等装填,火力被最慢的那一艘拖死。
+     实测(一局 52 分钟):双方【採到 >=2 级航迹且够得着】的时间几乎一样(红 17% / 蓝 16%),
+     齐射下令却是 17 次 vs 96 次 —— 差的不是机会也不是静默的代价,就是这道门。
+     蓝方那边(weapons/57)是每舰各算各的,所以三艘轮着开火。现在红方:间隔仍是全队一个(同一拍一起打 = 饱和),
+     但“我还有弹吗”每舰自己答;没人答得上就不算用掉这个窗口(计时不归零)。 */
   const env=(typeof curEnv==='function')?curEnv():null,mirror=!!(env&&env.match);
-  const salvoNow=!!foe&&st!=='ambush'&&RDOC.salvoT>=cfg.SALVO_GAP&&RDOC.foeD<=mslReach(reds[0])*1.1&&
-    F.rdy>=Math.ceil(F.n*(reds[0].cells||4)/2);
+  const salvoWin=!!foe&&st!=='ambush'&&RDOC.salvoT>=cfg.SALVO_GAP&&RDOC.foeD<=mslReach(reds[0])*1.1;
+  const salvoSet={};let salvoNow=false;
+  if(salvoWin)for(const e of reds){if(readyCells(e)>=Math.ceil((e.cells||4)/2)){salvoSet[e.id]=true;salvoNow=true;}}
   if(salvoNow)RDOC.salvoT=0;
   /* 逐舰 plan */
   const plan={};let i=0;
@@ -254,7 +260,7 @@ function aiDoctrine(dt,reds,blues){ // 指挥层入口:写 RDOC(含每艘舰的 
       pos=[goal[0]+nx*off,goal[1]+ny*off];pass=false;
     }
     plan[e.id]={role:role,pos:pos,pass:pass,hold:hold,paint:(paintOn&&isLamp),
-      foe:tgt||null,salvo:(salvoNow&&tgt)?(mirror?Math.min(2,readyCells(e)):(e.cells||4)):0};
+      foe:tgt||null,salvo:(salvoSet[e.id]&&tgt)?(mirror?Math.min(2,readyCells(e)):(e.cells||4)):0};
     i++;
   }
   RDOC.plan=plan;
