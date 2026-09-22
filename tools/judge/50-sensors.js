@@ -471,47 +471,98 @@ t('FLOW81_REVBURN',function(){
   }
   return out;
 });
-/* ===== ID2 被动射频不给身份:"X 型热源"那一档对亮灯的船同样存在 =====
-   用户 2026-09-22:"为什么直接从热区变成直接的舰艇信号了,我的小热源、中热源、大热源的设定呢?"
-   根因:内核里被动射频【无条件给身份】(波形指纹),开着雷达的船从被听见的第一拍起就已经"认出"了;等它被定位,地图上直接是真轮廓 + 真名。
-     ① 内核:静听那条量测的"给不给身份"位恒为 false;光学 / 照射两条仍按各自的识别距离给
-     ② 端到端:两艘静默的蓝舰(有基线,能交叉定位)对一艘【开着雷达】的红 DD,摆在光学看得见、但认不出轮廓的距离上(两个距离从梯子现量)
-        ⇒ 定位了(舰标画出来)而身份未知:轮廓 UNK、名字是热源分类、不是真名;贴近到光学认得出的距离 ⇒ 才变成 DD + 真名
-     ③ 反向对照:同一距离上红舰静默(不开雷达)结果必须一样 —— 身份与它开不开雷达无关 */
-t('FLOW82_ESMNOID',function(){
-  if(typeof contactIdn!=='function')return 'fail 缺 contactIdn';
+/* ===== ID3 听出型号(ESM / SEI):被动射频给身份,但【有距离门】 =====
+   这一条的历史要连着看:
+     ID2(2026-09-22 上午)把它整个关死。理由是内核里被动射频【无条件给身份】:开着雷达的船从被听见的第一拍起就已经认出来了,
+       于是"小/中/大型热源"那一档对亮灯的船根本不存在。删掉的是【无条件、无限远】,不是【听不出型号】。
+     ID3(同日稍晚)把它按真实形态补回来:辐射指纹比轮廓 / 回波都认得远(不靠角分辨),但不是无限远 ——
+       方位误差收进 size x COV.L_LIS 才算听出型号(参考对约 100 万公里)。静默的船根本没有 lis 量测,这一级对它天然不成立。
+     ① 内核:静听量测的"给不给身份"位是距离的函数 —— 认出距离以内 true、以外 false(反向对照就在这一半里)
+     ② 端到端:两艘静默蓝 DD 听一艘【开着雷达】的红 DD,摆在听出型号以内(远在光学发现之外)⇒ 认出=true、来路 idBy='lis';
+        而且这时候【只有方位没有位置】⇒ 显示态仍是热区(heat)。"听得出是什么、不知道在哪"正是这一级该有的形状
+     ③ 距离门有牙:同样开着雷达、摆到听出型号之外(仍在被听见之内)⇒ 听得见(lit>=1)但认不出
+     ④ 反向对照:同距离红舰静默 ⇒ 根本没有 lis 量测(ch.lis 为空)、也认不出 —— 开雷达 = 连身份一起递出去 */
+t('FLOW82_ESMID',function(){
+  if(typeof contactIdn!=='function'||!(COV.L_LIS>0))return 'fail ID3 未加载(缺 COV.L_LIS)';
   var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,lodBak=LOD.off,selBak=selected.slice(),camBak={x:cam.x,y:cam.y,zoom:cam.zoom};
-  var oT=ctx.fillText,oDH=drawHull,out='';
+  var out='';
   try{
     adminMode=false;selected=[];LOD.off=true;projectiles.length=0;
     var b1=makeShip('DD','无名蓝1',[0,-50000,0],[1,0,0],[0,0,0],'blue',2),b2=makeShip('DD','无名蓝2',[0,50000,0],[1,0,0],[0,0,0],'blue',2);
     var R=makeShip('DD','亮灯红真名',[0,0,0],[-1,0,0],[0,0,0],'red',2);
-    var lp=ladPair('DD','DD'),dFar=Math.sqrt(lp.optIdent*lp.optColdMin),dNear=lp.optIdent*0.6;
-    /* ① */
-    var shLis=covShape('lis',1,b1,Object.assign({},R,{emitMode:'paint',pos:[dFar,0,0]}),dFar);
-    var ok1=(!!shLis&&shLis[3]===false);
-    /* ②③ */
-    var texts=[],hull=null;
-    ctx.fillText=function(tx){texts.push(String(tx));return oT.apply(ctx,arguments);};
-    drawHull=function(c,cls,tier){hull=cls;return oDH.apply(this,arguments);};
+    var lp=ladPair('DD','DD'),dIn=lp.lisIdent*0.8,dOut=lp.lisIdent*1.3;
+    /* ① 内核两端 */
+    var sh=function(d){return covShape('lis',1,b1,Object.assign({},R,{emitMode:'paint',pos:[d,0,0]}),d);};
+    var shIn=sh(dIn),shOut=sh(dOut);
+    var ok1=(!!shIn&&shIn[3]===true&&!!shOut&&shOut[3]===false);
+    /* ②③④ 端到端 */
     var run=function(d,mode){
       ships.length=0;ships.push(b1,b2,R);ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.flame=0;x.sideFlame=0;x.autoEngage=false;x.roe='hold';x.noFire=true;});
       setEmit(b1,'silent');setEmit(b2,'silent');setEmit(R,mode);R.pos=[d,0,0];R.litBlue=0;R.covB=newCov();R.seenBlue=-1e9;R.seenBluePos=null;
       for(var i=0;i<40;i++)detectLoop(1);
-      cam.x=d/2;cam.y=0;cam.zoom=0.004;texts=[];hull=null;drawShip(R);
-      return {st:contactState(R,'blue'),lit:R.litBlue,idn:contactIdn(R,'blue'),hull:hull,real:texts.indexOf(R.name)>=0,sig:texts.indexOf(sigClassLabel(R))>=0,heard:!!(R.covB.ch&&R.covB.ch.lis)};};
-    var loud=run(dFar,'paint'),quiet=run(dFar,'silent'),close=run(dNear,'paint');
-    var unk=function(q){return q.st==='live'&&q.idn===false&&q.hull==='UNK'&&!q.real&&q.sig;};
-    var ok2=(loud.heard&&unk(loud)&&close.idn===true&&close.hull==='DD'&&close.real&&!close.sig);
-    var ok3=(!quiet.heard&&unk(quiet));
-    var ok=(ok1&&ok2&&ok3);
-    out=(ok?'ok':'fail')+' ① 静听量测的身份位='+(shLis?shLis[3]:'无')+'(须 false)='+ok1
-      +' | ② 红舰开着雷达 @'+Math.round(dFar/1e4)+' 万(光学认出 '+Math.round(lp.optIdent/1e4)+' 万之外):被听见='+loud.heard+' 状态='+loud.st+' lit='+loud.lit+' 认出='+loud.idn+' 轮廓='+loud.hull+' 真名上图='+loud.real+' 热源标签='+loud.sig
-        +';贴到 '+Math.round(dNear/1e4)+' 万:认出='+close.idn+' 轮廓='+close.hull+' 真名='+close.real+'='+ok2
-      +' | ③ 反向对照(同距离、红舰静默):状态='+quiet.st+' 认出='+quiet.idn+' 轮廓='+quiet.hull+'(须与开雷达时一样)='+ok3;
+      return {st:contactState(R,'blue'),lit:R.litBlue,idn:contactIdn(R,'blue'),by:R.covB.idBy,heard:!!(R.covB.ch&&R.covB.ch.lis)};};
+    var loud=run(dIn,'paint'),far=run(dOut,'paint'),quiet=run(dIn,'silent');
+    var ok2=(loud.heard&&loud.idn===true&&loud.by==='lis'&&loud.st==='heat');
+    var ok3=(far.heard&&far.lit>=1&&far.idn===false);
+    var ok4=(!quiet.heard&&quiet.idn===false&&quiet.lit===0);
+    var ok=(ok1&&ok2&&ok3&&ok4);
+    out=(ok?'ok':'fail')+' ① 静听量测的身份位:@'+Math.round(dIn/1e4)+' 万='+(shIn?shIn[3]:'无')+' / @'+Math.round(dOut/1e4)+' 万='+(shOut?shOut[3]:'无')+'(须 true/false)='+ok1
+      +' | ② 开雷达的红 DD @'+Math.round(dIn/1e4)+' 万(听出型号 '+Math.round(lp.lisIdent/1e4)+' 万以内、光学发现 '+Math.round(lp.optColdMin/1e4)+' 万之外):被听见='+loud.heard+' 认出='+loud.idn+' 来路='+loud.by+' 显示态='+loud.st+'(须 heat:听得出是什么、不知道在哪)='+ok2
+      +' | ③ 摆到 '+Math.round(dOut/1e4)+' 万(被听见 '+Math.round(lp.heardMin/1e4)+' 万之内):lit='+far.lit+' 认出='+far.idn+'='+ok3
+      +' | ④ 反向对照(同距离红舰静默):有 lis 量测='+quiet.heard+' lit='+quiet.lit+' 认出='+quiet.idn+'='+ok4;
   }finally{
-    ctx.fillText=oT;drawHull=oDH;
     adminMode=admBak;LOD.off=lodBak;selected=selBak;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+    projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
+  }
+  return out;
+});
+/* ===== ID3 照射认出(NCTR)与三级认出的位置 =====
+   用户 2026-09-22 实报:「我把人家都打死了都还是"大型热源""中型热源",识别不到具体舰艇种类」。
+   根因是三级认出都是形态 N 时代定的(贴到 9.4~12 万才认得出),而 WR1 之后主炮 36.6 万就有过半把握、导弹动力射程 37.5 万 —— 整场仗都在认出之外打完。
+     ① 照射认出:蓝 CA 开照射、红 DD 静默,摆在认出距离以内 ⇒ 认出、来路 idBy='act'、轮廓 DD;
+        反向对照:摆到认出距离之外(仍在雷达发现之内)⇒ 探得到(lit>=1)而认不出、轮廓 UNK
+     ② 三级认出从近到远:光学看轮廓 < 照射回波(NCTR) < 听辐射指纹(ESM)。四个舰种逐对量,不写公里数
+     ③ 用户那条诉求的判据:照射认出 > 导弹动力射程(mslReach)且 > 主炮过半把握距离(macRangeAt 0.5)——
+        开了雷达就要在【够得着之前】认出它。这一条直接拿 LAD 与武器模型对比,改小 LAD.radarIdent 当场翻红
+     ④ 连带的性质(拍下来钉住):开了雷达,【认出与定位几乎同时发生】—— 照射定位最多比照射认出远 5%。
+        (逐对实测 0.77~1.02 倍:认出随 size 开方、定位随它另一个指数,所以小船还剩一条细缝、大船根本没有。)
+        意思是"定位了却认不出"在照射玩法里只剩一条百分之一宽的带,测不稳也玩不出来;它从此是被动玩法的东西。
+        演示页两条 uitest 与 FLOW77 的端到端都因此改成了静默局;哪天这个关系变了,这条会红,提醒人回去改那几条 */
+t('FLOW86_IDN3',function(){
+  if(typeof mslReach!=='function'||typeof macRangeAt!=='function')return 'fail 缺 WR1 的武器谓词';
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,out='';
+  try{
+    adminMode=false;projectiles.length=0;
+    var B=makeShip('CA','认蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),D=makeShip('DD','认红',[0,0,0],[-1,0,0],[0,0,0],'red',2);
+    ships.length=0;ships.push(B,D);ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.flame=0;x.sideFlame=0;x.autoEngage=false;x.roe='hold';x.noFire=true;});
+    setEmit(B,'paint');setEmit(D,'silent');
+    var lp=ladPair('CA','DD');
+    var see=function(d){D.pos=[d,0,0];D.litBlue=0;D.covB=newCov();D.seenBlue=-1e9;D.seenBluePos=null;for(var i=0;i<40;i++)detectLoop(1);
+      return {lit:D.litBlue,idn:contactIdn(D,'blue'),by:D.covB.idBy,hull:shipIdentHull(D),fix:!!D.covB.fix};};
+    var near=see(lp.radarIdent*0.85),far=see(lp.radarIdent*1.3);
+    var ok1=(near.idn===true&&near.by==='act'&&near.hull==='DD'&&far.lit>=1&&far.idn===false&&far.hull==='UNK');
+    /* ② 四个舰种逐对 */
+    var CL=['DD','CA','BB','CV'],bad=[],i,j,q;
+    for(i=0;i<CL.length;i++)for(j=0;j<CL.length;j++){q=ladPair(CL[i],CL[j]);
+      if(!(q.optIdent<q.radarIdent&&q.radarIdent<q.lisIdent))bad.push(CL[i]+'>'+CL[j]);}
+    var ok2=(bad.length===0);
+    /* ③ 认出要在够得着之前:取最差(最近)的那一对 */
+    var reach=mslReach(B),half=macRangeAt(B,0.5),worst=1e18;
+    for(i=0;i<CL.length;i++)for(j=0;j<CL.length;j++)worst=Math.min(worst,ladPair(CL[i],CL[j]).radarIdent);
+    var ok3=(worst>reach&&worst>half);
+    /* ④ 认出与定位几乎同时 */
+    var bad4=[],w,rat,worstRat=0;
+    for(i=0;i<CL.length;i++)for(j=0;j<CL.length;j++){w=ladPair(CL[i],CL[j]);rat=w.radarLocate/w.radarIdent;
+      if(rat>worstRat)worstRat=rat;if(!(rat<=1.05))bad4.push(CL[i]+'>'+CL[j]+' x'+rat.toFixed(2));}
+    var ok4=(bad4.length===0);
+    var ok=(ok1&&ok2&&ok3&&ok4);
+    out=(ok?'ok':'fail')+' ① CA 照 DD @'+Math.round(lp.radarIdent*0.85/1000)+'k(认出 '+Math.round(lp.radarIdent/1000)+'k 内):认出='+near.idn+' 来路='+near.by+' 轮廓='+near.hull+';@'+Math.round(lp.radarIdent*1.3/1000)+'k(发现 '+Math.round(lp.radarMin/1000)+'k 内):lit='+far.lit+' 认出='+far.idn+' 轮廓='+far.hull+'='+ok1
+      +' | ② 四舰种逐对 光学<照射<静听:破=['+bad.join(' ')+']='+ok2
+      +' | ③ 最差的照射认出 '+Math.round(worst/1000)+'k vs 导弹动力 '+Math.round(reach/1000)+'k / 主炮 50% '+Math.round(half/1000)+'k='+ok3
+      +' | ④ 照射定位 / 照射认出 最大 '+worstRat.toFixed(3)+'(须<=1.05:认出与定位几乎同时)破=['+bad4.join(' ')+']='+ok4;
+  }finally{
+    adminMode=admBak;
     ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
     projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
   }

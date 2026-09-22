@@ -342,8 +342,10 @@ t('FLOW76_REDINTENT',function(){
      ① 访问器:自己一方恒真;红舰看 cov.idn 且要握着接触(lit=0 时残留的 idn 不算)
      ② 等级不授予身份:同一艘红舰(BB·T3)分别处在 2 级 / 3 级而【没认出】⇒ 轮廓 UNK、T2、名字是热源分类、可外传名字是"未知接触"、信息卡不写舰种;
         认出之后五样全部翻成真的(反向对照)
-     ③ 端到端:CA 照一艘 DD,摆在【跟踪级的门以内、雷达认出距离以外】(两个数都从梯子现量)⇒ 真跑感知,lit>=2 而轮廓仍是 UNK;
-        推到认出距离以内 ⇒ 轮廓变 DD */
+     ③ 端到端(ID3 起改成【被动局】):ID3 之后照射认出(63 万)比照射定位(63.7 万)几乎同时、实测还更早,
+        “开着雷达、定得出、却认不出”这个态就不存在了 —— 它只在被动玩法里有。
+        于是:两艘静默蓝舰光学交会定位一艘静默红 DD,摆在【光学认出以外】⇒ lit>=2 而轮廓仍是 UNK;
+        贴到光学认出以内 ⇒ 轮廓变 DD。两段距离从梯子现量 */
 t('FLOW77_IDN',function(){
   if(typeof contactIdn!=='function')return 'fail ID1 未加载(缺 contactIdn)';
   var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,lodBak=LOD.off,selBak=selected.slice(),camBak={x:cam.x,y:cam.y,zoom:cam.zoom};
@@ -370,17 +372,19 @@ t('FLOW77_IDN',function(){
     var ok2=(masked(u2)&&masked(u3)&&k2.cls==='BB'&&k2.tier===3&&k2.realName&&!k2.sig&&k2.out===R.name&&k2.cardKind&&k2.cardName&&k2.r>u2.r);
     ctx.fillText=oT;drawHull=oDH;
     /* ③ 端到端 */
-    var D=makeShip('DD','份靶',[0,0,0],[-1,0,0],[0,0,0],'red',2);ships.length=0;ships.push(B,D);setEmit(B,'paint');
-    var lp=ladPair('CA','DD'),dMid=Math.sqrt(lp.radarIdent*lp.radarMsl),i;
-    D.pos=[dMid,0,0];for(i=0;i<25;i++)detectLoop(1);
-    var farLit=D.litBlue,farIdn=contactIdn(D,'blue'),farHull=shipIdentHull(D);
-    D.pos=[lp.radarIdent*0.8,0,0];for(i=0;i<25;i++)detectLoop(1);
-    var nearLit=D.litBlue,nearIdn=contactIdn(D,'blue'),nearHull=shipIdentHull(D);
-    var ok3=(lp.radarIdent<lp.radarMsl*0.8&&farLit>=2&&farIdn===false&&farHull==='UNK'&&nearIdn===true&&nearHull==='DD');
+    var g1=makeShip('DD','份蓝左',[0,-50000,0],[1,0,0],[0,0,0],'blue',2),g2=makeShip('DD','份蓝右',[0,50000,0],[1,0,0],[0,0,0],'blue',2);
+    var D=makeShip('DD','份靶',[0,0,0],[-1,0,0],[0,0,0],'red',2);ships.length=0;ships.push(g1,g2,D);
+    ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.flame=0;x.sideFlame=0;x.noFire=true;setEmit(x,'silent');});
+    var lp=ladPair('DD','DD'),dMid=lp.optIdent*1.5,i;
+    var see=function(d){D.pos=[d,0,0];D.litBlue=0;D.covB=newCov();D.seenBlue=-1e9;D.seenBluePos=null;for(i=0;i<40;i++)detectLoop(1);
+      return {lit:D.litBlue,idn:contactIdn(D,'blue'),hull:shipIdentHull(D),by:D.covB.idBy};};
+    var far=see(dMid),near=see(lp.optIdent*0.7);
+    var farLit=far.lit,farIdn=far.idn,farHull=far.hull,nearIdn=near.idn,nearHull=near.hull;
+    var ok3=(farLit>=2&&farIdn===false&&farHull==='UNK'&&nearIdn===true&&nearHull==='DD'&&near.by==='opt');
     var ok=(ok1&&ok2&&ok3);
     out=(ok?'ok':'fail')+' ① 访问器:己方=true 红舰 2 级未认出='+a1+' 认出='+a2+' lit=0 残留 idn='+a3+'(须 false/true/false)='+ok1
       +' | ② 没认出的 BB·T3:2 级 ⇒ '+u2.cls+'/T'+u2.tier+' 真名上图='+u2.realName+' 外传名=「'+u2.out+'」卡片写舰种='+u2.cardKind+';3 级同样打码='+masked(u3)+';认出后 ⇒ '+k2.cls+'/T'+k2.tier+' 真名='+k2.realName+' 图标更大='+(k2.r>u2.r)+'='+ok2
-      +' | ③ 端到端 CA 照 DD:@'+Math.round(dMid/1000)+'k(跟踪门 '+Math.round(lp.radarMsl/1000)+'k 内、认出 '+Math.round(lp.radarIdent/1000)+'k 外)lit='+farLit+' 认出='+farIdn+' 轮廓='+farHull+' → @'+Math.round(lp.radarIdent*0.8/1000)+'k 认出='+nearIdn+' 轮廓='+nearHull+'='+ok3;
+      +' | ③ 端到端 双站静默光学交会:@'+Math.round(dMid/1000)+'k(光学认出 '+Math.round(lp.optIdent/1000)+'k 之外)lit='+farLit+' 认出='+farIdn+' 轮廓='+farHull+' → @'+Math.round(lp.optIdent*0.7/1000)+'k 认出='+nearIdn+'(来路 '+near.by+')轮廓='+nearHull+'='+ok3;
   }finally{
     ctx.fillText=oT;drawHull=oDH;
     adminMode=admBak;LOD.off=lodBak;selected=selBak;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;

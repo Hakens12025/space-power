@@ -69,7 +69,15 @@ const LAD = {
   optCross: 300000,   // 单条光学方位的横向误差 = 导弹门 的距离(决定交会多远有用)
   lisCross: 310000,   // 单条静听方位的横向误差 = 导弹门 的距离
   radarLook: 143000,  // 照射给出火控解的距离:【玩家真看得到的那个】—— 光学方位 + 照射测距融合、多拍积累之后椭圆进主炮门
-  radarIdent: 120000, // 照射认出(NCTR 需要比探测更高的信噪比)
+  /* ID3(2026-09-22 用户实报:「我把人家都打死了都还是“大型热源”、“中型热源”,识别不到具体舰艇种类」)。
+     这三级是形态 N 时代定的:认出要贴到 9.4~12 万,而 WR1 之后主炮在 36.6 万就有过半把握、导弹动力射程 37.5 万 —— 整场仗都在“认出”之外打完。
+     现在把认出整体外推,并把 ESM(听辐射指纹)单列成一级:
+       听出型号 lisIdent 100 万  只对【开着雷达】的船(静默的船根本没有 lis 量测,这一级对它天然不成立)。
+                                 ID2 删掉的是“无条件、无限远地认出”,不是“听不出型号”;现在它有距离门了
+       照射认出 radarIdent 50 万 我方开雷达、回波够强(NCTR)。> 导弹动力射程 ⇒ 开了雷达就能在够得着之前认出它
+       光学认出 optIdent 9.4 万  不动:贴到主炮那一带才看得清轮廓,是最后的确认 */
+  lisIdent: 1000000,  // 听出型号(ESM / SEI:辐射指纹,不靠角分辨)
+  radarIdent: 500000, // 照射认出(NCTR 需要比探测更高的信噪比)
   optIdent: 94000,    // 光学认出轮廓
   actTurn: 56250,     // 照射椭圆的转向点 = RRES / TH0.act。刻意不取整:RRES 决定断照后的滑行窗口
 };
@@ -94,7 +102,7 @@ const COV = {
   TH0: { opt: 0.0324, lis: 0.121, act: 0.016 },
 
   RRES: 0,            // ← ladApply 写入(= TH0.act * LAD.actTurn;现值 900)。门限处的测距误差 km
-  L_REF: 0, L_ACT: 0, // ← ladApply 写入。L_REF:角尺寸测距的尺度常数,同时是光学【认出】门;L_ACT:照射【认出】门
+  L_REF: 0, L_ACT: 0, L_LIS: 0, // L_LIS(ID3)= 静听【听出型号】门。 ← ladApply 写入。L_REF:角尺寸测距的尺度常数,同时是光学【认出】门;L_ACT:照射【认出】门
   HUGE: 1e7,          // km:表示【这条通道给不出距离】的一个大到等于没有的数
 
   /* 没有量测时椭圆怎么长。三个数,分两档:
@@ -198,8 +206,10 @@ function covShape(ch, gi, d, t, dd) {
      那是我定的规则,不是用户的。后果:任何开着雷达的船,从被听见的第一拍起就已经"认出"了(形态 H 下那是 320~640 万公里外);
      等它终于被定位,地图上直接就是真轮廓 + 真名,"X 型热源"那一档(定位了、但还没认出)对它根本不存在 ——
      而对局里红方旗舰开局就在照射,所以玩家看到的正是"热区 → 直接变成舰艇"。
-     现在身份只有两条来路:光学贴近到认得出轮廓,或者照射的回波够强(NCTR)。"贴近才认得出"对亮灯的船同样成立。 */
-  return [COV.HUGE, sPerp, false, false];
+     ID3(同日稍后)把它改回来,但带上距离门:方位误差收进 size x L_LIS 才算听出型号(参考对约 100 万公里)。
+     静默的船根本没有 lis 量测(rfLoudOf 恒 0),所以这一级对它天然不成立 —— 这正是“开雷达 = 连身份一起递出去”该有的形状:有代价,但有边界。
+     光学仍然只在贴到 9.4 万才认得出轮廓;照射(NCTR)50 万。 */
+  return [COV.HUGE, sPerp, false, sPerp <= t.size * COV.L_LIS];
 }
 
 /* ================= 一拍 =================
@@ -282,7 +292,7 @@ function covLit(c, t) {
    静听不走这条(它靠指纹,不靠角分辨),所以这里只回答光学与照射。 */
 function identDist(ch, d, t) {
   const R = covRangeOf(ch, d, t); if (!(R > 0)) return 0;
-  const L = sReq(t, 'size', 'ship') * (ch === 'act' ? COV.L_ACT : COV.L_REF), T = COV.TH0[ch];
+  const L = sReq(t, 'size', 'ship') * (ch === 'act' ? COV.L_ACT : (ch === 'lis' ? COV.L_LIS : COV.L_REF)), T = COV.TH0[ch]; // ID3:静听那一路用 L_LIS
   return ch === 'act' ? Math.pow(L * R * R / T, 1 / 3) : Math.sqrt(L * R / T);
 }
 
@@ -328,6 +338,7 @@ function ladApply() {
   const Ro = LAD.optCross * LAD.optCross * COV.TH0.opt / mslG;
   const Rl = LAD.lisCross * LAD.lisCross * COV.TH0.lis / mslG;
   COV.L_REF = LAD.optIdent * LAD.optIdent * COV.TH0.opt / (Ro * R.size);
+  COV.L_LIS = LAD.lisIdent * LAD.lisIdent * COV.TH0.lis / (Rl * R.size); // ID3:与 L_REF 同一条被动式子,换成静听那一路
   COV.RRES = COV.TH0.act * LAD.actTurn;
   /* 照射尺度:要让【稳态融合】之后的火控距离正好等于 LAD.radarLook。对数空间二分 */
   let Ra;
@@ -367,7 +378,7 @@ function ladPair(dn, tn) {
   return {
     optColdMin: visRangeOf(t0), optHot: visRangeOf(th), radarMin: actRangeOf(dq, reflOf(t0)), heardMin: hearRangeOf(dq, t0.recv),
     optCross: Math.sqrt(mslG * Ro / T.opt), lisCross: Math.sqrt(mslG * Rl / T.lis),
-    optIdent: identDist('opt', d0, t0), radarIdent: identDist('act', dq, t0),
+    optIdent: identDist('opt', d0, t0), radarIdent: identDist('act', dq, t0), lisIdent: identDist('lis', d0, tq), // ID3:听出型号量的是【目标在照射】时那一路
     radarLook: ladActGate(macG, Q), actTurn: COV.RRES / T.act,
     /* ---- 派生级 ---- */
     optLocate: optGateR(t0, COV.AMAX), optMsl: optGateR(t0, mslG), optGun: optGateR(t0, macG),
@@ -391,8 +402,11 @@ function ladCheck() {
   need(LAD.gun < LAD.msl && LAD.msl < hot, '主炮 < 导弹 < 光学发现(满推):先看见,后打得着;冷目标允许近于导弹射程(熄火潜行 = 伏击)');
   need(ra >= 2 * oc * (1 - e), '雷达发现 >= 2x 光学发现(冷目标),否则开雷达纯亏');
   need(he >= 1.5 * ra * (1 - e), '开雷达被听见 >= 1.5x 自己照到的距离(手电效应)');
-  need(LAD.optIdent < LAD.radarIdent, '照射认得比光学远,否则没人为了认出开雷达');
-  need(LAD.radarIdent <= LAD.gun && LAD.radarLook <= LAD.gun, '照射认出 / 给出火控解 都在主炮射程之内(不许没进射程就满火控)');
+  need(LAD.optIdent < LAD.radarIdent && LAD.radarIdent < LAD.lisIdent, 'ID3 三级认出从近到远:光学看轮廓 < 照射回波(NCTR)< 听辐射指纹(ESM)');
+  need(LAD.radarIdent > LAD.msl, 'ID3 开了雷达要在【导弹够得着之前】认出它 —— 否则整场仗都在打未识别接触(用户 2026-09-22 实报)');
+  need(LAD.optIdent < LAD.gun, '光学认出比主炮那一带还近:贴脸那一步的最后确认');
+  need(LAD.radarLook <= LAD.gun, '火控解(椭圆收进命中判定半径)在主炮那一带之内');
+  need(LAD.lisIdent < he, 'ID3 听得见才谈得上听出型号');
   need(LAD.optCross < hot && LAD.lisCross < he && LAD.radarIdent < ra && LAD.radarLook < ra, '定位域每一级都在同通道的发现距离之内(发现不了谈不上定位);光学按满推目标判');
   need(he <= lim * (1 + e), '参考对的每一级都在一局(' + LAD.SESSION_MIN + ' 分)之内被跨过');
   /* 靠【移动】跨过的门(光学/雷达)全舰种对都要在一局之内。

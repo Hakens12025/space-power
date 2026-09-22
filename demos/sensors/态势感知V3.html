@@ -305,7 +305,7 @@ const COV={
      稳态 394km、余量 3.6 倍,断照才有几秒滑行。这也更像物理:火控解算本来就该
      远好于"刚够开炮",不是擦着门槛。 */
   RRES:0,          /* ← ladApply 写入(= TH0.act x LAD.actTurn;现值 900) */
-  L_REF:0, L_ACT:0, /* ← ladApply 写入。L_REF:角尺寸测距的尺度常数,同时是光学【认出】门;L_ACT:照射【认出】门。
+  L_REF:0, L_ACT:0, L_LIS:0, /* L_LIS(ID3)= 静听【听出型号】门。 ← ladApply 写入。L_REF:角尺寸测距的尺度常数,同时是光学【认出】门;L_ACT:照射【认出】门。
                        两个原来共用一个 2700 —— 光学靠分辨轮廓、照射靠回波信噪比(NCTR),不是一回事,只是数恰好一样 */
   HUGE:1e7,         /* km:表示【这条通道给不出距离】的一个大到等于没有的数 */
   /* 没有量测时椭圆怎么长。两项:
@@ -385,7 +385,9 @@ const LAD={
   lisCross:310000,   /* 单条静听方位的横向误差 = 导弹门 的距离 */
   radarLook:143000,  /* 照射给出火控解的距离:【玩家真看得到的那个】—— 光学方位 + 照射测距融合、多拍积累之后椭圆进主炮门。
                         这里一度写 108000(单拍横向误差 = 主炮门),与模拟里实际发生的 14.3 万差 32% */
-  radarIdent:120000, /* 照射认出(NCTR 需要比探测更高的信噪比) */
+  /* ID3(2026-09-22):认出整体外推 + ESM 单列一级。理由与数见引擎 js/sensors/23-cov.js 的同名注释(两边逐位相同)。 */
+  lisIdent:1000000,  /* 听出型号(ESM / SEI:辐射指纹)—— 只对开着雷达的船成立 */
+  radarIdent:500000, /* 照射认出(NCTR 需要比探测更高的信噪比) */
   optIdent:94000,    /* 光学认出轮廓 */
   actTurn:56250,     /* 照射椭圆的转向点 = RRES/TH0.act。刻意不取整:RRES=900 决定断照后的滑行窗口,那个手感是调过的 */
 };
@@ -437,6 +439,7 @@ function ladApply(){
   const Ro=LAD.optCross*LAD.optCross*COV.TH0.opt/mslG;
   const Rl=LAD.lisCross*LAD.lisCross*COV.TH0.lis/mslG;
   COV.L_REF=LAD.optIdent*LAD.optIdent*COV.TH0.opt/(Ro*R.size);          /* 光学认出:d²·TH0/R <= size·L */
+  COV.L_LIS=LAD.lisIdent*LAD.lisIdent*COV.TH0.lis/(Rl*R.size);          /* ID3 听出型号:同一条被动式子,换成静听那一路 */
   COV.RRES =COV.TH0.act*LAD.actTurn;                                     /* 转向点 = RRES/TH0.act */
   /* 照射尺度:要让【稳态融合】之后的火控距离正好等于 LAD.radarLook。ladActGate 对 Ra 单调,对数空间二分 */
   let Ra; {let lo=1e3, hi=1e8; const od=km(LAD.optColdMin), ad=km(LAD.radarMin), Lsz=R.size*COV.L_REF;
@@ -462,8 +465,11 @@ function ladCheck(){
   need(LAD.gun<LAD.msl&&LAD.msl<hot,           '主炮 < 导弹 < 光学发现(满推):先看见,后打得着;冷目标允许近于导弹射程(熄火潜行 = 伏击)');
   need(ra>=2*oc*(1-e),                         '雷达发现 >= 2x 光学发现(冷目标),否则开雷达纯亏');
   need(he>=1.5*ra*(1-e),                       '开雷达被听见 >= 1.5x 自己照到的距离(手电效应)');
-  need(LAD.optIdent<LAD.radarIdent,            '照射认得比光学远,否则没人为了认出开雷达');
-  need(LAD.radarIdent<=LAD.gun&&LAD.radarLook<=LAD.gun, '照射认出 / 给出火控解 都在主炮射程之内(不许没进射程就满火控)');
+  need(LAD.optIdent<LAD.radarIdent&&LAD.radarIdent<LAD.lisIdent, 'ID3 三级认出从近到远:光学看轮廓 < 照射回波(NCTR)< 听辐射指纹(ESM)');
+  need(LAD.radarIdent>LAD.msl,                 'ID3 开了雷达要在【导弹够得着之前】认出它');
+  need(LAD.optIdent<LAD.gun,                   '光学认出比主炮那一带还近:贴脸那一步的最后确认');
+  need(LAD.lisIdent<he,                        'ID3 听得见才谈得上听出型号');
+  need(LAD.radarLook<=LAD.gun,                 '火控解在主炮那一带之内');
   need(LAD.optCross<hot&&LAD.lisCross<he&&LAD.radarIdent<ra&&LAD.radarLook<ra, '定位域每一级都在同通道的发现距离之内(发现不了谈不上定位);光学按满推目标判');
   need(he<=lim*(1+e),                          '参考对的每一级都在一局('+LAD.SESSION_MIN+' 分)之内被跨过');
   /* 靠【移动】跨过的门(光学、雷达)对所有舰种对都得在一局之内;
@@ -637,7 +643,7 @@ function covShape(ch,gi,d,t,dd){
      等它终于被定位,地图上直接就是真轮廓 + 真名,"X 型热源"那一档(定位了、但还没认出)对它根本不存在 ——
      而对局里红方旗舰开局就在照射,所以玩家看到的正是"热区 → 直接变成舰艇"。
      现在身份只有两条来路:光学贴近到认得出轮廓,或者照射的回波够强(NCTR)。"贴近才认得出"对亮灯的船同样成立。 */
-  return [COV.HUGE, sPerp, false, false];
+  return [COV.HUGE, sPerp, false, sPerp<=t.size*COV.L_LIS]; /* ID3:听出型号有距离门(参考对约 100 万);静默的船没有 lis 量测,这一级对它天然不成立 */
 }
 /* 一拍:先预测(椭圆长大),再把所有量测按信息相加 */
 function stepCov(t,dets,el){
@@ -750,7 +756,7 @@ function covLit(c,t){
    静听不走这条(它靠指纹,不靠角分辨),所以这里只回答光学与照射。 */
 function identDist(ch,d,t){
   const R=covRangeOf(ch,d,t); if(!(R>0))return 0;
-  const L=t.size*(ch==='act'?COV.L_ACT:COV.L_REF), T=COV.TH0[ch];
+  const L=t.size*(ch==='act'?COV.L_ACT:(ch==='lis'?COV.L_LIS:COV.L_REF)), T=COV.TH0[ch]; /* ID3 */
   return ch==='act'?Math.pow(L*R*R/T,1/3):Math.sqrt(L*R/T);
 }
 
@@ -772,7 +778,7 @@ function ladPair(dn,tn){
   return {
     optColdMin:visRange(t0), optHot:visRange(th), radarMin:actRange(dq,reflOf(t0)), heardMin:hearRange(dq,t0.recv),
     optCross:Math.sqrt(mslG*Ro/T.opt), lisCross:Math.sqrt(mslG*Rl/T.lis),
-    optIdent:identDist('opt',d0,t0), radarIdent:identDist('act',dq,t0),
+    optIdent:identDist('opt',d0,t0), radarIdent:identDist('act',dq,t0), lisIdent:identDist('lis',d0,tq), /* ID3:听出型号量的是【目标在照射】时那一路 */
     radarLook:ladActGate(macG,Q), actTurn:COV.RRES/T.act,
     /* -- 派生级 -- */
     optLocate:optGateR(t0,COV.AMAX), optMsl:optGateR(t0,mslG), optGun:optGateR(t0,macG),
@@ -2855,7 +2861,8 @@ function runSelftest(){
   })();
   /* 无量纲比:值对着【引擎原数手算】(不走 BUD —— BUD 抄错了这里要红);状态钉现行版此刻的样子。
      敏感度:① 扫完逐位复原(梯子、六个反解常数、层界、账面);② 有牙:命中半径 -20% 必须翻 B10.1(火控门 2.0k 对 1.6k),
-     主炮射程 -20% 必须翻梯子第 5 条(火控解 14 万落到主炮射程 12 万之外);③ 反向对照:舰体最大像素 ±20% 一条都不许翻(CA 最大 33px,38~58 都装得下)——
+     主炮射程 -20% 必须翻【火控解在主炮那一带之内】那一条(火控解 14 万落到主炮射程 12 万之外)——
+     序号会漂(ID3 往梯子里插了三条,这条从第 5 漂到第 8,当场把这条判据报红),所以按它自己的文案反查序号;③ 反向对照:舰体最大像素 ±20% 一条都不许翻(CA 最大 33px,38~58 都装得下)——
      没有这一半的话,一个见谁都报"翻了"的扫描也能过。 */
   (function(){
     const P=piRows(), by={}; for(const x of P)by[x.id]=x;
@@ -2868,10 +2875,11 @@ function runSelftest(){
     const snap=function(){return JSON.stringify([LAD,BUD,SENS.IR_DET,SENS.ACT_DET,SENS.LIS_DET,SENS.IR_REF,SENS.LIS_REF,SENS.ACT_REF,COV.L_REF,COV.L_ACT,COV.RRES,VT.T1,VT.T2,SENS.CLS.CA.emit,SENS.CLS.CA.recv,SENS.P_ENG_MAIN,DSN.time.V,budgetRows().map(x=>x.id+x.state+x.val)]);};
     const s0=snap(), T=budSens(), s1=snap(), row={}; for(const x of T)row[x.nm]=x;
     const hit=row['命中半径'], gun=row['主炮射程'], hull=row['舰体最大像素'];
-    chk('敏感度扫描:扫完逐位复原;命中半径 -20% 翻 B10.1、主炮射程 -20% 翻梯子5;舰体最大像素 ±20% 一条不翻(反向对照);排序按翻转条数',
+    const kGun='梯子'+(ladCheck().findIndex(x=>x.msg.indexOf('火控解')>=0)+1); /* 按文案反查序号,不写死「梯子5」 */
+    chk('敏感度扫描:扫完逐位复原;命中半径 -20% 翻 B10.1、主炮射程 -20% 翻【火控解在主炮带内】那条;舰体最大像素 ±20% 一条不翻(反向对照);排序按翻转条数',
       s0===s1&&T.length===budSensInputs().length&&hit.dn.brk.indexOf('B10.1')>=0&&hit.up.brk.indexOf('B10.1')<0&&
-      gun.dn.brk.indexOf('梯子5')>=0&&gun.up.brk.indexOf('梯子5')<0&&hull.n===0&&T.every((x,i)=>i===0||T[i-1].n>=x.n)&&T[0].n>0,
-      '复原='+(s0===s1)+'   前五:'+T.slice(0,5).map(x=>x.nm+' '+x.n).join(' / ')+'   命中半径 -20% 破 ['+hit.dn.brk.join(' ')+']   主炮射程 -20% 破 ['+gun.dn.brk.join(' ')+']   舰体像素 '+hull.n);
+      gun.dn.brk.indexOf(kGun)>=0&&gun.up.brk.indexOf(kGun)<0&&hull.n===0&&T.every((x,i)=>i===0||T[i-1].n>=x.n)&&T[0].n>0,
+      '复原='+(s0===s1)+'   前五:'+T.slice(0,5).map(x=>x.nm+' '+x.n).join(' / ')+'   命中半径 -20% 破 ['+hit.dn.brk.join(' ')+']   主炮射程 -20% 破 ['+gun.dn.brk.join(' ')+'](要 '+kGun+')   舰体像素 '+hull.n);
   })();
   /* 接触降速。要钉的四件事:
        ① 不泄露:冷船 24 万才看得见,把一艘熄火静默的红舰摆在 30 万(导弹射程 35 万之内)—— 我方没发现它,档位必须是 0;
@@ -3159,42 +3167,46 @@ function runSelftest(){
     'DD 距 '+fmtK(x13DD)+' > 圈 '+fmtK(rDD)+' ⇒ lit'+zDD.lit+'   而 CA 距 '+fmtK(x13CA)+' < 圈 '+fmtK(rCA)+
     ' ⇒ lit'+zCA.lit+'   圈比 '+(rCA/rDD).toFixed(3)+' = (1/0.42)^¼'+'   (CA 只到 1 级:照得到、但这么远定不出位置)');
   /* ⑭ 交会给【位置】,不给【身份】—— 两者是两个属性,互不挡路。
-     三段用同一对蓝舰(基线 10 万),只改目标的距离与发射档:
-       a 远处静默:椭圆已进导弹门 ⇒ 等级 2;但认不出 ⇒ 身份仍是未知
-       b 贴近到光学能分辨轮廓:身份由光学给出
-       c 回到远处但它自己开口:一步没挪,等级照样上得去,但【仍然认不出】(ID2:被动射频不给身份;原来这一段是"靠辐射指纹认出")*/
-  const XF=[['blue','DD',0,-50000,null],['blue','DD',0,50000,null],['red','DD',120000,0,null]];
+     三段用同一对蓝舰(基线 10 万),只改目标的距离与发射档。距离一律从模型现量(ID3 把认出那一级外推了,写死公里数的版本当场红):
+       a 远处静默(光学认出之外、椭圆已进导弹门)⇒ 等级 2、身份未知
+       b 贴近到光学能分辨轮廓 ⇒ 身份由光学给
+       c 一步没挪、只是它自己开口 ⇒ ID3:这个距离在 lisIdent 之内,听得出型号(idBy='lis');反向对照在 ⑭b下面 */
+  const dFarX=identDist('opt',ladShip('DD'),ladShip('DD'))*1.3;   /* 刚好在光学认出之外,而椭圆(双站交会)已进导弹门 */
+  const XF=[['blue','DD',0,-50000,null],['blue','DD',0,50000,null],['red','DD',dFarX,0,null]];
   loadScene(XF); advance(40);
   const xFar=R(), aFar=xFar.cov.a1, idFar=xFar.cov.idn, litFar=xFar.lit;
   const dOptID=identDist('opt',S.ships[0],xFar);
-  loadScene([XF[0],XF[1],['red','DD',70000,0,null]]); advance(40);
+  loadScene([XF[0],XF[1],['red','DD',dOptID*0.7,0,null]]); advance(40);
   const xNear=R(), litNear=xNear.lit, idNear=xNear.cov.idn, byNear=xNear.cov.idBy;
-  loadScene([XF[0],XF[1],['red','DD',120000,0,{emitMode:'paint'}]]); advance(40);
-  const xLoud=R(), litLoud=xLoud.lit, byLoud=xLoud.cov.idBy;
-  chk('⑭ 交会给位置、不给身份:椭圆进了导弹门 ⇒ 2 级,而身份仍未知;贴近靠轮廓认;它开口只抬等级、不给身份(ID2)',
-    aFar<covMsl(xFar)&&!idFar&&litFar===2&&idNear&&byNear==='opt'&&litNear>=2&&byLoud===''&&!xLoud.cov.idn&&litLoud>=2,
-    '远 12万静默 ±'+fmtK(aFar)+'(<导弹门 '+fmtK(covMsl(xFar))+') ⇒ lit'+litFar+' 身份='+(idFar?'已认出':'未知')+
-    '   贴到 7万(光学认出要 '+fmtK(dOptID)+' 以内) ⇒ '+byNear+' 认出 lit'+litNear+
-    '   回 12万但它开口 ⇒ 身份='+(xLoud.cov.idn?'已认出('+byLoud+')':'未知')+' lit'+litLoud);
+  loadScene([XF[0],XF[1],['red','DD',dFarX,0,{emitMode:'paint'}]]); advance(40);
+  const xLoud=R(), litLoud=xLoud.lit, byLoud=xLoud.cov.idBy, dLisID=identDist('lis',S.ships[0],xLoud);
+  chk('⑭ 交会给位置、不给身份:静默目标在光学认出之外 ⇒ 2 级而身份未知;贴近靠轮廓认;它开口靠辐射指纹认(ID3,有距离门)',
+    aFar<covMsl(xFar)&&!idFar&&litFar===2&&idNear&&byNear==='opt'&&litNear>=2&&byLoud==='lis'&&xLoud.cov.idn&&litLoud>=2&&dFarX<dLisID,
+    '远 '+fmtK(dFarX)+' 静默 ±'+fmtK(aFar)+'(<导弹门 '+fmtK(covMsl(xFar))+') ⇒ lit'+litFar+' 身份='+(idFar?'已认出':'未知')+
+    '   贴到 '+fmtK(dOptID*0.7)+'(光学认出要 '+fmtK(dOptID)+' 以内)⇒ '+byNear+' 认出 lit'+litNear+
+    '   回 '+fmtK(dFarX)+' 但它开口 ⇒ '+(xLoud.cov.idn?byLoud+' 认出':'未知')+' lit'+litLoud+'(听出型号要 '+fmtK(dLisID)+' 以内)');
   /* ⑭b 用户两次实报的那条路:从范围外走进来到 P1,再贴近、再退回 P1。
-        同一个 P1,等级必须与来路无关,而且必须等于"椭圆此刻落在哪个圈里"(定位几何小窗画的就是这个)。
-        反向对照:身份【确实】是路径的函数(进来时未知、退回来时已认出)—— 没有这一半的话,
-        一个根本没经过"认出"那一步的场景也能通过,判据就没测到东西。
-        两种情形各跑一遍:单站照射 / 双站静默交会。 */
+        同一个 P1,等级必须与来路无关,而且必须等于“椭圆此刻落在哪个圈里”(定位几何小窗画的就是这个)。
+        身份则是另一回事,ID3 之后两种情形恰好相反 —— 这两半互为反向对照:
+          单站照射:照射认出(50 万)比跟踪级(35 万)还远 ⇒ 进来那一刻身份就已经有了。这正是用户要的“别打完了还是热源”。
+          双站静默:谁都没开雷达 ⇒ 只能贴到光学认出(9.4 万)以内才认得出来,身份确实是路径的函数。
+        两段距离全部从模型现量。 */
   (function(){
     const gate=function(x){const c=x.cov; return !c.seen?0:(!covFix(c)?(c.n>0?1:0):(c.a1<=covMac(x)?3:(c.a1<=covMsl(x)?2:1)));};
-    const cases=[['单站照射',[['blue','DD',0,0,{emitMode:'paint'}]],220000,60000],
-                 ['双站静默',[['blue','DD',0,-50000,null],['blue','DD',0,50000,null]],150000,50000]];
+    const P=ladPair('DD','DD');
+    const cases=[['单站照射',[['blue','DD',0,0,{emitMode:'paint'}]],P.radarMsl*0.85,P.radarLook*0.5,true],
+                 ['双站静默',[['blue','DD',0,-50000,null],['blue','DD',0,50000,null]],P.optIdent*1.6,P.optIdent*0.55,false]];
     let okAll=true, txt='';
     for(const cs of cases){
-      const sc=cs[1].slice(); sc.push(['red','DD',1.2*ladPair('DD','DD').radarMin,0,null]); loadScene(sc);
+      const sc=cs[1].slice(); sc.push(['red','DD',1.2*P.radarMin,0,null]); loadScene(sc);
       const go=function(d){R().x=d; advance(12); return {lit:R().lit, g:gate(R()), idn:!!R().cov.idn, a:R().cov.a1};};
-      go(500000); const pin=go(cs[2]), near=go(cs[3]), pout=go(cs[2]);
-      const ok=pin.lit===pout.lit&&pin.lit===pin.g&&pout.lit===pout.g&&pin.lit>=2&&pin.a<=covMsl(R())&&!pin.idn&&near.idn&&pout.idn;
-      okAll=okAll&&ok;
-      txt+=cs[0]+' P1='+fmtK(cs[2])+': 进 lit'+pin.lit+'(椭圆 ±'+fmtK(pin.a)+' 身份'+(pin.idn?'已知':'未知')+') → 贴到 '+fmtK(cs[3])+' lit'+near.lit+' → 退回 lit'+pout.lit+'(身份'+(pout.idn?'已知':'未知')+')   ';
+      go(1.2*P.radarMin); const pin=go(cs[2]), near=go(cs[3]), pout=go(cs[2]);
+      const lvl=pin.lit===pout.lit&&pin.lit===pin.g&&pout.lit===pout.g&&pin.lit>=2&&pin.a<=covMsl(R());
+      const idOk=cs[4]?(pin.idn&&pout.idn):(!pin.idn&&near.idn&&pout.idn);
+      okAll=okAll&&lvl&&idOk;
+      txt+=cs[0]+' P1='+fmtK(cs[2])+': 进 lit'+pin.lit+'(椭圆 ±'+fmtK(pin.a)+' 身份'+(pin.idn?'已知':'未知')+') → 贴到 '+fmtK(cs[3])+' lit'+near.lit+'(身份'+(near.idn?'已知':'未知')+') → 退回 lit'+pout.lit+'(身份'+(pout.idn?'已知':'未知')+')'+(lvl&&idOk?'':' ✗')+'   ';
     }
-    chk('⑭b 同一个 P1,等级与来路无关、且等于椭圆落在哪个圈里(身份才是路径的函数)',okAll,txt);
+    chk('⑭b 同一个 P1,等级与来路无关;身份:开雷达的进来就认得出(ID3),都静默的才是路径的函数',okAll,txt);
   })();
   /* ⑭d 倍速与帧率不许改物理:一拍是 1 秒还是 2 秒(时间倍率 x40、或浏览器掉帧),同一个站位的稳态必须是同一个等级、
         同一个定位结论,椭圆相差不超过 12%。两个点都是实测翻过车的:原来每拍固定算"一次量测",
@@ -3722,17 +3734,20 @@ function runUitest(){
 
     /* ② 迷雾:敌舰【没认出】不许按 size 放大 —— 图标大小本身就是分级情报。
           反向对照:同一艘船认出来之后必须放大,否则这条只是"红方都不放大"。 */
-    /* 探测方用 DD:这样场上唯一的 CA 就是那艘红舰,数 CA 的舰体不会把蓝方自己算进去(第一版就栽在这儿) */
-    loadScene([['blue','DD',0,0,{emitMode:'paint'}],['red','CA',240000,0,null]]); advance(30);
-    const rr=S.ships[1]; setK(K_MAX,240000,0);
+    /* 探测方用 DD:这样场上唯一的 CA 就是那艘红舰,数 CA 的舰体不会把蓝方自己算进去(第一版就栽在这儿)。
+       ID3 之后两个站必须静默:开了雷达的话照射认出(65 万)比照射定位(58 万)还远 ⇒ 【定得出、认不出】这个态根本不存在。
+       它只在被动玩法里有:两站光学交会定得出位置,而轮廓要贴到光学认出(DD 看 CA 的 12.3 万)以内才看得清。两段距离现量。 */
+    const PC2=ladPair('DD','CA'), dUnk=PC2.optIdent*1.6, dIdn=PC2.optIdent*0.7;
+    loadScene([['blue','DD',0,-50000,null],['blue','DD',0,50000,null],['red','CA',dUnk,0,null]]); advance(30);
+    const rr=S.ships[2]; setK(K_MAX,dUnk,0);
     const U1=hullLens().filter(x=>x.cls==='UNK'||x.cls==='CA'), idn1=rr.cov.idn, fix1=covFix(rr.cov);
-    rr.x=130000; advance(30); setK(K_MAX,130000,0);
+    rr.x=dIdn; advance(30); setK(K_MAX,dIdn,0);
     const U2=hullLens().filter(x=>x.cls==='CA'&&x.len>lodNatLen('CA')+1), idn2=rr.cov.idn;
     const unk=U1.filter(x=>x.cls==='UNK')[0];
     chk('迷雾:没认出的敌舰不按 size 放大(反向对照:认出来之后必须放大)',
       fix1&&!idn1&&unk&&Math.abs(unk.len-lodNatLen('UNK'))<0.01&&U1.filter(x=>x.cls==='CA'&&x.len>lodNatLen('CA')+1).length===0&&
       idn2&&U2.length===1,
-      '24 万(已定位/未识别='+(!idn1)+'):画成 UNK '+(unk?unk.len.toFixed(1):'?')+'px(=固定图标 '+lodNatLen('UNK').toFixed(1)+')   贴到 13 万(已识别='+idn2+
+      fmtK(dUnk)+'(已定位='+fix1+'/未识别='+(!idn1)+'):画成 UNK '+(unk?unk.len.toFixed(1):'?')+'px(=固定图标 '+lodNatLen('UNK').toFixed(1)+')   贴到 '+fmtK(dIdn)+'(已识别='+idn2+
       '):CA 放大到 '+(U2[0]?U2[0].len.toFixed(0):'?')+'px');
 
     /* ③ 舰队按【屏幕直径】塌缩,而且带迟滞:往外滚与往里滚的切换点不是同一个 */
@@ -3757,14 +3772,20 @@ function runUitest(){
       '相距 200px: ['+g1+']   相距 30px: ['+g2+']');
 
     /* ⑤ 红方只聚【已定位】的接触;未定位的不进群(它们在热区里);没认出的在构成里只记成 ? */
-    const RCF=0.5*(ladPair('CA','DD').radarLocate+ladPair('CA','DD').radarMin);   /* 远的那艘:CA 的雷达照得到、却定不出位置的那一段的中点(原来取 0.6 x 发现距离,梯子压缩之后那一点落进了定位距离之内) */
-    loadScene([['blue','CA',0,0,{emitMode:'paint'}],['red','CA',200000,0,{emitMode:'paint'}],
-               ['red','DD',215000,9000,null],['red','DD',RCF,0,null]]); advance(30);
+    /* ID3 之后这一条也得改成被动局:蓝方一开雷达,定得出位置的就一定认得出来(认出 63 万 > 定位 63.7 万 之外仅差一线,实测认出更早),
+       【进了群却只记成 ?】就没了。所以:两个静默的蓝站光学交会 ⇒ 近的两艘红舰都定得出,
+       但只有贴得够近的那艘 CA 认得出轮廓,DD 在光学认出之外 ⇒ 构成里只能写 ?。
+       远的那艘改成【开着雷达】:静默的蓝站听得见它(被听见 320 万),却只拿得到方位 ⇒ 定不出位置、不进群。 */
+    const PP5=ladPair('DD','DD'), PC5=ladPair('DD','CA');
+    const RCF=Math.sqrt(PP5.lisCross*PP5.heardMin);   /* 远的那艘:听得见、交会却定不出位置的那一段的几何中点 */
+    loadScene([['blue','DD',0,-50000,null],['blue','DD',0,50000,null],
+               ['red','CA',PC5.optIdent*0.7,0,null],['red','DD',PP5.optIdent*1.2,9000,null],
+               ['red','DD',RCF,0,{emitMode:'paint'}]]); advance(30);
     /* 缩放必须拉到【远的那艘在屏幕上也挤得进 48px】的那一档(30px):
        第一版镜头太近,它离另外两艘四千像素 —— 就算把"只聚已定位"那道过滤删掉它也聚不进去,
        这条判据于是对那道过滤没有牙(突变验证时发现:删了过滤照样绿)。 */
     S.lodPrev=null; fit(VM); S.cx=RCF/2; S.cy=0; S.k=30/RCF; camApply(VM); drawMap();
-    const rc=S.lod.aggs.filter(a=>a.kind==='rcluster'), farR=S.ships[3];
+    const rc=S.lod.aggs.filter(a=>a.kind==='rcluster'), farR=S.ships[4];
     const comp=rc[0]?lodComp(rc[0].ships,true):'';
     chk('红方接触群:只含已定位的接触、未定位的不进群;没认出的只记成 ?(不泄露舰种)',
       rc.length===1&&rc[0].ships.length===2&&farR.lit>0&&!covFix(farR.cov)&&!S.lod.hideRed.has(farR.id)&&
