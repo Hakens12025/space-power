@@ -109,9 +109,9 @@ function makeShip(cls,name,pos,facing,vel,side,tier){ // TIER1 加第 7 参 tier
     thrust:st.thrust, turnRate:st.turnRate,
     speedGears:(st.speedGears||[0,250,500,800,-1]).slice(), // TIER1 速度档烘焙到实例(05-motion:13 speedGearsOf 改实例优先):tier 影响速度档的唯一通路;拷副本防表被原地改写
     hp:st.hp, maxHp:st.hp, macCd:0, missileArm:null, ammo:lw.ammo, macDmg:lw.macDmg, missDmg:lw.missDmg, interceptor:lw.inter||0, interMax:lw.inter||0, lockedTarget:null, lockPlayer:false, dead:false, // DS167:interMax=拦截弹库存上限(资源纪律判定用)
-    macReload:lw.mac||0, macRange:sReq(lw,'macRange','resolveLoadout'), macRadar:sReq(lw,'macRadar','resolveLoadout'), // RF3 MAC 装填秒/射程烘焙(原 CLS_WPN.mac,射程原为散落字面量);SN4 新增 macRadar=开照射时的火控射程。两块都走 sReq:resolveLoadout 已保证装炮的给真值、不装炮的显式给 0,所以 ||150000 那道兜底今天不可达,而它真生效时会给一艘没有炮的舰凭空发 15 万射程
+    macReload:lw.mac||0, macSigma:sReq(lw,'macSigma','resolveLoadout'), // RF3 MAC 装填秒烘焙;WR1 起射程字段换成角散布 macSigma(走 sReq:配装缺字段当场抛,不许静默退化)
     cells:(lw.cells||4), cellTimer:Array(lw.cells||4).fill(0), // 发射单元(v119):巴黎4单元/同时4组/每组独立装填
-    mslPer:lw.mslPer||12, mslReload:lw.mslReload||60, mslRange:lw.mslRange||350000, // RF3 导弹每组枚数/单元装填秒/射程烘焙(原为 fireMissiles/S15b/enemyAI 散落字面量)
+    mslPer:lw.mslPer||12, mslReload:lw.mslReload||60, // RF3 导弹每组枚数/单元装填秒/射程烘焙(原为 fireMissiles/S15b/enemyAI 散落字面量)
     guideChan:st.guideChan, // SN1 数据链引导通道(来源 weapons/51-defs 的 CLS_LINK,CA 3网/DD 1网):同时引导超自导范围的导弹数。原来的 ||4 是个假兜底 —— DD 真值就是 1,字段一旦丢了它会把 DD 悄悄涨到 4 而不是报错
     chaffRate:(lw.chaffRate!==undefined?lw.chaffRate:0.25), // 干扰弹(v119):数值概念——命中时导弹再丢随机数判被勾走。!==undefined 口径:chaffRate 是 'prob' 字段、钳到 [0,1] 就明确允许 0(本舰不带干扰弹),|| 会把这个合法 0 悄悄换成 DD 的 0.25(等于给 CA/BB/CV 凭空调强)
     value:st.value, // TIER1 威胁权重烘焙到实例:shipValue(s) 已是实例优先,落地后 04-targeting 网分配与 07:297 伏击雷阈值才吃得到 tier

@@ -309,8 +309,8 @@ t('FLOW52_COLD',function(){
    ①b 反向对照:把界换成【侧推】就必须有格子越界。没有这一条,①"全过"可能只是因为界定得太松。
    ② 基准舰锚点:ACT_DET 与 LIS_DET 的【定义】就挂在 DD 身上(基准舰 emit=recv=1 对反射 1.0 的目标)。
       动 DD 的收发、或动那两个参考距离,都会让 20-signature 文件头整段推导变成假话,而没有任何东西会报错。
-   ③ 武器表:规格条上那个射程必须【至少对标准目标可达】。macRadar 大于照射圈的话,玩家永远拿不到火控级,
-      那个数就是虚标 —— 而 fcGate/轮盘/hover 圈三处都照着它画。顺带守住表级不变量 macRadar >= macRange。
+   ③ 武器表(WR1 起):每个装主炮的舰种散布 macSigma>0;三档命中率距离严格有序 (90% < 50% < 10%);九成那一档落在 LAD.gun(主炮带)的 ±15% 内 ——
+      带与散布是两处填的数,这条把它们钉在一起,免得哪天改了散布、接触降速与视图的"主炮带"还停在旧数上。
    ④ emit 与 recv 随体型单调不减;手电系数 4*(emit/recv)^(1/4) 不许低于 4(等价 emit >= recv)。
       后者是「开雷达永远是我看得更清、但对方更早发现我」这条设计灵魂的充要条件:recv 一旦超过 emit,
       那个舰种上就会反转成「雷达看得比被听见还远」,而上面四条没有一条会红。
@@ -357,10 +357,11 @@ t('FLOW53_RADAR',function(){
   var badW=[],wRows=[],c,wi;
   for(c in CLS_LOADOUT)for(wi=0;wi<CLS_LOADOUT[c].length;wi++){
     var w=WPN[CLS_LOADOUT[c][wi]]; if(!w||w.kind!=='mac')continue;
-    var rr=actStd(c);
-    wRows.push(c+' macRadar='+w.macRadar+'/照射圈='+Math.round(rr));
-    if(!(w.macRadar>=w.macRange))badW.push(c+' macRadar<macRange');
-    if(!(w.macRadar<=rr+1e-6))badW.push(c+' macRadar超出照射圈 '+w.macRadar+'>'+Math.round(rr));
+    var sh=makeShip(c,'表'+c,[0,0,0],[1,0,0],[0,0,0],'blue',2),r9=macRangeAt(sh,0.9),r5=macRangeAt(sh,0.5),r1=macRangeAt(sh,0.1);
+    wRows.push(c+' σ='+w.macSigma+' 90%='+Math.round(r9/1000)+'k 50%='+Math.round(r5/1000)+'k 10%='+Math.round(r1/1000)+'k');
+    if(!(w.macSigma>0))badW.push(c+' 散布为 0');
+    if(!(r9<r5&&r5<r1))badW.push(c+' 三档不递增');
+    if(Math.abs(r9/LAD.gun-1)>0.15)badW.push(c+' 九成距离 '+Math.round(r9/1000)+'k 偏离主炮带 '+Math.round(LAD.gun/1000)+'k 超过 15%');
   }
   var ord=CL.slice().sort(function(x,y){return SENS.CLS[x].size-SENS.CLS[y].size;}),badM=[],m;
   for(m=1;m<ord.length;m++){

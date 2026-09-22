@@ -63,7 +63,7 @@ function stepDecoyProj(p,dt){ // 诱饵弹(v125):直线飞模拟舰船信号,燃
 function stepMacProj(p,dt){ // MAC轴炮:沿发射时船头直飞,命中或到预测时间失的
       p.age=(p.age||0)+dt;
       p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;
-      if(p.target&&!p.target.dead&&V.len(V.sub(p.target.pos,p.pos))<2000){applyDamage(p.target,p.dmg,p.shooter,'mac');spawnHit(p.pos,'mac');p.done=true;} // RANGE1 补第 4 实参 kind='mac'(靶场分武器统计)
+      if(p.target&&!p.target.dead&&V.len(V.sub(p.target.pos,p.pos))<MAC_HIT_R){applyDamage(p.target,p.dmg,p.shooter,'mac');spawnHit(p.pos,'mac');p.done=true;} // RANGE1 补第 4 实参 kind='mac'(靶场分武器统计)
       else if(p.age>=p.tt){p.done=true;} // 到预测时间未命中:失的(打偏到点消失,不无限飞)
 }
 function stepBeaconProj(p,dt){ // 侦察信标(v113):飞抵部署,遥控开关机;开机才耗开机时间(300s),关机静默
@@ -189,8 +189,13 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         return;
       }
       // T1引导门:自导(≤15万)或数据链引导 → 追击;脱锁(超自导+无通道/目标熄灭)→ 飞最后已知位置,到点变地雷待命(v126定稿,不自毁)
+      /* WR1 引导段的目标位置只有两个来路:导引头自己看见(guideMode 'self')⇒ 真值;靠母舰数据链('link')⇒ 母舰对它的【估计位置】(contactPos)。
+         估计位置交代不出(接触丢了)⇒ 这一拍按脱锁处理,走下面那条滑行路,不许回落真值。这是"射程无限、只是精准度问题"在导弹上的那一半:
+         远距离打的是发射与飞行途中的估计,椭圆比导引头的自导范围还大就大概率扑空。目标速度暂用真值(内核不估计速度,已知口子)。 */
+      let tp=null;
+      if(p.guided&&p.target){tp=(p.guideMode==='self')?p.target.pos:((typeof contactPos==='function')?contactPos(p.target,p.shooter.side):p.target.pos);if(!tp){p.guided=false;p.guideMode='coast';}}
       if(!p.guided){
-        if(!p.lastKpos)p.lastKpos=(p.target?p.target.pos.slice():[p.pos[0]+p.vel[0]*20,p.pos[1]+p.vel[1]*20,p.pos[2]+p.vel[2]*20]); // 记最后已知
+        if(!p.lastKpos)p.lastKpos=[p.pos[0]+p.vel[0]*20,p.pos[1]+p.vel[1]*20,p.pos[2]+p.vel[2]*20]; // 记最后已知(WR1:没有记录就沿当前航向;原来这里读目标真值)
         const toK=V.sub(p.lastKpos,p.pos);
         const kdist=V.len(toK);
         if(kdist<1200){ // 到点 → 变地雷:停车静默待命(敌舰进圈自主点火),等重新获得信息复活
@@ -225,8 +230,8 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         }
       }
       p.coastT=0;
-      p.lastKpos=p.target.pos.slice();
-      const toT=V.sub(p.target.pos,p.pos);
+      p.lastKpos=tp.slice(); // WR1:估计位置(自导时 = 真值)
+      const toT=V.sub(tp,p.pos);
       const dist=V.len(toT);
       const vn=V.len(p.vel);
       // —— 前置追踪:瞄目标未来位置(直接撞上,不追尾不减速) ——
@@ -240,11 +245,11 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
       let nearIc=false;
       for(let i=0;i<icArr.length;i++){const q=icArr[i];const ddx=q.pos[0]-p.pos[0],ddy=q.pos[1]-p.pos[1],ddz=q.pos[2]-p.pos[2];if(ddx*ddx+ddy*ddy+ddz*ddz<625000000){nearIc=true;break;}} // 25000²
       if(nearIc&&p.fuel>20){ // 蛇形:横向正弦摆动,幅度随接近收敛(远处难拦,近处收拢命中)
-        const dirT=V.norm(V.sub(p.target.pos,p.pos));
+        const dirT=V.norm(V.sub(tp,p.pos));
         const sw=Math.sin((p.age||0)*6)*Math.min(40000,dist*0.3);
         evX=-dirT[1]*sw; evY=dirT[0]*sw;
       }
-      let aim=[p.target.pos[0]+tv[0]*tLead+evX,p.target.pos[1]+tv[1]*tLead+evY,p.target.pos[2]+tv[2]*tLead];
+      let aim=[tp[0]+tv[0]*tLead+evX,tp[1]+tv[1]*tLead+evY,tp[2]+tv[2]*tLead]; // WR1:瞄估计位置
       if(p.netOff){ // 组网包抄(v121):瞄目标+方位偏移,线性收拢(外段绕开拉开方向),距目标<2万硬性归零(内段直插必中)
         const s=Math.max(0,Math.min(1,dist/(p.netD0||1)));
         const shrink=dist<20000?0:s; // 2万内偏移归零:机头直接朝目标,保证收拢命中

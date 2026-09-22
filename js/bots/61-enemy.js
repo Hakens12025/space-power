@@ -83,19 +83,19 @@ function enemyAI(dt){ // 叛军AI:朝【它认为】玩家在的地方推进/锁
     if(hasMAC(e)){e.lockedTarget=nearest;e.lockPlayer=false;} // 看得见才锁定(感知v4);TIER1 MAC 舰种门改能力谓词
     // DS149:敌AI MAC 找窗口纪律(方案A,设计师拍板)——进15万射程且mac就绪→停车找窗口(清orders变idle,战斗转向全向瞄准);开火冷却/失锁/超程恢复原推进命令
     if(hasMAC(e)){ // TIER1 MAC 舰种门改能力谓词(敌 AI 找窗口纪律)
-      const inZone=d<((typeof macEffRange==='function')?macEffRange(e):(e.macRange))&&e.macCd<=0&&e.lockedTarget&&!e.lockedTarget.dead; // RF3 射程读烘焙字段(定义在 weapons/51-defs)
+      const inZone=d<=macRangeAt(e,MAC_AUTO_P)&&e.macCd<=0&&e.lockedTarget&&!e.lockedTarget.dead; // WR1:没有射程门,bot 按命中率 >= 50% 才停车找窗口(30% 那一档是 64 万,停在那儿等窗口太远;bot 整体重做归下一轮) // RF3 射程读烘焙字段(定义在 weapons/51-defs)
       if(inZone&&e.aiHold===undefined){e.aiHold=e.orders.slice();e.orders=[];e.brake=false;e.turnTarget=null;} // 首次进射程:保存命令+停车
       else if(inZone&&e.aiHold!==undefined){e.orders=[];e.brake=false;e.turnTarget=null;} // 保持停车找窗口(1695每tick会重push,清掉)
       else if(e.aiHold!==undefined){e.orders=e.aiHold;e.aiHold=undefined;} // 开火/失锁/超程:恢复推进
     }
-    if(nearest&&e.macCd<=0&&hasMAC(e)&&d<((typeof macEffRange==='function')?macEffRange(e):(e.macRange))&&macAligned(e,nearest))fireMAC(e,nearest); // 敌MAC 近距精确;RF3 射程读烘焙字段;TIER1 MAC 舰种门改能力谓词
+    if(nearest&&e.macCd<=0&&hasMAC(e)&&d<=macRangeAt(e,MAC_AUTO_P)&&macAligned(e,nearest))fireMAC(e,nearest); // WR1:与 weapons/57 自动开火同一档(MAC_AUTO_P) // 敌MAC 近距精确;RF3 射程读烘焙字段;TIER1 MAC 舰种门改能力谓词
     // 敌导弹 = 远程主力:35万射程(只要能探测到就够得着),高概率持续齐射(2组/波,7s冷却)
     // 敌导弹 = 发射单元制(v119):就绪单元全发(护卫4组/巡洋6组),打完全部装填60s——自然形成"一波齐射/分钟",不再连续spam
     // MT1 对局里红方用与蓝方自动齐射【同一套纪律】(weapons/57:就绪单元过半才打、每波最多 2 组)。
     //     原规则是"就绪单元全发"(DD 4 组 / CA 6 组一轮打光),那是 DS167 按"5 艘红舰打 6~8 艘蓝舰"的预设调的节奏;
     //     3 对 3 镜像下它让红方一轮齐射的火力是蓝方的 2~3 倍 —— 实测替身玩家三局全输、红方零损失。预设场景(回归基线)不动,只门控在 match 上。
     const env=(typeof curEnv==='function')?curEnv():null,mirror=!!(env&&env.match),rdy=readyCells(e); // R4:读场景数据(90-envs 的 match 标记),不读界面模块 scenario/97 的 matchIsOn
-    if(nearest&&e.ammo>0&&d<(e.mslRange)&&Math.random()<0.08&&(!mirror||rdy>=Math.ceil((e.cells||4)/2)))orderMissileSalvo(e,nearest,mirror?Math.min(2,rdy):(e.cells||4)); // DS167(设计师拍板):2%→8%,对标bot节奏;RF3 射程读烘焙字段
+    if(nearest&&e.ammo>0&&d<=mslReach(e)&&Math.random()<0.08&&(!mirror||rdy>=Math.ceil((e.cells||4)/2)))orderMissileSalvo(e,nearest,mirror?Math.min(2,rdy):(e.cells||4)); // DS167(设计师拍板):2%→8%,对标bot节奏;RF3 射程读烘焙字段
     const incoming=projectiles.some(p=>p.type==='mac'&&p.target===e&&p.visRed); // AI1:看得见的来袭才躲(visRed 由 detectLoop 每拍算);原来不看,等于红方对每一发主炮都有预警
     if(incoming&&e.macEvadeCd<=0){e.macEvadeCd=8;if(e.orders[0])e.orders[0].pos=[e.pos[0]+(Math.random()-0.5)*20000,e.pos[1]+(Math.random()-0.5)*20000,0];}
     if(e.macEvadeCd>0)e.macEvadeCd-=dt;

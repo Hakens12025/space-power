@@ -149,24 +149,20 @@ function fcSetPick(s,seqId){ // RF8 指定唯一开火序列(只在 pick 模式�
   if(!q||q.shipId!==s.id)return;
   s.fcPick=q.id;s.fcBig='pick';
 }
-function fcGate(s,it,kind){ // RF5 单个目标项对某类武器的全部门:许可→存活→接触等级→射程。任一不过返回 null(调用方跳到下一个,两种模式都不许停摆)
+function fcGate(s,it,kind){ // RF5 单个目标项对某类武器的全部门:许可→存活→接触等级(WR1 起没有射程这一道)。任一不过返回 null(调用方跳到下一个,两种模式都不许停摆)
   if(!it||!it.allow||!it.allow[kind])return null;
   if(!it.tid&&it.pt){ // 指定点:fireMAC 要算提前量、必须有舰目标,所以指定点只对导弹有效
     if(kind!=='msl')return null;
-    if(V.len(V.sub(it.pt,s.pos))>=(s.mslRange))return null; // 空地没有阵营也没有接触等级,只剩射程这一道门
+    // WR1:指定点没有射程门(射程无限,玩家自己决定;之外滑行靠不了数据链 —— 指定点本来就没有目标可引导)
     return {pos:it.pt}; // orderMissileSalvo / fireMissiles 的第二参本来就接受 {pos}(区域齐射);共享 it.pt 数组,Post 段按引用回找记账
   }
   const t=fcShip(it.tid);
   if(!t||t.dead||t.side===s.side)return null; // side 同侧直接排除:免得把友舰写进 lockedTarget(它同时是转向指令)
   const lit=(s.side==='blue')?t.litBlue:t.litRed;
   if(kind==='mac'){
-    if(lit<3)return null; // 与 fireMAC 内部 q<3 同一口径:MAC 是解算武器,要火控级(主动 LADAR 测距测速)才算得出提前量
-    // RF6 门控比的是【硬上限】不是精确射程:精确射程到硬上限之间是射程外衰减区,能打(散布变大)。
-    // 这里若改回比精确射程,序列就拒绝往衰减区下令,而 fireMAC 与敌AI 照打——又变成"扇区说打不到、引擎照打"的两份口径。
-    if(V.len(V.sub(t.pos,s.pos))>=((typeof macEffRange==='function')?macEffRange(s)*MAC_FALLOFF:(s.macRange)))return null;
+    if(lit<2)return null; // WR1:与 fireMAC 内部 q<2 同一口径(原来要 3 级)。射程门整个没了:玩家的序列想在多远打就在多远打,打不打得中是散布与椭圆的事
   }else{
-    if(lit<2)return null; // 与 orderMissileSalvo 内部 q<2 同一口径:导弹要识别级
-    if(V.len(V.sub(t.pos,s.pos))>=(s.mslRange))return null;
+    if(lit<2)return null; // 与 orderMissileSalvo 内部 q<2 同一口径:导弹要跟踪级。WR1:发射门删了,之外滑行靠数据链
   }
   return t;
 }

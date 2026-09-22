@@ -74,7 +74,8 @@ function guideSide(side){ // 一方数据链网络的引导分配(v125:按网分
   for(const p of ms){if(p.needGuide&&!p.guided){p.guideMode='coast';if(!p.lastKpos){
     const relV=V.sub(p.vel,p.target.vel);
     const tt=Math.max(0.3,V.len(V.sub(p.target.pos,p.pos))/Math.max(500,V.len(relV)));
-    p.lastKpos=[p.target.pos[0]+p.target.vel[0]*tt,p.target.pos[1]+p.target.vel[1]*tt,p.target.pos[2]+p.target.vel[2]*tt];
+    const kp=(typeof contactPos==='function')?contactPos(p.target,p.shooter.side):p.target.pos; // WR1:最后已知位置按母舰的【估计位置】记;交代不出位置就沿当前航向滑行(不回落真值)
+    p.lastKpos=kp?[kp[0]+p.target.vel[0]*tt,kp[1]+p.target.vel[1]*tt,kp[2]+p.target.vel[2]*tt]:[p.pos[0]+p.vel[0]*20,p.pos[1]+p.vel[1]*20,p.pos[2]+p.vel[2]*20];
   }}}
 }
 function guideDesc(p){ // 信息面板:导弹引导状态

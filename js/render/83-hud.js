@@ -557,8 +557,8 @@ function drawHoverRings(){
   for(const id of ids){
     const s=shipById(id);if(!s||s.dead||s.side!=='blue')continue;
     const p=toScreen(s.pos[0],s.pos[1]);
-    if(hoverRing==='mac'){const e=(typeof macEffRange==='function')?macEffRange(s):(s.macRange);ring(p,e,'主炮 '+Math.round(e/1000)+'k'+(s.emitMode==='paint'?'(照射)':'(未照射)'));} // RF3 射程读烘焙字段(定义在 weapons/51-defs);RF6 改画【精确射程】,圈外到 ×MAC_FALLOFF 之间是衰减区,故意不画第二个圈——两个同心圈在战术图上读不出主次。SN4:后缀改读 emitMode,与 macEffRange 的新口径(paint→macRadar / 否则 macRange,二选一不取 max)同源
-    else if(hoverRing==='msl')ring(p,s.mslRange,'导弹 '+Math.round((s.mslRange)/1000)+'k');
+    if(hoverRing==='mac'){ring(p,macEffRange(s),'主炮 50% ≈ '+Math.round(macEffRange(s)/1000)+'k');ring(p,macRangeAt(s,0.1),'主炮 10% ≈ '+Math.round(macRangeAt(s,0.1)/1000)+'k');} // WR1:没有射程门,画两档命中率的距离
+    else if(hoverRing==='msl')ring(p,mslReach(s),'导弹 动力 ≈ '+Math.round(mslReach(s)/1000)+'k(之外滑行)'); // WR1
     else if(hoverRing==='ciws'){const c=ciwsOf(s);ring(p,c.outer,'外圈拦截 '+Math.round(c.outer/1000)+'k');ring(p,c.inner,'内圈 '+Math.round(c.inner/1000)+'k');}
     else if(hoverRing==='emit'&&typeof actRangeOf==='function'&&typeof hearRangeOf==='function'){ // EM1-B:雷达的账 —— 开了能照多远、开了会在多远被听见(两圈都按【开着照射】算,不管此刻开没开:这是做决定前要看的账)
       const ifPaint=Object.assign({},s,{emitMode:'paint'});
@@ -593,9 +593,8 @@ function drawTargeting(){
   ctx.stroke();
   if(tgt){
     const p=toScreen(sub.pos[0],sub.pos[1]),q=toScreen(tgt.pos[0],tgt.pos[1]);
-    // RF5 预览线按射程着色:缺省全武器许可,取射程最远那口(导弹)。射程【只】读实例烘焙字段(RF3,定义在 weapons/51-defs),不写字面量兜底——
-    // 上面 drawHoverRings 的 `s.mslRange` 是 RF2/RF3 遗留写法,照抄会把烘不出导弹的舰(mslRange 缺失/为 0)当成一门 35 万射程的导弹,预览线照样着成活跃色,给出"这个目标打得着"的假象。
-    const R=sub.mslRange||0; // 无导弹语义显式化:R=0 一律画超程暗色
+    // WR1 预览线按【动力射程】着色(没有射程门了;之外能打但靠滑行 + 数据链)。没装导弹的舰 R=0 一律暗色。
+    const R=(sub.ammo>0&&sub.cells>0)?mslReach(sub):0;
     const inR=R>0&&V.len(V.sub(tgt.pos,sub.pos))<=R; // 判据是世界距离而非屏幕距离(屏幕距离随 zoom 变,同一目标会时内时外)
     ctx.globalAlpha=inR?.75:.55; // 半透明一律 globalAlpha+rgba,全程只有 stroke/arc:每帧路径禁 shadowBlur/createRadialGradient
     ctx.strokeStyle=inR?'#ffe066':'#46566a'; // 射程内=--state-select(我下的命令) / 超程=--txt-mute(禁用态:这个目标现在打不着)

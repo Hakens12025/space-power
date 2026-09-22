@@ -9,17 +9,15 @@
 function selBlue(){return selectedShips().filter(s=>s.side==='blue'&&!s.dead);}
 /* kind → 开关字段/射程/hover 文案 的映射(武器机制数据从烘焙字段读,源头在 weapons/51-defs) */
 const KIND_INFO={
-  // RF6 射程一分为二:range=【精确射程】(画圈/报数用,主炮 = 有效射程,开雷达则由雷达范围顶上);
-  // maxRange=【硬上限】(门控用,超出它 fireMAC 静默拒发)。两者之间是射程外衰减区:能打、但散布随距离增长。
-  // 无衰减机制的武器不写 maxRange,下游一律 `maxRange?maxRange(s):range(s)` 回退,语义不变。
+  // WR1(2026-09-22)射程无限、只是精准度问题:range 的语义改成【命中率 50% 的距离】(主炮)/【动力射程】(导弹),都是从散布 / 燃料现算的,
+  //   不再是门;maxRange(主炮)= 命中率 10% 的距离,hover 时与 range 各画一圈。下游 `maxRange?maxRange(s):range(s)` 的回退口径不变。
   mac:{on:'macOn',
-    range:s=>(typeof macEffRange==='function')?macEffRange(s):(s.macRange),
-    maxRange:s=>((typeof macEffRange==='function')?macEffRange(s):(s.macRange))*((typeof MAC_FALLOFF==='number')?MAC_FALLOFF:1),
-    tip:s=>{const e=(typeof macEffRange==='function')?macEffRange(s):(s.macRange);
-      return `MAC轴炮 · 精确射程${Math.round(e/1000)}k${s.emitMode==='paint'?'(照射顶上)':'(未照射)'} · 衰减至${Math.round(e*((typeof MAC_FALLOFF==='number')?MAC_FALLOFF:1)/1000)}k · 伤害${s.macDmg||0} · 装填${Math.round(s.macReload||30)}s · 需火控开+机头对准`;}}, // SN4:后缀改读 emitMode —— macEffRange 已改成 paint→macRadar / 否则 macRange 的二选一(前提 9,不再与感知量程取 max)
+    range:s=>macEffRange(s),
+    maxRange:s=>macRangeAt(s,0.1),
+    tip:s=>`MAC轴炮 · 散布 ${(sReq(s,'macSigma')*1000).toFixed(1)} 毫弧 · 命中率 50% ≈ ${Math.round(macEffRange(s)/1000)}k / 10% ≈ ${Math.round(macRangeAt(s,0.1)/1000)}k · 伤害${s.macDmg||0} · 装填${Math.round(s.macReload||30)}s · 需火控开+机头对准+跟踪级`},
   msl:{on:'mslOn',
-    range:s=>s.mslRange,
-    tip:s=>`导弹齐射 · 射程${Math.round((s.mslRange)/1000)}k · 每组${s.mslPer||12}枚×${s.cells||4}单元 · 单元装填${s.mslReload||60}s · 需火控开+目标识别级`},
+    range:s=>mslReach(s),
+    tip:s=>`导弹齐射 · 动力射程 ≈ ${Math.round(mslReach(s)/1000)}k(之外滑行,靠数据链)· 每组${s.mslPer||12}枚×${s.cells||4}单元 · 单元装填${s.mslReload||60}s · 需火控开+目标跟踪级`},
   ciws:{on:'ciwsOn',
     range:s=>ciwsOf(s).outer,
     tip:s=>{const c=ciwsOf(s);return `近防 · 外圈${Math.round(c.outer/1000)}k拦截弹 · 内圈${Math.round(c.inner/1000)}k近防炮 · 库存${s.interceptor}枚(被动防御,来袭才发射)`;}},
@@ -30,7 +28,7 @@ function cmdList(s){
     {id:'cbFire',label:'火控',ring:null,
       get:x=>!!(x.autoEngage&&x.roe!=='hold'),
       set:(x,v)=>{x.autoEngage=v;x.roe=v?'free':'hold';if(!v)x.lockedTarget=null;}, // 关=停火+解除锁定,开=自动索敌+自动开火
-      tip:()=>'火控总开关:开=自动锁定已点亮敌舰,各武器进射程自动发射;关=停火并解除锁定'},
+      tip:()=>'火控总开关:开=自动锁定已跟踪的敌舰,主炮命中率够就自动开火、导弹在动力射程内自动齐射;关=停火并解除锁定'},
     // SN4 blocker C:这里原来有一条「雷达」布尔开关(读写的是那个已删的开关字段)。发射档换成三态 silent/paint/jam 之后塞不进这张表 ——
     //   表的形状是「每舰一个布尔」:get/set 两个钩子 + bindCmdBar 里写死的点击语义(读第一艘、取反、全队统一置成【一个】布尔目标态),
     //   三态既没有「取反」也没有单一目标态;硬塞进去会被那行 `if(!cmd.set)return` 静默吃掉(RF8 大序列钮那次的原样复刻:渲染正常、title 也在、就是按不动)。
@@ -61,7 +59,7 @@ function specItems(s){
     ['火控通道',s.guideChan],
   ];
   for(const w of (s.weapons||[])){
-    if(w.kind==='mac')items.push(['主炮',s.macDmg>0?(s.macDmg+'×'+Math.round(s.macReload)+'s'):'无']);
+    if(w.kind==='mac')items.push(['主炮',s.macDmg>0?(s.macDmg+'×'+Math.round(s.macReload)+'s · 50%@'+Math.round(macEffRange(s)/1000)+'k'):'无']); // WR1:规格条带上命中率 50% 的距离
     else if(w.kind==='msl')items.push(['导弹',s.ammo+'枚×'+s.cells+'组']);
     else if(w.kind==='ciws'){const c=ciwsOf(s);items.push(['拦截弹',s.interMax+'枚'],['近防',Math.round(c.outer/1000)+'k/'+Math.round(c.inner/1000)+'k']);}
   }

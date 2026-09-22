@@ -121,7 +121,7 @@ function stepShipsMotion(dt){
       if(s.driftFire){s.driftFireT=(s.driftFireT||0)-dt;if(s.driftFireT<=0){s.driftFire=false;}} // 60s限时
       const idle=!s.orders.length&&!s.formation&&!s.follow&&!s.turnTarget&&!s.brake; // FL1:跟随中的舰不算空闲,不许被战斗转向抢机头
       if(idle||(s.driftFire&&!s.crawling&&!s.turnTarget&&!s.brake)){ // 硬机动段让位
-        applyHeading(s,V.norm(V.sub(macPred(s,s.lockedTarget),s.pos)),dt); // RF10
+        const mp=macPred(s,s.lockedTarget); if(mp)applyHeading(s,V.norm(V.sub(mp,s.pos)),dt); // RF10;WR1:macPred 读估计位置,交代不出就不转(不回落真值)
       }
     }
     s.pos[0]+=s.vel[0]*dt; s.pos[1]+=s.vel[1]*dt; s.pos[2]+=s.vel[2]*dt;

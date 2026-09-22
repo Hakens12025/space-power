@@ -46,7 +46,10 @@ function stepWeaponSystems(dt){
     const isPt=(t.side===undefined); // RF5 指定点(空地)没有阵营也没有接触等级,跳过 side/litBlue 两道门(fcGate 已在序列侧查过射程,这里保留复查)
     if(!isPt&&(t.dead||t.side===s.side))continue;
     if(!isPt&&(litOf(t,s.side))<2)continue; // 与手动齐射同一识别级门控
-    if(V.len(V.sub(t.pos,s.pos))>=(s.mslRange))continue; // RF3 射程读烘焙字段(定义在 weapons/51-defs)
+    { // WR1:没有发射门了;自动齐射(玩家的「火控」钮)只在动力射程内打,免得自动化替玩家把弹药扔到滑行段去;距离按估计位置量(指定点按点)
+      const tp=isPt?t.pos:((typeof contactPos==='function')?contactPos(t,s.side):null); if(!tp)continue;
+      if(V.len(V.sub(tp,s.pos))>=mslReach(s))continue;
+    }
     const ready=readyCells(s);
     if(ready<Math.ceil((s.cells||4)/2))continue; // 过半就绪才打,自然成波(导弹Arm/弹药不足由 orderMissileSalvo 内部兜底)
     orderMissileSalvo(s,t,Math.min(2,ready));
@@ -88,7 +91,9 @@ function stepWeaponSystems(dt){
   for(const s of ships){
     const roeOK=s.macOn!==false&&(s.roe==='free'||(s.roe==='tight'&&s.roeCd>0)); // free自由/tight被攻击才还击(roeCd=受击冷却)/hold不开火;RF2 主炮开关:关=不参与自动开火
     const mt=(typeof fcActive==='function'&&fcActive(s))?(s.fcTgt&&s.fcTgt.mac):s.lockedTarget; // RF5 有序列则打序列解算的主炮目标:序列可能只许导弹打(allow.mac=false),这时 lockedTarget 虽被写成导弹目标,主炮也不许跟着开
-    if(roeOK&&!s.dead&&mt&&!mt.dead&&mt.side!==s.side&&s.macCd<=0&&hasMAC(s)&&macAligned(s,mt))fireMAC(s,mt); // TIER1 MAC 舰种门改能力谓词
+    if(roeOK&&!s.dead&&mt&&!mt.dead&&mt.side!==s.side&&s.macCd<=0&&hasMAC(s)&&macAligned(s,mt)){ // WR1:自动开火只在把握 >= MAC_AUTO_P 时打(没有射程门了);距离按估计位置量。这一条【不看 autoEngage】,红方 bot 的开火实际走的就是它
+      const mp=macPred(s,mt); if(mp&&macHitProb(s,V.len(V.sub(mp,s.pos)))>=MAC_AUTO_P)fireMAC(s,mt);
+    } // TIER1 MAC 舰种门改能力谓词
     if(s.roeCd>0)s.roeCd-=dt;
   }
 }

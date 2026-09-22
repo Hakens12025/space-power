@@ -1,44 +1,66 @@
 "use strict";
 /* RF1: 拆自 js/03-ships.js L335-493(MAC/诱饵/拦截弹/齐射发射链 + hitFX/threatCorridors/nets 实体状态)。纯移动无逻辑改动。 */
 function macPred(s,t){ // 目标未来位置(提前量,MAC 0.1c飞行时间);KIMI151:相对速度提前量——弹丸继承舰速后,提前量必须用(目标速-本舰速),否则行进间射击系统性脱靶
-  const d=V.len(V.sub(t.pos,s.pos));
+  // WR1:位置用【估计位置】(contactPos;交代不出位置 ⇒ 返回 null,调用方不许回落真值),速度暂用真值(内核不估计速度,已知口子)
+  const tp=(typeof contactPos==='function')?contactPos(t,s.side):t.pos; if(!tp)return null;
+  const d=V.len(V.sub(tp,s.pos));
   const tt=d/CFG.macSpd;
-  return [t.pos[0]+(t.vel[0]-s.vel[0])*tt,t.pos[1]+(t.vel[1]-s.vel[1])*tt,t.pos[2]+(t.vel[2]-s.vel[2])*tt];
+  return [tp[0]+(t.vel[0]-s.vel[0])*tt,tp[1]+(t.vel[1]-s.vel[1])*tt,tp[2]+(t.vel[2]-s.vel[2])*tt];
 }
 function macAligned(s,t){ // 轴炮窗口:机头是否对准预测点(~1.1°容差,摆到窗口即开火)
   if(!t||t.dead||t.side===s.side)return false;
-  return V.angle(s.facing,V.norm(V.sub(macPred(s,t),s.pos)))<0.02;
+  const mp=macPred(s,t); if(!mp)return false; // WR1:没有估计位置就没有窗口
+  return V.angle(s.facing,V.norm(V.sub(mp,s.pos)))<0.02;
 }
-/* RF6 主炮射程分两块:炮自己有射程,雷达自己有照射范围,两者是不同组件。
-   SN4 把第二块从感知层摘下来,改成武器表自带的 macRadar:开照射(emitMode==='paint')用 macRadar,静默/干扰用 macRange,不取 max。
-   为什么不取 max:两通道内核里的照射量程是「按目标反射率现算」的动态量(同一门炮打 DD 和打 CA 得出的数不一样),
-   拿它当火控射程等于把武器与感知又焊回一起——射程会随着看谁而变,而 fcGate / 目标轮盘 / hover 圈三处读数没有「看谁」这个参数。
-   数值上对现有舰种是零变化:DD 两块都是 15 万,CA 是 15 万→25 万,与改前 max(炮,感知半径) 的结果逐位相同。
-   超出有效射程不是硬截断,而是【散布随距离增长】——弹丸真的飞歪、屏幕上看得见,与既有的提前量脱靶自然叠加。
-   MAC_FALLOFF 是"再打就是浪费"的硬上限(30s 装填,不设上限 AI 会对着 100 万公里外空放)。
-   改前的散布锚在绝对距离上(d/100000*0.0025),与射程概念无关且过于温和:25 万公里处偏角才 0.00625rad、
-   脱靶约 1562km < 命中判定半径 2000km,所以 25 万外照样八发八中——这正是"主炮射程形同虚设"的根因。 */
-const MAC_FALLOFF=2.0;      // 硬上限 = 有效射程 × 此值,超出不开火
-const MAC_SPREAD_K=0.018;   // 每超出一倍有效射程增加的偏角(rad,约 1.0°)
-const MAC_SPREAD_CAP=0.05;  // 偏角上限,防极端距离下数值失控
-function macEffRange(s){ // SN4 有效射程唯一定义点:开照射用雷达那一块(macRadar),静默/干扰用炮自己那一块(macRange)。调用点一律调它,绝不在别处重拼这个判断
-  return s.emitMode==='paint'?sReq(s,'macRadar'):sReq(s,'macRange'); // 只有 paint 是在照射;jam 档发射机忙着造噪声、不照射,所以与 silent 同走炮射程。两块都走 sReq:字段一旦消失当场抛,不许静默退化成"零增益"(那正是 SN2 摘掉的那类兜底)。无主炮舰(CV)由 51-defs 的 resolveLoadout 显式烘成 0,所以这里不需要兜底也不会抛
+/* ================= WR1 武器射程无限,只是精准度问题(2026-09-22 用户拍板)=================
+   改前主炮有两块射程(炮自己 15 万 / 开雷达顶到 25 万)+ 硬上限 2 倍 + 超程散布,导弹有 35 万的发射门。
+   用户:"因为是太空,本身武器射程就应该是无限,只是精准度问题"。所以:
+     · 主炮没有射程门。每一发都带角散布 da ~ 高斯(0, macSigma)(以前只在超程时才加,而且是均匀分布)。
+       弹丸沿散布后的方向直飞到【预测点】的飞行时间就消失(不许无限飞:性能)。命中判定照旧 = 弹丸离目标真实位置 < MAC_HIT_R。
+       于是命中率随距离自然下降:P(d) = erf( MAC_HIT_R / (σ·d·√2) )。macSigma=0.0081 ⇒ 15 万 ≈ 90%、36.6 万 = 50%、196 万 = 10%。
+       飞行时间里目标机动造成的脱靶不用另建模:弹丸瞄的是发射那一刻的预测点,目标一加速自然打空(150 万公里要飞 50 秒)。
+     · 主炮的火控门从 3 级放宽到 2 级(跟踪级),瞄的是接触的【估计位置】(contactPos)—— 椭圆越大越打不中,这就是"精准度问题"的另一半。
+       目标速度暂用真值(内核今天不估计速度;已知的口子,记在 weapons/CLAUDE.md)。
+     · "有效射程"这个词保留,语义改成【命中率 50% 的距离】(macEffRange);macRangeAt(s,p) 给任意档;bot / 自动开火按命中率阈值决定打不打。
+     · 导弹没有发射门。射程 = 燃料:mslReach = 动力射程(加速一半、减速一半);之外滑行,靠数据链把它带到目标(weapons/56)。
+   旧那套(RF6 的硬上限倍数、超程线性散布、SN4 的"开雷达把炮的射程顶上去")整套删除;它们的理由都建立在"射程是门"上。 */
+const MAC_HIT_R=2000;        // 命中判定半径 km(weapons/56 的命中检查与 sensors/23 的 COV.MAC 同一个数)
+const MSL_ACC=150, MSL_FUEL=100;   // 导弹加速度 km/s²(weapons/56 里 DS190 定的 150)与燃料(满油门秒)
+const _Z={0.9:1.6449,0.5:0.6745,0.3:0.3853,0.1:0.1257};
+/* WR1 自动开火的把握下限。没有射程门之后,"打不打"只剩两个成本:30 秒装填,以及【开火暴露】(FX1:开火后 8 秒亮一档)。
+   所以纯按期望伤害算,20% 把握也值得打 —— 实测红方 bot 因此从 94 万公里就开始放炮(命中率 20.7%),整局双方各打五六十发、命中九发,读起来是"对着远处喷"。
+   定成 0.5:【自动化只打过半把握的】,想赌远射自己下令(玩家的火控序列不受这条限制,那是他自己的决定)。与 bots/61 红方 bot 的门同一档,双方口径一致。 */
+const MAC_AUTO_P=0.5; // 命中率 p ⇒ 半宽 z:P(|N(0,1)| < z) = p
+function gaussRand(){ // Box-Muller,一次一个
+  let u=0,v=0; while(u===0)u=Math.random(); while(v===0)v=Math.random();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
 }
+function erfApprox(x){ // Abramowitz-Stegun 7.1.26,误差 < 1.5e-7
+  const sg=x<0?-1:1; x=Math.abs(x);
+  const t=1/(1+0.3275911*x);
+  const y=1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-x*x);
+  return sg*y;
+}
+function macHitProb(s,d){ // 主炮在距离 d 上对标准命中判定半径的命中率(靶不动)
+  const sig=sReq(s,'macSigma'); if(!(sig>0)||!(d>0))return sig>0?1:0;
+  return erfApprox(MAC_HIT_R/(sig*d*Math.SQRT2));
+}
+function macRangeAt(s,p){ // 命中率恰为 p 的距离;p 只支持 _Z 里的四档
+  const z=_Z[p]; if(!z)throw new Error('macRangeAt: p 只支持 0.9/0.5/0.3/0.1');
+  const sig=sReq(s,'macSigma'); return sig>0?MAC_HIT_R/(sig*z):0;
+}
+function macEffRange(s){return macRangeAt(s,0.5);} // 有效射程 = 命中率 50% 的距离。调用点一律调它,绝不在别处重拼
+function mslReach(s){return MSL_ACC*(MSL_FUEL/2)*(MSL_FUEL/2);} // 动力射程:加速 fuel/2 秒再减速 fuel/2 秒 = 2 x 0.5 a t² = 375,000km(与旧的 35 万发射门几乎相同 —— 旧数就是这么来的)
 function fireMAC(shooter,target){ // MAC轴炮:沿船头方向直射(必须先对准),到预测时间失的
   if(shooter.noFire)return; // RANGE1 禁火总闸门 1/3:靶场的靶只挨打不还手。这是 MAC 发射的唯一实现,GM 手动锁定/自动索敌/AI 三条路径最终都落到这里。注意这是个【静默】开关(不报错不打日志),将来若误给蓝舰置了 noFire 会毫无线索,置位处只有 initEnemy 的靶语义包一处
   if(shooter.side===target.side||shooter.dead||target.dead)return;
   const q=litOf(target,shooter.side);
-  if(q<3)return; // 火控门控(v123):MAC是解算武器,需火控级(主动LADAR测距测速)才能算提前量;被动/识别级打不出
-  const d=V.len(V.sub(target.pos,shooter.pos));
-  const effR=macEffRange(shooter); // RF6 有效射程(开雷达则用雷达范围顶上)
-  if(d>=effR*MAC_FALLOFF)return; // RF6 射程外硬上限:与 q<3 同一层的静默闸门,三条发射路径(GM手动/自动索敌/敌AI)都落到这里,一处堵住即全堵
+  if(q<2)return; // WR1:火控门 3 级 → 2 级(跟踪级)。原来要火控级(椭圆进主炮门)才许开火;现在瞄的是估计位置,椭圆大就是打不中,不再由门替玩家挡
+  const pred=macPred(shooter,target); if(!pred)return; // WR1:交代不出估计位置就不开火(不回落真值)
+  const d=V.len(V.sub(pred,shooter.pos)); // WR1:飞行距离按预测点算(没有射程门了,d 只决定弹丸寿命)
   const tt=d/CFG.macSpd; // 飞行时间(MAC 0.1c)
-  const pred=macPred(shooter,target);
   const dir=V.norm(shooter.facing); // 轴炮:弹道=船头轴线(单位化防脏数据)
-  // RF6 射程外衰减:有效射程内零附加散布,超出后偏角随超出比例线性增长(脱靶距离 ≈ d×偏角,故实际衰减是超线性的)
-  const over=Math.max(0,d/effR-1);
-  const spread=Math.min(MAC_SPREAD_CAP,MAC_SPREAD_K*over);
-  const da=(Math.random()*2-1)*spread;
+  const da=gaussRand()*sReq(shooter,'macSigma'); // WR1:每一发都带高斯角散布(原来只在超程时加均匀散布);脱靶距离 ≈ d x da,命中率随距离自然下降
   const ang=Math.atan2(dir[1],dir[0])+da;
   const hxy=Math.hypot(dir[0],dir[1]); // KIMI146修:xy分量按朝向的xy模长缩放——原直接用满macSpd再叠dir[2]·macSpd,合速度超0.1c且弹道≠机头轴线(带俯仰时必脱靶)
   projectiles.push({type:'mac',pos:shooter.pos.slice(),vel:[Math.cos(ang)*hxy*CFG.macSpd+shooter.vel[0],Math.sin(ang)*hxy*CFG.macSpd+shooter.vel[1],dir[2]*CFG.macSpd+shooter.vel[2]],target,shooter,pred,tt,age:0,dmg:shooter.macDmg,visBlue:false,visRed:false}); // KIMI151:弹丸继承舰速(出膛矢量=舰速+机头轴×0.1c,相对舰体初速仍0.1c)
@@ -111,18 +133,20 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
   const isShip=target&&target.side!==undefined; // 有 side 才是舰船,否则当空位置(区域目标)
   if(shooter.dead)return;
   if(isShip&&(shooter.side===target.side||target.dead))return;
+  // WR1:发射方向、速度剖面、直插方向全部按【估计位置】算(原来读 target.pos 真值)。交代不出估计位置就不发。区域齐射的点本来就是玩家给的。
+  const tp0=isShip?((typeof contactPos==='function')?contactPos(target,shooter.side):null):target.pos; if(!tp0)return;
   const rounds=Math.min(n||salvoCount,readyCells(shooter),Math.floor(shooter.ammo/(shooter.mslPer||12))); // 组数=min(请求,就绪单元,弹药)。RF6 修:分母原写死 16 而每组实耗 mslPer=12(见下方 shooter.ammo-=shooter.mslPer),两处口径不一致导致末尾 12 枚成死弹
   if(rounds<=0)return; // 无就绪发射单元或弹药不足
   // 占用 rounds 个发射单元(独立装填60s)
   let used=0;
   if(shooter.cellTimer)for(let i=0;i<shooter.cellTimer.length&&used<rounds;i++){if(shooter.cellTimer[i]<=0){shooter.cellTimer[i]=shooter.mslReload||60;used++;}} // RF3 装填秒读烘焙字段(原字面量60,定义在 weapons/51-defs)
   // 组间散布(v111):同舰同目标多组不再 0km 叠加成"一发",按组序横散布成扇面(前置追踪会让各道在目标附近收拢)
-  const axis=V.norm(V.sub(target.pos,shooter.pos));
+  const axis=V.norm(V.sub(tp0,shooter.pos));
   let perp=V.norm([-axis[1],axis[0],0]);
   if(!isFinite(perp[0])||V.len(perp)<0.5)perp=[1,0,0]; // 退化兜底
   // v122 导弹模式:auto=默认组网(noNet船直射) / net=强制组网 / direct=直射
   const isNet=missileMode==='net'||(missileMode==='auto'&&!shooter.noNet);
-  const D0=isShip?Math.max(1,V.len(V.sub(target.pos,shooter.pos))):100000;
+  const D0=isShip?Math.max(1,V.len(V.sub(tp0,shooter.pos))):100000;
   // 速度剖面(v122):巡航vPeak(距离自适应,留20%距离加减速)+ 终端vTerm + 燃料预留(滑行修正+终端机动)
   const vTerm=isNet?3000:8000;      // 组网需低速机动/直射几乎不减速
   const netReserve=isNet?40:20;     // 预留燃料:滑行修正转向+终端机动
@@ -134,7 +158,7 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
   if(isNet&&isShip&&rounds>=2&&D0>=60000){
     const R=Math.min(150000,Math.max(30000,D0*0.5)); // 偏移半径=0.5×距离级:够把导弹绕到目标侧面(真·多方向),2万内归零兜底必中
     const dirs=Math.min(rounds,3); // 方向封顶3(直插/上/下——前半球最多覆盖3扇面,正后方绕不过去)
-    const si=V.norm([shooter.pos[0]-target.pos[0],shooter.pos[1]-target.pos[1],0]); // 直插方向(目标→发射舰)
+    const si=V.norm([shooter.pos[0]-tp0[0],shooter.pos[1]-tp0[1],0]); // 直插方向(目标→发射舰)
     let px=V.norm([-si[1],si[0],0]); // 垂直(逆时针90°)
     if(!isFinite(px[0])||V.len(px)<0.5)px=[0,1,0]; // 退化兜底
     const OFF_L={1:[[1,0]],2:[[0,1],[0,-1]],3:[[0,1],[1,0],[0,-1]],4:[[0,1],[1,0],[1,0],[0,-1]]}; // 局部坐标:[1,0]=直插, [0,±1]=上下两翼;DS170:4组=121排布(上1/直2/下1,不重叠——原k%3循环第4组和第1组重叠)
@@ -172,7 +196,7 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
       vel:[shooter.vel[0]+perp[0]*lane*10,shooter.vel[1]+perp[1]*lane*10,shooter.vel[2]+perp[2]*lane*10], // 继承载机速度矢量+轻微侧向发散
       target:isShip?target:null, shooter, dmg:shooter.missDmg*(shooter.mslPer||12), missDmg:shooter.missDmg, // 组总伤害 + 单颗伤害(v119,命中按单颗算)
       spd:Math.max(200,V.len(shooter.vel)), // 初始速率=载机速率
-      fuel:100, age:0, // 燃料(秒) + 飞行年龄(近防发射判定)
+      fuel:MSL_FUEL, age:0, // 燃料(秒,WR1 起是常量 MSL_FUEL:mslReach 从它现算)+ 飞行年龄(近防发射判定)
       park:!isShip, parkPt:isShip?null:target.pos.slice(), mine:false, trigRadius:isShip?120000:80000, trigMode:'any', // 区域齐射:飞到点位,到了等敌舰进圈自主攻击(盲射);雷触发圈放大v118
       netId, netFmt:null, // v125 网:所属网 + 网内阵型位(横线/集中)
       netOff:ng2?ng2.v:null, netOffR:netGeom?netGeom.R:0, netD0:netGeom?netGeom.D0:0, // v121组网:方位偏移(随接近收拢→多方向同时弹着)

@@ -4,14 +4,14 @@
    外加 57 的舰级 macOn 一道闸;任何一条恒不过,"许可只做减法"这句话就一个字也没被测到。
    fc3reset 的注释里本来就写着"MAC 要 litBlue>=3 才解算得出目标",但这条前提从来没被断言过,
    而感知层一动,最先垮的正是接触等级那条。故补两样,缺一不可:
-   ① 前置条件直接断言 —— litBlue 全程 >=3、三维距离全程在 macEffRange*MAC_FALLOFF 之内、macOn/autoEngage/roe 都放行;
+   ① 前置条件直接断言 —— litBlue 全程 >=3、三维距离全程在【命中率 50% 的距离】之内(WR1 起没有射程门,这一条只保证"打得着")、macOn/autoEngage/roe 都放行;
    ② 正向对照 —— 同一艘舰、同一个靶、紧接着的同一段时间,只把 allow.mac 这一个比特翻成 true,主炮就必须真的开火。
    只加 ① 的话,"序列层把 mac 也放行了"这种反向坏法仍测不出来(那时 macHits 照样是 0 才叫怪);
    只加 ② 的话,判定确实会红,但读数说不清是"许可层坏了"还是"这一局根本打不着"。 */
 t('FLOW3_ALLOW',function(){
   var e=fc3reset();
   fcNew(e.S,{tid:e.A.id},{mac:false,msl:true});
-  var cap=(typeof macEffRange==='function')?macEffRange(e.S)*MAC_FALLOFF:(e.S.macRange||150000); /* 与 fcGate 逐字同口径:比的是硬上限,不是精确射程 */
+  var cap=macRangeAt(e.S,0.5); /* WR1:射程门没了;前置条件只保证这一局在命中率过半的距离上打,"没开火"才证明得了是许可挡的 */
   var lit0=e.A.litBlue,litMin=99,dMax=0;
   for(var i=0;i<5000;i++){ /* 不走 fc3step:前置条件要在同一条循环里【逐拍】采样,只看首尾两拍的话中途掉级看不见 */
     stepSim(CFG.step);simTime+=CFG.step;
@@ -766,4 +766,88 @@ t('FLOW8_PICKBTN',function(){ /* RF8b「选择」钮必须【真的点得动】�
     &&big2==='rr'&&!on2&&big3==='rr'&&barWorks);
   return (ok?'ok':'fail')+' 初始='+big0+' 点一下→'+big1+'(pick='+(String(pick1)===String(s2)?'序列2':pick1)+',按钮on='+on1+')'
     +' 再点→'+big2+'(on='+on2+') | 无序列态时点→'+big3+'(须rr,只提示不改状态) | 方条仍可点='+barWorks;
+});
+/* ===== WR1 武器射程无限,只是精准度问题 =====
+   用户 2026-09-22 拍板。主炮:没有射程门,每发带高斯角散布,瞄接触的【估计位置】;导弹:没有发射门,数据链引导段瞄估计位置,导引头自己看见才用真值。
+     ① 主炮无射程门:150 万公里外的跟踪级接触照样出弹;反向对照:1 级不出、估计位置交代不出不出
+     ② 命中率随距离(蒙特卡洛,固定种子):15 万 / 50 万 / 150 万 三档落在各自区间且严格递减
+     ③ 瞄的是估计位置:估计偏开真值 3 万 ⇒ 几乎打不中;估计 = 真值 ⇒ 打得中
+     ④ 导弹无发射门:100 万公里外出弹;反向对照:1 级不出
+     ⑤ 数据链引导瞄估计位置:估计在 B、真值在 A ⇒ 航向指向 B;估计置 null ⇒ 脱锁、不朝 A 转;导引头看见 ⇒ 指向 A
+     ⑥ 读数:hover 主炮两圈(50% / 10%)、hover 导弹一圈(动力射程)、规格条含「50%@」、提示文案不含旧公里数 */
+t('FLOW85_WEAPONS',function(){
+  if(typeof macRangeAt!=='function'||typeof mslReach!=='function'||typeof gaussRand!=='function')return 'fail WR1 未加载(缺 macRangeAt / mslReach / gaussRand)';
+  var shipsBak=ships.slice(),projBak=projectiles,admBak=adminMode,selBak=selected.slice(),hrBak=hoverRing,camBak={x:cam.x,y:cam.y,zoom:cam.zoom};
+  var oRnd=Math.random,oAD=applyDamage,oArc=ctx.arc,oT=ctx.fillText,out='';
+  try{
+    adminMode=false;selected=[];hoverRing=null;projectiles=[];
+    var B=makeShip('CA','散布蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),R=makeShip('DD','散布红',[0,0,0],[-1,0,0],[0,0,0],'red',2);
+    ships.length=0;ships.push(B,R);
+    [B,R].forEach(function(x){x.orders=[];x.vel=[0,0,0];x.flame=0;x.sideFlame=0;x.autoEngage=false;x.roe='hold';x.noFire=false;x.macCd=0;x.fireHot=0;setEmit(x,'silent');});
+    var est=function(lit,ex,ey){R.litBlue=lit;var c=R.covB=newCov();if(lit>0){c.seen=true;c.ever=true;c.fix=(ex!==null);c.n=2;c.age=0;c.idn=true;if(ex!==null){c.x=ex;c.y=ey;}c.r1=c.a1=9000;c.r2=c.a2=4000;}
+      R.seenBlue=(ex!==null)?simTime:-1e9;R.seenBluePos=(ex!==null)?[ex,ey,0]:null;R.seenBlueVel=(ex!==null)?[0,0,0]:null;};
+    var place=function(d){R.pos=[d,0,0];B.facing=[1,0,0];};
+    var nMac=function(){return projectiles.filter(function(p){return p.type==='mac'&&!p.done;}).length;};
+    /* ① */
+    place(1500000);est(2,1500000,0);projectiles=[];B.macCd=0;fireMAC(B,R);var far1=nMac();
+    projectiles=[];B.macCd=0;est(1,1500000,0);fireMAC(B,R);var lit1=nMac();
+    projectiles=[];B.macCd=0;est(2,null,null);fireMAC(B,R);var noEst=nMac();
+    var ok1=(far1===1&&lit1===0&&noEst===0);
+    /* ② 蒙特卡洛 */
+    var seed=20260922;Math.random=function(){seed=(seed*16807)%2147483647;return seed/2147483647;};
+    var hits=0;applyDamage=function(t,dmg,src,kind){if(kind==='mac'&&t===R)hits++;};
+    var rate=function(d,n,ex,ey){place(d);est(2,ex===undefined?d:ex,ey===undefined?0:ey);hits=0;var i,k;
+      var mp=macPred(B,R);B.facing=V.norm(V.sub(mp,B.pos));   /* 轴炮沿机头开火;机头对着【估计位置】的预测点 —— 这正是 physics/31 战斗转向做的事 */
+      for(i=0;i<n;i++){projectiles=[];B.macCd=0;fireMAC(B,R);var p=projectiles[0];if(!p)continue;
+        for(k=0;k<4000&&!p.done;k++)stepProjectiles(0.05);}
+      return hits/n;};
+    var r15=rate(150000,300),r50=rate(500000,300),r150=rate(1500000,300);
+    var ok2=(r15>=0.80&&r15<=0.97&&r50>=0.25&&r50<=0.52&&r150>=0.04&&r150<=0.25&&r15>r50&&r50>r150);
+    /* ③ */
+    var rOff=rate(100000,100,100000,30000),rOn=rate(100000,100);
+    var ok3=(rOff<0.05&&rOn>0.85);
+    applyDamage=oAD;Math.random=oRnd;
+    /* ④ */
+    /* 门在 orderMissileSalvo(跟踪级),弹丸在 1 秒装填倒计时后由 stepWeaponSystems 生成 —— 走这条生产路径 */
+    var salvo=function(){projectiles=[];B.missileArm=null;B.ammo=240;B.cellTimer=B.cellTimer.map(function(){return 0;});orderMissileSalvo(B,R,1);var k;for(k=0;k<30;k++)stepWeaponSystems(0.05);return projectiles.filter(function(p){return p.type==='missile';}).length;};
+    place(1000000);est(2,1000000,0);var mslFar=salvo();
+    est(1,1000000,0);var mslLit1=salvo();
+    var ok4=(mslFar>=1&&mslLit1===0);
+    /* ⑤ 数据链引导 */
+    var ang=function(v,to,from){var d=[to[0]-from[0],to[1]-from[1],0];return V.angle(V.norm(v),V.norm(d));};
+    var A=[500000,0,0],Bp=[500000,80000,0];R.pos=A.slice();est(2,Bp[0],Bp[1]);projectiles=[];B.cellTimer=B.cellTimer.map(function(){return 0;});fireMissiles(B,R,1);
+    var m=projectiles.filter(function(p){return p.type==='missile';})[0];
+    m.pos=[200000,0,0];m.vel=[3000,0,0];m.spd=3000;                      /* 离 A 30 万、离 B 31 万:两个导引头都够不着,只能靠数据链 */
+    var i;for(i=0;i<120;i++)stepProjectiles(0.05);
+    var modeLink=m.guideMode,aB=ang(m.vel,Bp,m.pos),aA=ang(m.vel,A,m.pos);
+    var linkOk=(modeLink==='link'&&m.guided===true&&aB<aA*0.5&&aB<0.08);   /* 转向率有限,6 秒内收到 0.08 rad 之内且明显比朝真值近 */
+    est(2,null,null);stepProjectiles(0.05);var lostGuided=m.guided,lostMode=m.guideMode;var v0=V.norm(m.vel);for(i=0;i<40;i++)stepProjectiles(0.05);var drift=V.angle(v0,V.norm(m.vel)),aA2=ang(m.vel,A,m.pos);
+    var lostOk=(lostGuided===false&&lostMode!=='self'&&aA2>0.1);       /* 丢了信息:不许朝真值转过去 */
+    est(2,Bp[0],Bp[1]);m.pos=[A[0]-100000,-20000,0];m.vel=[3000,0,0];m.spd=3000;for(i=0;i<40;i++)stepProjectiles(0.05);   /* 贴到 A 10 万内:导引头自己看见 ⇒ 真值 */
+    var selfMode=m.guideMode,aA3=ang(m.vel,A,m.pos),aB3=ang(m.vel,Bp,m.pos);
+    var selfOk=(selfMode==='self'&&aA3<aB3);
+    var ok5=(linkOk&&lostOk&&selfOk);
+    /* ⑥ 读数 */
+    var arcs=[],texts=[];ctx.arc=function(x,y,r){arcs.push(r);return oArc.apply(ctx,arguments);};ctx.fillText=function(tx){texts.push(String(tx));return oT.apply(ctx,arguments);};
+    selected=[B.id];cam.x=0;cam.y=0;cam.zoom=1e-4;
+    hoverRing='mac';arcs=[];texts=[];drawHoverRings();
+    var r5=macRangeAt(B,0.5)*cam.zoom,r1=macRangeAt(B,0.1)*cam.zoom;
+    var macRings=arcs.some(function(r){return Math.abs(r-r5)<1e-6;})&&arcs.some(function(r){return Math.abs(r-r1)<1e-6;})&&texts.some(function(x){return x.indexOf('50%')>=0;})&&texts.some(function(x){return x.indexOf('10%')>=0;});
+    hoverRing='msl';arcs=[];texts=[];drawHoverRings();var mslRing=arcs.some(function(r){return Math.abs(r-mslReach(B)*cam.zoom)<1e-6;});
+    hoverRing=null;ctx.arc=oArc;ctx.fillText=oT;
+    var spec=specItems(B).map(function(q){return q.join(':');}).join(' '),tipM=KIND_INFO.mac.tip(B),tipS=KIND_INFO.msl.tip(B);
+    var ok6=(macRings&&mslRing&&spec.indexOf('50%@')>=0&&tipM.indexOf('150k')<0&&tipS.indexOf('350k')<0);
+    var ok=(ok1&&ok2&&ok3&&ok4&&ok5&&ok6);
+    out=(ok?'ok':'fail')+' ① 150 万外跟踪级出弹='+far1+'(须 1)1 级='+lit1+' 无估计位置='+noEst+'(须 0/0)='+ok1
+      +' | ② 命中率 15 万 '+(r15*100).toFixed(0)+'% / 50 万 '+(r50*100).toFixed(0)+'% / 150 万 '+(r150*100).toFixed(0)+'%(须 [80,97] / [25,52] / [4,25] 且递减)='+ok2
+      +' | ③ 10 万处估计偏开 3 万:'+(rOff*100).toFixed(0)+'%(须<5)估计=真值:'+(rOn*100).toFixed(0)+'%(须>85)='+ok3
+      +' | ④ 导弹 100 万外出弹='+mslFar+' 1 级='+mslLit1+'='+ok4
+      +' | ⑤ 数据链:mode='+modeLink+' 离估计 '+aB.toFixed(3)+' rad / 离真值 '+aA.toFixed(3)+'(须指向估计)='+linkOk+';估计置 null ⇒ guided='+lostGuided+' mode='+lostMode+' 离真值 '+aA2.toFixed(2)+'(须不朝它转)='+lostOk+';导引头看见 ⇒ mode='+selfMode+' 指向真值='+selfOk+'='+ok5
+      +' | ⑥ hover 主炮两圈(50%/10%)='+macRings+' hover 导弹一圈='+mslRing+' 规格条含 50%@='+(spec.indexOf('50%@')>=0)+' 提示不含旧公里数='+(tipM.indexOf('150k')<0&&tipS.indexOf('350k')<0)+'='+ok6;
+  }finally{
+    Math.random=oRnd;applyDamage=oAD;ctx.arc=oArc;ctx.fillText=oT;hoverRing=hrBak;
+    adminMode=admBak;selected=selBak;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
+    projectiles=projBak;ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+  }
+  return out;
 });

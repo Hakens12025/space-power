@@ -405,6 +405,8 @@ LAYER_SELF=$(printf '%s\n' "function f(){drawShip(s); /* updateSelPanel() 在注
 # 日志总线于 2026-09-22 整体删除:js/ 里不许再有裸 log( 调用(注释里的字面也算数;前缀排除 Math.log / console.log 这类带点号的)。
 LOG_LEFT=$(grep -rnE '(^|[^.A-Za-z0-9_$])log\(' js/ --include='*.js' | head -3)
 [ -z "$LOG_LEFT" ] || { echo "✗ 日志总线已删,js/ 里又出现了裸 log( 调用(注释里的也算数):"; echo "$LOG_LEFT"; fail=1; }
+grep -q "FLOW85_WEAPONS=ok" "$OUT" || { echo "✗ FLOW85_WEAPONS 未通过(WR1 武器射程无限、只是精准度问题:主炮无射程门、每发高斯散布、命中率随距离三档递减、瞄估计位置;导弹无发射门、数据链引导瞄估计位置、估计为 null 不回落真值;读数两圈 / 一圈)"; fail=1; }
+! grep -rnw --include='*.js' -E 'macRange|macRadar|mslRange|MAC_FALLOFF' js/ >/dev/null || { echo "✗ WR1 旧的射程字段 / 常量又出现在 js/ 里(macRange / macRadar / mslRange / MAC_FALLOFF):射程没有门,多远打得中由散布现算"; fail=1; }
 grep -q "FLOW84_EMITFX=ok" "$OUT" || { echo "✗ FLOW84_EMITFX 未通过(EM1 开雷达后的表现:发射机开着的船画向外扩散的涟漪(照射蓝 / 干扰橙 / 静默无),敌方接触只在我方听见时画;B:选中蓝舰不再画雷达量程大圈,悬停发射档钮才画照射量程 + 被听见两圈)"; fail=1; }
 grep -q "FLOW83_RWR=ok" "$OUT" || { echo "✗ FLOW83_RWR 未通过(RWR1 被照射告警:朝照射源方位的一段不闭合的橙色弧,不是闭合黄圈;只带方位不带距离;没被照射 / 照射源已沉就不画;与选中圈没有一项相同)"; fail=1; }
 grep -q "FLOW82_ESMNOID=ok" "$OUT" || { echo "✗ FLOW82_ESMNOID 未通过(ID2 被动射频不给身份:开着雷达的船被听见、被定位之后仍是 UNK +「X 型热源」,贴近到光学认得出才变成真舰;反向对照:同距离静默的船结果一样——身份与它开不开雷达无关)"; fail=1; }

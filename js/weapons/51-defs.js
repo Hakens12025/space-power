@@ -4,14 +4,14 @@
    resolveLoadout 把定义按 tier 乘数解析成【扁平实例字段】交 makeShip 烘焙(沿用本项目"热路径读实例字段"约定),
    并产出 s.weapons 清单(UI 由清单驱动生成,见 88-selpanel)。
    字段名与 TIER-BAL 的 TIER_MUL/TIER_FIELD 键对齐:mac=装填秒/inter=拦截弹载量等沿用旧键,tier 机制原样生效;
-   新键 macRange/macRadar/mslRange/mslPer/mslReload 走缺省 'mul' 策略(tier 想缩放射程/组枚数直接填 TIER_MUL 即可)。
-   SN4 表级不变量:同一件主炮的 macRadar 必须 >= macRange —— 开照射反而射程变短是说不通的,而且 macEffRange 不会为此报错,
-   只会静默给出一个更小的数,fcGate / 目标轮盘 / hover 圈 / 规格条跟着一起错。 */
+   新键 macSigma/mslPer/mslReload 走缺省 'mul' 策略(tier 想缩放散布 / 组枚数直接填 TIER_MUL 即可)。
+   WR1(2026-09-22 用户拍板「射程无限,只是精准度问题」):两块主炮射程(炮 / 雷达顶上)与导弹发射射程整套删掉,主炮只剩一个角散布 macSigma;
+   "多远打得中"由 weapons/52 的 macRangeAt / macHitProb 从散布现算,"多远飞得到"由 mslReach 从燃料现算 —— 表里不再有任何一个公里数。 */
 const WPN={ // 定义(Definition):全局一份的不变模板,数值原样搬自原 CLS_WPN/CLS_CIWS 表
-  mac_light:{kind:'mac',label:'主炮',macDmg:220,mac:30,macRange:150000,macRadar:150000},  // DD(原FRIGATE)轴炮;SN4 macRadar=开照射时的火控射程,取旧感知半径原值 15 万(与炮同程,DD 开照射零增益——这与改前 max(炮,感知) 的结果逐位相同)
-  mac_heavy:{kind:'mac',label:'主炮',macDmg:400,mac:30,macRange:150000,macRadar:250000}, // CA/BB 轴炮(BB 靠下方 CLS_LOADOUT 克隆自动跟上);SN4 macRadar 取旧感知半径原值 25 万,正是 83-hud 一直在画的那个圈。⚠ 注意它只对【标准目标】(反射 1.0,即巡洋级)可达:打一艘 DD(合成反射 0.42)时照射量程只有 209,153,拿不到火控级的话这 25 万就是虚标。FLOW53_RADAR ③ 守的是前一半(对标准目标必须可达),后一半是 stealth 在起作用的正确结果,不是 bug
-  msl_light:{kind:'msl',label:'导弹',missDmg:12,ammo:192,cells:4,mslPer:12,mslReload:60,mslRange:350000},  // DD 射手:16组×12(KIMI154:每组16→12)
-  msl_heavy:{kind:'msl',label:'导弹',missDmg:15,ammo:240,cells:6,mslPer:12,mslReload:60,mslRange:350000}, // CA 射手:20组×12(KIMI154)
+  mac_light:{kind:'mac',label:'主炮',macDmg:220,mac:30,macSigma:0.0081},  // DD 轴炮。WR1:macSigma = 每发的角散布(弧度,高斯 σ)。0.0081 ⇒ 对 2000km 命中判定半径:15 万 ≈ 90% / 36.6 万 = 50% / 196 万 = 10%
+  mac_heavy:{kind:'mac',label:'主炮',macDmg:400,mac:30,macSigma:0.0081},  // CA/BB 轴炮(BB 靠下方 CLS_LOADOUT 克隆自动跟上)。WR1:先与 DD 同一个散布,以后要分再填
+  msl_light:{kind:'msl',label:'导弹',missDmg:12,ammo:192,cells:4,mslPer:12,mslReload:60},  // DD 射手:16组×12(KIMI154:每组16→12)
+  msl_heavy:{kind:'msl',label:'导弹',missDmg:15,ammo:240,cells:6,mslPer:12,mslReload:60}, // CA 射手:20组×12(KIMI154)
   ciws_core:{kind:'ciws',label:'拦截',outer:25000,outerIntercept:0.40,inner:8000,innerIntercept:0.85,chaffRate:0.25,inter:384}, // DD 防空核心,干扰中
   ciws_self:{kind:'ciws',label:'拦截',outer:15000,outerIntercept:0.25,inner:5000,innerIntercept:0.40,chaffRate:0.15,inter:320}, // CA 自防御,干扰弱(大目标)
 };
@@ -41,7 +41,7 @@ function resolveLoadout(cls,tier){ // 配装 → 扁平武器字段(逐字段过
     // 同 kind 多件时数值按叠加口径合并(弹药/库存相加合理;概率/半径类相加不合理,当前每类仅一件,此口径留作扩展边界)
     if(!weapons.some(w=>w.kind===d.kind))weapons.push({kind:d.kind,label:d.label});
   }
-  if(!('macDmg'in src)){src.macDmg=0;src.mac=0;src.macRange=0;src.macRadar=0;} // 未装主炮:显式 0(hasMAC(s) 按 macDmg>0 判定,全库谓词不动)。SN4 把两块射程也纳进来:macEffRange 现在用 sReq 严格取值,不给字段就当场抛;而给 0 比给一个 15 万的假射程诚实——「没有炮」就该读成「射程 0」,fcGate 的主炮分支因此对 CV 恒返回 null(它本来也过不了 57 的 hasMAC 门)
+  if(!('macDmg'in src)){src.macDmg=0;src.mac=0;src.macSigma=0;} // 未装主炮:显式 0(hasMAC(s) 按 macDmg>0 判定,全库谓词不动)。SN4 把两块射程也纳进来:macEffRange 现在用 sReq 严格取值,不给字段就当场抛;而给 0 比给一个 15 万的假射程诚实——「没有炮」就该读成「射程 0」,fcGate 的主炮分支因此对 CV 恒返回 null(它本来也过不了 57 的 hasMAC 门)
   src.weapons=weapons;
   return src;
 }

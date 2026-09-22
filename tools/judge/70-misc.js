@@ -15,6 +15,8 @@ t('FLOW46_CIWS',function(){
     [X,R].forEach(function(s){s.orders=[];s.brake=false;s.lockedTarget=null;s.autoEngage=false;s.roe='hold';s.macOn=false;s.mslOn=false;s.follow=null;s.formation=null;}); /* 除近防外全部闭嘴:多一发主炮/导弹就多一堆弹丸,场面就不干净了 */
     X.ciwsOn=true;setEmit(X,paintOn?'paint':'silent');setEmit(R,'silent');R.ciwsOn=false; /* SN4:发射档只许走 setEmit(它是唯一写入口,非法值当场抛);来袭方恒静默,免得它自己的辐射把 B 相搅浑 */
     detT=0;                                        /* 感知节拍归零:detT 是全局的,跨探针残留会让第一拍 detectLoop 的时机说不清 */
+    /* WR1:发射方向按射手对目标的【估计位置】算,没接触就不发 —— 给红舰一条对甲的跟踪级接触(位置 = 真值,本条测的是近防,不是瞄准误差) */
+    X.litRed=2;var cR=X.covR=newCov();cR.seen=true;cR.ever=true;cR.fix=true;cR.n=2;cR.age=0;cR.x=X.pos[0];cR.y=X.pos[1];cR.idn=true;cR.r1=cR.a1=9000;cR.r2=cR.a2=4000;X.seenRed=simTime;X.seenRedPos=X.pos.slice();X.seenRedVel=[0,0,0];
     fireMissiles(R,X,1);                           /* 真实发射链:count/fuel/target/coastT/netId 全由生产代码填,不手搓弹丸 */
     var p=null,i;
     for(i=0;i<projectiles.length;i++)if(projectiles[i].type==='missile')p=projectiles[i];

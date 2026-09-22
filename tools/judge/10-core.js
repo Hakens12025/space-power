@@ -56,7 +56,7 @@ t('FLOW2',function(){
     var ca=bs.filter(function(x){return x.cls==='CA';})[0]||bs[0];
     var ts=ships.filter(function(x){return x.isTarget;});
     if(!ca||!ts.length)return;
-    var want=Math.min(ladPair('CA','DD').radarLook*0.9,(ca.macRange||150000)*0.8);
+    var want=Math.min(ladPair('CA','DD').radarLook*0.9,macRangeAt(ca,0.9)*0.8); /* WR1:射程字段没了,改按命中率九成的距离 */
     var near=1e18;
     ts.forEach(function(x){near=Math.min(near,Math.hypot(x.pos[0]-ca.pos[0],x.pos[1]-ca.pos[1]));});
     if(!(near>want))return;
