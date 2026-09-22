@@ -88,13 +88,17 @@ const RDOC_CFG={
                      //   而“我只看见你三艘里的一艘”正是迷雾里最常见的局面(弹尽那一支不受这条限)
   LAMP_S:75,         // 灯轮换周期(秒):谁亮谁挨打,不许一艘舰当一整局的靶子
   LAMP_HP:0.80,      // 当灯那艘掉到全队平均的这个比例以下 ⇒ 立刻换人
-  SHADOW_S:90,       // 尾随态定不出位置憋这么久 ⇒ 亮一次灯抢定位
-  PAINT_S:25,        // 抢定位那一下亮多久
+  SHADOW_S:90,       // 尾随态每黑这么久 ⇒ 亮一扇灯抢定位
+  PAINT_S:25,        // 抢定位那一下亮多久。两个数合起来是一个周期:黑 90 秒 / 亮 25 秒,循环
+                     //   ↑ 第一版是【一次性】的(paintT 只增不清),整局只抢一次定位 —— 整局模拟里红方在尾随态蹲了 35~43 分钟
   AMBUSH_S:420,      // 埋伏时限(模拟秒)。用户 2026-09-22 拍板"会埋伏,但有时限":憋够了就主动搜,免得双方都蹲着变成空局
-  SALVO_GAP:45,      // 舰队级齐射间隔(秒)。原来是每舰每 tick 掷 8% 的骰子,火力是随机的;现在是一个决定
+  SALVO_GAP:25,      // 舰队级齐射间隔(秒)。原来是每舰每 tick 掷 8% 的骰子,火力是随机的;现在是一个决定。
+                     //   45 改 25:整局模拟里红方齐射 23 波 / 蓝方 132 波 —— 蓝方那边(weapons/57)是【每舰就绪单元过半就打】,
+                     //   红方一道舰队级门把火力压成了蓝方的五分之一。饱和齐射是对的,间隔要跟装填走
   ORBIT_K:0.55,      // 环绕线速度 = 巡航的几成
   SLOT_A:0.90,       // 僚舰在轨道上偏开灯多少弧度(±52°,基线 ≈ 1.57 x 半径,够交叉定位)
   LEAD_A:0.30,       // 追的那个点沿轨道超前多少弧度
+  APPROACH_K:1.25,   // 离圈还有这么多倍半径时走【直线接近】,进了再转成绕圈
   FOCUS_HYS:1.35,    // 集火迟滞:已经在打的那个目标加这个成数,免得每拍换目标
 };
 const RDOC={st:'ambush',t:0,goal:[0,0],src:'',foe:null,foeD:0,r:0,orbit:0,dir:1,
@@ -189,7 +193,10 @@ function botNeedPaint(reds,foe){ // 这一拍要不要有人亮灯
   const st=RDOC.st;
   if(st==='ambush')return false;                        // 埋伏的全部意义就是不亮
   if(st==='search')return true;                         // 搜索:一盏灯扫(不扫的话静默熄火的玩家永远找不到,对局变僵局)
-  if(st==='shadow')return RDOC.shadowT>=RDOC_CFG.SHADOW_S&&RDOC.paintT<RDOC_CFG.PAINT_S; // 憋久了抢一次定位
+  if(st==='shadow'){ // 黑 SHADOW_S / 亮 PAINT_S 循环的搜索扇面
+    const T=RDOC_CFG.SHADOW_S+RDOC_CFG.PAINT_S;
+    return (RDOC.shadowT%T)>=RDOC_CFG.SHADOW_S;
+  }
   if(st==='withdraw'){                                  // 撤退时只在【自己的导弹还在飞】时亮:数据链要位置,其余时候亮灯纯送人头
     return projectiles.some(p=>p.type==='missile'&&p.shooter&&p.shooter.side==='red'&&p.guided&&p.guideMode!=='self');
   }
@@ -233,7 +240,12 @@ function aiDoctrine(dt,reds,blues){ // 指挥层入口:写 RDOC(含每艘舰的 
     if(st==='ambush'){pos=[e.pos[0],e.pos[1]];pass=false;hold=true;} // 蹲着:清命令 + 不推进(hold 在执行层会清 orders)
     else if(orbiting&&RDOC.r>0){
       const off=isLamp?0:((role==='flankL'?-1:1)*cfg.SLOT_A);
-      const a=RDOC.orbit+off+RDOC.dir*cfg.LEAD_A;        // 追一个沿轨道超前的点 ⇒ 永远在动(WR1:动着就难被主炮打中)
+      /* 先接近、再绕圈:离圈还远时直接朝接触进(只接到圈上,不进去),进了 APPROACH_K 倍半径才转成沿轨道追超前点。
+         第一版一直追轨道上的超前点 —— 接触的估计位置自己也在跑,横向分量把接近速度吃掉了:
+         整局模拟里交战态的实测平均半径 58 万,而条令要的是 35.6 万 —— 红方大半时间根本没进到导弹够得着的地方。 */
+      const dE=Math.hypot(e.pos[0]-c[0],e.pos[1]-c[1]);
+      const br=Math.atan2(e.pos[1]-c[1],e.pos[0]-c[0]);
+      const a=(dE>RDOC.r*cfg.APPROACH_K)?(br+off*0.35):(RDOC.orbit+off+RDOC.dir*cfg.LEAD_A);
       pos=[c[0]+Math.cos(a)*RDOC.r,c[1]+Math.sin(a)*RDOC.r];
       if(st==='press'){pos=[c[0]+Math.cos(RDOC.orbit+off)*RDOC.r,c[1]+Math.sin(RDOC.orbit+off)*RDOC.r];
         pass=false;hold=hasMAC(e)&&(RDOC.foeD<=macRangeAt(e,0.5));} // 压上态:到位停车,把机头交给战斗转向 —— 这才开得出主炮

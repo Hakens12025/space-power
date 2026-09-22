@@ -160,16 +160,26 @@ t('FLOW87_BOT',function(){
     /* ⑥ 埋伏有时限 */
     put(0,0,[]);
     run(20,0.5);var st6=RDOC.st,n6=nLit(),v6=spd();
-    run(Math.ceil(RDOC_CFG.AMBUSH_S/2)+10,2);var st6b=RDOC.st,n6b=nLit();
+    /* ↓ 步长由时限现算,步数固定 400 。
+       原来写的是 ceil(AMBUSH_S/2)+10 步 x 2 秒 —— 【循环长度由它要测的那个常数决定】。
+       变异验证把 AMBUSH_S 改成 1e9 去试“埋伏没有时限”时,这一行就变成五亿步,整个探针挂死了二十分钟。
+       判据里凡是“跑到某个阀值以后”,步数要封顶,让步长去跟阀值走。 */
+    run(400,Math.max(0.5,RDOC_CFG.AMBUSH_S*1.05/400));var st6b=RDOC.st,n6b=nLit();
     put(0,0,[[B1,1,900000,0,false]]);run(2,0.02);var st6c=RDOC.st;
-    var ok6=(st6==='ambush'&&n6===0&&v6<1&&st6b==='search'&&n6b===1&&st6c!=='ambush');
-    /* ⑦ 不偷看 */
-    put(0,0,[[B1,2,600000,0,false]]);
-    var sigU=botFoeSigma(B1),valU=botFoeValue(B1);
-    con(B1,2,600000,0,true);
-    var sigK=botFoeSigma(B1),valK=botFoeValue(B1);
-    var worst=botWorstSigma(),real=resolveLoadout('CA',2).macSigma;
-    var ok7=(sigU===worst&&valU===1&&sigK===real&&valK===shipValue(B1)&&valK>1);
+    /* 时限本身也要判:它必须是一局里等得到的数(用户拍板「会埋伏,但有时限」)。
+       只判行为的话,把 AMBUSH_S 改成 1e9 照样绿 —— 上面那行步长是按它现算的,再大也跨得过去。实测逃过一次。 */
+    var ok6=(st6==='ambush'&&n6===0&&v6<1&&st6b==='search'&&n6b===1&&st6c!=='ambush'&&RDOC_CFG.AMBUSH_S<=900);
+    /* ⑦ 不偷看。**拿航母当目标**:四个舰种今天的散布数值【完全相同】,拿 DD/CA 去比 σ 是比不出来的 ——
+       变异「直接读 b.cls」实测从这条判据底下逃过一次。航母没有主炮:认出来 ⇒ σ=0(可以贴上去),
+       没认出 ⇒ 必须按最危险的一型算 σ>0。偷看的实现会把没认出的那一问当场答成 0。 */
+    put(0,0,[]);
+    var CVb=makeShip('CV','令蓝丙',[600000,0,0],[1,0,0],[0,0,0],'blue',2);CVb.noFire=true;ships.push(CVb);
+    con(CVb,2,600000,0,false);
+    var sigU=botFoeSigma(CVb),valU=botFoeValue(CVb);
+    con(CVb,2,600000,0,true);
+    var sigK=botFoeSigma(CVb),valK=botFoeValue(CVb);
+    var worst=botWorstSigma();
+    var ok7=(sigU===worst&&sigU>0&&valU===1&&sigK===0&&valK===shipValue(CVb)&&valK>1);
     var ok=(ok1&&ok1b&&ok2&&ok3&&ok4&&ok5&&ok6&&ok7);
     out=(ok?'ok':'fail')
       +' ① 接触在主炮 50% 把握的 '+Math.round(dIn/1000)+'k 上(炮 '+Math.round(gun/1000)+'k):态='+st1+' 条令半径 '+Math.round(r1/1000)+'k 队心距离 '+Math.round(d0/1000)+'k → '+Math.round(d1/1000)+'k(须退到半径上)舰速 '+Math.round(v1)+'(须>0)三舰都有命令在走='+moving+'='+ok1
@@ -178,8 +188,8 @@ t('FLOW87_BOT',function(){
       +' | ③ 灯:交战态照射舰数 '+n3+'(须 1)轮换 '+lamp1+' → '+lamp2+'(须换人,换后仍 '+n3b+' 艘)='+ok3
       +' | ④ 齐射:'+waveT.length+' 波,最小间隔 '+minGap.toFixed(1)+'s(须>='+RDOC_CFG.SALVO_GAP+')首波同拍 '+firstN+' 舰一起下令(须>=2);单元全不就绪时下令 '+noRdy+' 次(须 0)='+ok4
       +' | ⑤ 结构 30%:态='+st5+' 半径 '+Math.round(r5/1000)+'k(须>导弹 '+Math.round(mslReach(R[0])/1000)+'k);弹尽后='+st5b+'='+ok5
-      +' | ⑥ 埋伏:态='+st6+' 照射 '+n6+' 艘 舰速 '+v6.toFixed(2)+'(须 ambush/0/静止)→ '+RDOC_CFG.AMBUSH_S+'s 后='+st6b+'(照射 '+n6b+' 艘);一有接触='+st6c+'='+ok6
-      +' | ⑦ 不偷看:没认出 σ='+sigU+'(须=最危险 '+worst+')价值='+valU+'(须 1);认出后 σ='+sigK+'(须=CA 真值 '+real+')价值='+valK+'='+ok7;
+      +' | ⑥ 埋伏:态='+st6+' 照射 '+n6+' 艘 舰速 '+v6.toFixed(2)+'(须 ambush/0/静止)→ '+RDOC_CFG.AMBUSH_S+'s 后='+st6b+'(照射 '+n6b+' 艘);一有接触='+st6c+';时限 '+RDOC_CFG.AMBUSH_S+'s(须<=900)='+ok6
+      +' | ⑦ 不偷看(目标是航母):没认出 σ='+sigU+'(须=最危险 '+worst+'>0)价值='+valU+'(须 1);认出后 σ='+sigK+'(须 0:航母没主炮)价值='+valK+'='+ok7;
   }finally{
     orderMissileSalvo=oOMS;
     var bak=JSON.parse(airBak),k4;for(k4 in bak)AIR[k4]=bak[k4];

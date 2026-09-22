@@ -34,7 +34,9 @@ function enemyAI(dt){
     if(foe&&e.macCd<=0&&hasMAC(e)&&macHitProb(e,d)>=MAC_AUTO_P&&macAligned(e,foe))fireMAC(e,foe);
     /* ⑤ 导弹:舰队级齐射窗口(60 里定的),取代原来每舰每 tick 掷 8% 的骰子。
           MT1 的镜像局纪律仍在 plan.salvo 里:对局里每舰每波最多 2 组。 */
-    if(foe&&pl.salvo>0&&e.ammo>0&&readyCells(e)>0)orderMissileSalvo(e,foe,pl.salvo);
+    /* 距离要【按本舰】量:60 那边的齐射窗口用的是队心到接触的距离,而三艘舰散在一段弧上,
+       队心比每一艘都近 —— 整局模拟里红方的首发就出在 50 万公里(动力射程才 37.5 万),弹药扔进了滑行段。 */
+    if(foe&&pl.salvo>0&&e.ammo>0&&readyCells(e)>0&&d<=mslReach(e)*1.05)orderMissileSalvo(e,foe,pl.salvo);
     /* ⑥ 规避:只躲【看得见】的来袭主炮弹(visRed 由 detectLoop 每拍算);AI1 之前对每一发都有预警。 */
     const incoming=projectiles.some(p=>p.type==='mac'&&p.target===e&&p.visRed);
     if(incoming&&e.macEvadeCd<=0){e.macEvadeCd=8;
