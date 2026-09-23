@@ -30,7 +30,7 @@ let fcSeqSeq=0;       // RF5 序列 id 自增源;91-init 换局时与 fireSeqs �
 function fcShip(id){ // RF5 按 id 取舰(序列存 id 不存引用,每次用时现解析)
   if(typeof ships==='undefined'||!id)return null;
   for(const s of ships)if(s.id===id)return s;
-  return null;
+  return objById(id)||null; // TK4c 目标也可能是石头(没认出之前它就是一条普通接触);舰船里找不到再找石头 —— 射手永远是舰船,上一行已返回
 }
 function fcInit(s){ // RF5 惰性初始化舰上的火控字段(makeShip 不用改:没序列的舰一个字段都不长)
   if(!s.fcSeqCur)s.fcSeqCur={mac:0,msl:0};   // 逐武器的「下一条该轮到的序列」下标
@@ -158,6 +158,7 @@ function fcGate(s,it,kind){ // RF5 单个目标项对某类武器的全部门:�
   }
   const t=fcShip(it.tid);
   if(!t||t.dead||t.side===s.side)return null; // side 同侧直接排除:免得把友舰写进 lockedTarget(它同时是转向指令)
+  if(!trkFoe(trkOf(s.side,t)))return null; // TK4c:已确认不是船(石头)⇒ 这一项跳过(序列里留着,认出之前下的令不作废,只是不再对它开火)
   const lit=trkLit(trkOf(s.side,t)); // TK2.1:原值不归一(下面的 lit<2 比较与原来逐字相同)
   if(kind==='mac'){
     if(lit<2)return null; // WR1:与 fireMAC 内部 q<2 同一口径(原来要 3 级)。射程门整个没了:玩家的序列想在多远打就在多远打,打不打得中是散布与椭圆的事

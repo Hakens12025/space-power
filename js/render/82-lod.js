@@ -96,7 +96,7 @@ function lodBuild(dtIn) {   // dtIn:判据用的时钟覆盖(同 camZoomStep);�
   /* -- 红方:已定位的接触 → 接触群。未定位的不进来(它们在热区里) -- */
   const ru = [];
   trkEach('blue', (tk, st) => { // TK2.4:接触群从蓝方航迹表里取(按注册表顺序);回调里 return 就是原来的 continue
-    if (trkGone(tk) || st !== 'live') return;
+    if (trkGone(tk) || st !== 'live' || !trkFoe(tk)) return; // TK4c:已确认的石头不进红方接触群(它不是敌情,单独画成石头)
     const s = trkSrc(tk);   // SN6f:只聚【实况】接触。coast / ghost 是记号、heat 是场,各有各的画法,收进一个"群·N"的菱形里就把那层意思抹掉了
     /* SN6d:位置从 contactPos 拿,与 drawShip / targetAt 同一个出处(原来这里直接读 covB.x/y,
        而 drawShip 读的是 s.pos —— 两个答案today 相等,门槛却早就分家了)。

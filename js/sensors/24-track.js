@@ -40,7 +40,7 @@ const TRK={blue:new WeakMap(),red:new WeakMap(),vis:{blue:new WeakSet(),red:new 
 function trkTab(side){return side==='blue'?TRK.blue:TRK.red;}
 
 /* 唯一的航迹工厂;不往任何表里登记。newCov() 每船两次,与原来舰船字面量里的调用次数相同 */
-function trkNew(by,src){return {src:src,by:by,lit:0,cov:newCov(),lastT:-1e9,lastPos:null,lastVel:null,idc:false};} // TK2.6 追加 idc:【确认】锁存(光学或照射认出过它、且接触一直握着)
+function trkNew(by,src){return {src:src,by:by,lit:0,cov:newCov(),lastT:-1e9,lastPos:null,lastVel:null,idc:false,tn:0};} // TK2.6 追加 idc:【确认】锁存(光学或照射认出过它、且接触一直握着)。TK4c 追加 tn:航迹号(0 = 还没发)
 
 /* O(1) 查表,【永远不建】。非对象、或从没登记过的对象(弹丸、{pos} 指定点、梯子的假船、沙盘克隆、判据的裸对象)一律 null */
 function trkOf(side,src){return (src!==null&&typeof src==='object')?(trkTab(side).get(src)||null):null;}
@@ -67,6 +67,7 @@ function trkStep(tk,t,obs,el){
   TRK_IDO.opt=TRK_IDO.lis=TRK_IDO.act=false;          // TK2.6:模块级草稿,每拍清零后交给内核记【哪几条通道认出了它】(不分配)
   const lit=stepCov(t,c,obs,el,TRK_IDO);
   if(c.fix&&c.n>0){tk.lastT=simTime;tk.lastPos=[c.x,c.y,t.pos[2]];tk.lastVel=t.vel.slice();}
+  if(lit>0&&tk.tn===0)tk.tn=++TRK_TN[tk.by]; // TK4c 航迹号:这一方第一次握住它的那一拍发号,之后终身不变(丢了再捡回来还是这个号)。只用于显示 —— 不当键、不当种子、不参与任何取舍
   if(lit>0){if(TRK_IDO.opt||TRK_IDO.act)tk.idc=true;}else tk.idc=false; // TK2.6 确认锁存:光学轮廓或照射回波认出过 ⇒ 确认;接触丢了(等级归 0)才清。与椭圆的身份位同一拍立、同一拍清
   tk.lit=lit;
   return lit;
@@ -139,9 +140,10 @@ function trkEach(side,fn){
 }
 function trkList(side,pred){const out=[];trkEach(side,function(tk,st){if(!pred||pred(tk,st))out.push(tk);});return out;}
 
-/* 自动化(自动索敌 / 网分配 / 重锁 / 红方集火)许不许把这条航迹当敌方目标。TK2 里恒为 true(纯占位,零影响);
-   TK4c 石头进来之后,它的函数体换成用户认可的那条类别规矩 —— 石头只改这一个函数 */
-function trkFoe(tk){return true;}
+/* 自动化(自动索敌 / 网分配 / 重锁 / 红方集火)许不许把这条航迹当敌方目标。TK2 里恒为 true(纯占位);
+   TK4c:只排除【已确认不是船】的(决定 6,用户认可)—— 没认出的照样能打(保持"有跟踪级就能打"),打到石头是弹药白费。
+   今天场上只有船 ⇒ 类型恒为 'ship' ⇒ 恒为 true,与 TK2 逐位相同;接触群与接触降速也问它(已确认的石头不算敌情) */
+function trkFoe(tk){return !(trkIdLvl(tk)===ID_CON&&trkIdType(tk).kind!=='ship');}
 
 /* ============================================================================
    TK2.6 身份三档(2026-09-23)。先对名字:这是【分类可信度】的阶梯(≈ 美海军反潜的 possible / probable / certain),
@@ -154,6 +156,7 @@ function trkFoe(tk){return true;}
    这一步行为不变:contactIdn 仍然是"至少疑似"(= 改前的 lit>0 且 idn),没有任何消费方改看"确认"—— 改哪一处都是单独的、要用户拍板的行为变更。
    ============================================================================ */
 const ID_UNK=0, ID_SUS=1, ID_CON=2;
+const TRK_TN={blue:0,red:0}; // TK4c 两方各自的航迹号计数器;initFleet 每局归零(旧局船的航迹保留旧号,不重发)
 const TRK_IDO={opt:false,lis:false,act:false};
 
 /* 这条航迹的身份档位。夹具写出来的"idc 为真但 idn 为假"读作未知、"idn 为真但 idc 为假"读作疑似 —— 容忍不一致的人造状态,不抛 */

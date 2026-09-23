@@ -57,5 +57,8 @@ function matchTick(){
   card.hidden=false;
 }
 on('btnMatch','click',function(e){e.currentTarget.blur();if(matchIsOn())matchExit();else matchEnter();});
+/* ENV1 碎石带入口:进(或重开)带 world 的那一条对局。退出走「对局」钮(进了任何一局对局它都写「回靶场」) */
+function matchRocksIdx(){for(let i=0;i<TEST_ENVS.length;i++)if(TEST_ENVS[i].match&&TEST_ENVS[i].world)return i;return -1;}
+on('btnRocks','click',function(e){e.currentTarget.blur();const i=matchRocksIdx();if(i<0)return;envIdx=i;initFleet();running=false;if(typeof camJump==='function')camJump(1);});
 on('meAgain','click',function(){matchEnter();});
 on('meRange','click',function(){matchExit();});

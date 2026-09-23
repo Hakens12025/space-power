@@ -55,6 +55,8 @@ function initFleet(){
     selected=[];                            // fmCreate 不该顺带把开局选中态也定了
   }
   initEnemy();
+  if(typeof envReset==='function'){envReset(env.world);envSpawnRocks();} // ENV1 / TK4c:按场景的 world 重建环境(太阳 / 残骸场)并撒石头。没有 world 的场景 ⇒ 空环境、零块石头。放在 initEnemy 之后:石头的 id 与舰船的 id 各走各的计数器,谁先谁后都不影响舰船
+  if(typeof TRK_TN!=='undefined'){TRK_TN.blue=0;TRK_TN.red=0;} // TK4c 航迹号每局从 1 发
   /* SN6c:**开局先跑一拍感知**。感知是每秒一拍的节拍(stepSim 的 S1),不先跑一拍的话开局第一秒
      所有接触都是 lit=0 —— 热区层与椭圆层都没东西可画,画面上是一片空,直到一秒后才"啪"地出现。
      用户实报的"需要走两步才能变成热区的形式"就是这一秒。放在 initEnemy 之后:红方得先在场上。 */

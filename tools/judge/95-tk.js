@@ -334,3 +334,120 @@ t('TK4A_RULES',function(){
   }
   return out;
 });
+
+/* TK4C_ROCK:石头是真的航迹源(TK4c)。环境清空后手摆,不依赖任何场景:
+   ① 登记与枚举:石头排在全部舰船之后;两方的枚举都给得出它(它是中立的,不是任何一方的"自己")。
+   ② 分不开:一块与 DD 同体型的石头、一艘熄火静默的红 DD,摆在蓝 DD 两侧的镜像位置,跑 20 拍 —— 两条航迹的等级 / 定位 / 两个轴长 / 身份逐位相同。
+   ③ 认出:把蓝 DD 挪进这块石头的光学认出距离(identDist 现量)⇒ 确认、类型是 rock、trkFoe 为假;挪进之前是未知、trkFoe 为真。
+   ④ 自动化:开火控的蓝舰锁上一块【没认出】的石头(跟踪级);石头一被确认 ⇒ 下一拍锁当场解掉(候选为空时也解 —— 第一版只"往下挑",候选为空就原样留着);
+      火控序列的门对已确认的石头给 null、对没认出的给它本身。
+   ⑤ 打不坏:applyDamage 之后石头没有结构值、没死。
+   ⑥ 画法:没认出的实况石头与一艘静止、熄火、静默、没认出的红舰,画布调用的方法序列与文字逐项相同;认出之后写「碎石」。
+   ⑦ 按 id 找得到(objById / fcShip);打码的名字:没认出「未知接触」、认出「碎石」;信息卡认出后写类别、不写结构;两条航迹各有航迹号且不同。
+   ⑧ 聚合:两块挤在一起的没认出的石头会被收进红方接触群;其中一块被确认之后它不在群里(已确认的石头不是敌情)。
+   ⑨ 接触降速:贴身的没认出的石头触发最高档(它可能是船),认出之后不触发。 */
+t('TK4C_ROCK',function(){
+  if(typeof makeRock!=='function'||typeof objById!=='function'||typeof drawRockAt!=='function')return 'fail 缺 makeRock / objById / drawRockAt';
+  var shipsBak=ships.slice(),rocksBak=rocks,projBak=projectiles,admBak=adminMode,seq0=shipSeq,rseq0=rockSeq,selBak=selected.slice(),tnBak={b:TRK_TN.blue,r:TRK_TN.red};
+  var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},envSun=ENV.sun,envF=ENV.fields.slice(),out='';
+  var M=['save','restore','translate','rotate','scale','beginPath','moveTo','lineTo','arc','closePath','fill','stroke','fillRect','strokeRect','fillText','setLineDash'],orig={};
+  M.forEach(function(k){orig[k]=ctx[k];});
+  var rec=[];
+  var capOn=function(){rec=[];M.forEach(function(k){ctx[k]=function(){rec.push(k==='fillText'?('T:'+arguments[0]):k);return orig[k].apply(ctx,arguments);};});};
+  var capOff=function(){M.forEach(function(k){ctx[k]=orig[k];});};
+  var LV=['未知','疑似','确认'];
+  try{
+    adminMode=false;selected=[];projectiles=[];envReset(null);
+    var calm=function(list){list.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.flame=0;x.sideFlame=0;x.autoEngage=false;x.roe='hold';x.noFire=true;x.facing=[1,0,0];});};
+    var B=makeShip('DD','石蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),R=makeShip('DD','石红',[0,0,0],[1,0,0],[0,0,0],'red',2);
+    var d=visRangeOf(R)*0.6,y0=d*0.3;
+    R.pos=[d,-y0,0];
+    rocks=[];var K=makeRock([d,y0,0],R.size,[1,0,0]);rocks.push(K);
+    ships.length=0;ships.push(B,R);calm(ships);setEmit(B,'silent');setEmit(R,'silent');
+    var live=function(x){tkFab('blue',x,{lit:2,cov:{fix:true,n:2,age:0,x:x.pos[0],y:x.pos[1],a1:5000,a2:3000,r1:5000,r2:3000,idn:false}});trkOf('blue',x).idc=false;};
+    /* ① */
+    live(R);live(K);tkFab('red',K,{lit:1});
+    var ordB=trkList('blue').map(function(tk){return trkSrc(tk);}),ordR=trkList('red').map(function(tk){return trkSrc(tk);});
+    var ok1=(ordB.length===2&&ordB[0]===R&&ordB[1]===K&&ordR.indexOf(K)>=0&&kindOf(K)==='rock'&&K.side==='neutral');
+    /* ② 清掉手搭的,真跑 20 拍 */
+    tkClear('blue',R);tkClear('blue',K);tkClear('red',K);
+    var i;
+    for(i=0;i<20;i++){detectLoop(1);simTime+=1;}
+    var tR=trkOf('blue',R),tK=trkOf('blue',K),cR=tR.cov,cK=tK.cov;
+    var same2=(tR.lit===tK.lit&&cR.fix===cK.fix&&cR.a1===cK.a1&&cR.a2===cK.a2&&cR.idn===cK.idn&&cR.n===cK.n&&contactState(R,'blue')===contactState(K,'blue'));
+    var ok2=(same2&&tK.lit>0);
+    var rd2='等级 '+tR.lit+'/'+tK.lit+' 轴 '+Math.round(cR.a1)+'x'+Math.round(cR.a2)+' / '+Math.round(cK.a1)+'x'+Math.round(cK.a2)+' 显示态 '+contactState(R,'blue')+'/'+contactState(K,'blue');
+    /* ③ 认出前后 */
+    var lvPre=contactIdLvl(K,'blue'),foePre=trkFoe(tK);
+    var idd=identDist('opt',B,K);
+    B.pos=[K.pos[0]-idd*0.8,K.pos[1],0];
+    for(i=0;i<20;i++){detectLoop(1);simTime+=1;}
+    var lvPost=contactIdLvl(K,'blue'),ty=contactIdType(K,'blue'),foePost=trkFoe(trkOf('blue',K));
+    var ok3=(lvPre===ID_UNK&&foePre===true&&idd<d&&lvPost===ID_CON&&!!ty&&ty.kind==='rock'&&foePost===false);
+    /* ④ 自动化:只留蓝舰与石头,石头手搭成没认出的跟踪级 */
+    ships.length=0;ships.push(B);B.autoEngage=true;B.roe='free';B.noFire=true;B.lockedTarget=null;
+    live(K);
+    stepWeaponSystems(0.02);var lock1=B.lockedTarget;
+    var gUnk=fcGate(B,{tid:K.id,allow:{mac:true,msl:true}},'msl');
+    trkOf('blue',K).cov.idn=true;trkOf('blue',K).idc=true;
+    stepWeaponSystems(0.02);var lock2=B.lockedTarget;
+    var gCon=fcGate(B,{tid:K.id,allow:{mac:true,msl:true}},'msl');
+    var ok4=(lock1===K&&lock2===null&&gUnk===K&&gCon===null);
+    /* ⑤ */
+    applyDamage(K,500,B,'mac');
+    var ok5=(!('hp' in K)&&K.dead===false);
+    /* ⑥ 画法:两条手搭成同样的没认出实况航迹 */
+    ships.length=0;ships.push(B,R);B.autoEngage=false;B.lockedTarget=null;
+    live(R);live(K);R.facing=[1,0,0];K.facing=[1,0,0];
+    if(typeof camJump==='function')camJump(1);
+    cam.x=d;cam.y=0;
+    capOn();drawShip(R);var sShip=rec.join(',');capOff();
+    capOn();drawRockAt(K,contactPos(K,'blue'),'live',false);var sRock=rec.join(','),nRec=rec.length;capOff();
+    trkOf('blue',K).cov.idn=true;trkOf('blue',K).idc=true;
+    capOn();drawRocks();var sKnown=rec.join(',');capOff();
+    var ok6=(sShip.length>0&&sShip===sRock&&sKnown.indexOf('T:碎石')>=0);
+    /* ⑦ */
+    var n7=(objById(K.id)===K&&fcShip(K.id)===K&&objById(R.id)===R);
+    var nmCon=xhName(K),cardCon=xhCardHTML(K,B),fcCon=fcUiName({tid:K.id});
+    trkOf('blue',K).cov.idn=false;trkOf('blue',K).idc=false;
+    var nmUnk=xhName(K),cardUnk=xhCardHTML(K,B),fcUnk=fcUiName({tid:K.id});
+    trkOf('blue',K).tn=0;trkOf('blue',R).tn=0;TRK_TN.blue=0;tkClear('blue',K);tkClear('blue',R);
+    B.pos=[0,0,0];R.pos=[d,-y0,0];K.pos=[d,y0,0];
+    for(i=0;i<3;i++){detectLoop(1);simTime+=1;}
+    var tnK=trkOf('blue',K).tn,tnR=trkOf('blue',R).tn;
+    var ok7=(n7&&nmUnk==='未知接触'&&nmCon==='碎石'&&fcUnk==='未知接触'&&fcCon==='碎石'&&cardUnk.indexOf('类别')<0&&cardCon.indexOf('碎石 · 不是舰船')>=0&&cardCon.indexOf('结构')<0&&tnK>0&&tnR>0&&tnK!==tnR);
+    /* ⑧ 聚合 */
+    var K2=makeRock([d+3000,y0+3000,0],R.size,[1,0,0]);rocks.push(K2);ships.length=0;ships.push(B);
+    live(K);live(K2);
+    cam.x=d;cam.y=y0;cam.zoom=6e-5;lodPrev={fleet:{},pairsB:null,pairsR:null};lodBuild();
+    var inC=function(x){return lodNow.aggs.some(function(a){return a.kind==='rcluster'&&a.ships.indexOf(x)>=0;});};
+    var c8a=inC(K)&&inC(K2);
+    trkOf('blue',K).cov.idn=true;trkOf('blue',K).idc=true;
+    lodPrev={fleet:{},pairsB:null,pairsR:null};lodBuild();
+    var c8b=!inC(K);
+    var ok8=(c8a&&c8b);
+    /* ⑨ 接触降速:贴身的一块没认出的石头 ⇒ 最高档(它可能是船);认出之后 ⇒ 0 档(它不是敌情) */
+    ships.length=0;ships.push(B);rocks=[K];K.pos=[B.pos[0]+LAD.gun*0.5,B.pos[1],0];live(K);
+    var tc1=tcBand();trkOf('blue',K).cov.idn=true;trkOf('blue',K).idc=true;var tc2=tcBand();
+    var ok9=(tc1===3&&tc2===0);
+    var ok=(ok1&&ok2&&ok3&&ok4&&ok5&&ok6&&ok7&&ok8&&ok9);
+    out=(ok?'ok':'fail')+' ① 枚举:蓝方表 [红舰, 石头] 顺序='+(ordB[0]===R&&ordB[1]===K)+' 红方表里也有石头='+(ordR.indexOf(K)>=0)+'='+ok1
+      +' | ② 镜像摆放跑 20 拍分不开='+same2+'('+rd2+')='+ok2
+      +' | ③ 认出前 '+LV[lvPre]+' 可打='+foePre+' ⇒ 挪进 '+Math.round(idd*0.8/1000)+'k 后 '+LV[lvPost]+' 类型='+(ty&&ty.kind)+' 可打='+foePost+'='+ok3
+      +' | ④ 自动索敌锁上没认出的石头='+(lock1===K)+' 确认后当场解锁='+(lock2===null)+' 火控门 没认出给它='+(gUnk===K)+' 确认后给 null='+(gCon===null)+'='+ok4
+      +' | ⑤ 打不坏='+ok5
+      +' | ⑥ 没认出的石头与冷红舰画布序列相同='+(sShip===sRock)+'('+nRec+' 步) 认出后写「碎石」='+(sKnown.indexOf('T:碎石')>=0)+'='+ok6
+      +' | ⑦ 按 id 找得到='+n7+' 名字(信息卡 / 火控面板) '+nmUnk+' '+fcUnk+' / '+nmCon+' '+fcCon+' 航迹号 '+tnR+' / '+tnK+'='+ok7
+      +' | ⑧ 没认出的两块进接触群='+c8a+' 确认那块出群='+c8b+'='+ok8
+      +' | ⑨ 接触降速:没认出的贴身石头 '+tc1+' 档(须 3)认出后 '+tc2+' 档(须 0)='+ok9;
+  }finally{
+    capOff();
+    shipSeq=seq0;rockSeq=rseq0;adminMode=admBak;selected=selBak;TRK_TN.blue=tnBak.b;TRK_TN.red=tnBak.r;
+    cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
+    projectiles=projBak;rocks=rocksBak;
+    ENV.sun=envSun;ENV.fields.length=0;envF.forEach(function(f){ENV.fields.push(f);});
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+    lodPrev={fleet:{},pairsB:null,pairsR:null};
+  }
+  return out;
+});

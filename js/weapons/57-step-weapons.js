@@ -15,6 +15,7 @@ function stepWeaponSystems(dt){
   for(const s of ships){
     if(s.dead||!s.autoEngage)continue;
     if(typeof fcActive==='function'&&fcActive(s))continue; // RF5 有火控序列的舰:lockedTarget 归序列执行器所有(weapons/58 每 tick 重写),自动索敌整段让出,否则两边抢锁定
+    if(s.lockedTarget&&!s.lockedTarget.dead&&!trkFoe(trkOf(s.side,s.lockedTarget)))s.lockedTarget=null; // TK4c:锁着的东西被确认不是船(石头)⇒ 当场解锁、往下重新挑。石头打不死,不解的话自动索敌会在一块认出来的石头上锁到天荒地老;只"往下挑"不够 —— 候选为空时那一支 continue 掉,旧锁原样留着(实测过)
     if(s.lockedTarget&&!s.lockedTarget.dead){ // 已有锁定
       /* MT1 修:自动索敌锁着目标时,每拍续上漂移射击(与火控序列 weapons/58 每拍续期是同一个动作)。
          physics/31 的战斗转向只替【空闲】的舰摆炮口,而编队成员 / 跟随中的舰不算空闲 —— 要它们也归瞄,靠的就是 driftFire 这个标志。

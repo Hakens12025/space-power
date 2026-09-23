@@ -4,6 +4,7 @@
    ----------------------------------------------------------------------------
    本文件【只放纯函数与模块私有的预计算缓冲】,零顶层执行语句(除了缓冲变量声明),
    不读 ships / projectiles / simTime / adminMode 任何全局,不写任何舰船状态。
+   ENV1 起多读两张环境数据表:world/12 的 ENV / ENV_CFG(太阳禁区、残骸场;与 SENS 同类,是每局的常量,不是状态)。
    跨文件引用(SENS 在 sensors/20-signature、sReq 在 core/00-config)全部在
    运行期解析 —— 与 formation/39-fmcaps 同口径,所以本文件在 index.html 里排在
    哪一行都不影响正确性(排在 21-detect 之后只是为了目录编号好读)。
@@ -52,6 +53,10 @@ let scTX = null, scTY = null, scTZ = null;          // 目标位置
 let scSigIR = null, scSigRF = null, scRefl = null;  // 目标侧三通道源强
 let scBIR = null, scBRF = null, scBACT = null, scBMax = null; // 三条通道各自的界 + 取 max 的整目标界
 let scGS = 0.0625, scGF = 0.25;    // 分档常数缓存(热循环不查 SENS.xxx)
+let scInF = null;                  // ENV1 目标在不在残骸场里(Uint8Array;没有场时全 0,热循环那一支天然不进)
+let scTVX = null, scTVY = null, scTVZ = null; // ENV1 目标速度(动目标显示按径向速度滤杂波用;只在有场时填)
+let scSunOn = false, scSunX = 0, scSunY = 0, scSunC2 = 1; // ENV1 太阳禁区:开关 + 方向 + cos^2 半角(热循环免开方)
+let scMTI2 = 0;                    // ENV1 动目标显示门限的平方
 
 function senseGrowD(n) { // 探测器侧扩容:只在长度不够时整体重建
   if (n <= scDCap) return;
@@ -66,6 +71,7 @@ function senseGrowT(n) { // 目标侧扩容:同上
   scTX = new Float64Array(c); scTY = new Float64Array(c); scTZ = new Float64Array(c);
   scSigIR = new Float64Array(c); scSigRF = new Float64Array(c); scRefl = new Float64Array(c);
   scBIR = new Float64Array(c); scBRF = new Float64Array(c); scBACT = new Float64Array(c); scBMax = new Float64Array(c);
+  scInF = new Uint8Array(c); scTVX = new Float64Array(c); scTVY = new Float64Array(c); scTVZ = new Float64Array(c); // ENV1
   scTCap = c;
 }
 
@@ -85,7 +91,9 @@ function optLum(s) { // 光学/红外亮度 = 体型 x (1 + 功耗)。取代已�
      于是照射一开光学量程就 x1.41,静默与照射在【光学】这条通道上几乎没区别。
      乘 0.15 之后照射只把 DD 的光学量程抬 7.2%、干扰抬 14.0%:它是一句设计表态,不是一条机制。
      ⚠ COV 住在 23-cov(加载晚于本文件),这里是运行期读取,安全;写成顶层常量就会撞 TDZ。 */
-  return sReq(s, 'size', 'ship') * (1 + engPowerOf(s) + COV.HEAT_EMIT * emitPowerOf(s) + firePowerOf(s));
+  /* ENV1:残骸场里的目标衬在被照亮的碎石前面,对比度下降 ⇒ 亮度乘 envOptK(场外 / 没有场恒为 1,乘 1 是精确的无操作)。
+     放在这里而不是热循环里:光学亮度只有这一个定义点,热循环的分档、23-cov 的定位精度(visAccOf)、界面上的"我此刻多亮"读的是同一个数 */
+  return sReq(s, 'size', 'ship') * (1 + engPowerOf(s) + COV.HEAT_EMIT * emitPowerOf(s) + firePowerOf(s)) * envOptK(s.pos);
 }
 function rfLoudOf(s) { // 射频响度 = 发射机档次 x 发射档。silent 恒为 0 —— 绝对静默,没有船体泄漏(旧模型那个泄漏系数已删)
   return sReq(s, 'emit', 'ship') * emitPowerOf(s);
@@ -120,6 +128,10 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
      误差椭圆没有"水位",时间的账在 23-cov 的 stepCov 里按【真实经过的秒数】取幂结算,
      所以这一段整个删掉 —— dt 参数留着:sensePrepare 的签名是判定与 sensePairAt 的契约面,而且
      将来若要把"这一拍盯了多久"喂进热循环,入口还在。 */
+  /* ENV1 环境(world/12):太阳禁区的方向、残骸场的动目标显示门限。空环境 ⇒ scSunOn=false、scInF 全 0,热循环里那两支一次都不进 */
+  const sun = ENV.sun, fOn = ENV.fields.length > 0;
+  scSunOn = !!sun; if (sun) { scSunX = sun.ux; scSunY = sun.uy; scSunC2 = sun.c2; }
+  scMTI2 = fOn ? ENV_CFG.MTI_V * ENV_CFG.MTI_V : 0;
   let mIR = 0, mRF = 0, mACT = 0;
   for (let i = 0; i < nd; i++) {
     const d = i < dets.length ? dets[i] : bcons[i - dets.length];
@@ -138,6 +150,8 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
     const bA2 = Math.sqrt(bA4); // 照射的界在 d^4 空间,必须在这里开方换算到 d^2 空间才能和另两路取 max(见文件头 blocker A)
     scBIR[i] = bIR; scBRF[i] = bRF; scBACT[i] = bA4;
     scBMax[i] = bIR > bRF ? (bIR > bA2 ? bIR : bA2) : (bRF > bA2 ? bRF : bA2);
+    const inF = fOn && envInField(p) ? 1 : 0; scInF[i] = inF; // ENV1:只有在场里的目标才需要速度
+    if (inF) { const v = t.vel; scTVX[i] = v[0]; scTVY[i] = v[1]; scTVZ[i] = v[2]; }
     /* SN6:干扰的落点从"每拍削弱照射水位"改成"把这一拍的回波误差按烧穿距离放大"(23-cov 的 covShape)。
        后者能直接读成一个距离(贴到这么近干扰就压不住了),前者只是一个乘子;而且误差模型里干扰
        本来就该糊【精度】而不是糊【有没有信号】—— 噪声抬高的是测量方差,不是让回波消失。 */
@@ -159,6 +173,11 @@ function sensePairGrades(j, ti) {
   if (sr !== 0) { r = sr * scKRF[j]; if (d2 < r) g |= ((d2 < r * scGS) ? 3 : ((d2 < r * scGF) ? 2 : 1)) << 2; } // 静默目标 sigRF 恒 0,这一路整段跳过
   r = scRefl[ti] * scKACT[j];
   if (r !== 0) { const dd = d2 * d2; if (dd < r) g |= ((dd < r * scGS) ? 3 : ((dd < r * scGF) ? 2 : 1)) << 4; } // 比四次方以避免开方
+  /* ENV1 太阳禁区:探测方看目标的视线落在太阳那个锥里 ⇒ 光学与静听这一拍没有量测(照射不受影响)。只看 XY。
+     dx 是"目标指向探测方",视线是它的反向,所以点积取负。与 world/12 的 envSunBlind 同式(那边给弹丸与判据用),判据逐对钉着 */
+  if (scSunOn && (g & 15) !== 0) { const k = -(dx * scSunX + dy * scSunY); if (k > 0 && k * k > (dx * dx + dy * dy) * scSunC2) g &= 48; }
+  /* ENV1 动目标显示:目标在残骸场里、径向速度低于门限 ⇒ 照射回波被当成杂波滤掉。与 envMtiBlind 同式 */
+  if ((g & 48) !== 0 && scInF[ti] === 1) { const rv = dx * scTVX[ti] + dy * scTVY[ti] + dz * scTVZ[ti]; if (rv * rv < scMTI2 * d2) g &= 15; }
   return g;
 }
 function senseScanTarget(ti) { // 对第 ti 个目标扫描全部探测器,逐通道取最好的那一档(与旧内核"取最大单源通量"同口径)
@@ -198,10 +217,13 @@ function projSig(p) { // 弹丸的亮度与反射。常数由旧模型的可见�
   return (p.fuel > 0) ? SENS.PROJ.mslHot : SENS.PROJ.mslCold; // 燃烧的喷焰 vs 滑行的冷弹
 }
 function senseSeesOptical(lum, d, pos) { // 探测器 d 能否光学看到位于 pos、亮度 lum 的东西
+  if (envSunBlind(d.pos, pos)) return false; // ENV1:弹丸与舰船同一套环境 —— 太阳禁区、残骸场的背景杂波(空环境时恒假 / 乘 1)
+  lum *= envOptK(pos);
   const dx = d.pos[0] - pos[0], dy = d.pos[1] - pos[1], dz = d.pos[2] - pos[2];
   return dx * dx + dy * dy + dz * dz < lum * senseKIR(d);
 }
-function senseSeesActive(refl, d, pos) { // 探测器 d 的照射能否打到位于 pos、反射 refl 的东西(不照射时 senseKACT 恒 0,自然为假)
+function senseSeesActive(refl, d, pos, vel) { // 探测器 d 的照射能否打到位于 pos、反射 refl 的东西(不照射时 senseKACT 恒 0,自然为假)。vel 可省
+  if (envMtiBlind(d.pos, pos, vel)) return false; // ENV1:场内慢目标的回波被动目标显示滤掉(空环境 / 不给速度时恒假)
   const dx = d.pos[0] - pos[0], dy = d.pos[1] - pos[1], dz = d.pos[2] - pos[2];
   const d2 = dx * dx + dy * dy + dz * dz;
   return d2 * d2 < refl * senseKACT(d);

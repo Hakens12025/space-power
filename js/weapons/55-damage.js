@@ -2,6 +2,7 @@
 /* RF1: 拆自 js/04-targeting.js L80-100(applyDamage,含 RANGE1 invuln 守卫)。纯移动无逻辑改动。 */
 function applyDamage(s,dmg,src,kind){ // RANGE1 加第 4 形参 kind('mac'/'missile'):靶场按武器分栏统计伤害,两个调用点(07-missiles 的 MAC 命中与导弹组命中)各传一个字面量
   if(s.dead)return;
+  if(kindOf(s)==='rock')return; // TK4c 石头没有结构值,打中了也什么都不发生(弹药白费,决定 6)。命中特效在调用方,照样有
   if(s.invuln){ // RANGE1 靶血量无限:守卫放在这里而不是两个调用点——上游那条完整命中结算链(扇面统计/近防过载/内圈近防/干扰弹掷骰/survHit×missDmg×扇面倍增)照常跑完,只是最后一步不扣血,而那条链正是靶场要测的东西
     if(dmg>0){
       if(typeof rangeTally==='function')rangeTally(s,dmg,kind,src); // 伤害不落到 hp,落到统计

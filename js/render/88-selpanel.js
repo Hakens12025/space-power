@@ -166,8 +166,8 @@ function setHTMLStable(el,html,force){
 }
 function fcUiName(t){ // 目标项 → 显示名(舰目标现查 ships 表,指定点显示 k 坐标)
   if(t&&t.tid!=null){
-    const o=(typeof ships!=='undefined')?ships.find(x=>String(x.id)===String(t.tid)):null;
-    return o?(o.name||String(t.tid)):'目标丢失';
+    const o=(typeof objById==='function')?objById(t.tid):null; // TK4c:目标也可能是石头
+    return o?(((typeof xhName==='function')?xhName(o):o.name)||String(t.tid)):'目标丢失'; // TK4c:名字走 xhName 打码(与 89 轮盘同一口径)—— 原来直接吐真名,没认出的敌舰名字、没认出的石头「碎石」两个字都会从这里漏出去
   }
   if(t&&t.pt)return `点 ${Math.round(t.pt[0]/1000)}k,${Math.round(t.pt[1]/1000)}k`;
   return '—';

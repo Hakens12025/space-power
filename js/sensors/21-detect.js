@@ -77,6 +77,7 @@ function detectFor(detSide,tgtSide,dt){
   const {dets,bcons}=detectorsOf(detSide);
   if(!dets.length&&!bcons.length)return;
   const tgts=ships.filter(t=>t.side===tgtSide&&!t.dead);
+  for(let i=0;i<rocks.length;i++)if(!rocks[i].dead)tgts.push(rocks[i]); // TK4c:石头两方都探测,接在对方舰船之后 —— 舰船在缓冲里的下标不变,每个目标的椭圆各推各的,所以舰船的航迹逐位不受影响
   if(!tgts.length)return;
   const el=(typeof dt==='number'&&isFinite(dt)&&dt>0)?dt:SENS.TICK;
   sensePrepare(dets,bcons,tgts,el); // 一次预计算喂满整个 O(N^2):除法与开方全在这一步
@@ -213,7 +214,7 @@ function projVisibleTo(p,detSide){
   const {dets,bcons}=detectorsOf(detSide);
   const sg=projSig(p);
   const lum=sg.lum,refl=sg.refl;
-  for(const d of dets){if(senseSeesOptical(lum,d,p.pos)||senseSeesActive(refl,d,p.pos))return true;} // 照射那一路:不在 paint 档时 senseKACT 恒 0,判据天然为假,这里不必再判一次发射档
-  for(const b of bcons){if(senseSeesOptical(lum,b,p.pos)||senseSeesActive(refl,b,p.pos))return true;} // 信标恒在照射(BEACON_EMIT/BEACON_RECV),对反射 1.0 的目标正好 300,000 —— 与全库既有的信标 300k 逐位相同
+  for(const d of dets){if(senseSeesOptical(lum,d,p.pos)||senseSeesActive(refl,d,p.pos,p.vel))return true;} // 照射那一路:不在 paint 档时 senseKACT 恒 0,判据天然为假,这里不必再判一次发射档
+  for(const b of bcons){if(senseSeesOptical(lum,b,p.pos)||senseSeesActive(refl,b,p.pos,p.vel))return true;} // 信标恒在照射(BEACON_EMIT/BEACON_RECV),对反射 1.0 的目标正好 300,000 —— 与全库既有的信标 300k 逐位相同
   return false;
 }

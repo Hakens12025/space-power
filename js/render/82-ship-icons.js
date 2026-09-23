@@ -7,17 +7,17 @@ const LADAR_WARN_W=6; // RF7e 被照射告警圈的脉冲角频率(rad/【墙钟
 // TIER1 4 舰种正式映射:旧三键 CRUISER/FRIGATE/SCOUT 已由 03-ships.js 的 normCls 在 makeShip 入口归一化,这里不再需要过渡键。
 // 10a 的 HULL.SC / HULL_LABEL.SC / HULL_BASE.SC 按拍板保留不动(轮廓资产留着,等 4 舰种数值定稿再决定去留),只是暂时无人引用。
 const CLS_HULL={DD:'DD',CA:'CA',BB:'BB',CV:'CV'};
-function shipHull(s){return CLS_HULL[s.cls]||'DD';}
+function shipHull(s){return kindOf(s)==='ship'?(CLS_HULL[s.cls]||'DD'):'UNK';} // TK4c:不是船的东西(石头)没有舰种轮廓,一律通用轮廓 —— 否则查不到舰种会落到 'DD'
 function shipTier(s){return s.tier||2;}                       // 未标 Tier 的舰按 T2(中性尺寸/亮度)
 function shipIdentHull(s){                                    // 识别分层:未达识别级的敌舰只给通用轮廓
   // ID1:打码条件从"等级恰为 1"换成"握着接触(lit>0)但还没认出"—— 身份问 sensors/21 的 contactIdn,不再从等级推。
   //      lit===0 那一档原样不打码(改前的 q===0 分支):编辑器与 GM 下画的是没有接触的红舰,那里要看真轮廓;非 GM 下 lit=0 的船根本不画舰体。
-  return (s.side==='red'&&litOf(s,'blue')>0&&!contactIdn(s,'blue'))?'UNK':shipHull(s); // TK2.4:等级走门面
+  return (s.side!=='blue'&&litOf(s,'blue')>0&&!contactIdn(s,'blue'))?'UNK':shipHull(s); // TK2.4:等级走门面。TK4b 审计:「不是我方」才打码(原写「是红方」,中立的石头会拿到真轮廓)
 }
 function shipIdentTier(s){                                    // TIER1 分级遮蔽:轮廓已被降级成 UNK 的敌舰(未达识别级)一律按 T2 尺寸画
   // TIER1 判据用 litBlue<2 而不是 shipIdentHull(s)==='UNK':幽灵接触(曾点亮、现已失联,litBlue=0)走的是 q===0 分支,轮廓不会被降级成 UNK,
   // 于是尺寸也跟着按真实 tier 画,分级照漏。轮廓层的幽灵泄漏是拆分前就有的既有行为(残影保留舰型),本次不动它,只堵本轮 tier 带出来的这一半。
-  return (s.side==='red'&&!contactIdn(s,'blue'))?2:shipTier(s); // ID1:原判据 litBlue<2;现在没认出一律 T2(lit=0 时 contactIdn 恒 false,与原来那一档逐位相同)
+  return (s.side!=='blue'&&!contactIdn(s,'blue'))?2:shipTier(s); // TK4b 审计同上。ID1:原判据 litBlue<2;现在没认出一律 T2(lit=0 时 contactIdn 恒 false,与原来那一档逐位相同)
 }
 /* ================= SN9 舰体大小随缩放变(2026-09-21)=================
    用户实报:"拉近了船不变大,拉远了船不变小,没有办法做出很直观的空间关系"。改前舰体是固定屏幕尺寸的贴纸,地图在它底下滑。
@@ -115,6 +115,56 @@ function drawWreck(s,p,r){ // 残骸:空心轮廓+裂纹+暗色,留名标记
 /* 幽灵/陈旧【记号】的半径,单位是屏幕像素(SN6e)。它是一个符号,不随缩放变化 ——
    与它同心的那个不确定圈才是世界尺度的。判据 FLOW47_FOG 按这个数取样。 */
 const CONTACT_MARK_R=7;
+/* 陈旧 / 失联的【记号】(SN6e)。TK4c 从 drawShip 里原样抽出来(一笔没改),石头的这两态也照它画 —— 没认出之前石头与船的记号必须一模一样 */
+function drawContactMark(s,p,view){
+  const ghost=view==='ghost';
+  /* 过期时长:coast 读椭圆自己的 age(距最后一次量测),ghost 读 contactAge(距最后一次定位)—— 各是各那一态的"多久了" */
+  const tkB=trkOf('blue',s),cB=tkB&&tkB.cov; // TK2.4:记号读蓝方航迹表
+  const ageV=ghost?contactAge(s,'blue'):((cB&&cB.age)||0);
+  ctx.save();
+  ctx.globalAlpha=ghost?0.4:0.7;
+  const col=ghost?'255,107,107':'255,209,102';
+  ctx.lineWidth=1;
+  let top=CONTACT_MARK_R;
+  if(ghost){
+    /* 不确定圈:半径是【世界公里】(最后已知速度 x 失联时长)⇒ 随缩放变化;虚线 = 这是个估计。
+       只在明显大于记号时才画 —— 缩到记号量级时是两个同样大的同心圈,读不出任何东西(SN6e 订正)。 */
+    const uv=V.len(tkB.lastVel)||0; // ||0 防的是速度算出 NaN,不是防字段缺失(contactPos 已经替它把过关;SN2c:这里绝不许回落到 s.vel 真值)
+    const rad=Math.min(200000,Math.max(8000,uv*ageV))*cam.zoom;
+    if(rad>CONTACT_MARK_R*1.8){
+      ctx.setLineDash([5,4]);
+      ctx.strokeStyle='rgba('+col+',.28)';
+      ctx.beginPath();ctx.arc(p[0],p[1],rad,0,6.283);ctx.stroke();
+      ctx.setLineDash([]);
+      top=rad;
+    }
+  }
+  /* 记号本体:【固定屏幕像素】的实线小圈 ⇒ 不随缩放变化;实线 = 这是个符号,不是估计 */
+  ctx.strokeStyle='rgba('+col+',.55)';
+  ctx.beginPath();ctx.arc(p[0],p[1],CONTACT_MARK_R,0,6.283);ctx.stroke();
+  ctx.fillStyle='rgba('+(ghost?'255,150,140':'255,209,102')+',.75)';
+  ctx.font='9px Consolas';ctx.textAlign='center';ctx.textBaseline='bottom';
+  /* 陈旧态航迹还在(lit>0、椭圆还在长大),等级照样要读;失联态 lit=0,没有等级可写 */
+  ctx.fillText((ghost?'⏳失联':'⏳陈旧')+Math.round(ageV)+'s'+((!ghost&&trkLit(tkB)>0&&typeof litTag==='function')?(' · '+litTag(trkLit(tkB))):''),p[0],p[1]-top-3);
+  ctx.restore();
+}
+/* 敌方接触的观测等级标签「◎ 3级 火控」+ 火控框(SN7c)。TK4c 从 drawShip 里原样抽出来,没认出的石头也照它画 */
+function drawFoeLitTag(p,r,foeLit){
+  if(foeLit>0&&typeof LIT_RGB!=='undefined'){
+    const rgb=LIT_RGB[foeLit]||LIT_RGB[0];
+    ctx.save();
+    ctx.fillStyle='rgba('+rgb+',.95)';ctx.font='10px Consolas';ctx.textAlign='center';ctx.textBaseline='top';
+    ctx.fillText((foeLit>=3?'◎ ':'')+litTag(foeLit),p[0],p[1]+r+(cam.zoom>0.0008?19:6));
+    if(foeLit>=3){
+      ctx.strokeStyle='rgba('+rgb+',.9)';ctx.lineWidth=1.2;
+      const q=r+6;
+      for(const d of [[-1,-1],[1,-1],[-1,1],[1,1]]){
+        ctx.beginPath();ctx.moveTo(p[0]+d[0]*q,p[1]+d[1]*q-d[1]*5);ctx.lineTo(p[0]+d[0]*q,p[1]+d[1]*q);ctx.lineTo(p[0]+d[0]*q-d[0]*5,p[1]+d[1]*q);ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+}
 function drawShip(s){
   /* ================= 红方接触:画什么只问 contactState(SN6f)=================
      五态互斥,每一态只有一个显示层负责(总表在 render/CLAUDE.md 的 SN6f 一节):
@@ -138,39 +188,7 @@ function drawShip(s){
   }
   const p=toScreen(dispPos[0],dispPos[1]);
   if(p[0]<-40||p[0]>W+40||p[1]<-40||p[1]>H+40)return;
-  if(view==='coast'||view==='ghost'){
-    const ghost=view==='ghost';
-    /* 过期时长:coast 读椭圆自己的 age(距最后一次量测),ghost 读 contactAge(距最后一次定位)—— 各是各那一态的"多久了" */
-    const tkB=trkOf('blue',s),cB=tkB&&tkB.cov; // TK2.4:记号读蓝方航迹表
-    const ageV=ghost?contactAge(s,'blue'):((cB&&cB.age)||0);
-    ctx.save();
-    ctx.globalAlpha=ghost?0.4:0.7;
-    const col=ghost?'255,107,107':'255,209,102';
-    ctx.lineWidth=1;
-    let top=CONTACT_MARK_R;
-    if(ghost){
-      /* 不确定圈:半径是【世界公里】(最后已知速度 x 失联时长)⇒ 随缩放变化;虚线 = 这是个估计。
-         只在明显大于记号时才画 —— 缩到记号量级时是两个同样大的同心圈,读不出任何东西(SN6e 订正)。 */
-      const uv=V.len(tkB.lastVel)||0; // ||0 防的是速度算出 NaN,不是防字段缺失(contactPos 已经替它把过关;SN2c:这里绝不许回落到 s.vel 真值)
-      const rad=Math.min(200000,Math.max(8000,uv*ageV))*cam.zoom;
-      if(rad>CONTACT_MARK_R*1.8){
-        ctx.setLineDash([5,4]);
-        ctx.strokeStyle='rgba('+col+',.28)';
-        ctx.beginPath();ctx.arc(p[0],p[1],rad,0,6.283);ctx.stroke();
-        ctx.setLineDash([]);
-        top=rad;
-      }
-    }
-    /* 记号本体:【固定屏幕像素】的实线小圈 ⇒ 不随缩放变化;实线 = 这是个符号,不是估计 */
-    ctx.strokeStyle='rgba('+col+',.55)';
-    ctx.beginPath();ctx.arc(p[0],p[1],CONTACT_MARK_R,0,6.283);ctx.stroke();
-    ctx.fillStyle='rgba('+(ghost?'255,150,140':'255,209,102')+',.75)';
-    ctx.font='9px Consolas';ctx.textAlign='center';ctx.textBaseline='bottom';
-    /* 陈旧态航迹还在(lit>0、椭圆还在长大),等级照样要读;失联态 lit=0,没有等级可写 */
-    ctx.fillText((ghost?'⏳失联':'⏳陈旧')+Math.round(ageV)+'s'+((!ghost&&trkLit(tkB)>0&&typeof litTag==='function')?(' · '+litTag(trkLit(tkB))):''),p[0],p[1]-top-3);
-    ctx.restore();
-    return;
-  }
+  if(view==='coast'||view==='ghost'){drawContactMark(s,p,view);return;} // TK4c:记号抽成函数(石头的陈旧 / 失联照同一个画法),画法一笔没改
   const r=Math.round(shipIconR(s)); // 图标半径:屏幕固定尺寸,但随舰种/Tier 变化(标签/选中圈/尾焰基准)
   if(s.dead){drawWreck(s,p,r);return;} // 残骸:空心图标,不再有舰体数据(幽灵/陈旧已在上面 return,不会走到这儿)
   // DS181 S3:⚠被照射告警(敌方雷达以照射模式对我驻留达阈值)→黄框闪烁(信息战灵魂提示)
@@ -264,20 +282,7 @@ function drawShip(s){
        火控框只看等级、不看身份:没认出的航迹照样可以有火控解(等级与身份是两栏)。
      · 不受上面那道缩放门管:名字拉远了可以省,"这条接触现在几级"是随时要读的。
      等级那行写在名字下面一行;名字被缩放门省掉时它就顶上去。 */
-  if(foeLit>0&&typeof LIT_RGB!=='undefined'){
-    const rgb=LIT_RGB[foeLit]||LIT_RGB[0];
-    ctx.save();
-    ctx.fillStyle='rgba('+rgb+',.95)';ctx.font='10px Consolas';ctx.textAlign='center';ctx.textBaseline='top';
-    ctx.fillText((foeLit>=3?'◎ ':'')+litTag(foeLit),p[0],p[1]+r+(cam.zoom>0.0008?19:6));
-    if(foeLit>=3){
-      ctx.strokeStyle='rgba('+rgb+',.9)';ctx.lineWidth=1.2;
-      const q=r+6;
-      for(const d of [[-1,-1],[1,-1],[-1,1],[1,1]]){
-        ctx.beginPath();ctx.moveTo(p[0]+d[0]*q,p[1]+d[1]*q-d[1]*5);ctx.lineTo(p[0]+d[0]*q,p[1]+d[1]*q);ctx.lineTo(p[0]+d[0]*q-d[0]*5,p[1]+d[1]*q);ctx.stroke();
-      }
-    }
-    ctx.restore();
-  }
+  drawFoeLitTag(p,r,foeLit); // TK4c:等级标签抽成函数(没认出的石头照同一个画法),画法一笔没改
   // 当前目标连线。FM2:每艘船(散船/旗舰/僚舰)都持有自己的令,所以这里【只读自己的 orders】——
   // FM1 那段"僚舰去读旗舰 orders 再叠自己的阵位偏移"的特例整体删除,编队的每个终点现在天然各画各的。
   /* FG1(2026-09-21,用户实报"我应该不能看到敌方的目标线和目的地线才对"):这条连线只画【我方】的船(GM 下照旧全画)。
