@@ -154,7 +154,6 @@ TIER_MUL
 TIER_ORDER
 TIER_SCALE
 TRK
-TRK_FWD
 TRK_IDO
 TUT_HTML
 V
@@ -783,7 +782,6 @@ trkBearing
 trkEach
 trkEnsure
 trkFoe
-trkFwdDesc
 trkGone
 trkIdLvl
 trkIdType

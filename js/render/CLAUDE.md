@@ -2,6 +2,8 @@
 
 呈现层(`js/render/`)的历史备忘。总览、跨系统约定与文件地图在仓库根 `CLAUDE.md`。
 
+> **TK3c(2026-09-23)起舰船对象上没有感知字段了。** 下文历史记录里写的 `covB` / `litBlue` / `seenBlue*`,读作「蓝方航迹表里对这艘船的那条航迹」的 `cov` / `lit` / `lastT·lastPos·lastVel`(`trkOf('blue',s)`;画面该问的是门面 `contactState` / `contactPos` / `litOf`)。对照表与规矩在 `js/sensors/CLAUDE.md` 的 TK 一节。
+
 ## SL1 瘦身(2026-09-22,用户拍板删掉 RF2 只藏不删的旧界面)
 
 本目录删了 `86-log`(日志面板订阅者)整文件;`87-fleetcards` 整文件删(舰队卡片 / 信息面板;SL1b 收尾:最后剩下的 `updateTop` 挪进 `88-selpanel`,`launchBeacon` 挪进 `weapons/52-fire` —— 信标是武器 / 载荷,而且留给红方 bot 做前出侦察,模拟层不许引用 render 里的符号;`layoutNetMines` 与 布防 / 信标 / 手动 / 布雷 四族点选待命态一起删:舰队卡没了它们就没有入口;`s.paintWarned` 只写不读也删);

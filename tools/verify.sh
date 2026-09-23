@@ -287,7 +287,7 @@ TK_STEP_N=$(tk_strip < js/sensors/21-detect.js | grep -o "trkStep(" | wc -l | tr
 TK_STEP_SELF=$(printf '/* trkStep( */\n// trkStep(\nvar a=1;\n' | tk_strip | grep -o "trkStep(" | wc -l | tr -d ' ')
 [ "$TK_STEP_SELF" = "0" ] || { echo "✗ TK2.0 检查器自检失败:注释里的 trkStep( 被数进去了($TK_STEP_SELF)"; fail=1; }
 # TK2.0:建航迹只许两处 —— 造船时的登记(sensors/24)与生产者(sensors/21)。别处出现 trkEnsure( 或直接往两张表里 set,就是「读的时候顺手建了一条」。
-TK_ENS_BAD=$(for f in $(grep -rlE "trkEnsure\(|TRK\.(blue|red)\.set\(" js/ --include='*.js'); do case "$f" in js/sensors/24-track.js|js/sensors/21-detect.js) ;; *) n=$(tk_strip < "$f" | grep -cE "trkEnsure\(|TRK\.(blue|red)\.set\("); [ "$n" -gt 0 ] && echo "$f";; esac; done)
+TK_ENS_BAD=$(for f in $(grep -rlE "trkEnsure\(|TRK\.(blue|red)\.set\(" js/ --include='*.js'); do case "$f" in js/sensors/24-track.js|js/sensors/21-detect.js) ;; *) n=$(tk_strip < "$f" | grep -cE "trkEnsure\(|TRK\.(blue|red)\.set\("); [ "$n" -gt 0 ] && echo "$f";; esac; done; true)
 [ -z "$TK_ENS_BAD" ] || { echo "✗ TK2.0:建航迹的调用出现在 sensors/24、sensors/21 之外:$TK_ENS_BAD"; fail=1; }
 # TK2.4:渲染层不再直读舰上的接触字段,正面那一半改成「去注释后 js/render 里真的在读航迹表」(trkOf / trkEach / trkPaintedBy 至少一处)
 TK_REND_N=$(cat js/render/*.js | tk_strip | grep -oE "trkOf\(|trkEach\(|trkPaintedBy\(" | wc -l | tr -d ' ')
