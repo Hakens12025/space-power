@@ -458,7 +458,8 @@ t('TK4C_ROCK',function(){
    同一艘红舰、同样的跟踪级航迹,只换身份一格(未知 / 疑似 / 确认):
    ① 蓝方自动索敌(57):未知不锁;疑似、确认都锁。
    ② 红方集火(bots/60 的 botFocus):红方表里的蓝舰未知 ⇒ 没有集火目标;疑似 ⇒ 是它。
-   ③ 数据链导弹丢了目标(56 的 link 支)+ 网分配器(53):新目标未知 ⇒ 导弹自毁(没有可分配的);疑似 ⇒ 先滑行等,分配器把它派过去。
+   ③ 数据链导弹丢了目标(56 的 link 支)+ 网分配器(53):新目标未知 ⇒ 导弹自毁(没有可分配的);疑似 ⇒ 先滑行等,分配器把它派过去;
+      滑行等分配的时候目标变回未知 ⇒ 分配器不派(第一版没有这一格,把分配器退回旧判断的变异逃掉了 —— 未知时导弹在前一步就自毁,分配器永远碰不到未知的候选)。
    ④ 导引头自己重选(56 的非 link 支):贴近到导引头自己看得见的距离;未知 ⇒ 自毁;疑似 ⇒ 重选到它。
    ⑤ 干扰之后复锁(56 的 chaffed 支):正前方一艘未知、侧面一艘疑似(原来那个目标)⇒ 复锁到疑似那艘,不拐向正前方的怪信号。
    ⑥ 玩家亲手下的令不受这条管:火控序列的门对未知的航迹照样放行(玩家下令 = 当场授权)。 */
@@ -483,7 +484,7 @@ t('WCS1_TIGHT',function(){
       ships.length=0;ships.push(B,E);calm(ships);fab('red',B,lv);return botFocus([E])===B;});
     var ok2=(r2[0]===false&&r2[1]===true);
     /* ③④ 真发两组导弹,原目标死掉,换一艘新目标 */
-    var msl=function(dist,lv){
+    var msl=function(dist,lv,lvAlloc){
       projectiles=[];missileMode='auto';
       var B=makeShip('CA','导蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),R1=makeShip('DD','导红1',[dist,0,0],[-1,0,0],[0,0,0],'red',2),R2=makeShip('DD','导红2',[dist*1.05,dist*0.15,0],[-1,0,0],[0,0,0],'red',2);
       ships.length=0;ships.push(B,R1,R2);calm(ships);B.noFire=false;
@@ -491,12 +492,13 @@ t('WCS1_TIGHT',function(){
       fireMissiles(B,R1,2);var ms=projectiles.filter(function(p){return p.type==='missile';});
       stepProjectiles(0.02);var gm=ms.map(function(p){return p.guideMode;}).join('/');
       R1.dead=true;fab('blue',R2,lv);
-      stepProjectiles(0.02);if(typeof reassignNets==='function')reassignNets('blue');
+      stepProjectiles(0.02);if(lvAlloc!==undefined)fab('blue',R2,lvAlloc);if(typeof reassignNets==='function')reassignNets('blue');
       var res=ms.map(function(p){return p.done?'自毁':(p.target===R2?'R2':(p.target===null?'等':'别的'));});
-      return {n:ms.length,gm:gm,res:res.join('/'),allR2:ms.length>0&&res.every(function(x){return x==='R2';}),allDone:ms.length>0&&res.every(function(x){return x==='自毁';})};
+      return {n:ms.length,gm:gm,res:res.join('/'),allR2:ms.length>0&&res.every(function(x){return x==='R2';}),allDone:ms.length>0&&res.every(function(x){return x==='自毁';}),allWait:ms.length>0&&res.every(function(x){return x==='等';})};
     };
-    var m3u=msl(200000,0),m3s=msl(200000,1),m4u=msl(60000,0),m4s=msl(60000,1);
-    var ok3=(m3u.gm.indexOf('link')>=0&&m3u.allDone&&m3s.allR2);
+    var m3u=msl(200000,0),m3s=msl(200000,1),m3a=msl(200000,1,0),m4u=msl(60000,0),m4s=msl(60000,1);
+    /* m3a:导弹因为「疑似」开始滑行等分配,轮到分配器那一拍目标变回未知 ⇒ 分配器不许派(只看 m3u 的话,分配器永远碰不到未知的候选:导弹在前一步就自毁了) */
+    var ok3=(m3u.gm.indexOf('link')>=0&&m3u.allDone&&m3s.allR2&&m3a.allWait);
     var ok4=(m4u.allDone&&m4s.allR2);
     /* ⑤ 干扰之后复锁 */
     projectiles=[];
@@ -512,7 +514,7 @@ t('WCS1_TIGHT',function(){
     var ok=(ok1&&ok2&&ok3&&ok4&&ok5&&ok6);
     out=(ok?'ok':'fail')+' ① 自动索敌 未知/疑似/确认 锁='+r1.join('/')+'(须 false/true/true)='+ok1
       +' | ② 红方集火 未知/疑似 ='+r2.join('/')+'(须 false/true)='+ok2
-      +' | ③ 数据链导弹 '+m3u.n+' 组(引导 '+m3u.gm+'):新目标未知 ⇒ '+m3u.res+'(须 自毁);疑似 ⇒ '+m3s.res+'(须 R2)='+ok3
+      +' | ③ 数据链导弹 '+m3u.n+' 组(引导 '+m3u.gm+'):新目标未知 ⇒ '+m3u.res+'(须 自毁);疑似 ⇒ '+m3s.res+'(须 R2);滑行等分配时变回未知 ⇒ '+m3a.res+'(须 等)='+ok3
       +' | ④ 贴近重选(引导 '+m4u.gm+'):未知 ⇒ '+m4u.res+' 疑似 ⇒ '+m4s.res+'='+ok4
       +' | ⑤ 干扰后复锁到侧面的疑似那艘、不拐向正前方的未知='+ok5+(p5?'':'(没发出导弹)')
       +' | ⑥ 玩家的火控序列对未知照样放行='+ok6;
