@@ -287,8 +287,9 @@ TK_STEP_N=$(tk_strip < js/sensors/21-detect.js | grep -o "trkStep(" | wc -l | tr
 TK_STEP_SELF=$(printf '/* trkStep( */\n// trkStep(\nvar a=1;\n' | tk_strip | grep -o "trkStep(" | wc -l | tr -d ' ')
 [ "$TK_STEP_SELF" = "0" ] || { echo "✗ TK2.0 检查器自检失败:注释里的 trkStep( 被数进去了($TK_STEP_SELF)"; fail=1; }
 # TK2.0:建航迹只许两处 —— 造船时的登记(sensors/24)与生产者(sensors/21)。别处出现 trkEnsure( 或直接往两张表里 set,就是「读的时候顺手建了一条」。
-TK_ENS_BAD=$(for f in $(grep -rlE "trkEnsure\(|TRK\.(blue|red)\.set\(" js/ --include='*.js'); do case "$f" in js/sensors/24-track.js|js/sensors/21-detect.js) ;; *) n=$(tk_strip < "$f" | grep -cE "trkEnsure\(|TRK\.(blue|red)\.set\("); [ "$n" -gt 0 ] && echo "$f";; esac; done; true)
-[ -z "$TK_ENS_BAD" ] || { echo "✗ TK2.0:建航迹的调用出现在 sensors/24、sensors/21 之外:$TK_ENS_BAD"; fail=1; }
+# TK4a 起同一条也管弹丸目击的写入口(trkSeeSet / 直接动 TRK.vis)。
+TK_ENS_BAD=$(for f in $(grep -rlE "trkEnsure\(|trkSeeSet\(|TRK\.(blue|red)\.set\(|TRK\.vis\." js/ --include='*.js'); do case "$f" in js/sensors/24-track.js|js/sensors/21-detect.js) ;; *) n=$(tk_strip < "$f" | grep -cE "trkEnsure\(|trkSeeSet\(|TRK\.(blue|red)\.set\(|TRK\.vis\."); [ "$n" -gt 0 ] && echo "$f";; esac; done; true)
+[ -z "$TK_ENS_BAD" ] || { echo "✗ TK2.0 / TK4a:建航迹或写弹丸目击的调用出现在 sensors/24、sensors/21 之外:$TK_ENS_BAD"; fail=1; }
 # TK2.4:渲染层不再直读舰上的接触字段,正面那一半改成「去注释后 js/render 里真的在读航迹表」(trkOf / trkEach / trkPaintedBy 至少一处)
 TK_REND_N=$(cat js/render/*.js | tk_strip | grep -oE "trkOf\(|trkEach\(|trkPaintedBy\(" | wc -l | tr -d ' ')
 [ "${TK_REND_N:-0}" -ge 1 ] 2>/dev/null || { echo "✗ TK2.4:js/render/ 去注释后一处航迹表读点都没有(实测 $TK_REND_N)—— 画面没有在读感知层"; fail=1; }
@@ -302,6 +303,13 @@ TK_OLD_HITS=$( for f in $(find js tools/judge -name '*.js'); do n=$(tk_strip < "
 [ -z "$TK_OLD_HITS" ] || { echo "✗ TK3c 负对照:旧的舰上感知字段名还在代码里(去注释后):$TK_OLD_HITS"; fail=1; }
 TK_OLD_SELF=$(printf '%s\n' "var a=s.lit""Blue;" "/* cov""B */" "// seen""Red""Pos" "var b=x.cov""Bx,c=y.ever""Lit""Blue;" | tk_strip | grep -cE "$TK_OLD" || true)
 [ "$TK_OLD_SELF" = "1" ] || { echo "✗ TK3c 检查器自检失败:样本里恰好一处代码里的旧名(另有两处注释、两个只是前缀相同的名字),数出 $TK_OLD_SELF"; fail=1; }
+# TK4a:弹丸也不带感知了 —— 看不看得见搬进航迹表的目击集合(trkSees / trkSeeSet)。原来弹丸上那两格布尔的名字,去注释后在 js/ 与 tools/judge/ 的代码里一处都不许有:
+# 漏迁一处读法不报错,只会恒读到 undefined(近防永远不拦、来袭弹永远不画)。只查代码,同 TK3c(决定 3)。以 true 收尾,理由见上。
+TK_VIS="(^|[^A-Za-z0-9_\$])vis""(Blue|Red)([^A-Za-z0-9_\$]|\$)"
+TK_VIS_HITS=$( for f in $(find js tools/judge -name '*.js'); do n=$(tk_strip < "$f" | grep -cE "$TK_VIS"); [ "$n" -gt 0 ] && echo "$f:$n"; done; true )
+[ -z "$TK_VIS_HITS" ] || { echo "✗ TK4a 负对照:弹丸上旧的可见性字段名还在代码里(去注释后):$TK_VIS_HITS"; fail=1; }
+TK_VIS_SELF=$(printf '%s\n' "if(p.vis""Red)x=1;" "/* p.vis""Blue */" "var q=o.vis""Blue""ish;" | tk_strip | grep -cE "$TK_VIS" || true)
+[ "$TK_VIS_SELF" = "1" ] || { echo "✗ TK4a 检查器自检失败:样本里恰好一处代码里的旧名(另有一处注释、一个只是前缀相同的名字),数出 $TK_VIS_SELF"; fail=1; }
 # 被照射告警的阈值原来是【两份手抄】的 0.3(21-detect 的日志门 + 82-ship-icons 的黄圈门),而且不在 SENS 表里。
 # SN4 把它收进 SENS.ACT_WARN,所以这条从"手抄份数=2"翻成"全库恰好一处定义 + 一处手抄都不许有"。
 # 反面那一半不能省:只判"定义有一处"的话,旁边再手抄一个字面量阈值照样全绿,而那正是改前的病。

@@ -34,7 +34,7 @@ function stepProjectiles(dt){
   for(const p of projectiles){
     if(p.type!=='missile'||p.done||!p.shooter)continue;
     if(p.shooter.side==='blue')continue; // 只看敌方
-    const seen=!adminMode?p.visBlue:true; // GM下也显示
+    const seen=!adminMode?trkSees('blue',p):true; // GM下也显示 TK4a:读航迹表的目击集合
     if(!seen)continue;
     const nowT=simTime,ship=p.shooter;
     const dup=threatCorridors.find(c=>c.ship===ship&&nowT-c.fireT<2);

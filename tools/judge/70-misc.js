@@ -27,10 +27,10 @@ t('FLOW46_CIWS',function(){
     for(i=0;i<N;i++){
       if(!p.done)p.pos=[PIN,0,0];
       stepSim(CFG.step);simTime+=CFG.step;
-      if(p.visBlue)seen=true;                      /* 可见性只【读】,从不写 */
+      if(trkSees('blue',p))seen=true;              /* 可见性只【读】,从不写 */
     }
     var cw=ciwsOf(X);
-    return {vis:seen,visEnd:!!p.visBlue,shots:shots-s0,int0:int0,int1:X.interceptor,
+    return {vis:seen,visEnd:trkSees('blue',p),shots:shots-s0,int0:int0,int1:X.interceptor,
       live:!p.done,d0:V.len(V.sub(p.pos,X.pos)),win:cw.outer*2,coast:(p.coastT||0),
       need:Math.ceil((p.count||16)*1.2),on:(X.ciwsOn!==false),cd:(X.ciwsCd||0),
       thr:V.dot(p.vel,V.norm(V.sub(X.pos,p.pos))),

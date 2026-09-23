@@ -57,8 +57,8 @@ t('FLOW71_AIFOG',function(){
     var ok5=(okP&&Math.abs(d01-AIR.SPREAD)<1e-3&&Math.abs(d12-AIR.SPREAD)<1e-3&&cOk&&along<1e-3&&AIR.SPREAD>=20000);
     /* ⑥ 规避只对看得见的来袭 */
     setup(0,0,'none');aiRedReset();
-    projectiles.push({type:'mac',target:R[0],visRed:false,pos:[0,0,0],vel:[0,0,0]});enemyAI(0.02);var ev0=R[0].macEvadeCd;
-    projectiles[0].visRed=true;enemyAI(0.02);var ev1=R[0].macEvadeCd;
+    projectiles.push(tkSeeProj('red',{type:'mac',target:R[0],pos:[0,0,0],vel:[0,0,0]},false));enemyAI(0.02);var ev0=R[0].macEvadeCd;
+    tkSeeProj('red',projectiles[0],true);enemyAI(0.02);var ev1=R[0].macEvadeCd;
     var ok6=(!(ev0>0)&&ev1>0);
     var ok=(ok1&&ok2&&ok3&&ok4&&ok5&&ok6);
     out=(ok?'ok':'fail')
@@ -337,8 +337,8 @@ t('FLOW74_TC',function(){
     con('fix',far[0],far[1]);var bFarEst=tcBand();                             /* 真值贴脸、估计在两倍导弹射程外 ⇒ 1 档 */
     con('fix',mid[0],mid[1]);var bMid=tcBand();
     con('fix',near[0],near[1]);var bNear=tcBand();
-    con('none');projectiles.push({type:'missile',done:false,visBlue:false,shooter:r0,target:b0,pos:[0,0,0],vel:[0,0,0]});var bMslDark=tcBand();
-    projectiles[0].visBlue=true;var bMslSeen=tcBand();projectiles.length=0;
+    con('none');projectiles.push(tkSeeProj('blue',{type:'missile',done:false,shooter:r0,target:b0,pos:[0,0,0],vel:[0,0,0]},false));var bMslDark=tcBand();
+    tkSeeProj('blue',projectiles[0],true);var bMslSeen=tcBand();projectiles.length=0;
     var ok1=(bNone===0&&bHeat===0&&bFarEst===1&&bMid===2&&bNear===3&&bMslDark===0&&bMslSeen===2);
     /* ② 时间行为 */
     var RMAX=RATES[RATES.length-1];                                          /* RT1:不写死 50 —— 取档位表的上限 */
@@ -434,7 +434,7 @@ t('FLOW76_REDINTENT',function(){
     ctx.lineTo=oLn;ctx.moveTo=oMv;
     var ok1=(drewShip&&!redLine&&blueLine&&gmLine);
     /* ② */
-    var P={type:'missile',shooter:R,target:B,pos:[45000,15000,0],vel:[-1000,0,0],done:false,visBlue:true};
+    var P=tkSeeProj('blue',{type:'missile',shooter:R,target:B,pos:[45000,15000,0],vel:[-1000,0,0],done:false},true);
     var eq=function(a,b){return Math.abs(a[0]-b[0])<1e-6&&Math.abs(a[1]-b[1])<1e-6;};
     dark();var fDark=corridorFrom(P);
     live(R.pos[0]+25000,R.pos[1]-18000);var fLive=corridorFrom(P);
@@ -444,7 +444,7 @@ t('FLOW76_REDINTENT',function(){
     dark();R.noFire=false;projectiles=[];threatCorridors=[];
     fireMissiles(R,{pos:[0,0,0]},1);
     var nM=projectiles.filter(function(p){return p.type==='missile';}).length;
-    projectiles.forEach(function(p){p.visBlue=true;});
+    projectiles.forEach(function(p){tkSeeProj('blue',p,true);});
     var truth=R.pos.slice();
     stepProjectiles(0.02);
     var cs=threatCorridors.slice(),leak=cs.some(function(c){return eq(c.from,truth);});

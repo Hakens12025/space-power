@@ -61,7 +61,7 @@ function detectLoop(dt){ // 一个感知节拍:蓝网络探红(litBlue)、红网
   /* SN6:updateESMFixes 已删。它做的事(被动射频只给方位、产物是一片不确定区)现在是模型本身的一部分:
      一条只有静听量测的接触,covSolve 解出来纵向就是 COV.HUGE,cov.fix=false —— 那就是"没有位置的接触",
      渲染层照 cov 画热区(SN6 阶段 2)。存旧椭圆的那张 Map 随之退役,不再有人往里写。 */
-  for(const p of projectiles){p.visBlue=projVisibleTo(p,'blue');p.visRed=projVisibleTo(p,'red');} // v119:弹丸可见性每节拍算一次,热路径(56/57/83)读缓存
+  for(const p of projectiles){trkSeeSet('blue',p,projVisibleTo(p,'blue'));trkSeeSet('red',p,projVisibleTo(p,'red'));} // v119:弹丸可见性每节拍算一次,热路径(56/57/83)读缓存 TK4a:缓存从弹丸身上搬进航迹表的目击集合(trkSees 读)
 }
 
 /* SN6:原先这里是 updateESMFixes —— 用驻留门 + 多站方位三角,给"听得见但没点亮"的红舰

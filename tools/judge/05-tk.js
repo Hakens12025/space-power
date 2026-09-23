@@ -57,3 +57,5 @@ function tkSnap(side,src){var tk=trkOf(side,src);return tk?{tk:tk,lit:tk.lit,cov
 function tkRestore(tok){if(!tok)return;var tk=tok.tk;tk.lit=tok.lit;tk.cov=tok.cov;tk.lastT=tok.lastT;tk.lastPos=tok.lastPos;tk.lastVel=tok.lastVel;tk.idc=tok.idc;}
 /* 这条航迹的椭圆键集合(排序后逗号连接),FLOW48 的键名普查用 */
 function tkKeySig(side,src){var tk=trkOf(side,src);return tk&&tk.cov?Object.keys(tk.cov).sort().join(','):'';}
+/* TK4a:写一发弹的目击(side 这一方这一拍看不看得见它)。原样写入;读用 trkSees。原来判据直接往弹丸上写那两格布尔 */
+function tkSeeProj(side,p,on){trkSeeSet(side,p,!!on);return p;}

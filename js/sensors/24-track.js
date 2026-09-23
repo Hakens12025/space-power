@@ -34,7 +34,7 @@
    newCov 在 trkNew 里【运行期】才调(makeShip 只在 init 与判据里跑)。
    ============================================================================ */
 
-const TRK={blue:new WeakMap(),red:new WeakMap()};
+const TRK={blue:new WeakMap(),red:new WeakMap(),vis:{blue:new WeakSet(),red:new WeakSet()}}; // TK4a 追加 vis:弹丸目击(两方各一个 WeakSet,见文件末 trkSees)
 
 /* 蓝 / 红两张表的唯一分流口:不是 'blue' 的一律归红,与原来那串三元式同口径 */
 function trkTab(side){return side==='blue'?TRK.blue:TRK.red;}
@@ -164,3 +164,12 @@ function trkIdType(tk){
   if(lv===ID_SUS&&s.spoof)return s.spoof;
   return {kind:s.kind||'ship',cls:s.cls||null,tier:s.tier||null};
 }
+
+/* ============================================================================
+   TK4a 弹丸目击(2026-09-23):这一方的传感器网络这一拍看不看得见这发弹。原来是挂在弹丸上的两格布尔,现在是两方各一个 WeakSet ——
+   弹丸从此也不带感知。生产者(21-detect 的 detectLoop)每拍对每发弹写一次(add / delete),所以最后写下的值一直留着,与原来那两格同义:
+   从数组里拿掉的弹,它最后一次的记录也还在,只是没人再问;从没被写过 = 看不见(原来新弹的初值就是 false)。
+   写只许生产者与判据夹具(verify.sh 的静态规则钉着)。不是 'blue' 的一律归红,与 trkTab 同口径。
+   ============================================================================ */
+function trkSees(side,p){return (side==='blue'?TRK.vis.blue:TRK.vis.red).has(p);}
+function trkSeeSet(side,p,on){const w=side==='blue'?TRK.vis.blue:TRK.vis.red;if(on)w.add(p);else w.delete(p);}

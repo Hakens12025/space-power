@@ -64,7 +64,7 @@ function fireMAC(shooter,target){ // MAC轴炮:沿船头方向直射(必须先�
   const da=gaussRand()*sReq(shooter,'macSigma'); // WR1:每一发都带高斯角散布(原来只在超程时加均匀散布);脱靶距离 ≈ d x da,命中率随距离自然下降
   const ang=Math.atan2(dir[1],dir[0])+da;
   const hxy=Math.hypot(dir[0],dir[1]); // KIMI146修:xy分量按朝向的xy模长缩放——原直接用满macSpd再叠dir[2]·macSpd,合速度超0.1c且弹道≠机头轴线(带俯仰时必脱靶)
-  projectiles.push({type:'mac',pos:shooter.pos.slice(),vel:[Math.cos(ang)*hxy*CFG.macSpd+shooter.vel[0],Math.sin(ang)*hxy*CFG.macSpd+shooter.vel[1],dir[2]*CFG.macSpd+shooter.vel[2]],target,shooter,pred,tt,age:0,dmg:shooter.macDmg,visBlue:false,visRed:false}); // KIMI151:弹丸继承舰速(出膛矢量=舰速+机头轴×0.1c,相对舰体初速仍0.1c)
+  projectiles.push({type:'mac',pos:shooter.pos.slice(),vel:[Math.cos(ang)*hxy*CFG.macSpd+shooter.vel[0],Math.sin(ang)*hxy*CFG.macSpd+shooter.vel[1],dir[2]*CFG.macSpd+shooter.vel[2]],target,shooter,pred,tt,age:0,dmg:shooter.macDmg}); // KIMI151:弹丸继承舰速(出膛矢量=舰速+机头轴×0.1c,相对舰体初速仍0.1c)
   shooter.fireHot=SENS.FIRE_S; // FX1 开火暴露(见 sensors/20 的 P_FIRE):与冷却同一处置位 —— 这里是 MAC 唯一的发射成功点
   shooter.macCd=shooter.macReload||0; // TIER1 改读实例烘焙的装填秒:原 CLS_WPN[shooter.cls].mac 无兜底,舰种不在表里就 TypeError 崩整帧(加 BB/CV 后风险放大)
   if(shooter.fcFired&&shooter.fcTgt&&shooter.fcTgt.mac===target)shooter.fcFired.mac=true; // RF5 开火来源标记(MAC 唯一的发射成功点,弹丸已入 projectiles、冷却已置位):火控序列的指针只认这个显式标记。绝不允许用 macCd/ammo 差分推断——任务系统/靶场AI/敌方AI/手动齐射都会动那两个字段,差分会让序列指针幽灵前进。RF5 核查修:标记再收窄成「打的正是本 tick 序列解算出来的那个目标」,否则玩家手动打第三方(71-keys/72-右键菜单)也会推动序列指针,序列自己那一发被白白跳过
@@ -90,11 +90,11 @@ function findInterceptorTarget(p){ // 拦截弹重选目标:前方最近的来�
 }
 function fireDecoy(shooter){ // v125 诱饵弹:模拟舰船热信号骗敌方拦截弹/传感器(对抗玩法)
   projectiles.push({type:'decoy',pos:shooter.pos.slice(),vel:shooter.vel.slice(),
-    target:null,shooter,spd:Math.max(300,V.len(shooter.vel)),age:0,fuel:60,visBlue:false,visRed:false});
+    target:null,shooter,spd:Math.max(300,V.len(shooter.vel)),age:0,fuel:60});
 }
 function fireInterceptor(shooter,targetMissile,count){ // 发射拦截导弹实体(燃料模式v114:可出远门防御)
   projectiles.push({type:'interceptor',count:count||16,pos:shooter.pos.slice(),vel:shooter.vel.slice(),
-    target:targetMissile,shooter,spd:Math.max(300,V.len(shooter.vel)),age:0,fuel:60,park:false,parkPt:null,screen:false,screenRange:100000,visBlue:false,visRed:false,
+    target:targetMissile,shooter,spd:Math.max(300,V.len(shooter.vel)),age:0,fuel:60,park:false,parkPt:null,screen:false,screenRange:100000,
     hitMul:(shooter.interHitMul||1)}); // RANGE1 拦截弹命中率倍率随弹出膛(07-missiles 的 hitRate 末尾乘它)。外圈拦截率的真实旋钮是这个:CLS_CIWS.outerIntercept 是死字段,声明后全库零读取,面板绝不能放它
 }
 function launchInterceptors(shooter,pt){ // 主动发射拦截弹到布防点(防空屏/伏击):飞抵停车,等来袭导弹进圈
@@ -102,7 +102,7 @@ function launchInterceptors(shooter,pt){ // 主动发射拦截弹到布防点(�
   if(shooter.interceptor<need)return false;
   shooter.interceptor-=need;
   projectiles.push({type:'interceptor',count:need,pos:shooter.pos.slice(),vel:shooter.vel.slice(),
-    target:null,shooter,spd:Math.max(300,V.len(shooter.vel)),age:0,fuel:60,park:true,parkPt:[pt[0],pt[1],0],screen:false,screenRange:100000,visBlue:false,visRed:false});
+    target:null,shooter,spd:Math.max(300,V.len(shooter.vel)),age:0,fuel:60,park:true,parkPt:[pt[0],pt[1],0],screen:false,screenRange:100000});
   return true;
 }
 /* SL1b(2026-09-22)从 render/87-fleetcards【纯移动】过来:它是武器 / 载荷的发射函数,不是界面。舰队卡删掉后它没有 UI 入口,
@@ -111,7 +111,7 @@ function launchBeacon(shooter,pt){ // 侦察舰发射信标(每舰2枚):飞向�
   if(shooter.beaconCount<=0)return false;
   shooter.beaconCount--;
   projectiles.push({type:'beacon',pos:shooter.pos.slice(),vel:shooter.vel.slice(),spd:Math.max(200,V.len(shooter.vel)),
-    shooter, fuel:80, age:0, park:true, parkPt:[pt[0],pt[1],0], arrived:false, on:false, life:300, done:false, visBlue:false, visRed:false});
+    shooter, fuel:80, age:0, park:true, parkPt:[pt[0],pt[1],0], arrived:false, on:false, life:300, done:false});
   return true;
 }
 let missileGroupSeq=0;
@@ -204,7 +204,7 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
       vPeak:pvPeak, vTerm, decelDist:pDecel, netReserve, // v122 速度剖面:巡航/终端/减速点/预留燃料
       guided:false, coastT:0, guideMode:null, lastKpos:null, guidedBy:null, // T1引导:自导/链导/脱锁(超自导范围无通道→滑行10s自毁)
       chaffed:false,chaffT:0,lastTarget:null, // v125 干扰弹脱锁
-      visBlue:false,visRed:false,
+      // TK4a:弹丸不再带可见性字段(看不看得见搬进航迹表的目击集合,sensors/24 的 trkSees);原来六个弹丸字面量里各有一对初值 false
     });
     shooter.ammo-=shooter.mslPer||12; // KIMI154:每组12颗;RF3 枚数读烘焙字段
   }

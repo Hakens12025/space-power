@@ -66,7 +66,7 @@ function stepWeaponSystems(dt){
       if(x.interceptor<(x.interMax||x.interceptor)*0.3&&d0>=ciws.outer*0.5)continue;
       // 智能拦截判定(v118):侦测到 + 射程内 + 确认是威胁(朝友方逼近) + 迎得上去 → 才开火(不无脑打,不浪费)
       if(d0>=ciws.outer*2)continue; // 射程(预警2×外圈)
-      if(!(x.side==='blue'?p.visBlue:p.visRed))continue; // 侦测到(本阵营传感器网络看得见才拦) v119:读detectLoop缓存
+      if(!trkSees(x.side==='blue'?'blue':'red',p))continue; // 侦测到(本阵营传感器网络看得见才拦) v119:读detectLoop缓存 TK4a:缓存在航迹表的目击集合里
       let threat=false;
       if(p.target&&p.target.side===x.side){ // 来袭导弹在追我方舰:朝目标逼近=威胁
         const tt=V.dot(p.vel,V.norm(V.sub(p.target.pos,p.pos)));

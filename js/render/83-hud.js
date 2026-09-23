@@ -156,7 +156,7 @@ function drawNetLinks(){ // v140:网内导弹细线连接;v142:星形连接(O(k)
   const byNet={};
   for(const p of projectiles){
     if(p.type!=='missile'||p.done||!p.netId)continue;
-    if(p.shooter&&p.shooter.side==='red'&&!adminMode&&!p.visBlue)continue; // 感知过滤(普通模式敌方未点亮不画)
+    if(p.shooter&&p.shooter.side==='red'&&!adminMode&&!trkSees('blue',p))continue; // 感知过滤(普通模式敌方未点亮不画) TK4a:目击读航迹表
     (byNet[p.netId]=byNet[p.netId]||[]).push(p);
   }
   ctx.save();
@@ -177,7 +177,7 @@ function drawNetLinks(){ // v140:网内导弹细线连接;v142:星形连接(O(k)
 }
 function drawProjectiles(){ // 弹丸/导弹
   for(const p of projectiles){
-    if(!adminMode&&p.shooter&&p.shooter.side==='red'&&!p.visBlue)continue; // 感知层 v4:普通模式敌方弹药只有被探测到才显示 v119:读缓存
+    if(!adminMode&&p.shooter&&p.shooter.side==='red'&&!trkSees('blue',p))continue; // 感知层 v4:普通模式敌方弹药只有被探测到才显示 v119:读缓存 TK4a:缓存在航迹表的目击集合里
     const s=toScreen(p.pos[0],p.pos[1]);
     if(p.type==='decoy'){ // 诱饵弹:紫色点(模拟舰船信号骗拦截)
       ctx.fillStyle='rgba(200,120,255,.9)';

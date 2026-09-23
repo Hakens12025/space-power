@@ -791,6 +791,8 @@ trkNew
 trkOf
 trkPaintedBy
 trkPos
+trkSeeSet
+trkSees
 trkSrc
 trkState
 trkStep

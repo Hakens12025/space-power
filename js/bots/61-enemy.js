@@ -38,7 +38,7 @@ function enemyAI(dt){
        队心比每一艘都近 —— 整局模拟里红方的首发就出在 50 万公里(动力射程才 37.5 万),弹药扔进了滑行段。 */
     if(foe&&pl.salvo>0&&e.ammo>0&&readyCells(e)>0&&d<=mslReach(e)*1.05)orderMissileSalvo(e,foe,pl.salvo);
     /* ⑥ 规避:只躲【看得见】的来袭主炮弹(visRed 由 detectLoop 每拍算);AI1 之前对每一发都有预警。 */
-    const incoming=projectiles.some(p=>p.type==='mac'&&p.target===e&&p.visRed);
+    const incoming=projectiles.some(p=>p.type==='mac'&&p.target===e&&trkSees('red',p)); // TK4a:目击读航迹表
     if(incoming&&e.macEvadeCd<=0){e.macEvadeCd=8;
       e.orders=[{pos:[e.pos[0]+(Math.random()-0.5)*20000,e.pos[1]+(Math.random()-0.5)*20000,0],type:'stop'}];}
     if(e.macEvadeCd>0)e.macEvadeCd-=dt;
