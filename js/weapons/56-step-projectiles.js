@@ -105,8 +105,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         if(trig){
           p.mine=false;p.target=trig; // 二次点火:变普通追击导弹扑上去
         }else if(p.lastTarget&&!p.lastTarget.dead){ // DS156 脱锁雷复活:重新获得原目标信息(被网络点亮)且还在警戒圈→复活追击(未竟任务继续)
-          const litKey=p.shooter.side==='blue'?'litBlue':'litRed';
-          if(p.lastTarget[litKey]>=2&&V.len(V.sub(p.lastTarget.pos,p.pos))<=(p.trigRadius||60000)*2){
+          if(trkLit(trkOf(p.shooter.side,p.lastTarget))>=2&&V.len(V.sub(p.lastTarget.pos,p.pos))<=(p.trigRadius||60000)*2){
             p.mine=false;p.target=p.lastTarget;p.chaffed=false;p.lastKpos=null;p.guided=true; // 复活=重新入引导(目标在自导范围,网已点亮)
           }
         }
@@ -154,18 +153,19 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
       }
       // 组网转移(DS147):目标没了——干扰复锁优先;link网(接入母舰火控)交给智能分配器按需求重分配;非link网独立重选最近
       if(!p.target||p.target.dead){
-        const litKey=p.shooter.side==='blue'?'litBlue':'litRed';
+        // TK2.1:下面四处「射手这一方知道什么」改读航迹表;挑目标的三处从这一方的航迹表里枚举(按注册表顺序、严格小于的并列取舍都与原来遍历 ships 相同),
+        //       距离与角度仍按真值几何量(那是弹体自己的导引头在看,不是情报)
         // v125:干扰脱锁优先复锁原目标(lastTarget),复锁靠转弯耗燃料;贴脸直插(v135)
         // DS190/DS191(用户令):不再固定复锁原目标,改选"最不用转弯"的已点亮目标(角度最小),
         // 全角度含正后方 180°(背后目标也复锁、走大圈,不变雷)。配合翻倍的转向油耗与下面的大转弯限速,绕圈复锁自然被燃料惩罚。
-        if(p.chaffed&&p.lastTarget&&!p.lastTarget.dead&&p.lastTarget[litKey]>=2){
+        if(p.chaffed&&p.lastTarget&&!p.lastTarget.dead&&trkLit(trkOf(p.shooter.side,p.lastTarget))>=2){
           const pdir=V.norm(p.vel);
           let bestT=null,bestAng=Math.PI+1;
-          for(const s of ships){
-            if(s.side===p.shooter.side||s.dead||s[litKey]<2)continue;
-            const a=V.angle(pdir,V.norm(V.sub(s.pos,p.pos)));
+          trkEach(p.shooter.side,tk=>{
+            if(trkGone(tk)||trkLit(tk)<2||!trkFoe(tk))return;
+            const s=trkSrc(tk),a=V.angle(pdir,V.norm(V.sub(s.pos,p.pos)));
             if(a<bestAng){bestAng=a;bestT=s;}
-          }
+          });
           if(bestT){p.target=bestT;p.chaffed=false;p.netOff=null;p.netOffR=0;p.netD0=0;}
           else{ // 兜底:场上已无任何点亮目标→转脱锁,飞原目标最后位置→到点变雷待命(不漂流)。
                // 注意:按当前进入条件(lastTarget 存活且点亮≥2)与扫描判据完全一致,lastTarget 自己必被选中,此分支逻辑上不可达;
@@ -175,11 +175,11 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
           }
         }else if(p.guideMode==='link'){ // DS147:接入母舰火控 → 待分配,分配器(每0.5s)按需求补目标;先滑行不失的
           p.target=null;
-          const anyEnemy=ships.some(s=>s.side!==p.shooter.side&&!s.dead&&s[litKey]>=2);
+          const anyEnemy=trkEach(p.shooter.side,tk=>!trkGone(tk)&&trkLit(tk)>=2&&trkFoe(tk));
           if(!anyEnemy){p.done=true;return;} // 全灭,失的
         }else{ // 非link:独立重选最近(原逻辑,散兵游勇)
           let nt=null,nd=1e18;
-          for(const s of ships){if(s.side!==p.shooter.side&&!s.dead&&s[litKey]>=2){const d=V.len(V.sub(s.pos,p.pos));if(d<nd){nd=d;nt=s;}}}
+          trkEach(p.shooter.side,tk=>{if(!trkGone(tk)&&trkLit(tk)>=2&&trkFoe(tk)){const s=trkSrc(tk),d=V.len(V.sub(s.pos,p.pos));if(d<nd){nd=d;nt=s;}}});
           if(nt){p.target=nt;recomputeNetOff(p,nt);}
           else{p.done=true;return;}
         }
@@ -220,7 +220,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
       }
       if(p.mine)p.mine=false; // 重新获得信息 → 变回追击导弹
       // DS166 诱饵勾自导(设计师拍板):自导弹(目标非火控级,主动LADAR分辨不出诱饵)距诱饵2万内→30%勾走;咬上诱饵→诱饵燃料尽一起自毁(扑空)
-      if(p.guideMode==='self'&&p.target&&p.target.side&&p.target[p.shooter.side==='blue'?'litBlue':'litRed']<3&&!p.chaffed){
+      if(p.guideMode==='self'&&p.target&&p.target.side&&trkLit(trkOf(p.shooter.side,p.target))<3&&!p.chaffed){ // TK2.1:射手这一方对目标的等级改读航迹表
         for(const q of projectiles){
           if(q.type!=='decoy'||q.done)continue;
           if(V.len(V.sub(q.pos,p.pos))<20000){

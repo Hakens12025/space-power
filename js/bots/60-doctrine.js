@@ -48,15 +48,15 @@ function aiSearchWp(k){ // 第 0 个是战场中心,之后按五角星次序(每
   const o=aiObjective();if(k<=0)return [o[0],o[1]];
   const a=(k-1)*2.5132741228718345;return [o[0]+Math.cos(a)*AIR.RING,o[1]+Math.sin(a)*AIR.RING];
 }
-function aiRedBelief(dt,reds,blues){ // 纯决策:红方此刻认为该去哪。只写 AIR,不碰任何一艘船
+function aiRedBelief(dt,reds){ // 纯决策:红方此刻认为该去哪。只写 AIR,不碰任何一艘船。TK2.2:接触从红方自己的航迹表里枚举,不再拿蓝舰名单
   let rx=0,ry=0;reds.forEach(e=>{rx+=e.pos[0];ry+=e.pos[1];});rx/=reds.length;ry/=reds.length;
   let n=0,x=0,y=0;
-  for(const b of blues){const p=contactPos(b,'red');if(p){x+=p[0];y+=p[1];n++;}}
+  trkEach('red',tk=>{if(trkGone(tk))return;const p=trkPos(tk);if(p){x+=p[0];y+=p[1];n++;}}); // 注册表顺序 = 原来蓝舰名单的顺序,浮点累加的次序不变
   if(n){AIR.goal=[x/n,y/n];AIR.src='fix';AIR.memPos=AIR.goal.slice();AIR.memT=0;}
   else{
     let bx=0,by=0,m=0;
-    for(const b of blues){if(contactState(b,'red')!=='heat')continue;
-      const dx=b.pos[0]-rx,dy=b.pos[1]-ry,l=Math.hypot(dx,dy)||1;bx+=dx/l;by+=dy/l;m++;}
+    trkEach('red',(tk,st)=>{if(trkGone(tk)||st!=='heat')return;
+      const u=trkBearing(tk,[rx,ry]);bx+=u[0];by+=u[1];m++;}); // 方位走具名的真值通道 trkBearing(逐浮点复刻原来那一句)
     const bl=Math.hypot(bx,by);
     if(m&&bl>1e-9){AIR.goal=[rx+bx/bl*AIR.LEAD,ry+by/bl*AIR.LEAD];AIR.src='brg';AIR.memPos=AIR.goal.slice();AIR.memT=0;}
     else if(AIR.memPos&&AIR.memT<AIR.MEM_S){
@@ -131,23 +131,23 @@ function botFleet(reds){ // 红方自己知道的三件事
   for(const e of reds){hp+=Math.max(0,e.hp)/Math.max(1,e.maxHp);ammo+=(e.ammo||0);rdy+=readyCells(e);}
   return {hp:hp/reds.length,ammo:ammo,rdy:rdy,n:reds.length};
 }
-function botFocus(reds,blues){ // WTA 贪心解:全队集火同一个。分数 = 价值 / 椭圆(越小越好打),带迟滞
+function botFocus(reds){ // WTA 贪心解:全队集火同一个。分数 = 价值 / 椭圆(越小越好打),带迟滞。TK2.2:候选是红方航迹表里的航迹,返回的仍是源对象(武器瞄对象)
   let best=null,bs=-1;
-  for(const b of blues){
-    if(b.dead||(b.litRed|0)<2)continue;                 // 够不上跟踪级 ⇒ 导弹门就过不去
-    const p=contactPos(b,'red');if(!p)continue;
-    const c=b.covR,q=(c&&c.a1>0)?Math.max(1,c.a1):1e9;
+  trkEach('red',tk=>{
+    if(trkGone(tk)||(trkLit(tk)|0)<2||!trkFoe(tk))return; // 够不上跟踪级 ⇒ 导弹门就过不去
+    const p=trkPos(tk);if(!p)return;
+    const b=trkSrc(tk),c=tk.cov,q=(c&&c.a1>0)?Math.max(1,c.a1):1e9;
     let sc=botFoeValue(b)*1e6/q;
     if(RDOC.foe===b)sc*=RDOC_CFG.FOCUS_HYS;
     if(sc>bs){bs=sc;best=b;}
-  }
+  });
   return best;
 }
-function botContacts(blues){let n=0;for(const b of blues)if(!b.dead&&(b.litRed|0)>0)n++;return n;}
+function botContacts(){let n=0;trkEach('red',tk=>{if(!trkGone(tk)&&(trkLit(tk)|0)>0)n++;});return n;} // TK2.2:红方握着几条接触,数自己的航迹表
 function botCenter(list){let x=0,y=0;for(const s of list){x+=s.pos[0];y+=s.pos[1];}return [x/list.length,y/list.length];}
 
-function botTransit(dt,reds,blues,F){ // 态势机。**转移条件里只许出现红方自己知道的量**
-  const cfg=RDOC_CFG,foe=botFocus(reds,blues),lit=botContacts(blues),st=RDOC.st;
+function botTransit(dt,reds,F){ // 态势机。**转移条件里只许出现红方自己知道的量**
+  const cfg=RDOC_CFG,foe=botFocus(reds),lit=botContacts(),st=RDOC.st;
   RDOC.foe=foe;
   if(st==='strike')RDOC.strikeT+=dt;            // “用导弹打了多久”是累计量,离开交战态不清 —— 清了的话压上那一拍它归零,下一拍又达不到门槛,两个态会逐拍互翻
   let next;
@@ -202,11 +202,11 @@ function botNeedPaint(reds,foe){ // 这一拍要不要有人亮灯
   }
   return !!foe;                                         // strike / press:要火控级,得有人照
 }
-function aiDoctrine(dt,reds,blues){ // 指挥层入口:写 RDOC(含每艘舰的 plan)。不碰任何一艘船的字段
+function aiDoctrine(dt,reds){ // 指挥层入口:写 RDOC(含每艘舰的 plan)。不碰任何一艘船的字段
   const cfg=RDOC_CFG,F=botFleet(reds);
-  const goal=aiRedBelief(dt,reds,blues);                // AI1 信念层照旧:它给"该往哪走"与来路 src
+  const goal=aiRedBelief(dt,reds);                // AI1 信念层照旧:它给"该往哪走"与来路 src
   RDOC.goal=[goal[0],goal[1]];RDOC.src=AIR.src;
-  const st=botTransit(dt,reds,blues,F),foe=RDOC.foe;
+  const st=botTransit(dt,reds,F),foe=RDOC.foe;
   const lamp=botLamp(dt,reds,F),paintOn=botNeedPaint(reds,foe);
   if(st==='shadow'&&paintOn)RDOC.paintT+=dt;else if(st!=='shadow')RDOC.paintT=0;
   RDOC.salvoT+=dt;

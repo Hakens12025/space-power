@@ -105,13 +105,23 @@ function shipAt(sx,sy){
 function targetAt(sx,sy){
   const w=worldAt(sx,sy);
   let best=null,bd=1e18;
-  for(const s of ships){
-    if(s.dead||s.side!=='red')continue;
-    const q=adminMode?s.pos:((typeof contactPos==='function')?contactPos(s,'blue'):null);
-    if(!q)continue;
-    const d=Math.hypot(q[0]-w[0],q[1]-w[1]);
-    if(d<60/cam.zoom && d<bd){bd=d;best=s;}
+  if(adminMode){ // GM:按真值扫红舰(旁路迷雾,口径与改前相同)
+    for(const s of ships){
+      if(s.dead||s.side!=='red')continue;
+      const q=s.pos;
+      const d=Math.hypot(q[0]-w[0],q[1]-w[1]);
+      if(d<60/cam.zoom && d<bd){bd=d;best=s;}
+    }
+    return best;
   }
+  /* TK2.3:非 GM 只能点【蓝方航迹表里】的东西 —— 点在估计位置上,交代不出位置的航迹点不到;按注册表顺序走、严格小于取舍,与改前逐拍相同。
+     返回的仍是源对象(锁定 / 火控序列拿它当句柄) */
+  trkEach('blue',tk=>{
+    if(trkGone(tk))return;
+    const q=trkPos(tk);if(!q)return;
+    const d=Math.hypot(q[0]-w[0],q[1]-w[1]);
+    if(d<60/cam.zoom && d<bd){bd=d;best=trkSrc(tk);}
+  });
   return best;
 }
 function clearPendings(){

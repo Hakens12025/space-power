@@ -21,7 +21,6 @@ function missSee(p){ // 导弹自身探测(信息源):被动看热(被动距离�
 }
 // DS147:missReport 已取消(数据链纯单向,导弹不回报传感器;导弹的探测只用于自身导引/复锁/飞最后已知变雷)
 function guideSide(side){ // 一方数据链网络的引导分配(v125:按网分配,每网占1通道,网内所有组共享引导)
-  const litKey=side==='blue'?'litBlue':'litRed';
   const gs=ships.filter(s=>s.side===side&&!s.dead&&(s.guideChan||0)>0); // 有火控通道的存活舰
   const ms=projectiles.filter(p=>p.type==='missile'&&!p.done&&!p.park&&!p.mine&&p.target&&p.target.side&&p.target.side!==side&&!p.target.dead);
   const parks=projectiles.filter(p=>p.type==='missile'&&!p.done&&p.park&&!p.mine&&p.shooter&&p.shooter.side===side); // DS192:空目标 park 弹(区域齐射/布雷途中),下面吃富余通道
@@ -36,7 +35,7 @@ function guideSide(side){ // 一方数据链网络的引导分配(v125:按网分
   for(const p of ms){
     if(!p.needGuide)continue;
     const key=p.netId||('g'+p.group);
-    if(!netMap.has(key))netMap.set(key,{groups:[],shooter:p.shooter,target:p.target,canGuide:!p.target.dead&&p.target[litKey]>=2}); // DS191:死目标不占通道(空发射不吃火控,双保险)
+    if(!netMap.has(key))netMap.set(key,{groups:[],shooter:p.shooter,target:p.target,canGuide:!p.target.dead&&trkLit(trkOf(side,p.target))>=2}); // TK2.1:这一方对目标握着的等级改读航迹表 // DS191:死目标不占通道(空发射不吃火控,双保险)
     netMap.get(key).groups.push(p);
   }
   const chan={};for(const s of gs)chan[s.id]=s.guideChan||0;

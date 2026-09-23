@@ -158,7 +158,7 @@ function fcGate(s,it,kind){ // RF5 单个目标项对某类武器的全部门:�
   }
   const t=fcShip(it.tid);
   if(!t||t.dead||t.side===s.side)return null; // side 同侧直接排除:免得把友舰写进 lockedTarget(它同时是转向指令)
-  const lit=(s.side==='blue')?t.litBlue:t.litRed;
+  const lit=trkLit(trkOf(s.side,t)); // TK2.1:原值不归一(下面的 lit<2 比较与原来逐字相同)
   if(kind==='mac'){
     if(lit<2)return null; // WR1:与 fireMAC 内部 q<2 同一口径(原来要 3 级)。射程门整个没了:玩家的序列想在多远打就在多远打,打不打得中是散布与椭圆的事
   }else{

@@ -8,7 +8,7 @@ function enemyAI(dt){
   if(!my.length)return;
   const reds=ships.filter(e=>e.side==='red'&&!e.dead&&!e.isTarget); // 测试靶不还击
   if(!reds.length)return;
-  aiDoctrine(dt,reds,my); // ← 指挥层:这一拍的全部决定都在 RDOC.plan 里了
+  aiDoctrine(dt,reds); // ← 指挥层:这一拍的全部决定都在 RDOC.plan 里了。TK2.2:指挥层从红方自己的航迹表里找接触,my 只剩上面那个「蓝方全灭就不动」的判断
   for(const e of reds){
     const pl=RDOC.plan[e.id];if(!pl)continue;
     if(e.macEvadeCd===undefined)e.macEvadeCd=0;

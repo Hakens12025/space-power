@@ -24,8 +24,7 @@ function stepWeaponSystems(dt){
       if(hasMAC(s)&&s.macOn!==false){s.driftFire=true;s.driftFireT=60;}
       continue;
     }
-    const litKey=s.side==='blue'?'litBlue':'litRed';
-    const enemies=ships.filter(t=>t.side!==s.side&&!t.dead&&t[litKey]>=2);
+    const enemies=trkList(s.side,tk=>!trkGone(tk)&&trkLit(tk)>=2&&trkFoe(tk)).map(trkSrc); // TK2.1:自动索敌的候选从这一方的航迹表里取(与原来遍历 ships 同序)
     if(!enemies.length)continue;
     let best=null,bs=-1e18;
     for(const t of enemies){

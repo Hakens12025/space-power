@@ -101,7 +101,7 @@ function xhName(s){ // RF5 可外传的目标名:未达识别级的敌舰不吐�
 }
 function xhCardHTML(s,sub){ // RF5 信息卡内容:按接触等级分三档。只产 HTML 字符串,DOM 与样式属渲染侧
   const gm=(typeof adminMode!=='undefined'&&adminMode);
-  const q=(s.side==='red')?(s.litBlue||0):3;
+  const q=(s.side==='red')?litOf(s,'blue'):3; // TK2.3:等级走门面(原来直读舰上字段)
   const cp=(!gm&&typeof contactPos==='function')?(contactPos(s,'blue')||s.pos):s.pos; // ID1 顺手:方位 / 距离按接触的【估计位置】报(与画出来、点得到的是同一个点),原来报的是真值
   const dx=cp[0]-sub.pos[0],dy=cp[1]-sub.pos[1];
   const dist=Math.hypot(dx,dy);
@@ -183,7 +183,7 @@ function radWeapons(s){ // RF5 轮盘的武器项来源:实例烘焙的 s.weapon
 function radItems(sub,t,it){ // RF5 解算每个武器扇区:allow=计划(许不许打),ok/why=此刻打不打得到。两者刻意分开 —— 目标现在打不到不代表以后打不到,所以禁用态扇区仍可点
   const out=[];
   if(!sub||!t)return out;
-  const lit=(sub.side==='blue')?(t.litBlue||0):(t.litRed||0);
+  const lit=litOf(t,sub.side); // TK2.3:射手这一方对目标的等级走门面(原来按阵营直读舰上字段)
   const dist=(typeof V!=='undefined'&&V.len&&V.sub)?V.len(V.sub(t.pos,sub.pos)):Math.hypot(t.pos[0]-sub.pos[0],t.pos[1]-sub.pos[1]); // RF5 距离口径必须与 58 的 fcGate 同源:它用的是【三维】V.len(V.sub(...))。原先写平面 Math.hypot,z 差两万的场景(90-envs「均衡编队」蓝方 z=+20000)在射程边界上会与引擎给出相反结论——轮盘说"射程内",fcGate 恒 return null,主炮永不开火而盘上没有任何提示
   for(const w of radWeapons(sub)){
     const k=w.kind;
