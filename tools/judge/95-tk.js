@@ -288,3 +288,49 @@ t('TK_ID',function(){
   }
   return out;
 });
+
+/* TK4A_RULES:TK4a 把弹丸目击搬进航迹表时,变异验证发现有三道迷雾门【一直没有判据钉着】(改前的代码同样的变异也逃得掉:
+   旧判据里写弹丸目击的只有「全部标成看得见」与近防 / 降速 / 规避三处,没有一条放一发看不见的红方导弹去看这三样):
+   ① 来袭走廊(weapons/56):非 GM 下,我方看不见的红方导弹不生成走廊;同一组标成看得见之后生成(正面对照,证明场面确实会触发)。
+   ② 来袭弹绘制(render/83-hud 的 drawProjectiles):看不见 ⇒ 一笔都不画;看得见 ⇒ 画。
+   ③ 网内连线(drawNetLinks):看不见 ⇒ 不连;看得见 ⇒ 至少一条(同一次齐射的几组同网、相距在通信距离内)。
+   ②③ 数的是画布调用次数(arc / fill / stroke / lineTo / fillRect),只数被测函数自己那一次调用。 */
+t('TK4A_RULES',function(){
+  if(typeof trkSees!=='function'||typeof drawProjectiles!=='function'||typeof drawNetLinks!=='function')return 'fail 缺 trkSees / drawProjectiles / drawNetLinks';
+  var shipsBak=ships.slice(),projBak=projectiles,corrBak=threatCorridors,admBak=adminMode,seq0=shipSeq,selBak=selected.slice(),selMBak=(typeof selMissile!=='undefined')?selMissile:null;
+  var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},M=['arc','fill','stroke','lineTo','fillRect'],orig={},n=0,out='';
+  M.forEach(function(k){orig[k]=ctx[k];});
+  var countOn=function(){n=0;M.forEach(function(k){ctx[k]=function(){n++;return orig[k].apply(ctx,arguments);};});};
+  var countOff=function(){M.forEach(function(k){ctx[k]=orig[k];});};
+  var calls=function(fn){countOn();try{fn();}finally{countOff();}return n;};
+  try{
+    adminMode=false;selected=[];if(typeof selMissile!=='undefined')selMissile=null;projectiles=[];threatCorridors=[];
+    var B=makeShip('CA','目蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),R=makeShip('DD','目红',[60000,20000,0],[-1,0,0],[0,0,0],'red',2);
+    ships.length=0;ships.push(B,R);R.noFire=false;
+    fireMissiles(R,{pos:[0,0,0]},3);    /* 三组:网内连线要至少两组同网 */
+    var ms=projectiles.filter(function(p){return p.type==='missile';}),nM=ms.length;
+    var sameNet=ms.length>=2&&ms.every(function(p){return p.netId&&p.netId===ms[0].netId;});
+    cam.x=R.pos[0];cam.y=R.pos[1];cam.zoom=0.004;
+    /* 看不见 */
+    projectiles.forEach(function(p){tkSeeProj('blue',p,false);});
+    threatCorridors=[];stepProjectiles(0.02);var corDark=threatCorridors.length;
+    var drawDark=calls(drawProjectiles),netDark=calls(drawNetLinks);
+    /* 看得见 */
+    projectiles.forEach(function(p){tkSeeProj('blue',p,true);});
+    threatCorridors=[];stepProjectiles(0.02);var corSeen=threatCorridors.length;
+    var drawSeen=calls(drawProjectiles),netSeen=calls(drawNetLinks);
+    var ok1=(nM>=1&&corDark===0&&corSeen>=1),ok2=(drawDark===0&&drawSeen>0),ok3=(sameNet&&netDark===0&&netSeen>0);
+    var ok=(ok1&&ok2&&ok3);
+    out=(ok?'ok':'fail')+' 红方一次齐射 '+nM+' 组(同网='+sameNet+')'
+      +' | ① 来袭走廊:看不见 '+corDark+' 条(须 0)/ 看得见 '+corSeen+' 条(须 ≥1)='+ok1
+      +' | ② 来袭弹绘制的画布调用:看不见 '+drawDark+'(须 0)/ 看得见 '+drawSeen+'(须 >0)='+ok2
+      +' | ③ 网内连线的画布调用:看不见 '+netDark+'(须 0)/ 看得见 '+netSeen+'(须 >0)='+ok3;
+  }finally{
+    countOff();
+    shipSeq=seq0;adminMode=admBak;selected=selBak;if(typeof selMissile!=='undefined')selMissile=selMBak;
+    cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
+    projectiles=projBak;threatCorridors=corrBak;
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+  }
+  return out;
+});

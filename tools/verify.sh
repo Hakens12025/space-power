@@ -458,6 +458,7 @@ grep -q "TK24_RULES=ok" "$OUT" || { echo "✗ TK24_RULES 未通过(两条原来�
 grep -q "TK_ID=ok" "$OUT" || { echo "✗ TK_ID 未通过(TK2.6 身份三档:听辐射指纹只到疑似、照射与光学到确认;同一拍静听站排在照射站前面时 idBy 是 lis 但档位必须是确认;接触丢了回到未知且锁存清掉;浸泡里锁存为真 ⟹ 握着身份)"; fail=1; }
 grep -q "TK2_DIFF=ok" "$OUT" || { echo "✗ TK2_DIFF 未通过(TK2.0 门面改读航迹表:改前五个公式逐字照抄(TK3b 起读航迹上的同一格)、与新门面逐值对表 —— 浸泡 5 个检查点 + 人造六态;自己一方的 contactPos 仍是 s.pos 本身;0.5 拍迟滞的假门面必须被对出来)"; fail=1; }
 grep -q "TK_NOCREATE=ok" "$OUT" || { echo "✗ TK_NOCREATE 未通过(读永远不建航迹:没登记过的探针走遍五个门面 / trkOf / trkEach / render / targetAt 后两表都没有它;trkList 与 ships 过滤同序同内容)"; fail=1; }
+grep -q "TK4A_RULES=ok" "$OUT" || { echo "✗ TK4A_RULES 未通过(TK4a 补钉的三道迷雾门:非 GM 下我方看不见的红方导弹不生成来袭走廊、不画、网内不连线;标成看得见之后三样都有)"; fail=1; }
 grep -q "TK3_NOFWD=ok" "$OUT" || { echo "✗ TK3_NOFWD 未通过(TK3c,原 TK1_FWD → TK3_TOMB:在场每艘船两方都有航迹;十个旧舰上感知字段名在船上一个都没有(自有 / 原型链都不许);新造的船同样没有;整对象拷贝拷不到、拷出来的不在表里;读永远不建航迹;重复登记抛。自检:往一次性船上写一个旧名字必须静默成功、航迹不动、而且被②判掉)"; fail=1; }
 grep -q "^RENDER=ok" "$OUT" || { echo "✗ RENDER 未通过"; fail=1; }
 [ $fail -eq 0 ] && echo "✓ 全部通过" || exit 1
