@@ -268,6 +268,21 @@ makeShip 的字面量包进 `trkAdopt(...)`、删掉那三行感知数据(字段
   看输出只是「判定」标题下面什么都没有。现在两条都以 `true` 收尾。TK2.0 加的 `TK_ENS_BAD` 是同一个形状:今天它的文件表里只有两个放行文件,所以没踩到;实测往 weapons/58 末尾加一行只在注释里提到 `trkEnsure(` 的样本,`set -e` 下脚本当场退出(退出码 1、下一行没跑到)。同样改成以 `true` 收尾了。
 - 验收:verify.sh 全绿;`tools/tk_ab.sh 1a887a8 40` 全部相同(摘要 404 行、画布日志 8 行、梯子 294 行)。
 
+### TK4a 落地(2026-09-23):弹丸目击搬进航迹表
+
+- `TRK` 字面量追加 `vis:{blue,red}`(两个 WeakSet)与 `trkSees(side,p)` / `trkSeeSet(side,p,on)`。生产者 detectLoop 每拍对每发弹 add / delete,
+  最后写下的值一直留着 —— 与原来弹丸上那两格布尔同义;weapons/52 六个弹丸字面量里的那对初值 false 删掉(从没写过 = 看不见)。**弹丸从此也不带感知。**
+- 六个读点改读 `trkSees`:core/06 接触降速、weapons/56 来袭走廊、weapons/57 近防门(原来的阵营三元式保留)、bots/61 规避、render/83-hud 两处(`drawNetLinks` / `drawProjectiles`)。
+  判据夹具 `tkSeeProj`(05-tk),70-misc / 80-match 的六处改走它。
+- verify.sh:TK4a 源码负对照(旧的两个名字去注释后在 js/ 与 tools/judge/ 的代码里为 0;**只查代码,同 TK3c 的决定 3** —— 契约原文写的是连注释一起数,为了与 TK3c 一个口径、也不改写历史注释,改成只查代码);
+  「只许 sensors/24、21 写」那条静态规则扩到 `trkSeeSet(` 与直接动 `TRK.vis.`。
+- 验收:verify.sh 全绿;`tools/tk_ab.sh 1a887a8 40` 全部相同(符号数 847 → 849)。
+- 变异:生产者两方写反(`FLOW46_CIWS` 红、A/B 分开)/ 近防门恒当看得见(`FLOW46_CIWS`)/ 接触降速看不见来袭弹(`FLOW74_TC`)/ 红方规避对看不见的也躲(`FLOW71_AIFOG`)/
+  两条静态规则各种一个样本 —— 全部被抓到。**有三个逃了**:来袭走廊、来袭弹绘制、网内连线这三道迷雾门去掉目击判断,verify 全绿、A/B 也相同。
+  不是迁移的问题:旧判据里写弹丸目击的只有「全部标成看得见」与近防 / 降速 / 规避三处,没有一条放一发**看不见**的红方导弹去看这三样,改前的代码同样的变异一样逃得掉。
+  补了一条 `TK4A_RULES`(红方一次齐射三组同网:看不见 ⇒ 走廊 0 条、画布调用 0 次、网内连线 0 次;看得见 ⇒ 三样都有),三个变异现在都红。
+  ⚠ 它第一版只发了一组导弹,网内连线要至少两组同网才画 —— 正面对照是 0,当场红;改成三组。**正面对照先要证明场面会触发。**
+
 ### 顺带发现的既有缺陷(本任务没引入、按决定没修)
 
 - `tools/train` 的七个 node 夹具(bench_all / corner_study / env / perf_sense / refine_node / stress / trace_ref2)文件表缺 23-cov,makeShip 抛 `newCov is not defined`(决定 1)。
