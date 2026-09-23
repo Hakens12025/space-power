@@ -32,7 +32,7 @@
 <div id="mapTag">战术层<b>TACTICAL</b></div><!-- SN6 当前层的读数,只在【换层那一刻】写(render/80-viewtier 的 vtFrame) -->
 
 <!-- 地图组 · 红外:左下角的红外开关 + 两种投法(甲 位置 / 乙 方向)。逻辑在本页最后那段脚本里 -->
-<div id="irDock"><button class="hbtn" id="irBtn" title="红外图(热像):整屏一层底红,有热源的地方与背景不平衡、颜色偏离底红 —— 越强偏得越多(暗红 → 橙 → 黄 → 近白)。色标固定:同样的热永远是同样的颜色。点火、开火、开雷达的船会更偏">红外</button><div id="irMode"><button class="hbtn" data-irm="jia" title="甲 位置:热源在它所在的位置偏色。近处小而亮,远处大而淡(越远越糊)">甲 位置</button><button class="hbtn" data-irm="yi" title="乙 方向:我方每艘船朝热源的那一片扇区整体偏暖,沿着这个方向远近都一样(红外量不到距离);几艘船的扇区交叠处更偏">乙 方向</button></div></div>
+<div id="irDock"><button class="hbtn" id="irBtn" title="红外图(热像):整屏一层底红,有热源的地方与背景不平衡、颜色偏离底红 —— 越强偏得越多(暗红 → 橙 → 黄 → 近白)。色标固定:同样的热永远是同样的颜色。带一点传感器噪声:很弱的热会淹在颗粒里。点火、开火、开雷达的船会更偏">红外</button><div id="irMode"><button class="hbtn" data-irm="jia" title="甲 位置:热源在它所在的位置偏色。近处小而亮,远处大而淡(越远越糊)">甲 位置</button><button class="hbtn" data-irm="yi" title="乙 方向:我方每艘船朝热源的那一片扇区整体偏暖,沿着这个方向远近都一样(红外量不到距离);几艘船的扇区交叠处更偏">乙 方向</button></div></div>
 
 <div id="hud" class="panel">
   <div class="logo">SPACE POWER<span> · 骨架</span></div>
@@ -208,7 +208,13 @@
             用全景条来做,计算量不随热源个数增长
    场的单位:1 = 一艘熄火静默的驱逐舰恰在引擎发现距离上的读数(甲是峰高,乙是信噪比)。那条线不画(用户拍板),只决定色标的刻度。
    这一页只加一层画面,引擎一个字不改:页面原样加载引擎的全部脚本;红外图挂在引擎接触层(drawContacts)之后画、舰标之下;
-   热区不画(把引擎的 heatBuild 换成恒返回 0,主游戏里热区还在)。观测者 = 我方全部存活的船;热源 = 不是我方的一切(红舰、石头)。 */
+   热区不画(把引擎的 heatBuild 换成恒返回 0,主游戏里热区还在)。观测者 = 我方全部存活的船;热源 = 不是我方的一切(红舰、石头、小行星)。
+   用户:「现在请加入一点点本地噪声,小行星,太阳。然后这里的舰船啥的我可以直接的拖动,蓝方红方的都可以」(太阳怎么做等用户选,这一版没有)
+     · 噪声 = 传感器噪声底(业内叫 NETD,噪声等效温差):加在【场值】上而不是颜色上 —— 很弱的热淹在颗粒里,强的不受影响;每 0.2 秒换一次颗粒,
+       用本页自己的种子随机流(不碰全局 Math.random:引擎的交战从全局流取数)。色标两头对称:噪声往下时比底红略暗
+     · 小行星 = 引擎自己的石头对象(makeRock,kind 'rock'),体型 1~3(碎石是 0.35~1.1),每一局在我方舰队周围撒 10 颗(固定种子)
+     · 拖动:左键按在一个东西上(蓝舰、红舰、石头 / 小行星,按真实位置判,12 像素内最近的)再拖超过 4 像素 ⇒ 搬到鼠标下、速度清零;
+       只点不拖时什么都不拦,引擎照常选中。没被发现的红舰地图上看不见但照样抓得住(F8 打开引擎的上帝视角能看见) */
 const IRM={on:false,mode:'jia',
   CELL:5,                  /* 底图一格 = 多少屏幕像素 */
   V0:0.02,VMAX:1000,       /* 固定色标:t = ln(1 + v/V0) / ln(1 + VMAX/V0);v = 0 是纯底红,v = 1000 顶到近白 */
@@ -216,13 +222,19 @@ const IRM={on:false,mode:'jia',
                               第一版取 0.002,色标在那里已有一格偏色,很弱的山被截出一圈看得见的台阶;按行列分开贴时范围是方的,于是出现淡淡的方块 */
   SIG_MIN:0.7,             /* 甲:山的最小宽度(格) */
   BINS:1440,               /* 乙:360° 全景条分多少格(0.25°) */
-  SNR_MIN:0.0003           /* 乙:信噪比低于它的热源不进全景条(同上,低到色标上显不出,热源越过它时不会"冒出来") */
+  SNR_MIN:0.0003,          /* 乙:信噪比低于它的热源不进全景条(同上,低到色标上显不出,热源越过它时不会"冒出来") */
+  NOISE:0.005,NOISE_MS:200 /* 传感器噪声:每格加一个标准差 = 0.005(场的单位,1 = 发现线)的高斯颗粒,每 0.2 秒换一次。
+                              0.01 截图看是满屏明显的颗粒、0.004 要凑近才看得出,取中间;对数色标在零附近放大弱信号,所以这个数看着小 */
 };
-/* 色带:t = 0 是底红,往上偏暖。RGBA,A 按 0~255(整屏都铺,所以底色本身也带透明度,星空与网格隐约可见) */
-const IRM_RAMP=[[0,[70,12,12,150]],[0.25,[150,30,20,170]],[0.5,[220,80,30,190]],[0.75,[255,170,60,210]],[1,[255,245,210,230]]];
-const IRM_LUT=(function(){const L=new Uint8ClampedArray(256*4);for(let k=0;k<256;k++){const t=k/255;let a=0;while(a<IRM_RAMP.length-2&&t>IRM_RAMP[a+1][0])a++;
-  const p=IRM_RAMP[a],q=IRM_RAMP[a+1],u=(t-p[0])/(q[0]-p[0]);for(let c=0;c<4;c++)L[k*4+c]=Math.round(p[1][c]+(q[1][c]-p[1][c])*u);}return L;})();
-function irmT(v){if(!(v>0))return 0;const t=Math.log(1+v/IRM.V0)/Math.log(1+IRM.VMAX/IRM.V0);return t>1?1:t;}
+/* 色带:t = 0 是底红,往上偏暖;往下(只有噪声会把它压到负的)比底红略暗。RGBA,A 按 0~255(整屏都铺,底色本身带透明度,星空与网格隐约可见) */
+const IRM_T0=-0.1;
+const IRM_RAMP=[[IRM_T0,[40,6,6,140]],[0,[70,12,12,150]],[0.25,[150,30,20,170]],[0.5,[220,80,30,190]],[0.75,[255,170,60,210]],[1,[255,245,210,230]]];
+const IRM_LUT=(function(){const L=new Uint8ClampedArray(256*4);for(let k=0;k<256;k++){const t=IRM_T0+k/255*(1-IRM_T0);let a=0;while(a<IRM_RAMP.length-2&&t>IRM_RAMP[a+1][0])a++;
+  const p=IRM_RAMP[a],q=IRM_RAMP[a+1],u=Math.max(0,Math.min(1,(t-p[0])/(q[0]-p[0])));for(let c=0;c<4;c++)L[k*4+c]=Math.round(p[1][c]+(q[1][c]-p[1][c])*u);}return L;})();
+function irmT(v){ /* 两头对称的对数色标:t = sign(v) x ln(1 + |v|/V0) / ln(1 + VMAX/V0),钳在 [T0, 1] */
+  if(!(v!==0)||!isFinite(v))return 0;
+  const t=Math.sign(v)*Math.log(1+Math.abs(v)/IRM.V0)/Math.log(1+IRM.VMAX/IRM.V0);return t>1?1:(t<IRM_T0?IRM_T0:t);}
+function irmIdx(v){return Math.round((irmT(v)-IRM_T0)/(1-IRM_T0)*255);}
 let irmRef=null;
 function irmRefGet(){ /* 刻度的参照:一艘熄火静默的 DD,在引擎给它的发现距离上的模糊宽度 */
   if(irmRef)return irmRef;
@@ -246,6 +258,16 @@ function irmHill(t,obs){
 }
 /* ---- 场:低分辨率底图上的格点 i,j 落在屏幕 (i*CELL, j*CELL) ---- */
 let irmF=null,irmGW=0,irmGH=0,irmCv=null,irmImg=null,irmProf=null;
+let irmNz=null,irmNzT=-1e9,irmNzSeed=20260923;
+function irmNzRnd(){let t=(irmNzSeed=(irmNzSeed+0x6D2B79F5)>>>0);t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;}
+function irmNoiseGet(n,force){ /* 每 NOISE_MS 毫秒(墙钟)换一次颗粒;尺寸变了立即换 */
+  if(force||!irmNz||irmNz.length!==n||nowMs()-irmNzT>=IRM.NOISE_MS){
+    if(!irmNz||irmNz.length!==n)irmNz=new Float32Array(n);
+    for(let q=0;q<n;q++){let u=0,v=0;while(u===0)u=irmNzRnd();v=irmNzRnd();irmNz[q]=Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+    irmNzT=nowMs();
+  }
+  return irmNz;
+}
 function irmGrid(){
   const C=IRM.CELL,gw=Math.ceil(W/C)+2,gh=Math.ceil(H/C)+2;
   if(!irmF||irmF.length!==gw*gh)irmF=new Float32Array(gw*gh);else irmF.fill(0);
@@ -298,8 +320,8 @@ function drawIrMap(){
   if(IRM.mode==='yi')irmFieldYi();else irmFieldJia();
   const gw=irmGW,gh=irmGH,C=IRM.CELL,F=irmF;
   if(!irmCv||irmCv.width!==gw||irmCv.height!==gh){irmCv=document.createElement('canvas');irmCv.width=gw;irmCv.height=gh;irmImg=irmCv.getContext('2d').createImageData(gw,gh);}
-  const D=irmImg.data;
-  for(let q=0;q<gw*gh;q++){const k=Math.round(irmT(F[q])*255)*4,o=q*4;D[o]=IRM_LUT[k];D[o+1]=IRM_LUT[k+1];D[o+2]=IRM_LUT[k+2];D[o+3]=IRM_LUT[k+3];}
+  const D=irmImg.data,nz=IRM.NOISE>0?irmNoiseGet(gw*gh):null,na=IRM.NOISE;
+  for(let q=0;q<gw*gh;q++){const k=irmIdx(nz?F[q]+na*nz[q]:F[q])*4,o=q*4;D[o]=IRM_LUT[k];D[o+1]=IRM_LUT[k+1];D[o+2]=IRM_LUT[k+2];D[o+3]=IRM_LUT[k+3];}
   irmCv.getContext('2d').putImageData(irmImg,0,0);
   ctx.save();ctx.imageSmoothingEnabled=true;
   ctx.drawImage(irmCv,-C/2,-C/2,gw*C,gh*C);   /* 格点 i 落在屏幕 i*CELL,底图的第 i 个像素铺在它周围一格;整屏都铺(没有热源也是一层底红) */
@@ -310,6 +332,45 @@ heatBuild=function(){return 0;};
 /* 挂进引擎的接触层之后(舰标之下)。引擎文件不改:render() 按名字调 drawContacts,运行期换成先画原来的、再画红外图 */
 const irmOrigDrawContacts=drawContacts;
 drawContacts=function(){irmOrigDrawContacts();if(IRM.on)drawIrMap();};
+
+/* ---- 小行星:引擎的石头对象,体型比碎石大;每一局(initFleet)在我方舰队周围撒一圈,固定种子 ---- */
+const IRM_AST={N:10,SEED:4242,SMIN:1,SMAX:3,R:500000,CLEAR:60000};
+function irmSpawnAsteroids(){
+  if(typeof makeRock!=='function'||typeof envRng!=='function')return 0;
+  const bl=ships.filter(s=>s.side==='blue'&&!s.dead);if(!bl.length)return 0;
+  let cx=0,cy=0;for(const s of bl){cx+=s.pos[0]/bl.length;cy+=s.pos[1]/bl.length;}
+  const r=envRng(IRM_AST.SEED);let n=0,guard=0;
+  while(n<IRM_AST.N&&guard++<200){
+    const x=cx+(r()*2-1)*IRM_AST.R,y=cy+(r()*2-1)*IRM_AST.R,sz=IRM_AST.SMIN+r()*(IRM_AST.SMAX-IRM_AST.SMIN),fa=r()*2*Math.PI;
+    if(bl.some(s=>Math.hypot(s.pos[0]-x,s.pos[1]-y)<IRM_AST.CLEAR))continue;   /* 不压在我方船身上 */
+    const k=makeRock([x,y,0],sz,[Math.cos(fa),Math.sin(fa),0]);k.name='小行星';k.asteroid=true;rocks.push(k);n++;
+  }
+  return n;
+}
+const irmOrigInitFleet=initFleet;
+initFleet=function(){const r=irmOrigInitFleet.apply(this,arguments);irmSpawnAsteroids();return r;};
+irmSpawnAsteroids();   /* 引擎的 init 在本段脚本之前已经跑过一次 initFleet,这一局补撒 */
+
+/* ---- 拖动:左键按在一个东西上(真实位置,12 像素内最近的)再拖 > 4 像素 ⇒ 搬到鼠标下。挂在 window 的捕获阶段,先于引擎画布上的 mousedown ---- */
+let irmDrag=null;
+function irmPickAt(sx,sy){
+  let best=null,bd=12;
+  for(const o of ships.concat(typeof rocks!=='undefined'?rocks:[])){if(o.dead)continue;const p=toScreen(o.pos[0],o.pos[1]),d=Math.hypot(p[0]-sx,p[1]-sy);if(d<bd){bd=d;best=o;}}
+  return best;
+}
+window.addEventListener('mousedown',function(e){
+  irmDrag=null;
+  if(e.button!==0||e.shiftKey||e.ctrlKey||e.target!==cv)return;
+  const o=irmPickAt(e.clientX,e.clientY);if(o)irmDrag={o:o,sx:e.clientX,sy:e.clientY,moved:false};
+},true);
+window.addEventListener('mousemove',function(e){
+  if(!irmDrag)return;
+  if(!irmDrag.moved&&Math.abs(e.clientX-irmDrag.sx)+Math.abs(e.clientY-irmDrag.sy)<=4)return;
+  irmDrag.moved=true;
+  selDrag=null;   /* 引擎按下时已经起了一个选框(拖空地 = 框选),拖东西时不要它 */
+  const w=worldAt(e.clientX,e.clientY),o=irmDrag.o;o.pos[0]=w[0];o.pos[1]=w[1];if(o.vel){o.vel[0]=0;o.vel[1]=0;o.vel[2]=0;}
+},true);
+window.addEventListener('mouseup',function(e){if(e.button===0)irmDrag=null;},true);
 
 /* 左下角的开关 */
 function irmSync(){
@@ -324,14 +385,16 @@ irmSync();
 /* ================= 自检(?selftest) ================= */
 function irmSelftest(){
   const out=[];let ok=true;const T=(n,c,d)=>{out.push((c?'✓ ':'✗ ')+n+(d?'  '+d:''));if(!c)ok=false;};
-  const shipsBak=ships.slice(),seq0=shipSeq,camBak={x:cam.x,y:cam.y,zoom:cam.zoom},onBak=IRM.on,modeBak=IRM.mode,rocksBak=(typeof rocks!=='undefined')?rocks:null;
+  const shipsBak=ships.slice(),seq0=shipSeq,camBak={x:cam.x,y:cam.y,zoom:cam.zoom},onBak=IRM.on,modeBak=IRM.mode,rocksBak=(typeof rocks!=='undefined')?rocks.slice():null,nzBak=IRM.NOISE;
+  const astN=rocksBak?rocksBak.filter(k=>k.asteroid).length:0;   /* ⑫ 用:页面加载那一局撒下的小行星(读在任何测试动 rocks 之前) */
+  IRM.NOISE=0;   /* ① ~ ⑩ 比的是确切的颜色,先关掉噪声;⑪ 专门测噪声 */
   const px=function(i,j){const o=(j*irmGW+i)*4,D=irmImg.data;return [D[o],D[o+1],D[o+2],D[o+3]];};
   const same=function(a,b){return a[0]===b[0]&&a[1]===b[1]&&a[2]===b[2]&&a[3]===b[3];};
   try{
     const B=makeShip('CA','红外测蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),R=makeShip('DD','红外测红',[0,0,0],[-1,0,0],[0,0,0],'red',2);
     ships.length=0;ships.push(B,R);R.flame=0;R.sideFlame=0;R.fireHot=0;setEmit(R,'silent');if(rocksBak)rocks=[];
     const Rv=visRangeOf(R),pk=function(k){R.pos=[Rv*k,0,0];return irmHill(R,[B]);};
-    const base=[IRM_LUT[0],IRM_LUT[1],IRM_LUT[2],IRM_LUT[3]];
+    const bi=irmIdx(0)*4,base=[IRM_LUT[bi],IRM_LUT[bi+1],IRM_LUT[bi+2],IRM_LUT[bi+3]];
     /* ① 底红:没有热源时,甲、乙两种画法整屏都是底色 */
     ships.length=0;ships.push(B);IRM.on=true;cam.x=0;cam.y=0;cam.zoom=Math.min(W,H)/(Rv*2);
     IRM.mode='jia';drawIrMap();const j1=px(Math.floor(irmGW/3),Math.floor(irmGH/2)),j2=px(irmGW-2,1);
@@ -395,9 +458,44 @@ function irmSelftest(){
     t0=performance.now();IRM.mode='yi';drawIrMap();const tY=performance.now()-t0;
     let nan=0;for(let n=0;n<irmF.length;n++)if(!isFinite(irmF[n]))nan++;
     T('⑩ 300 个热源:甲、乙各一帧算得完、没有 NaN',nan===0&&tJ<60&&tY<60,'甲 '+tJ.toFixed(1)+' ms · 乙 '+tY.toFixed(1)+' ms');
+    /* ⑪ 噪声:没有热源时底图有颗粒(不止一种颜色)、但很小(平均离底红不到 3 格色标);强热源处颜色基本不受影响;过了 NOISE_MS 颗粒会换 */
+    rocks=[];ships.length=0;ships.push(B);B.pos=[0,0,0];IRM.NOISE=nzBak;IRM.mode='jia';cam.x=0;cam.y=0;cam.zoom=Math.min(W,H)/(Rv*2);
+    irmNoiseGet(1,true);drawIrMap();
+    const bIdx=irmIdx(0);let kinds={},sumOff=0,nPx=irmGW*irmGH;
+    for(let q=0;q<nPx;q++){const k=irmIdx(irmF[q]+IRM.NOISE*irmNz[q]);kinds[k]=1;sumOff+=Math.abs(k-bIdx);}
+    const nKinds=Object.keys(kinds).length,meanOff=sumOff/nPx;
+    const f1=irmNz.slice(0,50);irmNzT=-1e9;drawIrMap();let chg=0;for(let q=0;q<50;q++)if(irmNz[q]!==f1[q])chg++;
+    const strong=irmIdx(64),strongN=irmIdx(64+3*IRM.NOISE);
+    T('⑪ 一点点噪声:底图有颗粒但很小、强热源不受影响、颗粒会换',IRM.NOISE>0&&nKinds>1&&meanOff<6&&strongN-strong<=1&&chg>40,
+      '底图颜色 '+nKinds+' 种 · 平均离底红 '+meanOff.toFixed(2)+' 格色标 · 峰高 64 处 3 倍噪声只差 '+(strongN-strong)+' 格 · 换颗粒 '+chg+'/50');
+    IRM.NOISE=0;
+    /* ⑫ 小行星:页面加载那一局撒了 N 颗(引擎的石头对象、叫小行星、体型 1~3、在热源集合里);再开一局照样是 N 颗,不越撒越多 */
+    ships.length=0;shipsBak.forEach(x=>ships.push(x));rocks=rocksBak?rocksBak.slice():[];
+    const ast0=rocks.filter(k=>k.asteroid),sizesOk=ast0.every(k=>k.size>=IRM_AST.SMIN&&k.size<=IRM_AST.SMAX&&k.kind==='rock'&&k.name==='小行星');
+    const inSrc=ast0.every(k=>irmSources().indexOf(k)>=0);
+    const shipsSnap=ships.slice(),seqSnap=shipSeq,rocksSnap=rocks.slice(),rseqSnap=rockSeq;
+    initFleet();const astAgain=rocks.filter(k=>k.asteroid).length;initFleet();const astAgain2=rocks.filter(k=>k.asteroid).length;
+    ships.length=0;shipsSnap.forEach(x=>ships.push(x));shipSeq=seqSnap;rocks=rocksSnap;rockSeq=rseqSnap;
+    T('⑫ 小行星:每一局撒 '+IRM_AST.N+' 颗、体型 1~3、算热源,换局不越撒越多',astN===IRM_AST.N&&ast0.length===IRM_AST.N&&sizesOk&&inSrc&&astAgain===IRM_AST.N&&astAgain2===IRM_AST.N,
+      '加载那一局 '+astN+' 颗 · 再开两局 '+astAgain+' / '+astAgain2+' 颗');
+    /* ⑬ 拖动:真实的鼠标事件。拖红舰、拖小行星、拖蓝舰都搬到鼠标下;只点不拖不动(引擎照常选中) */
+    const md=function(x,y){cv.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,clientX:x,clientY:y,button:0}));};
+    const mm=function(x,y){window.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:x,clientY:y}));};
+    const mu=function(x,y){window.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,clientX:x,clientY:y,button:0}));};
+    cam.x=0;cam.y=0;cam.zoom=Math.min(W,H)/(Rv*2);
+    const Bd=makeShip('DD','拖蓝',[-Rv*0.3,0,0],[1,0,0],[0,0,0],'blue',2),Rd=makeShip('DD','拖红',[Rv*0.3,Rv*0.2,0],[-1,0,0],[0,0,0],'red',2),Kd=makeRock([0,-Rv*0.3,0],2,[1,0,0]);
+    ships.length=0;ships.push(Bd,Rd);rocks=[Kd];selected=[];
+    const drag=function(o,dx,dy){const p=toScreen(o.pos[0],o.pos[1]);md(p[0],p[1]);mm(p[0]+dx/2,p[1]+dy/2);mm(p[0]+dx,p[1]+dy);mu(p[0]+dx,p[1]+dy);return worldAt(p[0]+dx,p[1]+dy);};
+    const near=function(o,w){return Math.hypot(o.pos[0]-w[0],o.pos[1]-w[1])<2/cam.zoom;};
+    const wR=drag(Rd,80,40),wK=drag(Kd,-60,30),wB=drag(Bd,50,-70);
+    const pB0=Bd.pos.slice(),pb=toScreen(Bd.pos[0],Bd.pos[1]);md(pb[0],pb[1]);mu(pb[0],pb[1]);
+    const clickStill=Bd.pos[0]===pB0[0]&&Bd.pos[1]===pB0[1],clickSel=selected.indexOf(Bd.id)>=0;
+    T('⑬ 拖动:红舰、小行星、蓝舰都搬到鼠标下;只点不拖不动、引擎照常选中',near(Rd,wR)&&near(Kd,wK)&&near(Bd,wB)&&clickStill&&clickSel&&selDrag===null,
+      '红 '+near(Rd,wR)+' · 小行星 '+near(Kd,wK)+' · 蓝 '+near(Bd,wB)+' · 点击不动 '+clickStill+' · 点击选中 '+clickSel);
+    selected=[];
   }catch(e){T('自检抛异常',false,String(e&&e.stack||e));}
   finally{
-    ships.length=0;shipsBak.forEach(x=>ships.push(x));shipSeq=seq0;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;IRM.on=onBak;IRM.mode=modeBak;if(rocksBak)rocks=rocksBak;irmSync();
+    ships.length=0;shipsBak.forEach(x=>ships.push(x));shipSeq=seq0;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;IRM.on=onBak;IRM.mode=modeBak;if(rocksBak)rocks=rocksBak;IRM.NOISE=nzBak;irmSync();
   }
   const pre=document.createElement('pre');pre.id='irSelftest';pre.textContent=out.join('\n');document.body.appendChild(pre);
   document.title=ok?'SELFTEST:PASS':'SELFTEST:FAIL';
