@@ -8,11 +8,7 @@
 <style>
 /* 地图组 · 红外:左下角的开关。几何与"开"态照抄右下角 #tools 的工具钮(css/app.css),颜色一律走设计变量 */
 #irDock{position:absolute;left:var(--gut);bottom:56px;z-index:var(--z-hud);display:flex;align-items:center;gap:6px}
-#irMode{display:inline-flex}
-#irMode .hbtn{border-radius:0;margin-left:-1px}
-#irMode .hbtn:first-child{border-radius:var(--r-sm) 0 0 var(--r-sm);margin-left:0}
-#irMode .hbtn:last-child{border-radius:0 var(--r-sm) var(--r-sm) 0}
-#irDock .hbtn.on{color:var(--acc);border-color:var(--acc);position:relative;z-index:1}
+#irDock .hbtn.on{color:var(--acc);border-color:var(--acc)}
 #irSelftest{position:fixed;left:8px;top:60px;z-index:var(--z-transient);white-space:pre-wrap;padding:8px;background:var(--srf-panel);color:var(--txt);font:12px var(--ff-mono,monospace)}
 </style>
 </head>
@@ -31,8 +27,8 @@
 <div id="matchEnd" class="panel" hidden><div class="me-title" id="meTitle">胜利</div><div class="me-sub" id="meSub"></div><div class="me-stat" id="meStat"></div><div class="me-btns"><button class="btn" id="meAgain">再来一局</button><button class="btn" id="meRange">回靶场</button></div></div>
 <div id="mapTag">战术层<b>TACTICAL</b></div><!-- SN6 当前层的读数,只在【换层那一刻】写(render/80-viewtier 的 vtFrame) -->
 
-<!-- 地图组 · 红外:左下角的红外开关 + 两种画法(A 画在真实位置 / B 沿视线的光带)。逻辑在本页最后那段脚本里 -->
-<div id="irDock"><button class="hbtn" id="irBtn" title="红外图:我方全部舰船看到的热源分布。越近越清楚、越远越糊;没有边界,远处慢慢淡掉。点火、开火、开雷达的船会变亮">红外</button><div id="irMode"><button class="hbtn" data-irm="A" title="A:热源画在它的真实位置,模糊成一团,团的大小 = 分辨率(最直观,但等于红外知道了距离)">A 真实位置</button><button class="hbtn" data-irm="B" title="B:从我方每艘船沿视线画一道光带,方向准、距离不知道;几艘船的光带交叉处会叠亮">B 沿视线</button></div></div>
+<!-- 地图组 · 红外:左下角的红外开关。逻辑在本页最后那段脚本里 -->
+<div id="irDock"><button class="hbtn" id="irBtn" title="红外图(热的地形):我方全部舰船看到的热源汇成一张场。每个热源是一座山 —— 近处高而尖、远处矮而宽;分 5 档,由暗到亮是海平面的 1 / 3 / 10 / 30 / 100 倍,档与档之间画等高线。海平面 = 一艘熄火静默的驱逐舰恰好在引擎的发现距离上的峰高:山露出海平面,引擎就判它被发现了。点火、开火、开雷达的船山会变高">红外</button></div>
 
 <div id="hud" class="panel">
   <div class="logo">SPACE POWER<span> · 骨架</span></div>
@@ -195,73 +191,105 @@
 "use strict";
 /* ================= 地图组 · 红外(2026-09-23)=================
    用户:「左下角做一个专门的红外雷达按钮,能看到观测范围内的热源分布,越近的分辨率越高,没有一个截断式的边界」
-         「里面可以加入舰船,操作方式和主引擎一致」「我的目的就是想看红外地图的效果和地图是否能与舰船产生反应」「AB 都要」
-   业内叫法:红外搜索跟踪(IRST)/ 前视红外(FLIR)。分辨率由瞬时视场决定(像素在目标处覆盖的宽度 = 距离 x 角度);
-   以后要做"近了能认出是什么",现成的尺子是 Johnson 判据(1958:目标宽度上约 1 / 4 / 6.4 个周期 ⇒ 发现 / 认出类别 / 认出具体是什么)。
-   这一页【只加一层画面,引擎一个字不改】:页面原样加载引擎的全部脚本(舰船、操作、加船小条都是引擎自己的),
-   红外图挂在引擎接触层(drawContacts)之后画,位于舰标之下。
-   热区不画(用户:「热区这个设计不要了」「我不是说了不要热区了吗」):这一页把引擎的 heatBuild 换成恒返回 0,热区那一层就没东西可画;
-   引擎文件照旧不改,主游戏里热区还在。椭圆跟着右下角「缩圈」钮走(引擎默认不画),舰标与陈旧 / 失联记号照常。
-   数全部读引擎自己的红外判据,不另立常数:
-     看不看得见:引擎的 visRangeOf(被光学 / 红外看见的距离,= sqrt(系数 x 光学亮度)),亮度 = 体型 x(1 + 引擎档 + 发射档废热 + 开火档)
-       ⇒ 信噪比 SNR = (被看见的距离 / 实际距离)^2。引擎是一道硬门槛(SNR > 1 才有);这里画成连续的 SNR / (1 + SNR),远处慢慢淡掉,没有边界
-     方向准不准:引擎的 covTheta('opt') —— 角误差随距离线性变大。模糊宽度 = 距离 x 角误差,所以近处清楚、远处糊(大致随距离平方变糊)
-   两种画法(用户:AB 都要):
-     A 热源画在它的【真实位置】,模糊成一团,团的大小 = 分辨率。最直观;代价是等于红外知道了距离(单台红外其实量不到距离)
-     B 沿【视线】画一道光带(从我方这艘船朝热源方向,宽度 = 角误差):方向准、距离不知道。近的亮而细,远的暗而宽;
-       我方几艘船的光带交叉处叠亮 —— 交叉定位是画面自己长出来的,不是算出来的
-   观测者 = 我方(蓝方)全部存活的船;热源 = 不是蓝方的一切(红舰、石头)。 */
-const IRM={on:false,mode:'A',
-  A_MIN:0.015,     /* 亮度低于它就不画(SNR < 0.015 ⇒ 实际距离已超过被看见距离的 8 倍,画了也看不见;这是省笔数,不是边界) */
-  PX_MIN:2.5,      /* 团 / 光带在屏幕上的最小半宽(像素):再小就看不见了 */
-  B_LEN:1500000    /* B 的光带画多长(世界 km)。【不许】按热源的真实距离取 —— 那等于把距离画出来了 */
+         「里面可以加入舰船,操作方式和主引擎一致」「热区这个设计不要了」
+         「真实位置画法,究竟在什么位置红外团才会消失?方法 B 假设有巨量的舰船-杂物-恒星,怎么办?
+           我想要的是一种类似综合起来的方法,类似等高线图」「替换 AB」
+   画法 = 热的地形:不一个物体画一个团、也不一对观测画一道光,而是把所有热源汇成一张场,分档加等高线画出来。
+   业内对应:天文的等照度线(isophote,一档一档的等亮度线);Elfes / Moravec 的证据栅格(1985~1989,读数累加进同一张栅格);
+   目标多到没法逐个关联时的概率假设密度 PHD(Mahler 2003)。这里只取"画场、不画物体"的画法,不做滤波。
+     · 每个热源堆一座山(二维高斯):体积 = 收到的热量(引擎的信噪比 SNR),宽度 = 分辨率(距离 x 引擎的角误差 covTheta('opt'))。
+       体积守恒,所以摊得越开峰越低 —— 远处的船又矮又宽,很快沉下去;近处又高又尖。宽度取看得最清楚的那一艘我方船
+     · 所有山叠成一张场,分 5 档(海平面的 1 / 3 / 10 / 30 / 100 倍),档与档之间画一条等高线
+     · 海平面 = 一艘熄火静默的 DD 恰好在引擎的发现距离上的峰高 ⇒ 地图与引擎的红外判据是同一个数:
+       一座山露出海平面,引擎就判它被发现了。它沉下去的位置就是"消失的地方",但地图上没有任何画出来的边界
+     · 离得比分辨率还近的几个热源自然并成一座山(分不开,就该画成一座);几百个热源也只是往同一张底图里贴几百次
+   这一页只加一层画面,引擎一个字不改:页面原样加载引擎的全部脚本;红外图挂在引擎接触层(drawContacts)之后画、舰标之下;
+   热区不画(把引擎的 heatBuild 换成恒返回 0,主游戏里热区还在)。观测者 = 我方全部存活的船;热源 = 不是我方的一切(红舰、石头)。 */
+const IRM={on:false,
+  CELL:5,                     /* 底图一格 = 多少屏幕像素 */
+  LEVELS:[1,3,10,30,100],     /* 分档:相对海平面的倍数 */
+  CULL:0.02,                  /* 每座山贴到比海平面低 2% 为止(不截在 3 个 sigma:近处的高峰在 3 sigma 处仍远高于海平面,截了就是一道硬边) */
+  SIG_MIN:0.7                 /* 山的最小宽度(格):再窄就只落在一格里 */
 };
-let irSprite=null;
-function irSpriteBuild(){ /* 软光点贴图:只在第一次用时生成一次(每帧不建渐变,守 render/84 的红线) */
-  const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');
-  const gr=g.createRadialGradient(32,32,0,32,32,32);
-  gr.addColorStop(0,'rgba(255,214,150,1)');gr.addColorStop(0.3,'rgba(255,154,85,.6)');gr.addColorStop(1,'rgba(255,110,40,0)');
-  g.fillStyle=gr;g.fillRect(0,0,64,64);return c;
+const IRM_FILL=[[120,30,20,70],[190,60,25,100],[240,110,40,130],[255,170,70,160],[255,230,160,190]];   /* 5 档的底色(RGBA,A 按 0~255) */
+const IRM_LINE=['rgba(255,110,60,.55)','rgba(255,140,70,.65)','rgba(255,175,90,.75)','rgba(255,210,130,.85)','rgba(255,240,200,.95)'];
+let irmRef=null;
+function irmRefGet(){ /* 海平面的参照:一艘熄火静默的 DD,在引擎给它的发现距离上的模糊宽度 */
+  if(irmRef)return irmRef;
+  const t={kind:'ship',size:shipStats('DD',2).size,flame:0,sideFlame:0,emitMode:'silent',fireHot:0,pos:null};
+  const R=visRangeOf(t);irmRef={R:R,sig:R*covTheta('opt',null,t,R)};return irmRef;
 }
-/* 观测者与热源 */
 function irmObservers(){return ships.filter(s=>s.side==='blue'&&!s.dead);}
 function irmSources(){return ships.filter(s=>s.side!=='blue'&&!s.dead).concat((typeof rocks!=='undefined'?rocks:[]).filter(r=>!r.dead));}
 /* 一对观测:o 看 t。全部读引擎的判据 */
 function irmPair(o,t){
   const dx=t.pos[0]-o.pos[0],dy=t.pos[1]-o.pos[1],dz=(t.pos[2]||0)-(o.pos[2]||0);
   const d=Math.max(1,Math.hypot(dx,dy,dz)),R=visRangeOf(t),snr=(R/d)*(R/d);
-  const sig=covTheta('opt',o,t,d);               /* 角误差(弧度),引擎的红外 / 光学方向精度 */
-  return {d:d,snr:snr,a:snr/(1+snr),sig:sig,blur:d*sig,brg:Math.atan2(dy,dx)};
+  return {d:d,snr:snr,blur:d*covTheta('opt',o,t,d)};
 }
-function drawIrMap(){
-  if(!irSprite)irSprite=irSpriteBuild();
-  const obs=irmObservers(),src=irmSources();if(!obs.length||!src.length)return;
-  ctx.save();ctx.globalCompositeOperation='lighter';
-  if(IRM.mode==='A'){
-    for(const t of src){
-      let best=null;for(const o of obs){const q=irmPair(o,t);if(!best||q.snr>best.snr)best=q;}   /* 取看得最清楚的那一艘 */
-      if(!best||best.a<IRM.A_MIN)continue;
-      const p=toScreen(t.pos[0],t.pos[1]),r=Math.max(IRM.PX_MIN,2*best.blur*cam.zoom);
-      if(p[0]<-r||p[0]>W+r||p[1]<-r||p[1]>H+r)continue;
-      ctx.globalAlpha=best.a;ctx.drawImage(irSprite,p[0]-r,p[1]-r,2*r,2*r);
-    }
-  }else{
-    for(const o of obs){
-      const a0=toScreen(o.pos[0],o.pos[1]);
-      for(const t of src){
-        const q=irmPair(o,t);if(q.a<IRM.A_MIN)continue;
-        /* 三层由宽到窄的扇形叠出软边:半宽 = 角误差 x 2 / 1 / 0.5,越里越亮;最细也不窄过 PX_MIN 像素(在光带远端量)。
-           单道压得很淡(第一版 0.18 / 0.32 / 0.5,靶场开局 9 道光带加色叠满半个屏幕):单道看得出方向,几道叠在一起才亮 */
-        const Lpx=IRM.B_LEN*cam.zoom,minAng=IRM.PX_MIN/Math.max(1,Lpx);
-        for(const [k,al] of [[2,0.05],[1,0.09],[0.5,0.16]]){
-          const h=Math.max(minAng,q.sig*k);
-          const e1=[a0[0]+Math.cos(q.brg-h)*Lpx,a0[1]+Math.sin(q.brg-h)*Lpx],e2=[a0[0]+Math.cos(q.brg+h)*Lpx,a0[1]+Math.sin(q.brg+h)*Lpx];
-          ctx.globalAlpha=q.a*al;ctx.fillStyle='rgb(255,154,85)';
-          ctx.beginPath();ctx.moveTo(a0[0],a0[1]);ctx.lineTo(e1[0],e1[1]);ctx.lineTo(e2[0],e2[1]);ctx.closePath();ctx.fill();
-        }
+/* 一座山:峰高(相对海平面)与宽度(km)。峰高 = 体积 / 面积 ∝ SNR / 宽度²,按参照归一 */
+function irmHill(t,obs){
+  let best=null;for(const o of obs){const q=irmPair(o,t);if(!best||q.snr>best.snr)best=q;}
+  if(!best)return null;
+  const ref=irmRefGet(),k=ref.sig/best.blur;
+  return {peak:best.snr*k*k,sig:best.blur};
+}
+/* 场:低分辨率底图上的格点 i,j 落在屏幕 (i*CELL, j*CELL) */
+let irmF=null,irmGW=0,irmGH=0,irmCv=null,irmImg=null;
+function irmField(){
+  const C=IRM.CELL,gw=Math.ceil(W/C)+2,gh=Math.ceil(H/C)+2;
+  if(!irmF||irmF.length!==gw*gh)irmF=new Float32Array(gw*gh);else irmF.fill(0);
+  irmGW=gw;irmGH=gh;
+  const obs=irmObservers();if(!obs.length)return 0;
+  let n=0;
+  for(const t of irmSources()){
+    const h=irmHill(t,obs);if(!h||!(h.peak>=IRM.CULL))continue;
+    const p=toScreen(t.pos[0],t.pos[1]),cx=p[0]/C,cy=p[1]/C;
+    const s=Math.max(IRM.SIG_MIN,h.sig*cam.zoom/C),r=s*Math.sqrt(2*Math.log(h.peak/IRM.CULL));
+    const i0=Math.max(0,Math.floor(cx-r)),i1=Math.min(gw-1,Math.ceil(cx+r)),j0=Math.max(0,Math.floor(cy-r)),j1=Math.min(gh-1,Math.ceil(cy+r));
+    if(i0>i1||j0>j1)continue;
+    const e=-0.5/(s*s);
+    for(let j=j0;j<=j1;j++){const dy=j-cy,dy2=dy*dy,row=j*gw;for(let i=i0;i<=i1;i++){const dx=i-cx;irmF[row+i]+=h.peak*Math.exp((dx*dx+dy2)*e);}}
+    n++;
+  }
+  return n;
+}
+/* 等高线:marching squares,每一档一条路径,端点在格边上线性插值 */
+function irmContour(L){
+  const F=irmF,gw=irmGW,gh=irmGH,C=IRM.CELL,path=new Path2D();let segs=0;
+  const lerp=function(a,b){return (L-a)/(b-a);};
+  for(let j=0;j<gh-1;j++){
+    for(let i=0;i<gw-1;i++){
+      const a=F[j*gw+i],b=F[j*gw+i+1],c=F[(j+1)*gw+i+1],d=F[(j+1)*gw+i];
+      const idx=(a>=L?8:0)|(b>=L?4:0)|(c>=L?2:0)|(d>=L?1:0);
+      if(idx===0||idx===15)continue;
+      const x=i*C,y=j*C;
+      const T=[x+lerp(a,b)*C,y],R=[x+C,y+lerp(b,c)*C],B=[x+lerp(d,c)*C,y+C],Lf=[x,y+lerp(a,d)*C];
+      const seg=function(p,q){path.moveTo(p[0],p[1]);path.lineTo(q[0],q[1]);segs++;};
+      switch(idx){
+        case 1:case 14:seg(Lf,B);break; case 2:case 13:seg(B,R);break; case 3:case 12:seg(Lf,R);break;
+        case 4:case 11:seg(T,R);break; case 6:case 9:seg(T,B);break; case 7:case 8:seg(Lf,T);break;
+        case 5:seg(Lf,T);seg(B,R);break; case 10:seg(T,R);seg(Lf,B);break;
       }
     }
   }
+  return segs?path:null;
+}
+function drawIrMap(){
+  const n=irmField();if(!n)return;
+  const gw=irmGW,gh=irmGH,C=IRM.CELL,Lv=IRM.LEVELS,F=irmF;
+  if(!irmCv||irmCv.width!==gw||irmCv.height!==gh){irmCv=document.createElement('canvas');irmCv.width=gw;irmCv.height=gh;irmImg=irmCv.getContext('2d').createImageData(gw,gh);}
+  const D=irmImg.data;
+  for(let q=0;q<gw*gh;q++){
+    const v=F[q];let b=0;while(b<Lv.length&&v>=Lv[b])b++;
+    const o=q*4;if(b===0){D[o+3]=0;continue;}
+    const c=IRM_FILL[b-1];D[o]=c[0];D[o+1]=c[1];D[o+2]=c[2];D[o+3]=c[3];
+  }
+  irmCv.getContext('2d').putImageData(irmImg,0,0);
+  ctx.save();ctx.imageSmoothingEnabled=true;
+  ctx.drawImage(irmCv,-C/2,-C/2,gw*C,gh*C);   /* 格点 i 落在屏幕 i*CELL,底图的第 i 个像素就铺在它周围一格 */
+  ctx.lineWidth=1;
+  for(let k=0;k<Lv.length;k++){const p=irmContour(Lv[k]);if(!p)continue;ctx.strokeStyle=IRM_LINE[k];ctx.stroke(p);}
   ctx.restore();
 }
 /* 热区不要:引擎的接触层每帧先调 heatBuild 生成热区、有东西才画。这里换成恒返回 0 */
@@ -271,82 +299,101 @@ const irmOrigDrawContacts=drawContacts;
 drawContacts=function(){irmOrigDrawContacts();if(IRM.on)drawIrMap();};
 
 /* 左下角的开关 */
-function irmSync(){
-  const b=document.getElementById('irBtn');if(!b)return;
-  b.classList.toggle('on',IRM.on);
-  for(const x of document.querySelectorAll('#irMode [data-irm]'))x.classList.toggle('on',x.getAttribute('data-irm')===IRM.mode);
-  document.getElementById('irMode').style.opacity=IRM.on?'1':'.45';
-}
+function irmSync(){const b=document.getElementById('irBtn');if(b)b.classList.toggle('on',IRM.on);}
 on('irBtn','click',function(e){e.currentTarget.blur();IRM.on=!IRM.on;irmSync();});
-on('irMode','click',function(e){const x=e.target.closest('[data-irm]');if(!x)return;x.blur();IRM.mode=x.getAttribute('data-irm');irmSync();});
 irmSync();
 
-/* ================= 自检(?selftest):只验模型与挂接,不验"好不好看" ================= */
+/* ================= 自检(?selftest) ================= */
 function irmSelftest(){
   const out=[];let ok=true;const T=(n,c,d)=>{out.push((c?'✓ ':'✗ ')+n+(d?'  '+d:''));if(!c)ok=false;};
-  const shipsBak=ships.slice(),seq0=shipSeq,camBak={x:cam.x,y:cam.y,zoom:cam.zoom},onBak=IRM.on,modeBak=IRM.mode,rocksBak=(typeof rocks!=='undefined')?rocks:null;
+  const shipsBak=ships.slice(),seq0=shipSeq,camBak={x:cam.x,y:cam.y,zoom:cam.zoom},onBak=IRM.on,rocksBak=(typeof rocks!=='undefined')?rocks:null;
   try{
     const B=makeShip('CA','红外测蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),R=makeShip('DD','红外测红',[0,0,0],[-1,0,0],[0,0,0],'red',2);
-    ships.length=0;ships.push(B,R);R.flame=0;R.sideFlame=0;R.fireHot=0;setEmit(R,'silent');
-    const Rv=visRangeOf(R),at=function(k){R.pos=[Rv*k,0,0];return irmPair(B,R);};
-    /* ① 没有截断式的边界:跨过引擎那道硬门槛(被看见的距离)时亮度是连续的;两倍、四倍远仍然 > 0,只是越来越淡 */
-    const a99=at(0.99).a,a101=at(1.01).a,a2=at(2).a,a4=at(4).a,a05=at(0.5).a;
-    T('① 没有截断式边界:跨过引擎硬门槛亮度连续',Math.abs(a99-a101)<0.02&&a2>0&&a4>0&&a05>a99&&a99>a2&&a2>a4,
-      '0.5 倍 '+a05.toFixed(3)+' · 0.99 倍 '+a99.toFixed(3)+' · 1.01 倍 '+a101.toFixed(3)+' · 2 倍 '+a2.toFixed(3)+' · 4 倍 '+a4.toFixed(3));
-    /* ② 越近分辨率越高:模糊宽度随距离单调变大,距离减半、模糊至少减半 */
-    const b1=at(1).blur,b05=at(0.5).blur,b025=at(0.25).blur;
-    T('② 越近分辨率越高',b025<b05&&b05<=b1/2+1e-9,'1/4 倍 '+Math.round(b025)+' km · 1/2 倍 '+Math.round(b05)+' km · 1 倍 '+Math.round(b1)+' km');
-    /* ③ 地图与舰船的反应:同一个距离上,点火 / 开火 / 开雷达都让它变亮(读的是引擎的亮度公式) */
-    R.pos=[Rv*1.5,0,0];const c0=irmPair(B,R).a;
-    R.flame=1;const cF=irmPair(B,R).a;R.flame=0;
-    R.fireHot=5;const cX=irmPair(B,R).a;R.fireHot=0;
-    setEmit(R,'paint');const cP=irmPair(B,R).a;setEmit(R,'silent');
-    T('③ 点火 / 开火 / 开雷达都变亮',cF>c0&&cX>c0&&cP>c0,'熄火静默 '+c0.toFixed(3)+' · 点火 '+cF.toFixed(3)+' · 开火 '+cX.toFixed(3)+' · 开雷达 '+cP.toFixed(3));
-    /* ④ 观测者是我方、热源是"不是我方"的一切:我方的船不进热源,红舰进;石头进 */
+    ships.length=0;ships.push(B,R);R.flame=0;R.sideFlame=0;R.fireHot=0;setEmit(R,'silent');if(rocksBak)rocks=[];
+    const Rv=visRangeOf(R),pk=function(k){R.pos=[Rv*k,0,0];return irmHill(R,[B]);};
+    /* ① 海平面对上引擎:熄火静默的 DD 在引擎的发现距离上峰高恰为 1;近一点露出、远一点沉下;峰高随距离连续下降 */
+    const h1=pk(1).peak,h09=pk(0.9).peak,h11=pk(1.1).peak,h0999=pk(0.999).peak,h1001=pk(1.001).peak,h05=pk(0.5).peak;
+    T('① 海平面 = 引擎的发现距离:恰在那里沉到海平面',Math.abs(h1-1)<1e-9&&h09>1&&h11<1&&Math.abs(h0999-h1001)<0.02&&h05>h09,
+      '0.5 倍 '+h05.toFixed(1)+' · 0.9 倍 '+h09.toFixed(2)+' · 1 倍 '+h1.toFixed(3)+' · 1.1 倍 '+h11.toFixed(2)+'(发现距离 '+Math.round(Rv/1000)+'k)');
+    /* ①b 体积守恒:山的体积(峰高 x 宽度²)正比于收到的热量(信噪比),摊得越开峰越低 —— 不守恒的话远处的船不会沉,只会变成一片越来越大的淡雾(A 画法的毛病) */
+    const vol=function(k){const h=pk(k);R.pos=[Rv*k,0,0];return h.peak*h.sig*h.sig/irmPair(B,R).snr;},v05=vol(0.5),v1=vol(1),v2=vol(2);
+    T('①b 体积守恒:峰高 x 宽度² / 信噪比 是常数',Math.abs(v05/v1-1)<1e-9&&Math.abs(v2/v1-1)<1e-9);
+    /* ② 越近越清楚:宽度随距离变大 */
+    const s1=pk(1).sig,s05=pk(0.5).sig,s025=pk(0.25).sig;
+    T('② 越近越清楚',s025<s05&&s05<=s1/2+1e-9,'1/4 倍 '+Math.round(s025)+' km · 1/2 倍 '+Math.round(s05)+' km · 1 倍 '+Math.round(s1)+' km');
+    /* ③ 与舰船的反应:同一个距离上,点火 / 开火 / 开雷达都让山变高;点火让沉下去的船重新露出来 */
+    R.pos=[Rv*1.5,0,0];const c0=irmHill(R,[B]).peak;
+    R.flame=1;const cF=irmHill(R,[B]).peak;R.flame=0;R.fireHot=5;const cX=irmHill(R,[B]).peak;R.fireHot=0;
+    setEmit(R,'paint');const cP=irmHill(R,[B]).peak;setEmit(R,'silent');
+    T('③ 点火 / 开火 / 开雷达都让山变高;1.5 倍远处点火能露出海平面',cF>c0&&cX>c0&&cP>c0&&c0<1&&cF>1,
+      '熄火静默 '+c0.toFixed(3)+' · 点火 '+cF.toFixed(2)+' · 开火 '+cX.toFixed(2)+' · 开雷达 '+cP.toFixed(3));
+    /* ④ 热源集合 */
     const K=(typeof makeRock==='function')?makeRock([Rv*0.5,Rv*0.2,0],0.8,[1,0,0]):null;if(K)rocks=[K];
     const S=irmSources();
-    T('④ 热源不含我方的船、含红舰与石头',S.indexOf(B)<0&&S.indexOf(R)>=0&&(!K||S.indexOf(K)>=0)&&irmObservers().indexOf(B)>=0,S.length+' 个热源');
-    /* ⑤ 挂接:打开红外图时,引擎的接触层之后真的多画了东西;A 画光点(drawImage),B 画光带(fill);关着一笔不多 */
-    cam.x=Rv*0.5;cam.y=0;cam.zoom=Math.min(W,H)/(Rv*2.5);R.pos=[Rv*0.7,0,0];
-    const cnt={drawImage:0,fill:0},orig={drawImage:ctx.drawImage,fill:ctx.fill};
-    const capture=function(fn){cnt.drawImage=0;cnt.fill=0;ctx.drawImage=function(){cnt.drawImage++;return orig.drawImage.apply(ctx,arguments);};ctx.fill=function(){cnt.fill++;return orig.fill.apply(ctx,arguments);};
-      try{fn();}finally{ctx.drawImage=orig.drawImage;ctx.fill=orig.fill;}return {i:cnt.drawImage,f:cnt.fill};};
+    T('④ 热源不含我方的船、含红舰与石头',S.indexOf(B)<0&&S.indexOf(R)>=0&&(!K||S.indexOf(K)>=0),S.length+' 个热源');
+    if(K)rocks=[];
+    /* ⑤ 挂接:打开时接触层之后多画一张底图 + 等高线;关着一笔不多 */
+    cam.x=Rv*0.3;cam.y=0;cam.zoom=Math.min(W,H)/(Rv*1.2);R.pos=[Rv*0.4,0,0];
+    const orig={drawImage:ctx.drawImage,stroke:ctx.stroke};let ci=0,cs=0;
+    const capture=function(fn){ci=0;cs=0;ctx.drawImage=function(){ci++;return orig.drawImage.apply(ctx,arguments);};ctx.stroke=function(){cs++;return orig.stroke.apply(ctx,arguments);};
+      try{fn();}finally{ctx.drawImage=orig.drawImage;ctx.stroke=orig.stroke;}return {i:ci,s:cs};};
     IRM.on=false;const off=capture(function(){drawContacts();});
-    IRM.on=true;IRM.mode='A';const onA=capture(function(){drawContacts();});
-    IRM.mode='B';const onB=capture(function(){drawContacts();});
-    T('⑤ 挂接:关着不多画;A 多画光点、B 多画光带',onA.i>off.i&&onB.f>off.f&&onB.i===off.i,
-      '关 '+off.i+' 图 / '+off.f+' 填 · A '+onA.i+' 图 · B '+onB.f+' 填');
-    /* ⑥ 热区不画:手搭一条"只有热区"的接触(有信号、定不出位置),关着红外图时接触层一笔图都不画 */
+    IRM.on=true;const onC=capture(function(){drawContacts();});
+    T('⑤ 挂接:关着不画;打开多一张底图、若干条等高线',off.i===0&&off.s===0&&onC.i===1&&onC.s>=1,'关 '+off.i+' 图 '+off.s+' 线 · 开 '+onC.i+' 图 '+onC.s+' 线');
+    /* ⑥ 热区不画 */
     const tkR=trkOf('blue',R);const covBak=tkR.cov,litBak=tkR.lit;tkR.cov=newCov();tkR.lit=1;tkR.cov.fix=false;
-    const st6=contactState(R,'blue');IRM.on=false;const off6=capture(function(){drawContacts();});
-    tkR.cov=covBak;tkR.lit=litBak;
-    T('⑥ 热区不画:只有热区的接触在,接触层也不画',st6==='heat'&&off6.i===0&&heatBuild()===0,'显示态 '+st6+' · 画图 '+off6.i+' 次');
+    const st6=contactState(R,'blue');IRM.on=false;const off6=capture(function(){drawContacts();});tkR.cov=covBak;tkR.lit=litBak;
+    T('⑥ 热区不画:只有热区的接触在,接触层也不画',st6==='heat'&&off6.i===0&&heatBuild()===0,'显示态 '+st6);
+    /* ⑦ 分不开的并成一座山:两块石头隔 0.3 个宽度 ⇒ 连线上只有一个峰;隔 5 个宽度 ⇒ 两个峰 */
+    const peaksAlong=function(sepK){
+      ships.length=0;ships.push(B);B.pos=[0,0,0];
+      const base=[Rv*0.35,0,0],A0=makeRock(base.slice(),0.8,[1,0,0]);rocks=[A0];
+      const sg=irmHill(A0,[B]).sig,A1=makeRock([base[0],base[1]+sg*sepK,0],0.8,[1,0,0]);rocks=[A0,A1];
+      cam.x=base[0];cam.y=base[1]+sg*sepK/2;cam.zoom=(IRM.CELL*8)/sg;   /* 让一个宽度 = 8 格 */
+      irmField();
+      const p0=toScreen(A0.pos[0],A0.pos[1]),p1=toScreen(A1.pos[0],A1.pos[1]),i=Math.round(p0[0]/IRM.CELL);
+      const ja=Math.round(p0[1]/IRM.CELL),jb=Math.round(p1[1]/IRM.CELL),v=[];
+      for(let j=Math.min(ja,jb)-2;j<=Math.max(ja,jb)+2;j++)v.push(irmF[j*irmGW+i]);
+      let m=0;for(let q=1;q<v.length-1;q++)if(v[q]>v[q-1]&&v[q]>=v[q+1])m++;
+      return m;
+    };
+    const m03=peaksAlong(0.3),m5=peaksAlong(5);
+    T('⑦ 分不开的并成一座山、分得开的两座',m03===1&&m5===2,'隔 0.3 个宽度 '+m03+' 个峰 · 隔 5 个宽度 '+m5+' 个峰');
+    /* ⑨ 不截断:一座很高的山在 4 个宽度之外仍按高斯衰减(4096 x e^-8 ≈ 1.4,还在海平面之上);截在 3 个宽度处的话这里是 0,地图上就是一道硬边 */
+    ships.length=0;ships.push(B);B.pos=[0,0,0];R.pos=[0,0,0];const Kt=makeRock([0,0,0],0.8,[1,0,0]);rocks=[Kt];
+    let kk=0.5;Kt.pos=[Rv*kk,0,0];while(irmHill(Kt,[B]).peak<4096&&kk>0.001){kk*=0.97;Kt.pos=[Rv*kk,0,0];}   /* 从 0.5 倍往近处找,找到峰高刚过 4096 的位置(第一版从原点起步,一次没找就停在观测船身上) */
+    const hT=irmHill(Kt,[B]);cam.x=Kt.pos[0];cam.y=0;cam.zoom=(IRM.CELL*6)/hT.sig;irmField();
+    const pc=toScreen(Kt.pos[0],Kt.pos[1]),ic=Math.round(pc[0]/IRM.CELL),jc=Math.round(pc[1]/IRM.CELL),sgc=hT.sig*cam.zoom/IRM.CELL;
+    const i4=Math.round(ic+4*sgc),v4=irmF[jc*irmGW+i4],want=hT.peak*Math.exp(-0.5*Math.pow((i4-pc[0]/IRM.CELL)/sgc,2));
+    T('⑨ 不截断:高山在 4 个宽度外仍按高斯衰减',v4>1&&Math.abs(v4/want-1)<0.05,'峰高 '+Math.round(hT.peak)+' · 4 个宽度处 '+v4.toFixed(2)+'(应为 '+want.toFixed(2)+')');
+    rocks=[];
+    /* ⑧ 海量热源:300 块石头撒满一片,算一帧场的时间、没有 NaN */
+    ships.length=0;ships.push(B);B.pos=[0,0,0];const many=[];
+    let sd=12345;const rnd=function(){sd=(sd*16807)%2147483647;return sd/2147483647;};
+    for(let q=0;q<300;q++)many.push(makeRock([rnd()*Rv*1.5-Rv*0.2,rnd()*Rv*1.2-Rv*0.6,0],0.3+rnd()*0.8,[1,0,0]));
+    rocks=many;cam.x=Rv*0.5;cam.y=0;cam.zoom=Math.min(W,H)/(Rv*1.6);
+    const t0=performance.now();const nh=irmField();const pth=[];for(const L of IRM.LEVELS)pth.push(irmContour(L));const dt=performance.now()-t0;
+    let nan=0;for(let q=0;q<irmF.length;q++)if(!isFinite(irmF[q]))nan++;
+    T('⑧ 300 个热源:一帧的场 + 等高线算得完、没有 NaN',nh>0&&nan===0&&dt<60,nh+' 座山露在屏上 · '+dt.toFixed(1)+' ms');
   }catch(e){T('自检抛异常',false,String(e&&e.stack||e));}
   finally{
-    ships.length=0;shipsBak.forEach(x=>ships.push(x));shipSeq=seq0;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;IRM.on=onBak;IRM.mode=modeBak;if(rocksBak)rocks=rocksBak;irmSync();
+    ships.length=0;shipsBak.forEach(x=>ships.push(x));shipSeq=seq0;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;IRM.on=onBak;if(rocksBak)rocks=rocksBak;irmSync();
   }
   const pre=document.createElement('pre');pre.id='irSelftest';pre.textContent=out.join('\n');document.body.appendChild(pre);
   document.title=ok?'SELFTEST:PASS':'SELFTEST:FAIL';
 }
-/* ================= 交互自检(?uitest):真实的点击 ================= */
 function irmUitest(){
   const out=[];let ok=true;const T=(n,c,d)=>{out.push((c?'✓ ':'✗ ')+n+(d?'  '+d:''));if(!c)ok=false;};
   try{
-    IRM.on=false;IRM.mode='A';irmSync();
-    document.getElementById('irBtn').click();
-    T('U1 点「红外」:打开、按钮亮',IRM.on===true&&document.getElementById('irBtn').classList.contains('on'));
-    document.querySelector('#irMode [data-irm="B"]').click();
-    T('U2 点「B 沿视线」:换成 B、按钮亮',IRM.mode==='B'&&document.querySelector('#irMode [data-irm="B"]').classList.contains('on'));
-    document.querySelector('#irMode [data-irm="A"]').click();
-    T('U3 点「A 真实位置」:换回 A',IRM.mode==='A');
-    document.getElementById('irBtn').click();
-    T('U4 再点「红外」:关掉',IRM.on===false&&!document.getElementById('irBtn').classList.contains('on'));
+    IRM.on=false;irmSync();
+    document.getElementById('irBtn').click();T('U1 点「红外」:打开、按钮亮',IRM.on===true&&document.getElementById('irBtn').classList.contains('on'));
+    document.getElementById('irBtn').click();T('U2 再点:关掉',IRM.on===false&&!document.getElementById('irBtn').classList.contains('on'));
   }catch(e){T('交互自检抛异常',false,String(e&&e.stack||e));}
   const pre=document.createElement('pre');pre.id='irSelftest';pre.textContent=out.join('\n');document.body.appendChild(pre);
   document.title=ok?'UITEST:PASS':'UITEST:FAIL';
 }
 {const Qs=new URLSearchParams(location.search);
-  if(Qs.has('ir'))IRM.on=true;if(Qs.get('mode')==='B')IRM.mode='B';irmSync();   /* 调试参数(截图用):?ir 打开红外图;?mode=B 用 B 画法 */
+  if(Qs.has('ir'))IRM.on=true;irmSync();   /* 调试参数(截图用):?ir 打开红外图 */
   if(Qs.has('selftest'))irmSelftest();if(Qs.has('uitest'))irmUitest();}
 </script>
 </body>
