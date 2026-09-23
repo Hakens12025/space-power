@@ -32,7 +32,7 @@
 <div id="mapTag">战术层<b>TACTICAL</b></div><!-- SN6 当前层的读数,只在【换层那一刻】写(render/80-viewtier 的 vtFrame) -->
 
 <!-- 地图组 · 红外:左下角的红外开关 + 两种投法(甲 位置 / 乙 方向)。逻辑在本页最后那段脚本里 -->
-<div id="irDock"><button class="hbtn" id="irBtn" title="红外图(热像):整屏一层底红,有热源的地方与背景不平衡、颜色偏离底红 —— 越强偏得越多(暗红 → 橙 → 黄 → 近白)。色标固定:同样的热永远是同样的颜色。带一点传感器噪声:很弱的热会淹在颗粒里。点火、开火、开雷达的船会更偏">红外</button><div id="irMode"><button class="hbtn" data-irm="jia" title="甲 位置:热源在它所在的位置偏色。近处小而亮,远处大而淡(越远越糊)">甲 位置</button><button class="hbtn" data-irm="yi" title="乙 方向:我方每艘船朝热源的那一片扇区整体偏暖,沿着这个方向远近都一样(红外量不到距离);几艘船的扇区交叠处更偏">乙 方向</button></div><div id="irSun"><button class="hbtn" data-sun="none" title="没有太阳">无太阳</button><button class="hbtn" data-sun="dir" title="太阳·方向:太阳在无穷远的方位 150°(与碎石带那颗同方位),写进引擎,引擎的探测也照它致盲(禁区半角 30°;碎石带那颗是 10°,不受影响)。乙:朝太阳那片扇区刺眼;甲:看不到太阳本身,但禁区里的热源被晃掉">太阳·方向</button><button class="hbtn" data-sun="pos" title="太阳·位置:在地图上放一颗有位置的恒星,真太阳大小(半径 69.6 万公里),默认 690 万公里外(约帕克太阳探测器最近点),能拖。只在红外图里,引擎不知道它。甲:刺眼的亮斑加散射光晕;乙:朝它那片扇区刺眼">太阳·位置</button></div><div id="irGlare"><button class="hbtn" data-gl="p4" title="杂散光·四次方:禁区外按角度的四次方衰减(偏开 90° 还有发现线的十几倍);恒星的光晕按距离的三次方淡出">光·四次方</button><button class="hbtn" data-gl="mid" title="杂散光·中(默认):四次方与陡在对数上的正中间 —— 偏开 45° / 60° / 90° 分别约是发现线的 79 / 7.9 / 0.11 倍">光·中</button><button class="hbtn" data-gl="steep" title="杂散光·陡(按真实光学):禁区边缘外每多偏 10° 降到十分之一;恒星的光晕每远一个太阳半径降到十分之一">光·陡</button></div></div>
+<div id="irDock"><button class="hbtn" id="irBtn" title="红外图(热像):整屏一层底红,有热源的地方与背景不平衡、颜色偏离底红 —— 越强偏得越多(暗红 → 橙 → 黄 → 近白)。色标固定:同样的热永远是同样的颜色。带一点传感器噪声:很弱的热会淹在颗粒里。点火、开火、开雷达的船会更偏">红外</button><div id="irMode"><button class="hbtn" data-irm="jia" title="甲 位置:热源在它所在的位置偏色。近处小而亮,远处大而淡(越远越糊)">甲 位置</button><button class="hbtn" data-irm="yi" title="乙 方向:我方每艘船朝热源的那一片扇区整体偏暖,沿着这个方向远近都一样(红外量不到距离);几艘船的扇区交叠处更偏">乙 方向</button></div><div id="irSun"><button class="hbtn" data-sun="none" title="没有太阳">无太阳</button><button class="hbtn" data-sun="dir" title="太阳·方向:太阳在无穷远的方位 150°(与碎石带那颗同方位),写进引擎,引擎的探测也照它致盲(禁区半角 30°;碎石带那颗是 10°,不受影响)。乙:朝太阳那片扇区刺眼;甲:看不到太阳本身,但禁区里的热源被晃掉">太阳·方向</button><button class="hbtn" data-sun="pos" title="太阳·位置:在地图上放一颗有位置的恒星,真太阳大小(半径 69.6 万公里),默认 690 万公里外(约帕克太阳探测器最近点),能拖。只在红外图里,引擎不知道它。甲:刺眼的亮斑加散射光晕;乙:朝它那片扇区刺眼">太阳·位置</button></div><div id="irGlare"><button class="hbtn" data-gl="p4" title="杂散光·四次方:禁区外按角度的四次方衰减(偏开 90° 还有发现线的十几倍);恒星的光晕按距离的三次方淡出">光·四次方</button><button class="hbtn" data-gl="mid" title="杂散光·中(默认):介于四次方与陡之间,偏四次方 —— 偏开 45° / 60° / 90° 分别约是发现线的 125 / 22 / 1.2 倍">光·中</button><button class="hbtn" data-gl="steep" title="杂散光·陡(按真实光学):禁区边缘外每多偏 10° 降到十分之一;恒星的光晕每远一个太阳半径降到十分之一">光·陡</button></div></div>
 
 <div id="hud" class="panel">
   <div class="logo">SPACE POWER<span> · 骨架</span></div>
@@ -433,23 +433,24 @@ GEOM.on=false;{const g=document.querySelector('#segTool [data-tool="geom"]');if(
      四次方(p4):原来那条。乙:禁区外按角度的 P 次方;甲的光晕:饱和半径外按距离的 POS_P 次方
      陡(steep):真实光学的杂散光(点源透过率曲线)离轴几十度内掉好几个数量级 ——
        乙:禁区边缘外每多偏 DEC_DEG 度降到十分之一;甲的光晕:饱和半径外每远 DEC_R 公里(一个太阳半径)降到十分之一
-     中(mid):两档在对数上的正中间(几何平均)—— 杂散光跨好几个数量级,"中间"要在对数上取。
-       乙 = VMAX x (半角 / 偏角)² x 10^(-(偏角 - 半角) / 20°);甲的光晕 = VMAX x (饱和半径 / r)^1.5 x 10^(-(r - 饱和半径) / 两个太阳半径)
-       偏开 45° / 60° / 90°:四次方 198 / 62.5 / 12.3,中 79 / 7.9 / 0.11,陡 32 / 1 / 0.001(场的单位,1 = 发现线)
+     中(mid):两档在对数上按 MIX 加权(四次方^MIX x 陡^(1-MIX))—— 杂散光跨好几个数量级,"中间"要在对数上取。
+       第一版 MIX = 0.5(正中间,几何平均);用户:「光中调大」→ 0.75(原来的中与四次方的正中间)
+       乙 = VMAX x (半角 / 偏角)³ x 10^(-(偏角 - 半角) / 40°);甲的光晕 = VMAX x (饱和半径 / r)^2.25 x 10^(-(r - 饱和半径) / 四个太阳半径)
+       偏开 45° / 60° / 90°:四次方 198 / 62.5 / 12.3,中 125 / 22 / 1.2(第一版 79 / 7.9 / 0.11),陡 32 / 1 / 0.001(场的单位,1 = 发现线)
      三档在禁区里 / 饱和半径里完全一样,边缘上都恰好是色标顶 */
-const IRM_SUN={mode:'none',BRG:150,HALF:30,P:4,POS_D:6900000,R_SAT:696000,POS_P:3,FALL:'mid',DEC_DEG:10,DEC_R:696000};
+const IRM_SUN={mode:'none',BRG:150,HALF:30,P:4,POS_D:6900000,R_SAT:696000,POS_P:3,FALL:'mid',MIX:0.75,DEC_DEG:10,DEC_R:696000};
 let irmStar=null;
 function irmGlare(dth){ /* 杂散光的角度律:禁区边缘(半角)恰为色标顶 VMAX,往里更亮(饱和);往外按 FALL 那一档衰减 */
   const h=IRM_SUN.HALF*Math.PI/180,a=Math.max(Math.abs(dth),h*0.05);
   const p4=IRM.VMAX*Math.pow(h/a,IRM_SUN.P);if(a<=h||IRM_SUN.FALL==='p4')return p4;
   const st=IRM.VMAX*Math.pow(10,-(a-h)/(IRM_SUN.DEC_DEG*Math.PI/180));
-  return IRM_SUN.FALL==='steep'?st:Math.sqrt(p4*st);
+  return IRM_SUN.FALL==='steep'?st:Math.pow(p4,IRM_SUN.MIX)*Math.pow(st,1-IRM_SUN.MIX);
 }
 function irmHalo(r){ /* 位置型恒星在甲里的亮斑 + 光晕:饱和半径以内两档一样;往外按 FALL 那一档衰减 */
   const Rs=IRM_SUN.R_SAT,rr=Math.max(Rs*0.05,r);
   const p4=IRM.VMAX*Math.pow(Rs/rr,IRM_SUN.POS_P);if(rr<=Rs||IRM_SUN.FALL==='p4')return p4;
   const st=IRM.VMAX*Math.pow(10,-(rr-Rs)/IRM_SUN.DEC_R);
-  return IRM_SUN.FALL==='steep'?st:Math.sqrt(p4*st);
+  return IRM_SUN.FALL==='steep'?st:Math.pow(p4,IRM_SUN.MIX)*Math.pow(st,1-IRM_SUN.MIX);
 }
 function irmSunSet(mode){
   IRM_SUN.mode=mode;
@@ -755,16 +756,16 @@ function irmSelftest(){
     T('㉑ 宽的山往底红收:色标坐标 x (1 - u²/(1+u²));发现距离上减半、近处几乎不动',
       Math.abs(a21.r-a21.want)<0.01&&Math.abs(b21.r-0.5)<0.01&&Math.abs(c21.r-c21.want)<0.01&&a21.r>0.9&&a21.pk<IRM.VMAX&&c21.r<b21.r&&Math.abs(b21.pk-1)<1e-6,
       '0.5 倍 u='+a21.u.toFixed(2)+' 剩 '+a21.r.toFixed(3)+'(应为 '+a21.want.toFixed(3)+') · 1 倍 u='+b21.u.toFixed(2)+' 剩 '+b21.r.toFixed(3)+' · 1.5 倍 u='+c21.u.toFixed(2)+' 剩 '+c21.r.toFixed(3)+'(应为 '+c21.want.toFixed(3)+')');
-    /* ㉒ 杂散光·中:四次方与陡在对数上的正中间(两档的几何平均,公式写字面值);乙 偏开 45° / 60° / 90°,甲 光晕 2 / 3 个太阳半径;页面默认就是这一档 */
+    /* ㉒ 杂散光·中:四次方^0.75 x 陡^0.25(对数上从正中间往四次方挪了一半,用户「光中调大」;公式写字面值);乙 偏开 45° / 60° / 90°,甲 光晕 2 / 3 个太阳半径;页面默认就是这一档 */
     ships.length=0;ships.push(B);B.pos=[0,0,0];irmSunSet('dir');IRM_SUN.FALL='mid';
     const P22=irmProfiles()[0].P,g22=function(off){return binAt(P22,IRM_SUN.BRG+off);};
-    const m22=function(off){return Math.sqrt(1000*Math.pow(30/off,4)*1000*Math.pow(10,-(off-30)/10));};
+    const m22=function(off){return Math.pow(1000*Math.pow(30/off,4),0.75)*Math.pow(1000*Math.pow(10,-(off-30)/10),0.25);};
     irmSunSet('pos');const S22=irmStar;cam.x=S22.pos[0];cam.y=S22.pos[1];cam.zoom=10*IRM.CELL/696000;irmFieldJia();
     const ps22=toScreen(S22.pos[0],S22.pos[1]),ic22=Math.round(ps22[0]/IRM.CELL),jc22=Math.round(ps22[1]/IRM.CELL);
     const hr22=function(di){const dx=((ic22+di)*IRM.CELL-ps22[0])/cam.zoom,dy=(jc22*IRM.CELL-ps22[1])/cam.zoom,r=Math.hypot(dx,dy);
-      return {v:irmF[jc22*irmGW+ic22+di],want:Math.sqrt(1000*Math.pow(696000/r,3)*1000*Math.pow(10,-(r-696000)/696000))};};
+      return {v:irmF[jc22*irmGW+ic22+di],want:Math.pow(1000*Math.pow(696000/r,3),0.75)*Math.pow(1000*Math.pow(10,-(r-696000)/696000),0.25)};};
     const h20=hr22(20),h30=hr22(30);irmSunSet('none');IRM_SUN.FALL='p4';
-    T('㉒ 杂散光·中:四次方与陡的几何平均(乙 45° / 60° / 90°,甲 光晕 2 / 3 个太阳半径);页面默认是中',
+    T('㉒ 杂散光·中:四次方^0.75 x 陡^0.25(乙 45° / 60° / 90°,甲 光晕 2 / 3 个太阳半径);页面默认是中',
       Math.abs(g22(45)/m22(45)-1)<0.05&&Math.abs(g22(60)/m22(60)-1)<0.05&&Math.abs(g22(90)/m22(90)-1)<0.05&&Math.abs(h20.v/h20.want-1)<0.01&&Math.abs(h30.v/h30.want-1)<0.01&&fallBak==='mid',
       '乙 45° '+g22(45).toFixed(1)+'(应为 '+m22(45).toFixed(1)+') · 60° '+g22(60).toFixed(2)+'(应为 '+m22(60).toFixed(2)+') · 90° '+g22(90).toFixed(3)+'(应为 '+m22(90).toFixed(3)+') · 甲 2R '+h20.v.toFixed(1)+'(应为 '+h20.want.toFixed(1)+') · 默认 '+fallBak);
   }catch(e){T('自检抛异常',false,String(e&&e.stack||e));}
