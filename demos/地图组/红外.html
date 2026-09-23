@@ -209,6 +209,7 @@
    场的单位:1 = 一艘熄火静默的驱逐舰恰在引擎发现距离上的读数(甲是峰高,乙是信噪比)。那条线不画(用户拍板),只决定色标的刻度。
    这一页只加一层画面,引擎一个字不改:页面原样加载引擎的全部脚本;红外图挂在引擎接触层(drawContacts)之后画、舰标之下;
    热区不画(把引擎的 heatBuild 换成恒返回 0,主游戏里热区还在)。观测者 = 我方全部存活的船;热源 = 不是我方的一切(红舰、石头、小行星)。
+   旧的接触模型(1/2/3 级、误差椭圆、缩圈)也不上这一页:非我方的东西普通视角下只在红外图上出现,F8 看真值(见下面那一节,主游戏里都还在)。
    用户:「现在请加入一点点本地噪声,小行星,太阳。然后这里的舰船啥的我可以直接的拖动,蓝方红方的都可以」(太阳怎么做等用户选,这一版没有)
      · 噪声 = 传感器噪声底(业内叫 NETD,噪声等效温差):加在【场值】上而不是颜色上 —— 很弱的热淹在颗粒里,强的不受影响;每 0.2 秒换一次颗粒,
        用本页自己的种子随机流(不碰全局 Math.random:引擎的交战从全局流取数)。色标两头对称:噪声往下时比底红略暗
@@ -348,6 +349,21 @@ heatBuild=function(){return 0;};
 /* 挂进引擎的接触层之后(舰标之下)。引擎文件不改:render() 按名字调 drawContacts,运行期换成先画原来的、再画红外图 */
 const irmOrigDrawContacts=drawContacts;
 drawContacts=function(){irmOrigDrawContacts();if(IRM.on)drawIrMap();};
+
+/* ---- 旧的接触模型不上这一页(用户:「不是说删掉当前的123级别椭圆型号么」;先前原话:「取消123级的识别……现在的缩圈机制就先不要了」)----
+   引擎的 1/2/3 级、误差椭圆、身份梯子给出的画面这一页一律不画:舰标与等级标签、陈旧 / 失联记号与不确定圈、红方接触群的菱形框、
+   石头的航迹(「碎石」)、右下角的缩圈钮与小窗;指针也点不到不是我方的东西(悬停准星、敌舰信息卡、点选敌舰都走 targetAt)。
+   于是普通视角下,不是我方的东西只在红外图上出现。F8(GM)照旧看真值 —— 那是上帝视角,不是感知。拖动按真实位置抓,不受影响。
+   ⚠ 只拿掉了【画面与指针】:引擎内部的等级照样在算,我方的自动锁定 / 自动开火仍按它走(把红舰拖近,我方照样会锁定、开火) */
+const irmOrigLodDrawShip=lodDrawShip;
+lodDrawShip=function(s){if(s.side!=='blue'&&!adminMode)return;irmOrigLodDrawShip(s);};
+const irmOrigLodBuild=lodBuild;
+lodBuild=function(){irmOrigLodBuild.apply(this,arguments);if(!adminMode)lodNow.aggs=lodNow.aggs.filter(a=>a.side==='blue');};
+const irmOrigDrawRocks=drawRocks;
+drawRocks=function(){if(adminMode)irmOrigDrawRocks();};
+const irmOrigTargetAt=targetAt;
+targetAt=function(sx,sy){return adminMode?irmOrigTargetAt(sx,sy):null;};
+GEOM.on=false;{const g=document.querySelector('#segTool [data-tool="geom"]');if(g)g.remove();}
 
 /* ---- 太阳(两种都试):方向型写进引擎的 ENV.sun;位置型是只在红外图里的一颗恒星 ---- */
 const IRM_SUN={mode:'none',BRG:150,HALF:10,P:4,POS_D:1500000,R_SAT:60000,POS_P:3};
@@ -560,6 +576,29 @@ function irmSelftest(){
     irmSunSet('none');
     T('⑮ 太阳·位置:只在红外图里;亮斑中心饱和、按距离三次方淡出;乙朝它饱和;能拖',onlyIr&&vc15>=IRM.VMAX&&Math.abs(v115/w115-1)<0.01&&Math.abs(v215/w215-1)<0.01&&v215<v115&&vS>=IRM.VMAX&&dragged&&irmStar===null,
       '中心 '+Math.round(vc15)+' · 约 1 个饱和半径处 '+v115.toFixed(0)+'(应为 '+w115.toFixed(0)+') · 约 2 倍处 '+v215.toFixed(0)+'(应为 '+w215.toFixed(0)+')'+' · 乙朝它 '+Math.round(vS)+' · 拖动 '+dragged);
+    /* ⑯ 旧的接触模型不上这一页:两艘红舰与一块石头都被做成引擎眼里的【实况】接触(椭圆已定位、2 级),
+       非 GM 时仍一笔不画(舰标 / 石头)、不进红方接触群、指针点不到、缩圈钮不在;GM 下照旧画得出、点得到 */
+    const R2=makeShip('DD','红外测红2',[0,0,0],[-1,0,0],[0,0,0],'red',2);
+    ships.length=0;ships.push(B,R,R2);B.pos=[0,0,0];R.pos=[Rv*0.3,0,0];R2.pos=[Rv*0.3,Rv*0.002,0];
+    const K16=makeRock([-Rv*0.3,0,0],1,[1,0,0]);rocks=[K16];
+    const live16=function(o){const tk=trkOf('blue',o),c=newCov();c.fix=true;c.n=1;c.x=o.pos[0];c.y=o.pos[1];tk.cov=c;tk.lit=2;};
+    live16(R);live16(R2);live16(K16);
+    const st16=[R,R2,K16].map(o=>contactState(o,'blue')).join('/');
+    const cnt=function(name,fn){const o=window[name];let n=0;window[name]=function(){n++;return o.apply(this,arguments);};try{fn();}finally{window[name]=o;}return n;};
+    const look=function(){
+      cam.x=0;cam.y=0;cam.zoom=Math.min(W,H)/(Rv*1.2);
+      const offB=LOD.off;LOD.off=true;lodBuild(1);   /* 两艘红舰只隔一两个像素:聚合开着的话原版也会把它们收进框里不画,那样"不画"就证明不了什么 */
+      const nS=cnt('drawShip',function(){lodDrawShip(R);lodDrawShip(R2);}),nK=cnt('drawRockAt',function(){drawRocks();});
+      const pR=toScreen(R.pos[0],R.pos[1]),hit=targetAt(pR[0],pR[1]);
+      LOD.off=offB;
+      cam.zoom=Math.min(W,H)/(Rv*400);for(let k=0;k<3;k++)lodBuild(1);const agg=lodNow.aggs.some(a=>a.side==='red');
+      return {nS:nS,nK:nK,hit:hit,agg:agg};
+    };
+    const gm16=adminMode;adminMode=false;const a16=look();adminMode=true;const g16=look();adminMode=gm16;lodBuild(1);
+    const noGeom=!document.querySelector('[data-tool="geom"]')&&GEOM.on===false;
+    T('⑯ 旧接触模型不上这一页:实况的红舰 / 石头非 GM 时不画、不进接触群、点不到,缩圈钮不在;GM 照旧',
+      st16==='live/live/live'&&a16.nS===0&&a16.nK===0&&a16.hit===null&&!a16.agg&&g16.nS===2&&g16.nK>0&&g16.hit===R&&noGeom,
+      '引擎显示态 '+st16+' · 非 GM:画舰 '+a16.nS+' 画石 '+a16.nK+' 点中 '+(a16.hit?a16.hit.name:'无')+' 接触群 '+a16.agg+' · GM:画舰 '+g16.nS+' 画石 '+g16.nK+' 点中 '+(g16.hit?g16.hit.name:'无')+' · 缩圈钮不在 '+noGeom);
   }catch(e){T('自检抛异常',false,String(e&&e.stack||e));}
   finally{
     ships.length=0;shipsBak.forEach(x=>ships.push(x));shipSeq=seq0;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;IRM.on=onBak;IRM.mode=modeBak;if(rocksBak)rocks=rocksBak;IRM.NOISE=nzBak;irmSunSet(sunBak);irmSync();
