@@ -428,5 +428,6 @@ grep -q "FLOW61_PICKPOS=ok" "$OUT" || { echo "✗ FLOW61_PICKPOS 未通过(SN6d 
 grep -q "FLOW59_SMOOTHZOOM=ok" "$OUT" || { echo "✗ FLOW59_SMOOTHZOOM 未通过(SN6b 平滑缩放:① 滚一格当拍 cam.zoom 不变、几帧后到位且动画收干净;② 光标下的世界点全程钉住(<1px);③ 连滚几格叠在目标上而不是叠在当前值上;④ 外部动过相机之后动画让位——不让位会每帧把镜头拽回锚点,实测让五条按像素取样的判据同时假红;⑤ 跳层动画抢占滚轮动画)"; fail=1; }
 grep -q '^let adminMode=false;' js/core/01-state.js || { echo "✗ GM 默认值不是关的(core/01 的 adminMode 必须默认 false;开着的话 drawShip 三道迷雾门第一句 !adminMode 全部跳过,而热区层不看它 —— 开局画面变成「热区 + 敌舰真实位置的舰标」叠在一起,整套战争迷雾在玩家眼里从不存在)"; fail=1; }
 grep -q "FLOW60_START=ok" "$OUT" || { echo "✗ FLOW60_START 未通过(SN6b 开局形态:① 三舰成一支【阵型】编队(src=generated,不是 fmCreate 默认的固定);② 建队不许让船动——靶场的静止发射 MAC 基线靠这条;③ CA 到最近的靶恰为 1 光秒,且在火控门之外(开局主炮打不响是刻意的);④ 三级星图三钮与信号视野钮都在右下角 #tools 里、顶栏已无、两者都点得动;⑤ 打开的时候就是热区——GM 默认关 + 蓝方开局静默 + 开局已跑过一拍感知,三者缺一都会让开局画面变成"敌舰真实位置可见"或"一片空")"; fail=1; }
+grep -q "TK1_FWD=ok" "$OUT" || { echo "✗ TK1_FWD 未通过(TK1 航迹表是唯一的存储:在场每艘船两方都有航迹、十个旧舰上名字读出来与航迹那一格同值同对象;它们是全场共享一份的不可枚举、不可重配置访问器(=TRK_FWD);经旧名字写进去的原样落在航迹上;整对象拷贝拷不到;读永远不建航迹;重复登记抛。两条自检:裸对象过不了①、可枚举描述符过不了②)"; fail=1; }
 grep -q "^RENDER=ok" "$OUT" || { echo "✗ RENDER 未通过"; fail=1; }
 [ $fail -eq 0 ] && echo "✓ 全部通过" || exit 1

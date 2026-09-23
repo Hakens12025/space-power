@@ -333,7 +333,11 @@ t('FLOW49_RANGE',function(){
   if(!rangeOn())return 'fail 当前不是靶场场景(rangeOn=false),旋钮链路测不了';
   function hit(el){ if(!el)return false; el.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true,button:0})); return true; }
   function btn(k,dir){ return trBodyEl?trBodyEl.querySelector('[data-knob="'+k+'"][data-dir="'+dir+'"]'):null; } /* 每次重新查:renderRangePanel 整块重建,存着旧引用会点到脱离文档的节点上 */
-  function scal(o){var m={},kk,vv,ty;for(kk in o){vv=o[kk];ty=typeof vv;if(ty==='number'||ty==='boolean'||ty==='string')m[kk]=vv;}return m;}
+  function scal(o){var m={},kk,vv,ty;for(kk in o){vv=o[kk];ty=typeof vv;if(ty==='number'||ty==='boolean'||ty==='string')m[kk]=vv;}
+    /* TK1:感知字段搬进航迹表之后,船上只剩【不可枚举】的转发访问器,for...in 看不见它们 ——「点一个旋钮只许改一个字段」这条会悄悄少查一块。
+       直接从两张航迹表读回同一组标量(等级与最后定位时刻),TK1 到 TK3 字段删掉之后都照样有效 */
+    if(typeof trkOf==='function')['blue','red'].forEach(function(sd){var k=trkOf(sd,o);if(k){m['trk.'+sd+'.lit']=k.lit;m['trk.'+sd+'.lastT']=k.lastT;}});
+    return m;}
   function dkeys(a,b){var o=[],kk;for(kk in b)if(a[kk]!==b[kk])o.push(kk);for(kk in a)if(!(kk in b))o.push(kk+'(消失)');return o;}
   var i,kn,vv;
   /* ① rangeDefaults 的影子副本。两条判据缺一不可:
@@ -456,7 +460,7 @@ t('FLOW49_RANGE',function(){
     var sm0=scal(TG);
     eSil=rgLis(10);hSil=hearRangeOf(TG);
     clickedM=hit(btn('emit',1));e1=cfg.targets[0].emit;m1=TG.emitMode;ePnt=rgLis(10);hPnt=hearRangeOf(TG);
-    mDif=dkeys(sm0,scal(TG)).filter(function(k){return !/^(litBlue|litRed|seenBlue|seenRed|paintWarned)$/.test(k);}); /* SN4:静默→照射,靶身只许 emitMode 这一个【旋钮写的】标量变。这一段中间真的跑了 detectLoop(它要测静听驻留),目标因此被点亮 —— 那几个探测派生字段跟着变是正确行为,不是旋钮写错了地方,故排除。清单写死不用通配:通配会把真正该抓的漏写一并放过 */
+    mDif=dkeys(sm0,scal(TG)).filter(function(k){return !/^(litBlue|litRed|seenBlue|seenRed|paintWarned|trk\.(blue|red)\.(lit|lastT))$/.test(k);}); /* SN4:静默→照射,靶身只许 emitMode 这一个【旋钮写的】标量变。这一段中间真的跑了 detectLoop(它要测静听驻留),目标因此被点亮 —— 那几个探测派生字段跟着变是正确行为,不是旋钮写错了地方,故排除。清单写死不用通配:通配会把真正该抓的漏写一并放过 */
     hit(btn('emit',1));e2=cfg.targets[0].emit;m2=TG.emitMode;eJam=rgLis(10);hJam=hearRangeOf(TG);
     hit(btn('emit',-1));hit(btn('emit',-1));e3=cfg.targets[0].emit;m3=TG.emitMode;mMode=TG.emitMode;
     ok3=(clickedM&&e1===1&&e2===2&&e3===0&&m1==='paint'&&m2==='jam'&&m3==='silent'

@@ -103,7 +103,7 @@ function makeShip(cls,name,pos,facing,vel,side,tier){ // TIER1 加第 7 参 tier
   const t=(tier===1||tier===2||tier===3)?tier:2; // TIER1 分级归一化:旧场景元组缺项(undefined)、脏数据一律安全降级 T2——这是旧存档向后兼容的唯一依赖点
   const st=shipStats(c,t); // TIER1 机动/舰体/感知字段的来源:base 表 × tier 乘数层。TIER_MUL 全空时 st 与 P1 的表逐字段相同
   const lw=resolveLoadout(c,t); // RF3 武器字段来源:weapons/51-defs 的 WPN 定义 × tier 乘数(舰船组合武器,不再自持武器数值)
-  return {id:'s'+shipSeq, cls:c, name, side:side||'blue', tier:t, // TIER1 cls 存归一化后的新名;TIER1 tier 由第 7 参决定(原来写死 2)
+  return trkAdopt({id:'s'+shipSeq, cls:c, name, side:side||'blue', tier:t, // TIER1 cls 存归一化后的新名;TIER1 tier 由第 7 参决定(原来写死 2);TK1 字面量包进 trkAdopt(sensors/24):两方各建一条航迹、挂上共享的转发访问器,舰上不再存感知数据
 
     pos:pos.slice(), vel:(vel||[0,0,0]).slice(), facing:V.norm(facing), // KIMI146修:vel原直接用传入引用→物理积分原地改写TEST_ENVS/自定义场景预设初速,重开场景继承上局残速
     thrust:st.thrust, turnRate:st.turnRate,
@@ -128,8 +128,6 @@ function makeShip(cls,name,pos,facing,vel,side,tier){ // TIER1 加第 7 参 tier
     emit:sReq(st,'emit','shipStats'), recv:sReq(st,'recv','shipStats'), // SN4 探测方:emit=发射机(照射量程 ∝ 四次方根,被对方听见的距离 ∝ 平方根——手电效应就出在这两条指数不同上),recv=接收机(静听量程 ∝ 平方根,照射量程 ∝ 四次方根)
     emitMode:'silent', // SN4 发射档三态(静默/照射/干扰)。全库【只有这一处】写档位字面量初值,其余写入一律走 sensors/21 的 setEmit——它是唯一写入口、非法档位当场抛,不给"拼错一个字母悄悄变静默"留缝
     ecmPower:sReq(st,'ecmPower','shipStats'), // SN4 干扰强度不再配一个开关布尔:它是 jam 档的强度(每拍削弱对方的照射驻留,只削回波、不削红外)。sReq 只拒 undefined,合法 0(不带干扰机)照常穿过
-    litBlue:0,litRed:0, // 阵营点亮质量等级(0未发现/1探测/2跟踪/3火控)。SN6 起它是接触椭圆的派生量,派生在 21-detect。SN3 这一行上原来还挂着两个阵营探测积分字段,全库零读取零写入、只有这一行声明,已删(名字不写进注释:verdict 段有条源码级负对照按名字 grep 守着,写进来会让它恒红——FM6b 的规矩);真正的驻留积分是下一行的 两个阵营接触对象
-    covB:newCov(),covR:newCov(), // SN6 误差椭圆接触:蓝/红网络各一份(covB = 蓝网络【对这艘船】握着的那条接触)。工厂 newCov() 在 sensors/23-cov,是全库唯一一处写这些键的字面量。取代 SN4 驻留积分:蓝/红网络各一份,工厂 newCov() 在 sensors/23-cov,是全库【唯一】一处写这三个键的字面量(原来是三份手抄:这里两份 + detectFor 补建那份)。opt=光学 / lis=雷达静听 / act=雷达照射——lis 与 act 是【同一部设备的两种模式】,不是两条通道,别读成"又变回三通道了";运行期调用,不受 22-percep 的加载顺序影响
-    seenBlue:-1e9,seenBluePos:null,seenBlueVel:null,seenRed:-1e9,seenRedPos:null,seenRedVel:null, // 信息年龄(最后被扫描时间戳/位置/速度,初始-1e9=从未扫到)
-    beaconMax:(st.beacon||0), beaconCount:(st.beacon||0)}; // TIER1 信标载量改表驱动(CLS_WPN.beacon):原来无条件给 2 枚、只靠 UI 按 cls==='SCOUT' 开门,现在"谁能放信标"是表里一格
+    // TK1 原来这里的三行感知数据(两方的等级 / 误差椭圆接触 / 最后定位记录)搬进了 sensors/24 的航迹表 TRK,由上面的 trkAdopt 登记;字段说明也搬过去了。TK1~TK3a 过渡期旧名字经转发访问器照旧可读写(TK3b 改墓碑、TK3c 删)
+    beaconMax:(st.beacon||0), beaconCount:(st.beacon||0)}); // TIER1 信标载量改表驱动(CLS_WPN.beacon):原来无条件给 2 枚、只靠 UI 按 cls==='SCOUT' 开门,现在"谁能放信标"是表里一格
 }

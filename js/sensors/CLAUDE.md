@@ -2,6 +2,191 @@
 
 感知系统(`js/sensors/`)的历史备忘。总览、跨系统约定与文件地图在仓库根 `CLAUDE.md`。
 
+## TK 航迹表:感知从舰船对象上搬走,每方一张表(2026-09-23 起,进行中)
+
+**这一节是冻结的契约。** 改 TK 系列的任何一步之前先读它;与它冲突的实现以它为准,要改契约先问。
+契约全文(英文,含逐行出处)与编排者的决定是这一轮工作流的产物;这里是它们落进仓库的那一份。用户原话:「全部做,不要分裂真值,统一系统」。
+
+### 先给业内叫法
+
+| 我们的东西 | 业内叫法 | 出处 |
+|---|---|---|
+| 每方一张航迹表 `TRK` | **track file**(航迹文件 / 航迹数据库) | 雷达数据处理;Blackman & Popoli, *Design and Analysis of Modern Tracking Systems*, 1999 |
+| 整件事 | **多目标跟踪(multi-target tracking, MTT)** | 同上 |
+| 量测直接按真值归到源对象上 | **oracle association**(真值关联 / known association) | 仿真里的标准简化 |
+| `lit` 与身份分两栏 | Link-16(MIL-STD-6016)的 **Track Quality** 与 **Identity** 是两个字段 | `lit` 是 TQ 的类比 |
+| 身份三档 未知 / 疑似 / 确认 | **分类可信度阶梯**;最接近的标准是美海军反潜的 possible / probable / certain | ⚠ 不是 STANAG 1241 / APP-6 里的敌我属性 |
+| 三条认出来路 | ESM / SEI(辐射指纹,可被欺骗)、NCTR(照射回波)、VID(光学轮廓) | 见下面 ID3 一节 |
+
+**完整形态有、我们刻意不做的**:① 数据关联(波门 gating + GNN / JPDA / MHT);② 航迹起始与确认(M-of-N);③ 航迹删除(coast 计数或航迹分数);
+④ 身份置信度融合(贝叶斯 / Dempster-Shafer);⑤ 重新捕获的接触换新航迹号。我们有的只是状态估计那一块(SN6 的误差椭圆 = 信息矩阵滤波)。
+后果写明:**航迹不分裂、不合并、不会张冠李戴**;一个(阵营, 源)终身一条航迹。
+
+### 表的形状
+
+```
+const TRK = { blue: new WeakMap(), red: new WeakMap() }      // js/sensors/24-track.js(TK1 新建);TK4a 在同一个字面量里加 vis:{blue,red}(WeakSet)
+航迹 = { src, by, lit, cov, lastT, lastPos, lastVel }          // 键序固定,只有 trkNew 造;TK2.6 追加 idc:false,TK4c 追加 tn:0
+```
+
+- `src` 源对象(只设一次);`by` 观测方 `'blue'|'red'` —— **刻意不叫 `side`**,这样航迹永远满足不了 `x.side!==side` 这种敌我过滤;
+  `lit` 0..3 原样存;`cov` 就是 `newCov()` 那个对象,**按引用**持有(stepCov 原地改,`cov.ch` 每拍换新);`lastT/lastPos/lastVel` 是最后一次定位的时刻 / 估计位置 / 真速度拷贝(-1e9 / null = 从没定过)。
+- 旧字段 → 新位置(TK1~TK3a 过渡期经转发访问器仍可读写,TK3b 改成墓碑、一碰就抛,TK3c 删):
+
+| 舰上旧字段 | 航迹字段 |
+|---|---|
+| `litBlue` / `litRed` | `TRK.blue` / `TRK.red` `.get(s).lit` |
+| `covB` / `covR` | `.cov` |
+| `seenBlue` / `seenRed` | `.lastT` |
+| `seenBluePos` / `seenRedPos` | `.lastPos` |
+| `seenBlueVel` / `seenRedVel` | `.lastVel` |
+
+TK3c 之后舰船对象只剩物理真值;TK4a 之后弹丸也不再带感知(`visBlue/visRed` → `TRK.vis` 两个 WeakSet)。
+
+### 表的规矩(每一条背后都有一个具体的坑)
+
+1. **键是源对象,不是 id。** id 会重复:`shipSeq` 每局归零、判据把 id 改成 `'s901'`(FLOW54)、航线细化沙盘的船叫 `'__rr'`。
+2. **不重新赋值、不清空、不遍历。** 没有 `trkReset`。`tools/judge/90-render.js` 的 FLOW63 先 `initFleet` 再把换局前的船放回来(:635 / :677),清表会让放回来的船全变成 none。旧引用(`RDOC.foe`、`lockedTarget`、`projectile.target`、`xh.snap`、判据手里的船)继续拿到冻结的旧答案,与今天一致。
+3. **表里不存顺序,枚举只走 `trkEach` / `trkList`**,按物理登记表的顺序(`ships[]`;TK4b 起接 `rocks[]`)。所有平局裁决(`d<bd`、`sc>bs`、稳定排序后取 `[0]`、`botFocus` 的第一个严格最大)与浮点累加顺序(红方信念的重心、热区场)因此不变,下游的随机数取数顺序也不变。
+4. **造船那一刻两边都建航迹**(`trkAdopt`,eager);**读永远不建**(`trkOf` / 门面 / `trkEach` 只查)。只有生产者写(detectFor 经 `trkEnsure` / `trkStep`),外加判据夹具。
+   TK2.0 起 verify.sh 钉着:`trkEnsure(` 与 `TRK.blue.set` / `TRK.red.set` 在 js/ 里只许出现在 sensors/24 与 sensors/21。
+   eager 不许退回按需:`58:161` 的 `lit<2` 与 `56:223` 的 `<3` 是裸比较,没有航迹时 `undefined<2` 为假 ⇒ 火控门【放行】。
+5. **`lit` 原样存**(不从 cov 现算、不做类型归一);**cov 按引用**;cov 上不加任何键(FLOW48 的键普查与字面量唯一性检查照旧成立)。
+6. **"自己这一方"在查询那一刻判**(`src.side===side`),不在建航迹时判 —— 判据会翻 `.side`(`40-formation.js` :591 / :713 / :729 / :1762)。
+7. **存在 ≠ 知道。** `if(trkOf(...))` 当"我们知道它"用,是泄漏形状的 bug;知道 = `trkState(tk)!=='none'`,`trkEach` 已经替你滤掉了。审查时 sensors/24 与门面之外的 `trkOf` 真值判断一律打回。
+8. **门面的名字永久不改**:`litOf` / `contactIdn` / `contactAge` / `contactState` / `contactPos`。weapons/52:5、54:77、56:196 的 typeof 守卫在名字缺席时回落到【真值】位置,R2 检查器只证明名字在某处声明过,证明不了它还是那个意思。
+9. **不许把 ships[] 的遍历与 trkEach 的遍历混用并假定两者一致。** trkEach 跟着调用那一刻的 `ships` 走(判据会重绑它;航线细化沙盘会临时换成单船克隆 —— 在沙盘里 trkEach 什么都不给,无害,因为那里没人枚举)。
+10. **航线细化沙盘的克隆船从 TK1 起没有感知**(for...in 拷不到不可枚举的转发字段)。今天是对的:它的 `lockedTarget` 恒 null。沙盘里永远不跑感知、不设锁定目标。
+11. **转发访问器(TK1~TK3a;TK3b 的墓碑沿用同一份)只许是一份冻结的 `TRK_FWD`,用 `Object.defineProperties` 挂到每艘船上**,所有船共用同一组 get/set 函数对象。不许写成 makeShip 字面量里的 `get litBlue(){}`,也不许每船一个闭包 —— 契约设计时在 node v24.13 里用真的 makeShip 字面量量过:那样每艘船都掉进字典模式(`%HasFastProperties` 为 false),全引擎的舰船字段都跟着变慢;共享冻结描述符则三型同 map、快属性。TK1 在 Chrome 里用 digest 的 MAPS 行复核。
+12. **击沉泄漏保持原样**(决定 10):消费方按真值 `.dead` 过滤(经 `trkGone`),沉船的航迹冻在最后一拍,可能一直是 live。关掉它是另一项要拍板的行为改动。
+
+### 命名陷阱(verify.sh 的源码检查会咬)
+
+- `trk` 后面紧跟 `.opt` / `.lis` / `.act` / `.ir` / `.esm` / `.lad` —— SN4 / SN6 / SN0 的负对照按这个形状 grep。**航迹变量一律叫 `tk`,别叫 `trk`。**
+- `detBlue` / `detRed` 这两个子串(SN3 负对照)。
+- 第 0 列 `const` / `let` 行(连同行尾注释)里不许出现「逗号 + 标识符 + 分号」的形状 —— 多声明拆分 sed 会把它当成一个符号(core/01 踩过)。
+- 模拟目录(sensors / physics / formation / weapons / bots / ships)的**代码**里不许出现呈现 / 指令层的符号(R3):`render`、`rad`、`xh`、`mmb`、`LOD`、`HEAT`、`SIG`、`GEOM`、`RWR`、`VT`、`targetAt`、`engageable`。
+- 新符号一律第 0 列声明;24-track 加载期一抛错,文件后半静默丢失,typeof 扫描报 `SYMS_MISSING`。
+- 24-track 的注释里不写十个旧字段名。
+
+### 身份三档(TK2.6 落地,那一步行为不变)
+
+- 界面叫 **未知 / 疑似 / 确认**(用户已认可),代码常量 `ID_UNK / ID_SUS / ID_CON`。
+  **「疑似」是分类可信度(≈ 美海军反潜的 probable),不是 STANAG 1241 里表示敌我属性的 Suspect** —— 那边的 Suspect 与 Pending / Unknown / Assumed Friend / Friend / Neutral / Hostile 并列,说的是"敌意程度",我们说的是"认不认得出它是什么"。
+- 存三件事、每件一个事实、**类型不存**:`cov.idn`(至少疑似,stepCov 闩住,与演示页共用)、`cov.idBy`(最近一次认出的那一拍里第一个认出的通道,FLOW82 / FLOW86 钉着)、`tk.idc`(确认闩:光学或照射认出过、且接触还握着;lit 归 0 时清)。
+- 类型是纯函数:未知 ⇒ null;疑似 ⇒ 对方**声称**的(诱饵的 `spoof`,否则 `{kind, cls, tier}`);确认 ⇒ 真的。石头从不发射,所以永远到不了"疑似"。
+- `stepCov` 加一个可选第 5 参 `idOut` 与一行 `if (sh[3] && idOut) idOut[ch] = true;` —— 记下【每一站】认出过的通道,补上"一站静听、另一站照射,同一拍里却只算疑似"那个先到先得的盲区。
+- 从"≥ 疑似"切到"== 确认"的每一个消费方都是**单独的行为改动**,各要一次拍板、一条判据、一份新的基准摘要。
+
+### 已拍板的决定(编排者 2026-09-23;与契约不同处以这张表为准)
+
+| # | 问题 | 决定 |
+|---|---|---|
+| 1 | `tools/train` 的七个 node 夹具早就坏了(文件表缺 23-cov,makeShip 抛 `newCov is not defined`) | **不修**,不是本任务引入的;TK1 也不往它们的文件表里加 24-track。性能基线改用浏览器里 digest 的 PERF 行 |
+| 2 | TK 判据放哪 | 新文件 `tools/judge/95-tk.js`(排最后,不扰动前面判据的 `shipSeq` 等状态);TK3a 的夹具辅助函数放 `tools/judge/05-tk.js`(排最前)。**偏离「加在对应系统文件末尾」的惯例**,理由就是这一句 |
+| 3 | TK3c 的源码负对照算不算注释 | **只查代码(去注释)**,用 R2 / R3 同一种去注释办法。历史注释里的旧字段名不改写(行内标记与历史注释不许清理) |
+| 4 | 身份三档的名字 | 未知 / 疑似 / 确认;`ID_UNK / ID_SUS / ID_CON`(见上一节) |
+| 5 | 确认闩(`idOut` 那一个可选参数和那一行)要不要搬进演示页 | **要**,只搬那一个参数和那一行,内核两份保持一致;演示页 `?selftest` / `?uitest` 必须仍 PASS |
+| 6 | TK4 里自动化能不能挑【未知】的航迹(可能是石头) | **能**(保持"有跟踪级就能打");只排除【已确认不是船】的。打到石头:弹药白费,石头没有 hp 不掉血。已确认的石头不计入「敌舰」类计数 |
+| 7 | 石头的阵营 | `side:'neutral'`,并做"不是红的就是自己人"三元式审计(command/74 :100 / :104、render/83-geom :72 / :85) |
+| 8 | render/82-ship-icons.js:225 的 `identQ` 是死代码 | **不删**(删死代码先问) |
+| 9 | 航迹号 | 每局在 `initFleet` 归零;一个(阵营, 源)终身一个号;只用于显示,永远不当键、种子或平局裁决 |
+| 10 | 击沉泄漏 | **保持现状**,列为待拍板的后续 |
+| 11 | `cov.ever`(引擎写、只有演示页读) | **保留**,内核两份一致 |
+| 12 | verify.sh 的 Chrome 不带 `--user-data-dir`(FLOW49 点旋钮会把 `sp_range_v1` 写进默认配置) | **不改 verify.sh 的启动参数**;A/B 工具自己用全新配置 |
+| — | TK4d 诱饵 | **不做**(用户没拍板诱饵) |
+| — | 石头从哪来 | 归「地图 / 环境系统」:由环境模块(`js/world/`,标记 `ENV1`)按场景里的残骸场定义生成,而不是契约里的 `scenario/92-rocks.js`。注册表 `rocks[]` 仍按契约放 core/01 |
+| — | 文档里与 TK 无关的陈旧条目(文件地图里 formation 39-44、physics/32、`paintWarned` / `everLitBlue` 的提法) | **不顺手改** |
+| — | 金标准 | 所有"行为不变"的步骤(TK1、TK2.0~2.6、TK3a~3c、TK4a~4b,以及无石头场景下的 TK4c)都与**同一个**提交 `1a887a8` 比:`tools/tk_ab.sh 1a887a8` |
+
+### 分步(每一步单独验收;js/ 从 TK1 才开始动)
+
+| 步 | 做什么 | 行为 |
+|---|---|---|
+| TK0 | 本节 + A/B 工具(下一小节) | js/ 零改动 |
+| TK1 | 新文件 sensors/24-track(`TRK` / `trkTab` / `trkNew` / `trkOf` / `trkFwdDesc` / `TRK_FWD` / `trkAdopt`);makeShip 改成 `return trkAdopt({...})` 并删掉那三行感知字段;旧字段变成共享的不可枚举转发访问器;判据 `TK1_FWD` | 纯存储搬家,逐位相同 |
+| TK2.0 | 生产者与门面改读表(`trkEnsure` / `trkStep` / `trkLit` / `trkState` / `trkAge` / `trkPos` / `trkIdn` / `trkSrc` / `trkGone` / `trkBearing` / `trkPaintedBy` / `trkEach` / `trkList` / `trkFoe`);判据 `TK2_DIFF` / `TK_NOCREATE` | 逐位相同 |
+| TK2.1 ~ 2.5 | weapons / bots / command / render / core+scenario 的读点逐个搬到门面或航迹 API | 逐位相同 |
+| TK2.6 | 身份三档(上一节),不切换任何消费方 | 逐位相同(摘要不含 `idc`) |
+| TK3a | 判据夹具搬到 `tools/judge/05-tk.js` 的辅助函数 | 逐位相同 |
+| TK3b | 转发访问器改成墓碑(一碰就抛),运行期证明没人再碰旧名字;不发版 | 逐位相同 |
+| TK3c | 删掉转发;舰船只剩物理真值 | 逐位相同 |
+| TK4a | 弹丸可见性搬进 `TRK.vis` | 逐位相同 |
+| TK4b | 世界登记表 `rocks[]` + `kindOf`,零块石头 | 逐位相同 |
+| TK4c | 石头的航迹(环境系统生成,见决定) | 无石头时逐位相同;有石头是显式的行为改动 |
+| TK4d | 诱饵 | **不做**(决定) |
+
+每一步都要:verify.sh 全绿、`tools/tk_ab.sh 1a887a8` 全部相同(梯子与画布日志在内;建议带第二个参数 `40`,理由见下一小节"覆盖的洞")。
+
+### 同种子逐位 A/B:`tools/tk_ab.sh`(TK0 做的尺子)
+
+```bash
+tools/tk_ab.sh 1a887a8        # TK 系列的金标准
+tools/tk_ab.sh HEAD           # 自己比自己:尺子本身稳不稳
+tools/tk_ab.sh 1a887a8 40     # 每局 40 分钟 —— 建议每一步都用这个:20 分钟的对局还没交火(见"覆盖的洞")
+```
+
+它在临时目录里 `git worktree add --detach` 出基准树,把**当前**的 `tools/tk/` 拷进去(两边用同一把尺子),两棵树各跑三个探针、逐行比对、打印第一处不同,不论成败都删掉 worktree 与临时页。
+三个探针都贴在 `head -n -2 index.html` 后面、放在各自树的仓库根(临时页 `__tk.html` / `__tkdraw.html` / `__tklad.html`,不与 verify.sh 的 `__v.html` 撞名;但两者别同时跑,PERF 会失真)。
+
+| 探针 | 量什么 | 输出 |
+|---|---|---|
+| `tools/tk/digest.js` | 对局与靶场各 5 个种子、每局 20 分钟(可改)的整局摘要:每 60 模拟秒一行 FNV-1a(舰船真值 + 两方感知 + 弹丸 + 红方信念与条令 + 接触降速 + 胜负)与累计随机取数次数 | `env seed t hash draws` / `SELF_DOUBLE` / `SELF_SEED` / `PERF` / `MAPS` |
+| `tools/tk/drawlog.js` | 画面:一次 `render()` 的全部画布调用(方法 + 样式 setter,数值按 1e-6 取整,热区贴图按像素哈希)。靶场 30 秒、对局 180 秒、FLOW63 的五个构造态 | `DRAW <画面> n=<调用数> h=<哈希>` |
+| `tools/tk/lad.js` | 梯子:`LAD` 全部键、`COV` 数值键与 `TH0`、`SENS.K_*` / `A_*`、全部舰种两两有序的 `ladPair` 字段,一律 Float64 位模式 | 另拿当前树的转储与演示页比一次(临时副本 `demos/sensors/__tklad.html`,必须与演示页同目录) |
+
+尺子自己的纪律(每条都是一次"尺子不准"):
+- **摘要不调 `render` / `xhTick` / `matchTick` / `updateTop`**:render 从模拟的随机流里取数(83-hud 的命中碎屑)、还读墙钟;夹在两次摘要之间调一次 render,就把后面模拟看到的随机流挪了一位。画面改用画布调用日志,不用截图(同一份代码连截两张都不一样)。
+- **`initFleet` 不清的全局由摘要补清**:`detT`、`netAllocT`、`acc`、`missileGroupSeq`、`netSeq`、`fmSeq`(它在 initFleet 里就要取号,所以在 initFleet 之前清)、`TC.band/hold/eff`、`rate=20`、航线细化队列。自检 `SELF_DOUBLE`(对局 seed 1 隔着另外九局再跑一遍)专抓漏清。
+- **每次 Chrome 用全新的 `--user-data-dir`**:靶场参数存在 localStorage 里,verify.sh 的判据会改写它(决定 12)。
+- **冻结帧循环**:tk_ab 在 `<body>` 后插一行把 `requestAnimationFrame` 换成空操作。实测不冻时,解析器在 core/99 与探针之间让出,真 `frame()` 偶尔先跑一帧(星空贴图、LOD 过渡起点都记在那一帧上),HEAD 对 HEAD 的画布日志调用数 1223 / 3633。
+- **星空重撒**:core/99 的 `init()` 用没播种的 `Math.random` 撒星,第一帧把它烤进离屏贴图;不重撒时 HEAD 对 HEAD 3633 / 3635。drawlog 用播种的随机流按同一个式子重撒一遍。
+- **`--dump-dom` 会把 `<` `>` `&` 转义成实体**:第一版的演示页对照因此一行 PAIR 都没匹配上,却报了"相同"(两边都是 0 行)。已在取数时还原;另加了行数下限(摘要检查点须 = 2 x 5 x 分钟数、画布日志须 7 个画面、梯子与演示页对照的 LAD / PAIR 都须 >0 行),比了 0 行的"相同"直接判红。
+
+TK0 实测(HEAD = `1a887a8` 对自己,每局 20 分钟):
+- 三份输出逐行相同(digest 204 行、drawlog 8 行、lad 294 行);`SELF_DOUBLE=ok`(20 个检查点);`SELF_SEED=ok`,对局 seed 2 在第 1 个检查点就与 seed 1 分开。
+- **灵敏度**:摘要的临时副本(放在仓库外的临时目录,用完即删)在 t=60 秒把 `ships[0].pos[0]` 加 1e-9,10 局 x 20 个检查点从 t=60 起【全部】不同,自检照样通过。
+- **引擎梯子 = 演示页梯子**:LAD 14 行 + PAIR 64 行逐位相同。⚠ 演示页的 `SENS.CLS` 只有 DD / CA,所以演示页那一侧只比得了 16 对里的 4 对;BB / CV 的 48 对只在引擎前后之间比。
+- **基线**(每次跑都打印,只报告不比对):
+  `MAPS natives=on same(DD,CA)=true same(CA,CV)=true same(DD,CV)=true fast(一次性三艘)=true fast(在场)=6/6`
+  `PERF match@120s stepSim x1000` 中位数:同一份代码六个样本 7.9 / 7.0 / 7.1 / 7.5 / 8.3 / 4.0 ms。
+
+覆盖的洞(记下而不是假装有):
+- **对局 20 分钟里一发都没打**:五个种子的随机取数到 20 分钟都停在 1(只有开局摆位那一次)。实测交火在 29 ~ 30 分钟开始(取数从 7 跳到 100 ~ 180)、34 分钟前打完。所以 20 分钟的默认值覆盖对局的感知 / 机动 / 红方条令,**不覆盖对局交火**。
+  这不是推测,量过:`1a887a8` 相对它的父提交 `e2d9f3d` 改了红方齐射窗口(BOT1c,bots/60),`tools/tk_ab.sh e2d9f3d` 在 20 分钟下报**全部相同**(抓不到),
+  40 分钟下在 `match 1 1800` 这个检查点分开(取数 115 / 101)。**每一步都建议跑 `tools/tk_ab.sh 1a887a8 40`**(每棵树 16 秒,20 分钟是 11 秒);默认值 20 是契约写的,没改。
+- **靶场 6 分钟之后五个种子收敛到同一个状态**(靶打不死、弹药打光:300 秒时五局五个哈希,360 秒起每个检查点五局只剩一个哈希,只有取数次数还不同)。A/B 仍然有效(比的是同一个种子),但后半段的检查点区分度低。
+- **PERF 的同代码散布是两倍**(4.0 ~ 8.3 ms),单个 PERF 行判不了 TK1 验收里的"stepSim 中位数在 10% 以内";要判就交替多跑几轮取中位数,或者改 PERF 的量法 —— 那是另一个决定,TK0 没动。
+- 不覆盖 GM、交互路径(鼠标 / 面板)与真实游玩(帧 dt 来自墙钟,本来就不可复现,也不声称可复现)。那几块靠 verify.sh 的判据与画布日志。
+
+### TK1 落地(2026-09-23):纯存储搬家
+
+改了四处、加了一条判据,其余(生产者 detectFor、stepCov、newCov、22-percep、全部读点与夹具)逐字节没动:
+新文件 `sensors/24-track.js`(`TRK` / `trkTab` / `trkNew` / `trkOf` / `trkFwdDesc` / `TRK_FWD` / `trkAdopt`,符号数 821 → 828);index.html 在 23-cov 之后加一行;
+makeShip 的字面量包进 `trkAdopt(...)`、删掉那三行感知数据(字段说明搬进 24-track 的文件头,不写旧名字);判据 `TK1_FWD`(`tools/judge/95-tk.js`)+ verify.sh 一行门。
+
+- **与契约逐字不同的一处:转发的 get / set 用 `switch(slot)` 写成五个具名读写,不写 `k[slot]`。** 十个 get 出自同一个函数字面量,V8 让它们共用一份反馈,
+  `k[slot]` 那一处见到五种键名就退成超多态;契约原样的写法实测 stepSim 慢 12~15%,超过验收线 10%。拆成具名读写后是 +7~8%,剩下那截是每次读一次 WeakMap 查表 ——
+  契约只许"缩短查表路径"、不许往船上挂句柄,所以到此为止。`trkFwdDesc` 这个工厂、一份冻结的 `TRK_FWD`、`Object.defineProperties` 都照契约;最后那句 `k[slot]` 留作兜底。
+- **PERF 怎么量的**:digest 的单行 PERF 判不了 10%(同一份基准代码两次跑出 3.3 / 7.6 ms;本机后台常年四成 CPU)。改用【同一页两个 iframe】分别加载 `1a887a8` 与当前树,
+  对局 120 秒的同一状态上 1000 步一批、两边交替、各 200 批,取逐对比值的中位数:TK1 三次 1.069 / 1.083 / 1.069;契约原样的写法 1.122。
+  脚本在工作流的临时目录里,没进仓库(要复用的话照这个口径:同页交替,不是隔页交替)。
+- 每 1000 步约 3.2 万次转发读(对局 120 秒,还没交火):weapons/57 自动索敌的扫描 9000 次,红方的 `contactState` / `botFocus` / `botContacts` 约 2.2 万次。TK2 把门面改成直接读表之后这一截会变。
+- `TK1_FWD` 的代码与注释都【不直接拼写】十个旧名字(字符串拼接现造),好让 TK3a 那条"tools/judge 里连注释一起数、须为 0"的检查不被它自己咬住;TK3b 把它改成墓碑判据时照旧。
+- 验收:verify.sh 全绿,probe_out 与父提交的差异只落在父提交自己两次运行的噪声集合里(SOAK / FLOW2 / FLOW6_PULSE / FLOW31 / FLOW65 / FLOW73)+ `SYMS_TOTAL` + 新的 `TK1_FWD` 行;
+  `tools/tk_ab.sh 1a887a8` 20 分钟与 40 分钟都全部相同(40 分钟含对局交火,取数到 1000+ 次);梯子前后与演示页都逐位相同;画布日志相同;
+  MAPS 三型同 map、在场 6/6 快属性;独立指纹(工作流的四局 16000 步哈希链)与基线逐字节相同。
+- **慢帧(验收 (7) 的后一半,SN7b:数慢帧不看平均)**:真实 GPU(RTX 4080 Laptop,ANGLE / D3D11 —— `--headless=new` 不加 `--disable-gpu` 就走真卡,页里用 `WEBGL_debug_renderer_info` 核过)、
+  `--force-device-scale-factor=2`(画布 3164x1608)、对局 x20、60 秒墙钟,数 rAF 到 rAF 超过 20ms 的帧,`1a887a8` 与 TK1 交替各跑:
+  开局那 60 秒(模拟 60 → 1260 秒,还没交火)两边都是 3 次 x 0 帧(每次约 1.44 万帧,中位 4.2ms);另把对局同步推到 1750 秒再量交火段(20 发上下弹丸、接触降速到 x4),两边都是 2 次 x 1 帧(最坏 29 ~ 37ms)。
+  探针是一个 CDP 小脚本(Node 自带 WebSocket,每次全新 `--user-data-dir`),在工作流的临时目录里,没进仓库。
+
+### 顺带发现的既有缺陷(本任务没引入、按决定没修)
+
+- `tools/train` 的七个 node 夹具(bench_all / corner_study / env / perf_sense / refine_node / stress / trace_ref2)文件表缺 23-cov,makeShip 抛 `newCov is not defined`(决定 1)。
+- verify.sh 的 Chrome 不带 `--user-data-dir`,FLOW49 点旋钮时 `sp_range_v1` 写进默认配置,理论上会漏到下一次运行(决定 12)。
+- render/82-ship-icons.js:225 的 `identQ` 算了不用(决定 8)。
+
 ## SN4 感知重做:三通道八字段 → 两通道四字段 备忘(2026-09)
 
 ### 一句话
