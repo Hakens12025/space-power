@@ -221,7 +221,9 @@
        乙:每艘船朝太阳那一片扇区刺眼 —— 禁区边缘恰好到色标顶,往外按角度的四次方衰减(杂散光);甲:看不到太阳本身(它没有位置),
        但一个热源若对某艘我方船落在禁区里,那艘船就看不见它;全被晃瞎就画不出来
      · 位置型 = 只存在于红外图里的一颗恒星(引擎不知道它),默认在我方舰队 690 万公里外、方位 150°,能拖。
-       甲:一团刺眼的亮斑 + 散射光晕(真太阳半径 69.6 万公里内饱和,往外按距离三次方淡出——用户:「位置型放大」);乙:每艘船朝它那一片扇区刺眼(同一条杂散光律) */
+       甲:一团刺眼的亮斑 + 散射光晕(真太阳半径 69.6 万公里内饱和,往外按距离三次方淡出——用户:「位置型放大」);乙:每艘船朝它那一片扇区刺眼(同一条杂散光律)
+   用户:「面向太阳和背对太阳我觉得红外识别是不一致的」—— 有太阳时两头都跟太阳的几何走(见 irmLumK / irmContrast 两节):
+     目标这一头按相位角变热(背对太阳看看到晒热的面);观测这一头面向太阳看时背景被杂散光抬亮、甲里的山又矮又宽 */
 const IRM={on:false,mode:'jia',
   CELL:5,                  /* 底图一格 = 多少屏幕像素 */
   V0:0.02,VMAX:1000,       /* 固定色标:t = ln(1 + v/V0) / ln(1 + VMAX/V0);v = 0 是纯底红,v = 1000 顶到近白 */
@@ -250,22 +252,61 @@ function irmRefGet(){ /* 刻度的参照:一艘熄火静默的 DD,在引擎给�
 }
 function irmObservers(){return ships.filter(s=>s.side==='blue'&&!s.dead);}
 function irmSources(){return ships.filter(s=>s.side!=='blue'&&!s.dead).concat((typeof rocks!=='undefined'?rocks:[]).filter(r=>!r.dead));}
-/* 石头(碎石、小行星)的热 —— 用户:「石头比同体型的船冷一点,有太阳的时候会以系数发热」「没太阳时也有一点热」:
-   亮度 = 同体型熄火冷船 x 系数:没太阳 0.5,有太阳(方向型、位置型都算,不看离恒星多远)0.8,仍比船冷。两个数是暂定的。
-   引擎里石头与同体型冷船逐笔一样亮(ENV1 拿它当假目标),这里只改红外图,主游戏不变。
-   按"亮度乘 k"整套改:收到的热 x k,角误差 / √k(引擎的光学角误差与亮度的平方根成反比,见 23-cov 的 visAccOf)——
-   于是一块石头在红外图上与一件亮度只有 k 倍的东西完全一样 */
-const IRM_ROCK={DARK:0.5,SUN:0.8};
-function irmLumK(t){return t.kind==='rock'?(IRM_SUN.mode==='none'?IRM_ROCK.DARK:IRM_ROCK.SUN):1;}
+/* ---- 目标有多热:自身的热 + 太阳晒的热 x 相位函数 ----
+   用户:「面向太阳和背对太阳我觉得红外识别是不一致的,现在感觉没有区别?」→ 拍板「A + B 都做」。这里是 A(目标这一头),B 在 irmContrast。
+   业内对应:相位角 α = 太阳-目标-观测者的夹角(行星测光的标准量);亮度随 α 的曲线叫相位曲线。
+     相位函数取朗伯球 Φ(α) = (sin α + (π - α) cos α) / π:背对太阳看(太阳在观测者身后,α = 0)看到整个晒热的面,Φ = 1;
+     面向太阳看(α = 180°)看到的是背阴面,Φ = 0;侧着看 Φ = 1/π。热红外的标准模型是 NEATM(Harris 1998),热集中在朝阳面,形状与此相近
+   自身的热:船照引擎那套(体型 x (1 + 引擎档 + 发射档 + 开火档),一个字不改);
+            石头 = 同体型熄火冷船的 DARK 倍(用户:「石头比同体型的船冷一点」「没太阳时也有一点热」)
+   晒的热 = SOLAR x 体型 x Φ(α):SOLAR = 1 ⇒ 熄火的冷船被晒的那面亮一倍;开着主推的船本来就是 4 倍,只多亮 25%。
+     石头与船晒的一样多,于是同一个角度下石头始终比同体型的船冷。SOLAR 是暂定的数。
+     方向型:太阳方向处处一样;位置型:每个目标按自己看恒星的方向。不看离恒星多远(与先前石头的系数同一个口径)
+   残骸场里的目标衬在被照亮的碎石前(envOptK),晒的热也跟着乘,与引擎的光学亮度同一个口径。
+   引擎里的亮度不变(主游戏不受影响),这里只改红外图:按"亮度乘 k"整套改 —— 收到的热 x k,角误差 / √k
+   (引擎的光学角误差与亮度的平方根成反比,见 23-cov 的 visAccOf),于是它在红外图上与一件亮度 k 倍的东西完全一样 */
+const IRM_ROCK={DARK:0.5};
+const IRM_SOLAR={S:1,G0:1};
+function irmSunDirAt(p){ /* 从 p 指向太阳的单位向量(平面);没有太阳给 null */
+  if(IRM_SUN.mode==='dir'){const a=IRM_SUN.BRG*Math.PI/180;return [Math.cos(a),Math.sin(a)];}
+  if(IRM_SUN.mode==='pos'&&irmStar){const dx=irmStar.pos[0]-p[0],dy=irmStar.pos[1]-p[1],l=Math.hypot(dx,dy)||1;return [dx/l,dy/l];}
+  return null;
+}
+function irmPhase(o,t){ /* 朗伯球相位函数 Φ(α);没有太阳给 0 */
+  const u=irmSunDirAt(t.pos);if(!u)return 0;
+  const dx=o.pos[0]-t.pos[0],dy=o.pos[1]-t.pos[1],l=Math.hypot(dx,dy)||1,c=Math.max(-1,Math.min(1,(dx*u[0]+dy*u[1])/l)),a=Math.acos(c);
+  return (Math.sin(a)+(Math.PI-a)*c)/Math.PI;
+}
+function irmLumK(o,t){ /* 红外图里的亮度 / 引擎的光学亮度 */
+  const L=optLum(t);if(!(L>0))return 1;
+  const self=(t.kind==='rock'?IRM_ROCK.DARK:1)*L,sun=IRM_SOLAR.S*t.size*envOptK(t.pos)*irmPhase(o,t);
+  return (self+sun)/L;
+}
+/* ---- 观测这一头(B):面向太阳看,背景被杂散光抬亮,对比度下降 —— 只用在甲里(乙本来就把杂散光画成背景叠在下面) ----
+   业内对应:背景受限探测(background-limited):噪声方差 ∝ 本底 + 背景,于是等效信噪比 = 信噪比 / √(1 + 背景 / G0)。
+   背景 = 这艘船朝目标那个方向的杂散光,用与乙同一条角度律(irmGlare,跟着「光·四次方 / 光·陡」走);
+   G0 = 1(场的单位,1 = 发现线):杂散光有一条发现线那么亮时,噪声方差翻倍。G0 是暂定的数。
+   禁区里仍照引擎一刀切(方向型;位置型引擎不知道,禁区里靠这条把它压到几乎看不见)。
+   同样按"亮度乘 m"算:热 x m,角误差 / √m —— 逆光时山又矮又宽 */
+function irmContrast(o,t){
+  const u=irmSunDirAt(o.pos);if(!u)return 1;
+  const d=Math.atan2(t.pos[1]-o.pos[1],t.pos[0]-o.pos[0])-Math.atan2(u[1],u[0]);
+  return 1/Math.sqrt(1+irmGlare(Math.atan2(Math.sin(d),Math.cos(d)))/IRM_SOLAR.G0);
+}
 /* 一对观测:o 看 t。全部读引擎的判据:信噪比(收到的热量)、角误差(方向精度)、模糊宽度 = 距离 x 角误差 */
 function irmPair(o,t){
-  const dx=t.pos[0]-o.pos[0],dy=t.pos[1]-o.pos[1],dz=(t.pos[2]||0)-(o.pos[2]||0),k=irmLumK(t);
+  const dx=t.pos[0]-o.pos[0],dy=t.pos[1]-o.pos[1],dz=(t.pos[2]||0)-(o.pos[2]||0),k=irmLumK(o,t);
   const d=Math.max(1,Math.hypot(dx,dy,dz)),R=visRangeOf(t),snr=(R/d)*(R/d)*k,ang=covTheta('opt',o,t,d)/Math.sqrt(k);
   return {d:d,snr:snr,ang:ang,blur:d*ang,brg:Math.atan2(dy,dx)};
 }
 /* 甲的一座山:峰高(按参照归一)与宽度(km)。峰高 = 体积 / 面积 ∝ 信噪比 / 宽度² */
 function irmHill(t,obs){
-  let best=null;for(const o of obs){if(IRM_SUN.mode==='dir'&&envSunBlind(o.pos,t.pos))continue;const q=irmPair(o,t);if(!best||q.snr>best.snr)best=q;}   /* 方向型太阳:这艘船看它的视线落在禁区里 ⇒ 看不见(与引擎的致盲同一个函数) */
+  let best=null;
+  for(const o of obs){
+    if(IRM_SUN.mode==='dir'&&envSunBlind(o.pos,t.pos))continue;   /* 方向型太阳:这艘船看它的视线落在禁区里 ⇒ 看不见(与引擎的致盲同一个函数) */
+    const q=irmPair(o,t),m=irmContrast(o,t),snr=q.snr*m,blur=q.blur/Math.sqrt(m);   /* 逆光打折(B) */
+    if(!best||snr>best.snr)best={snr:snr,blur:blur};
+  }
   if(!best)return null;
   const ref=irmRefGet(),k=ref.sig/best.blur;
   return {peak:best.snr*k*k,sig:best.blur};
@@ -627,17 +668,17 @@ function irmSelftest(){
     T('⑯ 旧接触模型不上这一页:实况的红舰 / 石头非 GM 时不画、不进接触群、点不到,缩圈钮不在;GM 照旧',
       st16==='live/live/live'&&a16.nS===0&&a16.nK===0&&a16.hit===null&&!a16.agg&&g16.nS===2&&g16.nK>0&&g16.hit===R&&noGeom,
       '引擎显示态 '+st16+' · 非 GM:画舰 '+a16.nS+' 画石 '+a16.nK+' 点中 '+(a16.hit?a16.hit.name:'无')+' 接触群 '+a16.agg+' · GM:画舰 '+g16.nS+' 画石 '+g16.nK+' 点中 '+(g16.hit?g16.hit.name:'无')+' · 缩圈钮不在 '+noGeom);
-    /* ⑰ 石头的热:与同体型的熄火冷船放在同一处比 —— 没太阳 0.5 倍、方向型 / 位置型太阳都是 0.8 倍(写字面值,用户拍板的数);
-          角误差按 1/√k 变宽;船本身不受影响(仍是引擎的 (发现距离 / 距离)²) */
+    /* ⑰ 石头的热:与同体型的熄火冷船放在同一处比 —— 没太阳 0.5 倍(字面值,用户拍板的数)、角误差按 1/√k 变宽;
+          有太阳(方向型 / 位置型)时同一处石头仍比船冷;没太阳时船本身不受影响(仍是引擎的 (发现距离 / 距离)²) */
     ships.length=0;ships.push(B);B.pos=[0,0,0];
     const C17=makeShip('DD','红外测冷船',[Rv*0.5,0,0],[-1,0,0],[0,0,0],'red',2);C17.flame=0;C17.sideFlame=0;C17.fireHot=0;setEmit(C17,'silent');
     const K17=makeRock([Rv*0.5,0,0],C17.size,[1,0,0]);rocks=[K17];
     const r17=function(){const a=irmPair(B,K17),b=irmPair(B,C17);return {h:a.snr/b.snr,w:a.ang/b.ang};};
     irmSunSet('none');const n17=r17();irmSunSet('dir');const d17=r17();irmSunSet('pos');const p17=r17();irmSunSet('none');
     const ship17=Math.abs(irmPair(B,C17).snr/Math.pow(visRangeOf(C17)/(Rv*0.5),2)-1)<1e-9;
-    T('⑰ 石头的热:没太阳 0.5 倍、有太阳 0.8 倍同体型冷船;角误差跟着变宽;船不受影响',
-      Math.abs(n17.h-0.5)<1e-6&&Math.abs(d17.h-0.8)<1e-6&&Math.abs(p17.h-0.8)<1e-6&&Math.abs(n17.w-1/Math.sqrt(0.5))<1e-6&&Math.abs(p17.w-1/Math.sqrt(0.8))<1e-6&&ship17,
-      '没太阳 '+n17.h.toFixed(3)+' · 方向型 '+d17.h.toFixed(3)+' · 位置型 '+p17.h.toFixed(3)+' · 角误差倍数 '+n17.w.toFixed(3)+' / '+p17.w.toFixed(3)+' · 船不变 '+ship17);
+    T('⑰ 石头的热:没太阳 0.5 倍同体型冷船、角误差跟着变宽;有太阳时同一处仍比船冷;没太阳时船不受影响',
+      Math.abs(n17.h-0.5)<1e-6&&Math.abs(n17.w-1/Math.sqrt(0.5))<1e-6&&d17.h<1&&p17.h<1&&ship17,
+      '没太阳 '+n17.h.toFixed(3)+' · 方向型 '+d17.h.toFixed(3)+' · 位置型 '+p17.h.toFixed(3)+' · 角误差倍数 '+n17.w.toFixed(3)+' · 船不变 '+ship17);
     /* ⑱ 杂散光·陡(画面上量,不是只量函数):乙 禁区边缘到色标顶、每多偏 10° 降到十分之一;甲 光晕在饱和半径处到顶、
           每远一个太阳半径(69.6 万公里)降到十分之一(两个数都写字面值);禁区 / 饱和半径里与四次方那档一样;同一处四次方那档更亮 */
     ships.length=0;ships.push(B);B.pos=[0,0,0];rocks=[];irmSunSet('dir');
@@ -655,6 +696,37 @@ function irmSelftest(){
       Math.abs(y40/(IRM.VMAX/10)-1)<0.05&&Math.abs(y50/(IRM.VMAX/100)-1)<0.05&&yIn===yInb&&y40b>y40
       &&Math.abs(f20/w18(20)-1)<0.01&&Math.abs(f30/w18(30)-1)<0.01&&f5===f5b&&f20b>f20,
       '乙:偏 40° '+y40.toFixed(1)+'(应为 100) · 偏 50° '+y50.toFixed(2)+'(应为 10) · 四次方同处 '+y40b.toFixed(0)+' · 甲:约 2 个太阳半径 '+f20.toFixed(1)+'(应为 '+w18(20).toFixed(1)+') · 约 3 个 '+f30.toFixed(2)+'(应为 '+w18(30).toFixed(2)+') · 四次方同处 '+f20b.toFixed(0));
+    /* ⑲ 相位角(A,目标这一头):熄火冷船背对太阳看(太阳在观测者身后)亮一倍、面向太阳看不变、侧着看多 1/π(朗伯球);
+          石头同样多出晒的热、始终比同体型船冷;开主推的船只多 25%;角误差按 1/√k;位置型按目标自己看恒星的方向。数都写字面值 */
+    ships.length=0;ships.push(B);B.pos=[0,0,0];rocks=[];
+    const C19=makeShip('DD','红外测相位',[0,0,0],[-1,0,0],[0,0,0],'red',2);C19.flame=0;C19.sideFlame=0;C19.fireHot=0;setEmit(C19,'silent');
+    const K19=makeRock([0,0,0],C19.size,[1,0,0]),d19=Rv*0.5;
+    const kAt=function(o,pos){C19.pos=pos.slice();K19.pos=pos.slice();const sb=IRM_SUN.mode,st=irmStar;
+      const sC=irmPair(o,C19),sK=irmPair(o,K19);IRM_SUN.mode='none';irmStar=null;const n=irmPair(o,C19);IRM_SUN.mode=sb;irmStar=st;
+      return {c:sC.snr/n.snr,k:sK.snr/n.snr,w:sC.ang/n.ang};};
+    irmSunSet('dir');const u19=[Math.cos(150*Math.PI/180),Math.sin(150*Math.PI/180)];
+    const lit=kAt(B,[-u19[0]*d19,-u19[1]*d19,0]),dark=kAt(B,[u19[0]*d19,u19[1]*d19,0]),side=kAt(B,[-u19[1]*d19,u19[0]*d19,0]);
+    C19.flame=1;const hot=kAt(B,[-u19[0]*d19,-u19[1]*d19,0]);C19.flame=0;
+    irmSunSet('pos');const S19=irmStar,T19=[S19.pos[0]+2e6,S19.pos[1],0];
+    const O19a={pos:[T19[0]-1e6,T19[1],0]},O19b={pos:[T19[0]+1e6,T19[1],0]},pLit=kAt(O19a,T19),pDark=kAt(O19b,T19);
+    irmSunSet('none');
+    const eq19=function(a,b){return Math.abs(a-b)<1e-6;};
+    T('⑲ 相位角:冷船背对太阳看 x2、面向太阳 x1、侧看 x(1+1/π);石头 1.5 / 0.5 / 0.5+1/π;主推的船 x1.25;角误差 /√k;位置型按目标看恒星的方向',
+      eq19(lit.c,2)&&eq19(dark.c,1)&&eq19(side.c,1+1/Math.PI)&&eq19(lit.k,1.5)&&eq19(dark.k,0.5)&&eq19(side.k,0.5+1/Math.PI)&&eq19(hot.c,1.25)&&eq19(lit.w,1/Math.sqrt(2))&&eq19(pLit.c,2)&&eq19(pDark.c,1),
+      '冷船 背对 '+lit.c.toFixed(3)+' 面向 '+dark.c.toFixed(3)+' 侧看 '+side.c.toFixed(3)+' · 石头 '+lit.k.toFixed(3)+' / '+dark.k.toFixed(3)+' / '+side.k.toFixed(3)+' · 主推 '+hot.c.toFixed(3)+' · 角误差 '+lit.w.toFixed(3)+' · 位置型 背对 '+pLit.c.toFixed(3)+' 面向 '+pDark.c.toFixed(3));
+    /* ⑳ 逆光(B,观测这一头,只在甲里):同一艘冷船,甲的山高 = 不打折的山高 x m²,m = 1/√(1 + 杂散光 / 1);
+          杂散光按两档角度律用字面值现算(半角 30°、四次方 / 每 10° 十分之一、色标顶 1000);乙那条不打折;位置型同一条律 */
+    ships.length=0;ships.push(B);B.pos=[0,0,0];irmSunSet('dir');
+    const raw=function(t){const q=irmPair(B,t),r=irmRefGet(),k=r.sig/q.blur;return q.snr*k*k;};
+    const ratioAt=function(offDeg){const a=(150+offDeg)*Math.PI/180;C19.pos=[Math.cos(a)*d19,Math.sin(a)*d19,0];return irmHill(C19,[B]).peak/raw(C19);};
+    const want20=function(offDeg,fall){const g=fall==='p4'?1000*Math.pow(30/offDeg,4):1000*Math.pow(10,-(offDeg-30)/10);return 1/(1+g);};
+    IRM_SUN.FALL='p4';const r45=ratioAt(45),y45=irmPair(B,C19).snr,r180=ratioAt(180);
+    IRM_SUN.FALL='steep';const s45=ratioAt(45),y45s=irmPair(B,C19).snr,s180=ratioAt(180);   /* 乙读的是 irmPair:同一处两档读数必须一样(打折只在甲的 irmHill 里) */
+    IRM_SUN.FALL='p4';irmSunSet('pos');const q45=ratioAt(45);irmSunSet('none');
+    const rel=function(a,b){return Math.abs(a/b-1)<1e-6;};
+    T('⑳ 逆光:甲的山高按 1/(1 + 杂散光) 打折(偏开 45° / 180°,四次方与陡两档);乙不打折;位置型同一条律',
+      rel(r45,want20(45,'p4'))&&rel(r180,want20(180,'p4'))&&rel(s45,want20(45,'steep'))&&rel(s180,want20(180,'steep'))&&r45<r180&&y45===y45s&&rel(q45,want20(45,'p4')),
+      '四次方 偏 45° '+r45.toExponential(3)+'(应为 '+want20(45,'p4').toExponential(3)+') 偏 180° '+r180.toFixed(3)+' · 陡 偏 45° '+s45.toExponential(3)+' 偏 180° '+s180.toFixed(3)+' · 乙不变 '+(y45===y45s)+' · 位置型 '+q45.toExponential(3));
   }catch(e){T('自检抛异常',false,String(e&&e.stack||e));}
   finally{
     ships.length=0;shipsBak.forEach(x=>ships.push(x));shipSeq=seq0;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;IRM.on=onBak;IRM.mode=modeBak;if(rocksBak)rocks=rocksBak;IRM.NOISE=nzBak;IRM_SUN.FALL=fallBak;irmSunSet(sunBak);irmSync();
