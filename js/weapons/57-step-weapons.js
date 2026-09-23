@@ -42,7 +42,7 @@ function stepWeaponSystems(dt){
     if(s.fcFired&&s.fcFired.msl)continue; // RF5 核查修:本 tick 序列刚真发射过(S14 的 missileArm 倒计时就在本函数开头,发完立刻把 missileArm 清空),此刻 s.fcTgt.msl 还是本 tick 开头解算的【旧目标】—— rot 要等 tick 末的 S17b stepFireControlPost 才前进。这里若照排,下一发会继承旧目标,rr 轮询在导弹侧完全失效(实测一轮恰好 2 发,rot 0→1→0 归位,第二个目标永远轮不到)。让出一拍(0.02s)再排,下一 tick 解算出的就是前进后的目标;无序列的舰不长 fcFired 字段,不受影响
     const t=(typeof fcActive==='function'&&fcActive(s))?(s.fcTgt&&s.fcTgt.msl):s.lockedTarget; // RF5 有序列则目标来源换成序列解算结果(fcTgt.msl 可能是舰,也可能是指定点 {pos});没序列沿用原锁定
     if(!t)continue;
-    const isPt=(t.side===undefined); // RF5 指定点(空地)没有阵营也没有接触等级,跳过 side/litBlue 两道门(fcGate 已在序列侧查过射程,这里保留复查)
+    const isPt=(kindOf(t)==='point'); // RF5 指定点(空地)没有阵营也没有接触等级,跳过 side/litBlue 两道门(fcGate 已在序列侧查过射程,这里保留复查) TK4b:点的判别走 kindOf
     if(!isPt&&(t.dead||t.side===s.side))continue;
     if(!isPt&&(litOf(t,s.side))<2)continue; // 与手动齐射同一识别级门控
     { // WR1:没有发射门了;自动齐射(玩家的「火控」钮)只在动力射程内打,免得自动化替玩家把弹药扔到滑行段去;距离按估计位置量(指定点按点)

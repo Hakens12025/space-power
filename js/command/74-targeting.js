@@ -97,11 +97,11 @@ function xhTick(dt){ // RF5 准星每帧状态机:命中测试 → 停留累加 
 }
 function xhName(s){ // RF5 可外传的目标名:未达识别级的敌舰不吐真名(卡片 / 轮盘 / 缩圈小窗同一口径,免得一处打码另一处泄底)
   const gm=(typeof adminMode!=='undefined'&&adminMode);
-  return (!gm&&s.side==='red'&&!contactIdn(s,'blue'))?'未知接触':s.name; // ID1:原判据 litBlue<2;身份问 contactIdn
+  return (!gm&&s.side!=='blue'&&!contactIdn(s,'blue'))?'未知接触':s.name; // ID1:原判据 litBlue<2;身份问 contactIdn TK4b:「不是我方」才打码(原写「是红方」:中立的石头会被当成自己人吐真名)
 }
 function xhCardHTML(s,sub){ // RF5 信息卡内容:按接触等级分三档。只产 HTML 字符串,DOM 与样式属渲染侧
   const gm=(typeof adminMode!=='undefined'&&adminMode);
-  const q=(s.side==='red')?litOf(s,'blue'):3; // TK2.3:等级走门面(原来直读舰上字段)
+  const q=(s.side==='blue')?3:litOf(s,'blue'); // TK2.3:等级走门面(原来直读舰上字段) TK4b:只有我方给满级(原写「红方才查等级」,中立物体会白拿 3 级)
   const cp=(!gm&&typeof contactPos==='function')?(contactPos(s,'blue')||s.pos):s.pos; // ID1 顺手:方位 / 距离按接触的【估计位置】报(与画出来、点得到的是同一个点),原来报的是真值
   const dx=cp[0]-sub.pos[0],dy=cp[1]-sub.pos[1];
   const dist=Math.hypot(dx,dy);

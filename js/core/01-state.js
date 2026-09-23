@@ -3,6 +3,7 @@
    SL1(2026-09-22 瘦身):回放 / demo 录制 / 舰队卡 / 右键菜单待命态 / 互搏 / 设置面板键位重绑 / 面板开关状态 / 简化UI总开关 的全局声明已随各自系统整体删除。 */
 /* ================= 全局状态 ================= */
 let ships=[], formations={}, selected=[], simTime=0, projectiles=[], victoryShown=false, defeatShown=false; // FL1:groups 编组名册层已删除,编队是唯一的一层(formations['1'..'4'],见 js/formation/42-formation.js)
+let rocks=[], rockSeq=0; // TK4b 物理世界登记表的第二段(舰船之后):环境生成的非舰船物体(ENV1 的石头)。initFleet 换局清空;枚举顺序 = ships 再 rocks(sensors/24 的 trkEach)
 let running=false, rate=1, acc=0, last=0; // 默认开局暂停,按空格开始
 const RATES=[0.1,0.2,0.5,1,2,5,10,20]; // v131:变速预设档位(不再二分出小数)。RT1(2026-09-22 用户拍板:"现在的交战非常的即时 RTS 化"):上限 50 → 20,下限 0.5 → 0.1。
 // 往下开两档是给交战用的:主炮带对头只打三轮、几秒钟就过完,x1 都嫌快 —— 慢放是"让人来得及读、来得及下令",不是特效。上限压到 20 是同一件事的另一头:接敌那一段靠接触降速(core/06)管,不靠一个能把整场快进掉的 x50。

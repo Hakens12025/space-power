@@ -504,6 +504,7 @@ initFleet
 jamDOf
 kMaxNow
 kMinNow
+kindOf
 ladActA1
 ladActGate
 ladActQ
@@ -642,6 +643,8 @@ resolveLoadout
 rfLoudOf
 rmbClick
 rmbTimer
+rockSeq
+rocks
 rotSlot
 routeCap
 routeMargin

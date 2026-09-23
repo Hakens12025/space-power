@@ -118,18 +118,22 @@ function trkBearing(tk,from){const s=tk.src,dx=s.pos[0]-from[0],dy=s.pos[1]-from
 /* 被照射告警的唯一跨表读:对方那张表里【对我】握着的接触,这一拍有没有一条照射量测;有就给那条量测记录(末位是照射源 id),没有给 null */
 function trkPaintedBy(s){const tk=trkOf(s.side==='blue'?'red':'blue',s),c=tk&&tk.cov;return (c&&c.ch&&c.ch.act)?c.ch.act:null;}
 
-/* 唯一的枚举原语:按【物理注册表】的顺序走(TK1~TK3 只有 ships,按下标),跳过自己这一方(查询那一刻判)、没有航迹的、以及显示态为 none 的
+/* 唯一的枚举原语:按【物理注册表】的顺序走(ships 按下标,TK4b 起接着走 rocks),跳过自己这一方(查询那一刻判)、没有航迹的、以及显示态为 none 的
    ——存在不等于知道。fn 返回 true 就停下并返回 true。不排序、不建航迹、不调随机数、除调用方自己的闭包外不分配。
-   顺序与注册表一致,所以迁过来的每个循环访问源的先后、并列时的取舍、浮点累加的次序都与改前相同 */
+   顺序与注册表一致,所以迁过来的每个循环访问源的先后、并列时的取舍、浮点累加的次序都与改前相同;石头永远排在全部舰船之后,
+   所以有石头的场景里舰船之间的先后也不变 */
 function trkEach(side,fn){
-  for(let i=0;i<ships.length;i++){
-    const s=ships[i];
-    if(s.side===side)continue;
-    const tk=trkOf(side,s);
-    if(!tk)continue;
-    const st=trkState(tk);
-    if(st==='none')continue;
-    if(fn(tk,st)===true)return true;
+  for(let r=0;r<2;r++){
+    const reg=r===0?ships:rocks;
+    for(let i=0;i<reg.length;i++){
+      const s=reg[i];
+      if(s.side===side)continue;
+      const tk=trkOf(side,s);
+      if(!tk)continue;
+      const st=trkState(tk);
+      if(st==='none')continue;
+      if(fn(tk,st)===true)return true;
+    }
   }
   return false;
 }
@@ -173,3 +177,11 @@ function trkIdType(tk){
    ============================================================================ */
 function trkSees(side,p){return (side==='blue'?TRK.vis.blue:TRK.vis.red).has(p);}
 function trkSeeSet(side,p,on){const w=side==='blue'?TRK.vis.blue:TRK.vis.red;if(on)w.add(p);else w.delete(p);}
+
+/* ============================================================================
+   TK4b 物体的种类(2026-09-23)。'ship' | 'rock' | 'decoy' | 'point':
+   带 kind 的物体报自己的 kind(石头 'rock',以后的诱饵 'decoy');没带 kind 的,有阵营就是船、没有就是一个指定点({pos} 空地目标、弹丸)。
+   取代原来散在武器 / 火控 / 小窗里的「side 是不是 undefined」那道判别 —— 那道判别在石头进来之后会把石头当成指定点。
+   今天场上只有船与指定点,两者都没有 kind,所以这一步逐位不变。
+   ============================================================================ */
+function kindOf(o){return o.kind||(o.side!==undefined?'ship':'point');}

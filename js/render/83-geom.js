@@ -54,7 +54,7 @@ function geomPickAt(sx, sy, sh) {
 function geomOwnTarget(sub, ok) {
   if (!sub || sub.dead) return null;
   const lt = sub.lockedTarget;
-  if (lt && lt.side !== undefined && lt.side !== sub.side && !lt.dead && ok(lt)) return lt;
+  if (lt && kindOf(lt) !== 'point' && lt.side !== sub.side && !lt.dead && ok(lt)) return lt; // TK4b:点与物体的判别走 kindOf
   if (typeof fcSeqsOf !== 'function') return null;
   for (const q of fcSeqsOf(sub)) {
     if (typeof fcRuns === 'function' && !fcRuns(sub, q)) continue;      // 暂停 / 大序列没轮到的不算"在等"
@@ -69,7 +69,7 @@ function geomOwnTarget(sub, ok) {
 /* 此刻该显示谁。返回 {t, why} 或 null。why 写在小窗里,免得"画的是谁"靠猜 */
 function geomSubject() {
   const gm = (typeof adminMode !== 'undefined' && adminMode);
-  const shown = t => !!t && !t.dead && t.side === 'red' && (gm || (typeof contactPos === 'function' && !!contactPos(t, 'blue')));
+  const shown = t => !!t && !t.dead && t.side !== 'blue' && (gm || (typeof contactPos === 'function' && !!contactPos(t, 'blue'))); // TK4b:「不是我方」(原写「是红方」),中立的石头也是一条要定位的接触
   /* 光标停在小窗自己身上时不算悬停:mousemove 挂在 window 上,小窗盖着的那块地图照样在喂 xh.pt ——
      不拦的话,你把光标移上来读数,窗底下 60px 内的某条接触会把常驻顶掉。 */
   const r = GEOM.rc, hasXh = (typeof xh !== 'undefined');
@@ -82,7 +82,7 @@ function geomSubject() {
     const p = shipById(GEOM.pin);
     /* 「此刻显示不显示」与「清不清常驻」是两个判据。只有死了 / 彻底失联(none)才清;
        退回热区只是【暂时不显示】—— 第一版一退成热区就永久清掉,重新定位之后小窗不回来。 */
-    if (!p || p.dead || p.side !== 'red' || (!gm && typeof contactState === 'function' && contactState(p, 'blue') === 'none')) GEOM.pin = null;
+    if (!p || p.dead || p.side === 'blue' || (!gm && typeof contactState === 'function' && contactState(p, 'blue') === 'none')) GEOM.pin = null; // TK4b:同上,口径改成「是我方」
     else if (shown(p)) return { t: p, why: '点选' };
   }
   const sub = (typeof xhSubject === 'function') ? xhSubject() : null;

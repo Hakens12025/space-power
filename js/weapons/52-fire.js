@@ -121,7 +121,7 @@ function readyCells(s){return s.cellTimer?s.cellTimer.filter(t=>t<=0).length:s.c
 function orderMissileSalvo(shooter,target,n){ // 齐射指令(v119·单元制):取就绪单元,1s后发射;发射单元独立装填60s
   if(shooter.noFire)return; // RANGE1 禁火总闸门 2/3:齐射下令的唯一实现(唯一写 shooter.missileArm 的地方),挡住 enemyAI / 任务系统 deny·strike / T·R 选武器点击三条下令路径
   if(shooter.missileArm)return; // 已在装填
-  const isShip=target&&target.side!==undefined;
+  const isShip=target&&kindOf(target)!=='point'; // TK4b:点与物体的判别统一走 kindOf(原来看 side 是不是 undefined,石头进来会被当成点)
   if(isShip&&(shooter.side===target.side||target.dead))return;
   if(isShip){const q=litOf(target,shooter.side);if(q<2)return;} // 火控门控(v123):导弹需识别级(2,精确知道位置);探测级只知道大小,盲射走区域齐射
   if(shooter.ammo<(shooter.mslPer||12))return; // 弹药不足。RF6 修:原写死 16,是每组 16 枚时代的遗留(KIMI154 把每组改 12 时漏改此处与 fireMissiles 的组数上限),后果是每舰末尾 12 枚永远打不出去(DD 192 枚只能打 15 组、CA 240 枚只能打 19 组)
@@ -131,7 +131,7 @@ function orderMissileSalvo(shooter,target,n){ // 齐射指令(v119·单元制):�
 }
 function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时组数)与弹药限制;target可以是舰船或空位置(区域齐射)
   if(shooter.noFire)return; // RANGE1 禁火总闸门 3/3:真正生成导弹弹丸的唯一实现,挡住 missileArm 倒计时残留(即使某条路径漏进了下令,弹丸也生不出来)
-  const isShip=target&&target.side!==undefined; // 有 side 才是舰船,否则当空位置(区域目标)
+  const isShip=target&&kindOf(target)!=='point'; // 有 side 才是舰船,否则当空位置(区域目标) TK4b:判别统一走 kindOf
   if(shooter.dead)return;
   if(isShip&&(shooter.side===target.side||target.dead))return;
   // WR1:发射方向、速度剖面、直插方向全部按【估计位置】算(原来读 target.pos 真值)。交代不出估计位置就不发。区域齐射的点本来就是玩家给的。

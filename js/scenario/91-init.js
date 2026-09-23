@@ -4,6 +4,7 @@ function initFleet(){
   const env=curEnv();
   const shipsDef=env.ships;
   shipSeq=0;
+  rocks=[];rockSeq=0; // TK4b 换局清登记表的第二段(石头由环境模块按场景生成,见 ENV1)
   ships=shipsDef.map(d=>makeShip(d[0],d[1],[d[2],d[3],d[4]],d[5],d[6],'blue',d[7])); // TIER1 蓝方元组末尾追加 tier(d[7]):旧存档只有 7 项,d[7]=undefined → makeShip 内降级 T2,零改动可读
   selected=[];formations={};projectiles=[];  // FL1:编组名册层已删,换局要清的是编队本身(formations['1'..'4'])
   // KIMI146:换局全量重置战斗状态。原只重置上面4个,导致:①来袭走廊引用旧局弹丸(done永不置位→橙锥永不消失)

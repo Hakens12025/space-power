@@ -213,7 +213,7 @@ function stepFireControl(dt){ // RF5 每 tick 前置决策:清理失效序列 �
     s.fcTgt.mac=rm.tgt;s.fcFrom.mac=rm.from;
     s.fcTgt.msl=rs.tgt;s.fcFrom.msl=rs.from;
     // 3. 陷阱一:lockedTarget 同时是 physics/31 战斗转向的转向指令,必须 MAC 优先;指定点没有 side/dead 字段,不能写进去
-    s.lockedTarget=s.fcTgt.mac||((s.fcTgt.msl&&s.fcTgt.msl.side!==undefined)?s.fcTgt.msl:null);
+    s.lockedTarget=s.fcTgt.mac||((s.fcTgt.msl&&kindOf(s.fcTgt.msl)!=='point')?s.fcTgt.msl:null); // TK4b:点与物体的判别统一走 kindOf
     s.lockPlayer=false; // 与 57 自动索敌写锁定时的口径一致(DS176 起该字段已退役,只留兼容)
     // 4. 陷阱二:driftFire 有 60s 倒计时,不每 tick 续期的话,执行着移动命令的舰打满 60s 后主炮会静默哑火
     if(s.fcTgt.mac){s.driftFire=true;s.driftFireT=Math.max(s.driftFireT||0,5);}
@@ -231,7 +231,7 @@ function stepFireControlPost(dt){ // RF5 每 tick 末:按【本 tick 真的发�
       if(si>=0){
         const q=seqs[si],m=q.targets.length;
         const tgt=s.fcTgt&&s.fcTgt[kind];
-        if(kind==='msl'&&tgt&&tgt.side===undefined&&tgt.pos){ // 指定点齐射记账:fcGate 返回的 {pos} 与目标项共享同一个 pt 数组,按引用回找
+        if(kind==='msl'&&tgt&&kindOf(tgt)==='point'&&tgt.pos){ // 指定点齐射记账:fcGate 返回的 {pos} 与目标项共享同一个 pt 数组,按引用回找 TK4b:点的判别走 kindOf
           const it=q.targets.find(x=>x.pt&&x.pt===tgt.pos);
           if(it)it.ptShots=(it.ptShots||0)+1; // 达到 FC_PT_SALVOS 由下一 tick 的清理段移除
         }
