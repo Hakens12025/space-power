@@ -458,7 +458,8 @@ grep -q "TK24_RULES=ok" "$OUT" || { echo "✗ TK24_RULES 未通过(两条原来�
 grep -q "TK_ID=ok" "$OUT" || { echo "✗ TK_ID 未通过(TK2.6 身份三档:听辐射指纹只到疑似、照射与光学到确认;同一拍静听站排在照射站前面时 idBy 是 lis 但档位必须是确认;接触丢了回到未知且锁存清掉;浸泡里锁存为真 ⟹ 握着身份)"; fail=1; }
 grep -q "TK2_DIFF=ok" "$OUT" || { echo "✗ TK2_DIFF 未通过(TK2.0 门面改读航迹表:改前五个公式逐字照抄(TK3b 起读航迹上的同一格)、与新门面逐值对表 —— 浸泡 5 个检查点 + 人造六态;自己一方的 contactPos 仍是 s.pos 本身;0.5 拍迟滞的假门面必须被对出来)"; fail=1; }
 grep -q "TK_NOCREATE=ok" "$OUT" || { echo "✗ TK_NOCREATE 未通过(读永远不建航迹:没登记过的探针走遍五个门面 / trkOf / trkEach / render / targetAt 后两表都没有它;trkList 与 ships 过滤同序同内容)"; fail=1; }
-grep -q "TK4C_ROCK=ok" "$OUT" || { echo "✗ TK4C_ROCK 未通过(TK4c 石头:排在舰船之后、两方都枚举得到;与镜像摆放的冷红舰跑 20 拍航迹逐位相同;贴进光学认出距离才确认、确认后不可打;自动索敌确认后当场解锁、火控门给 null;打不坏;没认出时与冷红舰画布序列相同;按 id 找得到、名字打码、各有航迹号;确认的出红方接触群)"; fail=1; }
+grep -q "WCS1_TIGHT=ok" "$OUT" || { echo "✗ WCS1_TIGHT 未通过(自动化开火 = Weapons Tight:自动索敌、红方集火、数据链导弹 + 网分配、导引头自己重选、干扰后复锁,都只挑身份至少疑似的船;玩家亲手下的火控序列对未知照样放行)"; fail=1; }
+grep -q "TK4C_ROCK=ok" "$OUT" || { echo "✗ TK4C_ROCK 未通过(TK4c 石头:排在舰船之后、两方都枚举得到;与镜像摆放的冷红舰跑 20 拍航迹逐位相同;贴进光学认出距离才确认、确认后不可打;自动索敌不锁没认出的、确认后当场解锁、火控门给 null;打不坏;没认出时与冷红舰画布序列相同;按 id 找得到、名字打码、各有航迹号;确认的出红方接触群)"; fail=1; }
 grep -q "ENV_SENSE=ok" "$OUT" || { echo "✗ ENV_SENSE 未通过(ENV1 环境:空环境无操作;太阳禁区致盲光学与静听、热循环与 envSunBlind 逐方位一致;残骸场亮度恰 x0.25;动目标显示滤掉场内慢目标、与 envMtiBlind 一致;弹丸同一套;碎石带场景确定、不碰全局随机数;底图守渲染红线)"; fail=1; }
 grep -q "TK4A_RULES=ok" "$OUT" || { echo "✗ TK4A_RULES 未通过(TK4a 补钉的三道迷雾门:非 GM 下我方看不见的红方导弹不生成来袭走廊、不画、网内不连线;标成看得见之后三样都有)"; fail=1; }
 grep -q "TK3_NOFWD=ok" "$OUT" || { echo "✗ TK3_NOFWD 未通过(TK3c,原 TK1_FWD → TK3_TOMB:在场每艘船两方都有航迹;十个旧舰上感知字段名在船上一个都没有(自有 / 原型链都不许);新造的船同样没有;整对象拷贝拷不到、拷出来的不在表里;读永远不建航迹;重复登记抛。自检:往一次性船上写一个旧名字必须静默成功、航迹不动、而且被②判掉)"; fail=1; }

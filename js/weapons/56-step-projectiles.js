@@ -162,7 +162,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
           const pdir=V.norm(p.vel);
           let bestT=null,bestAng=Math.PI+1;
           trkEach(p.shooter.side,tk=>{
-            if(trkGone(tk)||trkLit(tk)<2||!trkFoe(tk))return;
+            if(trkGone(tk)||trkLit(tk)<2||!trkPid(tk))return; // WCS1:导弹自己重选只挑认出是船的
             const s=trkSrc(tk),a=V.angle(pdir,V.norm(V.sub(s.pos,p.pos)));
             if(a<bestAng){bestAng=a;bestT=s;}
           });
@@ -175,11 +175,11 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
           }
         }else if(p.guideMode==='link'){ // DS147:接入母舰火控 → 待分配,分配器(每0.5s)按需求补目标;先滑行不失的
           p.target=null;
-          const anyEnemy=trkEach(p.shooter.side,tk=>!trkGone(tk)&&trkLit(tk)>=2&&trkFoe(tk));
+          const anyEnemy=trkEach(p.shooter.side,tk=>!trkGone(tk)&&trkLit(tk)>=2&&trkPid(tk)); // WCS1:与网分配器(53)同一个口径,否则等一个永远分不来的目标
           if(!anyEnemy){p.done=true;return;} // 全灭,失的
         }else{ // 非link:独立重选最近(原逻辑,散兵游勇)
           let nt=null,nd=1e18;
-          trkEach(p.shooter.side,tk=>{if(!trkGone(tk)&&trkLit(tk)>=2&&trkFoe(tk)){const s=trkSrc(tk),d=V.len(V.sub(s.pos,p.pos));if(d<nd){nd=d;nt=s;}}});
+          trkEach(p.shooter.side,tk=>{if(!trkGone(tk)&&trkLit(tk)>=2&&trkPid(tk)){const s=trkSrc(tk),d=V.len(V.sub(s.pos,p.pos));if(d<nd){nd=d;nt=s;}}});
           if(nt){p.target=nt;recomputeNetOff(p,nt);}
           else{p.done=true;return;}
         }

@@ -140,10 +140,16 @@ function trkEach(side,fn){
 }
 function trkList(side,pred){const out=[];trkEach(side,function(tk,st){if(!pred||pred(tk,st))out.push(tk);});return out;}
 
-/* 自动化(自动索敌 / 网分配 / 重锁 / 红方集火)许不许把这条航迹当敌方目标。TK2 里恒为 true(纯占位);
-   TK4c:只排除【已确认不是船】的(决定 6,用户认可)—— 没认出的照样能打(保持"有跟踪级就能打"),打到石头是弹药白费。
-   今天场上只有船 ⇒ 类型恒为 'ship' ⇒ 恒为 true,与 TK2 逐位相同;接触群与接触降速也问它(已确认的石头不算敌情) */
+/* 这条航迹【可能是敌情】吗:只排除【已确认不是船】的(TK4c)。没认出的算 —— 你确实不知道它是什么。
+   问它的是显示与节奏:红方接触群(82-lod)、接触降速(core/06),以及玩家亲手下的火控序列的门(58 的 fcGate:玩家下令等于当场授权,只拒绝已确认的石头)。
+   ⚠ 自动化开不开火不问它,问下面的 trkPid(WCS1) */
 function trkFoe(tk){return !(trkIdLvl(tk)===ID_CON&&trkIdType(tk).kind!=='ship');}
+/* WCS1(2026-09-23 用户拍板):自动化【可以自己开火】吗 —— 必须已经认出它是船(身份至少「疑似」,类型是船)。
+   业内叫法:武器控制状态(Weapons Control Status)里的 Weapons Tight,开火要正面识别(PID, positive identification);
+   改前等于 Weapons Free(没确认是友军就打),于是自动化会朝任何跟踪级的"怪信号"开火 —— 残骸场里几乎全打在没认出的石头上。
+   「疑似」算(听辐射指纹认出的):对面开着雷达,自动化就能打它;将来的诱饵正是冒充这一档骗自动化开火,那是诱饵该有的本事。
+   问它的是全部自动挑目标的地方:自动索敌(57)、网分配(53)、导弹丢了目标后的自己重选(56)、红方集火(bots/60)。玩家亲手下的令不问它 */
+function trkPid(tk){return trkIdLvl(tk)>=ID_SUS&&trkIdType(tk).kind==='ship';}
 
 /* ============================================================================
    TK2.6 身份三档(2026-09-23)。先对名字:这是【分类可信度】的阶梯(≈ 美海军反潜的 possible / probable / certain),

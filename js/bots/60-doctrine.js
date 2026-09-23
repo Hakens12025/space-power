@@ -134,7 +134,7 @@ function botFleet(reds){ // 红方自己知道的三件事
 function botFocus(reds){ // WTA 贪心解:全队集火同一个。分数 = 价值 / 椭圆(越小越好打),带迟滞。TK2.2:候选是红方航迹表里的航迹,返回的仍是源对象(武器瞄对象)
   let best=null,bs=-1;
   trkEach('red',tk=>{
-    if(trkGone(tk)||(trkLit(tk)|0)<2||!trkFoe(tk))return; // 够不上跟踪级 ⇒ 导弹门就过不去
+    if(trkGone(tk)||(trkLit(tk)|0)<2||!trkPid(tk))return; // 够不上跟踪级 ⇒ 导弹门就过不去。WCS1:红方与蓝方同一条规矩,集火只挑认出是船的
     const p=trkPos(tk);if(!p)return;
     const b=trkSrc(tk),c=tk.cov,q=(c&&c.a1>0)?Math.max(1,c.a1):1e9;
     let sc=botFoeValue(b)*1e6/q;

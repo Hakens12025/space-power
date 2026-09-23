@@ -19,7 +19,7 @@ function netAllocCount(side,targetId){ // 该目标当前被多少【接入母�
   return c;
 }
 function reassignNets(side){ // 网间协同分配:待分配网(目标已灭)补到"需求未满足"的目标,高需求优先;仅 link 网参与
-  const cands=trkList(side,tk=>!trkGone(tk)&&trkLit(tk)>=2&&trkFoe(tk)).map(trkSrc); // TK2.1:候选从这一方的航迹表里取(按注册表顺序,与原来遍历 ships 同序;下面的稳定排序不变)
+  const cands=trkList(side,tk=>!trkGone(tk)&&trkLit(tk)>=2&&trkPid(tk)).map(trkSrc); // WCS1:自动分配只挑认出是船的 // TK2.1:候选从这一方的航迹表里取(按注册表顺序,与原来遍历 ships 同序;下面的稳定排序不变)
   if(!cands.length)return;
   const freeNets=new Set();
   for(const p of projectiles){

@@ -339,8 +339,9 @@ t('TK4A_RULES',function(){
    ① 登记与枚举:石头排在全部舰船之后;两方的枚举都给得出它(它是中立的,不是任何一方的"自己")。
    ② 分不开:一块与 DD 同体型的石头、一艘熄火静默的红 DD,摆在蓝 DD 两侧的镜像位置,跑 20 拍 —— 两条航迹的等级 / 定位 / 两个轴长 / 身份逐位相同。
    ③ 认出:把蓝 DD 挪进这块石头的光学认出距离(identDist 现量)⇒ 确认、类型是 rock、trkFoe 为假;挪进之前是未知、trkFoe 为真。
-   ④ 自动化:开火控的蓝舰锁上一块【没认出】的石头(跟踪级);石头一被确认 ⇒ 下一拍锁当场解掉(候选为空时也解 —— 第一版只"往下挑",候选为空就原样留着);
-      火控序列的门对已确认的石头给 null、对没认出的给它本身。
+   ④ 自动化:WCS1 起开火控的蓝舰【不会】自己锁一块没认出的石头(跟踪级也不锁,Weapons Tight);
+      锁是从别处来的(玩家下令之后留下的)也一样 —— 石头一被确认 ⇒ 下一拍锁当场解掉(候选为空时也解:第一版只"往下挑",候选为空就原样留着);
+      火控序列的门(玩家亲手下的令)对没认出的给它本身、对已确认的石头给 null。
    ⑤ 打不坏:applyDamage 之后石头没有结构值、没死。
    ⑥ 画法:没认出的实况石头与一艘静止、熄火、静默、没认出的红舰,画布调用的方法序列与文字逐项相同;认出之后写「碎石」。
    ⑦ 按 id 找得到(objById / fcShip);打码的名字:没认出「未知接触」、认出「碎石」;信息卡认出后写类别、不写结构;两条航迹各有航迹号且不同。
@@ -387,12 +388,13 @@ t('TK4C_ROCK',function(){
     /* ④ 自动化:只留蓝舰与石头,石头手搭成没认出的跟踪级 */
     ships.length=0;ships.push(B);B.autoEngage=true;B.roe='free';B.noFire=true;B.lockedTarget=null;
     live(K);
-    stepWeaponSystems(0.02);var lock1=B.lockedTarget;
+    stepWeaponSystems(0.02);var lock1=B.lockedTarget;                 /* WCS1:没认出 ⇒ 自动化不锁 */
     var gUnk=fcGate(B,{tid:K.id,allow:{mac:true,msl:true}},'msl');
+    B.lockedTarget=K;stepWeaponSystems(0.02);var lock1b=B.lockedTarget;   /* 别处来的锁:没认出时留着 */
     trkOf('blue',K).cov.idn=true;trkOf('blue',K).idc=true;
-    stepWeaponSystems(0.02);var lock2=B.lockedTarget;
+    stepWeaponSystems(0.02);var lock2=B.lockedTarget;                 /* 确认是石头 ⇒ 当场解 */
     var gCon=fcGate(B,{tid:K.id,allow:{mac:true,msl:true}},'msl');
-    var ok4=(lock1===K&&lock2===null&&gUnk===K&&gCon===null);
+    var ok4=(lock1===null&&lock1b===K&&lock2===null&&gUnk===K&&gCon===null);
     /* ⑤ */
     applyDamage(K,500,B,'mac');
     var ok5=(!('hp' in K)&&K.dead===false);
@@ -434,7 +436,7 @@ t('TK4C_ROCK',function(){
     out=(ok?'ok':'fail')+' ① 枚举:蓝方表 [红舰, 石头] 顺序='+(ordB[0]===R&&ordB[1]===K)+' 红方表里也有石头='+(ordR.indexOf(K)>=0)+'='+ok1
       +' | ② 镜像摆放跑 20 拍分不开='+same2+'('+rd2+')='+ok2
       +' | ③ 认出前 '+LV[lvPre]+' 可打='+foePre+' ⇒ 挪进 '+Math.round(idd*0.8/1000)+'k 后 '+LV[lvPost]+' 类型='+(ty&&ty.kind)+' 可打='+foePost+'='+ok3
-      +' | ④ 自动索敌锁上没认出的石头='+(lock1===K)+' 确认后当场解锁='+(lock2===null)+' 火控门 没认出给它='+(gUnk===K)+' 确认后给 null='+(gCon===null)+'='+ok4
+      +' | ④ 自动索敌不锁没认出的石头='+(lock1===null)+' 别处来的锁没认出时留着='+(lock1b===K)+' 确认后当场解锁='+(lock2===null)+' 火控门 没认出给它='+(gUnk===K)+' 确认后给 null='+(gCon===null)+'='+ok4
       +' | ⑤ 打不坏='+ok5
       +' | ⑥ 没认出的石头与冷红舰画布序列相同='+(sShip===sRock)+'('+nRec+' 步) 认出后写「碎石」='+(sKnown.indexOf('T:碎石')>=0)+'='+ok6
       +' | ⑦ 按 id 找得到='+n7+' 名字(信息卡 / 火控面板) '+nmUnk+' '+fcUnk+' / '+nmCon+' '+fcCon+' 航迹号 '+tnR+' / '+tnK+'='+ok7
@@ -448,6 +450,75 @@ t('TK4C_ROCK',function(){
     ENV.sun=envSun;ENV.fields.length=0;envF.forEach(function(f){ENV.fields.push(f);});
     ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
     lodPrev={fleet:{},pairsB:null,pairsR:null};
+  }
+  return out;
+});
+
+/* WCS1_TIGHT:自动化开火改成 Weapons Tight(2026-09-23 用户拍板):每一处【自动挑目标】的地方,只挑身份至少「疑似」、类型是船的航迹。
+   同一艘红舰、同样的跟踪级航迹,只换身份一格(未知 / 疑似 / 确认):
+   ① 蓝方自动索敌(57):未知不锁;疑似、确认都锁。
+   ② 红方集火(bots/60 的 botFocus):红方表里的蓝舰未知 ⇒ 没有集火目标;疑似 ⇒ 是它。
+   ③ 数据链导弹丢了目标(56 的 link 支)+ 网分配器(53):新目标未知 ⇒ 导弹自毁(没有可分配的);疑似 ⇒ 先滑行等,分配器把它派过去。
+   ④ 导引头自己重选(56 的非 link 支):贴近到导引头自己看得见的距离;未知 ⇒ 自毁;疑似 ⇒ 重选到它。
+   ⑤ 干扰之后复锁(56 的 chaffed 支):正前方一艘未知、侧面一艘疑似(原来那个目标)⇒ 复锁到疑似那艘,不拐向正前方的怪信号。
+   ⑥ 玩家亲手下的令不受这条管:火控序列的门对未知的航迹照样放行(玩家下令 = 当场授权)。 */
+t('WCS1_TIGHT',function(){
+  if(typeof trkPid!=='function')return 'fail 缺 trkPid';
+  var shipsBak=ships.slice(),projBak=projectiles,admBak=adminMode,seq0=shipSeq,mmBak=missileMode,rocksBak=rocks,out='';
+  var ID=['未知','疑似','确认'];
+  /* 把 x 在 side 那张表里写成跟踪级实况,身份按 lv 写(0 未知 / 1 疑似 / 2 确认) */
+  var fab=function(side,x,lv){var tk=tkFab(side,x,{lit:2,cov:{fix:true,n:2,age:0,x:x.pos[0],y:x.pos[1],a1:5000,a2:3000,r1:5000,r2:3000,idn:lv>=1}});tk.idc=(lv===2);return tk;};
+  var calm=function(list){list.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.flame=0;x.sideFlame=0;x.autoEngage=false;x.roe='hold';x.lockedTarget=null;});};
+  try{
+    adminMode=false;rocks=[];
+    /* ① */
+    var r1=[0,1,2].map(function(lv){
+      projectiles=[];var B=makeShip('CA','限蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),R=makeShip('DD','限红',[200000,0,0],[-1,0,0],[0,0,0],'red',2);
+      ships.length=0;ships.push(B,R);calm(ships);B.autoEngage=true;B.roe='free';B.noFire=true;fab('blue',R,lv);
+      stepWeaponSystems(0.02);return B.lockedTarget===R;});
+    var ok1=(r1[0]===false&&r1[1]===true&&r1[2]===true);
+    /* ② */
+    var r2=[0,1].map(function(lv){
+      var E=makeShip('CA','限红集',[0,0,0],[1,0,0],[0,0,0],'red',2),B=makeShip('DD','限蓝靶',[200000,0,0],[-1,0,0],[0,0,0],'blue',2);
+      ships.length=0;ships.push(B,E);calm(ships);fab('red',B,lv);return botFocus([E])===B;});
+    var ok2=(r2[0]===false&&r2[1]===true);
+    /* ③④ 真发两组导弹,原目标死掉,换一艘新目标 */
+    var msl=function(dist,lv){
+      projectiles=[];missileMode='auto';
+      var B=makeShip('CA','导蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),R1=makeShip('DD','导红1',[dist,0,0],[-1,0,0],[0,0,0],'red',2),R2=makeShip('DD','导红2',[dist*1.05,dist*0.15,0],[-1,0,0],[0,0,0],'red',2);
+      ships.length=0;ships.push(B,R1,R2);calm(ships);B.noFire=false;
+      fab('blue',R1,1);fab('blue',R2,lv);
+      fireMissiles(B,R1,2);var ms=projectiles.filter(function(p){return p.type==='missile';});
+      stepProjectiles(0.02);var gm=ms.map(function(p){return p.guideMode;}).join('/');
+      R1.dead=true;fab('blue',R2,lv);
+      stepProjectiles(0.02);if(typeof reassignNets==='function')reassignNets('blue');
+      var res=ms.map(function(p){return p.done?'自毁':(p.target===R2?'R2':(p.target===null?'等':'别的'));});
+      return {n:ms.length,gm:gm,res:res.join('/'),allR2:ms.length>0&&res.every(function(x){return x==='R2';}),allDone:ms.length>0&&res.every(function(x){return x==='自毁';})};
+    };
+    var m3u=msl(200000,0),m3s=msl(200000,1),m4u=msl(60000,0),m4s=msl(60000,1);
+    var ok3=(m3u.gm.indexOf('link')>=0&&m3u.allDone&&m3s.allR2);
+    var ok4=(m4u.allDone&&m4s.allR2);
+    /* ⑤ 干扰之后复锁 */
+    projectiles=[];
+    var B5=makeShip('CA','扰蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),A5=makeShip('DD','扰红前',[150000,0,0],[-1,0,0],[0,0,0],'red',2),S5=makeShip('DD','扰红侧',[100000,80000,0],[-1,0,0],[0,0,0],'red',2);
+    ships.length=0;ships.push(B5,A5,S5);calm(ships);B5.noFire=false;fab('blue',A5,0);fab('blue',S5,1);
+    fireMissiles(B5,S5,1);var p5=projectiles.filter(function(p){return p.type==='missile';})[0];
+    if(p5){p5.pos=[50000,0,0];p5.vel=[5000,0,0];p5.chaffed=true;p5.chaffT=5;p5.lastTarget=S5;p5.target=null;stepProjectiles(0.02);}
+    var ok5=!!p5&&p5.target===S5;
+    /* ⑥ */
+    var B6=makeShip('CA','令蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),R6=makeShip('DD','令红',[200000,0,0],[-1,0,0],[0,0,0],'red',2);
+    ships.length=0;ships.push(B6,R6);calm(ships);fab('blue',R6,0);
+    var ok6=(fcGate(B6,{tid:R6.id,allow:{mac:true,msl:true}},'msl')===R6);
+    var ok=(ok1&&ok2&&ok3&&ok4&&ok5&&ok6);
+    out=(ok?'ok':'fail')+' ① 自动索敌 未知/疑似/确认 锁='+r1.join('/')+'(须 false/true/true)='+ok1
+      +' | ② 红方集火 未知/疑似 ='+r2.join('/')+'(须 false/true)='+ok2
+      +' | ③ 数据链导弹 '+m3u.n+' 组(引导 '+m3u.gm+'):新目标未知 ⇒ '+m3u.res+'(须 自毁);疑似 ⇒ '+m3s.res+'(须 R2)='+ok3
+      +' | ④ 贴近重选(引导 '+m4u.gm+'):未知 ⇒ '+m4u.res+' 疑似 ⇒ '+m4s.res+'='+ok4
+      +' | ⑤ 干扰后复锁到侧面的疑似那艘、不拐向正前方的未知='+ok5+(p5?'':'(没发出导弹)')
+      +' | ⑥ 玩家的火控序列对未知照样放行='+ok6;
+  }finally{
+    shipSeq=seq0;adminMode=admBak;missileMode=mmBak;rocks=rocksBak;projectiles=projBak;
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
   }
   return out;
 });

@@ -823,6 +823,7 @@ trkLit
 trkNew
 trkOf
 trkPaintedBy
+trkPid
 trkPos
 trkSeeSet
 trkSees

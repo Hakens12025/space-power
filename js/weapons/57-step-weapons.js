@@ -25,7 +25,7 @@ function stepWeaponSystems(dt){
       if(hasMAC(s)&&s.macOn!==false){s.driftFire=true;s.driftFireT=60;}
       continue;
     }
-    const enemies=trkList(s.side,tk=>!trkGone(tk)&&trkLit(tk)>=2&&trkFoe(tk)).map(trkSrc); // TK2.1:自动索敌的候选从这一方的航迹表里取(与原来遍历 ships 同序)
+    const enemies=trkList(s.side,tk=>!trkGone(tk)&&trkLit(tk)>=2&&trkPid(tk)).map(trkSrc); // WCS1:自动索敌只挑认出是船的(Weapons Tight);没认出的"怪信号"要玩家自己下令 // TK2.1:自动索敌的候选从这一方的航迹表里取(与原来遍历 ships 同序)
     if(!enemies.length)continue;
     let best=null,bs=-1e18;
     for(const t of enemies){
