@@ -8,10 +8,10 @@
 <style>
 /* 地图组 · 红外:左下角的开关。几何与"开"态照抄右下角 #tools 的工具钮(css/app.css),颜色一律走设计变量 */
 #irDock{position:absolute;left:var(--gut);bottom:56px;z-index:var(--z-hud);display:flex;align-items:center;gap:6px}
-#irMode,#irSun,#irGlare{display:inline-flex}
-#irMode .hbtn,#irSun .hbtn,#irGlare .hbtn{border-radius:0;margin-left:-1px}
-#irMode .hbtn:first-child,#irSun .hbtn:first-child,#irGlare .hbtn:first-child{border-radius:var(--r-sm) 0 0 var(--r-sm);margin-left:0}
-#irMode .hbtn:last-child,#irSun .hbtn:last-child,#irGlare .hbtn:last-child{border-radius:0 var(--r-sm) var(--r-sm) 0}
+#irMode,#irSun,#irGlare,#irEnv{display:inline-flex}
+#irMode .hbtn,#irSun .hbtn,#irGlare .hbtn,#irEnv .hbtn{border-radius:0;margin-left:-1px}
+#irMode .hbtn:first-child,#irSun .hbtn:first-child,#irGlare .hbtn:first-child,#irEnv .hbtn:first-child{border-radius:var(--r-sm) 0 0 var(--r-sm);margin-left:0}
+#irMode .hbtn:last-child,#irSun .hbtn:last-child,#irGlare .hbtn:last-child,#irEnv .hbtn:last-child{border-radius:0 var(--r-sm) var(--r-sm) 0}
 #irDock .hbtn.on{color:var(--acc);border-color:var(--acc);position:relative;z-index:1}
 #irSelftest{position:fixed;left:8px;top:60px;z-index:var(--z-transient);white-space:pre-wrap;padding:8px;background:var(--srf-panel);color:var(--txt);font:12px var(--ff-mono,monospace)}
 </style>
@@ -32,7 +32,7 @@
 <div id="mapTag">战术层<b>TACTICAL</b></div><!-- SN6 当前层的读数,只在【换层那一刻】写(render/80-viewtier 的 vtFrame) -->
 
 <!-- 地图组 · 红外:左下角的红外开关 + 两种投法(甲 位置 / 乙 方向)。逻辑在本页最后那段脚本里 -->
-<div id="irDock"><button class="hbtn" id="irBtn" title="红外图(热像):整屏一层底红,有热源的地方与背景不平衡、颜色偏离底红 —— 越强偏得越多(暗红 → 橙 → 黄 → 近白)。色标固定:同样的热永远是同样的颜色。带一点传感器噪声:很弱的热会淹在颗粒里。点火、开火、开雷达的船会更偏">红外</button><div id="irMode"><button class="hbtn" data-irm="jia" title="甲 位置:热源在它所在的位置偏色。近处小而亮,远处大而淡(越远越糊)">甲 位置</button><button class="hbtn" data-irm="yi" title="乙 方向:我方每艘船朝热源的那一片扇区整体偏暖,沿着这个方向远近都一样(红外量不到距离);几艘船的扇区交叠处更偏">乙 方向</button></div><div id="irSun"><button class="hbtn" data-sun="none" title="没有太阳">无太阳</button><button class="hbtn" data-sun="dir" title="太阳·方向:太阳在无穷远的方位 150°(与碎石带那颗同方位),写进引擎,引擎的探测也照它致盲(禁区半角 30°;碎石带那颗是 10°,不受影响)。乙:朝太阳那片扇区刺眼;甲:看不到太阳本身,但禁区里的热源被晃掉">太阳·方向</button><button class="hbtn" data-sun="pos" title="太阳·位置:在地图上放一颗有位置的恒星,真太阳大小(半径 69.6 万公里),默认 690 万公里外(约帕克太阳探测器最近点),能拖。只在红外图里,引擎不知道它。甲:刺眼的亮斑加散射光晕;乙:朝它那片扇区刺眼">太阳·位置</button></div><div id="irGlare"><button class="hbtn" data-gl="p4" title="杂散光·四次方:禁区外按角度的四次方衰减(偏开 90° 还有发现线的十几倍);恒星的光晕按距离的三次方淡出">光·四次方</button><button class="hbtn" data-gl="mid" title="杂散光·中(默认):介于四次方与陡之间,偏四次方 —— 偏开 45° / 60° / 90° 分别约是发现线的 157 / 37 / 3.8 倍">光·中</button><button class="hbtn" data-gl="steep" title="杂散光·陡(按真实光学):禁区边缘外每多偏 10° 降到十分之一;恒星的光晕每远一个太阳半径降到十分之一">光·陡</button></div></div>
+<div id="irDock"><button class="hbtn" id="irBtn" title="红外图(热像):整屏一层底红,有热源的地方与背景不平衡、颜色偏离底红 —— 越强偏得越多(暗红 → 橙 → 黄 → 近白)。色标固定:同样的热永远是同样的颜色。带一点传感器噪声:很弱的热会淹在颗粒里。点火、开火、开雷达的船会更偏">红外</button><div id="irMode"><button class="hbtn" data-irm="jia" title="甲 位置:热源在它所在的位置偏色。近处小而亮,远处大而淡(越远越糊)">甲 位置</button><button class="hbtn" data-irm="yi" title="乙 方向:我方每艘船朝热源的那一片扇区整体偏暖,沿着这个方向远近都一样(红外量不到距离);几艘船的扇区交叠处更偏">乙 方向</button></div><div id="irSun"><button class="hbtn" data-sun="none" title="没有太阳">无太阳</button><button class="hbtn" data-sun="dir" title="太阳·方向:太阳在无穷远的方位 150°(与碎石带那颗同方位),写进引擎,引擎的探测也照它致盲(禁区半角 30°;碎石带那颗是 10°,不受影响)。乙:朝太阳那片扇区刺眼;甲:看不到太阳本身,但禁区里的热源被晃掉">太阳·方向</button><button class="hbtn" data-sun="pos" title="太阳·位置:在地图上放一颗有位置的恒星,真太阳大小(半径 69.6 万公里),默认 690 万公里外(约帕克太阳探测器最近点),能拖。只在红外图里,引擎不知道它。甲:刺眼的亮斑加散射光晕;乙:朝它那片扇区刺眼">太阳·位置</button></div><div id="irGlare"><button class="hbtn" data-gl="p4" title="杂散光·四次方:禁区外按角度的四次方衰减(偏开 90° 还有发现线的十几倍);恒星的光晕按距离的三次方淡出">光·四次方</button><button class="hbtn" data-gl="mid" title="杂散光·中(默认):介于四次方与陡之间,偏四次方 —— 偏开 45° / 60° / 90° 分别约是发现线的 157 / 37 / 3.8 倍">光·中</button><button class="hbtn" data-gl="steep" title="杂散光·陡(按真实光学):禁区边缘外每多偏 10° 降到十分之一;恒星的光晕每远一个太阳半径降到十分之一">光·陡</button></div><div id="irEnv"><button class="hbtn" data-env="cloud" title="尘埃云(红外卷云):地图上的丝状暖色结构,有太阳时被晒热、更亮。衬在云里的目标背景热、对比度低,更难看清">尘埃云</button></div></div>
 
 <div id="hud" class="panel">
   <div class="logo">SPACE POWER<span> · 骨架</span></div>
@@ -316,9 +316,10 @@ function irmLumK(o,t){ /* 红外图里的亮度 / 引擎的光学亮度 */
    禁区里仍照引擎一刀切(方向型;位置型引擎不知道,禁区里靠这条把它压到几乎看不见)。
    同样按"亮度乘 m"算:热 x m,角误差 / √m —— 逆光时山又矮又宽 */
 function irmContrast(o,t){
-  const u=irmSunDirAt(o.pos);if(!u)return 1;
+  const cb=irmCloudBg(t.pos);   /* 尘埃云:目标衬在热的云里,背景同样被抬高(同一条背景受限律,见尘埃云那一节) */
+  const u=irmSunDirAt(o.pos);if(!u)return 1/Math.sqrt(1+cb/IRM_SOLAR.G0);
   const d=Math.atan2(t.pos[1]-o.pos[1],t.pos[0]-o.pos[0])-Math.atan2(u[1],u[0]);
-  return 1/Math.sqrt(1+irmGlare(Math.atan2(Math.sin(d),Math.cos(d)))/IRM_SOLAR.G0);
+  return 1/Math.sqrt(1+(irmGlare(Math.atan2(Math.sin(d),Math.cos(d)))+cb)/IRM_SOLAR.G0);
 }
 /* 一对观测:o 看 t。全部读引擎的判据:信噪比(收到的热量)、角误差(方向精度)、模糊宽度 = 距离 x 角误差 */
 function irmPair(o,t){
@@ -469,8 +470,61 @@ function irmFieldYi(){
   for(let j=0;j<gh;j++)for(let i=0;i<gw;i++)irmF[j*gw+i]=irmYiAt(irmProf,i*C,j*C);
   return irmProf.length;
 }
+/* ---- 尘埃云(业内叫红外卷云 infrared cirrus)—— 用户选了「4 尘埃云」----
+   依据:红外天文卫星 IRAS(1983)发现的"红外卷云"—— 星际尘埃被晒热后发的丝状红外辐射;内太阳系的红外背景主要是晒热的黄道尘埃。
+   形状:世界坐标里的分形噪声(固定种子,地图的一部分,不随镜头变)。大尺度两层决定哪里有云(约四成面积),
+     脊状分形(ridged fBm,1 - |2n - 1| 的平方逐层叠加)拉出丝 —— 这是做丝状结构的标准手法。
+   亮度:V x 浓度,有太阳时晒热、没太阳时只有 DARK 那么多(星际尘埃本身很冷)。V、DARK 是暂定的数。
+   两个作用:①画出来(甲乙都画 —— 云是地形,和残骸场一样算已知的地图);
+            ②衬在云里的目标背景热、对比度低:与逆光同一条背景受限律,甲里的山变矮变宽(irmContrast)。
+   ②按固定的物理尺度算(细到 MIN_KM),不随缩放变;①只画屏幕上分得出的那几层(细到两个粗格),拉远拉近不会闪。
+   性能:云按 2 x 2 格一个粗格算、双线性铺回;镜头和太阳不变时直接用上一帧的结果。左下角「尘埃云」开关,默认开 */
+const IRM_CLOUD={on:true,V:1.3,DARK:0.3,L0:1600000,OCT:9,GAIN:0.78,SEED:20,WARP:0.35,MASK_LO:0.5,MASK_HI:0.66,MIN_KM:12500};
+function irmHash(ix,iy,sd){let h=Math.imul(ix|0,374761393)^Math.imul(iy|0,668265263)^Math.imul(sd|0,1442695041);h=Math.imul(h^(h>>>13),1274126177);return((h^(h>>>16))>>>0)/4294967296;}
+/* 梯度噪声(Perlin 那一类):格点上放随机方向的梯度,输出约在 -1 ~ 1。第一版用的值噪声(格点上放随机值)有明显的方格 ——
+   脊状变换把方格放大成了"迷宫";换成梯度噪声、每一层再转一个角度,方向感就没了 */
+function irmGN(x,y,sd){
+  const ix=Math.floor(x),iy=Math.floor(y),fx=x-ix,fy=y-iy,ux=fx*fx*fx*(fx*(fx*6-15)+10),uy=fy*fy*fy*(fy*(fy*6-15)+10);
+  const g=function(i,j,dx,dy){const a=irmHash(i,j,sd)*6.283185307;return Math.cos(a)*dx+Math.sin(a)*dy;};
+  const n00=g(ix,iy,fx,fy),n10=g(ix+1,iy,fx-1,fy),n01=g(ix,iy+1,fx,fy-1),n11=g(ix+1,iy+1,fx-1,fy-1);
+  return 1.41*(n00+(n10-n00)*ux+(n01-n00)*uy+(n00-n10-n01+n11)*ux*uy);
+}
+let irmCloudNorm=0;{let a=0.5;for(let o=0;o<IRM_CLOUD.OCT;o++,a*=IRM_CLOUD.GAIN)irmCloudNorm+=a;}
+function irmCloudD(x,y,minL){ /* 浓度 0 ~ 1。minL:最细画到多少公里(物理用固定值,画面按屏幕) */
+  const C=IRM_CLOUD,L0=C.L0;
+  /* 哪里有云:两层低频梯度噪声,平滑阈值 */
+  let m=0.5+0.5*(0.65*irmGN(x/(2*L0),y/(2*L0),C.SEED)+0.35*irmGN(x/L0,y/L0,C.SEED+1));
+  m=(m-C.MASK_LO)/(C.MASK_HI-C.MASK_LO);if(m<=0)return 0;if(m>1)m=1;m=m*m*(3-2*m);
+  /* 坐标扭曲(domain warping):用一层低频噪声把坐标推开,丝就有了流向 */
+  const wx=x+C.WARP*L0*irmGN(x/L0+3.7,y/L0+1.3,C.SEED+2),wy=y+C.WARP*L0*irmGN(x/L0-2.1,y/L0+5.9,C.SEED+3);
+  /* 丝:脊状分形,每一层转 37°、缩一半、振幅留 GAIN(0.6 时战术层上只剩一片平滑的红,细丝要靠细的那几层撑)*/
+  let f=0,a=0.5,L=L0/2,cs=1,sn=0;const c37=Math.cos(0.6458),s37=Math.sin(0.6458);
+  for(let o=0;o<C.OCT;o++,L/=2,a*=C.GAIN){
+    const w=Math.min(1,L/minL-1);if(w<=0)break;
+    const px=(wx*cs-wy*sn)/L,py=(wx*sn+wy*cs)/L,r=1-Math.abs(irmGN(px,py,C.SEED+10+o));f+=a*w*r*r*r;   /* 三次方:脊更尖、丝更细 */
+    const c2=cs*c37-sn*s37;sn=cs*s37+sn*c37;cs=c2;
+  }
+  return Math.min(1,m*f/irmCloudNorm*1.4);   /* 第一版脊取平方、乘 1.6,云里大片顶到 1、被削平,战术层上看不出丝;改成三次方的尖脊再乘 1.4 */
+}
+function irmCloudLit(){return IRM_SUN.mode==='none'?IRM_CLOUD.DARK:1;}
+function irmCloudBg(p){return IRM_CLOUD.on?IRM_CLOUD.V*irmCloudD(p[0],p[1],IRM_CLOUD.MIN_KM)*irmCloudLit():0;}
+let irmCloudCache=null;
+function irmCloudAdd(){ /* 把云铺进这一帧的场里(甲乙都铺) */
+  if(!IRM_CLOUD.on)return;
+  const gw=irmGW,gh=irmGH,C=IRM.CELL,cw=Math.ceil(gw/2)+1,ch=Math.ceil(gh/2)+1,lit=irmCloudLit();
+  const key=[cam.x,cam.y,cam.zoom,gw,gh,lit,IRM_CLOUD.V].join('|');
+  if(!irmCloudCache||irmCloudCache.key!==key){
+    const G=new Float32Array(cw*ch),minL=4*C/cam.zoom;
+    for(let j=0;j<ch;j++)for(let i=0;i<cw;i++){const w=worldAt(i*2*C,j*2*C);G[j*cw+i]=IRM_CLOUD.V*lit*irmCloudD(w[0],w[1],minL);}
+    irmCloudCache={key:key,G:G,cw:cw};
+  }
+  const G=irmCloudCache.G;
+  for(let j=0;j<gh;j++){const j0=j>>1,fy=(j&1)*0.5,row=j*gw;for(let i=0;i<gw;i++){const i0=i>>1,fx=(i&1)*0.5,q=j0*cw+i0;
+    const v=G[q]*(1-fx)*(1-fy)+G[q+1]*fx*(1-fy)+G[q+cw]*(1-fx)*fy+G[q+cw+1]*fx*fy;irmF[row+i]+=v;}}
+}
 function drawIrMap(){
   if(IRM.mode==='yi')irmFieldYi();else irmFieldJia();
+  irmCloudAdd();
   const gw=irmGW,gh=irmGH,C=IRM.CELL,F=irmF;
   if(!irmCv||irmCv.width!==gw||irmCv.height!==gh){irmCv=document.createElement('canvas');irmCv.width=gw;irmCv.height=gh;irmImg=irmCv.getContext('2d').createImageData(gw,gh);}
   const D=irmImg.data,nz=IRM.NOISE>0?irmNoiseGet(gw*gh):null,na=IRM.NOISE;
@@ -612,9 +666,11 @@ function irmSync(){
   for(const x of document.querySelectorAll('#irSun [data-sun]'))x.classList.toggle('on',x.getAttribute('data-sun')===IRM_SUN.mode);
   for(const x of document.querySelectorAll('#irGlare [data-gl]'))x.classList.toggle('on',x.getAttribute('data-gl')===IRM_SUN.FALL);
   document.getElementById('irGlare').style.opacity=IRM_SUN.mode!=='none'?'1':'.45';
+  const ce=document.querySelector('#irEnv [data-env="cloud"]');if(ce)ce.classList.toggle('on',IRM_CLOUD.on);
 }
 on('irBtn','click',function(e){e.currentTarget.blur();IRM.on=!IRM.on;irmSync();});
 on('irSun','click',function(e){const x=e.target.closest('[data-sun]');if(!x)return;x.blur();irmSunSet(x.getAttribute('data-sun'));});
+on('irEnv','click',function(e){const x=e.target.closest('[data-env]');if(!x)return;x.blur();if(x.getAttribute('data-env')==='cloud')IRM_CLOUD.on=!IRM_CLOUD.on;irmSync();});
 on('irGlare','click',function(e){const x=e.target.closest('[data-gl]');if(!x)return;x.blur();IRM_SUN.FALL=x.getAttribute('data-gl');irmSync();});
 on('irMode','click',function(e){const x=e.target.closest('[data-irm]');if(!x)return;x.blur();IRM.mode=x.getAttribute('data-irm');irmSync();});
 irmSync();
@@ -625,6 +681,7 @@ function irmSelftest(){
   const shipsBak=ships.slice(),seq0=shipSeq,camBak={x:cam.x,y:cam.y,zoom:cam.zoom},onBak=IRM.on,modeBak=IRM.mode,rocksBak=(typeof rocks!=='undefined')?rocks.slice():null,nzBak=IRM.NOISE;
   const astN=rocksBak?rocksBak.filter(k=>k.asteroid).length:0;   /* ⑫ 用:页面加载那一局撒下的小行星(读在任何测试动 rocks 之前) */
   IRM.NOISE=0;   /* ① ~ ⑩ 比的是确切的颜色,先关掉噪声;⑪ 专门测噪声 */
+  const cloudBak=IRM_CLOUD.on;IRM_CLOUD.on=false;   /* ① ~ ㉖ 都按"没有云"写的(没有热源时整屏是底色);云单独在 ㉗ 测 */
   const sunBak=IRM_SUN.mode,fallBak=IRM_SUN.FALL;irmSunSet('none');IRM_SUN.FALL='p4';   /* ⑭ ⑮ 量的是四次方那一档;⑱ 专门量陡的那一档 */
   const px=function(i,j){const o=(j*irmGW+i)*4,D=irmImg.data;return [D[o],D[o+1],D[o+2],D[o+3]];};
   const same=function(a,b){return a[0]===b[0]&&a[1]===b[1]&&a[2]===b[2]&&a[3]===b[3];};
@@ -915,9 +972,28 @@ function irmSelftest(){
     T('㉖ 近处看得出舰形:认出距离上 N = 4;更远沿船身拉长;更近显出真舰种的舰形,再近有构件;远处不画',
       Math.abs(N1-4)<1e-6&&Math.abs(N15-4/2.25)<1e-6&&along>1.5*across&&s08.length===1&&s08[0].cls==='CA'&&!s08[0].detail&&s075.length===1&&s075[0].detail&&s15.length===0&&!mark&&Math.abs(c08-0.5)<0.03,
       '认出距离 '+Math.round(dId)+' km 处 N='+N1.toFixed(3)+' · 1.5 倍 N='+N15.toFixed(3)+' 沿船身 '+along.toFixed(3)+' / 横向 '+across.toFixed(3)+' · 0.8 倍 '+JSON.stringify(s08)+' · 0.75 倍 '+JSON.stringify(s075)+' · 1.5 倍 '+s15.length+' 个 · 全显时中心 / 原峰 '+c08.toFixed(3)+'(应为 0.5)');
+    /* ㉗ 尘埃云:①找一处浓的云,目标放进去,甲的山高 = 关云时 x 1/(1 + 1.3 x 浓度 x 亮度)(亮度:没太阳 0.3、有太阳 1;数写字面值);
+          ②背景按物理尺度算,换镜头不变;③画面:没有热源时,粗格点上的场值 = 1.3 x 亮度 x 浓度(按屏幕细度);④关掉:场里没有云、不打折 */
+    IRM_CLOUD.on=true;ships.length=0;B.pos=[0,0,0];B.flame=0;rocks=[];irmSunSet('none');IRM.mode='jia';
+    let cp=null,cd=0;for(let i=-40;i<=40&&cd<0.5;i++)for(let j=-40;j<=40;j++){const x=i*50000,y=j*50000,dd=irmCloudD(x,y,IRM_CLOUD.MIN_KM);if(dd>cd){cd=dd;cp=[x,y];}if(cd>=0.5)break;}
+    const C27=makeShip('DD','红外测云',[cp[0]+Rv*0.4,cp[1],0],[0,1,0],[0,0,0],'red',2);C27.flame=0;C27.sideFlame=0;C27.fireHot=0;setEmit(C27,'silent');
+    C27.pos=[cp[0],cp[1],0];B.pos=[cp[0]-Rv*0.4,cp[1],0];ships.push(B,C27);   /* 目标在云最浓处,观测船在它正西(看它的方向偏开太阳恰好 150°) */
+    const D27=irmCloudD(C27.pos[0],C27.pos[1],IRM_CLOUD.MIN_KM);
+    const pkOn=irmHill(C27,[B]).peak;IRM_CLOUD.on=false;const pkOff=irmHill(C27,[B]).peak;IRM_CLOUD.on=true;
+    irmSunSet('dir');IRM_SUN.FALL='p4';const pkSunOn=irmHill(C27,[B]).peak;IRM_CLOUD.on=false;const pkSunOff=irmHill(C27,[B]).peak;IRM_CLOUD.on=true;irmSunSet('none');
+    const r0=pkOn/pkOff,w0=1/(1+1.3*D27*0.3),rS=pkSunOn/pkSunOff,g27=1000*Math.pow(30/150,4),wS27=(1+g27)/(1+g27+1.3*D27*1);   /* 有太阳时背景 = 杂散光(观测船看目标偏开太阳 150°,四次方档:1000 x (30/150)^4 = 1.6)+ 云 */
+    const bg1=irmCloudBg(C27.pos);cam.zoom*=7;cam.x+=123456;const bg2=irmCloudBg(C27.pos);
+    ships.length=0;ships.push(B);cam.x=cp[0];cam.y=cp[1];cam.zoom=camBak.zoom;irmCloudCache=null;IRM.NOISE=0;IRM.mode='yi';drawIrMap();let fYi=0;for(let q=0;q<irmF.length;q++)fYi=Math.max(fYi,irmF[q]);IRM.mode='jia';drawIrMap();   /* 走真正的绘制入口(甲乙都铺云);乙里只有这一艘观测船、没有热源 */
+    let worst=0;for(let q=0;q<50;q++){const i=2*Math.floor(q*7.3%(irmGW/2-2)),j=2*Math.floor(q*3.1%(irmGH/2-2)),w=worldAt(i*IRM.CELL,j*IRM.CELL),want=1.3*0.3*irmCloudD(w[0],w[1],4*IRM.CELL/cam.zoom);worst=Math.max(worst,Math.abs(irmF[j*irmGW+i]-want));}
+    let fmax=0;for(let q=0;q<irmF.length;q++)fmax=Math.max(fmax,irmF[q]);
+    const t27=performance.now();irmCloudCache=null;irmGrid();irmCloudAdd();const ms27=performance.now()-t27;
+    IRM_CLOUD.on=false;irmFieldJia();irmCloudAdd();let offMax=0;for(let q=0;q<irmF.length;q++)offMax=Math.max(offMax,Math.abs(irmF[q]));const bgOff=irmCloudBg(C27.pos);IRM_CLOUD.on=false;
+    T('㉗ 尘埃云:云里的目标按背景受限律打折(背景 = 1.3 x 浓度 x 亮度,没太阳 0.3、有太阳 1 再加杂散光);背景不随镜头变;画面 = 1.3 x 亮度 x 浓度;关掉就没有',
+      cd>=0.5&&Math.abs(r0/w0-1)<1e-6&&Math.abs(rS/wS27-1)<1e-6&&bg1===bg2&&bg1>0&&worst<1e-6&&fmax>0.1&&fYi>0.1&&offMax===0&&bgOff===0&&ms27<40,
+      '浓度 '+D27.toFixed(3)+' · 没太阳 '+r0.toFixed(4)+'(应为 '+w0.toFixed(4)+') · 有太阳 '+rS.toFixed(4)+'(应为 '+wS27.toFixed(4)+') · 换镜头背景 '+(bg1===bg2)+' · 画面最大偏差 '+worst.toExponential(1)+' · 场最大 甲 '+fmax.toFixed(3)+' 乙 '+fYi.toFixed(3)+' · 关掉 '+offMax+' / '+bgOff+' · 算一帧云 '+ms27.toFixed(1)+' ms');
   }catch(e){T('自检抛异常',false,String(e&&e.stack||e));}
   finally{
-    ships.length=0;shipsBak.forEach(x=>ships.push(x));shipSeq=seq0;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;IRM.on=onBak;IRM.mode=modeBak;if(rocksBak)rocks=rocksBak;IRM.NOISE=nzBak;IRM_SUN.FALL=fallBak;irmSunSet(sunBak);irmSync();
+    ships.length=0;shipsBak.forEach(x=>ships.push(x));shipSeq=seq0;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;IRM.on=onBak;IRM.mode=modeBak;if(rocksBak)rocks=rocksBak;IRM.NOISE=nzBak;IRM_SUN.FALL=fallBak;IRM_CLOUD.on=cloudBak;irmSunSet(sunBak);irmSync();
   }
   const pre=document.createElement('pre');pre.id='irSelftest';pre.textContent=out.join('\n');document.body.appendChild(pre);
   document.title=ok?'SELFTEST:PASS':'SELFTEST:FAIL';
@@ -936,6 +1012,8 @@ function irmUitest(){
     document.querySelector('#irGlare [data-gl="steep"]').click();T('U8 点「光·陡」:换成陡、按钮亮',IRM_SUN.FALL==='steep'&&document.querySelector('#irGlare [data-gl="steep"]').classList.contains('on'));
     document.querySelector('#irGlare [data-gl="p4"]').click();T('U9 点「光·四次方」:换回来',IRM_SUN.FALL==='p4'&&document.querySelector('#irGlare [data-gl="p4"]').classList.contains('on'));
     document.querySelector('#irGlare [data-gl="mid"]').click();T('U10 点「光·中」:换成中、按钮亮',IRM_SUN.FALL==='mid'&&document.querySelector('#irGlare [data-gl="mid"]').classList.contains('on'));
+    {const c0=IRM_CLOUD.on,bt=document.querySelector('#irEnv [data-env="cloud"]');bt.click();const c1=IRM_CLOUD.on,o1=bt.classList.contains('on');bt.click();
+     T('U11 点「尘埃云」:开关来回切、按钮跟着亮灭',c1===!c0&&o1===c1&&IRM_CLOUD.on===c0&&bt.classList.contains('on')===c0);}
   }catch(e){T('交互自检抛异常',false,String(e&&e.stack||e));}
   const pre=document.createElement('pre');pre.id='irSelftest';pre.textContent=out.join('\n');document.body.appendChild(pre);
   document.title=ok?'UITEST:PASS':'UITEST:FAIL';
