@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>地图组 · 红外</title>
+<link rel="stylesheet" href="../../css/app.css?v=20260923">
+<style>
+/* 地图组 · 红外:左下角的开关。几何与"开"态照抄右下角 #tools 的工具钮(css/app.css),颜色一律走设计变量 */
+#irDock{position:absolute;left:var(--gut);bottom:56px;z-index:var(--z-hud);display:flex;align-items:center;gap:6px}
+#irMode{display:inline-flex}
+#irMode .hbtn{border-radius:0;margin-left:-1px}
+#irMode .hbtn:first-child{border-radius:var(--r-sm) 0 0 var(--r-sm);margin-left:0}
+#irMode .hbtn:last-child{border-radius:0 var(--r-sm) var(--r-sm) 0}
+#irDock .hbtn.on{color:var(--acc);border-color:var(--acc);position:relative;z-index:1}
+#irSelftest{position:fixed;left:8px;top:60px;z-index:var(--z-transient);white-space:pre-wrap;padding:8px;background:var(--srf-panel);color:var(--txt);font:12px var(--ff-mono,monospace)}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<!-- UI2:两个工具钮是图标钮(行内 SVG,颜色全走 css token),文字收进 title / aria-label。
+     SN6 右下角工具钮。钮的行为走 render/85-settings 的事件委托。 -->
+<div id="tools">
+  <div class="seg" id="segTier" title="三级星图:星图自己的比例尺阶梯 —— 画面短边横跨 战术 2 / 舰队 15 / 战区 45 光秒"><button class="hbtn" data-tier="1">战术</button><button class="hbtn" data-tier="2">舰队</button><button class="hbtn" data-tier="3">战区</button></div><!-- SN6b 从顶栏搬到这儿(用户拍板"三按钮放在右下角,大小和形状参考态势感知V3")。id 未变 ⇒ render/85-settings 的委托与 80-viewtier 里写高亮的那行都不用改 -->
+  <div class="seg" id="segTool"><button class="hbtn" data-tool="geom" title="缩圈:地图右上角弹出【定位几何】小窗——我方全体观测合起来,对方那艘船的误差椭圆现在有多大、离导弹门/主炮门还差多少。悬停敌方目标临时看;左键点敌方目标常驻;点我方舰看它正在打(或正在等)的那个目标" aria-label="缩圈"><svg class="tl-ico" viewBox="0 0 24 24" aria-hidden="true"><path class="i-ship" d="M17.6 12.9 8 6.4 11 12.3 8.4 17.9Z"/><ellipse class="i-ell" cx="12" cy="12" rx="10.8" ry="5.4" transform="rotate(-13 12 12)"/><path class="i-los" d="M0 14.8 24 9.2"/></svg></button><button class="hbtn" data-tool="sig" title="信号视野:画出我方每艘舰的【被探测范围】——光学/红外恒有;开了雷达才有被听见的那一圈。半径直接读感知层的量程律,与判据同一个数" aria-label="信号视野"><svg class="tl-ico" viewBox="0 0 24 24" aria-hidden="true"><circle class="i-r3" cx="12" cy="12.6" r="11.4"/><circle class="i-r2" cx="12" cy="12.6" r="8.2"/><circle class="i-r1" cx="12" cy="12.6" r="5"/><path class="i-ship" d="M12 5.4 15.9 18 12 14.8 8.1 18Z"/></svg></button></div>
+</div>
+<!-- SN7 定位几何小窗:叠在地图右上角、紧贴右轨左侧(照 demos/sensors/态势感知V3.html 的 #pPhase)。自己的小 canvas,不进主画布;
+     开关是右下角 #tools 的「缩圈」钮(render/85-settings 的委托)。 -->
+<div id="geomPane" class="panel" hidden><canvas id="geomCv"></canvas><div class="gp-tag">定位几何<b>GEOMETRY</b></div><div class="gp-hint" id="geomHint"></div></div>
+<!-- MT1 对局结果卡片:只在对局分出胜负时由 scenario/97-match 的 matchTick 显示。 -->
+<div id="matchEnd" class="panel" hidden><div class="me-title" id="meTitle">胜利</div><div class="me-sub" id="meSub"></div><div class="me-stat" id="meStat"></div><div class="me-btns"><button class="btn" id="meAgain">再来一局</button><button class="btn" id="meRange">回靶场</button></div></div>
+<div id="mapTag">战术层<b>TACTICAL</b></div><!-- SN6 当前层的读数,只在【换层那一刻】写(render/80-viewtier 的 vtFrame) -->
+
+<!-- 地图组 · 红外:左下角的红外开关 + 两种画法(A 画在真实位置 / B 沿视线的光带)。逻辑在本页最后那段脚本里 -->
+<div id="irDock"><button class="hbtn" id="irBtn" title="红外图:我方全部舰船看到的热源分布。越近越清楚、越远越糊;没有边界,远处慢慢淡掉。点火、开火、开雷达的船会变亮">红外</button><div id="irMode"><button class="hbtn" data-irm="A" title="A:热源画在它的真实位置,模糊成一团,团的大小 = 分辨率(最直观,但等于红外知道了距离)">A 真实位置</button><button class="hbtn" data-irm="B" title="B:从我方每艘船沿视线画一道光带,方向准、距离不知道;几艘船的光带交叉处会叠亮">B 沿视线</button></div></div>
+
+<div id="hud" class="panel">
+  <div class="logo">SPACE POWER<span> · 骨架</span></div>
+  <div id="clock">00:00</div>
+  <div id="rate">x1</div>
+  <button class="hbtn" id="btnPause" title="暂停/继续(空格)">⏸</button>
+  <button class="hbtn" id="btnSlow" title="减速(-)">−</button>
+  <button class="hbtn" id="btnFast" title="加速(+)">+</button>
+  <div class="spacer"></div>
+  <button class="hbtn" id="btnMatch" title="进入对局">对局</button>
+  <button class="hbtn" id="btnRocks" title="进入碎石带对局">碎石带</button><!-- ENV1 带环境的对局(太阳禁区 + 残骸场);入口逻辑在 scenario/97-match --><!-- MT1 对局入口(scenario/97-match);进了对局它变成「回靶场」 -->
+  <button class="hbtn" id="btnTut" title="教程 · 指挥官手册(Esc 关闭)">教程</button><!-- RF5-D 排在 .spacer 之后 = 顶栏右端。SL1(2026-09-22 瘦身):原来跟在它后面被藏着的七个旧钮(录制/GM/互搏/靶场参数/场景菜单/回放/设置)已整套删除;GM 仍走 F8 -->
+</div>
+
+<!-- FM1 编队书签栏(左轨顶部,常驻)。这是编队的唯一可见入口。
+     刻意不给 class="panel":.panel 带 overflow:hidden + 边框背景,会把一叠独立小条圈成一块面板。内容由 render/87-fmbar.js 填。 -->
+<div id="fmBar"></div>
+<!-- FM7 测试用「加船」小条:挂在左轨书签栏下方。靶场只有 3 艘蓝舰,凑不出两支编队,阵型没法手试。
+     内容由 scenario/96-spawn.js 建。 -->
+<div id="spawnBar"></div>
+<!-- FM1 编队菜单(点书签展开)。.p-title / #fmActs 两个容器必须是【静态元素】(信息区 #selFm 已搬到右轨 #selPanel 里)——
+     事件全部委托到它们身上,而 on() 遇元素不存在只会静默跳过,动态创建的容器挂不上委托。
+     默认 display:none,由 updFmBar() 写回 'flex'(不是 '')。 -->
+<div id="fmMenu" class="panel" style="display:none">
+  <div class="p-title"><b id="fmTitle">编队</b><span class="hint" id="fmHint">—</span></div>
+  <div id="fmActs"></div>
+</div>
+
+<!-- RF2 简化UI:选中舰实时信息面板(右轨)。SL1(2026-09-22 瘦身):旧舰队卡面板 / 事件面板 / 右轨底部的事件流面板已整套删除,右轨只剩这一块 -->
+<div id="selPanel" class="panel">
+  <div class="p-title"><b id="selTitle">未选中</b><span class="hint">左键点选 · 拖拽框选</span></div>
+  <div id="selInfo"></div>
+  <!-- FL1 编队信息区:原 #fmMenu 里的 #fmInfo,整块搬到右轨。理由是"左边只放操作、右边只放实时数据"。
+       必须是【静态元素】:87-fmbar 的事件委托挂在它身上,而 on() 遇元素不存在只会静默跳过。
+       显隐由 88-selpanel 的 updateSelPanel 独占(选中的恰好是一支编队才显示),87-fmbar 只管往里写内容。 -->
+  <div id="selFm" style="display:none"></div>
+  <div id="fcSec"><!-- RF5 火控计算机:序列/目标解算列表。#fcList 必须是静态元素——on() 遇元素不存在会静默跳过,动态创建挂不上委托 -->
+    <div class="fc-hd">火控计算机<span class="fc-btn" id="fcPickBtn" title="把当前序列态那条设为唯一开火序列;再按一次回到轮询">选择</span></div><!-- RF8b 舰级"选择"钮:刻意【不进 #fcList】——那里每 20 帧重渲一次,且委托要求带 data-seq(舰级动作没有),上一版的大序列钮正是栽在这条上 -->
+    <div id="fcList"></div>
+  </div>
+</div>
+
+<!-- RANGE1 靶场参数面板:左上角,UI1 左轨车道统一定位。SL1:顶栏那个开关钮已删,面板逻辑(scenario/95-range)保留,css 里仍按 RF2 的老样子藏着 -->
+<div id="trPanel" class="panel" style="display:none"><!-- UI1 原来这里写死 max-height:calc(100% - 316px),把旋钮区压成 8px;现由 --rail-top/--dock-b 派生 -->
+  <div class="p-title"><b>🎯 靶场参数</b><span class="hint">逐靶可调</span></div>
+  <div class="tr-tabs" id="trTabs"></div>
+  <div class="tr-body" id="trBody"></div>
+  <div class="tr-read" id="trRead"></div>
+  <div class="tr-btns">
+    <button class="ed-btn" id="trSyncBtn" title="打开后改任一旋钮同时作用于三个靶">同步全靶:关</button>
+    <button class="ed-btn" id="trReset" title="伤害/命中/防御链读数全部归零并重新计时">归零统计</button>
+    <button class="ed-btn danger" id="trClose">✕ 关闭</button>
+  </div>
+</div>
+
+<!-- RF3 简化UI:底部操作栏三区 = 舰名区 | 规格读数列(标签上/数值下) | 开关组(88-selpanel 按 s.weapons 配装动态生成) -->
+<div id="cmdBar" class="panel">
+  <div class="cmd-ship"><b id="ciName">—</b><span id="ciCls">—</span></div>
+  <div class="cmd-sep"></div>
+  <div id="ciSpec"></div>
+  <div class="cmd-sep"></div>
+  <div class="cmd-btns"></div>
+</div>
+<div id="cmdTip"></div>
+<!-- RF5-D 教程模态(顶栏 #btnTut 唤出)。内容由 render/85-tutorial.js 惰性写进 #tutBody(打开过一次才存在),
+     所以常规画面下这里是三个空壳,零元素泄漏。SL1:旧设置面板的遮罩已删,这是顶栏唯一的模态。 -->
+<div id="tutOverlay">
+  <div id="tutPanel">
+    <div class="tut-hd">
+      <h2>指挥官手册</h2>
+      <span class="tut-hd-hint">Esc / 点遮罩 关闭 · 打开期间模拟暂停</span>
+      <button class="hbtn" id="tutCloseBtn" title="关闭教程(Esc)">✕</button>
+    </div>
+    <div class="tut-body" id="tutBody"></div>
+  </div>
+</div>
+
+<!-- FM4 舰队编组控制页(编队菜单的「编组控制」钮唤出)。几何抄 #tutOverlay:外层 flex 居中 + 卡片定高 + 内层独立滚动。
+     内容由 render/89-fmpage.js 的 fmPageRender() 写进 #fpBody,
+     常规画面下这里是三个空壳。委托挂在 #fmPage / #fpClose 两个静态元素上,所以内容随便重渲都挂得住。 -->
+<div id="fmPage">
+  <div id="fmPagePanel">
+    <div class="fp-hd">
+      <h2>舰队编组控制</h2>
+      <span class="fp-hd-hint" id="fpHint">—</span>
+      <button class="hbtn" id="fpClose" title="关闭(Esc)">✕</button>
+    </div>
+    <div class="fp-body" id="fpBody"></div>
+  </div>
+</div>
+
+<div id="xhTip"></div><!-- RF5 悬停敌舰信息卡:跟随光标,内容按 litBlue 接触等级分档(command/74-targeting 写 innerHTML)。刻意不给 class="panel":.panel 带 z-index:var(--z-panel) 与 overflow:hidden,会把层级压回面板档还裁掉内容,几何一律自带(抄 #cmdTip) -->
+
+<!-- RF1: 目录=系统。编号十位是系统层(0core/1ships/2sensors/3physics/4formation/5weapons/6bots/7command/8render/9scenario)。
+     硬约束仅两条:core/00 定义 on() 必须最先(85/95/96/97 顶层调用它);core/99 顶层执行 init() 必须最后(且 init 调 loadRangeCfg,
+     故 scenario/95 必须在它之前)。其余跨文件引用全在运行期解析,层序排列只为可读性。 -->
+<script src="../../js/core/00-config.js?v=20260923"></script>
+<script src="../../js/core/01-state.js?v=20260923"></script>
+<script src="../../js/ships/10-hull-geometry.js?v=20260923"></script>
+<script src="../../js/ships/11-classes.js?v=20260923"></script>
+<script src="../../js/world/12-env.js?v=20260923"></script><!-- ENV1 环境系统:太阳禁区 + 残骸场 + 石头(TK4c)。必须在 sensors/ 之前:23-cov 加载期的梯子反解会读 optLum → envOptK -->
+<script src="../../js/sensors/20-signature.js?v=20260923"></script>
+<script src="../../js/sensors/21-detect.js?v=20260923"></script>
+<script src="../../js/sensors/22-percep.js?v=20260923"></script><!-- SN4 感知纯函数层:零顶层执行(只声明模块私有的 Float64Array 缓冲与三个纯字面量常量,不读 SENS/sReq/ships 任何东西)、不调 on()、不是 core/99,所以两条加载顺序硬约束都不涉及;跨文件引用(SENS 在 20-signature、sReq 在 00-config)全部运行期解析,与 formation/39-fmcaps 同口径 —— 排在 21-detect 之后只为目录编号好读,换到别处也不会错 -->
+<script src="../../js/sensors/23-cov.js?v=20260923"></script><!-- SN6 误差椭圆感知内核:同样零顶层执行(只声明;ladApply 不在加载期跑) -->
+<script src="../../js/sensors/24-track.js?v=20260923"></script><!-- TK1 航迹表(每方一张 WeakMap):顶层只建 TRK 与 TRK_FWD、只调同文件的函数;ships/11 的 makeShip 虽然排在它前面,但只在运行期调 trkAdopt(init 与判据里),所以不构成加载顺序约束 -->
+<script src="../../js/physics/30-motion.js?v=20260923"></script>
+<script src="../../js/physics/31-step-ships.js?v=20260923"></script>
+<script src="../../js/physics/32-route-refine.js?v=20260923"></script>
+<script src="../../js/formation/39-fmcaps.js?v=20260923"></script><!-- FM4 编队能力模型层:9 维能力(读配装实例字段)/四套站位模板/五条带半径/插槽扩容/匈牙利最优指派。纯函数,零顶层执行;排在 40 之前只为可读性,跨文件引用全在运行期解析 -->
+<script src="../../js/formation/40-slots.js?v=20260923"></script>
+<script src="../../js/formation/41-follow.js?v=20260923"></script>
+<script src="../../js/formation/42-formation.js?v=20260923"></script>
+<script src="../../js/formation/43-step.js?v=20260923"></script>
+<script src="../../js/formation/44-orders.js?v=20260923"></script><!-- FM1 编队重做:40几何(纯函数)/41通用跟随层/42编队实体(生命周期)/43每tick结算/44命令层。顶层只有 const/let/function,零顶层执行,跨文件引用全在运行期解析 -->
+<script src="../../js/weapons/50-missile-spec.js?v=20260923"></script>
+<script src="../../js/weapons/51-defs.js?v=20260923"></script>
+<script src="../../js/weapons/51-ciws.js?v=20260923"></script>
+<script src="../../js/weapons/52-fire.js?v=20260923"></script>
+<script src="../../js/weapons/53-nets.js?v=20260923"></script>
+<script src="../../js/weapons/54-missiles.js?v=20260923"></script>
+<script src="../../js/weapons/55-damage.js?v=20260923"></script>
+<script src="../../js/weapons/56-step-projectiles.js?v=20260923"></script>
+<script src="../../js/weapons/57-step-weapons.js?v=20260923"></script>
+<script src="../../js/weapons/58-firecontrol.js?v=20260923"></script><!-- RF5 火控计算机引擎:序列数据模型+stepFireControl/Post。位置只为目录编号可读性(编号 58 > 57,归位到 weapons 块末尾),跨文件引用全在运行期解析:本文件顶层只有 const/let/function 声明,零顶层执行 -->
+<script src="../../js/core/05-sim.js?v=20260923"></script>
+<script src="../../js/core/06-timecomp.js?v=20260923"></script><!-- TC1 接触降速:frame() 每帧调 tcStep;依赖全部在运行期解析 -->
+<script src="../../js/bots/60-doctrine.js?v=20260923"></script>
+<script src="../../js/bots/61-enemy.js?v=20260923"></script>
+<script src="../../js/command/70-input.js?v=20260923"></script>
+<script src="../../js/command/71-keys.js?v=20260923"></script>
+<script src="../../js/command/74-targeting.js?v=20260923"></script><!-- RF5 悬停准星/吸附状态 xh + #xhTip 信息卡。按目录编号序归位在 command 块末尾;顶层只有 let/const/function,零顶层执行,跨文件引用全在运行期解析 -->
+<script src="../../js/render/80-viewtier.js?v=20260923"></script><!-- SN6 三级星图:层界与缩放上下限由距离梯子推出;与 80-camera 共用编号(先例:85-settings/85-tutorial) -->
+<script src="../../js/render/80-camera.js?v=20260923"></script>
+<script src="../../js/render/81-background.js?v=20260923"></script>
+<script src="../../js/render/81-env.js?v=20260923"></script><!-- ENV1 环境底图(残骸场 + 太阳方向)。与 81-background 共用编号 81 -->
+<script src="../../js/render/82-ship-icons.js?v=20260923"></script>
+<script src="../../js/render/82-rocks.js?v=20260923"></script><!-- TK4c 石头的航迹(第二个循环)。与 82-ship-icons / 82-lod 共用编号 82 -->
+<script src="../../js/render/82-lod.js?v=20260923"></script><!-- SN6 聚合层:舰 → 舰队框 → 舰队组;与 82-ship-icons 共用编号 -->
+<script src="../../js/render/83-hud.js?v=20260923"></script>
+<script src="../../js/render/83-geom.js?v=20260923"></script><!-- SN7 定位几何小窗(缩圈图)。与 83-hud 共用编号 83(先例:85-settings / 85-tutorial) -->
+<script src="../../js/render/84-scene.js?v=20260923"></script>
+<script src="../../js/render/84-fmplot.js?v=20260923"></script><!-- FM4 编队能力站位的地图可视化。与 84-scene 共用编号 84(先例:weapons/51-defs 与 51-ciws),都属于“场景图层”;顶层只有 const/function,零顶层执行,由 84-scene 的 render() 运行期调用 -->
+<script src="../../js/render/85-settings.js?v=20260923"></script>
+<script src="../../js/render/85-tutorial.js?v=20260923"></script><!-- RF5-D 教程面板。与 85-settings 共用编号 85(先例:weapons/51-defs 与 51-ciws),语义上教程与设置相邻。顶层调用 on(),故必须晚于 core/00;其余引用全在运行期解析 -->
+<script src="../../js/render/87-fmbar.js?v=20260923"></script><!-- FM1 编队书签栏 + 编队菜单。与 87-fleetcards 共用编号 87(先例:weapons/51-defs 与 51-ciws、render/85-settings 与 85-tutorial),语义上都是"舰队编成"的呈现。顶层只有 on(...) 委托挂载,故必须晚于 core/00;updFmBar() 由 core/99 每 20 帧调用,其余跨文件引用全在运行期解析 -->
+<script src="../../js/render/88-selpanel.js?v=20260923"></script>
+<script src="../../js/render/89-radial.js?v=20260923"></script>
+<script src="../../js/render/89-fmpage.js?v=20260923"></script><!-- FM4 舰队编组控制页。与 89-radial 共用编号 89(先例:render/85-settings 与 85-tutorial)。顶层有 on(...) 委托挂载与两条 window 监听,故必须晚于 core/00;其余跨文件引用全在运行期解析 --><!-- RF5 Phase C 目标轮盘的几何与渲染:半径/角度/容量常量与 drawRadial/radialHit/radialInBand/radPages 全在这一份。必须晚于 88-selpanel(扇区射程读数走它的 KIND_INFO);顶层只有 const/let/function,零顶层执行 -->
+<script src="../../js/scenario/90-envs.js?v=20260923"></script>
+<script src="../../js/scenario/91-init.js?v=20260923"></script>
+<script src="../../js/scenario/95-range.js?v=20260923"></script>
+<script src="../../js/scenario/96-spawn.js?v=20260923"></script><!-- FM7 测试用加船小条。放在 95 之后、core/99 之前:它顶层调 on(),而 on() 定义在 core/00 -->
+<script src="../../js/scenario/97-match.js?v=20260923"></script><!-- MT1 对局入口 / 红方摆位 / 结果卡片。顶层调 on(),须在 core/00 之后;matchPlaceRed 被 91-init 运行期调用 -->
+<script src="../../js/core/99-main.js?v=20260923"></script>
+<!-- ================= 地图组 · 红外(demos/地图组/红外.html)=================
+     这一页是仓库根 index.html 的一份拷贝(2026-09-23 生成):DOM 与脚本一样,路径改成 ../../,再在最后加一段红外图脚本。
+     引擎的脚本一个字没改,舰船 / 鼠标键盘 / 加船小条都是引擎自己的。⚠ 主页面以后改了 DOM,这里不会跟着变 —— 要重新拷一份。 -->
+<script>
+"use strict";
+/* ================= 地图组 · 红外(2026-09-23)=================
+   用户:「左下角做一个专门的红外雷达按钮,能看到观测范围内的热源分布,越近的分辨率越高,没有一个截断式的边界」
+         「里面可以加入舰船,操作方式和主引擎一致」「我的目的就是想看红外地图的效果和地图是否能与舰船产生反应」「AB 都要」
+   业内叫法:红外搜索跟踪(IRST)/ 前视红外(FLIR)。分辨率由瞬时视场决定(像素在目标处覆盖的宽度 = 距离 x 角度);
+   以后要做"近了能认出是什么",现成的尺子是 Johnson 判据(1958:目标宽度上约 1 / 4 / 6.4 个周期 ⇒ 发现 / 认出类别 / 认出具体是什么)。
+   这一页【只加一层画面,引擎一个字不改】:页面原样加载引擎的全部脚本(舰船、操作、加船小条都是引擎自己的),
+   红外图挂在引擎接触层(drawContacts)之后画,位于舰标之下。引擎现有的热区 / 椭圆 / 记号照常画 —— 要不要在红外图打开时关掉它们,用户还没批。
+   数全部读引擎自己的红外判据,不另立常数:
+     看不看得见:引擎的 visRangeOf(被光学 / 红外看见的距离,= sqrt(系数 x 光学亮度)),亮度 = 体型 x(1 + 引擎档 + 发射档废热 + 开火档)
+       ⇒ 信噪比 SNR = (被看见的距离 / 实际距离)^2。引擎是一道硬门槛(SNR > 1 才有);这里画成连续的 SNR / (1 + SNR),远处慢慢淡掉,没有边界
+     方向准不准:引擎的 covTheta('opt') —— 角误差随距离线性变大。模糊宽度 = 距离 x 角误差,所以近处清楚、远处糊(大致随距离平方变糊)
+   两种画法(用户:AB 都要):
+     A 热源画在它的【真实位置】,模糊成一团,团的大小 = 分辨率。最直观;代价是等于红外知道了距离(单台红外其实量不到距离)
+     B 沿【视线】画一道光带(从我方这艘船朝热源方向,宽度 = 角误差):方向准、距离不知道。近的亮而细,远的暗而宽;
+       我方几艘船的光带交叉处叠亮 —— 交叉定位是画面自己长出来的,不是算出来的
+   观测者 = 我方(蓝方)全部存活的船;热源 = 不是蓝方的一切(红舰、石头)。 */
+const IRM={on:false,mode:'A',
+  A_MIN:0.015,     /* 亮度低于它就不画(SNR < 0.015 ⇒ 实际距离已超过被看见距离的 8 倍,画了也看不见;这是省笔数,不是边界) */
+  PX_MIN:2.5,      /* 团 / 光带在屏幕上的最小半宽(像素):再小就看不见了 */
+  B_LEN:1500000    /* B 的光带画多长(世界 km)。【不许】按热源的真实距离取 —— 那等于把距离画出来了 */
+};
+let irSprite=null;
+function irSpriteBuild(){ /* 软光点贴图:只在第一次用时生成一次(每帧不建渐变,守 render/84 的红线) */
+  const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');
+  const gr=g.createRadialGradient(32,32,0,32,32,32);
+  gr.addColorStop(0,'rgba(255,214,150,1)');gr.addColorStop(0.3,'rgba(255,154,85,.6)');gr.addColorStop(1,'rgba(255,110,40,0)');
+  g.fillStyle=gr;g.fillRect(0,0,64,64);return c;
+}
+/* 观测者与热源 */
+function irmObservers(){return ships.filter(s=>s.side==='blue'&&!s.dead);}
+function irmSources(){return ships.filter(s=>s.side!=='blue'&&!s.dead).concat((typeof rocks!=='undefined'?rocks:[]).filter(r=>!r.dead));}
+/* 一对观测:o 看 t。全部读引擎的判据 */
+function irmPair(o,t){
+  const dx=t.pos[0]-o.pos[0],dy=t.pos[1]-o.pos[1],dz=(t.pos[2]||0)-(o.pos[2]||0);
+  const d=Math.max(1,Math.hypot(dx,dy,dz)),R=visRangeOf(t),snr=(R/d)*(R/d);
+  const sig=covTheta('opt',o,t,d);               /* 角误差(弧度),引擎的红外 / 光学方向精度 */
+  return {d:d,snr:snr,a:snr/(1+snr),sig:sig,blur:d*sig,brg:Math.atan2(dy,dx)};
+}
+function drawIrMap(){
+  if(!irSprite)irSprite=irSpriteBuild();
+  const obs=irmObservers(),src=irmSources();if(!obs.length||!src.length)return;
+  ctx.save();ctx.globalCompositeOperation='lighter';
+  if(IRM.mode==='A'){
+    for(const t of src){
+      let best=null;for(const o of obs){const q=irmPair(o,t);if(!best||q.snr>best.snr)best=q;}   /* 取看得最清楚的那一艘 */
+      if(!best||best.a<IRM.A_MIN)continue;
+      const p=toScreen(t.pos[0],t.pos[1]),r=Math.max(IRM.PX_MIN,2*best.blur*cam.zoom);
+      if(p[0]<-r||p[0]>W+r||p[1]<-r||p[1]>H+r)continue;
+      ctx.globalAlpha=best.a;ctx.drawImage(irSprite,p[0]-r,p[1]-r,2*r,2*r);
+    }
+  }else{
+    for(const o of obs){
+      const a0=toScreen(o.pos[0],o.pos[1]);
+      for(const t of src){
+        const q=irmPair(o,t);if(q.a<IRM.A_MIN)continue;
+        /* 三层由宽到窄的扇形叠出软边:半宽 = 角误差 x 2 / 1 / 0.5,越里越亮;最细也不窄过 PX_MIN 像素(在光带远端量)。
+           单道压得很淡(第一版 0.18 / 0.32 / 0.5,靶场开局 9 道光带加色叠满半个屏幕):单道看得出方向,几道叠在一起才亮 */
+        const Lpx=IRM.B_LEN*cam.zoom,minAng=IRM.PX_MIN/Math.max(1,Lpx);
+        for(const [k,al] of [[2,0.05],[1,0.09],[0.5,0.16]]){
+          const h=Math.max(minAng,q.sig*k);
+          const e1=[a0[0]+Math.cos(q.brg-h)*Lpx,a0[1]+Math.sin(q.brg-h)*Lpx],e2=[a0[0]+Math.cos(q.brg+h)*Lpx,a0[1]+Math.sin(q.brg+h)*Lpx];
+          ctx.globalAlpha=q.a*al;ctx.fillStyle='rgb(255,154,85)';
+          ctx.beginPath();ctx.moveTo(a0[0],a0[1]);ctx.lineTo(e1[0],e1[1]);ctx.lineTo(e2[0],e2[1]);ctx.closePath();ctx.fill();
+        }
+      }
+    }
+  }
+  ctx.restore();
+}
+/* 挂进引擎的接触层之后(舰标之下)。引擎文件不改:render() 按名字调 drawContacts,运行期换成先画原来的、再画红外图 */
+const irmOrigDrawContacts=drawContacts;
+drawContacts=function(){irmOrigDrawContacts();if(IRM.on)drawIrMap();};
+
+/* 左下角的开关 */
+function irmSync(){
+  const b=document.getElementById('irBtn');if(!b)return;
+  b.classList.toggle('on',IRM.on);
+  for(const x of document.querySelectorAll('#irMode [data-irm]'))x.classList.toggle('on',x.getAttribute('data-irm')===IRM.mode);
+  document.getElementById('irMode').style.opacity=IRM.on?'1':'.45';
+}
+on('irBtn','click',function(e){e.currentTarget.blur();IRM.on=!IRM.on;irmSync();});
+on('irMode','click',function(e){const x=e.target.closest('[data-irm]');if(!x)return;x.blur();IRM.mode=x.getAttribute('data-irm');irmSync();});
+irmSync();
+
+/* ================= 自检(?selftest):只验模型与挂接,不验"好不好看" ================= */
+function irmSelftest(){
+  const out=[];let ok=true;const T=(n,c,d)=>{out.push((c?'✓ ':'✗ ')+n+(d?'  '+d:''));if(!c)ok=false;};
+  const shipsBak=ships.slice(),seq0=shipSeq,camBak={x:cam.x,y:cam.y,zoom:cam.zoom},onBak=IRM.on,modeBak=IRM.mode,rocksBak=(typeof rocks!=='undefined')?rocks:null;
+  try{
+    const B=makeShip('CA','红外测蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),R=makeShip('DD','红外测红',[0,0,0],[-1,0,0],[0,0,0],'red',2);
+    ships.length=0;ships.push(B,R);R.flame=0;R.sideFlame=0;R.fireHot=0;setEmit(R,'silent');
+    const Rv=visRangeOf(R),at=function(k){R.pos=[Rv*k,0,0];return irmPair(B,R);};
+    /* ① 没有截断式的边界:跨过引擎那道硬门槛(被看见的距离)时亮度是连续的;两倍、四倍远仍然 > 0,只是越来越淡 */
+    const a99=at(0.99).a,a101=at(1.01).a,a2=at(2).a,a4=at(4).a,a05=at(0.5).a;
+    T('① 没有截断式边界:跨过引擎硬门槛亮度连续',Math.abs(a99-a101)<0.02&&a2>0&&a4>0&&a05>a99&&a99>a2&&a2>a4,
+      '0.5 倍 '+a05.toFixed(3)+' · 0.99 倍 '+a99.toFixed(3)+' · 1.01 倍 '+a101.toFixed(3)+' · 2 倍 '+a2.toFixed(3)+' · 4 倍 '+a4.toFixed(3));
+    /* ② 越近分辨率越高:模糊宽度随距离单调变大,距离减半、模糊至少减半 */
+    const b1=at(1).blur,b05=at(0.5).blur,b025=at(0.25).blur;
+    T('② 越近分辨率越高',b025<b05&&b05<=b1/2+1e-9,'1/4 倍 '+Math.round(b025)+' km · 1/2 倍 '+Math.round(b05)+' km · 1 倍 '+Math.round(b1)+' km');
+    /* ③ 地图与舰船的反应:同一个距离上,点火 / 开火 / 开雷达都让它变亮(读的是引擎的亮度公式) */
+    R.pos=[Rv*1.5,0,0];const c0=irmPair(B,R).a;
+    R.flame=1;const cF=irmPair(B,R).a;R.flame=0;
+    R.fireHot=5;const cX=irmPair(B,R).a;R.fireHot=0;
+    setEmit(R,'paint');const cP=irmPair(B,R).a;setEmit(R,'silent');
+    T('③ 点火 / 开火 / 开雷达都变亮',cF>c0&&cX>c0&&cP>c0,'熄火静默 '+c0.toFixed(3)+' · 点火 '+cF.toFixed(3)+' · 开火 '+cX.toFixed(3)+' · 开雷达 '+cP.toFixed(3));
+    /* ④ 观测者是我方、热源是"不是我方"的一切:我方的船不进热源,红舰进;石头进 */
+    const K=(typeof makeRock==='function')?makeRock([Rv*0.5,Rv*0.2,0],0.8,[1,0,0]):null;if(K)rocks=[K];
+    const S=irmSources();
+    T('④ 热源不含我方的船、含红舰与石头',S.indexOf(B)<0&&S.indexOf(R)>=0&&(!K||S.indexOf(K)>=0)&&irmObservers().indexOf(B)>=0,S.length+' 个热源');
+    /* ⑤ 挂接:打开红外图时,引擎的接触层之后真的多画了东西;A 画光点(drawImage),B 画光带(fill);关着一笔不多 */
+    cam.x=Rv*0.5;cam.y=0;cam.zoom=Math.min(W,H)/(Rv*2.5);R.pos=[Rv*0.7,0,0];
+    const cnt={drawImage:0,fill:0},orig={drawImage:ctx.drawImage,fill:ctx.fill};
+    const capture=function(fn){cnt.drawImage=0;cnt.fill=0;ctx.drawImage=function(){cnt.drawImage++;return orig.drawImage.apply(ctx,arguments);};ctx.fill=function(){cnt.fill++;return orig.fill.apply(ctx,arguments);};
+      try{fn();}finally{ctx.drawImage=orig.drawImage;ctx.fill=orig.fill;}return {i:cnt.drawImage,f:cnt.fill};};
+    IRM.on=false;const off=capture(function(){drawContacts();});
+    IRM.on=true;IRM.mode='A';const onA=capture(function(){drawContacts();});
+    IRM.mode='B';const onB=capture(function(){drawContacts();});
+    T('⑤ 挂接:关着不多画;A 多画光点、B 多画光带',onA.i>off.i&&onB.f>off.f&&onB.i===off.i,
+      '关 '+off.i+' 图 / '+off.f+' 填 · A '+onA.i+' 图 · B '+onB.f+' 填');
+  }catch(e){T('自检抛异常',false,String(e&&e.stack||e));}
+  finally{
+    ships.length=0;shipsBak.forEach(x=>ships.push(x));shipSeq=seq0;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;IRM.on=onBak;IRM.mode=modeBak;if(rocksBak)rocks=rocksBak;irmSync();
+  }
+  const pre=document.createElement('pre');pre.id='irSelftest';pre.textContent=out.join('\n');document.body.appendChild(pre);
+  document.title=ok?'SELFTEST:PASS':'SELFTEST:FAIL';
+}
+/* ================= 交互自检(?uitest):真实的点击 ================= */
+function irmUitest(){
+  const out=[];let ok=true;const T=(n,c,d)=>{out.push((c?'✓ ':'✗ ')+n+(d?'  '+d:''));if(!c)ok=false;};
+  try{
+    IRM.on=false;IRM.mode='A';irmSync();
+    document.getElementById('irBtn').click();
+    T('U1 点「红外」:打开、按钮亮',IRM.on===true&&document.getElementById('irBtn').classList.contains('on'));
+    document.querySelector('#irMode [data-irm="B"]').click();
+    T('U2 点「B 沿视线」:换成 B、按钮亮',IRM.mode==='B'&&document.querySelector('#irMode [data-irm="B"]').classList.contains('on'));
+    document.querySelector('#irMode [data-irm="A"]').click();
+    T('U3 点「A 真实位置」:换回 A',IRM.mode==='A');
+    document.getElementById('irBtn').click();
+    T('U4 再点「红外」:关掉',IRM.on===false&&!document.getElementById('irBtn').classList.contains('on'));
+  }catch(e){T('交互自检抛异常',false,String(e&&e.stack||e));}
+  const pre=document.createElement('pre');pre.id='irSelftest';pre.textContent=out.join('\n');document.body.appendChild(pre);
+  document.title=ok?'UITEST:PASS':'UITEST:FAIL';
+}
+{const Qs=new URLSearchParams(location.search);
+  if(Qs.has('ir'))IRM.on=true;if(Qs.get('mode')==='B')IRM.mode='B';irmSync();   /* 调试参数(截图用):?ir 打开红外图;?mode=B 用 B 画法 */
+  if(Qs.has('selftest'))irmSelftest();if(Qs.has('uitest'))irmUitest();}
+</script>
+</body>
+</html>
