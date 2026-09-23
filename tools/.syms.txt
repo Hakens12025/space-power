@@ -81,6 +81,9 @@ HULL_BASE
 HULL_LABEL
 HULL_ORDER
 HULL_ZOOM
+ID_CON
+ID_SUS
+ID_UNK
 KIND_INFO
 K_HARD
 K_MIN
@@ -152,6 +155,7 @@ TIER_ORDER
 TIER_SCALE
 TRK
 TRK_FWD
+TRK_IDO
 TUT_HTML
 V
 VT
@@ -218,6 +222,8 @@ ciwsSectorOverload
 clearPendings
 cmdList
 contactAge
+contactIdLvl
+contactIdType
 contactIdn
 contactPos
 contactState
@@ -779,7 +785,8 @@ trkEnsure
 trkFoe
 trkFwdDesc
 trkGone
-trkIdn
+trkIdLvl
+trkIdType
 trkList
 trkLit
 trkNew

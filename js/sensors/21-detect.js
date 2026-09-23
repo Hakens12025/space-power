@@ -144,11 +144,10 @@ function emitLabel(mode){ // UI 文案的【唯一】出处:右栏 / 底栏 / �
    中间那 28 万公里里玩家白拿了舰种、舰名和分级,"贴近才认得出"这条玩法不存在;同一艘船在聚合框里(它读的是 idn)却记成"?"。
    自己这一方的船恒为已识别。 */
 function litOf(s,side){return trkLit(trkOf(side,s))||0;} // R7 某一方对这艘船握着的接触等级(0..3)。TK2.0 起读航迹表(原来读舰上字段,那个按阵营的三元式各写各的)
-function contactIdn(s,side){
-  if(!s)return false;
-  if(s.side===side)return true;
-  return trkIdn(trkOf(side,s)); // TK2.0:握着接触(等级 > 0)且椭圆锁存了身份 —— 同一个合取,改读航迹表
-}
+function contactIdn(s,side){return contactIdLvl(s,side)>=ID_SUS;} // TK2.6:「认出」= 身份至少疑似 —— 与改前(握着接触且椭圆锁存了身份)按定义相等;自己一方恒为真、空对象恒为假
+/* TK2.6 身份档位与类型的门面(与 contactIdn 同一家;三档的定义见 sensors/24)。自己这一方恒为确认 */
+function contactIdLvl(s,side){return !s?ID_UNK:(s.side===side?ID_CON:trkIdLvl(trkOf(side,s)));}
+function contactIdType(s,side){return !s?null:(s.side===side?{kind:s.kind||'ship',cls:s.cls||null,tier:s.tier||null}:trkIdType(trkOf(side,s)));}
 function sigClassLabel(s){ // 探测级(等级 1)只看得出信号有多大 → 大/中/小;识别级(2+)才知道舰种
   const sz=sReq(s,'size','ship'); // SN4:旧的船体信号字段已删,改读 size —— 两张表的数值逐位相同(DD 0.70 / CA 1.00),所以下面三档阈值一个字不动。新模型里 size 同时喂光学亮度与雷达反射,"大船两头都显眼",这一档情报因此比改前更有分量
   if(sz>=0.9)return '▣ 大型热源';

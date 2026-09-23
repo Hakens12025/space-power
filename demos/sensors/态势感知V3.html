@@ -646,7 +646,7 @@ function covShape(ch,gi,d,t,dd){
   return [COV.HUGE, sPerp, false, sPerp<=t.size*COV.L_LIS]; /* ID3:听出型号有距离门(参考对约 100 万);静默的船没有 lis 量测,这一级对它天然不成立 */
 }
 /* 一拍:先预测(椭圆长大),再把所有量测按信息相加 */
-function stepCov(t,dets,el){
+function stepCov(t,dets,el,idOut){ /* TK2.6(引擎同步):可选的 idOut 记下这一拍每一条认出它的通道 —— idBy 只记第一个 */
   const c=t.cov;
   /* c.n 此刻还是【上一拍】的量测数 —— 正好就是"我还握着这条接触吗"。
      复利按真实经过的秒数取幂,所以 5 次 1 秒与 1 次 5 秒结果逐位相同(倍速不改物理,判据钉住了这条)。 */
@@ -684,6 +684,7 @@ function stepCov(t,dets,el){
       covAddMeas(J,ux,uy,sh[2]?sh[0]*iw:COV.HUGE,sh[1]*iw); n++;
       if(!sh[2]&&sh[0]<rBound)rBound=sh[0];
       if(sh[3]&&!idn){idn=true;idBy=ch;}
+      if(sh[3]&&idOut)idOut[ch]=true;
       const cur=c.ch[ch];
       if(!cur||sh[1]<cur[1]){
         const R=covDetOf(ch,d,t);                        /* 信噪比问"我有多少信号" ⇒ 发现域 */

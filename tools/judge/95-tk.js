@@ -147,6 +147,7 @@ t('TK2_DIFF',function(){
   var diff=function(s,sd,st){ /* 返回空串 = 五个门面都对得上 */
     if(litOf(s,sd)!==oLit(s,sd))return 'litOf';
     if(contactIdn(s,sd)!==oIdn(s,sd))return 'contactIdn';
+    if(typeof contactIdLvl==='function'&&(contactIdLvl(s,sd)>=ID_SUS)!==oIdn(s,sd))return 'contactIdLvl>=疑似'; /* TK2.6:三档的「至少疑似」必须逐值等于改前的认出 */
     if(contactAge(s,sd)!==oAge(s,sd))return 'contactAge';
     if(contactState(s,sd)!==(st||oState)(s,sd))return 'contactState';
     var pn=contactPos(s,sd),po=oPos(s,sd);
@@ -256,6 +257,63 @@ t('TK24_RULES',function(){
     ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
     projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
     lodPrev={fleet:{},pairsB:null,pairsR:null};
+  }
+  return out;
+});
+
+/* TK_ID:TK2.6 身份三档(未知 / 疑似 / 确认)。距离一律从梯子现量,不写公里数。
+   ① 静默的蓝 DD 听一艘【开着雷达】的红 DD,摆在听出型号距离的 0.8 倍:疑似、来路 lis、而且仍是热区(听得出是什么、不知道在哪)
+   ② 开照射的蓝 CA 看一艘静默的红 DD,摆在照射认出距离的 0.85 倍:确认
+   ③ 静默的蓝 DD 光学看一艘静默的红 DD,摆在光学认出距离的 0.8 倍:确认
+   ④ 同一拍两站:1 号站(DD,静听)排在 ships 里 2 号站(CA,照射)前面 —— idBy 仍是 lis(第一个认出的通道),但档位必须是【确认】。
+      这就是契约评审员指出的那个盲区:只看 idBy 会读成疑似。变异「删掉 stepCov 里记 idOut 那一句」必须在这一条红
+   ⑤ 接触丢了(拉到很远、全体静默,等级归 0):未知,且确认锁存已清。变异「等级归 0 时不清锁存」必须在这一条红
+   ⑥ 浸泡里每一拍的不变量:确认锁存为真 ⟹ 等级 > 0 且椭圆锁存了身份 */
+t('TK_ID',function(){
+  if(typeof contactIdLvl!=='function'||typeof ID_CON==='undefined')return 'fail TK2.6 的身份档位没加载';
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,seq0=shipSeq,out='';
+  try{
+    adminMode=false;projectiles.length=0;
+    var calm=function(list){list.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.flame=0;x.sideFlame=0;x.autoEngage=false;x.roe='hold';x.noFire=true;});};
+    var beat=function(n){for(var i=0;i<n;i++)detectLoop(1);};
+    var lvName=['未知','疑似','确认'];
+    var pDD=ladPair('DD','DD'),pCA=ladPair('CA','DD');
+    /* ① */
+    var b1=makeShip('DD','身蓝1',[0,0,0],[1,0,0],[0,0,0],'blue',2),r1=makeShip('DD','身红1',[pDD.lisIdent*0.8,0,0],[-1,0,0],[0,0,0],'red',2);
+    ships.length=0;ships.push(b1,r1);calm(ships);setEmit(b1,'silent');setEmit(r1,'paint');beat(20);
+    var lv1=contactIdLvl(r1,'blue'),by1=trkOf('blue',r1).cov.idBy,st1=contactState(r1,'blue');
+    var ok1=(lv1===ID_SUS&&by1==='lis'&&st1==='heat');
+    /* ② */
+    var b2=makeShip('CA','身蓝2',[0,0,0],[1,0,0],[0,0,0],'blue',2),r2=makeShip('DD','身红2',[pCA.radarIdent*0.85,0,0],[-1,0,0],[0,0,0],'red',2);
+    ships.length=0;ships.push(b2,r2);calm(ships);setEmit(b2,'paint');setEmit(r2,'silent');beat(20);
+    var lv2=contactIdLvl(r2,'blue'),ok2=(lv2===ID_CON);
+    /* ③ */
+    var b3=makeShip('DD','身蓝3',[0,0,0],[1,0,0],[0,0,0],'blue',2),r3=makeShip('DD','身红3',[pDD.optIdent*0.8,0,0],[-1,0,0],[0,0,0],'red',2);
+    ships.length=0;ships.push(b3,r3);calm(ships);setEmit(b3,'silent');setEmit(r3,'silent');beat(20);
+    var lv3=contactIdLvl(r3,'blue'),ok3=(lv3===ID_CON);
+    /* ④ 同一拍两站:静听的 DD 排在照射的 CA 前面 */
+    var r4=makeShip('DD','身红4',[0,0,0],[-1,0,0],[0,0,0],'red',2);
+    var s1=makeShip('DD','身蓝4a',[-pDD.lisIdent*0.8,0,0],[1,0,0],[0,0,0],'blue',2),s2=makeShip('CA','身蓝4b',[pCA.radarIdent*0.85,0,0],[-1,0,0],[0,0,0],'blue',2);
+    ships.length=0;ships.push(s1,s2,r4);calm(ships);setEmit(s1,'silent');setEmit(s2,'paint');setEmit(r4,'paint');beat(20);
+    var lv4=contactIdLvl(r4,'blue'),by4=trkOf('blue',r4).cov.idBy,ok4=(lv4===ID_CON&&by4==='lis');
+    /* ⑤ 丢了:拉到被听见距离的 3 倍、全体静默 */
+    r4.pos=[pDD.heardMin*3,0,0];setEmit(r4,'silent');setEmit(s2,'silent');beat(40);
+    var tk4=trkOf('blue',r4),lv5=contactIdLvl(r4,'blue'),lit5=tk4.lit,idc5=tk4.idc,ok5=(lit5===0&&lv5===ID_UNK&&idc5===false); /* 读数当场记:⑥ 会把这艘船放回来再跑 60 拍,拼输出时航迹早变了(FLOW71 那种陈读数,又犯了一次) */
+    /* ⑥ 浸泡不变量:把 ④ 的场面放回来再跑 60 拍,每一拍查每一条航迹 */
+    r4.pos=[0,0,0];setEmit(r4,'paint');setEmit(s2,'paint');var badInv=0,chk=0;
+    for(var k=0;k<60;k++){beat(1);ships.forEach(function(x){['blue','red'].forEach(function(sd){var tk=trkOf(sd,x);chk++;if(tk&&tk.idc&&!(tk.lit>0&&tk.cov&&tk.cov.idn))badInv++;});});}
+    var ok6=(badInv===0&&chk>0);
+    var ok=(ok1&&ok2&&ok3&&ok4&&ok5&&ok6);
+    out=(ok?'ok':'fail')+' ① 听辐射指纹 @'+Math.round(pDD.lisIdent*0.8/1e4)+' 万:'+lvName[lv1]+' 来路='+by1+' 显示态='+st1+'(须 疑似 / lis / heat)='+ok1
+      +' | ② 照射 @'+Math.round(pCA.radarIdent*0.85/1e4)+' 万:'+lvName[lv2]+'(须 确认)='+ok2
+      +' | ③ 光学 @'+Math.round(pDD.optIdent*0.8/1e4)+' 万:'+lvName[lv3]+'(须 确认)='+ok3
+      +' | ④ 同拍两站(静听排在照射前):'+lvName[lv4]+' 来路='+by4+'(须 确认 / lis —— 只看来路会误读成疑似)='+ok4
+      +' | ⑤ 丢了:等级 '+lit5+' '+lvName[lv5]+' 锁存='+idc5+'(须 0 / 未知 / false)='+ok5
+      +' | ⑥ 浸泡 60 拍、'+chk+' 次检查:锁存为真却没握着身份='+badInv+'(须 0)='+ok6;
+  }finally{
+    shipSeq=seq0;adminMode=admBak;
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+    projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
   }
   return out;
 });

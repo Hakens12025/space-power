@@ -44,7 +44,7 @@ const TRK={blue:new WeakMap(),red:new WeakMap()};
 function trkTab(side){return side==='blue'?TRK.blue:TRK.red;}
 
 /* 唯一的航迹工厂;不往任何表里登记。newCov() 每船两次,与原来舰船字面量里的调用次数相同 */
-function trkNew(by,src){return {src:src,by:by,lit:0,cov:newCov(),lastT:-1e9,lastPos:null,lastVel:null};}
+function trkNew(by,src){return {src:src,by:by,lit:0,cov:newCov(),lastT:-1e9,lastPos:null,lastVel:null,idc:false};} // TK2.6 追加 idc:【确认】锁存(光学或照射认出过它、且接触一直握着)
 
 /* O(1) 查表,【永远不建】。非对象、或从没登记过的对象(弹丸、{pos} 指定点、梯子的假船、沙盘克隆、判据的裸对象)一律 null */
 function trkOf(side,src){return (src!==null&&typeof src==='object')?(trkTab(side).get(src)||null):null;}
@@ -96,8 +96,10 @@ function trkEnsure(side,src){const m=trkTab(side);let k=m.get(src);if(k===undefi
    等级【存下来】,不在读的时候从椭圆现算 */
 function trkStep(tk,t,obs,el){
   const c=tk.cov;
-  const lit=stepCov(t,c,obs,el);
+  TRK_IDO.opt=TRK_IDO.lis=TRK_IDO.act=false;          // TK2.6:模块级草稿,每拍清零后交给内核记【哪几条通道认出了它】(不分配)
+  const lit=stepCov(t,c,obs,el,TRK_IDO);
   if(c.fix&&c.n>0){tk.lastT=simTime;tk.lastPos=[c.x,c.y,t.pos[2]];tk.lastVel=t.vel.slice();}
+  if(lit>0){if(TRK_IDO.opt||TRK_IDO.act)tk.idc=true;}else tk.idc=false; // TK2.6 确认锁存:光学轮廓或照射回波认出过 ⇒ 确认;接触丢了(等级归 0)才清。与椭圆的身份位同一拍立、同一拍清
   tk.lit=lit;
   return lit;
 }
@@ -136,8 +138,6 @@ function trkPos(tk){
   return [lp[0]+lv[0]*a,lp[1]+lv[1]*a,lp[2]+(lv[2]||0)*a];
 }
 
-/* 认没认出:握着接触(等级 > 0)且椭圆锁存了身份 —— ID1 那个合取,原样 */
-function trkIdn(tk){return !!(tk&&tk.lit>0&&tk.cov&&tk.cov.idn);}
 
 /* ---- 通往真值的三条具名通道:全库只在这里定义,grep 得到、以后拆得掉 ----
    trkSrc     锁定 / 集火 / 火控序列 / 弹丸目标要的那个对象句柄(武器仍瞄对象,不瞄航迹)
@@ -170,3 +170,29 @@ function trkList(side,pred){const out=[];trkEach(side,function(tk,st){if(!pred||
 /* 自动化(自动索敌 / 网分配 / 重锁 / 红方集火)许不许把这条航迹当敌方目标。TK2 里恒为 true(纯占位,零影响);
    TK4c 石头进来之后,它的函数体换成用户认可的那条类别规矩 —— 石头只改这一个函数 */
 function trkFoe(tk){return true;}
+
+/* ============================================================================
+   TK2.6 身份三档(2026-09-23)。先对名字:这是【分类可信度】的阶梯(≈ 美海军反潜的 possible / probable / certain),
+   **不是** STANAG 1241 / APP-6 里表示敌我属性的 Suspect —— 那一套是 Pending / Unknown / Friend / Neutral / Suspect / Hostile,管的是"是不是敌人"。
+     未知 ID_UNK  没认出(或接触没握着)
+     疑似 ID_SUS  只凭辐射指纹认出(ESM / SEI)—— 能被冒充(以后的诱饵就是冒充这一档)
+     确认 ID_CON  光学轮廓或照射回波(NCTR)认出过,而且接触一直握着 —— 一旦确认,照射停了、只剩静听也不退回疑似
+   存储只有三格、一格一件事:cov.idn(至少疑似,内核锁存,与演示页共用)、cov.idBy(最近一次认出那一拍的【第一个】通道,判据断言它)、
+   tk.idc(确认锁存)。**类型不存**:神谕式关联下它是身份档位与源的一个纯函数(trkIdType),存一份就是第二份真值。
+   这一步行为不变:contactIdn 仍然是"至少疑似"(= 改前的 lit>0 且 idn),没有任何消费方改看"确认"—— 改哪一处都是单独的、要用户拍板的行为变更。
+   ============================================================================ */
+const ID_UNK=0, ID_SUS=1, ID_CON=2;
+const TRK_IDO={opt:false,lis:false,act:false};
+
+/* 这条航迹的身份档位。夹具写出来的"idc 为真但 idn 为假"读作未知、"idn 为真但 idc 为假"读作疑似 —— 容忍不一致的人造状态,不抛 */
+function trkIdLvl(tk){return !(tk&&tk.lit>0&&tk.cov&&tk.cov.idn)?ID_UNK:(tk.idc?ID_CON:ID_SUS);}
+
+/* 认出来的类型。未知 = null;疑似给【它声称的】(源带 spoof 就给 spoof —— 诱饵用;否则就是它自己);确认给真的。
+   kind 缺省 'ship':今天注册表里只有船 */
+function trkIdType(tk){
+  const lv=trkIdLvl(tk);
+  if(lv===ID_UNK)return null;
+  const s=tk.src;
+  if(lv===ID_SUS&&s.spoof)return s.spoof;
+  return {kind:s.kind||'ship',cls:s.cls||null,tier:s.tier||null};
+}

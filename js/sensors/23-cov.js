@@ -220,7 +220,7 @@ function covShape(ch, gi, d, t, dd) {
    el  = 这一拍实际经过的模拟秒
    ⚠ 与演示页的差别只有这个形状:演示页每拍对全部探测方现算量程,引擎有 O(N^2) 热循环与早退,
      所以把"哪些对有信号"这件事留在外面。数学逐行相同。 */
-function stepCov(t, c, obs, el) {
+function stepCov(t, c, obs, el, idOut) { // TK2.6:可选的 idOut 记下这一拍【每一条】认出它的通道(来自每一个探测站),见下面那一句
   /* 先验增长要按【真实经过的秒数】取幂,不能写成 a*(1+f)^el + G*el:
      实测 f=0.18 / G=120 / a0=400 时,跑 6 次 1 秒得 2213、跑 1 次 6 秒得 1800,差 23%
      —— 那就是"倍速越高、椭圆长得越慢",倍速改了物理。解析形让两者逐位相同。 */
@@ -251,6 +251,7 @@ function stepCov(t, c, obs, el) {
       n++;
       if (!sh[2] && sh[0] < rBound) rBound = sh[0];
       if (sh[3] && !idn) { idn = true; idBy = ch; }
+      if (sh[3] && idOut) idOut[ch] = true; // TK2.6:idBy 只记【第一个】认出它的通道(按探测站、通道的先后),同一拍里 1 号站静听认出、2 号站照射认出时 idBy 是 lis —— 身份三档要知道照射也认出来了
       const cur = c.ch[ch];
       if (!cur || sh[1] < cur[1]) {
         const R = covDetOf(ch, d, t);                   // 信噪比问"我有多少信号" ⇒ 发现域
