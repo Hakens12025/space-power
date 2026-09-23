@@ -23,19 +23,15 @@
    · 造船那一刻两边都建(trkAdopt,eager);读永远不建(trkOf 只查,查不到给 null)。
    · "自己这一方"在查询那一刻判,不在建航迹时判(判据会翻 .side)。
 
-   ---- TK1 的过渡:转发访问器(TK3b 已改成墓碑:一碰就抛;TK3c 删)----
-   旧的十个舰上感知字段名还有几百处读写(生产者的计算键、门面、裸读、判据夹具),TK1 一处都不改,
-   而是给每艘 makeShip 出来的船挂上【同一份冻结的】TRK_FWD 描述符:get / set 各做一次 WeakMap.get,
-   然后原样读写航迹上的那一格(不复制、不归一、不新建)。
-   ⚠ 只许是这一份共享描述符 + Object.defineProperties。不许写成舰船字面量里的 get 访问器,也不许每船一个闭包:
-     契约设计时用真的 makeShip 字面量在 node 里量过,那样每艘船都掉进字典模式(%HasFastProperties 为 false),
-     全引擎的舰船字段一起变慢;共享冻结描述符则三型同 map、快属性(tools/tk/digest.js 的 MAPS 行在 Chrome 里复核)。
-   ⚠ 不可枚举是 TK1 唯一的结构变化:for...in 与 Object.assign 看不到这十个名字。全库的整对象拷贝只有航线细化沙盘
-     (physics/32,沙盘里从不读感知)与几处喂给签名函数的 Object.assign(只读发射档 / 体型那几格)。
+   ---- 过渡期的转发访问器(TK1 建,TK3b 改墓碑,TK3c 删)----
+   TK1 ~ TK3a 期间,旧的十个舰上感知字段名是挂在每艘船上的一份共享、冻结、不可枚举的 get / set,转发到航迹上的那一格;
+   TK3b 改成一碰就抛的墓碑,运行期证明没人再碰;TK3c(2026-09-23)连同工厂、那张描述符表和挂载那一句一起删掉。
+   舰船对象从此只有物理真值,感知只在这两张表里。过渡期的写法与性能记录(为什么只许一份共享冻结描述符)在 js/sensors/CLAUDE.md 的 TK 一节。
+   ⚠ 从此往船上写一个旧名字【不会报错】,只会静默造出一个没人读的数据字段 —— 守这条的是 verify.sh 的 TK3c 源码负对照与判据 TK3_NOFWD。
 
    ---- 加载期 ----
-   顶层只执行 TRK 与 TRK_FWD 两句:它们只调同文件、已提升的 trkTab / trkFwdDesc,不碰 COV / LAD / SENS,
-   所以本文件没有暂时性死区的暴露面、也扰动不了 ladApply。newCov 在 trkNew 里【运行期】才调(makeShip 只在 init 与判据里跑)。
+   顶层只执行 TRK 一句,不碰 COV / LAD / SENS,所以本文件没有暂时性死区的暴露面、也扰动不了 ladApply。
+   newCov 在 trkNew 里【运行期】才调(makeShip 只在 init 与判据里跑)。
    ============================================================================ */
 
 const TRK={blue:new WeakMap(),red:new WeakMap()};
@@ -49,37 +45,10 @@ function trkNew(by,src){return {src:src,by:by,lit:0,cov:newCov(),lastT:-1e9,last
 /* O(1) 查表,【永远不建】。非对象、或从没登记过的对象(弹丸、{pos} 指定点、梯子的假船、沙盘克隆、判据的裸对象)一律 null */
 function trkOf(side,src){return (src!==null&&typeof src==='object')?(trkTab(side).get(src)||null):null;}
 
-/* TK1 转发描述符:this = 船;查不到航迹当场抛(不静默落回 undefined)。值原样存取、按引用。
-   TK1 PERF:取那一格用 switch 写成五个具名读写,不写 k[slot] —— 十个 get 出自同一个函数字面量,V8 让它们共用一份反馈,
-   k[slot] 那一处见到五种键名就退成超多态(megamorphic)的查缓存;拆成具名读写后每一处只见一种航迹形状。
-   实测(对局 120 秒后 1000 次 stepSim,同一个 Chrome、交替 6 页 x 50 个样本,中位数):1a887a8 2.70ms / k[slot] 3.10ms(+15%)/ 本写法 2.90ms(+7%)。
-   剩下那一截是每次读一次 WeakMap 查表,契约允许的只有"缩短查表路径"、不许往船上挂句柄,所以到此为止。
-   最后那句 k[slot] 只是兜底(五个 case 已覆盖 TRK_FWD 用到的全部格),保证任何格名都照原义存取 */
-/* TK3b 墓碑(2026-09-23):get / set 一碰就抛,不再转发。读写点已全部搬到航迹 API 与判据夹具,这一步在运行期证明没人再碰旧名字
-   —— 连 grep 看不见的计算键(s['lit'+K])也逃不掉。描述符的形状(共享、冻结、不可枚举、不可重配置)一格没动,所以舰船的隐藏类与 TK1 相同;
-   上面那段 switch 的性能记录是 TK1~TK3a 的,TK3c 连同这个工厂一起删。side 参数在墓碑里用不上,留着是为了 TRK_FWD 那张表一个字不改 */
-function trkFwdDesc(side,slot){return {
-  get(){throw new Error('TK3 已搬进航迹表:'+slot+' @ '+(this&&this.id));},
-  set(v){throw new Error('TK3 已搬进航迹表:'+slot+' @ '+(this&&this.id));},
-  enumerable:false,configurable:false};}
-
-/* 十个旧名字 → (哪张表, 航迹上的哪一格)。加载期建一次,所有船共用同一组 get / set 函数对象 */
-const TRK_FWD=Object.freeze({
-  litBlue:trkFwdDesc('blue','lit'),
-  litRed:trkFwdDesc('red','lit'),
-  covB:trkFwdDesc('blue','cov'),
-  covR:trkFwdDesc('red','cov'),
-  seenBlue:trkFwdDesc('blue','lastT'),
-  seenBluePos:trkFwdDesc('blue','lastPos'),
-  seenBlueVel:trkFwdDesc('blue','lastVel'),
-  seenRed:trkFwdDesc('red','lastT'),
-  seenRedPos:trkFwdDesc('red','lastPos'),
-  seenRedVel:trkFwdDesc('red','lastVel')});
-
-/* 登记一个源:两方各建一条航迹 + 挂转发;重复登记当场抛(装两遍转发会被 configurable:false 拒掉,这里先给一句能读懂的)。
+/* 登记一个源:两方各建一条航迹;重复登记当场抛(TK3c 起不再挂转发,src 上什么都不加)。
    返回 src 本身,makeShip 因此能写成 return trkAdopt({...}) */
 function trkAdopt(src){if(TRK.blue.has(src)||TRK.red.has(src))throw new Error('TK1 重复登记航迹源:'+(src&&src.id));
-  TRK.blue.set(src,trkNew('blue',src));TRK.red.set(src,trkNew('red',src));Object.defineProperties(src,TRK_FWD);return src;}
+  TRK.blue.set(src,trkNew('blue',src));TRK.red.set(src,trkNew('red',src));return src;}
 
 /* ============================================================================
    TK2.0 生产者与读原语直接落在表上(2026-09-23)。门面(21-detect 的 litOf / contactIdn / contactAge / contactState / contactPos)
@@ -88,7 +57,7 @@ function trkAdopt(src){if(TRK.blue.has(src)||TRK.red.has(src))throw new Error('T
    ============================================================================ */
 
 /* 取或建。只许生产者(21-detect 的 detectFor)与判据夹具调用 —— verify.sh 有一条静态检查钉着调用点。
-   TK1~TK4c 里造船时两方都已登记,这里总能查到;查不到才建(给将来不经 makeShip 的源用),不挂转发 */
+   TK1~TK4c 里造船时两方都已登记,这里总能查到;查不到才建(给将来不经 makeShip 的源用) */
 function trkEnsure(side,src){const m=trkTab(side);let k=m.get(src);if(k===undefined){k=trkNew(side==='blue'?'blue':'red',src);m.set(src,k);}return k;}
 
 /* 生产者的一拍:椭圆推进 → 最后定位记录 → 等级。三件事的先后与改前 detectFor 里逐字相同(见那里的两段长注释)。

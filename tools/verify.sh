@@ -79,7 +79,7 @@ case "$ST" in ''|*[!0-9]*) STN=0;; *) STN=$ST;; esac
 # ② 浸泡【双向】:NaN 必须为 0,同时必须真的跑出过弹丸 —— 只判 NaN 的话,一个"什么都没发生"的退化浸泡
 #    (弹丸恒 0、船原地不动)零 NaN 完美通过。新感知内核要引入预乘表与 d2 / d2*d2 比较,除零与溢出正是最可能的坏法。
 grep -qE '^SOAK=steps=[0-9]+ NaNships=0 NaNproj=0 maxLive=[1-9]' "$OUT" || { echo "✗ SOAK 浸泡:出了 NaN,或者一发弹丸都没活过(maxLive=0 = 浸泡空转,零 NaN 是白送的)"; fail=1; }
-grep -qE '^SOAK=.*seen=.*"missile"' "$OUT" || { echo "✗ SOAK 浸泡里一发导弹都没生成(SALVO→fireMissiles 断链。区域齐射本就绕开 litBlue 门控,感知层改动不该影响这条)"; fail=1; }
+grep -qE '^SOAK=.*seen=.*"missile"' "$OUT" || { echo "✗ SOAK 浸泡里一发导弹都没生成(SALVO→fireMissiles 断链。区域齐射本就绕开接触等级门控,感知层改动不该影响这条)"; fail=1; }
 # ③ 开局体检四条。它们是下游【全部】判定的前提:没有船、或者靶不再无敌,FLOW3/FLOW5 那两层的"记账"读数就不成立了,
 #    而那时它们多半仍是绿的(打不死的靶与不存在的靶,记账读数都是 0)。
 grep -qE '^BOOT=ships=[0-9]+ blue=[1-9][0-9]* red=[1-9][0-9]*' "$OUT" || { echo "✗ BOOT 开局舰船数不对(蓝/红任一为 0:下游判定全部失去意义)"; fail=1; }
@@ -292,6 +292,16 @@ TK_ENS_BAD=$(for f in $(grep -rlE "trkEnsure\(|TRK\.(blue|red)\.set\(" js/ --inc
 # TK2.4:渲染层不再直读舰上的接触字段,正面那一半改成「去注释后 js/render 里真的在读航迹表」(trkOf / trkEach / trkPaintedBy 至少一处)
 TK_REND_N=$(cat js/render/*.js | tk_strip | grep -oE "trkOf\(|trkEach\(|trkPaintedBy\(" | wc -l | tr -d ' ')
 [ "${TK_REND_N:-0}" -ge 1 ] 2>/dev/null || { echo "✗ TK2.4:js/render/ 去注释后一处航迹表读点都没有(实测 $TK_REND_N)—— 画面没有在读感知层"; fail=1; }
+# TK3c:舰船只剩物理真值。十个旧的舰上感知字段名,去注释后在 js/、tools/judge/ 与本文件的代码里一处都不许有 ——
+# 转发删掉之后,往船上写一个旧名字【不报错】,只会静默造出一个没人读的数据字段,读它则静默拿到 undefined(裸比较 undefined<2 为假 ⇒ 火控门放行)。
+# 只查代码(TK 决定 3):历史注释里的旧名不改写;本文件按行首 # 去注释。tools/tk/ 刻意不查:A/B 的探针要在金标准那棵树(航迹表之前)上跑,只能按旧名读。
+# 不用 \b(见上面 SN4 那段,locale 敏感):两侧用 ASCII 标识符字符类夹住。名字用字符串拼接写,免得本文件被自己抓到。带自检。
+# ⚠ 本文件开着 set -e:命令替换以「[ 条件 ] && echo」收尾时,条件为假就让整条赋值返回 1,脚本在判定块中途静默退出、连结论行都不打(第一版就这样)。两条都以 true 收尾。
+TK_OLD="(^|[^A-Za-z0-9_\$])(lit""(Blue|Red)|cov""[BR]|seen""(Blue|Red)(Pos|Vel)?)([^A-Za-z0-9_\$]|\$)"
+TK_OLD_HITS=$( for f in $(find js tools/judge -name '*.js'); do n=$(tk_strip < "$f" | grep -cE "$TK_OLD"); [ "$n" -gt 0 ] && echo "$f:$n"; done; n=$(grep -vE '^[[:space:]]*#' tools/verify.sh | grep -cE "$TK_OLD"); [ "$n" -gt 0 ] && echo "tools/verify.sh:$n"; true )
+[ -z "$TK_OLD_HITS" ] || { echo "✗ TK3c 负对照:旧的舰上感知字段名还在代码里(去注释后):$TK_OLD_HITS"; fail=1; }
+TK_OLD_SELF=$(printf '%s\n' "var a=s.lit""Blue;" "/* cov""B */" "// seen""Red""Pos" "var b=x.cov""Bx,c=y.ever""Lit""Blue;" | tk_strip | grep -cE "$TK_OLD" || true)
+[ "$TK_OLD_SELF" = "1" ] || { echo "✗ TK3c 检查器自检失败:样本里恰好一处代码里的旧名(另有两处注释、两个只是前缀相同的名字),数出 $TK_OLD_SELF"; fail=1; }
 # 被照射告警的阈值原来是【两份手抄】的 0.3(21-detect 的日志门 + 82-ship-icons 的黄圈门),而且不在 SENS 表里。
 # SN4 把它收进 SENS.ACT_WARN,所以这条从"手抄份数=2"翻成"全库恰好一处定义 + 一处手抄都不许有"。
 # 反面那一半不能省:只判"定义有一处"的话,旁边再手抄一个字面量阈值照样全绿,而那正是改前的病。
@@ -440,6 +450,6 @@ grep -q "TK24_RULES=ok" "$OUT" || { echo "✗ TK24_RULES 未通过(两条原来�
 grep -q "TK_ID=ok" "$OUT" || { echo "✗ TK_ID 未通过(TK2.6 身份三档:听辐射指纹只到疑似、照射与光学到确认;同一拍静听站排在照射站前面时 idBy 是 lis 但档位必须是确认;接触丢了回到未知且锁存清掉;浸泡里锁存为真 ⟹ 握着身份)"; fail=1; }
 grep -q "TK2_DIFF=ok" "$OUT" || { echo "✗ TK2_DIFF 未通过(TK2.0 门面改读航迹表:改前五个公式逐字照抄(TK3b 起读航迹上的同一格)、与新门面逐值对表 —— 浸泡 5 个检查点 + 人造六态;自己一方的 contactPos 仍是 s.pos 本身;0.5 拍迟滞的假门面必须被对出来)"; fail=1; }
 grep -q "TK_NOCREATE=ok" "$OUT" || { echo "✗ TK_NOCREATE 未通过(读永远不建航迹:没登记过的探针走遍五个门面 / trkOf / trkEach / render / targetAt 后两表都没有它;trkList 与 ships 过滤同序同内容)"; fail=1; }
-grep -q "TK3_TOMB=ok" "$OUT" || { echo "✗ TK3_TOMB 未通过(TK3b 墓碑,原 TK1_FWD:在场每艘船两方都有航迹;十个旧舰上名字是全场共享一份的不可枚举、不可重配置访问器(=TRK_FWD),读写一碰就抛「TK3 已搬进航迹表」且航迹那一格不动;整对象拷贝不抛、拷不到;读永远不建航迹;重复登记抛。两条自检:带旧名字的裸对象过不了墓碑检查、可枚举描述符过不了②)"; fail=1; }
+grep -q "TK3_NOFWD=ok" "$OUT" || { echo "✗ TK3_NOFWD 未通过(TK3c,原 TK1_FWD → TK3_TOMB:在场每艘船两方都有航迹;十个旧舰上感知字段名在船上一个都没有(自有 / 原型链都不许);新造的船同样没有;整对象拷贝拷不到、拷出来的不在表里;读永远不建航迹;重复登记抛。自检:往一次性船上写一个旧名字必须静默成功、航迹不动、而且被②判掉)"; fail=1; }
 grep -q "^RENDER=ok" "$OUT" || { echo "✗ RENDER 未通过"; fail=1; }
 [ $fail -eq 0 ] && echo "✓ 全部通过" || exit 1
