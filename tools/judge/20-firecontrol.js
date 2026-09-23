@@ -2,9 +2,9 @@
    SN0 补牙齿:改前判据只有 macHits===0 && FC3.mac===0,而【MAC 根本解算不出目标】会给出一模一样的读数 ——
    fcGate 的 mac 分支有三条静默 return null(58:164 许可 / 58:174 接触等级 lit>=3 / 58:177 射程),
    外加 57 的舰级 macOn 一道闸;任何一条恒不过,"许可只做减法"这句话就一个字也没被测到。
-   fc3reset 的注释里本来就写着"MAC 要 litBlue>=3 才解算得出目标",但这条前提从来没被断言过,
+   fc3reset 的注释里本来就写着"MAC 要蓝方航迹等级 litOf(t,'blue')>=3 才解算得出目标",但这条前提从来没被断言过,
    而感知层一动,最先垮的正是接触等级那条。故补两样,缺一不可:
-   ① 前置条件直接断言 —— litBlue 全程 >=3、三维距离全程在【命中率 50% 的距离】之内(WR1 起没有射程门,这一条只保证"打得着")、macOn/autoEngage/roe 都放行;
+   ① 前置条件直接断言 —— 蓝方航迹等级全程 >=3、三维距离全程在【命中率 50% 的距离】之内(WR1 起没有射程门,这一条只保证"打得着")、macOn/autoEngage/roe 都放行;
    ② 正向对照 —— 同一艘舰、同一个靶、紧接着的同一段时间,只把 allow.mac 这一个比特翻成 true,主炮就必须真的开火。
    只加 ① 的话,"序列层把 mac 也放行了"这种反向坏法仍测不出来(那时 macHits 照样是 0 才叫怪);
    只加 ② 的话,判定确实会红,但读数说不清是"许可层坏了"还是"这一局根本打不着"。 */
@@ -12,10 +12,10 @@ t('FLOW3_ALLOW',function(){
   var e=fc3reset();
   fcNew(e.S,{tid:e.A.id},{mac:false,msl:true});
   var cap=macRangeAt(e.S,0.5); /* WR1:射程门没了;前置条件只保证这一局在命中率过半的距离上打,"没开火"才证明得了是许可挡的 */
-  var lit0=e.A.litBlue,litMin=99,dMax=0;
+  var lit0=tkGet('blue',e.A).lit,litMin=99,dMax=0;
   for(var i=0;i<5000;i++){ /* 不走 fc3step:前置条件要在同一条循环里【逐拍】采样,只看首尾两拍的话中途掉级看不见 */
     stepSim(CFG.step);simTime+=CFG.step;
-    if(e.A.litBlue<litMin)litMin=e.A.litBlue;
+    if(tkGet('blue',e.A).lit<litMin)litMin=tkGet('blue',e.A).lit;
     var dd=V.len(V.sub(e.A.pos,e.S.pos));if(dd>dMax)dMax=dd; /* 三维距离,别写平面 hypot(同 RF5 备忘第三条门) */
   }
   var st=e.A.rangeStat,mac1=FC3.mac,msl1=FC3.msl,h1=st.macHits,ml1=st.mslHits;
@@ -31,7 +31,7 @@ t('FLOW3_ALLOW',function(){
   var pos=(mac2>mac1&&!!e.S.fcTgt.mac); /* 该发生的发生了 */
   var ok=(pre&&neg&&pos);
   return (ok?'ok':'fail')
-    +' 前置='+pre+'(litBlue '+lit0+'/min'+litMin+' 须>=3, dMax='+Math.round(dMax/1000)+'k<硬上限'+Math.round(cap/1000)+'k, macOn='+e.S.macOn+' roe='+e.S.roe+')'
+    +' 前置='+pre+'(蓝方等级 '+lit0+'/min'+litMin+' 须>=3, dMax='+Math.round(dMax/1000)+'k<硬上限'+Math.round(cap/1000)+'k, macOn='+e.S.macOn+' roe='+e.S.roe+')'
     +' 禁mac='+neg+'(macHits='+h1+' macShots='+mac1+' mslHits='+ml1+' mslShots='+msl1+' fcTgtMac为空='+(!e.S.fcTgt.mac)+')'
     +' 正向对照='+pos+'(放开许可后 macShots '+mac1+'→'+mac2+' macHits '+h1+'→'+h2+' fcTgtMac='+(e.S.fcTgt.mac?'set':'null')+')'
     +' locked='+(e.S.lockedTarget?e.S.lockedTarget.name:'null');
@@ -92,7 +92,7 @@ t('FLOW3_DRIFT',function(){
    为什么另起一层而不并进 FLOW3:FLOW3 测的是引擎(fcNew 之【后】的事),FLOW4 测的是入口(fcNew 之【前】的事)。
    Phase B 之前全库没有任何 fcNew 调用点,引擎是探针专用死代码,这一层验证的就是"玩家的手能不能把它按响"。
    与 FLOW3 的两处口径差异:
-   ① 一步模拟都不推。整条手势链不需要 stepSim(建序列只写 fireSeqs),不推就没有 detectLoop 改写 litBlue、
+   ① 一步模拟都不推。整条手势链不需要 stepSim(建序列只写 fireSeqs),不推就没有 detectLoop 改写蓝方航迹等级、
       没有靶场AI 覆写 lockedTarget、没有 Math.random —— 每条判定都是确定性的,失败即真失败。
    ② 时间不走模拟钟,改用【可控墙钟】。准星停留门槛(74 的 XH_DWELL=0.25s)与中键长短按门槛(70 的 MMB_HOLD_MS=350ms)
       读的都是 performance.now(UI 手感:不吃 rate、暂停时也要照走),而同步探针里墙钟不前进(虚拟时间只在渲染器
@@ -154,7 +154,7 @@ t('FLOW4_DWELL',function(){
   return (ok?'ok':'fail')+' snap:0ms='+(s0?s0.name:'null')+' 200ms='+(s1?s1.name:'null')+' 300ms='+(s2?s2.name:'null')
     +' dwellT='+xh.dwellT.toFixed(2)+' card='+(vis?'on':'off')+' 卡片='+txt+' vp='+W+'x'+H+' snapR='+Math.round(60/cam.zoom);
 });
-/* 6d-2 迷雾门控:非 GM + litBlue=0 → 停多久都不许吸(targetAt 的门控);同一位置点亮后必须吸得上(排除"准星整体坏了"的假绿) */
+/* 6d-2 迷雾门控:非 GM + 蓝方航迹等级 0 → 停多久都不许吸(targetAt 的门控);同一位置点亮后必须吸得上(排除"准星整体坏了"的假绿) */
 t('FLOW4_FOG',function(){
   /* SN6d:门的变量换了,对照组跟着换。
      原来是"只翻 litBlue 0→2,准星必须吸得上" —— 而 SN6d 起吸附门是 contactPos(有没有位置可交代),
@@ -162,17 +162,16 @@ t('FLOW4_FOG',function(){
        ① 暗          lit=0                      ⇒ 吸不上
        ② 只有热区    lit=1、fix=false(定不出位置)⇒ 吸不上 ← 改前这一档是【吸得上】的,而且吸在真值上
        ③ 定得出位置  lit=2、fix=true            ⇒ 吸得上
-     ⚠ 还要给 seenBlue 一个新鲜时间戳:contactState 的 live 要求 age<=5,而 makeShip 的初值是 -1e9
-       (=从未扫到)⇒ 否则是 stale,走外推那一支、seenBluePos 又是 null ⇒ 三档全吸不上,②③ 分不开。 */
+     ⚠ 还要给蓝方航迹的最后定位时刻 lastT 一个新鲜时间戳:contactState 的 live 要求 age<=5,而 makeShip 的初值是 -1e9
+       (=从未扫到)⇒ 否则是 stale,走外推那一支、lastPos 又是 null ⇒ 三档全吸不上,②③ 分不开。 */
   var e=fc4reset(),p=fc4at(e.A);
   adminMode=false;
   var A=e.A;
   function setContact(lit,fix){
-    A.litBlue=lit;
-    A.seenBlue=simTime;                                   /* 新鲜 ⇒ contactState 判 live */
-    if(!A.covB)A.covB=newCov();
-    A.covB.fix=!!fix;A.covB.seen=true;A.covB.n=1;A.covB.age=0;   /* SN6f:live = fix 且这一拍有量测 */
-    A.covB.x=A.pos[0];A.covB.y=A.pos[1];
+    tkPatch('blue',A,{lit:lit,
+      last:{t:simTime},                                   /* 新鲜 ⇒ contactState 判 live */
+      cov:{fix:!!fix,seen:true,n:1,age:0,                 /* SN6f:live = fix 且这一拍有量测;在原椭圆上改(航迹的椭圆恒在,改前那句"没有就补建"从不触发) */
+        x:A.pos[0],y:A.pos[1]}});
   }
   fc4clock(true);
   setContact(0,false);
@@ -295,7 +294,7 @@ function fc5reset(){ /* 手势基座直接复用 FLOW4 的 fc4reset(换局+摆�
   if(typeof rad!=='undefined'&&rad.open&&typeof radClose==='function')radClose(); /* 上一条判定可能留着开着的轮盘,fc4reset 不认识 rad */
   clearTimeout(mmbTimer);mmbTimer=null;
   var b=ships.filter(function(s){return s.side==='blue';});
-  b.slice(1).forEach(function(s,i){s.pos=[-50000,(i?1:-1)*30000,0];s.vel=[0,0,0];s.orders=[];s.autoEngage=false;s.roe='hold';s.macOn=false;s.mslOn=false;s.lockedTarget=null;}); /* 僚舰摆回靶场原始站位【只当传感器】:fc4reset 把它们扔到 40 万外是为了不掺进 shipAt,但 FLOW5_PICK 要步进,MAC 的 litBlue>=3 靠的正是这张三舰的探测网(与 fc3reset 的预热条件对齐);开火权全部关掉,免得命中记进同一个靶的 rangeStat */
+  b.slice(1).forEach(function(s,i){s.pos=[-50000,(i?1:-1)*30000,0];s.vel=[0,0,0];s.orders=[];s.autoEngage=false;s.roe='hold';s.macOn=false;s.mslOn=false;s.lockedTarget=null;}); /* 僚舰摆回靶场原始站位【只当传感器】:fc4reset 把它们扔到 40 万外是为了不掺进 shipAt,但 FLOW5_PICK 要步进,MAC 的蓝方航迹等级>=3 靠的正是这张三舰的探测网(与 fc3reset 的预热条件对齐);开火权全部关掉,免得命中记进同一个靶的 rangeStat */
   var rs=ships.filter(function(s){return s.side==='red';}),B=rs[1];
   B.pos=[60000,100000,0];B.vel=[0,0,0];B.orders=[];B.rangeAnchor=[60000,100000,0]; /* 第二个靶(三种上下文/分半环要两个目标):距 A 十万 > 吸附半径,准星在 A 上时不会顺手吸到它 */
   FC3.sh=e.S;FC3.mac=0;FC3.msl=0; /* 复用 FLOW3 装好的 fireMAC/fireMissiles 计数器(探针侧仪表),FLOW5_PICK 用它证明"改了许可之后真的不再开火" */
@@ -405,11 +404,11 @@ t('FLOW5_PICK',function(){
   var e=fc5reset();
   e.A.pos=[38000,-12000,0];e.A.rangeAnchor=[38000,-12000,0];e.A.vel=[0,0,0]; /* 距射手 4 万:与 FLOW3 同一个被两头夹出来的距离(MAC 打得中、导弹终端也打得中) */
   e.B.pos=[900000,400000,0];e.B.rangeAnchor=[900000,400000,0];e.B.vel=[0,0,0]; /* B 挪去天边:本条只看一个靶的记账 */
-  fc3step(1500); /* 预热 30s:MAC 要 litBlue>=3 才解算得出目标(同 fc3reset) */
+  fc3step(1500); /* 预热 30s:MAC 要蓝方航迹等级>=3 才解算得出目标(同 fc3reset) */
   e.A.rangeStat=newRangeStat();FC3.mac=0;FC3.msl=0;
   var p=fc4at(e.A);
   fc5hold(p,false);fc5release(p);
-  var lit=e.A.litBlue,o0=rad.open,i=-1;
+  var lit=tkGet('blue',e.A).lit,o0=rad.open,i=-1;
   for(var k=0;k<rad.items.length;k++)if(rad.items[k].kind==='mac')i=k;
   fc3step(2500); /* 50s 基线:许可着的主炮必须真的在开火,不然下面的"不再开火"是空的 */
   var m1=FC3.mac,l1=FC3.msl,h1=e.A.rangeStat.macHits;
@@ -421,7 +420,7 @@ t('FLOW5_PICK',function(){
   var m2=FC3.mac,l2=FC3.msl,h2=e.A.rangeStat.macHits;
   var ok=(o0&&lit>=3&&i>=0&&!!pt&&before===true&&after===false&&rad.items[i].allow===false
     &&m1>0&&m2===m1&&h2===h1&&l2>l1&&selected.join(',')===sel0);
-  return (ok?'ok':'fail')+' litBlue='+lit+' 主炮扇区 idx='+i+(pt?('@'+Math.round(pt[0])+','+Math.round(pt[1])):'(找不到)')
+  return (ok?'ok':'fail')+' 蓝方等级='+lit+' 主炮扇区 idx='+i+(pt?('@'+Math.round(pt[0])+','+Math.round(pt[1])):'(找不到)')
     +' allow.mac '+before+'→'+after+'(rad.items 回显='+(rad.items[i]?rad.items[i].allow:'-')+')'
     +' 切许可前50s:macShots='+m1+' macHits='+h1+' mslShots='+l1
     +' 切许可后60s:macShots='+m1+'→'+m2+' macHits='+h1+'→'+h2+' mslShots='+l1+'→'+l2+'(导弹仍在打=对照组)'
@@ -523,7 +522,7 @@ function fc6tap(p,shift){ /* RF7 一次短按(可带 Shift):照抄 fc5tap 的骨
 t('FLOW6_DESIG',function(){ /* Shift+中键=选定链:首按新建并入编辑态,再按追加,重复按去重;无 Shift 仍是快速交战(新建) */
   var e=fc5reset();
   var C=ships.filter(function(x){return x.side==='red';})[2];
-  C.pos=[60000,-100000,0];C.vel=[0,0,0];C.orders=[];C.rangeAnchor=[60000,-100000,0];C.litBlue=3; /* 第三靶:与 A/B 都隔十万,吸附不串 */
+  C.pos=[60000,-100000,0];C.vel=[0,0,0];C.orders=[];C.rangeAnchor=[60000,-100000,0];tkSetLit('blue',C,3); /* 第三靶:与 A/B 都隔十万,吸附不串 */
   fc4clock(true);fc5timer(true);
   var pA=fc4at(e.A);fc4move(pA[0],pA[1]);fc4frames(400);
   fc6tap(pA,true);                                        /* ① Shift+A:无编辑序列 → fcAppend 等价新建 */
@@ -650,7 +649,7 @@ t('FLOW6_FLOW',function(){ /* RF7d 数据链流动【方向】:亮段必须朝�
 t('FLOW6_PULSE',function(){ /* RF7e 被照射告警黄圈:脉冲必须挂墙钟,与 simTime/倍速解耦(原来挂 simTime,x50 下退化成高频乱闪) */
   var e=fc5reset();
   var S=e.S;S.pos=[0,0,0];S.vel=[0,0,0];cam.x=0;cam.y=0;
-  var _covBak=S.covR;   /* 本条要往舰上挂一条"正被照射"的接触。fc5reset 复用同一批舰,不还原的话后面每一条
+  var _covBak=tkGet('red',S).cov;   /* 本条要往舰上挂一条"正被照射"的接触。fc5reset 复用同一批舰,不还原的话后面每一条
                            用到它的判据都会多画一圈告警环 —— 实测 FLOW31 的对照组峰值被抬了 2 个灰阶就翻红了,
                            而被测代码一行没动。探针留下的状态残留是这套判定最容易自伤的地方(FLOW31 的块注释记过同一件事)。 */
   /* RWR1:告警从闭合黄圈换成了【朝照射源方位的一段弧】,采样点跟着挪到弧的正中:船心 + (图标半径 + RWR.GAP) x 来波方向。
@@ -659,7 +658,7 @@ t('FLOW6_PULSE',function(){ /* RF7e 被照射告警黄圈:脉冲必须挂墙钟,
   if(!PT)return 'fail 场上没有红舰可当照射源';
   var p=toScreen(0,0),pth=Math.atan2(PT.pos[1]-S.pos[1],PT.pos[0]-S.pos[0]),pR=shipIconR(S)+RWR.GAP,px=Math.round(p[0]+Math.cos(pth)*pR),py=Math.round(p[1]+Math.sin(pth)*pR);
   function warnPix(){ /* 每次重画前把驻留值按回去:detectLoop 不在本判定里跑,但 fc5reset 之后要保证条件成立 */
-    S.covR=newCov();S.covR.seen=true;S.covR.ch.act=[100,100,50000,20,PT.id];  /* SN6:告警条件 = 对方这一拍有一条【照射】量测打在我身上(c.ch.act 非空),不再是驻留过阈值 */                     /* SN4:驻留键改 opt/lis/act;阈值不再手抄 0.3,直接读 SENS.ACT_WARN——阈值一改这条自动跟着走,不会退化成"圈根本没画、两次采样都是背景色"的假绿(82 的黄圈门) */
+    tkPaintOn(S,[100,100,50000,20,PT.id],true);  /* SN6:告警条件 = 对方这一拍有一条【照射】量测打在我身上(c.ch.act 非空),不再是驻留过阈值 */                     /* SN4:驻留键改 opt/lis/act;阈值不再手抄 0.3,直接读 SENS.ACT_WARN——阈值一改这条自动跟着走,不会退化成"圈根本没画、两次采样都是背景色"的假绿(82 的黄圈门) */
     render();
     var d=ctx.getImageData(px,py,1,1).data;
     return d[0]+d[1]+d[2];                                        /* 亮度和:圈的 alpha 越高越亮 */
@@ -676,7 +675,7 @@ t('FLOW6_PULSE',function(){ /* RF7e 被照射告警黄圈:脉冲必须挂墙钟,
                                                                      实测约每十几次红一次(AI1 那轮抓到的,被测代码一行没动)。撞上了就再推 130ms 量一次,两个相位不可能都撞。 */
   fc4clock(false);
   simTime=st0;
-  S.covR=_covBak;       /* 还原,见上 */
+  tkGet('red',S).cov=_covBak;       /* 还原,见上 */
   var indep=(a0===a1), alive=(a0!==a2);
   var ok=(indep&&alive&&a0>0);
   return (ok?'ok':'fail')+' 采样('+px+','+py+') 亮度:基准='+a0
@@ -694,7 +693,7 @@ t('FLOW7_BIG',function(){ /* RF8 大序列:轮询(默认,多条轮流) vs 选择
   var dflt=S.fcBig;                       /* 默认必须是轮询 */
   /* ① 轮询:两条序列都该被解算到(逐武器各扫一圈,from 会落在不同序列上) */
   var seen={};
-  for(var i=0;i<300;i++){e.A.litBlue=3;e.B.litBlue=3; /* SN4:钉死接触等级——本条测的是大序列轮转,不是探测时序(见 SN0 规格) */ stepSim(0.02);
+  for(var i=0;i<300;i++){tkSetLit('blue',e.A,3);tkSetLit('blue',e.B,3); /* SN4:钉死接触等级——本条测的是大序列轮转,不是探测时序(见 SN0 规格) */ stepSim(0.02);
     if(S.fcFrom&&S.fcFrom.msl>=0)seen[S.fcFrom.msl]=1;
     if(S.fcFrom&&S.fcFrom.mac>=0)seen[S.fcFrom.mac]=1;}
   var rrSeen=Object.keys(seen).length;
@@ -702,7 +701,7 @@ t('FLOW7_BIG',function(){ /* RF8 大序列:轮询(默认,多条轮流) vs 选择
   fcSetBig(S,'pick');fcSetPick(S,s2);
   var idx2=fcSeqsOf(S).findIndex(function(q){return q.id===s2;});
   var seen2={},act=fcActive(S);
-  for(var j=0;j<300;j++){e.A.litBlue=3;e.B.litBlue=3; /* SN4:钉死接触等级——本条测的是大序列轮转,不是探测时序(见 SN0 规格) */ stepSim(0.02);
+  for(var j=0;j<300;j++){tkSetLit('blue',e.A,3);tkSetLit('blue',e.B,3); /* SN4:钉死接触等级——本条测的是大序列轮转,不是探测时序(见 SN0 规格) */ stepSim(0.02);
     if(S.fcFrom&&S.fcFrom.msl>=0)seen2[S.fcFrom.msl]=1;
     if(S.fcFrom&&S.fcFrom.mac>=0)seen2[S.fcFrom.mac]=1;}
   var pickKeys=Object.keys(seen2);
@@ -784,8 +783,9 @@ t('FLOW85_WEAPONS',function(){
     var B=makeShip('CA','散布蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),R=makeShip('DD','散布红',[0,0,0],[-1,0,0],[0,0,0],'red',2);
     ships.length=0;ships.push(B,R);
     [B,R].forEach(function(x){x.orders=[];x.vel=[0,0,0];x.flame=0;x.sideFlame=0;x.autoEngage=false;x.roe='hold';x.noFire=false;x.macCd=0;x.fireHot=0;setEmit(x,'silent');});
-    var est=function(lit,ex,ey){R.litBlue=lit;var c=R.covB=newCov();if(lit>0){c.seen=true;c.ever=true;c.fix=(ex!==null);c.n=2;c.age=0;c.idn=true;if(ex!==null){c.x=ex;c.y=ey;}c.r1=c.a1=9000;c.r2=c.a2=4000;}
-      R.seenBlue=(ex!==null)?simTime:-1e9;R.seenBluePos=(ex!==null)?[ex,ey,0]:null;R.seenBlueVel=(ex!==null)?[0,0,0]:null;};
+    var est=function(lit,ex,ey){var c=tkFab('blue',R,{lit:lit,
+        last:{t:(ex!==null)?simTime:-1e9,pos:(ex!==null)?[ex,ey,0]:null,vel:(ex!==null)?[0,0,0]:null}}).cov;
+      if(lit>0){c.seen=true;c.ever=true;c.fix=(ex!==null);c.n=2;c.age=0;c.idn=true;if(ex!==null){c.x=ex;c.y=ey;}c.r1=c.a1=9000;c.r2=c.a2=4000;}};
     var place=function(d){R.pos=[d,0,0];B.facing=[1,0,0];};
     var nMac=function(){return projectiles.filter(function(p){return p.type==='mac'&&!p.done;}).length;};
     /* ① */

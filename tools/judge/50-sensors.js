@@ -42,7 +42,7 @@ t('FLOW45_LINK',function(){
    别看见三个积分就以为又变回三通道了 —— 阶梯必须能区分"静听单独=1"与"照射建立=2",
    一个合并的雷达积分分不出来源,所以才拆成两个积分。
 
-   为什么非要有它:全部与感知相关的判据都把 lit 当成【不会变的背景前提】(手写 litBlue,
+   为什么非要有它:全部与感知相关的判据都把 lit 当成【不会变的背景前提】(手写蓝方航迹等级,
    或靠 fc3reset 预热若干秒隐式依赖),FLOW47_FOG 之外没有一条直接断言 detectLoop 的输出。
    尤其是 ① —— 没有这条上界的话,把探测能力整体放大十倍,全套判定只会【更容易】通过,
    没有任何一条会说"某个距离上必须仍然是 0 级"。
@@ -112,13 +112,13 @@ t('FLOW44_SENSE',function(){
     TG=makeShip('DD','SN6-tgt',[0,0,0],[1,0,0],[0,0,0],'red',2);
     ships.length=0;ships.push(DT);ships.push(TG);projectiles.length=0;
     [DT,TG].forEach(function(s){s.orders=[];s.vel=[0,0,0];s.brake=false;s.follow=null;s.formation=null;s.autoEngage=false;s.roe='hold';s.macOn=false;s.mslOn=false;s.ciwsOn=false;s.lockedTarget=null;});
-    var put=function(x,n){TG.pos=[x,0,0];for(var i=0;i<n;i++)detectLoop();L.push(TG.litBlue);A.push(TG.covB.a1);return TG.litBlue;};
-    var fresh=function(){TG.covB=newCov();TG.litBlue=0;detT=0;};
+    var put=function(x,n){TG.pos=[x,0,0];for(var i=0;i<n;i++)detectLoop();L.push(tkGet('blue',TG).lit);A.push(tkGet('blue',TG).cov.a1);return tkGet('blue',TG).lit;};
+    var fresh=function(){tkClear('blue',TG,'contact');detT=0;};
     /* 六段。距离全部现量:光学冷发现 / 单站光学定位 / 导弹门 / 主炮门 / 照射的三道门 */
     fresh();
     put(1.2*P.optColdMin,30);                    /* ① 光学发现之外、静默 ⇒ 一点信号都没有 */
     put(0.5*(P.optLocate+P.optColdMin),30);      /* ② 进了光学发现、还没到单站定位 ⇒ 探测级,而且【定不出位置】(热区) */
-    var fix2=TG.covB.fix;
+    var fix2=tkGet('blue',TG).cov.fix;
     put(0.8*P.optMsl,30);                        /* ③ 进了光学导弹门 ⇒ 跟踪级 */
     put(0.8*P.optGun,30);                        /* ④ 进了光学主炮门 ⇒ 火控级 */
     put(1.2*P.optColdMin,40);                    /* ⑤ 退回光学发现之外 ⇒ 椭圆长大、接触丢掉 ⇒ 灭回 0 */
@@ -129,8 +129,8 @@ t('FLOW44_SENSE',function(){
     var okRatchet=(L[5]===L[1]&&Math.abs(A[5]/A[1]-1)<1e-9); /* 同一个点、同样的姿态,等级与椭圆都必须一样 */
     /* ⑦ 照射把同一个点从"定不出位置"救成火控级:纯被动 vs 开照射,单变量对照 */
     fresh();var dAct=0.8*P.radarLook;
-    put(dAct,30);var litPassive=TG.litBlue,fixPassive=TG.covB.fix;
-    setEmit(DT,'paint');put(dAct,30);var litPaint=TG.litBlue;
+    put(dAct,30);var litPassive=tkGet('blue',TG).lit,fixPassive=tkGet('blue',TG).cov.fix;
+    setEmit(DT,'paint');put(dAct,30);var litPaint=tkGet('blue',TG).lit;
     setEmit(DT,'silent');
     var okPaint=(litPassive<3&&!fixPassive&&litPaint===3);
     /* ⑧ 生产接线:解析跳步可加 —— 走 stepSim 与一次性给同样时长必须逐位相同(倍速不许改物理) */
@@ -139,8 +139,8 @@ t('FLOW44_SENSE',function(){
     detectLoop=function(dt){wCnt++;wSum+=(typeof dt==='number'&&isFinite(dt)&&dt>0)?dt:SENS.TICK;return _dl.apply(null,arguments);};
     var wT=0;for(var q=0;q<200;q++){stepSim(CFG.step);wT+=CFG.step;}
     detectLoop=_dl;
-    var wRes=detT,wA=TG.covB.a1;
-    fresh();TG.pos=[dAct,0,0];detectLoop(wSum);var wB=TG.covB.a1;
+    var wRes=detT,wA=tkGet('blue',TG).cov.a1;
+    fresh();TG.pos=[dAct,0,0];detectLoop(wSum);var wB=tkGet('blue',TG).cov.a1;
     setEmit(DT,'silent');
     var okWire=(wCnt>=3&&Math.abs(wSum+wRes-wT)<1e-9&&wA>0&&wB>0);
     var ok=(okSeq&&okHeat&&okRatchet&&okPaint&&okWire);
@@ -247,7 +247,7 @@ t('FLOW51_PAIR',function(){
 /* SN4 blocker A:剪枝上界必须在【半径空间】做,三条通道各留一个界。
    只按被动两路取 max 的后果是硬的:一艘 silent + 熄火的冷目标,光学界小、静听界恒 0,
    整目标被早退跳过 ⇒ 照射驻留永不积累 ⇒ lit 永远上不到 3 ⇒ 主炮对所有不发光的目标【静默哑火】,
-   而 litBlue 全程是合法的 0/1/2,没有 NaN、没有异常、没有一行日志。
+   而蓝方航迹等级全程是合法的 0/1/2,没有 NaN、没有异常、没有一行日志。
    场景必须让"照射界 > 光学界",否则这条 bug 根本显不出来 —— DD 探 DD 的照射界(120,755)比光学界(150,599)还小。
    取 CA 探测方(emit 3 / recv 3)对 DD 冷目标,190,000 km:
      光学界 = 0.70×K_IR = 2.268e10 < d2 = 3.61e10 ⇒ 光学恒 0(目标确实是冷的)
@@ -279,16 +279,17 @@ t('FLOW52_COLD',function(){
     sensePrepare([DT],[],[TG],SENS.TICK);
     var b1=senseBoundsAt(0);
     var okB=(b0.act4===0&&b0.max2===b0.ir&&b1.act4>0&&b1.rf===0&&b1.ir>0&&b1.max2>b1.ir);
-    TG.covB=newCov();TG.litBlue=0;detT=0;
+    tkClear('blue',TG,'contact');detT=0;
     for(var i=0;i<40;i++)detectLoop();
+    var tkT=tkGet('blue',TG);                      /* 航迹对象本身不会被换(只有它的格会变),下面两处读它 */
     /* SN6:判"只有照射这一路穿进去了"改看接触上的三条通道记录(c.ch),比水位直观,而且它就是渲染层读的那份 */
-    var okLit=(TG.litBlue>=1&&!!TG.covB.ch.act&&!TG.covB.ch.opt&&!TG.covB.ch.lis);  /* 等级到几由距离决定(那是 FLOW44 的事);这里只要"照射真的穿进去了" */
+    var okLit=(tkT.lit>=1&&!!tkT.cov.ch.act&&!tkT.cov.ch.opt&&!tkT.cov.ch.lis);  /* 等级到几由距离决定(那是 FLOW44 的事);这里只要"照射真的穿进去了" */
     var ok=(okB&&okLit);
     out=(ok?'ok':'fail')
       +' 探测方静默时 照射界='+b0.act4+'(须0) max2='+b0.max2.toExponential(3)+' 光学界='+b0.ir.toExponential(3)+'(须相等)'
       +' | 探测方照射后 光学界='+b1.ir.toExponential(3)+' 静听界='+b1.rf+'(须0) 照射界换算回d2='+Math.sqrt(b1.act4).toExponential(3)
       +' max2='+b1.max2.toExponential(3)+'(须【严格大于】光学界=照射界真的进了 max)='+okB
-      +' | 冷目标 '+Math.round(TG.pos[0]/1000)+'k(光学够不着)跑 40 拍:lit='+TG.litBlue+'(须>=1) 椭圆 ±'+Math.round(TG.covB.a1)+'km 通道[照射='+(!!TG.covB.ch.act)+' 光学='+(!!TG.covB.ch.opt)+' 静听='+(!!TG.covB.ch.lis)+'](后两个须 false,证明确实只有照射穿进去了)='+okLit;
+      +' | 冷目标 '+Math.round(TG.pos[0]/1000)+'k(光学够不着)跑 40 拍:lit='+tkT.lit+'(须>=1) 椭圆 ±'+Math.round(tkT.cov.a1)+'km 通道[照射='+(!!tkT.cov.ch.act)+' 光学='+(!!tkT.cov.ch.opt)+' 静听='+(!!tkT.cov.ch.lis)+'](后两个须 false,证明确实只有照射穿进去了)='+okLit;
   }finally{
     detT=detBak;
     ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
@@ -405,8 +406,8 @@ t('FLOW53_RADAR',function(){
     rdl.forEach(function(tg){
       var dCA=1e18;
       bl.forEach(function(x){if(x.cls==='CA')dCA=Math.min(dCA,V.len(V.sub(tg.pos,x.pos)));});
-      rows.push(tg.name.replace('SN5-','')+' 距CA '+Math.round(dCA/1000)+'k lit'+tg.litBlue);
-      if(tg.litBlue>=3)lit3++;
+      rows.push(tg.name.replace('SN5-','')+' 距CA '+Math.round(dCA/1000)+'k lit'+tkGet('blue',tg).lit);
+      if(tkGet('blue',tg).lit>=3)lit3++;
     });
   }finally{
     detT=detBak;
@@ -451,10 +452,10 @@ t('FLOW81_REVBURN',function(){
     var ok2=(sawRev&&sawMain);
     /* ③ 端到端 */
     R.orders=[];R.vel=[0,0,0];R.brake=false;
-    var dMid=Math.sqrt(vM*vR);R.pos=[dMid,0,0];R.litBlue=0;R.covB=newCov();
-    R.flame=1;R.sideFlame=0;for(i=0;i<4;i++){R.flame=1;detectLoop(1);}var litMain=R.litBlue;
-    for(i=0;i<3;i++){R.flame=-1;detectLoop(1);}var litRev=R.litBlue;
-    for(i=0;i<6;i++){R.flame=0;detectLoop(1);}var litOff=R.litBlue;
+    var dMid=Math.sqrt(vM*vR);R.pos=[dMid,0,0];tkClear('blue',R,'contact');
+    R.flame=1;R.sideFlame=0;for(i=0;i<4;i++){R.flame=1;detectLoop(1);}var litMain=tkGet('blue',R).lit;
+    for(i=0;i<3;i++){R.flame=-1;detectLoop(1);}var litRev=tkGet('blue',R).lit;
+    for(i=0;i<6;i++){R.flame=0;detectLoop(1);}var litOff=tkGet('blue',R).lit;
     var ok3=(litMain===0&&litRev>=1&&litOff===0);
     /* ④ 读数 */
     R.flame=-1;var rdRev=(typeof senseRows==='function')?senseRows(R):'';R.flame=1;var rdMain=(typeof senseRows==='function')?senseRows(R):'';R.flame=0;
@@ -498,9 +499,9 @@ t('FLOW82_ESMID',function(){
     /* ②③④ 端到端 */
     var run=function(d,mode){
       ships.length=0;ships.push(b1,b2,R);ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.flame=0;x.sideFlame=0;x.autoEngage=false;x.roe='hold';x.noFire=true;});
-      setEmit(b1,'silent');setEmit(b2,'silent');setEmit(R,mode);R.pos=[d,0,0];R.litBlue=0;R.covB=newCov();R.seenBlue=-1e9;R.seenBluePos=null;
+      setEmit(b1,'silent');setEmit(b2,'silent');setEmit(R,mode);R.pos=[d,0,0];tkFab('blue',R,{lit:0,last:{t:-1e9,pos:null}});   /* 新椭圆 + 等级 0 + 最后定位的时刻与位置清掉(速度那一格改前就没动,照旧) */
       for(var i=0;i<40;i++)detectLoop(1);
-      return {st:contactState(R,'blue'),lit:R.litBlue,idn:contactIdn(R,'blue'),by:R.covB.idBy,heard:!!(R.covB.ch&&R.covB.ch.lis)};};
+      var tk=tkGet('blue',R);return {st:contactState(R,'blue'),lit:tk.lit,idn:contactIdn(R,'blue'),by:tk.cov.idBy,heard:!!(tk.cov.ch&&tk.cov.ch.lis)};};
     var loud=run(dIn,'paint'),far=run(dOut,'paint'),quiet=run(dIn,'silent');
     var ok2=(loud.heard&&loud.idn===true&&loud.by==='lis'&&loud.st==='heat');
     var ok3=(far.heard&&far.lit>=1&&far.idn===false);
@@ -538,8 +539,8 @@ t('FLOW86_IDN3',function(){
     ships.length=0;ships.push(B,D);ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.flame=0;x.sideFlame=0;x.autoEngage=false;x.roe='hold';x.noFire=true;});
     setEmit(B,'paint');setEmit(D,'silent');
     var lp=ladPair('CA','DD');
-    var see=function(d){D.pos=[d,0,0];D.litBlue=0;D.covB=newCov();D.seenBlue=-1e9;D.seenBluePos=null;for(var i=0;i<40;i++)detectLoop(1);
-      return {lit:D.litBlue,idn:contactIdn(D,'blue'),by:D.covB.idBy,hull:shipIdentHull(D),fix:!!D.covB.fix};};
+    var see=function(d){D.pos=[d,0,0];tkFab('blue',D,{lit:0,last:{t:-1e9,pos:null}});for(var i=0;i<40;i++)detectLoop(1);   /* 同 FLOW82:速度那一格改前就没清 */
+      var tk=tkGet('blue',D);return {lit:tk.lit,idn:contactIdn(D,'blue'),by:tk.cov.idBy,hull:shipIdentHull(D),fix:!!tk.cov.fix};};
     var near=see(lp.radarIdent*0.85),far=see(lp.radarIdent*1.3);
     var ok1=(near.idn===true&&near.by==='act'&&near.hull==='DD'&&far.lit>=1&&far.idn===false&&far.hull==='UNK');
     /* ② 四个舰种逐对 */

@@ -124,10 +124,10 @@ t('FLOW68_HULLSIZE',function(){
     var U1=makeShip('DD','未识小',[0,-40000,0],[-1,0,0],[0,0,0],'red',1),U2=makeShip('BB','未识大',[40000,-40000,0],[-1,0,0],[0,0,0],'red',3);
     ships.length=0;ships.push(B,Wk,R,U1,U2);
     ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.autoEngage=false;x.roe='hold';x.flame=0;x.sideFlame=0;});
-    var live=function(s,lit){s.litBlue=lit;s.seenBlue=simTime;s.seenBluePos=[s.pos[0],s.pos[1],0];s.seenBlueVel=[0,0,0];
-      var c=s.covB=newCov();c.seen=true;c.ever=true;c.fix=true;c.n=2;c.age=0;c.x=s.pos[0];c.y=s.pos[1];c.idn=(lit>=2);c.r1=c.a1=9000;c.r2=c.a2=4000;};
+    var live=function(s,lit){var c=tkFab('blue',s,{lit:lit,last:{t:simTime,pos:[s.pos[0],s.pos[1],0],vel:[0,0,0]}}).cov;
+      c.seen=true;c.ever=true;c.fix=true;c.n=2;c.age=0;c.x=s.pos[0];c.y=s.pos[1];c.idn=(lit>=2);c.r1=c.a1=9000;c.r2=c.a2=4000;};
     live(R,2);live(U1,1);live(U2,1);
-    var cw=B.covR=newCov();cw.ch.act=[0,0,40000,20,R.id];       /* 我方被照射 ⇒ 告警弧(RWR1:末位是照射源的 id,找不到就不画) */
+    tkPaintOn(B,[0,0,40000,20,R.id]);                          /* 我方被照射 ⇒ 告警弧(RWR1:末位是照射源的 id,找不到就不画) */
     B.lockedTarget=R;                                           /* 我方锁着它 ⇒ 锁定圈 */
     cam.x=20000;cam.y=0;
     var hulls=[],arcs=[],pts=[];
@@ -327,8 +327,8 @@ t('FLOW66_LITSTYLE',function(){
     g2.stroke=function(){if(pend2){paneEll={rgb:rgbOf(g2.strokeStyle),dashed:g2.getLineDash().length>0};pend2=false;}return oS2.apply(g2,arguments);};
     var rows=[],ok=true,distinct={};
     [1,2,3].forEach(function(lit){
-      R.litBlue=lit;R.seenBlue=simTime;R.seenBluePos=[R.pos[0],R.pos[1],0];R.seenBlueVel=[0,0,0];
-      var c=R.covB=newCov();c.seen=true;c.ever=true;c.fix=true;c.n=2;c.age=0;c.x=R.pos[0];c.y=R.pos[1];c.th=0.4;c.idn=true;
+      var c=tkFab('blue',R,{lit:lit,last:{t:simTime,pos:[R.pos[0],R.pos[1],0],vel:[0,0,0]}}).cov;
+      c.seen=true;c.ever=true;c.fix=true;c.n=2;c.age=0;c.x=R.pos[0];c.y=R.pos[1];c.th=0.4;c.idn=true;
       c.r1=c.a1=30000;c.r2=c.a2=9000;
       mapEll=null;paneEll=null;texts=[];brackets=0;pend=false;pend2=false;
       render();
@@ -345,9 +345,9 @@ t('FLOW66_LITSTYLE',function(){
     /* 三级各是各的颜色(三格都等于同一个色也能"三处一致") */
     var okDistinct=(Object.keys(distinct).length===3);
     /* 陈旧态带等级、失联态不带 */
-    R.litBlue=1;R.covB.n=0;R.covB.age=9;texts=[];render();
+    tkPatch('blue',R,{lit:1,cov:{n:0,age:9}});texts=[];render();
     var coastLab=texts.filter(function(x){return x.t.indexOf('陈旧')>=0;})[0];
-    R.litBlue=0;R.covB.fix=false;R.seenBlue=simTime-12;texts=[];render();
+    tkPatch('blue',R,{lit:0,cov:{fix:false},last:{t:simTime-12}});texts=[];render();
     var ghostLab=texts.filter(function(x){return x.t.indexOf('失联')>=0;})[0];
     var okMark=(coastLab&&coastLab.t.indexOf(litTag(1))>=0&&ghostLab&&ghostLab.t.indexOf('级')<0);
     ok=ok&&okDistinct&&okMark;
@@ -444,8 +444,8 @@ t('FLOW64_GEOM',function(){
   try{
     adminMode=false;LOD.off=true;
     B2.pos=[-60000,40000,0];B2.vel=[0,0,0];B2.orders=[];
-    function mk(t,fix,lit){t.litBlue=lit;t.seenBlue=fix?simTime:-1e9;t.seenBluePos=fix?[t.pos[0],t.pos[1],0]:null;t.seenBlueVel=fix?[0,0,0]:null;
-      var c=t.covB=newCov();c.seen=true;c.ever=true;c.fix=fix;c.n=fix?2:1;c.age=0;c.x=t.pos[0];c.y=t.pos[1];c.th=0.35;
+    function mk(t,fix,lit){var c=tkFab('blue',t,{lit:lit,last:{t:fix?simTime:-1e9,pos:fix?[t.pos[0],t.pos[1],0]:null,vel:fix?[0,0,0]:null}}).cov;
+      c.seen=true;c.ever=true;c.fix=fix;c.n=fix?2:1;c.age=0;c.x=t.pos[0];c.y=t.pos[1];c.th=0.35;
       c.r1=fix?covMsl(t)*0.8:COV.AMAX*3;c.r2=fix?covMsl(t)*0.3:30000;c.a1=Math.min(COV.AMAX,c.r1);c.a2=Math.min(COV.AMAX,c.r2);}
     mk(A,true,1);mk(B2,true,1);                       /* lit=1:定得出位置、但椭圆还没进导弹门 ⇒ 火控挂得上、打不响(正是小窗要解释的那一刻) */
     var nm=function(r){return r?r.t.name+'/'+r.why:'空';};
@@ -531,12 +531,12 @@ t('FLOW64_GEOM',function(){
     g2.moveTo=function(){moves++;return oM.apply(g2,arguments);};
     var shot=function(){arcs=[];ell=null;moves=0;render();return moves;};
     var n0=shot();
-    var k=ell?ell[0]/A.covB.a1:0;
+    var k=ell?ell[0]/tkGet('blue',A).cov.a1:0;
     var has=function(r){return arcs.some(function(x){return Math.abs(x-r)<1e-6;});};
     var okGate=(k>0&&has(covMsl(A)*k)&&has(covMac(A)*k));
     bl[2].pos=[0,40000,0];var nSame=shot();                                            /* 同一拍里把第三艘拉回来:冻结 ⇒ 仍是 2 条 */
     simTime+=SENS.TICK;var nNext=shot();                                               /* 过了一拍:重算 ⇒ 3 条 */
-    A.covB.n=0;A.covB.age=3;var nCut=shot();A.covB.n=2;A.covB.age=0;                   /* 量测断了:一条都不画 */
+    tkPatch('blue',A,{cov:{n:0,age:3}});var nCut=shot();tkPatch('blue',A,{cov:{n:2,age:0}});   /* 量测断了:一条都不画 */
     var okLines=(expect===2&&n0===2&&nSame===2&&nNext===3&&nCut===0);
     var ok8=(okGate&&okLines);
     /* ⑨ 换局清常驻:shipSeq 每局归零,不清的话上一局钉住的 id 会挂到新一局的另一艘船上 */
@@ -615,13 +615,13 @@ t('FLOW63_VIEW',function(){
       c.x=R.pos[0];c.y=R.pos[1];c.th=0.4;
       var big=fix?30000:COV.AMAX*3;c.r1=big;c.r2=fix?9000:40000;c.a1=Math.min(COV.AMAX,c.r1);c.a2=Math.min(COV.AMAX,c.r2);
       return c;}
-    function seen(ago){R.seenBlue=(ago===null)?-1e9:simTime-ago;R.seenBluePos=(ago===null)?null:[R.pos[0],R.pos[1],0];R.seenBlueVel=(ago===null)?null:[900,0,0];}
+    function seen(ago){tkPatch('blue',R,{last:{t:(ago===null)?-1e9:simTime-ago,pos:(ago===null)?null:[R.pos[0],R.pos[1],0],vel:(ago===null)?null:[900,0,0]}});}
     var CASES=[
-      ['none', function(){R.litBlue=0;R.covB=newCov();seen(null);}],
-      ['heat', function(){R.litBlue=1;R.covB=cov(false,2,0);seen(null);}],
-      ['live', function(){R.litBlue=2;R.covB=cov(true,3,0);seen(0);}],
-      ['coast',function(){R.litBlue=2;R.covB=cov(true,0,12);seen(12);}],
-      ['ghost',function(){R.litBlue=0;R.covB=cov(false,0,20);seen(20);}]
+      ['none', function(){tkFab('blue',R,{lit:0});seen(null);}],                      /* 新椭圆 + 等级;cov() 造好的那一份逐格写进航迹的新椭圆 */
+      ['heat', function(){tkFab('blue',R,{lit:1,cov:cov(false,2,0)});seen(null);}],
+      ['live', function(){tkFab('blue',R,{lit:2,cov:cov(true,3,0)});seen(0);}],
+      ['coast',function(){tkFab('blue',R,{lit:2,cov:cov(true,0,12)});seen(12);}],
+      ['ghost',function(){tkFab('blue',R,{lit:0,cov:cov(false,0,20)});seen(20);}]
     ];
     var rowsA=[],okA=true;
     CASES.forEach(function(cs){
@@ -695,15 +695,15 @@ t('FLOW62_MARK',function(){
     var G=makeShip('DD','记号幽灵',[200000,0,0],[1,0,0],[0,0,0],'red',2);
     ships.length=0;ships.push(O,G);
     ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.autoEngage=false;x.roe='hold';});
-    G.litBlue=0;G.seenBlue=simTime-20;
-    G.seenBluePos=[G.pos[0],G.pos[1],0];G.seenBlueVel=[800,0,0];   /* 不确定半径 = 800x20 = 16000 km */
+    tkPatch('blue',G,{lit:0,last:{t:simTime-20,
+      pos:[G.pos[0],G.pos[1],0],vel:[800,0,0]}});                 /* 不确定半径 = 800x20 = 16000 km */
     cam.x=100000;cam.y=0;
     /* 记录每一次 arc 的 (半径, 当时是不是虚线) */
     var arcs=[],dash=[];
     ctx.setLineDash=function(d){dash=d||[];return odash.apply(ctx,arguments);};
     ctx.arc=function(x,y,r){arcs.push({r:r,dashed:dash.length>0,x:x,y:y});return oarc.apply(ctx,arguments);};
     function shot(z){cam.zoom=z;arcs.length=0;dash=[];render();
-      var p=toScreen(G.seenBluePos[0]+G.seenBlueVel[0]*contactAge(G,'blue'),G.seenBluePos[1]);
+      var lk=tkGet('blue',G),p=toScreen(lk.lastPos[0]+lk.lastVel[0]*contactAge(G,'blue'),lk.lastPos[1]);
       return arcs.filter(function(a){return Math.hypot(a.x-p[0],a.y-p[1])<3;});
     }
     /* ① 拉近:两个圈都在,而且【画法不同】—— 记号实线、不确定圈虚线 */
@@ -771,30 +771,30 @@ t('FLOW61_PICKPOS',function(){
     }
     var same=function(a,b){return !!a&&!!b&&Math.abs(a[0]-b[0])<1e-9&&Math.abs(a[1]-b[1])<1e-9;};
     /* ① 实况 + 定得出位置,而且【估计 != 真值】 */
-    R.litBlue=2;R.seenBlue=simTime;
+    tkPatch('blue',R,{lit:2,last:{t:simTime}});
     /* 偏移量【从吸附半径现算】,不写死:targetAt 的吸附半径是 60/cam.zoom(=75,000km @ 本条的缩放),
        第一版偏 50k/30k = 斜距 58,310 < 75,000,于是真值仍落在【估计位置】的吸附圈里,
        "真值处点不到"那一格当场假红 —— 量的是圈的大小,不是读没读真值。 */
     var SNAP=60/cam.zoom;
-    R.covB.fix=true;R.covB.seen=true;R.covB.n=1;R.covB.age=0;   /* SN6f:n>0 才是 live;不给的话是 coast(位置同源,但那是另一态) */
-    R.covB.x=R.pos[0]+2.5*SNAP;R.covB.y=R.pos[1]-1.5*SNAP;
+    tkPatch('blue',R,{cov:{fix:true,seen:true,n:1,age:0}});   /* SN6f:n>0 才是 live;不给的话是 coast(位置同源,但那是另一态) */
+    tkPatch('blue',R,{cov:{x:R.pos[0]+2.5*SNAP,y:R.pos[1]-1.5*SNAP}});
     var cp1=contactPos(R,'blue'), d1=drawPt(R), k1=pickPt(R);
     var truthHit=(function(){var p=_ts(R.pos[0],R.pos[1]);return targetAt(p[0],p[1])===R;})();
-    var ok1=(same(cp1,[R.covB.x,R.covB.y])&&same(d1,cp1)&&same(k1,cp1)&&!truthHit);
+    var ok1=(same(cp1,[tkGet('blue',R).cov.x,tkGet('blue',R).cov.y])&&same(d1,cp1)&&same(k1,cp1)&&!truthHit);
     /* ② 只有热区:定不出位置 ⇒ 没有位置可交代,画不出、点不着 */
-    R.covB.fix=false;R.litBlue=1;
+    tkPatch('blue',R,{lit:1,cov:{fix:false}});
     var cp2=contactPos(R,'blue'), d2=drawPt(R);
     var hit2=(function(){var p=_ts(R.pos[0],R.pos[1]);return targetAt(p[0],p[1])===R;})();
     var ok2=(cp2===null&&d2===null&&!hit2);
     /* ③ 幽灵:最后已知 + 外推,画点与点选点都在外推点上,离真值很远 */
-    R.litBlue=0;R.seenBlue=simTime-10;
-    R.seenBluePos=[R.pos[0]-80000,R.pos[1],0];R.seenBlueVel=[1000,0,0];
+    tkPatch('blue',R,{lit:0,last:{t:simTime-10}});
+    tkPatch('blue',R,{last:{pos:[R.pos[0]-80000,R.pos[1],0],vel:[1000,0,0]}});
     var cp3=contactPos(R,'blue'), d3=drawPt(R), k3=pickPt(R);
     var want3=[R.pos[0]-80000+1000*10,R.pos[1]];
     var sep3=cp3?Math.round(Math.hypot(cp3[0]-R.pos[0],cp3[1]-R.pos[1])):-1;
     var ok3=(same(cp3,want3)&&same(d3,cp3)&&same(k3,cp3)&&sep3>60000);
     /* ④ 幽灵但【没有接触记录】:fail-closed,不许拿真值兜底(SN2c 那条) */
-    R.seenBluePos=null;R.seenBlueVel=null;
+    tkPatch('blue',R,{last:{pos:null,vel:null}});
     var cp4=contactPos(R,'blue'), d4=drawPt(R);
     var hit4=(function(){var p=_ts(R.pos[0],R.pos[1]);return targetAt(p[0],p[1])===R;})();
     var ok4=(cp4===null&&d4===null&&!hit4);
@@ -960,7 +960,7 @@ t('FLOW60_START',function(){
                                                  【默认值】是另一件事,交给判定块里那条源码级检查(判据跑到这儿时
                                                  adminMode 早被前面十几条判据写过,读它读到的是污染不是默认)。 */
       var silent=bl.every(function(x){return x.emitMode==='silent';});
-      var noFix=rd.every(function(x){return x.litBlue>0&&!(x.covB&&x.covB.fix);});
+      var noFix=rd.every(function(x){var k=tkGet('blue',x);return k.lit>0&&!(k.cov&&k.cov.fix);});
       rd.forEach(function(x){
         var n=0,tr=ctx.translate;
         ctx.translate=function(){n++;return tr.apply(ctx,arguments);};
@@ -1003,7 +1003,7 @@ t('FLOW83_RWR',function(){
     ships.length=0;ships.push(B,P);ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.flame=0;x.sideFlame=0;});
     cam.x=0;cam.y=0;cam.zoom=1/vtLandKmpp(1);
     var arcs=[];ctx.arc=function(x,y,r,a0,a1){arcs.push({r:r,a0:a0,a1:a1,col:String(ctx.strokeStyle)});return oArc.apply(ctx,arguments);};
-    var paint=function(on,id){var c=B.covR=newCov();if(on)c.ch.act=[0,0,40000,20,id];};
+    var paint=function(on,id){if(on)tkPaintOn(B,[0,0,40000,20,id]);else tkClear('red',B,'cov');};   /* 两支都是红方对 B 的那条航迹换新椭圆;on 再写一条照射量测 */
     var rgb=function(st){st=String(st);var h=st.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);   /* 不透明色 canvas 读回来是 #rrggbb(选中圈),带透明度的是 rgba(...)(告警弧)—— 两种都要认 */
       if(h)return parseInt(h[1],16)+','+parseInt(h[2],16)+','+parseInt(h[3],16);
       var m=st.match(/(\d+)\D+(\d+)\D+(\d+)/);return m?m[1]+','+m[2]+','+m[3]:st;};
@@ -1044,7 +1044,7 @@ t('FLOW83_RWR',function(){
      ② 悬停「发射档」钮(hoverRing='emit')⇒ 画两圈:照射量程 + 开雷达被听见,都带标签;静默的船照样画(那是做决定前要看的账)
      ③ 涟漪:我方照射 ⇒ 三段同心弧、阵营蓝、半径在 [图标半径+2, 图标半径+2+SPAN];静默 ⇒ 一段都没有;干扰 ⇒ 橙
      ④ 涟漪在动:同一艘船两个墙钟时刻画出来的半径不同、周期一到逐位复原
-     ⑤ 敌方接触:只在我方这一拍【听见】它的雷达(covB.ch.lis)时画(红);它开着雷达但我方没听见 ⇒ 不画(不读它的真值);GM 下按真值 */
+     ⑤ 敌方接触:只在我方这一拍【听见】它的雷达(蓝方航迹的 cov.ch.lis)时画(红);它开着雷达但我方没听见 ⇒ 不画(不读它的真值);GM 下按真值 */
 t('FLOW84_EMITFX',function(){
   if(typeof drawEmitRipple!=='function'||typeof emitRippleRgb!=='function')return 'fail EM1 未加载(缺 drawEmitRipple / emitRippleRgb)';
   var shipsBak=ships.slice(),admBak=adminMode,lodBak=LOD.off,selBak=selected.slice(),hrBak=hoverRing,camBak={x:cam.x,y:cam.y,zoom:cam.zoom},oArc=ctx.arc,oT=ctx.fillText,out='';
@@ -1086,8 +1086,8 @@ t('FLOW84_EMITFX',function(){
     var a0=radii(0),a1=radii(EMIT_FX.PERIOD_MS*0.37),a2=radii(EMIT_FX.PERIOD_MS);
     var ok4=(a0!==a1&&a0===a2);
     /* ⑤ */
-    var live=function(heard){R.litBlue=2;R.seenBlue=simTime;R.seenBluePos=[R.pos[0],R.pos[1],0];R.seenBlueVel=[0,0,0];
-      var c=R.covB=newCov();c.seen=true;c.ever=true;c.fix=true;c.n=2;c.age=0;c.x=R.pos[0];c.y=R.pos[1];c.idn=true;c.r1=c.a1=9000;c.r2=c.a2=4000;
+    var live=function(heard){var c=tkFab('blue',R,{lit:2,last:{t:simTime,pos:[R.pos[0],R.pos[1],0],vel:[0,0,0]}}).cov;
+      c.seen=true;c.ever=true;c.fix=true;c.n=2;c.age=0;c.x=R.pos[0];c.y=R.pos[1];c.idn=true;c.r1=c.a1=9000;c.r2=c.a2=4000;
       c.ch.opt=[1,1,120000,10,B.id];if(heard)c.ch.lis=[1,1,120000,10,B.id];};
     setEmit(R,'paint');live(true);var rh=ripples(R),rhRed=rh.length===EMIT_FX.N&&rh.every(function(q){return rgb(q.col)==='255,107,107';});
     live(false);var rNot=ripples(R).length;                       /* 它开着雷达,但我方没听见 ⇒ 不画(不读真值) */

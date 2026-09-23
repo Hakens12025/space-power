@@ -16,7 +16,7 @@ t('FLOW46_CIWS',function(){
     X.ciwsOn=true;setEmit(X,paintOn?'paint':'silent');setEmit(R,'silent');R.ciwsOn=false; /* SN4:发射档只许走 setEmit(它是唯一写入口,非法值当场抛);来袭方恒静默,免得它自己的辐射把 B 相搅浑 */
     detT=0;                                        /* 感知节拍归零:detT 是全局的,跨探针残留会让第一拍 detectLoop 的时机说不清 */
     /* WR1:发射方向按射手对目标的【估计位置】算,没接触就不发 —— 给红舰一条对甲的跟踪级接触(位置 = 真值,本条测的是近防,不是瞄准误差) */
-    X.litRed=2;var cR=X.covR=newCov();cR.seen=true;cR.ever=true;cR.fix=true;cR.n=2;cR.age=0;cR.x=X.pos[0];cR.y=X.pos[1];cR.idn=true;cR.r1=cR.a1=9000;cR.r2=cR.a2=4000;X.seenRed=simTime;X.seenRedPos=X.pos.slice();X.seenRedVel=[0,0,0];
+    var cR=tkFab('red',X,{lit:2,last:{t:simTime,pos:X.pos.slice(),vel:[0,0,0]}}).cov;cR.seen=true;cR.ever=true;cR.fix=true;cR.n=2;cR.age=0;cR.x=X.pos[0];cR.y=X.pos[1];cR.idn=true;cR.r1=cR.a1=9000;cR.r2=cR.a2=4000;
     fireMissiles(R,X,1);                           /* 真实发射链:count/fuel/target/coastT/netId 全由生产代码填,不手搓弹丸 */
     var p=null,i;
     for(i=0;i<projectiles.length;i++)if(projectiles[i].type==='missile')p=projectiles[i];
@@ -73,7 +73,7 @@ t('FLOW46_CIWS',function(){
    这条路径【今天一条判定都没有】:FLOW4_FOG 只跑 xhTick、从不调 render();
    而全部会调 render() 的判定都在 adminMode=true 下跑,L42 的非GM门第一行就把整块迷雾逻辑跳过 ——
    所以改对改错都是绿的。SN2c 会把那两处回落改成"没有接触记录就不画",本条是它的前置护栏:
-   今天要绿(探针喂的 seenBluePos/seenBlueVel 是完整的,回落分支不可达)、SN2c 之后仍要绿、把外推改坏必须红。
+   今天要绿(探针喂的最后定位记录 lastPos/lastVel 是完整的,回落分支不可达)、SN2c 之后仍要绿、把外推改坏必须红。
 
    判据【走 canvas 指令级,不走像素】:82-ship-icons:118-121 是 save→translate(p)→rotate→drawHull,
    那一句 ctx.translate(p[0],p[1]) 就是"图标画在哪儿"的唯一真相,坐标是精确浮点、没有噪声。
@@ -84,7 +84,7 @@ t('FLOW46_CIWS',function(){
    双向(缺一不可):
      ① 陈旧/幽灵必须落在【外推点】,而【真实位置】与【裸最后已知点】上一个都不许有 ——
         只判"在外推点"的话,去掉 +lv*ageV 那一项后图标落在 lp 上,离外推点不远却仍是错的;
-     ② 实况接触(lit=2、age=0)必须落在【真实位置】,且不许落到它那份故意写歪的 seenBluePos 上 ——
+     ② 实况接触(lit=2、age=0)必须落在【真实位置】,且不许落到它那份故意写歪的最后定位 lastPos 上 ——
         否则"坐标整体乱写"也能骗过第 ① 条;
      ③ 从未探到(lit=0、ever=false)一艘都不许画;非GM 的【舰体图标】总数须恰为 2(蓝方观测者 + 实况接触),
         【记号】总数须恰为 2(陈旧 + 幽灵)—— SN6e 起这两档不再是图标,改前这里是 4,那多出来的 2 正是
@@ -113,7 +113,7 @@ t('FLOW47_FOG',function(){
     var L=makeShip('DD','雾实况',wa(W*0.85,H*0.85),[1,0,0],[0,0,0],'red',2);
     var N=makeShip('DD','雾未探',wa(W*0.50,H*0.55),[1,0,0],[0,0,0],'red',2);
     ships.length=0;ships.push(O,S,G,L,N);
-    /* 外推点先定在屏幕上,再反推 seenBluePos —— 这样"外推点离真实位置多远"是被设计出来的,不是撞运气撞出来的。
+    /* 外推点先定在屏幕上,再反推最后定位 lastPos —— 这样"外推点离真实位置多远"是被设计出来的,不是撞运气撞出来的。
        速度取真实量级(DD 巡航 800km/s),年龄靠 contactState 的两档:陈旧无年龄上限,幽灵必须 <=30s */
     var Sv=[800,-300,0],Sage=100;   /* Sv*Sage = [80000,-30000] km = 屏幕 [+96,-36] px */
     var Gv=[-600,500,0],Gage=20;    /* Gv*Gage = [-12000,10000] km = 屏幕 [-14.4,+12] px */
@@ -121,24 +121,25 @@ t('FLOW47_FOG',function(){
     /* SN6f:"陈旧"的定义换了。旧口径是 lit>0 且 seenBlue 年龄>5(多久没被光学/照射扫到),在单一状态机里没有对应物;
        现在陈旧 = coast(coasted track):定得出位置(fix)、但量测已经断了(n=0、age 超过 1.5 拍)。
        它画在【估计点 c.x/c.y】(停在最后一次量测上,长大的是椭圆),【不再】按 seenPos 外推 ——
-       所以这里故意留一份会外推到别处的 seenBluePos 当诱饵:记号要是落到诱饵的外推点上,就是又读回旧状态机了。 */
-    S.litBlue=2;
-    S.covB=newCov();S.covB.seen=true;S.covB.ever=true;S.covB.fix=true;S.covB.n=0;S.covB.age=Sage;
-    S.covB.x=Sext[0];S.covB.y=Sext[1];S.covB.a1=1000;S.covB.a2=800;S.covB.r1=1000;S.covB.r2=800;
+       所以这里故意留一份会外推到别处的最后定位 lastPos 当诱饵:记号要是落到诱饵的外推点上,就是又读回旧状态机了。 */
+    var cS=tkFab('blue',S,{lit:2}).cov;                       /* 新椭圆 + 等级 2 */
+    cS.seen=true;cS.ever=true;cS.fix=true;cS.n=0;cS.age=Sage;
+    cS.x=Sext[0];cS.y=Sext[1];cS.a1=1000;cS.a2=800;cS.r1=1000;cS.r2=800;
     var Sdecoy=wa(W*0.40,H*0.92);
-    S.seenBlue=simTime-Sage;S.seenBlueVel=Sv.slice();S.seenBluePos=[Sdecoy[0]-Sv[0]*Sage,Sdecoy[1]-Sv[1]*Sage,0];
-    G.litBlue=0;G.seenBlue=simTime-Gage;                       /* !lit + 有定位记录 + age<=30 => ghost */
-    G.seenBlueVel=Gv.slice();G.seenBluePos=[Gext[0]-Gv[0]*Gage,Gext[1]-Gv[1]*Gage,0];
-    L.litBlue=2;L.seenBlue=simTime;                            /* age=0 => live,不许外推 */
-    L.seenBluePos=wa(W*0.05,H*0.05);L.seenBlueVel=[0,0,0];                        /* 故意写歪:实况若误走外推会当场暴露 */
+    tkPatch('blue',S,{last:{t:simTime-Sage,vel:Sv.slice(),pos:[Sdecoy[0]-Sv[0]*Sage,Sdecoy[1]-Sv[1]*Sage,0]}});
+    tkPatch('blue',G,{lit:0,last:{t:simTime-Gage,               /* !lit + 有定位记录 + age<=30 => ghost;椭圆不动(makeShip 那一份) */
+      vel:Gv.slice(),pos:[Gext[0]-Gv[0]*Gage,Gext[1]-Gv[1]*Gage,0]}});
+    tkPatch('blue',L,{lit:2,last:{t:simTime,                    /* age=0 => live,不许外推 */
+      pos:wa(W*0.05,H*0.05),vel:[0,0,0]}});                     /* 故意写歪:实况若误走外推会当场暴露 */
     /* SN6:实况接触还要【定得出位置】才画舰标 —— lit=1 在新内核里明确表示"有信号但没有位置"(纯方位接触),
        那种接触归热区层画。所以这里要给 L 一条真的定得出位置的接触;不给的话它就该被迷雾门挡掉(那是对的行为)。
        椭圆收到 1000km:小于导弹门,与上面写的 lit=2 自洽。 */
-    L.covB=newCov();L.covB.seen=true;L.covB.n=1;L.covB.fix=true;L.covB.ever=true;
-    L.covB.x=L.pos[0];L.covB.y=L.pos[1];L.covB.a1=1000;L.covB.a2=800;L.covB.r1=1000;L.covB.r2=800;
+    var cL=tkFab('blue',L,{}).cov;                             /* 只换新椭圆,等级与最后定位记录留着上面写的 */
+    cL.seen=true;cL.n=1;cL.fix=true;cL.ever=true;
+    cL.x=L.pos[0];cL.y=L.pos[1];cL.a1=1000;cL.a2=800;cL.r1=1000;cL.r2=800;
     /* 反向对照就在同一条判据里:S(陈旧)与 G(幽灵)【不】给 cov —— 它们走的是"外推最后已知位置"那条路,
        不受这条门管;若哪天把门错加到它们头上,上面那两条计数会当场变 0。 */
-    N.litBlue=0;                                              /* seenBlue 保持 makeShip 的 -1e9 = 从未扫到 => none */
+    tkSetLit('blue',N,0);                                     /* 最后定位时刻 lastT 保持 makeShip 的 -1e9 = 从未扫到 => none */
     var tr=[],mk=[];
     ctx.translate=function(x,y){tr.push([x,y]);return otr.apply(ctx,arguments);};
     /* SN6e:幽灵/陈旧改画【记号】之后,它们一个 translate 都不再发出(那是舰体图标的变换)。
@@ -151,11 +152,11 @@ t('FLOW47_FOG',function(){
     function sep(a,b){return Math.round(Math.hypot(a[0]-b[0],a[1]-b[1]));}
     /* —— 第一遍:非 GM(玩家视角),迷雾块生效 —— */
     tr.length=0;mk.length=0;render();
-    var nS=cntM(px(Sext)),nSr=cntM(px(S.pos))+cnt(px(S.pos)),nSl=cntM(px(S.seenBluePos))+cnt(px(S.seenBluePos))+cntM(px(Sdecoy))+cnt(px(Sdecoy));
-    var nG=cntM(px(Gext)),nGr=cntM(px(G.pos))+cnt(px(G.pos)),nGl=cntM(px(G.seenBluePos))+cnt(px(G.seenBluePos));
+    var nS=cntM(px(Sext)),nSr=cntM(px(S.pos))+cnt(px(S.pos)),nSl=cntM(px(tkGet('blue',S).lastPos))+cnt(px(tkGet('blue',S).lastPos))+cntM(px(Sdecoy))+cnt(px(Sdecoy));
+    var nG=cntM(px(Gext)),nGr=cntM(px(G.pos))+cnt(px(G.pos)),nGl=cntM(px(tkGet('blue',G).lastPos))+cnt(px(tkGet('blue',G).lastPos));
     var hullSG=cnt(px(Sext))+cnt(px(Gext));   /* SN6e:外推点上【不许】有舰体图标 —— 这一档只许是记号 */
     var totM=mk.length;
-    var nL=cnt(px(L.pos)),nLx=cnt(px(L.seenBluePos));
+    var nL=cnt(px(L.pos)),nLx=cnt(px(tkGet('blue',L).lastPos));
     var nN=cnt(px(N.pos)),nO=cnt(px(O.pos)),totN=tr.length;
     /* 分离度读数:三个候选点互相离得够远,这条判定才有区分力(不是"碰巧都在 3px 容差里") */
     var sepS=sep(px(Sext),px(S.pos)),sepG=sep(px(Gext),px(G.pos)),velS=sep(px(Sext),px(Sdecoy));
@@ -272,10 +273,10 @@ t('FLOW48_KEYS',function(){
   var TRK_WANT=Object.keys(newCov()).sort().join(',');
   var kOf=function(o){return o?Object.keys(o).sort().join(','):'缺失';};
   var fresh=makeShip('DD','SN6cov',[0,0,0],[1,0,0],[0,0,0],'blue',2);
-  var kNew=kOf(fresh.covB)+'|'+kOf(fresh.covR);
+  var kNew=(tkKeySig('blue',fresh)||'缺失')+'|'+(tkKeySig('red',fresh)||'缺失');   /* 没有航迹或没有椭圆读作「缺失」,与 kOf 同口径 */
   var liveS=null,i;
-  for(i=0;i<ships.length;i++)if(ships[i].covB&&ships[i].covR){liveS=ships[i];break;}
-  var kLive=liveS?(kOf(liveS.covB)+'|'+kOf(liveS.covR)):'无在场舰';
+  for(i=0;i<ships.length;i++){var tb=tkGet('blue',ships[i]),tr=tkGet('red',ships[i]);if(tb&&tb.cov&&tr&&tr.cov){liveS=ships[i];break;}}
+  var kLive=liveS?((tkKeySig('blue',liveS)||'缺失')+'|'+(tkKeySig('red',liveS)||'缺失')):'无在场舰';
   var trkOk=(kNew===TRK_WANT+'|'+TRK_WANT&&kLive===TRK_WANT+'|'+TRK_WANT);
   if(!trkOk)ok=false;
   /* 三条通道记录(c.ch)是渲染层与告警读的那份,单独钉一遍;种坏:少一条通道、或把 lis 改名,都必须被认出 */
@@ -456,11 +457,11 @@ t('FLOW49_RANGE',function(){
     applyRangeOne(TG,cfg.targets[0],true);renderRangePanel();
     /* SN6:驻留水位没有了,改读"蓝方这条接触上有没有静听那一路"——它就是发射档三态真正改变的东西。
        返回 1/0 而不是一个连续水位:三条判据要的本来就是"恒 0 / 不为 0",水位那几位小数从来没人看。 */
-    var rgLis=function(n){TG.covB=newCov();for(var w=0;w<n;w++)detectLoop();return TG.covB.ch.lis?1:0;};
+    var rgLis=function(n){tkClear('blue',TG,'cov');for(var w=0;w<n;w++)detectLoop();return tkGet('blue',TG).cov.ch.lis?1:0;};
     var sm0=scal(TG);
     eSil=rgLis(10);hSil=hearRangeOf(TG);
     clickedM=hit(btn('emit',1));e1=cfg.targets[0].emit;m1=TG.emitMode;ePnt=rgLis(10);hPnt=hearRangeOf(TG);
-    mDif=dkeys(sm0,scal(TG)).filter(function(k){return !/^(litBlue|litRed|seenBlue|seenRed|paintWarned|trk\.(blue|red)\.(lit|lastT))$/.test(k);}); /* SN4:静默→照射,靶身只许 emitMode 这一个【旋钮写的】标量变。这一段中间真的跑了 detectLoop(它要测静听驻留),目标因此被点亮 —— 那几个探测派生字段跟着变是正确行为,不是旋钮写错了地方,故排除。清单写死不用通配:通配会把真正该抓的漏写一并放过 */
+    mDif=dkeys(sm0,scal(TG)).filter(function(k){return !/^(paintWarned|trk\.(blue|red)\.(lit|lastT))$/.test(k);}); /* SN4:静默→照射,靶身只许 emitMode 这一个【旋钮写的】标量变。这一段中间真的跑了 detectLoop(它要测静听驻留),目标因此被点亮 —— 那几个探测派生字段跟着变是正确行为,不是旋钮写错了地方,故排除。清单写死不用通配:通配会把真正该抓的漏写一并放过 */
     hit(btn('emit',1));e2=cfg.targets[0].emit;m2=TG.emitMode;eJam=rgLis(10);hJam=hearRangeOf(TG);
     hit(btn('emit',-1));hit(btn('emit',-1));e3=cfg.targets[0].emit;m3=TG.emitMode;mMode=TG.emitMode;
     ok3=(clickedM&&e1===1&&e2===2&&e3===0&&m1==='paint'&&m2==='jam'&&m3==='silent'

@@ -20,11 +20,11 @@ t('FLOW71_AIFOG',function(){
     var setup=function(bx,by,mode,ex,ey){
       ships.length=0;R.forEach(function(e){e.orders=[];e.vel=[0,0,0];e.lockedTarget=null;e.macEvadeCd=0;e.aiHold=undefined;ships.push(e);});
       B.pos=[bx,by,0];B.vel=[0,0,0];ships.push(B);projectiles.length=0;
-      var c=B.covR=newCov();
-      if(mode==='none'){B.litRed=0;B.seenRed=-1e9;B.seenRedPos=null;B.seenRedVel=null;}
-      if(mode==='heat'){B.litRed=1;c.seen=true;c.ever=true;c.fix=false;c.n=1;c.age=0;B.seenRedPos=null;B.seenRedVel=null;}
-      if(mode==='fix'){B.litRed=2;c.seen=true;c.ever=true;c.fix=true;c.n=2;c.age=0;c.x=ex;c.y=ey;c.idn=true;c.r1=c.a1=9000;c.r2=c.a2=4000;
-        B.seenRed=simTime;B.seenRedPos=[ex,ey,0];B.seenRedVel=[0,0,0];}
+      var c=tkFab('red',B,{}).cov;                    /* 红方对 B 的那条航迹:先换新椭圆,等级与最后定位记录按三档分别写 */
+      if(mode==='none'){tkPatch('red',B,{lit:0,last:null});}
+      if(mode==='heat'){tkPatch('red',B,{lit:1});c.seen=true;c.ever=true;c.fix=false;c.n=1;c.age=0;tkPatch('red',B,{last:{pos:null,vel:null}});}   /* 最后定位时刻不动(改前就没动) */
+      if(mode==='fix'){tkPatch('red',B,{lit:2});c.seen=true;c.ever=true;c.fix=true;c.n=2;c.age=0;c.x=ex;c.y=ey;c.idn=true;c.r1=c.a1=9000;c.r2=c.a2=4000;
+        tkPatch('red',B,{last:{t:simTime,pos:[ex,ey,0],vel:[0,0,0]}});}
     };
     var same=function(a,b){return !!a&&!!b&&Math.abs(a[0]-b[0])<1e-6&&Math.abs(a[1]-b[1])<1e-6;};
     var fmt=function(g){return g?'['+Math.round(g[0]/1000)+'k,'+Math.round(g[1]/1000)+'k]':'无';};
@@ -93,14 +93,13 @@ t('FLOW87_BOT',function(){
   try{
     var R=[makeShip('CA','令红1',[0,0,0],[-1,0,0],[0,0,0],'red',2),makeShip('DD','令红2',[0,0,0],[-1,0,0],[0,0,0],'red',2),makeShip('DD','令红3',[0,0,0],[-1,0,0],[0,0,0],'red',2)];
     var B1=makeShip('CA','令蓝甲',[0,0,0],[1,0,0],[0,0,0],'blue',2),B2=makeShip('DD','令蓝乙',[0,0,0],[1,0,0],[0,0,0],'blue',2);
-    var con=function(b,lit,ex,ey,idn,a1){b.litRed=lit;var c=b.covR=newCov();
-      if(lit>0){c.seen=true;c.ever=true;c.fix=true;c.n=2;c.age=0;c.x=ex;c.y=ey;c.idn=!!idn;c.idBy=idn?'act':'';c.r1=c.a1=a1||9000;c.r2=c.a2=(a1||9000)/2;}
-      b.seenRed=lit>0?simTime:-1e9;b.seenRedPos=lit>0?[ex,ey,0]:null;b.seenRedVel=[0,0,0];};
+    var con=function(b,lit,ex,ey,idn,a1){var c=tkFab('red',b,{lit:lit,last:{t:lit>0?simTime:-1e9,pos:lit>0?[ex,ey,0]:null,vel:[0,0,0]}}).cov;
+      if(lit>0){c.seen=true;c.ever=true;c.fix=true;c.n=2;c.age=0;c.x=ex;c.y=ey;c.idn=!!idn;c.idBy=idn?'act':'';c.r1=c.a1=a1||9000;c.r2=c.a2=(a1||9000)/2;}};
     var put=function(rx,ry,blues){ // 摆局:三艘红舰在 rx,ry 附近;blues=[[舰,lit,x,y,认出?,椭圆],...]
       ships.length=0;projectiles.length=0;
       R.forEach(function(e,k){e.pos=[rx,ry+k*20000,0];e.vel=[0,0,0];e.orders=[];e.lockedTarget=null;e.macEvadeCd=0;e.aiHold=undefined;e.brake=false;
         e.hp=e.maxHp;e.ammo=240;e.cellTimer=e.cellTimer.map(function(){return 0;});e.macCd=0;e.noFire=false;e.roe='hold';e.dead=false;setEmit(e,'silent');ships.push(e);});
-      [B1,B2].forEach(function(b){b.vel=[0,0,0];b.orders=[];b.noFire=true;b.dead=false;b.litRed=0;b.covR=newCov();b.seenRedPos=null;b.seenRed=-1e9;setEmit(b,'silent');ships.push(b);});
+      [B1,B2].forEach(function(b){b.vel=[0,0,0];b.orders=[];b.noFire=true;b.dead=false;tkFab('red',b,{lit:0,last:{pos:null,t:-1e9}});setEmit(b,'silent');ships.push(b);});
       for(var k=0;k<blues.length;k++){var q=blues[k];q[0].pos=[q[2],q[3],0];con(q[0],q[1],q[2],q[3],q[4],q[5]);}
       aiRedReset();};
     var run=function(n,dt){for(var k=0;k<n;k++){enemyAI(dt);stepShipsMotion(dt);}};
@@ -125,7 +124,7 @@ t('FLOW87_BOT',function(){
     run(2,0.02);
     var locks=R.map(function(e){return e.lockedTarget;}),one=(locks[0]&&locks[1]===locks[0]&&locks[2]===locks[0]);
     var ok2a=(one&&locks[0]===B1);
-    B1.dead=true;B1.litRed=0;B1.covR=newCov();run(2,0.02);
+    B1.dead=true;tkClear('red',B1,'contact');run(2,0.02);
     var locks2=R.map(function(e){return e.lockedTarget;});
     var ok2=(ok2a&&locks2[0]===B2&&locks2[1]===B2&&locks2[2]===B2);
     B1.dead=false;
@@ -204,7 +203,7 @@ t('FLOW87_BOT',function(){
      ① 账:冷船亮度 = size;开火后 = size x (1 + P_FIRE);光学可见半径随之 x sqrt(1+P_FIRE)
      ② 置位走生产路径:导弹真发出去了才亮;主炮过了火控门才亮,没过门(被闸门静默挡回)不许亮;诱饵弹(防御)不亮
      ③ 倒数:stepWeaponSystems 推 FIRE_S 秒之后亮度逐位回到开火前
-     ④ 端到端:一艘静默熄火的红舰摆在【冷船看不见、开火看得见】的距离上 —— 不开火 litBlue=0,一开火下一拍就被看见,熄了之后又看不见 */
+     ④ 端到端:一艘静默熄火的红舰摆在【冷船看不见、开火看得见】的距离上 —— 不开火蓝方等级为 0,一开火下一拍就被看见,熄了之后又看不见 */
 t('FLOW72_FIREFLASH',function(){
   if(typeof firePowerOf!=='function'||!(SENS.P_FIRE>0)||!(SENS.FIRE_S>0))return 'fail FX1 未加载(缺 firePowerOf / SENS.P_FIRE / SENS.FIRE_S)';
   var shipsBak=ships.slice(),projBak=projectiles.slice(),out='';
@@ -217,8 +216,8 @@ t('FLOW72_FIREFLASH',function(){
     var ok1=(Math.abs(l0-R.size)<1e-12&&Math.abs(l1-R.size*(1+SENS.P_FIRE))<1e-12&&Math.abs(v1/v0-Math.sqrt(1+SENS.P_FIRE))<1e-9&&B.fireHot===0);
     /* ② 生产路径 */
     fireDecoy(B);var hotDecoy=B.fireHot;
-    R.litBlue=0;fireMAC(B,R);var hotGated=B.fireHot,nGated=projectiles.filter(function(p){return p.type==='mac';}).length;   /* 没过火控门:静默挡回,不许亮 */
-    R.litBlue=3;var c=R.covB=newCov();c.seen=true;c.fix=true;c.n=2;c.x=R.pos[0];c.y=R.pos[1];
+    tkSetLit('blue',R,0);fireMAC(B,R);var hotGated=B.fireHot,nGated=projectiles.filter(function(p){return p.type==='mac';}).length;   /* 没过火控门:静默挡回,不许亮 */
+    var c=tkFab('blue',R,{lit:3}).cov;c.seen=true;c.fix=true;c.n=2;c.x=R.pos[0];c.y=R.pos[1];
     fireMAC(B,R);var hotMac=B.fireHot,nMac=projectiles.filter(function(p){return p.type==='mac';}).length;
     B.fireHot=0;fireMissiles(B,{pos:[200000,0,0]},1);var hotMsl=B.fireHot,nMsl=projectiles.filter(function(p){return p.type==='missile';}).length;
     var ok2=(hotDecoy===0&&hotGated===0&&nGated===0&&nMac===1&&hotMac===SENS.FIRE_S&&nMsl>=1&&hotMsl===SENS.FIRE_S);
@@ -229,10 +228,10 @@ t('FLOW72_FIREFLASH',function(){
     var ok3=(stillHot&&lHot>lEnd&&Math.abs(lEnd-B.size)<1e-12);
     /* ④ 端到端:距离取冷 / 热两个可见半径的几何中点,从模型现量 */
     projectiles.length=0;R.fireHot=SENS.FIRE_S;var vHot=visRangeOf(R);R.fireHot=0;var dMid=Math.sqrt(visRangeOf(R)*vHot);
-    R.pos=[dMid,0,0];R.litBlue=0;R.covB=newCov();B.fireHot=0;
-    for(i=0;i<4;i++)detectLoop(1);var litCold=R.litBlue;
-    R.fireHot=SENS.FIRE_S;for(i=0;i<3;i++)detectLoop(1);var litHot=R.litBlue;
-    R.fireHot=0;for(i=0;i<6;i++)detectLoop(1);var litAfter=R.litBlue;
+    R.pos=[dMid,0,0];tkClear('blue',R,'contact');B.fireHot=0;
+    for(i=0;i<4;i++)detectLoop(1);var litCold=tkGet('blue',R).lit;
+    R.fireHot=SENS.FIRE_S;for(i=0;i<3;i++)detectLoop(1);var litHot=tkGet('blue',R).lit;
+    R.fireHot=0;for(i=0;i<6;i++)detectLoop(1);var litAfter=tkGet('blue',R).lit;
     var ok4=(litCold===0&&litHot>=1&&litAfter===0);
     var ok=(ok1&&ok2&&ok3&&ok4);
     out=(ok?'ok':'fail')
@@ -282,7 +281,7 @@ t('FLOW73_MATCH',function(){
     var ok2=(Math.abs(d0-MATCH.OPEN)<1&&Math.abs(th0)<=MATCH.ARC+1e-9&&injOk&&Object.keys(seen).length>=3);
     /* ③ 开局互相没有接触;间距 >= 最远的雷达发现(梯子上 CA 照 CA 的发现距离) */
     matchEnter();
-    var noContact=ships.every(function(s){return (s.litBlue||0)===0&&(s.litRed||0)===0;});
+    var noContact=ships.every(function(s){return litOf(s,'blue')===0&&litOf(s,'red')===0;});
     var radarMax=0;['DD','CA'].forEach(function(a){['DD','CA'].forEach(function(b){var p=ladPair(a,b);if(p&&p.radarMin>radarMax)radarMax=p.radarMin;});});
     var ok3=(noContact&&MATCH.OPEN>=radarMax&&radarMax>MATCH.OPEN*0.8);   /* 下限钉着"量到的真是雷达发现那一级":第一版误读了 radarLook(火控门,23 万),条件照样成立 */
     /* ⑤b 对局里全灭 ⇒ 弹 */
@@ -326,11 +325,11 @@ t('FLOW74_TC',function(){
     adminMode=false;matchEnter();
     var B=ships.filter(function(s){return s.side==='blue';}),R=ships.filter(function(s){return s.side==='red';}),r0=R[0],b0=B[0];
     R.slice(1).forEach(function(e){e.pos=[5e6,5e6,0];});                      /* 另两艘红舰挪到天边,只留一艘做文章 */
-    var con=function(mode,ex,ey){var c=r0.covB=newCov();
-      if(mode==='none'){r0.litBlue=0;r0.seenBlue=-1e9;r0.seenBluePos=null;r0.seenBlueVel=null;}
-      if(mode==='heat'){r0.litBlue=1;c.seen=true;c.ever=true;c.fix=false;c.n=1;c.age=0;r0.seenBluePos=null;r0.seenBlueVel=null;}
-      if(mode==='fix'){r0.litBlue=2;c.seen=true;c.ever=true;c.fix=true;c.n=2;c.age=0;c.x=ex;c.y=ey;c.idn=true;c.r1=c.a1=9000;c.r2=c.a2=4000;
-        r0.seenBlue=simTime;r0.seenBluePos=[ex,ey,0];r0.seenBlueVel=[0,0,0];}};
+    var con=function(mode,ex,ey){var c=tkFab('blue',r0,{}).cov;   /* 同 FLOW71 的 setup:先换新椭圆,等级与最后定位记录按三档分别写 */
+      if(mode==='none'){tkPatch('blue',r0,{lit:0,last:null});}
+      if(mode==='heat'){tkPatch('blue',r0,{lit:1});c.seen=true;c.ever=true;c.fix=false;c.n=1;c.age=0;tkPatch('blue',r0,{last:{pos:null,vel:null}});}
+      if(mode==='fix'){tkPatch('blue',r0,{lit:2});c.seen=true;c.ever=true;c.fix=true;c.n=2;c.age=0;c.x=ex;c.y=ey;c.idn=true;c.r1=c.a1=9000;c.r2=c.a2=4000;
+        tkPatch('blue',r0,{last:{t:simTime,pos:[ex,ey,0],vel:[0,0,0]}});}};
     var near=[b0.pos[0]+LAD.gun*0.5,b0.pos[1],0],mid=[b0.pos[0]+(LAD.gun+LAD.msl)/2,b0.pos[1]],far=[b0.pos[0]+LAD.msl*2,b0.pos[1]];
     projectiles.length=0;
     r0.pos=near.slice();con('none');var bNone=tcBand();
@@ -356,7 +355,7 @@ t('FLOW74_TC',function(){
     /* ③ 靶场里不生效:同一个"握有已定位接触"的局面 */
     matchExit();
     var rr=ships.filter(function(s){return s.side==='red';})[0],bb=ships.filter(function(s){return s.side==='blue';})[0];
-    rr.litBlue=2;var c2=rr.covB=newCov();c2.seen=true;c2.fix=true;c2.n=2;c2.x=bb.pos[0]+1000;c2.y=bb.pos[1];
+    var c2=tkFab('blue',rr,{lit:2}).cov;c2.seen=true;c2.fix=true;c2.n=2;c2.x=bb.pos[0]+1000;c2.y=bb.pos[1];
     rate=RMAX;TC.eff=0;for(i=0;i<30;i++)tcStep(0.1);var eRange=tcStep(0.1),rdRange=tcReadout(),bandInRange=tcBand();
     var ok3=(eRange===RMAX&&rdRange===''&&bandInRange===3);                      /* 档位函数照样算得出 3(局面确实成立),只是靶场里不用它 */
     var ok=(ok1&&ok2&&ok3&&ok4);
@@ -387,10 +386,10 @@ t('FLOW75_AUTOAIM',function(){
       ships.length=0;ships.push(A,Bm,T);projectiles.length=0;formations={};
       ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.macCd=999;});     /* 冷却拉满:只量"转不转",不让它真开炮把靶打死 */
       fmCreate('1',[A,Bm]);
-      T.litBlue=3;var c=T.covB=newCov();c.seen=true;c.fix=true;c.n=2;c.x=T.pos[0];c.y=T.pos[1];c.idn=true;
+      var c=tkFab('blue',T,{lit:3}).cov;c.seen=true;c.fix=true;c.n=2;c.x=T.pos[0];c.y=T.pos[1];c.idn=true;
       A.autoEngage=Bm.autoEngage=auto;A.roe=Bm.roe='free';
       if(!auto){Bm.lockedTarget=T;}                                            /* 对照组:手里有锁定,但没开火控 ⇒ 没人续 driftFire */
-      var i;for(i=0;i<1200;i++){T.litBlue=3;stepWeaponSystems(0.02);stepShipsMotion(0.02);}   /* 24 秒:CA 转 90 度要十几秒(第一版只跑 8 秒,转到 0.29 rad 就量了) */
+      var i;for(i=0;i<1200;i++){tkSetLit('blue',T,3);stepWeaponSystems(0.02);stepShipsMotion(0.02);}   /* 24 秒:CA 转 90 度要十几秒(第一版只跑 8 秒,转到 0.29 rad 就量了) */
       var want=V.norm(V.sub(T.pos,Bm.pos));
       return {member:!!Bm.formation,locked:Bm.lockedTarget===T,drift:!!Bm.driftFire,ang:V.angle(Bm.facing,want)};
     };
@@ -421,9 +420,9 @@ t('FLOW76_REDINTENT',function(){
     ships.length=0;ships.push(B,R);
     var DEST=[20000,-50000,0];
     B.orders=[{pos:[-30000,40000,0],type:'stop'}];R.orders=[{pos:DEST.slice(),type:'stop'}];
-    var live=function(ex,ey){R.litBlue=2;R.seenBlue=simTime;R.seenBluePos=[ex,ey,0];R.seenBlueVel=[0,0,0];
-      var c=R.covB=newCov();c.seen=true;c.ever=true;c.fix=true;c.n=2;c.age=0;c.x=ex;c.y=ey;c.idn=true;c.r1=c.a1=9000;c.r2=c.a2=4000;};
-    var dark=function(){R.litBlue=0;R.covB=newCov();R.seenBlue=-1e9;R.seenBluePos=null;R.seenBlueVel=null;};
+    var live=function(ex,ey){var c=tkFab('blue',R,{lit:2,last:{t:simTime,pos:[ex,ey,0],vel:[0,0,0]}}).cov;
+      c.seen=true;c.ever=true;c.fix=true;c.n=2;c.age=0;c.x=ex;c.y=ey;c.idn=true;c.r1=c.a1=9000;c.r2=c.a2=4000;};
+    var dark=function(){tkClear('blue',R,'all');};
     cam.x=20000;cam.y=0;cam.zoom=0.004;
     var pts=[];ctx.lineTo=function(x,y){pts.push([x,y]);return oLn.apply(ctx,arguments);};ctx.moveTo=function(x,y){pts.push([x,y]);return oMv.apply(ctx,arguments);};
     var touches=function(w){var q=toScreen(w[0],w[1]);return pts.some(function(p){return Math.hypot(p[0]-q[0],p[1]-q[1])<6;});};
@@ -482,8 +481,8 @@ t('FLOW77_IDN',function(){
     var B=makeShip('CA','份蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),R=makeShip('BB','份红真名',[60000,0,0],[-1,0,0],[0,0,0],'red',3);
     ships.length=0;ships.push(B,R);ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];});
     cam.x=30000;cam.y=0;cam.zoom=0.004;
-    var con=function(lit,idn){R.litBlue=lit;R.seenBlue=simTime;R.seenBluePos=[R.pos[0],R.pos[1],0];R.seenBlueVel=[0,0,0];
-      var c=R.covB=newCov();c.seen=true;c.ever=true;c.fix=lit>0;c.n=lit>0?2:0;c.age=0;c.x=R.pos[0];c.y=R.pos[1];c.idn=idn;c.r1=c.a1=3000;c.r2=c.a2=1500;};
+    var con=function(lit,idn){var c=tkFab('blue',R,{lit:lit,last:{t:simTime,pos:[R.pos[0],R.pos[1],0],vel:[0,0,0]}}).cov;
+      c.seen=true;c.ever=true;c.fix=lit>0;c.n=lit>0?2:0;c.age=0;c.x=R.pos[0];c.y=R.pos[1];c.idn=idn;c.r1=c.a1=3000;c.r2=c.a2=1500;};
     /* ① */
     con(2,false);var a1=contactIdn(R,'blue');con(2,true);var a2=contactIdn(R,'blue');con(0,true);var a3=contactIdn(R,'blue');
     var ok1=(contactIdn(B,'blue')===true&&a1===false&&a2===true&&a3===false&&contactIdn(null,'blue')===false);
@@ -503,8 +502,8 @@ t('FLOW77_IDN',function(){
     var D=makeShip('DD','份靶',[0,0,0],[-1,0,0],[0,0,0],'red',2);ships.length=0;ships.push(g1,g2,D);
     ships.forEach(function(x){x.orders=[];x.vel=[0,0,0];x.flame=0;x.sideFlame=0;x.noFire=true;setEmit(x,'silent');});
     var lp=ladPair('DD','DD'),dMid=lp.optIdent*1.5,i;
-    var see=function(d){D.pos=[d,0,0];D.litBlue=0;D.covB=newCov();D.seenBlue=-1e9;D.seenBluePos=null;for(i=0;i<40;i++)detectLoop(1);
-      return {lit:D.litBlue,idn:contactIdn(D,'blue'),hull:shipIdentHull(D),by:D.covB.idBy};};
+    var see=function(d){D.pos=[d,0,0];tkFab('blue',D,{lit:0,last:{t:-1e9,pos:null}});for(i=0;i<40;i++)detectLoop(1);   /* 速度那一格改前就没清 */
+      var tk=tkGet('blue',D);return {lit:tk.lit,idn:contactIdn(D,'blue'),hull:shipIdentHull(D),by:tk.cov.idBy};};
     var far=see(dMid),near=see(lp.optIdent*0.7);
     var farLit=far.lit,farIdn=far.idn,farHull=far.hull,nearIdn=near.idn,nearHull=near.hull;
     var ok3=(farLit>=2&&farIdn===false&&farHull==='UNK'&&nearIdn===true&&nearHull==='DD'&&near.by==='opt');

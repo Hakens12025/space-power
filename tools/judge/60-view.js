@@ -220,7 +220,7 @@ t('FLOW56_LOD',function(){
     cam.zoom=kFar;lodPrev={fleet:{},pairsB:null,pairsR:null};lodBuild();
     var aB=lodNow.aggs.filter(function(a){return a.side==='blue';});
     var aR=lodNow.aggs.filter(function(a){return a.kind==='rcluster';});
-    var ruLit=(RU.litBlue===1&&!RU.covB.fix);    /* 前提:那一艘确实是"有信号、定不出位置" */
+    var ruLit=(tkGet('blue',RU).lit===1&&!tkGet('blue',RU).cov.fix);    /* 前提:那一艘确实是"有信号、定不出位置" */
     var ok1=(ruLit&&aB.length===1&&aB[0].ships.length===4&&aR.length===1&&aR[0].ships.length===3
              &&lodNow.hideBlue.size===4&&lodNow.hideRed.size===3&&!lodNow.hideRed.has(RU.id));
     /* ② 拉近 ⇒ 都散开,一个都不收(阈值真的接在屏幕像素上,不是接在别的什么上)。
@@ -241,9 +241,9 @@ t('FLOW56_LOD',function(){
        不是"多远能认出"(那是 FLOW44/ladPair 的事);而且这个取样距离上本来就认不出。 */
     cam.zoom=6e-5;lodPrev={fleet:{},pairsB:null,pairsR:null};lodBuild();
     var rc=lodNow.aggs.filter(function(a){return a.kind==='rcluster';})[0];
-    Rr.forEach(function(x){x.covB.idn=true;});
+    Rr.forEach(function(x){tkGet('blue',x).cov.idn=true;});
     var compIdn=rc?lodComp(rc.ships,true):'';
-    Rr.forEach(function(x){x.covB.idn=false;});
+    Rr.forEach(function(x){tkGet('blue',x).cov.idn=false;});
     var compUnk=rc?lodComp(rc.ships,true):'';
     var ok4=(compIdn.indexOf('DD')>=0&&compUnk==='?×3'&&compUnk.indexOf('DD')<0);
     /* ⑤ 被收起的蓝舰点得到:拾取必须落到聚合框上(否则那几艘船永远选不中) */
@@ -252,7 +252,7 @@ t('FLOW56_LOD',function(){
     var ok5=(!!hit&&a0.ships.indexOf(hit)>=0);
     var ok=(ok1&&ok2&&ok3&&ok4&&ok5);
     out=(ok?'ok':'fail')
-      +' ① 拉远('+Math.round(1/kFar)+' km/px,从梯子现量):蓝 '+aB.length+' 框/收起 '+lodNow.hideBlue.size+' 艘,红 '+aR.length+' 群/收起 '+lodNow.hideRed.size+' 条(未定位那一艘须【不】进群:lit'+RU.litBlue+' 定得出='+RU.covB.fix+' 被收起='+lodNow.hideRed.has(RU.id)+')='+ok1
+      +' ① 拉远('+Math.round(1/kFar)+' km/px,从梯子现量):蓝 '+aB.length+' 框/收起 '+lodNow.hideBlue.size+' 艘,红 '+aR.length+' 群/收起 '+lodNow.hideRed.size+' 条(未定位那一艘须【不】进群:lit'+tkGet('blue',RU).lit+' 定得出='+tkGet('blue',RU).cov.fix+' 被收起='+lodNow.hideRed.has(RU.id)+')='+ok1
       +' | ② 拉近(100 km/px,相邻两艘 120px):聚合 0 个、一个都不收='+ok2
       +' | ③ 把红舰编进同一支编队后聚合结果逐位不变(不许读真实编制)='+ok3+' ['+sigA+'] vs ['+sigB+']'
       +' | ④ 构成:认出时「'+compIdn+'」 没认出时「'+compUnk+'」(后者须恰好是 ?×3)='+ok4
@@ -344,7 +344,7 @@ t('FLOW54_HEAT',function(){
     var oc=visRangeOf(Rr), hr=hearRangeOf(Rr,B.recv);
     var mom=function(d){                                 /* 把红舰放到 d,跑够拍数,读场的矩 */
       Rr.pos=[d,0,0];detT=0;
-      Rr.covB=newCov();Rr.litBlue=0;
+      tkClear('blue',Rr,'contact');
       for(var i=0;i<30;i++)detectLoop();
       /* ⚠ 镜头【对准接触本身】。第一版放在 d/2,于是团有一半拱出画布边缘被裁掉,重心被裁出来的那一侧带偏
          —— 归零对照量到 0.19 个团半径的"偏移",而那是裁剪的残影不是被测的东西。 */
@@ -366,7 +366,7 @@ t('FLOW54_HEAT',function(){
       var offPx=Math.hypot((mx+0.5)*HEAT_CELL-sp[0],(my+0.5)*HEAT_CELL-sp[1]);
       return {n:n,ar:l1/l2,rw:l1*HEAT_CELL/cam.zoom,       /* 长短比 + 换回【世界尺度】的场半径 */
               off:offPx, offRel:offPx/Math.max(l1*HEAT_CELL,1e-9),     /* 重心离真值:绝对(px)与【相对团本身的尺度】 */
-              ell:Rr.covB.r1/Math.max(Rr.covB.r2,1), fix:!!Rr.covB.fix, lit:Rr.litBlue};
+              ell:tkGet('blue',Rr).cov.r1/Math.max(tkGet('blue',Rr).cov.r2,1), fix:!!tkGet('blue',Rr).cov.fix, lit:tkGet('blue',Rr).lit};
     };
     /* 两档都要落在那一段里,而且拉开一点 —— 靠得太近的话对数压缩本来就只给几个百分点的差,判不出东西 */
     var dFar=Math.sqrt(Math.max(oc,1)*hr), dNear=Math.max(oc*1.05,dFar*0.30);
