@@ -32,7 +32,7 @@
 <div id="mapTag">战术层<b>TACTICAL</b></div><!-- SN6 当前层的读数,只在【换层那一刻】写(render/80-viewtier 的 vtFrame) -->
 
 <!-- 地图组 · 红外:左下角的红外开关 + 两种投法(甲 位置 / 乙 方向)。逻辑在本页最后那段脚本里 -->
-<div id="irDock"><button class="hbtn" id="irBtn" title="红外图(热像):整屏一层底红,有热源的地方与背景不平衡、颜色偏离底红 —— 越强偏得越多(暗红 → 橙 → 黄 → 近白)。色标固定:同样的热永远是同样的颜色。带一点传感器噪声:很弱的热会淹在颗粒里。点火、开火、开雷达的船会更偏">红外</button><div id="irMode"><button class="hbtn" data-irm="jia" title="甲 位置:热源在它所在的位置偏色。近处小而亮,远处大而淡(越远越糊)">甲 位置</button><button class="hbtn" data-irm="yi" title="乙 方向:我方每艘船朝热源的那一片扇区整体偏暖,沿着这个方向远近都一样(红外量不到距离);几艘船的扇区交叠处更偏">乙 方向</button></div><div id="irSun"><button class="hbtn" data-sun="none" title="没有太阳">无太阳</button><button class="hbtn" data-sun="dir" title="太阳·方向:太阳在无穷远的方位 150°(与碎石带那颗同一组数),写进引擎,引擎的探测也照它致盲(禁区半角 10°)。乙:朝太阳那片扇区刺眼;甲:看不到太阳本身,但禁区里的热源被晃掉">太阳·方向</button><button class="hbtn" data-sun="pos" title="太阳·位置:在地图上放一颗有位置的恒星(默认 150 万公里外,能拖)。只在红外图里,引擎不知道它。甲:刺眼的亮斑加散射光晕;乙:朝它那片扇区刺眼">太阳·位置</button></div></div>
+<div id="irDock"><button class="hbtn" id="irBtn" title="红外图(热像):整屏一层底红,有热源的地方与背景不平衡、颜色偏离底红 —— 越强偏得越多(暗红 → 橙 → 黄 → 近白)。色标固定:同样的热永远是同样的颜色。带一点传感器噪声:很弱的热会淹在颗粒里。点火、开火、开雷达的船会更偏">红外</button><div id="irMode"><button class="hbtn" data-irm="jia" title="甲 位置:热源在它所在的位置偏色。近处小而亮,远处大而淡(越远越糊)">甲 位置</button><button class="hbtn" data-irm="yi" title="乙 方向:我方每艘船朝热源的那一片扇区整体偏暖,沿着这个方向远近都一样(红外量不到距离);几艘船的扇区交叠处更偏">乙 方向</button></div><div id="irSun"><button class="hbtn" data-sun="none" title="没有太阳">无太阳</button><button class="hbtn" data-sun="dir" title="太阳·方向:太阳在无穷远的方位 150°(与碎石带那颗同方位),写进引擎,引擎的探测也照它致盲(禁区半角 30°;碎石带那颗是 10°,不受影响)。乙:朝太阳那片扇区刺眼;甲:看不到太阳本身,但禁区里的热源被晃掉">太阳·方向</button><button class="hbtn" data-sun="pos" title="太阳·位置:在地图上放一颗有位置的恒星,真太阳大小(半径 69.6 万公里),默认 690 万公里外(约帕克太阳探测器最近点),能拖。只在红外图里,引擎不知道它。甲:刺眼的亮斑加散射光晕;乙:朝它那片扇区刺眼">太阳·位置</button></div></div>
 
 <div id="hud" class="panel">
   <div class="logo">SPACE POWER<span> · 骨架</span></div>
@@ -217,11 +217,11 @@
      · 拖动:左键按在一个东西上(蓝舰、红舰、石头 / 小行星,按真实位置判,12 像素内最近的)再拖超过 4 像素 ⇒ 搬到鼠标下、速度清零;
        只点不拖时什么都不拦,引擎照常选中。没被发现的红舰地图上看不见但照样抓得住(F8 打开引擎的上帝视角能看见)
    用户:「(太阳)都试试」—— 左下角一个三档开关:无太阳 / 太阳·方向 / 太阳·位置
-     · 方向型 = 写进引擎自己的太阳(ENV.sun,方位 150°、禁区半角 10°,与碎石带那颗同一组数):引擎的探测照它致盲,屏幕边上的日标是引擎画的。
+     · 方向型 = 写进引擎自己的太阳(ENV.sun,方位 150° 与碎石带那颗相同;禁区半角 30°,碎石带是 10°——用户:「方向型加宽」):引擎的探测照它致盲,屏幕边上的日标是引擎画的。
        乙:每艘船朝太阳那一片扇区刺眼 —— 禁区边缘恰好到色标顶,往外按角度的四次方衰减(杂散光);甲:看不到太阳本身(它没有位置),
        但一个热源若对某艘我方船落在禁区里,那艘船就看不见它;全被晃瞎就画不出来
-     · 位置型 = 只存在于红外图里的一颗恒星(引擎不知道它),默认在我方舰队 150 万公里外、方位 150°,能拖。
-       甲:一团刺眼的亮斑 + 散射光晕(6 万公里内饱和,往外按距离三次方淡出);乙:每艘船朝它那一片扇区刺眼(同一条杂散光律) */
+     · 位置型 = 只存在于红外图里的一颗恒星(引擎不知道它),默认在我方舰队 690 万公里外、方位 150°,能拖。
+       甲:一团刺眼的亮斑 + 散射光晕(真太阳半径 69.6 万公里内饱和,往外按距离三次方淡出——用户:「位置型放大」);乙:每艘船朝它那一片扇区刺眼(同一条杂散光律) */
 const IRM={on:false,mode:'jia',
   CELL:5,                  /* 底图一格 = 多少屏幕像素 */
   V0:0.02,VMAX:1000,       /* 固定色标:t = ln(1 + v/V0) / ln(1 + VMAX/V0);v = 0 是纯底红,v = 1000 顶到近白 */
@@ -366,7 +366,11 @@ targetAt=function(sx,sy){return adminMode?irmOrigTargetAt(sx,sy):null;};
 GEOM.on=false;{const g=document.querySelector('#segTool [data-tool="geom"]');if(g)g.remove();}
 
 /* ---- 太阳(两种都试):方向型写进引擎的 ENV.sun;位置型是只在红外图里的一颗恒星 ---- */
-const IRM_SUN={mode:'none',BRG:150,HALF:10,P:4,POS_D:1500000,R_SAT:60000,POS_P:3};
+/* 用户(太阳是否太小):「方向型加宽,位置型放大」——
+   HALF 10° → 30°:真实传感器避开太阳的角度大得多(哈勃 50°、韦伯 85°、星敏感器常见 30~45°),取常见值的下限。只改这一页:主游戏碎石带那颗仍是 10°
+   R_SAT 6 万 → 69.6 万公里 = 真太阳半径(原来那颗只有木星大);POS_D 150 万 → 690 万公里 ≈ 帕克太阳探测器的最近点(约 9.9 个太阳半径)——
+   人造物到过离太阳最近的地方;再近舰队就在日冕里了。再远的话拉到最远也看不见它(最远的取景短边约 700 万公里) */
+const IRM_SUN={mode:'none',BRG:150,HALF:30,P:4,POS_D:6900000,R_SAT:696000,POS_P:3};
 let irmStar=null;
 function irmGlare(dth){ /* 杂散光的角度律:禁区边缘(半角)恰为色标顶 VMAX,往里更亮(饱和),往外按角度的 P 次方衰减 */
   const h=IRM_SUN.HALF*Math.PI/180,a=Math.max(Math.abs(dth),h*0.05);return IRM.VMAX*Math.pow(h/a,IRM_SUN.P);
@@ -546,25 +550,27 @@ function irmSelftest(){
     T('⑬ 拖动:红舰、小行星、蓝舰都搬到鼠标下;只点不拖不动、引擎照常选中',near(Rd,wR)&&near(Kd,wK)&&near(Bd,wB)&&clickStill&&clickSel&&selDrag===null,
       '红 '+near(Rd,wR)+' · 小行星 '+near(Kd,wK)+' · 蓝 '+near(Bd,wB)+' · 点击不动 '+clickStill+' · 点击选中 '+clickSel);
     selected=[];
-    /* ⑭ 太阳·方向:写进引擎的太阳;乙里朝太阳的扇区饱和、禁区边缘恰为色标顶、偏开 90° 已经很暗;
+    /* ⑭ 太阳·方向:写进引擎的太阳(方位同碎石带、半角 30°,碎石带自己仍是 10°);乙里朝太阳的扇区饱和、禁区边缘恰为色标顶、偏开两倍半角按四次方掉到 1/16;
+          偏开 25° 的船引擎也判致盲(10° 时不会);
           甲里正对太阳方向的红舰画不出来(那艘船被晃瞎,引擎的致盲函数也这么判);关掉太阳又看得见 */
     ships.length=0;ships.push(B);B.pos=[0,0,0];rocks=[];irmSunSet('dir');
-    const ws=TEST_ENVS[matchRocksIdx()].world.sun,envOk=!!ENV.sun&&ENV.sun.brg===ws.brg&&Math.abs(ENV.sun.half-ws.half)<1e-9;   /* 与碎石带那颗太阳同一组数:和引擎的场景比,不和本页自己的常数比 */
+    const ws=TEST_ENVS[matchRocksIdx()].world.sun,envOk=!!ENV.sun&&ENV.sun.brg===ws.brg&&Math.abs(ENV.sun.half-30)<1e-9&&ws.half===10;   /* 方位和引擎的场景比;半角写字面的 30(用户拍板的数),并确认碎石带那颗没被带着改 */
     const P14=irmProfiles()[0].P,binDeg=function(dg){return P14[Math.round((((dg%360)+360)%360)/360*IRM.BINS)%IRM.BINS];};
-    const v0=binDeg(IRM_SUN.BRG),vh=binDeg(IRM_SUN.BRG+IRM_SUN.HALF),v90=binDeg(IRM_SUN.BRG+90);
+    const v0=binDeg(IRM_SUN.BRG),vh=binDeg(IRM_SUN.BRG+IRM_SUN.HALF),v2h=binDeg(IRM_SUN.BRG+60),v90=binDeg(IRM_SUN.BRG+90);
+    const a25=(IRM_SUN.BRG+25)*Math.PI/180,blind25=envSunBlind(B.pos,[Math.cos(a25)*Rv*0.5,Math.sin(a25)*Rv*0.5,0]);
     const aS=IRM_SUN.BRG*Math.PI/180;R.pos=[Math.cos(aS)*Rv*0.5,Math.sin(aS)*Rv*0.5,0];R.flame=0;ships.push(R);
     const hDir=irmHill(R,[B]),blind=envSunBlind(B.pos,R.pos);irmSunSet('none');const hNone=irmHill(R,[B]),envBack=(ENV.sun===(curEnv().world&&curEnv().world.sun?ENV.sun:null));
-    T('⑭ 太阳·方向:写进引擎;扇区饱和、禁区边缘到色标顶、偏开 90° 很暗;正对太阳的红舰甲里画不出、关掉太阳又有',
-      envOk&&v0>=IRM.VMAX&&Math.abs(vh/IRM.VMAX-1)<0.02&&v90<1&&hDir===null&&blind&&!!hNone&&envBack,
-      '正对 '+Math.round(v0)+' · 禁区边缘 '+vh.toFixed(0)+' · 偏开 90° '+v90.toFixed(2)+' · 晃瞎 '+(hDir===null)+' / 引擎判致盲 '+blind+' · 关掉后看得见 '+!!hNone);
+    T('⑭ 太阳·方向:写进引擎、半角 30°;扇区饱和、禁区边缘到色标顶、两倍半角处 1/16;偏开 25° 也致盲;正对太阳的红舰甲里画不出、关掉太阳又有',
+      envOk&&v0>=IRM.VMAX&&Math.abs(vh/IRM.VMAX-1)<0.02&&Math.abs(v2h/(IRM.VMAX/16)-1)<0.05&&blind25&&hDir===null&&blind&&!!hNone&&envBack,
+      '正对 '+Math.round(v0)+' · 禁区边缘 '+vh.toFixed(0)+' · 偏开 60° '+v2h.toFixed(1)+'(应为 '+(IRM.VMAX/16).toFixed(1)+') · 偏开 90° '+v90.toFixed(2)+' · 偏开 25° 致盲 '+blind25+' · 晃瞎 '+(hDir===null)+' / 引擎判致盲 '+blind+' · 关掉后看得见 '+!!hNone);
     /* ⑮ 太阳·位置:只在红外图里(引擎的太阳不变、不在 ships / rocks / 热源集合里);甲的亮斑中心饱和、按距离三次方淡出;乙朝它饱和;能拖 */
     ships.length=0;ships.push(B);irmSunSet('pos');const S15=irmStar;
-    const onlyIr=!!S15&&ENV.sun===null&&ships.indexOf(S15)<0&&rocks.indexOf(S15)<0&&irmSources().indexOf(S15)<0;
+    const d15=Math.hypot(S15.pos[0]-B.pos[0],S15.pos[1]-B.pos[1]),onlyIr=Math.abs(d15-6900000)<1&&!!S15&&ENV.sun===null&&ships.indexOf(S15)<0&&rocks.indexOf(S15)<0&&irmSources().indexOf(S15)<0;
     cam.x=S15.pos[0];cam.y=S15.pos[1];cam.zoom=10*IRM.CELL/IRM_SUN.R_SAT;irmFieldJia();
     const ps=toScreen(S15.pos[0],S15.pos[1]),ic15=Math.round(ps[0]/IRM.CELL),jc15=Math.round(ps[1]/IRM.CELL);
     const vc15=irmF[jc15*irmGW+ic15],v115=irmF[jc15*irmGW+ic15+10],v215=irmF[jc15*irmGW+ic15+20];
     /* 理论值按这一格的实际距离算:恒星不正好落在格点上,"10 格外"不是正好一个饱和半径(第一版按整格比,差了 6%) */
-    const want15=function(di){const dx=((ic15+di)*IRM.CELL-ps[0])/cam.zoom,dy=(jc15*IRM.CELL-ps[1])/cam.zoom;return IRM.VMAX*Math.pow(IRM_SUN.R_SAT/Math.hypot(dx,dy),3);};   /* 规格是三次方:写字面的 3,不读 POS_P —— 读常数的话改了常数理论值跟着变,判据就是同义反复(反向对照实测过) */
+    const want15=function(di){const dx=((ic15+di)*IRM.CELL-ps[0])/cam.zoom,dy=(jc15*IRM.CELL-ps[1])/cam.zoom;return IRM.VMAX*Math.pow(696000/Math.hypot(dx,dy),3);};   /* 饱和半径写字面的 69.6 万公里(真太阳半径,用户拍板「放大」);规格是三次方:写字面的 3,不读 POS_P —— 读常数的话改了常数理论值跟着变,判据就是同义反复(反向对照实测过) */
     const w115=want15(10),w215=want15(20);
     const bS=Math.atan2(S15.pos[1]-B.pos[1],S15.pos[0]-B.pos[0])*180/Math.PI,P15=irmProfiles()[0].P,vS=P15[Math.round((((bS%360)+360)%360)/360*IRM.BINS)%IRM.BINS];
     cam.zoom=Math.min(W,H)/(IRM_SUN.POS_D*2.5);cam.x=(B.pos[0]+S15.pos[0])/2;cam.y=(B.pos[1]+S15.pos[1])/2;
