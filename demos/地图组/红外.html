@@ -378,8 +378,23 @@ function irmTail(t,h){ /* 甲里的尾巴:尾焰那份热占总热的比例、�
   const tot=optLum(t)*irmLumK(h.o,t),vis=pl.lum*irmAspect(pl,t,h.o);
   return tot>0?{share:Math.min(1,vis/tot),ux:pl.ux,uy:pl.uy}:null;
 }
+/* ---- 近处看得出舰形 —— 用户选了「2 近处看得出舰形」----
+   业内对应:Johnson 准则(Johnson 1958):目标横跨多少个分辨单元(线对)决定能看出什么 ——
+     约 1 个:发现(一个点);约 1.4:看出朝向;约 4:认出类型;约 6.4:确认(看得到细节)。
+   N = 4 x 体型 x L_REF / 山宽:锚在引擎自己的光学认出门上(23-cov:横向误差收进 体型 x L_REF 就算认出)——
+     引擎说"认出了"的那个距离上 N 恰好 = 4。山宽用红外图自己的(含尾焰视角、相位、逆光),所以逆光的船要贴得更近才认得出。
+   画法:N < 1 圆团;1 ~ 4 圆团沿船身方向拉长(面积不变,长宽比从 1 渐到 AR,石头到 AR_ROCK)—— 看得出它朝哪;
+     N 过 3 起舰形淡入、到 4 全显:按真舰种的舰体几何画一个热轮廓(比山顶再亮一点);山让给它(FADE = 1:整座让出),
+       换成一圈贴着舰形的小光晕(宽 = 舰标半径、峰 = 原峰 x HALO)。"分辨得开"的意思就是模糊比目标还小 ——
+       第一版山只让出七成,舰标大小的轮廓被一大团光盖住,截图里只剩中间一个小亮条;
+     N 过 6.4 画出舰体上的构件(炮塔、舰桥压暗)。点着火的船喷口处一个近白的热点。石头画成不规则的块。
+   舰形按舰标的比例放大画(真实船体比地图上一个像素还小,和引擎的舰标同一个系数 hullZoomF);拉远到舰标换记号的那一档就不画。
+   只有甲画;乙没有位置。AR / AR_ROCK / FADE 是暂定的数 */
+const IRM_RES={AR:3,AR_ROCK:1.5,FADE:1,HALO:0.5,DETAIL:6.4};
+function irmResN(t,h){return 4*t.size*COV.L_REF/h.sig;}
+let irmSil=[],irmSilDrawn=[];
 function irmFieldJia(){ /* 甲:每座山按行、列两个一维高斯相乘贴进底图(可分离,每格一次乘加) */
-  irmGrid();const C=IRM.CELL,gw=irmGW,gh=irmGH,obs=irmObservers();if(!obs.length)return 0;
+  irmGrid();irmSil=[];const C=IRM.CELL,gw=irmGW,gh=irmGH,obs=irmObservers();if(!obs.length)return 0;
   let n=0;
   for(const t of irmSources()){
     const h=irmHill(t,obs);if(!h)continue;
@@ -391,7 +406,17 @@ function irmFieldJia(){ /* 甲:每座山按行、列两个一维高斯相乘贴�
       irmSplatAniso(cx+tl.ux*sa,cy+tl.uy*sa,pkT,sa,s0,tl.ux,tl.uy);
       h.peak*=1-tl.share;
     }
-    const pk=irmShowPeak(h);if(!(pk>=IRM.CULL))continue;   /* 贴的是收过的峰(宽的山往底红收) */
+    const pk0=irmShowPeak(h);if(!(pk0>=IRM.CULL))continue;   /* 贴的是收过的峰(宽的山往底红收) */
+    /* 分辨得开多少(Johnson):舰形淡入的那一段山让出一部分;1 ~ 4 之间沿船身拉长 */
+    const N=irmResN(t,h),a=Math.max(0,Math.min(1,N-3));if(a>0)irmSil.push({t:t,N:N,a:a,v:pk0});
+    const pk=pk0*(1-IRM_RES.FADE*a);
+    if(a>0&&!shipMarkMode()){const ri=(t.kind==='rock'?hullSize('UNK',2)*0.78*Math.sqrt(t.size/0.7):hullSize(t.cls,t.tier||2)*0.78)*hullZoomF()/C;
+      irmSplatAniso(cx,cy,pk0*IRM_RES.HALO*a,Math.max(IRM.SIG_MIN,ri),Math.max(IRM.SIG_MIN,ri),1,0);}   /* 贴着舰形的小光晕 */
+    if(!(pk>=IRM.CULL)){n++;continue;}
+    if(N>1&&t.facing){
+      const ar=t.kind==='rock'?IRM_RES.AR_ROCK:IRM_RES.AR,rr=1+(ar-1)*Math.min(1,(N-1)/3),s0=Math.max(IRM.SIG_MIN,h.sig*cam.zoom/C),fl=Math.hypot(t.facing[0],t.facing[1])||1;
+      irmSplatAniso(cx,cy,pk,s0*Math.sqrt(rr),s0/Math.sqrt(rr),t.facing[0]/fl,t.facing[1]/fl);n++;continue;
+    }
     const s=Math.max(IRM.SIG_MIN,h.sig*cam.zoom/C),r=s*Math.sqrt(2*Math.log(pk/IRM.CULL));
     const i0=Math.max(0,Math.floor(cx-r)),i1=Math.min(gw-1,Math.ceil(cx+r)),j0=Math.max(0,Math.floor(cy-r)),j1=Math.min(gh-1,Math.ceil(cy+r));
     if(i0>i1||j0>j1)continue;
@@ -454,6 +479,30 @@ function drawIrMap(){
   ctx.save();ctx.imageSmoothingEnabled=true;
   ctx.drawImage(irmCv,-C/2,-C/2,gw*C,gh*C);   /* 格点 i 落在屏幕 i*CELL,底图的第 i 个像素铺在它周围一格;整屏都铺(没有热源也是一层底红) */
   ctx.restore();
+  irmSilDrawn=[];
+  if(IRM.mode!=='yi'&&irmSil.length&&!shipMarkMode())for(const e of irmSil)irmDrawSil(e);   /* 近处看得出舰形:叠在底图上 */
+}
+function irmLutRgb(t){const k=Math.round((Math.max(IRM_T0,Math.min(1,t))-IRM_T0)/(1-IRM_T0)*255)*4;return 'rgb('+IRM_LUT[k]+','+IRM_LUT[k+1]+','+IRM_LUT[k+2]+')';}
+function irmDrawSil(e){ /* 一个热轮廓:真舰种的舰体几何(或石头的不规则块),颜色比山顶亮一点,构件在 N >= 6.4 时压暗画出 */
+  const t=e.t,p=toScreen(t.pos[0],t.pos[1]);if(p[0]<-60||p[0]>W+60||p[1]<-60||p[1]>H+60)return;
+  const tv=irmT(e.v),col=irmLutRgb(tv+0.12),dark=irmLutRgb(tv-0.2),hot=irmLutRgb(1),detail=e.N>=IRM_RES.DETAIL,zf=hullZoomF();
+  ctx.save();ctx.globalAlpha=e.a;ctx.translate(p[0],p[1]);ctx.rotate(Math.atan2(t.facing[1],t.facing[0]));ctx.scale(zf,zf);
+  if(t.kind==='rock'){
+    const r=hullSize('UNK',2)*0.78*Math.sqrt(t.size/0.7);ctx.fillStyle=col;ctx.beginPath();
+    for(let i=0;i<ROCK_SHAPE.length;i++){const a=i/ROCK_SHAPE.length*2*Math.PI,q=r*ROCK_SHAPE[i];if(i)ctx.lineTo(Math.cos(a)*q,Math.sin(a)*q);else ctx.moveTo(Math.cos(a)*q,Math.sin(a)*q);}
+    ctx.closePath();ctx.fill();
+  }else{
+    const def=HULL[t.cls]||HULL.DD,sz=hullSize(t.cls,t.tier||2);ctx.scale(sz,sz);ctx.lineJoin='round';
+    for(const pt of def.parts){
+      if(pt.p==='poly'){ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(pt.pts[0][0],pt.pts[0][1]);for(let i=1;i<pt.pts.length;i++)ctx.lineTo(pt.pts[i][0],pt.pts[i][1]);
+        if(pt.mirror){for(let i=pt.pts.length-1;i>=0;i--){if(Math.abs(pt.pts[i][1])<1e-9)continue;ctx.lineTo(pt.pts[i][0],-pt.pts[i][1]);}}ctx.closePath();ctx.fill();}
+      else if(pt.p==='rect'||pt.p==='mirror'){ctx.fillStyle=(detail&&pt.dark)?dark:col;const ys=pt.p==='mirror'?[pt.y,-pt.y-pt.h]:[pt.y];for(const y of ys)ctx.fillRect(pt.x,y,pt.w,pt.h);}
+      else if(pt.p==='line'){ctx.strokeStyle=(detail&&pt.dark)?dark:col;ctx.lineWidth=pt.w||0.08;ctx.beginPath();ctx.moveTo(pt.x1,pt.y1);ctx.lineTo(pt.x2,pt.y2);ctx.stroke();}
+    }
+    if(t.flame){ctx.fillStyle=hot;ctx.beginPath();ctx.ellipse(t.flame>0?-1.0:1.35,0,0.22,0.16,0,0,2*Math.PI);ctx.fill();}   /* 喷口:主推在船尾、反推在船头 */
+  }
+  ctx.restore();
+  irmSilDrawn.push({cls:t.kind==='rock'?'rock':t.cls,detail:detail,a:e.a});
 }
 /* 热区不要:引擎的接触层每帧先调 heatBuild 生成热区、有东西才画。这里换成恒返回 0 */
 heatBuild=function(){return 0;};
@@ -631,13 +680,15 @@ function irmSelftest(){
     const tkR=trkOf('blue',R);const covBak=tkR.cov,litBak=tkR.lit;tkR.cov=newCov();tkR.lit=1;tkR.cov.fix=false;
     const st8=contactState(R,'blue');IRM.on=false;const off8=cap(function(){drawContacts();});tkR.cov=covBak;tkR.lit=litBak;
     T('⑧ 热区不画:只有热区的接触在,接触层也不画',st8==='heat'&&off8===0&&heatBuild()===0,'显示态 '+st8);
-    /* ⑨ 甲不截断:一座很高的山在 4 个宽度外仍按高斯衰减 */
-    ships.length=0;ships.push(B);B.pos=[0,0,0];const Kt=makeRock([0,0,0],0.8,[1,0,0]);rocks=[Kt];
-    let kk=0.5;Kt.pos=[Rv*kk,0,0];while(irmHill(Kt,[B]).peak<4096&&kk>0.001){kk*=0.97;Kt.pos=[Rv*kk,0,0];}
-    const hT=irmHill(Kt,[B]);cam.x=Kt.pos[0];cam.y=0;cam.zoom=(IRM.CELL*6)/hT.sig;irmFieldJia();
+    /* ⑨ 甲不截断:山在 4 个宽度外仍按高斯衰减(不被截成一个台阶)。
+          用一艘还没分辨开(N < 1)的船来量:分辨开以后山会让给舰形,那一段量的是另一件事(㉖)。开火档让它热一点、没有尾巴 */
+    ships.length=0;ships.push(B);B.pos=[0,0,0];rocks=[];
+    const Kt=makeShip('DD','红外测不截断',[0,0,0],[0,1,0],[0,0,0],'red',2);Kt.flame=0;Kt.sideFlame=0;Kt.fireHot=8;setEmit(Kt,'silent');ships.push(Kt);
+    let kk=2;Kt.pos=[Rv*kk,0,0];while(irmResN(Kt,irmHill(Kt,[B]))<0.95&&kk>0.01){kk*=0.99;Kt.pos=[Rv*kk,0,0];}kk/=0.99;Kt.pos=[Rv*kk,0,0];
+    const hT=irmHill(Kt,[B]),N9=irmResN(Kt,hT);cam.zoom=(IRM.CELL*6)/hT.sig;cam.x=Kt.pos[0]+(W/2-IRM.CELL*Math.round(W/2/IRM.CELL))/cam.zoom;cam.y=(H/2-IRM.CELL*Math.round(H/2/IRM.CELL))/cam.zoom;irmFieldJia();
     const pc=toScreen(Kt.pos[0],Kt.pos[1]),ic=Math.round(pc[0]/IRM.CELL),jc=Math.round(pc[1]/IRM.CELL),sgc=hT.sig*cam.zoom/IRM.CELL;
-    const pT=irmShowPeak(hT),i4=Math.round(ic+4*sgc),v4=irmF[jc*irmGW+i4],want=pT*Math.exp(-0.5*Math.pow((i4-pc[0]/IRM.CELL)/sgc,2)),vc=irmF[jc*irmGW+ic];   /* 场里贴的是收过的峰(很窄的高山几乎不收) */
-    T('⑨ 甲不截断:高山在 4 个宽度外仍按高斯衰减',v4>1&&Math.abs(v4/want-1)<0.05&&Math.abs(vc/(pT*Math.exp(-0.5*Math.pow((ic-pc[0]/IRM.CELL)/sgc,2)))-1)<0.05,'峰高 '+Math.round(hT.peak)+' · 4 个宽度处 '+v4.toFixed(2)+'(应为 '+want.toFixed(2)+')');
+    const pT=irmShowPeak(hT),i4=Math.round(ic+4*sgc),v4=irmF[jc*irmGW+i4],want=pT*Math.exp(-0.5*Math.pow((i4-pc[0]/IRM.CELL)/sgc,2)),vc=irmF[jc*irmGW+ic];
+    T('⑨ 甲不截断:山在 4 个宽度外仍按高斯衰减',N9<1&&v4>IRM.CULL&&Math.abs(v4/want-1)<0.05&&Math.abs(vc/pT-1)<0.05,'N='+N9.toFixed(2)+' · 峰高 '+pT.toFixed(2)+' · 4 个宽度处 '+v4.toExponential(2)+'(应为 '+want.toExponential(2)+',截断线 '+IRM.CULL+')');
     rocks=[];
     /* ⑩ 海量热源:300 块石头,甲、乙各算一帧 */
     const many=[];let sd=12345;const rnd=function(){sd=(sd*16807)%2147483647;return sd/2147483647;};
@@ -848,6 +899,22 @@ function irmSelftest(){
     T('㉕ 致盲后方:点主推瞎船后 ±30°、反推瞎船前;熄火不瞎;乙里扇区整段刺眼',
       !b20&&b40&&f0m&&!rf20&&rb20&&n20&&binAt(P25,180)>=IRM.VMAX&&binAt(P25,0)<IRM.VMAX,
       '主推:船后偏 20° '+b20+' · 偏 40° '+b40+' · 船前 '+f0m+' · 反推:船前偏 20° '+rf20+' · 船后 '+rb20+' · 熄火偏 20° '+n20+' · 乙 船后 '+Math.round(binAt(P25,180))+' 船前 '+binAt(P25,0).toFixed(2));
+    /* ㉖ 近处看得出舰形(Johnson):在引擎的光学认出距离上 N 恰好 = 4;1.5 倍处 N = 4/2.25、山沿船身拉长;
+          0.8 倍(N = 6.25)显出舰形、没有构件;0.75 倍(N ≈ 7.1)有构件;画的是真舰种;远处(N < 3)不画舰形 */
+    ships.length=0;B.pos=[0,0,0];B.flame=0;B.facing=[1,0,0];const C26=makeShip('CA','红外测舰形',[0,0,0],[0,1,0],[0,0,0],'red',2);
+    C26.flame=0;C26.sideFlame=0;C26.fireHot=0;setEmit(C26,'silent');ships.push(B,C26);rocks=[];irmSunSet('none');IRM.mode='jia';
+    const dId=identDist('opt',B,C26),n26=function(k){C26.pos=[dId*k,0,0];return irmResN(C26,irmHill(C26,[B]));};
+    const N1=n26(1),N15=n26(1.5);
+    C26.pos=[dId*1.5,0,0];const h26=irmHill(C26,[B]);cam.zoom=6*IRM.CELL/h26.sig;cam.x=C26.pos[0]+(W/2-IRM.CELL*Math.round(W/2/IRM.CELL))/cam.zoom;cam.y=(H/2-IRM.CELL*Math.round(H/2/IRM.CELL))/cam.zoom;irmFieldJia();
+    const pc26=toScreen(C26.pos[0],0),ic26=Math.round(pc26[0]/IRM.CELL),jc26=Math.round(pc26[1]/IRM.CELL);
+    const along=irmF[(jc26+9)*irmGW+ic26],across=irmF[jc26*irmGW+ic26+9];   /* 船头朝 +y(屏幕向下),沿船身 = 竖直方向 */
+    let c08=0;
+    const sil=function(k){C26.pos=[dId*k,0,0];cam.zoom=camBak.zoom;cam.x=C26.pos[0]+(W/2-IRM.CELL*Math.round(W/2/IRM.CELL))/cam.zoom;cam.y=(H/2-IRM.CELL*Math.round(H/2/IRM.CELL))/cam.zoom;drawIrMap();
+      if(k===0.8){const pc=toScreen(C26.pos[0],0);c08=irmF[Math.round(pc[1]/IRM.CELL)*irmGW+Math.round(pc[0]/IRM.CELL)]/irmShowPeak(irmHill(C26,[B]));}return irmSilDrawn.slice();};
+    const s08=sil(0.8),s075=sil(0.75),s15=sil(1.5),mark=shipMarkMode();   /* c08:舰形全显时山整个让出,中心只剩那圈小光晕 = 原峰 x 0.5 */
+    T('㉖ 近处看得出舰形:认出距离上 N = 4;更远沿船身拉长;更近显出真舰种的舰形,再近有构件;远处不画',
+      Math.abs(N1-4)<1e-6&&Math.abs(N15-4/2.25)<1e-6&&along>1.5*across&&s08.length===1&&s08[0].cls==='CA'&&!s08[0].detail&&s075.length===1&&s075[0].detail&&s15.length===0&&!mark&&Math.abs(c08-0.5)<0.03,
+      '认出距离 '+Math.round(dId)+' km 处 N='+N1.toFixed(3)+' · 1.5 倍 N='+N15.toFixed(3)+' 沿船身 '+along.toFixed(3)+' / 横向 '+across.toFixed(3)+' · 0.8 倍 '+JSON.stringify(s08)+' · 0.75 倍 '+JSON.stringify(s075)+' · 1.5 倍 '+s15.length+' 个 · 全显时中心 / 原峰 '+c08.toFixed(3)+'(应为 0.5)');
   }catch(e){T('自检抛异常',false,String(e&&e.stack||e));}
   finally{
     ships.length=0;shipsBak.forEach(x=>ships.push(x));shipSeq=seq0;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;IRM.on=onBak;IRM.mode=modeBak;if(rocksBak)rocks=rocksBak;IRM.NOISE=nzBak;IRM_SUN.FALL=fallBak;irmSunSet(sunBak);irmSync();
