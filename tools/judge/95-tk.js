@@ -221,3 +221,41 @@ t('TK_NOCREATE',function(){
     +' | render='+rendered+' targetAt 扫了 '+swept+' 点'
     +' | trkList(蓝) 与 ships 过滤同序同内容('+got.length+' 条)='+order+' 红方枚举不含红舰、换了边的蓝舰(自家表里握着实况航迹)也不进蓝方枚举='+ownSkipped;
 });
+
+/* TK24_RULES:TK2.4 / 2.5 改了这两行,变异验证发现它们背后的两条设计规则【一直没有判据钉着】(改前的代码同样的变异也逃得掉):
+   ① 聚合层的红方接触群只收【实况】接触 —— 陈旧与失联是记号、热区是场,各有各的画法(SN6f,82-lod)。
+      人造 2 条实况 + 1 条陈旧 + 1 条失联,挤在一起、拉远到会聚群的缩放:群里只能有那 2 条实况,陈旧与失联不许被收起。
+   ② 接触降速只看定得出位置的接触(实况 / 陈旧),热区与【失联】都不算(TC1 的 ②,core/06)。
+      一条失联航迹外推点就在蓝舰身边:档位必须是 0;同一个位置换成陈旧航迹:档位必须是 3(正面对照,证明这张场面确实会触发)。 */
+t('TK24_RULES',function(){
+  if(typeof lodBuild!=='function'||typeof tcBand!=='function')return 'fail 缺 lodBuild / tcBand';
+  var shipsBak=ships.slice(),projBak=projectiles.slice(),admBak=adminMode,camBak={x:cam.x,y:cam.y,zoom:cam.zoom},selBak=selected.slice(),seq0=shipSeq,out='';
+  try{
+    adminMode=false;selected=[];projectiles.length=0;
+    var B=makeShip('CA','规蓝',[-400000,0,0],[1,0,0],[0,0,0],'blue',2);
+    var R=[0,1,2,3].map(function(i){return makeShip('DD','规红'+i,[200000+i*9000,i*9000,0],[-1,0,0],[0,0,0],'red',2);});
+    ships.length=0;ships.push(B);R.forEach(function(x){ships.push(x);});
+    var put=function(s,st){var tk=trkOf('blue',s),c=tk.cov;
+      if(st==='live'||st==='coast'){tk.lit=2;c.fix=true;c.seen=true;c.x=s.pos[0];c.y=s.pos[1];c.a1=c.r1=4000;c.a2=c.r2=2000;c.n=(st==='live')?2:0;c.age=(st==='live')?0:SENS.TICK*3;}
+      if(st==='ghost'){tk.lit=0;c.fix=false;c.n=0;tk.lastPos=[s.pos[0],s.pos[1],0];tk.lastVel=[0,0,0];tk.lastT=simTime-2;}
+      return trkState(tk);};
+    var sts=[put(R[0],'live'),put(R[1],'live'),put(R[2],'coast'),put(R[3],'ghost')];
+    cam.x=0;cam.y=0;cam.zoom=6e-5;lodPrev={fleet:{},pairsB:null,pairsR:null};lodBuild();
+    var inCl={};lodNow.aggs.filter(function(a){return a.kind==='rcluster';}).forEach(function(a){a.ships.forEach(function(s){inCl[s.id]=1;});});
+    var ok1=(sts.join(',')==='live,live,coast,ghost'&&inCl[R[0].id]&&inCl[R[1].id]&&!inCl[R[2].id]&&!inCl[R[3].id]&&!lodNow.hideRed.has(R[2].id)&&!lodNow.hideRed.has(R[3].id));
+    /* ② 接触降速 */
+    ships.length=0;var B2=makeShip('CA','降蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),R2=makeShip('DD','降红',[LAD.gun*0.5,0,0],[-1,0,0],[0,0,0],'red',2);ships.push(B2,R2);
+    var gSt=put(R2,'ghost'),bandGhost=tcBand();
+    var tk2=trkOf('blue',R2);tk2.lastPos=null;var cSt=put(R2,'coast'),bandCoast=tcBand();
+    var ok2=(gSt==='ghost'&&bandGhost===0&&cSt==='coast'&&bandCoast===3);
+    var ok=(ok1&&ok2);
+    out=(ok?'ok':'fail')+' ① 人造四态 '+sts.join('/')+' 拉远后进了红方接触群的:'+Object.keys(inCl).length+' 条(须恰好两条实况;陈旧 '+(!inCl[R[2].id])+' 失联 '+(!inCl[R[3].id])+' 都不许进)='+ok1
+      +' | ② 贴身的失联航迹 ⇒ 降速档位 '+bandGhost+'(须 0);同一位置换成陈旧 ⇒ '+bandCoast+'(须 3)='+ok2;
+  }finally{
+    shipSeq=seq0;adminMode=admBak;selected=selBak;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
+    ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
+    projectiles.length=0;projBak.forEach(function(x){projectiles.push(x);});
+    lodPrev={fleet:{},pairsB:null,pairsR:null};
+  }
+  return out;
+});

@@ -124,14 +124,14 @@ function drawGeom() {
   const hint = document.getElementById('geomHint');
   const say = s => { if (hint && hint.textContent !== s) hint.textContent = s; };
   const sel = geomSubject();
-  const c = sel ? sel.t.covB : null;
+  const tk = sel ? trkOf('blue', sel.t) : null, c = tk ? tk.cov : null; // TK2.4:小窗读蓝方航迹表里对它的那条
   if (!sel || !c || !c.seen) {
     g.fillStyle = '#46566a'; g.font = '11px Consolas,monospace'; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.fillText('悬停或点选一个目标', Wp / 2, Hp / 2);
     say('定位几何 · GDOP');
     return;
   }
-  const t = sel.t, lit = t.litBlue || 0;
+  const t = sel.t, lit = trkLit(tk) || 0;
   const lines = c.n > 0 ? geomLines(t) : [];                             // 量测已断(coast / ghost)就不画视线,更不现查 —— 文件头迷雾纪律 ②;读数行写的也是「无量测」
   const mT = 18, mB = 22, mS = 12, R = Math.max(c.a1 * 1.35, 1000);
   const k = Math.min((Wp - 2 * mS) / (2 * R), (Hp - mT - mB) / (2 * R));

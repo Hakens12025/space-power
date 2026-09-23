@@ -95,16 +95,17 @@ function lodBuild(dtIn) {   // dtIn:判据用的时钟覆盖(同 camZoomStep);�
   }
   /* -- 红方:已定位的接触 → 接触群。未定位的不进来(它们在热区里) -- */
   const ru = [];
-  for (const s of ships) {
-    if (s.side !== 'red' || s.dead || contactState(s, 'blue') !== 'live') continue;   // SN6f:只聚【实况】接触。coast / ghost 是记号、heat 是场,各有各的画法,收进一个"群·N"的菱形里就把那层意思抹掉了
+  trkEach('blue', (tk, st) => { // TK2.4:接触群从蓝方航迹表里取(按注册表顺序);回调里 return 就是原来的 continue
+    if (trkGone(tk) || st !== 'live') return;
+    const s = trkSrc(tk);   // SN6f:只聚【实况】接触。coast / ghost 是记号、heat 是场,各有各的画法,收进一个"群·N"的菱形里就把那层意思抹掉了
     /* SN6d:位置从 contactPos 拿,与 drawShip / targetAt 同一个出处(原来这里直接读 covB.x/y,
        而 drawShip 读的是 s.pos —— 两个答案today 相等,门槛却早就分家了)。
        ⚠ 上面那道 fix 过滤【刻意保留】:这一层只聚"已定位"的接触,幽灵/陈旧虽然 contactPos 给得出
          外推位置,但它们不该被收进接触群(那是另一档信息,画法也不同)。 */
-    const cp = (typeof contactPos === 'function') ? contactPos(s, 'blue') : null;
-    if (!cp) continue;
+    const cp = trkPos(tk);
+    if (!cp) return;
     const p = toScreen(cp[0], cp[1]); ru.push({ id: 'R' + s.id, x: p[0], y: p[1], wx: cp[0], wy: cp[1], ship: s });
-  }
+  });
   const cr = lodCluster(ru, prev.pairsR); next.pairsR = cr.pairs;
   for (const gi of cr.groups) {
     if (gi.length < 2) continue;
@@ -166,7 +167,7 @@ function lodDrawShip(s) {
 /* 舰种构成:"CA×1 DD×2"。红方只许写【认出来的】,没认出的记成 ? —— 同 shipIdentHull 那条规矩 */
 function lodComp(list, red) {
   const m = {}; let unk = 0;
-  for (const s of list) { if (red && !(s.covB && s.covB.idn)) { unk++; continue; } m[s.cls] = (m[s.cls] || 0) + 1; }
+  for (const s of list) { if (red && !contactIdn(s, 'blue')) { unk++; continue; } m[s.cls] = (m[s.cls] || 0) + 1; } // TK2.4:身份只问 contactIdn(ID1 的规矩;原来这里是全库最后一处直读椭圆的身份位)
   const a = Object.keys(m).sort().map(k => k + '×' + m[k]); if (unk) a.push('?×' + unk);
   return a.join(' ');
 }

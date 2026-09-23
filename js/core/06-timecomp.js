@@ -19,15 +19,14 @@ function tcBand(){
   let b=0;
   const mine=ships.filter(s=>s.side==='blue'&&!s.dead);
   if(!mine.length)return 0;
-  for(const r of ships){
-    if(r.side!=='red'||r.dead)continue;
-    const st=contactState(r,'blue');
-    if(st!=='live'&&st!=='coast')continue;            // ② 热区(heat)与失联(ghost)都不算
-    const p=contactPos(r,'blue');if(!p)continue;
+  trkEach('blue',(tk,st)=>{ // TK2.5:只读我方知道的事 —— 枚举的就是蓝方航迹表;回调里 return 即原来的 continue
+    if(trkGone(tk))return;
+    if(st!=='live'&&st!=='coast')return;             // ② 热区(heat)与失联(ghost)都不算
+    const p=trkPos(tk);if(!p)return;
     b=Math.max(b,1);
     let d=Infinity;for(const x of mine)d=Math.min(d,Math.hypot(p[0]-x.pos[0],p[1]-x.pos[1]));   // ① 到【估计位置】的距离,不是真值
     if(d<=LAD.gun)b=3;else if(d<=LAD.msl)b=Math.max(b,2);
-  }
+  });
   if(b<2)for(const p of projectiles){                 // ④ 看得见的来袭导弹
     if(p.type==='missile'&&!p.done&&p.visBlue&&p.shooter&&p.shooter.side==='red'){b=2;break;}
   }

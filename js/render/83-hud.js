@@ -403,7 +403,7 @@ function heatBuild(){
   const CW=Math.max(2,Math.ceil(W/HEAT_CELL)), CH=Math.max(2,Math.ceil(H/HEAT_CELL));
   if(HEAT.cv.width!==CW||HEAT.cv.height!==CH){HEAT.cv.width=CW;HEAT.cv.height=CH;HEAT.sig='';HEAT.img=null;HEAT.f=null;}
   let nLit=0;
-  for(const s of ships)if(s.side==='red'&&!s.dead&&contactState(s,'blue')==='heat')nLit++;   // SN6f:画不画只问 contactState,不在这里另写一份条件
+  trkEach('blue',(tk,st)=>{if(!trkGone(tk)&&st==='heat')nLit++;});   // SN6f:画不画只问显示态,不在这里另写一份条件。TK2.4:数的是蓝方航迹表里的热区
   const sig=CW+'|'+CH+'|'+cam.x.toFixed(1)+'|'+cam.y.toFixed(1)+'|'+cam.zoom.toExponential(6)+
             '|'+Math.round(simTime/Math.max(SENS.TICK,1e-6))+'|'+nLit+'|'+(adminMode?1:0);
   if(sig===HEAT.sig)return nLit;
@@ -416,10 +416,10 @@ function heatBuild(){
   const img=HEAT.img, px=img.data, f=HEAT.f;
   px.fill(0); f.fill(0);
   const T=simTime*HEAT_CHURN;
-  for(const s of ships){
-    if(s.side!=='red'||s.dead||contactState(s,'blue')!=='heat')continue;
-    const c=s.covB;
-    if(!c||!c.seen)continue;
+  trkEach('blue',(tk,st)=>{ // TK2.4:从蓝方航迹表里取热区(按注册表顺序,浮点场的累加次序不变);回调里 return 就是原来外层的 continue
+    if(trkGone(tk)||st!=='heat')return;
+    const s=trkSrc(tk),c=tk.cov;
+    if(!c||!c.seen)return;
     const geo=Math.sqrt(Math.max(c.r1,1)*Math.max(c.r2,1));                 /* 等面积圆半径:面积留下,朝向丢掉 */
     const Rw=Math.min(COV.AMAX*HEAT_RMAX,COV.AMAX*HEAT_SIZE*Math.log(1+geo/COV.AMAX));
     const Rpx=Math.max(Rw*cam.zoom,HEAT_MINPX), Rc=Rpx/HEAT_CELL;
@@ -445,7 +445,7 @@ function heatBuild(){
         f[gy*CW+gx]+=amp*Math.exp(-1.35*qd);
       }
     }
-  }
+  });
   /* 着色:饱和 + 热力色阶(暗红 → 橙 → 黄白)。饱和那一步同时把峰压成高原 */
   for(let i=0,j=0;i<f.length;i++,j+=4){
     const t=1-Math.exp(-f[i]);
@@ -480,27 +480,26 @@ function drawContacts(){
      缩圈是同一件事的两个视图 —— 右上角小窗是放大的那一个,地图上的椭圆是原位的那一个 —— 一个钮管两处;平时地图上只留舰标 / 记号与等级标签。
      热区不归这个钮管:它是"那边有东西"本身,不是解算质量。 */
   if(typeof GEOM==='undefined'||!GEOM.on)return;
-  for(const s of ships){
-    if(s.dead||s.side!=='red')continue;
-    const c=s.covB;
+  trkEach('blue',(tk,st)=>{ // TK2.4:椭圆也从蓝方航迹表里取;下面的 return 就是原来的 continue
+    if(trkGone(tk))return;
+    const c=tk.cov;
     /* SN6f:live 与 coast 两态画椭圆。coast 时它就是那一态的不确定度 —— 量测断了,椭圆按 FADE_LOST 自己长大,
        长过 AMAX 就定不出位置、等级归 0、转成失联记号。画不画只问 contactState,与舰标层 / 热区层同一个出处。 */
-    const st=contactState(s,'blue');
-    if(!c||(st!=='live'&&st!=='coast'))continue;
+    if(!c||(st!=='live'&&st!=='coast'))return;
     const a1=c.a1*cam.zoom, a2=c.a2*cam.zoom;
-    if(a1<2)continue;                                   /* 收得比两个像素还紧:舰标自己说明一切 */
+    if(a1<2)return;                                   /* 收得比两个像素还紧:舰标自己说明一切 */
     const p=toScreen(c.x,c.y);
-    if(p[0]<-a1-40||p[0]>W+a1+40||p[1]<-a1-40||p[1]>H+a1+40)continue;
+    if(p[0]<-a1-40||p[0]>W+a1+40||p[1]<-a1-40||p[1]>H+a1+40)return;
     /* 配色读 LIT_RGB;线型照演示页:火控级【实线】、其余虚线 —— "这条解算稳了"一眼看得出,不用读数 */
-    const col=LIT_RGB[s.litBlue]||LIT_RGB[0];
+    const lit=trkLit(tk),col=LIT_RGB[lit]||LIT_RGB[0];
     ctx.save();
     ctx.translate(p[0],p[1]);ctx.rotate(c.th);
     ctx.fillStyle='rgba('+col+',.07)';
     ctx.beginPath();ctx.ellipse(0,0,a1,a2,0,0,6.283);ctx.fill();
-    ctx.strokeStyle='rgba('+col+',.75)';ctx.lineWidth=1.2;ctx.setLineDash(s.litBlue>=3?[]:[3,3]);
+    ctx.strokeStyle='rgba('+col+',.75)';ctx.lineWidth=1.2;ctx.setLineDash(lit>=3?[]:[3,3]);
     ctx.beginPath();ctx.ellipse(0,0,a1,a2,0,0,6.283);ctx.stroke();ctx.setLineDash([]);
     ctx.restore();
-  }
+  });
 }
 function drawMissileIntent(g){ // v129:选中导弹/网→显示目标虚线、目的地标记、触发圈、火控母舰连线
   const sp=toScreen(g.pos[0],g.pos[1]);

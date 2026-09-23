@@ -12,7 +12,7 @@ function shipTier(s){return s.tier||2;}                       // 未标 Tier 的
 function shipIdentHull(s){                                    // 识别分层:未达识别级的敌舰只给通用轮廓
   // ID1:打码条件从"等级恰为 1"换成"握着接触(lit>0)但还没认出"—— 身份问 sensors/21 的 contactIdn,不再从等级推。
   //      lit===0 那一档原样不打码(改前的 q===0 分支):编辑器与 GM 下画的是没有接触的红舰,那里要看真轮廓;非 GM 下 lit=0 的船根本不画舰体。
-  return (s.side==='red'&&(s.litBlue||0)>0&&!contactIdn(s,'blue'))?'UNK':shipHull(s);
+  return (s.side==='red'&&litOf(s,'blue')>0&&!contactIdn(s,'blue'))?'UNK':shipHull(s); // TK2.4:等级走门面
 }
 function shipIdentTier(s){                                    // TIER1 分级遮蔽:轮廓已被降级成 UNK 的敌舰(未达识别级)一律按 T2 尺寸画
   // TIER1 判据用 litBlue<2 而不是 shipIdentHull(s)==='UNK':幽灵接触(曾点亮、现已失联,litBlue=0)走的是 q===0 分支,轮廓不会被降级成 UNK,
@@ -70,7 +70,8 @@ const EMIT_FX={N:3,SPAN:16,PERIOD_MS:1500};
 function emitRippleRgb(s){
   const truth=(s.side==='blue'||adminMode);
   if(truth)return s.emitMode==='silent'?null:(s.emitMode==='jam'?'255,154,85':'90,167,255');
-  return (s.covB&&s.covB.ch&&s.covB.ch.lis)?'255,107,107':null;
+  const tk=trkOf('blue',s),c=tk&&tk.cov; // TK2.4:我方航迹表里对它的那条接触
+  return (c&&c.ch&&c.ch.lis)?'255,107,107':null;
 }
 function drawEmitRipple(p,r0,rgb,nowIn){
   const t=((isFinite(nowIn)?nowIn:nowMs())%EMIT_FX.PERIOD_MS)/EMIT_FX.PERIOD_MS;
@@ -140,7 +141,8 @@ function drawShip(s){
   if(view==='coast'||view==='ghost'){
     const ghost=view==='ghost';
     /* 过期时长:coast 读椭圆自己的 age(距最后一次量测),ghost 读 contactAge(距最后一次定位)—— 各是各那一态的"多久了" */
-    const ageV=ghost?contactAge(s,'blue'):((s.covB&&s.covB.age)||0);
+    const tkB=trkOf('blue',s),cB=tkB&&tkB.cov; // TK2.4:记号读蓝方航迹表
+    const ageV=ghost?contactAge(s,'blue'):((cB&&cB.age)||0);
     ctx.save();
     ctx.globalAlpha=ghost?0.4:0.7;
     const col=ghost?'255,107,107':'255,209,102';
@@ -149,7 +151,7 @@ function drawShip(s){
     if(ghost){
       /* 不确定圈:半径是【世界公里】(最后已知速度 x 失联时长)⇒ 随缩放变化;虚线 = 这是个估计。
          只在明显大于记号时才画 —— 缩到记号量级时是两个同样大的同心圈,读不出任何东西(SN6e 订正)。 */
-      const uv=V.len(s.seenBlueVel)||0; // ||0 防的是速度算出 NaN,不是防字段缺失(contactPos 已经替它把过关;SN2c:这里绝不许回落到 s.vel 真值)
+      const uv=V.len(tkB.lastVel)||0; // ||0 防的是速度算出 NaN,不是防字段缺失(contactPos 已经替它把过关;SN2c:这里绝不许回落到 s.vel 真值)
       const rad=Math.min(200000,Math.max(8000,uv*ageV))*cam.zoom;
       if(rad>CONTACT_MARK_R*1.8){
         ctx.setLineDash([5,4]);
@@ -165,7 +167,7 @@ function drawShip(s){
     ctx.fillStyle='rgba('+(ghost?'255,150,140':'255,209,102')+',.75)';
     ctx.font='9px Consolas';ctx.textAlign='center';ctx.textBaseline='bottom';
     /* 陈旧态航迹还在(lit>0、椭圆还在长大),等级照样要读;失联态 lit=0,没有等级可写 */
-    ctx.fillText((ghost?'⏳失联':'⏳陈旧')+Math.round(ageV)+'s'+((!ghost&&s.litBlue>0&&typeof litTag==='function')?(' · '+litTag(s.litBlue)):''),p[0],p[1]-top-3);
+    ctx.fillText((ghost?'⏳失联':'⏳陈旧')+Math.round(ageV)+'s'+((!ghost&&trkLit(tkB)>0&&typeof litTag==='function')?(' · '+litTag(trkLit(tkB))):''),p[0],p[1]-top-3);
     ctx.restore();
     return;
   }
@@ -177,15 +179,15 @@ function drawShip(s){
   if(!s.dead){
     // SN6:判据换成【对方这一拍有没有一条照射量测打在我身上】。那正是 c.ch.act 记的东西,不需要阈值,
     //      顺带解掉一桩旧账:那个阈值曾经是本文件与 21-detect 各手抄一份的字面量,SN4 把它收进感知表一处,SN6 连常数都不需要了。
-    const myCov=s.side==='blue'?s.covR:s.covB;   // 蓝舰看 covR = 红网络对我握着的那条接触
-    if(myCov&&myCov.ch&&myCov.ch.act){
+    const act=trkPaintedBy(s);   // TK2.4:对方航迹表里【对我】握着的那条接触这一拍的照射量测(跨表读只有这一个出口)
+    if(act){
       // RF7e 相位改挂【墙钟】,原来挂 simTime。simTime 按倍速推进(core/99 的 acc+=dt*rate),于是倍速一提闪烁跟着提:
       // x50 下每帧相位推进约 5 弧度,远超 60fps 的采样极限,呼吸退化成高频乱闪——这就是"闪动频率随时间越来越快"的来源。
       // 告警圈是给人看的 UI 指示,不是模拟实体,理应恒定 1 次/秒左右,与数据链流动(83-hud FC_FLOW)、准星停留门同一口径。
       const twms=nowMs();
       const pulse=0.45+0.35*Math.abs(Math.sin(twms*0.001*LADAR_WARN_W));
       // RWR1:闭合黄圈 → 朝照射源方位的告警弧(见文件头 drawRwrSpike)。呼吸相位照旧挂墙钟。
-      const painter=(typeof shipById==='function')?shipById(myCov.ch.act[4]):null;
+      const painter=(typeof shipById==='function')?shipById(act[4]):null;
       if(painter&&!painter.dead)drawRwrSpike(p,Math.atan2(painter.pos[1]-s.pos[1],painter.pos[0]-s.pos[0]),shipIconR(s)+RWR.GAP,pulse);
     }
   }
@@ -222,7 +224,7 @@ function drawShip(s){
   const fx=s.facing[0], fy=s.facing[1];
   const ang=Math.atan2(fy,fx);
   // 识别分层(v123):探测级(质量1)只知道大小→通用轮廓;识别级(2+)才知道舰种→真实舰型
-  const identQ=s.side==='red'?s.litBlue:3;
+  const identQ=s.side==='red'?trkLit(trkOf('blue',s)):3; // TK2.4:原值读航迹表(这个局部已经没人读了,删不删等用户拍板)
   ctx.save();
   ctx.translate(p[0],p[1]);
   ctx.rotate(ang);
@@ -249,7 +251,7 @@ function drawShip(s){
     ctx.fillText(tag,p[0],p[1]-r-7);
   }
   // 名称(识别分层:探测级显示"大/中/小热源",识别级显示舰种名)
-  const foeLit=(s.side==='red')?(s.litBlue||0):0;
+  const foeLit=(s.side==='red')?litOf(s,'blue'):0; // TK2.4:等级走门面
   if(cam.zoom>0.0008){
     const lbl=(shipIdentHull(s)==='UNK')?sigClassLabel(s):s.name; // ID1:名字与轮廓同一个口径 —— 轮廓打码了,名字就不许是真名(原来各判各的:identQ===1)
     ctx.fillStyle='rgba(215,226,240,.8)';ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';

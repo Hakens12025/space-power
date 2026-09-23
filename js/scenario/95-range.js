@@ -247,7 +247,7 @@ function trStatLines(t,idx){ // 单个靶的读数(4 行)
 // 新模型还多一条【与靶无关】的死法:火控级(3)只能由【蓝方】开照射挣来,蓝方静默时无论靶怎么调都停在 2,MAC 永远打不出去。
 // 把靶当前的被点亮等级直接写进读数,省得把自己调进死胡同还以为是 bug。门槛:导弹要 2(识别级)、MAC 要 3(火控级)。
 function trVisWarn(t){
-  const lit=t.litBlue||0;
+  const lit=litOf(t,'blue'); // TK2.5:等级走门面
   if(lit>=3)return '';
   const why=(lit<2)?'蓝方打不出任何弹':'蓝方只能打导弹,MAC 需火控级(3)';
   return `<div style="color:var(--state-warn)">　⚠ 被点亮 ${lit}/3 · ${why}(体型/隐身调过头?靶在干扰?还是蓝方自己没开照射?)</div>`;

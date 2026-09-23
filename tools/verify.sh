@@ -279,9 +279,6 @@ SN6_TRK_N=$(grep -rEoh "$SN4_TRK_NEW" js/ --include='*.js' | wc -l | tr -d ' ')
 [ "$SN6_TRK_N" = "0" ] || { echo "✗ SN6 负对照:已退役的驻留水位键在 js/ 里还剩 $SN6_TRK_N 处(注释里的也算数)"; grep -rEn "$SN4_TRK_NEW" js/ --include='*.js' | head -5; fail=1; }
 # 正面那一半:接触对象必须【真的被读】,而且渲染层与感知层都要有读点 —— 只判"旧的删干净了"的话,
 # 一个什么都不写的实现同样能全绿(那正是换内核最容易掉进去的坑)。
-SN6_COV_PAT="[Cc]""ov[BR][^A-Za-z0-9_]"   # 不用 \b:上一版那个反斜杠被当成转义写成了真的退格符,模式永远匹配不到
-SN6_COV_SENS=$(grep -rEoh "$SN6_COV_PAT" js/sensors/ --include='*.js' | wc -l | tr -d ' ')
-SN6_COV_REND=$(grep -rEoh "$SN6_COV_PAT" js/render/ --include='*.js' | wc -l | tr -d ' ')
 # TK2.0:生产者不再经舰上字段写接触,感知层那一半改成「生产者真的调用了 trkStep」(去注释,与 R2/R3 同一个 perl)。
 # 带自检:只在注释里提到它的样本必须数出 0,否则这条检查没有牙。
 tk_strip() { perl -0pe 's{/\*.*?\*/}{}gs; s{//[^\n]*}{}g'; }
@@ -292,7 +289,9 @@ TK_STEP_SELF=$(printf '/* trkStep( */\n// trkStep(\nvar a=1;\n' | tk_strip | gre
 # TK2.0:建航迹只许两处 —— 造船时的登记(sensors/24)与生产者(sensors/21)。别处出现 trkEnsure( 或直接往两张表里 set,就是「读的时候顺手建了一条」。
 TK_ENS_BAD=$(for f in $(grep -rlE "trkEnsure\(|TRK\.(blue|red)\.set\(" js/ --include='*.js'); do case "$f" in js/sensors/24-track.js|js/sensors/21-detect.js) ;; *) n=$(tk_strip < "$f" | grep -cE "trkEnsure\(|TRK\.(blue|red)\.set\("); [ "$n" -gt 0 ] && echo "$f";; esac; done)
 [ -z "$TK_ENS_BAD" ] || { echo "✗ TK2.0:建航迹的调用出现在 sensors/24、sensors/21 之外:$TK_ENS_BAD"; fail=1; }
-[ "${SN6_COV_REND:-0}" -ge 1 ] 2>/dev/null || { echo "✗ SN6 负对照:js/render/ 下一处接触对象读点都没有(实测 $SN6_COV_REND)——画面没有在读感知层"; fail=1; }
+# TK2.4:渲染层不再直读舰上的接触字段,正面那一半改成「去注释后 js/render 里真的在读航迹表」(trkOf / trkEach / trkPaintedBy 至少一处)
+TK_REND_N=$(cat js/render/*.js | tk_strip | grep -oE "trkOf\(|trkEach\(|trkPaintedBy\(" | wc -l | tr -d ' ')
+[ "${TK_REND_N:-0}" -ge 1 ] 2>/dev/null || { echo "✗ TK2.4:js/render/ 去注释后一处航迹表读点都没有(实测 $TK_REND_N)—— 画面没有在读感知层"; fail=1; }
 # 被照射告警的阈值原来是【两份手抄】的 0.3(21-detect 的日志门 + 82-ship-icons 的黄圈门),而且不在 SENS 表里。
 # SN4 把它收进 SENS.ACT_WARN,所以这条从"手抄份数=2"翻成"全库恰好一处定义 + 一处手抄都不许有"。
 # 反面那一半不能省:只判"定义有一处"的话,旁边再手抄一个字面量阈值照样全绿,而那正是改前的病。
@@ -437,6 +436,7 @@ grep -q "FLOW61_PICKPOS=ok" "$OUT" || { echo "✗ FLOW61_PICKPOS 未通过(SN6d 
 grep -q "FLOW59_SMOOTHZOOM=ok" "$OUT" || { echo "✗ FLOW59_SMOOTHZOOM 未通过(SN6b 平滑缩放:① 滚一格当拍 cam.zoom 不变、几帧后到位且动画收干净;② 光标下的世界点全程钉住(<1px);③ 连滚几格叠在目标上而不是叠在当前值上;④ 外部动过相机之后动画让位——不让位会每帧把镜头拽回锚点,实测让五条按像素取样的判据同时假红;⑤ 跳层动画抢占滚轮动画)"; fail=1; }
 grep -q '^let adminMode=false;' js/core/01-state.js || { echo "✗ GM 默认值不是关的(core/01 的 adminMode 必须默认 false;开着的话 drawShip 三道迷雾门第一句 !adminMode 全部跳过,而热区层不看它 —— 开局画面变成「热区 + 敌舰真实位置的舰标」叠在一起,整套战争迷雾在玩家眼里从不存在)"; fail=1; }
 grep -q "FLOW60_START=ok" "$OUT" || { echo "✗ FLOW60_START 未通过(SN6b 开局形态:① 三舰成一支【阵型】编队(src=generated,不是 fmCreate 默认的固定);② 建队不许让船动——靶场的静止发射 MAC 基线靠这条;③ CA 到最近的靶恰为 1 光秒,且在火控门之外(开局主炮打不响是刻意的);④ 三级星图三钮与信号视野钮都在右下角 #tools 里、顶栏已无、两者都点得动;⑤ 打开的时候就是热区——GM 默认关 + 蓝方开局静默 + 开局已跑过一拍感知,三者缺一都会让开局画面变成"敌舰真实位置可见"或"一片空")"; fail=1; }
+grep -q "TK24_RULES=ok" "$OUT" || { echo "✗ TK24_RULES 未通过(两条原来没人钉着的规则:红方接触群只收实况 —— 陈旧与失联不许进群;接触降速不看失联 —— 贴身的失联航迹档位须 0,同位置的陈旧须 3)"; fail=1; }
 grep -q "TK2_DIFF=ok" "$OUT" || { echo "✗ TK2_DIFF 未通过(TK2.0 门面改读航迹表:改前五个公式逐字照抄、与新门面逐值对表 —— 浸泡 5 个检查点 + 人造六态;自己一方的 contactPos 仍是 s.pos 本身;0.5 拍迟滞的假门面必须被对出来)"; fail=1; }
 grep -q "TK_NOCREATE=ok" "$OUT" || { echo "✗ TK_NOCREATE 未通过(读永远不建航迹:没登记过的探针走遍五个门面 / trkOf / trkEach / render / targetAt 后两表都没有它;trkList 与 ships 过滤同序同内容)"; fail=1; }
 grep -q "TK1_FWD=ok" "$OUT" || { echo "✗ TK1_FWD 未通过(TK1 航迹表是唯一的存储:在场每艘船两方都有航迹、十个旧舰上名字读出来与航迹那一格同值同对象;它们是全场共享一份的不可枚举、不可重配置访问器(=TRK_FWD);经旧名字写进去的原样落在航迹上;整对象拷贝拷不到;读永远不建航迹;重复登记抛。两条自检:裸对象过不了①、可枚举描述符过不了②)"; fail=1; }

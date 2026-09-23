@@ -109,7 +109,7 @@ function radSolve(sub,tgt,kind){
     o.rdyHard=((sub.ammo||0)<=0); // 弹尽 = 结构性不满足(装填也变不出来),与"装填中"分开画
     o.readyTxt=rc+'/'+(sub.cells||0)+'组';
   }else{o.rdy=true;o.readyTxt='—';}
-  o.lit=tgt?((sub.side==='blue')?(tgt.litBlue||0):(tgt.litRed||0)):0;
+  o.lit=tgt?litOf(tgt,sub.side):0; // TK2.4:等级走门面
   o.litHard=(o.lit===0); // 幽灵/未发现:再照也不是"快好了"
   o.ok=o.sw&&o.inR&&o.rdy&&(o.lit>=o.need);
   o.why=(!o.sw)?'开关关闭' // 优先级 开关 > 接触 > 射程 > 就绪(开关是玩家自己在底栏关掉的、一点就好,报它最有用;接触最结构性)
