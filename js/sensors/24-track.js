@@ -23,7 +23,7 @@
    · 造船那一刻两边都建(trkAdopt,eager);读永远不建(trkOf 只查,查不到给 null)。
    · "自己这一方"在查询那一刻判,不在建航迹时判(判据会翻 .side)。
 
-   ---- TK1 的过渡:转发访问器(TK3b 改墓碑、TK3c 删)----
+   ---- TK1 的过渡:转发访问器(TK3b 已改成墓碑:一碰就抛;TK3c 删)----
    旧的十个舰上感知字段名还有几百处读写(生产者的计算键、门面、裸读、判据夹具),TK1 一处都不改,
    而是给每艘 makeShip 出来的船挂上【同一份冻结的】TRK_FWD 描述符:get / set 各做一次 WeakMap.get,
    然后原样读写航迹上的那一格(不复制、不归一、不新建)。
@@ -55,13 +55,12 @@ function trkOf(side,src){return (src!==null&&typeof src==='object')?(trkTab(side
    实测(对局 120 秒后 1000 次 stepSim,同一个 Chrome、交替 6 页 x 50 个样本,中位数):1a887a8 2.70ms / k[slot] 3.10ms(+15%)/ 本写法 2.90ms(+7%)。
    剩下那一截是每次读一次 WeakMap 查表,契约允许的只有"缩短查表路径"、不许往船上挂句柄,所以到此为止。
    最后那句 k[slot] 只是兜底(五个 case 已覆盖 TRK_FWD 用到的全部格),保证任何格名都照原义存取 */
-function trkFwdDesc(side,slot){const m=trkTab(side);return {
-  get(){const k=m.get(this);if(k===undefined)throw new Error('TK1 转发字段找不到航迹:'+slot+' @ '+(this&&this.id));
-    switch(slot){case 'lit':return k.lit;case 'cov':return k.cov;case 'lastT':return k.lastT;case 'lastPos':return k.lastPos;case 'lastVel':return k.lastVel;}
-    return k[slot];},
-  set(v){const k=m.get(this);if(k===undefined)throw new Error('TK1 转发字段找不到航迹:'+slot+' @ '+(this&&this.id));
-    switch(slot){case 'lit':k.lit=v;return;case 'cov':k.cov=v;return;case 'lastT':k.lastT=v;return;case 'lastPos':k.lastPos=v;return;case 'lastVel':k.lastVel=v;return;}
-    k[slot]=v;},
+/* TK3b 墓碑(2026-09-23):get / set 一碰就抛,不再转发。读写点已全部搬到航迹 API 与判据夹具,这一步在运行期证明没人再碰旧名字
+   —— 连 grep 看不见的计算键(s['lit'+K])也逃不掉。描述符的形状(共享、冻结、不可枚举、不可重配置)一格没动,所以舰船的隐藏类与 TK1 相同;
+   上面那段 switch 的性能记录是 TK1~TK3a 的,TK3c 连同这个工厂一起删。side 参数在墓碑里用不上,留着是为了 TRK_FWD 那张表一个字不改 */
+function trkFwdDesc(side,slot){return {
+  get(){throw new Error('TK3 已搬进航迹表:'+slot+' @ '+(this&&this.id));},
+  set(v){throw new Error('TK3 已搬进航迹表:'+slot+' @ '+(this&&this.id));},
   enumerable:false,configurable:false};}
 
 /* 十个旧名字 → (哪张表, 航迹上的哪一格)。加载期建一次,所有船共用同一组 get / set 函数对象 */

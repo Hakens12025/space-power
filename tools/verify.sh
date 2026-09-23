@@ -438,8 +438,8 @@ grep -q '^let adminMode=false;' js/core/01-state.js || { echo "✗ GM 默认值�
 grep -q "FLOW60_START=ok" "$OUT" || { echo "✗ FLOW60_START 未通过(SN6b 开局形态:① 三舰成一支【阵型】编队(src=generated,不是 fmCreate 默认的固定);② 建队不许让船动——靶场的静止发射 MAC 基线靠这条;③ CA 到最近的靶恰为 1 光秒,且在火控门之外(开局主炮打不响是刻意的);④ 三级星图三钮与信号视野钮都在右下角 #tools 里、顶栏已无、两者都点得动;⑤ 打开的时候就是热区——GM 默认关 + 蓝方开局静默 + 开局已跑过一拍感知,三者缺一都会让开局画面变成"敌舰真实位置可见"或"一片空")"; fail=1; }
 grep -q "TK24_RULES=ok" "$OUT" || { echo "✗ TK24_RULES 未通过(两条原来没人钉着的规则:红方接触群只收实况 —— 陈旧与失联不许进群;接触降速不看失联 —— 贴身的失联航迹档位须 0,同位置的陈旧须 3)"; fail=1; }
 grep -q "TK_ID=ok" "$OUT" || { echo "✗ TK_ID 未通过(TK2.6 身份三档:听辐射指纹只到疑似、照射与光学到确认;同一拍静听站排在照射站前面时 idBy 是 lis 但档位必须是确认;接触丢了回到未知且锁存清掉;浸泡里锁存为真 ⟹ 握着身份)"; fail=1; }
-grep -q "TK2_DIFF=ok" "$OUT" || { echo "✗ TK2_DIFF 未通过(TK2.0 门面改读航迹表:改前五个公式逐字照抄、与新门面逐值对表 —— 浸泡 5 个检查点 + 人造六态;自己一方的 contactPos 仍是 s.pos 本身;0.5 拍迟滞的假门面必须被对出来)"; fail=1; }
+grep -q "TK2_DIFF=ok" "$OUT" || { echo "✗ TK2_DIFF 未通过(TK2.0 门面改读航迹表:改前五个公式逐字照抄(TK3b 起读航迹上的同一格)、与新门面逐值对表 —— 浸泡 5 个检查点 + 人造六态;自己一方的 contactPos 仍是 s.pos 本身;0.5 拍迟滞的假门面必须被对出来)"; fail=1; }
 grep -q "TK_NOCREATE=ok" "$OUT" || { echo "✗ TK_NOCREATE 未通过(读永远不建航迹:没登记过的探针走遍五个门面 / trkOf / trkEach / render / targetAt 后两表都没有它;trkList 与 ships 过滤同序同内容)"; fail=1; }
-grep -q "TK1_FWD=ok" "$OUT" || { echo "✗ TK1_FWD 未通过(TK1 航迹表是唯一的存储:在场每艘船两方都有航迹、十个旧舰上名字读出来与航迹那一格同值同对象;它们是全场共享一份的不可枚举、不可重配置访问器(=TRK_FWD);经旧名字写进去的原样落在航迹上;整对象拷贝拷不到;读永远不建航迹;重复登记抛。两条自检:裸对象过不了①、可枚举描述符过不了②)"; fail=1; }
+grep -q "TK3_TOMB=ok" "$OUT" || { echo "✗ TK3_TOMB 未通过(TK3b 墓碑,原 TK1_FWD:在场每艘船两方都有航迹;十个旧舰上名字是全场共享一份的不可枚举、不可重配置访问器(=TRK_FWD),读写一碰就抛「TK3 已搬进航迹表」且航迹那一格不动;整对象拷贝不抛、拷不到;读永远不建航迹;重复登记抛。两条自检:带旧名字的裸对象过不了墓碑检查、可枚举描述符过不了②)"; fail=1; }
 grep -q "^RENDER=ok" "$OUT" || { echo "✗ RENDER 未通过"; fail=1; }
 [ $fail -eq 0 ] && echo "✓ 全部通过" || exit 1

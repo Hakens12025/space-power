@@ -7,35 +7,33 @@
      这样 TK3a 那条「tools/judge 里连注释一起数、旧名字须为 0」的检查不会被这里的判据自己咬住。
    ============================================================================ */
 
-/* TK1_FWD:TK1 是纯存储搬家 —— 航迹表是唯一的存储,舰上那十个旧名字变成共享、不可枚举的转发访问器。
-   ① 在场每艘船、两方:都有航迹,航迹的 src 是它、by 是那一方;十个旧名字读出来的与航迹上那一格【同一个值 / 同一个对象】。
+/* TK3_TOMB(TK3b,原 TK1_FWD):航迹表是唯一的存储,舰上那十个旧名字是墓碑 —— 共享、不可枚举、一碰就抛的访问器。
+   ① 在场每艘船、两方:都有航迹,航迹的 src 是它、by 是那一方。
    ② 十个名字在每艘船上都是访问器(有 get / set、没有 value)、不可枚举、不可重配置;get / set 全场同一组函数对象(= TRK_FWD 里那一份)。
-   ③ 写穿:一次性船(shipSeq 先存后还、不进 ships)上经旧名字写进去的值原样落在航迹上(链式赋值拿到的就是航迹上那个 cov;
-      写 null / -1e9 原样存;写一方不动另一方);十个名字各用一个哨兵对象来回一遍。
-   ④ 整对象拷贝(航线细化沙盘的 rrMakeShip、Object.assign)拷不到这十个名字,拷出来的东西也不在表里。
-   ⑤ 自检:一个带着旧名字的裸对象必须被 ① 判掉;一个 enumerable:true 的描述符必须被 ② 判掉 —— 否则 ① ② 没有牙。
+   ③ 墓碑:一次性船(shipSeq 先存后还、不进 ships)上十个名字逐个读、逐个写,每一下都必须抛「TK3 已搬进航迹表」;
+      写被拒之后航迹上那一格原样没动(抛在写之前),名字也没有变成数据属性。
+   ④ 整对象拷贝(航线细化沙盘的 rrMakeShip、Object.assign)不抛、拷不到这十个名字,拷出来的东西也不在表里。
+   ⑤ 自检:一个带着旧名字(数据属性)的裸对象必须被 ③ 的墓碑检查判掉;一个 enumerable:true 的描述符必须被 ② 判掉 —— 否则 ② ③ 没有牙。
    ⑥ 读不建:一个从没登记过的探针对象走一遍 trkOf / litOf / contactState / contactPos 之后,两张表里都没有它。
    ⑦ 同一个源登记第二次必须抛。 */
-t('TK1_FWD',function(){
+t('TK3_TOMB',function(){
   if(typeof trkOf!=='function'||typeof trkAdopt!=='function'||typeof trkTab!=='function'||typeof TRK==='undefined'||typeof TRK_FWD==='undefined')return 'fail sensors/24-track 没加载(TRK / TRK_FWD / trkOf / trkAdopt / trkTab 缺)';
   if(typeof rrMakeShip!=='function')return 'fail physics/32 的 rrMakeShip 不在,④ 无处可测';
   /* [旧名字, 哪一方的表, 航迹上的哪一格] —— 名字拼接现造,理由见文件头 */
   var F10=[['lit'+'Blue','blue','lit'],['lit'+'Red','red','lit'],['cov'+'B','blue','cov'],['cov'+'R','red','cov'],
     ['seen'+'Blue','blue','lastT'],['seen'+'Blue'+'Pos','blue','lastPos'],['seen'+'Blue'+'Vel','blue','lastVel'],
     ['seen'+'Red','red','lastT'],['seen'+'Red'+'Pos','red','lastPos'],['seen'+'Red'+'Vel','red','lastVel']];
-  var N_LB=F10[0][0],N_LR=F10[1][0],N_CB=F10[2][0],N_CR=F10[3][0],N_SB=F10[4][0],N_SBP=F10[5][0];
-  var SIDES=['blue','red'];
-  /* 表本身与 TRK_FWD 的名字集合必须恰好是这十个(多一个少一个都说明契约面变了) */
+  var N_LB=F10[0][0],N_CB=F10[2][0],N_CR=F10[3][0];
+  var SIDES=['blue','red'],TOMB='TK3 已搬进航迹表';
   var fwdNames=Object.getOwnPropertyNames(TRK_FWD).sort().join(','),wantNames=F10.map(function(e){return e[0];}).sort().join(',');
   var okNames=(fwdNames===wantNames&&Object.isFrozen(TRK_FWD));
 
-  function chk1(s){ /* 返回空串 = 通过;否则是第一条不成立的理由 */
+  function chk1(s){
     for(var i=0;i<SIDES.length;i++){var sd=SIDES[i],k=trkOf(sd,s);
       if(k===null)return sd+' 没有航迹';
       if(k.src!==s)return sd+' 航迹的 src 不是它';
       if(k.by!==sd)return sd+' 航迹的 by='+k.by;
     }
-    for(var j=0;j<F10.length;j++){var e=F10[j];if(s[e[0]]!==trkOf(e[1],s)[e[2]])return e[0]+' 与 '+e[1]+' 表的 '+e[2]+' 不是同一个值';}
     return '';
   }
   function chk2(s){
@@ -46,6 +44,17 @@ t('TK1_FWD',function(){
       if(d.enumerable!==false)return e[0]+' 可枚举';
       if(d.configurable!==false)return e[0]+' 可重配置';
       if(d.get!==TRK_FWD[e[0]].get||d.set!==TRK_FWD[e[0]].set)return e[0]+' 的 get/set 不是 TRK_FWD 那一份共享函数';
+    }
+    return '';
+  }
+  /* 墓碑检查:返回空串 = 十个名字读写全抛、抛的是墓碑那句话、航迹那一格没被动 */
+  function chk3(s){
+    for(var j=0;j<F10.length;j++){var e=F10[j],tk=trkOf(e[1],s),before=tk?tk[e[2]]:undefined,m;
+      m='';try{var v=s[e[0]];m='读没抛(读到 '+String(v)+')';}catch(x){if(String(x&&x.message).indexOf(TOMB)<0)m='读抛的不是墓碑:'+(x&&x.message);}
+      if(m)return e[0]+' '+m;
+      m='';try{s[e[0]]={tk3:j};m='写没抛';}catch(x){if(String(x&&x.message).indexOf(TOMB)<0)m='写抛的不是墓碑:'+(x&&x.message);}
+      if(m)return e[0]+' '+m;
+      if(tk&&tk[e[2]]!==before)return e[0]+' 写被拒之后航迹那一格变了';
     }
     return '';
   }
@@ -62,35 +71,22 @@ t('TK1_FWD',function(){
   /* ③ ④ ⑦ 在一次性船上做:shipSeq 先存后还,永不进 ships */
   var sq=shipSeq,X=null,ok3=false,ok4=false,ok7=false,why3='',why4='',msg7='';
   try{
-    X=makeShip('CA','TK1探针',[0,0,0],[1,0,0],[0,0,0],'red',2);
+    X=makeShip('CA','TK3探针',[0,0,0],[1,0,0],[0,0,0],'red',2);
     var inShips=(ships.indexOf(X)>=0);
-    var c1=chk1(X),c2=chk2(X);
-    var kb=trkOf('blue',X),kr=trkOf('red',X);
-    /* 契约列的那几样,逐条 */
-    var c=X[N_CB]=newCov();c.fix=true;
-    var a1=(kb.cov===c&&kb.cov.fix===true&&kr.cov!==c);
-    X[N_LR]=2;var a2=(kr.lit===2&&kb.lit===0);
-    X[N_CR]=null;var a3=(kr.cov===null&&kb.cov===c);
-    var P=[1,2,3];X[N_SBP]=P;var a4p=(kb.lastPos===P);X[N_SBP]=null;var a4=(a4p&&kb.lastPos===null);
-    X[N_SB]=12.5;var a5p=(kb.lastT===12.5);X[N_SB]=-1e9;var a5=(a5p&&kb.lastT===-1e9);
-    /* 十个名字各一个哨兵对象:落在对的表、对的格;另一方同一格不动;写完读回同一个对象 */
-    var a6=true,who6='';
-    for(var j=0;j<F10.length;j++){var e=F10[j],other=trkOf(e[1]==='blue'?'red':'blue',X),before=other[e[2]],tok={tk1:j};
-      X[e[0]]=tok;
-      if(trkOf(e[1],X)[e[2]]!==tok||X[e[0]]!==tok||other[e[2]]!==before){a6=false;if(!who6)who6=e[0];}
-    }
-    var still=chk2(X);       /* 写了一圈之后还是访问器,没有被写成数据属性 */
-    ok3=(!inShips&&!c1&&!c2&&a1&&a2&&a3&&a4&&a5&&a6&&!still);
-    why3='不在 ships='+(!inShips)+' 新船过①='+(!c1)+' 过②='+(!c2)+' 链式赋值同一个 cov='+a1+' 写等级 2='+a2+' 写 null='+a3+' 位置按引用再写 null='+a4+' 时刻 12.5 再写 -1e9='+a5+' 十个哨兵='+a6+(who6?'(坏在 '+who6+')':'')+' 写完仍是访问器='+(!still);
+    var c1=chk1(X),c2=chk2(X),c3=chk3(X),still=chk2(X);  /* 读写过一圈之后还是那一份访问器 */
+    ok3=(!inShips&&!c1&&!c2&&!c3&&!still);
+    why3='不在 ships='+(!inShips)+' 新船过①='+(!c1)+' 过②='+(!c2)+' 十个名字读写全抛墓碑且航迹没动='+(!c3)+(c3?'(坏在 '+c3+')':'')+' 读写之后仍是访问器='+(!still);
     /* ④ */
-    var rr=rrMakeShip(X),oa=Object.assign({},X),leak=[];
-    [['rrMakeShip',rr],['Object.assign',oa]].forEach(function(p){
+    var rr=null,oa=null,cpThrew='';
+    try{rr=rrMakeShip(X);oa=Object.assign({},X);}catch(x){cpThrew=String(x&&x.message);}
+    var leak=[];
+    if(!cpThrew)[['rrMakeShip',rr],['Object.assign',oa]].forEach(function(p){
       F10.forEach(function(e){if(Object.getOwnPropertyDescriptor(p[1],e[0]))leak.push(p[0]+'.'+e[0]);});
       SIDES.forEach(function(sd){if(trkOf(sd,p[1])!==null)leak.push(p[0]+' 在 '+sd+' 表里');});
     });
     var forIn=0;for(var kk in X){if(F10.some(function(e){return e[0]===kk;}))forIn++;}
-    ok4=(leak.length===0&&forIn===0);
-    why4='拷出来的带旧名字或在表里='+(leak.length?leak.join(','):'无')+' for...in 看得见的旧名字='+forIn;
+    ok4=(!cpThrew&&leak.length===0&&forIn===0);
+    why4='拷贝抛='+(cpThrew||'无')+' 拷出来的带旧名字或在表里='+(leak.length?leak.join(','):'无')+' for...in 看得见的旧名字='+forIn;
     /* ⑦ */
     try{trkAdopt(X);msg7='没抛';}catch(x){msg7=String(x&&x.message);ok7=(msg7.indexOf('重复登记')>=0);}
   }catch(x){why3='THREW '+(x&&x.message);}
@@ -98,7 +94,7 @@ t('TK1_FWD',function(){
 
   /* ⑤ 自检 */
   var plain={};plain[N_LB]=0;plain[N_CB]=newCov();
-  var self1=(chk1(plain)!=='');
+  var p3=chk3(plain),self1=(p3!==''&&p3.indexOf('读没抛')>=0);
   var Z={},enumBad=N_CR;
   F10.forEach(function(e){Object.defineProperty(Z,e[0],{get:TRK_FWD[e[0]].get,set:TRK_FWD[e[0]].set,enumerable:(e[0]===enumBad),configurable:false});});
   var z2=chk2(Z),self2=(z2!==''&&z2.indexOf('可枚举')>=0);
@@ -111,37 +107,38 @@ t('TK1_FWD',function(){
 
   var ok=(okNames&&ok1&&ok2&&ok3&&ok4&&ok5&&ok6&&ok7);
   return (ok?'ok':'fail')+' 名字表=TRK_FWD 十个且冻结='+okNames
-    +' | ① 在场 '+n+' 艘 x 两方都有航迹、十个旧名字与航迹那一格同值='+ok1+(bad1?'(坏在 '+bad1+')':'')
+    +' | ① 在场 '+n+' 艘 x 两方都有航迹='+ok1+(bad1?'(坏在 '+bad1+')':'')
     +' | ② 访问器 / 不可枚举 / 不可重配置 / 全场共享一组 get·set='+ok2+(bad2?'(坏在 '+bad2+')':'')+(sameGet?'':'(get 不是同一个函数)')
-    +' | ③ 写穿='+ok3+' '+why3
-    +' | ④ 整对象拷贝拷不到='+ok4+' '+why4
-    +' | ⑤ 自检:裸对象被①判掉='+self1+' 可枚举描述符被②判掉='+self2+'('+z2+')'
+    +' | ③ 墓碑='+ok3+' '+why3
+    +' | ④ 整对象拷贝不抛、拷不到='+ok4+' '+why4
+    +' | ⑤ 自检:带旧名字的裸对象被③判掉='+self1+'('+p3+') 可枚举描述符被②判掉='+self2+'('+z2+')'
     +' | ⑥ 读不建:探针走过 trkOf / litOf / contactState / contactPos 后两表都没有它='+ok6+'(读数 '+r6.slice(2).map(String).join('/')+')'
     +' | ⑦ 重复登记抛='+ok7+'('+msg7+')';
 });
 
 /* TK2_DIFF:TK2.0 把门面(litOf / contactIdn / contactAge / contactState / contactPos)改成直接读航迹表。
-   这一条把【改前】的五个公式逐字抄一份(经旧名字读,TK1~TK3a 里那是转发访问器),与新门面逐值对表 —— === 比较,数组逐元素;
+   这一条把【改前】的五个公式逐字抄一份,与新门面逐值对表 —— === 比较,数组逐元素;
+   TK3b:旧名字成了墓碑,抄本改成直接读航迹上的同一格(lit / cov / lastT / lastPos / lastVel,就是原来转发过去的那一格)。
+   算法仍是改前那一份、与 sensors/24 各写各的,所以它还是一张钉死的规格表:迟滞阈值漂移、失联外推丢高度项这类变异照样在这里红;
    自己这一方的 contactPos 必须仍是 s.pos 那个对象本身(别名语义,调用方靠它)。
    取样:① 当前场面浸泡 5 个检查点(每个 300 拍 x 0.2 秒,蓝方照射、simTime 跟着走,让失联的年龄真的在长);
          ② 一次性船上人造的八种状态:none / heat / live / coast / 迟滞边界两侧各一 / ghost / 接触对象为空。
    ③ 反向对照:把"陈旧"的迟滞从 1.5 拍改成 0.5 拍的一个假门面,必须在人造的 coast 状态上被对出来 —— 否则这张对照表没有牙。 */
 t('TK2_DIFF',function(){
   if(typeof trkState!=='function'||typeof trkPos!=='function')return 'fail TK2.0 的读原语不在';
-  var K=function(sd){return sd==='blue'?'Blue':'Red';};
-  var nL=function(sd){return 'lit'+K(sd);},nC=function(sd){return 'cov'+(sd==='blue'?'B':'R');},
-      nS=function(sd){return 'seen'+K(sd);},nSP=function(sd){return 'seen'+K(sd)+'Pos';},nSV=function(sd){return 'seen'+K(sd)+'Vel';};
-  /* ---- 改前的五个公式(逐字照抄 1a887a8 的 sensors/21,只把字段名换成拼出来的)---- */
-  var oLit=function(s,sd){return s[nL(sd)]||0;};
-  var oIdn=function(s,sd){if(!s)return false;if(s.side===sd)return true;var c=s[nC(sd)],lit=s[nL(sd)];return !!(lit>0&&c&&c.idn);};
-  var oAge=function(s,sd){var v=s[nS(sd)];if(v==null||v<-1e8)return 1e9;return Math.max(0,simTime-v);};
-  var oStateK=function(K15){return function(s,sd){var lit=s[nL(sd)],c=s[nC(sd)];
+  /* 航迹上的那一格;没有航迹给空对象(各格读出 undefined,与改前在一个没有那些字段的对象上读同义) */
+  var G=function(s,sd){return trkOf(sd,s)||{};};
+  /* ---- 改前的五个公式(逐字照抄 1a887a8 的 sensors/21;TK3b 起字段读的是航迹上的同一格)---- */
+  var oLit=function(s,sd){return G(s,sd).lit||0;};
+  var oIdn=function(s,sd){if(!s)return false;if(s.side===sd)return true;var g=G(s,sd),c=g.cov,lit=g.lit;return !!(lit>0&&c&&c.idn);};
+  var oAge=function(s,sd){var v=G(s,sd).lastT;if(v==null||v<-1e8)return 1e9;return Math.max(0,simTime-v);};
+  var oStateK=function(K15){return function(s,sd){var g=G(s,sd),lit=g.lit,c=g.cov;
     if(lit>0){if(!c||!c.fix)return 'heat';return (c.n>0||c.age<=SENS.TICK*K15)?'live':'coast';}
-    var lp=s[nSP(sd)];return (lp&&oAge(s,sd)<=CONTACT_GHOST_TTL)?'ghost':'none';};};
+    var lp=g.lastPos;return (lp&&oAge(s,sd)<=CONTACT_GHOST_TTL)?'ghost':'none';};};
   var oState=oStateK(1.5);
-  var oPos=function(s,sd){if(!s)return null;if(s.side===sd)return s.pos;var st=oState(s,sd);
-    if(st==='live'||st==='coast'){var c=s[nC(sd)];return [c.x,c.y,s.pos[2]];}
-    if(st!=='ghost')return null;var lp=s[nSP(sd)],lv=s[nSV(sd)];if(!lp||!lv)return null;var a=oAge(s,sd);
+  var oPos=function(s,sd){if(!s)return null;if(s.side===sd)return s.pos;var st=oState(s,sd),g=G(s,sd);
+    if(st==='live'||st==='coast'){var c=g.cov;return [c.x,c.y,s.pos[2]];}
+    if(st!=='ghost')return null;var lp=g.lastPos,lv=g.lastVel;if(!lp||!lv)return null;var a=oAge(s,sd);
     return [lp[0]+lv[0]*a,lp[1]+lv[1]*a,lp[2]+(lv[2]||0)*a];};
   var same=function(a,b){if(a===b)return true;if(!a||!b||a.length!==b.length)return false;for(var i=0;i<a.length;i++)if(a[i]!==b[i])return false;return true;};
   var diff=function(s,sd,st){ /* 返回空串 = 五个门面都对得上 */
@@ -167,25 +164,26 @@ t('TK2_DIFF',function(){
   var ok1=(!bad&&nCmp>0);
   /* ② 人造状态(一次性船:shipSeq 先存后还,不进 ships) */
   var seq0=shipSeq,X=makeShip('DD','对表',[500000,0,0],[1,0,0],[0,0,0],'red',2);shipSeq=seq0;
-  var C=function(){return X[nC('blue')];};
+  var XB=trkOf('blue',X);
+  var C=function(){return XB.cov;};
   var FAB=[
     ['none',function(){}],
-    ['heat',function(){X[nL('blue')]=1;C().fix=false;}],
-    ['live',function(){X[nL('blue')]=2;var c=C();c.fix=true;c.n=2;c.age=0;c.x=480000;c.y=9000;c.idn=true;}],
-    ['coast',function(){X[nL('blue')]=2;var c=C();c.fix=true;c.n=0;c.age=SENS.TICK*3;c.x=470000;c.y=-5000;}], /* 3 拍:过了 1.5 拍的迟滞才是真的陈旧(第一版写 1.2 拍,读出来是 live —— 这一态根本没被对表) */
-    ['live-hyst',function(){X[nL('blue')]=2;var c=C();c.fix=true;c.n=0;c.age=SENS.TICK*1.2;c.x=470000;c.y=-5000;}], /* 迟滞之内:量测刚断 1.2 拍仍算实况 —— 阈值往下漂会被这一态抓到 */
-    ['coast-hyst',function(){X[nL('blue')]=2;var c=C();c.fix=true;c.n=0;c.age=SENS.TICK*2;c.x=470000;c.y=-5000;}], /* 刚过迟滞:2 拍 —— 阈值往上漂会被这一态抓到 */
-    ['ghost',function(){X[nL('blue')]=0;X[nSP('blue')]=[460000,3000,500];X[nSV('blue')]=[-100,20,7];X[nS('blue')]=simTime-5;}], /* 速度带 z 分量:外推的高度项被丢会对不上 */
-    ['cov-null',function(){X[nL('blue')]=1;X[nC('blue')]=null;}]
+    ['heat',function(){XB.lit=1;C().fix=false;}],
+    ['live',function(){XB.lit=2;var c=C();c.fix=true;c.n=2;c.age=0;c.x=480000;c.y=9000;c.idn=true;}],
+    ['coast',function(){XB.lit=2;var c=C();c.fix=true;c.n=0;c.age=SENS.TICK*3;c.x=470000;c.y=-5000;}], /* 3 拍:过了 1.5 拍的迟滞才是真的陈旧(第一版写 1.2 拍,读出来是 live —— 这一态根本没被对表) */
+    ['live-hyst',function(){XB.lit=2;var c=C();c.fix=true;c.n=0;c.age=SENS.TICK*1.2;c.x=470000;c.y=-5000;}], /* 迟滞之内:量测刚断 1.2 拍仍算实况 —— 阈值往下漂会被这一态抓到 */
+    ['coast-hyst',function(){XB.lit=2;var c=C();c.fix=true;c.n=0;c.age=SENS.TICK*2;c.x=470000;c.y=-5000;}], /* 刚过迟滞:2 拍 —— 阈值往上漂会被这一态抓到 */
+    ['ghost',function(){XB.lit=0;XB.lastPos=[460000,3000,500];XB.lastVel=[-100,20,7];XB.lastT=simTime-5;}], /* 速度带 z 分量:外推的高度项被丢会对不上 */
+    ['cov-null',function(){XB.lit=1;XB.cov=null;}]
   ];
   var bad2='',got2=[];
   FAB.forEach(function(f){if(bad2)return;
-    X[nC('blue')]=newCov();X[nL('blue')]=0;X[nS('blue')]=-1e9;X[nSP('blue')]=null;X[nSV('blue')]=null;
+    XB.cov=newCov();XB.lit=0;XB.lastT=-1e9;XB.lastPos=null;XB.lastVel=null;
     f[1]();got2.push(f[0]+'='+contactState(X,'blue'));
     var w=diff(X,'blue')||diff(X,'red');if(w)bad2=f[0]+' '+w;});
   var ok2=(!bad2&&got2.join(' ')==='none=none heat=heat live=live coast=coast live-hyst=live coast-hyst=coast ghost=ghost cov-null=heat'); /* 六态必须真的是六态,否则对表对的是别的状态 */
   /* ③ 反向对照:0.5 拍迟滞的假门面必须在 coast 上对不上 */
-  X[nC('blue')]=newCov();X[nL('blue')]=2;var cc=C();cc.fix=true;cc.n=0;cc.age=SENS.TICK*1.2;
+  XB.cov=newCov();XB.lit=2;var cc=C();cc.fix=true;cc.n=0;cc.age=SENS.TICK*1.2;
   var bite=(oStateK(0.5)(X,'blue')!==contactState(X,'blue'));
   var ok=(ok1&&ok2&&bite);
   return (ok?'ok':'fail')+' ① 浸泡 '+cps+' 个检查点 x '+ships.length+' 艘 x 两方,共对了 '+nCmp+' 组,出现过的显示态='+Object.keys(stSeen).sort().join('/')+' 不一致='+(bad||'无')
