@@ -84,14 +84,10 @@ function detectFor(detSide,tgtSide,dt){
      热循环按下标 j 取目标与探测方的系数,而椭圆要知道 j 对应的是【哪一艘】(信息按站累加,不再取最好的那一档)。
      两边错位的话,算出来的椭圆会拿 A 舰的精度挂在 B 舰的方位上 —— 数值全程合法,一行错都不报。 */
   const all=dets.concat(bcons);
-  const covKey=detSide==='blue'?'covB':'covR';
-  const litKey=detSide==='blue'?'litBlue':'litRed';
-  const seenKey=detSide==='blue'?'seenBlue':'seenRed';
-  const seenPosKey=detSide==='blue'?'seenBluePos':'seenRedPos';
-  const seenVelKey=detSide==='blue'?'seenBlueVel':'seenRedVel';
   for(let ti=0;ti<tgts.length;ti++){
     const t=tgts[ti];
-    const c=t[covKey]||(t[covKey]=newCov()); // 接触对象的字面量全库只有 newCov 一份,这里补建也调它
+    /* TK2.0:这一方对 t 的那条航迹(sensors/24)。原来是五个按阵营拼出来的舰上字段名;现在生产者直接写表,不经转发访问器 */
+    const tk=trkEnsure(detSide,t), c=tk.cov||(tk.cov=newCov()); // 接触对象的字面量全库只有 newCov 一份,这里补建也调它(判据夹具会把它置空)
     if(c.r1===undefined)throw new Error('SN6 接触对象键名不对(应为 newCov 那一套):'+((t&&t.name)||String(t))); // 换键名时漏改的地方会静默算成 NaN,再静默派生出 lit=0
     /* 逐【对】收集这一拍有信号的观测。与 SN4 的差别就在这里:
        旧内核逐目标取"最好的那一档",而信息是可加的 —— 三艘船各看一眼,
@@ -103,7 +99,7 @@ function detectFor(detSide,tgtSide,dt){
       const d=all[j], dx=d.pos[0]-t.pos[0], dy=d.pos[1]-t.pos[1], dz=d.pos[2]-t.pos[2];
       obs.push({det:d,dd:Math.sqrt(dx*dx+dy*dy+dz*dz),g:{opt:p&3,lis:(p>>2)&3,act:(p>>4)&3}});
     }
-    const lit=stepCov(t,c,obs,el); // 先验增长 + 逐站信息累加 + 解椭圆 + 派生等级,全在这一句里
+    /* TK2.0:下面两段注释说的三件事(椭圆推进、最后定位记录、等级)按原来的先后搬进了 sensors/24 的 trkStep,一句调用做完 */
     /* ---- 最后一次【定得出位置】的记录(SN6f:刷新规则换了,见下)----
        seen / seenPos / seenVel 记的是"我最后一次真的知道它在哪"——失联记号(幽灵)照着它外推。
        SN6f 之前的规则是"这一拍有光学或照射量测就刷新",那是 SN4 的说法:那时候光学/照射 = 有位置。
@@ -113,7 +109,6 @@ function detectFor(detSide,tgtSide,dt){
            于是一条正握着的航迹被旧状态机判成"陈旧",画面上出现【椭圆 + 陈旧记号】这种谁也没设计过的组合(用户实报)。
        现在只问模型一句话:这一拍定不定得出位置(c.fix)且确有量测(c.n>0)。写进去的是【估计】c.x/c.y,不是真值。
        DS183 那条纪律("拿静听去写 seenPos 等于凭空把距离变出来")原样成立:单站静听永远 fix=false,进不来。 */
-    if(c.fix&&c.n>0){t[seenKey]=simTime;t[seenPosKey]=[c.x,c.y,t.pos[2]];t[seenVelKey]=t.vel.slice();}
     /* ---- 等级:直接写,【没有棘轮】----
        litBlue/litRed 的取值(0 未发现 / 1 探测 / 2 识别 / 3 火控)与字段名一个字不动 —— 那是几十处读取的契约面。
        变的是它怎么来:SN4 是"只即时上升,下降只有归 0 与断照 3->2 两条路",于是 2 级是一个棘轮:
@@ -121,7 +116,7 @@ function detectFor(detSide,tgtSide,dt){
        ——"照一下就永久拿到导弹门"(见本目录 SN4 备忘末尾那条"等级是来路的函数")。
        SN6 里等级是椭圆的一个纯函数,同一个画面状态只有一种读数,棘轮自动消失。
        接触真的变糊了就该降级,那是"信息有保质期"这句话在等级上的体现。 */
-    t[litKey]=lit;
+    trkStep(tk,t,obs,el); // 先验增长 + 逐站信息累加 + 解椭圆 + 派生等级 → 定得出位置就记最后定位 → 存等级
   }
 }
 
@@ -148,12 +143,11 @@ function emitLabel(mode){ // UI 文案的【唯一】出处:右栏 / 底栏 / �
    后果是梯子上"认出"那一级在引擎里是死的:CA 照一艘 DD,跟踪级(lit2)的门在 43.5 万,认出要到 15.1 万(雷达)/ 9.4 万(光学),
    中间那 28 万公里里玩家白拿了舰种、舰名和分级,"贴近才认得出"这条玩法不存在;同一艘船在聚合框里(它读的是 idn)却记成"?"。
    自己这一方的船恒为已识别。 */
-function litOf(s,side){return (side==='blue'?s.litBlue:s.litRed)||0;} // R7 某一方对这艘船握着的接触等级(0..3)。原来 side==='blue'?x.litBlue:x.litRed 这个三元各写各的
+function litOf(s,side){return trkLit(trkOf(side,s))||0;} // R7 某一方对这艘船握着的接触等级(0..3)。TK2.0 起读航迹表(原来读舰上字段,那个按阵营的三元式各写各的)
 function contactIdn(s,side){
   if(!s)return false;
   if(s.side===side)return true;
-  const c=side==='blue'?s.covB:s.covR,lit=side==='blue'?s.litBlue:s.litRed;
-  return !!(lit>0&&c&&c.idn);
+  return trkIdn(trkOf(side,s)); // TK2.0:握着接触(等级 > 0)且椭圆锁存了身份 —— 同一个合取,改读航迹表
 }
 function sigClassLabel(s){ // 探测级(等级 1)只看得出信号有多大 → 大/中/小;识别级(2+)才知道舰种
   const sz=sReq(s,'size','ship'); // SN4:旧的船体信号字段已删,改读 size —— 两张表的数值逐位相同(DD 0.70 / CA 1.00),所以下面三档阈值一个字不动。新模型里 size 同时喂光学亮度与雷达反射,"大船两头都显眼",这一档情报因此比改前更有分量
@@ -161,11 +155,7 @@ function sigClassLabel(s){ // 探测级(等级 1)只看得出信号有多大 →
   if(sz>=0.6)return '▣ 中型热源';
   return '▣ 小型热源';
 }
-function contactAge(s,side){ // 距最后一次【定得出位置】的秒数(从未定位过 = 1e9)。SN6f:原来是"被光学或照射扫到",见 detectFor 里 seen* 的刷新规则
-  const v=side==='blue'?s.seenBlue:s.seenRed;
-  if(v==null||v<-1e8)return 1e9;
-  return Math.max(0,simTime-v);
-}
+function contactAge(s,side){return trkAge(trkOf(side,s));} // 距最后一次【定得出位置】的秒数(从未定位过 = 1e9)。SN6f:原来是"被光学或照射扫到",见 detectFor 里最后定位记录的刷新规则。TK2.0 起读航迹表
 /* ================= 接触的【显示态】:全库唯一的状态机(SN6f)=================
    用户实报:"只要存在热源的三角箭头就不显示热区……现在会出现只显示椭圆和陈旧、但不显示热区的情况。
    我总觉得这几种信息显示在做进引擎之后就没有对过,全是揉在一起的"。—— 字面意义上的事实:
@@ -189,16 +179,7 @@ function contactAge(s,side){ // 距最后一次【定得出位置】的秒数(�
    "有信号却陈旧"只是两套状态机打架打出来的。
    ⚠ coast 带 1.5 拍的迟滞:量程边缘的接触会隔拍掉一次量测,不带迟滞的话舰标与记号每秒互换一次。 */
 const CONTACT_GHOST_TTL=30;   // 失联记号保留多少秒(沿用旧值)
-function contactState(s,side){
-  const lit=side==='blue'?s.litBlue:s.litRed;
-  const c=side==='blue'?s.covB:s.covR;
-  if(lit>0){
-    if(!c||!c.fix)return 'heat';
-    return (c.n>0||c.age<=SENS.TICK*1.5)?'live':'coast';
-  }
-  const lp=side==='blue'?s.seenBluePos:s.seenRedPos;
-  return (lp&&contactAge(s,side)<=CONTACT_GHOST_TTL)?'ghost':'none';
-}
+function contactState(s,side){return trkState(trkOf(side,s));} // TK2.0:算法原样搬进 sensors/24 的 trkState(五态、1.5 拍迟滞、失联 TTL 全照旧),这里只剩查表
 
 /* 这条接触此刻【应该被画在 / 被点在】哪。交代不出位置就返回 null —— fail-closed。
    ---- 为什么要有这个函数 ----
@@ -225,17 +206,7 @@ function contactState(s,side){
 function contactPos(s,side){
   if(!s)return null;
   if(s.side===side)return s.pos;
-  const st=contactState(s,side);
-  if(st==='live'||st==='coast'){                 // 定得出位置:给【估计】。coast 时 c.x/c.y 停在最后一次量测上,长大的是椭圆
-    const c=side==='blue'?s.covB:s.covR;
-    return [c.x,c.y,s.pos[2]];
-  }
-  if(st!=='ghost')return null;                   // heat(归热区层)/ none:没有位置可交代
-  const lp=side==='blue'?s.seenBluePos:s.seenRedPos;
-  const lv=side==='blue'?s.seenBlueVel:s.seenRedVel;
-  if(!lp||!lv)return null;                       // SN2c:缺记录不许拿真值兜底
-  const a=contactAge(s,side);
-  return [lp[0]+lv[0]*a,lp[1]+lv[1]*a,lp[2]+(lv[2]||0)*a];
+  return trkPos(trkOf(side,s)); // TK2.0:live/coast 给估计、ghost 外推、heat/none 给 null —— 三条规则原样搬进 sensors/24 的 trkPos
 }
 
 function projVisibleTo(p,detSide){

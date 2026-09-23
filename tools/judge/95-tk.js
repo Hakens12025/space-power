@@ -119,3 +119,105 @@ t('TK1_FWD',function(){
     +' | ⑥ 读不建:探针走过 trkOf / litOf / contactState / contactPos 后两表都没有它='+ok6+'(读数 '+r6.slice(2).map(String).join('/')+')'
     +' | ⑦ 重复登记抛='+ok7+'('+msg7+')';
 });
+
+/* TK2_DIFF:TK2.0 把门面(litOf / contactIdn / contactAge / contactState / contactPos)改成直接读航迹表。
+   这一条把【改前】的五个公式逐字抄一份(经旧名字读,TK1~TK3a 里那是转发访问器),与新门面逐值对表 —— === 比较,数组逐元素;
+   自己这一方的 contactPos 必须仍是 s.pos 那个对象本身(别名语义,调用方靠它)。
+   取样:① 当前场面浸泡 5 个检查点(每个 300 拍 x 0.2 秒,蓝方照射、simTime 跟着走,让失联的年龄真的在长);
+         ② 一次性船上人造的八种状态:none / heat / live / coast / 迟滞边界两侧各一 / ghost / 接触对象为空。
+   ③ 反向对照:把"陈旧"的迟滞从 1.5 拍改成 0.5 拍的一个假门面,必须在人造的 coast 状态上被对出来 —— 否则这张对照表没有牙。 */
+t('TK2_DIFF',function(){
+  if(typeof trkState!=='function'||typeof trkPos!=='function')return 'fail TK2.0 的读原语不在';
+  var K=function(sd){return sd==='blue'?'Blue':'Red';};
+  var nL=function(sd){return 'lit'+K(sd);},nC=function(sd){return 'cov'+(sd==='blue'?'B':'R');},
+      nS=function(sd){return 'seen'+K(sd);},nSP=function(sd){return 'seen'+K(sd)+'Pos';},nSV=function(sd){return 'seen'+K(sd)+'Vel';};
+  /* ---- 改前的五个公式(逐字照抄 1a887a8 的 sensors/21,只把字段名换成拼出来的)---- */
+  var oLit=function(s,sd){return s[nL(sd)]||0;};
+  var oIdn=function(s,sd){if(!s)return false;if(s.side===sd)return true;var c=s[nC(sd)],lit=s[nL(sd)];return !!(lit>0&&c&&c.idn);};
+  var oAge=function(s,sd){var v=s[nS(sd)];if(v==null||v<-1e8)return 1e9;return Math.max(0,simTime-v);};
+  var oStateK=function(K15){return function(s,sd){var lit=s[nL(sd)],c=s[nC(sd)];
+    if(lit>0){if(!c||!c.fix)return 'heat';return (c.n>0||c.age<=SENS.TICK*K15)?'live':'coast';}
+    var lp=s[nSP(sd)];return (lp&&oAge(s,sd)<=CONTACT_GHOST_TTL)?'ghost':'none';};};
+  var oState=oStateK(1.5);
+  var oPos=function(s,sd){if(!s)return null;if(s.side===sd)return s.pos;var st=oState(s,sd);
+    if(st==='live'||st==='coast'){var c=s[nC(sd)];return [c.x,c.y,s.pos[2]];}
+    if(st!=='ghost')return null;var lp=s[nSP(sd)],lv=s[nSV(sd)];if(!lp||!lv)return null;var a=oAge(s,sd);
+    return [lp[0]+lv[0]*a,lp[1]+lv[1]*a,lp[2]+(lv[2]||0)*a];};
+  var same=function(a,b){if(a===b)return true;if(!a||!b||a.length!==b.length)return false;for(var i=0;i<a.length;i++)if(a[i]!==b[i])return false;return true;};
+  var diff=function(s,sd,st){ /* 返回空串 = 五个门面都对得上 */
+    if(litOf(s,sd)!==oLit(s,sd))return 'litOf';
+    if(contactIdn(s,sd)!==oIdn(s,sd))return 'contactIdn';
+    if(contactAge(s,sd)!==oAge(s,sd))return 'contactAge';
+    if(contactState(s,sd)!==(st||oState)(s,sd))return 'contactState';
+    var pn=contactPos(s,sd),po=oPos(s,sd);
+    if(s.side===sd){if(pn!==s.pos)return 'contactPos 自己一方不是 s.pos 本身';}
+    else if(!same(pn,po))return 'contactPos';
+    return '';
+  };
+  var SIDES=['blue','red'],bad='',nCmp=0,cps=0,i,k,sd;
+  /* ① 浸泡 */
+  ships.forEach(function(s){if(s.side==='blue'&&!s.dead&&typeof setEmit==='function')setEmit(s,'paint');});
+  for(k=0;k<5&&!bad;k++){
+    for(i=0;i<300;i++){stepSim(0.2);simTime+=0.2;}
+    cps++;
+    for(i=0;i<ships.length&&!bad;i++)for(var j=0;j<SIDES.length;j++){var w=diff(ships[i],SIDES[j]);nCmp++;if(w){bad='检查点 '+cps+' '+ships[i].id+'/'+SIDES[j]+' '+w;break;}}
+  }
+  var stSeen={};ships.forEach(function(s){SIDES.forEach(function(sd){stSeen[contactState(s,sd)]=1;});});
+  var ok1=(!bad&&nCmp>0);
+  /* ② 人造状态(一次性船:shipSeq 先存后还,不进 ships) */
+  var seq0=shipSeq,X=makeShip('DD','对表',[500000,0,0],[1,0,0],[0,0,0],'red',2);shipSeq=seq0;
+  var C=function(){return X[nC('blue')];};
+  var FAB=[
+    ['none',function(){}],
+    ['heat',function(){X[nL('blue')]=1;C().fix=false;}],
+    ['live',function(){X[nL('blue')]=2;var c=C();c.fix=true;c.n=2;c.age=0;c.x=480000;c.y=9000;c.idn=true;}],
+    ['coast',function(){X[nL('blue')]=2;var c=C();c.fix=true;c.n=0;c.age=SENS.TICK*3;c.x=470000;c.y=-5000;}], /* 3 拍:过了 1.5 拍的迟滞才是真的陈旧(第一版写 1.2 拍,读出来是 live —— 这一态根本没被对表) */
+    ['live-hyst',function(){X[nL('blue')]=2;var c=C();c.fix=true;c.n=0;c.age=SENS.TICK*1.2;c.x=470000;c.y=-5000;}], /* 迟滞之内:量测刚断 1.2 拍仍算实况 —— 阈值往下漂会被这一态抓到 */
+    ['coast-hyst',function(){X[nL('blue')]=2;var c=C();c.fix=true;c.n=0;c.age=SENS.TICK*2;c.x=470000;c.y=-5000;}], /* 刚过迟滞:2 拍 —— 阈值往上漂会被这一态抓到 */
+    ['ghost',function(){X[nL('blue')]=0;X[nSP('blue')]=[460000,3000,500];X[nSV('blue')]=[-100,20,7];X[nS('blue')]=simTime-5;}], /* 速度带 z 分量:外推的高度项被丢会对不上 */
+    ['cov-null',function(){X[nL('blue')]=1;X[nC('blue')]=null;}]
+  ];
+  var bad2='',got2=[];
+  FAB.forEach(function(f){if(bad2)return;
+    X[nC('blue')]=newCov();X[nL('blue')]=0;X[nS('blue')]=-1e9;X[nSP('blue')]=null;X[nSV('blue')]=null;
+    f[1]();got2.push(f[0]+'='+contactState(X,'blue'));
+    var w=diff(X,'blue')||diff(X,'red');if(w)bad2=f[0]+' '+w;});
+  var ok2=(!bad2&&got2.join(' ')==='none=none heat=heat live=live coast=coast live-hyst=live coast-hyst=coast ghost=ghost cov-null=heat'); /* 六态必须真的是六态,否则对表对的是别的状态 */
+  /* ③ 反向对照:0.5 拍迟滞的假门面必须在 coast 上对不上 */
+  X[nC('blue')]=newCov();X[nL('blue')]=2;var cc=C();cc.fix=true;cc.n=0;cc.age=SENS.TICK*1.2;
+  var bite=(oStateK(0.5)(X,'blue')!==contactState(X,'blue'));
+  var ok=(ok1&&ok2&&bite);
+  return (ok?'ok':'fail')+' ① 浸泡 '+cps+' 个检查点 x '+ships.length+' 艘 x 两方,共对了 '+nCmp+' 组,出现过的显示态='+Object.keys(stSeen).sort().join('/')+' 不一致='+(bad||'无')
+    +' | ② 人造八态('+got2.join(' ')+')不一致='+(bad2||'无')
+    +' | ③ 反向对照:0.5 拍迟滞的假门面在 coast 上被对出来='+bite;
+});
+
+/* TK_NOCREATE:读永远不建航迹。建航迹只有两处:造船时的 trkAdopt,和生产者 detectFor 里的 trkEnsure。
+   一个从没登记过的探针对象(阵营填红,像一艘敌舰那样)走遍全部读路径 —— 五个门面、trkOf、两方的 trkEach / trkList、
+   一次 render()、一次整屏 targetAt 扫描 —— 之后两张表里都不能有它。
+   另外钉住枚举的顺序与过滤:trkList('blue') 的源必须恰好是 ships 里【不是蓝方、显示态不是 none】的那些,顺序与 ships 相同。 */
+t('TK_NOCREATE',function(){
+  if(typeof trkEach!=='function'||typeof trkList!=='function')return 'fail TK2.0 的枚举原语不在';
+  var O={pos:[123,456,0],side:'red',id:'探针'};
+  var r=[trkOf('blue',O),trkOf('red',O),litOf(O,'blue'),contactIdn(O,'blue'),contactAge(O,'blue'),contactState(O,'blue'),contactPos(O,'blue')];
+  trkEach('blue',function(){return false;});trkEach('red',function(){return false;});trkList('blue');trkList('red');
+  var rendered=false,swept=0;
+  try{if(typeof render==='function'){render();rendered=true;}}catch(e){rendered='抛:'+e.message;}
+  if(typeof targetAt==='function'&&typeof W==='number'&&typeof H==='number'){for(var x=0;x<=W;x+=W/8)for(var y=0;y<=H;y+=H/6){targetAt(x,y);swept++;}}
+  var notIn=(!TRK.blue.has(O)&&!TRK.red.has(O));
+  var readsOk=(r[0]===null&&r[1]===null&&r[2]===0&&r[3]===false&&r[4]===1e9&&r[5]==='none'&&r[6]===null);
+  var want=ships.filter(function(s){return s.side!=='blue'&&contactState(s,'blue')!=='none';});
+  var got=trkList('blue').map(function(tk){return trkSrc(tk);});
+  var order=(want.length===got.length&&want.every(function(s,i){return s===got[i];}));
+  var ownSkipped=trkList('red').every(function(tk){return trkSrc(tk).side!=='red';});
+  /* 跳过自己这一方不是多余的:自家表里的航迹平时从没被推进过(显示态 none),会先被「跳过 none」挡掉 —— 变异验证时删掉那一句照样全绿。
+     真正要它的场面是【船换了阵营】(判据会改 .side):它在这张表里可能握着一条实况航迹。人造一艘这样的蓝舰,临时放进 ships,蓝方枚举里不许有它 */
+  var seqF=shipSeq,Y=makeShip('DD','换边',[0,0,0],[1,0,0],[0,0,0],'blue',2);shipSeq=seqF;
+  var ty=trkOf('blue',Y);ty.lit=2;ty.cov.fix=true;ty.cov.n=2;ty.cov.age=0;ty.cov.x=1;ty.cov.y=2;
+  ships.push(Y);var flipHidden=trkList('blue').every(function(tk){return trkSrc(tk)!==Y;})&&trkState(ty)==='live';ships.pop();
+  ownSkipped=ownSkipped&&flipHidden;
+  var ok=(notIn&&readsOk&&order&&ownSkipped&&rendered===true);
+  return (ok?'ok':'fail')+' 探针走完全部读路径后两表都没有它='+notIn+' 读数=['+r.slice(2).map(String).join(',')+'](须 0,false,1e9,none,null)='+readsOk
+    +' | render='+rendered+' targetAt 扫了 '+swept+' 点'
+    +' | trkList(蓝) 与 ships 过滤同序同内容('+got.length+' 条)='+order+' 红方枚举不含红舰、换了边的蓝舰(自家表里握着实况航迹)也不进蓝方枚举='+ownSkipped;
+});

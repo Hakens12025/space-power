@@ -81,3 +81,92 @@ const TRK_FWD=Object.freeze({
    返回 src 本身,makeShip 因此能写成 return trkAdopt({...}) */
 function trkAdopt(src){if(TRK.blue.has(src)||TRK.red.has(src))throw new Error('TK1 重复登记航迹源:'+(src&&src.id));
   TRK.blue.set(src,trkNew('blue',src));TRK.red.set(src,trkNew('red',src));Object.defineProperties(src,TRK_FWD);return src;}
+
+/* ============================================================================
+   TK2.0 生产者与读原语直接落在表上(2026-09-23)。门面(21-detect 的 litOf / contactIdn / contactAge / contactState / contactPos)
+   从这一步起读的是航迹本身,不再经过转发访问器;名字永远不改 —— weapons/52、54、56 在门面缺席时会回退真值,改名等于悄悄开后门。
+   ⚠ 每个原语都照搬改前门面的算法与每一处不对称(见 js/sensors/CLAUDE.md 的 TK 一节),判据 TK2_DIFF 拿改前公式逐值对表。
+   ============================================================================ */
+
+/* 取或建。只许生产者(21-detect 的 detectFor)与判据夹具调用 —— verify.sh 有一条静态检查钉着调用点。
+   TK1~TK4c 里造船时两方都已登记,这里总能查到;查不到才建(给将来不经 makeShip 的源用),不挂转发 */
+function trkEnsure(side,src){const m=trkTab(side);let k=m.get(src);if(k===undefined){k=trkNew(side==='blue'?'blue':'red',src);m.set(src,k);}return k;}
+
+/* 生产者的一拍:椭圆推进 → 最后定位记录 → 等级。三件事的先后与改前 detectFor 里逐字相同(见那里的两段长注释)。
+   等级【存下来】,不在读的时候从椭圆现算 */
+function trkStep(tk,t,obs,el){
+  const c=tk.cov;
+  const lit=stepCov(t,c,obs,el);
+  if(c.fix&&c.n>0){tk.lastT=simTime;tk.lastPos=[c.x,c.y,t.pos[2]];tk.lastVel=t.vel.slice();}
+  tk.lit=lit;
+  return lit;
+}
+
+/* 等级:有航迹给原值(不归一),没有给 0 —— 归一化(||0 / |0)留在各调用点自己写,与改前逐字相同 */
+function trkLit(tk){return tk?tk.lit:0;}
+
+/* 距最后一次【定得出位置】的秒数;从没定过 = 1e9。simTime 在调用那一刻读 */
+function trkAge(tk){
+  if(!tk)return 1e9;
+  const v=tk.lastT;
+  if(v==null||v<-1e8)return 1e9;
+  return Math.max(0,simTime-v);
+}
+
+/* 显示态状态机(SN6f 的五态,算法见 21-detect 的 contactState 长注释)。没有航迹 = none;不读 adminMode;没有"自己这一方"分支 */
+function trkState(tk){
+  if(!tk)return 'none';
+  const c=tk.cov;
+  if(tk.lit>0){
+    if(!c||!c.fix)return 'heat';
+    return (c.n>0||c.age<=SENS.TICK*1.5)?'live':'coast';
+  }
+  return (tk.lastPos&&trkAge(tk)<=CONTACT_GHOST_TTL)?'ghost':'none';
+}
+
+/* 画在哪 / 点在哪。每次给新数组,不缓存;交代不出位置给 null(fail-closed,缺记录不拿真值兜底)。
+   ⚠ 高度取源的真值 z(椭圆模型是二维的)—— 改前就是这样,原样保留 */
+function trkPos(tk){
+  const st=trkState(tk);
+  if(st==='live'||st==='coast'){const c=tk.cov;return [c.x,c.y,tk.src.pos[2]];}
+  if(st!=='ghost')return null;
+  const lp=tk.lastPos,lv=tk.lastVel;
+  if(!lp||!lv)return null;
+  const a=trkAge(tk);
+  return [lp[0]+lv[0]*a,lp[1]+lv[1]*a,lp[2]+(lv[2]||0)*a];
+}
+
+/* 认没认出:握着接触(等级 > 0)且椭圆锁存了身份 —— ID1 那个合取,原样 */
+function trkIdn(tk){return !!(tk&&tk.lit>0&&tk.cov&&tk.cov.idn);}
+
+/* ---- 通往真值的三条具名通道:全库只在这里定义,grep 得到、以后拆得掉 ----
+   trkSrc     锁定 / 集火 / 火控序列 / 弹丸目标要的那个对象句柄(武器仍瞄对象,不瞄航迹)
+   trkGone    源已经没了(沉了)—— 保留今天的"击沉泄漏":消费方照旧按真值 dead 过滤,是否堵上等用户拍板
+   trkBearing 从 from 指向源的单位方位,逐浮点复刻 bots/60 信念层里那一句(方位是合法情报,距离不是) */
+function trkSrc(tk){return tk.src;}
+function trkGone(tk){return !!tk.src.dead;}
+function trkBearing(tk,from){const s=tk.src,dx=s.pos[0]-from[0],dy=s.pos[1]-from[1],l=Math.hypot(dx,dy)||1;return [dx/l,dy/l];}
+
+/* 被照射告警的唯一跨表读:对方那张表里【对我】握着的接触,这一拍有没有一条照射量测;有就给那条量测记录(末位是照射源 id),没有给 null */
+function trkPaintedBy(s){const tk=trkOf(s.side==='blue'?'red':'blue',s),c=tk&&tk.cov;return (c&&c.ch&&c.ch.act)?c.ch.act:null;}
+
+/* 唯一的枚举原语:按【物理注册表】的顺序走(TK1~TK3 只有 ships,按下标),跳过自己这一方(查询那一刻判)、没有航迹的、以及显示态为 none 的
+   ——存在不等于知道。fn 返回 true 就停下并返回 true。不排序、不建航迹、不调随机数、除调用方自己的闭包外不分配。
+   顺序与注册表一致,所以迁过来的每个循环访问源的先后、并列时的取舍、浮点累加的次序都与改前相同 */
+function trkEach(side,fn){
+  for(let i=0;i<ships.length;i++){
+    const s=ships[i];
+    if(s.side===side)continue;
+    const tk=trkOf(side,s);
+    if(!tk)continue;
+    const st=trkState(tk);
+    if(st==='none')continue;
+    if(fn(tk,st)===true)return true;
+  }
+  return false;
+}
+function trkList(side,pred){const out=[];trkEach(side,function(tk,st){if(!pred||pred(tk,st))out.push(tk);});return out;}
+
+/* 自动化(自动索敌 / 网分配 / 重锁 / 红方集火)许不许把这条航迹当敌方目标。TK2 里恒为 true(纯占位,零影响);
+   TK4c 石头进来之后,它的函数体换成用户认可的那条类别规矩 —— 石头只改这一个函数 */
+function trkFoe(tk){return true;}
