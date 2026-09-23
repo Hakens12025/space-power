@@ -8,10 +8,10 @@
 <style>
 /* 地图组 · 红外:左下角的开关。几何与"开"态照抄右下角 #tools 的工具钮(css/app.css),颜色一律走设计变量 */
 #irDock{position:absolute;left:var(--gut);bottom:56px;z-index:var(--z-hud);display:flex;align-items:center;gap:6px}
-#irMode{display:inline-flex}
-#irMode .hbtn{border-radius:0;margin-left:-1px}
-#irMode .hbtn:first-child{border-radius:var(--r-sm) 0 0 var(--r-sm);margin-left:0}
-#irMode .hbtn:last-child{border-radius:0 var(--r-sm) var(--r-sm) 0}
+#irMode,#irSun{display:inline-flex}
+#irMode .hbtn,#irSun .hbtn{border-radius:0;margin-left:-1px}
+#irMode .hbtn:first-child,#irSun .hbtn:first-child{border-radius:var(--r-sm) 0 0 var(--r-sm);margin-left:0}
+#irMode .hbtn:last-child,#irSun .hbtn:last-child{border-radius:0 var(--r-sm) var(--r-sm) 0}
 #irDock .hbtn.on{color:var(--acc);border-color:var(--acc);position:relative;z-index:1}
 #irSelftest{position:fixed;left:8px;top:60px;z-index:var(--z-transient);white-space:pre-wrap;padding:8px;background:var(--srf-panel);color:var(--txt);font:12px var(--ff-mono,monospace)}
 </style>
@@ -32,7 +32,7 @@
 <div id="mapTag">战术层<b>TACTICAL</b></div><!-- SN6 当前层的读数,只在【换层那一刻】写(render/80-viewtier 的 vtFrame) -->
 
 <!-- 地图组 · 红外:左下角的红外开关 + 两种投法(甲 位置 / 乙 方向)。逻辑在本页最后那段脚本里 -->
-<div id="irDock"><button class="hbtn" id="irBtn" title="红外图(热像):整屏一层底红,有热源的地方与背景不平衡、颜色偏离底红 —— 越强偏得越多(暗红 → 橙 → 黄 → 近白)。色标固定:同样的热永远是同样的颜色。带一点传感器噪声:很弱的热会淹在颗粒里。点火、开火、开雷达的船会更偏">红外</button><div id="irMode"><button class="hbtn" data-irm="jia" title="甲 位置:热源在它所在的位置偏色。近处小而亮,远处大而淡(越远越糊)">甲 位置</button><button class="hbtn" data-irm="yi" title="乙 方向:我方每艘船朝热源的那一片扇区整体偏暖,沿着这个方向远近都一样(红外量不到距离);几艘船的扇区交叠处更偏">乙 方向</button></div></div>
+<div id="irDock"><button class="hbtn" id="irBtn" title="红外图(热像):整屏一层底红,有热源的地方与背景不平衡、颜色偏离底红 —— 越强偏得越多(暗红 → 橙 → 黄 → 近白)。色标固定:同样的热永远是同样的颜色。带一点传感器噪声:很弱的热会淹在颗粒里。点火、开火、开雷达的船会更偏">红外</button><div id="irMode"><button class="hbtn" data-irm="jia" title="甲 位置:热源在它所在的位置偏色。近处小而亮,远处大而淡(越远越糊)">甲 位置</button><button class="hbtn" data-irm="yi" title="乙 方向:我方每艘船朝热源的那一片扇区整体偏暖,沿着这个方向远近都一样(红外量不到距离);几艘船的扇区交叠处更偏">乙 方向</button></div><div id="irSun"><button class="hbtn" data-sun="none" title="没有太阳">无太阳</button><button class="hbtn" data-sun="dir" title="太阳·方向:太阳在无穷远的方位 150°(与碎石带那颗同一组数),写进引擎,引擎的探测也照它致盲(禁区半角 10°)。乙:朝太阳那片扇区刺眼;甲:看不到太阳本身,但禁区里的热源被晃掉">太阳·方向</button><button class="hbtn" data-sun="pos" title="太阳·位置:在地图上放一颗有位置的恒星(默认 150 万公里外,能拖)。只在红外图里,引擎不知道它。甲:刺眼的亮斑加散射光晕;乙:朝它那片扇区刺眼">太阳·位置</button></div></div>
 
 <div id="hud" class="panel">
   <div class="logo">SPACE POWER<span> · 骨架</span></div>
@@ -214,7 +214,13 @@
        用本页自己的种子随机流(不碰全局 Math.random:引擎的交战从全局流取数)。色标两头对称:噪声往下时比底红略暗
      · 小行星 = 引擎自己的石头对象(makeRock,kind 'rock'),体型 1~3(碎石是 0.35~1.1),每一局在我方舰队周围撒 10 颗(固定种子)
      · 拖动:左键按在一个东西上(蓝舰、红舰、石头 / 小行星,按真实位置判,12 像素内最近的)再拖超过 4 像素 ⇒ 搬到鼠标下、速度清零;
-       只点不拖时什么都不拦,引擎照常选中。没被发现的红舰地图上看不见但照样抓得住(F8 打开引擎的上帝视角能看见) */
+       只点不拖时什么都不拦,引擎照常选中。没被发现的红舰地图上看不见但照样抓得住(F8 打开引擎的上帝视角能看见)
+   用户:「(太阳)都试试」—— 左下角一个三档开关:无太阳 / 太阳·方向 / 太阳·位置
+     · 方向型 = 写进引擎自己的太阳(ENV.sun,方位 150°、禁区半角 10°,与碎石带那颗同一组数):引擎的探测照它致盲,屏幕边上的日标是引擎画的。
+       乙:每艘船朝太阳那一片扇区刺眼 —— 禁区边缘恰好到色标顶,往外按角度的四次方衰减(杂散光);甲:看不到太阳本身(它没有位置),
+       但一个热源若对某艘我方船落在禁区里,那艘船就看不见它;全被晃瞎就画不出来
+     · 位置型 = 只存在于红外图里的一颗恒星(引擎不知道它),默认在我方舰队 150 万公里外、方位 150°,能拖。
+       甲:一团刺眼的亮斑 + 散射光晕(6 万公里内饱和,往外按距离三次方淡出);乙:每艘船朝它那一片扇区刺眼(同一条杂散光律) */
 const IRM={on:false,mode:'jia',
   CELL:5,                  /* 底图一格 = 多少屏幕像素 */
   V0:0.02,VMAX:1000,       /* 固定色标:t = ln(1 + v/V0) / ln(1 + VMAX/V0);v = 0 是纯底红,v = 1000 顶到近白 */
@@ -251,7 +257,7 @@ function irmPair(o,t){
 }
 /* 甲的一座山:峰高(按参照归一)与宽度(km)。峰高 = 体积 / 面积 ∝ 信噪比 / 宽度² */
 function irmHill(t,obs){
-  let best=null;for(const o of obs){const q=irmPair(o,t);if(!best||q.snr>best.snr)best=q;}
+  let best=null;for(const o of obs){if(IRM_SUN.mode==='dir'&&envSunBlind(o.pos,t.pos))continue;const q=irmPair(o,t);if(!best||q.snr>best.snr)best=q;}   /* 方向型太阳:这艘船看它的视线落在禁区里 ⇒ 看不见(与引擎的致盲同一个函数) */
   if(!best)return null;
   const ref=irmRefGet(),k=ref.sig/best.blur;
   return {peak:best.snr*k*k,sig:best.blur};
@@ -287,6 +293,11 @@ function irmFieldJia(){ /* 甲:每座山按行、列两个一维高斯相乘贴�
     for(let j=j0;j<=j1;j++){const dy=j-cy,fy=h.peak*Math.exp(dy*dy*e),row=j*gw;for(let i=i0;i<=i1;i++)irmF[row+i]+=fy*ex[i-i0];}
     n++;
   }
+  if(irmStar){ /* 位置型恒星:R_SAT 以内饱和,往外按距离的 POS_P 次方淡出(亮斑 + 散射光晕) */
+    const p=toScreen(irmStar.pos[0],irmStar.pos[1]),kz=1/(cam.zoom),Rs=IRM_SUN.R_SAT;
+    for(let j=0;j<gh;j++){const dy=(j*C-p[1])*kz,row=j*gw;for(let i=0;i<gw;i++){const dx=(i*C-p[0])*kz,r=Math.max(Rs*0.05,Math.hypot(dx,dy));irmF[row+i]+=IRM.VMAX*Math.pow(Rs/r,IRM_SUN.POS_P);}}
+    n++;
+  }
   return n;
 }
 /* 乙:每艘我方船一条 360° 全景条。条上的第 b 格 = 朝方向 b 收到的热:每个热源贡献一个高斯峰(高 = 信噪比,宽 = 引擎角误差) */
@@ -299,6 +310,11 @@ function irmProfiles(){
       const c=(q.brg<0?q.brg+2*Math.PI:q.brg)*k,s=Math.max(0.5,q.ang*k),r=Math.min(B/2,Math.ceil(s*Math.sqrt(2*Math.log(q.snr/IRM.SNR_MIN*50)))),e=-0.5/(s*s);
       for(let b=Math.floor(c-r);b<=Math.ceil(c+r);b++){const db=b-c;P[((b%B)+B)%B]+=q.snr*Math.exp(db*db*e);}
     }
+    /* 太阳:方向型所有船同一个方位;位置型各船按自己看恒星的方位。整条全景都加杂散光 */
+    let sb=null;
+    if(IRM_SUN.mode==='dir')sb=IRM_SUN.BRG*Math.PI/180;
+    else if(irmStar)sb=Math.atan2(irmStar.pos[1]-o.pos[1],irmStar.pos[0]-o.pos[0]);
+    if(sb!==null)for(let b=0;b<B;b++){let d=b/k-sb;d=Math.atan2(Math.sin(d),Math.cos(d));P[b]+=irmGlare(d);}
     out.push({o:o,P:P});
   }
   return out;
@@ -333,6 +349,24 @@ heatBuild=function(){return 0;};
 const irmOrigDrawContacts=drawContacts;
 drawContacts=function(){irmOrigDrawContacts();if(IRM.on)drawIrMap();};
 
+/* ---- 太阳(两种都试):方向型写进引擎的 ENV.sun;位置型是只在红外图里的一颗恒星 ---- */
+const IRM_SUN={mode:'none',BRG:150,HALF:10,P:4,POS_D:1500000,R_SAT:60000,POS_P:3};
+let irmStar=null;
+function irmGlare(dth){ /* 杂散光的角度律:禁区边缘(半角)恰为色标顶 VMAX,往里更亮(饱和),往外按角度的 P 次方衰减 */
+  const h=IRM_SUN.HALF*Math.PI/180,a=Math.max(Math.abs(dth),h*0.05);return IRM.VMAX*Math.pow(h/a,IRM_SUN.P);
+}
+function irmSunSet(mode){
+  IRM_SUN.mode=mode;
+  envReset(curEnv().world);   /* 先恢复这一局场景自己的环境(靶场没有太阳;碎石带有它自己的那颗) */
+  if(mode==='dir'){const a=IRM_SUN.BRG*Math.PI/180,h=IRM_SUN.HALF*Math.PI/180,c=Math.cos(h);ENV.sun={brg:IRM_SUN.BRG,half:IRM_SUN.HALF,ux:Math.cos(a),uy:Math.sin(a),c2:c*c};}
+  irmStar=null;
+  if(mode==='pos'){
+    const bl=ships.filter(s=>s.side==='blue'&&!s.dead);let cx=0,cy=0;for(const s of bl){cx+=s.pos[0]/bl.length;cy+=s.pos[1]/bl.length;}
+    const a=IRM_SUN.BRG*Math.PI/180;irmStar={kind:'star',name:'恒星',pos:[cx+Math.cos(a)*IRM_SUN.POS_D,cy+Math.sin(a)*IRM_SUN.POS_D,0],vel:[0,0,0],dead:false};
+  }
+  irmSync();
+}
+
 /* ---- 小行星:引擎的石头对象,体型比碎石大;每一局(initFleet)在我方舰队周围撒一圈,固定种子 ---- */
 const IRM_AST={N:10,SEED:4242,SMIN:1,SMAX:3,R:500000,CLEAR:60000};
 function irmSpawnAsteroids(){
@@ -348,14 +382,14 @@ function irmSpawnAsteroids(){
   return n;
 }
 const irmOrigInitFleet=initFleet;
-initFleet=function(){const r=irmOrigInitFleet.apply(this,arguments);irmSpawnAsteroids();return r;};
+initFleet=function(){const r=irmOrigInitFleet.apply(this,arguments);irmSpawnAsteroids();if(IRM_SUN.mode!=='none')irmSunSet(IRM_SUN.mode);return r;};
 irmSpawnAsteroids();   /* 引擎的 init 在本段脚本之前已经跑过一次 initFleet,这一局补撒 */
 
 /* ---- 拖动:左键按在一个东西上(真实位置,12 像素内最近的)再拖 > 4 像素 ⇒ 搬到鼠标下。挂在 window 的捕获阶段,先于引擎画布上的 mousedown ---- */
 let irmDrag=null;
 function irmPickAt(sx,sy){
   let best=null,bd=12;
-  for(const o of ships.concat(typeof rocks!=='undefined'?rocks:[])){if(o.dead)continue;const p=toScreen(o.pos[0],o.pos[1]),d=Math.hypot(p[0]-sx,p[1]-sy);if(d<bd){bd=d;best=o;}}
+  for(const o of ships.concat(typeof rocks!=='undefined'?rocks:[],irmStar?[irmStar]:[])){if(o.dead)continue;const p=toScreen(o.pos[0],o.pos[1]),d=Math.hypot(p[0]-sx,p[1]-sy);if(d<bd){bd=d;best=o;}}
   return best;
 }
 window.addEventListener('mousedown',function(e){
@@ -377,8 +411,10 @@ function irmSync(){
   const b=document.getElementById('irBtn');if(!b)return;b.classList.toggle('on',IRM.on);
   for(const x of document.querySelectorAll('#irMode [data-irm]'))x.classList.toggle('on',x.getAttribute('data-irm')===IRM.mode);
   document.getElementById('irMode').style.opacity=IRM.on?'1':'.45';
+  for(const x of document.querySelectorAll('#irSun [data-sun]'))x.classList.toggle('on',x.getAttribute('data-sun')===IRM_SUN.mode);
 }
 on('irBtn','click',function(e){e.currentTarget.blur();IRM.on=!IRM.on;irmSync();});
+on('irSun','click',function(e){const x=e.target.closest('[data-sun]');if(!x)return;x.blur();irmSunSet(x.getAttribute('data-sun'));});
 on('irMode','click',function(e){const x=e.target.closest('[data-irm]');if(!x)return;x.blur();IRM.mode=x.getAttribute('data-irm');irmSync();});
 irmSync();
 
@@ -388,6 +424,7 @@ function irmSelftest(){
   const shipsBak=ships.slice(),seq0=shipSeq,camBak={x:cam.x,y:cam.y,zoom:cam.zoom},onBak=IRM.on,modeBak=IRM.mode,rocksBak=(typeof rocks!=='undefined')?rocks.slice():null,nzBak=IRM.NOISE;
   const astN=rocksBak?rocksBak.filter(k=>k.asteroid).length:0;   /* ⑫ 用:页面加载那一局撒下的小行星(读在任何测试动 rocks 之前) */
   IRM.NOISE=0;   /* ① ~ ⑩ 比的是确切的颜色,先关掉噪声;⑪ 专门测噪声 */
+  const sunBak=IRM_SUN.mode;irmSunSet('none');
   const px=function(i,j){const o=(j*irmGW+i)*4,D=irmImg.data;return [D[o],D[o+1],D[o+2],D[o+3]];};
   const same=function(a,b){return a[0]===b[0]&&a[1]===b[1]&&a[2]===b[2]&&a[3]===b[3];};
   try{
@@ -493,9 +530,39 @@ function irmSelftest(){
     T('⑬ 拖动:红舰、小行星、蓝舰都搬到鼠标下;只点不拖不动、引擎照常选中',near(Rd,wR)&&near(Kd,wK)&&near(Bd,wB)&&clickStill&&clickSel&&selDrag===null,
       '红 '+near(Rd,wR)+' · 小行星 '+near(Kd,wK)+' · 蓝 '+near(Bd,wB)+' · 点击不动 '+clickStill+' · 点击选中 '+clickSel);
     selected=[];
+    /* ⑭ 太阳·方向:写进引擎的太阳;乙里朝太阳的扇区饱和、禁区边缘恰为色标顶、偏开 90° 已经很暗;
+          甲里正对太阳方向的红舰画不出来(那艘船被晃瞎,引擎的致盲函数也这么判);关掉太阳又看得见 */
+    ships.length=0;ships.push(B);B.pos=[0,0,0];rocks=[];irmSunSet('dir');
+    const ws=TEST_ENVS[matchRocksIdx()].world.sun,envOk=!!ENV.sun&&ENV.sun.brg===ws.brg&&Math.abs(ENV.sun.half-ws.half)<1e-9;   /* 与碎石带那颗太阳同一组数:和引擎的场景比,不和本页自己的常数比 */
+    const P14=irmProfiles()[0].P,binDeg=function(dg){return P14[Math.round((((dg%360)+360)%360)/360*IRM.BINS)%IRM.BINS];};
+    const v0=binDeg(IRM_SUN.BRG),vh=binDeg(IRM_SUN.BRG+IRM_SUN.HALF),v90=binDeg(IRM_SUN.BRG+90);
+    const aS=IRM_SUN.BRG*Math.PI/180;R.pos=[Math.cos(aS)*Rv*0.5,Math.sin(aS)*Rv*0.5,0];R.flame=0;ships.push(R);
+    const hDir=irmHill(R,[B]),blind=envSunBlind(B.pos,R.pos);irmSunSet('none');const hNone=irmHill(R,[B]),envBack=(ENV.sun===(curEnv().world&&curEnv().world.sun?ENV.sun:null));
+    T('⑭ 太阳·方向:写进引擎;扇区饱和、禁区边缘到色标顶、偏开 90° 很暗;正对太阳的红舰甲里画不出、关掉太阳又有',
+      envOk&&v0>=IRM.VMAX&&Math.abs(vh/IRM.VMAX-1)<0.02&&v90<1&&hDir===null&&blind&&!!hNone&&envBack,
+      '正对 '+Math.round(v0)+' · 禁区边缘 '+vh.toFixed(0)+' · 偏开 90° '+v90.toFixed(2)+' · 晃瞎 '+(hDir===null)+' / 引擎判致盲 '+blind+' · 关掉后看得见 '+!!hNone);
+    /* ⑮ 太阳·位置:只在红外图里(引擎的太阳不变、不在 ships / rocks / 热源集合里);甲的亮斑中心饱和、按距离三次方淡出;乙朝它饱和;能拖 */
+    ships.length=0;ships.push(B);irmSunSet('pos');const S15=irmStar;
+    const onlyIr=!!S15&&ENV.sun===null&&ships.indexOf(S15)<0&&rocks.indexOf(S15)<0&&irmSources().indexOf(S15)<0;
+    cam.x=S15.pos[0];cam.y=S15.pos[1];cam.zoom=10*IRM.CELL/IRM_SUN.R_SAT;irmFieldJia();
+    const ps=toScreen(S15.pos[0],S15.pos[1]),ic15=Math.round(ps[0]/IRM.CELL),jc15=Math.round(ps[1]/IRM.CELL);
+    const vc15=irmF[jc15*irmGW+ic15],v115=irmF[jc15*irmGW+ic15+10],v215=irmF[jc15*irmGW+ic15+20];
+    /* 理论值按这一格的实际距离算:恒星不正好落在格点上,"10 格外"不是正好一个饱和半径(第一版按整格比,差了 6%) */
+    const want15=function(di){const dx=((ic15+di)*IRM.CELL-ps[0])/cam.zoom,dy=(jc15*IRM.CELL-ps[1])/cam.zoom;return IRM.VMAX*Math.pow(IRM_SUN.R_SAT/Math.hypot(dx,dy),3);};   /* 规格是三次方:写字面的 3,不读 POS_P —— 读常数的话改了常数理论值跟着变,判据就是同义反复(反向对照实测过) */
+    const w115=want15(10),w215=want15(20);
+    const bS=Math.atan2(S15.pos[1]-B.pos[1],S15.pos[0]-B.pos[0])*180/Math.PI,P15=irmProfiles()[0].P,vS=P15[Math.round((((bS%360)+360)%360)/360*IRM.BINS)%IRM.BINS];
+    cam.zoom=Math.min(W,H)/(IRM_SUN.POS_D*2.5);cam.x=(B.pos[0]+S15.pos[0])/2;cam.y=(B.pos[1]+S15.pos[1])/2;
+    const pS=toScreen(S15.pos[0],S15.pos[1]);
+    cv.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,clientX:pS[0],clientY:pS[1],button:0}));
+    window.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:pS[0]+30,clientY:pS[1]+20}));
+    window.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,clientX:pS[0]+30,clientY:pS[1]+20,button:0}));
+    const wS=worldAt(pS[0]+30,pS[1]+20),dragged=Math.hypot(S15.pos[0]-wS[0],S15.pos[1]-wS[1])<2/cam.zoom;
+    irmSunSet('none');
+    T('⑮ 太阳·位置:只在红外图里;亮斑中心饱和、按距离三次方淡出;乙朝它饱和;能拖',onlyIr&&vc15>=IRM.VMAX&&Math.abs(v115/w115-1)<0.01&&Math.abs(v215/w215-1)<0.01&&v215<v115&&vS>=IRM.VMAX&&dragged&&irmStar===null,
+      '中心 '+Math.round(vc15)+' · 约 1 个饱和半径处 '+v115.toFixed(0)+'(应为 '+w115.toFixed(0)+') · 约 2 倍处 '+v215.toFixed(0)+'(应为 '+w215.toFixed(0)+')'+' · 乙朝它 '+Math.round(vS)+' · 拖动 '+dragged);
   }catch(e){T('自检抛异常',false,String(e&&e.stack||e));}
   finally{
-    ships.length=0;shipsBak.forEach(x=>ships.push(x));shipSeq=seq0;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;IRM.on=onBak;IRM.mode=modeBak;if(rocksBak)rocks=rocksBak;IRM.NOISE=nzBak;irmSync();
+    ships.length=0;shipsBak.forEach(x=>ships.push(x));shipSeq=seq0;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;IRM.on=onBak;IRM.mode=modeBak;if(rocksBak)rocks=rocksBak;IRM.NOISE=nzBak;irmSunSet(sunBak);irmSync();
   }
   const pre=document.createElement('pre');pre.id='irSelftest';pre.textContent=out.join('\n');document.body.appendChild(pre);
   document.title=ok?'SELFTEST:PASS':'SELFTEST:FAIL';
@@ -508,6 +575,9 @@ function irmUitest(){
     document.querySelector('#irMode [data-irm="yi"]').click();T('U2 点「乙 方向」:换成乙、按钮亮',IRM.mode==='yi'&&document.querySelector('#irMode [data-irm="yi"]').classList.contains('on'));
     document.querySelector('#irMode [data-irm="jia"]').click();T('U3 点「甲 位置」:换回甲',IRM.mode==='jia');
     document.getElementById('irBtn').click();T('U4 再点「红外」:关掉',IRM.on===false&&!document.getElementById('irBtn').classList.contains('on'));
+    document.querySelector('#irSun [data-sun="dir"]').click();T('U5 点「太阳·方向」:引擎有了太阳、按钮亮',IRM_SUN.mode==='dir'&&!!ENV.sun&&document.querySelector('#irSun [data-sun="dir"]').classList.contains('on'));
+    document.querySelector('#irSun [data-sun="pos"]').click();T('U6 点「太阳·位置」:有了恒星、引擎的太阳撤掉',IRM_SUN.mode==='pos'&&!!irmStar&&ENV.sun===null);
+    document.querySelector('#irSun [data-sun="none"]').click();T('U7 点「无太阳」:都没了',IRM_SUN.mode==='none'&&!irmStar&&ENV.sun===null);
   }catch(e){T('交互自检抛异常',false,String(e&&e.stack||e));}
   const pre=document.createElement('pre');pre.id='irSelftest';pre.textContent=out.join('\n');document.body.appendChild(pre);
   document.title=ok?'UITEST:PASS':'UITEST:FAIL';
