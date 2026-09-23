@@ -199,7 +199,9 @@
    业内叫法:红外搜索跟踪(IRST)/ 前视红外(FLIR)。分辨率由瞬时视场决定(像素在目标处覆盖的宽度 = 距离 x 角度);
    以后要做"近了能认出是什么",现成的尺子是 Johnson 判据(1958:目标宽度上约 1 / 4 / 6.4 个周期 ⇒ 发现 / 认出类别 / 认出具体是什么)。
    这一页【只加一层画面,引擎一个字不改】:页面原样加载引擎的全部脚本(舰船、操作、加船小条都是引擎自己的),
-   红外图挂在引擎接触层(drawContacts)之后画,位于舰标之下。引擎现有的热区 / 椭圆 / 记号照常画 —— 要不要在红外图打开时关掉它们,用户还没批。
+   红外图挂在引擎接触层(drawContacts)之后画,位于舰标之下。
+   热区不画(用户:「热区这个设计不要了」「我不是说了不要热区了吗」):这一页把引擎的 heatBuild 换成恒返回 0,热区那一层就没东西可画;
+   引擎文件照旧不改,主游戏里热区还在。椭圆跟着右下角「缩圈」钮走(引擎默认不画),舰标与陈旧 / 失联记号照常。
    数全部读引擎自己的红外判据,不另立常数:
      看不看得见:引擎的 visRangeOf(被光学 / 红外看见的距离,= sqrt(系数 x 光学亮度)),亮度 = 体型 x(1 + 引擎档 + 发射档废热 + 开火档)
        ⇒ 信噪比 SNR = (被看见的距离 / 实际距离)^2。引擎是一道硬门槛(SNR > 1 才有);这里画成连续的 SNR / (1 + SNR),远处慢慢淡掉,没有边界
@@ -262,6 +264,8 @@ function drawIrMap(){
   }
   ctx.restore();
 }
+/* 热区不要:引擎的接触层每帧先调 heatBuild 生成热区、有东西才画。这里换成恒返回 0 */
+heatBuild=function(){return 0;};
 /* 挂进引擎的接触层之后(舰标之下)。引擎文件不改:render() 按名字调 drawContacts,运行期换成先画原来的、再画红外图 */
 const irmOrigDrawContacts=drawContacts;
 drawContacts=function(){irmOrigDrawContacts();if(IRM.on)drawIrMap();};
@@ -312,6 +316,11 @@ function irmSelftest(){
     IRM.mode='B';const onB=capture(function(){drawContacts();});
     T('⑤ 挂接:关着不多画;A 多画光点、B 多画光带',onA.i>off.i&&onB.f>off.f&&onB.i===off.i,
       '关 '+off.i+' 图 / '+off.f+' 填 · A '+onA.i+' 图 · B '+onB.f+' 填');
+    /* ⑥ 热区不画:手搭一条"只有热区"的接触(有信号、定不出位置),关着红外图时接触层一笔图都不画 */
+    const tkR=trkOf('blue',R);const covBak=tkR.cov,litBak=tkR.lit;tkR.cov=newCov();tkR.lit=1;tkR.cov.fix=false;
+    const st6=contactState(R,'blue');IRM.on=false;const off6=capture(function(){drawContacts();});
+    tkR.cov=covBak;tkR.lit=litBak;
+    T('⑥ 热区不画:只有热区的接触在,接触层也不画',st6==='heat'&&off6.i===0&&heatBuild()===0,'显示态 '+st6+' · 画图 '+off6.i+' 次');
   }catch(e){T('自检抛异常',false,String(e&&e.stack||e));}
   finally{
     ships.length=0;shipsBak.forEach(x=>ships.push(x));shipSeq=seq0;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;IRM.on=onBak;IRM.mode=modeBak;if(rocksBak)rocks=rocksBak;irmSync();
