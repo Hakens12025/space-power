@@ -277,9 +277,36 @@ function irmPhase(o,t){ /* 朗伯球相位函数 Φ(α);没有太阳给 0 */
   const dx=o.pos[0]-t.pos[0],dy=o.pos[1]-t.pos[1],l=Math.hypot(dx,dy)||1,c=Math.max(-1,Math.min(1,(dx*u[0]+dy*u[1])/l)),a=Math.acos(c);
   return (Math.sin(a)+(Math.PI-a)*c)/Math.PI;
 }
+/* ---- 引擎尾焰(业内叫羽流 plume)与自己的尾焰致盲后方(声呐里叫艉部盲区 baffles)----
+   用户选了「1 引擎尾焰」「8 尾焰致盲后方」。
+   尾焰的热 = 体型 x 引擎档(引擎那套:主推 3、反推 8;侧推没有固定朝向,不算尾焰)。喷口方向:主推朝船尾,反推朝船头。
+   视角(业内叫 aspect):从喷口正后方看整条尾焰都在,1;侧看 (1 + NOSE) / 2;正对船头看被船体挡住,只剩 NOSE。
+     依据:预警卫星靠火箭尾焰发现导弹发射;红外导引头分"只能追尾"与"全向"两种,说的就是这件事。NOSE 是暂定的数。
+   引擎里引擎档不分视角(主游戏不变);这里只改红外图:船体那部分照旧,尾焰那部分乘视角。
+   甲里还画一条尾巴:从船往喷口方向拖出去,长 TAIL_K 个山宽 —— 真实的尾焰比地图上一个像素还小,这是示意(和舰标放大画同一个道理);
+     尾焰那份热从船身那座山里分出来,放进这条尾巴(体积守恒:总热不变,只是摊开)。乙没有位置,只有亮度随视角变。
+   致盲后方:自己点着火时,顺着自己喷口方向看出去、半角 BAF 以内的扇区被自己的尾焰晃瞎 —— 甲里那艘船看不见扇区里的东西,
+     乙里那艘船的全景条在扇区里整段刺眼。主推瞎后方,反推(刹车)瞎前方。潜艇要转一下"清盲区"(Crazy Ivan),这里一样。BAF 是暂定的数 */
+const IRM_PLUME={NOSE:0.1,TAIL_K:4,BAF:30};
+function irmPlumeOf(s){ /* 尾焰:喷口方向(单位向量)与热;没点主推 / 反推给 null */
+  if(!s||s.kind==='rock'||!s.flame||!s.facing)return null;
+  const e=engPowerOf(s);if(!(e>0))return null;
+  const k=s.flame>0?-1:1,l=Math.hypot(s.facing[0],s.facing[1])||1;
+  return {ux:k*s.facing[0]/l,uy:k*s.facing[1]/l,lum:s.size*e*envOptK(s.pos)};
+}
+function irmAspect(pl,t,o){ /* 从 o 看 t 的尾焰露出多少:正对喷口 1,侧看 (1+NOSE)/2,正对船头 NOSE */
+  const dx=o.pos[0]-t.pos[0],dy=o.pos[1]-t.pos[1],l=Math.hypot(dx,dy)||1,c=(dx*pl.ux+dy*pl.uy)/l;
+  return IRM_PLUME.NOSE+(1-IRM_PLUME.NOSE)*(1+c)/2;
+}
+function irmBaffled(o,t){ /* o 自己点着火:顺着喷口方向、半角 BAF 以内看不见 */
+  const pl=irmPlumeOf(o);if(!pl)return false;
+  const dx=t.pos[0]-o.pos[0],dy=t.pos[1]-o.pos[1],l=Math.hypot(dx,dy)||1;
+  return (dx*pl.ux+dy*pl.uy)/l>Math.cos(IRM_PLUME.BAF*Math.PI/180);
+}
 function irmLumK(o,t){ /* 红外图里的亮度 / 引擎的光学亮度 */
   const L=optLum(t);if(!(L>0))return 1;
-  const self=(t.kind==='rock'?IRM_ROCK.DARK:1)*L,sun=IRM_SOLAR.S*t.size*envOptK(t.pos)*irmPhase(o,t);
+  const pl=irmPlumeOf(t),hid=pl?pl.lum*(1-irmAspect(pl,t,o)):0;   /* 尾焰被船体挡住的那部分 */
+  const self=(t.kind==='rock'?IRM_ROCK.DARK:1)*L-hid,sun=IRM_SOLAR.S*t.size*envOptK(t.pos)*irmPhase(o,t);
   return (self+sun)/L;
 }
 /* ---- 观测这一头(B):面向太阳看,背景被杂散光抬亮,对比度下降 —— 只用在甲里(乙本来就把杂散光画成背景叠在下面) ----
@@ -304,12 +331,13 @@ function irmHill(t,obs){
   let best=null;
   for(const o of obs){
     if(IRM_SUN.mode==='dir'&&envSunBlind(o.pos,t.pos))continue;   /* 方向型太阳:这艘船看它的视线落在禁区里 ⇒ 看不见(与引擎的致盲同一个函数) */
+    if(irmBaffled(o,t))continue;                                   /* 自己的尾焰晃瞎了这个方向 */
     const q=irmPair(o,t),m=irmContrast(o,t),snr=q.snr*m,blur=q.blur/Math.sqrt(m);   /* 逆光打折(B) */
-    if(!best||snr>best.snr)best={snr:snr,blur:blur};
+    if(!best||snr>best.snr)best={snr:snr,blur:blur,o:o};
   }
   if(!best)return null;
   const ref=irmRefGet(),k=ref.sig/best.blur;
-  return {peak:best.snr*k*k,sig:best.blur};
+  return {peak:best.snr*k*k,sig:best.blur,o:best.o};
 }
 /* ---- 宽的山往底红收(用户:「宽的山往底红收」)----
    业内对应:VSUP(value-suppressing uncertainty palette,Correll、Moritz、Heer,CHI 2018):不确定度越大,色标越往一个中性色收拢,
@@ -338,13 +366,32 @@ function irmGrid(){
   if(!irmF||irmF.length!==gw*gh)irmF=new Float32Array(gw*gh);else irmF.fill(0);
   irmGW=gw;irmGH=gh;
 }
+function irmSplatAniso(cx,cy,pk,sa,sc,ux,uy){ /* 各向异性高斯(格为单位):沿 (ux,uy) 宽 sa、垂直方向宽 sc。尾巴与"拉长的山"用 */
+  if(!(pk>=IRM.CULL))return;
+  const gw=irmGW,gh=irmGH,r=Math.max(sa,sc)*Math.sqrt(2*Math.log(pk/IRM.CULL));
+  const i0=Math.max(0,Math.floor(cx-r)),i1=Math.min(gw-1,Math.ceil(cx+r)),j0=Math.max(0,Math.floor(cy-r)),j1=Math.min(gh-1,Math.ceil(cy+r));
+  const ea=-0.5/(sa*sa),ec=-0.5/(sc*sc);
+  for(let j=j0;j<=j1;j++){const dy=j-cy,row=j*gw;for(let i=i0;i<=i1;i++){const dx=i-cx,a=dx*ux+dy*uy,c=dy*ux-dx*uy;irmF[row+i]+=pk*Math.exp(a*a*ea+c*c*ec);}}
+}
+function irmTail(t,h){ /* 甲里的尾巴:尾焰那份热占总热的比例、尾巴的方向;没点火给 null */
+  const pl=irmPlumeOf(t);if(!pl||!h.o)return null;
+  const tot=optLum(t)*irmLumK(h.o,t),vis=pl.lum*irmAspect(pl,t,h.o);
+  return tot>0?{share:Math.min(1,vis/tot),ux:pl.ux,uy:pl.uy}:null;
+}
 function irmFieldJia(){ /* 甲:每座山按行、列两个一维高斯相乘贴进底图(可分离,每格一次乘加) */
   irmGrid();const C=IRM.CELL,gw=irmGW,gh=irmGH,obs=irmObservers();if(!obs.length)return 0;
   let n=0;
   for(const t of irmSources()){
     const h=irmHill(t,obs);if(!h)continue;
-    const pk=irmShowPeak(h);if(!(pk>=IRM.CULL))continue;   /* 贴的是收过的峰(宽的山往底红收) */
     const p=toScreen(t.pos[0],t.pos[1]),cx=p[0]/C,cy=p[1]/C;
+    /* 尾巴:尾焰那份热从山里分出来,摊成一条沿喷口方向、长 TAIL_K 个山宽的长条(沿向宽 TAIL_K/2 个山宽、横向一个山宽,中心在船后半条尾巴处) */
+    const tl=irmTail(t,h);
+    if(tl&&tl.share>0){
+      const s0=Math.max(IRM.SIG_MIN,h.sig*cam.zoom/C),sa=s0*IRM_PLUME.TAIL_K/2,pkT=irmShowPeak({peak:h.peak*tl.share*s0/sa,sig:h.sig*Math.sqrt(IRM_PLUME.TAIL_K/2)});
+      irmSplatAniso(cx+tl.ux*sa,cy+tl.uy*sa,pkT,sa,s0,tl.ux,tl.uy);
+      h.peak*=1-tl.share;
+    }
+    const pk=irmShowPeak(h);if(!(pk>=IRM.CULL))continue;   /* 贴的是收过的峰(宽的山往底红收) */
     const s=Math.max(IRM.SIG_MIN,h.sig*cam.zoom/C),r=s*Math.sqrt(2*Math.log(pk/IRM.CULL));
     const i0=Math.max(0,Math.floor(cx-r)),i1=Math.min(gw-1,Math.ceil(cx+r)),j0=Math.max(0,Math.floor(cy-r)),j1=Math.min(gh-1,Math.ceil(cy+r));
     if(i0>i1||j0>j1)continue;
@@ -366,6 +413,7 @@ function irmProfiles(){
   for(const o of obs){
     const P=new Float32Array(B);
     for(const t of src){
+      if(irmBaffled(o,t))continue;   /* 自己的尾焰晃瞎了这个方向 */
       const q=irmPair(o,t);if(!(q.snr>=IRM.SNR_MIN))continue;
       const c=(q.brg<0?q.brg+2*Math.PI:q.brg)*k,s=Math.max(0.5,q.ang*k),r=Math.min(B/2,Math.ceil(s*Math.sqrt(2*Math.log(q.snr/IRM.SNR_MIN*50)))),e=-0.5/(s*s);
       for(let b=Math.floor(c-r);b<=Math.ceil(c+r);b++){const db=b-c;P[((b%B)+B)%B]+=q.snr*Math.exp(db*db*e);}
@@ -375,6 +423,10 @@ function irmProfiles(){
     if(IRM_SUN.mode==='dir')sb=IRM_SUN.BRG*Math.PI/180;
     else if(irmStar)sb=Math.atan2(irmStar.pos[1]-o.pos[1],irmStar.pos[0]-o.pos[0]);
     if(sb!==null)for(let b=0;b<B;b++){let d=b/k-sb;d=Math.atan2(Math.sin(d),Math.cos(d));P[b]+=irmGlare(d);}
+    /* 自己点着火:顺着喷口方向、半角 BAF 以内整段刺眼(与甲里"看不见"同一个扇区);边缘 ±1° 软过渡 —— 一刀切在 5 像素的格子上画出来是锯齿 */
+    const pl=irmPlumeOf(o);
+    if(pl){const pb=Math.atan2(pl.uy,pl.ux),D2R=Math.PI/180;
+      for(let b=0;b<B;b++){let d=b/k-pb;d=Math.abs(Math.atan2(Math.sin(d),Math.cos(d)))/D2R;const w=Math.max(0,Math.min(1,(IRM_PLUME.BAF+1-d)/2));if(w>0)P[b]+=IRM.VMAX*w;}}
     out.push({o:o,P:P});
   }
   return out;
@@ -714,13 +766,13 @@ function irmSelftest(){
       &&Math.abs(f20/w18(20)-1)<0.01&&Math.abs(f30/w18(30)-1)<0.01&&f5===f5b&&f20b>f20,
       '乙:偏 40° '+y40.toFixed(1)+'(应为 100) · 偏 50° '+y50.toFixed(2)+'(应为 10) · 四次方同处 '+y40b.toFixed(0)+' · 甲:约 2 个太阳半径 '+f20.toFixed(1)+'(应为 '+w18(20).toFixed(1)+') · 约 3 个 '+f30.toFixed(2)+'(应为 '+w18(30).toFixed(2)+') · 四次方同处 '+f20b.toFixed(0));
     /* ⑲ 相位角(A,目标这一头):熄火冷船背对太阳看(太阳在观测者身后)亮一倍、面向太阳看不变、侧着看多 1/π(朗伯球);
-          石头同样多出晒的热、始终比同体型船冷;开主推的船只多 25%;角误差按 1/√k;位置型按目标自己看恒星的方向。数都写字面值 */
+          石头同样多出晒的热、始终比同体型船冷;开主推的船晒出来的那份只占它亮度的 25%(有太阳减没太阳,尾焰视角两边一样、相减消掉);角误差按 1/√k;位置型按目标自己看恒星的方向。数都写字面值 */
     ships.length=0;ships.push(B);B.pos=[0,0,0];rocks=[];
     const C19=makeShip('DD','红外测相位',[0,0,0],[-1,0,0],[0,0,0],'red',2);C19.flame=0;C19.sideFlame=0;C19.fireHot=0;setEmit(C19,'silent');
     const K19=makeRock([0,0,0],C19.size,[1,0,0]),d19=Rv*0.5;
     const kAt=function(o,pos){C19.pos=pos.slice();K19.pos=pos.slice();const sb=IRM_SUN.mode,st=irmStar;
       const sC=irmPair(o,C19),sK=irmPair(o,K19);IRM_SUN.mode='none';irmStar=null;const n=irmPair(o,C19);IRM_SUN.mode=sb;irmStar=st;
-      return {c:sC.snr/n.snr,k:sK.snr/n.snr,w:sC.ang/n.ang};};
+      return {c:sC.snr/n.snr,k:sK.snr/n.snr,w:sC.ang/n.ang,dd:(sC.snr-n.snr)/Math.pow(visRangeOf(C19)/Math.hypot(pos[0]-o.pos[0],pos[1]-o.pos[1]),2)};};
     irmSunSet('dir');const u19=[Math.cos(150*Math.PI/180),Math.sin(150*Math.PI/180)];
     const lit=kAt(B,[-u19[0]*d19,-u19[1]*d19,0]),dark=kAt(B,[u19[0]*d19,u19[1]*d19,0]),side=kAt(B,[-u19[1]*d19,u19[0]*d19,0]);
     C19.flame=1;const hot=kAt(B,[-u19[0]*d19,-u19[1]*d19,0]);C19.flame=0;
@@ -729,8 +781,8 @@ function irmSelftest(){
     irmSunSet('none');
     const eq19=function(a,b){return Math.abs(a-b)<1e-6;};
     T('⑲ 相位角:冷船背对太阳看 x2、面向太阳 x1、侧看 x(1+1/π);石头 1.5 / 0.5 / 0.5+1/π;主推的船 x1.25;角误差 /√k;位置型按目标看恒星的方向',
-      eq19(lit.c,2)&&eq19(dark.c,1)&&eq19(side.c,1+1/Math.PI)&&eq19(lit.k,1.5)&&eq19(dark.k,0.5)&&eq19(side.k,0.5+1/Math.PI)&&eq19(hot.c,1.25)&&eq19(lit.w,1/Math.sqrt(2))&&eq19(pLit.c,2)&&eq19(pDark.c,1),
-      '冷船 背对 '+lit.c.toFixed(3)+' 面向 '+dark.c.toFixed(3)+' 侧看 '+side.c.toFixed(3)+' · 石头 '+lit.k.toFixed(3)+' / '+dark.k.toFixed(3)+' / '+side.k.toFixed(3)+' · 主推 '+hot.c.toFixed(3)+' · 角误差 '+lit.w.toFixed(3)+' · 位置型 背对 '+pLit.c.toFixed(3)+' 面向 '+pDark.c.toFixed(3));
+      eq19(lit.c,2)&&eq19(dark.c,1)&&eq19(side.c,1+1/Math.PI)&&eq19(lit.k,1.5)&&eq19(dark.k,0.5)&&eq19(side.k,0.5+1/Math.PI)&&eq19(hot.dd,0.25)&&eq19(lit.w,1/Math.sqrt(2))&&eq19(pLit.c,2)&&eq19(pDark.c,1),
+      '冷船 背对 '+lit.c.toFixed(3)+' 面向 '+dark.c.toFixed(3)+' 侧看 '+side.c.toFixed(3)+' · 石头 '+lit.k.toFixed(3)+' / '+dark.k.toFixed(3)+' / '+side.k.toFixed(3)+' · 主推多出 '+hot.dd.toFixed(3)+' · 角误差 '+lit.w.toFixed(3)+' · 位置型 背对 '+pLit.c.toFixed(3)+' 面向 '+pDark.c.toFixed(3));
     /* ⑳ 逆光(B,观测这一头,只在甲里):同一艘冷船,甲的山高 = 不打折的山高 x m²,m = 1/√(1 + 杂散光 / 1);
           杂散光按两档角度律用字面值现算(半角 30°、四次方 / 每 10° 十分之一、色标顶 1000);乙那条不打折;位置型同一条律 */
     ships.length=0;ships.push(B);B.pos=[0,0,0];irmSunSet('dir');
@@ -768,6 +820,34 @@ function irmSelftest(){
     T('㉒ 杂散光·中:四次方^0.875 x 陡^0.125(乙 45° / 60° / 90°,甲 光晕 2 / 3 个太阳半径);页面默认是中',
       Math.abs(g22(45)/m22(45)-1)<0.05&&Math.abs(g22(60)/m22(60)-1)<0.05&&Math.abs(g22(90)/m22(90)-1)<0.05&&Math.abs(h20.v/h20.want-1)<0.01&&Math.abs(h30.v/h30.want-1)<0.01&&fallBak==='mid',
       '乙 45° '+g22(45).toFixed(1)+'(应为 '+m22(45).toFixed(1)+') · 60° '+g22(60).toFixed(2)+'(应为 '+m22(60).toFixed(2)+') · 90° '+g22(90).toFixed(3)+'(应为 '+m22(90).toFixed(3)+') · 甲 2R '+h20.v.toFixed(1)+'(应为 '+h20.want.toFixed(1)+') · 默认 '+fallBak);
+    /* ㉓ 尾焰视角:船头朝 +x 的冷船点主推(引擎档 3,喷口朝船尾),从后 / 侧 / 前看,红外亮度是引擎亮度的 1 / 0.6625 / 0.325;
+          反推(引擎档 8,喷口朝船头)从前 / 后看是 1 / 0.2。按 NOSE = 0.1 写字面值 */
+    ships.length=0;ships.push(B);rocks=[];irmSunSet('none');
+    const C23=makeShip('DD','红外测尾焰',[0,0,0],[1,0,0],[0,0,0],'red',2);C23.sideFlame=0;C23.fireHot=0;setEmit(C23,'silent');
+    const d23=Rv*0.5,k23=function(ox,oy){B.pos=[ox*d23,oy*d23,0];const q=irmPair(B,C23);return q.snr/Math.pow(visRangeOf(C23)/d23,2);};
+    C23.flame=1;const mR=k23(-1,0),mS=k23(0,1),mF=k23(1,0);C23.flame=-1;const rF=k23(1,0),rR=k23(-1,0);C23.flame=0;const z0=k23(1,0);B.pos=[0,0,0];
+    const e23=function(a,b){return Math.abs(a-b)<1e-6;};
+    T('㉓ 尾焰视角:主推 后 / 侧 / 前 = 1 / 0.6625 / 0.325;反推 前 / 后 = 1 / 0.2;熄火不分视角',
+      e23(mR,1)&&e23(mS,0.6625)&&e23(mF,0.325)&&e23(rF,1)&&e23(rR,0.2)&&e23(z0,1),
+      '主推 '+mR.toFixed(4)+' / '+mS.toFixed(4)+' / '+mF.toFixed(4)+' · 反推 '+rF.toFixed(4)+' / '+rR.toFixed(4)+' · 熄火 '+z0.toFixed(4));
+    /* ㉔ 尾巴:侧着看一艘点主推的船,甲里船后(喷口方向)两个山宽处比船前同样远处热得多;尾焰那份热占总热 1.65 / 2.65;熄火时前后一样 */
+    ships.length=0;ships.push(B,C23);B.pos=[0,Rv*0.4,0];C23.pos=[0,0,0];
+    const f24=function(){const h=irmHill(C23,[B]);cam.zoom=6*IRM.CELL/h.sig;
+      cam.x=(W/2-IRM.CELL*Math.round(W/2/IRM.CELL))/cam.zoom;cam.y=(H/2-IRM.CELL*Math.round(H/2/IRM.CELL))/cam.zoom;irmFieldJia();   /* 船心对准格点,前后两个采样点才对称 */
+      const pc=toScreen(0,0),ic=Math.round(pc[0]/IRM.CELL),jc=Math.round(pc[1]/IRM.CELL);return {back:irmF[jc*irmGW+ic-12],front:irmF[jc*irmGW+ic+12],h:h};};
+    C23.flame=1;const on24=f24(),sh24=irmTail(C23,irmHill(C23,[B])).share;C23.flame=0;const off24=f24();
+    T('㉔ 尾巴:点主推时船后比船前热得多、尾焰占 1.65/2.65;熄火时前后一样',
+      on24.back>3*on24.front&&Math.abs(sh24-1.65/2.65)<1e-6&&Math.abs(off24.back/off24.front-1)<0.01,
+      '点火 船后 '+on24.back.toFixed(3)+' / 船前 '+on24.front.toFixed(3)+' · 尾焰占 '+sh24.toFixed(4)+' · 熄火 '+off24.back.toFixed(3)+' / '+off24.front.toFixed(3));
+    /* ㉕ 致盲后方:我方船头朝 +x、点主推 ⇒ 船后偏 20° 的目标甲里看不见、偏 40° 看得见;熄火时偏 20° 也看得见;
+          反推 ⇒ 船前偏 20° 看不见、船后看得见;乙里点主推时船后那一格 >= 色标顶、船前没有 */
+    ships.length=0;ships.push(B,C23);B.pos=[0,0,0];B.facing=[1,0,0];C23.flame=0;
+    const at25=function(deg){const a=deg*Math.PI/180;C23.pos=[Math.cos(a)*d23,Math.sin(a)*d23,0];return irmHill(C23,[B])!==null;};
+    B.flame=1;const b20=at25(160),b40=at25(140),f0m=at25(20);const P25=irmProfiles()[0].P;
+    B.flame=-1;const rf20=at25(20),rb20=at25(200);B.flame=0;const n20=at25(160);
+    T('㉕ 致盲后方:点主推瞎船后 ±30°、反推瞎船前;熄火不瞎;乙里扇区整段刺眼',
+      !b20&&b40&&f0m&&!rf20&&rb20&&n20&&binAt(P25,180)>=IRM.VMAX&&binAt(P25,0)<IRM.VMAX,
+      '主推:船后偏 20° '+b20+' · 偏 40° '+b40+' · 船前 '+f0m+' · 反推:船前偏 20° '+rf20+' · 船后 '+rb20+' · 熄火偏 20° '+n20+' · 乙 船后 '+Math.round(binAt(P25,180))+' 船前 '+binAt(P25,0).toFixed(2));
   }catch(e){T('自检抛异常',false,String(e&&e.stack||e));}
   finally{
     ships.length=0;shipsBak.forEach(x=>ships.push(x));shipSeq=seq0;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;IRM.on=onBak;IRM.mode=modeBak;if(rocksBak)rocks=rocksBak;IRM.NOISE=nzBak;IRM_SUN.FALL=fallBak;irmSunSet(sunBak);irmSync();
