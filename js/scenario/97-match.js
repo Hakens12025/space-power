@@ -34,6 +34,7 @@ function matchSync(){ // 顶栏钮的字与提示跟着当前场景走(进 / 出
   const card=document.getElementById('matchEnd');if(card)card.hidden=true;
   MATCH.shown=false;MATCH.t0=0;
   MATCH.nBlue=ships.filter(s=>s.side==='blue').length;MATCH.nRed=ships.filter(s=>s.side==='red').length;
+  gmSync();
 }
 function matchEnter(){
   const i=matchIdx();if(i<0)return;
@@ -61,8 +62,10 @@ function matchTick(){
   card.hidden=false;
 }
 on('btnMatch','click',function(e){e.currentTarget.blur();if(matchIsOn())matchExit();else matchEnter();});
-/* ENV1 碎石带入口:进(或重开)带 world 的那一条对局。退出走「对局」钮(进了任何一局对局它都写「回靶场」) */
-function matchRocksIdx(){for(let i=0;i<TEST_ENVS.length;i++)if(TEST_ENVS[i].match&&TEST_ENVS[i].world)return i;return -1;}
-on('btnRocks','click',function(e){e.currentTarget.blur();const i=matchRocksIdx();if(i<0)return;envIdx=i;initFleet();running=false;if(typeof camJump==='function')camJump(1);});
+function gmSync(){ // ENV2 顶栏「全知」钮只在靶场出现,亮灭跟 adminMode 走(F8 与钮共用)
+  const b=document.getElementById('btnGM');if(!b)return;
+  const e=curEnv();b.style.display=(e&&e.range)?'':'none';b.classList.toggle('on',!!adminMode);
+}
+on('btnGM','click',function(e){e.currentTarget.blur();adminMode=!adminMode;gmSync();});
 on('meAgain','click',function(){matchEnter();});
 on('meRange','click',function(){matchExit();});

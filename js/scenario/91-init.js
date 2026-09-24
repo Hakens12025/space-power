@@ -17,6 +17,7 @@ function initFleet(){
   selMissile=null;selNet=null;selMissileHits=[];victoryShown=false;defeatShown=false; // RF4a 框选聚合态一并清(否则引用旧局弹丸对象)
   if(typeof clearPendings==='function')clearPendings(); // KIMI146:交互pending态也清——原 pendingBeacon/pendingManual 等引用旧局舰对象(点地图把信标挂到已不存在的船上)。
   rangeFollow=null;
+  adminMode=!!env.range; // ENV2 靶场是全知沙盘、对局只看我方感知(用户 2026-09-25);F8 / 顶栏「全知」钮照样能切
   if(typeof fmbResetCache==='function')fmbResetCache(); // FL1:书签/信息区的 DOM 缓存按"编队id|旗舰id|成员id串"做签名,而 shipSeq 换局归零、舰 id 复用 —— 两局的同号编队签名可能逐字相同,不清会留着上一局的舰名
   // 初始集结
   if(!env.range&&!env.match)ships.forEach(s=>s.orders.push({pos:[0,0,0],type:'stop'})); // RANGE1 靶场不压集结令:蓝方开局就朝原点跑会毁掉"静止发射"基线(此行在 initEnemy 之前,ships[] 只有蓝方)
@@ -55,7 +56,7 @@ function initFleet(){
     selected=[];                            // fmCreate 不该顺带把开局选中态也定了
   }
   initEnemy();
-  if(typeof envReset==='function'){envReset(typeof matchWorld==='function'?matchWorld(env.world):env.world);envSpawnRocks();} // ENV1 / TK4c:按场景的 world 重建环境(太阳 / 残骸场)并撒石头。没有 world 的场景 ⇒ 空环境、零块石头。放在 initEnemy 之后:石头的 id 与舰船的 id 各走各的计数器,谁先谁后都不影响舰船。ENV2 太阳方位为 'rand' 的场景先经 matchWorld 掷成具体方位(envReset 不掷骰子)
+  if(typeof envReset==='function'){const w0=typeof matchWorld==='function'?matchWorld(env.world):env.world;rangeWorld=env.range&&w0?JSON.parse(JSON.stringify(w0)):null;envReset(rangeWorld||w0);envSpawnRocks();} // ENV2 靶场拖天体改的是这份副本(scenario/95 的 rangeWorld),不动场景表 // ENV1 / TK4c:按场景的 world 重建环境(太阳 / 残骸场)并撒石头。没有 world 的场景 ⇒ 空环境、零块石头。放在 initEnemy 之后:石头的 id 与舰船的 id 各走各的计数器,谁先谁后都不影响舰船。ENV2 太阳方位为 'rand' 的场景先经 matchWorld 掷成具体方位(envReset 不掷骰子)
   if(typeof TRK_TN!=='undefined'){TRK_TN.blue=0;TRK_TN.red=0;} // TK4c 航迹号每局从 1 发
   /* SN6c:**开局先跑一拍感知**。感知是每秒一拍的节拍(stepSim 的 S1),不先跑一拍的话开局第一秒
      所有接触都是 lit=0 —— 热区层与椭圆层都没东西可画,画面上是一片空,直到一秒后才"啪"地出现。

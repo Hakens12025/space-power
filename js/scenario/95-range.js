@@ -93,6 +93,7 @@ function rangeClampOne(src){ // 逐字段钳位。localStorage 里的值可能�
   }
   return out;
 }
+let rangeWorld=null; // ENV2 靶场的世界副本:拖天体时改它再 envReset(initFleet 每局从场景表重拷)
 let rangeCfg=null; // {v,sync,targets:[3组]}
 function rangeCfgAll(){if(!rangeCfg)loadRangeCfg();return rangeCfg;}
 const RANGE_CFG_V=2; // SN4:存档格式版本。v1=信号特征+两个开关布尔 / v2=体型+隐身+发射档索引

@@ -236,6 +236,21 @@ function mdPending(e,sx,sy){ // 六条 pending*(转向 / 布防 / 跟随 / 信�
   }
   return false;
 }
+let rangeDrag=null; // ENV2 靶场全知时按住拖动的东西:{o 实体 | bi 天体下标, dx, dy, sx, sy, moved}
+function rangeDragAt(sx,sy){ // ENV2 靶场沙盘(全知时):12 px 内最近的舰船(敌我)/ 石头,其次天体圆盘
+  const env=curEnv();if(!env||!env.range||!adminMode)return null;
+  const w=worldAt(sx,sy);let best=null,bd=144;
+  for(const list of [ships,rocks])for(const o of list){if(o.dead)continue;const p=toScreen(o.pos[0],o.pos[1]),d=(p[0]-sx)*(p[0]-sx)+(p[1]-sy)*(p[1]-sy);if(d<bd){bd=d;best={o:o,dx:o.pos[0]-w[0],dy:o.pos[1]-w[1]};}}
+  if(best)return best;
+  const B=(rangeWorld&&rangeWorld.bodies)||[];
+  for(let i=0;i<B.length;i++){const b=B[i],p=toScreen(b.x,b.y),r=Math.max(6,b.r*cam.zoom);if((p[0]-sx)*(p[0]-sx)+(p[1]-sy)*(p[1]-sy)<r*r)return {bi:i,dx:b.x-w[0],dy:b.y-w[1]};}
+  return null;
+}
+function rangeDragTo(x,y){ // ENV2 舰船 / 石头直接写位置(靶连锚点一起挪,免得闪避机动拽回去);天体改 rangeWorld 再 envReset,不直写 ENV
+  const g=rangeDrag,w=worldAt(x,y),nx=w[0]+g.dx,ny=w[1]+g.dy;
+  if(g.o){g.o.pos=[nx,ny,g.o.pos[2]||0];if(g.o.rangeAnchor)g.o.rangeAnchor=g.o.pos.slice();}
+  else{const b=rangeWorld.bodies[g.bi];b.x=nx;b.y=ny;envReset(rangeWorld);}
+}
 function mdLeft(e,sx,sy){ // 左键
   const ord=orderAt(sx,sy);
   if(ord){ // 命中命令点 → 拖拽调整位置
@@ -244,6 +259,7 @@ function mdLeft(e,sx,sy){ // 左键
     selDrag=null;
     return;
   }
+  if(!e.shiftKey&&!e.ctrlKey){const g=rangeDragAt(sx,sy);if(g){g.sx=sx;g.sy=sy;g.moved=false;rangeDrag=g;}} // ENV2 先记下,真拖了才搬;只点不拖照常往下走点选
   const sh=shipAt(sx,sy);
   if(e.shiftKey){ // Shift=选导弹(单击选最近的,拖动框选导弹群)
     const g=groupAt(sx,sy);
@@ -324,6 +340,10 @@ window.addEventListener('mousemove',e=>{
     return;
   }
   if(typeof xhFeed==='function')xhFeed(e.clientX,e.clientY); // RF5 悬停准星喂入(command/74)。放这里:测距在上面 return 了(准星不该在那个模式下出现),又早于 dragOrder 的 return(否则拖命令点时十字会冻在拖拽起点)
+  if(rangeDrag){ // ENV2 靶场沙盘拖动:过 5 px 才算拖,并取消这一击的点选 / 框选
+    if(!rangeDrag.moved&&Math.abs(e.clientX-rangeDrag.sx)+Math.abs(e.clientY-rangeDrag.sy)>5){rangeDrag.moved=true;selDrag=null;}
+    if(rangeDrag.moved){rangeDragTo(e.clientX,e.clientY);return;}
+  }
   if(dragOrder){ // 拖拽命令点调整位置
     // FM1:原先这里还有 kind:'cur'/'queue' 两支,分别写 F.dest 与 F.queue[i].pos。
     // 编队路径现在就是旗舰的 orders,拖旗舰的点即拖整队航线,与散船共用下面这一支。
@@ -370,6 +390,7 @@ window.addEventListener('mouseup',e=>{
       else if(typeof xhQuickEngage==='function')xhQuickEngage(mShift);                    // RF5 Phase B 快速交战;RF7 带上 Shift:按住=追加进当前编辑序列(选定手势),不按=新建
     }
   }
+  if(e.button===0&&rangeDrag){const m=rangeDrag.moved;rangeDrag=null;if(m)return;} // ENV2 拖过了就不再当点击
   if(dragOrder){dragOrder=null;return;}
   if(e.button===0&&selDrag){ // 左键:判定点击 vs 框选
     const clicked=Math.abs(selDrag.x1-selDrag.x0)<5&&Math.abs(selDrag.y1-selDrag.y0)<5;
@@ -435,7 +456,7 @@ function onWheel(e){e.preventDefault(); // preventDefault 仍是第一句(注册
     if(typeof radPage==='function')radPage(e.deltaY>0?1:-1);return;} // 下滚=往后翻,与浏览器一致;只取符号
   zoomAt(e.clientX,e.clientY,Math.pow(1.0016,-e.deltaY));}
 // RF5 失焦清理 +mmb:不清的话切窗回来会残留一个"按下未抬起"的中键计时,回来随手一抬就误触快速交战
-window.addEventListener('blur',()=>{ghostMove=null;panning=null;selDrag=null;rmbClick=null;dragOrder=null;mmb=null;clearTimeout(rmbTimer);rmbTimer=null;clearTimeout(mmbTimer);mmbTimer=null;/* RF5 Phase C:不清的话切窗回来会凭空弹出轮盘 */for(const k in camKeys)camKeys[k]=false;}); // v119:失焦清相机键位,防切窗后镜头卡移动
+window.addEventListener('blur',()=>{rangeDrag=null;ghostMove=null;panning=null;selDrag=null;rmbClick=null;dragOrder=null;mmb=null;clearTimeout(rmbTimer);rmbTimer=null;clearTimeout(mmbTimer);mmbTimer=null;/* RF5 Phase C:不清的话切窗回来会凭空弹出轮盘 */for(const k in camKeys)camKeys[k]=false;}); // v119:失焦清相机键位,防切窗后镜头卡移动
 
 function selectedShips(){return selected.map(id=>shipById(id)).filter(Boolean);}
 function controlledShips(){ // 可控制目标:GM(管理员)下敌我皆可,普通模式只控制我方

@@ -196,8 +196,8 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 /* MT1 对局:顶栏入口钮 + 结果卡片。#btnMatch 是文字钮(.hbtn 的底子是 15px 的图标字号,压回正文字号);进了对局亮成开启态。
    结果卡片居中偏上,档位用 --z-modal(整档):它要压住右轨与工具栏,但不需要遮罩 —— 战场停在决出胜负那一刻,本来就该看得见。
    注意:#btnMatch 是顶栏里除暂停/倍速/教程之外唯一的钮。 */
-#btnMatch{font-size:var(--fs-body);padding:0 var(--sp-3);letter-spacing:var(--ls-label)}
-#btnMatch.on{color:var(--acc);border-color:var(--acc);background:var(--acc-wash)}
+#btnMatch,#btnGM{font-size:var(--fs-body);padding:0 var(--sp-3);letter-spacing:var(--ls-label)}
+#btnMatch.on,#btnGM.on{color:var(--acc);border-color:var(--acc);background:var(--acc-wash)}
 #matchEnd{left:50%;top:32%;transform:translate(-50%,-50%);min-width:340px;padding:var(--sp-6) var(--sp-6) var(--sp-5);text-align:center;z-index:var(--z-modal);
   border-color:var(--state-ok);box-shadow:0 4px 28px rgba(0,0,0,.6)}
 #matchEnd[hidden]{display:none!important}
