@@ -294,7 +294,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #fcList .fc-bar.edit{border-color:var(--state-select);background:var(--srf-sel)} /* 序列态高亮 */
 /* RF8 暂停:原为 opacity:.55 —— 变灰在这个本来就偏暗的面板上几乎看不出来。改成红色实态(边框+淡红底+红字),
    与 .fc-btn.danger 同一个 --state-danger,语义是"这条序列停着、一发不打"。刻意不叠 opacity:压暗会把红一起压掉。 */
-#fcList .fc-bar:not(.empty):hover{border-color:var(--line-acc);background:var(--srf-hover)}
+#fcList .fc-bar:not(.empty):hover{border-color:var(--line-acc);background-color:var(--srf-hover)} /* TS1 只改底色、不用 background 简写:这条特异度 (1,3,0) 高过 .paused 的 (1,2,0),简写会把暂停条的斜线(background-image)冲掉,"排在 :hover 之后"只在特异度相同时才管用。新测试套件用真的 :hover 层叠才测出来(老判据派发合成 mouseover 进不了 :hover) */
 /* RF8c 暂停 = 禁止语义三件套:虚线框(不是实的,表示"这条不在生效")+ 对角斜线(划掉)+ 红色。
    只用红色实框实测仍读作"高亮/告警",区分不出"停用" —— 用户反馈"意思不是特别有效"。
    斜线用 linear-gradient 画在 background-image 上,不加 DOM:`to top right` 的渐变线从左下角指向右上角,

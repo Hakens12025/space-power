@@ -183,18 +183,16 @@ function 通道(x, css) {
   setHover(E, null);
   return { r, h, star: b2.querySelector('.no').textContent };
 }
-/* ⚠ 悬停时的斜线(background-image)这一格【没有断言】:按真 :hover 算,它今天是被冲掉的 ——
-   悬停规则 `#fcList .fc-bar:not(.empty):hover{…background:…}` 的特异度是 (1,3,0),高过 `.paused` 的 (1,2,0),
-   background 简写把 background-image 复位成 none;css 注释说的"排在 :hover 之后"只在特异度相同时才管用。
-   这是 css/app.css 的真 bug(原判据派发合成 mouseover 不会让浏览器进 :hover,所以一直没测出来),照纪律不在这里修,见报告;
-   修好之后把 '悬停' 也加进下面检查斜线的那一行。 */
+/* 悬停时的斜线(background-image)也要在:原来悬停规则用 background 简写、特异度 (1,3,0) 高过 `.paused` 的 (1,2,0),
+   把斜线冲掉了(老判据派发合成 mouseover 进不了 :hover,一直没测出来);css/app.css 的 TS1 改成只动 background-color 修好。 */
 function 暂停条禁止语义(v) {
   for (const [tag, s] of [['常态', v.r], ['悬停', v.h]]) {
     assert.ok(s.c1.borderTopColor.includes('255, 107, 107'), `${tag}:暂停条边框应为红(--state-danger),实际 ${s.c1.borderTopColor}`);
     assert.equal(s.c1.borderTopStyle, 'dashed', `${tag}:暂停条边框线型`);
     assert.ok(parseFloat(s.c1.opacity) > 0.95, `${tag}:暂停条不许靠变灰表达,opacity 实际 ${s.c1.opacity}`);
   }
-  assert.ok(v.r.c1.backgroundImage.includes('gradient'), `常态:暂停条应有对角斜线(background-image 渐变),实际 ${v.r.c1.backgroundImage}`);
+  for (const [tag, s] of [['常态', v.r], ['悬停', v.h]])
+    assert.ok(s.c1.backgroundImage.includes('gradient'), `${tag}:暂停条应有对角斜线(background-image 渐变),实际 ${s.c1.backgroundImage}`);
   assert.ok(v.r.no1.color.includes('255, 107, 107'), `暂停条序号应为红字,实际 ${v.r.no1.color}`);
 }
 function 选中与编辑并存(v) {
@@ -211,7 +209,7 @@ test('方条三状态各占独立视觉通道:暂停 = 红虚线框 + 对角斜�
 });
 test('反向对照(样式表):悬停规则挪到暂停规则后面(悬停的边框色压过暂停的红),光标停在暂停条上那一格必须被抓到', () => {
   const x = 三状态(fcFull());
-  const hover = '#fcList .fc-bar:not(.empty):hover{border-color:var(--line-acc);background:var(--srf-hover)}';
+  const hover = '#fcList .fc-bar:not(.empty):hover{border-color:var(--line-acc);background-color:var(--srf-hover)}'; // TS1 后悬停规则只动底色
   cssMutantMustFail([[hover, ''], ['#fcList .fc-bar.paused .no,', hover + '\n#fcList .fc-bar.paused .no,']], css => 暂停条禁止语义(通道(x, css)));
 });
 test('反向对照(样式表):pick 改写边框色(RF8 那个与 edit 抢同一属性的老毛病),青字那一格必须被抓到', () => {
