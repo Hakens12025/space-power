@@ -22,7 +22,7 @@ html,body{margin:0;height:100%;background:#070a0e;overflow:hidden;font:12px "Mic
 </style></head><body>
 <canvas id="cv"></canvas>
 <div id="hint">左键拖船 · 点船选中 · 拖选中船旁的小圆点定雷达朝向 · 悬停雷达 / 扇区按钮预览自己的暴露 · 悬停区域 / 回波看读数 · 右键拖动平移 · 滚轮缩放 · 加船:点 +蓝 / +红 再点地图,右键取消<br>
-淡色底 = 我方雷达看得见的范围 · 点 = 雷达回波(暖色在接近、冷色在远离,旧的变暗) · 青色区域 = 听到的敌方雷达在哪(层叠:越往里越可能;多边形:一定在里面;光斑:大概在哪)· 越小越亮 · 菱形 = 红外看见(青边 = 顺着区域盯到的)</div>
+淡色底 = 我方雷达看得见的范围 · 点 = 雷达回波(暖色在接近、冷色在远离,旧的变暗) · 青色区域 = 听到的敌方雷达在哪(格子 / 面片 / 点越密越浓 = 越可能在那;多边形:一定在里面;光斑:大概在哪)· 越小越亮 · 菱形 = 红外看见(青边 = 顺着区域盯到的)</div>
 <div id="perf"></div>
 <div id="fleet"></div>
 <div id="ui">
@@ -34,7 +34,7 @@ html,body{margin:0;height:100%;background:#070a0e;overflow:hidden;font:12px "Mic
   <div class="row"><span class="lab">视角</span><span id="view"><button data-v="blue">蓝方</button><button data-v="red">红方</button><button data-v="god">上帝</button></span>
     <span class="lab">时间</span><span id="speed"><button data-sp="0">暂停</button><button data-sp="1">×1</button><button data-sp="10">×10</button><button data-sp="50">×50</button></span>
     <span class="lab"></span><button id="reset">重来</button></div>
-  <div class="row"><span class="lab">区域</span><span id="zone"><button data-z="fuzzy">层叠</button><button data-z="poly">多边形</button><button data-z="blob">光斑</button></span>
+  <div class="row"><span class="lab">区域</span><span id="zone"><button data-z="hex">六边形</button><button data-z="low">低多边形</button><button data-z="dot">点阵</button><button data-z="feather">羽化</button><button data-z="fuzzy">层叠</button><button data-z="poly">多边形</button><button data-z="blob">光斑</button></span>
     <span class="lab">加船</span><span id="add"><button data-add="blue">+蓝</button><button data-add="red">+红</button></span></div>
 </div>
 <script>
@@ -52,6 +52,9 @@ const RAD={R0:1600000,   // 360° 扇区对一艘驱逐舰的雷达发现距离(
 const IRD={COLD:240000,HOT:480000};                  // 红外看见一艘驱逐舰:熄火 / 点火
 const ESM={S0:20,SMIN:1,NR:4,CUE_MAX:3,FADE:90};     // 第一次听到的半宽(度)、最窄半宽、第几次起有距离带、引导增益上限、隔多少秒算新一轮
 const FZ={LV:[0.25,0.5,0.75,1],H:1,R:1.6,HEAR:0.15};   // 层叠画法的 α 截集:隶属度 α 那一层,方位半宽 x(1+H·(1-α))、距离带两头各放 R^(1-α)、320 万的远边放 (1+HEAR·(1-α))
+const MU={LV:[1/6,2/6,3/6,4/6,5/6,1],CELL:8};          // 格子 / 面片 / 点阵 / 羽化四种画法:隶属度按这 6 刀 α 截集取,先铺到每 8 像素一格的网上
+const ZV={HEX:9,TRI:26,DOT:3};                         // 六边形外接半径、三角网格距、点阵一点,都约多少屏幕像素(世界锚定,按 2 的幂换级)
+const ZMODES=new Set(['hex','low','dot','feather']);
 function radarRange(w){return RAD.R0*Math.pow(360/w,0.25);}      // 搜索雷达方程:距离按(驻留 / 搜索角)的四次方根涨
 function esmHalf(n){return Math.max(ESM.SMIN,ESM.S0/Math.sqrt(n));}  // 测向误差按听到次数的平方根缩小
 function esmBandK(n){return 1+3/Math.sqrt(n);}                     // 距离带 [d/K, d·K]
@@ -71,7 +74,7 @@ function sideCol(side){return side==='blue'?'111,180,255':'255,107,90';}
 const FLEET=Math.max(0,Math.min(500,Math.floor(+new URLSearchParams(location.search).get('fleet')||0)));
 function mkShip(side,name,x,y,vx,vy){return {side:side,name:name,pos:[x,y],vel:[vx,vy],flame:0,rm:'off',w:360,dir:side==='blue'?0:Math.PI,ph:0,swept:new Set()};}
 let ships=[],clock=0,ESMREV=0;
-const S={view:'blue',speed:10,sel:null,hover:null,mx:null,my:null,zone:'fuzzy',place:null};   // zone:目标区域画成层叠 / 多边形 / 光斑;place:正在放新船的那一方
+const S={view:'blue',speed:10,sel:null,hover:null,mx:null,my:null,zone:'hex',place:null};   // zone:目标区域画成 六边形 / 低多边形 / 点阵 / 羽化 / 层叠 / 多边形 / 光斑;place:正在放新船的那一方
 const RET={blue:new Map(),red:new Map()};   // 雷达回波:目标 → {pos, vr, d, t}(扫到那一刻的快照)
 const TRK={blue:new Map(),red:new Map()};   // 听到的敌方雷达:'听者|辐射源' → {L, E, n, t, org, brg, half, band}
 const PING=new Map();                       // 船 → 最近一次被扫到的真实时刻(告警闪一下)
@@ -207,7 +210,9 @@ function polys(side){ /* 这一方对全部敌方辐射源的多边形;听到新
     const P=inter(0);if(!P)continue;   // 交集是空的(对方在两次被听到之间挪太远):这一轮不画
     let n=0,t=-1e9;for(const k of use){n+=k.n;t=Math.max(t,k.t);}
     const z={E:E,poly:P,area:polyArea(P),n:n,L:use.length,fresh:fresh,age:clock-t};
-    if(S.zone==='fuzzy')z.layers=FZ.LV.map(al=>al===1?P:inter(1-al)).filter(Boolean);   // 外层在前
+    const lv=S.zone==='fuzzy'?FZ.LV:(ZMODES.has(S.zone)?MU.LV:null);
+    if(lv){z.cuts=lv.map(al=>({al:al,P:al===1?P:inter(1-al)})).filter(c=>c.P);   // 外层在前
+      let x0=1e18,y0=1e18,x1=-1e18,y1=-1e18;for(const p of z.cuts[0].P){x0=Math.min(x0,p[0]);y0=Math.min(y0,p[1]);x1=Math.max(x1,p[0]);y1=Math.max(y1,p[1]);}z.bb=[x0,y0,x1,y1];}
     L.push(z);}
   PLY.key=key;PLY.pre=pre;PLY.t=now;PLY.list=L;return L;
 }
@@ -309,10 +314,85 @@ function drawPolys(side){ /* 每部听到的敌方雷达一块多边形:越小�
     ctx.strokeStyle='rgba(84,224,208,'+((0.35+0.5*u)*f).toFixed(3)+')';ctx.lineWidth=1;ctx.stroke();}
 }
 function drawFuzzy(side){ /* 层叠:几层逐级放大的多边形叠着填、不描边 —— 外形是多边形,越往里叠得越浓,没有一条清楚的边 */
-  for(const z of polys(side)){if(!z.layers)continue;
-    const s=Math.sqrt(z.area),u=Math.max(0,Math.min(1,Math.log(1e6/s)/Math.log(100))),a=(0.08+0.4*u)*estFade(z)/z.layers.length;
+  for(const z of polys(side)){if(!z.cuts)continue;
+    const s=Math.sqrt(z.area),u=Math.max(0,Math.min(1,Math.log(1e6/s)/Math.log(100))),a=(0.08+0.4*u)*estFade(z)/z.cuts.length;
     ctx.fillStyle='rgba(84,224,208,'+a.toFixed(3)+')';
-    for(const P of z.layers){ctx.beginPath();for(let i=0;i<P.length;i++){const p=toScreen(P[i][0],P[i][1]);if(i)ctx.lineTo(p[0],p[1]);else ctx.moveTo(p[0],p[1]);}ctx.closePath();ctx.fill();}}
+    for(const c of z.cuts){const P=c.P;ctx.beginPath();for(let i=0;i<P.length;i++){const p=toScreen(P[i][0],P[i][1]);if(i)ctx.lineTo(p[0],p[1]);else ctx.moveTo(p[0],p[1]);}ctx.closePath();ctx.fill();}}
+}
+/* ---- 格子 / 面片 / 点阵 / 羽化:同一张隶属度网,四种画法 ---- */
+function hash3(a,b,c){let h=Math.imul(a|0,374761393)^Math.imul(b|0,668265263)^Math.imul(c|0,1442695041);h=Math.imul(h^(h>>>13),1274126177);return((h^(h>>>16))>>>0)/4294967296;}
+function muOf(z,p){ /* p 在这一团里的隶属度:落在哪一刀里就是那一刀的 α(外层先判,不在最外层直接 0) */
+  const C=z.cuts;if(!polyIn(C[0].P,p))return 0;let m=C[0].al;
+  for(let i=1;i<C.length;i++){if(polyIn(C[i].P,p))m=C[i].al;else break;}return m;
+}
+function zoneBright(z){return (0.25+0.75*Math.max(0,Math.min(1,Math.log(1e6/Math.sqrt(z.area))/Math.log(100))))*estFade(z);}   // 最里层越小越亮
+const MUG={gw:0,gh:0,M:null,B:null};
+function muBuild(side){ /* 屏幕上每 CELL 像素一个采样点(在 i·CELL, j·CELL):M = 各团隶属度取大,B = 取到那一团的亮度 */
+  const CL=MU.CELL,gw=Math.ceil(W/CL)+2,gh=Math.ceil(H/CL)+2;
+  if(MUG.gw!==gw||MUG.gh!==gh){MUG.M=new Float32Array(gw*gh);MUG.B=new Float32Array(gw*gh);MUG.gw=gw;MUG.gh=gh;}
+  const M=MUG.M,B=MUG.B;M.fill(0);B.fill(0);
+  for(const z of polys(side)){if(!z.cuts)continue;const br=zoneBright(z),bb=z.bb,p=[0,0];
+    const i0=Math.max(0,Math.floor(((bb[0]-cam.x)*cam.zoom+W/2)/CL)),i1=Math.min(gw-1,Math.ceil(((bb[2]-cam.x)*cam.zoom+W/2)/CL));
+    const j0=Math.max(0,Math.floor(((bb[1]-cam.y)*cam.zoom+H/2)/CL)),j1=Math.min(gh-1,Math.ceil(((bb[3]-cam.y)*cam.zoom+H/2)/CL));
+    for(let j=j0;j<=j1;j++){p[1]=(j*CL-H/2)/cam.zoom+cam.y;
+      for(let i=i0;i<=i1;i++){p[0]=(i*CL-W/2)/cam.zoom+cam.x;const m=muOf(z,p),q=j*gw+i;if(m>M[q]){M[q]=m;B[q]=br;}}}}
+}
+const MU_OUT=[0,0];
+function muAt(sx,sy){ /* 屏幕坐标处的 [隶属度(双线性), 亮度] */
+  const CL=MU.CELL,fx=sx/CL,fy=sy/CL,i=Math.floor(fx),j=Math.floor(fy),gw=MUG.gw;
+  if(i<0||j<0||i>=gw-1||j>=MUG.gh-1){MU_OUT[0]=MU_OUT[1]=0;return MU_OUT;}
+  const u=fx-i,v=fy-j,q=j*gw+i,M=MUG.M,B=MUG.B;
+  MU_OUT[0]=(M[q]*(1-u)+M[q+1]*u)*(1-v)+(M[q+gw]*(1-u)+M[q+gw+1]*u)*v;MU_OUT[1]=Math.max(B[q],B[q+1],B[q+gw],B[q+gw+1]);return MU_OUT;
+}
+function hexPath(X,x,y,R){X.moveTo(x+Math.cos(Math.PI/6)*R,y+Math.sin(Math.PI/6)*R);for(let i=1;i<6;i++){const a=Math.PI/6+i*Math.PI/3;X.lineTo(x+Math.cos(a)*R,y+Math.sin(a)*R);}X.closePath();}
+function renderHex(X){ /* 六边形格子(世界锚定):隶属度高过这一格固定的随机门槛就点亮;差一点的画成小残格 */
+  const L=Math.round(Math.log2(ZV.HEX/cam.zoom)),s=Math.pow(2,L),w=s*Math.sqrt(3),hy=s*1.5,rp=s*cam.zoom;
+  const w0=worldAt(-2*rp,-2*rp),w1=worldAt(W+2*rp,H+2*rp),r0=Math.floor(w0[1]/hy),r1=Math.ceil(w1[1]/hy);
+  const P=[[],[]];for(let k=0;k<8;k++){P[0].push([]);P[1].push([]);}   // [整格 / 残格][亮度 8 档]
+  for(let r=r0;r<=r1;r++){const y=r*hy,off=(r&1)?w/2:0,q0=Math.floor((w0[0]-off)/w),q1=Math.ceil((w1[0]-off)/w);
+    for(let q=q0;q<=q1;q++){const p=toScreen(q*w+off,y),mb=muAt(p[0],p[1]);if(!(mb[0]>0))continue;
+      const t=hash3(L,q,r),c=mb[0]>t?0:(mb[0]>t*0.5?1:-1);if(c<0)continue;P[c][Math.min(7,Math.floor(mb[1]*8))].push(p);}}
+  for(let c=0;c<2;c++)for(let k=0;k<8;k++){const A=P[c][k];if(!A.length)continue;const b=(k+0.5)/8;
+    X.fillStyle='rgba(84,224,208,'+(c?0.1+0.2*b:0.18+0.5*b).toFixed(3)+')';X.beginPath();for(const p of A)hexPath(X,p[0],p[1],rp*(c?0.45:0.9));X.fill();}
+}
+function renderLow(X){ /* 低多边形面片:世界锚定的抖动三角网,每块按中心的隶属度定深浅,再乘一点固定的明暗差 */
+  const L=Math.round(Math.log2(ZV.TRI/cam.zoom)),s=Math.pow(2,L),hy=s*0.866,m=2*s;
+  const w0=worldAt(0,0),w1=worldAt(W,H),j0=Math.floor((w0[1]-m)/hy),j1=Math.ceil((w1[1]+m)/hy),i0=Math.floor((w0[0]-m)/s),i1=Math.ceil((w1[0]+m)/s);
+  const pt=(i,j)=>toScreen(s*(i+0.5*(j&1))+(hash3(L,i,2*j+1)-0.5)*0.56*s,hy*j+(hash3(L,2*i+1,j)-0.5)*0.56*s);
+  const tri=(a,b,c,hv)=>{const mb=muAt((a[0]+b[0]+c[0])/3,(a[1]+b[1]+c[1])/3);if(!(mb[0]>0))return;
+    X.fillStyle='rgba(84,224,208,'+((0.06+0.5*mb[1])*mb[0]*(0.7+0.6*hv)).toFixed(3)+')';X.beginPath();X.moveTo(a[0],a[1]);X.lineTo(b[0],b[1]);X.lineTo(c[0],c[1]);X.closePath();X.fill();};
+  let prev=null;
+  for(let j=j0;j<=j1;j++){const row=[];for(let i=i0;i<=i1+1;i++)row.push(pt(i,j));
+    if(prev){const odd=((j-1)&1)===1;
+      for(let k=0;k<prev.length-1;k++){const i=i0+k,h1=hash3(L,2*i,j*5+3),h2=hash3(L,2*i+1,j*5+3);
+        if(!odd){tri(prev[k],prev[k+1],row[k],h1);tri(prev[k+1],row[k+1],row[k],h2);}
+        else{tri(prev[k],prev[k+1],row[k+1],h1);tri(prev[k],row[k+1],row[k],h2);}}}
+    prev=row;}
+}
+const BAYER=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
+const ZS={cv:null,cx:null,img:null,gw:0,gh:0};
+function zsImg(gw,gh){if(ZS.gw!==gw||ZS.gh!==gh){ZS.cv=document.createElement('canvas');ZS.cv.width=gw;ZS.cv.height=gh;ZS.cx=ZS.cv.getContext('2d');ZS.img=ZS.cx.createImageData(gw,gh);ZS.gw=gw;ZS.gh=gh;}return ZS.img.data;}
+function renderDot(X){ /* 点阵:4x4 有序抖动,隶属度 1 处全满(实心),往外越来越稀;相位跟着世界走,平移时点不爬 */
+  const D=ZV.DOT,gw=Math.ceil(W/D),gh=Math.ceil(H/D),d=zsImg(gw,gh),ox=Math.round((cam.x*cam.zoom-W/2)/D),oy=Math.round((cam.y*cam.zoom-H/2)/D);
+  for(let j=0;j<gh;j++)for(let i=0;i<gw;i++){const mb=muAt((i+0.5)*D,(j+0.5)*D),o=(j*gw+i)*4;
+    if(mb[0]>(BAYER[((j+oy)&3)*4+((i+ox)&3)]+0.5)/16){d[o]=84;d[o+1]=224;d[o+2]=208;d[o+3]=Math.round(255*(0.2+0.5*mb[1]));}else d[o+3]=0;}
+  ZS.cx.putImageData(ZS.img,0,0);X.imageSmoothingEnabled=false;X.drawImage(ZS.cv,0,0,gw*D,gh*D);X.imageSmoothingEnabled=true;
+}
+function renderFeather(X){ /* 羽化:内部平涂,只在隶属度 0.35 ~ 0.65 那一窄圈软过渡 */
+  const CL=MU.CELL,gw=MUG.gw,gh=MUG.gh,d=zsImg(gw,gh),M=MUG.M,B=MUG.B;
+  for(let q=0;q<gw*gh;q++){const t=Math.max(0,Math.min(1,(M[q]-0.35)/0.3)),a=t*t*(3-2*t)*(0.12+0.45*B[q]),o=q*4;d[o]=84;d[o+1]=224;d[o+2]=208;d[o+3]=Math.round(255*a);}
+  ZS.cx.putImageData(ZS.img,0,0);X.imageSmoothingEnabled=true;X.drawImage(ZS.cv,-CL/2,-CL/2,gw*CL,gh*CL);
+}
+const ZC={key:'',rev:-1,clk:-1,t:0,cv:null,cx:null};
+function drawZone(side){ /* 画进离屏画布:镜头变了当帧重画;听到新的一次或时间走了,最多每 150 ms 重画一次;平时每帧只贴图 */
+  const key=[cam.x,cam.y,cam.zoom,W,H,DPR,side,S.zone].join('|'),now=performance.now();
+  if(key!==ZC.key||((ZC.rev!==ESMREV||ZC.clk!==clock)&&now-ZC.t>=150)){
+    ZC.key=key;ZC.rev=ESMREV;ZC.clk=clock;ZC.t=now;
+    if(!ZC.cv||ZC.cv.width!==Math.round(W*DPR)||ZC.cv.height!==Math.round(H*DPR)){ZC.cv=document.createElement('canvas');ZC.cv.width=Math.round(W*DPR);ZC.cv.height=Math.round(H*DPR);ZC.cx=ZC.cv.getContext('2d');}
+    const X=ZC.cx;X.setTransform(1,0,0,1,0,0);X.clearRect(0,0,ZC.cv.width,ZC.cv.height);X.setTransform(DPR,0,0,DPR,0,0);
+    muBuild(side);({hex:renderHex,low:renderLow,dot:renderDot,feather:renderFeather})[S.zone](X);
+  }
+  ctx.drawImage(ZC.cv,0,0,W,H);
 }
 function dopCol(vr,a){ /* 负 = 在接近:暖;正 = 在远离:冷 */
   const t=Math.max(-1,Math.min(1,vr/600)),b=[232,238,244],e=t<0?[255,120,50]:[80,170,255],u=Math.abs(t);
@@ -355,7 +435,7 @@ function drawHover(side){ /* 读数只在悬停时出:先找 12 像素内的回�
   if(br){const p=toScreen(br.pos[0],br.pos[1]),age=clock-br.t,vr=Math.round(Math.abs(br.vr)),mv=vr<20?'不动':(br.vr<0?'接近 ':'远离 ')+vr+' km/s';
     label(age<RAD.T*1.5?'回波 · '+fmtWan(br.d)+' · '+mv:'旧回波 · '+age.toFixed(0)+' s 前 · 当时 '+mv,p[0]+10,p[1]+14,dopCol(br.vr,1),true);return;}
   const w=worldAt(S.mx,S.my);
-  if(S.zone!=='blob'){let bz=null;for(const z of polys(side))if(polyIn(z.layers?z.layers[0]:z.poly,w)&&(!bz||z.area<bz.area))bz=z;
+  if(S.zone!=='blob'){let bz=null;for(const z of polys(side))if(polyIn(z.cuts?z.cuts[0].P:z.poly,w)&&(!bz||z.area<bz.area))bz=z;
     if(bz)label(enemyTag(bz.E)+' · '+bz.L+' 艘听到 '+bz.n+' 次 · 区域约 '+fmtWan(Math.sqrt(bz.area))+' 见方'+(bz.fresh?'':' · '+bz.age.toFixed(0)+' s 前'),S.mx+14,S.my-10,'#9ff0e8',true);
     return;}
   let be=null,bq=4;
@@ -369,7 +449,7 @@ function draw(){
   const v=S.view;
   if(v==='god'){drawCoverage('blue');drawCoverage('red');for(const s of ships)drawShip(s);}
   else{
-    drawCoverage(v);if(S.zone==='fuzzy')drawFuzzy(v);else if(S.zone==='poly')drawPolys(v);else drawRf(v);drawReturns(v);
+    drawCoverage(v);if(ZMODES.has(S.zone))drawZone(v);else if(S.zone==='fuzzy')drawFuzzy(v);else if(S.zone==='poly')drawPolys(v);else drawRf(v);drawReturns(v);
     for(const [T,r] of irView(v))drawIrContact(T,r.cued);
     for(const s of ships)if(s.side===v)drawShip(s);
   }
