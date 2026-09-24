@@ -22,7 +22,7 @@ html,body{margin:0;height:100%;background:#070a0e;overflow:hidden;font:12px "Mic
 </style></head><body>
 <canvas id="cv"></canvas>
 <div id="hint">左键拖船 · 点船选中 · 拖选中船旁的小圆点定雷达朝向 · 悬停雷达 / 扇区按钮预览自己的暴露 · 悬停区域 / 回波看读数 · 右键拖动平移 · 滚轮缩放 · 加船:点 +蓝 / +红 再点地图,右键取消<br>
-淡色底 = 我方雷达看得见的范围 · 点 = 雷达回波(暖色在接近、冷色在远离,旧的变暗) · 青色区域 = 听到的敌方雷达在哪(多边形:一定在里面;光斑:大概在哪)· 越小越亮 · 菱形 = 红外看见(青边 = 顺着区域盯到的)</div>
+淡色底 = 我方雷达看得见的范围 · 点 = 雷达回波(暖色在接近、冷色在远离,旧的变暗) · 青色区域 = 听到的敌方雷达在哪(层叠:越往里越可能;多边形:一定在里面;光斑:大概在哪)· 越小越亮 · 菱形 = 红外看见(青边 = 顺着区域盯到的)</div>
 <div id="perf"></div>
 <div id="fleet"></div>
 <div id="ui">
@@ -34,7 +34,7 @@ html,body{margin:0;height:100%;background:#070a0e;overflow:hidden;font:12px "Mic
   <div class="row"><span class="lab">视角</span><span id="view"><button data-v="blue">蓝方</button><button data-v="red">红方</button><button data-v="god">上帝</button></span>
     <span class="lab">时间</span><span id="speed"><button data-sp="0">暂停</button><button data-sp="1">×1</button><button data-sp="10">×10</button><button data-sp="50">×50</button></span>
     <span class="lab"></span><button id="reset">重来</button></div>
-  <div class="row"><span class="lab">区域</span><span id="zone"><button data-z="poly">多边形</button><button data-z="blob">光斑</button></span>
+  <div class="row"><span class="lab">区域</span><span id="zone"><button data-z="fuzzy">层叠</button><button data-z="poly">多边形</button><button data-z="blob">光斑</button></span>
     <span class="lab">加船</span><span id="add"><button data-add="blue">+蓝</button><button data-add="red">+红</button></span></div>
 </div>
 <script>
@@ -51,6 +51,7 @@ const RAD={R0:1600000,   // 360° 扇区对一艘驱逐舰的雷达发现距离(
   T:4};                  // 扫完一次扇区的秒数,与扇区宽度无关,所以扇区越窄驻留越长
 const IRD={COLD:240000,HOT:480000};                  // 红外看见一艘驱逐舰:熄火 / 点火
 const ESM={S0:20,SMIN:1,NR:4,CUE_MAX:3,FADE:90};     // 第一次听到的半宽(度)、最窄半宽、第几次起有距离带、引导增益上限、隔多少秒算新一轮
+const FZ={LV:[0.25,0.5,0.75,1],H:1,R:1.6,HEAR:0.15};   // 层叠画法的 α 截集:隶属度 α 那一层,方位半宽 x(1+H·(1-α))、距离带两头各放 R^(1-α)、320 万的远边放 (1+HEAR·(1-α))
 function radarRange(w){return RAD.R0*Math.pow(360/w,0.25);}      // 搜索雷达方程:距离按(驻留 / 搜索角)的四次方根涨
 function esmHalf(n){return Math.max(ESM.SMIN,ESM.S0/Math.sqrt(n));}  // 测向误差按听到次数的平方根缩小
 function esmBandK(n){return 1+3/Math.sqrt(n);}                     // 距离带 [d/K, d·K]
@@ -70,7 +71,7 @@ function sideCol(side){return side==='blue'?'111,180,255':'255,107,90';}
 const FLEET=Math.max(0,Math.min(500,Math.floor(+new URLSearchParams(location.search).get('fleet')||0)));
 function mkShip(side,name,x,y,vx,vy){return {side:side,name:name,pos:[x,y],vel:[vx,vy],flame:0,rm:'off',w:360,dir:side==='blue'?0:Math.PI,ph:0,swept:new Set()};}
 let ships=[],clock=0,ESMREV=0;
-const S={view:'blue',speed:10,sel:null,hover:null,mx:null,my:null,zone:'poly',place:null};   // zone:目标区域画成多边形 / 光斑;place:正在放新船的那一方
+const S={view:'blue',speed:10,sel:null,hover:null,mx:null,my:null,zone:'fuzzy',place:null};   // zone:目标区域画成层叠 / 多边形 / 光斑;place:正在放新船的那一方
 const RET={blue:new Map(),red:new Map()};   // 雷达回波:目标 → {pos, vr, d, t}(扫到那一刻的快照)
 const TRK={blue:new Map(),red:new Map()};   // 听到的敌方雷达:'听者|辐射源' → {L, E, n, t, org, brg, half, band}
 const PING=new Map();                       // 船 → 最近一次被扫到的真实时刻(告警闪一下)
@@ -170,8 +171,9 @@ function estFade(e){return !e.fresh?0.3:(e.age<RAD.T*1.5?1:Math.max(0.3,1-(e.age
 
 /* ---- 目标区域画成多边形(集员估计 / 航海的"戴帽三角"):每艘听者给一块"方位 ± 半宽、距离带"围成的凸多边形,
    全部求交集 = 对方一定在里面。内弧取弦、外弧放大 1/cos,两处都只会把区域放大,不会把真值切出去 ---- */
-function lobPoly(k){ /* 一艘听者的那一块,逆时针 */
-  const h=k.half*DEG,b0=k.band?k.band[0]:0,M=8,b1=Math.min(k.band?k.band[1]:RAD.HEAR,RAD.HEAR)/Math.cos(h/M),o=k.org,P=[];   // 远边封在 320 万:再远主瓣也听不见
+function lobPoly(k,a){ /* 一艘听者的那一块,逆时针;a = 1-α,0 是本身,大于 0 是层叠画法往外放的那几层 */
+  a=a||0;const h=k.half*DEG*(1+FZ.H*a),b0=k.band?k.band[0]/Math.pow(FZ.R,a):0,M=8,
+    b1=Math.min(k.band?k.band[1]*Math.pow(FZ.R,a):Infinity,RAD.HEAR*(1+FZ.HEAR*a))/Math.cos(h/M),o=k.org,P=[];   // 远边封在 320 万:再远主瓣也听不见
   const at=(r,a)=>[o[0]+Math.cos(a)*r,o[1]+Math.sin(a)*r];
   if(b0>0)P.push(at(b0,k.brg+h),at(b0,k.brg-h));else P.push([o[0],o[1]]);
   for(let i=0;i<=M;i++)P.push(at(b1,k.brg-h+2*h*i/M));
@@ -194,21 +196,23 @@ function polyHalf(P,O){ /* 从 O 看这块多边形张开多宽(半角,度);O �
   for(const p of P){const d=norm(Math.atan2(p[1]-O.pos[1],p[0]-O.pos[0])-a0+Math.PI)-Math.PI;lo=Math.min(lo,d);hi=Math.max(hi,d);}
   return Math.max(ESM.SMIN,(hi-lo)/2/DEG);
 }
-const PLY={key:'',t:-1e9,list:[]};
+const PLY={key:'',pre:'',t:-1e9,list:[]};
 function polys(side){ /* 这一方对全部敌方辐射源的多边形;听到新的一次最多每 100 ms 重算一次 */
-  const now=performance.now(),key=side+'|'+ESMREV+'|'+Math.floor(clock);
-  if(PLY.key===key||(PLY.key.split('|')[0]===side&&now-PLY.t<100))return PLY.list;
+  const now=performance.now(),pre=side+'|'+S.zone,key=pre+'|'+ESMREV+'|'+Math.floor(clock);
+  if(PLY.key===key||(PLY.pre===pre&&now-PLY.t<100))return PLY.list;
   const by=new Map();for(const k of TRK[side].values()){let a=by.get(k.E);if(!a)by.set(k.E,a=[]);a.push(k);}
   const L=[];
   for(const [E,a] of by){let use=a.filter(k=>clock-k.t<=ESM.FADE);const fresh=use.length>0;if(!fresh)use=a;
-    let P=lobPoly(use[0]);for(let i=1;i<use.length&&P.length>=3;i++)P=clipPoly(P,lobPoly(use[i]));
-    if(P.length<3)continue;   // 交集是空的(对方在两次被听到之间挪太远):这一轮不画
+    const inter=x=>{let P=lobPoly(use[0],x);for(let i=1;i<use.length&&P.length>=3;i++)P=clipPoly(P,lobPoly(use[i],x));return P.length>=3?P:null;};
+    const P=inter(0);if(!P)continue;   // 交集是空的(对方在两次被听到之间挪太远):这一轮不画
     let n=0,t=-1e9;for(const k of use){n+=k.n;t=Math.max(t,k.t);}
-    L.push({E:E,poly:P,area:polyArea(P),n:n,L:use.length,fresh:fresh,age:clock-t});}
-  PLY.key=key;PLY.t=now;PLY.list=L;return L;
+    const z={E:E,poly:P,area:polyArea(P),n:n,L:use.length,fresh:fresh,age:clock-t};
+    if(S.zone==='fuzzy')z.layers=FZ.LV.map(al=>al===1?P:inter(1-al)).filter(Boolean);   // 外层在前
+    L.push(z);}
+  PLY.key=key;PLY.pre=pre;PLY.t=now;PLY.list=L;return L;
 }
-/* 两种画法共用的接口:引导(D)与悬停都走这里 */
-function zones(side){return S.zone==='poly'?polys(side):ests(side);}
+/* 三种画法共用的接口:引导(D)与悬停都走这里;层叠画法的引导按最里层(= 多边形) */
+function zones(side){return S.zone==='blob'?ests(side):polys(side);}
 function zoneIn(z,p){return z.poly?polyIn(z.poly,p):estQ(z,p)<=4;}
 
 /* ---- 红外:能不能看见;落在光斑里的,顺着光斑盯着看(D)---- */
@@ -304,6 +308,12 @@ function drawPolys(side){ /* 每部听到的敌方雷达一块多边形:越小�
     ctx.fillStyle='rgba(84,224,208,'+((0.05+0.3*u)*f).toFixed(3)+')';ctx.fill();
     ctx.strokeStyle='rgba(84,224,208,'+((0.35+0.5*u)*f).toFixed(3)+')';ctx.lineWidth=1;ctx.stroke();}
 }
+function drawFuzzy(side){ /* 层叠:几层逐级放大的多边形叠着填、不描边 —— 外形是多边形,越往里叠得越浓,没有一条清楚的边 */
+  for(const z of polys(side)){if(!z.layers)continue;
+    const s=Math.sqrt(z.area),u=Math.max(0,Math.min(1,Math.log(1e6/s)/Math.log(100))),a=(0.08+0.4*u)*estFade(z)/z.layers.length;
+    ctx.fillStyle='rgba(84,224,208,'+a.toFixed(3)+')';
+    for(const P of z.layers){ctx.beginPath();for(let i=0;i<P.length;i++){const p=toScreen(P[i][0],P[i][1]);if(i)ctx.lineTo(p[0],p[1]);else ctx.moveTo(p[0],p[1]);}ctx.closePath();ctx.fill();}}
+}
 function dopCol(vr,a){ /* 负 = 在接近:暖;正 = 在远离:冷 */
   const t=Math.max(-1,Math.min(1,vr/600)),b=[232,238,244],e=t<0?[255,120,50]:[80,170,255],u=Math.abs(t);
   return 'rgba('+Math.round(b[0]+(e[0]-b[0])*u)+','+Math.round(b[1]+(e[1]-b[1])*u)+','+Math.round(b[2]+(e[2]-b[2])*u)+','+a.toFixed(2)+')';
@@ -345,7 +355,7 @@ function drawHover(side){ /* 读数只在悬停时出:先找 12 像素内的回�
   if(br){const p=toScreen(br.pos[0],br.pos[1]),age=clock-br.t,vr=Math.round(Math.abs(br.vr)),mv=vr<20?'不动':(br.vr<0?'接近 ':'远离 ')+vr+' km/s';
     label(age<RAD.T*1.5?'回波 · '+fmtWan(br.d)+' · '+mv:'旧回波 · '+age.toFixed(0)+' s 前 · 当时 '+mv,p[0]+10,p[1]+14,dopCol(br.vr,1),true);return;}
   const w=worldAt(S.mx,S.my);
-  if(S.zone==='poly'){let bz=null;for(const z of polys(side))if(polyIn(z.poly,w)&&(!bz||z.area<bz.area))bz=z;
+  if(S.zone!=='blob'){let bz=null;for(const z of polys(side))if(polyIn(z.layers?z.layers[0]:z.poly,w)&&(!bz||z.area<bz.area))bz=z;
     if(bz)label(enemyTag(bz.E)+' · '+bz.L+' 艘听到 '+bz.n+' 次 · 区域约 '+fmtWan(Math.sqrt(bz.area))+' 见方'+(bz.fresh?'':' · '+bz.age.toFixed(0)+' s 前'),S.mx+14,S.my-10,'#9ff0e8',true);
     return;}
   let be=null,bq=4;
@@ -359,7 +369,7 @@ function draw(){
   const v=S.view;
   if(v==='god'){drawCoverage('blue');drawCoverage('red');for(const s of ships)drawShip(s);}
   else{
-    drawCoverage(v);if(S.zone==='poly')drawPolys(v);else drawRf(v);drawReturns(v);
+    drawCoverage(v);if(S.zone==='fuzzy')drawFuzzy(v);else if(S.zone==='poly')drawPolys(v);else drawRf(v);drawReturns(v);
     for(const [T,r] of irView(v))drawIrContact(T,r.cued);
     for(const s of ships)if(s.side===v)drawShip(s);
   }
