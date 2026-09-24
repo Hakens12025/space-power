@@ -297,6 +297,7 @@ function identDist(ch, d, t, lo) {
   const L = sReq(t, 'size', 'ship') * (ch === 'act' ? COV.L_ACT : (ch === 'lis' ? COV.L_LIS : COV.L_REF)), T = COV.TH0[ch]; // ID3:静听那一路用 L_LIS
   return ch === 'act' ? Math.pow(L * R * R / T, 1 / 3) : Math.sqrt(L * R / T);
 }
+function covResN(t, sig) { return 4 * t.size * COV.L_REF / sig; } // ENV2 红外页 irmResN 搬来:模糊宽度 sig 下目标横跨几个分辨单元(Johnson 准则;光学认出距离上恰为 4)
 
 /* ================= 反解:梯子 → 模型常数 =================
    除照射尺度外全是闭式,逐条对着正向公式倒回去;照射尺度对 ladActGate 做二分(单调)。

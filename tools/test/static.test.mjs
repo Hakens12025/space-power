@@ -10,7 +10,9 @@
    ============================================================================ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { newEngine, mutantMustFail } from './engine.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { newEngine, mutantMustFail, REPO } from './engine.mjs';
 import { full, mutant as fxMutant } from './lib/fx.mjs';
 import { SRC, srcMutantMustFail, stripComments, stripHot, topSyms, topSymsR3, pageScripts, demoPage, demoDeclsPending, demoLad } from './lib/match-static.mjs';
 
@@ -128,6 +130,36 @@ function ENV只有world12写(V) {
 test('ENV 唯一写入口:js/ 里除 world/12-env.js 以外没有一行直接写 ENV(去注释后)', () => ENV只有world12写(SRC));
 test('反向对照:在内存里让 scenario/97 的 matchEnter 写一句 ENV.rev++,上一条必须失败', () =>
   srcMutantMustFail({ 'js/scenario/97-match.js': [['  envIdx=i;initFleet();\n  running=false;', '  envIdx=i;initFleet();ENV.rev++;\n  running=false;']] }, ENV只有world12写));
+
+/* ================================ ENV2 红外页是纯视图(第 3a 步)================================
+   红外页(demos/地图组/src/)只调引擎:第 3a 步删掉的页内物理副本一个名字都不许回来(去注释后按整词找);
+   它的脚本也归单写者管 —— 开关与拖动只改「测试·红外」那份 world(IRW)再 envReset,不许直接写 ENV。 */
+const IR_PAGE = 'demos/地图组/src/irmap_heat.js';
+const IR_GONE = ['IRM_ROCK', 'IRM_SOLAR', 'irmSunDirAt', 'irmPhase', 'IRM_PLUME', 'irmPlumeOf', 'irmAspect', 'irmBaffled', 'irmLumK', 'irmContrast', 'irmPair', 'irmResN',
+  'IRM_CLOUD', 'irmHash', 'irmGN', 'irmCloudNorm', 'irmCloudD', 'irmCloudLitAt', 'irmCloudBg', 'IRM_PLANET', 'irmPlanet', 'irmPlanetSet', 'irmPlanetAdd', 'irmInShadow', 'irmOccluded',
+  'IRM_SUN', 'irmGlare', 'irmStar', 'irmSunSet', 'IRM_AST', 'irmSpawnAsteroids', 'irmOrigInitFleet', 'irmWorld', 'irmWorldKeep', 'NOSE', 'senseHidden', 'sensePlumeAspect'];
+function 红外页没有物理副本(V) {
+  const code = stripComments(V.text(IR_PAGE));
+  assert.ok(/function drawIrMap\(/.test(code) && /function irmUitest\(/.test(code), '场面前提:去注释后的红外页源码里找得到 drawIrMap 与 irmUitest(去注释没把代码吃掉)');
+  const back = IR_GONE.filter(n => new RegExp('(^|[^A-Za-z0-9_$])' + n + '(?![A-Za-z0-9_$])').test(code));
+  if (/(^|[^A-Za-z0-9_$.])initFleet\s*=[^=]/m.test(code)) back.push('initFleet 包装');
+  assert.deepEqual(back, [], '红外页里又出现了第 3a 步删掉的页内副本(物理一律调引擎)');
+}
+test('ENV2 红外页是纯视图:第 3a 步删掉的页内物理副本(IRM_ROCK / irmPair / irmCloudD / IRM_SUN / initFleet 包装……)一个名字都不剩(去注释后)', () => 红外页没有物理副本(SRC));
+test('反向对照:在内存里给红外页种回一句 const IRM_ROCK,上一条必须失败', () =>
+  srcMutantMustFail({ [IR_PAGE]: [['let irmRef=null;', 'let irmRef=null;const IRM_ROCK={DARK:1};']] }, 红外页没有物理副本));
+test('反向对照:在内存里给红外页种回 initFleet 包装,上上条必须失败', () =>
+  srcMutantMustFail({ [IR_PAGE]: [['let irmRef=null;', 'let irmRef=null;initFleet=function(){};']] }, 红外页没有物理副本));
+const irSrcFiles = () => fs.readdirSync(path.join(REPO, 'demos/地图组/src')).filter(f => f.endsWith('.js')).sort().map(f => 'demos/地图组/src/' + f);
+function 红外页不直接写ENV(V) {
+  const files = irSrcFiles();
+  assert.ok(files.includes(IR_PAGE), '场面前提:demos/地图组/src/ 下找得到 irmap_heat.js');
+  const bad = files.map(f => [f, envWriteLines(V.text(f))]).filter(x => x[1] > 0).map(x => x.join(':'));
+  assert.deepEqual(bad, [], 'demos/地图组/src/ 下直接写 ENV 的脚本:命中行数(要改世界,改 IRW 再 envReset)');
+}
+test('ENV2 单写者:demos/地图组/src/*.js 不直接写 ENV(去注释后;开关与拖动只改 IRW 再 envReset)', () => 红外页不直接写ENV(SRC));
+test('反向对照:在内存里让 irmSetSun 直接写一句 ENV.sun=null,上一条必须失败', () =>
+  srcMutantMustFail({ [IR_PAGE]: [['  delete IRW.sun;delete IRW.stars;\n', '  delete IRW.sun;delete IRW.stars;ENV.sun=null;\n']] }, 红外页不直接写ENV));
 
 /* ================================ 航迹单写者(TK2.0 / TK4a)================================
    建航迹只许两处:造船时的登记(sensors/24)与生产者(sensors/21)。别处出现 trkEnsure( 或直接往两张表里 set,就是"读的时候顺手建了一条";

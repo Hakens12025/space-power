@@ -809,3 +809,54 @@ function 刹车船头朝敌(E) {
 test('ENV2 刹车段:开到红舰跟前停下,刹车那段船头朝着红舰、反推把船头那侧致盲 ⇒ 光学丢了 —— 这是预期(用户拍板 A2:主推、反推都致盲)', () => 刹车船头朝敌(logic()));
 test('反向对照:只有主推致盲(反推不瞎),上一条必须失败', () =>
   mutant({ [PAIRJS]: [['const f = s.flame, fc = s.facing; if (!f || !fc) return null;', 'const f = s.flame, fc = s.facing; if (!(f > 0) || !fc) return null;']] }, 刹车船头朝敌));
+
+/* ============================ ENV2 第 3a 步:红外页要调的四个函数(引擎自己不调) ============================ */
+/* 尾焰:喷口方向按 XY 归一(主推朝船尾、反推朝船头),热 = 体型 x 引擎档 x envOptK;熄火 / 没有朝向给 null */
+function 尾焰方向与热(E) {
+  const g = E.g, [, R] = duo(E, 'DD', 'DD'), sz = R.size, MAIN = E.val('SENS.P_ENG_MAIN'), REV = E.val('SENS.P_ENG_REV');
+  const read = (f, fc) => { R.flame = f; R.facing = fc; const p = g.sensePlume(R); return p && [p[0], p[1], p[2]]; };
+  const got = { 主推: read(1, [3, 4, 1]), 反推: read(-1, [3, 4, 1]), 熄火: read(0, [3, 4, 1]), 没有朝向: read(1, null) };
+  g.envReset({ fields: [{ x: 0, y: 0, r: 1e6, n: 0, seed: 1 }] });
+  got.场内主推 = read(1, [3, 4, 1]);
+  assert.deepEqual(got, { 主推: [-0.6, -0.8, sz * MAIN * 1], 反推: [0.6, 0.8, sz * REV * 1], 熄火: null, 没有朝向: null, 场内主推: [-0.6, -0.8, sz * MAIN * 0.25] },
+    '[喷口 x, 喷口 y, 尾焰热]');
+}
+test('ENV2 sensePlume:主推喷口朝船尾、反推朝船头(XY 归一),热 = 体型 x 引擎档 x envOptK;熄火 / 没有朝向给 null', () => 尾焰方向与热(logic()));
+test('反向对照:尾焰热不乘 envOptK,上一条必须失败', () =>
+  mutant({ [PAIRJS]: [["out[2] = sReq(s, 'size', 'ship') * engPowerOf(s) * envOptK(s.pos);", "out[2] = sReq(s, 'size', 'ship') * engPowerOf(s);"]] }, 尾焰方向与热));
+
+/* 三份:自身 = optLum - 尾焰、尾焰 = sensePlume 的热、晒热 = senseSolar;三份之和 = senseOptPair 的 lok(背对太阳看,相位 1) */
+function 亮度三份(E) {
+  const g = E.g, [B, R] = duo(E, 'DD', 'DD'); R.pos = [50000, 0, 0];
+  g.envReset({ sun: { brg: 180, half: 10 } });
+  R.flame = 1; const L = g.optLum(R), P = g.sensePlume(R)[2], p = g.senseOptParts(B, R), lok = g.senseOptPair(B, R).lok;
+  R.flame = 0; const q = g.senseOptParts(B, R);
+  assert.deepEqual({ 自身: p.self, 尾焰: p.plume, 晒热: p.solar, 熄火尾焰: q.plume, 熄火自身: q.self },
+    { 自身: L - P, 尾焰: P, 晒热: g.senseSolar(B, R), 熄火尾焰: 0, 熄火自身: g.optLum(R) });
+  assert.ok(p.solar > 0 && rel(p.self + p.plume + p.solar, lok) < 1e-12 && rel(P / L, 0.75) < 1e-12, `三份之和 ${p.self + p.plume + p.solar} 应 = lok ${lok};冷 DD 点主推尾焰占 ${P / L}(应 0.75)`);
+}
+test('ENV2 senseOptParts:自身 = optLum - 尾焰、尾焰 = sensePlume 的热、晒热 = senseSolar,三份之和 = lok;熄火时尾焰 0', () => 亮度三份(logic()));
+test('反向对照:尾焰份额恒 0(4a 的占位),上一条必须失败', () =>
+  mutant({ [PAIRJS]: [['return { self: L - P, plume: P, solar: senseSolar(o, t) };', 'return { self: L, plume: 0, solar: senseSolar(o, t) };']] }, 亮度三份));
+
+/* 三道门:空环境不挡;目标在光源禁区里、天体挡在中间、自己反推瞎船头,各自单独都挡 */
+function 光学三道门(E) {
+  const g = E.g, [B, R] = duo(E, 'DD', 'DD'); R.pos = [50000, 0, 0]; B.facing = [1, 0, 0];
+  const at = w => { g.envReset(w); return g.senseOptBlocked(B, R); };
+  const got = { 空环境: at(null), 禁区: at({ sun: { brg: 0, half: 10 } }), 遮挡: at({ bodies: [{ x: 25000, y: 0, r: 1000 }] }) };
+  g.envReset(null); B.flame = -1; got.反推瞎船头 = g.senseOptBlocked(B, R); B.flame = 1; got.主推不瞎船头 = g.senseOptBlocked(B, R); B.flame = 0;
+  assert.deepEqual(got, { 空环境: false, 禁区: true, 遮挡: true, 反推瞎船头: true, 主推不瞎船头: false });
+}
+test('ENV2 senseOptBlocked:空环境不挡;光源禁区、天体遮挡、自己反推瞎船头各自单独都挡;主推不瞎船头', () => 光学三道门(logic()));
+test('反向对照:三道门漏了自己尾焰致盲,上一条必须失败', () =>
+  mutant({ [PAIRJS]: [[' || senseBaffled(o, t.pos);', ';']] }, 光学三道门));
+
+/* 分辨单元数:在光学认出距离上,模糊宽度 = 距离 x 角精度 时恰为 4;1.5 倍距离处 4/2.25 */
+function 认出距离上四个单元(E) {
+  const g = E.g, [B, R] = duo(E, 'CA', 'DD'), d = g.identDist('opt', B, R);
+  const N = k => g.covResN(R, k * d * g.covTheta('opt', B, R, k * d));
+  assert.ok(rel(N(1), 4) < 1e-12 && rel(N(1.5), 4 / 2.25) < 1e-12, `认出距离上 N = ${N(1)}(应 4);1.5 倍 ${N(1.5)}(应 ${4 / 2.25})`);
+}
+test('ENV2 covResN:光学认出距离上恰为 4 个分辨单元,1.5 倍距离处 4/2.25', () => 认出距离上四个单元(logic()));
+test('反向对照:分辨单元数的系数写成 2,上一条必须失败', () =>
+  mutant({ [COVJS]: [['function covResN(t, sig) { return 4 * t.size * COV.L_REF / sig; }', 'function covResN(t, sig) { return 2 * t.size * COV.L_REF / sig; }']] }, 认出距离上四个单元));

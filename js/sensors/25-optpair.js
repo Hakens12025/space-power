@@ -57,6 +57,19 @@ function senseBaffled(o, tpos) { // ENV2 o 看 tpos 的视线落在自己尾焰�
   const vx = tpos[0] - o.pos[0], vy = tpos[1] - o.pos[1], k = vx * u[0] + vy * u[1];
   return k > 0 && k * k > (vx * vx + vy * vy) * senseBafC2();
 }
+function sensePlume(s, out) { // ENV2 尾焰:[喷口 XY 单位方向, 尾焰热 P = 体型 x 引擎档 x envOptK];熄火 / 没有朝向 ⇒ null(红外页甲的尾巴用)
+  if (!s.flame || !s.facing) return null;
+  const fc = s.facing, l = Math.hypot(fc[0], fc[1]) || 1, k = s.flame > 0 ? -1 : 1; if (!out) out = [0, 0, 0];
+  out[0] = k * fc[0] / l; out[1] = k * fc[1] / l; out[2] = sReq(s, 'size', 'ship') * engPowerOf(s) * envOptK(s.pos); return out;
+}
+const SOP_P3 = [0, 0, 0]; // ENV2 senseOptParts 的三格草稿
+function senseOptParts(o, t) { // ENV2 o 看 t 的亮度拆成三份:自身 / 尾焰 / 晒热(尾焰各向同性,拍板 A1)
+  const L = optLum(t), pl = sensePlume(t, SOP_P3), P = pl ? pl[2] : 0;
+  return { self: L - P, plume: P, solar: senseSolar(o, t) };
+}
+function senseOptBlocked(o, t) { // ENV2 光学看不见这一对:光源禁区 / 天体遮挡 / 自己尾焰致盲(红外页甲的三道门)
+  return envSunBlind(o.pos, t.pos) || (ENV.bodies.length > 0 && envOccluded(o.pos, t.pos)) || senseBaffled(o, t.pos);
+}
 function senseContrast(o, t) { const q = senseGlareAt(o.pos, t.pos) + (ENV.clouds.length ? envBg(t.pos, 'opt') : 0); return q > 0 ? 1 / Math.sqrt(1 + q / SENS.BG_G0) : 1; } // ENV2 背景受限的对比度因子
 function senseOptPair(o, t) { // ENV2 红外页用:甲读打折后的 snrEff / blurEff,乙读不打折的 snr / ang
   const dx = t.pos[0] - o.pos[0], dy = t.pos[1] - o.pos[1], dz = (t.pos[2] || 0) - (o.pos[2] || 0), d = Math.max(1, Math.hypot(dx, dy, dz));

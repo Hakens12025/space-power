@@ -246,10 +246,8 @@ test('反向对照:R3 写成 0.40,上一条必须失败', () =>
    做法:把红外页源码里 IRM_CLOUD 到 irmCloudD 那一段原样抠出来,放进一个空的 vm 上下文里跑;与「测试·红外」那朵云(云心 (0,0)、种子 20)的
    envCloudDensity(x, y, MIN_KM) 在内圈(ρ <= 1 - EDGE,不受软窗影响)2 万个随机点上逐位比 */
 function 物理尺度与红外页逐位相同(E) {
-  const src = fs.readFileSync(path.join(REPO, 'demos/地图组/src/irmap_heat.js'), 'utf8');
-  const i0 = src.indexOf('const IRM_CLOUD='), i1 = src.indexOf('function irmCloudLitAt');
-  assert.ok(i0 >= 0 && i1 > i0, '场面前提:红外页源码里找得到 IRM_CLOUD 到 irmCloudD 那一段');
-  const irm = vm.runInNewContext(src.slice(i0, i1) + '\n;({D:irmCloudD,C:IRM_CLOUD})');
+  const src = fs.readFileSync(path.join(REPO, 'tools/test/golden/irm_cloud_ref.js'), 'utf8');   // ENV2 第 3a 步红外页改调引擎、删了 irmCloudD,参照改读删之前冻结的原样拷贝
+  const irm = vm.runInNewContext(src + '\n;({D:irmCloudD,C:IRM_CLOUD})');
   const g = E.g, c = irEnv(E).world.clouds[0], mk = MK(E), e = E.run('ENV_CFG.DUST.EDGE'), rng = g.envRng(20260924);
   assert.deepEqual([c.x, c.y, c.seed, irm.C.SEED, irm.C.MIN_KM, mk], [0, 0, 20, 20, 12500, 12500], '场面前提:云心 (0,0)、种子 20,两边物理尺度都是 12500 km');
   g.envReset({ clouds: [c] });

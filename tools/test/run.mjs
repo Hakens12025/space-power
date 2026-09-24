@@ -54,6 +54,7 @@ const ASSET_TESTS = [
   [/^css\/app\.css$/, ['formation', 'firecontrol', 'render']],                  // 按样式表算 display / 颜色 / 工具栏规则
   [/^demos\/sensors\//, ['static']],                                            // 引擎梯子 = 演示页梯子
   [/^tools\/tk\//, ['static', 'slow']],                                         // tk/lad.js 被 static 与 slow/tk-golden 原样跑;digest.js / drawlog.js 在 slow/
+  [/^demos\/地图组\//, ['static']],                                             // ENV2 红外页是纯视图:static 查它没有物理副本、不直接写 ENV
 ];
 /* 改到这些 ⇒ 跑全部(框架本身、页面脚本清单) */
 const FRAMEWORK = [/^tools\/test\/engine\.mjs$/, /^tools\/test\/run\.mjs$/, /^tools\/test\/index\.js$/, /^tools\/test\/lib\//, /^index\.html$/];
@@ -94,7 +95,7 @@ const chosen = new Set(), notes = [];
 if (changed) {
   let names = [];
   try {
-    const git = args => execFileSync('git', args, { cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    const git = args => execFileSync('git', ['-c', 'core.quotepath=false', ...args], { cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });   // ENV2 路径里有中文(demos/地图组/)时 git 缺省会转义成 "\345…",正则就对不上
     names = [...git(['diff', '--name-only', base]).split('\n'), ...git(['ls-files', '--others', '--exclude-standard']).split('\n')].map(s => s.trim()).filter(Boolean);
   } catch (e) { console.error('--changed:git 调不起来(' + (e && e.message) + ')'); process.exit(2); }
   const why = new Set(), missing = new Set();
