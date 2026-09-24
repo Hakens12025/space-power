@@ -13,11 +13,18 @@ html,body{margin:0;height:100%;background:#070a0e;overflow:hidden;font:12px "Mic
 #read{font:12px Consolas,monospace;color:#8fa0b0;white-space:pre;line-height:1.5}
 #perf{position:fixed;right:10px;top:8px;font:12px Consolas,monospace;color:#8fa0b0}
 #hint{position:fixed;left:10px;top:8px;color:#5f7080;line-height:1.7}
+#fleet{position:fixed;right:10px;top:30px;display:flex;flex-direction:column;gap:3px;user-select:none;background:rgba(11,16,22,.85);border:1px solid #2a3642;padding:6px 8px}
+#fleet .row{display:flex;gap:3px;align-items:center}
+#fleet .nm{width:64px;font:12px Consolas,"Microsoft YaHei",monospace}
+#fleet button{background:#141b23;color:#9fb0c0;border:1px solid #2a3642;padding:2px 7px;font:12px "Microsoft YaHei",sans-serif;cursor:pointer}
+#fleet button.on{background:#7a2a18;color:#fff0e0;border-color:#c0502a}
+#fleet .ttl{color:#8fa0b0;margin-bottom:2px}
 </style></head><body>
 <canvas id="cv"></canvas>
 <div id="hint">左键拖船 · 点船选中 · 拖选中船旁的小圆点定雷达朝向 · 悬停雷达 / 扇区按钮预览自己的暴露 · 悬停光斑 / 回波看读数 · 右键拖动平移 · 滚轮缩放<br>
 淡色底 = 我方雷达看得见的范围 · 点 = 雷达回波(暖色在接近、冷色在远离,旧的变暗) · 青色光斑 = 听到的敌方雷达大概在哪(越糊越大越淡) · 菱形 = 红外看见(青边 = 顺着光斑盯到的)</div>
 <div id="perf"></div>
+<div id="fleet"></div>
 <div id="ui">
   <div id="read"></div>
   <div class="row" id="rowSel"><span class="lab" id="selName"></span>
@@ -74,6 +81,22 @@ function scene(){
     const s=mkShip('red','红'+(4+i),2700000+r()*700000,(r()*2-1)*1000000,-400,0);if(i%5===0){s.rm='on';s.ph=r();}ships.push(s);}
   clock=0;ESMREV++;IRC.t=-1e9;for(const m of [RET.blue,RET.red,TRK.blue,TRK.red,PING])m.clear();
   S.sel=ships.find(s=>S.view==='god'||s.side===S.view);
+  buildFleet();
+}
+function setRm(s,m){if(m!=='off'&&(m==='blink'||s.rm==='off')){s.ph=0;s.swept.clear();}s.rm=m;}   // 从关到开、或亮一下:从扇区起点扫
+/* 右上角雷达总控:每方"全部"一行 + 每艘一行,任何视角都能开关(不用选中、不用开上帝) */
+const RM_BTNS='<button data-rm="off">关</button><button data-rm="blink">亮一下</button><button data-rm="on">常开</button>';
+function buildFleet(){
+  let h='<div class="ttl">雷达总控</div>';
+  for(const side of ['blue','red'])h+='<div class="row" data-side="'+side+'"><span class="nm" style="color:rgb('+sideCol(side)+')">'+(side==='blue'?'蓝方全部':'红方全部')+'</span>'+RM_BTNS+'</div>';
+  if(ships.length<=24)ships.forEach(function(s,i){h+='<div class="row" data-i="'+i+'"><span class="nm" style="color:rgba('+sideCol(s.side)+',.85)">'+s.name+'</span>'+RM_BTNS+'</div>';});
+  else h+='<div class="ttl">船太多,只给全部</div>';
+  document.getElementById('fleet').innerHTML=h;
+}
+function syncFleet(){
+  for(const r of document.querySelectorAll('#fleet .row')){
+    const i=r.getAttribute('data-i'),side=r.getAttribute('data-side'),L=i!==null?[ships[+i]]:ships.filter(s=>s.side===side);
+    for(const b of r.querySelectorAll('button')){const m=b.getAttribute('data-rm');b.classList.toggle('on',L.length>0&&L.every(s=>s.rm===m));}}
 }
 function enemyTag(E){const k=ships.filter(s=>s.side===E.side).indexOf(E);return '辐射源'+(k<6?'甲乙丙丁戊己'[k]:(k+1)+'号');}   // 电子情报分得清是哪一部,不知道是哪艘船
 
@@ -350,10 +373,13 @@ function syncUI(){
   const s=S.sel;document.getElementById('rowSel').style.display=s?'flex':'none';
   if(s){document.getElementById('selName').textContent=s.name;mark('#selRad [data-rm]','data-rm',s.rm);mark('#selW [data-w]','data-w',s.w);mark('#selFl [data-fl]','data-fl',s.flame);}
   mark('#view [data-v]','data-v',S.view);mark('#speed [data-sp]','data-sp',S.speed);
+  syncFleet();
   document.getElementById('read').textContent=readout();
 }
 function onClick(id,fn){document.getElementById(id).addEventListener('click',function(e){const b=e.target.closest('button');if(!b)return;b.blur();fn(b);syncUI();});}
-onClick('selRad',function(b){const s=S.sel;if(!s)return;const m=b.getAttribute('data-rm');if(m!=='off'&&(m==='blink'||s.rm==='off')){s.ph=0;s.swept.clear();}s.rm=m;});
+onClick('selRad',function(b){if(S.sel)setRm(S.sel,b.getAttribute('data-rm'));});
+onClick('fleet',function(b){const r=b.closest('.row'),m=b.getAttribute('data-rm');if(!r||!m)return;const i=r.getAttribute('data-i');
+  for(const s of i!==null?[ships[+i]]:ships.filter(s=>s.side===r.getAttribute('data-side')))setRm(s,m);});
 onClick('selW',function(b){const s=S.sel;if(!s)return;s.w=+b.getAttribute('data-w');s.ph=0;s.swept.clear();});
 onClick('selFl',function(b){if(S.sel)S.sel.flame=+b.getAttribute('data-fl');});
 onClick('view',function(b){S.view=b.getAttribute('data-v');if(S.sel&&S.view!=='god'&&S.sel.side!==S.view)S.sel=ships.find(s=>s.side===S.view);});
