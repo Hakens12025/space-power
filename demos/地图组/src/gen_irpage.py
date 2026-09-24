@@ -18,7 +18,7 @@ style='''<style>
 #irDock .hbtn.on{color:var(--acc);border-color:var(--acc);position:relative;z-index:1}
 /* ENV2 顶栏「对局」「碎石带」两钮藏起来:它们会把 envIdx 切走,而本页的开关写的是「测试·红外」那份 world(E6) */
 #btnMatch,#btnRocks{display:none}
-#irSelftest{position:fixed;left:8px;top:60px;z-index:var(--z-transient);white-space:pre-wrap;padding:8px;background:var(--srf-panel);color:var(--txt);font:12px var(--ff-mono,monospace)}
+#irSelftest,#irPerf{position:fixed;left:8px;top:60px;z-index:var(--z-transient);white-space:pre-wrap;padding:8px;background:var(--srf-panel);color:var(--txt);font:12px var(--ff-mono,monospace)}
 </style>
 </head>'''
 assert s.count('</head>')==1; s=s.replace('</head>',style,1)
