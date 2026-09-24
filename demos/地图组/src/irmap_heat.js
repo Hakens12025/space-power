@@ -195,27 +195,42 @@ function irmFieldYi(){
    两个作用:①画出来(甲乙都画 —— 云是地形,和残骸场一样算已知的地图);
             ②衬在云里的目标背景热、对比度低:与逆光同一条背景受限律,甲里的山变矮变宽(irmContrast)。
    ②按固定的物理尺度算(细到 MIN_KM),不随缩放变;①只画屏幕上分得出的那几层(细到两个粗格),拉远拉近不会闪。
-   性能:云按 2 x 2 格一个粗格算、双线性铺回;镜头和太阳不变时直接用上一帧的结果。左下角「尘埃云」开关,默认开 */
+   性能:云的格点锚在世界坐标上(格距约 2 格、取 2 的幂),按级缓存、双线性铺回;平移只算露出来的格点。左下角「尘埃云」开关,默认开 */
 let irmCloudCache=null;
+const irmCloudWin=new Map(),IRM_CLOUD_M=8,IRM_CLOUD_LV=4;   // ENV2 3b-2 云改世界锚定:格点在世界 (I·2^L, J·2^L),每级一个窗口,平移只算露出来的格点
 function irmCloudAdd(){ /* 把云铺进这一帧的场里(甲乙都铺) */
   const CL=ENV.clouds;if(!CL.length)return;
-  const gw=irmGW,gh=irmGH,C=IRM.CELL,cw=Math.ceil(gw/2)+1,ch=Math.ceil(gh/2)+1,n=cw*ch,lens='|'+[cam.x,cam.y,cam.zoom,gw,gh].join('|');
+  const gw=irmGW,gh=irmGH,C=IRM.CELL,z=cam.zoom;
   let sig='';for(const c of CL)sig+=[c.x,c.y,c.r,c.seed,c.l0,c.v,c.dark].join(',')+';';
-  let K=irmCloudCache;
-  if(!K||K.dKey!==sig+lens){   // ENV2 浓度层:键 = 云签名 + 镜头 + 网格尺寸,存每个粗格 envBgParts 的两个和(换光照不重算浓度)
-    const G0=new Float32Array(n),G1=new Float32Array(n),minL=4*C/cam.zoom,q2=[0,0];
-    for(let j=0;j<ch;j++)for(let i=0;i<cw;i++){const q=j*cw+i;envBgParts(worldAt(i*2*C,j*2*C),'opt',minL,q2);G0[q]=q2[0];G1[q]=q2[1];}
-    K=irmCloudCache={dKey:sig+lens,lKey:'',G0:G0,G1:G1,G:new Float32Array(n),cw:cw};
+  if(!irmCloudCache||irmCloudCache.sig!==sig)irmCloudWin.clear();   // ENV2 有人清了缓存或云变了:各级窗口一起作废
+  const L=Math.round(Math.log2(2*C/z)),st=Math.pow(2,L),minL=2*st;   // ENV2 格距取离原来 2 格最近的 2 的幂(公里),细度 = 2 个格距,同级内与镜头无关
+  const x0=cam.x-W/2/z,y0=cam.y-H/2/z,a0=Math.floor(x0/st),a1=Math.floor((x0+(gw-1)*C/z)/st)+1,b0=Math.floor(y0/st),b1=Math.floor((y0+(gh-1)*C/z)/st)+1;
+  let K=irmCloudWin.get(L);
+  if(!K||a0<K.I0||a1>=K.I0+K.cw||b0<K.J0||b1>=K.J0+K.ch){   // ENV2 视野出了窗口:按视野加余量新开一个,旧窗口里有的格点照抄
+    const M=IRM_CLOUD_M,I0=a0-M,J0=b0-M,cw=a1-a0+1+2*M,ch=b1-b0+1+2*M,n=cw*ch,O=K,keepG=!!O&&O.lKey===ENV.rev;
+    const N={sig:sig,L:L,st:st,I0:I0,J0:J0,cw:cw,ch:ch,G0:new Float32Array(n),G1:new Float32Array(n),G:new Float32Array(n),lKey:keepG?ENV.rev:''},q2=[0,0],p=[0,0],lit=envHasLight();
+    for(let j=0;j<ch;j++)for(let i=0;i<cw;i++){const I=I0+i,J=J0+j,q=j*cw+i;
+      if(O&&I>=O.I0&&I<O.I0+O.cw&&J>=O.J0&&J<O.J0+O.ch){const r=(J-O.J0)*O.cw+(I-O.I0);N.G0[q]=O.G0[r];N.G1[q]=O.G1[r];if(keepG)N.G[q]=O.G[r];continue;}
+      p[0]=I*st;p[1]=J*st;envBgParts(p,'opt',minL,q2);N.G0[q]=q2[0];N.G1[q]=q2[1];if(keepG)N.G[q]=(lit&&!envInShadow(p))?q2[0]:q2[1];}
+    K=N;
   }
-  if(K.lKey!==ENV.rev+lens){   // ENV2 光照层:键 = ENV.rev + 镜头;有光且不在影子里取和0,否则取和1
-    const lit=envHasLight();
-    for(let j=0;j<ch;j++)for(let i=0;i<cw;i++){const q=j*cw+i;K.G[q]=(lit&&!envInShadow(worldAt(i*2*C,j*2*C)))?K.G0[q]:K.G1[q];}
-    K.lKey=ENV.rev+lens;
+  irmCloudWin.delete(L);irmCloudWin.set(L,K);if(irmCloudWin.size>IRM_CLOUD_LV)irmCloudWin.delete(irmCloudWin.keys().next().value);   // ENV2 最近用过的放最后,超了腾最久没用的那级
+  if(K.lKey!==ENV.rev){   // ENV2 光照层:键 = ENV.rev;有光且不在影子里取和0,否则取和1
+    const lit=envHasLight(),p=[0,0];
+    for(let j=0;j<K.ch;j++)for(let i=0;i<K.cw;i++){const q=j*K.cw+i;p[0]=(K.I0+i)*st;p[1]=(K.J0+j)*st;K.G[q]=(lit&&!envInShadow(p))?K.G0[q]:K.G1[q];}
+    K.lKey=ENV.rev;
   }
-  const G=K.G;
-  for(let j=0;j<gh;j++){const j0=j>>1,fy=(j&1)*0.5,row=j*gw;for(let i=0;i<gw;i++){const i0=i>>1,fx=(i&1)*0.5,q=j0*cw+i0;
-    const v=G[q]*(1-fx)*(1-fy)+G[q+1]*fx*(1-fy)+G[q+cw]*(1-fx)*fy+G[q+cw+1]*fx*fy;irmF[row+i]+=v;}}
+  irmCloudCache=K;
+  const G=K.G,cw=K.cw,ux=irmCloudIx(gw),uy=irmCloudIy(gh);
+  for(let i=0;i<gw;i++){const u=(x0+i*C/z)/st,f=Math.floor(u);ux.i[i]=f-K.I0;ux.f[i]=u-f;}
+  for(let j=0;j<gh;j++){const u=(y0+j*C/z)/st,f=Math.floor(u);uy.i[j]=f-K.J0;uy.f[j]=u-f;}
+  const XI=ux.i,XF=ux.f;
+  for(let j=0;j<gh;j++){const fy=uy.f[j],r0=uy.i[j]*cw,row=j*gw;for(let i=0;i<gw;i++){const fx=XF[i],q=r0+XI[i];
+    irmF[row+i]+=G[q]*(1-fx)*(1-fy)+G[q+1]*fx*(1-fy)+G[q+cw]*(1-fx)*fy+G[q+cw+1]*fx*fy;}}
 }
+const irmCloudAx={x:{i:new Int32Array(0),f:new Float64Array(0)},y:{i:new Int32Array(0),f:new Float64Array(0)}};
+function irmCloudIx(n){const a=irmCloudAx.x;if(a.i.length<n){a.i=new Int32Array(n);a.f=new Float64Array(n);}return a;}
+function irmCloudIy(n){const a=irmCloudAx.y;if(a.i.length<n){a.i=new Int32Array(n);a.f=new Float64Array(n);}return a;}
 /* ---- 大天体和它的影子 —— 用户选了「5 大天体和它的影子」----
    默认一颗海王星大小(半径 R)的天体,放在我方舰队方位 BRG、距离 D 处,能拖;只在红外图里(引擎不知道它)。
    画面(甲乙都画,地形):朝阳那半边亮 —— 太阳在平面里,俯视时明暗交界线过圆心,越往朝阳的边缘越亮(朗伯);背阴那半边 NIGHT。
@@ -716,7 +731,9 @@ function irmSelftest(){
     const r0=pkOn/pkOff,w0=1/(1+1.3*D27*0.3),rS=pkSunOn/pkSunOff,g27=Math.pow(1000*Math.pow(30/150,4),0.875)*Math.pow(1000*Math.pow(10,-(150-30)/10),0.125),wS27=(1+g27)/(1+g27+1.3*D27*1);   // ENV2 有太阳时背景 = 杂散光(偏开太阳 150°,光档删了只剩"中"律)+ 云
     const bg1=envBg(C27.pos,'opt');cam.zoom*=7;cam.x+=123456;const bg2=envBg(C27.pos,'opt');
     ships.length=0;ships.push(B);cam.x=cp[0];cam.y=cp[1];cam.zoom=camBak.zoom;irmCloudCache=null;IRM.NOISE=0;IRM.mode='yi';irmFullDraw();let fYi=0;for(let q=0;q<irmF.length;q++)fYi=Math.max(fYi,irmF[q]);IRM.mode='jia';irmFullDraw();   /* 走真正的绘制入口(甲乙都铺云);乙里只有这一艘观测船、没有热源 */
-    let worst=0;for(let q=0;q<50;q++){const i=2*Math.floor(q*7.3%(irmGW/2-2)),j=2*Math.floor(q*3.1%(irmGH/2-2)),w=worldAt(i*IRM.CELL,j*IRM.CELL),want=1.3*0.3*envCloudDensity(w[0],w[1],4*IRM.CELL/cam.zoom);worst=Math.max(worst,Math.abs(irmF[j*irmGW+i]-want));}
+    const K27=irmCloudCache,st27=K27.st,dn27=function(I,J){return 1.3*0.3*envCloudDensity(I*st27,J*st27,2*st27);};   // ENV2 3b-2 画面按世界格点(格距 st、细度 2 st)双线性
+    let worst=0;for(let q=0;q<50;q++){const i=Math.floor(q*7.3%(irmGW-2)),j=Math.floor(q*3.1%(irmGH-2)),w=worldAt(i*IRM.CELL,j*IRM.CELL),u=w[0]/st27,v=w[1]/st27,I=Math.floor(u),J=Math.floor(v),fx=u-I,fy=v-J;
+      const want=dn27(I,J)*(1-fx)*(1-fy)+dn27(I+1,J)*fx*(1-fy)+dn27(I,J+1)*(1-fx)*fy+dn27(I+1,J+1)*fx*fy;worst=Math.max(worst,Math.abs(irmF[j*irmGW+i]-want));}
     let fmax=0;for(let q=0;q<irmF.length;q++)fmax=Math.max(fmax,irmF[q]);
     const t27=performance.now();irmCloudCache=null;irmGrid();irmCloudAdd();const ms27=performance.now()-t27;
     irmSetEnv('clouds',false);irmFieldJia();irmCloudAdd();let offMax=0;for(let q=0;q<irmF.length;q++)offMax=Math.max(offMax,Math.abs(irmF[q]));const bgOff=envBg(C27.pos,'opt');
@@ -743,8 +760,8 @@ function irmSelftest(){
     B.pos=at28(-600000,R28*5);C28.pos=[B.pos[0]+u28[0]*Rv*0.3,B.pos[1]+u28[1]*Rv*0.3,0];const blindOut=irmHill(C28,[B])===null;
     /* ⑥ ENV2 页面云的光照层:浓云处(㉗ 的 cp)放进一颗天体的影子里,那个粗格的值 = 有光时的 0.3 倍;挪走天体变回 1 倍,浓度层不重算 */
     irmSetEnv('clouds',true);IRW.bodies=[{x:cp[0]+u28[0]*200000,y:cp[1]+u28[1]*200000,r:R28}];envReset(IRW);cam.x=cp[0];cam.y=cp[1];cam.zoom=20*IRM.CELL/R28;
-    const c28=function(){irmGrid();irmCloudAdd();const pc=toScreen(cp[0],cp[1]),ic=2*Math.round(pc[0]/IRM.CELL/2),jc=2*Math.round(pc[1]/IRM.CELL/2),w=worldAt(ic*IRM.CELL,jc*IRM.CELL),pw=envBgParts(w,'opt',4*IRM.CELL/cam.zoom);
-      return {v:irmF[jc*irmGW+ic]/pw[0],sh:envInShadow(w),G0:irmCloudCache.G0};};
+    const c28=function(){irmGrid();irmCloudAdd();const K=irmCloudCache,I=Math.round(cp[0]/K.st),J=Math.round(cp[1]/K.st),q=(J-K.J0)*K.cw+(I-K.I0);   // ENV2 3b-2 格点锚在世界上:直接读 cp 旁那个格点
+      return {v:K.G[q]/K.G0[q],sh:envInShadow([I*K.st,J*K.st]),G0:K.G0};};
     const cIn=c28();IRW.bodies=[];envReset(IRW);const cOut=c28(),cKeep=cIn.G0===cOut.G0;irmSetEnv('clouds',false);IRW.bodies=[{x:0,y:0,r:R28}];envReset(IRW);
     ships.length=0;ships.push(B);B.pos=[5e6,5e6,0];cam.zoom=40*IRM.CELL/R28;cam.x=0;cam.y=0;IRM.NOISE=0;IRM.mode='jia';irmFullDraw();
     const pp=toScreen(0,0),vEdge=irmF[Math.round((pp[1]+u28[1]*38*IRM.CELL)/IRM.CELL)*irmGW+Math.round((pp[0]+u28[0]*38*IRM.CELL)/IRM.CELL)],vNight=irmF[Math.round((pp[1]-u28[1]*20*IRM.CELL)/IRM.CELL)*irmGW+Math.round((pp[0]-u28[0]*20*IRM.CELL)/IRM.CELL)];
