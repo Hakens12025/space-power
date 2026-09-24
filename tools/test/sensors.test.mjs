@@ -146,7 +146,7 @@ function 谓词与热循环逐位相同(E) {
 }
 test('单点谓词:sensePairAt 与热循环(整目标 / 循环体)在 3x3 发射档 x 8 个距离上 packed 逐位相同,且不是恒 0', () => 谓词与热循环逐位相同(logic()));
 test('反向对照:单点谓词丢掉照射那一路,上一条必须失败', () =>
-  mutant({ [PERCEP]: [['const g = sensePairGrades(0, 0);\n  return { opt:', 'const g = sensePairGrades(0, 0) & 15;\n  return { opt:']] }, 谓词与热循环逐位相同));
+  mutant({ [PERCEP]: [['const g = senseResolve(0, 0, det, tgt, sensePairGrades(0, 0));', 'const g = senseResolve(0, 0, det, tgt, sensePairGrades(0, 0)) & 15;']] }, 谓词与热循环逐位相同));
 
 /* ============================ FLOW52:冷目标剪枝 ============================ */
 /* CA 照一艘静默熄火的 DD,摆在【光学够不着、照射够得着】那一段的几何中点 */
@@ -344,14 +344,20 @@ function 互照(E) {
   g.setEmit(B, 'paint'); g.setEmit(R, 'paint');
   return [B, R];
 }
-test('太阳禁区:太阳正对着视线时光学与静听这一拍没有量测、照射照旧;太阳转开 25 度就都回来', () => {
+/* ENV2 禁区外也有杂散光(有意改变):偏开 25° 时 g = 26.29、光学量程压到 0.471·vr,原来 0.5·vr 的取样点看不见了 ——
+   取样挪到 0.3·vr(同一方位),转开那一格只要求光学还在(档位会降)、静听原样;静听那一格仍证明禁区半角 < 25° */
+test('太阳禁区:太阳正对着视线时光学与静听这一拍没有量测、照射照旧;太阳转开 25 度静听回来、光学回来(被杂散光压低)', () => {
   const E = logic(), g = E.g, [B, R] = 互照(E), brg = Math.atan2(R.pos[1], R.pos[0]) * 180 / Math.PI;
+  R.pos = R.pos.map(v => v * 0.6);
   g.envReset(null); const g0 = g.sensePairAt(B, R);
   g.envReset({ sun: { brg, half: 10 } }); const s = g.sensePairAt(B, R);
   g.envReset({ sun: { brg: brg + 25, half: 10 } }); const off = g.sensePairAt(B, R);
   assert.ok(g0.opt > 0 && g0.lis > 0 && g0.act > 0, '没有太阳时三路都应有信号');
   assert.deepEqual([s.opt, s.lis, s.act], [0, 0, g0.act], '太阳正对:[光学, 静听, 照射]');
-  assert.deepEqual([off.opt, off.lis], [g0.opt, g0.lis], '转开 25 度:[光学, 静听]');
+  assert.ok(off.opt > 0 && off.lis === g0.lis, `转开 25 度:光学 ${off.opt} 应 > 0、静听 ${off.lis} 应 = ${g0.lis}`);
+  assert.equal(off.lo, g.senseOptLo(B, R), '转开 25 度:单点谓词的有效亮度 = senseOptLo');
+  const gl = g.senseGlare(Math.PI / 2, 10 * Math.PI / 180);
+  assert.ok(gl > 0.045 && gl < 0.047, `偏开 90°(半角 10°)的杂散光 ${gl} 应在 (0.045, 0.047)`);
 });
 function 太阳禁区两份式子相同(E) {
   const g = E.g, [B, R] = 互照(E);
@@ -362,7 +368,7 @@ function 太阳禁区两份式子相同(E) {
 }
 test('太阳禁区:热循环里的内联副本与 envSunBlind 在 72 个方位(5 度一档)上逐个相同', () => 太阳禁区两份式子相同(logic()));
 test('反向对照:热循环内联副本的视线方向写反,上一条必须失败', () =>
-  mutant({ [PERCEP]: [['const k = -(dx * scSunX + dy * scSunY);', 'const k = (dx * scSunX + dy * scSunY);']] }, 太阳禁区两份式子相同));
+  mutant({ [PERCEP]: [['const k = -(dx * scDSX[j] + dy * scDSY[j]);', 'const k = (dx * scDSX[j] + dy * scDSY[j]);']] }, 太阳禁区两份式子相同));
 function 残骸场光学杂波(E) {
   const g = E.g, [B, R] = 互照(E);
   g.envReset(null); g.setEmit(R, 'silent'); const lum0 = g.optLum(R), vr0 = g.visRangeOf(R);
@@ -397,3 +403,282 @@ test('弹丸同一套环境:燃烧的红方导弹空环境下我方光学看得�
   g.envReset({ sun: { brg: Math.atan2(P.pos[1], P.pos[0]) * 180 / Math.PI, half: 10 } });
   assert.deepEqual([seen, g.projVisibleTo(P, 'blue')], [true, false], '[空环境看得见, 太阳正对看得见]');
 });
+
+/* ============================ ENV2_SENSE:世界派生的效应进探测(光学 / 红外通道) ============================
+   成对有效亮度 lo = (L + 晒热) / √(1 + (杂散光 + 云背景)/BG_G0);热循环只放上界与待定位位(bit6),精算在 senseResolve。 */
+const RB = 24600;   // 天体半径(km),与 world.test 同一个数
+const rel = (a, b) => Math.abs(a / b - 1);
+function 空环境逐位是标称(E) {
+  const g = E.g, [B, R] = duo(E, 'DD', 'DD'); g.envReset(null);
+  const bad = []; let seen = 0;
+  for (const mode of ['silent', 'paint']) {
+    g.setEmit(R, mode); const L = g.optLum(R), vr = g.visRangeOf(R);
+    for (let k = 1; k <= 20; k++) {
+      R.pos = [vr * k / 16, 0, 0];
+      g.sensePrepare([B], [], [R], 1);
+      const sig = g.senseBoundsAt(0).sig, p = g.sensePairGrades(0, 0), q = g.sensePairAt(B, R);
+      if (!Object.is(sig, L)) bad.push(`${mode}@${k} 上界 ${sig} ≠ optLum ${L}`);
+      if (p & 64) bad.push(`${mode}@${k} 有待定位位`);
+      if (q.opt > 0) { seen++; if (!Object.is(q.lo, L)) bad.push(`${mode}@${k} lo ${q.lo} ≠ optLum ${L}`); }
+    }
+  }
+  assert.deepEqual(bad, [], '空环境:上界 / 待定位位 / 单点有效亮度 与标称值不逐位相同的格');
+  assert.ok(seen >= 20, `光学有档的格只有 ${seen} 个(须 >= 20)`);
+}
+test('ENV2 空环境逐位不变:上界 = optLum、20 个距离上热循环都没有待定位位、单点谓词的有效亮度 = optLum(静默与照射两档)', () => 空环境逐位是标称(logic()));
+test('反向对照:上界无条件乘 (1+1e-12),上一条必须失败', () =>
+  mutant({ [PERCEP]: [['const lum = senseLoOf(optLum(t), 0, solMax, 0, bg),', 'const lum = senseLoOf(optLum(t), 0, solMax, 0, bg) * (1 + 1e-12),']] }, 空环境逐位是标称));
+test('反向对照:待定位位无条件置上,上上条必须失败', () =>
+  mutant({ [PERCEP]: [['if ((g & 3) !== 0 && (scTDir[ti] | scDLit[j]) !== 0) g |= 64;', 'if ((g & 3) !== 0) g |= 64;']] }, 空环境逐位是标称));
+
+function 随机对不超过上界(E) {
+  const g = E.g, rnd = g.envRng(20260924), U = () => (rnd() * 2 - 1) * 400000;
+  const B = ship(E, 'DD', '随蓝', [0, 0, 0], 'blue'), R = ship(E, 'CA', '随红', [0, 0, 0], 'red'), K = g.makeRock([0, 0, 0], 1.5, [1, 0, 0]);
+  g.tkOnly(g.tkCalm([B, R]));
+  const bad = [], diff = []; let below = 0, solar = 0, glare = 0, cmp = 0;
+  for (let i = 0; i < 300; i++) {
+    const w = {}, lk = Math.floor(rnd() * 3), nb = Math.floor(rnd() * 3), nc = Math.floor(rnd() * 3);
+    if (lk === 1) w.sun = { brg: rnd() * 360, half: 10 };
+    if (lk === 2) w.stars = [{ x: U() * 10, y: U() * 10, r: 50000 }];
+    if (nb) w.bodies = Array.from({ length: nb }, () => ({ x: U(), y: U(), r: 20000 + rnd() * 30000 }));
+    if (nc) w.clouds = Array.from({ length: nc }, (_, k) => ({ x: U(), y: U(), r: 300000 + rnd() * 500000, seed: i * 3 + k }));
+    g.envReset(w);
+    const t = rnd() < 0.3 ? K : R; g.setEmit(R, rnd() < 0.5 ? 'silent' : 'paint');
+    B.pos = [U(), U(), 0]; t.pos = [U(), U(), 0];
+    g.sensePrepare([B], [], [t], 1);
+    const sig = g.senseBoundsAt(0).sig, lo = g.senseOptLo(B, t);
+    if (!(lo >= 0 && lo <= sig)) bad.push(`#${i} lo ${lo} 上界 ${sig}`);
+    if (lo < sig) below++; if (g.senseSolar(B, t) > 0) solar++; if (g.senseGlareAt(B.pos, t.pos) > 0) glare++;
+    const q = g.sensePairAt(B, t);   // ENV2 钉住精算步的输入(待定位位、云背景):热循环 + 精算必须与现算的 senseOptLo 逐位相同
+    if (q.opt > 0) { cmp++; if (!Object.is(q.lo, lo)) diff.push(`#${i} 单点 lo ${q.lo} / senseOptLo ${lo}`); }
+  }
+  assert.deepEqual(bad.slice(0, 5), [], `300 个随机对里 0 <= senseOptLo <= 上界 不成立的(前 5 个,共 ${bad.length} 个)`);
+  assert.ok(below >= 60 && solar >= 60 && glare >= 60, `严格低于上界 ${below} / 被晒 ${solar} / 有杂散光 ${glare} 对(各须 >= 60)`);
+  assert.deepEqual(diff.slice(0, 5), [], `光学有档的对里 sensePairAt.lo 与 senseOptLo 不逐位相同的(前 5 个,共 ${diff.length} 个)`);
+  assert.ok(cmp >= 40, `光学有档的对只有 ${cmp} 个(须 >= 40)`);
+}
+test('ENV2 上界:300 个随机对(光源 无 / 方向型 / 位置型,天体 0~2,云 0~2,舰或石头)0 <= senseOptLo <= 热循环上界;光学有档的对单点谓词的 lo 与 senseOptLo 逐位相同', () => 随机对不超过上界(logic()));
+test('反向对照:上界漏掉晒热项,上一条必须失败', () =>
+  mutant({ [PERCEP]: [["const solMax = lit && !tSh ? SENS.SOLAR_K * sReq(t, 'size', 'ship') * envOptK(p) : 0;", 'const solMax = 0;']] }, 随机对不超过上界));
+test('反向对照:待定位位只看目标、不看观测方被照亮,上上条必须失败', () =>
+  mutant({ [PERCEP]: [['if ((g & 3) !== 0 && (scTDir[ti] | scDLit[j]) !== 0) g |= 64;', 'if ((g & 3) !== 0 && scTDir[ti] !== 0) g |= 64;']] }, 随机对不超过上界));
+test('反向对照:精算步丢掉云背景,上上上条必须失败', () =>
+  mutant({ [PERCEP]: [['const lo = senseOptLoWith(d, t, scTBg[ti], scTSh[ti] === 1, scDLit[j] === 1);', 'const lo = senseOptLoWith(d, t, 0, scTSh[ti] === 1, scDLit[j] === 1);']] }, 随机对不超过上界));
+
+/* 蓝 / 红都开照射(互照),整体挪离原点:位置型恒星的方向每艘船不同,内联副本必须按观测方取 */
+function 位置型恒星禁区两份相同(E) {
+  const g = E.g, [B, R] = 互照(E), D = 3e6, o = [400000, 200000];
+  B.pos = [o[0], o[1], 0]; R.pos = [R.pos[0] + o[0], R.pos[1] + o[1], 0];
+  let agree = 0, blind = 0;
+  for (let k = 0; k < 72; k++) {
+    const a = k * 5 * Math.PI / 180; g.envReset({ stars: [{ x: D * Math.cos(a), y: D * Math.sin(a) }] });
+    const hot = (g.sensePairAt(B, R).packed & 15) === 0, fn = g.envSunBlind(B.pos, R.pos); if (hot === fn) agree++; if (fn) blind++;
+  }
+  assert.equal(agree, 72, '72 个方位上热循环的内联副本与 envSunBlind 一致的个数');
+  assert.ok(blind > 0 && blind < 72, `致盲的方位 ${blind} 个(须介于 0 与 72 之间)`);
+}
+test('ENV2 禁区内联副本:位置型恒星绕一圈 72 个方位,热循环的光学 + 静听清零与 envSunBlind 逐个相同', () => 位置型恒星禁区两份相同(logic()));
+test('反向对照:内联副本的光源方向改从原点取(不按观测方),上一条必须失败', () =>
+  mutant({ [PERCEP]: [['? envSunDirAt(p, scT2) : null;', '? envSunDirAt([0, 0, 0], scT2) : null;']] }, 位置型恒星禁区两份相同));
+function 遮挡两份相同(E) {
+  const g = E.g, [B, R] = 互照(E), rnd = g.envRng(4242);
+  g.envReset(null); const L = 0.45 * Math.min(g.visRangeOf(R), g.actRangeOf(B, g.reflOf(R)));
+  const bad = []; let occ = 0, nearTan = 0, inDisk = 0;
+  for (let i = 0; i < 500; i++) {
+    const a = rnd() * 2 * Math.PI, len = L * (0.2 + 0.8 * rnd()), r = 2000 + rnd() * 20000, nx = -Math.sin(a), ny = Math.cos(a);
+    B.pos = [(rnd() * 2 - 1) * 1e5, (rnd() * 2 - 1) * 1e5, 0]; R.pos = [B.pos[0] + Math.cos(a) * len, B.pos[1] + Math.sin(a) * len, 0];
+    let f = rnd() * 1.4 - 0.2, off = (rnd() * 2 - 1) * 1.5 * r;
+    if (i % 5 === 0) { f = 0.2 + 0.6 * rnd(); off = r * (1 + (rnd() * 2 - 1) * 1e-9); nearTan++; }   // 几乎相切
+    else if (i % 5 === 1) { f = rnd() < 0.5 ? 0 : 1; off = (rnd() * 2 - 1) * 0.5 * r; inDisk++; }  // 端点在盘里
+    const c = [B.pos[0] + Math.cos(a) * len * f + nx * off, B.pos[1] + Math.sin(a) * len * f + ny * off];
+    g.envReset(null); const g0 = g.sensePairAt(B, R).packed;
+    g.envReset({ bodies: [{ x: c[0], y: c[1], r }] });
+    const pk = g.sensePairAt(B, R).packed, fo = g.envOccluded(B.pos, R.pos);
+    if (g0 === 0) bad.push(`#${i} 没有天体时就够不着`);
+    if (fo) occ++;
+    if (!(fo ? pk === 0 : pk === g0)) bad.push(`#${i} 遮挡 ${fo} 热循环 ${pk} / 无天体 ${g0}`);
+  }
+  assert.deepEqual(bad.slice(0, 5), [], `500 条线段里热循环与 envOccluded 不一致的(前 5 条,共 ${bad.length} 条)`);
+  assert.ok(occ > 50 && occ < 450 && nearTan === 100 && inDisk === 100, `被挡 ${occ} 条(须在 50~450 之间)、几乎相切 ${nearTan}、端点在盘里 ${inDisk}`);
+}
+test('ENV2 遮挡内联副本:500 条随机线段(含几乎相切、端点在盘里)上热循环三通道清零与 envOccluded 一致,不挡时档位原样', () => 遮挡两份相同(logic()));
+test('反向对照:内联副本的叉积写成 wx*dy+wy*dx,上一条必须失败', () =>
+  mutant({ [PERCEP]: [['const cr = wy * dx - wx * dy, r2 = scOR2[b];', 'const cr = wx * dy + wy * dx, r2 = scOR2[b];']] }, 遮挡两份相同));
+
+function 相位(E) {
+  const g = E.g, [B, R] = duo(E, 'DD', 'DD'), K = g.makeRock([0, 0, 0], R.size, [1, 0, 0]), d = 50000;
+  const k = (t, o, w, per) => { g.envReset(w); t.pos = [0, 0, 0]; B.pos = o; return g.senseOptPair(B, t).lok / (per === 'L' ? g.optLum(t) : t.size); };
+  const sun = { sun: { brg: 0, half: 10 } }, star = { stars: [{ x: 0, y: 1e7 }] };
+  const got = {
+    冷船: [k(R, [d, 0, 0], sun), k(R, [-d, 0, 0], sun), k(R, [0, d, 0], sun)],
+    石头: [k(K, [d, 0, 0], sun), k(K, [-d, 0, 0], sun), k(K, [0, d, 0], sun)],
+    位置型: [k(R, [0, 5e6, 0], star), k(R, [1e7, 0, 0], star)],
+  };
+  R.flame = 1; got.主推 = [k(R, [d, 0, 0], sun, 'L')]; R.flame = 0;
+  const want = { 冷船: [2, 1, 1 + 1 / Math.PI], 石头: [1.5, 0.5, 0.5 + 1 / Math.PI], 位置型: [2, 1 + 1 / Math.PI], 主推: [1.25] };
+  const bad = [];
+  for (const n in want) want[n].forEach((w, i) => { if (!(rel(got[n][i], w) < 1e-12)) bad.push(`${n}[${i}] ${got[n][i]} 应为 ${w}`); });
+  assert.deepEqual(bad, [], '相位(背对太阳看 / 面向太阳看 / 侧看)的 lok/size;主推船 lok/L;位置型按目标自己看恒星的方向');
+}
+test('ENV2 相位:冷船背对太阳看 2、面向 1、侧看 1+1/π;石头 1.5 / 0.5 / 0.5+1/π;主推船亮 1.25 倍;位置型按目标看恒星的方向', () => 相位(logic()));
+test('反向对照:相位改用观测方看光源的方向,上一条必须失败', () =>
+  mutant({ 'js/sensors/25-optpair.js': [['const u = envSunDirAt(t.pos, SOP_T2), dx = o.pos[0] - t.pos[0]', 'const u = envSunDirAt(o.pos, SOP_T2), dx = o.pos[0] - t.pos[0]']] }, 相位));
+
+function 杂散光律(E) {
+  const g = E.g, G = E.val('SENS.GLARE'), deg = Math.PI / 180, h = 30 * deg;
+  const edge = g.senseGlare(h, h), g45 = g.senseGlare(45 * deg, h), p4 = g.senseGlare(45 * deg, h, 1), st = g.senseGlare(45 * deg, h, 0);
+  assert.equal(edge, G.EDGE, '禁区边缘恰为 EDGE');
+  assert.ok(Math.abs(g45 - 157.10) < 0.01, `偏开 45°(半角 30°)${g45},应 ≈ 157.10`);
+  assert.ok(rel(p4, G.EDGE * Math.pow(30 / 45, G.P)) < 1e-12 && rel(st, G.EDGE * Math.pow(10, -15 / G.DEC_DEG)) < 1e-12, `mix=1 纯四次方 ${p4} / mix=0 纯陡 ${st}`);
+  const [B, R] = duo(E, 'DD', 'DD'); R.pos = [0.3 * g.visRangeOf(R), 0, 0];
+  g.envReset({ sun: { brg: 45, half: 10 } });
+  const gA = g.senseGlareAt(B.pos, R.pos), L = g.optLum(R), ratio = g.visRangeOf(R, g.senseLoOf(L, 0, 0, gA, 0)) / g.visRangeOf(R);
+  assert.ok(rel(gA, g.senseGlare(45 * deg, 10 * deg)) < 1e-12, `观测方朝太阳 45° 看:${gA}`);
+  assert.ok(rel(ratio, Math.pow(1 + gA, -0.25)) < 1e-12 && Math.abs(ratio - 0.767) < 0.001, `量程比 ${ratio},应为 (1+g)^(-1/4) ≈ 0.767`);
+}
+test('ENV2 杂散光律:禁区边缘 = EDGE;偏开 45°(半角 30°)≈ 157.10;mix 1 / 0 是纯四次方 / 纯陡;朝太阳 45°(半角 10°)量程比 (1+g)^(-1/4) ≈ 0.767', () => 杂散光律(logic()));
+test('反向对照:杂散光 MIX 取 0.5,上一条必须失败', () =>
+  mutant({ 'js/sensors/20-signature.js': [['MIX: 0.875 }', 'MIX: 0.5 }']] }, 杂散光律));
+
+/* 找一个云够浓的点当目标位置(测试·红外那朵云) */
+function 云里一点(E) {
+  const g = E.g, MK = E.run('ENV_CFG.DUST.MIN_KM');
+  for (let i = -40; i <= 40; i++) for (let j = -40; j <= 40; j++) { const x = i * 50000, y = j * 50000; if (g.envCloudDensity(x, y, MK) >= 0.2) return [x, y, 0]; }
+  assert.fail('云里没有浓度 >= 0.2 的点');
+}
+function 云背景律(E) {
+  const g = E.g, [B, R] = duo(E, 'DD', 'DD'), C = { x: 0, y: 0, r: 4000000, seed: 20 }, MK = E.run('ENV_CFG.DUST.MIN_KM');
+  g.envReset({ clouds: [C] }); const P = 云里一点(E), D = g.envCloudDensity(P[0], P[1], MK), v = E.run('ENV.clouds[0].v'), dk = E.run('ENV.clouds[0].dark');
+  R.pos = P; B.pos = [P[0] - 50000, P[1], 0];
+  const L = g.optLum(R), lo0 = g.senseOptLo(B, R);
+  g.envReset({ clouds: [C], sun: { brg: 90 }, bodies: [{ x: B.pos[0], y: B.pos[1] + 3 * RB, r: RB }] });   // 光从 +Y 来:观测方在天体影子里,目标在影子外
+  const pre = [g.envInShadow(B.pos), g.envInShadow(R.pos)], sol = g.senseSolar(B, R), lo1 = g.senseOptLo(B, R);
+  assert.deepEqual(pre, [true, false], '场面前提 [观测方在影子里, 目标在影子里]');
+  assert.ok(sol > 0, '目标应被晒');
+  assert.ok(rel(lo0 / L, 1 / Math.sqrt(1 + v * D * dk)) < 1e-12, `没有光源:lo/L = ${lo0 / L},应为 1/√(1+v·D·dark)`);
+  assert.ok(rel(lo1, (L + sol) / Math.sqrt(1 + v * D)) < 1e-12, `有光源、观测方在影子里(没有杂散光):lo = ${lo1},应为 (L+晒热)/√(1+v·D)`);
+}
+test('ENV2 云背景律:没有光源时 lo/L = 1/√(1+v·D·dark);有光源、观测方在天体影子里时 lo = (L+晒热)/√(1+v·D)', () => 云背景律(logic()));
+test('反向对照:背景参照 BG_G0 种成 2,上一条必须失败', () =>
+  mutant({ 'js/sensors/20-signature.js': [['BG_G0: 1,', 'BG_G0: 2,']] }, 云背景律));
+
+function 影子里的目标不晒(E) {
+  const g = E.g, [B, R] = duo(E, 'DD', 'DD'); R.pos = [60000, 0, 0];
+  g.envReset({ sun: { brg: 180 }, bodies: [{ x: R.pos[0] - 3 * RB, y: 0, r: RB }] });   // 光从 -X 来,目标在天体背后
+  const inSh = g.envInShadow(R.pos), lok = g.senseOptPair(B, R).lok;
+  g.envReset({ sun: { brg: 180 }, bodies: [{ x: R.pos[0] + 3 * RB, y: 0, r: RB }] });
+  const lokOut = g.senseOptPair(B, R).lok, L = g.optLum(R);
+  assert.equal(inSh, true, '场面前提:目标在影子里');
+  assert.ok(Object.is(lok, L) && lokOut > L, `影子里 lok ${lok} 应恰为 optLum ${L};挪出影子 ${lokOut} 应更亮`);
+}
+test('ENV2 影子:目标在天体影子里不晒(lok 恰为 optLum),挪出影子就晒', () => 影子里的目标不晒(logic()));
+test('反向对照:相位不管目标在不在影子里,上一条必须失败', () =>
+  mutant({ 'js/sensors/25-optpair.js': [['  if (tSh) return 0;\n', '']] }, 影子里的目标不晒));
+/* ENV2 目标在影子里、观测方被照亮且视线不过天体:待定位位由观测方置上,精算步必须照样认出目标在影子里 */
+function 影子里的目标精算也不晒(E) {
+  const g = E.g, [B, R] = duo(E, 'DD', 'DD'); R.pos = [60000, 0, 0]; B.pos = [60000, 0.3 * g.visRangeOf(R), 0];
+  g.envReset({ sun: { brg: 180 }, bodies: [{ x: R.pos[0] - 3 * RB, y: 0, r: RB }] });   // 光从 -X 来,目标在天体背后
+  const q = g.sensePairAt(B, R), lo = g.senseOptLo(B, R);
+  assert.deepEqual([g.envInShadow(R.pos), g.envInShadow(B.pos), g.envOccluded(B.pos, R.pos), q.opt > 0], [true, false, false, true], '场面前提 [目标在影子里, 观测方在影子里, 视线被挡, 光学有档]');
+  assert.ok(Object.is(q.lo, lo), `单点谓词的 lo ${q.lo} 应与 senseOptLo ${lo} 逐位相同`);
+}
+test('ENV2 影子:目标在影子里、观测方被照亮时,单点谓词(热循环 + 精算)的 lo 与 senseOptLo 逐位相同', () => 影子里的目标精算也不晒(logic()));
+test('反向对照:精算步当目标不在影子里,上一条必须失败', () =>
+  mutant({ [PERCEP]: [['const lo = senseOptLoWith(d, t, scTBg[ti], scTSh[ti] === 1, scDLit[j] === 1);', 'const lo = senseOptLoWith(d, t, scTBg[ti], false, scDLit[j] === 1);']] }, 影子里的目标精算也不晒));
+test('反向对照:待定位位只看目标、不看观测方被照亮,上上条必须失败(随机对里只有 1 对咬住,这里定场面再钉一次)', () =>
+  mutant({ [PERCEP]: [['if ((g & 3) !== 0 && (scTDir[ti] | scDLit[j]) !== 0) g |= 64;', 'if ((g & 3) !== 0 && scTDir[ti] !== 0) g |= 64;']] }, 影子里的目标精算也不晒));
+function 影子里的观测方不晃(E) {
+  const g = E.g, [B, R] = 互照(E), a = 6 * Math.PI / 180, d = 0.3 * g.visRangeOf(R);
+  B.pos = [0, 0, 0]; R.pos = [d * Math.cos(a), d * Math.sin(a), 0];   // 离光源方向 6°:在 10° 禁区锥里
+  g.envReset({ sun: { brg: 0, half: 10 } }); const lit = g.sensePairAt(B, R), fLit = g.envSunBlind(B.pos, R.pos);
+  g.envReset({ sun: { brg: 0, half: 10 }, bodies: [{ x: 20 * RB, y: 0, r: RB }] });   // 观测方躲在天体背后(天体离它 20R,不挡这条视线)
+  const sh = g.sensePairAt(B, R), fSh = g.envSunBlind(B.pos, R.pos), G = g.senseGlareAt(B.pos, R.pos);
+  assert.deepEqual([g.envInShadow(B.pos), g.envOccluded(B.pos, R.pos)], [true, false], '场面前提 [观测方在影子里, 视线被挡]');
+  assert.deepEqual({ 不躲: [lit.opt, lit.lis, fLit], 躲: [sh.opt > 0, sh.lis > 0, fSh, G] }, { 不躲: [0, 0, true], 躲: [true, true, false, 0] }, '[光学, 静听, envSunBlind(, 杂散光)]');
+}
+test('ENV2 影子:观测方躲在天体影子里朝光源看不被晃 —— 光学与静听都在、envSunBlind 为假、杂散光为 0;不躲时被致盲', () => 影子里的观测方不晃(logic()));
+test('反向对照:热循环不管观测方在不在影子里,上一条必须失败', () =>
+  mutant({ [PERCEP]: [['const u = lit && !(nb && envInShadow(p)) ? envSunDirAt(p, scT2) : null;', 'const u = lit ? envSunDirAt(p, scT2) : null;']] }, 影子里的观测方不晃));
+
+function 遮挡挡三通道与弹丸(E) {
+  const g = E.g, [B, R] = 互照(E); g.tkOnly([B, R]);
+  const body = f => ({ bodies: [{ x: (B.pos[0] + f[0]) / 2, y: (B.pos[1] + f[1]) / 2, r: 5000 }] });   // 挡在正中间
+  const vr = g.visRangeOf(R), P = E.run(`({type:'missile',fuel:10,done:false,pos:[${vr * 0.3},${vr * 0.1},0],vel:[0,0,0]})`); P.shooter = R;
+  const M = E.run('({type:"missile",done:false,pos:[0,0,0],vel:[0,0,0]})'); M.target = R;
+  const read = () => { const q = g.sensePairAt(B, R); return [q.opt, q.lis, q.act]; };
+  g.envReset(null); const r0 = read(), v0 = g.projVisibleTo(P, 'blue'), s0 = g.missSee(M);
+  g.envReset(body(R.pos)); const r1 = read(), s1 = g.missSee(M);
+  g.envReset(body(P.pos)); const v1 = g.projVisibleTo(P, 'blue');
+  assert.ok(r0.every(x => x > 0) && v0 && s0, `没有天体时:三通道 ${r0}、弹丸可见 ${v0}、导引头看得见 ${s0}`);
+  assert.deepEqual({ 三通道: r1, 弹丸可见: v1, 导引头: s1 }, { 三通道: [0, 0, 0], 弹丸可见: false, 导引头: false }, '天体挡在中间');
+}
+test('ENV2 遮挡:天体挡在中间时光学 / 静听 / 照射都为 0,弹丸看不见,导引头也看不见;没有天体时都在', () => 遮挡挡三通道与弹丸(logic()));
+test('反向对照:遮挡只清光学,上一条必须失败', () =>
+  mutant({ [PERCEP]: [['{ g = 0; break; }', '{ g &= 60; break; }']] }, 遮挡挡三通道与弹丸));
+test('反向对照:弹丸的照射支路不管遮挡,上上条必须失败', () =>
+  mutant({ [PERCEP]: [['  if (envMtiBlind(d.pos, pos, vel)) return false; // ENV1:场内慢目标的回波被动目标显示滤掉(空环境 / 不给速度时恒假)\n  if (ENV.bodies.length && envOccluded(d.pos, pos)) return false; // ENV2 天体挡视线\n',
+    '  if (envMtiBlind(d.pos, pos, vel)) return false; // ENV1:场内慢目标的回波被动目标显示滤掉(空环境 / 不给速度时恒假)\n']] }, 遮挡挡三通道与弹丸));
+test('反向对照:导引头不管遮挡,上上上条必须失败', () =>
+  mutant({ 'js/weapons/54-missiles.js': [['  if(ENV.bodies.length&&envOccluded(p.pos,t.pos))return false;', '']] }, 遮挡挡三通道与弹丸));
+
+function 梯子与世界无关(E) {
+  const g = E.g, C = Object.keys(E.val('SENS.CLS'));
+  const dump = () => { const o = []; for (const a of C) for (const b of C) o.push([a + '>' + b, g.ladPair(a, b)]); return o; };
+  g.envReset(null); const e0 = dump();
+  g.envReset({ sun: { brg: 30, half: 10 }, fields: [{ x: 0, y: 0, r: 350000, n: 0 }], bodies: [{ x: 0, y: 0, r: RB }], clouds: [{ x: 0, y: 0, r: 4000000, seed: 20 }] });
+  const e1 = dump(), bad = [];
+  e0.forEach(([n, p], i) => { for (const k in p) if (!Object.is(p[k], e1[i][1][k])) bad.push(`${n}.${k} ${p[k]} → ${e1[i][1][k]}`); });
+  assert.ok(e0.length >= 4, '舰种对');
+  assert.deepEqual(bad.slice(0, 5), [], `挂上太阳 + 盖住原点的残骸场 / 天体 / 云之后 ladPair 变了的字段(前 5 个,共 ${bad.length} 个)`);
+}
+test('ENV2 梯子与世界无关:挂上太阳、盖住原点的残骸场 / 天体 / 云,全部舰种对的 ladPair 每个字段与空环境逐位相同', () => 梯子与世界无关(logic()));
+test('反向对照:梯子假船的 pos 改回 [0,0,0],上一条必须失败', () =>
+  mutant({ [COVJS]: [["sideFlame: 0, pos: null, id: 'lad_' + cls };", "sideFlame: 0, pos: [0, 0, 0], id: 'lad_' + cls };"]] }, 梯子与世界无关));
+
+function 石头冷一半(E) {
+  const g = E.g, [, R] = duo(E, 'DD', 'DD', 100000), K = g.makeRock(R.pos.slice(), R.size, [1, 0, 0]);
+  g.envReset(null); g.setEmit(R, 'silent');
+  assert.equal(g.optLum(K), 0.5 * g.optLum(R), '同一处、同体型、无光:石头亮度 = 0.5 x 冷船');
+  const r = g.visRangeOf(K) / g.visRangeOf(R);
+  assert.ok(rel(r, Math.SQRT1_2) < 1e-12, `可见半径之比 ${r},应为 √0.5`);
+}
+test('ENV2 石头冷:同一处、同体型、无光时石头亮度恰为冷船的 0.5,可见半径之比 √0.5', () => 石头冷一半(logic()));
+test('反向对照:optLum 不读 heatK,上一条必须失败', () =>
+  mutant({ [PERCEP]: [['return s.heatK === undefined ? v : v * s.heatK;', 'return v;']] }, 石头冷一半));
+
+/* 两艘蓝舰看红舰,有太阳、一个不挡视线的天体、一朵罩住红舰的云:截获 detectLoop 里蓝方对红舰的 obs */
+function 接线_obs带成对亮度(E) {
+  const g = E.g, B1 = ship(E, 'DD', '线蓝1', [0, 0, 0], 'blue'), B2 = ship(E, 'CA', '线蓝2', [0, 60000, 0], 'blue'), R = ship(E, 'DD', '线红', [0, 0, 0], 'red');
+  g.tkOnly(g.tkCalm([B1, B2, R])); R.pos = [0.4 * g.visRangeOf(R), 20000, 0];
+  g.envReset({ sun: { brg: 200, half: 10 }, bodies: [{ x: -5e5, y: 5e5, r: RB }], clouds: [{ x: R.pos[0], y: R.pos[1], r: 400000, seed: 5 }] });
+  let got = null; const orig = g.trkStep;
+  g.trkStep = function (tk, t, obs) { if (t === R && tk.by === 'blue') got = obs.slice(); return orig.apply(this, arguments); };
+  try { g.detectLoop(1); } finally { g.trkStep = orig; }
+  assert.ok(got && got.length === 2, `蓝方对红舰的 obs 应有 2 条,实际 ${got && got.length}`);
+  const bad = []; let env = 0;
+  for (const ob of got) {
+    const q = g.sensePairAt(ob.det, R);
+    if (ob.g.opt !== q.opt || ob.g.lis !== q.lis || ob.g.act !== q.act) bad.push(ob.det.name + ' 档位');
+    if (!Object.is(ob.lo, q.lo)) bad.push(`${ob.det.name} lo ${ob.lo} / 单点 ${q.lo}`);
+    if (q.lo !== g.optLum(R)) env++;
+  }
+  assert.deepEqual(bad, [], 'obs 与单点谓词不一致的');
+  assert.equal(env, 2, '两条 obs 的有效亮度都应被环境改过(否则没测到东西)');
+}
+test('ENV2 接线:detectLoop 交给航迹的每条 obs,三档与有效亮度 lo 都与 sensePairAt 逐位相同', () => 接线_obs带成对亮度(logic()));
+test('反向对照:obs 不带 lo,上一条必须失败', () =>
+  mutant({ 'js/sensors/21-detect.js': [[',lo:senseLastLo()});', '});']] }, 接线_obs带成对亮度));
+
+function 椭圆吃到成对亮度(E) {
+  const g = E.g, [B, R] = duo(E, 'DD', 'DD'), dd = 0.4 * g.visRangeOf(R); R.pos = [dd, 0, 0];
+  g.envReset({ sun: { brg: 30, half: 10 } });   // 观测方偏开太阳 30°、目标半侧朝阳
+  g.tkClear('blue', R, 'contact'); g.detectLoop(1);
+  const ch = g.trkOf('blue', R).cov.ch.opt, lo = g.sensePairAt(B, R).lo;
+  const want = dd * g.covTheta('opt', B, R, dd, lo), nom = dd * g.covTheta('opt', B, R, dd), snr = 2 * 10 * Math.log10(E.run('covDetOf')('opt', B, R, lo) / dd);
+  assert.ok(ch, '应有光学量测');
+  assert.ok(Object.is(ch[1], want) && want !== nom, `横向误差 ${ch[1]} 应恰为按 lo 算的 ${want}(标称 ${nom})`);
+  assert.ok(Object.is(ch[3], snr), `光学信噪比 ${ch[3]} 应恰为按 lo 算的 ${snr}`);
+}
+test('ENV2 椭圆吃到成对亮度:有光源时光学量测的横向误差与信噪比按这一对的 lo 算(不是标称值)', () => 椭圆吃到成对亮度(logic()));
+test('反向对照:covShape 的角精度不传 lo,上一条必须失败', () =>
+  mutant({ [COVJS]: [['const th = covTheta(ch, d, t, dd, lo);', 'const th = covTheta(ch, d, t, dd);']] }, 椭圆吃到成对亮度));

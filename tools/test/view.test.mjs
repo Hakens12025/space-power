@@ -109,7 +109,7 @@ function 半径就是量程律(E) {
 }
 test('信号视野:被看见的半径与感知层的光学量程律逐位相同,被听见(照射档)比它大(⑤)', () => 半径就是量程律(vfull()));
 test('反向对照:被看见半径多乘 1.01,上一条必须失败', () =>
-  vmutant({ [PERCEP]: [['function visRangeOf(s) { return Math.sqrt(SENS.K_IR * optLum(s)); }', 'function visRangeOf(s) { return Math.sqrt(SENS.K_IR * optLum(s)) * 1.01; }']] }, 半径就是量程律));
+  vmutant({ [PERCEP]: [['return Math.sqrt(SENS.K_IR * (lo === undefined ? optLum(s) : lo)); }', 'return Math.sqrt(SENS.K_IR * (lo === undefined ? optLum(s) : lo)) * 1.01; }']] }, 半径就是量程律));
 
 /* ============================ FLOW57_GRIDNEST:嵌套网格 ============================ */
 const divides = (a, b) => { const lo = Math.min(a, b), hi = Math.max(a, b); return Math.abs(hi / lo - Math.round(hi / lo)) < 1e-9; };

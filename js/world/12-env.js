@@ -60,6 +60,7 @@ function envReset(w){
   if(w){ // ENV2 先校验
     for(const k in w)if(ENV_KEYS.indexOf(k)<0)throw new Error('ENV2 world 里有不认识的键:'+k); // ENV1 时拼错(feilds)静默成空环境
     if((w.sun?1:0)+(w.stars?w.stars.length:0)>1)throw new Error('ENV2 v1 全图最多一个光源(sun 与 stars 合计 <=1)'); // 拍板点 5
+    if(w.sun&&!isFinite(w.sun.brg))throw new Error('ENV2 sun.brg 不是数:'+w.sun.brg+'(rand 要由对局层先掷成具体方位)'); // ENV2 envReset 不掷骰子
     for(const g of ['stars','bodies','clouds','asteroids'])for(const e of (w[g]||[]))
       if(!isFinite(e.x)||!isFinite(e.y)||(g==='stars'?(e.r!==undefined&&!(e.r>0)):!(e.r>0)))throw new Error('ENV2 '+g+' 条目缺坐标或半径');
   }
@@ -72,7 +73,7 @@ function envReset(w){
     st.push(F({x:s.x,y:s.y,r:num(s.r,ENV_CFG.STAR_R),half:h*180/Math.PI,c2:c*c}));}
   for(const b of (w&&w.bodies)||[])bd.push(F({x:b.x,y:b.y,r:b.r,r2:b.r*b.r,heat:num(b.heat,ENV_CFG.BODY_HEAT),name:b.name||'天体'})); // ENV2 天体:XY 上无限高的柱,挡视线、投影子
   for(const c of (w&&w.clouds)||[])cl.push(F({x:c.x,y:c.y,r:c.r,r2:c.r*c.r,seed:c.seed|0,v:num(c.v,D.V),dark:num(c.dark,D.DARK),l0:num(c.l0,D.L0)})); // ENV2 尘埃云:圆形有界,圈内用种子噪声出浓度
-  for(const f of (w&&w.fields)||[])fl.push(F({x:f.x,y:f.y,r:f.r,r2:f.r*f.r,n:f.n|0,seed:f.seed|0,smin:isFinite(f.smin)?f.smin:0.35,smax:isFinite(f.smax)?f.smax:1.1})); // ENV1 原样(ENV2 冻结)
+  for(const f of (w&&w.fields)||[])fl.push(F({x:f.x,y:f.y,r:f.r,r2:f.r*f.r,n:f.n|0,seed:f.seed|0,smin:isFinite(f.smin)?f.smin:0.35,smax:isFinite(f.smax)?f.smax:2.0})); // ENV1 原样(ENV2 冻结;ENV2 缺省 smax 2.0:石头冷 0.5 之后大碎石仍亮过冷 DD、冒充得了船)
   for(const a of (w&&w.asteroids)||[])ast.push(F({x:a.x,y:a.y,r:a.r,n:a.n|0,seed:a.seed|0,smin:num(a.smin,1),smax:num(a.smax,3),clear:num(a.clear,0),name:a.name||'小行星'})); // ENV2 小行星:只用来撒石头,不带光学杂波、不带 MTI
   ENV.sun=sun;ENV.stars=F(st);ENV.bodies=F(bd);ENV.clouds=F(cl);ENV.fields=F(fl);ENV.asteroids=F(ast);ENV.rev++; // ENV2 整体换成冻结的新列表
 }
@@ -85,10 +86,12 @@ function envInField(p){
 /* 光学背景杂波的亮度倍率:场内 OPT_K,场外 / 没有场 / 没有位置(梯子的假船)1 —— 乘 1 是精确的无操作 */
 function envOptK(p){return (ENV.fields.length>0&&p&&envInField(p))?ENV_CFG.OPT_K:1;}
 /* 太阳禁区:从 from 看 to 的视线落在太阳那个锥里。⚠ 22-percep 的热循环里有一份同式的内联副本(热循环不许调函数),判据 ENV_SENSE 钉着两者逐对相同 */
-function envSunBlind(from,to){
-  const s=ENV.sun;if(!s)return false;
-  const vx=to[0]-from[0],vy=to[1]-from[1],k=vx*s.ux+vy*s.uy;
-  return k>0&&k*k>(vx*vx+vy*vy)*s.c2;
+function envSunBlind(from,to){ // ENV2 光源方向按观测方取;观测方在天体影子里看不到光源 ⇒ 不致盲(光学与静听一起解除)
+  const s=ENV.sun;if(!s&&!ENV.stars.length)return false;
+  if(ENV.bodies.length&&envInShadow(from))return false;
+  const u=envSunDirAt(from,ENV_T2);if(!u)return false;
+  const c2=s?s.c2:ENV.stars[0].c2,vx=to[0]-from[0],vy=to[1]-from[1],k=vx*u[0]+vy*u[1];
+  return k>0&&k*k>(vx*vx+vy*vy)*c2;
 }
 /* 动目标显示:to 在场里、而且沿 from→to 视线的径向速度低于门限 ⇒ 回波被当成杂波。热循环里同样有一份内联副本 */
 function envMtiBlind(from,to,vel){

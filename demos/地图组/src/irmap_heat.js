@@ -71,7 +71,7 @@ function irmSources(){return ships.filter(s=>s.side!=='blue'&&!s.dead).concat((t
    残骸场里的目标衬在被照亮的碎石前(envOptK),晒的热也跟着乘,与引擎的光学亮度同一个口径。
    引擎里的亮度不变(主游戏不受影响),这里只改红外图:按"亮度乘 k"整套改 —— 收到的热 x k,角误差 / √k
    (引擎的光学角误差与亮度的平方根成反比,见 23-cov 的 visAccOf),于是它在红外图上与一件亮度 k 倍的东西完全一样 */
-const IRM_ROCK={DARK:0.5};
+const IRM_ROCK={DARK:1}; // ENV2 临时:引擎的 optLum 已含石头的 0.5(heatK),这里再乘就重复了;第 3 步整段删
 const IRM_SOLAR={S:1,G0:1};
 function irmSunDirAt(p){ /* 从 p 指向太阳的单位向量(平面);没有太阳给 null */
   if(IRM_SUN.mode==='dir'){const a=IRM_SUN.BRG*Math.PI/180;return [Math.cos(a),Math.sin(a)];}
@@ -454,9 +454,12 @@ function irmHalo(r){ /* 位置型恒星在甲里的亮斑 + 光晕:饱和半径�
   const st=IRM.VMAX*Math.pow(10,-(rr-Rs)/IRM_SUN.DEC_R);
   return IRM_SUN.FALL==='steep'?st:Math.pow(p4,IRM_SUN.MIX)*Math.pow(st,1-IRM_SUN.MIX);
 }
+let irmWorld=null;   // ENV2 这一局掷过太阳方位的场景 world:envReset 不收 'rand',点太阳钮也不许重掷
+function irmWorldKeep(){const w=curEnv().world;irmWorld=w&&w.sun&&w.sun.brg==='rand'&&ENV.sun?Object.assign({},w,{sun:Object.assign({},w.sun,{brg:ENV.sun.brg})}):matchWorld(w);}
+irmWorldKeep();
 function irmSunSet(mode){
   IRM_SUN.mode=mode;
-  envReset(curEnv().world);   /* 先恢复这一局场景自己的环境(靶场没有太阳;碎石带有它自己的那颗) */
+  envReset(irmWorld);   /* 先恢复这一局场景自己的环境(靶场没有太阳;碎石带有它自己的那颗) */
   if(mode==='dir'){const a=IRM_SUN.BRG*Math.PI/180,h=IRM_SUN.HALF*Math.PI/180,c=Math.cos(h);ENV.sun={brg:IRM_SUN.BRG,half:IRM_SUN.HALF,ux:Math.cos(a),uy:Math.sin(a),c2:c*c};}
   irmStar=null;
   if(mode==='pos'){
@@ -481,7 +484,7 @@ function irmSpawnAsteroids(){
   return n;
 }
 const irmOrigInitFleet=initFleet;
-initFleet=function(){const r=irmOrigInitFleet.apply(this,arguments);irmSpawnAsteroids();irmPlanetSet();if(IRM_SUN.mode!=='none')irmSunSet(IRM_SUN.mode);return r;};
+initFleet=function(){const r=irmOrigInitFleet.apply(this,arguments);irmWorldKeep();irmSpawnAsteroids();irmPlanetSet();if(IRM_SUN.mode!=='none')irmSunSet(IRM_SUN.mode);return r;};
 irmSpawnAsteroids();   /* 引擎的 init 在本段脚本之前已经跑过一次 initFleet,这一局补撒 */
 irmPlanetSet();
 
@@ -645,7 +648,7 @@ function irmSelftest(){
           偏开 25° 的船引擎也判致盲(10° 时不会);
           甲里正对太阳方向的红舰画不出来(那艘船被晃瞎,引擎的致盲函数也这么判);关掉太阳又看得见 */
     ships.length=0;ships.push(B);B.pos=[0,0,0];rocks=[];irmSunSet('dir');
-    const ws=TEST_ENVS[matchRocksIdx()].world.sun,envOk=!!ENV.sun&&ENV.sun.brg===ws.brg&&Math.abs(ENV.sun.half-30)<1e-9&&ws.half===10;   /* 方位和引擎的场景比;半角写字面的 30(用户拍板的数),并确认碎石带那颗没被带着改 */
+    const ws=TEST_ENVS[matchRocksIdx()].world.sun,envOk=!!ENV.sun&&ENV.sun.brg===150&&Math.abs(ENV.sun.half-30)<1e-9&&ws.half===10;   /* 方位和引擎的场景比;半角写字面的 30(用户拍板的数),并确认碎石带那颗没被带着改。ENV2 碎石带的太阳方位改成开局随机('rand'),方位改比本页写死的 150° */
     const P14=irmProfiles()[0].P,binDeg=function(dg){return P14[Math.round((((dg%360)+360)%360)/360*IRM.BINS)%IRM.BINS];};
     const v0=binDeg(IRM_SUN.BRG),vh=binDeg(IRM_SUN.BRG+IRM_SUN.HALF),v2h=binDeg(IRM_SUN.BRG+60),v90=binDeg(IRM_SUN.BRG+90);
     const a25=(IRM_SUN.BRG+25)*Math.PI/180,blind25=envSunBlind(B.pos,[Math.cos(a25)*Rv*0.5,Math.sin(a25)*Rv*0.5,0]);

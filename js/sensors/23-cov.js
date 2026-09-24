@@ -136,17 +136,17 @@ const COV = {
    从既有的 ecmPower 推,不另立一张每舰种的表 —— 两张表必然漂移,而漂移在这个系统里是完全静默的。 */
 const jamDOf = s => SENS.JAM_REF / Math.sqrt(sReq(s, 'ecmPower', 'ship'));
 
-function visAccOf(s) { return Math.sqrt(SENS.A_IR * optLum(s)); }
+function visAccOf(s, lo) { return Math.sqrt(SENS.A_IR * (lo === undefined ? optLum(s) : lo)); } // ENV2 lo = 这一对的有效亮度,不给读标称值
 function hearAccOf(s, recv) { return Math.sqrt(SENS.A_RF * rfLoudOf(s) * (isFinite(recv) ? recv : 1)); }
 function actAccOf(d, refl) { const r = SENS.A_ACT * sReq(d, 'emit', 'ship') * sReq(d, 'recv', 'ship') * (isFinite(refl) ? refl : 1); return Math.sqrt(Math.sqrt(r)); }
 
 /* 某条通道的【发现半径】与【定位尺度】。两者同形,只差读哪一套常数 —— 分家正是两套半径的意义。 */
-const covDetOf = (ch, d, t) => ch === 'opt' ? visRangeOf(t) : (ch === 'lis' ? hearRangeOf(t, d.recv) : actRangeOf(d, reflOf(t)));
-const covRangeOf = (ch, d, t) => ch === 'opt' ? visAccOf(t) : (ch === 'lis' ? hearAccOf(t, d.recv) : actAccOf(d, reflOf(t)));
+const covDetOf = (ch, d, t, lo) => ch === 'opt' ? visRangeOf(t, lo) : (ch === 'lis' ? hearRangeOf(t, d.recv) : actRangeOf(d, reflOf(t))); // ENV2 lo 只进光学那一支
+const covRangeOf = (ch, d, t, lo) => ch === 'opt' ? visAccOf(t, lo) : (ch === 'lis' ? hearAccOf(t, d.recv) : actAccOf(d, reflOf(t)));
 
 /* 这一拍的角精度(弧度)。连续,没有台阶 —— 驻留时代那张"弱/良/强"三档表的量化跳变是它换掉的东西。 */
-function covTheta(ch, d, t, dd) {
-  const R = covRangeOf(ch, d, t); if (!(R > 0)) return 0;
+function covTheta(ch, d, t, dd, lo) {
+  const R = covRangeOf(ch, d, t, lo); if (!(R > 0)) return 0;
   const u = dd / R;
   return COV.TH0[ch] * (ch === 'act' ? u * u : u);
 }
@@ -183,12 +183,12 @@ function covSolve(J) {
      静听单站的长轴从 24 万缩到 3.7 万)。那是双重计数。
      所以:横向(方位)是真量测,逐拍独立;纵向对被动通道只当【上限】,解算完再钳。
      照射不同 —— 它是真的在测距,每一拍都是一次独立测量,照常进信息矩阵。 */
-function covShape(ch, gi, d, t, dd) {
+function covShape(ch, gi, d, t, dd, lo) {
   if (!gi) return null;                                  // gi 只当"在不在量程内"用
-  const R = covRangeOf(ch, d, t);
+  const R = covRangeOf(ch, d, t, lo);
   if (!(R > 0)) return null;
   const u = dd / R;
-  const th = covTheta(ch, d, t, dd);
+  const th = covTheta(ch, d, t, dd, lo);
   const sPerp = dd * th;
   if (ch === 'act') {
     let sPar = COV.RRES * u * u, sq = sPerp;
@@ -246,7 +246,8 @@ function stepCov(t, c, obs, el, idOut) { // TK2.6:可选的 idOut 记下这一�
     const dxy = Math.sqrt(ux * ux + uy * uy);
     if (dxy > 1e-6) { ux /= dxy; uy /= dxy; } else { ux = 1; uy = 0; }
     for (const ch of ['opt', 'lis', 'act']) {
-      const sh = covShape(ch, g[ch], d, t, dd); if (!sh) continue;
+      const lo = ch === 'opt' ? ob.lo : undefined; // ENV2 这一对的有效光学亮度;手搭的 obs 没有 lo ⇒ 标称值
+      const sh = covShape(ch, g[ch], d, t, dd, lo); if (!sh) continue;
       covAddMeas(J, ux, uy, sh[2] ? sh[0] * iw : COV.HUGE, sh[1] * iw);  // 真量测进信息矩阵;界只钳上限
       n++;
       if (!sh[2] && sh[0] < rBound) rBound = sh[0];
@@ -254,7 +255,7 @@ function stepCov(t, c, obs, el, idOut) { // TK2.6:可选的 idOut 记下这一�
       if (sh[3] && idOut) idOut[ch] = true; // TK2.6:idBy 只记【第一个】认出它的通道(按探测站、通道的先后),同一拍里 1 号站静听认出、2 号站照射认出时 idBy 是 lis —— 身份三档要知道照射也认出来了
       const cur = c.ch[ch];
       if (!cur || sh[1] < cur[1]) {
-        const R = covDetOf(ch, d, t);                   // 信噪比问"我有多少信号" ⇒ 发现域
+        const R = covDetOf(ch, d, t, lo);               // 信噪比问"我有多少信号" ⇒ 发现域
         const snr = (ch === 'act' ? 4 : 2) * 10 * Math.log10(R / dd);  // 被动 (R/d)^2、照射 (R/d)^4,折成 dB
         c.ch[ch] = [sh[0], sh[1], dd, snr, d.id];       // 末位是探到它的那一艘(画单条方位线要用)
       }
@@ -291,8 +292,8 @@ function covLit(c, t) {
 }
 /* 某条通道【认出】目标的距离:横向误差收到目标尺寸以内。
    静听不走这条(它靠指纹,不靠角分辨),所以这里只回答光学与照射。 */
-function identDist(ch, d, t) {
-  const R = covRangeOf(ch, d, t); if (!(R > 0)) return 0;
+function identDist(ch, d, t, lo) {
+  const R = covRangeOf(ch, d, t, lo); if (!(R > 0)) return 0;
   const L = sReq(t, 'size', 'ship') * (ch === 'act' ? COV.L_ACT : (ch === 'lis' ? COV.L_LIS : COV.L_REF)), T = COV.TH0[ch]; // ID3:静听那一路用 L_LIS
   return ch === 'act' ? Math.pow(L * R * R / T, 1 / 3) : Math.sqrt(L * R / T);
 }
@@ -363,7 +364,7 @@ function ladApply() {
    字段按引擎 22-percep 的访问器口径给:optLum 读 flame/sideFlame,rfLoudOf 读 emit/emitMode。 */
 function ladShip(cls, o) {
   const r = SENS.CLS[cls];
-  const x = { cls: cls, size: r.size, stealth: r.stealth, emit: r.emit, recv: r.recv, ecmPower: r.ecmPower, emitMode: 'silent', flame: 0, sideFlame: 0, pos: [0, 0, 0], id: 'lad_' + cls };
+  const x = { cls: cls, size: r.size, stealth: r.stealth, emit: r.emit, recv: r.recv, ecmPower: r.ecmPower, emitMode: 'silent', flame: 0, sideFlame: 0, pos: null, id: 'lad_' + cls }; // ENV2 pos null:环境函数给中性值,梯子与世界无关
   if (o) for (const k in o) x[k] = o[k];
   return x;
 }

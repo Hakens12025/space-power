@@ -97,8 +97,9 @@ function detectFor(detSide,tgtSide,dt){
     for(let j=0;j<all.length;j++){
       const p=sensePairGrades(j,ti); // 打包三档,0 = 这一对三条通道全都够不着(整目标早退已经在里面)
       if(p===0)continue;
-      const d=all[j], dx=d.pos[0]-t.pos[0], dy=d.pos[1]-t.pos[1], dz=d.pos[2]-t.pos[2];
-      obs.push({det:d,dd:Math.sqrt(dx*dx+dy*dy+dz*dz),g:{opt:p&3,lis:(p>>2)&3,act:(p>>4)&3}});
+      const d=all[j], q=senseResolve(j,ti,d,t,p);if(q===0)continue; // ENV2 待定位的对在热循环外精算光学档与有效亮度
+      const dx=d.pos[0]-t.pos[0], dy=d.pos[1]-t.pos[1], dz=d.pos[2]-t.pos[2];
+      obs.push({det:d,dd:Math.sqrt(dx*dx+dy*dy+dz*dz),g:{opt:q&3,lis:(q>>2)&3,act:(q>>4)&3},lo:senseLastLo()});
     }
     /* TK2.0:下面两段注释说的三件事(椭圆推进、最后定位记录、等级)按原来的先后搬进了 sensors/24 的 trkStep,一句调用做完 */
     /* ---- 最后一次【定得出位置】的记录(SN6f:刷新规则换了,见下)----
@@ -213,8 +214,8 @@ function projVisibleTo(p,detSide){
   if(p.shooter&&p.shooter.side===detSide)return true; // 己方弹药永远可见
   const {dets,bcons}=detectorsOf(detSide);
   const sg=projSig(p);
-  const lum=sg.lum,refl=sg.refl;
-  for(const d of dets){if(senseSeesOptical(lum,d,p.pos)||senseSeesActive(refl,d,p.pos,p.vel))return true;} // 照射那一路:不在 paint 档时 senseKACT 恒 0,判据天然为假,这里不必再判一次发射档
-  for(const b of bcons){if(senseSeesOptical(lum,b,p.pos)||senseSeesActive(refl,b,p.pos,p.vel))return true;} // 信标恒在照射(BEACON_EMIT/BEACON_RECV),对反射 1.0 的目标正好 300,000 —— 与全库既有的信标 300k 逐位相同
+  const lum=sg.lum,refl=sg.refl,bg=ENV.clouds.length?envBg(p.pos,'opt'):0; // ENV2 云背景每颗弹丸算一次
+  for(const d of dets){if(senseSeesOptical(lum,d,p.pos,bg)||senseSeesActive(refl,d,p.pos,p.vel))return true;} // 照射那一路:不在 paint 档时 senseKACT 恒 0,判据天然为假,这里不必再判一次发射档
+  for(const b of bcons){if(senseSeesOptical(lum,b,p.pos,bg)||senseSeesActive(refl,b,p.pos,p.vel))return true;} // 信标恒在照射(BEACON_EMIT/BEACON_RECV),对反射 1.0 的目标正好 300,000 —— 与全库既有的信标 300k 逐位相同
   return false;
 }

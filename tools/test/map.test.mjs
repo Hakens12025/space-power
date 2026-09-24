@@ -188,6 +188,21 @@ test('大地图 ⑧ 登记表:world 层每个键在 ENV_KIND_OF 里都有条目�
 test('反向对照:登记表多一个 world 层没有的键,上一条必须失败', () =>
   bite({ [ENVJS]: [['  asteroids:[]}; // ENV2 世界层每个键', '  asteroids:[],comets:[]}; // ENV2 世界层每个键']] }, 登记表以世界层为锚, /没有 world 层以外的键/));
 
+/* ENV2 第 4a 步:选中的蓝舰躲在天体影子里看不到光源,不画禁区锥 */
+function 影子里不画禁区锥(E) {
+  const { g, rec } = 地图(E);
+  const sb = E.run("ships.filter(function(s){return s.side==='blue'&&!s.dead;})[0]");
+  assert.ok(sb, '场面前提:有一艘活着的蓝舰可选');
+  E.run(`selected=[${JSON.stringify(sb.id)}];`);
+  const cone = dx => { g.envReset({ sun: { brg: 0 }, bodies: [{ x: sb.pos[0] + dx, y: sb.pos[1], r: R4 }] }); return [g.envInShadow(sb.pos), named(mainOf(rec.frame(() => g.mapSunCue())), 'stroke').length]; };
+  const [inSh, nIn] = cone(3 * R4), [outSh, nOut] = cone(-3 * R4);
+  assert.deepEqual([inSh, outSh], [true, false], '场面前提 [天体在光源一侧时蓝舰在影子里, 天体在背光一侧时]');
+  assert.ok(nIn === 0 && nOut >= 1, `禁区锥的 stroke:影子里 ${nIn} 次(应 0)、影子外 ${nOut} 次(应 >= 1)`);
+}
+test('大地图 禁区锥:选中的蓝舰在天体影子里时不画锥(stroke 0 次),影子外照画', () => 影子里不画禁区锥(page()));
+test('反向对照:禁区锥不看影子,上一条必须失败', () =>
+  bite({ [ENVJS]: [["&&!(ENV.bodies.length&&envInShadow(sel.pos))", '']] }, 影子里不画禁区锥, /禁区锥的 stroke/));
+
 /* ============================ ENV2_MAP ⑨:只有恒星 / 只有天体 ============================ */
 test('大地图 ⑨ 只有恒星、只有天体、两者都有(都没有 sun)时 drawEnv 不抛(选中一艘蓝舰,恒星的禁区锥那一支也跑到)', () => {
   const { E, g } = 地图(page());

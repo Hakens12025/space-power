@@ -69,7 +69,7 @@ function 撒石头不碰全局随机流(E) {
   E.start('rocks', { seed: 3 });                                          // 开一局「对局·碎石带」:initFleet 里就撒过一遍石头
   const n0 = E.draws;
   E.run('rocks=[];rockSeq=0;');
-  E.g.envReset(E.run('curEnv().world'));
+  E.g.envReset(E.g.matchWorld(E.run('curEnv().world'), 0.5));   // ENV2 碎石带的太阳方位由对局层掷(envReset 只收掷过的副本);这里注入固定的 rnd,不从全局流取
   E.g.envSpawnRocks();
   assert.ok(E.run('rocks.length') > 0, '碎石带应撒出石头(一块都没撒的话,"没碰随机流"是白送的)');
   assert.equal(E.draws - n0, 0, '重建环境 + 撒石头期间全局 Math.random 应被取 0 次(石头走自己的种子流 envRng)');
@@ -167,7 +167,7 @@ test('单写者:严格模式下改条目、往列表里 push、给 ENV 加键都
 test('反向对照:天体列表不冻结,上一条必须失败', () =>
   mutant([['ENV.bodies=F(bd);', 'ENV.bodies=bd;']], 列表冻结_ENV封口));
 test('解析:碎石带解析出的 sun 与 fields 与 ENV1 的算法逐字段相同(ENV1 的式子内联在测试里),而且都冻结', () => {
-  const E = fresh(), W = E.run('TEST_ENVS[matchRocksIdx()].world'); E.g.envReset(W);
+  const E = fresh(), W = E.g.matchWorld(E.run('TEST_ENVS[matchRocksIdx()].world'), 0.25); E.g.envReset(W);   // ENV2 太阳方位 'rand' 先由对局层掷成具体数
   const ws = W.sun, a = ws.brg * Math.PI / 180, h = (isFinite(ws.half) ? ws.half : E.run('ENV_CFG.SUN_HALF_DEG')) * Math.PI / 180, c = Math.cos(h);
   const sun1 = { brg: ws.brg, half: h * 180 / Math.PI, ux: Math.cos(a), uy: Math.sin(a), c2: c * c };
   const fld1 = Array.from(W.fields || [], f => ({ x: f.x, y: f.y, r: f.r, r2: f.r * f.r, n: f.n | 0, seed: f.seed | 0, smin: isFinite(f.smin) ? f.smin : 0.35, smax: isFinite(f.smax) ? f.smax : 1.1 }));
@@ -325,7 +325,7 @@ test('反向对照:软窗的 smoothstep 换成 t²,上一条必须失败', () =>
 test('场景:每条 TEST_ENVS 的 world 都能 envReset 不抛;残骸场与天体不相交;蓝方开局位置与目标点不在天体里;带天体的对局红方摆位不在天体里', () => {
   const E = fresh(), g = E.g, envs = E.run('TEST_ENVS'), bad = [];
   envs.forEach((e, idx) => {
-    try { g.envReset(e.world); } catch (x) { bad.push(e.name + ' envReset 抛:' + x.message); return; }
+    try { g.envReset(g.matchWorld(e.world, 0.5)); } catch (x) { bad.push(e.name + ' envReset 抛:' + x.message); return; }   // ENV2 太阳方位 'rand' 由对局层先掷(initFleet 同一条路)
     const Bs = E.run('ENV.bodies'); if (!Bs.length) return;
     const inB = (x, y) => Bs.some(b => (x - b.x) ** 2 + (y - b.y) ** 2 < b.r2);
     for (const f of E.run('ENV.fields')) for (const b of Bs) if ((f.x - b.x) ** 2 + (f.y - b.y) ** 2 < (f.r + b.r) ** 2) bad.push(e.name + ' 残骸场与天体相交');
@@ -339,7 +339,7 @@ test('场景:每条 TEST_ENVS 的 world 都能 envReset 不抛;残骸场与天�
   assert.deepEqual([...new Set(bad)], []);
 });
 test('场景:碎石带有太阳与三片残骸场、撒出 30 块石头,撒两次位置与体型逐位相同', () => {
-  const E = fresh(), g = E.g, W = E.run('TEST_ENVS[matchRocksIdx()].world');
+  const E = fresh(), g = E.g, W = g.matchWorld(E.run('TEST_ENVS[matchRocksIdx()].world'), 0.5);   // ENV2 太阳方位 'rand' 先由对局层掷成具体数
   const spawn = () => { E.run('rocks=[];rockSeq=0;'); g.envReset(W); g.envSpawnRocks(); return E.run('rocks').map(r => r.pos.join(',') + '/' + r.size).join(';'); };
   const a = spawn();
   assert.deepEqual([E.run('ENV.sun') !== null, E.run('ENV.fields.length'), E.run('rocks.length')], [true, 3, 30], '[有太阳, 残骸场片数, 石头块数]');
@@ -391,3 +391,29 @@ function 小行星避让(E) {
 test('小行星:都不在残骸场里,离每艘舰船 >= clear、离天体 >= r + clear(clear = 30 万的临时 world 上同样守得住)', () => 小行星避让(fresh()));
 test('反向对照:撒小行星不再避让,上一条必须失败', () =>
   mutant([['if(envSpawnBlocked(x,y,a.clear))continue;', '']], 小行星避让));
+
+/* ---- ENV2 第 4a 步:碎石体型上限、碎石带的太阳随机 ---- */
+function 碎石体型上限(E) {
+  E.start('rocks', { seed: 1 });
+  const sz = E.val("rocks.filter(function(k){return k.name==='碎石';}).map(function(k){return k.size;})"), mx = Math.max(...sz);
+  assert.equal(sz.length, 30, '碎石带的碎石块数');
+  assert.ok(sz.every(s => s >= 0.35 && s <= 2.0), `碎石体型应在 [0.35, 2.0],最大 ${mx}`);
+  assert.ok(mx > 1.1, `最大碎石 ${mx} 应 > 1.1(上限是 2.0)`);
+  E.g.envReset({ fields: [{ x: 0, y: 0, r: 1000, n: 0 }] });
+  assert.equal(E.run('ENV.fields[0].smax'), 2, '残骸场缺省 smax');
+}
+test('碎石:碎石带开局 30 块碎石体型都在 [0.35, 2.0]、最大的超过 1.1;残骸场缺省 smax = 2.0', () => 碎石体型上限(fresh()));
+test('反向对照:碎石带中心那片的 smax 种成 3.0,上一条必须失败', () =>
+  mutantP({ 'js/scenario/90-envs.js': [['{x:0,y:0,r:350000,n:14,seed:11,smin:0.35,smax:2.0}', '{x:0,y:0,r:350000,n:14,seed:11,smin:0.35,smax:3.0}']] }, 碎石体型上限));
+function 碎石带太阳随种子(E) {
+  const brg = s => { E.start('rocks', { seed: s }); return E.run('ENV.sun.brg'); };
+  const a = brg(1), b = brg(2), a2 = brg(1);
+  assert.ok(isFinite(a) && a >= 0 && a < 360 && isFinite(b), `太阳方位应是 [0,360) 里的数:${a} / ${b}`);
+  assert.notEqual(a, b, '不同种子的两局太阳方位');
+  assert.equal(a2, a, '同种子的两局太阳方位');
+  assert.equal(E.run('TEST_ENVS[matchRocksIdx()].world.sun.brg'), 'rand', '场景表本身仍写 rand(掷出来的是副本)');
+  assert.throws(() => E.g.envReset(E.run('TEST_ENVS[matchRocksIdx()].world')), /rand/, 'envReset 不掷骰子:直接给 rand 当场抛');
+}
+test('碎石带太阳随机:不同种子的两局太阳方位不同、同种子相同;场景表不被改写;envReset 直接收到 rand 当场抛', () => 碎石带太阳随种子(fresh()));
+test('反向对照:对局层把太阳方位掷成定值,上一条必须失败', () =>
+  mutantP({ 'js/scenario/97-match.js': [['{brg:(rnd===undefined?Math.random():rnd)*360}', '{brg:150}']] }, 碎石带太阳随种子));

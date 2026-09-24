@@ -296,12 +296,21 @@ test('石头:登记与枚举 —— 石头是中立的,排在全部舰船之后,
 function 石头与冷红舰对照跑(E) {
   const S = 石头场面(E); beats(E, 20, true); return S;
 }
-test('石头:与熄火静默的红 DD 镜像摆放跑 20 拍,两条航迹的等级 / 定位 / 两个轴长 / 身份 / 显示态逐位相同(分不开)', () => {
-  const E = logic(), g = E.g, { R, K } = 石头与冷红舰对照跑(E), a = tk(E, 'blue', R), b = tk(E, 'blue', K);
-  const sig = (t, s) => [t.lit, t.cov.fix, t.cov.a1, t.cov.a2, t.cov.idn, t.cov.n, g.contactState(s, 'blue')];
-  assert.ok(b.lit > 0, '石头应被探到');
-  assert.deepEqual(sig(b, K), sig(a, R), '[等级, 定得出, 长轴, 短轴, 认出, 量测数, 显示态] 石头 vs 红舰');
-});
+/* ENV2 石头冷 0.5(拍板点 16)之后同体型的石头亮度是冷船的一半、量程 √0.5 倍:原来的"两条航迹逐位相同"改成下面这种分得开的方式,是有意的。
+   两者长轴都钳在 AMAX,起作用的是短轴与信噪比 */
+function 石头比冷船暗一半(E) {
+  const g = E.g, { B, R, K } = 石头与冷红舰对照跑(E), a = tk(E, 'blue', R), b = tk(E, 'blue', K);
+  assert.ok(a.lit > 0 && b.lit > 0, `0.6 倍量程处两者都应探得到:红舰 ${a.lit} / 石头 ${b.lit}`);
+  assert.equal(g.contactState(K, 'blue'), g.contactState(R, 'blue'), '显示态 石头 vs 红舰');
+  assert.ok(b.cov.a2 > a.cov.a2, `石头短轴 ${b.cov.a2} 应比红舰 ${a.cov.a2} 宽`);
+  const dB = b.cov.ch.opt[3] - a.cov.ch.opt[3];
+  assert.ok(Math.abs(dB - 10 * Math.log10(0.5)) < 1e-9, `光学信噪比差 ${dB} dB,应为 10·log10(0.5) = −3.0103`);
+  R.pos = R.pos.map(v => v * 4 / 3); K.pos = K.pos.map(v => v * 4 / 3); B.pos = [0, 0, 0]; beats(E, 20, true);
+  assert.deepEqual([tk(E, 'blue', R).lit > 0, tk(E, 'blue', K).lit > 0], [true, false], '挪到 0.835 倍量程之后 [红舰, 石头] 探得到');
+}
+test('石头:与熄火静默的红 DD 镜像摆放 —— 0.6 倍量程处都探得到、显示态相同;石头短轴更宽、光学信噪比低 3.01 dB;挪到 0.835 倍量程只剩船', () => 石头比冷船暗一半(logic()));
+test('反向对照:石头自身热倍率种成 1(同体型冷船一样亮),上一条必须失败', () =>
+  mutant({ 'js/world/12-env.js': [['ROCK_HEAT:0.5,', 'ROCK_HEAT:1,']] }, 石头比冷船暗一半));
 test('石头:认出之前是未知、算敌情;把蓝 DD 挪进光学认出距离再跑 20 拍 —— 确认、类型是石头、不再算敌情', () => {
   const E = logic(), g = E.g, { B, K, d } = 石头与冷红舰对照跑(E), [UNK, , CON] = ID(E);
   const pre = [g.contactIdLvl(K, 'blue'), g.trkFoe(tk(E, 'blue', K))], idd = g.identDist('opt', B, K);

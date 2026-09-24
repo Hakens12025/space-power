@@ -105,8 +105,8 @@ function geomLines(t) {
     /* 着色取【此刻方位最准的那条通道】,不按 act>opt>lis 的死顺序(演示页 chBestOf 踩过:远接触全判给照射、方位却是光学更准) */
     const dd = Math.hypot(t.pos[0] - w.pos[0], t.pos[1] - w.pos[1], (t.pos[2] || 0) - (w.pos[2] || 0)) || 1;
     let best = 'lis', bq = 1e18;
-    for (const ch of ['opt', 'lis', 'act']) { if (!gg[ch]) continue; const q = covTheta(ch, w, t, dd); if (q > 0 && q < bq) { bq = q; best = ch; } }
-    out.push({ w: w, ch: best, name: w.name || '信标' });
+    for (const ch of ['opt', 'lis', 'act']) { if (!gg[ch]) continue; const q = covTheta(ch, w, t, dd, ch === 'opt' ? gg.lo : undefined); if (q > 0 && q < bq) { bq = q; best = ch; } } // ENV2 光学按这一对的有效亮度
+    out.push({ w: w, ch: best, name: w.name || '信标', lo: gg.lo });
   }
   GEOM.byId[t.id] = out;
   GEOM.lines = out;
@@ -177,7 +177,7 @@ function drawGeom() {
   g.fillText(litTag(lit) + ' · 窗口半宽 ' + geomK(R), Wp - 8, 48);
   if (c.fix && !c.idn && lines.length) {                     // 身份是另一回事,单列一行:它不挡等级,只说"知不知道那是什么"
     let dId = 0;
-    for (const L of lines) dId = Math.max(dId, identDist('opt', L.w, t), identDist('act', L.w, t));
+    for (const L of lines) dId = Math.max(dId, identDist('opt', L.w, t, L.lo > 0 ? L.lo : undefined), identDist('act', L.w, t)); // ENV2 这一站没有光学量测时照旧按标称值(空环境逐位不变)
     if (dId > 0) g.fillText('身份未认出 · 贴到 ' + geomK(dId) + ' 内可认', Wp - 8, 61);
   }
   g.textAlign = 'left'; g.fillText('↳ ' + sel.why, 8, Hp - mB + 4);

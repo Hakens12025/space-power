@@ -65,7 +65,7 @@ function 照射看见冷弹(E) {
 }
 test('近防:探测方开照射、来袭冷弹 —— 走照射支路看得见,真发出拦截弹、库存下降(A1)', () => 照射看见冷弹(logic()));
 test('反向对照:弹丸可见性去掉照射支路,上一条必须失败', () =>
-  mutant({ [DETECT]: [['for(const d of dets){if(senseSeesOptical(lum,d,p.pos)||senseSeesActive(refl,d,p.pos,p.vel))return true;}', 'for(const d of dets){if(senseSeesOptical(lum,d,p.pos))return true;}']] }, 照射看见冷弹));
+  mutant({ [DETECT]: [['for(const d of dets){if(senseSeesOptical(lum,d,p.pos,bg)||senseSeesActive(refl,d,p.pos,p.vel))return true;}', 'for(const d of dets){if(senseSeesOptical(lum,d,p.pos,bg))return true;}']] }, 照射看见冷弹));
 function 光学看见热弹(E) {
   const A2 = 近防一相(E, false, false);
   assert.ok(A2.vis && A2.shots > 0 && A2.int1 < A2.int0, `A2 静默 + 热弹:可见=${A2.vis} 拦截弹=${A2.shots} 条 库存 ${A2.int0}→${A2.int1}(须可见、发出、库存下降)${cdiag(A2)}`);

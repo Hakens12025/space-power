@@ -92,6 +92,9 @@ const SENS = {
   P_FIRE: 3.0,         // 开火那几秒的功耗档(= P_ENG_MAIN)
   FIRE_S: 8,           // 开火之后亮多少模拟秒
   EMIT_P: { silent: 0, paint: 1.0, jam: 2.0 }, // 发射档:功耗 = 射频响度,同一张表
+  SOLAR_K: 1,          // ENV2 晒热:size x SOLAR_K x envOptK x 相位;熄火冷船朝阳面亮一倍(红外页 IRM_SOLAR.S)
+  BG_G0: 1,            // ENV2 背景受限的参照:lo = 亮度 / √(1 + 背景 / BG_G0);单位 = 发现线(红外页 IRM_SOLAR.G0)
+  GLARE: { EDGE: 1000, P: 4, DEC_DEG: 10, MIX: 0.875 }, // ENV2 杂散光角度律(红外页 irmGlare 的"光·中")
 
   /* ---- 通道二 雷达:一部设备两种模式 ---- */
   LIS_DET: 600000,     // 静听参考距离 km(recv=1 听 emit=1 的照射)

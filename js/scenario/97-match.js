@@ -21,6 +21,10 @@ function matchPlaceRed(defs,blueC,rnd){
   const o=(curEnv().objective)||[0,0],fl=Math.hypot(o[0]-cx,o[1]-cy)||1,face=[(o[0]-cx)/fl,(o[1]-cy)/fl,0]; // 船头朝战场中心
   return defs.map(function(d){const c=d.slice();c[2]=cx+d[2];c[3]=cy+d[3];c[5]=face;return c;});
 }
+function matchWorld(w,rnd){ // ENV2 场景里 sun.brg 为 'rand' 时掷成具体方位,返回副本(envReset 不掷骰子);rnd 可注入,平时与红方摆位同一个 Math.random
+  if(!w||!w.sun||w.sun.brg!=='rand')return w;
+  return Object.assign({},w,{sun:Object.assign({},w.sun,{brg:(rnd===undefined?Math.random():rnd)*360})});
+}
 function matchSync(){ // 顶栏钮的字与提示跟着当前场景走(进 / 出对局、场景菜单切走,都经过 initFleet ⇒ 由它调)
   const b=document.getElementById('btnMatch');if(!b)return;
   const on=matchIsOn();

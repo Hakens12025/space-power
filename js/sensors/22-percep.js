@@ -55,14 +55,20 @@ let scBIR = null, scBRF = null, scBACT = null, scBMax = null; // 三条通道各
 let scGS = 0.0625, scGF = 0.25;    // 分档常数缓存(热循环不查 SENS.xxx)
 let scInF = null;                  // ENV1 目标在不在残骸场里(Uint8Array;没有场时全 0,热循环那一支天然不进)
 let scTVX = null, scTVY = null, scTVZ = null; // ENV1 目标速度(动目标显示按径向速度滤杂波用;只在有场时填)
-let scSunOn = false, scSunX = 0, scSunY = 0, scSunC2 = 1; // ENV1 太阳禁区:开关 + 方向 + cos^2 半角(热循环免开方)
 let scMTI2 = 0;                    // ENV1 动目标显示门限的平方
+let scDLit = null, scDSX = null, scDSY = null; // ENV2 观测方看得见光源(Uint8)+ 从它指向光源的方向(位置型恒星每船不同)
+let scTDir = null, scTBg = null, scTSh = null; // ENV2 目标:这一对跟方向有关(Uint8)/ 云背景 / 在影子里(Uint8),精算步不重算
+let scON = 0, scOCap = 0, scOX = null, scOY = null, scOR2 = null; // ENV2 天体摊平(遮挡的内联副本读)
+let scLitC2 = 1;                   // ENV2 光源禁区的 cos^2 半角
+const scT2 = [0, 0];               // ENV2 sensePrepare 的两格草稿
+let scPairLo = 0;                  // ENV2 最近一次精算的有效亮度
 
 function senseGrowD(n) { // 探测器侧扩容:只在长度不够时整体重建
   if (n <= scDCap) return;
   const c = Math.max(16, n * 2);
   scDX = new Float64Array(c); scDY = new Float64Array(c); scDZ = new Float64Array(c);
   scKIR = new Float64Array(c); scKRF = new Float64Array(c); scKACT = new Float64Array(c);
+  scDLit = new Uint8Array(c); scDSX = new Float64Array(c); scDSY = new Float64Array(c); // ENV2
   scDCap = c;
 }
 function senseGrowT(n) { // 目标侧扩容:同上
@@ -72,7 +78,14 @@ function senseGrowT(n) { // 目标侧扩容:同上
   scSigIR = new Float64Array(c); scSigRF = new Float64Array(c); scRefl = new Float64Array(c);
   scBIR = new Float64Array(c); scBRF = new Float64Array(c); scBACT = new Float64Array(c); scBMax = new Float64Array(c);
   scInF = new Uint8Array(c); scTVX = new Float64Array(c); scTVY = new Float64Array(c); scTVZ = new Float64Array(c); // ENV1
+  scTDir = new Uint8Array(c); scTBg = new Float64Array(c); scTSh = new Uint8Array(c); // ENV2
   scTCap = c;
+}
+function senseGrowO(n) { // ENV2 天体侧扩容:同上
+  if (n <= scOCap) return;
+  const c = Math.max(4, n * 2);
+  scOX = new Float64Array(c); scOY = new Float64Array(c); scOR2 = new Float64Array(c);
+  scOCap = c;
 }
 
 /* ---------------- 源强与系数:全库【唯一】的三条量程律实现 ---------------- */
@@ -93,7 +106,8 @@ function optLum(s) { // 光学/红外亮度 = 体型 x (1 + 功耗)。取代已�
      ⚠ COV 住在 23-cov(加载晚于本文件),这里是运行期读取,安全;写成顶层常量就会撞 TDZ。 */
   /* ENV1:残骸场里的目标衬在被照亮的碎石前面,对比度下降 ⇒ 亮度乘 envOptK(场外 / 没有场恒为 1,乘 1 是精确的无操作)。
      放在这里而不是热循环里:光学亮度只有这一个定义点,热循环的分档、23-cov 的定位精度(visAccOf)、界面上的"我此刻多亮"读的是同一个数 */
-  return sReq(s, 'size', 'ship') * (1 + engPowerOf(s) + COV.HEAT_EMIT * emitPowerOf(s) + firePowerOf(s)) * envOptK(s.pos);
+  const v = sReq(s, 'size', 'ship') * (1 + engPowerOf(s) + COV.HEAT_EMIT * emitPowerOf(s) + firePowerOf(s)) * envOptK(s.pos);
+  return s.heatK === undefined ? v : v * s.heatK; // ENV2 石头的自身热倍率(舰船没有这个字段 ⇒ 不乘,逐位不变)
 }
 function rfLoudOf(s) { // 射频响度 = 发射机档次 x 发射档。silent 恒为 0 —— 绝对静默,没有船体泄漏(旧模型那个泄漏系数已删)
   return sReq(s, 'emit', 'ship') * emitPowerOf(s);
@@ -113,7 +127,7 @@ function senseKACT(d) { // 探测方照射系数:发射机与接收机各进四�
 }
 
 /* ---------------- UI 读数(blocker E:玩家必须看得见"我此刻有多亮") ---------------- */
-function visRangeOf(s) { return Math.sqrt(SENS.K_IR * optLum(s)); }                 // 本舰的光学可见半径 km
+function visRangeOf(s, lo) { return Math.sqrt(SENS.K_IR * (lo === undefined ? optLum(s) : lo)); } // 本舰的光学可见半径 km。ENV2 lo = 这一对的有效亮度,不给读标称值
 function hearRangeOf(s, recv) { return Math.sqrt(SENS.K_RF * rfLoudOf(s) * (isFinite(recv) ? recv : 1)); } // 被一部 recv 档接收机听见的距离(缺省 1.0 = 基准 DD 的耳朵)
 function actRangeOf(s, refl) { const r = SENS.K_ACT * sReq(s, 'emit', 'ship') * sReq(s, 'recv', 'ship') * (isFinite(refl) ? refl : 1); return Math.sqrt(Math.sqrt(r)); } // 本舰对 refl 基准目标(缺省 1.0)的照射量程。取代旧那个标量探测半径字段,83-hud 的圈与 84-scene 的圈都读它
 
@@ -129,9 +143,11 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
      所以这一段整个删掉 —— dt 参数留着:sensePrepare 的签名是判定与 sensePairAt 的契约面,而且
      将来若要把"这一拍盯了多久"喂进热循环,入口还在。 */
   /* ENV1 环境(world/12):太阳禁区的方向、残骸场的动目标显示门限。空环境 ⇒ scSunOn=false、scInF 全 0,热循环里那两支一次都不进 */
-  const sun = ENV.sun, fOn = ENV.fields.length > 0;
-  scSunOn = !!sun; if (sun) { scSunX = sun.ux; scSunY = sun.uy; scSunC2 = sun.c2; }
+  const fOn = ENV.fields.length > 0, lit = envHasLight(), nb = ENV.bodies.length > 0, cOn = ENV.clouds.length > 0; // ENV2 空环境 ⇒ scDLit / scTDir 全 0、scON = 0
+  scLitC2 = ENV.sun ? ENV.sun.c2 : (ENV.stars.length ? ENV.stars[0].c2 : 1);
   scMTI2 = fOn ? ENV_CFG.MTI_V * ENV_CFG.MTI_V : 0;
+  const B = ENV.bodies; senseGrowO(B.length); scON = B.length;
+  for (let b = 0; b < scON; b++) { scOX[b] = B[b].x; scOY[b] = B[b].y; scOR2[b] = B[b].r2; }
   let mIR = 0, mRF = 0, mACT = 0;
   for (let i = 0; i < nd; i++) {
     const d = i < dets.length ? dets[i] : bcons[i - dets.length];
@@ -139,13 +155,18 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
     scDX[i] = p[0]; scDY[i] = p[1]; scDZ[i] = p[2];
     const a = senseKIR(d), b = senseKRF(d), c = senseKACT(d);
     scKIR[i] = a; scKRF[i] = b; scKACT[i] = c;
+    const u = lit && !(nb && envInShadow(p)) ? envSunDirAt(p, scT2) : null; // ENV2 与 senseGlareAt 的 oLit 同式
+    scDLit[i] = u ? 1 : 0; scDSX[i] = u ? u[0] : 0; scDSY[i] = u ? u[1] : 0;
     if (a > mIR) mIR = a; if (b > mRF) mRF = b; if (c > mACT) mACT = c; // 三条界各自取【本方最强的那一部设备】,所以界永远不低于任何一对的真实判据
   }
   for (let i = 0; i < nt; i++) {
     const t = tgts[i], p = t.pos;
     scTX[i] = p[0]; scTY[i] = p[1]; scTZ[i] = p[2];
-    const lum = optLum(t), loud = rfLoudOf(t), rfl = reflOf(t);
+    const tSh = lit && nb && envInShadow(p) ? 1 : 0, bg = cOn ? envBg(p, 'opt') : 0; // ENV2 与 senseOptLo 的前置量同式
+    const solMax = lit && !tSh ? SENS.SOLAR_K * sReq(t, 'size', 'ship') * envOptK(p) : 0; // ENV2 上界必须含晒热:只靠晒热才看得见的对不许被早退跳过
+    const lum = senseLoOf(optLum(t), 0, solMax, 0, bg), loud = rfLoudOf(t), rfl = reflOf(t); // ENV2 scSigIR 是光学上界,空环境时逐位等于 optLum
     scSigIR[i] = lum; scSigRF[i] = loud; scRefl[i] = rfl;
+    scTDir[i] = solMax > 0 ? 1 : 0; scTBg[i] = bg; scTSh[i] = tSh;
     const bIR = lum * mIR, bRF = loud * mRF, bA4 = rfl * mACT;
     const bA2 = Math.sqrt(bA4); // 照射的界在 d^4 空间,必须在这里开方换算到 d^2 空间才能和另两路取 max(见文件头 blocker A)
     scBIR[i] = bIR; scBRF[i] = bRF; scBACT[i] = bA4;
@@ -175,12 +196,23 @@ function sensePairGrades(j, ti) {
   if (r !== 0) { const dd = d2 * d2; if (dd < r) g |= ((dd < r * scGS) ? 3 : ((dd < r * scGF) ? 2 : 1)) << 4; } // 比四次方以避免开方
   /* ENV1 太阳禁区:探测方看目标的视线落在太阳那个锥里 ⇒ 光学与静听这一拍没有量测(照射不受影响)。只看 XY。
      dx 是"目标指向探测方",视线是它的反向,所以点积取负。与 world/12 的 envSunBlind 同式(那边给弹丸与判据用),判据逐对钉着 */
-  if (scSunOn && (g & 15) !== 0) { const k = -(dx * scSunX + dy * scSunY); if (k > 0 && k * k > (dx * dx + dy * dy) * scSunC2) g &= 48; }
+  if (scDLit[j] === 1 && (g & 15) !== 0) { const k = -(dx * scDSX[j] + dy * scDSY[j]); if (k > 0 && k * k > (dx * dx + dy * dy) * scLitC2) g &= 48; } // ENV2 方向按观测方取;影子里的观测方 scDLit=0,不晃
   /* ENV1 动目标显示:目标在残骸场里、径向速度低于门限 ⇒ 照射回波被当成杂波滤掉。与 envMtiBlind 同式 */
   if ((g & 48) !== 0 && scInF[ti] === 1) { const rv = dx * scTVX[ti] + dy * scTVY[ti] + dz * scTVZ[ti]; if (rv * rv < scMTI2 * d2) g &= 15; }
+  if (g !== 0 && scON > 0) { // ENV2 天体遮挡三条通道一起清;端点在盘里的那个天体不算。与 envOccluded 逐位同式(dx = 观测 - 目标)
+    const l2 = dx * dx + dy * dy, ax = scDX[j], ay = scDY[j];
+    for (let b = 0; b < scON; b++) {
+      const wx = scOX[b] - ax, wy = scOY[b] - ay, pr = -(wx * dx + wy * dy);
+      if (pr > 0 && pr < l2) {
+        const cr = wy * dx - wx * dy, r2 = scOR2[b];
+        if (cr * cr < r2 * l2) { const ex = wx + dx, ey = wy + dy; if (wx * wx + wy * wy >= r2 && ex * ex + ey * ey >= r2) { g = 0; break; } }
+      }
+    }
+  }
+  if ((g & 3) !== 0 && (scTDir[ti] | scDLit[j]) !== 0) g |= 64; // ENV2 待定位(bit6):光学还在、这一对跟方向有关 ⇒ 热循环外 senseResolve 精算
   return g;
 }
-function senseScanTarget(ti) { // 对第 ti 个目标扫描全部探测器,逐通道取最好的那一档(与旧内核"取最大单源通量"同口径)
+function senseScanTarget(ti) { // 对第 ti 个目标扫描全部探测器,逐通道取最好的那一档(与旧内核"取最大单源通量"同口径)。ENV2 待定位的对给上界档(热循环里不许调 senseResolve)
   let qo = 0, ql = 0, qa = 0;
   for (let j = 0; j < scDN; j++) {
     const p = sensePairGrades(j, ti);
@@ -202,10 +234,20 @@ function senseScanTarget(ti) { // 对第 ti 个目标扫描全部探测器,逐�
 function sensePairAt(det, tgt) {
   const isB = !!(det && det.type === 'beacon');
   sensePrepare(isB ? [] : [det], isB ? [det] : [], [tgt], 1);
-  const g = sensePairGrades(0, 0);
-  return { opt: g & 3, lis: (g >> 2) & 3, act: (g >> 4) & 3, packed: g };
+  const g = senseResolve(0, 0, det, tgt, sensePairGrades(0, 0)); // ENV2 热循环 + 精算步 = 单点谓词
+  return { opt: g & 3, lis: (g >> 2) & 3, act: (g >> 4) & 3, packed: g, lo: scPairLo };
 }
-function senseBoundsAt(ti) { return { ir: scBIR[ti], rf: scBRF[ti], act4: scBACT[ti], max2: scBMax[ti] }; } // 三条界的只读窗口,给判定看"冷目标的照射界确实进了 max"
+function senseBoundsAt(ti) { return { ir: scBIR[ti], rf: scBRF[ti], act4: scBACT[ti], max2: scBMax[ti], sig: scSigIR[ti] }; } // 三条界的只读窗口,给判定看"冷目标的照射界确实进了 max"。ENV2 sig = 光学上界
+function senseLastLo() { return scPairLo; } // ENV2 最近一次 senseResolve 的有效亮度(光学 0 档时为 0)
+function senseResolve(j, ti, d, t, g) { // ENV2 精算步(热循环外):待定位的对按成对亮度重分光学档,其余原样;记下这一对的有效亮度
+  if ((g & 64) === 0) { scPairLo = (g & 3) !== 0 ? scSigIR[ti] : 0; return g; }
+  const lo = senseOptLoWith(d, t, scTBg[ti], scTSh[ti] === 1, scDLit[j] === 1);
+  const dx = scDX[j] - scTX[ti], dy = scDY[j] - scTY[ti], dz = scDZ[j] - scTZ[ti], d2 = dx * dx + dy * dy + dz * dz;
+  let q = g & 60; const r = lo * scKIR[j];
+  if (d2 < r) q |= (d2 < r * scGS) ? 3 : ((d2 < r * scGF) ? 2 : 1);
+  scPairLo = (q & 3) !== 0 ? lo : 0;
+  return q;
+}
 
 /* ---------------- 弹丸:同一条光学律 + 同一条照射律 ---------------- */
 function projSig(p) { // 弹丸的亮度与反射。常数由旧模型的可见半径反解(见 20-signature 的 PROJ 表),弹丸可见性不是本轮要改的东西
@@ -216,14 +258,17 @@ function projSig(p) { // 弹丸的亮度与反射。常数由旧模型的可见�
   if (p.screen || p.mine) return SENS.PROJ.mslCold; // 布防屏与伏击雷 = 冷目标
   return (p.fuel > 0) ? SENS.PROJ.mslHot : SENS.PROJ.mslCold; // 燃烧的喷焰 vs 滑行的冷弹
 }
-function senseSeesOptical(lum, d, pos) { // 探测器 d 能否光学看到位于 pos、亮度 lum 的东西
+function senseSeesOptical(lum, d, pos, bg) { // 探测器 d 能否光学看到位于 pos、亮度 lum 的东西。ENV2 bg = pos 处的云背景(调用方每颗弹丸算一次),可省
   if (envSunBlind(d.pos, pos)) return false; // ENV1:弹丸与舰船同一套环境 —— 太阳禁区、残骸场的背景杂波(空环境时恒假 / 乘 1)
+  if (ENV.bodies.length && envOccluded(d.pos, pos)) return false; // ENV2 天体挡视线
   lum *= envOptK(pos);
+  lum = senseLoOf(lum, 0, 0, senseGlareAt(d.pos, pos), bg || 0); // ENV2 杂散光 + 云背景(弹丸没有相位);都为 0 时原值
   const dx = d.pos[0] - pos[0], dy = d.pos[1] - pos[1], dz = d.pos[2] - pos[2];
   return dx * dx + dy * dy + dz * dz < lum * senseKIR(d);
 }
 function senseSeesActive(refl, d, pos, vel) { // 探测器 d 的照射能否打到位于 pos、反射 refl 的东西(不照射时 senseKACT 恒 0,自然为假)。vel 可省
   if (envMtiBlind(d.pos, pos, vel)) return false; // ENV1:场内慢目标的回波被动目标显示滤掉(空环境 / 不给速度时恒假)
+  if (ENV.bodies.length && envOccluded(d.pos, pos)) return false; // ENV2 天体挡视线
   const dx = d.pos[0] - pos[0], dy = d.pos[1] - pos[1], dz = d.pos[2] - pos[2];
   const d2 = dx * dx + dy * dy + dz * dz;
   return d2 * d2 < refl * senseKACT(d);
