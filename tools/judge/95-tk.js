@@ -350,7 +350,7 @@ t('TK4A_RULES',function(){
 t('TK4C_ROCK',function(){
   if(typeof makeRock!=='function'||typeof objById!=='function'||typeof drawRockAt!=='function')return 'fail 缺 makeRock / objById / drawRockAt';
   var shipsBak=ships.slice(),rocksBak=rocks,projBak=projectiles,admBak=adminMode,seq0=shipSeq,rseq0=rockSeq,selBak=selected.slice(),tnBak={b:TRK_TN.blue,r:TRK_TN.red};
-  var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},envSun=ENV.sun,envF=ENV.fields.slice(),out='';
+  var camBak={x:cam.x,y:cam.y,zoom:cam.zoom},out=''; /* ENV2 不再备份 ENV:finally 里 envReset(curEnv().world) 就还原了 */
   var M=['save','restore','translate','rotate','scale','beginPath','moveTo','lineTo','arc','closePath','fill','stroke','fillRect','strokeRect','fillText','setLineDash'],orig={};
   M.forEach(function(k){orig[k]=ctx[k];});
   var rec=[];
@@ -447,7 +447,7 @@ t('TK4C_ROCK',function(){
     shipSeq=seq0;rockSeq=rseq0;adminMode=admBak;selected=selBak;TRK_TN.blue=tnBak.b;TRK_TN.red=tnBak.r;
     cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;
     projectiles=projBak;rocks=rocksBak;
-    ENV.sun=envSun;ENV.fields.length=0;envF.forEach(function(f){ENV.fields.push(f);});
+    envReset(curEnv().world); /* ENV2 ENV 由配置派生:按当前场景重建即还原(列表冻结后旧的就地还原写法会抛) */
     ships.length=0;shipsBak.forEach(function(x){ships.push(x);});
     lodPrev={fleet:{},pairsB:null,pairsR:null};
   }

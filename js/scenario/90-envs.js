@@ -126,6 +126,14 @@ const TEST_ENVS=[
     ['DD','叛军·护卫-02',0,40000,0,[-1,0,0],[0,0,0],0,null,2],
   ]},
 ];
+/* ENV2 红外演示页用的世界:靶场的船(浅拷贝,ships / enemy 数组与靶场共用 —— makeShip 与 matchPlaceRed 都先 slice,今天没人改它们)
+   + 天体 / 尘埃云 / 小行星;太阳由页面开关加。range:true 是有意继承:开局取景(core/99)与靶语义与现在的红外页相同。
+   追加在末尾:1..6 回归基线、7 盲斗、8 碎石带都不动。不设 match(matchIdx / matchRocksIdx 不受影响)。这组数是演示摆位,不进尺度预算 */
+TEST_ENVS.push(Object.assign({},TEST_ENVS[0],{name:'测试·红外',world:{
+  bodies:[{x:-237939,y:-68404,r:24600}],                 // = 靶场蓝方重心 (-50000,0) 方位 200°、20 万公里(红外页 IRM_PLANET)
+  clouds:[{x:0,y:0,r:4000000,seed:20}],                  // 云心 (0,0):噪声坐标 = 世界坐标,形状与现在的红外页逐位一致;内圈 320 万不受软窗影响
+  asteroids:[{x:-50000,y:0,r:500000,n:10,seed:4242,smin:1,smax:3,clear:60000,name:'小行星'}]
+}}));
 let envIdx=0;
 function curEnv(){return TEST_ENVS[envIdx]||TEST_ENVS[0];}
 const DEFAULT_ENEMY=[

@@ -250,7 +250,7 @@ t('FLOW72_FIREFLASH',function(){
      ① 默认仍是靶场;点顶栏「对局」钮进对局:3 对 3、红方不是靶(打得死、会还手)、双方静默静止、蓝方没有被压集结令;钮变成「回靶场」;先停表
      ② 红方重心到蓝方重心恰为 MATCH.OPEN、方位落在 ±ARC 内;掷骰可注入(0 / 0.5 / 1 对应 -ARC / 0 / +ARC);真随机连进五局方位不许都一样
      ③ 开局双方互相都没有接触(远距接敌),而且间距不小于最远的雷达发现距离(从梯子现量)
-     ④ 回归基线没被挪位:靶场仍是第 0 条,原 6 条预设仍在 1..6,对局追加在第 7 条;ENV1 起它后面只许再追加带 world 的对局(碎石带),「对局」钮照旧进第 7 条
+     ④ 回归基线没被挪位:靶场仍是第 0 条,原 6 条预设仍在 1..6,对局追加在第 7 条;ENV1 起它后面只许再追加带 world 的条目:第 8 条碎石带(第一条带 world 的对局)、ENV2 追加的第 9 条「测试·红外」(不是对局);「对局」钮照旧进第 7 条
      ⑤ 结果卡片:开局藏着;靶场里分出胜负不弹;对局里全灭 ⇒ 弹、停表、字对(战败 / 胜利);「再来一局」重开并收起卡片
      ⑥ 再点一次钮回靶场 */
 t('FLOW73_MATCH',function(){
@@ -262,7 +262,7 @@ t('FLOW73_MATCH',function(){
     adminMode=false;
     var cen=function(side){var x=0,y=0,n=0;ships.forEach(function(s){if(s.side===side){x+=s.pos[0];y+=s.pos[1];n++;}});return [x/n,y/n];};
     /* ④ 先量基线(此刻还在靶场) */
-    var mi=matchIdx(),ok4=(envIdx===0&&TEST_ENVS[0].range===true&&TEST_ENVS[1].name==='均衡编队'&&TEST_ENVS[6].name==='测试·巴黎活'&&mi===7&&TEST_ENVS.slice(8).every(function(e){return e.match&&e.world;})&&!matchIsOn()&&btn.textContent==='对局');
+    var mi=matchIdx(),ok4=(envIdx===0&&TEST_ENVS[0].range===true&&TEST_ENVS[1].name==='均衡编队'&&TEST_ENVS[6].name==='测试·巴黎活'&&mi===7&&TEST_ENVS.slice(8).every(function(e){return !!e.world;})&&matchRocksIdx()===8&&TEST_ENVS[9].name==='测试·红外'&&!TEST_ENVS[9].match&&!matchIsOn()&&btn.textContent==='对局'); /* ENV2 第 9 条追加了「测试·红外」(带 world、不是对局):第 8 条起放宽成"都带 world",另钉碎石带仍是第 8 条、测试·红外在第 9 条且不设 match */
     /* ⑤a 靶场里分出胜负不弹 */
     victoryShown=true;matchTick();var rangeNoCard=card.hidden;victoryShown=false;
     /* ① 进对局 */
@@ -300,7 +300,7 @@ t('FLOW73_MATCH',function(){
       +' ① 进对局:'+B.length+' 对 '+R.length+' 停表 钮=「回靶场」红方非靶 全静默静止 蓝方无令='+ok1
       +' | ② 红蓝重心相距 '+Math.round(d0)+'(须='+MATCH.OPEN+')方位 '+(th0*57.2958).toFixed(1)+' 度(须在 ±'+Math.round(MATCH.ARC*57.2958)+' 内)注入 0/0.5/1 ⇒ '+inj.map(function(q){return (q.th*57.2958).toFixed(0);}).join('/')+' 度 连进五局方位种数='+Object.keys(seen).length+'='+ok2
       +' | ③ 开局互相无接触='+noContact+' 间距 >= 最远雷达发现 '+Math.round(radarMax)+'='+ok3
-      +' | ④ 基线没挪位:靶场=0、预设 1..6 原样、对局在第 '+mi+' 条、其后只有追加的环境对局('+(TEST_ENVS.length-8)+' 条)='+ok4
+      +' | ④ 基线没挪位:靶场=0、预设 1..6 原样、对局在第 '+mi+' 条、其后只有追加的带 world 条目(碎石带 + 测试·红外,'+(TEST_ENVS.length-8)+' 条)='+ok4 /* ENV2 读数跟着 ④ 改:第 8 条之后不再都是对局 */
       +' | ⑤ 卡片:靶场里不弹='+rangeNoCard+' 全灭弹「战败」并停表='+lose+' 再来一局='+again+' 「胜利」+ 击沉 3/3='+win+'='+ok5
       +' | ⑥ 回靶场='+ok6;
   }finally{

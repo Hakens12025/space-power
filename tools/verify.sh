@@ -423,11 +423,32 @@ top_syms() {
       | sed -E 's/,[[:space:]]*([A-Za-z_$][A-Za-z0-9_$]*)[[:space:]]*=/,\n\1=/g' | grep -aoE '^[A-Za-z_$][A-Za-z0-9_$]*'
   } | sort -u
 }
-layer_bad() { perl -0pe 's{/\*.*?\*/}{}gs; s{//[^\n]*}{}g' | grep -aowFf <(top_syms js/render js/command) | sort -u | tr '\n' ' ' | sed -E 's/ +$//'; }
-LAYER_BAD=$(find js/sensors js/physics js/formation js/weapons js/bots js/ships -name '*.js' -print0 | xargs -0 cat | layer_bad)
+# ENV2:原来是 grep -aowFf(按整词找符号表)。本机的 GNU grep 3.0 的 -w 在 -F(固定串)或多个模式时有 bug —— 标识符的【后缀】也算整词
+#   (实测 grep -wF rad 与 grep -w -e rad -e zzz 都命中 envGrad,BODY_HEAT 被当成 HEAT;单个正则的 grep -w rad 不命中;与 -o 无关)。
+#   加进 js/world 后当场误报,所以改成先切出标识符、再用 -x 整行比对符号表(-x -F -f 没有这个毛病,已实测):
+#   语义不变(只认完整的标识符),只去掉后缀误报;下面的自检照旧钉着"真逆层引用要认出来、注释与模拟层自己的符号不许报"。
+layer_bad() { perl -0pe 's{/\*.*?\*/}{}gs; s{//[^\n]*}{}g' | grep -aoE '[A-Za-z_$][A-Za-z0-9_$]*' | grep -axFf <(top_syms js/render js/command) | sort -u | tr '\n' ' ' | sed -E 's/ +$//'; }
+LAYER_BAD=$(find js/sensors js/physics js/formation js/weapons js/bots js/ships js/world -name '*.js' -print0 | xargs -0 cat | layer_bad) # ENV2 加 js/world:世界层(world/12、13)也是模拟,同样不许引用呈现 / 指令层
 LAYER_SELF=$(printf '%s\n' "function f(){drawShip(s); /* updateSelPanel() 在注释里 */ stepSim(0.02); // toScreen 在行注释里" "}" | layer_bad)
 [ "$LAYER_SELF" = "drawShip" ] || { echo "✗ R3 分层检查(自检):种下的逆层引用没被认出来,或者注释 / 模拟层自己的符号被误报(实测=「$LAYER_SELF」)—— 检查器自己坏了"; fail=1; }
 [ -z "$LAYER_BAD" ] || { echo "✗ R3 模拟目录引用了呈现 / 指令层的符号:$LAYER_BAD —— 模拟不该依赖界面"; fail=1; }
+# ENV2 唯一写入口(单写者,single-writer principle):全库只有 world/12 的 envReset 写 ENV。
+#   运行期冻结只挡一部分(列表与条目 freeze、ENV 本身 seal、所有 js 都是 "use strict"):改条目、改列表、给 EN''V 加键第一次跑到就抛 TypeError;
+#   但 seal 不拦替换已有的键(EN''V.sun={…}、EN''V.bodies=[…]、EN''V.rev++ 都不抛),这一类只有本条检查(W1 / W2)抓。本条同时管那些还没跑到的路径。
+#   去注释用与 R2 同一个 perl(tk_strip);模式串用字符串拼接切开(EN''V),免得本文件被自己抓到。四条:
+#   W1 赋值(含嵌套属性、下标、复合赋值、自增自减)/ W2 前置自增自减 / W3 会改数组的方法 / W4 Object.assign 一类与 delete。
+#   残余风险:先取别名、再改的写法(var E=EN''V; E.x=1)抓不到 —— 其中改条目 / 改列表 / 加键靠冻结在运行期挡住,替换已有的顶层键(E.sun=…)哪一层都挡不住。以 true 收尾,理由同 TK3c(set -e)。
+#   第 3 步(红外页改成纯视图)起扫描范围再加 demos/地图组/src/*.js。
+ENV_W1='(^|[^A-Za-z0-9_$.])EN''V(\.[A-Za-z_$][A-Za-z0-9_$]*|\[[^]]*\])+[[:space:]]*([-+*/%&|^]?=[^=]|\+\+|--)'
+ENV_W2='(\+\+|--)[[:space:]]*EN''V[.[]'
+ENV_W3='(^|[^A-Za-z0-9_$.])EN''V(\.[A-Za-z_$][A-Za-z0-9_$]*|\[[^]]*\])*\.(push|pop|shift|unshift|splice|sort|reverse|fill|copyWithin)\('
+ENV_W4='(Object\.(assign|defineProperty|defineProperties|setPrototypeOf)\(|delete[[:space:]]+)[[:space:]]*EN''V([^A-Za-z0-9_$]|$)'
+env_writes(){ tk_strip | grep -cE -e "$ENV_W1" -e "$ENV_W2" -e "$ENV_W3" -e "$ENV_W4" || true; }
+ENV_W_HITS=$( for f in $(find js tools/judge -name '*.js' ! -path 'js/world/12-env.js'); do n=$(env_writes < "$f"); [ "$n" -gt 0 ] && echo "$f:$n"; done; true )
+[ -z "$ENV_W_HITS" ] || { echo "✗ ENV2 唯一写入口:world/12 之外有代码直接写 ENV(去注释后):$ENV_W_HITS —— 运行期要改世界,改那份 world 配置再调 envReset(w)"; fail=1; }
+ENV_W_POS=$(printf '%s\n' "EN""V.stars[0].x=1;" "EN""V.rev+=1;" "++EN""V.rev;" "EN""V.bodies.push(b);" "Object.assign(EN""V.sun,{});" "delete EN""V.sun;" | env_writes)
+ENV_W_NEG=$(printf '%s\n' "if(EN""V.sun===null)x=1;" "EN""V_CFG.OPT_K=1;" "x=EN""V.sun;" "if(EN""V.a!=b)y=1;" "if(EN""V.a<=b)y=1;" "/* EN""V.sun=1 */" "// EN""V.sun=1" | env_writes)
+[ "$ENV_W_POS" = "6" ] && [ "$ENV_W_NEG" = "0" ] || { echo "✗ ENV2 唯一写入口检查(自检):六条种下的写法须全命中(实测 $ENV_W_POS)、七条读法与注释须一条不中(实测 $ENV_W_NEG)—— 检查器自己坏了"; fail=1; }
 # 日志总线于 2026-09-22 整体删除:js/ 里不许再有裸 log( 调用(注释里的字面也算数;前缀排除 Math.log / console.log 这类带点号的)。
 LOG_LEFT=$(grep -rnE '(^|[^.A-Za-z0-9_$])log\(' js/ --include='*.js' | head -3)
 [ -z "$LOG_LEFT" ] || { echo "✗ 日志总线已删,js/ 里又出现了裸 log( 调用(注释里的也算数):"; echo "$LOG_LEFT"; fail=1; }
@@ -461,6 +482,7 @@ grep -q "TK_NOCREATE=ok" "$OUT" || { echo "✗ TK_NOCREATE 未通过(读永远�
 grep -q "WCS1_TIGHT=ok" "$OUT" || { echo "✗ WCS1_TIGHT 未通过(自动化开火 = Weapons Tight:自动索敌、红方集火、数据链导弹 + 网分配、导引头自己重选、干扰后复锁,都只挑身份至少疑似的船;玩家亲手下的火控序列对未知照样放行)"; fail=1; }
 grep -q "TK4C_ROCK=ok" "$OUT" || { echo "✗ TK4C_ROCK 未通过(TK4c 石头:排在舰船之后、两方都枚举得到;与镜像摆放的冷红舰跑 20 拍航迹逐位相同;贴进光学认出距离才确认、确认后不可打;自动索敌不锁没认出的、确认后当场解锁、火控门给 null;打不坏;没认出时与冷红舰画布序列相同;按 id 找得到、名字打码、各有航迹号;确认的出红方接触群)"; fail=1; }
 grep -q "ENV_SENSE=ok" "$OUT" || { echo "✗ ENV_SENSE 未通过(ENV1 环境:空环境无操作;太阳禁区致盲光学与静听、热循环与 envSunBlind 逐方位一致;残骸场亮度恰 x0.25;动目标显示滤掉场内慢目标、与 envMtiBlind 一致;弹丸同一套;碎石带场景确定、不碰全局随机数;底图守渲染红线)"; fail=1; }
+grep -q "ENV2_WORLD=ok" "$OUT" || { echo "✗ ENV2_WORLD 未通过(ENV2 世界层:空环境每个查询精确无操作(+0 与 -0 分得开);解析缺省值、拼错键 / 双光源 / 缺坐标当场抛且 ENV 原样、条目冻结写了就抛、碎石带与 ENV1 逐字段相同;影子的柱与会聚锥;遮挡穿盘才挡、端点在盘内不算;云浓度有界、不截顶、不碰全局随机数、背景有光 v·D 无光或影子里 v·D·dark;场景里天体不压残骸场与出生点;小行星守距离、可复现)"; fail=1; }
 grep -q "TK4A_RULES=ok" "$OUT" || { echo "✗ TK4A_RULES 未通过(TK4a 补钉的三道迷雾门:非 GM 下我方看不见的红方导弹不生成来袭走廊、不画、网内不连线;标成看得见之后三样都有)"; fail=1; }
 grep -q "TK3_NOFWD=ok" "$OUT" || { echo "✗ TK3_NOFWD 未通过(TK3c,原 TK1_FWD → TK3_TOMB:在场每艘船两方都有航迹;十个旧舰上感知字段名在船上一个都没有(自有 / 原型链都不许);新造的船同样没有;整对象拷贝拷不到、拷出来的不在表里;读永远不建航迹;重复登记抛。自检:往一次性船上写一个旧名字必须静默成功、航迹不动、而且被②判掉)"; fail=1; }
 grep -q "^RENDER=ok" "$OUT" || { echo "✗ RENDER 未通过"; fail=1; }

@@ -1,7 +1,7 @@
 /* TK0 同种子逐位对照的【整局摘要】(2026-09-23)。
    用途:航迹表重构(TK1..TK4)的每一步都要证明"同一个种子跑出同一局" —— 这份脚本就是那把尺子。
    它不是判据,不进 tools/verify.sh 的拼接;tools/tk_ab.sh 把它贴在 `head -n -2 index.html` 后面做成 __tk.html,
-   在【基准树】与【当前树】里各跑一遍,逐行比对(PERF 行除外)。
+   在【基准树】与【当前树】里各跑一遍,逐行比对(PERF 行除外;ENV2 起 INFO 行也除外)。
 
    纪律(每一条背后都是一次"尺子自己不准"):
      · 全程同步跑完,不让 rAF 插进来;running=false。
@@ -17,6 +17,7 @@
      SELF_DOUBLE=...              对局 seed 1 同页连跑两次必须逐位相同
      SELF_SEED=...                对局 seed 2 必须在第 3 个检查点之前与 seed 1 分开(种子真的进了模拟)
      PERF ...                     对局 120 秒后 5 x 1000 次 stepSim 的中位数(只报告,不比对)
+     INFO rocks ...               ENV2 碎石带只报数探针:种子 1~3 各一局的开局方位、双方先见、结局、精算对数与耗时(只报告,不比对;tk_ab 两边并排打印)
      MAPS ...                     V8 隐藏类:三艘一次性舰是否同一张 map、在场舰是否快属性(需要 --allow-natives-syntax)
      DONE
    页面地址可带 ?min=N 改每局分钟数(冒烟用)。正式对照一律 40:20 分钟打不到对局的交战段(开火约在 29~30 分钟),实测漏过一次真改动。 */
@@ -110,7 +111,7 @@
   function resetWorld(env,seed){
     seedRng(seed);                   // 播种在 initFleet 之前:对局的红方方位就在 initFleet 里掷
     running=false;
-    envIdx=(env==='match')?matchIdx():0;
+    envIdx=(env==='match')?matchIdx():((env==='rocks')?matchRocksIdx():0);   // ENV2 'rocks' = 对局·碎石带(只给下面的 INFO rocks 探针用,不进逐位比对)
     fmSeq=0;missileGroupSeq=0;netSeq=0;   // 序号类在 initFleet 之前清:initFleet 里的 fmCreate 就要取号
     initFleet();
     detT=0;netAllocT=0;acc=0;missileGroupSeq=0;netSeq=0;
@@ -169,6 +170,48 @@
     var fm=firstDiff(res.match1,res.match2),fr=firstDiff(res.range1,res.range2);
     OUT.push('SELF_SEED='+((fm>=1&&fm<=3)?'ok':'fail')+' match首个分开的检查点='+(fm||'从未')+' range首个分开的检查点='+(fr||'从未')+'(range 只报告)');
   }catch(e){OUT.push('ERR 主流程 '+(e&&e.message||e));}
+
+  /* ---------- ENV2 INFO rocks:碎石带只报数探针(第 1 步起;tk_ab 比对时与 PERF 一样排除,两边并排打印、不判红) ----------
+     每个种子跑一局对局·碎石带(同样的脚本化蓝方),到分出胜负或 MIN 分钟为止。一行:
+       INFO rocks <种子> θ=<开局方位 度> 蓝先见=<秒> 红先见=<秒> 结局=<胜/负/未分>@<秒> 精算对/拍=<均值> 精算ms/拍=<均值>
+     先见 = 这一方对对方任一舰首次 lit>0(按帧查,精度一帧);精算两项靠包一层 window.senseResolve 计数、计时
+     (只数带待定位位 bit6 的对,拍数 = detectLoop 被调的次数);senseResolve 还不存在时写「—」。 */
+  function rocksInfo(seed){
+    var oRes=null,oDet=null,nRes=0,msRes=0,nBeat=0;
+    try{
+      resetWorld('rocks',seed);
+      var th=MATCH.theta*180/Math.PI;
+      if(typeof senseResolve==='function'&&typeof detectLoop==='function'){
+        oRes=window.senseResolve;oDet=window.detectLoop;
+        window.senseResolve=function(j,ti,d,t,g){
+          if((g&64)===0)return oRes.apply(this,arguments);
+          nRes++;var p0=performance.now(),q=oRes.apply(this,arguments);msRes+=performance.now()-p0;return q;};
+        window.detectLoop=function(){nBeat++;return oDet.apply(this,arguments);};
+      }
+      var blues=ships.filter(function(s){return s.side==='blue';}),reds=ships.filter(function(s){return s.side==='red';});
+      var anyLit=function(list,side){for(var i=0;i<list.length;i++){var p=percOf(list[i],side);if(p&&p.lit>0)return true;}return false;};
+      var alive=function(list){for(var i=0;i<list.length;i++)if(!list[i].dead)return true;return false;};
+      var tB=null,tR=null,res='未分',tEnd=MIN*60,guard=0;
+      while(simTime<MIN*60-1e-9){
+        frameEmu();
+        if(++guard>2e6)throw new Error('帧数超限:simTime 不动了('+simTime+')');
+        if(tB===null&&anyLit(reds,'blue'))tB=simTime;
+        if(tR===null&&anyLit(blues,'red'))tR=simTime;
+        if(!alive(reds)){res='胜';tEnd=simTime;break;}
+        if(!alive(blues)){res='负';tEnd=simTime;break;}
+      }
+      var f1=function(v){return v===null?'—':v.toFixed(1);};
+      return 'INFO rocks '+seed+' θ='+th.toFixed(2)+' 蓝先见='+f1(tB)+' 红先见='+f1(tR)+' 结局='+res+'@'+tEnd.toFixed(1)
+        +' 精算对/拍='+(oRes&&nBeat?(nRes/nBeat).toFixed(2):'—')+' 精算ms/拍='+(oRes&&nBeat?(msRes/nBeat).toFixed(4):'—');
+    }catch(e){return 'INFO rocks '+seed+' ERR '+(e&&e.message||e);}
+    finally{
+      if(oRes)window.senseResolve=oRes;
+      if(oDet)window.detectLoop=oDet;
+      unseedRng();
+    }
+  }
+  try{[1,2,3].forEach(function(seed){OUT.push(rocksInfo(seed));});}
+  catch(e){OUT.push('INFO rocks ERR '+(e&&e.message||e));}
 
   /* ---------- PERF:对局 seed 1 跑到 120 秒,再量 5 x 1000 次 stepSim(只报告;基准与当前同一个 Chrome 才有可比性) ---------- */
   try{

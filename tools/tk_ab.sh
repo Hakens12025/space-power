@@ -8,7 +8,7 @@
 #   2. 两棵树各自在【仓库根】拼三张临时页(__tk.html / __tkdraw.html / __tklad.html = `head -n -2 index.html` + 探针;
 #      <body> 后面多插一行冻结帧循环,理由见 mkpage),
 #      用同一个 Chrome、每次全新的 --user-data-dir 跑(靶场参数存在 localStorage 里,verify.sh 的判据会改写它),取 TK 那个 pre 的正文;
-#   3. 三份输出逐行比对,只豁免 PERF 行;有差异就打印第一处(digest 的第一处 = 第一个分开的检查点);
+#   3. 三份输出逐行比对,只豁免 PERF 行与 INFO 行(ENV2:碎石带只报数探针,两边并排打印、不判红);有差异就打印第一处(digest 的第一处 = 第一个分开的检查点);
 #   4. 当前树的梯子转储再和演示页比一次(临时副本 demos/sensors/__tklad.html:演示页按 ../../js/ 取舰体几何,必须放同一目录);
 #   5. 不论成败,删临时页、删 worktree、删 Chrome 配置目录。输出留在一个临时目录里(路径打印在最后),可设 TK_OUT 指定。
 # ⚠ 与 verify.sh 不冲突:它用 __v.html,这里用 __tk*.html。但两条都很吃 CPU,别同时跑,PERF 会失真。
@@ -83,7 +83,7 @@ for side in base cur; do
 done
 
 fail=0
-firstdiff(){ # 打印两份(已去掉 PERF)输出的第一处不同
+firstdiff(){ # 打印两份(已去掉 PERF / INFO)输出的第一处不同
   awk 'NR==FNR{a[FNR]=$0;na=FNR;next}
        {nb=FNR; if(!(FNR in a)||a[FNR]!=$0){printf "    第一处不同在第 %d 行\n      基准: %s\n      当前: %s\n",FNR,((FNR in a)?a[FNR]:"(没有这一行)"),$0; hit=1; exit}}
        END{if(!hit&&na!=nb)printf "    行数不同:基准 %d / 当前 %d(前面各行相同)\n",na,nb}' "$1" "$2"
@@ -93,9 +93,9 @@ for name in digest drawlog lad; do
   grep -q '^DONE' "$b" || { echo "✗ $name:基准那边没跑完(没有 DONE 行)"; fail=1; }
   grep -q '^DONE' "$c" || { echo "✗ $name:当前这边没跑完(没有 DONE 行)"; fail=1; }
   if grep -qE '(^| )ERR( |$)' "$b" "$c"; then echo "✗ $name:输出里有 ERR 行"; grep -hE '(^| )ERR( |$)' "$b" "$c" | head -5 | sed 's/^/    /'; fail=1; fi
-  grep -v '^PERF' "$b" > "$OUT/.b"; grep -v '^PERF' "$c" > "$OUT/.c"
+  grep -vE '^(PERF|INFO)' "$b" > "$OUT/.b"; grep -vE '^(PERF|INFO)' "$c" > "$OUT/.c"   # ENV2 INFO 行(碎石带只报数探针)与 PERF 一样不比对
   if cmp -s "$OUT/.b" "$OUT/.c"; then
-    echo "✓ $name 逐行相同(PERF 行除外,共 $(wc -l < "$OUT/.c") 行)"
+    echo "✓ $name 逐行相同(PERF / INFO 行除外,共 $(wc -l < "$OUT/.c") 行)"
   else
     echo "✗ $name 有差异"; firstdiff "$OUT/.b" "$OUT/.c"; fail=1
   fi
@@ -149,5 +149,9 @@ for side in base cur; do
   echo "  $side: $(grep '^PERF' "$OUT/${side}_digest.txt" | head -1)"
   echo "  $side: $(grep '^MAPS' "$OUT/${side}_digest.txt" | head -1)"
 done
+# ENV2 碎石带只报数探针:两边的 INFO rocks 行逐种子并排(基准一行、当前一行),只说相同不相同,不判红
+echo "  INFO rocks(碎石带只报数,不判红):"
+paste -d'\n' <(grep '^INFO' "$OUT/base_digest.txt" | sed 's/^/    base: /') <(grep '^INFO' "$OUT/cur_digest.txt" | sed 's/^/    cur:  /')
+if cmp -s <(grep '^INFO' "$OUT/base_digest.txt") <(grep '^INFO' "$OUT/cur_digest.txt"); then echo "    INFO 两边相同"; else echo "    INFO 两边不同(只报告)"; fi
 echo "  输出目录: $(winpath "$OUT")"
 [ $fail -eq 0 ] && echo "✓ TK A/B 全部相同" || { echo "✗ TK A/B 有差异(见上)"; exit 1; }
