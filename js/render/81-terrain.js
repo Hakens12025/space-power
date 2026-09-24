@@ -27,9 +27,15 @@
    建块的先后:视口里的块 → 它们的祖先(最粗一级先)→ 余量里的块(LRU 满了先舍余量,保"不露底");这一代还要用的旧块先标上、再建新块,不会被腾掉。
    粗图的采样先后:最粗一级祖先(一两块盖住整个视口)→ 想要的块 → 其余祖先;细图只建想要的块。
    合成缓存 = 视口四边各多 MARGIN 的一张设备像素画布:镜头停着 / 平移在余量的一半以内 ⇒ 每帧 1 次 drawImage(整数设备像素);
-   平移出了余量的一半 ⇒ 1:1 自拷贝挪过去,露出来的条在预算内补(条在余量里,补不完下一帧接着补也看不见);
-   缩放 / 跳层 / 窗口或 DPR 变了 ⇒ 后台按目标镜头分帧拼一张(每格 1 次贴图,预算内),拼完与前台对换;拼的那几帧前台照贴(拉伸盖得住就贴它,否则逐块画);
-   某块上色变好了 ⇒ 只重画那一格。缩放动画中:按落点(vtAnim / zAnim 的终点)预建瓦片、后台预拼,落地那一帧直接换上 1:1。
+   ENV2 任务 4(审查问题 3):视图的静止矢量(地图上是天体、影子、云的字)也画进合成缓存(painter.vec,在云格之上),键 = painter.vkey()
+   (世界 rev + 字的位置),变了就重拼 ⇒ 稳态帧主画布只剩这 1 次贴图(加上视图自己每帧的日标)。审查第四轮:只是字挪了(世界 rev 没变)不整张重拼,
+   走"挪的那张"(镜头没动时位移 0),只重画新旧字框压到的格(painter.vdiff 给字框)。
+   ENV2 任务 3(审查问题 4):合成缓存的一切重拼都走后台、按工作量分帧、拼完才换上,拼的那几帧前台照贴 —— 双缓冲:
+     平移出了余量的一半 ⇒ 后台起一张挪到镜头处的:先 1:1 整数设备像素拷前台(1 次贴图),露出来的格按预算补(格裁到画布后整个落在拷来范围里的照抄,
+     其余 —— 贴着露出条的那一列 / 一行 —— 重画),最后只在露出来的条、重画过的格与新旧字框里补矢量(裁剪);
+     缩放 / 跳层 / 窗口或 DPR 变了 / 世界 rev 变了 ⇒ 后台按目标镜头整张分帧拼(每格 1 次贴图 + 矢量 1 次,预算内);
+     视口里每一格都有了来源才换上(换上就不会露底);拼的那几帧前台照贴(同一缩放还盖得住视口就 1:1,拉伸盖得住就拉伸,否则逐块画)。
+   某块上色变好了 ⇒ 只在前台重画那一格(清掉整格再贴),矢量只在那几格里补画(裁剪)。缩放动画中:按落点(vtAnim / zAnim 的终点)预建瓦片、后台预拼,落地那一帧直接换上 1:1。
    ============================================================================ */
 const TERR={
   TILE:512,          // ENV2 一块瓦片 512 CSS 像素见方,按 DPR 1 建(每块 1 MB)
@@ -48,16 +54,19 @@ const TERR={
   UPD_MAX:2,         // ENV2 前台每帧最多重画几格:软件光栅下一格的放大贴图约 0.5~1 ms(在下次贴到主画布时同步光栅),多的留给下一帧
   SPARE_IDLE:300,    // ENV2 换下来的那张合成缓存画布闲置这么多帧就放掉(平时只占一张;换挡时才两张)
   pool:[],           // ENV2 被腾掉的瓦片留下的画布(连 2d 上下文),新块先拿它:新建一张 512 画布本机约 200 µs
-  budget:null,       // ENV2 判据用:{samp:n, cells?:m} ⇒ 本帧按个数采样(圈里圈外都算 1)、拼合成缓存至多 m 格(缺省不限)、上色不计,可复现;null ⇒ 生产(µs)
+  budget:null,       // ENV2 判据用:{samp:n, cells?:m} ⇒ 本帧按个数采样(圈里圈外都算 1)、拼合成缓存至多 m 格(缺省不限;拷前台 1 次、补矢量 1 次也各算 1 格)、上色不计,可复现;null ⇒ 生产(µs)
   tiles:new Map(),   // ENV2 数字键(terrKey)→ 瓦片
   iso:null,sig:null,rev:-1,L:null,tick:0,gen:0,paintSeq:0,busy:false,bk:0,
   want:[],anc:[],seq0:[],pos:[],wantKey:'',grp:new Map(), // ENV2 want = 想要的块(视口在前、余量在后);anc = 祖先(最粗一级在前);seq0 = 粗图的采样先后
-  comp:null,         // ENV2 前台合成缓存(正在贴的那张){cv,g,L,z,s,dpr,W,H,M,pw,ph,wx0,wy0,cx,cy,key,pos,n,k,done,seq,bad}
+  comp:null,         // ENV2 前台合成缓存(正在贴的那张){cv,g,L,z,s,dpr,W,H,M,pw,ph,wx0,wy0,cx,cy,key,pos,n,k,done,seq,bad,
+                     //      full(整张从头拼 / 挪的那张),src,kx,ky,cp(挪的那张:从哪张拷、挪多少设备像素、拷过没有),R(挪的那张要补矢量的矩形),vk,vk0,vd,vn,vdone(矢量的键 / 拷来那部分的键 / 字框按哪个键标过 / 画了几样 / 画过没有)}
   back:null,         // ENV2 后台合成缓存(按目标镜头分帧拼;拼完与前台对换)
+  rc:[0,0,0,0],rv:[],vd:[], // ENV2 草稿:一格的设备像素矩形;前台补矢量的矩形表;字挪了时新旧字框(世界坐标,审查第四轮)
   spare:null,spareT:0, // ENV2 换下来的那张(下次起后台时复用,免得每次换挡新建一张几十 MB 的画布)
   left:0,js:0,jc:0,  // ENV2 本帧剩下的预算:生产 left = µs;判据 js = 还能采几个点、jc = 还能拼几格
   vw:0,vh:0,dpr:0,M:128,s:1,
-  st:{samp:0,hit:0,units:0,paint:0,blit:0,cblit:0,build:0,upd:0,scroll:0,swap:0,mode:''} // ENV2 本帧计数(判据与性能探针读;每帧清零)。units = 工作量 µs(采样 + 上色 + 拼格);blit = 主画布显示贴图次数;cblit = 拼格次数
+  st:{samp:0,hit:0,units:0,paint:0,blit:0,cblit:0,build:0,upd:0,scroll:0,swap:0,vec:0,mode:'',show:''} // ENV2 本帧计数(判据与性能探针读;每帧清零)。units = 工作量 µs(采样 + 上色 + 拼格);blit = 主画布显示贴图次数;
+                     //      cblit = 拼格次数(含拷前台、补矢量);vec = 补矢量次数;show = 'comp'(贴的合成缓存里已有矢量)| 'direct'(逐块画:矢量要视图自己画)
 };
 function terrKey(L,ix,iy){return ((L+16)*2097152+(ix+1048576))*2097152+(iy+1048576);} // ENV2 瓦片数字键(< 2^48,精确;|ix|,|iy| < 2^20 ⇒ 一格 1 km 时也够 ±5 亿公里)
 function terrLevel(z,prev){ // ENV2 缩放级 L:一格 = 2^L km/px;带迟滞(见 S_LO / S_HI)
@@ -144,93 +153,138 @@ function terrBudget(){ // ENV2 帧首:生产 = BUDGET_US 减去一次显示贴�
   if(b){TERR.js=b.samp;TERR.jc=(b.cells===undefined)?Infinity:b.cells;TERR.left=Infinity;}
   else TERR.left=TERR.BUDGET_US-TERR.cost.blit;
 }
-function terrCanCell(){return TERR.budget?TERR.jc>0:(TERR.left>=TERR.cost.blit||TERR.st.cblit<TERR.MIN_CELLS);} // ENV2 这一帧还能不能再拼一格(生产:预算够一格,或本帧还没拼满保底格数)
-function terrSpendCell(){const S=TERR.st;S.cblit++;if(TERR.budget)TERR.jc--;else{TERR.left-=TERR.cost.blit;S.units+=TERR.cost.blit;}} // ENV2 拼了一格(或一次自拷贝)= 1 次贴图的工作量
+function terrCanCell(r){r=r|0;return TERR.budget?TERR.jc>r:(TERR.left>=TERR.cost.blit*(1+r)||(r===0&&TERR.st.cblit<TERR.MIN_CELLS));} // ENV2 这一帧还能不能再拼一格,并且再留 r 格(任务 3:前台重画格之后必须同一帧补矢量,先把那 1 格留出来)。生产:预算够,或本帧还没拼满保底格数
+function terrSpendCell(){const S=TERR.st;S.cblit++;if(TERR.budget)TERR.jc--;else{TERR.left-=TERR.cost.blit;S.units+=TERR.cost.blit;}} // ENV2 拼了一格(或拷一次前台 / 补一次矢量)= 1 次贴图的工作量
 function terrShow(){const S=TERR.st;S.blit++;if(!TERR.budget&&S.blit>1)TERR.left-=TERR.cost.blit;} // ENV2 主画布上的显示贴图:第 1 次已在帧首预留,逐块显示多出来的从预算里扣
 /* ---- ENV2 合成缓存:前台(贴)+ 后台(分帧拼)---- */
 function terrCovers(c,x,y,m){ // ENV2 以 (x,y) 为中心、缩放 c.z 的视口四边各外扩 m CSS px,整个落在合成缓存 c 里
   const X=(c.wx0-x)*c.z+W/2,Y=(c.wy0-y)*c.z+H/2;
   return X<=-m&&Y<=-m&&X+c.pw/c.s>=W+m&&Y+c.ph/c.s>=H+m;
 }
-function terrCompSlot(c,q,clear){ // ENV2 合成缓存里的一格:矩形取整到设备像素(相邻两格共用取整后的边,没有缝);来源没变就不动。画了给 true
+function terrCellRect(c,q,o){ // ENV2 合成缓存 c 里 (q.ix,q.iy) 那一格的设备像素矩形 [x,y,w,h](取整;相邻两格共用取整后的边,没有缝)
+  const km=TERR.TILE*Math.pow(2,c.L),f=c.z*c.s,X0=Math.round((q.ix*km-c.wx0)*f),Y0=Math.round((q.iy*km-c.wy0)*f);
+  o[0]=X0;o[1]=Y0;o[2]=Math.round(((q.ix+1)*km-c.wx0)*f)-X0;o[3]=Math.round(((q.iy+1)*km-c.wy0)*f)-Y0;return o;
+}
+function terrCompSlot(c,q,clear){ // ENV2 合成缓存里的一格:来源没变就不动。clear:先清掉整格(格里可能有旧的格、拷过来的半格或矢量 —— 任务 4 之后空白格上也可能有矢量)。画了给 true
   const T=terrBest(c.L,q.ix,q.iy);
   if(!T||(T.key===q.sk&&T.ver===q.sv))return false;
-  const km=TERR.TILE*Math.pow(2,c.L),f=c.z*c.s;
-  const X0=Math.round((q.ix*km-c.wx0)*f),X1=Math.round(((q.ix+1)*km-c.wx0)*f),Y0=Math.round((q.iy*km-c.wy0)*f),Y1=Math.round(((q.iy+1)*km-c.wy0)*f);
-  if(clear&&q.sv!==-1)c.g.clearRect(X0,Y0,X1-X0,Y1-Y0); // ENV2 sv=-1:这一格从来没画过(区域是空的);-2:平移时没补完的格(一半是挪过来的旧像素)→ 清掉整格再贴,不叠两遍 alpha
-  terrDrawSrc(c.g,T,TERR.bk,q.ix,q.iy,X0,Y0,X1-X0,Y1-Y0);terrSpendCell();
+  const r=terrCellRect(c,q,TERR.rc);
+  if(clear)c.g.clearRect(r[0],r[1],r[2],r[3]);
+  terrDrawSrc(c.g,T,TERR.bk,q.ix,q.iy,r[0],r[1],r[2],r[3]);terrSpendCell();
   q.sk=T.key;q.sv=T.ver;c.n++;return true;
 }
-function terrCompNew(L,z,cx,cy){ // ENV2 起一张后台合成缓存:(L,z)、中心 (cx,cy),格表 = 这一代的 TERR.pos(调之前刚按同一镜头 terrWantAt 过);画布复用 spare
+function terrCompNew(L,z,cx,cy){ // ENV2 起一张后台合成缓存(缺省整张从头拼):(L,z)、中心 (cx,cy),格表 = 这一代的 TERR.pos(调之前刚按同一镜头 terrWantAt 过);画布复用 spare
   const M=TERR.M,s=TERR.s,pw=Math.round((W+2*M)*s),ph=Math.round((H+2*M)*s);
   let c=TERR.spare;TERR.spare=null;
-  if(!c)c={cv:document.createElement('canvas'),g:null,L:0,z:0,s:0,dpr:0,W:0,H:0,M:0,pw:0,ph:0,wx0:0,wy0:0,cx:0,cy:0,key:'',pos:[],n:0,k:0,done:false,seq:-1,bad:false};
+  if(!c)c={cv:document.createElement('canvas'),g:null,L:0,z:0,s:0,dpr:0,W:0,H:0,M:0,pw:0,ph:0,wx0:0,wy0:0,cx:0,cy:0,key:'',pos:[],n:0,k:0,done:false,seq:-1,bad:false,
+    full:true,src:null,kx:0,ky:0,cp:false,R:null,vk:null,vk0:null,vd:null,vn:0,vdone:false};
   if(c.cv.width!==pw||c.cv.height!==ph){c.cv.width=pw;c.cv.height=ph;c.g=null;}
   if(!c.g)c.g=c.cv.getContext('2d');
   c.bad=false;c.L=L;c.z=z;c.s=s;c.dpr=TERR.dpr;c.W=W;c.H=H;c.M=M;c.pw=pw;c.ph=ph;c.n=0;c.k=0;c.done=false;
+  c.full=true;c.src=null;c.kx=0;c.ky=0;c.cp=false;c.R=null;c.vk=null;c.vk0=null;c.vd=null;c.vn=0;c.vdone=false; // ENV2 任务 3 / 4;vd = 字的脏框已按哪个矢量键标过(审查第四轮)
   c.cx=cx;c.cy=cy;c.key=TERR.wantKey;c.wx0=cx-(W/2+M)/z;c.wy0=cy-(H/2+M)/z;
-  c.pos.length=0;for(const q of TERR.pos)c.pos.push({ix:q.ix,iy:q.iy,sk:0,sv:-1}); // 自己留一份格表:别的镜头会把 TERR.pos 改掉
+  c.pos.length=0;for(const q of TERR.pos)c.pos.push({ix:q.ix,iy:q.iy,v:q.v,sk:0,sv:-1,cl:false,cpd:false}); // 自己留一份格表:别的镜头会把 TERR.pos 改掉。v = 在这张自己的视口里(换上之前这些格必须都有来源);cpd = 整格从前台拷来(审查第四轮)
   c.g.setTransform(1,0,0,1,0,0);c.g.clearRect(0,0,pw,ph);
   c.seq=TERR.paintSeq;TERR.st.build++;
   TERR.back=c;return c;
 }
-function terrBackFor(L,z,cx,cy){ // ENV2 后台那张对准目标镜头:没有 / 级或缩放或窗口变了 / 目标视口出了它的范围 ⇒ 重起一张(旧的画布留作 spare)。同一组输入 ⇒ 同一张
+function terrBackFor(L,z,cx,cy){ // ENV2 后台那张(整张从头拼的)对准目标镜头:没有 / 级或缩放或窗口变了 / 目标视口出了它的范围 / 它是挪的那张 ⇒ 重起一张(旧的画布留作 spare)。同一组输入 ⇒ 同一张
   terrWantAt(L,cx,cy,z); // 这一代要建的瓦片 = 目标镜头的
   const b=TERR.back;
-  if(b&&b.L===L&&b.z===z&&b.dpr===TERR.dpr&&b.W===W&&b.H===H&&b.M===TERR.M&&b.s===TERR.s&&b.key===TERR.wantKey&&terrCovers(b,cx,cy,0))return b;
-  if(b){TERR.back=null;terrFreeComp(TERR.spare);TERR.spare=b;TERR.spareT=TERR.tick;}
+  if(b&&b.full&&b.L===L&&b.z===z&&b.dpr===TERR.dpr&&b.W===W&&b.H===H&&b.M===TERR.M&&b.s===TERR.s&&b.key===TERR.wantKey&&terrCovers(b,cx,cy,0))return b;
+  terrDropBack();
   return terrCompNew(L,z,cx,cy);
 }
-function terrBackFill(){ // ENV2 后台那张按预算往下拼(视口里、离中心近的格先拼);所有格都过了一遍标 done(还没有来源的格留空,换上前台之后由更新那一步补)
+function terrBackScroll(c,vk,painter){ // ENV2 任务 3(审查问题 4):平移出了余量的一半(缩放、级、DPR、窗口都没变)⇒ 后台起一张挪到镜头处的,中心取"恰好挪了整数个设备像素"的那一点:
+  // 先 1:1 拷前台(1 格工作量),露出来的格按预算补,最后只在露出来的条与重画过的格里补矢量;拼完才换上,拼的那几帧前台照贴(还盖得住视口,1:1)。
+  // 原来是在前台上原地自拷贝 —— 拷那一下不看预算,露出来的格补不完就留着待补。挪得比整张还远 / 前台的矢量除了字的位置还有别的变了 ⇒ 整张从头拼。
+  // ENV2 审查第四轮:只是字挪了(同一个世界 rev)也走这里(镜头没动时 kx = ky = 0):只重画旧字框与新字框压到的格(terrBackDirty),不再整张重拼
+  const f=c.z*c.s,kx=Math.round((cam.x-c.cx)*f),ky=Math.round((cam.y-c.cy)*f);
+  if(Math.abs(kx)>=c.pw||Math.abs(ky)>=c.ph||(c.vk!==vk&&!terrVecDiff(painter,c.vk,vk,c.z)))return terrBackFor(c.L,c.z,cam.x,cam.y);
+  const b0=TERR.back;
+  if(b0&&!b0.full&&b0.src===c&&terrCovers(b0,cam.x,cam.y,0)){terrWantAt(b0.L,b0.cx,b0.cy,b0.z);return b0;} // 同一次挪还没拼完:接着拼(镜头又走了一点不重起;换上之后再挪)
+  const nx=c.cx+kx/f,ny=c.cy+ky/f;
+  terrWantAt(c.L,nx,ny,c.z);terrDropBack();
+  const b=terrCompNew(c.L,c.z,nx,ny);b.full=false;b.src=c;b.kx=kx;b.ky=ky;b.vk0=c.vk;b.vd=c.vk;TERR.st.scroll++;return b;
+}
+function terrBackCopy(c){ // ENV2 挪的那张的第一步:1:1 整数设备像素拷前台(c 刚清空过,source-over 即可)。整格都在拷来范围里、前台画过的格照抄来源;
+  // 其余的格待画,与拷来范围相交的先清整格(清掉拷过来的半格与矢量)。露出来的条记进补矢量的范围 R
+  const s=c.src,kx=c.kx,ky=c.ky,pw=c.pw,ph=c.ph;
+  c.g.drawImage(s.cv,-kx,-ky);terrSpendCell();c.cp=true;
+  const x0=Math.max(0,-kx),y0=Math.max(0,-ky),x1=Math.min(pw,pw-kx),y1=Math.min(ph,ph-ky),R=c.R=[]; // 拷来的范围(本张的设备像素)
+  if(kx>0)R.push(x1,0,pw-x1,ph);else if(kx<0)R.push(0,0,x0,ph);if(ky>0)R.push(0,y1,pw,ph-y1);else if(ky<0)R.push(0,0,pw,y0);
+  const old=new Map(),r=TERR.rc;for(const q of s.pos)old.set(terrKey(0,q.ix,q.iy),q);
+  for(const q of c.pos){terrCellRect(c,q,r);const o=old.get(terrKey(0,q.ix,q.iy));
+    const a0=Math.max(r[0],0),b0=Math.max(r[1],0),a1=Math.min(r[0]+r[2],pw),b1=Math.min(r[1]+r[3],ph); // ENV2 审查第四轮:格先裁到画布再判 —— 格边长 512·s CSS px,几乎每格都伸出合成缓存的外边,不裁的话全算"没拷全",挪一次整张重画
+    if(a0>=x0&&b0>=y0&&a1<=x1&&b1<=y1&&o&&o.sv>=0){q.sk=o.sk;q.sv=o.sv;q.cpd=true;c.n++;} // 格在画布里的部分整个拷过来了(连同它上面的矢量)
+    else q.cl=r[0]<x1&&r[0]+r[2]>x0&&r[1]<y1&&r[1]+r[3]>y0;}
+}
+function terrVecDiff(painter,k0,k1,z){ // ENV2 审查第四轮:矢量的键从 k0 变到 k1 是不是"只有字挪了"(painter.vdiff 把两边不同的字框推进 TERR.vd,世界坐标 [x0,y0,x1,y1] x n);不是 / 没有 vdiff ⇒ false
+  TERR.vd.length=0;return !!painter.vdiff&&painter.vdiff(k0,k1,z,TERR.vd);
+}
+function terrBackDirty(c,painter,vk){ // ENV2 审查第四轮:挪的那张拷完之后,矢量的键从拷来的 vk0 变成了 vk(字挪了)⇒ 新旧字框清掉、记进补矢量的范围 R,压到的拷来格改成待画;
+  // 键又变了就按最新的键补标(已重画过的格不用再画)。返回 false = 不只是字挪了(世界 rev 变了),拷来的不能用。清几个字框不记工作量(每个几十 x 十几 px,个数 = 带字的云数)
+  if(c.vd===vk)return true;
+  if(vk===c.vk0)TERR.vd.length=0;else if(!terrVecDiff(painter,c.vk0,vk,c.z))return false; // 键变回拷来时的样子:没有新的字框(之前标过的格与框照样重画)
+  c.vd=vk;const B=TERR.vd,f=c.z*c.s,r=TERR.rc;let n=0;
+  for(let i=0;i<B.length;i+=4){
+    const x0=Math.max(0,Math.floor((B[i]-c.wx0)*f)),y0=Math.max(0,Math.floor((B[i+1]-c.wy0)*f)),x1=Math.min(c.pw,Math.ceil((B[i+2]-c.wx0)*f)),y1=Math.min(c.ph,Math.ceil((B[i+3]-c.wy0)*f));
+    if(x0>=x1||y0>=y1)continue;
+    c.g.clearRect(x0,y0,x1-x0,y1-y0);c.R.push(x0,y0,x1-x0,y1-y0); // 字框可能伸出云格(格表里只有碰到云的格):那一截单独清、单独补矢量
+    for(const q of c.pos)if(q.cpd){terrCellRect(c,q,r);if(r[0]<x1&&r[0]+r[2]>x0&&r[1]<y1&&r[1]+r[3]>y0){q.cpd=false;q.sk=0;q.sv=-1;q.cl=true;c.n--;n++;}}
+  }
+  if(n)c.k=0;
+  return true;
+}
+function terrBackWhole(c){ // ENV2 挪的那张拷来的内容过时了(前台换了 / 矢量的键变了):改成整张从头拼
+  c.g.setTransform(1,0,0,1,0,0);c.g.clearRect(0,0,c.pw,c.ph);
+  c.full=true;c.cp=false;c.src=null;c.R=null;c.n=0;c.k=0;c.vdone=false;for(const q of c.pos){q.sk=0;q.sv=-1;q.cl=false;q.cpd=false;}
+}
+function terrVecPass(c,painter,R){ // ENV2 任务 4:视图的静止矢量(地图上是天体 / 影子 / 云的字)画进合成缓存,在云格之上;R = 只补这些矩形(设备像素,裁剪),null = 整张。记 1 格工作量
+  const g=c.g;g.save();g.setTransform(1,0,0,1,0,0);
+  if(R){g.beginPath();for(let i=0;i<R.length;i+=4)g.rect(R[i],R[i+1],R[i+2],R[i+3]);g.clip();}
+  g.setTransform(c.s,0,0,c.s,0,0); // 画法用 CSS 像素
+  c.vn=painter.vec(c)|0;g.restore();terrSpendCell();TERR.st.vec++;
+}
+function terrBackFill(painter,vk){ // ENV2 后台那张按预算往下拼:挪的那张先拷前台 → 没画过的格(有来源才画;视口里的、离中心近的先)→ 矢量 → done。
+  // 任务 3:视口里还有格没来源就不换上(换上就露底),下一帧从头再找;余量里没来源的格换上之后由更新那一步补
   const c=TERR.back;if(!c||c.done)return;
-  while(c.k<c.pos.length&&terrCanCell()){terrCompSlot(c,c.pos[c.k],false);c.k++;}
-  if(c.k>=c.pos.length)c.done=true;
+  if(!c.full&&!c.cp){
+    if(c.src!==TERR.comp)terrBackWhole(c); // 前台换了:拷来的不能用(审查第四轮:矢量的键变了不再整张重拼,见下一句)
+    else{if(!terrCanCell())return;terrBackCopy(c);}
+  }
+  if(!c.full&&c.cp&&!terrBackDirty(c,painter,vk))terrBackWhole(c); // ENV2 审查第四轮:只是字挪了 ⇒ 只重画新旧字框压到的格;世界 rev 变了 ⇒ 整张从头拼
+  for(;c.k<c.pos.length;c.k++){const q=c.pos[c.k];if(q.sv!==-1)continue;if(!terrCanCell())return;
+    if(terrCompSlot(c,q,q.cl)&&c.R){const r=terrCellRect(c,q,TERR.rc);c.R.push(r[0],r[1],r[2],r[3]);}}
+  if(!c.vdone){
+    for(const q of c.pos)if(q.v&&q.sv===-1){c.k=0;return;}
+    if(painter.vec){if(!terrCanCell())return;terrVecPass(c,painter,c.full?null:c.R);}
+    c.vk=vk;c.vdone=true;
+  }
+  c.done=true;
 }
 function terrSwap(){ // ENV2 后台拼完 ⇒ 换到前台;原前台留作 spare。seq 记 -1:拼的那几帧里可能又有块上完色,让更新那一步逐格核一遍
   const b=TERR.back;if(TERR.comp){terrFreeComp(TERR.spare);TERR.spare=TERR.comp;TERR.spareT=TERR.tick;}
-  TERR.comp=b;TERR.back=null;b.seq=-1;TERR.st.swap++;
+  TERR.comp=b;TERR.back=null;b.seq=-1;b.src=null;TERR.st.swap++;
 }
-function terrCompScroll(c){ // ENV2 平移出了余量的一半(缩放、级、DPR、窗口都没变):合成缓存 1:1 按整数设备像素自拷贝挪过去,露出来的条在预算内补(裁剪到条内画)。
-  // 整张重拼在软件光栅下是 5~12 ms(每格一次放大贴图,同步光栅);挪一张 1:1 的图只要零点几 ms,补的条只有条那么大。挪不了(挪得比整张还远)给 false
-  // ENV2 审查第 4 条:自拷贝记 1 格工作量,补条的格也按预算;补不完的格记 sv=-2,由 terrCompUpdate 接着补 —— 挪的门槛是余量的一半,露出来的条整条落在余量里,晚一两帧补也看不见
-  const f=c.z*c.s,kx=Math.round((cam.x-c.cx)*f),ky=Math.round((cam.y-c.cy)*f),pw=c.pw,ph=c.ph,g=c.g;
-  if(Math.abs(kx)>=pw||Math.abs(ky)>=ph)return false;
-  c.cx+=kx/f;c.cy+=ky/f;c.wx0=c.cx-(c.W/2+c.M)/c.z;c.wy0=c.cy-(c.H/2+c.M)/c.z; // 新中心取成"恰好挪了整数个设备像素"的那一点
-  g.setTransform(1,0,0,1,0,0);g.globalCompositeOperation='copy';g.drawImage(c.cv,-kx,-ky);g.globalCompositeOperation='source-over';terrSpendCell(); // 自拷贝(浏览器先取快照再画)。
-  // ENV2 必须用 copy:原来 source-over 把挪过去的半透明云叠在没清掉的旧像素上(alpha 翻倍、旧位置的等值线留成重影;判据 ② 与同一中心重拼的一张逐点比时抓到)
-  const R=[];if(kx>0)R.push(pw-kx,0,kx,ph);else if(kx<0)R.push(0,0,-kx,ph);if(ky>0)R.push(0,ph-ky,pw,ky);else if(ky<0)R.push(0,0,pw,-ky);
-  for(let i=0;i<R.length;i+=4)g.clearRect(R[i],R[i+1],R[i+2],R[i+3]); // 露出来的条先清掉(自拷贝在那里留下的是旧内容)
-  const old=new Map();for(const q of c.pos)old.set(terrKey(0,q.ix,q.iy),q);
-  terrWantAt(c.L,c.cx,c.cy,c.z);c.key=TERR.wantKey;
-  g.save();g.beginPath();for(let i=0;i<R.length;i+=4)g.rect(R[i],R[i+1],R[i+2],R[i+3]);g.clip();
-  const km=TERR.TILE*Math.pow(2,c.L),np=[];let pend=false;
-  for(const q0 of TERR.pos){const q1=old.get(terrKey(0,q0.ix,q0.iy)),isNew=!q1,q=q1||{ix:q0.ix,iy:q0.iy,sk:0,sv:-1};np.push(q);
-    const X0=Math.round((q.ix*km-c.wx0)*f),X1=Math.round(((q.ix+1)*km-c.wx0)*f),Y0=Math.round((q.iy*km-c.wy0)*f),Y1=Math.round(((q.iy+1)*km-c.wy0)*f);
-    let hit=false;for(let i=0;i<R.length;i+=4)if(X0<R[i]+R[i+2]&&X1>R[i]&&Y0<R[i+1]+R[i+3]&&Y1>R[i+1]){hit=true;break;}
-    if(!hit)continue;
-    const T=terrBest(c.L,q.ix,q.iy);
-    if(!T||!terrCanCell()){if(!isNew){q.sk=0;q.sv=-2;}pend=true;continue;} // ENV2 没有来源 / 预算用完:这一格待补(旧格记 -2:清整格再贴;新格整格都在露出来的条里,区域本来就是空的,记录留 -1)
-    terrDrawSrc(g,T,TERR.bk,q.ix,q.iy,X0,Y0,X1-X0,Y1-Y0);terrSpendCell();c.n++;
-    if(isNew){q.sk=T.key;q.sv=T.ver;} // 新格整格都在条里:画完就是完整的
-    else if(!(q.sk===T.key&&q.sv===T.ver)){q.sk=0;q.sv=-2;pend=true;} // 旧格在条外的部分是挪过来的旧像素(或从没画过):来源若已变 ⇒ 待补,terrCompUpdate 整格重画,不留新旧两半
-  }
-  g.restore();c.pos=np;if(pend)c.seq=-1;TERR.st.scroll++;return true;
+function terrCompUpdate(c,painter){ // ENV2 前台有格来源变了(块刚上完色)或待补:清掉整格再贴,矢量只在这几格里补画(裁剪,同一帧);每帧至多 UPD_MAX 格,
+  // 而且先留出补矢量的那 1 格预算;没补完就不记 seq,下一帧接着
+  const S=TERR.st,R=(painter.vec&&c.vn>0)?TERR.rv:null,res=R?1:0;let n=0,all=true;if(R)R.length=0;
+  for(const q of c.pos){if(n>=TERR.UPD_MAX||!terrCanCell(res)){all=false;break;}
+    if(terrCompSlot(c,q,true)){n++;if(R){const r=TERR.rc;R.push(r[0],r[1],r[2],r[3]);}}}
+  if(R&&R.length)terrVecPass(c,painter,R);
+  if(all){c.seq=TERR.paintSeq;S.upd++;}
 }
-function terrCompUpdate(c){ // ENV2 前台有格来源变了(块刚上完色)或待补:清掉那一格再贴;每帧至多 UPD_MAX 格而且在预算内,没补完就不记 seq,下一帧接着
-  const S=TERR.st;let n=0;
-  for(const q of c.pos){if(n>=TERR.UPD_MAX||!terrCanCell())return;if(terrCompSlot(c,q,true))n++;}
-  c.seq=TERR.paintSeq;S.upd++;
-}
-function terrShowComp(c){ // ENV2 1:1 贴前台:偏移取整到设备像素(DPR 1 / 2 时 /dpr 再 xdpr 是精确的)。视口里没有云就不贴
-  if(!(c.n&&terrOnScreen()))return;
+function terrShowComp(c){ // ENV2 1:1 贴前台:偏移取整到设备像素(DPR 1 / 2 时 /dpr 再 xdpr 是精确的)。视口里没有云、缓存里也没有矢量就不贴
+  if(!((c.n&&terrOnScreen())||c.vn>0))return;
   const z=cam.zoom,dpr=TERR.dpr;let x=(c.wx0-cam.x)*z+W/2,y=(c.wy0-cam.y)*z+H/2;
   if(c.s===dpr){x=Math.round(x*dpr)/dpr;y=Math.round(y*dpr)/dpr;}
   ctx.drawImage(c.cv,x,y,c.pw/c.s,c.ph/c.s);terrShow();
 }
-function terrShowLoose(c,cOk){ // ENV2 显示(允许拉伸,只在动画中 / 后台还没拼完时):旧前台拉伸着还盖得住视口 ⇒ 1 次 drawImage;盖不住 ⇒ 逐块画
+function terrShowLoose(c,cOk){ // ENV2 显示(允许拉伸,只在动画中 / 后台还没拼完时):旧前台拉伸着还盖得住视口 ⇒ 1 次 drawImage;盖不住 ⇒ 逐块画(矢量由视图直接画在主画布上)
   const z=cam.zoom;
-  if(cOk&&c.n){const f=z/c.z,x=(c.wx0-cam.x)*z+W/2,y=(c.wy0-cam.y)*z+H/2,w=c.pw/c.s*f,h=c.ph/c.s*f;
-    if(x<=0&&y<=0&&x+w>=W&&y+h>=H){if(terrOnScreen()){ctx.drawImage(c.cv,x,y,w,h);terrShow();}return 'stretch';}}
+  if(cOk&&(c.n||c.vn>0)){const f=z/c.z,x=(c.wx0-cam.x)*z+W/2,y=(c.wy0-cam.y)*z+H/2,w=c.pw/c.s*f,h=c.ph/c.s*f;
+    if(x<=0&&y<=0&&x+w>=W&&y+h>=H){if(terrOnScreen()||c.vn>0){ctx.drawImage(c.cv,x,y,w,h);terrShow();}return 'stretch';}}
   terrDirect(TERR.L);return 'direct';
 }
 function terrDirect(L){ // ENV2 合成缓存盖不住视口时:逐块画(拉伸)。多块共用同一块祖先、而且那块祖先底下看得见的格全用它时,只贴一次
@@ -280,8 +334,9 @@ function terrDustOne(c,x,y,minKm){ // ENV2 = envDustOne(噪声换 terrGN,其余�
   m=(m-D.MASK_LO)/(D.MASK_HI-D.MASK_LO);if(m<=0)return 0;if(m>1)m=1;m=m*m*(3-2*m);
   const wx=px+D.WARP*L0*terrGN(px/L0+3.7,py/L0+1.3,S+2),wy=py+D.WARP*L0*terrGN(px/L0-2.1,py/L0+5.9,S+3);
   let f=0,a=0.5,L=L0/2,cs=1,sn=0;const c37=Math.cos(0.6458),s37=Math.sin(0.6458);
-  for(let o=0;o<D.OCT;o++,L/=2,a*=D.GAIN){const w=Math.min(1,L/minKm-1);if(w<=0)break;
-    const qx=(wx*cs-wy*sn)/L,qy=(wx*sn+wy*cs)/L,r=1-Math.abs(terrGN(qx,qy,S+10+o));f+=a*w*r*r*r;
+  for(let o=0;o<D.OCT;o++,L/=2,a*=D.GAIN){const w=Math.min(1,L/minKm-1),wp=Math.min(1,L/D.MIN_KM-1);if(w<=0&&wp<=0)break;
+    if(!(w<=0)){const qx=(wx*cs-wy*sn)/L,qy=(wx*sn+wy*cs)/L,r=1-Math.abs(terrGN(qx,qy,S+10+o));f+=a*w*r*r*r;}
+    if(wp>w)f+=a*(wp-Math.max(w,0))*D.R3; // ENV2 = envDustOne(审查第四轮任务 1):只补物理尺度会算、这一细度截掉 / 淡出的那部分
     const c2=cs*c37-sn*s37;sn=cs*s37+sn*c37;cs=c2;}
   const core=Math.min(1,m*f/TERR_DUST_NORM*1.4),rho=Math.sqrt(q)/c.r,e=D.EDGE;
   if(rho<=1-e)return core;
@@ -378,7 +433,7 @@ function terrDropBack(){if(TERR.back){terrFreeComp(TERR.spare);TERR.spare=TERR.b
 function terrSettled(){const c=TERR.comp;return !TERR.busy&&!TERR.back&&!!c&&!c.bad&&c.seq===TERR.paintSeq;} // ENV2 全部建完、合成缓存是最新的(判据与性能探针读)
 /* ENV2 每帧入口(由视图的静态贴图层调:render/81-env 的 mapTileFrame)。painter = {paint(g,T), iso:[等值线的浓度档]} */
 function terrFrame(painter){
-  const S=TERR.st;S.samp=0;S.hit=0;S.units=0;S.paint=0;S.blit=0;S.cblit=0;S.build=0;S.upd=0;S.scroll=0;S.swap=0;S.mode='';
+  const S=TERR.st;S.samp=0;S.hit=0;S.units=0;S.paint=0;S.blit=0;S.cblit=0;S.build=0;S.upd=0;S.scroll=0;S.swap=0;S.vec=0;S.mode='';S.show='';
   TERR.tick++;
   if(!(W>0&&H>0))return;
   terrSync(painter);
@@ -389,27 +444,27 @@ function terrFrame(painter){
   if(vtAnim||zAnim){ // ENV2 缩放动画中:显示允许拉伸;落点那一代的瓦片与后台合成缓存先建(落点预取)
     let tz=z,tx=cam.x,ty=cam.y;
     if(vtAnim){tz=vtAnim.k1;tx=vtAnim.x1;ty=vtAnim.y1;}else{tz=zAnim.k1;tx=zAnim.wx-(zAnim.sx-W/2)/tz;ty=zAnim.wy-(zAnim.sy-H/2)/tz;} // 与 camAnimStep / camZoomStep 落地那一步同一个式子 ⇒ 落地时镜头逐位等于这里
-    const tL=terrLevel(tz,TERR.L);
+    const tL=terrLevel(tz,TERR.L),vk=painter.vkey?painter.vkey(tx,ty,tz):''; // ENV2 任务 4:矢量的键按落点的视图定(字的位置也按落点挑)
     TERR.L=terrLevel(z,TERR.L);
     S.mode=terrShowLoose(c,cOk);
-    terrBackFor(tL,tz,tx,ty);terrBackFill();
+    terrBackFor(tL,tz,tx,ty);terrBackFill(painter,vk);
   }else{
-    const L=terrLevel(z,TERR.L);TERR.L=L;
+    const L=terrLevel(z,TERR.L),vk=painter.vkey?painter.vkey(cam.x,cam.y,z):'';TERR.L=L;
+    const same=cOk&&c.z===z&&c.L===L; // 同一级、同一缩放:镜头只可能平移过
     let mode='';
-    if(cOk&&c.z===z&&c.L===L){
-      if(terrCovers(c,cam.x,cam.y,TERR.M/2))mode='steady';   // ENV2 余量还剩一半以上:只改贴图偏移
-      else if(terrCompScroll(c))mode='scroll';
-    }
-    if(!mode){ // ENV2 要换一张(缩放停了 / 跳了层 / 窗口或 DPR 变了 / 挪得比整张还远):后台按当前镜头拼,拼完就换上;动画落地时它早已预拼好
-      const b=terrBackFor(L,z,cam.x,cam.y);terrBackFill();
-      if(b.done){terrSwap();c=TERR.comp;mode='swap';}
+    if(same&&c.vk===vk&&terrCovers(c,cam.x,cam.y,TERR.M/2))mode='steady'; // ENV2 余量还剩一半以上、矢量没过时:只改贴图偏移
+    if(!mode){ // ENV2 要换一张:平移过了余量一半 ⇒ 挪的那张;缩放停了 / 跳了层 / 窗口或 DPR 变了 / 矢量的键变了 ⇒ 整张从头拼。后台按预算拼,拼完就换上;动画落地时它早已预拼好
+      const b=same?terrBackScroll(c,vk,painter):terrBackFor(L,z,cam.x,cam.y);terrBackFill(painter,vk);
+      if(b.done){terrSwap();c=TERR.comp;mode=b.full?'swap':'scroll';}
     }else terrDropBack();
     if(mode){
       if(TERR.wantKey!==c.key)terrWantAt(c.L,c.cx,c.cy,c.z); // 动画被打断、又停回这张合成缓存的镜头上:要建的仍是这一张的格(同一组输入 ⇒ 同一个键)
-      if(c.seq!==TERR.paintSeq){terrCompUpdate(c);if(mode==='steady')mode='update';}
-      S.mode=mode;terrShowComp(c);
-    }else S.mode='wait-'+terrShowLoose(c,cOk); // ENV2 后台还没拼完:前台照贴(拉伸盖得住就贴旧的,否则逐块)
+      if(c.seq!==TERR.paintSeq){terrCompUpdate(c,painter);if(mode==='steady')mode='update';}
+      S.mode=mode;terrShowComp(c);S.show='comp';
+    }else if(same&&terrCovers(c,cam.x,cam.y,0)){S.mode='wait-11';terrShowComp(c);S.show='comp';} // ENV2 任务 3:挪的那张 / 矢量重拼的那张还没拼完:前台还盖得住视口 ⇒ 照贴 1:1
+    else S.mode='wait-'+terrShowLoose(c,cOk); // ENV2 后台还没拼完:前台照贴(拉伸盖得住就贴旧的,否则逐块)
     if(TERR.spare&&!TERR.back&&TERR.tick-TERR.spareT>TERR.SPARE_IDLE){terrFreeComp(TERR.spare);TERR.spare=null;} // ENV2 平时只占一张合成缓存
   }
+  if(!S.show)S.show=(S.mode==='stretch'||S.mode==='wait-stretch')?'comp':'direct'; // ENV2 任务 4:逐块画时矢量不在任何贴上去的缓存里,视图要自己画
   terrWork(painter.paint);
 }

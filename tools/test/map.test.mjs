@@ -120,8 +120,9 @@ function 影子轮廓(E) {
   assert.equal(offOf(n).filter(e => !isSpr(e.cv)).length, 0, '整个 drawEnv 离屏 0 笔(天体名字的小贴图头一回画不算)');
 }
 test('大地图 ⑤ 影子:有光源时每个天体 2 笔、都裁在屏幕里,位置型的线止于锥顶;没有光源 0 笔、不建贴图', () => 影子轮廓(page()));
+/* 种坏点随源码改写(2026-09-24 ENV2 任务 4:影子画法改读当前视图的 mapTS,好画进合成缓存;直接调时 = toScreen) */
 test('反向对照:位置型恒星的影子不止于锥顶,上一条必须失败', () =>
-  bite({ [ENVJS]: [['      if(isFinite(Lu))p1=toScreen(b.x-ux*Lu,b.y-uy*Lu);', '      if(false)p1=toScreen(b.x-ux*Lu,b.y-uy*Lu);']] }, 影子轮廓, /止于锥顶/));
+  bite({ [ENVJS]: [['      if(isFinite(Lu))p1=mapTS(b.x-ux*Lu,b.y-uy*Lu);', '      if(false)p1=mapTS(b.x-ux*Lu,b.y-uy*Lu);']] }, 影子轮廓, /止于锥顶/));
 
 /* ============================ ENV2_MAP ⑥:恒星 ============================ */
 function 恒星光晕与日标(E) {
@@ -145,8 +146,9 @@ function 恒星光晕与日标(E) {
   assert.ok(dot > 0.999, `日标方向 = 屏幕中心指向恒星(点积 > 0.999),实际 ${dot}`);
 }
 test('大地图 ⑥ 恒星:在屏内贴光晕 1 次、渐变两帧合计只建 1 次、停着时 1:1;在屏外日标贴在内缩边框上、方向对', () => 恒星光晕与日标(page()));
+/* 种坏点随源码改写(2026-09-24 ENV2 任务 5):镜头停着时光晕不再从 128 那张缩,而是按量化尺寸直接画渐变 ⇒ "每帧重建渐变"种在量化那张的缓存判断上 */
 test('反向对照:光晕每帧重建径向渐变,上一条必须失败', () =>
-  bite({ [ENVJS]: [['  if(MAP_STAR.cv&&MAP_STAR.dpr===dpr)return MAP_STAR.cv;', '']] }, 恒星光晕与日标, /渐变/));
+  bite({ [ENVJS]: [['if(!MAP_STAR.sz||MAP_STAR.szN!==n||MAP_STAR.szDpr!==dpr){', 'if(true){']] }, 恒星光晕与日标, /渐变/));
 
 /* ============================ ENV2_MAP ⑦:巨圆 ============================ */
 /* 屏幕半径 = 1.5 倍"巨圆门"(3·max(W,H));zoom = 1 ⇒ 世界坐标差 = 屏幕像素差。三种摆法:圆心在屏内 / 圆心在屏外但盖住屏幕中心 / 没盖住屏幕中心 */
@@ -238,8 +240,9 @@ function DPR2换一张(E) {
   assert.equal(viewHoles(T.comp), 0, '换上那一刻视口里每一格都有来源(上一代上好色的祖先不许被新块腾掉)');
 }
 test('大地图 ⑫ DPR 2(1920x1080):按设备像素建、稳态 1:1;生产口径拉远 x0.7 换一张 ⇒ 每帧拼格受预算、拼不完照贴旧的,换上时视口不缺格', () => DPR2换一张(page()));
+/* 种坏点随源码改写(2026-09-24 ENV2 任务 3:terrCanCell 多了"再留 r 格"的参数) */
 test('反向对照:生产口径拼合成缓存不看预算,上一条必须失败', () =>
-  bite({ [TERJS]: [['function terrCanCell(){return TERR.budget?TERR.jc>0:(TERR.left>=TERR.cost.blit||TERR.st.cblit<TERR.MIN_CELLS);}', 'function terrCanCell(){return TERR.budget?TERR.jc>0:true;}']] }, DPR2换一张, /工作量/));
+  bite({ [TERJS]: [['function terrCanCell(r){r=r|0;return TERR.budget?TERR.jc>r:(TERR.left>=TERR.cost.blit*(1+r)||(r===0&&TERR.st.cblit<TERR.MIN_CELLS));}', 'function terrCanCell(r){r=r|0;return TERR.budget?TERR.jc>r:true;}']] }, DPR2换一张, /工作量/));
 function 超像素上限先收余量再降倍率(E) {
   const { g, T, J, V, settle } = 地图(E);
   E.run('devicePixelRatio=2;W=2560;H=1440;');

@@ -41,7 +41,8 @@ const ENV_CFG={
   STAR_R:696000,      // ENV2 位置型恒星的缺省光球半径 km(真太阳;红外页的 R_SAT)
   BODY_HEAT:2,        // ENV2 天体背阴面的自身热。单位 = 背景单位(与 envBg、云的 v 同一单位:1 = SENS.BG_G0 = 一条发现线);v1 只有红外视图读
   ROCK_HEAT:0.5,      // ENV2 石头自身热倍率(同体型熄火冷船 = 1);makeRock 写进 heatK,第 4a 步起 optLum 才读
-  DUST:{V:1.3,DARK:0.3,L0:1600000,OCT:9,GAIN:0.78,WARP:0.35,MASK_LO:0.5,MASK_HI:0.66,MIN_KM:12500,EDGE:0.2} // ENV2 尘埃云(红外页 IRM_CLOUD 的世界部分)+ 圆形软窗宽度 EDGE(占半径);噪声在 world/13-dust
+  DUST:{V:1.3,DARK:0.3,L0:1600000,OCT:9,GAIN:0.78,WARP:0.35,MASK_LO:0.5,MASK_HI:0.66,MIN_KM:12500,EDGE:0.2, // ENV2 尘埃云(红外页 IRM_CLOUD 的世界部分)+ 圆形软窗宽度 EDGE(占半径);噪声在 world/13-dust
+    R3:0.49} // ENV2 脊状倍频的期望 E[(1-|envGN|)^3]:物理尺度(MIN_KM)会算、视图细度截掉的倍频按它补上,各细度平均浓度 = 物理尺度的(审查问题 5;第四轮收窄:物理尺度本身不补)。数值积分:40 个种子 x 16 万点 = 0.48996,种子间标准差 0.0007;测试 world.test 钉着它与 envGN 相符
 };
 const ENV_KEYS=['sun','stars','bodies','clouds','fields','asteroids']; // ENV2 world 认识的键:envReset 见到别的键当场抛(ENV1 时拼错 feilds 会静默成空环境);视图的登记表以它为锚
 /* ENV1 的 sun:{brg,half,ux,uy,c2}(c2 = cos^2 半角,热循环免开方);fields:[{x,y,r,r2,n,seed,smin,smax}]。

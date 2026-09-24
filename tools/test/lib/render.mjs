@@ -336,19 +336,24 @@ export function recorder(E) {
    beginPath / rect / clip / clearRect / drawImage(源是别的画布 ⇒ 压一层来源;源是它自己 ⇒ 取重放到这一步之前、源点那一叠);
    合成方式 source-over = 叠一层,copy = 整块换成源(源图以外清空,同浏览器);画布宽高变了 = 清空。
    遇到别的绘制调用(fill / stroke / fillRect / putImageData …)直接抛:那不是合成缓存该有的东西,这把尺子也量不了。
-   返回 at(x, y) → 那个点的一叠(x, y 是画布像素的中心坐标) */
-export function provenance(rec, cv, ids = new Map()) {
-  const ops = rec.L.filter(e => e.cv === cv);
+   返回 at(x, y) → 那个点的一叠(x, y 是画布像素的中心坐标)。
+   opt(ENV2 任务 3 / 4 加的,缺省同原来):
+     deep(源画布) 为真 ⇒ 从那块画布拷过来的,取那块画布【在这一笔之前】那个源点的一叠(后台合成缓存从前台 1:1 拷过来,不再是原地自拷贝);
+     skip(源画布) 为真 ⇒ 这一笔不算一层(合成缓存里叠在云格上的矢量小贴图,比如云的字) */
+export function provenance(rec, cv, ids = new Map(), opt = {}) {
+  const byCv = new Map();
+  const opsOf = c => { let a = byCv.get(c); if (!a) { a = []; rec.L.forEach((e, gi) => { if (e.cv === c) a.push([gi, e]); }); byCv.set(c, a); } return a; };
+  const ops = opsOf(cv).map(p => p[1]);
   const idOf = c => { if (!ids.has(c)) ids.set(c, 'cv' + ids.size); return ids.get(c); };
   const IGN = { getTransform: 1, getImageData: 1, measureText: 1, isPointInPath: 1, isPointInStroke: 1, getLineDash: 1, setLineDash: 1, getContextAttributes: 1, isContextLost: 1 };
-  function stackAt(upto, x, y) {
+  function stackAt(c0, uptoG, x, y) {
     let S = [], M = [1, 0, 0, 1, 0, 0], clip = null, path = [], w = null, h = null;
-    const saved = [];
+    const saved = [], L0 = opsOf(c0);
     const inClip = () => !clip || clip.some(r => x >= r[0] && x < r[0] + r[2] && y >= r[1] && y < r[1] + r[3]);
     const tr = (rx, ry, rw, rh) => { if (M[1] !== 0 || M[2] !== 0) throw new Error('来源图只认轴对齐的变换'); return [M[0] * rx + M[4], M[3] * ry + M[5], M[0] * rw, M[3] * rh]; };
     const mul = (A, B, C, D, E2, F) => { const m = M; M = [m[0] * A + m[2] * B, m[1] * A + m[3] * B, m[0] * C + m[2] * D, m[1] * C + m[3] * D, m[0] * E2 + m[2] * F + m[4], m[1] * E2 + m[3] * F + m[5]]; };
-    for (let i = 0; i < upto; i++) {
-      const e = ops[i], a = e.a;
+    for (let i = 0; i < L0.length && L0[i][0] < uptoG; i++) {
+      const gi = L0[i][0], e = L0[i][1], a = e.a;
       if (w !== null && (e.W !== w || e.H !== h)) S = [];
       w = e.W; h = e.H;
       switch (e.m) {
@@ -368,10 +373,11 @@ export function provenance(rec, cv, ids = new Map()) {
           else if (a.length === 5) { dx = +a[1]; dy = +a[2]; dw = +a[3]; dh = +a[4]; }
           else { sx = +a[1]; sy = +a[2]; sw = +a[3]; sh = +a[4]; dx = +a[5]; dy = +a[6]; dw = +a[7]; dh = +a[8]; }
           if (!inClip()) break;
+          if (opt.skip && opt.skip(src)) break;
           const r = tr(dx, dy, dw, dh), inside = x >= r[0] && x < r[0] + r[2] && y >= r[1] && y < r[1] + r[3];
           if (!inside) { if (e.op === 'copy') S = []; break; }
           const u = sx + (x - r[0]) * sw / r[2], v = sy + (y - r[1]) * sh / r[3];
-          const from = (src === cv) ? stackAt(i, u, v) : [idOf(src) + '#' + e.sv + '@' + Math.floor(u) + ',' + Math.floor(v)];
+          const from = (src === c0 || (opt.deep && opt.deep(src))) ? stackAt(src, gi, u, v) : [idOf(src) + '#' + e.sv + '@' + Math.floor(u) + ',' + Math.floor(v)];
           S = (e.op === 'copy') ? from.slice() : S.concat(from);
           break;
         }
@@ -380,7 +386,7 @@ export function provenance(rec, cv, ids = new Map()) {
     }
     return S;
   }
-  return { ops, at: (x, y) => stackAt(ops.length, x, y) };
+  return { ops, at: (x, y) => stackAt(cv, Infinity, x, y) };
 }
 export const mainOf = L => L.filter(e => e.main);
 export const offOf = L => L.filter(e => !e.main);
@@ -455,5 +461,29 @@ export function 地图(E) {
   /* 视口里(不含余量)的合成缓存格,有几格找不到任何来源(本块或祖先都没上过色) */
   const viewHoles = c => { const km = T.TILE * Math.pow(2, c.L), z = E.run('cam.zoom'), cx = E.run('cam.x'), cy = E.run('cam.y');
     return c.pos.filter(q => q.ix * km < cx + W / 2 / z && (q.ix + 1) * km > cx - W / 2 / z && q.iy * km < cy + H / 2 / z && (q.iy + 1) * km > cy - H / 2 / z && !g.terrBest(c.L, q.ix, q.iy)).length; };
-  return { E, g, V, T, W, H, dpr, rec, frame, settle, J, blit11, one11, prodCheck, d0: () => E.run('__dens.n=0'), dN: () => E.run('__dens.n'), oCD, oTD, vw, vh, C12, check11, viewHoles };
+  /* ENV2 任务 3「从不露底」:这一帧(fl = frame() 的返回)主画布上,视口里每 step px 一个取样点、落在某朵云的圆里的,
+     最上面盖住它的那一笔 drawImage 必须来自已上色的东西 —— 前台合成缓存里有来源的那一格(sv >= 0),或者一块上过色的瓦片(逐块画时)。
+     没有任何一笔盖住 / 盖住它的是合成缓存里没来源的格 ⇒ 露底。返回 {miss, n, ex}(ex = 头一个露底点的说明) */
+  const bare = (fl, step = 40) => {
+    const z = E.run('cam.zoom'), cx = E.run('cam.x'), cy = E.run('cam.y'), C = E.val('ENV.clouds'), c = T.comp, r = [0, 0, 0, 0];
+    const D = mainOf(fl).filter(e => e.m === 'drawImage'), tiles = new Map(); T.tiles.forEach(t => { if (t.cv) tiles.set(t.cv, t); });
+    let miss = 0, n = 0, ex = '';
+    for (let y = step / 2; y < H; y += step) for (let x = step / 2; x < W; x += step) {
+      const wx = cx + (x - W / 2) / z, wy = cy + (y - H / 2) / z;
+      if (!C.some(k => (wx - k.x) ** 2 + (wy - k.y) ** 2 < k.r2)) continue;
+      n++; let ok = false, why = '没有一笔盖住';
+      for (let k = D.length - 1; k >= 0; k--) {
+        const a = D[k].a, src = a[0]; let sx = 0, sy = 0, sw = src.width, sh = src.height, dx, dy, dw, dh;
+        if (a.length === 5) { dx = a[1]; dy = a[2]; dw = a[3]; dh = a[4]; } else if (a.length === 9) { sx = a[1]; sy = a[2]; sw = a[3]; sh = a[4]; dx = a[5]; dy = a[6]; dw = a[7]; dh = a[8]; } else continue;
+        if (!(x >= dx && x < dx + dw && y >= dy && y < dy + dh)) continue;
+        const u = sx + (x - dx) * sw / dw, v = sy + (y - dy) * sh / dh;
+        if (c && src === c.cv) { const q = c.pos.find(q => { g.terrCellRect(c, q, r); return u >= r[0] && u < r[0] + r[2] && v >= r[1] && v < r[1] + r[3]; }); ok = !!q && q.sv >= 0; why = q ? '合成缓存那一格没来源' : '合成缓存在那里没有格'; }
+        else { const t = tiles.get(src); ok = !!t && t.painted >= 0; why = '贴的不是上过色的瓦片'; }
+        break;
+      }
+      if (!ok) { miss++; if (!ex) ex = `(${x},${y}) ${why}`; }
+    }
+    return { miss, n, ex };
+  };
+  return { E, g, V, T, W, H, dpr, rec, frame, settle, J, blit11, one11, prodCheck, d0: () => E.run('__dens.n=0'), dN: () => E.run('__dens.n'), oCD, oTD, vw, vh, C12, check11, viewHoles, bare };
 }

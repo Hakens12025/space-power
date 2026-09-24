@@ -12,33 +12,56 @@
    代码上是双分派 —— 一张 kind x view 的登记表(ECS 里叫每个视图一个 render system)。世界层(world/12、13)不引用这张表(R3 的依赖方向)。
      ENV_KIND_OF  世界层每个键(world/12 的 ENV_KEYS)→ 视图里的类
      ENV_VIEWS    视图名 → {order, slot, pre, kinds:{类 → 画法对象 | null(此视图刻意不画,旁边写理由)}}
-                  画法对象的槽:tile(画进静态贴图)、frame(每帧画在主画布上)、grid(红外页用,第 3 步登记)
-   图层顺序(地图):静态贴图(云)→ 云的名字 → 影子轮廓 → 残骸场 → 天体 → 恒星 → 日标。天体盖在云和影子上面;接触与舰标压在所有这些上面。
-   云在地形瓦片服务里(render/81-terrain:世界锚定的瓦片、粗到细、每帧工作量封顶、1:1 贴图);其余每帧按矢量画,笔数是常数、都裁到视口。
+                  画法对象的槽:tile(画进静态贴图)、frame(每帧画在主画布上)、grid(红外页用,第 3 步登记)、
+                  comp(ENV2 任务 4:静止的矢量,画进地形瓦片服务的合成缓存、在云格之上;没有合成缓存 / 缓存盖不住视口在逐块画时,每帧直接画在主画布上)
+   图层顺序(地图):静态贴图(云)→ 云的名字 → 影子轮廓 → 天体(这三样进合成缓存)→ 残骸场 → 恒星 → 日标。天体盖在云和影子上面;接触与舰标压在所有这些上面。
+   云在地形瓦片服务里(render/81-terrain:世界锚定的瓦片、粗到细、每帧工作量封顶、1:1 贴图);云的字、影子、天体随合成缓存一起贴(稳态帧主画布只剩
+   合成缓存 1 次 + 日标 1 次),其余(残骸场、恒星、日标)每帧按矢量画,笔数是常数、都裁到视口。
+   ⚠ 任务 4 起残骸场画在天体之上(原来在天体之下):场景规则里残骸场与天体不相交(world.test 的场景那一条),看不出差别。
    配色:单色、低 alpha、有清楚的线、带字 —— 用户否过"五彩斑斓色块"(render/CLAUDE.md SN6 一节)。
    每个画法在对应的 ENV 列表为空时第一句就返回 ⇒ 空环境下主画布与离屏一笔不画(tk_ab 的 drawlog 逐位相同)。
    上面 ENV1 那句"没有 createRadialGradient"说的是每帧路径:ENV2 恒星光晕的径向渐变只在离屏预渲染一次(MAP_STAR,先例 83-hud 的 SIG_FADE),每帧只贴。
-   ENV2 地图上的字(尘埃云 / 天体名 / 太阳 / 恒星)与日标图标都是预渲染的小贴图(mapText / mapCueSpr),每帧 1 次 drawImage、1:1:补充规格 B 的稳态 <= 50 µs。
+   ENV2 地图上的字(尘埃云 / 天体名 / 太阳 / 恒星)与日标图标都是预渲染的小贴图(mapText / mapCueSpr),每次 1 次 drawImage、1:1:补充规格 B 的稳态 <= 50 µs
+   (任务 4 起尘埃云与天体名随合成缓存画一次,不再每帧贴;太阳 / 恒星的字与日标仍每帧贴)。
    ============================================================================ */
 const ENV_KIND_OF={sun:['sun'],stars:['star'],bodies:['body','shadow'],clouds:['cloud'],fields:['field'],
   asteroids:[]}; // ENV2 世界层每个键 → 视图里的类。asteroids 就是石头:走 82-rocks 的航迹画法(带迷雾),不是地图事实;红外里它们是热源
 const ENV_VIEWS={}; // ENV2 视图名 → {order, slot, pre?, kinds:{类名 → 画法对象 | null}}
 ENV_VIEWS.map={order:['cloud','shadow','field','body','star','sun'],slot:'frame',pre:mapTileFrame,kinds:{
-  cloud:{tile:mapCloudPaint,frame:mapCloudLabels,need:function(){return ENV.clouds.length>0;}},
-  shadow:{frame:mapShadows},   // ENV2 补充规格 C:影子是每帧的矢量虚线(每个天体 2 条,Liang–Barsky 裁到屏幕),不进贴图 —— 贴图于是只依赖云的几何,换光照不作废
-  field:{frame:mapFields}, body:{frame:mapBodies}, star:{frame:mapStar}, sun:{frame:mapSunCue}}};
-function drawEnvView(view){const V=ENV_VIEWS[view];if(!V)return;if(V.pre)V.pre(V);
-  for(const k of V.order){const e=V.kinds[k];if(e&&e[V.slot])e[V.slot]();}}
+  cloud:{tile:mapCloudPaint,comp:mapCloudLabels,need:function(){return ENV.clouds.length>0;}},
+  shadow:{comp:mapShadows},   // ENV2 补充规格 C:影子是矢量虚线(每个天体 2 条,Liang–Barsky 裁到视图),不进瓦片 —— 瓦片于是只依赖云的几何,换光照不作废;任务 4 起画进合成缓存(矢量的键含世界 rev)
+  field:{frame:mapFields}, body:{comp:mapBodies}, star:{frame:mapStar}, sun:{frame:mapSunCue}}};
+function drawEnvView(view){const V=ENV_VIEWS[view];if(!V)return;const took=V.pre?V.pre(V):false; // ENV2 任务 4:pre 返回真 = comp 槽已经在贴上去的合成缓存里,不再每帧画
+  for(const k of V.order){const e=V.kinds[k];if(!e)continue;if(e.comp&&!took)e.comp();if(e[V.slot])e[V.slot]();}}
 function drawEnv(){drawEnvView('map');} // ENV2 名字不变:84-scene 的 typeof 守卫仍指向已声明符号(R2)
 
 /* ---- ENV2 静态贴图层(云):登记表的 pre ---- */
 const MAP_CLOUD={RGB:[150,172,205],A:0.10,ISO:[0.15,0.4,0.7],LINE:['rgba(165,188,220,.16)','rgba(165,188,220,.24)','rgba(165,188,220,.34)']}; // ENV2 云的海图配色:单色填充 alpha = 0.10·min(1,浓度);三档等值线
-const MAP_TILE_PAINT={paint:mapTilePaint,iso:MAP_CLOUD.ISO}; // ENV2 交给地形瓦片服务的上色器
+const MAP_TILE_PAINT={paint:mapTilePaint,iso:MAP_CLOUD.ISO,vec:mapVec,vkey:mapLabPlan,vdiff:mapLabDiff}; // ENV2 交给地形瓦片服务的上色器;任务 4:vec = 合成缓存的矢量层,vkey = 矢量层的键(世界 rev + 字的位置);
+  // 审查第四轮:vdiff = 两个键之间是不是只有字挪了、挪了的新旧字框在哪(合成缓存据此只重画那几格,不整张重拼)
 const MAP_SMALL={}; // ENV2 上色用的小画布(每种格点数一张:17 / 65),putImageData 之后放大贴进瓦片
 function mapTileNeed(V){for(const k of V.order){const e=V.kinds[k];if(e&&e.tile&&e.need())return true;}return false;} // ENV2 有没有要进贴图的类
-function mapTileFrame(V){ // ENV2 有要进贴图的类才开地形瓦片服务;都没有时一笔不画,并把瓦片放掉
+function mapTileFrame(V){ // ENV2 有要进贴图的类才开地形瓦片服务;都没有时一笔不画,并把瓦片放掉。返回真 = comp 槽已在贴上去的合成缓存里(任务 4)
+  // ⚠ 没有云(只有天体 / 太阳)的世界不开合成缓存,天体与影子照旧每帧直接画:为几个 arc 建一张几十 MB 的缓存不划算(现有场景里没有这种世界)
   if(!mapTileNeed(V)){terrRelease();return;}
   terrFrame(MAP_TILE_PAINT);
+  return TERR.st.show==='comp';
+}
+/* ---- ENV2 任务 4(审查问题 3):矢量画法画进哪里。comp 槽的画法(云的字 / 影子 / 天体)不直接读 ctx / W / H / toScreen,而是读这里:
+   on=false ⇒ 主画布(ctx、W / H、toScreen —— 与原来逐位相同,直接调这些画法的测试照旧);on=true ⇒ 一张合成缓存(它自己的镜头与 CSS 尺寸;
+   设备像素的变换与裁剪由地形瓦片服务的 terrVecPass 设好)。 ---- */
+const MAP_V={on:false,g:null,w:0,h:0,cx:0,cy:0,z:1};
+function mapG(){return MAP_V.on?MAP_V.g:ctx;}
+function mapVW(){return MAP_V.on?MAP_V.w:W;}
+function mapVH(){return MAP_V.on?MAP_V.h:H;}
+function mapVZ(){return MAP_V.on?MAP_V.z:cam.zoom;}
+function mapTS(x,y){const o=MAP_V;return o.on?[(x-o.cx)*o.z+o.w/2,(y-o.cy)*o.z+o.h/2]:toScreen(x,y);} // ENV2 世界 → 当前视图的 CSS 像素(主画布时就是 toScreen)
+function mapVec(c){ // ENV2 合成缓存 c 的矢量层:按登记表把 comp 槽依次画进这张缓存(在它自己的镜头里)。返回画了几样(0 ⇒ 缓存里只有云)
+  const V=ENV_VIEWS.map,o=MAP_V;let n=0;
+  o.on=true;o.g=c.g;o.w=c.W+2*c.M;o.h=c.H+2*c.M;o.cx=c.cx;o.cy=c.cy;o.z=c.z;
+  try{for(const k of V.order){const e=V.kinds[k];if(e&&e.comp)n+=e.comp()|0;}}
+  finally{o.on=false;o.g=null;}
+  return n;
 }
 function mapTilePaint(g,T){const V=ENV_VIEWS.map;for(const k of V.order){const e=V.kinds[k];if(e&&e.tile&&e.need())e.tile(g,T);}} // ENV2 按登记表把 tile 槽依次画进这块瓦片
 function mapTileStep(V,n){ // ENV2 判据用:按当前镜头定这一代要建的瓦片,再按个数(n,可为 Infinity)采样、上色全做;不画主画布
@@ -62,11 +85,67 @@ function mapCloudPaint(g,T){ // ENV2 云的海图画法(只在离屏瓦片上):�
   g.lineWidth=1;
   for(let k=0;k<T.piso.length;k++){g.strokeStyle=MAP_CLOUD.LINE[k];g.stroke(T.piso[k]);}
 }
-function mapCloudLabels(){ // ENV2 frame 槽:云心在屏幕里、屏幕半径大于 60px 的云写一行"尘埃云"(字是预渲染的小贴图,见 mapText)
-  const C=ENV.clouds;if(!C.length)return;
-  for(const c of C){const p=toScreen(c.x,c.y),r=c.r*cam.zoom;
-    if(!(r>60)||p[0]<0||p[0]>W||p[1]<0||p[1]>H)continue;
-    mapText('尘埃云','rgba(165,188,220,.55)',p[0],p[1]);}
+function mapCloudLabels(){ // ENV2 comp 槽(任务 2 / 审查问题 6):每朵要带字的云在它"屏幕上可见部分里的一点"写一行"尘埃云"(位置由 mapLabPlan 定、钉在世界上;
+  // 原来只写在云心、云心不在屏里就没有字,还会压在舰名上)。字是预渲染的小贴图(见 mapText)。返回写了几行
+  if(!ENV.clouds.length)return 0;
+  const L=MAP_LAB.list;for(const l of L){const p=mapTS(l.x,l.y);mapText('尘埃云',MAP_LAB.COL,p[0],p[1]);}
+  return L.length;
+}
+/* ---- ENV2 任务 2(审查问题 6):云的字写在哪。业内叫法:地图标注的自动摆放(automatic label placement,Imhof 1975 的制图标注原则;
+   候选位置 + 冲突检测 + 选最优那一套),我们只做最简单的一种:视口里一张候选格心网,排除压到舰船标签框的,取离云可见部分质心最近的那个。
+   迟滞:原来的位置还"好"就不动 —— 平移 / 缩放时字钉在世界上,不追着质心跑(否则每挪一下合成缓存就要重拼一次)。 ---- */
+const MAP_LAB={list:[],key:'',rev:-1,COL:'rgba(165,188,220,.55)',NX:16,NY:9,INSET:4,SHIP_HW:36,R_MIN:60,B:[],P:[]};
+  // list = [{i 云的下标, x, y 世界坐标}];key = 矢量层的键(世界 rev + 字的位置);NX x NY 候选格心;INSET 字离视口边至少几 px;
+  // SHIP_HW 舰船标签框的半宽下限(舰名 10px 字,7 个汉字 70px);R_MIN 云的屏幕半径大于它才带字(同原来);B / P 草稿
+function mapLabPlan(x,y,z){ // ENV2 视图 = 以 (x,y) 为中心、缩放 z 的视口(动画中是落点):定每朵云的字写在哪;返回矢量层的键(地形瓦片服务每帧调一次)
+  const C=ENV.clouds,old=(MAP_LAB.rev===ENV.rev)?MAP_LAB.list:null,nw=[],B=MAP_LAB.B;let boxed=false;
+  for(let i=0;i<C.length;i++){const c=C[i];
+    if(!(c.r*z>MAP_LAB.R_MIN)||!mapCircleInView(c,x,y,z))continue;
+    if(!boxed){mapShipBoxes(x,y,z,B);boxed=true;}
+    let o=null;if(old)for(const l of old)if(l.i===i){o=l;break;}
+    if(o&&mapLabOk(c,o.x,o.y,x,y,z,B)){nw.push(o);continue;} // 原来的位置还好:不动
+    const q=mapLabFind(c,x,y,z,B);if(q)nw.push({i:i,x:q[0],y:q[1]});
+  }
+  let same=!!old&&nw.length===old.length;if(same)for(let k=0;k<nw.length;k++)if(nw[k]!==old[k]){same=false;break;}
+  if(!same){MAP_LAB.list=nw;MAP_LAB.rev=ENV.rev;let s='r'+ENV.rev;for(const l of nw)s+='|'+l.i+':'+l.x+','+l.y;MAP_LAB.key=s;}
+  return MAP_LAB.key;
+}
+function mapLabDiff(k0,k1,z,out){ // ENV2 审查第四轮:矢量层的键 k0 → k1(缩放 z 下)只差字的位置(同一个世界 rev)⇒ 两边不同的字各推一个包围框进 out(世界坐标 [x0,y0,x1,y1],外扩 2 CSS px 盖住取整),给 true;
+  // 世界 rev 不同(天体 / 影子也可能变了)⇒ false。键的写法见 mapLabPlan:'r'+rev 之后每个字一段 '|云下标:x,y'(数转字符串再转回来是精确的)
+  const A=k0.split('|'),B=k1.split('|');if(A[0]!==B[0])return false;
+  const s=mapTextSpr('尘埃云',MAP_LAB.COL),l=(s.ax+2)/z,t=(s.ay+2)/z,r=(s.w-s.ax+2)/z,b=(s.h-s.ay+2)/z;
+  for(let pass=0;pass<2;pass++){const P=pass?B:A,Q=pass?A:B;
+    for(let i=1;i<P.length;i++){if(Q.indexOf(P[i],1)>0)continue;const u=P[i],k=u.indexOf(':'),m=u.indexOf(',',k),x=+u.slice(k+1,m),y=+u.slice(m+1);out.push(x-l,y-t,x+r,y+b);}}
+  return true;
+}
+function mapCircleInView(c,x,y,z){const hw=W/2/z,hh=H/2/z,dx=Math.max(x-hw-c.x,0,c.x-x-hw),dy=Math.max(y-hh-c.y,0,c.y-y-hh);return dx*dx+dy*dy<c.r2;} // ENV2 云的圆与视图相交
+function mapLabOk(c,wx,wy,x,y,z,B){ // ENV2 字的中心落在世界点 (wx,wy) 好不好:在云的实心部分里(ρ <= 1-EDGE)、整个在视口里(内缩 INSET)、不压任何舰船的标签框
+  const e=1-ENV_CFG.DUST.EDGE,dx=wx-c.x,dy=wy-c.y;if(dx*dx+dy*dy>c.r2*e*e)return false;
+  const s=mapTextSpr('尘埃云',MAP_LAB.COL),x0=(wx-x)*z+W/2-s.ax,y0=(wy-y)*z+H/2-s.ay,x1=x0+s.w,y1=y0+s.h,I=MAP_LAB.INSET;
+  if(x0<I||y0<I||x1>W-I||y1>H-I)return false;
+  for(let k=0;k<B.length;k+=4)if(x0<B[k+2]&&x1>B[k]&&y0<B[k+3]&&y1>B[k+1])return false;
+  return true;
+}
+function mapLabFind(c,x,y,z,B){ // ENV2 视口里 NX x NY 个候选格心:先求云可见部分(实心部分 ∩ 视口)的质心,再取离它最近的好格心;一个好的都没有给 null(不写字)
+  const nx=MAP_LAB.NX,ny=MAP_LAB.NY,e=1-ENV_CFG.DUST.EDGE,P=MAP_LAB.P;let mx=0,my=0,n=0;P.length=0;
+  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const wx=x+((i+0.5)*W/nx-W/2)/z,wy=y+((j+0.5)*H/ny-H/2)/z,dx=wx-c.x,dy=wy-c.y;
+    if(dx*dx+dy*dy>c.r2*e*e)continue;mx+=wx;my+=wy;n++;P.push(wx,wy);}
+  if(!n)return null;mx/=n;my/=n;
+  let best=-1,bd=Infinity;
+  for(let k=0;k<P.length;k+=2){const d=(P[k]-mx)*(P[k]-mx)+(P[k+1]-my)*(P[k+1]-my);if(d<bd&&mapLabOk(c,P[k],P[k+1],x,y,z,B)){bd=d;best=k;}}
+  return best<0?null:[P[best],P[best+1]];
+}
+function mapShipBoxes(x,y,z,out){ // ENV2 此视图里画得出来的舰船(同 drawShip 的迷雾口径:GM 全画;敌舰只画 live / coast / ghost、按 contactPos)各自的标签框 [x0,y0,x1,y1]:
+  // 舰标 + 上面的高度标 / 血条(r+22)+ 下面的舰名与等级(r+34),半宽取舰标与 SHIP_HW 里大的(保守,不量字)
+  out.length=0;
+  for(const s of ships){let p=s.pos;
+    if(!adminMode&&s.side==='red'){const v=contactState(s,'blue');if(v==='none'||v==='heat')continue;p=contactPos(s,'blue');if(!p)continue;}
+    const sx=(p[0]-x)*z+W/2,sy=(p[1]-y)*z+H/2;if(sx<-120||sx>W+120||sy<-120||sy>H+120)continue; // 离视口远的先剔掉(每帧都要核一遍字,舰船多时省掉 shipIconR)
+    const r=shipIconR(s),hw=Math.max(r+8,MAP_LAB.SHIP_HW);
+    if(sx+hw<0||sx-hw>W||sy+r+34<0||sy-r-22>H)continue;
+    out.push(sx-hw,sy-r-22,sx+hw,sy+r+34);
+  }
+  return out;
 }
 
 /* ---- ENV2 小贴图:地图上的字与日标图标各预渲染一次(按设备像素建),每帧 1 次 drawImage、左上角取整到设备像素(1:1)。
@@ -82,16 +161,17 @@ function mapSpr(key,w,h,ax,ay,paint){ // ENV2 取一张小贴图;没有或 DPR �
   const g=cv0.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,w,h);paint(g);
   return (MAP_SPR[key]={cv:cv0,w:cv0.width/dpr,h:cv0.height/dpr,ax:ax,ay:ay,dpr:dpr});
 }
-function mapBlit(s,x,y){const d=s.dpr;ctx.drawImage(s.cv,Math.round((x-s.ax)*d)/d,Math.round((y-s.ay)*d)/d,s.w,s.h);} // ENV2 锚点落在 (x,y),1:1 落在整数设备像素上
-function mapText(txt,col,x,y){ // ENV2 一行 10px 字,中心落在 (x,y)(= 原来 textAlign center、textBaseline middle 的那一次 fillText)
+function mapBlit(s,x,y){const d=s.dpr;mapG().drawImage(s.cv,Math.round((x-s.ax)*d)/d,Math.round((y-s.ay)*d)/d,s.w,s.h);} // ENV2 锚点落在 (x,y),1:1 落在整数设备像素上(任务 4:画进当前视图,主画布或合成缓存)
+function mapTextSpr(txt,col){ // ENV2 一行 10px 字的小贴图(任务 2:摆字时要先知道它多大,从 mapText 拆出来)
   const key='t|'+col+'|'+txt;let s=MAP_SPR[key];
   if(!s||s.dpr!==(window.devicePixelRatio||1)){
     if(!MAP_MEAS.g)MAP_MEAS.g=document.createElement('canvas').getContext('2d');
     MAP_MEAS.g.font=MAP_FONT;const w=Math.ceil(MAP_MEAS.g.measureText(txt).width)+4,h=16;
     s=mapSpr(key,w,h,w/2,h/2,function(g){g.font=MAP_FONT;g.fillStyle=col;g.textAlign='center';g.textBaseline='middle';g.fillText(txt,w/2,h/2);});
   }
-  mapBlit(s,x,y);
+  return s;
 }
+function mapText(txt,col,x,y){mapBlit(mapTextSpr(txt,col),x,y);} // ENV2 一行 10px 字,中心落在 (x,y)(= 原来 textAlign center、textBaseline middle 的那一次 fillText)
 function mapCueSpr(dx,dy,label){ // ENV2 日标 = ENV1 的画法(实心圆 r=6 + 8 根射线 9→13、线宽 1.5)+ 字(中心在 -26·方向)画进一张小图,锚点 = 圆心。
   // 每个标签一格,方向变了才重画(方向型太阳整局不变;屏外恒星平移时才变)。8 根射线一个 path(小图里画一次,不是每帧的大 path)
   const key='cue|'+label,dk=dx.toFixed(4)+','+dy.toFixed(4),s0=MAP_SPR[key];
@@ -117,27 +197,28 @@ function mapLB(x0,y0,x1,y1,X0,Y0,X1,Y1,out){ // ENV2 Liang–Barsky(1984)线段�
     const r=q/p;if(p<0){if(r>t1)return false;if(r>t0)t0=r;}else{if(r<t0)return false;if(r<t1)t1=r;}}
   out[0]=t0;out[1]=t1;return t0<t1;
 }
-function mapShadows(){ // ENV2 frame 槽
-  const B=ENV.bodies;if(!B.length||!envHasLight())return;
-  const S=ENV.sun?null:ENV.stars[0],u=MAP_T2,cut=[0,0],cx=W/2,cy=H/2;let on=false;
+function mapShadows(){ // ENV2 comp 槽(任务 4:画进当前视图 —— 合成缓存或主画布;返回画了几笔)
+  const B=ENV.bodies;if(!B.length||!envHasLight())return 0;
+  const g=mapG(),VW=mapVW(),VH=mapVH(),S=ENV.sun?null:ENV.stars[0],u=MAP_T2,cut=[0,0],cx=VW/2,cy=VH/2;let on=false,n=0;
   for(const b of B){
     if(!envSunDirAt([b.x,b.y],u))continue;
     let Lu=Infinity;
     if(S){if(!(S.r>b.r))continue;Lu=b.r*Math.hypot(S.x-b.x,S.y-b.y)/(S.r-b.r);} // 天体比恒星大:本影发散,不画(与 envInShadow 同口径)
     const nx=-u[1],ny=u[0],ux=u[0],uy=u[1];
     for(let sg=-1;sg<=1;sg+=2){
-      const ax=b.x+sg*b.r*nx,ay=b.y+sg*b.r*ny,p0=toScreen(ax,ay);let p1;
-      if(isFinite(Lu))p1=toScreen(b.x-ux*Lu,b.y-uy*Lu);   // 位置型:止于锥顶
-      else{const q=toScreen(ax-ux*1e6,ay-uy*1e6),ex=q[0]-p0[0],ey=q[1]-p0[1],el=Math.hypot(ex,ey)||1,len=Math.hypot(p0[0]-cx,p0[1]-cy)+W+H;
-        p1=[p0[0]+ex/el*len,p0[1]+ey/el*len];}            // 方向型:沿 −u 伸到一定出屏的地方
-      if(!mapLB(p0[0],p0[1],p1[0],p1[1],-1,-1,W+1,H+1,cut))continue;
+      const ax=b.x+sg*b.r*nx,ay=b.y+sg*b.r*ny,p0=mapTS(ax,ay);let p1;
+      if(isFinite(Lu))p1=mapTS(b.x-ux*Lu,b.y-uy*Lu);   // 位置型:止于锥顶
+      else{const q=mapTS(ax-ux*1e6,ay-uy*1e6),ex=q[0]-p0[0],ey=q[1]-p0[1],el=Math.hypot(ex,ey)||1,len=Math.hypot(p0[0]-cx,p0[1]-cy)+VW+VH;
+        p1=[p0[0]+ex/el*len,p0[1]+ey/el*len];}            // 方向型:沿 −u 伸到一定出视图的地方
+      if(!mapLB(p0[0],p0[1],p1[0],p1[1],-1,-1,VW+1,VH+1,cut))continue;
       const dx=p1[0]-p0[0],dy=p1[1]-p0[1];
-      if(!on){ctx.save();ctx.strokeStyle='rgba(170,180,200,.22)';ctx.lineWidth=1;ctx.setLineDash([3,5]);on=true;}
-      ctx.lineDashOffset=cut[0]*Math.hypot(dx,dy); // 虚线的相位从未裁剪的起点算:平移时虚线钉在世界上,不在屏幕边上爬
-      ctx.beginPath();ctx.moveTo(p0[0]+dx*cut[0],p0[1]+dy*cut[0]);ctx.lineTo(p0[0]+dx*cut[1],p0[1]+dy*cut[1]);ctx.stroke();
+      if(!on){g.save();g.strokeStyle='rgba(170,180,200,.22)';g.lineWidth=1;g.setLineDash([3,5]);on=true;}
+      g.lineDashOffset=cut[0]*Math.hypot(dx,dy); // 虚线的相位从未裁剪的起点算:平移时虚线钉在世界上,不在屏幕边上爬
+      g.beginPath();g.moveTo(p0[0]+dx*cut[0],p0[1]+dy*cut[0]);g.lineTo(p0[0]+dx*cut[1],p0[1]+dy*cut[1]);g.stroke();n++;
     }
   }
-  if(on){ctx.setLineDash([]);ctx.lineDashOffset=0;ctx.restore();}
+  if(on){g.setLineDash([]);g.lineDashOffset=0;g.restore();}
+  return n;
 }
 
 /* ---- ENV2 残骸场:ENV1 drawEnv 里的循环原样挪进来,成为登记表的 field 画法(巨圆降级照旧,不在本次范围内) ---- */
@@ -166,8 +247,8 @@ function mapFields(){ // ENV2 frame 槽(ENV1 原样)
 }
 
 /* ---- ENV2 巨圆降级:圆盘 ∩ 视口 的有界多边形(Sutherland–Hodgman 1974),天体与光球共用 ---- */
-function mapDiskPoly(cx,cy,r,hx,hy){ // ENV2 圆盘 ∩ 视口(外扩 2px)[∩ 半平面 (q-c)·(hx,hy) >= 0] 的有界多边形 [x,y,...];不相交给 null
-  const X0=-2,Y0=-2,X1=W+2,Y1=H+2,qx=Math.max(X0,Math.min(cx,X1)),qy=Math.max(Y0,Math.min(cy,Y1));
+function mapDiskPoly(cx,cy,r,hx,hy){ // ENV2 圆盘 ∩ 视口(外扩 2px;任务 4:当前视图 —— 主画布或合成缓存)[∩ 半平面 (q-c)·(hx,hy) >= 0] 的有界多边形 [x,y,...];不相交给 null
+  const X0=-2,Y0=-2,X1=mapVW()+2,Y1=mapVH()+2,qx=Math.max(X0,Math.min(cx,X1)),qy=Math.max(Y0,Math.min(cy,Y1));
   if((qx-cx)*(qx-cx)+(qy-cy)*(qy-cy)>r*r)return null;
   let P;
   if(cx>=X0&&cx<=X1&&cy>=Y0&&cy<=Y1)P=[X0,Y0,X1,Y0,X1,Y1,X0,Y1]; // 圆心在视口里且 r > 3 倍屏幕 ⇒ 视口整个在盘内
@@ -187,53 +268,62 @@ function mapClip(P,nx,ny,c){ // ENV2 Sutherland–Hodgman 单边裁剪:保留 nx
     if((da>=0)!==(db>=0)){const t=da/(da-db);out.push(ax+(bx-ax)*t,ay+(by-ay)*t);}}
   return out;
 }
-function mapFillPoly(P){ctx.beginPath();ctx.moveTo(P[0],P[1]);for(let i=2;i<P.length;i+=2)ctx.lineTo(P[i],P[i+1]);ctx.closePath();ctx.fill();} // ENV2 填一个 mapDiskPoly 的结果
+function mapFillPoly(P){const g=mapG();g.beginPath();g.moveTo(P[0],P[1]);for(let i=2;i<P.length;i+=2)g.lineTo(P[i],P[i+1]);g.closePath();g.fill();} // ENV2 填一个 mapDiskPoly 的结果(当前视图)
 
 /* ---- ENV2 天体:背阴色整盘 + 朝阳那半盘(那条弦就是明暗交界线)+ 描边 + 名字;每个至多 3 次 arc、2 次 fill、1 次 stroke、1 次 fillText ---- */
 const MAP_BODY={DARK:'rgba(58,64,78,.92)',LIT:'rgba(150,156,170,.92)',EDGE:'rgba(170,180,200,.45)',TXT:'rgba(200,206,220,.72)'}; // ENV2 天体配色:灰、不带色相(与云同一路单色)
-function mapBodies(){ // ENV2 frame 槽
-  const B=ENV.bodies;if(!B.length)return;
-  const big=3*Math.max(W,H),lit=envHasLight(),u=MAP_T2;
-  ctx.save();
+function mapBodies(){ // ENV2 comp 槽(任务 4:画进当前视图 —— 合成缓存或主画布;返回画了几个)
+  const B=ENV.bodies;if(!B.length)return 0;
+  const g=mapG(),VW=mapVW(),VH=mapVH(),z=mapVZ(),big=3*Math.max(VW,VH),lit=envHasLight(),u=MAP_T2;let n=0;
+  g.save();
   for(const b of B){
-    const p=toScreen(b.x,b.y),r=b.r*cam.zoom;
-    if(p[0]+r<0||p[0]-r>W||p[1]+r<0||p[1]-r>H)continue;       // 屏幕包围盒剔除
-    let a0=0,hasL=false;
-    if(lit&&envSunDirAt([b.x,b.y],u)){const q=toScreen(b.x+u[0]*1e6,b.y+u[1]*1e6);a0=Math.atan2(q[1]-p[1],q[0]-p[0]);hasL=true;} // 屏幕上的光源方向(不假定 y 轴朝哪,同日标)
-    if(r<3){ctx.fillStyle=MAP_BODY.LIT;ctx.beginPath();ctx.arc(p[0],p[1],3,0,6.283);ctx.fill();continue;}
+    const p=mapTS(b.x,b.y),r=b.r*z;
+    if(p[0]+r<0||p[0]-r>VW||p[1]+r<0||p[1]-r>VH)continue;       // 视图包围盒剔除
+    n++;let a0=0,hasL=false;
+    if(lit&&envSunDirAt([b.x,b.y],u)){const q=mapTS(b.x+u[0]*1e6,b.y+u[1]*1e6);a0=Math.atan2(q[1]-p[1],q[0]-p[0]);hasL=true;} // 屏幕上的光源方向(不假定 y 轴朝哪,同日标)
+    if(r<3){g.fillStyle=MAP_BODY.LIT;g.beginPath();g.arc(p[0],p[1],3,0,6.283);g.fill();continue;}
     if(r>big){ // 拉得很近:不画巨型圆,填 盘∩视口 的有界多边形;不描边、不写字
-      const P=mapDiskPoly(p[0],p[1],r);if(P){ctx.fillStyle=MAP_BODY.DARK;mapFillPoly(P);}
-      if(hasL){const P2=mapDiskPoly(p[0],p[1],r,Math.cos(a0),Math.sin(a0));if(P2){ctx.fillStyle=MAP_BODY.LIT;mapFillPoly(P2);}}
+      const P=mapDiskPoly(p[0],p[1],r);if(P){g.fillStyle=MAP_BODY.DARK;mapFillPoly(P);}
+      if(hasL){const P2=mapDiskPoly(p[0],p[1],r,Math.cos(a0),Math.sin(a0));if(P2){g.fillStyle=MAP_BODY.LIT;mapFillPoly(P2);}}
       continue;
     }
-    ctx.fillStyle=MAP_BODY.DARK;ctx.beginPath();ctx.arc(p[0],p[1],r,0,6.283);ctx.fill();
-    if(hasL){ctx.fillStyle=MAP_BODY.LIT;ctx.beginPath();ctx.arc(p[0],p[1],r,a0-Math.PI/2,a0+Math.PI/2);ctx.closePath();ctx.fill();}
-    ctx.strokeStyle=MAP_BODY.EDGE;ctx.lineWidth=1;ctx.beginPath();ctx.arc(p[0],p[1],r,0,6.283);ctx.stroke();
+    g.fillStyle=MAP_BODY.DARK;g.beginPath();g.arc(p[0],p[1],r,0,6.283);g.fill();
+    if(hasL){g.fillStyle=MAP_BODY.LIT;g.beginPath();g.arc(p[0],p[1],r,a0-Math.PI/2,a0+Math.PI/2);g.closePath();g.fill();}
+    g.strokeStyle=MAP_BODY.EDGE;g.lineWidth=1;g.beginPath();g.arc(p[0],p[1],r,0,6.283);g.stroke();
     if(r>24)mapText(b.name,MAP_BODY.TXT,p[0],p[1]); // ENV2 名字走预渲染的小贴图(审查第 3 条)
   }
-  ctx.restore();
+  g.restore();return n;
 }
 
 /* ---- ENV2 光源:位置型恒星(光晕 + 光球)与方向型太阳(日标)。日标与禁区锥是 ENV1 的画法,参数化后两种光源共用 ---- */
-const MAP_STAR={cv:null,dpr:0,sz:null,szN:0,szDpr:0,CAP:2048}; // ENV2 恒星光晕的预渲染贴图(128x128 径向渐变):只在第一次画或 DPR 变了时建一次(先例:83-hud 的 SIG_FADE),此后每帧只贴。
-                                                                // sz = 按当前屏幕半径从 128 那张缩好的一张(边长 szN 设备像素 <= CAP),镜头停着时每帧 1:1 贴它(审查第 7 条)
+const MAP_STAR={cv:null,dpr:0,sz:null,szN:0,szDpr:0,CAP:2048,Q:8}; // ENV2 恒星光晕的预渲染贴图(128x128 径向渐变):只在第一次要用或 DPR 变了时建一次(先例:83-hud 的 SIG_FADE),只给缩放动画中拉伸用。
+                                                                // sz = 按【量化后的】屏幕尺寸直接画渐变的一张(边长 szN 设备像素 <= CAP,按 2^(1/Q) 一档量化),镜头停着时每帧 1:1 贴它;尺寸换档才重画(审查问题 7)。
+                                                                // 审查第四轮:名义边长超过 CAP 时按 CAP 封顶(光晕不再跟着长大,仍 1:1)—— 暂定,待用户拍板(另两种:超过就不画 / 接受拉伸)
 function mapStarHalo(){
   const dpr=window.devicePixelRatio||1;
   if(MAP_STAR.cv&&MAP_STAR.dpr===dpr)return MAP_STAR.cv;
   const c=MAP_STAR.cv||document.createElement('canvas');c.width=128;c.height=128;
-  const g=c.getContext('2d'),gr=g.createRadialGradient(64,64,0,64,64,64);
-  gr.addColorStop(0,'rgba(255,214,120,.34)');gr.addColorStop(0.2,'rgba(255,214,120,.16)');gr.addColorStop(0.5,'rgba(255,214,120,.05)');gr.addColorStop(1,'rgba(255,214,120,0)');
-  g.fillStyle=gr;g.fillRect(0,0,128,128);
+  mapHaloPaint(c.getContext('2d'),128); // ENV2 色标与量化那张共用 mapHaloPaint(式子不变)
   MAP_STAR.cv=c;MAP_STAR.dpr=dpr;return c;
 }
-function mapStarHaloAt(x,y,hr){ // ENV2 审查第 7 条(补充规格 B:非动画帧贴图 1:1):镜头停着、边长 <= CAP 设备像素时贴按屏幕半径缩好的那张(半径变了才重缩一次,不建渐变);
-  // 缩放动画中、或光晕大过 CAP(DPR 2 时半径 > 512 CSS px)时照旧从 128 那张拉伸 —— 后者是剩下的非 1:1 情形(要么不画、要么占几十 MB,等有恒星的场景时拍板)
-  const src=mapStarHalo(),dpr=MAP_STAR.dpr,n=Math.round(2*hr*dpr);
-  if(!(vtAnim||zAnim)&&n>=1&&n<=MAP_STAR.CAP){
-    if(!MAP_STAR.sz||MAP_STAR.szN!==n||MAP_STAR.szDpr!==dpr){const c=MAP_STAR.sz||document.createElement('canvas');c.width=n;c.height=n;
-      const g=c.getContext('2d');g.imageSmoothingEnabled=true;g.drawImage(src,0,0,n,n);MAP_STAR.sz=c;MAP_STAR.szN=n;MAP_STAR.szDpr=dpr;}
-    const w=n/dpr;ctx.drawImage(MAP_STAR.sz,Math.round((x-w/2)*dpr)/dpr,Math.round((y-w/2)*dpr)/dpr,w,w);
-  }else ctx.drawImage(src,x-hr,y-hr,2*hr,2*hr);
+function mapHaloPaint(g,n){ // ENV2 光晕的径向渐变画进 n x n(设备像素;与 128 那张同一组色标)
+  const h=n/2,gr=g.createRadialGradient(h,h,0,h,h,h);
+  gr.addColorStop(0,'rgba(255,214,120,.34)');gr.addColorStop(0.2,'rgba(255,214,120,.16)');gr.addColorStop(0.5,'rgba(255,214,120,.05)');gr.addColorStop(1,'rgba(255,214,120,0)');
+  g.fillStyle=gr;g.fillRect(0,0,n,n);
+}
+function mapStarHaloAt(x,y,hr){ // ENV2 审查问题 7(补充规格 B:非动画帧贴图 1:1):镜头停着时贴按【量化后的】屏幕尺寸直接画渐变的那张 ——
+  // 边长按 2^(1/Q) 一档量化(同一档里缩放微调不重画;显示尺寸与名义 8 倍半径差不到半档,约 4%),换档才重画一次渐变,之后每帧 1:1 贴。缩放动画中从 128 那张拉伸(规格允许)。
+  // ENV2 审查第四轮:名义边长超过 CAP 设备像素(DPR 1 时半径 > 1024 CSS px、DPR 2 时 > 512)时按 CAP 封顶 —— 原来这一段每帧从 128 那张拉伸,是剩下的非 1:1 情形。
+  //   封顶之后光晕停在 CAP 那么大(恒星光球还在变大,光晕相对变窄),换来仍 1:1、不再多占内存;CAP 本身在量化档上(2^11),封顶那一刻尺寸是连续的。暂定,待用户拍板
+  const dpr=window.devicePixelRatio||1,n0=2*hr*dpr;
+  if(!(vtAnim||zAnim)&&n0>=1){
+    const Q=MAP_STAR.Q,n=Math.min(MAP_STAR.CAP,Math.max(2,Math.round(Math.pow(2,Math.round(Math.log2(n0)*Q)/Q)))); // ENV2 量化后的边长(设备像素),封顶 CAP
+    if(!MAP_STAR.sz||MAP_STAR.szN!==n||MAP_STAR.szDpr!==dpr){const c=MAP_STAR.sz||document.createElement('canvas');c.width=n;c.height=n; // 换档 / DPR 变了:按这一档直接画渐变(不再从 128 那张放大)
+      mapHaloPaint(c.getContext('2d'),n);MAP_STAR.sz=c;MAP_STAR.szN=n;MAP_STAR.szDpr=dpr;}
+    const w=n/dpr;ctx.drawImage(MAP_STAR.sz,Math.round(x*dpr-n/2)/dpr,Math.round(y*dpr-n/2)/dpr,w,w); // 1:1,左上角落在整数设备像素上
+    return;
+  }
+  const src=mapStarHalo();ctx.drawImage(src,x-hr,y-hr,2*hr,2*hr);
 }
 function mapLightCue(dx,dy,label){ // ENV2 ENV1 日标的画法(原 drawSunCue 36-45 行)参数化:屏幕方向 (dx,dy) 单位向量,贴在内缩边框上;返回落点(判据读)
   const cx=W/2,cy=H/2,mx=40,my=84; // 上下多留一截:顶栏、左下的比例尺与底栏都在边上(第一版 30px 边距时日标压在比例尺上)

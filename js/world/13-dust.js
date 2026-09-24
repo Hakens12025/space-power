@@ -12,6 +12,10 @@
    ---- 数值从哪来 ----
    envDustOne 就是红外页(demos/地图组)的 irmCloudD,只改三处:噪声坐标相对云心、种子与基准尺度取自这朵云;
    irmGN 里每次调用都新建的闭包提成顶层的 envGrad(数值逐位不变);结果再乘圆形软窗(最外 EDGE 一圈 smoothstep 降到 0)。
+   ENV2 第四处(审查问题 5,2026-09-24;第四轮收窄):视图细度比物理尺度粗时,物理尺度会算、这一细度截掉(或淡出)的那几层倍频不再按 0 算,
+   而是按这一层的期望 E[r³](DUST.R3)乘振幅补上 ⇒ 各细度的平均浓度都等于物理尺度的(战区层原来只剩第 0 个倍频,平均浓度掉到战术层的 13%,云看不见)。
+   物理尺度(minKm = MIN_KM)本身一层都不补:世界真值(envBg、传感器背景)与红外页逐位相同(world.test 钉着)。
+   业内叫法:程序纹理抗锯齿的 clamping —— 频率超过采样能分辨的分量换成它的平均值,而不是直接丢掉(Ebert 等《Texturing & Modeling》Peachey 那一章)。
    「测试·红外」的云心在 (0,0),所以噪声坐标就是世界坐标,形状与红外页逐位一致(内圈不受软窗影响)。
 
    ---- 规矩 ----
@@ -36,8 +40,9 @@ function envDustOne(c,x,y,minKm){ // ENV2 一朵云在世界点 (x,y) 的浓度 
   m=(m-D.MASK_LO)/(D.MASK_HI-D.MASK_LO);if(m<=0)return 0;if(m>1)m=1;m=m*m*(3-2*m);
   const wx=px+D.WARP*L0*envGN(px/L0+3.7,py/L0+1.3,S+2),wy=py+D.WARP*L0*envGN(px/L0-2.1,py/L0+5.9,S+3); // 坐标扭曲:丝有流向
   let f=0,a=0.5,L=L0/2,cs=1,sn=0;const c37=Math.cos(0.6458),s37=Math.sin(0.6458);
-  for(let o=0;o<D.OCT;o++,L/=2,a*=D.GAIN){const w=Math.min(1,L/minKm-1);if(w<=0)break; // 丝:脊状分形,每层转 37°、缩一半、振幅留 GAIN
-    const qx=(wx*cs-wy*sn)/L,qy=(wx*sn+wy*cs)/L,r=1-Math.abs(envGN(qx,qy,S+10+o));f+=a*w*r*r*r;
+  for(let o=0;o<D.OCT;o++,L/=2,a*=D.GAIN){const w=Math.min(1,L/minKm-1),wp=Math.min(1,L/D.MIN_KM-1);if(w<=0&&wp<=0)break; // 丝:脊状分形,每层转 37°、缩一半、振幅留 GAIN。ENV2 wp = 物理尺度(MIN_KM)下这一层的权重
+    if(!(w<=0)){const qx=(wx*cs-wy*sn)/L,qy=(wx*sn+wy*cs)/L,r=1-Math.abs(envGN(qx,qy,S+10+o));f+=a*w*r*r*r;}
+    if(wp>w)f+=a*(wp-Math.max(w,0))*D.R3; // ENV2 审查(第四轮)任务 1:只补"物理尺度会算、这一细度截掉 / 淡出"的那部分,按期望 E[r³] 补 ⇒ 各细度的平均浓度 = 物理尺度的;minKm = MIN_KM 时 wp = w 不补,与红外页逐位相同(上一轮连物理尺度截掉的第 6~8 层也补了,世界真值亮了 15%)。上一行写 !(w<=0) 不写 w>0:minKm 没传(w 为 NaN)时照旧返回 NaN(见函数头)
     const c2=cs*c37-sn*s37;sn=cs*s37+sn*c37;cs=c2;}
   const core=Math.min(1,m*f/ENV_DUST_NORM*1.4),rho=Math.sqrt(q)/c.r,e=D.EDGE;
   if(rho<=1-e)return core;

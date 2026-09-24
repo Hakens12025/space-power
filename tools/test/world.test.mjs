@@ -6,7 +6,10 @@
    ============================================================================ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { newEngine, mutantMustFail } from './engine.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import vm from 'node:vm';
+import { newEngine, mutantMustFail, REPO } from './engine.mjs';
 
 const ENV_JS = 'js/world/12-env.js';
 const fresh = () => newEngine({ logicOnly: true });
@@ -225,6 +228,45 @@ test('云:场景里每朵云在圈内 21x21 网格上浓度都在 [0,1]、同一
   assert.deepEqual([...new Set(bad)], []);
   assert.ok(peaks.every(m => m >= 0.3), '各云最大浓度 ' + peaks.map(m => m.toFixed(3)));
 });
+/* ENV2 任务 1(审查问题 5):截掉的细倍频按期望补,期望用的常数 DUST.R3 必须真是噪声脊 (1-|envGN|)^3 的平均值 ——
+   它是按 envGN 的分布数值积分出来的,噪声式子一改它就过时(补的量不再等于截掉的量,拉远拉近整体亮度会漂)。
+   这里现算:8 个种子 x 4 万点(格点间距取无理数,噪声格里的相位均匀),与常数差 < 0.005(种子间标准差约 0.0007,8 个平均约 0.00025) */
+function R3是噪声脊的期望(E) {
+  const est = E.run(`(function(){let s=0,n=0;const a=0.7548776662466927,b=0.5698402909980532;
+    for(let sd=0;sd<8;sd++)for(let i=0;i<200;i++)for(let j=0;j<200;j++){const r=1-Math.abs(envGN(i*a*2.3+j*0.011+sd*17.3,j*b*2.3+i*0.019-sd*9.1,sd*7+3));s+=r*r*r;n++;}
+    return s/n;})()`), R3 = E.run('ENV_CFG.DUST.R3');
+  assert.ok(Math.abs(R3 - est) < 0.005, `DUST.R3 = ${R3} 应等于 E[(1-|envGN|)^3] 的数值积分 ${est.toFixed(4)}(差 < 0.005)`);
+}
+test('云:DUST.R3(截掉的细倍频按它补)等于噪声脊 (1-|envGN|)^3 的平均值,数值积分差 < 0.005', () => R3是噪声脊的期望(fresh()));
+test('反向对照:R3 写成 0.40,上一条必须失败', () =>
+  mutant([['    R3:0.49}', '    R3:0.40}']], R3是噪声脊的期望));
+/* ENV2 审查(第四轮)任务 1:按期望补的只许是"物理尺度会算、视图细度截掉"的那几层 —— 物理尺度(DUST.MIN_KM,envBg 的缺省)下的世界真值
+   必须仍与红外页(demos/地图组/src/irmap_heat.js 的 irmCloudD)逐位相同。上一轮的式子连物理尺度本来就截掉的第 6~8 层也补了:
+   平均浓度与背景亮度都 +15%、原来非 0 的点几乎全部逐位不同,而没有任何测试发现(envBg 还没有调用方,金标准照样全绿)。
+   做法:把红外页源码里 IRM_CLOUD 到 irmCloudD 那一段原样抠出来,放进一个空的 vm 上下文里跑;与「测试·红外」那朵云(云心 (0,0)、种子 20)的
+   envCloudDensity(x, y, MIN_KM) 在内圈(ρ <= 1 - EDGE,不受软窗影响)2 万个随机点上逐位比 */
+function 物理尺度与红外页逐位相同(E) {
+  const src = fs.readFileSync(path.join(REPO, 'demos/地图组/src/irmap_heat.js'), 'utf8');
+  const i0 = src.indexOf('const IRM_CLOUD='), i1 = src.indexOf('function irmCloudLitAt');
+  assert.ok(i0 >= 0 && i1 > i0, '场面前提:红外页源码里找得到 IRM_CLOUD 到 irmCloudD 那一段');
+  const irm = vm.runInNewContext(src.slice(i0, i1) + '\n;({D:irmCloudD,C:IRM_CLOUD})');
+  const g = E.g, c = irEnv(E).world.clouds[0], mk = MK(E), e = E.run('ENV_CFG.DUST.EDGE'), rng = g.envRng(20260924);
+  assert.deepEqual([c.x, c.y, c.seed, irm.C.SEED, irm.C.MIN_KM, mk], [0, 0, 20, 20, 12500, 12500], '场面前提:云心 (0,0)、种子 20,两边物理尺度都是 12500 km');
+  g.envReset({ clouds: [c] });
+  let nz = 0, bad = 0, ex = '';
+  for (let k = 0; k < 20000; k++) {
+    const a = rng() * 2 * Math.PI, d = Math.sqrt(rng()) * (1 - e) * c.r * 0.999, x = Math.cos(a) * d, y = Math.sin(a) * d;
+    const v = g.envCloudDensity(x, y, mk), w = irm.D(x, y, irm.C.MIN_KM);
+    if (w > 0) nz++;
+    if (!Object.is(v, w)) { bad++; if (!ex) ex = `(${x.toFixed(0)},${y.toFixed(0)}) 世界 ${v} 红外页 ${w}`; }
+  }
+  assert.ok(nz > 2000, `场面前提:内圈有足够多的非 0 点(${nz})`);
+  assert.equal(bad, 0, `物理尺度下 envCloudDensity 应与红外页 irmCloudD 逐位相同,不同的点 ${bad}/20000:${ex}`);
+}
+test('云:物理尺度(MIN_KM)下「测试·红外」那朵云的浓度与红外页 irmCloudD 在内圈 2 万个点上逐位相同(按期望补的只是视图细度截掉的倍频,不动世界真值)', () => 物理尺度与红外页逐位相同(fresh()));
+test('反向对照:物理尺度截掉的倍频也按期望补(上一轮的式子),上一条必须失败', () =>
+  mutantP({ 'js/world/13-dust.js': [['wp=Math.min(1,L/D.MIN_KM-1);', 'wp=1;']] }, 物理尺度与红外页逐位相同));
+
 /* 「测试·红外」第一朵云在 21x21 网格上浓度最高的点 */
 function 云心最浓点(E) {
   const g = E.g, c = irEnv(E).world.clouds[0], mk = MK(E); g.envReset({ clouds: [c] });

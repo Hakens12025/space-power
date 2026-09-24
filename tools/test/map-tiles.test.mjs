@@ -27,8 +27,9 @@ function 稳态只贴一次(E) {
   assert.deepEqual([dN(), T.st.samp, T.st.units, T.st.mode], [0, 0, 0, 'steady'], '生产口径的稳态:0 采样、工作量 0');
 }
 test('大地图 ② 稳态:放开预算建完后,每帧主画布只贴 1 次合成缓存(1:1)、离屏 0 笔、0 采样;生产口径同样 0 工作量', () => 稳态只贴一次(page()));
+/* 种坏点随源码改写(2026-09-24 ENV2 任务 3 / 4):稳态的条件多了"矢量的键没变",平移改成后台挪的那张;守的东西不变 —— 镜头停着也不许每帧重拼 */
 test('反向对照:镜头停着也每帧整张重拼合成缓存,上一条必须失败', () =>
-  bite({ [TERJS]: [['    if(cOk&&c.z===z&&c.L===L){', '    if(false){']] }, 稳态只贴一次, /稳态/));
+  bite({ [TERJS]: [["    if(same&&c.vk===vk&&terrCovers(c,cam.x,cam.y,TERR.M/2))mode='steady';", "    if(false)mode='steady';"]] }, 稳态只贴一次, /稳态/));
 
 /* 平移用细颗粒的云(l0 = 6 万 km,这个缩放下约 90px 一团):挪出来的条里一定有云,"条没补"才抓得到 */
 const CF = { x: 0, y: 0, r: 4000000, seed: 21, l0: 60000 };
@@ -43,8 +44,10 @@ function 小平移只改偏移(E) {
 test('大地图 ② 平移(带 0.37px 小数)在余量一半以内:只改贴图偏移,0 采样,仍 1:1 落在整数设备像素上', () => 小平移只改偏移(page()));
 test('反向对照:贴图偏移不取整到设备像素,上一条必须失败', () =>
   bite({ [TERJS]: [['if(c.s===dpr){x=Math.round(x*dpr)/dpr;y=Math.round(y*dpr)/dpr;}', '']] }, 小平移只改偏移, /1:1 落在整数设备像素上/));
-/* 平移过了余量一半 ⇒ 合成缓存 1:1 自拷贝挪过去、露出来的条补上。挪完、建完之后,与"在同一中心重拼的一张"逐点比来源
-   (取样点每 7 设备像素一个;旧判据比的是 alpha 像素,允许 0.1% 的点不同 —— 格子边上取整差一像素的那种) */
+/* 平移过了余量一半 ⇒ 合成缓存挪过去、露出来的条补上。挪完、建完之后,与"在同一中心重拼的一张"逐点比来源
+   (取样点每 7 设备像素一个;旧判据比的是 alpha 像素,允许 0.1% 的点不同 —— 格子边上取整差一像素的那种)。
+   2026-09-24 ENV2 任务 3 / 4 起:挪不再是前台原地自拷贝,而是后台一张从前台 1:1 拷过来(来源图顺着拷的那一笔追到前台当时的来源:deep);
+   合成缓存里多了云的字这一层矢量小贴图,逐点比只比云格那一层(skip)。放开预算时后台当帧拼完就换上,模式仍记 scroll */
 function 挪过去与重拼逐点相同(E) {
   const { g, T, rec, W, settle, frame, one11, oCD } = 地图(E);
   g.envReset({ clouds: [CF] }); settle();
@@ -54,10 +57,12 @@ function 挪过去与重拼逐点相同(E) {
   assert.equal(mode, 'scroll', '过了余量一半:模式应是 scroll(挪,不是整张重拼)');
   assert.ok(one11(fs) && kx > 0, `挪的那一帧仍只贴 1 次 1:1,而且真的挪了(${kx} 设备像素)`);
   settle();
-  const cS = T.comp, bF = g.terrCompNew(cS.L, cS.z, cS.cx, cS.cy);
+  const cS = T.comp, deepSet = new Set([cS.cv, T.spare && T.spare.cv]), spr = new Set(Object.values(E.run('MAP_SPR')).map(s => s.cv));
+  const bF = g.terrCompNew(cS.L, cS.z, cS.cx, cS.cy);
   for (const q of bF.pos) g.terrCompSlot(bF, q, false);
   T.back = null;
-  const ids = new Map(), A = provenance(rec, cS.cv, ids), B = provenance(rec, bF.cv, ids), f = cS.z * cS.s, mk = 2 * T.CELL * Math.pow(2, cS.L);
+  const opt = { deep: c => deepSet.has(c), skip: c => spr.has(c) };
+  const ids = new Map(), A = provenance(rec, cS.cv, ids, opt), B = provenance(rec, bF.cv, ids, opt), f = cS.z * cS.s, mk = 2 * T.CELL * Math.pow(2, cS.L);
   let nPt = 0, nDiff = 0, nStrip = 0, nStripC = 0, deep = 0; const ex = [];
   for (let y = 3; y < cS.ph; y += 7) for (let x = 3; x < cS.pw; x += 7) {
     const a = A.at(x + 0.5, y + 0.5), b = B.at(x + 0.5, y + 0.5); nPt++;
@@ -67,14 +72,17 @@ function 挪过去与重拼逐点相同(E) {
   }
   g.terrFreeComp(bF);
   assert.ok(nStripC >= 100 && nStripC > nStrip * 0.1, `露出来的条里要有云(否则"条没补"量不出来):有云且有来源的点 ${nStripC}/${nStrip}`);
-  assert.equal(deep, 0, `挪完的合成缓存每个点应只有一层来源(自拷贝用 source-over ⇒ 旧像素上叠一层,alpha 翻倍、留重影),实际叠层的点 ${deep}`);
+  assert.equal(deep, 0, `挪完的合成缓存每个点应只有一层来源(叠在没清掉的旧像素上 ⇒ alpha 翻倍、留重影),实际叠层的点 ${deep}`);
   assert.ok(nDiff <= nPt * 0.001, `挪完的与在同一中心重拼的逐点比来源,不同的点应 <= 0.1%:${nDiff}/${nPt} ${ex.join(' ; ')}`);
 }
-test('大地图 ② 平移过了余量一半:1:1 自拷贝挪过去、露出来的条补上,建完后与在同一中心重拼的一张逐点来源相同(替代旧判据逐点比 alpha)', () => 挪过去与重拼逐点相同(page()));
+test('大地图 ② 平移过了余量一半:后台 1:1 拷前台挪过去、露出来的条补上,建完后与在同一中心重拼的一张逐点来源相同(替代旧判据逐点比 alpha)', () => 挪过去与重拼逐点相同(page()));
+/* 种坏点随源码改写(2026-09-24 ENV2 任务 3):露出来的格原来在 terrCompScroll 里按"与露出的条相交"补,现在在 terrBackCopy 里按"整格都在拷来范围里才照抄来源"分;
+   种坏 = 与条相交的格也照抄前台的来源(不补)。原来"自拷贝用 source-over"那条已无对应代码(不再原地自拷贝,后台是清空过的),改种"拷前台时偏移取反"。
+   2026-09-24 审查第四轮:判"整格拷来"之前先把格裁到画布(a0 / b0 / a1 / b1),种坏点跟着换锚,种法不变 */
 test('反向对照:挪过去之后露出来的条不补,上一条必须失败', () =>
-  bite({ [TERJS]: [['    if(!hit)continue;\n    const T=terrBest(c.L,q.ix,q.iy);', '    if(hit||!hit)continue;\n    const T=terrBest(c.L,q.ix,q.iy);']] }, 挪过去与重拼逐点相同, /逐点比来源/));
-test('反向对照:自拷贝用 source-over(第一版),上一条必须失败', () =>
-  bite({ [TERJS]: [["g.setTransform(1,0,0,1,0,0);g.globalCompositeOperation='copy';g.drawImage(c.cv,-kx,-ky);", 'g.setTransform(1,0,0,1,0,0);g.drawImage(c.cv,-kx,-ky);']] }, 挪过去与重拼逐点相同, /只有一层来源|逐点比来源/));
+  bite({ [TERJS]: [['    if(a0>=x0&&b0>=y0&&a1<=x1&&b1<=y1&&o&&o.sv>=0){', '    if(o&&o.sv>=0){']] }, 挪过去与重拼逐点相同, /逐点比来源/));
+test('反向对照:拷前台时偏移取反,上一条必须失败', () =>
+  bite({ [TERJS]: [['  c.g.drawImage(s.cv,-kx,-ky);terrSpendCell();c.cp=true;', '  c.g.drawImage(s.cv,kx,ky);terrSpendCell();c.cp=true;']] }, 挪过去与重拼逐点相同, /只有一层来源|逐点比来源/));
 
 test('大地图 ② 缩放 x1.3(同一级):两帧都 0 采样,换上重拼的那张(swap),两帧都 1:1', () => {
   const E = page(), { g, T, settle, frame, one11, d0, dN } = 地图(E);
@@ -99,8 +107,9 @@ function 双缓冲(E) {
   assert.ok(swapAt >= 1 && T.comp.pos.length > 2, `应拼了几帧才换上(格数 > 2),实际 ${seq.join(',')}`);
 }
 test('大地图 ② 双缓冲:再 x1.1 且每帧只准拼 2 格 ⇒ 拼的那几帧照贴旧的那张(拉伸 1 次),拼完才换上、换上那帧 1:1', () => 双缓冲(page()));
+/* 种坏点随源码改写(2026-09-24 ENV2 任务 3:后台拼格的循环改写了);守的东西不变 —— 后台拼格不看预算 */
 test('反向对照:后台拼合成缓存不看预算(一帧拼完),上一条必须失败', () =>
-  bite({ [TERJS]: [['while(c.k<c.pos.length&&terrCanCell()){terrCompSlot(c,c.pos[c.k],false);c.k++;}', 'while(c.k<c.pos.length){terrCompSlot(c,c.pos[c.k],false);c.k++;}']] }, 双缓冲, /每帧只准拼 2 格|应拼了几帧/));
+  bite({ [TERJS]: [['if(q.sv!==-1)continue;if(!terrCanCell())return;', 'if(q.sv!==-1)continue;']] }, 双缓冲, /每帧只准拼 2 格|应拼了几帧/));
 function 换级按预算采样(E) {
   const { g, T, J, settle, frame, one11, prodCheck } = 地图(E);
   g.envReset({ clouds: [C1] }); settle(); zoomTo(E, Z0 * 1.3); settle();
@@ -132,8 +141,9 @@ function 跳层落点预取(E) {
   assert.ok(one11(fj), '落地那一帧 1:1');
 }
 test('大地图 ② 跳层动画:动画中每帧只准拼 3 格,落地那一帧 0 格也直接换上(落点预取),1:1', () => 跳层落点预取(page()));
+/* 种坏点随源码改写(2026-09-24 ENV2 任务 4:terrBackFill 多了上色器与矢量键两个参数) */
 test('反向对照:动画中不按落点预拼,上一条必须失败', () =>
-  bite({ [TERJS]: [['    terrBackFor(tL,tz,tx,ty);terrBackFill();', '    ;']] }, 跳层落点预取, /落地那一帧/));
+  bite({ [TERJS]: [['    terrBackFor(tL,tz,tx,ty);terrBackFill(painter,vk);', '    ;']] }, 跳层落点预取, /落地那一帧/));
 function LRU上限(E) {
   const { g, T, W, settle, viewHoles } = 地图(E);
   g.envReset({ clouds: [C1] }); E.run(`cam.x=-2.6e6;cam.y=0;cam.zoom=${Z0};`); settle();
@@ -189,8 +199,9 @@ function 屏外与余量里的云不贴(E) {
   assert.equal(mainOf(fm).length, 0, '云只在余量里(视口里没有):主画布 0 次');
 }
 test('大地图 ② 云全在屏外 ⇒ 主画布 0 次;云只在余量里(视口里没有)⇒ 合成缓存里有它,主画布仍 0 次', () => 屏外与余量里的云不贴(page()));
+/* 种坏点随源码改写(2026-09-24 ENV2 任务 4:缓存里有矢量时也要贴,条件多了 c.vn>0);守的东西不变 —— 视口里没有云(也没有矢量)就不贴 */
 test('反向对照:视口里没有云也贴合成缓存,上一条必须失败', () =>
-  bite({ [TERJS]: [['  if(!(c.n&&terrOnScreen()))return;', '  if(!c.n)return;']] }, 屏外与余量里的云不贴, /主画布 0 次/));
+  bite({ [TERJS]: [['  if(!((c.n&&terrOnScreen())||c.vn>0))return;', '  if(!(c.n||c.vn>0))return;']] }, 屏外与余量里的云不贴, /主画布 0 次/));
 function 上色封顶(E) {
   const { g, T, settle, frame, prodCheck } = 地图(E);
   g.envReset({ clouds: [C1] }); settle();
