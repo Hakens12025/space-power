@@ -21,8 +21,8 @@ html,body{margin:0;height:100%;background:#070a0e;overflow:hidden;font:12px "Mic
 #fleet .ttl{color:#8fa0b0;margin-bottom:2px}
 </style></head><body>
 <canvas id="cv"></canvas>
-<div id="hint">左键拖船 · 点船选中 · 拖选中船旁的小圆点定雷达朝向 · 悬停雷达 / 扇区按钮预览自己的暴露 · 悬停光斑 / 回波看读数 · 右键拖动平移 · 滚轮缩放<br>
-淡色底 = 我方雷达看得见的范围 · 点 = 雷达回波(暖色在接近、冷色在远离,旧的变暗) · 青色光斑 = 听到的敌方雷达大概在哪(越糊越大越淡) · 菱形 = 红外看见(青边 = 顺着光斑盯到的)</div>
+<div id="hint">左键拖船 · 点船选中 · 拖选中船旁的小圆点定雷达朝向 · 悬停雷达 / 扇区按钮预览自己的暴露 · 悬停区域 / 回波看读数 · 右键拖动平移 · 滚轮缩放 · 加船:点 +蓝 / +红 再点地图,右键取消<br>
+淡色底 = 我方雷达看得见的范围 · 点 = 雷达回波(暖色在接近、冷色在远离,旧的变暗) · 青色区域 = 听到的敌方雷达在哪(多边形:一定在里面;光斑:大概在哪)· 越小越亮 · 菱形 = 红外看见(青边 = 顺着区域盯到的)</div>
 <div id="perf"></div>
 <div id="fleet"></div>
 <div id="ui">
@@ -34,6 +34,8 @@ html,body{margin:0;height:100%;background:#070a0e;overflow:hidden;font:12px "Mic
   <div class="row"><span class="lab">视角</span><span id="view"><button data-v="blue">蓝方</button><button data-v="red">红方</button><button data-v="god">上帝</button></span>
     <span class="lab">时间</span><span id="speed"><button data-sp="0">暂停</button><button data-sp="1">×1</button><button data-sp="10">×10</button><button data-sp="50">×50</button></span>
     <span class="lab"></span><button id="reset">重来</button></div>
+  <div class="row"><span class="lab">区域</span><span id="zone"><button data-z="poly">多边形</button><button data-z="blob">光斑</button></span>
+    <span class="lab">加船</span><span id="add"><button data-add="blue">+蓝</button><button data-add="red">+红</button></span></div>
 </div>
 <script>
 "use strict";
@@ -68,7 +70,7 @@ function sideCol(side){return side==='blue'?'111,180,255':'255,107,90';}
 const FLEET=Math.max(0,Math.min(500,Math.floor(+new URLSearchParams(location.search).get('fleet')||0)));
 function mkShip(side,name,x,y,vx,vy){return {side:side,name:name,pos:[x,y],vel:[vx,vy],flame:0,rm:'off',w:360,dir:side==='blue'?0:Math.PI,ph:0,swept:new Set()};}
 let ships=[],clock=0,ESMREV=0;
-const S={view:'blue',speed:10,sel:null,hover:null,mx:null,my:null};
+const S={view:'blue',speed:10,sel:null,hover:null,mx:null,my:null,zone:'poly',place:null};   // zone:目标区域画成多边形 / 光斑;place:正在放新船的那一方
 const RET={blue:new Map(),red:new Map()};   // 雷达回波:目标 → {pos, vr, d, t}(扫到那一刻的快照)
 const TRK={blue:new Map(),red:new Map()};   // 听到的敌方雷达:'听者|辐射源' → {L, E, n, t, org, brg, half, band}
 const PING=new Map();                       // 船 → 最近一次被扫到的真实时刻(告警闪一下)
@@ -79,9 +81,15 @@ function scene(){
   const r=rng(7);
   for(let i=0;i<FLEET;i++){ships.push(mkShip('blue','蓝'+(4+i),-600000+r()*800000,(r()*2-1)*1000000,0,0));
     const s=mkShip('red','红'+(4+i),2700000+r()*700000,(r()*2-1)*1000000,-400,0);if(i%5===0){s.rm='on';s.ph=r();}ships.push(s);}
-  clock=0;ESMREV++;IRC.t=-1e9;for(const m of [RET.blue,RET.red,TRK.blue,TRK.red,PING])m.clear();
+  clock=0;ESMREV++;IRC.t=-1e9;PLY.key='';PLY.t=-1e9;for(const m of [RET.blue,RET.red,TRK.blue,TRK.red,PING])m.clear();
   S.sel=ships.find(s=>S.view==='god'||s.side===S.view);
   buildFleet();
+}
+function addShip(side,x,y){ /* 新船:静止、熄火、雷达关;名字接着这一方最大的编号 */
+  let k=0;for(const s of ships)if(s.side===side)k=Math.max(k,+s.name.slice(1)||0);
+  const s=mkShip(side,(side==='blue'?'蓝':'红')+(k+1),x,y,0,0);ships.push(s);
+  if(S.view==='god'||S.view===side)S.sel=s;
+  buildFleet();return s;
 }
 function setRm(s,m){if(m!=='off'&&(m==='blink'||s.rm==='off')){s.ph=0;s.swept.clear();}s.rm=m;}   // 从关到开、或亮一下:从扇区起点扫
 /* 右上角雷达总控:每方"全部"一行 + 每艘一行,任何视角都能开关(不用选中、不用开上帝) */
@@ -160,17 +168,60 @@ function ests(side){ /* 这一方对全部敌方辐射源的估计;听到新的�
 function estQ(e,p){const C=e.C,det=C[0]*C[2]-C[1]*C[1],dx=p[0]-e.m[0],dy=p[1]-e.m[1];return (dx*dx*C[2]-2*dx*dy*C[1]+dy*dy*C[0])/det;}
 function estFade(e){return !e.fresh?0.3:(e.age<RAD.T*1.5?1:Math.max(0.3,1-(e.age-RAD.T*1.5)/ESM.FADE));}
 
+/* ---- 目标区域画成多边形(集员估计 / 航海的"戴帽三角"):每艘听者给一块"方位 ± 半宽、距离带"围成的凸多边形,
+   全部求交集 = 对方一定在里面。内弧取弦、外弧放大 1/cos,两处都只会把区域放大,不会把真值切出去 ---- */
+function lobPoly(k){ /* 一艘听者的那一块,逆时针 */
+  const h=k.half*DEG,b0=k.band?k.band[0]:0,M=8,b1=Math.min(k.band?k.band[1]:RAD.HEAR,RAD.HEAR)/Math.cos(h/M),o=k.org,P=[];   // 远边封在 320 万:再远主瓣也听不见
+  const at=(r,a)=>[o[0]+Math.cos(a)*r,o[1]+Math.sin(a)*r];
+  if(b0>0)P.push(at(b0,k.brg+h),at(b0,k.brg-h));else P.push([o[0],o[1]]);
+  for(let i=0;i<=M;i++)P.push(at(b1,k.brg-h+2*h*i/M));
+  return P;
+}
+function clipPoly(P,Q){ /* 凸多边形 P ∩ Q(都逆时针):Sutherland–Hodgman */
+  let out=P;
+  for(let i=0;i<Q.length&&out.length;i++){const a=Q[i],b=Q[(i+1)%Q.length],inp=out,ex=b[0]-a[0],ey=b[1]-a[1];out=[];
+    for(let j=0;j<inp.length;j++){const p=inp[j],q=inp[(j+1)%inp.length],sp=ex*(p[1]-a[1])-ey*(p[0]-a[0]),sq=ex*(q[1]-a[1])-ey*(q[0]-a[0]);
+      if(sp>=0)out.push(p);
+      if((sp>=0)!==(sq>=0)){const t=sp/(sp-sq);out.push([p[0]+(q[0]-p[0])*t,p[1]+(q[1]-p[1])*t]);}}}
+  return out;
+}
+function polyArea(P){let s=0;for(let i=0;i<P.length;i++){const p=P[i],q=P[(i+1)%P.length];s+=p[0]*q[1]-q[0]*p[1];}return Math.abs(s)/2;}
+function polyIn(P,p){for(let i=0;i<P.length;i++){const a=P[i],b=P[(i+1)%P.length];if((b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0])<0)return false;}return true;}
+function polyHalf(P,O){ /* 从 O 看这块多边形张开多宽(半角,度);O 在里面 = 180 */
+  if(polyIn(P,O.pos))return 180;
+  let cx=0,cy=0;for(const p of P){cx+=p[0]/P.length;cy+=p[1]/P.length;}
+  const a0=Math.atan2(cy-O.pos[1],cx-O.pos[0]);let lo=0,hi=0;
+  for(const p of P){const d=norm(Math.atan2(p[1]-O.pos[1],p[0]-O.pos[0])-a0+Math.PI)-Math.PI;lo=Math.min(lo,d);hi=Math.max(hi,d);}
+  return Math.max(ESM.SMIN,(hi-lo)/2/DEG);
+}
+const PLY={key:'',t:-1e9,list:[]};
+function polys(side){ /* 这一方对全部敌方辐射源的多边形;听到新的一次最多每 100 ms 重算一次 */
+  const now=performance.now(),key=side+'|'+ESMREV+'|'+Math.floor(clock);
+  if(PLY.key===key||(PLY.key.split('|')[0]===side&&now-PLY.t<100))return PLY.list;
+  const by=new Map();for(const k of TRK[side].values()){let a=by.get(k.E);if(!a)by.set(k.E,a=[]);a.push(k);}
+  const L=[];
+  for(const [E,a] of by){let use=a.filter(k=>clock-k.t<=ESM.FADE);const fresh=use.length>0;if(!fresh)use=a;
+    let P=lobPoly(use[0]);for(let i=1;i<use.length&&P.length>=3;i++)P=clipPoly(P,lobPoly(use[i]));
+    if(P.length<3)continue;   // 交集是空的(对方在两次被听到之间挪太远):这一轮不画
+    let n=0,t=-1e9;for(const k of use){n+=k.n;t=Math.max(t,k.t);}
+    L.push({E:E,poly:P,area:polyArea(P),n:n,L:use.length,fresh:fresh,age:clock-t});}
+  PLY.key=key;PLY.t=now;PLY.list=L;return L;
+}
+/* 两种画法共用的接口:引导(D)与悬停都走这里 */
+function zones(side){return S.zone==='poly'?polys(side):ests(side);}
+function zoneIn(z,p){return z.poly?polyIn(z.poly,p):estQ(z,p)<=4;}
+
 /* ---- 红外:能不能看见;落在光斑里的,顺着光斑盯着看(D)---- */
 function cueHalf(e,O){ /* 从 O 看这一团有多宽(半角,度) */
   const dx=e.m[0]-O.pos[0],dy=e.m[1]-O.pos[1],D=Math.hypot(dx,dy)||1,nx=-dy/D,ny=dx/D,C=e.C;
   return Math.max(ESM.SMIN,Math.atan2(2*Math.sqrt(nx*nx*C[0]+2*nx*ny*C[1]+ny*ny*C[2]),D)/DEG);
 }
 function cueTable(side){ /* 每一团 x 每艘我方船的引导增益:与目标无关,先算好 */
-  const L=ests(side).filter(e=>e.fresh),own=ships.filter(s=>s.side===side);
-  return {L:L,own:own,g:L.map(e=>own.map(O=>cueGain(cueHalf(e,O))))};
+  const L=zones(side).filter(e=>e.fresh),own=ships.filter(s=>s.side===side);
+  return {L:L,own:own,g:L.map(e=>own.map(O=>cueGain(e.poly?polyHalf(e.poly,O):cueHalf(e,O))))};
 }
 function irSeesT(tab,T){ /* 返回 null 或 {cued:只有盯着看才看得见} */
-  const inL=[];for(let i=0;i<tab.L.length;i++)if(estQ(tab.L[i],T.pos)<=4)inL.push(i);   // T 落在哪几团的 2σ 里
+  const inL=[];for(let i=0;i<tab.L.length;i++)if(zoneIn(tab.L[i],T.pos))inL.push(i);   // T 落在哪几块区域里(光斑按 2σ)
   const R=irRange(T);let seen=false;
   for(let j=0;j<tab.own.length;j++){const O=tab.own[j],d=Math.hypot(T.pos[0]-O.pos[0],T.pos[1]-O.pos[1]);
     if(d<=R)return {cued:false};
@@ -247,6 +298,12 @@ function drawRf(side){ /* 镜头变了当帧重算;听到新的一次或时间�
   if(!RF.cv)return;
   ctx.imageSmoothingEnabled=true;ctx.drawImage(RF.cv,-RF.CELL/2,-RF.CELL/2,RF.gw*RF.CELL,RF.gh*RF.CELL);
 }
+function drawPolys(side){ /* 每部听到的敌方雷达一块多边形:越小越亮(√面积 100 万 km 最淡,1 万 km 最亮) */
+  for(const z of polys(side)){const s=Math.sqrt(z.area),u=Math.max(0,Math.min(1,Math.log(1e6/s)/Math.log(100))),f=estFade(z);
+    ctx.beginPath();for(let i=0;i<z.poly.length;i++){const p=toScreen(z.poly[i][0],z.poly[i][1]);if(i)ctx.lineTo(p[0],p[1]);else ctx.moveTo(p[0],p[1]);}ctx.closePath();
+    ctx.fillStyle='rgba(84,224,208,'+((0.05+0.3*u)*f).toFixed(3)+')';ctx.fill();
+    ctx.strokeStyle='rgba(84,224,208,'+((0.35+0.5*u)*f).toFixed(3)+')';ctx.lineWidth=1;ctx.stroke();}
+}
 function dopCol(vr,a){ /* 负 = 在接近:暖;正 = 在远离:冷 */
   const t=Math.max(-1,Math.min(1,vr/600)),b=[232,238,244],e=t<0?[255,120,50]:[80,170,255],u=Math.abs(t);
   return 'rgba('+Math.round(b[0]+(e[0]-b[0])*u)+','+Math.round(b[1]+(e[1]-b[1])*u)+','+Math.round(b[2]+(e[2]-b[2])*u)+','+a.toFixed(2)+')';
@@ -287,7 +344,11 @@ function drawHover(side){ /* 读数只在悬停时出:先找 12 像素内的回�
   for(const r of RET[side].values()){const p=toScreen(r.pos[0],r.pos[1]),d=Math.hypot(p[0]-S.mx,p[1]-S.my);if(d<bd){bd=d;br=r;}}
   if(br){const p=toScreen(br.pos[0],br.pos[1]),age=clock-br.t,vr=Math.round(Math.abs(br.vr)),mv=vr<20?'不动':(br.vr<0?'接近 ':'远离 ')+vr+' km/s';
     label(age<RAD.T*1.5?'回波 · '+fmtWan(br.d)+' · '+mv:'旧回波 · '+age.toFixed(0)+' s 前 · 当时 '+mv,p[0]+10,p[1]+14,dopCol(br.vr,1),true);return;}
-  const w=worldAt(S.mx,S.my);let be=null,bq=4;
+  const w=worldAt(S.mx,S.my);
+  if(S.zone==='poly'){let bz=null;for(const z of polys(side))if(polyIn(z.poly,w)&&(!bz||z.area<bz.area))bz=z;
+    if(bz)label(enemyTag(bz.E)+' · '+bz.L+' 艘听到 '+bz.n+' 次 · 区域约 '+fmtWan(Math.sqrt(bz.area))+' 见方'+(bz.fresh?'':' · '+bz.age.toFixed(0)+' s 前'),S.mx+14,S.my-10,'#9ff0e8',true);
+    return;}
+  let be=null,bq=4;
   for(const e of ests(side)){const q=estQ(e,w);if(q<bq){bq=q;be=e;}}
   if(be){const C=be.C,m=(C[0]+C[2])/2,dd=Math.sqrt((C[0]-C[2])*(C[0]-C[2])/4+C[1]*C[1]),sa=Math.sqrt(m+dd);
     label(enemyTag(be.E)+' · '+be.L+' 艘听到 '+be.n+' 次 · 最长误差 ±'+fmtWan(2*sa)+(be.fresh?'':' · '+be.age.toFixed(0)+' s 前'),S.mx+14,S.my-10,'#9ff0e8',true);}
@@ -298,7 +359,7 @@ function draw(){
   const v=S.view;
   if(v==='god'){drawCoverage('blue');drawCoverage('red');for(const s of ships)drawShip(s);}
   else{
-    drawCoverage(v);drawRf(v);drawReturns(v);
+    drawCoverage(v);if(S.zone==='poly')drawPolys(v);else drawRf(v);drawReturns(v);
     for(const [T,r] of irView(v))drawIrContact(T,r.cued);
     for(const s of ships)if(s.side===v)drawShip(s);
   }
@@ -340,6 +401,7 @@ function pickAt(sx,sy){let best=null,bd=12;
   return best;}
 let drag=null,pan=null;
 cv.addEventListener('mousedown',function(e){
+  if(S.place){if(e.button===0){const w=worldAt(e.clientX,e.clientY);addShip(S.place,w[0],w[1]);}S.place=null;cv.style.cursor='';syncUI();return;}   // 放新船:左键放下,右键取消
   if(e.button===2){pan={sx:e.clientX,sy:e.clientY,cx:cam.x,cy:cam.y};return;}
   if(e.button!==0)return;
   const hp=handlePos();if(hp&&Math.hypot(hp[0]-e.clientX,hp[1]-e.clientY)<9){drag={aim:true};return;}
@@ -372,7 +434,7 @@ function mark(sel,attr,val){for(const x of document.querySelectorAll(sel))x.clas
 function syncUI(){
   const s=S.sel;document.getElementById('rowSel').style.display=s?'flex':'none';
   if(s){document.getElementById('selName').textContent=s.name;mark('#selRad [data-rm]','data-rm',s.rm);mark('#selW [data-w]','data-w',s.w);mark('#selFl [data-fl]','data-fl',s.flame);}
-  mark('#view [data-v]','data-v',S.view);mark('#speed [data-sp]','data-sp',S.speed);
+  mark('#view [data-v]','data-v',S.view);mark('#speed [data-sp]','data-sp',S.speed);mark('#zone [data-z]','data-z',S.zone);mark('#add [data-add]','data-add',S.place);
   syncFleet();
   document.getElementById('read').textContent=readout();
 }
@@ -385,6 +447,8 @@ onClick('selFl',function(b){if(S.sel)S.sel.flame=+b.getAttribute('data-fl');});
 onClick('view',function(b){S.view=b.getAttribute('data-v');if(S.sel&&S.view!=='god'&&S.sel.side!==S.view)S.sel=ships.find(s=>s.side===S.view);});
 onClick('speed',function(b){S.speed=+b.getAttribute('data-sp');});
 onClick('reset',function(){scene();});
+onClick('zone',function(b){S.zone=b.getAttribute('data-z');IRC.t=-1e9;});
+onClick('add',function(b){const s=b.getAttribute('data-add');S.place=S.place===s?null:s;cv.style.cursor=S.place?'crosshair':'';});
 for(const id of ['selRad','selW']){const el=document.getElementById(id);
   el.addEventListener('mouseover',function(e){const b=e.target.closest('button');if(b)S.hover={w:b.hasAttribute('data-w')?+b.getAttribute('data-w'):null};});
   el.addEventListener('mouseout',function(){S.hover=null;});}
