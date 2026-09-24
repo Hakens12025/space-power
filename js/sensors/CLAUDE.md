@@ -1,6 +1,6 @@
 # js/sensors
 
-> ⚠ **2026-09-24 起,验证一律用测试套件 `node --test tools/test/`**(`tools/test/engine.mjs` 把真引擎装进 node:vm;慢速的同种子逐位 A/B 在 `node --test tools/test/slow/golden.mjs`)。`tools/verify.sh`、`tools/judge/`、`tools/tk_ab.sh` 已停用,不再作为验收标准(用户拍板);下文凡是提到它们的,都是当时的历史记录。
+> ⚠ **2026-09-24 起,验证一律用测试套件 `node tools/test/run.mjs`(每个测试文件一个进程并行、单条超时、总时限 120 秒;迭代时用 `--changed` 或系统名只跑相关的)**(`tools/test/engine.mjs` 把真引擎装进 node:vm;慢速的同种子逐位 A/B 在 `node --test tools/test/slow/golden.mjs`)。`tools/verify.sh`、`tools/judge/`、`tools/tk_ab.sh` 已停用,不再作为验收标准(用户拍板);下文凡是提到它们的,都是当时的历史记录。
 
 
 感知系统(`js/sensors/`)的历史备忘。总览、跨系统约定与文件地图在仓库根 `CLAUDE.md`。
@@ -119,7 +119,7 @@ TK3c 之后舰船对象只剩物理真值;TK4a 之后弹丸也不再带感知(`v
 | TK4c | 石头的航迹(环境系统生成,见决定) | 无石头时逐位相同;有石头是显式的行为改动 |
 | TK4d | 诱饵 | **不做**(决定) |
 
-每一步都要:verify.sh 全绿、`tools/tk_ab.sh 1a887a8` 全部相同(梯子与画布日志在内;建议带第二个参数 `40`,理由见下一小节"覆盖的洞")。(TK 系列当时的规矩;TK 已完成,2026-09-24 起验证改用 `node --test tools/test/`,逐位 A/B 用 `tools/test/slow/golden.mjs`)
+每一步都要:verify.sh 全绿、`tools/tk_ab.sh 1a887a8` 全部相同(梯子与画布日志在内;建议带第二个参数 `40`,理由见下一小节"覆盖的洞")。(TK 系列当时的规矩;TK 已完成,2026-09-24 起验证改用 `node tools/test/run.mjs`,逐位 A/B 用 `tools/test/slow/golden.mjs`)
 
 ### 同种子逐位 A/B:`tools/tk_ab.sh`(TK0 做的尺子)
 

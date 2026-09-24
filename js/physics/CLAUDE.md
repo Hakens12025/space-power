@@ -1,6 +1,6 @@
 # js/physics
 
-> ⚠ **2026-09-24 起,验证一律用测试套件 `node --test tools/test/`**(`tools/test/engine.mjs` 把真引擎装进 node:vm;慢速的同种子逐位 A/B 在 `node --test tools/test/slow/golden.mjs`)。`tools/verify.sh`、`tools/judge/`、`tools/tk_ab.sh` 已停用,不再作为验收标准(用户拍板);下文凡是提到它们的,都是当时的历史记录。
+> ⚠ **2026-09-24 起,验证一律用测试套件 `node tools/test/run.mjs`(每个测试文件一个进程并行、单条超时、总时限 120 秒;迭代时用 `--changed` 或系统名只跑相关的)**(`tools/test/engine.mjs` 把真引擎装进 node:vm;慢速的同种子逐位 A/B 在 `node --test tools/test/slow/golden.mjs`)。`tools/verify.sh`、`tools/judge/`、`tools/tk_ab.sh` 已停用,不再作为验收标准(用户拍板);下文凡是提到它们的,都是当时的历史记录。
 
 
 运动内核与航线(`js/physics/`)的历史备忘。总览、跨系统约定与文件地图在仓库根 `CLAUDE.md`。
