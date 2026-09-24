@@ -156,7 +156,8 @@
 <script src="js/render/80-viewtier.js?v=20260923"></script><!-- SN6 三级星图:层界与缩放上下限由距离梯子推出;与 80-camera 共用编号(先例:85-settings/85-tutorial) -->
 <script src="js/render/80-camera.js?v=20260923"></script>
 <script src="js/render/81-background.js?v=20260923"></script>
-<script src="js/render/81-env.js?v=20260923"></script><!-- ENV1 环境底图(残骸场 + 太阳方向)。与 81-background 共用编号 81 -->
+<script src="js/render/81-terrain.js?v=20260924"></script><!-- ENV2 地形瓦片服务:云浓度的世界锚定瓦片(粗到细、每帧工作量封顶、LRU)+ 合成缓存(双缓冲、1:1 贴图)。顶层只有 const / function 与一个惰性求和的 let(TERR_DUST_NORM,同 world/13 的 ENV_DUST_NORM),运行期由 81-env 的 mapTileFrame 调;与 81-background 共用编号 81 -->
+<script src="js/render/81-env.js?v=20260924"></script><!-- ENV1 环境底图(残骸场 + 太阳方向)。与 81-background 共用编号 81。ENV2:改成 kind x view 登记表(ENV_VIEWS.map)+ 云 / 影子 / 天体 / 恒星的海图画法,版本号随之换 -->
 <script src="js/render/82-ship-icons.js?v=20260923"></script>
 <script src="js/render/82-rocks.js?v=20260923"></script><!-- TK4c 石头的航迹(第二个循环)。与 82-ship-icons / 82-lod 共用编号 82 -->
 <script src="js/render/82-lod.js?v=20260923"></script><!-- SN6 聚合层:舰 → 舰队框 → 舰队组;与 82-ship-icons 共用编号 -->
