@@ -60,6 +60,8 @@ let scDLit = null, scDSX = null, scDSY = null; // ENV2 观测方看得见光源(
 let scTDir = null, scTBg = null, scTSh = null; // ENV2 目标:这一对跟方向有关(Uint8)/ 云背景 / 在影子里(Uint8),精算步不重算
 let scON = 0, scOCap = 0, scOX = null, scOY = null, scOR2 = null; // ENV2 天体摊平(遮挡的内联副本读)
 let scLitC2 = 1;                   // ENV2 光源禁区的 cos^2 半角
+let scDBaf = null, scDBX = null, scDBY = null; // ENV2 观测方被自己尾焰致盲(Uint8)+ 致盲方向(XY 单位向量)
+let scBafC2 = 1;                   // ENV2 致盲半角的 cos^2
 const scT2 = [0, 0];               // ENV2 sensePrepare 的两格草稿
 let scPairLo = 0;                  // ENV2 最近一次精算的有效亮度
 
@@ -69,6 +71,7 @@ function senseGrowD(n) { // 探测器侧扩容:只在长度不够时整体重建
   scDX = new Float64Array(c); scDY = new Float64Array(c); scDZ = new Float64Array(c);
   scKIR = new Float64Array(c); scKRF = new Float64Array(c); scKACT = new Float64Array(c);
   scDLit = new Uint8Array(c); scDSX = new Float64Array(c); scDSY = new Float64Array(c); // ENV2
+  scDBaf = new Uint8Array(c); scDBX = new Float64Array(c); scDBY = new Float64Array(c); // ENV2
   scDCap = c;
 }
 function senseGrowT(n) { // 目标侧扩容:同上
@@ -142,9 +145,10 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
      误差椭圆没有"水位",时间的账在 23-cov 的 stepCov 里按【真实经过的秒数】取幂结算,
      所以这一段整个删掉 —— dt 参数留着:sensePrepare 的签名是判定与 sensePairAt 的契约面,而且
      将来若要把"这一拍盯了多久"喂进热循环,入口还在。 */
-  /* ENV1 环境(world/12):太阳禁区的方向、残骸场的动目标显示门限。空环境 ⇒ scSunOn=false、scInF 全 0,热循环里那两支一次都不进 */
+  /* ENV1 环境(world/12):太阳禁区的方向、残骸场的动目标显示门限。空环境 ⇒ scDLit 全 0、scInF 全 0,热循环里那两支一次都不进 */
   const fOn = ENV.fields.length > 0, lit = envHasLight(), nb = ENV.bodies.length > 0, cOn = ENV.clouds.length > 0; // ENV2 空环境 ⇒ scDLit / scTDir 全 0、scON = 0
   scLitC2 = ENV.sun ? ENV.sun.c2 : (ENV.stars.length ? ENV.stars[0].c2 : 1);
+  scBafC2 = senseBafC2();
   scMTI2 = fOn ? ENV_CFG.MTI_V * ENV_CFG.MTI_V : 0;
   const B = ENV.bodies; senseGrowO(B.length); scON = B.length;
   for (let b = 0; b < scON; b++) { scOX[b] = B[b].x; scOY[b] = B[b].y; scOR2[b] = B[b].r2; }
@@ -157,6 +161,8 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
     scKIR[i] = a; scKRF[i] = b; scKACT[i] = c;
     const u = lit && !(nb && envInShadow(p)) ? envSunDirAt(p, scT2) : null; // ENV2 与 senseGlareAt 的 oLit 同式
     scDLit[i] = u ? 1 : 0; scDSX[i] = u ? u[0] : 0; scDSY[i] = u ? u[1] : 0;
+    const bu = senseBafDir(d, scT2); // ENV2 与 senseBaffled 同一个方向(信标没有 flame ⇒ 不致盲)
+    scDBaf[i] = bu ? 1 : 0; scDBX[i] = bu ? bu[0] : 0; scDBY[i] = bu ? bu[1] : 0;
     if (a > mIR) mIR = a; if (b > mRF) mRF = b; if (c > mACT) mACT = c; // 三条界各自取【本方最强的那一部设备】,所以界永远不低于任何一对的真实判据
   }
   for (let i = 0; i < nt; i++) {
@@ -199,6 +205,7 @@ function sensePairGrades(j, ti) {
   if (scDLit[j] === 1 && (g & 15) !== 0) { const k = -(dx * scDSX[j] + dy * scDSY[j]); if (k > 0 && k * k > (dx * dx + dy * dy) * scLitC2) g &= 48; } // ENV2 方向按观测方取;影子里的观测方 scDLit=0,不晃
   /* ENV1 动目标显示:目标在残骸场里、径向速度低于门限 ⇒ 照射回波被当成杂波滤掉。与 envMtiBlind 同式 */
   if ((g & 48) !== 0 && scInF[ti] === 1) { const rv = dx * scTVX[ti] + dy * scTVY[ti] + dz * scTVZ[ti]; if (rv * rv < scMTI2 * d2) g &= 15; }
+  if (scDBaf[j] === 1 && (g & 3) !== 0) { const k = -(dx * scDBX[j] + dy * scDBY[j]); if (k > 0 && k * k > (dx * dx + dy * dy) * scBafC2) g &= 60; } // ENV2 自己尾焰致盲只清光学(拍板 A2),与 senseBaffled 同式
   if (g !== 0 && scON > 0) { // ENV2 天体遮挡三条通道一起清;端点在盘里的那个天体不算。与 envOccluded 逐位同式(dx = 观测 - 目标)
     const l2 = dx * dx + dy * dy, ax = scDX[j], ay = scDY[j];
     for (let b = 0; b < scON; b++) {

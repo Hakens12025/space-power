@@ -183,6 +183,27 @@ test('缩圈小窗:换局清常驻(shipSeq 每局归零,不清的话上一局钉
   E.run(`GEOM.pin=${JSON.stringify(A.id)};initFleet();`);
   assert.equal(E.run('GEOM.pin'), null);
 });
+/* ENV2 有光源时,小窗挑"方位最准的通道"(covTheta)与"贴到多近可认"(identDist)的光学那一路按这一对的有效亮度 lo 算:包这两个全局函数,记下光学那一路收到的 lo */
+function 小窗吃到成对亮度(E) {
+  const { g, A, bl, away } = 小窗场面(E);
+  E.run(`selected=[];GEOM.pin=${JSON.stringify(A.id)};GEOM.tick=-1;GEOM.byId={};`); away();
+  g.envReset({ sun: { brg: 90, half: 10 } });   // 光从 +Y 来:A 半侧朝阳、视线偏开太阳 ⇒ lo ≠ 标称
+  const want = {}; let n = 0, m = 0, env = 0;   // n = 有光学的站,m = 有任何一路的站(= 视线条数)
+  for (const w of bl) { const q = g.sensePairAt(w, A); want[w.name] = q.opt > 0 ? q.lo : undefined; if (q.opt || q.lis || q.act) m++; if (q.opt > 0) { n++; if (q.lo !== g.optLum(A)) env++; } }
+  E.run(`(function(){var a=covTheta,b=identDist;globalThis.__lo=[];
+    covTheta=function(ch,d,t,dd,lo){if(ch==='opt')__lo.push(['covTheta',d.name,lo]);return a.apply(this,arguments);};
+    identDist=function(ch,d,t,lo){if(ch==='opt')__lo.push(['identDist',d.name,lo]);return b.apply(this,arguments);};})()`);
+  E.run('render()');
+  const got = Array.from(E.run('__lo'), x => [x[0], x[1], x[2]]), bad = got.filter(x => !Object.is(x[2], want[x[1]])).map(x => `${x[0]}@${x[1]} 收到 ${x[2]},应为 ${want[x[1]]}`);
+  assert.ok(n >= 1 && env === n, `场面前提:光学有档的站 ${n} 个,其中 lo 被光源改过的 ${env} 个(须全部)`);
+  assert.deepEqual(got.map(x => x[0]).sort(), [...Array(n).fill('covTheta'), ...Array(m).fill('identDist')], '光学那一路:covTheta 每个有光学的站一次、identDist 每条视线一次');
+  assert.deepEqual(bad, [], '光学那一路收到的 lo 应逐位等于这一对的有效亮度');
+}
+test('缩圈小窗:有光源时,视线着色(covTheta)与"贴到多近可认"(identDist)的光学那一路收到的都是这一对的有效亮度 lo', () => 小窗吃到成对亮度(page(VIEW64)));
+test('反向对照:视线着色的 covTheta 不传 lo,上一条必须失败', () =>
+  bite({ [GEOMJS]: [["const q = covTheta(ch, w, t, dd, ch === 'opt' ? gg.lo : undefined);", 'const q = covTheta(ch, w, t, dd);']] }, 小窗吃到成对亮度, /有效亮度/, VIEW64));
+test('反向对照:认出距离的 identDist 不传 lo,上上条必须失败', () =>
+  bite({ [GEOMJS]: [["identDist('opt', L.w, t, L.lo > 0 ? L.lo : undefined)", "identDist('opt', L.w, t)"]] }, 小窗吃到成对亮度, /有效亮度/, VIEW64));
 
 /* ============================ FLOW68:舰体大小随缩放变 ============================ */
 /* 律:系数 = LAND x (缩放 / 战术落点的缩放)^A,钳在 [MARK, MAX];全场同一个数(不读任何一艘船的字段,所以不泄漏情报) */

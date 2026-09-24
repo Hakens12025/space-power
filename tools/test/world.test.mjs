@@ -170,7 +170,7 @@ test('解析:碎石带解析出的 sun 与 fields 与 ENV1 的算法逐字段相
   const E = fresh(), W = E.g.matchWorld(E.run('TEST_ENVS[matchRocksIdx()].world'), 0.25); E.g.envReset(W);   // ENV2 太阳方位 'rand' 先由对局层掷成具体数
   const ws = W.sun, a = ws.brg * Math.PI / 180, h = (isFinite(ws.half) ? ws.half : E.run('ENV_CFG.SUN_HALF_DEG')) * Math.PI / 180, c = Math.cos(h);
   const sun1 = { brg: ws.brg, half: h * 180 / Math.PI, ux: Math.cos(a), uy: Math.sin(a), c2: c * c };
-  const fld1 = Array.from(W.fields || [], f => ({ x: f.x, y: f.y, r: f.r, r2: f.r * f.r, n: f.n | 0, seed: f.seed | 0, smin: isFinite(f.smin) ? f.smin : 0.35, smax: isFinite(f.smax) ? f.smax : 1.1 }));
+  const fld1 = Array.from(W.fields || [], f => ({ x: f.x, y: f.y, r: f.r, r2: f.r * f.r, n: f.n | 0, seed: f.seed | 0, smin: isFinite(f.smin) ? f.smin : 0.35, smax: isFinite(f.smax) ? f.smax : 2.0 }));   // ENV2 缺省 smax 1.1 → 2.0(拍板 A4),内联的参照式跟着改
   assert.ok(fld1.length > 0, '碎石带没有残骸场');
   assert.deepEqual(E.val('ENV.sun'), sun1, 'sun');
   assert.deepEqual(E.val('ENV.fields'), fld1, 'fields');

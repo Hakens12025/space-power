@@ -403,6 +403,38 @@ test('弹丸同一套环境:燃烧的红方导弹空环境下我方光学看得�
   g.envReset({ sun: { brg: Math.atan2(P.pos[1], P.pos[0]) * 180 / Math.PI, half: 10 } });
   assert.deepEqual([seen, g.projVisibleTo(P, 'blue')], [true, false], '[空环境看得见, 太阳正对看得见]');
 });
+/* ENV2 弹丸的光学门槛 = senseLoOf(亮度, 0, 0, 杂散光, 云背景):导弹摆在"不打折看得见、打折之后看不见"的正中间(观测方静默,照射那一路为假) */
+function 弹丸摆在打折量程中间(E, q) {
+  const g = E.g, [B, R] = 互照(E); g.setEmit(B, 'silent'); g.setEmit(R, 'silent'); g.tkOnly([B, R]);
+  const r0 = Math.sqrt(E.run('SENS.PROJ.mslHot.lum') * g.senseKIR(B)), r1 = r0 / Math.pow(1 + q / E.run('SENS.BG_G0'), 0.25);
+  assert.ok(r1 < 0.9 * r0, `打折之后的量程 ${r1} 应明显小于 ${r0}(否则没测到东西)`);
+  return { B, R, d: (r0 + r1) / 2 };
+}
+function 弹丸吃杂散光(E) {
+  const g = E.g, a = 20 * Math.PI / 180, u = [Math.cos(a), Math.sin(a), 0];
+  g.envReset({ sun: { brg: 35, half: 10 } });   // 太阳偏开视线 15°:在禁区外,只剩杂散光
+  const { B, R, d } = 弹丸摆在打折量程中间(E, g.senseGlareAt([0, 0, 0], u));   // 互照把观测方摆在原点
+  const P = E.run(`({type:'missile',fuel:10,done:false,pos:[${d * u[0]},${d * u[1]},0],vel:[0,0,0]})`); P.shooter = R;
+  const blind = g.envSunBlind(B.pos, P.pos), sun = g.projVisibleTo(P, 'blue');
+  g.envReset(null); const none = g.projVisibleTo(P, 'blue');
+  assert.equal(blind, false, '场面前提:视线不在太阳禁区里');
+  assert.deepEqual({ 没有太阳: none, 太阳偏开15度: sun }, { 没有太阳: true, 太阳偏开15度: false }, '燃烧的导弹');
+}
+test('ENV2 弹丸吃杂散光:太阳偏开视线 15°(禁区外)时,不打折看得见的导弹被杂散光压到看不见', () => 弹丸吃杂散光(logic()));
+test('反向对照:弹丸的光学不算杂散光,上一条必须失败', () =>
+  mutant({ [PERCEP]: [['lum = senseLoOf(lum, 0, 0, senseGlareAt(d.pos, pos), bg || 0);', 'lum = senseLoOf(lum, 0, 0, 0, bg || 0);']] }, 弹丸吃杂散光));
+function 弹丸吃云背景(E) {
+  const g = E.g; g.envReset({ clouds: [{ x: 0, y: 0, r: 4000000, seed: 20 }], sun: { brg: 180, half: 10 } });   // 云要被照亮背景才够压;太阳在观测方背后(视线朝 +X),杂散光近乎 0
+  const Q = 云里一点(E, 0.6), { B, R, d } = 弹丸摆在打折量程中间(E, g.envBg(Q, 'opt') + g.senseGlareAt([0, 0, 0], [1, 0, 0]));
+  B.pos = [Q[0] - d, Q[1], 0];
+  const P = E.run(`({type:'missile',fuel:10,done:false,pos:[${Q[0]},${Q[1]},0],vel:[0,0,0]})`); P.shooter = R;
+  const cloud = g.projVisibleTo(P, 'blue');
+  g.envReset(null); const none = g.projVisibleTo(P, 'blue');
+  assert.deepEqual({ 没有云: none, 在云里: cloud }, { 没有云: true, 在云里: false }, '燃烧的导弹');
+}
+test('ENV2 弹丸吃云背景:没有云时看得见的导弹,摆进被照亮的浓云(太阳在观测方背后)就被背景压到看不见', () => 弹丸吃云背景(logic()));
+test('反向对照:projVisibleTo 的云背景恒给 0,上一条必须失败', () =>
+  mutant({ 'js/sensors/21-detect.js': [["bg=ENV.clouds.length?envBg(p.pos,'opt'):0;", 'bg=0;']] }, 弹丸吃云背景));
 
 /* ============================ ENV2_SENSE:世界派生的效应进探测(光学 / 红外通道) ============================
    成对有效亮度 lo = (L + 晒热) / √(1 + (杂散光 + 云背景)/BG_G0);热循环只放上界与待定位位(bit6),精算在 senseResolve。 */
@@ -541,10 +573,10 @@ test('反向对照:杂散光 MIX 取 0.5,上一条必须失败', () =>
   mutant({ 'js/sensors/20-signature.js': [['MIX: 0.875 }', 'MIX: 0.5 }']] }, 杂散光律));
 
 /* 找一个云够浓的点当目标位置(测试·红外那朵云) */
-function 云里一点(E) {
+function 云里一点(E, min = 0.2) {
   const g = E.g, MK = E.run('ENV_CFG.DUST.MIN_KM');
-  for (let i = -40; i <= 40; i++) for (let j = -40; j <= 40; j++) { const x = i * 50000, y = j * 50000; if (g.envCloudDensity(x, y, MK) >= 0.2) return [x, y, 0]; }
-  assert.fail('云里没有浓度 >= 0.2 的点');
+  for (let i = -40; i <= 40; i++) for (let j = -40; j <= 40; j++) { const x = i * 50000, y = j * 50000; if (g.envCloudDensity(x, y, MK) >= min) return [x, y, 0]; }
+  assert.fail(`云里没有浓度 >= ${min} 的点`);
 }
 function 云背景律(E) {
   const g = E.g, [B, R] = duo(E, 'DD', 'DD'), C = { x: 0, y: 0, r: 4000000, seed: 20 }, MK = E.run('ENV_CFG.DUST.MIN_KM');
@@ -682,3 +714,98 @@ function 椭圆吃到成对亮度(E) {
 test('ENV2 椭圆吃到成对亮度:有光源时光学量测的横向误差与信噪比按这一对的 lo 算(不是标称值)', () => 椭圆吃到成对亮度(logic()));
 test('反向对照:covShape 的角精度不传 lo,上一条必须失败', () =>
   mutant({ [COVJS]: [['const th = covTheta(ch, d, t, dd, lo);', 'const th = covTheta(ch, d, t, dd);']] }, 椭圆吃到成对亮度));
+
+/* ============================ ENV2 ④b:自己的尾焰致盲(baffles) ============================
+   点着火的观测方顺着喷口看出去、半角 SENS.BAF_DEG 以内光学看不见:主推瞎船尾、反推瞎船头;只清光学(拍板 A2)。 */
+const PAIRJS = 'js/sensors/25-optpair.js';
+/* 观测方的朝向 = 从它指向目标的方位转 rot 度(XY 平面) */
+const aimAt = (B, R, rot) => { const a = Math.atan2(R.pos[1] - B.pos[1], R.pos[0] - B.pos[0]) + rot * Math.PI / 180; B.facing = [Math.cos(a), Math.sin(a), 0]; };
+function 致盲看哪边(E) {
+  const g = E.g, [B, R] = 互照(E), base = g.sensePairAt(B, R);
+  assert.ok(base.opt > 0 && base.lis > 0 && base.act > 0, `熄火时三路都应有信号,实际 ${[base.opt, base.lis, base.act]}`);
+  const read = (flame, side, rot, facing) => {
+    B.flame = flame; B.sideFlame = side; aimAt(B, R, rot); if (facing !== undefined) B.facing = facing;
+    const q = g.sensePairAt(B, R); return { 光学: q.opt, 静听: q.lis, 照射: q.act, 函数版: g.senseBaffled(B, R.pos) };
+  };
+  const on = { 光学: 0, 静听: base.lis, 照射: base.act, 函数版: true }, off = { 光学: base.opt, 静听: base.lis, 照射: base.act, 函数版: false };
+  assert.deepEqual({
+    主推_目标在船尾: read(1, 0, 180), 主推_目标在船头: read(1, 0, 0), 反推_目标在船头: read(-1, 0, 0), 反推_目标在船尾: read(-1, 0, 180),
+    熄火_目标在船尾: read(0, 0, 180), 侧推_目标在船尾: read(0, 1, 180), 主推_没有朝向: read(1, 0, 180, null), 主推_朝向竖直: read(1, 0, 180, [0, 0, 1]),
+  }, {
+    主推_目标在船尾: on, 主推_目标在船头: off, 反推_目标在船头: on, 反推_目标在船尾: off,
+    熄火_目标在船尾: off, 侧推_目标在船尾: off, 主推_没有朝向: off, 主推_朝向竖直: off,
+  }, '致盲的只有光学(静听、照射原样),热循环与 senseBaffled 同一个答案');
+}
+test('ENV2 致盲:主推瞎船尾不瞎船头、反推瞎船头不瞎船尾;熄火 / 侧推 / 没有朝向 / 朝向竖直都不瞎;只清光学,静听与照射原样', () => 致盲看哪边(logic()));
+test('反向对照:致盲把静听一起清掉,上一条必须失败', () =>
+  mutant({ [PERCEP]: [['g &= 60; } // ENV2 自己尾焰致盲', 'g &= 48; } // ENV2 自己尾焰致盲']] }, 致盲看哪边));
+test('反向对照:反推也瞎船尾,上上条必须失败', () =>
+  mutant({ [PAIRJS]: [['const k = (f > 0 ? -1 : 1) / l;', 'const k = -1 / l;']] }, 致盲看哪边));
+test('反向对照:侧推也致盲,上上上条必须失败', () =>
+  mutant({ [PAIRJS]: [['const f = s.flame, fc = s.facing; if (!f || !fc) return null;', 'const f = s.flame || s.sideFlame, fc = s.facing; if (!f || !fc) return null;']] }, 致盲看哪边));
+
+function 致盲半角两侧(E) {
+  const g = E.g, [B, R] = 互照(E), H = E.run('SENS.BAF_DEG'), e = 0.01;
+  B.flame = 1;
+  const at = off => { aimAt(B, R, 180 + off); return [g.sensePairAt(B, R).opt === 0, g.senseBaffled(B, R.pos)]; };   // 船尾偏开视线 off 度
+  assert.deepEqual({ 里: at(H - e), 里_另一侧: at(e - H), 外: at(H + e), 外_另一侧: at(-H - e) },
+    { 里: [true, true], 里_另一侧: [true, true], 外: [false, false], 外_另一侧: [false, false] }, `船尾偏开视线 ${H}±${e} 度:[热循环清了光学, senseBaffled]`);
+}
+test('ENV2 致盲半角:船尾偏开视线 BAF_DEG - 0.01° 瞎、+ 0.01° 不瞎(两侧对称,热循环与 senseBaffled 相同)', () => 致盲半角两侧(logic()));
+test('反向对照:致盲半角的 cos² 写成 cos,上一条必须失败', () =>
+  mutant({ [PAIRJS]: [['const c = Math.cos(SENS.BAF_DEG * Math.PI / 180); return c * c;', 'const c = Math.cos(SENS.BAF_DEG * Math.PI / 180); return c;']] }, 致盲半角两侧));
+
+/* ENV2 离面版:目标抬高、朝向抬头,边界仍按 XY 夹角 —— 钉住"只看 XY",平面版与随机对都测不到这一半 */
+function 致盲半角两侧_离面(E) {
+  const g = E.g, [B, R] = 互照(E), H = E.run('SENS.BAF_DEG'), e = 0.01;
+  B.flame = 1; R.pos[2] = 0.5 * Math.hypot(R.pos[0], R.pos[1]);
+  const at = off => { aimAt(B, R, 180 + off); B.facing[2] = 0.6; return [g.sensePairAt(B, R).opt === 0, g.senseBaffled(B, R.pos)]; };
+  assert.deepEqual({ 里: at(H - e), 里_另一侧: at(e - H), 外: at(H + e), 外_另一侧: at(-H - e) },
+    { 里: [true, true], 里_另一侧: [true, true], 外: [false, false], 外_另一侧: [false, false] }, `离面:船尾偏开视线 ${H}±${e} 度:[热循环清了光学, senseBaffled]`);
+}
+test('ENV2 致盲半角离面:目标抬高、朝向抬头时边界仍按 XY 夹角(热循环与 senseBaffled 都只看 XY)', () => 致盲半角两侧_离面(logic()));
+test('反向对照:热循环致盲的视线长度带上 dz,上一条必须失败', () =>
+  mutant({ [PERCEP]: [['k * k > (dx * dx + dy * dy) * scBafC2) g &= 60;', 'k * k > (dx * dx + dy * dy + dz * dz) * scBafC2) g &= 60;']] }, 致盲半角两侧_离面));
+test('反向对照:senseBafDir 按三维长度归一,上上条必须失败', () =>
+  mutant({ [PAIRJS]: [['const l = Math.hypot(fc[0], fc[1]);', 'const l = Math.hypot(fc[0], fc[1], fc[2]);']] }, 致盲半角两侧_离面));
+
+/* 300 个随机对:一半朝向随机、一半把喷口对着视线 ±1.5 倍半角;flame 取 -1 / 0 / 1,侧推随机,朝向带竖直分量 */
+function 致盲随机对一致(E) {
+  const g = E.g, rnd = g.envRng(20260925), [B, R] = 互照(E), vr = g.visRangeOf(R), H = E.run('SENS.BAF_DEG') * Math.PI / 180;
+  const bad = []; let baf = 0, clear = 0;
+  for (let i = 0; i < 300; i++) {
+    B.pos = [(rnd() * 2 - 1) * 4e5, (rnd() * 2 - 1) * 4e5, (rnd() * 2 - 1) * 2e4];
+    const a = rnd() * 2 * Math.PI, d = vr * (0.05 + 0.4 * rnd());
+    R.pos = [B.pos[0] + d * Math.cos(a), B.pos[1] + d * Math.sin(a), B.pos[2] + (rnd() * 2 - 1) * 0.1 * d];
+    const f = [-1, 0, 1][Math.floor(rnd() * 3)], fa = rnd() < 0.5 ? rnd() * 2 * Math.PI : a + (f > 0 ? Math.PI : 0) + (rnd() * 2 - 1) * 1.5 * H;
+    B.facing = [Math.cos(fa), Math.sin(fa), (rnd() * 2 - 1) * 0.3];
+    B.flame = 0; B.sideFlame = 0; const g0 = g.sensePairAt(B, R).opt;
+    B.flame = f; B.sideFlame = rnd() < 0.3 ? 1 : 0;
+    const hot = g.sensePairAt(B, R).opt === 0, fn = g.senseBaffled(B, R.pos);
+    if (g0 === 0) bad.push(`#${i} 熄火时就没有光学(场面错)`);
+    else if (hot !== fn) bad.push(`#${i} 热循环 ${hot} / senseBaffled ${fn}`);
+    if (fn) baf++; else clear++;
+  }
+  assert.deepEqual(bad.slice(0, 5), [], `300 个随机对里热循环与 senseBaffled 不一致的(前 5 个,共 ${bad.length} 个)`);
+  assert.ok(baf >= 40 && clear >= 100, `致盲 ${baf} 对 / 不致盲 ${clear} 对(须 >= 40 / >= 100)`);
+}
+test('ENV2 致盲:300 个随机对(flame -1 / 0 / 1、朝向随机或贴着致盲锥)上热循环清光学与 senseBaffled 逐对一致', () => 致盲随机对一致(logic()));
+test('反向对照:热循环致盲那一行的视线方向写反,上一条必须失败', () =>
+  mutant({ [PERCEP]: [['const k = -(dx * scDBX[j] + dy * scDBY[j]);', 'const k = (dx * scDBX[j] + dy * scDBY[j]);']] }, 致盲随机对一致));
+test('反向对照:热循环致盲用光源禁区的半角,上上条必须失败', () =>
+  mutant({ [PERCEP]: [['k * k > (dx * dx + dy * dy) * scBafC2) g &= 60;', 'k * k > (dx * dx + dy * dy) * scLitC2) g &= 60;']] }, 致盲随机对一致));
+
+/* 生产路径(physics/30):带速度开向红舰、在它跟前停下。减速段机头朝目的地、前两舱反推 ⇒ flame = -1,致盲的正是船头那一侧 */
+function 刹车船头朝敌(E) {
+  const g = E.g, [B, R] = duo(E, 'DD', 'DD'), vr = g.visRangeOf(R);
+  R.pos = [0.3 * vr, 0, 0]; B.vel = [800, 0, 0]; B.orders = [{ pos: [0.1 * vr, 0, 0], type: 'stop' }];
+  let n = 0; while (!(B.flame < 0) && n < 3000) { g.stepShipsMotion(0.02); n++; }
+  const v = [R.pos[0] - B.pos[0], R.pos[1] - B.pos[1]], cosNose = (B.facing[0] * v[0] + B.facing[1] * v[1]) / Math.hypot(v[0], v[1]) / Math.hypot(B.facing[0], B.facing[1]);
+  const brake = g.sensePairAt(B, R).opt; B.flame = 0; const coast = g.sensePairAt(B, R).opt;
+  assert.ok(n < 3000, '没跑出反推(刹车段)');
+  assert.ok(cosNose > Math.cos(E.run('SENS.BAF_DEG') * Math.PI / 180), `刹车时船头与看红舰的视线夹角 ${Math.acos(cosNose) * 180 / Math.PI} 度,应在致盲半角以内`);
+  assert.deepEqual({ 刹车时光学: brake, 同一处熄火时有光学: coast > 0 }, { 刹车时光学: 0, 同一处熄火时有光学: true });
+}
+test('ENV2 刹车段:开到红舰跟前停下,刹车那段船头朝着红舰、反推把船头那侧致盲 ⇒ 光学丢了 —— 这是预期(用户拍板 A2:主推、反推都致盲)', () => 刹车船头朝敌(logic()));
+test('反向对照:只有主推致盲(反推不瞎),上一条必须失败', () =>
+  mutant({ [PAIRJS]: [['const f = s.flame, fc = s.facing; if (!f || !fc) return null;', 'const f = s.flame, fc = s.facing; if (!(f > 0) || !fc) return null;']] }, 刹车船头朝敌));
