@@ -1,6 +1,6 @@
 # todo-plan.md —— 统一待办计划
 
-> ⚠ **2026-09-24 起,验证一律用测试套件 `node tools/test/run.mjs`(每个测试文件一个进程并行、单条超时、总时限 120 秒;迭代时用 `--changed` 或系统名只跑相关的)**(`tools/test/engine.mjs` 把真引擎装进 node:vm;慢速的同种子逐位 A/B 在 `node --test tools/test/slow/golden.mjs`)。`tools/verify.sh`、`tools/judge/`、`tools/tk_ab.sh` 已停用,不再作为验收标准(用户拍板);下文凡是提到它们的,都是当时的历史记录。
+> ⚠ **2026-09-25 起没有测试套件**(用户拍板删除 `tools/test/` 与全部测试要求):改完由用户打开页面看;每帧耗时用 node 探针(`tools/perf/`)量。下文凡是提到测试、判据、金标准、verify.sh 的,都是当时的历史记录。
 
 
 > 建于 2026-09-19。这份文件收**还没做、要做、或者等拍板**的事,按系统分节。已经做完的事不放这儿(它们在各自的 `CLAUDE.md` 备忘、提交记录、或演示页的注释里)。

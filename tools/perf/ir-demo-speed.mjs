@@ -1,9 +1,9 @@
 /* ============================================================================
-   tools/test/perf/ir-demo-speed.mjs —— 性能探针:红外效果独立页(demos/地图组/红外效果.html)每帧的 JS 计算要多久。只输出数、不判定、不在任何默认运行里。
+   tools/perf/ir-demo-speed.mjs —— 性能探针:红外效果独立页(demos/地图组/红外效果.html)每帧的 JS 计算要多久。只输出数、不判定、不在任何默认运行里。
    ----------------------------------------------------------------------------
-     node tools/test/perf/ir-demo-speed.mjs                       全部各项
-     node tools/test/perf/ir-demo-speed.mjs 静止 平移              只跑这几项
-     node tools/test/perf/ir-demo-speed.mjs --page=某.html         量另一份页面(比如改动前的拷贝,做前后对照)
+     node tools/perf/ir-demo-speed.mjs                       全部各项
+     node tools/perf/ir-demo-speed.mjs 静止 平移              只跑这几项
+     node tools/perf/ir-demo-speed.mjs --page=某.html         量另一份页面(比如改动前的拷贝,做前后对照)
 
    做法:把页里唯一的 <script> 抠出来装进 node:vm;DOM / 画布是最小的桩(画布上下文的方法全是空操作,createImageData / getImageData
    给真的 Uint8ClampedArray),所以量到的只是页里的 JS 计算(场、云、上色、等值线),不含浏览器的光栅化与合成。
@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import vm from 'node:vm';
 
-const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const WARM = 90, N = 240;
 const PAN = 'cam.x-=2/cam.zoom;cam.y-=1/cam.zoom';                       // 右键拖:每帧 (2, 1) px
 const DRAG = 'ships[3].pos[0]+=2/cam.zoom;ships[3].pos[1]+=1/cam.zoom';  // 左键拖红·巡洋:每帧 (2, 1) px

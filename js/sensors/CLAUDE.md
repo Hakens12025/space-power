@@ -12,7 +12,7 @@
 - 两种看法:光学 / 红外(纯被动,与探测方无关)与雷达(一部设备两种模式:静听 / 照射)。被看方字段 `size` / `stealth`(只乘雷达),探测方字段 `emit` / `recv`。
 - `emitMode ∈ {silent, paint, jam}`,只经 `setEmit` 写(裸赋值是 bug);`silent` 的射频响度恒 0;`jam` 自己拿不到火控级。
 - 接触 = 位置估计 + 误差椭圆;`lit` 0..3 是椭圆落在哪道门,只表示航迹质量。身份只问 `contactIdn`,三条来路:光学贴近(`optIdent`)、照射(`radarIdent`)、静听对方雷达(`lisIdent`,带距离门)。
-- 数值唯一入口是距离梯子 `LAD`:模型常数由 `ladApply()` 反解,不许在 `SENS` / `COV` 里手填;改梯子先改演示页 `demos/sensors/态势感知V3.html`,再原样落引擎(static 测试逐位比两边)。
+- 数值唯一入口是距离梯子 `LAD`:模型常数由 `ladApply()` 反解,不许在 `SENS` / `COV` 里手填。
 
 ## 规矩
 - 位置只问 `contactPos`:实况要 `fix` 才给估计位置,幽灵 / 陈旧给外推,缺记录给 null —— 任何地方不许拿真值兜底。判据问"有没有坐标",不问"等级到几"。
@@ -20,10 +20,9 @@
 - 航迹表:键是源对象不是 id;不重赋值、不清空;枚举只走 `trkEach` / `trkList`(顺序 = `ships[]` 再 `rocks[]`);造船时 `trkAdopt` 两边建航迹,读永远不建;只有 sensors/21、24 写。`lit` 原样存、`cov` 按引用、`cov` 上不加键。
 - 存在 ≠ 知道:`if(trkOf(...))` 当"知道"用是泄漏;知道 = `trkState(tk)!=='none'`。"自己这一方"在查询那一刻判。
 - 自动化挑目标一律问 `trkPid`(身份至少疑似且是船,Weapons Tight):自动索敌、网分配、导弹重选 / 复锁、红方集火;"还有没有可分配的"与分配器同口径。显示、接触降速、玩家的火控序列问 `trkFoe`。
-- 热循环(`sensePairGrades` / `senseScanTarget`)里不许除法、开方、Math 调用、分配(static 测试查);这些都放 `sensePrepare`。剪枝上界必须含照射那一路(否则冷目标主炮静默哑火)。
+- 热循环(`sensePairGrades` / `senseScanTarget`)里不许除法、开方、Math 调用、分配;这些都放 `sensePrepare`。剪枝上界必须含照射那一路(否则冷目标主炮静默哑火)。
 - 热循环里的内联副本(太阳禁区、MTI、天体遮挡、尾焰致盲)与函数版(`envSunBlind` / `envOccluded` / `senseBaffled` 等)必须同式;改一边就改另一边。
 - 单点谓词与热循环共用缓冲,不许在扫描中途调。`detectLoop` 要收真实经过的模拟秒数。
 - ENV2 的 `lo` 在 visRange / covTheta / identDist 那条链上是可选参数,不传 = 标称值。
 - 石头:`kind:'rock'`、`side:'neutral'`,只有光学贴近才认得出;确认是石头的航迹自动化当场解锁,火控门拒绝。
 - 已知的真值口子(没修):目标速度、高度 Z、`sigClassLabel` 读真 `size`、击沉按真值 `.dead` 过滤。
-- static 测试的墓碑表禁止旧感知字段名出现在 js/ 里(有的连注释也算);注释里不要点被删符号的名字。
