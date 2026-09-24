@@ -1,5 +1,8 @@
 # js/render
 
+> ⚠ **2026-09-24 起,验证一律用测试套件 `node --test tools/test/`**(`tools/test/engine.mjs` 把真引擎装进 node:vm;慢速的同种子逐位 A/B 在 `node --test tools/test/slow/golden.mjs`)。`tools/verify.sh`、`tools/judge/`、`tools/tk_ab.sh` 已停用,不再作为验收标准(用户拍板);下文凡是提到它们的,都是当时的历史记录。
+
+
 呈现层(`js/render/`)的历史备忘。总览、跨系统约定与文件地图在仓库根 `CLAUDE.md`。
 
 > **TK3c(2026-09-23)起舰船对象上没有感知字段了。** 下文历史记录里写的 `covB` / `litBlue` / `seenBlue*`,读作「蓝方航迹表里对这艘船的那条航迹」的 `cov` / `lit` / `lastT·lastPos·lastVel`(`trkOf('blue',s)`;画面该问的是门面 `contactState` / `contactPos` / `litOf`)。对照表与规矩在 `js/sensors/CLAUDE.md` 的 TK 一节。

@@ -1,5 +1,8 @@
 # js/scenario + js/bots + core/06 —— 对局(垂直切片)备忘
 
+> ⚠ **2026-09-24 起,验证一律用测试套件 `node --test tools/test/`**(`tools/test/engine.mjs` 把真引擎装进 node:vm;慢速的同种子逐位 A/B 在 `node --test tools/test/slow/golden.mjs`)。`tools/verify.sh`、`tools/judge/`、`tools/tk_ab.sh` 已停用,不再作为验收标准(用户拍板);下文凡是提到它们的,都是当时的历史记录。
+
+
 这一份是**踩坑记录**,不是文档。四段是同一轮做的(2026-09-21),标记分别是 `AI1` / `FX1` / `MT1` / `TC1`。
 
 用户问「怎么做才能让这个游戏好玩」。标准答案是 Sid Meier 那句(游戏是一系列有趣的决定)+ MDA 框架(机制 / 动态 / 体验):
