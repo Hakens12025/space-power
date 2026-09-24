@@ -253,8 +253,6 @@ function irmT(v){ /* 两头对称的对数色标:t = sign(v) x ln(1 + |v|/V0) / 
   if(!(v!==0)||!isFinite(v))return 0;
   const t=Math.sign(v)*Math.log(1+Math.abs(v)/IRM.V0)/Math.log(1+IRM.VMAX/IRM.V0);return t>1?1:(t<IRM_T0?IRM_T0:t);}
 function irmIdx(v){return Math.round((irmT(v)-IRM_T0)/(1-IRM_T0)*255);}
-const IRM_FRZ=new URLSearchParams(location.search).has('selftest');   // ENV2 M10:?selftest 下视图物理的产品一律冻结,谁原地改就当场抛
-function irmProd(o){return IRM_FRZ?Object.freeze(o):o;}
 let irmRef=null;
 function irmRefGet(){ /* 刻度的参照:一艘熄火静默的 DD,在引擎给它的发现距离上的模糊宽度 */
   if(irmRef)return irmRef;
@@ -273,7 +271,7 @@ function irmHill(t,obs){
   }
   if(!best)return null;
   const ref=irmRefGet(),k=ref.sig/best.blur;
-  return irmProd({peak:best.snr*k*k,sig:best.blur,o:best.o});
+  return {peak:best.snr*k*k,sig:best.blur,o:best.o};
 }
 /* ---- 宽的山往底红收(用户:「宽的山往底红收」)----
    业内对应:VSUP(value-suppressing uncertainty palette,Correll、Moritz、Heer,CHI 2018):不确定度越大,色标越往一个中性色收拢,
@@ -286,17 +284,9 @@ function irmShowPeak(h){
   return IRM.V0*(Math.pow(1+h.peak/IRM.V0,1-w)-1);
 }
 /* ---- 场:低分辨率底图上的格点 i,j 落在屏幕 (i*CELL, j*CELL) ---- */
-let irmF=null,irmGW=0,irmGH=0,irmCv=null,irmImg=null,irmProf=null;
-let irmNz=null,irmNzT=-1e9,irmNzSeed=20260923;
+let irmF=null,irmGW=0,irmGH=0,irmProf=null;
+let irmNzSeed=20260923;
 function irmNzRnd(){let t=(irmNzSeed=(irmNzSeed+0x6D2B79F5)>>>0);t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;}
-function irmNoiseGet(n,force){ /* 每 NOISE_MS 毫秒(墙钟)换一次颗粒;尺寸变了立即换 */
-  if(force||!irmNz||irmNz.length!==n||nowMs()-irmNzT>=IRM.NOISE_MS){
-    if(!irmNz||irmNz.length!==n)irmNz=new Float32Array(n);
-    for(let q=0;q<n;q++){let u=0,v=0;while(u===0)u=irmNzRnd();v=irmNzRnd();irmNz[q]=Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
-    irmNzT=nowMs();
-  }
-  return irmNz;
-}
 function irmGrid(){
   const C=IRM.CELL,gw=Math.ceil(W/C)+2,gh=Math.ceil(H/C)+2;
   if(!irmF||irmF.length!==gw*gh)irmF=new Float32Array(gw*gh);else irmF.fill(0);
@@ -312,7 +302,7 @@ function irmSplatAniso(cx,cy,pk,sa,sc,ux,uy){ /* 各向异性高斯(格为单位
 function irmTail(t,h){ /* 甲里的尾巴:尾焰那份热占总热的比例、尾巴的方向;没点火给 null */
   const pl=sensePlume(t);if(!pl||!h.o)return null;
   const p=senseOptParts(h.o,t),tot=p.self+p.plume+p.solar;   // ENV2 份额 = 尾焰热 / 总热,不乘视角(拍板 A1);几何留在页里
-  return tot>0?irmProd({share:Math.min(1,p.plume/tot),ux:pl[0],uy:pl[1]}):null;
+  return tot>0?{share:Math.min(1,p.plume/tot),ux:pl[0],uy:pl[1]}:null;
 }
 /* ---- 近处看得出舰形 —— 用户选了「2 近处看得出舰形」----
    业内对应:Johnson 准则(Johnson 1958):目标横跨多少个分辨单元(线对)决定能看出什么 ——
@@ -344,7 +334,7 @@ function irmFieldJia(){ /* 甲:每座山按行、列两个一维高斯相乘贴�
     }
     const pk0=irmShowPeak(hs);if(!(pk0>=IRM.CULL))continue;   /* 贴的是收过的峰(宽的山往底红收) */
     /* 分辨得开多少(Johnson):舰形淡入的那一段山让出一部分;1 ~ 4 之间沿船身拉长 */
-    const N=covResN(t,h.sig),a=Math.max(0,Math.min(1,N-3));if(N>1)irmNBig.add(t);if(a>0)irmSil.push(irmProd({t:t,N:N,a:a,v:pk0}));
+    const N=covResN(t,h.sig),a=Math.max(0,Math.min(1,N-3));if(N>1)irmNBig.add(t);if(a>0)irmSil.push({t:t,N:N,a:a,v:pk0});
     const pk=pk0*(1-IRM_RES.FADE*a);
     if(a>0&&!shipMarkMode()){const ri=(t.kind==='rock'?hullSize('UNK',2)*0.78*Math.sqrt(t.size/0.7):hullSize(t.cls,t.tier||2)*0.78)*hullZoomF()/C;
       irmSplatAniso(cx,cy,pk0*IRM_RES.HALO*a,Math.max(IRM.SIG_MIN,ri),Math.max(IRM.SIG_MIN,ri),1,0);}   /* 贴着舰形的小光晕 */
@@ -380,7 +370,7 @@ function irmProfiles(){
     const pl=senseBafDir(o);   // ENV2 致盲方向与半角读引擎(主推瞎船尾、反推瞎船头)
     if(pl){const pb=Math.atan2(pl[1],pl[0]),D2R=Math.PI/180;
       for(let b=0;b<B;b++){let d=b/k-pb;d=Math.abs(Math.atan2(Math.sin(d),Math.cos(d)))/D2R;const w=Math.max(0,Math.min(1,(SENS.BAF_DEG+1-d)/2));if(w>0)P[b]+=IRM.VMAX*w;}}
-    out.push(irmProd({o:o,P:P}));
+    out.push({o:o,P:P});
   }
   return out;
 }
@@ -464,21 +454,7 @@ ENV_VIEWS.ir={order:['star','field','cloud','body'],slot:'grid',kinds:{  // ENV2
   cloud:{grid:irmCloudAdd}, body:{grid:irmBodyAdd},
   shadow:null,   // ENV2 不画:真空不发光,影子只经由云变暗显出来(云的光照层已含影子)
   sun:null}};    // ENV2 不画:方向型太阳没有位置;乙的杂散光在 irmProfiles 里
-function irmDrawRef(){   // ENV2 3b 参照实现 = 改名前的 drawIrMap 原样;自检的语义断言与逐格比对拿它当基准
-  if(IRM.mode==='yi')irmFieldYi();else irmFieldJia();
-  drawEnvView('ir');   // ENV2 光晕 / 场底 / 云 / 天体按登记表依次铺
-  const gw=irmGW,gh=irmGH,C=IRM.CELL,F=irmF;
-  if(!irmCv||irmCv.width!==gw||irmCv.height!==gh){irmCv=document.createElement('canvas');irmCv.width=gw;irmCv.height=gh;irmImg=irmCv.getContext('2d').createImageData(gw,gh);}
-  const D=irmImg.data,nz=IRM.NOISE>0?irmNoiseGet(gw*gh):null,na=IRM.NOISE;
-  for(let q=0;q<gw*gh;q++){const k=irmIdx(nz?F[q]+na*nz[q]:F[q])*4,o=q*4;D[o]=IRM_LUT[k];D[o+1]=IRM_LUT[k+1];D[o+2]=IRM_LUT[k+2];D[o+3]=IRM_LUT[k+3];}
-  irmCv.getContext('2d').putImageData(irmImg,0,0);
-  ctx.save();ctx.imageSmoothingEnabled=true;
-  ctx.drawImage(irmCv,-C/2,-C/2,gw*C,gh*C);   /* 格点 i 落在屏幕 i*CELL,底图的第 i 个像素铺在它周围一格;整屏都铺(没有热源也是一层底红) */
-  ctx.restore();
-  irmSilDrawn=[];
-  if(IRM.mode!=='yi'&&irmSil.length&&!shipMarkMode())for(const e of irmSil)irmDrawSil(e);   /* 近处看得出舰形:叠在底图上 */
-}
-/* ---- ENV2 3b 新管线(perf 第 1~2 步):内容签名整帧缓存 + 门槛表上色 + 两池噪声;出场步骤与参照相同 ---- */
+/* ---- ENV2 3b 新管线(perf 第 1~2 步):内容签名整帧缓存 + 门槛表上色 + 两池噪声 ---- */
 const IRV={sig:[],cur:[],nbig:new Set(),sil:[],F:null,gw:0,gh:0,C:0,wh:'',cc:null,cv:null,img:null,u32:null,ep:NaN,
   nz:{P:null,Q:null,len:0,oP:0,oQ:0,ep:NaN},col:{key:'',T8:null,TH:null,L32:null},f1:new Float32Array(1),u1:null,n:{full:0,color:0,blit:0}};
 IRV.u1=new Uint32Array(IRV.f1.buffer);
@@ -503,7 +479,7 @@ function irvColInit(){ // ENV2 algo ①:TH[k] = 使 irmIdx >= k 的最小 v(对 
   const L32=new Uint32Array(256);new Uint8Array(L32.buffer).set(IRM_LUT);   // ENV2 按字节拷:ImageData 的字节序就是 RGBA,与机器大小端无关
   K.TH=TH;K.T8=T8;K.L32=L32;K.key=IRM.V0+'|'+IRM.VMAX;
 }
-function irvColorize(F,n,P,oP,Q,oQ,na,L,O){ // ENV2 algo ①:查初猜表再与相邻门槛比一两次 ⇒ 与 irmIdx 逐位相同;Uint32 一次写一个像素。na > 0 时与参照同式 F + NOISE·颗粒
+function irvColorize(F,n,P,oP,Q,oQ,na,L,O){ // ENV2 algo ①:查初猜表再与相邻门槛比一两次 ⇒ 与 irmIdx 逐位相同;Uint32 一次写一个像素。na > 0 时 = F + NOISE·颗粒
   const T8=IRV.col.T8,TH=IRV.col.TH,f=IRV.f1,u=IRV.u1;
   if(na>0){for(let q=0;q<n;q++){const s=F[q]+na*(P[oP+q]+Q[oQ+q]);f[0]=s;let k=T8[u[0]>>>16];if(k>255)k=irmIdx(s);else{while(s>=TH[k+1])k++;while(s<TH[k])k--;}O[q]=L[k];}}
   else for(let q=0;q<n;q++){const s=F[q];f[0]=s;let k=T8[u[0]>>>16];if(k>255)k=irmIdx(s);else{while(s>=TH[k+1])k++;while(s<TH[k])k--;}O[q]=L[k];}
@@ -515,11 +491,11 @@ function irvNoise(n,ep){ // ENV2 algo ②:两个预生成的池(已乘 1/√2,�
     Z.P=mk();Z.Q=mk();Z.len=len;Z.ep=NaN;}
   if(ep!==Z.ep||Z.oP+n>Z.len||Z.oQ+n>Z.len){const m=Z.len-n+1;Z.oP=Math.floor(irmNzRnd()*m);Z.oQ=Math.floor(irmNzRnd()*m);Z.ep=ep;}
 }
-function irvGrain(n){const Z=IRV.nz,g=new Float64Array(n);for(let q=0;q<n;q++)g[q]=Z.P[Z.oP+q]+Z.Q[Z.oQ+q];return g;}   // ENV2 当前颗粒:自检拿它做统计、喂给参照逐格比
-function drawIrMap(){ // ENV2 3b 新入口:签名没变只贴一次缓存图;变了按参照同样的步骤出场;只换了噪声纪元就只重新上色
+function irvGrain(n){const Z=IRV.nz,g=new Float64Array(n);for(let q=0;q<n;q++)g[q]=Z.P[Z.oP+q]+Z.Q[Z.oQ+q];return g;}   // ENV2 当前颗粒:自检拿它做统计
+function drawIrMap(){ // ENV2 3b 新入口:签名没变只贴一次缓存图;变了整场重算;只换了噪声纪元就只重新上色
   const V=IRV;let full=false;
   if(irvSigNe(irvSig(V.cur),V.sig)){
-    const wh=W+'|'+H+'|'+IRM.CELL;if(wh!==V.wh||irmCloudCache!==V.cc)irmCloudCache=null;   // ENV2 S5:参照的云缓存键只含格数,只接着用自己在同一窗口、同一格宽下建的那份
+    const wh=W+'|'+H+'|'+IRM.CELL;if(wh!==V.wh||irmCloudCache!==V.cc)irmCloudCache=null;   // ENV2 云缓存键只含格数:窗口或格宽变了就作废
     if(IRM.mode==='yi')irmFieldYi();else irmFieldJia();
     drawEnvView('ir');
     V.cc=irmCloudCache;V.wh=wh;V.nbig=IRM.mode==='yi'?new Set():new Set(irmNBig);V.sil=IRM.mode==='yi'?[]:irmSil;
@@ -650,9 +626,9 @@ function irmSelftest(){
   const astN=rocksBak?rocksBak.filter(k=>k.name==='小行星').length:0;   /* ⑫ 用:页面加载那一局撒下的小行星(读在任何测试动 rocks 之前) */
   IRM.NOISE=0;   /* ① ~ ⑩ 比的是确切的颜色,先关掉噪声;⑪ 专门测噪声 */
   const irwBak=Object.assign({},IRW);IRW.clouds=[];IRW.bodies=[];delete IRW.sun;delete IRW.stars;envReset(IRW);   // ENV2 ① ~ ㉖ 按空世界写(没有云、天体、太阳),云与天体单独在 ㉗ ㉘ 测;收尾时还原 IRW
-  const px=function(i,j){const o=(j*irmGW+i)*4,D=irmImg.data;return [D[o],D[o+1],D[o+2],D[o+3]];};
+  const px=function(i,j){const o=(j*IRV.gw+i)*4,D=IRV.img.data;return [D[o],D[o+1],D[o+2],D[o+3]];};
   const same=function(a,b){return a[0]===b[0]&&a[1]===b[1]&&a[2]===b[2]&&a[3]===b[3];};
-  const irmRefDraw=function(){irmCloudCache=null;irmDrawRef();};   // ENV2 3b 语义断言跑参照实现;调它之前先清云缓存(S5)
+  const irmFullDraw=function(){irmCloudCache=null;IRV.sig.length=0;drawIrMap();};   // ENV2 自检走真实入口,先清签名与云缓存逼它整场重算
   try{
     const B=makeShip('CA','红外测蓝',[0,0,0],[1,0,0],[0,0,0],'blue',2),R=makeShip('DD','红外测红',[0,0,0],[-1,0,0],[0,0,0],'red',2);
     ships.length=0;ships.push(B,R);R.flame=0;R.sideFlame=0;R.fireHot=0;setEmit(R,'silent');if(rocksBak)rocks=[];
@@ -660,8 +636,8 @@ function irmSelftest(){
     const bi=irmIdx(0)*4,base=[IRM_LUT[bi],IRM_LUT[bi+1],IRM_LUT[bi+2],IRM_LUT[bi+3]];
     /* ① 底红:没有热源时,甲、乙两种画法整屏都是底色 */
     ships.length=0;ships.push(B);IRM.on=true;cam.x=0;cam.y=0;cam.zoom=Math.min(W,H)/(Rv*2);
-    IRM.mode='jia';irmRefDraw();const j1=px(Math.floor(irmGW/3),Math.floor(irmGH/2)),j2=px(irmGW-2,1);
-    IRM.mode='yi';irmRefDraw();const y1=px(Math.floor(irmGW/3),Math.floor(irmGH/2)),y2=px(irmGW-2,1);
+    IRM.mode='jia';irmFullDraw();const j1=px(Math.floor(irmGW/3),Math.floor(irmGH/2)),j2=px(irmGW-2,1);
+    IRM.mode='yi';irmFullDraw();const y1=px(Math.floor(irmGW/3),Math.floor(irmGH/2)),y2=px(irmGW-2,1);
     T('① 没有热源:整屏是一层底红(是红的、而且不透明到看得见)',base[0]>base[1]+30&&base[0]>base[2]+30&&base[3]>=100&&same(j1,base)&&same(j2,base)&&same(y1,base)&&same(y2,base),'底色 rgba('+base.join(',')+')');
     ships.push(R);
     /* ② 甲的物理(沿用):刻度对上引擎、体积守恒、越近越清楚、点火 / 开火 / 开雷达变强 */
@@ -673,7 +649,7 @@ function irmSelftest(){
     T('② 甲的物理:刻度 = 引擎发现距离、体积守恒、越近越清楚、点火 / 开火 / 开雷达变强',Math.abs(h1-1)<1e-9&&h09>1&&h11<1&&Math.abs(v05/v1-1)<1e-9&&Math.abs(v2/v1-1)<1e-9&&s05<=s1/2+1e-9&&cF>c0&&cX>c0&&cP>c0,
       '峰高 0.9 / 1 / 1.1 倍 = '+h09.toFixed(2)+' / '+h1.toFixed(3)+' / '+h11.toFixed(2)+' · 1.5 倍处 熄火 '+c0.toFixed(3)+' 点火 '+cF.toFixed(2));
     /* ③ 甲:能感知到比"发现"弱得多的东西 —— 1.7 倍发现距离处(早已判不出发现)峰处颜色仍偏离底红;越强偏得越多 */
-    const colorAt=function(k){R.pos=[Rv*k,0,0];cam.x=R.pos[0];cam.y=0;cam.zoom=(IRM.CELL*8)/pk(k).sig;IRM.mode='jia';irmRefDraw();const p=toScreen(R.pos[0],R.pos[1]);return px(Math.round(p[0]/IRM.CELL),Math.round(p[1]/IRM.CELL));};
+    const colorAt=function(k){R.pos=[Rv*k,0,0];cam.x=R.pos[0];cam.y=0;cam.zoom=(IRM.CELL*8)/pk(k).sig;IRM.mode='jia';irmFullDraw();const p=toScreen(R.pos[0],R.pos[1]);return px(Math.round(p[0]/IRM.CELL),Math.round(p[1]/IRM.CELL));};
     const cFar=colorAt(1.7),cMid=colorAt(1),cNear=colorAt(0.5);
     T('③ 甲:远在发现距离之外也有偏色,越强越偏',!same(cFar,base)&&cMid[1]>cFar[1]&&cNear[1]>cMid[1],'1.7 倍 rgb('+cFar.slice(0,3)+') · 1 倍 rgb('+cMid.slice(0,3)+') · 0.5 倍 rgb('+cNear.slice(0,3)+')');
     /* ④ 固定色标:画面里离这一点 60 格远的地方再放一个更热的热源(点火的巡洋舰,峰比它高),这一点的颜色一格不变 ——
@@ -683,7 +659,7 @@ function irmSelftest(){
     const hotAt=[[0,1],[0,-1],[1,0],[-1,0]].map(([a,b])=>[R.pos[0]+a*offKm,R.pos[1]+b*offKm]).find(p=>{const s=toScreen(p[0],p[1]);return s[0]>=IRM.CELL&&s[0]<W-IRM.CELL&&s[1]>=IRM.CELL&&s[1]<H-IRM.CELL;})||[R.pos[0],R.pos[1]+offKm]; // ENV2 挑一个在画面里的方向,矮窗口下也有牙
     const Hot=makeShip('CA','红外测热',[hotAt[0],hotAt[1],0],[1,0,0],[0,0,0],'red',2);Hot.flame=1;ships.push(Hot);
     const hotPk=irmHill(Hot,[B]).peak,rPk=irmHill(R,[B]).peak;
-    IRM.mode='jia';irmRefDraw();const pR=toScreen(R.pos[0],R.pos[1]),cB=px(Math.round(pR[0]/IRM.CELL),Math.round(pR[1]/IRM.CELL));
+    IRM.mode='jia';irmFullDraw();const pR=toScreen(R.pos[0],R.pos[1]),cB=px(Math.round(pR[0]/IRM.CELL),Math.round(pR[1]/IRM.CELL));
     const pH=toScreen(Hot.pos[0],Hot.pos[1]),hIn=pH[0]>=0&&pH[0]<W&&pH[1]>=0&&pH[1]<H,cH=hIn?px(Math.round(pH[0]/IRM.CELL),Math.round(pH[1]/IRM.CELL)):[0,0,0,0];ships.pop();
     T('④ 固定色标:画面里多了一个更热的热源,这一点颜色不变',same(cA,cB)&&hotPk>rPk&&hIn&&cH[1]>cB[1],'那一个的峰 '+hotPk.toFixed(2)+' > 这一点的峰 '+rPk.toFixed(2)+' · rgb('+cA.slice(0,3)+') / rgb('+cB.slice(0,3)+')');
     /* ⑤ 乙:朝热源的方向上,远近读数一样(不给距离);偏开 6 个角误差就回到底红;读数中心 = 信噪比 */
@@ -720,8 +696,8 @@ function irmSelftest(){
     const many=[];let sd=12345;const rnd=function(){sd=(sd*16807)%2147483647;return sd/2147483647;};
     for(let n=0;n<300;n++)many.push(makeRock([rnd()*Rv*1.5-Rv*0.2,rnd()*Rv*1.2-Rv*0.6,0],0.3+rnd()*0.8,[1,0,0]));
     rocks=many;cam.x=Rv*0.5;cam.y=0;cam.zoom=Math.min(W,H)/(Rv*1.6);
-    let t0=performance.now();IRM.mode='jia';irmRefDraw();const tJ=performance.now()-t0;
-    t0=performance.now();IRM.mode='yi';irmRefDraw();const tY=performance.now()-t0;
+    let t0=performance.now();IRM.mode='jia';irmFullDraw();const tJ=performance.now()-t0;
+    t0=performance.now();IRM.mode='yi';irmFullDraw();const tY=performance.now()-t0;
     let nan=0;for(let n=0;n<irmF.length;n++)if(!isFinite(irmF[n]))nan++;
     T('⑩ 300 个热源:甲、乙各一帧算得完、没有 NaN',nan===0&&tJ<60&&tY<60,'甲 '+tJ.toFixed(1)+' ms · 乙 '+tY.toFixed(1)+' ms');
     /* ⑪ 噪声:没有热源时底图有颗粒(不止一种颜色)、但很小(平均离底红不到 3 格色标);强热源处颜色基本不受影响;过了 NOISE_MS 颗粒会换。
@@ -922,7 +898,7 @@ function irmSelftest(){
     const pc26=toScreen(C26.pos[0],0),ic26=Math.round(pc26[0]/IRM.CELL),jc26=Math.round(pc26[1]/IRM.CELL);
     const along=irmF[(jc26+9)*irmGW+ic26],across=irmF[jc26*irmGW+ic26+9];   /* 船头朝 +y(屏幕向下),沿船身 = 竖直方向 */
     let c08=0;
-    const sil=function(k){C26.pos=[dId*k,0,0];cam.zoom=camBak.zoom;cam.x=C26.pos[0]+(W/2-IRM.CELL*Math.round(W/2/IRM.CELL))/cam.zoom;cam.y=(H/2-IRM.CELL*Math.round(H/2/IRM.CELL))/cam.zoom;irmRefDraw();
+    const sil=function(k){C26.pos=[dId*k,0,0];cam.zoom=camBak.zoom;cam.x=C26.pos[0]+(W/2-IRM.CELL*Math.round(W/2/IRM.CELL))/cam.zoom;cam.y=(H/2-IRM.CELL*Math.round(H/2/IRM.CELL))/cam.zoom;irmFullDraw();
       if(k===0.8){const pc=toScreen(C26.pos[0],0);c08=irmF[Math.round(pc[1]/IRM.CELL)*irmGW+Math.round(pc[0]/IRM.CELL)]/irmShowPeak(irmHill(C26,[B]));}return irmSilDrawn.slice();};
     const s08=sil(0.8),s075=sil(0.75),s15=sil(1.5),mark=shipMarkMode();   /* c08:舰形全显时山整个让出,中心只剩那圈小光晕 = 原峰 x 0.5 */
     T('㉖ 近处看得出舰形:认出距离上 N = 4;更远沿船身拉长;更近显出真舰种的舰形,再近有构件;远处不画',
@@ -939,7 +915,7 @@ function irmSelftest(){
     irmSetSun('dir');const pkSunOn=irmHill(C27,[B]).peak;irmSetEnv('clouds',false);const pkSunOff=irmHill(C27,[B]).peak;irmSetEnv('clouds',true);irmSetSun('none');
     const r0=pkOn/pkOff,w0=1/(1+1.3*D27*0.3),rS=pkSunOn/pkSunOff,g27=Math.pow(1000*Math.pow(30/150,4),0.875)*Math.pow(1000*Math.pow(10,-(150-30)/10),0.125),wS27=(1+g27)/(1+g27+1.3*D27*1);   // ENV2 有太阳时背景 = 杂散光(偏开太阳 150°,光档删了只剩"中"律)+ 云
     const bg1=envBg(C27.pos,'opt');cam.zoom*=7;cam.x+=123456;const bg2=envBg(C27.pos,'opt');
-    ships.length=0;ships.push(B);cam.x=cp[0];cam.y=cp[1];cam.zoom=camBak.zoom;irmCloudCache=null;IRM.NOISE=0;IRM.mode='yi';irmRefDraw();let fYi=0;for(let q=0;q<irmF.length;q++)fYi=Math.max(fYi,irmF[q]);IRM.mode='jia';irmRefDraw();   /* 走真正的绘制入口(甲乙都铺云);乙里只有这一艘观测船、没有热源 */
+    ships.length=0;ships.push(B);cam.x=cp[0];cam.y=cp[1];cam.zoom=camBak.zoom;irmCloudCache=null;IRM.NOISE=0;IRM.mode='yi';irmFullDraw();let fYi=0;for(let q=0;q<irmF.length;q++)fYi=Math.max(fYi,irmF[q]);IRM.mode='jia';irmFullDraw();   /* 走真正的绘制入口(甲乙都铺云);乙里只有这一艘观测船、没有热源 */
     let worst=0;for(let q=0;q<50;q++){const i=2*Math.floor(q*7.3%(irmGW/2-2)),j=2*Math.floor(q*3.1%(irmGH/2-2)),w=worldAt(i*IRM.CELL,j*IRM.CELL),want=1.3*0.3*envCloudDensity(w[0],w[1],4*IRM.CELL/cam.zoom);worst=Math.max(worst,Math.abs(irmF[j*irmGW+i]-want));}
     let fmax=0;for(let q=0;q<irmF.length;q++)fmax=Math.max(fmax,irmF[q]);
     const t27=performance.now();irmCloudCache=null;irmGrid();irmCloudAdd();const ms27=performance.now()-t27;
@@ -970,7 +946,7 @@ function irmSelftest(){
     const c28=function(){irmGrid();irmCloudAdd();const pc=toScreen(cp[0],cp[1]),ic=2*Math.round(pc[0]/IRM.CELL/2),jc=2*Math.round(pc[1]/IRM.CELL/2),w=worldAt(ic*IRM.CELL,jc*IRM.CELL),pw=envBgParts(w,'opt',4*IRM.CELL/cam.zoom);
       return {v:irmF[jc*irmGW+ic]/pw[0],sh:envInShadow(w),G0:irmCloudCache.G0};};
     const cIn=c28();IRW.bodies=[];envReset(IRW);const cOut=c28(),cKeep=cIn.G0===cOut.G0;irmSetEnv('clouds',false);IRW.bodies=[{x:0,y:0,r:R28}];envReset(IRW);
-    ships.length=0;ships.push(B);B.pos=[5e6,5e6,0];cam.zoom=40*IRM.CELL/R28;cam.x=0;cam.y=0;IRM.NOISE=0;IRM.mode='jia';irmRefDraw();
+    ships.length=0;ships.push(B);B.pos=[5e6,5e6,0];cam.zoom=40*IRM.CELL/R28;cam.x=0;cam.y=0;IRM.NOISE=0;IRM.mode='jia';irmFullDraw();
     const pp=toScreen(0,0),vEdge=irmF[Math.round((pp[1]+u28[1]*38*IRM.CELL)/IRM.CELL)*irmGW+Math.round((pp[0]+u28[0]*38*IRM.CELL)/IRM.CELL)],vNight=irmF[Math.round((pp[1]-u28[1]*20*IRM.CELL)/IRM.CELL)*irmGW+Math.round((pp[0]-u28[0]*20*IRM.CELL)/IRM.CELL)];
     irmSetEnv('bodies',false);ships.push(C28);B.pos=at28(-300000,0);C28.pos=at28(300000,0);const offVis=irmHill(C28,[B])!==null&&!envInShadow(at28(500000,0));
     irmSetSun('none');
@@ -978,77 +954,6 @@ function irmSelftest(){
       sh1&&!sh2&&!sh3&&sp1&&!sp2&&spW1&&!spW2&&phIn===0&&phOut>0&&occ&&occYi<1e-6&&vis&&inSh&&seen&&glY<1&&blindOut&&cIn.sh&&!cOut.sh&&Math.abs(cIn.v-0.3)<1e-6&&Math.abs(cOut.v-1)<1e-6&&cKeep&&vEdge>=0.9*IRM.VMAX&&Math.abs(vNight-2)<1e-6&&offVis,
       '柱 里 '+sh1+' 外 '+sh2+' 朝阳侧 '+sh3+' · 锥长 '+Math.round(Lu)+' km 0.97 倍 '+sp1+' 1.03 倍 '+sp2+' 半长处 0.45R '+spW1+' 0.55R '+spW2+' · 相位 影子里 '+phIn+' 外 '+phOut.toFixed(3)+' · 遮挡 甲 '+occ+' 乙 '+occYi.toExponential(1)+' 挪开 '+vis+
       ' · 躲影子 '+inSh+' 看得见 '+seen+' 乙太阳方向 '+glY.toFixed(3)+' (不躲时致盲 '+blindOut+') · 影子里的云 '+cIn.v.toFixed(4)+' / 挪走天体 '+cOut.v.toFixed(4)+' 浓度层没重算 '+cKeep+' · 朝阳边缘 '+Math.round(vEdge)+' 背阴 '+vNight.toFixed(2)+' · 关掉 '+offVis);
-    /* ㉙ ENV2 3b 上色换门槛表 + 初猜表(Uint32 一次写一个像素):100 万个随机值的色标下标与 irmIdx 逐个相同
-          (对数均匀的正负数、底红附近、门槛两侧几个 ulp、每道门槛本身;另加 ±0、NaN、±∞、超出 float32 的数、float32 的次正规数) */
-    {if(IRV.col.key!==IRM.V0+'|'+IRM.VMAX)irvColInit();
-     const NR=1000000,X=new Float64Array(NR),O=new Uint32Array(NR),ID=new Uint32Array(256),TH=IRV.col.TH;for(let k=0;k<256;k++)ID[k]=k;
-     let sd=20260924;const r=function(){sd=(Math.imul(sd,1664525)+1013904223)>>>0;return sd/4294967296;};
-     const sp=[0,-0,NaN,Infinity,-Infinity,1e39,-1e39,3.4028234663852886e38,-3.4028234663852886e38,5e-324,-5e-324,1e-40,-1e-40,IRM.V0,-IRM.V0,IRM.VMAX];
-     let q=0;for(const v of sp)X[q++]=v;for(let k=1;k<=255;k++){X[q++]=TH[k];X[q++]=TH[k]*(1-Number.EPSILON);X[q++]=TH[k]*(1+Number.EPSILON);}
-     for(;q<NR;q++){const a=r(),b=r(),c=r();
-       X[q]=a<0.4?(b<0.5?-1:1)*Math.pow(10,c*18-9):(a<0.7?TH[1+Math.floor(b*255)]*(1+(Math.floor(c*9)-4)*Number.EPSILON):(a<0.9?(b-0.5)*0.1:c*2000));}
-     irvColorize(X,NR,null,0,null,0,0,ID,O);
-     let bad=0,ex='';for(let i=0;i<NR;i++){const w=irmIdx(X[i]);if(O[i]!==w){bad++;if(!ex)ex=X[i]+' → '+O[i]+'(应为 '+w+')';}}
-     T('㉙ 上色换门槛表 + 初猜表:100 万个随机值的色标下标与 irmIdx 逐个相同(门槛两侧几个 ulp、±0、NaN、±∞、超出 float32 都在内)',bad===0,'不同 '+bad+' / '+NR+(ex?' · 例 '+ex:''));}
-    /* ㉚ ENV2 3b 内容签名整帧缓存:没变的帧只贴一次缓存图(不重算、不重新上色),只换噪声纪元时只重新上色;
-          改每个 IRM / IRM_RES 键、拖恒星 / 天体 / 舰船 / 石头(真实拖动处理函数)、切云 / 天体 / 三档太阳 / 甲乙 / DPR,甲乙各一遍:
-          每一项走真实逐帧入口(drawContacts),新画面与参照(同一份颗粒、先清云缓存)逐字节相同、舰形清单相同;参照画面没变的项只记数 */
-    {IRM.on=true;IRM.NOISE=0;IRM.mode='jia';rocks=[];selected=[];irmSetEnv('clouds',true);irmSetEnv('bodies',true);irmSetSun('pos');
-     B.pos=[0,0,0];B.flame=0;B.facing=[1,0,0];
-     const mk=function(c,nm,p,f,side,fl){const s=makeShip(c,nm,p,f,[0,0,0],side,2);s.flame=fl;s.sideFlame=0;s.fireHot=0;if(side==='red')setEmit(s,'silent');return s;};
-     const B2=mk('DD','缓存测蓝2',[-150000,0,0],[0,-1,0],'blue',1),C1=mk('CA','缓存测红1',[0,0,0],[0,1,0],'red',0);
-     C1.pos=[0.6*identDist('opt',B,C1),0,0];
-     const C2=mk('DD','缓存测红2',[-90000,-130000,0],[1,0,0],'red',1),C3=mk('DD','缓存测红3',[150000,120000,0],[-1,0,0],'red',0);
-     const K1=makeRock([-60000,60000,0],2,[1,0,0]),K2=makeRock([200000,-100000,0],1,[0,1,0]);
-     ships.length=0;ships.push(B,B2,C1,C2,C3);rocks=[K1,K2];cam.x=0;cam.y=0;cam.zoom=camBak.zoom;
-     const snap=function(){const f0=IRV.n.full;drawContacts();const nS=JSON.stringify(irmSilDrawn),nb=new Uint8Array(IRV.img.data);
-       if(IRM.NOISE>0){irmNz=irvGrain(IRV.gw*IRV.gh);irmNzT=nowMs();}   // ENV2 参照吃同一份颗粒,才能逐字节比
-       irmRefDraw();const rb=irmImg.data,rS=JSON.stringify(irmSilDrawn);let bad=0;
-       if(irmGW!==IRV.gw||irmGH!==IRV.gh||rb.length!==nb.length)bad=-1;else for(let i=0;i<rb.length;i++)if(rb[i]!==nb[i])bad++;
-       return {bad:bad,sil:nS===rS,rb:new Uint8Array(rb),rS:rS,full:IRV.n.full-f0};};
-     const differ=function(a,b){if(a.rb.length!==b.rb.length||a.rS!==b.rS)return true;for(let i=0;i<a.rb.length;i++)if(a.rb[i]!==b.rb[i])return true;return false;};
-     /* 没变的帧:两帧都只贴一次图;换噪声纪元:只重新上色 */
-     drawContacts();const n0=Object.assign({},IRV.n),di2=cap(function(){drawIrMap();drawIrMap();}),st={f:IRV.n.full-n0.full,c:IRV.n.color-n0.color,b:IRV.n.blit-n0.blit};
-     IRM.NOISE=nzBak;drawContacts();const n1=Object.assign({},IRV.n),nm0=nowMs;nowMs=function(){return nm0()+IRM.NOISE_MS;};try{drawContacts();}finally{nowMs=nm0;}
-     const ns={f:IRV.n.full-n1.full,c:IRV.n.color-n1.color};IRM.NOISE=0;
-     const staticOk=di2===2&&st.f===0&&st.c===0&&st.b===2&&ns.f===0&&ns.c===1;
-     const mut=function(v){if(typeof v==='boolean')return !v;if(typeof v==='string')return v==='jia'?'yi':(v==='yi'?'jia':v+'_');if(v===0)return 0.005;
-       if(Number.isInteger(v)){const w=Math.round(v*1.25);return w===v?v+1:w;}return v*1.25;};
-     const items=[];
-     for(const [nm,O] of [['IRM',IRM],['IRM_RES',IRM_RES]])for(const k of Object.keys(O)){let v0;items.push({name:nm+'.'+k,act:function(){v0=O[k];O[k]=mut(v0);},undo:function(){O[k]=v0;}});}
-     const dragAt=function(p,dx,dy){md(p[0],p[1]);mm(p[0]+dx/2,p[1]+dy/2);mm(p[0]+dx,p[1]+dy);mu(p[0]+dx,p[1]+dy);};
-     const dragShip=function(nm,o,dx,dy){let p0;return {name:nm,act:function(){p0=o.pos.slice();dragAt(toScreen(o.pos[0],o.pos[1]),dx,dy);},undo:function(){o.pos=p0;}};};
-     const dragIrw=function(nm,key,dx,dy,pre,post){let x0,y0;return {name:nm,pre:pre,post:post,act:function(){const e=IRW[key][0];x0=e.x;y0=e.y;dragAt(toScreen(e.x,e.y),dx,dy);},undo:function(){IRW[key][0].x=x0;IRW[key][0].y=y0;envReset(IRW);}};};
-     items.push(dragShip('拖红舰',C3,40,-30),dragShip('拖蓝舰',B2,-35,25),dragShip('拖石头',K1,30,30),dragIrw('拖天体','bodies',40,20),
-       dragIrw('拖恒星','stars',30,20,function(){const S=ENV.stars[0];cam.zoom=Math.min(W,H)/(6900000*2.5);cam.x=S.x/2;cam.y=S.y/2;},function(){cam.x=0;cam.y=0;cam.zoom=camBak.zoom;}));
-     const btn=function(sel){return function(){document.querySelector(sel).click();};};
-     items.push({name:'云',act:btn('#irEnv [data-env="cloud"]'),undo:btn('#irEnv [data-env="cloud"]')},{name:'天体',act:btn('#irEnv [data-env="planet"]'),undo:btn('#irEnv [data-env="planet"]')},
-       {name:'太阳·无',act:btn('#irSun [data-sun="none"]')},{name:'太阳·方向',act:btn('#irSun [data-sun="dir"]')},{name:'太阳·位置',act:btn('#irSun [data-sun="pos"]')});
-     const dprD=Object.getOwnPropertyDescriptor(window,'devicePixelRatio'),dpr0=window.devicePixelRatio;let dprOk=true;
-     items.push({name:'DPR',act:function(){try{Object.defineProperty(window,'devicePixelRatio',{value:dpr0*2,configurable:true,writable:true});}catch(e){/* 改不了就记失败 */}dprOk=dprOk&&window.devicePixelRatio===dpr0*2;},
-       undo:function(){try{if(dprD)Object.defineProperty(window,'devicePixelRatio',dprD);else delete window.devicePixelRatio;}catch(e){/* 同上 */}dprOk=dprOk&&window.devicePixelRatio===dpr0;}});
-     const fails=[],chg=[],same0=[];let nIt=0,dprFull=0;
-     for(const mode of ['jia','yi']){
-       IRM.mode=mode;const tag=mode==='yi'?'乙·':'甲·';
-       items.push({name:'甲乙',act:btn('#irMode [data-irm="'+(mode==='yi'?'jia':'yi')+'"]'),undo:btn('#irMode [data-irm="'+mode+'"]')});
-       for(const it of items){if(it.pre)it.pre();const a=snap();it.act();const b=snap();if(it.undo)it.undo();const c=snap();if(it.post)it.post();nIt++;
-         if(it.name==='DPR')dprFull+=b.full;
-         if(!(a.bad===0&&b.bad===0&&c.bad===0&&a.sil&&b.sil&&c.sil))fails.push(tag+it.name+'('+a.bad+'/'+b.bad+'/'+c.bad+(a.sil&&b.sil&&c.sil?'':' 舰形不同')+')');
-         (differ(a,b)?chg:same0).push(tag+it.name);}
-       items.pop();IRM.mode=mode;}
-     const must=['IRM.CELL','IRM.V0','IRM.VMAX','IRM.NOISE','IRM.mode','拖红舰','拖恒星','云','天体','太阳·无','甲乙'].reduce(function(a,n){return a.concat(['甲·'+n,'乙·'+n]);},[]).concat(['甲·IRM.TAIL_K','乙·IRM.BINS']);
-     const miss=must.filter(function(n){return chg.indexOf(n)<0;});
-     T('㉚ 整帧缓存:没变的帧只贴一次图、换噪声纪元只重新上色;改每个 IRM / IRM_RES 键、拖恒星 / 天体 / 舰船 / 石头、切云 / 天体 / 三档太阳 / 甲乙 / DPR(甲乙各一遍),新画面与参照逐字节相同',
-       staticOk&&fails.length===0&&miss.length===0&&dprOk,
-       '静止两帧 贴图 '+di2+' 次 · 重算 '+st.f+' 上色 '+st.c+' · 换纪元 重算 '+ns.f+' 上色 '+ns.c+' · 比了 '+nIt+' 项,参照变了的 '+chg.length+' 项 · 参照没变(只记数):'+same0.join(' ')+
-       ' · DPR 能改 '+dprOk+' 新管线重算 '+dprFull+' 次'+(fails.length?' · 不同:'+fails.join('; '):'')+(miss.length?' · 场面前提没变的:'+miss.join(' '):''));}
-    /* ㉛ ENV2 3b 产品冻结(M10):?selftest 下山、尾巴、全景条记录、舰形清单都冻结,原地写一笔当场抛 */
-    {IRM.mode='jia';irmSetEnv('clouds',false);irmSetEnv('bodies',false);irmSetSun('none');B.pos=[0,0,0];B.flame=0;B.facing=[1,0,0];rocks=[];
-     const C31=makeShip('DD','红外测冻结',[0,0,0],[0,1,0],[0,0,0],'red',2);C31.flame=1;C31.sideFlame=0;C31.fireHot=0;setEmit(C31,'silent');C31.pos=[0.7*identDist('opt',B,C31),0,0];ships.length=0;ships.push(B,C31);
-     const h31=irmHill(C31,[B]),t31=irmTail(C31,h31),p31=irmProfiles()[0];cam.x=C31.pos[0];cam.y=0;cam.zoom=camBak.zoom;irmFieldJia();const s31=irmSil;
-     let threw=false;try{h31.peak=0;}catch(e){threw=e instanceof TypeError;}
-     T('㉛ 产品冻结:山、尾巴、全景条记录、舰形清单在 ?selftest 下都冻结,原地写一笔当场抛',IRM_FRZ&&!!h31&&Object.isFrozen(h31)&&!!t31&&Object.isFrozen(t31)&&Object.isFrozen(p31)&&s31.length>0&&s31.every(function(e){return Object.isFrozen(e);})&&threw,
-       '山 '+Object.isFrozen(h31)+' · 尾巴 '+(!!t31&&Object.isFrozen(t31))+' · 全景条 '+Object.isFrozen(p31)+' · 舰形 '+s31.length+' 个 · 写一笔抛 TypeError '+threw);}
   }catch(e){T('自检抛异常',false,String(e&&e.stack||e));}
   finally{
     ships.length=0;shipsBak.forEach(x=>ships.push(x));shipSeq=seq0;cam.x=camBak.x;cam.y=camBak.y;cam.zoom=camBak.zoom;IRM.on=onBak;IRM.mode=modeBak;if(rocksBak)rocks=rocksBak;IRM.NOISE=nzBak;for(const k of ['sun','stars','clouds','bodies']){if(k in irwBak)IRW[k]=irwBak[k];else delete IRW[k];}envReset(IRW);irmSync();
@@ -1085,7 +990,7 @@ function irmUitest(){
   document.title=ok?'UITEST:PASS':'UITEST:FAIL';
 }
 /* ================= ENV2 3b 性能探针(?perf):只报数、不判定(机器噪声 ±30%)=================
-   量的是引擎每帧调的那一次红外图(含贴图与舰形)的墙钟;rAF 实时驱动、模拟暂停,每项热身 20 帧再记 120 帧。旧 = 参照 irmDrawRef,新 = drawIrMap */
+   量的是引擎每帧调的那一次红外图(含贴图与舰形)的墙钟;rAF 实时驱动、模拟暂停,每项热身 20 帧再记 120 帧。*/
 function irmPerf(){
   const N=120,WU=20,c0={x:cam.x,y:cam.y,zoom:cam.zoom},rk0=rocks.slice(),run0=running,hook=drawContacts,out=[];
   let many=null,base=null;
@@ -1104,7 +1009,7 @@ function irmPerf(){
   (async function(){
     for(const mode of ['jia','yi'])for(const sc of SC){
       IRM.mode=mode;if(sc.rk&&!many)mkMany();const row=[];
-      for(const im of [['旧',irmDrawRef],['新',drawIrMap]]){
+      for(const im of [['新',drawIrMap]]){
         cam.x=c0.x;cam.y=c0.y;cam.zoom=c0.zoom;rocks=sc.rk?rk0.concat(many):rk0.slice();if(many)for(let n=0;n<300;n++){many[n].pos[0]=base[n][0];many[n].pos[1]=base[n][1];}
         const n0=Object.assign({},IRV.n);await phase(im[1],sc.step);
         row.push(im[0]+' '+q(P.t)+(im[0]==='新'?'(重算 '+(IRV.n.full-n0.full)+' · 上色 '+(IRV.n.color-n0.color)+' 帧)':''));}
