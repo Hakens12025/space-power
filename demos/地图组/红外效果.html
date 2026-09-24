@@ -398,12 +398,14 @@ function iryUpdate(full,gch){ /* 返回 true = H 重投了 */
   for(const r of IRY.obs){const P=r.P,b0=r.b0,u=r.u;for(let q=0;q<n;q++){const b=b0[q],w=u[q];Hh[q]+=P[b]*(1-w)+P[b+1]*w;}}
   return true;
 }
-/* ---- 尘埃云:多尺度群岛遮罩(分出大大小小、成群的星云与大片空白)+ 坐标扭曲 + 脊状分形丝 ---- */
-const IRM_CLOUD={on:true,V:1.3,DARK:0.4,L0:500000,OCT:9,GAIN:0.78,SEED:20,WARP:0.35,MIN_KM:12500,Q0:0.78,G:4,QM:0.45,
-  ML0:64000000,MSPLIT:250000,MGAIN:0.73,MTH:0.55,MBAND:0.22,CORE:0.5,CORE0:0.55};
-  // 遮罩:ML0 到 MSPLIT 的 fBm(每层振幅比 MGAIN,谱斜率按实测星际尘埃),阈值 MTH、过渡宽 MBAND(单位 = 遮罩的标准差);MTH 越大空白越多
-  // L0 = 最粗一层的尺度(km);丝按实际算到的几层归一,再过 1 - exp(-(q/Q0)^G):块里大半是暗底、丝与结亮,亮处软肩不截顶;QM = 最粗一层没算全时补的期望
-const CLOUD={pos:[900000,-2900000,0]};   // 噪声场的偏移:世界 = 噪声坐标 + pos;拖云 = 拖整片场
+/* ---- 尘埃云:星云是天体,从生成点弥散出去,其余空间是空的 ——
+   高斯烟羽(点源扩散的标准模型):源点 + 风向,走得越远越宽越淡;中线随距离慢慢拐弯;湍流扭曲的涡随烟羽宽度变大;
+   边缘侵蚀(Schneider 2015 的 remap:细节只啃边缘,内部保持实心);内部纹理是 b2ea0f4 的脊状细丝 ---- */
+const IRM_CLOUD={on:true,V:0.9,DARK:0.4,MIN_KM:12500,SEED:20,L0:500000,OCT:9,GAIN:0.78,WARP:0.35,Q0:0.78,G:4,ER:0.55,FB:0.35};
+  // L0..G:细丝(同 b2ea0f4);ER:边缘侵蚀强度;FB:细丝暗处保留的底
+const CLOUD={pos:[0,0,0]};   // 整片星云的偏移:世界 = 星云坐标 + pos;拖云 = 拖整片
+const NEBS=[   // 每团:源点 (sx,sy) km、风向 th(弧度)、长度 L、源宽 W0、每走一个 L 变宽 K、蜿蜒 B、种子
+  {sx:-1500000,sy:-600000,th:0.35,L:6000000,W0:350000,K:0.55,B:0.12,sd:77}];
 function irmHash(ix,iy,sd){let h=Math.imul(ix|0,374761393)^Math.imul(iy|0,668265263)^Math.imul(sd|0,1442695041);h=Math.imul(h^(h>>>13),1274126177);return((h^(h>>>16))>>>0)/4294967296;}
 function irmGrad(i,j,dx,dy,sd){const a=irmHash(i,j,sd)*6.283185307;return Math.cos(a)*dx+Math.sin(a)*dy;}
 function irmGN(x,y,sd){
@@ -411,33 +413,36 @@ function irmGN(x,y,sd){
   const n00=irmGrad(ix,iy,fx,fy,sd),n10=irmGrad(ix+1,iy,fx-1,fy,sd),n01=irmGrad(ix,iy+1,fx,fy-1,sd),n11=irmGrad(ix+1,iy+1,fx-1,fy-1,sd);
   return 1.41*(n00+(n10-n00)*ux+(n01-n00)*uy+(n00-n10-n01+n11)*ux*uy);
 }
-const IRM_NV=(function(){let s2=0,h=12345;const n=8192;for(let i=0;i<n;i++){h=Math.imul(h,1103515245)+12345|0;const x=(h>>>8)/65536;h=Math.imul(h,1103515245)+12345|0;const y=(h>>>8)/65536;const v=irmGN(x,y,97);s2+=v*v;}return s2/n;})();   // 单层噪声的方差
-const IRM_MV=(function(){let v=0,a=1;for(let L=IRM_CLOUD.ML0;L>=IRM_CLOUD.MSPLIT;L/=2,a*=IRM_CLOUD.MGAIN)v+=a*a*IRM_NV;return v;})();   // 遮罩全细度下的方差
-function irmCloudD(x,y,minL){ /* 噪声坐标 (x,y) 的浓度 0~1;minL = 最细算到多少公里(画面按屏幕,物理用 MIN_KM) */
-  const C=IRM_CLOUD,L0=C.L0;
-  // 群岛遮罩:多尺度 fBm 过阈值,岛有大有小、成群分布;比像素小的层算不到时按它们的方差把阈值放软(拉远时小岛化成淡雾,总面积不跳)
-  let M=0,vd=0,a0=1,cs0=1,sn0=0;
-  for(let Lm=C.ML0;Lm>=C.MSPLIT;Lm/=2,a0*=C.MGAIN){const w=Math.min(1,Lm/minL-1);
-    if(w<=0){vd+=a0*a0*IRM_NV;continue;}
-    M+=a0*w*irmGN((x*cs0-y*sn0)/Lm,(x*sn0+y*cs0)/Lm,C.SEED+30);if(w<1)vd+=(1-w)*(1-w)*a0*a0*IRM_NV;
-    const c2=cs0*0.7986-sn0*0.6018;sn0=cs0*0.6018+sn0*0.7986;cs0=c2;}
-  const sd=Math.sqrt(IRM_MV),sp=Math.sqrt(C.MBAND*C.MBAND/16+0.36*vd/IRM_MV);
-  let m=1/(1+Math.exp(-(M/sd-C.MTH)/sp));if(m<0.01)return 0;
-  m*=C.CORE0+(1-C.CORE0)/(1+Math.exp(-(M/sd-C.MTH-C.CORE)/(2*sp+0.25)));   // 由边往核心渐亮:拉远时是一团云,不是平涂色块
-  const wx=x+C.WARP*L0*irmGN(x/L0+3.7,y/L0+1.3,C.SEED+2),wy=y+C.WARP*L0*irmGN(x/L0-2.1,y/L0+5.9,C.SEED+3);
+function irmFbm(x,y,oct,sd){let s=0,a=0.5,f=1;for(let o=0;o<oct;o++,a*=0.5,f*=2)s+=a*irmGN(x*f+o*5.3,y*f-o*3.1,sd+o);return s;}
+function irmFil(x,y,minL,sd){ /* b2ea0f4 的脊状细丝:返回 0..1;最粗一层都算不到时(拉远)用平均亮度 */
+  const C=IRM_CLOUD,L0=C.L0,wx=x+C.WARP*L0*irmGN(x/L0+3.7,y/L0+1.3,sd+2),wy=y+C.WARP*L0*irmGN(x/L0-2.1,y/L0+5.9,sd+3);
   let f=0,sw=0,a=0.5,L=L0/2,cs=1,sn=0;const c37=Math.cos(0.6458),s37=Math.sin(0.6458);
   for(let o=0;o<C.OCT;o++,L/=2,a*=C.GAIN){
     const w=Math.min(1,L/minL-1);if(w<=0)break;
-    const u=(wx*cs-wy*sn)/L,v=(wx*sn+wy*cs)/L,r=1-Math.abs(irmGN(u,v,C.SEED+10+o));f+=a*w*r*r*r;sw+=a*w;
+    const u=(wx*cs-wy*sn)/L,v=(wx*sn+wy*cs)/L,r=1-Math.abs(irmGN(u,v,sd+10+o));f+=a*w*r*r*r;sw+=a*w;
     const c2=cs*c37-sn*s37;sn=cs*s37+sn*c37;cs=c2;
   }
   const w0=Math.max(0,Math.min(1,L0/2/minL-1)),tp=sw>0?1-Math.exp(-Math.pow(f/sw/C.Q0,C.G)):0;
-  return m*(w0*tp+(1-w0)*IRM_FILM);   // 最粗一层丝都算不到时(拉远)用丝的真实平均亮度,不是偏暗的常数
+  return w0*tp+(1-w0)*IRM_FILM;
 }
 let IRM_FILM=0;
-{let s=0;const n=4000,C=IRM_CLOUD;   // 丝在全细度下的平均亮度:只看丝那一项(遮罩按 1)
-  for(let i=0;i<n;i++){const x=i*7919.3,y=i*104729.7;let f=0,sw=0,a=0.5,L=C.L0/2;for(let o=0;o<C.OCT;o++,L/=2,a*=C.GAIN){const r=1-Math.abs(irmGN(x/L,y/L,C.SEED+10+o));f+=a*r*r*r;sw+=a;}s+=1-Math.exp(-Math.pow(f/sw/C.Q0,C.G));}
-  IRM_FILM=s/n;
+{let s=0;const n=3000;for(let i=0;i<n;i++)s+=irmFil(i*7919.3,i*104729.7,1,7);IRM_FILM=s/n;}
+function irmPlume(N,x,y,minL){ /* 一团星云在星云坐标 (x,y) 的浓度 0~1;顺带把平滑外形写进 IRM_CLOUD_C */
+  const L=N.L,c=Math.cos(N.th),sn=Math.sin(N.th),dx=x-N.sx,dy=y-N.sy;
+  let s=dx*c+dy*sn,t=-dx*sn+dy*c;
+  if(s<-3*N.W0-0.3*L||s>4*L||Math.abs(t)>1.6*(N.W0+N.K*Math.max(0,s))+0.5*L)return 0;   // 包围框外直接 0
+  t-=N.B*L*irmGN(s/(0.7*L),0.5,N.sd)+0.5*N.B*L*irmGN(s/(0.25*L),2.5,N.sd+1);   // 中线蜿蜒:风向慢慢拐弯
+  const sg=N.W0+N.K*Math.max(0,s),ws=0.9*sg,wa=0.45*sg;                           // 湍流:涡的尺度与幅度随烟羽宽度变大
+  s+=wa*irmFbm(s/ws,t/ws,3,N.sd+10);t+=wa*irmFbm(s/ws+7.1,t/ws-3.3,3,N.sd+20);
+  const sg2=N.W0+N.K*Math.max(0,s),g0=Math.exp(-s*s/(2*N.W0*N.W0));
+  const along=s>0?Math.exp(-s/L)*(1-Math.exp(-s/(0.15*L)))+g0:g0,cov=Math.min(1,1.25*along*Math.exp(-t*t/(2*sg2*sg2)));
+  if(cov>IRM_CLOUD_C)IRM_CLOUD_C=cov;
+  const e=IRM_CLOUD.ER*(0.5+0.5*irmFbm(x/(0.35*sg2),y/(0.35*sg2),4,N.sd+30)),rho=Math.max(0,(cov-e)/(1-e));   // 边缘侵蚀
+  return rho>0?rho*(IRM_CLOUD.FB+(1-IRM_CLOUD.FB)*irmFil(x,y,minL,N.sd+40)):0;
+}
+let IRM_CLOUD_C=0;   // 上一次 irmCloudD 顺带算出的平滑外形(不含侵蚀与细丝):普通画面画等值线读它
+function irmCloudD(x,y,minL){ /* 星云坐标 (x,y) 的浓度 0~1(几团取最大);minL = 最细算到多少公里(画面按屏幕,物理用 MIN_KM) */
+  let d=0;IRM_CLOUD_C=0;for(const N of NEBS){const v=irmPlume(N,x,y,minL);if(v>d)d=v;}return d;
 }
 function irmCloudLitAt(p){return (IRM_SUN.mode==='none'||irmInShadow(p))?IRM_CLOUD.DARK:1;}
 function irmCloudBg(p){return IRM_CLOUD.on?IRM_CLOUD.V*irmCloudD(p[0]-CLOUD.pos[0],p[1]-CLOUD.pos[1],IRM_CLOUD.MIN_KM)*irmCloudLitAt(p):0;}
@@ -692,7 +697,7 @@ function sunIcon(x,y,txt){
    世界锚定瓦片:噪声坐标里 TG x TG 格一块、格距 2^L km(约 PX 屏幕像素),每块只造一次离屏画布;平移只造新露出来的块,
    静止帧只贴整屏缓存;每帧造块封顶约 BUDGET ms,没造好的先拿粗一两级或细一级的块垫着 ---- */
 const NEB={PX:8,TG:16,BUDGET:1.5,MAXT:400,ISO:[0.15,0.4,0.7],LINE:['rgba(150,165,215,.18)','rgba(140,190,235,.28)','rgba(180,225,255,.42)'],
-  LO:[118,108,160],HI:[110,185,235],A:0.42,tiles:new Map(),fc:null,fx:null,vs:[],pend:false,fr:0,dpr:0,sm:null,view:null,lab:null};
+  LO:[118,108,160],HI:[110,185,235],A:0.6,tiles:new Map(),fc:null,fx:null,vs:[],pend:false,fr:0,dpr:0,sm:null,view:null,lab:null};
   // 底色:浓度低处灰紫、高处青蓝,不透明度 A·浓度^0.7;等值线越浓越亮;lab = 「尘埃云」写在哪(噪声坐标)
 function nebLevel(){return Math.round(Math.log2(NEB.PX/cam.zoom));}
 function nebKey(L,i,j){return L+'|'+i+'|'+j;}
@@ -721,8 +726,8 @@ function nebIsoRow(G,n,j,cp,lev,P){ /* marching squares(照引擎 terrIsoRow):�
   }
 }
 function nebBuild(L,ti,tj){ /* 造一块:格点浓度 → 每格点一像素的小图放大(双线性)+ 三档等值线;全空的块不建画布 */
-  const V=NEB,TG=V.TG,n=TG+1,st=Math.pow(2,L),G=new Float32Array(n*n);let any=false;
-  for(let j=0;j<n;j++)for(let i=0;i<n;i++){const d=irmCloudD((ti*TG+i)*st,(tj*TG+j)*st,2*st);G[j*n+i]=d;if(d>0)any=true;}
+  const V=NEB,TG=V.TG,n=TG+1,st=Math.pow(2,L),G=new Float32Array(n*n),Gc=new Float32Array(n*n);let any=false;
+  for(let j=0;j<n;j++)for(let i=0;i<n;i++){const d=irmCloudD((ti*TG+i)*st,(tj*TG+j)*st,2*st);G[j*n+i]=d;Gc[j*n+i]=IRM_CLOUD_C;if(d>0||IRM_CLOUD_C>0.1)any=true;}
   const T={G:G,cv:null,used:V.fr};if(!any)return T;
   if(!V.sm||V.sm.cv.width!==n){const c=document.createElement('canvas');c.width=n;c.height=n;const g=c.getContext('2d');V.sm={cv:c,g:g,img:g.createImageData(n,n)};}
   const d8=V.sm.img.data,lo=V.LO,hi=V.HI;
@@ -731,7 +736,7 @@ function nebBuild(L,ti,tj){ /* 造一块:格点浓度 → 每格点一像素的�
   V.sm.g.putImageData(V.sm.img,0,0);
   const S=Math.round(TG*V.PX*DPR),cp=S/TG,c=document.createElement('canvas');c.width=S;c.height=S;const g=c.getContext('2d');
   g.imageSmoothingEnabled=true;g.drawImage(V.sm.cv,0,0,n,n,-cp/2,-cp/2,n*cp,n*cp);
-  const P=V.ISO.map(function(){return new Path2D();});for(let j=0;j<n-1;j++)nebIsoRow(G,n,j,cp,V.ISO,P);
+  const P=V.ISO.map(function(){return new Path2D();});for(let j=0;j<n-1;j++)nebIsoRow(Gc,n,j,cp,V.ISO,P);   // 等值线画平滑外形,不圈细节
   g.lineWidth=DPR;for(let k=0;k<P.length;k++){g.strokeStyle=V.LINE[k];g.stroke(P[k]);}
   T.cv=c;return T;
 }
