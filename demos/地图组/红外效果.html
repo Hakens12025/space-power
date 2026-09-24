@@ -691,7 +691,7 @@ function sunIcon(x,y,txt){
 /* ---- 普通画面的星云:同一浓度函数,冷色低透明底色 + 三档等值线(做法同引擎 81-env 的 mapCloudPaint)。
    世界锚定瓦片:噪声坐标里 TG x TG 格一块、格距 2^L km(约 PX 屏幕像素),每块只造一次离屏画布;平移只造新露出来的块,
    静止帧只贴整屏缓存;每帧造块封顶约 BUDGET ms,没造好的先拿粗一两级或细一级的块垫着 ---- */
-const NEB={PX:8,TG:32,BUDGET:1.5,MAXT:120,ISO:[0.15,0.4,0.7],LINE:['rgba(150,165,215,.18)','rgba(140,190,235,.28)','rgba(180,225,255,.42)'],
+const NEB={PX:8,TG:16,BUDGET:1.5,MAXT:400,ISO:[0.15,0.4,0.7],LINE:['rgba(150,165,215,.18)','rgba(140,190,235,.28)','rgba(180,225,255,.42)'],
   LO:[118,108,160],HI:[110,185,235],A:0.42,tiles:new Map(),fc:null,fx:null,vs:[],pend:false,fr:0,dpr:0,sm:null,view:null,lab:null};
   // 底色:浓度低处灰紫、高处青蓝,不透明度 A·浓度^0.7;等值线越浓越亮;lab = 「尘埃云」写在哪(噪声坐标)
 function nebLevel(){return Math.round(Math.log2(NEB.PX/cam.zoom));}
@@ -736,7 +736,7 @@ function nebBuild(L,ti,tj){ /* 造一块:格点浓度 → 每格点一像素的�
   T.cv=c;return T;
 }
 function nebHasCover(L,i,j){ /* 这块没造好时有没有别级的块垫得上 */
-  const V=NEB;if(V.tiles.has(nebKey(L+1,i>>1,j>>1))||V.tiles.has(nebKey(L+2,i>>2,j>>2)))return true;
+  const V=NEB;if(V.tiles.has(nebKey(L+1,i>>1,j>>1))||V.tiles.has(nebKey(L+2,i>>2,j>>2))||V.tiles.has(nebKey(L+3,i>>3,j>>3)))return true;
   for(let b=0;b<2;b++)for(let a=0;a<2;a++)if(!V.tiles.has(nebKey(L-1,2*i+a,2*j+b)))return false;
   return true;
 }
@@ -748,7 +748,7 @@ function nebCompose(){
     const x0=nebSX(v.ox+i*TW),x1=nebSX(v.ox+(i+1)*TW),y0=nebSY(v.oy+j*TW),y1=nebSY(v.oy+(j+1)*TW),T=V.tiles.get(nebKey(L,i,j));
     if(T){T.used=V.fr;if(T.cv)X.drawImage(T.cv,x0,y0,x1-x0,y1-y0);continue;}
     let done=false;
-    for(let m=1;m<=2&&!done;m++){const P=V.tiles.get(nebKey(L+m,i>>m,j>>m));if(!P)continue;P.used=V.fr;done=true;
+    for(let m=1;m<=3&&!done;m++){const P=V.tiles.get(nebKey(L+m,i>>m,j>>m));if(!P)continue;P.used=V.fr;done=true;
       if(P.cv){const s=P.cv.width/(1<<m),k=(1<<m)-1;X.drawImage(P.cv,(i&k)*s,(j&k)*s,s,s,x0,y0,x1-x0,y1-y0);}}
     if(done)continue;
     const xm=nebSX(v.ox+(i+0.5)*TW),ym=nebSY(v.oy+(j+0.5)*TW);
@@ -783,7 +783,7 @@ function nebDraw(){ /* 普通画面的星云层:视图变了或有新块才重�
     V.pend=false;
     if(miss.length){
       let bare=0;for(let k=0;k<miss.length;k+=2)if(!nebHasCover(L,miss[k],miss[k+1]))bare++;
-      if(bare*4>(v.i1-v.i0+1)*(v.j1-v.j0+1))for(let j=v.j0>>2;j<=v.j1>>2;j++)for(let i=v.i0>>2;i<=v.i1>>2;i++){const k=nebKey(L+2,i,j);if(!V.tiles.has(k))V.tiles.set(k,nebBuild(L+2,i,j));}
+      if(bare*4>(v.i1-v.i0+1)*(v.j1-v.j0+1))for(let j=v.j0>>3;j<=v.j1>>3;j++)for(let i=v.i0>>3;i<=v.i1>>3;i++){const k=nebKey(L+3,i,j);if(!V.tiles.has(k))V.tiles.set(k,nebBuild(L+3,i,j));}
         // 视野四分之一以上什么都垫不上(开页、跳得远):先造粗两级的几块;平移露出的一条边不值得,一两帧就补上
       const ci=(cam.x-ox)/TW-0.5,cj=(cam.y-oy)/TW-0.5,ord=[];for(let k=0;k<miss.length;k+=2)ord.push(k);
       ord.sort(function(p,q){const a=miss[p]-ci,b=miss[p+1]-cj,c=miss[q]-ci,d=miss[q+1]-cj;return a*a+b*b-c*c-d*d;});   // 离屏幕中心近的先造
