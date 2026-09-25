@@ -437,7 +437,8 @@ function onContextMenu(e){e.preventDefault();}
 function onWheel(e){e.preventDefault(); // preventDefault 仍是第一句(注册时的 {passive:false} 就是为它准备的)
   if(typeof rad!=='undefined'&&rad.open&&typeof radialInBand==='function'&&radialInBand(e.clientX,e.clientY)){ // RF5 Phase C 轮盘开 && 指针在环带内 = 翻页;环带外照常缩放。环带几何(内外半径/两个半环的角度区间与断口)只在 render/89 定义一份,这里一律调函数
     if(typeof radPage==='function')radPage(e.deltaY>0?1:-1);return;} // 下滚=往后翻,与浏览器一致;只取符号
-  zoomAt(e.clientX,e.clientY,Math.pow(1.0016,-e.deltaY));}
+  zoomAt(e.clientX,e.clientY,Math.pow(WHEEL_ZOOM_BASE,-e.deltaY));}
+const WHEEL_ZOOM_BASE=1.0008; // 滚轮一格(deltaY=100)的缩放倍率 = 它的 100 次方 ≈ 1.08;用户 2026-09-26 要求降低滚轮缩放能力,原 1.0016(≈ 1.17)
 // RF5 失焦清理 +mmb:不清的话切窗回来会残留一个"按下未抬起"的中键计时,回来随手一抬就误触快速交战
 window.addEventListener('blur',()=>{rangeDrag=null;ghostMove=null;panning=null;selDrag=null;rmbClick=null;dragOrder=null;mmb=null;clearTimeout(rmbTimer);rmbTimer=null;clearTimeout(mmbTimer);mmbTimer=null;/* RF5 Phase C:不清的话切窗回来会凭空弹出轮盘 */for(const k in camKeys)camKeys[k]=false;}); // v119:失焦清相机键位,防切窗后镜头卡移动
 
