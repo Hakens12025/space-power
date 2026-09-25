@@ -9,7 +9,7 @@
      ① detectorsOf   挑出某一方的传感器网络(存活舰 + 开机信标)
      ② detectFor     一次 sensePrepare + 逐【对】取量测 + 逐目标 stepCov(23-cov)推进接触
      ③ 握没握着 / 定没定位  存在航迹上(24-track 的 trkStep),门面 contactHeld / contactFix
-     ④ 三样派生产物  被照射告警 / 静听方位椭圆 / 弹丸可见性缓存
+     ④ 三样派生产物  被照射告警 / 听到的敌方雷达(ESM 记录,esmHear)/ 弹丸可见性缓存
      ⑤ setEmit 族    发射档三态(silent/paint/jam)的唯一写入口 + 循环 + UI 文案
 
    ---- 为什么"不在这里再写一遍衰减与增益" ----
@@ -69,6 +69,31 @@ function detectLoop(dt){ // 一个感知节拍:蓝网络探红(litBlue)、红网
    多站交会也不再需要专门的三角公式 —— 信息矩阵逐项相加就是交会,两条方位线一交,短轴自己就收紧了。
    连带退役:那个椭圆的出圈阈值、core/01-state 里存它的那张 Map、render/83 里画它的那个函数。 */
 
+/* ---- 听到的敌方雷达(ESM 记录,2026-09-26):照 demos/地图组/雷达效果.html 的 hear 搬来,只给雷达画面画"它大概在哪"(render/86-radarview)。
+   每方一张:辐射源 → (听者 → 记录)。每拍每对有静听量测就记一次。测向半宽 = K x covTheta('lis'),按有效次数的平方根收窄,
+   但收不过 23-cov "盯着看的稳态"那个比例(与椭圆内核同一套物理);两次之间方位漂过半个半宽,之前的积累大半作废。
+   隔 FADE 秒没听到再听到算新一轮,DROP 秒没听到就忘掉。 */
+const ESM_CFG={K:2,SMIN:Math.PI/180,FADE:90,DROP:600};
+const ESM={blue:new Map(),red:new Map()};
+function esmReset(){ESM.blue.clear();ESM.red.clear();}
+function esmHear(side,L,E,dd){ // L(我方听者)这一拍听到 E 的雷达;dd = 两者距离
+  const sig=covTheta('lis',L,E,dd);if(!(sig>0))return;
+  let m=ESM[side].get(E);if(!m)ESM[side].set(E,m=new Map());
+  const tb=Math.atan2(E.pos[1]-L.pos[1],E.pos[0]-L.pos[0]);let k=m.get(L);
+  if(!k||simTime-k.t>ESM_CFG.FADE){k={n:0,hits:0,tb:tb,half:Math.PI/2,t:simTime};m.set(L,k);}
+  if(k.n>0){const dl=Math.abs(Math.atan2(Math.sin(tb-k.tb),Math.cos(tb-k.tb)))/(k.half/2);k.n*=Math.exp(-dl*dl);}
+  k.n+=1;k.hits++;k.tb=tb;k.t=simTime;k.org=[L.pos[0],L.pos[1]];
+  const st=Math.sqrt(1-1/Math.pow(1+COV.FADE_HOLD,2*SENS.TICK)); // 盯着看的稳态 / 单次量测
+  k.half=Math.min(Math.PI/2-0.01,Math.max(ESM_CFG.SMIN,ESM_CFG.K*sig*Math.max(st,1/Math.sqrt(k.n))));
+  k.R=Math.max(dd*1.05,hearRangeOf(E,L.recv)/Math.sqrt(envRfNoise(L.pos,E.pos))); // 远端 = 这个方向上听得见的最远距离(恒星噪声锥里更近)
+}
+function esmEach(side,f){ // 逐个辐射源给 f(E, [{L,k}]);顺手忘掉太久没听到的
+  for(const [E,m] of ESM[side]){const a=[];
+    for(const [L,k] of m){if(simTime-k.t>ESM_CFG.DROP)m.delete(L);else a.push({L:L,k:k});}
+    if(!a.length){ESM[side].delete(E);continue;}
+    f(E,a);}
+}
+
 /* 一方的网络扫另一方的全部存活舰。三段:准备(O(N))→ 逐目标扫描(O(N^2),全在 22-percep 的
    热循环里)→ 椭圆推进(每目标一次)。本文件不碰距离、不碰通量、不碰增益。 */
 function detectFor(detSide,tgtSide,dt){
@@ -97,7 +122,9 @@ function detectFor(detSide,tgtSide,dt){
       if(p===0)continue;
       const d=all[j], q=senseResolve(j,ti,d,t,p);if(q===0)continue; // ENV2 待定位的对在热循环外精算光学档与有效亮度
       const dx=d.pos[0]-t.pos[0], dy=d.pos[1]-t.pos[1], dz=d.pos[2]-t.pos[2];
-      obs.push({det:d,dd:Math.sqrt(dx*dx+dy*dy+dz*dz),g:{opt:q&3,lis:(q>>2)&3,act:(q>>4)&3},lo:senseLastLo()});
+      const dd=Math.sqrt(dx*dx+dy*dy+dz*dz);
+      obs.push({det:d,dd:dd,g:{opt:q&3,lis:(q>>2)&3,act:(q>>4)&3},lo:senseLastLo()});
+      if(q&12)esmHear(detSide,d,t,dd); // 听到对方雷达:记一次(雷达画面的"被听见"区域读它)
     }
     /* TK2.0:下面两段注释说的三件事(椭圆推进、最后定位记录、握没握着)按原来的先后搬进了 sensors/24 的 trkStep,一句调用做完 */
     /* ---- 最后一次【定得出位置】的记录(SN6f:刷新规则换了,见下)----

@@ -6,11 +6,13 @@
    · 回波:这一拍有照射量测(航迹 cov.ch.act)的接触画方块,填充按多普勒(接近暖 / 远离冷,径向速度对照到它的那艘船),短线 = 5 分钟航程;
      回波本身分不出是船还是石头 —— 身份另走 trkIdLvl:不明不加框、疑似是船琥珀框、确认敌舰红框、确认是石头改灰色小方块
    · 选中的那艘:朝光源的射频噪声锥(envRfNoise 那四档,内亮外淡)
-   · 被听见:敌方开着雷达、我方听得到的(sensePairAt 的 lis 档 > 0),每艘听者一块"方位 ± 2σ、距离在听得见的范围内"的扇形,求交成多边形(集员估计);
-     每一对的方位按固定偏差挪开一点(引擎的估计位置等于真值,不挪的话多边形正中就是真位置);越小越亮
+   · 被听见:读 sensors/21 的 ESM 记录(对方关了雷达也留着)。每条记录一块"方位 ± 半宽、远端 = 听得见的最远距离"的扇形,求交(集员估计);
+     交集被方位线围死(不碰任何一块的远端)就画多边形,外面一圈最远可达(最大航速 x 距最后一次听到);围不死(单站 / 几艘挤在一起 / 交集为空)
+     就画高斯概率团(演示页 ests:每条一份高斯,横向 = 方位误差 x 距离,纵向 = 0 ~ 远端平铺,信息形式相加)。
+     每一对的方位按固定偏差挪开一点(引擎的量测没有噪声,不挪的话正中就是真位置);越小越亮,越久没听到越淡
    ============================================================================ */
-const RDV={K:2,ARC:12,T:0.2,cov:null,cx:null,t:-1e9,polys:[],rev:-1},RDV_U=[0,0];
-  // K = 扇形半宽取几个 σ;ARC = 扇形弧段数;T = 多边形最多每 T 秒(墙钟)重算一次
+const RDV={ARC:8,T:0.2,cov:null,cx:null,t:-1e9,zones:[],gs:null,vmax:0},RDV_U=[0,0];
+  // ARC = 扇形弧段数;T = 区域最多每 T 秒(墙钟)重算一次;gs = 单位高斯贴图(±4σ);vmax = 最远可达圈按的最大航速
 function rdvHash(a,b){let h=2166136261;const s=a+'|'+b;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}h^=h>>>13;h=Math.imul(h,1274126177);return((h^(h>>>16))>>>0)/4294967296;}
 function rdvStdRefl(){return SENS.CLS.DD.size*SENS.CLS.DD.stealth;} // 标准目标:一艘驱逐舰的雷达反射
 function rdvPainters(){const a=[];for(const s of ships)if(s.side==='blue'&&!s.dead&&s.emitMode==='paint')a.push(s);return a;}
@@ -40,8 +42,8 @@ function rdvSelected(E){ // 选中的那艘:虚线轮廓 + 天体身后的雷达
     ctx.beginPath();Q.forEach(function(q,i){const s=toScreen(E.pos[0]+q[0],E.pos[1]+q[1]);if(i)ctx.lineTo(s[0],s[1]);else ctx.moveTo(s[0],s[1]);});ctx.closePath();ctx.fillStyle='rgba(0,0,0,0.45)';ctx.fill();}
   ctx.restore();
 }
-/* ---- 被听见:扇形求交(Sutherland–Hodgman,凸多边形都按逆时针)---- */
-function rdvWedge(o,brg,half,R){const P=[[o.pos[0],o.pos[1]]],n=RDV.ARC;for(let i=0;i<=n;i++){const a=brg-half+2*half*i/n;P.push([o.pos[0]+Math.cos(a)*R,o.pos[1]+Math.sin(a)*R]);}return P;}
+/* ---- 被听见:扇形求交(Sutherland–Hodgman,凸多边形都按逆时针)/ 高斯概率团 ---- */
+function rdvLob(k,brg){const n=RDV.ARC,h=k.half,R=k.R/Math.cos(h/n),o=k.org,P=[[o[0],o[1]]];for(let i=0;i<=n;i++){const a=brg-h+2*h*i/n;P.push([o[0]+Math.cos(a)*R,o[1]+Math.sin(a)*R]);}return P;} // 远弧放大 1/cos,弦只会把区域放大
 function rdvClip(P,Q){
   let out=P;
   for(let i=0;i<Q.length&&out.length;i++){const a=Q[i],b=Q[(i+1)%Q.length],inp=out;out=[];
@@ -52,24 +54,59 @@ function rdvClip(P,Q){
   return out;
 }
 function rdvArea(P){let s=0;for(let i=0;i<P.length;i++){const p=P[i],q=P[(i+1)%P.length];s+=p[0]*q[1]-q[0]*p[1];}return Math.abs(s)/2;}
-function rdvPolys(){ // 我方对每部开着的敌方雷达的目标区域;最多每 T 秒重算
-  const now=performance.now()/1000;if(now-RDV.t<RDV.T)return RDV.polys;RDV.t=now;
-  const obs=[],out=[];for(const s of ships)if(s.side==='blue'&&!s.dead)obs.push(s);
-  for(const E of ships){if(E.side==='blue'||E.dead||!(rfLoudOf(E)>0))continue;
-    let poly=null,n=0;
-    for(const o of obs){const g=sensePairAt(o,E);if(!(g.lis>0))continue;
-      const dx=E.pos[0]-o.pos[0],dy=E.pos[1]-o.pos[1],d=Math.max(1,Math.hypot(dx,dy)),sig=covTheta('lis',o,E,d);if(!(sig>0))continue;
-      const brg=Math.atan2(dy,dx)+(rdvHash(o.id,E.id)*2-1)*sig,half=Math.min(RDV.K*sig,Math.PI/2-0.01),R=Math.max(d*1.05,hearRangeOf(E,o.recv)/Math.sqrt(envRfNoise(o.pos,E.pos))); // 远端 = 这个方向上实际听得见的距离(恒星噪声锥里更近)
-      const w=rdvWedge(o,brg,half,R);poly=poly?rdvClip(poly,w):w;n++;if(!poly.length)break;}
-    if(poly&&poly.length>2)out.push({E:E,poly:poly,n:n,area:rdvArea(poly)});
-  }
-  RDV.polys=out;return out;
+function rdvEst(use){ // 演示页 estOne:每条一份高斯按信息形式相加;迭代三次,让横向按融合后的距离算
+  let m=null,C=null;
+  for(let it=0;it<3;it++){let A=0,B=0,Cc=0,u=0,v=0;
+    for(const x of use){const k=x.k,ux=Math.cos(x.brg),uy=Math.sin(x.brg),nx=-uy,ny=ux,rc=k.R/2,sr=k.R/(2*Math.sqrt(3));
+      const px=k.org[0]+ux*rc,py=k.org[1]+uy*rc,r=m?Math.max(1e4,Math.hypot(m[0]-k.org[0],m[1]-k.org[1])):rc,sc=r*k.half/2,wc=1/(sc*sc),wr=1/(sr*sr);
+      const a00=wc*nx*nx+wr*ux*ux,a01=wc*nx*ny+wr*ux*uy,a11=wc*ny*ny+wr*uy*uy;
+      A+=a00;B+=a01;Cc+=a11;u+=a00*px+a01*py;v+=a01*px+a11*py;}
+    const det=A*Cc-B*B;if(!(det>0))return null;
+    m=[(Cc*u-B*v)/det,(A*v-B*u)/det];C=[Cc/det,-B/det,A/det];}
+  return {m:m,C:C};
 }
-function rdvDrawPolys(){
-  for(const z of rdvPolys()){const s=Math.sqrt(z.area),u=Math.max(0,Math.min(1,Math.log(1e6/s)/Math.log(100)));
+function rdvVmax(){if(!RDV.vmax){let v=800;for(const c in CLS_MOB){const g=CLS_MOB[c].speedGears;if(g&&g[3]>v)v=g[3];}RDV.vmax=v;}return RDV.vmax;} // 全舰种高速档的最大值(不读对方是什么船)
+function rdvZones(){ // 我方对每部听到过的敌方雷达的区域;最多每 T 秒重算
+  const now=performance.now()/1000;if(now-RDV.t<RDV.T)return RDV.zones;RDV.t=now;
+  const out=[],T15=SENS.TICK*1.5;
+  esmEach('blue',function(E,a){
+    if(E.dead)return;
+    let use=a.filter(x=>simTime-x.k.t<=ESM_CFG.FADE);const fresh=use.length>0;if(!fresh)use=a;
+    let P=null,t=-1e9,n=0;
+    for(const x of use){x.brg=x.k.tb+(rdvHash(x.L.id||'bcn',E.id)*2-1)*x.k.half*0.6;t=Math.max(t,x.k.t);n+=x.k.hits;if(!P||P.length){const w=rdvLob(x.k,x.brg);P=P?rdvClip(P,w):w;}}
+    let closed=!!P&&P.length>2; // 围死 = 没有一个顶点落在任何一块的远端上
+    if(closed)for(const q of P){for(const x of use)if(Math.hypot(q[0]-x.k.org[0],q[1]-x.k.org[1])>=x.k.R*(1-1e-6)){closed=false;break;}if(!closed)break;}
+    const age=simTime-t,z={E:E,n:n,L:use.length,fade:!fresh?0.3:(age<T15?1:Math.max(0.3,1-(age-T15)/ESM_CFG.FADE)),grow:rdvVmax()*Math.max(0,age-T15)};
+    if(closed){z.poly=P;z.area=rdvArea(P);}else{const g=rdvEst(use);if(!g)return;z.m=g.m;z.C=g.C;}
+    out.push(z);
+  });
+  RDV.zones=out;return out;
+}
+function rdvGSpr(){ // 单位高斯贴图:半边 64 像素 = 4σ,颜色照演示页 RF_RAMP(中心近白、边缘青、透明)
+  if(RDV.gs)return RDV.gs;
+  const n=128,c=document.createElement('canvas');c.width=n;c.height=n;const g=c.getContext('2d'),img=g.createImageData(n,n),D=img.data;
+  const RP=[[0,[40,120,130,0]],[0.12,[40,130,140,70]],[0.4,[70,200,200,140]],[0.7,[150,240,230,190]],[1,[240,255,250,235]]];
+  for(let j=0;j<n;j++)for(let i=0;i<n;i++){const x=(i+0.5-n/2)/(n/2)*4,y=(j+0.5-n/2)/(n/2)*4,t=Math.sqrt(Math.exp(-0.5*(x*x+y*y)));
+    let a=0;while(a<RP.length-2&&t>RP[a+1][0])a++;const p=RP[a],q=RP[a+1],u=Math.max(0,Math.min(1,(t-p[0])/(q[0]-p[0]))),o=(j*n+i)*4;
+    for(let k=0;k<4;k++)D[o+k]=Math.round(p[1][k]+(q[1][k]-p[1][k])*u);}
+  g.putImageData(img,0,0);return RDV.gs=c;
+}
+function rdvDrawGauss(z){
+  const C=z.C,h=(C[0]+C[2])/2,d=Math.sqrt((C[0]-C[2])*(C[0]-C[2])/4+C[1]*C[1]),s1=Math.sqrt(h+d),s2=Math.sqrt(Math.max(0,h-d)),th=0.5*Math.atan2(2*C[1],C[0]-C[2]);
+  const p=toScreen(z.m[0],z.m[1]),q=toScreen(z.m[0]+Math.cos(th)*1e4,z.m[1]+Math.sin(th)*1e4),r=4*s1*cam.zoom;
+  if(p[0]<-r||p[0]>W+r||p[1]<-r||p[1]>H+r||s2*cam.zoom<0.05)return;
+  const amp=4e8/(s1*s2),g=Math.min(1,Math.log(1+amp/1e-3)/Math.log(1001)); // 峰高 = (2 万 km)² / √det,越糊越暗(演示页 rfT)
+  ctx.save();ctx.globalAlpha=z.fade*Math.max(0.35,g);ctx.translate(p[0],p[1]);ctx.rotate(Math.atan2(q[1]-p[1],q[0]-p[0]));
+  ctx.scale(Math.max(4*s1*cam.zoom,1.5)/64,Math.max(4*s2*cam.zoom,1.5)/64);ctx.imageSmoothingEnabled=true;ctx.drawImage(rdvGSpr(),-64,-64);ctx.restore();
+}
+function rdvDrawZones(){
+  for(const z of rdvZones()){
+    if(!z.poly){rdvDrawGauss(z);continue;}
+    const s=Math.sqrt(z.area),u=Math.max(0,Math.min(1,Math.log(1e6/s)/Math.log(100))),f=z.fade;
     ctx.beginPath();for(let i=0;i<z.poly.length;i++){const p=toScreen(z.poly[i][0],z.poly[i][1]);if(i)ctx.lineTo(p[0],p[1]);else ctx.moveTo(p[0],p[1]);}ctx.closePath();
-    ctx.fillStyle='rgba(84,224,208,'+(0.05+0.3*u).toFixed(3)+')';ctx.fill();
-    ctx.strokeStyle='rgba(84,224,208,'+(0.35+0.5*u).toFixed(3)+')';ctx.lineWidth=1;ctx.stroke();}
+    if(z.grow*cam.zoom>1){ctx.lineJoin='round';ctx.lineWidth=2*z.grow*cam.zoom;ctx.strokeStyle='rgba(84,224,208,'+(0.06*f).toFixed(3)+')';ctx.stroke();ctx.lineWidth=1;ctx.lineJoin='miter';} // 最远可达圈:多边形往外放 grow(圆角)
+    ctx.fillStyle='rgba(84,224,208,'+((0.05+0.3*u)*f).toFixed(3)+')';ctx.fill();
+    ctx.strokeStyle='rgba(84,224,208,'+((0.35+0.5*u)*f).toFixed(3)+')';ctx.lineWidth=1;ctx.stroke();}
 }
 /* ---- 回波 ---- */
 function rdvDrawReturns(){
@@ -91,6 +128,6 @@ function drawRadarView(){ // 每帧入口(84-scene,MAPV.mode === 'radar'):覆盖
   const P=rdvPainters();
   rdvCoverage(P);
   for(const s of P)if(selected.indexOf(s.id)>=0)rdvSelected(s);
-  rdvDrawPolys();
+  rdvDrawZones();
   rdvDrawReturns();
 }

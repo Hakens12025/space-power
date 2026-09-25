@@ -6,7 +6,7 @@
 - `82-ship-icons.js` 舰标 / 记号 / 告警弧 / 涟漪(`HULL_ZOOM` / `hullZoomF` / `shipZoomF`);`82-lod.js` 聚合层(`lodBuild` / `lodDrawShip`);`82-rocks.js` 石头
 - `83-hud.js` hover 圈、信号视野、火控链;`84-scene.js` 每帧场景组装;`84-fmplot.js` 编队图
 - `86-irview.js` 红外画面(右下角「红外」钮,`MAPV.mode === 'ir'`;`drawIrView` / `irvOff`,物理走 `senseOptLoWith` / `senseOptBlocked` / `covTheta`)
-- `86-radarview.js` 雷达画面(右下角「雷达」钮,`MAPV.mode === 'radar'`;`drawRadarView`:照射覆盖、回波 `cov.ch.act`、听到的敌方雷达区域 `sensePairAt` 的 lis 扇形求交)
+- `86-radarview.js` 雷达画面(右下角「雷达」钮,`MAPV.mode === 'radar'`;`drawRadarView`:照射覆盖、回波 `cov.ch.act`、听到的敌方雷达区域:读 sensors/21 的 ESM 记录,围死画多边形、围不死画高斯团)
 - `85-settings.js` 右下工具栏与倍速钮;`85-tutorial.js` 教程 `TUT_HTML`;`87-fmbar.js` / `89-fmpage.js` 编队界面;`88-selpanel.js` 右栏与火控计算机;`89-radial.js` 目标轮盘几何
 
 ## 迷雾(画面不许泄漏真值)
