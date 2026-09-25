@@ -86,7 +86,7 @@ function drawLocks(){ // 火力锁定:红色虚线
     ctx.setLineDash([6,4]);
     ctx.strokeStyle='rgba(255,80,80,.85)';ctx.lineWidth=1.5;
     ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();
-    ctx.beginPath();ctx.arc(q[0],q[1],13*((typeof hullZoomF==='function')?hullZoomF():1),0,6.283);ctx.stroke(); // SN9 锁定圈跟着舰体大小走(同 82 的告警圈)
+    ctx.beginPath();ctx.arc(q[0],q[1],13*((typeof shipZoomF==='function')?shipZoomF():1),0,6.283);ctx.stroke(); // SN9 锁定圈跟着舰体大小走(同 82 的告警圈)
     ctx.restore();
   }
 }
@@ -520,7 +520,7 @@ function ghostAt(s,wx,wy,face,alpha,route,from){ // RF12 虚影的唯一画法(�
   // 半透明舰体:走 10-hull-geometry 的 outline 模式,尺寸用【真实 tier】—— 自己的船不做情报遮蔽
   ctx.globalAlpha=alpha;
   ctx.translate(g[0],g[1]);ctx.rotate(Math.atan2(face[1],face[0]));
-  if(typeof hullZoomF==='function'){const zf=hullZoomF();ctx.scale(zf,zf);} // SN9 虚影与真船同大:它演的就是「船到了那儿的样子」
+  if(typeof shipZoomF==='function'){const zf=shipZoomF();ctx.scale(zf,zf);} // SN9 虚影与真船同大:它演的就是「船到了那儿的样子」
   if(typeof drawHull==='function'&&typeof shipHull==='function')drawHull(ctx,shipHull(s),(s.tier||2),'#ffe066','outline');
   ctx.restore();
 }

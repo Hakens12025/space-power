@@ -3,7 +3,7 @@
 ## 文件
 - `80-camera.js` 相机与平滑缩放(`zAnim` / `camZoomStep` / `vtClampK`);`80-viewtier.js` 三级星图(`VT.SPAN_LS` 阶梯、`vtLandKmpp`、`vtWeights` / `vtTier`、刻度尺与换挡特效)
 - `81-background.js` 底色、嵌套网格、星空贴图 `STAR_TILE`;`81-env.js` 世界层的地图视图(`ENV_VIEWS` / `ENV_KIND_OF` / `drawEnvView`、标签 `mapLabPlan`);`81-terrain.js` 地形瓦片服务 `TERR`
-- `82-ship-icons.js` 舰标 / 记号 / 告警弧 / 涟漪(`HULL_ZOOM` / `hullZoomF` / `LIT_RGB`);`82-lod.js` 聚合层(`lodBuild` / `lodDrawShip`);`82-rocks.js` 石头
+- `82-ship-icons.js` 舰标 / 记号 / 告警弧 / 涟漪(`HULL_ZOOM` / `hullZoomF` / `shipZoomF` / `LIT_RGB`);`82-lod.js` 聚合层(`lodBuild` / `lodDrawShip`);`82-rocks.js` 石头
 - `83-hud.js` 误差椭圆、hover 圈、信号视野、火控链;`83-geom.js` 缩圈小窗;`84-scene.js` 每帧场景组装;`84-fmplot.js` 编队图
 - `85-settings.js` 右下工具栏与倍速钮;`85-tutorial.js` 教程 `TUT_HTML`;`87-fmbar.js` / `89-fmpage.js` 编队界面;`88-selpanel.js` 右栏与火控计算机;`89-radial.js` 目标轮盘几何
 
@@ -13,7 +13,7 @@
 - 陈旧 / 失联画记号(`CONTACT_MARK_R` 实线小圈 + 虚线不确定圈),画完直接 return,不走舰体 / 速度 / 尾焰 / 命令连线那条链。
 - 红方没有舰队层:只按屏幕距离聚已定位的接触,构成里没认出的记 `?`。敌方的目的地线、命令连线不画(GM 除外);来袭走廊从估计位置或第一次看见处画起。
 - 取景与缩放两头不许读任何接触的位置;信号视野按基准接收机算,不读敌舰的 `recv`。
-- 舰体大小系数全场同一个数(`hullZoomF`),不读任何一艘船的字段;拉远到 `MARK` 以下全体换记号。
+- 舰体大小系数全场同一个数(`hullZoomF`;舰船再乘 `SHIP_K` 0.6 即 `shipZoomF`,石头不乘),不读任何一艘船的字段;拉远到 `MARK` 以下全体换记号。
 
 ## 性能
 - 稳态帧不逐格重算:缓存 / 贴图 / 瓦片 / 脏矩形,贴图对齐整数设备像素 1:1。

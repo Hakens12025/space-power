@@ -46,6 +46,8 @@ function hullZoomRaw(){ // 未钳位的系数(判"该不该换记号"用)
   return HULL_ZOOM.LAND*Math.pow(cam.zoom*vtLandKmpp(1),HULL_ZOOM.A);
 }
 function hullZoomF(){return Math.max(HULL_ZOOM.MARK,Math.min(HULL_ZOOM.MAX,hullZoomRaw()));} // 轮廓 / 尾焰 / 告警圈 / 锁定圈 / 虚影共用的系数;下限 = MARK(记号模式下那几样按这个尺寸画)
+const SHIP_K=0.6; // 舰标 / 舰形轮廓再缩到 0.6(同演示页 红外效果.html;拉远换记号不变、石头不缩),免得船比行星还显眼
+function shipZoomF(){return hullZoomF()*SHIP_K;} // 舰船(活船、残骸、尾焰、锁定圈、虚影)用的系数
 function shipMarkMode(){return hullZoomRaw()<HULL_ZOOM.MARK;}
 function drawShipMark(s,p,color){ // A:拉远后的记号。我方 = 沿船头的小箭头;敌方接触 = 小菱形(不分舰种 / 分级 / 认没认出)
   const R=SHIP_MARK_R;
@@ -55,7 +57,7 @@ function drawShipMark(s,p,color){ // A:拉远后的记号。我方 = 沿船头�
   else{ctx.moveTo(R,0);ctx.lineTo(0,R);ctx.lineTo(-R,0);ctx.lineTo(0,-R);}
   ctx.closePath();ctx.fill();ctx.restore();
 }
-function shipIconR(s){return shipMarkMode()?SHIP_MARK_R+1:hullSize(shipIdentHull(s),shipIdentTier(s))*0.78*hullZoomF();} // 图标半径:标签/选中圈/尾焰的基准 TIER1 tier 也走遮蔽口径,否则选中圈/标签间距照样把分级漏出去
+function shipIconR(s){return shipMarkMode()?SHIP_MARK_R+1:hullSize(shipIdentHull(s),shipIdentTier(s))*0.78*shipZoomF();} // 图标半径:标签/选中圈/尾焰的基准 TIER1 tier 也走遮蔽口径,否则选中圈/标签间距照样把分级漏出去
 /* RWR1(2026-09-22 用户实报:"我方被敌方雷达照射的黄圈一闪一闪不是特别好,感觉就像是我选中这艘船了一样")。
    改前是一个闭合的黄色脉冲圈(半径 13 x 舰体系数)—— 与选中圈(黄、闭合、同心)只差粗细与闪不闪,一眼分不开。
    换成雷达告警接收机(RWR,radar warning receiver)的读法:在船外侧、【朝着照射源的方位】画一小段弧 + 一个指向船身的小三角 ="波束从那边打过来"。
@@ -100,7 +102,7 @@ function drawWreck(s,p,r){ // 残骸:空心轮廓+裂纹+暗色,留名标记
   ctx.save();
   ctx.translate(p[0],p[1]);
   ctx.rotate(ang);
-  ctx.save();{const zf=hullZoomF();ctx.scale(zf,zf);}drawHull(ctx,shipHull(s),shipIdentTier(s),'#a0aab9','outline');ctx.restore(); // SN9 残骸跟活船同一个系数;只包舰体这一笔 —— 下面的裂纹用的是传进来的 r(已含系数),一起包进来会被乘两次;原注: // 残骸:空心轮廓,不带阵营色。TIER1 残骸尺寸也走遮蔽口径(方案原文说残骸是已死舰可以保留真实 tier,但残骸在场上留很久,不遮蔽等于给"打死的是几级"留一个稳定读数)
+  ctx.save();{const zf=shipZoomF();ctx.scale(zf,zf);}drawHull(ctx,shipHull(s),shipIdentTier(s),'#a0aab9','outline');ctx.restore(); // SN9 残骸跟活船同一个系数;只包舰体这一笔 —— 下面的裂纹用的是传进来的 r(已含系数),一起包进来会被乘两次;原注: // 残骸:空心轮廓,不带阵营色。TIER1 残骸尺寸也走遮蔽口径(方案原文说残骸是已死舰可以保留真实 tier,但残骸在场上留很久,不遮蔽等于给"打死的是几级"留一个稳定读数)
   // 裂纹(断开感)
   ctx.strokeStyle='rgba(200,210,225,.5)';ctx.lineWidth=1;
   ctx.beginPath();ctx.moveTo(-r*0.7,-r*0.7);ctx.lineTo(r*0.3,r*0.3);ctx.stroke();
@@ -243,7 +245,7 @@ function drawShip(s){
   ctx.save();
   ctx.translate(p[0],p[1]);
   ctx.rotate(ang);
-  {const zf=hullZoomF();ctx.scale(zf,zf);} // SN9 舰体随缩放变(见文件头 HULL_ZOOM);包在这一对 save/restore 里,不外溢
+  {const zf=shipZoomF();ctx.scale(zf,zf);} // SN9 舰体随缩放变(见文件头 HULL_ZOOM);包在这一对 save/restore 里,不外溢
   if(!shipMarkMode())drawHull(ctx,shipIdentHull(s),shipIdentTier(s),bodyColor,'fill'); // 4 舰种 × T1/T2/T3,几何见 10a-ship-hulls.js。TIER1 轮廓与尺寸同一个遮蔽口径,未识别接触画 UNK+T2
   ctx.restore();
   if(shipMarkMode())drawShipMark(s,p,bodyColor); // SZ1-A 拉远后换记号
@@ -305,7 +307,7 @@ function drawFlame(s,p,r){
   const fl=Math.hypot(fx,fy);
   if(fl<0.05||(Math.abs(s.flame)<0.05&&Math.abs(s.sideFlame)<0.05))return; // v119:s.side是阵营字符串'blue'/'red',算术为NaN,应为sideFlame
   const ang=Math.atan2(fy,fx);
-  const zf=hullZoomF(); // SN9 尾焰长度跟舰体同一个系数:不跟的话拉远时 20px 的焰拖在 12px 的船后面
+  const zf=shipZoomF(); // SN9 尾焰长度跟舰体同一个系数:不跟的话拉远时 20px 的焰拖在 12px 的船后面
   if(s.flame>0.05){ // 后主推进:船尾喷焰
     const L=(10+10*s.flame)*zf;
     ctx.fillStyle='rgba(90,167,255,.45)';

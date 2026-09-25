@@ -118,7 +118,7 @@ const TEST_ENVS=[
    + 天体 / 尘埃云 / 小行星;太阳由页面开关加。range:true 是有意继承:开局取景(core/99)与靶语义与现在的红外页相同。
    追加在末尾。不设 match(matchIdx 不受影响)。这组数是演示摆位,不进尺度预算 */
 TEST_ENVS.push(Object.assign({},TEST_ENVS[0],{name:'测试·红外',world:{
-  bodies:[{x:-237939,y:-68404,r:24600}],                 // = 靶场蓝方重心 (-50000,0) 方位 200°、20 万公里(红外页 IRM_PLANET)
+  bodies:[{x:-237939,y:-68404,r:70000}],                 // 木星级(= 红外效果页 IRM_PLANET.R);靶场蓝方重心 (-50000,0) 方位 200°、20 万公里
   clouds:[{x:-2100000,y:-1900000,a:16e6,b:11e6,ang:39,seed:20}], // 同靶场那一朵
   asteroids:[{x:-50000,y:0,r:500000,n:10,seed:4242,smin:1,smax:3,clear:60000,name:'小行星'}]
 }}));
