@@ -1,7 +1,7 @@
 # js/render —— 呈现层(画布、HUD、右栏、轮盘、教程)
 
 ## 文件
-- `80-camera.js` 相机与平滑缩放(`zAnim` / `camZoomStep` / `vtClampK`);`80-viewtier.js` 三级星图(`VT.SPAN_LS` 阶梯、`vtLandKmpp`、`vtWeights` / `vtTier`、刻度尺与换挡特效)
+- `80-camera.js` 相机与平滑缩放(`zAnim` / `camZoomStep` / `vtClampK`);`80-viewtier.js` 三级星图(`VT.BAR_KM` / `VT.BAR_PX`:比例尺条固定长度,三层落点 = 条代表 3 万 / 20 万 / 100 万 km、`vtLandKmpp`、`vtWeights` / `vtTier`、刻度尺与换挡特效)
 - `81-background.js` 底色、嵌套网格、星空贴图 `STAR_TILE`;`81-env.js` 世界层的地图视图(`ENV_VIEWS` / `ENV_KIND_OF` / `drawEnvView`、标签 `mapLabPlan`);太阳线 `drawSunLines`(右下角开关 `SUNL.on`:选中舰的禁区锥 + 天体影子线,关着都不画);`81-terrain.js` 地形瓦片服务 `TERR`(采样在后台线程 `terrWkInit`)
 - `82-ship-icons.js` 舰标 / 记号 / 告警弧 / 涟漪(`HULL_ZOOM` / `hullZoomF` / `shipZoomF`);`82-lod.js` 聚合层(`lodBuild` / `lodDrawShip`);`82-rocks.js` 石头
 - `83-hud.js` hover 圈、信号视野、火控链;`84-scene.js` 每帧场景组装;`84-fmplot.js` 编队图
@@ -26,7 +26,7 @@
 - 星云采样的后台线程代码 = `terrWkInit` 里那张函数表(world/13 的浓度函数转成源码);`envDustOne` 新调用了别的函数就得加进表里,否则线程出错、静默退回主线程采样(变慢)。
 
 ## 规矩
-- 星图比例尺是星图自己的阶梯(`VT.SPAN_LS`),不读距离梯子或武器射程;层界取相邻落点的几何中点,画布一变重推。钳位只走 `vtClampK`。
+- 星图比例尺是星图自己的阶梯(`VT.BAR_KM`,比例尺条长固定 `VT.BAR_PX`,只变数字),不读距离梯子或武器射程;层界取相邻落点的几何中点,画布一变重推。钳位只走 `vtClampK`。
 - 网格用整除链 1-5-10 的嵌套阶梯,锚在世界原点;刻度只让离散层 `vtCur` 那一层写。
 - 平滑缩放:对数空间插值、锚点每帧重解、连滚叠在目标上、别人一碰相机就让位。界面动画走墙钟,步进函数收可覆盖的时钟参数。
 - 画在哪与点在哪读同一个坐标(聚合框、红方挪位的落点都在 `lodBuild` 里定)。

@@ -112,9 +112,8 @@ function drawGrid(){
   const wLs=vtW[2]+vtW[3];                                   // 刻度的透明度跟着【光秒网格整体】的权重走,不跟着某一层走
   if(vtW[2]>0.01)vtGridLs(vtW[2],2,vtCur!==3?wLs:0);
   if(vtW[3]>0.01)vtGridLs(vtW[3],3,vtCur===3?wLs:0);   // SN7d:战区层与舰队层是同一张光秒网格(固定资产 + LOD),放射距离环已删
-  // 比例尺(v111):左下角,物理标尺条 + 「一格 X km」
-  let barKm=step; while(barKm*cam.zoom<80)barKm*=2;
-  const barPx=barKm*cam.zoom;
+  // 比例尺:左下角,条长固定 VT.BAR_PX,上面的数随缩放连续变(用户 2026-09-26:"不要让比例尺可变,固定长度,变数字");三位有效数字 + 「一格 X km」
+  const barPx=VT.BAR_PX,km0=barPx/cam.zoom,pw=Math.pow(10,Math.max(0,Math.floor(Math.log10(km0))-2)),barKm=Math.round(km0/pw)*pw;
   const bx=12, by=H-14;
   ctx.save();
   ctx.fillStyle='rgba(5,7,12,.72)';
@@ -122,7 +121,7 @@ function drawGrid(){
   ctx.strokeStyle='#8fd0ff';ctx.lineWidth=2;ctx.fillStyle='#8fd0ff';
   ctx.fillRect(bx,by,barPx,4);ctx.strokeRect(bx,by,barPx,4);
   ctx.font='bold 12px Consolas';ctx.textAlign='left';ctx.textBaseline='middle';
-  const barLbl=barKm>=1000000?(barKm/1000000)+',000,000 km':Math.round(barKm/1000)+',000 km';
+  const barLbl=barKm.toLocaleString('en-US')+' km';
   ctx.fillText(barLbl,bx,by-9);
   ctx.font='10px Consolas';ctx.fillStyle='#ffd166';
   ctx.fillText('一格 '+Math.round(step/1000)+'k km',bx+3,by+12);

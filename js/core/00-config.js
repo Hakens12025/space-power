@@ -36,7 +36,7 @@ function sReq(o,k,where){
 const CFG={
   world: 500000,            // 战场半幅 km(直径约100万km)
   step: 0.02,               // 固定步长 秒(更细的tick)
-  thrust: 8,                // 推进加速度 km/s²
+  thrust: 2,                // 推进加速度 km/s²(舰种表没有的舰种用它兜底;2026-09-26 与舰种表一起降到 1/4,原 8)
   turnRate: 0.4,            // 转向率 rad/s(~23°/s,飞机式灵活)
   stopDist: 9000,           // 刹车距离 km
   arrive: 400,              // 到位判定 km
