@@ -12,7 +12,6 @@ function initFleet(){
   simTime=0;
   threatCorridors=[];hitFX=[];nets.clear();
   if(typeof aiRedReset==='function')aiRedReset(); // AI1 换局清红方 AI 的信念(目标点 / 最后已知位置 / 搜索进度),否则带着上一局的记忆开局
-  if(typeof GEOM!=='undefined'){GEOM.pin=null;GEOM.tick=-1;GEOM.byId={};} // SN7 换局清定位几何小窗的常驻与视线缓存:理由同下一行 —— shipSeq 每局归零,不清的话上一局钉住的 id 会挂到新一局的另一艘船上
   if(typeof fireSeqs!=='undefined'){fireSeqs=[];fcSeqSeq=0;} // RF5 火控序列换局清空(与 nets.clear() 同族):shipSeq 每局归零重排,不清会让上一局的序列按 id 精准挂到新一局的另一艘船上
   selMissile=null;selNet=null;selMissileHits=[];victoryShown=false;defeatShown=false; // RF4a 框选聚合态一并清(否则引用旧局弹丸对象)
   if(typeof clearPendings==='function')clearPendings(); // KIMI146:交互pending态也清——原 pendingBeacon/pendingManual 等引用旧局舰对象(点地图把信标挂到已不存在的船上)。
@@ -24,9 +23,9 @@ function initFleet(){
   /* SN6c(2026-09-19,用户实报"初始发射档位为静默"):**靶场蓝方开局不再默认开照射**。
      原来这一行是 RANGE1 留下的(靶场要测主炮,而火控级只有照射挣得到)。那条理由在 1 光秒的开局下已经不成立:
      火控天花板 172,829,开局 299,792 —— 照射也打不出主炮,只换来"一开局就把三个靶全定位并认出"
-     (实测:开局一拍之后 litBlue=2、fix=true、idn=true,椭圆 5353x1731)。摸黑接敌那一段当场没了。
+     (实测:开局一拍之后 fix=true、idn=true,椭圆 5353x1731)。摸黑接敌那一段当场没了。
      现在蓝方按 makeShip 的默认档 silent 开局:靶自己是开照射的(靶语义包),所以蓝方靠【静听】拿到
-     lit=1 的纯方位接触 ⇒ 开局画面就是热区。要开炮/要定位,玩家自己按发射档 —— 那正是这套机制要玩家做的决定。
+     纯方位接触 ⇒ 开局画面就是热区。要开炮/要定位,玩家自己按发射档 —— 那正是这套机制要玩家做的决定。
      ⚠ 要测主炮的判据自己开照射(FLOW2 已经这么做)。 */
   /* SN6b(2026-09-19,用户拍板"起始请把初始 3 舰作为阵型舰队存在"):
      开局蓝方直接成队,而不是三艘散船 —— 靶场现在是【1 光秒外摸黑接敌】,接敌是编队的事,

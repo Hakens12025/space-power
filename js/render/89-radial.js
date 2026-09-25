@@ -84,11 +84,11 @@ function radTargetShip(){ // RF5 rad.tid 存 id 不存引用(目标可能中途�
 }
 /* ---------------- 单个武器项对当前目标的解算 ----------------
    判据与 weapons/58 的 fcGate 逐条同口径:射程是【严格小于】(fcGate 写的是 >=range 就 return null);
-   接触等级 mac 需 lit>=3、msl 需 lit>=2(fcGate:143 与下一行,别写反)。
+   定位门两类武器相同(contactFix)。
    ok/why 在这里【每帧现算】而不是读 rad.items 的缓存字段:扇区上画的三格方块与下面的读数必须是同一次计算的产物,
    否则方块说"能打"、读数说"超程"这种自相矛盾没人查得出来。74 侧的 it.ok/it.why 用同一套判据,两边应当一致。 */
 function radSolve(sub,tgt,kind){
-  const o={dist:0,range:0,inR:false,rdy:false,rdyHard:false,lit:0,need:(kind==='mac')?3:2,litHard:false,readyTxt:'—',sw:true,ok:false,why:''};
+  const o={dist:0,range:0,inR:false,rdy:false,rdyHard:false,fix:false,fixHard:false,readyTxt:'—',sw:true,ok:false,why:''};
   if(!sub)return o;
   const ki=(typeof KIND_INFO!=='undefined'&&KIND_INFO[kind])?KIND_INFO[kind]:null;
   o.range=ki?ki.range(sub):0; // 射程唯一来源 = 88-selpanel 的 KIND_INFO(WR1 起:主炮 = 命中率 50% 的距离、导弹 = 动力射程,都是现算的),禁止在本文件写公里数字面量
@@ -109,12 +109,12 @@ function radSolve(sub,tgt,kind){
     o.rdyHard=((sub.ammo||0)<=0); // 弹尽 = 结构性不满足(装填也变不出来),与"装填中"分开画
     o.readyTxt=rc+'/'+(sub.cells||0)+'组';
   }else{o.rdy=true;o.readyTxt='—';}
-  o.lit=tgt?litOf(tgt,sub.side):0; // TK2.4:等级走门面
-  o.litHard=(o.lit===0); // 幽灵/未发现:再照也不是"快好了"
-  o.ok=o.sw&&o.inR&&o.rdy&&(o.lit>=o.need);
+  o.fix=!!tgt&&contactFix(tgt,sub.side);
+  o.fixHard=!tgt||!contactHeld(tgt,sub.side); // 连信号都没有:再等也不是"快好了"
+  o.ok=o.sw&&o.inR&&o.rdy&&o.fix;
   o.why=(!o.sw)?'开关关闭' // 优先级 开关 > 接触 > 射程 > 就绪(开关是玩家自己在底栏关掉的、一点就好,报它最有用;接触最结构性)
-    :((o.lit<o.need)?(o.need>=3?'需火控级':'需识别级')
-    :(!o.inR?'射程外':(o.rdy?'':(o.rdyHard?'弹尽':'装填中')))); // 措辞与 74 的 radItems 逐字一致('开关关闭'/'需火控级'/'需识别级'/'射程外'/'装填中'),同一件事在轮盘上不能有两种说法;'弹尽' 是本文件多分的一档(74 那边并入'装填中')
+    :(!o.fix?'未定位'
+    :(!o.inR?'射程外':(o.rdy?'':(o.rdyHard?'弹尽':'装填中')))); // 措辞与 74 的 radItems 逐字一致('开关关闭'/'未定位'/'射程外'/'装填中'),同一件事在轮盘上不能有两种说法;'弹尽' 是本文件多分的一档(74 那边并入'装填中')
   return o;
 }
 /* ---------------- 基础图元 ---------------- */
@@ -141,7 +141,7 @@ function radSquares(px,py,so){
   const cell=[
     [so.inR,false],                 // 0 射程:不满足一律"可自行恢复"(距离能缩短)
     [so.rdy,so.rdyHard],            // 1 就绪:装填中=可恢复 / 弹尽=结构性
-    [so.lit>=so.need,so.litHard],   // 2 接触:照久一点能上来 / lit===0 是幽灵、结构性
+    [so.fix,so.fixHard],            // 2 定位:等一会能定出来 / 连信号都没有是结构性
   ];
   const x0=px-9.5;
   for(let i=0;i<3;i++){
@@ -335,7 +335,7 @@ function drawRadial(){
     ctx.fillText('距 '+Math.round(so.dist/1000)+'k/'+Math.round(so.range/1000)+'k',cx,cy+18);
     ctx.fillStyle=so.rdy?'#dbe6f2':'#ff9a55';
     ctx.fillText((it.kind==='mac'?'炮 ':'弹 ')+so.readyTxt,cx,cy+32);
-    if(so.ok){ctx.fillStyle='#3fbf6f';ctx.fillText('接触 '+so.lit+'/'+so.need,cx,cy+46);}
+    if(so.ok){ctx.fillStyle='#3fbf6f';ctx.fillText('已定位',cx,cy+46);}
     else{ctx.fillStyle='#ff9a55';ctx.fillText('× '+(so.why||it.why||'不可用'),cx,cy+46);} // why 优先用本帧现算的,与三格方块保证同源
   }else{
     ctx.font='11px "Microsoft YaHei"';ctx.fillStyle='#c7d0dc'; // --txt

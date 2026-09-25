@@ -12,7 +12,6 @@ function render(){
   else if(typeof drawEnv==='function')drawEnv(); // ENV1 残骸场 + 太阳方向:地图事实,画在网格之后、一切接触之前(render/81-env)
   if(rdOn)drawRadarView();
   drawSignalView(); // SN6 信号视野(右下角工具钮):我方每艘舰的【被探测范围】。画在最底下——它是底图
-  drawContacts(); // SN6 接触层:有位置的画误差椭圆(没有位置的不画)。画在舰标【之前】——它是底图,不该盖住图标
   /* SN6 聚合层:先算出这一帧哪些船被收进了框(按屏幕像素,带迟滞),画的时候跳过它们,最后把框画上去。
      ⚠ lodBuild 必须在 drawShip 之前跑完 —— 它读的是 toScreen,而 toScreen 依赖这一帧的 cam(vtFrame 刚调整过)。 */
   lodBuild();
@@ -36,7 +35,6 @@ function render(){
   drawSelection();
   if(typeof drawEdgeRuler==='function')drawEdgeRuler(); // SN8 四边刻度尺(屏幕空间的仪器边框;换层时刻度重新长出来)
   if(typeof drawTierFx==='function')drawTierFx();       // SN8 换层瞬间的大字 + 扫描线,0.7 秒内淡出;平时首句就 return
-  if(typeof drawGeom==='function')drawGeom(); // SN7 定位几何小窗:画在【自己的】小 canvas 上,不碰主画布;钮关着时首句就 return。挂在 render 里是为了让调 render() 的判据也走得到它
   if(dragOrder){ // 拖拽中的命令点高亮(FM1:原来还有 kind==='cur'/'queue' 两支,读的是已删除的 F.dest/F.queue;
     // 编队路径现在就是旗舰的 s.orders,拖的是旗舰身上的普通命令点,下面 dragOrder.ship 这一支天然覆盖)
     let hp=null;

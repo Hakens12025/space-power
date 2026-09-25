@@ -352,41 +352,6 @@ function drawSignalView() {
 }
 
 /* ================= SN6 接触层:定得出位置的接触画误差椭圆(跟着「缩圈」钮);定不出位置的(热区)地图上不画(用户 2026-09-25)================= */
-/* ================= 接触等级的【配色与叫法】:全库唯一出处(SN7c,2026-09-21)=================
-   用户:"需要显示敌方的观测等级,比如一级二级三级,风格按照态势感知的风格来;缩圈的 UI 颜色和态势感知的也不一样,也要统一"。
-   演示页(demos/sensors/态势感知V3.html)的那一组是 LIT_COL = 灰 / 蓝 / 青 / 黄:
-        0 未发现  #7b8ea6    1 探测  #5aa7ff    2 跟踪  #54e0d0    3 火控  #ffe066
-   引擎这边原来是另一组(橙 / 蓝 / 绿),而且是地图椭圆层与缩圈小窗【各抄一份】—— 两处抄的还是同一组错的。
-   现在只有这一张表:地图上的椭圆、舰标下面的等级标签、陈旧记号、缩圈小窗四处都读它。
-   写成 "r,g,b" 三元组是因为调用点都要自己配透明度(rgba(...,a))。
-   等级的文字标签(「2级 跟踪」)已从界面上去掉(用户 2026-09-25),等级本身仍是武器门与机器人的依据。 */
-const LIT_RGB=['123,142,166','90,167,255','84,224,208','255,224,102'];
-function drawContacts(){
-  /* ---- 误差椭圆:定得出位置的接触。这里【可以】用椭圆 —— 它是武器层的语言,而这条接触确实进了武器的账 ----
-     GM1(2026-09-22 用户拍板:"如果我不点缩圈显示按钮,敌方在大地图上是默认不显示缩圈图标的"):这一层跟着右下角「缩圈」钮(GEOM.on)走,默认不画。
-     缩圈是同一件事的两个视图 —— 右上角小窗是放大的那一个,地图上的椭圆是原位的那一个 —— 一个钮管两处;平时地图上只留舰标 / 记号。 */
-  if(typeof GEOM==='undefined'||!GEOM.on)return;
-  trkEach('blue',(tk,st)=>{ // TK2.4:椭圆也从蓝方航迹表里取;下面的 return 就是原来的 continue
-    if(trkGone(tk))return;
-    const c=tk.cov;
-    /* SN6f:live 与 coast 两态画椭圆。coast 时它就是那一态的不确定度 —— 量测断了,椭圆按 FADE_LOST 自己长大,
-       长过 AMAX 就定不出位置、等级归 0、转成失联记号。画不画只问 contactState,与舰标层 / 热区层同一个出处。 */
-    if(!c||(st!=='live'&&st!=='coast'))return;
-    const a1=c.a1*cam.zoom, a2=c.a2*cam.zoom;
-    if(a1<2)return;                                   /* 收得比两个像素还紧:舰标自己说明一切 */
-    const p=toScreen(c.x,c.y);
-    if(p[0]<-a1-40||p[0]>W+a1+40||p[1]<-a1-40||p[1]>H+a1+40)return;
-    /* 配色读 LIT_RGB;线型照演示页:火控级【实线】、其余虚线 —— "这条解算稳了"一眼看得出,不用读数 */
-    const lit=trkLit(tk),col=LIT_RGB[lit]||LIT_RGB[0];
-    ctx.save();
-    ctx.translate(p[0],p[1]);ctx.rotate(c.th);
-    ctx.fillStyle='rgba('+col+',.07)';
-    ctx.beginPath();ctx.ellipse(0,0,a1,a2,0,0,6.283);ctx.fill();
-    ctx.strokeStyle='rgba('+col+',.75)';ctx.lineWidth=1.2;ctx.setLineDash(lit>=3?[]:[3,3]);
-    ctx.beginPath();ctx.ellipse(0,0,a1,a2,0,0,6.283);ctx.stroke();ctx.setLineDash([]);
-    ctx.restore();
-  });
-}
 function drawMissileIntent(g){ // v129:选中导弹/网→显示目标虚线、目的地标记、触发圈、火控母舰连线
   const sp=toScreen(g.pos[0],g.pos[1]);
   if(g.trigRadius){ // 触发圈(雷/区域齐射/网雷,选中即画)

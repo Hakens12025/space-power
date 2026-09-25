@@ -10,9 +10,9 @@ const CLS_HULL={DD:'DD',CA:'CA',BB:'BB',CV:'CV'};
 function shipHull(s){return kindOf(s)==='ship'?(CLS_HULL[s.cls]||'DD'):'UNK';} // TK4c:不是船的东西(石头)没有舰种轮廓,一律通用轮廓 —— 否则查不到舰种会落到 'DD'
 function shipTier(s){return s.tier||2;}                       // 未标 Tier 的舰按 T2(中性尺寸/亮度)
 function shipIdentHull(s){                                    // 识别分层:未达识别级的敌舰只给通用轮廓
-  // ID1:打码条件从"等级恰为 1"换成"握着接触(lit>0)但还没认出"—— 身份问 sensors/21 的 contactIdn,不再从等级推。
-  //      lit===0 那一档原样不打码(改前的 q===0 分支):编辑器与 GM 下画的是没有接触的红舰,那里要看真轮廓;非 GM 下 lit=0 的船根本不画舰体。
-  return (s.side!=='blue'&&litOf(s,'blue')>0&&!contactIdn(s,'blue'))?'UNK':shipHull(s); // TK2.4:等级走门面。TK4b 审计:「不是我方」才打码(原写「是红方」,中立的石头会拿到真轮廓)
+  // ID1:握着接触但还没认出 ⇒ 打码;身份问 sensors/21 的 contactIdn。
+  //      没握着那一档不打码:编辑器与 GM 下画的是没有接触的红舰,那里要看真轮廓;非 GM 下没握着的船根本不画舰体。
+  return (s.side!=='blue'&&contactHeld(s,'blue')&&!contactIdn(s,'blue'))?'UNK':shipHull(s); // TK4b 审计:「不是我方」才打码(原写「是红方」,中立的石头会拿到真轮廓)
 }
 function shipIdentTier(s){                                    // TIER1 分级遮蔽:轮廓已被降级成 UNK 的敌舰(未达识别级)一律按 T2 尺寸画
   // TIER1 判据用 litBlue<2 而不是 shipIdentHull(s)==='UNK':幽灵接触(曾点亮、现已失联,litBlue=0)走的是 q===0 分支,轮廓不会被降级成 UNK,
@@ -149,21 +149,6 @@ function drawContactMark(s,p,view){
   ctx.fillText((ghost?'⏳失联':'⏳陈旧')+Math.round(ageV)+'s',p[0],p[1]-top-3);
   ctx.restore();
 }
-/* 敌方接触的火控框(SN7c,火控级才画)。等级文字「◎ 3级 火控」已去掉(用户 2026-09-25);没认出的石头也照它画 */
-function drawFoeLitTag(p,r,foeLit){
-  if(foeLit>0&&typeof LIT_RGB!=='undefined'){
-    const rgb=LIT_RGB[foeLit]||LIT_RGB[0];
-    ctx.save();
-    if(foeLit>=3){
-      ctx.strokeStyle='rgba('+rgb+',.9)';ctx.lineWidth=1.2;
-      const q=r+6;
-      for(const d of [[-1,-1],[1,-1],[-1,1],[1,1]]){
-        ctx.beginPath();ctx.moveTo(p[0]+d[0]*q,p[1]+d[1]*q-d[1]*5);ctx.lineTo(p[0]+d[0]*q,p[1]+d[1]*q);ctx.lineTo(p[0]+d[0]*q-d[0]*5,p[1]+d[1]*q);ctx.stroke();
-      }
-    }
-    ctx.restore();
-  }
-}
 function drawShip(s){
   /* ================= 红方接触:画什么只问 contactState(SN6f)=================
      五态互斥,每一态只有一个显示层负责(总表在 render/CLAUDE.md 的 SN6f 一节):
@@ -240,8 +225,6 @@ function drawShip(s){
   ctx.strokeStyle=bodyColor; ctx.fillStyle=bodyColor;
   const fx=s.facing[0], fy=s.facing[1];
   const ang=Math.atan2(fy,fx);
-  // 识别分层(v123):探测级(质量1)只知道大小→通用轮廓;识别级(2+)才知道舰种→真实舰型
-  const identQ=s.side==='red'?trkLit(trkOf('blue',s)):3; // TK2.4:原值读航迹表(这个局部已经没人读了,删不删等用户拍板)
   ctx.save();
   ctx.translate(p[0],p[1]);
   ctx.rotate(ang);
@@ -267,21 +250,12 @@ function drawShip(s){
     const tag=(zc>0?'▲ ':'▼ ')+Math.round(Math.abs(zc)/1000)+'k';
     ctx.fillText(tag,p[0],p[1]-r-7);
   }
-  // 名称(识别分层:探测级显示"大/中/小热源",识别级显示舰种名)
-  const foeLit=(s.side==='red')?litOf(s,'blue'):0; // TK2.4:等级走门面
+  // 名称(没认出显示"大/中/小热源",认出显示舰名)
   if(cam.zoom>0.0008){
     const lbl=(shipIdentHull(s)==='UNK')?sigClassLabel(s):s.name; // ID1:名字与轮廓同一个口径 —— 轮廓打码了,名字就不许是真名(原来各判各的:identQ===1)
     ctx.fillStyle='rgba(215,226,240,.8)';ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';
     ctx.fillText(lbl,p[0],p[1]+r+6);
   }
-  /* SN7c 敌方接触的【观测等级】:「◎ 3级 火控」。
-     ⚠ 第一版照演示页在后面跟了误差读数(±2.7k x 1.1k),用户 2026-09-21 拍板去掉:地图上只要等级,
-       误差那组数归缩圈小窗管(它本来就是专门回答"椭圆现在多大"的地方),标签上再写一遍只是噪声。
-     · 颜色读 83-hud 的 LIT_RGB(与椭圆、缩圈小窗同一张表);火控级加 ◎ 前缀,并在舰标四角画黄色火控框 ——
-       火控框只看等级、不看身份:没认出的航迹照样可以有火控解(等级与身份是两栏)。
-     · 不受上面那道缩放门管:名字拉远了可以省,"这条接触现在几级"是随时要读的。
-     等级那行写在名字下面一行;名字被缩放门省掉时它就顶上去。 */
-  drawFoeLitTag(p,r,foeLit); // TK4c:等级标签抽成函数(没认出的石头照同一个画法),画法一笔没改
   // 当前目标连线。FM2:每艘船(散船/旗舰/僚舰)都持有自己的令,所以这里【只读自己的 orders】——
   // FM1 那段"僚舰去读旗舰 orders 再叠自己的阵位偏移"的特例整体删除,编队的每个终点现在天然各画各的。
   /* FG1(2026-09-21,用户实报"我应该不能看到敌方的目标线和目的地线才对"):这条连线只画【我方】的船(GM 下照旧全画)。

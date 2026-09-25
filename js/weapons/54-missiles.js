@@ -36,11 +36,11 @@ function guideSide(side){ // 一方数据链网络的引导分配(v125:按网分
   for(const p of ms){
     if(!p.needGuide)continue;
     const key=p.netId||('g'+p.group);
-    if(!netMap.has(key))netMap.set(key,{groups:[],shooter:p.shooter,target:p.target,canGuide:!p.target.dead&&trkLit(trkOf(side,p.target))>=2}); // TK2.1:这一方对目标握着的等级改读航迹表 // DS191:死目标不占通道(空发射不吃火控,双保险)
+    if(!netMap.has(key))netMap.set(key,{groups:[],shooter:p.shooter,target:p.target,canGuide:!p.target.dead&&trkFix(trkOf(side,p.target))}); // 数据链要母舰定得出目标位置 // DS191:死目标不占通道(空发射不吃火控,双保险)
     netMap.get(key).groups.push(p);
   }
   const chan={};for(const s of gs)chan[s.id]=s.guideChan||0;
-  const netList=[...netMap.values()].filter(n=>n.canGuide); // 目标识别级(2)可引导的网
+  const netList=[...netMap.values()].filter(n=>n.canGuide); // 目标定得出位置、可引导的网
   // 第一遍:自引导优先(每舰先导自己的网)
   for(const s of gs){
     if(chan[s.id]<=0)continue;

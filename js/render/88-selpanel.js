@@ -364,7 +364,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
     let hp=0,mhp=0;
     blue.forEach(s2=>{hp+=Math.max(0,s2.hp);mhp+=s2.maxHp||0;});
     const fr=mhp>0?Math.max(0,Math.min(1,hp/mhp)):0;
-    let lit=0;trkEach('blue',tk=>{if(!trkGone(tk)&&trkLit(tk))lit++;}); // TK2.4:数蓝方航迹表里握着的接触(原来按红舰名单数)
+    let lit=0;trkEach('blue',tk=>{if(!trkGone(tk)&&trkHeld(tk))lit++;}); // 数蓝方航迹表里握着的接触
     title.textContent='舰队总览';
     if(ciN)ciN.textContent='—';if(ciC)ciC.textContent='—';if(ciSp)ciSp.innerHTML='';
     box.innerHTML=`

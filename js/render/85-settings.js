@@ -25,10 +25,6 @@ on('tools','click',function(e){
     for(const x of document.querySelectorAll('#tools [data-tool="ir"],#tools [data-tool="radar"]'))x.classList.toggle('on',x.dataset.tool===MAPV.mode);
   }
   if(b.dataset.tool==='sig'){SIG.on=!SIG.on;b.classList.toggle('on',SIG.on);}
-  if(b.dataset.tool==='geom'&&typeof GEOM!=='undefined'){ // SN7 缩圈小窗:钮只管开关,显示谁由 83-geom 的 geomSubject 决定
-    GEOM.on=!GEOM.on;b.classList.toggle('on',GEOM.on);
-    const pane=document.getElementById('geomPane');if(pane)pane.hidden=!GEOM.on;
-  }
 });
 /* UI2 右下角工具栏给底部指令栏让位。#cmdBar 居中、最宽 1160px:够不到右下角时工具栏直接落在角上(css 的 bottom:--gut);
    伸到角上时工具栏坐到它上面。⚠ 高度必须【实测】:指令栏是 flex-wrap,窄视口下会换成两三行(762px 宽时 95px),

@@ -6,7 +6,7 @@
    为什么这么设计:
    ① 【主体舰】直接取 selBlue()[0](88-selpanel 右栏那个主角),不另立"当前舰"概念 —— 多一套选中语义就要多一处
       同步,右栏说的和准星打的必须是同一艘。
-   ② 命中测试复用 70-input 的 targetAt():它自带战争迷雾门控(非 GM 时 litBlue===0 的幽灵/未发现接触不可点)
+   ② 命中测试复用 70-input 的 targetAt():它自带战争迷雾门控(非 GM 时交代不出位置的接触不可点)
       与 60/cam.zoom 的吸附半径。另写一套命中测试 = 两套感知口径,迟早漂移。
    ③ 情报遮蔽复用 render/82-ship-icons 的 shipIdentHull/shipIdentTier —— 地图图标画成什么样,卡片就说到什么份上,
       不照着规则重写一遍(重写就是第二份真相)。唯一故意的偏差见 xhCardHTML 里的 GM 注释。
@@ -95,13 +95,12 @@ function xhTick(dt){ // RF5 准星每帧状态机:命中测试 → 停留累加 
   if(rad.open)xhCardHide(); // RF5 Phase C 轮盘开着时收起 #xhTip:长按开盘那一瞬光标必然停在目标身上,而目标正是轮盘圆心(radOpen 拿 toScreen(t.pos) 当 anchor),卡片钉在光标+16px 就必然糊进盘面右下象限,盖住 hub 读数井与右下扇区(八武器时整整盖住一瓣)。卡片上的目标名/方位/结构,hub 与扇区读数都有,收起不丢信息
   else if(xh.snap)xhCard(sub);else xhCardHide();
 }
-function xhName(s){ // RF5 可外传的目标名:未达识别级的敌舰不吐真名(卡片 / 轮盘 / 缩圈小窗同一口径,免得一处打码另一处泄底)
+function xhName(s){ // RF5 可外传的目标名:没认出的敌舰不吐真名(卡片 / 轮盘同一口径,免得一处打码另一处泄底)
   const gm=(typeof adminMode!=='undefined'&&adminMode);
   return (!gm&&s.side!=='blue'&&!contactIdn(s,'blue'))?'未知接触':s.name; // ID1:原判据 litBlue<2;身份问 contactIdn TK4b:「不是我方」才打码(原写「是红方」:中立的石头会被当成自己人吐真名)
 }
-function xhCardHTML(s,sub){ // RF5 信息卡内容:按接触等级分三档。只产 HTML 字符串,DOM 与样式属渲染侧
+function xhCardHTML(s,sub){ // RF5 信息卡内容:按认没认出、定没定位。只产 HTML 字符串,DOM 与样式属渲染侧
   const gm=(typeof adminMode!=='undefined'&&adminMode);
-  const q=(s.side==='blue')?3:litOf(s,'blue'); // TK2.3:等级走门面(原来直读舰上字段) TK4b:只有我方给满级(原写「红方才查等级」,中立物体会白拿 3 级)
   const cp=(!gm&&typeof contactPos==='function')?(contactPos(s,'blue')||s.pos):s.pos; // ID1 顺手:方位 / 距离按接触的【估计位置】报(与画出来、点得到的是同一个点),原来报的是真值
   const dx=cp[0]-sub.pos[0],dy=cp[1]-sub.pos[1];
   const dist=Math.hypot(dx,dy);
@@ -121,7 +120,7 @@ function xhCardHTML(s,sub){ // RF5 信息卡内容:按接触等级分三档。�
   else if(!masked)rows.push(['舰种',((typeof HULL_LABEL!=='undefined'&&HULL_LABEL[hull])||'未知')+'舰 · T'+tier]); // RF5 兜底文案改中文'未知'(原为直接吐 hull 代码):HULL_LABEL(ships/10)只有 DD/CA/BB/CV/SC 五个键,查不到时会渲染出 "UNK舰" 这种非中文串,违反 UI 全中文。识别级:舰种与分级解禁(与 82 放行真实轮廓/尺寸、87-fleetcards 的分级徽标同为 litBlue>=2)
   rows.push(['方位',String(Math.round(brg)%360).padStart(3,'0')+'° · '+Math.round(dist/1000)+'k']); // 探测级也给:这一档只有方位与距离是可信的
   {const tk=(!gm&&s.side!=='blue')?trkOf('blue',s):null;if(tk&&tk.tn)rows.push(['航迹','T'+String(tk.tn).padStart(2,'0')]);} // TK4c 航迹号:没认出的接触都叫「未知接触」,靠它指认是哪一条
-  if(!masked&&!notShip&&(gm||q>=3)){ // 火控级:追加数值。82 的图标层不区分 2 级与 3 级,这一档是信息卡独有的
+  if(!masked&&!notShip&&(gm||s.side==='blue'||contactFix(s,'blue'))){ // 定得出位置才追加数值
     rows.push(['结构',Math.max(0,Math.round(s.hp))+'/'+Math.round(s.maxHp)]);
     rows.push(['速度',Math.round((typeof V!=='undefined'&&V.len)?V.len(s.vel):Math.hypot(s.vel[0],s.vel[1]))+' m/s']);
   }
@@ -170,8 +169,7 @@ function xhQuickEngage(append){ // RF5 中键短按 = 快速交战:主体舰 + �
     return true;
   }
   if(fcNew(sub,{tid:t.id})==null)return false; // 建序列会顺带打开火控(58-firecontrol 的副作用),这是预期行为;RF7 触顶返回 null
-  // RF5:targetAt 的吸附门槛只要求 litBlue>=1,而 fcGate(58)对导弹要 >=2、主炮要 >=3。只到探测级就建序列 = 暂时一发不响;
-  // 不阻止建序列 —— 等级上来后这条序列本来就该自动开火。(原来这里按等级打一条提示,2026-09-22 随日志系统整体删除。)
+  // RF5:定出位置之前就建的序列暂时一发不响;不阻止 —— 定出位置后这条序列本来就该自动开火。(原来这里按等级打一条提示,2026-09-22 随日志系统整体删除。)
   if(typeof updateSelPanel==='function')updateSelPanel(); // 立刻刷右栏火控面板,不等 frame 的 20 帧低频刷新
   return true;
 }
@@ -186,7 +184,7 @@ function radWeapons(s){ // RF5 轮盘的武器项来源:实例烘焙的 s.weapon
 function radItems(sub,t,it){ // RF5 解算每个武器扇区:allow=计划(许不许打),ok/why=此刻打不打得到。两者刻意分开 —— 目标现在打不到不代表以后打不到,所以禁用态扇区仍可点
   const out=[];
   if(!sub||!t)return out;
-  const lit=litOf(t,sub.side); // TK2.3:射手这一方对目标的等级走门面(原来按阵营直读舰上字段)
+  const fix=contactFix(t,sub.side);
   const dist=(typeof V!=='undefined'&&V.len&&V.sub)?V.len(V.sub(t.pos,sub.pos)):Math.hypot(t.pos[0]-sub.pos[0],t.pos[1]-sub.pos[1]); // RF5 距离口径必须与 58 的 fcGate 同源:它用的是【三维】V.len(V.sub(...))。原先写平面 Math.hypot,z 差两万的场景(90-envs「均衡编队」蓝方 z=+20000)在射程边界上会与引擎给出相反结论——轮盘说"射程内",fcGate 恒 return null,主炮永不开火而盘上没有任何提示
   for(const w of radWeapons(sub)){
     const k=w.kind;
@@ -197,7 +195,7 @@ function radItems(sub,t,it){ // RF5 解算每个武器扇区:allow=计划(许不
     const swf=(ki&&ki.on)?ki.on:null;   // RF5 单舰武器开关的字段名【只从 88-selpanel:19 的 KIND_INFO.on 读】,不写 'macOn'/'mslOn' 字面量(与"门控用谓词、不写 cls==='XXX'"同一条铁律:字面量会静默失配)
     let ok=true,why='';
     if(swf&&sub[swf]===false){ok=false;why='开关关闭';} // RF5 补齐 57 实际开火门里被漏掉的一层:57:80 的 roeOK 要 macOn!==false、57:33 的自动齐射要 mslOn!==false。漏了它,底栏把主炮点掉之后扇区照样画成可用(三格全绿、无禁用虚线),玩家会反复点许可找原因——而许可本来就是开的
-    if(ok&&gated&&lit<(k==='mac'?3:2)){ok=false;why=(k==='mac')?'需火控级':'需识别级';} // 与 fcGate/fireMAC/orderMissileSalvo 内部门控同源:MAC 要火控级(3)、导弹要识别级(2)
+    if(ok&&gated&&!fix){ok=false;why='未定位';} // 与 fcGate / fireMAC / orderMissileSalvo 同一道定位门
     const maxRng=(ki&&ki.maxRange)?ki.maxRange(sub):rng; // RF6 硬上限;无衰减机制的武器(msl/ciws)回退成精确射程
     if(ok&&gated&&maxRng&&dist>=maxRng){ok=false;why='射程外';} // 比硬上限,不比精确射程:两者之间是衰减区(能打,散布变大),判成不可用会与 fcGate/fireMAC 给出相反结论
     if(ok&&gated){

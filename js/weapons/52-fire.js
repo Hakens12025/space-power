@@ -19,7 +19,7 @@ function macAligned(s,t){ // 轴炮窗口:机头是否对准预测点(~1.1°容�
        弹丸沿散布后的方向直飞到【预测点】的飞行时间就消失(不许无限飞:性能)。命中判定照旧 = 弹丸离目标真实位置 < MAC_HIT_R。
        于是命中率随距离自然下降:P(d) = erf( MAC_HIT_R / (σ·d·√2) )。macSigma=0.0081 ⇒ 15 万 ≈ 90%、36.6 万 = 50%、196 万 = 10%。
        飞行时间里目标机动造成的脱靶不用另建模:弹丸瞄的是发射那一刻的预测点,目标一加速自然打空(150 万公里要飞 50 秒)。
-     · 主炮的火控门从 3 级放宽到 2 级(跟踪级),瞄的是接触的【估计位置】(contactPos)—— 椭圆越大越打不中,这就是"精准度问题"的另一半。
+     · 主炮只要定得出位置就许开火,瞄的是接触的【估计位置】(contactPos)—— 椭圆越大越打不中,这就是"精准度问题"的另一半。
        目标速度暂用真值(内核今天不估计速度;已知的口子,记在 weapons/CLAUDE.md)。
      · "有效射程"这个词保留,语义改成【命中率 50% 的距离】(macEffRange);macRangeAt(s,p) 给任意档;bot / 自动开火按命中率阈值决定打不打。
      · 导弹没有发射门。射程 = 燃料:mslReach = 动力射程(加速一半、减速一半);之外滑行,靠数据链把它带到目标(weapons/56)。
@@ -55,8 +55,7 @@ function mslReach(s){return MSL_ACC*(MSL_FUEL/2)*(MSL_FUEL/2);} // 动力射程:
 function fireMAC(shooter,target){ // MAC轴炮:沿船头方向直射(必须先对准),到预测时间失的
   if(shooter.noFire)return; // RANGE1 禁火总闸门 1/3:靶场的靶只挨打不还手。这是 MAC 发射的唯一实现,GM 手动锁定/自动索敌/AI 三条路径最终都落到这里。注意这是个【静默】开关(不报错不打日志),将来若误给蓝舰置了 noFire 会毫无线索,置位处只有 initEnemy 的靶语义包一处
   if(shooter.side===target.side||shooter.dead||target.dead)return;
-  const q=litOf(target,shooter.side);
-  if(q<2)return; // WR1:火控门 3 级 → 2 级(跟踪级)。原来要火控级(椭圆进主炮门)才许开火;现在瞄的是估计位置,椭圆大就是打不中,不再由门替玩家挡
+  if(!contactFix(target,shooter.side))return; // 定得出位置就许开火;瞄的是估计位置,椭圆大就是打不中
   const pred=macPred(shooter,target); if(!pred)return; // WR1:交代不出估计位置就不开火(不回落真值)
   const d=V.len(V.sub(pred,shooter.pos)); // WR1:飞行距离按预测点算(没有射程门了,d 只决定弹丸寿命)
   const tt=d/CFG.macSpd; // 飞行时间(MAC 0.1c)
@@ -123,7 +122,7 @@ function orderMissileSalvo(shooter,target,n){ // 齐射指令(v119·单元制):�
   if(shooter.missileArm)return; // 已在装填
   const isShip=target&&kindOf(target)!=='point'; // TK4b:点与物体的判别统一走 kindOf(原来看 side 是不是 undefined,石头进来会被当成点)
   if(isShip&&(shooter.side===target.side||target.dead))return;
-  if(isShip){const q=litOf(target,shooter.side);if(q<2)return;} // 火控门控(v123):导弹需识别级(2,精确知道位置);探测级只知道大小,盲射走区域齐射
+  if(isShip&&!contactFix(target,shooter.side))return; // 定不出位置不许对舰齐射;要打就走区域齐射
   if(shooter.ammo<(shooter.mslPer||12))return; // 弹药不足。RF6 修:原写死 16,是每组 16 枚时代的遗留(KIMI154 把每组改 12 时漏改此处与 fireMissiles 的组数上限),后果是每舰末尾 12 枚永远打不出去(DD 192 枚只能打 15 组、CA 240 枚只能打 19 组)
   const avail=readyCells(shooter);
   if(avail<=0)return; // 发射单元全在装填

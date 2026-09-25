@@ -8,7 +8,7 @@
 
      ① detectorsOf   挑出某一方的传感器网络(存活舰 + 开机信标)
      ② detectFor     一次 sensePrepare + 逐【对】取量测 + 逐目标 stepCov(23-cov)推进接触
-     ③ lit 派生      由驻留三档推出接触等级 —— 全库【唯一】写 litBlue/litRed 的地方
+     ③ 握没握着 / 定没定位  存在航迹上(24-track 的 trkStep),门面 contactHeld / contactFix
      ④ 三样派生产物  被照射告警 / 静听方位椭圆 / 弹丸可见性缓存
      ⑤ setEmit 族    发射档三态(silent/paint/jam)的唯一写入口 + 循环 + UI 文案
 
@@ -18,10 +18,8 @@
    用另一个数,没人察觉。现在量程律只有 22-percep 一份,本文件与 render/83·84·88
    一律调函数。往这里加任何一行"再乘一个系数"都等于重新制造那道裂缝。
 
-   ---- 两通道的接触阶梯(阈值常量全在 SENS,形状沿用旧内核,下游读的仍是 0/1/2/3) ----
-     1 探测级:有信号,但椭圆还大到定不出位置(地图上是一团热区)
-     2 跟踪级:椭圆收进导弹门(导引头搜索篮)
-     3 火控级:椭圆收进主炮门(命中判定半径);照射一断,椭圆长大就自己掉下来
+   ---- 接触不分等级,只有两问 ----
+     握着:有信号,或椭圆还定得出位置;定位:椭圆长轴 < COV.AMAX。武器只问定位,准不准交给瞄估计位置的弹道
    (SN6 已删)旧内核的滞回对【光学与静听对称】判 —— 更旧的实现只判红外那一路,那是"射频通道
    单独恒点不亮"留下的不对称;新模型两条被动通道地位完全相同,只判一路会让"靠静听
    点亮、随后目标滑进光学盲区"的接触瞬间熄灭再重新点亮,画面上就是幽灵闪烁。
@@ -33,7 +31,7 @@
          也不削静听那一路 —— "正在大声喊的人"不可能因此变得更难听见,恰恰相反:jam 档的射频
          响度是 paint 的两倍,被听见的距离是 1.414 倍。
    也不削自己的探测:干扰是对外发噪声,不是让自己变瞎。但 jam 不是 paint,22-percep 的
-   senseKACT 只对 paint 给系数 ⇒ 干扰中的舰自己也拿不到火控级。三态的取舍到此闭合:
+   senseKACT 只对 paint 给系数 ⇒ 干扰中的舰自己没有照射那一路。三态的取舍到此闭合:
    看得清 / 不被听见 / 不被锁定,三者只能取其二。
    ========================================================================= */
 let detT=0; // 探测结算计时(core/05 累加,到 SENS.TICK 就把累计量当 dt 透传进来)
@@ -46,7 +44,7 @@ function detectorsOf(side){ // 该阵营的传感器网络:存活舰 + 开机的
      beaconOn 钮写它)。舰船的两条被动通道(光学、静听)是永远开着的接收机,emitMode 只决定
      【照射】那一路开不开,而那道门在 22-percep 的 senseKACT 里(非 paint 恒返回系数 0,热循环
      那一路天然不成立)。所以静默舰仍然是完整的探测器,【绝不许】在这里按 emitMode 过滤 ——
-     那样整队一进静默就集体失明,而 lit 全程是合法的 0,没有 NaN、没有异常、没有一行日志。 */
+     那样整队一进静默就集体失明,而接触全程是合法的"没握着",没有 NaN、没有异常、没有一行日志。 */
 }
 
 function detectLoop(dt){ // 一个感知节拍:蓝网络探红(litBlue)、红网络探蓝(litRed)——对称,不按玩家视角
@@ -72,7 +70,7 @@ function detectLoop(dt){ // 一个感知节拍:蓝网络探红(litBlue)、红网
    连带退役:那个椭圆的出圈阈值、core/01-state 里存它的那张 Map、render/83 里画它的那个函数。 */
 
 /* 一方的网络扫另一方的全部存活舰。三段:准备(O(N))→ 逐目标扫描(O(N^2),全在 22-percep 的
-   热循环里)→ 驻留推进与 lit 派生(每目标一次)。本文件不碰距离、不碰通量、不碰增益。 */
+   热循环里)→ 椭圆推进(每目标一次)。本文件不碰距离、不碰通量、不碰增益。 */
 function detectFor(detSide,tgtSide,dt){
   const {dets,bcons}=detectorsOf(detSide);
   if(!dets.length&&!bcons.length)return;
@@ -89,7 +87,7 @@ function detectFor(detSide,tgtSide,dt){
     const t=tgts[ti];
     /* TK2.0:这一方对 t 的那条航迹(sensors/24)。原来是五个按阵营拼出来的舰上字段名;现在生产者直接写表,不经转发访问器 */
     const tk=trkEnsure(detSide,t), c=tk.cov||(tk.cov=newCov()); // 接触对象的字面量全库只有 newCov 一份,这里补建也调它(判据夹具会把它置空)
-    if(c.r1===undefined)throw new Error('SN6 接触对象键名不对(应为 newCov 那一套):'+((t&&t.name)||String(t))); // 换键名时漏改的地方会静默算成 NaN,再静默派生出 lit=0
+    if(c.r1===undefined)throw new Error('SN6 接触对象键名不对(应为 newCov 那一套):'+((t&&t.name)||String(t))); // 换键名时漏改的地方会静默算成 NaN,再静默派生出"没握着"
     /* 逐【对】收集这一拍有信号的观测。与 SN4 的差别就在这里:
        旧内核逐目标取"最好的那一档",而信息是可加的 —— 三艘船各看一眼,
        合起来比任何一艘单独看都准,尤其是方位交会。所以这里不收敛,把每一站都交给 stepCov。 */
@@ -101,7 +99,7 @@ function detectFor(detSide,tgtSide,dt){
       const dx=d.pos[0]-t.pos[0], dy=d.pos[1]-t.pos[1], dz=d.pos[2]-t.pos[2];
       obs.push({det:d,dd:Math.sqrt(dx*dx+dy*dy+dz*dz),g:{opt:q&3,lis:(q>>2)&3,act:(q>>4)&3},lo:senseLastLo()});
     }
-    /* TK2.0:下面两段注释说的三件事(椭圆推进、最后定位记录、等级)按原来的先后搬进了 sensors/24 的 trkStep,一句调用做完 */
+    /* TK2.0:下面两段注释说的三件事(椭圆推进、最后定位记录、握没握着)按原来的先后搬进了 sensors/24 的 trkStep,一句调用做完 */
     /* ---- 最后一次【定得出位置】的记录(SN6f:刷新规则换了,见下)----
        seen / seenPos / seenVel 记的是"我最后一次真的知道它在哪"——失联记号(幽灵)照着它外推。
        SN6f 之前的规则是"这一拍有光学或照射量测就刷新",那是 SN4 的说法:那时候光学/照射 = 有位置。
@@ -111,14 +109,7 @@ function detectFor(detSide,tgtSide,dt){
            于是一条正握着的航迹被旧状态机判成"陈旧",画面上出现【椭圆 + 陈旧记号】这种谁也没设计过的组合(用户实报)。
        现在只问模型一句话:这一拍定不定得出位置(c.fix)且确有量测(c.n>0)。写进去的是【估计】c.x/c.y,不是真值。
        DS183 那条纪律("拿静听去写 seenPos 等于凭空把距离变出来")原样成立:单站静听永远 fix=false,进不来。 */
-    /* ---- 等级:直接写,【没有棘轮】----
-       litBlue/litRed 的取值(0 未发现 / 1 探测 / 2 识别 / 3 火控)与字段名一个字不动 —— 那是几十处读取的契约面。
-       变的是它怎么来:SN4 是"只即时上升,下降只有归 0 与断照 3->2 两条路",于是 2 级是一个棘轮:
-       实测同一个点、同样的发射档,从没被照过读 1 级,被照过 30 拍再转静默则永久停在 2 级
-       ——"照一下就永久拿到导弹门"(见本目录 SN4 备忘末尾那条"等级是来路的函数")。
-       SN6 里等级是椭圆的一个纯函数,同一个画面状态只有一种读数,棘轮自动消失。
-       接触真的变糊了就该降级,那是"信息有保质期"这句话在等级上的体现。 */
-    trkStep(tk,t,obs,el); // 先验增长 + 逐站信息累加 + 解椭圆 + 派生等级 → 定得出位置就记最后定位 → 存等级
+    trkStep(tk,t,obs,el); // 先验增长 + 逐站信息累加 + 解椭圆 → 定得出位置就记最后定位 → 存握没握着
   }
 }
 
@@ -145,12 +136,13 @@ function emitLabel(mode){ // UI 文案的【唯一】出处:右栏 / 底栏 / �
    后果是梯子上"认出"那一级在引擎里是死的:CA 照一艘 DD,跟踪级(lit2)的门在 43.5 万,认出要到 15.1 万(雷达)/ 9.4 万(光学),
    中间那 28 万公里里玩家白拿了舰种、舰名和分级,"贴近才认得出"这条玩法不存在;同一艘船在聚合框里(它读的是 idn)却记成"?"。
    自己这一方的船恒为已识别。 */
-function litOf(s,side){return trkLit(trkOf(side,s))||0;} // R7 某一方对这艘船握着的接触等级(0..3)。TK2.0 起读航迹表(原来读舰上字段,那个按阵营的三元式各写各的)
+function contactHeld(s,side){return trkHeld(trkOf(side,s));} // 某一方还握着这艘船的接触(有信号或定得出位置)
+function contactFix(s,side){return trkFix(trkOf(side,s));} // 某一方定得出这艘船的位置 —— 武器开火只问这个
 function contactIdn(s,side){return contactIdLvl(s,side)>=ID_SUS;} // TK2.6:「认出」= 身份至少疑似 —— 与改前(握着接触且椭圆锁存了身份)按定义相等;自己一方恒为真、空对象恒为假
 /* TK2.6 身份档位与类型的门面(与 contactIdn 同一家;三档的定义见 sensors/24)。自己这一方恒为确认 */
 function contactIdLvl(s,side){return !s?ID_UNK:(s.side===side?ID_CON:trkIdLvl(trkOf(side,s)));}
 function contactIdType(s,side){return !s?null:(s.side===side?{kind:s.kind||'ship',cls:s.cls||null,tier:s.tier||null}:trkIdType(trkOf(side,s)));}
-function sigClassLabel(s){ // 探测级(等级 1)只看得出信号有多大 → 大/中/小;识别级(2+)才知道舰种
+function sigClassLabel(s){ // 没认出时只看得出信号有多大 → 大/中/小
   const sz=sReq(s,'size','ship'); // SN4:旧的船体信号字段已删,改读 size —— 两张表的数值逐位相同(DD 0.70 / CA 1.00),所以下面三档阈值一个字不动。新模型里 size 同时喂光学亮度与雷达反射,"大船两头都显眼",这一档情报因此比改前更有分量
   if(sz>=0.9)return '▣ 大型热源';
   if(sz>=0.6)return '▣ 中型热源';
@@ -168,15 +160,15 @@ function contactAge(s,side){return trkAge(trkOf(side,s));} // 距最后一次【
 
      态      条件                                   画什么(互斥,见 render/CLAUDE.md 的 SN6f 表)
      none    从没发现 / 失联太久                     无
-     heat    有信号、定不出位置(lit>0 且 !fix)      热区场 —— 没有舰标、椭圆、记号
+     heat    有信号、定不出位置(握着且 !fix)       热区场 —— 没有舰标、椭圆、记号
      live    定得出位置、这一拍有量测                椭圆 + 舰标
      coast   定得出位置、但量测已经断了              椭圆(自己在长大)+【陈旧】记号,同一个点
-     ghost   彻底失联(lit=0)、曾经定位过、TTL 内    【失联】记号,画在最后定位的外推点
+     ghost   彻底失联(不再握着)、曾经定位过、TTL 内   【失联】记号,画在最后定位的外推点
 
    ---- 命名对齐 ----
    coast 是雷达航迹管理的标准词:coasted track(滑行/外推航迹)= 航迹还在、但这一拍没有量测来更新它,
    靠运动模型往前推、不确定度按过程噪声长大。23-cov 的 FADE_LOST 注释里用的就是这个词。UI 文案仍叫"陈旧"。
-   旧实现的"陈旧"是另一件事(多久没被光学/照射扫到),在 SN6 里没有对应物 —— lit>0 的接触按定义就是此刻有信号的,
+   旧实现的"陈旧"是另一件事(多久没被光学/照射扫到),在 SN6 里没有对应物 —— 握着的接触按定义就是此刻有信号的,
    "有信号却陈旧"只是两套状态机打架打出来的。
    ⚠ coast 带 1.5 拍的迟滞:量程边缘的接触会隔拍掉一次量测,不带迟滞的话舰标与记号每秒互换一次。 */
 const CONTACT_GHOST_TTL=30;   // 失联记号保留多少秒(沿用旧值)

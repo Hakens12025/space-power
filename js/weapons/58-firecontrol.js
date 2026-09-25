@@ -149,7 +149,7 @@ function fcSetPick(s,seqId){ // RF8 指定唯一开火序列(只在 pick 模式�
   if(!q||q.shipId!==s.id)return;
   s.fcPick=q.id;s.fcBig='pick';
 }
-function fcGate(s,it,kind){ // RF5 单个目标项对某类武器的全部门:许可→存活→接触等级(WR1 起没有射程这一道)。任一不过返回 null(调用方跳到下一个,两种模式都不许停摆)
+function fcGate(s,it,kind){ // RF5 单个目标项对某类武器的全部门:许可→存活→定位(WR1 起没有射程这一道)。任一不过返回 null(调用方跳到下一个,两种模式都不许停摆)
   if(!it||!it.allow||!it.allow[kind])return null;
   if(!it.tid&&it.pt){ // 指定点:fireMAC 要算提前量、必须有舰目标,所以指定点只对导弹有效
     if(kind!=='msl')return null;
@@ -159,12 +159,7 @@ function fcGate(s,it,kind){ // RF5 单个目标项对某类武器的全部门:�
   const t=fcShip(it.tid);
   if(!t||t.dead||t.side===s.side)return null; // side 同侧直接排除:免得把友舰写进 lockedTarget(它同时是转向指令)
   if(!trkFoe(trkOf(s.side,t)))return null; // TK4c:已确认不是船(石头)⇒ 这一项跳过(序列里留着,认出之前下的令不作废,只是不再对它开火)
-  const lit=trkLit(trkOf(s.side,t)); // TK2.1:原值不归一(下面的 lit<2 比较与原来逐字相同)
-  if(kind==='mac'){
-    if(lit<2)return null; // WR1:与 fireMAC 内部 q<2 同一口径(原来要 3 级)。射程门整个没了:玩家的序列想在多远打就在多远打,打不打得中是散布与椭圆的事
-  }else{
-    if(lit<2)return null; // 与 orderMissileSalvo 内部 q<2 同一口径:导弹要跟踪级。WR1:发射门删了,之外滑行靠数据链
-  }
+  if(!trkFix(trkOf(s.side,t)))return null; // 两类武器同一道门:定得出位置。打不打得中是散布与椭圆的事
   return t;
 }
 function fcSolve(s,seqs,kind){ // RF5 逐武器解算:从 fcSeqCur[kind] 起最多绕一圈序列,返回 {tgt,from}

@@ -6,11 +6,10 @@
    ---- 表的形状 ----
    TRK.blue = 蓝方知道的一切,TRK.red = 红方知道的一切。键是【源对象】,不是 id
    (id 会重复:shipSeq 每局归零、判据把 id 改成 's901'、航线细化沙盘的船叫 '__rr')。
-   一条航迹 = { src, by, lit, cov, lastT, lastPos, lastVel },只有 trkNew 造,键序固定:
+   一条航迹 = { src, by, held, cov, lastT, lastPos, lastVel },只有 trkNew 造,键序固定:
      src      源对象,只设一次;
      by       观测方 'blue' | 'red' —— 刻意不叫 side,航迹永远满足不了"x.side 不等于某方"这种敌我过滤;
-     lit      阵营点亮质量等级(0 未发现 / 1 探测 / 2 跟踪 / 3 火控),原样存:由 21-detect 的生产者写,
-              读的时候不从 cov 现算、不做类型归一。SN6 起它是接触椭圆的派生量,派生在 21-detect。
+     held     这一方还握不握着这条接触(布尔,23-cov 的 covHeld),只由 trkStep 写,读的时候不从 cov 现算。
               SN3 删过两个阵营探测积分死字段,名字不写进注释(verify.sh 的 SN3 负对照按名字 grep,写进来会让它恒红 —— FM6b 的规矩);
      cov      SN6 误差椭圆接触:这一方网络【对这艘船】握着的那条接触,就是 sensors/23-cov 的 newCov() 那个对象,按引用持有
               (stepCov 原地改它、每拍换新 cov.ch)。newCov() 是全库唯一写这些键的字面量(原来三份手抄:舰船字面量里两份 + detectFor 补建那份)。
@@ -40,7 +39,7 @@ const TRK={blue:new WeakMap(),red:new WeakMap(),vis:{blue:new WeakSet(),red:new 
 function trkTab(side){return side==='blue'?TRK.blue:TRK.red;}
 
 /* 唯一的航迹工厂;不往任何表里登记。newCov() 每船两次,与原来舰船字面量里的调用次数相同 */
-function trkNew(by,src){return {src:src,by:by,lit:0,cov:newCov(),lastT:-1e9,lastPos:null,lastVel:null,idc:false,tn:0};} // TK2.6 追加 idc:【确认】锁存(光学或照射认出过它、且接触一直握着)。TK4c 追加 tn:航迹号(0 = 还没发)
+function trkNew(by,src){return {src:src,by:by,held:false,cov:newCov(),lastT:-1e9,lastPos:null,lastVel:null,idc:false,tn:0};} // TK2.6 追加 idc:【确认】锁存(光学或照射认出过它、且接触一直握着)。TK4c 追加 tn:航迹号(0 = 还没发)
 
 /* O(1) 查表,【永远不建】。非对象、或从没登记过的对象(弹丸、{pos} 指定点、梯子的假船、沙盘克隆、判据的裸对象)一律 null */
 function trkOf(side,src){return (src!==null&&typeof src==='object')?(trkTab(side).get(src)||null):null;}
@@ -51,7 +50,7 @@ function trkAdopt(src){if(TRK.blue.has(src)||TRK.red.has(src))throw new Error('T
   TRK.blue.set(src,trkNew('blue',src));TRK.red.set(src,trkNew('red',src));return src;}
 
 /* ============================================================================
-   TK2.0 生产者与读原语直接落在表上(2026-09-23)。门面(21-detect 的 litOf / contactIdn / contactAge / contactState / contactPos)
+   TK2.0 生产者与读原语直接落在表上(2026-09-23)。门面(21-detect 的 contactHeld / contactFix / contactIdn / contactAge / contactState / contactPos)
    从这一步起读的是航迹本身,不再经过转发访问器;名字永远不改 —— weapons/52、54、56 在门面缺席时会回退真值,改名等于悄悄开后门。
    ⚠ 每个原语都照搬改前门面的算法与每一处不对称(见 js/sensors/CLAUDE.md 的 TK 一节),判据 TK2_DIFF 拿改前公式逐值对表。
    ============================================================================ */
@@ -60,21 +59,21 @@ function trkAdopt(src){if(TRK.blue.has(src)||TRK.red.has(src))throw new Error('T
    TK1~TK4c 里造船时两方都已登记,这里总能查到;查不到才建(给将来不经 makeShip 的源用) */
 function trkEnsure(side,src){const m=trkTab(side);let k=m.get(src);if(k===undefined){k=trkNew(side==='blue'?'blue':'red',src);m.set(src,k);}return k;}
 
-/* 生产者的一拍:椭圆推进 → 最后定位记录 → 等级。三件事的先后与改前 detectFor 里逐字相同(见那里的两段长注释)。
-   等级【存下来】,不在读的时候从椭圆现算 */
+/* 生产者的一拍:椭圆推进 → 最后定位记录 → 握没握着(存下来,不在读的时候现算) */
 function trkStep(tk,t,obs,el){
   const c=tk.cov;
   TRK_IDO.opt=TRK_IDO.lis=TRK_IDO.act=false;          // TK2.6:模块级草稿,每拍清零后交给内核记【哪几条通道认出了它】(不分配)
-  const lit=stepCov(t,c,obs,el,TRK_IDO);
+  const held=stepCov(t,c,obs,el,TRK_IDO);
   if(c.fix&&c.n>0){tk.lastT=simTime;tk.lastPos=[c.x,c.y,t.pos[2]];tk.lastVel=t.vel.slice();}
-  if(lit>0&&tk.tn===0)tk.tn=++TRK_TN[tk.by]; // TK4c 航迹号:这一方第一次握住它的那一拍发号,之后终身不变(丢了再捡回来还是这个号)。只用于显示 —— 不当键、不当种子、不参与任何取舍
-  if(lit>0){if(TRK_IDO.opt||TRK_IDO.act)tk.idc=true;}else tk.idc=false; // TK2.6 确认锁存:光学轮廓或照射回波认出过 ⇒ 确认;接触丢了(等级归 0)才清。与椭圆的身份位同一拍立、同一拍清
-  tk.lit=lit;
-  return lit;
+  if(held&&tk.tn===0)tk.tn=++TRK_TN[tk.by]; // TK4c 航迹号:这一方第一次握住它的那一拍发号,之后终身不变(丢了再捡回来还是这个号)。只用于显示 —— 不当键、不当种子、不参与任何取舍
+  if(held){if(TRK_IDO.opt||TRK_IDO.act)tk.idc=true;}else tk.idc=false; // TK2.6 确认锁存:光学轮廓或照射回波认出过 ⇒ 确认;接触丢了才清。与椭圆的身份位同一拍立、同一拍清
+  tk.held=held;
+  return held;
 }
 
-/* 等级:有航迹给原值(不归一),没有给 0 —— 归一化(||0 / |0)留在各调用点自己写,与改前逐字相同 */
-function trkLit(tk){return tk?tk.lit:0;}
+/* 握着这条接触(有信号或定得出位置);定得出位置 —— 武器开火只问后者 */
+function trkHeld(tk){return !!(tk&&tk.held);}
+function trkFix(tk){return !!(tk&&tk.held&&tk.cov&&tk.cov.fix);}
 
 /* 距最后一次【定得出位置】的秒数;从没定过 = 1e9。simTime 在调用那一刻读 */
 function trkAge(tk){
@@ -88,7 +87,7 @@ function trkAge(tk){
 function trkState(tk){
   if(!tk)return 'none';
   const c=tk.cov;
-  if(tk.lit>0){
+  if(tk.held){
     if(!c||!c.fix)return 'heat';
     return (c.n>0||c.age<=SENS.TICK*1.5)?'live':'coast';
   }
@@ -159,14 +158,14 @@ function trkPid(tk){return trkIdLvl(tk)>=ID_SUS&&trkIdType(tk).kind==='ship';}
      确认 ID_CON  光学轮廓或照射回波(NCTR)认出过,而且接触一直握着 —— 一旦确认,照射停了、只剩静听也不退回疑似
    存储只有三格、一格一件事:cov.idn(至少疑似,内核锁存,与演示页共用)、cov.idBy(最近一次认出那一拍的【第一个】通道,判据断言它)、
    tk.idc(确认锁存)。**类型不存**:神谕式关联下它是身份档位与源的一个纯函数(trkIdType),存一份就是第二份真值。
-   这一步行为不变:contactIdn 仍然是"至少疑似"(= 改前的 lit>0 且 idn),没有任何消费方改看"确认"—— 改哪一处都是单独的、要用户拍板的行为变更。
+   这一步行为不变:contactIdn 仍然是"至少疑似"(= 握着接触且 idn),没有任何消费方改看"确认"—— 改哪一处都是单独的、要用户拍板的行为变更。
    ============================================================================ */
 const ID_UNK=0, ID_SUS=1, ID_CON=2;
 const TRK_TN={blue:0,red:0}; // TK4c 两方各自的航迹号计数器;initFleet 每局归零(旧局船的航迹保留旧号,不重发)
 const TRK_IDO={opt:false,lis:false,act:false};
 
 /* 这条航迹的身份档位。夹具写出来的"idc 为真但 idn 为假"读作未知、"idn 为真但 idc 为假"读作疑似 —— 容忍不一致的人造状态,不抛 */
-function trkIdLvl(tk){return !(tk&&tk.lit>0&&tk.cov&&tk.cov.idn)?ID_UNK:(tk.idc?ID_CON:ID_SUS);}
+function trkIdLvl(tk){return !(tk&&tk.held&&tk.cov&&tk.cov.idn)?ID_UNK:(tk.idc?ID_CON:ID_SUS);}
 
 /* 认出来的类型。未知 = null;疑似给【它声称的】(源带 spoof 就给 spoof —— 诱饵用;否则就是它自己);确认给真的。
    kind 缺省 'ship':今天注册表里只有船 */

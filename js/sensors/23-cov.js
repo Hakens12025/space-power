@@ -5,13 +5,11 @@
 
    ---- 它与 SN4 驻留阶梯的关系 ----
    SN4:接触 = 三个水池(opt/lis/act 驻留积分),等级 = 水位过哪道门。
-   SN6:接触 = 一个位置估计 + 一个各向异性误差椭圆,等级 = 椭圆落在哪个门里。
-   两者【不能只搬一半】—— 阶梯的四个阈值与椭圆的两道门说的不是一件事(见 js/sensors/CLAUDE.md)。
-   契约面 litBlue / litRed 的 0/1/2/3 语义不变,所以 74 处读取点一处都不用改;变的只是派生它的那一层。
+   SN6:接触 = 一个位置估计 + 一个各向异性误差椭圆。不分等级:对外只回答握没握着(covHeld)、定没定出位置(c.fix)。
 
    ---- 谁调它 ----
    sensors/21-detect 的 detectFor:每个感知节拍,对每个目标用 22-percep 的 O(N^2) 热循环
-   挑出"这一拍哪些探测方对它有信号",然后调本文件的 stepCov 推进那条接触,covLit 派生 litBlue/litRed。
+   挑出"这一拍哪些探测方对它有信号",然后调本文件的 stepCov 推进那条接触,covHeld 回答还握不握着。
    文件末尾的 ladApply() 在加载期把梯子反解成六个量程常数 —— 那是它们唯一的写入口。
 
    ---- 两套半径:发现 与 定位 是两件事 ----
@@ -125,8 +123,8 @@ const COV = {
      ⚠ 上限落在【模型】上,不是画的时候偷偷裁 —— 裁的话圈与判据就不是一个数了。 */
   AMAX: 0.2 * C_LS,
 
-  MAC: 2000,          // 主炮门 = 命中判定半径(weapons/56-step-projectiles 的 2000km)
-  MSL: 30000,         // 导弹门 = 导引头搜索篮
+  MAC: 2000,          // 梯子标定尺:命中判定半径(weapons/56-step-projectiles 的 2000km);radarLook = 椭圆收进它的距离
+  MSL: 30000,         // 梯子标定尺:导引头搜索篮;optCross / lisCross 按它量
 };
 
 /* ================= 定位域的三条律 =================
@@ -233,7 +231,7 @@ function stepCov(t, c, obs, el, idOut) { // TK2.6:可选的 idOut 记下这一�
   const p1 = Math.min(BIG, (c.r1 + off) * gm - off), p2 = Math.min(BIG, (c.r2 + off) * gm - off);
   const J = [0, 0, 0]; covAddEll(J, p1, p2, c.th);
   /* 一拍给多少信息,按这一拍实际过了多久折算:传感器盯了 el 秒,信息量正比 el。
-     每拍固定算"一次量测"的话稳态随节拍长短变 —— 时间倍率一开,同一个站位的等级就变了。
+     每拍固定算"一次量测"的话稳态随节拍长短变 —— 时间倍率一开,同一个站位的椭圆就变了。
      只折算进信息矩阵的那一份;界与识别门是【单拍】的信噪比门限,与盯多久无关,不折算。 */
   const iw = 1 / Math.sqrt(Math.max(el, 1e-6) / SENS.TICK);
   let n = 0, rBound = 1e9, idn = false, idBy = '';
@@ -266,30 +264,20 @@ function stepCov(t, c, obs, el, idOut) { // TK2.6:可选的 idOut 记下这一�
   /* 定不定得出位置,看【真实】轴长 —— 钳位是为了别让画出来的椭圆涨到无穷,它不代表知识。 */
   c.r1 = q1; c.r2 = q2; c.fix = q1 < COV.AMAX;
   c.a1 = Math.min(COV.AMAX, q1); c.a2 = Math.min(COV.AMAX, q2);
-  /* 身份【闩住】:认出来之后,只要这条航迹还在就一直认得;航迹彻底断了(lit 归 0)才忘掉。
+  /* 身份【闩住】:认出来之后,只要这条航迹还在就一直认得;航迹彻底断了(不再握着)才忘掉。
      与 coasting 的语义一致 —— 丢了航迹就不知道重新出现的是不是同一艘。 */
   if (idn) { c.idn = true; c.idBy = idBy; }
   if (n > 0) { c.x = t.pos[0]; c.y = t.pos[1]; c.age = 0; c.seen = true; } else c.age += el;
-  const lit = covLit(c, t); if (lit > 0) c.ever = true; else { c.idn = false; c.idBy = ''; }
-  return lit;
+  const held = covHeld(c); if (held) c.ever = true; else { c.idn = false; c.idBy = ''; }
+  return held;
 }
 
-/* ================= 两道门 与 等级 =================
-   凭什么随目标变:
-     主炮门 = 命中判定半径 —— "我的解算够不够准"本来就该跟目标有多大比。同样 ±1800km,打巡洋舰打得中、打驱逐舰打不中
-     导弹门 = 导引头搜索篮 —— 导引头要在篮子里自己找到目标,所以跟合成反射走;开平方是为了不让差距大到离谱 */
+/* ================= 两把尺子(只给梯子标定用,不是开火门)=================
+   主炮尺 = 命中判定半径,跟目标体型比;导弹尺 = 导引头搜索篮,跟合成反射走,开平方免得差距离谱 */
 const covMac = t => COV.MAC * sReq(t, 'size', 'ship');
 const covMsl = t => COV.MSL * Math.sqrt(reflOf(t));
-const covFix = c => !!c.fix;
-/* 等级是【派生的显示量】:只是椭圆大小的三个分档,不再是任何东西的真相。
-   ⚠ 等级与【身份】是两件事(Link-16 / NTDS 里也是两栏:Track Quality 与 Identity)。
-     把身份塞进等级会造出"明明进了识别级的圈却还是蓝色 1 级、贴到很近才跳绿"的棘轮 —— 演示页修过这个 bug,
-     引擎的 SN4 现在还有一个同类的(见 js/sensors/CLAUDE.md)。 */
-function covLit(c, t) {
-  if (!c.seen) return 0;
-  if (!covFix(c)) return c.n > 0 ? 1 : 0;      // 有信号但定不出位置 = 探测级(地图上是一团热区)
-  return c.a1 <= covMac(t) ? 3 : (c.a1 <= covMsl(t) ? 2 : 1);
-}
+/* 这一方还握着这条接触:见过它,而且此刻定得出位置、或这一拍有信号 */
+function covHeld(c) { return !!(c.seen && (c.fix || c.n > 0)); }
 /* 某条通道【认出】目标的距离:横向误差收到目标尺寸以内。
    静听不走这条(它靠指纹,不靠角分辨),所以这里只回答光学与照射。 */
 function identDist(ch, d, t, lo) {

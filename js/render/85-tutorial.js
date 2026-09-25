@@ -38,60 +38,17 @@ const TUT_HTML=`
   <section class="tut-sec" id="tut-sensing">
     <h2 class="tut-h2">看不见就打不了</h2>
 
-    <p>感知是这个游戏的核心，也是最容易卡住新玩家的地方。最常见的困惑是「我明明在屏幕上看得见那艘敌舰，为什么打不了它」。答案是：屏幕上画不画得出来，和武器许不许你开火，是两套完全不同的判据。默认开局在管理员模式下，敌舰会直接画给你看；但武器门控看的从来不是你的眼睛，而是这艘敌舰对你这一方的接触等级。按 <code class="key">F8</code> 切到普通模式，感知才真正开始约束你的视野与准星。</p>
+    <p>感知是这个游戏的核心，也是最容易卡住新玩家的地方。最常见的困惑是「我明明在屏幕上看得见那艘敌舰，为什么打不了它」。答案是：屏幕上画不画得出来，和武器许不许你开火，是两套完全不同的判据。默认开局在管理员模式下，敌舰会直接画给你看；但武器门控看的从来不是你的眼睛，而是你这一方有没有把它的位置定出来。按 <code class="key">F8</code> 切到普通模式，感知才真正开始约束你的视野与准星。</p>
 
-    <h3 class="tut-h3">接触四级</h3>
-
-    <p>每艘舰对每个阵营各有一个接触等级，从 <code class="num">0</code> 到 <code class="num">3</code> 四档，由红外、电子侦察、雷达三个通道的驻留积分派生出来。它决定的不只是你看得见什么，更是你能打什么。</p>
-
-    <table class="tut-table tut-levels">
-      <caption class="tut-cap">接触四级 · 判据与解锁</caption>
-      <thead>
-        <tr><th>等级</th><th>名称</th><th>达成判据</th><th>解锁</th></tr>
-      </thead>
-      <tbody>
-        <tr><td><code class="num">0</code></td><td>未发现</td><td>三个通道都没积起来</td><td>什么都做不了</td></tr>
-        <tr><td><code class="num">1</code></td><td>探测</td><td>红外积分 <code class="num">≥1.0</code> 或雷达积分 <code class="num">≥1.0</code></td><td>只知道那边有东西</td></tr>
-        <tr><td><code class="num">2</code></td><td>识别</td><td>雷达积分 <code class="num">≥1.5</code>，或任意两个通道各 <code class="num">≥1.0</code></td><td>导弹可以打</td></tr>
-        <tr><td><code class="num">3</code></td><td>火控</td><td>雷达积分 <code class="num">≥2.0</code></td><td>主炮可以打</td></tr>
-      </tbody>
-    </table>
-
-    <p>这张表要读出两件事。第一，等级升上去之后带 <code class="num">0.5</code> 的滞回，要掉到阈值的一半才降级，所以短暂的信号起伏不会让你反复丢目标。第二，火控级是唯一一个会瞬间掉下来的：雷达积分一低于 <code class="num">1.5</code>，三级立刻退回二级。换句话说，火控级是一只必须一直端着的手电筒，你的雷达一关、或者目标跑出照射距离，主炮当场就哑。</p>
-
-    <p>此外还有一层信息新鲜度是你能看见的：<code class="num">5 秒</code>内被扫到过算实况，点亮了但超过 <code class="num">5 秒</code>没刷新算陈旧，曾经点亮过、失联 <code class="num">30 秒</code>以内算幽灵。陈旧与幽灵接触画的是最后已知位置，不是它此刻的位置，别照着那个位置去算提前量。</p>
+    <p>还有一层信息新鲜度是你能看见的：<code class="num">5 秒</code>内被扫到过算实况，点亮了但超过 <code class="num">5 秒</code>没刷新算陈旧，曾经点亮过、失联 <code class="num">30 秒</code>以内算幽灵。陈旧与幽灵接触画的是最后已知位置，不是它此刻的位置，别照着那个位置去算提前量。</p>
 
     <h3 class="tut-h3">三个通道</h3>
 
-    <p>红外是被动的，它听的是发动机热。辐射量的算法是舰体基线加上引擎那一份：基线就是这艘舰的基础信号，驱逐舰 <code class="num">0.7</code>、巡洋舰 <code class="num">1.0</code>；侧推在它之上再加 <code class="num">15</code>，主推或反推加 <code class="num">25</code>。换句话说，熄火时你只有舰体那一点底噪，侧推一下辐射量就跳到熄火的二十几倍，主推更是三十几倍——这个跳跃比你想象的大得多，别把「点一下侧推」当成小动作。电子侦察也是被动的，它听射频，但它给方位不给坐标，而且单凭它永远给不出一级，只能在「两通道交叉」那一条判据里凑一半。雷达是主动的，它发照射脉冲、收回波，代价是把自己也点亮。</p>
+    <p>红外是被动的，它听的是发动机热。辐射量的算法是舰体基线加上引擎那一份：基线就是这艘舰的基础信号，驱逐舰 <code class="num">0.7</code>、巡洋舰 <code class="num">1.0</code>；侧推在它之上再加 <code class="num">15</code>，主推或反推加 <code class="num">25</code>。换句话说，熄火时你只有舰体那一点底噪，侧推一下辐射量就跳到熄火的二十几倍，主推更是三十几倍——这个跳跃比你想象的大得多，别把「点一下侧推」当成小动作。电子侦察也是被动的，它听射频，但它给方位不给坐标。雷达是主动的，它发照射脉冲、收回波，代价是把自己也点亮。</p>
 
-    <p>三条通道的差别不是风味，是数量级。被动通道每一拍先衰减一成再积累，增益封顶之后稳态上限恒为 <code class="num">1.66</code>；雷达每一拍只衰减 <code class="num">6%</code>、单次增益是被动的三倍，稳态上限 <code class="num">8.33</code>。<code class="num">1.66</code> 这个数刚好卡在一级的 <code class="num">1.0</code> 之上、雷达单通道那条二级判据 <code class="num">1.5</code> 之下，所以任何一条被动通道单独工作，等多久也只能把敌舰点到探测级。但别把结论推过头：二级还有「任意两个通道各 <code class="num">≥1.0</code>」那条交叉判据，而红外与电子侦察吃满的稳态都是 <code class="num">1.66</code>，双双越过 <code class="num">1.0</code>。也就是说，一艘开着雷达又在主推的敌舰，你光靠红外加电子侦察这两条被动通道就能把它点进识别级、把导弹解禁，全程一次照射都不用发。真正只有雷达做得到的是火控级，那一档只看雷达积分。</p>
-
-    <p>反过来看你自己：一艘熄火滑行的驱逐舰，在 <code class="num">10 万公里</code>外的被动红外里稳态只积到 <code class="num">0.77</code>，连一级都不到，等于看不见；它一开侧推就跳到 <code class="num">1.66</code>，当场被点成探测级。所以「熄火最暗」不是修辞，是一张可以打的牌。</p>
-
-    <h3 class="tut-h3">开雷达的收益与代价</h3>
-
-    <p>先说收益。下面这组读数的条件是：一艘蓝方巡洋舰照一个静止、熄火的驱逐舰靶，从雷达开机开始计时。</p>
-
-    <table class="tut-table tut-ladar">
-      <caption class="tut-cap">雷达点亮耗时 · 巡洋舰照静止驱逐舰</caption>
-      <thead>
-        <tr><th>距离</th><th>探测（一级）</th><th>识别（二级）</th><th>火控（三级）</th></tr>
-      </thead>
-      <tbody>
-        <tr><td><code class="num">100k 公里</code></td><td><code class="num">3 秒</code></td><td><code class="num">4 秒</code></td><td><code class="num">5 秒</code></td></tr>
-        <tr><td><code class="num">150k 公里</code></td><td><code class="num">3 秒</code></td><td><code class="num">4 秒</code></td><td><code class="num">5 秒</code></td></tr>
-        <tr><td><code class="num">200k 公里</code></td><td><code class="num">3 秒</code></td><td><code class="num">4 秒</code></td><td><code class="num">6 秒</code></td></tr>
-        <tr><td><code class="num">250k 公里</code></td><td><code class="num">7 秒</code></td><td><code class="num">9 秒</code></td><td><code class="num">18 秒</code></td></tr>
-        <tr><td><code class="num">300k 公里</code></td><td colspan="3">回波归零，等多久都点不亮</td></tr>
-      </tbody>
-    </table>
-
-    <p>这张表的形状比数值更重要：<code class="num">20 万公里</code>以内点亮几乎是瞬间的事，到了 <code class="num">25 万公里</code>，从开机到能开主炮要熬 <code class="num">18 秒</code>，而过了 <code class="num">30 万公里</code>回波直接归零。硬边界取决于照射方的功率与目标的雷达截面，巡洋舰照驱逐舰约 <code class="num">27.8 万公里</code>，巡洋舰照巡洋舰约 <code class="num">31.6 万公里</code>，驱逐舰照驱逐舰约 <code class="num">25.5 万公里</code>。</p>
+    <h3 class="tut-h3">开雷达的代价</h3>
 
     <p>代价是不对称的，而且不利于你。一开机你就成了整片空域里最亮的射频源。对方的电子侦察在三十几万公里以内能把积分吃满到 <code class="num">1.66</code> 的稳态——巡洋舰辐射源约 <code class="num">31.7 万公里</code>、驱逐舰约 <code class="num">35.4 万公里</code>——再远稳态会往下掉，但只要通量还在探测下限之上就仍然在积累，一直要到巡洋舰约 <code class="num">70.9 万公里</code>、驱逐舰约 <code class="num">79.2 万公里</code>才真正归零。至于那个反推方位椭圆，它另有一道 <code class="num">60 万公里</code>的硬边界：越过它，对方就只剩一个「有人在辐射」的积分，画不出圈来。两头一对照，你的雷达照得到 <code class="num">27.8 万公里</code>，而被听见的距离大约是它的两倍。被你照到的一方还会直接收到一条「⚠ 被敌LADAR照射」的告警，它清楚地知道有人在照它。开雷达就是拿位置换情报，什么时候开、开多久，是这个游戏里最实在的一个决定。</p>
-
-    <p>靶场开局强制给蓝方开雷达，原因就写在上面这张表里：靶是静止且熄火的，不开雷达连探测级都到不了；而导弹需要识别级、主炮需要火控级，一发都打不出去。</p>
   </section>
 
   <section class="tut-sec" id="tut-weapons">
@@ -107,11 +64,11 @@ const TUT_HTML=`
 
     <p>越过有效射程并不是打不出去，而是开始散布。有效射程之内炮口没有附加偏差，越过之后偏角按超出比例增长，而脱靶距离又等于距离乘偏角，所以实际衰减是超线性的：以有效射程 <code class="num">150k 公里</code>为例，打到 <code class="num">225k</code>（一点五倍）平均脱靶约 <code class="num">1023 公里</code>，还在 <code class="num">2000 公里</code>的命中判定半径之内，多半打得中；打到 <code class="num">290k</code>（接近两倍）平均脱靶已是 <code class="num">2367 公里</code>，基本不中。到两倍有效射程就是硬上限，再远一发都不发——主炮 <code class="num">30 秒</code>装填，空放的代价太贵。</p>
 
-    <p>不过真正决定这一炮打不打得出去的，仍然是接触等级：目标没被点到火控级，站在射程圈正中间也一发不发。</p>
+    <p>不过真正决定这一炮打不打得出去的，是你定没定出目标的位置：定不出来，站在射程圈正中间也一发不发。</p>
 
     <h3 class="tut-h3">导弹：为什么成波打</h3>
 
-    <p>导弹是全场射程最长的武器，<code class="num">350k 公里</code>，而且只要识别级就能发射，比主炮低一档门槛。它以「组」为单位，每组 <code class="num">12 枚</code>；驱逐舰 <code class="num">4</code> 个发射单元、载弹 <code class="num">192 枚</code>、单枚伤害 <code class="num">12</code>，巡洋舰 <code class="num">6</code> 个单元、载弹 <code class="num">240 枚</code>、单枚 <code class="num">15</code>。</p>
+    <p>导弹是全场射程最长的武器，<code class="num">350k 公里</code>，和主炮一样，定出目标位置就能发射。它以「组」为单位，每组 <code class="num">12 枚</code>；驱逐舰 <code class="num">4</code> 个发射单元、载弹 <code class="num">192 枚</code>、单枚伤害 <code class="num">12</code>，巡洋舰 <code class="num">6</code> 个单元、载弹 <code class="num">240 枚</code>、单枚 <code class="num">15</code>。</p>
 
     <p>发射是两段式的：下令那一刻弹还没出膛，命令先在舰上挂一个 <code class="num">1 秒</code>的倒计时，倒计时走完才真正生成弹丸。每用掉一个发射单元，那个单元要单独装填 <code class="num">60 秒</code>。这两条加在一起决定了导弹的节奏是「波」而不是「流」：自动齐射每次最多下令 <code class="num">2 组</code>，而且要求就绪单元过半才肯下令，于是一艘巡洋舰的表现是每 <code class="num">60 秒</code>来一个 <code class="num">4 组</code>、<code class="num">48 枚</code>的波次，中间是安静的装填期。你等的不是冷却条，是下一波。</p>
 
@@ -181,9 +138,9 @@ const TUT_HTML=`
 
     <p>这是这一版最需要先建立的心智模型。一条火控序列说的是「这艘舰可以拿哪几件武器打哪几个目标」，它是一份许可，不是一句「开火」。序列只做减法：舰上原有的开火条件一条没变，序列只能在它们之上再关掉一些，永远打不开原本关着的门。所以你在轮盘上把某件武器的许可点亮，不等于它现在就会开火；而你把它点灭，则一定不会。</p>
 
-    <p>一个目标此刻打不打得到，要从外往里过三层。最外层是舰级开关，也就是底栏的火控总开关加上这艘舰的主炮、导弹各自的开关。中间一层是接触等级，主炮要火控级、导弹要识别级。最里层是射程，用的是三维距离而不是屏幕上的平面距离。任何一层不过，这一类武器这一拍就跳到序列里的下一个目标，不会停在原地空等。</p>
+    <p>一个目标此刻打不打得到，要从外往里过三层。最外层是舰级开关，也就是底栏的火控总开关加上这艘舰的主炮、导弹各自的开关。中间一层是定位，两类武器都要先把目标的位置定出来。最里层是射程，用的是三维距离而不是屏幕上的平面距离。任何一层不过，这一类武器这一拍就跳到序列里的下一个目标，不会停在原地空等。</p>
 
-    <p>好在轮盘会把不通过的原因直接写在扇区上：<code class="ui">开关关闭</code>、<code class="ui">需火控级</code>、<code class="ui">需识别级</code>、<code class="ui">射程外</code>、<code class="ui">装填中</code>、<code class="ui">弹尽</code>。看到哪一条就去修哪一条，这六个词和引擎内部用的是同一套判据。</p>
+    <p>好在轮盘会把不通过的原因直接写在扇区上：<code class="ui">开关关闭</code>、<code class="ui">未定位</code>、<code class="ui">射程外</code>、<code class="ui">装填中</code>、<code class="ui">弹尽</code>。看到哪一条就去修哪一条，这五个词和引擎内部用的是同一套判据。</p>
 
     <h3 class="tut-h3">准星与目标轮盘</h3>
 
@@ -222,14 +179,14 @@ const TUT_HTML=`
       </thead>
       <tbody>
         <tr><td><code class="ui">火控</code></td><td>自动索敌加自动开火的总闸。开则自动锁定已点亮的敌舰、各武器进条件就自动发射；关则停火并当场解除锁定</td><td>关</td></tr>
-        <tr><td><code class="ui">雷达</code></td><td>本舰的主动照射。开则是唯一能把接触打到火控级的通道（识别级也可由两条被动通道交叉达成），代价是本舰成为射频辐射源</td><td>靶场强制开</td></tr>
+        <tr><td><code class="ui">雷达</code></td><td>本舰的主动照射。开则能测距、更快把接触定出位置，代价是本舰成为射频辐射源</td><td>靶场强制开</td></tr>
         <tr><td><code class="ui">主炮</code></td><td>关掉后主炮不参与自动开火</td><td>开</td></tr>
         <tr><td><code class="ui">导弹</code></td><td>关掉后自动齐射整段跳过</td><td>开</td></tr>
         <tr><td><code class="ui">拦截</code></td><td>关掉后近防不再自动拦截来袭导弹，连冷却都不走</td><td>开</td></tr>
       </tbody>
     </table>
 
-    <p>把光标停在任意一个武器钮上，地图会给选中舰画出对应的射程圈：主炮 <code class="num">150k 公里</code>，导弹 <code class="num">350k 公里</code>，拦截画的是内外两个圈。这是最快确认「够不够得着」的办法，但要给它加一条限定：真正卡这个圈的只有导弹，自动齐射会先查距离再下令；主炮的自动开火根本不查射程，只要目标到了火控级、机头又摆进了对准窗口，它在 <code class="num">20 万公里</code>外照样开火——开局第一炮就是这么打出来的。<code class="num">150k 公里</code>这道门只在火控序列的射程判据里生效。</p>
+    <p>把光标停在任意一个武器钮上，地图会给选中舰画出对应的射程圈：主炮 <code class="num">150k 公里</code>，导弹 <code class="num">350k 公里</code>，拦截画的是内外两个圈。这是最快确认「够不够得着」的办法，但要给它加一条限定：真正卡这个圈的只有导弹，自动齐射会先查距离再下令；主炮的自动开火根本不查射程，只要目标定出了位置、机头又摆进了对准窗口，它在 <code class="num">20 万公里</code>外照样开火——开局第一炮就是这么打出来的。<code class="num">150k 公里</code>这道门只在火控序列的射程判据里生效。</p>
   </section>
 
   <section class="tut-sec" id="tut-firstrun">
@@ -237,7 +194,7 @@ const TUT_HTML=`
 
     <p>把上面这些串起来，第一局大致是这样：按 <code class="key">Space</code> 让时间跑起来，拖一个框把三艘蓝舰全选上，在底栏点开 <code class="ui">火控</code>。接下来不必你动手，三艘舰会自己索敌，评分规则是火力缺口优先、距离次之，于是它们会一起压向最近的那个靶。</p>
 
-    <p>实测这样放着跑 <code class="num">300 秒</code>：最近的 <code class="ui">靶·B</code> 在第 <code class="num">6 秒</code>被点到火控级，主炮与导弹几乎同时开火，最后全部战果集中在它身上，另外两个靶一点伤都没吃，却各消耗了十几枚拦截弹，替邻居挡下了掠过去的导弹。这一局你什么都没操作，看到的却是这套系统的全部脾气：点亮要时间、导弹成波来、拦截自动接。</p>
+    <p>实测这样放着跑 <code class="num">300 秒</code>：最近的 <code class="ui">靶·B</code> 在第 <code class="num">6 秒</code>被定出位置，主炮与导弹几乎同时开火，最后全部战果集中在它身上，另外两个靶一点伤都没吃，却各消耗了十几枚拦截弹，替邻居挡下了掠过去的导弹。这一局你什么都没操作，看到的却是这套系统的全部脾气：点亮要时间、导弹成波来、拦截自动接。</p>
 
     <p>想从「看它自己打」进到「我来点名」，就用准星加中键：光标停在你想打的靶上等吸附，短按中键建一条序列，再长按中键开轮盘调许可。到这一步，你才真正坐进了指挥席。</p>
   </section>

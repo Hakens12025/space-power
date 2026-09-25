@@ -25,7 +25,7 @@ function stepWeaponSystems(dt){
       if(hasMAC(s)&&s.macOn!==false){s.driftFire=true;s.driftFireT=60;}
       continue;
     }
-    const enemies=trkList(s.side,tk=>!trkGone(tk)&&trkLit(tk)>=2&&trkPid(tk)).map(trkSrc); // WCS1:自动索敌只挑认出是船的(Weapons Tight);没认出的"怪信号"要玩家自己下令 // TK2.1:自动索敌的候选从这一方的航迹表里取(与原来遍历 ships 同序)
+    const enemies=trkList(s.side,tk=>!trkGone(tk)&&trkFix(tk)&&trkPid(tk)).map(trkSrc); // WCS1:自动索敌只挑认出是船的(Weapons Tight);没认出的"怪信号"要玩家自己下令 // TK2.1:自动索敌的候选从这一方的航迹表里取(与原来遍历 ships 同序)
     if(!enemies.length)continue;
     let best=null,bs=-1e18;
     for(const t of enemies){
@@ -36,16 +36,16 @@ function stepWeaponSystems(dt){
     }
     if(best){s.lockedTarget=best;s.lockPlayer=false;}
   }
-  // RF2 导弹自动齐射(底栏"导弹"开关的自动行为):火控开+导弹开+锁定活目标+识别级+35万内+就绪单元过半 → 下令。
+  // RF2 导弹自动齐射(底栏"导弹"开关的自动行为):火控开+导弹开+锁定活目标+已定位+35万内+就绪单元过半 → 下令。
   // 波次节流靠发射单元 60s 独立装填天然限流,无需定时器;敌方不受影响(red 的 autoEngage 恒 false,enemyAI 走自己的 8% 掷骰)。
   for(const s of ships){
     if(s.dead||!s.autoEngage||s.mslOn===false)continue;
     if(s.fcFired&&s.fcFired.msl)continue; // RF5 核查修:本 tick 序列刚真发射过(S14 的 missileArm 倒计时就在本函数开头,发完立刻把 missileArm 清空),此刻 s.fcTgt.msl 还是本 tick 开头解算的【旧目标】—— rot 要等 tick 末的 S17b stepFireControlPost 才前进。这里若照排,下一发会继承旧目标,rr 轮询在导弹侧完全失效(实测一轮恰好 2 发,rot 0→1→0 归位,第二个目标永远轮不到)。让出一拍(0.02s)再排,下一 tick 解算出的就是前进后的目标;无序列的舰不长 fcFired 字段,不受影响
     const t=(typeof fcActive==='function'&&fcActive(s))?(s.fcTgt&&s.fcTgt.msl):s.lockedTarget; // RF5 有序列则目标来源换成序列解算结果(fcTgt.msl 可能是舰,也可能是指定点 {pos});没序列沿用原锁定
     if(!t)continue;
-    const isPt=(kindOf(t)==='point'); // RF5 指定点(空地)没有阵营也没有接触等级,跳过 side/litBlue 两道门(fcGate 已在序列侧查过射程,这里保留复查) TK4b:点的判别走 kindOf
+    const isPt=(kindOf(t)==='point'); // RF5 指定点(空地)没有阵营也没有接触等级,跳过 side / 定位两道门(fcGate 已在序列侧查过射程,这里保留复查) TK4b:点的判别走 kindOf
     if(!isPt&&(t.dead||t.side===s.side))continue;
-    if(!isPt&&(litOf(t,s.side))<2)continue; // 与手动齐射同一识别级门控
+    if(!isPt&&!contactFix(t,s.side))continue; // 与手动齐射同一道定位门
     { // WR1:没有发射门了;自动齐射(玩家的「火控」钮)只在动力射程内打,免得自动化替玩家把弹药扔到滑行段去;距离按估计位置量(指定点按点)
       const tp=isPt?t.pos:((typeof contactPos==='function')?contactPos(t,s.side):null); if(!tp)continue;
       if(V.len(V.sub(tp,s.pos))>=mslReach(s))continue;

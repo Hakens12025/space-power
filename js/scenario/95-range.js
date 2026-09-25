@@ -137,7 +137,7 @@ function applyRangeOne(t,c,resetStock){
   t.interHitMul=c.interHitMul;              // fireInterceptor 发射时烘焙进弹丸的 hitMul
   if(t.ciws)t.ciws.innerIntercept=c.inner;  // 逐靶可调:命中判定读的是 ciwsOf(x),而 ciwsOf 实例优先(makeShip 已把 ciws 烘焙到实例),写实例即刻生效
   t.chaffRate=c.chaff;                      // 命中瞬间逐颗掷骰读的就是舰上字段
-  t.size=c.size;t.stealth=c.stealth;        // SN4:体型同时喂光学亮度与雷达反射,隐身只乘雷达反射——两格合起来决定 litBlue 能不能上到 2(导弹门槛)。注意 3(MAC 门槛)不归它们管,那要【蓝方】开照射才挣得到
+  t.size=c.size;t.stealth=c.stealth;        // SN4:体型同时喂光学亮度与雷达反射,隐身只乘雷达反射——两格合起来决定蓝方定不定得出它的位置
   setEmit(t,SENS.EMIT_MODES[c.emit]);       // SN4:发射档唯一写入口。c.emit 是【索引】,索引→模式的映射只有 SENS.EMIT_MODES 一份;越界索引会让 setEmit 当场抛,不静默落成静默档
   t.ecmPower=c.ecmPower;                    // SN4:jam 档的干扰强度(只削弱照射驻留,不碰光学)
   const g=(typeof speedGearsOf==='function')?speedGearsOf(t):[0,250,500,800,-1];
@@ -244,14 +244,10 @@ function trStatLines(t,idx){ // 单个靶的读数(4 行)
     `<div>　拦截弹 ${t.interceptor||0}/${t.interMax||0}<span style="color:var(--dim)">(已用 ${used})</span></div>`+
     trVisWarn(t);
 }
-// RANGE1 + SN4:体型/隐身/发射档/干扰强度 这几个旋钮能把靶调到蓝方点不亮,此时一发都打不出去,现象与"禁火闸门坏了"一模一样。
-// 新模型还多一条【与靶无关】的死法:火控级(3)只能由【蓝方】开照射挣来,蓝方静默时无论靶怎么调都停在 2,MAC 永远打不出去。
-// 把靶当前的被点亮等级直接写进读数,省得把自己调进死胡同还以为是 bug。门槛:导弹要 2(识别级)、MAC 要 3(火控级)。
+// RANGE1 + SN4:体型/隐身/发射档/干扰强度 这几个旋钮能把靶调到蓝方定不出位置,此时一发都打不出去,现象与"禁火闸门坏了"一模一样。
 function trVisWarn(t){
-  const lit=litOf(t,'blue'); // TK2.5:等级走门面
-  if(lit>=3)return '';
-  const why=(lit<2)?'蓝方打不出任何弹':'蓝方只能打导弹,MAC 需火控级(3)';
-  return `<div style="color:var(--state-warn)">　⚠ 被点亮 ${lit}/3 · ${why}(体型/隐身调过头?靶在干扰?还是蓝方自己没开照射?)</div>`;
+  if(contactFix(t,'blue'))return '';
+  return `<div style="color:var(--state-warn)">　⚠ 蓝方定不出它的位置 · 打不出任何弹(体型/隐身调过头?靶在干扰?还是蓝方自己没开照射?)</div>`;
 }
 function updRangePanel(){ // 只刷读数与旋钮值,不重建 DOM。由 core/99 的 20 帧低频车直调(SL1 起)
   if(!trPanelEl)return;

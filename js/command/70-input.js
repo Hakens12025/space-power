@@ -272,19 +272,9 @@ function mdLeft(e,sx,sy){ // 左键
     const g=groupAt(sx,sy);
     if(g){selMissile=g;selNet=g.netId||null;selMissileHits=[g];selected=[];selDrag=null;return;}
   }
-  /* SN7 左键点敌方目标 = 把它挂进定位几何小窗(常驻),而且【不清空我方选中】。
-     改前点敌舰与点空地同一支:selected=[] —— 每看一次缩圈就丢一次选中(用户 2026-09-20 拍板改)。
-     ---- 这里只【判】,不写常驻 ----
-     常驻在 mouseup 确认这是一次【点击】之后才写(selDrag.pinId)。第一版在这里直接写、并且提前 return 不建 selDrag,
-     审查确认那是一个回归:每个敌方记号周围 60px 的圆都成了框选的起手死区(舰队层上那个圆有几十万公里,交战时我方舰基本都在里面),
-     拖不出框、还顺手把常驻换了。现在照样建框,只是不清选中;拖动 = 照常框选、常驻不动。
-     敌我都在吸附圈里时离光标近的那个赢(83-geom 的 geomPickAt);导弹组的点选排在它前面,既有语义优先;Ctrl 加选不碰常驻。 */
-  const pinT=(!e.ctrlKey&&typeof geomPickAt==='function')?geomPickAt(sx,sy,sh):null;
   selMissile=null;selNet=null;selMissileHits=[]; // 没点中导弹组 → 取消导弹组选中
   if(e.ctrlKey){
     if(sh){selected.includes(sh.id)?selected.splice(selected.indexOf(sh.id),1):selected.push(sh.id);}
-  }else if(pinT){
-    selDrag={x0:sx,y0:sy,x1:sx,y1:sy,pinId:pinT.id}; // 不清选中;是不是真的"点了敌舰"等 mouseup 再说
   }else{
     if((!sh||(sh.side==='red'&&!adminMode))&&!selDrag)selected=[]; // GM下可点选敌舰
     selDrag={x0:sx,y0:sy,x1:sx,y1:sy};
@@ -395,15 +385,8 @@ window.addEventListener('mouseup',e=>{
   if(e.button===0&&selDrag){ // 左键:判定点击 vs 框选
     const clicked=Math.abs(selDrag.x1-selDrag.x0)<5&&Math.abs(selDrag.y1-selDrag.y0)<5;
     if(clicked){
-      /* SN7 最后一次【点击】决定定位几何小窗的常驻:点敌舰 = 固定那一艘;点我方舰 / 点空地 = 清掉。
-         拖框不是点击、Shift 点选导弹也不是,两者都不碰常驻。pinId 由 mousedown 判好(敌我都在吸附圈里时近者胜)——
-         那种情形下这里不能再走 shipAt,否则近在咫尺的那艘我方舰会反手把选中抢走。 */
-      if(selDrag.pinId){if(typeof GEOM!=='undefined')GEOM.pin=selDrag.pinId;}
-      else{
-        const s=shipAt(selDrag.x0,selDrag.y0);
-        if(s){selected=[s.id];}
-        if(!selDrag.missileMode&&typeof GEOM!=='undefined')GEOM.pin=null;
-      }
+      const s=shipAt(selDrag.x0,selDrag.y0);
+      if(s){selected=[s.id];}
     }else if(selDrag.missileMode){ // Shift框选:选导弹群(不是船)
       const x=Math.min(selDrag.x0,selDrag.x1),y=Math.min(selDrag.y0,selDrag.y1);
       const w=Math.abs(selDrag.x1-selDrag.x0),h=Math.abs(selDrag.y1-selDrag.y0);
@@ -463,7 +446,6 @@ function controlledShips(){ // 可控制目标:GM(管理员)下敌我皆可,普�
   const sel=selectedShips().filter(s=>!s.dead);
   return adminMode?sel:sel.filter(s=>s.side==='blue');
 }
-function engageable(t,sh,minQ){ // 能否攻击:敌方 + 攻击方阵营已探测到足够质量(minQ:2识别/3火控,默认2)
-  minQ=minQ||2;
-  return t&&!t.dead&&t.side!==sh.side&&(litOf(t,sh.side))>=minQ;
+function engageable(t,sh){ // 能否攻击:敌方 + 攻击方阵营定得出它的位置
+  return t&&!t.dead&&t.side!==sh.side&&contactFix(t,sh.side);
 }
