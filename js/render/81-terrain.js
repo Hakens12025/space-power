@@ -22,7 +22,8 @@
    ---- 数据流 ----
    瓦片 (L, ix, iy):一格 = 2^L km/px,一块覆盖世界 [ix,ix+1) x [iy,iy+1) 乘 512·2^L km。格点在世界坐标 (ix·64 + i)·8·2^L 上 ——
    整数乘 2 的幂,是精确的双精度;相邻两块共用边上的格点,拼缝两边数值逐位相同(判据 ENV2_MAP ⑪ 钉着"瓦片 = 逐点直接算")。
-   视口块直接采 65x65 细格点(minKm 按细格)、上色一次;祖先只采 17x17 粗格点当垫底。一行采完就把上一行格子的
+   采样交给后台线程(Web Worker,至多 4 个,代码就是世界层的浓度函数,整遍派、整遍回);主线程只描等值线、上色;线程起不来才在主线程按预算采。
+   视口块直接采 65x65 细格点(minKm 按细格)、上色一次;祖先只采 17x17 粗格点当垫底。主线程自己采时一行采完就把上一行格子的
    等值线加进路径(Path2D,不是画布调用),所以上色那一步只剩 清空 + 贴填充 + 三次 stroke,不必再扫整张格子。
    建块的先后:视口里的块 → 它们的祖先(最粗一级先)→ 余量里的块(LRU 满了先舍余量,保"不露底");这一代还要用的旧块先标上、再建新块,不会被腾掉。
    粗图只给祖先(最粗一级先);细图只建想要的块。
@@ -58,7 +59,7 @@ const TERR={
   pool:[],           // ENV2 被腾掉的瓦片留下的画布(连 2d 上下文),新块先拿它:新建一张 512 画布本机约 200 µs
   budget:null,       // ENV2 判据用:{samp:n, cells?:m} ⇒ 本帧按个数采样(圈里圈外都算 1)、拼合成缓存至多 m 格(缺省不限;拷前台 1 次、补矢量 1 次也各算 1 格)、上色不计,可复现;null ⇒ 生产(µs)
   tiles:new Map(),   // ENV2 数字键(terrKey)→ 瓦片
-  iso:null,gain:null,blur:0,tp:1,mem:0,sig:null,rev:-1,L:null,tick:0,gen:0,paintSeq:0,busy:false,bk:0,
+  iso:null,gain:null,blur:0,tp:1,mem:0,wk:null,sig:null,rev:-1,L:null,tick:0,gen:0,paintSeq:0,busy:false,bk:0,
   want:[],anc:[],seq0:[],pos:[],wantKey:'',grp:new Map(), // ENV2 want = 想要的块(视口在前、余量在后);anc = 祖先(最粗一级在前);seq0 = 粗图的采样先后
   comp:null,         // ENV2 前台合成缓存(正在贴的那张){cv,g,L,z,s,dpr,W,H,M,pw,ph,wx0,wy0,cx,cy,key,pos,n,k,done,seq,bad,
                      //      full(整张从头拼 / 挪的那张),src,kx,ky,cp(挪的那张:从哪张拷、挪多少设备像素、拷过没有),R(挪的那张要补矢量的矩形),vk,vk0,vd,vn,vdone(矢量的键 / 拷来那部分的键 / 字框按哪个键标过 / 画了几样 / 画过没有)}
@@ -342,6 +343,46 @@ function terrIsoRow(G,n,j,cp,lev,P){ // ENV2 marching squares:第 j 行格子(�
     }
   }
 }
+/* ---- ENV2 后台线程采样(用户 2026-09-25:星云渲染再快一点)。线程的代码 = 世界层 13-dust 的浓度函数原文(同一串算式),云的配置按签名发过去 ---- */
+function terrWkInit(){ // ENV2 第一次要采样时起线程;起不来(或出过错)就一直走主线程采样
+  if(TERR.wk!==null)return TERR.wk.n>0;
+  TERR.wk={n:0,ws:[],jobs:new Map(),seq:0,rr:0,inflight:0,sig:null};
+  try{
+    const fns=[envHash,envGradC,envGN,envH8,envGNt,envDustFil,envDustOne,envCloudDensity].map(String).join('\n');
+    const src="'use strict';let ENV_GC_K=null,ENV_GC_V=null,ENV_GT=null,ENV_CFG={DUST:null},ENV={clouds:[]};\n"+fns+
+      "\nonmessage=function(e){const m=e.data;if(m.cfg){ENV_CFG={DUST:m.cfg};ENV={clouds:m.clouds};return;}"+
+      "const n=m.n,G=new Float64Array(n*n),C=ENV.clouds;for(let j=0;j<n;j++)for(let i=0;i<n;i++){const x=(m.bx+i*m.st)*m.ck,y=(m.by+j*m.st)*m.ck;let hit=false;"+
+      "for(let q=0;q<C.length;q++){const c=C[q],px=x-c.x,py=y-c.y;if(px*px+py*py<c.r2){hit=true;break;}}G[j*n+i]=hit?envCloudDensity(x,y,m.mk):0;}"+
+      "postMessage({id:m.id,G:G},[G.buffer]);};";
+    const url=URL.createObjectURL(new Blob([src],{type:'text/javascript'})),hc=navigator.hardwareConcurrency||2,n=Math.max(1,Math.min(4,hc-1));
+    for(let i=0;i<n;i++){const w=new Worker(url);w.onmessage=terrWkDone;w.onerror=terrWkFail;TERR.wk.ws.push(w);}
+    TERR.wk.n=n;
+  }catch(e){TERR.wk.n=0;}
+  return TERR.wk.n>0;
+}
+function terrWkFail(){ // ENV2 线程出错:全部停掉、在途的块放回去,改走主线程采样
+  const K=TERR.wk;for(const w of K.ws)w.terminate();K.ws.length=0;K.n=0;
+  for(const T of K.jobs.values())T.job=0;K.jobs.clear();K.inflight=0;
+}
+function terrWkDone(e){ // ENV2 一遍采完:块还在、而且就是派出去的那一遍 ⇒ 收下,等 terrWork 描线上色
+  const K=TERR.wk,m=e.data,T=K.jobs.get(m.id);K.jobs.delete(m.id);K.inflight--;
+  if(!T||T.job!==m.id||TERR.tiles.get(T.key)!==T)return;
+  T.job=0;T.wres=m.G;
+}
+function terrWkSend(T){ // ENV2 把这块当前这一遍(粗 / 细)整遍派给一个线程
+  const K=TERR.wk,co=T.phase===0,st=co?TERR.COARSE:1,n=TERR.TILE/TERR.CELL/st+1,mk=2*T.ck*st;
+  if(K.sig!==TERR.sig){K.sig=TERR.sig;for(const w of K.ws)w.postMessage({cfg:ENV_CFG.DUST,clouds:ENV.clouds});} // 云变了:先发新配置(同一线程的消息按序处理)
+  const g=TERR.gain?TERR.gain(mk):1;T.gain=g;T.lev=g===1?TERR.iso:TERR.iso.map(function(v){return v/g;});T.blw=TERR.blur>0&&T.ck*st>=TERR.blur;
+  const id=++K.seq;T.job=id;K.jobs.set(id,T);K.inflight++;
+  K.ws[K.rr++%K.n].postMessage({id:id,bx:T.bx,by:T.by,st:st,ck:T.ck,n:n,mk:mk});
+}
+function terrFinish(T){ // ENV2 线程采完的一遍:在主线程描等值线(粗级先 3x3 平均),交给上色
+  const G=T.wres,co=T.phase===0,st=co?TERR.COARSE:1,n=TERR.TILE/TERR.CELL/st+1,cp=TERR.CELL*st,iso=TERR.iso.map(function(){return new Path2D();});
+  let S=G;if(T.blw){S=new Float64Array(n*n);for(let j=0;j<n;j++)terrBlurRow(G,S,n,j);}
+  for(let j=0;j<n-1;j++)terrIsoRow(S,n,j,cp,T.lev,iso);
+  if(co)T.cg=G;else T.fg=G;
+  T.pg=G;T.pn=n;T.pc=cp;T.pgain=T.gain;T.piso=iso;T.iso=null;T.wres=null;T.need=true;T.phase++;T.k=0;
+}
 function terrSample(T,left,judge){ // ENV2 按预算采这块当前这一遍(粗 / 细)的格点;一行采完就把上一行格子的等值线加进路径。返回用掉的工作量
   const co=T.phase===0,st=co?TERR.COARSE:1,n=TERR.TILE/TERR.CELL/st+1,N=n*n,C=ENV.clouds,S=TERR.st,ck=T.ck,mk=2*ck*st;
   if(!T.iso){if(co)T.cg=new Float64Array(N);else T.fg=new Float64Array(N);T.iso=[];for(let k=0;k<TERR.iso.length;k++)T.iso.push(new Path2D()); // 这一遍开头:格点存 Float64(每块 33 KB)
@@ -388,15 +429,25 @@ function terrWork(paint){ // ENV2 本帧剩下的活:先上色排着队的块,�
   const judge=!!TERR.budget,C=TERR.cost,S=TERR.st;
   if(!TERR.busy)return;
   const lists=[TERR.want,TERR.anc];
-  for(const Ls of lists)for(const T of Ls)if(T.need){
+  for(const Ls of lists)for(const T of Ls)if(T.need||T.wres){
     /* ENV2 审查第 8 条:去掉原来的 PAINT_CAP(把标定值封顶在 60 µs,慢机器上记账会低估)。首次分配已挪出计时(terrCanvas);
        上色一块比整份预算还贵的机器上,本帧别的活都没做时准许做这一块(不可分单元),否则永远上不了色 —— 那一帧工作量 = 一块的上色成本,如实记账 */
     if(!judge&&TERR.left<C.paint&&!(S.units===0&&C.paint>TERR.BUDGET_US-C.blit))break;
+    const tf=judge?0:performance.now();if(T.wres)terrFinish(T);const df=judge?0:performance.now()-tf; // 线程采完的先描线(定了 pn 才知道画布多大),算进上色成本
     terrCanvas(T,T.pn===TERR.TILE/TERR.CELL+1?Math.round(TERR.TILE*TERR.tp):TERR.TILE); // 细图按设备像素、粗图按 1;分配不计进上色的标定
     const t0=judge?0:performance.now();terrPaint(T,paint);
-    if(!judge){C.pT+=performance.now()-t0;C.pN++;TERR.left-=C.paint;S.units+=C.paint;
+    if(!judge){C.pT+=performance.now()-t0+df;C.pN++;TERR.left-=C.paint;S.units+=C.paint;
       if(C.pT>=2){C.paint=Math.max(1000*C.pT/C.pN,5);C.pT=0;C.pN=0;}}
   }
+  if(!judge&&terrWkInit()){ // ENV2 后台线程采样:按先后给每块派一遍,在途的不重派,每个线程至多排 2 件
+    const K=TERR.wk;
+    wk:for(let ph=0;ph<2;ph++)for(const T of (ph?TERR.want:TERR.seq0)){
+      if(ph&&T.phase===0&&!T.job&&!T.wres){T.phase=1;T.k=0;T.iso=null;} // 视口块跳过粗图
+      if(T.phase!==ph||T.job||T.wres)continue;
+      if(K.inflight>=2*K.n)break wk;
+      terrWkSend(T);
+    }
+  }else{
   const t0=judge?0:performance.now(),minC=judge?1:C.samp*0.05;let used=0;const s0=S.samp,h0=S.hit,left=judge?TERR.js:TERR.left;
   outer:for(let ph=0;ph<2;ph++)for(const T of (ph?TERR.want:TERR.seq0)){ // ENV2 粗图按 seq0 的先后(祖先,最粗一级先);细图只建想要的块
     if(ph&&T.phase===0){T.phase=1;T.k=0;T.iso=null;} // 视口块跳过粗图
@@ -409,8 +460,9 @@ function terrWork(paint){ // ENV2 本帧剩下的活:先上色排着队的块,�
   else{TERR.left-=used;S.units+=used;const nH=S.hit-h0,nO=(S.samp-s0)-nH;
     if(nH+nO>0){C.sT+=performance.now()-t0;C.sN+=nH+0.05*nO;
       if(C.sT>=2){const v=1000*C.sT/C.sN;C.samp=C.cal?0.7*C.samp+0.3*v:v;C.cal++;C.sT=0;C.sN=0;}}} // 标定:累计 >= 2 ms 才更新(计时精度 100 µs)
+  }
   if(judge)for(const Ls of lists)for(const T of Ls)if(T.need){terrCanvas(T,T.pn===TERR.TILE/TERR.CELL+1?Math.round(TERR.TILE*TERR.tp):TERR.TILE);terrPaint(T,paint);} // 判据:这一步采完的块当场上色(上色不计工作量)
-  let busy=false;for(const Ls of lists)for(const T of Ls)if(T.phase<(Ls===TERR.anc?1:2)||T.need){busy=true;break;}
+  let busy=false;for(const Ls of lists)for(const T of Ls)if(T.phase<(Ls===TERR.anc?1:2)||T.need||T.wres){busy=true;break;}
   TERR.busy=busy;
 }
 function terrSync(painter){ // ENV2 每帧(与判据的 mapTileStep)先对一次:世界变了且云的签名变了 ⇒ 瓦片整体作废;窗口 / DPR 变了 ⇒ 合成缓存作废、重算余量
