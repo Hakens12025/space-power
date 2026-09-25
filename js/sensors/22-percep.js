@@ -57,7 +57,7 @@ let scInF = null;                  // ENV1 目标在不在残骸场里(Uint8Arra
 let scTVX = null, scTVY = null, scTVZ = null; // ENV1 目标速度(动目标显示按径向速度滤杂波用;只在有场时填)
 let scMTI2 = 0;                    // ENV1 动目标显示门限的平方
 let scDLit = null, scDSX = null, scDSY = null; // ENV2 观测方看得见光源(Uint8)+ 从它指向光源的方向(位置型恒星每船不同)
-let scTDir = null, scTBg = null, scTSh = null; // ENV2 目标:这一对跟方向有关(Uint8)/ 云背景 / 在影子里(Uint8),精算步不重算
+let scTDir = null, scTBg = null, scTSh = null, scCOn = 0; // ENV2 目标:这一对跟方向有关(Uint8)/ 云背景 / 在影子里(Uint8),精算步不重算
 let scON = 0, scOCap = 0, scOX = null, scOY = null, scOR2 = null; // ENV2 天体摊平(遮挡的内联副本读)
 let scLitC2 = 1;                   // ENV2 光源禁区的 cos^2 半角
 let scDBaf = null, scDBX = null, scDBY = null; // ENV2 观测方被自己尾焰致盲(Uint8)+ 致盲方向(XY 单位向量)
@@ -147,6 +147,7 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
      将来若要把"这一拍盯了多久"喂进热循环,入口还在。 */
   /* ENV1 环境(world/12):太阳禁区的方向、残骸场的动目标显示门限。空环境 ⇒ scDLit 全 0、scInF 全 0,热循环里那两支一次都不进 */
   const fOn = ENV.fields.length > 0, lit = envHasLight(), nb = ENV.bodies.length > 0, cOn = ENV.clouds.length > 0; // ENV2 空环境 ⇒ scDLit / scTDir 全 0、scON = 0
+  scCOn = cOn ? 1 : 0; // ENV2 有云 ⇒ 每一对都有消光,光学还在的对都要精算
   scLitC2 = ENV.sun ? ENV.sun.c2 : (ENV.stars.length ? ENV.stars[0].c2 : 1);
   scBafC2 = senseBafC2();
   scMTI2 = fOn ? ENV_CFG.MTI_V * ENV_CFG.MTI_V : 0;
@@ -216,7 +217,7 @@ function sensePairGrades(j, ti) {
       }
     }
   }
-  if ((g & 3) !== 0 && (scTDir[ti] | scDLit[j]) !== 0) g |= 64; // ENV2 待定位(bit6):光学还在、这一对跟方向有关 ⇒ 热循环外 senseResolve 精算
+  if ((g & 3) !== 0 && (scTDir[ti] | scDLit[j] | scCOn) !== 0) g |= 64; // ENV2 待定位(bit6):光学还在、这一对跟方向有关 ⇒ 热循环外 senseResolve 精算
   return g;
 }
 function senseScanTarget(ti) { // 对第 ti 个目标扫描全部探测器,逐通道取最好的那一档(与旧内核"取最大单源通量"同口径)。ENV2 待定位的对给上界档(热循环里不许调 senseResolve)
@@ -270,8 +271,8 @@ function senseSeesOptical(lum, d, pos, bg) { // 探测器 d 能否光学看到�
   if (ENV.bodies.length && envOccluded(d.pos, pos)) return false; // ENV2 天体挡视线
   lum *= envOptK(pos);
   lum = senseLoOf(lum, 0, 0, senseGlareAt(d.pos, pos), bg || 0); // ENV2 杂散光 + 云背景(弹丸没有相位);都为 0 时原值
-  const dx = d.pos[0] - pos[0], dy = d.pos[1] - pos[1], dz = d.pos[2] - pos[2];
-  return dx * dx + dy * dy + dz * dz < lum * senseKIR(d);
+  const dx = d.pos[0] - pos[0], dy = d.pos[1] - pos[1], dz = d.pos[2] - pos[2], d2 = dx * dx + dy * dy + dz * dz, r = lum * senseKIR(d);
+  return d2 < r && (!ENV.clouds.length || d2 < r * envExt(d.pos, pos, 8)); // ENV2 消光只在不算它也看得见时才算(沿线至多 8 点)
 }
 function senseSeesActive(refl, d, pos, vel) { // 探测器 d 的照射能否打到位于 pos、反射 refl 的东西(不照射时 senseKACT 恒 0,自然为假)。vel 可省
   if (envMtiBlind(d.pos, pos, vel)) return false; // ENV1:场内慢目标的回波被动目标显示滤掉(空环境 / 不给速度时恒假)

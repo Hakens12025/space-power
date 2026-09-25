@@ -36,8 +36,9 @@ function drawEnvView(view){const V=ENV_VIEWS[view];if(!V)return;const took=V.pre
 function drawEnv(){drawEnvView('map');} // ENV2 名字不变:84-scene 的 typeof 守卫仍指向已声明符号(R2)
 
 /* ---- ENV2 静态贴图层(云):登记表的 pre ---- */
-const MAP_CLOUD={RGB:[150,172,205],A:0.10,ISO:[0.15,0.4,0.7],LINE:['rgba(165,188,220,.16)','rgba(165,188,220,.24)','rgba(165,188,220,.34)']}; // ENV2 云的海图配色:单色填充 alpha = 0.10·min(1,浓度);三档等值线
-const MAP_TILE_PAINT={paint:mapTilePaint,iso:MAP_CLOUD.ISO,vec:mapVec,vkey:mapLabPlan,vdiff:mapLabDiff}; // ENV2 交给地形瓦片服务的上色器;任务 4:vec = 合成缓存的矢量层,vkey = 矢量层的键(世界 rev + 字的位置);
+const MAP_CLOUD={LO:[118,108,160],HI:[110,185,235],A:0.3,ISO:[0.15,0.4,0.7],LINE:['rgba(150,165,215,.18)','rgba(140,190,235,.28)','rgba(180,225,255,.42)'],GM:6,G0:131072,GL:3,BLUR_KM:32768};
+  // ENV2 云的海图配色(同演示页 NEB):浓度低处灰紫、高处青蓝,alpha = A·浓度^0.7;三档等值线;拉远(minKm 从 G0 起 GL 级)显示增益到 GM 倍;格距 >= BLUR_KM 时等值线描在 3x3 平均上
+const MAP_TILE_PAINT={paint:mapTilePaint,iso:MAP_CLOUD.ISO,gain:mapCloudGain,blur:MAP_CLOUD.BLUR_KM,vec:mapVec,vkey:mapLabPlan,vdiff:mapLabDiff}; // ENV2 交给地形瓦片服务的上色器;任务 4:vec = 合成缓存的矢量层,vkey = 矢量层的键(世界 rev + 字的位置);
   // 审查第四轮:vdiff = 两个键之间是不是只有字挪了、挪了的新旧字框在哪(合成缓存据此只重画那几格,不整张重拼)
 const MAP_SMALL={}; // ENV2 上色用的小画布(每种格点数一张:17 / 65),putImageData 之后放大贴进瓦片
 function mapTileNeed(V){for(const k of V.order){const e=V.kinds[k];if(e&&e.tile&&e.need())return true;}return false;} // ENV2 有没有要进贴图的类
@@ -77,14 +78,16 @@ function mapSmall(n){ // ENV2 n x n 的小画布与它的 ImageData(复用,不�
   return m;
 }
 function mapCloudPaint(g,T){ // ENV2 云的海图画法(只在离屏瓦片上):单色低 alpha 填充(格点放大、双线性)+ 三档等值线,每档一个 path、stroke 一次
-  const n=T.pn,G=T.pg,cp=T.pc,sm=mapSmall(n),d=sm.img.data,C=MAP_CLOUD.RGB,A=255*MAP_CLOUD.A;
-  for(let k=0,q=0;k<n*n;k++,q+=4){d[q]=C[0];d[q+1]=C[1];d[q+2]=C[2];d[q+3]=Math.round(A*Math.min(1,G[k]));} // 只在透明度上截顶(浓度本身不截,见 world/13)
+  const n=T.pn,G=T.pg,cp=T.pc,sm=mapSmall(n),d=sm.img.data,lo=MAP_CLOUD.LO,hi=MAP_CLOUD.HI,A=255*MAP_CLOUD.A,gn=T.pgain||1;
+  for(let k=0,q=0;k<n*n;k++,q+=4){const v=Math.min(1,G[k]*gn),u=Math.min(1,v/0.8); // 只在显示上截顶(浓度本身不截,见 world/13)
+    d[q]=lo[0]+(hi[0]-lo[0])*u;d[q+1]=lo[1]+(hi[1]-lo[1])*u;d[q+2]=lo[2]+(hi[2]-lo[2])*u;d[q+3]=v>0?Math.round(A*Math.pow(v,0.7)):0;}
   sm.g.putImageData(sm.img,0,0);
   g.imageSmoothingEnabled=true;
   g.drawImage(sm.cv,0,0,n,n,-cp/2,-cp/2,n*cp,n*cp); // 格点 i 落在瓦片像素 i·cp(相邻两块共用边上的格点,拼起来连续)
   g.lineWidth=1;
   for(let k=0;k<T.piso.length;k++){g.strokeStyle=MAP_CLOUD.LINE[k];g.stroke(T.piso[k]);}
 }
+function mapCloudGain(mk){let u=Math.max(0,Math.min(1,Math.log2(mk/MAP_CLOUD.G0)/MAP_CLOUD.GL));u=u*u*(3-2*u);return 1+(MAP_CLOUD.GM-1)*u;} // ENV2 拉远的显示增益:只放大亮度不挪位置
 function mapCloudLabels(){ // ENV2 comp 槽(任务 2 / 审查问题 6):每朵要带字的云在它"屏幕上可见部分里的一点"写一行"尘埃云"(位置由 mapLabPlan 定、钉在世界上;
   // 原来只写在云心、云心不在屏里就没有字,还会压在舰名上)。字是预渲染的小贴图(见 mapText)。返回写了几行
   if(!ENV.clouds.length)return 0;
@@ -94,7 +97,7 @@ function mapCloudLabels(){ // ENV2 comp 槽(任务 2 / 审查问题 6):每朵要
 /* ---- ENV2 任务 2(审查问题 6):云的字写在哪。业内叫法:地图标注的自动摆放(automatic label placement,Imhof 1975 的制图标注原则;
    候选位置 + 冲突检测 + 选最优那一套),我们只做最简单的一种:视口里一张候选格心网,排除压到舰船标签框的,取离云可见部分质心最近的那个。
    迟滞:原来的位置还"好"就不动 —— 平移 / 缩放时字钉在世界上,不追着质心跑(否则每挪一下合成缓存就要重拼一次)。 ---- */
-const MAP_LAB={list:[],key:'',rev:-1,COL:'rgba(165,188,220,.55)',NX:16,NY:9,INSET:4,SHIP_HW:36,R_MIN:60,B:[],P:[]};
+const MAP_LAB={list:[],key:'',rev:-1,COL:'rgba(165,188,220,.55)',NX:16,NY:9,INSET:4,SHIP_HW:36,R_MIN:60,DMIN:0.15,B:[],P:[]}; // ENV2 DMIN:字只写在显示浓度够的地方
   // list = [{i 云的下标, x, y 世界坐标}];key = 矢量层的键(世界 rev + 字的位置);NX x NY 候选格心;INSET 字离视口边至少几 px;
   // SHIP_HW 舰船标签框的半宽下限(舰名 10px 字,7 个汉字 70px);R_MIN 云的屏幕半径大于它才带字(同原来);B / P 草稿
 function mapLabPlan(x,y,z){ // ENV2 视图 = 以 (x,y) 为中心、缩放 z 的视口(动画中是落点):定每朵云的字写在哪;返回矢量层的键(地形瓦片服务每帧调一次)
@@ -119,17 +122,18 @@ function mapLabDiff(k0,k1,z,out){ // ENV2 审查第四轮:矢量层的键 k0 →
   return true;
 }
 function mapCircleInView(c,x,y,z){const hw=W/2/z,hh=H/2/z,dx=Math.max(x-hw-c.x,0,c.x-x-hw),dy=Math.max(y-hh-c.y,0,c.y-y-hh);return dx*dx+dy*dy<c.r2;} // ENV2 云的圆与视图相交
-function mapLabOk(c,wx,wy,x,y,z,B){ // ENV2 字的中心落在世界点 (wx,wy) 好不好:在云的实心部分里(ρ <= 1-EDGE)、整个在视口里(内缩 INSET)、不压任何舰船的标签框
-  const e=1-ENV_CFG.DUST.EDGE,dx=wx-c.x,dy=wy-c.y;if(dx*dx+dy*dy>c.r2*e*e)return false;
+function mapLabDense(c,wx,wy,z){const mk=64/z;return envDustOne(c,wx,wy,mk)*mapCloudGain(mk)>=MAP_LAB.DMIN;} // ENV2 世界点够不够浓(按 32 屏幕像素滤过:只看大片够不够浓,也省掉细丝的计算;乘显示增益)
+function mapLabOk(c,wx,wy,x,y,z,B){ // ENV2 字的中心落在世界点 (wx,wy) 好不好:云在那里够浓、整个在视口里(内缩 INSET)、不压任何舰船的标签框
+  if(!mapLabDense(c,wx,wy,z))return false;
   const s=mapTextSpr('尘埃云',MAP_LAB.COL),x0=(wx-x)*z+W/2-s.ax,y0=(wy-y)*z+H/2-s.ay,x1=x0+s.w,y1=y0+s.h,I=MAP_LAB.INSET;
   if(x0<I||y0<I||x1>W-I||y1>H-I)return false;
   for(let k=0;k<B.length;k+=4)if(x0<B[k+2]&&x1>B[k]&&y0<B[k+3]&&y1>B[k+1])return false;
   return true;
 }
-function mapLabFind(c,x,y,z,B){ // ENV2 视口里 NX x NY 个候选格心:先求云可见部分(实心部分 ∩ 视口)的质心,再取离它最近的好格心;一个好的都没有给 null(不写字)
-  const nx=MAP_LAB.NX,ny=MAP_LAB.NY,e=1-ENV_CFG.DUST.EDGE,P=MAP_LAB.P;let mx=0,my=0,n=0;P.length=0;
-  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const wx=x+((i+0.5)*W/nx-W/2)/z,wy=y+((j+0.5)*H/ny-H/2)/z,dx=wx-c.x,dy=wy-c.y;
-    if(dx*dx+dy*dy>c.r2*e*e)continue;mx+=wx;my+=wy;n++;P.push(wx,wy);}
+function mapLabFind(c,x,y,z,B){ // ENV2 视口里 NX x NY 个候选格心:先求云可见部分(够浓的候选格心)的质心,再取离它最近的好格心;一个好的都没有给 null(不写字)
+  const nx=MAP_LAB.NX,ny=MAP_LAB.NY,P=MAP_LAB.P;let mx=0,my=0,n=0;P.length=0;
+  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const wx=x+((i+0.5)*W/nx-W/2)/z,wy=y+((j+0.5)*H/ny-H/2)/z;
+    if(!mapLabDense(c,wx,wy,z))continue;mx+=wx;my+=wy;n++;P.push(wx,wy);}
   if(!n)return null;mx/=n;my/=n;
   let best=-1,bd=Infinity;
   for(let k=0;k<P.length;k+=2){const d=(P[k]-mx)*(P[k]-mx)+(P[k+1]-my)*(P[k+1]-my);if(d<bd&&mapLabOk(c,P[k],P[k+1],x,y,z,B)){bd=d;best=k;}}

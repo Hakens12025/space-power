@@ -38,7 +38,7 @@ function senseSolar(o, t, tSh) { // ENV2 前三项的乘法顺序与 sensePrepar
   const ph = senseSunPhase(o, t, tSh); return ph > 0 ? SENS.SOLAR_K * sReq(t, 'size', 'ship') * envOptK(t.pos) * ph : 0;
 }
 function senseOptLoWith(o, t, bg, tSh, oLit) { // ENV2 唯一的成对式子(senseResolve、senseOptLo 都走它)
-  return senseLoOf(optLum(t), 0, senseSolar(o, t, tSh), senseGlareAt(o.pos, t.pos, oLit), bg);
+  return senseLoOf(optLum(t), 0, senseSolar(o, t, tSh), senseGlareAt(o.pos, t.pos, oLit), bg) * envExt(o.pos, t.pos); // ENV2 消光:连线上的云吃掉到达观测方的亮度
 }
 function senseOptLo(o, t) { // ENV2 现算三个前置量;与 sensePrepare 的算法逐项相同
   const nb = ENV.bodies.length > 0, lit = envHasLight();

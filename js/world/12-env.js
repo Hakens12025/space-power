@@ -41,12 +41,16 @@ const ENV_CFG={
   STAR_R:696000,      // ENV2 位置型恒星的缺省光球半径 km(真太阳;红外页的 R_SAT)
   BODY_HEAT:2,        // ENV2 天体背阴面的自身热。单位 = 背景单位(与 envBg、云的 v 同一单位:1 = SENS.BG_G0 = 一条发现线);v1 只有红外视图读
   ROCK_HEAT:0.5,      // ENV2 石头自身热倍率(同体型熄火冷船 = 1);makeRock 写进 heatK,第 4a 步起 optLum 才读
-  DUST:{V:1.3,DARK:0.3,L0:1600000,OCT:9,GAIN:0.78,WARP:0.35,MASK_LO:0.5,MASK_HI:0.66,MIN_KM:12500,EDGE:0.2, // ENV2 尘埃云(红外页 IRM_CLOUD 的世界部分)+ 圆形软窗宽度 EDGE(占半径);噪声在 world/13-dust
-    R3:0.49} // ENV2 脊状倍频的期望 E[(1-|envGN|)^3]:物理尺度(MIN_KM)会算、视图细度截掉的倍频按它补上,各细度平均浓度 = 物理尺度的(审查问题 5;第四轮收窄:物理尺度本身不补)。数值积分:40 个种子 x 16 万点 = 0.48996,种子间标准差 0.0007;测试 world.test 钉着它与 envGN 相符
+  DUST:{V:1.3,DARK:0.3,MIN_KM:12500, // ENV2 尘埃云(world/13;与演示页 demos/地图组/红外效果.html 的 irmCloudD 同一套式子):亮度倍率、背阴处倍率、物理尺度
+    A:16e6,B:11e6,ANG:39,R1:1,R2:1.9,S0:0.8,S1:1.3,WBR:1.09,   // 本体:缺省半轴 / 朝向(度),归一半径 R1→R2 落到 0,S0→S1 起边缘扭曲(振幅 WBR·b)
+    PW:22e6,WT:15e6,P0:16e6,BOCT:4,BGN:0.55,LO:-0.25,HI:0.45,TH:0.06,CB:0.15,RC:0.8,SDB:244, // 云带:扭曲周期 / 振幅,fBm 起始尺度、层数、衰减,门槛,外疏内实,种子偏移
+    IL:1000000,MASK_LO:0.5,MASK_HI:0.66,SH:0.35,SHB:0.4,SR:0.6,VK:3.7,WK:0.4,PK:4, // 岛:基准尺度,门槛,出本体 / 云带稀处门槛上移,放宽系数,吃云带扭曲的比例,一周期 4·PK 格以上全算
+    FL0:500000,OCT:9,GAIN:0.78,WARP:0.35,Q0:0.78,G:4,QM:0.45,FM:0.2,XO:2,XA:0.4, // 丝:b2ea0f4 的脊状分形 + XO 层粗褶;QM / FM = 分辨不出时补的期望
+    EXT_TAU:150000,EXT_G:50000} // 消光:浓度 1 走 EXT_TAU km 光深为 1;沿线浓度取 EXT_G km 格点
 };
 const ENV_KEYS=['sun','stars','bodies','clouds','fields','asteroids']; // ENV2 world 认识的键:envReset 见到别的键当场抛(ENV1 时拼错 feilds 会静默成空环境);视图的登记表以它为锚
 /* ENV1 的 sun:{brg,half,ux,uy,c2}(c2 = cos^2 半角,热循环免开方);fields:[{x,y,r,r2,n,seed,smin,smax}]。
-   ENV2 加 stars:[{x,y,r,half,c2}] / bodies:[{x,y,r,r2,heat,name}] / clouds:[{x,y,r,r2,seed,v,dark,l0}] / asteroids:[{x,y,r,n,seed,smin,smax,clear,name}] / rev(每次 envReset 加 1,给视图缓存当键)。
+   ENV2 加 stars:[{x,y,r,half,c2}] / bodies:[{x,y,r,r2,heat,name}] / clouds:[{x,y,a,b,ang,ca,sa,r,r2,seed,v,dark}](r = 外接圆半径) / asteroids:[{x,y,r,n,seed,smin,smax,clear,name}] / rev(每次 envReset 加 1,给视图缓存当键)。
    ENV2 单写者:全库只有 envReset 写 ENV。ENV 本身 seal(不许加键),列表与条目由 envReset 整体换成冻结的新对象 ⇒ 严格模式下别处改条目、改列表、给 ENV 加键会当场抛 TypeError。
    ⚠ ENV2 seal 不拦替换已有的键:ENV.sun={…}、ENV.bodies=[…]、ENV.rev++ 运行期都不抛,这一类只靠 verify.sh 的唯一写入口检查(W1 / W2)抓 */
 const ENV=Object.seal({sun:null,stars:Object.freeze([]),bodies:Object.freeze([]),clouds:Object.freeze([]),
@@ -62,7 +66,7 @@ function envReset(w){
     if((w.sun?1:0)+(w.stars?w.stars.length:0)>1)throw new Error('ENV2 v1 全图最多一个光源(sun 与 stars 合计 <=1)'); // 拍板点 5
     if(w.sun&&!isFinite(w.sun.brg))throw new Error('ENV2 sun.brg 不是数:'+w.sun.brg+'(rand 要由对局层先掷成具体方位)'); // ENV2 envReset 不掷骰子
     for(const g of ['stars','bodies','clouds','asteroids'])for(const e of (w[g]||[]))
-      if(!isFinite(e.x)||!isFinite(e.y)||(g==='stars'?(e.r!==undefined&&!(e.r>0)):!(e.r>0)))throw new Error('ENV2 '+g+' 条目缺坐标或半径');
+      if(!isFinite(e.x)||!isFinite(e.y)||(g==='stars'||g==='clouds'?(e.r!==undefined&&!(e.r>0)):!(e.r>0)))throw new Error('ENV2 '+g+' 条目缺坐标或半径');
   }
   let sun=null;const st=[],bd=[],cl=[],fl=[],ast=[];
   if(w&&w.sun){ // ENV1 原样(只是先算进局部变量、再冻结)
@@ -72,7 +76,8 @@ function envReset(w){
   for(const s of (w&&w.stars)||[]){const h=num(s.half,ENV_CFG.SUN_HALF_DEG)*Math.PI/180,c=Math.cos(h); // ENV2 位置型恒星;half 单位是度,c2 = cos^2 半角
     st.push(F({x:s.x,y:s.y,r:num(s.r,ENV_CFG.STAR_R),half:h*180/Math.PI,c2:c*c}));}
   for(const b of (w&&w.bodies)||[])bd.push(F({x:b.x,y:b.y,r:b.r,r2:b.r*b.r,heat:num(b.heat,ENV_CFG.BODY_HEAT),name:b.name||'天体'})); // ENV2 天体:XY 上无限高的柱,挡视线、投影子
-  for(const c of (w&&w.clouds)||[])cl.push(F({x:c.x,y:c.y,r:c.r,r2:c.r*c.r,seed:c.seed|0,v:num(c.v,D.V),dark:num(c.dark,D.DARK),l0:num(c.l0,D.L0)})); // ENV2 尘埃云:圆形有界,圈内用种子噪声出浓度
+  for(const c of (w&&w.clouds)||[]){const a=num(c.a,D.A),b=num(c.b,D.B),ang=num(c.ang,D.ANG),r=(D.R2+D.WBR)*Math.max(a,b); // ENV2 尘埃云:生成点 (x,y) + 椭圆本体;r = 浓度可能非 0 的外接圆
+    cl.push(F({x:c.x,y:c.y,a:a,b:b,ang:ang,ca:Math.cos(ang*Math.PI/180),sa:Math.sin(ang*Math.PI/180),r:r,r2:r*r,seed:c.seed|0,v:num(c.v,D.V),dark:num(c.dark,D.DARK)}));}
   for(const f of (w&&w.fields)||[])fl.push(F({x:f.x,y:f.y,r:f.r,r2:f.r*f.r,n:f.n|0,seed:f.seed|0,smin:isFinite(f.smin)?f.smin:0.35,smax:isFinite(f.smax)?f.smax:2.0})); // ENV1 原样(ENV2 冻结;ENV2 缺省 smax 2.0:石头冷 0.5 之后大碎石仍亮过冷 DD、冒充得了船)
   for(const a of (w&&w.asteroids)||[])ast.push(F({x:a.x,y:a.y,r:a.r,n:a.n|0,seed:a.seed|0,smin:num(a.smin,1),smax:num(a.smax,3),clear:num(a.clear,0),name:a.name||'小行星'})); // ENV2 小行星:只用来撒石头,不带光学杂波、不带 MTI
   ENV.sun=sun;ENV.stars=F(st);ENV.bodies=F(bd);ENV.clouds=F(cl);ENV.fields=F(fl);ENV.asteroids=F(ast);ENV.rev++; // ENV2 整体换成冻结的新列表

@@ -56,7 +56,7 @@ const TERR={
   pool:[],           // ENV2 被腾掉的瓦片留下的画布(连 2d 上下文),新块先拿它:新建一张 512 画布本机约 200 µs
   budget:null,       // ENV2 判据用:{samp:n, cells?:m} ⇒ 本帧按个数采样(圈里圈外都算 1)、拼合成缓存至多 m 格(缺省不限;拷前台 1 次、补矢量 1 次也各算 1 格)、上色不计,可复现;null ⇒ 生产(µs)
   tiles:new Map(),   // ENV2 数字键(terrKey)→ 瓦片
-  iso:null,sig:null,rev:-1,L:null,tick:0,gen:0,paintSeq:0,busy:false,bk:0,
+  iso:null,gain:null,blur:0,sig:null,rev:-1,L:null,tick:0,gen:0,paintSeq:0,busy:false,bk:0,
   want:[],anc:[],seq0:[],pos:[],wantKey:'',grp:new Map(), // ENV2 want = 想要的块(视口在前、余量在后);anc = 祖先(最粗一级在前);seq0 = 粗图的采样先后
   comp:null,         // ENV2 前台合成缓存(正在贴的那张){cv,g,L,z,s,dpr,W,H,M,pw,ph,wx0,wy0,cx,cy,key,pos,n,k,done,seq,bad,
                      //      full(整张从头拼 / 挪的那张),src,kx,ky,cp(挪的那张:从哪张拷、挪多少设备像素、拷过没有),R(挪的那张要补矢量的矩形),vk,vk0,vd,vn,vdone(矢量的键 / 拷来那部分的键 / 字框按哪个键标过 / 画了几样 / 画过没有)}
@@ -73,7 +73,7 @@ function terrLevel(z,prev){ // ENV2 缩放级 L:一格 = 2^L km/px;带迟滞(见
   if(prev!==null){const s=Math.pow(2,prev)*z;if(s>=TERR.S_LO&&s<=TERR.S_HI)return prev;}
   const L=Math.ceil(Math.log2(1/z));return L<0?0:L;
 }
-function terrSig(iso){let s=iso.join(',');const C=ENV.clouds;for(let i=0;i<C.length;i++){const c=C[i];s+='|'+c.x+','+c.y+','+c.r+','+c.seed+','+c.l0;}return s;} // ENV2 瓦片的内容签名:只含云的几何(与光照、天体无关 —— 影子是每帧的矢量)+ 等值线档
+function terrSig(iso){let s=iso.join(',');const C=ENV.clouds;for(let i=0;i<C.length;i++){const c=C[i];s+='|'+c.x+','+c.y+','+c.a+','+c.b+','+c.ang+','+c.seed;}return s;} // ENV2 瓦片的内容签名:只含云的几何(与光照、天体无关 —— 影子是每帧的矢量)+ 等值线档
 function terrFreeComp(c){if(c&&c.cv){c.cv.width=0;c.cv.height=0;c.g=null;}} // ENV2 放掉一张合成缓存的像素(画布宽高置 0)
 function terrRelease(){ // ENV2 没有要进贴图的东西了(换了没有云的场景):瓦片与合成缓存全部放掉
   if(!TERR.tiles.size&&!TERR.comp&&!TERR.back&&!TERR.spare&&TERR.sig===null)return;
@@ -307,42 +307,10 @@ function terrDirect(L){ // ENV2 合成缓存盖不住视口时:逐块画(拉伸)
     else for(let i=0;i<e.m.length;i+=2){const ix=e.m[i],iy=e.m[i+1];terrDrawSrc(ctx,T,k,ix,iy,(ix*km-cam.x)*z+W/2,(iy*km-cam.y)*z+H/2,km*z,km*z);terrShow();}
   }
 }
-/* ---- ENV2 云浓度的视图层快版:与 world/13 的 envDustOne / envCloudDensity 同一串算式、同一个运算顺序,只把格点梯度(hash → cos/sin)缓存起来 ----
-   补充规格 C 允许的做法,条件是判据证明与 envDustOne 逐位相同:ENV2_MAP ⑪ 对每块瓦片的全部格点、外加 2 万个随机点(随机细度)逐位核对 terrDensity === envCloudDensity。
-   为什么值得:采样是建瓦片的全部成本,一个格点要 10 次梯度噪声、每次 4 个 cos + 4 个 sin;相邻格点落在同一个噪声格里,梯度是同一组。
-   ⚠ 这是世界层一个函数的副本:world/13 的 envDustOne / envGN / envGrad 改了,这里必须跟着改(⑪ 当场会红)。缓存撞槽只会多算一次,不会算错:每个梯度取出来立刻用掉 */
-const TERR_GC_N=16384,TERR_GC_K=new Int32Array(TERR_GC_N*3).fill(-2147483648),TERR_GC_V=new Float64Array(TERR_GC_N*2); // ENV2 梯度缓存:键 (i,j,种子),值 (cos,sin)
-let TERR_DUST_NORM=0; // ENV2 = world/13 的 ENV_DUST_NORM,同一个求和顺序现算(不写世界层的变量)
-function terrGrad(i,j,sd){ // ENV2 返回缓存槽下标;没命中就按 envGrad 的式子算进去
-  const h=((Math.imul(i,0x9E3779B1)^Math.imul(j,0x85EBCA77)^Math.imul(sd,0xC2B2AE3D))>>>18)&(TERR_GC_N-1),k=h*3;
-  if(TERR_GC_K[k]===i&&TERR_GC_K[k+1]===j&&TERR_GC_K[k+2]===sd)return h*2;
-  const a=envHash(i,j,sd)*6.283185307;TERR_GC_V[h*2]=Math.cos(a);TERR_GC_V[h*2+1]=Math.sin(a);TERR_GC_K[k]=i;TERR_GC_K[k+1]=j;TERR_GC_K[k+2]=sd;return h*2;
+function terrBlurRow(G,B,n,j){ // ENV2 B 的第 j 行 = G 在 3x3 邻域(越界不计)的平均:粗级的等值线描在它上面,不给零星亮点描小圈
+  const j0=j>0?j-1:0,j1=j<n-1?j+1:n-1;
+  for(let i=0;i<n;i++){const i0=i>0?i-1:0,i1=i<n-1?i+1:n-1;let t=0,c=0;for(let y=j0;y<=j1;y++)for(let x=i0;x<=i1;x++){t+=G[y*n+x];c++;}B[j*n+i]=t/c;}
 }
-function terrGN(x,y,sd){ // ENV2 = envGN(梯度取缓存;每个取出来立刻用,撞槽也不会读错)
-  const ix=Math.floor(x),iy=Math.floor(y),fx=x-ix,fy=y-iy,ux=fx*fx*fx*(fx*(fx*6-15)+10),uy=fy*fy*fy*(fy*(fy*6-15)+10),V=TERR_GC_V;
-  let s=terrGrad(ix,iy,sd);const n00=V[s]*fx+V[s+1]*fy;
-  s=terrGrad(ix+1,iy,sd);const n10=V[s]*(fx-1)+V[s+1]*fy;
-  s=terrGrad(ix,iy+1,sd);const n01=V[s]*fx+V[s+1]*(fy-1);
-  s=terrGrad(ix+1,iy+1,sd);const n11=V[s]*(fx-1)+V[s+1]*(fy-1);
-  return 1.41*(n00+(n10-n00)*ux+(n01-n00)*uy+(n00-n10-n01+n11)*ux*uy);
-}
-function terrDustOne(c,x,y,minKm){ // ENV2 = envDustOne(噪声换 terrGN,其余逐字相同)
-  const px=x-c.x,py=y-c.y,q=px*px+py*py;if(!(q<c.r2))return 0;
-  const D=ENV_CFG.DUST,L0=c.l0,S=c.seed;
-  if(!TERR_DUST_NORM){let g=0.5;for(let o=0;o<D.OCT;o++,g*=D.GAIN)TERR_DUST_NORM+=g;}
-  let m=0.5+0.5*(0.65*terrGN(px/(2*L0),py/(2*L0),S)+0.35*terrGN(px/L0,py/L0,S+1));
-  m=(m-D.MASK_LO)/(D.MASK_HI-D.MASK_LO);if(m<=0)return 0;if(m>1)m=1;m=m*m*(3-2*m);
-  const wx=px+D.WARP*L0*terrGN(px/L0+3.7,py/L0+1.3,S+2),wy=py+D.WARP*L0*terrGN(px/L0-2.1,py/L0+5.9,S+3);
-  let f=0,a=0.5,L=L0/2,cs=1,sn=0;const c37=Math.cos(0.6458),s37=Math.sin(0.6458);
-  for(let o=0;o<D.OCT;o++,L/=2,a*=D.GAIN){const w=Math.min(1,L/minKm-1),wp=Math.min(1,L/D.MIN_KM-1);if(w<=0&&wp<=0)break;
-    if(!(w<=0)){const qx=(wx*cs-wy*sn)/L,qy=(wx*sn+wy*cs)/L,r=1-Math.abs(terrGN(qx,qy,S+10+o));f+=a*w*r*r*r;}
-    if(wp>w)f+=a*(wp-Math.max(w,0))*D.R3; // ENV2 = envDustOne(审查第四轮任务 1):只补物理尺度会算、这一细度截掉 / 淡出的那部分
-    const c2=cs*c37-sn*s37;sn=cs*s37+sn*c37;cs=c2;}
-  const core=Math.min(1,m*f/TERR_DUST_NORM*1.4),rho=Math.sqrt(q)/c.r,e=D.EDGE;
-  if(rho<=1-e)return core;
-  const t=(1-rho)/e;return core*t*t*(3-2*t);
-}
-function terrDensity(x,y,minKm){const C=ENV.clouds;let s=0;for(let i=0;i<C.length;i++)s+=terrDustOne(C[i],x,y,minKm);return s;} // ENV2 = envCloudDensity(同一个聚合顺序)
 function terrIsoRow(G,n,j,cp,lev,P){ // ENV2 marching squares:第 j 行格子(格点行 j 与 j+1 之间)的等值线段加进 P[k](瓦片像素坐标,格点 i 在 i·cp)。四角 a 左上 b 右上 c 右下 d 左下;鞍点按格心均值定
   const r0=j*n,r1=r0+n,y0=j*cp,y1=y0+cp,nl=lev.length;
   for(let i=0;i<n-1;i++){
@@ -368,19 +336,21 @@ function terrIsoRow(G,n,j,cp,lev,P){ // ENV2 marching squares:第 j 行格子(�
   }
 }
 function terrSample(T,left,judge){ // ENV2 按预算采这块当前这一遍(粗 / 细)的格点;一行采完就把上一行格子的等值线加进路径。返回用掉的工作量
-  const co=T.phase===0,st=co?TERR.COARSE:1,n=TERR.TILE/TERR.CELL/st+1,N=n*n,C=ENV.clouds,S=TERR.st,lev=TERR.iso;
-  if(!T.iso){if(co)T.cg=new Float64Array(N);else T.fg=new Float64Array(N);T.iso=[];for(let k=0;k<lev.length;k++)T.iso.push(new Path2D());} // 这一遍开头:格点存 Float64(与逐点直接算逐位相同;每块 33 KB)
-  const G=co?T.cg:T.fg,ck=T.ck,mk=2*ck*st,ci=judge?1:TERR.cost.samp,co2=judge?1:ci*0.05,cp=TERR.CELL*st;
+  const co=T.phase===0,st=co?TERR.COARSE:1,n=TERR.TILE/TERR.CELL/st+1,N=n*n,C=ENV.clouds,S=TERR.st,ck=T.ck,mk=2*ck*st;
+  if(!T.iso){if(co)T.cg=new Float64Array(N);else T.fg=new Float64Array(N);T.iso=[];for(let k=0;k<TERR.iso.length;k++)T.iso.push(new Path2D()); // 这一遍开头:格点存 Float64(每块 33 KB)
+    const g=TERR.gain?TERR.gain(mk):1;T.gain=g;T.lev=g===1?TERR.iso:TERR.iso.map(function(v){return v/g;}); // ENV2 显示增益由上色器乘:等值线档按增益缩回原浓度
+    T.bl=(TERR.blur>0&&ck*st>=TERR.blur)?new Float64Array(N):null;}
+  const G=co?T.cg:T.fg,lev=T.lev,ci=judge?1:TERR.cost.samp,co2=judge?1:ci*0.05,cp=TERR.CELL*st;
   let k=T.k,u=0;
   while(k<N){
     const i=k%n,j=(k-i)/n,x=(T.bx+i*st)*ck,y=(T.by+j*st)*ck; // 整数乘 2 的幂:精确;与判据逐点直接算的坐标逐位相同
     let hit=false;for(let q=0;q<C.length;q++){const c=C[q],px=x-c.x,py=y-c.y;if(px*px+py*py<c.r2){hit=true;break;}} // 与 envDustOne 第一句同式:所有圈外 ⇒ 浓度恰为 +0,不必调
     const w=hit?ci:co2;if(u+w>left)break;
-    G[k]=hit?terrDensity(x,y,mk):0;u+=w;k++;S.samp++;if(hit)S.hit++; // = envCloudDensity(x,y,mk) 逐位(快版,见上)
-    if(i===n-1&&j>0)terrIsoRow(G,n,j-1,cp,lev,T.iso);
+    G[k]=hit?envCloudDensity(x,y,mk):0;u+=w;k++;S.samp++;if(hit)S.hit++;
+    if(i===n-1&&j>0){if(!T.bl)terrIsoRow(G,n,j-1,cp,lev,T.iso);else{terrBlurRow(G,T.bl,n,j-1);if(j>1)terrIsoRow(T.bl,n,j-2,cp,lev,T.iso);}}
   }
   T.k=k;
-  if(k===N){T.pg=G;T.pn=n;T.pc=cp;T.piso=T.iso;T.iso=null;T.need=true;T.phase++;T.k=0;}
+  if(k===N){if(T.bl){terrBlurRow(G,T.bl,n,n-1);terrIsoRow(T.bl,n,n-2,cp,lev,T.iso);T.bl=null;}T.pg=G;T.pn=n;T.pc=cp;T.pgain=T.gain;T.piso=T.iso;T.iso=null;T.need=true;T.phase++;T.k=0;}
   return u;
 }
 function terrCanvas(T){ // ENV2 给这块一张 512 画布:先拿池里的(被腾掉的块留下的),没有才新建
@@ -425,7 +395,7 @@ function terrWork(paint){ // ENV2 本帧剩下的活:先上色排着队的块,�
 }
 function terrSync(painter){ // ENV2 每帧(与判据的 mapTileStep)先对一次:世界变了且云的签名变了 ⇒ 瓦片整体作废;窗口 / DPR 变了 ⇒ 合成缓存作废、重算余量
   if(ENV.rev!==TERR.rev){TERR.rev=ENV.rev;const sg=terrSig(painter.iso);
-    if(sg!==TERR.sig){TERR.tiles.clear();TERR.want.length=0;TERR.anc.length=0;TERR.seq0.length=0;TERR.pos.length=0;TERR.wantKey='';TERR.busy=false;if(TERR.comp)TERR.comp.bad=true;terrDropBack();TERR.sig=sg;TERR.iso=painter.iso;}}
+    if(sg!==TERR.sig){TERR.tiles.clear();TERR.want.length=0;TERR.anc.length=0;TERR.seq0.length=0;TERR.pos.length=0;TERR.wantKey='';TERR.busy=false;if(TERR.comp)TERR.comp.bad=true;terrDropBack();TERR.sig=sg;TERR.iso=painter.iso;TERR.gain=painter.gain||null;TERR.blur=painter.blur||0;}}
   const dpr=window.devicePixelRatio||1;
   if(W!==TERR.vw||H!==TERR.vh||dpr!==TERR.dpr){TERR.vw=W;TERR.vh=H;TERR.dpr=dpr;terrMarginSet(dpr);if(TERR.comp)TERR.comp.bad=true;terrDropBack();}
 }
