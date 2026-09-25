@@ -22,7 +22,7 @@ html,body{margin:0;height:100%;background:#070a0e;overflow:hidden;font:12px "Mic
 </style></head><body>
 <canvas id="cv"></canvas>
 <div id="hint">左键拖船 · 点船选中 · 拖选中船旁的小圆点定雷达朝向 · 悬停雷达 / 扇区按钮预览自己的暴露 · 悬停区域 / 回波看读数 · 右键拖动平移 · 滚轮缩放 · 加船:点 +蓝 / +红 再点地图,右键取消<br>
-淡色底 = 我方雷达看得见的范围 · 点 = 雷达回波(暖色在接近、冷色在远离,旧的变暗) · 青色区域 = 听到的敌方雷达在哪(轮廓 = 一定在里面、边是软的;里面越亮越可能)· 越小越亮 · 菱形 = 红外看见(青边 = 顺着区域盯到的)</div>
+淡色底 = 我方雷达看得见的范围 · 点 = 雷达回波(暖色在接近、冷色在远离,旧的变暗) · 青色多边形 = 听到的敌方雷达一定在里面(听得越久、交会的船越多,越小越亮) · 菱形 = 红外看见(青边 = 顺着区域盯到的)</div>
 <div id="perf"></div>
 <div id="fleet"></div>
 <div id="ui">
@@ -362,7 +362,7 @@ function draw(){
   const v=S.view;
   if(v==='god'){drawCoverage('blue');drawCoverage('red');for(const s of ships)drawShip(s);}
   else{
-    drawCoverage(v);drawRf(v);drawReturns(v);
+    drawCoverage(v);drawPolys(v);drawReturns(v);
     for(const [T,r] of irView(v))drawIrContact(T,r.cued);
     for(const s of ships)if(s.side===v)drawShip(s);
   }
