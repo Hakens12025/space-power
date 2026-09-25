@@ -139,8 +139,8 @@ function hearAccOf(s, recv) { return Math.sqrt(SENS.A_RF * rfLoudOf(s) * (isFini
 function actAccOf(d, refl) { const r = SENS.A_ACT * sReq(d, 'emit', 'ship') * sReq(d, 'recv', 'ship') * (isFinite(refl) ? refl : 1); return Math.sqrt(Math.sqrt(r)); }
 
 /* 某条通道的【发现半径】与【定位尺度】。两者同形,只差读哪一套常数 —— 分家正是两套半径的意义。 */
-const covDetOf = (ch, d, t, lo) => ch === 'opt' ? visRangeOf(t, lo) : (ch === 'lis' ? hearRangeOf(t, d.recv) : actRangeOf(d, reflOf(t))); // ENV2 lo 只进光学那一支
-const covRangeOf = (ch, d, t, lo) => ch === 'opt' ? visAccOf(t, lo) : (ch === 'lis' ? hearAccOf(t, d.recv) : actAccOf(d, reflOf(t)));
+const covDetOf = (ch, d, t, lo) => ch === 'opt' ? visRangeOf(t, lo) * Math.sqrt(senseIrK(d)) : (ch === 'lis' ? hearRangeOf(t, d.recv) * Math.sqrt(senseLobe(t, d)) : actRangeOf(d, reflOf(t))); // ENV2 lo 只进光学那一支。V2 视场 / 旁瓣(照射的扇区倍数在 actRangeOf 里)
+const covRangeOf = (ch, d, t, lo) => ch === 'opt' ? visAccOf(t, lo) * senseIrK(d) : (ch === 'lis' ? hearAccOf(t, d.recv) * Math.sqrt(senseLobe(t, d)) : actAccOf(d, reflOf(t))); // V2 长焦:定位尺度 x k ⇒ 认出距离 x √k(衍射封顶)
 
 /* 这一拍的角精度(弧度)。连续,没有台阶 —— 驻留时代那张"弱/良/强"三档表的量化跳变是它换掉的东西。 */
 function covTheta(ch, d, t, dd, lo) {

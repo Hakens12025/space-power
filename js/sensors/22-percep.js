@@ -61,6 +61,9 @@ let scON = 0, scOCap = 0, scOX = null, scOY = null, scOR2 = null; // ENV2 天体
 let scLitC2 = 1;                   // ENV2 光源禁区的 cos^2 半角
 let scDBaf = null, scDBX = null, scDBY = null; // ENV2 观测方被自己尾焰致盲(Uint8)+ 致盲方向(XY 单位向量)
 let scBafC2 = 1;                   // ENV2 致盲半角的 cos^2
+let scDRs = null, scDRx = null, scDRy = null, scDRc = null; // V2 探测方的雷达扇区(Uint8 有没有 / 朝向 / 半角 cos^2);360° ⇒ 0,逐位同原机制
+let scDIs = null, scDIx = null, scDIy = null, scDIc = null; // V2 探测方的红外视场
+let scTRs = null, scTRx = null, scTRy = null, scTRc = null, scSide = 1; // V2 目标自己的雷达扇区(扇区外的听者只听旁瓣)与旁瓣倍率
 const scT2 = [0, 0];               // ENV2 sensePrepare 的两格草稿
 let scPairLo = 0;                  // ENV2 最近一次精算的有效亮度
 
@@ -71,6 +74,8 @@ function senseGrowD(n) { // 探测器侧扩容:只在长度不够时整体重建
   scKIR = new Float64Array(c); scKRF = new Float64Array(c); scKACT = new Float64Array(c);
   scDLit = new Uint8Array(c); scDSX = new Float64Array(c); scDSY = new Float64Array(c); // ENV2
   scDBaf = new Uint8Array(c); scDBX = new Float64Array(c); scDBY = new Float64Array(c); // ENV2
+  scDRs = new Uint8Array(c); scDRx = new Float64Array(c); scDRy = new Float64Array(c); scDRc = new Float64Array(c); // V2
+  scDIs = new Uint8Array(c); scDIx = new Float64Array(c); scDIy = new Float64Array(c); scDIc = new Float64Array(c); // V2
   scDCap = c;
 }
 function senseGrowT(n) { // 目标侧扩容:同上
@@ -81,6 +86,7 @@ function senseGrowT(n) { // 目标侧扩容:同上
   scBIR = new Float64Array(c); scBRF = new Float64Array(c); scBACT = new Float64Array(c); scBMax = new Float64Array(c);
   scInF = new Uint8Array(c); scTVX = new Float64Array(c); scTVY = new Float64Array(c); scTVZ = new Float64Array(c); // ENV1
   scTDir = new Uint8Array(c); scTBg = new Float64Array(c); scTSh = new Uint8Array(c); // ENV2
+  scTRs = new Uint8Array(c); scTRx = new Float64Array(c); scTRy = new Float64Array(c); scTRc = new Float64Array(c); // V2
   scTCap = c;
 }
 function senseGrowO(n) { // ENV2 天体侧扩容:同上
@@ -118,20 +124,36 @@ function reflOf(s) { // 雷达反射 = 体型 x 反射倍率。size 同时喂光
   return sReq(s, 'size', 'ship') * sReq(s, 'stealth', 'ship');
 }
 function senseKIR(d) { // 探测方光学系数。舰与信标唯一的差别在光学口径,今天两者都是 1.0(信标就是一个专职传感器荚舱)
-  return SENS.K_IR * (d && d.type === 'beacon' ? SENS.BEACON_OPT : 1);
+  return SENS.K_IR * (d && d.type === 'beacon' ? SENS.BEACON_OPT : 1) * senseIrK(d); // V2 视场收窄到 1/k ⇒ 系数 x k(距离 x √k)
 }
+/* ---- V2 雷达扇区 / 红外视场(数值模型-感知与武器.md 第 1~3 节)。字段缺省 360° ⇒ 倍数 1、不限方向,原机制逐位不变 ---- */
+function senseRadK(d) { const w = d && d.radW; return w > 0 && w < 360 ? 360 / w : 1; } // 搜索方程:扇区缩到 1/k,照射系数 x k(距离 x k^(1/4))
+function senseIrK(d) { const w = d && d.irW; return w > 0 && w < 360 ? 360 / w : 1; }  // 背景受限:视场缩到 1/k,光学系数 x k(距离 x √k)
+function senseSecU(s, kind) { // 这部设备的扇区:null = 不限;否则 [ux, uy, 半角 cos^2]。朝向没算过就当场算一次(21-detect 的 senseAimU)
+  const w = kind === 'rad' ? s.radW : s.irW; if (!(w > 0 && w < 360)) return null;
+  let u = kind === 'rad' ? s.radU : s.irU;
+  if (!u) { u = senseAimU(s, kind); if (kind === 'rad') s.radU = u; else s.irU = u; }
+  const c = Math.cos(w * Math.PI / 360); return [u[0], u[1], c * c];
+}
+function senseInSec(s, kind, pos) { // pos 在不在 s 这部设备的扇区里(热循环里有同式的内联副本)
+  const q = senseSecU(s, kind); if (!q) return true;
+  const dx = pos[0] - s.pos[0], dy = pos[1] - s.pos[1], k = dx * q[0] + dy * q[1];
+  return k > 0 && k * k > (dx * dx + dy * dy) * q[2];
+}
+function senseLobe(E, L) { return E.emitMode !== 'paint' || senseInSec(E, 'rad', L.pos) ? 1 : SENS.RF_SIDE; } // E 的雷达主瓣罩不罩得住听者 L;干扰是全向的
 function senseKRF(d) { // 探测方静听系数:接收机档次进平方根 ⇒ 静听量程 正比 sqrt(recv)
   return SENS.K_RF * (d && d.type === 'beacon' ? SENS.BEACON_RECV : sReq(d, 'recv', 'ship'));
 }
 function senseKACT(d) { // 探测方照射系数:发射机与接收机各进四次方根 ⇒ 照射量程 正比 (emit x recv)^(1/4)
   if (d && d.type === 'beacon') return SENS.K_ACT * SENS.BEACON_EMIT * SENS.BEACON_RECV; // 信标永远在照射(它就是个尖叫的灯塔,所以是消耗品)
-  return sReq(d, 'emitMode', 'ship') === 'paint' ? SENS.K_ACT * sReq(d, 'emit', 'ship') * sReq(d, 'recv', 'ship') : 0; // 不照射 ⇒ 系数 0,热循环里那一路天然不成立,不需要分支
+  if (d.radDown > 0) return 0; // V2 雷达被反辐射弹打瘫
+  return sReq(d, 'emitMode', 'ship') === 'paint' ? SENS.K_ACT * sReq(d, 'emit', 'ship') * sReq(d, 'recv', 'ship') * senseRadK(d) : 0; // 不照射 ⇒ 系数 0,热循环里那一路天然不成立,不需要分支
 }
 
 /* ---------------- UI 读数(blocker E:玩家必须看得见"我此刻有多亮") ---------------- */
 function visRangeOf(s, lo) { return Math.sqrt(SENS.K_IR * (lo === undefined ? optLum(s) : lo)); } // 本舰的光学可见半径 km。ENV2 lo = 这一对的有效亮度,不给读标称值
 function hearRangeOf(s, recv) { return Math.sqrt(SENS.K_RF * rfLoudOf(s) * (isFinite(recv) ? recv : 1)); } // 被一部 recv 档接收机听见的距离(缺省 1.0 = 基准 DD 的耳朵)
-function actRangeOf(s, refl) { const r = SENS.K_ACT * sReq(s, 'emit', 'ship') * sReq(s, 'recv', 'ship') * (isFinite(refl) ? refl : 1); return Math.sqrt(Math.sqrt(r)); } // 本舰对 refl 基准目标(缺省 1.0)的照射量程。取代旧那个标量探测半径字段,83-hud 的圈与 84-scene 的圈都读它
+function actRangeOf(s, refl) { const r = SENS.K_ACT * sReq(s, 'emit', 'ship') * sReq(s, 'recv', 'ship') * (isFinite(refl) ? refl : 1) * senseRadK(s); return Math.sqrt(Math.sqrt(r)); } // 本舰对 refl 基准目标(缺省 1.0)的照射量程。取代旧那个标量探测半径字段,83-hud 的圈与 84-scene 的圈都读它
 
 /* SN6:接触对象的唯一工厂搬去了 23-cov(newCov);本文件不再持有任何"每目标的累积状态"。 */
 
@@ -148,6 +170,7 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
   scCOn = cOn ? 1 : 0; // ENV2 有云 ⇒ 每一对都有消光,光学还在的对都要精算
   scLitC2 = ENV.sun ? ENV.sun.c2 : (ENV.stars.length ? ENV.stars[0].c2 : 1);
   scBafC2 = senseBafC2();
+  scSide = SENS.RF_SIDE;
   scMTI2 = envClutterOn() ? ENV_CFG.MTI_V * ENV_CFG.MTI_V : 0; // ENV2 杂波源:碎石带、天体盘面、小行星
   { const S = ENV_CFG.RF_SUN, h = envLightHalf(); for (let i = 0; i < 4; i++) { const c = Math.cos(Math.min(Math.PI / 2, S.E[i] * h)); scRfC2[i] = c * c; scRfN[i] = 1 + S.K / Math.pow(S.M[i], 4); } } // 与 envRfNoise 同式
   const B = ENV.bodies; senseGrowO(B.length); scON = B.length;
@@ -159,6 +182,8 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
     scDX[i] = p[0]; scDY[i] = p[1]; scDZ[i] = p[2];
     const a = senseKIR(d), b = senseKRF(d), c = senseKACT(d);
     scKIR[i] = a; scKRF[i] = b; scKACT[i] = c;
+    { const q = senseSecU(d, 'rad'); scDRs[i] = q ? 1 : 0; if (q) { scDRx[i] = q[0]; scDRy[i] = q[1]; scDRc[i] = q[2]; } } // V2 雷达扇区
+    { const q = senseSecU(d, 'ir'); scDIs[i] = q ? 1 : 0; if (q) { scDIx[i] = q[0]; scDIy[i] = q[1]; scDIc[i] = q[2]; } } // V2 红外视场
     const u = lit && !(nb && envInShadow(p)) ? envSunDirAt(p, scT2) : null; // ENV2 与 senseGlareAt 的 oLit 同式
     scDLit[i] = u ? 1 : 0; scDSX[i] = u ? u[0] : 0; scDSY[i] = u ? u[1] : 0;
     const bu = senseBafDir(d, scT2); // ENV2 与 senseBaffled 同一个方向(信标没有 flame ⇒ 不致盲)
@@ -172,6 +197,7 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
     const solMax = lit && !tSh ? SENS.SOLAR_K * sReq(t, 'size', 'ship') * envOptK(p) : 0; // ENV2 上界必须含晒热:只靠晒热才看得见的对不许被早退跳过
     const lum = senseLoOf(optLum(t), 0, solMax, 0, bg), loud = rfLoudOf(t), rfl = reflOf(t); // ENV2 scSigIR 是光学上界,空环境时逐位等于 optLum
     scSigIR[i] = lum; scSigRF[i] = loud; scRefl[i] = rfl;
+    { const q = loud > 0 && t.emitMode === 'paint' ? senseSecU(t, 'rad') : null; scTRs[i] = q ? 1 : 0; if (q) { scTRx[i] = q[0]; scTRy[i] = q[1]; scTRc[i] = q[2]; } } // V2 目标的雷达扇区:扇区外的听者只听得见旁瓣
     scTDir[i] = solMax > 0 ? 1 : 0; scTBg[i] = bg; scTSh[i] = tSh;
     const bIR = lum * mIR, bRF = loud * mRF, bA4 = rfl * mACT;
     const bA2 = Math.sqrt(bA4); // 照射的界在 d^4 空间,必须在这里开方换算到 d^2 空间才能和另两路取 max(见文件头 blocker A)
@@ -193,12 +219,13 @@ function sensePairGrades(j, ti) {
   const d2 = dx * dx + dy * dy + dz * dz;
   if (d2 > scBMax[ti]) return 0; // 整目标早退:三条界取 max,照射那一路一定在里面
   let g = 0, r = scSigIR[ti] * scKIR[j];
-  if (d2 < r) g |= 1;
+  if (d2 < r) { if (scDIs[j] === 0) g |= 1; else { const k = -(dx * scDIx[j] + dy * scDIy[j]); if (k > 0 && k * k > (dx * dx + dy * dy) * scDIc[j]) g |= 1; } } // V2 红外视场外看不见,与 senseInSec 同式
   let nz = 1; // ENV2 恒星射频噪声锥(静听与照射):视线朝光源的夹角落在哪一档;观测方在影子里 scDLit=0,不加。与 envRfNoise 同式
   if (scDLit[j] === 1) { const k = -(dx * scDSX[j] + dy * scDSY[j]); if (k > 0) { const kk = k * k, l2 = dx * dx + dy * dy; if (kk > l2 * scRfC2[3]) nz = kk > l2 * scRfC2[0] ? scRfN[0] : (kk > l2 * scRfC2[1] ? scRfN[1] : (kk > l2 * scRfC2[2] ? scRfN[2] : scRfN[3])); } }
   const sr = scSigRF[ti];
-  if (sr !== 0) { r = sr * scKRF[j]; const dn = d2 * nz; if (dn < r) g |= 4; } // 静默目标 sigRF 恒 0,这一路整段跳过;单程:距离按 噪声^(-1/2)
+  if (sr !== 0) { r = sr * scKRF[j]; if (scTRs[ti] === 1) { const k = dx * scTRx[ti] + dy * scTRy[ti]; if (!(k > 0 && k * k > (dx * dx + dy * dy) * scTRc[ti])) r *= scSide; } const dn = d2 * nz; if (dn < r) g |= 4; } // V2 听者在对方扇区外只听旁瓣 // 静默目标 sigRF 恒 0,这一路整段跳过;单程:距离按 噪声^(-1/2)
   r = scRefl[ti] * scKACT[j];
+  if (r !== 0 && scDRs[j] === 1) { const k = -(dx * scDRx[j] + dy * scDRy[j]); if (!(k > 0 && k * k > (dx * dx + dy * dy) * scDRc[j])) r = 0; } // V2 雷达扇区外照不到
   if (r !== 0) { const dd = d2 * d2 * nz; if (dd < r) g |= 16; } // 比四次方以避免开方;双程:距离按 噪声^(-1/4)
   /* ENV1 太阳禁区:探测方看目标的视线落在太阳那个锥里 ⇒ 光学与静听这一拍没有量测(照射不受影响)。只看 XY。
      dx 是"目标指向探测方",视线是它的反向,所以点积取负。与 world/12 的 envSunBlind 同式(那边给弹丸与判据用),判据逐对钉着 */
@@ -255,6 +282,7 @@ function projSig(p) { // 弹丸的亮度与反射。常数由旧模型的可见�
   return (p.fuel > 0) ? SENS.PROJ.mslHot : SENS.PROJ.mslCold; // 燃烧的喷焰 vs 滑行的冷弹
 }
 function senseSeesOptical(lum, d, pos, bg) { // 探测器 d 能否光学看到位于 pos、亮度 lum 的东西。ENV2 bg = pos 处的云背景(调用方每颗弹丸算一次),可省
+  if (!senseInSec(d, 'ir', pos)) return false; // V2 红外视场
   if (envSunBlind(d.pos, pos)) return false; // ENV1:弹丸与舰船同一套环境 —— 太阳禁区、残骸场的背景杂波(空环境时恒假 / 乘 1)
   if (ENV.bodies.length && envOccluded(d.pos, pos)) return false; // ENV2 天体挡视线
   lum *= envOptK(pos);
@@ -263,6 +291,7 @@ function senseSeesOptical(lum, d, pos, bg) { // 探测器 d 能否光学看到�
   return d2 < r && (!ENV.clouds.length || d2 < r * envExt(d.pos, pos, 8)); // ENV2 消光只在不算它也看得见时才算(沿线至多 8 点)
 }
 function senseSeesActive(refl, d, pos, vel) { // 探测器 d 的照射能否打到位于 pos、反射 refl 的东西(不照射时 senseKACT 恒 0,自然为假)。vel 可省
+  if (!senseInSec(d, 'rad', pos)) return false; // V2 雷达扇区
   if (envMtiBlind(d.pos, pos, vel)) return false; // ENV1:杂波里的慢目标被动目标显示滤掉(空环境 / 不给速度时恒假)
   if (ENV.bodies.length && envOccluded(d.pos, pos)) return false; // ENV2 天体挡视线
   const dx = d.pos[0] - pos[0], dy = d.pos[1] - pos[1], dz = d.pos[2] - pos[2];
