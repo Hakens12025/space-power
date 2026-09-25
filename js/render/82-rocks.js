@@ -48,19 +48,21 @@ function drawRockAt(s,pos,st,known){
     }
     return;
   }
-  /* 认出来了:石头的记号。大小跟着同一个缩放系数走(与舰标同一条律),再按体型略放大缩小 —— 认出之后体型已经不是秘密 */
+  /* 认出来了:石头的记号。大小跟着同一个缩放系数走(与舰标同一条律),半径再乘 √(体型/0.7)(面积 ∝ 体型,与红外画面 irvBodyR 同式)—— 认出之后体型已经不是秘密 */
   ctx.save();
   ctx.fillStyle='rgba('+ROCK_RGB+',.85)';ctx.strokeStyle='rgba('+ROCK_RGB+',1)';ctx.lineWidth=1;
-  if(shipMarkMode()){ctx.fillRect(p[0]-2.5,p[1]-2.5,5,5);}
+  const zs=Math.sqrt(s.size/0.7);let lr=r; // 体型差要看得出来(用户 2026-09-26:"碎石的 size 看上去都一个大小")
+  if(shipMarkMode()){const h=Math.max(1.5,Math.min(5,2.5*zs));ctx.fillRect(p[0]-h,p[1]-h,2*h,2*h);lr=Math.max(r,h);}
   else{
-    const rr=r*(0.55+0.45*s.size),a0=Math.atan2(s.facing[1],s.facing[0]),n=ROCK_SHAPE.length;
+    const rr=r*zs;lr=Math.max(r,rr*1.05);
+    const a0=Math.atan2(s.facing[1],s.facing[0]),n=ROCK_SHAPE.length;
     ctx.beginPath();
     for(let k=0;k<n;k++){const a=a0+k*2*Math.PI/n,q=rr*ROCK_SHAPE[k];if(k===0)ctx.moveTo(p[0]+Math.cos(a)*q,p[1]+Math.sin(a)*q);else ctx.lineTo(p[0]+Math.cos(a)*q,p[1]+Math.sin(a)*q);}
     ctx.closePath();ctx.fill();ctx.stroke();
   }
   if(cam.zoom>0.0008){
     ctx.fillStyle='rgba('+ROCK_RGB+',.9)';ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';
-    ctx.fillText('碎石',p[0],p[1]+r+6);
+    ctx.fillText('碎石',p[0],p[1]+lr+6);
   }
   ctx.restore();
 }

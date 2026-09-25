@@ -35,7 +35,7 @@ function senseSunPhase(o, t, tSh) { // ENV2 朗伯球相位 Φ(α),截到 [0,1](
   return Math.max(0, Math.min(1, (Math.sin(a) + (Math.PI - a) * c) / Math.PI));
 }
 function senseSolar(o, t, tSh) { // ENV2 前三项的乘法顺序与 sensePrepare 的 solMax 相同 ⇒ 上界逐位不低
-  const ph = senseSunPhase(o, t, tSh); return ph > 0 ? SENS.SOLAR_K * sReq(t, 'size', 'ship') * envOptK(t.pos) * ph : 0;
+  const ph = senseSunPhase(o, t, tSh); return ph > 0 ? SENS.SOLAR_K * sReq(t, 'size', 'ship') * ph : 0;
 }
 function senseOptLoWith(o, t, bg, tSh, oLit) { // ENV2 唯一的成对式子(senseResolve、senseOptLo 都走它)
   return senseLoOf(optLum(t), 0, senseSolar(o, t, tSh), senseGlareAt(o.pos, t.pos, oLit), bg) * envExt(o.pos, t.pos); // ENV2 消光:连线上的云吃掉到达观测方的亮度
@@ -57,10 +57,10 @@ function senseBaffled(o, tpos) { // ENV2 o 看 tpos 的视线落在自己尾焰�
   const vx = tpos[0] - o.pos[0], vy = tpos[1] - o.pos[1], k = vx * u[0] + vy * u[1];
   return k > 0 && k * k > (vx * vx + vy * vy) * senseBafC2();
 }
-function sensePlume(s, out) { // ENV2 尾焰:[喷口 XY 单位方向, 尾焰热 P = 体型 x 引擎档 x envOptK];熄火 / 没有朝向 ⇒ null(红外页甲的尾巴用)
+function sensePlume(s, out) { // ENV2 尾焰:[喷口 XY 单位方向, 尾焰热 P = 体型 x 引擎档];熄火 / 没有朝向 ⇒ null(红外页甲的尾巴用)
   if (!s.flame || !s.facing) return null;
   const fc = s.facing, l = Math.hypot(fc[0], fc[1]) || 1, k = s.flame > 0 ? -1 : 1; if (!out) out = [0, 0, 0];
-  out[0] = k * fc[0] / l; out[1] = k * fc[1] / l; out[2] = sReq(s, 'size', 'ship') * engPowerOf(s) * envOptK(s.pos); return out;
+  out[0] = k * fc[0] / l; out[1] = k * fc[1] / l; out[2] = sReq(s, 'size', 'ship') * engPowerOf(s); return out;
 }
 const SOP_P3 = [0, 0, 0]; // ENV2 senseOptParts 的三格草稿
 function senseOptParts(o, t) { // ENV2 o 看 t 的亮度拆成三份:自身 / 尾焰 / 晒热(尾焰各向同性,拍板 A1)

@@ -9,7 +9,7 @@ function render(){
   if(!irOn){if(typeof irvOff==='function')irvOff();drawStars();}
   drawGrid();
   if(irOn)drawIrView();
-  else if(typeof drawEnv==='function')drawEnv(); // ENV1 残骸场 + 太阳方向:地图事实,画在网格之后、一切接触之前(render/81-env)
+  else if(typeof drawEnv==='function')drawEnv(); // ENV1 天体 + 太阳方向:地图事实,画在网格之后、一切接触之前(render/81-env)
   if(rdOn)drawRadarView();
   if(typeof drawSunLines==='function')drawSunLines(); // 「太阳线」钮:叠在普通 / 红外 / 雷达任一画面上
   drawSignalView(); // SN6 信号视野(右下角工具钮):我方每艘舰的【被探测范围】。画在最底下——它是底图

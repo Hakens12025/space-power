@@ -31,22 +31,19 @@ function matchWorld(w,rnd){ // ENV2 场景里 sun.brg 为 'rand' 时掷成具体
 /* ---- 对局地图生成(用户 2026-09-25:"对局也要做各种天体与尘埃云,相当于一种地图生成机制,种子机制")----
    一个种子定一局:红方从哪个方向来(matchPlaceRed)+ 整个世界。摆位按对阵轴(蓝方重心 → 红方重心,长 D = 开局间距;s 沿轴,-0.5 = 蓝方、+0.5 = 红方;t 侧向):
    太阳(方向型 / 位置型各半,位置型在 600~900 万外)· 行星 0~2(木星级,两军之间或侧翼,离两军 >= 40 万、彼此 >= 80 万)·
-   尘埃云 0~2(半轴 200 万 ~ 1600 万,朝向随机,可以罩住舰队)· 碎石带 1~3(半径 10~22 万,中场一带,避开舰队与行星)· 小行星 6~12 颗(撒在对阵区,避开舰船与天体) */
+   尘埃云 0~2(半轴 200 万 ~ 1600 万,朝向随机,可以罩住舰队)· 小行星 20~40 颗(撒在对阵区,避开舰船与天体;体型按 world/12 的 ROCK_SFD 幂律,小的最多) */
 function matchGenWorld(seed,B,R){
   const r=envRng(seed*2+1),D=Math.hypot(R[0]-B[0],R[1]-B[1])||1,ux=(R[0]-B[0])/D,uy=(R[1]-B[1])/D,mx=(B[0]+R[0])/2,my=(B[1]+R[1])/2;
   const at=function(s,t){return [mx+(ux*s-uy*t)*D,my+(uy*s+ux*t)*D];};
   const far=function(p,q,d){return Math.hypot(p[0]-q[0],p[1]-q[1])>=d;};
-  const w={bodies:[],clouds:[],fields:[],asteroids:[]};
+  const w={bodies:[],clouds:[],asteroids:[]};
   if(r()<0.5)w.sun={brg:Math.round(r()*360),half:10};
   else{const a=r()*2*Math.PI,d=6e6+r()*3e6;w.stars=[{x:Math.round(mx+Math.cos(a)*d),y:Math.round(my+Math.sin(a)*d)}];}
   for(let n=Math.floor(r()*3),k=0;k<40&&w.bodies.length<n;k++){const p=at(r()*0.7-0.35,r()*1.2-0.6),rad=50000+r()*30000;
     if(far(p,B,400000)&&far(p,R,400000)&&w.bodies.every(function(b){return far(p,[b.x,b.y],800000);}))w.bodies.push({x:Math.round(p[0]),y:Math.round(p[1]),r:Math.round(rad)});}
   for(let n=Math.floor(r()*3),k=0;k<n;k++){const p=at(r()*1.6-0.8,r()*2-1),a=2e6*Math.pow(8,r()),b=a*(0.4+0.6*r());
     w.clouds.push({x:Math.round(p[0]),y:Math.round(p[1]),a:Math.round(a),b:Math.round(b),ang:Math.round(r()*180),seed:Math.floor(r()*1e6)});}
-  for(let n=1+Math.floor(r()*3),k=0;k<40&&w.fields.length<n;k++){const p=at(r()*0.6-0.3,r()-0.5),rad=100000+r()*120000;
-    if(far(p,B,rad+300000)&&far(p,R,rad+300000)&&w.bodies.every(function(b){return far(p,[b.x,b.y],b.r+rad+100000);})&&w.fields.every(function(f){return far(p,[f.x,f.y],f.r+rad+100000);}))
-      w.fields.push({x:Math.round(p[0]),y:Math.round(p[1]),r:Math.round(rad),n:10+Math.floor(r()*11),seed:Math.floor(r()*1e6),smin:0.35,smax:2.0});}
-  w.asteroids.push({x:Math.round(mx),y:Math.round(my),r:Math.round(D*0.6),n:6+Math.floor(r()*7),seed:Math.floor(r()*1e6),smin:1,smax:3,clear:150000,name:'小行星'});
+  w.asteroids.push({x:Math.round(mx),y:Math.round(my),r:Math.round(D*0.6),n:20+Math.floor(r()*21),seed:Math.floor(r()*1e6),clear:150000,name:'小行星'});
   return w;
 }
 function matchSync(){ // 顶栏钮的字与提示跟着当前场景走(进 / 出对局、场景菜单切走,都经过 initFleet ⇒ 由它调)
@@ -54,7 +51,7 @@ function matchSync(){ // 顶栏钮的字与提示跟着当前场景走(进 / 出
   const on=matchIsOn(),v2=on&&v2On();
   b.textContent=on&&!v2?'回靶场':'对局';
   b.classList.toggle('on',on&&!v2);b.style.display=v2?'none':''; // V2:对局里只留当前这一版的钮(字变成「回靶场」),另一版藏起来
-  b.title=on?'回到靶场(当前这一局作废) · 种子 '+MATCH.seed:'进入对局(原版机制):3 对 3,双方静默开局、相距 300 万公里;每局一个种子,定红方来向与地形(太阳 / 行星 / 尘埃云 / 碎石带 / 小行星)。全灭对方获胜';
+  b.title=on?'回到靶场(当前这一局作废) · 种子 '+MATCH.seed:'进入对局(原版机制):3 对 3,双方静默开局、相距 300 万公里;每局一个种子,定红方来向与地形(太阳 / 行星 / 尘埃云 / 小行星)。全灭对方获胜';
   if(b2){b2.textContent=v2?'回靶场':'新版交战';b2.classList.toggle('on',v2);b2.style.display=on&&!v2?'none':'';
     b2.title=v2?'回到靶场(当前这一局作废) · 种子 '+MATCH.seed:'进入新版交战:同一套对局,换成新机制 —— 雷达扇区、红外视场、反辐射弹、速射炮塔、近防激光、长矛激光(见 数值模型-感知与武器.md)';}
   const card=document.getElementById('matchEnd');if(card)card.hidden=true;

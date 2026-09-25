@@ -1,11 +1,11 @@
 "use strict";
 /* ============================================================================
-   ENV1 环境的底图(2026-09-23):残骸场的范围 + 太阳的方向。与 81-background 共用编号 81(先例:weapons/51-defs 与 51-ciws)。
+   ENV1 环境的底图(2026-09-23):天体、恒星与太阳的方向(残骸场 2026-09-26 删)。与 81-background 共用编号 81(先例:weapons/51-defs 与 51-ciws)。
    画在网格之后、信号视野之前(84-scene):它是地图的一部分,不该盖住任何接触。
    ⚠ 渲染红线(SN7d / SN7b):每帧只有"场的个数"那么几个圆 + 一个日标;场大到盖满屏幕时不画巨型圆,改铺一层整屏底色
      (高分屏上半径几十万像素的虚线圆会被逐帧光栅化成遮罩)。没有 shadowBlur、没有 createRadialGradient。
    太阳在无穷远:日标贴在屏幕边上、指向太阳的方向;「太阳线」钮打开时,从选中的那艘我方舰画出"朝太阳看会被致盲"的那个锥(两条淡虚线,drawSunLines),天体背光面的影子线也只在开着时画。
-   这里画的是【地图事实】,双方都知道(太阳在哪、碎石带在哪),不是情报,所以不分 GM。
+   这里画的是【地图事实】,双方都知道(太阳在哪、行星在哪),不是情报,所以不分 GM。
 
    ---- ENV2(2026-09-24):一份世界真值,多种视图 —— 大地图这一种 ----
    业内叫法:相关的合成环境(correlated synthetic environment,SEDRIS / OGC CDB)里"每个通道一套渲染器";
@@ -14,23 +14,22 @@
      ENV_VIEWS    视图名 → {order, slot, pre, kinds:{类 → 画法对象 | null(此视图刻意不画,旁边写理由)}}
                   画法对象的槽:tile(画进静态贴图)、frame(每帧画在主画布上)、grid(红外页用,第 3 步登记)、
                   comp(ENV2 任务 4:静止的矢量,画进地形瓦片服务的合成缓存、在云格之上;没有合成缓存 / 缓存盖不住视口在逐块画时,每帧直接画在主画布上)
-   图层顺序(地图):静态贴图(云)→ 云的名字 → 影子轮廓 → 天体(这三样进合成缓存)→ 残骸场 → 恒星 → 日标。天体盖在云和影子上面;接触与舰标压在所有这些上面。
+   图层顺序(地图):静态贴图(云)→ 云的名字 → 影子轮廓 → 天体(这三样进合成缓存)→ 恒星 → 日标。天体盖在云和影子上面;接触与舰标压在所有这些上面。
    云在地形瓦片服务里(render/81-terrain:世界锚定的瓦片、粗到细、每帧工作量封顶、1:1 贴图);云的字、影子、天体随合成缓存一起贴(稳态帧主画布只剩
-   合成缓存 1 次 + 日标 1 次),其余(残骸场、恒星、日标)每帧按矢量画,笔数是常数、都裁到视口。
-   ⚠ 任务 4 起残骸场画在天体之上(原来在天体之下):场景规则里残骸场与天体不相交(world.test 的场景那一条),看不出差别。
+   合成缓存 1 次 + 日标 1 次),其余(恒星、日标)每帧按矢量画,笔数是常数、都裁到视口。
    配色:单色、低 alpha、有清楚的线、带字 —— 用户否过"五彩斑斓色块"(render/CLAUDE.md SN6 一节)。
    每个画法在对应的 ENV 列表为空时第一句就返回 ⇒ 空环境下主画布与离屏一笔不画(tk_ab 的 drawlog 逐位相同)。
    上面 ENV1 那句"没有 createRadialGradient"说的是每帧路径:ENV2 恒星光晕的径向渐变只在离屏预渲染一次(MAP_STAR,先例 83-hud 的 SIG_FADE),每帧只贴。
    ENV2 地图上的字(尘埃云 / 天体名 / 太阳 / 恒星)与日标图标都是预渲染的小贴图(mapText / mapCueSpr),每次 1 次 drawImage、1:1:补充规格 B 的稳态 <= 50 µs
    (任务 4 起尘埃云与天体名随合成缓存画一次,不再每帧贴;太阳 / 恒星的字与日标仍每帧贴)。
    ============================================================================ */
-const ENV_KIND_OF={sun:['sun'],stars:['star'],bodies:['body','shadow'],clouds:['cloud'],fields:['field'],
+const ENV_KIND_OF={sun:['sun'],stars:['star'],bodies:['body','shadow'],clouds:['cloud'],
   asteroids:[]}; // ENV2 世界层每个键 → 视图里的类。asteroids 就是石头:走 82-rocks 的航迹画法(带迷雾),不是地图事实;红外里它们是热源
 const ENV_VIEWS={}; // ENV2 视图名 → {order, slot, pre?, kinds:{类名 → 画法对象 | null}}
-ENV_VIEWS.map={order:['cloud','shadow','field','body','star','sun'],slot:'frame',pre:mapTileFrame,kinds:{
+ENV_VIEWS.map={order:['cloud','shadow','body','star','sun'],slot:'frame',pre:mapTileFrame,kinds:{
   cloud:{tile:mapCloudPaint,comp:mapCloudLabels,need:function(){return ENV.clouds.length>0;}},
   shadow:{comp:mapShadows},   // ENV2 补充规格 C:影子是矢量虚线(每个天体 2 条,Liang–Barsky 裁到视图),不进瓦片 —— 瓦片于是只依赖云的几何,换光照不作废;任务 4 起画进合成缓存(矢量的键含世界 rev)
-  field:{frame:mapFields}, body:{comp:mapBodies}, star:{frame:mapStar}, sun:{frame:mapSunCue}}};
+  body:{comp:mapBodies}, star:{frame:mapStar}, sun:{frame:mapSunCue}}};
 function drawEnvView(view){const V=ENV_VIEWS[view];if(!V)return;const took=V.pre?V.pre(V):false; // ENV2 任务 4:pre 返回真 = comp 槽已经在贴上去的合成缓存里,不再每帧画
   for(const k of V.order){const e=V.kinds[k];if(!e)continue;if(e.comp&&!took)e.comp();if(e[V.slot])e[V.slot]();}}
 function drawEnv(){drawEnvView('map');} // ENV2 名字不变:84-scene 的 typeof 守卫仍指向已声明符号(R2)
@@ -223,31 +222,6 @@ function mapShadows(){ // ENV2 comp 槽(任务 4:画进当前视图 —— 合�
   }
   if(on){g.setLineDash([]);g.lineDashOffset=0;g.restore();}
   return n;
-}
-
-/* ---- ENV2 残骸场:ENV1 drawEnv 里的循环原样挪进来,成为登记表的 field 画法(巨圆降级照旧,不在本次范围内) ---- */
-function mapFields(){ // ENV2 frame 槽(ENV1 原样)
-  const F=ENV.fields;
-  if(F.length){
-    ctx.save();
-    const big=3*Math.max(W,H);
-    for(const f of F){
-      const p=toScreen(f.x,f.y),r=f.r*cam.zoom;
-      if(p[0]+r<0||p[0]-r>W||p[1]+r<0||p[1]-r>H)continue;
-      if(r>big){ // 拉得很近、整屏都在场里:铺底色,不画巨型圆
-        const dx=W/2-p[0],dy=H/2-p[1];
-        if(dx*dx+dy*dy<r*r){ctx.fillStyle='rgba(150,138,118,.05)';ctx.fillRect(0,0,W,H);}
-        continue;
-      }
-      ctx.fillStyle='rgba(150,138,118,.06)';
-      ctx.beginPath();ctx.arc(p[0],p[1],r,0,6.283);ctx.fill();
-      ctx.strokeStyle='rgba(176,164,140,.28)';ctx.lineWidth=1;ctx.setLineDash([6,6]);
-      ctx.beginPath();ctx.arc(p[0],p[1],r,0,6.283);ctx.stroke();
-      ctx.setLineDash([]);
-      if(r>40){ctx.fillStyle='rgba(190,178,150,.55)';ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText('残骸场',p[0],p[1]-r-4);}
-    }
-    ctx.restore();
-  }
 }
 
 /* ---- ENV2 巨圆降级:圆盘 ∩ 视口 的有界多边形(Sutherland–Hodgman 1974),天体与光球共用 ---- */

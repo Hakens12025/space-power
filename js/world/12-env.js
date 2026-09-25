@@ -1,6 +1,6 @@
 "use strict";
 /* ============================================================================
-   ENV1 环境系统(2026-09-23):地图上不属于任何一方的东西 —— 太阳与残骸场,以及残骸场里的石头。
+   ENV1 环境系统(2026-09-23):地图上不属于任何一方的东西 —— 太阳、天体、尘埃云与石头。
    用户:「这些的本质是地图系统的一部分」「全部做,不要分裂真值,统一系统」。
 
    ---- 先给业内叫法 ----
@@ -12,37 +12,37 @@
      ① 太阳禁区(sun exclusion angle):光电与被动射频朝太阳方向看会被致盲。完整形态里它有随距离与角度连续变化的背景亮度、
         传感器的挡光罩(baffle)与自动增益;我们只留一个锥 —— 目标落在"探测方看太阳"那个半角为 half 的锥里,光学与静听这一拍没有量测。
         照射不受影响(自己的回波远强于太阳的射频噪声)。太阳在无穷远,所以锥的方向全图一样;只看 XY(太阳在黄道面上)。
-     ② 残骸场的光学背景杂波:目标衬在一片被照亮的碎石前面,对比度下降 —— 场内目标的光学亮度乘 OPT_K(0.25 ⇒ 光学量程减半)。
+     ② (2026-09-26 删)残骸场与它的光学对比度一起删掉(用户:「残骸场不要了,删掉这个地形」)。
         完整形态是按背景辐亮度与目标对比度算检测概率;我们只留一个常数。它进的是 optLum(光学亮度的唯一定义点),
         所以热循环的分档、椭圆的定位精度、界面上的"我此刻多亮"三处读的是同一个数。
-     ③ 残骸场的雷达动目标显示(MTI,moving target indication):石头几乎不动,雷达用多普勒把"径向速度接近 0"的回波当杂波滤掉。
-        代价是场内径向速度低于门限(MTI_V)的目标一起被滤掉 —— 这就是"躲进碎石带、停下来"的战术。
+     ③ 雷达动目标显示(MTI,moving target indication):杂波源(天体盘面旁、石头旁,见 envInClutter)几乎不动,雷达用多普勒把"径向速度接近 0"的回波当杂波滤掉。
+        代价是杂波里径向速度低于门限(MTI_V)的目标一起被滤掉 —— 贴着行星或石头停下来的战术。
         完整形态有盲速、多普勒滤波器组、自适应 CFAR;我们只留一个门限,而且按目标的【世界】速度算(假定探测方已补偿自身运动,即 clutter locking)。
    石头(TK4c):每一块都是一个真的航迹源(kind:'rock', side:'neutral'),两方都会探测到它。冷、不发射、不动 ⇒ 没认出之前
    它与同样体型的冷船在任何通道上都分不开(光学亮度 = size,与熄火静默的船同式);光学贴近到认出距离之内才确认"是石头"。
    业内叫 false target / 虚警航迹的一种;完整形态的航迹起始(M-of-N)与分类(Bayes / D-S)我们没有,见 js/sensors/CLAUDE.md 的 TK 一节。
 
    ---- 数据从哪来 ----
-   场景条目(scenario/90-envs 的 TEST_ENVS)可以带一个 world:{sun:{brg,half},fields:[{x,y,r,n,seed,smin,smax}]}。
+   场景条目(scenario/90-envs 的 TEST_ENVS)可以带一个 world:{sun:{brg,half},asteroids:[{x,y,r,n,seed,smin,smax,clear,name}],…}。
    initFleet 每局调 envReset(curEnv().world) + envSpawnRocks()。没有 world 的场景(靶场、原有的对局、六条回归预设)⇒ 环境为空,
    上面三件事一律是精确的无操作(乘 1、恒假),同种子 A/B 逐位相同。
    ⚠ 石头的摆位用本文件自己的种子随机流(envRng),不碰全局 Math.random:对局的红方摆位、交战的散布都从全局流里取数,
      多取一次就把后面整局挪一位。
 
    ---- 加载顺序 ----
-   排在 ships/11 之后、sensors/ 之前:23-cov 加载期就会跑梯子反解(ladApply → ladPair → optLum → envOptK),那时 ENV 必须已经声明。
+   排在 ships/11 之后、sensors/ 之前:23-cov 加载期就会跑梯子反解(ladApply → ladPair → optLum),那时 ENV 必须已经声明。
    本文件顶层只执行 ENV_CFG / ENV 两句(ENV2 加 ENV_KEYS / ENV_T2 两个字面量;ENV 的 seal / freeze 只调内建),不调任何别的文件。makeRock 里的 trkAdopt(sensors/24)与 rockSeq / rocks(core/01)都在运行期解析。
    ============================================================================ */
 
 const ENV_CFG={
-  OPT_K:0.25,         // 残骸场内目标的光学亮度倍率(亮度 x0.25 ⇒ 光学量程 x0.5)
   MTI_V:30,
   RF_SUN:{K:30,E:[1,1.5,2,3],M:[1,1.2,1.75,2.5]}, // ENV2 恒星射频噪声锥(照 雷达效果.html):锥内噪声 1+K,往外按 (半角/夹角)^4 淡出;热循环不许反三角,分四档:夹角 <= E[i] 倍光源半角取 1 + K/M[i]^4,三倍半角之外不管
-  CLUT_RES:20000,AST_KM:4000, // ENV2 雷达杂波:贴着天体盘面 / 小行星本体(体型 x AST_KM)CLUT_RES 以内的慢目标,回波混进杂波(同碎石带,过 MTI)           // 动目标显示门限 km/s:场内径向速度低于它的回波被当成杂波。DD 速度档 250 / 500 / 800,所以"在动"几乎都滤不掉,停下来 / 贴着切向走才滤得掉
+  CLUT_RES:20000,AST_KM:4000, // ENV2 雷达杂波:贴着天体盘面 / 小行星本体(体型 x AST_KM)CLUT_RES 以内的慢目标,回波混进杂波(过 MTI)           // 动目标显示门限 km/s:场内径向速度低于它的回波被当成杂波。DD 速度档 250 / 500 / 800,所以"在动"几乎都滤不掉,停下来 / 贴着切向走才滤得掉
   SUN_HALF_DEG:10,    // 太阳禁区的缺省半角(度)。ENV2:也是位置型恒星禁区半角的缺省
   STAR_R:696000,      // ENV2 位置型恒星的缺省光球半径 km(真太阳;红外页的 R_SAT)
   BODY_HEAT:2,        // ENV2 天体背阴面的自身热。单位 = 背景单位(与 envBg、云的 v 同一单位:1 = SENS.BG_G0 = 一条发现线);v1 只有红外视图读
   ROCK_HEAT:0.5,      // ENV2 石头自身热倍率(同体型熄火冷船 = 1);makeRock 写进 heatK,第 4a 步起 optLum 才读
+  ROCK_SFD:{A:1.25,MIN:0.2,MAX:4}, // 石头体型的截断幂律 N(>s) ∝ s^-A:小的最多、越大越罕见(用户 2026-09-26)。业内:Dohnanyi 1969 碰撞平衡 N(>D) ∝ D^-2.5,体型 ∝ 截面 ∝ D² ⇒ A = 1.25
   DUST:{V:1.3,DARK:0.3,MIN_KM:12500, // ENV2 尘埃云(world/13;与演示页 demos/地图组/红外效果.html 的 irmCloudD 同一套式子):亮度倍率、背阴处倍率、物理尺度
     A:16e6,B:11e6,ANG:39,R1:1,R2:1.9,S0:0.8,S1:1.3,WBR:1.09,   // 本体:缺省半轴 / 朝向(度),归一半径 R1→R2 落到 0,S0→S1 起边缘扭曲(振幅 WBR·b)
     PW:22e6,WT:15e6,P0:16e6,BOCT:4,BGN:0.55,LO:-0.25,HI:0.45,TH:0.06,CB:0.15,RC:0.8,SDB:244, // 云带:扭曲周期 / 振幅,fBm 起始尺度、层数、衰减,门槛,外疏内实,种子偏移
@@ -50,13 +50,13 @@ const ENV_CFG={
     FL0:500000,OCT:9,GAIN:0.78,WARP:0.35,Q0:0.78,G:4,QM:0.45,FM:0.2,XO:2,XA:0.4, // 丝:b2ea0f4 的脊状分形 + XO 层粗褶;QM / FM = 分辨不出时补的期望
     EXT_TAU:150000,EXT_G:50000} // 消光:浓度 1 走 EXT_TAU km 光深为 1;沿线浓度取 EXT_G km 格点
 };
-const ENV_KEYS=['sun','stars','bodies','clouds','fields','asteroids']; // ENV2 world 认识的键:envReset 见到别的键当场抛(ENV1 时拼错 feilds 会静默成空环境);视图的登记表以它为锚
-/* ENV1 的 sun:{brg,half,ux,uy,c2}(c2 = cos^2 半角,热循环免开方);fields:[{x,y,r,r2,n,seed,smin,smax}]。
+const ENV_KEYS=['sun','stars','bodies','clouds','asteroids']; // ENV2 world 认识的键:envReset 见到别的键当场抛(ENV1 时拼错 feilds 会静默成空环境);视图的登记表以它为锚
+/* ENV1 的 sun:{brg,half,ux,uy,c2}(c2 = cos^2 半角,热循环免开方)。
    ENV2 加 stars:[{x,y,r,half,c2}] / bodies:[{x,y,r,r2,heat,name}] / clouds:[{x,y,a,b,ang,ca,sa,r,r2,seed,v,dark}](r = 外接圆半径) / asteroids:[{x,y,r,n,seed,smin,smax,clear,name}] / rev(每次 envReset 加 1,给视图缓存当键)。
    ENV2 单写者:全库只有 envReset 写 ENV。ENV 本身 seal(不许加键),列表与条目由 envReset 整体换成冻结的新对象 ⇒ 严格模式下别处改条目、改列表、给 ENV 加键会当场抛 TypeError。
    ⚠ ENV2 seal 不拦替换已有的键:ENV.sun={…}、ENV.bodies=[…]、ENV.rev++ 运行期都不抛,这一类只靠 verify.sh 的唯一写入口检查(W1 / W2)抓 */
 const ENV=Object.seal({sun:null,stars:Object.freeze([]),bodies:Object.freeze([]),clouds:Object.freeze([]),
-  fields:Object.freeze([]),asteroids:Object.freeze([]),rev:0});
+  asteroids:Object.freeze([]),rev:0});
 const ENV_T2=[0,0]; // ENV2 本层的两格草稿(envBg 取 envBgParts 的结果用,免分配)。⚠ 共用草稿:拿到的结果要在调别的写它的函数之前读完(今天只有 envBg 写;4a 起 envSunBlind 也写,落地时核一次)
 
 /* 按场景的 world 定义重建环境。缺省 / 没有 world ⇒ 空环境(太阳 null、所有列表为空)。
@@ -70,7 +70,7 @@ function envReset(w){
     for(const g of ['stars','bodies','clouds','asteroids'])for(const e of (w[g]||[]))
       if(!isFinite(e.x)||!isFinite(e.y)||(g==='stars'||g==='clouds'?(e.r!==undefined&&!(e.r>0)):!(e.r>0)))throw new Error('ENV2 '+g+' 条目缺坐标或半径');
   }
-  let sun=null;const st=[],bd=[],cl=[],fl=[],ast=[];
+  let sun=null;const st=[],bd=[],cl=[],ast=[];
   if(w&&w.sun){ // ENV1 原样(只是先算进局部变量、再冻结)
     const a=w.sun.brg*Math.PI/180,h=(isFinite(w.sun.half)?w.sun.half:ENV_CFG.SUN_HALF_DEG)*Math.PI/180,c=Math.cos(h);
     sun=F({brg:w.sun.brg,half:h*180/Math.PI,ux:Math.cos(a),uy:Math.sin(a),c2:c*c});
@@ -80,18 +80,9 @@ function envReset(w){
   for(const b of (w&&w.bodies)||[])bd.push(F({x:b.x,y:b.y,r:b.r,r2:b.r*b.r,heat:num(b.heat,ENV_CFG.BODY_HEAT),name:b.name||'天体'})); // ENV2 天体:XY 上无限高的柱,挡视线、投影子
   for(const c of (w&&w.clouds)||[]){const a=num(c.a,D.A),b=num(c.b,D.B),ang=num(c.ang,D.ANG),r=(D.R2+D.WBR)*Math.max(a,b); // ENV2 尘埃云:生成点 (x,y) + 椭圆本体;r = 浓度可能非 0 的外接圆
     cl.push(F({x:c.x,y:c.y,a:a,b:b,ang:ang,ca:Math.cos(ang*Math.PI/180),sa:Math.sin(ang*Math.PI/180),r:r,r2:r*r,seed:c.seed|0,v:num(c.v,D.V),dark:num(c.dark,D.DARK)}));}
-  for(const f of (w&&w.fields)||[])fl.push(F({x:f.x,y:f.y,r:f.r,r2:f.r*f.r,n:f.n|0,seed:f.seed|0,smin:isFinite(f.smin)?f.smin:0.35,smax:isFinite(f.smax)?f.smax:2.0})); // ENV1 原样(ENV2 冻结;ENV2 缺省 smax 2.0:石头冷 0.5 之后大碎石仍亮过冷 DD、冒充得了船)
-  for(const a of (w&&w.asteroids)||[])ast.push(F({x:a.x,y:a.y,r:a.r,n:a.n|0,seed:a.seed|0,smin:num(a.smin,1),smax:num(a.smax,3),clear:num(a.clear,0),name:a.name||'小行星'})); // ENV2 小行星:只用来撒石头,不带光学杂波、不带 MTI
-  ENV.sun=sun;ENV.stars=F(st);ENV.bodies=F(bd);ENV.clouds=F(cl);ENV.fields=F(fl);ENV.asteroids=F(ast);ENV.rev++; // ENV2 整体换成冻结的新列表
+  for(const a of (w&&w.asteroids)||[])ast.push(F({x:a.x,y:a.y,r:a.r,n:a.n|0,seed:a.seed|0,smin:num(a.smin,ENV_CFG.ROCK_SFD.MIN),smax:num(a.smax,ENV_CFG.ROCK_SFD.MAX),clear:num(a.clear,0),name:a.name||'小行星'})); // ENV2 小行星:只用来撒石头,不带光学杂波、不带 MTI
+  ENV.sun=sun;ENV.stars=F(st);ENV.bodies=F(bd);ENV.clouds=F(cl);ENV.asteroids=F(ast);ENV.rev++; // ENV2 整体换成冻结的新列表
 }
-/* 点在不在某个残骸场里(XY) */
-function envInField(p){
-  const F=ENV.fields;
-  for(let i=0;i<F.length;i++){const f=F[i],dx=p[0]-f.x,dy=p[1]-f.y;if(dx*dx+dy*dy<f.r2)return true;}
-  return false;
-}
-/* 光学背景杂波的亮度倍率:场内 OPT_K,场外 / 没有场 / 没有位置(梯子的假船)1 —— 乘 1 是精确的无操作 */
-function envOptK(p){return (ENV.fields.length>0&&p&&envInField(p))?ENV_CFG.OPT_K:1;}
 /* 太阳禁区:从 from 看 to 的视线落在太阳那个锥里。⚠ 22-percep 的热循环里有一份同式的内联副本(热循环不许调函数),判据 ENV_SENSE 钉着两者逐对相同 */
 function envSunBlind(from,to){ // ENV2 光源方向按观测方取;观测方在天体影子里看不到光源 ⇒ 不致盲(光学与静听一起解除)
   const s=ENV.sun;if(!s&&!ENV.stars.length)return false;
@@ -101,14 +92,13 @@ function envSunBlind(from,to){ // ENV2 光源方向按观测方取;观测方在�
   return k>0&&k*k>(vx*vx+vy*vy)*c2;
 }
 /* 动目标显示:to 在场里、而且沿 from→to 视线的径向速度低于门限 ⇒ 回波被当成杂波。热循环里同样有一份内联副本 */
-function envInClutter(p,self){ // ENV2 p 在雷达杂波里:碎石带内、贴着天体盘面、或贴着别的小行星(self 自己不算)。⚠ 22-percep 的 sensePrepare 按目标调它
-  if(ENV.fields.length&&envInField(p))return true;
+function envInClutter(p,self){ // ENV2 p 在雷达杂波里:贴着天体盘面、或贴着别的小行星(self 自己不算)。⚠ 22-percep 的 sensePrepare 按目标调它
   const C=ENV_CFG.CLUT_RES;
   for(const b of ENV.bodies){const dx=p[0]-b.x,dy=p[1]-b.y,q=b.r+C;if(dx*dx+dy*dy<q*q)return true;}
   for(const k of rocks){if(!k.ast||k===self||k.dead)continue;const dx=p[0]-k.pos[0],dy=p[1]-k.pos[1],q=k.size*ENV_CFG.AST_KM+C;if(dx*dx+dy*dy<q*q)return true;}
   return false;
 }
-function envClutterOn(){if(ENV.fields.length||ENV.bodies.length)return true;for(const k of rocks)if(k.ast&&!k.dead)return true;return false;} // ENV2 场上有没有杂波源
+function envClutterOn(){if(ENV.bodies.length)return true;for(const k of rocks)if(k.ast&&!k.dead)return true;return false;} // ENV2 场上有没有杂波源
 function envRfNoise(from,to){ // ENV2 从 from 朝 to 的射频噪声倍率(>= 1):朝光源的锥里被恒星噪声淹;观测方在天体影子里 ⇒ 光源被挡,不加。⚠ 22-percep 热循环里有同式的内联副本
   if(!envHasLight())return 1;
   if(ENV.bodies.length&&envInShadow(from))return 1;
@@ -169,19 +159,14 @@ function makeRock(pos,size,facing,name){ // ENV2 多一个可省的 name(小行�
     emit:0,recv:0,emitMode:'silent',ecmPower:0,flame:0,sideFlame:0,fireHot:0,dead:false,
     heatK:ENV_CFG.ROCK_HEAT}); // ENV2 自身热倍率:数值属性、不是按类别的门控(舰船没有这个字段);第 4a 步起 optLum 才读
 }
-/* 按残骸场撒石头:每个场自己一条种子流,场内均匀(半径取平方根)、离边缘留 5%;朝向随机(没认出时画成通用轮廓,朝向不能全都一样) */
+/* 石头的体型:截断帕累托的逆变换抽样(一个均匀数 u 换一个体型,可复现)。s = smin·(1 - u·(1 - (smin/smax)^A))^(-1/A) */
+function envRockSize(u,smin,smax){const A=ENV_CFG.ROCK_SFD.A;return smin*Math.pow(1-u*(1-Math.pow(smin/smax,A)),-1/A);}
+/* 撒石头:朝向随机(没认出时画成通用轮廓,朝向不能全都一样) */
 function envSpawnRocks(){
-  for(const f of ENV.fields){
-    const r=envRng(f.seed);
-    for(let i=0;i<f.n;i++){
-      const a=r()*2*Math.PI,d=Math.sqrt(r())*f.r*0.95,sz=f.smin+(f.smax-f.smin)*r(),fa=r()*2*Math.PI;
-      rocks.push(makeRock([f.x+Math.cos(a)*d,f.y+Math.sin(a)*d,0],sz,[Math.cos(fa),Math.sin(fa),0]));
-    }
-  }
   for(const a of ENV.asteroids){ // ENV2 小行星:圈内均匀(半径开方);离任何舰船 clear 以内、或落进 天体半径+clear 以内的点丢掉;每次尝试固定取 4 个数(被丢也取),可复现
     const r=envRng(a.seed);let n=0;
     for(let k=0;k<a.n*20&&n<a.n;k++){
-      const an=r()*2*Math.PI,d=Math.sqrt(r())*a.r,sz=a.smin+(a.smax-a.smin)*r(),fa=r()*2*Math.PI,x=a.x+Math.cos(an)*d,y=a.y+Math.sin(an)*d;
+      const an=r()*2*Math.PI,d=Math.sqrt(r())*a.r,sz=envRockSize(r(),a.smin,a.smax),fa=r()*2*Math.PI,x=a.x+Math.cos(an)*d,y=a.y+Math.sin(an)*d;
       if(envSpawnBlocked(x,y,a.clear))continue;
       const k=makeRock([x,y,0],sz,[Math.cos(fa),Math.sin(fa),0],a.name);k.ast=true;rocks.push(k);n++; // ast:小行星本体是雷达杂波源(envInClutter)
     }
