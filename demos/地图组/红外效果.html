@@ -399,7 +399,7 @@ function iryUpdate(full,gch){ /* 返回 true = H 重投了 */
   return true;
 }
 /* ---- 尘埃云:铺满空间的一整片噪声场 —— 梯度噪声两层遮罩(分出一块块)+ 坐标扭曲 + 脊状分形丝;没有圆、没有半径 ---- */
-const IRM_CLOUD={on:true,V:1.3,DARK:0.4,L0:500000,OCT:9,GAIN:0.78,SEED:20,WARP:0.35,MASK_LO:0.5,MASK_HI:0.66,MIN_KM:12500,Q0:0.78,G:4,QM:0.45};
+const IRM_CLOUD={on:true,V:1.3,DARK:0.4,L0:500000,OCT:9,GAIN:0.78,SEED:20,WARP:0.35,MASK_LO:0.5,MASK_HI:0.66,MIN_KM:12500,Q0:0.78,G:4,QM:0.45,FM:0.2,XO:2,XA:0.4,IL:1000000};
   // L0 = 最粗一层的尺度(km);丝按实际算到的几层归一,再过 1 - exp(-(q/Q0)^G):块里大半是暗底、丝与结亮,亮处软肩不截顶;QM = 最粗一层没算全时补的期望
 const CLOUD={pos:[-2100000,-1900000,0]};   // 噪声场的偏移:世界 = 噪声坐标 + pos;拖云 = 拖整片场
 function irmHash(ix,iy,sd){let h=Math.imul(ix|0,374761393)^Math.imul(iy|0,668265263)^Math.imul(sd|0,1442695041);h=Math.imul(h^(h>>>13),1274126177);return((h^(h>>>16))>>>0)/4294967296;}
@@ -409,24 +409,26 @@ function irmGN(x,y,sd){
   const n00=irmGrad(ix,iy,fx,fy,sd),n10=irmGrad(ix+1,iy,fx-1,fy,sd),n01=irmGrad(ix,iy+1,fx,fy-1,sd),n11=irmGrad(ix+1,iy+1,fx-1,fy-1,sd);
   return 1.41*(n00+(n10-n00)*ux+(n01-n00)*uy+(n00-n10-n01+n11)*ux*uy);
 }
-function irmCloudF(x,y,minL,sh){ /* b2ea0f4 原场:噪声坐标 (x,y) 的浓度 0~1;minL = 最细算到多少公里(画面按屏幕,物理用 MIN_KM);sh = 遮罩门槛上移(本体边缘岛变稀) */
-  const C=IRM_CLOUD,L0=C.L0;
-  let m=0.5+0.5*(0.65*irmGN(x/(2*L0),y/(2*L0),C.SEED)+0.35*irmGN(x/L0,y/L0,C.SEED+1));
-  m=(m-C.MASK_LO-(sh||0))/(C.MASK_HI-C.MASK_LO);if(m<=0)return 0;if(m>1)m=1;m=m*m*(3-2*m);
+function irmCloudFil(x,y,minL){ /* 丝:噪声坐标 (x,y) 的亮度 0~1;XO 层粗褶(L0 起往上)+ b2ea0f4 的丝;分辨不出的层按期望 QM 补,一层都没有时取近看的平均 FM */
+  const C=IRM_CLOUD,L0=C.L0;if(L0*Math.pow(2,C.XO-1)<=IRM_NEB.PK*minL&&L0/2<=minL)return C.FM;
   const wx=x+C.WARP*L0*irmGN(x/L0+3.7,y/L0+1.3,C.SEED+2),wy=y+C.WARP*L0*irmGN(x/L0-2.1,y/L0+5.9,C.SEED+3);
-  let f=0,sw=0,a=0.5,L=L0/2,cs=1,sn=0;const c37=Math.cos(0.6458),s37=Math.sin(0.6458);
+  let f=0,sw=0;
+  for(let o=0,L=L0;o<C.XO;o++,L*=2){const w=Math.max(0,Math.min(1,(L/minL-IRM_NEB.PK)/IRM_NEB.PK)),ca=Math.cos(1.1*(o+1)),sa=Math.sin(1.1*(o+1));   // 粗褶:恒星级看得见的那几层
+    if(w>0){const r=1-Math.abs(irmGNt((wx*ca-wy*sa)/L,(wx*sa+wy*ca)/L,C.SEED+30+o));f+=C.XA*w*r*r*r;}f+=C.XA*(1-w)*C.QM;sw+=C.XA;}
+  let a=0.5,L=L0/2,cs=1,sn=0;const c37=Math.cos(0.6458),s37=Math.sin(0.6458);
   for(let o=0;o<C.OCT;o++,L/=2,a*=C.GAIN){
     const w=Math.min(1,L/minL-1);if(w<=0)break;
     const u=(wx*cs-wy*sn)/L,v=(wx*sn+wy*cs)/L,r=1-Math.abs(irmGN(u,v,C.SEED+10+o));f+=a*w*r*r*r;sw+=a*w;
     const c2=cs*c37-sn*s37;sn=cs*s37+sn*c37;cs=c2;
   }
-  const w0=Math.max(0,Math.min(1,L0/2/minL-1)),q=(f+0.5*(1-w0)*C.QM)/(sw+0.5*(1-w0));   // 拉得很远、丝一层都没有时只剩遮罩的块
-  return m*(1-Math.exp(-Math.pow(q/C.Q0,C.G)));
+  const w0=Math.max(0,Math.min(1,L0/2/minL-1)),q=(f+0.5*(1-w0)*C.QM)/(sw+0.5*(1-w0));
+  return 1-Math.exp(-Math.pow(q/C.Q0,C.G));
 }
-/* 语义缩放:舰队级及更近 = 本体包络 x 原场(舰队视野在平台里,不变);拉远按 minL 渐变成从生成点长出的大尺度云图(域扭曲 fBm,最细 2M km) */
-const IRM_NEB={ANG:0.68,A:16e6,B:11e6,R1:1,R2:1.9,S0:0.8,S1:1.3,PW:22e6,WB:12e6,WT:15e6,P0:16e6,OCT:4,GN:0.55,K:0.75,LO:-0.25,HI:0.45,TH:0.06,CB:0.15,RC:0.8,SD:264,T0:131072,TN:1,SH:0.35,S2:4,T1:32768,TN1:1,O2X:3.3e6,O2Y:-5.1e6};
-  // A/B 平台半轴,R1→R2 包络落到 0;WB 边缘扭曲只在 r0>S0 出现(平台里不动原场);WT 纹理扭曲;TH/CB/RC 外疏内实;T0/TN 渐变起点与跨度
-  // 恒星级:原场放大 S2 倍、错开 O2 的一份拷贝;每级只有一档(L≤14 原场、15~16 放大拷贝、≥17 云图),换档处由 nebDraw 按连续缩放叠两级淡入淡出
+/* 星云是一张场:云带(大尺度域扭曲 fBm)定哪里有,b2ea0f4 的岛在同一扭曲坐标里顺着云带流,岛里是 b2ea0f4 的丝。
+   各级只差分辨率:分辨不出的层换成期望,岛的门槛按没算的方差放宽 —— 远看的亮处就是近看丝团密的地方 */
+const IRM_NEB={ANG:0.68,A:16e6,B:11e6,R1:1,R2:1.9,S0:0.8,S1:1.3,PW:22e6,WB:12e6,WT:15e6,P0:16e6,OCT:4,GN:0.55,LO:-0.25,HI:0.45,TH:0.06,CB:0.15,RC:0.8,SD:264,
+  SH:0.35,SHB:0.4,SR:0.6,VK:3.7,GM:6,G0:131072,GL:3,WK:0.4,PK:4};
+  // A/B 本体椭圆半轴,R1→R2 包络落到 0,WB 边缘扭曲;WT 云带扭曲;TH/CB/RC 外疏内实;SH = 出本体时岛门槛上移;SHB·(SR-s) = 云带稀处门槛上移、浓处下移(s=SR 时即 b2ea0f4);VK 放宽系数;GM = 拉远(minL 从 G0 起 GL 级)的显示增益;WK = 岛吃云带扭曲的比例
 IRM_NEB.ca=Math.cos(IRM_NEB.ANG);IRM_NEB.sa=Math.sin(IRM_NEB.ANG);
 const IRM_GT=new Float64Array(512);for(let k=0;k<256;k++){IRM_GT[2*k]=Math.cos(k*Math.PI/128);IRM_GT[2*k+1]=Math.sin(k*Math.PI/128);}
 function irmH8(h){h=Math.imul(h^(h>>>13),1274126177);return((h^(h>>>16))>>>24)<<1;}   // = irmHash 的高 8 位 x2(梯度表下标)
@@ -437,24 +439,22 @@ function irmGNt(x,y,sd){ /* 同 irmGN,梯度查表(省三角函数)、乘法共�
   h=irmH8(a0^b1);const n01=g[h]*fx+g[h+1]*(fy-1);h=irmH8(a1^b1);const n11=g[h]*(fx-1)+g[h+1]*(fy-1);
   return 1.41*(n00+(n10-n00)*ux+(n01-n00)*uy+(n00-n10-n01+n11)*ux*uy);
 }
-function irmNebT(minL,T0,TN){const s=Math.max(0,Math.min(1,Math.log2(minL/(T0||IRM_NEB.T0))/(TN||IRM_NEB.TN)));return s*s*(3-2*s);}
-function irmCloudD(x,y,minL){ /* 噪声坐标 (x,y) 的浓度 0~1 */
-  const N=IRM_NEB,t=irmNebT(minL),u0=(x*N.ca+y*N.sa)/N.A,v0=(y*N.ca-x*N.sa)/N.B,r0=Math.sqrt(u0*u0+v0*v0);
+function irmCloudD(x,y,minL){ /* 噪声坐标 (x,y) 的浓度 0~1;minL = 最细算到多少公里(画面按屏幕,物理用 MIN_KM) */
+  const N=IRM_NEB,C=IRM_CLOUD,u0=(x*N.ca+y*N.sa)/N.A,v0=(y*N.ca-x*N.sa)/N.B,r0=Math.sqrt(u0*u0+v0*v0);
   if(r0>=N.R2+N.WB/N.B)return 0;
-  let e=1,qx=0,qy=0,r=r0;
-  if(t>0||r0>N.S0){const X=x/N.PW,Y=y/N.PW;
-    qx=0.5*irmGNt(X,Y,N.SD)+0.25*irmGNt(2*X,2*Y,N.SD+1);qy=0.5*irmGNt(X+5.2,Y+1.3,N.SD+2)+0.25*irmGNt(2*X+5.2,2*Y+1.3,N.SD+3);
-    let k=(r0-N.S0)/(N.S1-N.S0);k=k<=0?0:k>=1?N.WB:N.WB*k*k*(3-2*k);
-    if(k>0){const xw=x+k*qx,yw=y+k*qy,u=(xw*N.ca+yw*N.sa)/N.A,v=(yw*N.ca-xw*N.sa)/N.B;r=Math.sqrt(u*u+v*v);}
-    e=Math.max(0,Math.min(1,(N.R2-r)/(N.R2-N.R1)));e=e*e*(3-2*e);}
-  if(e<=0)return 0;
-  const ts=irmNebT(minL,N.T1,N.TN1),sh=N.SH*(1-e),S=N.S2;   // 边缘:岛先变稀、外半段才变暗
-  let d=t<1?(1-t)*Math.min(1,2*e)*((ts<1?(1-ts)*irmCloudF(x,y,minL,sh):0)+(ts>0?ts*irmCloudF((x+N.O2X)/S,(y+N.O2Y)/S,minL/S,sh):0)):0;
-  if(t>0){const X=x+N.WT*qx,Y=y+N.WT*qy;let f=0,a=0.5,L=N.P0,am=0;
-    for(let o=0;o<N.OCT;o++,L/=2,a*=N.GN){const w=Math.min(1,L/minL-1);if(w<=0){am+=a;continue;}f+=a*w*irmGNt(X/L,Y/L,N.SD+10+o);am+=a*(1-w);}
-    const c=1-r*r/(N.RC*N.RC),th=N.TH*r*r-(c>0?N.CB*c*c:0),lo=N.LO-am,hi=N.HI+am;let s=(f-lo-th)/(hi-lo);s=s<0?0:s>1?1:s*s*(3-2*s);   // am = 没算的细层振幅:门槛放宽,远看成一团而非几个亮斑
-    d+=t*N.K*e*s*s;}   // 平方:大片薄雾 + 亮团,像云图
-  return d;
+  const P=x/N.PW,Q=y/N.PW,qx=0.5*irmGNt(P,Q,N.SD)+0.25*irmGNt(2*P,2*Q,N.SD+1),qy=0.5*irmGNt(P+5.2,Q+1.3,N.SD+2)+0.25*irmGNt(2*P+5.2,2*Q+1.3,N.SD+3);
+  let k=(r0-N.S0)/(N.S1-N.S0),r=r0;k=k<=0?0:k>=1?N.WB:N.WB*k*k*(3-2*k);
+  if(k>0){const xw=x+k*qx,yw=y+k*qy,u=(xw*N.ca+yw*N.sa)/N.A,v=(yw*N.ca-xw*N.sa)/N.B;r=Math.sqrt(u*u+v*v);}
+  let e=Math.max(0,Math.min(1,(N.R2-r)/(N.R2-N.R1)));if(e<=0)return 0;e=e*e*(3-2*e);
+  const X=x+N.WT*qx,Y=y+N.WT*qy;let f=0,a=0.5,L=N.P0,am=0;
+  for(let o=0;o<N.OCT;o++,L/=2,a*=N.GN){const w=Math.min(1,L/minL-1);if(w<=0){am+=a;continue;}f+=a*w*irmGNt(X/L,Y/L,N.SD+10+o);am+=a*(1-w);}
+  const c=1-r*r/(N.RC*N.RC),th=N.TH*r*r-(c>0?N.CB*c*c:0),lo=N.LO-am,hi=N.HI+am;let s=(f-lo-th)/(hi-lo);s=s<0?0:s>1?1:s*s*(3-2*s);
+  const L0=C.IL,pk=N.PK,w1=Math.max(0,Math.min(1,(2*L0/minL-pk)/pk)),w2=Math.max(0,Math.min(1,(L0/minL-pk)/pk));   // 岛的两层:一周期 4k 格以上全算、2k 格以下换期望
+  const Xi=x+N.WK*N.WT*qx,Yi=y+N.WK*N.WT*qy;let n=0;if(w1>0)n+=0.65*w1*irmGNt(Xi/(2*L0),Yi/(2*L0),C.SEED);if(w2>0)n+=0.35*w2*irmGNt(Xi/L0,Yi/L0,C.SEED+1);   // 岛只吃一部分云带扭曲,免得拉成条纹
+  const h=(C.MASK_HI-C.MASK_LO)/2,hh=Math.sqrt(h*h+N.VK*0.25*0.0924*(0.4225*(1-w1*w1)+0.1225*(1-w2*w2)));   // 0.0924 = 单层噪声方差
+  let m=(0.5+0.5*n-N.SH*(1-e)-N.SHB*(N.SR-s)-C.MASK_LO-h+hh)/(2*hh);if(m<=0)return 0;m=m>1?1:m*m*(3-2*m);
+  let gu=Math.max(0,Math.min(1,Math.log2(minL/N.G0)/N.GL));gu=gu*gu*(3-2*gu);const g=1+(N.GM-1)*gu;   // 拉远的显示增益:只放大亮度不挪位置,GL 级里慢慢加
+  return Math.min(1,Math.min(1,2*e)*m*irmCloudFil(x,y,minL)*g);
 }
 function irmCloudLitAt(p){return (IRM_SUN.mode==='none'||irmInShadow(p))?IRM_CLOUD.DARK:1;}
 function irmCloudBg(p){return IRM_CLOUD.on?IRM_CLOUD.V*irmCloudD(p[0]-CLOUD.pos[0],p[1]-CLOUD.pos[1],IRM_CLOUD.MIN_KM)*irmCloudLitAt(p):0;}
@@ -708,7 +708,7 @@ function sunIcon(x,y,txt){
 /* ---- 普通画面的星云:同一浓度函数,冷色低透明底色 + 三档等值线(做法同引擎 81-env 的 mapCloudPaint)。
    世界锚定瓦片:噪声坐标里 TG x TG 格一块、格距 2^L km(约 PX 屏幕像素),每块只造一次离屏画布;平移只造新露出来的块,
    静止帧只贴整屏缓存;每帧造块封顶约 BUDGET ms,没造好的先拿粗一两级或细一级的块垫着 ---- */
-const NEB={PX:8,TG:16,BUDGET:1.5,MAXT:400,XBAND:0.35,ISO:[0.15,0.4,0.7],LINE:['rgba(150,165,215,.18)','rgba(140,190,235,.28)','rgba(180,225,255,.42)'],
+const NEB={PX:8,TG:16,BUDGET:1.5,MAXT:400,CBL:15,ISO:[0.15,0.4,0.7],LINE:['rgba(150,165,215,.18)','rgba(140,190,235,.28)','rgba(180,225,255,.42)'],
   LO:[118,108,160],HI:[110,185,235],A:0.3,tiles:new Map(),fc:null,fx:null,vs:[],pend:false,fr:0,dpr:0,sm:null,view:null,lab:null};
   // 底色:浓度低处灰紫、高处青蓝,不透明度 A·浓度^0.7;等值线越浓越亮;lab = 「尘埃云」写在哪(噪声坐标)
 function nebLevel(){return Math.round(Math.log2(NEB.PX/cam.zoom));}
@@ -748,9 +748,10 @@ function nebBuild(L,ti,tj){ /* 造一块:格点浓度 → 每格点一像素的�
   V.sm.g.putImageData(V.sm.img,0,0);
   const S=Math.round(TG*V.PX*DPR),cp=S/TG,c=document.createElement('canvas');c.width=S;c.height=S;const g=c.getContext('2d');
   g.imageSmoothingEnabled=true;g.drawImage(V.sm.cv,0,0,n,n,-cp/2,-cp/2,n*cp,n*cp);
-  const tt=irmNebT(2*st);if(tt>=1){T.cv=c;return T;}   // 等值线随换到云图淡出,免得云图纹理描出等值线岛
-  const P=V.ISO.map(function(){return new Path2D();});for(let j=0;j<n-1;j++)nebIsoRow(G,n,j,cp,V.ISO,P);
-  g.lineWidth=DPR;g.globalAlpha=1-tt;for(let k=0;k<P.length;k++){g.strokeStyle=V.LINE[k];g.stroke(P[k]);}
+  let GC=G;if(L>=V.CBL){GC=new Float32Array(n*n);for(let j=0;j<n;j++)for(let i=0;i<n;i++){let t=0,c=0;   // 恒星级往外:等值线描在 3x3 平均过的格点上,不给零星亮点描小圈
+    for(let b=-1;b<=1;b++)for(let a=-1;a<=1;a++){const I=i+a,J=j+b;if(I>=0&&I<n&&J>=0&&J<n){t+=G[J*n+I];c++;}}GC[j*n+i]=t/c;}}
+  const P=V.ISO.map(function(){return new Path2D();});for(let j=0;j<n-1;j++)nebIsoRow(GC,n,j,cp,V.ISO,P);
+  g.lineWidth=DPR;for(let k=0;k<P.length;k++){g.strokeStyle=V.LINE[k];g.stroke(P[k]);}
   T.cv=c;return T;
 }
 function nebHasCover(L,i,j){ /* 这块没造好时有没有别级的块垫得上 */
@@ -760,16 +761,8 @@ function nebHasCover(L,i,j){ /* 这块没造好时有没有别级的块垫得上
 }
 function nebSX(x){return Math.round(((x-cam.x)*cam.zoom+W/2)*DPR);}   // 世界 → 缓存设备像素,取整(相邻块共用边、不留缝)
 function nebSY(y){return Math.round(((y-cam.y)*cam.zoom+H/2)*DPR);}
-function nebCompose(){ /* 拼整屏缓存:主级;换档带里再按 a2 叠另一级((1-a2)·主 + a2·副,lighter 相加 = 线性淡入淡出) */
-  const V=NEB,X=V.fx;X.setTransform(1,0,0,1,0,0);X.clearRect(0,0,V.fc.width,V.fc.height);X.imageSmoothingEnabled=true;
-  X.globalAlpha=1-V.a2;nebComposeLv(V.view);
-  if(V.view2){X.globalCompositeOperation='lighter';X.globalAlpha=V.a2;nebComposeLv(V.view2);X.globalCompositeOperation='source-over';}
-  X.globalAlpha=1;
-  if(V.tiles.size>V.MAXT){const a=[...V.tiles.entries()].sort(function(p,q){return p[1].used-q[1].used;});
-    for(let k=0;k<a.length&&V.tiles.size>V.MAXT;k++)if(a[k][1].used!==V.fr)V.tiles.delete(a[k][0]);}
-}
-function nebComposeLv(v){
-  const V=NEB,X=V.fx,L=v.L,TW=v.TW;
+function nebCompose(){
+  const V=NEB,v=V.view,X=V.fx,L=v.L,TW=v.TW;X.setTransform(1,0,0,1,0,0);X.clearRect(0,0,V.fc.width,V.fc.height);X.imageSmoothingEnabled=true;
   for(let j=v.j0;j<=v.j1;j++)for(let i=v.i0;i<=v.i1;i++){
     const x0=nebSX(v.ox+i*TW),x1=nebSX(v.ox+(i+1)*TW),y0=nebSY(v.oy+j*TW),y1=nebSY(v.oy+(j+1)*TW),T=V.tiles.get(nebKey(L,i,j));
     if(T){T.used=V.fr;if(T.cv)X.drawImage(T.cv,x0,y0,x1-x0,y1-y0);continue;}
@@ -781,6 +774,8 @@ function nebComposeLv(v){
     for(let b=0;b<2;b++)for(let a=0;a<2;a++){const C=V.tiles.get(nebKey(L-1,2*i+a,2*j+b));if(!C)continue;C.used=V.fr;
       if(C.cv)X.drawImage(C.cv,a?xm:x0,b?ym:y0,a?x1-xm:xm-x0,b?y1-ym:ym-y0);}
   }
+  if(V.tiles.size>V.MAXT){const a=[...V.tiles.entries()].sort(function(p,q){return p[1].used-q[1].used;});
+    for(let k=0;k<a.length&&V.tiles.size>V.MAXT;k++)if(a[k][1].used!==V.fr)V.tiles.delete(a[k][0]);}
 }
 function nebLabOk(x,y,dmin){ /* 噪声坐标 (x,y) 写字好不好:在屏里、不压舰名 / 天体 / 左下角开关;dmin >= 0 时还要那里够浓 */
   const p=toScreen(x+CLOUD.pos[0],y+CLOUD.pos[1]),r=uiRect;
@@ -800,15 +795,10 @@ function nebDraw(){ /* 普通画面的星云层:视图变了或有新块才重�
   if(V.dpr!==DPR){V.tiles.clear();V.dpr=DPR;V.vs=[];}
   if(!V.fc||V.fc.width!==cv.width||V.fc.height!==cv.height){V.fc=document.createElement('canvas');V.fc.width=cv.width;V.fc.height=cv.height;V.fx=V.fc.getContext('2d');V.vs=[];}
   const L=nebLevel(),TW=V.TG*Math.pow(2,L),ox=CLOUD.pos[0],oy=CLOUD.pos[1],w0=worldAt(0,0),w1=worldAt(W,H);
-  const lz=Math.log2(V.PX/cam.zoom);let L2=-1;V.a2=0;
-  for(const B of [Math.log2(IRM_NEB.T1)-0.5,Math.log2(IRM_NEB.T0)-0.5])if(Math.abs(lz-B)<V.XBAND){   // 换档带:另一级按连续缩放淡入
-    let u=(lz-B+V.XBAND)/(2*V.XBAND);u=u*u*(3-2*u);const hi=Math.floor(B)+1;L2=L===hi?hi-1:hi;V.a2=L2===hi?u:1-u;}
   const vs=[cam.x,cam.y,cam.zoom,W,H,DPR,ox,oy];let dirty=irvNe(vs,V.vs);
   if(dirty||V.pend){
-    const mk=function(L,TW){return {L:L,TW:TW,ox:ox,oy:oy,i0:Math.floor((w0[0]-ox)/TW),i1:Math.floor((w1[0]-ox)/TW),j0:Math.floor((w0[1]-oy)/TW),j1:Math.floor((w1[1]-oy)/TW)};};
-    const v=mk(L,TW),miss=[],miss2=[];V.view=v;V.view2=L2<0?null:mk(L2,V.TG*Math.pow(2,L2));
+    const v={L:L,TW:TW,ox:ox,oy:oy,i0:Math.floor((w0[0]-ox)/TW),i1:Math.floor((w1[0]-ox)/TW),j0:Math.floor((w0[1]-oy)/TW),j1:Math.floor((w1[1]-oy)/TW)},miss=[];V.view=v;
     for(let j=v.j0;j<=v.j1;j++)for(let i=v.i0;i<=v.i1;i++)if(!V.tiles.has(nebKey(L,i,j)))miss.push(i,j);
-    const v2=V.view2;if(v2)for(let j=v2.j0;j<=v2.j1;j++)for(let i=v2.i0;i<=v2.i1;i++)if(!V.tiles.has(nebKey(L2,i,j)))miss2.push(i,j);
     V.pend=false;
     if(miss.length){
       let bare=0;for(let k=0;k<miss.length;k+=2)if(!nebHasCover(L,miss[k],miss[k+1]))bare++;
@@ -820,9 +810,6 @@ function nebDraw(){ /* 普通画面的星云层:视图变了或有新块才重�
       for(;k<ord.length&&(k===0||performance.now()-t0<V.BUDGET);k++){const i=miss[ord[k]],j=miss[ord[k]+1];V.tiles.set(nebKey(L,i,j),nebBuild(L,i,j));}
       V.pend=k<ord.length;dirty=true;
     }
-    if(miss2.length&&!V.pend){const t0=performance.now();let k=0;   // 副级在主级补齐后再造
-      for(;k<miss2.length&&(k===0||performance.now()-t0<V.BUDGET);k+=2)V.tiles.set(nebKey(L2,miss2[k],miss2[k+1]),nebBuild(L2,miss2[k],miss2[k+1]));
-      V.pend=k<miss2.length;dirty=true;}
   }
   if(dirty){nebCompose();V.vs=vs;nebLabelFind();}
   else if(V.lab&&!nebLabOk(V.lab.x,V.lab.y,-1))nebLabelFind();   // 船拖到字上了:换个地方写
