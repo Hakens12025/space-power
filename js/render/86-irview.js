@@ -33,7 +33,7 @@ function irvHill(t,obs){ // 一座山:峰高(按参照归一)与宽度(km),取�
     if(bg!==bg){bg=ENV.clouds.length?envBg(t.pos,'opt'):0;tSh=lit&&nb&&envInShadow(t.pos);}
     const lo=senseOptLoWith(o,t,bg,tSh,lit&&!(nb&&envInShadow(o.pos)));if(!(lo>0))continue;
     const dx=t.pos[0]-o.pos[0],dy=t.pos[1]-o.pos[1],dz=(t.pos[2]||0)-(o.pos[2]||0),d=Math.max(1,Math.hypot(dx,dy,dz));
-    const snr=SENS.K_IR*senseIrK(o)*senseIrV2()*lo/(d*d),blur=d*covTheta('opt',o,t,d,lo); // V2 长焦:信噪比 x k;新版交战再 x V2_IR_K
+    const snr=SENS.K_IR*senseIrK(o)*lo/(d*d),blur=d*covTheta('opt',o,t,d,lo); // V2 长焦:信噪比 x k
     if(!(blur>0))continue;
     if(snr>=1)all.push({o:o,snr:snr}); // 真探测到了(与热循环 d² < K·亮度 同式):方位线用
     if(!best||snr>best.snr)best={snr:snr,blur:blur,o:o,k:n};
@@ -349,7 +349,7 @@ function irvBearings(){ // 定不出位置的热源:每艘探测到它的我方�
     const t=r.t,ph=r.ph;if(!ph||!ph.all||!ph.all.length||!irvUnfixed(t))continue;
     for(const q of ph.all){
       const o=q.o,dx=t.pos[0]-o.pos[0],dy=t.pos[1]-o.pos[1],d=Math.hypot(dx,dy)||1,ux=dx/d,uy=dy/d;
-      const L=Math.max(d*1.25,Math.sqrt(SENS.K_IR*senseIrK(o)*senseIrV2()*lumCA)),a=toScreen(o.pos[0],o.pos[1]),b=toScreen(o.pos[0]+ux*L,o.pos[1]+uy*L);
+      const L=Math.max(d*1.25,Math.sqrt(SENS.K_IR*senseIrK(o)*lumCA)),a=toScreen(o.pos[0],o.pos[1]),b=toScreen(o.pos[0]+ux*L,o.pos[1]+uy*L);
       const al=Math.min(0.55,0.18+0.12*Math.log10(q.snr));
       ctx.strokeStyle='rgba(255,150,70,'+(al*0.35).toFixed(3)+')';ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();
       ctx.strokeStyle='rgba(255,200,140,'+al.toFixed(3)+')';ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();

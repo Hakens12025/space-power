@@ -125,10 +125,9 @@ function reflOf(s) { // 雷达反射 = 体型 x 反射倍率。size 同时喂光
   return sReq(s, 'size', 'ship') * sReq(s, 'stealth', 'ship');
 }
 function senseKIR(d) { // 探测方光学系数。舰与信标唯一的差别在光学口径,今天两者都是 1.0(信标就是一个专职传感器荚舱)
-  return SENS.K_IR * (d && d.type === 'beacon' ? SENS.BEACON_OPT : 1) * senseIrK(d) * senseIrV2(); // V2 视场收窄到 1/k ⇒ 系数 x k(距离 x √k);新版交战再 x V2_IR_K
+  return SENS.K_IR * (d && d.type === 'beacon' ? SENS.BEACON_OPT : 1) * senseIrK(d); // V2 视场收窄到 1/k ⇒ 系数 x k(距离 x √k)
 }
 /* ---- V2 雷达扇区 / 红外视场(数值模型-感知与武器.md 第 1~3 节)。字段缺省 360° ⇒ 倍数 1、不限方向,原机制逐位不变 ---- */
-function senseIrV2() { return typeof v2On === 'function' && v2On() ? SENS.V2_IR_K : 1; } // V2 红外发现系数的倍数(只管发现,不管定位与认出)
 function senseRadK(d) { const w = d && d.radW; return w > 0 && w < 360 ? 360 / w : 1; } // 搜索方程:扇区缩到 1/k,照射系数 x k(距离 x k^(1/4))
 function senseIrK(d) { const w = d && d.irW; return w > 0 && w < 360 ? 360 / w : 1; }  // 背景受限:视场缩到 1/k,光学系数 x k(距离 x √k)
 function senseSecU(s, kind) { // 这部设备的扇区:null = 不限;否则 [ux, uy, 半角 cos^2]。朝向没算过就当场算一次(21-detect 的 senseAimU)
@@ -153,7 +152,7 @@ function senseKACT(d) { // 探测方照射系数:发射机与接收机各进四�
 }
 
 /* ---------------- UI 读数(blocker E:玩家必须看得见"我此刻有多亮") ---------------- */
-function visRangeOf(s, lo) { return Math.sqrt(SENS.K_IR * senseIrV2() * (lo === undefined ? optLum(s) : lo)); } // 本舰的光学可见半径 km。ENV2 lo = 这一对的有效亮度,不给读标称值
+function visRangeOf(s, lo) { return Math.sqrt(SENS.K_IR * (lo === undefined ? optLum(s) : lo)); } // 本舰的光学可见半径 km。ENV2 lo = 这一对的有效亮度,不给读标称值
 function hearRangeOf(s, recv) { return Math.sqrt(SENS.K_RF * rfLoudOf(s) * (isFinite(recv) ? recv : 1)); } // 被一部 recv 档接收机听见的距离(缺省 1.0 = 基准 DD 的耳朵)
 function actRangeOf(s, refl) { const r = SENS.K_ACT * sReq(s, 'emit', 'ship') * sReq(s, 'recv', 'ship') * (isFinite(refl) ? refl : 1) * senseRadK(s); return Math.sqrt(Math.sqrt(r)); } // 本舰对 refl 基准目标(缺省 1.0)的照射量程。取代旧那个标量探测半径字段,83-hud 的圈与 84-scene 的圈都读它
 
