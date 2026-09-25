@@ -2,7 +2,7 @@
 
 ## 文件
 - `80-camera.js` 相机与平滑缩放(`zAnim` / `camZoomStep` / `vtClampK`);`80-viewtier.js` 三级星图(`VT.SPAN_LS` 阶梯、`vtLandKmpp`、`vtWeights` / `vtTier`、刻度尺与换挡特效)
-- `81-background.js` 底色、嵌套网格、星空贴图 `STAR_TILE`;`81-env.js` 世界层的地图视图(`ENV_VIEWS` / `ENV_KIND_OF` / `drawEnvView`、标签 `mapLabPlan`);`81-terrain.js` 地形瓦片服务 `TERR`
+- `81-background.js` 底色、嵌套网格、星空贴图 `STAR_TILE`;`81-env.js` 世界层的地图视图(`ENV_VIEWS` / `ENV_KIND_OF` / `drawEnvView`、标签 `mapLabPlan`);`81-terrain.js` 地形瓦片服务 `TERR`(采样在后台线程 `terrWkInit`)
 - `82-ship-icons.js` 舰标 / 记号 / 告警弧 / 涟漪(`HULL_ZOOM` / `hullZoomF` / `shipZoomF` / `LIT_RGB`);`82-lod.js` 聚合层(`lodBuild` / `lodDrawShip`);`82-rocks.js` 石头
 - `83-hud.js` 误差椭圆、hover 圈、信号视野、火控链;`83-geom.js` 缩圈小窗;`84-scene.js` 每帧场景组装;`84-fmplot.js` 编队图
 - `85-settings.js` 右下工具栏与倍速钮;`85-tutorial.js` 教程 `TUT_HTML`;`87-fmbar.js` / `89-fmpage.js` 编队界面;`88-selpanel.js` 右栏与火控计算机;`89-radial.js` 目标轮盘几何
@@ -21,6 +21,7 @@
 - 屏幕空间的元素先数每帧绘制次数;以屏幕长度为上界的循环必须封顶(如 `FC_TIE_MAX`)。
 - 每帧路径不许新建 `createRadialGradient` / `shadowBlur`;渐变按颜色缓存在单位空间里再变换。
 - 性能要在 DPR 2 下量。
+- 星云采样的后台线程代码 = `terrWkInit` 里那张函数表(world/13 的浓度函数转成源码);`envDustOne` 新调用了别的函数就得加进表里,否则线程出错、静默退回主线程采样(变慢)。
 
 ## 规矩
 - 星图比例尺是星图自己的阶梯(`VT.SPAN_LS`),不读距离梯子或武器射程;层界取相邻落点的几何中点,画布一变重推。钳位只走 `vtClampK`。
