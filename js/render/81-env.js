@@ -336,7 +336,8 @@ function mapLightCue(dx,dy,label){ // ENV2 ENV1 日标的画法(原 drawSunCue 3
   mapBlit(mapCueSpr(dx,dy,label),x,y); // ENV2 图标连字是一张预渲染的小图,1 次 drawImage(审查第 3 条:原来 1 个圆 + 8 次 stroke + 1 次 fillText),不再改画布状态
   return [x,y];
 }
-function mapExclSel(){const sel=selected.length?shipById(selected[0]):null;return (sel&&!sel.dead&&sel.side==='blue'&&!(ENV.bodies.length&&envInShadow(sel.pos)))?sel:null;} // ENV2 选中的第一艘活着的蓝舰(只画一个锥就够读懂);在天体影子里看不到光源,不画锥
+function mapExclSel(){if(typeof MAPV!=='undefined'&&MAPV.mode==='radar')return null; // 雷达画面不画禁区锥的两条长虚线(用户 2026-09-26)
+  const sel=selected.length?shipById(selected[0]):null;return (sel&&!sel.dead&&sel.side==='blue'&&!(ENV.bodies.length&&envInShadow(sel.pos)))?sel:null;} // ENV2 选中的第一艘活着的蓝舰(只画一个锥就够读懂);在天体影子里看不到光源,不画锥
 function mapExclCone(sel,a0,h){ // ENV2 ENV1 禁区锥的画法(原 drawSunCue 49-53 行)参数化:从舰的屏幕位置、屏幕角 a0 两侧各 h 弧度画两条淡虚线(仍在一个 path 里,ENV1 现状)
   const p=toScreen(sel.pos[0],sel.pos[1]),L=Math.max(W,H)*1.5;
   ctx.strokeStyle='rgba(255,210,110,.28)';ctx.lineWidth=1;ctx.setLineDash([4,6]);
