@@ -21,8 +21,8 @@ html,body{margin:0;height:100%;background:#070a0e;overflow:hidden;font:12px "Mic
 #fleet .ttl{color:#8fa0b0;margin-bottom:2px}
 </style></head><body>
 <canvas id="cv"></canvas>
-<div id="hint">左键拖船 · 点船选中 · 拖选中船旁的小圆点定雷达朝向 · 悬停雷达 / 扇区按钮预览自己的暴露 · 悬停区域 / 回波看读数 · 右键拖动平移 · 滚轮缩放 · 加船:点 +蓝 / +红 再点地图,右键取消 · Shift+拖船 = 拉出速度(箭头越长越快)<br>
-淡色底 = 我方雷达看得见的范围 · 点 = 雷达回波(暖色在接近、冷色在远离,旧的变暗;灰点 = 碎石带里的杂波,分不出是碎石还是船) · 青色多边形 = 听到的敌方雷达一定在里面(听得越久、交会的船越多,越小越亮) · 菱形 = 红外看见(青边 = 顺着区域盯到的)</div>
+<div id="hint">左键拖船 · 点船选中 · 拖选中船旁的小圆点定雷达朝向 · 悬停雷达 / 扇区按钮预览自己的暴露 · 悬停区域 / 回波看读数 · 右键拖动平移 · 滚轮缩放 · 加船:点 +蓝 / +红 再点地图,右键取消 · Shift+拖船 = 拉出速度(箭头越长越快)· 天体 / 位置型恒星能拖<br>
+淡色底 = 我方雷达看得见的范围 · 点 = 雷达回波(暖色在接近、冷色在远离,旧的变暗;灰点 = 碎石带里的杂波,分不出是碎石还是船) · 青色多边形 = 听到的敌方雷达一定在里面(听得越久、交会的船越多,越小越亮) · 菱形 = 红外看见(青边 = 顺着区域盯到的)<br>选中的船:暗扇 = 雷达阴影(被挡住)· 黄扇 = 恒星噪声(雷达与静听都被淹)· 星云只挡红外、对雷达透明</div>
 <div id="perf"></div>
 <div id="fleet"></div>
 <div id="ui">
@@ -35,8 +35,9 @@ html,body{margin:0;height:100%;background:#070a0e;overflow:hidden;font:12px "Mic
   <div class="row"><span class="lab">视角</span><span id="view"><button data-v="blue">蓝方</button><button data-v="red">红方</button><button data-v="god">上帝</button></span>
     <span class="lab">时间</span><span id="speed"><button data-sp="0">暂停</button><button data-sp="1">×1</button><button data-sp="10">×10</button><button data-sp="50">×50</button></span>
     <span class="lab"></span><button id="reset">重来</button></div>
-  <div class="row"><span class="lab">加船</span><span id="add"><button data-add="blue">+蓝</button><button data-add="red">+红</button></span>
-    <span class="lab"></span><button id="clt">碎石带</button></div>
+  <div class="row"><span class="lab">加船</span><span id="add"><button data-add="blue">+蓝</button><button data-add="red">+红</button></span></div>
+  <div class="row"><span class="lab">地形</span><span id="sun"><button data-sun="none">无恒星</button><button data-sun="dir">恒星·方向</button><button data-sun="pos">恒星·位置</button></span>
+    <span class="lab"></span><span id="terr"><button data-t="planet">天体</button><button data-t="neb">星云</button><button data-t="debris">碎石带</button><button data-t="ast">小行星</button></span></div>
 </div>
 <script>
 "use strict";
@@ -54,6 +55,14 @@ const IRD={COLD:240000,HOT:480000};                  // 红外看见一艘驱逐
 const ESM={S0:20,SMIN:1,NR:4,CUE_MAX:3,FADE:90};     // 第一次听到的半宽(度)、最窄半宽、第几次起有距离带、引导增益上限、隔多少秒算新一轮
 const CLT={on:true,X:1400000,Y:-150000,R:400000,N:200,V:[0,0],MTI:60};   // 碎石带:圆心、半径、块数、整片漂移速度(km/s);MTI 门:朝雷达的速度和碎石差不过 60 km/s 就混进杂波
 const VPX=5;                                                            // Shift+拖船:每像素 5 km/s
+/* ---- 地形(类型与星云的式子抄自 红外效果.html,抄完归本页;位置按本页尺度重摆)---- */
+const TER={sun:'dir',planet:true,neb:true,ast:true};                   // 地形开关(碎石带用 CLT.on)
+const SUN={BRG:150,POS_D:6900000,R:696000,RF_HALF:10,RF_K:30,IR_HALF:30,IR_K:30};   // 方位 150°(从蓝方看)、位置型 690 万 km 外、真太阳半径;射频噪声锥 10°、红外眩光锥 30°,锥里噪声 / 背景抬到 1+K 倍
+const STAR={pos:[0,0]};                                                 // 位置型恒星(能拖)
+const PLANET={kind:'planet',pos:[1800000,350000],vel:[0,0],R:70000};   // 木星级,两舰队之间偏上(能拖)
+const NEB={IRK:15};                                                     // 星云:红外背景 = IRK x 浓度;射频透明
+const AST={N:8,KM:4000};                                                // 小行星:块数;本体半径 = 体型 x KM
+const RES=20000;                                                        // 雷达分辨单元(km):贴着天体 / 小行星这么近就和它的回波混在一起
 function radarRange(w){return RAD.R0*Math.pow(360/w,0.25);}      // 搜索雷达方程:距离按(驻留 / 搜索角)的四次方根涨
 function esmHalf(n){return Math.max(ESM.SMIN,ESM.S0/Math.sqrt(n));}  // 测向误差按听到次数的平方根缩小
 function esmBandK(n){return 1+3/Math.sqrt(n);}                     // 距离带 [d/K, d·K]
@@ -85,7 +94,8 @@ function scene(){
   for(let i=0;i<FLEET;i++){ships.push(mkShip('blue','蓝'+(4+i),-600000+r()*800000,(r()*2-1)*1000000,0,0));
     const s=mkShip('red','红'+(4+i),2700000+r()*700000,(r()*2-1)*1000000,-400,0);if(i%5===0){s.rm='on';s.ph=r();}ships.push(s);}
   clock=0;ESMREV++;IRC.t=-1e9;PLY.key='';PLY.t=-1e9;for(const m of [RET.blue,RET.red,TRK.blue,TRK.red,PING])m.clear();
-  mkRocks();
+  {const c=[-100000,0],a=SUN.BRG*DEG;STAR.pos=[c[0]+Math.cos(a)*SUN.POS_D,c[1]+Math.sin(a)*SUN.POS_D];}
+  mkRocks();mkAsts();buildWorld();
   S.sel=ships.find(s=>S.view==='god'||s.side===S.view);
   buildFleet();
 }
@@ -113,10 +123,115 @@ function syncFleet(){
 let rocks=[];
 function mkRocks(){ /* 碎石带里撒碎石(固定种子);体型 0.35 ~ 1.1,雷达距离按体型的四次方根打折 */
   rocks=[];if(!CLT.on)return;const r=rng(11);
-  for(let i=0;i<CLT.N;i++){const a=r()*2*Math.PI,d=Math.sqrt(r())*CLT.R;rocks.push({rock:true,name:'碎石',pos:[CLT.X+Math.cos(a)*d,CLT.Y+Math.sin(a)*d],vel:[CLT.V[0],CLT.V[1]],size:0.35+r()*0.75});}
+  for(let i=0;i<CLT.N;i++){const a=r()*2*Math.PI,d=Math.sqrt(r())*CLT.R;rocks.push({rock:'debris',name:'碎石',pos:[CLT.X+Math.cos(a)*d,CLT.Y+Math.sin(a)*d],vel:[CLT.V[0],CLT.V[1]],size:0.35+r()*0.75});}
+}
+let asts=[];
+function mkAsts(){ /* 小行星:体型 1 ~ 3,撒在两舰队之间(固定种子) */
+  asts=[];const r=rng(4242);
+  for(let i=0;i<AST.N;i++){const sz=1+r()*2;asts.push({kind:'asteroid',rock:'ast',name:'小行星',pos:[600000+r()*2000000,(r()*2-1)*900000],vel:[0,0],size:sz,r:sz*AST.KM});}
 }
 function inClutter(p){const dx=p[0]-CLT.X,dy=p[1]-CLT.Y;return CLT.on&&dx*dx+dy*dy<=CLT.R*CLT.R;}
 function enemyTag(E){const k=ships.filter(s=>s.side===E.side).indexOf(E);return '辐射源'+(k<6?'甲乙丙丁戊己'[k]:(k+1)+'号');}   // 电子情报分得清是哪一部,不知道是哪艘船
+
+/* ---- 统一规则:沙盒里每样东西按两个波段(ir 热 / rf 射频)各填四格 —— 发光 / 反射 / 挡路 / 背景。
+   三个传感器共用一条判据:看得见 ⇔ 信号 x 透过率 / (噪声 + 背景) ≥ 门槛。红外读 ir(背景受限,距离按 (1+背景)^(-1/4));
+   雷达读 rf 的反射(双程,距离按 (反射/噪声)^(1/4));静听读 rf 的发光(单程,距离按 噪声^(-1/2));
+   雷达多一个特权:背景里和目标同速的那部分滤不掉,其余用多普勒(MTI)滤掉。
+   加新东西 = 在 KINDS 里加一行、在 buildWorld 里放进 WORLD;没填的格 = 这个波段对它无所谓 ---- */
+function segDisk(a,b,c,R){ /* 线段 a→b 从圆盘里穿过(同 红外效果 irmOccluded) */
+  const vx=b[0]-a[0],vy=b[1]-a[1],L2=vx*vx+vy*vy;if(!(L2>0))return false;
+  const t=((c[0]-a[0])*vx+(c[1]-a[1])*vy)/L2;if(t<=0||t>=1)return false;
+  const qx=a[0]+t*vx-c[0],qy=a[1]+t*vy-c[1];return qx*qx+qy*qy<R*R;
+}
+function near(p,c,R){const dx=p[0]-c[0],dy=p[1]-c[1];return dx*dx+dy*dy<=R*R;}
+function starDir(o,from){return o.dir?SUN.BRG*DEG:Math.atan2(o.pos[1]-from[1],o.pos[0]-from[0]);}
+function coneK(o,from,th,half,K){const d=Math.abs(norm(th-starDir(o,from)+Math.PI)-Math.PI)/DEG;return d<=half?K:K*Math.pow(half/d,4);}   // 朝恒星 half 度以内 K,往外按四次方淡出
+const KINDS={
+  star:{     // 发光:射频噪声锥(雷达与静听都被淹,MTI 滤不掉)、红外眩光锥;位置型有本体挡路
+    rf:{noise:(o,from,th)=>coneK(o,from,th,SUN.RF_HALF,SUN.RF_K),block:(o,a,b)=>!o.dir&&segDisk(a,b,o.pos,SUN.R)},
+    ir:{bgDir:(o,from,th)=>coneK(o,from,th,SUN.IR_HALF,SUN.IR_K),block:(o,a,b)=>!o.dir&&segDisk(a,b,o.pos,SUN.R)}},
+  planet:{   // 挡路:两个波段全挡;背景:盘面是巨大的静止回波,贴着它(RES 内)的目标要靠 MTI 挑出来
+    rf:{block:(o,a,b)=>segDisk(a,b,o.pos,o.R),clutter:(o,p)=>near(p,o.pos,o.R+RES)?o.vel:null},
+    ir:{block:(o,a,b)=>segDisk(a,b,o.pos,o.R)}},
+  asteroid:{ // 反射:强点回波(进回波表,本身就是杂波);挡路:小本体;背景:贴着它 RES 内
+    rf:{block:(o,a,b,self)=>o!==self&&segDisk(a,b,o.pos,o.r),clutter:(o,p)=>near(p,o.pos,o.r+RES)?o.vel:null},
+    ir:{block:(o,a,b,self)=>o!==self&&segDisk(a,b,o.pos,o.r)}},
+  nebula:{   // 射频:透明(不填);红外背景 = IRK x 浓度
+    ir:{bgAt:(o,p)=>NEB.IRK*nebD(p)}},
+  debris:{   // 背景:碎石带里的离散杂波(每块碎石本身作为点反射体进回波)
+    rf:{clutter:(o,p)=>inClutter(p)?CLT.V:null}},
+};
+let WORLD=[],REFL=[];   // WORLD:参与规则的东西;REFL:会出回波的点反射体(碎石、小行星)
+function buildWorld(){
+  WORLD=[];if(TER.sun!=='none')WORLD.push({kind:'star',dir:TER.sun==='dir',pos:STAR.pos});
+  if(TER.planet)WORLD.push(PLANET);if(TER.neb)WORLD.push({kind:'nebula'});if(CLT.on)WORLD.push({kind:'debris'});
+  if(TER.ast)for(const a of asts)WORLD.push(a);
+  REFL=rocks.concat(TER.ast?asts:[]);
+}
+function rfBlocked(a,b,self){for(const o of WORLD){const f=KINDS[o.kind].rf;if(f&&f.block&&f.block(o,a,b,self))return true;}return false;}
+function irBlocked(a,b,self){for(const o of WORLD){const f=KINDS[o.kind].ir;if(f&&f.block&&f.block(o,a,b,self))return true;}return false;}
+function rfNoise(from,th){let n=1;for(const o of WORLD){const f=KINDS[o.kind].rf;if(f&&f.noise)n+=f.noise(o,from,th);}return n;}
+function irBgAt(p){let b=0;for(const o of WORLD){const f=KINDS[o.kind].ir;if(f&&f.bgAt)b+=f.bgAt(o,p);}return b;}
+function irBgDir(from,th){let b=0;for(const o of WORLD){const f=KINDS[o.kind].ir;if(f&&f.bgDir)b+=f.bgDir(o,from,th);}return b;}
+function rfClutterVs(p){let L=null;for(const o of WORLD){const f=KINDS[o.kind].rf;if(f&&f.clutter){const v=f.clutter(o,p);if(v)(L||(L=[])).push(v);}}return L;}
+function radarReach(E,th,size){return radarRange(E.w)*Math.pow(size/rfNoise(E.pos,th),0.25);}   // 双程:反射与噪声开四次方根
+function hearReach(L,th,R){return R/Math.sqrt(rfNoise(L.pos,th));}                                 // 单程:噪声开平方根
+
+/* ---- 星云浓度(抄自 红外效果.html 的 irmCloudF / irmCloudD,数与式子原样)---- */
+const IRM_CLOUD={on:true,V:1.3,DARK:0.4,L0:500000,OCT:9,GAIN:0.78,SEED:20,WARP:0.35,MASK_LO:0.5,MASK_HI:0.66,MIN_KM:12500,Q0:0.78,G:4,QM:0.45};
+const CLOUD={pos:[-2100000,-1900000,0]};
+function irmHash(ix,iy,sd){let h=Math.imul(ix|0,374761393)^Math.imul(iy|0,668265263)^Math.imul(sd|0,1442695041);h=Math.imul(h^(h>>>13),1274126177);return((h^(h>>>16))>>>0)/4294967296;}
+function irmGrad(i,j,dx,dy,sd){const a=irmHash(i,j,sd)*6.283185307;return Math.cos(a)*dx+Math.sin(a)*dy;}
+function irmGN(x,y,sd){
+  const ix=Math.floor(x),iy=Math.floor(y),fx=x-ix,fy=y-iy,ux=fx*fx*fx*(fx*(fx*6-15)+10),uy=fy*fy*fy*(fy*(fy*6-15)+10);
+  const n00=irmGrad(ix,iy,fx,fy,sd),n10=irmGrad(ix+1,iy,fx-1,fy,sd),n01=irmGrad(ix,iy+1,fx,fy-1,sd),n11=irmGrad(ix+1,iy+1,fx-1,fy-1,sd);
+  return 1.41*(n00+(n10-n00)*ux+(n01-n00)*uy+(n00-n10-n01+n11)*ux*uy);
+}
+function irmCloudF(x,y,minL,sh){
+  const C=IRM_CLOUD,L0=C.L0;
+  let m=0.5+0.5*(0.65*irmGN(x/(2*L0),y/(2*L0),C.SEED)+0.35*irmGN(x/L0,y/L0,C.SEED+1));
+  m=(m-C.MASK_LO-(sh||0))/(C.MASK_HI-C.MASK_LO);if(m<=0)return 0;if(m>1)m=1;m=m*m*(3-2*m);
+  const wx=x+C.WARP*L0*irmGN(x/L0+3.7,y/L0+1.3,C.SEED+2),wy=y+C.WARP*L0*irmGN(x/L0-2.1,y/L0+5.9,C.SEED+3);
+  let f=0,sw=0,a=0.5,L=L0/2,cs=1,sn=0;const c37=Math.cos(0.6458),s37=Math.sin(0.6458);
+  for(let o=0;o<C.OCT;o++,L/=2,a*=C.GAIN){
+    const w=Math.min(1,L/minL-1);if(w<=0)break;
+    const u=(wx*cs-wy*sn)/L,v=(wx*sn+wy*cs)/L,r=1-Math.abs(irmGN(u,v,C.SEED+10+o));f+=a*w*r*r*r;sw+=a*w;
+    const c2=cs*c37-sn*s37;sn=cs*s37+sn*c37;cs=c2;
+  }
+  const w0=Math.max(0,Math.min(1,L0/2/minL-1)),q=(f+0.5*(1-w0)*C.QM)/(sw+0.5*(1-w0));
+  return m*(1-Math.exp(-Math.pow(q/C.Q0,C.G)));
+}
+const IRM_NEB={ANG:0.68,A:16e6,B:11e6,R1:1,R2:1.9,S0:0.8,S1:1.3,PW:22e6,WB:12e6,WT:15e6,P0:16e6,OCT:4,GN:0.55,K:0.75,LO:-0.25,HI:0.45,TH:0.06,CB:0.15,RC:0.8,SD:264,T0:131072,TN:1,SH:0.35,S2:4,T1:32768,TN1:1,O2X:3.3e6,O2Y:-5.1e6};
+IRM_NEB.ca=Math.cos(IRM_NEB.ANG);IRM_NEB.sa=Math.sin(IRM_NEB.ANG);
+const IRM_GT=new Float64Array(512);for(let k=0;k<256;k++){IRM_GT[2*k]=Math.cos(k*Math.PI/128);IRM_GT[2*k+1]=Math.sin(k*Math.PI/128);}
+function irmH8(h){h=Math.imul(h^(h>>>13),1274126177);return((h^(h>>>16))>>>24)<<1;}
+function irmGNt(x,y,sd){
+  const ix=Math.floor(x),iy=Math.floor(y),fx=x-ix,fy=y-iy,ux=fx*fx*fx*(fx*(fx*6-15)+10),uy=fy*fy*fy*(fy*(fy*6-15)+10),g=IRM_GT;
+  const a0=Math.imul(ix|0,374761393),a1=Math.imul((ix+1)|0,374761393),b0=Math.imul(iy|0,668265263)^Math.imul(sd|0,1442695041),b1=Math.imul((iy+1)|0,668265263)^Math.imul(sd|0,1442695041);
+  let h=irmH8(a0^b0);const n00=g[h]*fx+g[h+1]*fy;h=irmH8(a1^b0);const n10=g[h]*(fx-1)+g[h+1]*fy;
+  h=irmH8(a0^b1);const n01=g[h]*fx+g[h+1]*(fy-1);h=irmH8(a1^b1);const n11=g[h]*(fx-1)+g[h+1]*(fy-1);
+  return 1.41*(n00+(n10-n00)*ux+(n01-n00)*uy+(n00-n10-n01+n11)*ux*uy);
+}
+function irmNebT(minL,T0,TN){const s=Math.max(0,Math.min(1,Math.log2(minL/(T0||IRM_NEB.T0))/(TN||IRM_NEB.TN)));return s*s*(3-2*s);}
+function irmCloudD(x,y,minL){
+  const N=IRM_NEB,t=irmNebT(minL),u0=(x*N.ca+y*N.sa)/N.A,v0=(y*N.ca-x*N.sa)/N.B,r0=Math.sqrt(u0*u0+v0*v0);
+  if(r0>=N.R2+N.WB/N.B)return 0;
+  let e=1,qx=0,qy=0,r=r0;
+  if(t>0||r0>N.S0){const X=x/N.PW,Y=y/N.PW;
+    qx=0.5*irmGNt(X,Y,N.SD)+0.25*irmGNt(2*X,2*Y,N.SD+1);qy=0.5*irmGNt(X+5.2,Y+1.3,N.SD+2)+0.25*irmGNt(2*X+5.2,2*Y+1.3,N.SD+3);
+    let k=(r0-N.S0)/(N.S1-N.S0);k=k<=0?0:k>=1?N.WB:N.WB*k*k*(3-2*k);
+    if(k>0){const xw=x+k*qx,yw=y+k*qy,u=(xw*N.ca+yw*N.sa)/N.A,v=(yw*N.ca-xw*N.sa)/N.B;r=Math.sqrt(u*u+v*v);}
+    e=Math.max(0,Math.min(1,(N.R2-r)/(N.R2-N.R1)));e=e*e*(3-2*e);}
+  if(e<=0)return 0;
+  const ts=irmNebT(minL,N.T1,N.TN1),sh=N.SH*(1-e),S=N.S2;
+  let d=t<1?(1-t)*Math.min(1,2*e)*((ts<1?(1-ts)*irmCloudF(x,y,minL,sh):0)+(ts>0?ts*irmCloudF((x+N.O2X)/S,(y+N.O2Y)/S,minL/S,sh):0)):0;
+  if(t>0){const X=x+N.WT*qx,Y=y+N.WT*qy;let f=0,a=0.5,L=N.P0,am=0;
+    for(let o=0;o<N.OCT;o++,L/=2,a*=N.GN){const w=Math.min(1,L/minL-1);if(w<=0){am+=a;continue;}f+=a*w*irmGNt(X/L,Y/L,N.SD+10+o);am+=a*(1-w);}
+    const c=1-r*r/(N.RC*N.RC),th=N.TH*r*r-(c>0?N.CB*c*c:0),lo=N.LO-am,hi=N.HI+am;let s=(f-lo-th)/(hi-lo);s=s<0?0:s>1?1:s*s*(3-2*s);
+    d+=t*N.K*e*s*s;}
+  return d;
+}
+function nebD(p,minL){return Math.min(1,irmCloudD(p[0]-CLOUD.pos[0],p[1]-CLOUD.pos[1],minL||IRM_CLOUD.MIN_KM));}   // 世界坐标处的浓度 0 ~ 1
 
 /* ---- 雷达:扫描、回波、被听见 ---- */
 function radOn(s){return s.rm!=='off';}
@@ -129,25 +244,29 @@ function hear(L,E,d){ /* L 听到 E 的雷达一次 */
   if(k.n>=ESM.NR){const K=esmBandK(k.n),c=d*Math.pow(K,pairU(L,E,'r')*0.5);k.band=[c/K,c*K];}else k.band=null;
   ESMREV++;PING.set(L,performance.now());
 }
-function radarHit(E,T,dx,dy,d){ /* 一个回波;在碎石带里,朝雷达的速度和碎石差不过 MTI 门就只是一粒杂波(停着藏、垂直视线横穿都藏得住) */
+function radarHit(E,T,dx,dy,d){ /* 一个回波;落在背景里(碎石带、天体盘面、小行星旁),朝雷达的速度和那片背景差不过 MTI 门就只是一粒杂波 */
   const vr=((T.vel[0]-E.vel[0])*dx+(T.vel[1]-E.vel[1])*dy)/d;let clut=false;
-  if(inClutter(T.pos)){const vc=((CLT.V[0]-E.vel[0])*dx+(CLT.V[1]-E.vel[1])*dy)/d;clut=Math.abs(vr-vc)<=CLT.MTI;}
+  const C=rfClutterVs(T.pos);if(C)for(const v of C){const vc=((v[0]-E.vel[0])*dx+(v[1]-E.vel[1])*dy)/d;if(Math.abs(vr-vc)<=CLT.MTI){clut=true;break;}}
   RET[E.side].set(T,{pos:[T.pos[0],T.pos[1]],vr:vr,d:d,t:clock,clut:clut});
 }
 function scanArc(E,a0,a1){ /* 这一小步波束从 a0 扫到 a1 */
   for(const T of ships){if(T.side===E.side)continue;
-    const dx=T.pos[0]-E.pos[0],dy=T.pos[1]-E.pos[1],d=Math.hypot(dx,dy);
-    if(!inArc(Math.atan2(dy,dx),a0,a1))continue;
+    const dx=T.pos[0]-E.pos[0],dy=T.pos[1]-E.pos[1],d=Math.hypot(dx,dy),th=Math.atan2(dy,dx);
+    if(!inArc(th,a0,a1))continue;
     E.swept.add(T);
-    if(d<=radarRange(E.w))radarHit(E,T,dx,dy,d);
-    if(d<=RAD.HEAR)hear(T,E,d);
+    if(d>RAD.HEAR&&d>radarRange(E.w))continue;
+    if(rfBlocked(E.pos,T.pos,T))continue;   // 挡路对两头一样:雷达看不见它,它也听不见这部雷达
+    if(d<=radarReach(E,th,1))radarHit(E,T,dx,dy,d);
+    if(d<=hearReach(T,th+Math.PI,RAD.HEAR))hear(T,E,d);
   }
   const R0=radarRange(E.w);
-  for(const K of rocks){const dx=K.pos[0]-E.pos[0],dy=K.pos[1]-E.pos[1],d=Math.sqrt(dx*dx+dy*dy);
-    if(d<=R0*Math.pow(K.size,0.25)&&inArc(Math.atan2(dy,dx),a0,a1))radarHit(E,K,dx,dy,d);}
+  for(const K of REFL){const dx=K.pos[0]-E.pos[0],dy=K.pos[1]-E.pos[1],d=Math.sqrt(dx*dx+dy*dy);
+    if(d>R0*Math.pow(K.size,0.25))continue;const th=Math.atan2(dy,dx);
+    if(inArc(th,a0,a1)&&d<=radarReach(E,th,K.size)&&!rfBlocked(E.pos,K.pos,K))radarHit(E,K,dx,dy,d);}
 }
 function sweepDone(E){ /* 扫完一次:主瓣没扫到、但在旁瓣距离里的,听到一次旁瓣 */
-  for(const T of ships){if(T.side===E.side||E.swept.has(T))continue;const d=Math.hypot(T.pos[0]-E.pos[0],T.pos[1]-E.pos[1]);if(d<=RAD.SIDE)hear(T,E,d);}
+  for(const T of ships){if(T.side===E.side||E.swept.has(T))continue;const dx=E.pos[0]-T.pos[0],dy=E.pos[1]-T.pos[1],d=Math.hypot(dx,dy);
+    if(d<=RAD.SIDE&&d<=hearReach(T,Math.atan2(dy,dx),RAD.SIDE)&&!rfBlocked(E.pos,T.pos,T))hear(T,E,d);}
   E.swept.clear();
 }
 function sweep(E,h){
@@ -237,8 +356,10 @@ function cueTable(side){ /* 每一团 x 每艘我方船的引导增益:与目标
 }
 function irSeesT(tab,T){ /* 返回 null 或 {cued:只有盯着看才看得见} */
   const inL=[];for(let i=0;i<tab.L.length;i++)if(polyIn(tab.L[i].poly,T.pos))inL.push(i);   // T 落在哪几块多边形里
-  const R=irRange(T);let seen=false;
-  for(let j=0;j<tab.own.length;j++){const O=tab.own[j],d=Math.hypot(T.pos[0]-O.pos[0],T.pos[1]-O.pos[1]);
+  const R0=irRange(T),bg=irBgAt(T.pos);let seen=false;   // 背景:目标处的星云(每个目标算一次)
+  for(let j=0;j<tab.own.length;j++){const O=tab.own[j],dx=T.pos[0]-O.pos[0],dy=T.pos[1]-O.pos[1],d=Math.hypot(dx,dy);
+    if(d>R0*ESM.CUE_MAX||irBlocked(O.pos,T.pos,T))continue;
+    const R=R0*Math.pow(1+bg+irBgDir(O.pos,Math.atan2(dy,dx)),-0.25);   // 背景受限:星云 + 朝恒星的眩光
     if(d<=R)return {cued:false};
     let g=1;for(const i of inL)g=Math.max(g,tab.g[i][j]);if(d<=R*g)seen=true;}
   return seen?{cued:true}:null;
@@ -277,9 +398,20 @@ function drawCoverage(side){ /* 一方全部开着的雷达看得见的范围:�
   if(!any)return;
   ctx.globalAlpha=0.06;ctx.drawImage(COV.cv,0,0,W,H);ctx.globalAlpha=1;
 }
-function drawRadar(E){ /* 只给选中的那艘画:扇区轮廓 + 扫描线 + 余辉(定朝向用) */
+function drawRadar(E){ /* 只给选中的那艘画:扇区轮廓 + 雷达阴影 + 恒星噪声锥 + 扫描线 + 余辉 */
   const c=sideCol(E.side),p=toScreen(E.pos[0],E.pos[1]),R=radarRange(E.w)*cam.zoom;
   sectorPath(ctx,p,R,E.dir,E.w);ctx.setLineDash([4,5]);ctx.strokeStyle='rgba('+c+',0.35)';ctx.lineWidth=1;ctx.stroke();ctx.setLineDash([]);
+  ctx.save();sectorPath(ctx,p,R,E.dir,E.w);ctx.clip();
+  for(const o of WORLD){const rr=o.kind==='planet'?o.R:(o.kind==='asteroid'?o.r:(o.kind==='star'&&!o.dir?SUN.R:0));if(!(rr>0))continue;   // 挡路的圆盘:身后一片暗扇
+    const dx=o.pos[0]-E.pos[0],dy=o.pos[1]-E.pos[1],D=Math.hypot(dx,dy);if(D<=rr||D-rr>radarRange(E.w))continue;
+    const a0=Math.atan2(dy,dx),h=Math.asin(rr/D),t=Math.sqrt(D*D-rr*rr),F=radarRange(E.w)*2;
+    const P=[[E.pos[0]+Math.cos(a0-h)*t,E.pos[1]+Math.sin(a0-h)*t],[E.pos[0]+Math.cos(a0-h)*F,E.pos[1]+Math.sin(a0-h)*F],[E.pos[0]+Math.cos(a0+h)*F,E.pos[1]+Math.sin(a0+h)*F],[E.pos[0]+Math.cos(a0+h)*t,E.pos[1]+Math.sin(a0+h)*t]];
+    ctx.beginPath();P.forEach((q,i)=>{const s=toScreen(q[0],q[1]);if(i)ctx.lineTo(s[0],s[1]);else ctx.moveTo(s[0],s[1]);});ctx.closePath();ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fill();
+    if(o.kind==='planet'){const s=toScreen(P[1][0]*0.5+P[0][0]*0.5,P[1][1]*0.5+P[0][1]*0.5);label('雷达阴影',s[0]+4,s[1],'#8a98a6');}}
+  for(const o of WORLD){if(o.kind!=='star')continue;const a=starDir(o,E.pos),h=SUN.RF_HALF*DEG;   // 朝恒星的噪声锥
+    ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.arc(p[0],p[1],R,a-h,a+h);ctx.closePath();ctx.fillStyle='rgba(255,200,80,0.1)';ctx.fill();
+    label('恒星噪声',p[0]+Math.cos(a)*Math.min(R,160),p[1]+Math.sin(a)*Math.min(R,160),'#ffc850');}
+  ctx.restore();
   const a=beamAt(E,E.ph),span=E.w>=360?2*Math.PI:E.w*DEG,tr=E.w>=360?span*0.12:Math.min(span*E.ph,span*0.12),N=8;
   for(let i=0;i<N;i++){ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.arc(p[0],p[1],R,a-tr*(i+1)/N,a-tr*i/N);ctx.closePath();ctx.fillStyle='rgba('+c+','+(0.16*(1-i/N)).toFixed(3)+')';ctx.fill();}
   ctx.strokeStyle='rgba('+c+',0.85)';ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(p[0]+Math.cos(a)*R,p[1]+Math.sin(a)*R);ctx.stroke();
@@ -342,7 +474,43 @@ function drawReturns(side){
     if(clock-r.t<RAD.T*0.3){ctx.fillStyle=dopCol(r.vr,0.25);ctx.beginPath();ctx.arc(p[0],p[1],9,0,2*Math.PI);ctx.fill();}
     ctx.fillStyle=dopCol(r.vr,retAlpha(r));ctx.beginPath();ctx.arc(p[0],p[1],3.5,0,2*Math.PI);ctx.fill();}
 }
-function drawRocks(){ctx.fillStyle='rgba(120,114,106,0.9)';for(const k of rocks){const p=toScreen(k.pos[0],k.pos[1]);ctx.beginPath();ctx.arc(p[0],p[1],Math.max(1.2,2*Math.sqrt(k.size)),0,2*Math.PI);ctx.fill();}}
+function drawRocks(){ctx.fillStyle='rgba(120,114,106,0.9)';for(const k of REFL){const p=toScreen(k.pos[0],k.pos[1]);ctx.beginPath();ctx.arc(p[0],p[1],Math.max(k.r?2.5:1.2,(k.r?2.5:2)*Math.sqrt(k.size)),0,2*Math.PI);ctx.fill();}}   // 上帝视角:碎石与小行星的真值
+/* 地形里"有名有姓"的东西(恒星、天体、星云的大致样子)所有视角都画;碎石与小行星是未知接触,只在回波里或上帝视角出现 */
+const NV={CELL:12,BUDGET:2,A:null,job:null,key:'',still:0};   // A = 已算好的一张(带它当时的镜头);job = 正在分帧重算的下一张
+function nebBuf(key){const CL=NV.CELL,gw=Math.ceil(W/CL)+2,gh=Math.ceil(H/CL)+2,cv=document.createElement('canvas');cv.width=gw;cv.height=gh;const cx=cv.getContext('2d');
+  return {key:key,cv:cv,cx:cx,img:cx.createImageData(gw,gh),gw:gw,gh:gh,j:0,cam:{x:cam.x,y:cam.y,zoom:cam.zoom},W:W,H:H};}
+function nebRows(B,ms){ /* 往下算若干行,最多 ms 毫秒;算完上图 */
+  const CL=NV.CELL,D=B.img.data,z=B.cam.zoom,minL=CL/z,p=[0,0],t0=performance.now();
+  while(B.j<B.gh){const j=B.j++;p[1]=(j*CL-B.H/2)/z+B.cam.y;
+    for(let i=0;i<B.gw;i++){p[0]=(i*CL-B.W/2)/z+B.cam.x;const v=nebD(p,minL),o=(j*B.gw+i)*4;D[o]=110;D[o+1]=130;D[o+2]=210;D[o+3]=Math.round(255*0.32*v);}
+    if(performance.now()-t0>=ms)break;}
+  if(B.j>=B.gh)B.cx.putImageData(B.img,0,0);
+}
+function drawNeb(){ /* 星云的大致:每 12 像素一格按粗细度取浓度,冷色低透明。
+  镜头在动时把已算好的那张按新镜头平移 / 缩放贴上,不重算;镜头停稳 100 ms 后分帧重算(每帧约 2 ms),算完换上;还没有图时一次算完 */
+  if(!TER.neb)return;
+  const key=[cam.x,cam.y,cam.zoom,W,H].join('|'),now=performance.now();
+  if(key!==NV.key){NV.key=key;NV.still=now;}
+  if(!NV.A){NV.A=nebBuf(key);nebRows(NV.A,Infinity);}
+  else if(NV.A.key!==key&&now-NV.still>=100){if(!NV.job||NV.job.key!==key)NV.job=nebBuf(key);nebRows(NV.job,NV.BUDGET);if(NV.job.j>=NV.job.gh){NV.A=NV.job;NV.job=null;}}
+  const A=NV.A,CL=NV.CELL,k=cam.zoom/A.cam.zoom,o=toScreen(A.cam.x-A.W/2/A.cam.zoom,A.cam.y-A.H/2/A.cam.zoom);   // 这张图的格点 (0,0) 在当前镜头下的屏幕位置
+  ctx.imageSmoothingEnabled=true;ctx.drawImage(A.cv,o[0]-CL/2*k,o[1]-CL/2*k,A.gw*CL*k,A.gh*CL*k);
+}
+function edgeIcon(ux,uy,txt){const hx=W/2-30,hy=H/2-30,k=Math.min(Math.abs(ux)>1e-9?hx/Math.abs(ux):1e9,Math.abs(uy)>1e-9?hy/Math.abs(uy):1e9);sunIcon(W/2+ux*k,H/2+uy*k,txt);}
+function sunIcon(x,y,txt){
+  ctx.strokeStyle='#ffd060';ctx.fillStyle='#ffd060';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(x,y,7,0,2*Math.PI);ctx.fill();
+  ctx.beginPath();for(let i=0;i<8;i++){const a=i*Math.PI/4;ctx.moveTo(x+Math.cos(a)*10,y+Math.sin(a)*10);ctx.lineTo(x+Math.cos(a)*14,y+Math.sin(a)*14);}ctx.stroke();ctx.lineWidth=1;
+  label(txt,x+17,y+4,'#ffd060');
+}
+function drawTerrain(){
+  drawNeb();
+  if(TER.planet){const p=toScreen(PLANET.pos[0],PLANET.pos[1]),r=Math.max(4,PLANET.R*cam.zoom);ctx.fillStyle='#26303a';ctx.beginPath();ctx.arc(p[0],p[1],r,0,2*Math.PI);ctx.fill();
+    ctx.strokeStyle='#3c4a58';ctx.stroke();label('天体',p[0]+r+4,p[1]+4,'#8a98a6');}
+  if(TER.sun==='dir'){const a=SUN.BRG*DEG;edgeIcon(Math.cos(a),Math.sin(a),'恒星');}
+  if(TER.sun==='pos'){const p=toScreen(STAR.pos[0],STAR.pos[1]);
+    if(p[0]>=0&&p[0]<=W&&p[1]>=0&&p[1]<=H){ctx.fillStyle='#ffd060';ctx.beginPath();ctx.arc(p[0],p[1],Math.max(6,SUN.R*cam.zoom),0,2*Math.PI);ctx.fill();label('恒星',p[0]+10,p[1]-10,'#ffd060');}
+    else{const dx=p[0]-W/2,dy=p[1]-H/2,l=Math.hypot(dx,dy)||1;edgeIcon(dx/l,dy/l,'恒星');}}
+}
 function drawVel(s){ /* 选中的船:速度箭头(1 像素 = VPX km/s) */
   const v=Math.hypot(s.vel[0],s.vel[1]);if(!(v>0))return;const p=toScreen(s.pos[0],s.pos[1]),q=[p[0]+s.vel[0]/VPX,p[1]+s.vel[1]/VPX],a=Math.atan2(s.vel[1],s.vel[0]);
   ctx.strokeStyle='rgba(232,238,244,0.7)';ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.lineTo(q[0]-Math.cos(a-0.4)*7,q[1]-Math.sin(a-0.4)*7);ctx.moveTo(q[0],q[1]);ctx.lineTo(q[0]-Math.cos(a+0.4)*7,q[1]-Math.sin(a+0.4)*7);ctx.stroke();
@@ -387,6 +555,7 @@ function handlePos(){const s=S.sel;if(!s||s.w>=360)return null;const p=toScreen(
 function draw(){
   ctx.setTransform(DPR,0,0,DPR,0,0);ctx.fillStyle='#070a0e';ctx.fillRect(0,0,W,H);drawGrid();
   const v=S.view;
+  drawTerrain();
   if(v==='god'){drawCoverage('blue');drawCoverage('red');drawRocks();for(const s of ships)drawShip(s);}
   else{
     drawCoverage(v);drawPolys(v);drawReturns(v);
@@ -404,6 +573,12 @@ function draw(){
 }
 
 /* ---- 读数 ---- */
+function envLine(s){ /* 选中的船所在的环境:按统一规则,哪几样东西对它起作用 */
+  const L=[],C=rfClutterVs(s.pos);
+  if(C)L.push('雷达背景里(碎石带 / 天体盘面 / 小行星旁):朝敌方雷达的速度差不过 '+CLT.MTI+' km/s 就混进杂波');
+  const nd=TER.neb?nebD(s.pos):0;if(nd>0.02)L.push('星云 '+nd.toFixed(2)+':红外看它打 '+Math.pow(1+NEB.IRK*nd,-0.25).toFixed(2)+' 折,雷达不受影响');
+  return L.length?L.join(' · '):'空旷';
+}
 function readout(){
   const s=S.sel;if(!s)return '';
   const pad=t=>(t+'          ').slice(0,10);
@@ -411,7 +586,8 @@ function readout(){
     '雷达看得见  '+pad(fmtWan(radarRange(s.w)))+'对驱逐舰\n'+
     '主瓣被听见  '+pad(fmtWan(RAD.HEAR))+'旁瓣 '+fmtWan(RAD.SIDE)+'\n'+
     '红外被看见  '+pad(fmtWan(irRange(s)))+(s.flame?'点火':'熄火')+';被顺着光斑盯着看时最远 '+fmtWan(irRange(s)*ESM.CUE_MAX)+'\n'+
-    '航速        '+pad(Math.hypot(s.vel[0],s.vel[1]).toFixed(0)+' km/s')+(inClutter(s.pos)?'在碎石带里:朝敌方雷达的速度差不过 '+CLT.MTI+' km/s 就混进杂波':'');
+    '航速        '+pad(Math.hypot(s.vel[0],s.vel[1]).toFixed(0)+' km/s')+'\n'+
+    '所在        '+envLine(s);
 }
 
 /* ---- 主循环 ---- */
@@ -430,6 +606,8 @@ function frame(now){
 /* ---- 交互:左键拖船 / 拖朝向点;只点不拖 = 选中;右键拖平移;滚轮缩放 ---- */
 function pickAt(sx,sy){let best=null,bd=12;
   for(const o of ships){if(S.view!=='god'&&o.side!==S.view)continue;const p=toScreen(o.pos[0],o.pos[1]),d=Math.hypot(p[0]-sx,p[1]-sy);if(d<bd){bd=d;best=o;}}
+  if(!best&&TER.sun==='pos'){const p=toScreen(STAR.pos[0],STAR.pos[1]);if(Math.hypot(p[0]-sx,p[1]-sy)<Math.max(12,SUN.R*cam.zoom))best=STAR;}
+  if(!best&&TER.planet){const p=toScreen(PLANET.pos[0],PLANET.pos[1]);if(Math.hypot(p[0]-sx,p[1]-sy)<Math.max(12,PLANET.R*cam.zoom))best=PLANET;}   // 地形能拖
   return best;}
 let drag=null,pan=null;
 cv.addEventListener('mousedown',function(e){
@@ -438,7 +616,7 @@ cv.addEventListener('mousedown',function(e){
   if(e.button!==0)return;
   const hp=handlePos();if(hp&&Math.hypot(hp[0]-e.clientX,hp[1]-e.clientY)<9){drag={aim:true};return;}
   const o=pickAt(e.clientX,e.clientY),w=worldAt(e.clientX,e.clientY);
-  if(e.shiftKey&&o){S.sel=o;drag={vel:o};syncUI();return;}   // Shift+拖船:拉出速度
+  if(e.shiftKey&&o&&o.side){S.sel=o;drag={vel:o};syncUI();return;}   // Shift+拖船:拉出速度
   drag={o:o,sx:e.clientX,sy:e.clientY,moved:false,ox:o?o.pos[0]-w[0]:0,oy:o?o.pos[1]-w[1]:0};
 });
 window.addEventListener('mousemove',function(e){
@@ -453,7 +631,7 @@ window.addEventListener('mousemove',function(e){
 });
 window.addEventListener('mouseup',function(e){
   if(e.button===2)pan=null;
-  if(e.button===0&&drag){if(!drag.aim&&!drag.vel&&!drag.moved){S.sel=drag.o;syncUI();}drag=null;}
+  if(e.button===0&&drag){if(!drag.aim&&!drag.vel&&!drag.moved){S.sel=drag.o&&drag.o.side?drag.o:null;syncUI();}drag=null;}
 });
 cv.addEventListener('mouseleave',function(){S.mx=S.my=null;});
 cv.addEventListener('contextmenu',function(e){e.preventDefault();});
@@ -468,7 +646,8 @@ function mark(sel,attr,val){for(const x of document.querySelectorAll(sel))x.clas
 function syncUI(){
   const s=S.sel;document.getElementById('rowSel').style.display=s?'flex':'none';
   if(s){document.getElementById('selName').textContent=s.name;mark('#selRad [data-rm]','data-rm',s.rm);mark('#selW [data-w]','data-w',s.w);mark('#selFl [data-fl]','data-fl',s.flame);}
-  mark('#view [data-v]','data-v',S.view);mark('#speed [data-sp]','data-sp',S.speed);mark('#add [data-add]','data-add',S.place);document.getElementById('clt').classList.toggle('on',CLT.on);
+  mark('#view [data-v]','data-v',S.view);mark('#speed [data-sp]','data-sp',S.speed);mark('#add [data-add]','data-add',S.place);mark('#sun [data-sun]','data-sun',TER.sun);
+  for(const x of document.querySelectorAll('#terr [data-t]')){const t=x.getAttribute('data-t');x.classList.toggle('on',t==='debris'?CLT.on:TER[t]);}
   syncFleet();
   document.getElementById('read').textContent=readout();
 }
@@ -482,7 +661,11 @@ onClick('view',function(b){S.view=b.getAttribute('data-v');if(S.sel&&S.view!=='g
 onClick('speed',function(b){S.speed=+b.getAttribute('data-sp');});
 onClick('reset',function(){scene();});
 onClick('stop',function(){if(S.sel)S.sel.vel=[0,0];});
-onClick('clt',function(){CLT.on=!CLT.on;mkRocks();for(const m of [RET.blue,RET.red])for(const k of [...m.keys()])if(k.rock)m.delete(k);});
+onClick('sun',function(b){TER.sun=b.getAttribute('data-sun');buildWorld();IRC.t=-1e9;});
+onClick('terr',function(b){const t=b.getAttribute('data-t');
+  if(t==='debris'){CLT.on=!CLT.on;mkRocks();}else TER[t]=!TER[t];
+  buildWorld();IRC.t=-1e9;
+  for(const m of [RET.blue,RET.red])for(const k of [...m.keys()])if((k.rock==='debris'&&!CLT.on)||(k.rock==='ast'&&!TER.ast))m.delete(k);});
 onClick('add',function(b){const s=b.getAttribute('data-add');S.place=S.place===s?null:s;cv.style.cursor=S.place?'crosshair':'';});
 for(const id of ['selRad','selW']){const el=document.getElementById(id);
   el.addEventListener('mouseover',function(e){const b=e.target.closest('button');if(b)S.hover={w:b.hasAttribute('data-w')?+b.getAttribute('data-w'):null};});
