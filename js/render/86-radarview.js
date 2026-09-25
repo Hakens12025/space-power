@@ -21,18 +21,23 @@ function rdvDop(vr,a){ // 负 = 在接近:暖;正 = 在远离:冷(同演示页 d
   return 'rgba('+Math.round(b[0]+(e[0]-b[0])*u)+','+Math.round(b[1]+(e[1]-b[1])*u)+','+Math.round(b[2]+(e[2]-b[2])*u)+','+a.toFixed(2)+')';
 }
 /* ---- 覆盖 ---- */
+function rdvSecPath(X,p,R,s){ // V2 雷达扇区:360° 画整圆,否则画扇形(朝向 s.radU)
+  X.beginPath();
+  if(s.radW<360&&s.radU){const a=Math.atan2(s.radU[1],s.radU[0]),h=s.radW*Math.PI/360;X.moveTo(p[0],p[1]);X.arc(p[0],p[1],R,a-h,a+h);X.closePath();}
+  else X.arc(p[0],p[1],R,0,2*Math.PI);
+}
 function rdvCoverage(P){
   if(!P.length)return;
   const w=Math.round(W),h=Math.round(H);
   if(!RDV.cov||RDV.cov.width!==w||RDV.cov.height!==h){RDV.cov=document.createElement('canvas');RDV.cov.width=w;RDV.cov.height=h;RDV.cx=RDV.cov.getContext('2d');}
   const X=RDV.cx,rf=rdvStdRefl();X.clearRect(0,0,w,h);X.fillStyle='rgb(111,180,255)';
-  for(const s of P){const p=toScreen(s.pos[0],s.pos[1]),R=actRangeOf(s,rf)*cam.zoom;X.beginPath();X.arc(p[0],p[1],R,0,2*Math.PI);X.fill();}
+  for(const s of P){if(s.radDown>0)continue;const p=toScreen(s.pos[0],s.pos[1]),R=actRangeOf(s,rf)*cam.zoom;rdvSecPath(X,p,R,s);X.fill();} // V2 扇区 / 被打瘫的不画
   ctx.save();ctx.globalAlpha=0.06;ctx.drawImage(RDV.cov,0,0,W,H);ctx.restore(); // 重叠不叠加、不画各自轮廓
 }
 function rdvSelected(E){ // 选中的那艘:虚线轮廓 + 天体身后的雷达阴影(暗扇)
   const p=toScreen(E.pos[0],E.pos[1]),Rw=actRangeOf(E,rdvStdRefl()),R=Rw*cam.zoom;
-  ctx.save();ctx.setLineDash([4,5]);ctx.strokeStyle='rgba(111,180,255,0.35)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(p[0],p[1],R,0,2*Math.PI);ctx.stroke();ctx.setLineDash([]);
-  ctx.beginPath();ctx.arc(p[0],p[1],R,0,2*Math.PI);ctx.clip();
+  ctx.save();ctx.setLineDash([4,5]);ctx.strokeStyle='rgba(111,180,255,0.35)';ctx.lineWidth=1;rdvSecPath(ctx,p,R,E);ctx.stroke();ctx.setLineDash([]);
+  rdvSecPath(ctx,p,R,E);ctx.clip();
   if(envHasLight()&&!(ENV.bodies.length&&envInShadow(E.pos))){const u=envSunDirAt(E.pos,RDV_U),S=ENV_CFG.RF_SUN,h=envLightHalf();   // 射频噪声锥:四档由外往里叠,越往里越亮
     if(u){const a=Math.atan2(u[1],u[0]);for(let i=S.E.length-1;i>=0;i--){const w=Math.min(Math.PI/2,S.E[i]*h);ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.arc(p[0],p[1],R,a-w,a+w);ctx.closePath();ctx.fillStyle='rgba(255,200,80,0.05)';ctx.fill();}
       ctx.fillStyle='#ffc850';ctx.font='11px "Microsoft YaHei",sans-serif';const q=Math.min(R*0.6,180);ctx.fillText('恒星噪声',p[0]+Math.cos(a)*q,p[1]+Math.sin(a)*q);}}

@@ -144,8 +144,8 @@
 <script src="js/weapons/54-missiles.js?v=20260926v2"></script>
 <script src="js/weapons/55-damage.js?v=20260923"></script>
 <script src="js/weapons/56-step-projectiles.js?v=20260926v2"></script>
-<script src="js/weapons/57-step-weapons.js?v=20260926v2"></script>
-<script src="js/weapons/59-v2weapons.js?v=20260926v2"></script><!-- V2 新版交战的武器:反辐射弹 / 近防激光 / 速射炮塔 / 长矛激光(只在新版交战的配装里出现) -->
+<script src="js/weapons/57-step-weapons.js?v=20260926v3"></script>
+<script src="js/weapons/59-v2weapons.js?v=20260926v3"></script><!-- V2 新版交战的武器:反辐射弹 / 近防激光 / 速射炮塔 / 长矛激光(只在新版交战的配装里出现) -->
 <script src="js/weapons/58-firecontrol.js?v=20260926c"></script><!-- RF5 火控计算机引擎:序列数据模型+stepFireControl/Post。位置只为目录编号可读性(编号 58 > 57,归位到 weapons 块末尾),跨文件引用全在运行期解析:本文件顶层只有 const/let/function 声明,零顶层执行 -->
 <script src="js/core/05-sim.js?v=20260923"></script>
 <script src="js/core/06-timecomp.js?v=20260923"></script><!-- TC1 接触降速:frame() 每帧调 tcStep;依赖全部在运行期解析 -->
@@ -167,8 +167,8 @@
 <script src="js/render/84-fmplot.js?v=20260923"></script><!-- FM4 编队能力站位的地图可视化。与 84-scene 共用编号 84(先例:weapons/51-defs 与 51-ciws),都属于“场景图层”;顶层只有 const/function,零顶层执行,由 84-scene 的 render() 运行期调用 -->
 <script src="js/render/85-settings.js?v=20260926e"></script>
 <script src="js/render/85-tutorial.js?v=20260926c"></script><!-- RF5-D 教程面板。与 85-settings 共用编号 85(先例:weapons/51-defs 与 51-ciws),语义上教程与设置相邻。顶层调用 on(),故必须晚于 core/00;其余引用全在运行期解析 -->
-<script src="js/render/86-irview.js?v=20260925"></script><!-- 红外画面:右下角「红外」钮(MAPV.mode === 'ir');演示页 红外效果.html 的甲画法,物理走引擎的传感器模型 -->
-<script src="js/render/86-radarview.js?v=20260926h"></script><!-- 雷达画面:右下角「雷达」钮(MAPV.mode === 'radar');演示页 雷达效果.html 的画法,数据走引擎现有的雷达模型 -->
+<script src="js/render/86-irview.js?v=20260926v3"></script><!-- 红外画面:右下角「红外」钮(MAPV.mode === 'ir');演示页 红外效果.html 的甲画法,物理走引擎的传感器模型 -->
+<script src="js/render/86-radarview.js?v=20260926v3"></script><!-- 雷达画面:右下角「雷达」钮(MAPV.mode === 'radar');演示页 雷达效果.html 的画法,数据走引擎现有的雷达模型 -->
 <script src="js/render/87-fmbar.js?v=20260923"></script><!-- FM1 编队书签栏 + 编队菜单。与 87-fleetcards 共用编号 87(先例:weapons/51-defs 与 51-ciws、render/85-settings 与 85-tutorial),语义上都是"舰队编成"的呈现。顶层只有 on(...) 委托挂载,故必须晚于 core/00;updFmBar() 由 core/99 每 20 帧调用,其余跨文件引用全在运行期解析 -->
 <script src="js/render/88-selpanel.js?v=20260926v2"></script>
 <script src="js/render/89-radial.js?v=20260926c"></script>
