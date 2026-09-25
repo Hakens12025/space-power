@@ -4,7 +4,7 @@ function macPred(s,t){ // 目标未来位置(提前量,MAC 0.1c飞行时间);KIM
   // WR1:位置用【估计位置】(contactPos;交代不出位置 ⇒ 返回 null,调用方不许回落真值),速度暂用真值(内核不估计速度,已知口子)
   const tp=(typeof contactPos==='function')?contactPos(t,s.side):t.pos; if(!tp)return null;
   const d=V.len(V.sub(tp,s.pos));
-  const tt=d/CFG.macSpd;
+  const tt=d/(s.macSpd||CFG.macSpd); // V2:弹速按舰(新版交战 0.2c)
   return [tp[0]+(t.vel[0]-s.vel[0])*tt,tp[1]+(t.vel[1]-s.vel[1])*tt,tp[2]+(t.vel[2]-s.vel[2])*tt];
 }
 function macAligned(s,t){ // 轴炮窗口:机头是否对准预测点(~1.1°容差,摆到窗口即开火)
@@ -58,12 +58,12 @@ function fireMAC(shooter,target){ // MAC轴炮:沿船头方向直射(必须先�
   if(!contactFix(target,shooter.side))return; // 定得出位置就许开火;瞄的是估计位置,椭圆大就是打不中
   const pred=macPred(shooter,target); if(!pred)return; // WR1:交代不出估计位置就不开火(不回落真值)
   const d=V.len(V.sub(pred,shooter.pos)); // WR1:飞行距离按预测点算(没有射程门了,d 只决定弹丸寿命)
-  const tt=d/CFG.macSpd; // 飞行时间(MAC 0.1c)
+  const vS=shooter.macSpd||CFG.macSpd,tt=d/vS; // 飞行时间(原版 0.1c,新版交战 0.2c)
   const dir=V.norm(shooter.facing); // 轴炮:弹道=船头轴线(单位化防脏数据)
   const da=gaussRand()*sReq(shooter,'macSigma'); // WR1:每一发都带高斯角散布(原来只在超程时加均匀散布);脱靶距离 ≈ d x da,命中率随距离自然下降
   const ang=Math.atan2(dir[1],dir[0])+da;
   const hxy=Math.hypot(dir[0],dir[1]); // KIMI146修:xy分量按朝向的xy模长缩放——原直接用满macSpd再叠dir[2]·macSpd,合速度超0.1c且弹道≠机头轴线(带俯仰时必脱靶)
-  projectiles.push({type:'mac',pos:shooter.pos.slice(),vel:[Math.cos(ang)*hxy*CFG.macSpd+shooter.vel[0],Math.sin(ang)*hxy*CFG.macSpd+shooter.vel[1],dir[2]*CFG.macSpd+shooter.vel[2]],target,shooter,pred,tt,age:0,dmg:shooter.macDmg}); // KIMI151:弹丸继承舰速(出膛矢量=舰速+机头轴×0.1c,相对舰体初速仍0.1c)
+  projectiles.push({type:'mac',pos:shooter.pos.slice(),vel:[Math.cos(ang)*hxy*vS+shooter.vel[0],Math.sin(ang)*hxy*vS+shooter.vel[1],dir[2]*vS+shooter.vel[2]],target,shooter,pred,tt,age:0,dmg:shooter.macDmg}); // KIMI151:弹丸继承舰速(出膛矢量=舰速+机头轴×0.1c,相对舰体初速仍0.1c)
   shooter.fireHot=SENS.FIRE_S; // FX1 开火暴露(见 sensors/20 的 P_FIRE):与冷却同一处置位 —— 这里是 MAC 唯一的发射成功点
   shooter.macCd=shooter.macReload||0; // TIER1 改读实例烘焙的装填秒:原 CLS_WPN[shooter.cls].mac 无兜底,舰种不在表里就 TypeError 崩整帧(加 BB/CV 后风险放大)
   if(shooter.fcFired&&shooter.fcTgt&&shooter.fcTgt.mac===target)shooter.fcFired.mac=true; // RF5 开火来源标记(MAC 唯一的发射成功点,弹丸已入 projectiles、冷却已置位):火控序列的指针只认这个显式标记。绝不允许用 macCd/ammo 差分推断——任务系统/靶场AI/敌方AI/手动齐射都会动那两个字段,差分会让序列指针幽灵前进。RF5 核查修:标记再收窄成「打的正是本 tick 序列解算出来的那个目标」,否则玩家手动打第三方(71-keys/72-右键菜单)也会推动序列指针,序列自己那一发被白白跳过

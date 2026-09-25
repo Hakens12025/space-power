@@ -25,7 +25,8 @@ function tcBand(){
     const p=trkPos(tk);if(!p)return;
     b=Math.max(b,1);
     let d=Infinity;for(const x of mine)d=Math.min(d,Math.hypot(p[0]-x.pos[0],p[1]-x.pos[1]));   // ① 到【估计位置】的距离,不是真值
-    if(d<=LAD.gun)b=3;else if(d<=LAD.msl)b=Math.max(b,2);
+    const G=(typeof v2On==='function'&&v2On())?V2W.BAND.gun:LAD.gun,M=(typeof v2On==='function'&&v2On())?V2W.BAND.msl:LAD.msl; // V2 距离带按新武器
+    if(d<=G)b=3;else if(d<=M)b=Math.max(b,2);
   });
   if(b<2)for(const p of projectiles){                 // ④ 看得见的来袭导弹
     if(p.type==='missile'&&!p.done&&trkSees('blue',p)&&p.shooter&&p.shooter.side==='red'){b=2;break;} // TK4a:目击读航迹表

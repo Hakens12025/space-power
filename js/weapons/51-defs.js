@@ -15,8 +15,11 @@ const WPN={ // 定义(Definition):全局一份的不变模板,数值原样搬自
   ciws_core:{kind:'ciws',label:'拦截',outer:25000,outerIntercept:0.40,inner:8000,innerIntercept:0.85,chaffRate:0.25,inter:384}, // DD 防空核心,干扰中
   ciws_self:{kind:'ciws',label:'拦截',outer:15000,outerIntercept:0.25,inner:5000,innerIntercept:0.40,chaffRate:0.15,inter:320}, // CA 自防御,干扰弱(大目标)
   /* ---- V2 新版交战(数值模型-感知与武器.md 第 5~7 节;机制在 weapons/59-v2weapons)---- */
-  msl_light_v2:{kind:'msl',label:'导弹',missDmg:12,ammo:192,cells:4,mslPer:12,mslReload:60,mslFuel:126}, // 燃料 126 s ⇒ 动力射程 150 x 63² ≈ 60 万(原 37.5 万与主炮躲得开的距离重合)
-  msl_heavy_v2:{kind:'msl',label:'导弹',missDmg:15,ammo:240,cells:6,mslPer:12,mslReload:60,mslFuel:126},
+  /* 距离带按引擎空间定锚(数值模型-感知与武器.md 第 4 节):反辐射 160 万 = 驱逐舰全向雷达 · 反舰弹 120 万 = 舰队定位距离 · 主炮躲得开 71 万 · 激光 25 万 */
+  mac_light_v2:{kind:'mac',label:'主炮',macDmg:90,mac:30,macSigma:0.0059,macSpd:60000},   // 0.2c:对 DD 躲得开 71 万;散布 5.9 毫弧 ⇒ 90% 20 万 / 50% 50 万;单发伤害按「一个距离带打掉同级一艘」反推
+  mac_heavy_v2:{kind:'mac',label:'主炮',macDmg:150,mac:30,macSigma:0.0059,macSpd:60000},
+  msl_light_v2:{kind:'msl',label:'导弹',missDmg:4,ammo:96,cells:4,mslPer:12,mslReload:60,mslFuel:179}, // 燃料 179 s ⇒ 动力射程 150 x 89.5² ≈ 120 万;弹药 = 一个导弹带的量(8 / 10 组),单枚伤害按「导弹带打掉约三分之一」反推:舰队 312 枚 x 突防约 47% x 4~5 ≈ 700
+  msl_heavy_v2:{kind:'msl',label:'导弹',missDmg:5,ammo:120,cells:6,mslPer:12,mslReload:60,mslFuel:179},
   arm:{kind:'arm',label:'反辐射',arm:4,armDmg:60},  // 4 枚;听见就能发,命中打瘫雷达
   gun2:{kind:'gun2',label:'速射炮',gun2N:1},         // 每件一门炮塔
   pdl:{kind:'pdl',label:'近防激光',pdlN:1},           // 每件一门
@@ -41,8 +44,8 @@ const CLS_LOADOUT={ // 配装(Loadout):舰种 → 武器 id 列表。CV 无主�
 CLS_LOADOUT.BB=CLS_LOADOUT.CA.slice(); // TODO(TIER-BAL) 战列配装待标定(克隆 CA)
 CLS_LOADOUT.CV=['msl_heavy','ciws_self']; // 航母无主炮;其余 TODO(TIER-BAL) 配装待标定
 const CLS_LOADOUT_V2={ // V2 新版交战的配装(用户 2026-09-26 选"按角色分"):DD 防空 / 压制,CA 主战;拦截弹原样保留(选"叠加新近防")
-  DD:['mac_light','msl_light_v2','arm','ciws_core','pdl','pdl','gun2'],
-  CA:['mac_heavy','msl_heavy_v2','lance','ciws_self','pdl','gun2','gun2'],
+  DD:['mac_light_v2','msl_light_v2','arm','ciws_core','pdl','pdl','gun2'],
+  CA:['mac_heavy_v2','msl_heavy_v2','lance','ciws_self','pdl','gun2','gun2'],
 };
 CLS_LOADOUT_V2.BB=CLS_LOADOUT_V2.CA.slice();
 CLS_LOADOUT_V2.CV=['msl_heavy_v2','arm','ciws_self','pdl','gun2','gun2'];

@@ -124,7 +124,7 @@ body.pin canvas#map{cursor:crosshair}
   <h1>底部栏样板 · 新版交战</h1>
   这张页不加载引擎,数都照 <span class="v">数值模型-感知与武器.md</span> 摆好。悬停任何档位、武器卡片,地图上会预览它管的范围。
   <div class="row">选中:<button data-sel="CA" class="on">巡洋舰</button><button data-sel="DD">驱逐舰</button><button data-sel="FLEET">编队 3 艘</button></div>
-  <div class="row">目标距离 <input id="dist" type="range" min="50" max="1500" value="420"><span class="v" id="distV">42 万</span></div>
+  <div class="row">目标距离 <input id="dist" type="range" min="50" max="2000" value="900"><span class="v" id="distV">90 万</span></div>
   <div class="row"><button id="bHeard" class="on">听见敌方雷达</button><button id="bWave">模拟一拨来袭导弹</button></div>
   <div class="row" style="color:var(--txt-mute)">键:F 雷达扇区 · E 红外视场 · Shift+F / Shift+E 指向 · T 主炮 · R 反舰弹 · Q 反辐射 · B 长矛 · Esc 取消</div>
 </div>
@@ -156,24 +156,24 @@ body.pin canvas#map{cursor:crosshair}
 /* ================= 数(照 数值模型-感知与武器.md 与引擎现值)================= */
 const KM=1000,WAN=10000;
 const CLS={
-  CA:{label:'巡洋舰',emitK:1.607,hear:4525e3,seen:287e3,hp:900,mac:400,cells:6,ammo:240,pd:5.7,ic:320,lance:true,arm:0},
-  DD:{label:'驱逐舰',emitK:1,hear:3200e3,seen:240e3,hp:550,mac:220,cells:4,ammo:192,pd:8.7,ic:384,lance:false,arm:4},
+  CA:{label:'巡洋舰',emitK:1.607,hear:4525e3,seen:287e3,hp:900,mac:150,cells:6,ammo:120,pd:8.3,ic:320,lance:true,arm:0},
+  DD:{label:'驱逐舰',emitK:1,hear:3200e3,seen:240e3,hp:550,mac:90,cells:4,ammo:96,pd:10.0,ic:384,lance:false,arm:4},
 };
 const RAD0_DD=1600e3;                        // 驱逐舰雷达全向看驱逐舰
 const IR={cold:240e3,hot:480e3,id:97e3};     // 广角看驱逐舰
 const W_RAD=[360,90,22.5],W_IR=[360,90,22.5],N_RAD=['全向','扇区','聚束'],N_IR=['广角','中焦','长焦'];
-const MAC_R50=366e3,MSL_R=595e3,ARM_R=996e3,LZ={D0:60e3,AUTO:100e3,MAX:300e3,ON:20,CD:40},PD_R=40e3;
+const MAC_R50=503e3,MAC_DODGE=710e3,MSL_R=1202e3,ARM_R=1607e3,LZ={D0:150e3,AUTO:250e3,MAX:600e3,ON:20,CD:40,DPS:12},PD_R=40e3; // 按引擎空间重推(数值模型 第 4~6 节)
 const radRange=(s,w)=>RAD0_DD*Math.pow(s.c.emitK,0.25)*Math.pow(360/w,0.25);   // 搜索方程:扇区缩到 1/k,距离 x k^(1/4)
 const irK=w=>Math.sqrt(360/w);                                                  // 背景受限:视场缩到 1/k,距离 x √k
 function wan(v){return v>=WAN?(v>=1e6?Math.round(v/WAN):Math.round(v/WAN*10)/10)+' 万':Math.round(v)+' km';}
 function erf(x){const t=1/(1+0.3275911*Math.abs(x)),y=1-((((1.061405429*t-1.453152027)*t+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-x*x);return x>=0?y:-y;}
-const macHit=d=>erf(2000/(0.0081*d*Math.SQRT2));
+const macHit=d=>erf(2000/(0.0059*d*Math.SQRT2));
 
 /* ================= 状态 ================= */
 function mkShip(cls,name){const c=CLS[cls];return {cls,c,name,hp:c.hp,emit:'silent',radW:360,radPin:null,irW:360,irPin:null,radDown:0,
   macCd:0,macAuto:true,cellT:Array(c.cells).fill(0),ammo:c.ammo,mslAuto:true,arm:c.arm,armAuto:true,lzBurst:0,lzCd:0,lzAuto:true,pdOn:true,pdBud:c.pd,ic:c.ic};}
 const FLEET=[mkShip('CA','马拉松-01'),mkShip('DD','巴黎-01'),mkShip('DD','波长-01')];
-const S={selKey:'CA',fc:false,dist:420e3,heard:true,pin:null,hover:null,follow:false};
+const S={selKey:'CA',fc:false,dist:900e3,heard:true,pin:null,hover:null,follow:false};
 function sel(){return S.selKey==='FLEET'?FLEET:(S.selKey==='CA'?[FLEET[0]]:[FLEET[1]]);}
 const first=()=>sel()[0];
 function common(f){const a=sel().map(f);return a.every(v=>v===a[0])?a[0]:undefined;} // 全队一致给值,不一致给 undefined(按钮画虚线)
@@ -222,10 +222,10 @@ function draw(){
     if(hv.k==='emit'){if(hv.v==='silent')ring(s.c.seen,'熄火时被看见 '+wan(s.c.seen),'rgba(143,208,255,.6)',[3,4]);
       else ring(s.c.hear*(hv.v==='jam'?1.414:1),'被听见 '+wan(s.c.hear*(hv.v==='jam'?1.414:1)),'rgba(255,154,85,.7)',[2,4]);}
     if(hv.k==='w'){const k=hv.v;
-      if(k==='mac'){ring(MAC_R50,'主炮 50% '+wan(MAC_R50),'rgba(143,208,255,.8)');ring(355e3,'驱逐舰躲得开 '+wan(355e3),'rgba(255,154,85,.6)',[3,4]);}
+      if(k==='mac'){ring(MAC_R50,'主炮 50% '+wan(MAC_R50),'rgba(143,208,255,.8)');ring(MAC_DODGE,'驱逐舰躲得开 '+wan(MAC_DODGE),'rgba(255,154,85,.6)',[3,4]);}
       if(k==='msl')ring(MSL_R,'反舰弹 动力 '+wan(MSL_R),'rgba(143,208,255,.8)');
       if(k==='arm')ring(ARM_R,'反辐射 '+wan(ARM_R),'rgba(84,224,208,.8)');
-      if(k==='lz'){ring(LZ.D0,'满伤 6 万','rgba(201,162,255,.9)');ring(LZ.AUTO,'自动 10 万','rgba(201,162,255,.6)',[3,4]);ring(LZ.MAX,'封顶 30 万','rgba(201,162,255,.45)',[1,4]);}
+      if(k==='lz'){ring(LZ.D0,'满伤 '+wan(LZ.D0),'rgba(201,162,255,.9)');ring(LZ.AUTO,'自动 '+wan(LZ.AUTO),'rgba(201,162,255,.6)',[3,4]);ring(LZ.MAX,'封顶 '+wan(LZ.MAX),'rgba(201,162,255,.45)',[1,4]);}
       if(k==='pd')ring(PD_R,'近防 4 万','rgba(120,230,255,.8)');}
   }
   // 太阳方向、目标、自己
@@ -283,9 +283,9 @@ function cardBody(k,L){
     return {pb:'<span style="display:contents">'+Array.from({length:mx},(_,i)=>`<i class="${i<n?'r':''}"></i>`).join('')+'</span>',seg:true,
       st:`<b>${n}</b> 枚 · ${S.heard?'<span class="ok">听见 1 部</span>':'没听到雷达'}`};}
   if(k==='lz'){const s=L.find(x=>x.c.lance);
-    if(s.lzBurst>0)return {pb:`<i style="width:${s.lzBurst/LZ.ON*100}%;background:var(--lance)"></i>`,st:`<span class="lz">开火 ${Math.ceil(s.lzBurst)}s</span> · <b>${Math.round(40*Math.min(1,(LZ.D0/d)**2))}</b>/s`};
+    if(s.lzBurst>0)return {pb:`<i style="width:${s.lzBurst/LZ.ON*100}%;background:var(--lance)"></i>`,st:`<span class="lz">开火 ${Math.ceil(s.lzBurst)}s</span> · <b>${Math.round(LZ.DPS*Math.min(1,(LZ.D0/d)**2))}</b>/s`};
     if(s.lzCd>0)return {pb:`<i style="width:${(1-s.lzCd/LZ.CD)*100}%;background:var(--state-warn)"></i>`,st:`<span class="w">冷却 ${Math.ceil(s.lzCd)}s</span>`};
-    return {pb:'<i style="width:100%"></i>',st:d<=LZ.MAX?`<span class="ok">就绪</span> · <b>${Math.round(40*Math.min(1,(LZ.D0/d)**2))}</b>/s`:`就绪 · <span class="w">${wan(d)} 太远</span>`};}
+    return {pb:'<i style="width:100%"></i>',st:d<=LZ.MAX?`<span class="ok">就绪</span> · <b>${Math.round(LZ.DPS*Math.min(1,(LZ.D0/d)**2))}</b>/s`:`就绪 · <span class="w">${wan(d)} 太远</span>`};}
   if(k==='pd'){const cap=L.reduce((a,x)=>a+x.c.pd,0),bud=L.reduce((a,x)=>a+x.pdBud,0),ic=L.reduce((a,x)=>a+x.ic,0);
     return {pb:`<i style="width:${bud/cap*100}%;background:var(--state-active)"></i>`,st:`<b>${bud.toFixed(1)}</b>/拨 · 拦截 <b>${ic}</b>`};}
 }
@@ -311,10 +311,10 @@ const TIPS={
   ir:v=>{const w=+v,k=irK(w);return {h:'红外 '+N_IR[W_IR.indexOf(w)]+' '+w+'°',r:[['冷驱逐舰',wan(IR.cold*k)],['主推驱逐舰',wan(IR.hot*k)],['认出',wan(IR.id*k)],['视场外','看不见']],hint:'不出声 · 左键 设档 · E 循环'};},
   chipRad:()=>({h:'雷达朝向',r:[['现在',first().radPin!=null?'钉住 '+degStr(first().radPin):(first().radW===360?'全向,没有朝向':'自动 · 对准火控目标')],['自动','火控目标 · 没有就朝船头'],['钉住','点地图指定方向']],hint:'左键 指向(Shift+F)· 右键 回到自动'}),
   chipIr:()=>({h:'红外朝向',r:[['现在',first().irPin!=null?'钉住 '+degStr(first().irPin):(first().irW===360?'广角,没有朝向':(S.fc?'自动 · 火控目标':(S.heard?'自动 · 盯听到的雷达':'自动 · 船头')))],['自动','火控目标 · 没有就盯听到的雷达'],['钉住','点地图指定方向']],hint:'左键 指向(Shift+E)· 右键 回到自动'}),
-  mac:()=>({h:'主炮 · 轴炮',r:[['伤害',first().c.mac+' / 30 s'],['此刻命中',Math.round(macHit(S.dist)*100)+'% @ '+wan(S.dist)],['驱逐舰躲得开','35.5 万外']],hint:'左键 打锁定目标(T)· 右键 自动开火 开/关'}),
-  msl:()=>({h:'反舰弹',r:[['动力射程',wan(MSL_R)],['每组','12 枚'],['两组同时到','打穿一艘驱逐舰的近防']],hint:'左键 齐射 2 组(R)· 右键 自动齐射 开/关'}),
+  mac:()=>({h:'主炮 · 轴炮 0.2c',r:[['伤害',first().c.mac+' / 30 s'],['此刻命中',Math.round(macHit(S.dist)*100)+'% @ '+wan(S.dist)],['驱逐舰躲得开',wan(MAC_DODGE)+' 外']],hint:'左键 打锁定目标(T)· 右键 自动开火 开/关'}),
+  msl:()=>({h:'反舰弹',r:[['动力射程',wan(MSL_R)],['每组','12 枚 x '+(first().cls==='CA'?5:4)+' 伤害'],['两组同时到','打穿一艘驱逐舰的近防']],hint:'左键 齐射 2 组(R)· 右键 自动齐射 开/关'}),
   arm:()=>({h:'反辐射弹',r:[['射程',wan(ARM_R)],['要求','听见就能发,不用定位'],['命中','60 伤害 + 雷达瘫痪 180 s'],['对方关雷达','飞到最后听到的地方变雷']],hint:'左键 打最近听到的雷达(Q)· 右键 自动 开/关'}),
-  lz:()=>({h:'长矛激光',r:[['满伤','6 万内 40/s'],['封顶','30 万'],['一轮','开 20 s · 冷 40 s'],['代价','开火时红外亮一档']],hint:'左键 开一轮(B)· 右键 进 10 万自动开 开/关'}),
+  lz:()=>({h:'长矛激光',r:[['满伤',wan(LZ.D0)+' 内 '+LZ.DPS+'/s'],['封顶',wan(LZ.MAX)],['一轮','开 20 s · 冷 40 s'],['代价','开火时红外亮一档']],hint:'左键 开一轮(B)· 右键 进 '+wan(LZ.AUTO)+' 自动开 开/关'}),
   pd:()=>{const L=sel();return {h:'近防',r:[['每拨击毁',L.reduce((a,x)=>a+x.c.pd,0).toFixed(1)+' 枚 · 4.4 s 回满'],['拦截弹',L.reduce((a,x)=>a+x.ic,0)+' 枚'],['范围','4 万内友舰一起出力']],hint:'被动防御 · 左键 开/关'};},
   fc:()=>({h:'火控',r:[['自动','自动锁定已定位的敌舰,各武器按自己的规矩开火'],['保持','停火、解除锁定']],hint:'左键 开/关'}),
 };
@@ -339,7 +339,7 @@ function fire(k){
   if(k==='mac'){const r=L.filter(x=>x.macCd<=0);if(!r.length)return say('主炮都在装填');r.forEach(x=>x.macCd=30);say(`主炮 ×${r.length} → T03 · 命中 ${Math.round(macHit(d)*100)}%`);}
   if(k==='msl'){let n=0;for(const x of L){let c=0;for(let i=0;i<x.cellT.length&&c<2;i++)if(x.cellT[i]<=0){x.cellT[i]=60;c++;}n+=c;x.ammo-=c*12;}if(!n)return say('发射单元都在装填');say(`反舰弹 ${n} 组 → T03`+(d>MSL_R?' · 超出动力射程,之后滑行':''));}
   if(k==='arm'){if(!S.heard)return say('没听到敌方雷达');const x=L.find(y=>y.arm>0);if(!x)return say('反辐射弹打光了');x.arm--;say('反辐射 → 最近听到的那部雷达');}
-  if(k==='lz'){const x=L.find(y=>y.c.lance);if(x.lzBurst>0||x.lzCd>0)return say('长矛还在开火 / 冷却');if(d>LZ.MAX)return say('目标 '+wan(d)+',超出 30 万');x.lzBurst=LZ.ON;say('长矛开火 20 s');}
+  if(k==='lz'){const x=L.find(y=>y.c.lance);if(x.lzBurst>0||x.lzCd>0)return say('长矛还在开火 / 冷却');if(d>LZ.MAX)return say('目标 '+wan(d)+',超出 '+wan(LZ.MAX));x.lzBurst=LZ.ON;say('长矛开火 20 s');}
   if(k==='pd'){const on=!autoOf('pd',L);L.forEach(x=>x.pdOn=on);say('近防 '+(on?'开':'关'));}
   flash(k);render();
 }

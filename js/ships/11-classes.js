@@ -122,7 +122,7 @@ function makeShip(cls,name,pos,facing,vel,side,tier){ // TIER1 加第 7 参 tier
     autoEngage:false, // v125 自动索敌交战:自动锁定感知层点亮的最近敌舰并开火(目标导向指挥)
     fireHot:0, // FX1 开火暴露:>0 表示刚开过火,光学亮度多加一档(秒,weapons/57 倒数)
     macOn:true, mslOn:true, ciwsOn:true, // RF2 简化UI武器开关(底栏·主炮/导弹/拦截):默认全开与既有自动化一致;火控默认关=autoEngage:false
-    mslFuel:lw.mslFuel||MSL_FUEL, arm:lw.arm||0, armMax:lw.arm||0, armDmg:lw.armDmg||0, pdlN:lw.pdlN||0, gun2N:lw.gun2N||0, lanceN:lw.lanceN||0, lanceBurst:0, lanceCd:0, lanceTgt:null, // V2 新武器(原版配装里全是 0,weapons/59 每一支都跳过)
+    macSpd:lw.macSpd||CFG.macSpd, mslFuel:lw.mslFuel||MSL_FUEL, arm:lw.arm||0, armMax:lw.arm||0, armDmg:lw.armDmg||0, pdlN:lw.pdlN||0, gun2N:lw.gun2N||0, lanceN:lw.lanceN||0, lanceBurst:0, lanceCd:0, lanceTgt:null, // V2 新武器(原版配装里全是 0,weapons/59 每一支都跳过)
     armOn:true, gun2On:true, pdlOn:true, lanceOn:true, // V2 底栏武器开关(字段名只从 88 的 KIND_INFO.on 读)
     radW:360, irW:360, radPin:null, irPin:null, radU:null, irU:null, radDown:0, // V2 雷达扇区 / 红外视场(度;360 = 不限,逐位同原机制)、手动钉住的世界角(null = 自动)、当前朝向、雷达被打瘫的剩余秒
     driftFire:false,driftFireT:0, // DS171 M3:漂移射击(60s限时)——命令照走,非硬机动段机头找窗口对准即发;承接KIMI148 lockPlayer 职能

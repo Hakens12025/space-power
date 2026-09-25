@@ -65,7 +65,7 @@ function drawRange(){ // 测距工具(按住C):起点(或跟随船)→鼠标目�
   const sel=controlledShips();
   if(sel.length===1&&rangeB){
     const dd=V.len(V.sub(rangeB,sel[0].pos));
-    const macT=dd/CFG.macSpd; // MAC:直线0.1c
+    const macT=dd/(sel[0].macSpd||CFG.macSpd); // MAC:直线飞(原版 0.1c,新版交战 0.2c)
     const misT=estimateMissileTime(sel[0].pos,sel[0].vel,rangeB);
     txt+=` · MAC ${macT.toFixed(1)}s · 射手 ${misT>=0?misT.toFixed(1)+'s':'∞'}`;
   }
