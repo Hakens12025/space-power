@@ -2,7 +2,7 @@
 
 ## 文件
 - `80-camera.js` 相机与平滑缩放(`zAnim` / `camZoomStep` / `vtClampK`);`80-viewtier.js` 三级星图(`VT.SPAN_LS` 阶梯、`vtLandKmpp`、`vtWeights` / `vtTier`、刻度尺与换挡特效)
-- `81-background.js` 底色、嵌套网格、星空贴图 `STAR_TILE`;`81-env.js` 世界层的地图视图(`ENV_VIEWS` / `ENV_KIND_OF` / `drawEnvView`、标签 `mapLabPlan`);太阳线 `drawSunLines`(右下角开关 `SUNL.on`);`81-terrain.js` 地形瓦片服务 `TERR`(采样在后台线程 `terrWkInit`)
+- `81-background.js` 底色、嵌套网格、星空贴图 `STAR_TILE`;`81-env.js` 世界层的地图视图(`ENV_VIEWS` / `ENV_KIND_OF` / `drawEnvView`、标签 `mapLabPlan`);太阳线 `drawSunLines`(右下角开关 `SUNL.on`:选中舰的禁区锥 + 天体影子线,关着都不画);`81-terrain.js` 地形瓦片服务 `TERR`(采样在后台线程 `terrWkInit`)
 - `82-ship-icons.js` 舰标 / 记号 / 告警弧 / 涟漪(`HULL_ZOOM` / `hullZoomF` / `shipZoomF`);`82-lod.js` 聚合层(`lodBuild` / `lodDrawShip`);`82-rocks.js` 石头
 - `83-hud.js` hover 圈、信号视野、火控链;`84-scene.js` 每帧场景组装;`84-fmplot.js` 编队图
 - `86-irview.js` 红外画面(右下角「红外」钮,`MAPV.mode === 'ir'`;`drawIrView` / `irvOff`,物理走 `senseOptLoWith` / `senseOptBlocked` / `covTheta`)

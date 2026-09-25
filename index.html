@@ -12,7 +12,7 @@
      SN6 右下角工具钮。钮的行为走 render/85-settings 的事件委托。 -->
 <div id="tools">
   <div class="seg" id="segTier" title="三级星图:星图自己的比例尺阶梯 —— 画面短边横跨 战术 2 / 舰队 15 / 战区 45 光秒"><button class="hbtn" data-tier="1">战术</button><button class="hbtn" data-tier="2">舰队</button><button class="hbtn" data-tier="3">战区</button></div><!-- SN6b 从顶栏搬到这儿(用户拍板"三按钮放在右下角,大小和形状参考态势感知V3")。id 未变 ⇒ render/85-settings 的委托与 80-viewtier 里写高亮的那行都不用改 -->
-  <div class="seg" id="segSun"><button class="hbtn" data-tool="sun" title="太阳线:选中的我方舰(没选中就是全部我方舰)朝光源的禁区锥 —— 锥里光学与静听看不见;独立开关,可叠在红外 / 雷达上" aria-label="太阳线"><svg class="tl-ico" viewBox="0 0 24 24" aria-hidden="true"><path class="i-sl" d="M3.5 20.5L15.2 2.2M3.5 20.5L21.8 8.8"/><circle class="i-sun" cx="19" cy="5" r="3.6"/><circle class="i-ship" cx="3.5" cy="20.5" r="1.9"/></svg></button></div>
+  <div class="seg" id="segSun"><button class="hbtn" data-tool="sun" title="太阳线:选中舰(选了一队取第一艘)朝光源的禁区锥 + 天体背光面的影子线;独立开关,可叠在红外 / 雷达上" aria-label="太阳线"><svg class="tl-ico" viewBox="0 0 24 24" aria-hidden="true"><path class="i-sl" d="M3.5 20.5L15.2 2.2M3.5 20.5L21.8 8.8"/><circle class="i-sun" cx="19" cy="5" r="3.6"/><circle class="i-ship" cx="3.5" cy="20.5" r="1.9"/></svg></button></div>
   <div class="seg" id="segTool"><button class="hbtn" data-tool="ir" title="红外:地图换成红外画面 —— 我方看得见的热(敌舰与石头只以热出现)" aria-label="红外"><svg class="tl-ico" viewBox="0 0 24 24" aria-hidden="true"><circle class="i-h3" cx="12" cy="12" r="11"/><circle class="i-h2" cx="12" cy="12" r="7.2"/><circle class="i-h1" cx="12" cy="12" r="4"/><circle class="i-hc" cx="12" cy="12" r="1.6"/></svg></button><button class="hbtn" data-tool="radar" title="雷达:地图上叠雷达画面 —— 我方照射的覆盖、回波(颜色 = 接近 / 远离)、听到的敌方雷达所在区域" aria-label="雷达"><svg class="tl-ico" viewBox="0 0 24 24" aria-hidden="true"><circle class="i-rr" cx="12" cy="12" r="10.4"/><circle class="i-rr2" cx="12" cy="12" r="5.6"/><path class="i-sw" d="M12 12V1.6A10.4 10.4 0 0 1 21.9 8.8Z"/><circle class="i-bl" cx="17.3" cy="6.7" r="1.3"/><circle class="i-rc" cx="12" cy="12" r="1.5"/></svg></button></div>
 </div>
 <!-- MT1 对局结果卡片:只在对局分出胜负时由 scenario/97-match 的 matchTick 显示。 -->
@@ -156,7 +156,7 @@
 <script src="js/render/80-camera.js?v=20260923"></script>
 <script src="js/render/81-background.js?v=20260925"></script>
 <script src="js/render/81-terrain.js?v=20260925d"></script><!-- ENV2 地形瓦片服务:云浓度的世界锚定瓦片(粗到细、每帧工作量封顶、LRU)+ 合成缓存(双缓冲、1:1 贴图)。顶层只有 const / function 与一个惰性求和的 let(TERR_DUST_NORM,同 world/13 的 ENV_DUST_NORM),运行期由 81-env 的 mapTileFrame 调;与 81-background 共用编号 81 -->
-<script src="js/render/81-env.js?v=20260926e"></script><!-- ENV1 环境底图(残骸场 + 太阳方向)。与 81-background 共用编号 81。ENV2:改成 kind x view 登记表(ENV_VIEWS.map)+ 云 / 影子 / 天体 / 恒星的海图画法,版本号随之换 -->
+<script src="js/render/81-env.js?v=20260926g"></script><!-- ENV1 环境底图(残骸场 + 太阳方向)。与 81-background 共用编号 81。ENV2:改成 kind x view 登记表(ENV_VIEWS.map)+ 云 / 影子 / 天体 / 恒星的海图画法,版本号随之换 -->
 <script src="js/render/82-ship-icons.js?v=20260926c"></script>
 <script src="js/render/82-rocks.js?v=20260926c"></script><!-- TK4c 石头的航迹(第二个循环)。与 82-ship-icons / 82-lod 共用编号 82 -->
 <script src="js/render/82-lod.js?v=20260925e"></script><!-- SN6 聚合层:舰 → 舰队框 → 舰队组;与 82-ship-icons 共用编号 -->

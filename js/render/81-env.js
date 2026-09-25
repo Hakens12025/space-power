@@ -4,7 +4,7 @@
    画在网格之后、信号视野之前(84-scene):它是地图的一部分,不该盖住任何接触。
    ⚠ 渲染红线(SN7d / SN7b):每帧只有"场的个数"那么几个圆 + 一个日标;场大到盖满屏幕时不画巨型圆,改铺一层整屏底色
      (高分屏上半径几十万像素的虚线圆会被逐帧光栅化成遮罩)。没有 shadowBlur、没有 createRadialGradient。
-   太阳在无穷远:日标贴在屏幕边上、指向太阳的方向;「太阳线」钮打开时,从选中的我方舰(没选中 = 全部我方舰)画出"朝太阳看会被致盲"的那个锥(两条淡虚线,drawSunLines)。
+   太阳在无穷远:日标贴在屏幕边上、指向太阳的方向;「太阳线」钮打开时,从选中的那艘我方舰画出"朝太阳看会被致盲"的那个锥(两条淡虚线,drawSunLines),天体背光面的影子线也只在开着时画。
    这里画的是【地图事实】,双方都知道(太阳在哪、碎石带在哪),不是情报,所以不分 GM。
 
    ---- ENV2(2026-09-24):一份世界真值,多种视图 —— 大地图这一种 ----
@@ -111,7 +111,7 @@ function mapLabPlan(x,y,z){ // ENV2 视图 = 以 (x,y) 为中心、缩放 z 的�
   }
   let same=!!old&&nw.length===old.length;if(same)for(let k=0;k<nw.length;k++)if(nw[k]!==old[k]){same=false;break;}
   if(!same){MAP_LAB.list=nw;MAP_LAB.rev=ENV.rev;let s='r'+ENV.rev;for(const l of nw)s+='|'+l.i+':'+l.x+','+l.y;MAP_LAB.key=s;}
-  return MAP_LAB.key;
+  return (mapSunOn()?'s':'')+MAP_LAB.key; // 「太阳线」开关进键:一拨就整张重拼矢量层(影子线在里面)
 }
 function mapLabDiff(k0,k1,z,out){ // ENV2 审查第四轮:矢量层的键 k0 → k1(缩放 z 下)只差字的位置(同一个世界 rev)⇒ 两边不同的字各推一个包围框进 out(世界坐标 [x0,y0,x1,y1],外扩 2 CSS px 盖住取整),给 true;
   // 世界 rev 不同(天体 / 影子也可能变了)⇒ false。键的写法见 mapLabPlan:'r'+rev 之后每个字一段 '|云下标:x,y'(数转字符串再转回来是精确的)
@@ -202,7 +202,7 @@ function mapLB(x0,y0,x1,y1,X0,Y0,X1,Y1,out){ // ENV2 Liang–Barsky(1984)线段�
   out[0]=t0;out[1]=t1;return t0<t1;
 }
 function mapShadows(){ // ENV2 comp 槽(任务 4:画进当前视图 —— 合成缓存或主画布;返回画了几笔)
-  const B=ENV.bodies;if(!B.length||!envHasLight())return 0;
+  const B=ENV.bodies;if(!B.length||!envHasLight()||!mapSunOn())return 0; // 影子线归「太阳线」钮
   const g=mapG(),VW=mapVW(),VH=mapVH(),S=ENV.sun?null:ENV.stars[0],u=MAP_T2,cut=[0,0],cx=VW/2,cy=VH/2;let on=false,n=0;
   for(const b of B){
     if(!envSunDirAt([b.x,b.y],u))continue;
@@ -344,17 +344,15 @@ function mapExclCone(sel,a0,h){ // ENV2 ENV1 禁区锥的画法(原 drawSunCue 4
   ctx.stroke();ctx.setLineDash([]);
 }
 const SUNL_U=[0,0];
-function drawSunLines(){ // 右下角「太阳线」钮:选中的我方舰(没选中 = 全部我方舰)朝光源的禁区锥;独立开关,叠在任何画面上
-  if(typeof SUNL==='undefined'||!SUNL.on||!envHasLight())return;
-  const sel=selectedShips().filter(s=>s.side==='blue'&&!s.dead),list=sel.length?sel:ships.filter(s=>s.side==='blue'&&!s.dead),h=envLightHalf();
-  ctx.save();
-  for(const s of list){
-    if(ENV.bodies.length&&envInShadow(s.pos))continue; // 在天体影子里看不到光源,没有禁区
-    const u=envSunDirAt(s.pos,SUNL_U);if(!u)continue;
-    const a=toScreen(s.pos[0],s.pos[1]),b=toScreen(s.pos[0]+u[0]*1e6,s.pos[1]+u[1]*1e6);
-    mapExclCone(s,Math.atan2(b[1]-a[1],b[0]-a[0]),h);
-  }
-  ctx.restore();
+function mapSunOn(){return typeof SUNL!=='undefined'&&SUNL.on;} // 「太阳线」钮:禁区锥与天体背光面的影子线都归它
+function drawSunLines(){ // 「太阳线」钮:选中的那艘我方舰(选了一队 = 第一艘)朝光源的禁区锥;叠在任何画面上
+  if(!mapSunOn()||!envHasLight())return;
+  if(MAPV.mode==='ir')mapShadows(); // 红外画面不走 drawEnv,影子线在这里补
+  const s=selectedShips().find(x=>x.side==='blue'&&!x.dead);
+  if(!s||(ENV.bodies.length&&envInShadow(s.pos)))return; // 在天体影子里看不到光源,没有禁区
+  const u=envSunDirAt(s.pos,SUNL_U);if(!u)return;
+  const a=toScreen(s.pos[0],s.pos[1]),b=toScreen(s.pos[0]+u[0]*1e6,s.pos[1]+u[1]*1e6);
+  ctx.save();mapExclCone(s,Math.atan2(b[1]-a[1],b[0]-a[0]),envLightHalf());ctx.restore();
 }
 function mapSunCue(){ // ENV2 方向型太阳:日标(禁区锥归「太阳线」钮,见 drawSunLines)
   if(!ENV.sun)return; // ENV2 E4:没有太阳(只有恒星 / 什么都没有)时第一句返回
