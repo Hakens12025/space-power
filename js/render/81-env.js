@@ -4,7 +4,7 @@
    画在网格之后、信号视野之前(84-scene):它是地图的一部分,不该盖住任何接触。
    ⚠ 渲染红线(SN7d / SN7b):每帧只有"场的个数"那么几个圆 + 一个日标;场大到盖满屏幕时不画巨型圆,改铺一层整屏底色
      (高分屏上半径几十万像素的虚线圆会被逐帧光栅化成遮罩)。没有 shadowBlur、没有 createRadialGradient。
-   太阳在无穷远:日标贴在屏幕边上、指向太阳的方向;选中一艘我方舰时,从它画出"朝太阳看会被致盲"的那个锥(两条淡虚线)。
+   太阳在无穷远:日标贴在屏幕边上、指向太阳的方向;「太阳线」钮打开时,从选中的我方舰(没选中 = 全部我方舰)画出"朝太阳看会被致盲"的那个锥(两条淡虚线,drawSunLines)。
    这里画的是【地图事实】,双方都知道(太阳在哪、碎石带在哪),不是情报,所以不分 GM。
 
    ---- ENV2(2026-09-24):一份世界真值,多种视图 —— 大地图这一种 ----
@@ -336,8 +336,6 @@ function mapLightCue(dx,dy,label){ // ENV2 ENV1 日标的画法(原 drawSunCue 3
   mapBlit(mapCueSpr(dx,dy,label),x,y); // ENV2 图标连字是一张预渲染的小图,1 次 drawImage(审查第 3 条:原来 1 个圆 + 8 次 stroke + 1 次 fillText),不再改画布状态
   return [x,y];
 }
-function mapExclSel(){if(typeof MAPV!=='undefined'&&MAPV.mode==='radar')return null; // 雷达画面不画禁区锥的两条长虚线(用户 2026-09-26)
-  const sel=selected.length?shipById(selected[0]):null;return (sel&&!sel.dead&&sel.side==='blue'&&!(ENV.bodies.length&&envInShadow(sel.pos)))?sel:null;} // ENV2 选中的第一艘活着的蓝舰(只画一个锥就够读懂);在天体影子里看不到光源,不画锥
 function mapExclCone(sel,a0,h){ // ENV2 ENV1 禁区锥的画法(原 drawSunCue 49-53 行)参数化:从舰的屏幕位置、屏幕角 a0 两侧各 h 弧度画两条淡虚线(仍在一个 path 里,ENV1 现状)
   const p=toScreen(sel.pos[0],sel.pos[1]),L=Math.max(W,H)*1.5;
   ctx.strokeStyle='rgba(255,210,110,.28)';ctx.lineWidth=1;ctx.setLineDash([4,6]);
@@ -345,15 +343,26 @@ function mapExclCone(sel,a0,h){ // ENV2 ENV1 禁区锥的画法(原 drawSunCue 4
   for(const sg of [-1,1]){const q=a0+sg*h;ctx.moveTo(p[0],p[1]);ctx.lineTo(p[0]+Math.cos(q)*L,p[1]+Math.sin(q)*L);}
   ctx.stroke();ctx.setLineDash([]);
 }
-function mapSunCue(){ // ENV2 方向型太阳:日标 + 选中舰的禁区锥(画法与 ENV1 的 drawSunCue 逐笔相同)
+const SUNL_U=[0,0];
+function drawSunLines(){ // 右下角「太阳线」钮:选中的我方舰(没选中 = 全部我方舰)朝光源的禁区锥;独立开关,叠在任何画面上
+  if(typeof SUNL==='undefined'||!SUNL.on||!envHasLight())return;
+  const sel=selectedShips().filter(s=>s.side==='blue'&&!s.dead),list=sel.length?sel:ships.filter(s=>s.side==='blue'&&!s.dead),h=envLightHalf();
+  ctx.save();
+  for(const s of list){
+    if(ENV.bodies.length&&envInShadow(s.pos))continue; // 在天体影子里看不到光源,没有禁区
+    const u=envSunDirAt(s.pos,SUNL_U);if(!u)continue;
+    const a=toScreen(s.pos[0],s.pos[1]),b=toScreen(s.pos[0]+u[0]*1e6,s.pos[1]+u[1]*1e6);
+    mapExclCone(s,Math.atan2(b[1]-a[1],b[0]-a[0]),h);
+  }
+  ctx.restore();
+}
+function mapSunCue(){ // ENV2 方向型太阳:日标(禁区锥归「太阳线」钮,见 drawSunLines)
   if(!ENV.sun)return; // ENV2 E4:没有太阳(只有恒星 / 什么都没有)时第一句返回
   const s=ENV.sun,a=toScreen(0,0),b=toScreen(s.ux*1e6,s.uy*1e6);
   let dx=b[0]-a[0],dy=b[1]-a[1];const l=Math.hypot(dx,dy)||1;dx/=l;dy/=l; // 屏幕上的太阳方向(不假定 y 轴朝哪)
   mapLightCue(dx,dy,'太阳');
-  const sel=mapExclSel();
-  if(sel){ctx.save();mapExclCone(sel,Math.atan2(dy,dx),s.half*Math.PI/180);ctx.restore();} // ENV2 日标只贴小图、不改状态,save / restore 只包禁区锥
 }
-function mapStar(){ // ENV2 位置型恒星:在屏内画光晕 + 光球 + 名字;在屏外画日标(方向 = 屏幕中心指向恒星);选中蓝舰时锥的方向 = 舰指向恒星
+function mapStar(){ // ENV2 位置型恒星:在屏内画光晕 + 光球 + 名字;在屏外画日标(方向 = 屏幕中心指向恒星)
   if(!ENV.stars.length)return;
   const S=ENV.stars[0],p=toScreen(S.x,S.y),r=S.r*cam.zoom,big=Math.max(W,H),on=p[0]>=0&&p[0]<=W&&p[1]>=0&&p[1]<=H;
   ctx.save();
@@ -365,7 +374,5 @@ function mapStar(){ // ENV2 位置型恒星:在屏内画光晕 + 光球 + 名字
   }
   if(on){if(r<=3*big)mapText('恒星','rgba(255,210,110,.85)',p[0],p[1]+Math.max(r,3)+9);} // ENV2 预渲染的字(原来 textBaseline top 落在 +4;10px 字的中线再往下 5)
   else{let dx=p[0]-W/2,dy=p[1]-H/2;const l=Math.hypot(dx,dy)||1;dx/=l;dy/=l;mapLightCue(dx,dy,'恒星');}
-  const sel=mapExclSel();
-  if(sel){const q=toScreen(sel.pos[0],sel.pos[1]);mapExclCone(sel,Math.atan2(p[1]-q[1],p[0]-q[0]),S.half*Math.PI/180);}
   ctx.restore();
 }

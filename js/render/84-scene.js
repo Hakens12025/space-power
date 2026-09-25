@@ -11,6 +11,7 @@ function render(){
   if(irOn)drawIrView();
   else if(typeof drawEnv==='function')drawEnv(); // ENV1 残骸场 + 太阳方向:地图事实,画在网格之后、一切接触之前(render/81-env)
   if(rdOn)drawRadarView();
+  if(typeof drawSunLines==='function')drawSunLines(); // 「太阳线」钮:叠在普通 / 红外 / 雷达任一画面上
   drawSignalView(); // SN6 信号视野(右下角工具钮):我方每艘舰的【被探测范围】。画在最底下——它是底图
   /* SN6 聚合层:先算出这一帧哪些船被收进了框(按屏幕像素,带迟滞),画的时候跳过它们,最后把框画上去。
      ⚠ lodBuild 必须在 drawShip 之前跑完 —— 它读的是 toScreen,而 toScreen 依赖这一帧的 cam(vtFrame 刚调整过)。 */
