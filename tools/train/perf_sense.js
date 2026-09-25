@@ -30,7 +30,7 @@ const FILES = [
   'js/ships/10-hull-geometry.js',
   'js/ships/11-classes.js',      // makeShip / shipStats
   'js/sensors/20-signature.js',  // SENS(SN4 起感知常量表只剩这一张,按舰种的那张子表已并进 SENS.CLS)
-  'js/sensors/22-percep.js',     // SN4 感知纯函数层:newTrk / optLum / rfLoudOf / reflOf / sensePrepare / senseScanTarget / sensePairGrades。排在 21-detect 前后都行(全是运行期解析),但【不能不载】—— makeShip 调 newTrk(),缺了第一艘船就 ReferenceError,整个台子一行数都出不来
+  'js/sensors/22-percep.js',     // SN4 感知纯函数层:newTrk / optLum / rfLoudOf / reflOf / sensePrepare / sensePairGrades。排在 21-detect 前后都行(全是运行期解析),但【不能不载】—— makeShip 调 newTrk(),缺了第一艘船就 ReferenceError,整个台子一行数都出不来
   'js/weapons/51-defs.js',       // CLS_LINK / WPN / resolveLoadout
   'js/weapons/51-ciws.js',
   'js/sensors/21-detect.js',     // 被测对象

@@ -3,7 +3,7 @@
 ## 文件
 - `20-signature.js` `SENS` 常数表、`optLum`(光学亮度唯一出处)、发射档 / 引擎档 / 开火档
 - `21-detect.js` 感知节拍 `detectLoop` / `detectFor`、`setEmit`(发射档唯一写入口)、门面 `litOf` / `contactIdn` / `contactAge` / `contactState` / `contactPos`、弹丸可见性 `projVisibleTo`
-- `22-percep.js` 热循环:`sensePrepare`(O(N) 预计算)/ `senseScanTarget` / `sensePairGrades`、`senseResolve`(热循环外的精算)
+- `22-percep.js` 热循环:`sensePrepare`(O(N) 预计算)/ `sensePairGrades`(每条通道 0 / 1,不分强弱档)、`senseResolve`(热循环外的精算)
 - `23-cov.js` 误差椭圆内核 `stepCov` / `covLit` / `covTheta` / `identDist`、距离梯子 `LAD` 与反解 `ladApply` / `ladPair` / `ladCheck`
 - `24-track.js` 每方一张航迹表 `TRK`(`trkAdopt` / `trkEnsure` / `trkStep` / `trkEach` / `trkFoe` / `trkPid`)
 - `25-optpair.js` ENV2 成对有效亮度 `senseOptLo` / `senseOptPair`、杂散光、相位、致盲 `senseBaffled`、页面用的 `senseOptBlocked` / `senseOptParts` / `sensePlume`
@@ -20,7 +20,7 @@
 - 航迹表:键是源对象不是 id;不重赋值、不清空;枚举只走 `trkEach` / `trkList`(顺序 = `ships[]` 再 `rocks[]`);造船时 `trkAdopt` 两边建航迹,读永远不建;只有 sensors/21、24 写。`lit` 原样存、`cov` 按引用、`cov` 上不加键。
 - 存在 ≠ 知道:`if(trkOf(...))` 当"知道"用是泄漏;知道 = `trkState(tk)!=='none'`。"自己这一方"在查询那一刻判。
 - 自动化挑目标一律问 `trkPid`(身份至少疑似且是船,Weapons Tight):自动索敌、网分配、导弹重选 / 复锁、红方集火;"还有没有可分配的"与分配器同口径。显示、接触降速、玩家的火控序列问 `trkFoe`。
-- 热循环(`sensePairGrades` / `senseScanTarget`)里不许除法、开方、Math 调用、分配;这些都放 `sensePrepare`。剪枝上界必须含照射那一路(否则冷目标主炮静默哑火)。
+- 热循环(`sensePairGrades`)里不许除法、开方、Math 调用、分配;这些都放 `sensePrepare`。剪枝上界必须含照射那一路(否则冷目标主炮静默哑火)。
 - 热循环里的内联副本(太阳禁区、恒星射频噪声锥、MTI、天体遮挡、尾焰致盲)与函数版(`envSunBlind` / `envRfNoise` / `envMtiBlind` / `envOccluded` / `senseBaffled` 等)必须同式;改一边就改另一边。
 - 雷达的环境:朝光源的锥里射频噪声抬高(静听按 噪声^(-1/2)、照射按 噪声^(-1/4) 缩);杂波(碎石带、天体盘面旁、小行星旁,`envInClutter`)里的慢目标过 MTI;星云对射频透明。
 - 单点谓词与热循环共用缓冲,不许在扫描中途调。`detectLoop` 要收真实经过的模拟秒数。

@@ -3,7 +3,7 @@
    SN4 感知层:阵营对称探测的【编排与派生】(两通道:光学红外 / 雷达)
    ----------------------------------------------------------------------------
    本文件【不实现任何一条量程律、衰减律或分档律】。三条律(光学 1/d^2、静听 1/d^2、
-   照射 1/d^4)、信噪比分档、驻留积分、干扰削减全部住在 sensors/22-percep.js,
+   照射 1/d^4)与干扰削减住在 sensors/22-percep.js 与 23-cov.js,
    数值住在 sensors/20-signature.js 的 SENS。本文件只做五件事:
 
      ① detectorsOf   挑出某一方的传感器网络(存活舰 + 开机信标)
@@ -95,7 +95,7 @@ function detectFor(detSide,tgtSide,dt){
        合起来比任何一艘单独看都准,尤其是方位交会。所以这里不收敛,把每一站都交给 stepCov。 */
     const obs=[];
     for(let j=0;j<all.length;j++){
-      const p=sensePairGrades(j,ti); // 打包三档,0 = 这一对三条通道全都够不着(整目标早退已经在里面)
+      const p=sensePairGrades(j,ti); // 打包三条通道(各 0 / 1),0 = 这一对三条通道全都够不着(整目标早退已经在里面)
       if(p===0)continue;
       const d=all[j], q=senseResolve(j,ti,d,t,p);if(q===0)continue; // ENV2 待定位的对在热循环外精算光学档与有效亮度
       const dx=d.pos[0]-t.pos[0], dy=d.pos[1]-t.pos[1], dz=d.pos[2]-t.pos[2];

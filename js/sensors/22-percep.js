@@ -39,7 +39,7 @@
    十几个 Float64Array。缩容不做 —— 战损只会让 N 变小,留着那块内存下一局照用。
 
    ---- 热循环纪律 ----
-   sensePairGrades / senseScanTarget 两个函数体内【不许出现】除法、开方、Math 调用、
+   sensePairGrades 函数体内【不许出现】除法、开方、Math 调用、
    对象属性查找、分配。除法与开方全部搬进 sensePrepare 的 O(N) 段。
    衰减是指数的,所以按累计 dt 一次算完(解析跳步),不做 N 次一秒步进。
    ========================================================================= */
@@ -52,7 +52,6 @@ let scKIR = null, scKRF = null, scKACT = null;      // 探测器侧三通道系�
 let scTX = null, scTY = null, scTZ = null;          // 目标位置
 let scSigIR = null, scSigRF = null, scRefl = null;  // 目标侧三通道源强
 let scBIR = null, scBRF = null, scBACT = null, scBMax = null; // 三条通道各自的界 + 取 max 的整目标界
-let scGS = 0.0625, scGF = 0.25;    // 分档常数缓存(热循环不查 SENS.xxx)
 let scInF = null;                  // ENV1 目标在不在残骸场里(Uint8Array;没有场时全 0,热循环那一支天然不进)
 let scTVX = null, scTVY = null, scTVZ = null; // ENV1 目标速度(动目标显示按径向速度滤杂波用;只在有场时填)
 let scMTI2 = 0, scRfC2 = new Float64Array(4), scRfN = new Float64Array(4); // ENV2 恒星射频噪声锥的四档:cos^2 门槛与噪声倍率(sensePrepare 填)                    // ENV1 动目标显示门限的平方
@@ -140,7 +139,6 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
   const nd = dets.length + bcons.length, nt = tgts.length;
   senseGrowD(nd); senseGrowT(nt);
   scDN = nd; scTN = nt;
-  scGS = SENS.GRADE_STRONG; scGF = SENS.GRADE_FAIR;
   /* SN6:这里原先还要算三条通道的解析衰减因子与按档增益表(驻留积分那一套的 O(N) 预备)。
      误差椭圆没有"水位",时间的账在 23-cov 的 stepCov 里按【真实经过的秒数】取幂结算,
      所以这一段整个删掉 —— dt 参数留着:sensePrepare 的签名是判定与 sensePairAt 的契约面,而且
@@ -188,22 +186,20 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
 }
 
 /* ---------------- 热循环体 = 单点查询谓词(blocker B:两者是同一个函数) ----------------
-   返回打包的三个信号档:bit0-1 = 光学,bit2-3 = 静听,bit4-5 = 照射;每档 0 无 / 1 弱 / 2 良 / 3 强。
-   分档是【信噪比档】而不是距离档:强 = 16 倍门限通量、良 = 4 倍门限通量。
-   于是 1/d^2 通道的强/良落在量程的 25% / 50% 处,1/d^4 通道落在 50% / 70.7% 处 ——
-   同一个信噪比含义,不同的衰减律,数字不同是对的。 */
+   返回打包的三条通道:bit0 = 光学、bit2 = 静听、bit4 = 照射,各为 0 / 1(这一拍够不够得着;字段仍两位宽,只用低位),bit6 = 待定位。
+   不分强弱档:定位精度由 23-cov 按距离连续算,"有没有信号"之外的一切都在椭圆里。 */
 function sensePairGrades(j, ti) {
   const dx = scDX[j] - scTX[ti], dy = scDY[j] - scTY[ti], dz = scDZ[j] - scTZ[ti];
   const d2 = dx * dx + dy * dy + dz * dz;
   if (d2 > scBMax[ti]) return 0; // 整目标早退:三条界取 max,照射那一路一定在里面
   let g = 0, r = scSigIR[ti] * scKIR[j];
-  if (d2 < r) g |= (d2 < r * scGS) ? 3 : ((d2 < r * scGF) ? 2 : 1);
+  if (d2 < r) g |= 1;
   let nz = 1; // ENV2 恒星射频噪声锥(静听与照射):视线朝光源的夹角落在哪一档;观测方在影子里 scDLit=0,不加。与 envRfNoise 同式
   if (scDLit[j] === 1) { const k = -(dx * scDSX[j] + dy * scDSY[j]); if (k > 0) { const kk = k * k, l2 = dx * dx + dy * dy; if (kk > l2 * scRfC2[3]) nz = kk > l2 * scRfC2[0] ? scRfN[0] : (kk > l2 * scRfC2[1] ? scRfN[1] : (kk > l2 * scRfC2[2] ? scRfN[2] : scRfN[3])); } }
   const sr = scSigRF[ti];
-  if (sr !== 0) { r = sr * scKRF[j]; const dn = d2 * nz; if (dn < r) g |= ((dn < r * scGS) ? 3 : ((dn < r * scGF) ? 2 : 1)) << 2; } // 静默目标 sigRF 恒 0,这一路整段跳过;单程:距离按 噪声^(-1/2)
+  if (sr !== 0) { r = sr * scKRF[j]; const dn = d2 * nz; if (dn < r) g |= 4; } // 静默目标 sigRF 恒 0,这一路整段跳过;单程:距离按 噪声^(-1/2)
   r = scRefl[ti] * scKACT[j];
-  if (r !== 0) { const dd = d2 * d2 * nz; if (dd < r) g |= ((dd < r * scGS) ? 3 : ((dd < r * scGF) ? 2 : 1)) << 4; } // 比四次方以避免开方;双程:距离按 噪声^(-1/4)
+  if (r !== 0) { const dd = d2 * d2 * nz; if (dd < r) g |= 16; } // 比四次方以避免开方;双程:距离按 噪声^(-1/4)
   /* ENV1 太阳禁区:探测方看目标的视线落在太阳那个锥里 ⇒ 光学与静听这一拍没有量测(照射不受影响)。只看 XY。
      dx 是"目标指向探测方",视线是它的反向,所以点积取负。与 world/12 的 envSunBlind 同式(那边给弹丸与判据用),判据逐对钉着 */
   if (scDLit[j] === 1 && (g & 15) !== 0) { const k = -(dx * scDSX[j] + dy * scDSY[j]); if (k > 0 && k * k > (dx * dx + dy * dy) * scLitC2) g &= 48; } // ENV2 方向按观测方取;影子里的观测方 scDLit=0,不晃
@@ -223,24 +219,13 @@ function sensePairGrades(j, ti) {
   if ((g & 3) !== 0 && (scTDir[ti] | scDLit[j] | scCOn) !== 0) g |= 64; // ENV2 待定位(bit6):光学还在、这一对跟方向有关 ⇒ 热循环外 senseResolve 精算
   return g;
 }
-function senseScanTarget(ti) { // 对第 ti 个目标扫描全部探测器,逐通道取最好的那一档(与旧内核"取最大单源通量"同口径)。ENV2 待定位的对给上界档(热循环里不许调 senseResolve)
-  let qo = 0, ql = 0, qa = 0;
-  for (let j = 0; j < scDN; j++) {
-    const p = sensePairGrades(j, ti);
-    if (p === 0) continue;
-    const a = p & 3; if (a > qo) qo = a;
-    const b = (p >> 2) & 3; if (b > ql) ql = b;
-    const c = (p >> 4) & 3; if (c > qa) qa = c;
-  }
-  return qo | (ql << 2) | (qa << 4);
-}
 /* SN6:这里原先是驻留推进(衰减 + 按档增益 + 干扰削减,每目标写一次)。
    整段删掉 —— 接触的推进现在是 23-cov 的 stepCov:先验按真实秒数增长,再把每一站的量测
    逐条加进信息矩阵,最后解出椭圆。本文件只负责回答"这一对、这一拍、哪几条通道够得着"。 */
 
 /* 单点查询谓词:拿【同一组缓冲、同一组常量、同一个 sensePairGrades】跑一对。
-   判定可以直接断言 sensePairAt(d,t) 与热循环对同一对给出相同的三档。
-   注意重入:它会覆盖共享缓冲,所以【绝不许】在 senseScanTarget 的循环中途调用;
+   判定可以直接断言 sensePairAt(d,t) 与热循环对同一对给出相同的三条通道。
+   注意重入:它会覆盖共享缓冲,所以【绝不许】在 detectFor 的扫描循环中途调用;
    detectFor 每次进来第一件事就是 sensePrepare 重填,所以在它之外调用永远安全。 */
 function sensePairAt(det, tgt) {
   const isB = !!(det && det.type === 'beacon');
@@ -249,13 +234,13 @@ function sensePairAt(det, tgt) {
   return { opt: g & 3, lis: (g >> 2) & 3, act: (g >> 4) & 3, packed: g, lo: scPairLo };
 }
 function senseBoundsAt(ti) { return { ir: scBIR[ti], rf: scBRF[ti], act4: scBACT[ti], max2: scBMax[ti], sig: scSigIR[ti] }; } // 三条界的只读窗口,给判定看"冷目标的照射界确实进了 max"。ENV2 sig = 光学上界
-function senseLastLo() { return scPairLo; } // ENV2 最近一次 senseResolve 的有效亮度(光学 0 档时为 0)
-function senseResolve(j, ti, d, t, g) { // ENV2 精算步(热循环外):待定位的对按成对亮度重分光学档,其余原样;记下这一对的有效亮度
+function senseLastLo() { return scPairLo; } // ENV2 最近一次 senseResolve 的有效亮度(光学够不着时为 0)
+function senseResolve(j, ti, d, t, g) { // ENV2 精算步(热循环外):待定位的对按成对亮度重判光学通道,其余原样;记下这一对的有效亮度
   if ((g & 64) === 0) { scPairLo = (g & 3) !== 0 ? scSigIR[ti] : 0; return g; }
   const lo = senseOptLoWith(d, t, scTBg[ti], scTSh[ti] === 1, scDLit[j] === 1);
   const dx = scDX[j] - scTX[ti], dy = scDY[j] - scTY[ti], dz = scDZ[j] - scTZ[ti], d2 = dx * dx + dy * dy + dz * dz;
   let q = g & 60; const r = lo * scKIR[j];
-  if (d2 < r) q |= (d2 < r * scGS) ? 3 : ((d2 < r * scGF) ? 2 : 1);
+  if (d2 < r) q |= 1;
   scPairLo = (q & 3) !== 0 ? lo : 0;
   return q;
 }
