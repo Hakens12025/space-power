@@ -14,13 +14,13 @@ on('segTier','click',function(e){
   if(b)camJump(+b.dataset.tier);
 });
 
-const MAPV={mode:'map'}; // 地图画面:'map' | 'ir' | 'radar'(右下角两钮切;红外 / 雷达画面还没接进引擎,先占位)
+const MAPV={mode:'map'}; // 地图画面:'map' | 'ir'(render/86-irview)| 'radar'(render/86-radarview);右下角两钮切
 /* SN6 右下角工具钮。与跳层三钮同样走委托 + core/00 的 on():
    裸 getElementById(x).addEventListener 在元素不存在时会抛错,并且【打断该文件后续所有顶层语句】。 */
 on('tools','click',function(e){
   const b=e.target.closest('[data-tool]');
   if(!b)return;
-  if(b.dataset.tool==='ir'||b.dataset.tool==='radar'){ // 地图画面切换(占位):红外 / 雷达互斥,再点一次回普通地图;画面还没接
+  if(b.dataset.tool==='ir'||b.dataset.tool==='radar'){ // 地图画面切换:红外 / 雷达互斥,再点一次回普通地图
     MAPV.mode=MAPV.mode===b.dataset.tool?'map':b.dataset.tool;
     for(const x of document.querySelectorAll('#tools [data-tool="ir"],#tools [data-tool="radar"]'))x.classList.toggle('on',x.dataset.tool===MAPV.mode);
   }
