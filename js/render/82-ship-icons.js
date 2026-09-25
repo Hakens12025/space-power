@@ -144,17 +144,14 @@ function drawContactMark(s,p,view){
   ctx.beginPath();ctx.arc(p[0],p[1],CONTACT_MARK_R,0,6.283);ctx.stroke();
   ctx.fillStyle='rgba('+(ghost?'255,150,140':'255,209,102')+',.75)';
   ctx.font='9px Consolas';ctx.textAlign='center';ctx.textBaseline='bottom';
-  /* 陈旧态航迹还在(lit>0、椭圆还在长大),等级照样要读;失联态 lit=0,没有等级可写 */
-  ctx.fillText((ghost?'⏳失联':'⏳陈旧')+Math.round(ageV)+'s'+((!ghost&&trkLit(tkB)>0&&typeof litTag==='function')?(' · '+litTag(trkLit(tkB))):''),p[0],p[1]-top-3);
+  ctx.fillText((ghost?'⏳失联':'⏳陈旧')+Math.round(ageV)+'s',p[0],p[1]-top-3);
   ctx.restore();
 }
-/* 敌方接触的观测等级标签「◎ 3级 火控」+ 火控框(SN7c)。TK4c 从 drawShip 里原样抽出来,没认出的石头也照它画 */
+/* 敌方接触的火控框(SN7c,火控级才画)。等级文字「◎ 3级 火控」已去掉(用户 2026-09-25);没认出的石头也照它画 */
 function drawFoeLitTag(p,r,foeLit){
   if(foeLit>0&&typeof LIT_RGB!=='undefined'){
     const rgb=LIT_RGB[foeLit]||LIT_RGB[0];
     ctx.save();
-    ctx.fillStyle='rgba('+rgb+',.95)';ctx.font='10px Consolas';ctx.textAlign='center';ctx.textBaseline='top';
-    ctx.fillText((foeLit>=3?'◎ ':'')+litTag(foeLit),p[0],p[1]+r+(cam.zoom>0.0008?19:6));
     if(foeLit>=3){
       ctx.strokeStyle='rgba('+rgb+',.9)';ctx.lineWidth=1.2;
       const q=r+6;
@@ -169,7 +166,7 @@ function drawShip(s){
   /* ================= 红方接触:画什么只问 contactState(SN6f)=================
      五态互斥,每一态只有一个显示层负责(总表在 render/CLAUDE.md 的 SN6f 一节):
        none   不画
-       heat   不画 —— 归热区层(83-hud 的 drawContacts);这里画任何东西都会把"定不出位置"变成一个点
+       heat   不画(地图上不画热区);这里画任何东西都会把"定不出位置"变成一个点
        live   舰标(本函数后半段那一整条链)+ 椭圆(83-hud)
        coast  【陈旧】记号 + 椭圆。⚠ 不另画不确定圈:椭圆自己就在长大(23-cov 的 FADE_LOST),
               它就是"我有多不知道它在哪";再叠一个"速度x年龄"的圈,就又回到"两个圈各说各话"。

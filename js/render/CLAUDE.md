@@ -3,13 +3,13 @@
 ## 文件
 - `80-camera.js` 相机与平滑缩放(`zAnim` / `camZoomStep` / `vtClampK`);`80-viewtier.js` 三级星图(`VT.SPAN_LS` 阶梯、`vtLandKmpp`、`vtWeights` / `vtTier`、刻度尺与换挡特效)
 - `81-background.js` 底色、嵌套网格、星空贴图 `STAR_TILE`;`81-env.js` 世界层的地图视图(`ENV_VIEWS` / `ENV_KIND_OF` / `drawEnvView`、标签 `mapLabPlan`);`81-terrain.js` 地形瓦片服务 `TERR`
-- `82-ship-icons.js` 舰标 / 记号 / 告警弧 / 涟漪(`HULL_ZOOM` / `hullZoomF` / `LIT_RGB` / `litTag`);`82-lod.js` 聚合层(`lodBuild` / `lodDrawShip`);`82-rocks.js` 石头
-- `83-hud.js` 热区场、椭圆、hover 圈、信号视野、火控链;`83-geom.js` 缩圈小窗;`84-scene.js` 每帧场景组装;`84-fmplot.js` 编队图
+- `82-ship-icons.js` 舰标 / 记号 / 告警弧 / 涟漪(`HULL_ZOOM` / `hullZoomF` / `LIT_RGB`);`82-lod.js` 聚合层(`lodBuild` / `lodDrawShip`);`82-rocks.js` 石头
+- `83-hud.js` 误差椭圆、hover 圈、信号视野、火控链;`83-geom.js` 缩圈小窗;`84-scene.js` 每帧场景组装;`84-fmplot.js` 编队图
 - `85-settings.js` 右下工具栏与倍速钮;`85-tutorial.js` 教程 `TUT_HTML`;`87-fmbar.js` / `89-fmpage.js` 编队界面;`88-selpanel.js` 右栏与火控计算机;`89-radial.js` 目标轮盘几何
 
 ## 迷雾(画面不许泄漏真值)
 - 接触显示五态只问 `contactState`(none / heat / live / coast / ghost),位置只问 `contactPos`,身份只问 `contactIdn`;各层不许自己写条件。
-- 热区是一片场:各向同性(等面积圆)、半径对数压缩、团心按不确定度偏开、域扭曲;不画等级。热区不看 `adminMode`、不归缩圈钮管;椭圆层归 `GEOM.on` 管。
+- 地图上不画热区(定不出位置的接触),也不写等级文字;等级只在逻辑里(武器门、机器人)。椭圆层归 `GEOM.on` 管。
 - 陈旧 / 失联画记号(`CONTACT_MARK_R` 实线小圈 + 虚线不确定圈),画完直接 return,不走舰体 / 速度 / 尾焰 / 命令连线那条链。
 - 红方没有舰队层:只按屏幕距离聚已定位的接触,构成里没认出的记 `?`。敌方的目的地线、命令连线不画(GM 除外);来袭走廊从估计位置或第一次看见处画起。
 - 取景与缩放两头不许读任何接触的位置;信号视野按基准接收机算,不读敌舰的 `recv`。

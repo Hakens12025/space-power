@@ -3,7 +3,7 @@
    TK4c 石头的航迹怎么画(2026-09-23)。与 82-ship-icons / 82-lod 共用编号 82(先例:weapons/51-defs 与 51-ciws)。
    石头不在 ships 里,render 的舰船循环画不到它;这里是第二个循环,排在舰船之后(84-scene)。
    规矩只有一条:**没认出之前,石头与一艘静止、熄火、静默的同体型冷船画出来一模一样**(用户:"全部做,不要分裂真值")——
-     · 显示态照样只问 contactState:none / heat 不画(热区层画)、coast / ghost 画记号(drawContactMark,与船同一个函数);
+     · 显示态照样只问 contactState:none / heat 不画(地图上不画热区)、coast / ghost 画记号(drawContactMark,与船同一个函数);
      · 实况、没认出:通用轮廓 + T2 尺寸 + 红色、名字写"X 型热源"(sigClassLabel 只读 size)、等级标签(drawFoeLitTag,与船同一个函数);
        石头冷、不发射、不动 ⇒ 船的那一支在这种船身上也不画速度箭头 / 尾焰 / 涟漪 / 高度标 / 目的地线,所以这里也不画;
      · 被收进红方接触群的(82-lod 的 hideRed)不画 —— 与船一样。⚠ 船的收拢 / 散开有 0.25 秒过渡(_lodE),石头没有:聚合动画那一瞬分得开,记在备忘里;

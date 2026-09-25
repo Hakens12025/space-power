@@ -13,7 +13,7 @@
    ---- 红方【没有舰队这一层】----
    我们不知道对方的编制。用真实归属去给敌舰分组就是泄露:玩家会从"它们被聚成一队"读出
    一个他根本没有的情报。所以红方只有【接触群】—— 只聚【已定位】的接触、只按屏幕距离聚,
-   未定位的继续待在热区里(那本来就是一片糊在一起的场,不需要聚合)。
+   未定位的不画,也不聚合。
    构成文字里没认出的一律记成 ?,不写舰种(shipIdentHull 那条"未达识别级换 UNK"的同一条规矩)。
 
    ---- 迟滞 ----
@@ -93,7 +93,7 @@ function lodBuild(dtIn) {   // dtIn:判据用的时钟覆盖(同 camZoomStep);�
       L.aggs.push({ kind: 'group', side: 'blue', x: x / us.length, y: y / us.length, wx: wx / us.length, wy: wy / us.length, ships: all, nf: us.length });
     }
   }
-  /* -- 红方:已定位的接触 → 接触群。未定位的不进来(它们在热区里) -- */
+  /* -- 红方:已定位的接触 → 接触群。未定位的不进来(地图上不画) -- */
   const ru = [];
   trkEach('blue', (tk, st) => { // TK2.4:接触群从蓝方航迹表里取(按注册表顺序);回调里 return 就是原来的 continue
     if (trkGone(tk) || st !== 'live' || !trkFoe(tk)) return; // TK4c:已确认的石头不进红方接触群(它不是敌情,单独画成石头)

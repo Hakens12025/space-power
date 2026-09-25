@@ -174,7 +174,7 @@ function drawGeom() {
   g.fillText(nm + '  ' + (c.fix ? ('±' + geomK(c.a1) + ' x ' + geomK(c.a2)) : '未定位'), Wp - 8, 22);
   g.fillStyle = 'rgba(106,125,146,.8)';
   g.fillText(c.n ? (lines.length + ' 个探测源 · ' + c.n + ' 条量测') : ('无量测 · 已 ' + Math.round(c.age) + 's'), Wp - 8, 35);
-  g.fillText(litTag(lit) + ' · 窗口半宽 ' + geomK(R), Wp - 8, 48);
+  g.fillText('窗口半宽 ' + geomK(R), Wp - 8, 48);
   if (c.fix && !c.idn && lines.length) {                     // 身份是另一回事,单列一行:它不挡等级,只说"知不知道那是什么"
     let dId = 0;
     for (const L of lines) dId = Math.max(dId, identDist('opt', L.w, t, L.lo > 0 ? L.lo : undefined), identDist('act', L.w, t)); // ENV2 这一站没有光学量测时照旧按标称值(空环境逐位不变)
