@@ -142,7 +142,7 @@ function irmContrast(o,t,cb){   // cb = 目标处的云背景(每个目标只算
   return 1/Math.sqrt(1+(irmGlare(Math.atan2(Math.sin(d),Math.cos(d)))+cb)/IRM_SOLAR.G0);
 }
 function irmPair(o,t){
-  const dx=t.pos[0]-o.pos[0],dy=t.pos[1]-o.pos[1],dz=(t.pos[2]||0)-(o.pos[2]||0),k=irmLumK(o,t);
+  const dx=t.pos[0]-o.pos[0],dy=t.pos[1]-o.pos[1],dz=(t.pos[2]||0)-(o.pos[2]||0),k=irmLumK(o,t)*irmExt(o.pos,t.pos);   // 消光只打在到达观测船的亮度上(尾焰占比 irmTail 不受影响)
   const d=Math.max(1,Math.hypot(dx,dy,dz)),R=visRangeOf(t),snr=(R/d)*(R/d)*k,ang=covTheta(o,t,d)/Math.sqrt(k);
   return {d:d,snr:snr,ang:ang,blur:d*ang,brg:Math.atan2(dy,dx)};
 }
@@ -439,7 +439,7 @@ function irmGNt(x,y,sd){ /* 同 irmGN,梯度查表(省三角函数)、乘法共�
   h=irmH8(a0^b1);const n01=g[h]*fx+g[h+1]*(fy-1);h=irmH8(a1^b1);const n11=g[h]*(fx-1)+g[h+1]*(fy-1);
   return 1.41*(n00+(n10-n00)*ux+(n01-n00)*uy+(n00-n10-n01+n11)*ux*uy);
 }
-function irmCloudD(x,y,minL){ /* 噪声坐标 (x,y) 的浓度 0~1;minL = 最细算到多少公里(画面按屏幕,物理用 MIN_KM) */
+function irmCloudD(x,y,minL,phys){ /* 噪声坐标 (x,y) 的浓度 0~1;minL = 最细算到多少公里(画面按屏幕,物理用 MIN_KM);phys = 不加显示增益 */
   const N=IRM_NEB,C=IRM_CLOUD,u0=(x*N.ca+y*N.sa)/N.A,v0=(y*N.ca-x*N.sa)/N.B,r0=Math.sqrt(u0*u0+v0*v0);
   if(r0>=N.R2+N.WB/N.B)return 0;
   const P=x/N.PW,Q=y/N.PW,qx=0.5*irmGNt(P,Q,N.SD)+0.25*irmGNt(2*P,2*Q,N.SD+1),qy=0.5*irmGNt(P+5.2,Q+1.3,N.SD+2)+0.25*irmGNt(2*P+5.2,2*Q+1.3,N.SD+3);
@@ -453,11 +453,27 @@ function irmCloudD(x,y,minL){ /* 噪声坐标 (x,y) 的浓度 0~1;minL = 最细�
   const Xi=x+N.WK*N.WT*qx,Yi=y+N.WK*N.WT*qy;let n=0;if(w1>0)n+=0.65*w1*irmGNt(Xi/(2*L0),Yi/(2*L0),C.SEED);if(w2>0)n+=0.35*w2*irmGNt(Xi/L0,Yi/L0,C.SEED+1);   // 岛只吃一部分云带扭曲,免得拉成条纹
   const h=(C.MASK_HI-C.MASK_LO)/2,hh=Math.sqrt(h*h+N.VK*0.25*0.0924*(0.4225*(1-w1*w1)+0.1225*(1-w2*w2)));   // 0.0924 = 单层噪声方差
   let m=(0.5+0.5*n-N.SH*(1-e)-N.SHB*(N.SR-s)-C.MASK_LO-h+hh)/(2*hh);if(m<=0)return 0;m=m>1?1:m*m*(3-2*m);
-  let gu=Math.max(0,Math.min(1,Math.log2(minL/N.G0)/N.GL));gu=gu*gu*(3-2*gu);const g=1+(N.GM-1)*gu;   // 拉远的显示增益:只放大亮度不挪位置,GL 级里慢慢加
+  let gu=Math.max(0,Math.min(1,Math.log2(minL/N.G0)/N.GL));gu=gu*gu*(3-2*gu);const g=phys?1:1+(N.GM-1)*gu;   // 拉远的显示增益:只放大亮度不挪位置,GL 级里慢慢加
   return Math.min(1,Math.min(1,2*e)*m*irmCloudFil(x,y,minL)*g);
 }
 function irmCloudLitAt(p){return (IRM_SUN.mode==='none'||irmInShadow(p))?IRM_CLOUD.DARK:1;}
 function irmCloudBg(p){return IRM_CLOUD.on?IRM_CLOUD.V*irmCloudD(p[0]-CLOUD.pos[0],p[1]-CLOUD.pos[1],IRM_CLOUD.MIN_KM)*irmCloudLitAt(p):0;}
+/* 消光:观测船到目标连线上的云吃掉亮度,乘 e^-τ,τ = ∫浓度 ds / TAU_KM(路径越长、穿过的丝团越密越暗);
+   浓度取 G 公里格点(噪声坐标锚定,按 2G 滤过,按需算、算过就留,CH x CH 一块),沿线每格一点双线性 */
+const IRM_EXT={on:true,TAU_KM:150000,G:50000,CH:64,MAXB:256,blk:new Map()};
+function irmExtNode(I,J){
+  const E=IRM_EXT,bi=Math.floor(I/E.CH),bj=Math.floor(J/E.CH),key=(bi+32768)*65536+(bj+32768);let b=E.blk.get(key);
+  if(!b){if(E.blk.size>=E.MAXB)E.blk.clear();b=new Float32Array(E.CH*E.CH).fill(NaN);E.blk.set(key,b);}
+  const q=(J-bj*E.CH)*E.CH+(I-bi*E.CH);let v=b[q];if(v!==v){v=irmCloudD(I*E.G,J*E.G,2*E.G,true);b[q]=v;}return v;
+}
+function irmExt(p,q){ /* 世界点 p → q 的透过率 0~1 */
+  const E=IRM_EXT;if(!E.on||!IRM_CLOUD.on)return 1;
+  const ax=(p[0]-CLOUD.pos[0])/E.G,ay=(p[1]-CLOUD.pos[1])/E.G,bx=(q[0]-CLOUD.pos[0])/E.G,by=(q[1]-CLOUD.pos[1])/E.G,L=Math.hypot(bx-ax,by-ay),n=Math.max(2,Math.min(64,Math.ceil(L)));
+  let s=0;
+  for(let i=0;i<n;i++){const u=(i+0.5)/n,x=ax+(bx-ax)*u,y=ay+(by-ay)*u,I=Math.floor(x),J=Math.floor(y),fx=x-I,fy=y-J;
+    const d0=irmExtNode(I,J)+(irmExtNode(I+1,J)-irmExtNode(I,J))*fx,d1=irmExtNode(I,J+1)+(irmExtNode(I+1,J+1)-irmExtNode(I,J+1))*fx;s+=d0+(d1-d0)*fy;}
+  return Math.exp(-s*L*E.G/n/E.TAU_KM);
+}
 /* 云缓存:格点锚在云自己的噪声坐标上(格距 2^L km,每级一个窗口,留最近 4 级);平移只补露出来的格点,光照层按键重算。
    换级时视野缺得多:先拿别级(没有就当帧算一张粗的)垫着,每帧补一批,视野补齐才换上 */
 const irmCloudWin=new Map(),IRM_CLOUD_M=8,IRM_CLOUD_LV=4,IRM_CLOUD_SYNC=400,IRM_CLOUD_BATCH=1500,IRM_CLOUD_COARSE=1200;
@@ -918,7 +934,7 @@ onClick('selEmit',function(b){if(sel)sel.emitMode=b.getAttribute('data-em');});
 /* 地址参数(截图用):?ir 开红外;mode=yi;sun=dir|pos;cloud=0;planet=0;cam=x,y,zoom;burn=i / rev=i 第 i 艘船主推 / 反推;sel=i;stress=N 撒 N 个在动的热源 */
 {const Q=new URLSearchParams(location.search);
   if(Q.has('ir'))IRM.on=true;if(Q.get('mode')==='yi')IRM.mode='yi';
-  if(Q.get('cloud')==='0')IRM_CLOUD.on=false;if(Q.get('planet')==='0'){IRM_PLANET.on=false;irmPlanet=null;}
+  if(Q.get('cloud')==='0')IRM_CLOUD.on=false;if(Q.get('ext')==='0')IRM_EXT.on=false;if(Q.get('planet')==='0'){IRM_PLANET.on=false;irmPlanet=null;}
   if(Q.has('cam')){const c=Q.get('cam').split(',').map(Number);if(c.length===3&&c.every(isFinite)){cam.x=c[0];cam.y=c[1];cam.zoom=c[2];}}
   if(Q.has('burn')&&ships[+Q.get('burn')])ships[+Q.get('burn')].flame=1;
   if(Q.has('rev')&&ships[+Q.get('rev')])ships[+Q.get('rev')].flame=-1;
