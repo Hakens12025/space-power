@@ -61,7 +61,7 @@ function stepWeaponSystems(dt){
     if(x.ciwsCd===undefined)x.ciwsCd=0;
     if(x.ciwsCd>0){x.ciwsCd-=dt;continue;}
     for(const p of projectiles){
-      if(p.type!=='missile'||p.done||p.coastT>0||p.shooter.side===x.side)continue; // T1:脱锁导弹必自毁,近防不浪费弹药
+      if(p.type!=='missile'||p.done||p.coastT>0||p.shooter.side===x.side||p.arm)continue; // V2 反辐射弹小、快、顺着对方自己的来波扎下来,拦截弹不打它(模拟里单枚 10 次全被拦,开雷达又没了代价);只剩近防炮 // T1:脱锁导弹必自毁,近防不浪费弹药
       const d0=V.len(V.sub(p.pos,x.pos));
       // DS167 拦截弹资源纪律(设计师拍板,敌我一致):库存<30%只拦"进入外圈一半距离"的近目标(储备意识;弹尽=裸奔,弹药管理的代价)
       if(x.interceptor<(x.interMax||x.interceptor)*0.3&&d0>=ciws.outer*0.5)continue;
@@ -96,4 +96,5 @@ function stepWeaponSystems(dt){
     } // TIER1 MAC 舰种门改能力谓词
     if(s.roeCd>0)s.roeCd-=dt;
   }
+  if(typeof v2Step==='function')v2Step(dt); // V2 新版交战的武器(weapons/59;原版配装没有这些字段,整段自然跳过)
 }

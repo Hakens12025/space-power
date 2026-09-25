@@ -93,6 +93,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
       p.age=(p.age||0)+dt;
       if(p.mine){ // 伏击雷(已布设):静止待命,自带被动传感器自主触发,点火=情报
         p.vel=[0,0,0];p.spd=0;
+        if(p.arm){if(p.armE&&!p.armE.dead&&V.len(V.sub(p.armE.pos,p.pos))<=(p.trigRadius||60000)*2&&armHear(p.armE,p.pos)){p.mine=false;p.target=p.armE;p.lastKpos=null;}return;} // V2 反辐射雷:只等原来那部雷达再开
         let trig=null;
         const trigR=p.trigRadius||60000;
         for(const s of ships){
@@ -153,6 +154,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
       }
       // 组网转移(DS147):目标没了——干扰复锁优先;link网(接入母舰火控)交给智能分配器按需求重分配;非link网独立重选最近
       if(!p.target||p.target.dead){
+        if(p.arm){p.done=true;return;} // V2 反辐射弹不改追别的船
         // TK2.1:下面四处「射手这一方知道什么」改读航迹表;挑目标的三处从这一方的航迹表里枚举(按注册表顺序、严格小于的并列取舍都与原来遍历 ships 相同),
         //       距离与角度仍按真值几何量(那是弹体自己的导引头在看,不是情报)
         // v125:干扰脱锁优先复锁原目标(lastTarget),复锁靠转弯耗燃料;贴脸直插(v135)
@@ -296,6 +298,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
       }
       if(dist<800){ // 命中:近防分层拦截(外圈拦截导弹/内圈近防炮)+ 扇面过载
         if(p.target.type==='decoy'){p.done=true;return;} // DS166:撞上诱饵=扑空(诱饵无装甲,导弹白烧)
+        if(typeof v2PdKill==='function'&&p.count>0){const k=v2PdKill(p);if(k>0){p.count-=k;p.dmg=p.count*(p.missDmg||12);if(p.count<=0){p.done=true;return;}}} // V2 近防激光 + 速射炮塔,叠在原有近防之前
         let surv=1;
         // 来袭导弹方向 → 船的扇面;统计同扇面来袭组数 + 受击扇面数
         const sect=sectorOf(Math.atan2(p.pos[1]-p.target.pos[1],p.pos[0]-p.target.pos[0]));
@@ -331,6 +334,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         if(survHit>0){
           const finalDmg=Math.max(1,Math.round(survHit*(p.missDmg||12)*sectorDmgMult)); // DS155:×扇面倍增
           applyDamage(p.target,finalDmg,p.shooter,'missile'); // RANGE1 补第 4 实参 kind='missile'
+          if(p.arm&&p.target.side)p.target.radDown=V2W.ARM.DOWN; // V2 反辐射弹:打瘫雷达
           spawnHit(p.pos,'missile');
         }
         if(decoy>0){ // 脱锁的n颗:继续飞(飞过目标),target清空走组网转移复锁,复锁靠转弯耗燃料

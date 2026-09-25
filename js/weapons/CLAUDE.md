@@ -5,6 +5,7 @@
 - `51-ciws.js` 近防谓词 / 过载 / 扇面;`52-fire.js` 主炮 / 诱饵 / 拦截弹 / 齐射发射链、开火暴露置位
 - `53-nets.js` 数据链网分配;`54-missiles.js` 导弹引导(`MSL_CFG` / `missSee`);`55-damage.js` `applyDamage`
 - `56-step-projectiles.js` 弹丸推进与引导;`57-step-weapons.js` 冷却 / 装填 / 自动索敌与自动齐射;`58-firecontrol.js` 火控序列引擎侧(`fcGate` / `fcSolve` / `fcRuns`)
+- `59-v2weapons.js` 新版交战的武器(`V2W`):反辐射弹 `fireARM`、近防激光 + 速射炮塔的每拨容量 `v2PdKill`、速射炮对舰、长矛激光;配装在 51 的 `CLS_LOADOUT_V2`(只在 `v2On()` 时用)
 
 ## 射程与瞄准
 - 没有射程门。主炮每发带高斯角散布 `macSigma`,命中率 P(d) = erf(`MAC_HIT_R` / (σ·d·√2))。距离一律调 `macHitProb` / `macRangeAt` / `macEffRange`(= 50% 把握距离),不写公里数。
@@ -19,7 +20,7 @@
 - 新增顶层 const 前先全库 grep 同名(跨 script 重名会让整个文件语法报废)。weapons 在 formation 之后加载,载入期不许读 formation 的顶层量(改成惰性函数)。
 
 ## 火控序列
-- 序列是"许可"不是"命令":`fcGate` 只做减法,放不开 57 关着的东西。门:舰级开关(`autoEngage`+`roe`、`macOn`/`mslOn`,字段名只从 `KIND_INFO[k].on` 读)→ 接触等级(主炮、导弹都要 ≥2)。
+- 序列是"许可"不是"命令":`fcGate` 只做减法,放不开 57 关着的东西。门:舰级开关(`autoEngage`+`roe`、`macOn`/`mslOn`,字段名只从 `KIND_INFO[k].on` 读)→ 定得出位置(`contactFix`)。
 - 轮盘的 `radItems`(command/74)与 `radSolve`(render/89)必须与 `fcGate` 逐条同口径、同措辞。
 - `fcRuns(s,q)` 是"这条序列参不参与解算"的唯一真相,`fcSolve` / `fcActive` / `stepFireControl` 共用。
 - 逐武器各一个指针;`seq` 模式每次从 0 扫,`rr` 从 `rot` 扫并把 `rot` 钉在真正选中的那一项。按 pick 过滤时 `continue` 跳过,不许筛数组(`fcFrom` 存的是下标)。

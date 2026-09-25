@@ -114,10 +114,11 @@ function optLum(s) { // 光学/红外亮度 = 体型 x (1 + 功耗)。取代已�
      ⚠ COV 住在 23-cov(加载晚于本文件),这里是运行期读取,安全;写成顶层常量就会撞 TDZ。 */
   /* ENV1:残骸场里的目标衬在被照亮的碎石前面,对比度下降 ⇒ 亮度乘 envOptK(场外 / 没有场恒为 1,乘 1 是精确的无操作)。
      放在这里而不是热循环里:光学亮度只有这一个定义点,热循环的分档、23-cov 的定位精度(visAccOf)、界面上的"我此刻多亮"读的是同一个数 */
-  const v = sReq(s, 'size', 'ship') * (1 + engPowerOf(s) + COV.HEAT_EMIT * emitPowerOf(s) + firePowerOf(s)) * envOptK(s.pos);
+  const v = sReq(s, 'size', 'ship') * (1 + engPowerOf(s) + COV.HEAT_EMIT * emitPowerOf(s) + firePowerOf(s) + (s.lanceBurst > 0 ? SENS.P_ENG_REV : 0)) * envOptK(s.pos); // V2 长矛激光开火时亮一档(同反推)
   return s.heatK === undefined ? v : v * s.heatK; // ENV2 石头的自身热倍率(舰船没有这个字段 ⇒ 不乘,逐位不变)
 }
 function rfLoudOf(s) { // 射频响度 = 发射机档次 x 发射档。silent 恒为 0 —— 绝对静默,没有船体泄漏(旧模型那个泄漏系数已删)
+  if (s.radDown > 0) return 0; // V2 雷达被反辐射弹打瘫:照射与干扰都发不出去
   return sReq(s, 'emit', 'ship') * emitPowerOf(s);
 }
 function reflOf(s) { // 雷达反射 = 体型 x 反射倍率。size 同时喂光学与雷达,所以"大船两头都显眼"是这个模型的结论而不是巧合

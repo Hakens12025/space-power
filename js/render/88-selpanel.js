@@ -21,6 +21,15 @@ const KIND_INFO={
   ciws:{on:'ciwsOn',
     range:s=>ciwsOf(s).outer,
     tip:s=>{const c=ciwsOf(s);return `近防 · 外圈${Math.round(c.outer/1000)}k拦截弹 · 内圈${Math.round(c.inner/1000)}k近防炮 · 库存${s.interceptor}枚(被动防御,来袭才发射)`;}},
+  // V2 新版交战(weapons/59;原版配装没有这些 kind,钮自然不出现)
+  arm:{on:'armOn',range:s=>armReach(),
+    tip:s=>`反辐射弹 · 射程 ≈ ${Math.round(armReach()/1000)}k · 听见就能发(Q),不要求定位;对方关雷达就飞到最后听到的地方变雷 · 命中 ${s.armDmg} 伤害 + 雷达瘫痪 ${V2W.ARM.DOWN}s · 剩 ${s.arm}/${s.armMax} 枚 · 火控开时自动打定得出位置、在射程内的`},
+  gun2:{on:'gun2On',range:s=>gun2Reach(),
+    tip:s=>`速射炮塔 ×${s.gun2N} · 近防每拨约打掉 ${(s.gun2N*V2W.PD.GUN).toFixed(1)} 枚 · 对舰只在 ${Math.round(gun2Reach()/1000)}k 内(驱逐舰躲得开的距离)· 炮塔不用转船`},
+  pdl:{on:'pdlOn',range:s=>V2W.PD.R,
+    tip:s=>`近防激光 ×${s.pdlN} · 每拨来袭约打掉 ${(s.pdlN*V2W.PD.PDL).toFixed(1)} 枚(${Math.round(V2W.PD.R/1000)}k 内的友舰一起出力)· ${V2W.PD.REFILL}s 回满;几组同时到才打得穿`},
+  lance:{on:'lanceOn',range:s=>V2W.LANCE.DMAX,
+    tip:s=>`长矛激光 · ${Math.round(V2W.LANCE.D0/1000)}k 内每秒 ${V2W.LANCE.DPS},往外按距离平方衰减,${Math.round(V2W.LANCE.DMAX/1000)}k 封顶 · 开 ${V2W.LANCE.ON}s 冷 ${V2W.LANCE.CD}s,开火时红外亮一档 · 锁定目标进 ${Math.round(V2W.LANCE.AUTO/1000)}k 自动开一轮;B 手动`},
 };
 /* 开关描述表:舰级开关(火控/雷达)固定 + 武器开关由旗舰 s.weapons 清单动态追加(无该武器的舰不显示对应钮) */
 function cmdList(s){
@@ -62,6 +71,10 @@ function specItems(s){
     if(w.kind==='mac')items.push(['主炮',s.macDmg>0?(s.macDmg+'×'+Math.round(s.macReload)+'s · 50%@'+Math.round(macEffRange(s)/1000)+'k'):'无']); // WR1:规格条带上命中率 50% 的距离
     else if(w.kind==='msl')items.push(['导弹',s.ammo+'枚×'+s.cells+'组']);
     else if(w.kind==='ciws'){const c=ciwsOf(s);items.push(['拦截弹',s.interMax+'枚'],['近防',Math.round(c.outer/1000)+'k/'+Math.round(c.inner/1000)+'k']);}
+    else if(w.kind==='arm')items.push(['反辐射',s.armMax+'枚']); // V2
+    else if(w.kind==='gun2')items.push(['速射炮',s.gun2N+'门']);
+    else if(w.kind==='pdl')items.push(['近防激光',s.pdlN+'门']);
+    else if(w.kind==='lance')items.push(['长矛',Math.round(V2W.LANCE.D0/1000)+'k/'+Math.round(V2W.LANCE.DMAX/1000)+'k']);
   }
   return items;
 }
@@ -104,7 +117,8 @@ function senseRows(s){
   const lb=(typeof emitLabel==='function')?emitLabel(s.emitMode):String(s.emitMode);
   const heard=silent?'静默 · 听不见':(k(hearRangeOf(s))+' 被听见 · '+lb);
   // 照射:actRangeOf 缺省 refl=1 = 对【标准目标】那一档;打隐身舰更近。silent/jam 两档没在照射,标出来免得读成「此刻的覆盖」。
-  return `<div class="row"><span class="k">光学</span><span class="v">${k(visRangeOf(s))} 可见 · ${est}</span></div>
+  const v2=(typeof v2On==='function'&&v2On())?`<div class="row"><span class="k">雷达扇区</span><span class="v">${s.radW}°${s.radPin!=null?' · 钉住':' · 自动'}${s.radDown>0?' · 瘫痪 '+Math.ceil(s.radDown)+'s':''}</span></div><div class="row"><span class="k">红外视场</span><span class="v">${s.irW}°${s.irPin!=null?' · 钉住':' · 自动'}</span></div>`:''; // V2
+  return v2+`<div class="row"><span class="k">光学</span><span class="v">${k(visRangeOf(s))} 可见 · ${est}</span></div>
     <div class="row"><span class="k">射频</span><span class="v">${heard}</span></div>
     <div class="row"><span class="k">照射</span><span class="v">${k(actRangeOf(s))}(标准目标)${silent?' · 未开机':(s.emitMode==='jam'?' · 干扰中不照射':'')}</span></div>`;
 }
@@ -115,6 +129,9 @@ function weaponRows(s){
     if(w.kind==='mac')h+=`<div class="row"><span class="k">主炮</span><span class="v">${s.macCd<=0?'就绪':Math.ceil(s.macCd)+'s'}</span></div>`;
     else if(w.kind==='msl')h+=`<div class="row"><span class="k">导弹</span><span class="v">${readyCells(s)}/${s.cells}组 · 弹${s.ammo}枚</span></div>`;
     else if(w.kind==='ciws')h+=`<div class="row"><span class="k">拦截弹</span><span class="v">${s.interceptor}/${s.interMax}枚</span></div>`;
+    else if(w.kind==='arm')h+=`<div class="row"><span class="k">反辐射</span><span class="v">${s.arm}/${s.armMax}枚</span></div>`; // V2
+    else if(w.kind==='lance')h+=`<div class="row"><span class="k">长矛</span><span class="v">${s.lanceBurst>0?'开火 '+Math.ceil(s.lanceBurst)+'s':(s.lanceCd>0?'冷却 '+Math.ceil(s.lanceCd)+'s':'就绪')}</span></div>`;
+    else if(w.kind==='pdl'){const c=v2PdCap(s);h+=`<div class="row"><span class="k">新近防</span><span class="v">${(s.pdBud===undefined?c:s.pdBud).toFixed(1)}/${c.toFixed(1)} 枚每拨</span></div>`;}
   }
   return h;
 }

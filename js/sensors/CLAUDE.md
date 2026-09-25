@@ -23,6 +23,7 @@
 - 热循环(`sensePairGrades`)里不许除法、开方、Math 调用、分配;这些都放 `sensePrepare`。剪枝上界必须含照射那一路(否则冷目标主炮静默哑火)。
 - 热循环里的内联副本(太阳禁区、恒星射频噪声锥、MTI、天体遮挡、尾焰致盲)与函数版(`envSunBlind` / `envRfNoise` / `envMtiBlind` / `envOccluded` / `senseBaffled` 等)必须同式;改一边就改另一边。
 - 雷达的环境:朝光源的锥里射频噪声抬高(静听按 噪声^(-1/2)、照射按 噪声^(-1/4) 缩);杂波(碎石带、天体盘面旁、小行星旁,`envInClutter`)里的慢目标过 MTI;星云对射频透明。
+- 新版交战的雷达扇区 / 红外视场是舰上的 `radW` / `irW`(360 = 不限,原机制逐位不变):扇区外看不见、照不到,听者在对方扇区外只听旁瓣(`SENS.RF_SIDE`);热循环内联副本与 `senseInSec` / `senseLobe` 同式。朝向由 21 的 `senseAimAll` 每拍定。
 - 单点谓词与热循环共用缓冲,不许在扫描中途调。`detectLoop` 要收真实经过的模拟秒数。
 - ENV2 的 `lo` 在 visRange / covTheta / identDist 那条链上是可选参数,不传 = 标称值。
 - 石头:`kind:'rock'`、`side:'neutral'`,只有光学贴近才认得出;确认是石头的航迹自动化当场解锁,火控门拒绝。
