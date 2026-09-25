@@ -49,7 +49,6 @@ function detectorsOf(side){ // 该阵营的传感器网络:存活舰 + 开机的
 
 function detectLoop(dt){ // 一个感知节拍:蓝网络探红(litBlue)、红网络探蓝(litRed)——对称,不按玩家视角
   const el=(typeof dt==='number'&&isFinite(dt)&&dt>0)?dt:SENS.TICK; // SN4:core/05 透传实际累计的模拟秒;判定里手摇 detectLoop() 不传参,按标称节拍算
-  if(typeof v2On==='function'&&v2On())senseAimAll(); // V2 先定雷达扇区 / 红外视场的朝向,再扫
   detectFor('blue','red',el);
   detectFor('red','blue',el);
   /* 被照射告警(上升沿)→ 图标闪烁(信息战的灵魂提示)。
@@ -86,23 +85,7 @@ function esmHear(side,L,E,dd){ // L(我方听者)这一拍听到 E 的雷达;dd 
   k.n+=1;k.hits++;k.tb=tb;k.t=simTime;k.org=[L.pos[0],L.pos[1]];
   const st=Math.sqrt(1-1/Math.pow(1+COV.FADE_HOLD,2*SENS.TICK)); // 盯着看的稳态 / 单次量测
   k.half=Math.min(Math.PI/2-0.01,Math.max(ESM_CFG.SMIN,ESM_CFG.K*sig*Math.max(st,1/Math.sqrt(k.n))));
-  k.R=Math.max(dd*1.05,hearRangeOf(E,L.recv)*Math.sqrt(senseLobe(E,L)/envRfNoise(L.pos,E.pos))); // 远端 = 这个方向上听得见的最远距离(恒星噪声锥里更近;V2 在它的扇区外只剩旁瓣)
-}
-/* ---- V2 雷达扇区 / 红外视场的朝向:手动钉住 > 当前火控目标(估计位置)> 红外:最近一次听到的敌方雷达(静默链:听见方位就把长焦盯过去)> 船头 ---- */
-function senseAimAng(s,kind){
-  const pin=kind==='rad'?s.radPin:s.irPin;if(pin!=null)return pin;
-  const t=s.lockedTarget||(s.fcTgt&&(s.fcTgt.mac||s.fcTgt.msl))||null;
-  if(t&&!t.dead){const p=(t.side&&t.side!==s.side)?contactPos(t,s.side):(t.pos||null);if(p)return Math.atan2(p[1]-s.pos[1],p[0]-s.pos[0]);}
-  if(kind==='ir'){let best=null;const m=ESM[s.side];
-    if(m)for(const [E,rs] of m){if(E.dead)continue;for(const [L,k] of rs)if(k.org&&(!best||k.t>best.t))best=k;}
-    if(best&&simTime-best.t<=ESM_CFG.FADE){const c=[best.org[0]+Math.cos(best.tb)*best.R/2,best.org[1]+Math.sin(best.tb)*best.R/2];return Math.atan2(c[1]-s.pos[1],c[0]-s.pos[0]);}}
-  return Math.atan2(s.facing[1],s.facing[0]);
-}
-function senseAimU(s,kind){const a=senseAimAng(s,kind);return [Math.cos(a),Math.sin(a)];}
-function senseAimAll(){for(const s of ships){if(s.dead)continue;if(s.radW<360)s.radU=senseAimU(s,'rad');if(s.irW<360)s.irU=senseAimU(s,'ir');}}
-function senseCycleW(list,kind){ // 选中舰的扇区 / 视场循环一档(三档见 SENS.RAD_W / IR_W);按第一艘的档位定下一档,全队统一
-  if(!list.length)return;const W=kind==='rad'?SENS.RAD_W:SENS.IR_W,cur=kind==='rad'?list[0].radW:list[0].irW,i=W.indexOf(cur),w=W[(i+1)%W.length];
-  for(const s of list){if(kind==='rad'){s.radW=w;s.radU=null;}else{s.irW=w;s.irU=null;}}
+  k.R=Math.max(dd*1.05,hearRangeOf(E,L.recv)/Math.sqrt(envRfNoise(L.pos,E.pos))); // 远端 = 这个方向上听得见的最远距离(恒星噪声锥里更近)
 }
 function esmEach(side,f){ // 逐个辐射源给 f(E, [{L,k}]);顺手忘掉太久没听到的
   for(const [E,m] of ESM[side]){const a=[];

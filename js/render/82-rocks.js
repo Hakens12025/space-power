@@ -10,7 +10,7 @@
      · 认出之后(光学贴近到认出距离、或照射认出)换成石头的记号:灰色不规则多边形 + "碎石",不再有等级标签(它不是目标了)。
    GM 下照真值全画成石头。
    ============================================================================ */
-const ROCK_RGB='154,145,132'; // 认出之后的石头色:灰褐,与敌我两色都分得开
+const ROCK_RGB='177,167,152'; // 认出之后的石头色:灰褐,与敌我两色都分得开(2026-09-26 调亮约 15%:星云底上看不清)
 const ROCK_SHAPE=[1,0.72,0.95,0.68,0.9,0.78,1.05]; // 不规则多边形的七个顶点半径系数
 
 function drawRocks(){
@@ -51,18 +51,15 @@ function drawRockAt(s,pos,st,known){
   /* 认出来了:石头的记号。大小跟着同一个缩放系数走(与舰标同一条律),半径再乘 √(体型/0.7)(面积 ∝ 体型,与红外画面 irvBodyR 同式)—— 认出之后体型已经不是秘密 */
   ctx.save();
   ctx.fillStyle='rgba('+ROCK_RGB+',.85)';ctx.strokeStyle='rgba('+ROCK_RGB+',1)';ctx.lineWidth=1;
-  const zs=Math.sqrt(s.size/0.7);let lr=r; // 体型差要看得出来(用户 2026-09-26:"碎石的 size 看上去都一个大小")
-  if(shipMarkMode()){const h=Math.max(1.5,Math.min(5,2.5*zs));ctx.fillRect(p[0]-h,p[1]-h,2*h,2*h);lr=Math.max(r,h);}
+  const zs=Math.sqrt(s.size/0.7); // 体型差要看得出来(用户 2026-09-26:"碎石的 size 看上去都一个大小")
+  if(shipMarkMode()){const h=Math.max(1.5,Math.min(5,2.5*zs));ctx.fillRect(p[0]-h,p[1]-h,2*h,2*h);}
   else{
-    const rr=r*zs;lr=Math.max(r,rr*1.05);
+    const rr=r*zs;
     const a0=Math.atan2(s.facing[1],s.facing[0]),n=ROCK_SHAPE.length;
     ctx.beginPath();
     for(let k=0;k<n;k++){const a=a0+k*2*Math.PI/n,q=rr*ROCK_SHAPE[k];if(k===0)ctx.moveTo(p[0]+Math.cos(a)*q,p[1]+Math.sin(a)*q);else ctx.lineTo(p[0]+Math.cos(a)*q,p[1]+Math.sin(a)*q);}
     ctx.closePath();ctx.fill();ctx.stroke();
   }
-  if(cam.zoom>0.0008){
-    ctx.fillStyle='rgba('+ROCK_RGB+',.9)';ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';
-    ctx.fillText('碎石',p[0],p[1]+lr+6);
-  }
+  // 2026-09-26 用户:碎石的中文标注不要了
   ctx.restore();
 }

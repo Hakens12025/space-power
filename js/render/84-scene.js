@@ -25,7 +25,6 @@ function render(){
   drawCorridors(); // v126:来袭走廊(敌方导弹发射预告弹道)
   drawHoverRings(); // RF2 简化UI:底栏武器钮 hover 时选中舰的射程圈
   drawHits();
-  if(typeof drawBeams==='function')drawBeams(); // V2 光束 / 曳光
   drawLocks();
   if(typeof drawFmStations==='function')drawFmStations(); // FM4 编队能力站位(带半径圈+站位点+离位细线)。排在跟随连线【之前】:它是"队形的底图"(常驻结构),而跟随连线是"正在进行的关系",后者该压在上面
   if(typeof drawFollowLinks==='function')drawFollowLinks(); // FL2 跟随连线(黄色流动细虚线):与数据链同层级语义("我下的命令/建立的关系"),排在它之前——数据链是瞬态交互产物、跟随是常驻关系,两者连到同一艘舰时链在上更符合"正在进行的事更高一层"

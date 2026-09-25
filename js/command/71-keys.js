@@ -17,10 +17,6 @@ const ACTIONS=[
   {id:'fire_missile',label:'射手导弹攻击(选中舰·锁定目标)',keys:['KeyR']},
   {id:'cease_fire',label:'停火(解除锁定)',keys:['KeyX']},
   {id:'reverse',label:'倒车(反推倒退)',keys:['KeyG']},
-  {id:'rad_w',label:'雷达扇区:全向 / 扇区 / 聚束(新版交战)',keys:['KeyF']},
-  {id:'ir_w',label:'红外视场:广角 / 中焦 / 长焦(新版交战)',keys:['KeyE']},
-  {id:'fire_arm',label:'反辐射弹:打最近一次听到的敌方雷达(新版交战)',keys:['KeyQ']},
-  {id:'fire_lance',label:'长矛激光:对锁定目标开一轮(新版交战)',keys:['KeyB']},
   // fire_all(全弹发射)绑 Ctrl 单键:用臂逻辑处理(松开触发),避免与 Ctrl+右键锁定/编组冲突
 ];
 const FIRE_ALL_ON=false; // RF6 全弹发射总开关:暂时关掉(无配置界面)。doAction 的 fire_all 分支与 ctrlArm 臂逻辑【原样保留】,改回 true 即恢复
@@ -104,10 +100,6 @@ function doAction(id){
       break;}
     case 'fire_missile':toggleWeapon('missile');break; // R:选定射手武器,点击敌舰攻击
     case 'cease_fire':ceaseFire();break; // X:停火(解除锁定)
-    case 'rad_w':if(typeof v2On==='function'&&v2On())senseCycleW(controlledShips().filter(s=>s.side==='blue'),'rad');break; // V2
-    case 'fire_arm':if(typeof armFireManual==='function')armFireManual(controlledShips().filter(s=>s.side==='blue'));break; // V2
-    case 'fire_lance':if(typeof lanceFireManual==='function')lanceFireManual(controlledShips().filter(s=>s.side==='blue'));break; // V2
-    case 'ir_w':if(typeof v2On==='function'&&v2On())senseCycleW(controlledShips().filter(s=>s.side==='blue'),'ir');break; // V2
     case 'reverse':{ // G:倒车(反推倒退)——选中舰朝船头反方向机动30k(机头不翻,用反推)
       const sel=controlledShips();
       sel.forEach(s=>{

@@ -27,20 +27,19 @@ function irvRef(){ // 刻度参照:熄火静默的 DD 恰在发现距离上
 function irvObs(){const a=[];for(const s of ships)if(s.side==='blue'&&!s.dead)a.push(s);return a;}
 function irvSrc(){const a=[];for(const s of ships)if(s.side!=='blue'&&!s.dead)a.push(s);for(const r of rocks)if(!r.dead)a.push(r);return a;}
 function irvHill(t,obs){ // 一座山:峰高(按参照归一)与宽度(km),取看得最清楚的那艘我方船
-  let best=null,bg=NaN,tSh=false;const lit=envHasLight(),nb=ENV.bodies.length>0,all=[];
+  let best=null,bg=NaN,tSh=false;const lit=envHasLight(),nb=ENV.bodies.length>0;
   for(let n=0;n<obs.length;n++){const o=obs[n];
-    if(senseOptBlocked(o,t)||!senseInSec(o,'ir',t.pos))continue; // V2 红外视场外看不见
+    if(senseOptBlocked(o,t))continue;
     if(bg!==bg){bg=ENV.clouds.length?envBg(t.pos,'opt'):0;tSh=lit&&nb&&envInShadow(t.pos);}
     const lo=senseOptLoWith(o,t,bg,tSh,lit&&!(nb&&envInShadow(o.pos)));if(!(lo>0))continue;
     const dx=t.pos[0]-o.pos[0],dy=t.pos[1]-o.pos[1],dz=(t.pos[2]||0)-(o.pos[2]||0),d=Math.max(1,Math.hypot(dx,dy,dz));
-    const snr=SENS.K_IR*senseIrK(o)*lo/(d*d),blur=d*covTheta('opt',o,t,d,lo); // V2 长焦:信噪比 x k
+    const snr=SENS.K_IR*lo/(d*d),blur=d*covTheta('opt',o,t,d,lo);
     if(!(blur>0))continue;
-    if(snr>=1)all.push({o:o,snr:snr}); // 真探测到了(与热循环 d² < K·亮度 同式):方位线用
     if(!best||snr>best.snr)best={snr:snr,blur:blur,o:o,k:n};
   }
   if(!best)return null;
   const ref=irvRef(),k=ref.sig/best.blur;
-  return {peak:best.snr*k*k,sig:best.blur,o:best.o,k:best.k,all:all};
+  return {peak:best.snr*k*k,sig:best.blur,o:best.o,k:best.k};
 }
 function irvShowPeak(h){const u=h.sig/irvRef().sig,w=u*u/(1+u*u);return IRV_C.V0*(Math.pow(1+h.peak/IRV_C.V0,1-w)-1);} // 宽的山往底红收(VSUP)
 const IRV_P3=[0,0,0];
@@ -106,9 +105,7 @@ function irvjCalib(src,obs){ // 进红外画面时标定一次:每个源算一�
 }
 function irvZf(t){return t.kind==='rock'?hullZoomF():shipZoomF();} // 舰船按 shipZoomF(再缩 SHIP_K),石头按 hullZoomF
 function irvBodyR(t){return t.kind==='rock'?hullSize('UNK',2)*0.78*Math.sqrt(t.size/0.7):hullSize(t.cls,t.tier||2)*0.78;} // 图标半径(未乘缩放系数)
-function irvUnfixed(t){return typeof v2On==='function'&&v2On()&&!adminMode&&t.side!=='blue'&&typeof trkFix==='function'&&!trkFix(trkOf('blue',t));} // 我方还定不出它的位置:红外只给方位
 function irvjSplats(t,ph){ // 一个源的贴片(尾焰尾巴、近处光晕、主山),格坐标
-  if(irvUnfixed(t))return IRVJ_NONE; // 定不出位置 ⇒ 不画热山,改在最上层画方位线(irvBearings)
   const C=IRV_C.CELL,p=toScreen(t.pos[0],t.pos[1]),cx=p[0]/C,cy=p[1]/C,list=[],tl=ph.tl,sig=ph.sig;let peak=ph.peak;
   if(tl&&tl.share>0){
     const s0=Math.max(IRV_C.SIG_MIN,sig*cam.zoom/C),sa=s0*IRV_C.TAIL_K/2,pkT=irvShowPeak({peak:peak*tl.share*s0/sa,sig:sig*Math.sqrt(IRV_C.TAIL_K/2)});
@@ -341,29 +338,7 @@ function irvUpdate(){
     irvFc(Math.max(0,Math.floor((r[0]-1)*C*dpr)-1),Math.max(0,Math.floor((r[2]-1)*C*dpr)-1),Math.min(V.fc.width,Math.ceil((r[1]+1)*C*dpr)+1),Math.min(V.fc.height,Math.ceil((r[3]+1)*C*dpr)+1),dpr);
   }
 }
-function drawIrView(){irvUpdate();ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(IRVC.fc,0,0);ctx.restore();irvBearings();irvFov();}
-function irvBearings(){ // 定不出位置的热源:每艘探测到它的我方舰沿方位画一条暖色亮带,伸到这艘舰看一艘点火巡洋舰的最远距离(不告诉你在哪一段);几条交叉处叠得更亮
-  if(typeof IRVJ==='undefined'||!IRVJ.rec)return;
-  const lumCA=SENS.CLS.CA.size*(1+SENS.P_ENG_MAIN);ctx.save();ctx.lineCap='round';
-  for(const r of IRVJ.rec.values()){
-    const t=r.t,ph=r.ph;if(!ph||!ph.all||!ph.all.length||!irvUnfixed(t))continue;
-    for(const q of ph.all){
-      const o=q.o,dx=t.pos[0]-o.pos[0],dy=t.pos[1]-o.pos[1],d=Math.hypot(dx,dy)||1,ux=dx/d,uy=dy/d;
-      const L=Math.max(d*1.25,Math.sqrt(SENS.K_IR*senseIrK(o)*lumCA)),a=toScreen(o.pos[0],o.pos[1]),b=toScreen(o.pos[0]+ux*L,o.pos[1]+uy*L);
-      const al=Math.min(0.55,0.18+0.12*Math.log10(q.snr));
-      ctx.strokeStyle='rgba(255,150,70,'+(al*0.35).toFixed(3)+')';ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();
-      ctx.strokeStyle='rgba(255,200,140,'+al.toFixed(3)+')';ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();
-    }
-  }
-  ctx.restore();
-}
-function irvFov(){ // V2 红外视场收窄的我方舰:画视场的两条边(暖色虚线,伸出屏幕)
-  const L=Math.max(W,H)*2;ctx.save();ctx.strokeStyle='rgba(255,190,120,.35)';ctx.lineWidth=1;ctx.setLineDash([5,6]);
-  for(const s of ships){if(s.dead||s.side!=='blue'||!(s.irW<360)||!s.irU)continue;
-    const p=toScreen(s.pos[0],s.pos[1]),a=Math.atan2(s.irU[1],s.irU[0]),h=s.irW*Math.PI/360;
-    ctx.beginPath();for(const q of [a-h,a+h]){ctx.moveTo(p[0],p[1]);ctx.lineTo(p[0]+Math.cos(q)*L,p[1]+Math.sin(q)*L);}ctx.stroke();}
-  ctx.setLineDash([]);ctx.restore();
-} // 每帧入口(84-scene,MAPV.mode === 'ir')
+function drawIrView(){irvUpdate();ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(IRVC.fc,0,0);ctx.restore();} // 每帧入口(84-scene,MAPV.mode === 'ir')
 function irvOff(){IRVC.live=false;} // 离开红外画面:下次进来整张重建
 /* ---- 近处的热轮廓:比山顶亮一点;在动的用预渲染精灵 ---- */
 const IRV_ROCK_SHAPE=[1,0.72,0.95,0.68,0.9,0.78,1.05];

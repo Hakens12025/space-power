@@ -4,7 +4,7 @@ function macPred(s,t){ // 目标未来位置(提前量,MAC 0.1c飞行时间);KIM
   // WR1:位置用【估计位置】(contactPos;交代不出位置 ⇒ 返回 null,调用方不许回落真值),速度暂用真值(内核不估计速度,已知口子)
   const tp=(typeof contactPos==='function')?contactPos(t,s.side):t.pos; if(!tp)return null;
   const d=V.len(V.sub(tp,s.pos));
-  const tt=d/(s.macSpd||CFG.macSpd); // V2:弹速按舰(新版交战 0.2c)
+  const tt=d/CFG.macSpd;
   return [tp[0]+(t.vel[0]-s.vel[0])*tt,tp[1]+(t.vel[1]-s.vel[1])*tt,tp[2]+(t.vel[2]-s.vel[2])*tt];
 }
 function macAligned(s,t){ // 轴炮窗口:机头是否对准预测点(~1.1°容差,摆到窗口即开火)
@@ -51,19 +51,19 @@ function macRangeSig(sig,p){ // BOT1:按【给定的散布】反算命中率恰�
 }
 function macRangeAt(s,p){return macRangeSig(sReq(s,'macSigma'),p);} // 命中率恰为 p 的距离;p 只支持 _Z 里的四档
 function macEffRange(s){return macRangeAt(s,0.5);} // 有效射程 = 命中率 50% 的距离。调用点一律调它,绝不在别处重拼
-function mslReach(s){const f=(s&&s.mslFuel)||MSL_FUEL;return MSL_ACC*(f/2)*(f/2);} // 动力射程:加速 fuel/2 秒再减速 fuel/2 秒 = 2 x 0.5 a t² = 375,000km(与旧的 35 万发射门几乎相同 —— 旧数就是这么来的)
+function mslReach(s){return MSL_ACC*(MSL_FUEL/2)*(MSL_FUEL/2);} // 动力射程:加速 fuel/2 秒再减速 fuel/2 秒 = 2 x 0.5 a t² = 375,000km(与旧的 35 万发射门几乎相同 —— 旧数就是这么来的)
 function fireMAC(shooter,target){ // MAC轴炮:沿船头方向直射(必须先对准),到预测时间失的
   if(shooter.noFire)return; // RANGE1 禁火总闸门 1/3:靶场的靶只挨打不还手。这是 MAC 发射的唯一实现,GM 手动锁定/自动索敌/AI 三条路径最终都落到这里。注意这是个【静默】开关(不报错不打日志),将来若误给蓝舰置了 noFire 会毫无线索,置位处只有 initEnemy 的靶语义包一处
   if(shooter.side===target.side||shooter.dead||target.dead)return;
   if(!contactFix(target,shooter.side))return; // 定得出位置就许开火;瞄的是估计位置,椭圆大就是打不中
   const pred=macPred(shooter,target); if(!pred)return; // WR1:交代不出估计位置就不开火(不回落真值)
   const d=V.len(V.sub(pred,shooter.pos)); // WR1:飞行距离按预测点算(没有射程门了,d 只决定弹丸寿命)
-  const vS=shooter.macSpd||CFG.macSpd,tt=d/vS; // 飞行时间(原版 0.1c,新版交战 0.2c)
+  const tt=d/CFG.macSpd; // 飞行时间(MAC 0.1c)
   const dir=V.norm(shooter.facing); // 轴炮:弹道=船头轴线(单位化防脏数据)
   const da=gaussRand()*sReq(shooter,'macSigma'); // WR1:每一发都带高斯角散布(原来只在超程时加均匀散布);脱靶距离 ≈ d x da,命中率随距离自然下降
   const ang=Math.atan2(dir[1],dir[0])+da;
   const hxy=Math.hypot(dir[0],dir[1]); // KIMI146修:xy分量按朝向的xy模长缩放——原直接用满macSpd再叠dir[2]·macSpd,合速度超0.1c且弹道≠机头轴线(带俯仰时必脱靶)
-  projectiles.push({type:'mac',pos:shooter.pos.slice(),vel:[Math.cos(ang)*hxy*vS+shooter.vel[0],Math.sin(ang)*hxy*vS+shooter.vel[1],dir[2]*vS+shooter.vel[2]],target,shooter,pred,tt,age:0,dmg:shooter.macDmg}); // KIMI151:弹丸继承舰速(出膛矢量=舰速+机头轴×0.1c,相对舰体初速仍0.1c)
+  projectiles.push({type:'mac',pos:shooter.pos.slice(),vel:[Math.cos(ang)*hxy*CFG.macSpd+shooter.vel[0],Math.sin(ang)*hxy*CFG.macSpd+shooter.vel[1],dir[2]*CFG.macSpd+shooter.vel[2]],target,shooter,pred,tt,age:0,dmg:shooter.macDmg}); // KIMI151:弹丸继承舰速(出膛矢量=舰速+机头轴×0.1c,相对舰体初速仍0.1c)
   shooter.fireHot=SENS.FIRE_S; // FX1 开火暴露(见 sensors/20 的 P_FIRE):与冷却同一处置位 —— 这里是 MAC 唯一的发射成功点
   shooter.macCd=shooter.macReload||0; // TIER1 改读实例烘焙的装填秒:原 CLS_WPN[shooter.cls].mac 无兜底,舰种不在表里就 TypeError 崩整帧(加 BB/CV 后风险放大)
   if(shooter.fcFired&&shooter.fcTgt&&shooter.fcTgt.mac===target)shooter.fcFired.mac=true; // RF5 开火来源标记(MAC 唯一的发射成功点,弹丸已入 projectiles、冷却已置位):火控序列的指针只认这个显式标记。绝不允许用 macCd/ammo 差分推断——任务系统/靶场AI/敌方AI/手动齐射都会动那两个字段,差分会让序列指针幽灵前进。RF5 核查修:标记再收窄成「打的正是本 tick 序列解算出来的那个目标」,否则玩家手动打第三方(71-keys/72-右键菜单)也会推动序列指针,序列自己那一发被白白跳过
@@ -196,7 +196,7 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
       vel:[shooter.vel[0]+perp[0]*lane*10,shooter.vel[1]+perp[1]*lane*10,shooter.vel[2]+perp[2]*lane*10], // 继承载机速度矢量+轻微侧向发散
       target:isShip?target:null, shooter, dmg:shooter.missDmg*(shooter.mslPer||12), missDmg:shooter.missDmg, // 组总伤害 + 单颗伤害(v119,命中按单颗算)
       spd:Math.max(200,V.len(shooter.vel)), // 初始速率=载机速率
-      fuel:shooter.mslFuel||MSL_FUEL, age:0, // V2:燃料按舰(新版交战 126 s) // 燃料(秒,WR1 起是常量 MSL_FUEL:mslReach 从它现算)+ 飞行年龄(近防发射判定)
+      fuel:MSL_FUEL, age:0, // 燃料(秒,WR1 起是常量 MSL_FUEL:mslReach 从它现算)+ 飞行年龄(近防发射判定)
       park:!isShip, parkPt:isShip?null:target.pos.slice(), mine:false, trigRadius:isShip?120000:80000, trigMode:'any', // 区域齐射:飞到点位,到了等敌舰进圈自主攻击(盲射);雷触发圈放大v118
       netId, netFmt:null, // v125 网:所属网 + 网内阵型位(横线/集中)
       netOff:ng2?ng2.v:null, netOffR:netGeom?netGeom.R:0, netD0:netGeom?netGeom.D0:0, // v121组网:方位偏移(随接近收拢→多方向同时弹着)

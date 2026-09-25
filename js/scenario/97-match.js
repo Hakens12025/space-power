@@ -11,7 +11,7 @@
    ⚠ 引擎里没有战场边界(CFG.world 只管星空贴图与开局镜头),所以"战场 200 万"不是一个要改的数,摆得开就是了。 */
 const MATCH={OPEN:3000000,ARC:Math.PI/3,shown:false,t0:0,nBlue:0,nRed:0,theta:0,seed:0,blueC:null,redC:null,
   fix:Math.floor(+new URLSearchParams(location.search).get('seed')||0)}; // seed = 这一局的种子(定红方来向与整个世界);fix = 地址 ?seed=N 固定种子(重放同一张图)
-function matchIdx(v2){for(let i=0;i<TEST_ENVS.length;i++)if(TEST_ENVS[i].match&&!!TEST_ENVS[i].v2===!!v2)return i;return -1;} // V2:原版对局 / 新版交战各一张表
+function matchIdx(){for(let i=0;i<TEST_ENVS.length;i++)if(TEST_ENVS[i].match)return i;return -1;}
 function matchIsOn(){const e=curEnv();return !!(e&&e.match);}
 /* 红方出生点:以蓝方重心为圆心、MATCH.OPEN 为半径,方位在正前方(+X)±ARC 内随机;红方元组里写的是【相对本队重心】的坐标。
    rnd 可注入(判据要复现);平时用 Math.random —— 它只在开局摆位时掷一次,不进模拟。 */
@@ -47,20 +47,18 @@ function matchGenWorld(seed,B,R){
   return w;
 }
 function matchSync(){ // 顶栏钮的字与提示跟着当前场景走(进 / 出对局、场景菜单切走,都经过 initFleet ⇒ 由它调)
-  const b=document.getElementById('btnMatch'),b2=document.getElementById('btnMatch2');if(!b)return;
-  const on=matchIsOn(),v2=on&&v2On();
-  b.textContent=on&&!v2?'回靶场':'对局';
-  b.classList.toggle('on',on&&!v2);b.style.display=v2?'none':''; // V2:对局里只留当前这一版的钮(字变成「回靶场」),另一版藏起来
-  b.title=on?'回到靶场(当前这一局作废) · 种子 '+MATCH.seed:'进入对局(原版机制):3 对 3,双方静默开局、相距 300 万公里;每局一个种子,定红方来向与地形(太阳 / 行星 / 尘埃云 / 小行星)。全灭对方获胜';
-  if(b2){b2.textContent=v2?'回靶场':'新版交战';b2.classList.toggle('on',v2);b2.style.display=on&&!v2?'none':'';
-    b2.title=v2?'回到靶场(当前这一局作废) · 种子 '+MATCH.seed:'进入新版交战:同一套对局,换成新机制 —— 雷达扇区、红外视场、反辐射弹、速射炮塔、近防激光、长矛激光(见 数值模型-感知与武器.md)';}
+  const b=document.getElementById('btnMatch');if(!b)return;
+  const on=matchIsOn();
+  b.textContent=on?'回靶场':'对局';
+  b.classList.toggle('on',on);
+  b.title=on?'回到靶场(当前这一局作废) · 种子 '+MATCH.seed:'进入对局:3 对 3,双方静默开局、相距 300 万公里;每局一个种子,定红方来向与地形(太阳 / 行星 / 尘埃云 / 小行星)。全灭对方获胜';
   const card=document.getElementById('matchEnd');if(card)card.hidden=true;
   MATCH.shown=false;MATCH.t0=0;
   MATCH.nBlue=ships.filter(s=>s.side==='blue').length;MATCH.nRed=ships.filter(s=>s.side==='red').length;
   gmSync();
 }
-function matchEnter(v2){
-  const i=matchIdx(v2);if(i<0)return;
+function matchEnter(){
+  const i=matchIdx();if(i<0)return;
   MATCH.seed=MATCH.fix||(1+Math.floor(Math.random()*999999999)); // 每局一个种子(地址 ?seed=N 固定)
   envIdx=i;initFleet();
   running=false; // 与开局同口径:先看清局面,空格开始
@@ -85,12 +83,11 @@ function matchTick(){
   document.getElementById('meStat').textContent='用时 '+mm+':'+ss+' · 我方幸存 '+bAlive+'/'+MATCH.nBlue+' · 击沉 '+(MATCH.nRed-rAlive)+'/'+MATCH.nRed+' · 种子 '+MATCH.seed;
   card.hidden=false;
 }
-on('btnMatch','click',function(e){e.currentTarget.blur();if(matchIsOn())matchExit();else matchEnter(false);});
-on('btnMatch2','click',function(e){e.currentTarget.blur();if(matchIsOn())matchExit();else matchEnter(true);});
+on('btnMatch','click',function(e){e.currentTarget.blur();if(matchIsOn())matchExit();else matchEnter();});
 function gmSync(){ // ENV2 顶栏「全知」钮只在靶场出现,亮灭跟 adminMode 走(F8 与钮共用)
   const b=document.getElementById('btnGM');if(!b)return;
   const e=curEnv();b.style.display=(e&&e.range)?'':'none';b.classList.toggle('on',!!adminMode);
 }
 on('btnGM','click',function(e){e.currentTarget.blur();adminMode=!adminMode;gmSync();});
-on('meAgain','click',function(){matchEnter(v2On());});
+on('meAgain','click',function(){matchEnter();});
 on('meRange','click',function(){matchExit();});

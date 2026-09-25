@@ -141,8 +141,8 @@ function hearAccOf(s, recv) { return Math.sqrt(SENS.A_RF * rfLoudOf(s) * (isFini
 function actAccOf(d, refl) { const r = SENS.A_ACT * sReq(d, 'emit', 'ship') * sReq(d, 'recv', 'ship') * (isFinite(refl) ? refl : 1); return Math.sqrt(Math.sqrt(r)); }
 
 /* 某条通道的【发现半径】与【定位尺度】。两者同形,只差读哪一套常数 —— 分家正是两套半径的意义。 */
-const covDetOf = (ch, d, t, lo) => ch === 'opt' ? visRangeOf(t, lo) * Math.sqrt(senseIrK(d)) : (ch === 'lis' ? hearRangeOf(t, d.recv) * Math.sqrt(senseLobe(t, d)) : actRangeOf(d, reflOf(t))); // ENV2 lo 只进光学那一支。V2 视场 / 旁瓣(照射的扇区倍数在 actRangeOf 里)
-const covRangeOf = (ch, d, t, lo) => ch === 'opt' ? visAccOf(t, lo) * senseIrK(d) : (ch === 'lis' ? hearAccOf(t, d.recv) * Math.sqrt(senseLobe(t, d)) : actAccOf(d, reflOf(t))); // V2 长焦:定位尺度 x k ⇒ 认出距离 x √k(衍射封顶)
+const covDetOf = (ch, d, t, lo) => ch === 'opt' ? visRangeOf(t, lo) : (ch === 'lis' ? hearRangeOf(t, d.recv) : actRangeOf(d, reflOf(t))); // ENV2 lo 只进光学那一支
+const covRangeOf = (ch, d, t, lo) => ch === 'opt' ? visAccOf(t, lo) : (ch === 'lis' ? hearAccOf(t, d.recv) : actAccOf(d, reflOf(t)));
 
 /* 这一拍的角精度(弧度)。连续,没有台阶 —— 驻留时代那张"弱/良/强"三档表的量化跳变是它换掉的东西。 */
 function covTheta(ch, d, t, dd, lo) {
@@ -197,7 +197,7 @@ function covShape(ch, gi, d, t, dd, lo) {
     if (sReq(t, 'emitMode', 'ship') === 'jam') { const jd = jamDOf(t), f = 1 + (dd / jd) * (dd / jd); sPar *= f; sq *= f; }
     /* 照射【认出】走回波信噪比(条令里叫 NCTR),这里拿横向误差当信噪比的代理量,阈值是目标尺寸。
        实测识别距/照射量程 0.83~1.04:大雷达看得比认得远,外圈约 13~17% 是"看得见、认不出"的一圈。 */
-    return [sPar, sq, true, sq <= t.size * COV.L_ACT * covIdK3()]; // V2 认出距离 x V2_ID_ACT(横向误差 ∝ d³)
+    return [sPar, sq, true, sq <= t.size * COV.L_ACT];
   }
   if (ch === 'opt')   // 角尺寸测距:σ_r = d^2 * θ / L。θ 也随距离变,所以实际按 d^3 涨,只在很近处才咬得住
     return [dd * dd * th / (t.size * COV.L_REF), sPerp, false, sPerp <= t.size * COV.L_REF];
@@ -282,11 +282,10 @@ const covMsl = t => COV.MSL * Math.sqrt(reflOf(t));
 function covHeld(c) { return !!(c.seen && (c.fix || c.n > 0)); }
 /* 某条通道【认出】目标的距离:横向误差收到目标尺寸以内。
    静听不走这条(它靠指纹,不靠角分辨),所以这里只回答光学与照射。 */
-function covIdK3() { const k = typeof v2On === 'function' && v2On() ? SENS.V2_ID_ACT : 1; return k * k * k; } // V2 雷达认出门放大 k³ ⇒ 认出距离 x k
 function identDist(ch, d, t, lo) {
   const R = covRangeOf(ch, d, t, lo); if (!(R > 0)) return 0;
   const L = sReq(t, 'size', 'ship') * (ch === 'act' ? COV.L_ACT : (ch === 'lis' ? COV.L_LIS : COV.L_REF)), T = COV.TH0[ch]; // ID3:静听那一路用 L_LIS
-  return ch === 'act' ? Math.pow(L * covIdK3() * R * R / T, 1 / 3) : Math.sqrt(L * R / T);
+  return ch === 'act' ? Math.pow(L * R * R / T, 1 / 3) : Math.sqrt(L * R / T);
 }
 function covResN(t, sig) { return 4 * t.size * COV.L_REF / sig; } // ENV2 红外页 irmResN 搬来:模糊宽度 sig 下目标横跨几个分辨单元(Johnson 准则;光学认出距离上恰为 4)
 

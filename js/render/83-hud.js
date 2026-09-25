@@ -65,7 +65,7 @@ function drawRange(){ // 测距工具(按住C):起点(或跟随船)→鼠标目�
   const sel=controlledShips();
   if(sel.length===1&&rangeB){
     const dd=V.len(V.sub(rangeB,sel[0].pos));
-    const macT=dd/(sel[0].macSpd||CFG.macSpd); // MAC:直线飞(原版 0.1c,新版交战 0.2c)
+    const macT=dd/CFG.macSpd; // MAC:直线0.1c
     const misT=estimateMissileTime(sel[0].pos,sel[0].vel,rangeB);
     txt+=` · MAC ${macT.toFixed(1)}s · 射手 ${misT>=0?misT.toFixed(1)+'s':'∞'}`;
   }
@@ -126,27 +126,6 @@ function drawHits(){ // 命中特效:命中点爆闪+十字,随时间淡出
     }
     ctx.restore();
   }
-}
-function drawBeams(){ // V2 光束 / 曳光(weapons/59 的 beamFX)+ 长矛激光(按舰上状态每帧画)。敌方的只在它交代得出位置时画,起点用估计位置
-  if(typeof beamFX==='undefined')return;
-  const from=s=>(s.side==='blue'||adminMode)?s.pos:((typeof contactPos==='function')?contactPos(s,'blue'):null);
-  const to=t=>(t.side==='blue'||adminMode||!t.side)?t.pos:((typeof contactPos==='function')?contactPos(t,'blue'):null);
-  ctx.save();ctx.lineCap='round';
-  for(const f of beamFX){
-    const a=from(f.a);if(!a)continue;const p=toScreen(a[0],a[1]),q=toScreen(f.b[0],f.b[1]);
-    ctx.globalAlpha=Math.min(1,f.t/0.25);
-    if(f.k==='pdl'){ctx.strokeStyle='rgba(120,230,255,.9)';ctx.lineWidth=1.4;}else{ctx.strokeStyle='rgba(255,220,150,.75)';ctx.lineWidth=1;ctx.setLineDash([2,6]);}
-    ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();ctx.setLineDash([]);
-  }
-  ctx.globalAlpha=1;
-  for(const s of ships){
-    if(s.dead||!(s.lanceBurst>0)||!s.lanceTgt||s.lanceTgt.dead)continue;
-    const a=from(s),b=to(s.lanceTgt);if(!a||!b)continue;
-    const p=toScreen(a[0],a[1]),q=toScreen(b[0],b[1]);
-    ctx.strokeStyle='rgba(190,120,255,.25)';ctx.lineWidth=6;ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();
-    ctx.strokeStyle='rgba(225,190,255,.95)';ctx.lineWidth=1.6;ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();
-  }
-  ctx.restore();
 }
 function drawCorridors(){ // v138(重做):来袭走廊——来源线(发射舰→导弹)+ 去向锥(导弹当前速度方向)+ 标签;导弹消失淡出5s
   for(const c of threatCorridors){
@@ -430,10 +409,6 @@ function drawHoverRings(){
     const p=toScreen(s.pos[0],s.pos[1]);
     if(hoverRing==='mac'){ring(p,macEffRange(s),'主炮 50% ≈ '+Math.round(macEffRange(s)/1000)+'k');ring(p,macRangeAt(s,0.1),'主炮 10% ≈ '+Math.round(macRangeAt(s,0.1)/1000)+'k');} // WR1:没有射程门,画两档命中率的距离
     else if(hoverRing==='msl')ring(p,mslReach(s),'导弹 动力 ≈ '+Math.round(mslReach(s)/1000)+'k(之外滑行)'); // WR1
-    else if(hoverRing==='arm')ring(p,armReach(),'反辐射 ≈ '+Math.round(armReach()/1000)+'k'); // V2
-    else if(hoverRing==='gun2')ring(p,gun2Reach(),'速射炮对舰 '+Math.round(gun2Reach()/1000)+'k');
-    else if(hoverRing==='pdl')ring(p,V2W.PD.R,'近防激光 '+Math.round(V2W.PD.R/1000)+'k');
-    else if(hoverRing==='lance'){ring(p,V2W.LANCE.D0,'长矛满伤 '+Math.round(V2W.LANCE.D0/1000)+'k');ring(p,V2W.LANCE.AUTO,'自动开火 '+Math.round(V2W.LANCE.AUTO/1000)+'k');ring(p,V2W.LANCE.DMAX,'封顶 '+Math.round(V2W.LANCE.DMAX/1000)+'k');}
     else if(hoverRing==='ciws'){const c=ciwsOf(s);ring(p,c.outer,'外圈拦截 '+Math.round(c.outer/1000)+'k');ring(p,c.inner,'内圈 '+Math.round(c.inner/1000)+'k');}
     else if(hoverRing==='emit'&&typeof actRangeOf==='function'&&typeof hearRangeOf==='function'){ // EM1-B:雷达的账 —— 开了能照多远、开了会在多远被听见(两圈都按【开着照射】算,不管此刻开没开:这是做决定前要看的账)
       const ifPaint=Object.assign({},s,{emitMode:'paint'});

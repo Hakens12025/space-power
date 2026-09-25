@@ -17,7 +17,6 @@ function enemyAI(dt){
           SN4 起是三态,红方只用 paint / silent 两档(不进 jam)。手电效应照旧:照射自照 15 万,被对方静听嗅到却是 60 万。 */
     if(pl.paint){if(e.emitMode==='silent')setEmit(e,'paint');}
     else if(e.emitMode!=='silent')setEmit(e,'silent');
-    if(e.emitMode==='paint'&&typeof v2On==='function'&&v2On()&&projectiles.some(p=>p.arm&&!p.done&&p.armE===e&&trkSees('red',p)))setEmit(e,'silent'); // V2 看见反辐射弹朝自己来就关雷达(它会飞去最后听到的地方变雷)
     /* ② 锁定:全队锁同一个(WTA 集火,60 里算好的)。原来是每舰各锁自己最近的。 */
     if(hasMAC(e)){e.lockedTarget=(pl.foe&&!pl.foe.dead)?pl.foe:null;e.lockPlayer=false;}
     /* ③ 机动:hold=清命令停车(埋伏 / 压上态找主炮窗口 —— 战斗转向只认【空闲】,见 physics/31 的 idle);

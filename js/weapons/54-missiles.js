@@ -27,7 +27,6 @@ function guideSide(side){ // 一方数据链网络的引导分配(v125:按网分
   const parks=projectiles.filter(p=>p.type==='missile'&&!p.done&&p.park&&!p.mine&&p.shooter&&p.shooter.side===side); // DS192:空目标 park 弹(区域齐射/布雷途中),下面吃富余通道
   if(!ms.length&&!parks.length)return;
   for(const p of ms){ // 标定引导需求:导弹自己探测到目标(被动看热/末端LADAR)→ 自导(不耗通道);没看到且网络未点亮 → 需引导/脱锁
-    if(p.arm){p.needGuide=false;p.guided=armHear(p.target,p.pos);p.guideMode=p.guided?'self':'coast';if(p.guided)p.lastKpos=p.target.pos.slice();continue;} // V2 反辐射弹:只听目标的雷达,不吃数据链
     p.guided=false; // KIMI146修:每tick无状态重算——原只置true永不复位,脱锁状态机整体失效(失去信息仍全知追击,架空导弹设计规范§1/§2)
     p.needGuide=!missSee(p);
     if(!p.needGuide){p.guided=true;p.coastT=0;p.guideMode='self';p.lastKpos=p.target.pos.slice();}

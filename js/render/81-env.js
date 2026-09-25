@@ -27,7 +27,7 @@ const ENV_KIND_OF={sun:['sun'],stars:['star'],bodies:['body','shadow'],clouds:['
   asteroids:[]}; // ENV2 世界层每个键 → 视图里的类。asteroids 就是石头:走 82-rocks 的航迹画法(带迷雾),不是地图事实;红外里它们是热源
 const ENV_VIEWS={}; // ENV2 视图名 → {order, slot, pre?, kinds:{类名 → 画法对象 | null}}
 ENV_VIEWS.map={order:['cloud','shadow','body','star','sun'],slot:'frame',pre:mapTileFrame,kinds:{
-  cloud:{tile:mapCloudPaint,comp:mapCloudLabels,need:function(){return ENV.clouds.length>0;}},
+  cloud:{tile:mapCloudPaint,need:function(){return ENV.clouds.length>0;}}, // 2026-09-26 用户:尘埃云的中文标注不要了(原 comp:mapCloudLabels)
   shadow:{comp:mapShadows},   // ENV2 补充规格 C:影子是矢量虚线(每个天体 2 条,Liang–Barsky 裁到视图),不进瓦片 —— 瓦片于是只依赖云的几何,换光照不作废;任务 4 起画进合成缓存(矢量的键含世界 rev)
   body:{comp:mapBodies}, star:{frame:mapStar}, sun:{frame:mapSunCue}}};
 function drawEnvView(view){const V=ENV_VIEWS[view];if(!V)return;const took=V.pre?V.pre(V):false; // ENV2 任务 4:pre 返回真 = comp 槽已经在贴上去的合成缓存里,不再每帧画
@@ -37,7 +37,7 @@ function drawEnv(){drawEnvView('map');} // ENV2 名字不变:84-scene 的 typeof
 /* ---- ENV2 静态贴图层(云):登记表的 pre ---- */
 const MAP_CLOUD={LO:[118,108,160],HI:[110,185,235],A:0.3,ISO:[0.15,0.4,0.7],LINE:['rgba(150,165,215,.18)','rgba(140,190,235,.28)','rgba(180,225,255,.42)'],GM:6,G0:131072,GL:3,BLUR_KM:32768};
   // ENV2 云的海图配色(同演示页 NEB):浓度低处灰紫、高处青蓝,alpha = A·浓度^0.7;三档等值线;拉远(minKm 从 G0 起 GL 级)显示增益到 GM 倍;格距 >= BLUR_KM 时等值线描在 3x3 平均上
-const MAP_TILE_PAINT={paint:mapTilePaint,iso:MAP_CLOUD.ISO,gain:mapCloudGain,blur:MAP_CLOUD.BLUR_KM,vec:mapVec,vkey:mapLabPlan,vdiff:mapLabDiff}; // ENV2 交给地形瓦片服务的上色器;任务 4:vec = 合成缓存的矢量层,vkey = 矢量层的键(世界 rev + 字的位置);
+const MAP_TILE_PAINT={paint:mapTilePaint,iso:MAP_CLOUD.ISO,gain:mapCloudGain,blur:MAP_CLOUD.BLUR_KM,vec:mapVec,vkey:mapVecKey}; // ENV2 交给地形瓦片服务的上色器;任务 4:vec = 合成缓存的矢量层,vkey = 矢量层的键(世界 rev + 字的位置);
   // 审查第四轮:vdiff = 两个键之间是不是只有字挪了、挪了的新旧字框在哪(合成缓存据此只重画那几格,不整张重拼)
 const MAP_SMALL={}; // ENV2 上色用的小画布(每种格点数一张:17 / 65),putImageData 之后放大贴进瓦片
 function mapTileNeed(V){for(const k of V.order){const e=V.kinds[k];if(e&&e.tile&&e.need())return true;}return false;} // ENV2 有没有要进贴图的类
@@ -87,6 +87,7 @@ function mapCloudPaint(g,T){ // ENV2 云的海图画法(只在离屏瓦片上):�
   for(let k=0;k<T.piso.length;k++){g.strokeStyle=MAP_CLOUD.LINE[k];g.stroke(T.piso[k]);}
 }
 function mapCloudGain(mk){let u=Math.max(0,Math.min(1,Math.log2(mk/MAP_CLOUD.G0)/MAP_CLOUD.GL));u=u*u*(3-2*u);return 1+(MAP_CLOUD.GM-1)*u;} // ENV2 拉远的显示增益:只放大亮度不挪位置
+function mapVecKey(){return (mapSunOn()?'s':'')+'r'+ENV.rev;} // 矢量层的键:世界 rev +「太阳线」开关(云的字删掉之后,键里不再有字的位置)
 function mapCloudLabels(){ // ENV2 comp 槽(任务 2 / 审查问题 6):每朵要带字的云在它"屏幕上可见部分里的一点"写一行"尘埃云"(位置由 mapLabPlan 定、钉在世界上;
   // 原来只写在云心、云心不在屏里就没有字,还会压在舰名上)。字是预渲染的小贴图(见 mapText)。返回写了几行
   if(!ENV.clouds.length)return 0;

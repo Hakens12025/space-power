@@ -179,7 +179,7 @@ function xhQuickEngage(append){ // RF5 中键短按 = 快速交战:主体舰 + �
    短按中键 或 Esc(71-keys)→ radClose;左键点扇区 → radPick(70-input 的 onMouseDown 首行早退,不许落到选舰/框选/命令点拖拽);
    滚轮在环带内 → radPage。两侧全部经 typeof 守卫互调,任一文件缺席另一边仍能独立工作(与本库既有口径一致)。 */
 function radWeapons(s){ // RF5 轮盘的武器项来源:实例烘焙的 s.weapons 清单(RF3 配装产出,加武器只改 51-defs 不改这里),过滤掉 ciws —— 近防是被动防御,与「许不许打这个目标」无关
-  return (s&&s.weapons?s.weapons:[]).filter(w=>w&&(w.kind==='mac'||w.kind==='msl')); // V2 的新武器暂不进轮盘(fcGate / fcSetAllow 只认这两类);原版配装逐位不变
+  return (s&&s.weapons?s.weapons:[]).filter(w=>w&&w.kind!=='ciws');
 }
 function radItems(sub,t,it){ // RF5 解算每个武器扇区:allow=计划(许不许打),ok/why=此刻打不打得到。两者刻意分开 —— 目标现在打不到不代表以后打不到,所以禁用态扇区仍可点
   const out=[];

@@ -5,7 +5,6 @@
 - `51-ciws.js` 近防谓词 / 过载 / 扇面;`52-fire.js` 主炮 / 诱饵 / 拦截弹 / 齐射发射链、开火暴露置位
 - `53-nets.js` 数据链网分配;`54-missiles.js` 导弹引导(`MSL_CFG` / `missSee`);`55-damage.js` `applyDamage`
 - `56-step-projectiles.js` 弹丸推进与引导;`57-step-weapons.js` 冷却 / 装填 / 自动索敌与自动齐射;`58-firecontrol.js` 火控序列引擎侧(`fcGate` / `fcSolve` / `fcRuns`)
-- `59-v2weapons.js` 新版交战的武器(`V2W`):反辐射弹 `fireARM`、近防激光 + 速射炮塔的每拨容量 `v2PdKill`、速射炮对舰、长矛激光;配装在 51 的 `CLS_LOADOUT_V2`(只在 `v2On()` 时用)
 
 ## 射程与瞄准
 - 没有射程门。主炮每发带高斯角散布 `macSigma`,命中率 P(d) = erf(`MAC_HIT_R` / (σ·d·√2))。距离一律调 `macHitProb` / `macRangeAt` / `macEffRange`(= 50% 把握距离),不写公里数。

@@ -122,11 +122,7 @@ TEST_ENVS.push(Object.assign({},TEST_ENVS[0],{name:'测试·红外',world:{
   asteroids:[{x:-50000,y:0,r:500000,n:10,seed:4242,smin:1,smax:3,clear:60000,name:'小行星'}]
 }}));
 let envIdx=0;
-/* V2 新版交战(用户 2026-09-26:"全新设定放入按钮2-新版交战……保留一下原版机制,我好做对比"):同一张对局表,只多一个 v2 门。
-   感知扇区 / 红外视场 / 新武器与新配装只在它为真时出现;数值见仓库根 数值模型-感知与武器.md */
-TEST_ENVS.push(Object.assign({},TEST_ENVS.find(e=>e.match),{name:'新版交战',v2:true}));
 function curEnv(){return TEST_ENVS[envIdx]||TEST_ENVS[0];}
-function v2On(){const e=curEnv();return !!(e&&e.v2);} // V2 的门:各系统只问它
 const DEFAULT_ENEMY=[
   ['CA','叛军·巡洋-01',220000,-90000,0,[-1,0,0],[0,0,0],0,null],
   ['CA','叛军·巡洋-02',240000,90000,0,[-1,0,0],[0,0,0],0,null],
