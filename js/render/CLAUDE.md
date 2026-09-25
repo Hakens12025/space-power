@@ -5,6 +5,7 @@
 - `81-background.js` 底色、嵌套网格、星空贴图 `STAR_TILE`;`81-env.js` 世界层的地图视图(`ENV_VIEWS` / `ENV_KIND_OF` / `drawEnvView`、标签 `mapLabPlan`);`81-terrain.js` 地形瓦片服务 `TERR`(采样在后台线程 `terrWkInit`)
 - `82-ship-icons.js` 舰标 / 记号 / 告警弧 / 涟漪(`HULL_ZOOM` / `hullZoomF` / `shipZoomF` / `LIT_RGB`);`82-lod.js` 聚合层(`lodBuild` / `lodDrawShip`);`82-rocks.js` 石头
 - `83-hud.js` 误差椭圆、hover 圈、信号视野、火控链;`83-geom.js` 缩圈小窗;`84-scene.js` 每帧场景组装;`84-fmplot.js` 编队图
+- `86-irview.js` 红外画面(右下角「红外」钮,`MAPV.mode === 'ir'`;`drawIrView` / `irvOff`,物理走 `senseOptLoWith` / `senseOptBlocked` / `covTheta`)
 - `85-settings.js` 右下工具栏与倍速钮;`85-tutorial.js` 教程 `TUT_HTML`;`87-fmbar.js` / `89-fmpage.js` 编队界面;`88-selpanel.js` 右栏与火控计算机;`89-radial.js` 目标轮盘几何
 
 ## 迷雾(画面不许泄漏真值)
