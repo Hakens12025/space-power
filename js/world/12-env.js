@@ -36,7 +36,9 @@
 
 const ENV_CFG={
   OPT_K:0.25,         // 残骸场内目标的光学亮度倍率(亮度 x0.25 ⇒ 光学量程 x0.5)
-  MTI_V:30,           // 动目标显示门限 km/s:场内径向速度低于它的回波被当成杂波。DD 速度档 250 / 500 / 800,所以"在动"几乎都滤不掉,停下来 / 贴着切向走才滤得掉
+  MTI_V:30,
+  RF_SUN:{K:30,E:[1,1.5,2,3],M:[1,1.2,1.75,2.5]}, // ENV2 恒星射频噪声锥(照 雷达效果.html):锥内噪声 1+K,往外按 (半角/夹角)^4 淡出;热循环不许反三角,分四档:夹角 <= E[i] 倍光源半角取 1 + K/M[i]^4,三倍半角之外不管
+  CLUT_RES:20000,AST_KM:4000, // ENV2 雷达杂波:贴着天体盘面 / 小行星本体(体型 x AST_KM)CLUT_RES 以内的慢目标,回波混进杂波(同碎石带,过 MTI)           // 动目标显示门限 km/s:场内径向速度低于它的回波被当成杂波。DD 速度档 250 / 500 / 800,所以"在动"几乎都滤不掉,停下来 / 贴着切向走才滤得掉
   SUN_HALF_DEG:10,    // 太阳禁区的缺省半角(度)。ENV2:也是位置型恒星禁区半角的缺省
   STAR_R:696000,      // ENV2 位置型恒星的缺省光球半径 km(真太阳;红外页的 R_SAT)
   BODY_HEAT:2,        // ENV2 天体背阴面的自身热。单位 = 背景单位(与 envBg、云的 v 同一单位:1 = SENS.BG_G0 = 一条发现线);v1 只有红外视图读
@@ -99,8 +101,26 @@ function envSunBlind(from,to){ // ENV2 光源方向按观测方取;观测方在�
   return k>0&&k*k>(vx*vx+vy*vy)*c2;
 }
 /* 动目标显示:to 在场里、而且沿 from→to 视线的径向速度低于门限 ⇒ 回波被当成杂波。热循环里同样有一份内联副本 */
-function envMtiBlind(from,to,vel){
-  if(!ENV.fields.length||!vel||!envInField(to))return false;
+function envInClutter(p,self){ // ENV2 p 在雷达杂波里:碎石带内、贴着天体盘面、或贴着别的小行星(self 自己不算)。⚠ 22-percep 的 sensePrepare 按目标调它
+  if(ENV.fields.length&&envInField(p))return true;
+  const C=ENV_CFG.CLUT_RES;
+  for(const b of ENV.bodies){const dx=p[0]-b.x,dy=p[1]-b.y,q=b.r+C;if(dx*dx+dy*dy<q*q)return true;}
+  for(const k of rocks){if(!k.ast||k===self||k.dead)continue;const dx=p[0]-k.pos[0],dy=p[1]-k.pos[1],q=k.size*ENV_CFG.AST_KM+C;if(dx*dx+dy*dy<q*q)return true;}
+  return false;
+}
+function envClutterOn(){if(ENV.fields.length||ENV.bodies.length)return true;for(const k of rocks)if(k.ast&&!k.dead)return true;return false;} // ENV2 场上有没有杂波源
+function envRfNoise(from,to){ // ENV2 从 from 朝 to 的射频噪声倍率(>= 1):朝光源的锥里被恒星噪声淹;观测方在天体影子里 ⇒ 光源被挡,不加。⚠ 22-percep 热循环里有同式的内联副本
+  if(!envHasLight())return 1;
+  if(ENV.bodies.length&&envInShadow(from))return 1;
+  const u=envSunDirAt(from,ENV_T2);if(!u)return 1;
+  const vx=to[0]-from[0],vy=to[1]-from[1],k=vx*u[0]+vy*u[1];if(!(k>0))return 1;
+  const kk=k*k,l2=vx*vx+vy*vy,S=ENV_CFG.RF_SUN,h=envLightHalf();
+  for(let i=0;i<S.E.length;i++){const c=Math.cos(Math.min(Math.PI/2,S.E[i]*h));if(kk>l2*c*c)return 1+S.K/Math.pow(S.M[i],4);}
+  return 1;
+}
+function envLightHalf(){const s=ENV.sun;return (s?s.half:(ENV.stars.length?ENV.stars[0].half:0))*Math.PI/180;} // ENV2 光源半角(弧度)
+function envMtiBlind(from,to,vel,self){
+  if(!vel||!envInClutter(to,self))return false;
   const dx=to[0]-from[0],dy=to[1]-from[1],dz=to[2]-from[2],rv=dx*vel[0]+dy*vel[1]+dz*vel[2];
   return rv*rv<ENV_CFG.MTI_V*ENV_CFG.MTI_V*(dx*dx+dy*dy+dz*dz);
 }
@@ -163,7 +183,7 @@ function envSpawnRocks(){
     for(let k=0;k<a.n*20&&n<a.n;k++){
       const an=r()*2*Math.PI,d=Math.sqrt(r())*a.r,sz=a.smin+(a.smax-a.smin)*r(),fa=r()*2*Math.PI,x=a.x+Math.cos(an)*d,y=a.y+Math.sin(an)*d;
       if(envSpawnBlocked(x,y,a.clear))continue;
-      rocks.push(makeRock([x,y,0],sz,[Math.cos(fa),Math.sin(fa),0],a.name));n++;
+      const k=makeRock([x,y,0],sz,[Math.cos(fa),Math.sin(fa),0],a.name);k.ast=true;rocks.push(k);n++; // ast:小行星本体是雷达杂波源(envInClutter)
     }
   }
 }

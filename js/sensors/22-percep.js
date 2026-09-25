@@ -55,7 +55,7 @@ let scBIR = null, scBRF = null, scBACT = null, scBMax = null; // 三条通道各
 let scGS = 0.0625, scGF = 0.25;    // 分档常数缓存(热循环不查 SENS.xxx)
 let scInF = null;                  // ENV1 目标在不在残骸场里(Uint8Array;没有场时全 0,热循环那一支天然不进)
 let scTVX = null, scTVY = null, scTVZ = null; // ENV1 目标速度(动目标显示按径向速度滤杂波用;只在有场时填)
-let scMTI2 = 0;                    // ENV1 动目标显示门限的平方
+let scMTI2 = 0, scRfC2 = new Float64Array(4), scRfN = new Float64Array(4); // ENV2 恒星射频噪声锥的四档:cos^2 门槛与噪声倍率(sensePrepare 填)                    // ENV1 动目标显示门限的平方
 let scDLit = null, scDSX = null, scDSY = null; // ENV2 观测方看得见光源(Uint8)+ 从它指向光源的方向(位置型恒星每船不同)
 let scTDir = null, scTBg = null, scTSh = null, scCOn = 0; // ENV2 目标:这一对跟方向有关(Uint8)/ 云背景 / 在影子里(Uint8),精算步不重算
 let scON = 0, scOCap = 0, scOX = null, scOY = null, scOR2 = null; // ENV2 天体摊平(遮挡的内联副本读)
@@ -150,7 +150,8 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
   scCOn = cOn ? 1 : 0; // ENV2 有云 ⇒ 每一对都有消光,光学还在的对都要精算
   scLitC2 = ENV.sun ? ENV.sun.c2 : (ENV.stars.length ? ENV.stars[0].c2 : 1);
   scBafC2 = senseBafC2();
-  scMTI2 = fOn ? ENV_CFG.MTI_V * ENV_CFG.MTI_V : 0;
+  scMTI2 = envClutterOn() ? ENV_CFG.MTI_V * ENV_CFG.MTI_V : 0; // ENV2 杂波源:碎石带、天体盘面、小行星
+  { const S = ENV_CFG.RF_SUN, h = envLightHalf(); for (let i = 0; i < 4; i++) { const c = Math.cos(Math.min(Math.PI / 2, S.E[i] * h)); scRfC2[i] = c * c; scRfN[i] = 1 + S.K / Math.pow(S.M[i], 4); } } // 与 envRfNoise 同式
   const B = ENV.bodies; senseGrowO(B.length); scON = B.length;
   for (let b = 0; b < scON; b++) { scOX[b] = B[b].x; scOY[b] = B[b].y; scOR2[b] = B[b].r2; }
   let mIR = 0, mRF = 0, mACT = 0;
@@ -178,7 +179,7 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
     const bA2 = Math.sqrt(bA4); // 照射的界在 d^4 空间,必须在这里开方换算到 d^2 空间才能和另两路取 max(见文件头 blocker A)
     scBIR[i] = bIR; scBRF[i] = bRF; scBACT[i] = bA4;
     scBMax[i] = bIR > bRF ? (bIR > bA2 ? bIR : bA2) : (bRF > bA2 ? bRF : bA2);
-    const inF = fOn && envInField(p) ? 1 : 0; scInF[i] = inF; // ENV1:只有在场里的目标才需要速度
+    const inF = scMTI2 > 0 && envInClutter(p, t) ? 1 : 0; scInF[i] = inF; // ENV1:只有在杂波里的目标才需要速度(ENV2 杂波 = 碎石带 / 天体盘面旁 / 小行星旁)
     if (inF) { const v = t.vel; scTVX[i] = v[0]; scTVY[i] = v[1]; scTVZ[i] = v[2]; }
     /* SN6:干扰的落点从"每拍削弱照射水位"改成"把这一拍的回波误差按烧穿距离放大"(23-cov 的 covShape)。
        后者能直接读成一个距离(贴到这么近干扰就压不住了),前者只是一个乘子;而且误差模型里干扰
@@ -197,10 +198,12 @@ function sensePairGrades(j, ti) {
   if (d2 > scBMax[ti]) return 0; // 整目标早退:三条界取 max,照射那一路一定在里面
   let g = 0, r = scSigIR[ti] * scKIR[j];
   if (d2 < r) g |= (d2 < r * scGS) ? 3 : ((d2 < r * scGF) ? 2 : 1);
+  let nz = 1; // ENV2 恒星射频噪声锥(静听与照射):视线朝光源的夹角落在哪一档;观测方在影子里 scDLit=0,不加。与 envRfNoise 同式
+  if (scDLit[j] === 1) { const k = -(dx * scDSX[j] + dy * scDSY[j]); if (k > 0) { const kk = k * k, l2 = dx * dx + dy * dy; if (kk > l2 * scRfC2[3]) nz = kk > l2 * scRfC2[0] ? scRfN[0] : (kk > l2 * scRfC2[1] ? scRfN[1] : (kk > l2 * scRfC2[2] ? scRfN[2] : scRfN[3])); } }
   const sr = scSigRF[ti];
-  if (sr !== 0) { r = sr * scKRF[j]; if (d2 < r) g |= ((d2 < r * scGS) ? 3 : ((d2 < r * scGF) ? 2 : 1)) << 2; } // 静默目标 sigRF 恒 0,这一路整段跳过
+  if (sr !== 0) { r = sr * scKRF[j]; const dn = d2 * nz; if (dn < r) g |= ((dn < r * scGS) ? 3 : ((dn < r * scGF) ? 2 : 1)) << 2; } // 静默目标 sigRF 恒 0,这一路整段跳过;单程:距离按 噪声^(-1/2)
   r = scRefl[ti] * scKACT[j];
-  if (r !== 0) { const dd = d2 * d2; if (dd < r) g |= ((dd < r * scGS) ? 3 : ((dd < r * scGF) ? 2 : 1)) << 4; } // 比四次方以避免开方
+  if (r !== 0) { const dd = d2 * d2 * nz; if (dd < r) g |= ((dd < r * scGS) ? 3 : ((dd < r * scGF) ? 2 : 1)) << 4; } // 比四次方以避免开方;双程:距离按 噪声^(-1/4)
   /* ENV1 太阳禁区:探测方看目标的视线落在太阳那个锥里 ⇒ 光学与静听这一拍没有量测(照射不受影响)。只看 XY。
      dx 是"目标指向探测方",视线是它的反向,所以点积取负。与 world/12 的 envSunBlind 同式(那边给弹丸与判据用),判据逐对钉着 */
   if (scDLit[j] === 1 && (g & 15) !== 0) { const k = -(dx * scDSX[j] + dy * scDSY[j]); if (k > 0 && k * k > (dx * dx + dy * dy) * scLitC2) g &= 48; } // ENV2 方向按观测方取;影子里的观测方 scDLit=0,不晃
@@ -275,9 +278,9 @@ function senseSeesOptical(lum, d, pos, bg) { // 探测器 d 能否光学看到�
   return d2 < r && (!ENV.clouds.length || d2 < r * envExt(d.pos, pos, 8)); // ENV2 消光只在不算它也看得见时才算(沿线至多 8 点)
 }
 function senseSeesActive(refl, d, pos, vel) { // 探测器 d 的照射能否打到位于 pos、反射 refl 的东西(不照射时 senseKACT 恒 0,自然为假)。vel 可省
-  if (envMtiBlind(d.pos, pos, vel)) return false; // ENV1:场内慢目标的回波被动目标显示滤掉(空环境 / 不给速度时恒假)
+  if (envMtiBlind(d.pos, pos, vel)) return false; // ENV1:杂波里的慢目标被动目标显示滤掉(空环境 / 不给速度时恒假)
   if (ENV.bodies.length && envOccluded(d.pos, pos)) return false; // ENV2 天体挡视线
   const dx = d.pos[0] - pos[0], dy = d.pos[1] - pos[1], dz = d.pos[2] - pos[2];
   const d2 = dx * dx + dy * dy + dz * dz;
-  return d2 * d2 < refl * senseKACT(d);
+  return d2 * d2 * envRfNoise(d.pos, pos) < refl * senseKACT(d); // ENV2 恒星射频噪声锥,与热循环同式
 }
