@@ -311,10 +311,16 @@ function mdRight(e,sx,sy){ // 右键:单击=直接移动,按住350ms=移动虚�
     }
   },350);
 }
+function mdInset(e){ // 特写框里:左键 = 主镜头飞过去;右键 = 取消待命态,没有待命态就跳过这段播放;中键只挡浏览器自动滚动
+  if(e.button===1){if(e.preventDefault)e.preventDefault();return;}
+  if(e.button===2){if(pendingTurn||selWeapon||pendingFollow){clearPendings();if(typeof updFmBar==='function')updFmBar();}else if(typeof insetSkip==='function')insetSkip();return;}
+  if(e.button===0&&typeof insetClick==='function')insetClick();
+}
+let insetCur=false; // 指针此刻在不在特写框上(只在进出时改 cursor)
 function onMouseDown(e){
   const sx=e.clientX,sy=e.clientY;
   if(mdRadial(e,sx,sy))return;
-  if(typeof insetHit==='function'&&insetHit(sx,sy)){if(e.button===0&&typeof insetClick==='function')insetClick();return;} // 2026-09-26 点在左下角特写框里:不落到框底下的地图;左键 = 主镜头飞过去
+  if(typeof insetHit==='function'&&insetHit(sx,sy)){mdInset(e);return;} // 2026-09-26 点在左下角特写框里:不落到框底下的地图
   if(mdWeaponPick(e,sx,sy))return;
   if(mdPending(e,sx,sy))return;
   if(e.button===0)mdLeft(e,sx,sy);
@@ -330,7 +336,9 @@ window.addEventListener('mousemove',e=>{
     rangeMoved=true;
     return;
   }
-  if(typeof xhFeed==='function')xhFeed(e.clientX,e.clientY); // RF5 悬停准星喂入(command/74)。放这里:测距在上面 return 了(准星不该在那个模式下出现),又早于 dragOrder 的 return(否则拖命令点时十字会冻在拖拽起点)
+  const inIn=typeof insetHit==='function'&&insetHit(e.clientX,e.clientY);if(inIn!==insetCur){insetCur=inIn;cv.style.cursor=inIn?'pointer':'';} // 2026-09-26 特写框上换手形指针
+  if(inIn){if(typeof xhOff==='function')xhOff();} // 2026-09-26 框上不吸附框下的敌舰、不弹信息卡
+  else if(typeof xhFeed==='function')xhFeed(e.clientX,e.clientY); // RF5 悬停准星喂入(command/74)。放这里:测距在上面 return 了(准星不该在那个模式下出现),又早于 dragOrder 的 return(否则拖命令点时十字会冻在拖拽起点)
   if(rangeDrag){ // ENV2 靶场沙盘拖动:过 5 px 才算拖,并取消这一击的点选 / 框选
     if(!rangeDrag.moved&&Math.abs(e.clientX-rangeDrag.sx)+Math.abs(e.clientY-rangeDrag.sy)>5){rangeDrag.moved=true;selDrag=null;}
     if(rangeDrag.moved){rangeDragTo(e.clientX,e.clientY);return;}
