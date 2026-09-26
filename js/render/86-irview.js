@@ -338,8 +338,43 @@ function irvUpdate(){
     irvFc(Math.max(0,Math.floor((r[0]-1)*C*dpr)-1),Math.max(0,Math.floor((r[2]-1)*C*dpr)-1),Math.min(V.fc.width,Math.ceil((r[1]+1)*C*dpr)+1),Math.min(V.fc.height,Math.ceil((r[3]+1)*C*dpr)+1),dpr);
   }
 }
-function drawIrView(){irvUpdate();ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(IRVC.fc,0,0);ctx.restore();} // 每帧入口(84-scene,MAPV.mode === 'ir')
-function irvOff(){IRVC.live=false;} // 离开红外画面:下次进来整张重建
+function drawIrView(){irvUpdate();ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(IRVC.fc,0,0);ctx.restore();irvDrawLobes();} // 每帧入口(84-scene,MAPV.mode === 'ir')
+function irvOff(){IRVC.live=false;}
+/* 2026-09-27 红外发现边界(用户选 D):给选中的我方舰(最多 3 艘)画两条随方位变的线 ——
+   实线 = 我能看见一艘熄火驱逐舰的最远距离;虚线 = 那个方位上的敌舰能看见我(按我此刻的引擎档、发射档)的最远距离。
+   物理全走感知内核(senseOptLo / senseOptBlocked / visRangeOf):距离与有效亮度互相依赖(消光、背景看位置),不动点迭代三步;
+   每个方位要算好几次消光积分,所以按帧预算分批算(LOBE.BUD ms),算完一整圈才换上去,每艘至多每 MS 毫秒重算一轮。 */
+const IRV_LOBE={m:new Map(),N:72,MS:1000,BUD:1.5,ref:null,obs:{pos:[0,0,0],flame:0,sideFlame:0,facing:[1,0,0]}};
+function irvLobeD(o,t,mv,ux,uy,bx,by){ // 沿 (ux,uy) 挪动 mv(o 或 t 之一),返回 o 能看见 t 的最远距离
+  let d=visRangeOf(t);
+  for(let k=0;k<3;k++){mv.pos[0]=bx+ux*d;mv.pos[1]=by+uy*d;mv.pos[2]=0;d=visRangeOf(t,Math.max(0,senseOptLo(o,t)));}
+  for(const f of [1,0.75,0.5,0.25]){mv.pos[0]=bx+ux*d*f;mv.pos[1]=by+uy*d*f;if(!senseOptBlocked(o,t))return d*f;} // 禁区 / 天体遮挡 / 自己尾焰致盲:往回找一个没被挡的距离
+  return 0;
+}
+function irvLobeWork(s,t0){ // 给 s 的下一轮边界算几个方位;返回是否还有预算
+  const L=IRV_LOBE,N=L.N;let e=L.m.get(s);
+  if(!e){e={a:null,b:null,na:new Float64Array(N),nb:new Float64Array(N),i:0,t:-1e9};L.m.set(s,e);}
+  if(e.i>=N){if(nowMs()-e.t<L.MS)return true;e.i=0;}
+  if(!L.ref)L.ref=ladShip('DD',{pos:[0,0,0]});
+  const t=L.ref,o=L.obs,bx=s.pos[0],by=s.pos[1];
+  while(e.i<N){const th=e.i/N*6.2832,ux=Math.cos(th),uy=Math.sin(th);
+    e.na[e.i]=irvLobeD(s,t,t,ux,uy,bx,by);e.nb[e.i]=irvLobeD(o,s,o,ux,uy,bx,by);e.i++;
+    if(nowMs()-t0>L.BUD)break;}
+  if(e.i>=N){e.a=e.na.slice();e.b=e.nb.slice();e.t=nowMs();}
+  return nowMs()-t0<=L.BUD;
+}
+function irvDrawLobes(){
+  const sel=(typeof controlledShips==='function'?controlledShips():[]).filter(s=>s.side==='blue').slice(0,3);if(!sel.length)return;
+  const t0=nowMs();for(const s of sel)if(!irvLobeWork(s,t0))break;
+  if(IRV_LOBE.m.size>12)for(const k of IRV_LOBE.m.keys())if(sel.indexOf(k)<0)IRV_LOBE.m.delete(k);
+  const N=IRV_LOBE.N;ctx.save();ctx.lineWidth=1.2;ctx.font='10px Consolas';ctx.textAlign='left';ctx.textBaseline='middle';
+  for(const s of sel){const e=IRV_LOBE.m.get(s);if(!e||!e.a)continue;
+    for(const [arr,col,dash,lb] of [[e.a,'rgba(255,214,140,.75)',[],'看得见熄火驱逐舰'],[e.b,'rgba(255,110,110,.7)',[5,4],'敌舰看得见我']]){
+      ctx.setLineDash(dash);ctx.strokeStyle=col;ctx.beginPath();let im=0;
+      for(let i=0;i<=N;i++){const k=i%N,th=k/N*6.2832,q=toScreen(s.pos[0]+Math.cos(th)*arr[k],s.pos[1]+Math.sin(th)*arr[k]);if(i)ctx.lineTo(q[0],q[1]);else ctx.moveTo(q[0],q[1]);if(arr[k]>arr[im])im=k;}
+      ctx.stroke();const th=im/N*6.2832,q=toScreen(s.pos[0]+Math.cos(th)*arr[im],s.pos[1]+Math.sin(th)*arr[im]);ctx.fillStyle=col;ctx.fillText(lb+' '+Math.round(arr[im]/1000)+'k',q[0]+4,q[1]);}}
+  ctx.setLineDash([]);ctx.restore();
+} // 离开红外画面:下次进来整张重建
 /* ---- 近处的热轮廓:比山顶亮一点;在动的用预渲染精灵 ---- */
 const IRV_ROCK_SHAPE=[1,0.72,0.95,0.68,0.9,0.78,1.05];
 function irvSilPath(X,t,tv){

@@ -231,17 +231,33 @@ function covShape(ch, gi, d, t, dd, lo) {
    el  = 这一拍实际经过的模拟秒
    ⚠ 与演示页的差别只有这个形状:演示页每拍对全部探测方现算量程,引擎有 O(N^2) 热循环与早退,
      所以把"哪些对有信号"这件事留在外面。数学逐行相同。 */
-function stepCov(t, c, obs, el, idOut) { // TK2.6:可选的 idOut 记下这一拍【每一条】认出它的通道(来自每一个探测站),见下面那一句
+function stepCov(t, c, obs, el, idOut, kin) { // TK2.6:可选的 idOut 记下这一拍【每一条】认出它的通道(来自每一个探测站),见下面那一句
   /* 先验增长要按【真实经过的秒数】取幂,不能写成 a*(1+f)^el + G*el:
      实测 f=0.18 / G=120 / a0=400 时,跑 6 次 1 秒得 2213、跑 1 次 6 秒得 1800,差 23%
      —— 那就是"倍速越高、椭圆长得越慢",倍速改了物理。解析形让两者逐位相同。 */
+  /* 2026-09-27 航位推算(用户选 A + B):没有量测、或已定位的航迹这一拍只剩单站光学方位 ⇒ 误差按未知加速度长 ½·a·τ²(τ = 距上次测到位置的秒数,
+     a = kin.a 这一方对它最大加速度的先验),不再按复利涨;红外看得见它没在喷(速度没变)就不长、τ 也不走。
+     有测距(照射 / 静听幅度 / 可见圈)或多站交会的一拍照旧复利 —— 梯子的标定(covSteady)只在这一路上,不受影响。 */
+  let rng = false, nOpt = 0, oDet = null;
+  for (const ob of obs) { const g = ob.g; if (g.act || g.lis || g.vis) rng = true; if (g.opt) { nOpt++; oDet = ob.det; } }
+  const posM = rng || nOpt >= 2, K = !!kin && !posM && (nOpt === 0 || c.fix);
+  if (kin) kin.pm = posM;
   const fd = c.n > 0 ? COV.FADE_HOLD : COV.FADE_LOST;
   const gm = Math.pow(1 + fd, el), off = COV.GROW / fd;
   /* 滤波器的【状态】是钳位之前的真实轴长 r1/r2;a1/a2 只是它钳到 AMAX 之后的显示值。
      拿 a1/a2 当状态会造成一段双稳态(实测:同一个点,从远处来定不出位置、从近处来定得出)——
      没有信息的轴自己就是一个极大的数,不需要靠钳位来表达。 */
   const BIG = COV.HUGE * 1e3;
-  const p1 = Math.min(BIG, (c.r1 + off) * gm - off), p2 = Math.min(BIG, (c.r2 + off) * gm - off);
+  let p1, p2, coastSeen = false;
+  if (K) {
+    coastSeen = nOpt > 0 && !(engPowerOf(t) > 0);
+    const gk = coastSeen ? 0 : kin.a * (kin.tau * el + 0.5 * el * el);
+    if (!coastSeen) kin.tau += el;
+    p1 = Math.min(BIG, c.r1 + gk); p2 = Math.min(BIG, c.r2 + gk);
+  } else {
+    p1 = Math.min(BIG, (c.r1 + off) * gm - off); p2 = Math.min(BIG, (c.r2 + off) * gm - off);
+    if (kin) { if (posM) kin.tau = 0; else kin.tau += el; }
+  }
   const J = [0, 0, 0]; covAddEll(J, p1, p2, c.th);
   /* 一拍给多少信息,按这一拍实际过了多久折算:传感器盯了 el 秒,信息量正比 el。
      每拍固定算"一次量测"的话稳态随节拍长短变 —— 时间倍率一开,同一个站位的椭圆就变了。
@@ -280,7 +296,13 @@ function stepCov(t, c, obs, el, idOut) { // TK2.6:可选的 idOut 记下这一�
   /* 身份【闩住】:认出来之后,只要这条航迹还在就一直认得;航迹彻底断了(不再握着)才忘掉。
      与 coasting 的语义一致 —— 丢了航迹就不知道重新出现的是不是同一艘。 */
   if (idn) { c.idn = true; c.idBy = idBy; }
-  if (n > 0) { c.x = t.pos[0]; c.y = t.pos[1]; c.age = 0; c.seen = true; } else c.age += el;
+  if (n > 0) {
+    c.x = t.pos[0]; c.y = t.pos[1]; c.age = 0; c.seen = true;
+    if (K && oDet && kin.dr) { // 单站方位续着的航迹:方向是量出来的,距离还是推算的 —— 估计点放在这条方位线上、离观测站与推算点一样远
+      const ox = oDet.pos[0], oy = oDet.pos[1], bx = t.pos[0] - ox, by = t.pos[1] - oy, bl = Math.hypot(bx, by) || 1, rd = Math.hypot(kin.dr[0] - ox, kin.dr[1] - oy);
+      c.x = ox + bx / bl * rd; c.y = oy + by / bl * rd;
+    }
+  } else c.age += el;
   const held = covHeld(c); if (held) c.ever = true; else { c.idn = false; c.idBy = ''; }
   return held;
 }
@@ -388,6 +410,17 @@ function ladPair(dn, tn) {
     optLocate: optGateR(t0, COV.AMAX), optMsl: optGateR(t0, mslG), optGun: optGateR(t0, macG),
     radarLocate: ladActGate(COV.AMAX * (1 - 1e-9), Q), radarMsl: ladActGate(mslG, Q),
   };
+}
+/* 2026-09-27 两艘静默舰相距基线 B、对一个标称亮度的目标(缺省熄火 DD)做红外交会,稳态椭圆收进定位门的最远距离(界面「静默交叉定位」预览读它)。
+   每站横向误差 σ = TH0·d²/R(被动律),两条方位夹角约 B/d ⇒ 纵向约 σ·√2·d/B;按"盯着看的稳态"收。封顶在这个目标的光学发现距离。 */
+function ladTriFix(B, cls) {
+  const t = ladShip(cls || 'DD'), Ro = visAccOf(t), dMax = visRangeOf(t), T = COV.TH0.opt;
+  if (!(B > 0)) return 0;
+  const ok = d => covSteady(Math.max(T * d * d / Ro / Math.SQRT2, T * d * d / Ro * Math.SQRT2 * d / B)) < COV.AMAX;
+  if (ok(dMax)) return dMax;
+  let lo = 1000, hi = dMax;
+  for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (ok(m)) lo = m; else hi = m; }
+  return lo;
 }
 /* 单站光学把目标 t 的椭圆收进某道门的距离:纵向界 d^3*TH0/(R*size*L) = gate */
 const optGateR = (t, gate) => Math.pow(gate * sReq(t, 'size', 'ship') * COV.L_REF * visAccOf(t) / COV.TH0.opt, 1 / 3);

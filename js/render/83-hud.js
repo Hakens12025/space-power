@@ -416,6 +416,22 @@ function drawHoverRings(){
       ring(p,hearRangeOf(ifPaint,1),'开雷达会在 '+Math.round(hearRangeOf(ifPaint,1)/1000)+'k 被听见');
     }
   }
+  if(hoverRing==='emit'&&typeof ladTriFix==='function'){ // 2026-09-27 静默交叉定位(用户选 C):全舰一体,基线 = 我方存活舰两两最远的距离;圈画在舰队中心
+    const B=ships.filter(s=>s.side==='blue'&&!s.dead);let bl=0,cx=0,cy=0;
+    for(const a of B){cx+=a.pos[0]/B.length;cy+=a.pos[1]/B.length;for(const b of B)bl=Math.max(bl,Math.hypot(a.pos[0]-b.pos[0],a.pos[1]-b.pos[1]));}
+    const r=B.length>=2?ladTriFix(bl):0;
+    if(r>0&&r*cam.zoom>=4){const p=toScreen(cx,cy);ctx.save();ctx.setLineDash([6,5]);ctx.strokeStyle='rgba(255,170,90,.6)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(p[0],p[1],r*cam.zoom,0,6.283);ctx.stroke();ctx.setLineDash([]);
+      ctx.fillStyle='rgba(255,190,120,.9)';ctx.font='10px Consolas';ctx.textAlign='center';ctx.textBaseline='top';
+      ctx.fillText('静默交叉定位 ≈ '+Math.round(r/1000)+'k(基线 '+Math.round(bl/1000)+'k · 对熄火驱逐舰,随太阳方位 ±)',p[0],p[1]+r*cam.zoom+2);ctx.restore();}
+  }
+}
+const PING_FX=new Map(),PING_MS=900; // 2026-09-27 扫描的脉冲圈:船 → {看到的 pingT, 墙钟起点}
+function drawPings(){ // 一圈从船身扩到雷达量程(对标准目标),墙钟 PING_MS 内淡出;敌方的只在全知时画
+  const now=nowMs(),lim=2*Math.hypot(W,H);
+  for(const s of ships){if(s.pingT===undefined||s.dead||(s.side!=='blue'&&!adminMode))continue;let f=PING_FX.get(s);if(!f||f.pt!==s.pingT){f={pt:s.pingT,t0:now};PING_FX.set(s,f);}}
+  for(const [s,f] of PING_FX){const k=(now-f.t0)/PING_MS;if(k>=1||k<0||s.dead){if(k>=1||s.dead)PING_FX.delete(s);continue;}
+    const R=actRangeOf(s)*Math.sqrt(k)*cam.zoom;if(R<2||R>lim)continue;const p=toScreen(s.pos[0],s.pos[1]);
+    ctx.save();ctx.globalAlpha=0.7*(1-k);ctx.strokeStyle=s.side==='blue'?'#6fb4ff':'#ff6b6b';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(p[0],p[1],R,0,6.283);ctx.stroke();ctx.restore();}
 }
 /* RF5 悬停准星 / 吸附反馈 / 预览线:表达"我此刻正要下的命令",与 drawOrders/drawRange/drawHoverRings 同族,故归在 83-hud。
    状态 xh(pt/snap/dwellT)由 command/74-targeting 维护,本文件只读不写——状态与绘制分家,同 RF5 Phase A「引擎在 weapons/58、面板在 render/88」的分工。

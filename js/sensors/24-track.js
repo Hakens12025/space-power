@@ -39,7 +39,7 @@ const TRK={blue:new WeakMap(),red:new WeakMap(),vis:{blue:new WeakSet(),red:new 
 function trkTab(side){return side==='blue'?TRK.blue:TRK.red;}
 
 /* 唯一的航迹工厂;不往任何表里登记。newCov() 每船两次,与原来舰船字面量里的调用次数相同 */
-function trkNew(by,src){return {src:src,by:by,held:false,cov:newCov(),lastT:-1e9,lastPos:null,lastVel:null,idc:false,tn:0};} // TK2.6 追加 idc:【确认】锁存(光学或照射认出过它、且接触一直握着)。TK4c 追加 tn:航迹号(0 = 还没发)
+function trkNew(by,src){return {src:src,by:by,held:false,cov:newCov(),lastT:-1e9,lastPos:null,lastVel:null,idc:false,tn:0,tau:0};} // 2026-09-27 追加 tau:距上次测到位置的秒数(23 的航位推算误差按它长) // TK2.6 追加 idc:【确认】锁存(光学或照射认出过它、且接触一直握着)。TK4c 追加 tn:航迹号(0 = 还没发)
 
 /* O(1) 查表,【永远不建】。非对象、或从没登记过的对象(弹丸、{pos} 指定点、梯子的假船、沙盘克隆、判据的裸对象)一律 null */
 function trkOf(side,src){return (src!==null&&typeof src==='object')?(trkTab(side).get(src)||null):null;}
@@ -63,8 +63,10 @@ function trkEnsure(side,src){const m=trkTab(side);let k=m.get(src);if(k===undefi
 function trkStep(tk,t,obs,el){
   const c=tk.cov;
   TRK_IDO.opt=TRK_IDO.lis=TRK_IDO.act=TRK_IDO.vis=false;          // TK2.6:模块级草稿,每拍清零后交给内核记【哪几条通道认出了它】(不分配)
-  const held=stepCov(t,c,obs,el,TRK_IDO);
-  if(c.fix&&c.n>0){tk.lastT=simTime;tk.lastPos=[c.x,c.y,t.pos[2]];tk.lastVel=t.vel.slice();}
+  TRK_KIN.tau=tk.tau;TRK_KIN.a=trkAccPrior(t,c);TRK_KIN.dr=(c.fix&&tk.lastPos&&tk.lastVel)?trkDR(tk):null;
+  const held=stepCov(t,c,obs,el,TRK_IDO,TRK_KIN);
+  tk.tau=TRK_KIN.tau;
+  if(c.fix&&c.n>0){tk.lastT=simTime;tk.lastPos=[c.x,c.y,t.pos[2]];if(TRK_KIN.pm||!tk.lastVel)tk.lastVel=t.vel.slice();} // 2026-09-27 速度只在测到位置的一拍更新(单站方位量不出速度)
   if(held&&tk.tn===0)tk.tn=++TRK_TN[tk.by]; // TK4c 航迹号:这一方第一次握住它的那一拍发号,之后终身不变(丢了再捡回来还是这个号)。只用于显示 —— 不当键、不当种子、不参与任何取舍
   if(held){if(TRK_IDO.opt||TRK_IDO.act||TRK_IDO.vis)tk.idc=true;}else tk.idc=false; // TK2.6 确认锁存:光学轮廓或照射回波认出过 ⇒ 确认;接触丢了才清。与椭圆的身份位同一拍立、同一拍清
   tk.held=held;
@@ -98,12 +100,10 @@ function trkState(tk){
    ⚠ 高度取源的真值 z(椭圆模型是二维的)—— 改前就是这样,原样保留 */
 function trkPos(tk){
   const st=trkState(tk);
-  if(st==='live'||st==='coast'){const c=tk.cov;return [c.x,c.y,tk.src.pos[2]];}
-  if(st!=='ghost')return null;
-  const lp=tk.lastPos,lv=tk.lastVel;
-  if(!lp||!lv)return null;
-  const a=trkAge(tk);
-  return [lp[0]+lv[0]*a,lp[1]+lv[1]*a,lp[2]+(lv[2]||0)*a];
+  if(st==='live'){const c=tk.cov;return [c.x,c.y,tk.src.pos[2]];}
+  if(st==='coast'&&!(tk.lastPos&&tk.lastVel)){const c=tk.cov;return [c.x,c.y,tk.src.pos[2]];}
+  if(st!=='ghost'&&st!=='coast')return null;
+  return trkDR(tk); // 2026-09-27 陈旧(coast)也按最后一次定位 + 速度外推(航位推算);原来停在最后一次量测上
 }
 
 
@@ -163,6 +163,14 @@ function trkPid(tk){return trkIdLvl(tk)>=ID_SUS&&trkIdType(tk).kind==='ship';}
 const ID_UNK=0, ID_SUS=1, ID_CON=2;
 const TRK_TN={blue:0,red:0}; // TK4c 两方各自的航迹号计数器;initFleet 每局归零(旧局船的航迹保留旧号,不重发)
 const TRK_IDO={opt:false,lis:false,act:false,vis:false}; // vis = 可见光圈(2026-09-26)
+const TRK_KIN={tau:0,a:0,dr:null,pm:false}; // 2026-09-27 航位推算:交给 23 stepCov 的输入输出(τ、加速度先验、推算点)
+let TRK_AMAX=0;
+function trkAccPrior(t,c){ // 这一方对它最大加速度的先验 km/游戏秒²:认出了按它的舰级(公开数据;石头为 0),没认出按舰级表里最猛的一档
+  if(!TRK_AMAX)for(const k in CLS_MOB)if(CLS_MOB[k].thrust>TRK_AMAX)TRK_AMAX=CLS_MOB[k].thrust;
+  if(c.idn)return kindOf(t)!=='ship'?0:(typeof t.thrust==='number'?t.thrust:TRK_AMAX);
+  return TRK_AMAX;
+}
+function trkDR(tk){const lp=tk.lastPos,lv=tk.lastVel;if(!lp||!lv)return null;const a=trkAge(tk);return [lp[0]+lv[0]*a,lp[1]+lv[1]*a,lp[2]+(lv[2]||0)*a];} // 航位推算点(dead reckoning):最后一次定位 + 最后速度 x 距那次的秒数
 
 /* 这条航迹的身份档位。夹具写出来的"idc 为真但 idn 为假"读作未知、"idn 为真但 idc 为假"读作疑似 —— 容忍不一致的人造状态,不抛 */
 function trkIdLvl(tk){return !(tk&&tk.held&&tk.cov&&tk.cov.idn)?ID_UNK:(tk.idc?ID_CON:ID_SUS);}

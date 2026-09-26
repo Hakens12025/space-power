@@ -68,7 +68,7 @@ const TUT_HTML=`
 
     <h3 class="tut-h3">导弹：为什么成波打</h3>
 
-    <p>导弹是全场射程最长的武器，<code class="num">350k 公里</code>，和主炮一样，定出目标位置就能发射。它以「组」为单位，每组 <code class="num">12 枚</code>；驱逐舰 <code class="num">4</code> 个发射单元、载弹 <code class="num">192 枚</code>、单枚伤害 <code class="num">12</code>，巡洋舰 <code class="num">6</code> 个单元、载弹 <code class="num">240 枚</code>、单枚 <code class="num">15</code>。</p>
+    <p>导弹是全场射程最长的武器，<code class="num">20 万公里</code>，比自己雷达定得出位置的距离还远——打满射程要靠静听、交叉定位或前出舰的数据。和主炮一样，定出目标位置就能发射。飞法分三段：点火加速、熄火滑行（红外里是冷的，只有雷达和可见圈看得到）、进了自己导引头的范围再点火修正；组网包抄的航线是弯的，几乎全程在喷。它以「组」为单位，每组 <code class="num">12 枚</code>；驱逐舰 <code class="num">4</code> 个发射单元、载弹 <code class="num">192 枚</code>、单枚伤害 <code class="num">12</code>，巡洋舰 <code class="num">6</code> 个单元、载弹 <code class="num">240 枚</code>、单枚 <code class="num">15</code>。</p>
 
     <p>发射是两段式的：下令那一刻弹还没出膛，命令先在舰上挂一个 <code class="num">1 秒</code>的倒计时，倒计时走完才真正生成弹丸。每用掉一个发射单元，那个单元要单独装填 <code class="num">60 秒</code>。这两条加在一起决定了导弹的节奏是「波」而不是「流」：自动齐射每次最多下令 <code class="num">2 组</code>，而且要求就绪单元过半才肯下令，于是一艘巡洋舰的表现是每 <code class="num">60 秒</code>来一个 <code class="num">4 组</code>、<code class="num">48 枚</code>的波次，中间是安静的装填期。你等的不是冷却条，是下一波。</p>
 
@@ -180,13 +180,14 @@ const TUT_HTML=`
       <tbody>
         <tr><td><code class="ui">火控</code></td><td>自动索敌加自动开火的总闸。开则自动锁定已点亮的敌舰、各武器进条件就自动发射；关则停火并当场解除锁定</td><td>关</td></tr>
         <tr><td><code class="ui">雷达</code></td><td>本舰的主动照射。开则能测距、更快把接触定出位置，代价是本舰成为射频辐射源</td><td>靶场强制开</td></tr>
+        <tr><td><code class="ui">扫描</code></td><td>雷达只照一拍：照得到的接触一次拿到位置和速度，之后按航位推算跟，对方不点火就一直对得上（红外看得见它在滑行就不会丢，看不见或它在喷约一分钟后丢）；对方只听到这一拍。悬停发射档或扫描时，舰队中心的橙色虚线圈是「静默交叉定位」的距离，随阵型拉开而变远</td><td>—</td></tr>
         <tr><td><code class="ui">主炮</code></td><td>关掉后主炮不参与自动开火</td><td>开</td></tr>
         <tr><td><code class="ui">导弹</code></td><td>关掉后自动齐射整段跳过</td><td>开</td></tr>
         <tr><td><code class="ui">拦截</code></td><td>关掉后近防不再自动拦截来袭导弹，连冷却都不走</td><td>开</td></tr>
       </tbody>
     </table>
 
-    <p>把光标停在任意一个武器钮上，地图会给选中舰画出对应的射程圈：主炮 <code class="num">150k 公里</code>，导弹 <code class="num">350k 公里</code>，拦截画的是内外两个圈。这是最快确认「够不够得着」的办法，但要给它加一条限定：真正卡这个圈的只有导弹，自动齐射会先查距离再下令；主炮的自动开火根本不查射程，只要目标定出了位置、机头又摆进了对准窗口，它在 <code class="num">20 万公里</code>外照样开火——开局第一炮就是这么打出来的。<code class="num">150k 公里</code>这道门只在火控序列的射程判据里生效。</p>
+    <p>把光标停在任意一个武器钮上，地图会给选中舰画出对应的射程圈：主炮 <code class="num">150k 公里</code>，导弹 <code class="num">20 万公里</code>，拦截画的是内外两个圈。这是最快确认「够不够得着」的办法，但要给它加一条限定：真正卡这个圈的只有导弹，自动齐射会先查距离再下令；主炮的自动开火根本不查射程，只要目标定出了位置、机头又摆进了对准窗口，它在 <code class="num">20 万公里</code>外照样开火——开局第一炮就是这么打出来的。<code class="num">150k 公里</code>这道门只在火控序列的射程判据里生效。</p>
   </section>
 
   <section class="tut-sec" id="tut-firstrun">

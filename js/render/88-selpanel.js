@@ -437,6 +437,7 @@ bindCmdBar();
    写入一律走 21-detect 的 setEmit(唯一写入口,非法字面量当场抛);文案一律走 emitLabel(UI 文案唯一出处,与 87 同源)。
    三态三色用【行内 style】给:内联优先级压得过 `#cmdBar .cbtn.on .s` 那条规则,所以本轮零 CSS 改动。 */
 function emitBtnSync(){
+  {const q=document.getElementById('cbPing');if(q)q.classList.toggle('is-dis',!selBlue().length);} // 2026-09-27 扫描钮:没有选中蓝舰就灰
   const b=document.getElementById('cbEmit');
   if(!b)return;
   const s=selBlue()[0];
@@ -467,6 +468,12 @@ function emitBtnSync(){
     if(t){t.style.display='block';t.textContent='发射档(三态循环):静默=一点不响,只靠光学看,对方听不见我;照射=雷达开机主动照,最准、也只有它上得到火控级,代价是被对方在约 4 倍距离上听见;干扰=发射机改去造噪声,压住对方对我的照射回波,但更吵、而且自己也照不了(火控级同样上不去)';}
   });
   b.addEventListener('mouseleave',()=>{hoverRing=null;if(typeof updSelWeaponTip==='function')updSelWeaponTip();});
+  const q=document.createElement('button');q.className='btn cbtn';q.id='cbPing'; // 2026-09-27 扫描(用户选 A):雷达只照一拍,照完回到原来的发射档
+  q.innerHTML='<span class="l">雷达</span><span class="s">扫描</span>';b.parentNode.insertBefore(q,b.nextSibling);
+  q.addEventListener('click',()=>{const sel=selBlue();if(!sel.length)return;sel.forEach(x=>{x.pingReq=true;});});
+  q.addEventListener('mouseenter',()=>{hoverRing='emit';const t=document.getElementById('cmdTip');
+    if(t){t.style.display='block';t.textContent='扫描:雷达只照一拍 —— 照得到的接触一次拿到位置和速度,之后按航位推算跟(对方不点火就一直对得上;红外看得见它在滑行就不会丢)。对方只在这一拍听得到你(一次方位 + 粗距离),不是一条持续的航迹。';}});
+  q.addEventListener('mouseleave',()=>{hoverRing=null;if(typeof updSelWeaponTip==='function')updSelWeaponTip();});
 })();
 function fcPickBtnSync(s){ // RF8b 同步标题栏「选择」钮:它在 #fcSec .fc-hd 里,是【静态元素】,所以直接改属性即可,不经 innerHTML
   const b=document.getElementById('fcPickBtn');

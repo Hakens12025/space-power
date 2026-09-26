@@ -49,6 +49,8 @@ function detectorsOf(side){ // 该阵营的传感器网络:存活舰 + 开机的
 
 function detectLoop(dt){ // 一个感知节拍:蓝网络探红(litBlue)、红网络探蓝(litRed)——对称,不按玩家视角
   const el=(typeof dt==='number'&&isFinite(dt)&&dt>0)?dt:SENS.TICK; // SN4:core/05 透传实际累计的模拟秒;判定里手摇 detectLoop() 不传参,按标称节拍算
+  const pg=PING_TMP;pg.length=0; // 2026-09-27 扫描(用户选 A):s.pingReq 的船只在这一拍照射(对方也只在这一拍听得到),节拍末尾回到原来的发射档
+  for(const s of ships)if(s.pingReq){s.pingReq=false;if(s.dead)continue;pg.push(s,s.emitMode);if(s.emitMode!=='paint')setEmit(s,'paint');s.pingT=simTime;}
   detectFor('blue','red',el);
   detectFor('red','blue',el);
   /* 被照射告警(上升沿)→ 图标闪烁(信息战的灵魂提示)。
@@ -59,7 +61,9 @@ function detectLoop(dt){ // 一个感知节拍:蓝网络探红(litBlue)、红网
   /* SN6:updateESMFixes 已删。它做的事(被动射频只给方位、产物是一片不确定区)现在是模型本身的一部分:
      一条只有静听量测的接触,covSolve 解出来纵向就是 COV.HUGE,cov.fix=false —— 那就是"没有位置的接触",
      渲染层照 cov 画热区(SN6 阶段 2)。存旧椭圆的那张 Map 随之退役,不再有人往里写。 */
-  for(const p of projectiles){trkSeeSet('blue',p,projVisibleTo(p,'blue'));trkSeeSet('red',p,projVisibleTo(p,'red'));} // v119:弹丸可见性每节拍算一次,热路径(56/57/83)读缓存 TK4a:缓存从弹丸身上搬进航迹表的目击集合(trkSees 读)
+  for(const p of projectiles){trkSeeSet('blue',p,projVisibleTo(p,'blue'));trkSeeSet('red',p,projVisibleTo(p,'red'));}
+  for(let i=0;i<pg.length;i+=2)if(pg[i].emitMode!==pg[i+1])setEmit(pg[i],pg[i+1]); // 扫描完回到原档(弹丸可见性也吃到这一拍的照射)
+  // v119:弹丸可见性每节拍算一次,热路径(56/57/83)读缓存 TK4a:缓存从弹丸身上搬进航迹表的目击集合(trkSees 读)
 }
 
 /* SN6:原先这里是 updateESMFixes —— 用驻留门 + 多站方位三角,给"听得见但没点亮"的红舰
@@ -73,6 +77,7 @@ function detectLoop(dt){ // 一个感知节拍:蓝网络探红(litBlue)、红网
    每方一张:辐射源 → (听者 → 记录)。每拍每对有静听量测就记一次。测向半宽 = K x covTheta('lis'),按有效次数的平方根收窄,
    但收不过 23-cov "盯着看的稳态"那个比例(与椭圆内核同一套物理);两次之间方位漂过半个半宽,之前的积累大半作废。
    隔 FADE 秒没听到再听到算新一轮,DROP 秒没听到就忘掉。 */
+const PING_TMP=[]; // 扫描这一拍的草稿:[船, 原发射档, ...]
 const ESM_CFG={K:2,SMIN:Math.PI/180,FADE:90,DROP:600};
 const ESM={blue:new Map(),red:new Map()};
 function esmReset(){ESM.blue.clear();ESM.red.clear();}
