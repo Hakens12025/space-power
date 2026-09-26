@@ -248,7 +248,7 @@ function fmGenStations(n, slots, gcap) {
 
 /* 五条带的半径,全部从【护卫】自己的近防参数算(旗舰不算进去:贴身带是护卫用来罩旗舰的,
    旗舰自己的内圈与它无关。把旗舰算进 min 会让 DD 护卫和 CA 护卫算出一样的半径)。 */
-const FM_CIWS_K = 5; // 2026-09-26 近防 x1/5 而阵型不跟(用户选"倍数 0.5,不跟近防缩"):这里乘回缩放前的尺度;fit / fmBandCloseCap / fmSwapKey / fmAssess 的几何门仍读真实 inner
+const FM_CIWS_K = 2; // 2026-09-26 近防取旧值 x0.5(跟阵型走),阵型按旧尺度 x bm 推:这里乘回旧尺度;fit / fmBandCloseCap / fmSwapKey / fmAssess 的几何门仍读真实 inner
 function fmBandRadii(list, flag, bm, P) {
   const inns = [], outs = [];
   list.forEach(s => {
@@ -283,7 +283,7 @@ function fmBandRadii(list, flag, bm, P) {
 function fmBandCloseCap(list, flag) {
   let mn = Infinity;
   list.forEach(s => { if (s === flag) return; const c = ciwsOf(s); if (s.ciwsOn && c.inner > 0) mn = Math.min(mn, c.inner); });
-  return isFinite(mn) ? mn : 8000;
+  return isFinite(mn) ? mn : 4000; // 2026-09-26 兜底 = 现 DD 内圈(原 8000)
 }
 
 /* 最大权二分匹配(Kuhn–Munkres)。精确最优,不是贪心。返回 as[i] = 第 i 艘舰拿到的站位下标,−1 = 没派上。

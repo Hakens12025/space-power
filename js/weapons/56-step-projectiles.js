@@ -246,7 +246,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
       let evX=0,evY=0;
       const icArr=p.shooter.side==='blue'?icRed:icBlue; // v119:读预收集表,平方距离免开方
       let nearIc=false;
-      for(let i=0;i<icArr.length;i++){const q=icArr[i];const ddx=q.pos[0]-p.pos[0],ddy=q.pos[1]-p.pos[1],ddz=q.pos[2]-p.pos[2];if(ddx*ddx+ddy*ddy+ddz*ddz<25000000){nearIc=true;break;}} // 5000²。2026-09-26 x1/5(单局地图):原 25000²
+      for(let i=0;i<icArr.length;i++){const q=icArr[i];const ddx=q.pos[0]-p.pos[0],ddy=q.pos[1]-p.pos[1],ddz=q.pos[2]-p.pos[2];if(ddx*ddx+ddy*ddy+ddz*ddz<156250000){nearIc=true;break;}} // 12500²(= DD 近防外圈)。2026-09-26 跟近防走:原 25000²
       if(nearIc&&p.fuel>20){ // 蛇形:横向正弦摆动,幅度随接近收敛(远处难拦,近处收拢命中)
         const dirT=V.norm(V.sub(tp,p.pos));
         const sw=Math.sin((p.age||0)*6)*Math.min(8000,dist*0.3); // 2026-09-26 x1/5(单局地图):幅度上限原 40000
@@ -354,7 +354,7 @@ function stepInterceptorProj(p,dt){ // 拦截导弹(v114):燃料模式可出远�
         let tgt=null;
         for(const q of projectiles){
           if(q.type!=='missile'||q.done||q.shooter.side===p.shooter.side)continue;
-          if(V.len(V.sub(q.pos,p.pos))<(p.screenRange||20000)){tgt=q;break;} // 2026-09-26 x1/5(单局地图):缺省原 100000
+          if(V.len(V.sub(q.pos,p.pos))<(p.screenRange||50000)){tgt=q;break;} // 2026-09-26 跟近防走:缺省原 100000
         }
         if(tgt){p.screen=false;p.target=tgt;p.spd=Math.max(p.spd,2000);}
         return;
