@@ -54,10 +54,10 @@ function rdvClip(P,Q){
   return out;
 }
 function rdvArea(P){let s=0;for(let i=0;i<P.length;i++){const p=P[i],q=P[(i+1)%P.length];s+=p[0]*q[1]-q[0]*p[1];}return Math.abs(s)/2;}
-function rdvEst(use){ // 演示页 estOne:每条一份高斯按信息形式相加;迭代三次,让横向按融合后的距离算
+function rdvEst(use,E){ // 演示页 estOne:每条一份高斯按信息形式相加;迭代三次,让横向按融合后的距离算
   let m=null,C=null;
   for(let it=0;it<3;it++){let A=0,B=0,Cc=0,u=0,v=0;
-    for(const x of use){const k=x.k,ux=Math.cos(x.brg),uy=Math.sin(x.brg),nx=-uy,ny=ux,rc=k.R/2,sr=k.R/(2*Math.sqrt(3));
+    for(const x of use){const k=x.k,ux=Math.cos(x.brg),uy=Math.sin(x.brg),nx=-uy,ny=ux,sr=k.sr,rc=k.rr+(rdvHash(E.id,x.L.id||'bcn')*2-1)*sr*0.6; // 2026-09-26 幅度测距:纵向以测得的距离为心、误差 k.sr(原 0~R 均匀,整条方位线);偏移同方位的伪随机抖动
       const px=k.org[0]+ux*rc,py=k.org[1]+uy*rc,r=m?Math.max(2e3*CFG.scale,Math.hypot(m[0]-k.org[0],m[1]-k.org[1])):rc,sc=r*k.half/2,wc=1/(sc*sc),wr=1/(sr*sr); // 2026-09-26 x1/5(单局地图):距离地板原 1e4
       const a00=wc*nx*nx+wr*ux*ux,a01=wc*nx*ny+wr*ux*uy,a11=wc*ny*ny+wr*uy*uy;
       A+=a00;B+=a01;Cc+=a11;u+=a00*px+a01*py;v+=a01*px+a11*py;}
@@ -77,7 +77,7 @@ function rdvZones(){ // 我方对每部听到过的敌方雷达的区域;最多�
     let closed=!!P&&P.length>2; // 围死 = 没有一个顶点落在任何一块的远端上
     if(closed)for(const q of P){for(const x of use)if(Math.hypot(q[0]-x.k.org[0],q[1]-x.k.org[1])>=x.k.R*(1-1e-6)){closed=false;break;}if(!closed)break;}
     const age=simTime-t,z={E:E,n:n,L:use.length,fade:!fresh?0.3:(age<T15?1:Math.max(0.3,1-(age-T15)/ESM_CFG.FADE)),grow:rdvVmax()*Math.max(0,age-T15)};
-    if(closed){z.poly=P;z.area=rdvArea(P);}else{const g=rdvEst(use);if(!g)return;z.m=g.m;z.C=g.C;}
+    if(closed){z.poly=P;z.area=rdvArea(P);}else{const g=rdvEst(use,E);if(!g)return;z.m=g.m;z.C=g.C;}
     out.push(z);
   });
   RDV.zones=out;return out;

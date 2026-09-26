@@ -86,6 +86,7 @@ function esmHear(side,L,E,dd){ // L(我方听者)这一拍听到 E 的雷达;dd 
   const st=Math.sqrt(1-1/Math.pow(1+COV.FADE_HOLD,2*SENS.TICK)); // 盯着看的稳态 / 单次量测
   k.half=Math.min(Math.PI/2-0.01,Math.max(ESM_CFG.SMIN,ESM_CFG.K*sig*Math.max(st,1/Math.sqrt(k.n))));
   k.R=Math.max(dd*1.05,hearRangeOf(E,L.recv)/Math.sqrt(envRfNoise(L.pos,E.pos))); // 远端 = 这个方向上听得见的最远距离(恒星噪声锥里更近)
+  k.rr=dd;k.sr=dd*(dd*sig<=E.size*COV.L_LIS?COV.RSS_ID:COV.RSS_UNK)*Math.max(st,1/Math.sqrt(k.n)); // 2026-09-26 幅度测距(与 23-cov 的静听量测同式):距离与它的纵向误差,雷达画面的高斯团用
 }
 function esmEach(side,f){ // 逐个辐射源给 f(E, [{L,k}]);顺手忘掉太久没听到的
   for(const [E,m] of ESM[side]){const a=[];
@@ -169,12 +170,7 @@ function contactIdn(s,side){return contactIdLvl(s,side)>=ID_SUS;} // TK2.6:「�
 /* TK2.6 身份档位与类型的门面(与 contactIdn 同一家;三档的定义见 sensors/24)。自己这一方恒为确认 */
 function contactIdLvl(s,side){return !s?ID_UNK:(s.side===side?ID_CON:trkIdLvl(trkOf(side,s)));}
 function contactIdType(s,side){return !s?null:(s.side===side?{kind:s.kind||'ship',cls:s.cls||null,tier:s.tier||null}:trkIdType(trkOf(side,s)));}
-function sigClassLabel(s){ // 没认出时只看得出信号有多大 → 大/中/小
-  const sz=sReq(s,'size','ship'); // SN4:旧的船体信号字段已删,改读 size —— 两张表的数值逐位相同(DD 0.70 / CA 1.00),所以下面三档阈值一个字不动。新模型里 size 同时喂光学亮度与雷达反射,"大船两头都显眼",这一档情报因此比改前更有分量
-  if(sz>=0.9)return '▣ 大型热源';
-  if(sz>=0.6)return '▣ 中型热源';
-  return '▣ 小型热源';
-}
+function sigClassLabel(s){return '未知热源';} // 2026-09-26 用户:没认出的一律「未知热源」(原按 size 分大 / 中 / 小型热源);船与石头同一个字
 function contactAge(s,side){return trkAge(trkOf(side,s));} // 距最后一次【定得出位置】的秒数(从未定位过 = 1e9)。SN6f:原来是"被光学或照射扫到",见 detectFor 里最后定位记录的刷新规则。TK2.0 起读航迹表
 /* ================= 接触的【显示态】:全库唯一的状态机(SN6f)=================
    用户实报:"只要存在热源的三角箭头就不显示热区……现在会出现只显示椭圆和陈旧、但不显示热区的情况。

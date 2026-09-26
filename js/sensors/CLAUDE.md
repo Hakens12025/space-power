@@ -23,6 +23,7 @@
 - 自动化挑目标一律问 `trkPid`(身份至少疑似且是船,Weapons Tight):自动索敌、网分配、导弹重选 / 复锁、红方集火;"还有没有可分配的"与分配器同口径。显示、接触降速、玩家的火控序列问 `trkFoe`。
 - 热循环(`sensePairGrades`)里不许除法、开方、Math 调用、分配;这些都放 `sensePrepare`。剪枝上界必须含照射那一路(否则冷目标主炮静默哑火)。
 - 热循环里的内联副本(太阳禁区、恒星射频噪声锥、MTI、天体遮挡、尾焰致盲)与函数版(`envSunBlind` / `envRfNoise` / `envMtiBlind` / `envOccluded` / `senseBaffled` 等)必须同式;改一边就改另一边。
+- 静听带幅度测距(RSS):纵向误差 = 距离 x `COV.RSS_UNK`(没听出型号)/ `COV.RSS_ID`(听出型号,与 `L_LIS` 同一个门)。雷达画面的高斯团读 21 的 `esmHear` 写的 `k.rr` / `k.sr`,与 23 的静听量测同式,改一边就改另一边。
 - 雷达的环境:朝光源的锥里射频噪声抬高(静听按 噪声^(-1/2)、照射按 噪声^(-1/4) 缩);杂波(天体盘面旁、小行星旁,`envInClutter`)里的慢目标过 MTI;星云对射频透明。
 - 单点谓词与热循环共用缓冲,不许在扫描中途调。`detectLoop` 要收真实经过的模拟秒数。
 - ENV2 的 `lo` 在 visRange / covTheta / identDist 那条链上是可选参数,不传 = 标称值。

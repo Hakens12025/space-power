@@ -20,7 +20,7 @@ function tcBand(){
   const mine=ships.filter(s=>s.side==='blue'&&!s.dead);
   if(!mine.length)return 0;
   trkEach('blue',(tk,st)=>{ // TK2.5:只读我方知道的事 —— 枚举的就是蓝方航迹表;回调里 return 即原来的 continue
-    if(trkGone(tk)||!trkFoe(tk))return;              // TK4c:已确认的石头不是敌情
+    if(trkGone(tk)||!trkPid(tk))return;              // TK4c:已确认的石头不是敌情。2026-09-26 用户:未知热源不降速 —— 只有认出是船(疑似及以上)的才算(原 trkFoe,没认出的碎石也会降速)
     if(st!=='live'&&st!=='coast')return;             // ② 热区(heat)与失联(ghost)都不算
     const p=trkPos(tk);if(!p)return;
     b=Math.max(b,1);

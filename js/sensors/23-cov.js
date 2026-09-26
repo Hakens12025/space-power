@@ -128,7 +128,10 @@ const COV = {
   AMAX: 0.04 * C_LS * CFG.scale,  // 2026-09-26 x1/5(单局地图):原 0.2 * C_LS
 
   MAC: 400 * CFG.scale,           // 梯子标定尺:命中判定半径(weapons/52 的 MAC_HIT_R,必须同一个数);radarLook = 椭圆收进它的距离。2026-09-26 x1/5(单局地图):原 2000
-  MSL: 6000 * CFG.scale,          // 梯子标定尺:导引头搜索篮;optCross / lisCross 按它量。2026-09-26 x1/5(单局地图):原 30000
+  MSL: 6000 * CFG.scale,
+  /* 2026-09-26 静听的幅度测距(ESM 的 RSS 测距:收到的功率 ∝ 发射功率 / d²,反推距离;用户选"加幅度测距,进内核")。单次量测的纵向误差 = 比例 x 距离:
+     没听出型号时不知道对方发射功率(舰种之间差几倍),比例 RSS_UNK;听出型号(与 L_LIS 同一个门)之后功率已知,比例 RSS_ID */
+  RSS_UNK: 0.5, RSS_ID: 0.2,          // 梯子标定尺:导引头搜索篮;optCross / lisCross 按它量。2026-09-26 x1/5(单局地图):原 30000
 };
 
 /* ================= 定位域的三条律 =================
@@ -212,7 +215,8 @@ function covShape(ch, gi, d, t, dd, lo) {
      静默的船根本没有 lis 量测(rfLoudOf 恒 0),所以这一级对它天然不成立 —— 这正是“开雷达 = 连身份一起递出去”该有的形状:有代价,但有边界。
      光学仍然只在贴到 9.4 万才认得出轮廓;照射(NCTR)50 万。
      2026-09-26 整体 x1/5,上文旧数按 1/5 读。 */
-  return [COV.HUGE, sPerp, false, sPerp <= t.size * COV.L_LIS];
+  const idf = sPerp <= t.size * COV.L_LIS;
+  return [dd * (idf ? COV.RSS_ID : COV.RSS_UNK), sPerp, true, idf]; // 2026-09-26 幅度测距:纵向从"没有距离"(原 COV.HUGE)改成 比例 x 距离
 }
 
 /* ================= 一拍 =================

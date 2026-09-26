@@ -38,9 +38,9 @@ function drawRockAt(s,pos,st,known){
     ctx.translate(p[0],p[1]);
     ctx.rotate(Math.atan2(s.facing[1],s.facing[0]));
     {const zf=hullZoomF();ctx.scale(zf,zf);}
-    if(!shipMarkMode())drawHull(ctx,shipIdentHull(s),shipIdentTier(s),bodyColor,'fill');
+    if(!shipMarkMode()&&shipIdentHull(s)!=='UNK')drawHull(ctx,shipIdentHull(s),shipIdentTier(s),bodyColor,'fill');
     ctx.restore();
-    if(shipMarkMode())drawShipMark(s,p,bodyColor);
+    if(shipMarkMode())drawShipMark(s,p,bodyColor);else if(shipIdentHull(s)==='UNK')drawUnkMark(p,r,bodyColor); // 2026-09-26 与没认出的船同一个空心菱形
     ctx.restore();
     if(cam.zoom>0.0008){
       ctx.fillStyle='rgba(215,226,240,.8)';ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';

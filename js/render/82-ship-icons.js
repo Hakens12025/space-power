@@ -57,6 +57,10 @@ function drawShipMark(s,p,color){ // A:拉远后的记号。我方 = 沿船头�
   else{ctx.moveTo(R,0);ctx.lineTo(0,R);ctx.lineTo(-R,0);ctx.lineTo(0,-R);}
   ctx.closePath();ctx.fill();ctx.restore();
 }
+function drawUnkMark(p,r,color){ // 未知热源的记号:不随朝向转的空心菱形,半径 = 图标半径(与拉远后的敌方菱形记号同一形状);船与石头共用
+  ctx.save();ctx.beginPath();ctx.moveTo(p[0]+r,p[1]);ctx.lineTo(p[0],p[1]+r);ctx.lineTo(p[0]-r,p[1]);ctx.lineTo(p[0],p[1]-r);ctx.closePath();
+  ctx.globalAlpha=0.25;ctx.fillStyle=color;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.stroke();ctx.restore();
+}
 function shipIconR(s){return shipMarkMode()?SHIP_MARK_R+1:hullSize(shipIdentHull(s),shipIdentTier(s))*0.78*shipZoomF();} // 图标半径:标签/选中圈/尾焰的基准 TIER1 tier 也走遮蔽口径,否则选中圈/标签间距照样把分级漏出去
 /* RWR1(2026-09-22 用户实报:"我方被敌方雷达照射的黄圈一闪一闪不是特别好,感觉就像是我选中这艘船了一样")。
    改前是一个闭合的黄色脉冲圈(半径 13 x 舰体系数)—— 与选中圈(黄、闭合、同心)只差粗细与闪不闪,一眼分不开。
@@ -229,9 +233,10 @@ function drawShip(s){
   ctx.translate(p[0],p[1]);
   ctx.rotate(ang);
   {const zf=shipZoomF();ctx.scale(zf,zf);} // SN9 舰体随缩放变(见文件头 HULL_ZOOM);包在这一对 save/restore 里,不外溢
-  if(!shipMarkMode())drawHull(ctx,shipIdentHull(s),shipIdentTier(s),bodyColor,'fill'); // 4 舰种 × T1/T2/T3,几何见 10a-ship-hulls.js。TIER1 轮廓与尺寸同一个遮蔽口径,未识别接触画 UNK+T2
+  if(!shipMarkMode()&&shipIdentHull(s)!=='UNK')drawHull(ctx,shipIdentHull(s),shipIdentTier(s),bodyColor,'fill'); // 4 舰种 × T1/T2/T3,几何见 10a-ship-hulls.js。TIER1 轮廓与尺寸同一个遮蔽口径,未识别接触画 UNK+T2
   ctx.restore();
   if(shipMarkMode())drawShipMark(s,p,bodyColor); // SZ1-A 拉远后换记号
+  else if(shipIdentHull(s)==='UNK')drawUnkMark(p,r,bodyColor); // 2026-09-26 没认出:不转的空心菱形(原 UNK 三角沿船头画,像箭头,还泄露朝向)
   // 选中高亮
   if(isSel){
     ctx.strokeStyle='#ffe066';ctx.lineWidth=1.6;
