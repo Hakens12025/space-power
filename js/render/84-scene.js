@@ -45,11 +45,6 @@ function drawVisFog(){
   g.globalCompositeOperation='source-over';
   ctx.save();ctx.imageSmoothingEnabled=true;ctx.drawImage(VISF.cv,0,0,W,H);ctx.restore();
 }
-/* 2026-09-26 左下角特写窗口(用户:"点击马拉松船,我就能看到这艘船的特写……舰队也是,自适应的拉到舰队的缩放大小……要能够看到地图背景的放大效果")。
-   业内叫画中画 / 单位特写镜头(picture-in-picture / unit cam)。第二个镜头在主画布的一个裁剪框里重画:星空借主画面那两张贴图,尘埃云借地形服务的前台合成缓存放大
-   (不重算,所以会软一点),天体 / 边界 / 舰船 / 石头 / 弹丸 / 命中按特写缩放真画。选一艘:缩到舰体刚好画到最大(HULL_ZOOM.MAX);选多艘:框住全部并留边,但不比单舰更近。没选就不画 */
-const INSET={W:320,H:200,M:12,GAP:10,bot:64,botT:-1e9,x:0,y:0,w:0,h:0,on:false};
-function insetHit(sx,sy){return INSET.on&&sx>=INSET.x&&sx<=INSET.x+INSET.w&&sy>=INSET.y&&sy<=INSET.y+INSET.h;} // 点在特写框里:输入层吞掉,不落到框底下的地图
 /* 2026-09-26 特写窗口里的尾迹(用户:"渲染类似于光速延迟里面的尾迹效果",同 demos/lightlag/光速延迟.html 的 trail):每 DT 模拟秒记一次位置,留最近 SPAN 秒,越旧越淡,线头接到此刻。
    敌舰只记我方知道的位置(contactPos:估计 / 外推;交代不出就断开),不画真值 */
 const TRAIL={DT:0.5,SPAN:60,t:-1e9,m:new Map()};
@@ -77,22 +72,105 @@ function drawTrails(){
   }
   ctx.restore();
 }
+/* 2026-09-26 左下角特写窗口(用户:"点击马拉松船,我就能看到这艘船的特写……舰队也是,自适应的拉到舰队的缩放大小……要能够看到地图背景的放大效果";
+   二轮"都做":威胁取景 / 框外指示 / 可达圈 / 阻尼 / 前视 / 点框跳主镜头 / 重复时收起 / 导演模式 / 离群处理)。
+   业内叫画中画 / 单位特写镜头(picture-in-picture / unit cam);取景照 Cinemachine 的 Target Group(一组点框进画面)+ 阻尼 + 前视(look-ahead)。
+   第二个镜头画进离屏画布、按透明度贴回(淡入淡出);星空借主贴图,尘埃云按特写自己的缩放级向地形服务要块 */
+const INSET={W:320,H:200,M:12,GAP:10,bot:64,botT:-1e9,x:0,y:0,w:0,h:0,on:false,cx:0,cy:0,z:1,
+  INC:80000,K:4,LEAD:0.25,FADE:6,DWELL:4000,EV_MS:5000, // 纳入取景的威胁距离 km(x scale)/ 阻尼 1/s / 前视占半宽的比例 / 淡入淡出 1/s / 导演每个画面至少停 ms / 事件保留 ms
+  ox:0,oy:0,lz:0,key:'',t:0,a:0,cv:null,g:null,dir:null,ev:[],dead:new Set(),idc:new Map(),hits:new WeakSet(),t0:-1};
+function insetHit(sx,sy){return INSET.on&&sx>=INSET.x&&sx<=INSET.x+INSET.w&&sy>=INSET.y&&sy<=INSET.y+INSET.h;} // 点在特写框里:输入层吞掉,不落到框底下的地图
+function insetClick(){zAnim=null;vtAnim={k0:cam.zoom,k1:cam.zoom,x0:cam.x,y0:cam.y,x1:INSET.cx,y1:INSET.cy,t0:nowMs(),dur:420};} // 点特写框:主镜头飞到特写中心,缩放不变(借跳层动画)
+const insetMed=a=>{const b=a.slice().sort((p,q)=>p-q),n=b.length;return n?(n%2?b[(n-1)/2]:(b[n/2-1]+b[n/2])/2):0;};
+function insetIncoming(){ // 我方看得见的来袭导弹,按到达时间排
+  const out=[];
+  for(const p of projectiles){
+    if(p.type!=='missile'||p.done||!p.shooter||p.shooter.side==='blue'||!p.target||p.target.dead||p.target.side!=='blue')continue;
+    if(!adminMode&&!trkSees('blue',p))continue;
+    const dx=p.target.pos[0]-p.pos[0],dy=p.target.pos[1]-p.pos[1],d=Math.hypot(dx,dy)||1,vc=((p.vel[0]-p.target.vel[0])*dx+(p.vel[1]-p.target.vel[1])*dy)/d;
+    out.push({p:p,tgt:p.target,d:d,eta:vc>1?d/vc:Infinity});
+  }
+  return out.sort((a,b)=>a.eta-b.eta);
+}
+function insetEvents(now){ // 导演模式的事件源(只读我方知道的事):击沉 / 命中 / 认出敌舰;换局清空
+  if(simTime<INSET.t0){INSET.ev.length=0;INSET.dead.clear();INSET.idc.clear();INSET.dir=null;}INSET.t0=simTime;
+  for(const s of ships){
+    if(s.dead){if(!INSET.dead.has(s.id)){INSET.dead.add(s.id);if(s.side==='blue'||adminMode||contactHeld(s,'blue'))INSET.ev.push({k:'kill',p:2,pos:s.pos.slice(),t:now,lbl:'击沉 '+(s.side==='blue'?s.name:'敌舰')});}continue;}
+    if(s.side!=='red')continue;
+    const tk=trkOf('blue',s),c=!!(tk&&trkIdLvl(tk)===ID_CON);if(c&&INSET.idc.get(s.id)===false)INSET.ev.push({k:'id',p:1,ship:s,t:now,lbl:'认出 '+s.name});INSET.idc.set(s.id,c);
+  }
+  for(const h of hitFX)if(!INSET.hits.has(h)){INSET.hits.add(h);INSET.ev.push({k:'hit',p:1.5,pos:h.pos.slice(),t:now,lbl:'命中'});}
+  INSET.ev=INSET.ev.filter(e=>now-e.t<INSET.EV_MS);
+}
+function insetSubject(sel,inc,lbl){ // 一组我方舰的取景:离群的不进框(改画框外指示),来袭导弹与锁定目标在 INC 以内就一起框进来
+  let keep=sel;const ind=[];
+  if(sel.length>2){const mx=insetMed(sel.map(s=>s.pos[0])),my=insetMed(sel.map(s=>s.pos[1])),d=sel.map(s=>Math.hypot(s.pos[0]-mx,s.pos[1]-my)),lim=Math.max(3*insetMed(d),15000*CFG.scale);
+    keep=sel.filter((s,i)=>d[i]<=lim);for(let i=0;i<sel.length;i++)if(d[i]>lim)ind.push({pos:sel[i].pos,col:'111,180,255',lbl:sel[i].name});}
+  const pts=keep.map(s=>[s.pos[0],s.pos[1]]),R=INSET.INC*CFG.scale,n0=pts.length;
+  const near=p=>{let m=Infinity;for(const s of keep)m=Math.min(m,Math.hypot(p[0]-s.pos[0],p[1]-s.pos[1]));return m;};
+  for(const m of inc){if(keep.indexOf(m.tgt)<0)continue;const d=near(m.p.pos);if(d<=R)pts.push([m.p.pos[0],m.p.pos[1]]);ind.push({pos:m.p.pos,col:'255,154,85',lbl:isFinite(m.eta)?Math.round(SHOW.t(m.eta))+' s':Math.round(d/1000)+'k'});}
+  for(const s of keep){const t=s.lockedTarget;if(!t||t.dead)continue;const p=(t.side==='blue'||adminMode)?t.pos:contactPos(t,'blue');if(!p)continue;const d=near(p);if(d<=R)pts.push([p[0],p[1]]);ind.push({pos:p,col:'255,107,107',lbl:Math.round(d/1000)+'k'});}
+  let ax=0,ay=0,vx=0,vy=0,vm=1;for(const s of keep){ax+=s.pos[0];ay+=s.pos[1];vx+=s.vel[0];vy+=s.vel[1];for(const g of (s.speedGears||[]))if(g>vm)vm=g;}
+  const k=keep.length;
+  return {key:'s:'+sel.map(s=>s.id).join(','),pts:pts,ind:ind,ax:ax/k,ay:ay/k,vx:vx/k,vy:vy/k,vm:vm,lead:pts.length===n0,single:(sel.length===1?sel[0]:null),
+    lbl:lbl||(sel.length===1?'特写 · '+sel[0].name:'特写 · '+sel.length+' 艘'+(keep.length<sel.length?'(离群 '+(sel.length-keep.length)+')':''))};
+}
+function insetDirector(now,inc){ // 没选东西时:挑场上最要紧的事(来袭导弹 > 击沉 > 命中 > 认出),每个画面至少停 DWELL,更要紧的来了才插队;没有事就不画
+  const pt=e=>({key:e.k+':'+e.t,p:e.p,t:now,build:()=>now-e.t<INSET.EV_MS?{key:e.k+':'+e.t,pts:[e.pos],ind:[],ax:e.pos[0],ay:e.pos[1],vx:0,vy:0,vm:1,lead:false,single:null,lbl:'导演 · '+e.lbl}:null});
+  let c=null;
+  if(inc.length){const tg=inc[0].tgt;c={key:'m:'+tg.id,p:3,t:now,build:()=>{const L=insetIncoming().filter(m=>m.tgt===tg);return (!tg.dead&&L.length)?insetSubject([tg],L,'导演 · 来袭导弹 → '+tg.name+(isFinite(L[0].eta)?' · '+Math.round(SHOW.t(L[0].eta))+' s':'')):null;}};}
+  for(const e of INSET.ev){if(c&&e.p<=c.p)continue;
+    if(e.k==='id'){const s=e.ship;c={key:'i:'+s.id,p:e.p,t:now,build:()=>{const p=!s.dead&&now-e.t<INSET.EV_MS?contactPos(s,'blue'):null;return p?{key:'i:'+s.id,pts:[p],ind:[],ax:p[0],ay:p[1],vx:0,vy:0,vm:1,lead:false,single:null,lbl:'导演 · '+e.lbl}:null;}};}
+    else c=pt(e);}
+  let D=INSET.dir,sub=D?D.build():null;if(!sub)D=INSET.dir=null;
+  if(c&&(!D||(c.key!==D.key&&(c.p>D.p||now-D.t>=INSET.DWELL)))){INSET.dir=c;sub=c.build();}
+  return sub;
+}
+function drawReach(s){ // 可达圈(同 demos/lightlag 的推力可达圈):按此刻速度惯性前推 T 秒的点,和那时最多能偏开的 ½·a·T²;T 取圈约占框高三分之一
+  const a=s.thrust||CFG.thrust;if(!(a>0))return;
+  const T=Math.max(PHYS.t(10),Math.min(PHYS.t(600),Math.sqrt(0.35*H/cam.zoom/a))),c=[s.pos[0]+s.vel[0]*T,s.pos[1]+s.vel[1]*T],r=0.5*a*T*T*cam.zoom;
+  const p=toScreen(s.pos[0],s.pos[1]),q=toScreen(c[0],c[1]);
+  ctx.save();ctx.strokeStyle='rgba(84,224,208,.55)';ctx.lineWidth=1;ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();
+  ctx.setLineDash([2,4]);ctx.beginPath();ctx.arc(q[0],q[1],r,0,6.2832);ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle='rgba(84,224,208,.85)';ctx.font='10px Consolas';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText('T+'+Math.round(SHOW.t(T))+' s',q[0],q[1]-r-2);
+  ctx.restore();
+}
 function drawInset(){
+  const now=nowMs(),dt=Math.min(0.1,Math.max(0,(now-INSET.t)/1000));INSET.t=now;
+  insetEvents(now);
+  const inc=insetIncoming(),sel=controlledShips().filter(s=>!s.dead);
+  let sub=null;
+  if(sel.length){INSET.dir=null;sub=insetSubject(sel,inc);}else sub=insetDirector(now,inc);
   INSET.on=false;
-  const sel=controlledShips().filter(s=>!s.dead);if(!sel.length){if(typeof terrXOff==='function')terrXOff();return;}
-  const now=nowMs();if(now-INSET.botT>500){INSET.botT=now;const cb=document.getElementById('cmdBar');if(cb)INSET.bot=Math.max(44,H-cb.getBoundingClientRect().top);} // 底边让开指令栏
+  if(!sub){INSET.a=0;INSET.key='';if(typeof terrXOff==='function')terrXOff();return;}
+  if(now-INSET.botT>500){INSET.botT=now;const cb=document.getElementById('cmdBar');if(cb)INSET.bot=Math.max(44,H-cb.getBoundingClientRect().top);} // 底边让开指令栏
   const w=Math.min(INSET.W,Math.round(W*0.3)),h=Math.round(w*INSET.H/INSET.W),x=INSET.M,y=H-INSET.bot-INSET.GAP-h;if(y<60)return;
-  const zMax=Math.pow(HULL_ZOOM.MAX/HULL_ZOOM.LAND,1/HULL_ZOOM.A)/vtLandKmpp(1); // 舰体刚好画到最大的那一档缩放
-  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;for(const s of sel){x0=Math.min(x0,s.pos[0]);x1=Math.max(x1,s.pos[0]);y0=Math.min(y0,s.pos[1]);y1=Math.max(y1,s.pos[1]);}
-  const z=Math.min(zMax,(w-2*70)/Math.max(1,x1-x0),(h-18-2*44)/Math.max(1,y1-y0)),cx=(x0+x1)/2,cy=(y0+y1)/2-9/z; // 框边按像素留白(舰标 + 标签),顶上让开标题条
-  const c0x=cam.x,c0y=cam.y,c0z=cam.zoom,W0=W,H0=H,comp=typeof TERR!=='undefined'?TERR.comp:null;
-  ctx.save();ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();ctx.translate(x,y);
-  cam.x=cx;cam.y=cy;cam.zoom=z;W=w;H=h;
+  /* 取景目标:框住 pts(按像素留白、顶上让开标题条),不比舰体画到最大那一档更近;只有自己几艘船时往速度方向前视 */
+  const zMax=Math.pow(HULL_ZOOM.MAX/HULL_ZOOM.LAND,1/HULL_ZOOM.A)/vtLandKmpp(1);
+  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;for(const p of sub.pts){x0=Math.min(x0,p[0]);x1=Math.max(x1,p[0]);y0=Math.min(y0,p[1]);y1=Math.max(y1,p[1]);}
+  const tz=Math.min(zMax,(w-140)/Math.max(1,x1-x0),(h-106)/Math.max(1,y1-y0));let tcx=(x0+x1)/2,tcy=(y0+y1)/2-9/tz;
+  const vv=Math.hypot(sub.vx,sub.vy);if(sub.lead&&vv>1){const L=Math.min(1,vv/sub.vm)*INSET.LEAD*(w/2)/tz;tcx+=sub.vx/vv*L;tcy+=sub.vy/vv*L;}
+  /* 阻尼:中心记成相对锚点(被取景那几艘的重心)的偏移,跟船不拖尾;缩放在对数空间指数逼近;换了对象且离得远就直接跳过去 */
+  const f=1-Math.exp(-dt*INSET.K);
+  if(sub.key!==INSET.key){const far=!INSET.key||INSET.a<=0||Math.hypot(tcx-INSET.cx,tcy-INSET.cy)>1.5*w/tz;
+    if(far){INSET.ox=tcx-sub.ax;INSET.oy=tcy-sub.ay;INSET.lz=Math.log(tz);}else{INSET.ox=INSET.cx-sub.ax;INSET.oy=INSET.cy-sub.ay;}INSET.key=sub.key;}
+  INSET.ox+=(tcx-sub.ax-INSET.ox)*f;INSET.oy+=(tcy-sub.ay-INSET.oy)*f;INSET.lz+=(Math.log(tz)-INSET.lz)*f;
+  const z=Math.exp(INSET.lz),cx=sub.ax+INSET.ox,cy=sub.ay+INSET.oy;INSET.cx=cx;INSET.cy=cy;INSET.z=z;
+  /* 重复时收起:主画面已经比特写还近、而且要看的全在主画面里 ⇒ 淡出 */
+  let want=1;if(cam.zoom>=0.8*z&&sub.pts.every(p=>{const q=toScreen(p[0],p[1]);return q[0]>=0&&q[0]<=W&&q[1]>=0&&q[1]<=H;}))want=0;
+  INSET.a+=(want-INSET.a)*(1-Math.exp(-dt*INSET.FADE));if(want===0&&INSET.a<0.02)INSET.a=0;
+  if(INSET.a<=0){if(typeof terrXOff==='function')terrXOff();return;}
+  const dpr=window.devicePixelRatio||1,pw=Math.round(w*dpr),ph=Math.round(h*dpr);
+  if(!INSET.cv)INSET.cv=document.createElement('canvas');
+  if(INSET.cv.width!==pw||INSET.cv.height!==ph){INSET.cv.width=pw;INSET.cv.height=ph;INSET.g=null;}
+  if(!INSET.g)INSET.g=INSET.cv.getContext('2d');
+  const g=INSET.g,ctx0=ctx,c0x=cam.x,c0y=cam.y,c0z=cam.zoom,W0=W,H0=H,comp=typeof TERR!=='undefined'?TERR.comp:null,ind=[];
+  g.setTransform(dpr,0,0,dpr,0,0);
+  ctx=g;cam.x=cx;cam.y=cy;cam.zoom=z;W=w;H=h;
   try{
     ctx.fillStyle=vtBg();ctx.fillRect(0,0,w,h);
-    const dpr=window.devicePixelRatio||1;
-    for(const c of STAR_TILE.cv)if(c)ctx.drawImage(c,0,0,Math.min(c.width,w*dpr),Math.min(c.height,h*dpr),0,0,Math.min(c.width/dpr,w),Math.min(c.height/dpr,h)); // 天在屏幕空间,借主画面的贴图
-    if(ENV.clouds.length&&typeof terrWantX==='function'&&TERR.sig!==null){ // 2026-09-26 尘埃云按特写自己的缩放级画(用户:"小窗要保持应有的渲染尺度"):地形服务替它建块,与主镜头共用缓存与预算
+    for(const c of STAR_TILE.cv)if(c)ctx.drawImage(c,0,0,Math.min(c.width,pw),Math.min(c.height,ph),0,0,Math.min(c.width/dpr,w),Math.min(c.height/dpr,h)); // 天在屏幕空间,借主画面的贴图
+    if(ENV.clouds.length&&typeof terrWantX==='function'&&TERR.sig!==null){ // 尘埃云按特写自己的缩放级画(用户:"小窗要保持应有的渲染尺度"):地形服务替它建块,与主镜头共用缓存与预算
       TERR.xL=terrLevel(z,TERR.xL);terrWantX(TERR.xL,cx,cy,z,w,h);
       if(!TERR.xw.some(T=>T.painted>=0)&&!TERR.xa.some(T=>T.painted>=0)&&comp&&comp.cv&&comp.z>0){ // 一块都还没上色:先拿主画面的合成缓存放大垫底
         const k=comp.z*comp.s,sx=(cx-w/2/z-comp.wx0)*k,sy=(cy-h/2/z-comp.wy0)*k,sw=w/z*k,sh=h/z*k;
@@ -102,16 +180,23 @@ function drawInset(){
     if(typeof mapBodies==='function')mapBodies();
     drawArena();
     drawTrails();
+    if(sub.single)drawReach(sub.single);
     for(const s of ships)drawShip(s);
     if(typeof drawRocks==='function')drawRocks();
     drawProjectiles();drawHits();
-  }finally{cam.x=c0x;cam.y=c0y;cam.zoom=c0z;W=W0;H=H0;ctx.restore();}
-  INSET.x=x;INSET.y=y;INSET.w=w;INSET.h=h;INSET.on=true;
-  ctx.save();ctx.strokeStyle='rgba(143,208,255,.55)';ctx.lineWidth=1;ctx.strokeRect(x+0.5,y+0.5,w-1,h-1);
+    for(const it of sub.ind){const q=toScreen(it.pos[0],it.pos[1]);if(q[0]<8||q[0]>w-8||q[1]<26||q[1]>h-8)ind.push({q:q,col:it.col,lbl:it.lbl});} // 框外的才画指示
+  }finally{ctx=ctx0;cam.x=c0x;cam.y=c0y;cam.zoom=c0z;W=W0;H=H0;}
+  INSET.x=x;INSET.y=y;INSET.w=w;INSET.h=h;INSET.on=INSET.a>0.5;
+  ctx.save();ctx.globalAlpha=INSET.a;ctx.drawImage(INSET.cv,x,y,w,h);
+  /* 框外指示:从框心朝它的方向,落在框边内侧的小三角 + 距离或到达时间 */
+  const mx=w/2,my=(h+18)/2;ctx.font='10px Consolas';ctx.textBaseline='middle';
+  for(const it of ind.slice(0,6)){const dx=it.q[0]-mx,dy=it.q[1]-my,l=Math.hypot(dx,dy)||1,ux=dx/l,uy=dy/l,t=Math.min(ux?(ux>0?(w-12-mx)/ux:(12-mx)/ux):Infinity,uy?(uy>0?(h-12-my)/uy:(30-my)/uy):Infinity);
+    const px=x+mx+ux*t,py=y+my+uy*t;ctx.fillStyle='rgba('+it.col+',.95)';ctx.beginPath();ctx.moveTo(px+ux*6,py+uy*6);ctx.lineTo(px-uy*5-ux*3,py+ux*5-uy*3);ctx.lineTo(px+uy*5-ux*3,py-ux*5-uy*3);ctx.closePath();ctx.fill();
+    ctx.textAlign=ux>0.3?'right':(ux<-0.3?'left':'center');ctx.fillText(it.lbl,px-ux*12,py-uy*12);}
+  ctx.strokeStyle='rgba(143,208,255,.55)';ctx.lineWidth=1;ctx.strokeRect(x+0.5,y+0.5,w-1,h-1);
   ctx.fillStyle='rgba(5,7,12,.72)';ctx.fillRect(x+1,y+1,w-2,18);
-  ctx.font='11px "Microsoft YaHei"';ctx.textBaseline='middle';ctx.textAlign='left';ctx.fillStyle='#cfe6ff';
-  ctx.fillText(sel.length===1?('特写 · '+sel[0].name):('特写 · '+sel.length+' 艘'),x+7,y+10);
-  const bk=60/z,pw=Math.pow(10,Math.floor(Math.log10(bk))),bkm=Math.max(pw,Math.round(bk/pw)*pw),bp=bkm*z; // 小比例尺:取整到一位有效数字
+  ctx.font='11px "Microsoft YaHei"';ctx.textAlign='left';ctx.fillStyle=INSET.dir?'#ffd166':'#cfe6ff';ctx.fillText(sub.lbl,x+7,y+10);
+  const bk=60/z,pw10=Math.pow(10,Math.floor(Math.log10(bk))),bkm=Math.max(pw10,Math.round(bk/pw10)*pw10),bp=bkm*z; // 小比例尺:取整到一位有效数字
   ctx.textAlign='right';ctx.fillStyle='#8fd0ff';ctx.fillText(bkm.toLocaleString('en-US')+' km',x+w-7,y+10);ctx.fillRect(x+w-7-bp,y+h-8,bp,2);
   ctx.restore();
 }

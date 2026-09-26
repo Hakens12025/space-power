@@ -314,7 +314,7 @@ function mdRight(e,sx,sy){ // 右键:单击=直接移动,按住350ms=移动虚�
 function onMouseDown(e){
   const sx=e.clientX,sy=e.clientY;
   if(mdRadial(e,sx,sy))return;
-  if(typeof insetHit==='function'&&insetHit(sx,sy))return; // 2026-09-26 点在左下角特写框里:不落到框底下的地图(不选舰、不下令)
+  if(typeof insetHit==='function'&&insetHit(sx,sy)){if(e.button===0&&typeof insetClick==='function')insetClick();return;} // 2026-09-26 点在左下角特写框里:不落到框底下的地图;左键 = 主镜头飞过去
   if(mdWeaponPick(e,sx,sy))return;
   if(mdPending(e,sx,sy))return;
   if(e.button===0)mdLeft(e,sx,sy);

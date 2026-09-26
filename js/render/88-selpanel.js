@@ -346,7 +346,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
       if(ciC)ciC.textContent=st.list.length+' 艘 · '+((typeof fmbModeText==='function')?fmbModeText(st.mode,true):st.mode); // FM3-1 三模式,文案与 87 同源
       if(ciSp)ciSp.innerHTML=[
         ['舰数',st.list.length],
-        ['编队速度',st.uncap?'不限':Math.round(st.spd)],
+        ['编队速度',st.uncap?'不限':Math.round(SHOW.v(st.spd))], // 2026-09-26 物理单位 km/s
         ['战力',Math.round(st.hpFrac*100)+'%'],
         ['离位',(st.dev/1000).toFixed(1)+'k'],
       ].map(it=>`<span class="fi"><i>${it[0]}</i><b>${it[1]}</b></span>`).join('');
