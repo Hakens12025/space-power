@@ -148,7 +148,7 @@ function updSelWeaponTip(){ // RF4b 待命提示:底栏上方 #cmdTip 常显(旧
     tip.textContent='跟随:'+who+' → 点一艘我方舰(点编队里任一艘 = 跟随那支编队) · 右键取消';
     tip.style.display='block';return;
   }
-  if(selWeapon){tip.textContent=(selWeapon==='mac'?'主炮攻击:点击敌舰(漂移射击60s,对准即发)':'导弹攻击:点击敌舰齐射 · 点空地=区域齐射')+' · 右键取消';tip.style.display='block';return;}
+  if(selWeapon){tip.textContent=(selWeapon==='mac'?'主炮强行开火:点敌舰或空地(转向对准即发一炮)':'导弹强行开火:点敌舰齐射 · 点空地 = 区域齐射')+' · 右键取消';tip.style.display='block';return;}
   if(pendingTurn){tip.textContent='转向:点击地图设定方向(速度不变) · 再按 V 取消 · 右键取消';tip.style.display='block';return;} // FL1 把 V 也接进来:它原本只走那个被 RF2 藏死的顶部状态条,按 V 之后玩家看不到任何提示
   tip.style.display='none';
 }
@@ -197,13 +197,14 @@ function mdRadial(e,sx,sy){ // RF5 Phase C 轮盘开着时的两段早退(盘内
 }
 function mdWeaponPick(e,sx,sy){ // 选定武器攻击:点目标 / 点空位置
   if(e.button===0&&selWeapon){ // 选定武器攻击:点击目标/空位置指定
-    const t=targetAt(sx,sy)||shipAt(sx,sy); // RF4b 敌舰优先(shipAt 已限定蓝方,原路径在简化UI后点敌舰落空)
+    let t=targetAt(sx,sy)||shipAt(sx,sy); // RF4b 敌舰优先(shipAt 已限定蓝方,原路径在简化UI后点敌舰落空)
     const atk=controlledShips();
+    if(t&&!t.dead&&!atk.some(x=>x.side===t.side)&&!atk.some(x=>engageable(t,x)))t=null; // 2026-09-27 点中的是打不了的接触(没定位):按那个位置打空地(强行开火)
     if(t&&!t.dead){ // 点中舰船:按攻击方各自阵营探测门控(GM能指挥敌方,但各边只能打自己探测到的)
       {
         const hiters=atk.filter(x=>engageable(t,x));
         if(hiters.length){
-          if(selWeapon==='mac'){hiters.forEach(x=>{if(hasMAC(x)){x.lockedTarget=t;x.driftFire=true;x.driftFireT=60;}});} // DS171:M3 lockPlayer→driftFire;TIER1 MAC 舰种门改能力谓词 hasMAC
+          if(selWeapon==='mac'){hiters.forEach(x=>{if(hasMAC(x)){x.lockedTarget=t;x.driftFire=true;x.driftFireT=60;x.forceMac={t:t,pt:null,T:60};}});} // 2026-09-27 强行开火:转向对准就开一炮(weapons/57),不看武器勾没勾 // DS171:M3 lockPlayer→driftFire;TIER1 MAC 舰种门改能力谓词 hasMAC
           else{hiters.forEach(x=>{if(x.ammo>0)orderMissileSalvo(x,t,salvoCount);});}
         }
       }
@@ -214,7 +215,10 @@ function mdWeaponPick(e,sx,sy){ // 选定武器攻击:点目标 / 点空位置
         atk.forEach(x=>{if(x.ammo>0)orderMissileSalvo(x,pos,salvoCount);});
       }
     }
-    // 其余情形(MAC 点了空地)什么都不做:MAC 需要目标
+    else if(selWeapon==='mac'){ // 2026-09-27 主炮打空地(用户选):转向那个点、对准就开一炮,弹道上碰到谁算谁(weapons/57 + 56)
+      const w=worldAt(sx,sy),pt=ordArenaClamp([w[0],w[1],0]);
+      atk.forEach(x=>{if(hasMAC(x))x.forceMac={t:null,pt:pt,T:60};});
+    }
     selWeapon=null;updSelWeaponTip();
     return true;
   }

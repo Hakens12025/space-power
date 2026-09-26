@@ -87,6 +87,12 @@ function stepWeaponSystems(dt){
       break;
     }
   }
+  for(const s of ships){const ff=s.forceMac;if(!ff)continue; // 2026-09-27 强行开火(用户:「选择使用某种武器攻击相应鼠标选定位置」):转向目标 / 地面点,对准就开一炮;不看火控、主炮勾选与把握门,60 秒没打出去作废
+    ff.T-=dt;const tp=ff.t?((ff.t.dead||ff.t.side===s.side)?null:macPred(s,ff.t)):ff.pt;
+    if(!tp||ff.T<=0||s.dead||!hasMAC(s)){s.forceMac=null;continue;}
+    s.turnTarget=[tp[0],tp[1],0]; // 朝向层对准后会清掉 turnTarget,所以每拍重设
+    if(s.macCd<=0&&V.angle(s.facing,V.norm(V.sub(tp,s.pos)))<0.02){if(ff.t)fireMAC(s,ff.t);else fireMACAt(s,ff.pt);if(s.macCd>0){s.forceMac=null;s.turnTarget=null;}}
+  }
   // 锁定自动开火(10秒一轮):机头摆到对准窗口的瞬间才开炮(不盲射);v125 ROE门控
   for(const s of ships){
     const roeOK=s.macOn!==false&&(s.roe==='free'||(s.roe==='tight'&&s.roeCd>0)); // free自由/tight被攻击才还击(roeCd=受击冷却)/hold不开火;RF2 主炮开关:关=不参与自动开火

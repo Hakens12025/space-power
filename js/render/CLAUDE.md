@@ -7,7 +7,7 @@
 - `83-hud.js` hover 圈(悬停发射档另画「静默交叉定位」橙虚线圈,读 sensors/23 `ladTriFix`)、扫描脉冲圈 `drawPings`、信号视野、火控链;`84-scene.js` 每帧场景组装(含游玩区边界 `drawArena`、可见光圈灰雾 `drawVisFog`、左下角特写窗口 `drawInset`:第二镜头画进离屏画布再按透明度贴回;取景 = 选中舰 + 纳入范围内的来袭导弹 / 锁定目标(离群舰、框外威胁画框边三角),临界阻尼 + 开平方前视;特写播放(击沉 / 损失 > 首次定位 / 中弹 / 命中 > 认出,有选中时只播与选中舰有关的、每段后冷却 3 s,来袭导弹在取景里时让位;敌方主体按航位推算跟随;预判段:离命中 0.4~3 墙钟秒先切过去(来袭 / 我方弹 / 可能击沉,致命判断只用悬停卡已显示的血量);命中 / 击沉 / 损失按消失的弹丸归到射手,射手定得出位置就一起框 + 虚线,传感器画面不给敌方射手;离命中 2.5 → 1 墙钟秒把语境点(射手、速度前后、附近舰)收向主体 = 推近,弹没了再保持 1.2 s;悬停暂停、右键跳过);星空借主贴图、尘埃云按特写自己的缩放级向地形服务要块(`terrWantX`,与主镜头共用缓存 / 线程 / 预算,没上色时拿 `TERR.comp` 放大垫底);尾迹 `TRAIL`(每 0.5 模拟秒记一次、留 60 秒,敌舰只记估计位置));`84-fmplot.js` 编队图
 - `86-irview.js` 红外画面(右下角「红外」钮,`MAPV.mode === 'ir'`;`drawIrView` / `irvOff`,物理走 `senseOptLoWith` / `senseOptBlocked` / `covTheta`;选中舰的红外发现边界 `irvDrawLobes`:实线 = 我看得见熄火 DD、虚线 = 敌舰看得见我,按帧预算 `IRV_LOBE.BUD` 分批算)
 - `86-radarview.js` 雷达画面(右下角「雷达」钮,`MAPV.mode === 'radar'`;`drawRadarView`:照射覆盖、回波 `cov.ch.act`、听到的敌方雷达区域:读 sensors/21 的 ESM 记录,围死画多边形、围不死画高斯团)
-- `85-settings.js` 右下工具栏与倍速钮;`85-tutorial.js` 教程 `TUT_HTML`;`87-fmbar.js` / `89-fmpage.js` 编队界面;`88-selpanel.js` 右栏与火控计算机;`89-radial.js` 目标轮盘几何
+- `85-settings.js` 右下工具栏与倍速钮;`85-tutorial.js` 教程 `TUT_HTML`;`87-fmbar.js` / `89-fmpage.js` 编队界面;`88-selpanel.js` 右栏与火控计算机、底栏三颗钮(雷达 / 武器各自向上弹菜单 `#cmdPop`:勾选即许可,攻击性武器勾着任一 = 火控开;跟随中再点 = 解除);`89-radial.js` 目标轮盘几何
 
 ## 迷雾(画面不许泄漏真值)
 - 接触显示五态只问 `contactState`(none / heat / live / coast / ghost),位置只问 `contactPos`,身份只问 `contactIdn`;各层不许自己写条件。

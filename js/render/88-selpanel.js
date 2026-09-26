@@ -2,7 +2,7 @@
 /* RF3: 简化UI核心——全部武器相关 UI 由 s.weapons 清单(weapons/51-defs 配装解析产物)驱动生成:
    底栏武器按钮/规格条武器段/右栏武器状态/hover 射程圈,加新武器种类这些地方零改动。
    右栏 #selPanel 只放【变化信息】(结构/目标/武器库状态/事件);
-   底栏 #cmdBar = 【固定信息】(舰名/舰种·等级 + 规格条 specItems)+ 开关组(火控一个舰级布尔开关 + 每件武器一个)+ 三个形状不同的独立钮(发射档/跟随/解除)。
+   底栏 #cmdBar = 【固定信息】(舰名/舰种·等级 + 规格条 specItems)+ 三颗钮:雷达 / 武器(各自向上弹菜单 #cmdPop,见本文件末尾)/ 跟随(2026-09-27 改版;原来的火控、逐武器开关、发射档、扫描、解除五种钮已去掉)。
    开关语义:火控=autoEngage+roe 合一(开=free+自动索敌,关=hold+解除锁定);发射档是三态循环,不在 cmdList 里(见本文件末尾 SN4 那一段);
    武器开关=macOn/mslOn/ciwsOn(按 kind 映射)。操作作用于【全部选中蓝舰】,状态读第一艘。
    (右轨的事件流面板与它的写入点 2026-09-22 随事件系统整体删除。) */
@@ -119,6 +119,7 @@ function weaponRows(s){
   return h;
 }
 function updateCmdBar(sel){
+  if(typeof cmdBarSync==='function'){cmdBarSync();if(typeof followBtnSync==='function')followBtnSync();return;} // 2026-09-27 底栏改版:雷达 / 武器 / 跟随三颗钮(见本文件末尾);下面按 cmdList 同步旧钮那段已不再走到
   const s=sel[0];
   for(const c of cmdList(s)){
     const b=document.getElementById(c.id);if(!b)continue;
@@ -397,84 +398,94 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
     ${weaponRows(s)}`; // SN4 blocker E:三行辐射读数插在「我在哪儿怎么动」与「我能打什么」之间 —— 中间这一组回答的是「我被看见多少」
   updateCmdBar(sel);
 }
-function bindCmdBar(){ // 按钮一次性预生成(舰级2个 + KIND_INFO 每种武器一个);显隐随旗舰配装,事件按下时现查命令表
+function bindCmdBar(){ // 2026-09-27 底栏改版(用户):火控 + 各武器并进「武器」,发射档 + 扫描并进「雷达」;两颗钮各自向上弹菜单(#cmdPop,见下)
   const wrap=document.querySelector('#cmdBar .cmd-btns');
   if(!wrap)return;
-  const ensure=(id)=>{ // 生成(或复用)按钮并挂事件;事件里按当前旗舰重新解析 cmd(不闭包捕获创建期对象)
-    let b=document.getElementById(id);
-    if(b)return b;
+  const mk=(id,label,kind,tip)=>{
+    let b=document.getElementById(id);if(b)return b;
     b=document.createElement('button');b.className='btn cbtn';b.id=id;wrap.appendChild(b);
-    b.addEventListener('click',()=>{
-      const sel=selBlue();if(!sel.length)return;
-      const cmd=cmdList(sel[0]).find(x=>x.id===b.id);if(!cmd||!cmd.set)return;
-      const nv=!cmd.get(sel[0]); // 以第一艘当前态取反,全队统一置为目标态
-      sel.forEach(s=>cmd.set(s,nv));
-      updateSelPanel();
-    });
-    b.addEventListener('mouseenter',()=>{
-      const sel=selBlue();
-      const cmd=sel.length?cmdList(sel[0]).find(x=>x.id===b.id):null;
-      hoverRing=(cmd&&cmd.ring)?cmd.ring:null; // 83-hud drawHoverRings 读
-      const tip=document.getElementById('cmdTip');
-      if(tip)tip.style.display=(cmd&&cmd.tip)?'block':'none';
-      if(tip&&cmd&&cmd.tip)tip.textContent=cmd.tip(sel[0]);
-    });
-    b.addEventListener('mouseleave',()=>{
-      hoverRing=null;
-      const tip=document.getElementById('cmdTip');if(tip)tip.style.display='none';
-    });
+    b.addEventListener('click',()=>{if(!selBlue().length)return;cmdPopToggle(kind,b);});
+    b.addEventListener('mouseenter',()=>{hoverRing=kind==='radar'?'emit':null;const t=document.getElementById('cmdTip');if(t){t.style.display='block';t.textContent=tip;}});
+    b.addEventListener('mouseleave',()=>{hoverRing=null;if(typeof updSelWeaponTip==='function')updSelWeaponTip();});
     return b;
   };
-  for(const c of cmdList(null))ensure(c.id); // 只剩 cbFire —— SN4 把原来那条布尔「雷达」摘出去做成三态钮了(见本文件末尾 bindEmitBtn)
-  for(const kind in KIND_INFO)ensure('cb_'+kind); // cb_mac/cb_msl/cb_ciws
+  mk('cbRadar','雷达','radar','雷达:点开选 静默 / 脉冲 / 发射 / 干扰。脉冲 = 只照一拍,照完回到原来那一档;发射 = 一直照,最准也最响;干扰 = 造噪声压对方对我的照射');
+  mk('cbWpn','武器','wpn','武器:点开勾选允许自动开火的武器,勾着任一件 = 火控开(钮亮);取消所有 = 火控关、停火并解除锁定。火炮 / 导弹再点名字展开,最右边 ⌖ = 强行开火');
 }
 bindCmdBar();
-/* ============ SN4 底栏【发射档】三态循环钮(#cbEmit) ============
-   silent 静默 → paint 照射 → jam 干扰 → silent,作用于【全部选中蓝舰】(与 cmdList 的多选语义一致:读第一艘、全队统一置成同一档)。
-   刻意【不进 cmdList】(blocker C):那张表是「每舰一个布尔」的形状,点击语义写死在 bindCmdBar 里(取反 + 全队置一个布尔目标态),
-   三态既没有取反也没有单一布尔目标态;硬塞会被 `if(!cmd.set)return` 静默吃掉 —— RF8 那个大序列钮就是这么「看得见摸不着」的。
-   先例是 FM6 的跟随两钮:形状不同就自己建、自己挂事件、在 updateCmdBar 末尾显式同步一次。
-   写入一律走 21-detect 的 setEmit(唯一写入口,非法字面量当场抛);文案一律走 emitLabel(UI 文案唯一出处,与 87 同源)。
-   三态三色用【行内 style】给:内联优先级压得过 `#cmdBar .cbtn.on .s` 那条规则,所以本轮零 CSS 改动。 */
-function emitBtnSync(){
-  {const q=document.getElementById('cbPing');if(q)q.classList.toggle('is-dis',!selBlue().length);} // 2026-09-27 扫描钮:没有选中蓝舰就灰
-  const b=document.getElementById('cbEmit');
-  if(!b)return;
-  const s=selBlue()[0];
-  if(!s){b.classList.add('is-dis');b.classList.remove('on');setHTMLStable(b,'<span class="l">发射档</span><span class="s">—</span>',false);return;}
-  b.classList.remove('is-dis');
-  const m=s.emitMode;
-  b.classList.toggle('on',m!=='silent');                       // .on 只表达「在辐射」这一件事;paint 与 jam 的区别交给下面的颜色,两个通道不抢同一个属性(同 RF8 方条那条纪律)
-  const col=(m==='jam')?'var(--state-warn)':((m==='paint')?'var(--state-active)':'var(--txt-mute)');
-  const lb=(typeof emitLabel==='function')?emitLabel(m):String(m);
-  setHTMLStable(b,`<span class="l">发射档</span><span class="s" style="color:${col}">${lb}</span>`,false);
+/* ============ 2026-09-27 底栏菜单 #cmdPop(用户:「统一归入雷达,点击后向上出现一个菜单……所有武器+火控统一归入武器按钮,亮代表启动」) ============
+   雷达:静默 / 脉冲 / 发射 / 干扰。脉冲 = 只照一拍(sensors/21 的 pingReq),照完回到原档;钮亮 = 在辐射或正在脉冲。
+   武器:取消所有 / 火炮 / 导弹 / 激光 / 近防。勾选即许可:攻击性武器(火炮、导弹)勾着任一 = 火控开(autoEngage + roe free),全不勾 = 火控关、解除锁定;
+     近防只管自己的 ciwsOn。火炮 / 导弹点名字向上展开具体武器,最右边 ⌖ = 强行开火(command/71 的 toggleWeapon → 70 的 mdWeaponPick)。激光目前没有,灰着占位。
+   菜单内容随 updateCmdBar(每 20 帧)重画,所以状态与脉冲的亮灭跟得上;点菜单与钮以外的地方关。 */
+const CMDPOP={kind:null,sub:null,el:null,btn:null};
+const WPN_CATS=[['mac','火炮'],['msl','导弹'],['laser','激光'],['ciws','近防']];
+const RADAR_ITEMS=[['silent','静默'],['pulse','脉冲'],['paint','发射'],['jam','干扰']];
+const RADAR_TIP={silent:'静默:一点不响,只靠红外看;对方听不见我',pulse:'脉冲:雷达只照一拍 —— 照得到的接触拿到位置和速度;对方只在这一拍听得到我',paint:'发射:雷达一直照,定位最快最准、也只有它能持续跟住远处的冷目标;代价是对方在约两倍距离上一直听得见我',jam:'干扰:发射机改去造噪声,压住对方对我的照射回波;更吵,而且自己拿不到照射定位'};
+function wpnFcOn(x){return !!(x.autoEngage&&x.roe!=='hold');}
+function wpnHas(x,k){return (x.weapons||[]).some(w=>w.kind===k);}
+function wpnChecked(x,k){if(!wpnHas(x,k))return false;if(k==='ciws')return x.ciwsOn!==false;const ki=KIND_INFO[k];return !!ki&&wpnFcOn(x)&&x[ki.on]!==false;}
+function wpnAnyOn(x){return wpnChecked(x,'mac')||wpnChecked(x,'msl');}
+function wpnToggle(k){
+  const sel=selBlue();if(!sel.length||!KIND_INFO[k])return;const v=!wpnChecked(sel[0],k);
+  for(const x of sel){
+    if(k==='ciws'){x.ciwsOn=v;continue;}
+    const on=KIND_INFO[k].on;
+    if(v){if(!wpnFcOn(x)){for(const kk of ['mac','msl'])if(kk!==k)x[KIND_INFO[kk].on]=false;x.autoEngage=true;x.roe='free';}x[on]=true;} // 火控从关到开:只开勾的这一件
+    else{x[on]=false;if(!wpnAnyOn(x)){x.autoEngage=false;x.roe='hold';x.lockedTarget=null;}} // 攻击性武器全不勾 = 火控关
+  }
+  updateSelPanel();
 }
-(function bindEmitBtn(){
-  const wrap=document.querySelector('#cmdBar .cmd-btns');
-  if(!wrap||document.getElementById('cbEmit'))return;
-  const b=document.createElement('button');b.className='btn cbtn';b.id='cbEmit';
-  const fire=document.getElementById('cbFire');                // 位置:紧跟火控钮 —— 它接替的正是原来 cmdList 第二条的位置,不这么插会掉到武器钮后面,读起来像武器的一部分
-  if(fire&&fire.parentNode===wrap)wrap.insertBefore(b,fire.nextSibling);else wrap.appendChild(b);
-  b.addEventListener('click',()=>{
-    const sel=selBlue();if(!sel.length)return;
-    if(typeof emitNext!=='function'||typeof setEmit!=='function')return;
-    const nv=emitNext(sel[0]);                                 // 读第一艘的下一档当目标态,全队统一置过去(与 cmdList 的多选口径同源)
-    sel.forEach(x=>setEmit(x,nv));
-    updateSelPanel();
-  });
-  b.addEventListener('mouseenter',()=>{
-    hoverRing='emit';                                          // EM1-B:悬停发射档 ⇒ 83-hud 画【照射量程(对标准目标)+ 被听见】两圈,与武器射程同一个用法(选中时那个常驻的大圈已删)
-    const t=document.getElementById('cmdTip');
-    if(t){t.style.display='block';t.textContent='发射档(三态循环):静默=一点不响,只靠光学看,对方听不见我;照射=雷达开机主动照,最准、也只有它上得到火控级,代价是被对方在约 4 倍距离上听见;干扰=发射机改去造噪声,压住对方对我的照射回波,但更吵、而且自己也照不了(火控级同样上不去)';}
-  });
-  b.addEventListener('mouseleave',()=>{hoverRing=null;if(typeof updSelWeaponTip==='function')updSelWeaponTip();});
-  const q=document.createElement('button');q.className='btn cbtn';q.id='cbPing'; // 2026-09-27 扫描(用户选 A):雷达只照一拍,照完回到原来的发射档
-  q.innerHTML='<span class="l">雷达</span><span class="s">扫描</span>';b.parentNode.insertBefore(q,b.nextSibling);
-  q.addEventListener('click',()=>{const sel=selBlue();if(!sel.length)return;sel.forEach(x=>{x.pingReq=true;});});
-  q.addEventListener('mouseenter',()=>{hoverRing='emit';const t=document.getElementById('cmdTip');
-    if(t){t.style.display='block';t.textContent='扫描:雷达只照一拍 —— 照得到的接触一次拿到位置和速度,之后按航位推算跟(对方不点火就一直对得上;红外看得见它在滑行就不会丢)。对方只在这一拍听得到你(一次方位 + 粗距离),不是一条持续的航迹。';}});
-  q.addEventListener('mouseleave',()=>{hoverRing=null;if(typeof updSelWeaponTip==='function')updSelWeaponTip();});
-})();
+function wpnClearAll(){for(const x of selBlue()){x.autoEngage=false;x.roe='hold';x.lockedTarget=null;x.macOn=false;x.mslOn=false;x.ciwsOn=false;}updateSelPanel();}
+function radarPulsing(x){const f=(typeof PING_FX!=='undefined')?PING_FX.get(x):null;return !!(x.pingReq||(f&&!f.done));}
+function radarPick(v){const sel=selBlue();if(!sel.length)return;if(v==='pulse')sel.forEach(x=>{x.pingReq=true;});else sel.forEach(x=>setEmit(x,v));updateSelPanel();}
+function wpnStat(s,k){return k==='mac'?'伤害 '+(s.macDmg||0)+' · 装填 '+Math.round(SHOW.t(s.macReload||0))+'s':(k==='msl'?(s.mslPer||12)+' 枚/组 · 余 '+(s.ammo||0)+' 枚':'');}
+function cmdPopEl(){
+  if(CMDPOP.el)return CMDPOP.el;
+  const d=document.createElement('div');d.id='cmdPop';document.body.appendChild(d);
+  d.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.classList.contains('is-dis'))return;const a=b.dataset.a,v=b.dataset.v;
+    if(a==='radar')radarPick(v);else if(a==='wchk')wpnToggle(v);else if(a==='clear')wpnClearAll();else if(a==='sub')CMDPOP.sub=CMDPOP.sub===v?null:v;
+    else if(a==='force'){const w=v==='msl'?'missile':v;cmdPopClose();if(typeof toggleWeapon==='function'&&selWeapon!==w)toggleWeapon(w);return;}
+    cmdPopRender();});
+  d.addEventListener('mouseover',e=>{const b=e.target.closest('button');if(!b)return;const a=b.dataset.a,v=b.dataset.v,s=selBlue()[0];let tip='';
+    if(a==='radar'){hoverRing='emit';tip=RADAR_TIP[v]||'';}
+    else if(a==='force'){hoverRing=v;tip='强行开火:点一艘敌舰打它,或点地图上的位置(导弹 = 区域齐射,主炮 = 转向那个点开一炮);不看武器勾没勾。右键取消';}
+    else if((a==='wchk'||a==='sub')&&KIND_INFO[v]&&s){hoverRing=v;tip=KIND_INFO[v].tip(s);}
+    else if(a==='clear'){hoverRing=null;tip='取消所有:所有武器都不勾 = 火控关、停火并解除锁定,近防也关';}
+    const t=document.getElementById('cmdTip');if(t&&tip){t.style.display='block';t.textContent=tip;}});
+  d.addEventListener('mouseleave',()=>{hoverRing=null;if(typeof updSelWeaponTip==='function')updSelWeaponTip();});
+  document.addEventListener('mousedown',e=>{if(!CMDPOP.kind)return;if(d.contains(e.target)||(CMDPOP.btn&&CMDPOP.btn.contains(e.target)))return;cmdPopClose();},true);
+  return CMDPOP.el=d;
+}
+function cmdPopToggle(kind,btn){if(CMDPOP.kind===kind){cmdPopClose();return;}CMDPOP.kind=kind;CMDPOP.sub=null;CMDPOP.btn=btn;cmdPopRender();}
+function cmdPopClose(){CMDPOP.kind=null;CMDPOP.sub=null;if(CMDPOP.el)CMDPOP.el.style.display='none';}
+function cmdPopRender(){
+  const d=cmdPopEl(),sel=selBlue(),s=sel[0];
+  if(!CMDPOP.kind||!s||!CMDPOP.btn){cmdPopClose();return;}
+  let h='';
+  if(CMDPOP.kind==='radar'){const pul=sel.some(radarPulsing);
+    h='<div class="cp-col">'+RADAR_ITEMS.map(([v,l])=>{const on=v==='pulse'?pul:s.emitMode===v;return '<button class="btn cp-b'+(on?' on':'')+'" data-a="radar" data-v="'+v+'">'+l+'</button>';}).join('')+'</div>';}
+  else{
+    let sub='';const k=CMDPOP.sub;
+    if(k){const ws=(s.weapons||[]).filter(w=>w.kind===k),c=wpnChecked(s,k);
+      sub='<div class="cp-col cp-sub">'+ws.map(w=>'<div class="cp-row"><button class="btn cp-b cp-name'+(c?' on':'')+'" data-a="wchk" data-v="'+k+'">'+(c?'☑ ':'☐ ')+w.label+'<span class="cp-st">'+wpnStat(s,k)+'</span></button><button class="btn cp-ff" data-a="force" data-v="'+k+'">⌖</button></div>').join('')+'</div>';}
+    const rows=['<button class="btn cp-b" data-a="clear">取消所有</button>'];
+    for(const [kk,l] of WPN_CATS){
+      if(!wpnHas(s,kk)){rows.push('<div class="cp-row"><button class="btn cp-b cp-name is-dis">☐ '+l+' · 暂无</button></div>');continue;}
+      const c=wpnChecked(s,kk),exp=kk!=='ciws';
+      rows.push('<div class="cp-row"><button class="btn cp-b cp-chk'+(c?' on':'')+'" data-a="wchk" data-v="'+kk+'">'+(c?'☑':'☐')+'</button><button class="btn cp-b cp-name'+(k===kk?' on':'')+'" data-a="'+(exp?'sub':'wchk')+'" data-v="'+kk+'">'+l+(exp?' ▴':'')+'</button></div>');}
+    h=sub+'<div class="cp-col">'+rows.join('')+'</div>';}
+  if(d._lastHTML!==h){d.innerHTML=h;d._lastHTML=h;}
+  const r=CMDPOP.btn.getBoundingClientRect();d.style.display='flex';d.style.left=Math.round(r.left)+'px';d.style.bottom=Math.round(window.innerHeight-r.top+6)+'px';
+}
+function cmdBarSync(){ // 三颗钮的字与亮灭;菜单开着就顺手重画
+  const sel=selBlue(),s=sel[0],r=document.getElementById('cbRadar'),w=document.getElementById('cbWpn');
+  if(r){r.classList.toggle('is-dis',!s);
+    if(!s){r.classList.remove('on');setHTMLStable(r,'<span class="l">雷达</span><span class="s">—</span>',false);}
+    else{const pul=sel.some(radarPulsing),lb=pul?'脉冲':({silent:'静默',paint:'发射',jam:'干扰'})[s.emitMode]||s.emitMode;r.classList.toggle('on',pul||s.emitMode!=='silent');setHTMLStable(r,'<span class="l">雷达</span><span class="s">'+lb+'</span>',false);}}
+  if(w){w.classList.toggle('is-dis',!s);const on=!!s&&wpnAnyOn(s);w.classList.toggle('on',on);setHTMLStable(w,'<span class="l">武器</span><span class="s">'+(s?(on?'启动':'关闭'):'—')+'</span>',false);}
+  if(CMDPOP.kind)cmdPopRender();
+}
 function fcPickBtnSync(s){ // RF8b 同步标题栏「选择」钮:它在 #fcSec .fc-hd 里,是【静态元素】,所以直接改属性即可,不经 innerHTML
   const b=document.getElementById('fcPickBtn');
   if(!b)return;
@@ -557,18 +568,15 @@ function followPick(target) { // 由 70-input 在待命态下点中一艘我方�
   updateSelPanel();
   return !!ok;
 }
-function followBtnSync() { // 两个钮的可用态与高亮:武装中点亮「跟随」;当前没有跟随关系时「解除」压暗
+function followingAny(sel) { return sel.some(s => !!s.follow || !!(s.formation && s.formation.follow)); } // 选中的船里有没有在跟随(散船 s.follow、编队 F.follow)
+function followBtnSync() { // 2026-09-27 只剩一颗钮(用户:「解除指令也不要了」):武装中 / 跟随中点亮;跟随中再点 = 解除
   const sel = selBlue();
-  const b1 = document.getElementById('cbFollow'), b2 = document.getElementById('cbUnfollow');
+  const b1 = document.getElementById('cbFollow');
   if (b1) {
+    const fol = followingAny(sel);
     b1.classList.toggle('is-dis', !sel.length);
-    b1.classList.toggle('on', !!pendingFollow);
-    setHTMLStable(b1, '<span class="l">跟随</span><span class="s">' + (pendingFollow ? '选目标' : (sel.length ? '待命' : '—')) + '</span>', false);
-  }
-  if (b2) {
-    const any = sel.some(s => !!s.follow);
-    b2.classList.toggle('is-dis', !any);
-    setHTMLStable(b2, '<span class="l">解除</span><span class="s">' + (any ? '跟随中' : '—') + '</span>', false);
+    b1.classList.toggle('on', !!pendingFollow || fol);
+    setHTMLStable(b1, '<span class="l">跟随</span><span class="s">' + (pendingFollow ? '选目标' : (fol ? '跟随中' : (sel.length ? '待命' : '—'))) + '</span>', false);
   }
 }
 (function bindFollowBtns() {
@@ -586,14 +594,8 @@ function followBtnSync() { // 两个钮的可用态与高亮:武装中点亮「�
     });
     b.addEventListener('mouseleave', () => { hoverRing = null; if (typeof updSelWeaponTip === 'function') updSelWeaponTip(); });
   };
-  mk('cbFollow', () => { followArm(); },
-    '跟随:按下后点一艘我方舰 → 当前选中的去跟着它走。作用域看你选了什么 —— 选中整支编队 = 整队跟随,选中单舰 = 这一艘跟随;点到编队里的任一艘 = 跟随那支编队(即它的旗舰)');
-  mk('cbUnfollow', () => {
-    const sel = selBlue();
-    if (typeof followStopList === 'function') followStopList(sel);
-    if (typeof updFmBar === 'function') updFmBar();
-    updateSelPanel();
-  }, '解除跟随:把当前选中的跟随关系清掉,回到各自走');
+  mk('cbFollow', () => { const sel = selBlue(); if (!pendingFollow && followingAny(sel)) { if (typeof followStopList === 'function') followStopList(sel); if (typeof updFmBar === 'function') updFmBar(); updateSelPanel(); } else followArm(); },
+    '跟随:按下后点一艘我方舰(已在跟随时再点 = 解除) → 当前选中的去跟着它走。作用域看你选了什么 —— 选中整支编队 = 整队跟随,选中单舰 = 这一艘跟随;点到编队里的任一艘 = 跟随那支编队(即它的旗舰)');
 })();
 /* SL1b(2026-09-22)从 render/87-fleetcards【纯移动】过来:那文件删到只剩它一个函数。core/99 每帧调。 */
 function updateTop(){ // 每帧轻量刷新:顶栏时钟与倍速读数

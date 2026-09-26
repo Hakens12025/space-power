@@ -64,6 +64,13 @@ function stepDecoyProj(p,dt){ // 诱饵弹(v125):直线飞模拟舰船信号,燃
 function stepMacProj(p,dt){ // MAC轴炮:沿发射时船头直飞,命中或到预测时间失的
       p.age=(p.age||0)+dt;
       p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;
+      if(p.ground){ // 2026-09-27 打空地的炮弹:对方每艘船都按本拍相对线段的最近点判(与下面同式),碰到第一艘就算
+        for(const u of ships){if(u.dead||u.side===p.shooter.side)continue;
+          const sx=(p.vel[0]-u.vel[0])*dt,sy=(p.vel[1]-u.vel[1])*dt,sz=(p.vel[2]-u.vel[2])*dt,rx=p.pos[0]-u.pos[0]-sx,ry=p.pos[1]-u.pos[1]-sy,rz=p.pos[2]-u.pos[2]-sz,ss=sx*sx+sy*sy+sz*sz,k=ss>0?Math.max(0,Math.min(1,-(rx*sx+ry*sy+rz*sz)/ss)):1;
+          if((rx+k*sx)**2+(ry+k*sy)**2+(rz+k*sz)**2<MAC_HIT_R*MAC_HIT_R){applyDamage(u,p.dmg,p.shooter,'mac');spawnHit(p.pos,'mac');p.done=true;return;}}
+        if(p.age>=p.tt)p.done=true;
+        return;
+      }
       const t=p.target,tv=(t&&t.vel)||[0,0,0],sx=(p.vel[0]-tv[0])*dt,sy=(p.vel[1]-tv[1])*dt,sz=(p.vel[2]-tv[2])*dt; // 2026-09-26 单局地图:MAC_HIT_R 400 < 单拍相对位移约 600km,只看拍末会漏判(实测 90% 带只剩 84%),改按本拍相对线段的最近点判
       const rx=t?p.pos[0]-t.pos[0]-sx:0,ry=t?p.pos[1]-t.pos[1]-sy:0,rz=t?p.pos[2]-t.pos[2]-sz:0,ss=sx*sx+sy*sy+sz*sz,u=ss>0?Math.max(0,Math.min(1,-(rx*sx+ry*sy+rz*sz)/ss)):1;
       if(t&&!t.dead&&(rx+u*sx)**2+(ry+u*sy)**2+(rz+u*sz)**2<MAC_HIT_R*MAC_HIT_R){applyDamage(p.target,p.dmg,p.shooter,'mac');spawnHit(p.pos,'mac');p.done=true;} // RANGE1 补第 4 实参 kind='mac'(靶场分武器统计)

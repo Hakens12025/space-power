@@ -425,6 +425,12 @@ function drawHoverRings(){
       ctx.fillText('静默交叉定位 ≈ '+Math.round(r/1000)+'k(基线 '+Math.round(bl/1000)+'k · 对熄火驱逐舰,随太阳方位 ±)',p[0],p[1]+r*cam.zoom+2);ctx.restore();}
   }
 }
+function drawForceMarks(){ // 2026-09-27 主炮打空地:还没打出去的炮击点画一个小准星
+  ctx.save();ctx.strokeStyle='rgba(255,209,102,.85)';ctx.fillStyle='rgba(255,209,102,.85)';ctx.lineWidth=1.2;ctx.font='10px Consolas';ctx.textAlign='left';ctx.textBaseline='middle';
+  for(const s of ships){const ff=s.forceMac;if(!ff||!ff.pt||s.dead||(s.side!=='blue'&&!adminMode))continue;const q=toScreen(ff.pt[0],ff.pt[1]);
+    ctx.beginPath();ctx.arc(q[0],q[1],6,0,6.283);ctx.moveTo(q[0]-10,q[1]);ctx.lineTo(q[0]+10,q[1]);ctx.moveTo(q[0],q[1]-10);ctx.lineTo(q[0],q[1]+10);ctx.stroke();ctx.fillText('炮击点',q[0]+12,q[1]);}
+  ctx.restore();
+}
 const PING_FX=new Map(),PING_MS=900; // 2026-09-27 扫描的脉冲圈:船 → {看到的 pingT, 墙钟起点}
 function drawPings(){ // 一圈从船身扩到雷达量程(对标准目标),墙钟 PING_MS 内淡出;敌方的只在全知时画
   const now=nowMs(),lim=2*Math.hypot(W,H);

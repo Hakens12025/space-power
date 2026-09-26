@@ -340,6 +340,16 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #cmdBar .cbtn .l{font-size:var(--fs-body)}
 #cmdBar .cbtn .s{font-size:var(--fs-label);letter-spacing:.3em;margin-right:-.3em;color:var(--txt-mute)}
 #cmdBar .cbtn.on .s{color:var(--state-active)}
+/* 2026-09-27 底栏向上弹的菜单(雷达 / 武器):body 下的浮层,left / bottom 由 render/88 的 cmdPopRender 按钮位置写 */
+#cmdPop{position:fixed;display:none;flex-direction:column;align-items:flex-start;gap:var(--sp-1);z-index:var(--z-flyout)}
+#cmdPop .cp-col{display:flex;flex-direction:column;gap:2px;padding:var(--sp-1);background:var(--srf-modal);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm)}
+#cmdPop .cp-sub{margin-left:var(--sp-5,24px)}
+#cmdPop .cp-row{display:flex;gap:2px;align-items:stretch}
+#cmdPop .cp-b{min-width:92px;padding:3px var(--sp-3);text-align:left;font-size:var(--fs-body)}
+#cmdPop .cp-chk{min-width:0;width:28px;padding:3px 0;text-align:center}
+#cmdPop .cp-name{flex:1}
+#cmdPop .cp-ff{min-width:0;width:22px;padding:0;font-size:var(--fs-label);color:var(--state-warn)}
+#cmdPop .cp-st{margin-left:var(--sp-2);font-size:var(--fs-micro);color:var(--txt-mute)}
 #cmdTip{position:fixed;bottom:72px;left:50%;transform:translateX(-50%);background:var(--srf-modal);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);padding:var(--sp-2) var(--sp-4);font-size:var(--fs-label);color:var(--txt);pointer-events:none;z-index:var(--z-transient);display:none;white-space:nowrap}
 
 /* ---------- RF5 悬停敌舰信息卡(跟随光标) ----------
