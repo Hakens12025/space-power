@@ -74,7 +74,7 @@ function drawTrails(){
   ctx.restore();
 }
 /* 2026-09-26 左下角特写窗口(用户:"点击马拉松船,我就能看到这艘船的特写……舰队也是,自适应的拉到舰队的缩放大小……要能够看到地图背景的放大效果";
-   二轮"都做":威胁取景 / 框外指示 / 阻尼 / 前视 / 点框跳主镜头 / 重复时收起 / 导演模式 / 离群处理)。
+   二轮"都做":威胁取景 / 框外指示 / 阻尼 / 前视 / 点框跳主镜头 / 特写播放 / 离群处理)。
    业内叫画中画 / 单位特写镜头(picture-in-picture / unit cam);取景照 Cinemachine 的 Target Group(一组点框进画面)+ 阻尼 + 前视(look-ahead)。
    第二个镜头画进离屏画布、按透明度贴回(淡入淡出);星空借主贴图,尘埃云按特写自己的缩放级向地形服务要块 */
 const INSET={W:320,H:200,M:12,GAP:10,bot:64,botT:-1e9,x:0,y:0,w:0,h:0,on:false,cx:0,cy:0,z:1,
@@ -116,15 +116,15 @@ function insetSubject(sel,inc,lbl){ // 一组我方舰的取景:离群的不进�
   return {key:'s:'+sel.map(s=>s.id).join(','),pts:pts,ind:ind,ax:ax/k,ay:ay/k,vx:vx/k,vy:vy/k,vm:vm,lead:pts.length===n0,
     lbl:lbl||(sel.length===1?'特写 · '+sel[0].name:'特写 · '+sel.length+' 艘'+(keep.length<sel.length?'(离群 '+(sel.length-keep.length)+')':''))};
 }
-function insetDirector(now,inc){ // 没选东西时:挑场上最要紧的事(来袭导弹 > 击沉 > 命中 > 认出),每个画面至少停 DWELL,更要紧的来了才插队;没有事就不画
-  const pt=e=>({key:e.k+':'+e.t,p:e.p,t:now,build:()=>now-e.t<INSET.EV_MS?{key:e.k+':'+e.t,pts:[e.pos],ind:[],ax:e.pos[0],ay:e.pos[1],vx:0,vy:0,vm:1,lead:false,lbl:'导演 · '+e.lbl}:null});
-  let c=null;
-  if(inc.length){const tg=inc[0].tgt;c={key:'m:'+tg.id,p:3,t:now,build:()=>{const L=insetIncoming().filter(m=>m.tgt===tg);return (!tg.dead&&L.length)?insetSubject([tg],L,'导演 · 来袭导弹 → '+tg.name+(isFinite(L[0].eta)?' · '+Math.round(SHOW.t(L[0].eta))+' s':'')):null;}};}
-  for(const e of INSET.ev){if(c&&e.p<=c.p)continue;
-    if(e.k==='id'){const s=e.ship;c={key:'i:'+s.id,p:e.p,t:now,build:()=>{const p=!s.dead&&now-e.t<INSET.EV_MS?contactPos(s,'blue'):null;return p?{key:'i:'+s.id,pts:[p],ind:[],ax:p[0],ay:p[1],vx:0,vy:0,vm:1,lead:false,lbl:'导演 · '+e.lbl}:null;}};}
+function insetDirector(now,inc,idle){ // 特写播放:击沉 > 命中 > 认出,每个事件只播一次、播 DWELL,更要紧的插队;idle(没选东西)时还会去看来袭导弹。没有要播的给 null
+  const pt=e=>({key:e.k+':'+e.t,p:e.p,t:now,build:()=>now-INSET.dir.t<INSET.DWELL?{key:e.k+':'+e.t,pts:[e.pos],ind:[],ax:e.pos[0],ay:e.pos[1],vx:0,vy:0,vm:1,lead:false,lbl:'播放 · '+e.lbl}:null});
+  let c=null,ce=null;
+  if(idle&&inc.length){const tg=inc[0].tgt;c={key:'m:'+tg.id,p:0.5,t:now,build:()=>{const L=insetIncoming().filter(m=>m.tgt===tg);return (!tg.dead&&L.length)?insetSubject([tg],L,'播放 · 来袭导弹 → '+tg.name+(isFinite(L[0].eta)?' · '+Math.round(SHOW.t(L[0].eta))+' s':'')):null;}};}
+  for(const e of INSET.ev){if(e.shown||(c&&e.p<=c.p&&!(e.p===c.p&&ce&&e.t>ce.t)))continue;ce=e;
+    if(e.k==='id'){const sh=e.ship;c={key:'i:'+sh.id,p:e.p,t:now,build:()=>{const q=!sh.dead&&now-INSET.dir.t<INSET.DWELL?contactPos(sh,'blue'):null;return q?{key:'i:'+sh.id,pts:[q],ind:[],ax:q[0],ay:q[1],vx:0,vy:0,vm:1,lead:false,lbl:'播放 · '+e.lbl}:null;}};}
     else c=pt(e);}
   let D=INSET.dir,sub=D?D.build():null;if(!sub)D=INSET.dir=null;
-  if(c&&(!D||(c.key!==D.key&&(c.p>D.p||now-D.t>=INSET.DWELL)))){INSET.dir=c;sub=c.build();}
+  if(c&&(!D||(c.key!==D.key&&(c.p>D.p||now-D.t>=INSET.DWELL)))){if(ce&&c.key!=='m:'+(inc[0]&&inc[0].tgt.id))ce.shown=true;INSET.dir=c;sub=c.build();}
   return sub;
 }
 function drawInset(){
@@ -132,7 +132,7 @@ function drawInset(){
   insetEvents(now);
   const inc=insetIncoming(),sel=controlledShips().filter(s=>!s.dead);
   let sub=null;
-  if(sel.length){INSET.dir=null;sub=insetSubject(sel,inc);}else sub=insetDirector(now,inc);
+  sub=insetDirector(now,inc,!sel.length);if(!sub&&sel.length)sub=insetSubject(sel,inc); // 2026-09-26 用户"各种特写播放我完全看不出来":播放不再要求没选中,播完回到选中的船
   INSET.on=false;
   if(!sub){INSET.a=0;INSET.key='';if(typeof terrXOff==='function')terrXOff();return;}
   if(now-INSET.botT>500){INSET.botT=now;const cb=document.getElementById('cmdBar');if(cb)INSET.bot=Math.max(44,H-cb.getBoundingClientRect().top);} // 底边让开指令栏
@@ -148,10 +148,7 @@ function drawInset(){
     if(far){INSET.ox=tcx-sub.ax;INSET.oy=tcy-sub.ay;INSET.lz=Math.log(tz);}else{INSET.ox=INSET.cx-sub.ax;INSET.oy=INSET.cy-sub.ay;}INSET.key=sub.key;}
   INSET.ox+=(tcx-sub.ax-INSET.ox)*f;INSET.oy+=(tcy-sub.ay-INSET.oy)*f;INSET.lz+=(Math.log(tz)-INSET.lz)*f;
   const z=Math.exp(INSET.lz),cx=sub.ax+INSET.ox,cy=sub.ay+INSET.oy;INSET.cx=cx;INSET.cy=cy;INSET.z=z;
-  /* 重复时收起:主画面已经比特写还近、而且要看的全在主画面里 ⇒ 淡出 */
-  let want=1;if(cam.zoom>=0.8*z&&sub.pts.every(p=>{const q=toScreen(p[0],p[1]);return q[0]>=0&&q[0]<=W&&q[1]>=0&&q[1]<=H;}))want=0;
-  INSET.a+=(want-INSET.a)*(1-Math.exp(-dt*INSET.FADE));if(want===0&&INSET.a<0.02)INSET.a=0;
-  if(INSET.a<=0){if(typeof terrXOff==='function')terrXOff();return;}
+  INSET.a+=(1-INSET.a)*(1-Math.exp(-dt*INSET.FADE)); // 淡入。2026-09-26 删掉"重复时收起"(用户:"在战斗的时候整个特写都不显示" —— 近战时主画面恰好装得下取景,它就把特写收了)
   const dpr=window.devicePixelRatio||1,pw=Math.round(w*dpr),ph=Math.round(h*dpr);
   if(!INSET.cv)INSET.cv=document.createElement('canvas');
   if(INSET.cv.width!==pw||INSET.cv.height!==ph){INSET.cv.width=pw;INSET.cv.height=ph;INSET.g=null;}
