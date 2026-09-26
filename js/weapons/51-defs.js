@@ -8,12 +8,12 @@
    WR1(2026-09-22 用户拍板「射程无限,只是精准度问题」):两块主炮射程(炮 / 雷达顶上)与导弹发射射程整套删掉,主炮只剩一个角散布 macSigma;
    "多远打得中"由 weapons/52 的 macRangeAt / macHitProb 从散布现算,"多远飞得到"由 mslReach 从燃料现算 —— 表里不再有任何一个公里数。 */
 const WPN={ // 定义(Definition):全局一份的不变模板,数值原样搬自原 CLS_WPN/CLS_CIWS 表
-  mac_light:{kind:'mac',label:'主炮',macDmg:220,mac:30,macSigma:0.0081},  // DD 轴炮。WR1:macSigma = 每发的角散布(弧度,高斯 σ)。0.0081 ⇒ 对 2000km 命中判定半径:15 万 ≈ 90% / 36.6 万 = 50% / 196 万 = 10%
+  mac_light:{kind:'mac',label:'主炮',macDmg:220,mac:30,macSigma:0.0081},  // DD 轴炮。WR1:macSigma = 每发的角散布(弧度,高斯 σ)。0.0081 ⇒ 对 400km 命中判定半径:3 万 ≈ 90% / 7.3 万 = 50% / 39 万 = 10%(2026-09-26 x1/5 单局地图:原 2000km 对应 15 万 / 36.6 万 / 196 万)
   mac_heavy:{kind:'mac',label:'主炮',macDmg:400,mac:30,macSigma:0.0081},  // CA/BB 轴炮(BB 靠下方 CLS_LOADOUT 克隆自动跟上)。WR1:先与 DD 同一个散布,以后要分再填
   msl_light:{kind:'msl',label:'导弹',missDmg:12,ammo:192,cells:4,mslPer:12,mslReload:60},  // DD 射手:16组×12(KIMI154:每组16→12)
   msl_heavy:{kind:'msl',label:'导弹',missDmg:15,ammo:240,cells:6,mslPer:12,mslReload:60}, // CA 射手:20组×12(KIMI154)
-  ciws_core:{kind:'ciws',label:'拦截',outer:25000,outerIntercept:0.40,inner:8000,innerIntercept:0.85,chaffRate:0.25,inter:384}, // DD 防空核心,干扰中
-  ciws_self:{kind:'ciws',label:'拦截',outer:15000,outerIntercept:0.25,inner:5000,innerIntercept:0.40,chaffRate:0.15,inter:320}, // CA 自防御,干扰弱(大目标)
+  ciws_core:{kind:'ciws',label:'拦截',outer:5000,outerIntercept:0.40,inner:1600,innerIntercept:0.85,chaffRate:0.25,inter:384}, // DD 防空核心,干扰中。2026-09-26 x1/5(单局地图):原 outer 25000 / inner 8000
+  ciws_self:{kind:'ciws',label:'拦截',outer:3000,outerIntercept:0.25,inner:1000,innerIntercept:0.40,chaffRate:0.15,inter:320}, // CA 自防御,干扰弱(大目标)。2026-09-26 x1/5(单局地图):原 outer 15000 / inner 5000
 };
 /* SN1 数据链表(Link):舰种 → 同时引导超自导范围的导弹数。原先寄住在 sensors/20-signature 的那张按舰种感知表里,SN1 迁来 ——
    guideChan 不是感知量,它只是搭那张表的车被 shipStats 烘焙:唯一的逻辑消费者是 weapons/54-missiles 的通道分配,

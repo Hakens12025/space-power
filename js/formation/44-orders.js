@@ -22,8 +22,13 @@ function orderClear(s) { // 清空既有航线意图(不含 resetForNewOrders �
    所以给一艘跟随中的舰单独下个令,它会去办完再自动跟回来,这正是 RTS 里想要的。
    要真正解除跟随只有两条明路:编队切回阵位态 / fmFollowStop。 */
 
+function ordArenaClamp(p) { // 2026-09-26 单局游玩区:命令点夹进 ARENA(null = 靶场 / 测试,不夹)。原地改并返回 p;令都经 mkOrder,拖点 / 虚影 / 红方航点也调它
+  if (ARENA) { p[0] = Math.max(ARENA.x0, Math.min(ARENA.x1, p[0])); p[1] = Math.max(ARENA.y0, Math.min(ARENA.y1, p[1])); }
+  return p;
+}
+
 function mkOrder(w, type, face, pace) { // 一条令的唯一构造口。face 只挂在 stop 上:31-step-ships 只在到位分支消费它
-  const o = { pos: [w[0], w[1], w[2] || 0], type: type || 'stop' };
+  const o = { pos: ordArenaClamp([w[0], w[1], w[2] || 0]), type: type || 'stop' }; // 2026-09-26 夹进 ARENA
   /* FM10【按弧长配速】pace = 这一段该按自己档位的几成走(1 = 跑满)。
      只有编队下令时会写它(44 fmSpread),散船那条路一律 undefined ⇒ 31-step-ships 按 1 处理,行为一位不变。 */
   if (isFinite(pace) && pace > 0 && pace < 1) o.pace = pace;
@@ -149,6 +154,7 @@ function fmAngOf(F, mates, dest, face) {
 function fmSpread(F, dest, type, face, mode) {
   const mates = fmShips(F);
   if (!mates.length) return null;
+  dest = ordArenaClamp([dest[0], dest[1], dest[2] || 0]); // 2026-09-26 编队级目标点先夹进 ARENA 再展开:只逐舰夹的话区外远点会把全队夹到同一个角上
   /* FM7【命令覆盖】:下令那一刻把名下的船认领过来(s.formation = F,并按 F 重算槽位)。
      这就是用户定的语义 —— A 同时在编队1、编队2 里,谁最后下令它就跟谁走。
      fmClaim 自带"没换主就不重排"的守卫:没有多归属时它是空操作,单编队路径行为一位不变
@@ -158,6 +164,11 @@ function fmSpread(F, dest, type, face, mode) {
      编队现在恒走下面这条:下令那一刻把编队级目标点展开成每艘船的绝对终点。 */
   const ang = fmAngOf(F, mates, dest, face); // FM6:有 face(编队虚影)时阵型朝向取 face 方向
   const ca = Math.cos(ang), sa = Math.sin(ang);
+  if (ARENA) { // 2026-09-26 整个阵型平移进 ARENA(保形):只夹目标点的话,贴边 / 角上朝外的站位会被 mkOrder 逐舰夹到同一个点
+    let bx0 = 0, bx1 = 0, by0 = 0, by1 = 0;
+    mates.forEach(s => { const o = rotSlot(s.fmSlot || [0, 0, 0], ca, sa); bx0 = Math.min(bx0, o[0]); bx1 = Math.max(bx1, o[0]); by0 = Math.min(by0, o[1]); by1 = Math.max(by1, o[1]); });
+    dest = [Math.max(ARENA.x0 - bx0, Math.min(ARENA.x1 - bx1, dest[0])), Math.max(ARENA.y0 - by0, Math.min(ARENA.y1 - by1, dest[1])), dest[2]];
+  }
   /* FL3:先按"各舰从哪儿出发"重新配对槽位,再算终点 —— 不配的话航向一反转,两翼互换、航线交叉。
      起点取【上一段的终点】(追加时)或【当前位置】(新航线时);必须在下面的循环【之前】算完,
      因为 orderMoveTo 会把 orders 清空,循环里再读末点就已经没了。 */

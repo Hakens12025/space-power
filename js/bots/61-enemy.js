@@ -2,7 +2,8 @@
 /* RF1: 拆自 js/07-missiles.js L707-742(enemyAI 红方决策)。纯移动无逻辑改动。
    BOT1(2026-09-22):本文件降为**执行层** —— 决策(信念 AI1 + 条令 RDOC)整体搬到 bots/60-doctrine.js。
    这里只做四件事:照 plan 走、照 plan 亮灯、照 plan 锁定与开火、看得见的来袭就规避。
-   每一条"为什么"都在 60 那份文件里,改行为先去改那边。 */
+   每一条"为什么"都在 60 那份文件里,改行为先去改那边。
+   2026-09-26 整体 x1/5(单局地图),下文注释里的旧距离(15 万 / 60 万 / 50 万 / 37.5 万)按 1/5 读。 */
 function enemyAI(dt){
   const my=ships.filter(s=>s.side==='blue'&&!s.dead);
   if(!my.length)return;
@@ -40,7 +41,7 @@ function enemyAI(dt){
     /* ⑥ 规避:只躲【看得见】的来袭主炮弹(visRed 由 detectLoop 每拍算);AI1 之前对每一发都有预警。 */
     const incoming=projectiles.some(p=>p.type==='mac'&&p.target===e&&trkSees('red',p)); // TK4a:目击读航迹表
     if(incoming&&e.macEvadeCd<=0){e.macEvadeCd=8;
-      e.orders=[{pos:[e.pos[0]+(Math.random()-0.5)*20000,e.pos[1]+(Math.random()-0.5)*20000,0],type:'stop'}];}
+      e.orders=[{pos:ordArenaClamp([e.pos[0]+(Math.random()-0.5)*4000,e.pos[1]+(Math.random()-0.5)*4000,0]),type:'stop'}];} // 2026-09-26 x1/5(单局地图):原 20000;规避点夹进 ARENA
     if(e.macEvadeCd>0)e.macEvadeCd-=dt;
   }
 }

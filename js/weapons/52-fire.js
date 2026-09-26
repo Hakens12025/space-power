@@ -23,9 +23,10 @@ function macAligned(s,t){ // 轴炮窗口:机头是否对准预测点(~1.1°容�
        目标速度暂用真值(内核今天不估计速度;已知的口子,记在 weapons/CLAUDE.md)。
      · "有效射程"这个词保留,语义改成【命中率 50% 的距离】(macEffRange);macRangeAt(s,p) 给任意档;bot / 自动开火按命中率阈值决定打不打。
      · 导弹没有发射门。射程 = 燃料:mslReach = 动力射程(加速一半、减速一半);之外滑行,靠数据链把它带到目标(weapons/56)。
-   旧那套(RF6 的硬上限倍数、超程线性散布、SN4 的"开雷达把炮的射程顶上去")整套删除;它们的理由都建立在"射程是门"上。 */
-const MAC_HIT_R=2000;        // 命中判定半径 km(weapons/56 的命中检查与 sensors/23 的 COV.MAC 同一个数)
-const MSL_ACC=150, MSL_FUEL=100;   // 导弹加速度 km/s²(weapons/56 里 DS190 定的 150)与燃料(满油门秒)
+   旧那套(RF6 的硬上限倍数、超程线性散布、SN4 的"开雷达把炮的射程顶上去")整套删除;它们的理由都建立在"射程是门"上。
+   2026-09-26 整体 x1/5(单局地图),上文旧数按 1/5 读(90% 带 3 万 / 50% 7.3 万 / 10% 39 万)。 */
+const MAC_HIT_R=400;         // 命中判定半径 km(weapons/56 的命中检查与 sensors/23 的 COV.MAC 同一个数)。2026-09-26 x1/5(单局地图):原 2000
+const MSL_ACC=150, MSL_FUEL=44.72;   // 导弹加速度 km/s²(weapons/56 里 DS190 定的 150)与燃料(满油门秒)。2026-09-26 x1/5(单局地图):燃料原 100,√2000 ⇒ 动力射程 7.5 万
 const _Z={0.9:1.6449,0.5:0.6745,0.3:0.3853,0.1:0.1257};
 /* WR1 自动开火的把握下限。没有射程门之后,"打不打"只剩两个成本:30 秒装填,以及【开火暴露】(FX1:开火后 8 秒亮一档)。
    所以纯按期望伤害算,20% 把握也值得打 —— 实测红方 bot 因此从 94 万公里就开始放炮(命中率 20.7%),整局双方各打五六十发、命中九发,读起来是"对着远处喷"。
@@ -51,7 +52,7 @@ function macRangeSig(sig,p){ // BOT1:按【给定的散布】反算命中率恰�
 }
 function macRangeAt(s,p){return macRangeSig(sReq(s,'macSigma'),p);} // 命中率恰为 p 的距离;p 只支持 _Z 里的四档
 function macEffRange(s){return macRangeAt(s,0.5);} // 有效射程 = 命中率 50% 的距离。调用点一律调它,绝不在别处重拼
-function mslReach(s){return MSL_ACC*(MSL_FUEL/2)*(MSL_FUEL/2);} // 动力射程:加速 fuel/2 秒再减速 fuel/2 秒 = 2 x 0.5 a t² = 375,000km(与旧的 35 万发射门几乎相同 —— 旧数就是这么来的)
+function mslReach(s){return MSL_ACC*(MSL_FUEL/2)*(MSL_FUEL/2);} // 动力射程:加速 fuel/2 秒再减速 fuel/2 秒 = 2 x 0.5 a t² ≈ 75,000km(2026-09-26 x1/5:原 37.5 万)
 function fireMAC(shooter,target){ // MAC轴炮:沿船头方向直射(必须先对准),到预测时间失的
   if(shooter.noFire)return; // RANGE1 禁火总闸门 1/3:靶场的靶只挨打不还手。这是 MAC 发射的唯一实现,GM 手动锁定/自动索敌/AI 三条路径最终都落到这里。注意这是个【静默】开关(不报错不打日志),将来若误给蓝舰置了 noFire 会毫无线索,置位处只有 initEnemy 的靶语义包一处
   if(shooter.side===target.side||shooter.dead||target.dead)return;
@@ -93,7 +94,7 @@ function fireDecoy(shooter){ // v125 诱饵弹:模拟舰船热信号骗敌方拦
 }
 function fireInterceptor(shooter,targetMissile,count){ // 发射拦截导弹实体(燃料模式v114:可出远门防御)
   projectiles.push({type:'interceptor',count:count||16,pos:shooter.pos.slice(),vel:shooter.vel.slice(),
-    target:targetMissile,shooter,spd:Math.max(300,V.len(shooter.vel)),age:0,fuel:60,park:false,parkPt:null,screen:false,screenRange:100000,
+    target:targetMissile,shooter,spd:Math.max(300,V.len(shooter.vel)),age:0,fuel:60,park:false,parkPt:null,screen:false,screenRange:20000, // 2026-09-26 x1/5(单局地图):原 100000
     hitMul:(shooter.interHitMul||1)}); // RANGE1 拦截弹命中率倍率随弹出膛(07-missiles 的 hitRate 末尾乘它)。外圈拦截率的真实旋钮是这个:CLS_CIWS.outerIntercept 是死字段,声明后全库零读取,面板绝不能放它
 }
 function launchInterceptors(shooter,pt){ // 主动发射拦截弹到布防点(防空屏/伏击):飞抵停车,等来袭导弹进圈
@@ -101,7 +102,7 @@ function launchInterceptors(shooter,pt){ // 主动发射拦截弹到布防点(�
   if(shooter.interceptor<need)return false;
   shooter.interceptor-=need;
   projectiles.push({type:'interceptor',count:need,pos:shooter.pos.slice(),vel:shooter.vel.slice(),
-    target:null,shooter,spd:Math.max(300,V.len(shooter.vel)),age:0,fuel:60,park:true,parkPt:[pt[0],pt[1],0],screen:false,screenRange:100000});
+    target:null,shooter,spd:Math.max(300,V.len(shooter.vel)),age:0,fuel:60,park:true,parkPt:[pt[0],pt[1],0],screen:false,screenRange:20000}); // 2026-09-26 x1/5(单局地图):原 100000
   return true;
 }
 /* SL1b(2026-09-22)从 render/87-fleetcards【纯移动】过来:它是武器 / 载荷的发射函数,不是界面。舰队卡删掉后它没有 UI 入口,
@@ -146,17 +147,17 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
   if(!isFinite(perp[0])||V.len(perp)<0.5)perp=[1,0,0]; // 退化兜底
   // v122 导弹模式:auto=默认组网(noNet船直射) / net=强制组网 / direct=直射
   const isNet=missileMode==='net'||(missileMode==='auto'&&!shooter.noNet);
-  const D0=isShip?Math.max(1,V.len(V.sub(tp0,shooter.pos))):100000;
+  const D0=isShip?Math.max(1,V.len(V.sub(tp0,shooter.pos))):20000; // 2026-09-26 x1/5(单局地图):区域齐射的距离级原 100000
   // 速度剖面(v122):巡航vPeak(距离自适应,留20%距离加减速)+ 终端vTerm + 燃料预留(滑行修正+终端机动)
   const vTerm=isNet?3000:8000;      // 组网需低速机动/直射几乎不减速
   const netReserve=isNet?40:20;     // 预留燃料:滑行修正转向+终端机动
   const baseMaxV=Math.sqrt((300*D0+vTerm*vTerm)/2); // DS190:加速度 200→150,系数同步 2×150=300 // 距离允许的峰值(加速+减速≈0.8D0,留巡航段)
   const baseVPeak=Math.max(vTerm,Math.min(isNet?7000:9000,baseMaxV));
   // DS190:原 baseDecel 在此计算但全函数无人读取(写进弹丸的是下面按组算的 pDecel),合并时一并清掉这个死变量
-  // 组网攻击(v121):≥2组打船+距离≥6万 → 各组带不同方位偏移收敛,多方向包抄同时弹着
+  // 组网攻击(v121):≥2组打船+距离≥1.2万(2026-09-26 x1/5,原 6 万)→ 各组带不同方位偏移收敛,多方向包抄同时弹着
   let netGeom=null;
-  if(isNet&&isShip&&rounds>=2&&D0>=60000){
-    const R=Math.min(150000,Math.max(30000,D0*0.5)); // 偏移半径=0.5×距离级:够把导弹绕到目标侧面(真·多方向),2万内归零兜底必中
+  if(isNet&&isShip&&rounds>=2&&D0>=12000){ // 2026-09-26 x1/5(单局地图):组网门槛原 60000
+    const R=Math.min(30000,Math.max(6000,D0*0.5)); // 偏移半径=0.5×距离级:够把导弹绕到目标侧面(真·多方向),2万内归零兜底必中(56 刻意不缩)。2026-09-26 x1/5(单局地图):原 min 150000 / max 30000
     const dirs=Math.min(rounds,3); // 方向封顶3(直插/上/下——前半球最多覆盖3扇面,正后方绕不过去)
     const si=V.norm([shooter.pos[0]-tp0[0],shooter.pos[1]-tp0[1],0]); // 直插方向(目标→发射舰)
     let px=V.norm([-si[1],si[0],0]); // 垂直(逆时针90°)
@@ -186,7 +187,7 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
   for(let k=0;k<rounds;k++){
     const gid=++missileGroupSeq;
     const lane=k-(rounds-1)/2;
-    const off=lane*500+(Math.random()-0.5)*400; // 500km/道 + 抖动
+    const off=lane*100+(Math.random()-0.5)*80; // 100km/道 + 抖动。2026-09-26 x1/5(单局地图):原 500 / 400
     const ng2=netGeom?netGeom.offs[k]:null;
     const pvPeak=ng2?ng2.vPeak:baseVPeak;
     const pDecel=(pvPeak*pvPeak-vTerm*vTerm)/(2*150); // DS190:减速点按 150 km/s² 反推(仍用 200 算会晚刹车→到点速度收不回 vTerm)
@@ -197,7 +198,7 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
       target:isShip?target:null, shooter, dmg:shooter.missDmg*(shooter.mslPer||12), missDmg:shooter.missDmg, // 组总伤害 + 单颗伤害(v119,命中按单颗算)
       spd:Math.max(200,V.len(shooter.vel)), // 初始速率=载机速率
       fuel:MSL_FUEL, age:0, // 燃料(秒,WR1 起是常量 MSL_FUEL:mslReach 从它现算)+ 飞行年龄(近防发射判定)
-      park:!isShip, parkPt:isShip?null:target.pos.slice(), mine:false, trigRadius:isShip?120000:80000, trigMode:'any', // 区域齐射:飞到点位,到了等敌舰进圈自主攻击(盲射);雷触发圈放大v118
+      park:!isShip, parkPt:isShip?null:target.pos.slice(), mine:false, trigRadius:isShip?24000:16000, trigMode:'any', // 区域齐射:飞到点位,到了等敌舰进圈自主攻击(盲射);雷触发圈放大v118。2026-09-26 x1/5(单局地图):原 120000 / 80000
       netId, netFmt:null, // v125 网:所属网 + 网内阵型位(横线/集中)
       netOff:ng2?ng2.v:null, netOffR:netGeom?netGeom.R:0, netD0:netGeom?netGeom.D0:0, // v121组网:方位偏移(随接近收拢→多方向同时弹着)
       vPeak:pvPeak, vTerm, decelDist:pDecel, netReserve, // v122 速度剖面:巡航/终端/减速点/预留燃料

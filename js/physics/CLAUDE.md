@@ -16,4 +16,5 @@
 - 航线细化:沙盘把全局 `ships` 临时换成克隆船、调真实的 `stepShipsMotion`,不复制逻辑;`rrTick` 必须排在 `stepSim` 之后;沙盘起点取船的真实状态;搜索用粗步长,真步长验收,不合规或没变快就整条丢弃;一次只细化 `RR_WIN` 个航点,剩 `RR_RETRIG` 个时重排;每帧 `RR_BUDGET` 步。
 - 评估基准不许读被调的参数:`RR_TOL=5000` 是字面量,不读 `CFG.passBy` / `ROUTE_TOL`。
 - 改 30-motion 的公式时,`tools/train/env_torch.py` 有一份移植(评测台用)要同步。
+- 对局游玩区的硬边只在 `stepShipsMotion` 积分之后夹一处(位置夹进 `ARENA`、朝外速度清零),别处不再各写一份。
 - 块注释里不要写 `v*/` 这类形状(会提前结束注释)。

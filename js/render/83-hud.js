@@ -199,7 +199,7 @@ function drawProjectiles(){ // 弹丸/导弹
       if(p===selMissile){ // 选中反馈(像点船:亮环+标签)
         ctx.strokeStyle='#4fe0ff';ctx.lineWidth=2;
         ctx.beginPath();ctx.arc(s[0],s[1],12,0,6.283);ctx.stroke();
-        if(p.on){const r=300000*cam.zoom;ctx.strokeStyle='rgba(255,160,80,.2)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(s[0],s[1],r,0,6.283);ctx.stroke();}
+        if(p.on){const r=Math.sqrt(Math.sqrt(senseKACT(p)))*cam.zoom;ctx.strokeStyle='rgba(255,160,80,.2)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(s[0],s[1],r,0,6.283);ctx.stroke();} // 2026-09-26 改读信标真实照射量程(对反射 1.0,sensors/20 BEACON_* 那条式子):原写死 300000 自形态 H 起已与感知分家,x1/5 的 60000 同样不对
         ctx.fillStyle='rgba(159,212,255,.95)';ctx.font='10px Consolas';ctx.textAlign='left';ctx.textBaseline='top';
         ctx.fillText(`📡信标 ${p.on?'开机':'关机'}${p.arrived?'':'·飞行'} ⏻${Math.round(p.life||0)}s`,s[0]+12,s[1]+12);
       }
@@ -269,7 +269,7 @@ function drawProjectiles(){ // 弹丸/导弹
         }
       }else if(p.mine&&p===selMissile){
         ctx.fillStyle='rgba(159,212,255,.9)';ctx.font='10px Consolas';ctx.textAlign='left';ctx.textBaseline='top';
-        ctx.fillText(`⚙雷 ${p.count||16}颗 · 圈${Math.round((p.trigRadius||60000)/1000)}k`,s[0]+9,s[1]+9);
+        ctx.fillText(`⚙雷 ${p.count||16}颗 · 圈${Math.round((p.trigRadius||12000)/1000)}k`,s[0]+9,s[1]+9); // 2026-09-26 x1/5(单局地图):原 60000
       }
     }
   }

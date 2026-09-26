@@ -3,6 +3,7 @@
 function initFleet(){
   const env=curEnv();
   const shipsDef=env.ships;
+  ARENA=null; // 2026-09-26 每局先不设边界;只有对局(match:true)由 scenario/97 的 matchPlaceRed 设游玩区
   shipSeq=0;
   rocks=[];rockSeq=0; // TK4b 换局清登记表的第二段(石头由环境模块按场景生成,见 ENV1)
   ships=shipsDef.map(d=>makeShip(d[0],d[1],[d[2],d[3],d[4]],d[5],d[6],'blue',d[7])); // TIER1 蓝方元组末尾追加 tier(d[7]):旧存档只有 7 项,d[7]=undefined → makeShip 内降级 T2,零改动可读
@@ -27,7 +28,8 @@ function initFleet(){
      (实测:开局一拍之后 fix=true、idn=true,椭圆 5353x1731)。摸黑接敌那一段当场没了。
      现在蓝方按 makeShip 的默认档 silent 开局:靶自己是开照射的(靶语义包),所以蓝方靠【静听】拿到
      纯方位接触 ⇒ 开局画面就是热区。要开炮/要定位,玩家自己按发射档 —— 那正是这套机制要玩家做的决定。
-     ⚠ 要测主炮的判据自己开照射(FLOW2 已经这么做)。 */
+     ⚠ 要测主炮的判据自己开照射(FLOW2 已经这么做)。
+     2026-09-26 整体 x1/5,上文旧数按 1/5 读(靶场开局 1 光秒 → 59,958 km)。 */
   /* SN6b(2026-09-19,用户拍板"起始请把初始 3 舰作为阵型舰队存在"):
      开局蓝方直接成队,而不是三艘散船 —— 靶场现在是【1 光秒外摸黑接敌】,接敌是编队的事,
      开局就该有个队;而且"阵型"模式下站位图(render/84-fmplot)与编组控制页才有东西可读。
@@ -43,7 +45,7 @@ function initFleet(){
        所以建完队船还站在场景元组写死的那三个坐标上,队形只存在于数据里、画面上看不出来。
        这里直接把成员【放到】自己的站位上(不是下令让它们飞过去:开局不该有一段自己跑位的动画,
        而且带着速度会污染靶场刻意保住的"静止发射"MAC 基线)。
-       ⚠ 旗舰不动 —— 它是锚点,也是"CA 到最近的靶 = 1 光秒"那条站位的基准。 */
+       ⚠ 旗舰不动 —— 它是锚点,也是"CA 到最近的靶 = 1 光秒"那条站位的基准。2026-09-26 x1/5 后是 59,958 km。 */
     if(F1&&typeof fmOffOf==='function'){
       const fl=fmFlag(F1);
       fmShips(F1).forEach(m=>{
@@ -79,7 +81,7 @@ function initEnemy(){
       s.invuln=true;   // 无敌在 applyDamage 顶部单点实现(不是 hp=Infinity:那会污染 info 面板显示与 demo JSON 序列化)
       s.noFire=true;   // 静默禁火总闸门,由 fireMAC / orderMissileSalvo / fireMissiles 三处守卫读取
       s.rangeAnchor=s.pos.slice(); // 闪避机动的圆心
-      setEmit(s,'paint'); // SN4:靶被 enemyAI 的 isTarget 早退跳过,拿不到 EMCON 开机逻辑;不开照射时对来袭燃烧弹只有光学的 47,996 km(新模型光学不看探测方,这是个常数),小于近防预警的 5 万,拦截会晚一拍;开照射后对导弹(反射 0.5)是 126,134 km
+      setEmit(s,'paint'); // SN4:靶被 enemyAI 的 isTarget 早退跳过,拿不到 EMCON 开机逻辑;不开照射时对来袭燃烧弹只有光学的 47,996 km(新模型光学不看探测方,这是个常数),小于近防预警的 5 万,拦截会晚一拍;开照射后对导弹(反射 0.5)是 126,134 km。2026-09-26 整体 x1/5,这几个旧数按 1/5 读
       if(typeof newRangeStat==='function')s.rangeStat=newRangeStat();
     }
     if(d[8]){const wps=Array.isArray(d[8][0])?d[8]:[d[8]];wps.forEach(wp=>s.orders.push({pos:wp.slice(),type:'stop'}));} // 动靶:沿路径点移动(可多点)

@@ -125,5 +125,9 @@ function stepShipsMotion(dt){
       }
     }
     s.pos[0]+=s.vel[0]*dt; s.pos[1]+=s.vel[1]*dt; s.pos[2]+=s.vel[2]*dt;
+    if(ARENA){ // 2026-09-26 单局游玩区硬边:位置夹进矩形,朝外的速度分量清零(撞墙停住,不反弹);ARENA 为 null(靶场 / 测试预设)不设边
+      if(s.pos[0]<ARENA.x0){s.pos[0]=ARENA.x0;if(s.vel[0]<0)s.vel[0]=0;}else if(s.pos[0]>ARENA.x1){s.pos[0]=ARENA.x1;if(s.vel[0]>0)s.vel[0]=0;}
+      if(s.pos[1]<ARENA.y0){s.pos[1]=ARENA.y0;if(s.vel[1]<0)s.vel[1]=0;}else if(s.pos[1]>ARENA.y1){s.pos[1]=ARENA.y1;if(s.vel[1]>0)s.vel[1]=0;}
+    }
   }
 }

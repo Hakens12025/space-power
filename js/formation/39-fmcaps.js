@@ -99,7 +99,7 @@ function fmBandNewKey(P) { // 取一个没被占用的键(删了再加也不会�
      gcap   每群容量(超过就分任务群;缺省 FM_GROUP_CAP=16) */
 const FM_STANCE = {
   fixed: {
-    nm: '固定模板', spread: 1.00, gap: 1.00, bm: 1.00, widen: 1.00, pref: 0, gcap: 16, boost: {}, slots: [
+    nm: '固定模板', spread: 1.00, gap: 1.00, bm: 0.50, widen: 1.00, pref: 0, gcap: 16, boost: {}, slots: [ // 2026-09-26 bm 1.00→0.50(用户:"舰队默认阵型的半径改为0.5");其余三套模板不动
       { nm: '正前屏护', cap: 'aaChan', band: 'screen', brg: 0 },
       { nm: '左翼屏护', cap: 'aaChan', band: 'screen', brg: 315 },
       { nm: '右翼屏护', cap: 'aaChan', band: 'screen', brg: 45 },
@@ -248,13 +248,14 @@ function fmGenStations(n, slots, gcap) {
 
 /* 五条带的半径,全部从【护卫】自己的近防参数算(旗舰不算进去:贴身带是护卫用来罩旗舰的,
    旗舰自己的内圈与它无关。把旗舰算进 min 会让 DD 护卫和 CA 护卫算出一样的半径)。 */
+const FM_CIWS_K = 5; // 2026-09-26 近防 x1/5 而阵型不跟(用户选"倍数 0.5,不跟近防缩"):这里乘回缩放前的尺度;fit / fmBandCloseCap / fmSwapKey / fmAssess 的几何门仍读真实 inner
 function fmBandRadii(list, flag, bm, P) {
   const inns = [], outs = [];
   list.forEach(s => {
     if (s === flag) return;
     const c = ciwsOf(s);
-    if (s.ciwsOn && c.inner > 0) inns.push(c.inner);
-    if (s.ciwsOn && c.outer > 0) outs.push(c.outer);
+    if (s.ciwsOn && c.inner > 0) inns.push(c.inner * FM_CIWS_K);
+    if (s.ciwsOn && c.outer > 0) outs.push(c.outer * FM_CIWS_K);
   });
   const minIn = inns.length ? Math.min(...inns) : 8000;
   const minOut = outs.length ? Math.min(...outs) : 25000;

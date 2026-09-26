@@ -100,12 +100,12 @@ function doAction(id){
       break;}
     case 'fire_missile':toggleWeapon('missile');break; // R:选定射手武器,点击敌舰攻击
     case 'cease_fire':ceaseFire();break; // X:停火(解除锁定)
-    case 'reverse':{ // G:倒车(反推倒退)——选中舰朝船头反方向机动30k(机头不翻,用反推)
+    case 'reverse':{ // G:倒车(反推倒退)——选中舰朝船头反方向机动6k(机头不翻,用反推)
       const sel=controlledShips();
       sel.forEach(s=>{
         const back=V.norm([-s.facing[0],-s.facing[1],-s.facing[2]]);
-        const tgt=[s.pos[0]+back[0]*30000,s.pos[1]+back[1]*30000,s.pos[2]+back[2]*30000];
-        s.orders=[{pos:tgt,type:'stop'}];s.brake=false;s.crawling=false;
+        const tgt=[s.pos[0]+back[0]*6000,s.pos[1]+back[1]*6000,s.pos[2]+back[2]*6000]; // 2026-09-26 x1/5(单局地图):原 30000
+        s.orders=[mkOrder(tgt,'stop')];s.brake=false;s.crawling=false; // 2026-09-26 经 mkOrder:命令点夹进 ARENA
       });
       break;}
     case 'fire_all':{ // Ctrl:全弹发射(选中舰·锁定目标)

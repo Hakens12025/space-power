@@ -40,7 +40,7 @@ function init(){
   loadBindings();
   loadRangeCfg(); // RANGE1 必须在 initFleet() 之前:initFleet → initEnemy 末尾会调 applyRangeCfg 把参数刷到刚造出来的靶身上
   initFleet();
-  if(curEnv().range){cam.x=125000;cam.y=30000;cam.zoom=Math.min(window.innerWidth,window.innerHeight)/400000;} // RANGE1 开局取景:三靶 Y 跨度只有 24 万,但顶栏(58px)与快捷指令栏(约 195px)会吃掉纵向可视区,按 24 万算最下面那个靶正好被快捷栏盖住——视野放到 40 万、镜头再往下压 3 万,三靶与蓝方三舰全部落在中间那条干净的带子里。非靶场场景不改,保持原视野。SN6b:靶阵外推 1 光秒之后 x 跨度从 17 万变成 35 万,取景中心跟着从 5 万挪到 12.5 万(两边各留一半);短边仍是 40 万,长边按宽高比给出 63~71 万,照样装得下
+  if(curEnv().range){cam.x=-15000;cam.y=6000;cam.zoom=Math.min(window.innerWidth,window.innerHeight)/80000;} // 2026-09-26 x1/5(靶阵随单局地图缩):原 cam (125000,30000)、短边 400000,按蓝方 CA 为锚一起缩,画面构图不变。RANGE1 开局取景:三靶 Y 跨度只有 24 万,但顶栏(58px)与快捷指令栏(约 195px)会吃掉纵向可视区,按 24 万算最下面那个靶正好被快捷栏盖住——视野放到 40 万、镜头再往下压 3 万,三靶与蓝方三舰全部落在中间那条干净的带子里。非靶场场景不改,保持原视野。SN6b:靶阵外推 1 光秒之后 x 跨度从 17 万变成 35 万,取景中心跟着从 5 万挪到 12.5 万(两边各留一半);短边仍是 40 万,长边按宽高比给出 63~71 万,照样装得下
   loadCamMult();
   window.addEventListener('resize',resize);resize();
   last=performance.now();requestAnimationFrame(frame);

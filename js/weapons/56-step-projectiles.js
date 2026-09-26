@@ -29,7 +29,7 @@ function stepProjectiles(dt){
   const icBlue=[],icRed=[];
   for(const q of projectiles){if(q.type==='interceptor'&&!q.done&&!q.screen&&!q.park){(q.shooter.side==='blue'?icBlue:icRed).push(q);}}
   guideMissiles(); // T1:每tick重算引导分配(自导/链导/脱锁),供下方追击门判定
-  updateNets(dt); // v125:网内连接检查——断网(离网中心>15万)计时,10s没回自毁
+  updateNets(dt); // v125:网内连接检查——断网(离网中心>NET_COMM)计时,10s没回自毁
   // v138 来袭走廊(活的预警):敌方导弹被己方看到即生成,跟踪导弹引用——来源线(发射舰→导弹)+去向锥(当前速度方向);同舰2s窗口去重;导弹消失淡出
   for(const p of projectiles){
     if(p.type!=='missile'||p.done||!p.shooter)continue;
@@ -48,6 +48,7 @@ function stepProjectiles(dt){
     else if(p.type==='beacon')stepBeaconProj(p,dt);
     else if(p.type==='missile')stepMissileProj(p,dt,icBlue,icRed);
     else if(p.type==='interceptor')stepInterceptorProj(p,dt);
+    if(ARENA&&!p.done&&!arenaIn(p.pos))p.done=true; // 2026-09-26 单局地图:五弹型统一在这里判,出了游玩区就消失
   }
   projectiles=projectiles.filter(p=>!p.done);
 }
@@ -63,7 +64,9 @@ function stepDecoyProj(p,dt){ // 诱饵弹(v125):直线飞模拟舰船信号,燃
 function stepMacProj(p,dt){ // MAC轴炮:沿发射时船头直飞,命中或到预测时间失的
       p.age=(p.age||0)+dt;
       p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;
-      if(p.target&&!p.target.dead&&V.len(V.sub(p.target.pos,p.pos))<MAC_HIT_R){applyDamage(p.target,p.dmg,p.shooter,'mac');spawnHit(p.pos,'mac');p.done=true;} // RANGE1 补第 4 实参 kind='mac'(靶场分武器统计)
+      const t=p.target,tv=(t&&t.vel)||[0,0,0],sx=(p.vel[0]-tv[0])*dt,sy=(p.vel[1]-tv[1])*dt,sz=(p.vel[2]-tv[2])*dt; // 2026-09-26 单局地图:MAC_HIT_R 400 < 单拍相对位移约 600km,只看拍末会漏判(实测 90% 带只剩 84%),改按本拍相对线段的最近点判
+      const rx=t?p.pos[0]-t.pos[0]-sx:0,ry=t?p.pos[1]-t.pos[1]-sy:0,rz=t?p.pos[2]-t.pos[2]-sz:0,ss=sx*sx+sy*sy+sz*sz,u=ss>0?Math.max(0,Math.min(1,-(rx*sx+ry*sy+rz*sz)/ss)):1;
+      if(t&&!t.dead&&(rx+u*sx)**2+(ry+u*sy)**2+(rz+u*sz)**2<MAC_HIT_R*MAC_HIT_R){applyDamage(p.target,p.dmg,p.shooter,'mac');spawnHit(p.pos,'mac');p.done=true;} // RANGE1 补第 4 实参 kind='mac'(靶场分武器统计)
       else if(p.age>=p.tt){p.done=true;} // 到预测时间未命中:失的(打偏到点消失,不无限飞)
 }
 function stepBeaconProj(p,dt){ // 侦察信标(v113):飞抵部署,遥控开关机;开机才耗开机时间(300s),关机静默
@@ -94,7 +97,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
       if(p.mine){ // 伏击雷(已布设):静止待命,自带被动传感器自主触发,点火=情报
         p.vel=[0,0,0];p.spd=0;
         let trig=null;
-        const trigR=p.trigRadius||60000;
+        const trigR=p.trigRadius||12000; // 2026-09-26 x1/5(单局地图):原 60000
         for(const s of ships){
           if(s.dead||s.side===p.shooter.side)continue;
           if(V.len(V.sub(s.pos,p.pos))>trigR)continue;
@@ -105,7 +108,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         if(trig){
           p.mine=false;p.target=trig; // 二次点火:变普通追击导弹扑上去
         }else if(p.lastTarget&&!p.lastTarget.dead){ // DS156 脱锁雷复活:重新获得原目标信息(被网络点亮)且还在警戒圈→复活追击(未竟任务继续)
-          if(trkFix(trkOf(p.shooter.side,p.lastTarget))&&V.len(V.sub(p.lastTarget.pos,p.pos))<=(p.trigRadius||60000)*2){
+          if(trkFix(trkOf(p.shooter.side,p.lastTarget))&&V.len(V.sub(p.lastTarget.pos,p.pos))<=(p.trigRadius||12000)*2){ // 2026-09-26 x1/5(单局地图):缺省原 60000
             p.mine=false;p.target=p.lastTarget;p.chaffed=false;p.lastKpos=null;p.guided=true; // 复活=重新入引导(目标在自导范围,网已点亮)
           }
         }
@@ -118,7 +121,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         const pvn=V.len(p.vel);
         if(pdist<1200||(pdist<5000&&pvn<80)){ // 到位(或低速贴点)→ 布设;v133:3万→5千,布雷贴点才变雷(原3万太松"瞬间停止")
           p.park=false;p.mine=true;p.vel=[0,0,0];p.spd=0;
-          if(p.parkFctrl)p.trigRadius=Math.max(p.trigRadius||60000,120000); // DS192:途中吃到火控的区域齐射弹=有信息支持,落地触发圈 120k(没吃到保持原值)
+          if(p.parkFctrl)p.trigRadius=Math.max(p.trigRadius||12000,24000); // DS192:途中吃到火控的区域齐射弹=有信息支持,落地触发圈 24k(没吃到保持原值)。2026-09-26 x1/5(单局地图):原 60000 / 120000
           return;
         }
         const pdir=V.norm(toP);
@@ -188,7 +191,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;
         return;
       }
-      // T1引导门:自导(≤15万)或数据链引导 → 追击;脱锁(超自导+无通道/目标熄灭)→ 飞最后已知位置,到点变地雷待命(v126定稿,不自毁)
+      // T1引导门:自导(≤MSL_CFG.ladar)或数据链引导 → 追击;脱锁(超自导+无通道/目标熄灭)→ 飞最后已知位置,到点变地雷待命(v126定稿,不自毁)
       /* WR1 引导段的目标位置只有两个来路:导引头自己看见(guideMode 'self')⇒ 真值;靠母舰数据链('link')⇒ 母舰对它的【估计位置】(contactPos)。
          估计位置交代不出(接触丢了)⇒ 这一拍按脱锁处理,走下面那条滑行路,不许回落真值。这是"射程无限、只是精准度问题"在导弹上的那一半:
          远距离打的是发射与飞行途中的估计,椭圆比导引头的自导范围还大就大概率扑空。目标速度暂用真值(内核不估计速度,已知口子)。 */
@@ -199,7 +202,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         const toK=V.sub(p.lastKpos,p.pos);
         const kdist=V.len(toK);
         if(kdist<1200){ // 到点 → 变地雷:停车静默待命(敌舰进圈自主点火),等重新获得信息复活
-          p.mine=true;p.vel=[0,0,0];p.spd=0;p.target=null;p.trigRadius=p.trigRadius||60000;return;
+          p.mine=true;p.vel=[0,0,0];p.spd=0;p.target=null;p.trigRadius=p.trigRadius||12000;return; // 2026-09-26 x1/5(单局地图):缺省原 60000
         }
         const kdir=V.norm(toK);
         // 飞向最后已知位置(巡航加速:有燃料就飞快点到点变雷,燃料尽只能滑行)
@@ -219,11 +222,11 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         return;
       }
       if(p.mine)p.mine=false; // 重新获得信息 → 变回追击导弹
-      // DS166 诱饵勾自导(设计师拍板):自导弹(主动LADAR分辨不出诱饵)距诱饵2万内→30%勾走;咬上诱饵→诱饵燃料尽一起自毁(扑空)
+      // DS166 诱饵勾自导(设计师拍板):自导弹(主动LADAR分辨不出诱饵)距诱饵4000内→30%勾走;咬上诱饵→诱饵燃料尽一起自毁(扑空)
       if(p.guideMode==='self'&&p.target&&p.target.side&&!p.chaffed){
         for(const q of projectiles){
           if(q.type!=='decoy'||q.done)continue;
-          if(V.len(V.sub(q.pos,p.pos))<20000){
+          if(V.len(V.sub(q.pos,p.pos))<4000){ // 2026-09-26 x1/5(单局地图):原 20000
             if(Math.random()<0.3){p.target=q;q.dead=false;} // 勾走:目标=诱饵实体(补dead字段,转移分支不误判失效;诱饵done时导弹同毁)
             break;
           }
@@ -243,16 +246,16 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
       let evX=0,evY=0;
       const icArr=p.shooter.side==='blue'?icRed:icBlue; // v119:读预收集表,平方距离免开方
       let nearIc=false;
-      for(let i=0;i<icArr.length;i++){const q=icArr[i];const ddx=q.pos[0]-p.pos[0],ddy=q.pos[1]-p.pos[1],ddz=q.pos[2]-p.pos[2];if(ddx*ddx+ddy*ddy+ddz*ddz<625000000){nearIc=true;break;}} // 25000²
+      for(let i=0;i<icArr.length;i++){const q=icArr[i];const ddx=q.pos[0]-p.pos[0],ddy=q.pos[1]-p.pos[1],ddz=q.pos[2]-p.pos[2];if(ddx*ddx+ddy*ddy+ddz*ddz<25000000){nearIc=true;break;}} // 5000²。2026-09-26 x1/5(单局地图):原 25000²
       if(nearIc&&p.fuel>20){ // 蛇形:横向正弦摆动,幅度随接近收敛(远处难拦,近处收拢命中)
         const dirT=V.norm(V.sub(tp,p.pos));
-        const sw=Math.sin((p.age||0)*6)*Math.min(40000,dist*0.3);
+        const sw=Math.sin((p.age||0)*6)*Math.min(8000,dist*0.3); // 2026-09-26 x1/5(单局地图):幅度上限原 40000
         evX=-dirT[1]*sw; evY=dirT[0]*sw;
       }
       let aim=[tp[0]+tv[0]*tLead+evX,tp[1]+tv[1]*tLead+evY,tp[2]+tv[2]*tLead]; // WR1:瞄估计位置
       if(p.netOff){ // 组网包抄(v121):瞄目标+方位偏移,线性收拢(外段绕开拉开方向),距目标<2万硬性归零(内段直插必中)
         const s=Math.max(0,Math.min(1,dist/(p.netD0||1)));
-        const shrink=dist<20000?0:s; // 2万内偏移归零:机头直接朝目标,保证收拢命中
+        const shrink=dist<20000?0:s; // 2万内偏移归零:机头直接朝目标,保证收拢命中。2026-09-26 单局地图刻意不缩:3000km/s 时转弯半径约 6700km,缩到 4000 实测导弹绕靶打转、命中 0
         aim=[aim[0]+p.netOff[0]*p.netOffR*shrink,aim[1]+p.netOff[1]*p.netOffR*shrink,aim[2]+p.netOff[2]*p.netOffR*shrink];
       }
       const dir=V.norm(V.sub(aim,p.pos));
@@ -294,14 +297,14 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
       if(p.fuel<=0&&V.dot(p.vel,V.sub(p.target.pos,p.pos))<0){ // v125:燃料尽且正在远离目标(转不动追不上)→失的自毁(否则永恒漂流)
         p.done=true;return;
       }
-      if(dist<800){ // 命中:近防分层拦截(外圈拦截导弹/内圈近防炮)+ 扇面过载
+      if(dist<800){ // 命中:近防分层拦截(外圈拦截导弹/内圈近防炮)+ 扇面过载。2026-09-26 单局地图刻意不缩:组网两组包抄的末端脱靶约 470~680km(速度 / 转向率不缩),缩到 160 实测自动齐射命中 0
         if(p.target.type==='decoy'){p.done=true;return;} // DS166:撞上诱饵=扑空(诱饵无装甲,导弹白烧)
         let surv=1;
         // 来袭导弹方向 → 船的扇面;统计同扇面来袭组数 + 受击扇面数
         const sect=sectorOf(Math.atan2(p.pos[1]-p.target.pos[1],p.pos[0]-p.target.pos[0]));
         let ng=1;const sects=new Set([sect]);
         for(const q of projectiles){
-          if(q!==p&&q.type==='missile'&&!q.done&&q.shooter.side===p.shooter.side&&V.len(V.sub(q.pos,p.pos))<200000){ // v119:只统计同为攻击方的组,防近防误算己方导弹
+          if(q!==p&&q.type==='missile'&&!q.done&&q.shooter.side===p.shooter.side&&V.len(V.sub(q.pos,p.pos))<40000){ // v119:只统计同为攻击方的组,防近防误算己方导弹。2026-09-26 x1/5(单局地图):原 200000
             const qs=sectorOf(Math.atan2(q.pos[1]-p.target.pos[1],q.pos[0]-p.target.pos[0]));
             if(qs===sect)ng++;
             sects.add(qs);
@@ -351,7 +354,7 @@ function stepInterceptorProj(p,dt){ // 拦截导弹(v114):燃料模式可出远�
         let tgt=null;
         for(const q of projectiles){
           if(q.type!=='missile'||q.done||q.shooter.side===p.shooter.side)continue;
-          if(V.len(V.sub(q.pos,p.pos))<(p.screenRange||100000)){tgt=q;break;}
+          if(V.len(V.sub(q.pos,p.pos))<(p.screenRange||20000)){tgt=q;break;} // 2026-09-26 x1/5(单局地图):缺省原 100000
         }
         if(tgt){p.screen=false;p.target=tgt;p.spd=Math.max(p.spd,2000);}
         return;
@@ -399,7 +402,7 @@ function stepInterceptorProj(p,dt){ // 拦截导弹(v114):燃料模式可出远�
       p.vel=[nd[0]*p.spd,nd[1]*p.spd,nd[2]*p.spd];
       p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;
       // 拦截判定:接近来袭导弹<1500 → 1颗拦1颗,逐颗概率;消耗自身;拦完继续往前拦下一个(不瞎追)
-      if(dist<1500){
+      if(dist<1500){ // 2026-09-26 单局地图刻意不缩:拦截弹末端脱靶约 350~800km(速度 / 转向率不缩),缩到 300 实测大半拦截弹擦肩而过
         const dirT=V.norm(V.sub(p.target.pos,p.pos));
         const sv=p.target.vel;
         const along=V.dot(sv,dirT);

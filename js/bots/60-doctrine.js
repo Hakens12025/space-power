@@ -23,7 +23,8 @@
    ⚠ WR1 之后没有「站在对方武器包线外打」这回事:主炮过半把握 36.6 万、导弹动力射程 37.5 万,两个带几乎重合。
      所以条令的杠杆不是距离,是**机动还是停车** —— 主炮要机头对准才打得响,而战斗转向只在【空闲】(没有命令)时抢机头
      (physics/31 的 idle 判据)。于是:交战态一直沿轨道机动 ⇒ 开不出主炮、也难被主炮打中(WR1 的弹丸瞄的是发射那一刻的预测点);
-     只有压上态才清命令停车、把机头交给战斗转向。「谁停下来谁开得出炮」从一条实测缺陷变成一个明写的决定。 */
+     只有压上态才清命令停车、把机头交给战斗转向。「谁停下来谁开得出炮」从一条实测缺陷变成一个明写的决定。
+   2026-09-26 整体 x1/5(单局地图),本文件注释里的旧距离(36.6 万 / 37.5 万 / 64 万 / 58 万 …)按 1/5 读;航点与目标点一律经 ordArenaClamp 夹进 ARENA。 */
 
 /* ================= AI1 红方信念层(2026-09-21;BOT1 从 bots/61 整体搬来,逻辑一行未改)=================
    搬家的理由:它回答的是"红方此刻认为该去哪",那是决策,不是执行。
@@ -40,25 +41,26 @@
    ⚠ 热区的中心(cov.x / cov.y)今天仍等于真值(模型只算不确定度、不模拟估计误差,见 js/sensors/CLAUDE.md),
       所以这里【刻意不读】未定位接触的 cov.x / cov.y —— 读了就是从那个已知的口子作弊。 */
 /* H1(形态 H):四个尺度常数跟着战场放大。LEAD 20 万 → 50 万(沿方位线一次推进多远:发现距离从 65 万变成 160~281 万,20 万一段太碎);
-   MEM_S 120 → 300 秒;SPREAD 6 万 → 15 万(纯方位交叉定位的基线:目标在 200 万开外时 6 万的基线几乎是一条线);RING 40 万 → 100 万;REACH 6 万 → 10 万。 */
-const AIR={LEAD:500000,MEM_S:300,SPREAD:150000,RING:1000000,REACH:100000,
+   MEM_S 120 → 300 秒;SPREAD 6 万 → 15 万(纯方位交叉定位的基线:目标在 200 万开外时 6 万的基线几乎是一条线);RING 40 万 → 100 万;REACH 6 万 → 10 万。
+   2026-09-26 整体 x1/5,上文旧数按 1/5 读。 */
+const AIR={LEAD:100000,MEM_S:300,SPREAD:30000,RING:200000,REACH:20000, // 2026-09-26 x1/5(单局地图):原 LEAD 500000 / SPREAD 150000 / RING 1000000 / REACH 100000;MEM_S 是秒不缩
   goal:null,src:'',memPos:null,memT:0,wp:0,u:[-1,0]};
 function aiObjective(){const env=(typeof curEnv==='function')?curEnv():null;return (env&&env.objective)?env.objective:[0,0];}
 function aiSearchWp(k){ // 第 0 个是战场中心,之后按五角星次序(每步转 144 度)绕圈 —— 相邻两步横穿圆心,扫过的面积最大
-  const o=aiObjective();if(k<=0)return [o[0],o[1]];
-  const a=(k-1)*2.5132741228718345;return [o[0]+Math.cos(a)*AIR.RING,o[1]+Math.sin(a)*AIR.RING];
+  const o=aiObjective();if(k<=0)return ordArenaClamp([o[0],o[1]]); // 2026-09-26 夹进 ARENA:到没到(REACH)按夹过的点量,否则区外航点永远到不了
+  const a=(k-1)*2.5132741228718345;return ordArenaClamp([o[0]+Math.cos(a)*AIR.RING,o[1]+Math.sin(a)*AIR.RING]);
 }
 function aiRedBelief(dt,reds){ // 纯决策:红方此刻认为该去哪。只写 AIR,不碰任何一艘船。TK2.2:接触从红方自己的航迹表里枚举,不再拿蓝舰名单
   let rx=0,ry=0;reds.forEach(e=>{rx+=e.pos[0];ry+=e.pos[1];});rx/=reds.length;ry/=reds.length;
   let n=0,x=0,y=0;
   trkEach('red',tk=>{if(trkGone(tk))return;const p=trkPos(tk);if(p){x+=p[0];y+=p[1];n++;}}); // 注册表顺序 = 原来蓝舰名单的顺序,浮点累加的次序不变
-  if(n){AIR.goal=[x/n,y/n];AIR.src='fix';AIR.memPos=AIR.goal.slice();AIR.memT=0;}
+  if(n){AIR.goal=ordArenaClamp([x/n,y/n]);AIR.src='fix';AIR.memPos=AIR.goal.slice();AIR.memT=0;} // 2026-09-26 夹进 ARENA(外推的估计位置可能出界)
   else{
     let bx=0,by=0,m=0;
     trkEach('red',(tk,st)=>{if(trkGone(tk)||st!=='heat')return;
       const u=trkBearing(tk,[rx,ry]);bx+=u[0];by+=u[1];m++;}); // 方位走具名的真值通道 trkBearing(逐浮点复刻原来那一句)
     const bl=Math.hypot(bx,by);
-    if(m&&bl>1e-9){AIR.goal=[rx+bx/bl*AIR.LEAD,ry+by/bl*AIR.LEAD];AIR.src='brg';AIR.memPos=AIR.goal.slice();AIR.memT=0;}
+    if(m&&bl>1e-9){AIR.goal=ordArenaClamp([rx+bx/bl*AIR.LEAD,ry+by/bl*AIR.LEAD]);AIR.src='brg';AIR.memPos=AIR.goal.slice();AIR.memT=0;} // 2026-09-26 夹进 ARENA
     else if(AIR.memPos&&AIR.memT<AIR.MEM_S){
       AIR.memT+=dt;AIR.goal=AIR.memPos;AIR.src='mem';
       if(Math.hypot(rx-AIR.memPos[0],ry-AIR.memPos[1])<AIR.REACH)AIR.memT=AIR.MEM_S; // 到了,没人 ⇒ 不再等
@@ -259,7 +261,7 @@ function aiDoctrine(dt,reds){ // 指挥层入口:写 RDOC(含每艘舰的 plan)�
       const off=(i-(reds.length-1)/2)*AIR.SPREAD;
       pos=[goal[0]+nx*off,goal[1]+ny*off];pass=false;
     }
-    plan[e.id]={role:role,pos:pos,pass:pass,hold:hold,paint:(paintOn&&isLamp),
+    plan[e.id]={role:role,pos:ordArenaClamp(pos),pass:pass,hold:hold,paint:(paintOn&&isLamp), // 2026-09-26 pos 夹进 ARENA(轨道点 / 横向排开点可能出界)
       foe:tgt||null,salvo:(salvoSet[e.id]&&tgt)?(mirror?Math.min(2,readyCells(e)):(e.cells||4)):0};
     i++;
   }

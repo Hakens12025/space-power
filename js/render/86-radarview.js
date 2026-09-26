@@ -58,7 +58,7 @@ function rdvEst(use){ // 演示页 estOne:每条一份高斯按信息形式相�
   let m=null,C=null;
   for(let it=0;it<3;it++){let A=0,B=0,Cc=0,u=0,v=0;
     for(const x of use){const k=x.k,ux=Math.cos(x.brg),uy=Math.sin(x.brg),nx=-uy,ny=ux,rc=k.R/2,sr=k.R/(2*Math.sqrt(3));
-      const px=k.org[0]+ux*rc,py=k.org[1]+uy*rc,r=m?Math.max(1e4,Math.hypot(m[0]-k.org[0],m[1]-k.org[1])):rc,sc=r*k.half/2,wc=1/(sc*sc),wr=1/(sr*sr);
+      const px=k.org[0]+ux*rc,py=k.org[1]+uy*rc,r=m?Math.max(2e3,Math.hypot(m[0]-k.org[0],m[1]-k.org[1])):rc,sc=r*k.half/2,wc=1/(sc*sc),wr=1/(sr*sr); // 2026-09-26 x1/5(单局地图):距离地板原 1e4
       const a00=wc*nx*nx+wr*ux*ux,a01=wc*nx*ny+wr*ux*uy,a11=wc*ny*ny+wr*uy*uy;
       A+=a00;B+=a01;Cc+=a11;u+=a00*px+a01*py;v+=a01*px+a11*py;}
     const det=A*Cc-B*B;if(!(det>0))return null;
@@ -95,14 +95,14 @@ function rdvDrawGauss(z){
   const C=z.C,h=(C[0]+C[2])/2,d=Math.sqrt((C[0]-C[2])*(C[0]-C[2])/4+C[1]*C[1]),s1=Math.sqrt(h+d),s2=Math.sqrt(Math.max(0,h-d)),th=0.5*Math.atan2(2*C[1],C[0]-C[2]);
   const p=toScreen(z.m[0],z.m[1]),q=toScreen(z.m[0]+Math.cos(th)*1e4,z.m[1]+Math.sin(th)*1e4),r=4*s1*cam.zoom;
   if(p[0]<-r||p[0]>W+r||p[1]<-r||p[1]>H+r||s2*cam.zoom<0.05)return;
-  const amp=4e8/(s1*s2),g=Math.min(1,Math.log(1+amp/1e-3)/Math.log(1001)); // 峰高 = (2 万 km)² / √det,越糊越暗(演示页 rfT)
+  const amp=1.6e7/(s1*s2),g=Math.min(1,Math.log(1+amp/1e-3)/Math.log(1001)); // 峰高 = (2 万 km)² / √det,越糊越暗(演示页 rfT) // 2026-09-26 x1/5(单局地图):参照改 (4000 km)²,原 4e8
   ctx.save();ctx.globalAlpha=z.fade*Math.max(0.35,g);ctx.translate(p[0],p[1]);ctx.rotate(Math.atan2(q[1]-p[1],q[0]-p[0]));
   ctx.scale(Math.max(4*s1*cam.zoom,1.5)/64,Math.max(4*s2*cam.zoom,1.5)/64);ctx.imageSmoothingEnabled=true;ctx.drawImage(rdvGSpr(),-64,-64);ctx.restore();
 }
 function rdvDrawZones(){
   for(const z of rdvZones()){
     if(!z.poly){rdvDrawGauss(z);continue;}
-    const s=Math.sqrt(z.area),u=Math.max(0,Math.min(1,Math.log(1e6/s)/Math.log(100))),f=z.fade;
+    const s=Math.sqrt(z.area),u=Math.max(0,Math.min(1,Math.log(2e5/s)/Math.log(100))),f=z.fade; // 2026-09-26 x1/5(单局地图):亮度刻度 2000~20 万 km,原 1e6(1 万~100 万)
     ctx.beginPath();for(let i=0;i<z.poly.length;i++){const p=toScreen(z.poly[i][0],z.poly[i][1]);if(i)ctx.lineTo(p[0],p[1]);else ctx.moveTo(p[0],p[1]);}ctx.closePath();
     if(z.grow*cam.zoom>1){ctx.lineJoin='round';ctx.lineWidth=2*z.grow*cam.zoom;ctx.strokeStyle='rgba(84,224,208,'+(0.06*f).toFixed(3)+')';ctx.stroke();ctx.lineWidth=1;ctx.lineJoin='miter';} // 最远可达圈:多边形往外放 grow(圆角)
     ctx.fillStyle='rgba(84,224,208,'+((0.05+0.3*u)*f).toFixed(3)+')';ctx.fill();

@@ -299,7 +299,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
       ['单枚伤',m.missDmg||12],
       ['组伤',Math.round(m.dmg||((m.count||12)*(m.missDmg||12)))],
       ...(m.vPeak?[['巡航',Math.round(m.vPeak)],['终端',Math.round(m.vTerm)]]:[]),
-      ['触发圈',Math.round((m.trigRadius||60000)/1000)+'k'],
+      ['触发圈',Math.round((m.trigRadius||12000)/1000)+'k'], // 2026-09-26 x1/5(单局地图):原 60000
     ].map(it=>`<span class="fi"><i>${it[0]}</i><b>${it[1]}</b></span>`).join('');
     const stt=m.mine?'伏击雷 · 静默待命':m.park?'飞向布雷点':(m.netOff?'组网包抄':(m.coastT>0?'脱锁滑行':'突击中'));
     const tgt=m.target?(m.target.name||(m.target.pos?'区域点':'—')):(m.mine?'无(待触发)':'无');
@@ -320,7 +320,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
     title.textContent='侦察信标';
     if(ciN)ciN.textContent='侦察信标';
     if(ciC)ciC.textContent=(m.shooter?m.shooter.name:'—');
-    if(ciSp)ciSp.innerHTML=[['探测半径','300k'],['部署点',m.parkPt?Math.round(m.parkPt[0]/1000)+'k':'—']].map(it=>`<span class="fi"><i>${it[0]}</i><b>${it[1]}</b></span>`).join('');
+    if(ciSp)ciSp.innerHTML=[['探测半径',Math.round(Math.sqrt(Math.sqrt(senseKACT(m)))/1000)+'k'/* 2026-09-26 改读信标真实照射量程(同 83-hud 那个圈):原写死 300k 已与感知分家 */],['部署点',m.parkPt?Math.round(m.parkPt[0]/1000)+'k':'—']].map(it=>`<span class="fi"><i>${it[0]}</i><b>${it[1]}</b></span>`).join('');
     const stt=m.arrived?(m.on?'开机 · 探测中':'静默待机'):'飞行中';
     box.innerHTML=`
       <div class="row"><span class="k">状态</span><span class="v">${stt}</span></div>

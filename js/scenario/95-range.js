@@ -58,7 +58,7 @@ function resetRangeStat(){ // 归零:调完一组参数不用重开场景就能�
 // 放上来调了不会有任何效果;外圈拦截的真实旋钮是"拦截弹命中率"(interHitMul → 弹上 hitMul → 07-missiles 的 hitRate)。
 const RANGE_KNOBS=[
   {k:'evadeOn',    nm:'闪避机动',  type:'bool'},
-  {k:'evadeR',     nm:'闪避半径',  type:'enum',vals:[10000,30000,60000,120000],fmt:v=>Math.round(v/1000)+'k'},
+  {k:'evadeR',     nm:'闪避半径',  type:'enum',vals:[2000,6000,12000,24000],fmt:v=>Math.round(v/1000)+'k'}, // 2026-09-26 x1/5(靶阵随单局地图缩):原 [10000,30000,60000,120000]
   {k:'evadeT',     nm:'换点周期',  type:'num', min:5,max:60,step:5,      fmt:v=>v+'s'},
   {k:'speedCmd',   nm:'闪避速度',  type:'gear'},
   {k:'inter',      nm:'拦截弹库存',type:'num', min:0,max:768,step:64,    fmt:v=>v+'枚'},
@@ -75,7 +75,7 @@ function rangeDefaults(){ // 缺省 = DD(靶用的舰种)的武器定义基线,�
   const c=(typeof WPN!=='undefined'&&WPN.ciws_core)||{innerIntercept:0.85,chaffRate:0.25};
   const w=(typeof WPN!=='undefined'&&WPN.ciws_core)||{inter:384};
   const sn=SENS.CLS.DD; // SN4:舰种行并进 SENS.CLS(前提 3,数值表只有一份),这里一律取活表。SN2 那条纪律原样有效——绝不在本文件留手抄副本:副本会在表被换掉时原地顶上,面板照常显示旧数并把值写进一个已不存在的字段,最难查的一种静默。本文件头部那句"调用点全部带 typeof 守卫"说的是别人调 95,不是 95 调别人:rangeDefaults 只在运行期被调,而 sensors/20 在 index.html 里排在本文件之前
-  return {evadeOn:false,evadeR:30000,evadeT:20,speedCmd:2,
+  return {evadeOn:false,evadeR:6000,evadeT:20,speedCmd:2, // 2026-09-26 evadeR x1/5:原 30000
     inter:w.inter,interHitMul:1,inner:c.innerIntercept,chaff:c.chaffRate,
     decoyAuto:0,size:sReq(sn,'size'),stealth:sReq(sn,'stealth'),emit:1,ecmPower:sReq(sn,'ecmPower')}; // SN4:三格感知缺省跟住活表,字段没了必须当场炸——吐 undefined 会顺着 rangeClampOne 的 Number(undefined)=NaN 一路变成 NaN,经 applyRangeOne 写进靶的 size/stealth,光学亮度与雷达反射全线 NaN 而面板只显示 "NaN"。emit 缺省取索引 1(照射),与 91-init 给靶 setEmit(s,'paint') 同口径,面板开箱即是"未改动"的对照组。⚠ 失败形态是【开局白屏】不是每帧一个异常:loadRangeCfg 在 init() 里、排在 requestAnimationFrame 之前,这里抛错会让 init 整个中止
 }
@@ -223,7 +223,7 @@ function renderRangePanel(){ // 重建旋钮行与页签(只在切靶/切场景/
       `<span class="tr-v" data-k="${kn.k}">${trKnobVal(kn,c)}</span>`+
       `<button class="tr-stp" data-knob="${kn.k}" data-dir="1">+</button></div>`;
   }
-  html+=`<div class="tr-note">实际位移 ≈ min(闪避半径, 速度×换点周期) —— 半径设 12万 但速度只有 800 时看不出效果。<br>`+
+  html+=`<div class="tr-note">实际位移 ≈ min(闪避半径, 速度×换点周期) —— 半径设 2.4万 但速度只有 800 时看不出效果。<br>`+
     `拦截弹库存 0 = 完全不拦(对照组基线);内圈近防率与干扰弹率只在导弹命中瞬间结算。<br>`+
     `靶血量无限、三道闸门禁火;打击任务的目标永不 dead,任务不会自己结束,这是靶场的预期行为。</div>`;
   if(ts.length>RANGE_SLOTS)html+=`<div class="tr-note" style="color:var(--org)">当前靶数 ${ts.length},仅前 ${RANGE_SLOTS} 个可调,其余用舰种默认值。</div>`;

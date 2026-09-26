@@ -1,4 +1,21 @@
 "use strict";
+/* 2026-09-26 单局游玩区(ARENA,scenario/97 设;null = 不画):区外压暗一层 + 细实线边框。每帧常数笔(压暗至多 4 块、边线至多 4 条 fillRect),不逐格 */
+function drawArena(){
+  if(!ARENA)return;
+  const a=toScreen(ARENA.x0,ARENA.y0),b=toScreen(ARENA.x1,ARENA.y1),cl=(v,m)=>Math.max(0,Math.min(m,Math.round(v)));
+  const x0=cl(a[0],W),x1=cl(b[0],W),y0=cl(a[1],H),y1=cl(b[1],H);
+  ctx.fillStyle='rgba(0,0,0,.4)';
+  if(y0>0)ctx.fillRect(0,0,W,y0);
+  if(y1<H)ctx.fillRect(0,y1,W,H-y1);
+  if(x0>0)ctx.fillRect(0,y0,x0,y1-y0);
+  if(x1<W)ctx.fillRect(x1,y0,W-x1,y1-y0);
+  ctx.fillStyle=vtInk(0.5); // 与网格同一套三层墨色
+  const ax=Math.round(a[0]),bx=Math.round(b[0]),ay=Math.round(a[1]),by=Math.round(b[1]);
+  if(ay>=0&&ay<H)ctx.fillRect(x0,ay,x1-x0,1);
+  if(by>=0&&by<H)ctx.fillRect(x0,by,x1-x0,1);
+  if(ax>=0&&ax<W)ctx.fillRect(ax,y0,1,y1-y0);
+  if(bx>=0&&bx<W)ctx.fillRect(bx,y0,1,y1-y0);
+}
 function render(){
   /* SN6 三级星图:先推进跳层动画、算出这一档缩放落在哪一层(连续权重 + 带迟滞的离散层),
      底色再按权重交叉淡化 —— 换层是淡入淡出不是跳变。详见 render/80-viewtier。 */
@@ -10,6 +27,7 @@ function render(){
   drawGrid();
   if(irOn)drawIrView();
   else if(typeof drawEnv==='function')drawEnv(); // ENV1 天体 + 太阳方向:地图事实,画在网格之后、一切接触之前(render/81-env)
+  drawArena(); // 2026-09-26 单局游玩区边界:天体之后、接触之前;普通 / 红外 / 雷达三种画面都走这一行
   if(rdOn)drawRadarView();
   if(typeof drawSunLines==='function')drawSunLines(); // 「太阳线」钮:叠在普通 / 红外 / 雷达任一画面上
   drawSignalView(); // SN6 信号视野(右下角工具钮):我方每艘舰的【被探测范围】。画在最底下——它是底图

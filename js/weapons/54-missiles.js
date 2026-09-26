@@ -1,23 +1,23 @@
 "use strict";
 /* RF1: 拆自 js/07-missiles.js L2-86(导弹引导:MSL_CFG/guideSide/missSee/guideDesc;GUIDE_SEEK 必须在 MSL_CFG 之后,同文件顺序保持)。纯移动无逻辑改动。 */
-/* ============ T1 导弹引导系统:自主导引15万,超范围需数据链通道,脱锁飞最后已知变雷 ============ */
+/* ============ T1 导弹引导系统:自主导引15万(2026-09-26 x1/5 后 3 万),超范围需数据链通道,脱锁飞最后已知变雷 ============ */
 // v126 导弹探测配置(留改型口子:以后不同导弹型号改这里数值)
 const MSL_CFG={
-  passive:100000,      // 导弹被动探测(看热):目标亮度在 被动距离×光学亮度 内 → 导弹自己"看到"(可锁);SN4 亮度函数改由感知内核 sensors/22-percep 提供
-  ladar:150000,        // 导弹主动光雷达(测距测速):**最后阶段开启**,15万=这玩意(自主导引范围)
-  ladarRange:150000,   // LADAR 有效距离(=GUIDE_SEEK,末端开启后精确锁定)
+  passive:20000,       // 导弹被动探测(看热):目标亮度在 被动距离×光学亮度 内 → 导弹自己"看到"(可锁);SN4 亮度函数改由感知内核 sensors/22-percep 提供。2026-09-26 x1/5(单局地图):原 100000
+  ladar:30000,         // 导弹主动光雷达(测距测速):**最后阶段开启**,3万=这玩意(自主导引范围)。2026-09-26 x1/5(单局地图):原 150000
+  ladarRange:30000,    // LADAR 有效距离(=GUIDE_SEEK,末端开启后精确锁定)。2026-09-26 x1/5(单局地图):原 150000
 };
 const GUIDE_SEEK=MSL_CFG.ladarRange; // 导弹自主导引范围(km)=主动LADAR末端开启后(范围内自主锁定,不耗通道)
 function guideMissiles(){ // 每tick重算引导分配(无状态:通道天然可回收/跨舰交接)——自引导优先,富余辅助
   guideSide('blue');guideSide('red');
 }
-function missSee(p){ // 导弹自身探测(信息源):被动看热(被动距离×目标光学亮度) 或 末端主动LADAR(15万=导引头,最后阶段开启)
+function missSee(p){ // 导弹自身探测(信息源):被动看热(被动距离×目标光学亮度) 或 末端主动LADAR(MSL_CFG.ladar=导引头,最后阶段开启)
   const t=p.target;
   if(!t||!t.side)return false;
   if(ENV.bodies.length&&envOccluded(p.pos,t.pos))return false; // ENV2 天体挡视线:被动看热与末端 LADAR 一起挡
   const d=V.len(V.sub(t.pos,p.pos));
-  if(d<MSL_CFG.passive*optLum(t))return true; // SN4 被动看热改读感知内核的 optLum(体型×(1+引擎档+发射档)):引擎开着或正在照射的目标看得远,熄火静默的冷目标难看到。量级注意:新口径约为旧口径的 2 倍(冷 DD 3.5 万→7 万、满推 CA 22 万→40 万),但下一行 15 万那道末端 LADAR 门在 15 万内恒为真,所以只有 15 万外才看得出差别——表现是热目标更早被自导接管、超视距链导通道占用相应变少
-  if(d<MSL_CFG.ladar)return true; // 末端LADAR开启(15万=这玩意):精确测距测速
+  if(d<MSL_CFG.passive*optLum(t))return true; // SN4 被动看热改读感知内核的 optLum(体型×(1+引擎档+发射档)):引擎开着或正在照射的目标看得远,熄火静默的冷目标难看到。量级注意:新口径约为旧口径的 2 倍(冷 DD 3.5 万→7 万、满推 CA 22 万→40 万),但下一行 15 万那道末端 LADAR 门在 15 万内恒为真,所以只有 15 万外才看得出差别——表现是热目标更早被自导接管、超视距链导通道占用相应变少(2026-09-26 整体 x1/5,本注释旧数按 1/5 读)
+  if(d<MSL_CFG.ladar)return true; // 末端LADAR开启(MSL_CFG.ladar):精确测距测速
   return false;
 }
 // DS147:missReport 已取消(数据链纯单向,导弹不回报传感器;导弹的探测只用于自身导引/复锁/飞最后已知变雷)
@@ -83,6 +83,6 @@ function guideDesc(p){ // 信息面板:导弹引导状态
   if(p.park)return '🧭 惯性导航(飞向点位)';
   if(p.guideMode==='coast')return '🔓 脱锁·飞最后已知(到点变雷)'; // KIMI146:脱锁文案按v126定稿(原"剩Ns自毁"已作废)
   if(p.guideMode==='link')return `📡 数据链引导${p.guidedByName?'('+p.guidedByName+')':''}`;
-  if(p.guideMode==='self')return '🎯 自主导引(15万内)';
+  if(p.guideMode==='self')return '🎯 自主导引(3万内)'; // 2026-09-26 x1/5(单局地图):原 15万
   return '—';
 }
