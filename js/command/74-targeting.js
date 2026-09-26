@@ -122,7 +122,7 @@ function xhCardHTML(s,sub){ // RF5 信息卡内容:按认没认出、定没定�
   {const tk=(!gm&&s.side!=='blue')?trkOf('blue',s):null;if(tk&&tk.tn)rows.push(['航迹','T'+String(tk.tn).padStart(2,'0')]);} // TK4c 航迹号:没认出的接触都叫「未知接触」,靠它指认是哪一条
   if(!masked&&!notShip&&(gm||s.side==='blue'||contactFix(s,'blue'))){ // 定得出位置才追加数值
     rows.push(['结构',Math.max(0,Math.round(s.hp))+'/'+Math.round(s.maxHp)]);
-    rows.push(['速度',Math.round((typeof V!=='undefined'&&V.len)?V.len(s.vel):Math.hypot(s.vel[0],s.vel[1]))+' m/s']);
+    rows.push(['速度',Math.round(SHOW.v((typeof V!=='undefined'&&V.len)?V.len(s.vel):Math.hypot(s.vel[0],s.vel[1])))+' km/s']); // 2026-09-27 经 SHOW 换回物理单位(原来把引擎单位标成 m/s)
   }
   return `<div class="nm${masked?' unk':''}">${masked?'未知接触':s.name}</div>`+ // 类名对齐 css 的 #xhTip 节:.unk=未达识别级的禁用态色,与地图上降级成 UNK 的轮廓同一语义
     rows.map(r=>`<div><span class="k">${r[0]}</span><span class="v">${r[1]}</span></div>`).join('');
