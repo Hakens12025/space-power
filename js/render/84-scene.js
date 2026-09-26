@@ -74,7 +74,7 @@ function drawTrails(){
   ctx.restore();
 }
 /* 2026-09-26 左下角特写窗口(用户:"点击马拉松船,我就能看到这艘船的特写……舰队也是,自适应的拉到舰队的缩放大小……要能够看到地图背景的放大效果";
-   二轮"都做":威胁取景 / 框外指示 / 可达圈 / 阻尼 / 前视 / 点框跳主镜头 / 重复时收起 / 导演模式 / 离群处理)。
+   二轮"都做":威胁取景 / 框外指示 / 阻尼 / 前视 / 点框跳主镜头 / 重复时收起 / 导演模式 / 离群处理)。
    业内叫画中画 / 单位特写镜头(picture-in-picture / unit cam);取景照 Cinemachine 的 Target Group(一组点框进画面)+ 阻尼 + 前视(look-ahead)。
    第二个镜头画进离屏画布、按透明度贴回(淡入淡出);星空借主贴图,尘埃云按特写自己的缩放级向地形服务要块 */
 const INSET={W:320,H:200,M:12,GAP:10,bot:64,botT:-1e9,x:0,y:0,w:0,h:0,on:false,cx:0,cy:0,z:1,
@@ -113,28 +113,19 @@ function insetSubject(sel,inc,lbl){ // 一组我方舰的取景:离群的不进�
   for(const s of keep){const t=s.lockedTarget;if(!t||t.dead)continue;const p=(t.side==='blue'||adminMode)?t.pos:contactPos(t,'blue');if(!p)continue;const d=near(p);if(d<=R)pts.push([p[0],p[1]]);ind.push({pos:p,col:'255,107,107',lbl:Math.round(d/1000)+'k'});}
   let ax=0,ay=0,vx=0,vy=0,vm=1;for(const s of keep){ax+=s.pos[0];ay+=s.pos[1];vx+=s.vel[0];vy+=s.vel[1];for(const g of (s.speedGears||[]))if(g>vm)vm=g;}
   const k=keep.length;
-  return {key:'s:'+sel.map(s=>s.id).join(','),pts:pts,ind:ind,ax:ax/k,ay:ay/k,vx:vx/k,vy:vy/k,vm:vm,lead:pts.length===n0,single:(sel.length===1?sel[0]:null),
+  return {key:'s:'+sel.map(s=>s.id).join(','),pts:pts,ind:ind,ax:ax/k,ay:ay/k,vx:vx/k,vy:vy/k,vm:vm,lead:pts.length===n0,
     lbl:lbl||(sel.length===1?'特写 · '+sel[0].name:'特写 · '+sel.length+' 艘'+(keep.length<sel.length?'(离群 '+(sel.length-keep.length)+')':''))};
 }
 function insetDirector(now,inc){ // 没选东西时:挑场上最要紧的事(来袭导弹 > 击沉 > 命中 > 认出),每个画面至少停 DWELL,更要紧的来了才插队;没有事就不画
-  const pt=e=>({key:e.k+':'+e.t,p:e.p,t:now,build:()=>now-e.t<INSET.EV_MS?{key:e.k+':'+e.t,pts:[e.pos],ind:[],ax:e.pos[0],ay:e.pos[1],vx:0,vy:0,vm:1,lead:false,single:null,lbl:'导演 · '+e.lbl}:null});
+  const pt=e=>({key:e.k+':'+e.t,p:e.p,t:now,build:()=>now-e.t<INSET.EV_MS?{key:e.k+':'+e.t,pts:[e.pos],ind:[],ax:e.pos[0],ay:e.pos[1],vx:0,vy:0,vm:1,lead:false,lbl:'导演 · '+e.lbl}:null});
   let c=null;
   if(inc.length){const tg=inc[0].tgt;c={key:'m:'+tg.id,p:3,t:now,build:()=>{const L=insetIncoming().filter(m=>m.tgt===tg);return (!tg.dead&&L.length)?insetSubject([tg],L,'导演 · 来袭导弹 → '+tg.name+(isFinite(L[0].eta)?' · '+Math.round(SHOW.t(L[0].eta))+' s':'')):null;}};}
   for(const e of INSET.ev){if(c&&e.p<=c.p)continue;
-    if(e.k==='id'){const s=e.ship;c={key:'i:'+s.id,p:e.p,t:now,build:()=>{const p=!s.dead&&now-e.t<INSET.EV_MS?contactPos(s,'blue'):null;return p?{key:'i:'+s.id,pts:[p],ind:[],ax:p[0],ay:p[1],vx:0,vy:0,vm:1,lead:false,single:null,lbl:'导演 · '+e.lbl}:null;}};}
+    if(e.k==='id'){const s=e.ship;c={key:'i:'+s.id,p:e.p,t:now,build:()=>{const p=!s.dead&&now-e.t<INSET.EV_MS?contactPos(s,'blue'):null;return p?{key:'i:'+s.id,pts:[p],ind:[],ax:p[0],ay:p[1],vx:0,vy:0,vm:1,lead:false,lbl:'导演 · '+e.lbl}:null;}};}
     else c=pt(e);}
   let D=INSET.dir,sub=D?D.build():null;if(!sub)D=INSET.dir=null;
   if(c&&(!D||(c.key!==D.key&&(c.p>D.p||now-D.t>=INSET.DWELL)))){INSET.dir=c;sub=c.build();}
   return sub;
-}
-function drawReach(s){ // 可达圈(同 demos/lightlag 的推力可达圈):按此刻速度惯性前推 T 秒的点,和那时最多能偏开的 ½·a·T²;T 取圈约占框高三分之一
-  const a=s.thrust||CFG.thrust;if(!(a>0))return;
-  const T=Math.max(PHYS.t(10),Math.min(PHYS.t(600),Math.sqrt(0.35*H/cam.zoom/a))),c=[s.pos[0]+s.vel[0]*T,s.pos[1]+s.vel[1]*T],r=0.5*a*T*T*cam.zoom;
-  const p=toScreen(s.pos[0],s.pos[1]),q=toScreen(c[0],c[1]);
-  ctx.save();ctx.strokeStyle='rgba(84,224,208,.55)';ctx.lineWidth=1;ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();
-  ctx.setLineDash([2,4]);ctx.beginPath();ctx.arc(q[0],q[1],r,0,6.2832);ctx.stroke();ctx.setLineDash([]);
-  ctx.fillStyle='rgba(84,224,208,.85)';ctx.font='10px Consolas';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText('T+'+Math.round(SHOW.t(T))+' s',q[0],q[1]-r-2);
-  ctx.restore();
 }
 function drawInset(){
   const now=nowMs(),dt=Math.min(0.1,Math.max(0,(now-INSET.t)/1000));INSET.t=now;
@@ -181,7 +172,6 @@ function drawInset(){
     if(typeof mapBodies==='function')mapBodies();
     drawArena();
     drawTrails();
-    if(sub.single)drawReach(sub.single);
     for(const s of ships)drawShip(s);
     if(typeof drawRocks==='function')drawRocks();
     drawProjectiles();drawHits();
