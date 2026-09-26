@@ -69,7 +69,7 @@ function matchEnter(){
   MATCH.seed=MATCH.fix||(1+Math.floor(Math.random()*999999999)); // 每局一个种子(地址 ?seed=N 固定)
   envIdx=i;initFleet();
   running=false; // 与开局同口径:先看清局面,空格开始
-  if(typeof camJump==='function')camJump(2,ARENA?[(ARENA.x0+ARENA.x1)/2,(ARENA.y0+ARENA.y1)/2]:undefined); // 2026-09-26 场地 x3 之后落舰队层(20 万比例尺)并对准游玩区中心:整块场地一屏(原落战术层)
+  if(typeof camJump==='function')camJump(2,ARENA?[(ARENA.x0+ARENA.x1)/2,(ARENA.y0+ARENA.y1)/2]:undefined); // 2026-09-26 落舰队层并对准游玩区中心,两军都在一屏里(原落战术层)
 }
 function matchExit(){
   envIdx=0;initFleet();

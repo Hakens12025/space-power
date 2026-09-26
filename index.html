@@ -11,7 +11,7 @@
 <!-- UI2:两个工具钮是图标钮(行内 SVG,颜色全走 css token),文字收进 title / aria-label。
      SN6 右下角工具钮。钮的行为走 render/85-settings 的事件委托。 -->
 <div id="tools">
-  <div class="seg" id="segTier" title="三级星图:按比例尺定 —— 左下角那条比例尺在 战术 / 舰队 / 战区 分别代表 5 万 / 20 万 / 100 万 km"><button class="hbtn" data-tier="1">战术</button><button class="hbtn" data-tier="2">舰队</button><button class="hbtn" data-tier="3">战区</button></div><!-- SN6b 从顶栏搬到这儿(用户拍板"三按钮放在右下角,大小和形状参考态势感知V3")。id 未变 ⇒ render/85-settings 的委托与 80-viewtier 里写高亮的那行都不用改 -->
+  <div class="seg" id="segTier" title="三级星图:按比例尺定 —— 左下角那条比例尺在 战术 / 舰队 / 战区 分别代表 3.5 万 / 8 万 / 100 万 km"><button class="hbtn" data-tier="1">战术</button><button class="hbtn" data-tier="2">舰队</button><button class="hbtn" data-tier="3">战区</button></div><!-- SN6b 从顶栏搬到这儿(用户拍板"三按钮放在右下角,大小和形状参考态势感知V3")。id 未变 ⇒ render/85-settings 的委托与 80-viewtier 里写高亮的那行都不用改 -->
   <div class="seg" id="segSun"><button class="hbtn" data-tool="sun" title="太阳线:选中舰(选了一队取第一艘)朝光源的禁区锥 + 天体背光面的影子线;独立开关,可叠在红外 / 雷达上" aria-label="太阳线"><svg class="tl-ico" viewBox="0 0 24 24" aria-hidden="true"><path class="i-sl" d="M3.5 20.5L15.2 2.2M3.5 20.5L21.8 8.8"/><circle class="i-sun" cx="19" cy="5" r="3.6"/><circle class="i-ship" cx="3.5" cy="20.5" r="1.9"/></svg></button></div>
   <div class="seg" id="segTool"><button class="hbtn" data-tool="ir" title="红外:地图换成红外画面 —— 我方看得见的热(敌舰与石头只以热出现)" aria-label="红外"><svg class="tl-ico" viewBox="0 0 24 24" aria-hidden="true"><circle class="i-h3" cx="12" cy="12" r="11"/><circle class="i-h2" cx="12" cy="12" r="7.2"/><circle class="i-h1" cx="12" cy="12" r="4"/><circle class="i-hc" cx="12" cy="12" r="1.6"/></svg></button><button class="hbtn" data-tool="radar" title="雷达:地图上叠雷达画面 —— 我方照射的覆盖、回波(颜色 = 接近 / 远离)、听到的敌方雷达所在区域" aria-label="雷达"><svg class="tl-ico" viewBox="0 0 24 24" aria-hidden="true"><circle class="i-rr" cx="12" cy="12" r="10.4"/><circle class="i-rr2" cx="12" cy="12" r="5.6"/><path class="i-sw" d="M12 12V1.6A10.4 10.4 0 0 1 21.9 8.8Z"/><circle class="i-bl" cx="17.3" cy="6.7" r="1.3"/><circle class="i-rc" cx="12" cy="12" r="1.5"/></svg></button></div>
 </div>
@@ -115,7 +115,7 @@
      硬约束仅两条:core/00 定义 on() 必须最先(85/95/96/97 顶层调用它);core/99 顶层执行 init() 必须最后(且 init 调 loadRangeCfg,
      故 scenario/95 必须在它之前)。其余跨文件引用全在运行期解析,层序排列只为可读性。 -->
 <script src="js/core/00-config.js?v=20260926k"></script>
-<script src="js/core/01-state.js?v=20260926j"></script>
+<script src="js/core/01-state.js?v=20260927a"></script>
 <script src="js/ships/10-hull-geometry.js?v=20260923"></script>
 <script src="js/ships/11-classes.js?v=20260926k"></script>
 <script src="js/world/12-env.js?v=20260926z"></script><!-- ENV1 环境系统:太阳禁区 + 天体 + 石头(TK4c)。必须在 sensors/ 之前:23-cov 加载期的梯子反解会读 optLum -->
@@ -149,10 +149,10 @@
 <script src="js/core/06-timecomp.js?v=20260926u"></script><!-- TC1 接触降速:frame() 每帧调 tcStep;依赖全部在运行期解析 -->
 <script src="js/bots/60-doctrine.js?v=20260926z"></script>
 <script src="js/bots/61-enemy.js?v=20260926z"></script>
-<script src="js/command/70-input.js?v=20260926c"></script>
+<script src="js/command/70-input.js?v=20260927a"></script>
 <script src="js/command/71-keys.js?v=20260926z"></script>
 <script src="js/command/74-targeting.js?v=20260926w"></script><!-- RF5 悬停准星/吸附状态 xh + #xhTip 信息卡。按目录编号序归位在 command 块末尾;顶层只有 let/const/function,零顶层执行,跨文件引用全在运行期解析 -->
-<script src="js/render/80-viewtier.js?v=20260926z"></script><!-- SN6 三级星图:层界与缩放上下限由距离梯子推出;与 80-camera 共用编号(先例:85-settings/85-tutorial) -->
+<script src="js/render/80-viewtier.js?v=20260927a"></script><!-- SN6 三级星图:层界与缩放上下限由距离梯子推出;与 80-camera 共用编号(先例:85-settings/85-tutorial) -->
 <script src="js/render/80-camera.js?v=20260923"></script>
 <script src="js/render/81-background.js?v=20260926v8"></script>
 <script src="js/render/81-terrain.js?v=20260926s"></script><!-- ENV2 地形瓦片服务:云浓度的世界锚定瓦片(粗到细、每帧工作量封顶、LRU)+ 合成缓存(双缓冲、1:1 贴图)。顶层只有 const / function 与一个惰性求和的 let(TERR_DUST_NORM,同 world/13 的 ENV_DUST_NORM),运行期由 81-env 的 mapTileFrame 调;与 81-background 共用编号 81 -->
@@ -175,7 +175,7 @@
 <script src="js/scenario/91-init.js?v=20260926x"></script>
 <script src="js/scenario/95-range.js?v=20260926k"></script>
 <script src="js/scenario/96-spawn.js?v=20260923"></script><!-- FM7 测试用加船小条。放在 95 之后、core/99 之前:它顶层调 on(),而 on() 定义在 core/00 -->
-<script src="js/scenario/97-match.js?v=20260926j"></script><!-- MT1 对局入口 / 红方摆位 / 结果卡片。顶层调 on(),须在 core/00 之后;matchPlaceRed 被 91-init 运行期调用 -->
+<script src="js/scenario/97-match.js?v=20260927a"></script><!-- MT1 对局入口 / 红方摆位 / 结果卡片。顶层调 on(),须在 core/00 之后;matchPlaceRed 被 91-init 运行期调用 -->
 <script src="js/core/99-main.js?v=20260926z"></script>
 </body>
 </html>
