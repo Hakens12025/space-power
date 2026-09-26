@@ -67,7 +67,7 @@ function drawRange(){ // 测距工具(按住C):起点(或跟随船)→鼠标目�
     const dd=V.len(V.sub(rangeB,sel[0].pos));
     const macT=dd/CFG.macSpd; // MAC:直线0.1c
     const misT=estimateMissileTime(sel[0].pos,sel[0].vel,rangeB);
-    txt+=` · MAC ${macT.toFixed(1)}s · 射手 ${misT>=0?misT.toFixed(1)+'s':'∞'}`;
+    txt+=` · MAC ${SHOW.t(macT).toFixed(1)}s · 射手 ${misT>=0?SHOW.t(misT).toFixed(1)+'s':'∞'}`; // 2026-09-26 物理秒
   }
   ctx.font='bold 13px Consolas';ctx.textAlign='center';
   ctx.lineWidth=4;ctx.strokeStyle='rgba(0,0,0,.85)';
@@ -201,7 +201,7 @@ function drawProjectiles(){ // 弹丸/导弹
         ctx.beginPath();ctx.arc(s[0],s[1],12,0,6.283);ctx.stroke();
         if(p.on){const r=Math.sqrt(Math.sqrt(senseKACT(p)))*cam.zoom;ctx.strokeStyle='rgba(255,160,80,.2)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(s[0],s[1],r,0,6.283);ctx.stroke();} // 2026-09-26 改读信标真实照射量程(对反射 1.0,sensors/20 BEACON_* 那条式子):原写死 300000 自形态 H 起已与感知分家,x1/5 的 60000 同样不对
         ctx.fillStyle='rgba(159,212,255,.95)';ctx.font='10px Consolas';ctx.textAlign='left';ctx.textBaseline='top';
-        ctx.fillText(`📡信标 ${p.on?'开机':'关机'}${p.arrived?'':'·飞行'} ⏻${Math.round(p.life||0)}s`,s[0]+12,s[1]+12);
+        ctx.fillText(`📡信标 ${p.on?'开机':'关机'}${p.arrived?'':'·飞行'} ⏻${Math.round(SHOW.t(p.life||0))}s`,s[0]+12,s[1]+12);
       }
       continue;
     }
@@ -265,7 +265,7 @@ function drawProjectiles(){ // 弹丸/导弹
           ctx.font='10px Consolas';ctx.textAlign='left';ctx.textBaseline='top';
           const rem=p.count||16;
           if(p.type==='interceptor')ctx.fillText(`⛔拦截 ▲${Math.round(vn)}(剩${rem}颗${p.fuel>0?' ⛽'+Math.round(p.fuel):' ⛽尽'})`,s[0]+7,s[1]+7);
-          else ctx.fillText(`▲${Math.round(vn)}(剩${rem}颗)${p.fuel>0?' ⛽'+Math.round(p.fuel):' ⛽尽'} · ${p.target?p.target.name:'无目标'}${p.coastT>0?' 🔓脱'+Math.round(p.coastT)+'s':''}`,s[0]+7,s[1]+7);
+          else ctx.fillText(`▲${Math.round(SHOW.v(vn))}(剩${rem}颗)${p.fuel>0?' ⛽'+Math.round(SHOW.t(p.fuel)):' ⛽尽'} · ${p.target?p.target.name:'无目标'}${p.coastT>0?' 🔓脱'+Math.round(SHOW.t(p.coastT))+'s':''}`,s[0]+7,s[1]+7);
         }
       }else if(p.mine&&p===selMissile){
         ctx.fillStyle='rgba(159,212,255,.9)';ctx.font='10px Consolas';ctx.textAlign='left';ctx.textBaseline='top';

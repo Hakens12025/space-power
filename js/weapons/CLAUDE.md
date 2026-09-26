@@ -7,6 +7,7 @@
 - `56-step-projectiles.js` 弹丸推进与引导;`57-step-weapons.js` 冷却 / 装填 / 自动索敌与自动齐射;`58-firecontrol.js` 火控序列引擎侧(`fcGate` / `fcSolve` / `fcRuns`)
 
 ## 射程与瞄准
+- 设计数据按现实单位写,经 core/00 的 `PHYS` 换成引擎单位(速度 x `TIME_K`、加速度 x `TIME_K`²、时长 / `TIME_K`);引擎内部按"游戏秒"跑(1 游戏秒 = `TIME_K` 物理秒),内部的导引 / 控制常数仍是游戏单位。
 - 和感知 / 交战 / 游玩区挂钩的长度一律写成 `基准 * CFG.scale`(core/00 的统一尺度倍数,现为 1);速度、时间、角度、像素、亮度不乘。改倍数要看的漂移比值写在 `CFG.scale` 的注释里。
 - 没有射程门。主炮每发带高斯角散布 `macSigma`,命中率 P(d) = erf(`MAC_HIT_R` / (σ·d·√2))。距离一律调 `macHitProb` / `macRangeAt` / `macEffRange`(= 50% 把握距离),不写公里数。
 - 导弹射程 = 燃料:`mslReach(s)` 是动力射程,之外滑行。自动齐射只在 `mslReach` 内打;玩家的火控序列不限。

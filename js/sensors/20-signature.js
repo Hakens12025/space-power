@@ -87,7 +87,7 @@ const SENS = {
      只算进攻性发射(fireMAC / fireMissiles);拦截弹与诱饵弹是防御,不罚。
      2026-09-26 整体 x1/5,上文旧距离按 1/5 读(DD 现约 9.6 万 → 19.2 万)。 */
   P_FIRE: 3.0,         // 开火那几秒的功耗档(= P_ENG_MAIN)
-  FIRE_S: 8,           // 开火之后亮多少模拟秒
+  FIRE_S: PHYS.t(80),  // 开火之后亮多久:物理 80 s
   EMIT_P: { silent: 0, paint: 1.0, jam: 2.0 }, // 发射档:功耗 = 射频响度,同一张表
   SOLAR_K: 1,          // ENV2 晒热:size x SOLAR_K x 相位;熄火冷船朝阳面亮一倍(红外页 IRM_SOLAR.S)
   BG_G0: 1,            // ENV2 背景受限的参照:lo = 亮度 / √(1 + 背景 / BG_G0);单位 = 发现线(红外页 IRM_SOLAR.G0)

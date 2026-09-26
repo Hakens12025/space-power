@@ -178,8 +178,8 @@ function fmbInfo(st){
   set(L.state,st.state);
   set(L.mode,fmbModeText(st.mode)); // FM3-1 三模式文案统一走 fmbModeText
   set(L.ftgt,st.ftName);
-  set(L.ctr,Math.round(st.cx/1000)+'k, '+Math.round(st.cy/1000)+'k · '+Math.round(st.avgV)+' km/s');
-  set(L.spd,st.uncap?'不限速':(st.spd===0?'0 · 定速停':Math.round(st.spd)+' km/s')); // FM2:加权平均,不再是组内最低
+  set(L.ctr,Math.round(st.cx/1000)+'k, '+Math.round(st.cy/1000)+'k · '+Math.round(SHOW.v(st.avgV))+' km/s');
+  set(L.spd,st.uncap?'不限速':(st.spd===0?'0 · 定速停':Math.round(SHOW.v(st.spd))+' km/s')); // FM2:加权平均,不再是组内最低
   set(L.dev,(st.dev/1000).toFixed(1)+'k');
   set(L.hp,Math.round(st.hpFrac*100)+'% · '+Math.round(st.hp)+'/'+Math.round(st.mhp));
   if(L.hpbar){

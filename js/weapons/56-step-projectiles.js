@@ -79,7 +79,7 @@ function stepBeaconProj(p,dt){ // 侦察信标(v113):飞抵部署,遥控开关�
         else{
           const dir=V.norm(toP);
           let sDes=Infinity;
-          if(pd<90000)sDes=Math.min(sDes,Math.max(1500,Math.sqrt(2*150*pd*0.6))); // DS190
+          if(pd<90000)sDes=Math.min(sDes,Math.max(1500,Math.sqrt(2*MSL_ACC*pd*0.6))); // DS190
           if(p.fuel>0){let dv=Math.max(-150*dt,Math.min(150*dt,sDes-p.spd));const c=Math.abs(dv)/150;if(c>p.fuel){dv*=p.fuel/c;p.fuel=0;}else p.fuel-=c;p.spd+=dv;} // DS190
           const tr=2.0/(1+pv/2500);let nd;
           if(pv>1&&p.fuel>0){const cur=V.norm(p.vel);nd=V.slerp(cur,dir,Math.min(1,tr*dt));p.fuel=Math.max(0,p.fuel-V.angle(cur,nd)*0.5);}
@@ -126,7 +126,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         }
         const pdir=V.norm(toP);
         let pspdDes=Infinity;
-        if(pdist<90000)pspdDes=Math.min(pspdDes,Math.max(1500,Math.sqrt(2*150*pdist*0.6))); // 接近减速。DS190:曲线也按 150 算——朋友版这处漏改,会按 200 的能力规划刹车→冲过布设点
+        if(pdist<90000)pspdDes=Math.min(pspdDes,Math.max(1500,Math.sqrt(2*MSL_ACC*pdist*0.6))); // 接近减速。DS190:曲线也按 150 算——朋友版这处漏改,会按 200 的能力规划刹车→冲过布设点
         if(p.fuel>0){
           let dv=Math.max(-150*dt,Math.min(150*dt,pspdDes-p.spd)); // DS190
           const cost=Math.abs(dv)/150; // DS190
@@ -208,7 +208,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         // 飞向最后已知位置(巡航加速:有燃料就飞快点到点变雷,燃料尽只能滑行)
         const kvn=V.len(p.vel);
         if(p.fuel>0){ // 朝最后已知位置加速到巡航(用剩余燃料,能到就行)
-          const kSpdDes=Math.min((p.vPeak||7000),Math.max(1500,Math.sqrt(2*150*Math.max(0,kdist-1200)*0.5))); // DS190
+          const kSpdDes=Math.min((p.vPeak||PHYS.v(700)),Math.max(1500,Math.sqrt(2*MSL_ACC*Math.max(0,kdist-1200)*0.5))); // DS190
           let dv=Math.max(-150*dt,Math.min(150*dt,kSpdDes-p.spd)); // DS190
           const cost=Math.abs(dv)/150; // DS190
           if(cost>p.fuel){dv*=p.fuel/cost;p.fuel=0;}else p.fuel-=cost;
@@ -263,18 +263,18 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
       let spdDes=Infinity;
       if(p.vPeak){ // 有速度剖面(所有火Missiles发射的导弹)
         if(dist>p.decelDist)spdDes=p.vPeak; // 巡航段:高速,不耗油
-        else spdDes=Math.max(p.vTerm,Math.sqrt(p.vTerm*p.vTerm+2*150*dist)); // 减速段:到目标=vTerm(DS190:加速度 150)
+        else spdDes=Math.max(p.vTerm,Math.sqrt(p.vTerm*p.vTerm+2*MSL_ACC*dist)); // 减速段:到目标=vTerm(DS190:加速度 150)
         // DS191(用户令"越快越不好转弯,不能无脑快"):大转弯(与当前航向夹角 >~17°)限速,降速才转得动;复锁/绕行不再全速冲。
         // 朝向取速度方向 V.norm(p.vel)——弹丸没有 facing 字段(朋友版这处写的 p.facing 恒为 undefined,限速从未生效过),下面旧逻辑兜底分支用的也是速度方向。
         const angTo=vn>5?V.angle(V.norm(p.vel),dir):0;
         if(angTo>0.3)spdDes=Math.min(spdDes,Math.max(p.vTerm,2500));
         // 燃料对称安全帽:按当前速度减速回vTerm需(vTerm外的燃料),再留净机动燃料——超了自动降速(加速多久留多久减速/滑行修正吃油→降速)
-        const safe=Math.max(p.vTerm,p.vTerm+Math.max(0,p.fuel-(p.netReserve||20))*150); // DS190:安全帽折算同步 150(用 200 会高估减速能力→放宽减速段→命中速度偏高)
+        const safe=Math.max(p.vTerm,p.vTerm+Math.max(0,p.fuel-(p.netReserve||20))*MSL_ACC); // DS190:安全帽折算同步 150(用 200 会高估减速能力→放宽减速段→命中速度偏高)
         spdDes=Math.min(spdDes,safe);
       }else{ // 旧逻辑兜底(手动构造的导弹)
         const ang=vn>5?V.angle(V.norm(p.vel),dir):0;
         if(ang>0.25)spdDes=Math.min(spdDes,1800+ang*5200); // 需大机动:限速换取转向(越快越拐不过弯)
-        if(dist<90000)spdDes=Math.min(spdDes,Math.max(1500,Math.sqrt(2*150*dist*0.6))); // DS190
+        if(dist<90000)spdDes=Math.min(spdDes,Math.max(1500,Math.sqrt(2*MSL_ACC*dist*0.6))); // DS190
       }
       // 有限加减速(加速=减速 150 km/s²,DS190) + 燃料限制:加减速/转向都耗燃料,耗尽只能滑行
       if(p.fuel>0){

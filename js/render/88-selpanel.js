@@ -14,10 +14,10 @@ const KIND_INFO={
   mac:{on:'macOn',
     range:s=>macEffRange(s),
     maxRange:s=>macRangeAt(s,0.1),
-    tip:s=>`MAC轴炮 · 散布 ${(sReq(s,'macSigma')*1000).toFixed(1)} 毫弧 · 命中率 50% ≈ ${Math.round(macEffRange(s)/1000)}k / 10% ≈ ${Math.round(macRangeAt(s,0.1)/1000)}k · 伤害${s.macDmg||0} · 装填${Math.round(s.macReload||30)}s · 需火控开+机头对准+跟踪级`},
+    tip:s=>`MAC轴炮 · 散布 ${(sReq(s,'macSigma')*1000).toFixed(1)} 毫弧 · 命中率 50% ≈ ${Math.round(macEffRange(s)/1000)}k / 10% ≈ ${Math.round(macRangeAt(s,0.1)/1000)}k · 伤害${s.macDmg||0} · 装填${Math.round(SHOW.t(s.macReload||30))}s · 需火控开+机头对准+跟踪级`},
   msl:{on:'mslOn',
     range:s=>mslReach(s),
-    tip:s=>`导弹齐射 · 动力射程 ≈ ${Math.round(mslReach(s)/1000)}k(之外滑行,靠数据链)· 每组${s.mslPer||12}枚×${s.cells||4}单元 · 单元装填${s.mslReload||60}s · 需火控开+目标跟踪级`},
+    tip:s=>`导弹齐射 · 动力射程 ≈ ${Math.round(mslReach(s)/1000)}k(之外滑行,靠数据链)· 每组${s.mslPer||12}枚×${s.cells||4}单元 · 单元装填${Math.round(SHOW.t(s.mslReload||60))}s · 需火控开+目标跟踪级`},
   ciws:{on:'ciwsOn',
     range:s=>ciwsOf(s).outer,
     tip:s=>{const c=ciwsOf(s);return `近防 · 外圈${Math.round(c.outer/1000)}k拦截弹 · 内圈${Math.round(c.inner/1000)}k近防炮 · 库存${s.interceptor}枚(被动防御,来袭才发射)`;}},
@@ -47,8 +47,8 @@ function cmdList(s){
 function specItems(s){
   const items=[
     ['结构',s.maxHp],
-    ['加速',s.thrust],
-    ['转向',s.turnRate],
+    ['加速',SHOW.g(s.thrust).toFixed(1)+' g'], // 2026-09-26 界面显示物理单位(core/00 的 SHOW)
+    ['转向',(SHOW.w(s.turnRate)*180/Math.PI).toFixed(1)+'°/s'],
     // SN4:旧的「传感器」是舰船自己的一个标量半径,那个字段已删。新模型里一部雷达有两种模式,量程各不相同,所以分两条:
     //   照射 = 我主动照【标准目标】(反射 1.0)能照多远;静听 = 我被动听一部【标准发射机】(emit 1、paint 档)能听多远。
     //   静听那条靠合成对象取值(契约里 hearRangeOf({emit:1,emitMode:'paint'},recv) 那条先例),本文件不重排任何公式。
@@ -59,7 +59,7 @@ function specItems(s){
     ['火控通道',s.guideChan],
   ];
   for(const w of (s.weapons||[])){
-    if(w.kind==='mac')items.push(['主炮',s.macDmg>0?(s.macDmg+'×'+Math.round(s.macReload)+'s · 50%@'+Math.round(macEffRange(s)/1000)+'k'):'无']); // WR1:规格条带上命中率 50% 的距离
+    if(w.kind==='mac')items.push(['主炮',s.macDmg>0?(s.macDmg+'×'+Math.round(SHOW.t(s.macReload))+'s · 50%@'+Math.round(macEffRange(s)/1000)+'k'):'无']); // WR1:规格条带上命中率 50% 的距离
     else if(w.kind==='msl')items.push(['导弹',s.ammo+'枚×'+s.cells+'组']);
     else if(w.kind==='ciws'){const c=ciwsOf(s);items.push(['拦截弹',s.interMax+'枚'],['近防',Math.round(c.outer/1000)+'k/'+Math.round(c.inner/1000)+'k']);}
   }
@@ -82,7 +82,7 @@ const ENG_LAMPS=[
 function engRows(s){
   const a=s.accNow||0;
   const lamps=ENG_LAMPS.map(([t,c,on])=>`<span class="eng-l${on(s)?' on':''}" style="color:${c}">${t}</span>`).join('');
-  return `<span class="eng-a">${a.toFixed(1)} km/s²</span>${lamps}`;
+  return `<span class="eng-a">${SHOW.g(a).toFixed(1)} g</span>${lamps}`; // 2026-09-26 物理单位,折成 g
 }
 /* SN4 blocker E【我此刻有多亮】。全库唯一的辐射读数原来在 87-fleetcards 那块被 RF2 藏死的舰队信息面板里(2026-09-22 已整块删除)——
    玩家一个字都看不到,却要靠它决定开不开雷达:这是「隐蔽 vs 精确」这个三角唯一的决策依据。
@@ -112,7 +112,7 @@ function senseRows(s){
 function weaponRows(s){
   let h='';
   for(const w of (s.weapons||[])){
-    if(w.kind==='mac')h+=`<div class="row"><span class="k">主炮</span><span class="v">${s.macCd<=0?'就绪':Math.ceil(s.macCd)+'s'}</span></div>`;
+    if(w.kind==='mac')h+=`<div class="row"><span class="k">主炮</span><span class="v">${s.macCd<=0?'就绪':Math.ceil(SHOW.t(s.macCd))+'s'}</span></div>`;
     else if(w.kind==='msl')h+=`<div class="row"><span class="k">导弹</span><span class="v">${readyCells(s)}/${s.cells}组 · 弹${s.ammo}枚</span></div>`;
     else if(w.kind==='ciws')h+=`<div class="row"><span class="k">拦截弹</span><span class="v">${s.interceptor}/${s.interMax}枚</span></div>`;
   }
@@ -276,7 +276,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
       ['单枚伤',rep.missDmg||12],
       ['合计伤',Math.round(dmgSum)],
       ['总枚数',total],
-      ['最紧燃料',Math.ceil(Math.max(0,minFuel))+'s'],
+      ['最紧燃料',Math.ceil(SHOW.t(Math.max(0,minFuel)))+'s'],
     ].map(it=>`<span class="fi"><i>${it[0]}</i><b>${it[1]}</b></span>`).join('');
     const fu=Math.max(0,Math.min(100,minFuel));
     box.innerHTML=`
@@ -285,8 +285,8 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
       <div class="row"><span class="k">状态</span><span class="v">${stts}</span></div>
       <div class="row"><span class="k">目标</span><span class="v">${tgts}</span></div>
       <div class="row"><span class="k">引导</span><span class="v">${gds}</span></div>
-      <div class="row"><span class="k">速度</span><span class="v">${Math.round(maxSpd)} km/s(最快)</span></div>
-      <div class="row"><span class="k">燃料</span><span class="v">最紧 ${minFuel>0?Math.ceil(minFuel)+'s':'耗尽(滑行)'}</span></div>`;
+      <div class="row"><span class="k">速度</span><span class="v">${Math.round(SHOW.v(maxSpd))} km/s(最快)</span></div>
+      <div class="row"><span class="k">燃料</span><span class="v">最紧 ${minFuel>0?Math.ceil(SHOW.t(minFuel))+'s':'耗尽(滑行)'}</span></div>`;
     updateCmdBar([]);
     return;
   }
@@ -307,10 +307,10 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
     const fu=Math.max(0,Math.min(100,m.fuel||0)); // 燃料满值100s,直接当百分比
     box.innerHTML=`
       <div class="hpbar"><i style="width:${fu}%;background:${fu>30?'var(--state-active)':'var(--state-warn)'}"></i></div>
-      <div class="row"><span class="k">燃料</span><span class="v">${m.fuel>0?Math.ceil(m.fuel)+'s':'耗尽(滑行)'}</span></div>
+      <div class="row"><span class="k">燃料</span><span class="v">${m.fuel>0?Math.ceil(SHOW.t(m.fuel))+'s':'耗尽(滑行)'}</span></div>
       <div class="row"><span class="k">状态</span><span class="v">${stt}</span></div>
       <div class="row"><span class="k">剩余</span><span class="v">${m.count||12} 颗</span></div>
-      <div class="row"><span class="k">速度</span><span class="v">${Math.round(V.len(m.vel))} km/s</span></div>
+      <div class="row"><span class="k">速度</span><span class="v">${Math.round(SHOW.v(V.len(m.vel)))} km/s</span></div>
       <div class="row"><span class="k">目标</span><span class="v">${tgt}${tdist?' · '+Math.round(tdist/1000)+'k':''}</span></div>
       <div class="row"><span class="k">引导</span><span class="v">${guideDesc(m)}</span></div>`;
     updateCmdBar([]); // 导弹不可开关操作
@@ -324,8 +324,8 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
     const stt=m.arrived?(m.on?'开机 · 探测中':'静默待机'):'飞行中';
     box.innerHTML=`
       <div class="row"><span class="k">状态</span><span class="v">${stt}</span></div>
-      <div class="row"><span class="k">开机时间</span><span class="v">${m.on&&m.life>0?Math.round(m.life)+'s':(m.arrived?'关机':'—')}</span></div>
-      <div class="row"><span class="k">速度</span><span class="v">${Math.round(V.len(m.vel))} km/s</span></div>`;
+      <div class="row"><span class="k">开机时间</span><span class="v">${m.on&&m.life>0?Math.round(SHOW.t(m.life))+'s':(m.arrived?'关机':'—')}</span></div>
+      <div class="row"><span class="k">速度</span><span class="v">${Math.round(SHOW.v(V.len(m.vel)))} km/s</span></div>`;
     updateCmdBar([]);
     return;
   }
@@ -390,7 +390,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
   box.innerHTML=`
     <div class="hpbar"><i style="width:${fr*100}%;background:${fr>0.35?'var(--state-ok)':'var(--state-warn)'}"></i></div>
     <div class="row"><span class="k">结构</span><span class="v">${Math.max(0,Math.round(s.hp))} / ${s.maxHp}</span></div>
-    <div class="row"><span class="k">速度</span><span class="v">${Math.round(V.len(s.vel))} km/s</span></div>
+    <div class="row"><span class="k">速度</span><span class="v">${Math.round(SHOW.v(V.len(s.vel)))} km/s</span></div>
     <div class="row"><span class="k">加速度</span><span class="v">${engRows(s)}</span></div>
     <div class="row"><span class="k">目标</span><span class="v">${t?t.name+' · '+Math.round(dist/1000)+'k':'—'}</span></div>
     ${senseRows(s)}
@@ -590,7 +590,7 @@ function followBtnSync() { // 两个钮的可用态与高亮:武装中点亮「�
 })();
 /* SL1b(2026-09-22)从 render/87-fleetcards【纯移动】过来:那文件删到只剩它一个函数。core/99 每帧调。 */
 function updateTop(){ // 每帧轻量刷新:顶栏时钟与倍速读数
-  const mm=String(Math.floor(simTime/60)).padStart(2,'0'),ss=String(Math.floor(simTime%60)).padStart(2,'0');
-  document.getElementById('clock').textContent=`${mm}:${ss}`;
+  const T=SHOW.t(simTime),hh=Math.floor(T/3600),mm=String(Math.floor(T/60)%60).padStart(2,'0'),ss=String(Math.floor(T%60)).padStart(2,'0'); // 2026-09-26 时钟走物理时间(模拟时间 x TIME_K),满一小时加时位
+  document.getElementById('clock').textContent=(hh?hh+':':'')+`${mm}:${ss}`;
   document.getElementById('rate').textContent=(running?'x'+rate:'⏸ x'+rate)+((typeof tcReadout==='function')?tcReadout():''); // TC1 被接触降速压住时写出「→ x6 定位」
 }

@@ -81,7 +81,7 @@ function stepWeaponSystems(dt){
       if(projectiles.some(q=>q.type==='interceptor'&&!q.done&&q.target===p))continue; // 该来袭组已有拦截弹在追:防重复(一组射手只吃一次拦截)
       const need=Math.ceil((p.count||16)*1.2); // 拦截弹数 = 来袭颗数×1.2 向上取整(覆盖拦截失败)
       if(x.interceptor>=need){
-        x.interceptor-=need;x.ciwsCd=3; // 拦截弹发射间隔冷却(3s)
+        x.interceptor-=need;x.ciwsCd=PHYS.t(30); // 拦截弹发射间隔冷却(物理 30 s)
         fireInterceptor(x,p,need);
       }
       break;

@@ -59,13 +59,13 @@ function resetRangeStat(){ // 归零:调完一组参数不用重开场景就能�
 const RANGE_KNOBS=[
   {k:'evadeOn',    nm:'闪避机动',  type:'bool'},
   {k:'evadeR',     nm:'闪避半径',  type:'enum',vals:[2000,6000,12000,24000].map(v=>v*CFG.scale),fmt:v=>Math.round(v/1000)+'k'}, // 2026-09-26 x1/5(靶阵随单局地图缩):原 [10000,30000,60000,120000]
-  {k:'evadeT',     nm:'换点周期',  type:'num', min:5,max:60,step:5,      fmt:v=>v+'s'},
+  {k:'evadeT',     nm:'换点周期',  type:'num', min:5,max:60,step:5,      fmt:v=>SHOW.t(v)+'s'},
   {k:'speedCmd',   nm:'闪避速度',  type:'gear'},
   {k:'inter',      nm:'拦截弹库存',type:'num', min:0,max:768,step:64,    fmt:v=>v+'枚'},
   {k:'interHitMul',nm:'拦截命中率',type:'num', min:0,max:2,step:0.1,     fmt:v=>v.toFixed(1)+'×'},
   {k:'inner',      nm:'内圈近防率',type:'num', min:0,max:0.95,step:0.05, fmt:v=>Math.round(v*100)+'%'},
   {k:'chaff',      nm:'干扰弹率',  type:'num', min:0,max:0.8,step:0.05,  fmt:v=>Math.round(v*100)+'%'},
-  {k:'decoyAuto',  nm:'诱饵弹自动',type:'enum',vals:[0,20,10,5],         fmt:v=>v?('每'+v+'s'):'关'},
+  {k:'decoyAuto',  nm:'诱饵弹自动',type:'enum',vals:[0,20,10,5],         fmt:v=>v?('每'+SHOW.t(v)+'s'):'关'},
   {k:'size',       nm:'体型',      type:'num', min:0.2,max:2,step:0.1,   fmt:v=>v.toFixed(1)}, // SN4:原「信号特征」。新模型里这一格同时是光学红外底数与雷达反射基数,改名免得与下面的隐身混成一件事
   {k:'stealth',    nm:'隐身',      type:'num', min:0.1,max:1,step:0.1,   fmt:v=>v.toFixed(1)}, // SN4:(0,1] 反射倍率,只乘雷达反射、不乘红外——把它调到底也不会让靶在光学上变暗。上界钉死 1:大于 1 的反射倍率在模型里没有意义,手改过的存档会被 rangeClampOne 拉回来
   {k:'emit',       nm:'发射档',    type:'enum',vals:[0,1,2],             fmt:v=>SENS.EMIT_LABEL[SENS.EMIT_MODES[v]]}, // SN4 必须用【数字索引】:rangeClampOne 的 enum 分支首行是 Number(v),字符串枚举必得 NaN 再无声落回默认(玩家点了没反应、还存不住)。索引→模式的映射只有 SENS.EMIT_MODES 一份,这里不另抄一张表
@@ -238,7 +238,7 @@ function trStatLines(t,idx){ // 单个靶的读数(4 行)
   const span=(st.firstT<0)?0:(st.lastT-st.firstT);
   const dps=(span>0.5)?(st.dmg/span):null;
   const used=Math.max(0,(t.interMax||0)-(t.interceptor||0));
-  return `<div><b>${t.name}</b> 承伤 ${Math.round(st.dmg)} · 命中 ${st.hits} 次 · 均输出 ${dps===null?'—':(Math.round(dps)+'/s')} <span style="color:var(--dim)">(${span>0?Math.round(span):0}s)</span></div>`+
+  return `<div><b>${t.name}</b> 承伤 ${Math.round(st.dmg)} · 命中 ${st.hits} 次 · 均输出 ${dps===null?'—':(Math.round(SHOW.w(dps))+'/s')} <span style="color:var(--dim)">(${span>0?Math.round(SHOW.t(span)):0}s)</span></div>`+
     `<div>　MAC ${st.macHits} 发/${Math.round(st.macDmg)} · 导弹 ${st.mslHits} 次/${Math.round(st.mslDmg)}</div>`+
     `<div>　到达 ${st.arrived}${st.reArr?('(+'+st.reArr+'复锁)'):''} → 干扰 -${st.chaffed} → 内圈 -${st.ciwsIn} → 命中 ${st.pierced} 枚</div>`+
     `<div>　拦截弹 ${t.interceptor||0}/${t.interMax||0}<span style="color:var(--dim)">(已用 ${used})</span></div>`+
