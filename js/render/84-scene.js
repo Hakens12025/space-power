@@ -117,6 +117,17 @@ function insetVel(s){ // 我方知道的速度 km/游戏秒:敌舰拿尾迹里�
   const t=a[3*n+2];let b=-1;for(let i=n-1;i>=0&&a[3*i]===a[3*i]&&t-a[3*i+2]<=8;i--)b=i;
   return (b<0||t-a[3*b+2]<1.5)?null:Math.hypot(a[3*n]-a[3*b],a[3*n+1]-a[3*b+1])/(t-a[3*b+2]);
 }
+function insetVelV(s){ // 我方知道的速度矢量 km/游戏秒(同 insetVel 的差分口径),凑不出给 null
+  if(adminMode||s.side==='blue')return [s.vel[0],s.vel[1]];
+  const a=TRAIL.m.get(s.id);if(!a)return null;let n=a.length/3-1;while(n>=0&&a[3*n]!==a[3*n])n--;if(n<0)return null;
+  const t=a[3*n+2];let b=-1;for(let i=n-1;i>=0&&a[3*i]===a[3*i]&&t-a[3*i+2]<=8;i--)b=i;
+  if(b<0||t-a[3*b+2]<1.5)return null;const k=1/(t-a[3*b+2]);return [(a[3*n]-a[3*b])*k,(a[3*n+1]-a[3*b+1])*k];
+}
+function insetDR(s){ // 敌舰的航位推算(dead reckoning):最近一次估计位置 + 估计速度 x 距那次估计的模拟秒(封顶 3 游戏秒),镜头跟得顺、不随感知拍一跳一跳
+  const p=insetKnown(s);if(!p||adminMode||s.side==='blue')return p;
+  const v=insetVelV(s),tk=trkOf('blue',s),dt=(v&&tk&&tk.lastT>-1e8)?Math.min(3,Math.max(0,simTime-tk.lastT)):0;
+  return dt?[p[0]+v[0]*dt,p[1]+v[1]*dt]:p;
+}
 function insetVpri(){if(!INSET.vpri){let m=1;for(const k in CLS_MOB)for(const g of CLS_MOB[k].speedGears)if(g>m)m=g;INSET.vpri=m;}return INSET.vpri;} // 凑不出估计时的保守先验:舰级表里最快的一档(公开数据,不读这艘船)
 function insetRate(){return running?(TC.eff>0?TC.eff:rate):0;} // 当前倍速(游戏秒 / 墙钟秒),暂停为 0
 function insetEvents(now){ // 导演的事件源(只读我方知道的事):损失 / 击沉 / 中弹 / 命中 / 认出 / 首次定位;换局清空
@@ -180,15 +191,15 @@ const insetIntel=k=>k==='id'||k==='fix'; // 认出与首次定位同属情报类
 function insetLbl(D){const l=D.evs[0].lbl||'';if(D.n<2)return l;let nf=0,ni=0,li='';for(const e of D.evs){if(e.k==='fix')nf++;else if(e.k==='id'){ni++;li=e.lbl;}}
   if(nf&&ni)return '定位'+(nf>1?' ×'+nf:'')+' · '+(ni>1?'认出 ×'+ni:li);if(D.k==='id')return '认出 ×'+D.n;const i=l.indexOf(' ');return i<0?l+' ×'+D.n:l.slice(0,i)+' ×'+D.n+l.slice(i);}
 function insetCol(D){return D.k==='m'?'rgb(255,154,85)':((D.k==='loss'||D.dyn)?'#ff6b6b':'#ffd166');}
-function insetBuild(e,now){ // 开播:敌方主体在这一帧取一次我方知道的位置,之后不跟;我方中弹跟着那艘船。取不到位置给 null(事件留在队列里下一帧再试)
+function insetBuild(e,now){ // 开播:敌方主体跟着它走(航位推算),击沉 / 损失定在爆炸处,我方中弹跟着那艘船。取不到位置给 null(事件留在队列里下一帧再试)
   const D={k:e.k,p:e.p,key:e.k+':'+e.seq,dwell:INSET.DW[e.k]||3000,el:0,ship:e.ship||null,n:1,evs:[e],qs:[],vm:0,dyn:false,sub:null},S=CFG.scale;
   if(e.k==='hit'&&e.ship&&e.ship.side==='blue'){if(e.ship.dead)return null;D.dyn=true;}
   else{const big=e.k==='kill'||e.k==='loss',q=big?(e.q||e.pos):((e.ship&&!e.ship.dead&&insetKnown(e.ship))||e.q||e.pos);if(!q)return null;
     D.qs.push(q.slice());
     if(insetIntel(e.k))for(const o of INSET.ev){if(o===e||o.shown||!insetIntel(o.k)||!o.ship||Math.abs(o.t-e.t)>INSET.MERGE_T)continue;const p=insetKnown(o.ship); // 2 s 内相距不远的情报类一起框
       if(p&&Math.hypot(p[0]-q[0],p[1]-q[1])<=INSET.MERGE_R*S){o.shown=true;D.evs.push(o);D.qs.push(p.slice());D.n++;}}
-    if(e.k!=='loss'){let b=null,bd=INSET.CTX_E1*S;for(const o of ships){if(o.dead||o.side!=='blue')continue;const d=Math.hypot(o.pos[0]-q[0],o.pos[1]-q[1]);if(d<bd){bd=d;b=o;}}if(b)D.qs.push([b.pos[0],b.pos[1]]);} // 附近有我方舰就一起框:看得出是谁看到 / 打到的它
-    D.sub=insetFixSub(D);}
+    if(e.k!=='loss'){let b=null,bd=INSET.CTX_E1*S;for(const o of ships){if(o.dead||o.side!=='blue')continue;const d=Math.hypot(o.pos[0]-q[0],o.pos[1]-q[1]);if(d<bd){bd=d;b=o;}}if(b){D.qs.push([b.pos[0],b.pos[1]]);D.buddy=b;}} // 附近有我方舰就一起框:看得出是谁看到 / 打到的它
+    D.sub=insetFixSub(D);if(!big&&e.ship&&!e.ship.dead){D.fol=true;D.sub.still=false;}} // 2026-09-27 敌方主体改成跟随(用户:"我方的镜头都是会跟着船走的,为什么敌方不能");首帧与跟随同一组点,不跳
   e.shown=true;INSET.fx=null;if(e.k==='hit'||e.k==='kill'||e.k==='loss')insetFx(D,now); // 换段:上一段没画完的爆闪不带过来
   return D;
 }
@@ -197,6 +208,12 @@ function insetPlaySub(D,now,inc){ // 播放中这一帧的取景
     if(!tg.dead&&L.length){D.gl=-1;D.sub=insetSubject([tg],L,'播放 · 来袭导弹 → '+tg.name+(isFinite(L[0].eta)?' · '+Math.round(SHOW.t(L[0].eta))+' s':''));D.sub.key=D.key;D.sub.enter=true;return D.sub;}
     if(D.gl<0)D.gl=now;return (D.sub&&now-D.gl<INSET.GRACE)?D.sub:null;} // 目标导弹一时看不见:宽限 GRACE 沿用上一帧
   if(D.dyn){if(!D.ship.dead){D.sub=insetSubject([D.ship],inc.filter(m=>m.tgt===D.ship),'');D.sub.key=D.key;D.sub.enter=true;}}
+  else if(D.fol){const P=[];let vx=0,vy=0,nv=0; // 跟着敌舰走:每帧按航位推算取位置,速度前后各看 CTX_T/2(同我方舰的按情况取景);开播时附近那艘我方舰还在附近就一起框(双人镜头)
+    for(const e of D.evs){const s=e.ship;if(!s||s.dead)continue;const q=insetDR(s);if(!q)continue;P.push(q);const v=insetVelV(s);if(v){vx+=v[0];vy+=v[1];nv++;}}
+    if(P.length){let ax=0,ay=0;for(const q of P){ax+=q[0];ay+=q[1];}ax/=P.length;ay/=P.length;if(nv){vx/=nv;vy/=nv;}
+      const tv=PHYS.t(INSET.CTX_T)/2,pts=[];for(const q of P)pts.push([q[0],q[1]],[q[0]+vx*tv,q[1]+vy*tv],[q[0]-vx*tv,q[1]-vy*tv]);
+      const b=D.buddy;if(b&&!b.dead&&Math.hypot(b.pos[0]-ax,b.pos[1]-ay)<=INSET.CTX_E1*CFG.scale)pts.push([b.pos[0],b.pos[1]]);
+      D.sub={key:D.key,kk:D.sub.kk,pts:pts,ind:[],ax:ax,ay:ay,vx:vx,vy:vy,vm:insetVpri(),wmax:0,wm:0,still:false,vt:0,enter:true,lbl:''};}} // 丢了位置就停在最后那一帧
   else{let v=0,pr=false;for(const e of D.evs){const s=e.ship;if(!s||s.dead||e.k==='kill'||e.k==='loss')continue;const u=insetVel(s);if(u===null)pr=true;else v=Math.max(v,u);}
     D.ve=Math.max(D.ve||0,v);D.vm=pr?Math.max(D.ve,insetVpri()):D.ve;D.sub.vt=D.vm*insetRate()*D.dwell/1000;} // 停留期间敌舰按已知速度能走多远(限制推近);每帧重估、只增不减,凑不出估计(首次定位刚开播)先按先验
   D.sub.lbl='播放 · '+insetLbl(D);return D.sub;
