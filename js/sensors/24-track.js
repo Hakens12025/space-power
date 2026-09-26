@@ -62,11 +62,11 @@ function trkEnsure(side,src){const m=trkTab(side);let k=m.get(src);if(k===undefi
 /* 生产者的一拍:椭圆推进 → 最后定位记录 → 握没握着(存下来,不在读的时候现算) */
 function trkStep(tk,t,obs,el){
   const c=tk.cov;
-  TRK_IDO.opt=TRK_IDO.lis=TRK_IDO.act=false;          // TK2.6:模块级草稿,每拍清零后交给内核记【哪几条通道认出了它】(不分配)
+  TRK_IDO.opt=TRK_IDO.lis=TRK_IDO.act=TRK_IDO.vis=false;          // TK2.6:模块级草稿,每拍清零后交给内核记【哪几条通道认出了它】(不分配)
   const held=stepCov(t,c,obs,el,TRK_IDO);
   if(c.fix&&c.n>0){tk.lastT=simTime;tk.lastPos=[c.x,c.y,t.pos[2]];tk.lastVel=t.vel.slice();}
   if(held&&tk.tn===0)tk.tn=++TRK_TN[tk.by]; // TK4c 航迹号:这一方第一次握住它的那一拍发号,之后终身不变(丢了再捡回来还是这个号)。只用于显示 —— 不当键、不当种子、不参与任何取舍
-  if(held){if(TRK_IDO.opt||TRK_IDO.act)tk.idc=true;}else tk.idc=false; // TK2.6 确认锁存:光学轮廓或照射回波认出过 ⇒ 确认;接触丢了才清。与椭圆的身份位同一拍立、同一拍清
+  if(held){if(TRK_IDO.opt||TRK_IDO.act||TRK_IDO.vis)tk.idc=true;}else tk.idc=false; // TK2.6 确认锁存:光学轮廓或照射回波认出过 ⇒ 确认;接触丢了才清。与椭圆的身份位同一拍立、同一拍清
   tk.held=held;
   return held;
 }
@@ -162,7 +162,7 @@ function trkPid(tk){return trkIdLvl(tk)>=ID_SUS&&trkIdType(tk).kind==='ship';}
    ============================================================================ */
 const ID_UNK=0, ID_SUS=1, ID_CON=2;
 const TRK_TN={blue:0,red:0}; // TK4c 两方各自的航迹号计数器;initFleet 每局归零(旧局船的航迹保留旧号,不重发)
-const TRK_IDO={opt:false,lis:false,act:false};
+const TRK_IDO={opt:false,lis:false,act:false,vis:false}; // vis = 可见光圈(2026-09-26)
 
 /* 这条航迹的身份档位。夹具写出来的"idc 为真但 idn 为假"读作未知、"idn 为真但 idc 为假"读作疑似 —— 容忍不一致的人造状态,不抛 */
 function trkIdLvl(tk){return !(tk&&tk.held&&tk.cov&&tk.cov.idn)?ID_UNK:(tk.idc?ID_CON:ID_SUS);}

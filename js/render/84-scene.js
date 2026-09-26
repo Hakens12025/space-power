@@ -16,6 +16,74 @@ function drawArena(){
   if(ax>=0&&ax<W)ctx.fillRect(ax,y0,1,y1-y0);
   if(bx>=0&&bx<W)ctx.fillRect(bx,y0,1,y1-y0);
 }
+/* 2026-09-26 可见光圈的灰色战争迷雾(用户:"让地图稍暗一点,作为灰色的战争迷雾,然后以飞船为圆心……圆形可见光区域,这个区域内所有东西均完全实时可见")。
+   业内叫视野半径 + 灰雾(RTS 的 sight radius / fog of war)。圈 = sensors/23 的 COV.VIS_R(感知内核同一个数),天体背后那一块照旧暗(视线被挡,与 senseVis 同一条规则)。
+   只在普通地图画面画。做法:1/K 分辨率的离屏层铺暗,每艘我方舰在草稿层画自己的圈、挖掉天体投下的视线阴影,再从暗层里挖掉;放大贴回,边缘自然柔化。每帧常数笔 */
+const VISF={K:4,A:0.32,cv:null,g:null,tc:null,tg:null};
+function drawVisFog(){
+  const K=VISF.K,w=Math.max(1,Math.ceil(W/K)),h=Math.max(1,Math.ceil(H/K));
+  if(!VISF.cv||VISF.cv.width!==w||VISF.cv.height!==h){
+    VISF.cv=document.createElement('canvas');VISF.cv.width=w;VISF.cv.height=h;VISF.g=VISF.cv.getContext('2d');
+    VISF.tc=document.createElement('canvas');VISF.tc.width=w;VISF.tc.height=h;VISF.tg=VISF.tc.getContext('2d');
+  }
+  const g=VISF.g,t=VISF.tg,RV=COV.VIS_R,R=RV*cam.zoom/K,sp=(x,y)=>{const q=toScreen(x,y);return [q[0]/K,q[1]/K];};
+  g.globalCompositeOperation='source-over';g.clearRect(0,0,w,h);g.fillStyle='rgba(0,0,0,'+VISF.A+')';g.fillRect(0,0,w,h);
+  g.globalCompositeOperation='destination-out';
+  for(const s of ships){
+    if(s.dead||s.side!=='blue')continue;
+    const c=sp(s.pos[0],s.pos[1]);if(c[0]+R<0||c[0]-R>w||c[1]+R<0||c[1]-R>h)continue;
+    t.globalCompositeOperation='source-over';t.clearRect(0,0,w,h);t.fillStyle='#000';t.beginPath();t.arc(c[0],c[1],R,0,6.2832);t.fill();
+    t.globalCompositeOperation='destination-out';
+    for(const b of ENV.bodies){ // 天体背后的视线阴影:两条切线之间、切点往外的那一块
+      const dx=b.x-s.pos[0],dy=b.y-s.pos[1],D=Math.hypot(dx,dy);if(!(D>b.r)||D-b.r>RV)continue;
+      const a=Math.atan2(dy,dx),hw=Math.asin(b.r/D),tl=Math.sqrt(D*D-b.r*b.r),L=D+2*RV;
+      const P=[[Math.cos(a-hw)*tl,Math.sin(a-hw)*tl],[Math.cos(a-hw)*L,Math.sin(a-hw)*L],[Math.cos(a+hw)*L,Math.sin(a+hw)*L],[Math.cos(a+hw)*tl,Math.sin(a+hw)*tl]];
+      t.beginPath();P.forEach((q,i)=>{const r=sp(s.pos[0]+q[0],s.pos[1]+q[1]);if(i)t.lineTo(r[0],r[1]);else t.moveTo(r[0],r[1]);});t.closePath();t.fill();
+    }
+    g.drawImage(VISF.tc,0,0);
+  }
+  g.globalCompositeOperation='source-over';
+  ctx.save();ctx.imageSmoothingEnabled=true;ctx.drawImage(VISF.cv,0,0,W,H);ctx.restore();
+}
+/* 2026-09-26 左下角特写窗口(用户:"点击马拉松船,我就能看到这艘船的特写……舰队也是,自适应的拉到舰队的缩放大小……要能够看到地图背景的放大效果")。
+   业内叫画中画 / 单位特写镜头(picture-in-picture / unit cam)。第二个镜头在主画布的一个裁剪框里重画:星空借主画面那两张贴图,尘埃云借地形服务的前台合成缓存放大
+   (不重算,所以会软一点),天体 / 边界 / 舰船 / 石头 / 弹丸 / 命中按特写缩放真画。选一艘:缩到舰体刚好画到最大(HULL_ZOOM.MAX);选多艘:框住全部并留边,但不比单舰更近。没选就不画 */
+const INSET={W:320,H:200,M:12,GAP:10,bot:64,botT:-1e9,x:0,y:0,w:0,h:0,on:false};
+function insetHit(sx,sy){return INSET.on&&sx>=INSET.x&&sx<=INSET.x+INSET.w&&sy>=INSET.y&&sy<=INSET.y+INSET.h;} // 点在特写框里:输入层吞掉,不落到框底下的地图
+function drawInset(){
+  INSET.on=false;
+  const sel=controlledShips().filter(s=>!s.dead);if(!sel.length)return;
+  const now=nowMs();if(now-INSET.botT>500){INSET.botT=now;const cb=document.getElementById('cmdBar');if(cb)INSET.bot=Math.max(44,H-cb.getBoundingClientRect().top);} // 底边让开指令栏
+  const w=Math.min(INSET.W,Math.round(W*0.3)),h=Math.round(w*INSET.H/INSET.W),x=INSET.M,y=H-INSET.bot-INSET.GAP-h;if(y<60)return;
+  const zMax=Math.pow(HULL_ZOOM.MAX/HULL_ZOOM.LAND,1/HULL_ZOOM.A)/vtLandKmpp(1); // 舰体刚好画到最大的那一档缩放
+  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;for(const s of sel){x0=Math.min(x0,s.pos[0]);x1=Math.max(x1,s.pos[0]);y0=Math.min(y0,s.pos[1]);y1=Math.max(y1,s.pos[1]);}
+  const z=Math.min(zMax,(w-2*70)/Math.max(1,x1-x0),(h-18-2*44)/Math.max(1,y1-y0)),cx=(x0+x1)/2,cy=(y0+y1)/2-9/z; // 框边按像素留白(舰标 + 标签),顶上让开标题条
+  const c0x=cam.x,c0y=cam.y,c0z=cam.zoom,W0=W,H0=H,comp=typeof TERR!=='undefined'?TERR.comp:null;
+  ctx.save();ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();ctx.translate(x,y);
+  cam.x=cx;cam.y=cy;cam.zoom=z;W=w;H=h;
+  try{
+    ctx.fillStyle=vtBg();ctx.fillRect(0,0,w,h);
+    const dpr=window.devicePixelRatio||1;
+    for(const c of STAR_TILE.cv)if(c)ctx.drawImage(c,0,0,Math.min(c.width,w*dpr),Math.min(c.height,h*dpr),0,0,Math.min(c.width/dpr,w),Math.min(c.height/dpr,h)); // 天在屏幕空间,借主画面的贴图
+    if(comp&&comp.cv&&comp.z>0){ // 尘埃云:前台合成缓存里对应的那一块放大
+      const k=comp.z*comp.s,sx=(cx-w/2/z-comp.wx0)*k,sy=(cy-h/2/z-comp.wy0)*k,sw=w/z*k,sh=h/z*k;
+      if(sx>=0&&sy>=0&&sx+sw<=comp.cv.width&&sy+sh<=comp.cv.height&&sw>=0.5&&sh>=0.5)ctx.drawImage(comp.cv,sx,sy,sw,sh,0,0,w,h);
+    }
+    if(typeof mapBodies==='function')mapBodies();
+    drawArena();
+    for(const s of ships)drawShip(s);
+    if(typeof drawRocks==='function')drawRocks();
+    drawProjectiles();drawHits();
+  }finally{cam.x=c0x;cam.y=c0y;cam.zoom=c0z;W=W0;H=H0;ctx.restore();}
+  INSET.x=x;INSET.y=y;INSET.w=w;INSET.h=h;INSET.on=true;
+  ctx.save();ctx.strokeStyle='rgba(143,208,255,.55)';ctx.lineWidth=1;ctx.strokeRect(x+0.5,y+0.5,w-1,h-1);
+  ctx.fillStyle='rgba(5,7,12,.72)';ctx.fillRect(x+1,y+1,w-2,18);
+  ctx.font='11px "Microsoft YaHei"';ctx.textBaseline='middle';ctx.textAlign='left';ctx.fillStyle='#cfe6ff';
+  ctx.fillText(sel.length===1?('特写 · '+sel[0].name):('特写 · '+sel.length+' 艘'),x+7,y+10);
+  const bk=60/z,pw=Math.pow(10,Math.floor(Math.log10(bk))),bkm=Math.max(pw,Math.round(bk/pw)*pw),bp=bkm*z; // 小比例尺:取整到一位有效数字
+  ctx.textAlign='right';ctx.fillStyle='#8fd0ff';ctx.fillText(bkm.toLocaleString('en-US')+' km',x+w-7,y+10);ctx.fillRect(x+w-7-bp,y+h-8,bp,2);
+  ctx.restore();
+}
 function render(){
   /* SN6 三级星图:先推进跳层动画、算出这一档缩放落在哪一层(连续权重 + 带迟滞的离散层),
      底色再按权重交叉淡化 —— 换层是淡入淡出不是跳变。详见 render/80-viewtier。 */
@@ -28,6 +96,7 @@ function render(){
   if(irOn)drawIrView();
   else if(typeof drawEnv==='function')drawEnv(); // ENV1 天体 + 太阳方向:地图事实,画在网格之后、一切接触之前(render/81-env)
   drawArena(); // 2026-09-26 单局游玩区边界:天体之后、接触之前;普通 / 红外 / 雷达三种画面都走这一行
+  if(!sv)drawVisFog(); // 2026-09-26 可见光圈的灰色迷雾:只在普通地图画面,画在一切接触之前
   if(rdOn)drawRadarView();
   if(typeof drawSunLines==='function')drawSunLines(); // 「太阳线」钮:叠在普通 / 红外 / 雷达任一画面上
   drawSignalView(); // SN6 信号视野(右下角工具钮):我方每艘舰的【被探测范围】。画在最底下——它是底图
@@ -54,6 +123,7 @@ function render(){
   drawSelection();
   if(typeof drawEdgeRuler==='function')drawEdgeRuler(); // SN8 四边刻度尺(屏幕空间的仪器边框;换层时刻度重新长出来)
   if(typeof drawTierFx==='function')drawTierFx();       // SN8 换层瞬间的大字 + 扫描线,0.7 秒内淡出;平时首句就 return
+  drawInset(); // 2026-09-26 左下角特写窗口:压在所有地图内容之上
   if(dragOrder){ // 拖拽中的命令点高亮(FM1:原来还有 kind==='cur'/'queue' 两支,读的是已删除的 F.dest/F.queue;
     // 编队路径现在就是旗舰的 s.orders,拖的是旗舰身上的普通命令点,下面 dragOrder.ship 这一支天然覆盖)
     let hp=null;

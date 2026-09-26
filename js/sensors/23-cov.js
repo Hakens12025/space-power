@@ -131,7 +131,10 @@ const COV = {
   MSL: 6000 * CFG.scale,
   /* 2026-09-26 静听的幅度测距(ESM 的 RSS 测距:收到的功率 ∝ 发射功率 / d²,反推距离;用户选"加幅度测距,进内核")。单次量测的纵向误差 = 比例 x 距离:
      没听出型号时不知道对方发射功率(舰种之间差几倍),比例 RSS_UNK;听出型号(与 L_LIS 同一个门)之后功率已知,比例 RSS_ID */
-  RSS_UNK: 0.5, RSS_ID: 0.2,          // 梯子标定尺:导引头搜索篮;optCross / lisCross 按它量。2026-09-26 x1/5(单局地图):原 30000
+  RSS_UNK: 0.5, RSS_ID: 0.2,
+  /* 2026-09-26 可见光圈(用户:"以飞船为圆心……这个区域内所有东西均完全实时可见";选"进感知内核"、半径 2 万):舰船 VIS_R 以内、视线不被天体挡住的一切,
+     这一拍直接定位(误差 AMIN)并确认身份;双方对称。业内叫视野半径(sight radius),RTS 战争迷雾里的"正在看见"那一档 */
+  VIS_R: 20000 * CFG.scale,          // 梯子标定尺:导引头搜索篮;optCross / lisCross 按它量。2026-09-26 x1/5(单局地图):原 30000
 };
 
 /* ================= 定位域的三条律 =================
@@ -159,7 +162,7 @@ function covTheta(ch, d, t, dd, lo) {
 /* ================= 椭圆代数(2x2 信息矩阵)=================
    J = [Jxx, Jxy, Jyy]。信息可加 —— 多站多通道的融合就是逐项相加,这是 Fisher 信息的定义。 */
 function newCov() {
-  return { x: 0, y: 0, a1: 1e9, a2: 1e9, r1: 1e9, r2: 1e9, th: 0, fix: false, ever: false, age: 1e9, seen: false, n: 0, idn: false, idBy: '', ch: { opt: null, lis: null, act: null } };
+  return { x: 0, y: 0, a1: 1e9, a2: 1e9, r1: 1e9, r2: 1e9, th: 0, fix: false, ever: false, age: 1e9, seen: false, n: 0, idn: false, idBy: '', ch: { opt: null, lis: null, act: null, vis: null } };
 }
 /* 把一个椭圆(长轴 a1 / 短轴 a2 / 倾角 th)当先验加进信息矩阵 */
 function covAddEll(J, a1, a2, th) {
@@ -190,6 +193,7 @@ function covSolve(J) {
      照射不同 —— 它是真的在测距,每一拍都是一次独立测量,照常进信息矩阵。 */
 function covShape(ch, gi, d, t, dd, lo) {
   if (!gi) return null;                                  // gi 只当"在不在量程内"用
+  if (ch === 'vis') return [COV.AMIN, COV.AMIN, true, true]; // 2026-09-26 可见光圈:圈内看得一清二楚,位置误差取下限、当场认出
   const R = covRangeOf(ch, d, t, lo);
   if (!(R > 0)) return null;
   const u = dd / R;
@@ -244,7 +248,7 @@ function stepCov(t, c, obs, el, idOut) { // TK2.6:可选的 idOut 记下这一�
      只折算进信息矩阵的那一份;界与识别门是【单拍】的信噪比门限,与盯多久无关,不折算。 */
   const iw = 1 / Math.sqrt(Math.max(el, 1e-6) / SENS.TICK);
   let n = 0, rBound = 1e9, idn = false, idBy = '';
-  c.ch = { opt: null, lis: null, act: null };
+  c.ch = { opt: null, lis: null, act: null, vis: null };
   for (const ob of obs) {
     const d = ob.det, g = ob.g, dd = ob.dd || 1;
     /* 椭圆是二维的(用户 2026-09-19 拍板),所以视线单位向量只取 XY 分量并在 XY 内归一化;
@@ -252,7 +256,7 @@ function stepCov(t, c, obs, el, idOut) { // TK2.6:可选的 idOut 记下这一�
     let ux = t.pos[0] - d.pos[0], uy = t.pos[1] - d.pos[1];
     const dxy = Math.sqrt(ux * ux + uy * uy);
     if (dxy > 1e-6) { ux /= dxy; uy /= dxy; } else { ux = 1; uy = 0; }
-    for (const ch of ['opt', 'lis', 'act']) {
+    for (const ch of ['opt', 'lis', 'act', 'vis']) { // vis = 可见光圈(2026-09-26)
       const lo = ch === 'opt' ? ob.lo : undefined; // ENV2 这一对的有效光学亮度;手搭的 obs 没有 lo ⇒ 标称值
       const sh = covShape(ch, g[ch], d, t, dd, lo); if (!sh) continue;
       covAddMeas(J, ux, uy, sh[2] ? sh[0] * iw : COV.HUGE, sh[1] * iw);  // 真量测进信息矩阵;界只钳上限
@@ -262,7 +266,7 @@ function stepCov(t, c, obs, el, idOut) { // TK2.6:可选的 idOut 记下这一�
       if (sh[3] && idOut) idOut[ch] = true; // TK2.6:idBy 只记【第一个】认出它的通道(按探测站、通道的先后),同一拍里 1 号站静听认出、2 号站照射认出时 idBy 是 lis —— 身份三档要知道照射也认出来了
       const cur = c.ch[ch];
       if (!cur || sh[1] < cur[1]) {
-        const R = covDetOf(ch, d, t, lo);               // 信噪比问"我有多少信号" ⇒ 发现域
+        const R = ch === 'vis' ? COV.VIS_R : covDetOf(ch, d, t, lo); // 信噪比问"我有多少信号" ⇒ 发现域
         const snr = (ch === 'act' ? 4 : 2) * 10 * Math.log10(R / dd);  // 被动 (R/d)^2、照射 (R/d)^4,折成 dB
         c.ch[ch] = [sh[0], sh[1], dd, snr, d.id];       // 末位是探到它的那一艘(画单条方位线要用)
       }

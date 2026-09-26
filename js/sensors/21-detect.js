@@ -120,11 +120,12 @@ function detectFor(detSide,tgtSide,dt){
     const obs=[];
     for(let j=0;j<all.length;j++){
       const p=sensePairGrades(j,ti); // 打包三条通道(各 0 / 1),0 = 这一对三条通道全都够不着(整目标早退已经在里面)
-      if(p===0)continue;
-      const d=all[j], q=senseResolve(j,ti,d,t,p);if(q===0)continue; // ENV2 待定位的对在热循环外精算光学档与有效亮度
+      const d=all[j], v=senseVis(d,t); // 2026-09-26 可见光圈:不经热循环(圈内对数很少),太阳禁区 / 尾焰 / 云都不挡,只有天体挡
+      if(p===0&&!v)continue;
+      const q=p===0?0:senseResolve(j,ti,d,t,p);if(q===0&&!v)continue; // ENV2 待定位的对在热循环外精算光学档与有效亮度
       const dx=d.pos[0]-t.pos[0], dy=d.pos[1]-t.pos[1], dz=d.pos[2]-t.pos[2];
       const dd=Math.sqrt(dx*dx+dy*dy+dz*dz);
-      obs.push({det:d,dd:dd,g:{opt:q&3,lis:(q>>2)&3,act:(q>>4)&3},lo:senseLastLo()});
+      obs.push({det:d,dd:dd,g:{opt:q&3,lis:(q>>2)&3,act:(q>>4)&3,vis:v?1:0},lo:senseLastLo()});
       if(q&12)esmHear(detSide,d,t,dd); // 听到对方雷达:记一次(雷达画面的"被听见"区域读它)
     }
     /* TK2.0:下面两段注释说的三件事(椭圆推进、最后定位记录、握没握着)按原来的先后搬进了 sensors/24 的 trkStep,一句调用做完 */
@@ -230,7 +231,7 @@ function projVisibleTo(p,detSide){
   const {dets,bcons}=detectorsOf(detSide);
   const sg=projSig(p);
   const lum=sg.lum,refl=sg.refl,bg=ENV.clouds.length?envBg(p.pos,'opt'):0; // ENV2 云背景每颗弹丸算一次
-  for(const d of dets){if(senseSeesOptical(lum,d,p.pos,bg)||senseSeesActive(refl,d,p.pos,p.vel))return true;} // 照射那一路:不在 paint 档时 senseKACT 恒 0,判据天然为假,这里不必再判一次发射档
+  for(const d of dets){if(senseVis(d,p)||senseSeesOptical(lum,d,p.pos,bg)||senseSeesActive(refl,d,p.pos,p.vel))return true;} // 2026-09-26 可见光圈内的弹丸也一清二楚 // 照射那一路:不在 paint 档时 senseKACT 恒 0,判据天然为假,这里不必再判一次发射档
   for(const b of bcons){if(senseSeesOptical(lum,b,p.pos,bg)||senseSeesActive(refl,b,p.pos,p.vel))return true;} // 信标恒在照射(BEACON_EMIT/BEACON_RECV),对反射 1.0 的目标正好 300,000 —— 与全库既有的信标 300k 逐位相同
   return false;
 }
