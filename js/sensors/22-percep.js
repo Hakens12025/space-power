@@ -255,7 +255,7 @@ function projSig(p) { // 弹丸的亮度与反射。常数由旧模型的可见�
   if (p.type === 'beacon') return SENS.PROJ.beacon;
   if (p.type === 'interceptor') return SENS.PROJ.inter;
   if (p.screen || p.mine) return SENS.PROJ.mslCold; // 布防屏与伏击雷 = 冷目标
-  return (p.fuel > 0) ? SENS.PROJ.mslHot : SENS.PROJ.mslCold; // 燃烧的喷焰 vs 滑行的冷弹
+  return (p.lit === undefined ? p.fuel > 0 : p.lit) ? SENS.PROJ.mslHot : SENS.PROJ.mslCold; // 燃烧的喷焰 vs 滑行的冷弹。2026-09-27 按这一拍喷没喷(weapons/56 写 p.lit),有油但在滑行也是冷的
 }
 function senseSeesOptical(lum, d, pos, bg) { // 探测器 d 能否光学看到位于 pos、亮度 lum 的东西。ENV2 bg = pos 处的云背景(调用方每颗弹丸算一次),可省
   if (envSunBlind(d.pos, pos)) return false; // ENV1:弹丸与舰船同一套环境 —— 太阳禁区(空环境时恒假)

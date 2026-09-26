@@ -17,7 +17,7 @@ const KIND_INFO={
     tip:s=>`MAC轴炮 · 散布 ${(sReq(s,'macSigma')*1000).toFixed(1)} 毫弧 · 命中率 50% ≈ ${Math.round(macEffRange(s)/1000)}k / 10% ≈ ${Math.round(macRangeAt(s,0.1)/1000)}k · 伤害${s.macDmg||0} · 装填${Math.round(SHOW.t(s.macReload||30))}s · 需火控开+机头对准+跟踪级`},
   msl:{on:'mslOn',
     range:s=>mslReach(s),
-    tip:s=>`导弹齐射 · 动力射程 ≈ ${Math.round(mslReach(s)/1000)}k(之外滑行,靠数据链)· 每组${s.mslPer||12}枚×${s.cells||4}单元 · 单元装填${Math.round(SHOW.t(s.mslReload||60))}s · 需火控开+目标跟踪级`},
+    tip:s=>`导弹齐射 · 射程 ≈ ${Math.round(mslReach(s)/1000)}k(加速 → 熄火滑行 → 末段修正,靠数据链)· 每组${s.mslPer||12}枚×${s.cells||4}单元 · 单元装填${Math.round(SHOW.t(s.mslReload||60))}s · 需火控开+目标跟踪级`},
   ciws:{on:'ciwsOn',
     range:s=>ciwsOf(s).outer,
     tip:s=>{const c=ciwsOf(s);return `近防 · 外圈${Math.round(c.outer/1000)}k拦截弹 · 内圈${Math.round(c.inner/1000)}k近防炮 · 库存${s.interceptor}枚(被动防御,来袭才发射)`;}},

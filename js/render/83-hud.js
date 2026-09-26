@@ -408,7 +408,7 @@ function drawHoverRings(){
     const s=shipById(id);if(!s||s.dead||s.side!=='blue')continue;
     const p=toScreen(s.pos[0],s.pos[1]);
     if(hoverRing==='mac'){ring(p,macEffRange(s),'主炮 50% ≈ '+Math.round(macEffRange(s)/1000)+'k');ring(p,macRangeAt(s,0.1),'主炮 10% ≈ '+Math.round(macRangeAt(s,0.1)/1000)+'k');} // WR1:没有射程门,画两档命中率的距离
-    else if(hoverRing==='msl')ring(p,mslReach(s),'导弹 动力 ≈ '+Math.round(mslReach(s)/1000)+'k(之外滑行)'); // WR1
+    else if(hoverRing==='msl')ring(p,mslReach(s),'导弹 射程 ≈ '+Math.round(mslReach(s)/1000)+'k(中段熄火滑行)'); // WR1
     else if(hoverRing==='ciws'){const c=ciwsOf(s);ring(p,c.outer,'外圈拦截 '+Math.round(c.outer/1000)+'k');ring(p,c.inner,'内圈 '+Math.round(c.inner/1000)+'k');}
     else if(hoverRing==='emit'&&typeof actRangeOf==='function'&&typeof hearRangeOf==='function'){ // EM1-B:雷达的账 —— 开了能照多远、开了会在多远被听见(两圈都按【开着照射】算,不管此刻开没开:这是做决定前要看的账)
       const ifPaint=Object.assign({},s,{emitMode:'paint'});

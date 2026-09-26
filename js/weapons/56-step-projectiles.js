@@ -46,7 +46,7 @@ function stepProjectiles(dt){
     if(p.type==='decoy')stepDecoyProj(p,dt);
     else if(p.type==='mac')stepMacProj(p,dt);
     else if(p.type==='beacon')stepBeaconProj(p,dt);
-    else if(p.type==='missile')stepMissileProj(p,dt,icBlue,icRed);
+    else if(p.type==='missile'){const f0=p.fuel;stepMissileProj(p,dt,icBlue,icRed);p.lit=p.fuel<f0;} // 2026-09-27 这一拍烧没烧油 = 喷没喷火(sensors/22 的 projSig 按它给红外亮度)
     else if(p.type==='interceptor')stepInterceptorProj(p,dt);
     if(ARENA&&!p.done&&!arenaIn(p.pos))p.done=true; // 2026-09-26 单局地图:五弹型统一在这里判,出了游玩区就消失
   }
@@ -259,6 +259,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         aim=[aim[0]+p.netOff[0]*p.netOffR*shrink,aim[1]+p.netOff[1]*p.netOffR*shrink,aim[2]+p.netOff[2]*p.netOffR*shrink];
       }
       const dir=V.norm(V.sub(aim,p.pos));
+      const coast=dist>GUIDE_SEEK&&!nearIc; // 2026-09-27 三段飞法(用户:"导弹本身的燃料控制,提升射程"):进自己导引头的范围之前是加速 / 滑行段,之后是末段
       // 速度剖面(v122):巡航vPeak高速飞(加速燃料),合适位置按距离减速到vTerm(减速燃料与加速对称),燃料对称安全帽兜底
       let spdDes=Infinity;
       if(p.vPeak){ // 有速度剖面(所有火Missiles发射的导弹)
@@ -271,6 +272,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         // 燃料对称安全帽:按当前速度减速回vTerm需(vTerm外的燃料),再留净机动燃料——超了自动降速(加速多久留多久减速/滑行修正吃油→降速)
         const safe=Math.max(p.vTerm,p.vTerm+Math.max(0,p.fuel-(p.netReserve||20))*MSL_ACC); // DS190:安全帽折算同步 150(用 200 会高估减速能力→放宽减速段→命中速度偏高)
         spdDes=Math.min(spdDes,safe);
+        if(coast&&spdDes>p.spd&&p.fuel<=(p.keep||0))spdDes=p.spd; // 加速不许动用末段预留(原来直射弹的终端速度够不着,安全帽从不起作用,一路加速把油烧光)
       }else{ // 旧逻辑兜底(手动构造的导弹)
         const ang=vn>5?V.angle(V.norm(p.vel),dir):0;
         if(ang>0.25)spdDes=Math.min(spdDes,1800+ang*5200); // 需大机动:限速换取转向(越快越拐不过弯)
@@ -287,9 +289,10 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
       const turnRate=1.2/(1+vn/1800);    // 越快越拐不过弯;KIMI152(DS172):2.0/(1+vn/2500)→1.2/(1+vn/1800)(2500速 57°→29°/s 约砍半)——高速=直射弹,复锁大转弯又慢又贵;低速终端段38°/s保证基本命中(拦截弹4.5/(1+pv/3000)不动,防御灵活性是对抗本体)
       let nd;
       if(vn>1&&p.fuel>0){ // 转向耗燃料(v122:越快转向越贵 0.5~3.0/rad);燃料耗尽无法转向,只能直线滑行
-        const cur=V.norm(p.vel);
-        nd=V.slerp(cur,dir,Math.min(1,turnRate*dt));
-        p.fuel=Math.max(0,p.fuel-V.angle(cur,nd)*turnFuelCost(vn));
+        const cur=V.norm(p.vel),ang=V.angle(cur,dir);
+        if(coast&&ang<1.5&&dist*Math.sin(ang)<MSL_MISS)nd=cur; // 滑行段:照当前航向飞下去的脱靶量在容差内就不修正(原来每拍都微调,全程喷火)
+        else{nd=V.slerp(cur,dir,Math.min(1,turnRate*dt));
+        p.fuel=Math.max(0,p.fuel-V.angle(cur,nd)*turnFuelCost(vn));}
       }else if(vn>1){nd=V.norm(p.vel);} // 无燃料:保持方向直线滑行
       else nd=dir;
       p.vel=[nd[0]*p.spd,nd[1]*p.spd,nd[2]*p.spd];

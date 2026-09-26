@@ -52,7 +52,8 @@ function macRangeSig(sig,p){ // BOT1:按【给定的散布】反算命中率恰�
 }
 function macRangeAt(s,p){return macRangeSig(sReq(s,'macSigma'),p);} // 命中率恰为 p 的距离;p 只支持 _Z 里的四档
 function macEffRange(s){return macRangeAt(s,0.5);} // 有效射程 = 命中率 50% 的距离。调用点一律调它,绝不在别处重拼
-function mslReach(s){return MSL_ACC*(MSL_FUEL/2)*(MSL_FUEL/2);} // 动力射程:加速 fuel/2 秒再减速 fuel/2 秒 = 2 x 0.5 a t² ≈ 75,000km(2026-09-26 x1/5:原 37.5 万)
+function mslReach(s){return LAD.msl;} // 2026-09-27 射程 = 设计包线 20 万(用户定;原来是「一半油加速、一半油减速」的动力射程 7.5 万)。靠三段飞法撑住:加速 → 熄火滑行(不耗油)→ 末段用预留燃料修正,见 56 的 stepMissileProj
+const MSL_MISS=1000*CFG.scale; // 滑行段的脱靶容差 km:照当前航向飞下去、离瞄准点的横向偏差不超过它就不转向(不转 = 不喷 = 红外里是冷的),超了才点火修正
 function fireMAC(shooter,target){ // MAC轴炮:沿船头方向直射(必须先对准),到预测时间失的
   if(shooter.noFire)return; // RANGE1 禁火总闸门 1/3:靶场的靶只挨打不还手。这是 MAC 发射的唯一实现,GM 手动锁定/自动索敌/AI 三条路径最终都落到这里。注意这是个【静默】开关(不报错不打日志),将来若误给蓝舰置了 noFire 会毫无线索,置位处只有 initEnemy 的靶语义包一处
   if(shooter.side===target.side||shooter.dead||target.dead)return;
@@ -201,7 +202,7 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
       park:!isShip, parkPt:isShip?null:target.pos.slice(), mine:false, trigRadius:(isShip?24000:16000)*CFG.scale, trigMode:'any', // 区域齐射:飞到点位,到了等敌舰进圈自主攻击(盲射);雷触发圈放大v118。2026-09-26 x1/5(单局地图):原 120000 / 80000
       netId, netFmt:null, // v125 网:所属网 + 网内阵型位(横线/集中)
       netOff:ng2?ng2.v:null, netOffR:netGeom?netGeom.R:0, netD0:netGeom?netGeom.D0:0, // v121组网:方位偏移(随接近收拢→多方向同时弹着)
-      vPeak:pvPeak, vTerm, decelDist:pDecel, netReserve, // v122 速度剖面:巡航/终端/减速点/预留燃料
+      vPeak:pvPeak, vTerm, decelDist:pDecel, netReserve, keep:isNet?0:netReserve, // v122 速度剖面:巡航/终端/减速点/预留燃料。2026-09-27 keep = 加速段不许动的末段预留:直射弹的终端速度够不着,安全帽管不住它;组网弹由安全帽管(要减速到 vTerm)
       guided:false, coastT:0, guideMode:null, lastKpos:null, guidedBy:null, // T1引导:自导/链导/脱锁(超自导范围无通道→滑行10s自毁)
       chaffed:false,chaffT:0,lastTarget:null, // v125 干扰弹脱锁
       // TK4a:弹丸不再带可见性字段(看不看得见搬进航迹表的目击集合,sensors/24 的 trkSees);原来六个弹丸字面量里各有一对初值 false
