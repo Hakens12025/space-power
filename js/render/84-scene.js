@@ -50,9 +50,36 @@ function drawVisFog(){
    (不重算,所以会软一点),天体 / 边界 / 舰船 / 石头 / 弹丸 / 命中按特写缩放真画。选一艘:缩到舰体刚好画到最大(HULL_ZOOM.MAX);选多艘:框住全部并留边,但不比单舰更近。没选就不画 */
 const INSET={W:320,H:200,M:12,GAP:10,bot:64,botT:-1e9,x:0,y:0,w:0,h:0,on:false};
 function insetHit(sx,sy){return INSET.on&&sx>=INSET.x&&sx<=INSET.x+INSET.w&&sy>=INSET.y&&sy<=INSET.y+INSET.h;} // 点在特写框里:输入层吞掉,不落到框底下的地图
+/* 2026-09-26 特写窗口里的尾迹(用户:"渲染类似于光速延迟里面的尾迹效果",同 demos/lightlag/光速延迟.html 的 trail):每 DT 模拟秒记一次位置,留最近 SPAN 秒,越旧越淡,线头接到此刻。
+   敌舰只记我方知道的位置(contactPos:估计 / 外推;交代不出就断开),不画真值 */
+const TRAIL={DT:0.5,SPAN:60,t:-1e9,m:new Map()};
+function trailPos(s){return (s.side==='blue'||adminMode)?s.pos:((typeof contactPos==='function')?contactPos(s,'blue'):null);}
+function trailRec(){
+  if(simTime<TRAIL.t){TRAIL.m.clear();TRAIL.t=-1e9;} // 换局(模拟时间归零)
+  if(simTime-TRAIL.t<TRAIL.DT)return;TRAIL.t=simTime;
+  for(const s of ships){
+    if(s.dead){TRAIL.m.delete(s.id);continue;}
+    const p=trailPos(s);let a=TRAIL.m.get(s.id);if(!a){a=[];TRAIL.m.set(s.id,a);}
+    if(p)a.push(p[0],p[1],simTime);else if(a.length&&a[a.length-3]===a[a.length-3])a.push(NaN,NaN,simTime);
+    let k=0;while(k<a.length&&simTime-a[k+2]>TRAIL.SPAN)k+=3;if(k)a.splice(0,k);
+  }
+}
+function drawTrails(){
+  ctx.save();ctx.lineWidth=1.4;ctx.lineCap='round';
+  for(const s of ships){
+    const a=s.dead?null:TRAIL.m.get(s.id);if(!a||a.length<3)continue;
+    ctx.strokeStyle=s.side==='blue'?'rgb(111,180,255)':'rgb(255,107,107)';
+    const n=a.length/3;let px=NaN,py=NaN;
+    for(let i=0;i<n;i++){const x=a[3*i];if(x!==x){px=NaN;continue;}const q=toScreen(x,a[3*i+1]);
+      if(px===px){ctx.globalAlpha=0.06+0.69*i/n;ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(q[0],q[1]);ctx.stroke();}
+      px=q[0];py=q[1];}
+    const cur=trailPos(s);if(cur&&px===px){const q=toScreen(cur[0],cur[1]);ctx.globalAlpha=0.75;ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(q[0],q[1]);ctx.stroke();}
+  }
+  ctx.restore();
+}
 function drawInset(){
   INSET.on=false;
-  const sel=controlledShips().filter(s=>!s.dead);if(!sel.length)return;
+  const sel=controlledShips().filter(s=>!s.dead);if(!sel.length){if(typeof terrXOff==='function')terrXOff();return;}
   const now=nowMs();if(now-INSET.botT>500){INSET.botT=now;const cb=document.getElementById('cmdBar');if(cb)INSET.bot=Math.max(44,H-cb.getBoundingClientRect().top);} // 底边让开指令栏
   const w=Math.min(INSET.W,Math.round(W*0.3)),h=Math.round(w*INSET.H/INSET.W),x=INSET.M,y=H-INSET.bot-INSET.GAP-h;if(y<60)return;
   const zMax=Math.pow(HULL_ZOOM.MAX/HULL_ZOOM.LAND,1/HULL_ZOOM.A)/vtLandKmpp(1); // 舰体刚好画到最大的那一档缩放
@@ -65,12 +92,16 @@ function drawInset(){
     ctx.fillStyle=vtBg();ctx.fillRect(0,0,w,h);
     const dpr=window.devicePixelRatio||1;
     for(const c of STAR_TILE.cv)if(c)ctx.drawImage(c,0,0,Math.min(c.width,w*dpr),Math.min(c.height,h*dpr),0,0,Math.min(c.width/dpr,w),Math.min(c.height/dpr,h)); // 天在屏幕空间,借主画面的贴图
-    if(comp&&comp.cv&&comp.z>0){ // 尘埃云:前台合成缓存里对应的那一块放大
-      const k=comp.z*comp.s,sx=(cx-w/2/z-comp.wx0)*k,sy=(cy-h/2/z-comp.wy0)*k,sw=w/z*k,sh=h/z*k;
-      if(sx>=0&&sy>=0&&sx+sw<=comp.cv.width&&sy+sh<=comp.cv.height&&sw>=0.5&&sh>=0.5)ctx.drawImage(comp.cv,sx,sy,sw,sh,0,0,w,h);
+    if(ENV.clouds.length&&typeof terrWantX==='function'&&TERR.sig!==null){ // 2026-09-26 尘埃云按特写自己的缩放级画(用户:"小窗要保持应有的渲染尺度"):地形服务替它建块,与主镜头共用缓存与预算
+      TERR.xL=terrLevel(z,TERR.xL);terrWantX(TERR.xL,cx,cy,z,w,h);
+      if(!TERR.xw.some(T=>T.painted>=0)&&!TERR.xa.some(T=>T.painted>=0)&&comp&&comp.cv&&comp.z>0){ // 一块都还没上色:先拿主画面的合成缓存放大垫底
+        const k=comp.z*comp.s,sx=(cx-w/2/z-comp.wx0)*k,sy=(cy-h/2/z-comp.wy0)*k,sw=w/z*k,sh=h/z*k;
+        if(sx>=0&&sy>=0&&sx+sw<=comp.cv.width&&sy+sh<=comp.cv.height&&sw>=0.5&&sh>=0.5)ctx.drawImage(comp.cv,sx,sy,sw,sh,0,0,w,h);
+      }else terrDirect(TERR.xL);
     }
     if(typeof mapBodies==='function')mapBodies();
     drawArena();
+    drawTrails();
     for(const s of ships)drawShip(s);
     if(typeof drawRocks==='function')drawRocks();
     drawProjectiles();drawHits();
@@ -123,7 +154,7 @@ function render(){
   drawSelection();
   if(typeof drawEdgeRuler==='function')drawEdgeRuler(); // SN8 四边刻度尺(屏幕空间的仪器边框;换层时刻度重新长出来)
   if(typeof drawTierFx==='function')drawTierFx();       // SN8 换层瞬间的大字 + 扫描线,0.7 秒内淡出;平时首句就 return
-  drawInset(); // 2026-09-26 左下角特写窗口:压在所有地图内容之上
+  trailRec();drawInset(); // 2026-09-26 左下角特写窗口:压在所有地图内容之上;尾迹每帧记(选没选都记,选中时才有历史)
   if(dragOrder){ // 拖拽中的命令点高亮(FM1:原来还有 kind==='cur'/'queue' 两支,读的是已删除的 F.dest/F.queue;
     // 编队路径现在就是旗舰的 s.orders,拖的是旗舰身上的普通命令点,下面 dragOrder.ship 这一支天然覆盖)
     let hp=null;

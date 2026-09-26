@@ -4,7 +4,7 @@
 - `80-camera.js` 相机与平滑缩放(`zAnim` / `camZoomStep` / `vtClampK`);`80-viewtier.js` 三级星图(`VT.BAR_KM` / `VT.BAR_PX`:比例尺条固定长度,三层落点 = 条代表 5 万 / 20 万 / 100 万 km、`vtLandKmpp`、`vtWeights` / `vtTier`、刻度尺与换挡特效)
 - `81-background.js` 底色、嵌套网格、星空贴图 `STAR_TILE`;`81-env.js` 世界层的地图视图(`ENV_VIEWS` / `ENV_KIND_OF` / `drawEnvView`、标签 `mapLabPlan`);太阳线 `drawSunLines`(右下角开关 `SUNL.on`:选中舰的禁区锥 + 天体影子线,关着都不画);`81-terrain.js` 地形瓦片服务 `TERR`(采样在后台线程 `terrWkInit`)
 - `82-ship-icons.js` 舰标 / 记号 / 告警弧 / 涟漪(`HULL_ZOOM` / `hullZoomF` / `shipZoomF`);`82-lod.js` 聚合层(`lodBuild` / `lodDrawShip`);`82-rocks.js` 石头
-- `83-hud.js` hover 圈、信号视野、火控链;`84-scene.js` 每帧场景组装(含游玩区边界 `drawArena`、可见光圈灰雾 `drawVisFog`、左下角特写窗口 `drawInset`:第二镜头在裁剪框里重画,星空借主贴图、尘埃云借 `TERR.comp` 放大);`84-fmplot.js` 编队图
+- `83-hud.js` hover 圈、信号视野、火控链;`84-scene.js` 每帧场景组装(含游玩区边界 `drawArena`、可见光圈灰雾 `drawVisFog`、左下角特写窗口 `drawInset`:第二镜头在裁剪框里重画,星空借主贴图、尘埃云按特写自己的缩放级向地形服务要块(`terrWantX`,与主镜头共用缓存 / 线程 / 预算,没上色时拿 `TERR.comp` 放大垫底);尾迹 `TRAIL`(每 0.5 模拟秒记一次、留 60 秒,敌舰只记估计位置));`84-fmplot.js` 编队图
 - `86-irview.js` 红外画面(右下角「红外」钮,`MAPV.mode === 'ir'`;`drawIrView` / `irvOff`,物理走 `senseOptLoWith` / `senseOptBlocked` / `covTheta`)
 - `86-radarview.js` 雷达画面(右下角「雷达」钮,`MAPV.mode === 'radar'`;`drawRadarView`:照射覆盖、回波 `cov.ch.act`、听到的敌方雷达区域:读 sensors/21 的 ESM 记录,围死画多边形、围不死画高斯团)
 - `85-settings.js` 右下工具栏与倍速钮;`85-tutorial.js` 教程 `TUT_HTML`;`87-fmbar.js` / `89-fmpage.js` 编队界面;`88-selpanel.js` 右栏与火控计算机;`89-radial.js` 目标轮盘几何

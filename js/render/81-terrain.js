@@ -61,6 +61,7 @@ const TERR={
   tiles:new Map(),   // ENV2 数字键(terrKey)→ 瓦片
   iso:null,gain:null,blur:0,tp:1,mem:0,wk:null,sig:null,rev:-1,L:null,tick:0,gen:0,paintSeq:0,busy:false,bk:0,
   want:[],anc:[],seq0:[],pos:[],wantKey:'',grp:new Map(), // ENV2 want = 想要的块(视口在前、余量在后);anc = 祖先(最粗一级在前);seq0 = 粗图的采样先后
+  xw:[],xa:[],xkey:'',xL:null, // 2026-09-26 第二个镜头(左下角特写窗口)要建的瓦片:本级细图 / 祖先粗图,见 terrWantX
   comp:null,         // ENV2 前台合成缓存(正在贴的那张){cv,g,L,z,s,dpr,W,H,M,pw,ph,wx0,wy0,cx,cy,key,pos,n,k,done,seq,bad,
                      //      full(整张从头拼 / 挪的那张),src,kx,ky,cp(挪的那张:从哪张拷、挪多少设备像素、拷过没有),R(挪的那张要补矢量的矩形),vk,vk0,vd,vn,vdone(矢量的键 / 拷来那部分的键 / 字框按哪个键标过 / 画了几样 / 画过没有)}
   back:null,         // ENV2 后台合成缓存(按目标镜头分帧拼;拼完与前台对换)
@@ -81,7 +82,7 @@ function terrFreeComp(c){if(c&&c.cv){c.cv.width=0;c.cv.height=0;c.g=null;}} // E
 function terrRelease(){ // ENV2 没有要进贴图的东西了(换了没有云的场景):瓦片与合成缓存全部放掉
   if(!TERR.tiles.size&&!TERR.comp&&!TERR.back&&!TERR.spare&&TERR.sig===null)return;
   terrFreeComp(TERR.comp);terrFreeComp(TERR.back);terrFreeComp(TERR.spare);
-  TERR.tiles.clear();TERR.comp=null;TERR.back=null;TERR.spare=null;TERR.pool.length=0;TERR.mem=0;TERR.want.length=0;TERR.anc.length=0;TERR.seq0.length=0;TERR.pos.length=0;TERR.wantKey='';TERR.sig=null;TERR.rev=-1;TERR.L=null;TERR.busy=false;
+  TERR.tiles.clear();TERR.xw.length=0;TERR.xa.length=0;TERR.xkey='';TERR.comp=null;TERR.back=null;TERR.spare=null;TERR.pool.length=0;TERR.mem=0;TERR.want.length=0;TERR.anc.length=0;TERR.seq0.length=0;TERR.pos.length=0;TERR.wantKey='';TERR.sig=null;TERR.rev=-1;TERR.L=null;TERR.busy=false;
 }
 function terrMarginSet(dpr){ // ENV2 合成缓存每边的余量(CSS px)与像素倍率:超过 PX_CAP 先收余量,再降倍率(降了之后贴图不再 1:1,只在超大屏上发生)
   const px=function(m,s){return (W+2*m)*(H+2*m)*s*s;};
@@ -141,6 +142,17 @@ function terrWantAt(L,cx,cy,z){ // ENV2 这一代要建的瓦片:第 L 级、与
   const S0=TERR.seq0;S0.length=0; // ENV2 粗图的采样先后:最粗一级祖先(一两块就盖住整个视口)→ 想要的块 → 其余祖先
   for(const T of TERR.anc)S0.push(T); // ENV2 视口块不出粗图(直接细图),粗图只给祖先
 }
+function terrWantX(L,cx,cy,z,w,h){ // 2026-09-26 第二个镜头(render/84 的 drawInset)按它自己的缩放级要瓦片:本级与视口相交、又与某朵云相交的(细图)+ 至多 UP 级祖先(粗图垫底)。
+  // 与主镜头共用缓存、线程与预算,排在主镜头的后面;每帧把这几块标成这一代、最近用过,免得被主镜头的 LRU 腾掉
+  const km=TERR.TILE*Math.pow(2,L),ix0=Math.floor((cx-w/2/z)/km),ix1=Math.floor((cx+w/2/z)/km),iy0=Math.floor((cy-h/2/z)/km),iy1=Math.floor((cy+h/2/z)/km),key=L+'|'+ix0+'|'+ix1+'|'+iy0+'|'+iy1;
+  if(key!==TERR.xkey){TERR.xkey=key;TERR.xw.length=0;TERR.xa.length=0;
+    for(let iy=iy0;iy<=iy1;iy++)for(let ix=ix0;ix<=ix1;ix++)if(terrHits(ix*km,iy*km,km)){const T=terrGet(L,ix,iy,true);if(T)TERR.xw.push(T);}
+    for(let k=1;k<=TERR.UP;k++){const kmA=km*Math.pow(2,k),seen=new Set();
+      for(const T of TERR.xw){const ax=T.ix>>k,ay=T.iy>>k,kk=terrKey(L+k,ax,ay);if(seen.has(kk))continue;seen.add(kk);if(terrHits(ax*kmA,ay*kmA,kmA)){const A=terrGet(L+k,ax,ay,true);if(A)TERR.xa.push(A);}}}
+    TERR.busy=true;}
+  for(const T of TERR.xw){T.used=TERR.tick;T.gen=TERR.gen;}for(const T of TERR.xa){T.used=TERR.tick;T.gen=TERR.gen;}
+}
+function terrXOff(){if(TERR.xw.length||TERR.xa.length){TERR.xw.length=0;TERR.xa.length=0;TERR.xkey='';}} // 特写窗口关了:不再替它建块
 function terrBest(L,ix,iy){ // ENV2 这一格拿哪块画:本块或至多 UP 级祖先里、已上色且有效格子最细的那块(祖先的细图比本块的粗图细);都没有给 null。级差放 TERR.bk
   let best=null,be=Infinity;TERR.bk=0;
   for(let k=0;k<=TERR.UP;k++){const T=TERR.tiles.get(terrKey(L+k,ix>>k,iy>>k));
@@ -428,7 +440,8 @@ function terrPaint(T,paint){ // ENV2 上色:这块的离屏画布清空后交给
 function terrWork(paint){ // ENV2 本帧剩下的活:先上色排着队的块,再采样(想要的粗 → 祖先粗 → 想要的细;祖先只建粗图)。生产按 µs 预算,判据按个数
   const judge=!!TERR.budget,C=TERR.cost,S=TERR.st;
   if(!TERR.busy)return;
-  const lists=[TERR.want,TERR.anc];
+  const lists=[TERR.want,TERR.anc,TERR.xw,TERR.xa]; // 2026-09-26 特写窗口的块排在主镜头之后
+  const FW=TERR.xw.length?TERR.want.concat(TERR.xw):TERR.want,CS=TERR.xa.length?TERR.seq0.concat(TERR.xa):TERR.seq0;
   for(const Ls of lists)for(const T of Ls)if(T.need||T.wres){
     /* ENV2 审查第 8 条:去掉原来的 PAINT_CAP(把标定值封顶在 60 µs,慢机器上记账会低估)。首次分配已挪出计时(terrCanvas);
        上色一块比整份预算还贵的机器上,本帧别的活都没做时准许做这一块(不可分单元),否则永远上不了色 —— 那一帧工作量 = 一块的上色成本,如实记账 */
@@ -441,7 +454,7 @@ function terrWork(paint){ // ENV2 本帧剩下的活:先上色排着队的块,�
   }
   if(!judge&&terrWkInit()){ // ENV2 后台线程采样:按先后给每块派一遍,在途的不重派,每个线程至多排 2 件
     const K=TERR.wk;
-    wk:for(let ph=0;ph<2;ph++)for(const T of (ph?TERR.want:TERR.seq0)){
+    wk:for(let ph=0;ph<2;ph++)for(const T of (ph?FW:CS)){
       if(ph&&T.phase===0&&!T.job&&!T.wres){T.phase=1;T.k=0;T.iso=null;} // 视口块跳过粗图
       if(T.phase!==ph||T.job||T.wres)continue;
       if(K.inflight>=2*K.n)break wk;
@@ -449,7 +462,7 @@ function terrWork(paint){ // ENV2 本帧剩下的活:先上色排着队的块,�
     }
   }else{
   const t0=judge?0:performance.now(),minC=judge?1:C.samp*0.05;let used=0;const s0=S.samp,h0=S.hit,left=judge?TERR.js:TERR.left;
-  outer:for(let ph=0;ph<2;ph++)for(const T of (ph?TERR.want:TERR.seq0)){ // ENV2 粗图按 seq0 的先后(祖先,最粗一级先);细图只建想要的块
+  outer:for(let ph=0;ph<2;ph++)for(const T of (ph?FW:CS)){ // ENV2 粗图按 seq0 的先后(祖先,最粗一级先);细图只建想要的块
     if(ph&&T.phase===0){T.phase=1;T.k=0;T.iso=null;} // 视口块跳过粗图
     if(T.phase!==ph)continue;
     if(left-used<minC)break outer;
@@ -462,15 +475,15 @@ function terrWork(paint){ // ENV2 本帧剩下的活:先上色排着队的块,�
       if(C.sT>=2){const v=1000*C.sT/C.sN;C.samp=C.cal?0.7*C.samp+0.3*v:v;C.cal++;C.sT=0;C.sN=0;}}} // 标定:累计 >= 2 ms 才更新(计时精度 100 µs)
   }
   if(judge)for(const Ls of lists)for(const T of Ls)if(T.need){terrCanvas(T,T.pn===TERR.TILE/TERR.CELL+1?Math.round(TERR.TILE*TERR.tp):TERR.TILE);terrPaint(T,paint);} // 判据:这一步采完的块当场上色(上色不计工作量)
-  let busy=false;for(const Ls of lists)for(const T of Ls)if(T.phase<(Ls===TERR.anc?1:2)||T.need||T.wres){busy=true;break;}
+  let busy=false;for(const Ls of lists)for(const T of Ls)if(T.phase<((Ls===TERR.anc||Ls===TERR.xa)?1:2)||T.need||T.wres){busy=true;break;}
   TERR.busy=busy;
 }
 function terrSync(painter){ // ENV2 每帧(与判据的 mapTileStep)先对一次:世界变了且云的签名变了 ⇒ 瓦片整体作废;窗口 / DPR 变了 ⇒ 合成缓存作废、重算余量
   if(ENV.rev!==TERR.rev){TERR.rev=ENV.rev;const sg=terrSig(painter.iso);
-    if(sg!==TERR.sig){TERR.tiles.clear();TERR.want.length=0;TERR.anc.length=0;TERR.seq0.length=0;TERR.pos.length=0;TERR.wantKey='';TERR.busy=false;if(TERR.comp)TERR.comp.bad=true;terrDropBack();TERR.sig=sg;TERR.iso=painter.iso;TERR.gain=painter.gain||null;TERR.blur=painter.blur||0;}}
+    if(sg!==TERR.sig){TERR.tiles.clear();TERR.xw.length=0;TERR.xa.length=0;TERR.xkey='';TERR.want.length=0;TERR.anc.length=0;TERR.seq0.length=0;TERR.pos.length=0;TERR.wantKey='';TERR.busy=false;if(TERR.comp)TERR.comp.bad=true;terrDropBack();TERR.sig=sg;TERR.iso=painter.iso;TERR.gain=painter.gain||null;TERR.blur=painter.blur||0;}}
   const dpr=window.devicePixelRatio||1;
   if(W!==TERR.vw||H!==TERR.vh||dpr!==TERR.dpr){TERR.vw=W;TERR.vh=H;TERR.dpr=dpr;terrMarginSet(dpr);if(TERR.comp)TERR.comp.bad=true;terrDropBack();}
-  const tp=Math.min(dpr,TERR.TP_MAX);if(tp!==TERR.tp){TERR.tp=tp;TERR.tiles.clear();TERR.pool.length=0;TERR.mem=0;TERR.want.length=0;TERR.anc.length=0;TERR.seq0.length=0;TERR.pos.length=0;TERR.wantKey='';TERR.busy=false;if(TERR.comp)TERR.comp.bad=true;} // ENV2 倍率变了:瓦片按新倍率重建
+  const tp=Math.min(dpr,TERR.TP_MAX);if(tp!==TERR.tp){TERR.tp=tp;TERR.tiles.clear();TERR.xw.length=0;TERR.xa.length=0;TERR.xkey='';TERR.pool.length=0;TERR.mem=0;TERR.want.length=0;TERR.anc.length=0;TERR.seq0.length=0;TERR.pos.length=0;TERR.wantKey='';TERR.busy=false;if(TERR.comp)TERR.comp.bad=true;} // ENV2 倍率变了:瓦片按新倍率重建
 }
 function terrDropBack(){if(TERR.back){terrFreeComp(TERR.spare);TERR.spare=TERR.back;TERR.spareT=TERR.tick;TERR.back=null;}} // ENV2 后台那张作废(内容过时):画布留作 spare
 function terrSettled(){const c=TERR.comp;return !TERR.busy&&!TERR.back&&!!c&&!c.bad&&c.seq===TERR.paintSeq;} // ENV2 全部建完、合成缓存是最新的(判据与性能探针读)
