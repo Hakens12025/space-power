@@ -47,15 +47,16 @@ function drawVisFog(){
 }
 /* 2026-09-26 特写窗口里的尾迹(用户:"渲染类似于光速延迟里面的尾迹效果",同 demos/lightlag/光速延迟.html 的 trail):每 DT 模拟秒记一次位置,留最近 SPAN 秒,越旧越淡,线头接到此刻。
    敌舰只记我方知道的位置(contactPos:估计 / 外推;交代不出就断开),不画真值 */
-const TRAIL={DT:0.5,SPAN:60,t:-1e9,m:new Map()};
+const TRAIL={DT:0.5,SPAN:60,JUMP:20000,t:-1e9,m:new Map(),arr:null}; // JUMP:相邻两次记录跳得比这远(km x scale)就断开 —— 瞬移(靶场拖船)不连线
 function trailPos(s){return (s.side==='blue'||adminMode)?s.pos:((typeof contactPos==='function')?contactPos(s,'blue'):null);}
 function trailRec(){
-  if(simTime<TRAIL.t){TRAIL.m.clear();TRAIL.t=-1e9;} // 换局(模拟时间归零)
+  if(simTime<TRAIL.t||TRAIL.arr!==ships){TRAIL.m.clear();TRAIL.t=-1e9;TRAIL.arr=ships;} // 换局:舰船表整个换了(靶场进对局时模拟时间都是 0,只比时间会把旧位置连到新位置上,画出一条长线)
   if(simTime-TRAIL.t<TRAIL.DT)return;TRAIL.t=simTime;
   for(const s of ships){
     if(s.dead){TRAIL.m.delete(s.id);continue;}
     const p=trailPos(s);let a=TRAIL.m.get(s.id);if(!a){a=[];TRAIL.m.set(s.id,a);}
-    if(p)a.push(p[0],p[1],simTime);else if(a.length&&a[a.length-3]===a[a.length-3])a.push(NaN,NaN,simTime);
+    const n=a.length,lx=a[n-3];if(p&&lx===lx&&n&&Math.hypot(p[0]-lx,p[1]-a[n-2])>TRAIL.JUMP*CFG.scale)a.push(NaN,NaN,simTime);
+    if(p)a.push(p[0],p[1],simTime);else if(n&&lx===lx)a.push(NaN,NaN,simTime);
     let k=0;while(k<a.length&&simTime-a[k+2]>TRAIL.SPAN)k+=3;if(k)a.splice(0,k);
   }
 }
@@ -93,7 +94,7 @@ function insetIncoming(){ // 我方看得见的来袭导弹,按到达时间排
   return out.sort((a,b)=>a.eta-b.eta);
 }
 function insetEvents(now){ // 导演模式的事件源(只读我方知道的事):击沉 / 命中 / 认出敌舰;换局清空
-  if(simTime<INSET.t0){INSET.ev.length=0;INSET.dead.clear();INSET.idc.clear();INSET.dir=null;}INSET.t0=simTime;
+  if(simTime<INSET.t0||INSET.arr!==ships){INSET.ev.length=0;INSET.dead.clear();INSET.idc.clear();INSET.dir=null;INSET.arr=ships;}INSET.t0=simTime; // 换局(同尾迹:按舰船表换没换判)
   for(const s of ships){
     if(s.dead){if(!INSET.dead.has(s.id)){INSET.dead.add(s.id);if(s.side==='blue'||adminMode||contactHeld(s,'blue'))INSET.ev.push({k:'kill',p:2,pos:s.pos.slice(),t:now,lbl:'击沉 '+(s.side==='blue'?s.name:'敌舰')});}continue;}
     if(s.side!=='red')continue;
