@@ -123,7 +123,7 @@
 <script src="js/sensors/20-signature.js?v=20260926k"></script>
 <script src="js/sensors/21-detect.js?v=20260926t"></script>
 <script src="js/sensors/22-percep.js?v=20260926t"></script><!-- SN4 感知纯函数层:零顶层执行(只声明模块私有的 Float64Array 缓冲与三个纯字面量常量,不读 SENS/sReq/ships 任何东西)、不调 on()、不是 core/99,所以两条加载顺序硬约束都不涉及;跨文件引用(SENS 在 20-signature、sReq 在 00-config)全部运行期解析,与 formation/39-fmcaps 同口径 —— 排在 21-detect 之后只为目录编号好读,换到别处也不会错 -->
-<script src="js/sensors/23-cov.js?v=20260926t"></script><!-- SN6 误差椭圆感知内核:同样零顶层执行(只声明;ladApply 不在加载期跑) -->
+<script src="js/sensors/23-cov.js?v=20260926d"></script><!-- SN6 误差椭圆感知内核:同样零顶层执行(只声明;ladApply 不在加载期跑) -->
 <script src="js/sensors/24-track.js?v=20260926t"></script><!-- TK1 航迹表(每方一张 WeakMap):顶层只建 TRK 与 TRK_FWD、只调同文件的函数;ships/11 的 makeShip 虽然排在它前面,但只在运行期调 trkAdopt(init 与判据里),所以不构成加载顺序约束 -->
 <script src="js/sensors/25-optpair.js?v=20260926r"></script><!-- ENV2 成对光学模型(晒热 / 杂散光 / 云背景):顶层只有声明,22-percep 的精算步与弹丸路径在运行期调 -->
 <script src="js/physics/30-motion.js?v=20260923"></script>
