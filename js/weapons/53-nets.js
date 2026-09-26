@@ -58,8 +58,8 @@ function reassignNets(side){ // 网间协同分配:待分配网(目标已灭)补
 }
 function recomputeNetOff(p,target){ // v135:目标转移后重算组网偏移(保持该组方向类型,第二个目标继续多方向同时弹着)
   if(!p.shooter)return;
-  const D0=Math.max(12000,V.len(V.sub(target.pos,p.shooter.pos))); // 距离级(≥1.2 万才组网)。2026-09-26 x1/5(单局地图):原 60000
-  const R=Math.min(30000,Math.max(6000,D0*0.5)); // 2026-09-26 x1/5(单局地图):原 min 150000 / max 30000,与 52 的 netGeom 同口径
+  const D0=Math.max(12000*CFG.scale,V.len(V.sub(target.pos,p.shooter.pos))); // 距离级(≥1.2 万才组网)。2026-09-26 x1/5(单局地图):原 60000
+  const R=Math.min(30000*CFG.scale,Math.max(6000*CFG.scale,D0*0.5)); // 2026-09-26 x1/5(单局地图):原 min 150000 / max 30000,与 52 的 netGeom 同口径
   const si=V.norm([p.shooter.pos[0]-target.pos[0],p.shooter.pos[1]-target.pos[1],0]); // 直插方向(目标→发射舰)
   let px=V.norm([-si[1],si[0],0]); // 垂直
   if(!isFinite(px[0])||V.len(px)<0.5)px=[0,1,0];
@@ -77,7 +77,7 @@ function recomputeNetOff(p,target){ // v135:目标转移后重算组网偏移(�
   }
   p.netOffR=R;p.netD0=D0;
 }
-const NET_COMM=30000; // v125:网内通信距离——断网超过此距离计时自毁。2026-09-26 x1/5(单局地图):原 150000
+const NET_COMM=30000*CFG.scale; // v125:网内通信距离——断网超过此距离计时自毁。2026-09-26 x1/5(单局地图):原 150000
 function updateNets(dt){ // v125:网内连接检查(仅地雷网)——雷组离网中心>NET_COMM=断网,计时10s没回自毁;清理空网(飞行攻击不要求组间通信)
   for(const [netId,net] of nets){
     const members=net.groups.map(g=>projectiles.find(p=>p.group===g&&p.type==='missile'&&!p.done&&p.mine)).filter(Boolean);

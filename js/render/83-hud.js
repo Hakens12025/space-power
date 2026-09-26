@@ -269,7 +269,7 @@ function drawProjectiles(){ // 弹丸/导弹
         }
       }else if(p.mine&&p===selMissile){
         ctx.fillStyle='rgba(159,212,255,.9)';ctx.font='10px Consolas';ctx.textAlign='left';ctx.textBaseline='top';
-        ctx.fillText(`⚙雷 ${p.count||16}颗 · 圈${Math.round((p.trigRadius||12000)/1000)}k`,s[0]+9,s[1]+9); // 2026-09-26 x1/5(单局地图):原 60000
+        ctx.fillText(`⚙雷 ${p.count||16}颗 · 圈${Math.round((p.trigRadius||12000*CFG.scale)/1000)}k`,s[0]+9,s[1]+9); // 2026-09-26 x1/5(单局地图):原 60000
       }
     }
   }

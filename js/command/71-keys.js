@@ -104,7 +104,7 @@ function doAction(id){
       const sel=controlledShips();
       sel.forEach(s=>{
         const back=V.norm([-s.facing[0],-s.facing[1],-s.facing[2]]);
-        const tgt=[s.pos[0]+back[0]*6000,s.pos[1]+back[1]*6000,s.pos[2]+back[2]*6000]; // 2026-09-26 x1/5(单局地图):原 30000
+        const tgt=[s.pos[0]+back[0]*6000*CFG.scale,s.pos[1]+back[1]*6000*CFG.scale,s.pos[2]+back[2]*6000*CFG.scale]; // 2026-09-26 x1/5(单局地图):原 30000
         s.orders=[mkOrder(tgt,'stop')];s.brake=false;s.crawling=false; // 2026-09-26 经 mkOrder:命令点夹进 ARENA
       });
       break;}

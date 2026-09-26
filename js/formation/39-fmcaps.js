@@ -257,8 +257,8 @@ function fmBandRadii(list, flag, bm, P) {
     if (s.ciwsOn && c.inner > 0) inns.push(c.inner * FM_CIWS_K);
     if (s.ciwsOn && c.outer > 0) outs.push(c.outer * FM_CIWS_K);
   });
-  const minIn = inns.length ? Math.min(...inns) : 8000;
-  const minOut = outs.length ? Math.min(...outs) : 25000;
+  const minIn = inns.length ? Math.min(...inns) : 8000 * CFG.scale;
+  const minOut = outs.length ? Math.min(...outs) : 25000 * CFG.scale;
   const m = bm || 1;
   /* FM6n 内置四条允许玩家【逐条覆盖】。覆盖是绝对值(千公里那个框),【不再乘 bm】——
      bm 是"把算出来的整体缩放",玩家写死的数不该再被缩放一次。
@@ -267,7 +267,7 @@ function fmBandRadii(list, flag, bm, P) {
      玩家要是把下游也填了,那就以玩家填的为准。 */
   const ovr = k => { const o = fmBandOvr(P, k); return fmBandReady(o) ? o.r : null; };
   const close = ovr('close') !== null ? ovr('close') : minIn * 0.9 * m;
-  const body = ovr('body') !== null ? ovr('body') : (minIn * 0.9 + 12000) * m;
+  const body = ovr('body') !== null ? ovr('body') : (minIn * 0.9 + 12000 * CFG.scale) * m;
   const screen = ovr('screen') !== null ? ovr('screen') : Math.max(body + minIn * m, minOut * 2 * m);
   const picket = ovr('picket') !== null ? ovr('picket') : screen * 2;
   const BR = { core: 0, close, body, screen, picket, baseGap: minIn * 2 };
@@ -283,7 +283,7 @@ function fmBandRadii(list, flag, bm, P) {
 function fmBandCloseCap(list, flag) {
   let mn = Infinity;
   list.forEach(s => { if (s === flag) return; const c = ciwsOf(s); if (s.ciwsOn && c.inner > 0) mn = Math.min(mn, c.inner); });
-  return isFinite(mn) ? mn : 4000; // 2026-09-26 兜底 = 现 DD 内圈(原 8000)
+  return isFinite(mn) ? mn : 4000 * CFG.scale; // 2026-09-26 兜底 = 现 DD 内圈(原 8000)
 }
 
 /* 最大权二分匹配(Kuhn–Munkres)。精确最优,不是贪心。返回 as[i] = 第 i 艘舰拿到的站位下标,−1 = 没派上。

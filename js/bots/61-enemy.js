@@ -41,7 +41,7 @@ function enemyAI(dt){
     /* ⑥ 规避:只躲【看得见】的来袭主炮弹(visRed 由 detectLoop 每拍算);AI1 之前对每一发都有预警。 */
     const incoming=projectiles.some(p=>p.type==='mac'&&p.target===e&&trkSees('red',p)); // TK4a:目击读航迹表
     if(incoming&&e.macEvadeCd<=0){e.macEvadeCd=8;
-      e.orders=[{pos:ordArenaClamp([e.pos[0]+(Math.random()-0.5)*4000,e.pos[1]+(Math.random()-0.5)*4000,0]),type:'stop'}];} // 2026-09-26 x1/5(单局地图):原 20000;规避点夹进 ARENA
+      e.orders=[{pos:ordArenaClamp([e.pos[0]+(Math.random()-0.5)*4000*CFG.scale,e.pos[1]+(Math.random()-0.5)*4000*CFG.scale,0]),type:'stop'}];} // 2026-09-26 x1/5(单局地图):原 20000;规避点夹进 ARENA
     if(e.macEvadeCd>0)e.macEvadeCd-=dt;
   }
 }

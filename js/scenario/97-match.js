@@ -11,7 +11,7 @@
    ⚠ 引擎里没有战场边界(CFG.world 只管星空贴图与开局镜头),所以"战场 200 万"不是一个要改的数,摆得开就是了。
    2026-09-26 整体 x1/5,上文旧数按 1/5 读(开局间距 60 万);并且现在【有】边界了:单局游玩区 ARENA(80 万 x 45 万,轴对齐,中心 = 两军重心连线中点)由 matchPlaceRed 设,
    舰船出不去(physics/31)、弹丸出界消失(weapons)。红方来向 ±60° 在 45 万高的矩形里装不下,收成 ±ARC(见 MATCH)。 */
-const MATCH={OPEN:600000,ARC:20*Math.PI/180,shown:false,t0:0,nBlue:0,nRed:0,theta:0,seed:0,blueC:null,redC:null,
+const MATCH={OPEN:600000*CFG.scale,ARC:20*Math.PI/180,shown:false,t0:0,nBlue:0,nRed:0,theta:0,seed:0,blueC:null,redC:null,
   fix:Math.floor(+new URLSearchParams(location.search).get('seed')||0)}; // seed = 这一局的种子(定红方来向与整个世界);fix = 地址 ?seed=N 固定种子(重放同一张图)。2026-09-26 x1/5(单局地图):OPEN 原 3000000;ARC 原 60°,改 20°:两军纵向错开至多 60 万·sin20° ≈ 20.5 万,各离游玩区上下边 >= 22.5-10.3-阵型半宽 ≈ 9.7 万
 function matchIdx(){for(let i=0;i<TEST_ENVS.length;i++)if(TEST_ENVS[i].match)return i;return -1;}
 function matchIsOn(){const e=curEnv();return !!(e&&e.match);}
@@ -45,12 +45,12 @@ function matchGenWorld(seed,B,R){
   if(r()<0.5)w.sun={brg:Math.round(r()*360),half:10};
   else{const a=r()*2*Math.PI,d=6e6+r()*3e6;w.stars=[{x:Math.round(mx+Math.cos(a)*d),y:Math.round(my+Math.sin(a)*d)}];}
   for(let n=Math.floor(r()*3),k=0;k<40&&w.bodies.length<n;k++){const p=inA(),rad=50000+r()*30000; // 2026-09-26 中心摆进游玩区,离两军重心 >= 半径+10 万、彼此 >= 两半径+10 万,摆不下就少摆:原 对阵轴上、离两军 40 万、彼此 80 万
-    if(far(p,B,rad+100000)&&far(p,R,rad+100000)&&w.bodies.every(function(b){return far(p,[b.x,b.y],rad+b.r+100000);}))w.bodies.push({x:Math.round(p[0]),y:Math.round(p[1]),r:Math.round(rad)});}
+    if(far(p,B,rad+100000*CFG.scale)&&far(p,R,rad+100000*CFG.scale)&&w.bodies.every(function(b){return far(p,[b.x,b.y],rad+b.r+100000*CFG.scale);}))w.bodies.push({x:Math.round(p[0]),y:Math.round(p[1]),r:Math.round(rad)});}
   for(let n=Math.floor(r()*3),k=0;k<n;k++){const p=at(r()*1.6-0.8,r()*2-1),a=2e6*Math.pow(8,r()),b=a*(0.4+0.6*r());
     w.clouds.push({x:Math.round(p[0]),y:Math.round(p[1]),a:Math.round(a),b:Math.round(b),ang:Math.round(r()*180),seed:Math.floor(r()*1e6)});}
   for(let n=20+Math.floor(r()*21),k=0,m=0;k<n*20&&m<n;k++){const p=inA(),sd=Math.floor(r()*1e6); // 2026-09-26 撒满整个游玩区矩形(原:中点为心、半径 0.6D 的圆;clear 原 150000)。world/12 只认圆 ⇒ 一颗一条(r=1、n=1),避让口径同它的 envSpawnBlocked
-    if(ships.some(function(s){return !far(p,s.pos,30000);})||w.bodies.some(function(b){return !far(p,[b.x,b.y],b.r+30000);}))continue;
-    w.asteroids.push({x:Math.round(p[0]),y:Math.round(p[1]),r:1,n:1,seed:sd,clear:30000,name:'小行星'});m++;}
+    if(ships.some(function(s){return !far(p,s.pos,30000*CFG.scale);})||w.bodies.some(function(b){return !far(p,[b.x,b.y],b.r+30000*CFG.scale);}))continue;
+    w.asteroids.push({x:Math.round(p[0]),y:Math.round(p[1]),r:1,n:1,seed:sd,clear:30000*CFG.scale,name:'小行星'});m++;}
   return w;
 }
 function matchSync(){ // 顶栏钮的字与提示跟着当前场景走(进 / 出对局、场景菜单切走,都经过 initFleet ⇒ 由它调)

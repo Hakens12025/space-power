@@ -299,7 +299,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
       ['单枚伤',m.missDmg||12],
       ['组伤',Math.round(m.dmg||((m.count||12)*(m.missDmg||12)))],
       ...(m.vPeak?[['巡航',Math.round(m.vPeak)],['终端',Math.round(m.vTerm)]]:[]),
-      ['触发圈',Math.round((m.trigRadius||12000)/1000)+'k'], // 2026-09-26 x1/5(单局地图):原 60000
+      ['触发圈',Math.round((m.trigRadius||12000*CFG.scale)/1000)+'k'], // 2026-09-26 x1/5(单局地图):原 60000
     ].map(it=>`<span class="fi"><i>${it[0]}</i><b>${it[1]}</b></span>`).join('');
     const stt=m.mine?'伏击雷 · 静默待命':m.park?'飞向布雷点':(m.netOff?'组网包抄':(m.coastT>0?'脱锁滑行':'突击中'));
     const tgt=m.target?(m.target.name||(m.target.pos?'区域点':'—')):(m.mine?'无(待触发)':'无');

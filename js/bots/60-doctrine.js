@@ -43,7 +43,7 @@
 /* H1(形态 H):四个尺度常数跟着战场放大。LEAD 20 万 → 50 万(沿方位线一次推进多远:发现距离从 65 万变成 160~281 万,20 万一段太碎);
    MEM_S 120 → 300 秒;SPREAD 6 万 → 15 万(纯方位交叉定位的基线:目标在 200 万开外时 6 万的基线几乎是一条线);RING 40 万 → 100 万;REACH 6 万 → 10 万。
    2026-09-26 整体 x1/5,上文旧数按 1/5 读。 */
-const AIR={LEAD:100000,MEM_S:300,SPREAD:30000,RING:200000,REACH:20000, // 2026-09-26 x1/5(单局地图):原 LEAD 500000 / SPREAD 150000 / RING 1000000 / REACH 100000;MEM_S 是秒不缩
+const AIR={LEAD:100000*CFG.scale,MEM_S:300,SPREAD:30000*CFG.scale,RING:200000*CFG.scale,REACH:20000*CFG.scale, // 2026-09-26 x1/5(单局地图):原 LEAD 500000 / SPREAD 150000 / RING 1000000 / REACH 100000;MEM_S 是秒不缩
   goal:null,src:'',memPos:null,memT:0,wp:0,u:[-1,0]};
 function aiObjective(){const env=(typeof curEnv==='function')?curEnv():null;return (env&&env.objective)?env.objective:[0,0];}
 function aiSearchWp(k){ // 第 0 个是战场中心,之后按五角星次序(每步转 144 度)绕圈 —— 相邻两步横穿圆心,扫过的面积最大

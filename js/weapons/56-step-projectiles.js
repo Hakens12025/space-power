@@ -97,7 +97,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
       if(p.mine){ // 伏击雷(已布设):静止待命,自带被动传感器自主触发,点火=情报
         p.vel=[0,0,0];p.spd=0;
         let trig=null;
-        const trigR=p.trigRadius||12000; // 2026-09-26 x1/5(单局地图):原 60000
+        const trigR=p.trigRadius||12000*CFG.scale; // 2026-09-26 x1/5(单局地图):原 60000
         for(const s of ships){
           if(s.dead||s.side===p.shooter.side)continue;
           if(V.len(V.sub(s.pos,p.pos))>trigR)continue;
@@ -108,7 +108,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         if(trig){
           p.mine=false;p.target=trig; // 二次点火:变普通追击导弹扑上去
         }else if(p.lastTarget&&!p.lastTarget.dead){ // DS156 脱锁雷复活:重新获得原目标信息(被网络点亮)且还在警戒圈→复活追击(未竟任务继续)
-          if(trkFix(trkOf(p.shooter.side,p.lastTarget))&&V.len(V.sub(p.lastTarget.pos,p.pos))<=(p.trigRadius||12000)*2){ // 2026-09-26 x1/5(单局地图):缺省原 60000
+          if(trkFix(trkOf(p.shooter.side,p.lastTarget))&&V.len(V.sub(p.lastTarget.pos,p.pos))<=(p.trigRadius||12000*CFG.scale)*2){ // 2026-09-26 x1/5(单局地图):缺省原 60000
             p.mine=false;p.target=p.lastTarget;p.chaffed=false;p.lastKpos=null;p.guided=true; // 复活=重新入引导(目标在自导范围,网已点亮)
           }
         }
@@ -121,7 +121,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         const pvn=V.len(p.vel);
         if(pdist<1200||(pdist<5000&&pvn<80)){ // 到位(或低速贴点)→ 布设;v133:3万→5千,布雷贴点才变雷(原3万太松"瞬间停止")
           p.park=false;p.mine=true;p.vel=[0,0,0];p.spd=0;
-          if(p.parkFctrl)p.trigRadius=Math.max(p.trigRadius||12000,24000); // DS192:途中吃到火控的区域齐射弹=有信息支持,落地触发圈 24k(没吃到保持原值)。2026-09-26 x1/5(单局地图):原 60000 / 120000
+          if(p.parkFctrl)p.trigRadius=Math.max(p.trigRadius||12000*CFG.scale,24000*CFG.scale); // DS192:途中吃到火控的区域齐射弹=有信息支持,落地触发圈 24k(没吃到保持原值)。2026-09-26 x1/5(单局地图):原 60000 / 120000
           return;
         }
         const pdir=V.norm(toP);
@@ -202,7 +202,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         const toK=V.sub(p.lastKpos,p.pos);
         const kdist=V.len(toK);
         if(kdist<1200){ // 到点 → 变地雷:停车静默待命(敌舰进圈自主点火),等重新获得信息复活
-          p.mine=true;p.vel=[0,0,0];p.spd=0;p.target=null;p.trigRadius=p.trigRadius||12000;return; // 2026-09-26 x1/5(单局地图):缺省原 60000
+          p.mine=true;p.vel=[0,0,0];p.spd=0;p.target=null;p.trigRadius=p.trigRadius||12000*CFG.scale;return; // 2026-09-26 x1/5(单局地图):缺省原 60000
         }
         const kdir=V.norm(toK);
         // 飞向最后已知位置(巡航加速:有燃料就飞快点到点变雷,燃料尽只能滑行)
@@ -226,7 +226,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
       if(p.guideMode==='self'&&p.target&&p.target.side&&!p.chaffed){
         for(const q of projectiles){
           if(q.type!=='decoy'||q.done)continue;
-          if(V.len(V.sub(q.pos,p.pos))<4000){ // 2026-09-26 x1/5(单局地图):原 20000
+          if(V.len(V.sub(q.pos,p.pos))<4000*CFG.scale){ // 2026-09-26 x1/5(单局地图):原 20000
             if(Math.random()<0.3){p.target=q;q.dead=false;} // 勾走:目标=诱饵实体(补dead字段,转移分支不误判失效;诱饵done时导弹同毁)
             break;
           }
@@ -246,10 +246,10 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
       let evX=0,evY=0;
       const icArr=p.shooter.side==='blue'?icRed:icBlue; // v119:读预收集表,平方距离免开方
       let nearIc=false;
-      for(let i=0;i<icArr.length;i++){const q=icArr[i];const ddx=q.pos[0]-p.pos[0],ddy=q.pos[1]-p.pos[1],ddz=q.pos[2]-p.pos[2];if(ddx*ddx+ddy*ddy+ddz*ddz<156250000){nearIc=true;break;}} // 12500²(= DD 近防外圈)。2026-09-26 跟近防走:原 25000²
+      for(let i=0;i<icArr.length;i++){const q=icArr[i];const ddx=q.pos[0]-p.pos[0],ddy=q.pos[1]-p.pos[1],ddz=q.pos[2]-p.pos[2];if(ddx*ddx+ddy*ddy+ddz*ddz<156250000*CFG.scale*CFG.scale){nearIc=true;break;}} // 12500²(= DD 近防外圈)。2026-09-26 跟近防走:原 25000²
       if(nearIc&&p.fuel>20){ // 蛇形:横向正弦摆动,幅度随接近收敛(远处难拦,近处收拢命中)
         const dirT=V.norm(V.sub(tp,p.pos));
-        const sw=Math.sin((p.age||0)*6)*Math.min(8000,dist*0.3); // 2026-09-26 x1/5(单局地图):幅度上限原 40000
+        const sw=Math.sin((p.age||0)*6)*Math.min(8000*CFG.scale,dist*0.3); // 2026-09-26 x1/5(单局地图):幅度上限原 40000
         evX=-dirT[1]*sw; evY=dirT[0]*sw;
       }
       let aim=[tp[0]+tv[0]*tLead+evX,tp[1]+tv[1]*tLead+evY,tp[2]+tv[2]*tLead]; // WR1:瞄估计位置
@@ -304,7 +304,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         const sect=sectorOf(Math.atan2(p.pos[1]-p.target.pos[1],p.pos[0]-p.target.pos[0]));
         let ng=1;const sects=new Set([sect]);
         for(const q of projectiles){
-          if(q!==p&&q.type==='missile'&&!q.done&&q.shooter.side===p.shooter.side&&V.len(V.sub(q.pos,p.pos))<40000){ // v119:只统计同为攻击方的组,防近防误算己方导弹。2026-09-26 x1/5(单局地图):原 200000
+          if(q!==p&&q.type==='missile'&&!q.done&&q.shooter.side===p.shooter.side&&V.len(V.sub(q.pos,p.pos))<40000*CFG.scale){ // v119:只统计同为攻击方的组,防近防误算己方导弹。2026-09-26 x1/5(单局地图):原 200000
             const qs=sectorOf(Math.atan2(q.pos[1]-p.target.pos[1],q.pos[0]-p.target.pos[0]));
             if(qs===sect)ng++;
             sects.add(qs);
@@ -354,7 +354,7 @@ function stepInterceptorProj(p,dt){ // 拦截导弹(v114):燃料模式可出远�
         let tgt=null;
         for(const q of projectiles){
           if(q.type!=='missile'||q.done||q.shooter.side===p.shooter.side)continue;
-          if(V.len(V.sub(q.pos,p.pos))<(p.screenRange||50000)){tgt=q;break;} // 2026-09-26 跟近防走:缺省原 100000
+          if(V.len(V.sub(q.pos,p.pos))<(p.screenRange||50000*CFG.scale)){tgt=q;break;} // 2026-09-26 跟近防走:缺省原 100000
         }
         if(tgt){p.screen=false;p.target=tgt;p.spd=Math.max(p.spd,2000);}
         return;
