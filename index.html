@@ -115,7 +115,7 @@
      硬约束仅两条:core/00 定义 on() 必须最先(85/95/96/97 顶层调用它);core/99 顶层执行 init() 必须最后(且 init 调 loadRangeCfg,
      故 scenario/95 必须在它之前)。其余跨文件引用全在运行期解析,层序排列只为可读性。 -->
 <script src="js/core/00-config.js?v=20260926k"></script>
-<script src="js/core/01-state.js?v=20260926z"></script>
+<script src="js/core/01-state.js?v=20260926j"></script>
 <script src="js/ships/10-hull-geometry.js?v=20260923"></script>
 <script src="js/ships/11-classes.js?v=20260926k"></script>
 <script src="js/world/12-env.js?v=20260926z"></script><!-- ENV1 环境系统:太阳禁区 + 天体 + 石头(TK4c)。必须在 sensors/ 之前:23-cov 加载期的梯子反解会读 optLum -->
@@ -175,7 +175,7 @@
 <script src="js/scenario/91-init.js?v=20260926x"></script>
 <script src="js/scenario/95-range.js?v=20260926k"></script>
 <script src="js/scenario/96-spawn.js?v=20260923"></script><!-- FM7 测试用加船小条。放在 95 之后、core/99 之前:它顶层调 on(),而 on() 定义在 core/00 -->
-<script src="js/scenario/97-match.js?v=20260926z"></script><!-- MT1 对局入口 / 红方摆位 / 结果卡片。顶层调 on(),须在 core/00 之后;matchPlaceRed 被 91-init 运行期调用 -->
+<script src="js/scenario/97-match.js?v=20260926j"></script><!-- MT1 对局入口 / 红方摆位 / 结果卡片。顶层调 on(),须在 core/00 之后;matchPlaceRed 被 91-init 运行期调用 -->
 <script src="js/core/99-main.js?v=20260926z"></script>
 </body>
 </html>
