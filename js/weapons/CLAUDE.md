@@ -9,7 +9,7 @@
 ## 射程与瞄准
 - 设计数据按现实单位写,经 core/00 的 `PHYS` 换成引擎单位(速度 x `TIME_K`、加速度 x `TIME_K`²、时长 / `TIME_K`);引擎内部按"游戏秒"跑(1 游戏秒 = `TIME_K` 物理秒),内部的导引 / 控制常数仍是游戏单位。
 - 和感知 / 交战 / 游玩区挂钩的长度一律写成 `基准 * CFG.scale`(core/00 的统一尺度倍数,现为 1);速度、时间、角度、像素、亮度不乘。改倍数要看的漂移比值写在 `CFG.scale` 的注释里。
-- 没有射程门。命中率是 S 形 P(d) = 1/(1+(d/d50)^`MAC_K`),d50 由 `macSigma` 反算(7.3 万);每发的角散布 `macShotSigma(s,d)` 按 P(d) 反推,实打与曲线一致。距离一律调 `macHitProb` / `macRangeAt` / `macEffRange`(= 50% 把握距离),不写公里数。
+- 没有射程门。命中率是 S 形 P(d) = 1/(1+(d/d50)^`MAC_K`),d50 由 `macSigma` 反算(7.3 万);每发的角散布 `macShotSigma(s,d)` 按 P(d) 反推,封顶 `MAC_SIG_CAP` 3°(约 16.5 万起),到顶以后命中率按固定角散布算(20 / 30 / 40 万 3.0% / 2.0% / 1.5%);`macHitProb` 两段都包含,实打与曲线一致。距离一律调 `macHitProb` / `macRangeAt` / `macEffRange`(= 50% 把握距离),不写公里数。
 - 导弹射程 = 设计包线 `LAD.msl`(40 万 x scale,2026-09-28),`mslReach(s)` 直接读它。
 - 发射后锁定(2026-09-28):没目标 / 丢目标的导弹(区域齐射、脱锁、数据链待分配、巡飞)每拍 `mslSeek` 找导引头看得见的最近目标(舰船 + 有结构值的物体,分不出民船诱饵),`mslAcquire` 转自导。到点:`p.mineOk`(底栏「变雷」,render/88 的 `cbMine`)勾了停下变雷,没勾转 `p.cruise` 直飞搜索。雷的触发同样走 `mslSeek`。自动齐射只在 `mslReach` 内打;玩家的火控序列不限。
 - 三段飞法(56 `stepMissileProj`):进自己导引头范围(`GUIDE_SEEK`)之前,照当前航向的脱靶量在 `MSL_MISS` 内就不转向;直射弹加速不许动 `keep`(末段预留)。这一拍烧没烧油写 `p.lit`,红外亮度按它(sensors/22 `projSig`)。组网弹的包抄航线是弯的、还要减速到 `vTerm`,所以几乎全程在喷。

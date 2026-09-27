@@ -51,18 +51,21 @@ function erfInv(x){ // Winitzki 近似 + 两步牛顿(按 erfApprox)
   return y;
 }
 function macD50(sig){return sig>0?MAC_HIT_R/(sig*MAC_Z50):0;}
-function macHitProb(s,d){ // 主炮在距离 d 上对标准命中判定半径的命中率(靶不动)
+const MAC_SIG_CAP=3*Math.PI/180; // 2026-09-28 用户:每发角散布封顶 3°(约 16.5 万起;原封顶 0.5 弧度 = 28.6°,远射满天飞)。再远按固定 3° 的一维高斯算:20 / 30 / 40 万命中 3.0% / 2.0% / 1.5%(远射 = 抽奖)
+function macHitCap(d){return erfApprox(MAC_HIT_R/(Math.SQRT2*d*MAC_SIG_CAP));} // 散布到顶以后的命中率
+function macHitProb(s,d){ // 主炮在距离 d 上对标准命中判定半径的命中率(靶不动):S 形,散布到顶以后改固定角(与 macShotSigma 实打一致)
   const sig=sReq(s,'macSigma'); if(!(sig>0)||!(d>0))return sig>0?1:0;
-  return 1/(1+Math.pow(d/macD50(sig),MAC_K));
+  const p=1/(1+Math.pow(d/macD50(sig),MAC_K));
+  return (p<1-1e-9&&MAC_HIT_R/(d*Math.SQRT2*erfInv(p))>MAC_SIG_CAP)?macHitCap(d):p;
 }
 function macRangeSig(sig,p){ // BOT1:按【给定的散布】反算命中率恰为 p 的距离。红方条令要问「对方那一型打我打得多准」,手里只有舰种不是实例
   if(!(p>0&&p<1))throw new Error('macRangeSig: p 要在 (0,1) 里');
-  return sig>0?macD50(sig)*Math.pow((1-p)/p,1/MAC_K):0;
+  return sig>0?Math.max(macD50(sig)*Math.pow((1-p)/p,1/MAC_K),MAC_HIT_R/(Math.SQRT2*MAC_SIG_CAP*erfInv(p))):0; // 两段取远的那一个(散布到顶以后命中率掉得慢)
 }
 function macRangeAt(s,p){return macRangeSig(sReq(s,'macSigma'),p);} // 命中率恰为 p 的距离
-function macShotSigma(s,d){ // 2026-09-28 这一发的角散布:一维高斯脱靶落进 MAC_HIT_R 的概率 = macHitProb(s,d);封顶 0.5 弧度(再远的把握 < 0.2%,不让炮弹横着飞)
+function macShotSigma(s,d){ // 2026-09-28 这一发的角散布:一维高斯脱靶落进 MAC_HIT_R 的概率 = macHitProb(s,d);封顶 MAC_SIG_CAP(3°)
   const p=macHitProb(s,d);if(p>=1-1e-9)return 0;
-  return Math.min(0.5,MAC_HIT_R/(d*Math.SQRT2*erfInv(p)));
+  return Math.min(MAC_SIG_CAP,MAC_HIT_R/(d*Math.SQRT2*erfInv(p)));
 }
 function macEffRange(s){return macRangeAt(s,0.5);} // 有效射程 = 命中率 50% 的距离。调用点一律调它,绝不在别处重拼
 function mslReach(s){return LAD.msl;} // 2026-09-27 射程 = 设计包线 20 万(用户定;原来是「一半油加速、一半油减速」的动力射程 7.5 万)。靠三段飞法撑住:加速 → 熄火滑行(不耗油)→ 末段用预留燃料修正,见 56 的 stepMissileProj
