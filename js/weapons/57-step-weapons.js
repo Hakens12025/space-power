@@ -88,7 +88,7 @@ function stepWeaponSystems(dt){
     }
   }
   for(const s of ships){const ff=s.forceMac;if(!ff)continue; // 2026-09-27 强行开火(用户:「选择使用某种武器攻击相应鼠标选定位置」):转向目标 / 地面点,对准就开一炮;不看火控、主炮勾选与把握门,60 秒没打出去作废
-    ff.T-=dt;const tp=ff.t?((ff.t.dead||ff.t.side===s.side)?null:macPred(s,ff.t)):ff.pt;
+    ff.T-=dt;const tp=ff.t?((ff.t.dead||ff.t.side===s.side)?null:macPred(s,ff.t)):macPtLead(s,ff.pt); // 打空地也按相对参照系提前
     if(!tp||ff.T<=0||s.dead||!hasMAC(s)){s.forceMac=null;continue;}
     s.turnTarget=[tp[0],tp[1],0]; // 朝向层对准后会清掉 turnTarget,所以每拍重设
     if(s.macCd<=0&&V.angle(s.facing,V.norm(V.sub(tp,s.pos)))<0.02){if(ff.t)fireMAC(s,ff.t);else fireMACAt(s,ff.pt);if(s.macCd>0){s.forceMac=null;s.turnTarget=null;}}

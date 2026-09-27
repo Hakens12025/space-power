@@ -7,6 +7,7 @@ function macPred(s,t){ // 目标未来位置(提前量,MAC 0.1c飞行时间);KIM
   const tt=d/CFG.macSpd;
   return [tp[0]+(t.vel[0]-s.vel[0])*tt,tp[1]+(t.vel[1]-s.vel[1])*tt,tp[2]+(t.vel[2]-s.vel[2])*tt];
 }
+function macPtLead(s,pt){const tt=V.len(V.sub(pt,s.pos))/CFG.macSpd;return [pt[0]-s.vel[0]*tt,pt[1]-s.vel[1]*tt,(pt[2]||0)-s.vel[2]*tt];} // 2026-09-28 打空地的提前量:炮弹带着本舰速度,机头要瞄 点 − 本舰速度 x 飞行时间(与 macPred 同一个相对参照系;原来直接瞄点,行进中系统性偏向本舰运动方向)
 function macAligned(s,t){ // 轴炮窗口:机头是否对准预测点(~1.1°容差,摆到窗口即开火)
   if(!t||t.dead||t.side===s.side)return false;
   const mp=macPred(s,t); if(!mp)return false; // WR1:没有估计位置就没有窗口
@@ -69,7 +70,8 @@ const MSL_LOAL_KEEP=PHYS.t(200); // 2026-09-28 区域齐射 / 脱锁的弹加速
 const MSL_MISS=1000*CFG.scale; // 滑行段的脱靶容差 km:照当前航向飞下去、离瞄准点的横向偏差不超过它就不转向(不转 = 不喷 = 红外里是冷的),超了才点火修正
 function fireMACAt(shooter,pt){ // 2026-09-27 主炮打空地(强行开火):朝那个点开一炮;没有目标,弹道上碰到对方哪艘船算哪艘(56 按 ground 判),飞到那个点消失
   if(shooter.noFire||shooter.dead)return;
-  const d=V.len(V.sub(pt,shooter.pos)),tt=d/CFG.macSpd,dir=V.norm(shooter.facing),ang=Math.atan2(dir[1],dir[0])+gaussRand()*macShotSigma(shooter,d),hxy=Math.hypot(dir[0],dir[1]);
+  const L=macPtLead(shooter,pt),d=V.len(V.sub(L,shooter.pos)),tt=d/CFG.macSpd,dir=V.norm(V.sub(L,shooter.pos)), // 2026-09-28 出膛沿精确瞄准线(机头已在 ±1.1° 窗口里,见 fireMAC 同一条)
+   ang=Math.atan2(dir[1],dir[0])+gaussRand()*macShotSigma(shooter,d),hxy=Math.hypot(dir[0],dir[1]);
   projectiles.push({type:'mac',pos:shooter.pos.slice(),vel:[Math.cos(ang)*hxy*CFG.macSpd+shooter.vel[0],Math.sin(ang)*hxy*CFG.macSpd+shooter.vel[1],dir[2]*CFG.macSpd+shooter.vel[2]],target:null,ground:true,shooter,pred:pt.slice(),tt,age:0,dmg:shooter.macDmg});
   shooter.fireHot=SENS.FIRE_S;shooter.macCd=shooter.macReload||0;
 }
@@ -80,7 +82,7 @@ function fireMAC(shooter,target){ // MAC轴炮:沿船头方向直射(必须先�
   const pred=macPred(shooter,target); if(!pred)return; // WR1:交代不出估计位置就不开火(不回落真值)
   const d=V.len(V.sub(pred,shooter.pos)); // WR1:飞行距离按预测点算(没有射程门了,d 只决定弹丸寿命)
   const tt=d/CFG.macSpd; // 飞行时间(MAC 0.1c)
-  const dir=V.norm(shooter.facing); // 轴炮:弹道=船头轴线(单位化防脏数据)
+  const dir=V.norm(V.sub(pred,shooter.pos)); // 2026-09-28 出膛沿精确瞄准线 + 散布:调用方都先查了机头在 ±1.1° 窗口里(macAligned);原来沿船头轴线,机头刚擦进窗口就开,4 万处偏出约 800 km(命中半径 400),实打低于命中率曲线、行进中尤其乱
   const da=gaussRand()*macShotSigma(shooter,d); // WR1:每一发都带高斯角散布;2026-09-28 散布按距离反推,打出来的命中率 = macHitProb 的 S 形
   const ang=Math.atan2(dir[1],dir[0])+da;
   const hxy=Math.hypot(dir[0],dir[1]); // KIMI146修:xy分量按朝向的xy模长缩放——原直接用满macSpd再叠dir[2]·macSpd,合速度超0.1c且弹道≠机头轴线(带俯仰时必脱靶)
