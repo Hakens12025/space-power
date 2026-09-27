@@ -76,12 +76,14 @@ function drawRange(){ // 测距工具(按住C):起点(或跟随船)→鼠标目�
   ctx.fillText(txt,q[0],q[1]-14);
   ctx.restore();
 }
+function viewPos(s){return (adminMode||s.side==='blue')?s.pos:contactPos(s,'blue');} // 2026-09-28 画面上对方东西画在哪 / 量多远的唯一出处:我方知道的位置(估计;GM 真值),交代不出给 null(不拿真值兜底)
 function drawLocks(){ // 火力锁定:红色虚线
   for(const s of ships){
     if(s.dead||!s.lockedTarget||s.lockedTarget.dead||s.lockedTarget.side===s.side)continue;
     if(!adminMode&&s.side==='red')continue; // 普通模式:敌方攻击目标不可见
+    const tq=viewPos(s.lockedTarget);if(!tq)continue; // 2026-09-28 画到我方知道的位置;接触丢了就不画(原来一直套在真值上)
     const p=toScreen(s.pos[0],s.pos[1]);
-    const q=toScreen(s.lockedTarget.pos[0],s.lockedTarget.pos[1]);
+    const q=toScreen(tq[0],tq[1]);
     ctx.save();
     ctx.setLineDash([6,4]);
     ctx.strokeStyle='rgba(255,80,80,.85)';ctx.lineWidth=1.5;
@@ -430,16 +432,16 @@ function drawHoverRings(){
    红外异常 = 蓝方航迹表里只有红外量测、还没定位的接触(heat 态 + cov.ch.opt),第一次出现、或开始点火 / 刹车 / 开火时报;标在它那团热所在处(与红外画面同一处)。
    雷达异常 = sensors/21 的 ESM 记录里还没定位的辐射源,沉默 ANOM.GAP 游戏秒以上又听到时报(每次脉冲都会报,持续照射只报开头);标在雷达画面那片听到区域的中心。
    约 ANOM.LIFE 毫秒淡出;屏幕上相近的同类只画一个。 */
-const ANOM={m:new WeakMap(),list:[],LIFE:5000,GAP:20,t:-1e9};
+const ANOM={m:new WeakMap(),list:[],LIFE:5000,GAP:20,t:-1e9,RMIN:8,RMAX:160}; // 2026-09-28 圈的屏幕半径夹在 RMIN~RMAX px(不确定半径 x 缩放)
 function anomScan(now){
   if(simTime<ANOM.t){ANOM.m=new WeakMap();ANOM.list.length=0;}ANOM.t=simTime; // 换局
   if(typeof trkEach==='function')trkEach('blue',(tk,st)=>{const s=trkSrc(tk);let a=ANOM.m.get(s);if(!a){a={ir:false,fl:0,fh:false,rd:-1e9};ANOM.m.set(s,a);}
     const ir=st==='heat'&&!!(tk.cov&&tk.cov.ch&&tk.cov.ch.opt);
-    if(ir){const fl=s.flame||0,fh=(s.fireHot||0)>0;if(!a.ir||(fl&&!a.fl)||(fh&&!a.fh))ANOM.list.push({k:'ir',x:s.pos[0],y:s.pos[1],t0:now});a.fl=fl;a.fh=fh;}
+    if(ir){const fl=s.flame||0,fh=(s.fireHot||0)>0;if(!a.ir||(fl&&!a.fl)||(fh&&!a.fh)){const L=contactLayer(s,'blue','opt');if(L)ANOM.list.push({k:'ir',x:L.x,y:L.y,r:L.r,t0:now});}a.fl=fl;a.fh=fh;} // 2026-09-28 位置与圈的大小 = 红外那一层自己的估计与不确定(原来标在真值)
     a.ir=ir;});
   if(typeof esmEach==='function')esmEach('blue',(E,arr)=>{if(contactFix(E,'blue'))return;let a=ANOM.m.get(E);if(!a){a={ir:false,fl:0,fh:false,rd:-1e9};ANOM.m.set(E,a);}
     let b=arr[0].k;for(const x of arr)if(x.k.sr<b.sr)b=x.k;
-    if(b.t>a.rd){if(b.t-a.rd>ANOM.GAP)ANOM.list.push({k:'rd',x:b.org[0]+Math.cos(b.tb)*b.rr,y:b.org[1]+Math.sin(b.tb)*b.rr,t0:now});a.rd=b.t;}});
+    if(b.t>a.rd){if(b.t-a.rd>ANOM.GAP)ANOM.list.push({k:'rd',x:b.org[0]+Math.cos(b.tb)*b.rr,y:b.org[1]+Math.sin(b.tb)*b.rr,r:Math.sqrt(Math.min(b.sr,TRK_ERR.ALONG_K*b.rr)*b.sc),t0:now});a.rd=b.t;}}); // 2026-09-28 静听测距 / 方位已带估计误差(21 的 esmHear);圈 = 等面积 1σ
 }
 function drawAnomalies(){
   const now=nowMs();anomScan(now);if(!ANOM.list.length)return;
@@ -448,8 +450,9 @@ function drawAnomalies(){
     const p=toScreen(e.x,e.y);if(p[0]<-40||p[0]>W+40||p[1]<-40||p[1]>H+40)continue;
     if(drawn.some(d=>d[2]===e.k&&Math.hypot(d[0]-p[0],d[1]-p[1])<40))continue;drawn.push([p[0],p[1],e.k]);
     const col=e.k==='ir'?'255,180,84':'84,224,208',a=k<0.08?k/0.08:1-(k-0.08)/0.92;
-    ctx.globalAlpha=a;ctx.strokeStyle='rgb('+col+')';ctx.lineWidth=1.3;ctx.beginPath();ctx.arc(p[0],p[1],6+4*Math.min(1,k*3),0,6.283);ctx.stroke();
-    ctx.fillStyle='rgb('+col+')';ctx.fillText(e.k==='ir'?'红外异常':'雷达异常',p[0],p[1]-12);}
+    const R=Math.max(ANOM.RMIN,Math.min(ANOM.RMAX,(e.r||0)*cam.zoom))*(0.6+0.4*Math.min(1,k*3)); // 简易提醒:圈的大小 = 这一层的不确定,画法不跟各层的画面走
+    ctx.globalAlpha=a;ctx.strokeStyle='rgb('+col+')';ctx.lineWidth=1.3;ctx.beginPath();ctx.arc(p[0],p[1],R,0,6.283);ctx.stroke();
+    ctx.fillStyle='rgb('+col+')';ctx.fillText(e.k==='ir'?'红外异常':'雷达异常',p[0],p[1]-R-2);}
   ctx.restore();
 }
 const SHTR={MS:8000,SEG:10,LEN:800000}; // 2026-09-28 炮弹来路线:墙钟亮多久 / 分几段渐隐 / 没有游玩区时往回画多长 km
@@ -511,8 +514,9 @@ function drawTargeting(){
   ctx.moveTo(sx,sy-11);ctx.lineTo(sx,sy-4);
   ctx.moveTo(sx,sy+4);ctx.lineTo(sx,sy+11);
   ctx.stroke();
-  if(tgt){
-    const p=toScreen(sub.pos[0],sub.pos[1]),q=toScreen(tgt.pos[0],tgt.pos[1]);
+  const tq=tgt?viewPos(tgt):null; // 2026-09-28 预览线连到我方知道的位置
+  if(tq){
+    const p=toScreen(sub.pos[0],sub.pos[1]),q=toScreen(tq[0],tq[1]);
     // WR1 预览线按【动力射程】着色(没有射程门了;之外能打但靠滑行 + 数据链)。没装导弹的舰 R=0 一律暗色。
     const R=(sub.ammo>0&&sub.cells>0)?mslReach(sub):0;
     const inR=R>0&&V.len(V.sub(tgt.pos,sub.pos))<=R; // 判据是世界距离而非屏幕距离(屏幕距离随 zoom 变,同一目标会时内时外)
@@ -621,7 +625,8 @@ function drawFollowLinks(){
     const t=followTargetOf(s);                          // 纯读:只做 ships.find + dead 判定,不推进 s.follow.ang
     if(!t)continue;
     if(selected.indexOf(s.id)<0&&selected.indexOf(t.id)<0)continue;
-    const a=toScreen(t.pos[0],t.pos[1]),b=toScreen(s.pos[0],s.pos[1]);
+    const tp=viewPos(t);if(!tp)continue; // 2026-09-28 跟随对方的船:连到我方知道的位置
+    const a=toScreen(tp[0],tp[1]),b=toScreen(s.pos[0],s.pos[1]);
     if(!isFinite(a[0])||!isFinite(a[1])||!isFinite(b[0])||!isFinite(b[1]))continue;
     if(Math.hypot(b[0]-a[0],b[1]-a[1])<6)continue;      // 贴到一起时不画,免得糊成一个点
     if(!began){ctx.save();ctx.strokeStyle='rgba(255,224,102,.85)';ctx.lineWidth=1;ctx.setLineDash(FOL_FLOW_DASH);ctx.lineDashOffset=off;began=true;}
@@ -637,7 +642,7 @@ function drawFcChain(){ // RF7 火控序列态的数据链(蓝色铁路线):主�
   const q=fcSeq(s.fcEditId);if(!q||q.shipId!==s.id||!(q.targets||[]).length)return;
   const pts=[toScreen(s.pos[0],s.pos[1])];
   for(const it of q.targets){ // 链节点按序列顺序:死目标由 58 的清理段 splice,这里只管画活着的;指定点直接连坐标
-    if(it.tid){const t=(typeof fcShip==='function')?fcShip(it.tid):null;if(t&&!t.dead)pts.push(toScreen(t.pos[0],t.pos[1]));}
+    if(it.tid){const t=(typeof fcShip==='function')?fcShip(it.tid):null,tp=(t&&!t.dead)?viewPos(t):null;if(tp)pts.push(toScreen(tp[0],tp[1]));} // 2026-09-28 我方知道的位置;交代不出就跳过这一节
     else if(it.pt)pts.push(toScreen(it.pt[0],it.pt[1]));
   }
   if(pts.length<2)return;

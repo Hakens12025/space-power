@@ -26,6 +26,11 @@ function irvT(v){
 function irvIdx(v){return Math.round((irvT(v)-IRV_T0)/(1-IRV_T0)*255);}
 function irvLutK(t){return Math.round((Math.max(IRV_T0,Math.min(1,t))-IRV_T0)/(1-IRV_T0)*255);}
 function irvLutHex(t){const k=irvLutK(t)*4;return '#'+((1<<24)|(IRV_LUT[k]<<16)|(IRV_LUT[k+1]<<8)|IRV_LUT[k+2]).toString(16).slice(1);}
+function irvEstPos(t){ // 2026-09-28 热团画在哪:我方知道的位置 —— 定出位置给融合估计,只有红外方位给红外那一层的估计,都没有就不画(GM 真值)。原来一律画真值
+  if(adminMode)return t.pos;
+  if(contactFix(t,'blue'))return contactPos(t,'blue');
+  const L=contactLayer(t,'blue','opt');return L?[L.x,L.y]:null;
+}
 function irvObs(){const a=[];for(const s of ships)if(s.side==='blue'&&!s.dead)a.push(s);return a;}
 function irvSrc(){const a=[];for(const s of ships)if(s.side!=='blue'&&!s.dead)a.push(s);for(const r of rocks)if(!r.dead&&r.side!=='blue')a.push(r);return a;} // 2026-09-27 自己放的浮标不算热源
 function irvPsf(){return IRV_C.PSF_K*4*SENS.CLS.DD.size*COV.L_REF/(3*LAD.optRange);} // 固定模糊角(DD 在测距尺度 6 万处横跨 3 格)。2026-09-28 红外 x 50/15 时角度不变:模糊占画面的比例只看角度,50 万框住的样子 = 原 15 万
@@ -108,8 +113,8 @@ function irvjCalib(src,obs){ // 进红外画面时标定一次:每个源算一�
 function irvZf(t){return t.kind==='rock'?hullZoomF():shipZoomF();} // 舰船按 shipZoomF(再缩 SHIP_K),石头按 hullZoomF
 function irvBodyR(t){return t.kind==='rock'?hullSize('UNK',2)*0.78*Math.sqrt(t.size/0.7):hullSize(t.cls,t.tier||2)*0.78;} // 图标半径(未乘缩放系数)
 function irvFlk(t){let h=0;const id=String(t.id);for(let i=0;i<id.length;i++)h=(h*31+id.charCodeAt(i))|0;return 1+IRV_C.FLK*Math.sin(nowMs()/1000*IRV_C.FLK_HZ*2*Math.PI+(h&1023)/1023*2*Math.PI);} // 没定位的"呼吸":每个源自己的相位,墙钟
-function irvjSplats(t,ph,fxd){ // 一个源的贴片(主山、尾焰尾巴),格坐标。一道门:色阶值 = GAIN x 这一份的信噪比;fxd = 我方定出了它的位置
-  const C=IRV_C.CELL,p=toScreen(t.pos[0],t.pos[1]),cx=p[0]/C,cy=p[1]/C,list=[],tl=ph.tl,sh=tl?tl.share:0;
+function irvjSplats(t,ph,fxd,ep){ // 一个源的贴片(主山、尾焰尾巴),格坐标。一道门:色阶值 = GAIN x 这一份的信噪比;fxd = 我方定出了它的位置;ep = 画在哪(irvEstPos)
+  const C=IRV_C.CELL,p=toScreen(ep[0],ep[1]),cx=p[0]/C,cy=p[1]/C,list=[],tl=ph.tl,sh=tl?tl.share:0;
   const s0=Math.max(IRV_C.SIG_MIN,Math.min(IRV_C.SIG_MAX_PX,IRV_C.GLYPH*irvBodyR(t)*irvZf(t))/C); // 团宽 = 舰标尺寸(远近一样大)
   const f=fxd?1:irvFlk(t),pk=irvV(ph.snr*(1-sh))*f,pkT=irvV(ph.snr*sh)*f;
   if(pk>=IRV_C.CULL){ // 出轮廓后照画(用户:显形了也要有红色团)
@@ -135,7 +140,7 @@ function irvjKeep(a,b){
 function irvSilOn(t){return contactFix(t,'blue')&&contactIdn(t,'blue');} // 2026-09-28 出轮廓 = 蓝方内核认出且定位(用户:红外认出了主视图却没有;原来按体型与距离自己判,和内核两把尺子)
 function irvjSilKey(e){if(!e)return '';return (e.N>=IRV_C.DETAIL)+'|'+irvLutK(irvT(e.v))+'|'+irvLutK(irvT(e.vt))+'|'+Math.round(e.a*255);}
 function irvSilR(t){return (t.kind==='rock'?irvBodyR(t)*1.06:hullSize(t.cls,t.tier||2)*1.6)*irvZf(t)+2;} // 热轮廓外接半径(px)
-function irvjBox(t){const p=toScreen(t.pos[0],t.pos[1]),R=irvSilR(t);return [p[0]-R,p[1]-R,p[0]+R,p[1]+R];}
+function irvjBox(t,ep){const p=toScreen(ep[0],ep[1]),R=irvSilR(t);return [p[0]-R,p[1]-R,p[0]+R,p[1]+R];}
 function irvjCells(b){const C=IRV_C.CELL;return [Math.max(0,Math.floor(b[0]/C)),Math.min(irvGW-1,Math.ceil(b[2]/C)),Math.max(0,Math.floor(b[1]/C)),Math.min(irvGH-1,Math.ceil(b[3]/C))];}
 function irvjUpdate(full,gch){ // 返回脏矩形 [i0,i1,j0,j1] 列表;null = 整张
   const obs=irvObs(),src=irvSrc(),R=IRVJ.rec,no=Math.min(obs.length,30),all=no?((1<<no)>>>0)-1:0;
@@ -151,8 +156,9 @@ function irvjUpdate(full,gch){ // 返回脏矩形 [i0,i1,j0,j1] 列表;null = �
   for(let n=0;n<src.length;n++){const t=src[n];let r=R.get(t),nw=false; // 1) 扫签名 + 离散判定;翻成谁都看不见的当帧去掉
     if(!r){r={t:t,px:0,py:0,vis:0,ph:null,sp:[],sil:null,sk:'',sb:null,mv:false,need:false,in0:false,in1:false,seen:0};R.set(t,r);nw=true;}
     r.seen=fr;
-    const pm=nw||r.px!==t.pos[0]||r.py!==t.pos[1],sc=nw||irvjStCh(r,t);r.mv=pm&&!nw;
-    if(pm){r.px=t.pos[0];r.py=t.pos[1];}if(sc)irvjStSet(r,t);
+    const ep=irvEstPos(t);if(!ep){r.ep=null;r.vis=0;if(r.ph||r.sp.length||r.sil){r.ph=null;r.need=true;}continue;} // 我方交代不出位置 ⇒ 不画
+    const pm=nw||!r.ep||r.px!==ep[0]||r.py!==ep[1],sc=nw||irvjStCh(r,t);r.mv=pm&&!nw;r.ep=ep;
+    if(pm){r.px=ep[0];r.py=ep[1];}if(sc)irvjStSet(r,t);
     const so=irvSilOn(t),fx=contactFix(t,'blue');if(so!==r.so||fx!==r.fx){r.so=so;r.fx=fx;r.need=true;} // 内核认出 / 定位变了:轮廓与亮核跟着重画(静止的石头不会因为挪动而重贴)
     if(!fx&&r.ph)r.need=true; // 没定位的每帧重算(呼吸)
     const chk=(gch||pm||sc)?all:cm;
@@ -170,12 +176,12 @@ function irvjUpdate(full,gch){ // 返回脏矩形 [i0,i1,j0,j1] 列表;null = �
   for(const r of R.values()){
     if(!(full||r.mv||r.need))continue;
     r.need=false;
-    const nx=r.ph?irvjSplats(r.t,r.ph,!!r.fx):IRVJ_NONE;
+    const nx=(r.ph&&r.ep)?irvjSplats(r.t,r.ph,!!r.fx,r.ep):IRVJ_NONE;
     if(full||r.mv||!irvjKeep(r.sp,nx.list)){work.push(r,nx.list);
       for(const s of r.sp){chg+=s.ar;area-=s.ar;if(s.ar&&!full)dirty.push([s.i0,s.i1,s.j0,s.j1]);}
       for(const s of nx.list){chg+=s.ar;area+=s.ar;if(s.ar&&!full)dirty.push([s.i0,s.i1,s.j0,s.j1]);}}
     const sk=irvjSilKey(nx.sil);
-    if(full||r.mv||sk!==r.sk){if(r.sb)dirty.push(irvjCells(r.sb));r.sil=nx.sil;r.sk=sk;r.sb=nx.sil?irvjBox(r.t):null;if(r.sb)dirty.push(irvjCells(r.sb));}
+    if(full||r.mv||sk!==r.sk){if(r.sb)dirty.push(irvjCells(r.sb));r.sil=nx.sil;r.sk=sk;r.sb=nx.sil?irvjBox(r.t,r.ep):null;if(r.sb)dirty.push(irvjCells(r.sb));}
   }
   const N=irvGW*irvGH;
   if(full||chg>area+N/4){ // 整张重贴比揭旧贴新便宜
@@ -311,7 +317,7 @@ function irvFc(x0,y0,x1,y1,dpr){ // 缓存的设备像素矩形里重画:清掉�
   X.save();X.setTransform(1,0,0,1,0,0);X.beginPath();X.rect(x0,y0,x1-x0,y1-y0);X.clip();X.clearRect(x0,y0,x1-x0,y1-y0);
   X.setTransform(dpr,0,0,dpr,0,0);X.imageSmoothingEnabled=true;X.drawImage(IRVC.cv,-C/2,-C/2,irvGW*C,irvGH*C);
   if(!shipMarkMode()&&!adminMode){const bx0=x0/dpr,by0=y0/dpr,bx1=x1/dpr,by1=y1/dpr; // 2026-09-28 GM 下主视图照画每个目标的真身,轮廓再垫一层会从底下漏一圈边(用户:石头旁边一圈红),不画
-    for(const r of IRVJ.rec.values())if(r.sil&&r.sb[2]>bx0&&r.sb[0]<bx1&&r.sb[3]>by0&&r.sb[1]<by1)irvDrawSil(X,r.t,r.sil,r.mv,dpr);}
+    for(const r of IRVJ.rec.values())if(r.sil&&r.sb[2]>bx0&&r.sb[0]<bx1&&r.sb[3]>by0&&r.sb[1]<by1)irvDrawSil(X,r.t,r.ep,r.sil,r.mv,dpr);}
   X.restore();
 }
 function irvUpdate(){
@@ -382,8 +388,8 @@ function irvSilSprite(t,e,zf,dpr){ // 预渲染精灵:按舰型、颜色档、�
   const g=c.getContext('2d');g.setTransform(dpr,0,0,dpr,n/2,n/2);g.scale(zf,zf);irvSilPath(g,t,e);
   s={c:c,r:n/2/dpr};IRV_SPR.m.set(key,s);return s;
 }
-function irvDrawSil(X,t,e,mv,dpr){
-  const p=toScreen(t.pos[0],t.pos[1]);if(p[0]<-60||p[0]>W+60||p[1]<-60||p[1]>H+60)return;
+function irvDrawSil(X,t,ep,e,mv,dpr){
+  if(!ep)return;const p=toScreen(ep[0],ep[1]);if(p[0]<-60||p[0]>W+60||p[1]<-60||p[1]>H+60)return;
   const zf=irvZf(t);
   X.save();X.globalAlpha=e.a;X.translate(p[0],p[1]);X.rotate(Math.atan2(t.facing[1],t.facing[0]));
   if(mv){const s=irvSilSprite(t,e,zf,dpr);X.drawImage(s.c,-s.r,-s.r,2*s.r,2*s.r);}

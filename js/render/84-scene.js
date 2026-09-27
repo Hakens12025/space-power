@@ -112,7 +112,6 @@ function insetIncoming(){ // 我方看得见的来袭导弹,按到达时间排
   return out.sort((a,b)=>a.eta-b.eta);
 }
 function insetPush(e,now){e.seq=++INSET.seq;e.t=now;INSET.ev.push(e);}
-function insetKnown(s){return (adminMode||s.side==='blue')?s.pos:contactPos(s,'blue');} // 我方知道的位置(全知时真值)
 function insetName(s){return (adminMode||trkIdLvl(trkOf('blue',s))===ID_CON)?s.name:'敌舰';}
 function insetVel(s){ // 我方知道的速度 km/游戏秒:敌舰拿尾迹里连续的估计点做差分,基线 1.5~8 游戏秒(估计按感知拍跳,基线短了抖一倍),凑不出给 null
   if(adminMode||s.side==='blue')return Math.hypot(s.vel[0],s.vel[1]);
@@ -127,7 +126,7 @@ function insetVelV(s){ // 我方知道的速度矢量 km/游戏秒(同 insetVel 
   if(b<0||t-a[3*b+2]<1.5)return null;const k=1/(t-a[3*b+2]);return [(a[3*n]-a[3*b])*k,(a[3*n+1]-a[3*b+1])*k];
 }
 function insetDR(s){ // 敌舰的航位推算(dead reckoning):最近一次估计位置 + 估计速度 x 距那次估计的模拟秒(封顶 3 游戏秒),镜头跟得顺、不随感知拍一跳一跳
-  const p=insetKnown(s);if(!p||adminMode||s.side==='blue')return p;
+  const p=viewPos(s);if(!p||adminMode||s.side==='blue')return p;
   const v=insetVelV(s),tk=trkOf('blue',s),dt=(v&&tk&&tk.lastT>-1e8)?Math.min(3,Math.max(0,simTime-tk.lastT)):0;
   return dt?[p[0]+v[0]*dt,p[1]+v[1]*dt]:p;
 }
@@ -164,7 +163,7 @@ function insetEvents(now){ // 导演的事件源(只读我方知道的事):损�
   for(const s of ships){
     if(s.dead){if(!INSET.dead.has(s.id)){INSET.dead.add(s.id);
         if(s.side==='blue'){kq.push(s.pos);insetPush({k:'loss',p:2.2,ship:s,sh:INSET.by.get(s.id)||null,q:s.pos.slice(),lbl:'损失 '+s.name},now);}
-        else{const q=insetKnown(s);if(q){kq.push(q);insetPush({k:'kill',p:2,ship:s,sh:INSET.by.get(s.id)||null,q:q.slice(),lbl:'击沉 '+insetName(s)},now);}}} // 敌舰取死亡那一帧的估计位置;只剩热区的不报
+        else{const q=viewPos(s);if(q){kq.push(q);insetPush({k:'kill',p:2,ship:s,sh:INSET.by.get(s.id)||null,q:q.slice(),lbl:'击沉 '+insetName(s)},now);}}} // 敌舰取死亡那一帧的估计位置;只剩热区的不报
       continue;}
     if(s.side!=='red')continue;
     const tk=trkOf('blue',s),c=!!(tk&&trkIdLvl(tk)===ID_CON);if(c&&INSET.idc.get(s.id)===false)insetPush({k:'id',p:1.2,ship:s,lbl:'认出 '+s.name},now);INSET.idc.set(s.id,c);
@@ -175,7 +174,7 @@ function insetEvents(now){ // 导演的事件源(只读我方知道的事):损�
     let dup=false;for(const q of kq)if(Math.hypot(q[0]-h.pos[0],q[1]-h.pos[1])<INSET.KILL_HIT*S)dup=true;if(dup)continue; // 同一帧的击沉已经报了这一下
     let b=null,bd=INSET.HIT_B*S;for(const s of ships){if(s.dead||s.side!=='blue')continue;const d=Math.hypot(s.pos[0]-h.pos[0],s.pos[1]-h.pos[1]);if(d<bd){bd=d;b=s;}}
     const at=hat.get(h);if(b){insetPush({k:'hit',p:1.5,ship:b,sh:at?at.sh:null,lbl:'中弹 '+b.name},now);continue;}
-    let r=null,rq=null;bd=INSET.HIT_R*S;for(const s of ships){if(s.dead||s.side==='blue'||!(adminMode||contactFix(s,'blue')))continue;const q=insetKnown(s);if(!q)continue;const d=Math.hypot(q[0]-h.pos[0],q[1]-h.pos[1]);if(d<bd){bd=d;r=s;rq=q;}}
+    let r=null,rq=null;bd=INSET.HIT_R*S;for(const s of ships){if(s.dead||s.side==='blue'||!(adminMode||contactFix(s,'blue')))continue;const q=viewPos(s);if(!q)continue;const d=Math.hypot(q[0]-h.pos[0],q[1]-h.pos[1]);if(d<bd){bd=d;r=s;rq=q;}}
     if(r)insetPush({k:'hit',p:1.5,ship:r,sh:at?at.sh:null,q:rq.slice(),lbl:'命中 '+insetName(r)},now); // 绑到受击舰、存我方知道的位置;绑不上(只有热区)就不报
   }
   const TR=(typeof SHELL_TR!=='undefined')?(adminMode?SHELL_TR.blue.concat(SHELL_TR.red):SHELL_TR.blue):[]; // 2026-09-28 炮弹来路回放(用户选):新记下的一条 = 一段,框住首见点与往回 SHELL_BACK 那一段(附近看见它的我方舰由 insetBuild 一起框)
@@ -207,7 +206,7 @@ function insetSubject(sel,inc,lbl){ // 一组我方舰的取景:离群的不进�
   for(const s of keep){const ex=s.vel[0]*tv,ey=s.vel[1]*tv;if(ex||ey)pts.push([s.pos[0]+ex,s.pos[1]+ey],[s.pos[0]-ex,s.pos[1]-ey]);}
   for(const o of ships){if(o.dead||sel.indexOf(o)>=0)continue;
     if(o.side==='blue'){const g=cw(near(o.pos),INSET.CTX_F0*S,INSET.CTX_F1*S);if(g>0)pts.push([ax+g*(o.pos[0]-ax),ay+g*(o.pos[1]-ay)]);}
-    else if(!INSET.hide&&(adminMode||contactFix(o,'blue'))){const p=insetKnown(o);if(!p)continue;const g=cw(near(p),INSET.CTX_E0*S,INSET.CTX_E1*S);if(g>0){pts.push([ax+g*(p[0]-ax),ay+g*(p[1]-ay)]);if(g>wmax)wmax=g;}}}
+    else if(!INSET.hide&&(adminMode||contactFix(o,'blue'))){const p=viewPos(o);if(!p)continue;const g=cw(near(p),INSET.CTX_E0*S,INSET.CTX_E1*S);if(g>0){pts.push([ax+g*(p[0]-ax),ay+g*(p[1]-ay)]);if(g>wmax)wmax=g;}}}
   const Q=sel.filter(s=>keep.indexOf(s)<0).map(s=>({pos:s.pos,col:'111,180,255',lbl:s.name,d:Math.hypot(s.pos[0]-ax,s.pos[1]-ay)}));
   L.sort((a,b)=>a.d-b.d);Q.sort((a,b)=>a.d-b.d);for(const it of L.concat(Q))if(ind.length<INSET.IND)ind.push(it); // 优先级:来袭(按到达时间)> 锁定 > 离群
   let pg=0,pm=null;for(const m of inc){if(keep.indexOf(m.tgt)<0)continue;const g=insetPushG(m.eta);if(g>pg){pg=g;pm=m;}}pg=insetPushHold(key,pg); // 推近:只留主体舰 + 快打到的那枚,其余取景点按 pg 收向主体
@@ -225,9 +224,9 @@ function insetCol(D){return D.k==='m'?'rgb(255,154,85)':((D.k==='loss'||D.dyn)?'
 function insetBuild(e,now){ // 开播:敌方主体跟着它走(航位推算),击沉 / 损失定在爆炸处,我方中弹跟着那艘船。取不到位置给 null(事件留在队列里下一帧再试)
   const D={k:e.k,p:e.p,key:e.k+':'+e.seq,dwell:INSET.DW[e.k]||3000,el:0,ship:e.ship||null,sh:(e.sh&&e.sh!==e.ship)?e.sh:null,n:1,evs:[e],qs:[],vm:0,dyn:false,sub:null},S=CFG.scale;
   if(e.k==='hit'&&e.ship&&e.ship.side==='blue'){if(e.ship.dead)return null;D.dyn=true;}
-  else{const big=e.k==='kill'||e.k==='loss',q=big?(e.q||e.pos):((e.ship&&!e.ship.dead&&insetKnown(e.ship))||e.q||e.pos);if(!q)return null;
+  else{const big=e.k==='kill'||e.k==='loss',q=big?(e.q||e.pos):((e.ship&&!e.ship.dead&&viewPos(e.ship))||e.q||e.pos);if(!q)return null;
     D.qs.push(q.slice());if(e.q2)D.qs.push(e.q2.slice()); // 炮弹来路:首见点 + 往回那一头
-    if(insetIntel(e.k))for(const o of INSET.ev){if(o===e||o.shown||!insetIntel(o.k)||!o.ship||Math.abs(o.t-e.t)>INSET.MERGE_T)continue;const p=insetKnown(o.ship); // 2 s 内相距不远的情报类一起框
+    if(insetIntel(e.k))for(const o of INSET.ev){if(o===e||o.shown||!insetIntel(o.k)||!o.ship||Math.abs(o.t-e.t)>INSET.MERGE_T)continue;const p=viewPos(o.ship); // 2 s 内相距不远的情报类一起框
       if(p&&Math.hypot(p[0]-q[0],p[1]-q[1])<=INSET.MERGE_R*S){o.shown=true;D.evs.push(o);D.qs.push(p.slice());D.n++;}}
     if(D.sh&&big){const r=insetShPos(D.sh);if(r&&Math.hypot(r[0]-q[0],r[1]-q[1])<=INSET.CAUSAL_R*S)D.qs.push(r.slice());} // 因果双人镜头:击沉 / 损失把开播那一刻的射手一起框
     if(e.k!=='loss'&&!D.sh){let b=null,bd=INSET.CTX_E1*S;for(const o of ships){if(o.dead||o.side!=='blue')continue;const d=Math.hypot(o.pos[0]-q[0],o.pos[1]-q[1]);if(d<bd){bd=d;b=o;}}if(b){D.qs.push([b.pos[0],b.pos[1]]);D.buddy=b;}} // 附近有我方舰就一起框:看得出是谁看到 / 打到的它

@@ -93,7 +93,7 @@ function radSolve(sub,tgt,kind){
   const ki=(typeof KIND_INFO!=='undefined'&&KIND_INFO[kind])?KIND_INFO[kind]:null;
   o.range=ki?ki.range(sub):0; // 射程唯一来源 = 88-selpanel 的 KIND_INFO(WR1 起:主炮 = 命中率 50% 的距离、导弹 = 动力射程,都是现算的),禁止在本文件写公里数字面量
   o.sw=!(ki&&ki.on&&sub[ki.on]===false); // RF5 单舰武器开关(同一份 KIND_INFO 的 .on 字段,不写 'macOn' 字面量)= 57 实际开火门的第一层:57:80 的 roeOK 与 57:33 的自动齐射都先看它。与 74 的 radItems 同一条判据
-  if(tgt)o.dist=(typeof V!=='undefined'&&V.len&&V.sub)?V.len(V.sub(tgt.pos,sub.pos)):Math.hypot(tgt.pos[0]-sub.pos[0],tgt.pos[1]-sub.pos[1]); // 三维距离:与 fcGate 的 V.len(V.sub(...)) 同口径(带 z 的场景里平面距离会在射程边界上给出相反结论)
+  {const tq=tgt?viewPos(tgt):null;if(tq)o.dist=V.len(V.sub(tq,sub.pos));} // 2026-09-28 距离按我方知道的位置量(原来量真值) // 三维距离:与 fcGate 的 V.len(V.sub(...)) 同口径(带 z 的场景里平面距离会在射程边界上给出相反结论)
   // RF6 可用性比【硬上限】,读数仍显示【精确射程】:精确射程到硬上限之间是射程外衰减区,能打但散布随距离增长。
   // 不必额外加一档提示——扇区读数本来就是「距离/射程」,衰减区会自己显示成 270k/150k,超程一眼可见;
   // 而 why 只在 !ok 时渲染(本文件:362),把衰减区判成 !ok 会让引擎照打、盘上却写"射程外",正是 RF5 备忘警告的两份口径。
@@ -165,8 +165,9 @@ function drawRadial(){
 
   /* ---- 1. 引线:轮盘钉在开启瞬间的屏幕位置不跟着目标跑(跟着跑的话扇区是移动靶,点不中),
            目标跑出外环后画一条细虚线把两者接回来。这是"标注"不是"命令",所以用中性灰而非命令黄 ---- */
-  if(tgt&&!tgt.dead&&typeof toScreen==='function'){
-    const q=toScreen(tgt.pos[0],tgt.pos[1]);
+  const tq=(tgt&&!tgt.dead)?viewPos(tgt):null;
+  if(tq&&typeof toScreen==='function'){
+    const q=toScreen(tq[0],tq[1]);
     const dx=q[0]-cx,dy=q[1]-cy,d=Math.hypot(dx,dy);
     if(d>RAD_RO+6){
       const ir=((typeof shipIconR==='function')?shipIconR(tgt):10)+6;

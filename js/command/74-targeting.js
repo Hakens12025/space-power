@@ -185,7 +185,7 @@ function radItems(sub,t,it){ // RF5 解算每个武器扇区:allow=计划(许不
   const out=[];
   if(!sub||!t)return out;
   const fix=contactFix(t,sub.side);
-  const dist=(typeof V!=='undefined'&&V.len&&V.sub)?V.len(V.sub(t.pos,sub.pos)):Math.hypot(t.pos[0]-sub.pos[0],t.pos[1]-sub.pos[1]); // RF5 距离口径必须与 58 的 fcGate 同源:它用的是【三维】V.len(V.sub(...))。原先写平面 Math.hypot,z 差两万的场景(90-envs「均衡编队」蓝方 z=+20000)在射程边界上会与引擎给出相反结论——轮盘说"射程内",fcGate 恒 return null,主炮永不开火而盘上没有任何提示
+  const tq=viewPos(t),dist=tq?V.len(V.sub(tq,sub.pos)):Infinity; // 2026-09-28 距离按我方知道的位置量(原来量真值);交代不出 = 够不着 // RF5 距离口径必须与 58 的 fcGate 同源:它用的是【三维】V.len(V.sub(...))。原先写平面 Math.hypot,z 差两万的场景(90-envs「均衡编队」蓝方 z=+20000)在射程边界上会与引擎给出相反结论——轮盘说"射程内",fcGate 恒 return null,主炮永不开火而盘上没有任何提示
   for(const w of radWeapons(sub)){
     const k=w.kind;
     const allow=(!it||!it.allow)||it.allow[k]!==false; // allow 缺省 undefined 语义为【真】:抄 58-firecontrol 的 !==false 口径(88-selpanel:313 同源),别写成 !it.allow[k]
@@ -245,7 +245,7 @@ function radOpen(sx,sy,shift){ // RF5 中键长按 = 开目标轮盘。三种上
   }else{seqId=fcNew(sub,{tid:t.id});tgtIdx=0;ctx='new';}                 // ③ 无 Shift(或压根没有有效编辑上下文)→ 新建下一条序列。fcNew 自带副作用(强开 autoEngage+roe='free'),任务书确认为预期
   const q=fcSeq(seqId);
   if(!q||tgtIdx<0||!q.targets[tgtIdx])return false;
-  const p=(typeof toScreen==='function')?toScreen(t.pos[0],t.pos[1]):[sx,sy]; // 锚定:开启瞬间目标的屏幕位置,钉住不动(引线由 89 每帧连到目标当前位置)。这是 74 唯一一次自己碰坐标,再没有第二处
+  const tq=viewPos(t),p=(tq&&typeof toScreen==='function')?toScreen(tq[0],tq[1]):[sx,sy]; // 2026-09-28 锚在我方知道的位置 // 锚定:开启瞬间目标的屏幕位置,钉住不动(引线由 89 每帧连到目标当前位置)。这是 74 唯一一次自己碰坐标,再没有第二处
   rad.open=true;rad.tid=t.id;rad.seqId=q.id;rad.tgtIdx=tgtIdx;
   rad.anchor[0]=p[0];rad.anchor[1]=p[1];
   rad.split=(q.targets.length>=2);   // 必须用【提交后】的条数:追加/新建刚刚改过它

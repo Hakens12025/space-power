@@ -39,7 +39,7 @@ const TRK={blue:new WeakMap(),red:new WeakMap(),vis:{blue:new WeakSet(),red:new 
 function trkTab(side){return side==='blue'?TRK.blue:TRK.red;}
 
 /* 唯一的航迹工厂;不往任何表里登记。newCov() 每船两次,与原来舰船字面量里的调用次数相同 */
-function trkNew(by,src){return {src:src,by:by,held:false,cov:newCov(),lastT:-1e9,lastPos:null,lastVel:null,idc:false,tn:0,tau:0,lastType:null,memGone:false};} // 2026-09-27 追加 lastType(最后一次认出的类型)/ memGone(记忆已被重新看过、清掉) // 2026-09-27 追加 tau:距上次测到位置的秒数(23 的航位推算误差按它长) // TK2.6 追加 idc:【确认】锁存(光学或照射认出过它、且接触一直握着)。TK4c 追加 tn:航迹号(0 = 还没发)
+function trkNew(by,src){return {src:src,by:by,held:false,cov:newCov(),lastT:-1e9,lastPos:null,lastVel:null,idc:false,tn:0,tau:0,lastType:null,memGone:false,ez:trkEzNew()};} // 2026-09-28 追加 ez:估计误差状态(见 trkErrStep) // 2026-09-27 追加 lastType(最后一次认出的类型)/ memGone(记忆已被重新看过、清掉) // 2026-09-27 追加 tau:距上次测到位置的秒数(23 的航位推算误差按它长) // TK2.6 追加 idc:【确认】锁存(光学或照射认出过它、且接触一直握着)。TK4c 追加 tn:航迹号(0 = 还没发)
 
 /* O(1) 查表,【永远不建】。非对象、或从没登记过的对象(弹丸、{pos} 指定点、梯子的假船、沙盘克隆、判据的裸对象)一律 null */
 function trkOf(side,src){return (src!==null&&typeof src==='object')?(trkTab(side).get(src)||null):null;}
@@ -66,6 +66,7 @@ function trkStep(tk,t,obs,el){
   TRK_KIN.tau=tk.tau;TRK_KIN.a=trkAccPrior(t,c);TRK_KIN.dr=(c.fix&&tk.lastPos&&tk.lastVel)?trkDR(tk):null;
   const held=stepCov(t,c,obs,el,TRK_IDO,TRK_KIN);
   tk.tau=TRK_KIN.tau;
+  trkErrStep(tk,el); // 2026-09-28 估计中心 = 真值 + 误差(按这一拍的椭圆);lastPos / trkPos / 航位推算都从它来
   if(c.fix&&c.n>0){tk.lastT=simTime;tk.lastPos=[c.x,c.y,t.pos[2]];if(TRK_KIN.pm||!tk.lastVel)tk.lastVel=t.vel.slice();} // 2026-09-27 速度只在测到位置的一拍更新(单站方位量不出速度)
   if(held&&tk.tn===0)tk.tn=++TRK_TN[tk.by]; // TK4c 航迹号:这一方第一次握住它的那一拍发号,之后终身不变(丢了再捡回来还是这个号)。只用于显示 —— 不当键、不当种子、不参与任何取舍
   if(held){if(TRK_IDO.opt||TRK_IDO.act||TRK_IDO.vis)tk.idc=true;}else tk.idc=false; // TK2.6 确认锁存:光学轮廓或照射回波认出过 ⇒ 确认;接触丢了才清。与椭圆的身份位同一拍立、同一拍清
@@ -75,6 +76,30 @@ function trkStep(tk,t,obs,el){
 }
 
 /* 握着这条接触(有信号或定得出位置);定得出位置 —— 武器开火只问后者 */
+/* ---- 2026-09-28 估计误差(用户:「很多情况下会标注敌方实际的位置」)----
+   标准形态:跟踪器的估计误差要与它自己报告的协方差一致(一致性估计,检验量叫 NEES)。模拟法:每条航迹一个标准化的
+   高斯-马尔可夫(AR(1) / OU)误差状态 z ~ N(0,1),相关时间 TRK_ERR.TAU 游戏秒(估计点慢慢漂,不每拍乱跳),
+   换算成公里 = 这一拍椭圆(1σ 轴长 r1 / r2、倾角 th)x z。融合估计写进 c.x / c.y;各通道(opt / lis / act)另有一份,
+   按该通道自己的沿视线 / 横向误差换算:红外那一层走 trkLayerEst(异常提醒、红外画面),静听那一层只在 21 的 esmHear 里用(测距 / 方位,雷达异常与雷达画面读它)。沿视线那一轴截到 ALONG_K x 距离,估计点不会跑到观测站背后。 */
+const TRK_ERR={TAU:20,ALONG_K:0.5};
+function trkClampK(v,lim){return v>lim?lim:(v<-lim?-lim:v);} // 沿视线那一轴的偏移截到 ±ALONG_K x 距离(截偏移本身,不是 σ:z 可到 ±3,只截 σ 估计点会跑到观测站背后)
+function trkGauss(){let u=0,v=0;while(u===0)u=Math.random();v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function trkEzNew(){return {f:[trkGauss(),trkGauss()],opt:[trkGauss(),trkGauss()],lis:[trkGauss(),trkGauss()]};} // f = 融合估计(c.x/c.y),opt = 红外那一层(trkLayerEst),lis = 静听那一层(21 的 esmHear:测距 rr / 方位 tb)
+function trkErrStep(tk,el){
+  const c=tk.cov;if(!(c.n>0))return; // 这一拍没量到:估计停在上一次(不重新加误差),误差状态也冻住(省掉大多数没握着的航迹的随机数)
+  const rho=Math.exp(-Math.max(0,el)/TRK_ERR.TAU),q=Math.sqrt(1-rho*rho),ez=tk.ez;
+  for(const k in ez){const z=ez[k];z[0]=rho*z[0]+q*trkGauss();z[1]=rho*z[1]+q*trkGauss();}
+  let dmin=1e18;for(const k in c.ch){const m=c.ch[k];if(m&&m[2]<dmin)dmin=m[2];}
+  const lim=TRK_ERR.ALONG_K*dmin,o1=trkClampK(ez.f[0]*c.r1,lim),o2=trkClampK(ez.f[1]*c.r2,lim),cs=Math.cos(c.th),sn=Math.sin(c.th);
+  c.x+=cs*o1-sn*o2;c.y+=sn*o1+cs*o2;
+}
+function trkLayerEst(tk,ch){ // 某一通道自己的估计:{x, y, r}(r = 等面积 1σ 半径 √(沿视线 x 横向));这一拍这条通道没量到给 null。只给 opt 用(静听那一层的唯一出处是 esmHear 的记录)
+  const c=tk&&tk.cov,m=c&&c.ch&&c.ch[ch];if(!m||m.length<7)return null;
+  const s=tk.src,ox=m[5],oy=m[6],dx=s.pos[0]-ox,dy=s.pos[1]-oy,l=Math.hypot(dx,dy)||1,ux=dx/l,uy=dy/l;
+  const lim=TRK_ERR.ALONG_K*m[2],sa=Math.min(m[0],lim),sc=m[1],z=tk.ez[ch];if(!z)throw new Error('trkLayerEst:没有 '+ch+' 这一层的误差状态');
+  const oa=trkClampK(z[0]*sa,lim),oc=trkClampK(z[1]*sc,lim);
+  return {x:s.pos[0]+ux*oa-uy*oc,y:s.pos[1]+uy*oa+ux*oc,r:Math.sqrt(sa*sc)};
+}
 function trkHeld(tk){return !!(tk&&tk.held);}
 function trkFix(tk){return !!(tk&&tk.held&&tk.cov&&tk.cov.fix);}
 
