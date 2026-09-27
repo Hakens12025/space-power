@@ -431,6 +431,21 @@ function drawForceMarks(){ // 2026-09-27 主炮打空地:还没打出去的炮�
     ctx.beginPath();ctx.arc(q[0],q[1],6,0,6.283);ctx.moveTo(q[0]-10,q[1]);ctx.lineTo(q[0]+10,q[1]);ctx.moveTo(q[0],q[1]-10);ctx.lineTo(q[0],q[1]+10);ctx.stroke();ctx.fillText('炮击点',q[0]+12,q[1]);}
   ctx.restore();
 }
+const TRANS_COL={点火:'255,180,84',刹车:'255,140,70',开火:'255,110,90',雷达:'120,200,255',脉冲:'170,150,255'},TRANS_LEN=500000*CFG.scale; // 线长 = 最亮的一种瞬态(刹车)能被看见的量级;不按真实距离截,免得线长泄露远近
+function drawTransients(){ // 2026-09-27 M3:我方记下的瞬态方位线(sensors/21 的 TRANS),从【记录那一刻观测站所在处】画出去,按年龄淡出;静听那一段按幅度测距加粗
+  if(typeof transEach!=='function')return;
+  const lab=new Set();ctx.save();ctx.font='10px "Microsoft YaHei"';ctx.textBaseline='middle';
+  transEach('blue',(r,t)=>{
+    const age=simTime-r.t,a=1-age/TRANS_FADE;if(!(a>0))return;
+    const ux=Math.cos(r.brg),uy=Math.sin(r.brg),col=TRANS_COL[r.kind]||'200,200,200',p0=toScreen(r.x,r.y),p1=toScreen(r.x+ux*TRANS_LEN,r.y+uy*TRANS_LEN);
+    ctx.globalAlpha=0.6*a;ctx.strokeStyle='rgb('+col+')';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(p0[0],p0[1]);ctx.lineTo(p1[0],p1[1]);ctx.stroke();
+    if(r.rr>0){const q0=toScreen(r.x+ux*(r.rr-r.sr),r.y+uy*(r.rr-r.sr)),q1=toScreen(r.x+ux*(r.rr+r.sr),r.y+uy*(r.rr+r.sr));ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(q0[0],q0[1]);ctx.lineTo(q1[0],q1[1]);ctx.stroke();}
+    const lk=(t._tid||0)+'|'+r.ch;if(lab.has(lk))return;lab.add(lk); // 同一目标同一类只标一次
+    const d=r.rr>0?r.rr:120000*CFG.scale,q=toScreen(r.x+ux*d,r.y+uy*d);ctx.globalAlpha=0.85*a;ctx.fillStyle='rgb('+col+')';ctx.textAlign='left';
+    ctx.fillText(r.kind+' · '+Math.round(SHOW.t(age))+'s 前',q[0]+6,q[1]-8);
+  });
+  ctx.restore();
+}
 const PING_FX=new Map(),PING_MS=900; // 2026-09-27 扫描的脉冲圈:船 → {看到的 pingT, 墙钟起点}
 function drawPings(){ // 一圈从船身扩到雷达量程(对标准目标),墙钟 PING_MS 内淡出;敌方的只在全知时画
   const now=nowMs(),lim=2*Math.hypot(W,H);

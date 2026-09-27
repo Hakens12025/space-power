@@ -80,7 +80,24 @@ function detectLoop(dt){ // 一个感知节拍:蓝网络探红(litBlue)、红网
 const PING_TMP=[]; // 扫描这一拍的草稿:[船, 原发射档, ...]
 const ESM_CFG={K:2,SMIN:Math.PI/180,FADE:90,DROP:600};
 const ESM={blue:new Map(),red:new Map()};
-function esmReset(){ESM.blue.clear();ESM.red.clear();}
+function esmReset(){ESM.blue.clear();ESM.red.clear();TRANS.blue.clear();TRANS.red.clear();}
+/* 2026-09-27 M3 瞬态信号(用户批准;潜艇游戏里叫 transient):一条还【没定位】的接触,这一拍被我方某一站用红外看到它在点火 / 刹车 / 开火,
+   或者听到它的雷达,就给那一站记一条方位(每站各一条 ⇒ 几条线交叉处就是它大概在哪,玩家可以自己用眼睛交会)。
+   方位按内核的测角精度加误差(covTheta,确定性的伪随机,不动 Math.random);静听另带幅度测距(与 23 的静听量测同一比例)。
+   记录 TRANS_FADE 游戏秒后丢掉;render/83 的 drawTransients 画。键:目标 → (类 → (站 → 记录)),只存最后一次。 */
+const TRANS={blue:new Map(),red:new Map()},TRANS_FADE=30;let TRANS_SEQ=0;
+function transU(a,b){const s=Math.sin(a*12.9898+b*78.233)*43758.5453;return s-Math.floor(s);} // [0,1) 的确定性伪随机
+function transRec(side,d,t,kind,ch,dd,lo,idn){
+  if(!d._tid)d._tid=++TRANS_SEQ;if(!t._tid)t._tid=++TRANS_SEQ;
+  const th=covTheta(ch,d,t,dd,lo)||0,g=(transU(simTime+d._tid*0.37,t._tid)-0.5)*3.46,g2=(transU(simTime*1.7+t._tid,d._tid*0.91)-0.5)*3.46; // 均匀分布、方差 1
+  const brg=Math.atan2(t.pos[1]-d.pos[1],t.pos[0]-d.pos[0])+g*th;
+  let rr=0,sr=0;if(ch==='lis'){const k=idn?COV.RSS_ID:COV.RSS_UNK;rr=Math.max(1000,dd*(1+g2*k));sr=rr*k;}
+  let m=TRANS[side].get(t);if(!m)TRANS[side].set(t,m=new Map());const gk=ch+'|'+d._tid;
+  m.set(gk,{x:d.pos[0],y:d.pos[1],brg:brg,kind:kind,ch:ch,t:simTime,rr:rr,sr:sr});
+}
+function transEach(side,f){ // 逐条给 f(记录, 目标);顺手丢掉过期的
+  for(const [t,m] of TRANS[side]){for(const [k,r] of m){if(simTime-r.t>TRANS_FADE||simTime<r.t)m.delete(k);else f(r,t);}if(!m.size)TRANS[side].delete(t);}
+}
 function esmHear(side,L,E,dd){ // L(我方听者)这一拍听到 E 的雷达;dd = 两者距离
   const sig=covTheta('lis',L,E,dd);if(!(sig>0))return;
   let m=ESM[side].get(E);if(!m)ESM[side].set(E,m=new Map());
@@ -144,6 +161,9 @@ function detectFor(detSide,tgtSide,dt){
        现在只问模型一句话:这一拍定不定得出位置(c.fix)且确有量测(c.n>0)。写进去的是【估计】c.x/c.y,不是真值。
        DS183 那条纪律("拿静听去写 seenPos 等于凭空把距离变出来")原样成立:单站静听永远 fix=false,进不来。 */
     trkStep(tk,t,obs,el); // 先验增长 + 逐站信息累加 + 解椭圆 → 定得出位置就记最后定位 → 存握没握着
+    if(!c.fix){const fire=(t.fireHot||0)>0,burn=!!t.flame,pul=t.pingT===simTime; // M3 瞬态:没定位才记(定位了就直接看得到它本身)
+      for(const ob of obs){if(ob.g.opt&&(fire||burn))transRec(detSide,ob.det,t,fire?'开火':(t.flame<0?'刹车':'点火'),'opt',ob.dd,ob.lo,c.idn);
+        if(ob.g.lis)transRec(detSide,ob.det,t,pul?'脉冲':'雷达','lis',ob.dd,undefined,c.idn);}}
   }
 }
 
