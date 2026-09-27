@@ -15,10 +15,11 @@ const ROCK_SHAPE=[1,0.72,0.95,0.68,0.9,0.78,1.05]; // 不规则多边形的七�
 
 function drawRocks(){
   if(!rocks.length)return;
-  if(adminMode){for(const s of rocks)if(!s.dead)drawRockAt(s,s.pos,'live',true);return;}
+  for(const s of rocks)if(!s.dead&&s.kind==='buoy'&&s.side==='blue')drawOwnBuoy(s); // 2026-09-27 自己的浮标:不在自己的航迹表里,单独画
+  if(adminMode){for(const s of rocks)if(!s.dead&&s.side!=='blue')drawRockAt(s,s.pos,'live',true);return;}
   trkEach('blue',function(tk,st){
     const s=trkSrc(tk);
-    if(kindOf(s)!=='rock'||st==='heat')return;
+    if(kindOf(s)==='ship'||st==='heat')return; // 2026-09-27 石头之外还有民船 / 诱饵 / 敌方浮标(world/14),都走这条
     const cp=trkPos(tk);if(!cp)return;
     if(st==='live'&&lodNow.live&&lodNow.hideRed.has(s.id))return; // 收进接触群了(只有没认出的才会被收,见 82-lod)
     drawRockAt(s,cp,st,contactIdn(s,'blue'));
@@ -48,6 +49,8 @@ function drawRockAt(s,pos,st,known){
     }
     return;
   }
+  {const tp=adminMode?{kind:kindOf(s)}:(contactIdType(s,'blue')||{kind:'rock'}); // 2026-09-27 按【认出的类型】画:诱饵在「疑似」档画成它冒充的敌舰
+    if(tp.kind!=='rock'){drawObjKnown(s,p,r,tp);return;}}
   /* 认出来了:石头的记号。大小跟着同一个缩放系数走(与舰标同一条律),半径再乘 √(体型/0.7)(面积 ∝ 体型,与红外画面 irvBodyR 同式)—— 认出之后体型已经不是秘密 */
   ctx.save();
   ctx.fillStyle='rgba('+ROCK_RGB+',.85)';ctx.strokeStyle='rgba('+ROCK_RGB+',1)';ctx.lineWidth=1;
@@ -61,5 +64,27 @@ function drawRockAt(s,pos,st,known){
     ctx.closePath();ctx.fill();ctx.stroke();
   }
   // 2026-09-26 用户:碎石的中文标注不要了
+  ctx.restore();
+}
+function drawObjKnown(s,p,r,tp){ // 2026-09-27 认出来的民船 / 诱饵 / 敌方浮标,以及冒充成舰船的诱饵
+  ctx.save();ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';
+  if(tp.kind==='ship'){ // 冒充:画成一艘敌方驱逐舰(与没认全的红舰同一套)
+    if(shipMarkMode())drawShipMark(s,p,'#ff6b6b');
+    else{ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(Math.atan2(s.facing[1],s.facing[0]));{const zf=shipZoomF();ctx.scale(zf,zf);}drawHull(ctx,tp.cls||'DD',tp.tier||2,'#ff6b6b','fill');ctx.restore();}
+    if(cam.zoom>0.0008){ctx.fillStyle='rgba(215,226,240,.8)';ctx.fillText(s.spoofName||s.name,p[0],p[1]+r+6);}
+    ctx.restore();return;}
+  const col=tp.kind==='civ'?'#a0aab9':(tp.kind==='lure'?'#d9a066':'#c890ff'),lb=({civ:'民船',lure:'诱饵',buoy:'浮标'})[tp.kind]||'';
+  ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=1.3;
+  if(tp.kind==='civ'){ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(Math.atan2(s.facing[1],s.facing[0]));{const zf=shipZoomF();ctx.scale(zf,zf);}drawHull(ctx,'DD',2,col,'outline');ctx.restore();}
+  else if(tp.kind==='lure'){const q=Math.max(4,r*0.8);ctx.beginPath();ctx.moveTo(p[0]-q,p[1]-q);ctx.lineTo(p[0]+q,p[1]+q);ctx.moveTo(p[0]+q,p[1]-q);ctx.lineTo(p[0]-q,p[1]+q);ctx.stroke();}
+  else{ctx.beginPath();ctx.arc(p[0],p[1],4,0,6.283);ctx.stroke();}
+  if(cam.zoom>0.0008){ctx.fillStyle='rgba(215,226,240,.8)';ctx.fillText(lb,p[0],p[1]+r+6);}
+  ctx.restore();
+}
+function drawOwnBuoy(s){ // 自己的浮标:蓝色小圈;开着照射时外面加一圈
+  const p=toScreen(s.pos[0],s.pos[1]);if(p[0]<-40||p[0]>W+40||p[1]<-40||p[1]>H+40)return;
+  ctx.save();ctx.strokeStyle='#5aa7ff';ctx.fillStyle='#5aa7ff';ctx.lineWidth=1.4;ctx.beginPath();ctx.arc(p[0],p[1],4,0,6.283);ctx.stroke();ctx.beginPath();ctx.arc(p[0],p[1],1.5,0,6.283);ctx.fill();
+  if(s.on){ctx.globalAlpha=0.6;ctx.beginPath();ctx.arc(p[0],p[1],8,0,6.283);ctx.stroke();ctx.globalAlpha=1;}
+  if(cam.zoom>0.0008){ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillStyle='rgba(143,208,255,.9)';ctx.fillText(s.name+(s.dest?' · 飞行':(s.on?' · 照射':' · 被动')),p[0],p[1]+8);}
   ctx.restore();
 }

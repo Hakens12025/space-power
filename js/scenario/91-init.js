@@ -59,6 +59,7 @@ function initFleet(){
   }
   initEnemy();
   if(typeof envReset==='function'){const w0=typeof matchWorld==='function'?matchWorld(env.world):env.world;rangeWorld=env.range&&w0?JSON.parse(JSON.stringify(w0)):null;envReset(rangeWorld||w0);envSpawnRocks();} // ENV2 靶场拖天体改的是这份副本(scenario/95 的 rangeWorld),不动场景表 // ENV1 / TK4c:按场景的 world 重建环境(太阳 / 残骸场)并撒石头。没有 world 的场景 ⇒ 空环境、零块石头。放在 initEnemy 之后:石头的 id 与舰船的 id 各走各的计数器,谁先谁后都不影响舰船。ENV2 太阳方位为 'rand' 的场景先经 matchWorld 掷成具体方位(envReset 不掷骰子)
+  if(env.match&&typeof objSpawnCivs==='function')objSpawnCivs(); // 2026-09-27 K2 对局撒民船(world/14)
   if(typeof TRK_TN!=='undefined'){TRK_TN.blue=0;TRK_TN.red=0;} // TK4c 航迹号每局从 1 发
   /* SN6c:**开局先跑一拍感知**。感知是每秒一拍的节拍(stepSim 的 S1),不先跑一拍的话开局第一秒
      所有接触都是 lit=0 —— 热区层与椭圆层都没东西可画,画面上是一片空,直到一秒后才"啪"地出现。

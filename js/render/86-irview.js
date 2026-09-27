@@ -25,7 +25,7 @@ function irvRef(){ // 刻度参照:熄火静默的 DD 恰在发现距离上
   const L=SENS.CLS.DD.size,R=Math.sqrt(SENS.K_IR*L);IRV_REF={R:R,sig:COV.TH0.opt*R*R/Math.sqrt(SENS.A_IR*L)};return IRV_REF;
 }
 function irvObs(){const a=[];for(const s of ships)if(s.side==='blue'&&!s.dead)a.push(s);return a;}
-function irvSrc(){const a=[];for(const s of ships)if(s.side!=='blue'&&!s.dead)a.push(s);for(const r of rocks)if(!r.dead)a.push(r);return a;}
+function irvSrc(){const a=[];for(const s of ships)if(s.side!=='blue'&&!s.dead)a.push(s);for(const r of rocks)if(!r.dead&&r.side!=='blue')a.push(r);return a;} // 2026-09-27 自己放的浮标不算热源
 function irvHill(t,obs){ // 一座山:峰高(按参照归一)与宽度(km),取看得最清楚的那艘我方船
   let best=null,bg=NaN,tSh=false;const lit=envHasLight(),nb=ENV.bodies.length>0;
   for(let n=0;n<obs.length;n++){const o=obs[n];

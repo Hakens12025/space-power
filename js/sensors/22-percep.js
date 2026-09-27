@@ -127,7 +127,7 @@ function senseKRF(d) { // 探测方静听系数:接收机档次进平方根 ⇒ 
   return SENS.K_RF * (d && d.type === 'beacon' ? SENS.BEACON_RECV : sReq(d, 'recv', 'ship'));
 }
 function senseKACT(d) { // 探测方照射系数:发射机与接收机各进四次方根 ⇒ 照射量程 正比 (emit x recv)^(1/4)
-  if (d && d.type === 'beacon') return SENS.K_ACT * SENS.BEACON_EMIT * SENS.BEACON_RECV; // 信标永远在照射(它就是个尖叫的灯塔,所以是消耗品)
+  if (d && d.type === 'beacon') return d.on ? SENS.K_ACT * SENS.BEACON_EMIT * SENS.BEACON_RECV : 0; // 信标开机就在照射(它就是个尖叫的灯塔,所以是消耗品)。2026-09-27 前出浮标关着 = 只被动听和看
   return sReq(d, 'emitMode', 'ship') === 'paint' ? SENS.K_ACT * sReq(d, 'emit', 'ship') * sReq(d, 'recv', 'ship') : 0; // 不照射 ⇒ 系数 0,热循环里那一路天然不成立,不需要分支
 }
 

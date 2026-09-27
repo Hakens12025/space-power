@@ -148,6 +148,7 @@ function updSelWeaponTip(){ // RF4b 待命提示:底栏上方 #cmdTip 常显(旧
     tip.textContent='跟随:'+who+' → 点一艘我方舰(点编队里任一艘 = 跟随那支编队) · 右键取消';
     tip.style.display='block';return;
   }
+  if(selWeapon==='buoy'){tip.textContent='放浮标:点地图上的位置 · 右键取消';tip.style.display='block';return;}
   if(selWeapon){tip.textContent=(selWeapon==='mac'?'主炮强行开火:点敌舰或空地(转向对准即发一炮)':'导弹强行开火:点敌舰齐射 · 点空地 = 区域齐射')+' · 右键取消';tip.style.display='block';return;}
   if(pendingTurn){tip.textContent='转向:点击地图设定方向(速度不变) · 再按 V 取消 · 右键取消';tip.style.display='block';return;} // FL1 把 V 也接进来:它原本只走那个被 RF2 藏死的顶部状态条,按 V 之后玩家看不到任何提示
   tip.style.display='none';
@@ -196,6 +197,11 @@ function mdRadial(e,sx,sy){ // RF5 Phase C 轮盘开着时的两段早退(盘内
   return false;
 }
 function mdWeaponPick(e,sx,sy){ // 选定武器攻击:点目标 / 点空位置
+  if(e.button===0&&selWeapon==='buoy'){ // 2026-09-27 放前出浮标:点哪儿飞到哪儿(world/14 的 launchBuoy)
+    const w=worldAt(sx,sy),pt=ordArenaClamp([w[0],w[1],0]);
+    for(const x of controlledShips())if((x.buoys||0)>0&&typeof launchBuoy==='function'){launchBuoy(x,pt);break;} // 一次放一个
+    selWeapon=null;updSelWeaponTip();if(typeof updateSelPanel==='function')updateSelPanel();return true;
+  }
   if(e.button===0&&selWeapon){ // 选定武器攻击:点击目标/空位置指定
     let t=targetAt(sx,sy)||shipAt(sx,sy); // RF4b 敌舰优先(shipAt 已限定蓝方,原路径在简化UI后点敌舰落空)
     const atk=controlledShips();

@@ -104,7 +104,7 @@ function makeShip(cls,name,pos,facing,vel,side,tier){ // TIER1 加第 7 参 tier
   const t=(tier===1||tier===2||tier===3)?tier:2; // TIER1 分级归一化:旧场景元组缺项(undefined)、脏数据一律安全降级 T2——这是旧存档向后兼容的唯一依赖点
   const st=shipStats(c,t); // TIER1 机动/舰体/感知字段的来源:base 表 × tier 乘数层。TIER_MUL 全空时 st 与 P1 的表逐字段相同
   const lw=resolveLoadout(c,t); // RF3 武器字段来源:weapons/51-defs 的 WPN 定义 × tier 乘数(舰船组合武器,不再自持武器数值)
-  return trkAdopt({id:'s'+shipSeq, cls:c, name, side:side||'blue', tier:t, // TIER1 cls 存归一化后的新名;TIER1 tier 由第 7 参决定(原来写死 2);TK1 字面量包进 trkAdopt(sensors/24):两方各建一条航迹、挂上共享的转发访问器,舰上不再存感知数据
+  const sh=trkAdopt({id:'s'+shipSeq, cls:c, name, side:side||'blue', tier:t, // TIER1 cls 存归一化后的新名;TIER1 tier 由第 7 参决定(原来写死 2);TK1 字面量包进 trkAdopt(sensors/24):两方各建一条航迹、挂上共享的转发访问器,舰上不再存感知数据
 
     pos:pos.slice(), vel:(vel||[0,0,0]).slice(), facing:V.norm(facing), // KIMI146修:vel原直接用传入引用→物理积分原地改写TEST_ENVS/自定义场景预设初速,重开场景继承上局残速
     thrust:st.thrust, turnRate:st.turnRate,
@@ -130,5 +130,7 @@ function makeShip(cls,name,pos,facing,vel,side,tier){ // TIER1 加第 7 参 tier
     emitMode:'silent', // SN4 发射档三态(静默/照射/干扰)。全库【只有这一处】写档位字面量初值,其余写入一律走 sensors/21 的 setEmit——它是唯一写入口、非法档位当场抛,不给"拼错一个字母悄悄变静默"留缝
     ecmPower:sReq(st,'ecmPower','shipStats'), // SN4 干扰强度不再配一个开关布尔:它是 jam 档的强度(每拍削弱对方的照射驻留,只削回波、不削红外)。sReq 只拒 undefined,合法 0(不带干扰机)照常穿过
     // TK1 原来这里的三行感知数据(两方的等级 / 误差椭圆接触 / 最后定位记录)搬进了 sensors/24 的航迹表 TRK,由上面的 trkAdopt 登记;字段说明也搬过去了。TK1~TK3a 过渡期旧名字经转发访问器照旧可读写(TK3b 改墓碑、TK3c 删)
-    beaconMax:(st.beacon||0), beaconCount:(st.beacon||0)}); // TIER1 信标载量改表驱动(CLS_WPN.beacon):原来无条件给 2 枚、只靠 UI 按 cls==='SCOUT' 开门,现在"谁能放信标"是表里一格
+    beaconMax:(st.beacon||0), beaconCount:(st.beacon||0)});
+  if(/^波长/.test(name||'')){sh.weapons=sh.weapons.concat([{kind:'buoy',label:'前出浮标'}]);sh.buoys=sh.buoysMax=(typeof OBJ_CFG!=='undefined'?OBJ_CFG.BUOY.N:2);} // 2026-09-27 用户:前出浮标是特殊武器,先只给「波长」(按舰名)
+  return sh; // TIER1 信标载量改表驱动(CLS_WPN.beacon):原来无条件给 2 枚、只靠 UI 按 cls==='SCOUT' 开门,现在"谁能放信标"是表里一格
 }

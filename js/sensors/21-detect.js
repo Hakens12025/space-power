@@ -39,6 +39,7 @@ let detT=0; // 探测结算计时(core/05 累加,到 SENS.TICK 就把累计量�
 function detectorsOf(side){ // 该阵营的传感器网络:存活舰 + 开机的信标
   const dets=ships.filter(s=>s.side===side&&!s.dead);
   const bcons=projectiles.filter(p=>p.type==='beacon'&&p.on&&p.shooter&&p.shooter.side===side&&!p.done);
+  for(const o of rocks)if(o.kind==='buoy'&&o.side===side&&!o.dead)bcons.push(o); // 2026-09-27 K3 前出浮标:被动时也是探测站(照射那一路看 o.on,sensors/22 的 senseKACT)
   return {dets,bcons};
   /* SN4:"开机"这个判据在新模型下【只对信标成立】(p.on 就是它的开机开关,87-fleetcards 的
      beaconOn 钮写它)。舰船的两条被动通道(光学、静听)是永远开着的接收机,emitMode 只决定
@@ -50,7 +51,7 @@ function detectorsOf(side){ // 该阵营的传感器网络:存活舰 + 开机的
 function detectLoop(dt){ // 一个感知节拍:蓝网络探红(litBlue)、红网络探蓝(litRed)——对称,不按玩家视角
   const el=(typeof dt==='number'&&isFinite(dt)&&dt>0)?dt:SENS.TICK; // SN4:core/05 透传实际累计的模拟秒;判定里手摇 detectLoop() 不传参,按标称节拍算
   const pg=PING_TMP;pg.length=0; // 2026-09-27 扫描(用户选 A):s.pingReq 的船只在这一拍照射(对方也只在这一拍听得到),节拍末尾回到原来的发射档
-  for(const s of ships)if(s.pingReq){s.pingReq=false;if(s.dead)continue;pg.push(s,s.emitMode);if(s.emitMode!=='paint')setEmit(s,'paint');s.pingT=simTime;}
+  for(const s of ships.concat(rocks))if(s.pingReq){s.pingReq=false;if(s.dead)continue;pg.push(s,s.emitMode);if(s.emitMode!=='paint')setEmit(s,'paint');s.pingT=simTime;} // 2026-09-27 民船的导航雷达也走这条路(world/14)
   detectFor('blue','red',el);
   detectFor('red','blue',el);
   /* 被照射告警(上升沿)→ 图标闪烁(信息战的灵魂提示)。
@@ -123,7 +124,7 @@ function detectFor(detSide,tgtSide,dt){
   const {dets,bcons}=detectorsOf(detSide);
   if(!dets.length&&!bcons.length)return;
   const tgts=ships.filter(t=>t.side===tgtSide&&!t.dead);
-  for(let i=0;i<rocks.length;i++)if(!rocks[i].dead)tgts.push(rocks[i]); // TK4c:石头两方都探测,接在对方舰船之后 —— 舰船在缓冲里的下标不变,每个目标的椭圆各推各的,所以舰船的航迹逐位不受影响
+  for(let i=0;i<rocks.length;i++)if(!rocks[i].dead&&rocks[i].side!==detSide)tgts.push(rocks[i]); // 2026-09-27 自己一方放的诱饵 / 浮标不探测 // TK4c:石头两方都探测,接在对方舰船之后 —— 舰船在缓冲里的下标不变,每个目标的椭圆各推各的,所以舰船的航迹逐位不受影响
   if(!tgts.length)return;
   const el=(typeof dt==='number'&&isFinite(dt)&&dt>0)?dt:SENS.TICK;
   sensePrepare(dets,bcons,tgts,el); // 一次预计算喂满整个 O(N^2):除法与开方全在这一步
