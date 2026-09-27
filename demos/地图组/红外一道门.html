@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>红外一道门</title>
+<style>
+  :root{--bg:#07090d;--panel:#0d1118;--line:#1d2533;--text:#c9d3e0;--dim:#7d8aa0;--acc:#5aa9ff}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:13px/1.5 system-ui,"Microsoft YaHei",sans-serif}
+  #wrap{display:flex;height:100%}
+  #stage{flex:1;position:relative;min-width:0}
+  #cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #panel{width:340px;flex:none;background:var(--panel);border-left:1px solid var(--line);padding:12px 14px;overflow-y:auto}
+  h1{font-size:15px;margin:0 0 6px}
+  .rule{background:#101722;border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin:0 0 10px;color:var(--dim)}
+  .rule b{color:var(--text)}
+  .row{margin:8px 0}
+  .row label{display:flex;justify-content:space-between;color:var(--dim)}
+  .row label span{color:var(--text);font-variant-numeric:tabular-nums}
+  input[type=range]{width:100%}
+  .btns{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+  button{background:#131b27;color:var(--text);border:1px solid var(--line);border-radius:5px;padding:4px 10px;cursor:pointer;font:inherit}
+  button.on{border-color:var(--acc);color:var(--acc)}
+  table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+  th,td{padding:3px 4px;border-bottom:1px solid var(--line);text-align:right}
+  th:first-child,td:first-child{text-align:left}
+  th{color:var(--dim);font-weight:normal}
+  .sw{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:4px}
+  #bar{height:12px;border-radius:3px;margin-top:4px}
+  #ticks{position:relative;height:16px;color:var(--dim);font-size:11px}
+  #ticks i{position:absolute;font-style:normal;transform:translateX(-50%)}
+  #mode{color:var(--dim)}
+  @media (max-width:760px){#wrap{flex-direction:column}#stage{height:60vh;flex:none}#panel{width:100%;border-left:0;border-top:1px solid var(--line)}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage"><canvas id="cv"></canvas></div>
+  <aside id="panel">
+    <h1>红外一道门</h1>
+    <div class="rule"><b>一条规则:</b>画面上每一处热的色阶值 = 增益 × 这一份热的光学信噪比。信噪比 = K × 亮度 / 距离²,与感知内核判"发现"的是同一个量(≥ 1 算发现)。船身、尾焰、开火、喷出的热气、导弹、轮廓全走这一道门,不分类型。<br><b>宽度</b> = 距离 × 固定模糊角,不读亮度;体型只决定什么时候出轮廓。</div>
+    <div class="row"><label>目标距离 <span id="vD"></span></label><input id="sD" type="range" min="0" max="1000" value="301"></div>
+    <div class="row"><label>视野半径(框住多远)<span id="vZ"></span></label><input id="sZ" type="range" min="0" max="1000" value="143"></div>
+    <div class="row"><label>门的增益 <span id="vC"></span></label><input id="sC" type="range" min="0" max="1000" value="500"></div>
+    <div class="row"><label>模糊角 <span id="vT"></span></label><input id="sT" type="range" min="0" max="1000" value="696"></div>
+    <div class="btns">
+      <button id="bSun" class="on">晒着</button>
+      <button id="bFire">DD / CA 开火</button>
+      <button id="bNoise" class="on">噪点</button>
+    </div>
+    <div id="mode"></div>
+    <div class="row"><div id="bar"></div><div id="ticks"></div></div>
+    <table><thead><tr><th>目标</th><th>船身 S</th><th>尾焰 S</th><th>色阶</th><th>轮廓 N</th></tr></thead><tbody id="tb"></tbody></table>
+    <p style="color:var(--dim);font-size:12px">S = 信噪比。色阶是船身那份;尾焰另算同一条式子。N ≥ 3 出轮廓(拉远成记号时不交接,热斑照画)。数值抄自引擎内核(熄火 DD 9.6 万发现、主推 x13.3、刹车 x27.1、开火 +12.3、石头自身热 0.5、晒热 x1),此页不与引擎同步。</p>
+  </aside>
+</div>
+<script>
+"use strict";
+/* ---- 内核数值(抄一份,不同步) ---- */
+const K = 96000 * 96000 / 0.7;              // 熄火 DD(亮度 0.7)恰在 9.6 万发现:S = K x 亮度 / d²
+const P_MAIN = 12.3, P_REV = 26.1, P_FIRE = 12.3, ROCK_HEAT = 0.5, SOLAR_K = 1;
+const OPT_ID = 60000;                       // DD 在这个距离出轮廓(N = 3);别的体型按体型比例
+/* ---- 画面常数(与引擎红外画面同一条色阶) ---- */
+const V0 = 0.02, VMAX = 1000, T0 = -0.1, NOISE = 0.005, CELL = 4, TAIL_K = 4, SIG_MIN = 0.7, MARK_KMPX = 1000;
+const RAMP = [[T0, [40, 6, 6]], [0, [70, 12, 12]], [0.25, [150, 30, 20]], [0.5, [220, 80, 30]], [0.75, [255, 170, 60]], [1, [255, 245, 210]]];
+const LUT = (() => { const L = new Uint8ClampedArray(256 * 3); for (let k = 0; k < 256; k++) { const t = T0 + k / 255 * (1 - T0); let a = 0; while (a < RAMP.length - 2 && t > RAMP[a + 1][0]) a++;
+  const p = RAMP[a], q = RAMP[a + 1], u = Math.max(0, Math.min(1, (t - p[0]) / (q[0] - p[0]))); for (let c = 0; c < 3; c++) L[k * 3 + c] = Math.round(p[1][c] + (q[1][c] - p[1][c]) * u); } return L; })();
+function irvT(v) { if (!(v !== 0) || !isFinite(v)) return 0; const t = Math.sign(v) * Math.log(1 + Math.abs(v) / V0) / Math.log(1 + VMAX / V0); return t > 1 ? 1 : (t < T0 ? T0 : t); }
+function lutK(t) { return Math.round((Math.max(T0, Math.min(1, t)) - T0) / (1 - T0) * 255); }
+function lutCss(t, a) { const k = lutK(t) * 3; return `rgba(${LUT[k]},${LUT[k + 1]},${LUT[k + 2]},${a === undefined ? 1 : a})`; }
+
+/* ---- 目标:都放在离观测舰 D 的一圈上,船头朝右 ---- */
+const TG = [
+  { n: 'DD 熄火', kind: 'ship', size: 0.7, flame: 0, fire: true },
+  { n: 'DD 主推', kind: 'ship', size: 0.7, flame: 1 },
+  { n: 'DD 刹车', kind: 'ship', size: 0.7, flame: -1 },
+  { n: 'CA 熄火', kind: 'ship', size: 1.0, flame: 0, fire: true },
+  { n: '石头 0.3', kind: 'rock', size: 0.3 },
+  { n: '石头 1', kind: 'rock', size: 1.0 },
+  { n: '石头 4', kind: 'rock', size: 4.0 },
+  { n: '导弹(在喷)', kind: 'msl', size: 0.05, lum: 0.76 },
+];
+TG.forEach((t, i) => { t.ang = -Math.PI / 2 + (i + 0.5) / TG.length * 2 * Math.PI; t.fx = 1; t.fy = 0; t.fireT = -1e9; t.puffT = 0; });
+const ROCK_SHAPE = [1, 0.72, 0.95, 0.68, 0.9, 0.78, 1.05];
+
+const st = { D: 20000, viewK: 1.4, c: 0.05, th: 0.0864, sun: true, noise: true };
+const puffs = [];
+const $ = id => document.getElementById(id);
+const logMap = (u, a, b) => a * Math.pow(b / a, u / 1000);
+function readUI() {
+  st.D = logMap(+$('sD').value, 5000, 500000);
+  st.viewK = logMap(+$('sZ').value, 0.8, 40);
+  st.c = logMap(+$('sC').value, 0.005, 0.5);
+  st.th = logMap(+$('sT').value, 0.005, 0.3);
+  $('vD').textContent = (st.D / 1e4).toFixed(st.D < 1e5 ? 1 : 0) + ' 万 km';
+  $('vZ').textContent = (st.D * st.viewK / 1e4).toFixed(1) + ' 万 km';
+  $('vC').textContent = st.c.toFixed(3);
+  $('vT').textContent = st.th.toFixed(3) + ' rad';
+}
+['sZ', 'sC', 'sT'].forEach(id => $(id).addEventListener('input', readUI));
+$('sD').addEventListener('input', () => { readUI(); puffs.length = 0; }); // 换距离:旧热气是按旧距离放的,清掉
+$('bSun').onclick = e => { st.sun = !st.sun; e.target.classList.toggle('on', st.sun); e.target.textContent = st.sun ? '晒着' : '背阴'; };
+$('bNoise').onclick = e => { st.noise = !st.noise; e.target.classList.toggle('on', st.noise); };
+$('bFire').onclick = () => { const now = performance.now(); for (const t of TG) if (t.fire) t.fireT = now; };
+readUI();
+
+/* ---- 一道门:每一份热的信噪比 ---- */
+function parts(t, now) {
+  const ph = st.sun ? 1 : 0;
+  const self = t.kind === 'msl' ? t.lum : t.size * (t.kind === 'rock' ? ROCK_HEAT : 1);
+  const solar = t.kind === 'msl' ? 0 : SOLAR_K * t.size * ph;
+  const fire = (t.fire && now - t.fireT < 3000) ? t.size * P_FIRE : 0;   // 开火那几拍多亮一档(内核是阶跃,这里 3 秒)
+  const plume = t.kind === 'ship' && t.flame ? t.size * (t.flame > 0 ? P_MAIN : P_REV) : 0;
+  const k = K / (st.D * st.D);
+  return { body: k * (self + solar + fire), plume: k * plume };
+}
+const gate = S => st.c * S;                 // 唯一的门:色阶值 = 增益 x 信噪比
+
+/* ---- 场 ---- */
+const cv = $('cv'), ctx = cv.getContext('2d');
+const small = document.createElement('canvas'), sx = small.getContext('2d');
+let W = 0, H = 0, gw = 0, gh = 0, F = null, img = null, nz = null, nzT = 0, dpr = 1;
+function resize() {
+  const r = cv.getBoundingClientRect(); dpr = window.devicePixelRatio || 1; W = r.width; H = r.height;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  gw = Math.ceil(W / CELL) + 1; gh = Math.ceil(H / CELL) + 1; F = new Float32Array(gw * gh); nz = new Float32Array(gw * gh);
+  small.width = gw; small.height = gh; img = sx.createImageData(gw, gh); nzT = 0;
+}
+window.addEventListener('resize', resize); resize();
+function gauss() { let u = 0, v = 0; while (!u) u = Math.random(); v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+function splat(cx, cy, pk, sa, sc, ux, uy) { // 格坐标;sa 沿 (ux,uy),sc 横向
+  if (!(pk > 1e-4)) return;
+  const r = Math.max(sa, sc) * Math.sqrt(2 * Math.log(pk / 1e-4));
+  const i0 = Math.max(0, Math.floor(cx - r)), i1 = Math.min(gw - 1, Math.ceil(cx + r)), j0 = Math.max(0, Math.floor(cy - r)), j1 = Math.min(gh - 1, Math.ceil(cy + r));
+  const ea = -0.5 / (sa * sa), ec = -0.5 / (sc * sc);
+  for (let j = j0; j <= j1; j++) { const dy = j - cy; for (let i = i0; i <= i1; i++) { const dx = i - cx, a = dx * ux + dy * uy, c = -dx * uy + dy * ux; F[j * gw + i] += pk * Math.exp(ea * a * a + ec * c * c); } }
+}
+
+let last = performance.now(), rows = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  const viewR = st.D * st.viewK, pxkm = Math.min(W, H) / 2 / viewR, kmpx = 1 / pxkm, mark = kmpx > MARK_KMPX;
+  const cx0 = W / 2, cy0 = H / 2;
+  const wkm = st.D * st.th, sig = Math.max(SIG_MIN, wkm * pxkm / CELL);   // 模糊宽(格):只看距离与模糊角
+  F.fill(0);
+  const info = [];
+  for (const t of TG) {
+    const px = cx0 + Math.cos(t.ang) * st.D * pxkm, py = cy0 + Math.sin(t.ang) * st.D * pxkm, gx = px / CELL, gy = py / CELL;
+    const S = parts(t, now), vb = gate(S.body), vt = gate(S.plume);
+    const dOut = t.kind === 'msl' ? 0 : OPT_ID * t.size / 0.7, N = 3 * dOut / st.D;
+    const a = mark ? 0 : Math.max(0, Math.min(1, N - 3));      // 出轮廓后热斑交给轮廓;拉远成记号时不交接
+    splat(gx, gy, vb * (1 - a), sig, sig, 1, 0);
+    let pux = 0, puy = 0;
+    if (vt > 0) {
+      pux = t.flame > 0 ? -t.fx : t.fx; puy = t.flame > 0 ? -t.fy : t.fy;   // 主推喷口朝后,刹车朝前
+      const sa = sig * TAIL_K / 2; splat(gx + pux * sa, gy + puy * sa, vt, sa, sig, pux, puy);
+      t.puffT += dt; if (t.puffT > 0.6) { t.puffT = 0; puffs.push({ t: t, x: Math.cos(t.ang) * st.D + pux * wkm * 2, y: Math.sin(t.ang) * st.D + puy * wkm * 2, ux: pux, uy: puy, age: 0 }); }
+    }
+    info.push({ t, px, py, S, vb, vt, N, a, pux, puy });
+  }
+  for (let i = puffs.length - 1; i >= 0; i--) { // 喷出去的热气:尾焰那一份的 1/4,散开、冷掉(同一道门)
+    const u = puffs[i]; u.age += dt; if (u.age > 4) { puffs.splice(i, 1); continue; }
+    u.x += u.ux * wkm * 0.6 * dt; u.y += u.uy * wkm * 0.6 * dt;
+    const S = parts(u.t, now).plume, f = 1 - u.age / 4, s = sig * (1 + u.age * 0.5);
+    splat((cx0 + u.x * pxkm) / CELL, (cy0 + u.y * pxkm) / CELL, gate(S) * 0.25 * f * f, s, s, 1, 0);
+  }
+  if (st.noise && now - nzT > 200) { nzT = now; for (let q = 0; q < nz.length; q++) nz[q] = gauss() * NOISE; }
+  const d = img.data;
+  for (let q = 0, n = gw * gh; q < n; q++) { const k = lutK(irvT(F[q] + (st.noise ? nz[q] : 0))) * 3, o = q * 4; d[o] = LUT[k]; d[o + 1] = LUT[k + 1]; d[o + 2] = LUT[k + 2]; d[o + 3] = 255; }
+  sx.putImageData(img, 0, 0);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(small, -CELL / 2, -CELL / 2, gw * CELL, gh * CELL);
+  /* 轮廓:同一道门的颜色(不提亮);喷口 = 尾焰那份的颜色 */
+  if (!mark) for (const o of info) if (o.a > 0) {
+    const t = o.t; ctx.save(); ctx.translate(o.px, o.py); ctx.globalAlpha = o.a; ctx.fillStyle = lutCss(irvT(o.vb));
+    ctx.beginPath();
+    if (t.kind === 'rock') { const r = 7 * Math.sqrt(t.size / 0.7); ROCK_SHAPE.forEach((m, i) => { const a = i / ROCK_SHAPE.length * 2 * Math.PI; ctx[i ? 'lineTo' : 'moveTo'](Math.cos(a) * r * m, Math.sin(a) * r * m); }); }
+    else { const L = t.size === 1 ? 11 : 9, Wd = L * 0.32; ctx.moveTo(L, 0); ctx.lineTo(L * 0.2, -Wd); ctx.lineTo(-L, -Wd * 0.8); ctx.lineTo(-L, Wd * 0.8); ctx.lineTo(L * 0.2, Wd); }
+    ctx.closePath(); ctx.fill();
+    if (o.vt > 0) { const L = t.size === 1 ? 11 : 9; ctx.fillStyle = lutCss(irvT(o.vt)); ctx.beginPath(); ctx.ellipse(t.flame > 0 ? -L - 2 : L + 2, 0, 2.6, 2, 0, 0, 2 * Math.PI); ctx.fill(); }
+    ctx.restore();
+  }
+  /* 观测舰 + 标签(演示用,不是红外信号) */
+  ctx.fillStyle = '#5aa9ff'; ctx.beginPath(); ctx.moveTo(cx0 + 8, cy0); ctx.lineTo(cx0 - 6, cy0 - 5); ctx.lineTo(cx0 - 6, cy0 + 5); ctx.closePath(); ctx.fill();
+  ctx.font = '11px system-ui,"Microsoft YaHei",sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(160,175,200,0.75)';
+  for (const o of info) ctx.fillText(o.t.n, o.px, o.py + Math.max(18, sig * CELL * 1.2) + 10);
+  $('mode').textContent = (mark ? '拉远成记号(不画轮廓,热斑不淡出)' : '正常缩放') + ' · 每像素 ' + Math.round(kmpx) + ' km · 模糊宽 ' + Math.round(wkm) + ' km';
+  if (++rows % 10 === 0) {
+    $('tb').innerHTML = info.map(o => `<tr><td><span class="sw" style="background:${lutCss(irvT(o.vb))}"></span>${o.t.n}</td><td>${o.S.body.toFixed(o.S.body < 10 ? 2 : 0)}</td><td>${o.S.plume ? o.S.plume.toFixed(0) : '—'}</td><td>${irvT(o.vb).toFixed(2)}</td><td>${o.N ? o.N.toFixed(1) : '—'}</td></tr>`).join('');
+    const bar = [], ticks = [];
+    for (let i = 0; i <= 20; i++) { const t = T0 + i / 20 * (1 - T0); bar.push(lutCss(t) + ' ' + (i * 5) + '%'); }
+    $('bar').style.background = 'linear-gradient(90deg,' + bar.join(',') + ')';
+    for (const S of [1, 10, 100, 1000, 10000]) { const t = irvT(gate(S)); ticks.push(`<i style="left:${((t - T0) / (1 - T0) * 100).toFixed(1)}%">S=${S}</i>`); }
+    $('ticks').innerHTML = ticks.join('');
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
