@@ -9,8 +9,8 @@
    ============================================================================ */
 const IRV_C={CELL:5,V0:0.02,VMAX:1000,CULL:0.0003,SIG_MIN:0.7,NOISE:0.005,NOISE_MS:200,TAIL_K:4,POS_P:3,MIX:0.875,
   BG_K:0.4,AR:3,AR_ROCK:1.5,FADE:1,HALO:0.5,DETAIL:6.4,CLOUD_M:8,CLOUD_LV:4,CLOUD_SYNC:400,CLOUD_BATCH:1500,CLOUD_COARSE:1200,
-  GAIN:0.05,FILL:20000,RIM:1.5,RIM_COL:'#080202'};
-  // 2026-09-28 GAIN = 一道门的增益(信噪比 1 = 色阶约 0.12);FILL = 石头的填满距离 / √体型(用户定 2 万);RIM / RIM_COL = 轮廓外圈暗边(只勾形状,不代表热)
+  GAIN:0.05,FILL:20000};
+  // 2026-09-28 GAIN = 一道门的增益(信噪比 1 = 色阶约 0.12);FILL = 石头的填满距离 / √体型(用户定 2 万)
   // V0 / VMAX = 色阶的对数刻度;CULL = 山截断处;SIG_MIN = 山的最小宽(格);TAIL_K = 尾焰尾巴长宽比;POS_P / MIX = 恒星光晕的律;AR / HALO / DETAIL = 近处热轮廓
 const IRV_T0=-0.1;
 const IRV_RAMP=[[IRV_T0,[40,6,6,140]],[0,[70,12,12,150]],[0.25,[150,30,20,170]],[0.5,[220,80,30,190]],[0.75,[255,170,60,210]],[1,[255,245,210,230]]];
@@ -356,17 +356,15 @@ function drawIrFx(){
   ctx.restore();
 }
 
-/* ---- 近处的热轮廓:叠在山上;填充 = 一道门的颜色(不提亮),外圈暗边只勾形状;喷口 = 尾焰那份的颜色;在动的用预渲染精灵 ---- */
+/* ---- 近处的热轮廓:叠在山上,比所在的山顶亮一档(原版画法,用户 2026-09-28:暗边难看);喷口 = 尾焰那份的颜色;在动的用预渲染精灵 ---- */
 const IRV_ROCK_SHAPE=[1,0.72,0.95,0.68,0.9,0.78,1.05];
-function irvSilPath(X,t,e,zf){ // X 已按 zf 缩放
-  const col=irvLutHex(irvT(e.v)),rim=IRV_C.RIM/zf;
-  if(t.kind==='rock'){const r=irvBodyR(t);X.beginPath();
+function irvSilPath(X,t,e){
+  const col=irvLutHex(irvT(e.v)+0.12);
+  if(t.kind==='rock'){const r=irvBodyR(t);X.fillStyle=col;X.beginPath();
     for(let i=0;i<IRV_ROCK_SHAPE.length;i++){const a=i/IRV_ROCK_SHAPE.length*2*Math.PI,q=r*IRV_ROCK_SHAPE[i];if(i)X.lineTo(Math.cos(a)*q,Math.sin(a)*q);else X.moveTo(Math.cos(a)*q,Math.sin(a)*q);}
-    X.closePath();X.fillStyle=col;X.fill();X.lineWidth=rim;X.strokeStyle=IRV_C.RIM_COL;X.stroke();return;}
-  const sz=hullSize(t.cls,t.tier||2);
-  X.save();X.scale(1+rim/sz,1+rim/sz);drawHull(X,t.cls,t.tier||2,IRV_C.RIM_COL,'fill');X.restore(); // 暗边:放大一圈的暗色船形垫在下面
+    X.closePath();X.fill();return;}
   drawHull(X,t.cls,t.tier||2,col,'fill');
-  if(t.flame&&e.vt>0){X.save();X.scale(sz,sz);X.fillStyle=irvLutHex(irvT(e.vt));X.beginPath();X.ellipse(t.flame>0?-1.0:1.35,0,0.22,0.16,0,0,2*Math.PI);X.fill();X.restore();}
+  if(t.flame&&e.vt>0){const sz=hullSize(t.cls,t.tier||2);X.save();X.scale(sz,sz);X.fillStyle=irvLutHex(irvT(e.vt));X.beginPath();X.ellipse(t.flame>0?-1.0:1.35,0,0.22,0.16,0,0,2*Math.PI);X.fill();X.restore();}
 }
 const IRV_SPR={k:'',m:new Map()};
 function irvSilSprite(t,e,zf,dpr){ // 预渲染精灵:按舰型、颜色档、尾焰、缩放缓存
@@ -374,7 +372,7 @@ function irvSilSprite(t,e,zf,dpr){ // 预渲染精灵:按舰型、颜色档、�
   const key=(t.kind==='rock'?'r'+t.size:t.cls+(t.tier||2)+'f'+Math.sign(t.flame))+'|'+irvLutK(irvT(e.v))+'|'+irvLutK(irvT(e.vt));
   let s=IRV_SPR.m.get(key);if(s)return s;
   const r=irvSilR(t),n=Math.ceil(2*r*dpr),c=document.createElement('canvas');c.width=n;c.height=n;
-  const g=c.getContext('2d');g.setTransform(dpr,0,0,dpr,n/2,n/2);g.scale(zf,zf);irvSilPath(g,t,e,zf);
+  const g=c.getContext('2d');g.setTransform(dpr,0,0,dpr,n/2,n/2);g.scale(zf,zf);irvSilPath(g,t,e);
   s={c:c,r:n/2/dpr};IRV_SPR.m.set(key,s);return s;
 }
 function irvDrawSil(X,t,e,mv,dpr){
@@ -382,6 +380,6 @@ function irvDrawSil(X,t,e,mv,dpr){
   const zf=irvZf(t);
   X.save();X.globalAlpha=e.a;X.translate(p[0],p[1]);X.rotate(Math.atan2(t.facing[1],t.facing[0]));
   if(mv){const s=irvSilSprite(t,e,zf,dpr);X.drawImage(s.c,-s.r,-s.r,2*s.r,2*s.r);}
-  else{X.scale(zf,zf);irvSilPath(X,t,e,zf);}
+  else{X.scale(zf,zf);irvSilPath(X,t,e);}
   X.restore();
 }
