@@ -24,7 +24,7 @@ function enemyAI(dt){
     /* ③ 机动:hold=清命令停车(埋伏 / 压上态找主炮窗口 —— 战斗转向只认【空闲】,见 physics/31 的 idle);
           否则追 plan 给的那个点,pass=掠过不停(交战态沿轨道机动),stop=到位停(接近 / 排开)。
           2026-09-28 规避已删,每拍照 plan 重写命令。 */
-    if(pl.hold){e.orders=[];e.brake=false;e.turnTarget=null;}
+    if(pl.hold){e.orders=[];e.brake=false;if(!e.forceMac)e.turnTarget=null;} // 抽奖开炮转头时不清 turnTarget(weapons/57 每拍重设)
     else e.orders=[{pos:[pl.pos[0],pl.pos[1],0],type:pl.pass?'pass':'stop'}];
     /* 原来这里还存一份 e.aiHold 好在离开停车态时还原命令 —— BOT1 之后每拍都由 plan 重写命令,存了没人读,去掉 */
     /* ④ 主炮:与蓝方自动开火同一档(MAC_AUTO_P,weapons/57)。没有射程门,只有把握门。
@@ -35,6 +35,8 @@ function enemyAI(dt){
     if(foe){const p=contactPos(foe,'red');if(p)d=Math.hypot(p[0]-e.pos[0],p[1]-e.pos[1],(p[2]||0)-e.pos[2]);}
     if(foe&&e.macCd<=0&&hasMAC(e)&&macHitProb(e,d)>=MAC_AUTO_P&&macAligned(e,foe)){fireMAC(e,foe);if(e.macCd>0)e.scootT=RDOC_CFG.SCOOT_S;} // 2026-09-28 开完一炮:60 的压上态照 scootT 先挪开
     if(e.scootT>0)e.scootT-=dt;
+    if(pl.gun&&!e.forceMac){e.forceMac={t:pl.gun.t||null,pt:pl.gun.pt||null,T:RDOC_CFG.LOT_T};e.lotto=true;} // 2026-09-28 抽奖开炮:照 60 挑的点转头、对准、开一炮(weapons/57 的强行开火)
+    if(e.lotto&&e.macCd>0){e.lotto=false;e.scootT=RDOC_CFG.SCOOT_S;}else if(e.lotto&&!e.forceMac)e.lotto=false; // 开出去了 ⇒ 打了就跑;超时没开出去 ⇒ 作废
     /* ⑤ 导弹:舰队级齐射窗口(60 里定的),取代原来每舰每 tick 掷 8% 的骰子。
           MT1 的镜像局纪律仍在 plan.salvo 里:对局里每舰每波最多 2 组。 */
     /* 距离要【按本舰】量:60 那边的齐射窗口用的是队心到接触的距离,而三艘舰散在一段弧上,

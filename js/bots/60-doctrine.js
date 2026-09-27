@@ -115,13 +115,21 @@ const RDOC_CFG={
   CB_GAP:30,         // 2026-09-28 反炮兵射击的最短间隔(秒):同一轮齐射的几发炮弹只还一次手
   CB_D:200000*CFG.scale,  // 沿炮弹反向线往回多远瞄
   LURE_OFF:90000*CFG.scale, // 2026-09-27 第一次握住接触时,两艘不当灯的船各往舰队中心两侧这么远放一个诱饵(world/14),诱饵一直开着雷达冒充灯
+  /* 2026-09-28 抽奖开炮(用户:「打炮是一种抽奖……抽中了就赚」「好处是万一蒙对了,坏处是会被进一步定位,这是一种风险收益模型」)。
+     业内:火力侦察(reconnaissance by fire)/ 扰乱拦阻射击(H&I);风险一侧是反炮兵与打了就跑。开不开 = 中奖率 x 价值 过不过【暴露代价】那一档 */
+  LOT_P_EXP:0.01,    // 已暴露(正在照射 / 刚开过火 / 正在点火 / 被照射告警)时:多开一炮几乎不加风险,中奖率过 1% 就开
+  LOT_P_HID:0.08,    // 隐蔽时:开火闪光让对方红外很远就看见、炮弹还留来路,要过 8% 才开;埋伏态不开
+  LOT_D_BRG:200000*CFG.scale, // 只有方位 / 炮弹来路、不知道距离时,算中奖率假设目标在这么远
+  LOT_CB_OFF:2000*CFG.scale,  // 反炮兵:对方炮弹来路离本舰这么近以内才算冲我来的,沿反向线打回去(炮弹沿途碰到谁算谁)
+  LOT_SPREAD_S:20,   // 同一个目标 / 来路,全队这么多秒内只抽一次(分散抽奖)
+  LOT_T:20,          // 转头对准的时限(秒),超时作废
 };
 const RDOC={st:'ambush',t:0,goal:[0,0],src:'',foe:null,foeD:0,r:0,orbit:0,dir:1,
-  lamp:'',lampT:0,ambT:0,salvoT:1e9,shadowT:0,paintT:0,strikeT:0,press:false,plan:{},why:'',pulseT:0,lured:false,bolT:0,cbT:1e9,cbLast:null};
+  lamp:'',lampT:0,ambT:0,salvoT:1e9,shadowT:0,paintT:0,strikeT:0,press:false,plan:{},why:'',pulseT:0,lured:false,bolT:0,cbT:1e9,cbLast:null,lot:new Map()};
 function aiRedReset(){ // 换局清空(scenario/91 调)。AI1 的信念 + BOT1 的条令一起清
   AIR.goal=null;AIR.src='';AIR.memPos=null;AIR.memT=0;AIR.wp=0;AIR.u=[-1,0];
   RDOC.st='ambush';RDOC.t=0;RDOC.foe=null;RDOC.foeD=0;RDOC.r=0;RDOC.orbit=0;RDOC.dir=1;
-  RDOC.lamp='';RDOC.lampT=0;RDOC.ambT=0;RDOC.salvoT=1e9;RDOC.shadowT=0;RDOC.paintT=0;RDOC.strikeT=0;RDOC.press=false;RDOC.plan={};RDOC.why='';RDOC.pulseT=0;RDOC.lured=false;RDOC.bolT=0;RDOC.cbT=1e9;RDOC.cbLast=null;
+  RDOC.lamp='';RDOC.lampT=0;RDOC.ambT=0;RDOC.salvoT=1e9;RDOC.shadowT=0;RDOC.paintT=0;RDOC.strikeT=0;RDOC.press=false;RDOC.plan={};RDOC.why='';RDOC.pulseT=0;RDOC.lured=false;RDOC.bolT=0;RDOC.cbT=1e9;RDOC.cbLast=null;RDOC.lot.clear();
 }
 let _botWorstSig=0; // 没认出的目标按"最危险的那一型"算:散布最小 = 打得最准。表是死的,算一次
 function botWorstSigma(){
@@ -157,6 +165,25 @@ function botFocus(reds){ // WTA 贪心解:全队集火同一个。分数 = 价�
     if(sc>bs){bs=sc;best=b;}
   });
   return best;
+}
+function botExposed(e){return e.emitMode!=='silent'||e.fireHot>0||!!e.flame||!!trkPaintedBy(e);} // 2026-09-28 红方自己知道的暴露:正在照射 / 刚开过火 / 正在点火 / 被照射告警(RWR)
+function botShotP(e,d,lat){return erfApprox(MAC_HIT_R/(Math.SQRT2*Math.hypot(lat,d*macShotSigma(e,d))));} // 中奖率:横向不确定度 lat 与这一发的散布合成,一维高斯落进命中半径(weapons/52 同一个模型)
+function botLottery(e,claim){ // 2026-09-28 抽奖开炮:从红方自己知道的里挑中奖率 x 价值最高的一个,过不过暴露那一档。返回 {t} / {pt} 或 null
+  const cfg=RDOC_CFG,need=botExposed(e)?cfg.LOT_P_EXP:cfg.LOT_P_HID,far=LAD.msl;let best=null,bv=need;
+  const free=k=>{if(claim.has(k))return false;const t0=RDOC.lot.get(k);return t0===undefined||simTime-t0>=cfg.LOT_SPREAD_S;};
+  trkEach('red',tk=>{
+    if(trkGone(tk)||!trkHeld(tk)||!trkFoe(tk))return;const b=trkSrc(tk);if(!free(b))return;
+    let c=null,p=0;
+    if(trkFix(tk)){const q=trkPos(tk);if(!q)return;p=botShotP(e,Math.hypot(q[0]-e.pos[0],q[1]-e.pos[1]),Math.max(0,tk.cov.a1||0));c={t:b};} // 定出位置:打估计位置
+    else{const u=trkBearing(tk,e.pos),ch=tk.cov&&tk.cov.ch,th=(ch&&ch.opt)?COV.TH0.opt:COV.TH0.lis;   // 只有方位:沿方位线打到导弹包线那么远,不知道距离按 LOT_D_BRG 算中奖率
+      p=botShotP(e,cfg.LOT_D_BRG,cfg.LOT_D_BRG*th);c={pt:[e.pos[0]+u[0]*far,e.pos[1]+u[1]*far,0]};}
+    const v=p*botFoeValue(b);if(v>bv){bv=v;best={k:b,g:c,p:p};}
+  });
+  const trL=(typeof SHELL_TR!=='undefined')?SHELL_TR.red:[],tr=trL.length?trL[trL.length-1]:null; // 反炮兵:冲我来的那条来路
+  if(tr&&free(tr)){const rx=e.pos[0]-tr.a[0],ry=e.pos[1]-tr.a[1],off=Math.abs(rx*tr.u[1]-ry*tr.u[0]);
+    if(off<cfg.LOT_CB_OFF){const p=botShotP(e,cfg.LOT_D_BRG,off);if(p>bv){bv=p;best={k:tr,g:{pt:[e.pos[0]-tr.u[0]*far,e.pos[1]-tr.u[1]*far,0]},p:p};}}}
+  if(!best)return null;
+  claim.add(best.k);RDOC.lot.set(best.k,simTime);best.g.p=best.p;return best.g;
 }
 function botContacts(){let n=0;trkEach('red',tk=>{if(!trkGone(tk)&&trkHeld(tk)&&trkFoe(tk))n++;});return n;} // 2026-09-28 已确认不是船的不算 // TK2.2:红方握着几条接触,数自己的航迹表
 function botCenter(list){let x=0,y=0;for(const s of list){x+=s.pos[0];y+=s.pos[1];}return [x/list.length,y/list.length];}
@@ -258,12 +285,12 @@ function aiDoctrine(dt,reds){ // 指挥层入口:写 RDOC(含每艘舰的 plan)�
   const trL=(typeof SHELL_TR!=='undefined')?SHELL_TR.red:[],tr=trL.length?trL[trL.length-1]:null;
   if(tr&&tr!==RDOC.cbLast&&RDOC.cbT>=cfg.CB_GAP){RDOC.cbLast=tr;RDOC.cbT=0;cbPt=ordArenaClamp([tr.a[0]-tr.u[0]*cfg.CB_D,tr.a[1]-tr.u[1]*cfg.CB_D,0]);}
   /* 逐舰 plan */
-  const plan={};let i=0;
+  const plan={};let i=0,nLot=0;const claim=new Set();
   const nx=-AIR.u[1],ny=AIR.u[0];                       // 非交战态:沿前进方向的法向横向排开(AI1 的基线站位)
   for(const e of reds){
     const isLamp=(e.id===lamp);
     const role=isLamp?'lamp':(i%2?'flankR':'flankL');
-    let pos,pass=true,hold=false;
+    let pos,pass=true,hold=false,gg=false;
     if(st==='ambush'){pos=[e.pos[0],e.pos[1]];pass=false;hold=true;} // 蹲着:清命令 + 不推进(hold 在执行层会清 orders)
     else if(orbiting&&RDOC.r>0){
       const off=isLamp?0:((role==='flankL'?-1:1)*cfg.SLOT_A);
@@ -275,20 +302,21 @@ function aiDoctrine(dt,reds){ // 指挥层入口:写 RDOC(含每艘舰的 plan)�
       const br=Math.atan2(e.pos[1]-c[1],e.pos[0]-c[0]);
       const a=(dE>RDOC.r*cfg.APPROACH_K)?(br+off*0.35):(RDOC.orbit+off+RDOC.dir*cfg.LEAD_A);
       pos=[c[0]+Math.cos(a)*RDOC.r,c[1]+Math.sin(a)*RDOC.r];
-      if(st==='strike'&&gunGo){pass=false;hold=true;}
+      if(st==='strike'&&gunGo){pass=false;hold=true;gg=true;}
       if(st==='press'){const sc=(e.scootT||0)>0,oa=RDOC.orbit+off+(sc?cfg.SCOOT_A*RDOC.dir:0);pos=[c[0]+Math.cos(oa)*RDOC.r,c[1]+Math.sin(oa)*RDOC.r];
-        pass=sc;hold=!sc&&hasMAC(e)&&(RDOC.foeD<=macRangeAt(e,0.5));} // 压上态:到位停车,把机头交给战斗转向 —— 这才开得出主炮;2026-09-28 开完一炮(scootT,61 写)先沿轨道挪开
+        pass=sc;hold=!sc&&hasMAC(e)&&(RDOC.foeD<=macRangeAt(e,0.5));gg=hold;} // 压上态:到位停车,把机头交给战斗转向 —— 这才开得出主炮;2026-09-28 开完一炮(scootT,61 写)先沿轨道挪开
     }else{
       const off=(i-(reds.length-1)/2)*AIR.SPREAD;
       pos=[goal[0]+nx*off,goal[1]+ny*off];pass=false;
     }
     const lp=(lure&&!isLamp&&lk<2)?ordArenaClamp(lure[lk++]):null;
+    const gun=(st!=='ambush'&&!gg&&hasMAC(e)&&e.macCd<=0&&!(e.scootT>0)&&!e.forceMac)?botLottery(e,claim):null;if(gun)nLot++; // 2026-09-28 抽奖开炮;高把握的那一路(gunGo / 压上停车)照旧走战斗转向
     plan[e.id]={role:role,pos:ordArenaClamp(pos),pass:pass,hold:hold,paint:(paintOn&&isLamp),ping:(ping&&isLamp),lure:lp, // 2026-09-26 pos 夹进 ARENA(轨道点 / 横向排开点可能出界)
       foe:tgt||null,salvo:(salvoSet[e.id]&&tgt)?(mirror?Math.min(2,readyCells(e)):(e.cells||4)):0,
-      blind:(e.ammo>0&&readyCells(e)>0)?(cbPt||bolPt):null};
+      blind:(e.ammo>0&&readyCells(e)>0)?(cbPt||bolPt):null,gun:gun};
     i++;
   }
   RDOC.plan=plan;
-  RDOC.why=st+'/'+RDOC.src+' r='+Math.round(RDOC.r/1000)+'k 灯='+lamp+(foe?' 集火='+foe.name:'')+(cbPt?' 反炮兵':'')+(bolPt?' 方位盲射':'');
+  RDOC.why=st+'/'+RDOC.src+' r='+Math.round(RDOC.r/1000)+'k 灯='+lamp+(foe?' 集火='+foe.name:'')+(cbPt?' 反炮兵':'')+(bolPt?' 方位盲射':'')+(nLot?' 抽奖'+nLot:'');
   return RDOC;
 }
