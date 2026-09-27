@@ -13,7 +13,7 @@ function frame(t){
   if(++frameN%20===0){updateSelPanel();if(typeof updRangePanel==='function')updRangePanel();if(typeof updFmBar==='function')updFmBar();if(typeof spawnBarBuild==='function'){spawnBarBuild();spawnBarSync();}} // 低频刷新:RF2 选中舰面板;RANGE1 靶场面板读数(SL1 起直接搭这班车 —— 原来由舰队卡的状态刷新顺带调,舰队卡整套删了,面板逻辑保留);FM1 +编队书签栏(搭同一班低频车,它必须幂等且不改仿真状态)
   camHeld(dt);
   if(running){
-    acc+=dt*((typeof tcStep==='function')?tcStep(dt):rate);let n=0; // TC1 接触降速(core/06):对局里握有已定位的接触时,玩家选的倍速只是上限
+    acc+=dt*((typeof tcStep==='function')?tcStep(dt):rate)*RATE_K;let n=0; // 2026-09-27 显示倍数 x RATE_K = 每墙钟秒走几游戏秒(core/01)。 // TC1 接触降速(core/06):对局里握有已定位的接触时,玩家选的倍速只是上限
     while(acc>=CFG.step&&n<100){stepSim(CFG.step);simTime+=CFG.step;acc-=CFG.step;n++;}
     if(n>=100)acc=0;
   }

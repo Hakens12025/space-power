@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Space Power · 骨架</title>
-<link rel="stylesheet" href="css/app.css?v=20260927b1">
+<link rel="stylesheet" href="css/app.css?v=20260927t1">
 </head>
 <body>
 <canvas id="cv"></canvas>
@@ -115,7 +115,7 @@
      硬约束仅两条:core/00 定义 on() 必须最先(85/95/96/97 顶层调用它);core/99 顶层执行 init() 必须最后(且 init 调 loadRangeCfg,
      故 scenario/95 必须在它之前)。其余跨文件引用全在运行期解析,层序排列只为可读性。 -->
 <script src="js/core/00-config.js?v=20260927m1"></script>
-<script src="js/core/01-state.js?v=20260927a"></script>
+<script src="js/core/01-state.js?v=20260927t1"></script>
 <script src="js/ships/10-hull-geometry.js?v=20260923"></script>
 <script src="js/ships/11-classes.js?v=20260927o1"></script>
 <script src="js/world/12-env.js?v=20260926z"></script><!-- ENV1 环境系统:太阳禁区 + 天体 + 石头(TK4c)。必须在 sensors/ 之前:23-cov 加载期的梯子反解会读 optLum -->
@@ -147,7 +147,7 @@
 <script src="js/weapons/57-step-weapons.js?v=20260927b1"></script>
 <script src="js/weapons/58-firecontrol.js?v=20260926c"></script><!-- RF5 火控计算机引擎:序列数据模型+stepFireControl/Post。位置只为目录编号可读性(编号 58 > 57,归位到 weapons 块末尾),跨文件引用全在运行期解析:本文件顶层只有 const/let/function 声明,零顶层执行 -->
 <script src="js/core/05-sim.js?v=20260927o1"></script>
-<script src="js/core/06-timecomp.js?v=20260926u"></script><!-- TC1 接触降速:frame() 每帧调 tcStep;依赖全部在运行期解析 -->
+<script src="js/core/06-timecomp.js?v=20260927t1"></script><!-- TC1 接触降速:frame() 每帧调 tcStep;依赖全部在运行期解析 -->
 <script src="js/bots/60-doctrine.js?v=20260927ai1"></script>
 <script src="js/bots/61-enemy.js?v=20260927ai1"></script>
 <script src="js/command/70-input.js?v=20260927o1"></script>
@@ -162,7 +162,7 @@
 <script src="js/render/82-rocks.js?v=20260927o1"></script><!-- TK4c 石头的航迹(第二个循环)。与 82-ship-icons / 82-lod 共用编号 82 -->
 <script src="js/render/82-lod.js?v=20260926z"></script><!-- SN6 聚合层:舰 → 舰队框 → 舰队组;与 82-ship-icons 共用编号 -->
 <script src="js/render/83-hud.js?v=20260927x1"></script>
-<script src="js/render/84-scene.js?v=20260927v5"></script>
+<script src="js/render/84-scene.js?v=20260927t1"></script>
 <script src="js/render/84-fmplot.js?v=20260923"></script><!-- FM4 编队能力站位的地图可视化。与 84-scene 共用编号 84(先例:weapons/51-defs 与 51-ciws),都属于“场景图层”;顶层只有 const/function,零顶层执行,由 84-scene 的 render() 运行期调用 -->
 <script src="js/render/85-settings.js?v=20260926e"></script>
 <script src="js/render/85-tutorial.js?v=20260927d1"></script><!-- RF5-D 教程面板。与 85-settings 共用编号 85(先例:weapons/51-defs 与 51-ciws),语义上教程与设置相邻。顶层调用 on(),故必须晚于 core/00;其余引用全在运行期解析 -->
@@ -177,6 +177,6 @@
 <script src="js/scenario/95-range.js?v=20260926k"></script>
 <script src="js/scenario/96-spawn.js?v=20260923"></script><!-- FM7 测试用加船小条。放在 95 之后、core/99 之前:它顶层调 on(),而 on() 定义在 core/00 -->
 <script src="js/scenario/97-match.js?v=20260927n1"></script><!-- MT1 对局入口 / 红方摆位 / 结果卡片。顶层调 on(),须在 core/00 之后;matchPlaceRed 被 91-init 运行期调用 -->
-<script src="js/core/99-main.js?v=20260926z"></script>
+<script src="js/core/99-main.js?v=20260927t2"></script>
 </body>
 </html>

@@ -161,6 +161,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
    开关态由钮的边框 + 淡填充 + 图标的不透明度表达。舰 = --txt-hi,圆 / 视线 = --acc,误差椭圆 = --state-warn(与地图上的告警橙同源)。 */
 #tools .hbtn[data-tool]{padding:2px;line-height:0}
 .tl-ico{display:block;width:18px;height:18px;pointer-events:none;opacity:.72}
+#segTool .tl-ico{width:24px;height:24px} /* 2026-09-27 用户:红外 / 雷达两颗稍微放大 */
 #tools .hbtn[data-tool]:hover .tl-ico,#tools .hbtn[data-tool].on .tl-ico{opacity:1}
 .tl-ico .i-ship{fill:var(--txt-hi)}
 .tl-ico .i-r1{fill:var(--acc);fill-opacity:.78}
