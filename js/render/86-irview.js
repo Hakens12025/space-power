@@ -5,7 +5,7 @@
    2026-09-28 一道门(用户,演示页 demos/地图组/红外一道门.html):每一处热的色阶值 = GAIN x 这一份热的有效信噪比 K_IR·lo/d²(船身、尾焰、轮廓、导弹同一条),不分类型;
    宽 = 距离 x 固定模糊角 irvPsf,不读亮度;石头又大又冷,近到填满模糊斑(FILL x √体型)后亮度不再涨(点源 → 扩展源),船与导弹当点源;三道门 = senseOptBlocked。
    背景:尘埃云(envBgParts,按光照;乘地图同一个显示增益)、位置型恒星的光晕、天体盘(朝阳面亮、背阴面 heat)。
-   场按 CELL 屏幕像素一格,色阶 + 噪点上色,小图放大进整屏缓存(设备像素),每帧 1:1 贴;山只在变了的地方揭旧贴新;近处(Johnson N >= 3)热轮廓叠在山上(山照画)。
+   场按 CELL 屏幕像素一格,色阶 + 噪点上色,小图放大进整屏缓存(设备像素),每帧 1:1 贴;山只在变了的地方揭旧贴新;蓝方内核认出且定位后热轮廓叠在山上(山照画;与主视图画出认出的船同一个条件)。
    ============================================================================ */
 const IRV_C={CELL:5,V0:0.02,VMAX:1000,CULL:0.0003,SIG_MIN:0.7,NOISE:0.005,NOISE_MS:200,TAIL_K:4,POS_P:3,MIX:0.875,
   BG_K:0.4,AR:3,AR_ROCK:1.5,FADE:1,HALO:0.5,DETAIL:6.4,CLOUD_M:8,CLOUD_LV:4,CLOUD_SYNC:400,CLOUD_BATCH:1500,CLOUD_COARSE:1200,
@@ -112,8 +112,8 @@ function irvjSplats(t,ph){ // 一个源的贴片(主山、尾焰尾巴),格坐�
   const pk=IRV_C.GAIN*ph.snr*(1-sh),pkT=IRV_C.GAIN*ph.snr*sh;
   if(pk>=IRV_C.CULL)list.push(irvSplatRect({x:cx,y:cy,pk:pk,a:s0,c:s0,ux:1,uy:0,iso:true})); // 出轮廓后照画(用户:显形了也要有红色团)
   if(pkT>=IRV_C.CULL){const sa=s0*IRV_C.TAIL_K/2;list.push(irvSplatRect({x:cx+tl.ux*sa,y:cy+tl.uy*sa,pk:pkT,a:sa,c:s0,ux:tl.ux,uy:tl.uy,iso:false}));}
-  const N=covResN(t,ph.sig),a=Math.max(0,Math.min(1,N-3)); // 出轮廓只看体型与距离
-  return {list:list,sil:a>0&&pk>=IRV_C.CULL?{N:N,a:a,v:pk,vt:pkT}:null};
+  const N=covResN(t,ph.sig); // N 只剩精灵缓存键用
+  return {list:list,sil:irvSilOn(t)&&pk>=IRV_C.CULL?{N:N,a:1,v:pk,vt:pkT}:null};
 }
 function irvjProbe(o,n){ // 同一位置、同一朝向的山:山顶、1σ、v = 6·V0、v = 2·V0 几个半径上色标下标都没变 = 不重贴
   for(let ax=0;ax<(o.iso?1:2);ax++){
@@ -128,6 +128,7 @@ function irvjKeep(a,b){
   for(let k=0;k<a.length;k++){const o=a[k],n=b[k];if(o.iso!==n.iso||o.x!==n.x||o.y!==n.y||o.ux!==n.ux||o.uy!==n.uy||!irvjProbe(o,n))return false;}
   return true;
 }
+function irvSilOn(t){return contactFix(t,'blue')&&contactIdn(t,'blue');} // 2026-09-28 出轮廓 = 蓝方内核认出且定位(用户:红外认出了主视图却没有;原来按体型与距离自己判,和内核两把尺子)
 function irvjSilKey(e){if(!e)return '';return (e.N>=IRV_C.DETAIL)+'|'+irvLutK(irvT(e.v))+'|'+irvLutK(irvT(e.vt))+'|'+Math.round(e.a*255);}
 function irvSilR(t){return (t.kind==='rock'?irvBodyR(t)*1.06:hullSize(t.cls,t.tier||2)*1.6)*irvZf(t)+2;} // 热轮廓外接半径(px)
 function irvjBox(t){const p=toScreen(t.pos[0],t.pos[1]),R=irvSilR(t);return [p[0]-R,p[1]-R,p[0]+R,p[1]+R];}
@@ -148,6 +149,7 @@ function irvjUpdate(full,gch){ // 返回脏矩形 [i0,i1,j0,j1] 列表;null = �
     r.seen=fr;
     const pm=nw||r.px!==t.pos[0]||r.py!==t.pos[1],sc=nw||irvjStCh(r,t);r.mv=pm&&!nw;
     if(pm){r.px=t.pos[0];r.py=t.pos[1];}if(sc)irvjStSet(r,t);
+    const so=irvSilOn(t);if(so!==r.so){r.so=so;r.need=true;} // 内核认出 / 定位变了:轮廓跟着重画(静止的石头不会因为挪动而重贴)
     const chk=(gch||pm||sc)?all:cm;
     if(!chk&&!om)continue;
     const v0=r.vis,v=chk?irvjVis(v0,t,obs,chk):v0;r.vis=v;
