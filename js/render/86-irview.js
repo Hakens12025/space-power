@@ -299,13 +299,13 @@ function irvFc(x0,y0,x1,y1,dpr){ // 缓存的设备像素矩形里重画:清掉�
   const X=IRVC.fx,C=IRV_C.CELL;if(x1<=x0||y1<=y0)return;
   X.save();X.setTransform(1,0,0,1,0,0);X.beginPath();X.rect(x0,y0,x1-x0,y1-y0);X.clip();X.clearRect(x0,y0,x1-x0,y1-y0);
   X.setTransform(dpr,0,0,dpr,0,0);X.imageSmoothingEnabled=true;X.drawImage(IRVC.cv,-C/2,-C/2,irvGW*C,irvGH*C);
-  if(!shipMarkMode()){const bx0=x0/dpr,by0=y0/dpr,bx1=x1/dpr,by1=y1/dpr;
+  if(!shipMarkMode()&&!adminMode){const bx0=x0/dpr,by0=y0/dpr,bx1=x1/dpr,by1=y1/dpr; // 2026-09-28 GM 下主视图照画每个目标的真身,轮廓再垫一层会从底下漏一圈边(用户:石头旁边一圈红),不画
     for(const r of IRVJ.rec.values())if(r.sil&&r.sb[2]>bx0&&r.sb[0]<bx1&&r.sb[3]>by0&&r.sb[1]<by1)irvDrawSil(X,r.t,r.sil,r.mv,dpr);}
   X.restore();
 }
 function irvUpdate(){
   const V=IRVC,C=IRV_C.CELL,dpr=devicePixelRatio||1,rs=irvGrid(),gw=irvGW,gh=irvGH,n=gw*gh;
-  const vs=[cam.x,cam.y,cam.zoom,W,H,dpr],gs=[ENV.rev];
+  const vs=[cam.x,cam.y,cam.zoom,W,H,dpr,adminMode],gs=[ENV.rev]; // adminMode:切 GM 时轮廓要整张重画
   const md=!V.live,view=rs||md||irvNe(vs,V.vs),glob=md||irvNe(gs,V.gs);
   if(md){IRVJ.reset=true;V.live=true;}
   V.vs=vs;V.gs=gs;
