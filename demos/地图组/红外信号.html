@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>红外与雷达信号</title>
+<style>
+:root{--bg:#05070c;--panel:#0b1018;--line:#1d2633;--txt:#d7e2f0;--dim:#7d8a9c;--acc:#5aa7ff;--warn:#ffb454;--teal:#54e0d0}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--txt);font:13px/1.5 "Microsoft YaHei",sans-serif}
+header{padding:10px 16px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:6px 18px;align-items:baseline}
+header h1{font-size:16px;margin:0;font-weight:normal;color:#fff}
+header p{margin:0;color:var(--dim);font-size:12px}
+main{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px 16px}
+@media (max-width:900px){main{grid-template-columns:1fr}}
+.pane{background:var(--panel);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.pane h2{margin:0;padding:6px 10px;font-size:13px;font-weight:normal;border-bottom:1px solid var(--line);display:flex;justify-content:space-between}
+.pane h2 span{color:var(--dim);font-size:12px}
+canvas{display:block;width:100%;height:auto;background:#000}
+.legend{padding:8px 10px;color:var(--dim);font-size:12px;border-top:1px solid var(--line)}
+.legend b{color:var(--txt);font-weight:normal}
+#ctl{padding:0 16px 16px}
+.bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0}
+.bar .nm{width:56px;color:var(--dim)}
+.bar .sep{width:1px;height:18px;background:var(--line);margin:0 4px}
+button{background:#111925;color:var(--txt);border:1px solid #2a3647;border-radius:4px;padding:3px 10px;font:inherit;cursor:pointer}
+button:hover{border-color:var(--acc)}
+button.on{background:#12304f;border-color:var(--acc);color:#cfe6ff}
+label{color:var(--dim);cursor:pointer;user-select:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>红外与雷达信号</h1>
+  <p>同一片空域的两种画面:左边是红外画面(看热),右边是雷达画面(听雷达、看回波)。信号不画成从船射出的线,而是在画面里本身长得不一样。演示页,不加载引擎。</p>
+</header>
+<main>
+  <section class="pane"><h2>红外画面 <span id="irInfo"></span></h2><canvas id="cvIR" width="760" height="520"></canvas>
+    <div class="legend"><b>熄火滑行</b>:只有船体余热,暗红一团。<b>主推</b>:核心更亮,尾焰拖在身后并微微闪烁,喷出的热气留成一道慢慢冷下去的彗尾。<b>刹车</b>:更亮更白,尾焰朝前,船开进自己喷出的热雾里、看得见在减速。<b>开火</b>:一下白热闪光,外扩一圈后几秒内褪掉。<b>发射导弹</b>:几个小亮点飞离,点火那几秒很亮,熄火滑行后就看不见了。</div></section>
+  <section class="pane"><h2>雷达画面 <span>我方静默,只在听</span></h2><canvas id="cvRD" width="760" height="520"></canvas>
+    <div class="legend"><b>持续照射</b>:对方开着雷达 ⇒ 沿方位拉长的一片青绿区域一直亮着(只听得出方向和大概远近)。<b>脉冲</b>:同一片区域闪一下再褪掉。<b>我方脉冲</b>:从舰队扩出一圈,照到的目标冒出琥珀色回波,然后慢慢淡掉 —— 这一下之后我方就知道它们在哪,对方也知道了我们。</div></section>
+</main>
+<div id="ctl">
+  <div class="bar"><label><input type="checkbox" id="auto" checked> 自动演示(40 秒一轮)</label><span class="sep"></span><button id="pause">暂停</button><button id="myPulse">我方脉冲</button><span class="sep"></span><label><input type="checkbox" id="tags" checked> 显示目标编号</label><label><input type="checkbox" id="glow" checked> 余辉(热像拖影)</label></div>
+  <div id="rows"></div>
+</div>
+<script>
+"use strict";
+/* ---------- 世界:单位 km、游戏秒(1 游戏秒 = 物理 10 秒,与引擎 x1 一致)---------- */
+const D0=96000;                   // 熄火驱逐舰恰好看得见的距离(引擎 LAD 光学冷)
+const P={coast:0,main:12.3,brake:26.1,fire:12.3}; // 功耗档:与引擎 sensors/20 相同
+const FLEET=[[0,-20000],[0,0],[0,20000]];         // 我方(观测站)
+const VIEW={x0:-30000,x1:270000,y0:-102000,y1:102000};
+const C=[ // 五个目标:编号、起点、速度(km/游戏秒)、体型
+  {id:'A',x:150000,y:-70000,vx:-420,vy:120,size:0.7},
+  {id:'B',x:190000,y:-25000,vx:-520,vy:0,size:0.7},
+  {id:'C',x:140000,y:20000,vx:-300,vy:-60,size:1.0},
+  {id:'D',x:200000,y:60000,vx:-380,vy:-90,size:0.7},
+  {id:'E',x:235000,y:-5000,vx:-260,vy:70,size:1.0},
+];
+for(const c of C){c.s0=[c.x,c.y,c.vx,c.vy];c.st='coast';c.rad='silent';c.fireT=-1e9;c.pingT=-1e9;c.puffT=0;c.ignT=-1e9;c.hist=[];c.histT=0;}
+const puffs=[],msls=[],echoes=[];let myPulseT=-1e9;
+/* ---------- 自动演示脚本(40 秒一轮)---------- */
+const SCRIPT=[ // [时刻, 编号, 字段, 值]
+  [2,'A','st','main'],[8,'A','st','coast'],
+  [10,'B','st','brake'],[17,'B','st','coast'],
+  [14,'C','fire',0],[17,'C','fire',0],[22,'C','msl',0],
+  [4,'D','rad','pulse'],
+  [25,'E','rad','paint'],[35,'E','rad','silent'],
+  [30,'','mypulse',0],
+];
+SCRIPT.sort((a,b)=>a[0]-b[0]);
+let T=0,lastT=0,paused=false,auto=true,loopT=0,si=0;
+function resetScene(){for(const c of C){[c.x,c.y,c.vx,c.vy]=c.s0;c.st='coast';c.rad='silent';c.fireT=-1e9;c.pingT=-1e9;c.ignT=-1e9;c.hist=[];}puffs.length=0;msls.length=0;echoes.length=0;loopT=0;si=0;syncRows();}
+function act(c,f,v){
+  if(f==='st'){if((v==='main'||v==='brake')&&c.st!==v)c.ignT=T;c.st=v;}else if(f==='rad')c.rad=v;
+  else if(f==='fire')c.fireT=T;
+  else if(f==='msl'){c.fireT=T;for(let k=-1;k<=1;k++){const dx=-c.x,dy=-c.y+k*15000,l=Math.hypot(dx,dy);msls.push({x:c.x,y:c.y,vx:dx/l*3000+c.vx,vy:dy/l*3000+c.vy,t0:T});}}
+  syncRows();
+}
+/* ---------- 一步 ---------- */
+function step(dt){
+  T+=dt;
+  if(auto){loopT+=dt;while(si<SCRIPT.length&&SCRIPT[si][0]<=loopT){const s=SCRIPT[si++];if(s[2]==='mypulse')doMyPulse();else act(C.find(c=>c.id===s[1]),s[2],s[3]);}
+    if(loopT>=40)resetScene();}
+  for(const c of C){
+    const sp=Math.hypot(c.vx,c.vy)||1,ux=c.vx/sp,uy=c.vy/sp;
+    if(c.st==='main'){c.vx+=ux*5*dt;c.vy+=uy*5*dt;}           // 5 g 左右
+    if(c.st==='brake'){const k=Math.max(0,1-12*dt/sp);c.vx*=k;c.vy*=k;} // 刹车:看得见在减速(演示放大了减速度)
+    c.x+=c.vx*dt;c.y+=c.vy*dt;
+    if(c.st==='main'||c.st==='brake'){ // 喷出去的热气:主推往后留、刹车往前抛(船会开进去)
+      c.puffT-=dt;if(c.puffT<=0){c.puffT=0.2;const dir=c.st==='main'?-1:1,L=c.st==='main'?9000:7000;
+        puffs.push({x:c.x+ux*dir*L,y:c.y+uy*dir*L,vx:c.vx*0.25+ux*dir*260,vy:c.vy*0.25+uy*dir*260,a:(c.st==='brake'?0.9:0.55)*lumOf(c)/0.7*0.18,t0:T,w0:3500});}}
+    if(c.rad==='pulse'&&T-c.pingT>=8)c.pingT=T;               // 脉冲:每 8 秒扫一拍
+    c.histT-=dt;if(c.histT<=0){c.histT=0.25;c.hist.push({x:c.x,y:c.y,l:lumOf(c),t:T});while(c.hist.length&&T-c.hist[0].t>6)c.hist.shift();}
+  }
+  for(const p of puffs){p.x+=p.vx*dt;p.y+=p.vy*dt;}
+  for(let i=puffs.length-1;i>=0;i--)if(T-puffs[i].t0>9)puffs.splice(i,1);
+  for(const m of msls){m.x+=m.vx*dt;m.y+=m.vy*dt;}
+  for(let i=msls.length-1;i>=0;i--)if(T-msls[i].t0>14)msls.splice(i,1);
+  for(let i=echoes.length-1;i>=0;i--)if(T-echoes[i].t0>10)echoes.splice(i,1);
+}
+function lumOf(c){const fire=Math.max(0,1-(T-c.fireT)/3)*P.fire;return c.size*(1+P[c.st]+fire);}
+function doMyPulse(){myPulseT=T;for(const c of C){const d=Math.hypot(c.x,c.y);if(d<320000)echoes.push({c:c,x:c.x,y:c.y,t0:T+d/320000});}}
+/* ---------- 红外场:低分辨率格子 + 高斯贴片 + 引擎同一张色阶 ---------- */
+const RAMP=[[-0.1,[40,6,6]],[0,[70,12,12]],[0.25,[150,30,20]],[0.5,[220,80,30]],[0.75,[255,170,60]],[1,[255,245,210]]];
+const LUT=(function(){const L=new Uint8ClampedArray(256*3);for(let k=0;k<256;k++){const t=-0.1+k/255*1.1;let a=0;while(a<RAMP.length-2&&t>RAMP[a+1][0])a++;const p=RAMP[a],q=RAMP[a+1],u=Math.max(0,Math.min(1,(t-p[0])/(q[0]-p[0])));for(let c=0;c<3;c++)L[k*3+c]=Math.round(p[1][c]+(q[1][c]-p[1][c])*u);}return L;})();
+const V0=0.02,VMAX=1000,LN=Math.log(1+VMAX/V0);
+function lutK(v){const t=v>0?Math.log(1+v/V0)/LN:0;return Math.max(0,Math.min(255,Math.round((Math.min(1,t)+0.1)/1.1*255)));}
+const cvIR=document.getElementById('cvIR'),gIR=cvIR.getContext('2d'),cvRD=document.getElementById('cvRD'),gRD=cvRD.getContext('2d');
+const CELL=4;let GW=0,GH=0,F=null,img=null,off=null,offg=null;
+function kmpp(cv){return (VIEW.x1-VIEW.x0)/cv.width;}
+function toPx(cv,x,y){const k=kmpp(cv);return [(x-VIEW.x0)/k,(y-VIEW.y0)/k];}
+function ensureField(){const gw=Math.ceil(cvIR.width/CELL),gh=Math.ceil(cvIR.height/CELL);if(gw!==GW||gh!==GH){GW=gw;GH=gh;F=new Float32Array(GW*GH);off=document.createElement('canvas');off.width=GW;off.height=GH;offg=off.getContext('2d');img=offg.createImageData(GW,GH);}}
+function splat(x,y,pk,sa,sc,ux,uy){ // 各向异性高斯:沿 (ux,uy) 宽 sa、横向宽 sc(单位 km)
+  if(!(pk>0.001))return;const k=kmpp(cvIR)*CELL,cx=(x-VIEW.x0)/k,cy=(y-VIEW.y0)/k,a=sa/k,c=sc/k,r=3*Math.max(a,c);
+  const i0=Math.max(0,Math.floor(cx-r)),i1=Math.min(GW-1,Math.ceil(cx+r)),j0=Math.max(0,Math.floor(cy-r)),j1=Math.min(GH-1,Math.ceil(cy+r)),ea=-0.5/(a*a),ec=-0.5/(c*c);
+  for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const dx=i-cx,dy=j-cy,p=dx*ux+dy*uy,q=-dx*uy+dy*ux;F[j*GW+i]+=pk*Math.exp(ea*p*p+ec*q*q);}
+}
+function ring(x,y,pk,R,w){ // 环形高斯(开火闪光外扩的那一圈)
+  const k=kmpp(cvIR)*CELL,cx=(x-VIEW.x0)/k,cy=(y-VIEW.y0)/k,Rc=R/k,wc=Math.max(0.8,w/k),r=Rc+3*wc;
+  const i0=Math.max(0,Math.floor(cx-r)),i1=Math.min(GW-1,Math.ceil(cx+r)),j0=Math.max(0,Math.floor(cy-r)),j1=Math.min(GH-1,Math.ceil(cy+r)),e=-0.5/(wc*wc);
+  for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const d=Math.hypot(i-cx,j-cy)-Rc;F[j*GW+i]+=pk*Math.exp(e*d*d);}
+}
+function obsDist(x,y){let m=1e18;for(const f of FLEET)m=Math.min(m,Math.hypot(x-f[0],y-f[1]));return m;} // 看得最清楚的那一站
+let nz=12345;function rnd(){nz=(nz*1103515245+12345)&0x7fffffff;return nz/0x7fffffff;}
+function drawIR(){
+  ensureField();F.fill(0);
+  for(const c of C){
+    const d=obsDist(c.x,c.y),lum=lumOf(c),pk=(lum/0.7)*(D0/d)*(D0/d),blur=Math.max(2500,d*0.028); // 峰高按"熄火 DD 恰在发现距离 = 1"归一;宽 = 模糊(越远越糊)
+    const sp=Math.hypot(c.vx,c.vy)||1,ux=c.vx/sp,uy=c.vy/sp,burn=c.st==='main'||c.st==='brake';
+    const flick=burn?1+0.13*Math.sin(T*23+c.x*1e-4)*Math.sin(T*9.7+c.y*1e-4):1; // 尾焰湍流:微微闪
+    const pkB=(c.size*(1+(T-c.fireT<3?Math.max(0,1-(T-c.fireT)/3)*P.fire:0))/0.7)*(D0/d)*(D0/d); // 船体(+ 开火余热)
+    if(burn){
+      const dir=c.st==='main'?-1:1,pl=pk-pkB,Lt=c.st==='main'?11000:15000,ig=1+1.5*Math.exp(-Math.max(0,T-c.ignT)/0.4); // 点火那一下更亮
+      splat(c.x+ux*dir*Lt*0.55,c.y+uy*dir*Lt*0.55,pl*(c.st==='brake'?0.65:0.55)*flick*ig,Lt,blur*0.75,ux,uy); // 尾焰:主推拖在后面、刹车朝前喷
+      splat(c.x,c.y,(pkB+pl*0.45)*flick*ig,blur,blur,1,0);                           // 喷口 + 船体
+    }else splat(c.x,c.y,pkB,blur,blur,1,0);
+    const fa=T-c.fireT;if(fa>=0&&fa<3){ring(c.x,c.y,40*(D0/d)*(D0/d)*Math.exp(-fa/0.5),Math.min(1,fa/0.35)*blur*2.8,blur*0.35);splat(c.x,c.y,60*(D0/d)*(D0/d)*Math.exp(-fa/0.25),blur*0.7,blur*0.7,1,0);} // 开火:白热闪光 + 外扩一圈
+  }
+  if(glow)for(const c of C)for(const h of c.hist){const a=T-h.t,d=obsDist(h.x,h.y),blur=Math.max(2500,d*0.028),f=Math.pow(1-a/6,2)*0.3;splat(h.x,h.y,(h.l/0.7)*(D0/d)*(D0/d)*f,blur*0.9,blur*0.9,1,0);} // 余辉:热像拖影,看得出往哪走
+  for(const p of puffs){const a=T-p.t0,d=obsDist(p.x,p.y),w=p.w0*(1+a*0.5);splat(p.x,p.y,p.a*Math.exp(-a/3.2)*(D0/d)*(D0/d)*(p.w0/w),w,w,1,0);} // 喷出去的热气:散开、冷下去
+  for(const m of msls){const a=T-m.t0,d=obsDist(m.x,m.y),hot=a<10,lum=hot?0.76:0.01,sp=Math.hypot(m.vx,m.vy),ux=m.vx/sp,uy=m.vy/sp;
+    splat(m.x,m.y,(lum/0.7)*(D0/d)*(D0/d)*(hot?1+0.2*Math.sin(T*31+a):1),hot?2600:1500,1200,ux,uy);}  // 导弹:点火那几秒亮,熄火滑行就暗了
+  const D=img.data;for(let i=0;i<GW*GH;i++){const v=F[i]+(rnd()-0.5)*0.004,k=lutK(v)*3,o=i*4;D[o]=LUT[k];D[o+1]=LUT[k+1];D[o+2]=LUT[k+2];D[o+3]=255;}
+  offg.putImageData(img,0,0);gIR.imageSmoothingEnabled=true;gIR.drawImage(off,0,0,GW*CELL,GH*CELL);
+  drawFleet(gIR,cvIR);if(tags)drawTags(gIR,cvIR,'rgba(255,230,200,.75)');
+}
+function drawFleet(g,cv){g.fillStyle='#5aa7ff';for(const f of FLEET){const p=toPx(cv,f[0],f[1]);g.beginPath();g.moveTo(p[0]+7,p[1]);g.lineTo(p[0]-5,p[1]-5);g.lineTo(p[0]-5,p[1]+5);g.closePath();g.fill();}}
+function drawTags(g,cv,col){g.font='11px "Microsoft YaHei"';g.fillStyle=col;g.textAlign='left';for(const c of C){const p=toPx(cv,c.x,c.y);g.fillText(c.id,p[0]+10,p[1]-10);}}
+/* ---------- 雷达画面:听到的区域(只有方向 + 大概远近)、我方脉冲与回波 ---------- */
+function blob(g,cv,x,y,ang,sr,st,a){ // 沿方位拉长的一团
+  const p=toPx(cv,x,y),k=kmpp(cv);g.save();g.translate(p[0],p[1]);g.rotate(ang);g.scale(sr/k,st/k);
+  const gr=g.createRadialGradient(0,0,0,0,0,1);gr.addColorStop(0,'rgba(84,224,208,'+(0.55*a).toFixed(3)+')');gr.addColorStop(0.6,'rgba(84,224,208,'+(0.18*a).toFixed(3)+')');gr.addColorStop(1,'rgba(84,224,208,0)');
+  g.fillStyle=gr;g.beginPath();g.arc(0,0,1,0,6.283);g.fill();g.restore();
+}
+function drawRD(){
+  const g=gRD,cv=cvRD;g.fillStyle='#03060a';g.fillRect(0,0,cv.width,cv.height);
+  g.strokeStyle='rgba(111,180,255,0.12)';g.lineWidth=1;const o=toPx(cv,0,0),k=kmpp(cv);for(const R of [100000,200000,300000]){g.beginPath();g.arc(o[0],o[1],R/k,0,6.283);g.stroke();}
+  for(const c of C){
+    const d=Math.hypot(c.x,c.y),ang=Math.atan2(c.y,c.x),sr=d*0.25,st=d*0.06; // 静听:方向较准、远近只按信号强弱估(±50%)
+    const ex=Math.cos(ang)*d,ey=Math.sin(ang)*d;
+    if(c.rad==='paint')blob(g,cv,ex,ey,ang,sr,st,0.85+0.15*Math.sin(T*2.1));
+    const pa=T-c.pingT;if(pa>=0&&pa<6)blob(g,cv,ex,ey,ang,sr,st,Math.exp(-pa/1.6)*(pa<0.15?pa/0.15:1));
+  }
+  const ma=T-myPulseT;if(ma>=0&&ma<1.2){g.strokeStyle='rgba(111,180,255,'+(0.8*(1-ma/1.2)).toFixed(3)+')';g.lineWidth=2;g.beginPath();g.arc(o[0],o[1],Math.min(1,ma)*320000/k,0,6.283);g.stroke();} // 我方脉冲:扩出一圈
+  for(const e of echoes){const a=T-e.t0;if(a<0)continue;const p=toPx(cv,e.x,e.y),al=Math.max(0,1-a/10);
+    g.fillStyle='rgba(255,190,70,'+(0.9*al).toFixed(3)+')';g.fillRect(p[0]-4,p[1]-4,8,8);if(a<0.4){g.strokeStyle='rgba(255,220,150,'+(1-a/0.4).toFixed(3)+')';g.strokeRect(p[0]-4-a*30,p[1]-4-a*30,8+a*60,8+a*60);}}
+  drawFleet(g,cv);if(tags)drawTags(g,cv,'rgba(180,240,230,.7)');
+}
+/* ---------- 界面 ---------- */
+let tags=true,glow=true;
+const ST=[['coast','滑行'],['main','主推'],['brake','刹车']],RAD=[['silent','静默'],['pulse','脉冲'],['paint','照射']];
+function syncRows(){
+  const rows=document.getElementById('rows');
+  if(!rows.children.length){for(const c of C){const d=document.createElement('div');d.className='bar';d.innerHTML='<span class="nm">目标 '+c.id+'</span>'
+    +ST.map(s=>'<button data-c="'+c.id+'" data-f="st" data-v="'+s[0]+'">'+s[1]+'</button>').join('')+'<button data-c="'+c.id+'" data-f="fire">开火</button><button data-c="'+c.id+'" data-f="msl">发射导弹</button><span class="sep"></span>'
+    +RAD.map(s=>'<button data-c="'+c.id+'" data-f="rad" data-v="'+s[0]+'">雷达 · '+s[1]+'</button>').join('');rows.appendChild(d);}}
+  for(const b of rows.querySelectorAll('button')){const c=C.find(x=>x.id===b.dataset.c),f=b.dataset.f;b.classList.toggle('on',(f==='st'&&c.st===b.dataset.v)||(f==='rad'&&c.rad===b.dataset.v));}
+}
+document.getElementById('rows').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;auto=false;document.getElementById('auto').checked=false;act(C.find(x=>x.id===b.dataset.c),b.dataset.f,b.dataset.v);});
+document.getElementById('auto').addEventListener('change',e=>{auto=e.target.checked;if(auto)resetScene();});
+document.getElementById('tags').addEventListener('change',e=>{tags=e.target.checked;});
+document.getElementById('glow').addEventListener('change',e=>{glow=e.target.checked;});
+document.getElementById('pause').addEventListener('click',e=>{paused=!paused;e.target.textContent=paused?'继续':'暂停';});
+document.getElementById('myPulse').addEventListener('click',()=>doMyPulse());
+function fit(){for(const cv of [cvIR,cvRD]){const w=Math.round(cv.getBoundingClientRect().width);if(w>0&&cv.width!==w){cv.width=w;cv.height=Math.round(w*(VIEW.y1-VIEW.y0)/(VIEW.x1-VIEW.x0));}}}
+window.addEventListener('resize',fit);
+function frame(now){const dt=Math.min(0.05,(now-lastT)/1000||0);lastT=now;if(!paused)step(dt);fit();drawIR();drawRD();
+  document.getElementById('irInfo').textContent='T = '+(T*10|0)+' 物理秒';requestAnimationFrame(frame);}
+syncRows();
+{const t0=+(new URLSearchParams(location.search).get('t')||0);if(t0>0){for(let k=0;k<t0/0.05;k++)step(0.05);paused=true;document.getElementById('pause').textContent='继续';}} // ?t=秒数:直接跳到自动演示的那一刻并暂停(看细节 / 截图用)
+requestAnimationFrame(t=>{lastT=t;requestAnimationFrame(frame);});
+</script>
+</body>
+</html>
