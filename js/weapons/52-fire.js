@@ -17,7 +17,7 @@ function macAligned(s,t){ // 轴炮窗口:机头是否对准预测点(~1.1°容�
    用户:"因为是太空,本身武器射程就应该是无限,只是精准度问题"。所以:
      · 主炮没有射程门。每一发都带角散布 da ~ 高斯(0, macSigma)(以前只在超程时才加,而且是均匀分布)。
        弹丸沿散布后的方向直飞到【预测点】的飞行时间就消失(不许无限飞:性能)。命中判定照旧 = 弹丸离目标真实位置 < MAC_HIT_R。
-       于是命中率随距离自然下降:P(d) = erf( MAC_HIT_R / (σ·d·√2) )。macSigma=0.0081 ⇒ 15 万 ≈ 90%、36.6 万 = 50%、196 万 = 10%。
+       于是命中率随距离自然下降:P(d) = erf( MAC_HIT_R / (σ·d·√2) )。macSigma=0.0081 ⇒ 15 万 ≈ 90%、36.6 万 = 50%、196 万 = 10%。(2026-09-28 改成 S 形,见 MAC_K)
        飞行时间里目标机动造成的脱靶不用另建模:弹丸瞄的是发射那一刻的预测点,目标一加速自然打空(150 万公里要飞 50 秒)。
      · 主炮只要定得出位置就许开火,瞄的是接触的【估计位置】(contactPos)—— 椭圆越大越打不中,这就是"精准度问题"的另一半。
        目标速度暂用真值(内核今天不估计速度;已知的口子,记在 weapons/CLAUDE.md)。
@@ -27,11 +27,12 @@ function macAligned(s,t){ // 轴炮窗口:机头是否对准预测点(~1.1°容�
    2026-09-26 整体 x1/5(单局地图),上文旧数按 1/5 读(90% 带 3 万 / 50% 7.3 万 / 10% 39 万)。 */
 const MAC_HIT_R=400*CFG.scale;         // 命中判定半径 km(weapons/56 的命中检查与 sensors/23 的 COV.MAC 同一个数)。2026-09-26 x1/5(单局地图):原 2000
 const MSL_ACC=PHYS.a(1.5), MSL_FUEL=PHYS.t(447.2)*Math.sqrt(CFG.scale); // 2026-09-26 物理单位:加速度 1.5 km/s² ≈ 153 g,燃料 447 s   // 导弹加速度 km/s²(weapons/56 里 DS190 定的 150)与燃料(满油门秒)。2026-09-26 x1/5(单局地图):燃料原 100,√2000 ⇒ 动力射程 7.5 万
-const _Z={0.9:1.6449,0.5:0.6745,0.3:0.3853,0.1:0.1257};
+const MAC_K=4,MAC_Z50=0.6745; // 2026-09-28 命中率改 S 形(用户选拐点 7.3 万):P(d) = 1/(1+(d/d50)^MAC_K),d50 = 散布反算的 50% 距离(z50:P(|N(0,1)|<z)=0.5)。3 万 97% / 7.3 万 50% / 12.6 万 10% / 20 万 2%
 /* WR1 自动开火的把握下限。没有射程门之后,"打不打"只剩两个成本:30 秒装填,以及【开火暴露】(FX1:开火后 8 秒亮一档)。
    所以纯按期望伤害算,20% 把握也值得打 —— 实测红方 bot 因此从 94 万公里就开始放炮(命中率 20.7%),整局双方各打五六十发、命中九发,读起来是"对着远处喷"。
-   定成 0.5:【自动化只打过半把握的】,想赌远射自己下令(玩家的火控序列不受这条限制,那是他自己的决定)。与 bots/61 红方 bot 的门同一档,双方口径一致。 */
-const MAC_AUTO_P=0.5; // 命中率 p ⇒ 半宽 z:P(|N(0,1)| < z) = p
+   定成 0.5:【自动化只打过半把握的】,想赌远射自己下令(玩家的火控序列不受这条限制,那是他自己的决定)。与 bots/61 红方 bot 的门同一档,双方口径一致。
+   2026-09-28 降到 0.1(用户:「允许很远就开始开炮」):S 形曲线下 10% 在 12.6 万,再远掉得很快,不会再出现 94 万外放炮。 */
+const MAC_AUTO_P=0.1;
 function gaussRand(){ // Box-Muller,一次一个
   let u=0,v=0; while(u===0)u=Math.random(); while(v===0)v=Math.random();
   return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
@@ -42,21 +43,32 @@ function erfApprox(x){ // Abramowitz-Stegun 7.1.26,误差 < 1.5e-7
   const y=1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-x*x);
   return sg*y;
 }
+function erfInv(x){ // Winitzki 近似 + 两步牛顿(按 erfApprox)
+  const a=0.147,l=Math.log(1-x*x),b=2/(Math.PI*a)+l/2;
+  let y=Math.sign(x)*Math.sqrt(Math.max(0,Math.sqrt(b*b-l/a)-b));
+  for(let i=0;i<2;i++)y-=(erfApprox(y)-x)/(1.1283791670955126*Math.exp(-y*y));
+  return y;
+}
+function macD50(sig){return sig>0?MAC_HIT_R/(sig*MAC_Z50):0;}
 function macHitProb(s,d){ // 主炮在距离 d 上对标准命中判定半径的命中率(靶不动)
   const sig=sReq(s,'macSigma'); if(!(sig>0)||!(d>0))return sig>0?1:0;
-  return erfApprox(MAC_HIT_R/(sig*d*Math.SQRT2));
+  return 1/(1+Math.pow(d/macD50(sig),MAC_K));
 }
 function macRangeSig(sig,p){ // BOT1:按【给定的散布】反算命中率恰为 p 的距离。红方条令要问「对方那一型打我打得多准」,手里只有舰种不是实例
-  const z=_Z[p]; if(!z)throw new Error('macRangeSig: p 只支持 0.9/0.5/0.3/0.1');
-  return sig>0?MAC_HIT_R/(sig*z):0;
+  if(!(p>0&&p<1))throw new Error('macRangeSig: p 要在 (0,1) 里');
+  return sig>0?macD50(sig)*Math.pow((1-p)/p,1/MAC_K):0;
 }
-function macRangeAt(s,p){return macRangeSig(sReq(s,'macSigma'),p);} // 命中率恰为 p 的距离;p 只支持 _Z 里的四档
+function macRangeAt(s,p){return macRangeSig(sReq(s,'macSigma'),p);} // 命中率恰为 p 的距离
+function macShotSigma(s,d){ // 2026-09-28 这一发的角散布:一维高斯脱靶落进 MAC_HIT_R 的概率 = macHitProb(s,d);封顶 0.5 弧度(再远的把握 < 0.2%,不让炮弹横着飞)
+  const p=macHitProb(s,d);if(p>=1-1e-9)return 0;
+  return Math.min(0.5,MAC_HIT_R/(d*Math.SQRT2*erfInv(p)));
+}
 function macEffRange(s){return macRangeAt(s,0.5);} // 有效射程 = 命中率 50% 的距离。调用点一律调它,绝不在别处重拼
 function mslReach(s){return LAD.msl;} // 2026-09-27 射程 = 设计包线 20 万(用户定;原来是「一半油加速、一半油减速」的动力射程 7.5 万)。靠三段飞法撑住:加速 → 熄火滑行(不耗油)→ 末段用预留燃料修正,见 56 的 stepMissileProj
 const MSL_MISS=1000*CFG.scale; // 滑行段的脱靶容差 km:照当前航向飞下去、离瞄准点的横向偏差不超过它就不转向(不转 = 不喷 = 红外里是冷的),超了才点火修正
 function fireMACAt(shooter,pt){ // 2026-09-27 主炮打空地(强行开火):朝那个点开一炮;没有目标,弹道上碰到对方哪艘船算哪艘(56 按 ground 判),飞到那个点消失
   if(shooter.noFire||shooter.dead)return;
-  const d=V.len(V.sub(pt,shooter.pos)),tt=d/CFG.macSpd,dir=V.norm(shooter.facing),ang=Math.atan2(dir[1],dir[0])+gaussRand()*sReq(shooter,'macSigma'),hxy=Math.hypot(dir[0],dir[1]);
+  const d=V.len(V.sub(pt,shooter.pos)),tt=d/CFG.macSpd,dir=V.norm(shooter.facing),ang=Math.atan2(dir[1],dir[0])+gaussRand()*macShotSigma(shooter,d),hxy=Math.hypot(dir[0],dir[1]);
   projectiles.push({type:'mac',pos:shooter.pos.slice(),vel:[Math.cos(ang)*hxy*CFG.macSpd+shooter.vel[0],Math.sin(ang)*hxy*CFG.macSpd+shooter.vel[1],dir[2]*CFG.macSpd+shooter.vel[2]],target:null,ground:true,shooter,pred:pt.slice(),tt,age:0,dmg:shooter.macDmg});
   shooter.fireHot=SENS.FIRE_S;shooter.macCd=shooter.macReload||0;
 }
@@ -68,7 +80,7 @@ function fireMAC(shooter,target){ // MAC轴炮:沿船头方向直射(必须先�
   const d=V.len(V.sub(pred,shooter.pos)); // WR1:飞行距离按预测点算(没有射程门了,d 只决定弹丸寿命)
   const tt=d/CFG.macSpd; // 飞行时间(MAC 0.1c)
   const dir=V.norm(shooter.facing); // 轴炮:弹道=船头轴线(单位化防脏数据)
-  const da=gaussRand()*sReq(shooter,'macSigma'); // WR1:每一发都带高斯角散布(原来只在超程时加均匀散布);脱靶距离 ≈ d x da,命中率随距离自然下降
+  const da=gaussRand()*macShotSigma(shooter,d); // WR1:每一发都带高斯角散布;2026-09-28 散布按距离反推,打出来的命中率 = macHitProb 的 S 形
   const ang=Math.atan2(dir[1],dir[0])+da;
   const hxy=Math.hypot(dir[0],dir[1]); // KIMI146修:xy分量按朝向的xy模长缩放——原直接用满macSpd再叠dir[2]·macSpd,合速度超0.1c且弹道≠机头轴线(带俯仰时必脱靶)
   projectiles.push({type:'mac',pos:shooter.pos.slice(),vel:[Math.cos(ang)*hxy*CFG.macSpd+shooter.vel[0],Math.sin(ang)*hxy*CFG.macSpd+shooter.vel[1],dir[2]*CFG.macSpd+shooter.vel[2]],target,shooter,pred,tt,age:0,dmg:shooter.macDmg}); // KIMI151:弹丸继承舰速(出膛矢量=舰速+机头轴×0.1c,相对舰体初速仍0.1c)

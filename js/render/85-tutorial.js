@@ -58,11 +58,9 @@ const TUT_HTML=`
 
     <p>主炮是一门轴炮，炮口固定在船头轴线上，不能转。所以只要火控给这艘舰解算出一个主炮目标，你会看见它自己开始转向：锁定目标同时就是转向指令，舰体会把机头往提前量的方向压。对准窗口只有 <code class="num">0.02 弧度</code>，也就是半角 <code class="num">1.146°</code>、全宽约 <code class="num">2.29°</code>，机头进不了这个窗口就不击发。这解释了大多数「火控明明开着却不开炮」的情形：船还在转。</p>
 
-    <p>弹速 <code class="num">30000 公里/秒</code>，正好是光速的十分之一；提前量按你与目标的相对速度算，飞行时间就是距离除以炮速。装填 <code class="num">30 秒</code>，所以主炮的节奏天生是每 <code class="num">30 秒</code>一发，伤害驱逐舰 <code class="num">220</code>、巡洋舰 <code class="num">400</code>。</p>
+    <p>弹速 <code class="num">3000 公里/秒</code>，是光速的百分之一；提前量按你与目标的相对速度算，飞行时间就是距离除以炮速。装填 <code class="num">300 秒</code>，伤害驱逐舰、巡洋舰的主炮都是 <code class="num">600</code>：驱逐舰结构 <code class="num">550</code>，挨一炮就沉；巡洋舰 <code class="num">900</code>，要两炮。</p>
 
-    <p>主炮的射程要分成两块看，因为炮和雷达是两个独立的组件。炮自己的射程是 <code class="num">150k 公里</code>，那是不开雷达时你能打到的边界；一旦开了雷达，边界就由雷达的照射范围顶上去，驱逐舰的雷达也是 <code class="num">150k 公里</code>所以没有增益，巡洋舰是 <code class="num">250k 公里</code>，等于开雷达就把主炮的有效射程拉长了三分之二。光标停在底栏主炮钮上时画出的那个圈，画的就是这个随雷达开关变化的有效射程。</p>
-
-    <p>越过有效射程并不是打不出去，而是开始散布。有效射程之内炮口没有附加偏差，越过之后偏角按超出比例增长，而脱靶距离又等于距离乘偏角，所以实际衰减是超线性的：以有效射程 <code class="num">150k 公里</code>为例，打到 <code class="num">225k</code>（一点五倍）平均脱靶约 <code class="num">1023 公里</code>，还在 <code class="num">2000 公里</code>的命中判定半径之内，多半打得中；打到 <code class="num">290k</code>（接近两倍）平均脱靶已是 <code class="num">2367 公里</code>，基本不中。到两倍有效射程就是硬上限，再远一发都不发——主炮 <code class="num">30 秒</code>装填，空放的代价太贵。</p>
+    <p>主炮没有射程门，只有把握。命中率随距离走一条陡的 S 形：<code class="num">3 万公里</code>内几乎必中（约 <code class="num">97%</code>），<code class="num">7.3 万</code>是一半，过了这个拐点掉得很快，<code class="num">12.6 万</code>只剩 <code class="num">10%</code>，<code class="num">20 万</code>约 <code class="num">2%</code>。自动开火只打把握不低于 <code class="num">10%</code> 的目标，所以远处也会开炮；但开炮会亮一下，炮弹划过对方的可见光圈时也会暴露来路，远射是拿自己的位置去赌一个小概率的一炮沉船。光标停在主炮上画出的两个圈就是 <code class="num">50%</code> 与 <code class="num">10%</code> 两条线。</p>
 
     <p>不过真正决定这一炮打不打得出去的，是你定没定出目标的位置：定不出来，站在射程圈正中间也一发不发。</p>
 
@@ -101,7 +99,7 @@ const TUT_HTML=`
         <tr><td>结构</td><td><code class="num">550</code></td><td><code class="num">900</code></td></tr>
         <tr><td>加速度</td><td><code class="num">20 km/s²</code></td><td><code class="num">15 km/s²</code></td></tr>
         <tr><td>转向率</td><td><code class="num">14.9°/秒</code></td><td><code class="num">9.17°/秒</code></td></tr>
-        <tr><td>主炮</td><td><code class="num">220</code> 伤害 · <code class="num">30 秒</code>装填</td><td><code class="num">400</code> 伤害 · <code class="num">30 秒</code>装填</td></tr>
+        <tr><td>主炮</td><td><code class="num">600</code> 伤害 · <code class="num">300 秒</code>装填</td><td><code class="num">600</code> 伤害 · <code class="num">300 秒</code>装填</td></tr>
         <tr><td>导弹</td><td><code class="num">4</code> 单元 · <code class="num">192 枚</code> · 单枚 <code class="num">12</code></td><td><code class="num">6</code> 单元 · <code class="num">240 枚</code> · 单枚 <code class="num">15</code></td></tr>
         <tr><td>近防内外圈</td><td>外 <code class="num">25k</code> · 内 <code class="num">8k 公里</code></td><td>外 <code class="num">15k</code> · 内 <code class="num">5k 公里</code></td></tr>
         <tr><td>内圈拦截上限</td><td><code class="num">0.85</code></td><td><code class="num">0.40</code></td></tr>
@@ -184,7 +182,7 @@ const TUT_HTML=`
       </tbody>
     </table>
 
-    <p>把光标停在武器菜单的任意一项上，地图会给选中舰画出对应的射程圈：主炮 <code class="num">150k 公里</code>，导弹 <code class="num">20 万公里</code>，拦截画的是内外两个圈。这是最快确认「够不够得着」的办法，但要给它加一条限定：真正卡这个圈的只有导弹，自动齐射会先查距离再下令；主炮的自动开火根本不查射程，只要目标定出了位置、机头又摆进了对准窗口，它在 <code class="num">20 万公里</code>外照样开火——开局第一炮就是这么打出来的。<code class="num">150k 公里</code>这道门只在火控序列的射程判据里生效。</p>
+    <p>把光标停在武器菜单的任意一项上，地图会给选中舰画出对应的射程圈：主炮画把握 <code class="num">50%</code> 与 <code class="num">10%</code> 两圈（<code class="num">7.3 万</code> / <code class="num">12.6 万</code>），导弹 <code class="num">20 万公里</code>，拦截画的是内外两个圈。这是最快确认「够不够得着」的办法，但要给它加一条限定：真正卡这个圈的只有导弹，自动齐射会先查距离再下令；主炮的自动开火不查射程、只查把握，把握不低于 <code class="num">10%</code>、目标定出了位置、机头又摆进了对准窗口就开火。</p>
   </section>
 
   <section class="tut-sec" id="tut-firstrun">
