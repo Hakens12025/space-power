@@ -2,7 +2,7 @@
 
 ## 文件
 - `90-envs.js` 场景表 `TEST_ENVS`、`envIdx`、`curEnv()`(= `TEST_ENVS[envIdx]`)、`DEFAULT_ENEMY`
-- `91-init.js` `initFleet`(跨系统的全局 reset)/ `initEnemy`;按场景的 `world` 调 `envReset` 并撒石头;按场景定 GM
+- `91-init.js` `initFleet`(跨系统的全局 reset)/ `initEnemy`;按场景的 `world` 调 `envReset` 并撒石头;对局另撒民船(world/14 的 `objSpawnCivs`),对局的石头是 4 片小行星带 + 20 颗零散(97 的 `matchGenWorld`);按场景定 GM
 - `95-range.js` 靶场:靶伤害统计、靶 AI、参数面板(localStorage)、世界副本 `rangeWorld`
 - `96-spawn.js` 添加舰船小菜单 `#spawnBar`
 - `97-match.js` 对局:`MATCH`、红方出生 `matchPlaceRed`、`matchTick`、结果卡 `#matchEnd`;顶栏「全知」钮 `gmSync`
