@@ -150,7 +150,7 @@ function drawContactMark(s,p,view){
   ctx.beginPath();ctx.arc(p[0],p[1],CONTACT_MARK_R,0,6.283);ctx.stroke();
   ctx.fillStyle='rgba('+(ghost?'255,150,140':'255,209,102')+',.75)';
   ctx.font='9px Consolas';ctx.textAlign='center';ctx.textBaseline='bottom';
-  ctx.fillText((ghost?'⏳失联':'⏳陈旧')+Math.round(ageV)+'s',p[0],p[1]-top-3);
+  ctx.fillText((ghost?'⏳失联':'⏳陈旧')+Math.round(SHOW.t(ageV))+'s',p[0],p[1]-top-3); // 2026-09-27 物理秒(原来把游戏秒当秒显示,差 TIME_K 倍)
   ctx.restore();
 }
 function drawMemory(s,p){ // 2026-09-27 舰船的记忆:最后认出是船 ⇒ 红色记号,没认出 ⇒ 灰色菱形;调暗、不画失联圈(石头等在 82-rocks 走 drawRockAt 的类型参数)

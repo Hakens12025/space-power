@@ -3,7 +3,7 @@
    底栏武器按钮/规格条武器段/右栏武器状态/hover 射程圈,加新武器种类这些地方零改动。
    右栏 #selPanel 只放【变化信息】(结构/目标/武器库状态/事件);
    底栏 #cmdBar = 【固定信息】(舰名/舰种·等级 + 规格条 specItems)+ 三颗钮:雷达 / 武器(各自向上弹菜单 #cmdPop,见本文件末尾)/ 跟随(2026-09-27 改版;原来的火控、逐武器开关、发射档、扫描、解除五种钮已去掉)。
-   开关语义:火控=autoEngage+roe 合一(开=free+自动索敌,关=hold+解除锁定);发射档是三态循环,不在 cmdList 里(见本文件末尾 SN4 那一段);
+   开关语义:火控=autoEngage+roe 合一(开=free+自动索敌,关=hold+解除锁定);发射档并进「雷达」菜单(见本文件末尾);
    武器开关=macOn/mslOn/ciwsOn(按 kind 映射)。操作作用于【全部选中蓝舰】,状态读第一艘。
    (右轨的事件流面板与它的写入点 2026-09-22 随事件系统整体删除。) */
 function selBlue(){return selectedShips().filter(s=>s.side==='blue'&&!s.dead);}
@@ -22,27 +22,6 @@ const KIND_INFO={
     range:s=>ciwsOf(s).outer,
     tip:s=>{const c=ciwsOf(s);return `近防 · 外圈${Math.round(c.outer/1000)}k拦截弹 · 内圈${Math.round(c.inner/1000)}k近防炮 · 库存${s.interceptor}枚(被动防御,来袭才发射)`;}},
 };
-/* 开关描述表:舰级开关(火控/雷达)固定 + 武器开关由旗舰 s.weapons 清单动态追加(无该武器的舰不显示对应钮) */
-function cmdList(s){
-  const cmds=[
-    {id:'cbFire',label:'火控',ring:null,
-      get:x=>!!(x.autoEngage&&x.roe!=='hold'),
-      set:(x,v)=>{x.autoEngage=v;x.roe=v?'free':'hold';if(!v)x.lockedTarget=null;}, // 关=停火+解除锁定,开=自动索敌+自动开火
-      tip:()=>'火控总开关:开=自动锁定已跟踪的敌舰,主炮命中率够就自动开火、导弹在动力射程内自动齐射;关=停火并解除锁定'},
-    // SN4 blocker C:这里原来有一条「雷达」布尔开关(读写的是那个已删的开关字段)。发射档换成三态 silent/paint/jam 之后塞不进这张表 ——
-    //   表的形状是「每舰一个布尔」:get/set 两个钩子 + bindCmdBar 里写死的点击语义(读第一艘、取反、全队统一置成【一个】布尔目标态),
-    //   三态既没有「取反」也没有单一目标态;硬塞进去会被那行 `if(!cmd.set)return` 静默吃掉(RF8 大序列钮那次的原样复刻:渲染正常、title 也在、就是按不动)。
-    //   照 FM6 跟随两钮的先例:自己建、自己挂事件、在 updateCmdBar 末尾显式同步一次。实现在本文件末尾的 emitBtnSync / bindEmitBtn。
-  ];
-  if(s)for(const w of (s.weapons||[])){
-    const ki=KIND_INFO[w.kind];if(!ki)continue;
-    cmds.push({id:'cb_'+w.kind,label:w.label,ring:w.kind,
-      get:x=>x[ki.on]!==false,
-      set:(x,v)=>{x[ki.on]=v;},
-      tip:ki.tip});
-  }
-  return cmds;
-}
 /* 底栏规格条:舰船类数据直接读直接放,零加工;武器段按清单生成 */
 function specItems(s){
   const items=[
@@ -119,26 +98,8 @@ function weaponRows(s){
   }
   return h;
 }
-function updateCmdBar(sel){
-  if(typeof cmdBarSync==='function'){cmdBarSync();if(typeof followBtnSync==='function')followBtnSync();return;} // 2026-09-27 底栏改版:雷达 / 武器 / 跟随三颗钮(见本文件末尾);下面按 cmdList 同步旧钮那段已不再走到
-  const s=sel[0];
-  for(const c of cmdList(s)){
-    const b=document.getElementById(c.id);if(!b)continue;
-    if(!s){b.classList.add('is-dis');b.classList.remove('on');b.innerHTML=`<span class="l">${c.label}</span><span class="s">—</span>`;continue;}
-    b.classList.remove('is-dis');
-    const on=c.get(s);
-    b.classList.toggle('on',on);
-    setHTMLStable(b,`<span class="l">${c.label}</span><span class="s">${on?'开':'关'}</span>`,false); // 双行:名称+状态(状态色由 .on 驱动)。RF7c 走稳定写入:按钮节点本身不换(所以 .btn:hover 一直稳),但内层 span 每拍换新的是纯 churn
-  }
-  updateCmdBarVis(s); // 武器钮按旗舰配装显隐(CV 无主炮则无主炮钮)
-  if(typeof followBtnSync==='function')followBtnSync(); // FM6 跟随两钮不在 cmdList 里(形状不同),显式同步一次
-  if(typeof emitBtnSync==='function')emitBtnSync();      // SN4 发射档三态钮同理(blocker C)。不在这儿同步的话,切换选中舰 / 别处改了 emitMode 都不会刷新,按钮会一直停在上一次点击后的字
-}
-function updateCmdBarVis(s){
-  for(const kind in KIND_INFO){
-    const b=document.getElementById('cb_'+kind);if(!b)continue;
-    b.style.display=(!s||!(s.weapons||[]).some(w=>w.kind===kind))?'none':'';
-  }
+function updateCmdBar(sel){ // 2026-09-27 底栏只剩雷达 / 武器 / 跟随三颗钮(见本文件末尾 cmdBarSync)
+  cmdBarSync();followBtnSync();
 }
 /* ==================== RF5 火控计算机面板(#fcSec / #fcList) ====================
    主体舰 = selBlue()[0];列出它的全部火控序列(fcSeqsOf)与每条序列下的目标项。
@@ -555,7 +516,7 @@ on('fcList','click',e=>{
      舰队→舰队 / 舰队→单舰 / 单舰→舰队 / 单舰→单舰。
    放在底栏而不是编队菜单里,正是因为它对散船同样成立;作用域解析(谁跟/跟谁)在 41-follow 的 followAssign,
    本文件只管"武装 → 提示 → 兑现"三步,与既有的 selWeapon / pendingTurn 两个待命态同构。
-   两个钮【不进 cmdList】:那张表是"每舰一个布尔开关"的形状(get/set + 全选统一置值),
+   两个钮不走逐舰开关表:那种表是"每舰一个布尔开关"的形状(get/set + 全选统一置值),
    而跟随是一次性动作、且作用域是【整个选中集合】而不是逐舰 —— 硬塞进去会像 RF8 那个大序列钮一样,
    在 `if(!cmd.set)return` 那行被静默吃掉。所以自己建、自己挂事件。 */
 function followArm() {

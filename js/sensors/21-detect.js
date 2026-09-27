@@ -157,12 +157,6 @@ function setEmit(s,mode){ // 全库【唯一】写 emitMode 的地方。裸赋�
   s.emitMode=mode;
   return mode;
 }
-function emitNext(s){ // 三态循环 silent→paint→jam→silent。UI 的三态钮(87-fleetcards / 88-selpanel)直接调它就行,不必再调一次 setEmit —— 它自己就是从 setEmit 出去的
-  const cur=sReq(s,'emitMode','ship');
-  const i=SENS.EMIT_MODES.indexOf(cur);
-  if(i<0)throw new Error('SN4 非法发射档:'+cur+' @ '+((s&&s.name)||(s&&s.id)||String(s)));
-  return setEmit(s,SENS.EMIT_MODES[(i+1)%SENS.EMIT_MODES.length]);
-}
 function emitLabel(mode){ // UI 文案的【唯一】出处:右栏 / 底栏 / 快捷栏 / 舰队卡 / 靶场面板五处都读它,别再各写各的中文
   return sReq(SENS.EMIT_LABEL,mode,'SENS.EMIT_LABEL');
 }
