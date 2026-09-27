@@ -8,10 +8,10 @@
    场按 CELL 屏幕像素一格,色阶 + 噪点上色,小图放大进整屏缓存(设备像素),每帧 1:1 贴;山只在变了的地方揭旧贴新;蓝方内核认出且定位后热轮廓叠在山上(山照画;与主视图画出认出的船同一个条件)。
    ============================================================================ */
 const IRV_C={CELL:5,V0:0.02,VMAX:1000,CULL:0.0003,SIG_MIN:0.7,NOISE:0.005,NOISE_MS:200,TAIL_K:4,POS_P:3,MIX:0.875,
-  BG_K:0.4,AR:3,AR_ROCK:1.5,FADE:1,HALO:0.5,DETAIL:6.4,CLOUD_M:8,CLOUD_LV:4,CLOUD_SYNC:400,CLOUD_BATCH:1500,CLOUD_COARSE:1200,
+  BG_K:0.4,DETAIL:6.4,CLOUD_M:8,CLOUD_LV:4,CLOUD_SYNC:400,CLOUD_BATCH:1500,CLOUD_COARSE:1200,
   GAIN:0.05,FILL:20000};
   // 2026-09-28 GAIN = 一道门的增益(信噪比 1 = 色阶约 0.12);FILL = 石头的填满距离 / √体型(用户定 2 万)
-  // V0 / VMAX = 色阶的对数刻度;CULL = 山截断处;SIG_MIN = 山的最小宽(格);TAIL_K = 尾焰尾巴长宽比;POS_P / MIX = 恒星光晕的律;AR / HALO / DETAIL = 近处热轮廓
+  // V0 / VMAX = 色阶的对数刻度;CULL = 山截断处;SIG_MIN = 山的最小宽(格);TAIL_K = 尾焰尾巴长宽比;POS_P / MIX = 恒星光晕的律;DETAIL = 轮廓精灵缓存键里的细节档
 const IRV_T0=-0.1;
 const IRV_RAMP=[[IRV_T0,[40,6,6,140]],[0,[70,12,12,150]],[0.25,[150,30,20,170]],[0.5,[220,80,30,190]],[0.75,[255,170,60,210]],[1,[255,245,210,230]]];
 const IRV_LUT=(function(){const L=new Uint8ClampedArray(256*4);for(let k=0;k<256;k++){const t=IRV_T0+k/255*(1-IRV_T0);let a=0;while(a<IRV_RAMP.length-2&&t>IRV_RAMP[a+1][0])a++;
@@ -22,11 +22,6 @@ function irvT(v){
 function irvIdx(v){return Math.round((irvT(v)-IRV_T0)/(1-IRV_T0)*255);}
 function irvLutK(t){return Math.round((Math.max(IRV_T0,Math.min(1,t))-IRV_T0)/(1-IRV_T0)*255);}
 function irvLutHex(t){const k=irvLutK(t)*4;return '#'+((1<<24)|(IRV_LUT[k]<<16)|(IRV_LUT[k+1]<<8)|IRV_LUT[k+2]).toString(16).slice(1);}
-let IRV_REF=null;
-function irvRef(){ // 刻度参照:熄火静默的 DD 恰在发现距离上
-  if(IRV_REF)return IRV_REF;
-  const L=SENS.CLS.DD.size,R=Math.sqrt(SENS.K_IR*L);IRV_REF={R:R,sig:COV.TH0.opt*R*R/Math.sqrt(SENS.A_IR*L)};return IRV_REF;
-}
 function irvObs(){const a=[];for(const s of ships)if(s.side==='blue'&&!s.dead)a.push(s);return a;}
 function irvSrc(){const a=[];for(const s of ships)if(s.side!=='blue'&&!s.dead)a.push(s);for(const r of rocks)if(!r.dead&&r.side!=='blue')a.push(r);return a;} // 2026-09-27 自己放的浮标不算热源
 function irvPsf(){return 4*SENS.CLS.DD.size*COV.L_REF/(3*LAD.optIdent);} // 固定模糊角:DD 恰在光学认出距离出轮廓(Johnson N = 3)
@@ -43,7 +38,6 @@ function irvHill(t,obs){ // 一座山:信噪比(一道门的输入)与模糊宽(
   if(!best)return null;
   return {snr:best.snr,sig:best.d*irvPsf(),o:best.o,k:best.k}; // 宽不读亮度(原来宽 = 定位误差,越暗越宽)
 }
-function irvShowPeak(h){const u=h.sig/irvRef().sig,w=u*u/(1+u*u);return IRV_C.V0*(Math.pow(1+h.peak/IRV_C.V0,1-w)-1);} // 宽的山往底红收(VSUP)
 const IRV_P3=[0,0,0];
 function irvTail(t,h){ // 尾焰占这座山的份额与朝向
   const pl=sensePlume(t,IRV_P3);if(!pl||!h.o)return null;
