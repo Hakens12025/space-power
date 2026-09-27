@@ -93,7 +93,7 @@ function radSolve(sub,tgt,kind){
   const ki=(typeof KIND_INFO!=='undefined'&&KIND_INFO[kind])?KIND_INFO[kind]:null;
   o.range=ki?ki.range(sub):0; // 射程唯一来源 = 88-selpanel 的 KIND_INFO(WR1 起:主炮 = 命中率 50% 的距离、导弹 = 动力射程,都是现算的),禁止在本文件写公里数字面量
   o.sw=!(ki&&ki.on&&sub[ki.on]===false); // RF5 单舰武器开关(同一份 KIND_INFO 的 .on 字段,不写 'macOn' 字面量)= 57 实际开火门的第一层:57:80 的 roeOK 与 57:33 的自动齐射都先看它。与 74 的 radItems 同一条判据
-  {const tq=tgt?viewPos(tgt):null;if(tq)o.dist=V.len(V.sub(tq,sub.pos));} // 2026-09-28 距离按我方知道的位置量(原来量真值) // 三维距离:与 fcGate 的 V.len(V.sub(...)) 同口径(带 z 的场景里平面距离会在射程边界上给出相反结论)
+  if(tgt){const tq=viewPos(tgt);o.dist=tq?V.len(V.sub(tq,sub.pos)):Infinity;} // 2026-09-28 距离按我方知道的位置量;交代不出 = 够不着(与 74 的 radItems 同口径)
   // RF6 可用性比【硬上限】,读数仍显示【精确射程】:精确射程到硬上限之间是射程外衰减区,能打但散布随距离增长。
   // 不必额外加一档提示——扇区读数本来就是「距离/射程」,衰减区会自己显示成 270k/150k,超程一眼可见;
   // 而 why 只在 !ok 时渲染(本文件:362),把衰减区判成 !ok 会让引擎照打、盘上却写"射程外",正是 RF5 备忘警告的两份口径。
@@ -275,7 +275,7 @@ function drawRadial(){
     radSquares(px,py+((tier===3)?-6:((tier===2)?1:6)),so);
     if(tier>=2){
       ctx.font='10px Consolas';ctx.fillStyle=so.inR?'#dbe6f2':'#ff9a55'; // --txt-read / --state-warn
-      ctx.fillText(Math.round(so.dist/1000)+'k/'+Math.round(so.range/1000)+'k',px,py+((tier===3)?8:14));
+      ctx.fillText((isFinite(so.dist)?Math.round(so.dist/1000):'?')+'k/'+Math.round(so.range/1000)+'k',px,py+((tier===3)?8:14));
     }
     if(tier>=3){
       ctx.font='10px Consolas';ctx.fillStyle=so.rdy?'#3fbf6f':'#6a7d92'; // --state-ok / --txt-dim
@@ -333,7 +333,7 @@ function drawRadial(){
     const it=list[hit]||{},so=solved[hit];
     ctx.font='10px Consolas';
     ctx.fillStyle=so.inR?'#dbe6f2':'#ff9a55';
-    ctx.fillText('距 '+Math.round(so.dist/1000)+'k/'+Math.round(so.range/1000)+'k',cx,cy+18);
+    ctx.fillText('距 '+(isFinite(so.dist)?Math.round(so.dist/1000):'?')+'k/'+Math.round(so.range/1000)+'k',cx,cy+18);
     ctx.fillStyle=so.rdy?'#dbe6f2':'#ff9a55';
     ctx.fillText((it.kind==='mac'?'炮 ':'弹 ')+so.readyTxt,cx,cy+32);
     if(so.ok){ctx.fillStyle='#3fbf6f';ctx.fillText('已定位',cx,cy+46);}

@@ -93,8 +93,11 @@ function esmHear(side,L,E,dd){ // L(我方听者)这一拍听到 E 的雷达;dd 
   const st=Math.sqrt(1-1/Math.pow(1+COV.FADE_HOLD,2*SENS.TICK)); // 盯着看的稳态 / 单次量测
   k.half=Math.min(Math.PI/2-0.01,Math.max(ESM_CFG.SMIN,ESM_CFG.K*sig*Math.max(st,1/Math.sqrt(k.n))));
   k.R=Math.max(dd*1.05,hearRangeOf(E,L.recv)/Math.sqrt(envRfNoise(L.pos,E.pos))); // 远端 = 这个方向上听得见的最远距离(恒星噪声锥里更近)
-  k.sr=dd*(dd*sig<=E.size*COV.L_LIS?COV.RSS_ID:COV.RSS_UNK)*Math.max(st,1/Math.sqrt(k.n));
-  {const tk=trkOf(side,E),z=tk?tk.ez.lis:[0,0];k.rr=dd+trkClampK(z[0]*k.sr,TRK_ERR.ALONG_K*dd);k.tb=tb+z[1]*sig;k.sc=dd*sig;} // sc = 横向 1σ(km),雷达异常的圈大小用 // 2026-09-28 测距与方位带上静听那一层的估计误差(原来 rr = 真实距离、tb = 真实方位,雷达画面的高斯团就在真值上) // 2026-09-26 幅度测距(与 23-cov 的静听量测同式):距离与它的纵向误差,雷达画面的高斯团用
+  const idf=dd*sig<=E.size*COV.L_LIS,tk=trkOf(side,E),z=tk?tk.ez.lis:[0,0]; // 2026-09-28 静听那一层的估计(见 sensors/24 的估计误差):k.tb 仍是量到的方位(只给上面的连续性判据),显示读 tbE / rr / r
+  const ref=(idf||(tk&&trkIdLvl(tk)>=ID_SUS))?E.emit:SENS.CLS.DD.emit,base=dd*Math.sqrt(ref/E.emit); // 假设法测距:没认出按驱逐舰的发射机反推(同一发射档),偏差是系统性的
+  k.sr=base*(idf?COV.RSS_ID:COV.RSS_UNK)*Math.max(st,1/Math.sqrt(k.n)); // 幅度测距的纵向 1σ(与 23-cov 的静听量测同式,按基准距离)
+  k.rr=base+trkClampK(z[0]*k.sr,TRK_ERR.ALONG_K*base);k.tbE=tb+trkClampK(z[1]*sig,Math.PI/4);
+  k.r=Math.sqrt(Math.min(k.sr,TRK_ERR.ALONG_K*base)*base*sig); // 等面积 1σ 半径(雷达异常的圈)
 }
 function esmEach(side,f){ // 逐个辐射源给 f(E, [{L,k}]);顺手忘掉太久没听到的
   for(const [E,m] of ESM[side]){const a=[];
@@ -170,7 +173,9 @@ function emitLabel(mode){ // UI 文案的【唯一】出处:右栏 / 底栏 / �
    中间那 28 万公里里玩家白拿了舰种、舰名和分级,"贴近才认得出"这条玩法不存在;同一艘船在聚合框里(它读的是 idn)却记成"?"。
    自己这一方的船恒为已识别。 */
 function contactHeld(s,side){return trkHeld(trkOf(side,s));} // 某一方还握着这艘船的接触(有信号或定得出位置)
-function contactLayer(s,side,ch){return trkLayerEst(trkOf(side,s),ch);} // 2026-09-28 红外那一层(ch = 'opt')自己的估计 {x,y,r}:红外异常、红外画面用;没有给 null,不拿真值兜底
+function esmEst(k){return {x:k.org[0]+Math.cos(k.tbE)*k.rr,y:k.org[1]+Math.sin(k.tbE)*k.rr,r:k.r};} // 2026-09-28 一条静听记录的估计点(esmHear 写的估计方位 / 测距 / 等面积半径)
+function contactHeardEst(E,side){const m=ESM[side].get(E);if(!m)return null;let b=null;for(const k of m.values())if(!b||k.sr<b.sr)b=k;return b?esmEst(b):null;} // 静听那一层的估计:取测距最准的那个听者
+function contactIrEst(s,side){return trkIrEst(trkOf(side,s));} // 2026-09-28 红外那一层自己的估计 {x,y,r}(亮度测距):红外异常、红外画面用;没有给 null,不拿真值兜底
 function contactFix(s,side){return trkFix(trkOf(side,s));} // 某一方定得出这艘船的位置 —— 武器开火只问这个
 function contactIdn(s,side){return contactIdLvl(s,side)>=ID_SUS;} // TK2.6:「认出」= 身份至少疑似 —— 与改前(握着接触且椭圆锁存了身份)按定义相等;自己一方恒为真、空对象恒为假
 /* TK2.6 身份档位与类型的门面(与 contactIdn 同一家;三档的定义见 sensors/24)。自己这一方恒为确认 */

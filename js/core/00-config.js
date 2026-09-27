@@ -61,6 +61,7 @@ const CFG={
 };
 
 /* ================= 3D 向量工具 ================= */
+function gaussRand(){let u=0,v=0;while(u===0)u=Math.random();while(v===0)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);} // Box-Muller,一次一个。全库唯一一份(2026-09-28 从 weapons/52 挪来,sensors/24 的误差状态也用它)
 const V={
   add:(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]],
   sub:(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]],

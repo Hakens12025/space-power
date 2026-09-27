@@ -157,7 +157,7 @@ function groupAt(sx,sy){ // 命中最近的导弹组/信标实体(屏幕距离,�
   const w=worldAt(sx,sy);
   let best=null,bd=30/cam.zoom;
   for(const p of projectiles){
-    if((p.type!=='missile'&&p.type!=='beacon')||p.done)continue;
+    if((p.type!=='missile'&&p.type!=='beacon')||p.done||!projSeen(p))continue; // 2026-09-28 看不见的弹点不到
     const d=Math.hypot(p.pos[0]-w[0],p.pos[1]-w[1]);
     if(d<bd){bd=d;best=p;}
   }
@@ -409,7 +409,7 @@ window.addEventListener('mouseup',e=>{
     }else if(selDrag.missileMode){ // Shift框选:选导弹群(不是船)
       const x=Math.min(selDrag.x0,selDrag.x1),y=Math.min(selDrag.y0,selDrag.y1);
       const w=Math.abs(selDrag.x1-selDrag.x0),h=Math.abs(selDrag.y1-selDrag.y0);
-      const inBox=projectiles.filter(p=>(p.type==='missile'||p.type==='beacon')&&!p.done);
+      const inBox=projectiles.filter(p=>(p.type==='missile'||p.type==='beacon')&&!p.done&&(adminMode||(p.shooter&&p.shooter.side==='blue'))); // 2026-09-28 框选只选我方弹(敌方弹单点看得见的)
       const hits=inBox.filter(p=>{const sp=toScreen(p.pos[0],p.pos[1]);return sp[0]>=x&&sp[0]<=x+w&&sp[1]>=y&&sp[1]<=y+h;});
       if(hits.length){
         selected=[]; // KIMI146修:清掉拖拽过程中误选的舰船,导弹信息面板才显示得出来
@@ -433,7 +433,7 @@ window.addEventListener('mouseup',e=>{
     if(!rMoved){ // 右键:未拖拽平移 → 点空地/友舰=移动,Shift+右键=追加路径点。RF5 拆掉了原「点中敌舰=指定打击目标」(RF4b)整支:它直写 lockedTarget/driftFire,与火控序列抢同一个字段,交战入口统一走中键快速交战
       const w=worldAt(rmbClick.sx,rmbClick.sy);
       // DS191(用户令):雷是网的一种形态,不是不能动——选中雷 + 右键点地图 = 重新布位(飞向新点再次布雷,网身份保留)
-      if(selMissile&&selMissile.mine&&!selMissile.done){
+      if(selMissile&&selMissile.mine&&!selMissile.done&&(adminMode||(selMissile.shooter&&selMissile.shooter.side==='blue'))){ // 2026-09-28 只能改自己的雷
         selMissile.mine=false;selMissile.park=true;selMissile.parkPt=ordArenaClamp([w[0],w[1],0]);selMissile.target=null; // 2026-09-26 改布位点夹进 ARENA:区外的点雷一出界就 done
         selMissile.vel=[0,0,0];selMissile.spd=Math.max(200,selMissile.spd||200);
         rmbClick=null;return;

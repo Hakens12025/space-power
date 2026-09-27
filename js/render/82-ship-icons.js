@@ -106,7 +106,7 @@ function drawWreck(s,p,r){ // 残骸:空心轮廓+裂纹+暗色,留名标记
   ctx.save();
   ctx.translate(p[0],p[1]);
   ctx.rotate(ang);
-  ctx.save();{const zf=shipZoomF();ctx.scale(zf,zf);}drawHull(ctx,shipHull(s),shipIdentTier(s),'#a0aab9','outline');ctx.restore(); // SN9 残骸跟活船同一个系数;只包舰体这一笔 —— 下面的裂纹用的是传进来的 r(已含系数),一起包进来会被乘两次;原注: // 残骸:空心轮廓,不带阵营色。TIER1 残骸尺寸也走遮蔽口径(方案原文说残骸是已死舰可以保留真实 tier,但残骸在场上留很久,不遮蔽等于给"打死的是几级"留一个稳定读数)
+  ctx.save();{const zf=shipZoomF();ctx.scale(zf,zf);}drawHull(ctx,shipIdentHull(s),shipIdentTier(s),'#a0aab9','outline'); // 2026-09-28 没认出的残骸画通用轮廓(原来真舰种)ctx.restore(); // SN9 残骸跟活船同一个系数;只包舰体这一笔 —— 下面的裂纹用的是传进来的 r(已含系数),一起包进来会被乘两次;原注: // 残骸:空心轮廓,不带阵营色。TIER1 残骸尺寸也走遮蔽口径(方案原文说残骸是已死舰可以保留真实 tier,但残骸在场上留很久,不遮蔽等于给"打死的是几级"留一个稳定读数)
   // 裂纹(断开感)
   ctx.strokeStyle='rgba(200,210,225,.5)';ctx.lineWidth=1;
   ctx.beginPath();ctx.moveTo(-r*0.7,-r*0.7);ctx.lineTo(r*0.3,r*0.3);ctx.stroke();
@@ -115,7 +115,7 @@ function drawWreck(s,p,r){ // 残骸:空心轮廓+裂纹+暗色,留名标记
   // 名字带残骸标记
   if(cam.zoom>0.0008){
     ctx.fillStyle='rgba(150,160,175,.65)';ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';
-    ctx.fillText(s.name+' ☠',p[0],p[1]+r+6);
+    ctx.fillText(xhName(s)+' ☠',p[0],p[1]+r+6); // 2026-09-28 名字打码(没认出写「未知接触」)
   }
 }
 /* 幽灵/陈旧【记号】的半径,单位是屏幕像素(SN6e)。它是一个符号,不随缩放变化 ——
@@ -228,7 +228,7 @@ function drawShip(s){
   }
 
   // 推进器尾焰(后主推进 / 前向反推 / 侧向辅助)
-  drawFlame(s,p,r);
+  if(adminMode||s.side==='blue'||contactIdn(s,'blue'))drawFlame(s,p,r); // 2026-09-28 没认出的不画尾焰 / 侧推:它们按真实朝向画,等于泄漏朝向(UNK 记号 09-26 已改成不转的菱形)
   {const erg=emitRippleRgb(s);if(erg)drawEmitRipple(p,shipIconR(s),erg);} // EM1 发射机开着 ⇒ 涟漪(画在舰体之下)
   // 舰体图标(wows式:按舰种形状,图标自身带朝向)
   ctx.save();

@@ -77,6 +77,7 @@ function drawRange(){ // 测距工具(按住C):起点(或跟随船)→鼠标目�
   ctx.restore();
 }
 function viewPos(s){return (adminMode||s.side==='blue')?s.pos:contactPos(s,'blue');} // 2026-09-28 画面上对方东西画在哪 / 量多远的唯一出处:我方知道的位置(估计;GM 真值),交代不出给 null(不拿真值兜底)
+function projSeen(p){return adminMode||!p.shooter||p.shooter.side==='blue'||trkSees('blue',p);} // 2026-09-28 我方看不看得见这枚弹:画、点选、选中面板同一道门
 function drawLocks(){ // 火力锁定:红色虚线
   for(const s of ships){
     if(s.dead||!s.lockedTarget||s.lockedTarget.dead||s.lockedTarget.side===s.side)continue;
@@ -94,6 +95,7 @@ function drawLocks(){ // 火力锁定:红色虚线
 }
 function drawHits(){ // 命中特效:命中点爆闪+十字,随时间淡出
   for(const h of hitFX){
+    if(!adminMode&&!h.vis)continue; // 2026-09-28 我方看不见的命中 / 击沉不画(52 的 spawnHit 出的时候判)
     const p=toScreen(h.pos[0],h.pos[1]);
     const a=Math.max(0,h.t/1.2);
     const prog=1-h.t/1.2;
@@ -179,7 +181,7 @@ function drawNetLinks(){ // v140:网内导弹细线连接;v142:星形连接(O(k)
 }
 function drawProjectiles(){ // 弹丸/导弹
   for(const p of projectiles){
-    if(!adminMode&&p.shooter&&p.shooter.side==='red'&&!trkSees('blue',p))continue; // 感知层 v4:普通模式敌方弹药只有被探测到才显示 v119:读缓存 TK4a:缓存在航迹表的目击集合里
+    if(!projSeen(p))continue; // 感知层 v4:普通模式敌方弹药只有被探测到才显示 v119:读缓存 TK4a:缓存在航迹表的目击集合里
     const s=toScreen(p.pos[0],p.pos[1]);
     if(p.type==='decoy'){ // 诱饵弹:紫色点(模拟舰船信号骗拦截)
       ctx.fillStyle='rgba(200,120,255,.9)';
@@ -246,7 +248,7 @@ function drawProjectiles(){ // 弹丸/导弹
       if(p===selMissile){
         ctx.strokeStyle='#4fe0ff';ctx.lineWidth=2;
         ctx.beginPath();ctx.arc(s[0],s[1],12,0,6.283);ctx.stroke();
-        const showSet=selNet?projectiles.filter(x=>x.type==='missile'&&!x.done&&x.netId===selNet):[p];
+        const showSet=selNet?projectiles.filter(x=>x.type==='missile'&&!x.done&&x.netId===selNet&&projSeen(x)):[p]; // 2026-09-28 同网里看不见的弹不画
         showSet.forEach(g=>{
           if(g!==p){
             const gs=toScreen(g.pos[0],g.pos[1]);
@@ -267,7 +269,8 @@ function drawProjectiles(){ // 弹丸/导弹
           ctx.font='10px Consolas';ctx.textAlign='left';ctx.textBaseline='top';
           const rem=p.count||16;
           if(p.type==='interceptor')ctx.fillText(`⛔拦截 ▲${Math.round(vn)}(剩${rem}颗${p.fuel>0?' ⛽'+Math.round(p.fuel):' ⛽尽'})`,s[0]+7,s[1]+7);
-          else ctx.fillText(`▲${Math.round(SHOW.v(vn))}(剩${rem}颗)${p.fuel>0?' ⛽'+Math.round(SHOW.t(p.fuel)):' ⛽尽'} · ${p.target?p.target.name:'无目标'}${p.coastT>0?' 🔓脱'+Math.round(SHOW.t(p.coastT))+'s':''}`,s[0]+7,s[1]+7);
+          else if(redSide&&!adminMode)ctx.fillText(`▲${Math.round(SHOW.v(vn))}`,s[0]+7,s[1]+7); // 2026-09-28 敌方弹只报看得见的量(速度)
+          else ctx.fillText(`▲${Math.round(SHOW.v(vn))}(剩${rem}颗)${p.fuel>0?' ⛽'+Math.round(SHOW.t(p.fuel)):' ⛽尽'} · ${p.target?xhName(p.target):'无目标'}${p.coastT>0?' 🔓脱'+Math.round(SHOW.t(p.coastT))+'s':''}`,s[0]+7,s[1]+7);
         }
       }else if(p.mine&&p===selMissile){
         ctx.fillStyle='rgba(159,212,255,.9)';ctx.font='10px Consolas';ctx.textAlign='left';ctx.textBaseline='top';
@@ -355,6 +358,7 @@ function drawSignalView() {
 
 /* ================= SN6 接触层:定得出位置的接触画误差椭圆(跟着「缩圈」钮);定不出位置的(热区)地图上不画(用户 2026-09-25)================= */
 function drawMissileIntent(g){ // v129:选中导弹/网→显示目标虚线、目的地标记、触发圈、火控母舰连线
+  if(!adminMode&&g.shooter&&g.shooter.side!=='blue')return; // 2026-09-28 敌方弹的意图(目标、引导舰)我方不知道
   const sp=toScreen(g.pos[0],g.pos[1]);
   if(g.trigRadius){ // 触发圈(雷/区域齐射/网雷,选中即画)
     const r=g.trigRadius*cam.zoom;
@@ -364,8 +368,10 @@ function drawMissileIntent(g){ // v129:选中导弹/网→显示目标虚线、�
   // 目的地:布雷/落点 > 锁定目标 > 最后已知
   let dest=null,destLbl='',destCol='rgba(255,255,255,.45)';
   if(g.park&&g.parkPt){dest=g.parkPt;destLbl='📍布雷点';destCol='rgba(255,154,85,.95)';}
-  else if(g.target&&!g.target.dead){dest=g.target.pos;destLbl=g.target.name;destCol='rgba(255,107,107,.95)';}
-  else if(g.lastKpos){dest=g.lastKpos;destLbl='⏳最后已知';destCol='rgba(200,210,220,.85)';}
+  else{
+    if(g.target&&!g.target.dead){const tq=g.guideMode==='self'?g.target.pos:viewPos(g.target);if(tq){dest=tq;destLbl=xhName(g.target);destCol='rgba(255,107,107,.95)';}} // 2026-09-28 数据链段画我方知道的位置、名字打码;导引头自己看见的才用真值
+    if(!dest&&g.lastKpos){dest=g.lastKpos;destLbl='⏳最后已知';destCol='rgba(200,210,220,.85)';}
+  }
   if(dest){
     const dp=toScreen(dest[0],dest[1]);
     ctx.save();
@@ -437,11 +443,11 @@ function anomScan(now){
   if(simTime<ANOM.t){ANOM.m=new WeakMap();ANOM.list.length=0;}ANOM.t=simTime; // 换局
   if(typeof trkEach==='function')trkEach('blue',(tk,st)=>{const s=trkSrc(tk);let a=ANOM.m.get(s);if(!a){a={ir:false,fl:0,fh:false,rd:-1e9};ANOM.m.set(s,a);}
     const ir=st==='heat'&&!!(tk.cov&&tk.cov.ch&&tk.cov.ch.opt);
-    if(ir){const fl=s.flame||0,fh=(s.fireHot||0)>0;if(!a.ir||(fl&&!a.fl)||(fh&&!a.fh)){const L=contactLayer(s,'blue','opt');if(L)ANOM.list.push({k:'ir',x:L.x,y:L.y,r:L.r,t0:now});}a.fl=fl;a.fh=fh;} // 2026-09-28 位置与圈的大小 = 红外那一层自己的估计与不确定(原来标在真值)
+    if(ir){const fl=s.flame||0,fh=(s.fireHot||0)>0;if(!a.ir||(fl&&!a.fl)||(fh&&!a.fh)){const L=contactIrEst(s,'blue');if(L)ANOM.list.push({k:'ir',x:L.x,y:L.y,r:L.r,t0:now});}a.fl=fl;a.fh=fh;} // 2026-09-28 位置与圈的大小 = 红外那一层自己的估计与不确定(原来标在真值)
     a.ir=ir;});
   if(typeof esmEach==='function')esmEach('blue',(E,arr)=>{if(contactFix(E,'blue'))return;let a=ANOM.m.get(E);if(!a){a={ir:false,fl:0,fh:false,rd:-1e9};ANOM.m.set(E,a);}
     let b=arr[0].k;for(const x of arr)if(x.k.sr<b.sr)b=x.k;
-    if(b.t>a.rd){if(b.t-a.rd>ANOM.GAP)ANOM.list.push({k:'rd',x:b.org[0]+Math.cos(b.tb)*b.rr,y:b.org[1]+Math.sin(b.tb)*b.rr,r:Math.sqrt(Math.min(b.sr,TRK_ERR.ALONG_K*b.rr)*b.sc),t0:now});a.rd=b.t;}}); // 2026-09-28 静听测距 / 方位已带估计误差(21 的 esmHear);圈 = 等面积 1σ
+    if(b.t>a.rd){if(b.t-a.rd>ANOM.GAP){const q=esmEst(b);ANOM.list.push({k:'rd',x:q.x,y:q.y,r:q.r,t0:now});}a.rd=b.t;}}); // 2026-09-28 静听测距 / 方位已带估计误差(21 的 esmHear);圈 = 等面积 1σ
 }
 function drawAnomalies(){
   const now=nowMs();anomScan(now);if(!ANOM.list.length)return;
@@ -519,7 +525,7 @@ function drawTargeting(){
     const p=toScreen(sub.pos[0],sub.pos[1]),q=toScreen(tq[0],tq[1]);
     // WR1 预览线按【动力射程】着色(没有射程门了;之外能打但靠滑行 + 数据链)。没装导弹的舰 R=0 一律暗色。
     const R=(sub.ammo>0&&sub.cells>0)?mslReach(sub):0;
-    const inR=R>0&&V.len(V.sub(tgt.pos,sub.pos))<=R; // 判据是世界距离而非屏幕距离(屏幕距离随 zoom 变,同一目标会时内时外)
+    const inR=R>0&&V.len(V.sub(tq,sub.pos))<=R; // 2026-09-28 与线的终点同一个点(我方知道的位置) // 判据是世界距离而非屏幕距离(屏幕距离随 zoom 变,同一目标会时内时外)
     ctx.globalAlpha=inR?.75:.55; // 半透明一律 globalAlpha+rgba,全程只有 stroke/arc:每帧路径禁 shadowBlur/createRadialGradient
     ctx.strokeStyle=inR?'#ffe066':'#46566a'; // 射程内=--state-select(我下的命令) / 超程=--txt-mute(禁用态:这个目标现在打不着)
     ctx.lineWidth=inR?1.2:1;

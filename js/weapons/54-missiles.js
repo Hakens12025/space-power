@@ -70,7 +70,7 @@ function guideSide(side){ // 一方数据链网络的引导分配(v125:按网分
   if(left.length){
     const fctrlOf=n=>{const nn=nets.get(n.groups[0].netId);return nn&&nn.fctrl==='hold'?1:0;};
     const val=n=>shipValue(n.target); // TIER1 舰种威胁硬编码改数据驱动谓词(值不变)
-    const tti=n=>{const relV=V.sub(n.groups[0].vel,n.target.vel);return V.len(V.sub(n.target.pos,n.groups[0].pos))/Math.max(500,V.len(relV));};
+    const tti=n=>{const q=contactPos(n.target,n.groups[0].shooter.side);if(!q)return Infinity;const relV=V.sub(n.groups[0].vel,n.target.vel);return V.len(V.sub(q,n.groups[0].pos))/Math.max(500,V.len(relV));}; // 2026-09-28 按我方知道的位置排(原来量真值);交代不出排最后
     left.sort((a,b)=>fctrlOf(b)-fctrlOf(a)||tti(a)-tti(b)||val(b)-val(a)); // hold网优先
     for(const n of left){
       let best=null,bd=1e18;
@@ -90,8 +90,8 @@ function guideSide(side){ // 一方数据链网络的引导分配(v125:按网分
   // 到点没人就变雷待命,网络恢复引导时会被上面几遍重新接管。
   for(const p of ms){if(p.needGuide&&!p.guided){p.guideMode='coast';if(!p.lastKpos){
     const relV=V.sub(p.vel,p.target.vel);
-    const tt=Math.max(0.3,V.len(V.sub(p.target.pos,p.pos))/Math.max(500,V.len(relV)));
-    const kp=(typeof contactPos==='function')?contactPos(p.target,p.shooter.side):p.target.pos; // WR1:最后已知位置按母舰的【估计位置】记;交代不出位置就沿当前航向滑行(不回落真值)
+    const kp=contactPos(p.target,p.shooter.side); // WR1:最后已知位置按母舰的【估计位置】记;交代不出位置就沿当前航向滑行(不回落真值)
+    const tt=kp?Math.max(0.3,V.len(V.sub(kp,p.pos))/Math.max(500,V.len(relV))):0; // 2026-09-28 飞行时间也按估计位置算(原来量真值)
     p.lastKpos=kp?[kp[0]+p.target.vel[0]*tt,kp[1]+p.target.vel[1]*tt,kp[2]+p.target.vel[2]*tt]:[p.pos[0]+p.vel[0]*20,p.pos[1]+p.vel[1]*20,p.pos[2]+p.vel[2]*20];
   }}}
 }

@@ -101,8 +101,8 @@ function xhName(s){ // RF5 可外传的目标名:没认出的敌舰不吐真名(
 }
 function xhCardHTML(s,sub){ // RF5 信息卡内容:按认没认出、定没定位。只产 HTML 字符串,DOM 与样式属渲染侧
   const gm=(typeof adminMode!=='undefined'&&adminMode);
-  const cp=(!gm&&typeof contactPos==='function')?(contactPos(s,'blue')||s.pos):s.pos; // ID1 顺手:方位 / 距离按接触的【估计位置】报(与画出来、点得到的是同一个点),原来报的是真值
-  const dx=cp[0]-sub.pos[0],dy=cp[1]-sub.pos[1];
+  const cp=viewPos(s); // 2026-09-28 我方知道的位置;交代不出就不报距离(原来拿真值兜底) // ID1 顺手:方位 / 距离按接触的【估计位置】报(与画出来、点得到的是同一个点),原来报的是真值
+  const dx=cp?cp[0]-sub.pos[0]:0,dy=cp?cp[1]-sub.pos[1]:0;
   const dist=Math.hypot(dx,dy);
   const brg=(Math.atan2(dy,dx)*180/Math.PI+360)%360; // 方位角:0°=+X(与"船头=+X"的几何约定同源),顺时针增
   // RF5 GM 分支绕开遮蔽再复用(仍然是 82 的函数,只是换成未遮蔽那一对):82 的 shipIdentHull/shipIdentTier 都【不看 adminMode】,
@@ -118,7 +118,7 @@ function xhCardHTML(s,sub){ // RF5 信息卡内容:按认没认出、定没定�
   const itp=gm?{kind:kindOf(s)}:(contactIdType(s,'blue')||{kind:'ship'}),notShip=!masked&&itp.kind!=='ship'; // TK4c:认出来不是船 ⇒ 没有舰种、结构与速度可报。2026-09-27 按认出的类型判(诱饵在「疑似」档冒充驱逐舰,不许说破)
   if(notShip)rows.push(['类别',({rock:'碎石',civ:'民船',lure:'诱饵',buoy:'浮标'})[itp.kind]+' · 不是舰船']);
   else if(!masked)rows.push(['舰种',((typeof HULL_LABEL!=='undefined'&&HULL_LABEL[hull])||'未知')+'舰 · T'+tier]); // RF5 兜底文案改中文'未知'(原为直接吐 hull 代码):HULL_LABEL(ships/10)只有 DD/CA/BB/CV/SC 五个键,查不到时会渲染出 "UNK舰" 这种非中文串,违反 UI 全中文。识别级:舰种与分级解禁(与 82 放行真实轮廓/尺寸、87-fleetcards 的分级徽标同为 litBlue>=2)
-  rows.push(['方位',String(Math.round(brg)%360).padStart(3,'0')+'° · '+Math.round(dist/1000)+'k']); // 探测级也给:这一档只有方位与距离是可信的
+  rows.push(['方位',cp?String(Math.round(brg)%360).padStart(3,'0')+'° · '+Math.round(dist/1000)+'k':'位置不明']); // 探测级也给:这一档只有方位与距离是可信的
   {const tk=(!gm&&s.side!=='blue')?trkOf('blue',s):null;if(tk&&tk.tn)rows.push(['航迹','T'+String(tk.tn).padStart(2,'0')]);} // TK4c 航迹号:没认出的接触都叫「未知接触」,靠它指认是哪一条
   if(!masked&&!notShip&&(gm||s.side==='blue'||contactFix(s,'blue'))){ // 定得出位置才追加数值
     rows.push(['结构',Math.max(0,Math.round(s.hp))+'/'+Math.round(s.maxHp)]);
@@ -185,7 +185,7 @@ function radItems(sub,t,it){ // RF5 解算每个武器扇区:allow=计划(许不
   const out=[];
   if(!sub||!t)return out;
   const fix=contactFix(t,sub.side);
-  const tq=viewPos(t),dist=tq?V.len(V.sub(tq,sub.pos)):Infinity; // 2026-09-28 距离按我方知道的位置量(原来量真值);交代不出 = 够不着 // RF5 距离口径必须与 58 的 fcGate 同源:它用的是【三维】V.len(V.sub(...))。原先写平面 Math.hypot,z 差两万的场景(90-envs「均衡编队」蓝方 z=+20000)在射程边界上会与引擎给出相反结论——轮盘说"射程内",fcGate 恒 return null,主炮永不开火而盘上没有任何提示
+  const tq=viewPos(t),dist=tq?V.len(V.sub(tq,sub.pos)):Infinity; // 2026-09-28 距离按我方知道的位置量;交代不出 = 够不着
   for(const w of radWeapons(sub)){
     const k=w.kind;
     const allow=(!it||!it.allow)||it.allow[k]!==false; // allow 缺省 undefined 语义为【真】:抄 58-firecontrol 的 !==false 口径(88-selpanel:313 同源),别写成 !it.allow[k]

@@ -58,9 +58,10 @@ function reassignNets(side){ // 网间协同分配:待分配网(目标已灭)补
 }
 function recomputeNetOff(p,target){ // v135:目标转移后重算组网偏移(保持该组方向类型,第二个目标继续多方向同时弹着)
   if(!p.shooter)return;
-  const D0=Math.max(12000*CFG.scale,V.len(V.sub(target.pos,p.shooter.pos))); // 距离级(≥1.2 万才组网)。2026-09-26 x1/5(单局地图):原 60000
+  const tq=contactPos(target,p.shooter.side);if(!tq)return; // 2026-09-28 几何按发射方知道的位置算(原来读真值);交代不出就保留原偏移
+  const D0=Math.max(12000*CFG.scale,V.len(V.sub(tq,p.shooter.pos))); // 距离级(≥1.2 万才组网)。2026-09-26 x1/5(单局地图):原 60000
   const R=Math.min(30000*CFG.scale,Math.max(6000*CFG.scale,D0*0.5)); // 2026-09-26 x1/5(单局地图):原 min 150000 / max 30000,与 52 的 netGeom 同口径
-  const si=V.norm([p.shooter.pos[0]-target.pos[0],p.shooter.pos[1]-target.pos[1],0]); // 直插方向(目标→发射舰)
+  const si=V.norm([p.shooter.pos[0]-tq[0],p.shooter.pos[1]-tq[1],0]); // 直插方向(目标→发射舰)
   let px=V.norm([-si[1],si[0],0]); // 垂直
   if(!isFinite(px[0])||V.len(px)<0.5)px=[0,1,0];
   if(p.netOff){ // 保持原方向类型:侧翼(横向分量大) vs 直插(纵向分量大)

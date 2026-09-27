@@ -34,10 +34,6 @@ const MAC_K=4,MAC_Z50=0.6745; // 2026-09-28 命中率改 S 形(用户选拐点 7
    定成 0.5:【自动化只打过半把握的】,想赌远射自己下令(玩家的火控序列不受这条限制,那是他自己的决定)。与 bots/61 红方 bot 的门同一档,双方口径一致。
    2026-09-28 降到 0.1(用户:「允许很远就开始开炮」):S 形曲线下 10% 在 12.6 万,再远掉得很快,不会再出现 94 万外放炮。 */
 const MAC_AUTO_P=0.1;
-function gaussRand(){ // Box-Muller,一次一个
-  let u=0,v=0; while(u===0)u=Math.random(); while(v===0)v=Math.random();
-  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
-}
 function erfApprox(x){ // Abramowitz-Stegun 7.1.26,误差 < 1.5e-7
   const sg=x<0?-1:1; x=Math.abs(x);
   const t=1/(1+0.3275911*x);
@@ -55,8 +51,7 @@ const MAC_SIG_CAP=3*Math.PI/180; // 2026-09-28 用户:每发角散布封顶 3°(
 function macHitCap(d){return erfApprox(MAC_HIT_R/(Math.SQRT2*d*MAC_SIG_CAP));} // 散布到顶以后的命中率
 function macHitProb(s,d){ // 主炮在距离 d 上对标准命中判定半径的命中率(靶不动):S 形,散布到顶以后改固定角(与 macShotSigma 实打一致)
   const sig=sReq(s,'macSigma'); if(!(sig>0)||!(d>0))return sig>0?1:0;
-  const p=1/(1+Math.pow(d/macD50(sig),MAC_K));
-  return (p<1-1e-9&&MAC_HIT_R/(d*Math.SQRT2*erfInv(p))>MAC_SIG_CAP)?macHitCap(d):p;
+  return Math.max(1/(1+Math.pow(d/macD50(sig),MAC_K)),macHitCap(d)); // 散布到顶(> 3°)⇔ 固定角的命中率比 S 形高,所以两段 = 取大
 }
 function macRangeSig(sig,p){ // BOT1:按【给定的散布】反算命中率恰为 p 的距离。红方条令要问「对方那一型打我打得多准」,手里只有舰种不是实例
   if(!(p>0&&p<1))throw new Error('macRangeSig: p 要在 (0,1) 里');
@@ -96,7 +91,10 @@ function fireMAC(shooter,target){ // MAC轴炮:沿船头方向直射(必须先�
 }
 let hitFX=[]; // 命中特效 {pos,t,type}  — MAC/导弹命中点的爆闪提示
 let threatCorridors=[]; // v126(外援C):来袭走廊 {from:[x,y],dir:[x,y],t:寿命,spd,ship,fireT}——敌方导弹出膛被看到时生成,橙虚线锥预告弹道
-function spawnHit(pos,type){hitFX.push({pos:pos.slice(),t:1.2,type});}
+function spawnHit(pos,type,sh,vic){ // 2026-09-28 vis = 我方看不看得见这一下:自己打的 / 挨打的是自己 / 落在我方某艘船的全知圈里;画面只画看得见的(原来看不见的地方的命中与击沉也画在真值上)
+  const vis=!!((sh&&sh.side==='blue')||(vic&&vic.side==='blue')||ships.some(s=>s.side==='blue'&&!s.dead&&Math.hypot(s.pos[0]-pos[0],s.pos[1]-pos[1])<(s.visR||COV.VIS_R)));
+  hitFX.push({pos:pos.slice(),t:1.2,type,vis});
+}
 function findInterceptorTarget(p){ // 拦截弹重选目标:前方最近的来袭导弹,诱饵弹优先(信号强,为真导弹让路)
   let best=null,bd=1e18,bestDecoy=false;
   const vd=V.norm(p.vel);

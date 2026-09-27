@@ -50,7 +50,7 @@ function pipGun(g,w,h,s){ // 主炮火控窗:S 形命中率曲线 + 目标此刻
   g.textAlign='right';g.fillStyle='rgba(255,209,102,.7)';g.fillText('自动开火门 '+Math.round(MAC_AUTO_P*100)+'%',R,Y(MAC_AUTO_P)-7);
   g.strokeStyle='#8fd0ff';g.lineWidth=1.5;g.beginPath();for(let i=0;i<=60;i++){const d=PIP.XMAX*i/60,x=X(d),y=Y(macHitProb(s,d));if(i)g.lineTo(x,y);else g.moveTo(x,y);}g.stroke();
   const ff=s.forceMac,mt=(typeof fcActive==='function'&&fcActive(s))?(s.fcTgt&&s.fcTgt.mac):(s.lockedTarget||(ff&&ff.t)||null);
-  const tp=mt?((mt.side==='blue'||adminMode)?mt.pos:contactPos(mt,s.side)):(ff&&ff.pt?ff.pt:null);
+  const tp=mt?viewPos(mt):(ff&&ff.pt?ff.pt:null);
   g.textAlign='left';g.textBaseline='top';g.font='11px "Microsoft YaHei"';
   if(!tp){g.fillStyle='#cfe6ff';g.fillText(mt?'主炮目标定不出位置':'无主炮目标 · 锁定或强行开火后显示',6,4);return;}
   const d=Math.hypot(tp[0]-s.pos[0],tp[1]-s.pos[1]),pr=macHitProb(s,d),x=X(d),y=Y(pr);

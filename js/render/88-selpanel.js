@@ -137,8 +137,9 @@ function fcUiName(t){ // 目标项 → 显示名(舰目标现查 ships 表,指�
 }
 function fcUiHp(t){ // 目标项 → HP 百分比(指定点无 HP,显示破折号)
   if(!t||t.tid==null)return '—';
-  const o=(typeof ships!=='undefined')?ships.find(x=>String(x.id)===String(t.tid)):null;
+  const o=objById(t.tid);
   if(!o||o.dead||!o.maxHp)return '—';
+  if(!adminMode&&o.side!=='blue'&&!(contactIdn(o,'blue')&&contactFix(o,'blue')))return '—'; // 2026-09-28 与悬停卡同一道门:认出且定位才报结构(原来无门,真血量照报,还能分出船和非船)
   return Math.max(0,Math.round(o.hp/o.maxHp*100))+'%';
 }
 function fcUiSeq(s,sid){ // 按 id 字符串取回序列对象(id 类型不确定,统一 String 比较)
@@ -227,7 +228,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
     const dmgSum=aliveHits.reduce((n,p)=>n+(p.dmg||0),0);
     const dist=list=>{const m={};list.forEach(k=>m[k]=(m[k]||0)+1);return Object.keys(m).map(k=>k+' ×'+m[k]).join(' · ');};
     const stts=dist(aliveHits.map(p=>p.mine?'伏击雷':p.cruise?'巡飞搜索':p.park?(p.mineOk?'布雷中':'飞向点位'):(p.netOff?'组网包抄':((p.coastT>0||p.guideMode==='coast')?'脱锁':'突击'))));
-    const tgts=dist(aliveHits.map(p=>p.target?(p.target.name||'区域'):'无'));
+    const tgts=dist(aliveHits.map(p=>p.target?(p.target.side!==undefined?xhName(p.target):'区域'):'无'));
     const gds=dist(aliveHits.map(p=>p.guideMode==='self'?'自主':p.guideMode==='link'?'数据链':p.guideMode==='coast'?'脱锁':'本地'));
     const minFuel=Math.min(...aliveHits.map(p=>p.fuel||0));
     const maxSpd=Math.max(...aliveHits.map(p=>V.len(p.vel)));
@@ -254,6 +255,11 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
     return;
   }
   const m=(selMissile&&!selMissile.done)?selMissile:null;
+  if(m&&m.type==='missile'&&!adminMode&&m.shooter&&m.shooter.side!=='blue'){ // 2026-09-28 敌方弹:只报看得见的量(射手、燃料、目标我方不知道)
+    title.textContent='敌方导弹';if(ciN)ciN.textContent='敌方导弹';if(ciC)ciC.textContent='—';if(ciSp)ciSp.innerHTML='';
+    box.innerHTML=`<div class="row"><span class="k">速度</span><span class="v">${Math.round(SHOW.v(V.len(m.vel)))} km/s</span></div>`;
+    updateCmdBar([]);return;
+  }
   if(m&&m.type==='missile'){
     title.textContent='导弹组';
     if(ciN)ciN.textContent='导弹组 #'+(m.group||'?');
@@ -265,8 +271,8 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
       ['触发圈',Math.round((m.trigRadius||12000*CFG.scale)/1000)+'k'], // 2026-09-26 x1/5(单局地图):原 60000
     ].map(it=>`<span class="fi"><i>${it[0]}</i><b>${it[1]}</b></span>`).join('');
     const stt=m.mine?'伏击雷 · 静默待命':m.cruise?'巡飞搜索 · 导引头开着':m.park?(m.mineOk?'飞向布雷点':'飞向点位 · 导引头搜索'):(m.netOff?'组网包抄':(m.coastT>0?'脱锁滑行':'突击中'));
-    const tgt=m.target?(m.target.name||(m.target.pos?'区域点':'—')):(m.mine?'无(待触发)':'无');
-    const tdist=(m.target&&m.target.pos)?V.len(V.sub(m.target.pos,m.pos)):0;
+    const tgt=m.target?(m.target.side!==undefined?xhName(m.target):(m.target.pos?'区域点':'—')):(m.mine?'无(待触发)':'无');
+    const tq=m.target?(m.target.side===undefined?m.target.pos:(m.guideMode==='self'?m.target.pos:viewPos(m.target))):null,tdist=tq?V.len(V.sub(tq,m.pos)):0; // 2026-09-28 名字打码、距离按我方知道的位置(导引头自己看见的用真值)
     const fu=Math.max(0,Math.min(100,m.fuel||0)); // 燃料满值100s,直接当百分比
     box.innerHTML=`
       <div class="hpbar"><i style="width:${fu}%;background:${fu>30?'var(--state-active)':'var(--state-warn)'}"></i></div>
@@ -349,14 +355,14 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
   if(ciSp)ciSp.innerHTML=specItems(s).map(it=>`<span class="fi"><i>${it[0]}</i><b>${it[1]}</b></span>`).join(''); // 标签上/数值下的读数柱
   // 变化信息(武器库状态) → 右栏
   const t=s.lockedTarget&&!s.lockedTarget.dead?s.lockedTarget:null;
-  const dist=t?V.len(V.sub(t.pos,s.pos)):0;
+  const tq=t?viewPos(t):null; // 2026-09-28 目标行:名字打码、距离按我方知道的位置,交代不出写位置不明(原来真名 + 真实距离)
   const fr=Math.max(0,Math.min(1,s.hp/s.maxHp));
   box.innerHTML=`
     <div class="hpbar"><i style="width:${fr*100}%;background:${fr>0.35?'var(--state-ok)':'var(--state-warn)'}"></i></div>
     <div class="row"><span class="k">结构</span><span class="v">${Math.max(0,Math.round(s.hp))} / ${s.maxHp}</span></div>
     <div class="row"><span class="k">速度</span><span class="v">${Math.round(SHOW.v(V.len(s.vel)))} km/s</span></div>
     <div class="row"><span class="k">加速度</span><span class="v">${engRows(s)}</span></div>
-    <div class="row"><span class="k">目标</span><span class="v">${t?t.name+' · '+Math.round(dist/1000)+'k':'—'}</span></div>
+    <div class="row"><span class="k">目标</span><span class="v">${t?xhName(t)+' · '+(tq?Math.round(V.len(V.sub(tq,s.pos))/1000)+'k':'位置不明'):'—'}</span></div>
     ${senseRows(s)}
     ${weaponRows(s)}`; // SN4 blocker E:三行辐射读数插在「我在哪儿怎么动」与「我能打什么」之间 —— 中间这一组回答的是「我被看见多少」
   updateCmdBar(sel);

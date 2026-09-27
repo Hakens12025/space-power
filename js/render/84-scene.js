@@ -56,13 +56,12 @@ function drawVisFog(B){
 /* 2026-09-26 特写窗口里的尾迹(用户:"渲染类似于光速延迟里面的尾迹效果",同 demos/lightlag/光速延迟.html 的 trail):每 DT 模拟秒记一次位置,留最近 SPAN 秒,越旧越淡,线头接到此刻。
    敌舰只记我方知道的位置(contactPos:估计 / 外推;交代不出就断开),不画真值 */
 const TRAIL={DT:0.5,SPAN:60,JUMP:20000,t:-1e9,m:new Map(),arr:null,gm:false}; // JUMP:相邻两次记录跳得比这远(km x scale)就断开 —— 瞬移(靶场拖船)不连线
-function trailPos(s){return (s.side==='blue'||adminMode)?s.pos:((typeof contactPos==='function')?contactPos(s,'blue'):null);}
 function trailRec(){
   if(simTime<TRAIL.t||TRAIL.arr!==ships||TRAIL.gm!==adminMode){TRAIL.m.clear();TRAIL.t=-1e9;TRAIL.arr=ships;TRAIL.gm=adminMode;} // 换局(舰船表整个换了)或全知开关变了就清:旧位置不连到新位置上,全知时记的真值不留
   if(simTime-TRAIL.t<TRAIL.DT)return;TRAIL.t=simTime;
   for(const s of ships){
     if(s.dead){TRAIL.m.delete(s.id);continue;}
-    const p=trailPos(s);let a=TRAIL.m.get(s.id);if(!a){a=[];TRAIL.m.set(s.id,a);}
+    const p=viewPos(s);let a=TRAIL.m.get(s.id);if(!a){a=[];TRAIL.m.set(s.id,a);}
     const n=a.length,lx=a[n-3];if(p&&lx===lx&&n&&Math.hypot(p[0]-lx,p[1]-a[n-2])>TRAIL.JUMP*CFG.scale)a.push(NaN,NaN,simTime);
     if(p)a.push(p[0],p[1],simTime);else if(n&&lx===lx)a.push(NaN,NaN,simTime);
     let k=0;while(k<a.length&&simTime-a[k+2]>TRAIL.SPAN)k+=3;if(k)a.splice(0,k);
@@ -78,7 +77,7 @@ function drawTrails(hide){ // hide:传感器画面里只画我方(同主画面�
     for(let i=0;i<n;i++){const x=a[3*i];if(x!==x){px=NaN;continue;}const q=toScreen(x,a[3*i+1]);
       if(px===px){ctx.globalAlpha=0.06+0.69*i/n;ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(q[0],q[1]);ctx.stroke();}
       px=q[0];py=q[1];lx=x;ly=a[3*i+1];}
-    const cur=trailPos(s);if(cur&&px===px&&Math.hypot(cur[0]-lx,cur[1]-ly)<=TRAIL.JUMP*CFG.scale){const q=toScreen(cur[0],cur[1]);ctx.globalAlpha=0.75;ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(q[0],q[1]);ctx.stroke();} // 线头同样按 JUMP 断开(暂停时拖船不拉长线)
+    const cur=viewPos(s);if(cur&&px===px&&Math.hypot(cur[0]-lx,cur[1]-ly)<=TRAIL.JUMP*CFG.scale){const q=toScreen(cur[0],cur[1]);ctx.globalAlpha=0.75;ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(q[0],q[1]);ctx.stroke();} // 线头同样按 JUMP 断开(暂停时拖船不拉长线)
   }
   ctx.restore();
 }
@@ -149,7 +148,7 @@ function insetVpri(){if(!INSET.vpri){let m=1;for(const k in CLS_MOB)for(const g 
 function insetPushG(eta){const w=Math.max(0,eta)/INSET.lrt,t=(INSET.PUSH_T0-w)/(INSET.PUSH_T0-INSET.PUSH_T1);return INSET.PUSH_MAX*(t<=0?0:(t>=1?1:t*t*(3-2*t)));} // 2026-09-27 封顶 PUSH_MAX(用户:"特写缩放的太猛了"):陪衬点只往主体收这么多 // 2026-09-27 临近命中推近(用户:"导弹快击中某个舰船了,就开始自适应的放大"):游戏秒按最近一次非零倍速换墙钟,暂停时不回弹
 function insetPushHold(key,g){const now=nowMs(),o=INSET.ph.get(key);if(!o||g>=o.g||now-o.t>INSET.PUSH_HOLD){if(INSET.ph.size>32)INSET.ph.clear();INSET.ph.set(key,{g:g,t:now});return g;}return o.g;}
 function insetRate(){return running?(TC.eff>0?TC.eff:rate)*RATE_K:0;} // 当前倍速(游戏秒 / 墙钟秒),暂停为 0
-function insetShellAtUs(r){const sel=selectedShips().filter(s=>s.side==='blue'&&!s.dead),L=sel.length?sel:ships.filter(s=>s.side==='blue'&&!s.dead); // 这条来路冲着我方(有选中时冲选中舰)来:船在炮弹前方、横向偏差 SHELL_NEAR 以内
+function insetShellAtUs(r,side){const sel=selectedShips().filter(s=>s.side===side&&!s.dead),L=sel.length?sel:ships.filter(s=>s.side===side&&!s.dead); // side = 挨打那一方(GM 下红方记的来路冲红方) // 这条来路冲着我方(有选中时冲选中舰)来:船在炮弹前方、横向偏差 SHELL_NEAR 以内
   for(const s of L){const rx=s.pos[0]-r.a[0],ry=s.pos[1]-r.a[1];if(rx*r.u[0]+ry*r.u[1]>0&&Math.abs(rx*r.u[1]-ry*r.u[0])<INSET.SHELL_NEAR*CFG.scale)return true;}return false;}
 function insetEvents(now){ // 导演的事件源(只读我方知道的事):损失 / 击沉 / 中弹 / 命中 / 认出 / 首次定位;换局清空
   const nm=simTime<INSET.t0||INSET.arr!==ships; // 换局(同尾迹:按舰船表换没换判)
@@ -177,8 +176,8 @@ function insetEvents(now){ // 导演的事件源(只读我方知道的事):损�
     let r=null,rq=null;bd=INSET.HIT_R*S;for(const s of ships){if(s.dead||s.side==='blue'||!(adminMode||contactFix(s,'blue')))continue;const q=viewPos(s);if(!q)continue;const d=Math.hypot(q[0]-h.pos[0],q[1]-h.pos[1]);if(d<bd){bd=d;r=s;rq=q;}}
     if(r)insetPush({k:'hit',p:1.5,ship:r,sh:at?at.sh:null,q:rq.slice(),lbl:'命中 '+insetName(r)},now); // 绑到受击舰、存我方知道的位置;绑不上(只有热区)就不报
   }
-  const TR=(typeof SHELL_TR!=='undefined')?(adminMode?SHELL_TR.blue.concat(SHELL_TR.red):SHELL_TR.blue):[]; // 2026-09-28 炮弹来路回放(用户选):新记下的一条 = 一段,框住首见点与往回 SHELL_BACK 那一段(附近看见它的我方舰由 insetBuild 一起框)
-  for(const r of TR){if(INSET.shr.has(r))continue;INSET.shr.add(r);if(nm)continue;if(now-INSET.shT<INSET.SHELL_GAP||!insetShellAtUs(r))continue;INSET.shT=now;const L=Math.min(shtrBack(r),INSET.SHELL_BACK*S);
+  const TR=(typeof SHELL_TR!=='undefined')?(adminMode?SHELL_TR.blue.concat(SHELL_TR.red):SHELL_TR.blue):[],trR=(typeof SHELL_TR!=='undefined')?SHELL_TR.red:[]; // 2026-09-28 炮弹来路回放(用户选):新记下的一条 = 一段,框住首见点与往回 SHELL_BACK 那一段(附近看见它的我方舰由 insetBuild 一起框)
+  for(const r of TR){if(INSET.shr.has(r))continue;INSET.shr.add(r);if(nm)continue;if(now-INSET.shT<INSET.SHELL_GAP||!insetShellAtUs(r,trR.indexOf(r)>=0?'red':'blue'))continue;INSET.shT=now;const L=Math.min(shtrBack(r),INSET.SHELL_BACK*S);
     insetPush({k:'shell',p:1.7,q:[r.a[0],r.a[1]],q2:[r.a[0]-r.u[0]*L,r.a[1]-r.u[1]*L],lbl:'炮弹来路 · 往回 '+Math.round(L/1e4)+' 万 km'},now);}
   INSET.ev=INSET.ev.filter(e=>now-e.t<(INSET.EVMS[e.k]||6000));
 }
@@ -199,7 +198,7 @@ function insetSubject(sel,inc,lbl){ // 一组我方舰的取景:离群的不进�
     if(keep.indexOf(m.tgt)>=0){const g=wt(d);if(g>0){pts.push([ax+g*(m.p.pos[0]-ax),ay+g*(m.p.pos[1]-ay)]);if(g>wm)wm=g;}}
     if(ind.length<INSET.IND)ind.push({pos:m.p.pos,col:'255,154,85',lbl:isFinite(m.eta)?Math.round(SHOW.t(m.eta))+' s':Math.round(d/1000)+'k'});}
   wmax=wm;const L=[],seen=new Set();
-  for(const s of keep){const t=s.lockedTarget;if(!t||t.dead||seen.has(t.id))continue;seen.add(t.id);const p=(t.side==='blue'||adminMode)?t.pos:contactPos(t,'blue');if(!p)continue; // 几艘锁同一个目标只算一条
+  for(const s of keep){const t=s.lockedTarget;if(!t||t.dead||seen.has(t.id))continue;seen.add(t.id);const p=viewPos(t);if(!p)continue; // 几艘锁同一个目标只算一条
     const d=near(p),g=INSET.hide?0:wt(d);if(g>0){pts.push([ax+g*(p[0]-ax),ay+g*(p[1]-ay)]);if(g>wmax)wmax=g;}L.push({pos:p,col:'255,107,107',lbl:Math.round(d/1000)+'k',d:d});}
   // 2026-09-27 按情况定缩放(用户:"聚焦特写的时候看情况给比例尺大小,现在永远是 1000km"):速度越快看得越远,附近的友舰与已定位的敌舰按远近渐进框进来
   const tv=PHYS.t(INSET.CTX_T)/2,cw=(d,a,b)=>{const t=(b-d)/(b-a);return t<=0?0:(t>=1?1:t*t*(3-2*t));};

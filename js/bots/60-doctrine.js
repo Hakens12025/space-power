@@ -119,7 +119,7 @@ const RDOC_CFG={
      业内:火力侦察(reconnaissance by fire)/ 扰乱拦阻射击(H&I);风险一侧是反炮兵与打了就跑。开不开 = 中奖率 x 价值 过不过【暴露代价】那一档 */
   LOT_P_EXP:0.01,    // 已暴露(正在照射 / 刚开过火 / 正在点火 / 被照射告警)时:多开一炮几乎不加风险,中奖率过 1% 就开
   LOT_P_HID:0.08,    // 隐蔽时:开火闪光让对方红外很远就看见、炮弹还留来路,要过 8% 才开;埋伏态不开
-  LOT_D_BRG:200000*CFG.scale, // 只有方位 / 炮弹来路、不知道距离时,算中奖率假设目标在这么远
+  LOT_D_BRG:200000*CFG.scale, // 反炮兵沿炮弹来路打回去时不知道射手多远,算中奖率假设在这么远
   LOT_CB_OFF:2000*CFG.scale,  // 反炮兵:对方炮弹来路离本舰这么近以内才算冲我来的,沿反向线打回去(炮弹沿途碰到谁算谁)
   LOT_SPREAD_S:20,   // 同一个目标 / 来路,全队这么多秒内只抽一次(分散抽奖)
   LOT_T:20,          // 转头对准的时限(秒),超时作废
@@ -175,8 +175,8 @@ function botLottery(e,claim){ // 2026-09-28 抽奖开炮:从红方自己知道�
     if(trkGone(tk)||!trkHeld(tk)||!trkFoe(tk))return;const b=trkSrc(tk);if(!free(b))return;
     let c=null,p=0;
     if(trkFix(tk)){const q=trkPos(tk);if(!q)return;p=botShotP(e,Math.hypot(q[0]-e.pos[0],q[1]-e.pos[1]),Math.max(0,tk.cov.a1||0));c={t:b};} // 定出位置:打估计位置
-    else{const u=trkBearing(tk,e.pos),ch=tk.cov&&tk.cov.ch,th=(ch&&ch.opt)?COV.TH0.opt:COV.TH0.lis;   // 只有方位:沿方位线打到导弹包线那么远,不知道距离按 LOT_D_BRG 算中奖率
-      p=botShotP(e,cfg.LOT_D_BRG,cfg.LOT_D_BRG*th);c={pt:[e.pos[0]+u[0]*far,e.pos[1]+u[1]*far,0]};}
+    else{const q=contactIrEst(b,'red')||contactHeardEst(b,'red');if(!q)return; // 只有方位:瞄红方自己那一层的估计(红外亮度测距 / 静听假设法测距),沿开炮舰指向它的线打到导弹包线那么远;中奖率按它的等面积半径(瞄准与中奖率同一个数)
+      const dx=q.x-e.pos[0],dy=q.y-e.pos[1],dq=Math.hypot(dx,dy)||1;p=botShotP(e,dq,q.r);c={pt:[e.pos[0]+dx/dq*far,e.pos[1]+dy/dq*far,0]};}
     const v=p*botFoeValue(b);if(v>bv){bv=v;best={k:b,g:c,p:p};}
   });
   const trL=(typeof SHELL_TR!=='undefined')?SHELL_TR.red:[],tr=trL.length?trL[trL.length-1]:null; // 反炮兵:冲我来的那条来路

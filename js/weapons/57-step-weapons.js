@@ -31,7 +31,7 @@ function stepWeaponSystems(dt){
     for(const t of enemies){
       const locked=ships.filter(x=>x.lockedTarget===t).length; // 已被几艘锁(避免重复)
       const demand=shipValue(t);   // 所需火力(艘);TIER1 舰种威胁硬编码改数据驱动谓词(值不变)
-      const sc=(demand-locked)*1000-V.len(V.sub(t.pos,s.pos));   // 缺口优先,距离次之
+      const q=contactPos(t,s.side),sc=(demand-locked)*1000-(q?V.len(V.sub(q,s.pos)):1e12);   // 缺口优先,距离次之(2026-09-28 距离按我方知道的位置量,原来量真值)
       if(sc>bs){bs=sc;best=t;}
     }
     if(best){s.lockedTarget=best;s.lockPlayer=false;}
@@ -69,10 +69,8 @@ function stepWeaponSystems(dt){
       if(d0>=ciws.outer*2)continue; // 射程(预警2×外圈)
       if(!trkSees(x.side==='blue'?'blue':'red',p))continue; // 侦测到(本阵营传感器网络看得见才拦) v119:读detectLoop缓存 TK4a:缓存在航迹表的目击集合里
       let threat=false;
-      if(p.target&&p.target.side===x.side){ // 来袭导弹在追我方舰:朝目标逼近=威胁
-        const tt=V.dot(p.vel,V.norm(V.sub(p.target.pos,p.pos)));
-        if(tt>0)threat=true;
-      }
+      {const vl=V.len(p.vel); // 来袭导弹正朝我方某艘舰飞(速度方向与指向它的方向夹角约 25° 以内)= 威胁。2026-09-28 原来直接读来袭弹内部的真实目标 p.target
+        if(vl>0)for(const f of ships){if(f.dead||f.side!==x.side)continue;if(V.dot(p.vel,V.norm(V.sub(f.pos,p.pos)))>0.9*vl){threat=true;break;}}}
       if(!threat){ // 无目标/目标不是我方:看是否朝本舰逼近
         const appr=V.dot(p.vel,V.norm(V.sub(x.pos,p.pos)));
         if(appr>0)threat=true;

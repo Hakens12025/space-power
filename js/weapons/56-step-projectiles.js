@@ -85,13 +85,13 @@ function stepMacProj(p,dt){ // MAC轴炮:沿发射时船头直飞,命中或到�
       if(p.ground){ // 2026-09-27 打空地的炮弹:对方每艘船都按本拍相对线段的最近点判(与下面同式),碰到第一艘就算
         for(const u of ships.concat(rocks)){if(u.dead||u.side===p.shooter.side||u.hp===undefined)continue; // 物体里只有带结构值的(民船 / 诱饵 / 浮标)挨得了打
           const sx=(p.vel[0]-u.vel[0])*dt,sy=(p.vel[1]-u.vel[1])*dt,sz=(p.vel[2]-u.vel[2])*dt,rx=p.pos[0]-u.pos[0]-sx,ry=p.pos[1]-u.pos[1]-sy,rz=p.pos[2]-u.pos[2]-sz,ss=sx*sx+sy*sy+sz*sz,k=ss>0?Math.max(0,Math.min(1,-(rx*sx+ry*sy+rz*sz)/ss)):1;
-          if((rx+k*sx)**2+(ry+k*sy)**2+(rz+k*sz)**2<MAC_HIT_R*MAC_HIT_R){applyDamage(u,p.dmg,p.shooter,'mac');spawnHit(p.pos,'mac');p.done=true;return;}}
+          if((rx+k*sx)**2+(ry+k*sy)**2+(rz+k*sz)**2<MAC_HIT_R*MAC_HIT_R){applyDamage(u,p.dmg,p.shooter,'mac');spawnHit(p.pos,'mac',p.shooter,u);p.done=true;return;}}
         if(p.age>=p.tt)p.done=true;
         return;
       }
       const t=p.target,tv=(t&&t.vel)||[0,0,0],sx=(p.vel[0]-tv[0])*dt,sy=(p.vel[1]-tv[1])*dt,sz=(p.vel[2]-tv[2])*dt; // 2026-09-26 单局地图:MAC_HIT_R 400 < 单拍相对位移约 600km,只看拍末会漏判(实测 90% 带只剩 84%),改按本拍相对线段的最近点判
       const rx=t?p.pos[0]-t.pos[0]-sx:0,ry=t?p.pos[1]-t.pos[1]-sy:0,rz=t?p.pos[2]-t.pos[2]-sz:0,ss=sx*sx+sy*sy+sz*sz,u=ss>0?Math.max(0,Math.min(1,-(rx*sx+ry*sy+rz*sz)/ss)):1;
-      if(t&&!t.dead&&(rx+u*sx)**2+(ry+u*sy)**2+(rz+u*sz)**2<MAC_HIT_R*MAC_HIT_R){applyDamage(p.target,p.dmg,p.shooter,'mac');spawnHit(p.pos,'mac');p.done=true;} // RANGE1 补第 4 实参 kind='mac'(靶场分武器统计)
+      if(t&&!t.dead&&(rx+u*sx)**2+(ry+u*sy)**2+(rz+u*sz)**2<MAC_HIT_R*MAC_HIT_R){applyDamage(p.target,p.dmg,p.shooter,'mac');spawnHit(p.pos,'mac',p.shooter,p.target);p.done=true;} // RANGE1 补第 4 实参 kind='mac'(靶场分武器统计)
       else if(p.age>=p.tt){p.done=true;} // 到预测时间未命中:失的(打偏到点消失,不无限飞)
 }
 function stepBeaconProj(p,dt){ // 侦察信标(v113):飞抵部署,遥控开关机;开机才耗开机时间(300s),关机静默
@@ -127,7 +127,8 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         if(trig){
           p.mine=false;p.target=trig; // 二次点火:变普通追击导弹扑上去
         }else if(p.lastTarget&&!p.lastTarget.dead){ // DS156 脱锁雷复活:重新获得原目标信息(被网络点亮)且还在警戒圈→复活追击(未竟任务继续)
-          if(trkFix(trkOf(p.shooter.side,p.lastTarget))&&V.len(V.sub(p.lastTarget.pos,p.pos))<=(p.trigRadius||12000*CFG.scale)*2){ // 2026-09-26 x1/5(单局地图):缺省原 60000
+          const lq=contactPos(p.lastTarget,p.shooter.side); // 2026-09-28 距离按母舰网络的估计位置量(原来量真值)
+          if(trkFix(trkOf(p.shooter.side,p.lastTarget))&&lq&&V.len(V.sub(lq,p.pos))<=(p.trigRadius||12000*CFG.scale)*2){ // 2026-09-26 x1/5(单局地图):缺省原 60000
             p.mine=false;p.target=p.lastTarget;p.chaffed=false;p.lastKpos=null;p.guided=true; // 复活=重新入引导(目标在自导范围,网已点亮)
           }
         }
@@ -368,7 +369,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         if(survHit>0){
           const finalDmg=Math.max(1,Math.round(survHit*(p.missDmg||12)*sectorDmgMult)); // DS155:×扇面倍增
           applyDamage(p.target,finalDmg,p.shooter,'missile'); // RANGE1 补第 4 实参 kind='missile'
-          spawnHit(p.pos,'missile');
+          spawnHit(p.pos,'missile',p.shooter,p.target);
         }
         if(decoy>0){ // 脱锁的n颗:继续飞(飞过目标),target清空走组网转移复锁,复锁靠转弯耗燃料
           p.count=decoy;

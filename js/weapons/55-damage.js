@@ -18,7 +18,7 @@ function applyDamage(s,dmg,src,kind){ // RANGE1 加第 4 形参 kind('mac'/'miss
     s.vel=[0,0,0];s.flame=0;s.sideFlame=0;s.turnAim=null;s.speedCmd=null;s.turnTarget=null; // 残骸冻结,不再移动
     if(s.lockedTarget)s.lockedTarget=null;
     selected=selected.filter(id=>id!==s.id); // 残骸不可选中
-    spawnHit(s.pos,'missile'); // v127:击毁生成大爆炸特效
+    spawnHit(s.pos,'missile',src,s); // v127:击毁生成大爆炸特效
     const bh=hitFX[hitFX.length-1];if(bh)bh.big=true;
   }
 }
