@@ -8,9 +8,10 @@
    场按 CELL 屏幕像素一格,色阶 + 噪点上色,小图放大进整屏缓存(设备像素),每帧 1:1 贴;山只在变了的地方揭旧贴新;蓝方内核认出且定位后热轮廓叠在山上(山照画;与主视图画出认出的船同一个条件)。
    ============================================================================ */
 const IRV_C={CELL:5,V0:0.02,VMAX:1000,CULL:0.0003,SIG_MIN:0.7,NOISE:0.005,NOISE_MS:200,TAIL_K:4,POS_P:3,MIX:0.875,
-  BG_K:0.4,DETAIL:6.4,CLOUD_M:8,CLOUD_LV:4,CLOUD_SYNC:400,CLOUD_BATCH:1500,CLOUD_COARSE:1200,
-  GAIN:0.05,FILL:66667};
-  // 2026-09-28 GAIN = 一道门的增益(信噪比 1 = 色阶约 0.12);FILL = 石头的填满距离 / √体型(用户定 2 万;同日红外 x 50/15 跟着 x 3.33)
+  BG_K:0.1,DETAIL:6.4,CLOUD_M:8,CLOUD_LV:4,CLOUD_SYNC:400,CLOUD_BATCH:1500,CLOUD_COARSE:1200,
+  GAIN:0.5,FILL:66667,PSF_K:0.5};
+  // 2026-09-28 用户:「整体亮度要和本底区分开,足够远的地方辨认度要够高」「红外团缩小一点」:GAIN 0.05 → 0.5(信噪比 1 = 色阶约 0.30,原 0.12,星云背景最亮到 0.28)、BG_K 0.4 → 0.1(背景最亮约 0.14)、PSF_K 模糊角 x0.5;
+  // GAIN = 一道门的增益,信噪比 < 1(内核还没发现)按三次方淡出 irvV;FILL = 石头的填满距离 / √体型(用户定 2 万;同日红外 x 50/15 跟着 x 3.33)
   // V0 / VMAX = 色阶的对数刻度;CULL = 山截断处;SIG_MIN = 山的最小宽(格);TAIL_K = 尾焰尾巴长宽比;POS_P / MIX = 恒星光晕的律;DETAIL = 轮廓精灵缓存键里的细节档
 const IRV_T0=-0.1;
 const IRV_RAMP=[[IRV_T0,[40,6,6,140]],[0,[70,12,12,150]],[0.25,[150,30,20,170]],[0.5,[220,80,30,190]],[0.75,[255,170,60,210]],[1,[255,245,210,230]]];
@@ -24,7 +25,8 @@ function irvLutK(t){return Math.round((Math.max(IRV_T0,Math.min(1,t))-IRV_T0)/(1
 function irvLutHex(t){const k=irvLutK(t)*4;return '#'+((1<<24)|(IRV_LUT[k]<<16)|(IRV_LUT[k+1]<<8)|IRV_LUT[k+2]).toString(16).slice(1);}
 function irvObs(){const a=[];for(const s of ships)if(s.side==='blue'&&!s.dead)a.push(s);return a;}
 function irvSrc(){const a=[];for(const s of ships)if(s.side!=='blue'&&!s.dead)a.push(s);for(const r of rocks)if(!r.dead&&r.side!=='blue')a.push(r);return a;} // 2026-09-27 自己放的浮标不算热源
-function irvPsf(){return 4*SENS.CLS.DD.size*COV.L_REF/(3*LAD.optRange);} // 固定模糊角(DD 在测距尺度 6 万处横跨 3 格)。2026-09-28 红外 x 50/15 时角度不变:模糊占画面的比例只看角度,50 万框住的样子 = 原 15 万
+function irvPsf(){return IRV_C.PSF_K*4*SENS.CLS.DD.size*COV.L_REF/(3*LAD.optRange);} // 固定模糊角(DD 在测距尺度 6 万处横跨 3 格)。2026-09-28 红外 x 50/15 时角度不变:模糊占画面的比例只看角度,50 万框住的样子 = 原 15 万
+function irvV(snr){return IRV_C.GAIN*(snr>=1?snr:snr*snr*snr);} // 一道门:信噪比 → 色阶值;内核发现门限(信噪比 1)以下三次方淡出,热团在发现距离上才冒出来(增益调高以后不许跑在内核前面)
 function irvHill(t,obs){ // 一座山:信噪比(一道门的输入)与模糊宽(km),取看得最清楚的那艘我方船
   let best=null,bg=NaN,tSh=false;const lit=envHasLight(),nb=ENV.bodies.length>0;
   for(let n=0;n<obs.length;n++){const o=obs[n];
@@ -103,7 +105,7 @@ function irvZf(t){return t.kind==='rock'?hullZoomF():shipZoomF();} // 舰船按 
 function irvBodyR(t){return t.kind==='rock'?hullSize('UNK',2)*0.78*Math.sqrt(t.size/0.7):hullSize(t.cls,t.tier||2)*0.78;} // 图标半径(未乘缩放系数)
 function irvjSplats(t,ph){ // 一个源的贴片(主山、尾焰尾巴),格坐标。一道门:色阶值 = GAIN x 这一份的信噪比
   const C=IRV_C.CELL,p=toScreen(t.pos[0],t.pos[1]),cx=p[0]/C,cy=p[1]/C,list=[],tl=ph.tl,sh=tl?tl.share:0,s0=Math.max(IRV_C.SIG_MIN,ph.sig*cam.zoom/C);
-  const pk=IRV_C.GAIN*ph.snr*(1-sh),pkT=IRV_C.GAIN*ph.snr*sh;
+  const pk=irvV(ph.snr*(1-sh)),pkT=irvV(ph.snr*sh);
   if(pk>=IRV_C.CULL)list.push(irvSplatRect({x:cx,y:cy,pk:pk,a:s0,c:s0,ux:1,uy:0,iso:true})); // 出轮廓后照画(用户:显形了也要有红色团)
   if(pkT>=IRV_C.CULL){const sa=s0*IRV_C.TAIL_K/2;list.push(irvSplatRect({x:cx+tl.ux*sa,y:cy+tl.uy*sa,pk:pkT,a:sa,c:s0,ux:tl.ux,uy:tl.uy,iso:false}));}
   const N=covResN(t,ph.sig); // N 只剩精灵缓存键用
@@ -345,7 +347,7 @@ function drawIrFx(){
     const p=toScreen(q.pos[0],q.pos[1]);if(p[0]<-60||p[0]>W+60||p[1]<-60||p[1]>H+60)continue;
     const L=projSig(q).lum;let snr=0,dm=0;
     for(const r of obs){const o=r.o,d=Math.max(1,Math.hypot(q.pos[0]-o.pos[0],q.pos[1]-o.pos[1])),v=SENS.K_IR*L/(d*d);if(v>snr){snr=v;dm=d;}}
-    const v=IRV_C.GAIN*snr;if(!(v>=IRV_C.CULL))continue;
+    const v=irvV(snr);if(!(v>=IRV_C.CULL))continue;
     const R=2.5*Math.max(IRV_C.SIG_MIN*IRV_C.CELL,dm*th*cam.zoom);
     ctx.drawImage(irvDot(irvLutK(irvT(v))),p[0]-R,p[1]-R,2*R,2*R);
   }
