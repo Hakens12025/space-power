@@ -9,7 +9,8 @@
    ============================================================================ */
 const IRV_C={CELL:5,V0:0.02,VMAX:1000,CULL:0.0003,SIG_MIN:0.7,NOISE:0.005,NOISE_MS:200,TAIL_K:4,POS_P:3,MIX:0.875,
   BG_K:0.1,DETAIL:6.4,CLOUD_M:8,CLOUD_LV:4,CLOUD_SYNC:400,CLOUD_BATCH:1500,CLOUD_COARSE:1200,
-  GAIN:0.5,FILL:66667,PSF_K:0.5};
+  GAIN:0.2,FILL:66667,PSF_K:0.5,MSL_SZK:0.3};
+  // 2026-09-28 同日二调(用户:「亮多了,不要那么亮」「团的大小和物体 size 挂钩,别出现小物体大红外团」):GAIN 0.5 → 0.2(信噪比 1 = 色阶约 0.22);团宽再乘 √(体型 / 驱逐舰体型)(irvSzK),导弹按 MSL_SZK
   // 2026-09-28 用户:「整体亮度要和本底区分开,足够远的地方辨认度要够高」「红外团缩小一点」:GAIN 0.05 → 0.5(信噪比 1 = 色阶约 0.30,原 0.12,星云背景最亮到 0.28)、BG_K 0.4 → 0.1(背景最亮约 0.14)、PSF_K 模糊角 x0.5;
   // GAIN = 一道门的增益,信噪比 < 1(内核还没发现)按三次方淡出 irvV;FILL = 石头的填满距离 / √体型(用户定 2 万;同日红外 x 50/15 跟着 x 3.33)
   // V0 / VMAX = 色阶的对数刻度;CULL = 山截断处;SIG_MIN = 山的最小宽(格);TAIL_K = 尾焰尾巴长宽比;POS_P / MIX = 恒星光晕的律;DETAIL = 轮廓精灵缓存键里的细节档
@@ -26,6 +27,7 @@ function irvLutHex(t){const k=irvLutK(t)*4;return '#'+((1<<24)|(IRV_LUT[k]<<16)|
 function irvObs(){const a=[];for(const s of ships)if(s.side==='blue'&&!s.dead)a.push(s);return a;}
 function irvSrc(){const a=[];for(const s of ships)if(s.side!=='blue'&&!s.dead)a.push(s);for(const r of rocks)if(!r.dead&&r.side!=='blue')a.push(r);return a;} // 2026-09-27 自己放的浮标不算热源
 function irvPsf(){return IRV_C.PSF_K*4*SENS.CLS.DD.size*COV.L_REF/(3*LAD.optRange);} // 固定模糊角(DD 在测距尺度 6 万处横跨 3 格)。2026-09-28 红外 x 50/15 时角度不变:模糊占画面的比例只看角度,50 万框住的样子 = 原 15 万
+function irvSzK(t){return Math.sqrt(t.size/SENS.CLS.DD.size);} // 团宽跟体型走:面积正比体型 ⇒ 线尺寸按开方(驱逐舰 = 1);不读亮度
 function irvV(snr){return IRV_C.GAIN*(snr>=1?snr:snr*snr*snr);} // 一道门:信噪比 → 色阶值;内核发现门限(信噪比 1)以下三次方淡出,热团在发现距离上才冒出来(增益调高以后不许跑在内核前面)
 function irvHill(t,obs){ // 一座山:信噪比(一道门的输入)与模糊宽(km),取看得最清楚的那艘我方船
   let best=null,bg=NaN,tSh=false;const lit=envHasLight(),nb=ENV.bodies.length>0;
@@ -38,7 +40,7 @@ function irvHill(t,obs){ // 一座山:信噪比(一道门的输入)与模糊宽(
     if(!best||snr>best.snr)best={snr:snr,d:d,o:o,k:n};
   }
   if(!best)return null;
-  return {snr:best.snr,sig:best.d*irvPsf(),o:best.o,k:best.k}; // 宽不读亮度(原来宽 = 定位误差,越暗越宽)
+  return {snr:best.snr,sig:best.d*irvPsf()*irvSzK(t),o:best.o,k:best.k}; // 宽不读亮度(原来宽 = 定位误差,越暗越宽)
 }
 const IRV_P3=[0,0,0];
 function irvTail(t,h){ // 尾焰占这座山的份额与朝向
@@ -348,7 +350,7 @@ function drawIrFx(){
     const L=projSig(q).lum;let snr=0,dm=0;
     for(const r of obs){const o=r.o,d=Math.max(1,Math.hypot(q.pos[0]-o.pos[0],q.pos[1]-o.pos[1])),v=SENS.K_IR*L/(d*d);if(v>snr){snr=v;dm=d;}}
     const v=irvV(snr);if(!(v>=IRV_C.CULL))continue;
-    const R=2.5*Math.max(IRV_C.SIG_MIN*IRV_C.CELL,dm*th*cam.zoom);
+    const R=2.5*Math.max(IRV_C.SIG_MIN*IRV_C.CELL,dm*th*IRV_C.MSL_SZK*cam.zoom); // 导弹小,团宽按 MSL_SZK
     ctx.drawImage(irvDot(irvLutK(irvT(v))),p[0]-R,p[1]-R,2*R,2*R);
   }
   ctx.restore();
