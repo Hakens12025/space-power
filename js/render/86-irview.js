@@ -9,7 +9,9 @@
    ============================================================================ */
 const IRV_C={CELL:5,V0:0.02,VMAX:1000,CULL:0.0003,SIG_MIN:0.7,NOISE:0.005,NOISE_MS:200,TAIL_K:4,POS_P:3,MIX:0.875,
   BG_K:0.1,DETAIL:6.4,CLOUD_M:8,CLOUD_LV:4,CLOUD_SYNC:400,CLOUD_BATCH:1500,CLOUD_COARSE:1200,
-  GAIN:0.2,FILL:66667,PSF_K:0.5,MSL_SZK:0.3};
+  GAIN:0.2,FILL:66667,PSF_K:0.5,MSL_SZK:0.3,GLYPH:1.3,SIG_MAX_PX:30,MSL_PX:3,FLK:0.2,FLK_HZ:1.1,CORE:0.4,CORE_W:0.45};
+  // 2026-09-28 甲(用户选:「团的大小 = 物体、不确定 = 质感」;远处点火的船原来能有星球那么大):团宽 = GLYPH x 舰标半径(同舰标缩放,石头含 √体型),封顶 SIG_MAX_PX,远近一样大;
+  //   定出位置的加一个紧的亮核(CORE 份额、宽 CORE_W),没定位的亮度围着一道门的值起伏 ±FLK(FLK_HZ 次 / 秒);导弹是 MSL_PX 的小点
   // 2026-09-28 同日二调(用户:「亮多了,不要那么亮」「团的大小和物体 size 挂钩,别出现小物体大红外团」):GAIN 0.5 → 0.2(信噪比 1 = 色阶约 0.22);团宽再乘 √(体型 / 驱逐舰体型)(irvSzK),导弹按 MSL_SZK
   // 2026-09-28 用户:「整体亮度要和本底区分开,足够远的地方辨认度要够高」「红外团缩小一点」:GAIN 0.05 → 0.5(信噪比 1 = 色阶约 0.30,原 0.12,星云背景最亮到 0.28)、BG_K 0.4 → 0.1(背景最亮约 0.14)、PSF_K 模糊角 x0.5;
   // GAIN = 一道门的增益,信噪比 < 1(内核还没发现)按三次方淡出 irvV;FILL = 石头的填满距离 / √体型(用户定 2 万;同日红外 x 50/15 跟着 x 3.33)
@@ -40,7 +42,7 @@ function irvHill(t,obs){ // 一座山:信噪比(一道门的输入)与模糊宽(
     if(!best||snr>best.snr)best={snr:snr,d:d,o:o,k:n};
   }
   if(!best)return null;
-  return {snr:best.snr,sig:best.d*irvPsf()*irvSzK(t),o:best.o,k:best.k}; // 宽不读亮度(原来宽 = 定位误差,越暗越宽)
+  return {snr:best.snr,o:best.o,k:best.k}; // 宽不在这里:按舰标的屏幕尺寸(irvjSplats),不读距离也不读亮度
 }
 const IRV_P3=[0,0,0];
 function irvTail(t,h){ // 尾焰占这座山的份额与朝向
@@ -105,13 +107,17 @@ function irvjCalib(src,obs){ // 进红外画面时标定一次:每个源算一�
 }
 function irvZf(t){return t.kind==='rock'?hullZoomF():shipZoomF();} // 舰船按 shipZoomF(再缩 SHIP_K),石头按 hullZoomF
 function irvBodyR(t){return t.kind==='rock'?hullSize('UNK',2)*0.78*Math.sqrt(t.size/0.7):hullSize(t.cls,t.tier||2)*0.78;} // 图标半径(未乘缩放系数)
-function irvjSplats(t,ph){ // 一个源的贴片(主山、尾焰尾巴),格坐标。一道门:色阶值 = GAIN x 这一份的信噪比
-  const C=IRV_C.CELL,p=toScreen(t.pos[0],t.pos[1]),cx=p[0]/C,cy=p[1]/C,list=[],tl=ph.tl,sh=tl?tl.share:0,s0=Math.max(IRV_C.SIG_MIN,ph.sig*cam.zoom/C);
-  const pk=irvV(ph.snr*(1-sh)),pkT=irvV(ph.snr*sh);
-  if(pk>=IRV_C.CULL)list.push(irvSplatRect({x:cx,y:cy,pk:pk,a:s0,c:s0,ux:1,uy:0,iso:true})); // 出轮廓后照画(用户:显形了也要有红色团)
-  if(pkT>=IRV_C.CULL){const sa=s0*IRV_C.TAIL_K/2;list.push(irvSplatRect({x:cx+tl.ux*sa,y:cy+tl.uy*sa,pk:pkT,a:sa,c:s0,ux:tl.ux,uy:tl.uy,iso:false}));}
-  const N=covResN(t,ph.sig); // N 只剩精灵缓存键用
-  return {list:list,sil:irvSilOn(t)&&pk>=IRV_C.CULL?{N:N,a:1,v:pk,vt:pkT}:null};
+function irvFlk(t){let h=0;const id=String(t.id);for(let i=0;i<id.length;i++)h=(h*31+id.charCodeAt(i))|0;return 1+IRV_C.FLK*Math.sin(nowMs()/1000*IRV_C.FLK_HZ*2*Math.PI+(h&1023)/1023*2*Math.PI);} // 没定位的"呼吸":每个源自己的相位,墙钟
+function irvjSplats(t,ph,fxd){ // 一个源的贴片(主山、尾焰尾巴),格坐标。一道门:色阶值 = GAIN x 这一份的信噪比;fxd = 我方定出了它的位置
+  const C=IRV_C.CELL,p=toScreen(t.pos[0],t.pos[1]),cx=p[0]/C,cy=p[1]/C,list=[],tl=ph.tl,sh=tl?tl.share:0;
+  const s0=Math.max(IRV_C.SIG_MIN,Math.min(IRV_C.SIG_MAX_PX,IRV_C.GLYPH*irvBodyR(t)*irvZf(t))/C); // 团宽 = 舰标尺寸(远近一样大)
+  const f=fxd?1:irvFlk(t),pk=irvV(ph.snr*(1-sh))*f,pkT=irvV(ph.snr*sh)*f;
+  if(pk>=IRV_C.CULL){ // 出轮廓后照画(用户:显形了也要有红色团)
+    if(fxd){const sc=Math.max(IRV_C.SIG_MIN*0.5,s0*IRV_C.CORE_W); // 定出位置:外团 + 紧的亮核,峰值合起来仍是一道门的值
+      list.push(irvSplatRect({x:cx,y:cy,pk:pk*(1-IRV_C.CORE),a:s0,c:s0,ux:1,uy:0,iso:true}),irvSplatRect({x:cx,y:cy,pk:pk*IRV_C.CORE,a:sc,c:sc,ux:1,uy:0,iso:true}));}
+    else list.push(irvSplatRect({x:cx,y:cy,pk:pk,a:s0,c:s0,ux:1,uy:0,iso:true}));}
+  if(pkT>=IRV_C.CULL){const sa=s0*IRV_C.TAIL_K/2;list.push(irvSplatRect({x:cx+tl.ux*sa,y:cy+tl.uy*sa,pk:pkT,a:sa,c:s0,ux:tl.ux,uy:tl.uy,iso:false}));} // 尾焰跟着团走
+  return {list:list,sil:irvSilOn(t)&&pk>=IRV_C.CULL?{N:0,a:1,v:pk,vt:pkT}:null};
 }
 function irvjProbe(o,n){ // 同一位置、同一朝向的山:山顶、1σ、v = 6·V0、v = 2·V0 几个半径上色标下标都没变 = 不重贴
   for(let ax=0;ax<(o.iso?1:2);ax++){
@@ -147,7 +153,8 @@ function irvjUpdate(full,gch){ // 返回脏矩形 [i0,i1,j0,j1] 列表;null = �
     r.seen=fr;
     const pm=nw||r.px!==t.pos[0]||r.py!==t.pos[1],sc=nw||irvjStCh(r,t);r.mv=pm&&!nw;
     if(pm){r.px=t.pos[0];r.py=t.pos[1];}if(sc)irvjStSet(r,t);
-    const so=irvSilOn(t);if(so!==r.so){r.so=so;r.need=true;} // 内核认出 / 定位变了:轮廓跟着重画(静止的石头不会因为挪动而重贴)
+    const so=irvSilOn(t),fx=contactFix(t,'blue');if(so!==r.so||fx!==r.fx){r.so=so;r.fx=fx;r.need=true;} // 内核认出 / 定位变了:轮廓与亮核跟着重画(静止的石头不会因为挪动而重贴)
+    if(!fx&&r.ph)r.need=true; // 没定位的每帧重算(呼吸)
     const chk=(gch||pm||sc)?all:cm;
     if(!chk&&!om)continue;
     const v0=r.vis,v=chk?irvjVis(v0,t,obs,chk):v0;r.vis=v;
@@ -163,7 +170,7 @@ function irvjUpdate(full,gch){ // 返回脏矩形 [i0,i1,j0,j1] 列表;null = �
   for(const r of R.values()){
     if(!(full||r.mv||r.need))continue;
     r.need=false;
-    const nx=r.ph?irvjSplats(r.t,r.ph):IRVJ_NONE;
+    const nx=r.ph?irvjSplats(r.t,r.ph,!!r.fx):IRVJ_NONE;
     if(full||r.mv||!irvjKeep(r.sp,nx.list)){work.push(r,nx.list);
       for(const s of r.sp){chg+=s.ar;area-=s.ar;if(s.ar&&!full)dirty.push([s.i0,s.i1,s.j0,s.j1]);}
       for(const s of nx.list){chg+=s.ar;area+=s.ar;if(s.ar&&!full)dirty.push([s.i0,s.i1,s.j0,s.j1]);}}
@@ -344,13 +351,13 @@ function irvDot(k){ // 按色阶下标缓存的高斯亮点贴图(渐变只在�
   g.fillStyle=r;g.fillRect(0,0,32,32);IRV_DOT.set(k,c);return c;
 }
 function drawIrFx(){
-  const obs=IRVJ.obs;if(!obs.length)return;const th=irvPsf();ctx.save();ctx.globalAlpha=1;
+  const obs=IRVJ.obs;if(!obs.length)return;ctx.save();ctx.globalAlpha=1;
   for(const q of projectiles){if(q.type!=='missile'||q.done||!(adminMode||q.shooter.side==='blue'||trkSees('blue',q)))continue;
     const p=toScreen(q.pos[0],q.pos[1]);if(p[0]<-60||p[0]>W+60||p[1]<-60||p[1]>H+60)continue;
     const L=projSig(q).lum;let snr=0,dm=0;
     for(const r of obs){const o=r.o,d=Math.max(1,Math.hypot(q.pos[0]-o.pos[0],q.pos[1]-o.pos[1])),v=SENS.K_IR*L/(d*d);if(v>snr){snr=v;dm=d;}}
     const v=irvV(snr);if(!(v>=IRV_C.CULL))continue;
-    const R=2.5*Math.max(IRV_C.SIG_MIN*IRV_C.CELL,dm*th*IRV_C.MSL_SZK*cam.zoom); // 导弹小,团宽按 MSL_SZK
+    const R=2.5*IRV_C.MSL_PX; // 导弹是固定大小的小点(团宽不读距离)
     ctx.drawImage(irvDot(irvLutK(irvT(v))),p[0]-R,p[1]-R,2*R,2*R);
   }
   ctx.restore();
