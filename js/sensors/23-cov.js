@@ -64,7 +64,7 @@ const LAD = {
      2026-09-26 光学冷改成 48 万(用户删掉"冷船藏得住是设定"的前提:舰船熄火也比同体积石头热)。只动发现,定位与认出由别的锚反解、不动;
      雷达火控的标定只在 radarLook(14.3 万)处用到光学,也不动。代价:原版里冷船在进导弹射程(37.5 万)之前就被看见,熄火伏击变弱。
      H1 那组数先在 demos/sensors/态势感知V3.html 上过了尺度预算(成立 23 / 超支 0 / 待定 1),再原样落到这里;光学冷的翻倍没有回写演示页。 */
-  optColdMin: 96000 * CFG.scale / 60000, radarMin: 320000 * CFG.scale / 60000, heardMin: 640000 * CFG.scale / 60000, // 2026-09-26 x1/5(单局地图):原 480000 / 1600000 / 3200000
+  optColdMin: 320000 * CFG.scale / 60000, radarMin: 320000 * CFG.scale / 60000, heardMin: 640000 * CFG.scale / 60000, // 2026-09-26 x1/5(单局地图):原 480000 / 1600000 / 3200000。2026-09-28 光学冷 9.6 万 → 32 万(用户:红外 x 50/15,「15 万的样子放到 50 万」;发现与认出拉远,单舰定位不动)
 
   /* ---- 定位域:公里 ---- */
   optCross: 60000 * CFG.scale,    // 单条光学方位的横向误差 = 导弹门 的距离(决定交会多远有用)。2026-09-26 x1/5(单局地图):原 300000
@@ -79,7 +79,8 @@ const LAD = {
        光学认出 optIdent 9.4 万  不动:贴到主炮那一带才看得清轮廓,是最后的确认 */
   lisIdent: 200000 * CFG.scale,   // 2026-09-28 用户:「20万km的静听还是可以的」,21f26f6 压到 12 万后退回。   // 听出型号(ESM / SEI:辐射指纹,不靠角分辨)。2026-09-26 x1/5(单局地图):原 1000000
   radarIdent: 100000 * CFG.scale, // 照射认出(NCTR 需要比探测更高的信噪比)。2026-09-26 x1/5(单局地图):原 500000
-  optIdent: 60000 * CFG.scale,   // 2026-09-27 用户:「将红外的分辨率距离拉的更远」:1.88 万 → 6 万(熄火 DD;点火的船更亮、看得更清,自动更远)。原注释:    // 光学认出轮廓。2026-09-26 x1/5(单局地图):原 94000
+  optIdent: 200000 * CFG.scale,  // 2026-09-28 用户:红外 x 50/15:6 万 → 20 万(熄火 DD;只管认出门 L_OID)。2026-09-27 用户:「将红外的分辨率距离拉的更远」:1.88 万 → 6 万(熄火 DD;点火的船更亮、看得更清,自动更远)。
+  optRange: 60000 * CFG.scale,   // 2026-09-28 角尺寸测距的尺度(L_REF,单舰红外定位 3.5 万由它定):与认出拆开,用户定「定位不动」,原来两件事共用 optIdent原注释:    // 光学认出轮廓。2026-09-26 x1/5(单局地图):原 94000
   actTurn: 11250 * CFG.scale,     // 照射椭圆的转向点 = RRES / TH0.act。刻意不取整:RRES 决定断照后的滑行窗口。2026-09-26 x1/5(单局地图):原 56250
 };
 
@@ -103,7 +104,7 @@ const COV = {
   TH0: { opt: 0.0324, lis: 0.121, act: 0.016 },
 
   RRES: 0,            // ← ladApply 写入(= TH0.act * LAD.actTurn;现值 180,2026-09-26 x1/5 前是 900)。门限处的测距误差 km
-  L_REF: 0, L_ACT: 0, L_LIS: 0, // L_LIS(ID3)= 静听【听出型号】门。 ← ladApply 写入。L_REF:角尺寸测距的尺度常数,同时是光学【认出】门;L_ACT:照射【认出】门
+  L_REF: 0, L_OID: 0, L_ACT: 0, L_LIS: 0, // L_LIS(ID3)= 静听【听出型号】门。 ← ladApply 写入。L_REF:角尺寸测距的尺度常数(LAD.optRange);L_OID:光学【认出】门(LAD.optIdent,2026-09-28 与 L_REF 拆开);L_ACT:照射【认出】门
   HUGE: 1e7,          // km:表示【这条通道给不出距离】的一个大到等于没有的数
 
   /* 没有量测时椭圆怎么长。三个数,分两档:
@@ -210,7 +211,7 @@ function covShape(ch, gi, d, t, dd, lo) {
     return [sPar, sq, true, sq <= t.size * COV.L_ACT];
   }
   if (ch === 'opt')   // 角尺寸测距:σ_r = d^2 * θ / L。θ 也随距离变,所以实际按 d^3 涨,只在很近处才咬得住
-    return [dd * dd * th / (t.size * COV.L_REF), sPerp, false, sPerp <= t.size * COV.L_REF];
+    return [dd * dd * th / (t.size * COV.L_REF), sPerp, false, sPerp <= t.size * COV.L_OID]; // 测距用 L_REF,认出用 L_OID
   /* ID2(2026-09-22 用户实报:"为什么直接从热区变成直接的舰艇信号了,我的小热源、中热源、大热源的设定呢?")
      被动射频:一条视线,没有距离,而且【不给身份】。原来这里无条件给身份(靠波形指纹,条令里叫 SEI / EOB,"开雷达 = 把自己的身份一起递出去")——
      那是我定的规则,不是用户的。后果:任何开着雷达的船,从被听见的第一拍起就已经"认出"了(形态 H 下那是 320~640 万公里外);
@@ -318,7 +319,7 @@ function covHeld(c) { return !!(c.seen && (c.fix || c.n > 0)); }
    静听不走这条(它靠指纹,不靠角分辨),所以这里只回答光学与照射。 */
 function identDist(ch, d, t, lo) {
   const R = covRangeOf(ch, d, t, lo); if (!(R > 0)) return 0;
-  const L = sReq(t, 'size', 'ship') * (ch === 'act' ? COV.L_ACT : (ch === 'lis' ? COV.L_LIS : COV.L_REF)), T = COV.TH0[ch]; // ID3:静听那一路用 L_LIS
+  const L = sReq(t, 'size', 'ship') * (ch === 'act' ? COV.L_ACT : (ch === 'lis' ? COV.L_LIS : COV.L_OID)), T = COV.TH0[ch]; // ID3:静听那一路用 L_LIS
   return ch === 'act' ? Math.pow(L * R * R / T, 1 / 3) : Math.sqrt(L * R / T);
 }
 function covResN(t, sig) { return 4 * t.size * COV.L_REF / sig; } // ENV2 红外页 irmResN 搬来:模糊宽度 sig 下目标横跨几个分辨单元(Johnson 准则;光学认出距离上恰为 4)
@@ -364,7 +365,8 @@ function ladApply() {
   /* 定位域:σ⊥ = d^2*TH0/R(被动)、d^3*TH0/R^2(照射)。令它等于门,解出尺度 R */
   const Ro = LAD.optCross * LAD.optCross * COV.TH0.opt / mslG;
   const Rl = LAD.lisCross * LAD.lisCross * COV.TH0.lis / mslG;
-  COV.L_REF = LAD.optIdent * LAD.optIdent * COV.TH0.opt / (Ro * R.size);
+  COV.L_REF = LAD.optRange * LAD.optRange * COV.TH0.opt / (Ro * R.size);
+  COV.L_OID = LAD.optIdent * LAD.optIdent * COV.TH0.opt / (Ro * R.size); // 2026-09-28 与 L_REF 同一条式子,锚换成认出距离
   COV.L_LIS = LAD.lisIdent * LAD.lisIdent * COV.TH0.lis / (Rl * R.size); // ID3:与 L_REF 同一条被动式子,换成静听那一路
   COV.RRES = COV.TH0.act * LAD.actTurn;
   /* 照射尺度:要让【稳态融合】之后的火控距离正好等于 LAD.radarLook。对数空间二分 */
@@ -438,9 +440,9 @@ function ladCheck() {
   /* 设计选择:冷目标的光学发现允许近于导弹射程(熄火潜行 = 伏击),
      所以这一条与下面"交会在发现距离之内"都对【满推】目标判。 */
   need(LAD.gun < LAD.msl, '主炮 < 导弹'); // 2026-09-27 导弹 20 万起不再小于光学发现(满推):射程超过自己的传感器,远射要靠静听 / 交叉定位 / 前出舰的数据(用户选 Sea Power 那种结构)
-  need(ra >= 2 * oc * (1 - e), '雷达发现 >= 2x 光学发现(冷目标),否则开雷达纯亏');
+  // 2026-09-28 删掉「雷达发现 >= 2x 光学发现(冷目标)」:用户把红外发现拉到 32 万(= 雷达发现),雷达的价值改在定位 / 测距
   need(he >= 1.5 * ra * (1 - e), '开雷达被听见 >= 1.5x 自己照到的距离(手电效应)');
-  need(LAD.optIdent < LAD.radarIdent && LAD.radarIdent < LAD.lisIdent, 'ID3 三级认出从近到远:光学看轮廓 < 照射回波(NCTR)< 听辐射指纹(ESM)');
+  need(LAD.radarIdent < LAD.lisIdent, 'ID3 照射回波(NCTR)< 听辐射指纹(ESM)'); // 2026-09-28 光学认出拉到 20 万(用户),不再排在最近
   // 2026-09-27 删掉「照射认出 > 导弹射程」:用户接受远射打的是还没认出的接触(自动开火仍只打疑似以上,trkPid)
   // 2026-09-27 删掉「光学认出 < 主炮带」:红外认出拉到 6 万(用户),它不再是贴脸那一步
   need(LAD.radarLook <= LAD.gun, '火控解(椭圆收进命中判定半径)在主炮那一带之内');

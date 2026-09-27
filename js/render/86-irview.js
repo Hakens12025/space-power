@@ -9,8 +9,8 @@
    ============================================================================ */
 const IRV_C={CELL:5,V0:0.02,VMAX:1000,CULL:0.0003,SIG_MIN:0.7,NOISE:0.005,NOISE_MS:200,TAIL_K:4,POS_P:3,MIX:0.875,
   BG_K:0.4,DETAIL:6.4,CLOUD_M:8,CLOUD_LV:4,CLOUD_SYNC:400,CLOUD_BATCH:1500,CLOUD_COARSE:1200,
-  GAIN:0.05,FILL:20000};
-  // 2026-09-28 GAIN = 一道门的增益(信噪比 1 = 色阶约 0.12);FILL = 石头的填满距离 / √体型(用户定 2 万)
+  GAIN:0.05,FILL:66667};
+  // 2026-09-28 GAIN = 一道门的增益(信噪比 1 = 色阶约 0.12);FILL = 石头的填满距离 / √体型(用户定 2 万;同日红外 x 50/15 跟着 x 3.33)
   // V0 / VMAX = 色阶的对数刻度;CULL = 山截断处;SIG_MIN = 山的最小宽(格);TAIL_K = 尾焰尾巴长宽比;POS_P / MIX = 恒星光晕的律;DETAIL = 轮廓精灵缓存键里的细节档
 const IRV_T0=-0.1;
 const IRV_RAMP=[[IRV_T0,[40,6,6,140]],[0,[70,12,12,150]],[0.25,[150,30,20,170]],[0.5,[220,80,30,190]],[0.75,[255,170,60,210]],[1,[255,245,210,230]]];
@@ -24,7 +24,7 @@ function irvLutK(t){return Math.round((Math.max(IRV_T0,Math.min(1,t))-IRV_T0)/(1
 function irvLutHex(t){const k=irvLutK(t)*4;return '#'+((1<<24)|(IRV_LUT[k]<<16)|(IRV_LUT[k+1]<<8)|IRV_LUT[k+2]).toString(16).slice(1);}
 function irvObs(){const a=[];for(const s of ships)if(s.side==='blue'&&!s.dead)a.push(s);return a;}
 function irvSrc(){const a=[];for(const s of ships)if(s.side!=='blue'&&!s.dead)a.push(s);for(const r of rocks)if(!r.dead&&r.side!=='blue')a.push(r);return a;} // 2026-09-27 自己放的浮标不算热源
-function irvPsf(){return 4*SENS.CLS.DD.size*COV.L_REF/(3*LAD.optIdent);} // 固定模糊角:DD 恰在光学认出距离出轮廓(Johnson N = 3)
+function irvPsf(){return 4*SENS.CLS.DD.size*COV.L_REF/(3*LAD.optRange);} // 固定模糊角(DD 在测距尺度 6 万处横跨 3 格)。2026-09-28 红外 x 50/15 时角度不变:模糊占画面的比例只看角度,50 万框住的样子 = 原 15 万
 function irvHill(t,obs){ // 一座山:信噪比(一道门的输入)与模糊宽(km),取看得最清楚的那艘我方船
   let best=null,bg=NaN,tSh=false;const lit=envHasLight(),nb=ENV.bodies.length>0;
   for(let n=0;n<obs.length;n++){const o=obs[n];
