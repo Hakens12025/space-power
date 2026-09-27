@@ -31,7 +31,7 @@ function drawRockAt(s,pos,st,known){
   const r=Math.round(shipIconR(s));
   if(!known){
     /* 与 drawShip 里那艘静止、熄火、静默、没认出的红舰逐笔同序:舰体(或拉远后的菱形记号)→ 名字 → 等级 */
-    const bodyColor='#ff6b6b';
+    const bodyColor='#a0aab9'; // 2026-09-27 用户:未知热源用灰色(--side-neutral),与没认出的船同色
     ctx.save();
     ctx.strokeStyle=bodyColor;ctx.fillStyle=bodyColor;
     ctx.save();

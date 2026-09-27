@@ -201,7 +201,7 @@ function drawShip(s){
   const zc=s.pos[2];
 
   // 舰体颜色统一(高度差用 ▲▼ 标记表达,不靠变色)
-  const bodyColor=s.side==='red'?'#ff6b6b':'#5aa7ff';
+  const bodyColor=s.side==='red'?(shipIdentHull(s)==='UNK'?'#a0aab9':'#ff6b6b'):'#5aa7ff'; // 2026-09-27 用户:未知热源用灰色(--side-neutral),认出是敌舰才红
 
   // 速度矢量箭头(2D投影)
   const vn=V.len(s.vel);
