@@ -32,6 +32,5 @@
 - ENV2 的 `lo` 在 visRange / covTheta / identDist 那条链上是可选参数,不传 = 标称值。
 - 石头:`kind:'rock'`、`side:'neutral'`,只有光学贴近才认得出;确认是石头的航迹自动化当场解锁,火控门拒绝。
 - 同一张登记表 `rocks[]` 里还有民船 `civ` / 诱饵 `lure` / 前出浮标 `buoy`(world/14,2026-09-27):自己一方放的不当目标;诱饵带 `spoof`,「疑似」档报它冒充的驱逐舰;浮标 `type:'beacon'` 进探测站表,`on` 才照射(`senseKACT`),`emit`/`recv` 取信标系数(`covRangeOf` 按探测站自己的字段算精度)。
-- 瞬态(M3):没定位的接触被红外看到点火 / 刹车 / 开火、或被听到雷达 / 脉冲,每站记一条带测角误差的方位(`transRec` / `transEach`,`TRANS_FADE` 秒过期);render/83 画。
 - 导弹导引头看热用 weapons/54 的 `missLum`(N1 之前的引擎档),不跟传感器的 `optLum`(用户 2026-09-27 选)。
 - 已知的真值口子(没修):目标速度、高度 Z、`sigClassLabel` 读真 `size`、击沉按真值 `.dead` 过滤。
