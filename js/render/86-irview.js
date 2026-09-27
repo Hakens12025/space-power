@@ -338,43 +338,51 @@ function irvUpdate(){
     irvFc(Math.max(0,Math.floor((r[0]-1)*C*dpr)-1),Math.max(0,Math.floor((r[2]-1)*C*dpr)-1),Math.min(V.fc.width,Math.ceil((r[1]+1)*C*dpr)+1),Math.min(V.fc.height,Math.ceil((r[3]+1)*C*dpr)+1),dpr);
   }
 }
-function drawIrView(){irvUpdate();ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(IRVC.fc,0,0);ctx.restore();irvDrawLobes();} // 每帧入口(84-scene,MAPV.mode === 'ir')
-function irvOff(){IRVC.live=false;}
-/* 2026-09-27 红外发现边界(用户选 D):给选中的我方舰(最多 3 艘)画两条随方位变的线 ——
-   实线 = 我能看见一艘熄火驱逐舰的最远距离;虚线 = 那个方位上的敌舰能看见我(按我此刻的引擎档、发射档)的最远距离。
-   物理全走感知内核(senseOptLo / senseOptBlocked / visRangeOf):距离与有效亮度互相依赖(消光、背景看位置),不动点迭代三步;
-   每个方位要算好几次消光积分,所以按帧预算分批算(LOBE.BUD ms),算完一整圈才换上去,每艘至多每 MS 毫秒重算一轮。 */
-const IRV_LOBE={m:new Map(),N:72,MS:1000,BUD:1.5,ref:null,obs:{pos:[0,0,0],flame:0,sideFlame:0,facing:[1,0,0]}};
-function irvLobeD(o,t,mv,ux,uy,bx,by){ // 沿 (ux,uy) 挪动 mv(o 或 t 之一),返回 o 能看见 t 的最远距离
-  let d=visRangeOf(t);
-  for(let k=0;k<3;k++){mv.pos[0]=bx+ux*d;mv.pos[1]=by+uy*d;mv.pos[2]=0;d=visRangeOf(t,Math.max(0,senseOptLo(o,t)));}
-  for(const f of [1,0.75,0.5,0.25]){mv.pos[0]=bx+ux*d*f;mv.pos[1]=by+uy*d*f;if(!senseOptBlocked(o,t))return d*f;} // 禁区 / 天体遮挡 / 自己尾焰致盲:往回找一个没被挡的距离
-  return 0;
+function drawIrView(){irvUpdate();ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(IRVC.fc,0,0);ctx.restore();drawIrFx();} // 每帧入口(84-scene,MAPV.mode === 'ir')
+function irvOff(){IRVC.live=false;IRFX.src.clear();IRFX.puffs.length=0;IRFX.fl.length=0;} // 离开红外画面:下次进来整张重建
+/* 2026-09-27 红外信号效果(用户:"检测到了什么刹车,那就在红外屏幕上能够看出来区别";挑省性能的做法,不做余辉)。
+   叠在缓存好的热图上:预渲染三张贴图(光晕 / 尾焰 / 闪光圈),每帧按 IRVJ 记录给【我方红外真看得见】的热源各贴一两张,叠加发光;热图本身不重算。
+   主推 = 橙色尾焰拖在身后、随湍流微闪;刹车 = 更白更亮、尾焰朝前喷;点火那一下亮一闪;喷出的热气一团团散开冷掉(封顶 IRFX.PMAX);
+   开火 = 白热闪光外扩一圈;正在喷的导弹 = 小亮点。时长按墙钟,高倍速下也看得见。 */
+const IRFX={spr:null,src:new Map(),puffs:[],fl:[],PMAX:160,PUFF_DT:1,PUFF_LIFE:12,t:0,sim:0};
+function irfxSprites(){
+  if(IRFX.spr)return IRFX.spr;const mk=(w,h,f)=>{const c=document.createElement('canvas');c.width=w;c.height=h;f(c.getContext('2d'),w,h);return c;};
+  const glow=mk(64,64,(g,w)=>{const r=g.createRadialGradient(w/2,w/2,0,w/2,w/2,w/2);r.addColorStop(0,'rgba(255,248,225,1)');r.addColorStop(0.25,'rgba(255,200,110,0.7)');r.addColorStop(0.6,'rgba(230,110,40,0.22)');r.addColorStop(1,'rgba(200,60,20,0)');g.fillStyle=r;g.fillRect(0,0,w,w);});
+  const plume=mk(128,32,(g,w,h)=>{const a=g.createLinearGradient(0,0,w,0);a.addColorStop(0,'rgba(255,235,190,0.95)');a.addColorStop(0.25,'rgba(255,170,80,0.6)');a.addColorStop(1,'rgba(220,80,30,0)');g.fillStyle=a;g.fillRect(0,0,w,h);
+    g.globalCompositeOperation='destination-in';const v=g.createLinearGradient(0,0,0,h);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(0.5,'rgba(0,0,0,1)');v.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=v;g.fillRect(0,0,w,h);});
+  const ring=mk(128,128,(g,w)=>{const r=g.createRadialGradient(w/2,w/2,w*0.34,w/2,w/2,w/2);r.addColorStop(0,'rgba(255,245,215,0)');r.addColorStop(0.55,'rgba(255,245,215,0.9)');r.addColorStop(1,'rgba(255,200,120,0)');g.fillStyle=r;g.fillRect(0,0,w,w);});
+  return IRFX.spr={glow:glow,plume:plume,ring:ring};
 }
-function irvLobeWork(s,t0){ // 给 s 的下一轮边界算几个方位;返回是否还有预算
-  const L=IRV_LOBE,N=L.N;let e=L.m.get(s);
-  if(!e){e={a:null,b:null,na:new Float64Array(N),nb:new Float64Array(N),i:0,t:-1e9};L.m.set(s,e);}
-  if(e.i>=N){if(nowMs()-e.t<L.MS)return true;e.i=0;}
-  if(!L.ref)L.ref=ladShip('DD',{pos:[0,0,0]});
-  const t=L.ref,o=L.obs,bx=s.pos[0],by=s.pos[1];
-  while(e.i<N){const th=e.i/N*6.2832,ux=Math.cos(th),uy=Math.sin(th);
-    e.na[e.i]=irvLobeD(s,t,t,ux,uy,bx,by);e.nb[e.i]=irvLobeD(o,s,o,ux,uy,bx,by);e.i++;
-    if(nowMs()-t0>L.BUD)break;}
-  if(e.i>=N){e.a=e.na.slice();e.b=e.nb.slice();e.t=nowMs();}
-  return nowMs()-t0<=L.BUD;
+function irfxSnr(ph){const k=irvRef().sig/ph.sig;return ph.peak/(k*k);} // 这一对的信噪比:1 = 恰在发现门限上
+function drawIrFx(){
+  const S=irfxSprites(),now=nowMs(),dtw=Math.min(0.1,Math.max(0,(now-(IRFX.t||now))/1000)),dts=Math.max(0,simTime-IRFX.sim);IRFX.t=now;IRFX.sim=simTime;
+  const seen=new Set();ctx.save();ctx.globalCompositeOperation='lighter';
+  for(const r of IRVJ.rec.values()){
+    const t=r.t,ph=r.ph;if(!ph||t.dead)continue;const snr=irfxSnr(ph);if(!(snr>=0.5))continue; // 我方红外真看得见才画
+    seen.add(t);let st=IRFX.src.get(t);if(!st){st={fl:t.flame,fh:t.fireHot>0,ig:-1e9,pt:simTime};IRFX.src.set(t,st);}
+    const p=toScreen(t.pos[0],t.pos[1]),sz=Math.max(5,Math.min(90,ph.sig*cam.zoom*2.2)),a0=Math.max(0.25,Math.min(0.95,0.45+0.18*Math.log10(snr)));
+    if(t.flame&&!st.fl)st.ig=now;st.fl=t.flame;
+    const fh=t.fireHot>0;if(fh&&!st.fh)IRFX.fl.push({t:t,t0:now,sz:sz,a:a0});st.fh=fh;
+    if(t.flame){ // 尾焰:主推拖在后面,刹车朝前喷(喷口方向 = sensePlume)
+      const pl=sensePlume(t,IRV_P3);if(pl){const brake=t.flame<0,sh=0.82+0.12*Math.sin(now*0.023+t.pos[0]*1e-4)+0.06*Math.sin(now*0.061),L=sz*(brake?2.6:2.1),Wd=sz*(brake?0.8:0.65);
+        ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(Math.atan2(pl[1],pl[0]));ctx.globalAlpha=a0*sh*(brake?1:0.85);ctx.drawImage(S.plume,0,-Wd/2,L,Wd);ctx.restore();
+        ctx.globalAlpha=a0*(brake?0.9:0.55)*sh;ctx.drawImage(S.glow,p[0]-sz*(brake?0.75:0.6),p[1]-sz*(brake?0.75:0.6),sz*(brake?1.5:1.2),sz*(brake?1.5:1.2)); // 刹车的喷口朝着前方,核心更白更亮
+        if(simTime-st.pt>=IRFX.PUFF_DT&&IRFX.puffs.length<IRFX.PMAX){st.pt=simTime;const v=t.vel||[0,0,0],L0=ph.sig*1.5;IRFX.puffs.push({x:t.pos[0]+pl[0]*L0,y:t.pos[1]+pl[1]*L0,vx:v[0]*0.3+pl[0]*PHYS.v(20),vy:v[1]*0.3+pl[1]*PHYS.v(20),t0:simTime,w:ph.sig,a:a0*0.5});}}}
+    const ig=(now-st.ig)/500;if(ig>=0&&ig<1){ctx.globalAlpha=a0*(1-ig);const q=sz*(1.4+ig);ctx.drawImage(S.glow,p[0]-q,p[1]-q,2*q,2*q);} // 点火那一下
+  }
+  for(const t of IRFX.src.keys())if(!seen.has(t))IRFX.src.delete(t);
+  for(let i=IRFX.puffs.length-1;i>=0;i--){const u=IRFX.puffs[i],age=simTime-u.t0;if(age>IRFX.PUFF_LIFE||age<0){IRFX.puffs.splice(i,1);continue;} // 喷出去的热气:散开、冷掉
+    u.x+=u.vx*dts;u.y+=u.vy*dts;const q=toScreen(u.x,u.y),w=Math.max(4,Math.min(120,u.w*(1+age*0.35)*cam.zoom*2)),f=1-age/IRFX.PUFF_LIFE;
+    ctx.globalAlpha=u.a*f*f;ctx.drawImage(S.glow,q[0]-w,q[1]-w,2*w,2*w);}
+  for(let i=IRFX.fl.length-1;i>=0;i--){const f=IRFX.fl[i],k=(now-f.t0)/1400;if(k>=1||f.t.dead){IRFX.fl.splice(i,1);continue;} // 开火:白热闪光 + 外扩一圈
+    const p=toScreen(f.t.pos[0],f.t.pos[1]),rr=f.sz*(1+5*Math.min(1,k/0.3));
+    ctx.globalAlpha=Math.min(1,f.a*1.3)*(1-k);ctx.drawImage(S.ring,p[0]-rr,p[1]-rr,2*rr,2*rr);
+    const c=f.sz*1.6*(1-k*0.5);ctx.globalAlpha=(1-k)*(1-k);ctx.drawImage(S.glow,p[0]-c,p[1]-c,2*c,2*c);}
+  for(const q of projectiles){if(q.type!=='missile'||q.done||!q.lit||!(adminMode||q.shooter.side==='blue'||trkSees('blue',q)))continue; // 正在喷的导弹
+    const p=toScreen(q.pos[0],q.pos[1]);if(p[0]<-20||p[0]>W+20||p[1]<-20||p[1]>H+20)continue;ctx.globalAlpha=0.8;ctx.drawImage(S.glow,p[0]-5,p[1]-5,10,10);}
+  ctx.restore();
 }
-function irvDrawLobes(){
-  const sel=(typeof controlledShips==='function'?controlledShips():[]).filter(s=>s.side==='blue').slice(0,3);if(!sel.length)return;
-  const t0=nowMs();for(const s of sel)if(!irvLobeWork(s,t0))break;
-  if(IRV_LOBE.m.size>12)for(const k of IRV_LOBE.m.keys())if(sel.indexOf(k)<0)IRV_LOBE.m.delete(k);
-  const N=IRV_LOBE.N;ctx.save();ctx.lineWidth=1.2;ctx.font='10px Consolas';ctx.textAlign='left';ctx.textBaseline='middle';
-  for(const s of sel){const e=IRV_LOBE.m.get(s);if(!e||!e.a)continue;
-    for(const [arr,col,dash,lb] of [[e.a,'rgba(255,214,140,.75)',[],'看得见熄火驱逐舰'],[e.b,'rgba(255,110,110,.7)',[5,4],'敌舰看得见我']]){
-      ctx.setLineDash(dash);ctx.strokeStyle=col;ctx.beginPath();let im=0;
-      for(let i=0;i<=N;i++){const k=i%N,th=k/N*6.2832,q=toScreen(s.pos[0]+Math.cos(th)*arr[k],s.pos[1]+Math.sin(th)*arr[k]);if(i)ctx.lineTo(q[0],q[1]);else ctx.moveTo(q[0],q[1]);if(arr[k]>arr[im])im=k;}
-      ctx.stroke();const th=im/N*6.2832,q=toScreen(s.pos[0]+Math.cos(th)*arr[im],s.pos[1]+Math.sin(th)*arr[im]);ctx.fillStyle=col;ctx.fillText(lb+' '+Math.round(arr[im]/1000)+'k',q[0]+4,q[1]);}}
-  ctx.setLineDash([]);ctx.restore();
-} // 离开红外画面:下次进来整张重建
+
 /* ---- 近处的热轮廓:比山顶亮一点;在动的用预渲染精灵 ---- */
 const IRV_ROCK_SHAPE=[1,0.72,0.95,0.68,0.9,0.78,1.05];
 function irvSilPath(X,t,tv){

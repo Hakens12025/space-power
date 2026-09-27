@@ -27,11 +27,12 @@ function drawVisFog(B){
     B.cv=document.createElement('canvas');B.cv.width=w;B.cv.height=h;B.g=B.cv.getContext('2d');
     B.tc=document.createElement('canvas');B.tc.width=w;B.tc.height=h;B.tg=B.tc.getContext('2d');B.sig=null;
   }
-  const g=B.g,t=B.tg,RV=COV.VIS_R,R=RV*cam.zoom/K,sp=(x,y)=>{const q=toScreen(x,y);return [q[0]/K,q[1]/K];},q4=v=>Math.round(v*4),S=[q4(R)],L=[];
+  const g=B.g,t=B.tg,sp=(x,y)=>{const q=toScreen(x,y);return [q[0]/K,q[1]/K];},q4=v=>Math.round(v*4),S=[],L=[];
   for(const s of ships){
     if(s.dead||s.side!=='blue')continue;
+    const RV=s.visR||COV.VIS_R,R=RV*cam.zoom/K; // 2026-09-27 每艘自己的全知圈(按所处环境缩)
     const c=sp(s.pos[0],s.pos[1]);if(c[0]+R<0||c[0]-R>w||c[1]+R<0||c[1]-R>h)continue;
-    const sh=[];L.push(c,sh);S.push(q4(c[0]),q4(c[1]),-1);
+    const sh=[];L.push(c,sh,R);S.push(q4(c[0]),q4(c[1]),q4(R),-1);
     for(const b of ENV.bodies){ // 天体背后的视线阴影:两条切线之间、切点往外的那一块
       const dx=b.x-s.pos[0],dy=b.y-s.pos[1],D=Math.hypot(dx,dy);if(!(D>b.r)||D-b.r>RV)continue;
       const a=Math.atan2(dy,dx),hw=Math.asin(b.r/D),tl=Math.sqrt(D*D-b.r*b.r),Lf=D+2*RV;
@@ -42,7 +43,7 @@ function drawVisFog(B){
   if(!same){B.sig=S; // 脏检查:圈心、半径、阴影顶点取整到 1/4 灰雾像素(1 屏幕像素)都没变就直接贴上一帧
     g.globalCompositeOperation='source-over';g.clearRect(0,0,w,h);g.fillStyle='rgba(0,0,0,'+B.A+')';g.fillRect(0,0,w,h);
     g.globalCompositeOperation='destination-out';
-    for(let i=0;i<L.length;i+=2){const c=L[i],sh=L[i+1];
+    for(let i=0;i<L.length;i+=3){const c=L[i],sh=L[i+1],R=L[i+2];
       t.globalCompositeOperation='source-over';t.clearRect(0,0,w,h);t.fillStyle='#000';t.beginPath();t.arc(c[0],c[1],R,0,6.2832);t.fill();
       t.globalCompositeOperation='destination-out';
       for(let j=0;j<sh.length;j+=4){t.beginPath();t.moveTo(sh[j][0],sh[j][1]);t.lineTo(sh[j+1][0],sh[j+1][1]);t.lineTo(sh[j+2][0],sh[j+2][1]);t.lineTo(sh[j+3][0],sh[j+3][1]);t.closePath();t.fill();}

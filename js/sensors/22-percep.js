@@ -121,7 +121,15 @@ function senseKIR(d) { // 探测方光学系数。舰与信标唯一的差别在
 function senseVis(d, t) { // 2026-09-26 可见光圈:探测方是舰船、目标在 COV.VIS_R 以内、视线不被天体挡住 ⇒ 看得一清二楚(信标不算:圈是"以飞船为圆心")
   if (d.type === 'beacon') return false;
   const dx = t.pos[0] - d.pos[0], dy = t.pos[1] - d.pos[1], dz = (t.pos[2] || 0) - (d.pos[2] || 0);
-  return dx * dx + dy * dy + dz * dz < COV.VIS_R * COV.VIS_R && !(ENV.bodies.length && envOccluded(d.pos, t.pos));
+  const R = d.visR || COV.VIS_R; // 2026-09-27 每艘自己的全知圈(visRadiusOf,感知节拍开头写)
+  return dx * dx + dy * dy + dz * dz < R * R && !(ENV.bodies.length && envOccluded(d.pos, t.pos));
+}
+function visRadiusOf(s) { // 2026-09-27 全知圈半径:基准 x 星云消光(沿观测舰两侧各取一段 VIS_R 的透过率取平均,下限 VIS_DUST_MIN)x 天体影子(VIS_SHADOW)
+  const R0 = COV.VIS_R, p = s.pos;
+  let f = 1;
+  if (ENV.clouds.length) { const T = 0.5 * (envExt(p, [p[0] + R0, p[1], p[2]], 8) + envExt(p, [p[0] - R0, p[1], p[2]], 8)); f = Math.max(COV.VIS_DUST_MIN, T); }
+  if (ENV.bodies.length && envInShadow(p)) f *= COV.VIS_SHADOW;
+  return R0 * f;
 }
 function senseKRF(d) { // 探测方静听系数:接收机档次进平方根 ⇒ 静听量程 正比 sqrt(recv)
   return SENS.K_RF * (d && d.type === 'beacon' ? SENS.BEACON_RECV : sReq(d, 'recv', 'ship'));

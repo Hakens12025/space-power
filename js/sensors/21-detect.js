@@ -50,6 +50,7 @@ function detectorsOf(side){ // 该阵营的传感器网络:存活舰 + 开机的
 
 function detectLoop(dt){ // 一个感知节拍:蓝网络探红(litBlue)、红网络探蓝(litRed)——对称,不按玩家视角
   const el=(typeof dt==='number'&&isFinite(dt)&&dt>0)?dt:SENS.TICK; // SN4:core/05 透传实际累计的模拟秒;判定里手摇 detectLoop() 不传参,按标称节拍算
+  for(const s of ships)if(!s.dead)s.visR=visRadiusOf(s); // 2026-09-27 每艘自己的全知圈,每拍按所处环境重算一次
   const pg=PING_TMP;pg.length=0; // 2026-09-27 扫描(用户选 A):s.pingReq 的船只在这一拍照射(对方也只在这一拍听得到),节拍末尾回到原来的发射档
   for(const s of ships.concat(rocks))if(s.pingReq){s.pingReq=false;if(s.dead)continue;pg.push(s,s.emitMode);if(s.emitMode!=='paint')setEmit(s,'paint');s.pingT=simTime;} // 2026-09-27 民船的导航雷达也走这条路(world/14)
   detectFor('blue','red',el);

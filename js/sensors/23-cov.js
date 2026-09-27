@@ -79,7 +79,7 @@ const LAD = {
        光学认出 optIdent 9.4 万  不动:贴到主炮那一带才看得清轮廓,是最后的确认 */
   lisIdent: 200000 * CFG.scale,   // 听出型号(ESM / SEI:辐射指纹,不靠角分辨)。2026-09-26 x1/5(单局地图):原 1000000
   radarIdent: 100000 * CFG.scale, // 照射认出(NCTR 需要比探测更高的信噪比)。2026-09-26 x1/5(单局地图):原 500000
-  optIdent: 18800 * CFG.scale,    // 光学认出轮廓。2026-09-26 x1/5(单局地图):原 94000
+  optIdent: 60000 * CFG.scale,   // 2026-09-27 用户:「将红外的分辨率距离拉的更远」:1.88 万 → 6 万(熄火 DD;点火的船更亮、看得更清,自动更远)。原注释:    // 光学认出轮廓。2026-09-26 x1/5(单局地图):原 94000
   actTurn: 11250 * CFG.scale,     // 照射椭圆的转向点 = RRES / TH0.act。刻意不取整:RRES 决定断照后的滑行窗口。2026-09-26 x1/5(单局地图):原 56250
 };
 
@@ -134,7 +134,8 @@ const COV = {
   RSS_UNK: 0.5, RSS_ID: 0.2,
   /* 2026-09-26 可见光圈(用户:"以飞船为圆心……这个区域内所有东西均完全实时可见";选"进感知内核"、半径 2 万):舰船 VIS_R 以内、视线不被天体挡住的一切,
      这一拍直接定位(误差 AMIN)并确认身份;双方对称。业内叫视野半径(sight radius),RTS 战争迷雾里的"正在看见"那一档 */
-  VIS_R: 30000 * CFG.scale, // 2026-09-26 用户"单舰的完全可见圈有点小了":2 万 → 3 万(= 主炮九成命中带)          // 梯子标定尺:导引头搜索篮;optCross / lisCross 按它量。2026-09-26 x1/5(单局地图):原 30000
+  VIS_R: 50000 * CFG.scale, // 2026-09-27 用户:「可以考虑把全知圈放大一点,或者根据当前的环境来修改」:3 万 → 5 万基准,每艘按自己所处的环境缩(sensors/22 的 visRadiusOf)
+  VIS_DUST_MIN: 0.4, VIS_SHADOW: 0.7, // 星云里按消光缩、最多缩到基准的这一成;在天体影子里乘这个。(沿革:2026-09-26 2 万 → 3 万,用户"单舰的完全可见圈有点小了")
 };
 
 /* ================= 定位域的三条律 =================
@@ -282,7 +283,7 @@ function stepCov(t, c, obs, el, idOut, kin) { // TK2.6:可选的 idOut 记下这
       if (sh[3] && idOut) idOut[ch] = true; // TK2.6:idBy 只记【第一个】认出它的通道(按探测站、通道的先后),同一拍里 1 号站静听认出、2 号站照射认出时 idBy 是 lis —— 身份三档要知道照射也认出来了
       const cur = c.ch[ch];
       if (!cur || sh[1] < cur[1]) {
-        const R = ch === 'vis' ? COV.VIS_R : covDetOf(ch, d, t, lo); // 信噪比问"我有多少信号" ⇒ 发现域
+        const R = ch === 'vis' ? (d.visR || COV.VIS_R) : covDetOf(ch, d, t, lo); // 信噪比问"我有多少信号" ⇒ 发现域
         const snr = (ch === 'act' ? 4 : 2) * 10 * Math.log10(R / dd);  // 被动 (R/d)^2、照射 (R/d)^4,折成 dB
         c.ch[ch] = [sh[0], sh[1], dd, snr, d.id];       // 末位是探到它的那一艘(画单条方位线要用)
       }
@@ -441,7 +442,7 @@ function ladCheck() {
   need(he >= 1.5 * ra * (1 - e), '开雷达被听见 >= 1.5x 自己照到的距离(手电效应)');
   need(LAD.optIdent < LAD.radarIdent && LAD.radarIdent < LAD.lisIdent, 'ID3 三级认出从近到远:光学看轮廓 < 照射回波(NCTR)< 听辐射指纹(ESM)');
   // 2026-09-27 删掉「照射认出 > 导弹射程」:用户接受远射打的是还没认出的接触(自动开火仍只打疑似以上,trkPid)
-  need(LAD.optIdent < LAD.gun, '光学认出比主炮那一带还近:贴脸那一步的最后确认');
+  // 2026-09-27 删掉「光学认出 < 主炮带」:红外认出拉到 6 万(用户),它不再是贴脸那一步
   need(LAD.radarLook <= LAD.gun, '火控解(椭圆收进命中判定半径)在主炮那一带之内');
   need(LAD.lisIdent < he, 'ID3 听得见才谈得上听出型号');
   need(LAD.optCross < hot && LAD.lisCross < he && LAD.radarIdent < ra && LAD.radarLook < ra, '定位域每一级都在同通道的发现距离之内(发现不了谈不上定位);光学按满推目标判');
