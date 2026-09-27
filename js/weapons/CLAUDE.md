@@ -18,6 +18,7 @@
 - 已知的真值口子:目标速度仍取真值(接触没有速度估计);命中判定按真实位置(那是物理)。
 - 前出浮标(2026-09-27):特殊武器 `kind:'buoy'`,只给名字以「波长」开头的船(ships/11 的 `makeShip`,`s.buoys`);⌖ 点位置 → world/14 的 `launchBuoy`,菜单里逐个遥控照射(`buoySetOn`)。不进轮盘。
 - 强行开火(2026-09-27):`s.forceMac = {t|pt, T}` 由 command/70 的 `mdWeaponPick` 写,57 每拍重设 `turnTarget`、对准就开一炮(不看火控、勾选与把握门,60 秒作废);打空地走 52 的 `fireMACAt`,弹丸带 `ground`,56 对对方每艘船按线段最近点判。
+- 炮弹来路(2026-09-28,反炮兵定位的最简形态):对方主炮弹进了我方任一艘舰的可见光圈(`senseVis`)⇒ 56 的 `shellTraceStep` 往 `SHELL_TR[side]` 记首见点 `a` 与飞行方向 `u`,射手开火时就在 a − u·s 上;只记几何不记射手,留 `KEEP` 游戏秒,换局清空(scenario/91)。蓝方的画在地图上(render/83 `drawShellTraces`),红方的给 bots 读。导弹不做。
 - 开火暴露:进攻性发射后 `FIRE_S` 秒光学加 `P_FIRE` 一档;被火控门挡回的、拦截弹、诱饵弹不亮。
 
 ## 定义与配装

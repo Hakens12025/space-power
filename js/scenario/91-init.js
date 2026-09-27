@@ -12,6 +12,7 @@ function initFleet(){
   // ②victoryShown/defeatShown不重置→上一局歼灭后,新一局不再报胜/败 ③nets/ESM/导弹选中残留旧局引用
   simTime=0;
   threatCorridors=[];hitFX=[];nets.clear();
+  if(typeof SHELL_TR!=='undefined'){SHELL_TR.blue.length=0;SHELL_TR.red.length=0;} // 2026-09-28 炮弹来路记录随局清空
   if(typeof aiRedReset==='function')aiRedReset(); // AI1 换局清红方 AI 的信念(目标点 / 最后已知位置 / 搜索进度),否则带着上一局的记忆开局
   if(typeof esmReset==='function')esmReset(); // 换局清听到的敌方雷达记录(键是舰对象,旧局的船不该留着)
   if(typeof fireSeqs!=='undefined'){fireSeqs=[];fcSeqSeq=0;} // RF5 火控序列换局清空(与 nets.clear() 同族):shipSeq 每局归零重排,不清会让上一局的序列按 id 精准挂到新一局的另一艘船上
