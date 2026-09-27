@@ -89,12 +89,12 @@ const INSET={CTX_T:240,CTX_F0:40000,CTX_F1:50000,CTX_E0:50000,CTX_E1:60000, // �
   INC_IN:80000,INC_OUT:100000,LEAD:0.4,FADE_IN:6,FADE_OUT:9,ON_A:0.05, // 威胁权重满 / 归零的距离 km(x scale)/ 前视上限占半宽(竖直占半高)/ 淡入淡出 1/s / 可点门槛
   T_PAN:0.45,T_OUT:0.3,T_IN:0.6,SX:30,SY:24,ZLAG:1.5,CUT:150, // 临界阻尼时间常数 s(平移 / 拉远 / 推近)/ 锚点安全边 px / 拉远最多落后倍数 / 切镜遮罩 ms
   OUT_HI:1.2,OUT_LO:0.8,SPLIT:60000,JOIN:48000,CL:18,IND:24,INDN:5, // 离群迟滞 / 两艘拆开与合拢 km / 框外指示聚类 px、输入上限、最多几簇
-  DW:{kill:3500,loss:3500,hit:2500,id:3000,fix:3000},EVMS:{kill:6000,loss:6000,id:6000,fix:6000,hit:1500}, // 每类停留 / 事件寿命 ms
+  DW:{kill:3500,loss:3500,hit:2500,id:3000,fix:3000,shell:3500},EVMS:{kill:6000,loss:6000,id:6000,fix:6000,hit:1500,shell:4000},SHELL_BACK:200000, // 每类停留 / 事件寿命 ms;炮弹来路回放往回框多远 km(x scale)
   COOL:3000,GRACE:500,KILL_HIT:3000,HIT_B:2000,HIT_R:5000,HIT_ADD:600,HIT_CAP:4000,MERGE_T:2000,MERGE_R:50000, // 冷却 / 来袭宽限 ms;击沉吞命中 / 命中绑我舰 / 绑敌舰 km;合并命中加时 / 封顶 ms;合并认出定位 ms / km
   HOV:5000, // 指针多久没动就不再算悬停 ms
   PRE_S:3,PRE_MIN:0.4,POST:1200,PRE_COOL:4000,ATTR_R:20000,CAUSAL_R:120000,PUSH_T0:2.5,PUSH_T1:1,PUSH_HOLD:1200,PUSH_MAX:0.5,lrt:1,ph:new Map(), // 推近:离命中 PUSH_T0 → PUSH_T1 墙钟秒从不推到推满,弹没了再保持 PUSH_HOLD ms;预判:离命中 PRE_MIN~PRE_S 墙钟秒切过去、弹没了再停 POST ms、同一目标冷却 ms;命中归到消失弹丸的半径、双人镜头最多框多远 km(x scale)
   ox:0,oy:0,lz:0,vo:[0,0,0],key:'',kk:'',sk:'',t:0,a:0,cut:-1e9,cool:-1e9,hov:false,mx:0,my:0,mt:-1e9,gm:false,hide:false,vpri:0,err:false,last:null,fx:null,mskip:null,cv:null,g:null,
-  dir:null,ev:[],seq:0,prj:new Map(),by:new Map(),preT:new Map(),preSeen:new WeakSet(),out:new Set(),outK:'',dead:new Set(),idc:new Map(),fixd:new WeakSet(),fix0:true,hits:new WeakSet(),t0:-1,arr:null,
+  dir:null,ev:[],seq:0,prj:new Map(),by:new Map(),preT:new Map(),preSeen:new WeakSet(),out:new Set(),outK:'',dead:new Set(),idc:new Map(),fixd:new WeakSet(),fix0:true,hits:new WeakSet(),shr:new WeakSet(),t0:-1,arr:null,
   lod0:{hideBlue:new Set(),hideRed:new Set(),aggs:[],live:false}}; // 特写不做聚合:画特写时把 lodNow 临时换成这个空的
 function insetHit(sx,sy){return INSET.on&&sx>=INSET.x&&sx<=INSET.x+INSET.w&&sy>=INSET.y&&sy<=INSET.y+INSET.h;} // 点在特写框里:输入层吞掉,不落到框底下的地图
 function insetClick(){const k1=vtAnim?vtAnim.k1:cam.zoom;zAnim=null;vtAnim={k0:cam.zoom,k1:k1,x0:cam.x,y0:cam.y,x1:INSET.cx,y1:INSET.cy,t0:nowMs(),dur:420};} // 点特写框:主镜头飞到特写中心;跳层动画正在跑就沿用它的目标缩放,不截断跳层
@@ -152,7 +152,7 @@ function insetRate(){return running?(TC.eff>0?TC.eff:rate)*RATE_K:0;} // 当前�
 function insetEvents(now){ // 导演的事件源(只读我方知道的事):损失 / 击沉 / 中弹 / 命中 / 认出 / 首次定位;换局清空
   const nm=simTime<INSET.t0||INSET.arr!==ships; // 换局(同尾迹:按舰船表换没换判)
   if(nm||INSET.gm!==adminMode){INSET.ev.length=0;INSET.dir=null;INSET.fx=null;INSET.last=null;INSET.key='';INSET.gm=adminMode;} // 换局或全知开关变了:全知时记的真值不留,旧取景不拿来淡出
-  if(nm){INSET.dead.clear();INSET.idc.clear();INSET.fixd=new WeakSet();INSET.fix0=true;INSET.arr=ships;INSET.prj=new Map();INSET.by.clear();INSET.preT.clear();INSET.ph.clear();}
+  if(nm){INSET.dead.clear();INSET.idc.clear();INSET.fixd=new WeakSet();INSET.fix0=true;INSET.arr=ships;INSET.prj=new Map();INSET.by.clear();INSET.preT.clear();INSET.ph.clear();INSET.shr=new WeakSet();}
   const adv=simTime!==INSET.t0,S=CFG.scale,kq=[];INSET.t0=simTime;
   const prv=INSET.prj,cur=new Map(),hat=new Map(); // 2026-09-27 命中归属:每帧记下在飞的主炮弹 / 导弹(谁打谁),新冒出的命中闪光归到这一帧刚消失、离它最近的那颗
   for(const p of projectiles)if((p.type==='mac'||p.type==='missile')&&!p.done&&p.shooter&&p.target&&p.target.side)cur.set(p,{sh:p.shooter,tg:p.target,x:p.pos[0],y:p.pos[1]});
@@ -175,6 +175,9 @@ function insetEvents(now){ // 导演的事件源(只读我方知道的事):损�
     let r=null,rq=null;bd=INSET.HIT_R*S;for(const s of ships){if(s.dead||s.side==='blue'||!(adminMode||contactFix(s,'blue')))continue;const q=insetKnown(s);if(!q)continue;const d=Math.hypot(q[0]-h.pos[0],q[1]-h.pos[1]);if(d<bd){bd=d;r=s;rq=q;}}
     if(r)insetPush({k:'hit',p:1.5,ship:r,sh:at?at.sh:null,q:rq.slice(),lbl:'命中 '+insetName(r)},now); // 绑到受击舰、存我方知道的位置;绑不上(只有热区)就不报
   }
+  const TR=(typeof SHELL_TR!=='undefined')?(adminMode?SHELL_TR.blue.concat(SHELL_TR.red):SHELL_TR.blue):[]; // 2026-09-28 炮弹来路回放(用户选):新记下的一条 = 一段,框住首见点与往回 SHELL_BACK 那一段(附近看见它的我方舰由 insetBuild 一起框)
+  for(const r of TR){if(INSET.shr.has(r))continue;INSET.shr.add(r);if(nm)continue;const L=Math.min(shtrBack(r),INSET.SHELL_BACK*S);
+    insetPush({k:'shell',p:1.7,q:[r.a[0],r.a[1]],q2:[r.a[0]-r.u[0]*L,r.a[1]-r.u[1]*L],lbl:'炮弹来路 · 往回 '+Math.round(L/1e4)+' 万 km'},now);}
   INSET.ev=INSET.ev.filter(e=>now-e.t<(INSET.EVMS[e.k]||6000));
 }
 function insetSubject(sel,inc,lbl){ // 一组我方舰的取景:离群的不进框(改画框外指示,带迟滞);来袭导弹与锁定目标按距离给权重、渐进框进来
@@ -220,7 +223,7 @@ function insetBuild(e,now){ // 开播:敌方主体跟着它走(航位推算),击
   const D={k:e.k,p:e.p,key:e.k+':'+e.seq,dwell:INSET.DW[e.k]||3000,el:0,ship:e.ship||null,sh:(e.sh&&e.sh!==e.ship)?e.sh:null,n:1,evs:[e],qs:[],vm:0,dyn:false,sub:null},S=CFG.scale;
   if(e.k==='hit'&&e.ship&&e.ship.side==='blue'){if(e.ship.dead)return null;D.dyn=true;}
   else{const big=e.k==='kill'||e.k==='loss',q=big?(e.q||e.pos):((e.ship&&!e.ship.dead&&insetKnown(e.ship))||e.q||e.pos);if(!q)return null;
-    D.qs.push(q.slice());
+    D.qs.push(q.slice());if(e.q2)D.qs.push(e.q2.slice()); // 炮弹来路:首见点 + 往回那一头
     if(insetIntel(e.k))for(const o of INSET.ev){if(o===e||o.shown||!insetIntel(o.k)||!o.ship||Math.abs(o.t-e.t)>INSET.MERGE_T)continue;const p=insetKnown(o.ship); // 2 s 内相距不远的情报类一起框
       if(p&&Math.hypot(p[0]-q[0],p[1]-q[1])<=INSET.MERGE_R*S){o.shown=true;D.evs.push(o);D.qs.push(p.slice());D.n++;}}
     if(D.sh&&big){const r=insetShPos(D.sh);if(r&&Math.hypot(r[0]-q[0],r[1]-q[1])<=INSET.CAUSAL_R*S)D.qs.push(r.slice());} // 因果双人镜头:击沉 / 损失把开播那一刻的射手一起框
@@ -259,6 +262,7 @@ const insetFoe=e=>e.k==='id'||e.k==='fix'||(e.k==='hit'&&!!e.ship&&e.ship.side!=
 function insetDirector(now,dt,inc,ss,sel,hide){ // 特写播放(导演):按优先级排队、严格更高的才插队
   const idle=!sel.length,thr=!!(ss&&ss.wm>0),S=CFG.scale;let D=INSET.dir,sub=null;
   if(D&&((D.k==='m'&&!idle)||(thr&&D.p<2)||(hide&&insetFoe(D)))){D=INSET.dir=null;INSET.cool=now;INSET.fx=null;} // 威胁优先:导弹来袭的最后一段一定在特写里
+  if(D&&D.k==='shell')for(const e of INSET.ev)if(!e.shown&&e.k==='shell')e.shown=true; // 正在放炮弹来路:同一轮的其他炮弹不再排队
   if(D)for(const e of INSET.ev){if(e.shown||!e.ship)continue; // 合并:同一艘又中弹
     if(D.k==='pre'&&e.ship===D.tg&&(e.k==='hit'||e.k==='kill'||e.k==='loss')){e.shown=true;if(D.end<0)D.end=now;const q=e.ship.side==='blue'?null:(e.q||insetShPos(e.ship));INSET.fx={x:q?q[0]:0,y:q?q[1]:0,s:q?null:e.ship,t0:now,big:e.k!=='hit',col:e.ship.side==='blue'?'255,107,107':'255,209,102'};continue;} // 预判接住的命中 / 击沉:原地爆闪,不再单独播一段
     if(D.k==='hit'&&e.k==='hit'&&e.ship===D.ship){e.shown=true;D.evs.push(e);D.n++;D.dwell=Math.min(INSET.HIT_CAP,D.dwell+INSET.HIT_ADD);insetFx(D,now);}
@@ -365,7 +369,7 @@ function drawInset(){
     drawTrails(hide);
     for(const s of ships){if(hide&&s.side!=='blue')continue;drawShip(s);}
     if(!hide&&typeof drawRocks==='function')drawRocks();
-    drawProjectiles();drawHits();insetCausal();
+    drawProjectiles();if(typeof drawShellTraces==='function')drawShellTraces();drawHits();insetCausal();
     const F=INSET.fx;if(F){const k=(now-F.t0)/(F.big?1500:1200);if(k>=1||k<0)INSET.fx=null;else{const p=F.s?F.s.pos:[F.x,F.y],q=toScreen(p[0],p[1]);ctx.globalAlpha=1-k;ctx.strokeStyle=ctx.fillStyle='rgb('+F.col+')';ctx.lineWidth=1.5; // 开播自带爆闪:hitFX 只活 1.2 游戏秒,切过去时多半已经没了
       ctx.beginPath();ctx.arc(q[0],q[1],F.big?14+70*k:8+40*k,0,6.2832);ctx.stroke();ctx.beginPath();ctx.arc(q[0],q[1],Math.max(0.1,(F.big?10:6)*(1-k)),0,6.2832);ctx.fill();ctx.globalAlpha=1;}}
   }finally{ctx=ctx0;cam.x=c0x;cam.y=c0y;cam.zoom=c0z;W=W0;H=H0;lodNow=lod;}

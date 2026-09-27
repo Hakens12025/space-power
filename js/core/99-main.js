@@ -23,6 +23,7 @@ function frame(t){
   if(typeof xhTick==='function')xhTick(dt); // RF5 悬停准星每帧状态机(command/74):敌舰在动、相机也会被 WASD/右键拖动平移,只靠 mousemove 喂命中会留下陈旧吸附,所以每帧重跑一次。放在 render() 之前——83-hud 的 drawTargeting 读 xh.snap,晚一行吸附圈就比 #xhTip 信息卡慢一帧;typeof 守卫与 stepSim 里 stepFireControl 同口径(74 缺席也不崩)
   if(typeof matchTick==='function')matchTick(); // MT1 对局分出胜负 ⇒ 停表、弹结果卡片(非模拟的每帧 UI 状态机,同 xhTick 的挂法)
   render();
+  if(typeof pipFrame==='function')pipFrame(); // 2026-09-28 右栏小窗(render/88-pip)
   updateTop();
 }
 function init(){

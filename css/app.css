@@ -258,6 +258,9 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
    (只有 max-height 时高度是内容高,没有自由空间,flex-grow 写了也不生效);②把 #selInfo/#selFm 从
    flex:0 1 auto 改成 1 1 auto 去吸收这份空间。#fcSec 在场时内容本就超过 min-height,增量为 0,原布局不变。
    min() 兜住矮视口:min-height 在 CSS 里胜过 max-height,写死 300px 会在小窗口顶穿右轨。 */
+#pipBox{padding:var(--sp-2) var(--sp-3);border-bottom:var(--bw) solid var(--line);flex:0 0 auto} /* 2026-09-28 右栏小窗(render/88-pip):导引头画面 / 主炮火控 */
+#pipBox .pip-hd{font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label);margin-bottom:var(--sp-1)}
+#pipCv{display:block;width:100%;height:150px}
 #selInfo{padding:var(--sp-3);border-bottom:var(--bw) solid var(--line);flex:1 1 auto;min-height:0;overflow-y:auto}
 #selInfo h3{font-size:var(--fs-title);color:var(--txt-hi);margin:0 0 2px}
 #selInfo .sub{font-size:var(--fs-label);color:var(--txt-dim);margin-bottom:var(--sp-2)}
