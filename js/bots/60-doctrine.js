@@ -102,13 +102,15 @@ const RDOC_CFG={
   LEAD_A:0.30,       // 追的那个点沿轨道超前多少弧度
   APPROACH_K:1.25,   // 离圈还有这么多倍半径时走【直线接近】,进了再转成绕圈
   FOCUS_HYS:1.35,    // 集火迟滞:已经在打的那个目标加这个成数,免得每拍换目标
+  PULSE_S:45,        // 2026-09-27 搜索 / 尾随态:当灯的那艘每隔这么多秒扫一拍(sensors/21 的扫描),扫完换人当灯 —— 脉冲出自不同位置,听的一方难以交会
+  LURE_OFF:90000*CFG.scale, // 2026-09-27 第一次握住接触时,两艘不当灯的船各往舰队中心两侧这么远放一个诱饵(world/14),诱饵一直开着雷达冒充灯
 };
 const RDOC={st:'ambush',t:0,goal:[0,0],src:'',foe:null,foeD:0,r:0,orbit:0,dir:1,
-  lamp:'',lampT:0,ambT:0,salvoT:1e9,shadowT:0,paintT:0,strikeT:0,press:false,plan:{},why:''};
+  lamp:'',lampT:0,ambT:0,salvoT:1e9,shadowT:0,paintT:0,strikeT:0,press:false,plan:{},why:'',pulseT:0,lured:false};
 function aiRedReset(){ // 换局清空(scenario/91 调)。AI1 的信念 + BOT1 的条令一起清
   AIR.goal=null;AIR.src='';AIR.memPos=null;AIR.memT=0;AIR.wp=0;AIR.u=[-1,0];
   RDOC.st='ambush';RDOC.t=0;RDOC.foe=null;RDOC.foeD=0;RDOC.r=0;RDOC.orbit=0;RDOC.dir=1;
-  RDOC.lamp='';RDOC.lampT=0;RDOC.ambT=0;RDOC.salvoT=1e9;RDOC.shadowT=0;RDOC.paintT=0;RDOC.strikeT=0;RDOC.press=false;RDOC.plan={};RDOC.why='';
+  RDOC.lamp='';RDOC.lampT=0;RDOC.ambT=0;RDOC.salvoT=1e9;RDOC.shadowT=0;RDOC.paintT=0;RDOC.strikeT=0;RDOC.press=false;RDOC.plan={};RDOC.why='';RDOC.pulseT=0;RDOC.lured=false;
 }
 let _botWorstSig=0; // 没认出的目标按"最危险的那一型"算:散布最小 = 打得最准。表是死的,算一次
 function botWorstSigma(){
@@ -191,26 +193,27 @@ function botLamp(dt,reds,F){ // 谁当灯:轮换 + 掉血就换人。灯是唯�
   }
   return RDOC.lamp;
 }
-function botNeedPaint(reds,foe){ // 这一拍要不要有人亮灯
+function botNeedPaint(reds,foe){ // 这一拍要不要有人亮灯:'paint' = 一直照 / 'pulse' = 隔一阵扫一拍 / false = 黑着
   const st=RDOC.st;
   if(st==='ambush')return false;                        // 埋伏的全部意义就是不亮
-  if(st==='search')return true;                         // 搜索:一盏灯扫(不扫的话静默熄火的玩家永远找不到,对局变僵局)
-  if(st==='shadow'){ // 黑 SHADOW_S / 亮 PAINT_S 循环的搜索扇面
-    const T=RDOC_CFG.SHADOW_S+RDOC_CFG.PAINT_S;
-    return (RDOC.shadowT%T)>=RDOC_CFG.SHADOW_S;
-  }
+  if(st==='search'||st==='shadow')return 'pulse';       // 2026-09-27 搜索与尾随改成脉冲(原来:搜索一直照、尾随黑 90 秒亮 25 秒)—— 与玩家的「脉冲」同一条规则
   if(st==='withdraw'){                                  // 撤退时只在【自己的导弹还在飞】时亮:数据链要位置,其余时候亮灯纯送人头
-    return projectiles.some(p=>p.type==='missile'&&p.shooter&&p.shooter.side==='red'&&p.guided&&p.guideMode!=='self');
+    return projectiles.some(p=>p.type==='missile'&&p.shooter&&p.shooter.side==='red'&&p.guided&&p.guideMode!=='self')?'paint':false;
   }
-  return !!foe;                                         // strike / press:要火控级,得有人照
+  return foe?'paint':false;                             // strike / press:要火控级,得有人照
 }
 function aiDoctrine(dt,reds){ // 指挥层入口:写 RDOC(含每艘舰的 plan)。不碰任何一艘船的字段
   const cfg=RDOC_CFG,F=botFleet(reds);
   const goal=aiRedBelief(dt,reds);                // AI1 信念层照旧:它给"该往哪走"与来路 src
   RDOC.goal=[goal[0],goal[1]];RDOC.src=AIR.src;
   const st=botTransit(dt,reds,F),foe=RDOC.foe;
-  const lamp=botLamp(dt,reds,F),paintOn=botNeedPaint(reds,foe);
-  if(st==='shadow'&&paintOn)RDOC.paintT+=dt;else if(st!=='shadow')RDOC.paintT=0;
+  const lamp=botLamp(dt,reds,F),pm=botNeedPaint(reds,foe),paintOn=pm==='paint';
+  let ping=false; // 2026-09-27 脉冲:到点扫一拍,然后强制换人当灯
+  if(pm==='pulse'){RDOC.pulseT+=dt;if(RDOC.pulseT>=cfg.PULSE_S){RDOC.pulseT=0;ping=true;RDOC.lampT=cfg.LAMP_S;}}else RDOC.pulseT=cfg.PULSE_S;
+  if(st==='shadow'&&(paintOn||ping))RDOC.paintT+=dt;else if(st!=='shadow')RDOC.paintT=0;
+  let lure=null; // 2026-09-27 诱饵:第一次握住接触(离开埋伏)时放一次,两侧各一个
+  if(!RDOC.lured&&st!=='ambush'&&botContacts()>0){RDOC.lured=true;const rc0=botCenter(reds),nx0=-AIR.u[1],ny0=AIR.u[0];lure=[[rc0[0]+nx0*cfg.LURE_OFF,rc0[1]+ny0*cfg.LURE_OFF],[rc0[0]-nx0*cfg.LURE_OFF,rc0[1]-ny0*cfg.LURE_OFF]];}
+  let lk=0;
   RDOC.salvoT+=dt;
   const rc=botCenter(reds);
   let orbiting=!!foe&&(st==='strike'||st==='press'||st==='withdraw');
@@ -261,7 +264,8 @@ function aiDoctrine(dt,reds){ // 指挥层入口:写 RDOC(含每艘舰的 plan)�
       const off=(i-(reds.length-1)/2)*AIR.SPREAD;
       pos=[goal[0]+nx*off,goal[1]+ny*off];pass=false;
     }
-    plan[e.id]={role:role,pos:ordArenaClamp(pos),pass:pass,hold:hold,paint:(paintOn&&isLamp), // 2026-09-26 pos 夹进 ARENA(轨道点 / 横向排开点可能出界)
+    const lp=(lure&&!isLamp&&lk<2)?ordArenaClamp(lure[lk++]):null;
+    plan[e.id]={role:role,pos:ordArenaClamp(pos),pass:pass,hold:hold,paint:(paintOn&&isLamp),ping:(ping&&isLamp),lure:lp, // 2026-09-26 pos 夹进 ARENA(轨道点 / 横向排开点可能出界)
       foe:tgt||null,salvo:(salvoSet[e.id]&&tgt)?(mirror?Math.min(2,readyCells(e)):(e.cells||4)):0};
     i++;
   }

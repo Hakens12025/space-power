@@ -18,6 +18,8 @@ function enemyAI(dt){
           SN4 起是三态,红方只用 paint / silent 两档(不进 jam)。手电效应照旧:照射自照 15 万,被对方静听嗅到却是 60 万。 */
     if(pl.paint){if(e.emitMode==='silent')setEmit(e,'paint');}
     else if(e.emitMode!=='silent')setEmit(e,'silent');
+    if(pl.ping)e.pingReq=true; // 2026-09-27 脉冲:只照一拍(sensors/21)
+    if(pl.lure&&(e.lures===undefined?1:e.lures)>0&&typeof launchLure==='function'){launchLure(e,pl.lure);e.lures=(e.lures===undefined?1:e.lures)-1;} // 2026-09-27 放诱饵(world/14),每舰一个
     /* ② 锁定:全队锁同一个(WTA 集火,60 里算好的)。原来是每舰各锁自己最近的。 */
     if(hasMAC(e)){e.lockedTarget=(pl.foe&&!pl.foe.dead)?pl.foe:null;e.lockPlayer=false;}
     /* ③ 机动:hold=清命令停车(埋伏 / 压上态找主炮窗口 —— 战斗转向只认【空闲】,见 physics/31 的 idle);
