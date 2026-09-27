@@ -39,11 +39,12 @@
   <div id="stage"><canvas id="cv"></canvas></div>
   <aside id="panel">
     <h1>红外一道门</h1>
-    <div class="rule"><b>一条规则:</b>画面上每一处热的色阶值 = 增益 × 这一份热的光学信噪比。信噪比 = K × 亮度 / 距离²,与感知内核判"发现"的是同一个量(≥ 1 算发现)。船身、尾焰、开火、导弹、轮廓全走这一道门,不分类型。<br><b>宽度</b> = 距离 × 固定模糊角,不读亮度;体型只决定什么时候出轮廓。</div>
+    <div class="rule"><b>一条规则:</b>画面上每一处热的色阶值 = 增益 × 这一份热的光学信噪比。信噪比 = K × 亮度 / 距离²,与感知内核判"发现"的是同一个量(≥ 1 算发现)。船身、尾焰、开火、导弹、轮廓全走这一道门,不分类型。<br><b>宽度</b> = 距离 × 固定模糊角,不读亮度;体型只决定什么时候出轮廓。<br><b>填满</b>:物体大到填满模糊斑后亮度不再涨(点源 → 扩展源),填满距离由实际尺寸决定。石头又大又冷 = 基准 × √体型;船和导弹小,按点源。</div>
     <div class="row"><label>目标距离 <span id="vD"></span></label><input id="sD" type="range" min="0" max="1000" value="301"></div>
     <div class="row"><label>视野半径(框住多远)<span id="vZ"></span></label><input id="sZ" type="range" min="0" max="1000" value="143"></div>
     <div class="row"><label>门的增益 <span id="vC"></span></label><input id="sC" type="range" min="0" max="1000" value="500"></div>
     <div class="row"><label>模糊角 <span id="vT"></span></label><input id="sT" type="range" min="0" max="1000" value="696"></div>
+    <div class="row"><label>石头填满距离(体型 1)<span id="vF"></span></label><input id="sF" type="range" min="0" max="1000" value="473"></div>
     <div class="btns">
       <button id="bSun" class="on">晒着</button>
       <button id="bFire">DD / CA 开火</button>
@@ -52,7 +53,7 @@
     <div id="mode"></div>
     <div class="row"><div id="bar"></div><div id="ticks"></div></div>
     <table><thead><tr><th>目标</th><th>船身 S</th><th>尾焰 S</th><th>色阶</th><th>轮廓 N</th></tr></thead><tbody id="tb"></tbody></table>
-    <p style="color:var(--dim);font-size:12px">S = 信噪比。色阶是船身那份;尾焰另算同一条式子。N ≥ 3 出轮廓,叠在热斑上,热斑不消失;拉远成记号时不画轮廓。数值抄自引擎内核(熄火 DD 9.6 万发现、主推 x13.3、刹车 x27.1、开火 +12.3、石头自身热 0.5、晒热 x1),此页不与引擎同步。</p>
+    <p style="color:var(--dim);font-size:12px">S = 信噪比(石头进了填满距离后按填满距离算,不再涨)。色阶是船身那份;尾焰另算同一条式子。N ≥ 3 出轮廓,叠在热斑上,热斑不消失;拉远成记号时不画轮廓。数值抄自引擎内核(熄火 DD 9.6 万发现、主推 x13.3、刹车 x27.1、开火 +12.3、石头自身热 0.5、晒热 x1),此页不与引擎同步。</p>
   </aside>
 </div>
 <script>
@@ -84,7 +85,7 @@ const TG = [
 TG.forEach((t, i) => { t.ang = -Math.PI / 2 + (i + 0.5) / TG.length * 2 * Math.PI; t.fx = 1; t.fy = 0; t.fireT = -1e9; });
 const ROCK_SHAPE = [1, 0.72, 0.95, 0.68, 0.9, 0.78, 1.05];
 
-const st = { D: 20000, viewK: 1.4, c: 0.05, th: 0.0864, sun: true, noise: true };
+const st = { D: 20000, viewK: 1.4, c: 0.05, th: 0.0864, fill: 50000, sun: true, noise: true };
 const $ = id => document.getElementById(id);
 const logMap = (u, a, b) => a * Math.pow(b / a, u / 1000);
 function readUI() {
@@ -92,12 +93,14 @@ function readUI() {
   st.viewK = logMap(+$('sZ').value, 0.8, 40);
   st.c = logMap(+$('sC').value, 0.005, 0.5);
   st.th = logMap(+$('sT').value, 0.005, 0.3);
+  st.fill = logMap(+$('sF').value, 10000, 300000);
   $('vD').textContent = (st.D / 1e4).toFixed(st.D < 1e5 ? 1 : 0) + ' 万 km';
   $('vZ').textContent = (st.D * st.viewK / 1e4).toFixed(1) + ' 万 km';
   $('vC').textContent = st.c.toFixed(3);
   $('vT').textContent = st.th.toFixed(3) + ' rad';
+  $('vF').textContent = (st.fill / 1e4).toFixed(1) + ' 万 km';
 }
-['sD', 'sZ', 'sC', 'sT'].forEach(id => $(id).addEventListener('input', readUI));
+['sD', 'sZ', 'sC', 'sT', 'sF'].forEach(id => $(id).addEventListener('input', readUI));
 $('bSun').onclick = e => { st.sun = !st.sun; e.target.classList.toggle('on', st.sun); e.target.textContent = st.sun ? '晒着' : '背阴'; };
 $('bNoise').onclick = e => { st.noise = !st.noise; e.target.classList.toggle('on', st.noise); };
 $('bFire').onclick = () => { const now = performance.now(); for (const t of TG) if (t.fire) t.fireT = now; };
@@ -110,7 +113,8 @@ function parts(t, now) {
   const solar = t.kind === 'msl' ? 0 : SOLAR_K * t.size * ph;
   const fire = (t.fire && now - t.fireT < 3000) ? t.size * P_FIRE : 0;   // 开火那几拍多亮一档(内核是阶跃,这里 3 秒)
   const plume = t.kind === 'ship' && t.flame ? t.size * (t.flame > 0 ? P_MAIN : P_REV) : 0;
-  const k = K / (st.D * st.D);
+  const dF = t.kind === 'rock' ? st.fill * Math.sqrt(t.size) : 0;      // 填满距离:石头又大又冷,早早填满模糊斑;船、导弹小,按点源
+  const k = K / Math.pow(Math.max(st.D, dF), 2);                        // 填满之后亮度不再涨(点源 → 扩展源)
   return { body: k * (self + solar + fire), plume: k * plume };
 }
 const gate = S => st.c * S;                 // 唯一的门:色阶值 = 增益 x 信噪比
