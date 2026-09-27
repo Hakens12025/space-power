@@ -13,14 +13,29 @@ function guideMissiles(){ // 每tick重算引导分配(无状态:通道天然可
 }
 const MSL_SEEK_P={P_ENG_MAIN:3,P_ENG_REV:8,P_ENG_SIDE:1,P_FIRE:3}; // 导引头看热用 N1 之前的档位(2026-09-27 用户选「不跟」)
 function missLum(t){return optLum(t,MSL_SEEK_P);} // 公式与传感器同一份(sensors/22 的 optLum),只换档位表
-function missSee(p){ // 导弹自身探测(信息源):被动看热(被动距离×目标光学亮度) 或 末端主动LADAR(MSL_CFG.ladar=导引头,最后阶段开启)
-  const t=p.target;
+function missSeeT(p,t){ // 导弹自身探测(信息源):被动看热(被动距离×目标光学亮度) 或 末端主动LADAR(MSL_CFG.ladar=导引头,最后阶段开启)
   if(!t||!t.side)return false;
   if(ENV.bodies.length&&envOccluded(p.pos,t.pos))return false; // ENV2 天体挡视线:被动看热与末端 LADAR 一起挡
   const d=V.len(V.sub(t.pos,p.pos));
   if(d<MSL_CFG.passive*missLum(t))return true; // 2026-09-27 导引头看热改读 missLum(用户选「不跟」N1 的新亮度) // SN4 被动看热改读感知内核的 optLum(体型×(1+引擎档+发射档)):引擎开着或正在照射的目标看得远,熄火静默的冷目标难看到。量级注意:新口径约为旧口径的 2 倍(冷 DD 3.5 万→7 万、满推 CA 22 万→40 万),但下一行 15 万那道末端 LADAR 门在 15 万内恒为真,所以只有 15 万外才看得出差别——表现是热目标更早被自导接管、超视距链导通道占用相应变少(2026-09-26 整体 x1/5,本注释旧数按 1/5 读)
   if(d<MSL_CFG.ladar)return true; // 末端LADAR开启(MSL_CFG.ladar):精确测距测速
   return false;
+}
+function missSee(p){return missSeeT(p,p.target);} // 导引头看不看得见自己的目标
+/* 2026-09-28 发射后锁定(LOAL,鱼叉「只给方位发射」的用法;用户:「识别到目标后自动攻击」):没有目标(区域齐射 / 巡飞 / 数据链待分配)
+   或丢了目标的导弹一路开着导引头找,看见就扑,挑最近的。导引头分不出民船、诱饵与敌舰(用户选「认不出」);石头没有结构值,不算。
+   看得多远同 missSeeT:冷船靠末端 LADAR 约 3 万,点火 / 刹车的船远得多(被动看热按亮度线性放大)。 */
+function mslSeek(p,R,ok){
+  const side=p.shooter.side;let best=null,bd=R||Infinity;
+  const tryT=t=>{if(t.dead||t.side===side||t.hp===undefined||(ok&&!ok(t)))return;
+    const d=Math.hypot(t.pos[0]-p.pos[0],t.pos[1]-p.pos[1]);if(d<bd&&missSeeT(p,t)){bd=d;best=t;}};
+  for(const s of ships)tryT(s);
+  for(const o of rocks)tryT(o);
+  return best;
+}
+function mslAcquire(p,t){ // 导引头锁上 t:从布雷 / 巡飞 / 脱锁转成自导追击(下一拍 guideSide 按 missSee 续 self)
+  p.target=t;p.park=false;p.cruise=false;p.mine=false;p.chaffed=false;p.lastKpos=null;
+  p.guided=true;p.guideMode='self';p.netOff=null;p.netOffR=0;p.netD0=0;
 }
 // DS147:missReport 已取消(数据链纯单向,导弹不回报传感器;导弹的探测只用于自身导引/复锁/飞最后已知变雷)
 function guideSide(side){ // 一方数据链网络的引导分配(v125:按网分配,每网占1通道,网内所有组共享引导)
@@ -81,9 +96,10 @@ function guideSide(side){ // 一方数据链网络的引导分配(v125:按网分
   }}}
 }
 function guideDesc(p){ // 信息面板:导弹引导状态
-  if(p.mine)return '⚙ 伏击待命(本地传感器)';
-  if(p.park)return '🧭 惯性导航(飞向点位)';
-  if(p.guideMode==='coast')return '🔓 脱锁·飞最后已知(到点变雷)'; // KIMI146:脱锁文案按v126定稿(原"剩Ns自毁"已作废)
+  if(p.mine)return '⚙ 伏击待命(导引头)';
+  if(p.cruise)return '🔎 巡飞搜索(导引头开着)';
+  if(p.park)return '🧭 飞向点位(导引头搜索中)';
+  if(p.guideMode==='coast')return '🔓 脱锁·飞最后已知('+(p.mineOk?'到点变雷':'到点巡飞')+')'; // KIMI146:脱锁文案按v126定稿(原"剩Ns自毁"已作废)
   if(p.guideMode==='link')return `📡 数据链引导${p.guidedByName?'('+p.guidedByName+')':''}`;
   if(p.guideMode==='self')return '🎯 自主导引(3万内)'; // 2026-09-26 x1/5(单局地图):原 15万
   return '—';

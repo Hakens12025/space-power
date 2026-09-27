@@ -105,13 +105,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         p.vel=[0,0,0];p.spd=0;
         let trig=null;
         const trigR=p.trigRadius||12000*CFG.scale; // 2026-09-26 x1/5(单局地图):原 60000
-        for(const s of ships){
-          if(s.dead||s.side===p.shooter.side)continue;
-          if(V.len(V.sub(s.pos,p.pos))>trigR)continue;
-          if(p.trigMode==='big'&&shipValue(s)<3)continue; // 只伏击巡洋级+;TIER1 改按威胁权重判定(巡洋=3 放行,护卫2/巡游1 跳过,与原舰种名判定等价)
-          if(p.trigMode==='engine'&&!s.flame&&!s.sideFlame)continue; // 只打引擎开着的(熄火滑行可溜过)
-          trig=s;break;
-        }
+        trig=mslSeek(p,trigR,s=>!(p.trigMode==='big'&&shipValue(s)<3)&&!(p.trigMode==='engine'&&!s.flame&&!s.sideFlame)); // 2026-09-28 触发走导引头(同 LOAL:看得见才算、分不出民船诱饵、挑最近)。big 只伏击巡洋级+;engine 只打引擎开着的
         if(trig){
           p.mine=false;p.target=trig; // 二次点火:变普通追击导弹扑上去
         }else if(p.lastTarget&&!p.lastTarget.dead){ // DS156 脱锁雷复活:重新获得原目标信息(被网络点亮)且还在警戒圈→复活追击(未竟任务继续)
@@ -122,20 +116,29 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;
         return;
       }
+      if(p.cruise){ // 2026-09-28 巡飞搜索(没勾「变雷」的弹到点后,用户:「不选中就一直飞」):不喷火直飞,导引头一路找;原目标被母舰重新定位就回去追;出游玩区消失
+        const t=mslSeek(p);
+        if(t)mslAcquire(p,t);
+        else if(p.lastTarget&&!p.lastTarget.dead&&trkFix(trkOf(p.shooter.side,p.lastTarget))){p.cruise=false;p.target=p.lastTarget;p.lastKpos=null;}
+        else{p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;return;}
+      }
+      if(p.park){const t=mslSeek(p);if(t)mslAcquire(p,t);} // 2026-09-28 LOAL:区域齐射 / 布雷途中导引头一路找,看见就扑
       if(p.park){ // 飞向布雷点:接近减速,到位布设成雷(太空停车零耗)
         const toP=V.sub(p.parkPt,p.pos);
         const pdist=V.len(toP);
         const pvn=V.len(p.vel);
-        if(pdist<1200||(pdist<5000&&pvn<80)){ // 到位(或低速贴点)→ 布设;v133:3万→5千,布雷贴点才变雷(原3万太松"瞬间停止")
+        if(!p.mineOk&&(pdist<1200||(pdist<20000*CFG.scale&&V.dot(p.vel,toP)<=0))){p.park=false;p.cruise=true;return;} // 没勾「变雷」:不减速,飞过瞄准点就转巡飞
+        if(p.mineOk&&(pdist<1200||(pdist<5000&&pvn<80))){ // 到位(或低速贴点)→ 布设;v133:3万→5千,布雷贴点才变雷(原3万太松"瞬间停止")
           p.park=false;p.mine=true;p.vel=[0,0,0];p.spd=0;
           if(p.parkFctrl)p.trigRadius=Math.max(p.trigRadius||12000*CFG.scale,24000*CFG.scale); // DS192:途中吃到火控的区域齐射弹=有信息支持,落地触发圈 24k(没吃到保持原值)。2026-09-26 x1/5(单局地图):原 60000 / 120000
           return;
         }
         const pdir=V.norm(toP);
         let pspdDes=Infinity;
-        if(pdist<90000)pspdDes=Math.min(pspdDes,Math.max(1500,Math.sqrt(2*MSL_ACC*pdist*0.6))); // 接近减速。DS190:曲线也按 150 算——朋友版这处漏改,会按 200 的能力规划刹车→冲过布设点
+        if(p.mineOk&&pdist<90000)pspdDes=Math.min(pspdDes,Math.max(1500,Math.sqrt(2*MSL_ACC*pdist*0.6))); // 接近减速(只有要变雷的才减)。DS190:曲线也按 150 算——朋友版这处漏改,会按 200 的能力规划刹车→冲过布设点
         if(p.fuel>0){
           let dv=Math.max(-150*dt,Math.min(150*dt,pspdDes-p.spd)); // DS190
+          if(dv>0&&p.fuel<=MSL_LOAL_KEEP)dv=0; // 2026-09-28 加速不动末段预留
           const cost=Math.abs(dv)/150; // DS190
           if(cost>p.fuel){dv*=p.fuel/cost;p.fuel=0;}
           else p.fuel-=cost;
@@ -194,9 +197,9 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
           else{p.done=true;return;}
         }
       }
-      if(!p.target){ // DS147:link网待分配中,滑行等待分配器补目标(不脱锁不变雷)
-        p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;
-        return;
+      if(!p.target){ // DS147:link网待分配中,滑行等待分配器补目标(不脱锁不变雷);2026-09-28 等的时候导引头也在找
+        const t=mslSeek(p);if(t)mslAcquire(p,t);
+        else{p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;return;}
       }
       // T1引导门:自导(≤MSL_CFG.ladar)或数据链引导 → 追击;脱锁(超自导+无通道/目标熄灭)→ 飞最后已知位置,到点变地雷待命(v126定稿,不自毁)
       /* WR1 引导段的目标位置只有两个来路:导引头自己看见(guideMode 'self')⇒ 真值;靠母舰数据链('link')⇒ 母舰对它的【估计位置】(contactPos)。
@@ -204,19 +207,22 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
          远距离打的是发射与飞行途中的估计,椭圆比导引头的自导范围还大就大概率扑空。目标速度暂用真值(内核不估计速度,已知口子)。 */
       let tp=null;
       if(p.guided&&p.target){tp=(p.guideMode==='self')?p.target.pos:((typeof contactPos==='function')?contactPos(p.target,p.shooter.side):p.target.pos);if(!tp){p.guided=false;p.guideMode='coast';}}
+      if(!p.guided){const t=mslSeek(p);if(t){mslAcquire(p,t);tp=t.pos;}} // 2026-09-28 LOAL:脱锁途中导引头看见别的就扑
       if(!p.guided){
         if(!p.lastKpos)p.lastKpos=[p.pos[0]+p.vel[0]*20,p.pos[1]+p.vel[1]*20,p.pos[2]+p.vel[2]*20]; // 记最后已知(WR1:没有记录就沿当前航向;原来这里读目标真值)
         const toK=V.sub(p.lastKpos,p.pos);
         const kdist=V.len(toK);
-        if(kdist<1200){ // 到点 → 变地雷:停车静默待命(敌舰进圈自主点火),等重新获得信息复活
+        if(kdist<1200||(!p.mineOk&&kdist<20000*CFG.scale&&V.dot(p.vel,toK)<=0)){ // 到点 → 勾了「变雷」停车静默待命(导引头看见就点火),等重新获得信息复活;没勾就巡飞搜索(2026-09-28)
+          if(!p.mineOk){p.cruise=true;p.lastTarget=p.target;p.target=null;return;}
           p.mine=true;p.vel=[0,0,0];p.spd=0;p.target=null;p.trigRadius=p.trigRadius||12000*CFG.scale;return; // 2026-09-26 x1/5(单局地图):缺省原 60000
         }
         const kdir=V.norm(toK);
         // 飞向最后已知位置(巡航加速:有燃料就飞快点到点变雷,燃料尽只能滑行)
         const kvn=V.len(p.vel);
         if(p.fuel>0){ // 朝最后已知位置加速到巡航(用剩余燃料,能到就行)
-          const kSpdDes=Math.min((p.vPeak||PHYS.v(700)),Math.max(1500,Math.sqrt(2*MSL_ACC*Math.max(0,kdist-1200)*0.5))); // DS190
+          const kSpdDes=p.mineOk?Math.min((p.vPeak||PHYS.v(700)),Math.max(1500,Math.sqrt(2*MSL_ACC*Math.max(0,kdist-1200)*0.5))):(p.vPeak||PHYS.v(700)); // DS190;2026-09-28 不变雷的不减速
           let dv=Math.max(-150*dt,Math.min(150*dt,kSpdDes-p.spd)); // DS190
+          if(dv>0&&p.fuel<=MSL_LOAL_KEEP)dv=0; // 2026-09-28 加速不动末段预留
           const cost=Math.abs(dv)/150; // DS190
           if(cost>p.fuel){dv*=p.fuel/cost;p.fuel=0;}else p.fuel-=cost;
           p.spd+=dv;

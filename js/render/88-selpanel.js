@@ -226,7 +226,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
     const total=aliveHits.reduce((n,p)=>n+(p.count||0),0);
     const dmgSum=aliveHits.reduce((n,p)=>n+(p.dmg||0),0);
     const dist=list=>{const m={};list.forEach(k=>m[k]=(m[k]||0)+1);return Object.keys(m).map(k=>k+' ×'+m[k]).join(' · ');};
-    const stts=dist(aliveHits.map(p=>p.mine?'伏击雷':p.park?'布雷中':(p.netOff?'组网包抄':((p.coastT>0||p.guideMode==='coast')?'脱锁':'突击'))));
+    const stts=dist(aliveHits.map(p=>p.mine?'伏击雷':p.cruise?'巡飞搜索':p.park?(p.mineOk?'布雷中':'飞向点位'):(p.netOff?'组网包抄':((p.coastT>0||p.guideMode==='coast')?'脱锁':'突击'))));
     const tgts=dist(aliveHits.map(p=>p.target?(p.target.name||'区域'):'无'));
     const gds=dist(aliveHits.map(p=>p.guideMode==='self'?'自主':p.guideMode==='link'?'数据链':p.guideMode==='coast'?'脱锁':'本地'));
     const minFuel=Math.min(...aliveHits.map(p=>p.fuel||0));
@@ -264,7 +264,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
       ...(m.vPeak?[['巡航',Math.round(m.vPeak)],['终端',Math.round(m.vTerm)]]:[]),
       ['触发圈',Math.round((m.trigRadius||12000*CFG.scale)/1000)+'k'], // 2026-09-26 x1/5(单局地图):原 60000
     ].map(it=>`<span class="fi"><i>${it[0]}</i><b>${it[1]}</b></span>`).join('');
-    const stt=m.mine?'伏击雷 · 静默待命':m.park?'飞向布雷点':(m.netOff?'组网包抄':(m.coastT>0?'脱锁滑行':'突击中'));
+    const stt=m.mine?'伏击雷 · 静默待命':m.cruise?'巡飞搜索 · 导引头开着':m.park?(m.mineOk?'飞向布雷点':'飞向点位 · 导引头搜索'):(m.netOff?'组网包抄':(m.coastT>0?'脱锁滑行':'突击中'));
     const tgt=m.target?(m.target.name||(m.target.pos?'区域点':'—')):(m.mine?'无(待触发)':'无');
     const tdist=(m.target&&m.target.pos)?V.len(V.sub(m.target.pos,m.pos)):0;
     const fu=Math.max(0,Math.min(100,m.fuel||0)); // 燃料满值100s,直接当百分比
@@ -275,8 +275,9 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
       <div class="row"><span class="k">剩余</span><span class="v">${m.count||12} 颗</span></div>
       <div class="row"><span class="k">速度</span><span class="v">${Math.round(SHOW.v(V.len(m.vel)))} km/s</span></div>
       <div class="row"><span class="k">目标</span><span class="v">${tgt}${tdist?' · '+Math.round(tdist/1000)+'k':''}</span></div>
-      <div class="row"><span class="k">引导</span><span class="v">${guideDesc(m)}</span></div>`;
-    updateCmdBar([]); // 导弹不可开关操作
+      <div class="row"><span class="k">引导</span><span class="v">${guideDesc(m)}</span></div>
+      <div class="row"><span class="k">到点</span><span class="v">${m.mine?'已布雷':(m.mineOk?'停下变雷':'一直飞(巡飞搜索)')}</span></div>`;
+    updateCmdBar([]); // 导弹只有底栏「变雷」一颗钮(cbMine)
     return;
   }
   if(m&&m.type==='beacon'){ // 侦察信标(groupAt 也能命中)
@@ -454,7 +455,25 @@ function cmdBarSync(){ // 三颗钮的字与亮灭;菜单开着就顺手重画
     else{const pul=sel.some(radarPulsing),lb=pul?'脉冲':({silent:'静默',paint:'发射',jam:'干扰'})[s.emitMode]||s.emitMode;r.classList.toggle('on',pul||s.emitMode!=='silent');setHTMLStable(r,'<span class="l">雷达</span><span class="s">'+lb+'</span>',false);}}
   if(w){w.classList.toggle('is-dis',!s);const on=!!s&&wpnAnyOn(s);w.classList.toggle('on',on);setHTMLStable(w,'<span class="l">武器</span><span class="s">'+(s?(on?'启动':'关闭'):'—')+'</span>',false);}
   if(CMDPOP.kind)cmdPopRender();
+  const mb=document.getElementById('cbMine'),ml=mslSelOwn(); // 2026-09-28 选中我方导弹时才出现
+  if(mb){mb.style.display=ml.length?'':'none';
+    if(ml.length){const on=ml.every(p=>p.mineOk||p.mine);mb.classList.toggle('on',on);setHTMLStable(mb,'<span class="l">变雷</span><span class="s">'+(on?'到点停下':'一直飞')+'</span>',false);}}
 }
+function mslSelOwn(){ // 2026-09-28 选中的我方导弹组:点选 = 整个网,框选 = 框里的组(GM 下敌方的也算)
+  const set=new Set((selMissileHits||[]).filter(p=>p.type==='missile'&&!p.done));
+  if(selNet)for(const p of projectiles)if(p.type==='missile'&&!p.done&&p.netId===selNet)set.add(p);
+  return [...set].filter(p=>adminMode||(p.shooter&&p.shooter.side==='blue'));
+}
+(function bindMineBtn(){ // 2026-09-28 底栏「变雷」(用户:「导弹也作为可选单位,下部 ui 给一个变雷的选项,不选中就一直飞」)
+  const wrap=document.querySelector('#cmdBar .cmd-btns');if(!wrap||document.getElementById('cbMine'))return;
+  const b=document.createElement('button');b.className='btn cbtn';b.id='cbMine';b.style.display='none';wrap.appendChild(b);
+  b.addEventListener('click',()=>{const L=mslSelOwn();if(!L.length)return;const v=!L.every(p=>p.mineOk||p.mine);
+    for(const p of L){if(p.mine)continue;p.mineOk=v;
+      if(v&&p.cruise){p.cruise=false;p.park=true;p.parkPt=ordArenaClamp([p.pos[0],p.pos[1],0]);}} // 已在巡飞的:就地减速停下
+    cmdBarSync();updateSelPanel();});
+  b.addEventListener('mouseenter',()=>{const t=document.getElementById('cmdTip');if(t){t.style.display='block';t.textContent='变雷:勾上 = 飞到瞄准点停下待命,导引头看见目标再点火扑上去;不勾 = 飞过瞄准点继续直飞,导引头一路找,出游玩区消失。两种都是途中一看见就扑。已经停下的雷不受影响';}});
+  b.addEventListener('mouseleave',()=>{if(typeof updSelWeaponTip==='function')updSelWeaponTip();});
+})();
 function fcPickBtnSync(s){ // RF8b 同步标题栏「选择」钮:它在 #fcSec .fc-hd 里,是【静态元素】,所以直接改属性即可,不经 innerHTML
   const b=document.getElementById('fcPickBtn');
   if(!b)return;
