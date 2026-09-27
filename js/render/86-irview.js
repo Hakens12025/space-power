@@ -2,14 +2,14 @@
 /* ============================================================================
    红外画面(右下角「红外」钮,MAPV.mode === 'ir'):演示页 demos/地图组/红外效果.html 的甲画法搬进引擎,物理全走引擎的传感器模型。
    每个热源(非我方的船、石头)在我方看得最清楚的那艘船眼里是一座山:有效亮度 = senseOptLoWith(晒热 / 杂散光 / 云背景 / 消光),
-   峰高 = 有效信噪比 K_IR·lo/d²(按"熄火静默 DD 恰在发现距离上"归一),宽 = 模糊宽度 d·covTheta('opt');三道门 = senseOptBlocked。
+   亮度与大小分开(2026-09-28 用户):峰高 = 有效信噪比 K_IR·lo/d²(发现门限上 = THR),封在表面亮度(温度)以内;宽 = 距离 x 固定模糊角 与 目标尺寸 合成,与亮度无关;三道门 = senseOptBlocked。
    背景:尘埃云(envBgParts,按光照;乘地图同一个显示增益)、位置型恒星的光晕、天体盘(朝阳面亮、背阴面 heat)。
    场按 CELL 屏幕像素一格,色阶 + 噪点上色,小图放大进整屏缓存(设备像素),每帧 1:1 贴;山只在变了的地方揭旧贴新;近处(Johnson N >= 3)画热轮廓。
    ============================================================================ */
 const IRV_C={CELL:5,V0:0.02,VMAX:1000,CULL:0.0003,SIG_MIN:0.7,NOISE:0.005,NOISE_MS:200,TAIL_K:4,POS_P:3,MIX:0.875,
   BG_K:0.4,AR:3,AR_ROCK:1.5,FADE:1,HALO:0.5,DETAIL:6.4,CLOUD_M:8,CLOUD_LV:4,CLOUD_SYNC:400,CLOUD_BATCH:1500,CLOUD_COARSE:1200,
-  SHIP_HOT:15,SURF_K:0.88};
-  // 2026-09-28 表面亮度(扩展源):SHIP_HOT = 船的自身热集中在散热板上,每单位面积 x15(熄火船 = 晒着的石头 x10,用户选);SURF_K = 表面亮度换到色阶(熄火船身落在色阶 0.6)
+  SHIP_HOT:15,SURF_K:0.103,THR:0.154};
+  // 2026-09-28 SHIP_HOT = 船的自身热集中在散热板上,每单位面积 x15(熄火船 = 晒着的石头 x10,用户选);THR = 发现门限上的色阶值(色阶 0.2 暗红);SURF_K = 表面亮度换到色阶(晒着的石头恰在 THR、熄火船 0.40)
   // V0 / VMAX = 色阶的对数刻度;CULL = 山截断处;SIG_MIN = 山的最小宽(格);TAIL_K = 尾焰尾巴长宽比;POS_P / MIX = 恒星光晕的律;AR / HALO / DETAIL = 近处热轮廓
 const IRV_T0=-0.1;
 const IRV_RAMP=[[IRV_T0,[40,6,6,140]],[0,[70,12,12,150]],[0.25,[150,30,20,170]],[0.5,[220,80,30,190]],[0.75,[255,170,60,210]],[1,[255,245,210,230]]];
@@ -28,20 +28,20 @@ function irvRef(){ // 刻度参照:熄火静默的 DD 恰在发现距离上
 }
 function irvObs(){const a=[];for(const s of ships)if(s.side==='blue'&&!s.dead)a.push(s);return a;}
 function irvSrc(){const a=[];for(const s of ships)if(s.side!=='blue'&&!s.dead)a.push(s);for(const r of rocks)if(!r.dead&&r.side!=='blue')a.push(r);return a;} // 2026-09-27 自己放的浮标不算热源
-function irvHill(t,obs){ // 一座山:峰高(按参照归一)与宽度(km),取看得最清楚的那艘我方船
+function irvPsf(){return 4*SENS.CLS.DD.size*COV.L_REF/(3*LAD.optIdent);} // 固定模糊角:DD 恰在光学认出距离上出轮廓(Johnson N = 3)
+function irvV(s){return IRV_C.THR*(s>=1?s:s*s*s);} // 信噪比 → 色阶值:发现门限上 = THR;门限以下三次方淡出(埋进噪点)
+function irvHill(t,obs){ // 一座山:信噪比(亮度轴)与宽度 km(大小轴),取看得最清楚的那艘我方船
   let best=null,bg=NaN,tSh=false;const lit=envHasLight(),nb=ENV.bodies.length>0;
   for(let n=0;n<obs.length;n++){const o=obs[n];
     if(senseOptBlocked(o,t))continue;
     if(bg!==bg){bg=ENV.clouds.length?envBg(t.pos,'opt'):0;tSh=lit&&nb&&envInShadow(t.pos);}
     const lo=senseOptLoWith(o,t,bg,tSh,lit&&!(nb&&envInShadow(o.pos)));if(!(lo>0))continue;
     const dx=t.pos[0]-o.pos[0],dy=t.pos[1]-o.pos[1],dz=(t.pos[2]||0)-(o.pos[2]||0),d=Math.max(1,Math.hypot(dx,dy,dz));
-    const snr=SENS.K_IR*lo/(d*d),blur=d*covTheta('opt',o,t,d,lo);
-    if(!(blur>0))continue;
-    if(!best||snr>best.snr)best={snr:snr,blur:blur,o:o,k:n,lo:lo};
+    const snr=SENS.K_IR*lo/(d*d);
+    if(!best||snr>best.snr)best={snr:snr,d:d,o:o,k:n,lo:lo};
   }
   if(!best)return null;
-  const ref=irvRef(),k=ref.sig/best.blur;
-  return {peak:best.snr*k*k,sig:best.blur,o:best.o,k:best.k,lo:best.lo};
+  return {snr:best.snr,sig:best.d*irvPsf(),o:best.o,k:best.k,lo:best.lo}; // 宽 = 距离 x 固定模糊角,不读亮度(原来宽 = 定位误差,越暗越宽);体型只管出轮廓(covResN)与轮廓大小
 }
 function irvShowPeak(h){const u=h.sig/irvRef().sig,w=u*u/(1+u*u);return IRV_C.V0*(Math.pow(1+h.peak/IRV_C.V0,1-w)-1);} // 宽的山往底红收(VSUP)
 const IRV_P3=[0,0,0];
@@ -89,7 +89,7 @@ const IRVJ={rec:new Map(),obs:[],q0:[],q1:[],fr:0,cost:0,cost0:0,area:0,reset:tr
 const IRVJ_NONE={list:[],sil:null};
 function irvjStCh(r,t){return r.fl!==t.flame||r.sf!==t.sideFlame||r.em!==t.emitMode||r.fh!==(t.fireHot>0)||r.fx!==t.facing[0]||r.fy!==t.facing[1];}
 function irvjStSet(r,t){r.fl=t.flame;r.sf=t.sideFlame;r.em=t.emitMode;r.fh=t.fireHot>0;r.fx=t.facing[0];r.fy=t.facing[1];}
-function irvSurf(t,h,q){ // 2026-09-28 船身的表面亮度(色阶值):山顶不超过它 —— 远处是点源(总亮度摊在模糊斑上),近处看得清形状后是扩展源(只看多热、与距离无关)
+function irvSurf(t,h,q){ // 2026-09-28 船身的表面亮度(色阶值,温度上限):山顶不超过它,与距离、大小无关
   const tot=q.self+q.plume+q.solar;if(!(tot>0))return Infinity;
   return IRV_C.SURF_K*(h.lo/tot)*(q.self*(t.kind==='rock'?1:IRV_C.SHIP_HOT)+q.solar)/sReq(t,'size','ship'); // h.lo/tot:背景与消光的折损照乘;尾焰单独成尾巴,不算进船身
 }
@@ -112,18 +112,17 @@ function irvjCalib(src,obs){ // 进红外画面时标定一次:每个源算一�
 function irvZf(t){return t.kind==='rock'?hullZoomF():shipZoomF();} // 舰船按 shipZoomF(再缩 SHIP_K),石头按 hullZoomF
 function irvBodyR(t){return t.kind==='rock'?hullSize('UNK',2)*0.78*Math.sqrt(t.size/0.7):hullSize(t.cls,t.tier||2)*0.78;} // 图标半径(未乘缩放系数)
 function irvjSplats(t,ph){ // 一个源的贴片(尾焰尾巴、近处光晕、主山),格坐标
-  const C=IRV_C.CELL,p=toScreen(t.pos[0],t.pos[1]),cx=p[0]/C,cy=p[1]/C,list=[],tl=ph.tl,sig=ph.sig;let peak=ph.peak;
-  if(tl&&tl.share>0){
-    const s0=Math.max(IRV_C.SIG_MIN,sig*cam.zoom/C),sa=s0*IRV_C.TAIL_K/2,pkT=irvShowPeak({peak:peak*tl.share*s0/sa,sig:sig*Math.sqrt(IRV_C.TAIL_K/2)});
+  const C=IRV_C.CELL,p=toScreen(t.pos[0],t.pos[1]),cx=p[0]/C,cy=p[1]/C,list=[],tl=ph.tl,s0=Math.max(IRV_C.SIG_MIN,ph.sig*cam.zoom/C);let sh=0;
+  const N=covResN(t,ph.sig),a=Math.max(0,Math.min(1,N-3)); // 大小轴:目标横跨几个模糊宽,只看体型与距离
+  if(tl&&tl.share>0){sh=tl.share;
+    const sa=s0*IRV_C.TAIL_K/2,pkT=irvV(ph.snr*sh)*(1-IRV_C.FADE*a); // 尾焰是最热的部分,不封顶;出轮廓后随主山一起淡出(近处归热轮廓的喷口与 drawIrFx)
     if(pkT>=IRV_C.CULL)list.push(irvSplatRect({x:cx+tl.ux*sa,y:cy+tl.uy*sa,pk:pkT,a:sa,c:s0,ux:tl.ux,uy:tl.uy,iso:false}));
-    peak*=1-tl.share;
   }
-  const h={peak:peak,sig:sig},pk0=Math.min(irvShowPeak(h),ph.surf);if(!(pk0>=IRV_C.CULL))return {list:list,sil:null}; // 2026-09-28 山顶封在表面亮度(石头贴近不再和船一样白)
-  const N=covResN(t,sig),a=Math.max(0,Math.min(1,N-3)),sil=a>0?{N:N,a:a,v:pk0}:null,pk=pk0*(1-IRV_C.FADE*a);
+  const pk0=Math.min(irvV(ph.snr*(1-sh)),ph.surf);if(!(pk0>=IRV_C.CULL))return {list:list,sil:null}; // 2026-09-28 亮度轴:信号随距离涨,封在表面亮度(温度)
+  const sil=a>0?{N:N,a:a,v:pk0}:null,pk=pk0*(1-IRV_C.FADE*a);
   if(a>0&&!shipMarkMode()){const ri=Math.max(IRV_C.SIG_MIN,irvBodyR(t)*irvZf(t)/C),pkH=pk0*IRV_C.HALO*a;
     if(pkH>=IRV_C.CULL)list.push(irvSplatRect({x:cx,y:cy,pk:pkH,a:ri,c:ri,ux:1,uy:0,iso:false}));}
   if(!(pk>=IRV_C.CULL))return {list:list,sil:sil};
-  const s0=Math.max(IRV_C.SIG_MIN,sig*cam.zoom/C);
   if(N>1&&t.facing){const ar=t.kind==='rock'?IRV_C.AR_ROCK:IRV_C.AR,rr=1+(ar-1)*Math.min(1,(N-1)/3),fl=Math.hypot(t.facing[0],t.facing[1])||1;
     list.push(irvSplatRect({x:cx,y:cy,pk:pk,a:s0*Math.sqrt(rr),c:s0/Math.sqrt(rr),ux:t.facing[0]/fl,uy:t.facing[1]/fl,iso:false}));}
   else list.push(irvSplatRect({x:cx,y:cy,pk:pk,a:s0,c:s0,ux:1,uy:0,iso:true}));
@@ -359,21 +358,21 @@ function irfxSprites(){
   const ring=mk(128,128,(g,w)=>{const r=g.createRadialGradient(w/2,w/2,w*0.34,w/2,w/2,w/2);r.addColorStop(0,'rgba(255,245,215,0)');r.addColorStop(0.55,'rgba(255,245,215,0.9)');r.addColorStop(1,'rgba(255,200,120,0)');g.fillStyle=r;g.fillRect(0,0,w,w);});
   return IRFX.spr={glow:glow,plume:plume,ring:ring};
 }
-function irfxSnr(ph){const k=irvRef().sig/ph.sig;return ph.peak/(k*k);} // 这一对的信噪比:1 = 恰在发现门限上
+function irfxSnr(ph){return ph.snr;} // 这一对的信噪比:1 = 恰在发现门限上
 function drawIrFx(){
   const S=irfxSprites(),now=nowMs(),dtw=Math.min(0.1,Math.max(0,(now-(IRFX.t||now))/1000)),dts=Math.max(0,simTime-IRFX.sim);IRFX.t=now;IRFX.sim=simTime;
   const seen=new Set();ctx.save();ctx.globalCompositeOperation='lighter';
-  for(const r of IRVJ.rec.values()){
+  for(const r of IRVJ.rec.values()){ // 2026-09-28 wk:特效尺寸 = 模糊宽,按舰标大小封顶(宽度不再随亮度变窄)
     const t=r.t,ph=r.ph;if(!ph||t.dead)continue;const snr=irfxSnr(ph);if(!(snr>=0.5))continue; // 我方红外真看得见才画
     seen.add(t);let st=IRFX.src.get(t);if(!st){st={fl:t.flame,fh:t.fireHot>0,ig:-1e9,pt:simTime};IRFX.src.set(t,st);}
-    const p=toScreen(t.pos[0],t.pos[1]),sz=Math.max(5,Math.min(90,ph.sig*cam.zoom*2.2)),a0=Math.max(0.25,Math.min(0.95,0.45+0.18*Math.log10(snr)));
+    const p=toScreen(t.pos[0],t.pos[1]),wk=Math.min(ph.sig,irvSilR(t)/cam.zoom),sz=Math.max(5,Math.min(90,wk*cam.zoom*2.2)),a0=Math.max(0.25,Math.min(0.95,0.45+0.18*Math.log10(snr)));
     if(t.flame&&!st.fl)st.ig=now;st.fl=t.flame;
     const fh=t.fireHot>0;if(fh&&!st.fh)IRFX.fl.push({t:t,t0:now,sz:sz,a:a0});st.fh=fh;
     if(t.flame){ // 尾焰:主推拖在后面,刹车朝前喷(喷口方向 = sensePlume)
       const pl=sensePlume(t,IRV_P3);if(pl){const brake=t.flame<0,sh=0.82+0.12*Math.sin(now*0.023+t.pos[0]*1e-4)+0.06*Math.sin(now*0.061),L=sz*(brake?2.6:2.1),Wd=sz*(brake?0.8:0.65);
         ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(Math.atan2(pl[1],pl[0]));ctx.globalAlpha=a0*sh*(brake?1:0.85);ctx.drawImage(S.plume,0,-Wd/2,L,Wd);ctx.restore();
         ctx.globalAlpha=a0*(brake?0.9:0.55)*sh;ctx.drawImage(S.glow,p[0]-sz*(brake?0.75:0.6),p[1]-sz*(brake?0.75:0.6),sz*(brake?1.5:1.2),sz*(brake?1.5:1.2)); // 刹车的喷口朝着前方,核心更白更亮
-        if(simTime-st.pt>=IRFX.PUFF_DT&&IRFX.puffs.length<IRFX.PMAX){st.pt=simTime;const v=t.vel||[0,0,0],L0=ph.sig*1.5;IRFX.puffs.push({x:t.pos[0]+pl[0]*L0,y:t.pos[1]+pl[1]*L0,vx:v[0]*0.3+pl[0]*PHYS.v(20),vy:v[1]*0.3+pl[1]*PHYS.v(20),t0:simTime,w:ph.sig,a:a0*0.5});}}}
+        if(simTime-st.pt>=IRFX.PUFF_DT&&IRFX.puffs.length<IRFX.PMAX){st.pt=simTime;const v=t.vel||[0,0,0],L0=wk*1.5;IRFX.puffs.push({x:t.pos[0]+pl[0]*L0,y:t.pos[1]+pl[1]*L0,vx:v[0]*0.3+pl[0]*PHYS.v(20),vy:v[1]*0.3+pl[1]*PHYS.v(20),t0:simTime,w:wk,a:a0*0.5});}}}
     const ig=(now-st.ig)/500;if(ig>=0&&ig<1){ctx.globalAlpha=a0*(1-ig);const q=sz*(1.4+ig);ctx.drawImage(S.glow,p[0]-q,p[1]-q,2*q,2*q);} // 点火那一下
   }
   for(const t of IRFX.src.keys())if(!seen.has(t))IRFX.src.delete(t);
@@ -393,7 +392,7 @@ function drawIrFx(){
 const IRV_ROCK_SHAPE=[1,0.72,0.95,0.68,0.9,0.78,1.05];
 function irvSilPath(X,t,tv){
   const col=irvLutHex(tv+0.12);
-  if(t.kind==='rock'){const r=irvBodyR(t);X.fillStyle=col;X.beginPath();
+  if(t.kind==='rock'){const r=irvBodyR(t);X.fillStyle=irvLutHex(tv);X.beginPath(); // 2026-09-28 石头轮廓不再提亮
     for(let i=0;i<IRV_ROCK_SHAPE.length;i++){const a=i/IRV_ROCK_SHAPE.length*2*Math.PI,q=r*IRV_ROCK_SHAPE[i];if(i)X.lineTo(Math.cos(a)*q,Math.sin(a)*q);else X.moveTo(Math.cos(a)*q,Math.sin(a)*q);}
     X.closePath();X.fill();return;}
   drawHull(X,t.cls,t.tier||2,col,'fill');
