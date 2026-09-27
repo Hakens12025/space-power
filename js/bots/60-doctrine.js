@@ -53,11 +53,11 @@ function aiSearchWp(k){ // 第 0 个是战场中心,之后按五角星次序(每
 function aiRedBelief(dt,reds){ // 纯决策:红方此刻认为该去哪。只写 AIR,不碰任何一艘船。TK2.2:接触从红方自己的航迹表里枚举,不再拿蓝舰名单
   let rx=0,ry=0;reds.forEach(e=>{rx+=e.pos[0];ry+=e.pos[1];});rx/=reds.length;ry/=reds.length;
   let n=0,x=0,y=0;
-  trkEach('red',tk=>{if(trkGone(tk))return;const p=trkPos(tk);if(p){x+=p[0];y+=p[1];n++;}}); // 注册表顺序 = 原来蓝舰名单的顺序,浮点累加的次序不变
+  trkEach('red',tk=>{if(trkGone(tk)||!trkFoe(tk))return;const p=trkPos(tk);if(p){x+=p[0];y+=p[1];n++;}}); // 注册表顺序 = 原来蓝舰名单的顺序,浮点累加的次序不变。2026-09-28 跳过已确认不是船的(石头 / 民船):原来会把队心拉进碎石带、整局停在那里
   if(n){AIR.goal=ordArenaClamp([x/n,y/n]);AIR.src='fix';AIR.memPos=AIR.goal.slice();AIR.memT=0;} // 2026-09-26 夹进 ARENA(外推的估计位置可能出界)
   else{
     let bx=0,by=0,m=0;
-    trkEach('red',(tk,st)=>{if(trkGone(tk)||st!=='heat')return;
+    trkEach('red',(tk,st)=>{if(trkGone(tk)||st!=='heat'||!trkFoe(tk))return;
       const u=trkBearing(tk,[rx,ry]);bx+=u[0];by+=u[1];m++;}); // 方位走具名的真值通道 trkBearing(逐浮点复刻原来那一句)
     const bl=Math.hypot(bx,by);
     if(m&&bl>1e-9){AIR.goal=ordArenaClamp([rx+bx/bl*AIR.LEAD,ry+by/bl*AIR.LEAD]);AIR.src='brg';AIR.memPos=AIR.goal.slice();AIR.memT=0;} // 2026-09-26 夹进 ARENA
@@ -76,13 +76,21 @@ function aiRedBelief(dt,reds){ // 纯决策:红方此刻认为该去哪。只写
   return AIR.goal;
 }
 
+/* ================= BOT2 按新交战规则改条令(2026-09-28,用户:「根据这种说法,重做敌方的 ai」)=================
+   新规则:主炮一炮沉驱逐舰、命中率 S 形(7.3 万 50% / 12.6 万 10% / 15 万 5%);导弹 40 万、发射后锁定(盲射会自己找);
+   对方炮弹划过可见光圈会暴露来路(weapons/56 的 SHELL_TR)。对应的四处改动(业内战术名在括号里):
+     · 交战态站在双方主炮约 12% 把握的距离(约 12 万)用导弹打;主炮就绪、把握过门就停车对准开一炮
+     · 开完一炮 SCOOT_S 秒内不停车、沿轨道挪开 —— 打了就跑(shoot-and-scoot);压上态同样
+     · 尾随态(只有方位、定不出位置)隔 BOL_GAP 秒沿方位盲射一组 —— 只给方位发射(BOL)
+     · 看见对方炮弹来路,沿反向线盲射一组 —— 反炮兵射击(counter-battery fire)
+   删掉了看见来袭炮弹就规避:炮弹进可见光圈到命中约 17 物理秒,驱逐舰只挪得开约 7 km(命中半径 400 km),而规避要点火、点火更亮。 */
 /* ================= BOT1 条令 ================= */
 /* 六个态。箭头上写的是【红方自己知道的事】—— 它不知道蓝舰的血量、弹药、编成,所以转移条件里一个都没有。 */
 const RDOC_CFG={
-  WEZ_P:0.30,        // 交战半径的【外界】:让对方主炮的把握降到这一档(0.30 ⇒ 64 万)
+  WEZ_P:0.12,        // 交战半径的【外界】:让对方主炮的把握降到这一档。2026-09-28 0.30 → 0.12(S 形曲线下约 12 万,刚进自动开火门;一炮沉船后 30% 的距离不能站)
   STRIKE_K:0.95,     // 交战半径的【内界】:自己导弹动力射程的几成。两者取小 —— WR1 之后取小的恒是这一条,见文件头那条 ⚠
   PRESS_K:0.80,      // 压上态:进到自己主炮过半把握距离的几成
-  WD_P:0.30,         // 脱离态:退到对方主炮把握降到这一档的距离(0.30 ⇒ 64 万,导弹滑行 26 万过去)。
+  WD_P:0.02,         // 脱离态:退到对方主炮把握降到这一档的距离。2026-09-28 0.30 → 0.02(约 19 万)
                      //   填 (0,1) 里的把握
   HP_WD:0.45,     // 舰队平均结构比低于此 ⇒ 脱离
   HP_PRESS:0.75,     // 高于此才允许压上
@@ -100,14 +108,20 @@ const RDOC_CFG={
   APPROACH_K:1.25,   // 离圈还有这么多倍半径时走【直线接近】,进了再转成绕圈
   FOCUS_HYS:1.35,    // 集火迟滞:已经在打的那个目标加这个成数,免得每拍换目标
   PULSE_S:45,        // 2026-09-27 搜索 / 尾随态:当灯的那艘每隔这么多秒扫一拍(sensors/21 的扫描),扫完换人当灯 —— 脉冲出自不同位置,听的一方难以交会
+  SCOOT_S:30,        // 2026-09-28 压上态开完一炮后这么多秒不停车(沿轨道挪开 SCOOT_A 弧度):对方看见开火闪光与炮弹来路,原地不动就是等着挨还击
+  SCOOT_A:0.6,
+  BOL_GAP:90,        // 2026-09-28 尾随态沿方位盲射的间隔(秒),每艘就绪的一组;导弹过点后一路巡飞搜索(weapons/56)
+  BOL_D:200000*CFG.scale, // 盲射瞄准点离队心多远(只定方向,导弹过点继续飞)
+  CB_GAP:30,         // 2026-09-28 反炮兵射击的最短间隔(秒):同一轮齐射的几发炮弹只还一次手
+  CB_D:200000*CFG.scale,  // 沿炮弹反向线往回多远瞄
   LURE_OFF:90000*CFG.scale, // 2026-09-27 第一次握住接触时,两艘不当灯的船各往舰队中心两侧这么远放一个诱饵(world/14),诱饵一直开着雷达冒充灯
 };
 const RDOC={st:'ambush',t:0,goal:[0,0],src:'',foe:null,foeD:0,r:0,orbit:0,dir:1,
-  lamp:'',lampT:0,ambT:0,salvoT:1e9,shadowT:0,paintT:0,strikeT:0,press:false,plan:{},why:'',pulseT:0,lured:false};
+  lamp:'',lampT:0,ambT:0,salvoT:1e9,shadowT:0,paintT:0,strikeT:0,press:false,plan:{},why:'',pulseT:0,lured:false,bolT:0,cbT:1e9,cbLast:null};
 function aiRedReset(){ // 换局清空(scenario/91 调)。AI1 的信念 + BOT1 的条令一起清
   AIR.goal=null;AIR.src='';AIR.memPos=null;AIR.memT=0;AIR.wp=0;AIR.u=[-1,0];
   RDOC.st='ambush';RDOC.t=0;RDOC.foe=null;RDOC.foeD=0;RDOC.r=0;RDOC.orbit=0;RDOC.dir=1;
-  RDOC.lamp='';RDOC.lampT=0;RDOC.ambT=0;RDOC.salvoT=1e9;RDOC.shadowT=0;RDOC.paintT=0;RDOC.strikeT=0;RDOC.press=false;RDOC.plan={};RDOC.why='';RDOC.pulseT=0;RDOC.lured=false;
+  RDOC.lamp='';RDOC.lampT=0;RDOC.ambT=0;RDOC.salvoT=1e9;RDOC.shadowT=0;RDOC.paintT=0;RDOC.strikeT=0;RDOC.press=false;RDOC.plan={};RDOC.why='';RDOC.pulseT=0;RDOC.lured=false;RDOC.bolT=0;RDOC.cbT=1e9;RDOC.cbLast=null;
 }
 let _botWorstSig=0; // 没认出的目标按"最危险的那一型"算:散布最小 = 打得最准。表是死的,算一次
 function botWorstSigma(){
@@ -144,7 +158,7 @@ function botFocus(reds){ // WTA 贪心解:全队集火同一个。分数 = 价�
   });
   return best;
 }
-function botContacts(){let n=0;trkEach('red',tk=>{if(!trkGone(tk)&&trkHeld(tk))n++;});return n;} // TK2.2:红方握着几条接触,数自己的航迹表
+function botContacts(){let n=0;trkEach('red',tk=>{if(!trkGone(tk)&&trkHeld(tk)&&trkFoe(tk))n++;});return n;} // 2026-09-28 已确认不是船的不算 // TK2.2:红方握着几条接触,数自己的航迹表
 function botCenter(list){let x=0,y=0;for(const s of list){x+=s.pos[0];y+=s.pos[1];}return [x/list.length,y/list.length];}
 
 function botTransit(dt,reds,F){ // 态势机。**转移条件里只许出现红方自己知道的量**
@@ -173,7 +187,7 @@ function botGunShip(reds){for(const e of reds)if(hasMAC(e))return e;return reds[
 function botRadius(reds,foe){ // 这一态该站多远
   const flag=botGunShip(reds),cfg=RDOC_CFG;
   if(RDOC.st==='press')return macRangeAt(flag,0.5)*cfg.PRESS_K||mslReach(flag)*0.5;
-  if(RDOC.st==='withdraw')return Math.max(foe?botFoeGunR(foe,cfg.WD_P):0,mslReach(flag)*1.2);
+  if(RDOC.st==='withdraw')return Math.max(foe?botFoeGunR(foe,cfg.WD_P):0,mslReach(flag)*0.5); // 2026-09-28 导弹 40 万之后改 0.5:退到主炮够不着、导弹还够得着的地方
   const out=foe?botFoeGunR(foe,cfg.WEZ_P):0;            // 对方够不太着我的距离
   const inn=mslReach(flag)*cfg.STRIKE_K;                // 我够得着它的距离
   return out>0?Math.min(out,inn):inn;                   // 取小:站到外界去就连导弹都只能滑行过去了
@@ -238,6 +252,11 @@ function aiDoctrine(dt,reds){ // 指挥层入口:写 RDOC(含每艘舰的 plan)�
   const salvoSet={};let salvoNow=false;
   if(salvoWin)for(const e of reds){if(readyCells(e)>=Math.ceil((e.cells||4)/2)){salvoSet[e.id]=true;salvoNow=true;}}
   if(salvoNow)RDOC.salvoT=0;
+  RDOC.bolT+=dt;RDOC.cbT+=dt; // 2026-09-28 盲射:尾随态沿方位(BOL);任何态看见对方炮弹来路就沿反向线还手(反炮兵)
+  let bolPt=null,cbPt=null;
+  if(st==='shadow'&&RDOC.src==='brg'&&RDOC.bolT>=cfg.BOL_GAP){RDOC.bolT=0;bolPt=ordArenaClamp([rc[0]+AIR.u[0]*cfg.BOL_D,rc[1]+AIR.u[1]*cfg.BOL_D,0]);}
+  const trL=(typeof SHELL_TR!=='undefined')?SHELL_TR.red:[],tr=trL.length?trL[trL.length-1]:null;
+  if(tr&&tr!==RDOC.cbLast&&RDOC.cbT>=cfg.CB_GAP){RDOC.cbLast=tr;RDOC.cbT=0;cbPt=ordArenaClamp([tr.a[0]-tr.u[0]*cfg.CB_D,tr.a[1]-tr.u[1]*cfg.CB_D,0]);}
   /* 逐舰 plan */
   const plan={};let i=0;
   const nx=-AIR.u[1],ny=AIR.u[0];                       // 非交战态:沿前进方向的法向横向排开(AI1 的基线站位)
@@ -252,21 +271,24 @@ function aiDoctrine(dt,reds){ // 指挥层入口:写 RDOC(含每艘舰的 plan)�
          第一版一直追轨道上的超前点 —— 接触的估计位置自己也在跑,横向分量把接近速度吃掉了:
          整局模拟里交战态的实测平均半径 58 万,而条令要的是 35.6 万 —— 红方大半时间根本没进到导弹够得着的地方。 */
       const dE=Math.hypot(e.pos[0]-c[0],e.pos[1]-c[1]);
+      const gunGo=hasMAC(e)&&e.macCd<=0&&!(e.scootT>0)&&!!tgt&&macHitProb(e,dE)>=MAC_AUTO_P; // 2026-09-28 站位时也抓机会:主炮就绪、把握过门 ⇒ 停车把机头交给战斗转向
       const br=Math.atan2(e.pos[1]-c[1],e.pos[0]-c[0]);
       const a=(dE>RDOC.r*cfg.APPROACH_K)?(br+off*0.35):(RDOC.orbit+off+RDOC.dir*cfg.LEAD_A);
       pos=[c[0]+Math.cos(a)*RDOC.r,c[1]+Math.sin(a)*RDOC.r];
-      if(st==='press'){pos=[c[0]+Math.cos(RDOC.orbit+off)*RDOC.r,c[1]+Math.sin(RDOC.orbit+off)*RDOC.r];
-        pass=false;hold=hasMAC(e)&&(RDOC.foeD<=macRangeAt(e,0.5));} // 压上态:到位停车,把机头交给战斗转向 —— 这才开得出主炮
+      if(st==='strike'&&gunGo){pass=false;hold=true;}
+      if(st==='press'){const sc=(e.scootT||0)>0,oa=RDOC.orbit+off+(sc?cfg.SCOOT_A*RDOC.dir:0);pos=[c[0]+Math.cos(oa)*RDOC.r,c[1]+Math.sin(oa)*RDOC.r];
+        pass=sc;hold=!sc&&hasMAC(e)&&(RDOC.foeD<=macRangeAt(e,0.5));} // 压上态:到位停车,把机头交给战斗转向 —— 这才开得出主炮;2026-09-28 开完一炮(scootT,61 写)先沿轨道挪开
     }else{
       const off=(i-(reds.length-1)/2)*AIR.SPREAD;
       pos=[goal[0]+nx*off,goal[1]+ny*off];pass=false;
     }
     const lp=(lure&&!isLamp&&lk<2)?ordArenaClamp(lure[lk++]):null;
     plan[e.id]={role:role,pos:ordArenaClamp(pos),pass:pass,hold:hold,paint:(paintOn&&isLamp),ping:(ping&&isLamp),lure:lp, // 2026-09-26 pos 夹进 ARENA(轨道点 / 横向排开点可能出界)
-      foe:tgt||null,salvo:(salvoSet[e.id]&&tgt)?(mirror?Math.min(2,readyCells(e)):(e.cells||4)):0};
+      foe:tgt||null,salvo:(salvoSet[e.id]&&tgt)?(mirror?Math.min(2,readyCells(e)):(e.cells||4)):0,
+      blind:(e.ammo>0&&readyCells(e)>0)?(cbPt||bolPt):null};
     i++;
   }
   RDOC.plan=plan;
-  RDOC.why=st+'/'+RDOC.src+' r='+Math.round(RDOC.r/1000)+'k 灯='+lamp+(foe?' 集火='+foe.name:'');
+  RDOC.why=st+'/'+RDOC.src+' r='+Math.round(RDOC.r/1000)+'k 灯='+lamp+(foe?' 集火='+foe.name:'')+(cbPt?' 反炮兵':'')+(bolPt?' 方位盲射':'');
   return RDOC;
 }
