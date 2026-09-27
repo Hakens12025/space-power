@@ -39,7 +39,7 @@
   <div id="stage"><canvas id="cv"></canvas></div>
   <aside id="panel">
     <h1>红外一道门</h1>
-    <div class="rule"><b>一条规则:</b>画面上每一处热的色阶值 = 增益 × 这一份热的光学信噪比。信噪比 = K × 亮度 / 距离²,与感知内核判"发现"的是同一个量(≥ 1 算发现)。船身、尾焰、开火、喷出的热气、导弹、轮廓全走这一道门,不分类型。<br><b>宽度</b> = 距离 × 固定模糊角,不读亮度;体型只决定什么时候出轮廓。</div>
+    <div class="rule"><b>一条规则:</b>画面上每一处热的色阶值 = 增益 × 这一份热的光学信噪比。信噪比 = K × 亮度 / 距离²,与感知内核判"发现"的是同一个量(≥ 1 算发现)。船身、尾焰、开火、导弹、轮廓全走这一道门,不分类型。<br><b>宽度</b> = 距离 × 固定模糊角,不读亮度;体型只决定什么时候出轮廓。</div>
     <div class="row"><label>目标距离 <span id="vD"></span></label><input id="sD" type="range" min="0" max="1000" value="301"></div>
     <div class="row"><label>视野半径(框住多远)<span id="vZ"></span></label><input id="sZ" type="range" min="0" max="1000" value="143"></div>
     <div class="row"><label>门的增益 <span id="vC"></span></label><input id="sC" type="range" min="0" max="1000" value="500"></div>
@@ -81,11 +81,10 @@ const TG = [
   { n: '石头 4', kind: 'rock', size: 4.0 },
   { n: '导弹(在喷)', kind: 'msl', size: 0.05, lum: 0.76 },
 ];
-TG.forEach((t, i) => { t.ang = -Math.PI / 2 + (i + 0.5) / TG.length * 2 * Math.PI; t.fx = 1; t.fy = 0; t.fireT = -1e9; t.puffT = 0; });
+TG.forEach((t, i) => { t.ang = -Math.PI / 2 + (i + 0.5) / TG.length * 2 * Math.PI; t.fx = 1; t.fy = 0; t.fireT = -1e9; });
 const ROCK_SHAPE = [1, 0.72, 0.95, 0.68, 0.9, 0.78, 1.05];
 
 const st = { D: 20000, viewK: 1.4, c: 0.05, th: 0.0864, sun: true, noise: true };
-const puffs = [];
 const $ = id => document.getElementById(id);
 const logMap = (u, a, b) => a * Math.pow(b / a, u / 1000);
 function readUI() {
@@ -98,8 +97,7 @@ function readUI() {
   $('vC').textContent = st.c.toFixed(3);
   $('vT').textContent = st.th.toFixed(3) + ' rad';
 }
-['sZ', 'sC', 'sT'].forEach(id => $(id).addEventListener('input', readUI));
-$('sD').addEventListener('input', () => { readUI(); puffs.length = 0; }); // 换距离:旧热气是按旧距离放的,清掉
+['sD', 'sZ', 'sC', 'sT'].forEach(id => $(id).addEventListener('input', readUI));
 $('bSun').onclick = e => { st.sun = !st.sun; e.target.classList.toggle('on', st.sun); e.target.textContent = st.sun ? '晒着' : '背阴'; };
 $('bNoise').onclick = e => { st.noise = !st.noise; e.target.classList.toggle('on', st.noise); };
 $('bFire').onclick = () => { const now = performance.now(); for (const t of TG) if (t.fire) t.fireT = now; };
@@ -137,9 +135,8 @@ function splat(cx, cy, pk, sa, sc, ux, uy) { // 格坐标;sa 沿 (ux,uy),sc 横�
   for (let j = j0; j <= j1; j++) { const dy = j - cy; for (let i = i0; i <= i1; i++) { const dx = i - cx, a = dx * ux + dy * uy, c = -dx * uy + dy * ux; F[j * gw + i] += pk * Math.exp(ea * a * a + ec * c * c); } }
 }
 
-let last = performance.now(), rows = 0;
+let rows = 0;
 function frame(now) {
-  const dt = Math.min(0.1, (now - last) / 1000); last = now;
   const viewR = st.D * st.viewK, pxkm = Math.min(W, H) / 2 / viewR, kmpx = 1 / pxkm, mark = kmpx > MARK_KMPX;
   const cx0 = W / 2, cy0 = H / 2;
   const wkm = st.D * st.th, sig = Math.max(SIG_MIN, wkm * pxkm / CELL);   // 模糊宽(格):只看距离与模糊角
@@ -155,15 +152,8 @@ function frame(now) {
     if (vt > 0) {
       pux = t.flame > 0 ? -t.fx : t.fx; puy = t.flame > 0 ? -t.fy : t.fy;   // 主推喷口朝后,刹车朝前
       const sa = sig * TAIL_K / 2; splat(gx + pux * sa, gy + puy * sa, vt, sa, sig, pux, puy);
-      t.puffT += dt; if (t.puffT > 0.6) { t.puffT = 0; puffs.push({ t: t, x: Math.cos(t.ang) * st.D + pux * wkm * 2, y: Math.sin(t.ang) * st.D + puy * wkm * 2, ux: pux, uy: puy, age: 0 }); }
     }
     info.push({ t, px, py, S, vb, vt, N, a, pux, puy });
-  }
-  for (let i = puffs.length - 1; i >= 0; i--) { // 喷出去的热气:尾焰那一份的 1/4,散开、冷掉(同一道门)
-    const u = puffs[i]; u.age += dt; if (u.age > 4) { puffs.splice(i, 1); continue; }
-    u.x += u.ux * wkm * 0.6 * dt; u.y += u.uy * wkm * 0.6 * dt;
-    const S = parts(u.t, now).plume, f = 1 - u.age / 4, s = sig * (1 + u.age * 0.5);
-    splat((cx0 + u.x * pxkm) / CELL, (cy0 + u.y * pxkm) / CELL, gate(S) * 0.25 * f * f, s, s, 1, 0);
   }
   if (st.noise && now - nzT > 200) { nzT = now; for (let q = 0; q < nz.length; q++) nz[q] = gauss() * NOISE; }
   const d = img.data;
