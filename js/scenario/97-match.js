@@ -48,7 +48,12 @@ function matchGenWorld(seed,B,R){
     if(far(p,B,rad+100000*CFG.scale)&&far(p,R,rad+100000*CFG.scale)&&w.bodies.every(function(b){return far(p,[b.x,b.y],rad+b.r+100000*CFG.scale);}))w.bodies.push({x:Math.round(p[0]),y:Math.round(p[1]),r:Math.round(rad)});}
   for(let n=Math.floor(r()*3),k=0;k<n;k++){const p=at(r()*1.6-0.8,r()*2-1),a=2e6*Math.pow(8,r()),b=a*(0.4+0.6*r());
     w.clouds.push({x:Math.round(p[0]),y:Math.round(p[1]),a:Math.round(a),b:Math.round(b),ang:Math.round(r()*180),seed:Math.floor(r()*1e6)});}
-  for(let n=20+Math.floor(r()*21),k=0,m=0;k<n*20&&m<n;k++){const p=inA(),sd=Math.floor(r()*1e6); // 2026-09-26 撒满整个游玩区矩形(原:中点为心、半径 0.6D 的圆;clear 原 150000)。world/12 只认圆 ⇒ 一颗一条(r=1、n=1),避让口径同它的 envSpawnBlocked
+  for(let k=0,m=0;k<80&&m<4;k++){ // 2026-09-27 N3(用户批准):4 片小行星带,前两片摆在两军之间的航路附近(沿对阵轴 -0.3~1.3 倍间距、横向 ±30 万),后两片在游玩区里随便摆;成片的石头既是假目标也是雷达杂波区
+    const q=m<2?[B[0]+ux*D*(r()*1.6-0.3)-uy*(r()*2-1)*300000*CFG.scale,B[1]+uy*D*(r()*1.6-0.3)+ux*(r()*2-1)*300000*CFG.scale]:inA(),rad=(60000+r()*40000)*CFG.scale,sd=Math.floor(r()*1e6);
+    if(ARENA&&!arenaIn([q[0],q[1],0]))continue;
+    if(ships.some(function(s){return !far(q,s.pos,rad+30000*CFG.scale);})||w.bodies.some(function(b){return !far(q,[b.x,b.y],b.r+rad);}))continue;
+    w.asteroids.push({x:Math.round(q[0]),y:Math.round(q[1]),r:Math.round(rad),n:25,seed:sd,clear:30000*CFG.scale,name:'小行星'});m++;}
+  for(let n=20,k=0,m=0;k<n*20&&m<n;k++){const p=inA(),sd=Math.floor(r()*1e6); // 另撒 20 颗零散的(原来全场只撒这一种 20~40 颗) // 2026-09-26 撒满整个游玩区矩形(原:中点为心、半径 0.6D 的圆;clear 原 150000)。world/12 只认圆 ⇒ 一颗一条(r=1、n=1),避让口径同它的 envSpawnBlocked
     if(ships.some(function(s){return !far(p,s.pos,30000*CFG.scale);})||w.bodies.some(function(b){return !far(p,[b.x,b.y],b.r+30000*CFG.scale);}))continue;
     w.asteroids.push({x:Math.round(p[0]),y:Math.round(p[1]),r:1,n:1,seed:sd,clear:30000*CFG.scale,name:'小行星'});m++;}
   return w;

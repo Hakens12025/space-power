@@ -11,12 +11,15 @@ const GUIDE_SEEK=MSL_CFG.ladarRange; // 导弹自主导引范围(km)=主动LADAR
 function guideMissiles(){ // 每tick重算引导分配(无状态:通道天然可回收/跨舰交接)——自引导优先,富余辅助
   guideSide('blue');guideSide('red');
 }
+function missLum(t){ // 导引头眼里的目标亮度:同 sensors/22 的 optLum,但引擎 / 开火档仍按 N1 之前的 主推 3 / 反推 8 / 侧推 1 / 开火 3(2026-09-27 用户选不跟)
+  const e=t.flame<0?8:(t.flame>0?3:(t.sideFlame?1:0)),v=sReq(t,'size','ship')*(1+e+COV.HEAT_EMIT*emitPowerOf(t)+(t.fireHot>0?3:0));return t.heatK===undefined?v:v*t.heatK;
+}
 function missSee(p){ // 导弹自身探测(信息源):被动看热(被动距离×目标光学亮度) 或 末端主动LADAR(MSL_CFG.ladar=导引头,最后阶段开启)
   const t=p.target;
   if(!t||!t.side)return false;
   if(ENV.bodies.length&&envOccluded(p.pos,t.pos))return false; // ENV2 天体挡视线:被动看热与末端 LADAR 一起挡
   const d=V.len(V.sub(t.pos,p.pos));
-  if(d<MSL_CFG.passive*optLum(t))return true; // SN4 被动看热改读感知内核的 optLum(体型×(1+引擎档+发射档)):引擎开着或正在照射的目标看得远,熄火静默的冷目标难看到。量级注意:新口径约为旧口径的 2 倍(冷 DD 3.5 万→7 万、满推 CA 22 万→40 万),但下一行 15 万那道末端 LADAR 门在 15 万内恒为真,所以只有 15 万外才看得出差别——表现是热目标更早被自导接管、超视距链导通道占用相应变少(2026-09-26 整体 x1/5,本注释旧数按 1/5 读)
+  if(d<MSL_CFG.passive*missLum(t))return true; // 2026-09-27 导引头看热改读 missLum(用户选「不跟」N1 的新亮度) // SN4 被动看热改读感知内核的 optLum(体型×(1+引擎档+发射档)):引擎开着或正在照射的目标看得远,熄火静默的冷目标难看到。量级注意:新口径约为旧口径的 2 倍(冷 DD 3.5 万→7 万、满推 CA 22 万→40 万),但下一行 15 万那道末端 LADAR 门在 15 万内恒为真,所以只有 15 万外才看得出差别——表现是热目标更早被自导接管、超视距链导通道占用相应变少(2026-09-26 整体 x1/5,本注释旧数按 1/5 读)
   if(d<MSL_CFG.ladar)return true; // 末端LADAR开启(MSL_CFG.ladar):精确测距测速
   return false;
 }
