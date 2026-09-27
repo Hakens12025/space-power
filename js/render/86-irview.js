@@ -7,7 +7,9 @@
    场按 CELL 屏幕像素一格,色阶 + 噪点上色,小图放大进整屏缓存(设备像素),每帧 1:1 贴;山只在变了的地方揭旧贴新;近处(Johnson N >= 3)画热轮廓。
    ============================================================================ */
 const IRV_C={CELL:5,V0:0.02,VMAX:1000,CULL:0.0003,SIG_MIN:0.7,NOISE:0.005,NOISE_MS:200,TAIL_K:4,POS_P:3,MIX:0.875,
-  BG_K:0.4,AR:3,AR_ROCK:1.5,FADE:1,HALO:0.5,DETAIL:6.4,CLOUD_M:8,CLOUD_LV:4,CLOUD_SYNC:400,CLOUD_BATCH:1500,CLOUD_COARSE:1200};
+  BG_K:0.4,AR:3,AR_ROCK:1.5,FADE:1,HALO:0.5,DETAIL:6.4,CLOUD_M:8,CLOUD_LV:4,CLOUD_SYNC:400,CLOUD_BATCH:1500,CLOUD_COARSE:1200,
+  SHIP_HOT:15,SURF_K:0.88};
+  // 2026-09-28 表面亮度(扩展源):SHIP_HOT = 船的自身热集中在散热板上,每单位面积 x15(熄火船 = 晒着的石头 x10,用户选);SURF_K = 表面亮度换到色阶(熄火船身落在色阶 0.6)
   // V0 / VMAX = 色阶的对数刻度;CULL = 山截断处;SIG_MIN = 山的最小宽(格);TAIL_K = 尾焰尾巴长宽比;POS_P / MIX = 恒星光晕的律;AR / HALO / DETAIL = 近处热轮廓
 const IRV_T0=-0.1;
 const IRV_RAMP=[[IRV_T0,[40,6,6,140]],[0,[70,12,12,150]],[0.25,[150,30,20,170]],[0.5,[220,80,30,190]],[0.75,[255,170,60,210]],[1,[255,245,210,230]]];
@@ -35,17 +37,17 @@ function irvHill(t,obs){ // 一座山:峰高(按参照归一)与宽度(km),取�
     const dx=t.pos[0]-o.pos[0],dy=t.pos[1]-o.pos[1],dz=(t.pos[2]||0)-(o.pos[2]||0),d=Math.max(1,Math.hypot(dx,dy,dz));
     const snr=SENS.K_IR*lo/(d*d),blur=d*covTheta('opt',o,t,d,lo);
     if(!(blur>0))continue;
-    if(!best||snr>best.snr)best={snr:snr,blur:blur,o:o,k:n};
+    if(!best||snr>best.snr)best={snr:snr,blur:blur,o:o,k:n,lo:lo};
   }
   if(!best)return null;
   const ref=irvRef(),k=ref.sig/best.blur;
-  return {peak:best.snr*k*k,sig:best.blur,o:best.o,k:best.k};
+  return {peak:best.snr*k*k,sig:best.blur,o:best.o,k:best.k,lo:best.lo};
 }
 function irvShowPeak(h){const u=h.sig/irvRef().sig,w=u*u/(1+u*u);return IRV_C.V0*(Math.pow(1+h.peak/IRV_C.V0,1-w)-1);} // 宽的山往底红收(VSUP)
 const IRV_P3=[0,0,0];
-function irvTail(t,h){ // 尾焰占这座山的份额与朝向
+function irvTail(t,h,q){ // 尾焰占这座山的份额与朝向;q = senseOptParts(h.o,t)
   const pl=sensePlume(t,IRV_P3);if(!pl||!h.o)return null;
-  const q=senseOptParts(h.o,t),tot=q.self+q.plume+q.solar;
+  const tot=q.self+q.plume+q.solar;
   return tot>0?{share:Math.min(1,q.plume/tot),ux:pl[0],uy:pl[1]}:null;
 }
 /* ---- 场:格点 i,j 落在屏幕 (i*CELL, j*CELL)。H = 山,B = 云 + 恒星光晕,F = H + B 再盖天体 ---- */
@@ -87,7 +89,11 @@ const IRVJ={rec:new Map(),obs:[],q0:[],q1:[],fr:0,cost:0,cost0:0,area:0,reset:tr
 const IRVJ_NONE={list:[],sil:null};
 function irvjStCh(r,t){return r.fl!==t.flame||r.sf!==t.sideFlame||r.em!==t.emitMode||r.fh!==(t.fireHot>0)||r.fx!==t.facing[0]||r.fy!==t.facing[1];}
 function irvjStSet(r,t){r.fl=t.flame;r.sf=t.sideFlame;r.em=t.emitMode;r.fh=t.fireHot>0;r.fx=t.facing[0];r.fy=t.facing[1];}
-function irvjPhys(t,obs){const h=irvHill(t,obs);if(h)h.tl=irvTail(t,h);return h;}
+function irvSurf(t,h,q){ // 2026-09-28 船身的表面亮度(色阶值):山顶不超过它 —— 远处是点源(总亮度摊在模糊斑上),近处看得清形状后是扩展源(只看多热、与距离无关)
+  const tot=q.self+q.plume+q.solar;if(!(tot>0))return Infinity;
+  return IRV_C.SURF_K*(h.lo/tot)*(q.self*(t.kind==='rock'?1:IRV_C.SHIP_HOT)+q.solar)/sReq(t,'size','ship'); // h.lo/tot:背景与消光的折损照乘;尾焰单独成尾巴,不算进船身
+}
+function irvjPhys(t,obs){const h=irvHill(t,obs);if(h){const q=senseOptParts(h.o,t);h.tl=irvTail(t,h,q);h.surf=irvSurf(t,h,q);}return h;}
 function irvjVis(m,t,obs,chk){for(let k=0;k<obs.length;k++)if(chk&(1<<k)){if(!senseOptBlocked(obs[k],t))m|=1<<k;else m&=~(1<<k);}return m;}
 function irvjQ(r,p){if(p===0){if(!r.in0){r.in0=true;IRVJ.q0.push(r);}}else if(!r.in0&&!r.in1){r.in1=true;IRVJ.q1.push(r);}}
 function irvjDrain(q,cap,obs,p0){
@@ -112,7 +118,7 @@ function irvjSplats(t,ph){ // 一个源的贴片(尾焰尾巴、近处光晕、�
     if(pkT>=IRV_C.CULL)list.push(irvSplatRect({x:cx+tl.ux*sa,y:cy+tl.uy*sa,pk:pkT,a:sa,c:s0,ux:tl.ux,uy:tl.uy,iso:false}));
     peak*=1-tl.share;
   }
-  const h={peak:peak,sig:sig},pk0=irvShowPeak(h);if(!(pk0>=IRV_C.CULL))return {list:list,sil:null};
+  const h={peak:peak,sig:sig},pk0=Math.min(irvShowPeak(h),ph.surf);if(!(pk0>=IRV_C.CULL))return {list:list,sil:null}; // 2026-09-28 山顶封在表面亮度(石头贴近不再和船一样白)
   const N=covResN(t,sig),a=Math.max(0,Math.min(1,N-3)),sil=a>0?{N:N,a:a,v:pk0}:null,pk=pk0*(1-IRV_C.FADE*a);
   if(a>0&&!shipMarkMode()){const ri=Math.max(IRV_C.SIG_MIN,irvBodyR(t)*irvZf(t)/C),pkH=pk0*IRV_C.HALO*a;
     if(pkH>=IRV_C.CULL)list.push(irvSplatRect({x:cx,y:cy,pk:pkH,a:ri,c:ri,ux:1,uy:0,iso:false}));}
