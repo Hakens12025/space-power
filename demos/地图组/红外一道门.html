@@ -52,7 +52,7 @@
     <div id="mode"></div>
     <div class="row"><div id="bar"></div><div id="ticks"></div></div>
     <table><thead><tr><th>目标</th><th>船身 S</th><th>尾焰 S</th><th>色阶</th><th>轮廓 N</th></tr></thead><tbody id="tb"></tbody></table>
-    <p style="color:var(--dim);font-size:12px">S = 信噪比。色阶是船身那份;尾焰另算同一条式子。N ≥ 3 出轮廓(拉远成记号时不交接,热斑照画)。数值抄自引擎内核(熄火 DD 9.6 万发现、主推 x13.3、刹车 x27.1、开火 +12.3、石头自身热 0.5、晒热 x1),此页不与引擎同步。</p>
+    <p style="color:var(--dim);font-size:12px">S = 信噪比。色阶是船身那份;尾焰另算同一条式子。N ≥ 3 出轮廓,叠在热斑上,热斑不消失;拉远成记号时不画轮廓。数值抄自引擎内核(熄火 DD 9.6 万发现、主推 x13.3、刹车 x27.1、开火 +12.3、石头自身热 0.5、晒热 x1),此页不与引擎同步。</p>
   </aside>
 </div>
 <script>
@@ -149,8 +149,8 @@ function frame(now) {
     const px = cx0 + Math.cos(t.ang) * st.D * pxkm, py = cy0 + Math.sin(t.ang) * st.D * pxkm, gx = px / CELL, gy = py / CELL;
     const S = parts(t, now), vb = gate(S.body), vt = gate(S.plume);
     const dOut = t.kind === 'msl' ? 0 : OPT_ID * t.size / 0.7, N = 3 * dOut / st.D;
-    const a = mark ? 0 : Math.max(0, Math.min(1, N - 3));      // 出轮廓后热斑交给轮廓;拉远成记号时不交接
-    splat(gx, gy, vb * (1 - a), sig, sig, 1, 0);
+    const a = mark ? 0 : Math.max(0, Math.min(1, N - 3));      // 轮廓的不透明度;拉远成记号时不画轮廓
+    splat(gx, gy, vb, sig, sig, 1, 0);                        // 出轮廓后热斑照画(用户:显形了也要有红色团),轮廓叠在上面
     let pux = 0, puy = 0;
     if (vt > 0) {
       pux = t.flame > 0 ? -t.fx : t.fx; puy = t.flame > 0 ? -t.fy : t.fy;   // 主推喷口朝后,刹车朝前
@@ -185,7 +185,7 @@ function frame(now) {
   ctx.fillStyle = '#5aa9ff'; ctx.beginPath(); ctx.moveTo(cx0 + 8, cy0); ctx.lineTo(cx0 - 6, cy0 - 5); ctx.lineTo(cx0 - 6, cy0 + 5); ctx.closePath(); ctx.fill();
   ctx.font = '11px system-ui,"Microsoft YaHei",sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(160,175,200,0.75)';
   for (const o of info) ctx.fillText(o.t.n, o.px, o.py + Math.max(18, sig * CELL * 1.2) + 10);
-  $('mode').textContent = (mark ? '拉远成记号(不画轮廓,热斑不淡出)' : '正常缩放') + ' · 每像素 ' + Math.round(kmpx) + ' km · 模糊宽 ' + Math.round(wkm) + ' km';
+  $('mode').textContent = (mark ? '拉远成记号(不画轮廓)' : '正常缩放') + ' · 每像素 ' + Math.round(kmpx) + ' km · 模糊宽 ' + Math.round(wkm) + ' km';
   if (++rows % 10 === 0) {
     $('tb').innerHTML = info.map(o => `<tr><td><span class="sw" style="background:${lutCss(irvT(o.vb))}"></span>${o.t.n}</td><td>${o.S.body.toFixed(o.S.body < 10 ? 2 : 0)}</td><td>${o.S.plume ? o.S.plume.toFixed(0) : '—'}</td><td>${irvT(o.vb).toFixed(2)}</td><td>${o.N ? o.N.toFixed(1) : '—'}</td></tr>`).join('');
     const bar = [], ticks = [];
