@@ -32,5 +32,6 @@
 - ENV2 的 `lo` 在 visRange / covTheta / identDist 那条链上是可选参数,不传 = 标称值。
 - 石头:`kind:'rock'`、`side:'neutral'`,只有光学贴近才认得出;确认是石头的航迹自动化当场解锁,火控门拒绝。
 - 同一张登记表 `rocks[]` 里还有民船 `civ` / 诱饵 `lure` / 前出浮标 `buoy`(world/14,2026-09-27):自己一方放的不当目标;诱饵带 `spoof`,「疑似」档报它冒充的驱逐舰;浮标 `type:'beacon'` 进探测站表,`on` 才照射(`senseKACT`),`emit`/`recv` 取信标系数(`covRangeOf` 按探测站自己的字段算精度)。
-- 导弹导引头看热用 weapons/54 的 `missLum`(N1 之前的引擎档),不跟传感器的 `optLum`(用户 2026-09-27 选)。
+- 导弹导引头看热用 weapons/54 的 `missLum` = `optLum(t, MSL_SEEK_P)`(同一个公式,档位表换成 N1 之前的,用户 2026-09-27 选不跟)。
+- 记忆(2026-09-27,RTS 迷雾的"最后所见"):最后一次定位时不动的(`trkStill`,低于 `TRK_STILL_V`)失联后不计时丢弃(`trkMem`);我方全知圈重新扫过那一点却没量到它 ⇒ `memGone` 清掉;握着时 `lastType` 记下认出的类型,画记忆用它。动的目标照旧陈旧 → 失联 → `CONTACT_GHOST_TTL` 后消失。
 - 已知的真值口子(没修):目标速度、高度 Z、`sigClassLabel` 读真 `size`、击沉按真值 `.dead` 过滤。

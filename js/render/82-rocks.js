@@ -25,9 +25,10 @@ function drawRocks(){
     drawRockAt(s,cp,st,contactIdn(s,'blue'));
   });
 }
-function drawRockAt(s,pos,st,known){
+function drawRockAt(s,pos,st,known,tpo){ // tpo:按这个类型画(记忆用最后认出的类型),缺省问航迹
   const p=toScreen(pos[0],pos[1]);
   if(p[0]<-40||p[0]>W+40||p[1]<-40||p[1]>H+40)return;
+  if((st==='coast'||st==='ghost')&&!adminMode&&trkMem(trkOf('blue',s))){const lt=trkOf('blue',s).lastType;ctx.save();ctx.globalAlpha=0.42;drawRockAt(s,pos,'live',!!lt,lt);ctx.restore();return;} // 2026-09-27 记忆:按最后所见调暗画
   if(st==='coast'||st==='ghost'){drawContactMark(s,p,st);return;}
   const r=Math.round(shipIconR(s));
   if(!known){
@@ -49,7 +50,7 @@ function drawRockAt(s,pos,st,known){
     }
     return;
   }
-  {const tp=adminMode?{kind:kindOf(s)}:(contactIdType(s,'blue')||{kind:'rock'}); // 2026-09-27 按【认出的类型】画:诱饵在「疑似」档画成它冒充的敌舰
+  {const tp=tpo||(adminMode?{kind:kindOf(s)}:(contactIdType(s,'blue')||{kind:'rock'})); // 2026-09-27 按【认出的类型】画:诱饵在「疑似」档画成它冒充的敌舰
     if(tp.kind!=='rock'){drawObjKnown(s,p,r,tp);return;}}
   /* 认出来了:石头的记号。大小跟着同一个缩放系数走(与舰标同一条律),半径再乘 √(体型/0.7)(面积 ∝ 体型,与红外画面 irvBodyR 同式)—— 认出之后体型已经不是秘密 */
   ctx.save();

@@ -425,6 +425,33 @@ function drawHoverRings(){
       ctx.fillText('静默交叉定位 ≈ '+Math.round(r/1000)+'k(基线 '+Math.round(bl/1000)+'k · 对熄火驱逐舰,随太阳方位 ±)',p[0],p[1]+r*cam.zoom+2);ctx.restore();}
   }
 }
+/* 2026-09-27 雷达异常 / 红外异常(用户:「当出现了异常的时候,直接在主视角上面标注」;选「只报没定位的」「标在异常处、淡出」)。
+   不另做探测,复用两份现成的数据:
+   红外异常 = 蓝方航迹表里只有红外量测、还没定位的接触(heat 态 + cov.ch.opt),第一次出现、或开始点火 / 刹车 / 开火时报;标在它那团热所在处(与红外画面同一处)。
+   雷达异常 = sensors/21 的 ESM 记录里还没定位的辐射源,沉默 ANOM.GAP 游戏秒以上又听到时报(每次脉冲都会报,持续照射只报开头);标在雷达画面那片听到区域的中心。
+   约 ANOM.LIFE 毫秒淡出;屏幕上相近的同类只画一个。 */
+const ANOM={m:new WeakMap(),list:[],LIFE:5000,GAP:20,t:-1e9};
+function anomScan(now){
+  if(simTime<ANOM.t){ANOM.m=new WeakMap();ANOM.list.length=0;}ANOM.t=simTime; // 换局
+  if(typeof trkEach==='function')trkEach('blue',(tk,st)=>{const s=trkSrc(tk);let a=ANOM.m.get(s);if(!a){a={ir:false,fl:0,fh:false,rd:-1e9};ANOM.m.set(s,a);}
+    const ir=st==='heat'&&!!(tk.cov&&tk.cov.ch&&tk.cov.ch.opt);
+    if(ir){const fl=s.flame||0,fh=(s.fireHot||0)>0;if(!a.ir||(fl&&!a.fl)||(fh&&!a.fh))ANOM.list.push({k:'ir',x:s.pos[0],y:s.pos[1],t0:now});a.fl=fl;a.fh=fh;}
+    a.ir=ir;});
+  if(typeof esmEach==='function')esmEach('blue',(E,arr)=>{if(contactFix(E,'blue'))return;let a=ANOM.m.get(E);if(!a){a={ir:false,fl:0,fh:false,rd:-1e9};ANOM.m.set(E,a);}
+    let b=arr[0].k;for(const x of arr)if(x.k.sr<b.sr)b=x.k;
+    if(b.t>a.rd){if(b.t-a.rd>ANOM.GAP)ANOM.list.push({k:'rd',x:b.org[0]+Math.cos(b.tb)*b.rr,y:b.org[1]+Math.sin(b.tb)*b.rr,t0:now});a.rd=b.t;}});
+}
+function drawAnomalies(){
+  const now=nowMs();anomScan(now);if(!ANOM.list.length)return;
+  const drawn=[];ctx.save();ctx.font='11px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='bottom';
+  for(let i=ANOM.list.length-1;i>=0;i--){const e=ANOM.list[i],k=(now-e.t0)/ANOM.LIFE;if(k>=1||k<0){ANOM.list.splice(i,1);continue;}
+    const p=toScreen(e.x,e.y);if(p[0]<-40||p[0]>W+40||p[1]<-40||p[1]>H+40)continue;
+    if(drawn.some(d=>d[2]===e.k&&Math.hypot(d[0]-p[0],d[1]-p[1])<40))continue;drawn.push([p[0],p[1],e.k]);
+    const col=e.k==='ir'?'255,180,84':'84,224,208',a=k<0.08?k/0.08:1-(k-0.08)/0.92;
+    ctx.globalAlpha=a;ctx.strokeStyle='rgb('+col+')';ctx.lineWidth=1.3;ctx.beginPath();ctx.arc(p[0],p[1],6+4*Math.min(1,k*3),0,6.283);ctx.stroke();
+    ctx.fillStyle='rgb('+col+')';ctx.fillText(e.k==='ir'?'红外异常':'雷达异常',p[0],p[1]-12);}
+  ctx.restore();
+}
 function drawForceMarks(){ // 2026-09-27 主炮打空地:还没打出去的炮击点画一个小准星
   ctx.save();ctx.strokeStyle='rgba(255,209,102,.85)';ctx.fillStyle='rgba(255,209,102,.85)';ctx.lineWidth=1.2;ctx.font='10px Consolas';ctx.textAlign='left';ctx.textBaseline='middle';
   for(const s of ships){const ff=s.forceMac;if(!ff||!ff.pt||s.dead||(s.side!=='blue'&&!adminMode))continue;const q=toScreen(ff.pt[0],ff.pt[1]);

@@ -153,6 +153,11 @@ function drawContactMark(s,p,view){
   ctx.fillText((ghost?'⏳失联':'⏳陈旧')+Math.round(ageV)+'s',p[0],p[1]-top-3);
   ctx.restore();
 }
+function drawMemory(s,p){ // 2026-09-27 舰船的记忆:最后认出是船 ⇒ 红色记号,没认出 ⇒ 灰色菱形;调暗、不画失联圈(石头等在 82-rocks 走 drawRockAt 的类型参数)
+  const tk=trkOf('blue',s),lt=tk&&tk.lastType;ctx.save();ctx.globalAlpha=0.42;
+  if(lt&&lt.kind==='ship')drawShipMark(s,p,'#ff6b6b');else drawUnkMark(p,Math.max(4,Math.round(shipIconR(s)*0.8)),'#a0aab9');
+  ctx.restore();
+}
 function drawShip(s){
   /* ================= 红方接触:画什么只问 contactState(SN6f)=================
      五态互斥,每一态只有一个显示层负责(总表在 render/CLAUDE.md 的 SN6f 一节):
@@ -176,6 +181,7 @@ function drawShip(s){
   }
   const p=toScreen(dispPos[0],dispPos[1]);
   if(p[0]<-40||p[0]>W+40||p[1]<-40||p[1]>H+40)return;
+  if((view==='coast'||view==='ghost')&&trkMem(trkOf('blue',s))){drawMemory(s,p);return;} // 2026-09-27 记忆:不动的目标出了全知圈,按最后所见调暗画
   if(view==='coast'||view==='ghost'){drawContactMark(s,p,view);return;} // TK4c:记号抽成函数(石头的陈旧 / 失联照同一个画法),画法一笔没改
   const r=Math.round(shipIconR(s)); // 图标半径:屏幕固定尺寸,但随舰种/Tier 变化(标签/选中圈/尾焰基准)
   if(s.dead){drawWreck(s,p,r);return;} // 残骸:空心图标,不再有舰体数据(幽灵/陈旧已在上面 return,不会走到这儿)

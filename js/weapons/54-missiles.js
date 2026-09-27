@@ -11,9 +11,8 @@ const GUIDE_SEEK=MSL_CFG.ladarRange; // 导弹自主导引范围(km)=主动LADAR
 function guideMissiles(){ // 每tick重算引导分配(无状态:通道天然可回收/跨舰交接)——自引导优先,富余辅助
   guideSide('blue');guideSide('red');
 }
-function missLum(t){ // 导引头眼里的目标亮度:同 sensors/22 的 optLum,但引擎 / 开火档仍按 N1 之前的 主推 3 / 反推 8 / 侧推 1 / 开火 3(2026-09-27 用户选不跟)
-  const e=t.flame<0?8:(t.flame>0?3:(t.sideFlame?1:0)),v=sReq(t,'size','ship')*(1+e+COV.HEAT_EMIT*emitPowerOf(t)+(t.fireHot>0?3:0));return t.heatK===undefined?v:v*t.heatK;
-}
+const MSL_SEEK_P={P_ENG_MAIN:3,P_ENG_REV:8,P_ENG_SIDE:1,P_FIRE:3}; // 导引头看热用 N1 之前的档位(2026-09-27 用户选「不跟」)
+function missLum(t){return optLum(t,MSL_SEEK_P);} // 公式与传感器同一份(sensors/22 的 optLum),只换档位表
 function missSee(p){ // 导弹自身探测(信息源):被动看热(被动距离×目标光学亮度) 或 末端主动LADAR(MSL_CFG.ladar=导引头,最后阶段开启)
   const t=p.target;
   if(!t||!t.side)return false;

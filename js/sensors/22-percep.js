@@ -94,19 +94,20 @@ function senseGrowO(n) { // ENV2 天体侧扩容:同上
 function emitPowerOf(s) { // 发射档的功率档位:既当【功耗】(进光学亮度)又当【射频响度】(进静听)——物理上本来就是同一个量:发射机功率
   return sReq(SENS.EMIT_P, sReq(s, 'emitMode', 'ship'), 'SENS.EMIT_P'); // 非法/缺失的 emitMode 当场抛:全库只许 silent/paint/jam 三个字面量
 }
-function engPowerOf(s) { // 引擎档:主推/反推最费电,姿态侧推次之,熄火滑行为 0(与 31-step-ships 每 tick 复位的 flame/sideFlame 同源)
-  return s.flame < 0 ? SENS.P_ENG_REV : (s.flame > 0 ? SENS.P_ENG_MAIN : (s.sideFlame ? SENS.P_ENG_SIDE : 0)); // RV1:反推(flame<0,physics/30 置位)单列一档,比主推更亮
+function engPowerOf(s, P) { // 引擎档:主推/反推最费电,姿态侧推次之,熄火滑行为 0(与 31-step-ships 每 tick 复位的 flame/sideFlame 同源)。P = 档位表,缺省 SENS(2026-09-27 导弹导引头传旧档位,weapons/54)
+  P = P || SENS;
+  return s.flame < 0 ? P.P_ENG_REV : (s.flame > 0 ? P.P_ENG_MAIN : (s.sideFlame ? P.P_ENG_SIDE : 0)); // RV1:反推(flame<0,physics/30 置位)单列一档,比主推更亮
 }
-function firePowerOf(s) { // FX1 开火暴露:发射后的 FIRE_S 秒里多亮一档(s.fireHot 由 weapons/52 的两个发射成功点置位、weapons/57 的冷却循环倒数)
-  return s.fireHot > 0 ? SENS.P_FIRE : 0;
+function firePowerOf(s, P) { // FX1 开火暴露:发射后的 FIRE_S 秒里多亮一档(s.fireHot 由 weapons/52 的两个发射成功点置位、weapons/57 的冷却循环倒数)
+  return s.fireHot > 0 ? (P || SENS).P_FIRE : 0;
 }
-function optLum(s) { // 光学/红外亮度 = 体型 x (1 + 功耗)。取代已删的那两个旧亮度函数(船体信号 x 引擎乘数)
+function optLum(s, P) { // P:档位表,缺省 SENS // 光学/红外亮度 = 体型 x (1 + 功耗)。取代已删的那两个旧亮度函数(船体信号 x 引擎乘数)
   /* SN6:发射档进光学亮度时要乘废热系数 COV.HEAT_EMIT,不能原样加。
      废热正比发射功率没错,但量级上雷达是几百千瓦、引擎是吉瓦级 —— 原样加等于说"开雷达和点主推一样亮",
      于是照射一开光学量程就 x1.41,静默与照射在【光学】这条通道上几乎没区别。
      乘 0.15 之后照射只把 DD 的光学量程抬 7.2%、干扰抬 14.0%:它是一句设计表态,不是一条机制。
      ⚠ COV 住在 23-cov(加载晚于本文件),这里是运行期读取,安全;写成顶层常量就会撞 TDZ。 */
-  const v = sReq(s, 'size', 'ship') * (1 + engPowerOf(s) + COV.HEAT_EMIT * emitPowerOf(s) + firePowerOf(s));
+  const v = sReq(s, 'size', 'ship') * (1 + engPowerOf(s, P) + COV.HEAT_EMIT * emitPowerOf(s) + firePowerOf(s, P));
   return s.heatK === undefined ? v : v * s.heatK; // ENV2 石头的自身热倍率(舰船没有这个字段 ⇒ 不乘,逐位不变)
 }
 function rfLoudOf(s) { // 射频响度 = 发射机档次 x 发射档。silent 恒为 0 —— 绝对静默,没有船体泄漏(旧模型那个泄漏系数已删)

@@ -39,7 +39,7 @@ const TRK={blue:new WeakMap(),red:new WeakMap(),vis:{blue:new WeakSet(),red:new 
 function trkTab(side){return side==='blue'?TRK.blue:TRK.red;}
 
 /* 唯一的航迹工厂;不往任何表里登记。newCov() 每船两次,与原来舰船字面量里的调用次数相同 */
-function trkNew(by,src){return {src:src,by:by,held:false,cov:newCov(),lastT:-1e9,lastPos:null,lastVel:null,idc:false,tn:0,tau:0};} // 2026-09-27 追加 tau:距上次测到位置的秒数(23 的航位推算误差按它长) // TK2.6 追加 idc:【确认】锁存(光学或照射认出过它、且接触一直握着)。TK4c 追加 tn:航迹号(0 = 还没发)
+function trkNew(by,src){return {src:src,by:by,held:false,cov:newCov(),lastT:-1e9,lastPos:null,lastVel:null,idc:false,tn:0,tau:0,lastType:null,memGone:false};} // 2026-09-27 追加 lastType(最后一次认出的类型)/ memGone(记忆已被重新看过、清掉) // 2026-09-27 追加 tau:距上次测到位置的秒数(23 的航位推算误差按它长) // TK2.6 追加 idc:【确认】锁存(光学或照射认出过它、且接触一直握着)。TK4c 追加 tn:航迹号(0 = 还没发)
 
 /* O(1) 查表,【永远不建】。非对象、或从没登记过的对象(弹丸、{pos} 指定点、梯子的假船、沙盘克隆、判据的裸对象)一律 null */
 function trkOf(side,src){return (src!==null&&typeof src==='object')?(trkTab(side).get(src)||null):null;}
@@ -70,6 +70,7 @@ function trkStep(tk,t,obs,el){
   if(held&&tk.tn===0)tk.tn=++TRK_TN[tk.by]; // TK4c 航迹号:这一方第一次握住它的那一拍发号,之后终身不变(丢了再捡回来还是这个号)。只用于显示 —— 不当键、不当种子、不参与任何取舍
   if(held){if(TRK_IDO.opt||TRK_IDO.act||TRK_IDO.vis)tk.idc=true;}else tk.idc=false; // TK2.6 确认锁存:光学轮廓或照射回波认出过 ⇒ 确认;接触丢了才清。与椭圆的身份位同一拍立、同一拍清
   tk.held=held;
+  if(held){const ty=trkIdType(tk);if(ty)tk.lastType=ty;tk.memGone=false;} // 2026-09-27 记忆:握着时记下认出的类型,出了全知圈按它画
   return held;
 }
 
@@ -93,7 +94,7 @@ function trkState(tk){
     if(!c||!c.fix)return 'heat';
     return (c.n>0||c.age<=SENS.TICK*1.5)?'live':'coast';
   }
-  return (tk.lastPos&&trkAge(tk)<=CONTACT_GHOST_TTL)?'ghost':'none';
+  return (tk.lastPos&&(trkAge(tk)<=CONTACT_GHOST_TTL||trkMem(tk)))?'ghost':'none'; // 2026-09-27 不动的目标失联后留在原地(记忆),不计时丢弃
 }
 
 /* 画在哪 / 点在哪。每次给新数组,不缓存;交代不出位置给 null(fail-closed,缺记录不拿真值兜底)。
@@ -170,6 +171,9 @@ function trkAccPrior(t,c){ // 这一方对它最大加速度的先验 km/游戏�
   if(c.idn)return kindOf(t)!=='ship'?0:(typeof t.thrust==='number'?t.thrust:TRK_AMAX);
   return TRK_AMAX;
 }
+const TRK_STILL_V=PHYS.v(1); // 最后一次定位时速度低于这个就算"不动"(物理 1 km/s)
+function trkStill(tk){const v=tk.lastVel;return !!(v&&Math.hypot(v[0],v[1])<TRK_STILL_V);}
+function trkMem(tk){return !!(tk&&tk.lastPos&&!tk.memGone&&trkStill(tk));} // 2026-09-27 记忆(用户:「探测出来的目标出了全知圈也不要消失,类似 rts 的那种做法,不动的目标保留在原地,动了的目标就走陈旧机制」):RTS 迷雾的"最后所见"
 function trkDR(tk){const lp=tk.lastPos,lv=tk.lastVel;if(!lp||!lv)return null;const a=trkAge(tk);return [lp[0]+lv[0]*a,lp[1]+lv[1]*a,lp[2]+(lv[2]||0)*a];} // 航位推算点(dead reckoning):最后一次定位 + 最后速度 x 距那次的秒数
 
 /* 这条航迹的身份档位。夹具写出来的"idc 为真但 idn 为假"读作未知、"idn 为真但 idc 为假"读作疑似 —— 容忍不一致的人造状态,不抛 */
