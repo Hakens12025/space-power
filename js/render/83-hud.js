@@ -439,7 +439,7 @@ function drawHoverRings(){
    雷达异常 = sensors/21 的 ESM 记录里还没定位的辐射源,沉默 ANOM.GAP 游戏秒以上又听到时报(每次脉冲都会报,持续照射只报开头);标在雷达画面画这条记录的那一点(86 的 rdvEsmBrg / rdvEsmRc,带偏移),圈 = 那一片的等面积半径。
    2026-09-28 用户:异常圈不标真实位置,位置与大小走各层自己的画面;只是简易提醒,画法不跟各层走。
    约 ANOM.LIFE 毫秒淡出;屏幕上相近的同类只画一个。 */
-const ANOM={m:new WeakMap(),list:[],LIFE:5000,GAP:20,t:-1e9,RMIN:8,RMAX:160,FADE:0.5,EXP:4}; // 2026-09-28 圈的屏幕半径夹在 RMIN~RMAX px(不确定半径 x 缩放);FADE = 从寿命的这一处起指数暗淡,EXP = 指数的陡度
+const ANOM={m:new WeakMap(),list:[],LIFE:3000,GAP:20,t:-1e9,RMIN:8,RMAX:80,FADE:0.3,EXP:4}; // 2026-09-28 用户:圈太大、衰减太慢 —— 上限 160 → 80 px、寿命 5 → 3 秒、从三成寿命起就指数暗淡(原一半) // 2026-09-28 圈的屏幕半径夹在 RMIN~RMAX px(不确定半径 x 缩放);FADE = 从寿命的这一处起指数暗淡,EXP = 指数的陡度
 function anomScan(now){
   if(simTime<ANOM.t){ANOM.m=new WeakMap();ANOM.list.length=0;}ANOM.t=simTime; // 换局
   if(typeof trkEach==='function')trkEach('blue',(tk,st)=>{const s=trkSrc(tk);let a=ANOM.m.get(s);if(!a){a={ir:false,fl:0,fh:false,rd:-1e9};ANOM.m.set(s,a);}
