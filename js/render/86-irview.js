@@ -12,10 +12,10 @@
 const IRV_C={CELL:8,V0:0.02,VMAX:1000,CULL:0.0003,SIG_MIN:0.7,NOISE:0.005,NOISE_MS:200,TAIL_K:4,POS_P:3,MIX:0.875,
   BG_K:0.1,CLOUD_M:8,CLOUD_LV:4,CLOUD_SYNC:400,CLOUD_BATCH:1500,CLOUD_COARSE:1200,
   GAIN:0.2,CONTRAST:1.14,FILL_K:1/3,GLYPH:1.3,SIG_MAX_PX:30,MSL_PX:3,CORE:0.4,CORE_W:0.45,
-  UNC_K:0.75,UNC_CAP:4,PH_K:0.3,OFF:0.5,GLIDE:0.6,EP_PX:0.5,FX_T:1.5,FX_RING:2.5,FX_RT:0.35,FX_TAU:0.5,FX_CORE:0.25,FX_BOOST:3,TW:1.4,PLAT:1.2,WARP:0.05,CHURN:0.15,CHURN_STEP:0.1,R_TOL:0.05};
+  UNC_K:0.75,UNC_CAP:4,PH_K:0.3,OFF:0.5,GLIDE:0.6,EP_PX:0.5,FX_T:1.5,FX_RING:4,FX_RT:0.35,FX_TAU:0.5,FX_CORE:0.25,FX_BOOST:6,FX_CR:1.5,TW:1.4,PLAT:1.2,WARP:0.05,CHURN:0.15,CHURN_STEP:0.1,R_TOL:0.05};
   // GAIN / CONTRAST = 一道门:色阶值 = GAIN x 信噪比^CONTRAST(信噪比 1 ≈ 色阶 0.22 不动,< 1 按三次方淡出,见 irvV)。CONTRAST 1.14(2026-09-28 用户:巅峰亮度都不高):红外 x0.6 把灵敏度降到 0.36 倍,同距离全都变暗;加对比度把近处的亮端拉回早上的水平,发现门限处不抬(试过「刚发现的热提亮」0.49 x 信噪比^0.8,用户不要);BG_K = 背景(云 / 恒星光晕)压暗倍数;FILL_K = 石头填满距离 / (认出距离 x √体型)
   // GLYPH = 舰标团 / 舰标半径,封顶 SIG_MAX_PX;MSL_PX = 导弹小点;CORE / CORE_W = 定位后亮核的份额与宽度
-  // PH_K = 红外测距的相对 1σ(不确定半径 = 距离 x √(PH_K x 方位误差));OFF = 红外异常圈心偏移 / 不确定半径;GLIDE = 定位 / 丢定位时团缩小 / 胀大的时间常数(墙钟秒,只在跑的时候走);EP_PX = 团心挪不到这么多像素不重贴;FX_* = 开火效果(演示页 红外信号.html 的画法,2026-09-28 用户:开火不够明显):墙钟 FX_T 秒,光环在 FX_RT 秒里从团半径扩到 (1 + FX_RING) 倍、按 FX_TAU 衰减,亮核按 FX_CORE 衰减,颜色 = 这团热开火时的信噪比 x FX_BOOST 过一道门(用户:闪光不够亮,稍微亮一点;演示页的闪光也比开火那份热亮 3~5 倍);UNC_K = 热区对数半径的缩放;UNC_CAP = 团半径上限(x 舰标团);TW = 过渡宽度(x 团半径);PLAT = 高原;WARP / CHURN = 扭曲幅度与翻涌速度(rad / 墙钟秒,只在跑的时候走);
+  // PH_K = 红外测距的相对 1σ(不确定半径 = 距离 x √(PH_K x 方位误差));OFF = 红外异常圈心偏移 / 不确定半径;GLIDE = 定位 / 丢定位时团缩小 / 胀大的时间常数(墙钟秒,只在跑的时候走);EP_PX = 团心挪不到这么多像素不重贴;FX_* = 开火效果(演示页 红外信号.html 的画法,2026-09-28 用户:开火不够明显):墙钟 FX_T 秒,光环在 FX_RT 秒里从团半径扩到 (1 + FX_RING) 倍、按 FX_TAU 衰减,亮核(半径 FX_CR x 团半径)按 FX_CORE 衰减,颜色 = 这团热开火时的信噪比 x FX_BOOST 过一道门(用户两次要更亮、范围更大:BOOST 3 → 6、光环 3.5 → 5 倍团半径);UNC_K = 热区对数半径的缩放;UNC_CAP = 团半径上限(x 舰标团);TW = 过渡宽度(x 团半径);PLAT = 高原;WARP / CHURN = 扭曲幅度与翻涌速度(rad / 墙钟秒,只在跑的时候走);
   // CHURN_STEP = 翻涌累计把形状挪到这么多格才重贴;R_TOL = 团半径变了这个比例才重贴
   // CELL = 场的格子(屏幕 px;2026-09-28 用户:像素变糊一点,5 → 8,与红外 x0.6 对应);V0 / VMAX = 色阶的对数刻度;CULL = 山截断处;SIG_MIN = 山的最小宽(格);TAIL_K = 尾焰尾巴长宽比;POS_P / MIX = 恒星光晕的律
 const IRV_T0=-0.1;
@@ -397,7 +397,7 @@ function drawIrFx(){
     const k=irvLutK(irvT(irvV(r.ph.snr*C.FX_BOOST))),o=k*4,R0=Math.max(3,(r.bR||1)*C.CELL),Rr=R0*(1+C.FX_RING*Math.min(1,a/C.FX_RT));
     ctx.globalAlpha=Math.exp(-a/C.FX_TAU);ctx.strokeStyle='rgb('+IRV_LUT[o]+','+IRV_LUT[o+1]+','+IRV_LUT[o+2]+')';ctx.lineWidth=Math.max(1.5,R0*0.35);
     ctx.beginPath();ctx.arc(p[0],p[1],Rr,0,6.283);ctx.stroke();
-    const rc=R0*1.2;ctx.globalAlpha=Math.exp(-a/C.FX_CORE);ctx.drawImage(irvDot(k),p[0]-rc,p[1]-rc,2*rc,2*rc);
+    const rc=R0*C.FX_CR;ctx.globalAlpha=Math.exp(-a/C.FX_CORE);ctx.drawImage(irvDot(k),p[0]-rc,p[1]-rc,2*rc,2*rc);
   }
   ctx.restore();
 }
