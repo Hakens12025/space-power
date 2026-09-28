@@ -3,7 +3,8 @@
    红外画面(右下角「红外」钮,MAPV.mode === 'ir'):演示页 demos/地图组/红外效果.html 的甲画法搬进引擎,物理全走引擎的传感器模型。
    每个热源(非我方的船、石头)在我方看得最清楚的那艘船眼里是一团:有效亮度 = senseOptLoWith(晒热 / 杂散光 / 云背景 / 消光),三道门 = senseOptBlocked。
    一道门(2026-09-28 用户,演示页 demos/地图组/红外一道门.html):每一处热的色阶值 = GAIN x 这一份热的有效信噪比 K_IR·lo/d²(船身、尾焰、轮廓、导弹同一条),不分类型;
-   团画在真实位置 + 一个随距离连续变小的偏移(irvEstPos:每个目标方向固定,大小 = OFF x 不确定半径;只在画面层算,感知内核与主视角不受影响;定位前后不换来源,从红外进可见光不跳。2026-09-28 用户);
+   团画在哪跟着我方知道多少走,与主视角一致(2026-09-28 用户:进了可见光团和碎石还不在一起、整个显示流程破碎):只有红外(没定位)画在 irvHeatPos = 真实位置 + 方向固定的偏移 x OFF x 不确定半径;
+   一定位就在 GLIDE 秒里滑到主视角画它的位置(viewPos)、缩成定位后的小团,丢了定位再滑回去;定位了的红外被三道门挡住也照画(热是物体固有的);偏移只在画面层算,感知内核与主视角不受影响;
    团的大小 = 不确定(演示页 demos/地图组/红外弥散团.html):等面积半径按以前热区的对数压缩,屏幕上夹在热晕最小半径(irvGlowMin:舰标团;画轮廓时比轮廓大一圈)与 UNC_CAP 倍之间;弥散:圆的、轻微扭曲、缓慢翻涌,剖面画在色阶上(中心 = 一道门的峰值色阶,按 TW x 团半径平滑落回本底,不读亮度);定位的另有亮核;
    石头又大又冷,近到填满距离(FILL_K x 认出距离 x √体型)以内亮度不再涨(点源 → 扩展源),船与导弹当点源。
    背景:尘埃云(envBgParts,按光照;乘地图同一个显示增益)、位置型恒星的光晕、天体盘(朝阳面亮、背阴面 heat)。
@@ -12,10 +13,10 @@
 const IRV_C={CELL:5,V0:0.02,VMAX:1000,CULL:0.0003,SIG_MIN:0.7,NOISE:0.005,NOISE_MS:200,TAIL_K:4,POS_P:3,MIX:0.875,
   BG_K:0.1,CLOUD_M:8,CLOUD_LV:4,CLOUD_SYNC:400,CLOUD_BATCH:1500,CLOUD_COARSE:1200,
   GAIN:0.2,FILL_K:1/3,GLYPH:1.3,SIG_MAX_PX:30,MSL_PX:3,CORE:0.4,CORE_W:0.45,
-  UNC_K:0.75,UNC_CAP:4,PH_K:0.3,OFF:0.5,TW:1.4,PLAT:1.2,WARP:0.05,CHURN:0.15,CHURN_STEP:0.1,R_TOL:0.05};
+  UNC_K:0.75,UNC_CAP:4,PH_K:0.3,OFF:0.5,GLIDE:0.6,EP_PX:0.5,TW:1.4,PLAT:1.2,WARP:0.05,CHURN:0.15,CHURN_STEP:0.1,R_TOL:0.05};
   // GAIN = 一道门的增益(信噪比 1 ≈ 色阶 0.22,信噪比 < 1 按三次方淡出,见 irvV);BG_K = 背景(云 / 恒星光晕)压暗倍数;FILL_K = 石头填满距离 / (认出距离 x √体型)
   // GLYPH = 舰标团 / 舰标半径,封顶 SIG_MAX_PX;MSL_PX = 导弹小点;CORE / CORE_W = 定位后亮核的份额与宽度
-  // PH_K = 红外测距的相对 1σ(不确定半径 = 距离 x √(PH_K x 方位误差));OFF = 团心偏移 / 不确定半径;UNC_K = 热区对数半径的缩放;UNC_CAP = 团半径上限(x 舰标团);TW = 过渡宽度(x 团半径);PLAT = 高原;WARP / CHURN = 扭曲幅度与翻涌速度(rad / 墙钟秒,只在跑的时候走);
+  // PH_K = 红外测距的相对 1σ(不确定半径 = 距离 x √(PH_K x 方位误差));OFF = 团心偏移 / 不确定半径;GLIDE = 定位 / 丢定位时团滑过去的时间常数(墙钟秒,只在跑的时候走);EP_PX = 团心挪不到这么多像素不重贴(偏移随我方移动连续变,不设门槛就每帧重贴全部碎石);UNC_K = 热区对数半径的缩放;UNC_CAP = 团半径上限(x 舰标团);TW = 过渡宽度(x 团半径);PLAT = 高原;WARP / CHURN = 扭曲幅度与翻涌速度(rad / 墙钟秒,只在跑的时候走);
   // CHURN_STEP = 翻涌累计把形状挪到这么多格才重贴;R_TOL = 团半径变了这个比例才重贴
   // V0 / VMAX = 色阶的对数刻度;CULL = 山截断处;SIG_MIN = 山的最小宽(格);TAIL_K = 尾焰尾巴长宽比;POS_P / MIX = 恒星光晕的律
 const IRV_T0=-0.1;
@@ -32,17 +33,17 @@ function irvUnc(t){ // 不确定半径(km):离最近那艘我方船 d,按目标�
   let d=Infinity,o=null;for(const s of ships)if(s.side==='blue'&&!s.dead){const e=Math.hypot(t.pos[0]-s.pos[0],t.pos[1]-s.pos[1]);if(e<d){d=e;o=s;}}
   return o?d*Math.sqrt(IRV_C.PH_K*covTheta('opt',o,t,d,sReq(t,'size','ship')*(t.heatK===undefined?1:t.heatK))):0;
 }
-function irvEstPos(t){ // 热团画在哪、多不确定:[x, y, 不确定半径 km] = 真实位置 + 每个目标方向固定的偏移 x OFF x 不确定半径(用户:有一定偏移、越近越小、不跳);GM 不偏。红外异常圈也读它
+function irvHeatPos(t){ // 没定位时热团画在哪、多不确定:[x, y, 不确定半径 km] = 真实位置 + 每个目标方向固定的偏移 x OFF x 不确定半径(越近越小);GM 不偏。红外异常圈也读它
   const r=irvUnc(t);if(adminMode)return [t.pos[0],t.pos[1],r];
   const h=irvPh(t)*1.618,k=IRV_C.OFF*r;return [t.pos[0]+Math.cos(h)*k,t.pos[1]+Math.sin(h)*k,r];
 }
 function irvObs(){const a=[];for(const s of ships)if(s.side==='blue'&&!s.dead)a.push(s);return a;}
 function irvSrc(){const a=[];for(const s of ships)if(s.side!=='blue'&&!s.dead)a.push(s);for(const r of rocks)if(!r.dead&&r.side!=='blue')a.push(r);return a;} // 2026-09-27 自己放的浮标不算热源
 function irvV(snr){return IRV_C.GAIN*(snr>=1?snr:snr*snr*snr);} // 一道门:信噪比 → 色阶值;内核发现门限(信噪比 1)以下三次方淡出,热团在发现距离上才冒出来(增益调高以后不许跑在内核前面)
-function irvHill(t,obs){ // 一座山:信噪比(一道门的输入)与模糊宽(km),取看得最清楚的那艘我方船
+function irvHill(t,obs,kn){ // 一座山:信噪比(一道门的输入),取看得最清楚的那艘我方船。kn = 我方已定位它:三道门(日光禁区 / 天体遮挡 / 自己尾焰致盲)不挡,照画它的热(用户:红外是固有的特性,可见光里红团不许消失)
   let best=null,bg=NaN,tSh=false;const lit=envHasLight(),nb=ENV.bodies.length>0;
   for(let n=0;n<obs.length;n++){const o=obs[n];
-    if(senseOptBlocked(o,t))continue;
+    if(!kn&&senseOptBlocked(o,t))continue;
     if(bg!==bg){bg=ENV.clouds.length?envBg(t.pos,'opt'):0;tSh=lit&&nb&&envInShadow(t.pos);}
     const lo=senseOptLoWith(o,t,bg,tSh,lit&&!(nb&&envInShadow(o.pos)));if(!(lo>0))continue;
     const dx=t.pos[0]-o.pos[0],dy=t.pos[1]-o.pos[1],dz=(t.pos[2]||0)-(o.pos[2]||0),d=Math.max(1,Math.hypot(dx,dy,dz));
@@ -108,15 +109,15 @@ const IRVJ={rec:new Map(),obs:[],q0:[],q1:[],fr:0,cost:0,cost0:0,area:0,reset:tr
 const IRVJ_NONE={list:[],sil:null};
 function irvjStCh(r,t){return r.fl!==t.flame||r.sf!==t.sideFlame||r.em!==t.emitMode||r.fh!==(t.fireHot>0)||r.fx!==t.facing[0]||r.fy!==t.facing[1];}
 function irvjStSet(r,t){r.fl=t.flame;r.sf=t.sideFlame;r.em=t.emitMode;r.fh=t.fireHot>0;r.fx=t.facing[0];r.fy=t.facing[1];}
-function irvjPhys(t,obs){const h=irvHill(t,obs);if(h)h.tl=irvTail(t,h);return h;}
-function irvjVis(m,t,obs,chk){for(let k=0;k<obs.length;k++)if(chk&(1<<k)){if(!senseOptBlocked(obs[k],t))m|=1<<k;else m&=~(1<<k);}return m;}
+function irvjPhys(t,obs,kn){const h=irvHill(t,obs,kn);if(h)h.tl=irvTail(t,h);return h;}
+function irvjVis(m,t,obs,chk,kn){for(let k=0;k<obs.length;k++)if(chk&(1<<k)){if(kn||!senseOptBlocked(obs[k],t))m|=1<<k;else m&=~(1<<k);}return m;}
 function irvjQ(r,p){if(p===0){if(!r.in0){r.in0=true;IRVJ.q0.push(r);}}else if(!r.in0&&!r.in1){r.in1=true;IRVJ.q1.push(r);}}
 function irvjDrain(q,cap,obs,p0){
   let n=0,h=0;
   while(h<q.length&&n<cap){const r=q[h++];
     if(p0){if(!r.in0)continue;r.in0=false;r.in1=false;}else{if(!r.in1)continue;r.in1=false;if(r.in0)continue;}
     if(!r.vis||r.seen!==IRVJ.fr)continue;
-    r.ph=irvjPhys(r.t,obs);r.need=true;n++;}
+    r.ph=irvjPhys(r.t,obs,r.kn);r.need=true;n++;}
   q.splice(0,h);return n;
 }
 function irvjCalib(src,obs){ // 进红外画面时标定一次:每个源算一次物理要多少 µs(批次 >= 2 ms)
@@ -131,7 +132,7 @@ function irvPh(t){let h=IRV_PH.get(t);if(h===undefined){h=0;const id=String(t.id
 function irvGlyph(t){const it=adminMode?{kind:t.kind||'ship'}:contactIdType(t,'blue');return Math.min(IRV_C.SIG_MAX_PX,IRV_C.GLYPH*shipIconR(t)*((it&&it.kind==='rock')?Math.sqrt(t.size/0.7):1));} // 舰标团半径(px):与主视图舰标同一个(没认出不暴露舰种;认出是石头才按 √体型)
 function irvGlowMin(t,g){return (!shipMarkMode()&&!adminMode&&irvSilOn(t))?Math.max(g,irvSilR(t)):g;} // 热晕最小半径(px):画轮廓时不小于轮廓(用户:显形了也要有红色团;轮廓叠在团上,四周露出红晕)
 function irvBlobR(g,gm,rk){const Rk=IRV_C.UNC_K*COV.AMAX*Math.log(1+Math.max(0,rk)/COV.AMAX);return Math.max(IRV_C.SIG_MIN,Math.max(gm,Math.min(IRV_C.UNC_CAP*g,Rk*cam.zoom))/IRV_C.CELL);} // 团半径(格):误差圈 rk(km)按热区的对数压缩,下限 = 热晕最小半径 gm,上限 = UNC_CAP x 舰标团 g(上限不跟轮廓变,出轮廓那一下不跳)
-function irvjSplats(t,ph,fxd,ep){ // 一个源的贴片(弥散团、尾焰尾巴),格坐标。一道门:峰值色阶值 = GAIN x 这一份的信噪比;fxd = 我方定出了它的位置;ep = [x, y, 误差圈 km](irvEstPos)
+function irvjSplats(t,ph,fxd,ep){ // 一个源的贴片(弥散团、尾焰尾巴),格坐标。一道门:峰值色阶值 = GAIN x 这一份的信噪比;fxd = 我方定出了它的位置;ep = [x, y, 不确定半径 km](irvjUpdate 里按定位与否在 irvHeatPos 与 viewPos 之间滑)
   const C=IRV_C.CELL,p=toScreen(ep[0],ep[1]),cx=p[0]/C,cy=p[1]/C,list=[],tl=ph.tl,sh=tl?tl.share:0;
   const g=irvGlyph(t),s0=Math.max(IRV_C.SIG_MIN,g/C),R=irvBlobR(g,irvGlowMin(t,g),ep[2]),h=irvPh(t),q=IRVJ.ch,q1=h*1.7+q,q2=h*2.9-q*0.8;
   const vt=irvV(ph.snr),idn=adminMode||contactIdn(t,'blue'),pk=idn?vt*(1-sh):vt,pkT=idn?vt*sh:0; // 淡出按总信噪比(内核发现用的那个)判;认出了按份额分给团和尾焰,没认出尾焰那份并进团里(不画方向:方向 = 真实朝向)
@@ -171,21 +172,25 @@ function irvjUpdate(full,gch){ // 返回脏矩形 [i0,i1,j0,j1] 列表;null = �
     if(!IRVJ.cost&&no)irvjCalib(src,obs);}
   else for(let k=0;k<no;k++){const r=IRVJ.obs[k],o=obs[k],pm=r.px!==o.pos[0]||r.py!==o.pos[1],sc=irvjStCh(r,o);
     if(pm||sc){cm|=1<<k;r.px=o.pos[0];r.py=o.pos[1];irvjStSet(r,o);}if(pm)om=true;}
-  const fr=++IRVJ.fr,tn=performance.now();if(running)IRVJ.ch+=Math.min(0.1,Math.max(0,tn-IRVJ.tc)/1000)*IRV_C.CHURN;IRVJ.tc=tn; // 翻涌相位:墙钟,只在跑的时候走(暂停 = 稳态,不重贴)
+  const fr=++IRVJ.fr,tn=performance.now(),dtw=running?Math.min(0.1,Math.max(0,tn-IRVJ.tc)/1000):0,gk=1-Math.exp(-dtw/IRV_C.GLIDE);IRVJ.ch+=dtw*IRV_C.CHURN;IRVJ.tc=tn; // 翻涌相位与定位滑动:墙钟,只在跑的时候走(暂停 = 稳态,不重贴)
   for(let n=0;n<src.length;n++){const t=src[n];let r=R.get(t),nw=false; // 1) 扫签名 + 离散判定;翻成谁都看不见的当帧去掉
-    if(!r){r={t:t,px:0,py:0,vis:0,ph:null,sp:[],sil:null,sk:'',sb:null,mv:false,need:false,in0:false,in1:false,seen:0,bR:0,qs:0};R.set(t,r);nw=true;}
+    if(!r){r={t:t,px:0,py:0,vis:0,ph:null,sp:[],sil:null,sk:'',sb:null,mv:false,need:false,in0:false,in1:false,seen:0,bR:0,qs:0,w:0,kp:null};R.set(t,r);nw=true;}
     r.seen=fr;
-    const ep=irvEstPos(t);if(!ep){r.ep=null;r.vis=0;if(r.ph||r.sp.length||r.sil){r.ph=null;r.need=true;}continue;} // 我方交代不出位置 ⇒ 不画
+    const hp=irvHeatPos(t),kp=(adminMode||contactFix(t,'blue'))?viewPos(t):null,wt=kp?1:0; // 定位了:目标是主视角画它的位置;没定位:偏开的热团位置
+    if(kp)r.kp=[kp[0],kp[1]];r.w=nw?wt:r.w+(wt-r.w)*gk;if(Math.abs(wt-r.w)<0.01)r.w=wt;
+    const K=r.kp||hp,w=r.kp?r.w:0;let ep=[hp[0]+(K[0]-hp[0])*w,hp[1]+(K[1]-hp[1])*w,hp[2]*(1-w)]; // 团心在两者之间滑,不确定半径跟着收(定位后 = 热晕最小半径)
+    if(!nw&&r.ep&&Math.hypot(ep[0]-r.ep[0],ep[1]-r.ep[1])*cam.zoom<IRV_C.EP_PX&&Math.abs(ep[2]-r.ep[2])<IRV_C.R_TOL*Math.max(r.ep[2],1))ep=r.ep;
     const pm=nw||!r.ep||r.px!==ep[0]||r.py!==ep[1],sc=nw||irvjStCh(r,t);r.mv=pm&&!nw;r.ep=ep;
     if(pm){r.px=ep[0];r.py=ep[1];}if(sc)irvjStSet(r,t);
     const so=irvSilOn(t),fxd=contactFix(t,'blue');if(so!==r.so||fxd!==r.fxd){r.so=so;r.fxd=fxd;r.need=true;} // 内核认出 / 定位变了:轮廓与亮核跟着重画(静止的石头不会因为挪动而重贴)。fxd 不叫 fx:r.fx 是 irvjStSet 存的机头朝向
+    const kn=adminMode||fxd,kc=kn!==r.kn;r.kn=kn; // 定位与否变了:看不看得见要重判(定位了就不受三道门挡)
     {const op=so?viewPos(t):null;r.smv=!!op&&(!r.op||r.op[0]!==op[0]||r.op[1]!==op[1]);r.op=op?[op[0],op[1]]:null;if(r.smv)r.need=true;} // 轮廓画在我方知道的位置(用户选甲:物体本身;红晕按红外那一层略偏、翻涌)
     if(r.ph){const g=irvGlyph(t),bR=irvBlobR(g,irvGlowMin(t,g),ep[2]);if(Math.abs(bR-r.bR)>IRV_C.R_TOL*r.bR||(IRVJ.ch-r.qs)*IRV_C.WARP*bR>=IRV_C.CHURN_STEP)r.need=true;} // 团大小变了、或翻涌累计把形状挪够了:重贴
-    const chk=(gch||pm||sc)?all:cm;
+    const chk=(gch||pm||sc||kc)?all:cm;
     if(!chk&&!om)continue;
-    const v0=r.vis,v=chk?irvjVis(v0,t,obs,chk):v0;r.vis=v;
+    const v0=r.vis,v=chk?irvjVis(v0,t,obs,chk,kn):v0;r.vis=v;
     if(!v){if(r.ph){r.ph=null;r.need=true;}continue;}
-    if(!r.ph||(v&~v0)||!(v&(1<<r.ph.k))||sc||gch)irvjQ(r,0);
+    if(!r.ph||(v&~v0)||!(v&(1<<r.ph.k))||sc||gch||kc)irvjQ(r,0);
     else if(pm||om)irvjQ(r,1);
   }
   for(const r of R.values())if(r.seen!==fr&&(r.ph||r.sp.length||r.sil)){r.ph=null;r.need=true;}
