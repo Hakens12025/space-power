@@ -166,6 +166,51 @@ function drawCiwsFx(){
   }
   ctx.restore();
 }
+/* 2026-09-29 护盾(用户在 demos/weapons/护盾特效.html 调定):罩子半径 = 舰标半长 x K(按我方看到的舰标,没认出不暴露舰种);常亮随盾量,回充时边上三段流光,
+   破盾期间一圈暗虚线的重启进度;打中 / 击破 / 重启 / 回满的特效按墙钟放(weapons/55 的 shieldFX)。对方的船只在我方可见光圈里才画罩子 */
+const SHD_FX={K:2,GLOW:0.2,HIT_T:0.3,BRK_T:0.5,FLOW:0.5,RST_T:0.6,FULL_T:0.5,COL:{blue:[110,210,255],red:[255,150,110]}};
+let SHD_W=0,SHD_T=0; // 流光相位的钟(墙钟,只在跑的时候走)
+function shieldR(s){return shipIconR(s)*(shipMarkMode()?1:1.5/0.78)*SHD_FX.K;}
+function shieldSeen(s){if(adminMode||s.side===VIEW)return true;const tk=trkOf(VIEW,s);return !!(tk&&tk.cov&&tk.cov.ch&&tk.cov.ch.vis);}
+function shdRgba(c,a){return 'rgba('+c[0]+','+c[1]+','+c[2]+','+Math.max(0,Math.min(1,a)).toFixed(3)+')';}
+function shdArc(x,y,r,a0,a1,col,w){ctx.strokeStyle=col;ctx.lineWidth=w;ctx.beginPath();ctx.arc(x,y,r,a0,a1);ctx.stroke();}
+function drawShieldBubble(s,p){ // drawShip 调(舰体之下)
+  if(!(s.shMax>0)||!shieldSeen(s))return;
+  const C=SHD_FX.COL[s.side]||SHD_FX.COL.blue,R=shieldR(s),x=p[0],y=p[1],G=SHD_FX.GLOW;
+  ctx.save();
+  if(s.shDown>0){const q=1-s.shDown/SHIELD.RESTART_S;ctx.setLineDash([3,4]);shdArc(x,y,R,-1.571,-1.571+6.283*q,shdRgba(C,0.28),1.2);ctx.setLineDash([]);}
+  else{const f=s.sh/s.shMax,g=ctx.createRadialGradient(x,y,R*0.55,x,y,R);g.addColorStop(0,shdRgba(C,0));g.addColorStop(1,shdRgba(C,0.10*G*(0.3+0.7*f)));ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,R,0,6.283);ctx.fill();
+    shdArc(x,y,R,0,6.283,shdRgba(C,(0.15+0.55*f)*G+0.05),1.3);
+    if(f<1){const ph=SHD_W*SHD_FX.FLOW*2.2;for(let k=0;k<3;k++){const a0=ph+k*2.094;shdArc(x,y,R,a0,a0+0.35+0.5*f,shdRgba(C,0.35+0.5*f),2);}}}
+  ctx.restore();
+}
+function drawShieldFx(){
+  const now=nowMs();if(SHD_T&&running)SHD_W+=Math.min(0.05,Math.max(0,(now-SHD_T)/1000));SHD_T=now;
+  if(!shieldFX.length)return;
+  ctx.save();
+  for(let i=shieldFX.length-1;i>=0;i--){const e=shieldFX[i],a=(now-e.tw)/1000,F=SHD_FX;
+    const T=e.k==='hit'?F.HIT_T*(e.big?1.6:1):(e.k==='break'?F.BRK_T:(e.k==='restart'?F.RST_T:F.FULL_T));
+    if(a>T||a<0){shieldFX.splice(i,1);continue;}
+    if(!adminMode&&!e.vis[VIEW])continue;
+    const s=e.s,q=(adminMode||s.side===VIEW)?s.pos:(viewPos(s)||e.pos),p=toScreen(q[0],q[1]),R=shieldR(s),L=R/F.K,C=F.COL[s.side]||F.COL.blue,cx=p[0],cy=p[1],u=a/T,k=1-u;
+    if(cx<-R*3||cx>W+R*3||cy<-R*3||cy>H+R*3)continue;
+    if(e.k==='hit'){const w=e.big?0.8:0.3;
+      shdArc(cx,cy,R,e.a-w*(0.4+u),e.a+w*(0.4+u),shdRgba([255,255,255],0.9*k*k),e.big?3.5:2.2); // 命中点一段亮弧往两边铺开
+      shdArc(cx,cy,R,e.a+w*0.4+u*2.2,e.a+w*0.4+u*2.2+0.25,shdRgba(C,0.8*k),2);shdArc(cx,cy,R,e.a-w*0.4-u*2.2-0.25,e.a-w*0.4-u*2.2,shdRgba(C,0.8*k),2); // 沿罩面跑开的涟漪
+      shdArc(cx,cy,R,0,6.283,shdRgba(C,0.45*k*(e.big?1:0.5)),1.6); // 整层闪一下
+      const px=cx+Math.cos(e.a)*R,py=cy+Math.sin(e.a)*R,gr=L*(e.big?1.6:0.7),rg=ctx.createRadialGradient(px,py,0,px,py,gr);rg.addColorStop(0,shdRgba([255,255,255],0.85*k));rg.addColorStop(1,shdRgba(C,0));ctx.fillStyle=rg;ctx.beginPath();ctx.arc(px,py,gr,0,6.283);ctx.fill();}
+    else if(e.k==='break'){
+      if(!e.sh){e.sh=[];for(let n=0;n<14;n++)e.sh.push({c:(n+Math.random()*0.5)/14*6.283,w:6.283/14*(0.55+Math.random()*0.35),v:0.5+Math.random()*0.9,r:(Math.random()-0.5)*3});
+        e.sp=[];for(let n=0;n<22;n++)e.sp.push({c:e.a+(Math.random()-0.5)*2.4,v:0.8+Math.random()*1.6});}
+      shdArc(cx,cy,R*(1+0.9*Math.sqrt(u)),0,6.283,shdRgba(C,0.7*k),2.5*k+0.5); // 往外炸开的一圈
+      for(const o of e.sh){const d=R*(1+o.v*u*0.9),a0=o.c+o.r*u*0.3;shdArc(cx,cy,d,a0,a0+o.w*(1-0.4*u),shdRgba(C,0.9*k),2);} // 罩子碎成一段段往外飞
+      ctx.fillStyle=shdRgba([255,255,255],k);for(const o of e.sp){const d=R+L*3*o.v*u;ctx.fillRect(cx+Math.cos(o.c)*d-1,cy+Math.sin(o.c)*d-1,2,2);} // 火花
+      if(u<0.25){const g=ctx.createRadialGradient(cx,cy,R*0.6,cx,cy,R*1.08);g.addColorStop(0,shdRgba(C,0));g.addColorStop(0.8,shdRgba([255,255,255],0.55*(1-u/0.25)));g.addColorStop(1,shdRgba(C,0));ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,R*1.08,0,6.283);ctx.fill();}} // 碎之前罩面整圈亮一下
+    else if(e.k==='restart')shdArc(cx,cy,L*0.8+(R-L*0.8)*Math.sqrt(u),0,6.283,shdRgba(C,0.9*k+0.2),2.5*k+1); // 从船身张开
+    else shdArc(cx,cy,R,0,6.283,shdRgba(C,0.7*k),2.4); // 回满闪一圈
+  }
+  ctx.restore();
+}
 function drawCorridors(){ // v138(重做):来袭走廊——来源线(发射舰→导弹)+ 去向锥(导弹当前速度方向)+ 标签;导弹消失淡出5s
   for(const c of threatCorridors){
     if(!c.p)continue;

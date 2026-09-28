@@ -11,7 +11,7 @@ function initFleet(){
   // KIMI146:换局全量重置战斗状态。原只重置上面4个,导致:①来袭走廊引用旧局弹丸(done永不置位→橙锥永不消失)
   // ②victoryShown/defeatShown不重置→上一局歼灭后,新一局不再报胜/败 ③nets/ESM/导弹选中残留旧局引用
   simTime=0;
-  threatCorridors=[];hitFX=[];ciwsFX=[];nets.clear();
+  threatCorridors=[];hitFX=[];ciwsFX=[];shieldFX=[];nets.clear();
   if(typeof SHELL_TR!=='undefined'){SHELL_TR.blue.length=0;SHELL_TR.red.length=0;} // 2026-09-28 炮弹来路记录随局清空
   if(typeof aiRedReset==='function')aiRedReset(); // AI1 换局清红方 AI 的信念(目标点 / 最后已知位置 / 搜索进度),否则带着上一局的记忆开局
   if(typeof esmReset==='function')esmReset(); // 换局清听到的敌方雷达记录(键是舰对象,旧局的船不该留着)

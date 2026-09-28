@@ -88,13 +88,13 @@ function stepMacProj(p,dt){ // MAC轴炮:沿发射时船头直飞,命中或到�
       if(p.ground){ // 2026-09-27 打空地的炮弹:对方每艘船都按本拍相对线段的最近点判(与下面同式),碰到第一艘就算
         for(const u of ships.concat(rocks)){if(u.dead||u.side===p.shooter.side||u.hp===undefined)continue; // 物体里只有带结构值的(民船 / 诱饵 / 浮标)挨得了打
           const sx=(p.vel[0]-u.vel[0])*dt,sy=(p.vel[1]-u.vel[1])*dt,sz=(p.vel[2]-u.vel[2])*dt,rx=p.pos[0]-u.pos[0]-sx,ry=p.pos[1]-u.pos[1]-sy,rz=p.pos[2]-u.pos[2]-sz,ss=sx*sx+sy*sy+sz*sz,k=ss>0?Math.max(0,Math.min(1,-(rx*sx+ry*sy+rz*sz)/ss)):1;
-          if((rx+k*sx)**2+(ry+k*sy)**2+(rz+k*sz)**2<MAC_HIT_R*MAC_HIT_R){applyDamage(u,p.dmg,p.shooter,'mac');spawnHit(p.pos,'mac',p.shooter,u);p.done=true;return;}}
+          if((rx+k*sx)**2+(ry+k*sy)**2+(rz+k*sz)**2<MAC_HIT_R*MAC_HIT_R){if(applyDamage(u,p.dmg,p.shooter,'mac',p)>0)spawnHit(p.pos,'mac',p.shooter,u);p.done=true;return;}}
         if(!ARENA&&p.age*CFG.macSpd>MAC_FAR)p.done=true; // 2026-09-28 用户:炮弹射程理论无限 —— 不再到点消失,飞到出游玩区(主循环统一判);靶场没有游玩区,飞出 MAC_FAR 才收
         return;
       }
       const t=p.target,tv=(t&&t.vel)||[0,0,0],sx=(p.vel[0]-tv[0])*dt,sy=(p.vel[1]-tv[1])*dt,sz=(p.vel[2]-tv[2])*dt; // 2026-09-26 单局地图:MAC_HIT_R 400 < 单拍相对位移约 600km,只看拍末会漏判(实测 90% 带只剩 84%),改按本拍相对线段的最近点判
       const rx=t?p.pos[0]-t.pos[0]-sx:0,ry=t?p.pos[1]-t.pos[1]-sy:0,rz=t?p.pos[2]-t.pos[2]-sz:0,ss=sx*sx+sy*sy+sz*sz,u=ss>0?Math.max(0,Math.min(1,-(rx*sx+ry*sy+rz*sz)/ss)):1;
-      if(t&&!t.dead&&(rx+u*sx)**2+(ry+u*sy)**2+(rz+u*sz)**2<MAC_HIT_R*MAC_HIT_R){applyDamage(p.target,p.dmg,p.shooter,'mac');spawnHit(p.pos,'mac',p.shooter,p.target);p.done=true;} // RANGE1 补第 4 实参 kind='mac'(靶场分武器统计)
+      if(t&&!t.dead&&(rx+u*sx)**2+(ry+u*sy)**2+(rz+u*sz)**2<MAC_HIT_R*MAC_HIT_R){if(applyDamage(p.target,p.dmg,p.shooter,'mac',p)>0)spawnHit(p.pos,'mac',p.shooter,p.target);p.done=true;} // RANGE1 补第 4 实参 kind='mac'(靶场分武器统计)
       else if(p.age>=p.tt){p.ground=true;} // 2026-09-28 过了预测时间没中:不消失,当成打空地的炮弹接着飞,路上碰到谁算谁(用户:射程理论无限)
 }
 function stepBeaconProj(p,dt){ // 侦察信标(v113):飞抵部署,遥控开关机;开机才耗开机时间(300s),关机静默
@@ -370,8 +370,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         if(typeof rangeDefTally==='function')rangeDefTally(p.target,p,decoy,hitCount-survHit,survHit); // RANGE1 防御链埋点:到达/干扰弹勾走/内圈拦掉/实际命中四段读数。没有这一步,用户调 chaffRate 与 innerIntercept 只能看总伤害变化,看不到"拦掉几颗",等于盲调
         if(survHit>0){
           const finalDmg=Math.max(1,Math.round(survHit*(p.missDmg||12)*sectorDmgMult)); // DS155:×扇面倍增
-          applyDamage(p.target,finalDmg,p.shooter,'missile'); // RANGE1 补第 4 实参 kind='missile'
-          spawnHit(p.pos,'missile',p.shooter,p.target);
+          if(applyDamage(p.target,finalDmg,p.shooter,'missile',p)>0)spawnHit(p.pos,'missile',p.shooter,p.target); // RANGE1 补第 4 实参 kind='missile'。2026-09-29 全被护盾挡住不出船体命中闪光(护盾特效在 55)
         }
         if(decoy>0){ // 脱锁的n颗:继续飞(飞过目标),target清空走组网转移复锁,复锁靠转弯耗燃料
           p.count=decoy;

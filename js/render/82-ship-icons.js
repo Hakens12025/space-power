@@ -230,6 +230,7 @@ function drawShip(s){
   // 推进器尾焰(后主推进 / 前向反推 / 侧向辅助)
   if(adminMode||s.side===VIEW||contactIdn(s,VIEW))drawFlame(s,p,r); // 2026-09-28 没认出的不画尾焰 / 侧推:它们按真实朝向画,等于泄漏朝向(UNK 记号 09-26 已改成不转的菱形)
   {const erg=emitRippleRgb(s);if(erg)drawEmitRipple(p,shipIconR(s),erg);} // EM1 发射机开着 ⇒ 涟漪(画在舰体之下)
+  if(typeof drawShieldBubble==='function')drawShieldBubble(s,p); // 2026-09-29 护盾罩子(render/83)
   // 舰体图标(wows式:按舰种形状,图标自身带朝向)
   ctx.save();
   ctx.strokeStyle=bodyColor; ctx.fillStyle=bodyColor;
@@ -251,6 +252,7 @@ function drawShip(s){
     const bw=26,bh=3,bx=p[0]-bw/2,by=p[1]-r-14,fr=Math.max(0,Math.min(1,s.hp/s.maxHp));
     ctx.fillStyle='rgba(10,14,20,.7)';ctx.fillRect(bx-1,by-1,bw+2,bh+2);
     ctx.fillStyle=fr>0.35?'#54e0d0':'#ffb454';ctx.fillRect(bx,by,bw*fr,bh);
+    if(s.shMax>0){const sf=s.shDown>0?0:Math.max(0,Math.min(1,s.sh/s.shMax));ctx.fillStyle='rgba(10,14,20,.7)';ctx.fillRect(bx-1,by-5,bw+2,bh+1);ctx.fillStyle='rgb(110,210,255)';ctx.fillRect(bx,by-4,bw*sf,bh-1);} // 2026-09-29 护盾条(血条上面一条细的)
   }
   ctx.restore();
 

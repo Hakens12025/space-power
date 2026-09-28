@@ -3,7 +3,7 @@
 ## 文件
 - `50-missile-spec.js` 导弹规格;`51-defs.js` 武器定义表 `WPN`、配装 `CLS_LOADOUT`、`resolveLoadout(cls,tier)`、命中率函数
 - `51-ciws.js` 近防谓词 / 过载 / 扇面;`52-fire.js` 主炮 / 诱饵 / 拦截弹 / 齐射发射链、开火暴露置位、命中闪光 `spawnHit` / 近防火花 `spawnCiwsFX`(看得见的口径 `fxVis`)
-- `53-nets.js` 数据链网分配;`54-missiles.js` 导弹引导(`MSL_CFG` / `missSee`);`55-damage.js` `applyDamage`
+- `53-nets.js` 数据链网分配;`54-missiles.js` 导弹引导(`MSL_CFG` / `missSee`);`55-damage.js` `applyDamage`(先扣护盾,打破后多出的进船体;返回进船体的伤害,调用方据此出不出船体命中闪光)、护盾回充 / 重启 `stepShields`(`SHIELD`:空到满 60、破后 10 游戏秒重启;盾值在 ships/11 `CLS_STRUCT.shield`)
 - `56-step-projectiles.js` 弹丸推进与引导;`57-step-weapons.js` 冷却 / 装填 / 自动索敌与自动齐射;`58-firecontrol.js` 火控序列引擎侧(`fcGate` / `fcSolve` / `fcRuns`)
 
 ## 射程与瞄准

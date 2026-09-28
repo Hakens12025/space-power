@@ -11,8 +11,8 @@ const CLS_MOB={ // 舰种差异化机动:转向率 / 推进加速度(太空无�
   CA:{turnRate:PHYS.w(0.016),thrust:PHYS.a(0.0375),speedGears:[0,PHYS.v(20),PHYS.v(40),PHYS.v(70),-1]}, // 2026-09-26 物理单位:3.8 g、转向 0.9°/s、速度档 20 / 40 / 70 km/s // TIER1 原 CRUISER 马拉松级:重,加速适中;DS148速度档按舰种(巡洋偏慢)
 };
 const CLS_STRUCT={ // RF3 舰体表:结构/信标载量(非武器数据,从原 CLS_WPN 拆出;武器数值已移 weapons/51-defs 的 WPN 定义表)
-  DD:{hp:550, beacon:2}, // TIER1 原 FRIGATE 护卫:beacon 由 makeShip 里无条件 2 枚改表驱动 TODO(TIER-BAL) 载量待定
-  CA:{hp:900, beacon:0}, // TIER1 原 CRUISER 巡洋 TODO(TIER-BAL) beacon 载量待定
+  DD:{hp:550, beacon:2, shield:200}, // 2026-09-29 shield = 护盾(用户:舰队护盾,血量没船体高;weapons/55) // TIER1 原 FRIGATE 护卫:beacon 由 makeShip 里无条件 2 枚改表驱动 TODO(TIER-BAL) 载量待定
+  CA:{hp:900, beacon:0, shield:300}, // TIER1 原 CRUISER 巡洋 TODO(TIER-BAL) beacon 载量待定
 };
 /* ===== TIER1 能力谓词层:把逻辑层散落的 cls==='XXX' 硬编码换成数据驱动查询(P0 建的安全垫,P1 随五张表一起换成 DD/CA/BB/CV 键) ===== */
 /* FM3-2:原先这里还有一张"舰种战术角色表"(DD 屏护 / CA·BB·CV 主力线),给 40-slots 旧弧线阵与 42/44 换槽分桶用。
@@ -88,7 +88,7 @@ function shipStats(cls,tier){ // TIER1 (舰种,分级) → 扁平属性对象:�
   if(hit)return hit;
   const src=Object.assign({},
     CLS_MOB[c]||{turnRate:CFG.turnRate,thrust:CFG.thrust},
-    CLS_STRUCT[c]||{hp:500,beacon:0}, // RF3 武器数值已移 weapons/51-defs(resolveLoadout 单独解析),这里只剩舰体/机动/感知
+    CLS_STRUCT[c]||{hp:500,beacon:0,shield:175}, // RF3 武器数值已移 weapons/51-defs(resolveLoadout 单独解析),这里只剩舰体/机动/感知
     sReq(SENS.CLS,c,'SENS.CLS'), // SN4 感知行表:size/stealth/emit/recv 加干扰强度,全部住 sensors/20 的 SENS.CLS 这【一份】表里(前提:数值表只有一份,原来那张独立的按舰种感知表已整个删除)。sReq 挡的是"表里少了一个舰种"——Object.assign 对 undefined 源是静默空操作,不抛的话整船感知字段一次全缺,后面每个消费者各自兜底成不同的假值
     CLS_LINK[c]||CLS_LINK.DD, // SN1 数据链表(guideChan)单独并进来,来源在 weapons/51-defs;函数体内引用=运行期解析,不受 51-defs 加载晚于本文件影响(同上一行的先例)
     {value:CLS_VALUE[c]||1});                                     // 威胁权重进 tier 层:04-targeting:6 网分配与 07-missiles:297 伏击雷阈值读的就是它(经 shipValue 实例优先)。SN4 这里原来还并进四张按舰种的感知子表(雷达截面/照射功率/两个探测下限),两通道内核之后那四张表连同它们的字段一起没了,感知数值只剩上一行那一处来源
@@ -109,7 +109,7 @@ function makeShip(cls,name,pos,facing,vel,side,tier){ // TIER1 加第 7 参 tier
     pos:pos.slice(), vel:(vel||[0,0,0]).slice(), facing:V.norm(facing), // KIMI146修:vel原直接用传入引用→物理积分原地改写TEST_ENVS/自定义场景预设初速,重开场景继承上局残速
     thrust:st.thrust, turnRate:st.turnRate,
     speedGears:(st.speedGears||[0,250,500,800,-1]).slice(), // TIER1 速度档烘焙到实例(05-motion:13 speedGearsOf 改实例优先):tier 影响速度档的唯一通路;拷副本防表被原地改写
-    hp:st.hp, maxHp:st.hp, macCd:0, missileArm:null, ammo:lw.ammo, macDmg:lw.macDmg, missDmg:lw.missDmg, interceptor:lw.inter||0, interMax:lw.inter||0, lockedTarget:null, lockPlayer:false, dead:false, // DS167:interMax=拦截弹库存上限(资源纪律判定用)
+    hp:st.hp, maxHp:st.hp, shMax:st.shield||0, sh:st.shield||0, shDown:0, macCd:0, missileArm:null, ammo:lw.ammo, macDmg:lw.macDmg, missDmg:lw.missDmg, interceptor:lw.inter||0, interMax:lw.inter||0, lockedTarget:null, lockPlayer:false, dead:false, // DS167:interMax=拦截弹库存上限(资源纪律判定用)
     macReload:lw.mac||0, macSigma:sReq(lw,'macSigma','resolveLoadout'), // RF3 MAC 装填秒烘焙;WR1 起射程字段换成角散布 macSigma(走 sReq:配装缺字段当场抛,不许静默退化)
     cells:(lw.cells||4), cellTimer:Array(lw.cells||4).fill(0), // 发射单元(v119):巴黎4单元/同时4组/每组独立装填
     mslPer:lw.mslPer||12, mslReload:lw.mslReload||60, // RF3 导弹每组枚数/单元装填秒/射程烘焙(原为 fireMissiles/S15b/enemyAI 散落字面量)

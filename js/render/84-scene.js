@@ -370,7 +370,7 @@ function drawInset(){
     drawTrails(hide);
     for(const s of ships){if(hide&&s.side!==VIEW)continue;drawShip(s);}
     if(typeof drawRocks==='function')drawRocks(hide);
-    drawProjectiles();if(typeof drawShellTraces==='function')drawShellTraces();drawHits();drawCiwsFx();insetCausal();
+    drawProjectiles();if(typeof drawShellTraces==='function')drawShellTraces();drawHits();drawCiwsFx();if(typeof drawShieldFx==='function')drawShieldFx();insetCausal();
     const F=INSET.fx;if(F){const k=(now-F.t0)/(F.big?1500:1200);if(k>=1||k<0)INSET.fx=null;else{const p=F.s?F.s.pos:[F.x,F.y],q=toScreen(p[0],p[1]);ctx.globalAlpha=1-k;ctx.strokeStyle=ctx.fillStyle='rgb('+F.col+')';ctx.lineWidth=1.5; // 开播自带爆闪:hitFX 只活 1.2 游戏秒,切过去时多半已经没了
       ctx.beginPath();ctx.arc(q[0],q[1],F.big?14+70*k:8+40*k,0,6.2832);ctx.stroke();ctx.beginPath();ctx.arc(q[0],q[1],Math.max(0.1,(F.big?10:6)*(1-k)),0,6.2832);ctx.fill();ctx.globalAlpha=1;}}
   }finally{ctx=ctx0;cam.x=c0x;cam.y=c0y;cam.zoom=c0z;W=W0;H=H0;lodNow=lod;}
@@ -432,6 +432,7 @@ function render(){
   if(typeof drawShellTraces==='function')drawShellTraces(); // 2026-09-28 敌方炮弹来路(render/83)
   drawHoverRings();if(typeof drawPings==='function')drawPings();if(typeof drawForceMarks==='function')drawForceMarks();if(typeof drawAnomalies==='function')drawAnomalies(); // 2026-09-27 雷达异常 / 红外异常(render/83) // 2026-09-27 扫描脉冲圈(render/83)。RF2 简化UI:底栏武器钮 hover 时选中舰的射程圈
   drawHits();drawCiwsFx(); // 2026-09-28 近防炮曳光 + 火花(render/83)
+  if(typeof drawShieldFx==='function')drawShieldFx(); // 2026-09-29 护盾打中 / 击破 / 重启 / 回满(render/83)
   drawLocks();
   if(typeof drawFmStations==='function')drawFmStations(); // FM4 编队能力站位(带半径圈+站位点+离位细线)。排在跟随连线【之前】:它是"队形的底图"(常驻结构),而跟随连线是"正在进行的关系",后者该压在上面
   if(typeof drawFollowLinks==='function')drawFollowLinks(); // FL2 跟随连线(黄色流动细虚线):与数据链同层级语义("我下的命令/建立的关系"),排在它之前——数据链是瞬态交互产物、跟随是常驻关系,两者连到同一艘舰时链在上更符合"正在进行的事更高一层"
