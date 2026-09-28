@@ -67,7 +67,7 @@ function trkStep(tk,t,obs,el){
   TRK_KIN.tau=tk.tau;TRK_KIN.a=trkAccPrior(t,c);TRK_KIN.dr=(c.fix&&tk.lastPos&&tk.lastVel)?trkDRbase(tk):null;
   const held=stepCov(t,c,obs,el,TRK_IDO,TRK_KIN);
   tk.tau=TRK_KIN.tau;
-  trkErrStep(tk,el); // 2026-09-28 估计中心 = 真值 + 误差(按这一拍的椭圆);lastPos / trkPos / 航位推算都从它来
+  trkErrStep(tk); // 2026-09-28 估计中心 = 真值 + 误差(按这一拍的椭圆);lastPos / trkPos / 航位推算都从它来
   if(c.fix&&c.n>0){tk.lastT=simTime;tk.lastPos=[c.x,c.y,t.pos[2]];tk.eoL[0]=tk.eo[0];tk.eoL[1]=tk.eo[1];if(TRK_KIN.pm||!tk.lastVel)tk.lastVel=t.vel.slice();} // 2026-09-27 速度只在测到位置的一拍更新(单站方位量不出速度)
   if(held&&tk.tn===0)tk.tn=++TRK_TN[tk.by]; // TK4c 航迹号:这一方第一次握住它的那一拍发号,之后终身不变(丢了再捡回来还是这个号)。只用于显示 —— 不当键、不当种子、不参与任何取舍
   if(held){if(TRK_IDO.opt||TRK_IDO.act||TRK_IDO.vis)tk.idc=true;}else tk.idc=false; // TK2.6 确认锁存:光学轮廓或照射回波认出过 ⇒ 确认;接触丢了才清。与椭圆的身份位同一拍立、同一拍清
@@ -78,36 +78,29 @@ function trkStep(tk,t,obs,el){
 
 /* ---- 2026-09-28 估计误差(用户:「很多情况下会标注敌方实际的位置」)----
    标准形态:跟踪器的估计误差要与它自己报告的协方差一致(一致性估计,检验量叫 NEES)。这里有意偏保守:误差只到 AMP x 1σ。
-   每条航迹每一路一个平滑、有界的误差状态 z(value noise:每 TRK_ERR.TAU 游戏秒一个 [-1,1] 的随机节点,节点之间 smoothstep 插值,再乘 AMP)。
-   2026-09-28 从 AR(1) 换过来(用户:「允许飘,但是不要飘散,太飘」):AR(1) 每拍新抽一步 0.3σ,画面每秒一跳;这个只慢慢飘,偏移封顶。
+   每条航迹每一路一个误差 z(两个分量各在 [-AMP, AMP] 里均匀抽),建航迹时抽一次就钉死:估计点只随这一层的不确定度缩放,不随时间漂。
+   2026-09-28 改过三轮:AR(1) 每拍一跳 → 平滑漂移 → 用户「碎石在乱飞」(碎石不动,估计点一漂就像在飞)→ 钉死。
    · 融合估计(真有测距 / 交会 / 可见圈的那一路):偏移 = 这一拍椭圆(1σ 轴长 r1 / r2、倾角 th)x z,加到 c.x / c.y;
      单站方位续航那一支从【去掉误差的】推算点起算(trkDRbase),否则误差逐拍累加。
-   · 纯被动的两层没有距离量测,距离按被动测距的标准假设法给(assumed-signature passive ranging):没认出就假设它是一艘驱逐舰,
-     由亮度 / 射频响度反推距离 —— 偏差是系统性的,长时间平均也平均不出真值;认出了型号才按它自己的量。
-     红外那一层走 trkIrEst(异常提醒、红外画面;它的偏差钉住不漂,不确定改由红外画面的团大小表示);静听那一层在 21 的 esmHear 里(测距 rr / 估计方位 tbE,雷达异常与雷达画面读它)。
+   · 红外那一层(trkIrEst,异常提醒、红外画面):真实位置 + z x 这一层的等面积 1σ 半径,方向钉在地图坐标里(不跟视线转,换观测站只是半径变)。
+     原来按假设型号反推距离:碎石被推到 2~4 倍远,我方一动它就按(倍数 − 1)x 我方速度滑。
+   · 静听那一层在 21 的 esmHear 里(测距 rr / 估计方位 tbE,雷达异常与雷达画面读它):假设法测距(没认出按驱逐舰的发射机档次反推,偏差是系统性的)+ z x 这一拍的 1σ。
    沿视线的偏移截在 ±ALONG_K x 基准距离(截偏移本身)。 */
-const TRK_ERR={TAU:20,AMP:0.5,ALONG_K:0.5,PH_K:0.3}; // TAU = 节点间隔(游戏秒);AMP = 偏移上限(x 1σ);PH_K:假设法测距的相对 1σ(同型号之间亮度 / 响度的散布)
+const TRK_ERR={AMP:0.5,ALONG_K:0.5,PH_K:0.3}; // AMP = 偏移上限(x 1σ);PH_K = 红外那一层测距的相对 1σ
 function trkClampK(v,lim){return v>lim?lim:(v<-lim?-lim:v);}
-function trkKnot(){return [2*Math.random()-1,2*Math.random()-1];}
-function trkEzAt(e){const u=e.u,w=u*u*(3-2*u),A=TRK_ERR.AMP;e.z[0]=A*(e.a[0]+(e.b[0]-e.a[0])*w);e.z[1]=A*(e.a[1]+(e.b[1]-e.a[1])*w);} // smoothstep:过节点时速度为零,不折
-function trkEzCh(){const e={a:trkKnot(),b:trkKnot(),u:Math.random(),z:[0,0]};trkEzAt(e);return e;} // u 随机起步:各航迹不同时换节点
-function trkEzNew(){return {f:trkEzCh(),opt:trkEzCh(),lis:trkEzCh()};} // f = 融合估计,opt = 红外那一层,lis = 静听那一层;读当前值用 .z
-function trkErrStep(tk,el){
-  const c=tk.cov;if(!(c.n>0))return; // 这一拍没量到:估计停在上一次,误差状态也冻住
-  const du=Math.max(0,el)/TRK_ERR.TAU,ez=tk.ez;
-  for(const k in ez){if(k==='opt')continue;const e=ez[k];e.u+=du;while(e.u>=1){e.u-=1;e.a=e.b;e.b=trkKnot();}trkEzAt(e);} // 红外那一层的偏差钉住、不走(用户:不要红外层萤火虫般乱飞),建航迹时定下
+function trkEzCh(){const A=TRK_ERR.AMP;return [A*(2*Math.random()-1),A*(2*Math.random()-1)];}
+function trkEzNew(){return {f:trkEzCh(),opt:trkEzCh(),lis:trkEzCh()};} // f = 融合估计,opt = 红外那一层,lis = 静听那一层;钉死不变
+function trkErrStep(tk){
+  const c=tk.cov,z=tk.ez.f;if(!(c.n>0))return; // 这一拍没量到:估计停在上一次
   let dmin=1e18;for(const k in c.ch){const m=c.ch[k];if(m&&m[2]<dmin)dmin=m[2];}
-  const lim=TRK_ERR.ALONG_K*dmin,o1=trkClampK(ez.f.z[0]*c.r1,lim),o2=trkClampK(ez.f.z[1]*c.r2,lim),cs=Math.cos(c.th),sn=Math.sin(c.th);
+  const lim=TRK_ERR.ALONG_K*dmin,o1=trkClampK(z[0]*c.r1,lim),o2=trkClampK(z[1]*c.r2,lim),cs=Math.cos(c.th),sn=Math.sin(c.th);
   tk.eo[0]=cs*o1-sn*o2;tk.eo[1]=sn*o1+cs*o2;c.x+=tk.eo[0];c.y+=tk.eo[1];
 }
 function trkDRbase(tk){const p=trkDR(tk);return p?[p[0]-tk.eoL[0],p[1]-tk.eoL[1],p[2]]:null;} // 单站方位续航的推算基准:最后定位点去掉当时加的误差再外推
-function trkRefSize(tk){const ty=trkIdType(tk),c=ty&&ty.kind==='ship'&&SENS.CLS[normCls(ty.cls)];return c?c.size:SENS.CLS.DD.size;} // 假设法测距的参考体型:认出了按它的舰级,没认出按驱逐舰
-function trkIrEst(tk){ // 红外那一层的估计 {x,y,r}:方位是量出来的(带角误差);距离 = 亮度测距(信噪比 + 参考亮度,看得见在不在喷),不读真实距离。这一拍红外没量到给 null
+function trkIrEst(tk){ // 红外那一层的估计 {x,y,r}:真实位置 + 钉死的偏移 x 这一层的等面积 1σ 半径 r(方位误差 th 与测距误差 PH_K 的几何平均)。这一拍红外没量到给 null
   const m=tk&&tk.cov&&tk.cov.ch.opt;if(!m)return null;
-  const s=tk.src,ox=m[5],oy=m[6],dx=s.pos[0]-ox,dy=s.pos[1]-oy,l=Math.hypot(dx,dy)||1,ux=dx/l,uy=dy/l;
-  const dp=Math.sqrt(SENS.K_IR*trkRefSize(tk)*(1+engPowerOf(s)))/Math.pow(10,m[3]/20),th=m[1]/m[2],z=tk.ez.opt.z; // m[3] = 20·lg(R/d) ⇒ 10^(m[3]/20) = √信噪比
-  const oa=dp*trkClampK(z[0]*TRK_ERR.PH_K,TRK_ERR.ALONG_K),oc=dp*trkClampK(z[1]*th,TRK_ERR.ALONG_K);
-  return {x:ox+ux*(dp+oa)-uy*oc,y:oy+uy*(dp+oa)+ux*oc,r:dp*Math.sqrt(TRK_ERR.PH_K*th)}; // r = 等面积 1σ 半径
+  const s=tk.src,r=Math.hypot(s.pos[0]-m[5],s.pos[1]-m[6])*Math.sqrt(TRK_ERR.PH_K*m[1]/m[2]),z=tk.ez.opt;
+  return {x:s.pos[0]+z[0]*r,y:s.pos[1]+z[1]*r,r:r};
 }
 /* 握着这条接触(有信号或定得出位置);定得出位置 —— 武器开火只问后者 */
 function trkHeld(tk){return !!(tk&&tk.held);}

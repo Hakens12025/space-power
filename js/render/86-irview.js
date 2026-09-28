@@ -28,7 +28,7 @@ function irvT(v){
 function irvIdx(v){return Math.round((irvT(v)-IRV_T0)/(1-IRV_T0)*255);}
 function irvLutK(t){return Math.round((Math.max(IRV_T0,Math.min(1,t))-IRV_T0)/(1-IRV_T0)*255);}
 function irvLutHex(t){const k=irvLutK(t)*4;return '#'+((1<<24)|(IRV_LUT[k]<<16)|(IRV_LUT[k+1]<<8)|IRV_LUT[k+2]).toString(16).slice(1);}
-function irvEstPos(t){ // 热团画在哪、多不确定:[x, y, 误差圈等面积 1σ 半径 km]。定出位置给我方知道的位置(viewPos,GM 真值)与融合椭圆;只有红外方位给红外那一层的估计(亮度测距);都没有就不画
+function irvEstPos(t){ // 热团画在哪、多不确定:[x, y, 误差圈等面积 1σ 半径 km]。定出位置给我方知道的位置(viewPos,GM 真值)与融合椭圆;只有红外方位给红外那一层的估计(假设法测距);都没有就不画
   const fx=contactFix(t,'blue');
   if(adminMode||fx){const p=viewPos(t);if(!p)return null;const L=fx?null:contactIrEst(t,'blue');return [p[0],p[1],fx?contactFixR(t,'blue'):(L?L.r:0)];}
   const L=contactIrEst(t,'blue');return L?[L.x,L.y,L.r]:null;

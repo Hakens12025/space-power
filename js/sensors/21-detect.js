@@ -93,7 +93,7 @@ function esmHear(side,L,E,dd){ // L(我方听者)这一拍听到 E 的雷达;dd 
   const st=Math.sqrt(1-1/Math.pow(1+COV.FADE_HOLD,2*SENS.TICK)),ga=Math.max(st,1/Math.sqrt(k.n)),sa=sig*ga; // 盯着看的稳态 / 单次量测;ga = 积累收窄的系数,sa = 积累后的方位 1σ
   k.half=Math.min(Math.PI/2-0.01,Math.max(ESM_CFG.SMIN,ESM_CFG.K*sa));
   k.R=Math.max(dd*1.05,hearRangeOf(E,L.recv)/Math.sqrt(envRfNoise(L.pos,E.pos))); // 远端 = 这个方向上听得见的最远距离(恒星噪声锥里更近)
-  const idf=dd*sig<=E.size*COV.L_LIS,tk=trkOf(side,E),z=tk?tk.ez.lis.z:[0,0]; // 2026-09-28 静听那一层的估计(见 sensors/24 的估计误差):k.tb 仍是量到的方位(只给上面的连续性判据),显示读 tbE / rr / r
+  const idf=dd*sig<=E.size*COV.L_LIS,tk=trkOf(side,E),z=tk?tk.ez.lis:[0,0]; // 2026-09-28 静听那一层的估计(见 sensors/24 的估计误差):k.tb 仍是量到的方位(只给上面的连续性判据),显示读 tbE / rr / r
   const ref=(idf||(tk&&trkIdLvl(tk)>=ID_SUS))?E.emit:SENS.CLS.DD.emit,base=dd*Math.sqrt(ref/E.emit); // 假设法测距:没认出按驱逐舰的发射机反推(同一发射档),偏差是系统性的
   k.sr=base*(idf?COV.RSS_ID:COV.RSS_UNK)*ga; // 幅度测距的纵向 1σ(与 23-cov 的静听量测同式,按基准距离)
   k.rr=base+trkClampK(z[0]*k.sr,TRK_ERR.ALONG_K*base);k.tbE=tb+trkClampK(z[1]*sa,Math.PI/4); // 2026-09-28 方位误差按积累后的 sa(原来用单次的 sig,偏到 30°~45°,比扇形还宽)
@@ -175,7 +175,7 @@ function emitLabel(mode){ // UI 文案的【唯一】出处:右栏 / 底栏 / �
 function contactHeld(s,side){return trkHeld(trkOf(side,s));} // 某一方还握着这艘船的接触(有信号或定得出位置)
 function esmEst(k){return {x:k.org[0]+Math.cos(k.tbE)*k.rr,y:k.org[1]+Math.sin(k.tbE)*k.rr,r:k.r};} // 2026-09-28 一条静听记录的估计点(esmHear 写的估计方位 / 测距 / 等面积半径)
 function contactHeardEst(E,side){const m=ESM[side].get(E);if(!m)return null;let b=null;for(const k of m.values())if(!b||k.sr<b.sr)b=k;return b?esmEst(b):null;} // 静听那一层的估计:取测距最准的那个听者
-function contactIrEst(s,side){return trkIrEst(trkOf(side,s));} // 2026-09-28 红外那一层自己的估计 {x,y,r}(亮度测距):红外异常、红外画面用;没有给 null,不拿真值兜底
+function contactIrEst(s,side){return trkIrEst(trkOf(side,s));} // 2026-09-28 红外那一层自己的估计 {x,y,r}(假设法测距):红外异常、红外画面用;没有给 null,不拿真值兜底
 function contactFixR(s,side){return trkFixR(trkOf(side,s));} // 2026-09-28 定位的误差椭圆等面积 1σ 半径(km;红外画面的团大小读它)
 function contactFix(s,side){return trkFix(trkOf(side,s));} // 某一方定得出这艘船的位置 —— 武器开火只问这个
 function contactIdn(s,side){return contactIdLvl(s,side)>=ID_SUS;} // TK2.6:「认出」= 身份至少疑似 —— 与改前(握着接触且椭圆锁存了身份)按定义相等;自己一方恒为真、空对象恒为假
