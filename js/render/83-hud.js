@@ -569,8 +569,10 @@ ctx.globalAlpha=A0;ctx.setLineDash([]);ctx.beginPath();ctx.arc(a[0],a[1],3,0,6.2
 }
 function drawForceMarks(){ // 2026-09-27 主炮打空地:还没打出去的炮击点画一个小准星
   ctx.save();ctx.strokeStyle='rgba(255,209,102,.85)';ctx.fillStyle='rgba(255,209,102,.85)';ctx.lineWidth=1.2;ctx.font='10px Consolas';ctx.textAlign='left';ctx.textBaseline='middle';
-  for(const s of ships){const ff=s.forceMac;if(!ff||!ff.pt||s.dead||(s.side!=='blue'&&!adminMode))continue;const q=toScreen(ff.pt[0],ff.pt[1]);
-    ctx.beginPath();ctx.arc(q[0],q[1],6,0,6.283);ctx.moveTo(q[0]-10,q[1]);ctx.lineTo(q[0]+10,q[1]);ctx.moveTo(q[0],q[1]-10);ctx.lineTo(q[0],q[1]+10);ctx.stroke();ctx.fillText('炮击点',q[0]+12,q[1]);}
+  const mk=(pt,lb)=>{const q=toScreen(pt[0],pt[1]);ctx.beginPath();ctx.arc(q[0],q[1],6,0,6.283);ctx.moveTo(q[0]-10,q[1]);ctx.lineTo(q[0]+10,q[1]);ctx.moveTo(q[0],q[1]-10);ctx.lineTo(q[0],q[1]+10);ctx.stroke();ctx.fillText(lb,q[0]+12,q[1]);};
+  const done=new Set(); // 2026-09-29 强制目标点(74 中键点空地):同一个点只画一次
+  for(const s of ships){if(s.dead||(s.side!=='blue'&&!adminMode))continue;const ff=s.forceMac;if(ff&&ff.pt)mk(ff.pt,'炮击点');
+    const f=s.fTgt;if(f){const k=Math.round(f.pt[0])+','+Math.round(f.pt[1]);if(!done.has(k)){done.add(k);mk(f.pt,'强制目标');}}}
   ctx.restore();
 }
 const PING_FX=new Map(),PING_MS=900; // 2026-09-27 扫描的脉冲圈:船 → {看到的 pingT, 墙钟起点}

@@ -154,14 +154,12 @@ function xhQuickEngage(append){ // RF5 中键短按 = 快速交战:选中的蓝�
   if(!sub)return false;
   const t=(xh.snap&&!xh.snap.dead)?xh.snap:null;
   const sel=(typeof selBlue==='function')?selBlue():[sub];
-  if(!t){ // 2026-09-29 用户:中键点空地不走火控计算机,是一次自动强行开火 —— 每艘主炮转向对准开一炮(57 forceMac)、导弹打一组区域齐射,不看武器勾没勾(同 ⌖ 强行开火)
+  if(!t){ // 2026-09-29 用户:中键点空地 = 给选中的舰一个强制目标点(不进火控计算机)。走目标的路 —— 57 的自动开火循环按武器勾选打、不看射程,
+    // 插在锁定目标 / 火控序列前面;勾着的每件武器打 2 次就撤,一件没勾就一发不打(用户:强制开火服从火控;⌖ 红点的单次开火另走自己的逻辑)
     if(!(xh.pt[0]>=0))return false;
     const w=worldAt(xh.pt[0],xh.pt[1]),pt=ordArenaClamp([w[0],w[1],0]);let n=0;
-    for(const x of sel){let f=false;
-      if(hasMAC(x)&&!x.noFire){x.forceMac={t:null,pt:pt.slice(),T:60};f=true;}
-      if((x.ammo||0)>0&&!x.noFire){orderMissileSalvo(x,{pos:pt.slice()},salvoCount);f=true;}
-      if(f)n++;}
-    if(typeof cmdTipFlash==='function')cmdTipFlash(n?'⌖ 强行开火:'+n+' 艘朝这个点开火(主炮转向对准开一炮 · 导弹一组区域齐射)':'⌖ 选中的船没有能开火的武器',2500);
+    for(const x of sel){x.fTgt={pt:pt.slice(),n:{mac:0,msl:0}};if(typeof wpnChecked==='function'&&(wpnChecked(x,'mac')||wpnChecked(x,'msl')))n++;}
+    if(typeof cmdTipFlash==='function')cmdTipFlash(n?'⌖ 强制目标:'+n+' 艘按勾选的武器朝这个点打(每件 2 次)'+(n<sel.length?' · '+(sel.length-n)+' 艘没勾武器、不开火':''):'⌖ 选中的船都没勾武器,不开火',2500);
     if(typeof updateSelPanel==='function')updateSelPanel();
     return n>0;
   }

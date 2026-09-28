@@ -52,7 +52,7 @@ function toggleWeapon(w){ // T/R:选定武器进行攻击选择(点击敌舰攻�
 function ceaseFire(){ // X:停火,解除所有选中舰锁定
   const sel=controlledShips();
   if(!sel.length)return;
-  sel.forEach(s=>{s.lockedTarget=null;s.lockPlayer=false;});
+  sel.forEach(s=>{s.lockedTarget=null;s.lockPlayer=false;s.fTgt=null;}); // 2026-09-29 连强制目标点一起撤
 }
 function fmAssign(g,sel){ // Ctrl+数字:按当前选中舰建/覆盖编队 g。FL1 一层化后建队只有 fmCreate 一个入口 —— 它自己处理"删旧槽位 / 把船从旧队摘干净 / 分槽 / 不足2艘则清空"并打日志,这里只做转发
   fmCreate(g,sel);

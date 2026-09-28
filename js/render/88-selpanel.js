@@ -406,7 +406,7 @@ function wpnToggle(k){
   }
   updateSelPanel();
 }
-function wpnClearAll(){for(const x of selBlue()){x.autoEngage=false;x.roe='hold';x.lockedTarget=null;x.macOn=false;x.mslOn=false;x.ciwsOn=false;}updateSelPanel();}
+function wpnClearAll(){for(const x of selBlue()){x.autoEngage=false;x.roe='hold';x.lockedTarget=null;x.fTgt=null;x.macOn=false;x.mslOn=false;x.ciwsOn=false;}updateSelPanel();}
 function radarPulsing(x){const f=(typeof PING_FX!=='undefined')?PING_FX.get(x):null;return !!(x.pingReq||(f&&!f.done));}
 function radarPick(v){const sel=selBlue();if(!sel.length)return;if(v==='pulse')sel.forEach(x=>{x.pingReq=true;});else sel.forEach(x=>setEmit(x,v));updateSelPanel();}
 function wpnStat(s,k){return k==='mac'?'伤害 '+(s.macDmg||0)+' · 装填 '+Math.round(SHOW.t(s.macReload||0))+'s':(k==='msl'?(s.mslPer||12)+' 枚/组 · 余 '+(s.ammo||0)+' 枚':'');}

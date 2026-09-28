@@ -1,6 +1,7 @@
 "use strict";
 /* RF1: 提取自 stepSim 的 S14-S17 段(原 07-missiles.js L636-698):武器冷却/发射单元装填/齐射开火延迟 →
    自动索敌交战 → 近防自动拦截 → MAC 锁定自动开火。四个循环原样保留(内层 continue 不变)。 */
+const FT_N=2; // 2026-09-29 强制目标点(74 中键点空地)每件勾着的武器打几次就撤(导弹按组)
 function stepWeaponSystems(dt){
   for(const s of ships){ // 武器冷却 + 发射单元装填 + 齐射开火延迟(v119:单元独立装填60s)
     if(s.macCd>0)s.macCd-=dt;
@@ -41,6 +42,8 @@ function stepWeaponSystems(dt){
   for(const s of ships){
     if(s.dead||!s.autoEngage||s.mslOn===false)continue;
     if(s.fcFired&&s.fcFired.msl)continue; // RF5 核查修:本 tick 序列刚真发射过(S14 的 missileArm 倒计时就在本函数开头,发完立刻把 missileArm 清空),此刻 s.fcTgt.msl 还是本 tick 开头解算的【旧目标】—— rot 要等 tick 末的 S17b stepFireControlPost 才前进。这里若照排,下一发会继承旧目标,rr 轮询在导弹侧完全失效(实测一轮恰好 2 发,rot 0→1→0 归位,第二个目标永远轮不到)。让出一拍(0.02s)再排,下一 tick 解算出的就是前进后的目标;无序列的舰不长 fcFired 字段,不受影响
+    const fp=(s.fTgt&&s.fTgt.n.msl<FT_N)?s.fTgt:null; // 2026-09-29 强制目标点(74 中键点空地)插队:同一道勾选门(本循环开头的 autoEngage / mslOn),区域齐射、不看射程
+    if(fp){const ready=readyCells(s);if(!s.missileArm&&ready>=Math.ceil((s.cells||4)/2)){orderMissileSalvo(s,{pos:fp.pt.slice()},Math.min(2,ready));if(s.missileArm)fp.n.msl++;}continue;}
     const t=(typeof fcActive==='function'&&fcActive(s))?(s.fcTgt&&s.fcTgt.msl):s.lockedTarget; // RF5 有序列则目标来源换成序列解算结果(舰);没序列沿用原锁定
     if(!t)continue;
     if(t.dead||t.side===s.side)continue;
@@ -94,9 +97,15 @@ function stepWeaponSystems(dt){
   for(const s of ships){
     const roeOK=s.macOn!==false&&(s.roe==='free'||(s.roe==='tight'&&s.roeCd>0)); // free自由/tight被攻击才还击(roeCd=受击冷却)/hold不开火;RF2 主炮开关:关=不参与自动开火
     const mt=(typeof fcActive==='function'&&fcActive(s))?(s.fcTgt&&s.fcTgt.mac):s.lockedTarget; // RF5 有序列则打序列解算的主炮目标:序列可能只许导弹打(allow.mac=false),这时 lockedTarget 虽被写成导弹目标,主炮也不许跟着开
-    if(roeOK&&!s.dead&&mt&&!mt.dead&&mt.side!==s.side&&s.macCd<=0&&hasMAC(s)&&macAligned(s,mt)){ // WR1:自动开火只在把握 >= MAC_AUTO_P 时打(没有射程门了);距离按估计位置量。这一条【不看 autoEngage】,红方 bot 的开火实际走的就是它
+    const fp=(s.fTgt&&s.fTgt.n.mac<FT_N&&hasMAC(s))?s.fTgt:null; // 2026-09-29 强制目标点插队:主炮勾着(roeOK)才转向带提前量的那个点,对准就开一炮
+    s.ftAim=!!(fp&&roeOK&&!s.dead)||!!(s.forceMac&&s.forceMac.pt); // 主炮正朝一个点对准(强制目标点 / ⌖ 打空地):physics/31 的战斗转向让位,否则每拍朝向层转到位清掉 turnTarget、战斗转向又拉回锁定目标,来回拉锯永远对不准
+    if(fp&&roeOK&&!s.dead){const tp=macPtLead(s,fp.pt);s.turnTarget=[tp[0],tp[1],0];if(s.macCd<=0&&macAimErr(s,tp)<MAC_ALIGN){fireMACAt(s,fp.pt);if(s.macCd>0)fp.n.mac++;}}
+    else if(roeOK&&!s.dead&&mt&&!mt.dead&&mt.side!==s.side&&s.macCd<=0&&hasMAC(s)&&macAligned(s,mt)){ // WR1:自动开火只在把握 >= MAC_AUTO_P 时打(没有射程门了);距离按估计位置量。这一条【不看 autoEngage】,红方 bot 的开火实际走的就是它
       const mp=macPred(s,mt); if(mp&&((typeof fcForce==='function'&&fcForce(s,'mac'))||macHitProb(s,V.len(V.sub(mp,s.pos)),mt)>=MAC_AUTO_P))fireMAC(s,mt); // 2026-09-29 强制开火的序列不看把握门
     } // TIER1 MAC 舰种门改能力谓词
     if(s.roeCd>0)s.roeCd-=dt;
   }
+  for(const s of ships){const f=s.fTgt;if(!f)continue; // 强制目标点:勾着的每件武器都打够 FT_N 次就撤(没勾的不等;一件没勾 = 立刻撤,一发不打)
+    const fc=s.autoEngage&&s.roe!=='hold',on=k=>fc&&(k==='mac'?(hasMAC(s)&&s.macOn!==false):((s.ammo||0)>=(s.mslPer||12)&&s.mslOn!==false));
+    if(s.dead||['mac','msl'].every(k=>!on(k)||f.n[k]>=FT_N))s.fTgt=null;}
 }
