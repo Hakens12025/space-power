@@ -36,13 +36,14 @@
   <div id="stage"><canvas id="cv"></canvas></div>
   <aside id="panel">
     <h1>红外弥散团</h1>
-    <div class="rule"><b>位置钉住:</b>团画在红外那一层的估计上(没认出按驱逐舰的亮度反推距离,另带一个固定偏移),不随时间漂。<br><b>大小 = 不确定:</b>半径 = 红外层误差圈的等面积半径,按以前热区的对数压缩;屏幕上最小 = 舰标团,最大 = 舰标团 x 封顶倍数。<br><b>弥散:</b>圆的、不带方向,扭曲成不规则的一团、缓慢翻涌,最亮处是高原。<br><b>亮度</b>仍走一道门:峰值色阶 = 增益 x 信噪比,大团不变暗。<br>点画面上的目标切换 定位 / 没定位。</div>
+    <div class="rule"><b>位置钉住:</b>团画在红外那一层的估计上(没认出按驱逐舰的亮度反推距离,另带一个固定偏移),不随时间漂。<br><b>大小 = 不确定:</b>半径 = 红外层误差圈的等面积半径,按以前热区的对数压缩;屏幕上最小 = 舰标团,最大 = 舰标团 x 封顶倍数。<br><b>弥散:</b>圆的、不带方向,扭曲成不规则的一团、缓慢翻涌,最亮处是高原。<br><b>亮度</b>仍走一道门:峰值色阶 = 增益 x 信噪比,大团不变暗。<br><b>过渡:</b>颜色在色阶上从峰值平滑落回本底,过渡宽度只跟团的大小走、不读亮度 —— 亮的小团也有一圈渐变(原来在数值上画高斯,按对数色阶看越亮边越陡)。<br>点画面上的目标切换 定位 / 没定位。</div>
     <div class="row"><label>目标距离 <span id="vD"></span></label><input id="sD" type="range" min="0" max="1000" value="677"></div>
     <div class="row"><label>视野半径(框住多远)<span id="vZ"></span></label><input id="sZ" type="range" min="0" max="1000" value="300"></div>
     <div class="row"><label>大小缩放(热区原值 0.75)<span id="vS"></span></label><input id="sS" type="range" min="0" max="1000" value="500"></div>
     <div class="row"><label>封顶(x 舰标团)<span id="vK"></span></label><input id="sK" type="range" min="0" max="1000" value="500"></div>
-    <div class="row"><label>扭曲 <span id="vW"></span></label><input id="sW" type="range" min="0" max="1000" value="400"></div>
-    <div class="row"><label>翻涌速度 <span id="vR"></span></label><input id="sR" type="range" min="0" max="1000" value="500"></div>
+    <div class="row"><label>扭曲 <span id="vW"></span></label><input id="sW" type="range" min="0" max="1000" value="83"></div>
+    <div class="row"><label>翻涌速度 <span id="vR"></span></label><input id="sR" type="range" min="0" max="1000" value="402"></div>
+    <div class="row"><label>过渡宽度 <span id="vX"></span></label><input id="sX" type="range" min="0" max="1000" value="500"></div>
     <div class="btns">
       <button id="bRun" class="on">在跑</button>
       <button id="bStep" class="on">按引擎节拍 200 ms</button>
@@ -82,7 +83,7 @@ const TG = [
 ];
 TG.forEach((t, i) => { t.ang = -Math.PI / 2 + (i + 0.5) / TG.length * 2 * Math.PI; t.ph = i * 2.399; t.oz = [Math.cos(t.ph * 1.7) * 0.5, Math.sin(t.ph * 2.3) * 0.5]; t.fix = false; });
 
-const st = { D: 200000, viewK: 1.4, sizeK: 0.75, capK: 4, warp: 0.24, churn: 0.25, run: true, step: true, truth: false, sun: true };
+const st = { D: 200000, viewK: 1.4, sizeK: 0.75, capK: 4, warp: 0.05, churn: 0.15, tw: 1.4, run: true, step: true, truth: false, sun: true };
 const $ = id => document.getElementById(id);
 const logMap = (u, a, b) => a * Math.pow(b / a, u / 1000);
 function readUI() {
@@ -92,14 +93,16 @@ function readUI() {
   st.capK = 1 + (+$('sK').value) / 1000 * 6;
   st.warp = (+$('sW').value) / 1000 * 0.6;
   st.churn = logMap(+$('sR').value, 0.02, 3);
+  st.tw = logMap(+$('sX').value, 0.7, 2.8);
   $('vD').textContent = (st.D / 1e4).toFixed(st.D < 1e5 ? 1 : 0) + ' 万 km';
   $('vZ').textContent = (st.D * st.viewK / 1e4).toFixed(1) + ' 万 km';
   $('vS').textContent = st.sizeK.toFixed(2);
   $('vK').textContent = st.capK.toFixed(1) + ' 倍';
   $('vW').textContent = st.warp.toFixed(2);
   $('vR').textContent = st.churn.toFixed(2) + ' rad/s';
+  $('vX').textContent = st.tw.toFixed(2) + ' x 团半径';
 }
-['sD', 'sZ', 'sS', 'sK', 'sW', 'sR'].forEach(id => $(id).addEventListener('input', readUI));
+['sD', 'sZ', 'sS', 'sK', 'sW', 'sR', 'sX'].forEach(id => $(id).addEventListener('input', readUI));
 const tog = (id, key, on, off) => { $(id).onclick = e => { st[key] = !st[key]; e.target.classList.toggle('on', st[key]); if (on) e.target.textContent = st[key] ? on : off; }; };
 tog('bRun', 'run', '在跑', '暂停'); tog('bStep', 'step'); tog('bTruth', 'truth'); tog('bSun', 'sun', '晒着', '背阴');
 $('bFix').onclick = () => { const all = TG.every(t => t.fix); TG.forEach(t => t.fix = !all); };
@@ -130,17 +133,16 @@ function resize() {
 }
 window.addEventListener('resize', resize); resize();
 function gauss() { let u = 0; while (!u) u = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * Math.random()); }
-const PN = 1 - Math.exp(-PLAT);
-function blob(cx, cy, pk, Rc, warp, q1, q2) { // 格坐标;圆的,扭曲只加不规则、拉不出方向;峰值 = pk(高原)
+const PN = 1 - Math.exp(-PLAT), LT = Math.log(1 + VMAX / V0);
+const tInv = t => V0 * (Math.exp(t * LT) - 1);          // 色阶 → 数值(irvT 的逆)
+function blob(cx, cy, pk, Rc, warp, q1, q2, tw) { // 格坐标;圆的,扭曲只加不规则、拉不出方向;剖面画在色阶上:中心 = 峰值色阶(高原),按 tw x 团半径平滑落回本底
   if (!(pk > 1e-4)) return;
-  const rr = 2.5 * Rc * (1 + warp);
+  const tp = irvT(pk), k = 1.35 / (tw * tw), qmax = 6 * tw * tw, rr = Math.sqrt(qmax) * Rc * (1 + warp) + 1;
   const i0 = Math.max(0, Math.floor(cx - rr)), i1 = Math.min(gw - 1, Math.ceil(cx + rr)), j0 = Math.max(0, Math.floor(cy - rr)), j1 = Math.min(gh - 1, Math.ceil(cy + rr));
   for (let j = j0; j <= j1; j++) { const dy = (j - cy) / Rc; for (let i = i0; i <= i1; i++) { const dx = (i - cx) / Rc;
-    const u = dx + warp * Math.sin(1.7 * dy + q1), w = dy + warp * Math.sin(1.9 * dx + q2), qd = u * u + w * w; if (qd > 6) continue;
-    F[j * gw + i] += pk * (1 - Math.exp(-PLAT * Math.exp(-1.35 * qd))) / PN; } }
+    const u = dx + warp * Math.sin(1.7 * dy + q1), w = dy + warp * Math.sin(1.9 * dx + q2), qd = u * u + w * w; if (qd > qmax) continue;
+    F[j * gw + i] += tInv(tp * (1 - Math.exp(-PLAT * Math.exp(-k * qd))) / PN); } }
 }
-function core(cx, cy, pk, s) { const r = 3 * s, i0 = Math.max(0, Math.floor(cx - r)), i1 = Math.min(gw - 1, Math.ceil(cx + r)), j0 = Math.max(0, Math.floor(cy - r)), j1 = Math.min(gh - 1, Math.ceil(cy + r)), e = -0.5 / (s * s);
-  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) F[j * gw + i] += pk * Math.exp(e * ((i - cx) * (i - cx) + (j - cy) * (j - cy))); }
 
 let T = 0, last = 0, lastStep = -1, rows = 0, info = [];
 function frame(now) {
@@ -156,8 +158,8 @@ function frame(now) {
     const Rkm = st.sizeK * AMAX * Math.log(1 + e.r / AMAX);                             // 热区的对数半径
     const Rpx = Math.max(glyph, Math.min(st.capK * glyph, Rkm * pxkm)), Rc = Rpx / CELL;
     const pk = gate(e.snr), ch = st.churn * Tq, q1 = t.ph * 1.7 + ch, q2 = t.ph * 2.9 - ch * 0.8;
-    if (t.fix) { blob(ex / CELL, ey / CELL, pk * (1 - CORE), Rc, st.warp, q1, q2); core(ex / CELL, ey / CELL, pk * CORE, Math.max(0.35, Rc * CORE_W)); }
-    else blob(ex / CELL, ey / CELL, pk, Rc, st.warp, q1, q2);
+    if (t.fix) { blob(ex / CELL, ey / CELL, pk * (1 - CORE), Rc, st.warp, q1, q2, st.tw); blob(ex / CELL, ey / CELL, pk * CORE, Math.max(0.35, Rc * CORE_W), 0, 0, 0, st.tw); }   // 亮核同一个剖面,中心合起来仍是 pk
+    else blob(ex / CELL, ey / CELL, pk, Rc, st.warp, q1, q2, st.tw);
     info.push({ t, e, tx, ty, ex, ey, Rpx, pk });
   }
   if (st.run && stepIx !== lastStep) { lastStep = stepIx; for (let q = 0; q < nz.length; q++) nz[q] = gauss() * NOISE; }
