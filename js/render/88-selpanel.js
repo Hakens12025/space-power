@@ -173,7 +173,7 @@ function updateFcPanel(force){ // 由 updateSelPanel 每 20 帧重渲(与卡片�
   let h='<div class="fc-bars">';
   for(let i=0;i<cap;i++){
     const q=seqs[i];
-    if(!q){h+=`<div class="fc-bar empty" title="空序列槽(中键点敌舰或空地建序列,Shift+中键追加)"><span class="no">${i+1}</span></div>`;continue;}
+    if(!q){h+=`<div class="fc-bar empty" title="空序列槽(中键点敌舰建序列,Shift+中键追加)"><span class="no">${i+1}</span></div>`;continue;}
     const sid=String(q.id),edit=String(s.fcEditId)===sid,pick=big&&String(s.fcPick)===sid;
     h+=`<div class="fc-bar${edit?' edit':''}${pick?' pick':''}${q.paused?' paused':''}" data-fc-act="bar" data-seq="${sid}" title="${q.name} · ${q.mode==='rr'?'轮询':'依次'} · ${(q.targets||[]).length}个目标${q.force?' · 强制开火':''}${pick?' · ★当前唯一开火序列':(big?' · 点击改为用这条打':'')} · 点击进入序列态(地图显示数据链)">`
       +`<span class="no">${pick?'★':''}${i+1}</span><span class="md">${q.mode==='rr'?'轮':'依'}</span><span class="ct">${(q.targets||[]).length}</span>`
@@ -464,7 +464,8 @@ function cmdBarSync(){ // 三颗钮的字与亮灭;菜单开着就顺手重画
   if(r){r.classList.toggle('is-dis',!s);
     if(!s){r.classList.remove('on');setHTMLStable(r,'<span class="l">雷达</span><span class="s">—</span>',false);}
     else{const pul=sel.some(radarPulsing),lb=pul?'脉冲':({silent:'静默',paint:'发射',jam:'干扰'})[s.emitMode]||s.emitMode;r.classList.toggle('on',pul||s.emitMode!=='silent');setHTMLStable(r,'<span class="l">雷达</span><span class="s">'+lb+'</span>',false);}}
-  if(w){w.classList.toggle('is-dis',!s);const on=!!s&&wpnAnyOn(s);w.classList.toggle('on',on);setHTMLStable(w,'<span class="l">武器</span><span class="s">'+(s?(on?'启动':'关闭'):'—')+'</span>',false);}
+  if(w){w.classList.toggle('is-dis',!s);const on=!!s&&wpnAnyOn(s),arm=(typeof selWeapon!=='undefined')?selWeapon:null;w.classList.toggle('on',on);w.classList.toggle('armed',!!s&&!!arm); // 2026-09-29 选定了强行开火 / 放浮标:钮上直接写,不用去猜
+    setHTMLStable(w,'<span class="l">武器</span><span class="s">'+(s?(arm?({mac:'主炮强行开火',missile:'导弹强行开火',buoy:'放浮标'})[arm]||'强行开火':(on?'启动':'关闭')):'—')+'</span>',false);}
   if(CMDPOP.kind)cmdPopRender();
   const mb=document.getElementById('cbMine'),ml=mslSelOwn(); // 2026-09-28 选中我方导弹时才出现
   if(mb){mb.style.display=ml.length?'':'none';

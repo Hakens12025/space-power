@@ -348,9 +348,12 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #cmdPop .cp-b{min-width:92px;padding:3px var(--sp-3);text-align:left;font-size:var(--fs-body)}
 #cmdPop .cp-chk{min-width:0;width:28px;padding:3px 0;text-align:center}
 #cmdPop .cp-name{flex:1}
-#cmdPop .cp-ff{min-width:0;width:22px;padding:0;font-size:var(--fs-label);color:var(--state-warn)}
+#cmdPop .cp-ff{min-width:0;width:32px;padding:0;font-size:var(--fs-hero);line-height:1;color:var(--state-danger)} /* 2026-09-29 用户:放大一点,看得出是红色瞄准镜 */
 #cmdPop .cp-st{margin-left:var(--sp-2);font-size:var(--fs-micro);color:var(--txt-mute)}
 #cmdTip{position:fixed;bottom:72px;left:50%;transform:translateX(-50%);background:var(--srf-modal);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);padding:var(--sp-2) var(--sp-4);font-size:var(--fs-label);color:var(--txt);pointer-events:none;z-index:var(--z-transient);display:none;white-space:nowrap}
+#cmdTip.armed{border-color:var(--state-danger);color:var(--txt);font-size:var(--fs-read);box-shadow:0 0 0 1px var(--state-danger),0 0 14px rgba(255,107,107,.35)} /* 2026-09-29 选定(待命)态与悬停说明区分开 */
+#cbWpn.armed{border-color:var(--state-danger)}
+#cbWpn.armed .s{color:var(--state-danger)}
 
 /* ---------- RF5 悬停敌舰信息卡(跟随光标) ----------
    面/线/圆角/字号整条抄 #cmdTip,读数三件套抄 #selInfo .row .v,不新写十六进制色。

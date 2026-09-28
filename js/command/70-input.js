@@ -133,11 +133,14 @@ function clearPendings(){
   pendingFollow=null; // SL1b(2026-09-22):布防 / 信标 / 手动 / 布雷四族点选待命态随舰队卡一起失去唯一入口,整套删除
   updSelWeaponTip();
 }
+let CMDTIP_FLASH=null; // 2026-09-29 一次性回执 {text, until}:显示 ms 毫秒后自己收起
+function cmdTipFlash(text,ms){CMDTIP_FLASH={text:text,until:nowMs()+ms};updSelWeaponTip();setTimeout(updSelWeaponTip,ms+50);}
 function updSelWeaponTip(){ // RF4b 待命提示:底栏上方 #cmdTip 常显(旧的顶部状态条提示 2026-09-22 已随右键菜单文件一起删)
   /* FL1:本函数是 #cmdTip 的【唯一所有者】,所以跟随点选的提示也从这里出 ——
      87-fmbar 原来走的是那个被 RF2 藏死的顶部状态条,提示根本不显示,
      玩家对"我正处在跟随点选待命态"完全无感知(同 toggleWeapon 当年踩过并改走 #cmdTip 的那条)。 */
   const tip=document.getElementById('cmdTip');if(!tip)return;
+  tip.classList.toggle('armed',!!selWeapon||!!(CMDTIP_FLASH&&nowMs()<CMDTIP_FLASH.until)); // 2026-09-29 用户:点了红色瞄准镜分不清是否真的选定 —— 选定(待命)态换醒目样式,与悬停说明区分开
   /* 三支互斥(三个 arm 点都先 clearPendings),所以判定顺序不影响正确性,只影响可读性。 */
   if(typeof pendingFollow!=='undefined'&&pendingFollow){
     /* FM6 提示要说清【当前作用域】—— 四种组合(舰队/单舰 × 舰队/单舰)里玩家最容易搞混的
@@ -148,9 +151,10 @@ function updSelWeaponTip(){ // RF4b 待命提示:底栏上方 #cmdTip 常显(旧
     tip.textContent='跟随:'+who+' → 点一艘我方舰(点编队里任一艘 = 跟随那支编队) · 右键取消';
     tip.style.display='block';return;
   }
-  if(selWeapon==='buoy'){tip.textContent='放浮标:点地图上的位置 · 右键取消';tip.style.display='block';return;}
-  if(selWeapon){tip.textContent=(selWeapon==='mac'?'主炮强行开火:点敌舰或空地(转向对准即发一炮)':'导弹强行开火:点敌舰齐射 · 点空地 = 区域齐射')+' · 右键取消';tip.style.display='block';return;}
-  if(pendingTurn){tip.textContent='转向:点击地图设定方向(速度不变) · 再按 V 取消 · 右键取消';tip.style.display='block';return;} // FL1 把 V 也接进来:它原本只走那个被 RF2 藏死的顶部状态条,按 V 之后玩家看不到任何提示
+  if(selWeapon==='buoy'){tip.textContent='⌖ 已选定 · 放浮标:点地图上的位置 · 右键取消';tip.style.display='block';return;}
+  if(selWeapon){tip.textContent='⌖ 已选定 · '+(selWeapon==='mac'?'主炮强行开火:点敌舰或空地(转向对准即发一炮)':'导弹强行开火:点敌舰齐射 · 点空地 = 区域齐射')+' · 右键取消';tip.style.display='block';return;}
+  if(pendingTurn){tip.textContent='转向:点击地图设定方向(速度不变) · 再按 V 取消 · 右键取消';tip.style.display='block';return;}
+  if(CMDTIP_FLASH&&nowMs()<CMDTIP_FLASH.until){tip.textContent=CMDTIP_FLASH.text;tip.style.display='block';return;} // 2026-09-29 一次性回执(中键打空地) // FL1 把 V 也接进来:它原本只走那个被 RF2 藏死的顶部状态条,按 V 之后玩家看不到任何提示
   tip.style.display='none';
 }
 function groupAt(sx,sy){ // 命中最近的导弹组/信标实体(屏幕距离,可点选,半径30px)

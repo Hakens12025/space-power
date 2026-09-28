@@ -149,15 +149,24 @@ function xhCardHide(){ // RF5 收起信息卡(用 _shown 记账,免得每帧都�
 }
 function xhQuickEngage(append){ // RF5 中键短按 = 快速交战:选中的蓝舰 + 当前吸附目标 → 新建一条火控序列(allow 缺省 = 全武器许可)
   // RF7 append=按下中键那一瞬 Shift 在按:目标【追加】进当前编辑序列(无编辑序列则等价新建)。这是火控序列的选定手势。
-  // 2026-09-29 用户:框选后中键,选中的【每一艘】蓝舰都进火控序列(原来只有第一艘);没吸附到目标 = 点在空地上,把那个点加进序列(主炮 / 导弹都能打,58 fcGate)
+  // 2026-09-29 用户:框选后中键,选中的【每一艘】蓝舰都进火控序列(原来只有第一艘)
   const sub=xhSubject();
   if(!sub)return false;
-  if(typeof fcNew!=='function')return false;
   const t=(xh.snap&&!xh.snap.dead)?xh.snap:null;
-  let tgt=null;
-  if(t)tgt={tid:t.id};
-  else{if(!(xh.pt[0]>=0))return false;const w=worldAt(xh.pt[0],xh.pt[1]);tgt={pt:[w[0],w[1],0]};}
   const sel=(typeof selBlue==='function')?selBlue():[sub];
+  if(!t){ // 2026-09-29 用户:中键点空地不走火控计算机,是一次自动强行开火 —— 每艘主炮转向对准开一炮(57 forceMac)、导弹打一组区域齐射,不看武器勾没勾(同 ⌖ 强行开火)
+    if(!(xh.pt[0]>=0))return false;
+    const w=worldAt(xh.pt[0],xh.pt[1]),pt=ordArenaClamp([w[0],w[1],0]);let n=0;
+    for(const x of sel){let f=false;
+      if(hasMAC(x)&&!x.noFire){x.forceMac={t:null,pt:pt.slice(),T:60};f=true;}
+      if((x.ammo||0)>0&&!x.noFire){orderMissileSalvo(x,{pos:pt.slice()},salvoCount);f=true;}
+      if(f)n++;}
+    if(typeof cmdTipFlash==='function')cmdTipFlash(n?'⌖ 强行开火:'+n+' 艘朝这个点开火(主炮转向对准开一炮 · 导弹一组区域齐射)':'⌖ 选中的船没有能开火的武器',2500);
+    if(typeof updateSelPanel==='function')updateSelPanel();
+    return n>0;
+  }
+  if(typeof fcNew!=='function')return false;
+  const tgt={tid:t.id};
   let ok=false;
   for(const s of sel){
     if(append){
