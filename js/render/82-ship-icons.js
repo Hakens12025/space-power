@@ -106,7 +106,7 @@ function drawWreck(s,p,r){ // 残骸:空心轮廓+裂纹+暗色,留名标记
   ctx.save();
   ctx.translate(p[0],p[1]);
   ctx.rotate(ang);
-  ctx.save();{const zf=shipZoomF();ctx.scale(zf,zf);}drawHull(ctx,shipIdentHull(s),shipIdentTier(s),'#a0aab9','outline'); // 2026-09-28 没认出的残骸画通用轮廓(原来真舰种)ctx.restore(); // SN9 残骸跟活船同一个系数;只包舰体这一笔 —— 下面的裂纹用的是传进来的 r(已含系数),一起包进来会被乘两次;原注: // 残骸:空心轮廓,不带阵营色。TIER1 残骸尺寸也走遮蔽口径(方案原文说残骸是已死舰可以保留真实 tier,但残骸在场上留很久,不遮蔽等于给"打死的是几级"留一个稳定读数)
+  ctx.save();{const zf=shipZoomF();ctx.scale(zf,zf);}drawHull(ctx,shipIdentHull(s),shipIdentTier(s),'#a0aab9','outline');ctx.restore(); // 2026-09-28 没认出的残骸画通用轮廓(原来真舰种)。SN9 残骸跟活船同一个系数;只包舰体这一笔 —— 下面的裂纹用的是传进来的 r(已含系数),一起包进来会被乘两次;原注: // 残骸:空心轮廓,不带阵营色。TIER1 残骸尺寸也走遮蔽口径(方案原文说残骸是已死舰可以保留真实 tier,但残骸在场上留很久,不遮蔽等于给"打死的是几级"留一个稳定读数)
   // 裂纹(断开感)
   ctx.strokeStyle='rgba(200,210,225,.5)';ctx.lineWidth=1;
   ctx.beginPath();ctx.moveTo(-r*0.7,-r*0.7);ctx.lineTo(r*0.3,r*0.3);ctx.stroke();
