@@ -22,6 +22,7 @@ html,body{margin:0;height:100%;background:#070a0e;overflow:hidden;font:12px "Mic
   <div class="row"><button id="irBtn">红外</button><span id="irMode"><button data-irm="jia">甲 位置</button><button data-irm="yi">乙 方向</button></span></div>
   <div class="row" id="irSun"><button data-sun="none">无太阳</button><button data-sun="dir">太阳·方向</button><button data-sun="pos">太阳·位置</button></div>
   <div class="row" id="irEnv"><button data-env="cloud">尘埃云</button><button data-env="planet">天体</button></div>
+  <div class="row" id="irCov"><span class="lab">覆盖图</span><button data-cov="env" title="只算环境:每一处按看得最清楚的那艘我方船,太阳禁区 / 杂散光 / 星云 / 天体背后 / 尾焰锥把发现距离折成几成,折得越多越暗;谁都看不见的加斜线">只算环境</button><button data-cov="dist" title="含距离:一艘熄火驱逐停在这里,我方有没有船发现得了;发现不了的压暗加斜线">含距离</button></div>
 </div>
 <script>
 "use strict";
@@ -101,7 +102,7 @@ function irmObservers(){return ships.filter(s=>s.side==='blue'&&!s.dead);}
 function irmSources(){return ships.filter(s=>s.side!=='blue'&&!s.dead).concat(rocks.filter(r=>!r.dead));}
 /* 目标有多热:自身 + 太阳晒的 x 朗伯球相位函数 */
 const IRM_ROCK={DARK:0.5};
-const IRM_SOLAR={S:1,G0:1};
+const IRM_SOLAR={S:1,G0:1,DUST:11.5};   // DUST = 星云背景进背景受限律的分量(2026-09-29,同引擎:被照亮的浓星云发现距离约一半)
 function irmSunDirAt(p){
   if(IRM_SUN.mode==='dir'){const a=IRM_SUN.BRG*Math.PI/180;return [Math.cos(a),Math.sin(a)];}
   if(IRM_SUN.mode==='pos'&&irmStar){const dx=irmStar.pos[0]-p[0],dy=irmStar.pos[1]-p[1],l=Math.hypot(dx,dy)||1;return [dx/l,dy/l];}
@@ -137,9 +138,9 @@ function irmLumK(o,t){
 }
 /* 观测这一头:逆光 / 衬在云里时背景抬高(背景受限律),等效亮度打折 */
 function irmContrast(o,t,cb){   // cb = 目标处的云背景(每个目标只算一次)
-  const u=irmInShadow(o.pos)?null:irmSunDirAt(o.pos);if(!u)return 1/Math.sqrt(1+cb/IRM_SOLAR.G0);
+  const u=irmInShadow(o.pos)?null:irmSunDirAt(o.pos);if(!u)return 1/Math.sqrt(1+IRM_SOLAR.DUST*cb/IRM_SOLAR.G0);
   const d=Math.atan2(t.pos[1]-o.pos[1],t.pos[0]-o.pos[0])-Math.atan2(u[1],u[0]);
-  return 1/Math.sqrt(1+(irmGlare(Math.atan2(Math.sin(d),Math.cos(d)))+cb)/IRM_SOLAR.G0);
+  return 1/Math.sqrt(1+(irmGlare(Math.atan2(Math.sin(d),Math.cos(d)))+IRM_SOLAR.DUST*cb)/IRM_SOLAR.G0);
 }
 function irmPair(o,t){
   const dx=t.pos[0]-o.pos[0],dy=t.pos[1]-o.pos[1],dz=(t.pos[2]||0)-(o.pos[2]||0),k=irmLumK(o,t)*irmExt(o.pos,t.pos);   // 消光只打在到达观测船的亮度上(尾焰占比 irmTail 不受影响)
@@ -862,6 +863,61 @@ function drawOverlay(){
     else{const dx=p[0]-W/2,dy=p[1]-H/2,l=Math.hypot(dx,dy)||1,q=edgePoint(dx/l,dy/l,30);sunIcon(q[0],q[1],'恒星');}}
 }
 
+/* ---- 红外覆盖图(2026-09-29 用户:要看得出哪里看不见;我方所有船合起来,与太阳线那种单船的锥不同)----
+   每一格放一艘参照船(熄火静默的 DD),取看得最清楚的那艘我方船,式子全用上面的(禁区 / 遮挡 / 尾焰致盲 / 晒热 / 杂散光 / 星云背景 / 消光)。
+   env  = 只算环境:环境留下的信号份额开方 = 发现距离折成几成,压暗 1 - 几成;谁都看不见(禁区 / 遮挡 / 致盲)加斜线
+   dist = 含距离:参照船在这里我方发现不了(信噪比 < 1)就压暗加斜线,边上 EDGE 一段渐变
+   画法与热分开:冷色压暗 + 灰蓝斜线,不进红外色阶。只在船 / 镜头 / 环境变了时重算,其余帧贴缓存 */
+const COVM={mode:'',CELL:16,COARSE:48,BUDGET:4,DARK:0.62,EDGE:0.25,HATCH:'rgba(150,172,205,.38)',key:'',job:null,mk:null,hk:null,out:null,tmp:null,pat:null,ms:0};
+// CELL = 细格(屏幕 px);COARSE = 一变先用的粗格(立刻画);BUDGET = 细格每帧最多算几毫秒,算完才换上
+function covmKey(){
+  const a=[COVM.mode,cam.x,cam.y,cam.zoom,W,H,DPR,IRM_SUN.mode,irmStar?irmStar.pos.join():'-',irmPlanet?irmPlanet.pos.join():'-',IRM_CLOUD.on,IRM_EXT.on,CLOUD.pos.join()];
+  for(const o of irmObservers())a.push(o.pos[0],o.pos[1],o.flame,o.facing[0],o.facing[1]);
+  return a.join('|');
+}
+function covmCell(T,obs){ /* 返回压暗 0~1;负数 = 压暗 1 且加斜线(-1 = 谁都看不见) */
+  let best=0,any=false,cb=NaN;const p=T.pos;
+  for(const o of obs){
+    if(IRM_SUN.mode==='dir'&&envSunBlind(o.pos,p)&&!irmInShadow(o.pos))continue;
+    if(irmOccluded(o.pos,p)||irmBaffled(o,T))continue;
+    any=true;if(cb!==cb)cb=irmCloudBg(p);
+    const q=irmPair(o,T),m=irmContrast(o,T,cb),R=visRangeOf(T),k=COVM.mode==='env'?q.snr*m*(q.d/R)*(q.d/R):q.snr*m;
+    if(k>best)best=k;}
+  if(!any)return -1;
+  const r=Math.sqrt(Math.min(1,best));
+  if(COVM.mode==='env')return 1-r;
+  return best>=1?0:-Math.min(1,(1-r)/COVM.EDGE);
+}
+function covmJob(C){const gw=Math.ceil(W/C)+2,gh=Math.ceil(H/C)+2;
+  return {C:C,gw:gw,gh:gh,j:0,di:new ImageData(gw,gh),hi:new ImageData(gw,gh),obs:irmObservers(),T:{kind:'ship',cls:'DD',tier:2,size:SIZE.DD,flame:0,sideFlame:0,emitMode:'silent',fireHot:0,pos:[0,0,0],facing:[1,0,0]}};}
+function covmRun(J,budget){ /* 按行算,超了预算就停(下帧接着);返回 true = 算完 */
+  const t0=performance.now(),C=J.C,T=J.T;
+  for(;J.j<J.gh;J.j++){if(performance.now()-t0>budget)return false;const j=J.j;
+    for(let i=0;i<J.gw;i++){const w=worldAt((i-1)*C,(j-1)*C);T.pos=[w[0],w[1],0]; // 格 i 的中心落在屏幕 (i-1)·C(covmCompose 同一偏移)
+      const v=J.obs.length?covmCell(T,J.obs):-1,q=(j*J.gw+i)*4,dk=v<0?-v:v;
+      J.di.data[q]=4;J.di.data[q+1]=7;J.di.data[q+2]=12;J.di.data[q+3]=Math.round(255*COVM.DARK*dk);J.hi.data[q+3]=v<0?Math.round(255*-v):0;}}
+  return true;
+}
+function covmCompose(J){
+  if(!COVM.mk||COVM.mk.width!==J.gw||COVM.mk.height!==J.gh){for(const k of ['mk','hk']){COVM[k]=document.createElement('canvas');COVM[k].width=J.gw;COVM[k].height=J.gh;}}
+  COVM.mk.getContext('2d').putImageData(J.di,0,0);COVM.hk.getContext('2d').putImageData(J.hi,0,0);
+  const cw=Math.round(W*DPR),ch=Math.round(H*DPR);
+  for(const k of ['out','tmp'])if(!COVM[k]||COVM[k].width!==cw||COVM[k].height!==ch){COVM[k]=document.createElement('canvas');COVM[k].width=cw;COVM[k].height=ch;}
+  if(!COVM.pat){const pc=document.createElement('canvas');pc.width=pc.height=10;const g=pc.getContext('2d');g.strokeStyle=COVM.HATCH;g.lineWidth=1.2;g.beginPath();g.moveTo(-2,12);g.lineTo(12,-2);g.stroke();COVM.pat=pc;}
+  const O=COVM.out.getContext('2d'),X=COVM.tmp.getContext('2d'),S=J.C*DPR,off=-1.5*S;
+  O.setTransform(1,0,0,1,0,0);O.clearRect(0,0,cw,ch);O.imageSmoothingEnabled=true;O.drawImage(COVM.mk,off,off,J.gw*S,J.gh*S);
+  X.setTransform(1,0,0,1,0,0);X.globalCompositeOperation='source-over';X.clearRect(0,0,cw,ch);X.imageSmoothingEnabled=true;X.drawImage(COVM.hk,off,off,J.gw*S,J.gh*S);
+  X.globalCompositeOperation='source-in';X.fillStyle=X.createPattern(COVM.pat,'repeat');X.fillRect(0,0,cw,ch);X.globalCompositeOperation='source-over';
+  O.drawImage(COVM.tmp,0,0);
+}
+function drawCovMap(){
+  if(!COVM.mode)return;
+  const k=covmKey();
+  if(k!==COVM.key){COVM.key=k;const t0=performance.now(),J=covmJob(COVM.COARSE);covmRun(J,Infinity);covmCompose(J);COVM.ms=performance.now()-t0;COVM.job=covmJob(COVM.CELL);}
+  else if(COVM.job&&covmRun(COVM.job,COVM.BUDGET)){covmCompose(COVM.job);COVM.job=null;}
+  ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(COVM.out,0,0);ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+
 /* ---- 主循环与每帧毫秒数 ---- */
 const PERF={n:0,sum:0,max:0,shown:0};
 function frame(){
@@ -871,9 +927,10 @@ function frame(){
   ctx.setTransform(DPR,0,0,DPR,0,0);
   ctx.fillStyle='#070a0e';ctx.fillRect(0,0,W,H);drawGrid();
   if(IRM.on)drawIrMap();else{IRV.live=false;drawPlain();}
+  drawCovMap();
   drawOverlay();
   const dt=performance.now()-t0;PERF.n++;PERF.sum+=dt;PERF.max=Math.max(PERF.max,dt);
-  if(t0-PERF.shown>500){document.getElementById('perf').textContent='帧 '+(PERF.sum/PERF.n).toFixed(2)+' ms · 峰 '+PERF.max.toFixed(1)+' ms'+(IRM.on?' · 上次重算 '+IRV.tFull.toFixed(1)+' ms':'');PERF.n=0;PERF.sum=0;PERF.max=0;PERF.shown=t0;}
+  if(t0-PERF.shown>500){document.getElementById('perf').textContent='帧 '+(PERF.sum/PERF.n).toFixed(2)+' ms · 峰 '+PERF.max.toFixed(1)+' ms'+(IRM.on?' · 上次重算 '+IRV.tFull.toFixed(1)+' ms':'')+(COVM.mode?' · 覆盖图粗算 '+COVM.ms.toFixed(1)+' ms':'');PERF.n=0;PERF.sum=0;PERF.max=0;PERF.shown=t0;}
   requestAnimationFrame(frame);
 }
 
@@ -917,6 +974,7 @@ function syncUI(){
   for(const x of document.querySelectorAll('#irSun [data-sun]'))x.classList.toggle('on',x.getAttribute('data-sun')===IRM_SUN.mode);
   document.querySelector('#irEnv [data-env="cloud"]').classList.toggle('on',IRM_CLOUD.on);
   document.querySelector('#irEnv [data-env="planet"]').classList.toggle('on',IRM_PLANET.on);
+  for(const x of document.querySelectorAll('#irCov [data-cov]'))x.classList.toggle('on',x.getAttribute('data-cov')===COVM.mode);
   document.getElementById('rowSel').style.display=sel?'flex':'none';
   if(sel){document.getElementById('selName').textContent=sel.name;
     for(const x of document.querySelectorAll('#selFlame [data-fl]'))x.classList.toggle('on',+x.getAttribute('data-fl')===sel.flame);
@@ -928,10 +986,11 @@ onClick('irBtn',function(){IRM.on=!IRM.on;});
 onClick('irMode',function(b){IRM.mode=b.getAttribute('data-irm');});
 onClick('irSun',function(b){irmSunSet(b.getAttribute('data-sun'));});
 onClick('irEnv',function(b){const k=b.getAttribute('data-env');if(k==='cloud')IRM_CLOUD.on=!IRM_CLOUD.on;else{IRM_PLANET.on=!IRM_PLANET.on;irmPlanet=IRM_PLANET.on?PLANET:null;}});
+onClick('irCov',function(b){const m=b.getAttribute('data-cov');COVM.mode=COVM.mode===m?'':m;COVM.key='';});
 onClick('selFlame',function(b){if(sel)sel.flame=+b.getAttribute('data-fl');});
 onClick('selEmit',function(b){if(sel)sel.emitMode=b.getAttribute('data-em');});
 
-/* 地址参数(截图用):?ir 开红外;mode=yi;sun=dir|pos;cloud=0;planet=0;cam=x,y,zoom;burn=i / rev=i 第 i 艘船主推 / 反推;sel=i;stress=N 撒 N 个在动的热源 */
+/* 地址参数(截图用):?ir 开红外;mode=yi;sun=dir|pos;cloud=0;planet=0;cov=env|dist 覆盖图;cam=x,y,zoom;burn=i / rev=i 第 i 艘船主推 / 反推;sel=i;stress=N 撒 N 个在动的热源 */
 {const Q=new URLSearchParams(location.search);
   if(Q.has('ir'))IRM.on=true;if(Q.get('mode')==='yi')IRM.mode='yi';
   if(Q.get('cloud')==='0')IRM_CLOUD.on=false;if(Q.get('ext')==='0')IRM_EXT.on=false;if(Q.get('planet')==='0'){IRM_PLANET.on=false;irmPlanet=null;}
@@ -940,6 +999,7 @@ onClick('selEmit',function(b){if(sel)sel.emitMode=b.getAttribute('data-em');});
   if(Q.has('rev')&&ships[+Q.get('rev')])ships[+Q.get('rev')].flame=-1;
   if(Q.has('sel')&&ships[+Q.get('sel')])sel=ships[+Q.get('sel')];
   if(Q.has('stress'))stressInit(+Q.get('stress')||0);
+  if(Q.get('cov')==='env'||Q.get('cov')==='dist')COVM.mode=Q.get('cov');
   irmSunSet(Q.get('sun')==='dir'||Q.get('sun')==='pos'?Q.get('sun'):'none');}
 window.addEventListener('resize',function(){resize();syncUI();});resize();syncUI();requestAnimationFrame(frame);
 </script>
