@@ -73,7 +73,7 @@ function fireMACAt(shooter,pt){ // 2026-09-27 主炮打空地(强行开火):朝�
   const L=macPtLead(shooter,pt),d=V.len(V.sub(L,shooter.pos)),tt=d/CFG.macSpd,dir=V.norm(V.sub(L,shooter.pos)), // 出膛方位沿机头轴线 + 散布,俯仰取瞄准线(见 fireMAC 同一条)
    ang=Math.atan2(shooter.facing[1],shooter.facing[0])+gaussRand()*macShotSigma(shooter,d),hxy=Math.hypot(dir[0],dir[1]);
   projectiles.push({type:'mac',pos:shooter.pos.slice(),vel:[Math.cos(ang)*hxy*CFG.macSpd+shooter.vel[0],Math.sin(ang)*hxy*CFG.macSpd+shooter.vel[1],dir[2]*CFG.macSpd+shooter.vel[2]],target:null,ground:true,shooter,pred:pt.slice(),tt,age:0,dmg:shooter.macDmg});
-  shooter.fireHot=SENS.FIRE_S;shooter.macCd=shooter.macReload||0;
+  shooter.fireHot=SENS.FIRE_S;shooter.fireN=(shooter.fireN||0)+1;shooter.macCd=shooter.macReload||0;
 }
 function fireMAC(shooter,target){ // MAC 轴炮:沿机头轴线直射(调用方先查 macAligned:机头转到位才开);没中接着飞(weapons/56)
   if(shooter.noFire)return; // RANGE1 禁火总闸门 1/3:靶场的靶只挨打不还手。这是 MAC 发射的唯一实现,GM 手动锁定/自动索敌/AI 三条路径最终都落到这里。注意这是个【静默】开关(不报错不打日志),将来若误给蓝舰置了 noFire 会毫无线索,置位处只有 initEnemy 的靶语义包一处
@@ -87,7 +87,7 @@ function fireMAC(shooter,target){ // MAC 轴炮:沿机头轴线直射(调用方�
   const ang=Math.atan2(shooter.facing[1],shooter.facing[0])+da; // 2026-09-28 用户:轴炮对准再射 —— 出膛方位沿机头轴线 + 散布(对准门收到 0.1°,4 万处偏不到 70 km,远小于命中半径 400;原来 1.1° 窗口擦边就开,只好改沿精确瞄准线)
   const hxy=Math.hypot(dir[0],dir[1]); // KIMI146修:xy分量按朝向的xy模长缩放——原直接用满macSpd再叠dir[2]·macSpd,合速度超0.1c且弹道≠机头轴线(带俯仰时必脱靶)
   projectiles.push({type:'mac',pos:shooter.pos.slice(),vel:[Math.cos(ang)*hxy*CFG.macSpd+shooter.vel[0],Math.sin(ang)*hxy*CFG.macSpd+shooter.vel[1],dir[2]*CFG.macSpd+shooter.vel[2]],target,shooter,pred,tt,age:0,dmg:shooter.macDmg}); // KIMI151:弹丸继承舰速(出膛矢量=舰速+机头轴×0.1c,相对舰体初速仍0.1c)
-  shooter.fireHot=SENS.FIRE_S; // FX1 开火暴露(见 sensors/20 的 P_FIRE):与冷却同一处置位 —— 这里是 MAC 唯一的发射成功点
+  shooter.fireHot=SENS.FIRE_S;shooter.fireN=(shooter.fireN||0)+1; // fireN = 开火次数(render/86 开火闪光按它触发)。FX1 开火暴露(见 sensors/20 的 P_FIRE):与冷却同一处置位 —— 这里是 MAC 唯一的发射成功点
   shooter.macCd=shooter.macReload||0; // TIER1 改读实例烘焙的装填秒:原 CLS_WPN[shooter.cls].mac 无兜底,舰种不在表里就 TypeError 崩整帧(加 BB/CV 后风险放大)
   if(shooter.fcFired&&shooter.fcTgt&&shooter.fcTgt.mac===target)shooter.fcFired.mac=true; // RF5 开火来源标记(MAC 唯一的发射成功点,弹丸已入 projectiles、冷却已置位):火控序列的指针只认这个显式标记。绝不允许用 macCd/ammo 差分推断——任务系统/靶场AI/敌方AI/手动齐射都会动那两个字段,差分会让序列指针幽灵前进。RF5 核查修:标记再收窄成「打的正是本 tick 序列解算出来的那个目标」,否则玩家手动打第三方(71-keys/72-右键菜单)也会推动序列指针,序列自己那一发被白白跳过
 }
@@ -236,6 +236,6 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
     });
     shooter.ammo-=shooter.mslPer||12; // KIMI154:每组12颗;RF3 枚数读烘焙字段
   }
-  if(rounds>0)shooter.fireHot=SENS.FIRE_S; // FX1 开火暴露:真发出去了才亮(rounds=0 是弹药 / 单元不足的空转)
+  if(rounds>0){shooter.fireHot=SENS.FIRE_S;shooter.fireN=(shooter.fireN||0)+1;} // FX1 开火暴露:真发出去了才亮(rounds=0 是弹药 / 单元不足的空转)
   if(shooter.fcFired&&shooter.fcTgt&&shooter.fcTgt.msl&&(shooter.fcTgt.msl===target||(target&&target.pos&&shooter.fcTgt.msl.pos===target.pos)))shooter.fcFired.msl=true; // RF5 开火来源标记(fireMissiles 的发射成功点:早退全在上面,到这里 rounds≥1 组弹丸已入 projectiles)。陷阱三:orderMissileSalvo 只写 missileArm、真发射晚 1s 且中途会被 noFire/dead/弹药不足吞掉,所以标记只能打在这里。RF5 核查修:再收窄成「打的正是序列解算出来的那个目标」,挡掉手动/任务/敌AI 齐射推动序列指针;指定点每 tick 是新 {pos} 对象,故按 pt 数组引用比(与 Post 段回找记账同一口径)
 }

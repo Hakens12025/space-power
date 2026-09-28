@@ -390,8 +390,8 @@ function drawIrFx(){
     ctx.drawImage(irvDot(irvLutK(irvT(v))),p[0]-R,p[1]-R,2*R,2*R);
   }
   const now=nowMs(),C=IRV_C; // 开火:扩散光环 + 亮核(按墙钟放,几倍速都看得见;只画红外画面看得见的那团)
-  for(const r of IRVJ.rec.values()){const t=r.t,on=(t.fireHot||0)>0;
-    if(on&&!r.fwOn)r.fw=now;r.fwOn=on;
+  for(const r of IRVJ.rec.values()){const t=r.t,n=t.fireN||0; // 2026-09-28 每开一次火闪一次(原来按 fireHot 从 0 变正:暂停时再按、3 游戏秒内再开火都不闪)
+    if(r.fn===undefined)r.fn=n;else if(n!==r.fn){r.fn=n;r.fw=now;}
     const a=(now-(r.fw||-1e9))/1000;if(!(a>=0&&a<C.FX_T)||!r.ph||!r.ep||!r.sp.length)continue;
     const p=toScreen(r.ep[0],r.ep[1]);if(p[0]<-120||p[0]>W+120||p[1]<-120||p[1]>H+120)continue;
     const k=irvLutK(irvT(irvV(r.ph.snr*C.FX_BOOST))),o=k*4,R0=Math.max(3,(r.bR||1)*C.CELL),Rr=R0*(1+C.FX_RING*Math.min(1,a/C.FX_RT));
