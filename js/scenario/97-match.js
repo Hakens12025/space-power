@@ -100,9 +100,11 @@ function gmSync(){ // ENV2 顶栏「全知」钮只在靶场出现,亮灭跟 adm
   const b=document.getElementById('btnGM');if(!b)return;
   const e=curEnv(),rg=!!(e&&e.range);b.style.display=rg?'':'none';b.classList.toggle('on',!!adminMode);
   if(!rg)VIEW='blue'; // 视角切换只在靶场
+  const tb=document.getElementById('btnTr');if(tb)tb.style.display=rg?'':'none';
   const v=document.getElementById('btnView');if(v){v.style.display=rg?'':'none';v.textContent=VIEW==='red'?'红方视角':'蓝方视角';v.classList.toggle('on',VIEW==='red');}
 }
 on('btnGM','click',function(e){e.currentTarget.blur();adminMode=!adminMode;gmSync();});
 on('btnView','click',function(e){e.currentTarget.blur();VIEW=VIEW==='blue'?'red':'blue';gmSync();}); // 2026-09-28 靶场切红蓝视野
+on('btnTr','click',function(e){e.currentTarget.blur();const p=document.getElementById('trPanel');if(!p)return;const open=p.style.display==='none';p.style.display=open?'flex':'none';if(open&&typeof renderRangePanel==='function')renderRangePanel();}); // 2026-09-28 靶场参数面板的开关
 on('meAgain','click',function(){matchEnter();});
 on('meRange','click',function(){matchExit();});

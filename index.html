@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Space Power · 骨架</title>
-<link rel="stylesheet" href="css/app.css?v=20260928e1">
+<link rel="stylesheet" href="css/app.css?v=20260928zl">
 </head>
 <body>
 <canvas id="cv"></canvas>
@@ -30,6 +30,7 @@
   <button class="hbtn" id="btnMatch" title="进入对局">对局</button>
   <button class="hbtn" id="btnGM" title="全知(F8):显示全部真值,可拖动单位与天体;关掉 = 只看我方感知到的">全知</button><!-- ENV2 靶场的显示切换,只在靶场出现(scenario/97-match 的 gmSync) --><!-- MT1 对局入口(scenario/97-match);进了对局它变成「回靶场」 -->
   <button class="hbtn" id="btnView" title="视角:画面从蓝方 / 红方的感知看(只在靶场;选中与下令仍是蓝方)">蓝方视角</button>
+  <button class="hbtn" id="btnTr" title="靶场参数:逐靶的姿态(熄火 / 主推 / 反推 / 侧推)、雷达、开火闪光、开一炮与闪避参数">靶场参数</button>
   <button class="hbtn" id="btnTut" title="教程 · 指挥官手册(Esc 关闭)">教程</button><!-- RF5-D 排在 .spacer 之后 = 顶栏右端。SL1(2026-09-22 瘦身):原来跟在它后面被藏着的七个旧钮(录制/GM/互搏/靶场参数/场景菜单/回放/设置)已整套删除;GM 仍走 F8 -->
 </div>
 
@@ -62,7 +63,7 @@
   </div>
 </div>
 
-<!-- RANGE1 靶场参数面板:左上角,UI1 左轨车道统一定位。SL1:顶栏那个开关钮已删,面板逻辑(scenario/95-range)保留,css 里仍按 RF2 的老样子藏着 -->
+<!-- RANGE1 靶场参数面板:左上角,UI1 左轨车道统一定位。入口:靶场顶栏「靶场参数」钮(2026-09-28 放出来,SL1 起曾藏着) -->
 <div id="trPanel" class="panel" style="display:none"><!-- UI1 原来这里写死 max-height:calc(100% - 316px),把旋钮区压成 8px;现由 --rail-top/--dock-b 派生 -->
   <div class="p-title"><b>🎯 靶场参数</b><span class="hint">逐靶可调</span></div>
   <div class="tr-tabs" id="trTabs"></div>
@@ -179,7 +180,7 @@
 <script src="js/scenario/91-init.js?v=20260928e1"></script>
 <script src="js/scenario/95-range.js?v=20260928zj"></script>
 <script src="js/scenario/96-spawn.js?v=20260923"></script><!-- FM7 测试用加船小条。放在 95 之后、core/99 之前:它顶层调 on(),而 on() 定义在 core/00 -->
-<script src="js/scenario/97-match.js?v=20260928zk"></script><!-- MT1 对局入口 / 红方摆位 / 结果卡片。顶层调 on(),须在 core/00 之后;matchPlaceRed 被 91-init 运行期调用 -->
+<script src="js/scenario/97-match.js?v=20260928zl"></script><!-- MT1 对局入口 / 红方摆位 / 结果卡片。顶层调 on(),须在 core/00 之后;matchPlaceRed 被 91-init 运行期调用 -->
 <script src="js/core/99-main.js?v=20260928e1"></script>
 </body>
 </html>

@@ -245,11 +245,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 /* 面板标题右侧的提示字 */
 .hint{font-size:var(--fs-label);color:var(--txt-mute);letter-spacing:var(--ls-label)} /* 面板标题右侧的补充说明、空态说明 */
 
-/* ==================== 靶场参数面板的显隐(SL1,2026-09-22 瘦身) ====================
-   RF2 那份「只藏不删」的隐藏清单里的面板与顶栏钮已整套删除,只剩 #trPanel 一块:它的逻辑(scenario/95-range)保留,
-   但顶栏开关钮已删、唯一入口只剩进靶场时的自动弹出 —— 这里按 RF2 的老样子继续藏住,维持今天的画面;
-   要让它回来,删掉下面这一行即可(scenario/95 的自动弹出与关闭钮都还在)。 */
-#trPanel{display:none!important}
+/* 靶场参数面板 #trPanel:SL1(2026-09-22)起藏着;2026-09-28 用户要靶子姿态控制,放出来,入口是靶场顶栏「靶场参数」钮(scenario/97 gmSync 管显隐) */
 
 /* 选中舰实时信息面板(右轨) */
 #selPanel{top:var(--rail-top);right:var(--gut);width:var(--rail-w);max-height:calc(100% - var(--rail-top) - var(--dock-b));min-height:min(300px,calc(100% - var(--rail-top) - var(--dock-b)));display:flex;flex-direction:column} /* SL1 末项回到 --dock-b:右轨底部原来给事件流面板让出的车道随它一起收回(不能直接到 --gut:实测 vw<1700 时 #cmdBar 会横向侵入右轨) */
