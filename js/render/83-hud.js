@@ -470,7 +470,7 @@ function shtrBack(r){ // 从首见点往回延长到游玩区边上(没有游玩
     if(uy>1e-9)s=Math.min(s,(ARENA.y1-r.a[1])/uy);else if(uy<-1e-9)s=Math.min(s,(ARENA.y0-r.a[1])/uy);}
   return Math.max(0,s);
 }
-function drawShellTraces(){ // 2026-09-28 敌方炮弹划过我方可见光圈:圈里真实飞过的那一段画实线(a → b),再从 a 沿弹道往回画虚线延长到游玩区边上(weapons/56 的 SHELL_TR);离首见点越远越淡,墙钟 SHTR.MS 后消失
+function drawShellTraces(){ // 2026-09-28 敌方炮弹被我方看见(可见光圈或雷达):看得见的那一段画实线(a → b),再从 a 沿弹道往回画虚线延长到游玩区边上(weapons/56 的 SHELL_TR);离首见点越远越淡,墙钟 SHTR.MS 后消失
   const L=adminMode?SHELL_TR.blue.concat(SHELL_TR.red):SHELL_TR.blue;if(!L.length)return;
   const now=nowMs(),lab=[];ctx.save();ctx.lineWidth=1.4;ctx.setLineDash([7,5]);ctx.font='11px "Microsoft YaHei"';ctx.textBaseline='bottom';
   for(const r of L){let w0=SHTR_W.get(r);if(w0===undefined){w0=now;SHTR_W.set(r,w0);}const k=(now-w0)/SHTR.MS;if(k>=1||k<0)continue;

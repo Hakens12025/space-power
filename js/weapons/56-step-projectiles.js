@@ -54,18 +54,17 @@ function stepProjectiles(dt){
   projectiles=projectiles.filter(p=>!p.done);
 }
 /* 2026-09-28 炮弹来路(反炮兵定位 counter-battery 的最简形态;用户:「顺着敌方火炮划过我方的可见光完全感知区,反向延长这个线条,来看看炮弹是从哪里来的,导弹不行」)。
-   对方的主炮弹进了我方任一艘舰的可见光圈 ⇒ 记下第一次看见的点 a、在圈里飞到的最后一点 b 和飞行方向:开火那一刻的射手就在这条线往回延长的某处(不知道开火时刻,所以只有线没有点)。
+   对方的主炮弹被我方看见(可见光圈或雷达照到,trkSees)⇒ 记下第一次看见的点 a、看得见的最后一点 b 和飞行方向:开火那一刻的射手就在这条线往回延长的某处(不知道开火时刻,所以只有线没有点)。
    只记几何,不记射手是谁;两方对称,SHELL_TR.red 是红方知道的(bots 读),SHELL_TR.blue 画在我方地图上(render/83)。导弹会拐弯,不做。 */
 const SHELL_TR={blue:[],red:[],KEEP:60}; // KEEP:一条记录留多少游戏秒
 function shellTraceStep(){
   for(const side of ['blue','red']){
-    let dets=null;const L=SHELL_TR[side];
+    const L=SHELL_TR[side];
     for(const p of projectiles){
       if(p.type!=='mac'||!p.shooter||p.shooter.side===side)continue;
       const r0=p.tr&&p.tr[side];if(r0&&r0.out)continue; // 已经穿出可见光圈:这一段定了
-      if(!dets)dets=ships.filter(s=>s.side===side&&!s.dead);
-      const vis=dets.some(d=>senseVis(d,p));
-      if(r0){if(vis)r0.b=[p.pos[0],p.pos[1]];else r0.out=true;continue;} // 2026-09-28 还在圈里就把轨迹末端 b 往前推(用户:炮弹划过可见光圈时要画出轨迹)
+      const vis=trkSees(side,p); // 2026-09-28 用户:雷达照得到的炮弹就是看得见 —— 与地图上画不画这发炮弹同一个判据(可见光圈或雷达;原来只认可见光圈,雷达照到的炮弹有点没线)
+      if(r0){if(vis)r0.b=[p.pos[0],p.pos[1]];else r0.out=true;continue;} // 还看得见就把轨迹末端 b 往前推
       if(!vis)continue;
       const v=Math.hypot(p.vel[0],p.vel[1])||1,r={a:[p.pos[0],p.pos[1]],b:[p.pos[0],p.pos[1]],u:[p.vel[0]/v,p.vel[1]/v],t:simTime};
       (p.tr||(p.tr={}))[side]=r;L.push(r);

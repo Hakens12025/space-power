@@ -232,7 +232,6 @@ function contactPos(s,side){
 function projVisibleTo(p,detSide){
   if(p.shooter&&p.shooter.side===detSide)return true; // 己方弹药永远可见
   const {dets,bcons}=detectorsOf(detSide);
-  if(p.type==='mac'){for(const d of dets)if(senseVis(d,p))return true;return false;} // 2026-09-28 用户:炮弹只在可见光圈里看得见(原来反射按 1 算,一开雷达 50 万 km 外就照出来)
   const sg=projSig(p);
   const lum=sg.lum,refl=sg.refl,bg=ENV.clouds.length?envBg(p.pos,'opt'):0; // ENV2 云背景每颗弹丸算一次
   for(const d of dets){if(senseVis(d,p)||senseSeesOptical(lum,d,p.pos,bg)||senseSeesActive(refl,d,p.pos,p.vel))return true;} // 2026-09-26 可见光圈内的弹丸也一清二楚 // 照射那一路:不在 paint 档时 senseKACT 恒 0,判据天然为假,这里不必再判一次发射档
