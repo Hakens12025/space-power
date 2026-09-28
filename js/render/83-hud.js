@@ -733,9 +733,8 @@ function drawFcChain(){ // RF7 火控序列态的数据链(蓝色铁路线):主�
   const s=selBlue()[0];if(!s||s.dead)return;
   const q=fcSeq(s.fcEditId);if(!q||q.shipId!==s.id||!(q.targets||[]).length)return;
   const pts=[toScreen(s.pos[0],s.pos[1])];
-  for(const it of q.targets){ // 链节点按序列顺序:死目标由 58 的清理段 splice,这里只管画活着的;指定点直接连坐标
+  for(const it of q.targets){ // 链节点按序列顺序:死目标由 58 的清理段 splice,这里只管画活着的
     if(it.tid){const t=(typeof fcShip==='function')?fcShip(it.tid):null,tp=(t&&!t.dead)?viewPos(t):null;if(tp)pts.push(toScreen(tp[0],tp[1]));} // 2026-09-28 我方知道的位置;交代不出就跳过这一节
-    else if(it.pt)pts.push(toScreen(it.pt[0],it.pt[1]));
   }
   if(pts.length<2)return;
   ctx.save();

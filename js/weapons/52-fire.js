@@ -244,5 +244,5 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
     shooter.ammo-=shooter.mslPer||12; // KIMI154:每组12颗;RF3 枚数读烘焙字段
   }
   if(rounds>0){shooter.fireHot=SENS.FIRE_S;shooter.fireN=(shooter.fireN||0)+1;} // FX1 开火暴露:真发出去了才亮(rounds=0 是弹药 / 单元不足的空转)
-  if(shooter.fcFired&&shooter.fcTgt&&shooter.fcTgt.msl&&(shooter.fcTgt.msl===target||(target&&target.pos&&shooter.fcTgt.msl.pos===target.pos)))shooter.fcFired.msl=true; // RF5 开火来源标记(fireMissiles 的发射成功点:早退全在上面,到这里 rounds≥1 组弹丸已入 projectiles)。陷阱三:orderMissileSalvo 只写 missileArm、真发射晚 1s 且中途会被 noFire/dead/弹药不足吞掉,所以标记只能打在这里。RF5 核查修:再收窄成「打的正是序列解算出来的那个目标」,挡掉手动/任务/敌AI 齐射推动序列指针;指定点每 tick 是新 {pos} 对象,故按 pt 数组引用比(与 Post 段回找记账同一口径)
+  if(shooter.fcFired&&shooter.fcTgt&&shooter.fcTgt.msl&&shooter.fcTgt.msl===target)shooter.fcFired.msl=true; // RF5 开火来源标记(fireMissiles 的发射成功点:早退全在上面,到这里 rounds≥1 组弹丸已入 projectiles)。陷阱三:orderMissileSalvo 只写 missileArm、真发射晚 1s 且中途会被 noFire/dead/弹药不足吞掉,所以标记只能打在这里。RF5 核查修:再收窄成「打的正是序列解算出来的那个目标」,挡掉手动/任务/敌AI 齐射推动序列指针
 }

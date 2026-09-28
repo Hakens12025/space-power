@@ -41,13 +41,12 @@ function stepWeaponSystems(dt){
   for(const s of ships){
     if(s.dead||!s.autoEngage||s.mslOn===false)continue;
     if(s.fcFired&&s.fcFired.msl)continue; // RF5 核查修:本 tick 序列刚真发射过(S14 的 missileArm 倒计时就在本函数开头,发完立刻把 missileArm 清空),此刻 s.fcTgt.msl 还是本 tick 开头解算的【旧目标】—— rot 要等 tick 末的 S17b stepFireControlPost 才前进。这里若照排,下一发会继承旧目标,rr 轮询在导弹侧完全失效(实测一轮恰好 2 发,rot 0→1→0 归位,第二个目标永远轮不到)。让出一拍(0.02s)再排,下一 tick 解算出的就是前进后的目标;无序列的舰不长 fcFired 字段,不受影响
-    const t=(typeof fcActive==='function'&&fcActive(s))?(s.fcTgt&&s.fcTgt.msl):s.lockedTarget; // RF5 有序列则目标来源换成序列解算结果(fcTgt.msl 可能是舰,也可能是指定点 {pos});没序列沿用原锁定
+    const t=(typeof fcActive==='function'&&fcActive(s))?(s.fcTgt&&s.fcTgt.msl):s.lockedTarget; // RF5 有序列则目标来源换成序列解算结果(舰);没序列沿用原锁定
     if(!t)continue;
-    const isPt=(kindOf(t)==='point'); // RF5 指定点(空地)没有阵营也没有接触等级,跳过 side / 定位两道门(fcGate 已在序列侧查过射程,这里保留复查) TK4b:点的判别走 kindOf
-    if(!isPt&&(t.dead||t.side===s.side))continue;
-    if(!isPt&&!contactFix(t,s.side))continue; // 与手动齐射同一道定位门
-    { // WR1:没有发射门了;自动齐射(玩家的「火控」钮)只在动力射程内打,免得自动化替玩家把弹药扔到滑行段去;距离按估计位置量(指定点按点)
-      const tp=isPt?t.pos:((typeof contactPos==='function')?contactPos(t,s.side):null); if(!tp)continue;
+    if(t.dead||t.side===s.side)continue;
+    if(!contactFix(t,s.side))continue; // 与手动齐射同一道定位门
+    { // WR1:没有发射门了;自动齐射(玩家的「火控」钮)只在动力射程内打,免得自动化替玩家把弹药扔到滑行段去;距离按估计位置量
+      const tp=(typeof contactPos==='function')?contactPos(t,s.side):null; if(!tp)continue;
       if(!(typeof fcForce==='function'&&fcForce(s,'msl'))&&V.len(V.sub(tp,s.pos))>=mslReach(s))continue; // 2026-09-29 强制开火的序列不看射程
     }
     const ready=readyCells(s);
@@ -95,10 +94,7 @@ function stepWeaponSystems(dt){
   for(const s of ships){
     const roeOK=s.macOn!==false&&(s.roe==='free'||(s.roe==='tight'&&s.roeCd>0)); // free自由/tight被攻击才还击(roeCd=受击冷却)/hold不开火;RF2 主炮开关:关=不参与自动开火
     const mt=(typeof fcActive==='function'&&fcActive(s))?(s.fcTgt&&s.fcTgt.mac):s.lockedTarget; // RF5 有序列则打序列解算的主炮目标:序列可能只许导弹打(allow.mac=false),这时 lockedTarget 虽被写成导弹目标,主炮也不许跟着开
-    if(mt&&kindOf(mt)==='point'){ // 2026-09-29 火控序列里的空地点(58 fcGate):转向带提前量的那个点(同强行开火),对准就开一炮;记开火标记给 58 的 Post 推指针、记次数
-      if(roeOK&&!s.dead&&hasMAC(s)){const tp=macPtLead(s,mt.pos);s.turnTarget=[tp[0],tp[1],0];
-        if(s.macCd<=0&&macAimErr(s,tp)<MAC_ALIGN){fireMACAt(s,mt.pos);if(s.macCd>0&&s.fcFired)s.fcFired.mac=true;}}
-    }else if(roeOK&&!s.dead&&mt&&!mt.dead&&mt.side!==s.side&&s.macCd<=0&&hasMAC(s)&&macAligned(s,mt)){ // WR1:自动开火只在把握 >= MAC_AUTO_P 时打(没有射程门了);距离按估计位置量。这一条【不看 autoEngage】,红方 bot 的开火实际走的就是它
+    if(roeOK&&!s.dead&&mt&&!mt.dead&&mt.side!==s.side&&s.macCd<=0&&hasMAC(s)&&macAligned(s,mt)){ // WR1:自动开火只在把握 >= MAC_AUTO_P 时打(没有射程门了);距离按估计位置量。这一条【不看 autoEngage】,红方 bot 的开火实际走的就是它
       const mp=macPred(s,mt); if(mp&&((typeof fcForce==='function'&&fcForce(s,'mac'))||macHitProb(s,V.len(V.sub(mp,s.pos)),mt)>=MAC_AUTO_P))fireMAC(s,mt); // 2026-09-29 强制开火的序列不看把握门
     } // TIER1 MAC 舰种门改能力谓词
     if(s.roeCd>0)s.roeCd-=dt;

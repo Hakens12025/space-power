@@ -13,7 +13,7 @@
    踩过的坑(全部来自实读代码,不是猜测):
    · 陷阱一:lockedTarget 同时是【转向指令】。physics/31-step-ships:74-80 的战斗转向段是朝 macPred(s,lockedTarget)
      摆机头的,所以 lockedTarget 必须跟 MAC 指针走(mac 优先),否则船头去追导弹目标、主炮永远进不了 macAligned
-     的对准门(MAC_ALIGN)。指定点更不能写进 lockedTarget —— 它只有 pos,转向段会读 .dead/.side。
+     的对准门(MAC_ALIGN)。
    · 陷阱二:driftFire 自带 60s 倒计时(31-step-ships:75)。一艘正在执行移动命令的舰全靠 driftFire 才抢得到机头,
      倒计时一到主炮就【静默哑火】(不报错不打日志)。所以解算出 mac 目标时必须每 tick 续期,不是置一次 true 就完事。
    · 陷阱三:orderMissileSalvo 是【延迟发射】,它只写 s.missileArm,真正的 fireMissiles 在 1s 后的另一个 tick 由
@@ -23,7 +23,6 @@
    · 陷阱四:靶场的靶带 noFire(静默开关),靶不会还手,序列在靶场只能观察己方这一侧。
    命名注意:weapons/52-fire 的网实体有个属性叫 fctrl('auto'|'hold' 连接模式),那是「网的火控」,与本文件的 fc*
    火控序列同域不同义,别看串(同类先例见 54-missiles 的 parkFctrl vs fctrl)。 */
-const FC_PT_SALVOS=2; // RF5 指定点目标每类武器的次数上限(导弹 2 组、主炮 2 发;2026-09-29 起两类各记各的):都打满即视为完成并出队。空地没有「死亡」判据,必须给个收敛条件,否则序列永远卡在这一项
 const FC_MAX_SEQS=5;  // RF7 每舰序列上限 = 火控计算机的方条数(88-selpanel 画五根竖条,一条一槽)。不封顶方条就得滚动,违背"简单"的要求
 let fireSeqs=[];      // RF5 全部火控序列(扁平数组,创建顺序即 UI 显示顺序与执行器下标口径)
 let fcSeqSeq=0;       // RF5 序列 id 自增源;91-init 换局时与 fireSeqs 一起归零
@@ -49,13 +48,13 @@ function fcSeq(seqId){ // RF5 按序列 id 取序列
   for(const q of fireSeqs)if(q.id===seqId)return q;
   return null;
 }
-function fcTgtItem(tgt,allow){ // RF5 目标项工厂:{tid:'舰id'} 或 {pt:[x,y,z]} 二选一,另一个为 null
+function fcTgtItem(tgt,allow){ // RF5 目标项工厂:{tid:'舰id'}(2026-09-29 指定点目标删了:中键点空地改成直接强行开火,不进序列)
   const a=allow||{};
-  return {tid:(tgt&&tgt.tid)||null, pt:(tgt&&tgt.pt)?tgt.pt.slice():null, // pt 拷副本:调用方常直接递 worldAt() 的返回,原数组可能被复用改写
-    allow:{mac:a.mac!==false, msl:a.msl!==false}, ptN:{mac:0,msl:0}}; // ptN = 指定点每类武器已打次数(2026-09-29 主炮也能打点,两类各记各的) // allow 缺省 {mac:true,msl:true},故用 !==false 而非 ||
+  return {tid:(tgt&&tgt.tid)||null,
+    allow:{mac:a.mac!==false, msl:a.msl!==false}}; // allow 缺省 {mac:true,msl:true},故用 !==false 而非 ||
 }
-function fcPush(seq,tgt,allow){ // RF5 内部:把一个目标追加进序列(两个字段都空的脏目标不进队)
-  if(!seq||!tgt||(!tgt.tid&&!tgt.pt))return seq;
+function fcPush(seq,tgt,allow){ // RF5 内部:把一个目标追加进序列(没有 tid 的脏目标不进队)
+  if(!seq||!tgt||!tgt.tid)return seq;
   seq.targets.push(fcTgtItem(tgt,allow));
   return seq;
 }
@@ -157,17 +156,8 @@ function fcSetPick(s,seqId){ // RF8 指定唯一开火序列(只在 pick 模式�
   if(!q||q.shipId!==s.id)return;
   s.fcPick=q.id;s.fcBig='pick';
 }
-function fcPtDone(s,it){ // 2026-09-29 指定点出队:许可的每类武器都打满 FC_PT_SALVOS 次(这艘船没有这类武器 / 导弹打光也算满)
-  const N=it.ptN||{},d=w=>!it.allow[w]||(N[w]||0)>=FC_PT_SALVOS||(w==='mac'?!(s&&hasMAC(s)):!(s&&(s.ammo||0)>0));
-  return d('mac')&&d('msl');
-}
 function fcGate(s,it,kind){ // RF5 单个目标项对某类武器的全部门:许可→存活→定位(WR1 起没有射程这一道)。任一不过返回 null(调用方跳到下一个,两种模式都不许停摆)
   if(!it||!it.allow||!it.allow[kind])return null;
-  if(!it.tid&&it.pt){ // 指定点(空地)。2026-09-29 用户:主炮也能打 —— 57 按强行开火的办法转向带提前量的那个点、对准就开一炮(fireMACAt)
-    // WR1:指定点没有射程门(射程无限,玩家自己决定;之外滑行靠不了数据链 —— 指定点本来就没有目标可引导)
-    if(((it.ptN&&it.ptN[kind])||0)>=FC_PT_SALVOS)return null; // 这类武器已打满,留给另一类
-    return {pos:it.pt}; // orderMissileSalvo / fireMissiles 的第二参本来就接受 {pos}(区域齐射);共享 it.pt 数组,Post 段按引用回找记账
-  }
   const t=fcShip(it.tid);
   if(!t||t.dead||t.side===s.side)return null; // side 同侧直接排除:免得把友舰写进 lockedTarget(它同时是转向指令)
   if(!trkFoe(trkOf(s.side,t)))return null; // TK4c:已确认不是船(石头)⇒ 这一项跳过(序列里留着,认出之前下的令不作废,只是不再对它开火)
@@ -196,14 +186,13 @@ function fcSolve(s,seqs,kind){ // RF5 逐武器解算:从 fcSeqCur[kind] 起最�
 }
 function stepFireControl(dt){ // RF5 每 tick 前置决策:清理失效序列 → 逐武器解算目标 → 写 lockedTarget + 续期 driftFire
   if(!fireSeqs.length)return;
-  // 1. 清理:目标 id 解析不到活舰的移除;指定点打满 FC_PT_SALVOS 组的移除;targets 清空的序列整条撤
+  // 1. 清理:目标 id 解析不到活舰的移除;targets 清空的序列整条撤
   for(let i=fireSeqs.length-1;i>=0;i--){
     const q=fireSeqs[i];
     for(let j=q.targets.length-1;j>=0;j--){
       const it=q.targets[j];
       if(it.tid){const t=fcShip(it.tid);if(!t||t.dead)q.targets.splice(j,1);}
-      else if(it.pt){if(fcPtDone(fcShip(q.shipId),it))q.targets.splice(j,1);}
-      else q.targets.splice(j,1); // tid/pt 都没有:脏数据
+      else q.targets.splice(j,1); // 没有 tid:脏数据
     }
     if(!q.targets.length)fcRemove(q.id); // 倒序遍历,fcRemove 内部 splice 掉的正是当前项,不影响后续下标
   }
@@ -220,12 +209,11 @@ function stepFireControl(dt){ // RF5 每 tick 前置决策:清理失效序列 �
     const rm=fcSolve(s,seqs,'mac'),rs=fcSolve(s,seqs,'msl');
     s.fcTgt.mac=rm.tgt;s.fcFrom.mac=rm.from;
     s.fcTgt.msl=rs.tgt;s.fcFrom.msl=rs.from;
-    // 3. 陷阱一:lockedTarget 同时是 physics/31 战斗转向的转向指令,必须 MAC 优先;指定点没有 side/dead 字段,不能写进去
-    const mS=(s.fcTgt.mac&&kindOf(s.fcTgt.mac)!=='point')?s.fcTgt.mac:null; // 2026-09-29 主炮目标也可能是空地点:点不进 lockedTarget,转向在 57 每拍设 turnTarget
-    s.lockedTarget=mS||((s.fcTgt.msl&&kindOf(s.fcTgt.msl)!=='point')?s.fcTgt.msl:null); // TK4b:点与物体的判别统一走 kindOf
+    // 3. 陷阱一:lockedTarget 同时是 physics/31 战斗转向的转向指令,必须 MAC 优先
+    s.lockedTarget=s.fcTgt.mac||s.fcTgt.msl||null;
     s.lockPlayer=false; // 与 57 自动索敌写锁定时的口径一致(DS176 起该字段已退役,只留兼容)
     // 4. 陷阱二:driftFire 有 60s 倒计时,不每 tick 续期的话,执行着移动命令的舰打满 60s 后主炮会静默哑火
-    if(mS){s.driftFire=true;s.driftFireT=Math.max(s.driftFireT||0,5);}
+    if(s.fcTgt.mac){s.driftFire=true;s.driftFireT=Math.max(s.driftFireT||0,5);}
   }
 }
 function stepFireControlPost(dt){ // RF5 每 tick 末:按【本 tick 真的发射了】推进指针(陷阱三:只认 52-fire 打的显式标记,绝不做 macCd/ammo 差分)
@@ -239,11 +227,6 @@ function stepFireControlPost(dt){ // RF5 每 tick 末:按【本 tick 真的发�
       const si=(f>=0&&f<seqs.length)?f:-1; // UI 可能在两 tick 之间删了序列,下标要现验
       if(si>=0){
         const q=seqs[si],m=q.targets.length;
-        const tgt=s.fcTgt&&s.fcTgt[kind];
-        if(tgt&&kindOf(tgt)==='point'&&tgt.pos){ // 2026-09-29 主炮打空地点也记一次(两类武器合计 FC_PT_SALVOS 次出队) // 指定点齐射记账:fcGate 返回的 {pos} 与目标项共享同一个 pt 数组,按引用回找 TK4b:点的判别走 kindOf
-          const it=q.targets.find(x=>x.pt&&x.pt===tgt.pos);
-          if(it){if(!it.ptN)it.ptN={mac:0,msl:0};it.ptN[kind]=(it.ptN[kind]||0)+1;} // 每类武器打满 FC_PT_SALVOS 由下一 tick 的清理段移除(fcPtDone)
-        }
         if(q.mode==='rr'&&m)q.rot[kind]=(((q.rot[kind]||0)+1)%m); // 轮询:打完换下一个目标(散布);'seq' 不动指针,靠「打死才出队」推进
         s.fcSeqCur[kind]=(si+1)%seqs.length; // 序列间轮询:下一条该轮到谁(si>=0 已保证 seqs.length>0)。RF5 原写在 if 块外,si=-1(这一发不来自任何序列,如序列全暂停期间的自动索敌开火)时也照样 +1,会把「下一条该轮到谁」凭空挪一格;现在只被【确实由某条序列驱动的开火】推动
       }

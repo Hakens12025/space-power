@@ -242,7 +242,7 @@ function radOpen(sx,sy,shift){ // RF5 中键长按 = 开目标轮盘。三种上
   if(typeof fcSeq!=='function'||typeof fcNew!=='function')return false; // 沿用本库 typeof 守卫口径(58 缺席时本文件仍不崩)
   const q0=fcSeq(sub.fcEditId);                        // fcEditId 为 null 时 fcSeq 遍历一圈返回 null(id 由 ++fcSeqSeq 从 1 起,撞不上 null),安全
   const cur=(q0&&q0.shipId===sub.id)?q0:null;          // 与 fcAppend 同一道防线:编辑上下文可能指向别舰或已删的序列
-  const idx=cur?cur.targets.findIndex(x=>x.tid&&x.tid===t.id):-1; // 只比 tid:targets 里可能混着 {pt:[x,y,z],tid:null} 指定点项,必须先真值判定再 ===
+  const idx=cur?cur.targets.findIndex(x=>x.tid&&x.tid===t.id):-1; // 只比 tid:必须先真值判定再 ===
   let seqId=null,tgtIdx=-1,ctx='';
   if(idx>=0){seqId=cur.id;tgtIdx=idx;ctx='edit';}                       // ① 目标已在当前编辑序列 → 只编辑,不新建不追加
   else if(shift&&cur&&typeof fcAppend==='function'){                    // ② Shift + 不在序列 → 追加进当前编辑序列

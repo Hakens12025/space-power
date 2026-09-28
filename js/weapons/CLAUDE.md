@@ -34,4 +34,4 @@
 - `fcRuns(s,q)` 是"这条序列参不参与解算"的唯一真相,`fcSolve` / `fcActive` / `stepFireControl` 共用。
 - 逐武器各一个指针;`seq` 模式每次从 0 扫,`rr` 从 `rot` 扫并把 `rot` 钉在真正选中的那一项。按 pick 过滤时 `continue` 跳过,不许筛数组(`fcFrom` 存的是下标)。
 - 删掉被选中的序列要兜底改选第一条,一条不剩退回 `'rr'`。
-- 四个陷阱:`lockedTarget` 同时是转向指令(主炮目标优先,指定点绝不写进去);`driftFire` 有 60 s 倒计时,执行移动命令的舰每拍续期;`orderMissileSalvo` 是延迟发射,下令 ≠ 打了;开火来源只认 52 写的 `s.fcFired` 标记,不许拿 `macCd` / `ammo` 做差分。
+- 四个陷阱:`lockedTarget` 同时是转向指令(主炮目标优先);`driftFire` 有 60 s 倒计时,执行移动命令的舰每拍续期;`orderMissileSalvo` 是延迟发射,下令 ≠ 打了;开火来源只认 52 写的 `s.fcFired` 标记,不许拿 `macCd` / `ammo` 做差分。
