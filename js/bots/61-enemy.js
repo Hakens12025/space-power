@@ -33,7 +33,7 @@ function enemyAI(dt){
     const foe=(pl.foe&&!pl.foe.dead)?pl.foe:null;
     let d=Infinity;
     if(foe){const p=contactPos(foe,'red');if(p)d=Math.hypot(p[0]-e.pos[0],p[1]-e.pos[1],(p[2]||0)-e.pos[2]);}
-    if(foe&&e.macCd<=0&&hasMAC(e)&&macHitProb(e,d)>=MAC_AUTO_P&&macAligned(e,foe)){fireMAC(e,foe);if(e.macCd>0)e.scootT=RDOC_CFG.SCOOT_S;} // 2026-09-28 开完一炮:60 的压上态照 scootT 先挪开
+    if(foe&&e.macCd<=0&&hasMAC(e)&&macHitProb(e,d,foe)>=MAC_AUTO_P&&macAligned(e,foe)){fireMAC(e,foe);if(e.macCd>0)e.scootT=RDOC_CFG.SCOOT_S;} // 2026-09-28 开完一炮:60 的压上态照 scootT 先挪开
     if(e.scootT>0)e.scootT-=dt;
     if(pl.gun&&!e.forceMac){e.forceMac={t:pl.gun.t||null,pt:pl.gun.pt||null,T:RDOC_CFG.LOT_T};e.lotto=true;} // 2026-09-28 抽奖开炮:照 60 挑的点转头、对准、开一炮(weapons/57 的强行开火)
     if(e.lotto&&e.macCd>0){e.lotto=false;e.scootT=RDOC_CFG.SCOOT_S;}else if(e.lotto&&!e.forceMac)e.lotto=false; // 开出去了 ⇒ 打了就跑;超时没开出去 ⇒ 作废

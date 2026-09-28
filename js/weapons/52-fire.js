@@ -53,8 +53,13 @@ function erfInv(x){ // Winitzki 近似 + 两步牛顿(按 erfApprox)
 function macD50(sig){return sig>0?MAC_HIT_R/(sig*MAC_Z50):0;}
 const MAC_SIG_CAP=3*Math.PI/180; // 2026-09-28 用户:每发角散布封顶 3°(约 16.5 万起;原封顶 0.5 弧度 = 28.6°,远射满天飞)。再远按固定 3° 的一维高斯算:20 / 30 / 40 万命中 3.0% / 2.0% / 1.5%(远射 = 抽奖)
 function macHitCap(d){return erfApprox(MAC_HIT_R/(Math.SQRT2*d*MAC_SIG_CAP));} // 散布到顶以后的命中率
-function macHitProb(s,d){ // 主炮在距离 d 上对标准命中判定半径的命中率(靶不动):S 形,散布到顶以后改固定角(与 macShotSigma 实打一致)
+/* 2026-09-29 用户:雷达现在是纯信息位置,前出没有好处 —— 奖励前出:对方在我方可见光圈里 / 被我方雷达照到,命中曲线的距离按 VIS / RAD 缩(拉长曲线,用户选):
+   7.3 万处 50% → 70% / 63%,10 万 22% → 40% / 32%,远处抽奖几乎不变。判据读我方航迹这一拍有没有可见光 / 照射量测(不读真值),两个都有取可见光 */
+const MAC_FWD={VIS:1.236,RAD:1.136};
+function macFwdK(side,t){if(!t||!t.side||t.side===side)return 1;const tk=trkOf(side,t),c=tk&&tk.cov&&tk.cov.ch;return !c?1:(c.vis?MAC_FWD.VIS:(c.act?MAC_FWD.RAD:1));}
+function macHitProb(s,d,t){ // 主炮在距离 d 上对标准命中判定半径的命中率(靶不动):S 形,散布到顶以后改固定角(与 macShotSigma 实打一致)。t = 目标(可省):前出奖励
   const sig=sReq(s,'macSigma'); if(!(sig>0)||!(d>0))return sig>0?1:0;
+  d/=macFwdK(s.side,t);
   return Math.max(1/(1+Math.pow(d/macD50(sig),MAC_K)),macHitCap(d)); // 散布到顶(> 3°)⇔ 固定角的命中率比 S 形高,所以两段 = 取大
 }
 function macRangeSig(sig,p){ // BOT1:按【给定的散布】反算命中率恰为 p 的距离。红方条令要问「对方那一型打我打得多准」,手里只有舰种不是实例
@@ -62,8 +67,8 @@ function macRangeSig(sig,p){ // BOT1:按【给定的散布】反算命中率恰�
   return sig>0?Math.max(macD50(sig)*Math.pow((1-p)/p,1/MAC_K),MAC_HIT_R/(Math.SQRT2*MAC_SIG_CAP*erfInv(p))):0; // 两段取远的那一个(散布到顶以后命中率掉得慢)
 }
 function macRangeAt(s,p){return macRangeSig(sReq(s,'macSigma'),p);} // 命中率恰为 p 的距离
-function macShotSigma(s,d){ // 2026-09-28 这一发的角散布:一维高斯脱靶落进 MAC_HIT_R 的概率 = macHitProb(s,d);封顶 MAC_SIG_CAP(3°)
-  const p=macHitProb(s,d);if(p>=1-1e-9)return 0;
+function macShotSigma(s,d,t){ // 2026-09-28 这一发的角散布:一维高斯脱靶落进 MAC_HIT_R 的概率 = macHitProb(s,d,t);封顶 MAC_SIG_CAP(3°)
+  const p=macHitProb(s,d,t);if(p>=1-1e-9)return 0;
   return Math.min(MAC_SIG_CAP,MAC_HIT_R/(d*Math.SQRT2*erfInv(p)));
 }
 function macEffRange(s){return macRangeAt(s,0.5);} // 有效射程 = 命中率 50% 的距离。调用点一律调它,绝不在别处重拼
@@ -85,7 +90,7 @@ function fireMAC(shooter,target){ // MAC 轴炮:沿机头轴线直射(调用方�
   const d=V.len(V.sub(pred,shooter.pos)); // WR1:飞行距离按预测点算(没有射程门了,d 只决定弹丸寿命)
   const tt=d/CFG.macSpd; // 飞行时间(MAC 匀速 CFG.macSpd)
   const dir=V.norm(V.sub(pred,shooter.pos)); // 俯仰取瞄准线;方位见下一行
-  const da=gaussRand()*macShotSigma(shooter,d); // WR1:每一发都带高斯角散布;2026-09-28 散布按距离反推,打出来的命中率 = macHitProb 的 S 形
+  const da=gaussRand()*macShotSigma(shooter,d,target); // WR1:每一发都带高斯角散布;2026-09-28 散布按距离反推,打出来的命中率 = macHitProb 的 S 形
   const ang=Math.atan2(shooter.facing[1],shooter.facing[0])+da; // 2026-09-28 用户:轴炮对准再射 —— 出膛方位沿机头轴线 + 散布(对准门收到 0.1°,4 万处偏不到 70 km,远小于命中半径 400;原来 1.1° 窗口擦边就开,只好改沿精确瞄准线)
   const hxy=Math.hypot(dir[0],dir[1]); // KIMI146修:xy分量按朝向的xy模长缩放——原直接用满macSpd再叠dir[2]·macSpd,合速度超0.1c且弹道≠机头轴线(带俯仰时必脱靶)
   projectiles.push({type:'mac',pos:shooter.pos.slice(),vel:[Math.cos(ang)*hxy*CFG.macSpd+shooter.vel[0],Math.sin(ang)*hxy*CFG.macSpd+shooter.vel[1],dir[2]*CFG.macSpd+shooter.vel[2]],target,shooter,pred,tt,age:0,dmg:shooter.macDmg}); // KIMI151:弹丸继承舰速(出膛矢量=舰速+机头轴×0.1c,相对舰体初速仍0.1c)

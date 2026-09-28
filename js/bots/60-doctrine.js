@@ -167,14 +167,14 @@ function botFocus(reds){ // WTA 贪心解:全队集火同一个。分数 = 价�
   return best;
 }
 function botExposed(e){return e.emitMode!=='silent'||e.fireHot>0||!!e.flame||!!trkPaintedBy(e);} // 2026-09-28 红方自己知道的暴露:正在照射 / 刚开过火 / 正在点火 / 被照射告警(RWR)
-function botShotP(e,d,lat){return erfApprox(MAC_HIT_R/(Math.SQRT2*Math.hypot(lat,d*macShotSigma(e,d))));} // 中奖率:横向不确定度 lat 与这一发的散布合成,一维高斯落进命中半径(weapons/52 同一个模型)
+function botShotP(e,d,lat,t){return erfApprox(MAC_HIT_R/(Math.SQRT2*Math.hypot(lat,d*macShotSigma(e,d,t))));} // 中奖率:横向不确定度 lat 与这一发的散布合成,一维高斯落进命中半径(weapons/52 同一个模型)
 function botLottery(e,claim){ // 2026-09-28 抽奖开炮:从红方自己知道的里挑中奖率 x 价值最高的一个,过不过暴露那一档。返回 {t} / {pt} 或 null
   const cfg=RDOC_CFG,need=botExposed(e)?cfg.LOT_P_EXP:cfg.LOT_P_HID,far=LAD.msl;let best=null,bv=need;
   const free=k=>{if(claim.has(k))return false;const t0=RDOC.lot.get(k);return t0===undefined||simTime-t0>=cfg.LOT_SPREAD_S;};
   trkEach('red',tk=>{
     if(trkGone(tk)||!trkHeld(tk)||!trkFoe(tk))return;const b=trkSrc(tk);if(!free(b))return;
     let c=null,p=0;
-    if(trkFix(tk)){const q=trkPos(tk);if(!q)return;p=botShotP(e,Math.hypot(q[0]-e.pos[0],q[1]-e.pos[1]),Math.max(0,tk.cov.a1||0));c={t:b};} // 定出位置:打估计位置
+    if(trkFix(tk)){const q=trkPos(tk);if(!q)return;p=botShotP(e,Math.hypot(q[0]-e.pos[0],q[1]-e.pos[1]),Math.max(0,tk.cov.a1||0),b);c={t:b};} // 定出位置:打估计位置
     else{const u=trkBearing(tk,e.pos),ch=tk.cov&&tk.cov.ch,th=(ch&&ch.opt)?COV.TH0.opt:COV.TH0.lis;   // 只有方位:沿方位线打到导弹包线那么远,不知道距离按 LOT_D_BRG 算中奖率
       p=botShotP(e,cfg.LOT_D_BRG,cfg.LOT_D_BRG*th);c={pt:[e.pos[0]+u[0]*far,e.pos[1]+u[1]*far,0]};}
     const v=p*botFoeValue(b);if(v>bv){bv=v;best={k:b,g:c,p:p};}
@@ -298,7 +298,7 @@ function aiDoctrine(dt,reds){ // 指挥层入口:写 RDOC(含每艘舰的 plan)�
          第一版一直追轨道上的超前点 —— 接触的估计位置自己也在跑,横向分量把接近速度吃掉了:
          整局模拟里交战态的实测平均半径 58 万,而条令要的是 35.6 万 —— 红方大半时间根本没进到导弹够得着的地方。 */
       const dE=Math.hypot(e.pos[0]-c[0],e.pos[1]-c[1]);
-      const gunGo=hasMAC(e)&&e.macCd<=0&&!(e.scootT>0)&&!!tgt&&macHitProb(e,dE)>=MAC_AUTO_P; // 2026-09-28 站位时也抓机会:主炮就绪、把握过门 ⇒ 停车把机头交给战斗转向
+      const gunGo=hasMAC(e)&&e.macCd<=0&&!(e.scootT>0)&&!!tgt&&macHitProb(e,dE,tgt)>=MAC_AUTO_P; // 2026-09-28 站位时也抓机会:主炮就绪、把握过门 ⇒ 停车把机头交给战斗转向
       const br=Math.atan2(e.pos[1]-c[1],e.pos[0]-c[0]);
       const a=(dE>RDOC.r*cfg.APPROACH_K)?(br+off*0.35):(RDOC.orbit+off+RDOC.dir*cfg.LEAD_A);
       pos=[c[0]+Math.cos(a)*RDOC.r,c[1]+Math.sin(a)*RDOC.r];

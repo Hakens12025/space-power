@@ -29,12 +29,14 @@ function pipGun(g,w,h,s){ // 主炮火控窗:S 形命中率曲线 + 目标此刻
   const tp=mt?viewPos(mt):(ff&&ff.pt?ff.pt:null);
   g.textAlign='left';g.textBaseline='top';g.font='11px "Microsoft YaHei"';
   if(!tp){g.fillStyle='#cfe6ff';g.fillText(mt?'主炮目标定不出位置':'无主炮目标 · 锁定或强行开火后显示',6,4);return;}
-  const d=Math.hypot(tp[0]-s.pos[0],tp[1]-s.pos[1]),pr=macHitProb(s,d),x=X(d),y=Y(pr);
+  const fk=mt?macFwdK(s.side,mt):1; // 2026-09-29 前出奖励(weapons/52):对方在我方可见光圈里 / 被雷达照到,多画一条拉长的曲线
+  if(fk>1){g.strokeStyle='#6ee7a8';g.lineWidth=1.5;g.beginPath();for(let i=0;i<=60;i++){const dd=PIP.XMAX*i/60,xx=X(dd),yy=Y(macHitProb(s,dd,mt));if(i)g.lineTo(xx,yy);else g.moveTo(xx,yy);}g.stroke();}
+  const d=Math.hypot(tp[0]-s.pos[0],tp[1]-s.pos[1]),pr=macHitProb(s,d,mt),x=X(d),y=Y(pr);
   g.strokeStyle='rgba(255,107,107,.7)';g.lineWidth=1;g.beginPath();g.moveTo(x,T);g.lineTo(x,B);g.stroke();
   g.fillStyle='rgb(255,107,107)';g.beginPath();g.arc(x,y,3.5,0,6.283);g.fill();
-  g.fillStyle='#cfe6ff';g.fillText((mt?'目标':'炮击点')+' '+(d/1e4).toFixed(1)+' 万 km · 把握 '+(pr>=0.1?Math.round(pr*100):(pr*100).toFixed(1))+'%'+(d>PIP.XMAX?'(超出图)':''),6,4);
+  g.fillStyle='#cfe6ff';g.fillText((mt?'目标':'炮击点')+' '+(d/1e4).toFixed(1)+' 万 km · 把握 '+(pr>=0.1?Math.round(pr*100):(pr*100).toFixed(1))+'%'+(fk>1?(fk===MAC_FWD.VIS?' · 可见光加成':' · 雷达加成'):'')+(d>PIP.XMAX?'(超出图)':''),6,4);
   const mp=mt?macPred(s,mt):tp,ang=mp?V.angle(s.facing,V.norm(V.sub(mp,s.pos))):0;
   g.font='10px Consolas';g.fillStyle='#8fd0ff';g.textBaseline='bottom';
-  g.fillText('散布1σ '+Math.round(d*macShotSigma(s,d)).toLocaleString('en-US')+'km / 命中半径 '+MAC_HIT_R+'km',6,h-14);
+  g.fillText('散布1σ '+Math.round(d*macShotSigma(s,d,mt)).toLocaleString('en-US')+'km / 命中半径 '+MAC_HIT_R+'km',6,h-14);
   g.fillText('飞行 '+Math.round(SHOW.t(d/CFG.macSpd))+'s · 装填 '+(s.macCd>0?Math.ceil(SHOW.t(s.macCd))+'s':'就绪')+' · 机头 '+(ang<0.02?'对准':(ang*57.2958).toFixed(0)+'°'),6,h-2);
 }

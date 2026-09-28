@@ -96,7 +96,7 @@ function stepWeaponSystems(dt){
     const roeOK=s.macOn!==false&&(s.roe==='free'||(s.roe==='tight'&&s.roeCd>0)); // free自由/tight被攻击才还击(roeCd=受击冷却)/hold不开火;RF2 主炮开关:关=不参与自动开火
     const mt=(typeof fcActive==='function'&&fcActive(s))?(s.fcTgt&&s.fcTgt.mac):s.lockedTarget; // RF5 有序列则打序列解算的主炮目标:序列可能只许导弹打(allow.mac=false),这时 lockedTarget 虽被写成导弹目标,主炮也不许跟着开
     if(roeOK&&!s.dead&&mt&&!mt.dead&&mt.side!==s.side&&s.macCd<=0&&hasMAC(s)&&macAligned(s,mt)){ // WR1:自动开火只在把握 >= MAC_AUTO_P 时打(没有射程门了);距离按估计位置量。这一条【不看 autoEngage】,红方 bot 的开火实际走的就是它
-      const mp=macPred(s,mt); if(mp&&macHitProb(s,V.len(V.sub(mp,s.pos)))>=MAC_AUTO_P)fireMAC(s,mt);
+      const mp=macPred(s,mt); if(mp&&macHitProb(s,V.len(V.sub(mp,s.pos)),mt)>=MAC_AUTO_P)fireMAC(s,mt);
     } // TIER1 MAC 舰种门改能力谓词
     if(s.roeCd>0)s.roeCd-=dt;
   }

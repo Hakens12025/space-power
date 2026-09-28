@@ -13,12 +13,15 @@ function guideMissiles(){ // 每tick重算引导分配(无状态:通道天然可
 }
 const MSL_SEEK_P={P_ENG_MAIN:3,P_ENG_REV:8,P_ENG_SIDE:1,P_FIRE:3}; // 导引头看热用 N1 之前的档位(2026-09-27 用户选「不跟」)
 function missLum(t){return optLum(t,MSL_SEEK_P);} // 公式与传感器同一份(sensors/22 的 optLum),只换档位表
-function missSeeT(p,t){ // 导弹自身探测(信息源):被动看热(被动距离×目标光学亮度) 或 末端主动LADAR(MSL_CFG.ladar=导引头,最后阶段开启)
+/* 2026-09-29 用户:盲射时导引头弱一点(原来几乎都能认准目标),按导弹自己的探测圈和目标体型算(用户选:2 万 x 体型,看热一起按同一倍数减)。
+   只管盲射找目标(mslSeek:区域齐射 / 巡飞 / 脱锁 / 变雷触发);追自己目标的导弹(missSee)照旧 */
+const MSL_BLIND={R:20000*CFG.scale,K:2/3}; // R = 盲射探测圈(x 目标体型,驱逐 1.4 万 / 巡洋 2 万);K = 看热距离的倍数(= R / 末端 LADAR 3 万)
+function missSeeT(p,t,blind){ // 导弹自身探测(信息源):被动看热(被动距离×目标光学亮度) 或 末端主动LADAR(MSL_CFG.ladar=导引头,最后阶段开启)
   if(!t||!t.side)return false;
   if(ENV.bodies.length&&envOccluded(p.pos,t.pos))return false; // ENV2 天体挡视线:被动看热与末端 LADAR 一起挡
   const d=V.len(V.sub(t.pos,p.pos));
-  if(d<MSL_CFG.passive*missLum(t))return true; // 2026-09-27 导引头看热改读 missLum(用户选「不跟」N1 的新亮度) // SN4 被动看热改读感知内核的 optLum(体型×(1+引擎档+发射档)):引擎开着或正在照射的目标看得远,熄火静默的冷目标难看到。量级注意:新口径约为旧口径的 2 倍(冷 DD 3.5 万→7 万、满推 CA 22 万→40 万),但下一行 15 万那道末端 LADAR 门在 15 万内恒为真,所以只有 15 万外才看得出差别——表现是热目标更早被自导接管、超视距链导通道占用相应变少(2026-09-26 整体 x1/5,本注释旧数按 1/5 读)
-  if(d<MSL_CFG.ladar)return true; // 末端LADAR开启(MSL_CFG.ladar):精确测距测速
+  if(d<MSL_CFG.passive*missLum(t)*(blind?MSL_BLIND.K:1))return true; // 2026-09-27 导引头看热改读 missLum(用户选「不跟」N1 的新亮度) // SN4 被动看热改读感知内核的 optLum(体型×(1+引擎档+发射档)):引擎开着或正在照射的目标看得远,熄火静默的冷目标难看到。量级注意:新口径约为旧口径的 2 倍(冷 DD 3.5 万→7 万、满推 CA 22 万→40 万),但下一行 15 万那道末端 LADAR 门在 15 万内恒为真,所以只有 15 万外才看得出差别——表现是热目标更早被自导接管、超视距链导通道占用相应变少(2026-09-26 整体 x1/5,本注释旧数按 1/5 读)
+  if(d<(blind?MSL_BLIND.R*(t.size||0):MSL_CFG.ladar))return true; // 末端LADAR开启(MSL_CFG.ladar):精确测距测速
   return false;
 }
 function missSee(p){return missSeeT(p,p.target);} // 导引头看不看得见自己的目标
@@ -28,7 +31,7 @@ function missSee(p){return missSeeT(p,p.target);} // 导引头看不看得见自
 function mslSeek(p,R,ok){
   const side=p.shooter.side;let best=null,bd=R||Infinity;
   const tryT=t=>{if(t.dead||t.side===side||t.hp===undefined||(ok&&!ok(t)))return;
-    const d=Math.hypot(t.pos[0]-p.pos[0],t.pos[1]-p.pos[1]);if(d<bd&&missSeeT(p,t)){bd=d;best=t;}};
+    const d=Math.hypot(t.pos[0]-p.pos[0],t.pos[1]-p.pos[1]);if(d<bd&&missSeeT(p,t,true)){bd=d;best=t;}};
   for(const s of ships)tryT(s);
   for(const o of rocks)tryT(o);
   return best;
