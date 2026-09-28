@@ -386,7 +386,7 @@ bindCmdBar();
 /* ============ 2026-09-27 底栏菜单 #cmdPop(用户:「统一归入雷达,点击后向上出现一个菜单……所有武器+火控统一归入武器按钮,亮代表启动」) ============
    雷达:静默 / 脉冲 / 发射 / 干扰。脉冲 = 只照一拍(sensors/21 的 pingReq),照完回到原档;钮亮 = 在辐射或正在脉冲。
    武器:取消所有 / 火炮 / 导弹 / 激光 / 近防。勾选即许可:攻击性武器(火炮、导弹)勾着任一 = 火控开(autoEngage + roe free),全不勾 = 火控关、解除锁定;
-     近防只管自己的 ciwsOn。火炮 / 导弹点名字向上展开具体武器,最右边 ⌖ = 强行开火(command/71 的 toggleWeapon → 70 的 mdWeaponPick)。激光目前没有,灰着占位。
+     近防只管自己的 ciwsOn。火炮 / 导弹点名字向右展开具体武器(2026-09-29 用户:原向上),最右边 ⌖ = 强行开火(command/71 的 toggleWeapon → 70 的 mdWeaponPick)。激光目前没有,灰着占位。
    菜单内容随 updateCmdBar(每 20 帧)重画,所以状态与脉冲的亮灭跟得上;点菜单与钮以外的地方关。 */
 const CMDPOP={kind:null,sub:null,el:null,btn:null};
 const WPN_CATS=[['mac','火炮'],['msl','导弹'],['laser','激光'],['ciws','近防'],['buoy','特殊']]; // 2026-09-27 特殊类:前出浮标(先只给「波长」)
@@ -448,12 +448,15 @@ function cmdPopRender(){
     const rows=['<button class="btn cp-b" data-a="clear">取消所有</button>'];
     for(const [kk,l] of WPN_CATS){
       if(!wpnHas(s,kk)){rows.push('<div class="cp-row"><button class="btn cp-b cp-name is-dis">☐ '+l+' · 暂无</button></div>');continue;}
-      if(kk==='buoy'){rows.push('<div class="cp-row"><button class="btn cp-b cp-name'+(k===kk?' on':'')+'" data-a="sub" data-v="buoy">'+l+' ▴</button></div>');continue;} // 特殊类没有勾选(不参与自动开火),只展开
+      if(kk==='buoy'){rows.push('<div class="cp-row"><button class="btn cp-b cp-name'+(k===kk?' on':'')+'" data-a="sub" data-v="buoy">'+l+' ▸</button></div>');continue;} // 特殊类没有勾选(不参与自动开火),只展开
       const c=wpnChecked(s,kk),exp=kk!=='ciws';
-      rows.push('<div class="cp-row"><button class="btn cp-b cp-chk'+(c?' on':'')+'" data-a="wchk" data-v="'+kk+'">'+(c?'☑':'☐')+'</button><button class="btn cp-b cp-name'+(k===kk?' on':'')+'" data-a="'+(exp?'sub':'wchk')+'" data-v="'+kk+'">'+l+(exp?' ▴':'')+'</button></div>');}
-    h=sub+'<div class="cp-col">'+rows.join('')+'</div>';}
+      rows.push('<div class="cp-row"><button class="btn cp-b cp-chk'+(c?' on':'')+'" data-a="wchk" data-v="'+kk+'">'+(c?'☑':'☐')+'</button><button class="btn cp-b cp-name'+(k===kk?' on':'')+'" data-a="'+(exp?'sub':'wchk')+'" data-v="'+kk+'">'+l+(exp?' ▸':'')+'</button></div>');}
+    h='<div class="cp-col cp-main">'+rows.join('')+'</div>'+sub;}
   if(d._lastHTML!==h){d.innerHTML=h;d._lastHTML=h;}
   const r=CMDPOP.btn.getBoundingClientRect();d.style.display='flex';d.style.left=Math.round(r.left)+'px';d.style.bottom=Math.round(window.innerHeight-r.top+6)+'px';
+  {const sb=d.querySelector('.cp-sub'),mn=d.querySelector('.cp-main'),rb=mn&&CMDPOP.sub?mn.querySelector('[data-a="sub"][data-v="'+CMDPOP.sub+'"]'):null; // 右边那一列的底对齐点中的那一行
+   if(sb&&rb){const px=Math.max(0,Math.round(mn.getBoundingClientRect().bottom-rb.getBoundingClientRect().bottom-4))+'px';if(sb.style.marginBottom!==px)sb.style.marginBottom=px;}}
+  {const w=d.getBoundingClientRect().width,lx=Math.max(4,Math.min(Math.round(r.left),Math.round(window.innerWidth-w-8)));d.style.left=lx+'px';} // 右边那一列出了屏幕就整个往左挪
 }
 function cmdBarSync(){ // 三颗钮的字与亮灭;菜单开着就顺手重画
   const sel=selBlue(),s=sel[0],r=document.getElementById('cbRadar'),w=document.getElementById('cbWpn');

@@ -341,9 +341,9 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #cmdBar .cbtn .s{font-size:var(--fs-label);letter-spacing:.3em;margin-right:-.3em;color:var(--txt-mute)}
 #cmdBar .cbtn.on .s{color:var(--state-active)}
 /* 2026-09-27 底栏向上弹的菜单(雷达 / 武器):body 下的浮层,left / bottom 由 render/88 的 cmdPopRender 按钮位置写 */
-#cmdPop{position:fixed;display:none;flex-direction:column;align-items:flex-start;gap:var(--sp-1);z-index:var(--z-flyout)}
+#cmdPop{position:fixed;display:none;flex-direction:row;align-items:flex-end;gap:var(--sp-1);z-index:var(--z-flyout)}
 #cmdPop .cp-col{display:flex;flex-direction:column;gap:2px;padding:var(--sp-1);background:var(--srf-modal);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm)}
-#cmdPop .cp-sub{margin-left:var(--sp-5,24px)}
+#cmdPop .cp-sub{margin-left:0} /* 2026-09-29 用户:具体武器显示在分类右边(原在上边);对齐点中的那一行见 88 cmdPopRender */
 #cmdPop .cp-row{display:flex;gap:2px;align-items:stretch}
 #cmdPop .cp-b{min-width:92px;padding:3px var(--sp-3);text-align:left;font-size:var(--fs-body)}
 #cmdPop .cp-chk{min-width:0;width:28px;padding:3px 0;text-align:center}

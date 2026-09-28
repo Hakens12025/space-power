@@ -8,8 +8,8 @@
    WR1(2026-09-22 用户拍板「射程无限,只是精准度问题」):两块主炮射程(炮 / 雷达顶上)与导弹发射射程整套删掉,主炮只剩一个角散布 macSigma;
    "多远打得中"由 weapons/52 的 macRangeAt / macHitProb 从散布现算,"多远飞得到"由 mslReach 从燃料现算 —— 表里不再有任何一个公里数。 */
 const WPN={ // 定义(Definition):全局一份的不变模板,数值原样搬自原 CLS_WPN/CLS_CIWS 表
-  mac_light:{kind:'mac',label:'主炮',macDmg:600,mac:PHYS.t(300),macSigma:0.0081},  // DD 轴炮。2026-09-28 伤害 220 → 600(用户:一炮打死护卫舰;DD 550 一炮、CA 900 两炮)。macSigma 定 50% 距离:0.0081 ⇒ 7.3 万,曲线形状见 weapons/52 的 MAC_K(3 万 97% / 12.6 万 10%)
-  mac_heavy:{kind:'mac',label:'主炮',macDmg:600,mac:PHYS.t(300),macSigma:0.0081},  // CA/BB 轴炮。2026-09-28 伤害 400 → 600(BB 靠下方 CLS_LOADOUT 克隆自动跟上)。WR1:先与 DD 同一个散布,以后要分再填
+  mac_light:{kind:'mac',label:'主炮',macDmg:600,mac:PHYS.t(600),macSigma:0.0081},  // DD 轴炮。2026-09-29 装填 300 → 600 秒(用户)。2026-09-28 伤害 220 → 600(用户:一炮打死护卫舰;DD 550 一炮、CA 900 两炮)。macSigma 定 50% 距离:0.0081 ⇒ 7.3 万,曲线形状见 weapons/52 的 MAC_K(3 万 97% / 12.6 万 10%)
+  mac_heavy:{kind:'mac',label:'主炮',macDmg:600,mac:PHYS.t(600),macSigma:0.0081},  // CA/BB 轴炮。2026-09-28 伤害 400 → 600(BB 靠下方 CLS_LOADOUT 克隆自动跟上)。WR1:先与 DD 同一个散布,以后要分再填
   msl_light:{kind:'msl',label:'导弹',missDmg:12,ammo:192,cells:4,mslPer:12,mslReload:PHYS.t(600)},  // DD 射手:16组×12(KIMI154:每组16→12)
   msl_heavy:{kind:'msl',label:'导弹',missDmg:15,ammo:240,cells:6,mslPer:12,mslReload:PHYS.t(600)}, // CA 射手:20组×12(KIMI154)
   // 2026-09-28 用户:拦截圈 x1.5(外圈 / 内圈:防空核心 1.25 万 / 4000 → 1.875 万 / 6000,自防御 7500 / 2500 → 1.125 万 / 3750;先试过 x2)
