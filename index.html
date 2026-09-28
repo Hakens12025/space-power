@@ -116,7 +116,7 @@
      硬约束仅两条:core/00 定义 on() 必须最先(85/95/96/97 顶层调用它);core/99 顶层执行 init() 必须最后(且 init 调 loadRangeCfg,
      故 scenario/95 必须在它之前)。其余跨文件引用全在运行期解析,层序排列只为可读性。 -->
 <script src="js/core/00-config.js?v=20260928r1"></script>
-<script src="js/core/01-state.js?v=20260927t1"></script>
+<script src="js/core/01-state.js?v=20260928v1"></script>
 <script src="js/ships/10-hull-geometry.js?v=20260923"></script>
 <script src="js/ships/11-classes.js?v=20260927o1"></script>
 <script src="js/world/12-env.js?v=20260928s1"></script><!-- ENV1 环境系统:太阳禁区 + 天体 + 石头(TK4c)。必须在 sensors/ 之前:23-cov 加载期的梯子反解会读 optLum -->
@@ -148,7 +148,7 @@
 <script src="js/weapons/57-step-weapons.js?v=20260928r1"></script>
 <script src="js/weapons/58-firecontrol.js?v=20260926c"></script><!-- RF5 火控计算机引擎:序列数据模型+stepFireControl/Post。位置只为目录编号可读性(编号 58 > 57,归位到 weapons 块末尾),跨文件引用全在运行期解析:本文件顶层只有 const/let/function 声明,零顶层执行 -->
 <script src="js/core/05-sim.js?v=20260927o1"></script>
-<script src="js/core/06-timecomp.js?v=20260927t1"></script><!-- TC1 接触降速:frame() 每帧调 tcStep;依赖全部在运行期解析 -->
+<script src="js/core/06-timecomp.js?v=20260928v1"></script><!-- TC1 接触降速:frame() 每帧调 tcStep;依赖全部在运行期解析 -->
 <script src="js/bots/60-doctrine.js?v=20260928r1"></script>
 <script src="js/bots/61-enemy.js?v=20260928l1"></script>
 <script src="js/command/70-input.js?v=20260928r1"></script>

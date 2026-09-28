@@ -13,7 +13,7 @@
    只在【对局】里生效:靶场是调试台,要的就是想多快就多快。
    ⚠ 走墙钟(frame 给的 dt),不走模拟时间:它是"玩家坐在椅子上的感受",同 camZoomStep / 告警脉冲。 */
 const TC={on:true,band:0,hold:0,eff:0,HOLD:4,TAU:0.35,CAP:[12,8,4],NAME:['接敌','定位','交战','近战']};
-const tcCap=b=>b>0?TC.CAP[b-1]:Infinity; // 2026-09-27 CAP 改按【显示倍数】写(原 6 / 4 / 2 是推进倍数;显示倍数 = 推进 / RATE_K,所以翻倍,实际降速不变)
+const tcCap=b=>b>0?TC.CAP[b-1]:Infinity; // 2026-09-27 CAP 改按【显示倍数】写(推进倍数 = 显示倍数 x RATE_K);2026-09-28 RATE_K 0.5 → 1 后实际推进也跟着 x2
 function tcActive(){const env=(typeof curEnv==='function')?curEnv():null;return TC.on&&!!(env&&env.match);} // R4:读场景数据,不读界面模块 scenario/97 的 matchIsOn
 function tcBand(){
   let b=0;
