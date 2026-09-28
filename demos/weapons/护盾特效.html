@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>护盾特效</title>
+<style>
+  :root{--bg:#07090d;--panel:#0d1118;--line:#1d2533;--text:#c9d3e0;--dim:#7d8aa0;--acc:#5aa9ff}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:13px/1.5 system-ui,"Microsoft YaHei",sans-serif}
+  #wrap{display:flex;height:100%}
+  #stage{flex:1;position:relative;min-width:0}
+  #cv{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:crosshair}
+  #panel{width:330px;flex:none;background:var(--panel);border-left:1px solid var(--line);padding:12px 14px;overflow-y:auto}
+  h1{font-size:15px;margin:0 0 6px}
+  .rule{background:#101722;border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin:0 0 10px;color:var(--dim)}
+  .rule b{color:var(--text)}
+  .row{margin:8px 0}
+  .row label{display:flex;justify-content:space-between;color:var(--dim)}
+  .row label span{color:var(--text);font-variant-numeric:tabular-nums}
+  input[type=range]{width:100%}
+  .btns{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+  button{background:#131b27;color:var(--text);border:1px solid var(--line);border-radius:5px;padding:4px 10px;cursor:pointer;font:inherit}
+  button.on{border-color:var(--acc);color:var(--acc)}
+  #stat{font-variant-numeric:tabular-nums;margin:6px 0}
+  #log{color:var(--dim);font-size:12px;font-variant-numeric:tabular-nums}
+  h2{font-size:13px;margin:12px 0 2px;color:var(--dim);font-weight:normal}
+  @media (max-width:760px){#wrap{flex-direction:column}#stage{height:60vh;flex:none}#panel{width:100%;border-left:0;border-top:1px solid var(--line)}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage"><canvas id="cv"></canvas></div>
+  <aside id="panel">
+    <h1>护盾特效</h1>
+    <div class="rule"><b>规则:</b>每艘船一层护盾(驱逐 200 / 巡洋 300,船体 550 / 900),一直慢慢回(空到满 60 游戏秒)。挨打先扣盾,<b>打破盾后多出的伤害进船体</b>(满盾驱逐挨一发主炮 600 剩 150)。盾破后 10 游戏秒重启,从 0 开始回。<br><b>操作:</b>在画面上点一下 = 从那个方向打来一发主炮;下面的按钮打导弹、直接打破、回满。</div>
+    <div class="btns">
+      <button id="bMac">主炮一发</button><button id="bMsl">导弹一组</button><button id="bBreak">直接打破</button><button id="bFull">回满护盾</button><button id="bRepair">修复船体</button><button id="bRun" class="on">在跑</button>
+    </div>
+    <div class="btns"><button id="bDD" class="on">驱逐</button><button id="bCA">巡洋</button><button id="bBlue" class="on">蓝方盾色</button><button id="bRed">红方盾色</button></div>
+    <div id="stat"></div>
+    <h2>数值</h2>
+    <div class="row"><label>倍速(游戏秒 / 真实秒)<span id="vR"></span></label><input id="sR" type="range" min="0" max="1000" value="0"></div>
+    <div class="row"><label>空到满(游戏秒)<span id="vG"></span></label><input id="sG" type="range" min="10" max="180" value="60"></div>
+    <div class="row"><label>击破后重启(游戏秒)<span id="vT"></span></label><input id="sT" type="range" min="1" max="30" value="10"></div>
+    <h2>特效</h2>
+    <div class="row"><label>罩子大小(x 舰标半长)<span id="vK"></span></label><input id="sK" type="range" min="0" max="1000" value="450"></div>
+    <div class="row"><label>罩子常亮<span id="vA"></span></label><input id="sA" type="range" min="0" max="1000" value="350"></div>
+    <div class="row"><label>命中特效停留(真实秒)<span id="vH"></span></label><input id="sH" type="range" min="0" max="1000" value="350"></div>
+    <div class="row"><label>击破特效停留(真实秒)<span id="vB"></span></label><input id="sB" type="range" min="0" max="1000" value="450"></div>
+    <div class="row"><label>充能流光速度<span id="vF"></span></label><input id="sF" type="range" min="0" max="1000" value="400"></div>
+    <div class="row"><label>舰标大小(px)<span id="vZ"></span></label><input id="sZ" type="range" min="0" max="1000" value="600"></div>
+    <div id="log"></div>
+  </aside>
+</div>
+<script>
+"use strict";
+/* ---- 数值(本页自带,不与引擎同步) ---- */
+const HULL={DD:550,CA:900},SHIELD={DD:200,CA:300},MAC_DMG=600,MSL_N=12,MSL_DMG=12;
+const COL={blue:[110,210,255],red:[255,150,110]};
+const $=id=>document.getElementById(id);
+const logMap=(u,a,b)=>a*Math.pow(b/a,u/1000);
+const st={rate:1,regen:60,restart:10,k:1.9,glow:0.35,hitT:0.5,brkT:0.9,flow:1,px:14,run:true,cls:'DD',side:'blue'};
+function readUI(){
+  st.rate=logMap(+$('sR').value,1,10);st.regen=+$('sG').value;st.restart=+$('sT').value;
+  st.k=1.2+(+$('sK').value)/1000*2.2;st.glow=(+$('sA').value)/1000;st.hitT=0.1+(+$('sH').value)/1000*1.4;st.brkT=0.2+(+$('sB').value)/1000*1.6;
+  st.flow=logMap(+$('sF').value,0.2,5);st.px=logMap(+$('sZ').value,5,60);
+  $('vR').textContent='x'+st.rate.toFixed(1);$('vG').textContent=st.regen+' 秒';$('vT').textContent=st.restart+' 秒';$('vK').textContent=st.k.toFixed(2);
+  $('vA').textContent=Math.round(st.glow*100)+'%';$('vH').textContent=st.hitT.toFixed(2)+' 秒';$('vB').textContent=st.brkT.toFixed(2)+' 秒';$('vF').textContent=st.flow.toFixed(2);$('vZ').textContent=Math.round(st.px)+' px';
+}
+['sR','sG','sT','sK','sA','sH','sB','sF','sZ'].forEach(id=>$(id).addEventListener('input',readUI));readUI();
+
+/* ---- 船与护盾的状态(游戏时间走) ---- */
+const S={hull:HULL.DD,max:SHIELD.DD,sh:SHIELD.DD,up:true,down:0,sunk:false,full:true};
+let log=[];
+function say(t){log.unshift(t);log=log.slice(0,7);}
+function setCls(c){st.cls=c;S.hull=HULL[c];S.max=SHIELD[c];S.sh=S.max;S.up=true;S.down=0;S.sunk=false;S.full=true;}
+function damage(d,ang,big){ /* 先扣盾,打破后多出的进船体 */
+  if(S.sunk)return;
+  let over=d;
+  if(S.up){const a=Math.min(S.sh,d);S.sh-=a;over=d-a;fxHit(ang,big);
+    if(S.sh<=1e-6){S.sh=0;S.up=false;S.down=st.restart;S.full=false;fxBreak(ang);say('护盾被击破'+(over>0?',多出 '+Math.round(over)+' 进船体':''));}}
+  else fxHull(ang,big);
+  if(over>0){S.hull-=over;if(S.hull<=0){S.hull=0;S.sunk=true;say('击沉');}}
+}
+function stepGame(dtg){
+  if(S.sunk)return;
+  if(S.up){if(S.sh<S.max){S.sh=Math.min(S.max,S.sh+S.max/st.regen*dtg);if(S.sh>=S.max&&!S.full){S.full=true;fxFull();}}}
+  else{S.down-=dtg;if(S.down<=0){S.up=true;S.sh=0;S.full=false;fxRestart();say('护盾重启,从 0 开始回');}}
+}
+
+/* ---- 特效(真实时间走,几倍速都看得见) ---- */
+const FX=[],SHOTS=[];let wall=0;
+function fxHit(a,big){FX.push({k:'hit',a:a,big:!!big,t0:wall});}
+function fxHull(a,big){FX.push({k:'hull',a:a,big:!!big,t0:wall});}
+function fxBreak(a){const n=14,sh=[];for(let i=0;i<n;i++){const c=(i+Math.random()*0.5)/n*6.283;sh.push({c:c,w:6.283/n*(0.55+Math.random()*0.35),v:0.5+Math.random()*0.9,r:(Math.random()-0.5)*3});}
+  const sp=[];for(let i=0;i<22;i++){const c=a+(Math.random()-0.5)*2.4;sp.push({c:c,v:0.8+Math.random()*1.6});}
+  FX.push({k:'break',a:a,sh:sh,sp:sp,t0:wall});}
+function fxRestart(){FX.push({k:'restart',t0:wall});}
+function fxFull(){FX.push({k:'full',t0:wall});}
+
+/* ---- 来弹:主炮一发(亮线)/ 导弹一组(小点,错开到达) ---- */
+function fireMac(ang){SHOTS.push({k:'mac',a:ang,t0:wall,T:0.28});}
+function fireMsl(ang){for(let i=0;i<MSL_N;i++)SHOTS.push({k:'msl',a:ang+(Math.random()-0.5)*0.5,t0:wall+i*0.05+Math.random()*0.04,T:0.55});}
+
+$('bMac').onclick=()=>fireMac(Math.random()*6.283);
+$('bMsl').onclick=()=>fireMsl(Math.random()*6.283);
+$('bBreak').onclick=()=>{if(S.up&&!S.sunk){damage(S.sh,Math.random()*6.283,true);}};
+$('bFull').onclick=()=>{if(!S.sunk){if(!S.up){S.up=true;fxRestart();}S.sh=S.max;S.full=true;fxFull();}};
+$('bRepair').onclick=()=>{S.hull=HULL[st.cls];S.sunk=false;};
+$('bRun').onclick=e=>{st.run=!st.run;e.target.classList.toggle('on',st.run);e.target.textContent=st.run?'在跑':'暂停';};
+function clsBtn(c){setCls(c);$('bDD').classList.toggle('on',c==='DD');$('bCA').classList.toggle('on',c==='CA');say('换成'+(c==='DD'?'驱逐':'巡洋'));}
+$('bDD').onclick=()=>clsBtn('DD');$('bCA').onclick=()=>clsBtn('CA');
+function sideBtn(s){st.side=s;$('bBlue').classList.toggle('on',s==='blue');$('bRed').classList.toggle('on',s==='red');}
+$('bBlue').onclick=()=>sideBtn('blue');$('bRed').onclick=()=>sideBtn('red');
+
+const cv=$('cv'),ctx=cv.getContext('2d');let W=0,H=0,dpr=1;
+function resize(){const r=cv.getBoundingClientRect();dpr=window.devicePixelRatio||1;W=r.width;H=r.height;cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);}
+window.addEventListener('resize',resize);resize();
+cv.addEventListener('pointerdown',e=>{const r=cv.getBoundingClientRect();fireMac(Math.atan2(e.clientY-r.top-H/2,e.clientX-r.left-W/2));});
+
+/* ---- 画 ---- */
+const HULLP={DD:[[1.5,0],[0.58,0.22],[-0.88,0.2],[-0.98,0],[-0.88,-0.2],[0.58,-0.22]],CA:[[1.52,0],[0.64,0.32],[-0.9,0.3],[-1.02,0],[-0.9,-0.3],[0.64,-0.32]]};
+function rgba(c,a){return 'rgba('+c[0]+','+c[1]+','+c[2]+','+Math.max(0,Math.min(1,a)).toFixed(3)+')';}
+function arc(cx,cy,r,a0,a1,col,w){ctx.strokeStyle=col;ctx.lineWidth=w;ctx.beginPath();ctx.arc(cx,cy,r,a0,a1);ctx.stroke();}
+function drawShip(cx,cy,L){
+  ctx.save();ctx.translate(cx,cy);ctx.scale(L/1.5,L/1.5);ctx.beginPath();const P=HULLP[st.cls];ctx.moveTo(P[0][0],P[0][1]);for(let i=1;i<P.length;i++)ctx.lineTo(P[i][0],P[i][1]);ctx.closePath();
+  ctx.fillStyle=S.sunk?'#3a3f47':(st.side==='blue'?'#5aa9ff':'#ff6b5a');ctx.fill();ctx.restore();
+}
+function frame(now){
+  const dtw=frame.last?Math.min(0.05,(now-frame.last)/1000):0;frame.last=now;if(st.run)wall+=dtw;
+  if(st.run)stepGame(dtw*st.rate);
+  const cx=W/2,cy=H/2,L=st.px,R=L*st.k,C=COL[st.side];
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#07090d';ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='rgba(120,140,170,.07)';ctx.lineWidth=1;for(let x=(cx%40);x<W;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}for(let y=(cy%40);y<H;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  /* 来弹:到达罩子(盾在)或船体(盾不在)就结算 */
+  for(let i=SHOTS.length-1;i>=0;i--){const s=SHOTS[i],g=(wall-s.t0)/s.T;if(g<0)continue;
+    const r1=S.up?R:L*0.7,r0=Math.max(W,H)*0.75,rr=r0+(r1-r0)*Math.min(1,g),x=cx+Math.cos(s.a)*rr,y=cy+Math.sin(s.a)*rr;
+    if(g>=1){SHOTS.splice(i,1);damage(s.k==='mac'?MAC_DMG:MSL_DMG,s.a,s.k==='mac');continue;}
+    if(s.k==='mac'){const x0=cx+Math.cos(s.a)*(rr+L*6),y0=cy+Math.sin(s.a)*(rr+L*6);ctx.strokeStyle='rgba(255,236,190,.95)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x0,y0);ctx.lineTo(x,y);ctx.stroke();}
+    else{ctx.fillStyle='#ff8a6a';ctx.fillRect(x-1.5,y-1.5,3,3);}}
+  /* 罩子:常亮按盾量;在回的时候边上有流光;不在的时候画一圈暗的重启进度 */
+  if(!S.sunk){
+    const f=S.up?S.sh/S.max:0;
+    if(S.up){const g=ctx.createRadialGradient(cx,cy,R*0.55,cx,cy,R);g.addColorStop(0,rgba(C,0));g.addColorStop(1,rgba(C,0.10*st.glow*(0.3+0.7*f)));ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,R,0,6.283);ctx.fill();
+      arc(cx,cy,R,0,6.283,rgba(C,(0.15+0.55*f)*st.glow+0.05),1.3);
+      if(S.sh<S.max){const ph=wall*st.flow*2.2;for(let k=0;k<3;k++){const a0=ph+k*2.094;arc(cx,cy,R,a0,a0+0.35+0.5*f,rgba(C,0.35+0.5*f),2);}}}
+    else{const p=1-Math.max(0,S.down)/st.restart;ctx.setLineDash([3,4]);arc(cx,cy,R,-1.571,-1.571+6.283*p,rgba(C,0.28),1.2);ctx.setLineDash([]);}
+  }
+  /* 特效 */
+  for(let i=FX.length-1;i>=0;i--){const e=FX[i],a=wall-e.t0;
+    if(e.k==='hit'){const T=st.hitT*(e.big?1.6:1);if(a>T){FX.splice(i,1);continue;}const u=a/T,k=1-u,w=e.big?0.8:0.3;
+      arc(cx,cy,R,e.a-w*(0.4+u),e.a+w*(0.4+u),rgba([255,255,255],0.9*k*k),e.big?3.5:2.2);              // 命中点一段亮弧,往两边铺开
+      arc(cx,cy,R,e.a+w*0.4+u*2.2,e.a+w*0.4+u*2.2+0.25,rgba(C,0.8*k),2);arc(cx,cy,R,e.a-w*0.4-u*2.2-0.25,e.a-w*0.4-u*2.2,rgba(C,0.8*k),2); // 沿罩面跑开的涟漪
+      arc(cx,cy,R,0,6.283,rgba(C,0.45*k*(e.big?1:0.5)),1.6);                                           // 整层罩子闪一下
+      const px=cx+Math.cos(e.a)*R,py=cy+Math.sin(e.a)*R,rg=ctx.createRadialGradient(px,py,0,px,py,L*(e.big?1.6:0.7));rg.addColorStop(0,rgba([255,255,255],0.85*k));rg.addColorStop(1,rgba(C,0));ctx.fillStyle=rg;ctx.beginPath();ctx.arc(px,py,L*(e.big?1.6:0.7),0,6.283);ctx.fill();}
+    else if(e.k==='hull'){const T=st.hitT*(e.big?2:1);if(a>T){FX.splice(i,1);continue;}const k=1-a/T,px=cx+Math.cos(e.a)*L*0.7,py=cy+Math.sin(e.a)*L*0.7;
+      ctx.strokeStyle=rgba([255,107,107],k);ctx.lineWidth=2;ctx.beginPath();ctx.arc(px,py,3+(1-k)*L*(e.big?1.2:0.5),0,6.283);ctx.stroke();}
+    else if(e.k==='break'){const T=st.brkT;if(a>T){FX.splice(i,1);continue;}const u=a/T,k=1-u;
+      arc(cx,cy,R*(1+0.9*Math.sqrt(u)),0,6.283,rgba(C,0.7*k),2.5*k+0.5);                               // 往外炸开的一圈
+      for(const s of e.sh){const d=R*(1+s.v*u*0.9),a0=s.c+s.r*u*0.3;arc(cx,cy,d,a0,a0+s.w*(1-0.4*u),rgba(C,0.9*k),2);} // 罩子碎成一段段往外飞
+      for(const s of e.sp){const d=R+L*3*s.v*u;ctx.fillStyle=rgba([255,255,255],k);ctx.fillRect(cx+Math.cos(s.c)*d-1,cy+Math.sin(s.c)*d-1,2,2);} // 火花
+      if(u<0.25){const q=1-u/0.25,g=ctx.createRadialGradient(cx,cy,R*0.6,cx,cy,R*1.08);g.addColorStop(0,rgba(C,0));g.addColorStop(0.8,rgba([255,255,255],0.55*q));g.addColorStop(1,rgba(C,0));ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,R*1.08,0,6.283);ctx.fill();}} // 碎之前罩面整圈亮一下(中间不涂)
+    else if(e.k==='restart'){const T=0.6;if(a>T){FX.splice(i,1);continue;}const u=a/T;arc(cx,cy,L*0.8+(R-L*0.8)*Math.sqrt(u),0,6.283,rgba(C,0.9*(1-u)+0.2),2.5*(1-u)+1);}
+    else if(e.k==='full'){const T=0.5;if(a>T){FX.splice(i,1);continue;}arc(cx,cy,R,0,6.283,rgba(C,0.7*(1-a/T)),2.4);}}
+  drawShip(cx,cy,L);
+  /* 读数 */
+  const hb=S.hull/HULL[st.cls],sb=S.up?S.sh/S.max:0,bw=Math.max(40,R*1.6),bx=cx-bw/2,by=cy+R+10;
+  ctx.fillStyle='#1a2130';ctx.fillRect(bx,by,bw,3);ctx.fillRect(bx,by+5,bw,3);ctx.fillStyle=rgba(C,0.9);ctx.fillRect(bx,by,bw*sb,3);ctx.fillStyle=hb>0.3?'#6ee7a8':'#ff6b6b';ctx.fillRect(bx,by+5,bw*hb,3);
+  $('stat').innerHTML='船体 <b>'+Math.round(S.hull)+'</b> / '+HULL[st.cls]+' · 护盾 <b>'+(S.up?Math.round(S.sh):0)+'</b> / '+S.max+' · '+(S.sunk?'<b style="color:#ff6b6b">已击沉</b>':(S.up?(S.sh>=S.max?'满':'回充中'):'<b>重启中 '+Math.max(0,S.down).toFixed(1)+' 秒</b>'));
+  $('log').innerHTML=log.join('<br>');
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
