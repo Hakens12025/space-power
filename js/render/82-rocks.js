@@ -13,9 +13,10 @@
 const ROCK_RGB='177,167,152'; // 认出之后的石头色:灰褐,与敌我两色都分得开(2026-09-26 调亮约 15%:星云底上看不清)
 const ROCK_SHAPE=[1,0.72,0.95,0.68,0.9,0.78,1.05]; // 不规则多边形的七个顶点半径系数
 
-function drawRocks(){
+function drawRocks(ownOnly){ // ownOnly = 传感器画面(红外 / 雷达):只画自己的浮标(它和我方舰一样是自己的东西,三种画面都画;2026-09-28 用户:红外 / 雷达画面里看不见自己的浮标)
   if(!rocks.length)return;
   for(const s of rocks)if(!s.dead&&s.kind==='buoy'&&s.side==='blue')drawOwnBuoy(s); // 2026-09-27 自己的浮标:不在自己的航迹表里,单独画
+  if(ownOnly)return;
   if(adminMode){for(const s of rocks)if(!s.dead&&s.side!=='blue')drawRockAt(s,s.pos,'live',true);return;}
   trkEach('blue',function(tk,st){
     const s=trkSrc(tk);

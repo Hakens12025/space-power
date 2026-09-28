@@ -369,7 +369,7 @@ function drawInset(){
     if(!sv)drawVisFog(VISX); // 可见光圈灰雾:圈外的敌舰画面比圈内暗
     drawTrails(hide);
     for(const s of ships){if(hide&&s.side!=='blue')continue;drawShip(s);}
-    if(!hide&&typeof drawRocks==='function')drawRocks();
+    if(typeof drawRocks==='function')drawRocks(hide);
     drawProjectiles();if(typeof drawShellTraces==='function')drawShellTraces();drawHits();insetCausal();
     const F=INSET.fx;if(F){const k=(now-F.t0)/(F.big?1500:1200);if(k>=1||k<0)INSET.fx=null;else{const p=F.s?F.s.pos:[F.x,F.y],q=toScreen(p[0],p[1]);ctx.globalAlpha=1-k;ctx.strokeStyle=ctx.fillStyle='rgb('+F.col+')';ctx.lineWidth=1.5; // 开播自带爆闪:hitFX 只活 1.2 游戏秒,切过去时多半已经没了
       ctx.beginPath();ctx.arc(q[0],q[1],F.big?14+70*k:8+40*k,0,6.2832);ctx.stroke();ctx.beginPath();ctx.arc(q[0],q[1],Math.max(0.1,(F.big?10:6)*(1-k)),0,6.2832);ctx.fill();ctx.globalAlpha=1;}}
@@ -425,7 +425,7 @@ function render(){
   lodBuild();
   const hideFoe=sv&&!adminMode; // 对局里的传感器画面只看这一种传感器;全知照样全渲染(同一份真值,只是画法不同)
   ships.forEach(function(s){if(hideFoe&&s.side!=='blue')return;lodDrawShip(s);}); // SN8:收拢 / 散开带过渡(完全收进框里的不画;没在过渡的原样调 drawShip)
-  if(!hideFoe&&typeof drawRocks==='function')drawRocks(); // TK4c 石头的航迹:第二个循环,排在舰船之后(石头不在 ships 里);没认出之前与冷船画法一模一样(render/82-rocks)
+  if(typeof drawRocks==='function')drawRocks(hideFoe); // 传感器画面里只画自己的浮标(敌方石头只以热 / 回波出现)。TK4c 石头的航迹:第二个循环,排在舰船之后(石头不在 ships 里);没认出之前与冷船画法一模一样(render/82-rocks)
   drawAggs();
   if(selNet)drawNetLinks(); // DS169:网内细线收进选中态(常态不画,选中网才连;信息分层)
   drawProjectiles();
