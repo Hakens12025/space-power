@@ -17,7 +17,7 @@ function rdvHash(a,b){let h=2166136261;const s=a+'|'+b;for(let i=0;i<s.length;i+
 function rdvEsmBrg(E,L,k){return k.tb+(rdvHash(L.id||'bcn',E.id)*2-1)*k.half*0.6;} // 这条静听记录画在哪个方位:量到的方位 + 每一对固定的偏移(± 0.6 x 半宽,随积累收窄);雷达异常圈也读它
 function rdvEsmRc(E,L,k){return k.rr+(rdvHash(E.id,L.id||'bcn')*2-1)*k.sr*0.6;} // 画在多远:幅度测距 + 每一对固定的偏移(± 0.6 x 纵向误差)
 function rdvStdRefl(){return SENS.CLS.DD.size*SENS.CLS.DD.stealth;} // 标准目标:一艘驱逐舰的雷达反射
-function rdvPainters(){const a=[];for(const s of ships)if(s.side==='blue'&&!s.dead&&s.emitMode==='paint')a.push(s);return a;}
+function rdvPainters(){const a=[];for(const s of ships)if(s.side===VIEW&&!s.dead&&s.emitMode==='paint')a.push(s);return a;}
 function rdvDop(vr,a){ // 负 = 在接近:暖;正 = 在远离:冷(同演示页 dopCol)
   const t=Math.max(-1,Math.min(1,vr/600)),b=[232,238,244],e=t<0?[255,120,50]:[80,170,255],u=Math.abs(t);
   return 'rgba('+Math.round(b[0]+(e[0]-b[0])*u)+','+Math.round(b[1]+(e[1]-b[1])*u)+','+Math.round(b[2]+(e[2]-b[2])*u)+','+a.toFixed(2)+')';
@@ -71,7 +71,7 @@ function rdvVmax(){if(!RDV.vmax){let v=800;for(const c in CLS_MOB){const g=CLS_M
 function rdvZones(){ // 我方对每部听到过的敌方雷达的区域;最多每 T 秒重算
   const now=performance.now()/1000;if(now-RDV.t<RDV.T)return RDV.zones;RDV.t=now;
   const out=[],T15=SENS.TICK*1.5;
-  esmEach('blue',function(E,a){
+  esmEach(VIEW,function(E,a){
     if(E.dead)return;
     let use=a.filter(x=>simTime-x.k.t<=ESM_CFG.FADE);const fresh=use.length>0;if(!fresh)use=a;
     let P=null,t=-1e9,n=0;
@@ -113,7 +113,7 @@ function rdvDrawZones(){
 /* ---- 回波 ---- */
 function rdvDrawReturns(){
   const byId=new Map();for(const s of ships)byId.set(s.id,s);
-  trkEach('blue',function(tk,st){
+  trkEach(VIEW,function(tk,st){
     const c=tk.cov;if(!c||!c.ch||!c.ch.act)return;
     const s=trkSrc(tk),q=trkPos(tk);if(!q)return;
     const o=byId.get(c.ch.act[4]),p=toScreen(q[0],q[1]);if(p[0]<-20||p[0]>W+20||p[1]<-20||p[1]>H+20)return;

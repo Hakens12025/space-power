@@ -12,12 +12,12 @@ function shipTier(s){return s.tier||2;}                       // 未标 Tier 的
 function shipIdentHull(s){                                    // 识别分层:未达识别级的敌舰只给通用轮廓
   // ID1:握着接触但还没认出 ⇒ 打码;身份问 sensors/21 的 contactIdn。
   //      没握着那一档不打码:编辑器与 GM 下画的是没有接触的红舰,那里要看真轮廓;非 GM 下没握着的船根本不画舰体。
-  return (s.side!=='blue'&&contactHeld(s,'blue')&&!contactIdn(s,'blue'))?'UNK':shipHull(s); // TK4b 审计:「不是我方」才打码(原写「是红方」,中立的石头会拿到真轮廓)
+  return (s.side!==VIEW&&contactHeld(s,VIEW)&&!contactIdn(s,VIEW))?'UNK':shipHull(s); // TK4b 审计:「不是我方」才打码(原写「是红方」,中立的石头会拿到真轮廓)
 }
 function shipIdentTier(s){                                    // TIER1 分级遮蔽:轮廓已被降级成 UNK 的敌舰(未达识别级)一律按 T2 尺寸画
   // TIER1 判据用 litBlue<2 而不是 shipIdentHull(s)==='UNK':幽灵接触(曾点亮、现已失联,litBlue=0)走的是 q===0 分支,轮廓不会被降级成 UNK,
   // 于是尺寸也跟着按真实 tier 画,分级照漏。轮廓层的幽灵泄漏是拆分前就有的既有行为(残影保留舰型),本次不动它,只堵本轮 tier 带出来的这一半。
-  return (s.side!=='blue'&&!contactIdn(s,'blue'))?2:shipTier(s); // TK4b 审计同上。ID1:原判据 litBlue<2;现在没认出一律 T2(lit=0 时 contactIdn 恒 false,与原来那一档逐位相同)
+  return (s.side!==VIEW&&!contactIdn(s,VIEW))?2:shipTier(s); // TK4b 审计同上。ID1:原判据 litBlue<2;现在没认出一律 T2(lit=0 时 contactIdn 恒 false,与原来那一档逐位相同)
 }
 /* ================= SN9 舰体大小随缩放变(2026-09-21)=================
    用户实报:"拉近了船不变大,拉远了船不变小,没有办法做出很直观的空间关系"。改前舰体是固定屏幕尺寸的贴纸,地图在它底下滑。
@@ -53,7 +53,7 @@ function drawShipMark(s,p,color){ // A:拉远后的记号。我方 = 沿船头�
   const R=SHIP_MARK_R;
   ctx.save();ctx.translate(p[0],p[1]);ctx.fillStyle=color;
   ctx.beginPath();
-  if(s.side==='blue'){ctx.rotate(Math.atan2(s.facing[1],s.facing[0]));ctx.moveTo(R,0);ctx.lineTo(-R+1,R-1);ctx.lineTo(-R+2.2,0);ctx.lineTo(-R+1,-R+1);}
+  if(s.side===VIEW){ctx.rotate(Math.atan2(s.facing[1],s.facing[0]));ctx.moveTo(R,0);ctx.lineTo(-R+1,R-1);ctx.lineTo(-R+2.2,0);ctx.lineTo(-R+1,-R+1);}
   else{ctx.moveTo(R,0);ctx.lineTo(0,R);ctx.lineTo(-R,0);ctx.lineTo(0,-R);}
   ctx.closePath();ctx.fill();ctx.restore();
 }
@@ -74,9 +74,9 @@ function shipIconR(s){return shipMarkMode()?SHIP_MARK_R+1:hullSize(shipIdentHull
    那是我方自己的量测,不是它的真值;GM 下敌方按真值画。走墙钟(倍速一提不该变快);每艘三段圆弧,不进任何大 path。 */
 const EMIT_FX={N:3,SPAN:16,PERIOD_MS:1500};
 function emitRippleRgb(s){
-  const truth=(s.side==='blue'||adminMode);
+  const truth=(s.side===VIEW||adminMode);
   if(truth)return s.emitMode==='silent'?null:(s.emitMode==='jam'?'255,154,85':'90,167,255');
-  const tk=trkOf('blue',s),c=tk&&tk.cov; // TK2.4:我方航迹表里对它的那条接触
+  const tk=trkOf(VIEW,s),c=tk&&tk.cov; // TK2.4:我方航迹表里对它的那条接触
   return (c&&c.ch&&c.ch.lis)?'255,107,107':null;
 }
 function drawEmitRipple(p,r0,rgb,nowIn){
@@ -125,8 +125,8 @@ const CONTACT_MARK_R=7;
 function drawContactMark(s,p,view){
   const ghost=view==='ghost';
   /* 过期时长:coast 读椭圆自己的 age(距最后一次量测),ghost 读 contactAge(距最后一次定位)—— 各是各那一态的"多久了" */
-  const tkB=trkOf('blue',s),cB=tkB&&tkB.cov; // TK2.4:记号读蓝方航迹表
-  const ageV=ghost?contactAge(s,'blue'):((cB&&cB.age)||0);
+  const tkB=trkOf(VIEW,s),cB=tkB&&tkB.cov; // TK2.4:记号读蓝方航迹表
+  const ageV=ghost?contactAge(s,VIEW):((cB&&cB.age)||0);
   ctx.save();
   ctx.globalAlpha=ghost?0.4:0.7;
   const col=ghost?'255,107,107':'255,209,102';
@@ -154,7 +154,7 @@ function drawContactMark(s,p,view){
   ctx.restore();
 }
 function drawMemory(s,p){ // 2026-09-27 舰船的记忆:最后认出是船 ⇒ 红色记号,没认出 ⇒ 灰色菱形;调暗、不画失联圈(石头等在 82-rocks 走 drawRockAt 的类型参数)
-  const tk=trkOf('blue',s),lt=tk&&tk.lastType;ctx.save();ctx.globalAlpha=0.42;
+  const tk=trkOf(VIEW,s),lt=tk&&tk.lastType;ctx.save();ctx.globalAlpha=0.42;
   if(lt&&lt.kind==='ship')drawShipMark(s,p,'#ff6b6b');else drawUnkMark(p,Math.max(4,Math.round(shipIconR(s)*0.8)),'#a0aab9');
   ctx.restore();
 }
@@ -172,16 +172,16 @@ function drawShip(s){
      而且图标那条链会把 s.vel / s.flame / s.orders[0] / s.facing 四样【真值】实时画出去。
      GM 旁路:dispPos 保持真值、view 保持 live。 */
   let dispPos=s.pos, view='live';
-  if(!adminMode&&s.side==='red'){
-    view=contactState(s,'blue');
+  if(!adminMode&&s.side!==VIEW){
+    view=contactState(s,VIEW);
     if(view==='none'||view==='heat')return;
-    const cp=contactPos(s,'blue');
+    const cp=contactPos(s,VIEW);
     if(!cp)return;
     dispPos=cp;
   }
   const p=toScreen(dispPos[0],dispPos[1]);
   if(p[0]<-40||p[0]>W+40||p[1]<-40||p[1]>H+40)return;
-  if((view==='coast'||view==='ghost')&&trkMem(trkOf('blue',s))){drawMemory(s,p);return;} // 2026-09-27 记忆:不动的目标出了全知圈,按最后所见调暗画
+  if((view==='coast'||view==='ghost')&&trkMem(trkOf(VIEW,s))){drawMemory(s,p);return;} // 2026-09-27 记忆:不动的目标出了全知圈,按最后所见调暗画
   if(view==='coast'||view==='ghost'){drawContactMark(s,p,view);return;} // TK4c:记号抽成函数(石头的陈旧 / 失联照同一个画法),画法一笔没改
   const r=Math.round(shipIconR(s)); // 图标半径:屏幕固定尺寸,但随舰种/Tier 变化(标签/选中圈/尾焰基准)
   if(s.dead){drawWreck(s,p,r);return;} // 残骸:空心图标,不再有舰体数据(幽灵/陈旧已在上面 return,不会走到这儿)
@@ -207,7 +207,7 @@ function drawShip(s){
   const zc=s.pos[2];
 
   // 舰体颜色统一(高度差用 ▲▼ 标记表达,不靠变色)
-  const bodyColor=s.side==='red'?(shipIdentHull(s)==='UNK'?'#a0aab9':'#ff6b6b'):'#5aa7ff'; // 2026-09-27 用户:未知热源用灰色(--side-neutral),认出是敌舰才红
+  const bodyColor=(s.side!==VIEW&&shipIdentHull(s)==='UNK')?'#a0aab9':(s.side==='red'?'#ff6b6b':'#5aa7ff'); // 阵营色;本视角没认出的对方画灰 // 2026-09-27 用户:未知热源用灰色(--side-neutral),认出是敌舰才红
 
   // 速度矢量箭头(2D投影)
   const vn=V.len(s.vel);
@@ -228,7 +228,7 @@ function drawShip(s){
   }
 
   // 推进器尾焰(后主推进 / 前向反推 / 侧向辅助)
-  if(adminMode||s.side==='blue'||contactIdn(s,'blue'))drawFlame(s,p,r); // 2026-09-28 没认出的不画尾焰 / 侧推:它们按真实朝向画,等于泄漏朝向(UNK 记号 09-26 已改成不转的菱形)
+  if(adminMode||s.side===VIEW||contactIdn(s,VIEW))drawFlame(s,p,r); // 2026-09-28 没认出的不画尾焰 / 侧推:它们按真实朝向画,等于泄漏朝向(UNK 记号 09-26 已改成不转的菱形)
   {const erg=emitRippleRgb(s);if(erg)drawEmitRipple(p,shipIconR(s),erg);} // EM1 发射机开着 ⇒ 涟漪(画在舰体之下)
   // 舰体图标(wows式:按舰种形状,图标自身带朝向)
   ctx.save();

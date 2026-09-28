@@ -76,8 +76,8 @@ function drawRange(){ // 测距工具(按住C):起点(或跟随船)→鼠标目�
   ctx.fillText(txt,q[0],q[1]-14);
   ctx.restore();
 }
-function viewPos(s){return (adminMode||s.side==='blue')?s.pos:contactPos(s,'blue');} // 2026-09-28 画面上对方东西画在哪 / 量多远的唯一出处:我方知道的位置(估计;GM 真值),交代不出给 null(不拿真值兜底)
-function projSeen(p){return adminMode||!p.shooter||p.shooter.side==='blue'||trkSees('blue',p);} // 2026-09-28 我方看不看得见这枚弹:画、点选、选中面板同一道门
+function viewPos(s){return (adminMode||s.side===VIEW)?s.pos:contactPos(s,VIEW);} // 2026-09-28 画面上对方东西画在哪 / 量多远的唯一出处:我方知道的位置(估计;GM 真值),交代不出给 null(不拿真值兜底)
+function projSeen(p){return adminMode||!p.shooter||p.shooter.side===VIEW||trkSees(VIEW,p);} // 2026-09-28 我方看不看得见这枚弹:画、点选、选中面板同一道门
 function drawLocks(){ // 火力锁定:红色虚线
   for(const s of ships){
     if(s.dead||!s.lockedTarget||s.lockedTarget.dead||s.lockedTarget.side===s.side)continue;
@@ -95,7 +95,7 @@ function drawLocks(){ // 火力锁定:红色虚线
 }
 function drawHits(){ // 命中特效:命中点爆闪+十字,随时间淡出
   for(const h of hitFX){
-    if(!adminMode&&!h.vis)continue; // 2026-09-28 我方看不见的命中 / 击沉不画(52 的 spawnHit 出的时候判)
+    if(!adminMode&&!h.vis[VIEW])continue; // 2026-09-28 我方看不见的命中 / 击沉不画(52 的 spawnHit 出的时候判)
     const p=toScreen(h.pos[0],h.pos[1]);
     const a=Math.max(0,h.t/1.2);
     const prog=1-h.t/1.2;
@@ -160,7 +160,7 @@ function drawNetLinks(){ // v140:网内导弹细线连接;v142:星形连接(O(k)
   const byNet={};
   for(const p of projectiles){
     if(p.type!=='missile'||p.done||!p.netId)continue;
-    if(p.shooter&&p.shooter.side==='red'&&!adminMode&&!trkSees('blue',p))continue; // 感知过滤(普通模式敌方未点亮不画) TK4a:目击读航迹表
+    if(p.shooter&&p.shooter.side!==VIEW&&!adminMode&&!trkSees(VIEW,p))continue; // 感知过滤(普通模式敌方未点亮不画) TK4a:目击读航迹表
     (byNet[p.netId]=byNet[p.netId]||[]).push(p);
   }
   ctx.save();
@@ -269,7 +269,7 @@ function drawProjectiles(){ // 弹丸/导弹
           ctx.font='10px Consolas';ctx.textAlign='left';ctx.textBaseline='top';
           const rem=p.count||16;
           if(p.type==='interceptor')ctx.fillText(`⛔拦截 ▲${Math.round(vn)}(剩${rem}颗${p.fuel>0?' ⛽'+Math.round(p.fuel):' ⛽尽'})`,s[0]+7,s[1]+7);
-          else if(redSide&&!adminMode)ctx.fillText(`▲${Math.round(SHOW.v(vn))}`,s[0]+7,s[1]+7); // 2026-09-28 敌方弹只报看得见的量(速度)
+          else if(p.shooter&&p.shooter.side!==VIEW&&!adminMode)ctx.fillText(`▲${Math.round(SHOW.v(vn))}`,s[0]+7,s[1]+7); // 2026-09-28 敌方弹只报看得见的量(速度)
           else ctx.fillText(`▲${Math.round(SHOW.v(vn))}(剩${rem}颗)${p.fuel>0?' ⛽'+Math.round(SHOW.t(p.fuel)):' ⛽尽'} · ${p.target?xhName(p.target):'无目标'}${p.coastT>0?' 🔓脱'+Math.round(SHOW.t(p.coastT))+'s':''}`,s[0]+7,s[1]+7);
         }
       }else if(p.mine&&p===selMissile){
@@ -344,7 +344,7 @@ function drawSignalView() {
   if (!SIG.on) return;
   SIG.lblN = 0;                       // 每帧归零:圈在画外的那几行靠它逐行错开
   for (const s of ships) {
-    if (s.side !== 'blue' || s.dead) continue;
+    if (s.side !== VIEW || s.dead) continue;
     /* 标注只给【选中】的那几艘 —— 整支舰队都标的话,一堆数字摞在一起,一个都读不出来 */
     const sel = selected.indexOf(s.id) >= 0;
     /* 被听见那一圈只在【在发射】时才有。这道守卫看着冗余(silent 的射频响度恒 0 ⇒ 半径 0 ⇒ 画不出东西),
@@ -441,14 +441,14 @@ function drawHoverRings(){
    约 ANOM.LIFE 毫秒淡出;屏幕上相近的同类只画一个。 */
 const ANOM={m:new WeakMap(),list:[],LIFE:3000,GAP:20,t:-1e9,RMIN:8,RMAX:50,FADE:0.3,EXP:4,IR_T:0.3}; // 2026-09-28 用户:圈太大、衰减太慢 —— 上限 160 → 80 → 50 px、寿命 5 → 3 秒、从三成寿命起就指数暗淡(原一半);IR_T = 红外异常要那团热在红外画面里的峰值色阶到这么亮才报(用户:提示了却在红外里看不见) // 2026-09-28 圈的屏幕半径夹在 RMIN~RMAX px(不确定半径 x 缩放);FADE = 从寿命的这一处起指数暗淡,EXP = 指数的陡度
 function anomScan(now){
-  if(simTime<ANOM.t){ANOM.m=new WeakMap();ANOM.list.length=0;}ANOM.t=simTime; // 换局
-  if(typeof trkEach==='function')trkEach('blue',(tk,st)=>{const s=trkSrc(tk);let a=ANOM.m.get(s);if(!a){a={ir:false,fl:0,fh:false,rd:-1e9,pend:false,ck:-1e9};ANOM.m.set(s,a);}
+  if(simTime<ANOM.t||ANOM.v!==VIEW){ANOM.m=new WeakMap();ANOM.list.length=0;ANOM.v=VIEW;}ANOM.t=simTime; // 换局 / 换视角
+  if(typeof trkEach==='function')trkEach(VIEW,(tk,st)=>{const s=trkSrc(tk);let a=ANOM.m.get(s);if(!a){a={ir:false,fl:0,fh:false,rd:-1e9,pend:false,ck:-1e9};ANOM.m.set(s,a);}
     const ir=st==='heat'&&!!(tk.cov&&tk.cov.ch&&tk.cov.ch.opt);
     if(ir){const fl=s.flame||0,fh=(s.fireHot||0)>0;if(!a.ir||(fl&&!a.fl)||(fh&&!a.fh))a.pend=true;a.fl=fl;a.fh=fh; // 第一次出现 / 点火 / 开火:待报
       if(a.pend&&simTime-a.ck>=1){a.ck=simTime;const h=irvHill(s,irvObs());if(h&&irvT(irvV(h.snr))>=ANOM.IR_T){a.pend=false;const q=irvAnomPt(s);ANOM.list.push({k:'ir',x:q[0],y:q[1],r:q[2],t0:now});}}} // 红外画面里够亮才报,不够亮每游戏秒再看一次
     else a.pend=false;
     a.ir=ir;});
-  if(typeof esmEach==='function')esmEach('blue',(E,arr)=>{if(contactFix(E,'blue'))return;let a=ANOM.m.get(E);if(!a){a={ir:false,fl:0,fh:false,rd:-1e9};ANOM.m.set(E,a);}
+  if(typeof esmEach==='function')esmEach(VIEW,(E,arr)=>{if(contactFix(E,VIEW))return;let a=ANOM.m.get(E);if(!a){a={ir:false,fl:0,fh:false,rd:-1e9};ANOM.m.set(E,a);}
     let b=arr[0];for(const x of arr)if(x.k.sr<b.k.sr)b=x;const k=b.k;
     if(k.t>a.rd){if(k.t-a.rd>ANOM.GAP){const g=rdvEsmBrg(E,b.L,k),rc=rdvEsmRc(E,b.L,k);ANOM.list.push({k:'rd',x:k.org[0]+Math.cos(g)*rc,y:k.org[1]+Math.sin(g)*rc,r:Math.sqrt(k.sr*k.rr*k.half),t0:now});}a.rd=k.t;}});
 }
@@ -473,10 +473,10 @@ function shtrBack(r){ // 从首见点往回延长到游玩区边上(没有游玩
   return Math.max(0,s);
 }
 function drawShellTraces(){ // 2026-09-28 敌方炮弹被我方看见(可见光圈或雷达):看得见的那一段画实线(a → b),再从 a 沿弹道往回画虚线延长到游玩区边上(weapons/56 的 SHELL_TR);离首见点越远越淡,墙钟 SHTR.MS 后消失
-  const L=adminMode?SHELL_TR.blue.concat(SHELL_TR.red):SHELL_TR.blue;if(!L.length)return;
+  const L=adminMode?SHELL_TR.blue.concat(SHELL_TR.red):SHELL_TR[VIEW];if(!L.length)return;
   const now=nowMs(),lab=[];ctx.save();ctx.lineWidth=1.4;ctx.setLineDash([7,5]);ctx.font='11px "Microsoft YaHei"';ctx.textBaseline='bottom';
   for(const r of L){let w0=SHTR_W.get(r);if(w0===undefined){w0=now;SHTR_W.set(r,w0);}const k=(now-w0)/SHTR.MS;if(k>=1||k<0)continue;
-    const A0=k<0.05?k/0.05:1-(k-0.05)/0.95,len=shtrBack(r),col=(adminMode&&SHELL_TR.red.indexOf(r)>=0)?'111,180,255':'255,120,90';
+    const A0=k<0.05?k/0.05:1-(k-0.05)/0.95,len=shtrBack(r),col=SHELL_TR.red.indexOf(r)>=0?'111,180,255':'255,120,90'; // 按开炮那一方的阵营色(红方记的是蓝方的炮弹)
     ctx.strokeStyle='rgb('+col+')';
     const a=toScreen(r.a[0],r.a[1]),b=toScreen((r.b||r.a)[0],(r.b||r.a)[1]); // 轨迹:圈里真实飞过的那一段
     ctx.setLineDash([]);ctx.lineWidth=1.8;ctx.globalAlpha=0.9*A0;ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();ctx.lineWidth=1.4;ctx.setLineDash([7,5]);

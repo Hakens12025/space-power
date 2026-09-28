@@ -94,8 +94,8 @@ function fireMAC(shooter,target){ // MAC 轴炮:沿机头轴线直射(调用方�
 let hitFX=[]; // 命中特效 {pos,t,type}  — MAC/导弹命中点的爆闪提示
 let threatCorridors=[]; // v126(外援C):来袭走廊 {from:[x,y],dir:[x,y],t:寿命,spd,ship,fireT}——敌方导弹出膛被看到时生成,橙虚线锥预告弹道
 function spawnHit(pos,type,sh,vic){ // 2026-09-28 vis = 我方看不看得见这一下:自己打的 / 挨打的是自己 / 落在我方某艘船的全知圈里;画面只画看得见的(原来看不见的地方的命中与击沉也画在真值上)
-  const vis=!!((sh&&sh.side==='blue')||(vic&&vic.side==='blue')||ships.some(s=>s.side==='blue'&&!s.dead&&Math.hypot(s.pos[0]-pos[0],s.pos[1]-pos[1])<(s.visR||COV.VIS_R)));
-  hitFX.push({pos:pos.slice(),t:1.2,type,vis});
+  const see=sd=>!!((sh&&sh.side===sd)||(vic&&vic.side===sd)||ships.some(s=>s.side===sd&&!s.dead&&Math.hypot(s.pos[0]-pos[0],s.pos[1]-pos[1])<(s.visR||COV.VIS_R)));
+  hitFX.push({pos:pos.slice(),t:1.2,type,vis:{blue:see('blue'),red:see('red')}}); // 两方各记一份(画面按当前视角 VIEW 读)
 }
 function findInterceptorTarget(p){ // 拦截弹重选目标:前方最近的来袭导弹,诱饵弹优先(信号强,为真导弹让路)
   let best=null,bd=1e18,bestDecoy=false;

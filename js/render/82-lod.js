@@ -60,7 +60,7 @@ function lodBuild(dtIn) {   // dtIn:判据用的时钟覆盖(同 camZoomStep);�
   /* -- 蓝方:舰 → 舰队(按引擎的编队归属;没编队的自成一支) -- */
   const fleets = new Map();
   for (const s of ships) {
-    if (s.side !== 'blue' || s.dead) continue;
+    if (s.side !== VIEW || s.dead) continue; // 本视角的自己(2026-09-28 VIEW;下面 blue / red 标签表角色:自己 / 对手)
     /* 分组键用编队的【id】,不是编队对象本身。fmOf 返回的是对象:拿它当键,Map 里还凑合能用,
        但标签会印成"编队[object Object]",而且下面 next.fleet[fl] 把对象转成字符串当属性名 ——
        所有编队的迟滞状态撞在同一个键上。SN6 起就是这样,只是那时开局没有编队、画面上看不见(SN7d 截图时才露出来)。 */
@@ -95,7 +95,7 @@ function lodBuild(dtIn) {   // dtIn:判据用的时钟覆盖(同 camZoomStep);�
   }
   /* -- 红方:已定位的接触 → 接触群。未定位的不进来(地图上不画) -- */
   const ru = [];
-  trkEach('blue', (tk, st) => { // TK2.4:接触群从蓝方航迹表里取(按注册表顺序);回调里 return 就是原来的 continue
+  trkEach(VIEW, (tk, st) => { // TK2.4:接触群从蓝方航迹表里取(按注册表顺序);回调里 return 就是原来的 continue
     if (trkGone(tk) || st !== 'live' || !trkFoe(tk)) return; // TK4c:已确认的石头不进红方接触群(它不是敌情,单独画成石头)
     const s = trkSrc(tk);   // SN6f:只聚【实况】接触。coast / ghost 是记号、heat 是场,各有各的画法,收进一个"群·N"的菱形里就把那层意思抹掉了
     /* SN6d:位置从 contactPos 拿,与 drawShip / targetAt 同一个出处(原来这里直接读 covB.x/y,
@@ -155,7 +155,7 @@ function lodDrawShip(s) {
   if (e >= 1) return;
   const tw = s._lodW;
   if (e <= 0 || !tw) { drawShip(s); return; }
-  const me = (s.side === 'red' && typeof contactPos === 'function' && !adminMode) ? contactPos(s, 'blue') : s.pos;
+  const me = (s.side !== VIEW && typeof contactPos === 'function' && !adminMode) ? contactPos(s, VIEW) : s.pos;
   if (!me) { drawShip(s); return; }
   const ee = e * e * (3 - 2 * e), p0 = toScreen(me[0], me[1]), p1 = toScreen(tw[0], tw[1]);
   ctx.save();
@@ -167,7 +167,7 @@ function lodDrawShip(s) {
 /* 舰种构成:"CA×1 DD×2"。红方只许写【认出来的】,没认出的记成 ? —— 同 shipIdentHull 那条规矩 */
 function lodComp(list, red) {
   const m = {}; let unk = 0;
-  for (const s of list) { if (red && !contactIdn(s, 'blue')) { unk++; continue; } m[s.cls] = (m[s.cls] || 0) + 1; } // TK2.4:身份只问 contactIdn(ID1 的规矩;原来这里是全库最后一处直读椭圆的身份位)
+  for (const s of list) { if (red && !contactIdn(s, VIEW)) { unk++; continue; } m[s.cls] = (m[s.cls] || 0) + 1; } // TK2.4:身份只问 contactIdn(ID1 的规矩;原来这里是全库最后一处直读椭圆的身份位)
   const a = Object.keys(m).sort().map(k => k + '×' + m[k]); if (unk) a.push('?×' + unk);
   return a.join(' ');
 }

@@ -98,8 +98,11 @@ function matchTick(){
 on('btnMatch','click',function(e){e.currentTarget.blur();if(matchIsOn())matchExit();else matchEnter();});
 function gmSync(){ // ENV2 顶栏「全知」钮只在靶场出现,亮灭跟 adminMode 走(F8 与钮共用)
   const b=document.getElementById('btnGM');if(!b)return;
-  const e=curEnv();b.style.display=(e&&e.range)?'':'none';b.classList.toggle('on',!!adminMode);
+  const e=curEnv(),rg=!!(e&&e.range);b.style.display=rg?'':'none';b.classList.toggle('on',!!adminMode);
+  if(!rg)VIEW='blue'; // 视角切换只在靶场
+  const v=document.getElementById('btnView');if(v){v.style.display=rg?'':'none';v.textContent=VIEW==='red'?'红方视角':'蓝方视角';v.classList.toggle('on',VIEW==='red');}
 }
 on('btnGM','click',function(e){e.currentTarget.blur();adminMode=!adminMode;gmSync();});
+on('btnView','click',function(e){e.currentTarget.blur();VIEW=VIEW==='blue'?'red':'blue';gmSync();}); // 2026-09-28 靶场切红蓝视野
 on('meAgain','click',function(){matchEnter();});
 on('meRange','click',function(){matchExit();});

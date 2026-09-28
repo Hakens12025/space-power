@@ -29,6 +29,7 @@
   <div class="spacer"></div>
   <button class="hbtn" id="btnMatch" title="进入对局">对局</button>
   <button class="hbtn" id="btnGM" title="全知(F8):显示全部真值,可拖动单位与天体;关掉 = 只看我方感知到的">全知</button><!-- ENV2 靶场的显示切换,只在靶场出现(scenario/97-match 的 gmSync) --><!-- MT1 对局入口(scenario/97-match);进了对局它变成「回靶场」 -->
+  <button class="hbtn" id="btnView" title="视角:画面从蓝方 / 红方的感知看(只在靶场;选中与下令仍是蓝方)">蓝方视角</button>
   <button class="hbtn" id="btnTut" title="教程 · 指挥官手册(Esc 关闭)">教程</button><!-- RF5-D 排在 .spacer 之后 = 顶栏右端。SL1(2026-09-22 瘦身):原来跟在它后面被藏着的七个旧钮(录制/GM/互搏/靶场参数/场景菜单/回放/设置)已整套删除;GM 仍走 F8 -->
 </div>
 
@@ -116,7 +117,7 @@
      硬约束仅两条:core/00 定义 on() 必须最先(85/95/96/97 顶层调用它);core/99 顶层执行 init() 必须最后(且 init 调 loadRangeCfg,
      故 scenario/95 必须在它之前)。其余跨文件引用全在运行期解析,层序排列只为可读性。 -->
 <script src="js/core/00-config.js?v=20260928r1"></script>
-<script src="js/core/01-state.js?v=20260928v1"></script>
+<script src="js/core/01-state.js?v=20260928zk"></script>
 <script src="js/ships/10-hull-geometry.js?v=20260923"></script>
 <script src="js/ships/11-classes.js?v=20260927o1"></script>
 <script src="js/world/12-env.js?v=20260928s1"></script><!-- ENV1 环境系统:太阳禁区 + 天体 + 石头(TK4c)。必须在 sensors/ 之前:23-cov 加载期的梯子反解会读 optLum -->
@@ -140,7 +141,7 @@
 <script src="js/weapons/50-missile-spec.js?v=20260928e1"></script>
 <script src="js/weapons/51-defs.js?v=20260928e1"></script>
 <script src="js/weapons/51-ciws.js?v=20260923"></script>
-<script src="js/weapons/52-fire.js?v=20260928ze"></script>
+<script src="js/weapons/52-fire.js?v=20260928zk"></script>
 <script src="js/weapons/53-nets.js?v=20260928r1"></script>
 <script src="js/weapons/54-missiles.js?v=20260928r1"></script>
 <script src="js/weapons/55-damage.js?v=20260928r1"></script>
@@ -158,17 +159,17 @@
 <script src="js/render/80-camera.js?v=20260923"></script>
 <script src="js/render/81-background.js?v=20260926v8"></script>
 <script src="js/render/81-terrain.js?v=20260926s"></script><!-- ENV2 地形瓦片服务:云浓度的世界锚定瓦片(粗到细、每帧工作量封顶、LRU)+ 合成缓存(双缓冲、1:1 贴图)。顶层只有 const / function 与一个惰性求和的 let(TERR_DUST_NORM,同 world/13 的 ENV_DUST_NORM),运行期由 81-env 的 mapTileFrame 调;与 81-background 共用编号 81 -->
-<script src="js/render/81-env.js?v=20260926w"></script><!-- ENV1 环境底图(天体 + 太阳方向)。与 81-background 共用编号 81。ENV2:改成 kind x view 登记表(ENV_VIEWS.map)+ 云 / 影子 / 天体 / 恒星的海图画法,版本号随之换 -->
-<script src="js/render/82-ship-icons.js?v=20260928zh"></script>
-<script src="js/render/82-rocks.js?v=20260928zf"></script><!-- TK4c 石头的航迹(第二个循环)。与 82-ship-icons / 82-lod 共用编号 82 -->
-<script src="js/render/82-lod.js?v=20260926z"></script><!-- SN6 聚合层:舰 → 舰队框 → 舰队组;与 82-ship-icons 共用编号 -->
-<script src="js/render/83-hud.js?v=20260928zi"></script>
-<script src="js/render/84-scene.js?v=20260928zf"></script>
+<script src="js/render/81-env.js?v=20260928zk"></script><!-- ENV1 环境底图(天体 + 太阳方向)。与 81-background 共用编号 81。ENV2:改成 kind x view 登记表(ENV_VIEWS.map)+ 云 / 影子 / 天体 / 恒星的海图画法,版本号随之换 -->
+<script src="js/render/82-ship-icons.js?v=20260928zk"></script>
+<script src="js/render/82-rocks.js?v=20260928zk"></script><!-- TK4c 石头的航迹(第二个循环)。与 82-ship-icons / 82-lod 共用编号 82 -->
+<script src="js/render/82-lod.js?v=20260928zk"></script><!-- SN6 聚合层:舰 → 舰队框 → 舰队组;与 82-ship-icons 共用编号 -->
+<script src="js/render/83-hud.js?v=20260928zk"></script>
+<script src="js/render/84-scene.js?v=20260928zk"></script>
 <script src="js/render/84-fmplot.js?v=20260923"></script><!-- FM4 编队能力站位的地图可视化。与 84-scene 共用编号 84(先例:weapons/51-defs 与 51-ciws),都属于“场景图层”;顶层只有 const/function,零顶层执行,由 84-scene 的 render() 运行期调用 -->
 <script src="js/render/85-settings.js?v=20260926e"></script>
 <script src="js/render/85-tutorial.js?v=20260928e1"></script><!-- RF5-D 教程面板。与 85-settings 共用编号 85(先例:weapons/51-defs 与 51-ciws),语义上教程与设置相邻。顶层调用 on(),故必须晚于 core/00;其余引用全在运行期解析 -->
-<script src="js/render/86-irview.js?v=20260928zg"></script><!-- 红外画面:右下角「红外」钮(MAPV.mode === 'ir');演示页 红外效果.html 的甲画法,物理走引擎的传感器模型 -->
-<script src="js/render/86-radarview.js?v=20260928y1"></script><!-- 雷达画面:右下角「雷达」钮(MAPV.mode === 'radar');演示页 雷达效果.html 的画法,数据走引擎现有的雷达模型 -->
+<script src="js/render/86-irview.js?v=20260928zk"></script><!-- 红外画面:右下角「红外」钮(MAPV.mode === 'ir');演示页 红外效果.html 的甲画法,物理走引擎的传感器模型 -->
+<script src="js/render/86-radarview.js?v=20260928zk"></script><!-- 雷达画面:右下角「雷达」钮(MAPV.mode === 'radar');演示页 雷达效果.html 的画法,数据走引擎现有的雷达模型 -->
 <script src="js/render/87-fmbar.js?v=20260926k"></script><!-- FM1 编队书签栏 + 编队菜单。与 87-fleetcards 共用编号 87(先例:weapons/51-defs 与 51-ciws、render/85-settings 与 85-tutorial),语义上都是"舰队编成"的呈现。顶层只有 on(...) 委托挂载,故必须晚于 core/00;updFmBar() 由 core/99 每 20 帧调用,其余跨文件引用全在运行期解析 -->
 <script src="js/render/88-selpanel.js?v=20260928r1"></script>
 <script src="js/render/88-pip.js?v=20260928s1"></script><!-- 2026-09-28 右栏小窗;运行期才读各层函数 -->
@@ -178,7 +179,7 @@
 <script src="js/scenario/91-init.js?v=20260928e1"></script>
 <script src="js/scenario/95-range.js?v=20260928zj"></script>
 <script src="js/scenario/96-spawn.js?v=20260923"></script><!-- FM7 测试用加船小条。放在 95 之后、core/99 之前:它顶层调 on(),而 on() 定义在 core/00 -->
-<script src="js/scenario/97-match.js?v=20260928za"></script><!-- MT1 对局入口 / 红方摆位 / 结果卡片。顶层调 on(),须在 core/00 之后;matchPlaceRed 被 91-init 运行期调用 -->
+<script src="js/scenario/97-match.js?v=20260928zk"></script><!-- MT1 对局入口 / 红方摆位 / 结果卡片。顶层调 on(),须在 core/00 之后;matchPlaceRed 被 91-init 运行期调用 -->
 <script src="js/core/99-main.js?v=20260928e1"></script>
 </body>
 </html>
