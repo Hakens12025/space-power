@@ -3,8 +3,8 @@
    红外画面(右下角「红外」钮,MAPV.mode === 'ir'):演示页 demos/地图组/红外效果.html 的甲画法搬进引擎,物理全走引擎的传感器模型。
    每个热源(非我方的船、石头)在我方看得最清楚的那艘船眼里是一团:有效亮度 = senseOptLoWith(晒热 / 杂散光 / 云背景 / 消光),三道门 = senseOptBlocked。
    一道门(2026-09-28 用户,演示页 demos/地图组/红外一道门.html):每一处热的色阶值 = GAIN x 这一份热的有效信噪比 K_IR·lo/d²(船身、尾焰、轮廓、导弹同一条),不分类型;
-   团只有一个来源:红外那一层的估计(irvEstPos = 真实位置 + 钉死的偏移 x 这一层的不确定半径,越近越小;定位前后不换来源,从红外进可见光不跳。2026-09-28 用户);
-   团的大小 = 这一层的不确定(演示页 demos/地图组/红外弥散团.html):等面积半径按以前热区的对数压缩,屏幕上夹在热晕最小半径(irvGlowMin:舰标团;画轮廓时比轮廓大一圈)与 UNC_CAP 倍之间;弥散:圆的、轻微扭曲、缓慢翻涌,剖面画在色阶上(中心 = 一道门的峰值色阶,按 TW x 团半径平滑落回本底,不读亮度);定位的另有亮核;
+   团画在真实位置 + 一个随距离连续变小的偏移(irvEstPos:每个目标方向固定,大小 = OFF x 不确定半径;只在画面层算,感知内核与主视角不受影响;定位前后不换来源,从红外进可见光不跳。2026-09-28 用户);
+   团的大小 = 不确定(演示页 demos/地图组/红外弥散团.html):等面积半径按以前热区的对数压缩,屏幕上夹在热晕最小半径(irvGlowMin:舰标团;画轮廓时比轮廓大一圈)与 UNC_CAP 倍之间;弥散:圆的、轻微扭曲、缓慢翻涌,剖面画在色阶上(中心 = 一道门的峰值色阶,按 TW x 团半径平滑落回本底,不读亮度);定位的另有亮核;
    石头又大又冷,近到填满距离(FILL_K x 认出距离 x √体型)以内亮度不再涨(点源 → 扩展源),船与导弹当点源。
    背景:尘埃云(envBgParts,按光照;乘地图同一个显示增益)、位置型恒星的光晕、天体盘(朝阳面亮、背阴面 heat)。
    场按 CELL 屏幕像素一格,色阶 + 噪点上色,小图放大进整屏缓存(设备像素),每帧 1:1 贴;山只在变了的地方揭旧贴新;蓝方内核认出且定位后热轮廓叠在山上(山照画;与主视图画出认出的船同一个条件)。
@@ -12,10 +12,10 @@
 const IRV_C={CELL:5,V0:0.02,VMAX:1000,CULL:0.0003,SIG_MIN:0.7,NOISE:0.005,NOISE_MS:200,TAIL_K:4,POS_P:3,MIX:0.875,
   BG_K:0.1,CLOUD_M:8,CLOUD_LV:4,CLOUD_SYNC:400,CLOUD_BATCH:1500,CLOUD_COARSE:1200,
   GAIN:0.2,FILL_K:1/3,GLYPH:1.3,SIG_MAX_PX:30,MSL_PX:3,CORE:0.4,CORE_W:0.45,
-  UNC_K:0.75,UNC_CAP:4,TW:1.4,PLAT:1.2,WARP:0.05,CHURN:0.15,CHURN_STEP:0.1,R_TOL:0.05};
+  UNC_K:0.75,UNC_CAP:4,PH_K:0.3,OFF:0.5,TW:1.4,PLAT:1.2,WARP:0.05,CHURN:0.15,CHURN_STEP:0.1,R_TOL:0.05};
   // GAIN = 一道门的增益(信噪比 1 ≈ 色阶 0.22,信噪比 < 1 按三次方淡出,见 irvV);BG_K = 背景(云 / 恒星光晕)压暗倍数;FILL_K = 石头填满距离 / (认出距离 x √体型)
   // GLYPH = 舰标团 / 舰标半径,封顶 SIG_MAX_PX;MSL_PX = 导弹小点;CORE / CORE_W = 定位后亮核的份额与宽度
-  // UNC_K = 热区对数半径的缩放;UNC_CAP = 团半径上限(x 舰标团);TW = 过渡宽度(x 团半径);PLAT = 高原;WARP / CHURN = 扭曲幅度与翻涌速度(rad / 墙钟秒,只在跑的时候走);
+  // PH_K = 红外测距的相对 1σ(不确定半径 = 距离 x √(PH_K x 方位误差));OFF = 团心偏移 / 不确定半径;UNC_K = 热区对数半径的缩放;UNC_CAP = 团半径上限(x 舰标团);TW = 过渡宽度(x 团半径);PLAT = 高原;WARP / CHURN = 扭曲幅度与翻涌速度(rad / 墙钟秒,只在跑的时候走);
   // CHURN_STEP = 翻涌累计把形状挪到这么多格才重贴;R_TOL = 团半径变了这个比例才重贴
   // V0 / VMAX = 色阶的对数刻度;CULL = 山截断处;SIG_MIN = 山的最小宽(格);TAIL_K = 尾焰尾巴长宽比;POS_P / MIX = 恒星光晕的律
 const IRV_T0=-0.1;
@@ -28,9 +28,13 @@ function irvT(v){
 function irvIdx(v){return Math.round((irvT(v)-IRV_T0)/(1-IRV_T0)*255);}
 function irvLutK(t){return Math.round((Math.max(IRV_T0,Math.min(1,t))-IRV_T0)/(1-IRV_T0)*255);}
 function irvLutHex(t){const k=irvLutK(t)*4;return '#'+((1<<24)|(IRV_LUT[k]<<16)|(IRV_LUT[k+1]<<8)|IRV_LUT[k+2]).toString(16).slice(1);}
-function irvEstPos(t){ // 热团画在哪、多不确定:[x, y, 红外那一层的等面积 1σ 半径 km]。只用红外那一层的估计,定位与否不换来源(换来源 = 定位那一下团会跳);GM 画真值;这一拍红外没量到不画
-  const L=contactIrEst(t,'blue');if(adminMode)return [t.pos[0],t.pos[1],L?L.r:0];
-  return L?[L.x,L.y,L.r]:null;
+function irvUnc(t){ // 不确定半径(km):离最近那艘我方船 d,按目标的固有亮度(体型 x 自身热;不含尾焰 / 开火 / 雷达,点火不跳)算方位误差 th,r = d x √(PH_K x th)。越近越小、连续
+  let d=Infinity,o=null;for(const s of ships)if(s.side==='blue'&&!s.dead){const e=Math.hypot(t.pos[0]-s.pos[0],t.pos[1]-s.pos[1]);if(e<d){d=e;o=s;}}
+  return o?d*Math.sqrt(IRV_C.PH_K*covTheta('opt',o,t,d,sReq(t,'size','ship')*(t.heatK===undefined?1:t.heatK))):0;
+}
+function irvEstPos(t){ // 热团画在哪、多不确定:[x, y, 不确定半径 km] = 真实位置 + 每个目标方向固定的偏移 x OFF x 不确定半径(用户:有一定偏移、越近越小、不跳);GM 不偏。红外异常圈也读它
+  const r=irvUnc(t);if(adminMode)return [t.pos[0],t.pos[1],r];
+  const h=irvPh(t)*1.618,k=IRV_C.OFF*r;return [t.pos[0]+Math.cos(h)*k,t.pos[1]+Math.sin(h)*k,r];
 }
 function irvObs(){const a=[];for(const s of ships)if(s.side==='blue'&&!s.dead)a.push(s);return a;}
 function irvSrc(){const a=[];for(const s of ships)if(s.side!=='blue'&&!s.dead)a.push(s);for(const r of rocks)if(!r.dead&&r.side!=='blue')a.push(r);return a;} // 2026-09-27 自己放的浮标不算热源

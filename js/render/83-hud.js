@@ -435,19 +435,20 @@ function drawHoverRings(){
 }
 /* 2026-09-27 雷达异常 / 红外异常(用户:「当出现了异常的时候,直接在主视角上面标注」;选「只报没定位的」「标在异常处、淡出」)。
    不另做探测,复用两份现成的数据:
-   红外异常 = 蓝方航迹表里只有红外量测、还没定位的接触(heat 态 + cov.ch.opt),第一次出现、或开始点火 / 刹车 / 开火时报;标在它那团热所在处(与红外画面同一处)。
-   雷达异常 = sensors/21 的 ESM 记录里还没定位的辐射源,沉默 ANOM.GAP 游戏秒以上又听到时报(每次脉冲都会报,持续照射只报开头);标在雷达画面那片听到区域的中心。
+   红外异常 = 蓝方航迹表里只有红外量测、还没定位的接触(heat 态 + cov.ch.opt),第一次出现、或开始点火 / 刹车 / 开火时报;标在红外画面那团热所在处(86 的 irvEstPos,带偏移),圈 = 红外画面的不确定半径。
+   雷达异常 = sensors/21 的 ESM 记录里还没定位的辐射源,沉默 ANOM.GAP 游戏秒以上又听到时报(每次脉冲都会报,持续照射只报开头);标在雷达画面画这条记录的那一点(86 的 rdvEsmBrg / rdvEsmRc,带偏移),圈 = 那一片的等面积半径。
+   2026-09-28 用户:异常圈不标真实位置,位置与大小走各层自己的画面;只是简易提醒,画法不跟各层走。
    约 ANOM.LIFE 毫秒淡出;屏幕上相近的同类只画一个。 */
 const ANOM={m:new WeakMap(),list:[],LIFE:5000,GAP:20,t:-1e9,RMIN:8,RMAX:160,FADE:0.5,EXP:4}; // 2026-09-28 圈的屏幕半径夹在 RMIN~RMAX px(不确定半径 x 缩放);FADE = 从寿命的这一处起指数暗淡,EXP = 指数的陡度
 function anomScan(now){
   if(simTime<ANOM.t){ANOM.m=new WeakMap();ANOM.list.length=0;}ANOM.t=simTime; // 换局
   if(typeof trkEach==='function')trkEach('blue',(tk,st)=>{const s=trkSrc(tk);let a=ANOM.m.get(s);if(!a){a={ir:false,fl:0,fh:false,rd:-1e9};ANOM.m.set(s,a);}
     const ir=st==='heat'&&!!(tk.cov&&tk.cov.ch&&tk.cov.ch.opt);
-    if(ir){const fl=s.flame||0,fh=(s.fireHot||0)>0;if(!a.ir||(fl&&!a.fl)||(fh&&!a.fh)){const L=contactIrEst(s,'blue');if(L)ANOM.list.push({k:'ir',x:L.x,y:L.y,r:L.r,t0:now});}a.fl=fl;a.fh=fh;} // 2026-09-28 位置与圈的大小 = 红外那一层自己的估计与不确定(原来标在真值)
+    if(ir){const fl=s.flame||0,fh=(s.fireHot||0)>0;if(!a.ir||(fl&&!a.fl)||(fh&&!a.fh)){const q=irvEstPos(s);ANOM.list.push({k:'ir',x:q[0],y:q[1],r:q[2],t0:now});}a.fl=fl;a.fh=fh;}
     a.ir=ir;});
   if(typeof esmEach==='function')esmEach('blue',(E,arr)=>{if(contactFix(E,'blue'))return;let a=ANOM.m.get(E);if(!a){a={ir:false,fl:0,fh:false,rd:-1e9};ANOM.m.set(E,a);}
-    let b=arr[0].k;for(const x of arr)if(x.k.sr<b.sr)b=x.k;
-    if(b.t>a.rd){if(b.t-a.rd>ANOM.GAP){const q=esmEst(b);ANOM.list.push({k:'rd',x:q.x,y:q.y,r:q.r,t0:now});}a.rd=b.t;}}); // 2026-09-28 静听测距 / 方位已带估计误差(21 的 esmHear);圈 = 等面积 1σ
+    let b=arr[0];for(const x of arr)if(x.k.sr<b.k.sr)b=x;const k=b.k;
+    if(k.t>a.rd){if(k.t-a.rd>ANOM.GAP){const g=rdvEsmBrg(E,b.L,k),rc=rdvEsmRc(E,b.L,k);ANOM.list.push({k:'rd',x:k.org[0]+Math.cos(g)*rc,y:k.org[1]+Math.sin(g)*rc,r:Math.sqrt(k.sr*k.rr*k.half),t0:now});}a.rd=k.t;}});
 }
 function drawAnomalies(){
   const now=nowMs();anomScan(now);if(!ANOM.list.length)return;

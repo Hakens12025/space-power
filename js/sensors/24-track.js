@@ -15,7 +15,6 @@
               (stepCov 原地改它、每拍换新 cov.ch)。newCov() 是全库唯一写这些键的字面量(原来三份手抄:舰船字面量里两份 + detectFor 补建那份)。
               ch.opt = 光学 / ch.lis = 雷达静听 / ch.act = 雷达照射 —— lis 与 act 是【同一部设备的两种模式】,不是两条通道,别读成"又变回三通道了";
      lastT / lastPos / lastVel   最后一次【定得出位置】的时刻 / 估计位置 / 真速度拷贝(信息年龄;-1e9 / null = 从没定过)。
-     之后追加的键(idc / tn / tau / lastType / memGone / ez / eo / eoL)见 trkNew 的行尾注释。
    舰船对象从 TK3c 起只剩物理真值。
 
    ---- 表的规矩(每一条背后都有一个具体的坑,细节见备忘)----
@@ -40,7 +39,7 @@ const TRK={blue:new WeakMap(),red:new WeakMap(),vis:{blue:new WeakSet(),red:new 
 function trkTab(side){return side==='blue'?TRK.blue:TRK.red;}
 
 /* 唯一的航迹工厂;不往任何表里登记。newCov() 每船两次,与原来舰船字面量里的调用次数相同 */
-function trkNew(by,src){return {src:src,by:by,held:false,cov:newCov(),lastT:-1e9,lastPos:null,lastVel:null,idc:false,tn:0,tau:0,lastType:null,memGone:false,ez:trkEzNew(),eo:[0,0],eoL:[0,0],irR:0,irT:-1e9};} // 2026-09-28 追加 ez:估计误差状态 / eo:这一拍加到估计中心的偏移 / eoL:最后定位那一拍的偏移(见 trkErrStep)/ irR、irT:红外那一层收敛中的不确定半径与最后一次量到的时刻(见 trkIrStep) // 2026-09-27 追加 lastType(最后一次认出的类型)/ memGone(记忆已被重新看过、清掉) // 2026-09-27 追加 tau:距上次测到位置的秒数(23 的航位推算误差按它长) // TK2.6 追加 idc:【确认】锁存(光学或照射认出过它、且接触一直握着)。TK4c 追加 tn:航迹号(0 = 还没发)
+function trkNew(by,src){return {src:src,by:by,held:false,cov:newCov(),lastT:-1e9,lastPos:null,lastVel:null,idc:false,tn:0,tau:0,lastType:null,memGone:false};} // 2026-09-27 追加 lastType(最后一次认出的类型)/ memGone(记忆已被重新看过、清掉) // 2026-09-27 追加 tau:距上次测到位置的秒数(23 的航位推算误差按它长) // TK2.6 追加 idc:【确认】锁存(光学或照射认出过它、且接触一直握着)。TK4c 追加 tn:航迹号(0 = 还没发)
 
 /* O(1) 查表,【永远不建】。非对象、或从没登记过的对象(弹丸、{pos} 指定点、梯子的假船、沙盘克隆、判据的裸对象)一律 null */
 function trkOf(side,src){return (src!==null&&typeof src==='object')?(trkTab(side).get(src)||null):null;}
@@ -64,12 +63,10 @@ function trkEnsure(side,src){const m=trkTab(side);let k=m.get(src);if(k===undefi
 function trkStep(tk,t,obs,el){
   const c=tk.cov;
   TRK_IDO.opt=TRK_IDO.lis=TRK_IDO.act=TRK_IDO.vis=false;          // TK2.6:模块级草稿,每拍清零后交给内核记【哪几条通道认出了它】(不分配)
-  TRK_KIN.tau=tk.tau;TRK_KIN.a=trkAccPrior(t,c);TRK_KIN.dr=(c.fix&&tk.lastPos&&tk.lastVel)?trkDRbase(tk):null;
+  TRK_KIN.tau=tk.tau;TRK_KIN.a=trkAccPrior(t,c);TRK_KIN.dr=(c.fix&&tk.lastPos&&tk.lastVel)?trkDR(tk):null;
   const held=stepCov(t,c,obs,el,TRK_IDO,TRK_KIN);
   tk.tau=TRK_KIN.tau;
-  trkErrStep(tk); // 2026-09-28 估计中心 = 真值 + 误差(按这一拍的椭圆);lastPos / trkPos / 航位推算都从它来
-  trkIrStep(tk,el);
-  if(c.fix&&c.n>0){tk.lastT=simTime;tk.lastPos=[c.x,c.y,t.pos[2]];tk.eoL[0]=tk.eo[0];tk.eoL[1]=tk.eo[1];if(TRK_KIN.pm||!tk.lastVel)tk.lastVel=t.vel.slice();} // 2026-09-27 速度只在测到位置的一拍更新(单站方位量不出速度)
+  if(c.fix&&c.n>0){tk.lastT=simTime;tk.lastPos=[c.x,c.y,t.pos[2]];if(TRK_KIN.pm||!tk.lastVel)tk.lastVel=t.vel.slice();} // 2026-09-27 速度只在测到位置的一拍更新(单站方位量不出速度)
   if(held&&tk.tn===0)tk.tn=++TRK_TN[tk.by]; // TK4c 航迹号:这一方第一次握住它的那一拍发号,之后终身不变(丢了再捡回来还是这个号)。只用于显示 —— 不当键、不当种子、不参与任何取舍
   if(held){if(TRK_IDO.opt||TRK_IDO.act||TRK_IDO.vis)tk.idc=true;}else tk.idc=false; // TK2.6 确认锁存:光学轮廓或照射回波认出过 ⇒ 确认;接触丢了才清。与椭圆的身份位同一拍立、同一拍清
   tk.held=held;
@@ -77,41 +74,9 @@ function trkStep(tk,t,obs,el){
   return held;
 }
 
-/* ---- 2026-09-28 估计误差(用户:「很多情况下会标注敌方实际的位置」)----
-   标准形态:跟踪器的估计误差要与它自己报告的协方差一致(一致性估计,检验量叫 NEES)。这里有意偏保守:误差只到 AMP x 1σ。
-   每条航迹每一路一个误差 z(两个分量各在 [-AMP, AMP] 里均匀抽),建航迹时抽一次就钉死:估计点只随这一层的不确定度缩放,不随时间漂。
-   2026-09-28 改过三轮:AR(1) 每拍一跳 → 平滑漂移 → 用户「碎石在乱飞」(碎石不动,估计点一漂就像在飞)→ 钉死。
-   · 融合估计(真有测距 / 交会 / 可见圈的那一路):偏移 = 这一拍椭圆(1σ 轴长 r1 / r2、倾角 th)x z,加到 c.x / c.y;
-     单站方位续航那一支从【去掉误差的】推算点起算(trkDRbase),否则误差逐拍累加。
-   · 红外那一层(trkIrEst,异常提醒、红外画面):真实位置 + z x 这一层的等面积 1σ 半径 irR,方向钉在地图坐标里(不跟视线转);irR 按 IR_TAU 收敛(trkIrStep),越近越小,定位前后连续。
-     原来按假设型号反推距离:碎石被推到 2~4 倍远,我方一动它就按(倍数 − 1)x 我方速度滑。
-   · 静听那一层在 21 的 esmHear 里(测距 rr / 估计方位 tbE,雷达异常与雷达画面读它):假设法测距(没认出按驱逐舰的发射机档次反推,偏差是系统性的)+ z x 这一拍的 1σ。
-   沿视线的偏移截在 ±ALONG_K x 基准距离(截偏移本身)。 */
-const TRK_ERR={AMP:0.5,ALONG_K:0.5,PH_K:0.3,IR_TAU:5}; // AMP = 偏移上限(x 1σ);PH_K = 红外那一层测距的相对 1σ;IR_TAU = 红外那一层不确定半径的收敛时间(游戏秒)
-function trkClampK(v,lim){return v>lim?lim:(v<-lim?-lim:v);}
-function trkEzCh(){const A=TRK_ERR.AMP;return [A*(2*Math.random()-1),A*(2*Math.random()-1)];}
-function trkEzNew(){return {f:trkEzCh(),opt:trkEzCh(),lis:trkEzCh()};} // f = 融合估计,opt = 红外那一层,lis = 静听那一层;钉死不变
-function trkErrStep(tk){
-  const c=tk.cov,z=tk.ez.f;if(!(c.n>0))return; // 这一拍没量到:估计停在上一次
-  let dmin=1e18;for(const k in c.ch){const m=c.ch[k];if(m&&m[2]<dmin)dmin=m[2];}
-  const lim=TRK_ERR.ALONG_K*dmin,o1=trkClampK(z[0]*c.r1,lim),o2=trkClampK(z[1]*c.r2,lim),cs=Math.cos(c.th),sn=Math.sin(c.th);
-  tk.eo[0]=cs*o1-sn*o2;tk.eo[1]=sn*o1+cs*o2;c.x+=tk.eo[0];c.y+=tk.eo[1];
-}
-function trkDRbase(tk){const p=trkDR(tk);return p?[p[0]-tk.eoL[0],p[1]-tk.eoL[1],p[2]]:null;} // 单站方位续航的推算基准:最后定位点去掉当时加的误差再外推
-function trkIrStep(tk,el){ // 红外那一层的不确定半径 irR:这一拍的等面积 1σ(方位误差 th 与测距误差 PH_K 的几何平均)按 IR_TAU 收敛;刚出现(上一拍没量到)直接取这一拍
-  const m=tk.cov.ch.opt;if(!m)return;
-  const s=tk.src,r=Math.hypot(s.pos[0]-m[5],s.pos[1]-m[6])*Math.sqrt(TRK_ERR.PH_K*m[1]/m[2]);
-  tk.irR=(simTime-tk.irT<=1.5*SENS.TICK&&tk.irR>0)?r+(tk.irR-r)*Math.exp(-Math.max(0,el)/TRK_ERR.IR_TAU):r;tk.irT=simTime; // 2026-09-28 原来逐拍照搬:船点火 / 侧推一开一关,半径在 10 万 ~ 12 万 km 间跳,团跟着一跳 2~5 px
-}
-function trkIrEst(tk){ // 红外那一层的估计 {x,y,r}:真实位置 + 钉死的偏移 x 这一层的不确定半径 irR(trkIrStep)。这一拍红外没量到给 null
-  if(!(tk&&tk.cov&&tk.cov.ch.opt&&tk.irR>0))return null;
-  const s=tk.src,r=tk.irR,z=tk.ez.opt;
-  return {x:s.pos[0]+z[0]*r,y:s.pos[1]+z[1]*r,r:r};
-}
 /* 握着这条接触(有信号或定得出位置);定得出位置 —— 武器开火只问后者 */
 function trkHeld(tk){return !!(tk&&tk.held);}
 function trkFix(tk){return !!(tk&&tk.held&&tk.cov&&tk.cov.fix);}
-function trkFixR(tk){return trkFix(tk)?Math.sqrt(tk.cov.r1*tk.cov.r2):0;} // 定位的误差椭圆等面积 1σ 半径(km)
 
 /* 距最后一次【定得出位置】的秒数;从没定过 = 1e9。simTime 在调用那一刻读 */
 function trkAge(tk){
@@ -151,7 +116,7 @@ function trkSrc(tk){return tk.src;}
 function trkGone(tk){return !!tk.src.dead;}
 function trkBearing(tk,from){const s=tk.src,dx=s.pos[0]-from[0],dy=s.pos[1]-from[1],l=Math.hypot(dx,dy)||1;return [dx/l,dy/l];}
 
-/* 被照射告警的唯一跨表读:对方那张表里【对我】握着的接触,这一拍有没有一条照射量测;有就给那条量测记录([4] 是照射源 id,[5][6] 是它的位置),没有给 null */
+/* 被照射告警的唯一跨表读:对方那张表里【对我】握着的接触,这一拍有没有一条照射量测;有就给那条量测记录(末位是照射源 id),没有给 null */
 function trkPaintedBy(s){const tk=trkOf(s.side==='blue'?'red':'blue',s),c=tk&&tk.cov;return (c&&c.ch&&c.ch.act)?c.ch.act:null;}
 
 /* 唯一的枚举原语:按【物理注册表】的顺序走(ships 按下标,TK4b 起接着走 rocks),跳过自己这一方(查询那一刻判)、没有航迹的、以及显示态为 none 的

@@ -38,8 +38,8 @@
    三艘船沿前进方向的【横向】拉开 SPREAD:纯方位接触要靠基线交叉定位,挤成一团永远定不出位置。
    ⚠ brg 那一支读了蓝舰的真实坐标来算方位。这是合法的:lit>=1 而没有 fix,正是"我知道它在那个方向"。
       它不读距离 —— 判据 FLOW71 把同一方位上的蓝舰摆在两个距离,目标点必须逐位相同。
-   ⚠ 未定位接触的 cov.x / cov.y 这里仍然不读:2026-09-28 起估计中心带误差(sensors/24 的 trkErrStep),不再等于真值,
-      但沿方位的那一轴没有测距约束,拿它当目标点等于把一个随机的距离当真。 */
+   ⚠ 热区的中心(cov.x / cov.y)今天仍等于真值(模型只算不确定度、不模拟估计误差,见 js/sensors/CLAUDE.md),
+      所以这里【刻意不读】未定位接触的 cov.x / cov.y —— 读了就是从那个已知的口子作弊。 */
 /* H1(形态 H):四个尺度常数跟着战场放大。LEAD 20 万 → 50 万(沿方位线一次推进多远:发现距离从 65 万变成 160~281 万,20 万一段太碎);
    MEM_S 120 → 300 秒;SPREAD 6 万 → 15 万(纯方位交叉定位的基线:目标在 200 万开外时 6 万的基线几乎是一条线);RING 40 万 → 100 万;REACH 6 万 → 10 万。
    2026-09-26 整体 x1/5,上文旧数按 1/5 读。 */
@@ -119,7 +119,7 @@ const RDOC_CFG={
      业内:火力侦察(reconnaissance by fire)/ 扰乱拦阻射击(H&I);风险一侧是反炮兵与打了就跑。开不开 = 中奖率 x 价值 过不过【暴露代价】那一档 */
   LOT_P_EXP:0.01,    // 已暴露(正在照射 / 刚开过火 / 正在点火 / 被照射告警)时:多开一炮几乎不加风险,中奖率过 1% 就开
   LOT_P_HID:0.08,    // 隐蔽时:开火闪光让对方红外很远就看见、炮弹还留来路,要过 8% 才开;埋伏态不开
-  LOT_D_BRG:200000*CFG.scale, // 反炮兵沿炮弹来路打回去时不知道射手多远,算中奖率假设在这么远
+  LOT_D_BRG:200000*CFG.scale, // 只有方位 / 炮弹来路、不知道距离时,算中奖率假设目标在这么远
   LOT_CB_OFF:2000*CFG.scale,  // 反炮兵:对方炮弹来路离本舰这么近以内才算冲我来的,沿反向线打回去(炮弹沿途碰到谁算谁)
   LOT_SPREAD_S:20,   // 同一个目标 / 来路,全队这么多秒内只抽一次(分散抽奖)
   LOT_T:20,          // 转头对准的时限(秒),超时作废
@@ -175,8 +175,8 @@ function botLottery(e,claim){ // 2026-09-28 抽奖开炮:从红方自己知道�
     if(trkGone(tk)||!trkHeld(tk)||!trkFoe(tk))return;const b=trkSrc(tk);if(!free(b))return;
     let c=null,p=0;
     if(trkFix(tk)){const q=trkPos(tk);if(!q)return;p=botShotP(e,Math.hypot(q[0]-e.pos[0],q[1]-e.pos[1]),Math.max(0,tk.cov.a1||0));c={t:b};} // 定出位置:打估计位置
-    else{const q=contactIrEst(b,'red')||contactHeardEst(b,'red');if(!q)return; // 只有方位:瞄红方自己那一层的估计(红外亮度测距 / 静听假设法测距),沿开炮舰指向它的线打到导弹包线那么远;中奖率按它的等面积半径(瞄准与中奖率同一个数)
-      const dx=q.x-e.pos[0],dy=q.y-e.pos[1],dq=Math.hypot(dx,dy)||1;p=botShotP(e,dq,q.r);c={pt:[e.pos[0]+dx/dq*far,e.pos[1]+dy/dq*far,0]};}
+    else{const u=trkBearing(tk,e.pos),ch=tk.cov&&tk.cov.ch,th=(ch&&ch.opt)?COV.TH0.opt:COV.TH0.lis;   // 只有方位:沿方位线打到导弹包线那么远,不知道距离按 LOT_D_BRG 算中奖率
+      p=botShotP(e,cfg.LOT_D_BRG,cfg.LOT_D_BRG*th);c={pt:[e.pos[0]+u[0]*far,e.pos[1]+u[1]*far,0]};}
     const v=p*botFoeValue(b);if(v>bv){bv=v;best={k:b,g:c,p:p};}
   });
   const trL=(typeof SHELL_TR!=='undefined')?SHELL_TR.red:[],tr=trL.length?trL[trL.length-1]:null; // 反炮兵:冲我来的那条来路

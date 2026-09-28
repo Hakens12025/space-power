@@ -285,7 +285,7 @@ function stepCov(t, c, obs, el, idOut, kin) { // TK2.6:可选的 idOut 记下这
       if (!cur || sh[1] < cur[1]) {
         const R = ch === 'vis' ? (d.visR || COV.VIS_R) : covDetOf(ch, d, t, lo); // 信噪比问"我有多少信号" ⇒ 发现域
         const snr = (ch === 'act' ? 4 : 2) * 10 * Math.log10(R / dd);  // 被动 (R/d)^2、照射 (R/d)^4,折成 dB
-        c.ch[ch] = [sh[0], sh[1], dd, snr, d.id, d.pos[0], d.pos[1]]; // [5] 起是探测站位置(2026-09-28 分层估计从它量方位);d.id 是探到它的那一艘
+        c.ch[ch] = [sh[0], sh[1], dd, snr, d.id];       // 末位是探到它的那一艘(画单条方位线要用)
       }
     }
   }
