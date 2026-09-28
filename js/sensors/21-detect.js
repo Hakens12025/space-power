@@ -176,6 +176,7 @@ function contactHeld(s,side){return trkHeld(trkOf(side,s));} // 某一方还握�
 function esmEst(k){return {x:k.org[0]+Math.cos(k.tbE)*k.rr,y:k.org[1]+Math.sin(k.tbE)*k.rr,r:k.r};} // 2026-09-28 一条静听记录的估计点(esmHear 写的估计方位 / 测距 / 等面积半径)
 function contactHeardEst(E,side){const m=ESM[side].get(E);if(!m)return null;let b=null;for(const k of m.values())if(!b||k.sr<b.sr)b=k;return b?esmEst(b):null;} // 静听那一层的估计:取测距最准的那个听者
 function contactIrEst(s,side){return trkIrEst(trkOf(side,s));} // 2026-09-28 红外那一层自己的估计 {x,y,r}(亮度测距):红外异常、红外画面用;没有给 null,不拿真值兜底
+function contactFixR(s,side){return trkFixR(trkOf(side,s));} // 2026-09-28 定位的误差椭圆等面积 1σ 半径(km;红外画面的团大小读它)
 function contactFix(s,side){return trkFix(trkOf(side,s));} // 某一方定得出这艘船的位置 —— 武器开火只问这个
 function contactIdn(s,side){return contactIdLvl(s,side)>=ID_SUS;} // TK2.6:「认出」= 身份至少疑似 —— 与改前(握着接触且椭圆锁存了身份)按定义相等;自己一方恒为真、空对象恒为假
 /* TK2.6 身份档位与类型的门面(与 contactIdn 同一家;三档的定义见 sensors/24)。自己这一方恒为确认 */

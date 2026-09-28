@@ -84,7 +84,7 @@ function trkStep(tk,t,obs,el){
      单站方位续航那一支从【去掉误差的】推算点起算(trkDRbase),否则误差逐拍累加。
    · 纯被动的两层没有距离量测,距离按被动测距的标准假设法给(assumed-signature passive ranging):没认出就假设它是一艘驱逐舰,
      由亮度 / 射频响度反推距离 —— 偏差是系统性的,长时间平均也平均不出真值;认出了型号才按它自己的量。
-     红外那一层走 trkIrEst(异常提醒、红外画面);静听那一层在 21 的 esmHear 里(测距 rr / 估计方位 tbE,雷达异常与雷达画面读它)。
+     红外那一层走 trkIrEst(异常提醒、红外画面;它的偏差钉住不漂,不确定改由红外画面的团大小表示);静听那一层在 21 的 esmHear 里(测距 rr / 估计方位 tbE,雷达异常与雷达画面读它)。
    沿视线的偏移截在 ±ALONG_K x 基准距离(截偏移本身)。 */
 const TRK_ERR={TAU:20,AMP:0.5,ALONG_K:0.5,PH_K:0.3}; // TAU = 节点间隔(游戏秒);AMP = 偏移上限(x 1σ);PH_K:假设法测距的相对 1σ(同型号之间亮度 / 响度的散布)
 function trkClampK(v,lim){return v>lim?lim:(v<-lim?-lim:v);}
@@ -95,7 +95,7 @@ function trkEzNew(){return {f:trkEzCh(),opt:trkEzCh(),lis:trkEzCh()};} // f = �
 function trkErrStep(tk,el){
   const c=tk.cov;if(!(c.n>0))return; // 这一拍没量到:估计停在上一次,误差状态也冻住
   const du=Math.max(0,el)/TRK_ERR.TAU,ez=tk.ez;
-  for(const k in ez){const e=ez[k];e.u+=du;while(e.u>=1){e.u-=1;e.a=e.b;e.b=trkKnot();}trkEzAt(e);}
+  for(const k in ez){if(k==='opt')continue;const e=ez[k];e.u+=du;while(e.u>=1){e.u-=1;e.a=e.b;e.b=trkKnot();}trkEzAt(e);} // 红外那一层的偏差钉住、不走(用户:不要红外层萤火虫般乱飞),建航迹时定下
   let dmin=1e18;for(const k in c.ch){const m=c.ch[k];if(m&&m[2]<dmin)dmin=m[2];}
   const lim=TRK_ERR.ALONG_K*dmin,o1=trkClampK(ez.f.z[0]*c.r1,lim),o2=trkClampK(ez.f.z[1]*c.r2,lim),cs=Math.cos(c.th),sn=Math.sin(c.th);
   tk.eo[0]=cs*o1-sn*o2;tk.eo[1]=sn*o1+cs*o2;c.x+=tk.eo[0];c.y+=tk.eo[1];
@@ -112,6 +112,7 @@ function trkIrEst(tk){ // 红外那一层的估计 {x,y,r}:方位是量出来的
 /* 握着这条接触(有信号或定得出位置);定得出位置 —— 武器开火只问后者 */
 function trkHeld(tk){return !!(tk&&tk.held);}
 function trkFix(tk){return !!(tk&&tk.held&&tk.cov&&tk.cov.fix);}
+function trkFixR(tk){return trkFix(tk)?Math.sqrt(tk.cov.r1*tk.cov.r2):0;} // 定位的误差椭圆等面积 1σ 半径(km)
 
 /* 距最后一次【定得出位置】的秒数;从没定过 = 1e9。simTime 在调用那一刻读 */
 function trkAge(tk){

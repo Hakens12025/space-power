@@ -438,7 +438,7 @@ function drawHoverRings(){
    红外异常 = 蓝方航迹表里只有红外量测、还没定位的接触(heat 态 + cov.ch.opt),第一次出现、或开始点火 / 刹车 / 开火时报;标在它那团热所在处(与红外画面同一处)。
    雷达异常 = sensors/21 的 ESM 记录里还没定位的辐射源,沉默 ANOM.GAP 游戏秒以上又听到时报(每次脉冲都会报,持续照射只报开头);标在雷达画面那片听到区域的中心。
    约 ANOM.LIFE 毫秒淡出;屏幕上相近的同类只画一个。 */
-const ANOM={m:new WeakMap(),list:[],LIFE:5000,GAP:20,t:-1e9,RMIN:8,RMAX:160}; // 2026-09-28 圈的屏幕半径夹在 RMIN~RMAX px(不确定半径 x 缩放)
+const ANOM={m:new WeakMap(),list:[],LIFE:5000,GAP:20,t:-1e9,RMIN:8,RMAX:160,FADE:0.5,EXP:4}; // 2026-09-28 圈的屏幕半径夹在 RMIN~RMAX px(不确定半径 x 缩放);FADE = 从寿命的这一处起指数暗淡,EXP = 指数的陡度
 function anomScan(now){
   if(simTime<ANOM.t){ANOM.m=new WeakMap();ANOM.list.length=0;}ANOM.t=simTime; // 换局
   if(typeof trkEach==='function')trkEach('blue',(tk,st)=>{const s=trkSrc(tk);let a=ANOM.m.get(s);if(!a){a={ir:false,fl:0,fh:false,rd:-1e9};ANOM.m.set(s,a);}
@@ -455,8 +455,8 @@ function drawAnomalies(){
   for(let i=ANOM.list.length-1;i>=0;i--){const e=ANOM.list[i],k=(now-e.t0)/ANOM.LIFE;if(k>=1||k<0){ANOM.list.splice(i,1);continue;}
     const p=toScreen(e.x,e.y);if(p[0]<-40||p[0]>W+40||p[1]<-40||p[1]>H+40)continue;
     if(drawn.some(d=>d[2]===e.k&&Math.hypot(d[0]-p[0],d[1]-p[1])<40))continue;drawn.push([p[0],p[1],e.k]);
-    const col=e.k==='ir'?'255,180,84':'84,224,208',a=k<0.08?k/0.08:1-(k-0.08)/0.92;
-    const R=Math.max(ANOM.RMIN,Math.min(ANOM.RMAX,(e.r||0)*cam.zoom))*(0.6+0.4*Math.min(1,k*3)); // 简易提醒:圈的大小 = 这一层的不确定,画法不跟各层的画面走
+    const col=e.k==='ir'?'255,180,84':'84,224,208',x=(k-ANOM.FADE)/(1-ANOM.FADE),a=k<0.05?k/0.05:(x<=0?1:(Math.exp(-ANOM.EXP*x)-Math.exp(-ANOM.EXP))/(1-Math.exp(-ANOM.EXP)));
+    const R=Math.max(ANOM.RMIN,Math.min(ANOM.RMAX,(e.r||0)*cam.zoom))*(0.25+0.75*Math.sqrt(k)); // 简易提醒:边界 = 这一层的不确定。2026-09-28 一直往外弥散(半径 ∝ √t),后半段指数暗淡、到边界正好消失(用户:原来扩到三分之一寿命就停在边界再变暗)
     ctx.globalAlpha=a;ctx.strokeStyle='rgb('+col+')';ctx.lineWidth=1.3;ctx.beginPath();ctx.arc(p[0],p[1],R,0,6.283);ctx.stroke();
     ctx.fillStyle='rgb('+col+')';ctx.fillText(e.k==='ir'?'红外异常':'雷达异常',p[0],p[1]-R-2);}
   ctx.restore();
