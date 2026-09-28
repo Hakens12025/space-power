@@ -1,7 +1,7 @@
 # js/sensors —— 感知:两通道、误差椭圆、航迹表
 
 ## 文件
-- `20-signature.js` `SENS` 常数表、`optLum`(光学亮度唯一出处)、发射档 / 引擎档 / 开火档
+- `20-signature.js` `SENS` 常数表、`optLum`(光学亮度唯一出处)、发射档 / 引擎档 / 开火档(开火那份热按 22 的 `fireLvl` 在 `FIRE_S` 里线性退完)
 - `21-detect.js` 感知节拍 `detectLoop` / `detectFor`、`setEmit`(发射档唯一写入口)、门面 `contactHeld` / `contactFix` / `contactIdn` / `contactAge` / `contactState` / `contactPos`、弹丸可见性 `projVisibleTo`、听到的敌方雷达 `ESM` / `esmHear`(雷达画面读)
 - `22-percep.js` 热循环:`sensePrepare`(O(N) 预计算)/ `sensePairGrades`(每条通道 0 / 1,不分强弱档)、`senseResolve`(热循环外的精算)
 - `23-cov.js` 误差椭圆内核 `stepCov` / `covHeld` / `covTheta`、距离梯子 `LAD` 与反解 `ladApply`、交会预览 `ladTriFix`

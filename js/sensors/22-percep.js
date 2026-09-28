@@ -98,8 +98,11 @@ function engPowerOf(s, P) { // 引擎档:主推/反推最费电,姿态侧推次�
   P = P || SENS;
   return s.flame < 0 ? P.P_ENG_REV : (s.flame > 0 ? P.P_ENG_MAIN : (s.sideFlame ? P.P_ENG_SIDE : 0)); // RV1:反推(flame<0,physics/30 置位)单列一档,比主推更亮
 }
-function firePowerOf(s, P) { // FX1 开火暴露:发射后的 FIRE_S 秒里多亮一档(s.fireHot 由 weapons/52 的两个发射成功点置位、weapons/57 的冷却循环倒数)
-  return s.fireHot > 0 ? (P || SENS).P_FIRE : 0;
+function fireLvl(s) { // 2026-09-28 开火那份热还剩几成:开火一刻 1,FIRE_S 秒里线性退到 0(用户:开火闪光就是这份热本身;红外画面照读,render/86 的团按它胀大)
+  return s.fireHot > 0 ? Math.min(1, s.fireHot / SENS.FIRE_S) : 0;
+}
+function firePowerOf(s, P) { // FX1 开火暴露:发射后多亮 P_FIRE x fireLvl 一档(s.fireHot 由 weapons/52 的两个发射成功点置位、weapons/57 的冷却循环倒数)
+  return (P || SENS).P_FIRE * fireLvl(s);
 }
 function optLum(s, P) { // P:档位表,缺省 SENS // 光学/红外亮度 = 体型 x (1 + 功耗)。取代已删的那两个旧亮度函数(船体信号 x 引擎乘数)
   /* SN6:发射档进光学亮度时要乘废热系数 COV.HEAT_EMIT,不能原样加。

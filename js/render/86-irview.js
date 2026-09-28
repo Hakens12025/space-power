@@ -12,10 +12,10 @@
 const IRV_C={CELL:8,V0:0.02,VMAX:1000,CULL:0.0003,SIG_MIN:0.7,NOISE:0.005,NOISE_MS:200,TAIL_K:4,POS_P:3,MIX:0.875,
   BG_K:0.1,CLOUD_M:8,CLOUD_LV:4,CLOUD_SYNC:400,CLOUD_BATCH:1500,CLOUD_COARSE:1200,
   GAIN:0.2,CONTRAST:1.14,FILL_K:1/3,GLYPH:1.3,SIG_MAX_PX:30,MSL_PX:3,CORE:0.4,CORE_W:0.45,
-  UNC_K:0.75,UNC_CAP:4,PH_K:0.3,OFF:0.5,GLIDE:0.6,EP_PX:0.5,FX_T:1.5,FX_RING:4,FX_RT:0.35,FX_TAU:0.5,FX_CORE:0.25,FX_BOOST:6,FX_CR:1.5,TW:1.4,PLAT:1.2,WARP:0.05,CHURN:0.15,CHURN_STEP:0.1,R_TOL:0.05};
+  UNC_K:0.75,UNC_CAP:4,PH_K:0.3,OFF:0.5,GLIDE:0.6,EP_PX:0.5,FIRE_GROW:1,FIRE_Q:12,TW:1.4,PLAT:1.2,WARP:0.05,CHURN:0.15,CHURN_STEP:0.1,R_TOL:0.05};
   // GAIN / CONTRAST = 一道门:色阶值 = GAIN x 信噪比^CONTRAST(信噪比 1 ≈ 色阶 0.22 不动,< 1 按三次方淡出,见 irvV)。CONTRAST 1.14(2026-09-28 用户:巅峰亮度都不高):红外 x0.6 把灵敏度降到 0.36 倍,同距离全都变暗;加对比度把近处的亮端拉回早上的水平,发现门限处不抬(试过「刚发现的热提亮」0.49 x 信噪比^0.8,用户不要);BG_K = 背景(云 / 恒星光晕)压暗倍数;FILL_K = 石头填满距离 / (认出距离 x √体型)
   // GLYPH = 舰标团 / 舰标半径,封顶 SIG_MAX_PX;MSL_PX = 导弹小点;CORE / CORE_W = 定位后亮核的份额与宽度
-  // PH_K = 红外测距的相对 1σ(不确定半径 = 距离 x √(PH_K x 方位误差));OFF = 红外异常圈心偏移 / 不确定半径;GLIDE = 定位 / 丢定位时团缩小 / 胀大的时间常数(墙钟秒,只在跑的时候走);EP_PX = 团心挪不到这么多像素不重贴;FX_* = 开火效果(演示页 红外信号.html 的画法,2026-09-28 用户:开火不够明显):墙钟 FX_T 秒,光环在 FX_RT 秒里从团半径扩到 (1 + FX_RING) 倍、按 FX_TAU 衰减,亮核(半径 FX_CR x 团半径)按 FX_CORE 衰减,颜色 = 这团热开火时的信噪比 x FX_BOOST 过一道门(用户两次要更亮、范围更大:BOOST 3 → 6、光环 3.5 → 5 倍团半径);UNC_K = 热区对数半径的缩放;UNC_CAP = 团半径上限(x 舰标团);TW = 过渡宽度(x 团半径);PLAT = 高原;WARP / CHURN = 扭曲幅度与翻涌速度(rad / 墙钟秒,只在跑的时候走);
+  // PH_K = 红外测距的相对 1σ(不确定半径 = 距离 x √(PH_K x 方位误差));OFF = 红外异常圈心偏移 / 不确定半径;GLIDE = 定位 / 丢定位时团缩小 / 胀大的时间常数(墙钟秒,只在跑的时候走);EP_PX = 团心挪不到这么多像素不重贴;FIRE_GROW = 开火一刻团半径多出几个舰标团(随开火那份热退回去,sensors/22 fireLvl;2026-09-28 用户:开火是红外亮度提升、团变大一点、发白一点,作为属性,不贴特效);FIRE_Q = 开火热退的过程中重算物理的档数;UNC_K = 热区对数半径的缩放;UNC_CAP = 团半径上限(x 舰标团);TW = 过渡宽度(x 团半径);PLAT = 高原;WARP / CHURN = 扭曲幅度与翻涌速度(rad / 墙钟秒,只在跑的时候走);
   // CHURN_STEP = 翻涌累计把形状挪到这么多格才重贴;R_TOL = 团半径变了这个比例才重贴
   // CELL = 场的格子(屏幕 px;2026-09-28 用户:像素变糊一点,5 → 8,与红外 x0.6 对应);V0 / VMAX = 色阶的对数刻度;CULL = 山截断处;SIG_MIN = 山的最小宽(格);TAIL_K = 尾焰尾巴长宽比;POS_P / MIX = 恒星光晕的律
 const IRV_T0=-0.1;
@@ -106,8 +106,9 @@ function irvSplat(s,sg){ // sg = +1 贴上 / -1 揭掉(同样的数,原样相消
 /* ---- 每源一条记录。离散判定每帧算;物理(峰高、宽度)按工作量每帧封顶约 100 µs,状态变了的先算(P0),只挪了位置的山立刻挪、峰高宽度之后补(P1) ---- */
 const IRVJ={rec:new Map(),obs:[],q0:[],q1:[],fr:0,cost:0,cost0:0,area:0,reset:true,ch:0,tc:0}; // ch = 翻涌相位(rad),tc = 上一帧的墙钟
 const IRVJ_NONE={list:[],sil:null};
-function irvjStCh(r,t){return r.fl!==t.flame||r.sf!==t.sideFlame||r.em!==t.emitMode||r.fh!==(t.fireHot>0)||r.fx!==t.facing[0]||r.fy!==t.facing[1];}
-function irvjStSet(r,t){r.fl=t.flame;r.sf=t.sideFlame;r.em=t.emitMode;r.fh=t.fireHot>0;r.fx=t.facing[0];r.fy=t.facing[1];}
+function irvFireQ(t){return Math.ceil(fireLvl(t)*IRV_C.FIRE_Q);} // 开火热分档:退一档重算一次物理(亮度跟着内核退)
+function irvjStCh(r,t){return r.fl!==t.flame||r.sf!==t.sideFlame||r.em!==t.emitMode||r.fh!==irvFireQ(t)||r.fx!==t.facing[0]||r.fy!==t.facing[1];}
+function irvjStSet(r,t){r.fl=t.flame;r.sf=t.sideFlame;r.em=t.emitMode;r.fh=irvFireQ(t);r.fx=t.facing[0];r.fy=t.facing[1];}
 function irvjPhys(t,obs,kn){const h=irvHill(t,obs,kn);if(h)h.tl=irvTail(t,h);return h;}
 function irvjVis(m,t,obs,chk,kn){for(let k=0;k<obs.length;k++)if(chk&(1<<k)){if(kn||!senseOptBlocked(obs[k],t))m|=1<<k;else m&=~(1<<k);}return m;}
 function irvjQ(r,p){if(p===0){if(!r.in0){r.in0=true;IRVJ.q0.push(r);}}else if(!r.in0&&!r.in1){r.in1=true;IRVJ.q1.push(r);}}
@@ -131,9 +132,10 @@ function irvPh(t){let h=IRV_PH.get(t);if(h===undefined){h=0;const id=String(t.id
 function irvGlyph(t){const it=adminMode?{kind:t.kind||'ship'}:contactIdType(t,VIEW);return Math.min(IRV_C.SIG_MAX_PX,IRV_C.GLYPH*shipIconR(t)*((it&&it.kind==='rock')?Math.sqrt(t.size/0.7):1));} // 舰标团半径(px):与主视图舰标同一个(没认出不暴露舰种;认出是石头才按 √体型)
 function irvGlowMin(t,g){return (!shipMarkMode()&&!adminMode&&irvSilOn(t))?Math.max(g,irvSilR(t)):g;} // 热晕最小半径(px):画轮廓时不小于轮廓(用户:显形了也要有红色团;轮廓叠在团上,四周露出红晕)
 function irvBlobR(g,gm,rk){const Rk=IRV_C.UNC_K*COV.AMAX*Math.log(1+Math.max(0,rk)/COV.AMAX);return Math.max(IRV_C.SIG_MIN,Math.max(gm,Math.min(IRV_C.UNC_CAP*g,Rk*cam.zoom))/IRV_C.CELL);} // 团半径(格):误差圈 rk(km)按热区的对数压缩,下限 = 热晕最小半径 gm,上限 = UNC_CAP x 舰标团 g(上限不跟轮廓变,出轮廓那一下不跳)
+function irvBlobRt(t,g,rk){return irvBlobR(g,irvGlowMin(t,g),rk)+IRV_C.FIRE_GROW*fireLvl(t)*g/IRV_C.CELL;} // 这一团的半径(格):不确定 + 开火那份热胀出来的
 function irvjSplats(t,ph,fxd,ep){ // 一个源的贴片(弥散团、尾焰尾巴),格坐标。一道门:峰值色阶值 = GAIN x 这一份的信噪比;fxd = 我方定出了它的位置;ep = [x, y, 不确定半径 km](irvjUpdate 里按定位与否在 irvHeatPos 与 viewPos 之间滑)
   const C=IRV_C.CELL,p=toScreen(ep[0],ep[1]),cx=p[0]/C,cy=p[1]/C,list=[],tl=ph.tl,sh=tl?tl.share:0;
-  const g=irvGlyph(t),s0=Math.max(IRV_C.SIG_MIN,g/C),R=irvBlobR(g,irvGlowMin(t,g),ep[2]),h=irvPh(t),q=IRVJ.ch,q1=h*1.7+q,q2=h*2.9-q*0.8;
+  const g=irvGlyph(t),s0=Math.max(IRV_C.SIG_MIN,g/C),R=irvBlobRt(t,g,ep[2]),h=irvPh(t),q=IRVJ.ch,q1=h*1.7+q,q2=h*2.9-q*0.8;
   const vt=irvV(ph.snr),idn=adminMode||contactIdn(t,VIEW),pk=idn?vt*(1-sh):vt,pkT=idn?vt*sh:0; // 淡出按总信噪比(内核发现用的那个)判;认出了按份额分给团和尾焰,没认出尾焰那份并进团里(不画方向:方向 = 真实朝向)
   if(pk>=IRV_C.CULL){ // 出轮廓后照画(用户:显形了也要有红色团)
     if(fxd)list.push(irvSplatRect({bl:true,x:cx,y:cy,pk:pk*(1-IRV_C.CORE),R:R,wp:IRV_C.WARP,q1:q1,q2:q2}),irvSplatRect({bl:true,x:cx,y:cy,pk:pk*IRV_C.CORE,R:Math.max(IRV_C.SIG_MIN*0.5,R*IRV_C.CORE_W),wp:0,q1:0,q2:0})); // 定出位置:外团 + 亮核,中心合起来仍是一道门的值
@@ -183,7 +185,7 @@ function irvjUpdate(full,gch){ // 返回脏矩形 [i0,i1,j0,j1] 列表;null = �
     const so=irvSilOn(t),fxd=contactFix(t,VIEW);if(so!==r.so||fxd!==r.fxd){r.so=so;r.fxd=fxd;r.need=true;} // 内核认出 / 定位变了:轮廓与亮核跟着重画(静止的石头不会因为挪动而重贴)。fxd 不叫 fx:r.fx 是 irvjStSet 存的机头朝向
     const kn=adminMode||fxd,kc=kn!==r.kn;r.kn=kn; // 定位与否变了:看不看得见要重判(定位了就不受三道门挡)
     {const op=so?viewPos(t):null;r.smv=!!op&&(!r.op||r.op[0]!==op[0]||r.op[1]!==op[1]);r.op=op?[op[0],op[1]]:null;if(r.smv)r.need=true;} // 轮廓画在我方知道的位置(用户选甲:物体本身;红晕按红外那一层略偏、翻涌)
-    if(r.ph){const g=irvGlyph(t),bR=irvBlobR(g,irvGlowMin(t,g),ep[2]);if(Math.abs(bR-r.bR)>IRV_C.R_TOL*r.bR||(IRVJ.ch-r.qs)*IRV_C.WARP*bR>=IRV_C.CHURN_STEP)r.need=true;} // 团大小变了、或翻涌累计把形状挪够了:重贴
+    if(r.ph){const g=irvGlyph(t),bR=irvBlobRt(t,g,ep[2]);if(Math.abs(bR-r.bR)>IRV_C.R_TOL*r.bR||(IRVJ.ch-r.qs)*IRV_C.WARP*bR>=IRV_C.CHURN_STEP)r.need=true;} // 团大小变了、或翻涌累计把形状挪够了:重贴
     const chk=(gch||pm||sc||kc)?all:cm;
     if(!chk&&!om)continue;
     const v0=r.vis,v=chk?irvjVis(v0,t,obs,chk,kn):v0;r.vis=v;
@@ -369,7 +371,7 @@ function irvUpdate(){
 function drawIrView(){irvUpdate();ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(IRVC.fc,0,0);ctx.restore();drawIrFx();} // 每帧入口(84-scene,MAPV.mode === 'ir')
 function irvOff(){IRVC.live=false;} // 离开红外画面:下次进来整张重建
 /* 2026-09-28 一道门(用户:「所有红外效果走同一道门」):原来叠在热图上的贴图尾焰、点火一闪、喷出的热气、开火光圈都删了 ——
-   尾焰在场里按尾焰那份信噪比画,开火 = 船身那份在 fireHot 期间多亮一档(内核的量)。这里只剩导弹(弹丸不进热源表):
+   尾焰在场里按尾焰那份信噪比画,开火 = 船身那份多亮一档、团胀大(内核 fireLvl,开火一刻最热、FIRE_S 里退完)。这里只剩导弹(弹丸不进热源表):
    颜色 = irvV(有效信噪比):projSig 的亮度 x 背景对比度 x 消光 / 三维距离²,取看得最清楚的我方船;看不看得见问 projSeen(与主画面同一道门)。 */
 const IRV_DOT=new Map();
 function irvDot(k){ // 按色阶下标缓存的高斯亮点贴图(渐变只在第一次用到时建)
@@ -388,16 +390,6 @@ function drawIrFx(){
     const v=irvV(snr);if(!(v>=IRV_C.CULL))continue;
     const R=2.5*IRV_C.MSL_PX; // 导弹是固定大小的小点(团宽不读距离)
     ctx.drawImage(irvDot(irvLutK(irvT(v))),p[0]-R,p[1]-R,2*R,2*R);
-  }
-  const now=nowMs(),C=IRV_C; // 开火:扩散光环 + 亮核(按墙钟放,几倍速都看得见;只画红外画面看得见的那团)
-  for(const r of IRVJ.rec.values()){const t=r.t,n=t.fireN||0; // 2026-09-28 每开一次火闪一次(原来按 fireHot 从 0 变正:暂停时再按、3 游戏秒内再开火都不闪)
-    if(r.fn===undefined)r.fn=n;else if(n!==r.fn){r.fn=n;r.fw=now;}
-    const a=(now-(r.fw||-1e9))/1000;if(!(a>=0&&a<C.FX_T)||!r.ph||!r.ep||!r.sp.length)continue;
-    const p=toScreen(r.ep[0],r.ep[1]);if(p[0]<-120||p[0]>W+120||p[1]<-120||p[1]>H+120)continue;
-    const k=irvLutK(irvT(irvV(r.ph.snr*C.FX_BOOST))),o=k*4,R0=Math.max(3,(r.bR||1)*C.CELL),Rr=R0*(1+C.FX_RING*Math.min(1,a/C.FX_RT));
-    ctx.globalAlpha=Math.exp(-a/C.FX_TAU);ctx.strokeStyle='rgb('+IRV_LUT[o]+','+IRV_LUT[o+1]+','+IRV_LUT[o+2]+')';ctx.lineWidth=Math.max(1.5,R0*0.35);
-    ctx.beginPath();ctx.arc(p[0],p[1],Rr,0,6.283);ctx.stroke();
-    const rc=R0*C.FX_CR;ctx.globalAlpha=Math.exp(-a/C.FX_CORE);ctx.drawImage(irvDot(k),p[0]-rc,p[1]-rc,2*rc,2*rc);
   }
   ctx.restore();
 }
