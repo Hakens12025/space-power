@@ -219,6 +219,14 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
   const fmBox=document.getElementById('selFm');
   if(fmBox&&fmBox.style.display!=='none')fmBox.style.display='none';
   if(box.style.display!=='block')box.style.display='block';
+  if(selBuoy&&(selBuoy.dead||rocks.indexOf(selBuoy)<0))selBuoy=null; // 2026-09-29 浮标没了 / 换局:撤选中
+  if(selBuoy){ // 2026-09-29 用户:点浮标 → 底栏雷达开照射 / 打脉冲(飞行中也行);原来武器菜单「特殊」里的逐个开关已删
+    const o=selBuoy;title.textContent='前出浮标';if(ciN)ciN.textContent=o.name;if(ciC)ciC.textContent=o.owner?o.owner.name:'—';if(ciSp)ciSp.innerHTML='';
+    box.innerHTML=`<div class="row"><span class="k">状态</span><span class="v">${o.dest?'飞行中':'就位'}</span></div>`
+      +`<div class="row"><span class="k">雷达</span><span class="v">${o.on?'照射 · 对方听得见':'被动 · 只看和听'}</span></div>`
+      +(o.life>0?`<div class="row"><span class="k">剩余</span><span class="v">${Math.round(SHOW.t(o.life))} s</span></div>`:'');
+    updateCmdBar([]);return;
+  }
   // 导弹群/导弹组/信标视图:Shift+点选或框选导弹(选择机制在 70-input) → 右栏切实时弹道数据,底栏切固定参数,按钮组置灰
   // RF4a 框选聚合:selMissileHits 里存活组>1 → 汇总视图(状态/目标/引导分布);代表组=剩余弹头最多者
   const aliveHits=(selMissileHits||[]).filter(p=>!p.done&&p.type==='missile');
@@ -374,7 +382,7 @@ function bindCmdBar(){ // 2026-09-27 底栏改版(用户):火控 + 各武器并�
   const mk=(id,label,kind,tip)=>{
     let b=document.getElementById(id);if(b)return b;
     b=document.createElement('button');b.className='btn cbtn';b.id=id;wrap.appendChild(b);
-    b.addEventListener('click',()=>{if(!selBlue().length)return;cmdPopToggle(kind,b);});
+    b.addEventListener('click',()=>{if(!selBlue().length&&!(kind==='radar'&&selBuoyOk()))return;cmdPopToggle(kind,b);});
     b.addEventListener('mouseenter',()=>{hoverRing=kind==='radar'?'emit':null;const t=document.getElementById('cmdTip');if(t){t.style.display='block';t.textContent=tip;}});
     b.addEventListener('mouseleave',()=>{hoverRing=null;if(typeof updSelWeaponTip==='function')updSelWeaponTip();});
     return b;
@@ -408,20 +416,19 @@ function wpnToggle(k){
 }
 function wpnClearAll(){for(const x of selBlue()){x.autoEngage=false;x.roe='hold';x.lockedTarget=null;x.fTgt=null;x.macOn=false;x.mslOn=false;x.ciwsOn=false;}updateSelPanel();}
 function radarPulsing(x){const f=(typeof PING_FX!=='undefined')?PING_FX.get(x):null;return !!(x.pingReq||(f&&!f.done));}
-function radarPick(v){const sel=selBlue();if(!sel.length)return;if(v==='pulse')sel.forEach(x=>{x.pingReq=true;});else sel.forEach(x=>setEmit(x,v));updateSelPanel();}
+function selBuoyOk(){return (typeof selBuoy!=='undefined'&&selBuoy&&!selBuoy.dead)?selBuoy:null;} // 2026-09-29 选中的我方浮标(底栏雷达作用于它)
+function radarPick(v){const bu=selBuoyOk();if(bu){if(v==='pulse')bu.pingReq=true;else if(typeof buoySetOn==='function')buoySetOn(bu,v==='paint');updateSelPanel();return;}const sel=selBlue();if(!sel.length)return;if(v==='pulse')sel.forEach(x=>{x.pingReq=true;});else sel.forEach(x=>setEmit(x,v));updateSelPanel();}
 function wpnStat(s,k){return k==='mac'?'伤害 '+(s.macDmg||0)+' · 装填 '+Math.round(SHOW.t(s.macReload||0))+'s':(k==='msl'?(s.mslPer||12)+' 枚/组 · 余 '+(s.ammo||0)+' 枚':'');}
 function cmdPopEl(){
   if(CMDPOP.el)return CMDPOP.el;
   const d=document.createElement('div');d.id='cmdPop';document.body.appendChild(d);
   d.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.classList.contains('is-dis'))return;const a=b.dataset.a,v=b.dataset.v;
     if(a==='radar')radarPick(v);else if(a==='wchk')wpnToggle(v);else if(a==='clear')wpnClearAll();else if(a==='sub')CMDPOP.sub=CMDPOP.sub===v?null:v;
-    else if(a==='buoyon'){const o=rocks.find(x=>x.id===v);if(o&&typeof buoySetOn==='function')buoySetOn(o,!o.on);}
     else if(a==='force'){const w=v==='msl'?'missile':v;cmdPopClose();if(typeof toggleWeapon==='function'&&selWeapon!==w)toggleWeapon(w);return;}
     cmdPopRender();});
   d.addEventListener('mouseover',e=>{const b=e.target.closest('button');if(!b)return;const a=b.dataset.a,v=b.dataset.v,s=selBlue()[0];let tip='';
     if(a==='radar'){hoverRing='emit';tip=RADAR_TIP[v]||'';}
     else if(a==='force'&&v==='buoy'){hoverRing=null;tip='放浮标:点地图上的位置,浮标飞过去停下(飞的那段在点火,远处看得见);平时被动看和听,在菜单里点它一下就开照射(开着才会被对方听见)。右键取消';}
-    else if(a==='buoyon'){hoverRing=null;tip='遥控这个浮标:照射 = 它开雷达(定位快、准,但会被对方听见);被动 = 只看和听';}
     else if(a==='force'){hoverRing=v;tip='强行开火:点一艘敌舰打它,或点地图上的位置(导弹 = 区域齐射,主炮 = 转向那个点开一炮);不看武器勾没勾。右键取消';}
     else if((a==='wchk'||a==='sub')&&KIND_INFO[v]&&s){hoverRing=v;tip=KIND_INFO[v].tip(s);}
     else if(a==='clear'){hoverRing=null;tip='取消所有:所有武器都不勾 = 火控关、停火并解除锁定,近防也关';}
@@ -433,16 +440,17 @@ function cmdPopEl(){
 function cmdPopToggle(kind,btn){if(CMDPOP.kind===kind){cmdPopClose();return;}CMDPOP.kind=kind;CMDPOP.sub=null;CMDPOP.btn=btn;cmdPopRender();}
 function cmdPopClose(){CMDPOP.kind=null;CMDPOP.sub=null;if(CMDPOP.el)CMDPOP.el.style.display='none';}
 function cmdPopRender(){
-  const d=cmdPopEl(),sel=selBlue(),s=sel[0];
-  if(!CMDPOP.kind||!s||!CMDPOP.btn){cmdPopClose();return;}
+  const d=cmdPopEl(),sel=selBlue(),s=sel[0],bu=selBuoyOk();
+  if(!CMDPOP.kind||!CMDPOP.btn||!(s||(bu&&CMDPOP.kind==='radar'))){cmdPopClose();return;}
   let h='';
-  if(CMDPOP.kind==='radar'){const pul=sel.some(radarPulsing);
+  if(CMDPOP.kind==='radar'&&bu){const pul=radarPulsing(bu); // 2026-09-29 浮标:静默 / 脉冲 / 发射(没有干扰)
+    h='<div class="cp-col">'+RADAR_ITEMS.filter(([v])=>v!=='jam').map(([v,l])=>{const on=v==='pulse'?pul:(v==='paint'?bu.on:!bu.on);return '<button class="btn cp-b'+(on?' on':'')+'" data-a="radar" data-v="'+v+'">'+l+'</button>';}).join('')+'</div>';}
+  else if(CMDPOP.kind==='radar'){const pul=sel.some(radarPulsing);
     h='<div class="cp-col">'+RADAR_ITEMS.map(([v,l])=>{const on=v==='pulse'?pul:s.emitMode===v;return '<button class="btn cp-b'+(on?' on':'')+'" data-a="radar" data-v="'+v+'">'+l+'</button>';}).join('')+'</div>';}
   else{
     let sub='';const k=CMDPOP.sub;
-    if(k==='buoy'){const own=rocks.filter(o=>o.kind==='buoy'&&!o.dead&&o.owner&&sel.indexOf(o.owner)>=0);
-      sub='<div class="cp-col cp-sub"><div class="cp-row"><button class="btn cp-b cp-name" data-a="sub" data-v="buoy">前出浮标<span class="cp-st">余 '+sel.reduce((a,x)=>a+(x.buoys||0),0)+' 个</span></button><button class="btn cp-ff" data-a="force" data-v="buoy">⌖</button></div>'
-        +own.map(o=>'<div class="cp-row"><button class="btn cp-b cp-name'+(o.on?' on':'')+'" data-a="buoyon" data-v="'+o.id+'">'+o.name+'<span class="cp-st">'+(o.dest?'飞行中':(o.on?'照射 · 点一下关':'被动 · 点一下照射'))+'</span></button></div>').join('')+'</div>';}
+    if(k==='buoy'){ // 2026-09-29 逐个浮标的开关删了(用户:操作入口放到浮标本身,点浮标 → 底栏雷达)
+      sub='<div class="cp-col cp-sub"><div class="cp-row"><button class="btn cp-b cp-name" data-a="sub" data-v="buoy">前出浮标<span class="cp-st">余 '+sel.reduce((a,x)=>a+(x.buoys||0),0)+' 个</span></button><button class="btn cp-ff" data-a="force" data-v="buoy">⌖</button></div>'+'</div>';}
     else if(k){const ws=(s.weapons||[]).filter(w=>w.kind===k),c=wpnChecked(s,k);
       sub='<div class="cp-col cp-sub">'+ws.map(w=>'<div class="cp-row"><button class="btn cp-b cp-name'+(c?' on':'')+'" data-a="wchk" data-v="'+k+'">'+(c?'☑ ':'☐ ')+w.label+'<span class="cp-st">'+wpnStat(s,k)+'</span></button><button class="btn cp-ff" data-a="force" data-v="'+k+'">⌖</button></div>').join('')+'</div>';}
     const rows=['<button class="btn cp-b" data-a="clear">取消所有</button>'];

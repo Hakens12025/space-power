@@ -578,8 +578,8 @@ function drawForceMarks(){ // 2026-09-27 主炮打空地:还没打出去的炮�
 const PING_FX=new Map(),PING_MS=900; // 2026-09-27 扫描的脉冲圈:船 → {看到的 pingT, 墙钟起点}
 function drawPings(){ // 一圈从船身扩到雷达量程(对标准目标),墙钟 PING_MS 内淡出;敌方的只在全知时画
   const now=nowMs(),lim=2*Math.hypot(W,H);
-  for(const s of ships){if(s.pingT===undefined||s.dead||(s.side!=='blue'&&!adminMode))continue;let f=PING_FX.get(s);if(!f||f.pt!==s.pingT){f={pt:s.pingT,t0:now};PING_FX.set(s,f);}}
-  if(PING_FX.size>64)for(const s of PING_FX.keys())if(s.dead||ships.indexOf(s)<0)PING_FX.delete(s); // 换局 / 沉了的清掉(沉了的不会再进上面那个循环)
+  for(const s of ships.concat(rocks)){if(s.pingT===undefined||s.dead||(s.kind&&s.kind!=='buoy')||(s.side!=='blue'&&!adminMode))continue;let f=PING_FX.get(s);if(!f||f.pt!==s.pingT){f={pt:s.pingT,t0:now};PING_FX.set(s,f);}} // 2026-09-29 浮标的脉冲也画圈
+  if(PING_FX.size>64)for(const s of PING_FX.keys())if(s.dead||(ships.indexOf(s)<0&&rocks.indexOf(s)<0))PING_FX.delete(s); // 换局 / 沉了的清掉(沉了的不会再进上面那个循环)
   for(const [s,f] of PING_FX){if(f.done)continue;const k=(now-f.t0)/PING_MS;if(k>=1||k<0||s.dead){f.done=k>=1||s.dead;continue;} // 2026-09-27 修:播完只标 done,不删 —— 删了下一帧会当成新扫描重播,脉冲一直循环(用户实报)
     const R=actRangeOf(s)*Math.sqrt(k)*cam.zoom;if(R<2||R>lim)continue;const p=toScreen(s.pos[0],s.pos[1]);
     ctx.save();ctx.globalAlpha=0.7*(1-k);ctx.strokeStyle=s.side==='blue'?'#6fb4ff':'#ff6b6b';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(p[0],p[1],R,0,6.283);ctx.stroke();ctx.restore();}

@@ -157,6 +157,11 @@ function updSelWeaponTip(){ // RF4b 待命提示:底栏上方 #cmdTip 常显(旧
   if(CMDTIP_FLASH&&nowMs()<CMDTIP_FLASH.until){tip.textContent=CMDTIP_FLASH.text;tip.style.display='block';return;} // 2026-09-29 一次性回执(中键打空地) // FL1 把 V 也接进来:它原本只走那个被 RF2 藏死的顶部状态条,按 V 之后玩家看不到任何提示
   tip.style.display='none';
 }
+function buoyAt(sx,sy){ // 2026-09-29 命中最近的我方前出浮标(屏幕 14 px 内,飞行中也算)
+  let best=null,bd=14;
+  for(const o of rocks){if(o.dead||o.kind!=='buoy'||o.side!=='blue')continue;const p=toScreen(o.pos[0],o.pos[1]),d=Math.hypot(p[0]-sx,p[1]-sy);if(d<bd){bd=d;best=o;}}
+  return best;
+}
 function groupAt(sx,sy){ // 命中最近的导弹组/信标实体(屏幕距离,可点选,半径30px)
   const w=worldAt(sx,sy);
   let best=null,bd=30/cam.zoom;
@@ -269,7 +274,7 @@ function mdLeft(e,sx,sy){ // 左键
   const ord=orderAt(sx,sy);
   if(ord){ // 命中命令点 → 拖拽调整位置
     dragOrder=ord;
-    if(ord.ship){selected=[ord.ship.id];selMissile=null;selNet=null;selMissileHits=[];} // FL1:orderAt 扫的是全部蓝舰的 orders(不限选中),所以这条路径能在"导弹选中态"下把 selected 改成舰船;不清的话 88-selpanel 的导弹早退会挡在编队/单舰分支前面,右栏切不过来
+    if(ord.ship){selected=[ord.ship.id];selMissile=null;selNet=null;selMissileHits=[];selBuoy=null;} // FL1:orderAt 扫的是全部蓝舰的 orders(不限选中),所以这条路径能在"导弹选中态"下把 selected 改成舰船;不清的话 88-selpanel 的导弹早退会挡在编队/单舰分支前面,右栏切不过来
     selDrag=null;
     return;
   }
@@ -284,9 +289,11 @@ function mdLeft(e,sx,sy){ // 左键
   }
   if(!sh){ // 没点中船 → 看导弹组(导弹组可点选;v125点中组=选整个网)
     const g=groupAt(sx,sy);
-    if(g){selMissile=g;selNet=g.netId||null;selMissileHits=[g];selected=[];selDrag=null;return;}
+    if(g){selMissile=g;selNet=g.netId||null;selMissileHits=[g];selected=[];selDrag=null;selBuoy=null;return;}
+    const b=buoyAt(sx,sy); // 2026-09-29 点中我方浮标 → 选中它(右栏 / 底栏雷达切到浮标)
+    if(b){selBuoy=b;selMissile=null;selNet=null;selMissileHits=[];selected=[];selDrag=null;if(typeof updateSelPanel==='function')updateSelPanel();return;}
   }
-  selMissile=null;selNet=null;selMissileHits=[]; // 没点中导弹组 → 取消导弹组选中
+  selMissile=null;selNet=null;selMissileHits=[];selBuoy=null; // 没点中导弹组 / 浮标 → 取消它们的选中
   if(e.ctrlKey){
     if(sh){selected.includes(sh.id)?selected.splice(selected.indexOf(sh.id),1):selected.push(sh.id);}
   }else{

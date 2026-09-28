@@ -87,6 +87,7 @@ function drawOwnBuoy(s){ // 自己的浮标:蓝色小圈;开着照射时外面�
   const p=toScreen(s.pos[0],s.pos[1]);if(p[0]<-40||p[0]>W+40||p[1]<-40||p[1]>H+40)return;
   ctx.save();ctx.strokeStyle='#5aa7ff';ctx.fillStyle='#5aa7ff';ctx.lineWidth=1.4;ctx.beginPath();ctx.arc(p[0],p[1],4,0,6.283);ctx.stroke();ctx.beginPath();ctx.arc(p[0],p[1],1.5,0,6.283);ctx.fill();
   if(s.on){ctx.globalAlpha=0.6;ctx.beginPath();ctx.arc(p[0],p[1],8,0,6.283);ctx.stroke();ctx.globalAlpha=1;}
+  if(typeof selBuoy!=='undefined'&&selBuoy===s){ctx.strokeStyle='#ffe066';ctx.lineWidth=1.6;ctx.beginPath();ctx.arc(p[0],p[1],12,0,6.283);ctx.stroke();} // 2026-09-29 选中(同舰船选中圈的颜色)
   if(cam.zoom>0.0008){ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillStyle='rgba(143,208,255,.9)';ctx.fillText(s.name+(s.dest?' · 飞行':(s.on?' · 照射':' · 被动')),p[0],p[1]+8);}
   ctx.restore();
 }
