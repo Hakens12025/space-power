@@ -30,6 +30,8 @@ function macAligned(s,t){ // 轴炮对准:机头是否转到预测点上(MAC_ALI
    2026-09-26 整体 x1/5(单局地图),上文旧数按 1/5 读(90% 带 3 万 / 50% 7.3 万 / 10% 39 万)。 */
 const MAC_HIT_R=400*CFG.scale;         // 命中判定半径 km(weapons/56 的命中检查与 sensors/23 的 COV.MAC 同一个数)。2026-09-26 x1/5(单局地图):原 2000
 const MSL_ACC=PHYS.a(1.5), MSL_FUEL=PHYS.t(447.2)*Math.sqrt(CFG.scale); // 2026-09-26 物理单位:加速度 1.5 km/s² ≈ 153 g,燃料 447 s   // 导弹加速度 km/s²(weapons/56 里 DS190 定的 150)与燃料(满油门秒)。2026-09-26 x1/5(单局地图):燃料原 100,√2000 ⇒ 动力射程 7.5 万
+const MSL_VK=0.25,MSL_A=MSL_ACC*MSL_VK; // 2026-09-29 用户:导弹速度 1/4 —— 整条速度曲线(巡航上限、终端速度、减速下限、加速度 MSL_A、转弯的速度尺度)一起乘 MSL_VK,燃料秒数不变 ⇒ 实测速度正好 1/4。MSL_ACC 原值留给侦察信标(56 stepBeaconProj)
+const INT_VK=1/3; // 2026-09-29 用户:拦截弹速度 1/3(56 stepInterceptorProj 的加速度、上限、下限、转弯尺度,与发射初速下限一起乘)
 const MAC_K=4,MAC_Z50=0.6745; // 2026-09-28 命中率改 S 形(用户选拐点 7.3 万):P(d) = 1/(1+(d/d50)^MAC_K),d50 = 散布反算的 50% 距离(z50:P(|N(0,1)|<z)=0.5)。3 万 97% / 7.3 万 50% / 12.6 万 10% / 20 万 2%
 /* WR1 自动开火的把握下限。没有射程门之后,"打不打"只剩两个成本:30 秒装填,以及【开火暴露】(FX1:开火后 8 秒亮一档)。
    所以纯按期望伤害算,20% 把握也值得打 —— 实测红方 bot 因此从 94 万公里就开始放炮(命中率 20.7%),整局双方各打五六十发、命中九发,读起来是"对着远处喷"。
@@ -81,7 +83,7 @@ function fireMAC(shooter,target){ // MAC 轴炮:沿机头轴线直射(调用方�
   if(!contactFix(target,shooter.side))return; // 定得出位置就许开火;瞄的是估计位置,椭圆大就是打不中
   const pred=macPred(shooter,target); if(!pred)return; // WR1:交代不出估计位置就不开火(不回落真值)
   const d=V.len(V.sub(pred,shooter.pos)); // WR1:飞行距离按预测点算(没有射程门了,d 只决定弹丸寿命)
-  const tt=d/CFG.macSpd; // 飞行时间(MAC 0.1c)
+  const tt=d/CFG.macSpd; // 飞行时间(MAC 匀速 CFG.macSpd)
   const dir=V.norm(V.sub(pred,shooter.pos)); // 俯仰取瞄准线;方位见下一行
   const da=gaussRand()*macShotSigma(shooter,d); // WR1:每一发都带高斯角散布;2026-09-28 散布按距离反推,打出来的命中率 = macHitProb 的 S 形
   const ang=Math.atan2(shooter.facing[1],shooter.facing[0])+da; // 2026-09-28 用户:轴炮对准再射 —— 出膛方位沿机头轴线 + 散布(对准门收到 0.1°,4 万处偏不到 70 km,远小于命中半径 400;原来 1.1° 窗口擦边就开,只好改沿精确瞄准线)
@@ -118,11 +120,11 @@ function findInterceptorTarget(p){ // 拦截弹重选目标:前方最近的来�
 }
 function fireDecoy(shooter){ // v125 诱饵弹:模拟舰船热信号骗敌方拦截弹/传感器(对抗玩法)
   projectiles.push({type:'decoy',pos:shooter.pos.slice(),vel:shooter.vel.slice(),
-    target:null,shooter,spd:Math.max(PHYS.v(30),V.len(shooter.vel)),age:0,fuel:PHYS.t(600)});
+    target:null,shooter,spd:Math.max(PHYS.v(30)*INT_VK,V.len(shooter.vel)),age:0,fuel:PHYS.t(600)});
 }
 function fireInterceptor(shooter,targetMissile,count){ // 发射拦截导弹实体(燃料模式v114:可出远门防御)
   projectiles.push({type:'interceptor',count:count||16,pos:shooter.pos.slice(),vel:shooter.vel.slice(),
-    target:targetMissile,shooter,spd:Math.max(PHYS.v(30),V.len(shooter.vel)),age:0,fuel:PHYS.t(600),park:false,parkPt:null,screen:false,screenRange:50000*CFG.scale, // 2026-09-26 跟近防走(= 4 x DD 外圈 12500):原 100000
+    target:targetMissile,shooter,spd:Math.max(PHYS.v(30)*INT_VK,V.len(shooter.vel)),age:0,fuel:PHYS.t(600),park:false,parkPt:null,screen:false,screenRange:50000*CFG.scale, // 2026-09-26 跟近防走(= 4 x DD 外圈 12500):原 100000
     hitMul:(shooter.interHitMul||1)}); // RANGE1 拦截弹命中率倍率随弹出膛(07-missiles 的 hitRate 末尾乘它)。外圈拦截率的真实旋钮是这个:CLS_CIWS.outerIntercept 是死字段,声明后全库零读取,面板绝不能放它
 }
 function launchInterceptors(shooter,pt){ // 主动发射拦截弹到布防点(防空屏/伏击):飞抵停车,等来袭导弹进圈
@@ -130,7 +132,7 @@ function launchInterceptors(shooter,pt){ // 主动发射拦截弹到布防点(�
   if(shooter.interceptor<need)return false;
   shooter.interceptor-=need;
   projectiles.push({type:'interceptor',count:need,pos:shooter.pos.slice(),vel:shooter.vel.slice(),
-    target:null,shooter,spd:Math.max(PHYS.v(30),V.len(shooter.vel)),age:0,fuel:PHYS.t(600),park:true,parkPt:[pt[0],pt[1],0],screen:false,screenRange:50000*CFG.scale}); // 2026-09-26 跟近防走(= 4 x DD 外圈 12500):原 100000
+    target:null,shooter,spd:Math.max(PHYS.v(30)*INT_VK,V.len(shooter.vel)),age:0,fuel:PHYS.t(600),park:true,parkPt:[pt[0],pt[1],0],screen:false,screenRange:50000*CFG.scale}); // 2026-09-26 跟近防走(= 4 x DD 外圈 12500):原 100000
   return true;
 }
 /* SL1b(2026-09-22)从 render/87-fleetcards【纯移动】过来:它是武器 / 载荷的发射函数,不是界面。舰队卡删掉后它没有 UI 入口,
@@ -177,10 +179,10 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
   const isNet=missileMode==='net'||(missileMode==='auto'&&!shooter.noNet);
   const D0=isShip?Math.max(1,V.len(V.sub(tp0,shooter.pos))):20000*CFG.scale; // 2026-09-26 x1/5(单局地图):区域齐射的距离级原 100000
   // 速度剖面(v122):巡航vPeak(距离自适应,留20%距离加减速)+ 终端vTerm + 燃料预留(滑行修正+终端机动)
-  const vTerm=isNet?PHYS.v(300):PHYS.v(800); // 物理 300 / 800 km/s      // 组网需低速机动/直射几乎不减速
+  const vTerm=(isNet?PHYS.v(300):PHYS.v(800))*MSL_VK; // 物理 300 / 800 km/s      // 组网需低速机动/直射几乎不减速
   const netReserve=isNet?PHYS.t(400):PHYS.t(200); // 物理 400 / 200 s     // 预留燃料:滑行修正转向+终端机动
-  const baseMaxV=Math.sqrt((2*MSL_ACC*D0+vTerm*vTerm)/2); // DS190:加速度 200→150,系数同步 2×150=300 // 距离允许的峰值(加速+减速≈0.8D0,留巡航段)
-  const baseVPeak=Math.max(vTerm,Math.min(isNet?PHYS.v(700):PHYS.v(900),baseMaxV));
+  const baseMaxV=Math.sqrt((2*MSL_A*D0+vTerm*vTerm)/2); // DS190:加速度 200→150,系数同步 2×150=300 // 距离允许的峰值(加速+减速≈0.8D0,留巡航段)
+  const baseVPeak=Math.max(vTerm,Math.min((isNet?PHYS.v(700):PHYS.v(900))*MSL_VK,baseMaxV));
   // DS190:原 baseDecel 在此计算但全函数无人读取(写进弹丸的是下面按组算的 pDecel),合并时一并清掉这个死变量
   // 组网攻击(v121):≥2组打船+距离≥1.2万(2026-09-26 x1/5,原 6 万)→ 各组带不同方位偏移收敛,多方向包抄同时弹着
   let netGeom=null;
@@ -205,7 +207,7 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
         ov=[ov[0]*c+cx*s2,ov[1]*c+cy*s2,ov[2]*c+cz*s2+dot*(1-c)];
       }
       const lateral=Math.sqrt(Math.max(0,1-(ov[0]*si[0]+ov[1]*si[1])**2)); // 偏移的横向分量(0=直插,1=侧翼)
-      offs.push({v:ov,vPeak:Math.min(isNet?PHYS.v(700):PHYS.v(900),Math.max(vTerm,baseMaxV*(1+lateral*0.12)))}); // 侧翼+12%配速(同步到达)
+      offs.push({v:ov,vPeak:Math.min((isNet?PHYS.v(700):PHYS.v(900))*MSL_VK,Math.max(vTerm,baseMaxV*(1+lateral*0.12)))}); // 侧翼+12%配速(同步到达)
     }
     netGeom={R,offs,D0,dirs};
   }
@@ -218,13 +220,13 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
     const off=(lane*100+(Math.random()-0.5)*80)*CFG.scale; // 100km/道 + 抖动。2026-09-26 x1/5(单局地图):原 500 / 400
     const ng2=netGeom?netGeom.offs[k]:null;
     const pvPeak=ng2?ng2.vPeak:baseVPeak;
-    const pDecel=(pvPeak*pvPeak-vTerm*vTerm)/(2*MSL_ACC); // DS190:减速点按 150 km/s² 反推(仍用 200 算会晚刹车→到点速度收不回 vTerm)
+    const pDecel=(pvPeak*pvPeak-vTerm*vTerm)/(2*MSL_A); // DS190:减速点按 150 km/s² 反推(仍用 200 算会晚刹车→到点速度收不回 vTerm)
     nets.get(netId).groups.push(gid);
     projectiles.push({type:'missile',group:gid,count:shooter.mslPer||12, // KIMI154:每组16→12颗(用户令砍射手:齐射密度-25%,拦截需求同步降,反清屏延续);RF3 枚数读烘焙字段(定义在 weapons/51-defs)
       pos:[shooter.pos[0]+perp[0]*off,shooter.pos[1]+perp[1]*off,shooter.pos[2]+perp[2]*off],
       vel:[shooter.vel[0]+perp[0]*lane*10,shooter.vel[1]+perp[1]*lane*10,shooter.vel[2]+perp[2]*lane*10], // 继承载机速度矢量+轻微侧向发散
       target:isShip?target:null, shooter, dmg:shooter.missDmg*(shooter.mslPer||12), missDmg:shooter.missDmg, // 组总伤害 + 单颗伤害(v119,命中按单颗算)
-      spd:Math.max(200,V.len(shooter.vel)), // 初始速率=载机速率
+      spd:Math.max(200*MSL_VK,V.len(shooter.vel)), // 初始速率=载机速率
       fuel:MSL_FUEL, age:0, // 燃料(秒,WR1 起是常量 MSL_FUEL:mslReach 从它现算)+ 飞行年龄(近防发射判定)
       park:!isShip, parkPt:isShip?null:target.pos.slice(), mine:false, mineOk:false, cruise:false, trigRadius:(isShip?24000:16000)*CFG.scale, trigMode:'any', // 2026-09-28 mineOk = 底栏「变雷」:勾了到点停下待命,没勾到点巡飞搜索(cruise) // 区域齐射:飞到点位,到了等敌舰进圈自主攻击(盲射);雷触发圈放大v118。2026-09-26 x1/5(单局地图):原 120000 / 80000
       netId, netFmt:null, // v125 网:所属网 + 网内阵型位(横线/集中)

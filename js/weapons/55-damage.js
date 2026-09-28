@@ -2,7 +2,7 @@
 /* RF1: 拆自 js/04-targeting.js L80-100(applyDamage,含 RANGE1 invuln 守卫)。纯移动无逻辑改动。 */
 function applyDamage(s,dmg,src,kind,p){ // 2026-09-29 p = 打中它的那颗弹(护盾特效定方向,可省);返回进了船体的伤害(全被护盾挡住 = 0,调用方据此决定出不出船体命中闪光)。 // RANGE1 加第 4 形参 kind('mac'/'missile'):靶场按武器分栏统计伤害,两个调用点(07-missiles 的 MAC 命中与导弹组命中)各传一个字面量
   if(s.dead)return 0;
-  if(kindOf(s)==='rock')return dmg; // TK4c 石头没有结构值,打中了也什么都不发生(弹药白费,决定 6)。命中特效在调用方,照样有
+  if(kindOf(s)==='rock'){s.dead=true;return dmg;} // 2026-09-29 用户:碎石会被击毁(原 TK4c 决定 6「打中了也什么都不发生」作废) // TK4c 石头没有结构值,打中了也什么都不发生(弹药白费,决定 6)。命中特效在调用方,照样有
   if(s.shMax>0&&s.shDown<=0&&dmg>0){ // 2026-09-29 护盾:先扣盾,打破后多出的进船体(用户选);破了 SHIELD.RESTART_S 游戏秒后重启、从 0 开始回
     const a=Math.min(s.sh,dmg);s.sh-=a;dmg-=a;s.roeCd=8;shieldFx(s,'hit',src,p,kind==='mac');
     if(s.sh<=1e-9){s.sh=0;s.shDown=SHIELD.RESTART_S;shieldFx(s,'break',src,p);}

@@ -43,12 +43,14 @@ function stepProjectiles(dt){
   }
   for(let i=threatCorridors.length-1;i>=0;i--){const c=threatCorridors[i];if(c.p.done){c.t-=dt;if(c.t<=0)threatCorridors.splice(i,1);}}
   for(const p of projectiles){ // 五弹型主循环(RF1:分支体在下方五个子函数)
+    const x0=p.pos[0],y0=p.pos[1];
     if(p.type==='decoy')stepDecoyProj(p,dt);
     else if(p.type==='mac')stepMacProj(p,dt);
     else if(p.type==='beacon')stepBeaconProj(p,dt);
     else if(p.type==='missile'){const f0=p.fuel;stepMissileProj(p,dt,icBlue,icRed);p.lit=p.fuel<f0;} // 2026-09-27 这一拍烧没烧油 = 喷没喷火(sensors/22 的 projSig 按它给红外亮度)
     else if(p.type==='interceptor')stepInterceptorProj(p,dt);
     if(ARENA&&!p.done&&!arenaIn(p.pos))p.done=true; // 2026-09-26 单局地图:五弹型统一在这里判,出了游玩区就消失
+    if(!p.done&&(p.type==='mac'||p.type==='missile'||p.type==='interceptor'))projBlock(p,x0,y0); // 2026-09-29 天体 / 碎石挡弹
   }
   shellTraceStep();
   projectiles=projectiles.filter(p=>!p.done);
@@ -70,6 +72,26 @@ function shellTraceStep(){
       (p.tr||(p.tr={}))[side]=r;L.push(r);
     }
     while(L.length&&simTime-L[0].t>SHELL_TR.KEEP)L.shift();
+  }
+}
+/* 2026-09-29 用户:天体是遮挡,炮弹会被挡住;碎石也挡,但碎石会被击毁(炮弹 / 导弹 / 拦截弹都算)。
+   这一步走过的线段 (x0,y0) → p.pos 碰到天体盘 = 弹没了,撞击点出命中闪光;碰到碎石(命中半径 MAC_HIT_R 内,同打船)= 碎石被打碎,
+   炮弹没了、导弹组 / 拦截弹组少一颗(一颗不剩才没)。瞄着那块碎石打的弹不在这里判(走原来的命中结算,同样打碎) */
+function projBlock(p,x0,y0){
+  const x1=p.pos[0],y1=p.pos[1],dx=x1-x0,dy=y1-y0,l2=dx*dx+dy*dy;if(!(l2>0))return;
+  const kind=p.type==='mac'?'mac':'missile';
+  for(const b of ENV.bodies){
+    const fx=x0-b.x,fy=y0-b.y,bb=fx*dx+fy*dy,cc=fx*fx+fy*fy-b.r2,disc=bb*bb-l2*cc;if(disc<0)continue;
+    const t=(-bb-Math.sqrt(disc))/l2;if(t>1||(t<0&&cc>0))continue; // 这一步没碰到盘(起点在盘里 cc<=0 也算碰到)
+    const u=Math.max(0,t);p.done=true;spawnHit([x0+dx*u,y0+dy*u,p.pos[2]||0],kind,p.shooter,null);return;
+  }
+  const R2=MAC_HIT_R*MAC_HIT_R,L=Math.sqrt(l2)+MAC_HIT_R;
+  for(const k of rocks){
+    if(k.dead||k.kind!=='rock'||k===p.target)continue;
+    const ex=k.pos[0]-x0,ey=k.pos[1]-y0;if(Math.abs(ex)>L||Math.abs(ey)>L)continue;
+    const u=Math.max(0,Math.min(1,(ex*dx+ey*dy)/l2)),cx=dx*u-ex,cy=dy*u-ey;if(cx*cx+cy*cy>=R2)continue;
+    applyDamage(k,p.missDmg||p.dmg||1,p.shooter,kind,p);spawnHit(k.pos,kind,p.shooter,k);
+    if(p.type!=='mac'&&(p.count||1)>1){p.count--;if(p.type==='missile')p.dmg=(p.missDmg||12)*p.count;}else{p.done=true;return;}
   }
 }
 function stepDecoyProj(p,dt){ // 诱饵弹(v125):直线飞模拟舰船信号,燃料耗尽自毁
@@ -157,11 +179,11 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         }
         const pdir=V.norm(toP);
         let pspdDes=Infinity;
-        if(p.mineOk&&pdist<90000)pspdDes=Math.min(pspdDes,Math.max(1500,Math.sqrt(2*MSL_ACC*pdist*0.6))); // 接近减速(只有要变雷的才减)。DS190:曲线也按 150 算——朋友版这处漏改,会按 200 的能力规划刹车→冲过布设点
+        if(p.mineOk&&pdist<90000)pspdDes=Math.min(pspdDes,Math.max(1500*MSL_VK,Math.sqrt(2*MSL_A*pdist*0.6))); // 接近减速(只有要变雷的才减)。DS190:曲线也按 150 算——朋友版这处漏改,会按 200 的能力规划刹车→冲过布设点
         if(p.fuel>0){
-          let dv=Math.max(-150*dt,Math.min(150*dt,pspdDes-p.spd)); // DS190
+          let dv=Math.max(-MSL_A*dt,Math.min(MSL_A*dt,pspdDes-p.spd)); // DS190
           if(dv>0&&p.fuel<=MSL_LOAL_KEEP)dv=0; // 2026-09-28 加速不动末段预留
-          const cost=Math.abs(dv)/150; // DS190
+          const cost=Math.abs(dv)/MSL_A; // DS190
           if(cost>p.fuel){dv*=p.fuel/cost;p.fuel=0;}
           else p.fuel-=cost;
           p.spd+=dv;
@@ -240,10 +262,10 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         // 飞向最后已知位置(巡航加速:有燃料就飞快点到点变雷,燃料尽只能滑行)
         const kvn=V.len(p.vel);
         if(p.fuel>0){ // 朝最后已知位置加速到巡航(用剩余燃料,能到就行)
-          const kSpdDes=p.mineOk?Math.min((p.vPeak||PHYS.v(700)),Math.max(1500,Math.sqrt(2*MSL_ACC*Math.max(0,kdist-1200)*0.5))):(p.vPeak||PHYS.v(700)); // DS190;2026-09-28 不变雷的不减速
-          let dv=Math.max(-150*dt,Math.min(150*dt,kSpdDes-p.spd)); // DS190
+          const kSpdDes=p.mineOk?Math.min((p.vPeak||PHYS.v(700)*MSL_VK),Math.max(1500*MSL_VK,Math.sqrt(2*MSL_A*Math.max(0,kdist-1200)*0.5))):(p.vPeak||PHYS.v(700)*MSL_VK); // DS190;2026-09-28 不变雷的不减速
+          let dv=Math.max(-MSL_A*dt,Math.min(MSL_A*dt,kSpdDes-p.spd)); // DS190
           if(dv>0&&p.fuel<=MSL_LOAL_KEEP)dv=0; // 2026-09-28 加速不动末段预留
-          const cost=Math.abs(dv)/150; // DS190
+          const cost=Math.abs(dv)/MSL_A; // DS190
           if(cost>p.fuel){dv*=p.fuel/cost;p.fuel=0;}else p.fuel-=cost;
           p.spd+=dv;
         }
@@ -297,29 +319,29 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
       let spdDes=Infinity;
       if(p.vPeak){ // 有速度剖面(所有火Missiles发射的导弹)
         if(dist>p.decelDist)spdDes=p.vPeak; // 巡航段:高速,不耗油
-        else spdDes=Math.max(p.vTerm,Math.sqrt(p.vTerm*p.vTerm+2*MSL_ACC*dist)); // 减速段:到目标=vTerm(DS190:加速度 150)
+        else spdDes=Math.max(p.vTerm,Math.sqrt(p.vTerm*p.vTerm+2*MSL_A*dist)); // 减速段:到目标=vTerm(DS190:加速度 150)
         // DS191(用户令"越快越不好转弯,不能无脑快"):大转弯(与当前航向夹角 >~17°)限速,降速才转得动;复锁/绕行不再全速冲。
         // 朝向取速度方向 V.norm(p.vel)——弹丸没有 facing 字段(朋友版这处写的 p.facing 恒为 undefined,限速从未生效过),下面旧逻辑兜底分支用的也是速度方向。
         const angTo=vn>5?V.angle(V.norm(p.vel),dir):0;
         if(angTo>0.3)spdDes=Math.min(spdDes,Math.max(p.vTerm,2500));
         // 燃料对称安全帽:按当前速度减速回vTerm需(vTerm外的燃料),再留净机动燃料——超了自动降速(加速多久留多久减速/滑行修正吃油→降速)
-        const safe=Math.max(p.vTerm,p.vTerm+Math.max(0,p.fuel-(p.netReserve||20))*MSL_ACC); // DS190:安全帽折算同步 150(用 200 会高估减速能力→放宽减速段→命中速度偏高)
+        const safe=Math.max(p.vTerm,p.vTerm+Math.max(0,p.fuel-(p.netReserve||20))*MSL_A); // DS190:安全帽折算同步 150(用 200 会高估减速能力→放宽减速段→命中速度偏高)
         spdDes=Math.min(spdDes,safe);
         if(coast&&spdDes>p.spd&&p.fuel<=(p.keep||0))spdDes=p.spd; // 加速不许动用末段预留(原来直射弹的终端速度够不着,安全帽从不起作用,一路加速把油烧光)
       }else{ // 旧逻辑兜底(手动构造的导弹)
         const ang=vn>5?V.angle(V.norm(p.vel),dir):0;
         if(ang>0.25)spdDes=Math.min(spdDes,1800+ang*5200); // 需大机动:限速换取转向(越快越拐不过弯)
-        if(dist<90000)spdDes=Math.min(spdDes,Math.max(1500,Math.sqrt(2*MSL_ACC*dist*0.6))); // DS190
+        if(dist<90000)spdDes=Math.min(spdDes,Math.max(1500*MSL_VK,Math.sqrt(2*MSL_A*dist*0.6))); // DS190
       }
       // 有限加减速(加速=减速 150 km/s²,DS190) + 燃料限制:加减速/转向都耗燃料,耗尽只能滑行
       if(p.fuel>0){
-        let dv=Math.max(-150*dt,Math.min(150*dt,spdDes-p.spd)); // DS190
-        const cost=Math.abs(dv)/150; // DS190:折算成满油门秒数。朋友版这处 dv 钳到 150 却仍除 200,等于每单位燃料多拿 33% Δv,把 DS190 的削弱抵掉一截——按 150 改齐
+        let dv=Math.max(-MSL_A*dt,Math.min(MSL_A*dt,spdDes-p.spd)); // DS190
+        const cost=Math.abs(dv)/MSL_A; // DS190:折算成满油门秒数。朋友版这处 dv 钳到 150 却仍除 200,等于每单位燃料多拿 33% Δv,把 DS190 的削弱抵掉一截——按 150 改齐
         if(cost>p.fuel){dv*=p.fuel/cost;p.fuel=0;}
         else p.fuel-=cost;
         p.spd+=dv;
       }
-      const turnRate=1.2/(1+vn/1800);    // 越快越拐不过弯;KIMI152(DS172):2.0/(1+vn/2500)→1.2/(1+vn/1800)(2500速 57°→29°/s 约砍半)——高速=直射弹,复锁大转弯又慢又贵;低速终端段38°/s保证基本命中(拦截弹4.5/(1+pv/3000)不动,防御灵活性是对抗本体)
+      const turnRate=1.2/(1+vn/(1800*MSL_VK));    // 越快越拐不过弯;KIMI152(DS172):2.0/(1+vn/2500)→1.2/(1+vn/1800)(2500速 57°→29°/s 约砍半)——高速=直射弹,复锁大转弯又慢又贵;低速终端段38°/s保证基本命中(拦截弹4.5/(1+pv/3000)不动,防御灵活性是对抗本体)
       let nd;
       if(vn>1&&p.fuel>0){ // 转向耗燃料(v122:越快转向越贵 0.5~3.0/rad);燃料耗尽无法转向,只能直线滑行
         const cur=V.norm(p.vel),ang=V.angle(cur,dir);
@@ -392,7 +414,7 @@ function stepInterceptorProj(p,dt){ // 拦截导弹(v114):燃料模式可出远�
           if(q.type!=='missile'||q.done||q.shooter.side===p.shooter.side)continue;
           if(V.len(V.sub(q.pos,p.pos))<(p.screenRange||50000*CFG.scale)){tgt=q;break;} // 2026-09-26 跟近防走:缺省原 100000
         }
-        if(tgt){p.screen=false;p.target=tgt;p.spd=Math.max(p.spd,2000);}
+        if(tgt){p.screen=false;p.target=tgt;p.spd=Math.max(p.spd,2000*INT_VK);}
         return;
       }
       if(p.fuel<=0){p.done=true;return;} // 燃料耗尽自毁(v118:燃料=寿命,耗尽即失效)
@@ -401,9 +423,9 @@ function stepInterceptorProj(p,dt){ // 拦截导弹(v114):燃料模式可出远�
         if(pd<800||(pd<20000&&pv<80)){p.park=false;p.screen=true;p.vel=[0,0,0];p.spd=0;return;}
         const dir=V.norm(toP);
         let sDes=Infinity;
-        if(pd<90000)sDes=Math.min(sDes,Math.max(1500,Math.sqrt(2*400*pd*0.6)));
-        if(p.fuel>0){let dv=Math.max(-400*dt,Math.min(400*dt,sDes-p.spd));const c=Math.abs(dv)/400;if(c>p.fuel){dv*=p.fuel/c;p.fuel=0;}else p.fuel-=c;p.spd+=dv;}
-        const tr=4.5/(1+pv/3000);let nd; // 转向更强
+        if(pd<90000)sDes=Math.min(sDes,Math.max(1500*INT_VK,Math.sqrt(2*400*INT_VK*pd*0.6)));
+        if(p.fuel>0){let dv=Math.max(-400*INT_VK*dt,Math.min(400*INT_VK*dt,sDes-p.spd));const c=Math.abs(dv)/(400*INT_VK);if(c>p.fuel){dv*=p.fuel/c;p.fuel=0;}else p.fuel-=c;p.spd+=dv;}
+        const tr=4.5/(1+pv/(3000*INT_VK));let nd; // 转向更强
         if(pv>1&&p.fuel>0){const cur=V.norm(p.vel);nd=V.slerp(cur,dir,Math.min(1,tr*dt));p.fuel=Math.max(0,p.fuel-V.angle(cur,nd)*0.8);} // 转向更耗燃料
         else if(pv>1){nd=V.norm(p.vel);}else nd=dir;
         p.vel=[nd[0]*p.spd,nd[1]*p.spd,nd[2]*p.spd];
@@ -425,14 +447,14 @@ function stepInterceptorProj(p,dt){ // 拦截导弹(v114):燃料模式可出远�
       const vn=V.len(p.vel);
       // 燃料模式(v118):加速400/上限24000/燃料60s,加减速/转向都耗燃料;转向更强但更耗油
       if(p.fuel>0){
-        let dv=Math.max(-400*dt,Math.min(400*dt,24000-p.spd));
-        const cost=Math.abs(dv)/400;
+        let dv=Math.max(-400*INT_VK*dt,Math.min(400*INT_VK*dt,24000*INT_VK-p.spd));
+        const cost=Math.abs(dv)/(400*INT_VK);
         if(cost>p.fuel){dv*=p.fuel/cost;p.fuel=0;}
         else p.fuel-=cost;
         p.spd+=dv;
       }
       let nd;
-      if(vn>1&&p.fuel>0){const cur=V.norm(p.vel);nd=V.slerp(cur,dir,Math.min(1,4.5/(1+vn/3000)*dt));p.fuel=Math.max(0,p.fuel-V.angle(cur,nd)*0.8);} // 转向更强(4.5)但更耗油(0.8/rad)
+      if(vn>1&&p.fuel>0){const cur=V.norm(p.vel);nd=V.slerp(cur,dir,Math.min(1,4.5/(1+vn/(3000*INT_VK))*dt));p.fuel=Math.max(0,p.fuel-V.angle(cur,nd)*0.8);} // 转向更强(4.5)但更耗油(0.8/rad)
       else if(vn>1){nd=V.norm(p.vel);}
       else nd=dir;
       p.vel=[nd[0]*p.spd,nd[1]*p.spd,nd[2]*p.spd];

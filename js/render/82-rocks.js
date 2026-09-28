@@ -19,7 +19,7 @@ function drawRocks(ownOnly){ // ownOnly = 传感器画面(红外 / 雷达):只�
   if(ownOnly)return;
   if(adminMode){for(const s of rocks)if(!s.dead&&s.side!==VIEW)drawRockAt(s,s.pos,'live',true);return;}
   trkEach(VIEW,function(tk,st){
-    const s=trkSrc(tk);
+    const s=trkSrc(tk);if(s.dead)return; // 2026-09-29 被打碎的碎石不再画(weapons/55)
     if(kindOf(s)==='ship'||st==='heat')return; // 2026-09-27 石头之外还有民船 / 诱饵 / 敌方浮标(world/14),都走这条
     const cp=trkPos(tk);if(!cp)return;
     if(st==='live'&&lodNow.live&&lodNow.hideRed.has(s.id))return; // 收进接触群了(只有没认出的才会被收,见 82-lod)

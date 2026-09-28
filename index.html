@@ -117,7 +117,7 @@
 <!-- RF1: 目录=系统。编号十位是系统层(0core/1ships/2sensors/3physics/4formation/5weapons/6bots/7command/8render/9scenario)。
      硬约束仅两条:core/00 定义 on() 必须最先(85/95/96/97 顶层调用它);core/99 顶层执行 init() 必须最后(且 init 调 loadRangeCfg,
      故 scenario/95 必须在它之前)。其余跨文件引用全在运行期解析,层序排列只为可读性。 -->
-<script src="js/core/00-config.js?v=20260928r1"></script>
+<script src="js/core/00-config.js?v=20260929sp"></script>
 <script src="js/core/01-state.js?v=20260928zk"></script>
 <script src="js/ships/10-hull-geometry.js?v=20260923"></script>
 <script src="js/ships/11-classes.js?v=20260929sh"></script>
@@ -127,7 +127,7 @@
 <script src="js/sensors/20-signature.js?v=20260929iv"></script>
 <script src="js/sensors/21-detect.js?v=20260928zc"></script>
 <script src="js/sensors/22-percep.js?v=20260928fp"></script><!-- SN4 感知纯函数层:零顶层执行(只声明模块私有的 Float64Array 缓冲与三个纯字面量常量,不读 SENS/sReq/ships 任何东西)、不调 on()、不是 core/99,所以两条加载顺序硬约束都不涉及;跨文件引用(SENS 在 20-signature、sReq 在 00-config)全部运行期解析,与 formation/39-fmcaps 同口径 —— 排在 21-detect 之后只为目录编号好读,换到别处也不会错 -->
-<script src="js/sensors/23-cov.js?v=20260928zd"></script><!-- SN6 误差椭圆感知内核:同样零顶层执行(只声明;ladApply 不在加载期跑) -->
+<script src="js/sensors/23-cov.js?v=20260929sp"></script><!-- SN6 误差椭圆感知内核:同样零顶层执行(只声明;ladApply 不在加载期跑) -->
 <script src="js/sensors/24-track.js?v=20260928y1"></script><!-- TK1 航迹表(每方一张 WeakMap):顶层只建 TRK 与 TRK_FWD、只调同文件的函数;ships/11 的 makeShip 虽然排在它前面,但只在运行期调 trkAdopt(init 与判据里),所以不构成加载顺序约束 -->
 <script src="js/sensors/25-optpair.js?v=20260929iv"></script><!-- ENV2 成对光学模型(晒热 / 杂散光 / 云背景):顶层只有声明,22-percep 的精算步与弹丸路径在运行期调 -->
 <script src="js/physics/30-motion.js?v=20260923"></script>
@@ -142,11 +142,11 @@
 <script src="js/weapons/50-missile-spec.js?v=20260928e1"></script>
 <script src="js/weapons/51-defs.js?v=20260928cj"></script>
 <script src="js/weapons/51-ciws.js?v=20260923"></script>
-<script src="js/weapons/52-fire.js?v=20260928fn"></script>
+<script src="js/weapons/52-fire.js?v=20260929sq"></script>
 <script src="js/weapons/53-nets.js?v=20260928r1"></script>
 <script src="js/weapons/54-missiles.js?v=20260928r1"></script>
-<script src="js/weapons/55-damage.js?v=20260929sh"></script>
-<script src="js/weapons/56-step-projectiles.js?v=20260929sh"></script>
+<script src="js/weapons/55-damage.js?v=20260929sp"></script>
+<script src="js/weapons/56-step-projectiles.js?v=20260929sp"></script>
 <script src="js/weapons/57-step-weapons.js?v=20260928ze"></script>
 <script src="js/weapons/58-firecontrol.js?v=20260926c"></script><!-- RF5 火控计算机引擎:序列数据模型+stepFireControl/Post。位置只为目录编号可读性(编号 58 > 57,归位到 weapons 块末尾),跨文件引用全在运行期解析:本文件顶层只有 const/let/function 声明,零顶层执行 -->
 <script src="js/core/05-sim.js?v=20260929sh"></script>
@@ -162,9 +162,9 @@
 <script src="js/render/81-terrain.js?v=20260926s"></script><!-- ENV2 地形瓦片服务:云浓度的世界锚定瓦片(粗到细、每帧工作量封顶、LRU)+ 合成缓存(双缓冲、1:1 贴图)。顶层只有 const / function 与一个惰性求和的 let(TERR_DUST_NORM,同 world/13 的 ENV_DUST_NORM),运行期由 81-env 的 mapTileFrame 调;与 81-background 共用编号 81 -->
 <script src="js/render/81-env.js?v=20260928zk"></script><!-- ENV1 环境底图(天体 + 太阳方向)。与 81-background 共用编号 81。ENV2:改成 kind x view 登记表(ENV_VIEWS.map)+ 云 / 影子 / 天体 / 恒星的海图画法,版本号随之换 -->
 <script src="js/render/82-ship-icons.js?v=20260929sh"></script>
-<script src="js/render/82-rocks.js?v=20260928zk"></script><!-- TK4c 石头的航迹(第二个循环)。与 82-ship-icons / 82-lod 共用编号 82 -->
+<script src="js/render/82-rocks.js?v=20260929sp"></script><!-- TK4c 石头的航迹(第二个循环)。与 82-ship-icons / 82-lod 共用编号 82 -->
 <script src="js/render/82-lod.js?v=20260928zk"></script><!-- SN6 聚合层:舰 → 舰队框 → 舰队组;与 82-ship-icons 共用编号 -->
-<script src="js/render/83-hud.js?v=20260929sh"></script>
+<script src="js/render/83-hud.js?v=20260929sq"></script>
 <script src="js/render/84-scene.js?v=20260929sh"></script>
 <script src="js/render/84-fmplot.js?v=20260923"></script><!-- FM4 编队能力站位的地图可视化。与 84-scene 共用编号 84(先例:weapons/51-defs 与 51-ciws),都属于“场景图层”;顶层只有 const/function,零顶层执行,由 84-scene 的 render() 运行期调用 -->
 <script src="js/render/85-settings.js?v=20260926e"></script>
