@@ -41,7 +41,6 @@
    2026-09-26 整体 x1/5(单局地图 80 万 x 45 万):本表各注释里的旧距离与"分钟预警"按 1/5 读;V_REF 不动。 */
 const LAD = {
   V_REF: 1000,        // km/s。只用来把公里换成"分钟预警",不进任何判据
-  SESSION_MIN: 24 * CFG.scale,    // 一局的量级(分钟)。任何一级超过它 = 开局就跨过、整局不变 = 装饰。H1:60 → 120(形态 H 的一局本来就长)。2026-09-26 x1/5(单局地图,距离缩、速度不缩):原 120
 
   /* ---- 武器带(WR1 起武器没有射程门:gun = 主炮命中率约九成的距离(散布 0.0081 对 2000km),msl = 导弹动力射程 —— 它们是接触降速 / 视图 / 梯子不变量用的【带】,不是门)---- */
   gun: 30000 * CFG.scale, msl: 400000 * CFG.scale, // 2026-09-28 导弹 20 万 → 40 万(用户:「允许很远就开始发射导弹」;远了靠发射后锁定) // 2026-09-26 x1/5(单局地图):原 150000 / 350000(命中半径 2000 → 400)。2026-09-27 导弹 7 万 → 20 万(用户定,weapons/52 的 mslReach 直接读它)
@@ -309,19 +308,8 @@ function stepCov(t, c, obs, el, idOut, kin) { // TK2.6:可选的 idOut 记下这
   return held;
 }
 
-/* ================= 两把尺子(只给梯子标定用,不是开火门)=================
-   主炮尺 = 命中判定半径,跟目标体型比;导弹尺 = 导引头搜索篮,跟合成反射走,开平方免得差距离谱 */
-const covMac = t => COV.MAC * sReq(t, 'size', 'ship');
-const covMsl = t => COV.MSL * Math.sqrt(reflOf(t));
 /* 这一方还握着这条接触:见过它,而且此刻定得出位置、或这一拍有信号 */
 function covHeld(c) { return !!(c.seen && (c.fix || c.n > 0)); }
-/* 某条通道【认出】目标的距离:横向误差收到目标尺寸以内。
-   静听不走这条(它靠指纹,不靠角分辨),所以这里只回答光学与照射。 */
-function identDist(ch, d, t, lo) {
-  const R = covRangeOf(ch, d, t, lo); if (!(R > 0)) return 0;
-  const L = sReq(t, 'size', 'ship') * (ch === 'act' ? COV.L_ACT : (ch === 'lis' ? COV.L_LIS : COV.L_OID)), T = COV.TH0[ch]; // ID3:静听那一路用 L_LIS
-  return ch === 'act' ? Math.pow(L * R * R / T, 1 / 3) : Math.sqrt(L * R / T);
-}
 
 /* ================= 反解:梯子 → 模型常数 =================
    除照射尺度外全是闭式,逐条对着正向公式倒回去;照射尺度对 ladActGate 做二分(单调)。
@@ -335,7 +323,7 @@ function covSteady(m) {
   for (let i = 0; i < 44; i++) { const a = (lo + hi) / 2, g = (a + off) * gm - off; if (1 / (a * a) - 1 / (g * g) - 1 / (m * m) > 0) lo = a; else hi = a; }
   return Math.max(COV.AMIN, (lo + hi) / 2);
 }
-/* 距离 d 上,照射方对一个目标的稳态长轴。q 里要什么见 ladActQ。
+/* 距离 d 上,照射方对一个目标的稳态长轴。q = { Ra 照射尺度, Ro 光学尺度, od / ad 光学 / 照射发现距离, Lsz 体型 x L_REF, jamD 烧穿距离(可缺) }。
    ⚠ 目标的发射档会同时改三样:回波被糊、多一条静听方位、它自己更亮;后两样由调用方算进 q。 */
 function ladActA1(d, q) {
   const T = COV.TH0, u = d / q.Ra, jf = q.jamD ? 1 + (d / q.jamD) * (d / q.jamD) : 1, sa = d * T.act * u * u * jf;
@@ -383,9 +371,7 @@ function ladApply() {
   SENS.A_IR = SENS.IR_REF * SENS.IR_REF; SENS.A_RF = SENS.LIS_REF * SENS.LIS_REF; SENS.A_ACT = Math.pow(SENS.ACT_REF, 4);
 }
 
-/* ================= 正向:从模型量出每一级的距离 =================
-   与 ladApply(反解)互为逆 —— 反解写进模型的常数,再用正向公式量回来,必须等于梯子上写的那个数。
-   这条"往返"是本文件最重要的一条判据:哪一侧的式子动了,它当场红。 */
+/* ================= 正向:从模型量出一个距离(界面预览用)================= */
 /* 一艘用来量尺子的假想舰。不走 makeShip:那会推进 shipSeq、烘一堆武器字段,而这里只要感知那几个量。
    字段按引擎 22-percep 的访问器口径给:optLum 读 flame/sideFlame,rfLoudOf 读 emit/emitMode。 */
 function ladShip(cls, o) {
@@ -393,25 +379,6 @@ function ladShip(cls, o) {
   const x = { cls: cls, size: r.size, stealth: r.stealth, emit: r.emit, recv: r.recv, ecmPower: r.ecmPower, emitMode: 'silent', flame: 0, sideFlame: 0, pos: null, id: 'lad_' + cls }; // ENV2 pos null:环境函数给中性值,梯子与世界无关
   if (o) for (const k in o) x[k] = o[k];
   return x;
-}
-/* 探测方 d 照一个不发射的目标 t 时,ladActA1 / ladActGate 要的那包数 */
-function ladActQ(d, t) {
-  return { Ra: actAccOf(d, reflOf(t)), Ro: visAccOf(t), od: visRangeOf(t), ad: actRangeOf(d, reflOf(t)), Lsz: sReq(t, 'size', 'ship') * COV.L_REF };
-}
-/* 行 = 探测方 看 目标。主级(梯子上有字面量的)与派生级(由主级决定、玩家同样看得见的)都在这儿。 */
-function ladPair(dn, tn) {
-  const d0 = ladShip(dn), dq = ladShip(dn, { emitMode: 'paint' }), t0 = ladShip(tn), tq = ladShip(tn, { emitMode: 'paint' }), th = ladShip(tn, { flame: 1 });
-  const mslG = covMsl(t0), macG = covMac(t0), T = COV.TH0, Ro = visAccOf(t0), Rl = hearAccOf(tq, d0.recv), Ra = actAccOf(dq, reflOf(t0));
-  const Q = ladActQ(dq, t0);
-  return {
-    optColdMin: visRangeOf(t0), optHot: visRangeOf(th), radarMin: actRangeOf(dq, reflOf(t0)), heardMin: hearRangeOf(dq, t0.recv),
-    optCross: Math.sqrt(mslG * Ro / T.opt), lisCross: Math.sqrt(mslG * Rl / T.lis),
-    optIdent: identDist('opt', d0, t0), radarIdent: identDist('act', dq, t0), lisIdent: identDist('lis', d0, tq), // ID3:听出型号量的是【目标在照射】时那一路
-    radarLook: ladActGate(macG, Q), actTurn: COV.RRES / T.act,
-    /* ---- 派生级 ---- */
-    optLocate: optGateR(t0, COV.AMAX), optMsl: optGateR(t0, mslG), optGun: optGateR(t0, macG),
-    radarLocate: ladActGate(COV.AMAX * (1 - 1e-9), Q), radarMsl: ladActGate(mslG, Q),
-  };
 }
 /* 2026-09-27 两艘静默舰相距基线 B、对一个标称亮度的目标(缺省熄火 DD)做红外交会,稳态椭圆收进定位门的最远距离(界面「静默交叉定位」预览读它)。
    每站横向误差 σ = TH0·d²/R(被动律),两条方位夹角约 B/d ⇒ 纵向约 σ·√2·d/B;按"盯着看的稳态"收。封顶在这个目标的光学发现距离。 */
@@ -424,41 +391,7 @@ function ladTriFix(B, cls) {
   for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (ok(m)) lo = m; else hi = m; }
   return lo;
 }
-/* 单站光学把目标 t 的椭圆收进某道门的距离:纵向界 d^3*TH0/(R*size*L) = gate */
-const optGateR = (t, gate) => Math.pow(gate * sReq(t, 'size', 'ship') * COV.L_REF * visAccOf(t) / COV.TH0.opt, 1 / 3);
-
-/* ================= 不变量 =================
-   梯子的【顺序】就是设计本身。顺序一破当场知道,不用等哪条判据碰巧踩到。
-   返回全表 [{ok,msg}];加载期与每次改数都该查。
-   ⚠ 用到 ladPair(正向模型),所以只能在整套脚本都加载完之后调。 */
-function ladCheck() {
-  const km = m => m * 60 * LAD.V_REF, e = 1e-9, out = [];
-  const oc = km(LAD.optColdMin), ra = km(LAD.radarMin), he = km(LAD.heardMin), lim = km(LAD.SESSION_MIN);
-  const need = function (ok, msg) { out.push({ ok: !!ok, msg: msg }); };
-  const hot = oc * Math.sqrt(1 + SENS.P_ENG_MAIN);     // 满推目标的光学发现 = 冷目标 x 2
-  /* 设计选择:冷目标的光学发现允许近于导弹射程(熄火潜行 = 伏击),
-     所以这一条与下面"交会在发现距离之内"都对【满推】目标判。 */
-  need(LAD.gun < LAD.msl, '主炮 < 导弹'); // 2026-09-27 导弹 20 万起不再小于光学发现(满推):射程超过自己的传感器,远射要靠静听 / 交叉定位 / 前出舰的数据(用户选 Sea Power 那种结构)
-  // 2026-09-28 删掉「雷达发现 >= 2x 光学发现(冷目标)」:用户把红外发现拉到 32 万(= 雷达发现),雷达的价值改在定位 / 测距
-  need(he >= 1.5 * ra * (1 - e), '开雷达被听见 >= 1.5x 自己照到的距离(手电效应)');
-  need(LAD.radarIdent < LAD.lisIdent, 'ID3 照射回波(NCTR)< 听辐射指纹(ESM)'); // 2026-09-28 光学认出拉到 20 万(用户),不再排在最近
-  // 2026-09-27 删掉「照射认出 > 导弹射程」:用户接受远射打的是还没认出的接触(自动开火仍只打疑似以上,trkPid)
-  // 2026-09-27 删掉「光学认出 < 主炮带」:红外认出拉到 6 万(用户),它不再是贴脸那一步
-  need(LAD.radarLook <= LAD.gun, '火控解(椭圆收进命中判定半径)在主炮那一带之内');
-  need(LAD.lisIdent < he, 'ID3 听得见才谈得上听出型号');
-  need(LAD.optCross < hot && LAD.lisCross < he && LAD.radarIdent < ra && LAD.radarLook < ra, '定位域每一级都在同通道的发现距离之内(发现不了谈不上定位);光学按满推目标判');
-  need(he <= lim * (1 + e), '参考对的每一级都在一局(' + LAD.SESSION_MIN + ' 分)之内被跨过');
-  /* 靠【移动】跨过的门(光学/雷达)全舰种对都要在一局之内。
-     "被听见"不在此列 —— 它靠【开不开雷达】这个决定跨过,圈大不等于装饰。 */
-  let worst = 0, who = '';
-  for (const dn in SENS.CLS) for (const tn in SENS.CLS) { const p = ladPair(dn, tn), v = Math.max(p.optHot, p.radarMin); if (v > worst) { worst = v; who = dn + ' 看 ' + tn; } }
-  need(worst <= lim * (1 + e), '靠移动跨过的门(光学/雷达)全舰种对都在一局之内:最远 ' + who + ' ' + Math.round(worst / 60 / LAD.V_REF) + ' 分');
-  return out;
-}
-
 /* ================= 加载期反解 =================
    梯子 -> 六个量程常数。放在文件末尾的顶层:20-signature 先于本文件加载,SENS.CLS / SENS.EMIT_P 已经在了。
-   ⚠ 这是那六个数【唯一】的写入口 —— 在 SENS 里手填会被这一行覆盖。
-   ladCheck 不在这里调:它要用 ladPair,而 ladPair 会读 optLum(住在 22-percep,已加载)——
-   其实是安全的,但不变量表属于"设计期检查",放进 tools/verify.sh 的判定里,不占运行期。 */
+   ⚠ 这是那六个数【唯一】的写入口 —— 在 SENS 里手填会被这一行覆盖。 */
 ladApply();

@@ -1,44 +1,20 @@
 "use strict";
 /* 2026-09-28 右栏小窗(画中画 PiP;用户:「看看是否可以增加什么小窗的画面」,选了导引头画面 + 主炮火控窗 + 炮弹来源回放,后者在 84 的特写里)。
-   选中我方导弹 ⇒ 导引头画面(seeker view):以这组弹为中心、航向朝上,只画它的导引头此刻看得见的(weapons/54 的 missSeeT),分不出是什么,锁上的加方框。
+   导引头画面 2026-09-28 删掉(用户:小窗是主视角的放大特写,不能和主视角不一样;它画的是导弹看见的真实位置,而导弹不回传)。
    选中一艘有主炮的我方舰 ⇒ 主炮火控窗:命中率随距离的 S 形曲线(weapons/52 的 macHitProb),标出主炮目标此刻的距离与把握,下面写散布、飞行、装填、机头偏角。
    画在 index.html 的 #pipCv(右栏 #pipBox);core/99 每帧调 pipFrame,每 PIP.EVERY 帧画一次。 */
-const PIP={EVERY:3,R:100000*CFG.scale,XMAX:200000*CFG.scale,n:0,w:0,h:0,dpr:0,hd:''};
+const PIP={EVERY:3,XMAX:200000*CFG.scale,n:0,w:0,h:0,dpr:0,hd:''};
 function pipFrame(){
   if(++PIP.n%PIP.EVERY)return;
   const box=document.getElementById('pipBox'),cv=document.getElementById('pipCv');if(!box||!cv)return;
-  const ml=(typeof mslSelOwn==='function')?mslSelOwn():[],s=ml.length?null:selBlue().find(x=>!x.dead&&hasMAC(x));
-  if(!ml.length&&!s){if(box.style.display!=='none')box.style.display='none';return;}
+  const s=selBlue().find(x=>!x.dead&&hasMAC(x));
+  if(!s){if(box.style.display!=='none')box.style.display='none';return;}
   if(box.style.display!=='block')box.style.display='block';
   const dpr=window.devicePixelRatio||1,w=cv.clientWidth||236,h=cv.clientHeight||150;
   if(PIP.w!==w||PIP.h!==h||PIP.dpr!==dpr){PIP.w=w;PIP.h=h;PIP.dpr=dpr;cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);}
   const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);g.fillStyle='rgb(5,7,12)';g.fillRect(0,0,w,h);
-  let hd;
-  if(ml.length){const p=(ml.indexOf(selMissile)>=0?selMissile:ml[0]);pipSeeker(g,w,h,p);hd='导引头画面 · 导弹组 #'+(p.group||'?');}
-  else{pipGun(g,w,h,s);hd='主炮火控 · '+s.name;}
+  pipGun(g,w,h,s);const hd='主炮火控 · '+s.name;
   if(hd!==PIP.hd){PIP.hd=hd;const e=document.getElementById('pipHd');if(e)e.textContent=hd;}
-}
-function pipSeeker(g,w,h,p){ // 导引头画面:航向朝上,R 以内看得见的热源画成琥珀点,锁上的加方框;LADAR 圈 = 冷船也看得见的距离
-  const cx=w/2,cy=h*0.64,k=(h*0.58)/PIP.R,v=Math.hypot(p.vel[0],p.vel[1]),hx=v>1e-6?p.vel[0]/v:0,hy=v>1e-6?p.vel[1]/v:-1;
-  const scr=(x,y)=>{const dx=x-p.pos[0],dy=y-p.pos[1],f=dx*hx+dy*hy,l=dx*hy-dy*hx;return [cx+l*k,cy-f*k];}; // 前 = 上,右手 = 右
-  g.strokeStyle='rgba(143,208,255,.35)';g.lineWidth=1;g.setLineDash([4,4]);g.beginPath();g.arc(cx,cy,MSL_CFG.ladar*k,0,6.283);g.stroke();g.setLineDash([]);
-  g.fillStyle='rgba(143,208,255,.6)';g.font='10px Consolas';g.textAlign='left';g.textBaseline='middle';g.fillText('LADAR '+Math.round(MSL_CFG.ladar/1e4)+'万',cx+MSL_CFG.ladar*k*0.72+4,cy-MSL_CFG.ladar*k*0.72);
-  g.strokeStyle='rgba(143,208,255,.8)';g.beginPath();g.moveTo(cx,cy);g.lineTo(cx,cy-14);g.moveTo(cx-4,cy-9);g.lineTo(cx,cy-14);g.lineTo(cx+4,cy-9);g.stroke(); // 自己:航向箭头
-  const aim=p.park?p.parkPt:(p.guideMode==='coast'?p.lastKpos:null);
-  if(aim){const q=scr(aim[0],aim[1]);if(q[0]>4&&q[0]<w-4&&q[1]>4&&q[1]<h-4){g.strokeStyle='rgba(255,209,102,.7)';g.beginPath();g.moveTo(q[0]-5,q[1]);g.lineTo(q[0]+5,q[1]);g.moveTo(q[0],q[1]-5);g.lineTo(q[0],q[1]+5);g.stroke();g.fillStyle='rgba(255,209,102,.7)';g.fillText('瞄准点',q[0]+7,q[1]);}}
-  const side=p.shooter.side,cand=[];let n=0;
-  const tryT=t=>{if(t.dead||t.side===side||t.hp===undefined)return;const d=Math.hypot(t.pos[0]-p.pos[0],t.pos[1]-p.pos[1]);if(d>PIP.R*1.4||!missSeeT(p,t))return;cand.push([t,d]);};
-  for(const t of ships)tryT(t);for(const t of rocks)tryT(t);
-  for(const [t,d] of cand){const q=scr(t.pos[0],t.pos[1]),lk=t===p.target&&!p.park&&!p.cruise&&!p.mine;
-    const x=Math.max(6,Math.min(w-6,q[0])),y=Math.max(6,Math.min(h-6,q[1])),r=2+Math.min(3,Math.sqrt(missLum(t)));
-    g.fillStyle='rgb(255,209,102)';g.beginPath();g.arc(x,y,r,0,6.283);g.fill();
-    if(lk){g.strokeStyle='rgb(255,107,107)';g.strokeRect(x-8,y-8,16,16);g.fillStyle='rgb(255,107,107)';g.fillText('锁定 '+(d/1e4).toFixed(1)+'万',x+11,y);}
-    else if(n++<4){g.fillStyle='rgba(255,209,102,.8)';g.fillText('热源 '+(d/1e4).toFixed(1)+'万',x+7,y);}}
-  const st=p.mine?'雷 · 待命':(p.cruise?'巡飞 · 搜索中':(p.park?'飞向点位 · 搜索中':(p.guideMode==='self'?'自导 · 已锁定':(p.guideMode==='link'?'数据链引导':'脱锁 · 搜索中'))));
-  g.fillStyle='#cfe6ff';g.font='11px "Microsoft YaHei"';g.textBaseline='top';g.fillText(st,6,5);
-  g.font='10px Consolas';g.fillStyle='#8fd0ff';g.fillText('油 '+(p.fuel>0?Math.ceil(SHOW.t(p.fuel))+'s':'尽')+' · '+Math.round(SHOW.v(v))+' km/s',6,20);
-  g.textBaseline='bottom';g.fillText('到点:'+(p.mine?'已布雷':(p.mineOk?'停下变雷':'一直飞')),6,h-4);
-  g.textAlign='right';g.fillText(cand.length?'看见 '+cand.length:'什么都没看见',w-6,h-4);
 }
 function pipGun(g,w,h,s){ // 主炮火控窗:S 形命中率曲线 + 目标此刻的距离与把握
   const L=30,R=w-8,T=22,B=h-30,X=d=>L+(R-L)*Math.min(1,d/PIP.XMAX),Y=pr=>B-(B-T)*pr;

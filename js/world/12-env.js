@@ -30,7 +30,7 @@
      多取一次就把后面整局挪一位。
 
    ---- 加载顺序 ----
-   排在 ships/11 之后、sensors/ 之前:23-cov 加载期就会跑梯子反解(ladApply → ladPair → optLum),那时 ENV 必须已经声明。
+   排在 ships/11 之后、sensors/ 之前:sensors/ 的访问器(22-percep 的 optLum 等)读 ENV。
    本文件顶层只执行 ENV_CFG / ENV 两句(ENV2 加 ENV_KEYS / ENV_T2 两个字面量;ENV 的 seal / freeze 只调内建),不调任何别的文件。makeRock 里的 trkAdopt(sensors/24)与 rockSeq / rocks(core/01)都在运行期解析。
    ============================================================================ */
 

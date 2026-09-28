@@ -4,7 +4,7 @@
 - `20-signature.js` `SENS` 常数表、`optLum`(光学亮度唯一出处)、发射档 / 引擎档 / 开火档
 - `21-detect.js` 感知节拍 `detectLoop` / `detectFor`、`setEmit`(发射档唯一写入口)、门面 `contactHeld` / `contactFix` / `contactIdn` / `contactAge` / `contactState` / `contactPos`、弹丸可见性 `projVisibleTo`、听到的敌方雷达 `ESM` / `esmHear`(雷达画面读)
 - `22-percep.js` 热循环:`sensePrepare`(O(N) 预计算)/ `sensePairGrades`(每条通道 0 / 1,不分强弱档)、`senseResolve`(热循环外的精算)
-- `23-cov.js` 误差椭圆内核 `stepCov` / `covHeld` / `covTheta` / `identDist`、距离梯子 `LAD` 与反解 `ladApply` / `ladPair` / `ladCheck`
+- `23-cov.js` 误差椭圆内核 `stepCov` / `covHeld` / `covTheta`、距离梯子 `LAD` 与反解 `ladApply`、交会预览 `ladTriFix`
 - `24-track.js` 每方一张航迹表 `TRK`(`trkAdopt` / `trkEnsure` / `trkStep` / `trkEach` / `trkFoe` / `trkPid`)
 - `25-optpair.js` ENV2 成对有效亮度 `senseOptLo` / `senseOptPair`、杂散光、相位、致盲 `senseBaffled`、页面用的 `senseOptBlocked` / `senseOptParts` / `sensePlume`
 
@@ -30,7 +30,7 @@
 - 静听带幅度测距(RSS):纵向误差 = 距离 x `COV.RSS_UNK`(没听出型号)/ `COV.RSS_ID`(听出型号,与 `L_LIS` 同一个门)。雷达画面的高斯团读 21 的 `esmHear` 写的 `k.rr` / `k.sr`,与 23 的静听量测同式,改一边就改另一边。
 - 雷达的环境:朝光源的锥里射频噪声抬高(静听按 噪声^(-1/2)、照射按 噪声^(-1/4) 缩);杂波(天体盘面旁、小行星旁,`envInClutter`)里的慢目标过 MTI;星云对射频透明。
 - 单点谓词与热循环共用缓冲,不许在扫描中途调。`detectLoop` 要收真实经过的模拟秒数。
-- ENV2 的 `lo` 在 visRange / covTheta / identDist 那条链上是可选参数,不传 = 标称值。
+- ENV2 的 `lo` 在 visRange / covTheta 那条链上是可选参数,不传 = 标称值。
 - 石头:`kind:'rock'`、`side:'neutral'`,只有光学贴近才认得出;确认是石头的航迹自动化当场解锁,火控门拒绝。
 - 同一张登记表 `rocks[]` 里还有民船 `civ` / 诱饵 `lure` / 前出浮标 `buoy`(world/14,2026-09-27):自己一方放的不当目标;诱饵带 `spoof`,「疑似」档报它冒充的驱逐舰;浮标 `type:'beacon'` 进探测站表,`on` 才照射(`senseKACT`),`emit`/`recv` 取信标系数(`covRangeOf` 按探测站自己的字段算精度)。
 - 导弹导引头看热用 weapons/54 的 `missLum` = `optLum(t, MSL_SEEK_P)`(同一个公式,档位表换成 N1 之前的,用户 2026-09-27 选不跟)。
