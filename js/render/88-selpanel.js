@@ -173,9 +173,9 @@ function updateFcPanel(force){ // 由 updateSelPanel 每 20 帧重渲(与卡片�
   let h='<div class="fc-bars">';
   for(let i=0;i<cap;i++){
     const q=seqs[i];
-    if(!q){h+=`<div class="fc-bar empty" title="空序列槽(Shift+中键点敌舰建序列)"><span class="no">${i+1}</span></div>`;continue;}
+    if(!q){h+=`<div class="fc-bar empty" title="空序列槽(中键点敌舰或空地建序列,Shift+中键追加)"><span class="no">${i+1}</span></div>`;continue;}
     const sid=String(q.id),edit=String(s.fcEditId)===sid,pick=big&&String(s.fcPick)===sid;
-    h+=`<div class="fc-bar${edit?' edit':''}${pick?' pick':''}${q.paused?' paused':''}" data-fc-act="bar" data-seq="${sid}" title="${q.name} · ${q.mode==='rr'?'轮询':'依次'} · ${(q.targets||[]).length}个目标${pick?' · ★当前唯一开火序列':(big?' · 点击改为用这条打':'')} · 点击进入序列态(地图显示数据链)">`
+    h+=`<div class="fc-bar${edit?' edit':''}${pick?' pick':''}${q.paused?' paused':''}" data-fc-act="bar" data-seq="${sid}" title="${q.name} · ${q.mode==='rr'?'轮询':'依次'} · ${(q.targets||[]).length}个目标${q.force?' · 强制开火':''}${pick?' · ★当前唯一开火序列':(big?' · 点击改为用这条打':'')} · 点击进入序列态(地图显示数据链)">`
       +`<span class="no">${pick?'★':''}${i+1}</span><span class="md">${q.mode==='rr'?'轮':'依'}</span><span class="ct">${(q.targets||[]).length}</span>`
       +`</div>`;
   }
@@ -189,6 +189,7 @@ function updateFcPanel(force){ // 由 updateSelPanel 每 20 帧重渲(与卡片�
       +`<span class="nm">${cur.name||('火控序列'+sid)}</span>`
       +`<span class="fc-btn${rr?' on':''}" data-fc-act="mode" data-seq="${sid}" title="依次=打死一个再换;轮询=每次齐射换一个">${rr?'轮询':'依次'}</span>`
       +(cur.paused?'<span class="fc-tag paused">已暂停 · 不开火</span>':'') // RF8 详情区也给一条红标:方条变红了,展开的详情里却没有对应提示会显得断裂
+      +`<span class="fc-btn${cur.force?' on':''}" data-fc-act="force" data-seq="${sid}" title="强制开火:这条序列的目标哪怕在射程外也自动开火(主炮不看 10% 自动开火门、导弹不看 40 万射程);仍要定出位置、主炮仍要对准">强制</span>`
       +`<span class="fc-btn${cur.paused?' on':''}" data-fc-act="pause" data-seq="${sid}" title="暂停后该序列不参与解算">${cur.paused?'恢复':'暂停'}</span>`
       +`<span class="fc-btn danger" data-fc-act="del" data-seq="${sid}" title="删除整条序列">删除</span>`
       +`</div>`;
@@ -530,6 +531,7 @@ on('fcList','click',e=>{
       break; // RF7 点方条:进入序列态,再点同一根=退出(fcSetEdit 传 null 即清编辑态,地图蓝链随之熄灭)
     case 'mode':if(!seq)return;if(typeof fcSetMode==='function')fcSetMode(seq.id,seq.mode==='rr'?'seq':'rr');break;
     case 'pause':if(!seq)return;if(typeof fcTogglePause==='function')fcTogglePause(seq.id);break;
+    case 'force':if(!seq)return;if(typeof fcToggleForce==='function')fcToggleForce(seq.id);break; // 2026-09-29 强制开火
     case 'del':if(!seq)return;if(typeof fcRemove==='function')fcRemove(seq.id);break;
     case 'delt':if(!seq)return;if(typeof fcRemoveTarget==='function')fcRemoveTarget(seq.id,idx);break;
     case 'mac':case 'msl':{if(!seq)return; // 许可徽标取反;allow 缺省视为 true,与 fcNew 的缺省口径一致

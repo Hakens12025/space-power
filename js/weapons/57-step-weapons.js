@@ -48,7 +48,7 @@ function stepWeaponSystems(dt){
     if(!isPt&&!contactFix(t,s.side))continue; // 与手动齐射同一道定位门
     { // WR1:没有发射门了;自动齐射(玩家的「火控」钮)只在动力射程内打,免得自动化替玩家把弹药扔到滑行段去;距离按估计位置量(指定点按点)
       const tp=isPt?t.pos:((typeof contactPos==='function')?contactPos(t,s.side):null); if(!tp)continue;
-      if(V.len(V.sub(tp,s.pos))>=mslReach(s))continue;
+      if(!(typeof fcForce==='function'&&fcForce(s,'msl'))&&V.len(V.sub(tp,s.pos))>=mslReach(s))continue; // 2026-09-29 强制开火的序列不看射程
     }
     const ready=readyCells(s);
     if(ready<Math.ceil((s.cells||4)/2))continue; // 过半就绪才打,自然成波(导弹Arm/弹药不足由 orderMissileSalvo 内部兜底)
@@ -95,8 +95,11 @@ function stepWeaponSystems(dt){
   for(const s of ships){
     const roeOK=s.macOn!==false&&(s.roe==='free'||(s.roe==='tight'&&s.roeCd>0)); // free自由/tight被攻击才还击(roeCd=受击冷却)/hold不开火;RF2 主炮开关:关=不参与自动开火
     const mt=(typeof fcActive==='function'&&fcActive(s))?(s.fcTgt&&s.fcTgt.mac):s.lockedTarget; // RF5 有序列则打序列解算的主炮目标:序列可能只许导弹打(allow.mac=false),这时 lockedTarget 虽被写成导弹目标,主炮也不许跟着开
-    if(roeOK&&!s.dead&&mt&&!mt.dead&&mt.side!==s.side&&s.macCd<=0&&hasMAC(s)&&macAligned(s,mt)){ // WR1:自动开火只在把握 >= MAC_AUTO_P 时打(没有射程门了);距离按估计位置量。这一条【不看 autoEngage】,红方 bot 的开火实际走的就是它
-      const mp=macPred(s,mt); if(mp&&macHitProb(s,V.len(V.sub(mp,s.pos)),mt)>=MAC_AUTO_P)fireMAC(s,mt);
+    if(mt&&kindOf(mt)==='point'){ // 2026-09-29 火控序列里的空地点(58 fcGate):转向带提前量的那个点(同强行开火),对准就开一炮;记开火标记给 58 的 Post 推指针、记次数
+      if(roeOK&&!s.dead&&hasMAC(s)){const tp=macPtLead(s,mt.pos);s.turnTarget=[tp[0],tp[1],0];
+        if(s.macCd<=0&&macAimErr(s,tp)<MAC_ALIGN){fireMACAt(s,mt.pos);if(s.macCd>0&&s.fcFired)s.fcFired.mac=true;}}
+    }else if(roeOK&&!s.dead&&mt&&!mt.dead&&mt.side!==s.side&&s.macCd<=0&&hasMAC(s)&&macAligned(s,mt)){ // WR1:自动开火只在把握 >= MAC_AUTO_P 时打(没有射程门了);距离按估计位置量。这一条【不看 autoEngage】,红方 bot 的开火实际走的就是它
+      const mp=macPred(s,mt); if(mp&&((typeof fcForce==='function'&&fcForce(s,'mac'))||macHitProb(s,V.len(V.sub(mp,s.pos)),mt)>=MAC_AUTO_P))fireMAC(s,mt); // 2026-09-29 强制开火的序列不看把握门
     } // TIER1 MAC 舰种门改能力谓词
     if(s.roeCd>0)s.roeCd-=dt;
   }

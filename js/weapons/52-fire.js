@@ -104,9 +104,9 @@ function fxVis(pos,sh,vic){ // 2026-09-28 vis = 我方看不看得见这一下:�
   const see=sd=>!!((sh&&sh.side===sd)||(vic&&vic.side===sd)||ships.some(s=>s.side===sd&&!s.dead&&Math.hypot(s.pos[0]-pos[0],s.pos[1]-pos[1])<(s.visR||COV.VIS_R)));
   return {blue:see('blue'),red:see('red')}; // 两方各记一份(画面按当前视角 VIEW 读)
 }
-function spawnHit(pos,type,sh,vic){hitFX.push({pos:pos.slice(),t:1.2,type,vis:fxVis(pos,sh,vic)});}
+function spawnHit(pos,type,sh,vic){hitFX.push({pos:pos.slice(),t:1.2,type,vis:fxVis(pos,sh,vic),vic:vic||null});} // 2026-09-29 vic = 挨打的是什么(撞天体为 null、碎石 / 民船也在这里):小窗只报打在舰船上的
 let ciwsFX=[]; // 2026-09-28 近防炮打掉的导弹火花 {pos,n,tw,vis}:weapons/56 结算时出,render/83 drawCiwsFx 按墙钟画完就删(不进 hitFX:小窗导演会把它当中弹)
-function spawnCiwsFX(pos,n,sh,vic){ciwsFX.push({pos:pos.slice(),n,tw:nowMs(),vis:fxVis(pos,sh,vic)});}
+function spawnCiwsFX(pos,n,sh,vic){ciwsFX.push({pos:pos.slice(),n,tw:nowMs(),vis:fxVis(pos,sh,vic),vic:vic||null});} // vic = 那组导弹冲着的船(小窗「近防拦下」绑它)
 function findInterceptorTarget(p){ // 拦截弹重选目标:前方最近的来袭导弹,诱饵弹优先(信号强,为真导弹让路)
   let best=null,bd=1e18,bestDecoy=false;
   const vd=V.norm(p.vel);

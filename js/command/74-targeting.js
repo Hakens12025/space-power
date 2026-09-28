@@ -147,31 +147,28 @@ function xhCardHide(){ // RF5 收起信息卡(用 _shown 记账,免得每帧都�
   if(el)el.style.display='none';
   xh._shown=false;xh._html='';xh._w=0;
 }
-function xhQuickEngage(append){ // RF5 中键短按 = 快速交战:主体舰 + 当前吸附目标 → 新建一条火控序列(allow 缺省 = 全武器许可)
-  // RF7 append=按下中键那一瞬 Shift 在按:目标【追加】进当前编辑序列(无编辑序列则等价新建)。这是火控序列的选定手势:
-  // Shift+中键点 T1 建序列并进入序列态(地图亮数据链),再 Shift+中键点 T2、T3 依次入链。改前短按压根不看 Shift,
-  // 按住 Shift 点第二个目标照样走 fcNew 新建 —— 玩家要的追加从来没触发过,这正是"Shift 选择没做好"的根因。
+function xhQuickEngage(append){ // RF5 中键短按 = 快速交战:选中的蓝舰 + 当前吸附目标 → 新建一条火控序列(allow 缺省 = 全武器许可)
+  // RF7 append=按下中键那一瞬 Shift 在按:目标【追加】进当前编辑序列(无编辑序列则等价新建)。这是火控序列的选定手势。
+  // 2026-09-29 用户:框选后中键,选中的【每一艘】蓝舰都进火控序列(原来只有第一艘);没吸附到目标 = 点在空地上,把那个点加进序列(主炮 / 导弹都能打,58 fcGate)
   const sub=xhSubject();
   if(!sub)return false;
-  const t=xh.snap;
-  if(!t||t.dead)return false;
   if(typeof fcNew!=='function')return false;
-  if(append){
-    const q0=(typeof fcSeq==='function')?fcSeq(sub.fcEditId):null;
-    const cur=(q0&&q0.shipId===sub.id)?q0:null; // 编辑上下文可能指向别舰/已删序列(与 radOpen 同一道防线)
-    if(cur&&(cur.targets||[]).some(x=>x.tid&&String(x.tid)===String(t.id))){ // 去重:已在链里,再按只是确认,不重复入队
-      if(typeof updateSelPanel==='function')updateSelPanel();
-      return true;
-    }
-    const sid=(typeof fcAppend==='function')?fcAppend(sub,{tid:t.id}):null; // 无编辑序列时 fcAppend 内部等价 fcNew
-    if(sid==null)return false; // RF7 fcNew 触顶(上限 FC_MAX_SEQS)返回 null
-    if(typeof updateSelPanel==='function')updateSelPanel();
-    return true;
+  const t=(xh.snap&&!xh.snap.dead)?xh.snap:null;
+  let tgt=null;
+  if(t)tgt={tid:t.id};
+  else{if(!(xh.pt[0]>=0))return false;const w=worldAt(xh.pt[0],xh.pt[1]);tgt={pt:[w[0],w[1],0]};}
+  const sel=(typeof selBlue==='function')?selBlue():[sub];
+  let ok=false;
+  for(const s of sel){
+    if(append){
+      const q0=(typeof fcSeq==='function')?fcSeq(s.fcEditId):null;
+      const cur=(q0&&q0.shipId===s.id)?q0:null; // 编辑上下文可能指向别舰/已删序列(与 radOpen 同一道防线)
+      if(t&&cur&&(cur.targets||[]).some(x=>x.tid&&String(x.tid)===String(t.id))){ok=true;continue;} // 去重:已在链里,再按只是确认,不重复入队
+      if(typeof fcAppend==='function'&&fcAppend(s,tgt)!=null)ok=true; // 无编辑序列时 fcAppend 内部等价 fcNew;触顶(FC_MAX_SEQS)返回 null
+    }else if(fcNew(s,tgt)!=null)ok=true; // 建序列会顺带打开火控(58-firecontrol 的副作用),这是预期行为;RF7 触顶返回 null
   }
-  if(fcNew(sub,{tid:t.id})==null)return false; // 建序列会顺带打开火控(58-firecontrol 的副作用),这是预期行为;RF7 触顶返回 null
-  // RF5:定出位置之前就建的序列暂时一发不响;不阻止 —— 定出位置后这条序列本来就该自动开火。(原来这里按等级打一条提示,2026-09-22 随日志系统整体删除。)
-  if(typeof updateSelPanel==='function')updateSelPanel(); // 立刻刷右栏火控面板,不等 frame 的 20 帧低频刷新
-  return true;
+  if(ok&&typeof updateSelPanel==='function')updateSelPanel(); // 立刻刷右栏火控面板,不等 frame 的 20 帧低频刷新
+  return ok;
 }
 
 /* ================= RF5 Phase C:目标轮盘(数据侧) =================
