@@ -54,17 +54,20 @@ function stepProjectiles(dt){
   projectiles=projectiles.filter(p=>!p.done);
 }
 /* 2026-09-28 炮弹来路(反炮兵定位 counter-battery 的最简形态;用户:「顺着敌方火炮划过我方的可见光完全感知区,反向延长这个线条,来看看炮弹是从哪里来的,导弹不行」)。
-   对方的主炮弹进了我方任一艘舰的可见光圈 ⇒ 记下第一次看见的点和飞行方向:开火那一刻的射手就在这条线往回延长的某处(不知道开火时刻,所以只有线没有点)。
+   对方的主炮弹进了我方任一艘舰的可见光圈 ⇒ 记下第一次看见的点 a、在圈里飞到的最后一点 b 和飞行方向:开火那一刻的射手就在这条线往回延长的某处(不知道开火时刻,所以只有线没有点)。
    只记几何,不记射手是谁;两方对称,SHELL_TR.red 是红方知道的(bots 读),SHELL_TR.blue 画在我方地图上(render/83)。导弹会拐弯,不做。 */
 const SHELL_TR={blue:[],red:[],KEEP:60}; // KEEP:一条记录留多少游戏秒
 function shellTraceStep(){
   for(const side of ['blue','red']){
     let dets=null;const L=SHELL_TR[side];
     for(const p of projectiles){
-      if(p.type!=='mac'||!p.shooter||p.shooter.side===side||(p.tr&&p.tr[side]))continue;
+      if(p.type!=='mac'||!p.shooter||p.shooter.side===side)continue;
+      const r0=p.tr&&p.tr[side];if(r0&&r0.out)continue; // 已经穿出可见光圈:这一段定了
       if(!dets)dets=ships.filter(s=>s.side===side&&!s.dead);
-      if(!dets.some(d=>senseVis(d,p)))continue;
-      const v=Math.hypot(p.vel[0],p.vel[1])||1,r={a:[p.pos[0],p.pos[1]],u:[p.vel[0]/v,p.vel[1]/v],t:simTime};
+      const vis=dets.some(d=>senseVis(d,p));
+      if(r0){if(vis)r0.b=[p.pos[0],p.pos[1]];else r0.out=true;continue;} // 2026-09-28 还在圈里就把轨迹末端 b 往前推(用户:炮弹划过可见光圈时要画出轨迹)
+      if(!vis)continue;
+      const v=Math.hypot(p.vel[0],p.vel[1])||1,r={a:[p.pos[0],p.pos[1]],b:[p.pos[0],p.pos[1]],u:[p.vel[0]/v,p.vel[1]/v],t:simTime};
       (p.tr||(p.tr={}))[side]=r;L.push(r);
     }
     while(L.length&&simTime-L[0].t>SHELL_TR.KEEP)L.shift();
@@ -79,6 +82,7 @@ function stepDecoyProj(p,dt){ // 诱饵弹(v125):直线飞模拟舰船信号,燃
       p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;
       return;
 }
+const MAC_FAR=3000000*CFG.scale; // 没有游玩区(靶场)时炮弹飞多远才收
 function stepMacProj(p,dt){ // MAC轴炮:沿发射时船头直飞,命中或到预测时间失的
       p.age=(p.age||0)+dt;
       p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;
@@ -86,13 +90,13 @@ function stepMacProj(p,dt){ // MAC轴炮:沿发射时船头直飞,命中或到�
         for(const u of ships.concat(rocks)){if(u.dead||u.side===p.shooter.side||u.hp===undefined)continue; // 物体里只有带结构值的(民船 / 诱饵 / 浮标)挨得了打
           const sx=(p.vel[0]-u.vel[0])*dt,sy=(p.vel[1]-u.vel[1])*dt,sz=(p.vel[2]-u.vel[2])*dt,rx=p.pos[0]-u.pos[0]-sx,ry=p.pos[1]-u.pos[1]-sy,rz=p.pos[2]-u.pos[2]-sz,ss=sx*sx+sy*sy+sz*sz,k=ss>0?Math.max(0,Math.min(1,-(rx*sx+ry*sy+rz*sz)/ss)):1;
           if((rx+k*sx)**2+(ry+k*sy)**2+(rz+k*sz)**2<MAC_HIT_R*MAC_HIT_R){applyDamage(u,p.dmg,p.shooter,'mac');spawnHit(p.pos,'mac',p.shooter,u);p.done=true;return;}}
-        if(p.age>=p.tt)p.done=true;
+        if(!ARENA&&p.age*CFG.macSpd>MAC_FAR)p.done=true; // 2026-09-28 用户:炮弹射程理论无限 —— 不再到点消失,飞到出游玩区(主循环统一判);靶场没有游玩区,飞出 MAC_FAR 才收
         return;
       }
       const t=p.target,tv=(t&&t.vel)||[0,0,0],sx=(p.vel[0]-tv[0])*dt,sy=(p.vel[1]-tv[1])*dt,sz=(p.vel[2]-tv[2])*dt; // 2026-09-26 单局地图:MAC_HIT_R 400 < 单拍相对位移约 600km,只看拍末会漏判(实测 90% 带只剩 84%),改按本拍相对线段的最近点判
       const rx=t?p.pos[0]-t.pos[0]-sx:0,ry=t?p.pos[1]-t.pos[1]-sy:0,rz=t?p.pos[2]-t.pos[2]-sz:0,ss=sx*sx+sy*sy+sz*sz,u=ss>0?Math.max(0,Math.min(1,-(rx*sx+ry*sy+rz*sz)/ss)):1;
       if(t&&!t.dead&&(rx+u*sx)**2+(ry+u*sy)**2+(rz+u*sz)**2<MAC_HIT_R*MAC_HIT_R){applyDamage(p.target,p.dmg,p.shooter,'mac');spawnHit(p.pos,'mac',p.shooter,p.target);p.done=true;} // RANGE1 补第 4 实参 kind='mac'(靶场分武器统计)
-      else if(p.age>=p.tt){p.done=true;} // 到预测时间未命中:失的(打偏到点消失,不无限飞)
+      else if(p.age>=p.tt){p.ground=true;} // 2026-09-28 过了预测时间没中:不消失,当成打空地的炮弹接着飞,路上碰到谁算谁(用户:射程理论无限)
 }
 function stepBeaconProj(p,dt){ // 侦察信标(v113):飞抵部署,遥控开关机;开机才耗开机时间(300s),关机静默
       p.age=(p.age||0)+dt;
@@ -206,14 +210,12 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
             p.lastKpos=(p.lastTarget&&!p.lastTarget.dead)?p.lastTarget.pos.slice():p.pos.slice();
           }
         }else if(p.guideMode==='link'){ // DS147:接入母舰火控 → 待分配,分配器(每0.5s)按需求补目标;先滑行不失的
-          p.target=null;
-          const anyEnemy=trkEach(p.shooter.side,tk=>!trkGone(tk)&&trkFix(tk)&&trkPid(tk)); // WCS1:与网分配器(53)同一个口径,否则等一个永远分不来的目标
-          if(!anyEnemy){p.done=true;return;} // 全灭,失的
+          p.target=null; // 2026-09-28 场上没有可分配的目标也不自毁(用户:没耗尽燃料前还能一直运动):下面滑行 + 导引头一路找
         }else{ // 非link:独立重选最近(原逻辑,散兵游勇)
           let nt=null,nd=1e18;
           trkEach(p.shooter.side,tk=>{if(!trkGone(tk)&&trkFix(tk)&&trkPid(tk)){const s=trkSrc(tk),d=V.len(V.sub(s.pos,p.pos));if(d<nd){nd=d;nt=s;}}});
           if(nt){p.target=nt;recomputeNetOff(p,nt);}
-          else{p.done=true;return;}
+          else p.target=null; // 2026-09-28 没有可重选的也不自毁:下面滑行 + 导引头一路找
         }
       }
       if(!p.target){ // DS147:link网待分配中,滑行等待分配器补目标(不脱锁不变雷);2026-09-28 等的时候导引头也在找
