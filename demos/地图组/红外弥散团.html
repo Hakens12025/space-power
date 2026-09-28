@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>红外弥散团</title>
+<style>
+  :root{--bg:#07090d;--panel:#0d1118;--line:#1d2533;--text:#c9d3e0;--dim:#7d8aa0;--acc:#5aa9ff}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:13px/1.5 system-ui,"Microsoft YaHei",sans-serif}
+  #wrap{display:flex;height:100%}
+  #stage{flex:1;position:relative;min-width:0}
+  #cv{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:pointer}
+  #panel{width:340px;flex:none;background:var(--panel);border-left:1px solid var(--line);padding:12px 14px;overflow-y:auto}
+  h1{font-size:15px;margin:0 0 6px}
+  .rule{background:#101722;border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin:0 0 10px;color:var(--dim)}
+  .rule b{color:var(--text)}
+  .row{margin:8px 0}
+  .row label{display:flex;justify-content:space-between;color:var(--dim)}
+  .row label span{color:var(--text);font-variant-numeric:tabular-nums}
+  input[type=range]{width:100%}
+  .btns{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+  button{background:#131b27;color:var(--text);border:1px solid var(--line);border-radius:5px;padding:4px 10px;cursor:pointer;font:inherit}
+  button.on{border-color:var(--acc);color:var(--acc)}
+  table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+  th,td{padding:3px 4px;border-bottom:1px solid var(--line);text-align:right}
+  th:first-child,td:first-child{text-align:left}
+  th{color:var(--dim);font-weight:normal}
+  .sw{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:4px}
+  #mode{color:var(--dim)}
+  @media (max-width:760px){#wrap{flex-direction:column}#stage{height:60vh;flex:none}#panel{width:100%;border-left:0;border-top:1px solid var(--line)}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage"><canvas id="cv"></canvas></div>
+  <aside id="panel">
+    <h1>红外弥散团</h1>
+    <div class="rule"><b>位置钉住:</b>团画在红外那一层的估计上(没认出按驱逐舰的亮度反推距离,另带一个固定偏移),不随时间漂。<br><b>大小 = 不确定:</b>半径 = 红外层误差圈的等面积半径,按以前热区的对数压缩;屏幕上最小 = 舰标团,最大 = 舰标团 x 封顶倍数。<br><b>弥散:</b>圆的、不带方向,扭曲成不规则的一团、缓慢翻涌,最亮处是高原。<br><b>亮度</b>仍走一道门:峰值色阶 = 增益 x 信噪比,大团不变暗。<br>点画面上的目标切换 定位 / 没定位。</div>
+    <div class="row"><label>目标距离 <span id="vD"></span></label><input id="sD" type="range" min="0" max="1000" value="677"></div>
+    <div class="row"><label>视野半径(框住多远)<span id="vZ"></span></label><input id="sZ" type="range" min="0" max="1000" value="300"></div>
+    <div class="row"><label>大小缩放(热区原值 0.75)<span id="vS"></span></label><input id="sS" type="range" min="0" max="1000" value="500"></div>
+    <div class="row"><label>封顶(x 舰标团)<span id="vK"></span></label><input id="sK" type="range" min="0" max="1000" value="500"></div>
+    <div class="row"><label>扭曲 <span id="vW"></span></label><input id="sW" type="range" min="0" max="1000" value="400"></div>
+    <div class="row"><label>翻涌速度 <span id="vR"></span></label><input id="sR" type="range" min="0" max="1000" value="500"></div>
+    <div class="btns">
+      <button id="bRun" class="on">在跑</button>
+      <button id="bStep" class="on">按引擎节拍 200 ms</button>
+      <button id="bTruth">显示真值</button>
+      <button id="bSun" class="on">晒着</button>
+      <button id="bFix">全部定位</button>
+    </div>
+    <div id="mode"></div>
+    <table><thead><tr><th>目标</th><th>信噪比</th><th>误差圈 km</th><th>画出 px</th><th>色阶</th></tr></thead><tbody id="tb"></tbody></table>
+    <p style="color:var(--dim);font-size:12px">数值抄自引擎(2026-09-28):红外发现 K、角精度 TH0 0.0324、定位门 AMAX 1.2 万 km、假设法测距散布 0.3、增益 0.2、石头填满 = 6.7 万 x √体型、舰标半径 5 px(团 = 1.3 倍)、定位的误差圈中位 560 km。暂停时不动;「按引擎节拍」= 翻涌和噪点每 200 ms 走一步(引擎红外画面的重贴节拍)。此页不与引擎同步。</p>
+  </aside>
+</div>
+<script>
+"use strict";
+/* ---- 内核数值(抄一份,不同步) ---- */
+const K_IR = 146285714285.7143, A_IR = 1285420408.1632655, TH0 = 0.0324, AMAX = 11991.7;
+const P_MAIN = 12.3, ROCK_HEAT = 0.5, SOLAR_K = 1, PH_K = 0.3, FIX_R = 560, FILL = 200000 / 3;
+const DD_REF = 0.7;                           // 没认出:按一艘熄火驱逐舰的亮度反推距离
+/* ---- 画面常数(与引擎红外画面同一条色阶) ---- */
+const GAIN = 0.2, V0 = 0.02, VMAX = 1000, T0 = -0.1, NOISE = 0.005, CELL = 4, ICON_R = 5, GLYPH = 1.3, CORE = 0.4, CORE_W = 0.45, PLAT = 1.2, STEP_MS = 200;
+const RAMP = [[T0, [40, 6, 6]], [0, [70, 12, 12]], [0.25, [150, 30, 20]], [0.5, [220, 80, 30]], [0.75, [255, 170, 60]], [1, [255, 245, 210]]];
+const LUT = (() => { const L = new Uint8ClampedArray(256 * 3); for (let k = 0; k < 256; k++) { const t = T0 + k / 255 * (1 - T0); let a = 0; while (a < RAMP.length - 2 && t > RAMP[a + 1][0]) a++;
+  const p = RAMP[a], q = RAMP[a + 1], u = Math.max(0, Math.min(1, (t - p[0]) / (q[0] - p[0]))); for (let c = 0; c < 3; c++) L[k * 3 + c] = Math.round(p[1][c] + (q[1][c] - p[1][c]) * u); } return L; })();
+function irvT(v) { if (!(v !== 0) || !isFinite(v)) return 0; const t = Math.sign(v) * Math.log(1 + Math.abs(v) / V0) / Math.log(1 + VMAX / V0); return t > 1 ? 1 : (t < T0 ? T0 : t); }
+function lutK(t) { return Math.round((Math.max(T0, Math.min(1, t)) - T0) / (1 - T0) * 255); }
+function lutCss(t) { const k = lutK(t) * 3; return `rgb(${LUT[k]},${LUT[k + 1]},${LUT[k + 2]})`; }
+const gate = S => GAIN * (S >= 1 ? S : S * S * S); // 一道门:信噪比 1 以下三次方淡出
+
+/* ---- 目标:放在离观测舰 D 的一圈上;每个一组固定相位与固定偏移方向(不随时间变) ---- */
+const TG = [
+  { n: 'DD 熄火', kind: 'ship', size: 0.7, flame: 0 },
+  { n: 'DD 主推', kind: 'ship', size: 0.7, flame: 1 },
+  { n: 'CA 熄火', kind: 'ship', size: 1.0, flame: 0 },
+  { n: '石头 0.3', kind: 'rock', size: 0.3 },
+  { n: '石头 1', kind: 'rock', size: 1.0 },
+  { n: '石头 4', kind: 'rock', size: 4.0 },
+];
+TG.forEach((t, i) => { t.ang = -Math.PI / 2 + (i + 0.5) / TG.length * 2 * Math.PI; t.ph = i * 2.399; t.oz = [Math.cos(t.ph * 1.7) * 0.5, Math.sin(t.ph * 2.3) * 0.5]; t.fix = false; });
+
+const st = { D: 200000, viewK: 1.4, sizeK: 0.75, capK: 4, warp: 0.24, churn: 0.25, run: true, step: true, truth: false, sun: true };
+const $ = id => document.getElementById(id);
+const logMap = (u, a, b) => a * Math.pow(b / a, u / 1000);
+function readUI() {
+  st.D = logMap(+$('sD').value, 20000, 600000);
+  st.viewK = logMap(+$('sZ').value, 0.8, 8);
+  st.sizeK = logMap(+$('sS').value, 0.1875, 3);
+  st.capK = 1 + (+$('sK').value) / 1000 * 6;
+  st.warp = (+$('sW').value) / 1000 * 0.6;
+  st.churn = logMap(+$('sR').value, 0.02, 3);
+  $('vD').textContent = (st.D / 1e4).toFixed(st.D < 1e5 ? 1 : 0) + ' 万 km';
+  $('vZ').textContent = (st.D * st.viewK / 1e4).toFixed(1) + ' 万 km';
+  $('vS').textContent = st.sizeK.toFixed(2);
+  $('vK').textContent = st.capK.toFixed(1) + ' 倍';
+  $('vW').textContent = st.warp.toFixed(2);
+  $('vR').textContent = st.churn.toFixed(2) + ' rad/s';
+}
+['sD', 'sZ', 'sS', 'sK', 'sW', 'sR'].forEach(id => $(id).addEventListener('input', readUI));
+const tog = (id, key, on, off) => { $(id).onclick = e => { st[key] = !st[key]; e.target.classList.toggle('on', st[key]); if (on) e.target.textContent = st[key] ? on : off; }; };
+tog('bRun', 'run', '在跑', '暂停'); tog('bStep', 'step'); tog('bTruth', 'truth'); tog('bSun', 'sun', '晒着', '背阴');
+$('bFix').onclick = () => { const all = TG.every(t => t.fix); TG.forEach(t => t.fix = !all); };
+readUI();
+
+/* ---- 每个目标:信噪比、红外层估计、误差圈 ---- */
+function lumOf(t) { const solar = st.sun ? SOLAR_K * t.size : 0; return t.kind === 'rock' ? t.size * ROCK_HEAT + solar : t.size * (1 + (t.flame ? P_MAIN : 0)) + solar; }
+function est(t) {
+  const lo = lumOf(t), d = st.D, dF = t.kind === 'rock' ? FILL * Math.sqrt(t.size) : 0;
+  const snr = K_IR * lo / Math.pow(Math.max(d, dF), 2);
+  const th = d * TH0 / Math.sqrt(A_IR * lo);                          // 这一拍的角精度(被动律 σ⊥ = d²·TH0/R)
+  const ref = t.kind === 'ship' && t.fix ? lo : DD_REF * (t.flame ? 1 + P_MAIN : 1);   // 定位 + 认出按自己;没认出按驱逐舰(看得见在不在喷)
+  const dp = t.fix ? d : d * Math.sqrt(ref / lo);                    // 假设法测距(系统偏差)
+  const r = t.fix ? FIX_R : dp * Math.sqrt(PH_K * th);               // 等面积 1σ 半径
+  const oa = t.fix ? 0 : dp * PH_K * t.oz[0], oc = t.fix ? 0 : dp * Math.min(0.5, th) * t.oz[1];   // 固定偏移:0.5σ 量级,不随时间变
+  return { snr, th, dp, r, oa, oc };
+}
+
+/* ---- 场 ---- */
+const cv = $('cv'), ctx = cv.getContext('2d');
+const small = document.createElement('canvas'), sx = small.getContext('2d');
+let W = 0, H = 0, gw = 0, gh = 0, F = null, img = null, nz = null, dpr = 1;
+function resize() {
+  const r = cv.getBoundingClientRect(); dpr = window.devicePixelRatio || 1; W = r.width; H = r.height;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  gw = Math.ceil(W / CELL) + 1; gh = Math.ceil(H / CELL) + 1; F = new Float32Array(gw * gh); nz = new Float32Array(gw * gh);
+  small.width = gw; small.height = gh; img = sx.createImageData(gw, gh);
+}
+window.addEventListener('resize', resize); resize();
+function gauss() { let u = 0; while (!u) u = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * Math.random()); }
+const PN = 1 - Math.exp(-PLAT);
+function blob(cx, cy, pk, Rc, warp, q1, q2) { // 格坐标;圆的,扭曲只加不规则、拉不出方向;峰值 = pk(高原)
+  if (!(pk > 1e-4)) return;
+  const rr = 2.5 * Rc * (1 + warp);
+  const i0 = Math.max(0, Math.floor(cx - rr)), i1 = Math.min(gw - 1, Math.ceil(cx + rr)), j0 = Math.max(0, Math.floor(cy - rr)), j1 = Math.min(gh - 1, Math.ceil(cy + rr));
+  for (let j = j0; j <= j1; j++) { const dy = (j - cy) / Rc; for (let i = i0; i <= i1; i++) { const dx = (i - cx) / Rc;
+    const u = dx + warp * Math.sin(1.7 * dy + q1), w = dy + warp * Math.sin(1.9 * dx + q2), qd = u * u + w * w; if (qd > 6) continue;
+    F[j * gw + i] += pk * (1 - Math.exp(-PLAT * Math.exp(-1.35 * qd))) / PN; } }
+}
+function core(cx, cy, pk, s) { const r = 3 * s, i0 = Math.max(0, Math.floor(cx - r)), i1 = Math.min(gw - 1, Math.ceil(cx + r)), j0 = Math.max(0, Math.floor(cy - r)), j1 = Math.min(gh - 1, Math.ceil(cy + r)), e = -0.5 / (s * s);
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) F[j * gw + i] += pk * Math.exp(e * ((i - cx) * (i - cx) + (j - cy) * (j - cy))); }
+
+let T = 0, last = 0, lastStep = -1, rows = 0, info = [];
+function frame(now) {
+  const dt = last ? Math.min(0.1, (now - last) / 1000) : 0; last = now;
+  if (st.run) T += dt;
+  const Tq = st.step ? Math.floor(T * 1000 / STEP_MS) * STEP_MS / 1000 : T, stepIx = Math.floor(T * 1000 / STEP_MS);
+  const viewR = st.D * st.viewK, pxkm = Math.min(W, H) / 2 / viewR, cx0 = W / 2, cy0 = H / 2, glyph = GLYPH * ICON_R;
+  F.fill(0); info = [];
+  for (const t of TG) {
+    const e = est(t), ux = Math.cos(t.ang), uy = Math.sin(t.ang);
+    const tx = cx0 + ux * st.D * pxkm, ty = cy0 + uy * st.D * pxkm;                     // 真值(只在「显示真值」时画)
+    const ex = cx0 + (ux * (e.dp + e.oa) - uy * e.oc) * pxkm, ey = cy0 + (uy * (e.dp + e.oa) + ux * e.oc) * pxkm;   // 画在估计上
+    const Rkm = st.sizeK * AMAX * Math.log(1 + e.r / AMAX);                             // 热区的对数半径
+    const Rpx = Math.max(glyph, Math.min(st.capK * glyph, Rkm * pxkm)), Rc = Rpx / CELL;
+    const pk = gate(e.snr), ch = st.churn * Tq, q1 = t.ph * 1.7 + ch, q2 = t.ph * 2.9 - ch * 0.8;
+    if (t.fix) { blob(ex / CELL, ey / CELL, pk * (1 - CORE), Rc, st.warp, q1, q2); core(ex / CELL, ey / CELL, pk * CORE, Math.max(0.35, Rc * CORE_W)); }
+    else blob(ex / CELL, ey / CELL, pk, Rc, st.warp, q1, q2);
+    info.push({ t, e, tx, ty, ex, ey, Rpx, pk });
+  }
+  if (st.run && stepIx !== lastStep) { lastStep = stepIx; for (let q = 0; q < nz.length; q++) nz[q] = gauss() * NOISE; }
+  const d = img.data;
+  for (let q = 0, n = gw * gh; q < n; q++) { const k = lutK(irvT(F[q] + nz[q])) * 3, o = q * 4; d[o] = LUT[k]; d[o + 1] = LUT[k + 1]; d[o + 2] = LUT[k + 2]; d[o + 3] = 255; }
+  sx.putImageData(img, 0, 0);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(small, -CELL / 2, -CELL / 2, gw * CELL, gh * CELL);
+  /* 观测舰 + 标签 + 真值(演示用,不是红外信号) */
+  ctx.fillStyle = '#5aa9ff'; ctx.beginPath(); ctx.moveTo(cx0 + 8, cy0); ctx.lineTo(cx0 - 6, cy0 - 5); ctx.lineTo(cx0 - 6, cy0 + 5); ctx.closePath(); ctx.fill();
+  ctx.font = '11px system-ui,"Microsoft YaHei",sans-serif'; ctx.textAlign = 'center';
+  for (const o of info) {
+    ctx.fillStyle = 'rgba(160,175,200,0.75)'; ctx.fillText(o.t.n + (o.t.fix ? ' · 定位' : ''), o.ex, o.ey + o.Rpx + 16);
+    if (st.truth) { ctx.strokeStyle = 'rgba(120,200,255,0.8)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(o.tx - 5, o.ty); ctx.lineTo(o.tx + 5, o.ty); ctx.moveTo(o.tx, o.ty - 5); ctx.lineTo(o.tx, o.ty + 5); ctx.stroke(); }
+  }
+  $('mode').textContent = '每像素 ' + Math.round(1 / pxkm) + ' km · 舰标团 ' + glyph.toFixed(1) + ' px · 封顶 ' + (st.capK * glyph).toFixed(0) + ' px' + (st.run ? '' : ' · 暂停');
+  if (++rows % 10 === 0) $('tb').innerHTML = info.map(o => `<tr><td><span class="sw" style="background:${lutCss(irvT(o.pk))}"></span>${o.t.n}</td><td>${o.e.snr.toFixed(o.e.snr < 10 ? 2 : 0)}</td><td>${Math.round(o.e.r).toLocaleString('en-US')}</td><td>${o.Rpx.toFixed(0)}</td><td>${irvT(o.pk).toFixed(2)}</td></tr>`).join('');
+  requestAnimationFrame(frame);
+}
+cv.addEventListener('click', ev => { const r = cv.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top; let b = null, bd = 1e9;
+  for (const o of info) { const dd = Math.hypot(o.ex - x, o.ey - y); if (dd < bd) { bd = dd; b = o; } } if (b && bd < Math.max(30, b.Rpx * 1.5)) b.t.fix = !b.t.fix; });
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
