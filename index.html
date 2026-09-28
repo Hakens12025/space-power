@@ -129,7 +129,7 @@
 <script src="js/sensors/24-track.js?v=20260928y1"></script><!-- TK1 航迹表(每方一张 WeakMap):顶层只建 TRK 与 TRK_FWD、只调同文件的函数;ships/11 的 makeShip 虽然排在它前面,但只在运行期调 trkAdopt(init 与判据里),所以不构成加载顺序约束 -->
 <script src="js/sensors/25-optpair.js?v=20260926r"></script><!-- ENV2 成对光学模型(晒热 / 杂散光 / 云背景):顶层只有声明,22-percep 的精算步与弹丸路径在运行期调 -->
 <script src="js/physics/30-motion.js?v=20260923"></script>
-<script src="js/physics/31-step-ships.js?v=20260926x"></script>
+<script src="js/physics/31-step-ships.js?v=20260928zj"></script>
 <script src="js/physics/32-route-refine.js?v=20260923"></script>
 <script src="js/formation/39-fmcaps.js?v=20260926z"></script><!-- FM4 编队能力模型层:9 维能力(读配装实例字段)/四套站位模板/五条带半径/插槽扩容/匈牙利最优指派。纯函数,零顶层执行;排在 40 之前只为可读性,跨文件引用全在运行期解析 -->
 <script src="js/formation/40-slots.js?v=20260926x"></script>
@@ -151,7 +151,7 @@
 <script src="js/core/06-timecomp.js?v=20260928v1"></script><!-- TC1 接触降速:frame() 每帧调 tcStep;依赖全部在运行期解析 -->
 <script src="js/bots/60-doctrine.js?v=20260928y1"></script>
 <script src="js/bots/61-enemy.js?v=20260928l1"></script>
-<script src="js/command/70-input.js?v=20260928r1"></script>
+<script src="js/command/70-input.js?v=20260928zj"></script>
 <script src="js/command/71-keys.js?v=20260926z"></script>
 <script src="js/command/74-targeting.js?v=20260928r1"></script><!-- RF5 悬停准星/吸附状态 xh + #xhTip 信息卡。按目录编号序归位在 command 块末尾;顶层只有 let/const/function,零顶层执行,跨文件引用全在运行期解析 -->
 <script src="js/render/80-viewtier.js?v=20260927a"></script><!-- SN6 三级星图:层界与缩放上下限由距离梯子推出;与 80-camera 共用编号(先例:85-settings/85-tutorial) -->
@@ -176,7 +176,7 @@
 <script src="js/render/89-fmpage.js?v=20260926y"></script><!-- FM4 舰队编组控制页。与 89-radial 共用编号 89(先例:render/85-settings 与 85-tutorial)。顶层有 on(...) 委托挂载与两条 window 监听,故必须晚于 core/00;其余跨文件引用全在运行期解析 --><!-- RF5 Phase C 目标轮盘的几何与渲染:半径/角度/容量常量与 drawRadial/radialHit/radialInBand/radPages 全在这一份。必须晚于 88-selpanel(扇区射程读数走它的 KIND_INFO);顶层只有 const/let/function,零顶层执行 -->
 <script src="js/scenario/90-envs.js?v=20260926z"></script>
 <script src="js/scenario/91-init.js?v=20260928e1"></script>
-<script src="js/scenario/95-range.js?v=20260926k"></script>
+<script src="js/scenario/95-range.js?v=20260928zj"></script>
 <script src="js/scenario/96-spawn.js?v=20260923"></script><!-- FM7 测试用加船小条。放在 95 之后、core/99 之前:它顶层调 on(),而 on() 定义在 core/00 -->
 <script src="js/scenario/97-match.js?v=20260928za"></script><!-- MT1 对局入口 / 红方摆位 / 结果卡片。顶层调 on(),须在 core/00 之后;matchPlaceRed 被 91-init 运行期调用 -->
 <script src="js/core/99-main.js?v=20260928e1"></script>

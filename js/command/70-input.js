@@ -247,8 +247,8 @@ function mdPending(e,sx,sy){ // 六条 pending*(转向 / 布防 / 跟随 / 信�
   return false;
 }
 let rangeDrag=null; // ENV2 靶场全知时按住拖动的东西:{o 实体 | bi 天体下标, dx, dy, sx, sy, moved}
-function rangeDragAt(sx,sy){ // ENV2 靶场沙盘(全知时):12 px 内最近的舰船(敌我)/ 石头,其次天体圆盘
-  const env=curEnv();if(!env||!env.range||!adminMode)return null;
+function rangeDragAt(sx,sy){ // ENV2 靶场沙盘:12 px 内最近的舰船(敌我)/ 石头,其次天体圆盘。2026-09-28 用户:不开全知也能拖(按真实位置抓,靶场是测试台)
+  const env=curEnv();if(!env||!env.range)return null;
   const w=worldAt(sx,sy);let best=null,bd=144;
   for(const list of [ships,rocks])for(const o of list){if(o.dead)continue;const p=toScreen(o.pos[0],o.pos[1]),d=(p[0]-sx)*(p[0]-sx)+(p[1]-sy)*(p[1]-sy);if(d<bd){bd=d;best={o:o,dx:o.pos[0]-w[0],dy:o.pos[1]-w[1]};}}
   if(best)return best;

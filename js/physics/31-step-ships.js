@@ -7,6 +7,7 @@ function stepShipsMotion(dt){
     if(!isFinite(s.pos[0])||!isFinite(s.pos[1])||!isFinite(s.pos[2])){s.pos=[0,0,0];s.vel=[0,0,0];s.facing=[1,0,0];} // NaN防护
     if(s.dead){s.vel=[0,0,0];s.flame=0;s.sideFlame=0;continue;} // 残骸冻结
     s.flame=0;s.sideFlame=0; // 本步推进器状态默认无焰
+    if(s.pose){s.vel=[0,0,0];s.flame=s.pose.fl;s.sideFlame=s.pose.sf;continue;} // 2026-09-28 靶场姿态(scenario/95):钉在原地,只留推进器的火(测红外 / 雷达信号用)
     s.accNow=0;s.engMain=false;s.engRetro=false;s.engSide=false;s.engLv=[0,0,0]; /* RF19b:accLat/aimHeading 随 torque 删除 */ // RF9 同拍清零;RF10 追加三推开度 engLv / 横向副作用 accLat / 期望朝向 aimHeading:这四个是"本 tick 实际在推什么"的读数,由 30-motion 的 steerToVel 当场置位。
     // 必须在【这里】清而不是在 steerToVel 里清 —— 有几条分支(空闲锁定漂移/编队旗舰调头)整拍不调 steerToVel,在那里清的话读数会冻在上一拍。
     /* FM2 编队:运动层【只剩一件事】—— 给编队里的船加一道组速上限(见下面的 cap)。

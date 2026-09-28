@@ -164,6 +164,7 @@ function rangeTargetAI(dt){ // 每 tick 跑一次,调用点在 stepSim 的 enemy
     // 三道禁火闸门本来就让靶发不出弹,这里清的是"锁定线/瞄准姿态"这些会污染观测与闪避机动的残留状态。
     t.autoEngage=false;t.lockedTarget=null;t.lockPlayer=false;
     if(t.driftFire){t.driftFire=false;t.driftFireT=0;} // driftFire 会在运动内核里抢机头,直接干扰闪避机动
+    if(t.pose){t.orders=[];t.rgEv=false;continue;} // 2026-09-28 摆了姿态的靶钉在原地(physics/31),闪避机动与自动诱饵都不接管
     const c=(i<RANGE_SLOTS)?cfg.targets[i]:null;
     if(!c)continue; // 超过 3 个靶:只清交战态,机动不接管(面板管不到它们)
     if(c.evadeOn){
@@ -186,6 +187,32 @@ function rangeTargetAI(dt){ // 每 tick 跑一次,调用点在 stepSim 的 enemy
       if(t.rgDecT<=0){t.rgDecT=c.decoyAuto;if(typeof fireDecoy==='function')fireDecoy(t);}
     }else t.rgDecT=0;
   }
+}
+
+/* ---------- 靶子姿态(2026-09-28 用户:靶场里要能控制敌方全推 / 反推 / 开火 / 开炮,摆好当靶子,不许动) ---------- */
+const TR_POSES=[['ai','自动',null],['off','熄火',{fl:0,sf:0}],['main','主推',{fl:1,sf:0}],['rev','反推',{fl:-1,sf:0}],['side','侧推',{fl:0,sf:1}]];
+function trPoseKey(t){if(!t||!t.pose)return 'ai';const f=TR_POSES.find(x=>x[2]&&x[2].fl===t.pose.fl&&x[2].sf===t.pose.sf);return f?f[0]:'ai';}
+function trPoseSet(t,k){const f=TR_POSES.find(x=>x[0]===k);if(!t||!f)return;t.pose=f[2]?{fl:f[2].fl,sf:f[2].sf}:null;if(t.pose){t.orders=[];t.vel=[0,0,0];}}
+function trShot(t){ // 朝最近的一艘蓝舰开一炮(机头直接摆过去;靶平时禁火,这一炮临时放开)
+  let b=null,bd=1e18;for(const s of ships)if(s.side!==t.side&&!s.dead){const d=Math.hypot(s.pos[0]-t.pos[0],s.pos[1]-t.pos[1]);if(d<bd){bd=d;b=s;}}
+  if(!b)return;const L=macPtLead(t,b.pos),u=V.norm(V.sub(L,t.pos));t.facing=[u[0],u[1],u[2]||0];
+  const nf=t.noFire;t.noFire=false;fireMACAt(t,b.pos.slice());t.noFire=nf;
+}
+function trPoseAct(k){ // 面板按钮:姿态 / 雷达 / 开火闪光 / 开一炮,只作用于当前页签的靶
+  const t=rangeTargets()[trTab];if(!t)return;
+  if(k==='radar')setEmit(t,t.emitMode==='paint'?'silent':'paint');
+  else if(k==='flash')t.fireHot=SENS.FIRE_S;
+  else if(k==='shot')trShot(t);
+  else trPoseSet(t,k);
+  renderRangePanel();
+}
+function trPoseHTML(t){
+  if(!t)return '';
+  const cur=trPoseKey(t);let h=`<div class="tr-row"><span class="tr-nm">姿态(钉在原地)</span></div><div class="tr-row">`;
+  for(const x of TR_POSES)h+=`<button class="tr-stp${x[0]===cur?' on':''}" data-pose="${x[0]}" style="width:auto;padding:0 6px${x[0]===cur?';border-color:var(--acc);color:var(--acc)':''}">${x[1]}</button>`;
+  h+=`</div><div class="tr-row"><button class="tr-stp" data-pose="radar" style="width:auto;padding:0 6px">雷达:${t.emitMode==='paint'?'开':'关'}</button>`+
+     `<button class="tr-stp" data-pose="flash" style="width:auto;padding:0 6px">开火闪光</button><button class="tr-stp" data-pose="shot" style="width:auto;padding:0 6px">朝最近蓝舰开一炮</button></div>`;
+  return h;
 }
 
 /* ---------- 参数面板 ---------- */
@@ -216,7 +243,7 @@ function renderRangePanel(){ // 重建旋钮行与页签(只在切靶/切场景/
     trTabsEl.appendChild(b);
   }
   const c=cfg.targets[trTab];
-  let html='';
+  let html=trPoseHTML(ts[trTab]);
   for(const kn of RANGE_KNOBS){
     html+=`<div class="tr-row"><span class="tr-nm">${kn.nm}</span>`+
       `<button class="tr-stp" data-knob="${kn.k}" data-dir="-1">−</button>`+
@@ -294,6 +321,7 @@ if(trTabsEl)trTabsEl.addEventListener('pointerdown',e=>{
   e.preventDefault();trTab=+b.dataset.tab;renderRangePanel();
 });
 if(trBodyEl)trBodyEl.addEventListener('pointerdown',e=>{
+  const q=e.target.closest('[data-pose]');if(q&&e.button===0){e.preventDefault();trPoseAct(q.dataset.pose);return;}
   const b=e.target.closest('[data-knob]');
   if(!b||e.button!==0)return;
   e.preventDefault();trStep(b.dataset.knob,+b.dataset.dir);
