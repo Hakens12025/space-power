@@ -10,9 +10,9 @@
    ============================================================================ */
 const IRV_C={CELL:5,V0:0.02,VMAX:1000,CULL:0.0003,SIG_MIN:0.7,NOISE:0.005,NOISE_MS:200,TAIL_K:4,POS_P:3,MIX:0.875,
   BG_K:0.1,CLOUD_M:8,CLOUD_LV:4,CLOUD_SYNC:400,CLOUD_BATCH:1500,CLOUD_COARSE:1200,
-  GAIN:0.2,FILL_K:1/3,GLYPH:1.3,SIG_MAX_PX:30,MSL_PX:3,FLK:0.2,FLK_HZ:1.1,CORE:0.4,CORE_W:0.45};
+  GAIN:0.2,FILL_K:1/3,GLYPH:1.3,SIG_MAX_PX:30,MSL_PX:3,FLK:0.2,FLK_HZ:0.25,CORE:0.4,CORE_W:0.45};
   // GAIN = 一道门的增益(信噪比 1 ≈ 色阶 0.22,信噪比 < 1 按三次方淡出,见 irvV);BG_K = 背景(云 / 恒星光晕)压暗倍数;FILL_K = 石头填满距离 / (认出距离 x √体型)
-  // GLYPH = 团宽 / 舰标半径,封顶 SIG_MAX_PX;MSL_PX = 导弹小点;FLK / FLK_HZ = 没定位的呼吸幅度与频率(跟噪点节拍 NOISE_MS 走);CORE / CORE_W = 定位后亮核的份额与宽度
+  // GLYPH = 团宽 / 舰标半径,封顶 SIG_MAX_PX;MSL_PX = 导弹小点;FLK / FLK_HZ = 没定位的呼吸幅度与频率(跟噪点节拍 NOISE_MS 走,一步相位 = FLK_HZ x NOISE_MS;1.1 Hz 时一步 79°、亮度一跳 18% 像闪,2026-09-28 降到 0.25);CORE / CORE_W = 定位后亮核的份额与宽度
   // V0 / VMAX = 色阶的对数刻度;CULL = 山截断处;SIG_MIN = 山的最小宽(格);TAIL_K = 尾焰尾巴长宽比;POS_P / MIX = 恒星光晕的律
 const IRV_T0=-0.1;
 const IRV_RAMP=[[IRV_T0,[40,6,6,140]],[0,[70,12,12,150]],[0.25,[150,30,20,170]],[0.5,[220,80,30,190]],[0.75,[255,170,60,210]],[1,[255,245,210,230]]];

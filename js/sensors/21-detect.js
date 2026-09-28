@@ -90,14 +90,14 @@ function esmHear(side,L,E,dd){ // L(我方听者)这一拍听到 E 的雷达;dd 
   if(!k||simTime-k.t>ESM_CFG.FADE){k={n:0,hits:0,tb:tb,half:Math.PI/2,t:simTime};m.set(L,k);}
   if(k.n>0){const dl=Math.abs(Math.atan2(Math.sin(tb-k.tb),Math.cos(tb-k.tb)))/(k.half/2);k.n*=Math.exp(-dl*dl);}
   k.n+=1;k.hits++;k.tb=tb;k.t=simTime;k.org=[L.pos[0],L.pos[1]];
-  const st=Math.sqrt(1-1/Math.pow(1+COV.FADE_HOLD,2*SENS.TICK)); // 盯着看的稳态 / 单次量测
-  k.half=Math.min(Math.PI/2-0.01,Math.max(ESM_CFG.SMIN,ESM_CFG.K*sig*Math.max(st,1/Math.sqrt(k.n))));
+  const st=Math.sqrt(1-1/Math.pow(1+COV.FADE_HOLD,2*SENS.TICK)),ga=Math.max(st,1/Math.sqrt(k.n)),sa=sig*ga; // 盯着看的稳态 / 单次量测;ga = 积累收窄的系数,sa = 积累后的方位 1σ
+  k.half=Math.min(Math.PI/2-0.01,Math.max(ESM_CFG.SMIN,ESM_CFG.K*sa));
   k.R=Math.max(dd*1.05,hearRangeOf(E,L.recv)/Math.sqrt(envRfNoise(L.pos,E.pos))); // 远端 = 这个方向上听得见的最远距离(恒星噪声锥里更近)
-  const idf=dd*sig<=E.size*COV.L_LIS,tk=trkOf(side,E),z=tk?tk.ez.lis:[0,0]; // 2026-09-28 静听那一层的估计(见 sensors/24 的估计误差):k.tb 仍是量到的方位(只给上面的连续性判据),显示读 tbE / rr / r
+  const idf=dd*sig<=E.size*COV.L_LIS,tk=trkOf(side,E),z=tk?tk.ez.lis.z:[0,0]; // 2026-09-28 静听那一层的估计(见 sensors/24 的估计误差):k.tb 仍是量到的方位(只给上面的连续性判据),显示读 tbE / rr / r
   const ref=(idf||(tk&&trkIdLvl(tk)>=ID_SUS))?E.emit:SENS.CLS.DD.emit,base=dd*Math.sqrt(ref/E.emit); // 假设法测距:没认出按驱逐舰的发射机反推(同一发射档),偏差是系统性的
-  k.sr=base*(idf?COV.RSS_ID:COV.RSS_UNK)*Math.max(st,1/Math.sqrt(k.n)); // 幅度测距的纵向 1σ(与 23-cov 的静听量测同式,按基准距离)
-  k.rr=base+trkClampK(z[0]*k.sr,TRK_ERR.ALONG_K*base);k.tbE=tb+trkClampK(z[1]*sig,Math.PI/4);
-  k.r=Math.sqrt(Math.min(k.sr,TRK_ERR.ALONG_K*base)*base*sig); // 等面积 1σ 半径(雷达异常的圈)
+  k.sr=base*(idf?COV.RSS_ID:COV.RSS_UNK)*ga; // 幅度测距的纵向 1σ(与 23-cov 的静听量测同式,按基准距离)
+  k.rr=base+trkClampK(z[0]*k.sr,TRK_ERR.ALONG_K*base);k.tbE=tb+trkClampK(z[1]*sa,Math.PI/4); // 2026-09-28 方位误差按积累后的 sa(原来用单次的 sig,偏到 30°~45°,比扇形还宽)
+  k.r=Math.sqrt(Math.min(k.sr,TRK_ERR.ALONG_K*base)*base*sa); // 等面积 1σ 半径(雷达异常的圈)
 }
 function esmEach(side,f){ // 逐个辐射源给 f(E, [{L,k}]);顺手忘掉太久没听到的
   for(const [E,m] of ESM[side]){const a=[];
