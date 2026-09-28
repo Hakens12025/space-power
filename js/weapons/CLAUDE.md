@@ -3,7 +3,7 @@
 ## 文件
 - `50-missile-spec.js` 导弹规格;`51-defs.js` 武器定义表 `WPN`、配装 `CLS_LOADOUT`、`resolveLoadout(cls,tier)`、命中率函数
 - `51-ciws.js` 近防谓词 / 过载 / 扇面;`52-fire.js` 主炮 / 诱饵 / 拦截弹 / 齐射发射链、开火暴露置位、命中闪光 `spawnHit` / 近防火花 `spawnCiwsFX`(看得见的口径 `fxVis`)
-- `53-nets.js` 数据链网分配;`54-missiles.js` 导弹引导(`MSL_CFG` / `missSee`);主炮前出奖励 `MAC_FWD` / `macFwdK`(52;对方在我方可见光圈里 / 被我方雷达照到,命中曲线的距离按 1.236 / 1.136 缩,`macHitProb` / `macShotSigma` 带目标就算);盲射导引头 `MSL_BLIND`(54 `missSeeT` 的 blind:探测圈 2 万 x 目标体型、看热 x2/3,只给 `mslSeek`);`56-step-projectiles.js` 天体 / 碎石挡弹 `projBlock`(炮弹 / 导弹 / 拦截弹;碎石被打碎、导弹组少一颗);导弹速度曲线乘 `MSL_VK`(1/4,加速度 `MSL_A`,原 `MSL_ACC` 只给信标)、拦截弹乘 `INT_VK`(1/3),都在 52;`55-damage.js` `applyDamage`(碎石被打中就碎;先扣护盾,打破后多出的进船体;返回进船体的伤害,调用方据此出不出船体命中闪光)、护盾回充 / 重启 `stepShields`(`SHIELD`:空到满 60、破后 10 游戏秒重启;盾值在 ships/11 `CLS_STRUCT.shield`)
+- `53-nets.js` 数据链网分配;`54-missiles.js` 导弹引导(`MSL_CFG` / `missSee`);主炮前出奖励 `MAC_FWD` / `macFwdK`(52;对方在我方可见光圈里 / 被我方雷达照到,命中曲线的距离按 1.6 / 1.3 缩,`macHitProb` / `macShotSigma` 带目标就算);盲射导引头 `MSL_BLIND`(54 `missSeeT` 的 blind:探测圈 2 万 x 目标体型、看热 x2/3,只给 `mslSeek`);`56-step-projectiles.js` 天体 / 碎石挡弹 `projBlock`(炮弹 / 导弹 / 拦截弹;碎石被打碎、导弹组少一颗);导弹速度曲线乘 `MSL_VK`(1/4,加速度 `MSL_A`,原 `MSL_ACC` 只给信标)、拦截弹乘 `INT_VK`(1/3),都在 52;`55-damage.js` `applyDamage`(碎石被打中就碎;先扣护盾,打破后多出的进船体;返回进船体的伤害,调用方据此出不出船体命中闪光)、护盾回充 / 重启 `stepShields`(`SHIELD`:空到满 60、破后 10 游戏秒重启;盾值在 ships/11 `CLS_STRUCT.shield`)
 - `56-step-projectiles.js` 弹丸推进与引导;`57-step-weapons.js` 冷却 / 装填 / 自动索敌与自动齐射;`58-firecontrol.js` 火控序列引擎侧(`fcGate` / `fcSolve` / `fcRuns`)
 
 ## 射程与瞄准

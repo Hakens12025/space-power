@@ -54,8 +54,8 @@ function macD50(sig){return sig>0?MAC_HIT_R/(sig*MAC_Z50):0;}
 const MAC_SIG_CAP=3*Math.PI/180; // 2026-09-28 用户:每发角散布封顶 3°(约 16.5 万起;原封顶 0.5 弧度 = 28.6°,远射满天飞)。再远按固定 3° 的一维高斯算:20 / 30 / 40 万命中 3.0% / 2.0% / 1.5%(远射 = 抽奖)
 function macHitCap(d){return erfApprox(MAC_HIT_R/(Math.SQRT2*d*MAC_SIG_CAP));} // 散布到顶以后的命中率
 /* 2026-09-29 用户:雷达现在是纯信息位置,前出没有好处 —— 奖励前出:对方在我方可见光圈里 / 被我方雷达照到,命中曲线的距离按 VIS / RAD 缩(拉长曲线,用户选):
-   7.3 万处 50% → 70% / 63%,10 万 22% → 40% / 32%,远处抽奖几乎不变。判据读我方航迹这一拍有没有可见光 / 照射量测(不读真值),两个都有取可见光 */
-const MAC_FWD={VIS:1.236,RAD:1.136};
+   2026-09-29 用户:远处几乎没提升,要更明显 → 1.236 / 1.136 调到 1.6 / 1.3(用户选只拉长曲线):7.3 万 50% → 87% / 74%,10 万 22% → 65% / 45%,20 万 3.0% → 10.5% / 4.9%,40 万 1.5% → 2.4% / 2.0%。判据读我方航迹这一拍有没有可见光 / 照射量测(不读真值),两个都有取可见光 */
+const MAC_FWD={VIS:1.6,RAD:1.3};
 function macFwdK(side,t){if(!t||!t.side||t.side===side)return 1;const tk=trkOf(side,t),c=tk&&tk.cov&&tk.cov.ch;return !c?1:(c.vis?MAC_FWD.VIS:(c.act?MAC_FWD.RAD:1));}
 function macHitProb(s,d,t){ // 主炮在距离 d 上对标准命中判定半径的命中率(靶不动):S 形,散布到顶以后改固定角(与 macShotSigma 实打一致)。t = 目标(可省):前出奖励
   const sig=sReq(s,'macSigma'); if(!(sig>0)||!(d>0))return sig>0?1:0;
