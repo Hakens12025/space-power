@@ -89,9 +89,9 @@ function stepWeaponSystems(dt){
     ff.T-=dt;const tp=ff.t?((ff.t.dead||ff.t.side===s.side)?null:macPred(s,ff.t)):macPtLead(s,ff.pt); // 打空地也按相对参照系提前
     if(!tp||ff.T<=0||s.dead||!hasMAC(s)){s.forceMac=null;continue;}
     s.turnTarget=[tp[0],tp[1],0]; // 朝向层对准后会清掉 turnTarget,所以每拍重设
-    if(s.macCd<=0&&V.angle(s.facing,V.norm(V.sub(tp,s.pos)))<0.02){if(ff.t)fireMAC(s,ff.t);else fireMACAt(s,ff.pt);if(s.macCd>0){s.forceMac=null;s.turnTarget=null;}}
+    if(s.macCd<=0&&macAimErr(s,tp)<MAC_ALIGN){if(ff.t)fireMAC(s,ff.t);else fireMACAt(s,ff.pt);if(s.macCd>0){s.forceMac=null;s.turnTarget=null;}}
   }
-  // 锁定自动开火(10秒一轮):机头摆到对准窗口的瞬间才开炮(不盲射);v125 ROE门控
+  // 锁定自动开火(10秒一轮):机头转到位(MAC_ALIGN)才开炮(不盲射);v125 ROE门控
   for(const s of ships){
     const roeOK=s.macOn!==false&&(s.roe==='free'||(s.roe==='tight'&&s.roeCd>0)); // free自由/tight被攻击才还击(roeCd=受击冷却)/hold不开火;RF2 主炮开关:关=不参与自动开火
     const mt=(typeof fcActive==='function'&&fcActive(s))?(s.fcTgt&&s.fcTgt.mac):s.lockedTarget; // RF5 有序列则打序列解算的主炮目标:序列可能只许导弹打(allow.mac=false),这时 lockedTarget 虽被写成导弹目标,主炮也不许跟着开

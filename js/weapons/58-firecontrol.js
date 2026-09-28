@@ -13,7 +13,7 @@
    踩过的坑(全部来自实读代码,不是猜测):
    · 陷阱一:lockedTarget 同时是【转向指令】。physics/31-step-ships:74-80 的战斗转向段是朝 macPred(s,lockedTarget)
      摆机头的,所以 lockedTarget 必须跟 MAC 指针走(mac 优先),否则船头去追导弹目标、主炮永远进不了 macAligned
-     的 1.1° 窗口。指定点更不能写进 lockedTarget —— 它只有 pos,转向段会读 .dead/.side。
+     的对准门(MAC_ALIGN)。指定点更不能写进 lockedTarget —— 它只有 pos,转向段会读 .dead/.side。
    · 陷阱二:driftFire 自带 60s 倒计时(31-step-ships:75)。一艘正在执行移动命令的舰全靠 driftFire 才抢得到机头,
      倒计时一到主炮就【静默哑火】(不报错不打日志)。所以解算出 mac 目标时必须每 tick 续期,不是置一次 true 就完事。
    · 陷阱三:orderMissileSalvo 是【延迟发射】,它只写 s.missileArm,真正的 fireMissiles 在 1s 后的另一个 tick 由
