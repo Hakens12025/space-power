@@ -11,9 +11,9 @@
    ============================================================================ */
 const IRV_C={CELL:8,V0:0.02,VMAX:1000,CULL:0.0003,SIG_MIN:0.7,NOISE:0.005,NOISE_MS:200,TAIL_K:4,POS_P:3,MIX:0.875,
   BG_K:0.1,CLOUD_M:8,CLOUD_LV:4,CLOUD_SYNC:400,CLOUD_BATCH:1500,CLOUD_COARSE:1200,
-  GAIN:0.2,CONTRAST:1.14,FILL_K:1/3,GLYPH:1.3,SIG_MAX_PX:30,MSL_PX:3,CORE:0.4,CORE_W:0.45,
+  GAIN:0.2,DET_V:0.862,CONTRAST:0.928,FILL_K:1/3,GLYPH:1.3,SIG_MAX_PX:30,MSL_PX:3,CORE:0.4,CORE_W:0.45,
   UNC_K:0.75,UNC_CAP:4,PH_K:0.3,OFF:0.5,GLIDE:0.6,EP_PX:0.5,FIRE_GROW:1,FIRE_Q:12,TW:1.4,PLAT:1.2,WARP:0.05,CHURN:0.15,CHURN_STEP:0.1,R_TOL:0.05};
-  // GAIN / CONTRAST = 一道门:色阶值 = GAIN x 信噪比^CONTRAST(信噪比 1 ≈ 色阶 0.22 不动,< 1 按三次方淡出,见 irvV)。CONTRAST 1.14(2026-09-28 用户:巅峰亮度都不高):红外 x0.6 把灵敏度降到 0.36 倍,同距离全都变暗;加对比度把近处的亮端拉回早上的水平,发现门限处不抬(试过「刚发现的热提亮」0.49 x 信噪比^0.8,用户不要);BG_K = 背景(云 / 恒星光晕)压暗倍数;FILL_K = 石头填满距离 / (认出距离 x √体型)
+  // 一道门:信噪比 >= 1(内核发现门)色阶值 = DET_V x 信噪比^CONTRAST,< 1 = GAIN x 信噪比³ 淡出(见 irvV)。2026-09-28 用户:发现即可见 —— 发现门处 0.22 → 0.35(DET_V),信噪比 1000 处照旧 0.94(CONTRAST 1.14 → 0.928);门下不动(没发现的暗热与星云混在一起);发现了的热再乘 (1 + 所在处底 / V0),比底亮出同样一截(irvjSplats;原来底把热的对比度又吃一次);BG_K = 背景(云 / 恒星光晕)压暗倍数;FILL_K = 石头填满距离 / (认出距离 x √体型)
   // GLYPH = 舰标团 / 舰标半径,封顶 SIG_MAX_PX;MSL_PX = 导弹小点;CORE / CORE_W = 定位后亮核的份额与宽度
   // PH_K = 红外测距的相对 1σ(不确定半径 = 距离 x √(PH_K x 方位误差));OFF = 红外异常圈心偏移 / 不确定半径;GLIDE = 定位 / 丢定位时团缩小 / 胀大的时间常数(墙钟秒,只在跑的时候走);EP_PX = 团心挪不到这么多像素不重贴;FIRE_GROW = 开火一刻团半径多出几个舰标团(随开火那份热退回去,sensors/22 fireLvl;2026-09-28 用户:开火是红外亮度提升、团变大一点、发白一点,作为属性,不贴特效);FIRE_Q = 开火热退的过程中重算物理的档数;UNC_K = 热区对数半径的缩放;UNC_CAP = 团半径上限(x 舰标团);TW = 过渡宽度(x 团半径);PLAT = 高原;WARP / CHURN = 扭曲幅度与翻涌速度(rad / 墙钟秒,只在跑的时候走);
   // CHURN_STEP = 翻涌累计把形状挪到这么多格才重贴;R_TOL = 团半径变了这个比例才重贴
@@ -38,7 +38,7 @@ function irvAnomPt(t){ // 红外异常圈画在哪、多大:[x, y, 不确定半�
 }
 function irvObs(){const a=[];for(const s of ships)if(s.side===VIEW&&!s.dead)a.push(s);return a;} // 本视角的船(VIEW)
 function irvSrc(){const a=[];for(const s of ships)if(s.side!==VIEW&&!s.dead)a.push(s);for(const r of rocks)if(!r.dead&&r.side!==VIEW)a.push(r);return a;} // 2026-09-27 自己放的浮标不算热源
-function irvV(snr){return IRV_C.GAIN*(snr>=1?Math.pow(snr,IRV_C.CONTRAST):snr*snr*snr);} // 一道门:信噪比 → 色阶值;内核发现门限(信噪比 1)以下三次方淡出,热团在发现距离上才冒出来(增益调高以后不许跑在内核前面)
+function irvV(snr){return snr>=1?IRV_C.DET_V*Math.pow(snr,IRV_C.CONTRAST):IRV_C.GAIN*snr*snr*snr;} // 一道门:信噪比 → 色阶值;内核发现门限(信噪比 1)以下三次方淡出,热团在发现距离上才冒出来(增益调高以后不许跑在内核前面)
 function irvHill(t,obs,kn){ // 一座山:信噪比(一道门的输入),取看得最清楚的那艘我方船。kn = 我方已定位它:三道门(日光禁区 / 天体遮挡 / 自己尾焰致盲)不挡,照画它的热(用户:红外是固有的特性,可见光里红团不许消失)
   let best=null,bg=NaN,tSh=false;const lit=envHasLight(),nb=ENV.bodies.length>0;
   for(let n=0;n<obs.length;n++){const o=obs[n];
@@ -133,10 +133,11 @@ function irvGlyph(t){const it=adminMode?{kind:t.kind||'ship'}:contactIdType(t,VI
 function irvGlowMin(t,g){return (!shipMarkMode()&&!adminMode&&irvSilOn(t))?Math.max(g,irvSilR(t)):g;} // 热晕最小半径(px):画轮廓时不小于轮廓(用户:显形了也要有红色团;轮廓叠在团上,四周露出红晕)
 function irvBlobR(g,gm,rk){const Rk=IRV_C.UNC_K*COV.AMAX*Math.log(1+Math.max(0,rk)/COV.AMAX);return Math.max(IRV_C.SIG_MIN,Math.max(gm,Math.min(IRV_C.UNC_CAP*g,Rk*cam.zoom))/IRV_C.CELL);} // 团半径(格):误差圈 rk(km)按热区的对数压缩,下限 = 热晕最小半径 gm,上限 = UNC_CAP x 舰标团 g(上限不跟轮廓变,出轮廓那一下不跳)
 function irvBlobRt(t,g,rk){return irvBlobR(g,irvGlowMin(t,g),rk)+IRV_C.FIRE_GROW*fireLvl(t)*g/IRV_C.CELL;} // 这一团的半径(格):不确定 + 开火那份热胀出来的
+function irvBgAt(cx,cy){const i=Math.round(cx),j=Math.round(cy);return (irvB&&i>=0&&j>=0&&i<irvGW&&j<irvGH)?irvB[j*irvGW+i]*IRV_C.BG_K:0;} // 这一格画上去的底(云 + 恒星光晕)
 function irvjSplats(t,ph,fxd,ep){ // 一个源的贴片(弥散团、尾焰尾巴),格坐标。一道门:峰值色阶值 = GAIN x 这一份的信噪比;fxd = 我方定出了它的位置;ep = [x, y, 不确定半径 km](irvjUpdate 里按定位与否在 irvHeatPos 与 viewPos 之间滑)
   const C=IRV_C.CELL,p=toScreen(ep[0],ep[1]),cx=p[0]/C,cy=p[1]/C,list=[],tl=ph.tl,sh=tl?tl.share:0;
   const g=irvGlyph(t),s0=Math.max(IRV_C.SIG_MIN,g/C),R=irvBlobRt(t,g,ep[2]),h=irvPh(t),q=IRVJ.ch,q1=h*1.7+q,q2=h*2.9-q*0.8;
-  const vt=irvV(ph.snr),idn=adminMode||contactIdn(t,VIEW),pk=idn?vt*(1-sh):vt,pkT=idn?vt*sh:0; // 淡出按总信噪比(内核发现用的那个)判;认出了按份额分给团和尾焰,没认出尾焰那份并进团里(不画方向:方向 = 真实朝向)
+  const vt=irvV(ph.snr)*(ph.snr>=1?1+irvBgAt(cx,cy)/IRV_C.V0:1),idn=adminMode||contactIdn(t,VIEW),pk=idn?vt*(1-sh):vt,pkT=idn?vt*sh:0; // 淡出按总信噪比(内核发现用的那个)判;认出了按份额分给团和尾焰,没认出尾焰那份并进团里(不画方向:方向 = 真实朝向)
   if(pk>=IRV_C.CULL){ // 出轮廓后照画(用户:显形了也要有红色团)
     if(fxd)list.push(irvSplatRect({bl:true,x:cx,y:cy,pk:pk*(1-IRV_C.CORE),R:R,wp:IRV_C.WARP,q1:q1,q2:q2}),irvSplatRect({bl:true,x:cx,y:cy,pk:pk*IRV_C.CORE,R:Math.max(IRV_C.SIG_MIN*0.5,R*IRV_C.CORE_W),wp:0,q1:0,q2:0})); // 定出位置:外团 + 亮核,中心合起来仍是一道门的值
     else list.push(irvSplatRect({bl:true,x:cx,y:cy,pk:pk,R:R,wp:IRV_C.WARP,q1:q1,q2:q2}));}
@@ -356,7 +357,7 @@ function irvUpdate(){
   if(!V.col)irvColInit();
   let bg=view||glob;
   if(bg)irvBgBuild();else if(V.cloudPend&&irvCloudStep()){irvBgBuild();bg=true;}
-  let rects=irvjUpdate(view,glob);
+  let rects=irvjUpdate(view||bg,glob); // 底变了(含星云分帧补齐)发现了的热要按新底重贴
   if(bg)rects=null;
   const ep=Math.floor(performance.now()/IRV_C.NOISE_MS),na=IRV_C.NOISE,Z=V.nz,L32=V.col.L32;
   if(rects===null)irvCompose(0,gw-1,0,gh-1);else for(const r of rects)irvCompose(r[0],r[1],r[2],r[3]);

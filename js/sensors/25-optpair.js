@@ -6,8 +6,8 @@
    ============================================================================ */
 const SOP_T2 = [0, 0]; // ENV2 本文件的两格草稿
 
-function senseLoOf(L, hid, sol, G, bg) { // ENV2 有效光学亮度的唯一式子:(L - hid + sol) / √(1 + (G + bg)/BG_G0);背景为 0 时不开方
-  const num = L - hid + sol, q = G + bg;
+function senseLoOf(L, hid, sol, G, bg) { // ENV2 有效光学亮度的唯一式子:(L - hid + sol) / √(1 + (G + BG_DUST x bg)/BG_G0);背景为 0 时不开方
+  const num = L - hid + sol, q = G + SENS.BG_DUST * bg;
   return q > 0 ? num / Math.sqrt(1 + q / SENS.BG_G0) : num;
 }
 function senseHalfRad() { const s = ENV.sun; return s ? s.half * Math.PI / 180 : (ENV.stars.length ? ENV.stars[0].half * Math.PI / 180 : 0); } // ENV2 度→弧度只在这一处
@@ -70,7 +70,7 @@ function senseOptParts(o, t) { // ENV2 o 看 t 的亮度拆成三份:自身 / �
 function senseOptBlocked(o, t) { // ENV2 光学看不见这一对:光源禁区 / 天体遮挡 / 自己尾焰致盲(红外页甲的三道门)
   return envSunBlind(o.pos, t.pos) || (ENV.bodies.length > 0 && envOccluded(o.pos, t.pos)) || senseBaffled(o, t.pos);
 }
-function senseContrast(o, t) { const q = senseGlareAt(o.pos, t.pos) + (ENV.clouds.length ? envBg(t.pos, 'opt') : 0); return q > 0 ? 1 / Math.sqrt(1 + q / SENS.BG_G0) : 1; } // ENV2 背景受限的对比度因子
+function senseContrast(o, t) { const q = senseGlareAt(o.pos, t.pos) + (ENV.clouds.length ? SENS.BG_DUST * envBg(t.pos, 'opt') : 0); return q > 0 ? 1 / Math.sqrt(1 + q / SENS.BG_G0) : 1; } // ENV2 背景受限的对比度因子
 function senseOptPair(o, t) { // ENV2 红外页用:甲读打折后的 snrEff / blurEff,乙读不打折的 snr / ang
   const dx = t.pos[0] - o.pos[0], dy = t.pos[1] - o.pos[1], dz = (t.pos[2] || 0) - (o.pos[2] || 0), d = Math.max(1, Math.hypot(dx, dy, dz));
   const L = optLum(t), lok = senseLoOf(L, 0, senseSolar(o, t), 0, 0), lo = senseOptLo(o, t);
