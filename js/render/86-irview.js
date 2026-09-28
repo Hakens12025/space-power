@@ -3,8 +3,7 @@
    红外画面(右下角「红外」钮,MAPV.mode === 'ir'):演示页 demos/地图组/红外效果.html 的甲画法搬进引擎,物理全走引擎的传感器模型。
    每个热源(非我方的船、石头)在我方看得最清楚的那艘船眼里是一团:有效亮度 = senseOptLoWith(晒热 / 杂散光 / 云背景 / 消光),三道门 = senseOptBlocked。
    一道门(2026-09-28 用户,演示页 demos/地图组/红外一道门.html):每一处热的色阶值 = GAIN x 这一份热的有效信噪比 K_IR·lo/d²(船身、尾焰、轮廓、导弹同一条),不分类型;
-   团画在哪跟着我方知道多少走,与主视角一致(2026-09-28 用户:进了可见光团和碎石还不在一起、整个显示流程破碎):只有红外(没定位)画在 irvHeatPos = 真实位置 + 方向固定的偏移 x OFF x 不确定半径;
-   一定位就在 GLIDE 秒里滑到主视角画它的位置(viewPos)、缩成定位后的小团,丢了定位再滑回去;定位了的红外被三道门挡住也照画(热是物体固有的);偏移只在画面层算,感知内核与主视角不受影响;
+   团画在物体所在处,不偏(2026-09-28 用户:删掉红外的偏移);一定位就在 GLIDE 秒里缩成定位后的小团,丢了定位再慢慢胀回去;定位了的红外被三道门挡住也照画(热是物体固有的);
    团的大小 = 不确定(演示页 demos/地图组/红外弥散团.html):等面积半径按以前热区的对数压缩,屏幕上夹在热晕最小半径(irvGlowMin:舰标团;画轮廓时比轮廓大一圈)与 UNC_CAP 倍之间;弥散:圆的、轻微扭曲、缓慢翻涌,剖面画在色阶上(中心 = 一道门的峰值色阶,按 TW x 团半径平滑落回本底,不读亮度);定位的另有亮核;
    石头又大又冷,近到填满距离(FILL_K x 认出距离 x √体型)以内亮度不再涨(点源 → 扩展源),船与导弹当点源。
    背景:尘埃云(envBgParts,按光照;乘地图同一个显示增益)、位置型恒星的光晕、天体盘(朝阳面亮、背阴面 heat)。
@@ -16,7 +15,7 @@ const IRV_C={CELL:5,V0:0.02,VMAX:1000,CULL:0.0003,SIG_MIN:0.7,NOISE:0.005,NOISE_
   UNC_K:0.75,UNC_CAP:4,PH_K:0.3,OFF:0.5,GLIDE:0.6,EP_PX:0.5,TW:1.4,PLAT:1.2,WARP:0.05,CHURN:0.15,CHURN_STEP:0.1,R_TOL:0.05};
   // GAIN = 一道门的增益(信噪比 1 ≈ 色阶 0.22,信噪比 < 1 按三次方淡出,见 irvV);BG_K = 背景(云 / 恒星光晕)压暗倍数;FILL_K = 石头填满距离 / (认出距离 x √体型)
   // GLYPH = 舰标团 / 舰标半径,封顶 SIG_MAX_PX;MSL_PX = 导弹小点;CORE / CORE_W = 定位后亮核的份额与宽度
-  // PH_K = 红外测距的相对 1σ(不确定半径 = 距离 x √(PH_K x 方位误差));OFF = 团心偏移 / 不确定半径;GLIDE = 定位 / 丢定位时团滑过去的时间常数(墙钟秒,只在跑的时候走);EP_PX = 团心挪不到这么多像素不重贴(偏移随我方移动连续变,不设门槛就每帧重贴全部碎石);UNC_K = 热区对数半径的缩放;UNC_CAP = 团半径上限(x 舰标团);TW = 过渡宽度(x 团半径);PLAT = 高原;WARP / CHURN = 扭曲幅度与翻涌速度(rad / 墙钟秒,只在跑的时候走);
+  // PH_K = 红外测距的相对 1σ(不确定半径 = 距离 x √(PH_K x 方位误差));OFF = 红外异常圈心偏移 / 不确定半径;GLIDE = 定位 / 丢定位时团缩小 / 胀大的时间常数(墙钟秒,只在跑的时候走);EP_PX = 团心挪不到这么多像素不重贴;UNC_K = 热区对数半径的缩放;UNC_CAP = 团半径上限(x 舰标团);TW = 过渡宽度(x 团半径);PLAT = 高原;WARP / CHURN = 扭曲幅度与翻涌速度(rad / 墙钟秒,只在跑的时候走);
   // CHURN_STEP = 翻涌累计把形状挪到这么多格才重贴;R_TOL = 团半径变了这个比例才重贴
   // V0 / VMAX = 色阶的对数刻度;CULL = 山截断处;SIG_MIN = 山的最小宽(格);TAIL_K = 尾焰尾巴长宽比;POS_P / MIX = 恒星光晕的律
 const IRV_T0=-0.1;
@@ -33,7 +32,7 @@ function irvUnc(t){ // 不确定半径(km):离最近那艘我方船 d,按目标�
   let d=Infinity,o=null;for(const s of ships)if(s.side==='blue'&&!s.dead){const e=Math.hypot(t.pos[0]-s.pos[0],t.pos[1]-s.pos[1]);if(e<d){d=e;o=s;}}
   return o?d*Math.sqrt(IRV_C.PH_K*covTheta('opt',o,t,d,sReq(t,'size','ship')*(t.heatK===undefined?1:t.heatK))):0;
 }
-function irvHeatPos(t){ // 没定位时热团画在哪、多不确定:[x, y, 不确定半径 km] = 真实位置 + 每个目标方向固定的偏移 x OFF x 不确定半径(越近越小);GM 不偏。红外异常圈也读它
+function irvAnomPt(t){ // 红外异常圈画在哪、多大:[x, y, 不确定半径 km] = 真实位置 + 每个目标方向固定的偏移 x OFF x 不确定半径(用户:异常圈不标真实位置);红外画面的团本身不偏;GM 不偏
   const r=irvUnc(t);if(adminMode)return [t.pos[0],t.pos[1],r];
   const h=irvPh(t)*1.618,k=IRV_C.OFF*r;return [t.pos[0]+Math.cos(h)*k,t.pos[1]+Math.sin(h)*k,r];
 }
@@ -172,13 +171,12 @@ function irvjUpdate(full,gch){ // 返回脏矩形 [i0,i1,j0,j1] 列表;null = �
     if(!IRVJ.cost&&no)irvjCalib(src,obs);}
   else for(let k=0;k<no;k++){const r=IRVJ.obs[k],o=obs[k],pm=r.px!==o.pos[0]||r.py!==o.pos[1],sc=irvjStCh(r,o);
     if(pm||sc){cm|=1<<k;r.px=o.pos[0];r.py=o.pos[1];irvjStSet(r,o);}if(pm)om=true;}
-  const fr=++IRVJ.fr,tn=performance.now(),dtw=running?Math.min(0.1,Math.max(0,tn-IRVJ.tc)/1000):0,gk=1-Math.exp(-dtw/IRV_C.GLIDE);IRVJ.ch+=dtw*IRV_C.CHURN;IRVJ.tc=tn; // 翻涌相位与定位滑动:墙钟,只在跑的时候走(暂停 = 稳态,不重贴)
+  const fr=++IRVJ.fr,tn=performance.now(),dtw=running?Math.min(0.1,Math.max(0,tn-IRVJ.tc)/1000):0,gk=1-Math.exp(-dtw/IRV_C.GLIDE);IRVJ.ch+=dtw*IRV_C.CHURN;IRVJ.tc=tn; // 翻涌相位与定位时团的缩放:墙钟,只在跑的时候走(暂停 = 稳态,不重贴)
   for(let n=0;n<src.length;n++){const t=src[n];let r=R.get(t),nw=false; // 1) 扫签名 + 离散判定;翻成谁都看不见的当帧去掉
-    if(!r){r={t:t,px:0,py:0,vis:0,ph:null,sp:[],sil:null,sk:'',sb:null,mv:false,need:false,in0:false,in1:false,seen:0,bR:0,qs:0,w:0,kp:null};R.set(t,r);nw=true;}
+    if(!r){r={t:t,px:0,py:0,vis:0,ph:null,sp:[],sil:null,sk:'',sb:null,mv:false,need:false,in0:false,in1:false,seen:0,bR:0,qs:0,w:0};R.set(t,r);nw=true;}
     r.seen=fr;
-    const hp=irvHeatPos(t),kp=(adminMode||contactFix(t,'blue'))?viewPos(t):null,wt=kp?1:0; // 定位了:目标是主视角画它的位置;没定位:偏开的热团位置
-    if(kp)r.kp=[kp[0],kp[1]];r.w=nw?wt:r.w+(wt-r.w)*gk;if(Math.abs(wt-r.w)<0.01)r.w=wt;
-    const K=r.kp||hp,w=r.kp?r.w:0;let ep=[hp[0]+(K[0]-hp[0])*w,hp[1]+(K[1]-hp[1])*w,hp[2]*(1-w)]; // 团心在两者之间滑,不确定半径跟着收(定位后 = 热晕最小半径)
+    const wt=(adminMode||contactFix(t,'blue'))?1:0;r.w=nw?wt:r.w+(wt-r.w)*gk;if(Math.abs(wt-r.w)<0.01)r.w=wt;
+    let ep=[t.pos[0],t.pos[1],irvUnc(t)*(1-r.w)]; // 团画在物体所在处;不确定半径定位后在 GLIDE 秒里收到热晕最小半径,丢了定位再胀回去
     if(!nw&&r.ep&&Math.hypot(ep[0]-r.ep[0],ep[1]-r.ep[1])*cam.zoom<IRV_C.EP_PX&&Math.abs(ep[2]-r.ep[2])<IRV_C.R_TOL*Math.max(r.ep[2],1))ep=r.ep;
     const pm=nw||!r.ep||r.px!==ep[0]||r.py!==ep[1],sc=nw||irvjStCh(r,t);r.mv=pm&&!nw;r.ep=ep;
     if(pm){r.px=ep[0];r.py=ep[1];}if(sc)irvjStSet(r,t);
