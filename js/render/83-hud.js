@@ -131,6 +131,41 @@ function drawHits(){ // 命中特效:命中点爆闪+十字,随时间淡出
     ctx.restore();
   }
 }
+/* 2026-09-28 近防炮特效(用户在 demos/weapons/近防炮特效.html 调定):导弹进了某艘船的近防内圈,这艘船朝它打几串曳光,目标没了再打 HOLD 秒;
+   打掉的几颗在命中点炸小火花(weapons/56 结算时 spawnCiwsFX 出)。全按墙钟走,几倍速都看得见;暂停时不出新曳光 */
+const CIWS_FX={HOLD:0.1,N:2,FIRE:10,SPREAD:2/57.3,OFF:0.012,LEN:0.1,REACH:1.25,LIFE:0.45,LIFE_J:0.2,PUFF_T:0.7,PUFF_D:0.25,PUFF_R0:0.015,PUFF_R1:0.09,PUFF_REF:6000};
+// FIRE = 每流每秒几发;SPREAD = 散布(弧度);OFF = 流间夹角;LEN = 曳光长度 / 内圈;REACH = 飞到内圈几倍处灭;LIFE + 随机 LIFE_J = 一发飞几秒;PUFF_T = 火花寿命,PUFF_D = 最多错开几秒,PUFF_R0~R1 = 散开半径 / PUFF_REF km
+const CIWS_ST=new WeakMap(),CIWS_TR=[];let CIWS_T=0;
+function drawCiwsFx(){
+  const C=CIWS_FX,now=nowMs(),dtw=CIWS_T?Math.min(0.05,Math.max(0,(now-CIWS_T)/1000)):0;CIWS_T=now;
+  if(running&&dtw>0)for(const x of ships){
+    if(x.dead||x.ciwsOn===false)continue;const k=ciwsOf(x);if(!k||!(k.inner>0))continue;
+    let m=null,md=k.inner;for(const p of projectiles){if(p.type!=='missile'||p.done||!p.shooter||p.shooter.side===x.side)continue;const d=Math.hypot(p.pos[0]-x.pos[0],p.pos[1]-x.pos[1]);if(d<md){md=d;m=p;}}
+    let st=CIWS_ST.get(x);
+    if(m){if(!st){st={acc:0,a:0,t:0};CIWS_ST.set(x,st);}st.a=Math.atan2(m.pos[1]-x.pos[1],m.pos[0]-x.pos[0]);st.t=now;}
+    if(!st)continue;if(now-st.t>C.HOLD*1000){CIWS_ST.delete(x);continue;}
+    st.acc+=dtw*C.FIRE*C.N;
+    while(st.acc>=1){st.acc-=1;const j=Math.floor(Math.random()*C.N);CIWS_TR.push({s:x,R:k.inner,a:st.a+(j-(C.N-1)/2)*C.OFF+(Math.random()*2-1)*C.SPREAD,t0:now,life:C.LIFE+Math.random()*C.LIFE_J});}
+  }
+  ctx.save();ctx.lineCap='round';ctx.lineWidth=1.6;
+  for(let i=CIWS_TR.length-1;i>=0;i--){ // 曳光:从舰出发往外飞,飞出内圈外一点就灭;开火的船我方看得见(自己的 / 定得出位置的)才画
+    const t=CIWS_TR[i],g=(now-t.t0)/1000;if(g>t.life||g<0){CIWS_TR.splice(i,1);continue;}
+    if(!(adminMode||t.s.side===VIEW||contactFix(t.s,VIEW)))continue;
+    const r1=g/t.life*t.R*C.REACH,r0=Math.max(0,r1-C.LEN*t.R),c=Math.cos(t.a),n=Math.sin(t.a),o=t.s.pos;
+    const p0=toScreen(o[0]+c*r0,o[1]+n*r0),p1=toScreen(o[0]+c*r1,o[1]+n*r1);
+    ctx.strokeStyle='rgba(255,240,170,'+(0.9*(1-g/t.life)).toFixed(3)+')';ctx.beginPath();ctx.moveTo(p0[0],p0[1]);ctx.lineTo(p1[0],p1[1]);ctx.stroke();
+  }
+  ctx.lineWidth=1.2;
+  for(let i=ciwsFX.length-1;i>=0;i--){ // 火花:被打掉的每颗一朵,错开一点炸
+    const f=ciwsFX[i],g0=(now-f.tw)/1000;if(g0>C.PUFF_D+C.PUFF_T||g0<0){ciwsFX.splice(i,1);continue;}
+    if(!adminMode&&!f.vis[VIEW])continue;
+    if(!f.pf){const R=C.PUFF_REF*CFG.scale;f.pf=Array.from({length:Math.min(16,f.n)},()=>{const a=Math.random()*6.283,r=R*(C.PUFF_R0+Math.random()*(C.PUFF_R1-C.PUFF_R0));return [f.pos[0]+Math.cos(a)*r,f.pos[1]+Math.sin(a)*r,Math.random()*C.PUFF_D];});}
+    for(const q of f.pf){const g=g0-q[2];if(g<0||g>C.PUFF_T)continue;const p=toScreen(q[0],q[1]),a=1-g/C.PUFF_T;
+      ctx.fillStyle='rgba(255,220,150,'+(0.9*a).toFixed(3)+')';ctx.beginPath();ctx.arc(p[0],p[1],Math.max(1,3*(1-g)),0,6.283);ctx.fill();
+      ctx.strokeStyle='rgba(255,170,90,'+(0.7*a).toFixed(3)+')';ctx.beginPath();ctx.arc(p[0],p[1],2+g*18,0,6.283);ctx.stroke();}
+  }
+  ctx.restore();
+}
 function drawCorridors(){ // v138(重做):来袭走廊——来源线(发射舰→导弹)+ 去向锥(导弹当前速度方向)+ 标签;导弹消失淡出5s
   for(const c of threatCorridors){
     if(!c.p)continue;

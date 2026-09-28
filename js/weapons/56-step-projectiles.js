@@ -366,6 +366,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         for(let k=0;k<(p.count||16);k++){if(Math.random()<cr)decoy++;}
         const hitCount=(p.count||16)-decoy; // 未脱锁的命中颗
         const survHit=Math.max(0,Math.round(hitCount*surv)); // 内圈近防再拦一层
+        if(hitCount>survHit)spawnCiwsFX(p.pos,hitCount-survHit,p.shooter,p.target); // 2026-09-28 近防炮打掉的那几颗炸小火花(render/83)
         if(typeof rangeDefTally==='function')rangeDefTally(p.target,p,decoy,hitCount-survHit,survHit); // RANGE1 防御链埋点:到达/干扰弹勾走/内圈拦掉/实际命中四段读数。没有这一步,用户调 chaffRate 与 innerIntercept 只能看总伤害变化,看不到"拦掉几颗",等于盲调
         if(survHit>0){
           const finalDmg=Math.max(1,Math.round(survHit*(p.missDmg||12)*sectorDmgMult)); // DS155:×扇面倍增
