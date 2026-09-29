@@ -455,8 +455,10 @@ function cmdPopRender(){
 }
 function cmdBarSync(){ // 三颗钮的字与亮灭;菜单开着就顺手重画
   const sel=selBlue(),s=sel[0],r=document.getElementById('cbRadar'),w=document.getElementById('cbWpn');
-  if(r){r.classList.toggle('is-dis',!s);
-    if(!s){r.classList.remove('on');setHTMLStable(r,'<span class="l">雷达</span><span class="s">—</span>',false);}
+  const bu=s?null:selBuoyOk(); // 2026-09-29 只选中浮标:雷达钮作用于它(原来按"没选船"禁用,pointer-events:none 点不动)
+  if(r){r.classList.toggle('is-dis',!s&&!bu);
+    if(bu){const pul=radarPulsing(bu);r.classList.toggle('on',pul||bu.on);setHTMLStable(r,'<span class="l">雷达</span><span class="s">'+(pul?'脉冲':(bu.on?'发射':'静默'))+'</span>',false);}
+    else if(!s){r.classList.remove('on');setHTMLStable(r,'<span class="l">雷达</span><span class="s">—</span>',false);}
     else{const pul=sel.some(radarPulsing),lb=pul?'脉冲':({silent:'静默',paint:'发射',jam:'干扰'})[s.emitMode]||s.emitMode;r.classList.toggle('on',pul||s.emitMode!=='silent');setHTMLStable(r,'<span class="l">雷达</span><span class="s">'+lb+'</span>',false);}}
   if(w){w.classList.toggle('is-dis',!s);const on=!!s&&wpnAnyOn(s),arm=(typeof selWeapon!=='undefined')?selWeapon:null;w.classList.toggle('on',on);w.classList.toggle('armed',!!s&&!!arm); // 2026-09-29 选定了强行开火 / 放浮标:钮上直接写,不用去猜
     setHTMLStable(w,'<span class="l">武器</span><span class="s">'+(s?(arm?({mac:'主炮强行开火',missile:'导弹强行开火',buoy:'放浮标'})[arm]||'强行开火':(on?'启动':'关闭')):'—')+'</span>',false);}
