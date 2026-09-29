@@ -35,3 +35,4 @@
 - 导弹导引头看热用 weapons/54 的 `missLum` = `optLum(t, MSL_SEEK_P)`(同一个公式,档位表换成 N1 之前的,用户 2026-09-27 选不跟)。
 - 记忆(2026-09-27,RTS 迷雾的"最后所见"):最后一次定位时不动的(`trkStill`,低于 `TRK_STILL_V`)失联后不计时丢弃(`trkMem`);我方全知圈重新扫过那一点却没量到它 ⇒ `memGone` 清掉;握着时 `lastType` 记下认出的类型,画记忆用它。动的目标照旧陈旧 → 失联 → `CONTACT_GHOST_TTL` 后消失。
 - 已知的真值口子(没修):目标速度、高度 Z、`sigClassLabel` 读真 `size`、击沉按真值 `.dead` 过滤。
+- 性能缓存(2026-09-29,石头上千块):`trkEach` 只走每方的非空航迹清单(24 `trkActive`)—— 航迹字段只许 `trkStep` 改(它标脏);静止石头的影子 / 云背景 / 光学上界 / 雷达量与「在不在杂波里」缓存在石头的 `spc` 上,键 = `ENV.rev` + 位置、`ROCK_DEADS` + `rocks.length` + `ROCK_EPOCH`(world/12)。`rocks` 只追加、不删不重排(打碎只标 dead);挪静止石头要 `ROCK_EPOCH++`,打碎要 `ROCK_DEADS++`(weapons/55),否则网格与缓存都是旧的。

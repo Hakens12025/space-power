@@ -24,7 +24,7 @@
    (任务 4 起尘埃云与天体名随合成缓存画一次,不再每帧贴;太阳 / 恒星的字与日标仍每帧贴)。
    ============================================================================ */
 const ENV_KIND_OF={stars:['star'],bodies:['body','shadow'],clouds:['cloud'],
-  asteroids:[]}; // ENV2 世界层每个键 → 视图里的类。asteroids 就是石头:走 82-rocks 的航迹画法(带迷雾),不是地图事实;红外里它们是热源
+  asteroids:[],belts:[]}; // ENV2 世界层每个键 → 视图里的类。asteroids 就是石头:走 82-rocks 的航迹画法(带迷雾),不是地图事实;红外里它们是热源。belts(碎石带,world/15)同理:带本身不画
 const ENV_VIEWS={}; // ENV2 视图名 → {order, slot, pre?, kinds:{类名 → 画法对象 | null}}
 ENV_VIEWS.map={order:['cloud','shadow','body','star'],slot:'frame',pre:mapTileFrame,kinds:{
   cloud:{tile:mapCloudPaint,need:function(){return ENV.clouds.length>0;}}, // 2026-09-26 用户:尘埃云的中文标注不要了(原 comp:mapCloudLabels)

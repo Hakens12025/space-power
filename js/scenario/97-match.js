@@ -34,6 +34,7 @@ function matchWorld(w){ // 对局:按种子生成整个世界;别的场景原样
    一个种子定一局:红方从哪个方向来(matchPlaceRed)+ 整个世界。摆位按对阵轴(蓝方重心 → 红方重心,长 D = 开局间距;s 沿轴,-0.5 = 蓝方、+0.5 = 红方;t 侧向):
    太阳(一半没有、一半是位置型恒星,在 600~900 万外;2026-09-29 取消无限远的方向型)· 行星 0~2(木星级,两军之间或侧翼,离两军 >= 40 万、彼此 >= 80 万)·
    尘埃云 0~2(半轴 200 万 ~ 1600 万,朝向随机,可以罩住舰队)· 小行星 20~40 颗(撒在对阵区,避开舰船与天体;体型按 world/12 的 ROCK_SFD 幂律,小的最多)
+   2026-09-29 碎石带(world/15):2~4 个结构(弧带 / 流带 / 分叉 / 喷流)+ 每颗行星 50% 带环,块数 / 带宽 / 聚团每个结构各掷,地图上不画。
    2026-09-26 单局地图(游玩区 ARENA 80 万 x 45 万):太阳 / 恒星 / 尘埃云照原世界尺度不动;行星与小行星改摆进游玩区(见行内),上文行星与小行星的旧数作废。 */
 function matchGenWorld(seed,B,R){
   const r=envRng(seed*2+1),D=Math.hypot(R[0]-B[0],R[1]-B[1])||1,ux=(R[0]-B[0])/D,uy=(R[1]-B[1])/D,mx=(B[0]+R[0])/2,my=(B[1]+R[1])/2;
@@ -55,6 +56,10 @@ function matchGenWorld(seed,B,R){
   for(let n=20,k=0,m=0;k<n*20&&m<n;k++){const p=inA(),sd=Math.floor(r()*1e6); // 另撒 20 颗零散的(原来全场只撒这一种 20~40 颗) // 2026-09-26 撒满整个游玩区矩形(原:中点为心、半径 0.6D 的圆;clear 原 150000)。world/12 只认圆 ⇒ 一颗一条(r=1、n=1),避让口径同它的 envSpawnBlocked
     if(ships.some(function(s){return !far(p,s.pos,30000*CFG.scale);})||w.bodies.some(function(b){return !far(p,[b.x,b.y],b.r+30000*CFG.scale);}))continue;
     w.asteroids.push({x:Math.round(p[0]),y:Math.round(p[1]),r:1,n:1,seed:sd,clear:30000*CFG.scale,name:'小行星'});m++;}
+  { // 2026-09-29 碎石带(world/15;用户:碎石呈形状、更密集的结构,地图上不画):排在最后掷,前面的地形随机序列不变。形状在撒石头时按各自的种子生成
+    const B=BELT_CFG,rr=a=>a[0]+r()*(a[1]-a[0]),par=()=>({seed:Math.floor(r()*1e9)+1,n:Math.round(rr(B.N)),w:rr(B.W),c:rr(B.C)});w.belts=[];
+    for(let n=Math.round(rr([B.CNT[0]-0.49,B.CNT[1]+0.49])),i=0;i<n;i++){const kind=B.TYPES[Math.floor(r()*B.TYPES.length)];w.belts.push(Object.assign({kind:kind},par()));}
+    for(const b of w.bodies)if(r()<B.RING_P){const q=par();q.n=Math.round(q.n/2);w.belts.push(Object.assign({kind:'行星环',x:b.x,y:b.y,br:b.r},q));}}
   return w;
 }
 function matchSync(){ // 顶栏钮的字与提示跟着当前场景走(进 / 出对局、场景菜单切走,都经过 initFleet ⇒ 由它调)

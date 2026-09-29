@@ -197,7 +197,11 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
     const bA2 = Math.sqrt(bA4); // 照射的界在 d^4 空间,必须在这里开方换算到 d^2 空间才能和另两路取 max(见文件头 blocker A)
     scBIR[i] = bIR; scBRF[i] = bRF; scBACT[i] = bA4;
     scBMax[i] = bIR > bRF ? (bIR > bA2 ? bIR : bA2) : (bRF > bA2 ? bRF : bA2);
-    const inF = scMTI2 > 0 && envInClutter(p, t) ? 1 : 0; scInF[i] = inF; // ENV1:只有在杂波里的目标才需要速度(ENV2 杂波 = 天体盘面旁 / 小行星旁)
+    const S = t.kind === 'rock' ? t.spc : null; let inF; // ENV1:只有在杂波里的目标才需要速度(ENV2 杂波 = 天体盘面旁 / 小行星旁)
+    if (!(scMTI2 > 0)) inF = 0;
+    else if (S && S.fq === ROCK_DEADS && S.fn === rocks.length && S.fe === ROCK_EPOCH) inF = S.inF; // 2026-09-29 性能:静止石头在不在杂波里只随附近石头被打碎 / 增减 / 拖动变,按这三个计数缓存
+    else { inF = envInClutter(p, t) ? 1 : 0; if (S) { S.inF = inF; S.fq = ROCK_DEADS; S.fn = rocks.length; S.fe = ROCK_EPOCH; } }
+    scInF[i] = inF;
     if (inF) { const v = t.vel; scTVX[i] = v[0]; scTVY[i] = v[1]; scTVZ[i] = v[2]; }
     /* SN6:干扰的落点从"每拍削弱照射水位"改成"把这一拍的回波误差按烧穿距离放大"(23-cov 的 covShape)。
        后者能直接读成一个距离(贴到这么近干扰就压不住了),前者只是一个乘子;而且误差模型里干扰

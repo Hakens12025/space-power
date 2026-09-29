@@ -17,3 +17,4 @@
 - 对局入口是顶栏 `#btnMatch`;`#matchEnd` 只在对局里弹;`matchTick` 挂在 `frame()` 里。接触降速(core/06)只在对局里生效。
 - 对局有游玩区 `ARENA`(306 万 x 172.1 万 km,开局镜头落舰队层,core/01;`matchPlaceRed` 设,`initFleet` 清成 null):舰船撞边夹住(physics/31)、弹丸出界消失(weapons/56)、命令点与红方航点夹进区内(formation/44 `ordArenaClamp`)。靶场与测试预设不设边界。
 - 删一个全局符号时按名字全库扫一遍,不能只扫调用形状(有地方把函数存进局部变量再调)。
+- 对局世界生成(97 `matchGenWorld`)最后掷碎石带清单 `belts`:2~4 个结构(弧带 / 流带 / 分叉 / 喷流)+ 每颗行星 50% 带环,块数 / 带宽 / 聚团每个结构各掷;world/15 按各自的种子生成形状、撒石头(`BELT_CFG`,演示页 demos/地图组/碎石带.html)。带本身不是地图事实,不画不标。

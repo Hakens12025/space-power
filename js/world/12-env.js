@@ -50,13 +50,13 @@ const ENV_CFG={
     FL0:500000,OCT:9,GAIN:0.78,WARP:0.35,Q0:0.78,G:4,QM:0.45,FM:0.2,XO:2,XA:0.4, // 丝:b2ea0f4 的脊状分形 + XO 层粗褶;QM / FM = 分辨不出时补的期望
     EXT_TAU:150000,EXT_G:50000} // 消光:浓度 1 走 EXT_TAU km 光深为 1;沿线浓度取 EXT_G km 格点
 };
-const ENV_KEYS=['stars','bodies','clouds','asteroids']; // ENV2 world 认识的键:envReset 见到别的键当场抛(ENV1 时拼错 feilds 会静默成空环境);视图的登记表以它为锚
+const ENV_KEYS=['stars','bodies','clouds','asteroids','belts']; // ENV2 world 认识的键:envReset 见到别的键当场抛(ENV1 时拼错 feilds 会静默成空环境);视图的登记表以它为锚
 /* 2026-09-29 用户取消无限远的方向型太阳(ENV1 的 sun),光源只剩位置型恒星。
    ENV2 stars:[{x,y,r,half,c2}](c2 = cos^2 半角,热循环免开方) / bodies:[{x,y,r,r2,heat,name}] / clouds:[{x,y,a,b,ang,ca,sa,r,r2,seed,v,dark}](r = 外接圆半径) / asteroids:[{x,y,r,n,seed,smin,smax,clear,name}] / rev(每次 envReset 加 1,给视图缓存当键)。
    ENV2 单写者:全库只有 envReset 写 ENV。ENV 本身 seal(不许加键),列表与条目由 envReset 整体换成冻结的新对象 ⇒ 严格模式下别处改条目、改列表、给 ENV 加键会当场抛 TypeError。
    ⚠ ENV2 seal 不拦替换已有的键:ENV.stars=[…]、ENV.bodies=[…]、ENV.rev++ 运行期都不抛,这一类只靠 verify.sh 的唯一写入口检查(W1 / W2)抓 */
 const ENV=Object.seal({stars:Object.freeze([]),bodies:Object.freeze([]),clouds:Object.freeze([]),
-  asteroids:Object.freeze([]),rev:0});
+  asteroids:Object.freeze([]),belts:Object.freeze([]),rev:0}); // 2026-09-29 belts = 碎石带的结构清单(world/15)
 const ENV_T2=[0,0]; // ENV2 本层的两格草稿(envBg 取 envBgParts 的结果用,免分配)。⚠ 共用草稿:拿到的结果要在调别的写它的函数之前读完(今天只有 envBg 写;4a 起 envSunBlind 也写,落地时核一次)
 
 /* 按场景的 world 定义重建环境。缺省 / 没有 world ⇒ 空环境(太阳 null、所有列表为空)。
@@ -68,15 +68,17 @@ function envReset(w){
     if(w.stars&&w.stars.length>1)throw new Error('ENV2 v1 全图最多一个光源(stars <= 1)'); // 拍板点 5
     for(const g of ['stars','bodies','clouds','asteroids'])for(const e of (w[g]||[]))
       if(!isFinite(e.x)||!isFinite(e.y)||(g==='stars'||g==='clouds'?(e.r!==undefined&&!(e.r>0)):!(e.r>0)))throw new Error('ENV2 '+g+' 条目缺坐标或半径');
+    for(const e of (w.belts||[]))if(typeof e.kind!=='string'||!isFinite(e.seed)||!(e.n>0)||!(e.w>0)||!isFinite(e.c))throw new Error('碎石带条目缺 kind / seed / n / w / c'); // 2026-09-29 world/15
   }
-  const st=[],bd=[],cl=[],ast=[];
+  const st=[],bd=[],cl=[],ast=[],blt=[];
   for(const s of (w&&w.stars)||[]){const h=num(s.half,ENV_CFG.SUN_HALF_DEG)*Math.PI/180,c=Math.cos(h); // ENV2 位置型恒星;half 单位是度,c2 = cos^2 半角
     st.push(F({x:s.x,y:s.y,r:num(s.r,ENV_CFG.STAR_R),half:h*180/Math.PI,c2:c*c}));}
   for(const b of (w&&w.bodies)||[])bd.push(F({x:b.x,y:b.y,r:b.r,r2:b.r*b.r,heat:num(b.heat,ENV_CFG.BODY_HEAT),name:b.name||'天体'})); // ENV2 天体:XY 上无限高的柱,挡视线、投影子
   for(const c of (w&&w.clouds)||[]){const a=num(c.a,D.A),b=num(c.b,D.B),ang=num(c.ang,D.ANG),r=(D.R2+D.WBR)*Math.max(a,b); // ENV2 尘埃云:生成点 (x,y) + 椭圆本体;r = 浓度可能非 0 的外接圆
     cl.push(F({x:c.x,y:c.y,a:a,b:b,ang:ang,ca:Math.cos(ang*Math.PI/180),sa:Math.sin(ang*Math.PI/180),r:r,r2:r*r,seed:c.seed|0,v:num(c.v,D.V),dark:num(c.dark,D.DARK)}));}
   for(const a of (w&&w.asteroids)||[])ast.push(F({x:a.x,y:a.y,r:a.r,n:a.n|0,seed:a.seed|0,smin:num(a.smin,ENV_CFG.ROCK_SFD.MIN),smax:num(a.smax,ENV_CFG.ROCK_SFD.MAX),clear:num(a.clear,0),name:a.name||'小行星'})); // ENV2 小行星:只用来撒石头,不带光学杂波、不带 MTI
-  ENV.stars=F(st);ENV.bodies=F(bd);ENV.clouds=F(cl);ENV.asteroids=F(ast);ENV.rev++; // ENV2 整体换成冻结的新列表
+  for(const e of (w&&w.belts)||[])blt.push(F(Object.assign({},e))); // 2026-09-29 碎石带:原样冻结,形状在 world/15 撒石头时按各自的种子生成
+  ENV.belts=F(blt);ENV.stars=F(st);ENV.bodies=F(bd);ENV.clouds=F(cl);ENV.asteroids=F(ast);ENV.rev++; // ENV2 整体换成冻结的新列表
 }
 /* 太阳禁区:从 from 看 to 的视线落在太阳那个锥里。⚠ 22-percep 的热循环里有一份同式的内联副本(热循环不许调函数),判据 ENV_SENSE 钉着两者逐对相同 */
 function envSunBlind(from,to){ // ENV2 光源方向按观测方取;观测方在天体影子里看不到光源 ⇒ 不致盲(光学与静听一起解除)
@@ -89,7 +91,7 @@ function envSunBlind(from,to){ // ENV2 光源方向按观测方取;观测方在�
 /* 动目标显示:to 在场里、而且沿 from→to 视线的径向速度低于门限 ⇒ 回波被当成杂波。热循环里同样有一份内联副本 */
 /* 2026-09-29 性能:静止石头(kind 'rock' 或 ast)的空间网格,格里存注册表下标。杂波判定(下面)与挡弹(weapons/56 projBlock)只查附近几格。
    rocks 只追加、不删不重排(打碎只是 dead),这类石头只有靶场拖动会挪(command/70 rangeDragTo 加 ROCK_EPOCH)⇒ 数组 / 长度 / 纪元都没变就不重建 */
-let ROCK_EPOCH=0;
+let ROCK_EPOCH=0,ROCK_DEADS=0; // ROCK_DEADS = 打碎过几块(weapons/55 applyDamage 加;sensors/22 杂波缓存的键之一)
 const ROCKG={cell:8000*CFG.scale,arr:null,n:-1,ep:-1,map:null,maxS:0};
 function rockKey(ix,iy){return (ix+1048576)*2097152+(iy+1048576);}
 function rockGrid(){
@@ -177,6 +179,7 @@ function envSpawnRocks(){
       const k=makeRock([x,y,0],sz,[Math.cos(fa),Math.sin(fa),0],a.name);k.ast=true;rocks.push(k);n++; // ast:小行星本体是雷达杂波源(envInClutter)
     }
   }
+  if(typeof envSpawnBelts==='function')envSpawnBelts(); // 2026-09-29 碎石带(world/15),排在小行星之后
 }
 function envSpawnBlocked(x,y,cl){ // ENV2 小行星的避让:initFleet 在 initEnemy 之后才撒,此刻两方的船都在场
   for(const s of ships){const dx=s.pos[0]-x,dy=s.pos[1]-y;if(dx*dx+dy*dy<cl*cl)return true;}
