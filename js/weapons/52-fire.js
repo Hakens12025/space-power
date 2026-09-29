@@ -56,7 +56,7 @@ function macHitCap(d){return erfApprox(MAC_HIT_R/(Math.SQRT2*d*MAC_SIG_CAP));} /
 /* 2026-09-29 用户:雷达现在是纯信息位置,前出没有好处 —— 奖励前出:对方在我方可见光圈里 / 被我方雷达照到,命中曲线的距离按 VIS / RAD 缩(拉长曲线,用户选):
    2026-09-29 用户:远处几乎没提升,要更明显 → 1.236 / 1.136 调到 1.6 / 1.3(用户选只拉长曲线):7.3 万 50% → 87% / 74%,10 万 22% → 65% / 45%,20 万 3.0% → 10.5% / 4.9%,40 万 1.5% → 2.4% / 2.0%。判据读我方航迹这一拍有没有可见光 / 照射量测(不读真值),两个都有取可见光 */
 const MAC_FWD={VIS:1.6,RAD:1.3};
-function macFwdK(side,t){if(!t||!t.side||t.side===side)return 1;const tk=trkOf(side,t),c=tk&&tk.cov&&tk.cov.ch;return !c?1:(c.vis?MAC_FWD.VIS:(c.act?MAC_FWD.RAD:1));}
+function macFwdK(side,t){if(!t||!t.side||t.side===side)return 1;const tk=trkOf(side,t);return trkCh(tk,'vis')?MAC_FWD.VIS:(trkCh(tk,'act')?MAC_FWD.RAD:1);}
 function macHitProb(s,d,t){ // 主炮在距离 d 上对标准命中判定半径的命中率(靶不动):S 形,散布到顶以后改固定角(与 macShotSigma 实打一致)。t = 目标(可省):前出奖励
   const sig=sReq(s,'macSigma'); if(!(sig>0)||!(d>0))return sig>0?1:0;
   d/=macFwdK(s.side,t);
@@ -81,6 +81,11 @@ function fireMACAt(shooter,pt){ // 2026-09-27 主炮打空地(强行开火):朝�
    ang=Math.atan2(shooter.facing[1],shooter.facing[0])+gaussRand()*macShotSigma(shooter,d),hxy=Math.hypot(dir[0],dir[1]);
   projectiles.push({type:'mac',pos:shooter.pos.slice(),vel:[Math.cos(ang)*hxy*CFG.macSpd+shooter.vel[0],Math.sin(ang)*hxy*CFG.macSpd+shooter.vel[1],dir[2]*CFG.macSpd+shooter.vel[2]],target:null,ground:true,shooter,pred:pt.slice(),tt,age:0,dmg:shooter.macDmg});
   shooter.fireHot=SENS.FIRE_S;shooter.macCd=shooter.macReload||0;
+}
+function macShootPt(s,pt){ // 转向带提前量的那个点(每拍重设 turnTarget,朝向层对准后会清掉),对准就朝它开一炮;开出去返回 true。⌖ 打空地与强制目标点共用(57)
+  const tp=macPtLead(s,pt);s.turnTarget=[tp[0],tp[1],0];
+  if(s.macCd<=0&&macAimErr(s,tp)<MAC_ALIGN){fireMACAt(s,pt);return s.macCd>0;}
+  return false;
 }
 function fireMAC(shooter,target){ // MAC 轴炮:沿机头轴线直射(调用方先查 macAligned:机头转到位才开);没中接着飞(weapons/56)
   if(shooter.noFire)return; // RANGE1 禁火总闸门 1/3:靶场的靶只挨打不还手。这是 MAC 发射的唯一实现,GM 手动锁定/自动索敌/AI 三条路径最终都落到这里。注意这是个【静默】开关(不报错不打日志),将来若误给蓝舰置了 noFire 会毫无线索,置位处只有 initEnemy 的靶语义包一处

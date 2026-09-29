@@ -135,10 +135,10 @@ function drawHits(){ // 命中特效:命中点爆闪+十字,随时间淡出
    打掉的几颗在命中点炸小火花(weapons/56 结算时 spawnCiwsFX 出)。全按墙钟走,几倍速都看得见;暂停时不出新曳光 */
 const CIWS_FX={HOLD:0.1,N:2,FIRE:10,SPREAD:2/57.3,OFF:0.012,LEN:0.1,REACH:1.25,LIFE:0.45,LIFE_J:0.2,PUFF_T:0.7,PUFF_D:0.25,PUFF_R0:0.015,PUFF_R1:0.09,PUFF_REF:6000};
 // FIRE = 每流每秒几发;SPREAD = 散布(弧度);OFF = 流间夹角;LEN = 曳光长度 / 内圈;REACH = 飞到内圈几倍处灭;LIFE + 随机 LIFE_J = 一发飞几秒;PUFF_T = 火花寿命,PUFF_D = 最多错开几秒,PUFF_R0~R1 = 散开半径 / PUFF_REF km
-const CIWS_ST=new WeakMap(),CIWS_TR=[];let CIWS_T=0;
+const CIWS_ST=new WeakMap(),CIWS_TR=[],CIWS_CLK={t:0};
 function drawCiwsFx(){
-  const C=CIWS_FX,now=nowMs(),dtw=CIWS_T?Math.min(0.05,Math.max(0,(now-CIWS_T)/1000)):0;CIWS_T=now;
-  if(running&&dtw>0)for(const x of ships){
+  const C=CIWS_FX,now=nowMs(),dtw=runDt(CIWS_CLK,0.05);
+  if(dtw>0)for(const x of ships){
     if(x.dead||x.ciwsOn===false)continue;const k=ciwsOf(x);if(!k||!(k.inner>0))continue;
     let m=null,md=k.inner;for(const p of projectiles){if(p.type!=='missile'||p.done||!p.shooter||p.shooter.side===x.side)continue;const d=Math.hypot(p.pos[0]-x.pos[0],p.pos[1]-x.pos[1]);if(d<md){md=d;m=p;}}
     let st=CIWS_ST.get(x);
@@ -169,9 +169,9 @@ function drawCiwsFx(){
 /* 2026-09-29 护盾(用户在 demos/weapons/护盾特效.html 调定):罩子半径 = 舰标半长 x K(按我方看到的舰标,没认出不暴露舰种);常亮随盾量,回充时边上三段流光,
    破盾期间一圈暗虚线的重启进度;打中 / 击破 / 重启 / 回满的特效按墙钟放(weapons/55 的 shieldFX)。对方的船只在我方可见光圈里才画罩子 */
 const SHD_FX={K:2,GLOW:0.2,HIT_T:0.3,BRK_T:0.5,FLOW:0.5,RST_T:0.6,FULL_T:0.5,COL:{blue:[110,210,255],red:[255,150,110]}};
-let SHD_W=0,SHD_T=0; // 流光相位的钟(墙钟,只在跑的时候走)
+let SHD_W=0;const SHD_CLK={t:0}; // 流光相位(墙钟,只在跑的时候走)
 function shieldR(s){return shipIconR(s)*(shipMarkMode()?1:1.5/0.78)*SHD_FX.K;}
-function shieldSeen(s){if(adminMode||s.side===VIEW)return true;const tk=trkOf(VIEW,s);return !!(tk&&tk.cov&&tk.cov.ch&&tk.cov.ch.vis);}
+function shieldSeen(s){return adminMode||s.side===VIEW||!!trkCh(trkOf(VIEW,s),'vis');}
 function shdRgba(c,a){return 'rgba('+c[0]+','+c[1]+','+c[2]+','+Math.max(0,Math.min(1,a)).toFixed(3)+')';}
 function shdArc(x,y,r,a0,a1,col,w){ctx.strokeStyle=col;ctx.lineWidth=w;ctx.beginPath();ctx.arc(x,y,r,a0,a1);ctx.stroke();}
 function drawShieldBubble(s,p){ // drawShip 调(舰体之下)
@@ -185,7 +185,7 @@ function drawShieldBubble(s,p){ // drawShip 调(舰体之下)
   ctx.restore();
 }
 function drawShieldFx(){
-  const now=nowMs();if(SHD_T&&running)SHD_W+=Math.min(0.05,Math.max(0,(now-SHD_T)/1000));SHD_T=now;
+  const now=nowMs();SHD_W+=runDt(SHD_CLK,0.05);
   if(!shieldFX.length)return;
   ctx.save();
   for(let i=shieldFX.length-1;i>=0;i--){const e=shieldFX[i],a=(now-e.tw)/1000,F=SHD_FX;
@@ -498,7 +498,7 @@ const ANOM={m:new WeakMap(),list:[],LIFE:3000,GAP:20,t:-1e9,base:true,RMIN:8,RMA
 function anomScan(now){
   if(simTime<ANOM.t||ANOM.v!==VIEW){ANOM.m=new WeakMap();ANOM.list.length=0;ANOM.v=VIEW;ANOM.base=true;}ANOM.t=simTime; // 换局 / 换视角(base:这之后第一拍已经在的接触只记不报)
   if(typeof trkEach==='function')trkEach(VIEW,(tk,st)=>{const s=trkSrc(tk);let a=ANOM.m.get(s);if(!a){a={ir:false,fl:0,fh:false,rd:-1e9,pend:false,ck:-1e9};ANOM.m.set(s,a);}
-    const ir=st==='heat'&&!!(tk.cov&&tk.cov.ch&&tk.cov.ch.opt);
+    const ir=st==='heat'&&!!trkCh(tk,'opt');
     if(ir){const fl=s.flame||0,fh=(s.fireHot||0)>0;if(!a.ir&&ANOM.base){}else if(!a.ir||(fl&&!a.fl)||(fh&&!a.fh))a.pend=true;a.fl=fl;a.fh=fh; // 第一次出现 / 点火 / 开火:待报。2026-09-29 用户:刚进对局时已经在的东西不报红外异常
       if(a.pend&&simTime-a.ck>=1){a.ck=simTime;const h=irvHill(s,irvObs());if(h&&h.snr>=1){a.pend=false;const q=irvAnomPt(s);ANOM.list.push({k:'ir',x:q[0],y:q[1],r:q[2],t0:now});}}} // 红外画面里够亮才报,不够亮每游戏秒再看一次
     else a.pend=false;

@@ -28,7 +28,7 @@ function stepProjectiles(dt){
     else if(p.type==='missile'){const f0=p.fuel;stepMissileProj(p,dt,icBlue,icRed);p.lit=p.fuel<f0;} // 2026-09-27 这一拍烧没烧油 = 喷没喷火(sensors/22 的 projSig 按它给红外亮度)
     else if(p.type==='interceptor')stepInterceptorProj(p,dt);
     if(ARENA&&!p.done&&!arenaIn(p.pos))p.done=true; // 2026-09-26 单局地图:五弹型统一在这里判,出了游玩区就消失
-    if(!p.done&&(p.type==='mac'||p.type==='missile'||p.type==='interceptor'))projBlock(p,x0,y0); // 2026-09-29 天体 / 碎石挡弹
+    if(!p.done&&(p.type==='mac'||p.type==='missile'||p.type==='interceptor'))projBlock(p,x0,y0,dt); // 2026-09-29 天体 / 碎石挡弹
   }
   shellTraceStep();
   projectiles=projectiles.filter(p=>!p.done);
@@ -55,7 +55,7 @@ function shellTraceStep(){
 /* 2026-09-29 用户:天体是遮挡,炮弹会被挡住;碎石也挡,但碎石会被击毁(炮弹 / 导弹 / 拦截弹都算)。
    这一步走过的线段 (x0,y0) → p.pos 碰到天体盘 = 弹没了,撞击点出命中闪光;碰到碎石(命中半径 MAC_HIT_R 内,同打船)= 碎石被打碎,
    炮弹没了、导弹组 / 拦截弹组少一颗(一颗不剩才没)。瞄着那块碎石打的弹不在这里判(走原来的命中结算,同样打碎) */
-function projBlock(p,x0,y0){
+function projBlock(p,x0,y0,dt){
   const x1=p.pos[0],y1=p.pos[1],dx=x1-x0,dy=y1-y0,l2=dx*dx+dy*dy;if(!(l2>0))return;
   const kind=p.type==='mac'?'mac':'missile';
   for(const b of ENV.bodies){
@@ -67,7 +67,7 @@ function projBlock(p,x0,y0){
   for(const k of rocks){
     if(k.dead||k.kind!=='rock'||k===p.target)continue;
     const ex=k.pos[0]-x0,ey=k.pos[1]-y0;if(Math.abs(ex)>L||Math.abs(ey)>L)continue;
-    const u=Math.max(0,Math.min(1,(ex*dx+ey*dy)/l2)),cx=dx*u-ex,cy=dy*u-ey;if(cx*cx+cy*cy>=R2)continue;
+    if(stepCPA2(p,k,dt)>=R2)continue;
     applyDamage(k,p.missDmg||p.dmg||1,p.shooter,kind,p);spawnHit(k.pos,kind,p.shooter,k);
     if(p.type!=='mac'&&(p.count||1)>1){p.count--;if(p.type==='missile')p.dmg=(p.missDmg||12)*p.count;}else{p.done=true;return;}
   }
@@ -82,19 +82,21 @@ function stepDecoyProj(p,dt){ // 诱饵弹(v125):直线飞模拟舰船信号,燃
       return;
 }
 const MAC_FAR=3000000*CFG.scale; // 没有游玩区(靶场)时炮弹飞多远才收
+function stepCPA2(p,u,dt){ // 这一拍 p 相对 u 走过的线段(p 已推进到拍末)离 u 最近处的距离²:相对运动、三维。命中半径比单拍相对位移小,只看拍末会漏判
+  const v=u.vel||[0,0,0],sx=(p.vel[0]-v[0])*dt,sy=(p.vel[1]-v[1])*dt,sz=(p.vel[2]-v[2])*dt,rx=p.pos[0]-u.pos[0]-sx,ry=p.pos[1]-u.pos[1]-sy,rz=p.pos[2]-u.pos[2]-sz,ss=sx*sx+sy*sy+sz*sz,k=ss>0?Math.max(0,Math.min(1,-(rx*sx+ry*sy+rz*sz)/ss)):1;
+  return (rx+k*sx)**2+(ry+k*sy)**2+(rz+k*sz)**2;
+}
 function stepMacProj(p,dt){ // MAC轴炮:沿发射时船头直飞,命中或到预测时间失的
       p.age=(p.age||0)+dt;
       p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;
       if(p.ground){ // 2026-09-27 打空地的炮弹:对方每艘船都按本拍相对线段的最近点判(与下面同式),碰到第一艘就算
         for(const u of ships.concat(rocks)){if(u.dead||u.side===p.shooter.side||u.hp===undefined)continue; // 物体里只有带结构值的(民船 / 诱饵 / 浮标)挨得了打
-          const sx=(p.vel[0]-u.vel[0])*dt,sy=(p.vel[1]-u.vel[1])*dt,sz=(p.vel[2]-u.vel[2])*dt,rx=p.pos[0]-u.pos[0]-sx,ry=p.pos[1]-u.pos[1]-sy,rz=p.pos[2]-u.pos[2]-sz,ss=sx*sx+sy*sy+sz*sz,k=ss>0?Math.max(0,Math.min(1,-(rx*sx+ry*sy+rz*sz)/ss)):1;
-          if((rx+k*sx)**2+(ry+k*sy)**2+(rz+k*sz)**2<MAC_HIT_R*MAC_HIT_R){if(applyDamage(u,p.dmg,p.shooter,'mac',p)>0)spawnHit(p.pos,'mac',p.shooter,u);p.done=true;return;}}
+          if(stepCPA2(p,u,dt)<MAC_HIT_R*MAC_HIT_R){if(applyDamage(u,p.dmg,p.shooter,'mac',p)>0)spawnHit(p.pos,'mac',p.shooter,u);p.done=true;return;}}
         if(!ARENA&&p.age*CFG.macSpd>MAC_FAR)p.done=true; // 2026-09-28 用户:炮弹射程理论无限 —— 不再到点消失,飞到出游玩区(主循环统一判);靶场没有游玩区,飞出 MAC_FAR 才收
         return;
       }
-      const t=p.target,tv=(t&&t.vel)||[0,0,0],sx=(p.vel[0]-tv[0])*dt,sy=(p.vel[1]-tv[1])*dt,sz=(p.vel[2]-tv[2])*dt; // 2026-09-26 单局地图:MAC_HIT_R 400 < 单拍相对位移约 600km,只看拍末会漏判(实测 90% 带只剩 84%),改按本拍相对线段的最近点判
-      const rx=t?p.pos[0]-t.pos[0]-sx:0,ry=t?p.pos[1]-t.pos[1]-sy:0,rz=t?p.pos[2]-t.pos[2]-sz:0,ss=sx*sx+sy*sy+sz*sz,u=ss>0?Math.max(0,Math.min(1,-(rx*sx+ry*sy+rz*sz)/ss)):1;
-      if(t&&!t.dead&&(rx+u*sx)**2+(ry+u*sy)**2+(rz+u*sz)**2<MAC_HIT_R*MAC_HIT_R){if(applyDamage(p.target,p.dmg,p.shooter,'mac',p)>0)spawnHit(p.pos,'mac',p.shooter,p.target);p.done=true;} // RANGE1 补第 4 实参 kind='mac'(靶场分武器统计)
+      const t=p.target; // 2026-09-26 单局地图:MAC_HIT_R 400 < 单拍相对位移约 600km,只看拍末会漏判(实测 90% 带只剩 84%),改按本拍相对线段的最近点判
+      if(t&&!t.dead&&stepCPA2(p,t,dt)<MAC_HIT_R*MAC_HIT_R){if(applyDamage(p.target,p.dmg,p.shooter,'mac',p)>0)spawnHit(p.pos,'mac',p.shooter,p.target);p.done=true;} // RANGE1 补第 4 实参 kind='mac'(靶场分武器统计)
       else if(p.age>=p.tt){p.ground=true;} // 2026-09-28 过了预测时间没中:不消失,当成打空地的炮弹接着飞,路上碰到谁算谁(用户:射程理论无限)
 }
 function stepBeaconProj(p,dt){ // 侦察信标(v113):飞抵部署,遥控开关机;开机才耗开机时间(300s),关机静默

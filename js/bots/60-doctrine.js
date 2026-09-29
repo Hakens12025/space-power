@@ -175,7 +175,7 @@ function botLottery(e,claim){ // 2026-09-28 抽奖开炮:从红方自己知道�
     if(trkGone(tk)||!trkHeld(tk)||!trkFoe(tk))return;const b=trkSrc(tk);if(!free(b))return;
     let c=null,p=0;
     if(trkFix(tk)){const q=trkPos(tk);if(!q)return;p=botShotP(e,Math.hypot(q[0]-e.pos[0],q[1]-e.pos[1]),Math.max(0,tk.cov.a1||0),b);c={t:b};} // 定出位置:打估计位置
-    else{const u=trkBearing(tk,e.pos),ch=tk.cov&&tk.cov.ch,th=(ch&&ch.opt)?COV.TH0.opt:COV.TH0.lis;   // 只有方位:沿方位线打到导弹包线那么远,不知道距离按 LOT_D_BRG 算中奖率
+    else{const u=trkBearing(tk,e.pos),th=trkCh(tk,'opt')?COV.TH0.opt:COV.TH0.lis;   // 只有方位:沿方位线打到导弹包线那么远,不知道距离按 LOT_D_BRG 算中奖率
       p=botShotP(e,cfg.LOT_D_BRG,cfg.LOT_D_BRG*th);c={pt:[e.pos[0]+u[0]*far,e.pos[1]+u[1]*far,0]};}
     const v=p*botFoeValue(b);if(v>bv){bv=v;best={k:b,g:c,p:p};}
   });

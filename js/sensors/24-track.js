@@ -117,7 +117,8 @@ function trkGone(tk){return !!tk.src.dead;}
 function trkBearing(tk,from){const s=tk.src,dx=s.pos[0]-from[0],dy=s.pos[1]-from[1],l=Math.hypot(dx,dy)||1;return [dx/l,dy/l];}
 
 /* 被照射告警的唯一跨表读:对方那张表里【对我】握着的接触,这一拍有没有一条照射量测;有就给那条量测记录(末位是照射源 id),没有给 null */
-function trkPaintedBy(s){const tk=trkOf(s.side==='blue'?'red':'blue',s),c=tk&&tk.cov;return (c&&c.ch&&c.ch.act)?c.ch.act:null;}
+function trkCh(tk,k){const c=tk&&tk.cov&&tk.cov.ch;return (c&&c[k])||null;} // 2026-09-29 这条航迹这一拍某条通道('opt' / 'lis' / 'act' / 'vis')的量测,没有给 null
+function trkPaintedBy(s){return trkCh(trkOf(s.side==='blue'?'red':'blue',s),'act');}
 
 /* 唯一的枚举原语:按【物理注册表】的顺序走(ships 按下标,TK4b 起接着走 rocks),跳过自己这一方(查询那一刻判)、没有航迹的、以及显示态为 none 的
    ——存在不等于知道。fn 返回 true 就停下并返回 true。不排序、不建航迹、不调随机数、除调用方自己的闭包外不分配。

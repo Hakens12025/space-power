@@ -5,6 +5,7 @@
 /* R7 墙钟毫秒。界面动画(缩放 / 跳层 / 换挡大字 / 聚合过渡 / 告警脉冲 / 数据链流动)一律走墙钟而不是 simTime —— 暂停时照样要动、倍速一提也不该变快。
    全库审查时这个三元式各写各的有 11 处,还另有两个只在本文件内用的 helper;现在只有这一个出处。performance 在调用那一刻才取,判据换钟照样生效。 */
 function nowMs(){return (typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();}
+function runDt(o,cap){const n=nowMs(),d=o.t?Math.min(cap,Math.max(0,(n-o.t)/1000)):0;o.t=n;return (typeof running!=='undefined'&&running)?d:0;} // 2026-09-29 墙钟步长(秒),只在跑的时候走(暂停 = 0);o = 调用方自己的钟 {t},cap = 单帧上限。画面特效的相位 / 生成用(近防曳光、护盾流光、红外翻涌)
 function on(id,ev,fn){const el=document.getElementById(id);if(el)el.addEventListener(ev,fn);} // 安全挂载:元素不存在不崩
 /* ================= SN2 严格取值 ================= */
 /* SN2:从一个对象上取【必须存在】的一格,缺失当场抛错,不返回哨兵值。感知重做第二段会删掉八个感知字段,

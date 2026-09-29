@@ -114,9 +114,9 @@ function rdvDrawZones(){
 function rdvDrawReturns(){
   const byId=new Map();for(const s of ships)byId.set(s.id,s);
   trkEach(VIEW,function(tk,st){
-    const c=tk.cov;if(!c||!c.ch||!c.ch.act)return;
+    const act=trkCh(tk,'act');if(!act)return;
     const s=trkSrc(tk),q=trkPos(tk);if(!q)return;
-    const o=byId.get(c.ch.act[4]),p=toScreen(q[0],q[1]);if(p[0]<-20||p[0]>W+20||p[1]<-20||p[1]>H+20)return;
+    const o=byId.get(act[4]),p=toScreen(q[0],q[1]);if(p[0]<-20||p[0]>W+20||p[1]<-20||p[1]>H+20)return;
     let vr=0;const sv=s.vel||[0,0,0];
     if(o){const dx=s.pos[0]-o.pos[0],dy=s.pos[1]-o.pos[1],l=Math.hypot(dx,dy)||1,ov=o.vel||[0,0,0];vr=((sv[0]-ov[0])*dx+(sv[1]-ov[1])*dy)/l;}
     const lv=trkIdLvl(tk),ty=lv===ID_UNK?null:trkIdType(tk),rock=ty&&ty.kind==='rock'&&lv===ID_CON,al=st==='live'?1:0.5;

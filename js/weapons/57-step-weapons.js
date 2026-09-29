@@ -88,10 +88,12 @@ function stepWeaponSystems(dt){
     }
   }
   for(const s of ships){const ff=s.forceMac;if(!ff)continue; // 2026-09-27 强行开火(用户:「选择使用某种武器攻击相应鼠标选定位置」):转向目标 / 地面点,对准就开一炮;不看火控、主炮勾选与把握门,60 秒没打出去作废
-    ff.T-=dt;const tp=ff.t?((ff.t.dead||ff.t.side===s.side)?null:macPred(s,ff.t)):macPtLead(s,ff.pt); // 打空地也按相对参照系提前
-    if(!tp||ff.T<=0||s.dead||!hasMAC(s)){s.forceMac=null;continue;}
-    s.turnTarget=[tp[0],tp[1],0]; // 朝向层对准后会清掉 turnTarget,所以每拍重设
-    if(s.macCd<=0&&macAimErr(s,tp)<MAC_ALIGN){if(ff.t)fireMAC(s,ff.t);else fireMACAt(s,ff.pt);if(s.macCd>0){s.forceMac=null;s.turnTarget=null;}}
+    ff.T-=dt;const tp=ff.t?((ff.t.dead||ff.t.side===s.side)?null:macPred(s,ff.t)):null;
+    if((ff.t&&!tp)||ff.T<=0||s.dead||!hasMAC(s)){s.forceMac=null;continue;}
+    let shot=false;
+    if(ff.pt)shot=macShootPt(s,ff.pt); // 打空地:同强制目标点(52 macShootPt,按相对参照系提前)
+    else{s.turnTarget=[tp[0],tp[1],0];if(s.macCd<=0&&macAimErr(s,tp)<MAC_ALIGN){fireMAC(s,ff.t);shot=s.macCd>0;}} // 朝向层对准后会清掉 turnTarget,所以每拍重设
+    if(shot){s.forceMac=null;s.turnTarget=null;}
   }
   // 锁定自动开火(10秒一轮):机头转到位(MAC_ALIGN)才开炮(不盲射);v125 ROE门控
   for(const s of ships){
@@ -99,7 +101,7 @@ function stepWeaponSystems(dt){
     const mt=(typeof fcActive==='function'&&fcActive(s))?(s.fcTgt&&s.fcTgt.mac):s.lockedTarget; // RF5 有序列则打序列解算的主炮目标:序列可能只许导弹打(allow.mac=false),这时 lockedTarget 虽被写成导弹目标,主炮也不许跟着开
     const fp=(s.fTgt&&s.fTgt.n.mac<FT_N&&hasMAC(s))?s.fTgt:null; // 2026-09-29 强制目标点插队:主炮勾着(roeOK)才转向带提前量的那个点,对准就开一炮
     s.ftAim=!!(fp&&roeOK&&!s.dead)||!!(s.forceMac&&s.forceMac.pt); // 主炮正朝一个点对准(强制目标点 / ⌖ 打空地):physics/31 的战斗转向让位,否则每拍朝向层转到位清掉 turnTarget、战斗转向又拉回锁定目标,来回拉锯永远对不准
-    if(fp&&roeOK&&!s.dead){const tp=macPtLead(s,fp.pt);s.turnTarget=[tp[0],tp[1],0];if(s.macCd<=0&&macAimErr(s,tp)<MAC_ALIGN){fireMACAt(s,fp.pt);if(s.macCd>0)fp.n.mac++;}}
+    if(fp&&roeOK&&!s.dead){if(macShootPt(s,fp.pt))fp.n.mac++;}
     else if(roeOK&&!s.dead&&mt&&!mt.dead&&mt.side!==s.side&&s.macCd<=0&&hasMAC(s)&&macAligned(s,mt)){ // WR1:自动开火只在把握 >= MAC_AUTO_P 时打(没有射程门了);距离按估计位置量。这一条【不看 autoEngage】,红方 bot 的开火实际走的就是它
       const mp=macPred(s,mt); if(mp&&((typeof fcForce==='function'&&fcForce(s,'mac'))||macHitProb(s,V.len(V.sub(mp,s.pos)),mt)>=MAC_AUTO_P))fireMAC(s,mt); // 2026-09-29 强制开火的序列不看把握门
     } // TIER1 MAC 舰种门改能力谓词

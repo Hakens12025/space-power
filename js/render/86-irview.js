@@ -104,7 +104,7 @@ function irvSplat(s,sg){ // sg = +1 贴上 / -1 揭掉(同样的数,原样相消
   }
 }
 /* ---- 每源一条记录。离散判定每帧算;物理(峰高、宽度)按工作量每帧封顶约 100 µs,状态变了的先算(P0),只挪了位置的山立刻挪、峰高宽度之后补(P1) ---- */
-const IRVJ={rec:new Map(),obs:[],q0:[],q1:[],fr:0,cost:0,cost0:0,area:0,reset:true,ch:0,tc:0}; // ch = 翻涌相位(rad),tc = 上一帧的墙钟
+const IRVJ={rec:new Map(),obs:[],q0:[],q1:[],fr:0,cost:0,cost0:0,area:0,reset:true,ch:0,clk:{t:0}}; // ch = 翻涌相位(rad),clk = 墙钟(core/00 runDt)
 const IRVJ_NONE={list:[],sil:null};
 function irvFireQ(t){return Math.ceil(fireLvl(t)*IRV_C.FIRE_Q);} // 开火热分档:退一档重算一次物理(亮度跟着内核退)
 function irvjStCh(r,t){return r.fl!==t.flame||r.sf!==t.sideFlame||r.em!==t.emitMode||r.fh!==irvFireQ(t)||r.fx!==t.facing[0]||r.fy!==t.facing[1];}
@@ -174,7 +174,7 @@ function irvjUpdate(full,gch){ // 返回脏矩形 [i0,i1,j0,j1] 列表;null = �
     if(!IRVJ.cost&&no)irvjCalib(src,obs);}
   else for(let k=0;k<no;k++){const r=IRVJ.obs[k],o=obs[k],pm=r.px!==o.pos[0]||r.py!==o.pos[1],sc=irvjStCh(r,o);
     if(pm||sc){cm|=1<<k;r.px=o.pos[0];r.py=o.pos[1];irvjStSet(r,o);}if(pm)om=true;}
-  const fr=++IRVJ.fr,tn=performance.now(),dtw=running?Math.min(0.1,Math.max(0,tn-IRVJ.tc)/1000):0,gk=1-Math.exp(-dtw/IRV_C.GLIDE);IRVJ.ch+=dtw*IRV_C.CHURN;IRVJ.tc=tn; // 翻涌相位与定位时团的缩放:墙钟,只在跑的时候走(暂停 = 稳态,不重贴)
+  const fr=++IRVJ.fr,dtw=runDt(IRVJ.clk,0.1),gk=1-Math.exp(-dtw/IRV_C.GLIDE);IRVJ.ch+=dtw*IRV_C.CHURN; // 翻涌相位与定位时团的缩放:墙钟,只在跑的时候走(暂停 = 稳态,不重贴)
   for(let n=0;n<src.length;n++){const t=src[n];let r=R.get(t),nw=false; // 1) 扫签名 + 离散判定;翻成谁都看不见的当帧去掉
     if(!r){r={t:t,px:0,py:0,vis:0,ph:null,sp:[],sil:null,sk:'',sb:null,mv:false,need:false,in0:false,in1:false,seen:0,bR:0,qs:0,w:0};R.set(t,r);nw=true;}
     r.seen=fr;
