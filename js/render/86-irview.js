@@ -9,7 +9,7 @@
    背景:尘埃云(envBgParts,按光照;乘地图同一个显示增益)、位置型恒星的光晕、天体盘(朝阳面亮、背阴面 heat)。
    场按 CELL 屏幕像素一格,色阶 + 噪点上色,小图放大进整屏缓存(设备像素),每帧 1:1 贴;山只在变了的地方揭旧贴新;蓝方内核认出且定位后热轮廓叠在山上(山照画;与主视图画出认出的船同一个条件)。
    ============================================================================ */
-const IRV_C={CELL:12,V0:0.02,VMAX:1000,CULL:0.0003,SIG_MIN:0.7,NOISE:0.005,NOISE_MS:200,TAIL_K:4,POS_P:3,MIX:0.875,
+const IRV_C={CELL:6,V0:0.02,VMAX:1000,CULL:0.0003,SIG_MIN:0.7,NOISE:0.005,NOISE_MS:200,TAIL_K:4,POS_P:3,MIX:0.875,
   BG_K:0.1,CLOUD_M:8,CLOUD_LV:4,CLOUD_SYNC:400,CLOUD_BATCH:1500,CLOUD_COARSE:1200,
   GAIN:0.2,SUB_P:0.64,DET_V:0.862,CONTRAST:0.928,FILL_K:1/3,GLYPH:1.3,SIG_MAX_PX:30,MSL_PX:3,CORE:0.4,CORE_W:0.45,
   UNC_K:0.75,UNC_CAP:4,PH_K:0.3,GLIDE:0.6,EP_PX:0.5,FIRE_GROW:1,FIRE_Q:12,TW:2.0,PLAT:0.7,WARP:0.05,CHURN:0.15,CHURN_STEP:0.1,R_TOL:0.05};
@@ -17,7 +17,7 @@ const IRV_C={CELL:12,V0:0.02,VMAX:1000,CULL:0.0003,SIG_MIN:0.7,NOISE:0.005,NOISE
   // GLYPH = 舰标团 / 舰标半径,封顶 SIG_MAX_PX;MSL_PX = 导弹小点;CORE / CORE_W = 定位后亮核的份额与宽度
   // PH_K = 红外测距的相对 1σ(不确定半径 = 距离 x √(PH_K x 方位误差));GLIDE = 定位 / 丢定位时团缩小 / 胀大的时间常数(墙钟秒,只在跑的时候走);EP_PX = 团心挪不到这么多像素不重贴;FIRE_GROW = 开火一刻团半径多出几个舰标团(随开火那份热退回去,sensors/22 fireLvl;2026-09-28 用户:开火是红外亮度提升、团变大一点、发白一点,作为属性,不贴特效);FIRE_Q = 开火热退的过程中重算物理的档数;UNC_K = 热区对数半径的缩放;UNC_CAP = 团半径上限(x 舰标团);TW = 过渡宽度(x 团半径);PLAT = 高原;WARP / CHURN = 扭曲幅度与翻涌速度(rad / 墙钟秒,只在跑的时候走);
   // CHURN_STEP = 翻涌累计把形状挪到这么多格才重贴;R_TOL = 团半径变了这个比例才重贴
-  // CELL = 场的格子(屏幕 px;2026-09-30 用户:红外2 圈里的画面细一点点,14 → 12;2026-09-28 用户:像素变糊一点,5 → 8,与红外 x0.6 对应;2026-09-29 再糊一点,8 → 10 → 14,同时团的剖面放软:TW 1.4 → 2.0、PLAT 1.2 → 0.7);V0 / VMAX = 色阶的对数刻度;CULL = 山截断处;SIG_MIN = 山的最小宽(格);TAIL_K = 尾焰尾巴长宽比;POS_P / MIX = 恒星光晕的律
+  // CELL = 场的格子(屏幕 px;2026-09-30 用户:红外2 圈里的画面细一点点,14 → 12;同日:圈里的本底颗粒再细,12 → 6(与红外2 的环一样);2026-09-28 用户:像素变糊一点,5 → 8,与红外 x0.6 对应;2026-09-29 再糊一点,8 → 10 → 14,同时团的剖面放软:TW 1.4 → 2.0、PLAT 1.2 → 0.7);V0 / VMAX = 色阶的对数刻度;CULL = 山截断处;SIG_MIN = 山的最小宽(格);TAIL_K = 尾焰尾巴长宽比;POS_P / MIX = 恒星光晕的律
 const IRV_T0=-0.1;
 const IRV_RAMP=[[IRV_T0,[40,6,6,140]],[0,[70,12,12,150]],[0.25,[150,30,20,170]],[0.5,[220,80,30,190]],[0.75,[255,170,60,210]],[1,[255,245,210,230]]];
 const IRV_LUT=(function(){const L=new Uint8ClampedArray(256*4);for(let k=0;k<256;k++){const t=IRV_T0+k/255*(1-IRV_T0);let a=0;while(a<IRV_RAMP.length-2&&t>IRV_RAMP[a+1][0])a++;
