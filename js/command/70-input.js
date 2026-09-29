@@ -117,7 +117,7 @@ function targetAt(sx,sy){
   /* TK2.3:非 GM 只能点【蓝方航迹表里】的东西 —— 点在估计位置上,交代不出位置的航迹点不到;按注册表顺序走、严格小于取舍,与改前逐拍相同。
      返回的仍是源对象(锁定 / 火控序列拿它当句柄) */
   trkEach('blue',tk=>{
-    if(trkGone(tk))return;
+    if(trkGone(tk)||!trkFoe(tk))return; // 2026-09-30 用户:选中舰后准星能吸到碎石 —— 已确认不是船的(碎石、民船)不当目标,同 24 trkFoe(显示 / 玩家火控的口径)
     const q=trkPos(tk);if(!q)return;
     const d=Math.hypot(q[0]-w[0],q[1]-w[1]);
     if(d<60/cam.zoom && d<bd){bd=d;best=trkSrc(tk);}

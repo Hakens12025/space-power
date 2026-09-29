@@ -101,7 +101,7 @@ function irvSplat(s,sg){ // sg = +1 贴上 / -1 揭掉(同样的数,原样相消
   }
 }
 /* ---- 每源一条记录。离散判定每帧算;物理(峰高、宽度)按工作量每帧封顶约 100 µs,状态变了的先算(P0),只挪了位置的山立刻挪、峰高宽度之后补(P1) ---- */
-const IRVJ={rec:new Map(),obs:[],q0:[],q1:[],fr:0,cost:0,cost0:0,area:0,reset:true,ch:0,clk:{t:0},wt:0,slot:0,K:8,pan:null}; // ch = 翻涌相位(rad),clk = 墙钟(core/00 runDt);wt = 跑的时候累计的墙钟秒;K = 静止石头分几帧轮一遍(2026-09-29 性能)
+const IRVJ={rec:new Map(),obs:[],q0:[],q1:[],fr:0,cost:0,cost0:0,area:0,reset:true,ch:0,st:null,wt:0,slot:0,K:8,pan:null}; // ch = 翻涌相位(rad),st = 上一帧的游戏时间;wt = 跑的时候累计的墙钟秒;K = 静止石头分几帧轮一遍(2026-09-29 性能)
 const IRVJ_NONE={list:[],sil:null};
 function irvFireQ(t){return Math.ceil(fireLvl(t)*IRV_C.FIRE_Q);} // 开火热分档:退一档重算一次物理(亮度跟着内核退)
 function irvjStCh(r,t){return r.fl!==t.flame||r.sf!==t.sideFlame||r.em!==t.emitMode||r.fh!==irvFireQ(t)||r.fx!==t.facing[0]||r.fy!==t.facing[1];}
@@ -171,7 +171,7 @@ function irvjUpdate(full,gch){ // 返回脏矩形 [i0,i1,j0,j1] 列表;null = �
     if(!IRVJ.cost&&no)irvjCalib(src,obs);}
   else for(let k=0;k<no;k++){const r=IRVJ.obs[k],o=obs[k],pm=r.px!==o.pos[0]||r.py!==o.pos[1],sc=irvjStCh(r,o);
     if(pm||sc){cm|=1<<k;r.px=o.pos[0];r.py=o.pos[1];irvjStSet(r,o);}if(pm)om=true;}
-  const fr=++IRVJ.fr,dtw=runDt(IRVJ.clk,0.1);IRVJ.wt+=dtw;IRVJ.ch+=dtw*IRV_C.CHURN; // 翻涌相位与定位时团的缩放:墙钟,只在跑的时候走(暂停 = 稳态,不重贴)
+  const fr=++IRVJ.fr,gt=simTime+acc,dtw=IRVJ.st===null?0:Math.max(0,Math.min(1,gt-IRVJ.st));IRVJ.st=gt;IRVJ.wt+=dtw;IRVJ.ch+=dtw*IRV_C.CHURN; // 翻涌相位与定位时团的缩放:按游戏时间走(2026-09-30 用户:跟倍速;暂停 = 稳态,不重贴;一帧至多 1 游戏秒)
   for(let n=0;n<src.length;n++){const t=src[n];let r=R.get(t),nw=false; // 1) 扫签名 + 离散判定;翻成谁都看不见的当帧去掉
     if(r&&t.kind==='rock'&&(fr+r.slot)%IRVJ.K!==0){r.seen=fr;continue;} // 2026-09-29 性能:静止石头(上千块)分 K 帧轮一遍;状态最多晚 K 帧跟上,团的缩放按两次之间实际经过的墙钟算
     if(!r){r={slot:(IRVJ.slot++)%IRVJ.K,wt:IRVJ.wt,t:t,px:0,py:0,vis:0,ph:null,sp:[],sil:null,sk:'',sb:null,mv:false,need:false,in0:false,in1:false,seen:0,bR:0,qs:0,w:0};R.set(t,r);nw=true;}
@@ -360,7 +360,7 @@ function irvUpdate(){
   if(bg)irvBgBuild();else if(V.cloudPend&&irvCloudStep()){irvBgBuild();bg=true;}
   let rects=irvjUpdate(view||bg,glob); // 底变了(含星云分帧补齐)发现了的热要按新底重贴
   if(bg)rects=null;
-  const ep=Math.floor(performance.now()/IRV_C.NOISE_MS),na=IRV_C.NOISE,Z=V.nz,L32=V.col.L32;
+  const ep=Math.floor(simTime*1000/IRV_C.NOISE_MS),na=IRV_C.NOISE,Z=V.nz,L32=V.col.L32;
   if(rects===null)irvCompose(0,gw-1,0,gh-1);else for(const r of rects)irvCompose(r[0],r[1],r[2],r[3]);
   if(rects===null||ep!==V.ep){
     irvNoise(n,ep);irvColorize(irvF,0,n,Z.P,Z.oP,Z.Q,Z.oQ,na,L32,V.u32);V.cx.putImageData(V.img,0,0);irvFc(0,0,V.fc.width,V.fc.height,dpr);V.ep=ep;

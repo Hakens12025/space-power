@@ -473,7 +473,7 @@ function drawHoverRings(){
 }
 /* 2026-09-27 雷达异常 / 红外异常(用户:「当出现了异常的时候,直接在主视角上面标注」;选「只报没定位的」「标在异常处、淡出」)。
    不另做探测,复用两份现成的数据:
-   红外异常 = 蓝方航迹表里只有红外量测、还没定位的接触(heat 态 + cov.ch.opt),第一次出现、或开始点火 / 刹车 / 开火,且那团热的信噪比到发现门(1)时报;带源 s,刻痕按它的方位画(86-ir2view ir2AnomDraw);报的那一刻全舰长波围得出交集(ir2ZoneOf)就带交集的面积中心与等面积半径,主视角在那里照旧画圈。
+   红外异常 = 蓝方航迹表里只有红外量测、还没定位的接触(heat 态 + cov.ch.opt),第一次出现、或开始点火 / 刹车 / 开火,且那团热的信噪比到发现门(1)时报;带源 s,刻痕按它的方位画(86-ir2view ir2AnomDraw);报的那一刻全舰短波(尾焰 / 开火)围得出交集(ir2ZoneOf)就带交集的面积中心与等面积半径,主视角在那里照旧画圈。
    雷达异常 = sensors/21 的 ESM 记录里还没定位的辐射源,沉默 ANOM.GAP 游戏秒以上又听到时报(每次脉冲都会报,持续照射只报开头);标在雷达画面画这条记录的那一点(86 的 rdvEsmBrg / rdvEsmRc,带偏移),圈 = 那一片的等面积半径。
    2026-09-28 用户:异常圈不标真实位置,位置与大小走各层自己的画面;只是简易提醒,画法不跟各层走。
    2026-09-30 用户:红外异常不画扩散圈,改成刻痕:主视角弹在可见光圈边上,红外画面(红外2)弹在环 / 仪表外沿,围出交集的多边形也闪一下(86-ir2view)。雷达异常照旧画圈。
@@ -496,7 +496,7 @@ function drawAnomalies(){
   const now=nowMs();anomScan(now);if(!ANOM.list.length)return;
   const drawn=[],irs=[];ctx.save();ctx.font='11px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='bottom';
   for(let i=ANOM.list.length-1;i>=0;i--){const e=ANOM.list[i],k=(now-e.t0)/ANOM.LIFE;if(k>=1||k<0){ANOM.list.splice(i,1);continue;}
-    if(e.k==='ir'&&(e.x===undefined||MAPV.mode==='ir')){irs.push(e);continue;} // 2026-09-30 用户:红外异常的刻痕交给 86-ir2view(红外画面在环外沿,主视角在可见光圈边上);主视角里长波围出了交集的照旧画圈(落在交集处)
+    if(e.k==='ir'&&(e.x===undefined||MAPV.mode==='ir')){irs.push(e);continue;} // 2026-09-30 用户:红外异常的刻痕交给 86-ir2view(红外画面在环外沿,主视角在可见光圈边上);主视角里短波(尾焰 / 开火)围出了交集的照旧画圈(落在交集处)
     const p=toScreen(e.x,e.y);if(p[0]<-40||p[0]>W+40||p[1]<-40||p[1]>H+40)continue;
     if(drawn.some(d=>d[2]===e.k&&Math.hypot(d[0]-p[0],d[1]-p[1])<40))continue;drawn.push([p[0],p[1],e.k]);
     const col=e.k==='ir'?'255,180,84':'84,224,208',x=(k-ANOM.FADE)/(1-ANOM.FADE),a=k<0.05?k/0.05:(x<=0?1:(Math.exp(-ANOM.EXP*x)-Math.exp(-ANOM.EXP))/(1-Math.exp(-ANOM.EXP)));
