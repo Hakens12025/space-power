@@ -3,15 +3,16 @@
    红外2(右下角「红外」钮,MAPV.mode === 'ir';2026-09-30 用户:演示页 demos/地图组/红外2.html 的「按选择」+ 一个红外仪表做进引擎,「红外」钮直接换成它)。
    · 可见光圈(s.visR)里 = 红外1(86-irview 的整屏画面裁进圈里);圈外的热按方位压到圈外一环上:角度 = 方位,厚度 = 温度(内冷外热、对数),颜色 = 一道门 irvV。
    · 选中一艘:它自己的环。选中几艘:各艘一个环,叠着的地方归离得近的那艘;每个目标只画在一个环上 —— 那个方位的环露在外面、看它最清楚的那艘
-     (用户选甲:舰队数据链认得出同一个目标);地图上画交集(照 86-radarview「被听见」:看得见的每艘一块扇形求交,围死才画);左边一个红外仪表(方位从选中这几艘的中心量)。
+     (用户选甲:舰队数据链认得出同一个目标);地图上画交集(照 86-radarview「被听见」:看得见的每艘一块扇形求交,围死才画;2026-09-30 用户:只用长波 —— 船体自身热 + 晒热,尾焰 / 开火不算);左边一个红外仪表(方位从选中这几艘的中心量)。
      没选:各船圈内红外 + 全舰队仪表,不画环。
    · 物理同 irvHill:senseOptLoWith / senseOptBlocked / K_IR / 石头填满距离;定位了的不受日光禁区 / 天体遮挡挡(自己的尾焰不挡自己,2026-09-30)。发现门 = 内核(信噪比 1),不另加增益。
    · 温度:senseOptParts 的自身热(石头 T_ROCK、船 T_HULL)/ 尾焰 / 晒热;开火那份(firePowerOf)从自身热里拆出来,温度随 fireLvl 退回船体温度。
-   · 红外异常(83-hud anomScan 报的,带源):红外2 里弹在环 / 仪表外沿,围出交集的多边形也闪一下;主视角弹在可见光圈边上(ir2AnomDraw)。
+   · 红外异常(83-hud anomScan 报的,带源):红外2 里弹在环 / 仪表外沿,围出交集的多边形也闪一下;主视角:全舰长波围得出交集就像以前一样在交集处画圈(ir2ZoneOf,83 画),
+     围不出就弹在可见光圈边上(ir2AnomDraw)。
    · 只在点开时算。环的数据:船等每帧重算,静止石头分 K 帧轮一遍(各占一个槽,重算那个槽时先减旧的再加新的);环的像素每帧按格上色。
    ============================================================================ */
-const IR2_C={BAND:65,EDGE:'rgba(255,150,70,.5)',EDGE_W:1,RIN_MIN:30,N:360,M:8,T0:100,T1:6000,RSIG:0.14,
-  // BAND = 环厚 px(2026-09-30 用户:稍微厚一点,52 → 65);EDGE / EDGE_W = 环外沿的线(用户:黄色勾边太粗,2 px 实色 → 1 px 半透明);RIN_MIN = 环内沿至少多少 px(拉远时可见光圈在屏幕上太小);N = 一圈几格(1°,已比屏幕上一格细);M = 厚度分几档(环厚约 9 个格子);T0 / T1 = 内沿 / 外沿温度 K(对数刻度);RSIG = 谱宽(厚度的几成)
+const IR2_C={BAND:65,FEATHER:16,EDGE:'rgba(255,150,70,.5)',EDGE_W:1,RIN_MIN:30,N:360,M:8,T0:100,T1:6000,RSIG:0.14,
+  // BAND = 环厚 px(2026-09-30 用户:稍微厚一点,52 → 65);FEATHER = 两艘的环交界处羽化的宽度 px(同日用户);EDGE / EDGE_W = 环外沿的线(用户:黄色勾边太粗,2 px 实色 → 1 px 半透明);RIN_MIN = 环内沿至少多少 px(拉远时可见光圈在屏幕上太小);N = 一圈几格(1°,已比屏幕上一格细);M = 厚度分几档(环厚约 9 个格子);T0 / T1 = 内沿 / 外沿温度 K(对数刻度);RSIG = 谱宽(厚度的几成)
   T_ROCK:150,T_SOLAR:250,T_HULL:300,T_PLUME:1500,T_FIRE:3000,T_NEB:100,T_BODY:200,T_SUN:5800,
   SIG0:8,SMIN:0.6,SMAX:25,XF:0.1,K:16,CULL:0.001,PO_K:0.002,PO_N:8,
   // 团的角宽(度,高斯 σ)= SIG0 / √信噪比,夹在 [SMIN, SMAX];XF = 可见光圈边内外各几成里渐变交接;K = 静止石头分几帧轮一遍;CULL = 峰值低于它的团不铺(色阶差不到一档),团的尾巴铺到 CULL / 10 为止;
@@ -36,10 +37,12 @@ function ir2At(V,a,rho){ // 环上方位 a(弧度)、厚度位置 rho 的值:方
 function ir2RIn(s){return Math.max(IR2_C.RIN_MIN,(s.visR||COV.VIS_R)*cam.zoom);} // 环内沿的屏幕半径 = 这艘的可见光圈
 function ir2RW(s){return Math.max(s.visR||COV.VIS_R,IR2_C.RIN_MIN/cam.zoom);} // 同一个圈的世界半径(拉远时按 RIN_MIN 撑大,圈里照红外1 的范围与环内沿一致)
 function ir2W(d,R){const a=R*(1-IR2_C.XF),b=R*(1+IR2_C.XF);if(d<=a)return 1;if(d>=b)return 0;const x=(b-d)/(b-a);return x*x*(3-2*x);} // 在圈里的份额(圈边内外各 XF 成渐变)
-function ir2LumMax(){ // 最亮的船(最大体型 x 反推 + 最响的发射档 + 开火 + 晒热):交集扇形的远端按它算
-  if(!IR2.lumMax){let s=0,e=0;for(const c in SENS.CLS)s=Math.max(s,SENS.CLS[c].size);for(const k in SENS.EMIT_P)e=Math.max(e,SENS.EMIT_P[k]);
-    IR2.lumMax=s*(1+Math.max(SENS.P_ENG_MAIN,SENS.P_ENG_REV)+COV.HEAT_EMIT*e+SENS.P_FIRE+SENS.SOLAR_K);}
-  return IR2.lumMax;
+function ir2LumLong(){ // 长波最亮(最大体型 x 船体自身热 + 最响的发射档废热 + 晒热;不含尾焰 / 开火):交集扇形的远端按它算
+  if(!IR2.lumL){let s=0,e=0;for(const c in SENS.CLS)s=Math.max(s,SENS.CLS[c].size);for(const k in SENS.EMIT_P)e=Math.max(e,SENS.EMIT_P[k]);IR2.lumL=s*(1+COV.HEAT_EMIT*e+SENS.SOLAR_K);}
+  return IR2.lumL;
+}
+function ir2LongShare(o,t){ // 这一对里长波(船体自身热 + 晒热;尾焰、开火是短波)占几成;石头全是长波
+  if(t.kind==='rock')return 1;const q=senseOptParts(o,t),fire=sReq(t,'size','ship')*firePowerOf(t),tot=q.self+q.plume+q.solar;return tot>0?Math.max(0,q.self-fire+q.solar)/tot:0;
 }
 function ir2Snr(o,t,bg,tSh,oLit,kn){ // o 看 t 的信噪比(同 irvHill 的一对:三道门、有效亮度、石头近到填满距离后不再变亮);看不见 = 0
   if(!kn&&senseOptBlocked(o,t))return 0;
@@ -118,7 +121,8 @@ function ir2Update(){
     if(keep)for(let i=0;i<S.length;i++){const o=S[i],dx=o.pos[0]-rc.po[2*i],dy=o.pos[1]-rc.po[2*i+1],px=t.pos[0]-o.pos[0],py=t.pos[1]-o.pos[1];if(dx*dx+dy*dy>IR2_C.PO_K*IR2_C.PO_K*(px*px+py*py)){keep=false;break;}}
     if(keep)rc.age++;
     else{const bg=ENV.clouds.length?envBg(t.pos,'opt'):0,tSh=lit&&nb&&envInShadow(t.pos);
-      for(let i=0;i<S.length;i++){sn[i]=ir2Snr(S[i],t,bg,tSh,oL[i],kn);rc.po[2*i]=S[i].pos[0];rc.po[2*i+1]=S[i].pos[1];}rc.ev=ENV.rev;rc.kn=kn;rc.age=0;}
+      for(let i=0;i<S.length;i++){sn[i]=ir2Snr(S[i],t,bg,tSh,oL[i],kn);rc.po[2*i]=S[i].pos[0];rc.po[2*i+1]=S[i].pos[1];}
+      if(rock)rc.snL=sn;else{const L=rc.snL&&rc.snL!==sn&&rc.snL.length===S.length?rc.snL:(rc.snL=new Float64Array(S.length));for(let i=0;i<S.length;i++)L[i]=sn[i]>0?sn[i]*ir2LongShare(S[i],t):0;}rc.ev=ENV.rev;rc.kn=kn;rc.age=0;} // 长波信噪比(交集只用它)
     let wi=0;for(let i=0;i<IS.length;i++)wi=Math.max(wi,ir2W(Math.hypot(t.pos[0]-IS[i].pos[0],t.pos[1]-IS[i].pos[1]),rw[i]));rc.wi=wi;
     rc.k=-1;
     if(RS.length&&wi<1){let k=-1,kx=-1; // 只上一个环:那个方位的环露在外面(三个点里两个以上当一样)、再比谁看得清
@@ -136,18 +140,26 @@ function ir2Update(){
   for(const [t,rc] of IR2.rec)if(rc.seen!==fr)IR2.rec.delete(t);
 }
 /* ---- 交集(照 86-radarview 的「被听见」:rdvLob / rdvClip / rdvArea)---- */
-function ir2Zones(){
+function ir2Cen(P){let a=0,x=0,y=0;for(let i=0;i<P.length;i++){const p=P[i],q=P[(i+1)%P.length],c=p[0]*q[1]-q[0]*p[1];a+=c;x+=(p[0]+q[0])*c;y+=(p[1]+q[1])*c;}return Math.abs(a)>1e-9?[x/(3*a),y/(3*a)]:[P[0][0],P[0][1]];} // 多边形的面积中心
+function ir2Wedges(t,obs,snl){ // 长波看得见(信噪比过发现门)的每艘一块扇形求交:半宽 = 环上那团的角宽,远端 = 长波最亮的船在这个亮度下能在多远,方位按每一对固定挪开(同雷达画面,显示层防泄露);
+  // 围死(不碰任何一块的远端)→ {P, area, c 面积中心, r 等面积半径},否则 null(红外没有测距)
+  const Lm=ir2LumLong(),W=[];
+  for(let i=0;i<obs.length;i++){const s=snl[i];if(!(s>=1))continue;const o=obs[i],h=Math.max(IR2_C.SMIN,Math.min(IR2_C.SMAX,IR2_C.SIG0/Math.sqrt(s)))*Math.PI/180;
+    W.push({org:[o.pos[0],o.pos[1]],R:Math.sqrt(SENS.K_IR*Lm/s),half:h,brg:Math.atan2(t.pos[1]-o.pos[1],t.pos[0]-o.pos[0])+(rdvHash(o.id,t.id)*2-1)*h*0.6});}
+  if(W.length<2)return null;
+  let P=null;for(const w of W){const L=rdvLob(w,w.brg);P=P?rdvClip(P,L):L;if(!P.length)return null;}
+  if(P.length<3)return null;
+  for(const q of P)for(const w of W)if(Math.hypot(q[0]-w.org[0],q[1]-w.org[1])>=w.R*(1-1e-6))return null;
+  const area=rdvArea(P);return {P:P,area:area,c:ir2Cen(P),r:Math.sqrt(area/Math.PI)};
+}
+function ir2ZoneOf(t,obs){ // 主视角的红外异常用:按 obs(全舰)长波现算这一个源的交集(不读红外2 的缓存,红外没点开也能用;异常很少,只在报的那一刻算)
+  const lit=envHasLight(),nb=ENV.bodies.length>0,bg=ENV.clouds.length?envBg(t.pos,'opt'):0,tSh=lit&&nb&&envInShadow(t.pos),kn=adminMode||contactFix(t,VIEW);
+  return ir2Wedges(t,obs,obs.map(o=>{const s=ir2Snr(o,t,bg,tSh,lit&&!(nb&&envInShadow(o.pos)),kn);return s>0?s*ir2LongShare(o,t):0;}));
+}
+function ir2Zones(){ // 红外2 多选时的交集(只用长波),每 ZONE_T 墙钟秒重算
   const now=nowMs()/1000;if(now-IR2.zt<IR2_C.ZONE_T)return IR2.zones;IR2.zt=now;
   const RS=IR2.RS,out=[];if(RS.length<2){IR2.zones=out;return out;}
-  const Lm=ir2LumMax();
-  for(const [t,rc] of IR2.rec){if(rc.wi>0||!rc.sn||t.dead)continue;const W=[]; // 可见光圈里的不画(实际位置已经看得见)
-    for(let i=0;i<RS.length;i++){const s=rc.sn[i];if(!(s>=1))continue;const o=RS[i],h=Math.max(IR2_C.SMIN,Math.min(IR2_C.SMAX,IR2_C.SIG0/Math.sqrt(s)))*Math.PI/180; // 半宽 = 环上那团的角宽
-      W.push({org:[o.pos[0],o.pos[1]],R:Math.sqrt(SENS.K_IR*Lm/s),half:h,brg:Math.atan2(t.pos[1]-o.pos[1],t.pos[0]-o.pos[0])+(rdvHash(o.id,t.id)*2-1)*h*0.6});} // 远端 = 最亮的船在这个亮度下能在多远;方位按每一对固定挪开(同雷达画面,显示层防泄露)
-    if(W.length<2)continue;
-    let P=null;for(const w of W){const L=rdvLob(w,w.brg);P=P?rdvClip(P,L):L;if(!P.length)break;}
-    if(!P||P.length<3)continue;
-    let ok=true;for(const q of P){for(const w of W)if(Math.hypot(q[0]-w.org[0],q[1]-w.org[1])>=w.R*(1-1e-6)){ok=false;break;}if(!ok)break;} // 碰到远端 = 围不死(红外没有测距),不画
-    if(ok)out.push({t:t,P:P,area:rdvArea(P)});}
+  for(const [t,rc] of IR2.rec){if(rc.wi>0||!rc.snL||t.dead)continue;const z=ir2Wedges(t,RS,rc.snL);if(z){z.t=t;out.push(z);}} // 可见光圈里的不画(实际位置已经看得见)
   IR2.zones=out;return out;
 }
 function ir2ZonePath(z){ctx.beginPath();for(let i=0;i<z.P.length;i++){const q=toScreen(z.P[i][0],z.P[i][1]);if(i)ctx.lineTo(q[0],q[1]);else ctx.moveTo(q[0],q[1]);}ctx.closePath();}
@@ -171,24 +183,22 @@ function ir2Arcs(P,R,k){ // 第 k 个圆(屏幕,半径 R[k])没被别的圆盖�
 function ir2InArcs(arcs,a){a=((a%(2*Math.PI))+2*Math.PI)%(2*Math.PI);for(const q of arcs)if(a>=q[0]&&a<=q[1])return true;return false;}
 function ir2Ticks(at){ctx.strokeStyle='rgba(255,200,150,.55)';ctx.lineWidth=1;for(let t=0;t<12;t++){const a=t*Math.PI/6,q=at(a);if(!q)continue;const l=t%3===0?7:4;ctx.beginPath();ctx.moveTo(q[0],q[1]);ctx.lineTo(q[0]+Math.cos(a)*l,q[1]+Math.sin(a)*l);ctx.stroke();}} // 方位刻度:每 30°,东南西北长一点
 function ir2Lay(n){const k='lay'+n;if(!IR2[k]){const c=document.createElement('canvas');IR2[k]={c:c,g:c.getContext('2d'),img:null,w:0,h:0,ep:NaN,res:null};}return IR2[k];} // 上色层:环、仪表各一张(稳态时照用上一帧)
-function ir2Paint(L,bb,ann,cellFn){ // 在层 L 上、屏幕矩形 bb 里按 CELL 格上色(锚在屏幕上):只算落在圆环带 ann = [[x, y, 内半径, 外半径], ...] 里的格;cellFn(x, y) → [值, 归属] / null;
-  // 归属变了的格压暗一半(两艘的环的接缝)。返回 [画布, i0, j0, 宽, 高](格)
+function ir2Paint(L,bb,ann,cellFn){ // 在层 L 上、屏幕矩形 bb 里按 CELL 格上色(锚在屏幕上):只算落在圆环带 ann = [[x, y, 内半径, 外半径], ...] 里的格;cellFn(x, y) → 值 / null。
+  // 返回 [画布, i0, j0, 宽, 高](格)
   const C=IR2_C.CELL,i0=Math.max(-1,Math.floor(bb[0]/C)-1),i1=Math.min(Math.ceil(W/C)+1,Math.ceil(bb[2]/C)+1),j0=Math.max(-1,Math.floor(bb[1]/C)-1),j1=Math.min(Math.ceil(H/C)+1,Math.ceil(bb[3]/C)+1),nw=i1-i0+1,nh=j1-j0+1;
   if(nw<=0||nh<=0)return null;
-  if(L.w!==nw||L.h!==nh||!L.img){L.c.width=nw;L.c.height=nh;L.w=nw;L.h=nh;L.img=L.g.createImageData(nw,nh);L.u32=new Uint32Array(L.img.data.buffer);L.own=new Int16Array(nw*nh);L.mk=new Uint8Array(nw);}
+  if(L.w!==nw||L.h!==nh||!L.img){L.c.width=nw;L.c.height=nh;L.w=nw;L.h=nh;L.img=L.g.createImageData(nw,nh);L.u32=new Uint32Array(L.img.data.buffer);L.mk=new Uint8Array(nw);}
   if(!IRVC.col)irvColInit();
   const gw=Math.ceil(W/C)+4,gh=Math.ceil(H/C)+4;if(!IR2.gr||IR2.grW!==gw||IR2.grH!==gh){IR2.gr=new Float32Array(gw*gh);IR2.grW=gw;IR2.grH=gh;for(let j=0;j<gh;j++)for(let i=0;i<gw;i++)IR2.gr[j*gw+i]=1+IR2_C.GRAIN*(ir2Hash(i-2,j-2,0)*2-1);} // 亮处的乘性颗粒:按屏幕格子算一次
   const GR=IR2.gr;
-  const O=L.u32,OW=L.own,MK=L.mk,T=ir2L32(),ep=Math.floor(nowMs()/IR2_C.NOISE_MS),T8=IRVC.col.T8,TH=IRVC.col.TH,f1=IRVC.f1,u1=IRVC.u1; // 色阶下标照红外1 查表(float32 高 16 位初猜 + 门槛表修正),不逐格算对数
+  const O=L.u32,MK=L.mk,T=ir2L32(),ep=Math.floor(nowMs()/IR2_C.NOISE_MS),T8=IRVC.col.T8,TH=IRVC.col.TH,f1=IRVC.f1,u1=IRVC.u1; // 色阶下标照红外1 查表(float32 高 16 位初猜 + 门槛表修正),不逐格算对数
   const span=(x0,x1)=>{const a=Math.max(0,Math.floor(x0/C-0.5-i0)-1),b=Math.min(nw-1,Math.ceil(x1/C-0.5-i0)+1);for(let i=a;i<=b;i++)MK[i]=1;};
   for(let j=0;j<nh;j++){const gj=j0+j,y=(gj+0.5)*C;MK.fill(0);
     for(const a of ann){const dy=Math.abs(y-a[1]);if(dy>=a[3]+C)continue;const xo=Math.sqrt(Math.max(0,(a[3]+C)*(a[3]+C)-dy*dy)),xi=dy<a[2]-C?Math.sqrt((a[2]-C)*(a[2]-C)-dy*dy):0; // 这一行与圆环带相交的一段或两段
       if(xi>0){span(a[0]-xo,a[0]-xi);span(a[0]+xi,a[0]+xo);}else span(a[0]-xo,a[0]+xo);}
     for(let i=0;i<nw;i++){const q=j*nw+i,gi=i0+i,r=MK[i]?cellFn((gi+0.5)*C,y):null;
-    if(!r){O[q]=0;OW[q]=-1;continue;}
-    const v=r[0]*GR[(gj+2)*gw+gi+2]+IR2_C.NOISE*(ir2Hash(gi+977,gj+131,ep)*2-1);f1[0]=v;let k=T8[u1[0]>>>16];if(k>255)k=irvIdx(v);else{while(v>=TH[k+1])k++;while(v<TH[k])k--;}O[q]=T[k];OW[q]=r[1];}}
-  for(let j=0;j<nh;j++)for(let i=0;i<nw;i++){const q=j*nw+i,o=OW[q];if(o<0)continue;
-    if((i+1<nw&&OW[q+1]>=0&&OW[q+1]!==o)||(j+1<nh&&OW[q+nw]>=0&&OW[q+nw]!==o)){const c=O[q];O[q]=(c&0xff000000)|((((c>>>16)&255)>>>1)<<16)|((((c>>>8)&255)>>>1)<<8)|((c&255)>>>1);}}
+    if(r===null){O[q]=0;continue;}
+    const v=r*GR[(gj+2)*gw+gi+2]+IR2_C.NOISE*(ir2Hash(gi+977,gj+131,ep)*2-1);f1[0]=v;let k=T8[u1[0]>>>16];if(k>255)k=irvIdx(v);else{while(v>=TH[k+1])k++;while(v<TH[k])k--;}O[q]=T[k];}}
   L.g.putImageData(L.img,0,0);return [L.c,i0,j0,nw,nh];
 }
 function ir2Blit(lay,bb,out,inn){ // 环层:裁在外沿以内(几个圆并起来)、挖掉可见光圈(几个圆并起来);只动 bb 那一块
@@ -200,6 +210,7 @@ function ir2Blit(lay,bb,out,inn){ // 环层:裁在外沿以内(几个圆并起�
   g.globalCompositeOperation='destination-out';g.beginPath();inn(g);g.fill();g.globalCompositeOperation='source-over';
   ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(R.c,x0,y0,x1-x0,y1-y0,x0,y0,x1-x0,y1-y0);ctx.restore();
 }
+function ir2RingAt(V,c,x,y,rho){let a=Math.atan2(y-c[1],x-c[0]);if(a<0)a+=2*Math.PI;return ir2At(V,a,rho);} // 环心 c 的环上、屏幕点 (x, y) 那个方位
 function ir2Circles(g,P,R){for(let i=0;i<P.length;i++){g.moveTo(P[i][0]+R[i],P[i][1]);g.arc(P[i][0],P[i][1],R[i],0,2*Math.PI);}} // 同向的几个圆:nonzero 下就是并集
 function drawIr2View(){ // 每帧入口(84-scene,MAPV.mode === 'ir';画在地图 / 天体之后、接触之前)
   ir2Update();
@@ -208,8 +219,9 @@ function drawIr2View(){ // 每帧入口(84-scene,MAPV.mode === 'ir';画在地图
     ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(IRVC.fc,0,0);ctx.restore();drawIrFx();ctx.restore();}
   if(RS.length){const P=IR2.P,RI=IR2.RI,B=IR2_C.BAND,C=IR2_C.CELL,rings=IR2.rings,RO=RI.map(r=>r+B),bb=[Infinity,Infinity,-Infinity,-Infinity];
     for(let i=0;i<P.length;i++){bb[0]=Math.min(bb[0],P[i][0]-RO[i]);bb[1]=Math.min(bb[1],P[i][1]-RO[i]);bb[2]=Math.max(bb[2],P[i][0]+RO[i]);bb[3]=Math.max(bb[3],P[i][1]+RO[i]);}
-    const LR=ir2Lay('R'),ep=Math.floor(nowMs()/IR2_C.NOISE_MS),lay=(IR2.still&&LR.res&&LR.ep===ep)?LR.res:(LR.ep=ep,LR.res=ir2Paint(LR,bb,P.map((p,i)=>[p[0],p[1],RI[i]-2*C,RO[i]+2*C]),(x,y)=>{let bj=-1,be=Infinity;for(let j=0;j<P.length;j++){const dx=x-P[j][0],dy=y-P[j][1],d=Math.sqrt(dx*dx+dy*dy);if(d<RI[j]-2*C)return null;const e=d-RI[j];if(e<be){be=e;bj=j;}} // 归离它的圈边最近的那艘(环叠着的地方)
-      if(bj<0||be>=B+2*C)return null;let a=Math.atan2(y-P[bj][1],x-P[bj][0]);if(a<0)a+=2*Math.PI;return [ir2At(rings[bj].V,a,be/B),bj];}));
+    const LR=ir2Lay('R'),ep=Math.floor(nowMs()/IR2_C.NOISE_MS),lay=(IR2.still&&LR.res&&LR.ep===ep)?LR.res:(LR.ep=ep,LR.res=ir2Paint(LR,bb,P.map((p,i)=>[p[0],p[1],RI[i]-2*C,RO[i]+2*C]),(x,y)=>{let b1=-1,e1=Infinity,b2=-1,e2=Infinity;for(let j=0;j<P.length;j++){const dx=x-P[j][0],dy=y-P[j][1],d=Math.sqrt(dx*dx+dy*dy);if(d<RI[j]-2*C)return null;const e=d-RI[j];if(e<e1){e2=e1;b2=b1;e1=e;b1=j;}else if(e<e2){e2=e;b2=j;}} // 离圈边最近的两艘
+      if(b1<0||e1>=B+2*C)return null;const v1=ir2RingAt(rings[b1].V,P[b1],x,y,e1/B),F=IR2_C.FEATHER;if(b2<0||e2-e1>=F)return v1; // 两个环交界附近 FEATHER px 里按离两边圈边的远近混合(2026-09-30 用户:交界处羽化)
+      const w=0.5+0.5*(e2-e1)/F;return w*v1+(1-w)*ir2RingAt(rings[b2].V,P[b2],x,y,e2/B);}));
     if(lay)ir2Blit(lay,bb,g=>ir2Circles(g,P,RO),g=>ir2Circles(g,P,RI));
     ctx.save();
     for(let k=0;k<P.length;k++){const arcs=ir2Arcs(P,RO,k);ctx.strokeStyle=IR2_C.EDGE;ctx.lineWidth=IR2_C.EDGE_W;for(const q of arcs){ctx.beginPath();ctx.arc(P[k][0],P[k][1],RO[k],q[0],q[1]);ctx.stroke();} // 外沿橙线(只画露在外面的)
@@ -231,7 +243,7 @@ function drawIr2Hud(){ // 红外仪表(左边加舰条与特写窗之间,被页�
   if(now-IR2.hudT>500||!IR2.hud){IR2.hudT=now;IR2.hud=ir2HudPlace(ro+pad);}
   const S=IR2.hud,bot=(S.left&&typeof INSET!=='undefined'&&INSET.on)?Math.min(S.bot,INSET.y-8):S.bot,cx=S.x,cy=Math.max(S.top+ro+pad,Math.min((S.top+bot)/2,bot-ro-pad)); // 左边时底边再让开特写窗
   ctx.save();ctx.fillStyle='rgba(8,12,18,.88)';ctx.strokeStyle='rgba(143,208,255,.25)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(cx,cy,ro+pad,0,2*Math.PI);ctx.fill();ctx.stroke();
-  const LH=ir2Lay('H'),ep=Math.floor(now/IR2_C.NOISE_MS),lay=(IR2.still&&LH.res&&LH.ep===ep&&LH.cx===cx&&LH.cy===cy)?LH.res:(LH.ep=ep,LH.cx=cx,LH.cy=cy,LH.res=ir2Paint(LH,[cx-ro-2,cy-ro-2,cx+ro+2,cy+ro+2],[[cx,cy,r0-2*C,ro+2*C]],(x,y)=>{const d=Math.sqrt((x-cx)*(x-cx)+(y-cy)*(y-cy));if(d<r0-2*C||d>=ro+2*C)return null;let a=Math.atan2(y-cy,x-cx);if(a<0)a+=2*Math.PI;return [ir2At(inst.V,a,(d-r0)/B),0];}));
+  const LH=ir2Lay('H'),ep=Math.floor(now/IR2_C.NOISE_MS),lay=(IR2.still&&LH.res&&LH.ep===ep&&LH.cx===cx&&LH.cy===cy)?LH.res:(LH.ep=ep,LH.cx=cx,LH.cy=cy,LH.res=ir2Paint(LH,[cx-ro-2,cy-ro-2,cx+ro+2,cy+ro+2],[[cx,cy,r0-2*C,ro+2*C]],(x,y)=>{const d=Math.sqrt((x-cx)*(x-cx)+(y-cy)*(y-cy));if(d<r0-2*C||d>=ro+2*C)return null;let a=Math.atan2(y-cy,x-cx);if(a<0)a+=2*Math.PI;return ir2At(inst.V,a,(d-r0)/B);}));
   if(lay){ctx.beginPath();ctx.arc(cx,cy,ro,0,2*Math.PI);ctx.moveTo(cx+r0,cy);ctx.arc(cx,cy,r0,0,2*Math.PI,true);ctx.clip('evenodd');ctx.imageSmoothingEnabled=true;ctx.drawImage(lay[0],lay[1]*C,lay[2]*C,lay[3]*C,lay[4]*C);}
   ctx.restore();ctx.save();
   ctx.strokeStyle=IR2_C.EDGE;ctx.lineWidth=IR2_C.EDGE_W;ctx.beginPath();ctx.arc(cx,cy,ro,0,2*Math.PI);ctx.stroke();ir2Ticks(a=>[cx+Math.cos(a)*(ro+2),cy+Math.sin(a)*(ro+2)]);
