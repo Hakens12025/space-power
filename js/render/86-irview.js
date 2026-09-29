@@ -72,18 +72,19 @@ function irvSplatRect(s){ // 贴片 s = {x,y,pk,a,c,ux,uy,iso}(高斯,截断在�
   s.ar=s.i0>s.i1||s.j0>s.j1?0:(s.i1-s.i0+1)*(s.j1-s.j0+1);return s;
 }
 let irvEx=new Float64Array(256);
+const IRV_TB=new Map(); // 弥散团剖面表的缓存:峰值 → 表(见 irvSplat)
 const IRV_BL=(function(){const n=128,tw=IRV_C.TW,k=1.35/(tw*tw),qm=6*tw*tw,PL=IRV_C.PLAT,PN=1-Math.exp(-PL),pt=new Float64Array(n+1); // 弥散团剖面的公共部分:色阶比例 pt[档](高原 + 按 TW 落回本底),档 = qd x n / qm
-  for(let b=0;b<=n;b++)pt[b]=b===n?0:(1-Math.exp(-PL*Math.exp(-k*b*qm/n)))/PN;return {n:n,qm:qm,pt:pt,tb:new Float64Array(n+1),lt:Math.log(1+IRV_C.VMAX/IRV_C.V0)};})();
+  for(let b=0;b<=n;b++)pt[b]=b===n?0:(1-Math.exp(-PL*Math.exp(-k*b*qm/n)))/PN;return {n:n,qm:qm,pt:pt,lt:Math.log(1+IRV_C.VMAX/IRV_C.V0)};})();
 function irvSplat(s,sg){ // sg = +1 贴上 / -1 揭掉(同样的数,原样相消)
   if(!s.ar)return;
   const F=irvH,gw=irvGW,i0=s.i0,i1=s.i1,j0=s.j0,j1=s.j1,p=sg*s.pk,cx=s.x,cy=s.y;
   if(s.bl){ // 弥散团:剖面画在色阶上(中心 = 峰值色阶、高原,按 TW x R 平滑落回本底);扭曲按行 / 按列各算一次正弦,只加不规则、拉不出方向
-    const B=IRV_BL,NB=B.n,tp=irvT(s.pk)*B.lt,tb=B.tb,R=s.R,wp=s.wp,inv=NB/B.qm;
-    for(let b=0;b<=NB;b++)tb[b]=sg*IRV_C.V0*(Math.exp(tp*B.pt[b])-1); // 这一团的剖面表(按 qd 分 NB 档,格里线性插值):每团 NB 次 exp,不是每格三次
+    const B=IRV_BL,NB=B.n,R=s.R,wp=s.wp,inv=NB/B.qm;let tb=IRV_TB.get(s.pk); // 这一团的剖面表(按 qd 分 NB 档,格里线性插值):每团 NB 次 exp,不是每格三次
+    if(!tb){const tp=irvT(s.pk)*B.lt;tb=new Float64Array(NB+1);for(let b=0;b<=NB;b++)tb[b]=IRV_C.V0*(Math.exp(tp*B.pt[b])-1);if(IRV_TB.size>=4096)IRV_TB.clear();IRV_TB.set(s.pk,tb);} // 2026-09-29 性能:按峰值缓存(镜头一动整张重贴,上千座山原来每次都重算);揭掉 = 同一张表乘 -1,原样相消
     if(irvEx.length<i1-i0+1)irvEx=new Float64Array(2*(i1-i0+1));const wx=irvEx;
     for(let i=i0;i<=i1;i++)wx[i-i0]=wp*Math.sin(1.9*(i-cx)/R+s.q2);
     for(let j=j0;j<=j1;j++){const dy=(j-cy)/R,ou=wp*Math.sin(1.7*dy+s.q1),row=j*gw;
-      for(let i=i0;i<=i1;i++){const u=(i-cx)/R+ou,w=dy+wx[i-i0],f=(u*u+w*w)*inv;if(f>=NB)continue;const b=f|0;F[row+i]+=tb[b]+(tb[b+1]-tb[b])*(f-b);}}
+      for(let i=i0;i<=i1;i++){const u=(i-cx)/R+ou,w=dy+wx[i-i0],f=(u*u+w*w)*inv;if(f>=NB)continue;const b=f|0;F[row+i]+=sg*(tb[b]+(tb[b+1]-tb[b])*(f-b));}}
     return;
   }
   if(s.iso){ // 可分离:每列、每行各一次 exp
@@ -104,7 +105,7 @@ function irvSplat(s,sg){ // sg = +1 贴上 / -1 揭掉(同样的数,原样相消
   }
 }
 /* ---- 每源一条记录。离散判定每帧算;物理(峰高、宽度)按工作量每帧封顶约 100 µs,状态变了的先算(P0),只挪了位置的山立刻挪、峰高宽度之后补(P1) ---- */
-const IRVJ={rec:new Map(),obs:[],q0:[],q1:[],fr:0,cost:0,cost0:0,area:0,reset:true,ch:0,clk:{t:0}}; // ch = 翻涌相位(rad),clk = 墙钟(core/00 runDt)
+const IRVJ={rec:new Map(),obs:[],q0:[],q1:[],fr:0,cost:0,cost0:0,area:0,reset:true,ch:0,clk:{t:0},wt:0,slot:0,K:8,pan:null}; // ch = 翻涌相位(rad),clk = 墙钟(core/00 runDt);wt = 跑的时候累计的墙钟秒;K = 静止石头分几帧轮一遍(2026-09-29 性能)
 const IRVJ_NONE={list:[],sil:null};
 function irvFireQ(t){return Math.ceil(fireLvl(t)*IRV_C.FIRE_Q);} // 开火热分档:退一档重算一次物理(亮度跟着内核退)
 function irvjStCh(r,t){return r.fl!==t.flame||r.sf!==t.sideFlame||r.em!==t.emitMode||r.fh!==irvFireQ(t)||r.fx!==t.facing[0]||r.fy!==t.facing[1];}
@@ -174,11 +175,12 @@ function irvjUpdate(full,gch){ // 返回脏矩形 [i0,i1,j0,j1] 列表;null = �
     if(!IRVJ.cost&&no)irvjCalib(src,obs);}
   else for(let k=0;k<no;k++){const r=IRVJ.obs[k],o=obs[k],pm=r.px!==o.pos[0]||r.py!==o.pos[1],sc=irvjStCh(r,o);
     if(pm||sc){cm|=1<<k;r.px=o.pos[0];r.py=o.pos[1];irvjStSet(r,o);}if(pm)om=true;}
-  const fr=++IRVJ.fr,dtw=runDt(IRVJ.clk,0.1),gk=1-Math.exp(-dtw/IRV_C.GLIDE);IRVJ.ch+=dtw*IRV_C.CHURN; // 翻涌相位与定位时团的缩放:墙钟,只在跑的时候走(暂停 = 稳态,不重贴)
+  const fr=++IRVJ.fr,dtw=runDt(IRVJ.clk,0.1);IRVJ.wt+=dtw;IRVJ.ch+=dtw*IRV_C.CHURN; // 翻涌相位与定位时团的缩放:墙钟,只在跑的时候走(暂停 = 稳态,不重贴)
   for(let n=0;n<src.length;n++){const t=src[n];let r=R.get(t),nw=false; // 1) 扫签名 + 离散判定;翻成谁都看不见的当帧去掉
-    if(!r){r={t:t,px:0,py:0,vis:0,ph:null,sp:[],sil:null,sk:'',sb:null,mv:false,need:false,in0:false,in1:false,seen:0,bR:0,qs:0,w:0};R.set(t,r);nw=true;}
+    if(r&&t.kind==='rock'&&(fr+r.slot)%IRVJ.K!==0){r.seen=fr;continue;} // 2026-09-29 性能:静止石头(上千块)分 K 帧轮一遍;状态最多晚 K 帧跟上,团的缩放按两次之间实际经过的墙钟算
+    if(!r){r={slot:(IRVJ.slot++)%IRVJ.K,wt:IRVJ.wt,t:t,px:0,py:0,vis:0,ph:null,sp:[],sil:null,sk:'',sb:null,mv:false,need:false,in0:false,in1:false,seen:0,bR:0,qs:0,w:0};R.set(t,r);nw=true;}
     r.seen=fr;
-    const wt=(adminMode||contactFix(t,VIEW))?1:0;r.w=nw?wt:r.w+(wt-r.w)*gk;if(Math.abs(wt-r.w)<0.01)r.w=wt;
+    const wt=(adminMode||contactFix(t,VIEW))?1:0,gk=1-Math.exp(-(IRVJ.wt-r.wt)/IRV_C.GLIDE);r.wt=IRVJ.wt;r.w=nw?wt:r.w+(wt-r.w)*gk;if(Math.abs(wt-r.w)<0.01)r.w=wt;
     let ep=[t.pos[0],t.pos[1],irvUnc(t)*(1-r.w)]; // 团画在物体所在处;不确定半径定位后在 GLIDE 秒里收到热晕最小半径,丢了定位再胀回去
     if(!nw&&r.ep&&Math.hypot(ep[0]-r.ep[0],ep[1]-r.ep[1])*cam.zoom<IRV_C.EP_PX&&Math.abs(ep[2]-r.ep[2])<IRV_C.R_TOL*Math.max(r.ep[2],1))ep=r.ep;
     const pm=nw||!r.ep||r.px!==ep[0]||r.py!==ep[1],sc=nw||irvjStCh(r,t);r.mv=pm&&!nw;r.ep=ep;
@@ -199,8 +201,10 @@ function irvjUpdate(full,gch){ // 返回脏矩形 [i0,i1,j0,j1] 列表;null = �
   let n=irvjDrain(IRVJ.q0,cap,obs,true);n+=irvjDrain(IRVJ.q1,cap-n,obs,false);
   if(n>=8&&!reset){const c=(performance.now()-t0)*1000/n;IRVJ.cost=Math.min(IRVJ.cost0*4,Math.max(IRVJ.cost0/4,IRVJ.cost*0.9+c*0.1));}
   const work=[],dirty=[];let chg=0,area=IRVJ.area; // 3) 重贴:位置变了必贴;只是物理变了的按探针决定
+  const pan=full?IRVJ.pan:null;
   for(const r of R.values()){
     if(!(full||r.mv||r.need))continue;
+    if(pan&&!r.mv&&!r.need&&r.ph&&r.ep){for(const q of r.sp){q.x+=pan[0];q.y+=pan[1];irvSplatRect(q);}r.sb=r.sil?irvjBox(r.t,r.op):null;continue;} // 纯平移:形状、峰值不重算,只挪位置、重算外接框(下面整张重贴)
     r.need=false;
     const nx=(r.ph&&r.ep)?irvjSplats(r.t,r.ph,!!r.fxd,r.ep):IRVJ_NONE;if(nx.R){r.bR=nx.R;r.qs=IRVJ.ch;}
     if(full||r.mv||!irvjKeep(r.sp,nx.list)){work.push(r,nx.list);
@@ -349,7 +353,8 @@ function irvFc(x0,y0,x1,y1,dpr){ // 缓存的设备像素矩形里重画:清掉�
 function irvUpdate(){
   const V=IRVC,C=IRV_C.CELL,dpr=devicePixelRatio||1,rs=irvGrid(),gw=irvGW,gh=irvGH,n=gw*gh;
   const vs=[cam.x,cam.y,cam.zoom,W,H,dpr,adminMode,VIEW],gs=[ENV.rev]; // adminMode:切 GM 时轮廓要整张重画
-  const md=!V.live,view=rs||md||irvNe(vs,V.vs),glob=md||irvNe(gs,V.gs);
+  const md=!V.live,view=rs||md||irvNe(vs,V.vs),glob=md||irvNe(gs,V.gs),pv=V.vs;
+  IRVJ.pan=(view&&!rs&&!md&&!glob&&pv&&pv[2]===cam.zoom&&pv[3]===W&&pv[4]===H&&pv[5]===dpr&&pv[6]===adminMode&&pv[7]===VIEW)?[-(cam.x-pv[0])*cam.zoom/C,-(cam.y-pv[1])*cam.zoom/C]:null; // 2026-09-29 性能:纯平移(只有镜头中心变了)时山的形状不变,irvjUpdate 把贴片整体挪过去
   if(md){IRVJ.reset=true;V.live=true;}
   V.vs=vs;V.gs=gs;
   if(!V.cv||V.cv.width!==gw||V.cv.height!==gh){V.cv=document.createElement('canvas');V.cv.width=gw;V.cv.height=gh;V.cx=V.cv.getContext('2d');V.img=V.cx.createImageData(gw,gh);V.u32=new Uint32Array(V.img.data.buffer);}
