@@ -105,7 +105,7 @@ function fireMAC(shooter,target){ // MAC 轴炮:沿机头轴线直射(调用方�
 }
 let hitFX=[]; // 命中特效 {pos,t,type}  — MAC/导弹命中点的爆闪提示
 function fxVis(pos,sh,vic){ // 2026-09-28 vis = 我方看不看得见这一下:自己打的 / 挨打的是自己 / 落在我方某艘船的全知圈里;画面只画看得见的(原来看不见的地方的命中与击沉也画在真值上)
-  const see=sd=>!!((sh&&sh.side===sd)||(vic&&vic.side===sd)||ships.some(s=>s.side===sd&&!s.dead&&Math.hypot(s.pos[0]-pos[0],s.pos[1]-pos[1])<(s.visR||COV.VIS_R)));
+  const see=sd=>!!((sh&&sh.side===sd)||(vic&&vic.side===sd)||ships.some(s=>s.side===sd&&!s.dead&&Math.hypot(s.pos[0]-pos[0],s.pos[1]-pos[1])<(s.visR||COV.VIS_R))||rocks.some(o=>o.kind==='buoy'&&o.side===sd&&!o.dead&&Math.hypot(o.pos[0]-pos[0],o.pos[1]-pos[1])<(o.visR||0)));
   return {blue:see('blue'),red:see('red')}; // 两方各记一份(画面按当前视角 VIEW 读)
 }
 function spawnHit(pos,type,sh,vic){hitFX.push({pos:pos.slice(),t:1.2,type,vis:fxVis(pos,sh,vic),vic:vic||null});} // 2026-09-29 vic = 挨打的是什么(撞天体为 null、碎石 / 民船也在这里):小窗只报打在舰船上的

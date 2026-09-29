@@ -122,8 +122,7 @@ function reflOf(s) { // 雷达反射 = 体型 x 反射倍率。size 同时喂光
 function senseKIR(d) { // 探测方光学系数。舰与信标唯一的差别在光学口径,今天两者都是 1.0(信标就是一个专职传感器荚舱)
   return SENS.K_IR * (d && d.type === 'beacon' ? SENS.BEACON_OPT : 1);
 }
-function senseVis(d, t) { // 2026-09-26 可见光圈:探测方是舰船、目标在 COV.VIS_R 以内、视线不被天体挡住 ⇒ 看得一清二楚(信标不算:圈是"以飞船为圆心")
-  if (d.type === 'beacon') return false;
+function senseVis(d, t) { // 2026-09-26 可见光圈:目标在探测方自己的圈 visR 以内、视线不被天体挡住 ⇒ 看得一清二楚(2026-09-29 前出浮标也有,0.7 倍)
   const dx = t.pos[0] - d.pos[0], dy = t.pos[1] - d.pos[1], dz = (t.pos[2] || 0) - (d.pos[2] || 0);
   const R = d.visR || COV.VIS_R; // 2026-09-27 每艘自己的全知圈(visRadiusOf,感知节拍开头写)
   return dx * dx + dy * dy + dz * dz < R * R && !(ENV.bodies.length && envOccluded(d.pos, t.pos));

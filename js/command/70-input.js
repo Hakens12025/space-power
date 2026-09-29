@@ -420,7 +420,7 @@ window.addEventListener('mouseup',e=>{
     }else if(selDrag.missileMode){ // Shift框选:选导弹群(不是船)
       const x=Math.min(selDrag.x0,selDrag.x1),y=Math.min(selDrag.y0,selDrag.y1);
       const w=Math.abs(selDrag.x1-selDrag.x0),h=Math.abs(selDrag.y1-selDrag.y0);
-      const inBox=projectiles.filter(p=>p.type==='missile'&&!p.done&&(adminMode||(p.shooter&&p.shooter.side==='blue'))); // 2026-09-28 框选只选我方弹(敌方弹单点看得见的)
+      const inBox=projectiles.filter(p=>p.type==='missile'&&!p.done&&projSeen(p)&&(adminMode||(p.shooter&&p.shooter.side==='blue'))); // 2026-09-28 框选只选我方弹(敌方弹单点看得见的)
       const hits=inBox.filter(p=>{const sp=toScreen(p.pos[0],p.pos[1]);return sp[0]>=x&&sp[0]<=x+w&&sp[1]>=y&&sp[1]<=y+h;});
       if(hits.length){
         selected=[]; // KIMI146修:清掉拖拽过程中误选的舰船,导弹信息面板才显示得出来

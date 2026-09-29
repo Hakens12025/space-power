@@ -77,7 +77,7 @@ function drawRange(){ // 测距工具(按住C):起点(或跟随船)→鼠标目�
   ctx.restore();
 }
 function viewPos(s){return (adminMode||s.side===VIEW)?s.pos:contactPos(s,VIEW);} // 2026-09-28 画面上对方东西画在哪 / 量多远的唯一出处:我方知道的位置(估计;GM 真值),交代不出给 null(不拿真值兜底)
-function projSeen(p){return adminMode||!p.shooter||p.shooter.side===VIEW||trkSees(VIEW,p);} // 2026-09-28 我方看不看得见这枚弹:画、点选、选中面板同一道门
+function projSeen(p){return adminMode||!p.shooter||trkSees(VIEW,p);} // 2026-09-28 我方看不看得见这枚弹:画、点选、选中面板同一道门(2026-09-29 自己的弹也按视野)
 function drawLocks(){ // 火力锁定:红色虚线
   for(const s of ships){
     if(s.dead||!s.lockedTarget||s.lockedTarget.dead||s.lockedTarget.side===s.side)continue;
@@ -215,7 +215,7 @@ function drawNetLinks(){ // v140:网内导弹细线连接;v142:星形连接(O(k)
   const byNet={};
   for(const p of projectiles){
     if(p.type!=='missile'||p.done||!p.netId)continue;
-    if(p.shooter&&p.shooter.side!==VIEW&&!adminMode&&!trkSees(VIEW,p))continue; // 感知过滤(普通模式敌方未点亮不画) TK4a:目击读航迹表
+    if(!projSeen(p))continue; // 感知过滤:看不见的弹不连线(2026-09-29 自己的弹也按视野)
     (byNet[p.netId]=byNet[p.netId]||[]).push(p);
   }
   ctx.save();

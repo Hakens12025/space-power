@@ -12,7 +12,7 @@
 const OBJ_CFG={ // 物理单位(km/s、s),用的地方经 PHYS 换算
   CIV:{N:5,SPD:[20,50],SIZE:[0.5,1.4],HP:200,TURN:60,RADAR:0.5,EMIT:0.3,PING:150}, // 数量 / 巡航速度 / 体型 / 结构 / 转向点火秒 / 带导航雷达的比例 / 雷达档 / 隔几秒扫一拍
   LURE:{HP:60,LIFE:3000,FLY:150,DRIFT:15,BURN_EVERY:300,BURN:30,SIZE:0.7}, // 结构 / 寿命 / 飞过去的速度 / 到位后漂的速度 / 隔多久点一次火 / 点多久 / 体型(冒充 DD)
-  BUOY:{N:2,HP:40,FLY:150,LIFE:6000,SIZE:0.15}, // 每舰几个 / 结构 / 飞行速度 / 到位后的寿命 / 体型(小而冷)
+  BUOY:{N:2,HP:40,FLY:150,LIFE:6000,SIZE:0.15,VIS:0.7}, // 每舰几个 / 结构 / 飞行速度 / 到位后的寿命 / 体型(小而冷)/ 可见光圈是舰船的几倍(2026-09-29 用户)
 };
 let OBJ_SEQ=0;
 function makeObj(kind,side,name,pos,o){ // 字段按感知内核与武器会读到的那几格给齐(sReq 严格取值,缺一格就抛)
@@ -40,7 +40,7 @@ function launchLure(shooter,pt){ // K1 诱饵:从放它的船身边飞到 pt(飞
 function launchBuoy(shooter,pt){ // K3 前出浮标:飞到 pt 停下
   if(!(shooter.buoys>0))return null;shooter.buoys--;
   const B=OBJ_CFG.BUOY,o=makeObj('buoy',shooter.side,'浮标-'+(++OBJ_SEQ),shooter.pos,{type:'beacon',on:false,size:B.SIZE,emit:SENS.BEACON_EMIT,recv:SENS.BEACON_RECV,hp:B.HP,maxHp:B.HP,
-    dest:[pt[0],pt[1],0],life:PHYS.t(B.LIFE),owner:shooter});
+    dest:[pt[0],pt[1],0],life:PHYS.t(B.LIFE),owner:shooter,visR:COV.VIS_R*B.VIS});
   rocks.push(o);return o;
 }
 function buoySetOn(o,on){if(!o||o.dead)return;o.on=!!on;setEmit(o,o.on?'paint':'silent');} // 遥控:开 = 照射(被对方听见),关 = 回到被动

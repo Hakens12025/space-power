@@ -50,6 +50,7 @@ function detectorsOf(side){ // 该阵营的传感器网络:存活舰 + 前出浮
 function detectLoop(dt){ // 一个感知节拍:蓝网络探红(litBlue)、红网络探蓝(litRed)——对称,不按玩家视角
   const el=(typeof dt==='number'&&isFinite(dt)&&dt>0)?dt:SENS.TICK; // SN4:core/05 透传实际累计的模拟秒;判定里手摇 detectLoop() 不传参,按标称节拍算
   for(const s of ships)if(!s.dead)s.visR=visRadiusOf(s); // 2026-09-27 每艘自己的全知圈,每拍按所处环境重算一次
+  for(const o of rocks)if(o.kind==='buoy'&&!o.dead)o.visR=visRadiusOf(o)*OBJ_CFG.BUOY.VIS; // 2026-09-29 前出浮标的可见光圈:舰船的 0.7 倍,同样按环境缩
   const pg=PING_TMP;pg.length=0; // 2026-09-27 扫描(用户选 A):s.pingReq 的船只在这一拍照射(对方也只在这一拍听得到),节拍末尾回到原来的发射档
   for(const s of ships.concat(rocks))if(s.pingReq){s.pingReq=false;if(s.dead)continue;pg.push(s,s.emitMode);if(s.emitMode!=='paint')setEmit(s,'paint');if(s.kind==='buoy'){s.pingOn=s.on;s.on=true;}s.pingT=simTime;} // 2026-09-29 浮标的照射看 on,这一拍临时打开 // 2026-09-27 民船的导航雷达也走这条路(world/14)
   detectFor('blue','red',el);
@@ -145,7 +146,7 @@ function detectFor(detSide,tgtSide,dt){
        现在只问模型一句话:这一拍定不定得出位置(c.fix)且确有量测(c.n>0)。写进去的是【估计】c.x/c.y,不是真值。
        DS183 那条纪律("拿静听去写 seenPos 等于凭空把距离变出来")原样成立:单站静听永远 fix=false,进不来。 */
     trkStep(tk,t,obs,el); // 先验增长 + 逐站信息累加 + 解椭圆 → 定得出位置就记最后定位 → 存握没握着
-    if(!(c.n>0)&&tk.lastPos&&!tk.memGone&&trkStill(tk))for(const d of dets){const R=d.visR||COV.VIS_R,q=tk.lastPos; // 2026-09-27 记忆:全知圈重新扫过那一点却没看到它 ⇒ 清掉
+    if(!(c.n>0)&&tk.lastPos&&!tk.memGone&&trkStill(tk))for(const d of all){const R=d.visR||COV.VIS_R,q=tk.lastPos; // 2026-09-27 记忆:全知圈重新扫过那一点却没看到它 ⇒ 清掉
       if(Math.hypot(d.pos[0]-q[0],d.pos[1]-q[1])<R&&!(ENV.bodies.length&&envOccluded(d.pos,q))){tk.memGone=true;break;}}
   }
 }
@@ -228,12 +229,11 @@ function contactPos(s,side){
   return trkPos(trkOf(side,s)); // TK2.0:live/coast 给估计、ghost 外推、heat/none 给 null —— 三条规则原样搬进 sensors/24 的 trkPos
 }
 
-function projVisibleTo(p,detSide){
-  if(p.shooter&&p.shooter.side===detSide)return true; // 己方弹药永远可见
+function projVisibleTo(p,detSide){ // 2026-09-29 用户:自己打出去的炮弹 / 导弹也按视野看(原来己方弹永远可见);模拟不读它,只管画面
   const {dets,bcons}=detectorsOf(detSide);
   const sg=projSig(p);
   const lum=sg.lum,refl=sg.refl,bg=ENV.clouds.length?envBg(p.pos,'opt'):0; // ENV2 云背景每颗弹丸算一次
   for(const d of dets){if(senseVis(d,p)||senseSeesOptical(lum,d,p.pos,bg)||senseSeesActive(refl,d,p.pos,p.vel))return true;} // 2026-09-26 可见光圈内的弹丸也一清二楚 // 照射那一路:不在 paint 档时 senseKACT 恒 0,判据天然为假,这里不必再判一次发射档
-  for(const b of bcons){if(senseSeesOptical(lum,b,p.pos,bg)||senseSeesActive(refl,b,p.pos,p.vel))return true;} // 信标恒在照射(BEACON_EMIT/BEACON_RECV),对反射 1.0 的目标正好 300,000 —— 与全库既有的信标 300k 逐位相同
+  for(const b of bcons){if(senseVis(b,p)||senseSeesOptical(lum,b,p.pos,bg)||senseSeesActive(refl,b,p.pos,p.vel))return true;} // 信标恒在照射(BEACON_EMIT/BEACON_RECV),对反射 1.0 的目标正好 300,000 —— 与全库既有的信标 300k 逐位相同
   return false;
 }
