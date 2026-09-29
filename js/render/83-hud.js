@@ -452,20 +452,11 @@ function drawHoverRings(){
     if(hoverRing==='mac'){ring(p,macEffRange(s),'主炮 50% ≈ '+Math.round(macEffRange(s)/1000)+'k');ring(p,macRangeAt(s,0.1),'主炮 10% ≈ '+Math.round(macRangeAt(s,0.1)/1000)+'k');} // WR1:没有射程门,画两档命中率的距离
     else if(hoverRing==='msl')ring(p,mslReach(s),'导弹 射程 ≈ '+Math.round(mslReach(s)/1000)+'k(中段熄火滑行)'); // WR1
     else if(hoverRing==='ciws'||hoverRing==='ciwsMsl'||hoverRing==='ciwsGun'){const c=ciwsOf(s);if(hoverRing!=='ciwsGun')ring(p,c.outer,'外圈拦截 '+Math.round(c.outer/1000)+'k');if(hoverRing!=='ciwsMsl')ring(p,c.inner,'内圈 '+Math.round(c.inner/1000)+'k');} // 2026-09-29 近防导弹只画外圈、近防炮只画内圈
-    else if(hoverRing==='emit'&&typeof actRangeOf==='function'&&typeof hearRangeOf==='function'){ // EM1-B:雷达的账 —— 开了能照多远、开了会在多远被听见(两圈都按【开着照射】算,不管此刻开没开:这是做决定前要看的账)
-      const ifPaint=Object.assign({},s,{emitMode:'paint'});
+    else if(hoverRing==='emit'&&typeof actRangeOf==='function') // EM1-B:开了能照多远(按【开着照射】算,不管此刻开没开)。2026-09-29 用户:雷达范围只画照射圈(「被听见」圈与静默交叉定位圈去掉)
       ring(p,actRangeOf(s),'雷达 '+Math.round(actRangeOf(s)/1000)+'k(对标准目标)'+(s.emitMode==='silent'?' · 现在静默':''));
-      ring(p,hearRangeOf(ifPaint,1),'开雷达会在 '+Math.round(hearRangeOf(ifPaint,1)/1000)+'k 被听见');
-    }
   }
-  if(hoverRing==='emit'&&typeof ladTriFix==='function'){ // 2026-09-27 静默交叉定位(用户选 C):全舰一体,基线 = 我方存活舰两两最远的距离;圈画在舰队中心
-    const B=ships.filter(s=>s.side==='blue'&&!s.dead);let bl=0,cx=0,cy=0;
-    for(const a of B){cx+=a.pos[0]/B.length;cy+=a.pos[1]/B.length;for(const b of B)bl=Math.max(bl,Math.hypot(a.pos[0]-b.pos[0],a.pos[1]-b.pos[1]));}
-    const r=B.length>=2?ladTriFix(bl):0;
-    if(r>0&&r*cam.zoom>=4){const p=toScreen(cx,cy);ctx.save();ctx.setLineDash([6,5]);ctx.strokeStyle='rgba(255,170,90,.6)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(p[0],p[1],r*cam.zoom,0,6.283);ctx.stroke();ctx.setLineDash([]);
-      ctx.fillStyle='rgba(255,190,120,.9)';ctx.font='10px Consolas';ctx.textAlign='center';ctx.textBaseline='top';
-      ctx.fillText('静默交叉定位 ≈ '+Math.round(r/1000)+'k(基线 '+Math.round(bl/1000)+'k · 对熄火驱逐舰,随太阳方位 ±)',p[0],p[1]+r*cam.zoom+2);ctx.restore();}
-  }
+  {const bu=hoverRing==='emit'&&typeof selBuoyOk==='function'?selBuoyOk():null; // 2026-09-29 用户:选中浮标时也看得到它的雷达范围
+    if(bu){const p=toScreen(bu.pos[0],bu.pos[1]),r=actRangeOf(bu);ring(p,r,'浮标雷达 '+Math.round(r/1000)+'k(对标准目标)'+(bu.on?'':' · 现在被动'));}}
 }
 /* 2026-09-27 雷达异常 / 红外异常(用户:「当出现了异常的时候,直接在主视角上面标注」;选「只报没定位的」「标在异常处、淡出」)。
    不另做探测,复用两份现成的数据:

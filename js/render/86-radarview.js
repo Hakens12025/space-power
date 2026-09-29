@@ -20,7 +20,7 @@ function rdvEsmBrg(E,L,k){return k.tb+(rdvHash(L.id||'bcn',E.id)*2-1)*k.half*0.6
 function rdvEsmRc(E,L,k){return k.rr+(rdvHash(E.id,L.id||'bcn')*2-1)*k.sr*0.6;} // 画在多远:幅度测距 + 每一对固定的偏移(± 0.6 x 纵向误差)
 function rdvPow(E){return Math.min(1,Math.sqrt(Math.max(0,E.emit||0)/RDV.EMIT_TOP));} // 功率系数 √(emit / 巡洋舰),封顶 1:民船 0.39、驱逐 / 诱饵 0.71、巡洋 / 浮标 1
 function rdvStdRefl(){return SENS.CLS.DD.size*SENS.CLS.DD.stealth;} // 标准目标:一艘驱逐舰的雷达反射
-function rdvPainters(){const a=[];for(const s of ships)if(s.side===VIEW&&!s.dead&&s.emitMode==='paint')a.push(s);return a;}
+function rdvPainters(){const a=[];for(const s of ships)if(s.side===VIEW&&!s.dead&&s.emitMode==='paint')a.push(s);for(const o of rockObjs())if(o.kind==='buoy'&&o.side===VIEW&&!o.dead&&o.emitMode==='paint')a.push(o);return a;} // 2026-09-29 用户:浮标开着照射也画它的范围
 function rdvDop(vr,a){ // 负 = 在接近:暖;正 = 在远离:冷(同演示页 dopCol)
   const t=Math.max(-1,Math.min(1,vr/600)),b=[232,238,244],e=t<0?[255,120,50]:[80,170,255],u=Math.abs(t);
   return 'rgba('+Math.round(b[0]+(e[0]-b[0])*u)+','+Math.round(b[1]+(e[1]-b[1])*u)+','+Math.round(b[2]+(e[2]-b[2])*u)+','+a.toFixed(2)+')';
@@ -132,7 +132,7 @@ function rdvDrawReturns(){
 function drawRadarView(){ // 每帧入口(84-scene,MAPV.mode === 'radar'):覆盖 → 被听见的区域 → 回波
   const P=rdvPainters();
   rdvCoverage(P);
-  for(const s of P)if(selected.indexOf(s.id)>=0)rdvSelected(s);
+  for(const s of P)if(selected.indexOf(s.id)>=0||s===selBuoy)rdvSelected(s);
   rdvDrawZones();
   rdvDrawReturns();
 }
