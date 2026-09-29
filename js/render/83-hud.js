@@ -473,7 +473,7 @@ function drawHoverRings(){
 }
 /* 2026-09-27 雷达异常 / 红外异常(用户:「当出现了异常的时候,直接在主视角上面标注」;选「只报没定位的」「标在异常处、淡出」)。
    不另做探测,复用两份现成的数据:
-   红外异常 = 蓝方航迹表里只有红外量测、还没定位的接触(heat 态 + cov.ch.opt),第一次出现、或开始点火 / 刹车 / 开火,且那团热的信噪比到发现门(1)时报;标在那团热附近(86 的 irvAnomPt:带一个随不确定度变小的偏移,不标真实位置),圈 = 红外画面的不确定半径。
+   红外异常 = 蓝方航迹表里只有红外量测、还没定位的接触(heat 态 + cov.ch.opt),第一次出现、或开始点火 / 刹车 / 开火,且那团热的信噪比到发现门(1)时报;带源 s,刻痕按它的方位画(86-ir2view ir2AnomDraw)。
    雷达异常 = sensors/21 的 ESM 记录里还没定位的辐射源,沉默 ANOM.GAP 游戏秒以上又听到时报(每次脉冲都会报,持续照射只报开头);标在雷达画面画这条记录的那一点(86 的 rdvEsmBrg / rdvEsmRc,带偏移),圈 = 那一片的等面积半径。
    2026-09-28 用户:异常圈不标真实位置,位置与大小走各层自己的画面;只是简易提醒,画法不跟各层走。
    2026-09-30 用户:红外异常不画扩散圈,改成刻痕:主视角弹在可见光圈边上,红外画面(红外2)弹在环 / 仪表外沿,围出交集的多边形也闪一下(86-ir2view)。雷达异常照旧画圈。
@@ -484,7 +484,7 @@ function anomScan(now){
   if(typeof trkEach==='function')trkEach(VIEW,(tk,st)=>{const s=trkSrc(tk);let a=ANOM.m.get(s);if(!a){a={ir:false,fl:0,fh:false,rd:-1e9,pend:false,ck:-1e9};ANOM.m.set(s,a);}
     const ir=st==='heat'&&!!trkCh(tk,'opt');
     if(ir){const fl=s.flame||0,fh=(s.fireHot||0)>0;if(!a.ir&&ANOM.base){}else if(!a.ir||(fl&&!a.fl)||(fh&&!a.fh))a.pend=true;a.fl=fl;a.fh=fh; // 第一次出现 / 点火 / 开火:待报。2026-09-29 用户:刚进对局时已经在的东西不报红外异常
-      if(a.pend&&simTime-a.ck>=1){a.ck=simTime;const h=irvHill(s,irvObs());if(h&&h.snr>=1){a.pend=false;const q=irvAnomPt(s);ANOM.list.push({k:'ir',s:s,x:q[0],y:q[1],r:q[2],t0:now});}}} // 红外画面里够亮才报,不够亮每游戏秒再看一次;带源 s(刻痕按它的方位画,86-ir2view)
+      if(a.pend&&simTime-a.ck>=1){a.ck=simTime;const h=irvHill(s,irvObs());if(h&&h.snr>=1){a.pend=false;ANOM.list.push({k:'ir',s:s,t0:now});}}} // 红外画面里够亮才报,不够亮每游戏秒再看一次;带源 s(刻痕按它的方位画,86-ir2view)
     else a.pend=false;
     a.ir=ir;});
   if(ANOM.base&&simTime>=SENS.TICK)ANOM.base=false; // 开局第一拍感知已经跑过(切视角时这一次扫描就算那一拍)

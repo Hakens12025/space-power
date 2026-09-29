@@ -1,6 +1,6 @@
 "use strict";
 /* ============================================================================
-   红外画面(右下角「红外」钮,MAPV.mode === 'ir'):演示页 demos/地图组/红外效果.html 的甲画法搬进引擎,物理全走引擎的传感器模型。
+   红外1 画面(2026-09-30 起只被 86-ir2view 裁进可见光圈里用:irvUpdate / drawIrFx;原来是右下角「红外」钮的整屏画面):演示页 demos/地图组/红外效果.html 的甲画法搬进引擎,物理全走引擎的传感器模型。
    每个热源(非我方的船、石头)在我方看得最清楚的那艘船眼里是一团:有效亮度 = senseOptLoWith(晒热 / 杂散光 / 云背景 / 消光),三道门 = senseOptBlocked。
    一道门(2026-09-28 用户):每一处热的色阶值 = GAIN x 这一份热的有效信噪比 K_IR·lo/d²(船身、尾焰、轮廓、导弹同一条),不分类型;
    团画在物体所在处,不偏(2026-09-28 用户:删掉红外的偏移);一定位就在 GLIDE 秒里缩成定位后的小团,丢了定位再慢慢胀回去;定位了的红外被三道门挡住也照画(热是物体固有的);
@@ -12,10 +12,10 @@
 const IRV_C={CELL:12,V0:0.02,VMAX:1000,CULL:0.0003,SIG_MIN:0.7,NOISE:0.005,NOISE_MS:200,TAIL_K:4,POS_P:3,MIX:0.875,
   BG_K:0.1,CLOUD_M:8,CLOUD_LV:4,CLOUD_SYNC:400,CLOUD_BATCH:1500,CLOUD_COARSE:1200,
   GAIN:0.2,SUB_P:0.64,DET_V:0.862,CONTRAST:0.928,FILL_K:1/3,GLYPH:1.3,SIG_MAX_PX:30,MSL_PX:3,CORE:0.4,CORE_W:0.45,
-  UNC_K:0.75,UNC_CAP:4,PH_K:0.3,OFF:0.5,GLIDE:0.6,EP_PX:0.5,FIRE_GROW:1,FIRE_Q:12,TW:2.0,PLAT:0.7,WARP:0.05,CHURN:0.15,CHURN_STEP:0.1,R_TOL:0.05};
+  UNC_K:0.75,UNC_CAP:4,PH_K:0.3,GLIDE:0.6,EP_PX:0.5,FIRE_GROW:1,FIRE_Q:12,TW:2.0,PLAT:0.7,WARP:0.05,CHURN:0.15,CHURN_STEP:0.1,R_TOL:0.05};
   // 一道门:信噪比 >= 1(内核发现门)色阶值 = DET_V x 信噪比^CONTRAST,< 1 = GAIN x 信噪比^SUB_P 淡出(见 irvV;2026-09-29 用户:旧开局距离 120 万、没有星云时开局就能淡淡看见对方,SUB_P 3 → 0.64,门下封顶仍是 GAIN)。2026-09-28 用户:发现即可见 —— 发现门处 0.22 → 0.35(DET_V),信噪比 1000 处照旧 0.94(CONTRAST 1.14 → 0.928);门下不动(没发现的暗热与星云混在一起);发现了的热再乘 (1 + 所在处底 / V0),比底亮出同样一截(irvjSplats;原来底把热的对比度又吃一次);BG_K = 背景(云 / 恒星光晕)压暗倍数;FILL_K = 石头填满距离 / (认出距离 x √体型)
   // GLYPH = 舰标团 / 舰标半径,封顶 SIG_MAX_PX;MSL_PX = 导弹小点;CORE / CORE_W = 定位后亮核的份额与宽度
-  // PH_K = 红外测距的相对 1σ(不确定半径 = 距离 x √(PH_K x 方位误差));OFF = 红外异常圈心偏移 / 不确定半径;GLIDE = 定位 / 丢定位时团缩小 / 胀大的时间常数(墙钟秒,只在跑的时候走);EP_PX = 团心挪不到这么多像素不重贴;FIRE_GROW = 开火一刻团半径多出几个舰标团(随开火那份热退回去,sensors/22 fireLvl;2026-09-28 用户:开火是红外亮度提升、团变大一点、发白一点,作为属性,不贴特效);FIRE_Q = 开火热退的过程中重算物理的档数;UNC_K = 热区对数半径的缩放;UNC_CAP = 团半径上限(x 舰标团);TW = 过渡宽度(x 团半径);PLAT = 高原;WARP / CHURN = 扭曲幅度与翻涌速度(rad / 墙钟秒,只在跑的时候走);
+  // PH_K = 红外测距的相对 1σ(不确定半径 = 距离 x √(PH_K x 方位误差));GLIDE = 定位 / 丢定位时团缩小 / 胀大的时间常数(墙钟秒,只在跑的时候走);EP_PX = 团心挪不到这么多像素不重贴;FIRE_GROW = 开火一刻团半径多出几个舰标团(随开火那份热退回去,sensors/22 fireLvl;2026-09-28 用户:开火是红外亮度提升、团变大一点、发白一点,作为属性,不贴特效);FIRE_Q = 开火热退的过程中重算物理的档数;UNC_K = 热区对数半径的缩放;UNC_CAP = 团半径上限(x 舰标团);TW = 过渡宽度(x 团半径);PLAT = 高原;WARP / CHURN = 扭曲幅度与翻涌速度(rad / 墙钟秒,只在跑的时候走);
   // CHURN_STEP = 翻涌累计把形状挪到这么多格才重贴;R_TOL = 团半径变了这个比例才重贴
   // CELL = 场的格子(屏幕 px;2026-09-30 用户:红外2 圈里的画面细一点点,14 → 12;2026-09-28 用户:像素变糊一点,5 → 8,与红外 x0.6 对应;2026-09-29 再糊一点,8 → 10 → 14,同时团的剖面放软:TW 1.4 → 2.0、PLAT 1.2 → 0.7);V0 / VMAX = 色阶的对数刻度;CULL = 山截断处;SIG_MIN = 山的最小宽(格);TAIL_K = 尾焰尾巴长宽比;POS_P / MIX = 恒星光晕的律
 const IRV_T0=-0.1;
@@ -31,10 +31,6 @@ function irvLutHex(t){const k=irvLutK(t)*4;return '#'+((1<<24)|(IRV_LUT[k]<<16)|
 function irvUnc(t){ // 不确定半径(km):离最近那艘我方船 d,按目标的固有亮度(体型 x 自身热;不含尾焰 / 开火 / 雷达,点火不跳)算方位误差 th,r = d x √(PH_K x th)。越近越小、连续
   let d=Infinity,o=null;for(const s of ships)if(s.side===VIEW&&!s.dead){const e=Math.hypot(t.pos[0]-s.pos[0],t.pos[1]-s.pos[1]);if(e<d){d=e;o=s;}}
   return o?d*Math.sqrt(IRV_C.PH_K*covTheta('opt',o,t,d,sReq(t,'size','ship')*(t.heatK===undefined?1:t.heatK))):0;
-}
-function irvAnomPt(t){ // 红外异常圈画在哪、多大:[x, y, 不确定半径 km] = 真实位置 + 每个目标方向固定的偏移 x OFF x 不确定半径(用户:异常圈不标真实位置);红外画面的团本身不偏;GM 不偏
-  const r=irvUnc(t);if(adminMode)return [t.pos[0],t.pos[1],r];
-  const h=irvPh(t)*1.618,k=IRV_C.OFF*r;return [t.pos[0]+Math.cos(h)*k,t.pos[1]+Math.sin(h)*k,r];
 }
 function irvObs(){const a=[];for(const s of ships)if(s.side===VIEW&&!s.dead)a.push(s);return a;} // 本视角的船(VIEW)
 function irvSrc(){const a=[];for(const s of ships)if(s.side!==VIEW&&!s.dead)a.push(s);for(const r of rocks)if(!r.dead&&r.side!==VIEW)a.push(r);return a;} // 2026-09-27 自己放的浮标不算热源
@@ -374,7 +370,6 @@ function irvUpdate(){
     irvFc(Math.max(0,Math.floor((r[0]-1)*C*dpr)-1),Math.max(0,Math.floor((r[2]-1)*C*dpr)-1),Math.min(V.fc.width,Math.ceil((r[1]+1)*C*dpr)+1),Math.min(V.fc.height,Math.ceil((r[3]+1)*C*dpr)+1),dpr);
   }
 }
-function drawIrView(){irvUpdate();ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(IRVC.fc,0,0);ctx.restore();drawIrFx();} // 每帧入口(84-scene,MAPV.mode === 'ir')
 function irvOff(){IRVC.live=false;} // 离开红外画面:下次进来整张重建
 /* 2026-09-28 一道门(用户:「所有红外效果走同一道门」):原来叠在热图上的贴图尾焰、点火一闪、喷出的热气、开火光圈都删了 ——
    尾焰在场里按尾焰那份信噪比画,开火 = 船身那份多亮一档、团胀大(内核 fireLvl,开火一刻最热、FIRE_S 里退完)。这里只剩导弹(弹丸不进热源表):

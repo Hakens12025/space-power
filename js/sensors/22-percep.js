@@ -59,8 +59,6 @@ let scDLit = null, scDSX = null, scDSY = null; // ENV2 观测方看得见光源(
 let scTDir = null, scTBg = null, scTSh = null, scCOn = 0; // ENV2 目标:这一对跟方向有关(Uint8)/ 云背景 / 在影子里(Uint8),精算步不重算
 let scON = 0, scOCap = 0, scOX = null, scOY = null, scOR2 = null; // ENV2 天体摊平(遮挡的内联副本读)
 let scLitC2 = 1;                   // ENV2 光源禁区的 cos^2 半角
-let scDBaf = null, scDBX = null, scDBY = null; // ENV2 观测方被自己尾焰致盲(Uint8)+ 致盲方向(XY 单位向量)
-let scBafC2 = 1;                   // ENV2 致盲半角的 cos^2
 const scT2 = [0, 0];               // ENV2 sensePrepare 的两格草稿
 let scPairLo = 0;                  // ENV2 最近一次精算的有效亮度
 
@@ -70,7 +68,6 @@ function senseGrowD(n) { // 探测器侧扩容:只在长度不够时整体重建
   scDX = new Float64Array(c); scDY = new Float64Array(c); scDZ = new Float64Array(c);
   scKIR = new Float64Array(c); scKRF = new Float64Array(c); scKACT = new Float64Array(c);
   scDLit = new Uint8Array(c); scDSX = new Float64Array(c); scDSY = new Float64Array(c); // ENV2
-  scDBaf = new Uint8Array(c); scDBX = new Float64Array(c); scDBY = new Float64Array(c); // ENV2
   scDCap = c;
 }
 function senseGrowT(n) { // 目标侧扩容:同上
@@ -226,7 +223,7 @@ function sensePairGrades(j, ti) {
   if (scDLit[j] === 1 && (g & 15) !== 0) { const k = -(dx * scDSX[j] + dy * scDSY[j]); if (k > 0 && k * k > (dx * dx + dy * dy) * scLitC2) g &= 48; } // ENV2 方向按观测方取;影子里的观测方 scDLit=0,不晃
   /* ENV1 动目标显示:目标在杂波里、径向速度低于门限 ⇒ 照射回波被当成杂波滤掉。与 envMtiBlind 同式 */
   if ((g & 48) !== 0 && scInF[ti] === 1) { const rv = dx * scTVX[ti] + dy * scTVY[ti] + dz * scTVZ[ti]; if (rv * rv < scMTI2 * d2) g &= 15; }
-  /* 2026-09-30 用户:自己的红外信号不影响自己 —— 自己尾焰致盲那一行删了(原来清光学,与 senseBaffled 同式) */
+  /* 2026-09-30 用户:自己的红外信号不影响自己(自己尾焰致盲删了) */
   if (g !== 0 && scON > 0) { // ENV2 天体遮挡三条通道一起清;端点在盘里的那个天体不算。与 envOccluded 逐位同式(dx = 观测 - 目标)
     const l2 = dx * dx + dy * dy, ax = scDX[j], ay = scDY[j];
     for (let b = 0; b < scON; b++) {

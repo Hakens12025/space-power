@@ -37,19 +37,6 @@ function senseSolar(o, t, tSh) { // ENV2 前三项的乘法顺序与 sensePrepar
 function senseOptLoWith(o, t, bg, tSh, oLit) { // ENV2 唯一的成对式子(senseResolve、render/86 红外画面都走它)
   return senseLoOf(optLum(t), 0, senseSolar(o, t, tSh), senseGlareAt(o.pos, t.pos, oLit), bg) * envExt(o.pos, t.pos); // ENV2 消光:连线上的云吃掉到达观测方的亮度
 }
-const SOP_B2 = [0, 0]; // ENV2 senseBaffled 的两格草稿
-function senseBafC2() { const c = Math.cos(SENS.BAF_DEG * Math.PI / 180); return c * c; } // ENV2 致盲半角的 cos^2(热循环与 senseBaffled 读同一个数)
-function senseBafDir(s, out) { // ENV2 被自己尾焰致盲的 XY 单位方向:主推瞎船尾、反推瞎船头;熄火 / 侧推 / 没有朝向 ⇒ null(拍板 A2)
-  const f = s.flame, fc = s.facing; if (!f || !fc) return null;
-  const l = Math.hypot(fc[0], fc[1]); if (!(l > 0)) return null;
-  const k = (f > 0 ? -1 : 1) / l; if (!out) out = [0, 0];
-  out[0] = k * fc[0]; out[1] = k * fc[1]; return out;
-}
-function senseBaffled(o, tpos) { // ENV2 o 看 tpos 的视线落在自己尾焰的致盲锥里(只挡光学)。与 22-percep 热循环那一行同式
-  const u = senseBafDir(o, SOP_B2); if (!u) return false;
-  const vx = tpos[0] - o.pos[0], vy = tpos[1] - o.pos[1], k = vx * u[0] + vy * u[1];
-  return k > 0 && k * k > (vx * vx + vy * vy) * senseBafC2();
-}
 function sensePlume(s, out) { // ENV2 尾焰:[喷口 XY 单位方向, 尾焰热 P = 体型 x 引擎档];熄火 / 没有朝向 ⇒ null(红外页甲的尾巴用)
   if (!s.flame || !s.facing) return null;
   const fc = s.facing, l = Math.hypot(fc[0], fc[1]) || 1, k = s.flame > 0 ? -1 : 1; if (!out) out = [0, 0, 0];
