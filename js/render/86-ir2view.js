@@ -5,7 +5,7 @@
    · 选中一艘:它自己的环。选中几艘:各艘一个环,叠着的地方归离得近的那艘;每个目标只画在一个环上 —— 那个方位的环露在外面、看它最清楚的那艘
      (用户选甲:舰队数据链认得出同一个目标);地图上画交集(照 86-radarview「被听见」:看得见的每艘一块扇形求交,围死才画);左边一个红外仪表(方位从选中这几艘的中心量)。
      没选:各船圈内红外 + 全舰队仪表,不画环。
-   · 物理同 irvHill:senseOptLoWith / senseOptBlocked / K_IR / 石头填满距离;定位了的不受三道门挡。发现门 = 内核(信噪比 1),不另加增益。
+   · 物理同 irvHill:senseOptLoWith / senseOptBlocked / K_IR / 石头填满距离;定位了的不受日光禁区 / 天体遮挡挡(自己的尾焰不挡自己,2026-09-30)。发现门 = 内核(信噪比 1),不另加增益。
    · 温度:senseOptParts 的自身热(石头 T_ROCK、船 T_HULL)/ 尾焰 / 晒热;开火那份(firePowerOf)从自身热里拆出来,温度随 fireLvl 退回船体温度。
    · 红外异常(83-hud anomScan 报的,带源):红外2 里弹在环 / 仪表外沿,围出交集的多边形也闪一下;主视角弹在可见光圈边上(ir2AnomDraw)。
    · 只在点开时算。环的数据:船等每帧重算,静止石头分 K 帧轮一遍(各占一个槽,重算那个槽时先减旧的再加新的);环的像素每帧按格上色。
@@ -18,8 +18,8 @@ const IR2_C={BAND:65,EDGE:'rgba(255,150,70,.5)',EDGE_W:1,RIN_MIN:30,N:360,M:8,T0
   // 石头的信噪比:我方船挪得不到距离的 PO_K 就照用上次的,至多连用 PO_N 轮
   NEB_K:0.02,NEB_L:2500000*CFG.scale,NEB_NB:180,NEB_DR:0.02,SUN_G:3,SUN_SIG:12,
   // 本底:星云发光 = NEB_K x 沿视线的光深(从圈边往外 NEB_L km,一圈 NEB_NB 个方向);环心挪动超过 NEB_DR x 圈半径才重算;恒星眩光峰值(色阶值)与角宽(度)
-  CELL:6,GRAIN:0.3,NOISE:0.005,NOISE_MS:200,FLK_PLUME:0.35,LC_A:[0.2,0.5],LC_P:[5,30],
-  // 颗粒:格子 px、亮处的乘性颗粒(锚在屏幕上)、底噪幅度与换一次的毫秒;尾焰抖动幅度;石头翻滚的明暗幅度与周期(秒)
+  CELL:4,GRAIN:0.3,NOISE:0.005,NOISE_MS:200,FLK_PLUME:0.35,LC_A:[0.2,0.5],LC_P:[5,30],
+  // 颗粒:格子 px(2026-09-30 用户:底噪颗粒小一点,6 → 4)、亮处的乘性颗粒(锚在屏幕上)、底噪幅度与换一次的毫秒;尾焰抖动幅度;石头翻滚的明暗幅度与周期(秒)
   INST_R:36,INST_B:50,INST_PAD:18,FLASH_S:1.5,ZONE_T:0.2,ZONE_S:200000*CFG.scale};
   // 仪表内圈半径 / 环厚 / 底板边 px;异常刻痕几秒淡出;交集每几墙钟秒重算一次、亮度刻度(√面积 2000 ~ 20 万 km 由亮到暗,同雷达画面)
 const IR2={gr:null,grW:0,grH:0,sk:null,still:false,key:'',fr:0,ns:0,wt:0,clk:{t:0},rings:[],inst:null,rec:new Map(),zones:[],zt:-1e9,RS:[],IS:[],QS:null,S:[],P:[],RI:[],rc:null,hud:null,hudT:-1e9,hudC:null,L32:null,lumMax:0};

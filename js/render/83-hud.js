@@ -355,25 +355,38 @@ function sigLegible(sx, sy, rr) {
   const fx = Math.max(Math.abs(sx), Math.abs(sx - W)), fy = Math.max(Math.abs(sy), Math.abs(sy - H));
   return rr < Math.hypot(fx, fy);
 }
-function sigFill(wx, wy, r, rgb, lbl) {
+function sigFill(wx, wy, r, rgb, lbl, rs) { // rs:按方向的半径(一圈均分、从 +x 起;给了就画轮廓,r = 其中最远)
   const p = toScreen(wx, wy), rr = r * cam.zoom;
   if (!sigLegible(p[0], p[1], rr)) return;
   ctx.save();
   ctx.translate(p[0], p[1]); ctx.scale(rr, rr);
   ctx.fillStyle = sigFade(rgb);
-  ctx.beginPath(); ctx.arc(0, 0, 1, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath();
+  if (rs) { const N = rs.length; for (let k = 0; k < N; k++) { const a = k / N * 2 * Math.PI, q = rs[k] / r; if (k) ctx.lineTo(Math.cos(a) * q, Math.sin(a) * q); else ctx.moveTo(Math.cos(a) * q, Math.sin(a) * q); } ctx.closePath(); }
+  else ctx.arc(0, 0, 1, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
   if (lbl) {
     /* 标注画在圈顶。⚠ 圈大到圆顶跑出画面时(被听见那一圈经常如此),直接写就是写到屏幕外 ——
        那时把这一行【钉到画面上沿】并注明"圈在画外",一帧里可能有好几条,逐行错开。 */
     ctx.save(); ctx.fillStyle = 'rgba(' + rgb + ',.8)'; ctx.font = '10px Consolas'; ctx.textAlign = 'center';
-    const x = Math.max(52, Math.min(W - 52, p[0])), y = p[1] - rr - 3;
+    const x = Math.max(52, Math.min(W - 52, p[0])), y = p[1] - (rs ? rs[Math.round(rs.length * 3 / 4) % rs.length] * cam.zoom : rr) - 3; // 轮廓:写在正上方那一点
     if (y >= 14) { ctx.textBaseline = 'bottom'; ctx.fillText(lbl, x, y); }
     else { ctx.textBaseline = 'bottom'; SIG.lblN++; ctx.fillText(lbl + '(圈在画外)', x, 14 + (SIG.lblN - 1) * 13); }
     ctx.restore();
   }
 }
 const sigKm = v => v >= 1e6 ? (v / 1e6).toFixed(2) + 'M' : (v >= 10000 ? Math.round(v / 1000) + 'k' : (v / 1000).toFixed(1) + 'k');
+const SIG_SEEN = { N: 32, T: 500, m: new WeakMap() }; // 2026-09-30 用户:「被看见」要算环境 —— 按 N 个方向的轮廓(sensors/25 senseSeenRange),每 T 毫秒(墙钟)、挪够了、亮度 / 世界变了才重算
+function sigSeen(s) { // {r: 各方向 km, mn, mx};内核缺席时 null(不给假兜底)
+  if (typeof senseSeenRange !== 'function') return null;
+  const now = nowMs(), L = optLum(s), c = SIG_SEEN.m.get(s);
+  if (c && now - c.t < SIG_SEEN.T && c.rev === ENV.rev && c.L === L && Math.hypot(s.pos[0] - c.x, s.pos[1] - c.y) < 0.01 * (c.mx + 1)) return c;
+  const N = SIG_SEEN.N, r = new Float64Array(N); let mn = Infinity, mx = 0;
+  for (let k = 0; k < N; k++) { const a = k / N * 2 * Math.PI; r[k] = senseSeenRange(s, Math.cos(a), Math.sin(a)); if (r[k] < mn) mn = r[k]; if (r[k] > mx) mx = r[k]; }
+  const e = { t: now, x: s.pos[0], y: s.pos[1], rev: ENV.rev, L: L, r: r, mn: mn, mx: mx }; SIG_SEEN.m.set(s, e); return e;
+}
+const sigSpan = e => e.mx - e.mn < 0.05 * e.mx ? sigKm(e.mx) : (e.mn < 1 ? '0' : sigKm(e.mn)) + '~' + sigKm(e.mx); // 各方向差不到半成就只写一个数;有方向看不见写 0
 function drawSignalView() {
   if (!SIG.on) return;
   SIG.lblN = 0;                       // 每帧归零:圈在画外的那几行靠它逐行错开
@@ -385,8 +398,8 @@ function drawSignalView() {
        留着是因为它写下了【意图】:是"这艘船此刻在不在喊"决定这一圈存不存在,不是"半径算出来碰巧是 0"。
        ⚠ 变异测试提醒过:把这道守卫直接删掉是个【假变异】(行为不变),真要测的是"有没有读发射档"。 */
     if (rfLoudOf(s) > 0) { const r = hearRangeOf(s, 1); sigFill(s.pos[0], s.pos[1], r, '84,224,208', sel ? ('被听见 ' + sigKm(r)) : null); }
-    const rv = visRangeOf(s);
-    sigFill(s.pos[0], s.pos[1], rv, '255,154,85', sel ? ('被看见 ' + sigKm(rv)) : null);
+    const e = sigSeen(s); if (!e) continue;
+    sigFill(s.pos[0], s.pos[1], e.mx, '255,154,85', sel ? ('被看见 ' + sigSpan(e)) : null, e.r); // 2026-09-30 按环境的轮廓(原来是标称值的圆 visRangeOf)
   }
 }
 

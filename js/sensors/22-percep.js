@@ -127,10 +127,10 @@ function senseVis(d, t) { // 2026-09-26 可见光圈:目标在探测方自己的
   const R = d.visR || COV.VIS_R; // 2026-09-27 每艘自己的全知圈(visRadiusOf,感知节拍开头写)
   return dx * dx + dy * dy + dz * dz < R * R && !(ENV.bodies.length && envOccluded(d.pos, t.pos));
 }
-function visRadiusOf(s) { // 2026-09-27 全知圈半径:基准 x 星云消光(沿观测舰两侧各取一段 VIS_R 的透过率取平均,下限 VIS_DUST_MIN)x 天体影子(VIS_SHADOW)
+function visRadiusOf(s) { // 2026-09-27 全知圈半径:基准 x 星云消光(八个方向各取一段 VIS_R 的透过率取平均,下限 VIS_DUST_MIN)x 天体影子(VIS_SHADOW)
   const R0 = COV.VIS_R, p = s.pos;
   let f = 1;
-  if (ENV.clouds.length) { const T = 0.5 * (envExt(p, [p[0] + R0, p[1], p[2]], 8) + envExt(p, [p[0] - R0, p[1], p[2]], 8)); f = Math.max(COV.VIS_DUST_MIN, T); }
+  if (ENV.clouds.length) { let T = 0; for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; T += envExt(p, [p[0] + R0 * Math.cos(a), p[1] + R0 * Math.sin(a), p[2]], 8); } f = Math.max(COV.VIS_DUST_MIN, T / 8); } // 2026-09-30 用户:原来只量东西两段,星云在正南北时圈不缩
   if (ENV.bodies.length && envInShadow(p)) f *= COV.VIS_SHADOW;
   return R0 * f;
 }
@@ -161,7 +161,6 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
   const lit = envHasLight(), nb = ENV.bodies.length > 0, cOn = ENV.clouds.length > 0; // ENV2 空环境 ⇒ scDLit / scTDir 全 0、scON = 0
   scCOn = cOn ? 1 : 0; // ENV2 有云 ⇒ 每一对都有消光,光学还在的对都要精算
   scLitC2 = ENV.stars.length ? ENV.stars[0].c2 : 1;
-  scBafC2 = senseBafC2();
   scMTI2 = envClutterOn() ? ENV_CFG.MTI_V * ENV_CFG.MTI_V : 0; // ENV2 杂波源:天体盘面、小行星
   { const S = ENV_CFG.RF_SUN, h = envLightHalf(); for (let i = 0; i < 4; i++) { const c = Math.cos(Math.min(Math.PI / 2, S.E[i] * h)); scRfC2[i] = c * c; scRfN[i] = 1 + S.K / Math.pow(S.M[i], 4); } } // 与 envRfNoise 同式
   const B = ENV.bodies; senseGrowO(B.length); scON = B.length;
@@ -175,8 +174,6 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
     scKIR[i] = a; scKRF[i] = b; scKACT[i] = c;
     const u = lit && !(nb && envInShadow(p)) ? envSunDirAt(p, scT2) : null; // ENV2 与 senseGlareAt 的 oLit 同式
     scDLit[i] = u ? 1 : 0; scDSX[i] = u ? u[0] : 0; scDSY[i] = u ? u[1] : 0;
-    const bu = senseBafDir(d, scT2); // ENV2 与 senseBaffled 同一个方向(信标没有 flame ⇒ 不致盲)
-    scDBaf[i] = bu ? 1 : 0; scDBX[i] = bu ? bu[0] : 0; scDBY[i] = bu ? bu[1] : 0;
     if (a > mIR) mIR = a; if (b > mRF) mRF = b; if (c > mACT) mACT = c; // 三条界各自取【本方最强的那一部设备】,所以界永远不低于任何一对的真实判据
   }
   for (let i = 0; i < nt; i++) {
@@ -229,7 +226,7 @@ function sensePairGrades(j, ti) {
   if (scDLit[j] === 1 && (g & 15) !== 0) { const k = -(dx * scDSX[j] + dy * scDSY[j]); if (k > 0 && k * k > (dx * dx + dy * dy) * scLitC2) g &= 48; } // ENV2 方向按观测方取;影子里的观测方 scDLit=0,不晃
   /* ENV1 动目标显示:目标在杂波里、径向速度低于门限 ⇒ 照射回波被当成杂波滤掉。与 envMtiBlind 同式 */
   if ((g & 48) !== 0 && scInF[ti] === 1) { const rv = dx * scTVX[ti] + dy * scTVY[ti] + dz * scTVZ[ti]; if (rv * rv < scMTI2 * d2) g &= 15; }
-  if (scDBaf[j] === 1 && (g & 3) !== 0) { const k = -(dx * scDBX[j] + dy * scDBY[j]); if (k > 0 && k * k > (dx * dx + dy * dy) * scBafC2) g &= 60; } // ENV2 自己尾焰致盲只清光学(拍板 A2),与 senseBaffled 同式
+  /* 2026-09-30 用户:自己的红外信号不影响自己 —— 自己尾焰致盲那一行删了(原来清光学,与 senseBaffled 同式) */
   if (g !== 0 && scON > 0) { // ENV2 天体遮挡三条通道一起清;端点在盘里的那个天体不算。与 envOccluded 逐位同式(dx = 观测 - 目标)
     const l2 = dx * dx + dy * dy, ax = scDX[j], ay = scDY[j];
     for (let b = 0; b < scON; b++) {

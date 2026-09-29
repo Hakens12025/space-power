@@ -6,7 +6,7 @@
 - `22-percep.js` 热循环:`sensePrepare`(O(N) 预计算)/ `sensePairGrades`(每条通道 0 / 1,不分强弱档)、`senseResolve`(热循环外的精算)
 - `23-cov.js` 误差椭圆内核 `stepCov` / `covHeld` / `covTheta`、距离梯子 `LAD` 与反解 `ladApply`、交会预览 `ladTriFix`
 - `24-track.js` 每方一张航迹表 `TRK`(`trkAdopt` / `trkEnsure` / `trkStep` / `trkEach` / `trkFoe` / `trkPid`)
-- `25-optpair.js` ENV2 成对有效亮度 `senseOptLoWith`、杂散光、相位、致盲 `senseBaffled`、红外画面用的 `senseOptBlocked` / `senseOptParts` / `sensePlume`
+- `25-optpair.js` ENV2 成对有效亮度 `senseOptLoWith`、杂散光、相位、从某方向被看见的距离 `senseSeenRange`(信号视野与右栏读数用)、红外画面用的 `senseOptBlocked` / `senseOptParts` / `sensePlume`
 
 ## 模型
 - 两种看法:光学 / 红外(纯被动,与探测方无关)与雷达(一部设备两种模式:静听 / 照射)。被看方字段 `size` / `stealth`(只乘雷达),探测方字段 `emit` / `recv`。
@@ -22,10 +22,10 @@
 - 存在 ≠ 知道:`if(trkOf(...))` 当"知道"用是泄漏;知道 = `trkState(tk)!=='none'`。"自己这一方"在查询那一刻判。
 - 自动化挑目标一律问 `trkPid`(身份至少疑似且是船,Weapons Tight):自动索敌、网分配、导弹重选 / 复锁、红方集火;"还有没有可分配的"与分配器同口径。显示、接触降速、玩家的火控序列问 `trkFoe`。
 - 热循环(`sensePairGrades`)里不许除法、开方、Math 调用、分配;这些都放 `sensePrepare`。剪枝上界必须含照射那一路(否则冷目标主炮静默哑火)。
-- 热循环里的内联副本(太阳禁区、恒星射频噪声锥、MTI、天体遮挡、尾焰致盲)与函数版(`envSunBlind` / `envRfNoise` / `envMtiBlind` / `envOccluded` / `senseBaffled` 等)必须同式;改一边就改另一边。
+- 热循环里的内联副本(太阳禁区、恒星射频噪声锥、MTI、天体遮挡)与函数版(`envSunBlind` / `envRfNoise` / `envMtiBlind` / `envOccluded` 等)必须同式,改一边就改另一边。自己的尾焰不致盲自己(2026-09-30 用户)。
 - 航位推算(2026-09-27):没有量测、或已定位的航迹这一拍只剩单站光学方位 ⇒ 误差按 ½·a·τ² 长(`kin.tau` = 距上次测到位置的秒数,存在航迹 `tk.tau`;a = `trkAccPrior`),红外看得见它没在喷就不长;有测距或多站交会的一拍照旧复利(梯子标定只在这一路)。陈旧(coast)与失联位置都走 `trkDR`;速度只在测到位置的一拍更新。单站方位续着的估计点 = 方位线上、离观测站与推算点等远。
 - 扫描:`s.pingReq` 的船在下一拍照射一拍(`detectLoop` 里临时 `setEmit`,节拍末尾回原档,`s.pingT` 记时刻)。静默交叉定位预览读 `ladTriFix(基线)`。
-- 全知圈(可见光,不从红外拆出):每艘舰自己的半径 `s.visR` = `COV.VIS_R`(11.7 万 x scale)x 星云消光(观测舰两侧各一段的透过率,下限 `VIS_DUST_MIN`)x 天体影子 `VIS_SHADOW`,每拍 `visRadiusOf` 重算(前出浮标也有,x `OBJ_CFG.BUOY.VIS` 0.7);圈内、视线不被天体挡住的一切这一拍直接定位并确认(通道 `vis`,`senseVis` 判,不经热循环;弹丸同样,自己打出去的也不例外 —— `projVisibleTo` 没有己方捷径)。双方对称;灰雾(84 的 `drawVisFog`)画的是同一个圈。
+- 全知圈(可见光,不从红外拆出):每艘舰自己的半径 `s.visR` = `COV.VIS_R`(11.7 万 x scale)x 星云消光(八个方向各一段的透过率取平均,还是正圆,下限 `VIS_DUST_MIN`)x 天体影子 `VIS_SHADOW`,每拍 `visRadiusOf` 重算(前出浮标也有,x `OBJ_CFG.BUOY.VIS` 0.7);圈内、视线不被天体挡住的一切这一拍直接定位并确认(通道 `vis`,`senseVis` 判,不经热循环;弹丸同样,自己打出去的也不例外 —— `projVisibleTo` 没有己方捷径)。双方对称;灰雾(84 的 `drawVisFog`)画的是同一个圈。
 - 静听带幅度测距(RSS):纵向误差 = 距离 x `COV.RSS_UNK`(没听出型号)/ `COV.RSS_ID`(听出型号,与 `L_LIS` 同一个门)。雷达画面的高斯团读 21 的 `esmHear` 写的 `k.rr` / `k.sr`,与 23 的静听量测同式,改一边就改另一边。
 - 雷达的环境:朝光源的锥里射频噪声抬高(静听按 噪声^(-1/2)、照射按 噪声^(-1/4) 缩);杂波(天体盘面旁、小行星旁,`envInClutter`)里的慢目标过 MTI;星云对射频透明。
 - 单点谓词与热循环共用缓冲,不许在扫描中途调。`detectLoop` 要收真实经过的模拟秒数。

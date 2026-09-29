@@ -71,9 +71,9 @@ function engRows(s){
    刻意【不给假兜底】:内核没加载好时整段不出行(fail-closed),而不是印一个看着完全正常的数字 ——
    这块面板的全部价值就是这三个数可信。 */
 function senseRows(s){
-  if(typeof visRangeOf!=='function'||typeof hearRangeOf!=='function'||typeof actRangeOf!=='function')return '';
+  if(typeof sigSeen!=='function'||typeof hearRangeOf!=='function'||typeof actRangeOf!=='function')return '';const se=sigSeen(s);if(!se)return '';
   const k=v=>Math.round(v/1000)+'k';
-  // 光学:亮度 = 体型 ×(1 + 功耗),功耗 = 引擎档 + 发射档。档位字只拿 engPowerOf 的返回值与 SENS.P_ENG_MAIN 比 ——
+  // 光学:按环境的被看见距离,各方向最近~最远(83 sigSeen,2026-09-30);亮度 = 体型 ×(1 + 功耗),功耗 = 引擎档 + 发射档。档位字只拿 engPowerOf 的返回值与 SENS.P_ENG_MAIN 比 ——
   //   不在这儿重排一遍引擎状态机(那会变成 ENG_LAMPS 之外的第三份「什么算满推」)。
   const ep=(typeof engPowerOf==='function')?engPowerOf(s):0;
   const est=(ep>=SENS.P_ENG_REV)?'反推':((ep>=SENS.P_ENG_MAIN)?'满推':(ep>0?'机动':'熄火')); // RV1:反推单列一档(更亮),读数上也要分得出
@@ -83,7 +83,7 @@ function senseRows(s){
   const lb=(typeof emitLabel==='function')?emitLabel(s.emitMode):String(s.emitMode);
   const heard=silent?'静默 · 听不见':(k(hearRangeOf(s))+' 被听见 · '+lb);
   // 照射:actRangeOf 缺省 refl=1 = 对【标准目标】那一档;打隐身舰更近。silent/jam 两档没在照射,标出来免得读成「此刻的覆盖」。
-  return `<div class="row"><span class="k">光学</span><span class="v">${k(visRangeOf(s))} 可见 · ${est}</span></div>
+  return `<div class="row"><span class="k">光学</span><span class="v">${sigSpan(se)} 可见 · ${est}</span></div>
     <div class="row"><span class="k">射频</span><span class="v">${heard}</span></div>
     <div class="row"><span class="k">照射</span><span class="v">${k(actRangeOf(s))}(标准目标)${silent?' · 未开机':(s.emitMode==='jam'?' · 干扰中不照射':'')}</span></div>`;
 }

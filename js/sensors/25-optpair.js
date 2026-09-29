@@ -60,7 +60,22 @@ function senseOptParts(o, t) { // ENV2 o 看 t 的亮度拆成三份:自身 / �
   const L = optLum(t), pl = sensePlume(t, SOP_P3), P = pl ? pl[2] : 0;
   return { self: L - P, plume: P, solar: senseSolar(o, t) };
 }
-function senseOptBlocked(o, t) { // ENV2 光学看不见这一对:光源禁区 / 天体遮挡 / 自己尾焰致盲(红外页甲的三道门)
-  return envSunBlind(o.pos, t.pos) || (ENV.bodies.length > 0 && envOccluded(o.pos, t.pos)) || senseBaffled(o, t.pos);
+function senseOptBlocked(o, t) { // ENV2 光学看不见这一对:光源禁区 / 天体遮挡(2026-09-30 用户:自己的红外信号不影响自己 —— 自己尾焰致盲这一道删了)
+  return envSunBlind(o.pos, t.pos) || (ENV.bodies.length > 0 && envOccluded(o.pos, t.pos));
+}
+const SOP_SR = { pos: [0, 0, 0] }; // senseSeenRange 的假观测方
+function senseSeenRange(s, ux, uy) { // 2026-09-30 从方向 (ux, uy) 来的对手(基准光学接收机 K_IR)在多远处看 s 正好过发现门(信噪比 1),km;0 = 这个方向看不见。
+  // 与 senseOptLoWith 同一条式子:路上的云消光、s 背后的云背景、对方看 s 时的恒星杂散光 / 禁区、按观察角度的晒热;射线先碰到的天体盘挡住它身后。距离按不动点迭代(消光随距离变)
+  const L = optLum(s), p = s.pos, bg = ENV.clouds.length ? envBg(p, 'opt') : 0, lit = envHasLight(), nb = ENV.bodies.length > 0, tSh = lit && nb && envInShadow(p);
+  let lim = Infinity;
+  for (const b of ENV.bodies) { const wx = b.x - p[0], wy = b.y - p[1], w2 = wx * wx + wy * wy, pr = wx * ux + wy * uy; if (pr <= 0 || w2 < b.r2) continue; const c2 = w2 - pr * pr; if (c2 < b.r2) lim = Math.min(lim, pr - Math.sqrt(b.r2 - c2)); } // s 在盘里时那个天体不算(同 envOccluded)
+  const o = SOP_SR.pos; let d = Math.sqrt(SENS.K_IR * L);
+  for (let it = 0; it < 4; it++) {
+    const dd = Math.min(d, lim); o[0] = p[0] + ux * dd; o[1] = p[1] + uy * dd; o[2] = p[2] || 0;
+    if (envSunBlind(o, p)) return 0; // 对方看 s 时恒星正在 s 身后(对方在影子里不算)
+    const lo = senseLoOf(L, 0, senseSolar(SOP_SR, s, tSh), senseGlareAt(o, p), bg) * envExt(o, p);
+    d = Math.sqrt(SENS.K_IR * Math.max(0, lo));
+  }
+  return Math.min(d, lim);
 }
 function senseContrast(o, t) { const q = senseGlareAt(o.pos, t.pos) + (ENV.clouds.length ? SENS.BG_DUST * envBg(t.pos, 'opt') : 0); return q > 0 ? 1 / Math.sqrt(1 + q / SENS.BG_G0) : 1; } // ENV2 背景受限的对比度因子

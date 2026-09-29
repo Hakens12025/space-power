@@ -39,7 +39,7 @@ function irvAnomPt(t){ // 红外异常圈画在哪、多大:[x, y, 不确定半�
 function irvObs(){const a=[];for(const s of ships)if(s.side===VIEW&&!s.dead)a.push(s);return a;} // 本视角的船(VIEW)
 function irvSrc(){const a=[];for(const s of ships)if(s.side!==VIEW&&!s.dead)a.push(s);for(const r of rocks)if(!r.dead&&r.side!==VIEW)a.push(r);return a;} // 2026-09-27 自己放的浮标不算热源
 function irvV(snr){return snr>=1?IRV_C.DET_V*Math.pow(snr,IRV_C.CONTRAST):IRV_C.GAIN*Math.pow(snr,IRV_C.SUB_P);} // 一道门:信噪比 → 色阶值;内核发现门限(信噪比 1)以下按 SUB_P 次方淡出(远处淡淡一团),门下封顶 GAIN,发现门处跳到 DET_V(增益调高以后不许跑在内核前面)
-function irvHill(t,obs,kn){ // 一座山:信噪比(一道门的输入),取看得最清楚的那艘我方船。kn = 我方已定位它:三道门(日光禁区 / 天体遮挡 / 自己尾焰致盲)不挡,照画它的热(用户:红外是固有的特性,可见光里红团不许消失)
+function irvHill(t,obs,kn){ // 一座山:信噪比(一道门的输入),取看得最清楚的那艘我方船。kn = 我方已定位它:日光禁区 / 天体遮挡不挡(2026-09-30 自己尾焰致盲删了),照画它的热(用户:红外是固有的特性,可见光里红团不许消失)
   let best=null,bg=NaN,tSh=false;const lit=envHasLight(),nb=ENV.bodies.length>0;
   for(let n=0;n<obs.length;n++){const o=obs[n];
     if(!kn&&senseOptBlocked(o,t))continue;
