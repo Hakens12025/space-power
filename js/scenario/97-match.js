@@ -44,7 +44,7 @@ function matchGenWorld(seed,B,R){
   const w={bodies:[],clouds:[],asteroids:[]};
   if(r()<0.5)w.sun={brg:Math.round(r()*360),half:10};
   else{const a=r()*2*Math.PI,d=6e6+r()*3e6;w.stars=[{x:Math.round(mx+Math.cos(a)*d),y:Math.round(my+Math.sin(a)*d)}];}
-  for(let n=Math.floor(r()*3),k=0;k<40&&w.bodies.length<n;k++){const p=inA(),rad=50000+r()*30000; // 2026-09-26 中心摆进游玩区,离两军重心 >= 半径+10 万、彼此 >= 两半径+10 万,摆不下就少摆:原 对阵轴上、离两军 40 万、彼此 80 万
+  for(let n=Math.floor(r()*3),k=0;k<40&&w.bodies.length<n;k++){const p=inA(),rad=70000*(0.6+r()*1.4); // 2026-09-29 用户:天体大小要有差异 —— 木星级 7 万 x 0.6~2 倍(原 5~8 万)。2026-09-26 中心摆进游玩区,离两军重心 >= 半径+10 万、彼此 >= 两半径+10 万,摆不下就少摆:原 对阵轴上、离两军 40 万、彼此 80 万
     if(far(p,B,rad+100000*CFG.scale)&&far(p,R,rad+100000*CFG.scale)&&w.bodies.every(function(b){return far(p,[b.x,b.y],rad+b.r+100000*CFG.scale);}))w.bodies.push({x:Math.round(p[0]),y:Math.round(p[1]),r:Math.round(rad)});}
   for(let n=Math.floor(r()*3),k=0;k<n;k++){const p=at(r()*1.6-0.8,r()*2-1),a=2e6*Math.pow(8,r()),b=a*(0.4+0.6*r());
     w.clouds.push({x:Math.round(p[0]),y:Math.round(p[1]),a:Math.round(a),b:Math.round(b),ang:Math.round(r()*180),seed:Math.floor(r()*1e6)});}
