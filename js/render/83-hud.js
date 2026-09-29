@@ -463,6 +463,7 @@ function drawHoverRings(){
    红外异常 = 蓝方航迹表里只有红外量测、还没定位的接触(heat 态 + cov.ch.opt),第一次出现、或开始点火 / 刹车 / 开火,且那团热的信噪比到发现门(1)时报;标在那团热附近(86 的 irvAnomPt:带一个随不确定度变小的偏移,不标真实位置),圈 = 红外画面的不确定半径。
    雷达异常 = sensors/21 的 ESM 记录里还没定位的辐射源,沉默 ANOM.GAP 游戏秒以上又听到时报(每次脉冲都会报,持续照射只报开头);标在雷达画面画这条记录的那一点(86 的 rdvEsmBrg / rdvEsmRc,带偏移),圈 = 那一片的等面积半径。
    2026-09-28 用户:异常圈不标真实位置,位置与大小走各层自己的画面;只是简易提醒,画法不跟各层走。
+   2026-09-30 用户:红外异常不画扩散圈,改成刻痕:主视角弹在可见光圈边上,红外画面(红外2)弹在环 / 仪表外沿,围出交集的多边形也闪一下(86-ir2view)。雷达异常照旧画圈。
    约 ANOM.LIFE 毫秒淡出;屏幕上相近的同类只画一个。 */
 const ANOM={m:new WeakMap(),list:[],LIFE:3000,GAP:20,t:-1e9,base:true,RMIN:8,RMAX:50,FADE:0.3,EXP:4}; // 2026-09-28 用户:圈太大、衰减太慢 —— 上限 160 → 80 → 50 px、寿命 5 → 3 秒、从三成寿命起就指数暗淡(原一半);红外异常的门 = 发现门(信噪比 1,红外画面上正好是保底色阶那一档;2026-09-28 用户认可,原 0.30 ≈ 信噪比 2.2) // 2026-09-28 圈的屏幕半径夹在 RMIN~RMAX px(不确定半径 x 缩放);FADE = 从寿命的这一处起指数暗淡,EXP = 指数的陡度
 function anomScan(now){
@@ -470,7 +471,7 @@ function anomScan(now){
   if(typeof trkEach==='function')trkEach(VIEW,(tk,st)=>{const s=trkSrc(tk);let a=ANOM.m.get(s);if(!a){a={ir:false,fl:0,fh:false,rd:-1e9,pend:false,ck:-1e9};ANOM.m.set(s,a);}
     const ir=st==='heat'&&!!trkCh(tk,'opt');
     if(ir){const fl=s.flame||0,fh=(s.fireHot||0)>0;if(!a.ir&&ANOM.base){}else if(!a.ir||(fl&&!a.fl)||(fh&&!a.fh))a.pend=true;a.fl=fl;a.fh=fh; // 第一次出现 / 点火 / 开火:待报。2026-09-29 用户:刚进对局时已经在的东西不报红外异常
-      if(a.pend&&simTime-a.ck>=1){a.ck=simTime;const h=irvHill(s,irvObs());if(h&&h.snr>=1){a.pend=false;const q=irvAnomPt(s);ANOM.list.push({k:'ir',x:q[0],y:q[1],r:q[2],t0:now});}}} // 红外画面里够亮才报,不够亮每游戏秒再看一次
+      if(a.pend&&simTime-a.ck>=1){a.ck=simTime;const h=irvHill(s,irvObs());if(h&&h.snr>=1){a.pend=false;const q=irvAnomPt(s);ANOM.list.push({k:'ir',s:s,x:q[0],y:q[1],r:q[2],t0:now});}}} // 红外画面里够亮才报,不够亮每游戏秒再看一次;带源 s(刻痕按它的方位画,86-ir2view)
     else a.pend=false;
     a.ir=ir;});
   if(ANOM.base&&simTime>=SENS.TICK)ANOM.base=false; // 开局第一拍感知已经跑过(切视角时这一次扫描就算那一拍)
@@ -480,8 +481,9 @@ function anomScan(now){
 }
 function drawAnomalies(){
   const now=nowMs();anomScan(now);if(!ANOM.list.length)return;
-  const drawn=[];ctx.save();ctx.font='11px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='bottom';
+  const drawn=[],irs=[];ctx.save();ctx.font='11px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='bottom';
   for(let i=ANOM.list.length-1;i>=0;i--){const e=ANOM.list[i],k=(now-e.t0)/ANOM.LIFE;if(k>=1||k<0){ANOM.list.splice(i,1);continue;}
+    if(e.k==='ir'){irs.push(e);continue;} // 2026-09-30 用户:红外异常不画扩散圈 —— 主视角弹在可见光圈边上、红外画面弹在环外沿(86-ir2view ir2AnomDraw)
     const p=toScreen(e.x,e.y);if(p[0]<-40||p[0]>W+40||p[1]<-40||p[1]>H+40)continue;
     if(drawn.some(d=>d[2]===e.k&&Math.hypot(d[0]-p[0],d[1]-p[1])<40))continue;drawn.push([p[0],p[1],e.k]);
     const col=e.k==='ir'?'255,180,84':'84,224,208',x=(k-ANOM.FADE)/(1-ANOM.FADE),a=k<0.05?k/0.05:(x<=0?1:(Math.exp(-ANOM.EXP*x)-Math.exp(-ANOM.EXP))/(1-Math.exp(-ANOM.EXP)));
@@ -489,6 +491,7 @@ function drawAnomalies(){
     ctx.globalAlpha=a;ctx.strokeStyle='rgb('+col+')';ctx.lineWidth=1.3;ctx.beginPath();ctx.arc(p[0],p[1],R,0,6.283);ctx.stroke();
     ctx.fillStyle='rgb('+col+')';ctx.fillText(e.k==='ir'?'红外异常':'雷达异常',p[0],p[1]-R-2);}
   ctx.restore();
+  if(irs.length&&typeof ir2AnomDraw==='function')ir2AnomDraw(irs,now);
 }
 const SHTR={MS:8000,SEG:10,LEN:3000000}; // 2026-09-28 炮弹来路线:墙钟亮多久 / 分几段渐隐 / 没有游玩区时往回画多长 km
 const SHTR_W=new WeakMap(); // 记录 → 第一次画的墙钟

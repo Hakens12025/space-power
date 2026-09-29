@@ -416,15 +416,16 @@ function render(){
   /* SN6 三级星图:先推进跳层动画、算出这一档缩放落在哪一层(连续权重 + 带迟滞的离散层),
      底色再按权重交叉淡化 —— 换层是淡入淡出不是跳变。详见 render/80-viewtier。 */
   vtFrame();
-  const irOn=typeof MAPV!=='undefined'&&MAPV.mode==='ir'; // 右下角「红外」钮:地图换成红外画面(render/86-irview),只叠我方舰标,敌舰与石头只以热出现
+  const irOn=typeof MAPV!=='undefined'&&MAPV.mode==='ir'; // 右下角「红外」钮:普通地图上叠红外2(render/86-ir2view:可见光圈里是红外画面,圈外的热压到环上),敌舰与石头只以热出现
   const rdOn=typeof MAPV!=='undefined'&&MAPV.mode==='radar',sv=irOn||rdOn; // 右下角「雷达」钮:普通地图上叠雷达画面(render/86-radarview),敌舰与石头只以回波 / 被听见的区域出现
   ctx.fillStyle=vtBg();ctx.fillRect(0,0,cv.width,cv.height);
-  if(!irOn){if(typeof irvOff==='function')irvOff();drawStars();}
+  if(!irOn&&typeof irvOff==='function')irvOff();
+  drawStars();
   drawGrid();
-  if(irOn)drawIrView();
-  else if(typeof drawEnv==='function')drawEnv(); // ENV1 天体 + 太阳方向:地图事实,画在网格之后、一切接触之前(render/81-env)
+  if(typeof drawEnv==='function')drawEnv(); // ENV1 天体 + 太阳方向:地图事实,画在网格之后、一切接触之前(render/81-env)
   drawArena(); // 2026-09-26 单局游玩区边界:天体之后、接触之前;普通 / 红外 / 雷达三种画面都走这一行
   if(!sv)drawVisFog(); // 2026-09-26 可见光圈的灰色迷雾:只在普通地图画面,画在一切接触之前
+  if(irOn)drawIr2View(); // 2026-09-30 红外2(用户:「红外」钮直接换成它)
   if(rdOn)drawRadarView();
   if(typeof drawSunLines==='function')drawSunLines(); // 「太阳线」钮:叠在普通 / 红外 / 雷达任一画面上
   drawSignalView(); // SN6 信号视野(右下角工具钮):我方每艘舰的【被探测范围】。画在最底下——它是底图
@@ -439,6 +440,7 @@ function render(){
   drawProjectiles();
   if(typeof drawShellTraces==='function')drawShellTraces(); // 2026-09-28 敌方炮弹来路(render/83)
   drawHoverRings();if(typeof drawPings==='function')drawPings();if(typeof drawForceMarks==='function')drawForceMarks();if(typeof drawAnomalies==='function')drawAnomalies(); // 2026-09-27 雷达异常 / 红外异常(render/83) // 2026-09-27 扫描脉冲圈(render/83)。RF2 简化UI:底栏武器钮 hover 时选中舰的射程圈
+  if(irOn&&typeof drawIr2Hud==='function')drawIr2Hud(); // 2026-09-30 红外仪表(左边,加舰条与特写窗之间)
   drawHits();drawCiwsFx(); // 2026-09-28 近防炮曳光 + 火花(render/83)
   if(typeof drawShieldFx==='function')drawShieldFx(); // 2026-09-29 护盾打中 / 击破 / 重启 / 回满(render/83)
   drawLocks();
