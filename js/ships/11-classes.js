@@ -10,9 +10,9 @@ const CLS_MOB={ // 舰种差异化机动:转向率 / 推进加速度(太空无�
   /* 2026-09-26 用户:"舰船的加速减速度我们需要调整,使其加减速更慢" —— 推进加速度降到 1/4(原 DD 20 / CA 15 km/s²);驱逐舰到高速档 800 km/s 约 160 s。这一轮只看速度,不动武器与闪避的数 */
   CA:{turnRate:PHYS.w(0.016),thrust:PHYS.a(0.0375),speedGears:[0,PHYS.v(20),PHYS.v(40),PHYS.v(70),-1]}, // 2026-09-26 物理单位:3.8 g、转向 0.9°/s、速度档 20 / 40 / 70 km/s // TIER1 原 CRUISER 马拉松级:重,加速适中;DS148速度档按舰种(巡洋偏慢)
 };
-const CLS_STRUCT={ // RF3 舰体表:结构/信标载量(非武器数据,从原 CLS_WPN 拆出;武器数值已移 weapons/51-defs 的 WPN 定义表)
-  DD:{hp:550, beacon:2, shield:200}, // 2026-09-29 shield = 护盾(用户:舰队护盾,血量没船体高;weapons/55) // TIER1 原 FRIGATE 护卫:beacon 由 makeShip 里无条件 2 枚改表驱动 TODO(TIER-BAL) 载量待定
-  CA:{hp:900, beacon:0, shield:300}, // TIER1 原 CRUISER 巡洋 TODO(TIER-BAL) beacon 载量待定
+const CLS_STRUCT={ // RF3 舰体表:结构(非武器数据,从原 CLS_WPN 拆出;武器数值已移 weapons/51-defs 的 WPN 定义表)
+  DD:{hp:550, shield:200}, // 2026-09-29 shield = 护盾(用户:舰队护盾,血量没船体高;weapons/55) // TIER1 原 FRIGATE 护卫
+  CA:{hp:900, shield:300}, // TIER1 原 CRUISER 巡洋
 };
 /* ===== TIER1 能力谓词层:把逻辑层散落的 cls==='XXX' 硬编码换成数据驱动查询(P0 建的安全垫,P1 随五张表一起换成 DD/CA/BB/CV 键) ===== */
 /* FM3-2:原先这里还有一张"舰种战术角色表"(DD 屏护 / CA·BB·CV 主力线),给 40-slots 旧弧线阵与 42/44 换槽分桶用。
@@ -31,7 +31,7 @@ CLS_STRUCT.CV={...CLS_STRUCT.CA};                                          // TO
    载入顺序红线:本区块顶层禁止引用 10a-ship-hulls.js 的 TIER_SCALE / TIER_ORDER / HULL_LABEL——index.html 里 10a(:172)排在 03(:165)之后,顶层引用会 ReferenceError;所以 tier 键 1/2/3 在这里自己写死。 */
 const TIER_LABEL={1:'T1',2:'T2',3:'T3'}; // TIER1 分级短名。与 10a 的 TIER_SCALE/TIER_LIGHT 同键但不引用它(见上面的载入顺序说明)
 const TIER_FIELD={ // TIER1 字段 → applyTier 策略表。缺省是 'mul'(直乘),所以这里只列非 'mul' 的字段
-  ammo:'int', cells:'int', inter:'int', guideChan:'int', beacon:'int', value:'int', // 整数量:乘完四舍五入、下限 1;但原值 ≤0 视为结构性零(如 CA/BB/CV 的 beacon:0)原样保留,绝不被抬成 1
+  ammo:'int', cells:'int', inter:'int', guideChan:'int', value:'int', // 整数量:乘完四舍五入、下限 1;但原值 ≤0 视为结构性零原样保留,绝不被抬成 1
   outerIntercept:'prob', innerIntercept:'prob', chaffRate:'prob', ecmPower:'prob', stealth:'prob', // 概率:乘完钳到 [0,1](outerIntercept 是方案原清单外补的——它和 innerIntercept 同为拦截率,漏钳会出现 >1 的拦截概率)。SN4 stealth 必须列在这里:它是 (0,1] 的雷达反射倍率,走缺省的 'mul' 会让某个分级乘出【大于 1】的反射倍率——比 1 大的隐身系数没有物理含义,而且不会报错,只会让那一级的舰在雷达上悄悄比本体还亮
   speedGears:'gears', // 速度档数组:整条曲线乘同一个【标量】k(不是每档给一个乘数),逐项取整;负数=哨兵(-1 不限速)原样保留,不参与乘法
 };
@@ -39,13 +39,13 @@ const TIER_MUL={ // TIER1 全局分级乘数。空对象 = 该分级所有字段
   // ⚠ SN4 填数前的一条不变量:size/stealth 作用在【被看方】(有多亮、反光多强),emit/recv 作用在【探测方】(照得多远、听得多远),想让某个分级"探得更远"和"更难被探"是两笔账,别只写一边。原来这里还有一条"探测下限是探测力的派生量、只填一半这层关系会静默断掉"——那两个派生字段随两通道内核一起删了,派生关系不复存在,所以那条不变量一并删掉而不是改写
   // ⚠ TIER1 乘数一律是【标量】。speedGears 也是整条曲线乘一个数,写成数组(想给每档一个乘数)会让全档变 NaN——applyTier 已加类型守卫挡住,但守卫只是不崩,填的数照样不生效
   1:{ /* TODO(TIER-BAL) 逐项填,缺省=1。填法:把需要的项写成 `字段:数值,`,不需要的留在注释里
-       hp: macDmg: missDmg: ammo: cells: inter: mac: beacon: value:
+       hp: macDmg: missDmg: ammo: cells: inter: mac: value:
        turnRate: thrust: speedGears:
        outer: outerIntercept: inner: innerIntercept: chaffRate: guideChan:
        size: stealth: emit: recv: ecmPower: */ },
   2:{ /* T2 = 基准,永远保持空:所有字段乘 1,数值就是上面五张 CLS_* 表里写的那个 */ },
   3:{ /* TODO(TIER-BAL) 逐项填,缺省=1,字段清单同 T1:
-       hp: macDmg: missDmg: ammo: cells: inter: mac: beacon: value:
+       hp: macDmg: missDmg: ammo: cells: inter: mac: value:
        turnRate: thrust: speedGears:
        outer: outerIntercept: inner: innerIntercept: chaffRate: guideChan:
        size: stealth: emit: recv: ecmPower: */ },
@@ -67,7 +67,7 @@ function applyTier(key,val,k){ // TIER1 按 TIER_FIELD 策略把乘数 k 施加�
   if(mode==='gears')return (Array.isArray(val)&&typeof k==='number'&&isFinite(k))?val.map(v=>v<0?v:Math.round(v*k)):val; // 负数是哨兵(-1=不限速),乘了就变成正数档位,必须原样穿过。TIER1 补 k 的类型守卫:乘数误写成数组(以为要逐档给数)会让全档变 NaN,再顺着 speedGearsOf→cruiseOf→steerToVel 把整舰运动弄坏且一声不吭
   if(k===1)return val;                                            // 未填乘数的快路径:原值原样返回,保证 TIER_MUL 全空时与 P1 逐位相同
   if(typeof val!=='number'||!isFinite(val))return val;             // 非数值字段(将来若混进字符串/对象)一律不动
-  if(mode==='int')return val<=0?val:Math.max(1,Math.round(val*k)); // ≤0 是结构性零(CA 的 beacon:0)不能被下限抬成 1;正数取整且至少留 1
+  if(mode==='int')return val<=0?val:Math.max(1,Math.round(val*k)); // ≤0 是结构性零,不能被下限抬成 1;正数取整且至少留 1
   if(mode==='prob')return Math.max(0,Math.min(1,val*k));           // 概率钳 [0,1]
   return val*k;
 }
@@ -88,7 +88,7 @@ function shipStats(cls,tier){ // TIER1 (舰种,分级) → 扁平属性对象:�
   if(hit)return hit;
   const src=Object.assign({},
     CLS_MOB[c]||{turnRate:CFG.turnRate,thrust:CFG.thrust},
-    CLS_STRUCT[c]||{hp:500,beacon:0,shield:175}, // RF3 武器数值已移 weapons/51-defs(resolveLoadout 单独解析),这里只剩舰体/机动/感知
+    CLS_STRUCT[c]||{hp:500,shield:175}, // RF3 武器数值已移 weapons/51-defs(resolveLoadout 单独解析),这里只剩舰体/机动/感知
     sReq(SENS.CLS,c,'SENS.CLS'), // SN4 感知行表:size/stealth/emit/recv 加干扰强度,全部住 sensors/20 的 SENS.CLS 这【一份】表里(前提:数值表只有一份,原来那张独立的按舰种感知表已整个删除)。sReq 挡的是"表里少了一个舰种"——Object.assign 对 undefined 源是静默空操作,不抛的话整船感知字段一次全缺,后面每个消费者各自兜底成不同的假值
     CLS_LINK[c]||CLS_LINK.DD, // SN1 数据链表(guideChan)单独并进来,来源在 weapons/51-defs;函数体内引用=运行期解析,不受 51-defs 加载晚于本文件影响(同上一行的先例)
     {value:CLS_VALUE[c]||1});                                     // 威胁权重进 tier 层:04-targeting:6 网分配与 07-missiles:297 伏击雷阈值读的就是它(经 shipValue 实例优先)。SN4 这里原来还并进四张按舰种的感知子表(雷达截面/照射功率/两个探测下限),两通道内核之后那四张表连同它们的字段一起没了,感知数值只剩上一行那一处来源
@@ -130,7 +130,7 @@ function makeShip(cls,name,pos,facing,vel,side,tier){ // TIER1 加第 7 参 tier
     emitMode:'silent', // SN4 发射档三态(静默/照射/干扰)。全库【只有这一处】写档位字面量初值,其余写入一律走 sensors/21 的 setEmit——它是唯一写入口、非法档位当场抛,不给"拼错一个字母悄悄变静默"留缝
     ecmPower:sReq(st,'ecmPower','shipStats'), // SN4 干扰强度不再配一个开关布尔:它是 jam 档的强度(每拍削弱对方的照射驻留,只削回波、不削红外)。sReq 只拒 undefined,合法 0(不带干扰机)照常穿过
     // TK1 原来这里的三行感知数据(两方的等级 / 误差椭圆接触 / 最后定位记录)搬进了 sensors/24 的航迹表 TRK,由上面的 trkAdopt 登记;字段说明也搬过去了。TK1~TK3a 过渡期旧名字经转发访问器照旧可读写(TK3b 改墓碑、TK3c 删)
-    beaconMax:(st.beacon||0), beaconCount:(st.beacon||0)});
+  });
   if(/^波长/.test(name||'')){sh.weapons=sh.weapons.concat([{kind:'buoy',label:'前出浮标'}]);sh.buoys=sh.buoysMax=(typeof OBJ_CFG!=='undefined'?OBJ_CFG.BUOY.N:2);} // 2026-09-27 用户:前出浮标是特殊武器,先只给「波长」(按舰名)
-  return sh; // TIER1 信标载量改表驱动(CLS_WPN.beacon):原来无条件给 2 枚、只靠 UI 按 cls==='SCOUT' 开门,现在"谁能放信标"是表里一格
+  return sh;
 }

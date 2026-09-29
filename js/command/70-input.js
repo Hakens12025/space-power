@@ -162,11 +162,11 @@ function buoyAt(sx,sy){ // 2026-09-29 命中最近的我方前出浮标(屏幕 1
   for(const o of rocks){if(o.dead||o.kind!=='buoy'||o.side!=='blue')continue;const p=toScreen(o.pos[0],o.pos[1]),d=Math.hypot(p[0]-sx,p[1]-sy);if(d<bd){bd=d;best=o;}}
   return best;
 }
-function groupAt(sx,sy){ // 命中最近的导弹组/信标实体(屏幕距离,可点选,半径30px)
+function groupAt(sx,sy){ // 命中最近的导弹组(屏幕距离,可点选,半径30px)
   const w=worldAt(sx,sy);
   let best=null,bd=30/cam.zoom;
   for(const p of projectiles){
-    if((p.type!=='missile'&&p.type!=='beacon')||p.done||!projSeen(p))continue; // 2026-09-28 看不见的弹点不到
+    if(p.type!=='missile'||p.done||!projSeen(p))continue; // 2026-09-28 看不见的弹点不到
     const d=Math.hypot(p.pos[0]-w[0],p.pos[1]-w[1]);
     if(d<bd){bd=d;best=p;}
   }
@@ -420,7 +420,7 @@ window.addEventListener('mouseup',e=>{
     }else if(selDrag.missileMode){ // Shift框选:选导弹群(不是船)
       const x=Math.min(selDrag.x0,selDrag.x1),y=Math.min(selDrag.y0,selDrag.y1);
       const w=Math.abs(selDrag.x1-selDrag.x0),h=Math.abs(selDrag.y1-selDrag.y0);
-      const inBox=projectiles.filter(p=>(p.type==='missile'||p.type==='beacon')&&!p.done&&(adminMode||(p.shooter&&p.shooter.side==='blue'))); // 2026-09-28 框选只选我方弹(敌方弹单点看得见的)
+      const inBox=projectiles.filter(p=>p.type==='missile'&&!p.done&&(adminMode||(p.shooter&&p.shooter.side==='blue'))); // 2026-09-28 框选只选我方弹(敌方弹单点看得见的)
       const hits=inBox.filter(p=>{const sp=toScreen(p.pos[0],p.pos[1]);return sp[0]>=x&&sp[0]<=x+w&&sp[1]>=y&&sp[1]<=y+h;});
       if(hits.length){
         selected=[]; // KIMI146修:清掉拖拽过程中误选的舰船,导弹信息面板才显示得出来

@@ -133,7 +133,7 @@ function fireDecoy(shooter){ // v125 诱饵弹:模拟舰船热信号骗敌方拦
 }
 function fireInterceptor(shooter,targetMissile,count){ // 发射拦截导弹实体(燃料模式v114:可出远门防御)
   projectiles.push({type:'interceptor',count:count||16,pos:shooter.pos.slice(),vel:shooter.vel.slice(),
-    target:targetMissile,shooter,spd:Math.max(PHYS.v(30)*INT_VK,V.len(shooter.vel)),age:0,fuel:PHYS.t(600),park:false,parkPt:null,screen:false,screenRange:50000*CFG.scale, // 2026-09-26 跟近防走(= 4 x DD 外圈 12500):原 100000
+    target:targetMissile,shooter,spd:Math.max(PHYS.v(30)*INT_VK,V.len(shooter.vel)),age:0,fuel:PHYS.t(600),
     hitMul:(shooter.interHitMul||1)}); // RANGE1 拦截弹命中率倍率随弹出膛(07-missiles 的 hitRate 末尾乘它)。外圈拦截率的真实旋钮是这个:CLS_CIWS.outerIntercept 是死字段,声明后全库零读取,面板绝不能放它
 }
 let missileGroupSeq=0;

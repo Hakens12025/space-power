@@ -1,12 +1,12 @@
 "use strict";
 /* RF1: 提取自 stepSim 的 S5-S11 段(原 07-missiles.js L236-631):弹丸上限裁剪→拦截弹预收集→引导分配→网检查→
-   五弹型主循环→过滤。各弹型分支提为子函数,原外层循环的 continue 早退定点转为 return(内层扫描循环的
+   四弹型主循环→过滤。各弹型分支提为子函数,原外层循环的 continue 早退定点转为 return(内层扫描循环的
    continue 保留原样),控制流与原版逐段一致。 */
 function stepProjectiles(dt){
   // ===== 战斗更新 =====
-  if(projectiles.length>400){ // v126(外援E):雷/信标/防空屏豁免;飞行弹按"剩余命中时间"保最迫近(脱靶/游魂优先砍,不再砍最老)
-    const persist=projectiles.filter(p=>p.mine||p.screen||p.type==='beacon');
-    const volatile=projectiles.filter(p=>!(p.mine||p.screen||p.type==='beacon'));
+  if(projectiles.length>400){ // v126(外援E):雷豁免;飞行弹按"剩余命中时间"保最迫近(脱靶/游魂优先砍,不再砍最老)
+    const persist=projectiles.filter(p=>p.mine);
+    const volatile=projectiles.filter(p=>!p.mine);
     volatile.sort((a,b)=>{
       const ta=a.target&&!a.target.dead?V.len(V.sub(a.pos,a.target.pos))/Math.max(300,V.len(a.vel)):1e9;
       const tb=b.target&&!b.target.dead?V.len(V.sub(b.pos,b.target.pos))/Math.max(300,V.len(b.vel)):1e9;
@@ -17,17 +17,16 @@ function stepProjectiles(dt){
   }
   // v119:预收集活跃拦截弹(按阵营),供导弹蛇形判定O(1)跳过——原为O(P²)全表扫描
   const icBlue=[],icRed=[];
-  for(const q of projectiles){if(q.type==='interceptor'&&!q.done&&!q.screen&&!q.park){(q.shooter.side==='blue'?icBlue:icRed).push(q);}}
+  for(const q of projectiles){if(q.type==='interceptor'&&!q.done){(q.shooter.side==='blue'?icBlue:icRed).push(q);}}
   guideMissiles(); // T1:每tick重算引导分配(自导/链导/脱锁),供下方追击门判定
   updateNets(dt); // v125:网内连接检查——断网(离网中心>NET_COMM)计时,10s没回自毁
-  for(const p of projectiles){ // 五弹型主循环(RF1:分支体在下方五个子函数)
+  for(const p of projectiles){ // 四弹型主循环(RF1:分支体在下方四个子函数)
     const x0=p.pos[0],y0=p.pos[1];
     if(p.type==='decoy')stepDecoyProj(p,dt);
     else if(p.type==='mac')stepMacProj(p,dt);
-    else if(p.type==='beacon')stepBeaconProj(p,dt);
     else if(p.type==='missile'){const f0=p.fuel;stepMissileProj(p,dt,icBlue,icRed);p.lit=p.fuel<f0;} // 2026-09-27 这一拍烧没烧油 = 喷没喷火(sensors/22 的 projSig 按它给红外亮度)
     else if(p.type==='interceptor')stepInterceptorProj(p,dt);
-    if(ARENA&&!p.done&&!arenaIn(p.pos))p.done=true; // 2026-09-26 单局地图:五弹型统一在这里判,出了游玩区就消失
+    if(ARENA&&!p.done&&!arenaIn(p.pos))p.done=true; // 2026-09-26 单局地图:四弹型统一在这里判,出了游玩区就消失
     if(!p.done&&(p.type==='mac'||p.type==='missile'||p.type==='interceptor'))projBlock(p,x0,y0,dt); // 2026-09-29 天体 / 碎石挡弹
   }
   shellTraceStep();
@@ -98,29 +97,6 @@ function stepMacProj(p,dt){ // MAC轴炮:沿发射时船头直飞,命中或到�
       const t=p.target; // 2026-09-26 单局地图:MAC_HIT_R 400 < 单拍相对位移约 600km,只看拍末会漏判(实测 90% 带只剩 84%),改按本拍相对线段的最近点判
       if(t&&!t.dead&&stepCPA2(p,t,dt)<MAC_HIT_R*MAC_HIT_R){if(applyDamage(p.target,p.dmg,p.shooter,'mac',p)>0)spawnHit(p.pos,'mac',p.shooter,p.target);p.done=true;} // RANGE1 补第 4 实参 kind='mac'(靶场分武器统计)
       else if(p.age>=p.tt){p.ground=true;} // 2026-09-28 过了预测时间没中:不消失,当成打空地的炮弹接着飞,路上碰到谁算谁(用户:射程理论无限)
-}
-function stepBeaconProj(p,dt){ // 侦察信标(v113):飞抵部署,遥控开关机;开机才耗开机时间(300s),关机静默
-      p.age=(p.age||0)+dt;
-      if(p.on){p.life=(p.life||300)-dt;if(p.life<=0){p.done=true;return;}} // 开机才耗时间(300s);飞行/待机都可开关
-      if(p.park&&!p.arrived){ // 飞向部署点(复用导弹布雷的减速逻辑)
-        const toP=V.sub(p.parkPt,p.pos);const pd=V.len(toP);const pv=V.len(p.vel);
-        if(p.fuel<=0&&pd>30000&&V.dot(p.vel,toP)<=0){p.done=true;return;} // v119:没油且在远离部署点,自毁防永久漂流
-        if(pd<1200||(pd<30000&&pv<80)){p.park=false;p.arrived=true;p.vel=[0,0,0];p.spd=0;if(!p.on)p.life=300;}
-        else{
-          const dir=V.norm(toP);
-          let sDes=Infinity;
-          if(pd<90000)sDes=Math.min(sDes,Math.max(1500,Math.sqrt(2*MSL_ACC*pd*0.6))); // DS190
-          if(p.fuel>0){let dv=Math.max(-150*dt,Math.min(150*dt,sDes-p.spd));const c=Math.abs(dv)/150;if(c>p.fuel){dv*=p.fuel/c;p.fuel=0;}else p.fuel-=c;p.spd+=dv;} // DS190
-          const tr=2.0/(1+pv/2500);let nd;
-          if(pv>1&&p.fuel>0){const cur=V.norm(p.vel);nd=V.slerp(cur,dir,Math.min(1,tr*dt));p.fuel=Math.max(0,p.fuel-V.angle(cur,nd)*0.5);}
-          else if(pv>1){nd=V.norm(p.vel);}else nd=dir;
-          p.vel=[nd[0]*p.spd,nd[1]*p.spd,nd[2]*p.spd];
-          p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;
-        }
-      }else if(p.arrived){ // 已部署:开机=提供LADAR回波+成为ESM辐射源;关机=静默冷目标
-        p.vel=[0,0,0];p.spd=0;
-      }
-      return;
 }
 function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+暴力加速,射后不管,组网转移(一弹传三代)
       p.age=(p.age||0)+dt;
@@ -385,33 +361,9 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         }
       }
 }
-function stepInterceptorProj(p,dt){ // 拦截导弹(v114):燃料模式可出远门;可布防伏击/主动拦截;1颗拦1颗,消耗自身
+function stepInterceptorProj(p,dt){ // 拦截导弹(v114):燃料模式可出远门;主动拦截;1颗拦1颗,消耗自身
       p.age=(p.age||0)+dt;
-      if(p.screen){ // 布防屏:停在这里等来袭导弹进圈(伏击拦截)
-        p.vel=[0,0,0];p.spd=0;
-        let tgt=null;
-        for(const q of projectiles){
-          if(q.type!=='missile'||q.done||q.shooter.side===p.shooter.side)continue;
-          if(V.len(V.sub(q.pos,p.pos))<(p.screenRange||50000*CFG.scale)){tgt=q;break;} // 2026-09-26 跟近防走:缺省原 100000
-        }
-        if(tgt){p.screen=false;p.target=tgt;p.spd=Math.max(p.spd,2000*INT_VK);}
-        return;
-      }
       if(p.fuel<=0){p.done=true;return;} // 燃料耗尽自毁(v118:燃料=寿命,耗尽即失效)
-      if(p.park){ // 飞向布防点:接近减速,到位布防成屏(伏击)
-        const toP=V.sub(p.parkPt,p.pos);const pd=V.len(toP);const pv=V.len(p.vel);
-        if(pd<800||(pd<20000&&pv<80)){p.park=false;p.screen=true;p.vel=[0,0,0];p.spd=0;return;}
-        const dir=V.norm(toP);
-        let sDes=Infinity;
-        if(pd<90000)sDes=Math.min(sDes,Math.max(1500*INT_VK,Math.sqrt(2*400*INT_VK*pd*0.6)));
-        if(p.fuel>0){let dv=Math.max(-400*INT_VK*dt,Math.min(400*INT_VK*dt,sDes-p.spd));const c=Math.abs(dv)/(400*INT_VK);if(c>p.fuel){dv*=p.fuel/c;p.fuel=0;}else p.fuel-=c;p.spd+=dv;}
-        const tr=4.5/(1+pv/(3000*INT_VK));let nd; // 转向更强
-        if(pv>1&&p.fuel>0){const cur=V.norm(p.vel);nd=V.slerp(cur,dir,Math.min(1,tr*dt));p.fuel=Math.max(0,p.fuel-V.angle(cur,nd)*0.8);} // 转向更耗燃料
-        else if(pv>1){nd=V.norm(p.vel);}else nd=dir;
-        p.vel=[nd[0]*p.spd,nd[1]*p.spd,nd[2]*p.spd];
-        p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;
-        return;
-      }
       if(!p.target||p.target.done||((p.target.count??1)<=0)){ // 目标失效/拦完:重选前方目标;KIMI146修:诱饵弹无count字段,(count||0)<=0恒真→每tick重复重选(??1后只在done时才重选)
         p.target=findInterceptorTarget(p);
       }

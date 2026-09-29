@@ -123,7 +123,6 @@ const SENS = {
     mslCold: { lum: 0.0100, refl: 0.50 },
     inter: { lum: 0.0711, refl: 0.25 },
     decoy: { lum: 0.2500, refl: 2.00 },
-    beacon: { lum: 0.0400, refl: 1.00 },
   },
 
   /* ---- 发射档三态:全库【唯一】的枚举。写入口是 21-detect 的 setEmit ---- */

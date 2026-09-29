@@ -294,19 +294,6 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
     updateCmdBar([]); // 导弹只有底栏「变雷」一颗钮(cbMine)
     return;
   }
-  if(m&&m.type==='beacon'){ // 侦察信标(groupAt 也能命中)
-    title.textContent='侦察信标';
-    if(ciN)ciN.textContent='侦察信标';
-    if(ciC)ciC.textContent=(m.shooter?m.shooter.name:'—');
-    if(ciSp)ciSp.innerHTML=[['探测半径',Math.round(Math.sqrt(Math.sqrt(senseKACT(m)))/1000)+'k'/* 2026-09-26 改读信标真实照射量程(同 83-hud 那个圈):原写死 300k 已与感知分家 */],['部署点',m.parkPt?Math.round(m.parkPt[0]/1000)+'k':'—']].map(it=>`<span class="fi"><i>${it[0]}</i><b>${it[1]}</b></span>`).join('');
-    const stt=m.arrived?(m.on?'开机 · 探测中':'静默待机'):'飞行中';
-    box.innerHTML=`
-      <div class="row"><span class="k">状态</span><span class="v">${stt}</span></div>
-      <div class="row"><span class="k">开机时间</span><span class="v">${m.on&&m.life>0?Math.round(SHOW.t(m.life))+'s':(m.arrived?'关机':'—')}</span></div>
-      <div class="row"><span class="k">速度</span><span class="v">${Math.round(SHOW.v(V.len(m.vel)))} km/s</span></div>`;
-    updateCmdBar([]);
-    return;
-  }
   const sel=selBlue();
   /* FL1【编队分支】:选中集合恰好等于某支编队的全部活船 → 右栏整块换成【编队实时数据】,不再显示单舰读数。
      判据直接复用 44-orders 下命令时用的同一个 fmSameShips(RTS 语义:选中什么就是什么),

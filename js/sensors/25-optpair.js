@@ -34,12 +34,8 @@ function senseSunPhase(o, t, tSh) { // ENV2 朗伯球相位 Φ(α),截到 [0,1](
 function senseSolar(o, t, tSh) { // ENV2 前三项的乘法顺序与 sensePrepare 的 solMax 相同 ⇒ 上界逐位不低
   const ph = senseSunPhase(o, t, tSh); return ph > 0 ? SENS.SOLAR_K * sReq(t, 'size', 'ship') * ph : 0;
 }
-function senseOptLoWith(o, t, bg, tSh, oLit) { // ENV2 唯一的成对式子(senseResolve、senseOptLo 都走它)
+function senseOptLoWith(o, t, bg, tSh, oLit) { // ENV2 唯一的成对式子(senseResolve、render/86 红外画面都走它)
   return senseLoOf(optLum(t), 0, senseSolar(o, t, tSh), senseGlareAt(o.pos, t.pos, oLit), bg) * envExt(o.pos, t.pos); // ENV2 消光:连线上的云吃掉到达观测方的亮度
-}
-function senseOptLo(o, t) { // ENV2 现算三个前置量;与 sensePrepare 的算法逐项相同
-  const nb = ENV.bodies.length > 0, lit = envHasLight();
-  return senseOptLoWith(o, t, ENV.clouds.length ? envBg(t.pos, 'opt') : 0, lit && nb && envInShadow(t.pos), lit && !(nb && envInShadow(o.pos)));
 }
 const SOP_B2 = [0, 0]; // ENV2 senseBaffled 的两格草稿
 function senseBafC2() { const c = Math.cos(SENS.BAF_DEG * Math.PI / 180); return c * c; } // ENV2 致盲半角的 cos^2(热循环与 senseBaffled 读同一个数)

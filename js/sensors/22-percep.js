@@ -183,7 +183,7 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
   for (let i = 0; i < nt; i++) {
     const t = tgts[i], p = t.pos;
     scTX[i] = p[0]; scTY[i] = p[1]; scTZ[i] = p[2];
-    const tSh = lit && nb && envInShadow(p) ? 1 : 0, bg = cOn ? envBg(p, 'opt') : 0; // ENV2 与 senseOptLo 的前置量同式
+    const tSh = lit && nb && envInShadow(p) ? 1 : 0, bg = cOn ? envBg(p, 'opt') : 0; // ENV2 senseOptLoWith 的前置量(senseResolve 原样递过去)
     const solMax = lit && !tSh ? SENS.SOLAR_K * sReq(t, 'size', 'ship') : 0; // ENV2 上界必须含晒热:只靠晒热才看得见的对不许被早退跳过
     const lum = senseLoOf(optLum(t), 0, solMax, 0, bg), loud = rfLoudOf(t), rfl = reflOf(t); // ENV2 scSigIR 是光学上界,空环境时逐位等于 optLum
     scSigIR[i] = lum; scSigRF[i] = loud; scRefl[i] = rfl;
@@ -263,9 +263,8 @@ function senseResolve(j, ti, d, t, g) { // ENV2 精算步(热循环外):待定�
 function projSig(p) { // 弹丸的亮度与反射。常数由旧模型的可见半径反解(见 20-signature 的 PROJ 表),弹丸可见性不是本轮要改的东西
   if (p.type === 'mac') return SENS.PROJ.mac;
   if (p.type === 'decoy') return SENS.PROJ.decoy;
-  if (p.type === 'beacon') return SENS.PROJ.beacon;
   if (p.type === 'interceptor') return SENS.PROJ.inter;
-  if (p.screen || p.mine) return SENS.PROJ.mslCold; // 布防屏与伏击雷 = 冷目标
+  if (p.mine) return SENS.PROJ.mslCold; // 伏击雷 = 冷目标
   return (p.lit === undefined ? p.fuel > 0 : p.lit) ? SENS.PROJ.mslHot : SENS.PROJ.mslCold; // 燃烧的喷焰 vs 滑行的冷弹。2026-09-27 按这一拍喷没喷(weapons/56 写 p.lit),有油但在滑行也是冷的
 }
 function senseSeesOptical(lum, d, pos, bg) { // 探测器 d 能否光学看到位于 pos、亮度 lum 的东西。ENV2 bg = pos 处的云背景(调用方每颗弹丸算一次),可省

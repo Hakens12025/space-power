@@ -36,13 +36,12 @@
    ========================================================================= */
 let detT=0; // 探测结算计时(core/05 累加,到 SENS.TICK 就把累计量当 dt 透传进来)
 
-function detectorsOf(side){ // 该阵营的传感器网络:存活舰 + 开机的信标
+function detectorsOf(side){ // 该阵营的传感器网络:存活舰 + 前出浮标
   const dets=ships.filter(s=>s.side===side&&!s.dead);
-  const bcons=projectiles.filter(p=>p.type==='beacon'&&p.on&&p.shooter&&p.shooter.side===side&&!p.done);
+  const bcons=[];
   for(const o of rocks)if(o.kind==='buoy'&&o.side===side&&!o.dead)bcons.push(o); // 2026-09-27 K3 前出浮标:被动时也是探测站(照射那一路看 o.on,sensors/22 的 senseKACT)
   return {dets,bcons};
-  /* SN4:"开机"这个判据在新模型下【只对信标成立】(p.on 就是它的开机开关,87-fleetcards 的
-     beaconOn 钮写它)。舰船的两条被动通道(光学、静听)是永远开着的接收机,emitMode 只决定
+  /* SN4:舰船的两条被动通道(光学、静听)是永远开着的接收机,emitMode 只决定
      【照射】那一路开不开,而那道门在 22-percep 的 senseKACT 里(非 paint 恒返回系数 0,热循环
      那一路天然不成立)。所以静默舰仍然是完整的探测器,【绝不许】在这里按 emitMode 过滤 ——
      那样整队一进静默就集体失明,而接触全程是合法的"没握着",没有 NaN、没有异常、没有一行日志。 */

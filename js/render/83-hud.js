@@ -243,27 +243,6 @@ function drawProjectiles(){ // 弹丸/导弹
       ctx.beginPath();ctx.arc(s[0],s[1],3,0,6.283);ctx.fill();
       continue;
     }
-    if(p.type==='beacon'){ // 侦察信标:开机=橙脉冲+探测圈;静默=暗点;选中=亮环(飞行/待机都有反馈)
-      if(p.arrived){
-        ctx.fillStyle=p.on?'rgba(255,160,80,.9)':'rgba(110,150,170,.6)';
-        ctx.beginPath();ctx.arc(s[0],s[1],4,0,6.283);ctx.fill();
-        if(p.on){ // 开机脉冲环
-          ctx.strokeStyle='rgba(255,160,80,.4)';ctx.lineWidth=1;
-          ctx.beginPath();ctx.arc(s[0],s[1],(p.age%2)*14+5,0,6.283);ctx.stroke();
-        }
-      }else{
-        ctx.fillStyle=p.on?'rgba(255,160,80,.9)':'rgba(110,150,170,.8)';
-        ctx.beginPath();ctx.arc(s[0],s[1],3,0,6.283);ctx.fill();
-      }
-      if(p===selMissile){ // 选中反馈(像点船:亮环+标签)
-        ctx.strokeStyle='#4fe0ff';ctx.lineWidth=2;
-        ctx.beginPath();ctx.arc(s[0],s[1],12,0,6.283);ctx.stroke();
-        if(p.on){const r=Math.sqrt(Math.sqrt(senseKACT(p)))*cam.zoom;ctx.strokeStyle='rgba(255,160,80,.2)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(s[0],s[1],r,0,6.283);ctx.stroke();} // 2026-09-26 改读信标真实照射量程(对反射 1.0,sensors/20 BEACON_* 那条式子):原写死 300000 自形态 H 起已与感知分家,x1/5 的 60000 同样不对
-        ctx.fillStyle='rgba(159,212,255,.95)';ctx.font='10px Consolas';ctx.textAlign='left';ctx.textBaseline='top';
-        ctx.fillText(`📡信标 ${p.on?'开机':'关机'}${p.arrived?'':'·飞行'} ⏻${Math.round(SHOW.t(p.life||0))}s`,s[0]+12,s[1]+12);
-      }
-      continue;
-    }
     if(p.type==='mac'){
       ctx.fillStyle='#ffffff';ctx.fillRect(s[0]-2,s[1]-2,4,4);
     }else{ // 导弹组/拦截导弹组(显示剩余数量)
