@@ -9,13 +9,16 @@
    · 被听见:读 sensors/21 的 ESM 记录(对方关了雷达也留着)。每条记录一块"方位 ± 半宽、远端 = 听得见的最远距离"的扇形,求交(集员估计);
      交集被方位线围死(不碰任何一块的远端)就画多边形,外面一圈最远可达(最大航速 x 距最后一次听到);围不死(单站 / 几艘挤在一起 / 交集为空)
      就画高斯概率团(演示页 ests:每条一份高斯,横向 = 方位误差 x 距离,纵向 = 0 ~ 远端平铺,信息形式相加)。
-     每一对的方位按固定偏差挪开一点(引擎的量测没有噪声,不挪的话正中就是真位置);越小越亮,越久没听到越淡
+     每一对的方位按固定偏差挪开一点(引擎的量测没有噪声,不挪的话正中就是真位置);越小越亮,越久没听到越淡;
+     雷达越强越亮(2026-09-29 用户:民船的雷达不强,那团光没那么亮、没那么大):光强 = 功率系数 rdvPow x 高斯,同一条色阶,
+     弱雷达峰值暗、没有白芯,看得见的那圈跟着缩;团的形状仍只表示"它大概在哪"。围死的多边形按功率调暗
    ============================================================================ */
-const RDV={ARC:8,T:0.2,cov:null,cx:null,t:-1e9,zones:[],gs:null,vmax:0},RDV_U=[0,0];
-  // ARC = 扇形弧段数;T = 区域最多每 T 秒(墙钟)重算一次;gs = 单位高斯贴图(±4σ);vmax = 最远可达圈按的最大航速
+const RDV={ARC:8,T:0.2,cov:null,cx:null,t:-1e9,zones:[],gs:[],vmax:0,EMIT_TOP:2,QN:16},RDV_U=[0,0];
+  // ARC = 扇形弧段数;T = 区域最多每 T 秒(墙钟)重算一次;gs = 单位高斯贴图(±4σ,按功率分 QN 档,每档一张);vmax = 最远可达圈按的最大航速;EMIT_TOP = 功率系数封顶的发射机(巡洋舰 2)
 function rdvHash(a,b){let h=2166136261;const s=a+'|'+b;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}h^=h>>>13;h=Math.imul(h,1274126177);return((h^(h>>>16))>>>0)/4294967296;}
 function rdvEsmBrg(E,L,k){return k.tb+(rdvHash(L.id||'bcn',E.id)*2-1)*k.half*0.6;} // 这条静听记录画在哪个方位:量到的方位 + 每一对固定的偏移(± 0.6 x 半宽,随积累收窄);雷达异常圈也读它
 function rdvEsmRc(E,L,k){return k.rr+(rdvHash(E.id,L.id||'bcn')*2-1)*k.sr*0.6;} // 画在多远:幅度测距 + 每一对固定的偏移(± 0.6 x 纵向误差)
+function rdvPow(E){return Math.min(1,Math.sqrt(Math.max(0,E.emit||0)/RDV.EMIT_TOP));} // 功率系数 √(emit / 巡洋舰),封顶 1:民船 0.39、驱逐 / 诱饵 0.71、巡洋 / 浮标 1
 function rdvStdRefl(){return SENS.CLS.DD.size*SENS.CLS.DD.stealth;} // 标准目标:一艘驱逐舰的雷达反射
 function rdvPainters(){const a=[];for(const s of ships)if(s.side===VIEW&&!s.dead&&s.emitMode==='paint')a.push(s);return a;}
 function rdvDop(vr,a){ // 负 = 在接近:暖;正 = 在远离:冷(同演示页 dopCol)
@@ -78,20 +81,20 @@ function rdvZones(){ // 我方对每部听到过的敌方雷达的区域;最多�
     for(const x of use){x.brg=rdvEsmBrg(E,x.L,x.k);t=Math.max(t,x.k.t);n+=x.k.hits;if(!P||P.length){const w=rdvLob(x.k,x.brg);P=P?rdvClip(P,w):w;}}
     let closed=!!P&&P.length>2; // 围死 = 没有一个顶点落在任何一块的远端上
     if(closed)for(const q of P){for(const x of use)if(Math.hypot(q[0]-x.k.org[0],q[1]-x.k.org[1])>=x.k.R*(1-1e-6)){closed=false;break;}if(!closed)break;}
-    const age=simTime-t,z={E:E,n:n,L:use.length,fade:!fresh?0.3:(age<T15?1:Math.max(0.3,1-(age-T15)/ESM_CFG.FADE)),grow:rdvVmax()*Math.max(0,age-T15)};
+    const age=simTime-t,z={E:E,q:rdvPow(E),n:n,L:use.length,fade:!fresh?0.3:(age<T15?1:Math.max(0.3,1-(age-T15)/ESM_CFG.FADE)),grow:rdvVmax()*Math.max(0,age-T15)};
     if(closed){z.poly=P;z.area=rdvArea(P);}else{const g=rdvEst(use,E);if(!g)return;z.m=g.m;z.C=g.C;}
     out.push(z);
   });
   RDV.zones=out;return out;
 }
-function rdvGSpr(){ // 单位高斯贴图:半边 64 像素 = 4σ,颜色照演示页 RF_RAMP(中心近白、边缘青、透明)
-  if(RDV.gs)return RDV.gs;
+function rdvGSpr(q){ // 单位高斯贴图:半边 64 像素 = 4σ,颜色照演示页 RF_RAMP(中心近白、边缘青、透明);q = 功率系数,色阶读 √(q x 高斯)
+  const lv=Math.max(1,Math.min(RDV.QN,Math.round(q*RDV.QN)));if(RDV.gs[lv])return RDV.gs[lv];
   const n=128,c=document.createElement('canvas');c.width=n;c.height=n;const g=c.getContext('2d'),img=g.createImageData(n,n),D=img.data;
   const RP=[[0,[40,120,130,0]],[0.12,[40,130,140,70]],[0.4,[70,200,200,140]],[0.7,[150,240,230,190]],[1,[240,255,250,235]]];
-  for(let j=0;j<n;j++)for(let i=0;i<n;i++){const x=(i+0.5-n/2)/(n/2)*4,y=(j+0.5-n/2)/(n/2)*4,t=Math.sqrt(Math.exp(-0.5*(x*x+y*y)));
+  for(let j=0;j<n;j++)for(let i=0;i<n;i++){const x=(i+0.5-n/2)/(n/2)*4,y=(j+0.5-n/2)/(n/2)*4,t=Math.sqrt(lv/RDV.QN*Math.exp(-0.5*(x*x+y*y)));
     let a=0;while(a<RP.length-2&&t>RP[a+1][0])a++;const p=RP[a],q=RP[a+1],u=Math.max(0,Math.min(1,(t-p[0])/(q[0]-p[0]))),o=(j*n+i)*4;
     for(let k=0;k<4;k++)D[o+k]=Math.round(p[1][k]+(q[1][k]-p[1][k])*u);}
-  g.putImageData(img,0,0);return RDV.gs=c;
+  g.putImageData(img,0,0);return RDV.gs[lv]=c;
 }
 function rdvDrawGauss(z){
   const C=z.C,h=(C[0]+C[2])/2,d=Math.sqrt((C[0]-C[2])*(C[0]-C[2])/4+C[1]*C[1]),s1=Math.sqrt(h+d),s2=Math.sqrt(Math.max(0,h-d)),th=0.5*Math.atan2(2*C[1],C[0]-C[2]);
@@ -99,12 +102,12 @@ function rdvDrawGauss(z){
   if(p[0]<-r||p[0]>W+r||p[1]<-r||p[1]>H+r||s2*cam.zoom<0.05)return;
   const amp=1.6e7*CFG.scale*CFG.scale/(s1*s2),g=Math.min(1,Math.log(1+amp/1e-3)/Math.log(1001)); // 峰高 = (2 万 km)² / √det,越糊越暗(演示页 rfT) // 2026-09-26 x1/5(单局地图):参照改 (4000 km)²,原 4e8
   ctx.save();ctx.globalAlpha=z.fade*Math.max(0.35,g);ctx.translate(p[0],p[1]);ctx.rotate(Math.atan2(q[1]-p[1],q[0]-p[0]));
-  ctx.scale(Math.max(4*s1*cam.zoom,1.5)/64,Math.max(4*s2*cam.zoom,1.5)/64);ctx.imageSmoothingEnabled=true;ctx.drawImage(rdvGSpr(),-64,-64);ctx.restore();
+  ctx.scale(Math.max(4*s1*cam.zoom,1.5)/64,Math.max(4*s2*cam.zoom,1.5)/64);ctx.imageSmoothingEnabled=true;ctx.drawImage(rdvGSpr(z.q),-64,-64);ctx.restore();
 }
 function rdvDrawZones(){
   for(const z of rdvZones()){
     if(!z.poly){rdvDrawGauss(z);continue;}
-    const s=Math.sqrt(z.area),u=Math.max(0,Math.min(1,Math.log(2e5*CFG.scale/s)/Math.log(100))),f=z.fade; // 2026-09-26 x1/5(单局地图):亮度刻度 2000~20 万 km,原 1e6(1 万~100 万)
+    const s=Math.sqrt(z.area),u=Math.max(0,Math.min(1,Math.log(2e5*CFG.scale/s)/Math.log(100))),f=z.fade*z.q; // 按功率调暗(rdvPow)。 2026-09-26 x1/5(单局地图):亮度刻度 2000~20 万 km,原 1e6(1 万~100 万)
     ctx.beginPath();for(let i=0;i<z.poly.length;i++){const p=toScreen(z.poly[i][0],z.poly[i][1]);if(i)ctx.lineTo(p[0],p[1]);else ctx.moveTo(p[0],p[1]);}ctx.closePath();
     if(z.grow*cam.zoom>1){ctx.lineJoin='round';ctx.lineWidth=2*z.grow*cam.zoom;ctx.strokeStyle='rgba(84,224,208,'+(0.06*f).toFixed(3)+')';ctx.stroke();ctx.lineWidth=1;ctx.lineJoin='miter';} // 最远可达圈:多边形往外放 grow(圆角)
     ctx.fillStyle='rgba(84,224,208,'+((0.05+0.3*u)*f).toFixed(3)+')';ctx.fill();
