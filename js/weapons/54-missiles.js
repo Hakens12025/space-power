@@ -33,7 +33,7 @@ function mslSeek(p,R,ok){
   const tryT=t=>{if(t.dead||t.side===side||t.hp===undefined||(ok&&!ok(t)))return;
     const d=Math.hypot(t.pos[0]-p.pos[0],t.pos[1]-p.pos[1]);if(d<bd&&missSeeT(p,t,true)){bd=d;best=t;}};
   for(const s of ships)tryT(s);
-  for(const o of rocks)tryT(o);
+  for(const o of rockObjs())tryT(o); // 2026-09-29 静止石头没有结构值,tryT 本来就跳过它们:只走会动的物体
   return best;
 }
 function mslAcquire(p,t){ // 导引头锁上 t:从布雷 / 巡飞 / 脱锁转成自导追击(下一拍 guideSide 按 missSee 续 self)

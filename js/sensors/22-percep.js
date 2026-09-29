@@ -182,9 +182,15 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
   for (let i = 0; i < nt; i++) {
     const t = tgts[i], p = t.pos;
     scTX[i] = p[0]; scTY[i] = p[1]; scTZ[i] = p[2];
-    const tSh = lit && nb && envInShadow(p) ? 1 : 0, bg = cOn ? envBg(p, 'opt') : 0; // ENV2 senseOptLoWith 的前置量(senseResolve 原样递过去)
-    const solMax = lit && !tSh ? SENS.SOLAR_K * sReq(t, 'size', 'ship') : 0; // ENV2 上界必须含晒热:只靠晒热才看得见的对不许被早退跳过
-    const lum = senseLoOf(optLum(t), 0, solMax, 0, bg), loud = rfLoudOf(t), rfl = reflOf(t); // ENV2 scSigIR 是光学上界,空环境时逐位等于 optLum
+    let tSh, bg, solMax, lum, loud, rfl;
+    const K = t.kind === 'rock' ? t.spc : null; // 2026-09-29 性能:静止石头的这几个前置量只随环境版本(ENV.rev)与自己的位置变,缓存在石头上(同一套式子,逐位相同)
+    if (K && K.rev === ENV.rev && K.x === p[0] && K.y === p[1] && K.z === p[2]) { tSh = K.tSh; bg = K.bg; solMax = K.solMax; lum = K.lum; loud = K.loud; rfl = K.rfl; }
+    else {
+      tSh = lit && nb && envInShadow(p) ? 1 : 0; bg = cOn ? envBg(p, 'opt') : 0; // ENV2 senseOptLoWith 的前置量(senseResolve 原样递过去)
+      solMax = lit && !tSh ? SENS.SOLAR_K * sReq(t, 'size', 'ship') : 0; // ENV2 上界必须含晒热:只靠晒热才看得见的对不许被早退跳过
+      lum = senseLoOf(optLum(t), 0, solMax, 0, bg); loud = rfLoudOf(t); rfl = reflOf(t); // ENV2 scSigIR 是光学上界,空环境时逐位等于 optLum
+      if (t.kind === 'rock') t.spc = { rev: ENV.rev, x: p[0], y: p[1], z: p[2], tSh, bg, solMax, lum, loud, rfl };
+    }
     scSigIR[i] = lum; scSigRF[i] = loud; scRefl[i] = rfl;
     scTDir[i] = solMax > 0 ? 1 : 0; scTBg[i] = bg; scTSh[i] = tSh;
     const bIR = lum * mIR, bRF = loud * mRF, bA4 = rfl * mACT;

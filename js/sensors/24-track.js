@@ -69,7 +69,7 @@ function trkStep(tk,t,obs,el){
   if(c.fix&&c.n>0){tk.lastT=simTime;tk.lastPos=[c.x,c.y,t.pos[2]];if(TRK_KIN.pm||!tk.lastVel)tk.lastVel=t.vel.slice();} // 2026-09-27 速度只在测到位置的一拍更新(单站方位量不出速度)
   if(held&&tk.tn===0)tk.tn=++TRK_TN[tk.by]; // TK4c 航迹号:这一方第一次握住它的那一拍发号,之后终身不变(丢了再捡回来还是这个号)。只用于显示 —— 不当键、不当种子、不参与任何取舍
   if(held){if(TRK_IDO.opt||TRK_IDO.act||TRK_IDO.vis)tk.idc=true;}else tk.idc=false; // TK2.6 确认锁存:光学轮廓或照射回波认出过 ⇒ 确认;接触丢了才清。与椭圆的身份位同一拍立、同一拍清
-  tk.held=held;
+  tk.held=held;(tk.by==='blue'?TRK_ACT.blue:TRK_ACT.red).dirty=true; // 2026-09-29 状态可能变了:下一次 trkEach 重建非空清单
   if(held){const ty=trkIdType(tk);if(ty)tk.lastType=ty;tk.memGone=false;} // 2026-09-27 记忆:握着时记下认出的类型,出了全知圈按它画
   return held;
 }
@@ -124,18 +124,26 @@ function trkPaintedBy(s){return trkCh(trkOf(s.side==='blue'?'red':'blue',s),'act
    ——存在不等于知道。fn 返回 true 就停下并返回 true。不排序、不建航迹、不调随机数、除调用方自己的闭包外不分配。
    顺序与注册表一致,所以迁过来的每个循环访问源的先后、并列时的取舍、浮点累加的次序都与改前相同;石头永远排在全部舰船之后,
    所以有石头的场景里舰船之间的先后也不变 */
+/* 2026-09-29 性能:注册表里的石头上千块,每一步都整表扫太贵(红方 AI / 自动索敌 / 导弹找目标每 0.02 游戏秒扫一遍)。
+   每方存一份「上次重建时不是 none 的航迹」(按注册表顺序),只走它。航迹状态只在 trkStep 变(它标脏);节拍之间只会从 ghost 退成 none,
+   查询时照旧逐条算状态、跳过 none ⇒ 与逐个扫注册表逐位相同。注册表只追加、换局整个换掉:数组或长度变了也重建。重建给新数组,外层正在走的那份不受影响 */
+const TRK_ACT={blue:{dirty:true,sh:null,nS:-1,rk:null,nR:-1,list:[]},red:{dirty:true,sh:null,nS:-1,rk:null,nR:-1,list:[]}};
+function trkActive(side){
+  const A=side==='blue'?TRK_ACT.blue:TRK_ACT.red;
+  if(A.dirty||A.sd!==side||A.sh!==ships||A.nS!==ships.length||A.rk!==rocks||A.nR!==rocks.length){
+    const L=[];
+    for(let r=0;r<2;r++){const reg=r===0?ships:rocks;
+      for(let i=0;i<reg.length;i++){const s=reg[i];if(s.side===side)continue;const tk=trkOf(side,s);if(tk&&trkState(tk)!=='none')L.push(tk);}}
+    A.dirty=false;A.sd=side;A.sh=ships;A.nS=ships.length;A.rk=rocks;A.nR=rocks.length;A.list=L;
+  }
+  return A.list;
+}
 function trkEach(side,fn){
-  for(let r=0;r<2;r++){
-    const reg=r===0?ships:rocks;
-    for(let i=0;i<reg.length;i++){
-      const s=reg[i];
-      if(s.side===side)continue;
-      const tk=trkOf(side,s);
-      if(!tk)continue;
-      const st=trkState(tk);
-      if(st==='none')continue;
-      if(fn(tk,st)===true)return true;
-    }
+  const L=trkActive(side);
+  for(let i=0;i<L.length;i++){
+    const tk=L[i],st=trkState(tk);
+    if(st==='none')continue;
+    if(fn(tk,st)===true)return true;
   }
   return false;
 }

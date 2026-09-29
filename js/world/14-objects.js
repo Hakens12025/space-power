@@ -15,6 +15,11 @@ const OBJ_CFG={ // 物理单位(km/s、s),用的地方经 PHYS 换算
   BUOY:{N:2,HP:40,FLY:150,LIFE:6000,SIZE:0.15,VIS:0.7}, // 每舰几个 / 结构 / 飞行速度 / 到位后的寿命 / 体型(小而冷)/ 可见光圈是舰船的几倍(2026-09-29 用户)
 };
 let OBJ_SEQ=0;
+const ROBJ={arr:null,n:-1,list:[]};
+function rockObjs(){ // 2026-09-29 性能:rocks 里不是静止石头的那几个(民船 / 诱饵 / 浮标),按注册表顺序。rocks 只追加不删,数组 / 长度不变就不重建
+  if(ROBJ.arr!==rocks||ROBJ.n!==rocks.length){ROBJ.arr=rocks;ROBJ.n=rocks.length;ROBJ.list=rocks.filter(o=>o.kind!=='rock');}
+  return ROBJ.list;
+}
 function makeObj(kind,side,name,pos,o){ // 字段按感知内核与武器会读到的那几格给齐(sReq 严格取值,缺一格就抛)
   const x={kind:kind,id:'o'+(++rockSeq),side:side,name:name,cls:'DD',tier:2,pos:pos.slice(),vel:[0,0,0],facing:[1,0,0],
     size:0.7,stealth:1,emit:0,recv:0,emitMode:'silent',ecmPower:0,flame:0,sideFlame:0,fireHot:0,thrust:0,dead:false,hp:100,maxHp:100};
@@ -50,8 +55,8 @@ function objFly(o,dt,spd){ // 朝 dest 飞(点着火);到了返回 true
   o.vel=[to[0]/d*spd,to[1]/d*spd,0];o.facing=[to[0]/d,to[1]/d,0];o.flame=1;o.pos[0]+=o.vel[0]*dt;o.pos[1]+=o.vel[1]*dt;return false;
 }
 function stepObjects(dt){
-  for(const o of rocks){
-    if(o.dead||!o.kind||o.kind==='rock')continue;
+  for(const o of rockObjs()){
+    if(o.dead||!o.kind)continue;
     if(o.kind==='civ'){
       const C=OBJ_CFG.CIV,to=V.sub(o.wp,o.pos);
       if(Math.hypot(to[0],to[1])<o.spd*PHYS.t(C.TURN)){o.wp=objArenaPt(o._r);o.burnT=PHYS.t(C.TURN);} // 快到航点:换下一个,转向那段点火

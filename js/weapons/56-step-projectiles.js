@@ -54,6 +54,7 @@ function shellTraceStep(){
 /* 2026-09-29 用户:天体是遮挡,炮弹会被挡住;碎石也挡,但碎石会被击毁(炮弹 / 导弹 / 拦截弹都算)。
    这一步走过的线段 (x0,y0) → p.pos 碰到天体盘 = 弹没了,撞击点出命中闪光;碰到碎石(命中半径 MAC_HIT_R 内,同打船)= 碎石被打碎,
    炮弹没了、导弹组 / 拦截弹组少一颗(一颗不剩才没)。瞄着那块碎石打的弹不在这里判(走原来的命中结算,同样打碎) */
+const PB_CAND=[]; // projBlock 的候选草稿(不重入)
 function projBlock(p,x0,y0,dt){
   const x1=p.pos[0],y1=p.pos[1],dx=x1-x0,dy=y1-y0,l2=dx*dx+dy*dy;if(!(l2>0))return;
   const kind=p.type==='mac'?'mac':'missile';
@@ -62,8 +63,11 @@ function projBlock(p,x0,y0,dt){
     const t=(-bb-Math.sqrt(disc))/l2;if(t>1||(t<0&&cc>0))continue; // 这一步没碰到盘(起点在盘里 cc<=0 也算碰到)
     const u=Math.max(0,t);p.done=true;spawnHit([x0+dx*u,y0+dy*u,p.pos[2]||0],kind,p.shooter,null);return;
   }
-  const R2=MAC_HIT_R*MAC_HIT_R,L=Math.sqrt(l2)+MAC_HIT_R;
-  for(const k of rocks){
+  const R2=MAC_HIT_R*MAC_HIT_R,L=Math.sqrt(l2)+MAC_HIT_R,G=rockGrid(),c=G.cell,ix0=Math.floor((x0-L)/c),ix1=Math.floor((x0+L)/c),iy0=Math.floor((y0-L)/c),iy1=Math.floor((y0+L)/c);
+  let cand=null; // 2026-09-29 性能:只取这一步外接框盖到的格(world/12 rockGrid),按注册表下标排好 —— 碰到的先后与逐个扫一样;一步走得太远就退回整表扫
+  if((ix1-ix0+1)*(iy1-iy0+1)<=64){cand=PB_CAND;cand.length=0;for(let ix=ix0;ix<=ix1;ix++)for(let iy=iy0;iy<=iy1;iy++){const a=G.map.get(rockKey(ix,iy));if(a)for(let j=0;j<a.length;j++)cand.push(a[j]);}if(cand.length>1)cand.sort((u,v)=>u-v);}
+  const nC=cand?cand.length:rocks.length;
+  for(let j=0;j<nC;j++){const k=cand?rocks[cand[j]]:rocks[j];
     if(k.dead||k.kind!=='rock'||k===p.target)continue;
     const ex=k.pos[0]-x0,ey=k.pos[1]-y0;if(Math.abs(ex)>L||Math.abs(ey)>L)continue;
     if(stepCPA2(p,k,dt)>=R2)continue;
@@ -89,7 +93,7 @@ function stepMacProj(p,dt){ // MAC轴炮:沿发射时船头直飞,命中或到�
       p.age=(p.age||0)+dt;
       p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;
       if(p.ground){ // 2026-09-27 打空地的炮弹:对方每艘船都按本拍相对线段的最近点判(与下面同式),碰到第一艘就算
-        for(const u of ships.concat(rocks)){if(u.dead||u.side===p.shooter.side||u.hp===undefined)continue; // 物体里只有带结构值的(民船 / 诱饵 / 浮标)挨得了打
+        for(let g=0;g<2;g++)for(const u of (g?rockObjs():ships)){if(u.dead||u.side===p.shooter.side||u.hp===undefined)continue; // 物体里只有带结构值的(民船 / 诱饵 / 浮标)挨得了打;2026-09-29 不再每步拼数组,石头本来就没有结构值(world/14 rockObjs)
           if(stepCPA2(p,u,dt)<MAC_HIT_R*MAC_HIT_R){if(applyDamage(u,p.dmg,p.shooter,'mac',p)>0)spawnHit(p.pos,'mac',p.shooter,u);p.done=true;return;}}
         if(!ARENA&&p.age*CFG.macSpd>MAC_FAR)p.done=true; // 2026-09-28 用户:炮弹射程理论无限 —— 不再到点消失,飞到出游玩区(主循环统一判);靶场没有游玩区,飞出 MAC_FAR 才收
         return;

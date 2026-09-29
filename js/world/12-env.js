@@ -87,10 +87,24 @@ function envSunBlind(from,to){ // ENV2 光源方向按观测方取;观测方在�
   return k>0&&k*k>(vx*vx+vy*vy)*c2;
 }
 /* 动目标显示:to 在场里、而且沿 from→to 视线的径向速度低于门限 ⇒ 回波被当成杂波。热循环里同样有一份内联副本 */
+/* 2026-09-29 性能:静止石头(kind 'rock' 或 ast)的空间网格,格里存注册表下标。杂波判定(下面)与挡弹(weapons/56 projBlock)只查附近几格。
+   rocks 只追加、不删不重排(打碎只是 dead),这类石头只有靶场拖动会挪(command/70 rangeDragTo 加 ROCK_EPOCH)⇒ 数组 / 长度 / 纪元都没变就不重建 */
+let ROCK_EPOCH=0;
+const ROCKG={cell:8000*CFG.scale,arr:null,n:-1,ep:-1,map:null,maxS:0};
+function rockKey(ix,iy){return (ix+1048576)*2097152+(iy+1048576);}
+function rockGrid(){
+  const G=ROCKG;if(G.arr===rocks&&G.n===rocks.length&&G.ep===ROCK_EPOCH)return G;
+  const m=new Map(),c=G.cell;let mx=0;
+  for(let i=0;i<rocks.length;i++){const k=rocks[i];if(k.kind!=='rock'&&!k.ast)continue;
+    const key=rockKey(Math.floor(k.pos[0]/c),Math.floor(k.pos[1]/c));let a=m.get(key);if(!a){a=[];m.set(key,a);}a.push(i);if(k.size>mx)mx=k.size;}
+  G.arr=rocks;G.n=rocks.length;G.ep=ROCK_EPOCH;G.map=m;G.maxS=mx;return G;
+}
 function envInClutter(p,self){ // ENV2 p 在雷达杂波里:贴着天体盘面、或贴着别的小行星(self 自己不算)。⚠ 22-percep 的 sensePrepare 按目标调它
   const C=ENV_CFG.CLUT_RES;
   for(const b of ENV.bodies){const dx=p[0]-b.x,dy=p[1]-b.y,q=b.r+C;if(dx*dx+dy*dy<q*q)return true;}
-  for(const k of rocks){if(!k.ast||k===self||k.dead)continue;const dx=p[0]-k.pos[0],dy=p[1]-k.pos[1],q=k.size*ENV_CFG.AST_KM+C;if(dx*dx+dy*dy<q*q)return true;}
+  const G=rockGrid(),c=G.cell,q0=G.maxS*ENV_CFG.AST_KM+C,x0=Math.floor((p[0]-q0)/c),x1=Math.floor((p[0]+q0)/c),y0=Math.floor((p[1]-q0)/c),y1=Math.floor((p[1]+q0)/c); // 2026-09-29 只查最大杂波半径覆盖的格(原来整表扫)
+  for(let ix=x0;ix<=x1;ix++)for(let iy=y0;iy<=y1;iy++){const a=G.map.get(rockKey(ix,iy));if(!a)continue;
+    for(let j=0;j<a.length;j++){const k=rocks[a[j]];if(!k.ast||k===self||k.dead)continue;const dx=p[0]-k.pos[0],dy=p[1]-k.pos[1],q=k.size*ENV_CFG.AST_KM+C;if(dx*dx+dy*dy<q*q)return true;}}
   return false;
 }
 function envClutterOn(){if(ENV.bodies.length)return true;for(const k of rocks)if(k.ast&&!k.dead)return true;return false;} // ENV2 场上有没有杂波源

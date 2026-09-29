@@ -267,7 +267,7 @@ function rangeDragAt(sx,sy){ // ENV2 靶场沙盘:12 px 内最近的舰船(敌�
 }
 function rangeDragTo(x,y){ // ENV2 舰船 / 石头直接写位置(靶连锚点一起挪,免得闪避机动拽回去);天体改 rangeWorld 再 envReset,不直写 ENV
   const g=rangeDrag,w=worldAt(x,y),nx=w[0]+g.dx,ny=w[1]+g.dy;
-  if(g.o){g.o.pos=[nx,ny,g.o.pos[2]||0];if(g.o.rangeAnchor)g.o.rangeAnchor=g.o.pos.slice();}
+  if(g.o){g.o.pos=[nx,ny,g.o.pos[2]||0];if(g.o.rangeAnchor)g.o.rangeAnchor=g.o.pos.slice();ROCK_EPOCH++;} // 2026-09-29 石头挪了:world/12 的网格重建
   else{const b=rangeWorld.bodies[g.bi];b.x=nx;b.y=ny;envReset(rangeWorld);}
 }
 function mdLeft(e,sx,sy){ // 左键
