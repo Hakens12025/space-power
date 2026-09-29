@@ -9,15 +9,15 @@
    背景:尘埃云(envBgParts,按光照;乘地图同一个显示增益)、位置型恒星的光晕、天体盘(朝阳面亮、背阴面 heat)。
    场按 CELL 屏幕像素一格,色阶 + 噪点上色,小图放大进整屏缓存(设备像素),每帧 1:1 贴;山只在变了的地方揭旧贴新;蓝方内核认出且定位后热轮廓叠在山上(山照画;与主视图画出认出的船同一个条件)。
    ============================================================================ */
-const IRV_C={CELL:10,V0:0.02,VMAX:1000,CULL:0.0003,SIG_MIN:0.7,NOISE:0.005,NOISE_MS:200,TAIL_K:4,POS_P:3,MIX:0.875,
+const IRV_C={CELL:14,V0:0.02,VMAX:1000,CULL:0.0003,SIG_MIN:0.7,NOISE:0.005,NOISE_MS:200,TAIL_K:4,POS_P:3,MIX:0.875,
   BG_K:0.1,CLOUD_M:8,CLOUD_LV:4,CLOUD_SYNC:400,CLOUD_BATCH:1500,CLOUD_COARSE:1200,
   GAIN:0.2,SUB_P:0.64,DET_V:0.862,CONTRAST:0.928,FILL_K:1/3,GLYPH:1.3,SIG_MAX_PX:30,MSL_PX:3,CORE:0.4,CORE_W:0.45,
-  UNC_K:0.75,UNC_CAP:4,PH_K:0.3,OFF:0.5,GLIDE:0.6,EP_PX:0.5,FIRE_GROW:1,FIRE_Q:12,TW:1.4,PLAT:1.2,WARP:0.05,CHURN:0.15,CHURN_STEP:0.1,R_TOL:0.05};
+  UNC_K:0.75,UNC_CAP:4,PH_K:0.3,OFF:0.5,GLIDE:0.6,EP_PX:0.5,FIRE_GROW:1,FIRE_Q:12,TW:2.0,PLAT:0.7,WARP:0.05,CHURN:0.15,CHURN_STEP:0.1,R_TOL:0.05};
   // 一道门:信噪比 >= 1(内核发现门)色阶值 = DET_V x 信噪比^CONTRAST,< 1 = GAIN x 信噪比^SUB_P 淡出(见 irvV;2026-09-29 用户:旧开局距离 120 万、没有星云时开局就能淡淡看见对方,SUB_P 3 → 0.64,门下封顶仍是 GAIN)。2026-09-28 用户:发现即可见 —— 发现门处 0.22 → 0.35(DET_V),信噪比 1000 处照旧 0.94(CONTRAST 1.14 → 0.928);门下不动(没发现的暗热与星云混在一起);发现了的热再乘 (1 + 所在处底 / V0),比底亮出同样一截(irvjSplats;原来底把热的对比度又吃一次);BG_K = 背景(云 / 恒星光晕)压暗倍数;FILL_K = 石头填满距离 / (认出距离 x √体型)
   // GLYPH = 舰标团 / 舰标半径,封顶 SIG_MAX_PX;MSL_PX = 导弹小点;CORE / CORE_W = 定位后亮核的份额与宽度
   // PH_K = 红外测距的相对 1σ(不确定半径 = 距离 x √(PH_K x 方位误差));OFF = 红外异常圈心偏移 / 不确定半径;GLIDE = 定位 / 丢定位时团缩小 / 胀大的时间常数(墙钟秒,只在跑的时候走);EP_PX = 团心挪不到这么多像素不重贴;FIRE_GROW = 开火一刻团半径多出几个舰标团(随开火那份热退回去,sensors/22 fireLvl;2026-09-28 用户:开火是红外亮度提升、团变大一点、发白一点,作为属性,不贴特效);FIRE_Q = 开火热退的过程中重算物理的档数;UNC_K = 热区对数半径的缩放;UNC_CAP = 团半径上限(x 舰标团);TW = 过渡宽度(x 团半径);PLAT = 高原;WARP / CHURN = 扭曲幅度与翻涌速度(rad / 墙钟秒,只在跑的时候走);
   // CHURN_STEP = 翻涌累计把形状挪到这么多格才重贴;R_TOL = 团半径变了这个比例才重贴
-  // CELL = 场的格子(屏幕 px;2026-09-28 用户:像素变糊一点,5 → 8,与红外 x0.6 对应;2026-09-29 再糊一点,8 → 10);V0 / VMAX = 色阶的对数刻度;CULL = 山截断处;SIG_MIN = 山的最小宽(格);TAIL_K = 尾焰尾巴长宽比;POS_P / MIX = 恒星光晕的律
+  // CELL = 场的格子(屏幕 px;2026-09-28 用户:像素变糊一点,5 → 8,与红外 x0.6 对应;2026-09-29 再糊一点,8 → 10 → 14,同时团的剖面放软:TW 1.4 → 2.0、PLAT 1.2 → 0.7);V0 / VMAX = 色阶的对数刻度;CULL = 山截断处;SIG_MIN = 山的最小宽(格);TAIL_K = 尾焰尾巴长宽比;POS_P / MIX = 恒星光晕的律
 const IRV_T0=-0.1;
 const IRV_RAMP=[[IRV_T0,[40,6,6,140]],[0,[70,12,12,150]],[0.25,[150,30,20,170]],[0.5,[220,80,30,190]],[0.75,[255,170,60,210]],[1,[255,245,210,230]]];
 const IRV_LUT=(function(){const L=new Uint8ClampedArray(256*4);for(let k=0;k<256;k++){const t=IRV_T0+k/255*(1-IRV_T0);let a=0;while(a<IRV_RAMP.length-2&&t>IRV_RAMP[a+1][0])a++;
