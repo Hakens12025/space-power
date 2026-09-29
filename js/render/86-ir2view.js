@@ -10,8 +10,8 @@
    · 红外异常(83-hud anomScan 报的,带源):红外2 里弹在环 / 仪表外沿,围出交集的多边形也闪一下;主视角弹在可见光圈边上(ir2AnomDraw)。
    · 只在点开时算。环的数据:船等每帧重算,静止石头分 K 帧轮一遍(各占一个槽,重算那个槽时先减旧的再加新的);环的像素每帧按格上色。
    ============================================================================ */
-const IR2_C={BAND:52,RIN_MIN:30,N:360,M:8,T0:100,T1:6000,RSIG:0.14,
-  // BAND = 环厚 px;RIN_MIN = 环内沿至少多少 px(拉远时可见光圈在屏幕上太小);N = 一圈几格(1°,已比屏幕上一格细);M = 厚度分几档(环厚约 9 个格子);T0 / T1 = 内沿 / 外沿温度 K(对数刻度);RSIG = 谱宽(厚度的几成)
+const IR2_C={BAND:65,EDGE:'rgba(255,150,70,.5)',EDGE_W:1,RIN_MIN:30,N:360,M:8,T0:100,T1:6000,RSIG:0.14,
+  // BAND = 环厚 px(2026-09-30 用户:稍微厚一点,52 → 65);EDGE / EDGE_W = 环外沿的线(用户:黄色勾边太粗,2 px 实色 → 1 px 半透明);RIN_MIN = 环内沿至少多少 px(拉远时可见光圈在屏幕上太小);N = 一圈几格(1°,已比屏幕上一格细);M = 厚度分几档(环厚约 9 个格子);T0 / T1 = 内沿 / 外沿温度 K(对数刻度);RSIG = 谱宽(厚度的几成)
   T_ROCK:150,T_SOLAR:250,T_HULL:300,T_PLUME:1500,T_FIRE:3000,T_NEB:100,T_BODY:200,T_SUN:5800,
   SIG0:8,SMIN:0.6,SMAX:25,XF:0.1,K:16,CULL:0.001,PO_K:0.002,PO_N:8,
   // 团的角宽(度,高斯 σ)= SIG0 / √信噪比,夹在 [SMIN, SMAX];XF = 可见光圈边内外各几成里渐变交接;K = 静止石头分几帧轮一遍;CULL = 峰值低于它的团不铺(色阶差不到一档),团的尾巴铺到 CULL / 10 为止;
@@ -20,7 +20,7 @@ const IR2_C={BAND:52,RIN_MIN:30,N:360,M:8,T0:100,T1:6000,RSIG:0.14,
   // 本底:星云发光 = NEB_K x 沿视线的光深(从圈边往外 NEB_L km,一圈 NEB_NB 个方向);环心挪动超过 NEB_DR x 圈半径才重算;恒星眩光峰值(色阶值)与角宽(度)
   CELL:6,GRAIN:0.3,NOISE:0.005,NOISE_MS:200,FLK_PLUME:0.35,LC_A:[0.2,0.5],LC_P:[5,30],
   // 颗粒:格子 px、亮处的乘性颗粒(锚在屏幕上)、底噪幅度与换一次的毫秒;尾焰抖动幅度;石头翻滚的明暗幅度与周期(秒)
-  INST_R:36,INST_B:40,INST_PAD:18,FLASH_S:1.5,ZONE_T:0.2,ZONE_S:200000*CFG.scale};
+  INST_R:36,INST_B:50,INST_PAD:18,FLASH_S:1.5,ZONE_T:0.2,ZONE_S:200000*CFG.scale};
   // 仪表内圈半径 / 环厚 / 底板边 px;异常刻痕几秒淡出;交集每几墙钟秒重算一次、亮度刻度(√面积 2000 ~ 20 万 km 由亮到暗,同雷达画面)
 const IR2={gr:null,grW:0,grH:0,sk:null,still:false,key:'',fr:0,ns:0,wt:0,clk:{t:0},rings:[],inst:null,rec:new Map(),zones:[],zt:-1e9,RS:[],IS:[],QS:null,S:[],P:[],RI:[],rc:null,hud:null,hudT:-1e9,hudC:null,L32:null,lumMax:0};
 function ir2Wrap(a){a=(a+Math.PI)%(2*Math.PI);if(a<0)a+=2*Math.PI;return a-Math.PI;}
@@ -212,7 +212,7 @@ function drawIr2View(){ // 每帧入口(84-scene,MAPV.mode === 'ir';画在地图
       if(bj<0||be>=B+2*C)return null;let a=Math.atan2(y-P[bj][1],x-P[bj][0]);if(a<0)a+=2*Math.PI;return [ir2At(rings[bj].V,a,be/B),bj];}));
     if(lay)ir2Blit(lay,bb,g=>ir2Circles(g,P,RO),g=>ir2Circles(g,P,RI));
     ctx.save();
-    for(let k=0;k<P.length;k++){const arcs=ir2Arcs(P,RO,k);ctx.strokeStyle='#ff8a2a';ctx.lineWidth=2;for(const q of arcs){ctx.beginPath();ctx.arc(P[k][0],P[k][1],RO[k],q[0],q[1]);ctx.stroke();} // 外沿橙线(只画露在外面的)
+    for(let k=0;k<P.length;k++){const arcs=ir2Arcs(P,RO,k);ctx.strokeStyle=IR2_C.EDGE;ctx.lineWidth=IR2_C.EDGE_W;for(const q of arcs){ctx.beginPath();ctx.arc(P[k][0],P[k][1],RO[k],q[0],q[1]);ctx.stroke();} // 外沿橙线(只画露在外面的)
       ir2Ticks(a=>ir2InArcs(arcs,a)?[P[k][0]+Math.cos(a)*(RO[k]+2),P[k][1]+Math.sin(a)*(RO[k]+2)]:null);}
     ctx.restore();}
   if(IS.length){ctx.save();ctx.strokeStyle='rgba(255,200,150,.35)';ctx.lineWidth=1;ctx.setLineDash([4,4]);for(let k=0;k<IS.length;k++)for(const q of ir2Arcs(PI,RII,k)){ctx.beginPath();ctx.arc(PI[k][0],PI[k][1],RII[k],q[0],q[1]);ctx.stroke();}ctx.restore();} // 可见光圈(并起来):里面实际可见
@@ -226,7 +226,7 @@ function drawIr2Hud(){ // 红外仪表(左边,加舰条与特写窗之间;没选
   const LH=ir2Lay('H'),ep=Math.floor(now/IR2_C.NOISE_MS),lay=(IR2.still&&LH.res&&LH.ep===ep&&LH.cx===cx&&LH.cy===cy)?LH.res:(LH.ep=ep,LH.cx=cx,LH.cy=cy,LH.res=ir2Paint(LH,[cx-ro-2,cy-ro-2,cx+ro+2,cy+ro+2],[[cx,cy,r0-2*C,ro+2*C]],(x,y)=>{const d=Math.sqrt((x-cx)*(x-cx)+(y-cy)*(y-cy));if(d<r0-2*C||d>=ro+2*C)return null;let a=Math.atan2(y-cy,x-cx);if(a<0)a+=2*Math.PI;return [ir2At(inst.V,a,(d-r0)/B),0];}));
   if(lay){ctx.beginPath();ctx.arc(cx,cy,ro,0,2*Math.PI);ctx.moveTo(cx+r0,cy);ctx.arc(cx,cy,r0,0,2*Math.PI,true);ctx.clip('evenodd');ctx.imageSmoothingEnabled=true;ctx.drawImage(lay[0],lay[1]*C,lay[2]*C,lay[3]*C,lay[4]*C);}
   ctx.restore();ctx.save();
-  ctx.strokeStyle='#ff8a2a';ctx.lineWidth=2;ctx.beginPath();ctx.arc(cx,cy,ro,0,2*Math.PI);ctx.stroke();ir2Ticks(a=>[cx+Math.cos(a)*(ro+2),cy+Math.sin(a)*(ro+2)]);
+  ctx.strokeStyle=IR2_C.EDGE;ctx.lineWidth=IR2_C.EDGE_W;ctx.beginPath();ctx.arc(cx,cy,ro,0,2*Math.PI);ctx.stroke();ir2Ticks(a=>[cx+Math.cos(a)*(ro+2),cy+Math.sin(a)*(ro+2)]);
   let mx=1;for(const s of QS)mx=Math.max(mx,Math.hypot(s.pos[0]-inst.c[0],s.pos[1]-inst.c[1]));const sc=(r0-10)/mx;
   ctx.fillStyle='#5aa7ff';for(const s of QS){ctx.beginPath();ctx.arc(cx+(s.pos[0]-inst.c[0])*sc,cy+(s.pos[1]-inst.c[1])*sc,2.5,0,2*Math.PI);ctx.fill();}
   ctx.font='11px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='alphabetic';ctx.fillStyle='#8fa0b0';ctx.fillText(IR2.RS.length?'红外仪表 · 选中 '+QS.length+' 艘':'红外仪表 · 全舰队',cx,cy+ro+pad-5);
