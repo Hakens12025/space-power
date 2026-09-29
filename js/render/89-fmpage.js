@@ -226,8 +226,8 @@ function fmPgDialInner(F, PL) {
      不然圈一开就有半个圈落在画面外,看着像画错了。与沙盘 阵型控制台.html 同一条处理。 */
   if (fmPg.ovIn || fmPg.ovOu) PL.pairs.forEach(pr => {
     const st = PL.sta[pr.j], c = (typeof ciwsOf === 'function') ? ciwsOf(pr.s) : null;
-    if (!st || !c || !pr.s.ciwsOn) return;
-    const rr = Math.max(fmPg.ovOu ? (c.outer || 0) : 0, fmPg.ovIn ? (c.inner || 0) : 0);
+    if (!st || !c) return;
+    const rr = Math.max(fmPg.ovOu && pr.s.ciwsOn ? (c.outer || 0) : 0, fmPg.ovIn && pr.s.ciwsGunOn !== false ? (c.inner || 0) : 0);
     if (rr > 0) maxR = Math.max(maxR, Math.hypot(st.lx, st.ly) + rr);
   });
   const k = FP_FIT / maxR * fmPg.zoom;          // FM6l 基准贴合 × 玩家的缩放
@@ -265,15 +265,15 @@ function fmPgDialInner(F, PL) {
   /* FM9【覆盖圈】= 各舰自己的近防内圈/外圈,画在最底下(它们是大面积的半透明区域,盖住谁都不好)。
      配色抄沙盘 阵型控制台.html:外圈青、内圈绿,填充极淡、描边也淡 —— 它是"罩得住多大范围"的示意,
      不是可点的东西,所以 pointer-events 全关掉,免得抢走插槽圈的拖拽。
-     只画【真的开着近防】的舰(s.ciwsOn):关了近防还画一个圈是骗人的。 */
+     只画【真的开着】的那一圈:外圈看近防导弹 s.ciwsOn、内圈看近防炮 s.ciwsGunOn(2026-09-29 拆两件),关了还画一个圈是骗人的。 */
   if (fmPg.ovIn || fmPg.ovOu) PL.pairs.forEach(pr => {
     const st = PL.sta[pr.j], c = (typeof ciwsOf === 'function') ? ciwsOf(pr.s) : null;
-    if (!st || !c || !pr.s.ciwsOn) return;
+    if (!st || !c) return;
     const q = px(st.lx, st.ly);
     if (!isFinite(q[0]) || !isFinite(q[1])) return;
-    if (fmPg.ovOu && c.outer > 0) g += '<circle cx="' + q[0].toFixed(1) + '" cy="' + q[1].toFixed(1)
+    if (fmPg.ovOu && pr.s.ciwsOn && c.outer > 0) g += '<circle cx="' + q[0].toFixed(1) + '" cy="' + q[1].toFixed(1)
       + '" r="' + (c.outer * k).toFixed(1) + '" fill="rgba(79,224,255,.035)" stroke="rgba(79,224,255,.22)" stroke-width="1" pointer-events="none"/>';
-    if (fmPg.ovIn && c.inner > 0) g += '<circle cx="' + q[0].toFixed(1) + '" cy="' + q[1].toFixed(1)
+    if (fmPg.ovIn && pr.s.ciwsGunOn !== false && c.inner > 0) g += '<circle cx="' + q[0].toFixed(1) + '" cy="' + q[1].toFixed(1)
       + '" r="' + (c.inner * k).toFixed(1) + '" fill="rgba(110,231,168,.06)" stroke="rgba(110,231,168,.35)" stroke-width="1" pointer-events="none"/>';
   });
   /* 各舰实际站位(在插槽圈之下画,免得盖住可点的插槽) */

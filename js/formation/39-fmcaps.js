@@ -254,7 +254,7 @@ function fmBandRadii(list, flag, bm, P) {
   list.forEach(s => {
     if (s === flag) return;
     const c = ciwsOf(s);
-    if (s.ciwsOn && c.inner > 0) inns.push(c.inner * FM_CIWS_K);
+    if (s.ciwsGunOn !== false && c.inner > 0) inns.push(c.inner * FM_CIWS_K); // 2026-09-29 内圈 = 近防炮的开关
     if (s.ciwsOn && c.outer > 0) outs.push(c.outer * FM_CIWS_K);
   });
   const minIn = inns.length ? Math.min(...inns) : 8000 * CFG.scale;
@@ -282,7 +282,7 @@ function fmBandRadii(list, flag, bm, P) {
    但编组控制页会把那条带标黄提醒 —— 这是四条带里【唯一】与算法强相关的一条。 */
 function fmBandCloseCap(list, flag) {
   let mn = Infinity;
-  list.forEach(s => { if (s === flag) return; const c = ciwsOf(s); if (s.ciwsOn && c.inner > 0) mn = Math.min(mn, c.inner); });
+  list.forEach(s => { if (s === flag) return; const c = ciwsOf(s); if (s.ciwsGunOn !== false && c.inner > 0) mn = Math.min(mn, c.inner); });
   return isFinite(mn) ? mn : 4000 * CFG.scale; // 2026-09-26 兜底 = 现 DD 内圈(原 8000)
 }
 

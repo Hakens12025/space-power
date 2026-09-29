@@ -139,7 +139,7 @@ const CIWS_ST=new WeakMap(),CIWS_TR=[],CIWS_CLK={t:0};
 function drawCiwsFx(){
   const C=CIWS_FX,now=nowMs(),dtw=runDt(CIWS_CLK,0.05);
   if(dtw>0)for(const x of ships){
-    if(x.dead||x.ciwsOn===false)continue;const k=ciwsOf(x);if(!k||!(k.inner>0))continue;
+    if(x.dead||x.ciwsGunOn===false)continue;const k=ciwsOf(x);if(!k||!(k.inner>0))continue; // 2026-09-29 曳光 = 近防炮,看它自己的开关
     let m=null,md=k.inner;for(const p of projectiles){if(p.type!=='missile'||p.done||!p.shooter||p.shooter.side===x.side)continue;const d=Math.hypot(p.pos[0]-x.pos[0],p.pos[1]-x.pos[1]);if(d<md){md=d;m=p;}}
     let st=CIWS_ST.get(x);
     if(m){if(!st){st={acc:0,a:0,t:0};CIWS_ST.set(x,st);}st.a=Math.atan2(m.pos[1]-x.pos[1],m.pos[0]-x.pos[0]);st.t=now;}
@@ -451,7 +451,7 @@ function drawHoverRings(){
     const p=toScreen(s.pos[0],s.pos[1]);
     if(hoverRing==='mac'){ring(p,macEffRange(s),'主炮 50% ≈ '+Math.round(macEffRange(s)/1000)+'k');ring(p,macRangeAt(s,0.1),'主炮 10% ≈ '+Math.round(macRangeAt(s,0.1)/1000)+'k');} // WR1:没有射程门,画两档命中率的距离
     else if(hoverRing==='msl')ring(p,mslReach(s),'导弹 射程 ≈ '+Math.round(mslReach(s)/1000)+'k(中段熄火滑行)'); // WR1
-    else if(hoverRing==='ciws'){const c=ciwsOf(s);ring(p,c.outer,'外圈拦截 '+Math.round(c.outer/1000)+'k');ring(p,c.inner,'内圈 '+Math.round(c.inner/1000)+'k');}
+    else if(hoverRing==='ciws'||hoverRing==='ciwsMsl'||hoverRing==='ciwsGun'){const c=ciwsOf(s);if(hoverRing!=='ciwsGun')ring(p,c.outer,'外圈拦截 '+Math.round(c.outer/1000)+'k');if(hoverRing!=='ciwsMsl')ring(p,c.inner,'内圈 '+Math.round(c.inner/1000)+'k');} // 2026-09-29 近防导弹只画外圈、近防炮只画内圈
     else if(hoverRing==='emit'&&typeof actRangeOf==='function'&&typeof hearRangeOf==='function'){ // EM1-B:雷达的账 —— 开了能照多远、开了会在多远被听见(两圈都按【开着照射】算,不管此刻开没开:这是做决定前要看的账)
       const ifPaint=Object.assign({},s,{emitMode:'paint'});
       ring(p,actRangeOf(s),'雷达 '+Math.round(actRangeOf(s)/1000)+'k(对标准目标)'+(s.emitMode==='silent'?' · 现在静默':''));

@@ -4,7 +4,7 @@
    右栏 #selPanel 只放【变化信息】(结构/目标/武器库状态/事件);
    底栏 #cmdBar = 【固定信息】(舰名/舰种·等级 + 规格条 specItems)+ 三颗钮:雷达 / 武器(各自向上弹菜单 #cmdPop,见本文件末尾)/ 跟随(2026-09-27 改版;原来的火控、逐武器开关、发射档、扫描、解除五种钮已去掉)。
    开关语义:火控=autoEngage+roe 合一(开=free+自动索敌,关=hold+解除锁定);发射档并进「雷达」菜单(见本文件末尾);
-   武器开关=macOn/mslOn/ciwsOn(按 kind 映射)。操作作用于【全部选中蓝舰】,状态读第一艘。
+   武器开关=macOn/mslOn/ciwsOn(按 kind 映射;近防另有 ciwsGunOn,见 CIWS_SUB)。操作作用于【全部选中蓝舰】,状态读第一艘。
    (右轨的事件流面板与它的写入点 2026-09-22 随事件系统整体删除。) */
 function selBlue(){return selectedShips().filter(s=>s.side==='blue'&&!s.dead);}
 /* kind → 开关字段/射程/hover 文案 的映射(武器机制数据从烘焙字段读,源头在 weapons/51-defs) */
@@ -381,7 +381,7 @@ bindCmdBar();
 /* ============ 2026-09-27 底栏菜单 #cmdPop(用户:「统一归入雷达,点击后向上出现一个菜单……所有武器+火控统一归入武器按钮,亮代表启动」) ============
    雷达:静默 / 脉冲 / 发射 / 干扰。脉冲 = 只照一拍(sensors/21 的 pingReq),照完回到原档;钮亮 = 在辐射或正在脉冲。
    武器:取消所有 / 火炮 / 导弹 / 激光 / 近防。勾选即许可:攻击性武器(火炮、导弹)勾着任一 = 火控开(autoEngage + roe free),全不勾 = 火控关、解除锁定;
-     近防只管自己的 ciwsOn。火炮 / 导弹点名字向右展开具体武器(2026-09-29 用户:原向上),最右边 ⌖ = 强行开火(command/71 的 toggleWeapon → 70 的 mdWeaponPick)。激光目前没有,灰着占位。
+     近防只管自己的两件(CIWS_SUB:近防导弹 ciwsOn / 近防炮 ciwsGunOn),不碰火控;上一级的勾按下一级算,没全勾显示半勾 ⊟。火炮 / 导弹 / 近防点名字向右展开具体武器(2026-09-29 用户:原向上),最右边 ⌖ = 强行开火(command/71 的 toggleWeapon → 70 的 mdWeaponPick)。激光目前没有,灰着占位。
    菜单内容随 updateCmdBar(每 20 帧)重画,所以状态与脉冲的亮灭跟得上;点菜单与钮以外的地方关。 */
 const CMDPOP={kind:null,sub:null,el:null,btn:null};
 const WPN_CATS=[['mac','火炮'],['msl','导弹'],['laser','激光'],['ciws','近防'],['buoy','特殊']]; // 2026-09-27 特殊类:前出浮标(先只给「波长」)
@@ -389,19 +389,23 @@ const RADAR_ITEMS=[['silent','静默'],['pulse','脉冲'],['paint','发射'],['j
 const RADAR_TIP={silent:'静默:一点不响,只靠红外看;对方听不见我',pulse:'脉冲:雷达只照一拍 —— 照得到的接触拿到位置和速度;对方只在这一拍听得到我',paint:'发射:雷达一直照,定位最快最准、也只有它能持续跟住远处的冷目标;代价是对方在约两倍距离上一直听得见我',jam:'干扰:发射机改去造噪声,压住对方对我的照射回波;更吵,而且自己拿不到照射定位'};
 function wpnFcOn(x){return !!(x.autoEngage&&x.roe!=='hold');}
 function wpnHas(x,k){return (x.weapons||[]).some(w=>w.kind===k);}
-function wpnChecked(x,k){if(!wpnHas(x,k))return false;if(k==='ciws')return x.ciwsOn!==false;const ki=KIND_INFO[k];return !!ki&&wpnFcOn(x)&&x[ki.on]!==false;}
+function wpnChecked(x,k){if(!wpnHas(x,k))return false;if(k==='ciws')return CIWS_SUB.every(c=>x[c[2]]!==false);const ki=KIND_INFO[k];return !!ki&&wpnFcOn(x)&&x[ki.on]!==false;}
 function wpnAnyOn(x){return wpnChecked(x,'mac')||wpnChecked(x,'msl');}
+const CIWS_SUB=[['ciwsMsl','近防导弹','ciwsOn'],['ciwsGun','近防炮','ciwsGunOn']]; // 2026-09-29 用户:近防展开两件各自勾;[菜单 id, 名字, 舰船开关字段]
+function ciwsSubOn(x,f){return wpnHas(x,'ciws')&&x[f]!==false;}
+function wpnTri(x,k){if(k!=='ciws')return wpnChecked(x,k)?2:0;const n=CIWS_SUB.filter(c=>ciwsSubOn(x,c[2])).length;return n===CIWS_SUB.length?2:(n?1:0);} // 上一级的勾:2 全勾 / 1 半勾 / 0 不勾
+function ciwsSubToggle(id){const c=CIWS_SUB.find(c=>c[0]===id),sel=selBlue();if(!c||!sel.length)return;const v=!ciwsSubOn(sel[0],c[2]);for(const x of sel)x[c[2]]=v;updateSelPanel();}
 function wpnToggle(k){
   const sel=selBlue();if(!sel.length||!KIND_INFO[k])return;const v=!wpnChecked(sel[0],k);
   for(const x of sel){
-    if(k==='ciws'){x.ciwsOn=v;continue;}
+    if(k==='ciws'){for(const c of CIWS_SUB)x[c[2]]=v;continue;} // 上一级:没全勾 → 全勾,全勾 → 全关
     const on=KIND_INFO[k].on;
     if(v){if(!wpnFcOn(x)){for(const kk of ['mac','msl'])if(kk!==k)x[KIND_INFO[kk].on]=false;x.autoEngage=true;x.roe='free';}x[on]=true;} // 火控从关到开:只开勾的这一件
     else{x[on]=false;if(!wpnAnyOn(x)){x.autoEngage=false;x.roe='hold';x.lockedTarget=null;}} // 攻击性武器全不勾 = 火控关
   }
   updateSelPanel();
 }
-function wpnClearAll(){for(const x of selBlue()){x.autoEngage=false;x.roe='hold';x.lockedTarget=null;x.fTgt=null;x.macOn=false;x.mslOn=false;x.ciwsOn=false;}updateSelPanel();}
+function wpnClearAll(){for(const x of selBlue()){x.autoEngage=false;x.roe='hold';x.lockedTarget=null;x.fTgt=null;x.macOn=false;x.mslOn=false;x.ciwsOn=false;x.ciwsGunOn=false;}updateSelPanel();}
 function radarPulsing(x){const f=(typeof PING_FX!=='undefined')?PING_FX.get(x):null;return !!(x.pingReq||(f&&!f.done));}
 function selBuoyOk(){return (typeof selBuoy!=='undefined'&&selBuoy&&!selBuoy.dead)?selBuoy:null;} // 2026-09-29 选中的我方浮标(底栏雷达作用于它)
 function radarPick(v){const bu=selBuoyOk();if(bu){if(v==='pulse')bu.pingReq=true;else if(typeof buoySetOn==='function')buoySetOn(bu,v==='paint');updateSelPanel();return;}const sel=selBlue();if(!sel.length)return;if(v==='pulse')sel.forEach(x=>{x.pingReq=true;});else sel.forEach(x=>setEmit(x,v));updateSelPanel();}
@@ -410,7 +414,7 @@ function cmdPopEl(){
   if(CMDPOP.el)return CMDPOP.el;
   const d=document.createElement('div');d.id='cmdPop';document.body.appendChild(d);
   d.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.classList.contains('is-dis'))return;const a=b.dataset.a,v=b.dataset.v;
-    if(a==='radar')radarPick(v);else if(a==='wchk')wpnToggle(v);else if(a==='clear')wpnClearAll();else if(a==='sub')CMDPOP.sub=CMDPOP.sub===v?null:v;
+    if(a==='radar')radarPick(v);else if(a==='wchk')wpnToggle(v);else if(a==='csub')ciwsSubToggle(v);else if(a==='clear')wpnClearAll();else if(a==='sub')CMDPOP.sub=CMDPOP.sub===v?null:v;
     else if(a==='force'){const w=v==='msl'?'missile':v;cmdPopClose();if(typeof toggleWeapon==='function'&&selWeapon!==w)toggleWeapon(w);return;}
     cmdPopRender();});
   d.addEventListener('mouseover',e=>{const b=e.target.closest('button');if(!b)return;const a=b.dataset.a,v=b.dataset.v,s=selBlue()[0];let tip='';
@@ -418,6 +422,7 @@ function cmdPopEl(){
     else if(a==='force'&&v==='buoy'){hoverRing=null;tip='放浮标:点地图上的位置,浮标飞过去停下(飞的那段在点火,远处看得见);平时被动看和听,在菜单里点它一下就开照射(开着才会被对方听见)。右键取消';}
     else if(a==='force'){hoverRing=v;tip='强行开火:点一艘敌舰打它,或点地图上的位置(导弹 = 区域齐射,主炮 = 转向那个点开一炮);不看武器勾没勾。右键取消';}
     else if((a==='wchk'||a==='sub')&&KIND_INFO[v]&&s){hoverRing=v;tip=KIND_INFO[v].tip(s);}
+    else if(a==='csub'&&s&&wpnHas(s,'ciws')){const c=ciwsOf(s);hoverRing=v;tip=v==='ciwsMsl'?`近防导弹 · 外圈 ${Math.round(c.outer/1000)}k 拦截弹 · 库存 ${s.interceptor||0} 枚 · 来袭导弹进预警距离自动发射迎上去(消耗弹药)`:`近防炮 · 内圈 ${Math.round(c.inner/1000)}k · 打进内圈的来袭弹再过一道拦截(不耗弹药)`;}
     else if(a==='clear'){hoverRing=null;tip='取消所有:所有武器都不勾 = 火控关、停火并解除锁定,近防也关';}
     const t=document.getElementById('cmdTip');if(t&&tip){t.style.display='block';t.textContent=tip;}});
   d.addEventListener('mouseleave',()=>{hoverRing=null;if(typeof updSelWeaponTip==='function')updSelWeaponTip();});
@@ -438,14 +443,17 @@ function cmdPopRender(){
     let sub='';const k=CMDPOP.sub;
     if(k==='buoy'){ // 2026-09-29 逐个浮标的开关删了(用户:操作入口放到浮标本身,点浮标 → 底栏雷达)
       sub='<div class="cp-col cp-sub"><div class="cp-row"><button class="btn cp-b cp-name" data-a="sub" data-v="buoy">前出浮标<span class="cp-st">余 '+sel.reduce((a,x)=>a+(x.buoys||0),0)+' 个</span></button><button class="btn cp-ff" data-a="force" data-v="buoy">⌖</button></div>'+'</div>';}
+    else if(k==='ciws'){const cw=ciwsOf(s)||{outer:0,inner:0};
+      sub='<div class="cp-col cp-sub">'+CIWS_SUB.map(([id,l,f])=>{const on=ciwsSubOn(s,f),st=id==='ciwsMsl'?'外圈 '+Math.round(cw.outer/1000)+'k · 余 '+(s.interceptor||0)+' 枚':'内圈 '+Math.round(cw.inner/1000)+'k';
+        return '<div class="cp-row"><button class="btn cp-b cp-name'+(on?' on':'')+'" data-a="csub" data-v="'+id+'">'+(on?'☑ ':'☐ ')+l+'<span class="cp-st">'+st+'</span></button></div>';}).join('')+'</div>';} // 防御武器没有 ⌖
     else if(k){const ws=(s.weapons||[]).filter(w=>w.kind===k),c=wpnChecked(s,k);
       sub='<div class="cp-col cp-sub">'+ws.map(w=>'<div class="cp-row"><button class="btn cp-b cp-name'+(c?' on':'')+'" data-a="wchk" data-v="'+k+'">'+(c?'☑ ':'☐ ')+w.label+'<span class="cp-st">'+wpnStat(s,k)+'</span></button><button class="btn cp-ff" data-a="force" data-v="'+k+'">⌖</button></div>').join('')+'</div>';}
     const rows=['<button class="btn cp-b" data-a="clear">取消所有</button>'];
     for(const [kk,l] of WPN_CATS){
       if(!wpnHas(s,kk)){rows.push('<div class="cp-row"><button class="btn cp-b cp-name is-dis">☐ '+l+' · 暂无</button></div>');continue;}
       if(kk==='buoy'){rows.push('<div class="cp-row"><button class="btn cp-b cp-name'+(k===kk?' on':'')+'" data-a="sub" data-v="buoy">'+l+' ▸</button></div>');continue;} // 特殊类没有勾选(不参与自动开火),只展开
-      const c=wpnChecked(s,kk),exp=kk!=='ciws';
-      rows.push('<div class="cp-row"><button class="btn cp-b cp-chk'+(c?' on':'')+'" data-a="wchk" data-v="'+kk+'">'+(c?'☑':'☐')+'</button><button class="btn cp-b cp-name'+(k===kk?' on':'')+'" data-a="'+(exp?'sub':'wchk')+'" data-v="'+kk+'">'+l+(exp?' ▸':'')+'</button></div>');}
+      const c=wpnTri(s,kk);
+      rows.push('<div class="cp-row"><button class="btn cp-b cp-chk'+(c===2?' on':(c===1?' half':''))+'" data-a="wchk" data-v="'+kk+'">'+(c===2?'☑':(c===1?'⊟':'☐'))+'</button><button class="btn cp-b cp-name'+(k===kk?' on':'')+'" data-a="sub" data-v="'+kk+'">'+l+' ▸</button></div>');}
     h='<div class="cp-col cp-main">'+rows.join('')+'</div>'+sub;}
   if(d._lastHTML!==h){d.innerHTML=h;d._lastHTML=h;}
   const r=CMDPOP.btn.getBoundingClientRect();d.style.display='flex';d.style.left=Math.round(r.left)+'px';d.style.bottom=Math.round(window.innerHeight-r.top+6)+'px';
