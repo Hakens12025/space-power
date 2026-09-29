@@ -486,7 +486,6 @@ function terrSync(painter){ // ENV2 每帧(与判据的 mapTileStep)先对一次
   const tp=Math.min(dpr,TERR.TP_MAX);if(tp!==TERR.tp){TERR.tp=tp;TERR.tiles.clear();TERR.xw.length=0;TERR.xa.length=0;TERR.xkey='';TERR.pool.length=0;TERR.mem=0;TERR.want.length=0;TERR.anc.length=0;TERR.seq0.length=0;TERR.pos.length=0;TERR.wantKey='';TERR.busy=false;if(TERR.comp)TERR.comp.bad=true;} // ENV2 倍率变了:瓦片按新倍率重建
 }
 function terrDropBack(){if(TERR.back){terrFreeComp(TERR.spare);TERR.spare=TERR.back;TERR.spareT=TERR.tick;TERR.back=null;}} // ENV2 后台那张作废(内容过时):画布留作 spare
-function terrSettled(){const c=TERR.comp;return !TERR.busy&&!TERR.back&&!!c&&!c.bad&&c.seq===TERR.paintSeq;} // ENV2 全部建完、合成缓存是最新的(判据与性能探针读)
 /* ENV2 每帧入口(由视图的静态贴图层调:render/81-env 的 mapTileFrame)。painter = {paint(g,T), iso:[等值线的浓度档]} */
 function terrFrame(painter){
   const S=TERR.st;S.samp=0;S.hit=0;S.units=0;S.paint=0;S.blit=0;S.cblit=0;S.build=0;S.upd=0;S.scroll=0;S.swap=0;S.vec=0;S.mode='';S.show='';

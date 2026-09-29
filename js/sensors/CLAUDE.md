@@ -6,7 +6,7 @@
 - `22-percep.js` 热循环:`sensePrepare`(O(N) 预计算)/ `sensePairGrades`(每条通道 0 / 1,不分强弱档)、`senseResolve`(热循环外的精算)
 - `23-cov.js` 误差椭圆内核 `stepCov` / `covHeld` / `covTheta`、距离梯子 `LAD` 与反解 `ladApply`、交会预览 `ladTriFix`
 - `24-track.js` 每方一张航迹表 `TRK`(`trkAdopt` / `trkEnsure` / `trkStep` / `trkEach` / `trkFoe` / `trkPid`)
-- `25-optpair.js` ENV2 成对有效亮度 `senseOptLo` / `senseOptPair`、杂散光、相位、致盲 `senseBaffled`、页面用的 `senseOptBlocked` / `senseOptParts` / `sensePlume`
+- `25-optpair.js` ENV2 成对有效亮度 `senseOptLoWith`、杂散光、相位、致盲 `senseBaffled`、红外画面用的 `senseOptBlocked` / `senseOptParts` / `sensePlume`
 
 ## 模型
 - 两种看法:光学 / 红外(纯被动,与探测方无关)与雷达(一部设备两种模式:静听 / 照射)。被看方字段 `size` / `stealth`(只乘雷达),探测方字段 `emit` / `recv`。

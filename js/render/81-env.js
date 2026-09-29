@@ -113,14 +113,6 @@ function mapLabPlan(x,y,z){ // ENV2 视图 = 以 (x,y) 为中心、缩放 z 的�
   if(!same){MAP_LAB.list=nw;MAP_LAB.rev=ENV.rev;let s='r'+ENV.rev;for(const l of nw)s+='|'+l.i+':'+l.x+','+l.y;MAP_LAB.key=s;}
   return (mapSunOn()?'s':'')+MAP_LAB.key; // 「太阳线」开关进键:一拨就整张重拼矢量层(影子线在里面)
 }
-function mapLabDiff(k0,k1,z,out){ // ENV2 审查第四轮:矢量层的键 k0 → k1(缩放 z 下)只差字的位置(同一个世界 rev)⇒ 两边不同的字各推一个包围框进 out(世界坐标 [x0,y0,x1,y1],外扩 2 CSS px 盖住取整),给 true;
-  // 世界 rev 不同(天体 / 影子也可能变了)⇒ false。键的写法见 mapLabPlan:'r'+rev 之后每个字一段 '|云下标:x,y'(数转字符串再转回来是精确的)
-  const A=k0.split('|'),B=k1.split('|');if(A[0]!==B[0])return false;
-  const s=mapTextSpr('尘埃云',MAP_LAB.COL),l=(s.ax+2)/z,t=(s.ay+2)/z,r=(s.w-s.ax+2)/z,b=(s.h-s.ay+2)/z;
-  for(let pass=0;pass<2;pass++){const P=pass?B:A,Q=pass?A:B;
-    for(let i=1;i<P.length;i++){if(Q.indexOf(P[i],1)>0)continue;const u=P[i],k=u.indexOf(':'),m=u.indexOf(',',k),x=+u.slice(k+1,m),y=+u.slice(m+1);out.push(x-l,y-t,x+r,y+b);}}
-  return true;
-}
 function mapCircleInView(c,x,y,z){const hw=W/2/z,hh=H/2/z,dx=Math.max(x-hw-c.x,0,c.x-x-hw),dy=Math.max(y-hh-c.y,0,c.y-y-hh);return dx*dx+dy*dy<c.r2;} // ENV2 云的圆与视图相交
 function mapLabDense(c,wx,wy,z){const mk=64/z;return envDustOne(c,wx,wy,mk)*mapCloudGain(mk)>=MAP_LAB.DMIN;} // ENV2 世界点够不够浓(按 32 屏幕像素滤过:只看大片够不够浓,也省掉细丝的计算;乘显示增益)
 function mapLabOk(c,wx,wy,x,y,z,B){ // ENV2 字的中心落在世界点 (wx,wy) 好不好:云在那里够浓、整个在视口里(内缩 INSET)、不压任何舰船的标签框

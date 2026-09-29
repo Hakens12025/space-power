@@ -248,7 +248,6 @@ function sensePairAt(det, tgt) {
   const g = senseResolve(0, 0, det, tgt, sensePairGrades(0, 0)); // ENV2 热循环 + 精算步 = 单点谓词
   return { opt: g & 3, lis: (g >> 2) & 3, act: (g >> 4) & 3, packed: g, lo: scPairLo };
 }
-function senseBoundsAt(ti) { return { ir: scBIR[ti], rf: scBRF[ti], act4: scBACT[ti], max2: scBMax[ti], sig: scSigIR[ti] }; } // 三条界的只读窗口,给判定看"冷目标的照射界确实进了 max"。ENV2 sig = 光学上界
 function senseLastLo() { return scPairLo; } // ENV2 最近一次 senseResolve 的有效亮度(光学够不着时为 0)
 function senseResolve(j, ti, d, t, g) { // ENV2 精算步(热循环外):待定位的对按成对亮度重判光学通道,其余原样;记下这一对的有效亮度
   if ((g & 64) === 0) { scPairLo = (g & 3) !== 0 ? scSigIR[ti] : 0; return g; }

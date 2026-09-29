@@ -201,7 +201,7 @@ function trShot(t){ // 朝最近的一艘蓝舰开一炮(机头直接摆过去;�
 function trPoseAct(k){ // 面板按钮:姿态 / 雷达 / 开火闪光 / 开一炮,只作用于当前页签的靶
   const t=rangeTargets()[trTab];if(!t)return;
   if(k==='radar')setEmit(t,t.emitMode==='paint'?'silent':'paint');
-  else if(k==='flash'){t.fireHot=SENS.FIRE_S;t.fireN=(t.fireN||0)+1;}
+  else if(k==='flash')t.fireHot=SENS.FIRE_S;
   else if(k==='shot')trShot(t);
   else trPoseSet(t,k);
   renderRangePanel();

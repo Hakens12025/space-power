@@ -227,7 +227,6 @@ function fmSpread(F, dest, type, face, mode) {
 
 function fmMoveTo(F, dest, type, face) { F.dest0 = null; return fmSpread(F, dest, type, face, 'move'); } // 新航线:锚点回到旗舰实时位置
 function fmAppend(F, w, face) { return fmSpread(F, w, null, face, 'append'); }
-function fmPush(F, w, type, face) { return fmSpread(F, w, type, face, 'push'); }
 
 function fmHalt(F) { // 整队停车:逐舰刹停(每艘船持有自己的令,没有"让旗舰停下别人就跟着停"这回事了)
   fmShips(F).forEach(m => { orderClear(m); m.brake = true; });

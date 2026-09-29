@@ -23,9 +23,6 @@ function senseGlareAt(opos, tpos, oLit) { // ENV2 从 opos 看 tpos 那个方向
   const u = envSunDirAt(opos, SOP_T2), vx = tpos[0] - opos[0], vy = tpos[1] - opos[1];
   return senseGlare(Math.atan2(Math.abs(vx * u[1] - vy * u[0]), vx * u[0] + vy * u[1]), senseHalfRad());
 }
-function senseGlareDir(o, th) { // ENV2 o 朝世界方位 th 的杂散光(红外页乙的每一格)
-  return senseGlareAt(o.pos, [o.pos[0] + Math.cos(th), o.pos[1] + Math.sin(th), 0]);
-}
 function senseSunPhase(o, t, tSh) { // ENV2 朗伯球相位 Φ(α),截到 [0,1](上界要求 Φ ≤ 1);tSh 可省
   if (!envHasLight()) return 0;
   if (tSh === undefined) tSh = ENV.bodies.length > 0 && envInShadow(t.pos);
@@ -71,10 +68,3 @@ function senseOptBlocked(o, t) { // ENV2 光学看不见这一对:光源禁区 /
   return envSunBlind(o.pos, t.pos) || (ENV.bodies.length > 0 && envOccluded(o.pos, t.pos)) || senseBaffled(o, t.pos);
 }
 function senseContrast(o, t) { const q = senseGlareAt(o.pos, t.pos) + (ENV.clouds.length ? SENS.BG_DUST * envBg(t.pos, 'opt') : 0); return q > 0 ? 1 / Math.sqrt(1 + q / SENS.BG_G0) : 1; } // ENV2 背景受限的对比度因子
-function senseOptPair(o, t) { // ENV2 红外页用:甲读打折后的 snrEff / blurEff,乙读不打折的 snr / ang
-  const dx = t.pos[0] - o.pos[0], dy = t.pos[1] - o.pos[1], dz = (t.pos[2] || 0) - (o.pos[2] || 0), d = Math.max(1, Math.hypot(dx, dy, dz));
-  const L = optLum(t), lok = senseLoOf(L, 0, senseSolar(o, t), 0, 0), lo = senseOptLo(o, t);
-  const ang = covTheta('opt', o, t, d, lok), angEff = covTheta('opt', o, t, d, lo);
-  return { d: d, k: lok / L, m: senseContrast(o, t), lo: lo, lok: lok, snr: SENS.K_IR * lok / (d * d), snrEff: SENS.K_IR * lo / (d * d),
-    ang: ang, angEff: angEff, blur: d * ang, blurEff: d * angEff, brg: Math.atan2(dy, dx) };
-}

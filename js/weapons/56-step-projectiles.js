@@ -1,17 +1,7 @@
 "use strict";
 /* RF1: 提取自 stepSim 的 S5-S11 段(原 07-missiles.js L236-631):弹丸上限裁剪→拦截弹预收集→引导分配→网检查→
-   来袭走廊→五弹型主循环→过滤。各弹型分支提为子函数,原外层循环的 continue 早退定点转为 return(内层扫描循环的
+   五弹型主循环→过滤。各弹型分支提为子函数,原外层循环的 continue 早退定点转为 return(内层扫描循环的
    continue 保留原样),控制流与原版逐段一致。 */
-/* FG1 来袭走廊的来源线从哪儿画起。原来一律取发射舰的【真实位置】—— 哪怕那艘船我方根本没定位,橙虚线也直接指到它身上:
-   一轮齐射就把射手的坐标白送了(用户实报的"敌方的目标线")。现在只许用我方知道的事:
-     射手定得出位置(contactPos 非空:实况 / 陈旧 / 失联外推)⇒ 从那个【估计位置】画起;
-     否则 ⇒ 从我方【第一次看见这组导弹】的地方画起 —— "它是从那个方向来的"是合法情报,"它是谁、在哪打的"不是。
-   GM 下照旧取真值。走廊只在导弹被我方看见(visBlue)时才生成,所以 p.pos 此刻就是首见位置。 */
-function corridorFrom(p){
-  if(adminMode)return p.shooter.pos.slice();
-  const q=(typeof contactPos==='function')?contactPos(p.shooter,'blue'):null;
-  return (q||p.pos).slice();
-}
 function stepProjectiles(dt){
   // ===== 战斗更新 =====
   if(projectiles.length>400){ // v126(外援E):雷/信标/防空屏豁免;飞行弹按"剩余命中时间"保最迫近(脱靶/游魂优先砍,不再砍最老)
@@ -30,18 +20,6 @@ function stepProjectiles(dt){
   for(const q of projectiles){if(q.type==='interceptor'&&!q.done&&!q.screen&&!q.park){(q.shooter.side==='blue'?icBlue:icRed).push(q);}}
   guideMissiles(); // T1:每tick重算引导分配(自导/链导/脱锁),供下方追击门判定
   updateNets(dt); // v125:网内连接检查——断网(离网中心>NET_COMM)计时,10s没回自毁
-  // v138 来袭走廊(活的预警):敌方导弹被己方看到即生成,跟踪导弹引用——来源线(发射舰→导弹)+去向锥(当前速度方向);同舰2s窗口去重;导弹消失淡出
-  for(const p of projectiles){
-    if(p.type!=='missile'||p.done||!p.shooter)continue;
-    if(p.shooter.side==='blue')continue; // 只看敌方
-    const seen=!adminMode?trkSees('blue',p):true; // GM下也显示 TK4a:读航迹表的目击集合
-    if(!seen)continue;
-    const nowT=simTime,ship=p.shooter;
-    const dup=threatCorridors.find(c=>c.ship===ship&&nowT-c.fireT<2);
-    if(dup){dup.p=p;dup.t=5;dup.fireT=nowT;continue;} // 同舰2s内:更新到最新导弹(淡出重置)
-    threatCorridors.push({p,from:corridorFrom(p),t:5,ship,fireT:nowT}); // t=淡出寿命(导弹done后5s消失)
-  }
-  for(let i=threatCorridors.length-1;i>=0;i--){const c=threatCorridors[i];if(c.p.done){c.t-=dt;if(c.t<=0)threatCorridors.splice(i,1);}}
   for(const p of projectiles){ // 五弹型主循环(RF1:分支体在下方五个子函数)
     const x0=p.pos[0],y0=p.pos[1];
     if(p.type==='decoy')stepDecoyProj(p,dt);

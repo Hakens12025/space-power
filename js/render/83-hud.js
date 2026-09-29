@@ -211,31 +211,6 @@ function drawShieldFx(){
   }
   ctx.restore();
 }
-function drawCorridors(){ // v138(重做):来袭走廊——来源线(发射舰→导弹)+ 去向锥(导弹当前速度方向)+ 标签;导弹消失淡出5s
-  for(const c of threatCorridors){
-    if(!c.p)continue;
-    const fade=c.p.done?Math.max(0,c.t/5):1; // 导弹存活全亮,消失淡出
-    const f=toScreen(c.from[0],c.from[1]);
-    const m=toScreen(c.p.pos[0],c.p.pos[1]);
-    ctx.save();
-    // 来源线:发射舰 → 导弹当前位置(橙虚线)
-    ctx.strokeStyle=`rgba(255,160,80,${0.45*fade})`;ctx.lineWidth=1;ctx.setLineDash([5,4]);
-    ctx.beginPath();ctx.moveTo(f[0],f[1]);ctx.lineTo(m[0],m[1]);ctx.stroke();
-    ctx.setLineDash([]);
-    // 去向锥:导弹沿当前速度方向(短线+箭头)
-    const vl=V.len(c.p.vel)||1;const dx=c.p.vel[0]/vl,dy=c.p.vel[1]/vl;
-    const len=Math.min(40,Math.max(10,vl*0.01*cam.zoom));
-    ctx.strokeStyle=`rgba(255,160,80,${0.8*fade})`;ctx.lineWidth=1.3;
-    ctx.beginPath();ctx.moveTo(m[0],m[1]);ctx.lineTo(m[0]+dx*len,m[1]+dy*len);ctx.stroke();
-    for(const s of [-1,1]){
-      ctx.beginPath();ctx.moveTo(m[0]+dx*len*0.6,m[1]+dy*len*0.6);
-      ctx.lineTo(m[0]+dx*len,m[1]+dy*len);
-      ctx.stroke();
-    }
-    ctx.restore();
-    // DS169 信息分层:去掉⚠来袭文字(来源线+去向锥已表达方向,常态预警不堆字)
-  }
-}
 function drawNetLinks(){ // v140:网内导弹细线连接;v142:星形连接(O(k) 线替代全连接 O(k²),减渲染开销防卡)
   const byNet={};
   for(const p of projectiles){

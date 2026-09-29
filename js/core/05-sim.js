@@ -11,7 +11,7 @@ function stepSim(dt){
   if(typeof stepFireControl==='function')stepFireControl(dt); // RF5 S3b 火控序列前置决策(→ weapons/58):清理失效序列→逐武器解算目标→改写 lockedTarget/续期 driftFire。必须在 S4 之前(lockedTarget 同时是战斗转向的转向指令,同 tick 就要被机头归瞄消费),也必然在 S14-S17 之前(自动齐射与 MAC 自动开火同 tick 读到本段的结果)
   stepShipsMotion(dt); // S4 舰船运动主循环(→ physics/31)
   if(typeof stepObjects==='function')stepObjects(dt); // 2026-09-27 民船 / 诱饵 / 浮标的推进(world/14)
-  stepProjectiles(dt); // S5-S11 弹丸:裁剪→预收集→引导→网检查→来袭走廊→五弹型主循环→过滤(→ weapons/56)
+  stepProjectiles(dt); // S5-S11 弹丸:裁剪→预收集→引导→网检查→五弹型主循环→过滤(→ weapons/56)
   if(selMissile&&selMissile.done)selMissile=null; // 选中的导弹组没了 → 取消选中
   for(const h of hitFX)h.t-=dt; // 命中特效寿命
   hitFX=hitFX.filter(h=>h.t>0);
