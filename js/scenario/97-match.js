@@ -33,7 +33,7 @@ function matchWorld(w,rnd){ // ENV2 场景里 sun.brg 为 'rand' 时掷成具体
 }
 /* ---- 对局地图生成(用户 2026-09-25:"对局也要做各种天体与尘埃云,相当于一种地图生成机制,种子机制")----
    一个种子定一局:红方从哪个方向来(matchPlaceRed)+ 整个世界。摆位按对阵轴(蓝方重心 → 红方重心,长 D = 开局间距;s 沿轴,-0.5 = 蓝方、+0.5 = 红方;t 侧向):
-   太阳(方向型 / 位置型各半,位置型在 600~900 万外)· 行星 0~2(木星级,两军之间或侧翼,离两军 >= 40 万、彼此 >= 80 万)·
+   太阳(一半没有、一半是位置型恒星,在 600~900 万外;2026-09-29 取消无限远的方向型)· 行星 0~2(木星级,两军之间或侧翼,离两军 >= 40 万、彼此 >= 80 万)·
    尘埃云 0~2(半轴 200 万 ~ 1600 万,朝向随机,可以罩住舰队)· 小行星 20~40 颗(撒在对阵区,避开舰船与天体;体型按 world/12 的 ROCK_SFD 幂律,小的最多)
    2026-09-26 单局地图(游玩区 ARENA 80 万 x 45 万):太阳 / 恒星 / 尘埃云照原世界尺度不动;行星与小行星改摆进游玩区(见行内),上文行星与小行星的旧数作废。 */
 function matchGenWorld(seed,B,R){
@@ -42,7 +42,7 @@ function matchGenWorld(seed,B,R){
   const A=ARENA||{x0:mx-ARENA_W/2,y0:my-ARENA_H/2},inA=function(){return [A.x0+r()*ARENA_W,A.y0+r()*ARENA_H];}; // 2026-09-26 游玩区里均匀取一点
   const far=function(p,q,d){return Math.hypot(p[0]-q[0],p[1]-q[1])>=d;};
   const w={bodies:[],clouds:[],asteroids:[]};
-  if(r()<0.5)w.sun={brg:Math.round(r()*360),half:10};
+  if(r()<0.5)r(); // 2026-09-29 用户:取消无限远的方向型太阳 —— 这一半改成没有太阳(照样掷一次,同一个种子后面的地形不变)
   else{const a=r()*2*Math.PI,d=6e6+r()*3e6;w.stars=[{x:Math.round(mx+Math.cos(a)*d),y:Math.round(my+Math.sin(a)*d)}];}
   for(let n=Math.floor(r()*3),k=0;k<40&&w.bodies.length<n;k++){const p=inA(),rad=70000*(0.6+r()*1.4); // 2026-09-29 用户:天体大小要有差异 —— 木星级 7 万 x 0.6~2 倍(原 5~8 万)。2026-09-26 中心摆进游玩区,离两军重心 >= 半径+10 万、彼此 >= 两半径+10 万,摆不下就少摆:原 对阵轴上、离两军 40 万、彼此 80 万
     if(far(p,B,rad+100000*CFG.scale)&&far(p,R,rad+100000*CFG.scale)&&w.bodies.every(function(b){return far(p,[b.x,b.y],rad+b.r+100000*CFG.scale);}))w.bodies.push({x:Math.round(p[0]),y:Math.round(p[1]),r:Math.round(rad)});}
