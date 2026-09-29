@@ -118,7 +118,7 @@
      硬约束仅两条:core/00 定义 on() 必须最先(85/95/96/97 顶层调用它);core/99 顶层执行 init() 必须最后(且 init 调 loadRangeCfg,
      故 scenario/95 必须在它之前)。其余跨文件引用全在运行期解析,层序排列只为可读性。 -->
 <script src="js/core/00-config.js?v=20260929cl"></script>
-<script src="js/core/01-state.js?v=20260929by"></script>
+<script src="js/core/01-state.js?v=20260929sc"></script>
 <script src="js/ships/10-hull-geometry.js?v=20260923"></script>
 <script src="js/ships/11-classes.js?v=20260929d2"></script>
 <script src="js/world/12-env.js?v=20260928s1"></script><!-- ENV1 环境系统:太阳禁区 + 天体 + 石头(TK4c)。必须在 sensors/ 之前:23-cov 加载期的梯子反解会读 optLum -->
@@ -153,10 +153,10 @@
 <script src="js/core/06-timecomp.js?v=20260928v1"></script><!-- TC1 接触降速:frame() 每帧调 tcStep;依赖全部在运行期解析 -->
 <script src="js/bots/60-doctrine.js?v=20260929cl"></script>
 <script src="js/bots/61-enemy.js?v=20260929fw"></script>
-<script src="js/command/70-input.js?v=20260929d2"></script>
+<script src="js/command/70-input.js?v=20260929sc"></script>
 <script src="js/command/71-keys.js?v=20260929ft"></script>
 <script src="js/command/74-targeting.js?v=20260929ft"></script><!-- RF5 悬停准星/吸附状态 xh + #xhTip 信息卡。按目录编号序归位在 command 块末尾;顶层只有 let/const/function,零顶层执行,跨文件引用全在运行期解析 -->
-<script src="js/render/80-viewtier.js?v=20260927a"></script><!-- SN6 三级星图:层界与缩放上下限由距离梯子推出;与 80-camera 共用编号(先例:85-settings/85-tutorial) -->
+<script src="js/render/80-viewtier.js?v=20260929sc"></script><!-- SN6 三级星图:层界与缩放上下限由距离梯子推出;与 80-camera 共用编号(先例:85-settings/85-tutorial) -->
 <script src="js/render/80-camera.js?v=20260923"></script>
 <script src="js/render/81-background.js?v=20260926v8"></script>
 <script src="js/render/81-terrain.js?v=20260929cl"></script><!-- ENV2 地形瓦片服务:云浓度的世界锚定瓦片(粗到细、每帧工作量封顶、LRU)+ 合成缓存(双缓冲、1:1 贴图)。顶层只有 const / function 与一个惰性求和的 let(TERR_DUST_NORM,同 world/13 的 ENV_DUST_NORM),运行期由 81-env 的 mapTileFrame 调;与 81-background 共用编号 81 -->

@@ -468,7 +468,7 @@ function onWheel(e){e.preventDefault(); // preventDefault 仍是第一句(注册
   if(typeof rad!=='undefined'&&rad.open&&typeof radialInBand==='function'&&radialInBand(e.clientX,e.clientY)){ // RF5 Phase C 轮盘开 && 指针在环带内 = 翻页;环带外照常缩放。环带几何(内外半径/两个半环的角度区间与断口)只在 render/89 定义一份,这里一律调函数
     if(typeof radPage==='function')radPage(e.deltaY>0?1:-1);return;} // 下滚=往后翻,与浏览器一致;只取符号
   zoomAt(e.clientX,e.clientY,Math.pow(WHEEL_ZOOM_BASE,-e.deltaY));}
-const WHEEL_ZOOM_BASE=Math.pow(80000/(35000*CFG.scale),1/(48*100)); // 2026-09-27 两层落点改成 3.5 万 / 8 万,仍是战术滚到舰队 48 格(一格约 1.017 倍) // 滚轮一格(deltaY=100):从战术层滚到舰队层正好 48 格(用户 2026-09-26);原 1.0016(一格 1.17)。2026-09-26 战术层比例尺 3 万→5 万(单局地图):分母跟着换,一格约 1.040→1.029 倍
+const WHEEL_ZOOM_BASE=Math.pow(100000/(40000*CFG.scale),1/(48*100)); // 2026-09-29 两层落点改成 4 万 / 10 万,仍是战术滚到舰队 48 格(一格约 1.019 倍) // 滚轮一格(deltaY=100):从战术层滚到舰队层正好 48 格(用户 2026-09-26);原 1.0016(一格 1.17)。2026-09-26 战术层比例尺 3 万→5 万(单局地图):分母跟着换,一格约 1.040→1.029 倍
 // RF5 失焦清理 +mmb:不清的话切窗回来会残留一个"按下未抬起"的中键计时,回来随手一抬就误触快速交战
 window.addEventListener('blur',()=>{rangeDrag=null;ghostMove=null;panning=null;selDrag=null;rmbClick=null;dragOrder=null;mmb=null;clearTimeout(rmbTimer);rmbTimer=null;clearTimeout(mmbTimer);mmbTimer=null;/* RF5 Phase C:不清的话切窗回来会凭空弹出轮盘 */for(const k in camKeys)camKeys[k]=false;}); // v119:失焦清相机键位,防切窗后镜头卡移动
 
