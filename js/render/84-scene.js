@@ -305,8 +305,7 @@ function insetSD(c,t,i,T,dt){ // 临界阻尼平滑(Unity Mathf.SmoothDamp;Game 
 function insetOff(){INSET.on=false;INSET.a=0;INSET.key='';INSET.last=null;if(typeof terrXOff==='function')terrXOff();}
 function insetCue(x,y,w,h){ // 日标被特写框盖住时让位(落点公式同 81-env 的 mapLightCue):整张被盖住就沿同一条射线挪到框外,盖住一部分就把框里那一截补画在框上
   if(typeof mapCueSpr!=='function')return;let dx=0,dy=0,lb='';
-  if(ENV.sun){const a=toScreen(0,0),b=toScreen(ENV.sun.ux*1e6,ENV.sun.uy*1e6);dx=b[0]-a[0];dy=b[1]-a[1];lb='太阳';}
-  else if(ENV.stars.length){const p=toScreen(ENV.stars[0].x,ENV.stars[0].y);if(p[0]>=0&&p[0]<=W&&p[1]>=0&&p[1]<=H)return;dx=p[0]-W/2;dy=p[1]-H/2;lb='恒星';}
+  if(ENV.stars.length){const p=toScreen(ENV.stars[0].x,ENV.stars[0].y);if(p[0]>=0&&p[0]<=W&&p[1]>=0&&p[1]<=H)return;dx=p[0]-W/2;dy=p[1]-H/2;lb='恒星';}
   else return;
   const l=Math.hypot(dx,dy)||1;dx/=l;dy/=l;
   const cx=W/2,cy=H/2,tx=dx>1e-9?(W-40-cx)/dx:(dx<-1e-9?(40-cx)/dx:Infinity),ty=dy>1e-9?(H-84-cy)/dy:(dy<-1e-9?(84-cy)/dy:Infinity),t=Math.min(tx,ty),px=cx+dx*t,py=cy+dy*t,P=INSET.CUE;

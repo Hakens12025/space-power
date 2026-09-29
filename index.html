@@ -121,15 +121,15 @@
 <script src="js/core/01-state.js?v=20260929a85"></script>
 <script src="js/ships/10-hull-geometry.js?v=20260923"></script>
 <script src="js/ships/11-classes.js?v=20260929cw"></script>
-<script src="js/world/12-env.js?v=20260928s1"></script><!-- ENV1 环境系统:太阳禁区 + 天体 + 石头(TK4c)。必须在 sensors/ 之前:23-cov 加载期的梯子反解会读 optLum -->
+<script src="js/world/12-env.js?v=20260929sd"></script><!-- ENV1 环境系统:太阳禁区 + 天体 + 石头(TK4c)。必须在 sensors/ 之前:23-cov 加载期的梯子反解会读 optLum -->
 <script src="js/world/13-dust.js?v=20260925"></script><!-- ENV2 世界层的尘埃云:噪声与背景亮度(envDustOne / envCloudDensity / envBg)。与 12-env 同属世界层,排在 sensors/ 之前;顶层只有声明,运行期才读 ENV -->
 <script src="js/world/14-objects.js?v=20260929vs"></script><!-- 2026-09-27 民船 / 诱饵 / 前出浮标(与石头同一张登记表 rocks[])-->
 <script src="js/sensors/20-signature.js?v=20260929d2"></script>
 <script src="js/sensors/21-detect.js?v=20260929vs"></script>
-<script src="js/sensors/22-percep.js?v=20260929vs"></script><!-- SN4 感知纯函数层:零顶层执行(只声明模块私有的 Float64Array 缓冲与三个纯字面量常量,不读 SENS/sReq/ships 任何东西)、不调 on()、不是 core/99,所以两条加载顺序硬约束都不涉及;跨文件引用(SENS 在 20-signature、sReq 在 00-config)全部运行期解析,与 formation/39-fmcaps 同口径 —— 排在 21-detect 之后只为目录编号好读,换到别处也不会错 -->
+<script src="js/sensors/22-percep.js?v=20260929sd"></script><!-- SN4 感知纯函数层:零顶层执行(只声明模块私有的 Float64Array 缓冲与三个纯字面量常量,不读 SENS/sReq/ships 任何东西)、不调 on()、不是 core/99,所以两条加载顺序硬约束都不涉及;跨文件引用(SENS 在 20-signature、sReq 在 00-config)全部运行期解析,与 formation/39-fmcaps 同口径 —— 排在 21-detect 之后只为目录编号好读,换到别处也不会错 -->
 <script src="js/sensors/23-cov.js?v=20260929sp"></script><!-- SN6 误差椭圆感知内核:同样零顶层执行(只声明;ladApply 不在加载期跑) -->
 <script src="js/sensors/24-track.js?v=20260929cl"></script><!-- TK1 航迹表(每方一张 WeakMap):顶层只建 TRK 与 TRK_FWD、只调同文件的函数;ships/11 的 makeShip 虽然排在它前面,但只在运行期调 trkAdopt(init 与判据里),所以不构成加载顺序约束 -->
-<script src="js/sensors/25-optpair.js?v=20260929d2"></script><!-- ENV2 成对光学模型(晒热 / 杂散光 / 云背景):顶层只有声明,22-percep 的精算步与弹丸路径在运行期调 -->
+<script src="js/sensors/25-optpair.js?v=20260929sd"></script><!-- ENV2 成对光学模型(晒热 / 杂散光 / 云背景):顶层只有声明,22-percep 的精算步与弹丸路径在运行期调 -->
 <script src="js/physics/30-motion.js?v=20260923"></script>
 <script src="js/physics/31-step-ships.js?v=20260929fu"></script>
 <script src="js/physics/32-route-refine.js?v=20260923"></script>
@@ -160,12 +160,12 @@
 <script src="js/render/80-camera.js?v=20260923"></script>
 <script src="js/render/81-background.js?v=20260926v8"></script>
 <script src="js/render/81-terrain.js?v=20260929cl"></script><!-- ENV2 地形瓦片服务:云浓度的世界锚定瓦片(粗到细、每帧工作量封顶、LRU)+ 合成缓存(双缓冲、1:1 贴图)。顶层只有 const / function 与一个惰性求和的 let(TERR_DUST_NORM,同 world/13 的 ENV_DUST_NORM),运行期由 81-env 的 mapTileFrame 调;与 81-background 共用编号 81 -->
-<script src="js/render/81-env.js?v=20260929cl"></script><!-- ENV1 环境底图(天体 + 太阳方向)。与 81-background 共用编号 81。ENV2:改成 kind x view 登记表(ENV_VIEWS.map)+ 云 / 影子 / 天体 / 恒星的海图画法,版本号随之换 -->
+<script src="js/render/81-env.js?v=20260929sd"></script><!-- ENV1 环境底图(天体 + 太阳方向)。与 81-background 共用编号 81。ENV2:改成 kind x view 登记表(ENV_VIEWS.map)+ 云 / 影子 / 天体 / 恒星的海图画法,版本号随之换 -->
 <script src="js/render/82-ship-icons.js?v=20260929sh"></script>
 <script src="js/render/82-rocks.js?v=20260929by"></script><!-- TK4c 石头的航迹(第二个循环)。与 82-ship-icons / 82-lod 共用编号 82 -->
 <script src="js/render/82-lod.js?v=20260928zk"></script><!-- SN6 聚合层:舰 → 舰队框 → 舰队组;与 82-ship-icons 共用编号 -->
 <script src="js/render/83-hud.js?v=20260929vs"></script>
-<script src="js/render/84-scene.js?v=20260929vs"></script>
+<script src="js/render/84-scene.js?v=20260929sd"></script>
 <script src="js/render/84-fmplot.js?v=20260923"></script><!-- FM4 编队能力站位的地图可视化。与 84-scene 共用编号 84(先例:weapons/51-defs 与 51-ciws),都属于“场景图层”;顶层只有 const/function,零顶层执行,由 84-scene 的 render() 运行期调用 -->
 <script src="js/render/85-settings.js?v=20260926e"></script>
 <script src="js/render/85-tutorial.js?v=20260929cw"></script><!-- RF5-D 教程面板。与 85-settings 共用编号 85(先例:weapons/51-defs 与 51-ciws),语义上教程与设置相邻。顶层调用 on(),故必须晚于 core/00;其余引用全在运行期解析 -->
@@ -180,7 +180,7 @@
 <script src="js/scenario/91-init.js?v=20260929cl"></script>
 <script src="js/scenario/95-range.js?v=20260929cl"></script>
 <script src="js/scenario/96-spawn.js?v=20260923"></script><!-- FM7 测试用加船小条。放在 95 之后、core/99 之前:它顶层调 on(),而 on() 定义在 core/00 -->
-<script src="js/scenario/97-match.js?v=20260929sn"></script><!-- MT1 对局入口 / 红方摆位 / 结果卡片。顶层调 on(),须在 core/00 之后;matchPlaceRed 被 91-init 运行期调用 -->
+<script src="js/scenario/97-match.js?v=20260929sd"></script><!-- MT1 对局入口 / 红方摆位 / 结果卡片。顶层调 on(),须在 core/00 之后;matchPlaceRed 被 91-init 运行期调用 -->
 <script src="js/core/99-main.js?v=20260928fn"></script>
 </body>
 </html>

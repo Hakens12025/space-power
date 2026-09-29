@@ -26,10 +26,9 @@ function matchPlaceRed(defs,blueC,rnd){
   const o=(curEnv().objective)||[0,0],fl=Math.hypot(o[0]-cx,o[1]-cy)||1,face=[(o[0]-cx)/fl,(o[1]-cy)/fl,0]; // 船头朝战场中心
   return defs.map(function(d){const c=d.slice();c[2]=cx+d[2];c[3]=cy+d[3];c[5]=face;return c;});
 }
-function matchWorld(w,rnd){ // ENV2 场景里 sun.brg 为 'rand' 时掷成具体方位,返回副本(envReset 不掷骰子);rnd 可注入,平时与红方摆位同一个 Math.random。对局:按种子生成整个世界
+function matchWorld(w){ // 对局:按种子生成整个世界;别的场景原样返回(2026-09-29 方向型太阳删了,原来 sun.brg 'rand' 在这里掷方位)
   if(matchIsOn()&&MATCH.seed&&MATCH.redC)return matchGenWorld(MATCH.seed,MATCH.blueC,MATCH.redC);
-  if(!w||!w.sun||w.sun.brg!=='rand')return w;
-  return Object.assign({},w,{sun:Object.assign({},w.sun,{brg:(rnd===undefined?Math.random():rnd)*360})});
+  return w;
 }
 /* ---- 对局地图生成(用户 2026-09-25:"对局也要做各种天体与尘埃云,相当于一种地图生成机制,种子机制")----
    一个种子定一局:红方从哪个方向来(matchPlaceRed)+ 整个世界。摆位按对阵轴(蓝方重心 → 红方重心,长 D = 开局间距;s 沿轴,-0.5 = 蓝方、+0.5 = 红方;t 侧向):

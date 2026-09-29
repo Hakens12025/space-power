@@ -23,7 +23,7 @@
    业内叫 false target / 虚警航迹的一种;完整形态的航迹起始(M-of-N)与分类(Bayes / D-S)我们没有,见 js/sensors/CLAUDE.md 的 TK 一节。
 
    ---- 数据从哪来 ----
-   场景条目(scenario/90-envs 的 TEST_ENVS)可以带一个 world:{sun:{brg,half},asteroids:[{x,y,r,n,seed,smin,smax,clear,name}],…}。
+   场景条目(scenario/90-envs 的 TEST_ENVS)可以带一个 world:{stars:[{x,y,r,half}],asteroids:[{x,y,r,n,seed,smin,smax,clear,name}],…}。
    initFleet 每局调 envReset(curEnv().world) + envSpawnRocks()。没有 world 的场景(靶场、原有的对局、六条回归预设)⇒ 环境为空,
    上面三件事一律是精确的无操作(乘 1、恒假),同种子 A/B 逐位相同。
    ⚠ 石头的摆位用本文件自己的种子随机流(envRng),不碰全局 Math.random:对局的红方摆位、交战的散布都从全局流里取数,
@@ -38,7 +38,7 @@ const ENV_CFG={
   MTI_V:30,
   RF_SUN:{K:30,E:[1,1.5,2,3],M:[1,1.2,1.75,2.5]}, // ENV2 恒星射频噪声锥(照 雷达效果.html):锥内噪声 1+K,往外按 (半角/夹角)^4 淡出;热循环不许反三角,分四档:夹角 <= E[i] 倍光源半角取 1 + K/M[i]^4,三倍半角之外不管
   CLUT_RES:4000*CFG.scale,AST_KM:800*CFG.scale, // 2026-09-26 x1/5(单局地图):原 20000 / 4000。ENV2 雷达杂波:贴着天体盘面 / 小行星本体(体型 x AST_KM)CLUT_RES 以内的慢目标,回波混进杂波(过 MTI)           // 动目标显示门限 km/s:场内径向速度低于它的回波被当成杂波。DD 速度档 250 / 500 / 800,所以"在动"几乎都滤不掉,停下来 / 贴着切向走才滤得掉
-  SUN_HALF_DEG:10,    // 太阳禁区的缺省半角(度)。ENV2:也是位置型恒星禁区半角的缺省
+  SUN_HALF_DEG:10,    // 恒星禁区的缺省半角(度)
   STAR_R:696000,      // ENV2 位置型恒星的缺省光球半径 km(真太阳;红外页的 R_SAT)
   BODY_HEAT:2,        // ENV2 天体背阴面的自身热。单位 = 背景单位(与 envBg、云的 v 同一单位:1 = SENS.BG_G0 = 一条发现线);v1 只有红外视图读
   ROCK_HEAT:0.5,      // ENV2 石头自身热倍率(同体型熄火冷船 = 1);makeRock 写进 heatK,第 4a 步起 optLum 才读
@@ -50,12 +50,12 @@ const ENV_CFG={
     FL0:500000,OCT:9,GAIN:0.78,WARP:0.35,Q0:0.78,G:4,QM:0.45,FM:0.2,XO:2,XA:0.4, // 丝:b2ea0f4 的脊状分形 + XO 层粗褶;QM / FM = 分辨不出时补的期望
     EXT_TAU:150000,EXT_G:50000} // 消光:浓度 1 走 EXT_TAU km 光深为 1;沿线浓度取 EXT_G km 格点
 };
-const ENV_KEYS=['sun','stars','bodies','clouds','asteroids']; // ENV2 world 认识的键:envReset 见到别的键当场抛(ENV1 时拼错 feilds 会静默成空环境);视图的登记表以它为锚
-/* ENV1 的 sun:{brg,half,ux,uy,c2}(c2 = cos^2 半角,热循环免开方)。
-   ENV2 加 stars:[{x,y,r,half,c2}] / bodies:[{x,y,r,r2,heat,name}] / clouds:[{x,y,a,b,ang,ca,sa,r,r2,seed,v,dark}](r = 外接圆半径) / asteroids:[{x,y,r,n,seed,smin,smax,clear,name}] / rev(每次 envReset 加 1,给视图缓存当键)。
+const ENV_KEYS=['stars','bodies','clouds','asteroids']; // ENV2 world 认识的键:envReset 见到别的键当场抛(ENV1 时拼错 feilds 会静默成空环境);视图的登记表以它为锚
+/* 2026-09-29 用户取消无限远的方向型太阳(ENV1 的 sun),光源只剩位置型恒星。
+   ENV2 stars:[{x,y,r,half,c2}](c2 = cos^2 半角,热循环免开方) / bodies:[{x,y,r,r2,heat,name}] / clouds:[{x,y,a,b,ang,ca,sa,r,r2,seed,v,dark}](r = 外接圆半径) / asteroids:[{x,y,r,n,seed,smin,smax,clear,name}] / rev(每次 envReset 加 1,给视图缓存当键)。
    ENV2 单写者:全库只有 envReset 写 ENV。ENV 本身 seal(不许加键),列表与条目由 envReset 整体换成冻结的新对象 ⇒ 严格模式下别处改条目、改列表、给 ENV 加键会当场抛 TypeError。
-   ⚠ ENV2 seal 不拦替换已有的键:ENV.sun={…}、ENV.bodies=[…]、ENV.rev++ 运行期都不抛,这一类只靠 verify.sh 的唯一写入口检查(W1 / W2)抓 */
-const ENV=Object.seal({sun:null,stars:Object.freeze([]),bodies:Object.freeze([]),clouds:Object.freeze([]),
+   ⚠ ENV2 seal 不拦替换已有的键:ENV.stars=[…]、ENV.bodies=[…]、ENV.rev++ 运行期都不抛,这一类只靠 verify.sh 的唯一写入口检查(W1 / W2)抓 */
+const ENV=Object.seal({stars:Object.freeze([]),bodies:Object.freeze([]),clouds:Object.freeze([]),
   asteroids:Object.freeze([]),rev:0});
 const ENV_T2=[0,0]; // ENV2 本层的两格草稿(envBg 取 envBgParts 的结果用,免分配)。⚠ 共用草稿:拿到的结果要在调别的写它的函数之前读完(今天只有 envBg 写;4a 起 envSunBlind 也写,落地时核一次)
 
@@ -65,30 +65,25 @@ function envReset(w){
   const D=ENV_CFG.DUST,F=Object.freeze,num=function(v,d){return isFinite(v)?v:d;};
   if(w){ // ENV2 先校验
     for(const k in w)if(ENV_KEYS.indexOf(k)<0)throw new Error('ENV2 world 里有不认识的键:'+k); // ENV1 时拼错(feilds)静默成空环境
-    if((w.sun?1:0)+(w.stars?w.stars.length:0)>1)throw new Error('ENV2 v1 全图最多一个光源(sun 与 stars 合计 <=1)'); // 拍板点 5
-    if(w.sun&&!isFinite(w.sun.brg))throw new Error('ENV2 sun.brg 不是数:'+w.sun.brg+'(rand 要由对局层先掷成具体方位)'); // ENV2 envReset 不掷骰子
+    if(w.stars&&w.stars.length>1)throw new Error('ENV2 v1 全图最多一个光源(stars <= 1)'); // 拍板点 5
     for(const g of ['stars','bodies','clouds','asteroids'])for(const e of (w[g]||[]))
       if(!isFinite(e.x)||!isFinite(e.y)||(g==='stars'||g==='clouds'?(e.r!==undefined&&!(e.r>0)):!(e.r>0)))throw new Error('ENV2 '+g+' 条目缺坐标或半径');
   }
-  let sun=null;const st=[],bd=[],cl=[],ast=[];
-  if(w&&w.sun){ // ENV1 原样(只是先算进局部变量、再冻结)
-    const a=w.sun.brg*Math.PI/180,h=(isFinite(w.sun.half)?w.sun.half:ENV_CFG.SUN_HALF_DEG)*Math.PI/180,c=Math.cos(h);
-    sun=F({brg:w.sun.brg,half:h*180/Math.PI,ux:Math.cos(a),uy:Math.sin(a),c2:c*c});
-  }
+  const st=[],bd=[],cl=[],ast=[];
   for(const s of (w&&w.stars)||[]){const h=num(s.half,ENV_CFG.SUN_HALF_DEG)*Math.PI/180,c=Math.cos(h); // ENV2 位置型恒星;half 单位是度,c2 = cos^2 半角
     st.push(F({x:s.x,y:s.y,r:num(s.r,ENV_CFG.STAR_R),half:h*180/Math.PI,c2:c*c}));}
   for(const b of (w&&w.bodies)||[])bd.push(F({x:b.x,y:b.y,r:b.r,r2:b.r*b.r,heat:num(b.heat,ENV_CFG.BODY_HEAT),name:b.name||'天体'})); // ENV2 天体:XY 上无限高的柱,挡视线、投影子
   for(const c of (w&&w.clouds)||[]){const a=num(c.a,D.A),b=num(c.b,D.B),ang=num(c.ang,D.ANG),r=(D.R2+D.WBR)*Math.max(a,b); // ENV2 尘埃云:生成点 (x,y) + 椭圆本体;r = 浓度可能非 0 的外接圆
     cl.push(F({x:c.x,y:c.y,a:a,b:b,ang:ang,ca:Math.cos(ang*Math.PI/180),sa:Math.sin(ang*Math.PI/180),r:r,r2:r*r,seed:c.seed|0,v:num(c.v,D.V),dark:num(c.dark,D.DARK)}));}
   for(const a of (w&&w.asteroids)||[])ast.push(F({x:a.x,y:a.y,r:a.r,n:a.n|0,seed:a.seed|0,smin:num(a.smin,ENV_CFG.ROCK_SFD.MIN),smax:num(a.smax,ENV_CFG.ROCK_SFD.MAX),clear:num(a.clear,0),name:a.name||'小行星'})); // ENV2 小行星:只用来撒石头,不带光学杂波、不带 MTI
-  ENV.sun=sun;ENV.stars=F(st);ENV.bodies=F(bd);ENV.clouds=F(cl);ENV.asteroids=F(ast);ENV.rev++; // ENV2 整体换成冻结的新列表
+  ENV.stars=F(st);ENV.bodies=F(bd);ENV.clouds=F(cl);ENV.asteroids=F(ast);ENV.rev++; // ENV2 整体换成冻结的新列表
 }
 /* 太阳禁区:从 from 看 to 的视线落在太阳那个锥里。⚠ 22-percep 的热循环里有一份同式的内联副本(热循环不许调函数),判据 ENV_SENSE 钉着两者逐对相同 */
 function envSunBlind(from,to){ // ENV2 光源方向按观测方取;观测方在天体影子里看不到光源 ⇒ 不致盲(光学与静听一起解除)
-  const s=ENV.sun;if(!s&&!ENV.stars.length)return false;
+  if(!ENV.stars.length)return false;
   if(ENV.bodies.length&&envInShadow(from))return false;
   const u=envSunDirAt(from,ENV_T2);if(!u)return false;
-  const c2=s?s.c2:ENV.stars[0].c2,vx=to[0]-from[0],vy=to[1]-from[1],k=vx*u[0]+vy*u[1];
+  const c2=ENV.stars[0].c2,vx=to[0]-from[0],vy=to[1]-from[1],k=vx*u[0]+vy*u[1];
   return k>0&&k*k>(vx*vx+vy*vy)*c2;
 }
 /* 动目标显示:to 在场里、而且沿 from→to 视线的径向速度低于门限 ⇒ 回波被当成杂波。热循环里同样有一份内联副本 */
@@ -108,7 +103,7 @@ function envRfNoise(from,to){ // ENV2 从 from 朝 to 的射频噪声倍率(>= 1
   for(let i=0;i<S.E.length;i++){const c=Math.cos(Math.min(Math.PI/2,S.E[i]*h));if(kk>l2*c*c)return 1+S.K/Math.pow(S.M[i],4);}
   return 1;
 }
-function envLightHalf(){const s=ENV.sun;return (s?s.half:(ENV.stars.length?ENV.stars[0].half:0))*Math.PI/180;} // ENV2 光源半角(弧度)
+function envLightHalf(){return (ENV.stars.length?ENV.stars[0].half:0)*Math.PI/180;} // ENV2 光源半角(弧度)
 function envMtiBlind(from,to,vel,self){
   if(!vel||!envInClutter(to,self))return false;
   const dx=to[0]-from[0],dy=to[1]-from[1],dz=to[2]-from[2],rv=dx*vel[0]+dy*vel[1]+dz*vel[2];
@@ -116,22 +111,19 @@ function envMtiBlind(from,to,vel,self){
 }
 
 /* ---- ENV2 共用查询:纯函数,只读 ENV,第一句对空表早退(没有配置时是精确的无操作,判据 ENV2_WORLD ① 钉着) ---- */
-function envHasLight(){return ENV.sun!==null||ENV.stars.length>0;} // ENV2 全图有没有光源
-function envSunDirAt(p,out){ // ENV2 从 p 指向光源的 XY 单位向量;没有光源给 null。方向型原样拷 ux/uy(逐位同 ENV1);位置型 p 为 null 时给 null
-  const s=ENV.sun,o=out||[0,0];
-  if(s){o[0]=s.ux;o[1]=s.uy;return o;}
+function envHasLight(){return ENV.stars.length>0;} // ENV2 全图有没有光源
+function envSunDirAt(p,out){ // ENV2 从 p 指向光源(位置型恒星)的 XY 单位向量;没有光源或 p 为 null 时给 null
+  const o=out||[0,0];
   if(!ENV.stars.length||!p)return null;
   const S=ENV.stars[0],dx=S.x-p[0],dy=S.y-p[1],l=Math.hypot(dx,dy)||1;o[0]=dx/l;o[1]=dy/l;return o;
 }
 function envInShadow(p){ // ENV2 p 在任一天体的本影里(XY)。u = 天体中心指向光源;本影轴 = -u
   const B=ENV.bodies;if(!B.length||!p||!envHasLight())return false;
-  const s=ENV.sun,S=s?null:ENV.stars[0];
+  const S=ENV.stars[0];
   for(let i=0;i<B.length;i++){
-    const b=B[i];let ux,uy;
-    if(s){ux=s.ux;uy=s.uy;}else{const ax=S.x-b.x,ay=S.y-b.y,l=Math.hypot(ax,ay)||1;ux=ax/l;uy=ay/l;}
+    const b=B[i],ax=S.x-b.x,ay=S.y-b.y,l=Math.hypot(ax,ay)||1,ux=ax/l,uy=ay/l;
     const dx=p[0]-b.x,dy=p[1]-b.y,along=-(dx*ux+dy*uy),perp=Math.abs(dx*uy-dy*ux);
     if(!(along>0))continue;
-    if(s){if(perp<b.r)return true;continue;}                 // 方向型:等宽的柱
     if(!(S.r>b.r))continue;                                    // 天体比恒星大:本影发散,v1 不建模(同红外页)
     const Lu=b.r*Math.hypot(S.x-b.x,S.y-b.y)/(S.r-b.r);        // 位置型:会聚的锥,长 Lu
     if(along<Lu&&perp<b.r*(1-along/Lu))return true;

@@ -23,13 +23,13 @@
    ENV2 地图上的字(尘埃云 / 天体名 / 太阳 / 恒星)与日标图标都是预渲染的小贴图(mapText / mapCueSpr),每次 1 次 drawImage、1:1:补充规格 B 的稳态 <= 50 µs
    (任务 4 起尘埃云与天体名随合成缓存画一次,不再每帧贴;太阳 / 恒星的字与日标仍每帧贴)。
    ============================================================================ */
-const ENV_KIND_OF={sun:['sun'],stars:['star'],bodies:['body','shadow'],clouds:['cloud'],
+const ENV_KIND_OF={stars:['star'],bodies:['body','shadow'],clouds:['cloud'],
   asteroids:[]}; // ENV2 世界层每个键 → 视图里的类。asteroids 就是石头:走 82-rocks 的航迹画法(带迷雾),不是地图事实;红外里它们是热源
 const ENV_VIEWS={}; // ENV2 视图名 → {order, slot, pre?, kinds:{类名 → 画法对象 | null}}
-ENV_VIEWS.map={order:['cloud','shadow','body','star','sun'],slot:'frame',pre:mapTileFrame,kinds:{
+ENV_VIEWS.map={order:['cloud','shadow','body','star'],slot:'frame',pre:mapTileFrame,kinds:{
   cloud:{tile:mapCloudPaint,need:function(){return ENV.clouds.length>0;}}, // 2026-09-26 用户:尘埃云的中文标注不要了(原 comp:mapCloudLabels)
   shadow:{comp:mapShadows},   // ENV2 补充规格 C:影子是矢量虚线(每个天体 2 条,Liang–Barsky 裁到视图),不进瓦片 —— 瓦片于是只依赖云的几何,换光照不作废;任务 4 起画进合成缓存(矢量的键含世界 rev)
-  body:{comp:mapBodies}, star:{frame:mapStar}, sun:{frame:mapSunCue}}};
+  body:{comp:mapBodies}, star:{frame:mapStar}}};
 function drawEnvView(view){const V=ENV_VIEWS[view];if(!V)return;const took=V.pre?V.pre(V):false; // ENV2 任务 4:pre 返回真 = comp 槽已经在贴上去的合成缓存里,不再每帧画
   for(const k of V.order){const e=V.kinds[k];if(!e)continue;if(e.comp&&!took)e.comp();if(e[V.slot])e[V.slot]();}}
 function drawEnv(){drawEnvView('map');} // ENV2 名字不变:84-scene 的 typeof 守卫仍指向已声明符号(R2)
@@ -169,7 +169,7 @@ function mapTextSpr(txt,col){ // ENV2 一行 10px 字的小贴图(任务 2:摆�
 }
 function mapText(txt,col,x,y){mapBlit(mapTextSpr(txt,col),x,y);} // ENV2 一行 10px 字,中心落在 (x,y)(= 原来 textAlign center、textBaseline middle 的那一次 fillText)
 function mapCueSpr(dx,dy,label){ // ENV2 日标 = ENV1 的画法(实心圆 r=6 + 8 根射线 9→13、线宽 1.5)+ 字(中心在 -26·方向)画进一张小图,锚点 = 圆心。
-  // 每个标签一格,方向变了才重画(方向型太阳整局不变;屏外恒星平移时才变)。8 根射线一个 path(小图里画一次,不是每帧的大 path)
+  // 每个标签一格,方向变了才重画(屏外恒星平移时才变)。8 根射线一个 path(小图里画一次,不是每帧的大 path)
   const key='cue|'+label,dk=dx.toFixed(4)+','+dy.toFixed(4),s0=MAP_SPR[key];
   if(s0&&s0.dk===dk&&s0.dpr===(window.devicePixelRatio||1))return s0;
   if(!MAP_MEAS.g)MAP_MEAS.g=document.createElement('canvas').getContext('2d');
@@ -184,7 +184,7 @@ function mapCueSpr(dx,dy,label){ // ENV2 日标 = ENV1 的画法(实心圆 r=6 +
   s.dk=dk;return s;
 }
 
-/* ---- ENV2 影子轮廓:每个天体 2 条虚线(方向型:从 C±R·n 沿 −u 伸出屏幕;位置型:止于锥顶 C − u·Lu),Liang–Barsky 裁到 [−1,W+1]x[−1,H+1] ---- */
+/* ---- ENV2 影子轮廓:每个天体 2 条虚线(止于锥顶 C − u·Lu),Liang–Barsky 裁到 [−1,W+1]x[−1,H+1] ---- */
 const MAP_T2=[0,0]; // ENV2 本文件的两格草稿(光源方向)
 function mapLB(x0,y0,x1,y1,X0,Y0,X1,Y1,out){ // ENV2 Liang–Barsky(1984)线段裁剪:把 (x0,y0)→(x1,y1) 裁到矩形里,out=[t0,t1];整段在外给 false
   let t0=0,t1=1;const dx=x1-x0,dy=y1-y0,P=[-dx,dx,-dy,dy],Q=[x0-X0,X1-x0,y0-Y0,Y1-y0];
@@ -195,17 +195,13 @@ function mapLB(x0,y0,x1,y1,X0,Y0,X1,Y1,out){ // ENV2 Liang–Barsky(1984)线段�
 }
 function mapShadows(){ // ENV2 comp 槽(任务 4:画进当前视图 —— 合成缓存或主画布;返回画了几笔)
   const B=ENV.bodies;if(!B.length||!envHasLight()||!mapSunOn())return 0; // 影子线归「太阳线」钮
-  const g=mapG(),VW=mapVW(),VH=mapVH(),S=ENV.sun?null:ENV.stars[0],u=MAP_T2,cut=[0,0],cx=VW/2,cy=VH/2;let on=false,n=0;
+  const g=mapG(),VW=mapVW(),VH=mapVH(),S=ENV.stars[0],u=MAP_T2,cut=[0,0];let on=false,n=0;
   for(const b of B){
     if(!envSunDirAt([b.x,b.y],u))continue;
-    let Lu=Infinity;
-    if(S){if(!(S.r>b.r))continue;Lu=b.r*Math.hypot(S.x-b.x,S.y-b.y)/(S.r-b.r);} // 天体比恒星大:本影发散,不画(与 envInShadow 同口径)
+    if(!(S.r>b.r))continue;const Lu=b.r*Math.hypot(S.x-b.x,S.y-b.y)/(S.r-b.r); // 天体比恒星大:本影发散,不画(与 envInShadow 同口径)
     const nx=-u[1],ny=u[0],ux=u[0],uy=u[1];
     for(let sg=-1;sg<=1;sg+=2){
-      const ax=b.x+sg*b.r*nx,ay=b.y+sg*b.r*ny,p0=mapTS(ax,ay);let p1;
-      if(isFinite(Lu))p1=mapTS(b.x-ux*Lu,b.y-uy*Lu);   // 位置型:止于锥顶
-      else{const q=mapTS(ax-ux*1e6,ay-uy*1e6),ex=q[0]-p0[0],ey=q[1]-p0[1],el=Math.hypot(ex,ey)||1,len=Math.hypot(p0[0]-cx,p0[1]-cy)+VW+VH;
-        p1=[p0[0]+ex/el*len,p0[1]+ey/el*len];}            // 方向型:沿 −u 伸到一定出视图的地方
+      const ax=b.x+sg*b.r*nx,ay=b.y+sg*b.r*ny,p0=mapTS(ax,ay),p1=mapTS(b.x-ux*Lu,b.y-uy*Lu); // 止于锥顶
       if(!mapLB(p0[0],p0[1],p1[0],p1[1],-1,-1,VW+1,VH+1,cut))continue;
       const dx=p1[0]-p0[0],dy=p1[1]-p0[1];
       if(!on){g.save();g.strokeStyle='rgba(170,180,200,.22)';g.lineWidth=1;g.setLineDash([3,5]);on=true;}
@@ -266,7 +262,7 @@ function mapBodies(){ // ENV2 comp 槽(任务 4:画进当前视图 —— 合成
   g.restore();return n;
 }
 
-/* ---- ENV2 光源:位置型恒星(光晕 + 光球)与方向型太阳(日标)。日标与禁区锥是 ENV1 的画法,参数化后两种光源共用 ---- */
+/* ---- ENV2 光源:位置型恒星(光晕 + 光球;屏外画日标)。日标与禁区锥是 ENV1 的画法(2026-09-29 方向型太阳已删) ---- */
 const MAP_STAR={cv:null,dpr:0,sz:null,szN:0,szDpr:0,CAP:2048,Q:8}; // ENV2 恒星光晕的预渲染贴图(128x128 径向渐变):只在第一次要用或 DPR 变了时建一次(先例:83-hud 的 SIG_FADE),只给缩放动画中拉伸用。
                                                                 // sz = 按【量化后的】屏幕尺寸直接画渐变的一张(边长 szN 设备像素 <= CAP,按 2^(1/Q) 一档量化),镜头停着时每帧 1:1 贴它;尺寸换档才重画(审查问题 7)。
                                                                 // 审查第四轮:名义边长超过 CAP 时按 CAP 封顶(光晕不再跟着长大,仍 1:1)—— 暂定,待用户拍板(另两种:超过就不画 / 接受拉伸)
@@ -320,12 +316,6 @@ function drawSunLines(){ // 「太阳线」钮:选中的那艘我方舰(选了�
   const u=envSunDirAt(s.pos,SUNL_U);if(!u)return;
   const a=toScreen(s.pos[0],s.pos[1]),b=toScreen(s.pos[0]+u[0]*1e6,s.pos[1]+u[1]*1e6);
   ctx.save();mapExclCone(s,Math.atan2(b[1]-a[1],b[0]-a[0]),envLightHalf());ctx.restore();
-}
-function mapSunCue(){ // ENV2 方向型太阳:日标(禁区锥归「太阳线」钮,见 drawSunLines)
-  if(!ENV.sun)return; // ENV2 E4:没有太阳(只有恒星 / 什么都没有)时第一句返回
-  const s=ENV.sun,a=toScreen(0,0),b=toScreen(s.ux*1e6,s.uy*1e6);
-  let dx=b[0]-a[0],dy=b[1]-a[1];const l=Math.hypot(dx,dy)||1;dx/=l;dy/=l; // 屏幕上的太阳方向(不假定 y 轴朝哪)
-  mapLightCue(dx,dy,'太阳');
 }
 function mapStar(){ // ENV2 位置型恒星:在屏内画光晕 + 光球 + 名字;在屏外画日标(方向 = 屏幕中心指向恒星)
   if(!ENV.stars.length)return;

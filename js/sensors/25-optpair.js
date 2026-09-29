@@ -10,7 +10,7 @@ function senseLoOf(L, hid, sol, G, bg) { // ENV2 有效光学亮度的唯一式�
   const num = L - hid + sol, q = G + SENS.BG_DUST * bg;
   return q > 0 ? num / Math.sqrt(1 + q / SENS.BG_G0) : num;
 }
-function senseHalfRad() { const s = ENV.sun; return s ? s.half * Math.PI / 180 : (ENV.stars.length ? ENV.stars[0].half * Math.PI / 180 : 0); } // ENV2 度→弧度只在这一处
+function senseHalfRad() { return ENV.stars.length ? ENV.stars[0].half * Math.PI / 180 : 0; } // ENV2 度→弧度只在这一处
 function senseGlare(off, halfRad, mix) { // ENV2 禁区边缘恰为 EDGE;里面 (h/a)^P;外面 四次方^MIX x 陡^(1-MIX)。弧度;mix 可省(测试量纯律时给 1 / 0)
   const G = SENS.GLARE, a = Math.max(Math.abs(off), halfRad * 0.05), p4 = G.EDGE * Math.pow(halfRad / a, G.P);
   const mx = (mix === undefined) ? G.MIX : mix; if (a <= halfRad || mx === 1) return p4;
