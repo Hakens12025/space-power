@@ -218,10 +218,18 @@ function drawIr2View(){ // 每帧入口(84-scene,MAPV.mode === 'ir';画在地图
   if(IS.length){ctx.save();ctx.strokeStyle='rgba(255,200,150,.35)';ctx.lineWidth=1;ctx.setLineDash([4,4]);for(let k=0;k<IS.length;k++)for(const q of ir2Arcs(PI,RII,k)){ctx.beginPath();ctx.arc(PI[k][0],PI[k][1],RII[k],q[0],q[1]);ctx.stroke();}ctx.restore();} // 可见光圈(并起来):里面实际可见
   if(RS.length>1){ctx.save();ir2DrawZones();ctx.restore();}
 }
-function drawIr2Hud(){ // 红外仪表(左边,加舰条与特写窗之间;没选 = 全舰队,选几艘 = 那几艘):方位从中心量,径向 = 温度;中间画队形(缩小,只示意)
+function ir2HudPlace(R){ // 仪表放哪(半径 R 连底板):左边(加舰条与指令栏之间)被页面面板挡住(比如靶场参数)就换到右边(右栏与右下工具栏之间);每 500 ms 看一次
+  const rc=id=>{const e=document.getElementById(id);if(!e)return null;const r=e.getBoundingClientRect();return r.height>0?r:null;},sb=rc('spawnBar'),cb=rc('cmdBar'),sp=rc('selPanel'),tl=rc('tools');
+  const free=(x,y)=>{for(const d of [[0,0],[R,0],[-R,0],[0,R],[0,-R]]){const e=document.elementFromPoint(x+d[0],y+d[1]);if(e&&e!==cv)return false;}return true;};
+  const L={x:16+R,top:Math.max(60,sb?sb.bottom+8:60),bot:(cb?cb.top:H-60)-8,left:true},Rt={x:W-16-R,top:Math.max(60,sp?sp.bottom+8:60),bot:(tl?tl.top:H-60)-8,left:false};
+  for(const c of [L,Rt]){const y=Math.max(c.top+R,Math.min((c.top+c.bot)/2,c.bot-R));if(free(c.x,y))return c;}
+  return L;
+}
+function drawIr2Hud(){ // 红外仪表(左边加舰条与特写窗之间,被页面面板挡住就放右边,见 ir2HudPlace;没选 = 全舰队,选几艘 = 那几艘):方位从中心量,径向 = 温度;中间画队形(缩小,只示意)
   const inst=IR2.inst,QS=IR2.QS;IR2.hudC=null;if(!inst||!QS||!QS.length)return;
-  const now=nowMs();if(now-IR2.hudT>500||!IR2.hud){IR2.hudT=now;const sb=document.getElementById('spawnBar');let top=60;if(sb){const r=sb.getBoundingClientRect();if(r.height>0)top=Math.max(top,r.bottom+8);}IR2.hud={top:top};} // 顶边让开加船条
-  const r0=IR2_C.INST_R,B=IR2_C.INST_B,ro=r0+B,pad=IR2_C.INST_PAD,C=IR2_C.CELL,bot=(typeof INSET!=='undefined'&&INSET.on)?INSET.y-8:H-80,cx=16+ro+pad,cy=Math.max(IR2.hud.top+ro+pad,Math.min((IR2.hud.top+bot)/2,bot-ro-pad));
+  const r0=IR2_C.INST_R,B=IR2_C.INST_B,ro=r0+B,pad=IR2_C.INST_PAD,C=IR2_C.CELL,now=nowMs();
+  if(now-IR2.hudT>500||!IR2.hud){IR2.hudT=now;IR2.hud=ir2HudPlace(ro+pad);}
+  const S=IR2.hud,bot=(S.left&&typeof INSET!=='undefined'&&INSET.on)?Math.min(S.bot,INSET.y-8):S.bot,cx=S.x,cy=Math.max(S.top+ro+pad,Math.min((S.top+bot)/2,bot-ro-pad)); // 左边时底边再让开特写窗
   ctx.save();ctx.fillStyle='rgba(8,12,18,.88)';ctx.strokeStyle='rgba(143,208,255,.25)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(cx,cy,ro+pad,0,2*Math.PI);ctx.fill();ctx.stroke();
   const LH=ir2Lay('H'),ep=Math.floor(now/IR2_C.NOISE_MS),lay=(IR2.still&&LH.res&&LH.ep===ep&&LH.cx===cx&&LH.cy===cy)?LH.res:(LH.ep=ep,LH.cx=cx,LH.cy=cy,LH.res=ir2Paint(LH,[cx-ro-2,cy-ro-2,cx+ro+2,cy+ro+2],[[cx,cy,r0-2*C,ro+2*C]],(x,y)=>{const d=Math.sqrt((x-cx)*(x-cx)+(y-cy)*(y-cy));if(d<r0-2*C||d>=ro+2*C)return null;let a=Math.atan2(y-cy,x-cx);if(a<0)a+=2*Math.PI;return [ir2At(inst.V,a,(d-r0)/B),0];}));
   if(lay){ctx.beginPath();ctx.arc(cx,cy,ro,0,2*Math.PI);ctx.moveTo(cx+r0,cy);ctx.arc(cx,cy,r0,0,2*Math.PI,true);ctx.clip('evenodd');ctx.imageSmoothingEnabled=true;ctx.drawImage(lay[0],lay[1]*C,lay[2]*C,lay[3]*C,lay[4]*C);}
