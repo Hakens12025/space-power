@@ -287,11 +287,12 @@ function mdLeft(e,sx,sy){ // 左键
     selDrag={x0:sx,y0:sy,x1:sx,y1:sy,missileMode:true};
     return;
   }
+  const b=buoyAt(sx,sy); // 2026-09-29 点中我方浮标 → 选中它(右栏 / 底栏雷达切到浮标)。浮标比船离光标近就先选浮标:船的点选圈 60 px(舰队层 6 万 km),刚放出去的浮标总在圈里
+  if(b&&(!sh||(()=>{const p=toScreen(sh.pos[0],sh.pos[1]),q=toScreen(b.pos[0],b.pos[1]);return Math.hypot(q[0]-sx,q[1]-sy)<Math.hypot(p[0]-sx,p[1]-sy);})())){ // 一样近(刚发射还叠在船上)让给船
+    selBuoy=b;selMissile=null;selNet=null;selMissileHits=[];selected=[];selDrag=null;if(typeof updateSelPanel==='function')updateSelPanel();return;}
   if(!sh){ // 没点中船 → 看导弹组(导弹组可点选;v125点中组=选整个网)
     const g=groupAt(sx,sy);
     if(g){selMissile=g;selNet=g.netId||null;selMissileHits=[g];selected=[];selDrag=null;selBuoy=null;return;}
-    const b=buoyAt(sx,sy); // 2026-09-29 点中我方浮标 → 选中它(右栏 / 底栏雷达切到浮标)
-    if(b){selBuoy=b;selMissile=null;selNet=null;selMissileHits=[];selected=[];selDrag=null;if(typeof updateSelPanel==='function')updateSelPanel();return;}
   }
   selMissile=null;selNet=null;selMissileHits=[];selBuoy=null; // 没点中导弹组 / 浮标 → 取消它们的选中
   if(e.ctrlKey){
