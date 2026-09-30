@@ -20,10 +20,10 @@ const IR2_C={BAND:65,FEATHER:16,EDGE:'rgba(255,150,70,.5)',EDGE_W:1,RIN_MIN:30,N
   NEB_K:0.02,NEB_L:2500000*CFG.scale,NEB_NB:180,NEB_DR:0.02,SUN_G:3,SUN_SIG:12,
   // 本底:星云发光 = NEB_K x 沿视线的光深(从圈边往外 NEB_L km,一圈 NEB_NB 个方向);环心挪动超过 NEB_DR x 圈半径才重算;恒星眩光峰值(色阶值)与角宽(度)
   CELL:6,GRAIN:0.3,NOISE:0.005,NOISE_MS:200,FLK_PLUME:0.35,LC_A:[0.2,0.5],LC_P:[5,30],
-  // 颗粒:格子 px(2026-09-30 试过 4,用户:外层不用变细,退回 6)、亮处的乘性颗粒(锚在屏幕上)、底噪幅度与换一次的毫秒(游戏时间,x1 = 真实时间);尾焰抖动幅度;石头翻滚的明暗幅度与周期(秒)
+  // 颗粒:格子 px(2026-09-30 试过 4,用户:外层不用变细,退回 6)、亮处的乘性颗粒(锚在屏幕上)、底噪幅度与换一次的毫秒(真实时间);尾焰抖动幅度;石头翻滚的明暗幅度与周期(秒)
   INST_R:36,INST_B:50,INST_PAD:18,FLASH_S:1.5,ZONE_T:0.2,ZONE_S:200000*CFG.scale};
   // 仪表内圈半径 / 环厚 / 底板边 px;异常刻痕几秒淡出;交集每几墙钟秒重算一次、亮度刻度(√面积 2000 ~ 20 万 km 由亮到暗,同雷达画面)
-const IR2={gr:null,grW:0,grH:0,sk:null,still:false,key:'',fr:0,ns:0,wt:0,rings:[],inst:null,rec:new Map(),zones:[],zt:-1e9,RS:[],IS:[],QS:null,S:[],P:[],RI:[],rc:null,hud:null,hudT:-1e9,hudC:null,L32:null,lumMax:0};
+const IR2={gr:null,grW:0,grH:0,sk:null,still:false,key:'',fr:0,ns:0,wt:0,clk:{t:0},rings:[],inst:null,rec:new Map(),zones:[],zt:-1e9,RS:[],IS:[],QS:null,S:[],P:[],RI:[],rc:null,hud:null,hudT:-1e9,hudC:null,L32:null,lumMax:0};
 function ir2Wrap(a){a=(a+Math.PI)%(2*Math.PI);if(a<0)a+=2*Math.PI;return a-Math.PI;}
 function ir2Rho(T){return Math.max(0,Math.min(1,Math.log(T/IR2_C.T0)/Math.log(IR2_C.T1/IR2_C.T0)));} // 温度 → 厚度位置(0 = 内沿冷,1 = 外沿热)
 const IR2_PROF=new Map();
@@ -50,7 +50,7 @@ function ir2Snr(o,t,bg,tSh,oLit,kn){ // o 看 t 的信噪比(同 irvHill 的一�
   const d=Math.max(1,Math.hypot(t.pos[0]-o.pos[0],t.pos[1]-o.pos[1],(t.pos[2]||0)-(o.pos[2]||0))),dF=t.kind==='rock'?IRV_C.FILL_K*LAD.optIdent*Math.sqrt(t.size):0;
   return SENS.K_IR*lo/Math.pow(Math.max(d,dF),2);
 }
-function ir2Comps(o,t){ // 船等(石头走 ir2SplatRock)的亮度拆成几份 [亮度, 温度 K, 闪烁倍率]:自身热 / 开火(从自身热里拆)/ 尾焰(抖)/ 晒热;闪烁按游戏时间走(跟倍速)
+function ir2Comps(o,t){ // 船等(石头走 ir2SplatRock)的亮度拆成几份 [亮度, 温度 K, 闪烁倍率]:自身热 / 开火(从自身热里拆)/ 尾焰(抖)/ 晒热;闪烁按真实时间走、只在跑的时候走
   const q=senseOptParts(o,t),tw=IR2.wt,ph=irvPh(t),out=[],fire=sReq(t,'size','ship')*firePowerOf(t),self=Math.max(0,q.self-fire);
   out.push([self,IR2_C.T_HULL,1]);
   if(fire>0)out.push([fire,IR2_C.T_HULL+(IR2_C.T_FIRE-IR2_C.T_HULL)*fireLvl(t),1]); // 开火那份:越退越冷,在环上往内滑、并进船体
@@ -103,7 +103,7 @@ function ir2Update(){
   const key=VIEW+'|'+S.map(s=>s.id).join(',')+'|'+RS.length+'|'+(QS?1:0)+'|'+(adminMode?1:0),reset=key!==IR2.key;
   if(reset){IR2.key=key;IR2.rec.clear();IR2.rings=RS.map(ir2Ring);IR2.inst=QS?ir2Ring():null;IR2.zones=[];IR2.zt=-1e9;}
   IR2.RS=RS;IR2.IS=IS;IR2.QS=QS;IR2.S=S;IR2.P=RS.map(s=>toScreen(s.pos[0],s.pos[1]));IR2.RI=RS.map(ir2RIn);
-  IR2.wt=simTime+acc; // 2026-09-30 用户:红外层的闪动要跟游戏倍速 —— 按游戏时间走(x1 时一游戏秒 = 一真实秒;暂停就停;加上没走完的那一小步 acc,慢放时不一顿一顿)
+  IR2.wt+=runDt(IR2.clk,0.1); // 闪烁按真实时间走、只在跑的时候走(2026-09-30 试过跟游戏倍速,用户:不要随游戏速度变)
   const src=irvSrc(),sk=[cam.x,cam.y,cam.zoom,W,H,ENV.rev,ROCK_EPOCH];for(const s of S)sk.push(s.pos[0],s.pos[1],s.visR||0);for(const t of src)if(t.kind!=='rock')sk.push(t.pos[0],t.pos[1],t.flame||0,t.sideFlame?1:0,t.fireHot||0); // 稳态:暂停、镜头 / 船 / 世界都没变 ⇒ 环的数据不重算
   let same=!(typeof running!=='undefined'&&running)&&!reset&&!!IR2.sk&&IR2.sk.length===sk.length;if(same)for(let i=0;i<sk.length;i++)if(sk[i]!==IR2.sk[i]){same=false;break;}
   IR2.sk=sk;IR2.still=same;if(same)return;
@@ -191,7 +191,7 @@ function ir2Paint(L,bb,ann,cellFn){ // 在层 L 上、屏幕矩形 bb 里按 CEL
   if(!IRVC.col)irvColInit();
   const gw=Math.ceil(W/C)+4,gh=Math.ceil(H/C)+4;if(!IR2.gr||IR2.grW!==gw||IR2.grH!==gh){IR2.gr=new Float32Array(gw*gh);IR2.grW=gw;IR2.grH=gh;for(let j=0;j<gh;j++)for(let i=0;i<gw;i++)IR2.gr[j*gw+i]=1+IR2_C.GRAIN*(ir2Hash(i-2,j-2,0)*2-1);} // 亮处的乘性颗粒:按屏幕格子算一次
   const GR=IR2.gr;
-  const O=L.u32,MK=L.mk,T=ir2L32(),ep=Math.floor(simTime*1000/IR2_C.NOISE_MS),T8=IRVC.col.T8,TH=IRVC.col.TH,f1=IRVC.f1,u1=IRVC.u1; // 色阶下标照红外1 查表(float32 高 16 位初猜 + 门槛表修正),不逐格算对数
+  const O=L.u32,MK=L.mk,T=ir2L32(),ep=Math.floor(nowMs()/IR2_C.NOISE_MS),T8=IRVC.col.T8,TH=IRVC.col.TH,f1=IRVC.f1,u1=IRVC.u1; // 色阶下标照红外1 查表(float32 高 16 位初猜 + 门槛表修正),不逐格算对数
   const span=(x0,x1)=>{const a=Math.max(0,Math.floor(x0/C-0.5-i0)-1),b=Math.min(nw-1,Math.ceil(x1/C-0.5-i0)+1);for(let i=a;i<=b;i++)MK[i]=1;};
   for(let j=0;j<nh;j++){const gj=j0+j,y=(gj+0.5)*C;MK.fill(0);
     for(const a of ann){const dy=Math.abs(y-a[1]);if(dy>=a[3]+C)continue;const xo=Math.sqrt(Math.max(0,(a[3]+C)*(a[3]+C)-dy*dy)),xi=dy<a[2]-C?Math.sqrt((a[2]-C)*(a[2]-C)-dy*dy):0; // 这一行与圆环带相交的一段或两段
@@ -219,7 +219,7 @@ function drawIr2View(){ // 每帧入口(84-scene,MAPV.mode === 'ir';画在地图
     ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(IRVC.fc,0,0);ctx.restore();drawIrFx();ctx.restore();}
   if(RS.length){const P=IR2.P,RI=IR2.RI,B=IR2_C.BAND,C=IR2_C.CELL,rings=IR2.rings,RO=RI.map(r=>r+B),bb=[Infinity,Infinity,-Infinity,-Infinity];
     for(let i=0;i<P.length;i++){bb[0]=Math.min(bb[0],P[i][0]-RO[i]);bb[1]=Math.min(bb[1],P[i][1]-RO[i]);bb[2]=Math.max(bb[2],P[i][0]+RO[i]);bb[3]=Math.max(bb[3],P[i][1]+RO[i]);}
-    const LR=ir2Lay('R'),ep=Math.floor(simTime*1000/IR2_C.NOISE_MS),lay=(IR2.still&&LR.res&&LR.ep===ep)?LR.res:(LR.ep=ep,LR.res=ir2Paint(LR,bb,P.map((p,i)=>[p[0],p[1],RI[i]-2*C,RO[i]+2*C]),(x,y)=>{let b1=-1,e1=Infinity,b2=-1,e2=Infinity;for(let j=0;j<P.length;j++){const dx=x-P[j][0],dy=y-P[j][1],d=Math.sqrt(dx*dx+dy*dy);if(d<RI[j]-2*C)return null;const e=d-RI[j];if(e<e1){e2=e1;b2=b1;e1=e;b1=j;}else if(e<e2){e2=e;b2=j;}} // 离圈边最近的两艘
+    const LR=ir2Lay('R'),ep=Math.floor(nowMs()/IR2_C.NOISE_MS),lay=(IR2.still&&LR.res&&LR.ep===ep)?LR.res:(LR.ep=ep,LR.res=ir2Paint(LR,bb,P.map((p,i)=>[p[0],p[1],RI[i]-2*C,RO[i]+2*C]),(x,y)=>{let b1=-1,e1=Infinity,b2=-1,e2=Infinity;for(let j=0;j<P.length;j++){const dx=x-P[j][0],dy=y-P[j][1],d=Math.sqrt(dx*dx+dy*dy);if(d<RI[j]-2*C)return null;const e=d-RI[j];if(e<e1){e2=e1;b2=b1;e1=e;b1=j;}else if(e<e2){e2=e;b2=j;}} // 离圈边最近的两艘
       if(b1<0||e1>=B+2*C)return null;const v1=ir2RingAt(rings[b1].V,P[b1],x,y,e1/B),F=IR2_C.FEATHER;if(b2<0||e2-e1>=F)return v1; // 两个环交界附近 FEATHER px 里按离两边圈边的远近混合(2026-09-30 用户:交界处羽化)
       const w=0.5+0.5*(e2-e1)/F;return w*v1+(1-w)*ir2RingAt(rings[b2].V,P[b2],x,y,e2/B);}));
     if(lay)ir2Blit(lay,bb,g=>ir2Circles(g,P,RO),g=>ir2Circles(g,P,RI));
@@ -243,7 +243,7 @@ function drawIr2Hud(){ // 红外仪表(左边加舰条与特写窗之间,被页�
   if(now-IR2.hudT>500||!IR2.hud){IR2.hudT=now;IR2.hud=ir2HudPlace(ro+pad);}
   const S=IR2.hud,bot=(S.left&&typeof INSET!=='undefined'&&INSET.on)?Math.min(S.bot,INSET.y-8):S.bot,cx=S.x,cy=Math.max(S.top+ro+pad,Math.min((S.top+bot)/2,bot-ro-pad)); // 左边时底边再让开特写窗
   ctx.save();ctx.fillStyle='rgba(8,12,18,.88)';ctx.strokeStyle='rgba(143,208,255,.25)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(cx,cy,ro+pad,0,2*Math.PI);ctx.fill();ctx.stroke();
-  const LH=ir2Lay('H'),ep=Math.floor(simTime*1000/IR2_C.NOISE_MS),lay=(IR2.still&&LH.res&&LH.ep===ep&&LH.cx===cx&&LH.cy===cy)?LH.res:(LH.ep=ep,LH.cx=cx,LH.cy=cy,LH.res=ir2Paint(LH,[cx-ro-2,cy-ro-2,cx+ro+2,cy+ro+2],[[cx,cy,r0-2*C,ro+2*C]],(x,y)=>{const d=Math.sqrt((x-cx)*(x-cx)+(y-cy)*(y-cy));if(d<r0-2*C||d>=ro+2*C)return null;let a=Math.atan2(y-cy,x-cx);if(a<0)a+=2*Math.PI;return ir2At(inst.V,a,(d-r0)/B);}));
+  const LH=ir2Lay('H'),ep=Math.floor(nowMs()/IR2_C.NOISE_MS),lay=(IR2.still&&LH.res&&LH.ep===ep&&LH.cx===cx&&LH.cy===cy)?LH.res:(LH.ep=ep,LH.cx=cx,LH.cy=cy,LH.res=ir2Paint(LH,[cx-ro-2,cy-ro-2,cx+ro+2,cy+ro+2],[[cx,cy,r0-2*C,ro+2*C]],(x,y)=>{const d=Math.sqrt((x-cx)*(x-cx)+(y-cy)*(y-cy));if(d<r0-2*C||d>=ro+2*C)return null;let a=Math.atan2(y-cy,x-cx);if(a<0)a+=2*Math.PI;return ir2At(inst.V,a,(d-r0)/B);}));
   if(lay){ctx.beginPath();ctx.arc(cx,cy,ro,0,2*Math.PI);ctx.moveTo(cx+r0,cy);ctx.arc(cx,cy,r0,0,2*Math.PI,true);ctx.clip('evenodd');ctx.imageSmoothingEnabled=true;ctx.drawImage(lay[0],lay[1]*C,lay[2]*C,lay[3]*C,lay[4]*C);}
   ctx.restore();ctx.save();
   ctx.strokeStyle=IR2_C.EDGE;ctx.lineWidth=IR2_C.EDGE_W;ctx.beginPath();ctx.arc(cx,cy,ro,0,2*Math.PI);ctx.stroke();ir2Ticks(a=>[cx+Math.cos(a)*(ro+2),cy+Math.sin(a)*(ro+2)]);
