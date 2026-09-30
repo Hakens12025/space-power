@@ -77,7 +77,7 @@ function drawRange(){ // 测距工具(按住C):起点(或跟随船)→鼠标目�
   ctx.restore();
 }
 function viewPos(s){return (adminMode||s.side===VIEW)?s.pos:contactPos(s,VIEW);} // 2026-09-28 画面上对方东西画在哪 / 量多远的唯一出处:我方知道的位置(估计;GM 真值),交代不出给 null(不拿真值兜底)
-function projSeen(p){return adminMode||!p.shooter||trkSees(VIEW,p);} // 2026-09-28 我方看不看得见这枚弹:画、点选、选中面板同一道门(2026-09-29 自己的弹也按视野)
+function projSeen(p){return adminMode||!p.shooter||trkSees(VIEW,p)||(p.type==='missile'&&p.online&&p.shooter.side===VIEW);} // 2026-09-28 我方看不看得见这枚弹:画、点选、选中面板同一道门(2026-09-29 自己的弹也按视野)
 function drawLocks(){ // 火力锁定:红色虚线
   for(const s of ships){
     if(s.dead||!s.lockedTarget||s.lockedTarget.dead||s.lockedTarget.side===s.side)continue;
@@ -225,7 +225,7 @@ function drawNetLinks(){ // v140:网内导弹细线连接;v142:星形连接(O(k)
     if(arr.length<2)continue;
     const c=arr[0]; // 参考组(网内第一组),星形连到各组
     for(let j=1;j<arr.length;j++){
-      if(V.len(V.sub(c.pos,arr[j].pos))>NET_COMM)continue; // 断网不连
+      if(V.len(V.sub(c.pos,arr[j].pos))>MSL_LINK.MM)continue; // 断网不连(2026-09-30 按导弹组网的弹弹距离)
       const pa=toScreen(c.pos[0],c.pos[1]);
       const pb=toScreen(arr[j].pos[0],arr[j].pos[1]);
       ctx.strokeStyle='rgba(84,224,208,.2)';

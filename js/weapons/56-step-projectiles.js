@@ -18,6 +18,7 @@ function stepProjectiles(dt){
   // v119:预收集活跃拦截弹(按阵营),供导弹蛇形判定O(1)跳过——原为O(P²)全表扫描
   const icBlue=[],icRed=[];
   for(const q of projectiles){if(q.type==='interceptor'&&!q.done){(q.shooter.side==='blue'?icBlue:icRed).push(q);}}
+  mslNetStep(dt); // 2026-09-30 导弹组网:每个感知节拍重算哪些导弹组连得到舰队(weapons/54)
   guideMissiles(); // T1:每tick重算引导分配(自导/链导/脱锁),供下方追击门判定
   updateNets(dt); // v125:网内连接检查——断网(离网中心>NET_COMM)计时,10s没回自毁
   for(const p of projectiles){ // 四弹型主循环(RF1:分支体在下方四个子函数)

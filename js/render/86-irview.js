@@ -399,7 +399,7 @@ function irvDot(k){ // 按色阶下标缓存的高斯亮点贴图(渐变只在�
 }
 function drawIrFx(){
   const obs=IRVJ.obs;if(!obs.length)return;ctx.save();ctx.globalAlpha=1;
-  for(const q of projectiles){if(q.type!=='missile'||q.done||!projSeen(q))continue;
+  for(const q of projectiles){if(q.type!=='missile'||q.done||!(adminMode||trkSees(VIEW,q)))continue; // 2026-09-30 只画红外 / 视野看得见的(导弹网回传的我方弹不进红外画面)
     const p=toScreen(q.pos[0],q.pos[1]);if(p[0]<-60||p[0]>W+60||p[1]<-60||p[1]>H+60)continue;
     const L=projSig(q).lum;let snr=0;
     for(const r of obs){const o=r.o,d=Math.max(1,Math.hypot(q.pos[0]-o.pos[0],q.pos[1]-o.pos[1],(q.pos[2]||0)-(o.pos[2]||0))),v=SENS.K_IR*L*senseContrast(o,q)*envExt(o.pos,q.pos)/(d*d);if(v>snr)snr=v;}

@@ -8,6 +8,20 @@ const MSL_CFG={
   ladarRange:30000*CFG.scale,    // LADAR 有效距离(=GUIDE_SEEK,末端开启后精确锁定)。2026-09-26 x1/5(单局地图):原 150000
 };
 const GUIDE_SEEK=MSL_CFG.ladarRange; // 导弹自主导引范围(km)=主动LADAR末端开启后(范围内自主锁定,不耗通道)
+/* 2026-09-30 导弹组网(用户):弹与弹 MM(可见光圈的一半)、弹与舰(含前出浮标)MS 以内连一条边;一组导弹经弹弹链能连到任何一艘我方船(舰与舰之间量子通信,算一个节点)就「在网上」(p.online):
+   回传自身状态(我方画真位置、选中面板照实报)、收数据链引导(guideSide 只给在网上的)。每个感知节拍重算一次;刚发射的算在网上(52 fireMissiles) */
+const MSL_LINK={MM:COV.VIS_R/2,MS:60000*CFG.scale};
+let mslNetT=0;
+function mslNetStep(dt){
+  mslNetT+=dt;if(mslNetT<SENS.TICK)return;mslNetT=0;
+  const MS2=MSL_LINK.MS*MSL_LINK.MS,MM2=MSL_LINK.MM*MSL_LINK.MM;
+  for(const side of ['blue','red']){
+    const F=[];for(const s of ships)if(s.side===side&&!s.dead)F.push(s.pos);for(const o of rockObjs())if(o.kind==='buoy'&&o.side===side&&!o.dead)F.push(o.pos);
+    const M=projectiles.filter(p=>p.type==='missile'&&!p.done&&p.shooter&&p.shooter.side===side),q=[];
+    for(const p of M){p.online=false;for(const f of F){const dx=p.pos[0]-f[0],dy=p.pos[1]-f[1],dz=p.pos[2]-(f[2]||0);if(dx*dx+dy*dy+dz*dz<MS2){p.online=true;q.push(p);break;}}} // 直连舰队
+    for(let i=0;i<q.length;i++){const a=q[i];for(const b of M){if(b.online)continue;const dx=a.pos[0]-b.pos[0],dy=a.pos[1]-b.pos[1],dz=a.pos[2]-b.pos[2];if(dx*dx+dy*dy+dz*dz<MM2){b.online=true;q.push(b);}}} // 经弹弹链接力
+  }
+}
 function guideMissiles(){ // 每tick重算引导分配(无状态:通道天然可回收/跨舰交接)——自引导优先,富余辅助
   guideSide('blue');guideSide('red');
 }
@@ -54,7 +68,7 @@ function guideSide(side){ // 一方数据链网络的引导分配(v125:按网分
   // v125:按网分组——每个网(有超自导需求的)占1通道,网内所有组共享
   const netMap=new Map();
   for(const p of ms){
-    if(!p.needGuide)continue;
+    if(!p.needGuide||!p.online)continue; // 2026-09-30 断链(不在导弹网上)的收不到数据链引导
     const key=p.netId||('g'+p.group);
     if(!netMap.has(key))netMap.set(key,{groups:[],shooter:p.shooter,target:p.target,canGuide:!p.target.dead&&trkFix(trkOf(side,p.target))}); // 数据链要母舰定得出目标位置 // DS191:死目标不占通道(空发射不吃火控,双保险)
     netMap.get(key).groups.push(p);
@@ -85,6 +99,7 @@ function guideSide(side){ // 一方数据链网络的引导分配(v125:按网分
   // 命名注意:这里用 parkFctrl 而不是 fctrl —— 本文件上面的 nets 网对象已经有一个 fctrl('hold'/'auto' 连接模式),同名不同义,分开命名免得读代码的人串线。
   for(const p of parks){p.parkFctrl=false;p.guideMode='';p.guidedByName=null;} // 每 tick 重算:通道被有目标的网抢走时自动释放
   for(const p of parks){
+    if(!p.online)continue; // 2026-09-30 断链的收不到
     let best=null,bd=1e18;
     for(const s of gs){if(chan[s.id]>0){const d=V.len(V.sub(s.pos,p.pos));if(d<bd){bd=d;best=s;}}}
     if(best){p.parkFctrl=true;p.guideMode='link';p.guidedByName=best.name;chan[best.id]--;}
