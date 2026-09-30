@@ -13,7 +13,8 @@
      雷达越强越亮(2026-09-29 用户:民船的雷达不强,那团光没那么亮、没那么大):光强 = 功率系数 rdvPow x 高斯,同一条色阶,
      弱雷达峰值暗、没有白芯,看得见的那圈跟着缩;团的形状仍只表示"它大概在哪"。围死的多边形按功率调暗
    ============================================================================ */
-const RDV={ARC:8,T:0.2,cov:null,cx:null,t:-1e9,zones:[],gs:[],vmax:0,EMIT_TOP:2,QN:16},RDV_U=[0,0],RDV_RB=new Float64Array(10);
+const RDV={ARC:8,T:0.2,cov:null,cx:null,t:-1e9,zones:[],gs:[],vmax:0,EMIT_TOP:2,QN:16,FA_N:3,FA_A:1e10*CFG.scale*CFG.scale,FA_V:150,fa:null},RDV_U=[0,0],RDV_RB=new Float64Array(10);
+  // FA_N / FA_A / FA_V = 丙 杂波虚警:每个照射源每拍最多几个;照射范围里的杂波区面积(km²)到 FA_A 时平均 FA_N / 2 个;假回波的多普勒在 ± FA_V km/s 里取
   // ARC = 扇形弧段数;T = 区域最多每 T 秒(墙钟)重算一次;gs = 单位高斯贴图(±4σ,按功率分 QN 档,每档一张);vmax = 最远可达圈按的最大航速;EMIT_TOP = 功率系数封顶的发射机(巡洋舰 2)
 function rdvHash(a,b){let h=2166136261;const s=a+'|'+b;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}h^=h>>>13;h=Math.imul(h,1274126177);return((h^(h>>>16))>>>0)/4294967296;}
 function rdvEsmBrg(E,L,k){return k.tb+(rdvHash(L.id||'bcn',E.id)*2-1)*k.half*0.6;} // 这条静听记录画在哪个方位:量到的方位 + 每一对固定的偏移(± 0.6 x 半宽,随积累收窄);雷达异常圈也读它
@@ -132,10 +133,27 @@ function rdvDrawReturns(){
     if(ty&&ty.kind!=='rock'){ctx.strokeStyle=lv===ID_CON?'rgba(255,90,80,0.95)':'rgba(255,190,70,0.9)';ctx.lineWidth=1.5;ctx.strokeRect(p[0]-6,p[1]-6,12,12);ctx.lineWidth=1;} // 疑似是船琥珀框、确认敌舰红框
   });
 }
+/* ---- 丙 杂波虚警(2026-09-30 用户拍板):照射范围里的杂波区(天体盘面外 CLUT_RES、小行星旁,同 world/12 envInClutter)每个感知节拍冒出 0~FA_N 个假回波,只存在一拍;
+   位置按 照射源 x 节拍 哈希(不碰全局随机流),个数按杂波区面积;只画在雷达画面,不进航迹表(不影响自动火控、锁定、异常) ---- */
+function rdvFalse(P){
+  const n=Math.floor(simTime/SENS.TICK),key=P.map(s=>s.id).join(','),F=RDV.fa;if(F&&F.n===n&&F.key===key&&F.rev===ENV.rev)return F.list;
+  const C=ENV_CFG.CLUT_RES,AK=ENV_CFG.AST_KM,rf=rdvStdRefl(),list=[];
+  for(const s of P){const R=actRangeOf(s,rf),px=s.pos[0],py=s.pos[1],src=[];let A=0; // src:每个杂波源 5 个数 = 中心 x、y,内半径,带宽,面积
+    for(const b of ENV.bodies){if(Math.hypot(b.x-px,b.y-py)-b.r-C>R)continue;const a=Math.PI*((b.r+C)*(b.r+C)-b.r*b.r);src.push(b.x,b.y,b.r,C,a);A+=a;}
+    for(const k of rocks){if(!k.ast||k.dead)continue;const q=k.size*AK+C,dx=k.pos[0]-px,dy=k.pos[1]-py;if(dx*dx+dy*dy>(R+q)*(R+q))continue;const a=Math.PI*q*q;src.push(k.pos[0],k.pos[1],0,q,a);A+=a;}
+    if(!A)continue;
+    const id=(s.id===undefined?'bcn':s.id)+'|'+n,cnt=Math.min(RDV.FA_N,Math.floor(RDV.FA_N*A/(A+RDV.FA_A)+rdvHash(id,'n')));
+    for(let i=0;i<cnt;i++){let u=rdvHash(id,i+'s')*A,j=0;while(j<src.length-5&&u>src[j+4]){u-=src[j+4];j+=5;} // 按面积挑一个杂波源,在它的杂波区里均匀取一点
+      const r0=src[j+2],w=src[j+3],rr=Math.sqrt(r0*r0+rdvHash(id,i+'r')*((r0+w)*(r0+w)-r0*r0)),th=2*Math.PI*rdvHash(id,i+'a'),x=src[j]+Math.cos(th)*rr,y=src[j+1]+Math.sin(th)*rr;
+      if((x-px)*(x-px)+(y-py)*(y-py)<=R*R)list.push([x,y,(rdvHash(id,i+'v')*2-1)*RDV.FA_V]);}}
+  RDV.fa={n:n,key:key,rev:ENV.rev,list:list};return list;
+}
+function rdvDrawFalse(P){for(const f of rdvFalse(P)){const p=toScreen(f[0],f[1]);if(p[0]<-20||p[0]>W+20||p[1]<-20||p[1]>H+20)continue;ctx.fillStyle=rdvDop(f[2],1);ctx.fillRect(p[0]-3.5,p[1]-3.5,7,7);}} // 和不明的真回波一样的方块(没有身份框、没有速度线)
 function drawRadarView(){ // 每帧入口(84-scene,MAPV.mode === 'radar'):覆盖 → 被听见的区域 → 回波
   const P=rdvPainters();
   rdvCoverage(P);
   for(const s of P)if(selected.indexOf(s.id)>=0||s===selBuoy)rdvSelected(s);
   rdvDrawZones();
+  rdvDrawFalse(P);
   rdvDrawReturns();
 }
