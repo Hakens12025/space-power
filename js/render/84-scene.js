@@ -27,7 +27,8 @@ function drawVisFog(B){
     B.cv=document.createElement('canvas');B.cv.width=w;B.cv.height=h;B.g=B.cv.getContext('2d');
     B.tc=document.createElement('canvas');B.tc.width=w;B.tc.height=h;B.tg=B.tc.getContext('2d');B.sig=null;
   }
-  const g=B.g,t=B.tg,sp=(x,y)=>{const q=toScreen(x,y);return [q[0]/K,q[1]/K];},q4=v=>Math.round(v*4),S=[],L=[];
+  const fz=typeof sfxFog==='function'?sfxFog():null; // 2026-09-30 红外 / 雷达画面里雾按画面染色(render/86-sensorfx)
+  const g=B.g,t=B.tg,sp=(x,y)=>{const q=toScreen(x,y);return [q[0]/K,q[1]/K];},q4=v=>Math.round(v*4),S=[fz?fz.key:0],L=[];
   for(let gi=0;gi<2;gi++)for(const s of (gi?rockObjs():ships)){
     if(s.dead||s.side!==VIEW||(s.kind&&s.kind!=='buoy'))continue; // 2026-09-29 前出浮标也挖一个圈(0.7 倍)
     const RV=s.visR||COV.VIS_R,R=RV*cam.zoom/K; // 2026-09-27 每艘自己的全知圈(按所处环境缩)
@@ -41,7 +42,7 @@ function drawVisFog(B){
   }
   const S0=B.sig;let same=!!S0&&S0.length===S.length;if(same)for(let i=0;i<S.length;i++)if(S0[i]!==S[i]){same=false;break;}
   if(!same){B.sig=S; // 脏检查:圈心、半径、阴影顶点取整到 1/4 灰雾像素(1 屏幕像素)都没变就直接贴上一帧
-    g.globalCompositeOperation='source-over';g.clearRect(0,0,w,h);g.fillStyle='rgba(0,0,0,'+B.A+')';g.fillRect(0,0,w,h);
+    g.globalCompositeOperation='source-over';g.clearRect(0,0,w,h);g.fillStyle=fz?fz.fill:'rgba(0,0,0,'+B.A+')';g.fillRect(0,0,w,h);
     g.globalCompositeOperation='destination-out';
     for(let i=0;i<L.length;i+=3){const c=L[i],sh=L[i+1],R=L[i+2];
       t.globalCompositeOperation='source-over';t.clearRect(0,0,w,h);t.fillStyle='#000';t.beginPath();t.arc(c[0],c[1],R,0,6.2832);t.fill();
@@ -427,6 +428,7 @@ function render(){
   drawVisFog(); // 2026-09-26 可见光圈的灰色迷雾,画在一切接触之前;2026-09-30 用户:红外 / 雷达画面也分出亮的可见光区域和暗的圈外(原来只在普通地图画面)
   if(irOn)drawIr2View(); // 2026-09-30 红外2(用户:「红外」钮直接换成它)
   if(rdOn)drawRadarView();
+  if(typeof drawSfxSweep==='function'){drawSfxSweep();drawSfxRim();} // 2026-09-30 雷达扫描扇、可见光圈外轮廓柔光(render/86-sensorfx;只在红外 / 雷达画面)
   if(typeof drawSunLines==='function')drawSunLines(); // 「太阳线」钮:叠在普通 / 红外 / 雷达任一画面上
   drawSignalView(); // SN6 信号视野(右下角工具钮):我方每艘舰的【被探测范围】。画在最底下——它是底图
   /* SN6 聚合层:先算出这一帧哪些船被收进了框(按屏幕像素,带迟滞),画的时候跳过它们,最后把框画上去。
@@ -449,12 +451,14 @@ function render(){
   if(typeof drawFcChain==='function')drawFcChain(); // RF7 火控序列数据链(蓝色铁路线):与 drawTargeting 同层级语义("我下的命令"),压 drawLocks 之上(红虚线与蓝链会连到同一艘敌舰,链在下会被切成断线)、让位于 drawTargeting(准星是"正在进行"的交互,比"已下的命令"更高一层)
   if(typeof drawGhost==='function')drawGhost(); // RF11 移动虚影:与数据链同层级语义(我下的命令),排在 drawTargeting 之前 —— 准星是"正在进行的交互",比"正要下的命令"更高一层
   drawTargeting(); // RF5 图层顺序:准星/吸附圈/预览线表达"正要下的命令",必须压在 drawShip→drawLocks 这一整段"已经发生的事"之上(尤其 drawLocks 的红虚线会连到同一艘敌舰,排在它下面预览线会被压成断线);又必须让位于下面 drawRange/drawSelection/dragOrder 这几项排他交互与屏幕 chrome
+  if(typeof drawSfxFilter==='function')drawSfxFilter(); // 2026-09-30 红外 / 雷达画面的滤镜(淡主色 + 暗角),盖地图内容、不盖特写窗与交互层
   try{trailRec();drawInset();}catch(e){if(!INSET.err){INSET.err=true;setTimeout(()=>{throw e;},0);}} // 2026-09-26 左下角特写窗口:压在所有地图内容之上、轮盘 / 测距 / 框选 / 刻度 / 换层大字之下;尾迹每帧记(选没选都记,选中时才有历史);出错不连累后面这些层,错误照样抛一次
   if(typeof drawRadial==='function')drawRadial(); // RF5 Phase C 目标轮盘:必须压在 drawTargeting 之上——它的黄吸附圈(r=shipIconR+8≈18~26)与 drawLocks 的红圈(r=13)都落在轮盘 RAD_RI=62 的内洞里,排下面会从洞里穿出来盖住 hub 读数(全图字最小、最需要干净背景的地方);又必须让位下面 drawRange/drawSelection/dragOrder 三项排他交互(测距读数该在最上,左键不被轮盘拦截故框选/拖命令点仍是全局交互)。89 是新文件,用 typeof 守卫而不照抄上面的裸调:顶层 const 万一撞名整文件语法报废时,每帧渲染不跟着一起崩
   drawRange();
   drawSelection();
   if(typeof drawEdgeRuler==='function')drawEdgeRuler(); // SN8 四边刻度尺(屏幕空间的仪器边框;换层时刻度重新长出来)
   if(typeof drawTierFx==='function')drawTierFx();       // SN8 换层瞬间的大字 + 扫描线,0.7 秒内淡出;平时首句就 return
+  if(typeof drawSfxHud==='function'){drawSfxHud();drawSfxSwitch();} // 2026-09-30 红外 / 雷达画面的角标与视角标签;切换画面时的扫描线与文字(render/86-sensorfx)
   if(dragOrder){ // 拖拽中的命令点高亮(FM1:原来还有 kind==='cur'/'queue' 两支,读的是已删除的 F.dest/F.queue;
     // 编队路径现在就是旗舰的 s.orders,拖的是旗舰身上的普通命令点,下面 dragOrder.ship 这一支天然覆盖)
     let hp=null;
