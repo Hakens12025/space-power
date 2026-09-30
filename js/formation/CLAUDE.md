@@ -21,6 +21,7 @@
 - 各种 setter 要有"值没变就整个返回"的空操作守卫(`fmSetSrc` / `fmSetParam` / `fmSetStance` / `fmClaim`),否则会把落盘的配对抹回原序、离位读数乱跳。
 - 快照只由「重新固定」重拍(`fmSetSrc(F,'snapshot',true)`);切回固定模式不改快照。换旗时快照不改写,`F.ang` 换参考系。
 - 阵型态下每条令都带 face = 阵型朝向;face 只经 `mkOrder` 构造(补齐三元、挡非有限值)。
+- 舰船不准进入天体与恒星(2026-09-30):`mkOrder` 把命令点推出「半径 + `ENV_CFG.BODY_CLEAR`」的圈;`orderMoveTo` / `orderAppend` / `orderPush` 经 `ordRoute` 在新的一段穿过这圈时先插绕行的经过点(world/12 `envBodyOut` / `envDetour`)。直接改 `o.pos` 的地方(拖航点)不重新绕,靠 physics/31 的硬边兜底。
 - 几何参数只经 `fmGeoOf(P)` 取;规划、地图绘制、编组控制页的方位盘与拖动反解必须同源。
 - 未完成的插槽(能力或带为空)、未填半径的自定义带不进几何(`fmSlotsOf` / `fmBandReady` / `fmSlotReady` 各自守);删带时把引用它的插槽 band 置空。
 - `s.fmStn` 是纯展示字段,逻辑分支不许读。站位图画不画由 `fmpShowsStations(F)` 决定,不看字段有没有被写过。编组控制页现算站位表后要按 `s.fmSlot` 对回配对(`fmPgSyncPairs`)。

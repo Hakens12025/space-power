@@ -27,8 +27,16 @@ function ordArenaClamp(p) { // 2026-09-26 单局游玩区:命令点夹进 ARENA(
   return p;
 }
 
+function ordInArena(p) { return !ARENA || (p[0] >= ARENA.x0 && p[0] <= ARENA.x1 && p[1] >= ARENA.y0 && p[1] <= ARENA.y1); } // 2026-09-30 天体的推出点 / 绕行点要落在游玩区里
+
+function ordRoute(s, from, w, pace) { // 2026-09-30 用户:舰船不准进入天体 —— 命令点推出天体圈(正点在天体中心时朝 from 那一侧),from → 命令点穿过天体圈就先插绕行的经过点(world/12 envBodyOut / envDetour)。返回推出后的命令点
+  const d = envBodyOut(ordArenaClamp([w[0], w[1], w[2] || 0]), from, ordInArena);
+  for (const p of envDetour(from, d, ordInArena)) s.orders.push(mkOrder(p, 'pass', null, pace));
+  return d;
+}
+
 function mkOrder(w, type, face, pace) { // 一条令的唯一构造口。face 只挂在 stop 上:31-step-ships 只在到位分支消费它
-  const o = { pos: ordArenaClamp([w[0], w[1], w[2] || 0]), type: type || 'stop' }; // 2026-09-26 夹进 ARENA
+  const o = { pos: envBodyOut(ordArenaClamp([w[0], w[1], w[2] || 0]), null, ordInArena), type: type || 'stop' }; // 2026-09-26 夹进 ARENA;2026-09-30 推出天体圈
   /* FM10【按弧长配速】pace = 这一段该按自己档位的几成走(1 = 跑满)。
      只有编队下令时会写它(44 fmSpread),散船那条路一律 undefined ⇒ 31-step-ships 按 1 处理,行为一位不变。 */
   if (isFinite(pace) && pace > 0 && pace < 1) o.pace = pace;
@@ -46,7 +54,7 @@ function mkOrder(w, type, face, pace) { // 一条令的唯一构造口。face �
 
 function orderMoveTo(s, dest, type, face, pace) { // 下一条新航线(清旧令)
   orderClear(s);
-  s.orders.push(mkOrder(dest, type, face, pace));
+  s.orders.push(mkOrder(ordRoute(s, s.pos, dest, pace), type, face, pace));
   resetForNewOrders(s);
   if (typeof rrStart === 'function') rrStart(s); // RF14 航线细化(会先撤掉这艘船的旧任务)
 }
@@ -57,13 +65,13 @@ function orderAppend(s, w, face, pace) { // 追加一个点:新点=停车,原末
     prev.type = 'pass';
     delete prev.face; delete prev.pt; // 降级必须删 face/pt:31 只在 stop 分支兑现 face,留着的话 83-hud 会画一个永不兑现的持久船影(承诺与行为分家,比不画更糟)
   }
-  s.orders.push(mkOrder(w, 'stop', face, pace));
+  s.orders.push(mkOrder(ordRoute(s, s.orders.length ? s.orders[s.orders.length - 1].pos : s.pos, w, pace), 'stop', face, pace));
   resetForNewOrders(s);
   if (typeof rrStart === 'function') rrStart(s);
 }
 
 function orderPush(s, w, type, face, pace) { // 原样追加一条令(不降级旧末点)。卡片菜单"路径点(经过)"用:它要的就是一个 pass 点
-  s.orders.push(mkOrder(w, type || 'pass', face, pace));
+  s.orders.push(mkOrder(ordRoute(s, s.orders.length ? s.orders[s.orders.length - 1].pos : s.pos, w, pace), type || 'pass', face, pace));
   resetForNewOrders(s);
   if (typeof rrStart === 'function') rrStart(s);
 }

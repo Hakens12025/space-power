@@ -25,7 +25,7 @@ function enemyAI(dt){
           否则追 plan 给的那个点,pass=掠过不停(交战态沿轨道机动),stop=到位停(接近 / 排开)。
           2026-09-28 规避已删,每拍照 plan 重写命令。 */
     if(pl.hold){e.orders=[];e.brake=false;if(!e.forceMac)e.turnTarget=null;} // 抽奖开炮转头时不清 turnTarget(weapons/57 每拍重设)
-    else e.orders=[{pos:[pl.pos[0],pl.pos[1],0],type:pl.pass?'pass':'stop'}];
+    else{const d=envBodyOut([pl.pos[0],pl.pos[1],0],e.pos,ordInArena);e.orders=envDetour(e.pos,d,ordInArena).map(p=>({pos:p,type:'pass'}));e.orders.push({pos:d,type:pl.pass?'pass':'stop'});} // 2026-09-30 不准进入天体:命令点推出天体圈、穿过就绕(world/12,同蓝方 formation/44 ordRoute)
     /* 原来这里还存一份 e.aiHold 好在离开停车态时还原命令 —— BOT1 之后每拍都由 plan 重写命令,存了没人读,去掉 */
     /* ④ 主炮:与蓝方自动开火同一档(MAC_AUTO_P,weapons/57)。没有射程门,只有把握门。
           交战态一直在动 ⇒ 机头跟着推力走、进不了对准窗口 ⇒ 天然打不出主炮,这正是条令要的;

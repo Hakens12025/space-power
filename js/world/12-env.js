@@ -41,6 +41,7 @@ const ENV_CFG={
   RF_BURST:{K:8,W:1.5,GAP:200,DUR:[20,60],RISE:3,FALL:10,T_MAX:36000}, // 甲 恒星射电暴(2026-09-30 用户拍板):暴发时噪声系数 x K(锥心 241 倍)、锥宽 x W;两次之间空 GAP 游戏秒(指数分布的均值,加上持续 ⇒ 平均 240 秒一次),持续 DUR,开头 RISE 秒升起、结尾 FALL 秒回落;时间表生成到 T_MAX 秒
   CLUT_RES:4000*CFG.scale,AST_KM:800*CFG.scale, // 2026-09-26 x1/5(单局地图):原 20000 / 4000。ENV2 雷达杂波:贴着天体盘面 / 小行星本体(体型 x AST_KM)CLUT_RES 以内的慢目标,回波混进杂波(过 MTI)           // 动目标显示门限 km/s:场内径向速度低于它的回波被当成杂波。DD 速度档 250 / 500 / 800,所以"在动"几乎都滤不掉,停下来 / 贴着切向走才滤得掉
   SUN_HALF_DEG:10,    // 恒星禁区的缺省半角(度)
+  BODY_CLEAR:3000*CFG.scale, // 2026-09-30 用户:舰船不准进入天体与恒星(障碍表 envObstacles)—— 命令点落在盘面外 BODY_CLEAR 以内推到这一圈上,航线穿过这一圈就绕行(envBodyOut / envDetour);盘面本身是物理硬边(physics/31)。3000 < 杂波区 CLUT_RES,贴着行星停进杂波区的战术照旧
   STAR_R:696000,      // ENV2 位置型恒星的缺省光球半径 km(真太阳;红外页的 R_SAT)
   BODY_HEAT:2,        // ENV2 天体背阴面的自身热。单位 = 背景单位(与 envBg、云的 v 同一单位:1 = SENS.BG_G0 = 一条发现线);v1 只有红外视图读
   ROCK_HEAT:0.5,      // ENV2 石头自身热倍率(同体型熄火冷船 = 1);makeRock 写进 heatK,第 4a 步起 optLum 才读
@@ -110,6 +111,38 @@ function envInClutter(p,self){ // ENV2 p 在雷达杂波里:贴着天体盘面�
   for(let ix=x0;ix<=x1;ix++)for(let iy=y0;iy<=y1;iy++){const a=G.map.get(rockKey(ix,iy));if(!a)continue;
     for(let j=0;j<a.length;j++){const k=rocks[a[j]];if(!k.ast||k===self||k.dead)continue;const dx=p[0]-k.pos[0],dy=p[1]-k.pos[1],q=k.size*ENV_CFG.AST_KM+C;if(dx*dx+dy*dy<q*q)return true;}}
   return false;
+}
+/* ---- 2026-09-30 舰船不准进入天体与恒星(用户:寻路绕过去、点天体就去天体旁边;太阳也不准驶入):盘面是硬边(physics/31);命令层(formation/44 ordRoute、bots/61)用下面几个把命令点推出、把航线绕开 ---- */
+const ENV_OBS={rev:-1,a:[]};
+function envObstacles(){if(ENV_OBS.rev!==ENV.rev){const a=[];for(const s of ENV.stars)a.push({x:s.x,y:s.y,r:s.r,r2:s.r*s.r});for(const b of ENV.bodies)a.push(b);ENV_OBS.a=a;ENV_OBS.rev=ENV.rev;}return ENV_OBS.a;} // 障碍表 = 恒星 + 天体({x,y,r,r2}),按 ENV.rev 缓存
+function envBodyOut(p,ref,ok){ // 点 p 落在某个天体「半径 + BODY_CLEAR」以内 ⇒ 沿 天体中心 → p 推到这一圈上(p 正在中心时朝 ref);ok(q) 为假(比如出了游玩区)就沿圈往两边找最近的可用点。原地改并返回 p
+  const m=ENV_CFG.BODY_CLEAR;
+  for(const b of envObstacles()){const R=b.r+m;let dx=p[0]-b.x,dy=p[1]-b.y,d=Math.hypot(dx,dy);if(d>=R)continue;
+    if(d<1e-6){dx=ref?ref[0]-b.x:1;dy=ref?ref[1]-b.y:0;}
+    const a0=Math.atan2(dy,dx);
+    for(let k=0,done=false;k<=36&&!done;k++)for(const sg of (k?[1,-1]:[1])){const a=a0+sg*k*Math.PI/36,x=b.x+Math.cos(a)*R,y=b.y+Math.sin(a)*R;if(!ok||ok([x,y,p[2]||0])){p[0]=x;p[1]=y;done=true;break;}}}
+  return p;
+}
+function envDetour(a,b,ok){const out=[];envDetourSeg(a,b,ok,out,null,0);return out;} // 从 a 到 b 的直线穿过某个障碍(天体 / 恒星)「半径 + BODY_CLEAR」的圈 ⇒ 绕过去的经过点(不含 a、b);不穿过给 []
+function envDetourHit(a,b,skip){ // a→b 最先穿过的那个圈(离圆心最近的点在线段中间、且在圈里;从圈里往外走不算),没有给 null
+  const m=ENV_CFG.BODY_CLEAR,dx=b[0]-a[0],dy=b[1]-a[1],l2=dx*dx+dy*dy;if(!(l2>0))return null;let best=null,bt=Infinity;
+  for(const B of envObstacles()){if(B===skip)continue;const R=B.r+m,t=((B.x-a[0])*dx+(B.y-a[1])*dy)/l2;if(!(t>0&&t<1))continue;
+    const cx=a[0]+dx*t-B.x,cy=a[1]+dy*t-B.y;if(cx*cx+cy*cy<R*R&&t<bt){bt=t;best=B;}}
+  return best;
+}
+function envDetourSeg(a,b,ok,out,skip,dep){ // 绕开 a→b 上最先碰到的天体,绕行后的每一段再查别的天体(最多 3 层)
+  const B=dep>3?null:envDetourHit(a,b,skip);if(!B)return;
+  let prev=a;for(const w of envDetourAround(B,a,b,ok)){envDetourSeg(prev,w,ok,out,B,dep+1);out.push(w);prev=w;}
+  envDetourSeg(prev,b,ok,out,B,dep+1);
+}
+function envDetourAround(B,a,b,ok){ // 绕天体 B 从 a 到 b:切线出发 → 沿圈 → 切线到达。点取在外切多边形上(每段都与圈相切、不进圈,每个拐角最多 30°);两侧都算,取弧短且各点都可用的一侧
+  const R=B.r+ENV_CFG.BODY_CLEAR,TW=2*Math.PI,nrm=x=>((x%TW)+TW)%TW;
+  const pa=Math.atan2(a[1]-B.y,a[0]-B.x),pb=Math.atan2(b[1]-B.y,b[0]-B.x),aa=Math.acos(R/Math.max(R,Math.hypot(a[0]-B.x,a[1]-B.y))),ab=Math.acos(R/Math.max(R,Math.hypot(b[0]-B.x,b[1]-B.y)));
+  let best=null,bs=Infinity;
+  for(const sg of [1,-1]){const t1=pa+sg*aa,D=nrm(sg*(pb-sg*ab-t1)),n=Math.max(1,Math.ceil(D/(Math.PI/6))),h=D/(2*n),rv=R/Math.cos(h),W=[];
+    for(let k=0;k<n;k++){const t=t1+sg*(2*k+1)*h;W.push([B.x+Math.cos(t)*rv,B.y+Math.sin(t)*rv,((a[2]||0)+(b[2]||0))/2]);}
+    const sc=D+(ok&&W.some(w=>!ok(w))?100:0);if(sc<bs){bs=sc;best=W;}}
+  return best;
 }
 function envClutterOn(){if(ENV.bodies.length)return true;for(const k of rocks)if(k.ast&&!k.dead)return true;return false;} // ENV2 场上有没有杂波源
 function envRfNoise(from,to){ // ENV2 从 from 朝 to 的射频噪声倍率(>= 1):朝光源的锥里被恒星噪声淹(观测方在天体影子里 ⇒ 光源被挡,不加);乙 朝正在吵的射电天体再加一份(噪声功率相加,按天体顺序)。⚠ 22-percep 热循环里有同式的内联副本(四档都取 envRfSun / envRfBodyCone)

@@ -130,5 +130,7 @@ function stepShipsMotion(dt){
       if(s.pos[0]<ARENA.x0){s.pos[0]=ARENA.x0;if(s.vel[0]<0)s.vel[0]=0;}else if(s.pos[0]>ARENA.x1){s.pos[0]=ARENA.x1;if(s.vel[0]>0)s.vel[0]=0;}
       if(s.pos[1]<ARENA.y0){s.pos[1]=ARENA.y0;if(s.vel[1]<0)s.vel[1]=0;}else if(s.pos[1]>ARENA.y1){s.pos[1]=ARENA.y1;if(s.vel[1]>0)s.vel[1]=0;}
     }
+    for(const b of envObstacles()){const dx=s.pos[0]-b.x,dy=s.pos[1]-b.y,d2=dx*dx+dy*dy;if(d2>=b.r2)continue; // 2026-09-30 用户:舰船不准进入天体与恒星(world/12 envObstacles)—— 盘面是硬边:推回盘面、朝里的速度分量清零(同游玩区硬边,不反弹);命令层另有推出 / 绕行(formation/44 ordRoute)
+      const d=Math.sqrt(d2),ux=d>0?dx/d:1,uy=d>0?dy/d:0,vr=s.vel[0]*ux+s.vel[1]*uy;s.pos[0]=b.x+ux*b.r;s.pos[1]=b.y+uy*b.r;if(vr<0){s.vel[0]-=vr*ux;s.vel[1]-=vr*uy;}}
   }
 }

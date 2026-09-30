@@ -2,7 +2,7 @@
 
 ## 文件
 - `60-doctrine.js` 指挥层,纯决策:读接触图与自己的状态,写 `RDOC`(含每艘舰的 `plan`)与信念层 `AIR`(`aiRedBelief` / `aiSearchWp` / `aiObjective`)。不碰任何舰船字段。
-- `61-enemy.js` 执行层:照 `RDOC.plan` 去走、亮灯、锁、开火、规避。改行为去改 60,不要在 61 里加 if。
+- `61-enemy.js` 执行层:照 `RDOC.plan` 去走、亮灯、锁、开火、规避。改行为去改 60,不要在 61 里加 if。命令点同蓝方一样推出天体 / 恒星圈、穿过就绕(world/12 `envBodyOut` / `envDetour`)。
 
 ## 条令的六个态
 `ambush`(开局静默不动,`AMBUSH_S` 时限)→ `search`(五角星航点,一盏灯扫)→ `shadow`(沿方位线推进、横向拉开 `SPREAD` 交叉定位)→ `strike`(绕估计位置走轨道,一直在动)→ `press`(打够 `PRESS_AFTER_S` 且以多打少、或弹尽:进主炮带停车)/ `withdraw`(平均结构 < `HP_WD` 且有弹:退到主炮 30% 把握距离外用导弹打)。
