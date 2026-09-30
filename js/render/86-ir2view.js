@@ -203,22 +203,34 @@ function ir2Paint(L,bb,ann,cellFn){ // 在层 L 上、屏幕矩形 bb 里按 CEL
     const v=IR2_CV[0]*GR[(gj+2)*gw+gi+2]+IR2_C.NOISE*(ir2Hash(gi+977,gj+131,ep)*2-1);f1[0]=v;let k=T8[u1[0]>>>16];if(k>255)k=irvIdx(v);else{while(v>=TH[k+1])k++;while(v<TH[k])k--;}O[q]=T[k];}}
   L.g.putImageData(L.img,0,0);return [L.c,i0,j0,nw,nh];
 }
-function ir2Blit(lay,bb,out,inn){ // 环层:裁在外沿以内(几个圆并起来)、挖掉可见光圈(几个圆并起来);只动 bb 那一块
+function ir2Blit(lay,bb,out,inn){ // 环层:裁在外沿以内(几个圆并起来)、挖掉可见光圈(几个圆并起来);只动 bb 那一块。离屏按 CSS 像素(2026-09-30 性能:整屏大的圆路径裁剪 / 挖圈放在设备像素上每帧好几毫秒;环本身是 CELL 格子,不丢细节,圆边由外沿橙线与圈的虚线压着)
   if(!IR2.rc){const c=document.createElement('canvas');IR2.rc={c:c,g:c.getContext('2d')};}
-  const R=IR2.rc,dpr=devicePixelRatio||1,C=IR2_C.CELL;if(R.c.width!==cv.width||R.c.height!==cv.height){R.c.width=cv.width;R.c.height=cv.height;}
-  const x0=Math.max(0,Math.floor(bb[0]*dpr)-2),y0=Math.max(0,Math.floor(bb[1]*dpr)-2),x1=Math.min(R.c.width,Math.ceil(bb[2]*dpr)+2),y1=Math.min(R.c.height,Math.ceil(bb[3]*dpr)+2);if(x1<=x0||y1<=y0)return;
-  const g=R.g;g.setTransform(1,0,0,1,0,0);g.clearRect(x0,y0,x1-x0,y1-y0);g.setTransform(dpr,0,0,dpr,0,0);
+  const R=IR2.rc,dpr=devicePixelRatio||1,C=IR2_C.CELL,cw=Math.ceil(W),ch=Math.ceil(H);if(R.c.width!==cw||R.c.height!==ch){R.c.width=cw;R.c.height=ch;}
+  const x0=Math.max(0,Math.floor(bb[0])-2),y0=Math.max(0,Math.floor(bb[1])-2),x1=Math.min(cw,Math.ceil(bb[2])+2),y1=Math.min(ch,Math.ceil(bb[3])+2);if(x1<=x0||y1<=y0)return;
+  const g=R.g;g.setTransform(1,0,0,1,0,0);g.clearRect(x0,y0,x1-x0,y1-y0);
   g.save();g.beginPath();out(g);g.clip();g.imageSmoothingEnabled=true;g.drawImage(lay[0],lay[1]*C,lay[2]*C,lay[3]*C,lay[4]*C);g.restore();
   g.globalCompositeOperation='destination-out';g.beginPath();inn(g);g.fill();g.globalCompositeOperation='source-over';
-  ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(R.c,x0,y0,x1-x0,y1-y0,x0,y0,x1-x0,y1-y0);ctx.restore();
+  ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.imageSmoothingEnabled=true;ctx.drawImage(R.c,x0,y0,x1-x0,y1-y0,x0*dpr,y0*dpr,(x1-x0)*dpr,(y1-y0)*dpr);ctx.restore();
+}
+function ir2InBlit(P,R){ // 可见光圈里贴红外1 的画面:圈的并集填在 CSS 像素的遮罩上,再在设备像素的离屏上 destination-in(2026-09-30 性能:原来直接拿整屏大的圆路径裁剪主画布,每帧几毫秒);内容照红外1 的设备像素,只动圈的外接框那一块
+  if(!IR2.im){const a=document.createElement('canvas'),b=document.createElement('canvas');IR2.im={m:a,mg:a.getContext('2d'),c:b,g:b.getContext('2d')};}
+  const I=IR2.im,dpr=devicePixelRatio||1,fc=IRVC.fc,cw=Math.ceil(W),ch=Math.ceil(H);
+  if(I.m.width!==cw||I.m.height!==ch){I.m.width=cw;I.m.height=ch;}
+  if(I.c.width!==fc.width||I.c.height!==fc.height){I.c.width=fc.width;I.c.height=fc.height;}
+  let bx0=Infinity,by0=Infinity,bx1=-Infinity,by1=-Infinity;for(let i=0;i<P.length;i++){bx0=Math.min(bx0,P[i][0]-R[i]);by0=Math.min(by0,P[i][1]-R[i]);bx1=Math.max(bx1,P[i][0]+R[i]);by1=Math.max(by1,P[i][1]+R[i]);}
+  const x0=Math.max(0,Math.floor(bx0)-2),y0=Math.max(0,Math.floor(by0)-2),x1=Math.min(cw,Math.ceil(bx1)+2),y1=Math.min(ch,Math.ceil(by1)+2);if(x1<=x0||y1<=y0)return;
+  const mg=I.mg;mg.setTransform(1,0,0,1,0,0);mg.clearRect(x0,y0,x1-x0,y1-y0);mg.fillStyle='#fff';mg.beginPath();ir2Circles(mg,P,R);mg.fill();
+  const X0=Math.floor(x0*dpr),Y0=Math.floor(y0*dpr),X1=Math.min(I.c.width,Math.ceil(x1*dpr)),Y1=Math.min(I.c.height,Math.ceil(y1*dpr)),w=X1-X0,h=Y1-Y0;if(w<=0||h<=0)return;
+  const g=I.g;g.setTransform(1,0,0,1,0,0);g.save();g.beginPath();g.rect(X0,Y0,w,h);g.clip();g.clearRect(X0,Y0,w,h);g.drawImage(fc,X0,Y0,w,h,X0,Y0,w,h);
+  g.globalCompositeOperation='destination-in';g.imageSmoothingEnabled=true;g.drawImage(I.m,X0/dpr,Y0/dpr,w/dpr,h/dpr,X0,Y0,w,h);g.restore();
+  ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(I.c,X0,Y0,w,h,X0,Y0,w,h);ctx.restore();
 }
 function ir2RingAt(V,c,x,y,rho){let a=Math.atan2(y-c[1],x-c[0]);if(a<0)a+=2*Math.PI;return ir2At(V,a,rho);} // 环心 c 的环上、屏幕点 (x, y) 那个方位
 function ir2Circles(g,P,R){for(let i=0;i<P.length;i++){g.moveTo(P[i][0]+R[i],P[i][1]);g.arc(P[i][0],P[i][1],R[i],0,2*Math.PI);}} // 同向的几个圆:nonzero 下就是并集
 function drawIr2View(){ // 每帧入口(84-scene,MAPV.mode === 'ir';画在地图 / 天体之后、接触之前)
   ir2Update();
   const IS=IR2.IS,RS=IR2.RS,PI=IS.map(s=>toScreen(s.pos[0],s.pos[1])),RII=IS.map(ir2RIn);
-  if(IS.length){irvUpdate();ctx.save();ctx.beginPath();ir2Circles(ctx,PI,RII);ctx.clip(); // 可见光圈里 = 红外1
-    ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(IRVC.fc,0,0);ctx.restore();drawIrFx();ctx.restore();}
+  if(IS.length){irvUpdate();ir2InBlit(PI,RII);ctx.save();ctx.beginPath();ir2Circles(ctx,PI,RII);ctx.clip();drawIrFx();ctx.restore();} // 可见光圈里 = 红外1;导弹的小点照旧裁在圈里(画的面积小,裁剪不贵)
   if(RS.length){const P=IR2.P,RI=IR2.RI,B=IR2_C.BAND,C=IR2_C.CELL,rings=IR2.rings,RO=RI.map(r=>r+B),bb=[Infinity,Infinity,-Infinity,-Infinity];
     for(let i=0;i<P.length;i++){bb[0]=Math.min(bb[0],P[i][0]-RO[i]);bb[1]=Math.min(bb[1],P[i][1]-RO[i]);bb[2]=Math.max(bb[2],P[i][0]+RO[i]);bb[3]=Math.max(bb[3],P[i][1]+RO[i]);}
     const LR=ir2Lay('R'),ep=Math.floor(nowMs()/IR2_C.NOISE_MS),lay=(IR2.still&&LR.res&&LR.ep===ep)?LR.res:(LR.ep=ep,LR.res=ir2Paint(LR,bb,P.map((p,i)=>[p[0],p[1],RI[i]-2*C,RO[i]+2*C]),(x,y)=>{let b1=-1,e1=Infinity,b2=-1,e2=Infinity;for(let j=0;j<P.length;j++){const dx=x-P[j][0],dy=y-P[j][1],d=Math.sqrt(dx*dx+dy*dy);if(d<RI[j]-2*C)return 0;const e=d-RI[j];if(e<e1){e2=e1;b2=b1;e1=e;b1=j;}else if(e<e2){e2=e;b2=j;}} // 离圈边最近的两艘
