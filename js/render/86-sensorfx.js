@@ -1,13 +1,13 @@
 "use strict";
 /* ============================================================================
-   传感器画面的小特效(2026-09-30 用户从演示页 demos/sensors/传感器视角特效.html 挑了 1 2 3 4 5 8 9):
-   · 只在红外 / 雷达画面:1 可见光圈并起来的外轮廓柔光(慢呼吸)、3 灰雾按画面染色(84 drawVisFog 读 sfxFog)、5 四角角标 + 顶栏下方的视角标签、8 滤镜(淡淡一层主色 + 暗角);
+   传感器画面的小特效(2026-09-30 用户从演示页 demos/sensors/传感器视角特效.html 挑了 1 2 3 4 5 8 9;同日 1 圈边呼吸线有 bug,用户让删了):
+   · 只在红外 / 雷达画面:3 灰雾按画面染色(84 drawVisFog 读 sfxFog)、5 四角角标 + 顶栏下方的视角标签、8 滤镜(淡淡一层主色 + 暗角);
    · 雷达画面:2 开着照射的我方船 / 浮标的覆盖里转一道扫描扇(按游戏时间转,跟倍速,暂停就停);
    · 任何画面切换:4 一道扫描线从上往下扫过、9 切换文字(同换层大字 render/80 drawTierFx 的样子)。
-   呼吸、闪烁、切换动画走墙钟(界面动画的规矩)。贴图都预渲染一次,每帧只旋转 / 平移 / 调透明度;圈大到整屏都在里面就不描边、不贴扇。
+   闪烁、切换动画走墙钟(界面动画的规矩)。贴图都预渲染一次,每帧只旋转 / 平移 / 调透明度;覆盖大到整屏都在里面就不贴扇。
    ============================================================================ */
-const SFX_C={RIM_T:3.2,RIM_A:[0.35,0.75],SWEEP_T:4,SWEEP_W:40,WIPE_MS:380,TITLE_MS:700,HUD_M:6,HUD_L:26,FILT_A:0.05,VIG_A:0.35,FOG_A:0.40};
-  // RIM_T / RIM_A = 圈边呼吸周期(墙钟秒)与透明度上下限;SWEEP_T / SWEEP_W = 扫描扇转一圈几游戏秒、扇尾多宽(度);WIPE_MS / TITLE_MS = 切换扫描线 / 切换文字多久(同换层 VT_FX_MS);
+const SFX_C={SWEEP_T:4,SWEEP_W:40,WIPE_MS:380,TITLE_MS:700,HUD_M:6,HUD_L:26,FILT_A:0.05,VIG_A:0.35,FOG_A:0.40};
+  // SWEEP_T / SWEEP_W = 扫描扇转一圈几游戏秒、扇尾多宽(度);WIPE_MS / TITLE_MS = 切换扫描线 / 切换文字多久(同换层 VT_FX_MS);
   // HUD_M / HUD_L = 角标离屏边 / 边长 px;FILT_A / VIG_A = 滤镜主色与暗角的透明度;FOG_A = 染色雾的深浅(普通画面的灰雾是 VISF.A 0.32)
 const SFX_COL={map:[190,215,240],ir:[255,150,70],radar:[84,224,208]},SFX_FOG={ir:[26,4,2],radar:[0,16,18]}; // 各画面的主色;雾的颜色(红外偏暗红、雷达偏暗青)
 const SFX_TITLE={map:['VISUAL','普通视角'],ir:['INFRARED','红外视角'],radar:['RADAR','雷达视角']};
@@ -26,18 +26,6 @@ function sfxSpr(){ // 预渲染的贴图(第一次用到时建):扫描扇、切�
     wipe:mk(8,64,(g,w,h)=>{const gr=g.createLinearGradient(0,0,0,h);gr.addColorStop(0,'rgba(255,255,255,0)');gr.addColorStop(0.8,'rgba(255,255,255,.25)');gr.addColorStop(0.97,'rgba(255,255,255,.95)');gr.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=gr;g.fillRect(0,0,w,h);}), // 下沿亮、往上拖尾
     vig:mk(256,256,(g,w,h)=>{const gr=g.createRadialGradient(w/2,h/2,w*0.28,w/2,h/2,w*0.72);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(0,0,0,1)');g.fillStyle=gr;g.fillRect(0,0,w,h);})};
   return SFX.spr;
-}
-function drawSfxRim(){ // 1 可见光圈(我方船与前出浮标,同 drawVisFog 那几个圈)并起来的外轮廓:三层描边(宽淡 → 窄亮)做柔光,透明度慢呼吸
-  if(!sfxSensor()||typeof ir2Arcs!=='function')return;
-  const md=sfxMode(),P=[],R=[],big=2*Math.hypot(W,H);
-  for(let gi=0;gi<2;gi++)for(const s of (gi?rockObjs():ships)){if(s.dead||s.side!==VIEW||(s.kind&&s.kind!=='buoy'))continue;
-    const p=toScreen(s.pos[0],s.pos[1]),r=(s.visR||COV.VIS_R)*cam.zoom;if(p[0]+r<0||p[0]-r>W||p[1]+r<0||p[1]-r>H)continue;P.push(p);R.push(r);} // 整个圈都在屏外的不算(它盖住的弧也在屏外)
-  if(!P.length)return;
-  const arcs=P.map((p,i)=>(R[i]<6||R[i]>big)?[]:ir2Arcs(P,R,i)),k=0.5+0.5*Math.sin(2*Math.PI*nowMs()/1000/SFX_C.RIM_T),a=SFX_C.RIM_A[0]+(SFX_C.RIM_A[1]-SFX_C.RIM_A[0])*k;
-  ctx.save();
-  for(const [w,m] of [[7,0.10],[3.5,0.22],[1.2,0.9]]){ctx.strokeStyle=sfxCol(md,a*m);ctx.lineWidth=w;
-    for(let i=0;i<P.length;i++)for(const q of arcs[i]){ctx.beginPath();ctx.arc(P[i][0],P[i][1],R[i],q[0],q[1]);ctx.stroke();}}
-  ctx.restore();
 }
 function drawSfxSweep(){ // 2 雷达画面:开着照射的我方船 / 浮标(86-radarview rdvPainters)的覆盖里转一道扫描扇,不指向任何目标
   if(sfxMode()!=='radar'||typeof rdvPainters!=='function')return;
