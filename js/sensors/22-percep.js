@@ -135,14 +135,15 @@ function senseKRF(d) { // 探测方静听系数:接收机档次进平方根 ⇒ 
   return SENS.K_RF * (d && d.type === 'beacon' ? SENS.BEACON_RECV : sReq(d, 'recv', 'ship'));
 }
 function senseKACT(d) { // 探测方照射系数:发射机与接收机各进四次方根 ⇒ 照射量程 正比 (emit x recv)^(1/4)
-  if (d && d.type === 'beacon') return d.on ? SENS.K_ACT * SENS.BEACON_EMIT * SENS.BEACON_RECV : 0; // 信标开机就在照射(它就是个尖叫的灯塔,所以是消耗品)。2026-09-27 前出浮标关着 = 只被动听和看
+  if (d && d.type === 'beacon') return d.on ? SENS.K_ACT * SENS.BEACON_ACT : 0; // 信标开机就在照射(它就是个尖叫的灯塔,所以是消耗品)。2026-09-27 前出浮标关着 = 只被动听和看
   return sReq(d, 'emitMode', 'ship') === 'paint' ? SENS.K_ACT * sReq(d, 'emit', 'ship') * sReq(d, 'recv', 'ship') : 0; // 不照射 ⇒ 系数 0,热循环里那一路天然不成立,不需要分支
 }
 
 /* ---------------- UI 读数(blocker E:玩家必须看得见"我此刻有多亮") ---------------- */
 function visRangeOf(s, lo) { return Math.sqrt(SENS.K_IR * (lo === undefined ? optLum(s) : lo)); } // 本舰的光学可见半径 km。ENV2 lo = 这一对的有效亮度,不给读标称值
 function hearRangeOf(s, recv) { return Math.sqrt(SENS.K_RF * rfLoudOf(s) * (isFinite(recv) ? recv : 1)); } // 被一部 recv 档接收机听见的距离(缺省 1.0 = 基准 DD 的耳朵)
-function actRangeOf(s, refl) { const r = SENS.K_ACT * sReq(s, 'emit', 'ship') * sReq(s, 'recv', 'ship') * (isFinite(refl) ? refl : 1); return Math.sqrt(Math.sqrt(r)); } // 本舰对 refl 基准目标(缺省 1.0)的照射量程。取代旧那个标量探测半径字段,83-hud 的圈与 84-scene 的圈都读它
+function actProdOf(s) { return s && s.type === 'beacon' ? SENS.BEACON_ACT : sReq(s, 'emit', 'ship') * sReq(s, 'recv', 'ship'); } // 照射的发射 x 接收:浮标用自己那一个数(2026-09-30,LAD.buoyAct),舰船 = 两个字段相乘
+function actRangeOf(s, refl) { const r = SENS.K_ACT * actProdOf(s) * (isFinite(refl) ? refl : 1); return Math.sqrt(Math.sqrt(r)); } // 本舰对 refl 基准目标(缺省 1.0)的照射量程。取代旧那个标量探测半径字段,83-hud 的圈与 84-scene 的圈都读它
 
 /* SN6:接触对象的唯一工厂搬去了 23-cov(newCov);本文件不再持有任何"每目标的累积状态"。 */
 

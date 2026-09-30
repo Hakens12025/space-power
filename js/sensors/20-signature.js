@@ -97,7 +97,7 @@ const SENS = {
   /* ---- 通道二 雷达:一部设备两种模式 ---- */
   LIS_DET: 600000,     // 静听参考距离 km(recv=1 听 emit=1 的照射)
   ACT_DET: 150000,     // 照射参考量程 km(emit=recv=1 打反射 1.0)
-  BEACON_OPT: 1.0, BEACON_RECV: 4.0, BEACON_EMIT: 4.0, // 信标当探测器时的三个系数(它恒在照射)
+  BEACON_OPT: 1.0, BEACON_RECV: 4.0, BEACON_EMIT: 4.0, BEACON_ACT: 0, // 信标当探测器时的系数(它恒在照射);RECV 管静听、EMIT 管被听见多远;BEACON_ACT = 照射的发射 x 接收,由 ladApply 按 LAD.buoyAct 反解(2026-09-30)
 
 
   /* SN6:驻留时代的三个衰减率、三张按档增益表、接触阶梯的四个阈值与滞回、断照降级门、
