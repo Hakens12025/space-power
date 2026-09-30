@@ -29,7 +29,7 @@ function drawVisFog(B){
   }
   const fz=typeof sfxFog==='function'?sfxFog():null; // 2026-09-30 红外 / 雷达画面里雾按画面染色(render/86-sensorfx)
   const g=B.g,t=B.tg,sp=(x,y)=>{const q=toScreen(x,y);return [q[0]/K,q[1]/K];},q4=v=>Math.round(v*4),S=[fz?fz.key:0],L=[];
-  for(let gi=0;gi<2;gi++)for(const s of (gi?rockObjs():ships)){
+  if(!(fz&&fz.key===1))for(let gi=0;gi<2;gi++)for(const s of (gi?rockObjs():ships)){ // 2026-09-30 用户:红外画面里不挖可见光圈(主视角那块亮的范围删掉),雾铺满整屏
     if(s.dead||s.side!==VIEW||(s.kind&&s.kind!=='buoy'))continue; // 2026-09-29 前出浮标也挖一个圈(0.7 倍)
     const RV=s.visR||COV.VIS_R,R=RV*cam.zoom/K; // 2026-09-27 每艘自己的全知圈(按所处环境缩)
     const c=sp(s.pos[0],s.pos[1]);if(c[0]+R<0||c[0]-R>w||c[1]+R<0||c[1]-R>h)continue;

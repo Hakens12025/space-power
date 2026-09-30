@@ -242,7 +242,6 @@ function drawIr2View(){ // 每帧入口(84-scene,MAPV.mode === 'ir';画在地图
     for(let k=0;k<P.length;k++){const arcs=ir2Arcs(P,RO,k);ctx.strokeStyle=IR2_C.EDGE;ctx.lineWidth=IR2_C.EDGE_W;for(const q of arcs){ctx.beginPath();ctx.arc(P[k][0],P[k][1],RO[k],q[0],q[1]);ctx.stroke();} // 外沿橙线(只画露在外面的)
       ir2Ticks(a=>ir2InArcs(arcs,a)?[P[k][0]+Math.cos(a)*(RO[k]+2),P[k][1]+Math.sin(a)*(RO[k]+2)]:null);}
     ctx.restore();}
-  if(IS.length){ctx.save();ctx.strokeStyle='rgba(255,200,150,.35)';ctx.lineWidth=1;ctx.setLineDash([4,4]);for(let k=0;k<IS.length;k++)for(const q of ir2Arcs(PI,RII,k)){ctx.beginPath();ctx.arc(PI[k][0],PI[k][1],RII[k],q[0],q[1]);ctx.stroke();}ctx.restore();} // 可见光圈(并起来):里面实际可见
   if(RS.length>1){ctx.save();ir2DrawZones();ctx.restore();}
 }
 function ir2HudPlace(R){ // 仪表放哪(半径 R 连底板):左边(加舰条与指令栏之间)被页面面板挡住(比如靶场参数)就换到右边(右栏与右下工具栏之间);每 500 ms 看一次
