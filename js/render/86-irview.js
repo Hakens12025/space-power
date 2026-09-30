@@ -416,7 +416,7 @@ function irvSilPath(X,t,e){
   if(t.kind==='rock'){const r=irvBodyR(t);X.fillStyle=col;X.beginPath();
     for(let i=0;i<ROCK_SHAPE.length;i++){const a=i/ROCK_SHAPE.length*2*Math.PI,q=r*ROCK_SHAPE[i];if(i)X.lineTo(Math.cos(a)*q,Math.sin(a)*q);else X.moveTo(Math.cos(a)*q,Math.sin(a)*q);}
     X.closePath();X.fill();return;}
-  drawHull(X,t.cls,t.tier||2,col,'fill');
+  drawHull(X,CLS_HULL[t.cls]||'DD',t.tier||2,col,'fill'); // 舰种 → 轮廓走 82 的对照表
   if(t.flame&&e.vt>0){const sz=hullSize(t.cls,t.tier||2);X.save();X.scale(sz,sz);X.fillStyle=irvLutHex(irvT(e.vt));X.beginPath();X.ellipse(t.flame>0?-1.0:1.35,0,0.22,0.16,0,0,2*Math.PI);X.fill();X.restore();}
 }
 const IRV_SPR={k:'',m:new Map()};

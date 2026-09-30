@@ -71,10 +71,10 @@ const RANGE_KNOBS=[
   {k:'emit',       nm:'发射档',    type:'enum',vals:[0,1,2],             fmt:v=>SENS.EMIT_LABEL[SENS.EMIT_MODES[v]]}, // SN4 必须用【数字索引】:rangeClampOne 的 enum 分支首行是 Number(v),字符串枚举必得 NaN 再无声落回默认(玩家点了没反应、还存不住)。索引→模式的映射只有 SENS.EMIT_MODES 一份,这里不另抄一张表
   {k:'ecmPower',   nm:'干扰强度',   type:'num', min:0.2,max:1,step:0.1,   fmt:v=>Math.round(v*100)+'%'}, // SN4:电子对抗折进发射档的 jam 档,这一格现在是 jam 削弱【照射驻留】的强度(噪声淹的是雷达回波,淹不了红外)
 ];
-function rangeDefaults(){ // 缺省 = DD(靶用的舰种)的武器定义基线,这样面板开箱即是"未改动"的对照组。RF3 改读 weapons/51-defs(原 CLS_CIWS.DD/CLS_WPN.DD)
+function rangeDefaults(){ // 缺省 = FF(靶用的舰种;2026-09-30 重排前叫 DD)的武器定义基线,这样面板开箱即是"未改动"的对照组。RF3 改读 weapons/51-defs(原 CLS_CIWS.DD/CLS_WPN.DD)
   const c=(typeof WPN!=='undefined'&&WPN.ciws_core)||{innerIntercept:0.85,chaffRate:0.25};
   const w=(typeof WPN!=='undefined'&&WPN.ciws_core)||{inter:384};
-  const sn=SENS.CLS.DD; // SN4:舰种行并进 SENS.CLS(前提 3,数值表只有一份),这里一律取活表。SN2 那条纪律原样有效——绝不在本文件留手抄副本:副本会在表被换掉时原地顶上,面板照常显示旧数并把值写进一个已不存在的字段,最难查的一种静默。本文件头部那句"调用点全部带 typeof 守卫"说的是别人调 95,不是 95 调别人:rangeDefaults 只在运行期被调,而 sensors/20 在 index.html 里排在本文件之前
+  const sn=SENS.CLS.FF; // SN4:舰种行并进 SENS.CLS(前提 3,数值表只有一份),这里一律取活表。SN2 那条纪律原样有效——绝不在本文件留手抄副本:副本会在表被换掉时原地顶上,面板照常显示旧数并把值写进一个已不存在的字段,最难查的一种静默。本文件头部那句"调用点全部带 typeof 守卫"说的是别人调 95,不是 95 调别人:rangeDefaults 只在运行期被调,而 sensors/20 在 index.html 里排在本文件之前
   return {evadeOn:false,evadeR:6000*CFG.scale,evadeT:20,speedCmd:2, // 2026-09-26 evadeR x1/5:原 30000
     inter:w.inter,interHitMul:1,inner:c.innerIntercept,chaff:c.chaffRate,
     decoyAuto:0,size:sReq(sn,'size'),stealth:sReq(sn,'stealth'),emit:1,ecmPower:sReq(sn,'ecmPower')}; // SN4:三格感知缺省跟住活表,字段没了必须当场炸——吐 undefined 会顺着 rangeClampOne 的 Number(undefined)=NaN 一路变成 NaN,经 applyRangeOne 写进靶的 size/stealth,光学亮度与雷达反射全线 NaN 而面板只显示 "NaN"。emit 缺省取索引 1(照射),与 91-init 给靶 setEmit(s,'paint') 同口径,面板开箱即是"未改动"的对照组。⚠ 失败形态是【开局白屏】不是每帧一个异常:loadRangeCfg 在 init() 里、排在 requestAnimationFrame 之前,这里抛错会让 init 整个中止

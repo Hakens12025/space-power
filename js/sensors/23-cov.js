@@ -344,7 +344,7 @@ function ladActGate(gate, q) {
 }
 /* 梯子的六个主级 → SENS 的六个量程常数。这是那六个数【唯一】的写入口。 */
 function ladApply() {
-  const R = SENS.CLS.DD, refl = R.size * R.stealth, km = m => m * 60 * LAD.V_REF;
+  const R = SENS.CLS.FF, refl = R.size * R.stealth, km = m => m * 60 * LAD.V_REF;
   const macG = COV.MAC * R.size, mslG = COV.MSL * Math.sqrt(refl);
   /* 发现域:三条律各一个锚,直接除掉参考对自己的缩放因子 */
   SENS.IR_DET = km(LAD.optColdMin) / Math.sqrt(R.size);
@@ -385,7 +385,7 @@ function ladShip(cls, o) {
 /* 2026-09-27 两艘静默舰相距基线 B、对一个标称亮度的目标(缺省熄火 DD)做红外交会,稳态椭圆收进定位门的最远距离(界面「静默交叉定位」预览读它)。
    每站横向误差 σ = TH0·d²/R(被动律),两条方位夹角约 B/d ⇒ 纵向约 σ·√2·d/B;按"盯着看的稳态"收。封顶在这个目标的光学发现距离。 */
 function ladTriFix(B, cls) {
-  const t = ladShip(cls || 'DD'), Ro = visAccOf(t), dMax = visRangeOf(t), T = COV.TH0.opt;
+  const t = ladShip(cls || 'FF'), Ro = visAccOf(t), dMax = visRangeOf(t), T = COV.TH0.opt;
   if (!(B > 0)) return 0;
   const ok = d => covSteady(Math.max(T * d * d / Ro / Math.SQRT2, T * d * d / Ro * Math.SQRT2 * d / B)) < COV.AMAX;
   if (ok(dMax)) return dMax;

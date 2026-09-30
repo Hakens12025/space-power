@@ -57,7 +57,7 @@
 const SENS = {
   /* ---- 舰种行:四个字段取代旧的八个。ecmPower 不在替换之列,它是干扰强度不是感知量,搭这张表的车 ---- */
   CLS: {
-    DD: { size: 0.70, stealth: 0.60, emit: 1.0, recv: 1.0, ecmPower: 0.3 }, // 巴黎级:小、低反射、基准雷达
+    FF: { size: 0.70, stealth: 0.60, emit: 1.0, recv: 1.0, ecmPower: 0.3 }, // 巴黎级:小、低反射、基准雷达
     /* SN6:CA 的 emit/recv 由 3.0 压到 2.0。3.0 的理由是"把照射量程抬到 260k 贴住 83-hud 那个 250k 圈",
        但它同时让 CA 被听见的距离是 DD 的 3 倍 —— 一个舰种就把整条梯子的上端拖大 3 倍,一层视图装不下两种船
        (尺度预算 B7 舰种差 3.0 超支)。压到 2.0 之后:雷达 x1.41、被 CA 听见 x2,仍然"大船看得远也更吵",
@@ -129,7 +129,9 @@ const SENS = {
   EMIT_LABEL: { silent: '静默', paint: '照射', jam: '干扰' },
 };
 SENS.CLS.BB = { ...SENS.CLS.CA };  // TODO(TIER-BAL) 战列感知待标定
-SENS.CLS.CV = { ...SENS.CLS.CA };  // TODO(TIER-BAL) 航母感知待标定
+SENS.CLS.CV = { ...SENS.CLS.CA };
+SENS.CLS.DD = { ...SENS.CLS.FF };  // TODO(TIER-BAL) 2026-09-30 戟级:先照搬护卫舰
+SENS.CLS.CL = { ...SENS.CLS.FF };  // TODO(TIER-BAL) 航母感知待标定
 /* 派生常数:写成乘法而不是 Math.pow,免得在顶层依赖别的文件;三条律的分母全在这里,22-percep 只乘不除 */
 SENS.K_IR = SENS.IR_DET * SENS.IR_DET;                                                   // 3.24e10
 SENS.K_RF = SENS.LIS_DET * SENS.LIS_DET;                                                 // 3.6e11

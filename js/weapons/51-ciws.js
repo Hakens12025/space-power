@@ -4,7 +4,7 @@ function ciwsOf(s){ // TIER1 近防参数查询:实例优先(makeShip 已烘焙 
   return (s&&s.ciws)||ciwsDefOf(s&&s.cls);
 }
 function ciwsDefOf(cls){ // RF3 兜底改读 weapons/51-defs 定义表(原 CLS_CIWS[cls]||CLS_CIWS.DD):取该舰种配装里的 ciws 件,无则 DD 的
-  const ids=(typeof CLS_LOADOUT!=='undefined'&&CLS_LOADOUT[cls])||CLS_LOADOUT.DD;
+  const ids=(typeof CLS_LOADOUT!=='undefined'&&CLS_LOADOUT[cls])||CLS_LOADOUT.FF;
   const d=(typeof WPN!=='undefined'&&WPN[ids.find(id=>WPN[id]&&WPN[id].kind==='ciws')])||WPN.ciws_core;
   return {outer:d.outer,outerIntercept:d.outerIntercept,inner:d.inner,innerIntercept:d.innerIntercept};
 }

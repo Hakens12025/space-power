@@ -2,29 +2,35 @@
 /* RF1: 拆自 js/03-ships.js L3-25,L65-71,L78-143,L151-183(舰种表/Tier 层/shipStats/makeShip)。纯移动无逻辑改动;SN4:感知数值表只有一份,住 sensors/20-signature 的 SENS(按舰种的行表是 SENS.CLS),本文件只负责把它烘焙到实例。 */
 let shipSeq=0;
 // TIER1 删除死表 CLS_SHAPE(旧几何代号 blk/tri/trl):已被 10a/10b 的 HULL 轮廓系统完全取代,全库零读取点
-const CLS_NAME={DD:'巴黎级驱逐舰 (Paris)',CA:'马拉松级巡洋舰 (Marathon)',BB:'战列舰 (BB)',CV:'航母 (CV)'}; // TIER1 4 舰种级名;BB/CV 是临时文案 TODO(NAME) 待定级名(会直接显示在 info 面板与编辑器菜单上)
-const CLS_ALIAS={CRUISER:'CA',FRIGATE:'DD',SCOUT:'DD'}; // TIER1 旧舰种名别名:全库唯一保留旧名的地方,只服务旧存档与旧导出场景(SCOUT 按拍板折进 DD)
-function normCls(c){return CLS_ALIAS[c]||(CLS_MOB[c]?c:'DD');} // TIER1 舰种归一化:只在 makeShip 运行期调用,不在顶层求值,故不受同文件里 CLS_MOB 定义靠后的影响
+const CLS_NAME={FF:'巴黎级护卫舰 (Paris)',DD:'戟级驱逐舰 (Halberd)',CA:'马拉松级巡洋舰 (Marathon)',BB:'战列舰位 (待定)',CV:'新纪元级航母 (Epoch)',CL:'波长级巡游舰 (Wavelength)'}; // 2026-09-30 按 UNSC 原作重排(用户,issue #1):巴黎 = 护卫舰 FF、戟级 = 驱逐舰 DD、新纪元 = 航母;波长单列一类;BB 留空位
+const CLS_ORDER=['FF','DD','CA','BB','CV','CL']; // 舰种排列(加船条等列表用)
+const CLS_SHORT={FF:'护卫舰',DD:'驱逐舰',CA:'巡洋舰',BB:'战列舰',CV:'航母',CL:'巡游舰'}; // 舰种短名(悬停卡) // TIER1 4 舰种级名;BB/CV 是临时文案 TODO(NAME) 待定级名(会直接显示在 info 面板与编辑器菜单上)
+const CLS_ALIAS={CRUISER:'CA',FRIGATE:'FF',SCOUT:'FF'}; // TIER1 旧舰种名别名:全库唯一保留旧名的地方,只服务旧存档与旧导出场景(SCOUT 按拍板折进 DD)
+function normCls(c){return CLS_ALIAS[c]||(CLS_MOB[c]?c:'FF');} // TIER1 舰种归一化:只在 makeShip 运行期调用,不在顶层求值,故不受同文件里 CLS_MOB 定义靠后的影响
 const CLS_MOB={ // 舰种差异化机动:转向率 / 推进加速度(太空无速度上限,持续加速) v119:drift参数已随旧内核删除
-  DD:{turnRate:PHYS.w(0.026),thrust:PHYS.a(0.05),speedGears:[0,PHYS.v(25),PHYS.v(50),PHYS.v(80),-1]}, // 2026-09-26 物理单位:5.1 g、转向 1.5°/s、速度档 25 / 50 / 80 km/s // TIER1 原 FRIGATE 巴黎级:均衡(基准档),数值原样搬;SCOUT 折进 DD,其 0.4/25/[0,300,600,1000] 一并退役
+  FF:{turnRate:PHYS.w(0.026),thrust:PHYS.a(0.05),speedGears:[0,PHYS.v(25),PHYS.v(50),PHYS.v(80),-1]}, // 2026-09-26 物理单位:5.1 g、转向 1.5°/s、速度档 25 / 50 / 80 km/s // TIER1 原 FRIGATE 巴黎级:均衡(基准档),数值原样搬;SCOUT 折进 DD,其 0.4/25/[0,300,600,1000] 一并退役
   /* 2026-09-26 用户:"舰船的加速减速度我们需要调整,使其加减速更慢" —— 推进加速度降到 1/4(原 DD 20 / CA 15 km/s²);驱逐舰到高速档 800 km/s 约 160 s。这一轮只看速度,不动武器与闪避的数 */
   CA:{turnRate:PHYS.w(0.016),thrust:PHYS.a(0.0375),speedGears:[0,PHYS.v(20),PHYS.v(40),PHYS.v(70),-1]}, // 2026-09-26 物理单位:3.8 g、转向 0.9°/s、速度档 20 / 40 / 70 km/s // TIER1 原 CRUISER 马拉松级:重,加速适中;DS148速度档按舰种(巡洋偏慢)
 };
 const CLS_STRUCT={ // RF3 舰体表:结构(非武器数据,从原 CLS_WPN 拆出;武器数值已移 weapons/51-defs 的 WPN 定义表)
-  DD:{hp:550, shield:200}, // 2026-09-29 shield = 护盾(用户:舰队护盾,血量没船体高;weapons/55) // TIER1 原 FRIGATE 护卫
+  FF:{hp:550, shield:200}, // 2026-09-29 shield = 护盾(用户:舰队护盾,血量没船体高;weapons/55) // TIER1 原 FRIGATE 护卫
   CA:{hp:900, shield:300}, // TIER1 原 CRUISER 巡洋
 };
 /* ===== TIER1 能力谓词层:把逻辑层散落的 cls==='XXX' 硬编码换成数据驱动查询(P0 建的安全垫,P1 随五张表一起换成 DD/CA/BB/CV 键) ===== */
 /* FM3-2:原先这里还有一张"舰种战术角色表"(DD 屏护 / CA·BB·CV 主力线),给 40-slots 旧弧线阵与 42/44 换槽分桶用。
    条令站位一路改到 FM4 的能力插槽之后,站位需求按实例配装字段现算(39-fmcaps 的 9 维能力),那张表连同它的名字一起删了 —— 不要再按舰种写角色表。 */
-const CLS_VALUE={DD:2,CA:3,BB:3,CV:3}; // TIER1 舰种威胁权重 TODO(TIER-BAL)。注意 3 在这里是个阈值:07-missiles.js:297 伏击雷 trigMode 'big' 按 shipValue(s)<3 放行,改这里的数会静默改变伏击名单
+const CLS_VALUE={FF:2,DD:2,CA:3,BB:3,CV:3,CL:2}; // TIER1 舰种威胁权重 TODO(TIER-BAL)。注意 3 在这里是个阈值:07-missiles.js:297 伏击雷 trigMode 'big' 按 shipValue(s)<3 放行,改这里的数会静默改变伏击名单
 function shipValue(s){return (s&&s.value)||CLS_VALUE[s&&s.cls]||1;} // TIER1 威胁权重查询:实例优先(s.value 待 P2 tier 烘焙,现阶段恒走表),未知舰种回 1——与 ciwsOf/hasMAC 的实例优先口径对齐
 function hasMAC(s){return ((s&&s.macDmg)||0)>0;} // TIER1 是否装备 MAC 主炮:按实例 macDmg>0 判定(CV 的 macDmg=0 自动被排除),等价于旧的 cls==='CRUISER'||cls==='FRIGATE'
 /* ===== TIER1 BB/CV 占位:显式克隆 CA,克隆语句本身就是"这不是设计过的数值"的声明;grep TODO(TIER-BAL) 一次全能捞出来 ===== */
 CLS_MOB.BB={...CLS_MOB.CA,speedGears:CLS_MOB.CA.speedGears.slice()};   // TODO(TIER-BAL) 战列机动待标定;speedGears 单独拷副本,否则 BB/CV/CA 共用同一个数组引用
 CLS_MOB.CV={...CLS_MOB.CA,speedGears:CLS_MOB.CA.speedGears.slice()};   // TODO(TIER-BAL) 航母机动待标定
 CLS_STRUCT.BB={...CLS_STRUCT.CA};                                          // TODO(TIER-BAL) 战列舰体待标定
-CLS_STRUCT.CV={...CLS_STRUCT.CA};                                          // TODO(TIER-BAL) 航母舰体待标定(武器差异在 CLS_LOADOUT.CV:不装主炮)
+CLS_STRUCT.CV={...CLS_STRUCT.CA};
+CLS_MOB.DD={...CLS_MOB.FF,speedGears:CLS_MOB.FF.speedGears.slice()};   // TODO(TIER-BAL) 2026-09-30 戟级驱逐舰:先照搬护卫舰(用户:数值不用管)
+CLS_MOB.CL={...CLS_MOB.FF,speedGears:CLS_MOB.FF.speedGears.slice()};   // 波长级巡游舰:沿用重排前(原驱逐舰)的数值
+CLS_STRUCT.DD={...CLS_STRUCT.FF};                                          // TODO(TIER-BAL) 戟级舰体待标定
+CLS_STRUCT.CL={...CLS_STRUCT.FF};                                          // TODO(TIER-BAL) 航母舰体待标定(武器差异在 CLS_LOADOUT.CV:不装主炮)
 /* ==== TIER-BAL:START —— 4 舰种 × T1/T2/T3 数值层(未平衡) ====
    形状:base 表(按舰种,上面那五张)× tier 乘数层(按分级,可按舰种覆盖)→ shipStats(cls,tier) → makeShip 一次性烘焙到实例。
    平衡阶段只编辑这一段连续区域:改 TIER_MUL / CLS_TIER_MUL 两个对象即可,任何调用点都不用碰。
@@ -90,7 +96,7 @@ function shipStats(cls,tier){ // TIER1 (舰种,分级) → 扁平属性对象:�
     CLS_MOB[c]||{turnRate:CFG.turnRate,thrust:CFG.thrust},
     CLS_STRUCT[c]||{hp:500,shield:175}, // RF3 武器数值已移 weapons/51-defs(resolveLoadout 单独解析),这里只剩舰体/机动/感知
     sReq(SENS.CLS,c,'SENS.CLS'), // SN4 感知行表:size/stealth/emit/recv 加干扰强度,全部住 sensors/20 的 SENS.CLS 这【一份】表里(前提:数值表只有一份,原来那张独立的按舰种感知表已整个删除)。sReq 挡的是"表里少了一个舰种"——Object.assign 对 undefined 源是静默空操作,不抛的话整船感知字段一次全缺,后面每个消费者各自兜底成不同的假值
-    CLS_LINK[c]||CLS_LINK.DD, // SN1 数据链表(guideChan)单独并进来,来源在 weapons/51-defs;函数体内引用=运行期解析,不受 51-defs 加载晚于本文件影响(同上一行的先例)
+    CLS_LINK[c]||CLS_LINK.FF, // SN1 数据链表(guideChan)单独并进来,来源在 weapons/51-defs;函数体内引用=运行期解析,不受 51-defs 加载晚于本文件影响(同上一行的先例)
     {value:CLS_VALUE[c]||1});                                     // 威胁权重进 tier 层:04-targeting:6 网分配与 07-missiles:297 伏击雷阈值读的就是它(经 shipValue 实例优先)。SN4 这里原来还并进四张按舰种的感知子表(雷达截面/照射功率/两个探测下限),两通道内核之后那四张表连同它们的字段一起没了,感知数值只剩上一行那一处来源
   const out={};
   for(const k in src)out[k]=applyTier(k,src[k],tierMul(c,t,k));

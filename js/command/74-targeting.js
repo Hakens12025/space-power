@@ -117,7 +117,7 @@ function xhCardHTML(s,sub){ // RF5 信息卡内容:按认没认出、定没定�
   const rows=[];
   const itp=gm?{kind:kindOf(s)}:(contactIdType(s,'blue')||{kind:'ship'}),notShip=!masked&&itp.kind!=='ship'; // TK4c:认出来不是船 ⇒ 没有舰种、结构与速度可报。2026-09-27 按认出的类型判(诱饵在「疑似」档冒充驱逐舰,不许说破)
   if(notShip)rows.push(['类别',({rock:'碎石',civ:'民船',lure:'诱饵',buoy:'浮标'})[itp.kind]+' · 不是舰船']);
-  else if(!masked)rows.push(['舰种',((typeof HULL_LABEL!=='undefined'&&HULL_LABEL[hull])||'未知')+'舰 · T'+tier]); // RF5 兜底文案改中文'未知'(原为直接吐 hull 代码):HULL_LABEL(ships/10)只有 DD/CA/BB/CV/SC 五个键,查不到时会渲染出 "UNK舰" 这种非中文串,违反 UI 全中文。识别级:舰种与分级解禁(与 82 放行真实轮廓/尺寸、87-fleetcards 的分级徽标同为 litBlue>=2)
+  else if(!masked)rows.push(['舰种',((typeof CLS_SHORT!=='undefined'&&CLS_SHORT[s.cls])||'未知')+' · T'+tier]); // 2026-09-30 舰种名按舰种查(重排后轮廓与舰种不再一一对应) // RF5 兜底文案改中文'未知'(原为直接吐 hull 代码):HULL_LABEL(ships/10)只有 DD/CA/BB/CV/SC 五个键,查不到时会渲染出 "UNK舰" 这种非中文串,违反 UI 全中文。识别级:舰种与分级解禁(与 82 放行真实轮廓/尺寸、87-fleetcards 的分级徽标同为 litBlue>=2)
   rows.push(['方位',cp?String(Math.round(brg)%360).padStart(3,'0')+'° · '+Math.round(dist/1000)+'k':'位置不明']); // 探测级也给:这一档只有方位与距离是可信的
   {const tk=(!gm&&s.side!=='blue')?trkOf('blue',s):null;if(tk&&tk.tn)rows.push(['航迹','T'+String(tk.tn).padStart(2,'0')]);} // TK4c 航迹号:没认出的接触都叫「未知接触」,靠它指认是哪一条
   if(!masked&&!notShip&&(gm||s.side==='blue'||contactFix(s,'blue'))){ // 定得出位置才追加数值

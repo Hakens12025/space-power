@@ -21,7 +21,7 @@ function rockObjs(){ // 2026-09-29 性能:rocks 里不是静止石头的那几�
   return ROBJ.list;
 }
 function makeObj(kind,side,name,pos,o){ // 字段按感知内核与武器会读到的那几格给齐(sReq 严格取值,缺一格就抛)
-  const x={kind:kind,id:'o'+(++rockSeq),side:side,name:name,cls:'DD',tier:2,pos:pos.slice(),vel:[0,0,0],facing:[1,0,0],
+  const x={kind:kind,id:'o'+(++rockSeq),side:side,name:name,cls:'FF',tier:2,pos:pos.slice(),vel:[0,0,0],facing:[1,0,0],
     size:0.7,stealth:1,emit:0,recv:0,emitMode:'silent',ecmPower:0,flame:0,sideFlame:0,fireHot:0,thrust:0,dead:false,hp:100,maxHp:100};
   if(o)for(const k in o)x[k]=o[k];
   return trkAdopt(x);
@@ -39,7 +39,7 @@ function objSpawnCivs(){ // 对局开局撒民船(scenario/91 的 initFleet 在�
 }
 function launchLure(shooter,pt){ // K1 诱饵:从放它的船身边飞到 pt(飞的那段在点火),到位后漂着冒充一艘驱逐舰
   const L=OBJ_CFG.LURE,o=makeObj('lure',shooter.side,'诱饵',shooter.pos,{size:L.SIZE,stealth:0.4,emit:1,hp:L.HP,maxHp:L.HP,
-    dest:[pt[0],pt[1],0],life:PHYS.t(L.LIFE),burnCd:PHYS.t(L.BURN_EVERY)*Math.random(),burnT:0,spoof:{kind:'ship',cls:'DD',tier:2},spoofName:'叛军·护卫-'+(11+(++OBJ_SEQ))});
+    dest:[pt[0],pt[1],0],life:PHYS.t(L.LIFE),burnCd:PHYS.t(L.BURN_EVERY)*Math.random(),burnT:0,spoof:{kind:'ship',cls:'FF',tier:2},spoofName:'叛军·护卫-'+(11+(++OBJ_SEQ))});
   setEmit(o,'paint');rocks.push(o);return o;
 }
 function launchBuoy(shooter,pt){ // K3 前出浮标:飞到 pt 停下

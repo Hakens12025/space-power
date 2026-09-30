@@ -6,7 +6,7 @@ const LADAR_WARN_W=6; // RF7e 被照射告警圈的脉冲角频率(rad/【墙钟
 
 // TIER1 4 舰种正式映射:旧三键 CRUISER/FRIGATE/SCOUT 已由 03-ships.js 的 normCls 在 makeShip 入口归一化,这里不再需要过渡键。
 // 10a 的 HULL.SC / HULL_LABEL.SC / HULL_BASE.SC 按拍板保留不动(轮廓资产留着,等 4 舰种数值定稿再决定去留),只是暂时无人引用。
-const CLS_HULL={DD:'DD',CA:'CA',BB:'BB',CV:'CV'};
+const CLS_HULL={FF:'DD',DD:'CA',CA:'BB',BB:'BB',CV:'CV',CL:'SC'}; // 2026-09-30 舰种重排后按大小对应原来那套轮廓(用户:不换成 UNSC 轮廓):护卫 = 最小那个、驱逐 = 次小、巡洋 = 宽的、BB 空位同巡洋、航母不变、波长用侦察轮廓
 function shipHull(s){return kindOf(s)==='ship'?(CLS_HULL[s.cls]||'DD'):'UNK';} // TK4c:不是船的东西(石头)没有舰种轮廓,一律通用轮廓 —— 否则查不到舰种会落到 'DD'
 function shipTier(s){return s.tier||2;}                       // 未标 Tier 的舰按 T2(中性尺寸/亮度)
 function shipIdentHull(s){                                    // 识别分层:未达识别级的敌舰只给通用轮廓

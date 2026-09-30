@@ -73,7 +73,7 @@ function drawObjKnown(s,p,r,tp){ // 2026-09-27 认出来的民船 / 诱饵 / 敌
   ctx.save();ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';
   if(tp.kind==='ship'){ // 冒充:画成一艘敌方驱逐舰(与没认全的红舰同一套)
     if(shipMarkMode())drawShipMark(s,p,'#ff6b6b');
-    else{ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(Math.atan2(s.facing[1],s.facing[0]));{const zf=shipZoomF();ctx.scale(zf,zf);}drawHull(ctx,tp.cls||'DD',tp.tier||2,'#ff6b6b','fill');ctx.restore();}
+    else{ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(Math.atan2(s.facing[1],s.facing[0]));{const zf=shipZoomF();ctx.scale(zf,zf);}drawHull(ctx,CLS_HULL[tp.cls]||'DD',tp.tier||2,'#ff6b6b','fill');ctx.restore();}
     if(cam.zoom>0.0008){ctx.fillStyle='rgba(215,226,240,.8)';ctx.fillText(s.spoofName||s.name,p[0],p[1]+r+6);}
     ctx.restore();return;}
   const col=tp.kind==='civ'?'#a0aab9':(tp.kind==='lure'?'#d9a066':'#c890ff'),lb=({civ:'民船',lure:'诱饵',buoy:'浮标'})[tp.kind]||'';

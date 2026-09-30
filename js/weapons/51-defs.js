@@ -23,20 +23,24 @@ const WPN={ // 定义(Definition):全局一份的不变模板,数值原样搬自
    SN4:那张表已随两通道重做被整表替换,所以这段改成不点名 —— 删掉的符号连注释里的字面也要抹掉,否则日后按名字 grep 会误报「还有引用」。
    TIER_FIELD 里的 guideChan:'int' 与表位置无关,原样生效(ships/11-classes)。 */
 const CLS_LINK={
-  DD:{guideChan:1}, // TIER1 原 FRIGATE 巴黎:1 网
+  FF:{guideChan:1}, // TIER1 原 FRIGATE 巴黎:1 网
   CA:{guideChan:3}, // TIER1 原 CRUISER 马拉松:3 网
 };
 CLS_LINK.BB={...CLS_LINK.CA}; // TODO(TIER-BAL) 战列数据链待标定
-CLS_LINK.CV={...CLS_LINK.CA}; // TODO(TIER-BAL) 航母数据链待标定
+CLS_LINK.CV={...CLS_LINK.CA};
+CLS_LINK.DD={...CLS_LINK.FF}; // TODO(TIER-BAL) 2026-09-30 戟级:先照搬护卫舰
+CLS_LINK.CL={...CLS_LINK.FF}; // TODO(TIER-BAL) 航母数据链待标定
 const CLS_LOADOUT={ // 配装(Loadout):舰种 → 武器 id 列表。CV 无主炮=结构事实(不装 mac 即可,hasMAC 按 macDmg=0 自动排除),不是待平衡数值
-  DD:['mac_light','msl_light','ciws_core'],
+  FF:['mac_light','msl_light','ciws_core'],
   CA:['mac_heavy','msl_heavy','ciws_self'],
 };
 CLS_LOADOUT.BB=CLS_LOADOUT.CA.slice(); // TODO(TIER-BAL) 战列配装待标定(克隆 CA)
-CLS_LOADOUT.CV=['msl_heavy','ciws_self']; // 航母无主炮;其余 TODO(TIER-BAL) 配装待标定
+CLS_LOADOUT.CV=['msl_heavy','ciws_self'];
+CLS_LOADOUT.DD=CLS_LOADOUT.FF.slice(); // TODO(TIER-BAL) 2026-09-30 戟级:先照搬护卫舰
+CLS_LOADOUT.CL=CLS_LOADOUT.FF.slice(); // 航母无主炮;其余 TODO(TIER-BAL) 配装待标定
 function resolveLoadout(cls,tier){ // 配装 → 扁平武器字段(逐字段过 applyTier/tierMul,与 shipStats 同一套乘数机制)
   const src={};const weapons=[];
-  for(const id of (CLS_LOADOUT[cls]||CLS_LOADOUT.DD)){
+  for(const id of (CLS_LOADOUT[cls]||CLS_LOADOUT.FF)){
     const d=WPN[id];if(!d)continue;
     for(const k in d){if(k==='kind'||k==='label')continue;src[k]=(src[k]||0)+applyTier(k,d[k],tierMul(cls,tier,k));}
     // 同 kind 多件时数值按叠加口径合并(弹药/库存相加合理;概率/半径类相加不合理,当前每类仅一件,此口径留作扩展边界)

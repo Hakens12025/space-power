@@ -30,7 +30,7 @@ function spawnBarBuild() {
   if (!el || el.dataset.built) return;
   el.dataset.built = '1';
   el.innerHTML = '<span class="sp-lb">加船</span>'
-    + HULL_ORDER.map(c => '<button class="btn qbtn" data-sp="' + c + '" title="在摄像机附近放一艘 ' + c + '（测试用）">' + c + '</button>').join('')
+    + CLS_ORDER.map(c => '<button class="btn qbtn" data-sp="' + c + '" title="在摄像机附近放一艘 ' + c + '（测试用）">' + c + '</button>').join('')
     + '<button class="btn qbtn sp-side" data-sp="side" title="切换放置阵营">蓝</button>'
     + '<button class="btn qbtn qstop" data-sp="clr" title="删掉所有用本菜单加出来的船">清</button>';
 }
@@ -58,7 +58,7 @@ function spawnBarAct(a) {
     if (typeof updFmBar === 'function') updFmBar();
     return;
   }
-  if (HULL_ORDER.indexOf(a) >= 0) spawnTestShip(a);
+  if (CLS_ORDER.indexOf(a) >= 0) spawnTestShip(a);
 }
 /* 委托挂在静态容器上(同 #fmActs 的口径);pointerdown 而不是 click —— 与本项目其余按钮一致 */
 on('spawnBar', 'pointerdown', e => {
