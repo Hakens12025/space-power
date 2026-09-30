@@ -54,16 +54,40 @@ function mslAcquire(p,t){ // 导引头锁上 t:从布雷 / 巡飞 / 脱锁转成
   p.target=t;p.park=false;p.cruise=false;p.mine=false;p.chaffed=false;p.lastKpos=null;
   p.guided=true;p.guideMode='self';p.netOff=null;p.netOffR=0;p.netD0=0;
 }
+/* 2026-09-30 断链的导弹只用自己知道的(用户):导弹带一份自己的目标记录 p.tk = {pos, vel, t, sig, a}(52 出膛时按母舰的估计写;在网上时随母舰的估计更新,导引头看见时用自己量到的),
+   断链后不读目标的真实死活、不翻舰队航迹表:飞向按记录外推的点,导引头按 b「最像原目标」挑(用户选 b):体型比在 MSL_SIM 以内、最像的优先,并列取离预计位置最近;
+   只认再捕获范围(预计位置 + 导引头 3 万 + ½·a·τ²,τ = 最后一次拿到目标信息后的时间,a 同航迹表的先验 trkAccPrior)里的;原目标型号不知道 ⇒ 取离预计位置最近 */
+const MSL_SIM=1.25;
+function mslSigOf(t,side){const ty=trkIdType(trkOf(side,t)),c=ty&&ty.kind==='ship'&&ty.cls&&SENS.CLS[ty.cls];return c?c.size:null;} // 母舰认出的型号 → 体型;没认出给 null
+function mslTkSet(p,q,sig){ // 更新导弹自己的目标记录(原地改)
+  let k=p.tk;if(!k)k=p.tk={pos:[0,0,0],vel:[0,0,0],t:0,sig:null,a:0};
+  const v=p.target.vel;k.pos[0]=q[0];k.pos[1]=q[1];k.pos[2]=q[2]||0;k.vel[0]=v[0];k.vel[1]=v[1];k.vel[2]=v[2];k.t=simTime; // 目标速度仍取真值(接触没有速度估计,已登记的口子)
+  if(sig)k.sig=sig;k.a=trkAccPrior(p.target,{idn:!!k.sig});
+}
+function mslBasket(p){const k=p.tk;if(!k)return null;const u=simTime-k.t;return {x:k.pos[0]+k.vel[0]*u,y:k.pos[1]+k.vel[1]*u,z:k.pos[2]+k.vel[2]*u,r:GUIDE_SEEK+0.5*k.a*u*u};} // 预计目标位置 + 再捕获半径
+function mslSeekB(p,R,ok,noBasket){ // 断链的导弹自己挑目标(b);R / ok 同 mslSeek;noBasket = 雷的触发(守着自己的点,不看预计位置)
+  const side=p.shooter.side,k=p.tk,bk=noBasket?null:mslBasket(p),lim=Math.log(MSL_SIM);let best=null,bs=Infinity,bd=Infinity;
+  const tryT=t=>{if(t.dead||t.side===side||t.hp===undefined||(ok&&!ok(t)))return;
+    const dp=Math.hypot(t.pos[0]-p.pos[0],t.pos[1]-p.pos[1]);if(R&&dp>=R)return;
+    const d=bk?Math.hypot(t.pos[0]-bk.x,t.pos[1]-bk.y):dp;if(bk&&d>bk.r)return;
+    let q=0;if(k&&k.sig){q=Math.abs(Math.log((t.size||1e-9)/k.sig));if(q>lim+1e-9)return;}
+    if(!missSeeT(p,t,true))return;
+    if(q<bs-1e-9||(q<=bs+1e-9&&d<bd)){bs=q;bd=d;best=t;}};
+  for(const s of ships)tryT(s);
+  for(const o of rockObjs())tryT(o);
+  return best;
+}
 // DS147:missReport 已取消(数据链纯单向,导弹不回报传感器;导弹的探测只用于自身导引/复锁/飞最后已知变雷)
 function guideSide(side){ // 一方数据链网络的引导分配(v125:按网分配,每网占1通道,网内所有组共享引导)
   const gs=ships.filter(s=>s.side===side&&!s.dead&&(s.guideChan||0)>0); // 有火控通道的存活舰
-  const ms=projectiles.filter(p=>p.type==='missile'&&!p.done&&!p.park&&!p.mine&&p.target&&p.target.side&&p.target.side!==side&&!p.target.dead);
+  const ms=projectiles.filter(p=>p.type==='missile'&&!p.done&&!p.park&&!p.mine&&p.target&&p.target.side&&p.target.side!==side&&(!p.target.dead||!p.online)); // 2026-09-30 断链的不知道目标死了,照样按自己的记录飞
   const parks=projectiles.filter(p=>p.type==='missile'&&!p.done&&p.park&&!p.mine&&p.shooter&&p.shooter.side===side); // DS192:空目标 park 弹(区域齐射/布雷途中),下面吃富余通道
   if(!ms.length&&!parks.length)return;
   for(const p of ms){ // 标定引导需求:导弹自己探测到目标(被动看热/末端LADAR)→ 自导(不耗通道);没看到且网络未点亮 → 需引导/脱锁
     p.guided=false; // KIMI146修:每tick无状态重算——原只置true永不复位,脱锁状态机整体失效(失去信息仍全知追击,架空导弹设计规范§1/§2)
-    p.needGuide=!missSee(p);
-    if(!p.needGuide){p.guided=true;p.coastT=0;p.guideMode='self';p.lastKpos=p.target.pos.slice();}
+    p.needGuide=p.target.dead||!missSee(p);
+    if(!p.needGuide){p.guided=true;p.coastT=0;p.guideMode='self';p.lastKpos=p.target.pos.slice();mslTkSet(p,p.target.pos,p.target.size);} // 导引头自己量到的
+    else if(p.online&&!p.target.dead){const q=contactPos(p.target,side);if(q)mslTkSet(p,q,mslSigOf(p.target,side));} // 在网上:随母舰的估计更新
   }
   // v125:按网分组——每个网(有超自导需求的)占1通道,网内所有组共享
   const netMap=new Map();
@@ -106,11 +130,10 @@ function guideSide(side){ // 一方数据链网络的引导分配(v125:按网分
   }
   // 剩余未引导(超范围+没通道 或 目标未点亮)→ 脱锁。DS192(用户令):不再飞"目标当时所在点",改飞"按目标当前矢量外推的预测命中点";
   // 到点没人就变雷待命,网络恢复引导时会被上面几遍重新接管。
-  for(const p of ms){if(p.needGuide&&!p.guided){p.guideMode='coast';if(!p.lastKpos){
-    const relV=V.sub(p.vel,p.target.vel);
-    const kp=contactPos(p.target,p.shooter.side); // WR1:最后已知位置按母舰的【估计位置】记;交代不出位置就沿当前航向滑行(不回落真值)
-    const tt=kp?Math.max(0.3,V.len(V.sub(kp,p.pos))/Math.max(500,V.len(relV))):0; // 2026-09-28 飞行时间也按估计位置算(原来量真值)
-    p.lastKpos=kp?[kp[0]+p.target.vel[0]*tt,kp[1]+p.target.vel[1]*tt,kp[2]+p.target.vel[2]*tt]:[p.pos[0]+p.vel[0]*20,p.pos[1]+p.vel[1]*20,p.pos[2]+p.vel[2]*20];
+  for(const p of ms){if(p.needGuide&&!p.guided){const enter=p.guideMode!=='coast';p.guideMode='coast';if(enter||!p.lastKpos){ // 刚掉进脱锁就按记录重算一次预计拦截点(原来引导时 lastKpos 每拍写成目标此刻的位置,掉线后飞向那个旧点)
+    const bk=mslBasket(p),kv=p.tk?p.tk.vel:[0,0,0]; // 2026-09-30 按导弹自己的目标记录外推(在网上时它随母舰的估计更新,等于原来读 contactPos);没有记录就沿当前航向滑行
+    const tt=bk?Math.max(0.3,Math.hypot(bk.x-p.pos[0],bk.y-p.pos[1],bk.z-p.pos[2])/Math.max(500,V.len(V.sub(p.vel,kv)))):0;
+    p.lastKpos=bk?[bk.x+kv[0]*tt,bk.y+kv[1]*tt,bk.z+kv[2]*tt]:[p.pos[0]+p.vel[0]*20,p.pos[1]+p.vel[1]*20,p.pos[2]+p.vel[2]*20];
   }}}
 }
 function guideDesc(p){ // 信息面板:导弹引导状态

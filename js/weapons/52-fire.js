@@ -227,6 +227,7 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
       guided:false, coastT:0, guideMode:null, lastKpos:null, guidedBy:null, // T1引导:自导/链导/脱锁(超自导范围无通道→滑行10s自毁)
       chaffed:false,chaffT:0,lastTarget:null, // v125 干扰弹脱锁
       online:true, // 2026-09-30 导弹组网:出膛时在舰队旁,算在网上;之后每个感知节拍由 54 的 mslNetStep 重算
+      tk:isShip?{pos:tp0.slice(),vel:target.vel.slice(),t:simTime,sig:mslSigOf(target,shooter.side),a:trkAccPrior(target,{idn:!!mslSigOf(target,shooter.side)})}:null, // 2026-09-30 导弹自己的目标记录(54 mslTkSet 更新;断链后只靠它)
       // TK4a:弹丸不再带可见性字段(看不看得见搬进航迹表的目击集合,sensors/24 的 trkSees);原来六个弹丸字面量里各有一对初值 false
     });
     shooter.ammo-=shooter.mslPer||12; // KIMI154:每组12颗;RF3 枚数读烘焙字段
