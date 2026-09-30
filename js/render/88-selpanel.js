@@ -218,6 +218,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
      display 一律写具体值('block'),不能写 '':#selFm 的 html 内联 style 是 display:none,''会退回去。 */
   const fmBox=document.getElementById('selFm');
   if(fmBox&&fmBox.style.display!=='none')fmBox.style.display='none';
+  if(typeof ptSet==='function')ptSet(null); // 2026-09-30 底栏肖像同样先收起,只有下面选中舰船那一支再亮出来(同一个 JS 任务里改,不闪)
   if(box.style.display!=='block')box.style.display='block';
   if(selBuoy&&(selBuoy.dead||rocks.indexOf(selBuoy)<0))selBuoy=null; // 2026-09-29 浮标没了 / 换局:撤选中
   if(selBuoy){ // 2026-09-29 用户:点浮标 → 底栏雷达开照射 / 打脉冲(飞行中也行);原来武器菜单「特殊」里的逐个开关已删
@@ -346,6 +347,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
   title.textContent=sel.length>1?`已选 ${sel.length} 艘`:'实时状态';
   // 固定信息(舰船类数据,整局不变) → 底栏
   if(ciN)ciN.textContent=s.name;
+  if(typeof ptSet==='function')ptSet(s); // 2026-09-30 用户:舰名区变成 图 + 名(render/88-portrait)
   if(ciC)ciC.textContent=(CLS_NAME[s.cls]||s.cls)+' · '+(TIER_LABEL[s.tier]||'T2');
   if(ciSp)ciSp.innerHTML=specItems(s).map(it=>`<span class="fi"><i>${it[0]}</i><b>${it[1]}</b></span>`).join(''); // 标签上/数值下的读数柱
   // 变化信息(武器库状态) → 右栏

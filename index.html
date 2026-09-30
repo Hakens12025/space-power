@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Space Power · 骨架</title>
-<link rel="stylesheet" href="css/app.css?v=20260929cw">
+<link rel="stylesheet" href="css/app.css?v=20260930pt">
 </head>
 <body>
 <canvas id="cv"></canvas>
@@ -76,9 +76,9 @@
   </div>
 </div>
 
-<!-- RF3 简化UI:底部操作栏三区 = 舰名区 | 规格读数列(标签上/数值下) | 开关组(88-selpanel 按 s.weapons 配装动态生成) -->
+<!-- RF3 简化UI:底部操作栏三区 = 舰名区(2026-09-30 选中舰船时左边加侧视肖像,render/88-portrait)| 规格读数列(标签上/数值下) | 开关组(88-selpanel 按 s.weapons 配装动态生成) -->
 <div id="cmdBar" class="panel">
-  <div class="cmd-ship"><b id="ciName">—</b><span id="ciCls">—</span></div>
+  <div class="cmd-ship"><canvas id="ciPort" style="display:none"></canvas><div class="cmd-ship-t"><b id="ciName">—</b><span id="ciCls">—</span></div></div>
   <div class="cmd-sep"></div>
   <div id="ciSpec"></div>
   <div class="cmd-sep"></div>
@@ -174,7 +174,8 @@
 <script src="js/render/86-radarview.js?v=20260929r7"></script><!-- 雷达画面:右下角「雷达」钮(MAPV.mode === 'radar');演示页 雷达效果.html 的画法,数据走引擎现有的雷达模型 -->
 <script src="js/render/86-ir2view.js?v=20260930gt"></script><!-- 红外2:右下角「红外」钮(MAPV.mode === 'ir');演示页 地图组/红外2.html 的「按选择」+ 红外仪表,可见光圈里借 86-irview 的红外画面 -->
 <script src="js/render/87-fmbar.js?v=20260926k"></script><!-- FM1 编队书签栏 + 编队菜单。与 87-fleetcards 共用编号 87(先例:weapons/51-defs 与 51-ciws、render/85-settings 与 85-tutorial),语义上都是"舰队编成"的呈现。顶层只有 on(...) 委托挂载,故必须晚于 core/00;updFmBar() 由 core/99 每 20 帧调用,其余跨文件引用全在运行期解析 -->
-<script src="js/render/88-selpanel.js?v=20260930sv"></script>
+<script src="js/render/88-portrait.js?v=20260930pt"></script><!-- 2026-09-30 底栏舰名区的侧视肖像(UNSC 手画矢量);ptSet 由 88-selpanel 调 -->
+<script src="js/render/88-selpanel.js?v=20260930pt"></script>
 <script src="js/render/88-pip.js?v=20260929fw"></script><!-- 2026-09-28 右栏小窗;运行期才读各层函数 -->
 <script src="js/render/89-radial.js?v=20260928r1"></script>
 <script src="js/render/89-fmpage.js?v=20260929cw"></script><!-- FM4 舰队编组控制页。与 89-radial 共用编号 89(先例:render/85-settings 与 85-tutorial)。顶层有 on(...) 委托挂载与两条 window 监听,故必须晚于 core/00;其余跨文件引用全在运行期解析 --><!-- RF5 Phase C 目标轮盘的几何与渲染:半径/角度/容量常量与 drawRadial/radialHit/radialInBand/radPages 全在这一份。必须晚于 88-selpanel(扇区射程读数走它的 KIND_INFO);顶层只有 const/let/function,零顶层执行 -->
