@@ -18,7 +18,7 @@ function drawArena(){
 }
 /* 2026-09-26 可见光圈的灰色战争迷雾(用户:"让地图稍暗一点,作为灰色的战争迷雾,然后以飞船为圆心……圆形可见光区域,这个区域内所有东西均完全实时可见")。
    业内叫视野半径 + 灰雾(RTS 的 sight radius / fog of war)。圈 = sensors/23 的 COV.VIS_R(感知内核同一个数),天体背后那一块照旧暗(视线被挡,与 senseVis 同一条规则)。
-   只在普通地图画面画。做法:1/K 分辨率的离屏层铺暗,每艘我方舰在草稿层画自己的圈、挖掉天体投下的视线阴影,再从暗层里挖掉;放大贴回,边缘自然柔化。每帧常数笔 */
+   普通 / 红外 / 雷达三种画面都画(2026-09-30 起;原来只在普通地图画面画)。做法:1/K 分辨率的离屏层铺暗,每艘我方舰在草稿层画自己的圈、挖掉天体投下的视线阴影,再从暗层里挖掉;放大贴回,边缘自然柔化。每帧常数笔 */
 const VISF={K:4,A:0.32,cv:null,g:null,tc:null,tg:null};
 const VISX={K:4,A:0.32,cv:null,g:null,tc:null,tg:null}; // 2026-09-26 特写窗口自己那一套:同参数、各自缓冲(共用一套会按两种尺寸每帧来回重建)
 function drawVisFog(B){
@@ -374,7 +374,7 @@ function drawInset(){
     }
     if(typeof mapBodies==='function')mapBodies();
     drawArena();
-    if(!sv)drawVisFog(VISX); // 可见光圈灰雾:圈外的敌舰画面比圈内暗
+    drawVisFog(VISX); // 可见光圈灰雾:圈外的敌舰画面比圈内暗(2026-09-30 红外 / 雷达画面也画)
     drawTrails(hide);
     for(const s of ships){if(hide&&s.side!==VIEW)continue;drawShip(s);}
     if(typeof drawRocks==='function')drawRocks(hide);
@@ -424,7 +424,7 @@ function render(){
   drawGrid();
   if(typeof drawEnv==='function')drawEnv(); // ENV1 天体 + 太阳方向:地图事实,画在网格之后、一切接触之前(render/81-env)
   drawArena(); // 2026-09-26 单局游玩区边界:天体之后、接触之前;普通 / 红外 / 雷达三种画面都走这一行
-  if(!sv)drawVisFog(); // 2026-09-26 可见光圈的灰色迷雾:只在普通地图画面,画在一切接触之前
+  drawVisFog(); // 2026-09-26 可见光圈的灰色迷雾,画在一切接触之前;2026-09-30 用户:红外 / 雷达画面也分出亮的可见光区域和暗的圈外(原来只在普通地图画面)
   if(irOn)drawIr2View(); // 2026-09-30 红外2(用户:「红外」钮直接换成它)
   if(rdOn)drawRadarView();
   if(typeof drawSunLines==='function')drawSunLines(); // 「太阳线」钮:叠在普通 / 红外 / 雷达任一画面上
