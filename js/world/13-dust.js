@@ -79,7 +79,7 @@ function envBg(p,band,minKm){ // ENV2 某点某波段的背景亮度(背景单�
 const ENV_EXT={rev:-1,blk:new Map(),CH:64,MAXB:256}; // ENV2 消光的格点缓存:CH x CH 一块,块数到 MAXB 整个清掉
 function envExtNode(I,J){ // ENV2 EXT_G 公里格点 (I,J) 上各云浓度之和(按 2·EXT_G 滤过)
   const E=ENV_EXT,G=ENV_CFG.DUST.EXT_G;if(E.rev!==ENV.rev){E.blk.clear();E.rev=ENV.rev;}
-  const bi=Math.floor(I/E.CH),bj=Math.floor(J/E.CH),key=(bi+32768)*65536+(bj+32768);let b=E.blk.get(key);
+  const bi=Math.floor(I/E.CH),bj=Math.floor(J/E.CH),key=(bi+16384)*32768+(bj+16384);let b=E.blk.get(key); // 2026-09-30 性能:键落在小整数范围(原来 x65536 超出,每查一次就分配一个数字对象;一块 = CH x EXT_G km,块坐标远小于 16384,不会撞键)
   if(!b){if(E.blk.size>=E.MAXB)E.blk.clear();b=new Float32Array(E.CH*E.CH).fill(NaN);E.blk.set(key,b);}
   const q=(J-bj*E.CH)*E.CH+(I-bi*E.CH);let v=b[q];if(v!==v){v=envCloudDensity(I*G,J*G,2*G);b[q]=v;}return v;
 }

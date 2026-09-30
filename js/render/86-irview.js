@@ -29,11 +29,15 @@ function irvIdx(v){return Math.round((irvT(v)-IRV_T0)/(1-IRV_T0)*255);}
 function irvLutK(t){return Math.round((Math.max(IRV_T0,Math.min(1,t))-IRV_T0)/(1-IRV_T0)*255);}
 function irvLutHex(t){const k=irvLutK(t)*4;return '#'+((1<<24)|(IRV_LUT[k]<<16)|(IRV_LUT[k+1]<<8)|IRV_LUT[k+2]).toString(16).slice(1);}
 function irvUnc(t){ // 不确定半径(km):离最近那艘我方船 d,按目标的固有亮度(体型 x 自身热;不含尾焰 / 开火 / 雷达,点火不跳)算方位误差 th,r = d x √(PH_K x th)。越近越小、连续
-  let d=Infinity,o=null;for(const s of ships)if(s.side===VIEW&&!s.dead){const e=Math.hypot(t.pos[0]-s.pos[0],t.pos[1]-s.pos[1]);if(e<d){d=e;o=s;}}
+  let d=Infinity,o=null;for(const s of ships)if(s.side===VIEW&&!s.dead){const ex=t.pos[0]-s.pos[0],ey=t.pos[1]-s.pos[1],e=Math.sqrt(ex*ex+ey*ey);if(e<d){d=e;o=s;}} // sqrt:Math.hypot 会分配
   return o?d*Math.sqrt(IRV_C.PH_K*covTheta('opt',o,t,d,sReq(t,'size','ship')*(t.heatK===undefined?1:t.heatK))):0;
 }
 function irvObs(){const a=[];for(const s of ships)if(s.side===VIEW&&!s.dead)a.push(s);return a;} // 本视角的船(VIEW)
-function irvSrc(){const a=[];for(const s of ships)if(s.side!==VIEW&&!s.dead)a.push(s);for(const r of rocks)if(!r.dead&&r.side!==VIEW)a.push(r);return a;} // 2026-09-27 自己放的浮标不算热源
+const IRV_SRC={a:[],f:-1};
+function irvSrc(){ // 热源:非本方的船、石头(2026-09-27 自己放的浮标不算)。2026-09-30 性能:同一帧里红外1 / 红外2 共用一份,数组原地重填(原来每次新建一个上千项的数组,红外画面每帧分配多、垃圾回收频繁、卡顿)
+  const f=typeof frameN!=='undefined'?frameN:-1;if(f>=0&&f===IRV_SRC.f)return IRV_SRC.a;
+  const a=IRV_SRC.a;let n=0;for(const s of ships)if(s.side!==VIEW&&!s.dead)a[n++]=s;for(const r of rocks)if(!r.dead&&r.side!==VIEW)a[n++]=r;a.length=n;IRV_SRC.f=f;return a; // 按下标填、最后截长度(先清零再 push 会反复重分配底层存储)
+}
 function irvV(snr){return snr>=1?IRV_C.DET_V*Math.pow(snr,IRV_C.CONTRAST):IRV_C.GAIN*Math.pow(snr,IRV_C.SUB_P);} // 一道门:信噪比 → 色阶值;内核发现门限(信噪比 1)以下按 SUB_P 次方淡出(远处淡淡一团),门下封顶 GAIN,发现门处跳到 DET_V(增益调高以后不许跑在内核前面)
 function irvHill(t,obs,kn){ // 一座山:信噪比(一道门的输入),取看得最清楚的那艘我方船。kn = 我方已定位它:日光禁区 / 天体遮挡不挡(2026-09-30 自己尾焰致盲删了),照画它的热(用户:红外是固有的特性,可见光里红团不许消失)
   let best=null,bg=NaN,tSh=false;const lit=envHasLight(),nb=ENV.bodies.length>0;
@@ -177,13 +181,13 @@ function irvjUpdate(full,gch){ // 返回脏矩形 [i0,i1,j0,j1] 列表;null = �
     if(!r){r={slot:(IRVJ.slot++)%IRVJ.K,wt:IRVJ.wt,t:t,px:0,py:0,vis:0,ph:null,sp:[],sil:null,sk:'',sb:null,mv:false,need:false,in0:false,in1:false,seen:0,bR:0,qs:0,w:0};R.set(t,r);nw=true;}
     r.seen=fr;
     const wt=(adminMode||contactFix(t,VIEW))?1:0,gk=1-Math.exp(-(IRVJ.wt-r.wt)/IRV_C.GLIDE);r.wt=IRVJ.wt;r.w=nw?wt:r.w+(wt-r.w)*gk;if(Math.abs(wt-r.w)<0.01)r.w=wt;
-    let ep=[t.pos[0],t.pos[1],irvUnc(t)*(1-r.w)]; // 团画在物体所在处;不确定半径定位后在 GLIDE 秒里收到热晕最小半径,丢了定位再胀回去
-    if(!nw&&r.ep&&Math.hypot(ep[0]-r.ep[0],ep[1]-r.ep[1])*cam.zoom<IRV_C.EP_PX&&Math.abs(ep[2]-r.ep[2])<IRV_C.R_TOL*Math.max(r.ep[2],1))ep=r.ep;
+    const ex=t.pos[0],ey=t.pos[1],er=irvUnc(t)*(1-r.w);let ep=r.ep; // 团画在物体所在处;不确定半径定位后在 GLIDE 秒里收到热晕最小半径,丢了定位再胀回去
+    if(nw||!ep||!(Math.hypot(ex-ep[0],ey-ep[1])*cam.zoom<IRV_C.EP_PX&&Math.abs(er-ep[2])<IRV_C.R_TOL*Math.max(ep[2],1))){if(ep){ep[0]=ex;ep[1]=ey;ep[2]=er;}else ep=[ex,ey,er];} // 挪够了才改(原地改写;原来每帧每个源新建一个数组)
     const pm=nw||!r.ep||r.px!==ep[0]||r.py!==ep[1],sc=nw||irvjStCh(r,t);r.mv=pm&&!nw;r.ep=ep;
     if(pm){r.px=ep[0];r.py=ep[1];}if(sc)irvjStSet(r,t);
     const so=irvSilOn(t),fxd=contactFix(t,VIEW);if(so!==r.so||fxd!==r.fxd){r.so=so;r.fxd=fxd;r.need=true;} // 内核认出 / 定位变了:轮廓与亮核跟着重画(静止的石头不会因为挪动而重贴)。fxd 不叫 fx:r.fx 是 irvjStSet 存的机头朝向
     const kn=adminMode||fxd,kc=kn!==r.kn;r.kn=kn; // 定位与否变了:看不看得见要重判(定位了就不受三道门挡)
-    {const op=so?viewPos(t):null;r.smv=!!op&&(!r.op||r.op[0]!==op[0]||r.op[1]!==op[1]);r.op=op?[op[0],op[1]]:null;if(r.smv)r.need=true;} // 轮廓画在我方知道的位置(用户选甲:物体本身;红晕按红外那一层略偏、翻涌)
+    {const op=so?viewPos(t):null;r.smv=!!op&&(!r.op||r.op[0]!==op[0]||r.op[1]!==op[1]);if(!op)r.op=null;else if(!r.op)r.op=[op[0],op[1]];else{r.op[0]=op[0];r.op[1]=op[1];}if(r.smv)r.need=true;} // 轮廓画在我方知道的位置(用户选甲:物体本身;红晕按红外那一层略偏、翻涌)
     if(r.ph){const g=irvGlyph(t),bR=irvBlobRt(t,g,ep[2]);if(Math.abs(bR-r.bR)>IRV_C.R_TOL*r.bR||(IRVJ.ch-r.qs)*IRV_C.WARP*bR>=IRV_C.CHURN_STEP)r.need=true;} // 团大小变了、或翻涌累计把形状挪够了:重贴
     const chk=(gch||pm||sc||kc)?all:cm;
     if(!chk&&!om)continue;
