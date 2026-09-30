@@ -13,7 +13,7 @@
      雷达越强越亮(2026-09-29 用户:民船的雷达不强,那团光没那么亮、没那么大):光强 = 功率系数 rdvPow x 高斯,同一条色阶,
      弱雷达峰值暗、没有白芯,看得见的那圈跟着缩;团的形状仍只表示"它大概在哪"。围死的多边形按功率调暗
    ============================================================================ */
-const RDV={ARC:8,T:0.2,cov:null,cx:null,t:-1e9,zones:[],gs:[],vmax:0,EMIT_TOP:2,QN:16},RDV_U=[0,0];
+const RDV={ARC:8,T:0.2,cov:null,cx:null,t:-1e9,zones:[],gs:[],vmax:0,EMIT_TOP:2,QN:16},RDV_U=[0,0],RDV_RB=new Float64Array(10);
   // ARC = 扇形弧段数;T = 区域最多每 T 秒(墙钟)重算一次;gs = 单位高斯贴图(±4σ,按功率分 QN 档,每档一张);vmax = 最远可达圈按的最大航速;EMIT_TOP = 功率系数封顶的发射机(巡洋舰 2)
 function rdvHash(a,b){let h=2166136261;const s=a+'|'+b;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}h^=h>>>13;h=Math.imul(h,1274126177);return((h^(h>>>16))>>>0)/4294967296;}
 function rdvEsmBrg(E,L,k){return k.tb+(rdvHash(L.id||'bcn',E.id)*2-1)*k.half*0.6;} // 这条静听记录画在哪个方位:量到的方位 + 每一对固定的偏移(± 0.6 x 半宽,随积累收窄);雷达异常圈也读它
@@ -41,6 +41,9 @@ function rdvSelected(E){ // 选中的那艘:虚线轮廓 + 天体身后的雷达
   if(envHasLight()&&!(ENV.bodies.length&&envInShadow(E.pos))){const u=envSunDirAt(E.pos,RDV_U),F=envRfSun(),al=(0.05*(1+1.5*F.b)).toFixed(3);   // 射频噪声锥:四档由外往里叠,越往里越亮;射电暴时按暴发强度变宽变亮(同 envRfNoise 那一份)
     if(u){const a=Math.atan2(u[1],u[0]);for(let i=3;i>=0;i--){const w=F.w[i];ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.arc(p[0],p[1],R,a-w,a+w);ctx.closePath();ctx.fillStyle='rgba(255,200,80,'+al+')';ctx.fill();}
       ctx.fillStyle='#ffc850';ctx.font='11px "Microsoft YaHei",sans-serif';const q=Math.min(R*0.6,180);ctx.fillText(F.b>0?'恒星射电暴':'恒星噪声',p[0]+Math.cos(a)*q,p[1]+Math.sin(a)*q);}}
+  {const on=envRfBodiesOn(),o=RDV_RB;for(let b=0;b<ENV.bodies.length;b++){if(!on[b])continue;envRfBodyCone(ENV.bodies[b],E.pos,o);const a=Math.atan2(o[1],o[0]); // 乙 正在吵的射电天体:同样四档由外往里叠,紫色(同 envRfNoise 那一份锥)
+    for(let i=3;i>=0;i--){const w=o[6+i];ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.arc(p[0],p[1],R,a-w,a+w);ctx.closePath();ctx.fillStyle='rgba(200,150,255,0.05)';ctx.fill();}
+    ctx.fillStyle='#c8a0ff';ctx.font='11px "Microsoft YaHei",sans-serif';const q=Math.min(R*0.6,180);ctx.fillText('天体射电',p[0]+Math.cos(a)*q,p[1]+Math.sin(a)*q);}}
   for(const b of ENV.bodies){const dx=b.x-E.pos[0],dy=b.y-E.pos[1],D=Math.hypot(dx,dy);if(D<=b.r||D-b.r>Rw)continue;
     const a0=Math.atan2(dy,dx),hh=Math.asin(b.r/D),t=Math.sqrt(D*D-b.r*b.r),F=Rw*2;
     const Q=[[Math.cos(a0-hh)*t,Math.sin(a0-hh)*t],[Math.cos(a0-hh)*F,Math.sin(a0-hh)*F],[Math.cos(a0+hh)*F,Math.sin(a0+hh)*F],[Math.cos(a0+hh)*t,Math.sin(a0+hh)*t]];

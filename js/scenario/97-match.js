@@ -61,7 +61,8 @@ function matchGenWorld(seed,B,R){
     for(let n=Math.round(rr([B.CNT[0]-0.49,B.CNT[1]+0.49])),i=0;i<n;i++){const kind=B.TYPES[Math.floor(r()*B.TYPES.length)];w.belts.push(Object.assign({kind:kind},par()));}
     for(const b of w.bodies)if(r()<B.RING_P){const q=par();q.n=Math.round(q.n/2);w.belts.push(Object.assign({kind:'行星环',x:b.x,y:b.y,br:b.r},q));}}
   { const q=envRng(seed*7+5); // 2026-09-30 射电(用户拍板):另一条种子随机流,前面的地形不变
-    if(w.stars)w.stars[0].rfb=envRfBursts(q);} // 甲 恒星射电暴的时间表
+    if(w.stars)w.stars[0].rfb=envRfBursts(q); // 甲 恒星射电暴的时间表
+    for(const b of w.bodies)b.rf=envRfBodySched(q);} // 乙 哪些天体是射电天体、什么时候在吵
   return w;
 }
 function matchSync(){ // 顶栏钮的字与提示跟着当前场景走(进 / 出对局、场景菜单切走,都经过 initFleet ⇒ 由它调)

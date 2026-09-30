@@ -58,6 +58,7 @@ let scMTI2 = 0, scRfC2 = new Float64Array(4), scRfN = new Float64Array(4); // EN
 let scDLit = null, scDSX = null, scDSY = null; // ENV2 观测方看得见光源(Uint8)+ 从它指向光源的方向(位置型恒星每船不同)
 let scTDir = null, scTBg = null, scTSh = null, scCOn = 0; // ENV2 目标:这一对跟方向有关(Uint8)/ 云背景 / 在影子里(Uint8),精算步不重算
 let scON = 0, scOCap = 0, scOX = null, scOY = null, scOR2 = null; // ENV2 天体摊平(遮挡的内联副本读)
+let scRbN = 0, scRbCap = 0, scRbU = null, scRbC = null; const scRbX = new Float64Array(4), scRbT = new Float64Array(10); // 乙 正在吵的射电天体:每 (探测方, 天体) 的方向与四档 cos^2 门槛、四档噪声增量(sensePrepare 填)
 let scLitC2 = 1;                   // ENV2 光源禁区的 cos^2 半角
 const scT2 = [0, 0];               // ENV2 sensePrepare 的两格草稿
 let scPairLo = 0;                  // ENV2 最近一次精算的有效亮度
@@ -161,6 +162,10 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
   scLitC2 = ENV.stars.length ? ENV.stars[0].c2 : 1;
   scMTI2 = envClutterOn() ? ENV_CFG.MTI_V * ENV_CFG.MTI_V : 0; // ENV2 杂波源:天体盘面、小行星
   { const R = envRfSun(); for (let i = 0; i < 4; i++) { scRfC2[i] = R.c2[i]; scRfN[i] = R.n[i]; } } // 与 envRfNoise 同一份四档(world/12 envRfSun,含甲 恒星射电暴,随 simTime 变)
+  { const on = envRfBodiesOn(), X = envRfBodyX(); let m = 0; for (let b = 0; b < on.length; b++) if (on[b]) m++; scRbN = m; for (let i = 0; i < 4; i++) scRbX[i] = X[i]; // 乙 与 envRfNoise 同一份锥(world/12 envRfBodyCone)
+    if (m > 0) { if (nd * m > scRbCap) { scRbCap = Math.max(16, nd * m * 2); scRbU = new Float64Array(2 * scRbCap); scRbC = new Float64Array(4 * scRbCap); }
+      for (let j = 0; j < nd; j++) { const d = j < dets.length ? dets[j] : bcons[j - dets.length]; let q = j * m;
+        for (let b = 0; b < on.length; b++) { if (!on[b]) continue; envRfBodyCone(ENV.bodies[b], d.pos, scRbT); scRbU[2 * q] = scRbT[0]; scRbU[2 * q + 1] = scRbT[1]; for (let i = 0; i < 4; i++) scRbC[4 * q + i] = scRbT[2 + i]; q++; } } } }
   const B = ENV.bodies; senseGrowO(B.length); scON = B.length;
   for (let b = 0; b < scON; b++) { scOX[b] = B[b].x; scOY[b] = B[b].y; scOR2[b] = B[b].r2; }
   let mIR = 0, mRF = 0, mACT = 0;
@@ -215,6 +220,7 @@ function sensePairGrades(j, ti) {
   if (d2 < r) g |= 1;
   let nz = 1; // ENV2 恒星射频噪声锥(静听与照射):视线朝光源的夹角落在哪一档;观测方在影子里 scDLit=0,不加。与 envRfNoise 同式
   if (scDLit[j] === 1) { const k = -(dx * scDSX[j] + dy * scDSY[j]); if (k > 0) { const kk = k * k, l2 = dx * dx + dy * dy; if (kk > l2 * scRfC2[3]) nz = kk > l2 * scRfC2[0] ? scRfN[0] : (kk > l2 * scRfC2[1] ? scRfN[1] : (kk > l2 * scRfC2[2] ? scRfN[2] : scRfN[3])); } }
+  if (scRbN > 0) { const l2 = dx * dx + dy * dy; for (let b = 0; b < scRbN; b++) { const q = j * scRbN + b, k = -(dx * scRbU[2 * q] + dy * scRbU[2 * q + 1]); if (k > 0) { const kk = k * k, o = 4 * q; if (kk > l2 * scRbC[o + 3]) nz += kk > l2 * scRbC[o] ? scRbX[0] : (kk > l2 * scRbC[o + 1] ? scRbX[1] : (kk > l2 * scRbC[o + 2] ? scRbX[2] : scRbX[3])); } } } // 乙 正在吵的射电天体方向再加一份(噪声功率相加,按天体顺序)。与 envRfNoise 同式
   const sr = scSigRF[ti];
   if (sr !== 0) { r = sr * scKRF[j]; const dn = d2 * nz; if (dn < r) g |= 4; } // 静默目标 sigRF 恒 0,这一路整段跳过;单程:距离按 噪声^(-1/2)
   r = scRefl[ti] * scKACT[j];

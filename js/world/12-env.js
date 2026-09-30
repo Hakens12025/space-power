@@ -37,6 +37,7 @@
 const ENV_CFG={
   MTI_V:30,
   RF_SUN:{K:30,E:[1,1.5,2,3],M:[1,1.2,1.75,2.5]}, // ENV2 恒星射频噪声锥(照 雷达效果.html):锥内噪声 1+K,往外按 (半角/夹角)^4 淡出;热循环不许反三角,分四档:夹角 <= E[i] 倍光源半角取 1 + K/M[i]^4,三倍半角之外不管
+  RF_BODY:{P:0.5,K:6,E:[1,1.5,2,3],SEG:[60,180]}, // 乙 天体射电(2026-09-30 用户拍板):每个天体按种子 P 的概率是射电天体;吵的时候朝它的方向噪声 1 + K(锥心 7 倍),四档半宽 = E[i] x 天体视半径,淡出同恒星(RF_SUN.M);吵 / 静交替,每段在 SEG 游戏秒里均匀取(约一半时间在吵)
   RF_BURST:{K:8,W:1.5,GAP:200,DUR:[20,60],RISE:3,FALL:10,T_MAX:36000}, // 甲 恒星射电暴(2026-09-30 用户拍板):暴发时噪声系数 x K(锥心 241 倍)、锥宽 x W;两次之间空 GAP 游戏秒(指数分布的均值,加上持续 ⇒ 平均 240 秒一次),持续 DUR,开头 RISE 秒升起、结尾 FALL 秒回落;时间表生成到 T_MAX 秒
   CLUT_RES:4000*CFG.scale,AST_KM:800*CFG.scale, // 2026-09-26 x1/5(单局地图):原 20000 / 4000。ENV2 雷达杂波:贴着天体盘面 / 小行星本体(体型 x AST_KM)CLUT_RES 以内的慢目标,回波混进杂波(过 MTI)           // 动目标显示门限 km/s:场内径向速度低于它的回波被当成杂波。DD 速度档 250 / 500 / 800,所以"在动"几乎都滤不掉,停下来 / 贴着切向走才滤得掉
   SUN_HALF_DEG:10,    // 恒星禁区的缺省半角(度)
@@ -74,7 +75,7 @@ function envReset(w){
   const st=[],bd=[],cl=[],ast=[],blt=[];
   for(const s of (w&&w.stars)||[]){const h=num(s.half,ENV_CFG.SUN_HALF_DEG)*Math.PI/180,c=Math.cos(h); // ENV2 位置型恒星;half 单位是度,c2 = cos^2 半角
     st.push(F({x:s.x,y:s.y,r:num(s.r,ENV_CFG.STAR_R),half:h*180/Math.PI,c2:c*c,rfb:Array.isArray(s.rfb)?F(s.rfb.slice()):null}));} // rfb = 射电暴时间表 [开始, 持续, …](对局按种子生成,envRfBursts);没有 = 不暴发
-  for(const b of (w&&w.bodies)||[])bd.push(F({x:b.x,y:b.y,r:b.r,r2:b.r*b.r,heat:num(b.heat,ENV_CFG.BODY_HEAT),name:b.name||'天体'})); // ENV2 天体:XY 上无限高的柱,挡视线、投影子
+  for(const b of (w&&w.bodies)||[])bd.push(F({x:b.x,y:b.y,r:b.r,r2:b.r*b.r,heat:num(b.heat,ENV_CFG.BODY_HEAT),name:b.name||'天体',rf:b.rf?F({on0:!!b.rf.on0,sw:F(b.rf.sw.slice())}):null})); // ENV2 天体:XY 上无限高的柱,挡视线、投影子;rf = 乙 射电开关表(envRfBodySched),没有 = 不是射电天体
   for(const c of (w&&w.clouds)||[]){const a=num(c.a,D.A),b=num(c.b,D.B),ang=num(c.ang,D.ANG),r=(D.R2+D.WBR)*Math.max(a,b); // ENV2 尘埃云:生成点 (x,y) + 椭圆本体;r = 浓度可能非 0 的外接圆
     cl.push(F({x:c.x,y:c.y,a:a,b:b,ang:ang,ca:Math.cos(ang*Math.PI/180),sa:Math.sin(ang*Math.PI/180),r:r,r2:r*r,seed:c.seed|0,v:num(c.v,D.V),dark:num(c.dark,D.DARK)}));}
   for(const a of (w&&w.asteroids)||[])ast.push(F({x:a.x,y:a.y,r:a.r,n:a.n|0,seed:a.seed|0,smin:num(a.smin,ENV_CFG.ROCK_SFD.MIN),smax:num(a.smax,ENV_CFG.ROCK_SFD.MAX),clear:num(a.clear,0),name:a.name||'小行星'})); // ENV2 小行星:只用来撒石头,不带光学杂波、不带 MTI
@@ -111,14 +112,32 @@ function envInClutter(p,self){ // ENV2 p 在雷达杂波里:贴着天体盘面�
   return false;
 }
 function envClutterOn(){if(ENV.bodies.length)return true;for(const k of rocks)if(k.ast&&!k.dead)return true;return false;} // ENV2 场上有没有杂波源
-function envRfNoise(from,to){ // ENV2 从 from 朝 to 的射频噪声倍率(>= 1):朝光源的锥里被恒星噪声淹;观测方在天体影子里 ⇒ 光源被挡,不加。⚠ 22-percep 热循环里有同式的内联副本(四档都取 envRfSun)
-  if(!envHasLight())return 1;
-  if(ENV.bodies.length&&envInShadow(from))return 1;
-  const u=envSunDirAt(from,ENV_T2);if(!u)return 1;
-  const vx=to[0]-from[0],vy=to[1]-from[1],k=vx*u[0]+vy*u[1];if(!(k>0))return 1;
-  const kk=k*k,l2=vx*vx+vy*vy,R=envRfSun();
-  for(let i=0;i<4;i++)if(kk>l2*R.c2[i])return R.n[i];
-  return 1;
+function envRfNoise(from,to){ // ENV2 从 from 朝 to 的射频噪声倍率(>= 1):朝光源的锥里被恒星噪声淹(观测方在天体影子里 ⇒ 光源被挡,不加);乙 朝正在吵的射电天体再加一份(噪声功率相加,按天体顺序)。⚠ 22-percep 热循环里有同式的内联副本(四档都取 envRfSun / envRfBodyCone)
+  const vx=to[0]-from[0],vy=to[1]-from[1],l2=vx*vx+vy*vy;let n=1;
+  if(envHasLight()&&!(ENV.bodies.length&&envInShadow(from))){const u=envSunDirAt(from,ENV_T2);
+    if(u){const k=vx*u[0]+vy*u[1];if(k>0){const kk=k*k,R=envRfSun();for(let i=0;i<4;i++)if(kk>l2*R.c2[i]){n=R.n[i];break;}}}}
+  const B=ENV.bodies;
+  if(B.length){const on=envRfBodiesOn(),o=ENV_RFC,X=envRfBodyX();
+    for(let b=0;b<B.length;b++){if(!on[b])continue;envRfBodyCone(B[b],from,o);const k=vx*o[0]+vy*o[1];if(!(k>0))continue;const kk=k*k;for(let i=0;i<4;i++)if(kk>l2*o[2+i]){n+=X[i];break;}}}
+  return n;
+}
+const ENV_RFC=new Float64Array(10),ENV_RFX=new Float64Array(4),ENV_RFO={on:new Uint8Array(0),t:NaN,rev:-1}; // 乙 草稿:一个天体的噪声锥 / 四档噪声增量 / 此刻哪些天体在吵(按 simTime 与 ENV.rev 缓存)
+function envRfBodySched(rnd){ // 乙 一个天体的射电开关表:不是射电天体给 null;是 ⇒ {on0 开局吵不吵, sw 切换时刻};rnd = 对局的种子随机流
+  const C=ENV_CFG.RF_BODY;if(!(rnd()<C.P))return null;
+  const on0=rnd()<0.5,sw=[];for(let t=0;;){t+=C.SEG[0]+rnd()*(C.SEG[1]-C.SEG[0]);if(t>ENV_CFG.RF_BURST.T_MAX)break;sw.push(Math.round(t));}
+  return {on0:on0,sw:sw};
+}
+function envRfBodiesOn(){ // 乙 此刻每个天体在不在吵(Uint8,下标同 ENV.bodies)
+  const R=ENV_RFO,B=ENV.bodies;if(R.t===simTime&&R.rev===ENV.rev)return R.on;
+  if(R.on.length!==B.length)R.on=new Uint8Array(B.length);
+  for(let b=0;b<B.length;b++){const f=B[b].rf;let on=0;if(f){let n=0;while(n<f.sw.length&&f.sw[n]<=simTime)n++;on=(f.on0?1:0)^(n&1);}R.on[b]=on;}
+  R.t=simTime;R.rev=ENV.rev;return R.on;
+}
+function envRfBodyX(){const C=ENV_CFG.RF_BODY,M=ENV_CFG.RF_SUN.M;for(let i=0;i<4;i++)ENV_RFX[i]=C.K/Math.pow(M[i],4);return ENV_RFX;} // 乙 四档噪声增量 K / M[i]^4
+function envRfBodyCone(b,from,o){ // 乙 从 from 看天体 b 的噪声锥:o[0..1] = 指向天体的单位向量,o[2..5] = 四档 cos² 半宽,o[6..9] = 四档半宽(弧度);半宽 = E[i] x 视半径 asin(r / 距离)
+  const dx=b.x-from[0],dy=b.y-from[1],D=Math.hypot(dx,dy)||1,a=Math.asin(Math.min(1,b.r/D)),E=ENV_CFG.RF_BODY.E;
+  o[0]=dx/D;o[1]=dy/D;for(let i=0;i<4;i++){const w=Math.min(Math.PI/2,E[i]*a),c=Math.cos(w);o[2+i]=c*c;o[6+i]=w;}
+  return o;
 }
 const ENV_RF={c2:new Float64Array(4),n:new Float64Array(4),w:new Float64Array(4),b:0,t:NaN,rev:-1}; // 恒星噪声锥四档:cos² 半宽 / 噪声倍率 / 半宽(弧度),b = 暴发强度;按 simTime 与 ENV.rev 缓存
 function envRfSun(){ // 恒星噪声锥此刻的四档(含甲 恒星射电暴:噪声系数 x (1 + (K-1) b)、锥宽 x (1 + (W-1) b));envRfNoise、22-percep 的 sensePrepare、雷达画面共用这一份
