@@ -413,14 +413,10 @@ function drawSignalView() {
 }
 
 /* ================= SN6 接触层:定得出位置的接触画误差椭圆(跟着「缩圈」钮);定不出位置的(热区)地图上不画(用户 2026-09-25)================= */
-function drawMissileIntent(g){ // v129:选中导弹/网→显示目标虚线、目的地标记、触发圈、火控母舰连线
+function drawMissileIntent(g){ // v129:选中导弹/网→显示目标虚线、目的地标记、火控母舰连线(触发圈 2026-09-30 不画了)
   if(!adminMode&&g.shooter&&g.shooter.side!=='blue')return; // 2026-09-28 敌方弹的意图(目标、引导舰)我方不知道
   const sp=toScreen(g.pos[0],g.pos[1]);
-  if(g.trigRadius){ // 触发圈(雷/区域齐射/网雷,选中即画)
-    const r=g.trigRadius*cam.zoom;
-    ctx.strokeStyle='rgba(79,224,255,.35)';ctx.lineWidth=1;
-    ctx.beginPath();ctx.arc(sp[0],sp[1],r,0,6.283);ctx.stroke();
-  }
+  // 2026-09-30 用户:不显示触发圈(原来选中即画一个蓝圈,半径 = trigRadius)
   // 目的地:布雷/落点 > 锁定目标 > 最后已知
   let dest=null,destLbl='',destCol='rgba(255,255,255,.45)';
   if(g.park&&g.parkPt){dest=g.parkPt;destLbl='📍布雷点';destCol='rgba(255,154,85,.95)';}
