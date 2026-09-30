@@ -279,20 +279,22 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
       ...(m.vPeak?[['巡航',Math.round(m.vPeak)],['终端',Math.round(m.vTerm)]]:[]),
       ['触发圈',Math.round((m.trigRadius||12000*CFG.scale)/1000)+'k'], // 2026-09-26 x1/5(单局地图):原 60000
     ].map(it=>`<span class="fi"><i>${it[0]}</i><b>${it[1]}</b></span>`).join('');
-    const stt=m.mine?'伏击雷 · 静默待命':m.cruise?'巡飞搜索 · 导引头开着':m.park?(m.mineOk?'飞向布雷点':'飞向点位 · 导引头搜索'):(m.netOff?'组网包抄':(m.coastT>0?'脱锁滑行':'突击中'));
-    const tgt=m.target?(m.target.side!==undefined?xhName(m.target):(m.target.pos?'区域点':'—')):(m.mine?'无(待触发)':'无');
-    const tq=m.target?(m.target.side===undefined?m.target.pos:(m.guideMode==='self'?m.target.pos:viewPos(m.target))):null,tdist=tq?V.len(V.sub(tq,m.pos)):0; // 2026-09-28 名字打码、距离按我方知道的位置(导引头自己看见的用真值)
-    const fu=Math.max(0,Math.min(100,m.fuel||0)); // 燃料满值100s,直接当百分比
+    const rp=(m.shooter&&m.shooter.side===VIEW&&!adminMode&&!projSeen(m)&&m.rep)?m.rep:null; // 2026-09-30 断链又看不见:只报最后一次回报的(位置取推测位置),不读真值
+    const mv=rp?Object.assign(Object.create(m),{mine:rp.mine,cruise:rp.cruise,park:rp.park,mineOk:rp.mineOk,coastT:0,target:rp.tgt,fuel:rp.fuel,count:rp.count,vel:[rp.dir[0]*rp.spd,rp.dir[1]*rp.spd,rp.dir[2]*rp.spd],pos:m.pg?mslPredPos(m.pg,simTime):rp.pos,guideMode:'coast'}):m;
+    const stt=mv.mine?'伏击雷 · 静默待命':mv.cruise?'巡飞搜索 · 导引头开着':mv.park?(mv.mineOk?'飞向布雷点':'飞向点位 · 导引头搜索'):(mv.netOff?'组网包抄':(mv.coastT>0?'脱锁滑行':'突击中'));
+    const tgt=mv.target?(mv.target.side!==undefined?xhName(mv.target):(mv.target.pos?'区域点':'—')):(mv.mine?'无(待触发)':'无');
+    const tq=mv.target?(mv.target.side===undefined?mv.target.pos:(mv.guideMode==='self'?mv.target.pos:viewPos(mv.target))):null,tdist=tq?V.len(V.sub(tq,mv.pos)):0; // 2026-09-28 名字打码、距离按我方知道的位置(导引头自己看见的用真值)
+    const fu=Math.max(0,Math.min(100,mv.fuel||0)); // 燃料满值100s,直接当百分比
     box.innerHTML=`
       <div class="hpbar"><i style="width:${fu}%;background:${fu>30?'var(--state-active)':'var(--state-warn)'}"></i></div>
-      <div class="row"><span class="k">燃料</span><span class="v">${m.fuel>0?Math.ceil(SHOW.t(m.fuel))+'s':'耗尽(滑行)'}</span></div>
+      <div class="row"><span class="k">燃料</span><span class="v">${mv.fuel>0?Math.ceil(SHOW.t(mv.fuel))+'s':'耗尽(滑行)'}</span></div>
       <div class="row"><span class="k">状态</span><span class="v">${stt}</span></div>
-      <div class="row"><span class="k">剩余</span><span class="v">${m.count||12} 颗</span></div>
-      <div class="row"><span class="k">速度</span><span class="v">${Math.round(SHOW.v(V.len(m.vel)))} km/s</span></div>
+      <div class="row"><span class="k">剩余</span><span class="v">${mv.count||12} 颗</span></div>
+      <div class="row"><span class="k">速度</span><span class="v">${Math.round(SHOW.v(V.len(mv.vel)))} km/s</span></div>
       <div class="row"><span class="k">目标</span><span class="v">${tgt}${tdist?' · '+Math.round(tdist/1000)+'k':''}</span></div>
-      <div class="row"><span class="k">引导</span><span class="v">${guideDesc(m)}</span></div>
-      <div class="row"><span class="k">数据链</span><span class="v">${m.online?'在网上':'断链'}</span></div>
-      <div class="row"><span class="k">到点</span><span class="v">${m.mine?'已布雷':(m.mineOk?'停下变雷':'一直飞(巡飞搜索)')}</span></div>`;
+      <div class="row"><span class="k">引导</span><span class="v">${guideDesc(mv)}</span></div>
+      <div class="row"><span class="k">数据链</span><span class="v">${m.online?'在网上':(rp?'断链 · 最后回报 '+Math.round(SHOW.t(simTime-rp.t))+' s 前(推测)':'断链')}</span></div>
+      <div class="row"><span class="k">到点</span><span class="v">${mv.mine?'已布雷':(mv.mineOk?'停下变雷':'一直飞(巡飞搜索)')}</span></div>`;
     updateCmdBar([]); // 导弹只有底栏「变雷」一颗钮(cbMine)
     return;
   }

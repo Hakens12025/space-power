@@ -313,6 +313,15 @@ function drawProjectiles(){ // 弹丸/导弹
     }
   }
 }
+function drawMslPred(){ // 2026-09-30 推测弹标(weapons/54 MSL_PRED):我方断链又看不见的导弹、看不见的炮弹,在推测位置画暗淡的弹标;真弹看得见时不画
+  for(const g of MSL_PRED){if(g.side!==VIEW&&!adminMode)continue;if(g.src&&!g.src.done&&projSeen(g.src))continue;
+    const P=mslPredPos(g,simTime+acc),s=toScreen(P[0],P[1]);if(s[0]<-10||s[0]>W+10||s[1]<-10||s[1]>H+10)continue;
+    if(g.k==='mac'){ctx.fillStyle='rgba(255,255,255,.3)';ctx.fillRect(s[0]-2,s[1]-2,4,4);continue;}
+    const mine=g.mine||(g.mineOk&&g.aim&&g.spd*(simTime+acc-g.t)>=Math.hypot(g.aim[0]-g.pos[0],g.aim[1]-g.pos[1],g.aim[2]-g.pos[2]));
+    if(mine){ctx.fillStyle='rgba(255,120,70,.3)';ctx.beginPath();ctx.moveTo(s[0],s[1]-6);ctx.lineTo(s[0]+6,s[1]);ctx.lineTo(s[0],s[1]+6);ctx.lineTo(s[0]-6,s[1]);ctx.closePath();ctx.fill();continue;}
+    ctx.strokeStyle='rgba(255,255,255,.25)';ctx.lineWidth=0.8;ctx.beginPath();ctx.arc(s[0],s[1],5,0,6.283);ctx.stroke();
+    ctx.fillStyle='rgba(255,209,102,.3)';ctx.beginPath();ctx.arc(s[0],s[1],2.5,0,6.283);ctx.fill();}
+}
 function drawSelection(){
   if(!selDrag)return;
   const x=Math.min(selDrag.x0,selDrag.x1),y=Math.min(selDrag.y0,selDrag.y1),w=Math.abs(selDrag.x1-selDrag.x0),h=Math.abs(selDrag.y1-selDrag.y0);

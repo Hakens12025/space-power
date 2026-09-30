@@ -17,9 +17,49 @@ function mslNetStep(dt){
   const MS2=MSL_LINK.MS*MSL_LINK.MS,MM2=MSL_LINK.MM*MSL_LINK.MM;
   for(const side of ['blue','red']){
     const F=[];for(const s of ships)if(s.side===side&&!s.dead)F.push(s.pos);for(const o of rockObjs())if(o.kind==='buoy'&&o.side===side&&!o.dead)F.push(o.pos);
-    const M=projectiles.filter(p=>p.type==='missile'&&!p.done&&p.shooter&&p.shooter.side===side),q=[];
+    const M=projectiles.filter(p=>p.type==='missile'&&!p.done&&p.shooter&&p.shooter.side===side),q=[],was=M.map(p=>p.online!==false);
     for(const p of M){p.online=false;for(const f of F){const dx=p.pos[0]-f[0],dy=p.pos[1]-f[1],dz=p.pos[2]-(f[2]||0);if(dx*dx+dy*dy+dz*dz<MS2){p.online=true;q.push(p);break;}}} // 直连舰队
     for(let i=0;i<q.length;i++){const a=q[i];for(const b of M){if(b.online)continue;const dx=a.pos[0]-b.pos[0],dy=a.pos[1]-b.pos[1],dz=a.pos[2]-b.pos[2];if(dx*dx+dy*dy+dz*dz<MM2){b.online=true;q.push(b);}}} // 经弹弹链接力
+    M.forEach((p,i)=>{if(p.online){mslRep(p);if(p.pg)mslPredDel(p.pg);}else if(was[i]&&!p.pg&&p.rep)mslPredAdd(p,'msl');}); // 在网上每拍回报;刚断链按最后一次回报建推测
+    for(const p of projectiles)if(p.type==='mac'&&!p.done&&!p.pg&&p.shooter&&p.shooter.side===side)mslPredAdd(p,'mac'); // 炮弹:出膛状态本来就知道,直线外推
+  }
+  mslPredStep();
+}
+/* 2026-09-30 推测弹标(用户:断链又看不见的导弹、看不见的炮弹给一个推测位置,画暗淡的弹标):按最后一次回报(导弹)/ 出膛状态(炮弹)往前推。
+   每条独立于真实弹丸(弹没了推测还在,不泄漏);只在这几种情况下撤:再连上网、推出游玩区、推进已知天体 / 恒星、推到我方可见光圈里却没看见(同航迹记忆 memGone)。
+   看得见的时候按看到的重新起算。导弹的推法 = 它断链时在执行的程序:雷不动;飞向点位 / 预计拦截点(mslCoastPt),到点勾了「变雷」停下,没勾接着直飞;巡飞直飞。速度按回报时的 */
+const MSL_PRED=[];
+function mslCoastPt(p){ // 掉进脱锁时的预计拦截点(按导弹自己的目标记录外推);guideSide 与推测共用,没有记录给 null
+  const bk=mslBasket(p);if(!bk)return null;const kv=p.tk.vel,tt=Math.max(0.3,Math.hypot(bk.x-p.pos[0],bk.y-p.pos[1],bk.z-p.pos[2])/Math.max(500,V.len(V.sub(p.vel,kv))));
+  return [bk.x+kv[0]*tt,bk.y+kv[1]*tt,bk.z+kv[2]*tt];
+}
+function mslRep(p){ // 在网上时每拍记一份回报(原地改):位置、方向、速率、在执行的程序、剩几颗、剩多少油、在追谁
+  let r=p.rep;if(!r)r=p.rep={t:0,pos:[0,0,0],dir:[1,0,0],spd:0,aim:null,mine:false,mineOk:false,park:false,cruise:false,count:0,fuel:0,tgt:null};
+  const vn=V.len(p.vel);r.t=simTime;r.pos[0]=p.pos[0];r.pos[1]=p.pos[1];r.pos[2]=p.pos[2];if(vn>0){r.dir[0]=p.vel[0]/vn;r.dir[1]=p.vel[1]/vn;r.dir[2]=p.vel[2]/vn;}r.spd=vn;
+  r.mine=!!p.mine;r.mineOk=!!p.mineOk;r.park=!!p.park;r.cruise=!!p.cruise;r.count=p.count;r.fuel=p.fuel;r.tgt=p.target;
+  r.aim=(p.mine||p.cruise)?null:(p.park&&p.parkPt?p.parkPt.slice():mslCoastPt(p));
+}
+function mslPredAdd(p,k){const r=p.rep,g=k==='mac'?{k:k,side:p.shooter.side,src:p,t:simTime,pos:p.pos.slice(),vel:p.vel.slice()}:{k:k,side:p.shooter.side,src:p,t:r.t,pos:r.pos.slice(),dir:r.dir.slice(),spd:r.spd,aim:r.aim&&r.aim.slice(),mine:r.mine,mineOk:r.mineOk};MSL_PRED.push(g);p.pg=g;}
+function mslPredDel(g){const i=MSL_PRED.indexOf(g);if(i>=0)MSL_PRED.splice(i,1);if(g.src)g.src.pg=null;}
+function mslPredPos(g,now){ // 推测记录此刻在哪
+  const u=now-g.t;
+  if(g.k==='mac')return [g.pos[0]+g.vel[0]*u,g.pos[1]+g.vel[1]*u,g.pos[2]+g.vel[2]*u];
+  if(g.mine)return g.pos.slice();
+  const s=g.spd*u;
+  if(g.aim){const dx=g.aim[0]-g.pos[0],dy=g.aim[1]-g.pos[1],dz=g.aim[2]-g.pos[2],d=Math.hypot(dx,dy,dz)||1;
+    if(s<d)return [g.pos[0]+dx/d*s,g.pos[1]+dy/d*s,g.pos[2]+dz/d*s];
+    if(g.mineOk)return g.aim.slice();
+    return [g.aim[0]+dx/d*(s-d),g.aim[1]+dy/d*(s-d),g.aim[2]+dz/d*(s-d)];}
+  return [g.pos[0]+g.dir[0]*s,g.pos[1]+g.dir[1]*s,g.pos[2]+g.dir[2]*s];
+}
+function mslPredStep(){ // 每个感知节拍:看得见的重新起算,该撤的撤
+  const obs=envObstacles();
+  for(let i=MSL_PRED.length-1;i>=0;i--){const g=MSL_PRED[i],src=g.src,alive=!!src&&!src.done;
+    if(alive&&trkSees(g.side,src)){g.t=simTime;g.pos=src.pos.slice();if(g.k==='mac')g.vel=src.vel.slice();else{const vn=V.len(src.vel);if(vn>0){g.dir=[src.vel[0]/vn,src.vel[1]/vn,src.vel[2]/vn];g.spd=vn;}}continue;}
+    const P=mslPredPos(g,simTime);let gone=!!ARENA&&!arenaIn(P);
+    if(!gone)for(const b of obs){const dx=P[0]-b.x,dy=P[1]-b.y;if(dx*dx+dy*dy<b.r2){gone=true;break;}}
+    if(!gone)for(const s of ships){if(s.side!==g.side||s.dead)continue;const R=s.visR||COV.VIS_R,dx=P[0]-s.pos[0],dy=P[1]-s.pos[1];if(dx*dx+dy*dy<R*R){gone=true;break;}}
+    if(gone)mslPredDel(g);
   }
 }
 function guideMissiles(){ // 每tick重算引导分配(无状态:通道天然可回收/跨舰交接)——自引导优先,富余辅助
@@ -131,9 +171,7 @@ function guideSide(side){ // 一方数据链网络的引导分配(v125:按网分
   // 剩余未引导(超范围+没通道 或 目标未点亮)→ 脱锁。DS192(用户令):不再飞"目标当时所在点",改飞"按目标当前矢量外推的预测命中点";
   // 到点没人就变雷待命,网络恢复引导时会被上面几遍重新接管。
   for(const p of ms){if(p.needGuide&&!p.guided){const enter=p.guideMode!=='coast';p.guideMode='coast';if(enter||!p.lastKpos){ // 刚掉进脱锁就按记录重算一次预计拦截点(原来引导时 lastKpos 每拍写成目标此刻的位置,掉线后飞向那个旧点)
-    const bk=mslBasket(p),kv=p.tk?p.tk.vel:[0,0,0]; // 2026-09-30 按导弹自己的目标记录外推(在网上时它随母舰的估计更新,等于原来读 contactPos);没有记录就沿当前航向滑行
-    const tt=bk?Math.max(0.3,Math.hypot(bk.x-p.pos[0],bk.y-p.pos[1],bk.z-p.pos[2])/Math.max(500,V.len(V.sub(p.vel,kv)))):0;
-    p.lastKpos=bk?[bk.x+kv[0]*tt,bk.y+kv[1]*tt,bk.z+kv[2]*tt]:[p.pos[0]+p.vel[0]*20,p.pos[1]+p.vel[1]*20,p.pos[2]+p.vel[2]*20];
+    p.lastKpos=mslCoastPt(p)||[p.pos[0]+p.vel[0]*20,p.pos[1]+p.vel[1]*20,p.pos[2]+p.vel[2]*20]; // 2026-09-30 按导弹自己的目标记录外推(在网上时它随母舰的估计更新,等于原来读 contactPos);没有记录就沿当前航向滑行
   }}}
 }
 function guideDesc(p){ // 信息面板:导弹引导状态
