@@ -167,7 +167,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
       if(p.chaffed){
         p.chaffT=(p.chaffT||0)+dt;
         if(p.chaffT<2){p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;return;}
-        else{p.netOff=null;p.netOffR=0;p.netD0=0;} // v135:脱锁2s滑行结束→清组网偏移直插(目标太近,旧偏移会绕圈);chaffed保留供复锁判定
+        // v135:脱锁2s滑行结束→直插(目标太近,翼面偏移会绕圈);chaffed保留供复锁判定。组网偏移 2026-10-01 已拆(54 翼面),这里不用再清
       }
       // 组网转移(DS147):目标没了——干扰复锁优先;link网(接入母舰火控)交给智能分配器按需求重分配;非link网独立重选最近
       if(!p.target||(p.target.dead&&p.online)){ // 2026-09-30 断链的不知道目标死了(照自己的记录飞,下面的脱锁路)
@@ -184,7 +184,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
             const s=trkSrc(tk),a=V.angle(pdir,V.norm(V.sub(s.pos,p.pos)));
             if(a<bestAng){bestAng=a;bestT=s;}
           });
-          if(bestT){p.target=bestT;p.chaffed=false;p.netOff=null;p.netOffR=0;p.netD0=0;}
+          if(bestT){p.target=bestT;p.chaffed=false;}
           else{ // 兜底:场上已无任何点亮目标→转脱锁,飞原目标最后位置→到点变雷待命(不漂流)。
                // 注意:按当前进入条件(lastTarget 存活且已定位)与扫描判据完全一致,lastTarget 自己必被选中,此分支逻辑上不可达;
                // 保留是为了将来放宽进入条件时不至于裸奔,不要因为"看着没用"就删。
@@ -197,7 +197,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         }else{ // 非link:独立重选最近(原逻辑,散兵游勇)
           let nt=null,nd=1e18;
           trkEach(p.shooter.side,tk=>{if(!trkGone(tk)&&trkFix(tk)&&trkPid(tk)){const s=trkSrc(tk),d=V.len(V.sub(s.pos,p.pos));if(d<nd){nd=d;nt=s;}}});
-          if(nt){p.target=nt;recomputeNetOff(p,nt);}
+          if(nt){p.target=nt;}
           else p.target=null; // 2026-09-28 没有可重选的也不自毁:下面滑行 + 导引头一路找
         }
       }
@@ -270,17 +270,17 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         evX=-dirT[1]*sw; evY=dirT[0]*sw;
       }
       let aim=[tp[0]+tv[0]*tLead+evX,tp[1]+tv[1]*tLead+evY,tp[2]+tv[2]*tLead]; // WR1:瞄估计位置
-      if(p.netOff){ // 组网包抄(v121):瞄目标+方位偏移,线性收拢(外段绕开拉开方向),距目标<2万硬性归零(内段直插必中)
-        const s=Math.max(0,Math.min(1,dist/(p.netD0||1)));
-        const shrink=dist<20000?0:s; // 2万内偏移归零:机头直接朝目标,保证收拢命中。2026-09-26 单局地图刻意不缩:3000km/s 时转弯半径约 6700km,缩到 4000 实测导弹绕靶打转、命中 0
-        aim=[aim[0]+p.netOff[0]*p.netOffR*shrink,aim[1]+p.netOff[1]*p.netOffR*shrink,aim[2]+p.netOff[2]*p.netOffR*shrink];
+      if(p.wing&&p.wSlot&&p.wW){ // 2026-10-01 两翼攻击队形(54 mslWingForm):瞄目标+翼面槽位偏移,终端 conv 内收拢(多方向同时弹着)
+        const k=dist<MSL_WING.conv?0:Math.min(1,(dist-MSL_WING.conv)/MSL_WING.convW);
+        aim=[aim[0]+p.wW[0]*p.wSlot*k,aim[1]+p.wW[1]*p.wSlot*k,aim[2]];
       }
       const dir=V.norm(V.sub(aim,p.pos));
       const coast=dist>GUIDE_SEEK&&!nearIc; // 2026-09-27 三段飞法(用户:"导弹本身的燃料控制,提升射程"):进自己导引头的范围之前是加速 / 滑行段,之后是末段
       // 速度剖面(v122):巡航vPeak高速飞(加速燃料),合适位置按距离减速到vTerm(减速燃料与加速对称),燃料对称安全帽兜底
       let spdDes=Infinity;
-      if(p.vPeak){ // 有速度剖面(所有火Missiles发射的导弹)
-        if(dist>p.decelDist)spdDes=p.vPeak; // 巡航段:高速,不耗油
+      if(p.vPeak){ // 有速度剖面(所有火Missiles发射的导弹);2026-10-01 巡航速度 = 翼面同步巡航(54 mslWingForm 解出,没排上翼 = 自己的峰值),减速点跟着同步速度重算
+        const vC=p.wing?(p.wV||p.vPeak):p.vPeak,dec0=p.wing?(p.wDec||0):p.decelDist; // 翼面的减速点按同步速度重算(可为负 = 一路巡航);不在翼里的照旧
+        if(dist>dec0)spdDes=vC; // 巡航段:同步速度(领先的被压慢一点,慢慢飞不刹车)
         else spdDes=Math.max(p.vTerm,Math.sqrt(p.vTerm*p.vTerm+2*MSL_A*dist)); // 减速段:到目标=vTerm(DS190:加速度 150)
         // DS191(用户令"越快越不好转弯,不能无脑快"):大转弯(与当前航向夹角 >~17°)限速,降速才转得动;复锁/绕行不再全速冲。
         // 朝向取速度方向 V.norm(p.vel)——弹丸没有 facing 字段(朋友版这处写的 p.facing 恒为 undefined,限速从未生效过),下面旧逻辑兜底分支用的也是速度方向。

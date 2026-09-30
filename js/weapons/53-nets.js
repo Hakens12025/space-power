@@ -1,5 +1,5 @@
 "use strict";
-/* RF1: 拆自 js/04-targeting.js L2-79(网分配器/recomputeNetOff)+ js/07-missiles.js L87-103(NET_COMM/updateNets)。纯移动无逻辑改动。 */
+/* RF1: 拆自 js/04-targeting.js L2-79(网分配器)+ js/07-missiles.js L87-103(NET_COMM/updateNets)。recomputeNetOff(组网偏移)2026-10-01 随包抄几何一起拆掉,翼面在 54 mslWingForm。 */
 /* ================= DS147 智能目标分配器:网按"目标所需网数"协同 ================= */
 let netAllocT=0; // DS147:分配器节流计时(每0.5s平衡一次)
 function netDemand(t){ // 目标需要几个网来打(舰种威胁:巡洋核心3网/护卫2网/巡游1网)
@@ -36,7 +36,7 @@ function reassignNets(side){ // 网间协同分配:待分配网(目标已灭)补
       for(const p of projectiles){
         if(p.type==='missile'&&!p.done&&p.netId===nid){
           if(p.mine||p.coastT>0)continue; // 雷/脱锁不干预
-          p.target=t;p.chaffed=false;recomputeNetOff(p,t); // 保持方向类型重算偏移
+          p.target=t;p.chaffed=false; // 2026-10-01 组网偏移已拆:翼面由 54 下一拍重排(wTgt 变了自动重新入列)
         }
       }
     }
@@ -50,33 +50,11 @@ function reassignNets(side){ // 网间协同分配:待分配网(目标已灭)补
       for(const p of projectiles){
         if(p.type==='missile'&&!p.done&&p.netId===nid){
           if(p.mine||p.coastT>0)continue;
-          p.target=top;p.chaffed=false;recomputeNetOff(p,top);
+          p.target=top;p.chaffed=false;
         }
       }
     }
   }
-}
-function recomputeNetOff(p,target){ // v135:目标转移后重算组网偏移(保持该组方向类型,第二个目标继续多方向同时弹着)
-  if(!p.shooter)return;
-  const tq=contactPos(target,p.shooter.side);if(!tq)return; // 2026-09-28 几何按发射方知道的位置算(原来读真值);交代不出就保留原偏移
-  const D0=Math.max(12000*CFG.scale,V.len(V.sub(tq,p.shooter.pos))); // 距离级(≥1.2 万才组网)。2026-09-26 x1/5(单局地图):原 60000
-  const R=Math.min(30000*CFG.scale,Math.max(6000*CFG.scale,D0*0.5)); // 2026-09-26 x1/5(单局地图):原 min 150000 / max 30000,与 52 的 netGeom 同口径
-  const si=V.norm([p.shooter.pos[0]-tq[0],p.shooter.pos[1]-tq[1],0]); // 直插方向(目标→发射舰)
-  let px=V.norm([-si[1],si[0],0]); // 垂直
-  if(!isFinite(px[0])||V.len(px)<0.5)px=[0,1,0];
-  if(p.netOff){ // 保持原方向类型:侧翼(横向分量大) vs 直插(纵向分量大)
-    const lat=Math.abs(p.netOff[0]*px[0]+p.netOff[1]*px[1]);
-    const lon=Math.abs(p.netOff[0]*si[0]+p.netOff[1]*si[1]);
-    if(lat>lon){ // 侧翼型:用新px方向,保留符号
-      const sign=(p.netOff[0]*px[0]+p.netOff[1]*px[1])>=0?1:-1;
-      p.netOff=[px[0]*sign,px[1]*sign,0];
-    }else{ // 直插型:用新si方向
-      p.netOff=[si[0],si[1],0];
-    }
-  }else{
-    p.netOff=[si[0],si[1],0];
-  }
-  p.netOffR=R;p.netD0=D0;
 }
 const NET_COMM=30000*CFG.scale; // v125:网内通信距离——断网超过此距离计时自毁。2026-09-26 x1/5(单局地图):原 150000
 function updateNets(dt){ // v125:网内连接检查(仅地雷网)——雷组离网中心>NET_COMM=断网,计时10s没回自毁;清理空网(飞行攻击不要求组间通信)

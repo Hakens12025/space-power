@@ -176,33 +176,8 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
   const baseMaxV=Math.sqrt((2*MSL_A*D0+vTerm*vTerm)/2); // DS190:加速度 200→150,系数同步 2×150=300 // 距离允许的峰值(加速+减速≈0.8D0,留巡航段)
   const baseVPeak=Math.max(vTerm,Math.min((isNet?PHYS.v(700):PHYS.v(900))*MSL_VK,baseMaxV));
   // DS190:原 baseDecel 在此计算但全函数无人读取(写进弹丸的是下面按组算的 pDecel),合并时一并清掉这个死变量
-  // 组网攻击(v121):≥2组打船+距离≥1.2万(2026-09-26 x1/5,原 6 万)→ 各组带不同方位偏移收敛,多方向包抄同时弹着
-  let netGeom=null;
-  if(isNet&&isShip&&rounds>=2&&D0>=12000*CFG.scale){ // 2026-09-26 x1/5(单局地图):组网门槛原 60000
-    const R=Math.min(30000*CFG.scale,Math.max(6000*CFG.scale,D0*0.5)); // 偏移半径=0.5×距离级:够把导弹绕到目标侧面(真·多方向),2万内归零兜底必中(56 刻意不缩)。2026-09-26 x1/5(单局地图):原 min 150000 / max 30000
-    const dirs=Math.min(rounds,3); // 方向封顶3(直插/上/下——前半球最多覆盖3扇面,正后方绕不过去)
-    const si=V.norm([shooter.pos[0]-tp0[0],shooter.pos[1]-tp0[1],0]); // 直插方向(目标→发射舰)
-    let px=V.norm([-si[1],si[0],0]); // 垂直(逆时针90°)
-    if(!isFinite(px[0])||V.len(px)<0.5)px=[0,1,0]; // 退化兜底
-    const OFF_L={1:[[1,0]],2:[[0,1],[0,-1]],3:[[0,1],[1,0],[0,-1]],4:[[0,1],[1,0],[1,0],[0,-1]]}; // 局部坐标:[1,0]=直插, [0,±1]=上下两翼;DS170:4组=121排布(上1/直2/下1,不重叠——原k%3循环第4组和第1组重叠)
-    const toW=o=>[o[0]*si[0]+o[1]*px[0],o[0]*si[1]+o[1]*px[1],0]; // 局部→世界
-    const offs=[];
-    for(let k=0;k<rounds;k++){
-      let ov=toW(OFF_L[Math.min(rounds,4)][k%Math.min(rounds,4)]); // 4组内121排布,>4循环
-      // DS178(KIMI派活):>4组循环同向重叠→每圈(lap=floor(k/4))追加lap×0.6rad角度偏移——6组齐射呈6向包抄
-      const lap=Math.floor(k/4);
-      if(lap>0){
-        // 绕固定z轴旋转(与所有组网方向不平行):绕直插轴si旋转直插组不变/绕px旋转上翼组不变——z轴对全方向有效,atan2可区分
-        const c=Math.cos(lap*0.6),s2=Math.sin(lap*0.6);
-        const cx=-ov[1],cy=ov[0],cz=0; // z×ov
-        const dot=ov[2]; // z·ov
-        ov=[ov[0]*c+cx*s2,ov[1]*c+cy*s2,ov[2]*c+cz*s2+dot*(1-c)];
-      }
-      const lateral=Math.sqrt(Math.max(0,1-(ov[0]*si[0]+ov[1]*si[1])**2)); // 偏移的横向分量(0=直插,1=侧翼)
-      offs.push({v:ov,vPeak:Math.min((isNet?PHYS.v(700):PHYS.v(900))*MSL_VK,Math.max(vTerm,baseMaxV*(1+lateral*0.12)))}); // 侧翼+12%配速(同步到达)
-    }
-    netGeom={R,offs,D0,dirs};
-  }
+  /* 2026-10-01 组网包抄几何(v121 的 OFF_L 直插/上/下翼 + 侧翼 +12% 配速)整个拆掉:多波聚集的两翼攻击队形改由 54 的 mslWingForm
+     每感知拍在簇上成形(槽位按入列次序左右交替、同步巡航速度),不在这里按单次齐射摆固定方向 */
   // v125 网实体:一次齐射=一个网(单组也算网),所有组绑定 netId
   const netId=++netSeq;
   nets.set(netId,{id:netId,mode:missileMode,groups:[],shooter,fmt:null,fctrl:'auto',manualTarget:null});
@@ -210,8 +185,7 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
     const gid=++missileGroupSeq;
     const lane=k-(rounds-1)/2;
     const off=(lane*100+(Math.random()-0.5)*80)*CFG.scale; // 100km/道 + 抖动。2026-09-26 x1/5(单局地图):原 500 / 400
-    const ng2=netGeom?netGeom.offs[k]:null;
-    const pvPeak=ng2?ng2.vPeak:baseVPeak;
+    const pvPeak=baseVPeak;
     const pDecel=(pvPeak*pvPeak-vTerm*vTerm)/(2*MSL_A); // DS190:减速点按 150 km/s² 反推(仍用 200 算会晚刹车→到点速度收不回 vTerm)
     nets.get(netId).groups.push(gid);
     projectiles.push({type:'missile',group:gid,count:shooter.mslPer||12, // KIMI154:每组16→12颗(用户令砍射手:齐射密度-25%,拦截需求同步降,反清屏延续);RF3 枚数读烘焙字段(定义在 weapons/51-defs)
@@ -222,7 +196,7 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
       fuel:MSL_FUEL, age:0, // 燃料(秒,WR1 起是常量 MSL_FUEL:mslReach 从它现算)+ 飞行年龄(近防发射判定)
       park:!isShip, parkPt:isShip?null:target.pos.slice(), mine:false, mineOk:false, cruise:false, trigRadius:(isShip?24000:16000)*CFG.scale, trigMode:'any', // 2026-09-28 mineOk = 底栏「变雷」:勾了到点停下待命,没勾到点巡飞搜索(cruise) // 区域齐射:飞到点位,到了等敌舰进圈自主攻击(盲射);雷触发圈放大v118。2026-09-26 x1/5(单局地图):原 120000 / 80000
       netId, netFmt:null, // v125 网:所属网 + 网内阵型位(横线/集中)
-      netOff:ng2?ng2.v:null, netOffR:netGeom?netGeom.R:0, netD0:netGeom?netGeom.D0:0, // v121组网:方位偏移(随接近收拢→多方向同时弹着)
+      wing:false, wSlot:null, // 2026-10-01 两翼攻击队形:54 mslWingForm 每拍排(簇内按入列次序左右交替),发射时不定
       vPeak:pvPeak, vTerm, decelDist:pDecel, netReserve, keep:isNet?0:netReserve, // v122 速度剖面:巡航/终端/减速点/预留燃料。2026-09-27 keep = 加速段不许动的末段预留:直射弹的终端速度够不着,安全帽管不住它;组网弹由安全帽管(要减速到 vTerm)
       guided:false, coastT:0, guideMode:null, lastKpos:null, guidedBy:null, // T1引导:自导/链导/脱锁(超自导范围无通道→滑行10s自毁)
       chaffed:false,chaffT:0,lastTarget:null, // v125 干扰弹脱锁

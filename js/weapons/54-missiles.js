@@ -10,7 +10,8 @@ const MSL_CFG={
 const GUIDE_SEEK=MSL_CFG.ladarRange; // 导弹自主导引范围(km)=主动LADAR末端开启后(范围内自主锁定,不耗通道)
 /* 2026-09-30 导弹组网(用户):弹与弹 MM(可见光圈的一半)、弹与舰(含前出浮标)MS 以内连一条边;一组导弹经弹弹链能连到任何一艘我方船(舰与舰之间量子通信,算一个节点)就「在网上」(p.online):
    回传自身状态(我方画真位置、选中面板照实报)、收数据链引导(guideSide 只给在网上的)。每个感知节拍重算一次;刚发射的算在网上(52 fireMissiles) */
-const MSL_LINK={MM:87750*CFG.scale,MS:90000*CFG.scale}; // 2026-10-01 用户:组网半径 x1.5(弹弹 5.85 万 → 8.775 万,弹舰 6 万 → 9 万);同日可见光圈 x1.5,弹弹距离不再跟着可见光圈走(原来写成可见光圈的倍数)
+const MSL_LINK={MM:87750*CFG.scale,MS:90000*CFG.scale};
+const MSL_WING={S:5000*CFG.scale,FLOOR:0.62,conv:25000*CFG.scale,convW:80000*CFG.scale}; // 2026-10-01 两翼攻击队形(用户,演示页 demos/weapons/导弹组网.html):S = 槽位间距 0.5 万;FLOOR = 同步巡航下限(x vPeak,且不低于 1.05 x vTerm);conv / convW = 终端几公里开始收拢、收拢带多宽 // 2026-10-01 用户:组网半径 x1.5(弹弹 5.85 万 → 8.775 万,弹舰 6 万 → 9 万);同日可见光圈 x1.5,弹弹距离不再跟着可见光圈走(原来写成可见光圈的倍数)
 let mslNetT=0;
 function mslNetStep(dt){
   mslNetT+=dt;if(mslNetT<SENS.TICK)return;mslNetT=0;
@@ -21,6 +22,7 @@ function mslNetStep(dt){
     for(const p of M){p.online=false;for(const f of F){const dx=p.pos[0]-f[0],dy=p.pos[1]-f[1],dz=p.pos[2]-(f[2]||0);if(dx*dx+dy*dy+dz*dz<MS2){p.online=true;q.push(p);break;}}} // 直连舰队
     for(let i=0;i<q.length;i++){const a=q[i];for(const b of M){if(b.online)continue;const dx=a.pos[0]-b.pos[0],dy=a.pos[1]-b.pos[1],dz=a.pos[2]-b.pos[2];if(dx*dx+dy*dy+dz*dz<MM2){b.online=true;q.push(b);}}} // 经弹弹链接力
     M.forEach((p,i)=>{if(p.online){mslRep(p);if(p.pg)mslPredDel(p.pg);}else if(was[i]&&!p.pg&&p.rep)mslPredAdd(p,'msl');}); // 在网上每拍回报;刚断链按最后一次回报建推测
+    mslWingForm(M);
     for(const p of projectiles)if(p.type==='mac'&&!p.done&&!p.pg&&p.shooter&&p.shooter.side===side)mslPredAdd(p,'mac'); // 炮弹:出膛状态本来就知道,直线外推
   }
   mslPredStep();
@@ -92,7 +94,36 @@ function mslSeek(p,R,ok){
 }
 function mslAcquire(p,t){ // 导引头锁上 t:从布雷 / 巡飞 / 脱锁转成自导追击(下一拍 guideSide 按 missSee 续 self)
   p.target=t;p.park=false;p.cruise=false;p.mine=false;p.chaffed=false;p.lastKpos=null;
-  p.guided=true;p.guideMode='self';p.netOff=null;p.netOffR=0;p.netD0=0;
+  p.guided=true;p.guideMode='self';p.wSlot=null; // 翼面槽位下一拍重排(54)
+}
+function mslWingTau(d,vP,vT,v0){v0=Math.min(v0,vP);const A=MSL_A,a=(vP*vP-v0*v0)/(2*A),b=Math.max(0,(vP*vP-vT*vT)/(2*A)); // 剩余耗时:加速段(已在 vP 就没有)+巡航段+减速段;v0 按当前速度起算 —— 按『从静止加速』会把末段的剩余时间估长,同步速度被压到下限
+  return Math.max(0,d-a-b)/vP+Math.max(0,vP-v0)/A+Math.max(0,vP-vT)/A;}
+function mslWingForm(M){ // 2026-10-01 两翼攻击队形(demos/weapons/导弹组网.html,用户):一个连通簇 = 一面翼,纯导弹-导弹规则。槽位按入列次序左右交替、间距 MSL_WING.S(先发的当翼尖、后发的居中,冻结不重排 —— 按距离重排会在超车时互换左右,弹道来回横穿白烧转向油);同步 T = 簇内真实耗时最久的一组,各组解出同步巡航速度 v = 剩余路程/T:领先的少加速慢慢飞(不刹车,巡航慢一成末段少刹一成,净省油),尾随的照常全速;终端 conv 内翼面收拢。在追目标(非自导末段、非布雷/巡飞/雷)的组才入翼;目标定不出位置这拍不排,照各自引导飞
+  const act=[];
+  for(const p of M){p.wing=false;if(!p.done&&!p.mine&&!p.park&&!p.cruise&&p.target&&p.target.side){p.nb=[];act.push(p);}} // 自导(导引头看得见原目标)也留在翼里:被动看热 8 万外就转自导,退出会掐断同步;导引头另锁新目标的走 mslAcquire 清槽
+  const MM2=MSL_LINK.MM*MSL_LINK.MM;
+  for(let i=0;i<act.length;i++)for(let j=i+1;j<act.length;j++){const a=act[i],b=act[j],dx=a.pos[0]-b.pos[0],dy=a.pos[1]-b.pos[1],dz=a.pos[2]-b.pos[2];
+    if(dx*dx+dy*dy+dz*dz<MM2){a.nb.push(b);b.nb.push(a);}}
+  const seen=new Set();
+  for(const g0 of act){if(seen.has(g0))continue;
+    const comp=[g0];seen.add(g0);const st=[g0];
+    while(st.length){const x=st.pop();for(const nb of x.nb)if(!seen.has(nb)){seen.add(nb);comp.push(nb);st.push(nb);}}
+    const byT=new Map();
+    for(const g of comp){if(g.wTgt!==g.target){g.wTgt=g.target;g.rk=undefined;}let L=byT.get(g.target);if(!L){L=[];byT.set(g.target,L);}L.push(g);}
+    for(const [tgt,L] of byT){
+      const side=L[0].shooter.side,pr=contactPos(tgt,side);
+      if(!pr){for(const g of L)g.wSlot=null;continue;}
+      let cx=0,cy=0;for(const g of L){cx+=g.pos[0];cy+=g.pos[1];}
+      const ux=pr[0]-cx/L.length,uy=pr[1]-cy/L.length,ul=Math.hypot(ux,uy)||1,w=[-uy/ul,ux/ul];
+      for(const g of L){const d=Math.hypot(pr[0]-g.pos[0],pr[1]-g.pos[1]);g.ds=g.ds===undefined?d:g.ds*0.9+d*0.1;
+        if(g.rk===undefined){let n=0;for(const x of L)if(x!==g&&x.wTgt===g.wTgt&&x.rk!==undefined)n++;g.rk=n;}}
+      const cap=Math.floor(L.length/2)*MSL_WING.S;
+      for(const g of L){g.wing=true;g.wSlot=(g.rk%2?-1:1)*Math.max(0,cap-Math.floor(g.rk/2)*MSL_WING.S);g.wW=w;
+        const kk=Math.max(0,Math.min(1,(g.ds-MSL_WING.conv)/MSL_WING.convW));g.pe=Math.hypot(g.ds,Math.abs(g.wSlot)*(0.35+0.55*kk));}
+      for(const g of L)g.aC=Math.min(g.vPeak,g.vTerm+Math.max(0,g.fuel-(g.netReserve||20))*MSL_A); // 现实油门上限:安全帽同式(56)—— 预留油不许动,巡航常被钉在 vTerm 附近;同步解按这个上限算,不按 vPeak
+      let T=0;for(const g of L)T=Math.max(T,mslWingTau(g.pe,g.aC,g.vTerm,Math.max(g.spd||0,200*MSL_VK)));
+      for(const g of L){g.wT=T;g.wV=Math.max(g.aC*MSL_WING.FLOOR,Math.min(g.aC,g.pe/Math.max(1,T))); // 同步巡航速度:可以低于 vTerm(领先的少烧油慢慢飞);wDec<0 ⇒ 减速段永远不进,一路巡航到底
+        g.wDec=(g.wV*g.wV-g.vTerm*g.vTerm)/(2*MSL_A);}}}
 }
 /* 2026-09-30 断链的导弹只用自己知道的(用户):导弹带一份自己的目标记录 p.tk = {pos, vel, t, sig, a}(52 出膛时按母舰的估计写;在网上时随母舰的估计更新,导引头看见时用自己量到的),
    断链后不读目标的真实死活、不翻舰队航迹表:飞向按记录外推的点,导引头按 b「最像原目标」挑(用户选 b):体型比在 MSL_SIM 以内、最像的优先,并列取离预计位置最近;
