@@ -10,7 +10,7 @@ const MSL_CFG={
 const GUIDE_SEEK=MSL_CFG.ladarRange; // 导弹自主导引范围(km)=主动LADAR末端开启后(范围内自主锁定,不耗通道)
 /* 2026-09-30 导弹组网(用户):弹与弹 MM(可见光圈的一半)、弹与舰(含前出浮标)MS 以内连一条边;一组导弹经弹弹链能连到任何一艘我方船(舰与舰之间量子通信,算一个节点)就「在网上」(p.online):
    回传自身状态(我方画真位置、选中面板照实报)、收数据链引导(guideSide 只给在网上的)。每个感知节拍重算一次;刚发射的算在网上(52 fireMissiles) */
-const MSL_LINK={MM:COV.VIS_R/2,MS:60000*CFG.scale};
+const MSL_LINK={MM:COV.VIS_R*0.75,MS:90000*CFG.scale}; // 2026-10-01 用户:组网半径 x1.5(弹弹 可见光圈的一半 5.85 万 → 8.775 万,弹舰 6 万 → 9 万)
 let mslNetT=0;
 function mslNetStep(dt){
   mslNetT+=dt;if(mslNetT<SENS.TICK)return;mslNetT=0;

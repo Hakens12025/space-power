@@ -416,7 +416,7 @@ function drawSignalView() {
 function drawMissileIntent(g){ // v129:选中导弹/网→显示组网圈与引导圈(2026-10-01)、目标虚线、目的地标记、火控母舰连线
   if(!adminMode&&g.shooter&&g.shooter.side!=='blue')return; // 2026-09-28 敌方弹的意图(目标、引导舰)我方不知道
   const sp=toScreen(g.pos[0],g.pos[1]);
-  { // 2026-10-01 用户:画组网圈与引导圈,两种画法(2026-09-30 触发圈不画了)。组网圈 = 弹与弹通信距离(weapons/54 MSL_LINK.MM,5.85 万):青色虚线;引导圈 = 导引头自主导引范围(GUIDE_SEEK,3 万):琥珀色实线
+  { // 2026-10-01 用户:画组网圈与引导圈,两种画法(2026-09-30 触发圈不画了)。组网圈 = 弹与弹通信距离(weapons/54 MSL_LINK.MM,8.775 万):青色虚线;引导圈 = 导引头自主导引范围(GUIDE_SEEK,3 万):琥珀色实线
     const r1=MSL_LINK.MM*cam.zoom,r2=GUIDE_SEEK*cam.zoom;
     ctx.save();ctx.lineWidth=1;ctx.font='10px "Microsoft YaHei",sans-serif';ctx.textAlign='center';ctx.textBaseline='bottom';
     ctx.strokeStyle='rgba(84,224,208,.5)';ctx.setLineDash([6,6]);ctx.beginPath();ctx.arc(sp[0],sp[1],r1,0,6.283);ctx.stroke();ctx.setLineDash([]);
