@@ -20,7 +20,8 @@ function drawRocks(ownOnly){ // ownOnly = 传感器画面(红外 / 雷达):只�
   if(adminMode){for(const s of rocks)if(!s.dead&&s.side!==VIEW)drawRockAt(s,s.pos,'live',true);return;}
   trkEach(VIEW,function(tk,st){
     const s=trkSrc(tk);if(s.dead)return; // 2026-09-29 被打碎的碎石不再画(weapons/55)
-    if(kindOf(s)==='ship'||st==='heat')return; // 2026-09-27 石头之外还有民船 / 诱饵 / 敌方浮标(world/14),都走这条
+    if(kindOf(s)==='ship')return; // 2026-09-27 石头之外还有民船 / 诱饵 / 敌方浮标(world/14),都走这条
+    if(st==='heat'){if(trkMem(tk))drawRockAt(s,tk.lastPos,'ghost',false);return;} // 2026-09-30 用户:被雷达扫出来的碎石关了雷达也要留着 —— 只剩红外(热)的,定过位又不动就在最后所见处画记忆;热区本身照旧不画
     const cp=trkPos(tk);if(!cp)return;
     if(st==='live'&&lodNow.live&&lodNow.hideRed.has(s.id))return; // 收进接触群了(只有没认出的才会被收,见 82-lod)
     drawRockAt(s,cp,st,contactIdn(s,VIEW));
