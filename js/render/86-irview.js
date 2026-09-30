@@ -12,7 +12,8 @@
 const IRV_C={CELL:6,V0:0.02,VMAX:1000,CULL:0.0003,SIG_MIN:0.7,NOISE:0.005,NOISE_MS:200,TAIL_K:4,POS_P:3,MIX:0.875,
   BG_K:0.1,CLOUD_M:8,CLOUD_LV:4,CLOUD_SYNC:400,CLOUD_BATCH:1500,CLOUD_COARSE:1200,
   GAIN:0.2,SUB_P:0.64,DET_V:0.862,CONTRAST:0.928,FILL_K:1/3,GLYPH:1.3,SIG_MAX_PX:30,MSL_PX:3,CORE:0.4,CORE_W:0.45,
-  UNC_K:0.75,UNC_CAP:4,PH_K:0.3,GLIDE:0.6,EP_PX:0.5,FIRE_GROW:1,FIRE_Q:12,TW:2.0,PLAT:0.7,WARP:0.05,CHURN:0.15,CHURN_STEP:0.1,R_TOL:0.05};
+  UNC_K:0.75,UNC_CAP:4,PH_K:0.3,GLIDE:0.6,EP_PX:0.5,FIRE_GROW:1,FIRE_Q:12,TW:2.0,PLAT:0.7,WARP:0.05,CHURN:0.15,CHURN_STEP:0.1,R_TOL:0.05,WIN_M:48};
+  // WIN_M = 窗口在可见光圈外接框外留的余量(CSS px,见 irvUpdateWin)
   // 一道门:信噪比 >= 1(内核发现门)色阶值 = DET_V x 信噪比^CONTRAST,< 1 = GAIN x 信噪比^SUB_P 淡出(见 irvV;2026-09-29 用户:旧开局距离 120 万、没有星云时开局就能淡淡看见对方,SUB_P 3 → 0.64,门下封顶仍是 GAIN)。2026-09-28 用户:发现即可见 —— 发现门处 0.22 → 0.35(DET_V),信噪比 1000 处照旧 0.94(CONTRAST 1.14 → 0.928);门下不动(没发现的暗热与星云混在一起);发现了的热再乘 (1 + 所在处底 / V0),比底亮出同样一截(irvjSplats;原来底把热的对比度又吃一次);BG_K = 背景(云 / 恒星光晕)压暗倍数;FILL_K = 石头填满距离 / (认出距离 x √体型)
   // GLYPH = 舰标团 / 舰标半径,封顶 SIG_MAX_PX;MSL_PX = 导弹小点;CORE / CORE_W = 定位后亮核的份额与宽度
   // PH_K = 红外测距的相对 1σ(不确定半径 = 距离 x √(PH_K x 方位误差));GLIDE = 定位 / 丢定位时团缩小 / 胀大的时间常数(墙钟秒,只在跑的时候走);EP_PX = 团心挪不到这么多像素不重贴;FIRE_GROW = 开火一刻团半径多出几个舰标团(随开火那份热退回去,sensors/22 fireLvl;2026-09-28 用户:开火是红外亮度提升、团变大一点、发白一点,作为属性,不贴特效);FIRE_Q = 开火热退的过程中重算物理的档数;UNC_K = 热区对数半径的缩放;UNC_CAP = 团半径上限(x 舰标团);TW = 过渡宽度(x 团半径);PLAT = 高原;WARP / CHURN = 扭曲幅度与翻涌速度(rad / 墙钟秒,只在跑的时候走);
@@ -358,7 +359,7 @@ function irvUpdate(){
   if(md){IRVJ.reset=true;V.live=true;}
   V.vs=vs;V.gs=gs;
   if(!V.cv||V.cv.width!==gw||V.cv.height!==gh){V.cv=document.createElement('canvas');V.cv.width=gw;V.cv.height=gh;V.cx=V.cv.getContext('2d');V.img=V.cx.createImageData(gw,gh);V.u32=new Uint32Array(V.img.data.buffer);}
-  if(!V.fc||V.fc.width!==cv.width||V.fc.height!==cv.height){V.fc=document.createElement('canvas');V.fc.width=cv.width;V.fc.height=cv.height;V.fx=V.fc.getContext('2d');}
+  const fw=Math.ceil(W*dpr),fh=Math.ceil(H*dpr);if(!V.fc||V.fc.width!==fw||V.fc.height!==fh){V.fc=document.createElement('canvas');V.fc.width=fw;V.fc.height=fh;V.fx=V.fc.getContext('2d');} // 缓存画布 = 窗口大小(设备像素)
   if(!V.col)irvColInit();
   let bg=view||glob;
   if(bg)irvBgBuild();else if(V.cloudPend&&irvCloudStep()){irvBgBuild();bg=true;}
@@ -375,6 +376,16 @@ function irvUpdate(){
   }
 }
 function irvOff(){IRVC.live=false;} // 离开红外画面:下次进来整张重建
+const IRVW={on:false,x:0,y:0,w:0,h:0,z:0,sx:0,sy:0}; // 红外1 的窗口:中心 x,y(km)、宽高 w,h(CSS px)、缩放 z;sx,sy = 此刻左上角在屏幕上的位置
+function irvUpdateWin(bx0,by0,bx1,by1){ // 2026-09-30 性能(用户:舰队层红外里 WASD 平移卡):红外1 只在可见光圈外接框(屏幕 CSS px)加余量的窗口里算。窗口钉在世界上,平移时不动 ⇒ 走稳态;圈出了窗口 / 换缩放才重开。返回 IRVW,没有要算的返回 null
+  const M=IRV_C.WIN_M,x0=Math.max(bx0,-M),y0=Math.max(by0,-M),x1=Math.min(bx1,W+M),y1=Math.min(by1,H+M);if(x1<=x0||y1<=y0)return null;
+  const V=IRVW,z=cam.zoom;let sx=(V.x-cam.x)*z+W/2-V.w/2,sy=(V.y-cam.y)*z+H/2-V.h/2;
+  if(!(V.on&&V.z===z&&x0>=sx&&y0>=sy&&x1<=sx+V.w&&y1<=sy+V.h)){const P=M+0.1*Math.max(x1-x0,y1-y0),Q=4*IRV_C.CELL,cx=(x0+x1)/2,cy=(y0+y1)/2; // 重开:外接框加余量,宽高取 4 格的整数倍(少换格子尺寸)
+    V.w=Math.ceil((x1-x0+2*P)/Q)*Q;V.h=Math.ceil((y1-y0+2*P)/Q)*Q;V.z=z;V.x=cam.x+(cx-W/2)/z;V.y=cam.y+(cy-H/2)/z;V.on=true;sx=cx-V.w/2;sy=cy-V.h/2;}
+  const sW=W,sH=H,sX=cam.x,sY=cam.y;W=V.w;H=V.h;cam.x=V.x;cam.y=V.y; // 红外1 整条流水线按"屏幕 = 窗口"跑(toScreen / 格子 / 缓存键都跟着窗口)
+  try{irvUpdate();}finally{W=sW;H=sH;cam.x=sX;cam.y=sY;}
+  V.sx=sx;V.sy=sy;return V;
+}
 /* 2026-09-28 一道门(用户:「所有红外效果走同一道门」):原来叠在热图上的贴图尾焰、点火一闪、喷出的热气、开火光圈都删了 ——
    尾焰在场里按尾焰那份信噪比画,开火 = 船身那份多亮一档、团胀大(内核 fireLvl,开火一刻最热、FIRE_S 里退完)。这里只剩导弹(弹丸不进热源表):
    颜色 = irvV(有效信噪比):projSig 的亮度 x 背景对比度 x 消光 / 三维距离²,取看得最清楚的我方船;看不看得见问 projSeen(与主画面同一道门)。 */
