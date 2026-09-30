@@ -132,8 +132,11 @@ function visRadiusOf(s) { // 2026-09-27 全知圈半径:基准 x 星云消光(�
   if (ENV.bodies.length && envInShadow(p)) f *= COV.VIS_SHADOW;
   return R0 * f;
 }
+function lisRecvOf(d) { // 静听用的接收机档次 = recv x 舰种的静听倍数(2026-09-30 用户:波长 70 万,23 LAD.clLis 反解;只乘静听,照射照读 recv)。静听的判定、精度、雷达画面远端、右栏读数都读它
+  return d && d.type === 'beacon' ? SENS.BEACON_RECV : sReq(d, 'recv', 'ship') * ((SENS.LIS_K && SENS.LIS_K[d.cls]) || 1);
+}
 function senseKRF(d) { // 探测方静听系数:接收机档次进平方根 ⇒ 静听量程 正比 sqrt(recv)
-  return SENS.K_RF * (d && d.type === 'beacon' ? SENS.BEACON_RECV : sReq(d, 'recv', 'ship'));
+  return SENS.K_RF * lisRecvOf(d);
 }
 function senseKACT(d) { // 探测方照射系数:发射机与接收机各进四次方根 ⇒ 照射量程 正比 (emit x recv)^(1/4)
   if (d && d.type === 'beacon') return d.on ? SENS.K_ACT * SENS.BEACON_ACT : 0; // 信标开机就在照射(它就是个尖叫的灯塔,所以是消耗品)。2026-09-27 前出浮标关着 = 只被动听和看

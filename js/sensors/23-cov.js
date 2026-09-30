@@ -69,6 +69,7 @@ const LAD = {
   optCross: 60000 * CFG.scale,    // 单条光学方位的横向误差 = 导弹门 的距离(决定交会多远有用)。2026-09-26 x1/5(单局地图):原 300000
   lisCross: 62000 * CFG.scale,    // 单条静听方位的横向误差 = 导弹门 的距离。2026-09-26 x1/5(单局地图):原 310000
   radarLook: 22022 * CFG.scale,   // 2026-09-29 用户:雷达 x0.7(原 31460)。2026-09-28 用户:雷达 x1.1(原 28600)。 照射给出火控解的距离:【玩家真看得到的那个】—— 光学方位 + 照射测距融合、多拍积累之后椭圆进主炮门。2026-09-26 x1/5(单局地图):原 143000
+  clLis: 700000 * CFG.scale,     // 2026-09-30 用户:波长(CL)的静听 70 万(听一部标准发射机 emit 1、paint 档;原来照抄护卫舰 recv 1 ≈ 49.3 万)。ladApply 反解成 SENS.LIS_K.CL,只乘静听那一路,照射不变
   buoyAct: 250000 * CFG.scale,   // 2026-09-30 用户:前出浮标的雷达(照射)范围只有 25 万(对反射 1 的目标;原来发射 x 接收 4 x 4 ≈ 61 万)。ladApply 反解成 SENS.BEACON_ACT,只管照射,浮标被听见 / 自己静听照旧
   /* ID3(2026-09-22 用户实报:「我把人家都打死了都还是“大型热源”、“中型热源”,识别不到具体舰艇种类」)。
      这三级是形态 N 时代定的:认出要贴到 9.4~12 万,而 WR1 之后主炮在 36.6 万就有过半把握、导弹动力射程 37.5 万 —— 整场仗都在“认出”之外打完。
@@ -151,8 +152,8 @@ function hearAccOf(s, recv) { return Math.sqrt(SENS.A_RF * rfLoudOf(s) * (isFini
 function actAccOf(d, refl) { const r = SENS.A_ACT * actProdOf(d) * (isFinite(refl) ? refl : 1); return Math.sqrt(Math.sqrt(r)); }
 
 /* 某条通道的【发现半径】与【定位尺度】。两者同形,只差读哪一套常数 —— 分家正是两套半径的意义。 */
-const covDetOf = (ch, d, t, lo) => ch === 'opt' ? visRangeOf(t, lo) : (ch === 'lis' ? hearRangeOf(t, d.recv) : actRangeOf(d, reflOf(t))); // ENV2 lo 只进光学那一支
-const covRangeOf = (ch, d, t, lo) => ch === 'opt' ? visAccOf(t, lo) : (ch === 'lis' ? hearAccOf(t, d.recv) : actAccOf(d, reflOf(t)));
+const covDetOf = (ch, d, t, lo) => ch === 'opt' ? visRangeOf(t, lo) : (ch === 'lis' ? hearRangeOf(t, lisRecvOf(d)) : actRangeOf(d, reflOf(t))); // ENV2;2026-09-30 静听的接收机读 lisRecvOf lo 只进光学那一支
+const covRangeOf = (ch, d, t, lo) => ch === 'opt' ? visAccOf(t, lo) : (ch === 'lis' ? hearAccOf(t, lisRecvOf(d)) : actAccOf(d, reflOf(t)));
 
 /* 这一拍的角精度(弧度)。连续,没有台阶 —— 驻留时代那张"弱/良/强"三档表的量化跳变是它换掉的东西。 */
 function covTheta(ch, d, t, dd, lo) {
@@ -369,6 +370,7 @@ function ladApply() {
   SENS.ACT_REF = Ra / Math.pow(R.emit * R.recv * refl, 0.25);
   COV.L_ACT = Math.pow(LAD.radarIdent, 3) * COV.TH0.act / (Ra * Ra * R.size);
   SENS.K_IR = SENS.IR_DET * SENS.IR_DET; SENS.K_RF = SENS.LIS_DET * SENS.LIS_DET; SENS.K_ACT = Math.pow(SENS.ACT_DET, 4);
+  SENS.LIS_K = { CL: LAD.clLis * LAD.clLis / (SENS.K_RF * SENS.EMIT_P.paint * SENS.CLS.CL.recv) }; // 2026-09-30 舰种的静听倍数(22 lisRecvOf 读;只乘静听,不碰照射):波长听标准发射机正好 = LAD.clLis
   SENS.BEACON_ACT = Math.pow(LAD.buoyAct, 4) / SENS.K_ACT; // 2026-09-30 浮标照射的发射 x 接收(并成一个数):照射距离正好 = LAD.buoyAct
   SENS.A_IR = SENS.IR_REF * SENS.IR_REF; SENS.A_RF = SENS.LIS_REF * SENS.LIS_REF; SENS.A_ACT = Math.pow(SENS.ACT_REF, 4);
 }

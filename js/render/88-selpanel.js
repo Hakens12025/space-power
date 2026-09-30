@@ -34,7 +34,7 @@ function specItems(s){
     //   这里用裸读 s.recv 而不是 sReq:本函数在 frame 的 20 帧低频渲染里,抛出来只会每 20 帧刷一次控制台(rAF 已在 core/99 的函数首行排好,不会停循环),
     //   但底栏整条规格会消失;字段缺失由 ships/11 的 SHIP_STATS_REQ 出口断言在造舰那一刻抓,不必在渲染层再抓一次。
     ['照射',Math.round(actRangeOf(s)/1000)+'k'],
-    ['静听',Math.round(hearRangeOf({emit:1,emitMode:'paint'},s.recv)/1000)+'k'],
+    ['静听',Math.round(hearRangeOf({emit:1,emitMode:'paint'},lisRecvOf(s))/1000)+'k'],
     ['火控通道',s.guideChan],
   ];
   for(const w of (s.weapons||[])){
