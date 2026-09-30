@@ -38,9 +38,9 @@ function rdvSelected(E){ // 选中的那艘:虚线轮廓 + 天体身后的雷达
   const p=toScreen(E.pos[0],E.pos[1]),Rw=actRangeOf(E,rdvStdRefl()),R=Rw*cam.zoom;
   ctx.save();ctx.setLineDash([4,5]);ctx.strokeStyle='rgba(111,180,255,0.35)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(p[0],p[1],R,0,2*Math.PI);ctx.stroke();ctx.setLineDash([]);
   ctx.beginPath();ctx.arc(p[0],p[1],R,0,2*Math.PI);ctx.clip();
-  if(envHasLight()&&!(ENV.bodies.length&&envInShadow(E.pos))){const u=envSunDirAt(E.pos,RDV_U),S=ENV_CFG.RF_SUN,h=envLightHalf();   // 射频噪声锥:四档由外往里叠,越往里越亮
-    if(u){const a=Math.atan2(u[1],u[0]);for(let i=S.E.length-1;i>=0;i--){const w=Math.min(Math.PI/2,S.E[i]*h);ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.arc(p[0],p[1],R,a-w,a+w);ctx.closePath();ctx.fillStyle='rgba(255,200,80,0.05)';ctx.fill();}
-      ctx.fillStyle='#ffc850';ctx.font='11px "Microsoft YaHei",sans-serif';const q=Math.min(R*0.6,180);ctx.fillText('恒星噪声',p[0]+Math.cos(a)*q,p[1]+Math.sin(a)*q);}}
+  if(envHasLight()&&!(ENV.bodies.length&&envInShadow(E.pos))){const u=envSunDirAt(E.pos,RDV_U),F=envRfSun(),al=(0.05*(1+1.5*F.b)).toFixed(3);   // 射频噪声锥:四档由外往里叠,越往里越亮;射电暴时按暴发强度变宽变亮(同 envRfNoise 那一份)
+    if(u){const a=Math.atan2(u[1],u[0]);for(let i=3;i>=0;i--){const w=F.w[i];ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.arc(p[0],p[1],R,a-w,a+w);ctx.closePath();ctx.fillStyle='rgba(255,200,80,'+al+')';ctx.fill();}
+      ctx.fillStyle='#ffc850';ctx.font='11px "Microsoft YaHei",sans-serif';const q=Math.min(R*0.6,180);ctx.fillText(F.b>0?'恒星射电暴':'恒星噪声',p[0]+Math.cos(a)*q,p[1]+Math.sin(a)*q);}}
   for(const b of ENV.bodies){const dx=b.x-E.pos[0],dy=b.y-E.pos[1],D=Math.hypot(dx,dy);if(D<=b.r||D-b.r>Rw)continue;
     const a0=Math.atan2(dy,dx),hh=Math.asin(b.r/D),t=Math.sqrt(D*D-b.r*b.r),F=Rw*2;
     const Q=[[Math.cos(a0-hh)*t,Math.sin(a0-hh)*t],[Math.cos(a0-hh)*F,Math.sin(a0-hh)*F],[Math.cos(a0+hh)*F,Math.sin(a0+hh)*F],[Math.cos(a0+hh)*t,Math.sin(a0+hh)*t]];

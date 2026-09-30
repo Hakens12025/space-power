@@ -37,6 +37,7 @@
 const ENV_CFG={
   MTI_V:30,
   RF_SUN:{K:30,E:[1,1.5,2,3],M:[1,1.2,1.75,2.5]}, // ENV2 恒星射频噪声锥(照 雷达效果.html):锥内噪声 1+K,往外按 (半角/夹角)^4 淡出;热循环不许反三角,分四档:夹角 <= E[i] 倍光源半角取 1 + K/M[i]^4,三倍半角之外不管
+  RF_BURST:{K:8,W:1.5,GAP:200,DUR:[20,60],RISE:3,FALL:10,T_MAX:36000}, // 甲 恒星射电暴(2026-09-30 用户拍板):暴发时噪声系数 x K(锥心 241 倍)、锥宽 x W;两次之间空 GAP 游戏秒(指数分布的均值,加上持续 ⇒ 平均 240 秒一次),持续 DUR,开头 RISE 秒升起、结尾 FALL 秒回落;时间表生成到 T_MAX 秒
   CLUT_RES:4000*CFG.scale,AST_KM:800*CFG.scale, // 2026-09-26 x1/5(单局地图):原 20000 / 4000。ENV2 雷达杂波:贴着天体盘面 / 小行星本体(体型 x AST_KM)CLUT_RES 以内的慢目标,回波混进杂波(过 MTI)           // 动目标显示门限 km/s:场内径向速度低于它的回波被当成杂波。DD 速度档 250 / 500 / 800,所以"在动"几乎都滤不掉,停下来 / 贴着切向走才滤得掉
   SUN_HALF_DEG:10,    // 恒星禁区的缺省半角(度)
   STAR_R:696000,      // ENV2 位置型恒星的缺省光球半径 km(真太阳;红外页的 R_SAT)
@@ -72,7 +73,7 @@ function envReset(w){
   }
   const st=[],bd=[],cl=[],ast=[],blt=[];
   for(const s of (w&&w.stars)||[]){const h=num(s.half,ENV_CFG.SUN_HALF_DEG)*Math.PI/180,c=Math.cos(h); // ENV2 位置型恒星;half 单位是度,c2 = cos^2 半角
-    st.push(F({x:s.x,y:s.y,r:num(s.r,ENV_CFG.STAR_R),half:h*180/Math.PI,c2:c*c}));}
+    st.push(F({x:s.x,y:s.y,r:num(s.r,ENV_CFG.STAR_R),half:h*180/Math.PI,c2:c*c,rfb:Array.isArray(s.rfb)?F(s.rfb.slice()):null}));} // rfb = 射电暴时间表 [开始, 持续, …](对局按种子生成,envRfBursts);没有 = 不暴发
   for(const b of (w&&w.bodies)||[])bd.push(F({x:b.x,y:b.y,r:b.r,r2:b.r*b.r,heat:num(b.heat,ENV_CFG.BODY_HEAT),name:b.name||'天体'})); // ENV2 天体:XY 上无限高的柱,挡视线、投影子
   for(const c of (w&&w.clouds)||[]){const a=num(c.a,D.A),b=num(c.b,D.B),ang=num(c.ang,D.ANG),r=(D.R2+D.WBR)*Math.max(a,b); // ENV2 尘埃云:生成点 (x,y) + 椭圆本体;r = 浓度可能非 0 的外接圆
     cl.push(F({x:c.x,y:c.y,a:a,b:b,ang:ang,ca:Math.cos(ang*Math.PI/180),sa:Math.sin(ang*Math.PI/180),r:r,r2:r*r,seed:c.seed|0,v:num(c.v,D.V),dark:num(c.dark,D.DARK)}));}
@@ -110,14 +111,32 @@ function envInClutter(p,self){ // ENV2 p 在雷达杂波里:贴着天体盘面�
   return false;
 }
 function envClutterOn(){if(ENV.bodies.length)return true;for(const k of rocks)if(k.ast&&!k.dead)return true;return false;} // ENV2 场上有没有杂波源
-function envRfNoise(from,to){ // ENV2 从 from 朝 to 的射频噪声倍率(>= 1):朝光源的锥里被恒星噪声淹;观测方在天体影子里 ⇒ 光源被挡,不加。⚠ 22-percep 热循环里有同式的内联副本
+function envRfNoise(from,to){ // ENV2 从 from 朝 to 的射频噪声倍率(>= 1):朝光源的锥里被恒星噪声淹;观测方在天体影子里 ⇒ 光源被挡,不加。⚠ 22-percep 热循环里有同式的内联副本(四档都取 envRfSun)
   if(!envHasLight())return 1;
   if(ENV.bodies.length&&envInShadow(from))return 1;
   const u=envSunDirAt(from,ENV_T2);if(!u)return 1;
   const vx=to[0]-from[0],vy=to[1]-from[1],k=vx*u[0]+vy*u[1];if(!(k>0))return 1;
-  const kk=k*k,l2=vx*vx+vy*vy,S=ENV_CFG.RF_SUN,h=envLightHalf();
-  for(let i=0;i<S.E.length;i++){const c=Math.cos(Math.min(Math.PI/2,S.E[i]*h));if(kk>l2*c*c)return 1+S.K/Math.pow(S.M[i],4);}
+  const kk=k*k,l2=vx*vx+vy*vy,R=envRfSun();
+  for(let i=0;i<4;i++)if(kk>l2*R.c2[i])return R.n[i];
   return 1;
+}
+const ENV_RF={c2:new Float64Array(4),n:new Float64Array(4),w:new Float64Array(4),b:0,t:NaN,rev:-1}; // 恒星噪声锥四档:cos² 半宽 / 噪声倍率 / 半宽(弧度),b = 暴发强度;按 simTime 与 ENV.rev 缓存
+function envRfSun(){ // 恒星噪声锥此刻的四档(含甲 恒星射电暴:噪声系数 x (1 + (K-1) b)、锥宽 x (1 + (W-1) b));envRfNoise、22-percep 的 sensePrepare、雷达画面共用这一份
+  const R=ENV_RF;if(R.t===simTime&&R.rev===ENV.rev)return R;
+  const S=ENV_CFG.RF_SUN,B=ENV_CFG.RF_BURST,b=envRfBurst(simTime),h=envLightHalf()*(1+(B.W-1)*b),k=S.K*(1+(B.K-1)*b);
+  for(let i=0;i<4;i++){const w=Math.min(Math.PI/2,S.E[i]*h),c=Math.cos(w);R.w[i]=w;R.c2[i]=c*c;R.n[i]=1+k/Math.pow(S.M[i],4);}
+  R.b=b;R.t=simTime;R.rev=ENV.rev;return R;
+}
+function envRfBurst(t){ // 甲 t 时刻的暴发强度 0~1(开头 RISE 秒升起、结尾 FALL 秒回落);没有光源 / 没有时间表 ⇒ 0
+  const S=ENV.stars[0];if(!S||!S.rfb)return 0;
+  const A=S.rfb,C=ENV_CFG.RF_BURST;
+  for(let i=0;i<A.length;i+=2){if(t<A[i])return 0;const u=t-A[i],d=A[i+1];if(u<d)return Math.max(0,Math.min(1,u/C.RISE,(d-u)/C.FALL));}
+  return 0;
+}
+function envRfBursts(rnd){ // 甲 生成一局的射电暴时间表 [开始, 持续, …]:间隔按指数分布(均值 GAP),持续在 DUR 里均匀;rnd = 对局的种子随机流
+  const C=ENV_CFG.RF_BURST,a=[];let t=0;
+  for(;;){t+=-C.GAP*Math.log(1-rnd());if(t>C.T_MAX)break;const d=C.DUR[0]+rnd()*(C.DUR[1]-C.DUR[0]);a.push(Math.round(t),Math.round(d));t+=d;}
+  return a;
 }
 function envLightHalf(){return (ENV.stars.length?ENV.stars[0].half:0)*Math.PI/180;} // ENV2 光源半角(弧度)
 function envMtiBlind(from,to,vel,self){

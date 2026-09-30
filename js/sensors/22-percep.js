@@ -160,7 +160,7 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
   scCOn = cOn ? 1 : 0; // ENV2 有云 ⇒ 每一对都有消光,光学还在的对都要精算
   scLitC2 = ENV.stars.length ? ENV.stars[0].c2 : 1;
   scMTI2 = envClutterOn() ? ENV_CFG.MTI_V * ENV_CFG.MTI_V : 0; // ENV2 杂波源:天体盘面、小行星
-  { const S = ENV_CFG.RF_SUN, h = envLightHalf(); for (let i = 0; i < 4; i++) { const c = Math.cos(Math.min(Math.PI / 2, S.E[i] * h)); scRfC2[i] = c * c; scRfN[i] = 1 + S.K / Math.pow(S.M[i], 4); } } // 与 envRfNoise 同式
+  { const R = envRfSun(); for (let i = 0; i < 4; i++) { scRfC2[i] = R.c2[i]; scRfN[i] = R.n[i]; } } // 与 envRfNoise 同一份四档(world/12 envRfSun,含甲 恒星射电暴,随 simTime 变)
   const B = ENV.bodies; senseGrowO(B.length); scON = B.length;
   for (let b = 0; b < scON; b++) { scOX[b] = B[b].x; scOY[b] = B[b].y; scOR2[b] = B[b].r2; }
   let mIR = 0, mRF = 0, mACT = 0;
