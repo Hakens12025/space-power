@@ -103,6 +103,36 @@ function stepMacProj(p,dt){ // MAC轴炮:沿发射时船头直飞,命中或到�
       if(t&&!t.dead&&stepCPA2(p,t,dt)<MAC_HIT_R*MAC_HIT_R){if(applyDamage(p.target,p.dmg,p.shooter,'mac',p)>0)spawnHit(p.pos,'mac',p.shooter,p.target);p.done=true;} // RANGE1 补第 4 实参 kind='mac'(靶场分武器统计)
       else if(p.age>=p.tt){p.ground=true;} // 2026-09-28 过了预测时间没中:不消失,当成打空地的炮弹接着飞,路上碰到谁算谁(用户:射程理论无限)
 }
+function mslSwarmStep(p,tp,dist,dir0){ // 2026-10-01 三关系公共段:① 油量 → 能力天花板;③ 邻居 → 聚拢(质心吸引 + 间距排斥 + 死区)。追目标与打空地(目的地 = 布雷点)同用
+  const aC=p.vPeak?Math.min(p.vPeak,p.vTerm+Math.max(0,p.fuel-MSL_SWARM.RES)*MSL_A):0; // ① 油烧得越多天花板越低,谁也不会被要求飞出自己油量允许的速度
+  const nb=[]; // 同目的地的邻组:追目标 = 同一目标;打空地 = 布雷点在同一片(6 万内)
+  for(const q of (p.nb||[])){if(q.done)continue;
+    if(p.park){if(q.park&&Math.hypot(q.parkPt[0]-p.parkPt[0],q.parkPt[1]-p.parkPt[1])<60000*CFG.scale)nb.push(q);}
+    else if(q.tgt===p.tgt&&!q.park)nb.push(q);}
+  let cx=0,cy=0;for(const q of nb){cx+=q.pos[0];cy+=q.pos[1];}
+  const dCen=nb.length?Math.hypot(cx/nb.length-p.pos[0],cy/nb.length-p.pos[1]):0;
+  const dEff=dist+0.5*dCen; // 有效路程 = 到目的地距离 + 离局部质心距离的一半(聚拢的弯路不自欺)
+  let dir=dir0;
+  if(nb.length&&p.guideMode!=='self'){ // ③ 聚拢;聚集力距目标 conv 起淡出
+    const fadeT=Math.max(0,Math.min(1,(dist-MSL_SWARM.conv)/MSL_SWARM.convW));
+    if(fadeT>0){
+      const vn=V.len(p.vel)||1,fadeC=Math.max(0.15,Math.min(1,dCen/(15000*CFG.scale)));
+      const tc=[(cx/nb.length-p.pos[0])/dCen,(cy/nb.length-p.pos[1])/dCen];
+      let px=0,py=0;const rs=MSL_SWARM.S;
+      for(const q of nb){const dx=p.pos[0]-q.pos[0],dy=p.pos[1]-q.pos[1],dq=Math.hypot(dx,dy);
+        if(dq>1&&dq<rs){px+=dx/dq*(1-dq/rs);py+=dy/dq*(1-dq/rs);}}
+      const cand=V.norm([dir0[0]+MSL_SWARM.COH*fadeT*fadeC*tc[0]+px*fadeT*0.8,dir0[1]+MSL_SWARM.COH*fadeT*fadeC*tc[1]+py*fadeT*0.8,dir0[2]]);
+      const ca=Math.atan2(cand[1],cand[0])-Math.atan2(p.vel[1],p.vel[0]),ca2=Math.atan2(Math.sin(ca),Math.cos(ca));
+      dir=Math.abs(ca2)<MSL_SWARM.DEAD?[p.vel[0]/vn,p.vel[1]/vn,0]:cand;}} // 转向死区 2°:不追微小抖动,省下微转向的油
+  return {dir:dir,dEff:dEff,nb:nb,aC:aC,cx:cx,cy:cy};}
+function mslSwarmVc(p,tp,sw){ // ② 同步:与一跳邻组比【按能力天花板算】的到达时刻,等最慢的(下限 FLOOR·aC,等不起掉队),滞回 HYST
+  let etaRef=sw.dEff/Math.max(1,sw.aC); // 无邻组 / 基准:按自己的天花板尽快到
+  for(const q of sw.nb){const aQ=Math.min(q.vPeak||p.vPeak,q.vTerm+Math.max(0,(q.fuel||0)-MSL_SWARM.RES)*MSL_A);
+    const dj=Math.hypot(tp[0]-q.pos[0],tp[1]-q.pos[1])+0.5*Math.hypot(sw.cx/sw.nb.length-q.pos[0],sw.cy/sw.nb.length-q.pos[1]);
+    etaRef=Math.max(etaRef,dj/Math.max(1,aQ));}
+  const vc=Math.max(sw.aC*MSL_SWARM.FLOOR,Math.min(sw.aC,sw.dEff/Math.max(1,etaRef)));
+  if(p.vCmd===undefined||Math.abs(vc-p.vCmd)>Math.max(MSL_SWARM.HYST*p.vCmd,15))p.vCmd=vc;
+  return p.vCmd;}
 function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+暴力加速,射后不管,组网转移(一弹传三代)
       p.age=(p.age||0)+dt;
       if(p.mine){ // 伏击雷(已布设):静止待命,自带被动传感器自主触发,点火=情报
@@ -138,8 +168,9 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
           if(p.parkFctrl)p.trigRadius=Math.max(p.trigRadius||12000*CFG.scale,24000*CFG.scale); // DS192:途中吃到火控的区域齐射弹=有信息支持,落地触发圈 24k(没吃到保持原值)。2026-09-26 x1/5(单局地图):原 60000 / 120000
           return;
         }
-        const pdir=V.norm(toP);
-        let pspdDes=Infinity;
+        const psw=mslSwarmStep(p,p.parkPt,pdist,V.norm(toP)); // 2026-10-01 用户:打空地也要看得出组网 —— 三关系同样生效,目的地 = 布雷点,同目的地的邻组一起同步 / 聚拢
+        const pdir=psw.dir;
+        let pspdDes=p.vPeak?Math.min(mslSwarmVc(p,p.parkPt,psw),psw.aC):Infinity;
         if(p.mineOk&&pdist<90000)pspdDes=Math.min(pspdDes,Math.max(1500*MSL_VK,Math.sqrt(2*MSL_A*pdist*0.6))); // 接近减速(只有要变雷的才减)。DS190:曲线也按 150 算——朋友版这处漏改,会按 200 的能力规划刹车→冲过布设点
         if(p.fuel>0){
           let dv=Math.max(-MSL_A*dt,Math.min(MSL_A*dt,pspdDes-p.spd)); // DS190
@@ -270,37 +301,15 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         evX=-dirT[1]*sw; evY=dirT[0]*sw;
       }
       const dir0=V.norm([tp[0]+tv[0]*tLead+evX-p.pos[0],tp[1]+tv[1]*tLead+evY-p.pos[1],tp[2]+tv[2]*tLead-p.pos[2]]); // WR1:瞄估计位置(带前置量 / 蛇形)
-      // ===== 2026-10-01 三关系算法(用户,演示页 demos/weapons/导弹组网.html):① 自身油量 → 能力天花板;② 目标距离 + 一跳邻居(按能力)→ 同步;③ 邻居 → 聚拢 =====
-      const aC=p.vPeak?Math.min(p.vPeak,p.vTerm+Math.max(0,p.fuel-MSL_SWARM.RES)*MSL_A):0; // ① 油烧得越多天花板越低,谁也不会被要求飞出自己油量允许的速度
-      const nb=(p.nb||[]).filter(q=>!q.done&&q.tgt===p.tgt); // 同目标的邻组才算同步 / 聚拢(异目标的各打各的)
-      let cx=0,cy=0;for(const q of nb){cx+=q.pos[0];cy+=q.pos[1];}
-      const dCen=nb.length?Math.hypot(cx/nb.length-p.pos[0],cy/nb.length-p.pos[1]):0;
-      const dEff=dist+0.5*dCen; // ② 有效路程 = 到目标距离 + 离局部质心距离的一半(聚拢的弯路不自欺)
-      let dir=dir0;
-      if(nb.length&&p.guideMode!=='self'){ // ③ 聚拢:质心吸引(权重随离质心距离衰减,收拢了就不再拉)+ 间距排斥 + 转向死区;聚集力距目标 conv 起淡出
-        const fadeT=Math.max(0,Math.min(1,(dist-MSL_SWARM.conv)/MSL_SWARM.convW));
-        if(fadeT>0){
-          const fadeC=Math.max(0.15,Math.min(1,dCen/15000*CFG.scale));
-          const tc=[(cx/nb.length-p.pos[0])/dCen,(cy/nb.length-p.pos[1])/dCen];
-          let px=0,py=0;const rs=MSL_SWARM.S;
-          for(const q of nb){const dx=p.pos[0]-q.pos[0],dy=p.pos[1]-q.pos[1],dq=Math.hypot(dx,dy);
-            if(dq>1&&dq<rs){px+=dx/dq*(1-dq/rs);py+=dy/dq*(1-dq/rs);}}
-          const cand=V.norm([dir0[0]+MSL_SWARM.COH*fadeT*fadeC*tc[0]+px*fadeT*0.8,dir0[1]+MSL_SWARM.COH*fadeT*fadeC*tc[1]+py*fadeT*0.8,dir0[2]]);
-          const ca=Math.atan2(cand[1],cand[0])-Math.atan2(p.vel[1],p.vel[0]),ca2=Math.atan2(Math.sin(ca),Math.cos(ca));
-          dir=Math.abs(ca2)<MSL_SWARM.DEAD?[p.vel[0]/vn,p.vel[1]/vn,0]:cand;}} // 转向死区 2°:不追微小抖动,省下微转向的油
+      // ===== 2026-10-01 三关系算法(用户,演示页 demos/weapons/导弹组网.html):公共段在 mslSwarmStep / mslSwarmVc(打空地同样用) =====
+      const sw=mslSwarmStep(p,tp,dist,dir0),aC=sw.aC,nb=sw.nb,dEff=sw.dEff;
+      const dir=sw.dir;
       const aim=[p.pos[0]+dir[0]*500000*CFG.scale,p.pos[1]+dir[1]*500000*CFG.scale,p.pos[2]];
       const coast=dist>GUIDE_SEEK&&!nearIc; // 2026-09-27 三段飞法(用户:"导弹本身的燃料控制,提升射程"):进自己导引头的范围之前是加速 / 滑行段,之后是末段
       // 速度剖面(v122):巡航vPeak高速飞(加速燃料),合适位置按距离减速到vTerm(减速燃料与加速对称),燃料对称安全帽兜底
       let spdDes=Infinity;
-      if(p.vPeak){ // 2026-10-01 三关系:巡航速度 = 同步指令(② 解出),天花板 aC 封顶;不再有减速段 —— 冲刺段(DASH 内)不减速,带速命中
-        let etaRef=dEff/Math.max(1,aC); // ② 无邻居 / 基准:按自己的天花板尽快到
-        for(const q of nb){ // 一跳邻居的到达时刻按【它的能力天花板】算,不按它当前的速度 —— 按当前速度的话最慢的一组会把所有人拖到减速下限齐飞,距离差永远冻结(演示页实测过)
-          const aQ=Math.min(q.vPeak||p.vPeak,q.vTerm+Math.max(0,(q.fuel||0)-MSL_SWARM.RES)*MSL_A);
-          const dj=Math.hypot(tp[0]-q.pos[0],tp[1]-q.pos[1])+0.5*Math.hypot(cx/nb.length-q.pos[0],cy/nb.length-q.pos[1]);
-          etaRef=Math.max(etaRef,dj/Math.max(1,aQ));}
-        const vc=Math.max(aC*MSL_SWARM.FLOOR,Math.min(aC,dEff/Math.max(1,etaRef))); // 等最慢的,等不起(0.85 x 天花板)就掉队
-        if(p.vCmd===undefined||Math.abs(vc-p.vCmd)>Math.max(MSL_SWARM.HYST*p.vCmd,15))p.vCmd=vc; // 调度滞回:不为噪声重新加减速
-        spdDes=Math.min(p.vCmd,aC);
+      if(p.vPeak){ // 2026-10-01 三关系:巡航速度 = 同步指令(mslSwarmVc 解出),天花板 aC 封顶;不再有减速段 —— 冲刺段(DASH 内)不减速,带速命中
+        spdDes=Math.min(mslSwarmVc(p,tp,sw),aC);
         // DS191(用户令"越快越不好转弯,不能无脑快"):大转弯(与当前航向夹角 >~17°)限速,降速才转得动
         const angTo=vn>5?V.angle(V.norm(p.vel),dir):0;
         if(angTo>0.3)spdDes=Math.min(spdDes,Math.max(p.vTerm,2500));
