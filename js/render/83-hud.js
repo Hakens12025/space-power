@@ -211,28 +211,36 @@ function drawShieldFx(){
   }
   ctx.restore();
 }
-function drawNetLinks(){ // v140:网内导弹细线连接;v142:星形连接(O(k) 线替代全连接 O(k²),减渲染开销防卡)
-  const byNet={};
-  for(const p of projectiles){
-    if(p.type!=='missile'||p.done||!p.netId)continue;
-    if(!projSeen(p))continue; // 感知过滤:看不见的弹不连线(2026-09-29 自己的弹也按视野)
-    (byNet[p.netId]=byNet[p.netId]||[]).push(p);
-  }
-  ctx.save();
-  ctx.lineWidth=0.8;ctx.setLineDash([3,3]);
-  for(const id in byNet){
-    const arr=byNet[id];
-    if(arr.length<2)continue;
-    const c=arr[0]; // 参考组(网内第一组),星形连到各组
-    for(let j=1;j<arr.length;j++){
-      if(V.len(V.sub(c.pos,arr[j].pos))>MSL_LINK.MM)continue; // 断网不连(2026-09-30 按导弹组网的弹弹距离)
-      const pa=toScreen(c.pos[0],c.pos[1]);
-      const pb=toScreen(arr[j].pos[0],arr[j].pos[1]);
-      ctx.strokeStyle='rgba(84,224,208,.2)';
-      ctx.beginPath();ctx.moveTo(pa[0],pa[1]);ctx.lineTo(pb[0],pb[1]);ctx.stroke();
-    }
-  }
-  ctx.setLineDash([]);ctx.restore();
+function drawChain(p0){ // 2026-10-01 传播链路(用户:点一枚导弹,看到链本身 —— 在圈里就相连,一条线串完,能回舰就续到舰,到不了就停在最后一枚上,不叫断链):取选中组所在的连通簇(弹弹 ≤MM、弹舰/浮标 ≤MS),最小生成树(Prim,从选中组起每次接上最近的一枚)画成尽量短的一株线;有成员够得着舰就把树接到最近那艘上,末段换亮色。同网虚线(v140)与 📡 直连舰的线(只表示分到了通道)都由此取代
+  const side=p0.shooter&&p0.shooter.side;if(!side)return;
+  const M=[];
+  for(const p of projectiles)if(p.type==='missile'&&!p.done&&p.shooter&&p.shooter.side===side)M.push(p);
+  const MM=MSL_LINK.MM*MSL_LINK.MM,MS=MSL_LINK.MS*MSL_LINK.MS;
+  const cl=[p0],seen=new Set([p0]),st=[p0]; // 连通簇:从选中组灌水
+  while(st.length){const x=st.pop();
+    for(const p of M){if(seen.has(p))continue;const dx=p.pos[0]-x.pos[0],dy=p.pos[1]-x.pos[1],dz=p.pos[2]-x.pos[2];
+      if(dx*dx+dy*dy+dz*dz<MM){seen.add(p);cl.push(p);st.push(p);}}}
+  const F=[];
+  for(const s of ships)if(s.side===side&&!s.dead)F.push(s);
+  for(const o of rockObjs())if(o.kind==='buoy'&&o.side===side&&!o.dead)F.push(o);
+  let shipEnd=null,sd=MS;
+  for(const g of cl)for(const f of F){const dx=g.pos[0]-f.pos[0],dy=g.pos[1]-f.pos[1],dz=g.pos[2]-(f.pos[2]||0),q=dx*dx+dy*dy+dz*dz;
+    if(q<sd){sd=q;shipEnd=[g,f];}} // 簇里够得着舰的成员里取最近的那艘
+  const inn=new Set(cl),par=new Map(); // Prim 最小生成树:每轮把离树最近的组接进来
+  const key=g=>{let best=null,bd=Infinity;for(const [k,v] of par){const dx=g.pos[0]-k.pos[0],dy=g.pos[1]-k.pos[1],dz=g.pos[2]-k.pos[2],q=dx*dx+dy*dy+dz*dz;if(q<bd){bd=q;best=k;}}return [best,bd];};
+  const pend=cl.filter(g=>g!==p0);par.set(p0,null);
+  while(pend.length){let bi=0,bg=null,bb=Infinity;
+    for(let i=0;i<pend.length;i++){const [k,q]=key(pend[i]);if(q<bb){bb=q;bg=k;bi=i;}}
+    const g=pend.splice(bi,1)[0];par.set(g,bg);}
+  ctx.save();ctx.lineWidth=1;
+  ctx.strokeStyle='rgba(84,224,208,.5)';
+  ctx.beginPath();
+  for(const [g,k] of par){if(!k)continue;const a2=toScreen(g.pos[0],g.pos[1]),b2=toScreen(k.pos[0],k.pos[1]);ctx.moveTo(a2[0],a2[1]);ctx.lineTo(b2[0],b2[1]);}
+  ctx.stroke();
+  if(shipEnd){const g=shipEnd[0],f=shipEnd[1],a2=toScreen(g.pos[0],g.pos[1]),b2=toScreen(f.pos[0],f.pos[1]); // 回舰的那一段
+    ctx.strokeStyle='rgba(84,224,208,.9)';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(a2[0],a2[1]);ctx.lineTo(b2[0],b2[1]);ctx.stroke();}
+  ctx.restore();
 }
 function drawProjectiles(){ // 弹丸/导弹
   for(const p of projectiles){
@@ -283,14 +291,8 @@ function drawProjectiles(){ // 弹丸/导弹
         ctx.strokeStyle='#4fe0ff';ctx.lineWidth=2;
         ctx.beginPath();ctx.arc(s[0],s[1],12,0,6.283);ctx.stroke();
         const showSet=selNet?projectiles.filter(x=>x.type==='missile'&&!x.done&&x.netId===selNet&&projSeen(x)):[p]; // 2026-09-28 同网里看不见的弹不画
-        showSet.forEach(g=>{
-          if(g!==p){
-            const gs=toScreen(g.pos[0],g.pos[1]);
-            ctx.strokeStyle='rgba(79,224,255,.5)';ctx.lineWidth=1;
-            ctx.beginPath();ctx.arc(gs[0],gs[1],9,0,6.283);ctx.stroke();
-          }
-          drawMissileIntent(g);
-        });
+        drawChain(p); // 传播链路:整簇一条线(83 的 drawChain)
+        showSet.forEach(g=>{drawMissileIntent(g);});
       }
       // DS169 信息分层:常态只画细箭头,文字数据收进选中态(点选/网选才显示速率/剩余/燃料/目标)
       if(vn>1){
@@ -444,21 +446,8 @@ function drawMissileIntent(g){ // v129:选中导弹/网→显示组网圈与引�
     ctx.fillText(destLbl,dp[0]+8,dp[1]-2);
     ctx.restore();
   }
-  // 火控母舰连线(数据链引导:导弹→引导舰)
-  if(g.guideMode==='link'&&g.guidedByName){
-    const sh=ships.find(x=>x.name===g.guidedByName&&!x.dead);
-    if(sh){
-      const hp=toScreen(sh.pos[0],sh.pos[1]);
-      ctx.save();
-      ctx.strokeStyle='rgba(84,224,208,.9)';ctx.lineWidth=1;ctx.setLineDash([2,3]);
-      ctx.beginPath();ctx.moveTo(sp[0],sp[1]);ctx.lineTo(hp[0],hp[1]);ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle='rgba(84,224,208,.95)';ctx.font='10px "Microsoft YaHei"';ctx.textAlign='left';ctx.textBaseline='top';
-      ctx.fillText('📡'+sh.name,hp[0]+8,hp[1]+8);
-      ctx.restore();
-    }
-  }
 }
+
 /* RF2 简化UI:hover 底栏武器钮时给选中蓝舰画对应射程圈。
    (原来这上面还有一个「范围模式」函数把全场所有范围圈一次画齐,它的总开关只在被删的快捷栏里写,2026-09-22 一并删了;这里自画同款 arc+顶标) */
 function drawHoverRings(){

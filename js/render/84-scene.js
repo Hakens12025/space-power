@@ -438,7 +438,7 @@ function render(){
   ships.forEach(function(s){if(hideFoe&&s.side!==VIEW)return;lodDrawShip(s);}); // SN8:收拢 / 散开带过渡(完全收进框里的不画;没在过渡的原样调 drawShip)
   if(typeof drawRocks==='function')drawRocks(hideFoe); // 传感器画面里只画自己的浮标(敌方石头只以热 / 回波出现)。TK4c 石头的航迹:第二个循环,排在舰船之后(石头不在 ships 里);没认出之前与冷船画法一模一样(render/82-rocks)
   drawAggs();
-  if(selNet)drawNetLinks(); // DS169:网内细线收进选中态(常态不画,选中网才连;信息分层)
+  // DS169:网内细线 2026-10-01 起由传播链路(83 drawChain,选中导弹时画整簇最小生成树)取代信息分层)
   drawProjectiles();if(typeof drawMslPred==='function')drawMslPred();
   if(typeof drawShellTraces==='function')drawShellTraces(); // 2026-09-28 敌方炮弹来路(render/83)
   drawHoverRings();if(typeof drawPings==='function')drawPings();if(typeof drawForceMarks==='function')drawForceMarks();if(typeof drawAnomalies==='function')drawAnomalies(); // 2026-09-27 雷达异常 / 红外异常(render/83) // 2026-09-27 扫描脉冲圈(render/83)。RF2 简化UI:底栏武器钮 hover 时选中舰的射程圈

@@ -293,7 +293,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
       <div class="row"><span class="k">速度</span><span class="v">${Math.round(SHOW.v(V.len(mv.vel)))} km/s</span></div>
       <div class="row"><span class="k">目标</span><span class="v">${tgt}${tdist?' · '+Math.round(tdist/1000)+'k':''}</span></div>
       <div class="row"><span class="k">引导</span><span class="v">${guideDesc(mv)}</span></div>
-      <div class="row"><span class="k">数据链</span><span class="v">${m.online?'在网上':(rp?'断链 · 最后回报 '+Math.round(SHOW.t(simTime-rp.t))+' s 前(推测)':'断链')}</span></div>
+      <div class="row"><span class="k">数据链</span><span class="v">${m.online?'已回舰':(rp?'未回舰 · 最后回报 '+Math.round(SHOW.t(simTime-rp.t))+' s 前(推测)':'导弹间互联 · 未回舰')}</span></div>
       <div class="row"><span class="k">到点</span><span class="v">${mv.mine?'已布雷':(mv.mineOk?'停下变雷':'一直飞(巡飞搜索)')}</span></div>`;
     updateCmdBar([]); // 导弹只有底栏「变雷」一颗钮(cbMine)
     return;
