@@ -174,10 +174,9 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
   const vTerm=(isNet?PHYS.v(300):PHYS.v(800))*MSL_VK; // 物理 300 / 800 km/s      // 组网需低速机动/直射几乎不减速
   const netReserve=isNet?PHYS.t(150):PHYS.t(200); // 物理 150 / 200 s     // 预留燃料:终端机动。2026-10-01 组网 400→150(用户:防过度减速 —— 原来 400 的预留把巡航钉死在 vTerm,整条弹道都在慢性减速;现在上限随油量线性降,刹回 vTerm 的油由上限公式自己保证(任何时候 油量 >= 预留 + (v−vTerm)/加速度),预留只留终端机动)
   const baseMaxV=Math.sqrt((2*MSL_A*D0+vTerm*vTerm)/2); // DS190:加速度 200→150,系数同步 2×150=300 // 距离允许的峰值(加速+减速≈0.8D0,留巡航段)
-  const baseVPeak=Math.max(vTerm,Math.min((isNet?PHYS.v(700):PHYS.v(900))*MSL_VK,baseMaxV));
+  const baseVPeak=Math.max(vTerm,Math.min((isNet?PHYS.v(700):PHYS.v(900))*MSL_VK,baseMaxV,(MSL_FUEL*0.75*MSL_A+vTerm)/2)); // 2026-10-01 再加整箱油预算:加速占一半(同演示页;没这条的话三关系的能力天花板只留 2 秒冲刺预留,会把全员放到 3500 过度加速、20 秒烧空)
   // DS190:原 baseDecel 在此计算但全函数无人读取(写进弹丸的是下面按组算的 pDecel),合并时一并清掉这个死变量
-  /* 2026-10-01 组网包抄几何(v121 的 OFF_L 直插/上/下翼 + 侧翼 +12% 配速)整个拆掉:多波聚集的两翼攻击队形改由 54 的 mslWingForm
-     每感知拍在簇上成形(槽位按入列次序左右交替、同步巡航速度),不在这里按单次齐射摆固定方向 */
+  /* 2026-10-01 聚集 / 同步改由 56 的三关系算法每拍在邻接上算(54 建邻接),发射时不摆任何几何 */
   // v125 网实体:一次齐射=一个网(单组也算网),所有组绑定 netId
   const netId=++netSeq;
   nets.set(netId,{id:netId,mode:missileMode,groups:[],shooter,fmt:null,fctrl:'auto',manualTarget:null});
@@ -196,7 +195,7 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
       fuel:MSL_FUEL, age:0, // 燃料(秒,WR1 起是常量 MSL_FUEL:mslReach 从它现算)+ 飞行年龄(近防发射判定)
       park:!isShip, parkPt:isShip?null:target.pos.slice(), mine:false, mineOk:false, cruise:false, trigRadius:(isShip?24000:16000)*CFG.scale, trigMode:'any', // 2026-09-28 mineOk = 底栏「变雷」:勾了到点停下待命,没勾到点巡飞搜索(cruise) // 区域齐射:飞到点位,到了等敌舰进圈自主攻击(盲射);雷触发圈放大v118。2026-09-26 x1/5(单局地图):原 120000 / 80000
       netId, netFmt:null, // v125 网:所属网 + 网内阵型位(横线/集中)
-      wing:false, wSlot:null, // 2026-10-01 两翼攻击队形:54 mslWingForm 每拍排(簇内按入列次序左右交替),发射时不定
+      nb:[], vCmd:undefined, // 2026-10-01 三关系算法:nb = 组网圈内的邻组(54 mslNetStep 每感知拍建);vCmd = 同步速度指令(带滞回)
       vPeak:pvPeak, vTerm, decelDist:pDecel, netReserve, keep:isNet?0:netReserve, // v122 速度剖面:巡航/终端/减速点/预留燃料。2026-09-27 keep = 加速段不许动的末段预留:直射弹的终端速度够不着,安全帽管不住它;组网弹由安全帽管(要减速到 vTerm)
       guided:false, coastT:0, guideMode:null, lastKpos:null, guidedBy:null, // T1引导:自导/链导/脱锁(超自导范围无通道→滑行10s自毁)
       chaffed:false,chaffT:0,lastTarget:null, // v125 干扰弹脱锁

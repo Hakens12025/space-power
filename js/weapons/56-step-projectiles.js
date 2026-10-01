@@ -269,28 +269,43 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         const sw=Math.sin((p.age||0)*6)*Math.min(8000*CFG.scale,dist*0.3); // 2026-09-26 x1/5(单局地图):幅度上限原 40000
         evX=-dirT[1]*sw; evY=dirT[0]*sw;
       }
-      let aim=[tp[0]+tv[0]*tLead+evX,tp[1]+tv[1]*tLead+evY,tp[2]+tv[2]*tLead]; // WR1:瞄估计位置
-      if(p.wing&&p.wSlot&&p.wW){ // 2026-10-01 两翼攻击队形(54 mslWingForm):瞄目标+翼面槽位偏移,终端 conv 内收拢(多方向同时弹着)
-        const k=dist<MSL_WING.conv?0:Math.min(1,(dist-MSL_WING.conv)/MSL_WING.convW);
-        aim=[aim[0]+p.wW[0]*p.wSlot*k,aim[1]+p.wW[1]*p.wSlot*k,aim[2]];
-      }
-      const dir=V.norm(V.sub(aim,p.pos));
+      const dir0=V.norm([tp[0]+tv[0]*tLead+evX-p.pos[0],tp[1]+tv[1]*tLead+evY-p.pos[1],tp[2]+tv[2]*tLead-p.pos[2]]); // WR1:瞄估计位置(带前置量 / 蛇形)
+      // ===== 2026-10-01 三关系算法(用户,演示页 demos/weapons/导弹组网.html):① 自身油量 → 能力天花板;② 目标距离 + 一跳邻居(按能力)→ 同步;③ 邻居 → 聚拢 =====
+      const aC=p.vPeak?Math.min(p.vPeak,p.vTerm+Math.max(0,p.fuel-MSL_SWARM.RES)*MSL_A):0; // ① 油烧得越多天花板越低,谁也不会被要求飞出自己油量允许的速度
+      const nb=(p.nb||[]).filter(q=>!q.done&&q.tgt===p.tgt); // 同目标的邻组才算同步 / 聚拢(异目标的各打各的)
+      let cx=0,cy=0;for(const q of nb){cx+=q.pos[0];cy+=q.pos[1];}
+      const dCen=nb.length?Math.hypot(cx/nb.length-p.pos[0],cy/nb.length-p.pos[1]):0;
+      const dEff=dist+0.5*dCen; // ② 有效路程 = 到目标距离 + 离局部质心距离的一半(聚拢的弯路不自欺)
+      let dir=dir0;
+      if(nb.length&&p.guideMode!=='self'){ // ③ 聚拢:质心吸引(权重随离质心距离衰减,收拢了就不再拉)+ 间距排斥 + 转向死区;聚集力距目标 conv 起淡出
+        const fadeT=Math.max(0,Math.min(1,(dist-MSL_SWARM.conv)/MSL_SWARM.convW));
+        if(fadeT>0){
+          const fadeC=Math.max(0.15,Math.min(1,dCen/15000*CFG.scale));
+          const tc=[(cx/nb.length-p.pos[0])/dCen,(cy/nb.length-p.pos[1])/dCen];
+          let px=0,py=0;const rs=MSL_SWARM.S;
+          for(const q of nb){const dx=p.pos[0]-q.pos[0],dy=p.pos[1]-q.pos[1],dq=Math.hypot(dx,dy);
+            if(dq>1&&dq<rs){px+=dx/dq*(1-dq/rs);py+=dy/dq*(1-dq/rs);}}
+          const cand=V.norm([dir0[0]+MSL_SWARM.COH*fadeT*fadeC*tc[0]+px*fadeT*0.8,dir0[1]+MSL_SWARM.COH*fadeT*fadeC*tc[1]+py*fadeT*0.8,dir0[2]]);
+          const ca=Math.atan2(cand[1],cand[0])-Math.atan2(p.vel[1],p.vel[0]),ca2=Math.atan2(Math.sin(ca),Math.cos(ca));
+          dir=Math.abs(ca2)<MSL_SWARM.DEAD?[p.vel[0]/vn,p.vel[1]/vn,0]:cand;}} // 转向死区 2°:不追微小抖动,省下微转向的油
+      const aim=[p.pos[0]+dir[0]*500000*CFG.scale,p.pos[1]+dir[1]*500000*CFG.scale,p.pos[2]];
       const coast=dist>GUIDE_SEEK&&!nearIc; // 2026-09-27 三段飞法(用户:"导弹本身的燃料控制,提升射程"):进自己导引头的范围之前是加速 / 滑行段,之后是末段
       // 速度剖面(v122):巡航vPeak高速飞(加速燃料),合适位置按距离减速到vTerm(减速燃料与加速对称),燃料对称安全帽兜底
       let spdDes=Infinity;
-      if(p.vPeak){ // 有速度剖面(所有火Missiles发射的导弹);2026-10-01 巡航速度 = 翼面同步巡航(54 mslWingForm 解出,没排上翼 = 自己的峰值),减速点跟着同步速度重算
-        const vC=p.wing?(p.wV||p.vPeak):p.vPeak,dec0=p.wing?(p.wDec||0):p.decelDist; // 翼面的减速点按同步速度重算(可为负 = 一路巡航);不在翼里的照旧
-        if(dist>dec0)spdDes=vC; // 巡航段:同步速度(领先的被压慢一点,慢慢飞不刹车)
-        else spdDes=Math.max(p.vTerm,Math.sqrt(p.vTerm*p.vTerm+2*MSL_A*dist)); // 减速段:到目标=vTerm(DS190:加速度 150)
-        // DS191(用户令"越快越不好转弯,不能无脑快"):大转弯(与当前航向夹角 >~17°)限速,降速才转得动;复锁/绕行不再全速冲。
-        // 朝向取速度方向 V.norm(p.vel)——弹丸没有 facing 字段(朋友版这处写的 p.facing 恒为 undefined,限速从未生效过),下面旧逻辑兜底分支用的也是速度方向。
+      if(p.vPeak){ // 2026-10-01 三关系:巡航速度 = 同步指令(② 解出),天花板 aC 封顶;不再有减速段 —— 冲刺段(DASH 内)不减速,带速命中
+        let etaRef=dEff/Math.max(1,aC); // ② 无邻居 / 基准:按自己的天花板尽快到
+        for(const q of nb){ // 一跳邻居的到达时刻按【它的能力天花板】算,不按它当前的速度 —— 按当前速度的话最慢的一组会把所有人拖到减速下限齐飞,距离差永远冻结(演示页实测过)
+          const aQ=Math.min(q.vPeak||p.vPeak,q.vTerm+Math.max(0,(q.fuel||0)-MSL_SWARM.RES)*MSL_A);
+          const dj=Math.hypot(tp[0]-q.pos[0],tp[1]-q.pos[1])+0.5*Math.hypot(cx/nb.length-q.pos[0],cy/nb.length-q.pos[1]);
+          etaRef=Math.max(etaRef,dj/Math.max(1,aQ));}
+        const vc=Math.max(aC*MSL_SWARM.FLOOR,Math.min(aC,dEff/Math.max(1,etaRef))); // 等最慢的,等不起(0.85 x 天花板)就掉队
+        if(p.vCmd===undefined||Math.abs(vc-p.vCmd)>Math.max(MSL_SWARM.HYST*p.vCmd,15))p.vCmd=vc; // 调度滞回:不为噪声重新加减速
+        spdDes=Math.min(p.vCmd,aC);
+        // DS191(用户令"越快越不好转弯,不能无脑快"):大转弯(与当前航向夹角 >~17°)限速,降速才转得动
         const angTo=vn>5?V.angle(V.norm(p.vel),dir):0;
         if(angTo>0.3)spdDes=Math.min(spdDes,Math.max(p.vTerm,2500));
-        // 燃料对称安全帽:按当前速度减速回vTerm需(vTerm外的燃料),再留净机动燃料——超了自动降速(加速多久留多久减速/滑行修正吃油→降速)
-        const safe=Math.max(p.vTerm,p.vTerm+Math.max(0,p.fuel-(p.netReserve||20))*MSL_A); // DS190:安全帽折算同步 150(用 200 会高估减速能力→放宽减速段→命中速度偏高)
-        spdDes=Math.min(spdDes,safe);
-        if(p.wing&&dist<MSL_WING.DASH)spdDes=Math.max(spdDes,p.spd); // 2026-10-01 用户(饱和攻击冲刺段):进了导引头锁定范围(3 万,盖过近防外圈)就不再减速 —— 保持进入时的速度命中,上面的刹车曲线与安全帽一并不管(冲刺不需要留刹车的油),缩短在近防圈里的暴露时间
-        if(coast&&spdDes>p.spd&&p.fuel<=(p.keep||0))spdDes=p.spd; // 加速不许动用末段预留(原来直射弹的终端速度够不着,安全帽从不起作用,一路加速把油烧光)
+        if(dist<MSL_SWARM.DASH)spdDes=Math.max(spdDes,p.spd); // 冲刺段:进了导引头锁定范围不再减速,保持速度命中,缩短在近防圈里的暴露时间
+        if(coast&&spdDes>p.spd&&p.fuel<=(p.keep||0))spdDes=p.spd; // 加速不许动用末段预留
       }else{ // 旧逻辑兜底(手动构造的导弹)
         const ang=vn>5?V.angle(V.norm(p.vel),dir):0;
         if(ang>0.25)spdDes=Math.min(spdDes,1800+ang*5200); // 需大机动:限速换取转向(越快越拐不过弯)
