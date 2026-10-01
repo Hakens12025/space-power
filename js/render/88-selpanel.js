@@ -148,9 +148,11 @@ function fcUiSeq(s,sid){ // 按 id 字符串取回序列对象(id 类型不确�
 function updateFcPanel(force){ // 由 updateSelPanel 每 20 帧重渲(与卡片状态同拍);写入一律走 setHTMLStable,force=点击后必须立即回显
   // RF7 重做:五根竖直方条 = 五个序列槽(上限 FC_MAX_SEQS,一条一槽,空槽画暗不可点),点方条 = 进入该序列的【序列态】
   // (面板高亮 + 地图亮蓝色数据链,见 83-hud drawFcChain),再点同一根 = 退出。方条下方只放当前序列的简要详情。
+  // 2026-10-02 用户:舰队层面(多选 / 编队)走【和单舰一样的逻辑】—— 方条 + 点条进序列态 + 同样的详情,只是对象变成所有选中的舰:
+  // 方条铺开各舰的序列(带舰名标签),点某条 = 进那一艘那条的序列态(其他选舰的序列态清掉,详情只有一份),动作经 data-ship 落到对应舰上
   const list=document.getElementById('fcList');
   if(!list)return;
-  /* FL1 火控计算机改成【条件显示】:只有"恰好选中一艘舰 且 这艘舰真有火控序列"时才出现。
+  /* FL1 火控计算机改成【条件显示】:选中的任一舰有火控序列就出现(单舰 / 舰队同一条式)。
      开关放在这里而不是 updateSelPanel 里,是因为本函数是唯一每拍必经的火控入口 ——
      updateSelPanel 有 6 个提前 return(导弹群/单导弹/信标/未选中/编队/单舰),而它在【函数开头】无条件调本函数,
      所以那 6 支全都走得到这一段。放到 updateSelPanel 尾部的话有五支漏掉,面板会赖在屏幕上。
@@ -159,68 +161,67 @@ function updateFcPanel(force){ // 由 updateSelPanel 每 20 帧重渲(与卡片�
      好让它重新显示的那一瞬内容就是对的,而不是等下一个 20 帧拍子。
      #fcList 的委托与 #fcPickBtn 都挂在静态节点上,父容器隐不隐藏与它们无关,不用动。 */
   const _sb=selBlue();
-  const hasFc=_sb.length>0&&typeof fcSeqsOf==='function'&&_sb.some(x=>(fcSeqsOf(x)||[]).length>0); // 2026-10-01 用户:舰队层面(多选 / 编队)有火控也显示,统一整个舰队的火控序列
+  const hasFc=_sb.length>0&&typeof fcSeqsOf==='function'&&_sb.some(x=>(fcSeqsOf(x)||[]).length>0);
   const sec=document.getElementById('fcSec');
   if(sec){const d=hasFc?'block':'none';if(sec.style.display!==d)sec.style.display=d;}
   const s=_sb[0];
   if(!s){setHTMLStable(list,'<div class="fc-empty">未选中我方舰船</div>',force);return;}
   if(typeof fcSeqsOf!=='function'){setHTMLStable(list,'<div class="fc-empty">火控引擎未就绪</div>',force);return;}
-  if(_sb.length>1){ // 舰队视图:选中各舰的全部序列统一列出,每条带 强制(不论距离开火)/暂停;点条不进序列态(那是单舰视图的事,要看详情点选那一艘)
-    const pk=document.getElementById('fcPickBtn');if(pk)pk.style.display='none'; // 舰级「选择」钮只对单舰有意义,舰队视图藏掉
-    fcPickBtnSync(null);
-    let h='';
+  const many=_sb.length>1;
+  const seqOf=(x,sid)=>((typeof fcSeq==='function')?fcSeq(sid):null); // 序列按 id 全局可查(shipId 校验在下面)
+  let subj=s; // 序列态主体舰:多选时 = 选中的舰里 fcEditId 指向有效序列的那艘(委托里点条时会把别的清掉,这里只找不写)
+  if(many){subj=null;for(const x of _sb){const q=(typeof fcSeq==='function')?fcSeq(x.fcEditId):null;if(q&&String(q.shipId)===String(x.id)){subj=x;break;}}}
+  const pk=document.getElementById('fcPickBtn');if(pk)pk.style.display='';
+  const seqs=(subj?(fcSeqsOf(subj)||[]):[]);
+  const cap=(typeof FC_MAX_SEQS==='number')?FC_MAX_SEQS:5;
+  const big=subj&&subj.fcBig==='pick';
+  fcPickBtnSync(subj); // RF8b「选择」钮在标题栏(#fcSec .fc-hd),不在本容器里,单独同步一次状态;舰队无序列态时灭
+  let h='<div class="fc-bars">';
+  if(!many){ // 单舰:五个序列槽(空槽画暗)
+    for(let i=0;i<cap;i++){
+      const q=seqs[i];
+      if(!q){h+=`<div class="fc-bar empty" title="空序列槽(中键点敌舰建序列,Shift+中键追加)"><span class="no">${i+1}</span></div>`;continue;}
+      const sid=String(q.id),edit=String(s.fcEditId)===sid,pick=big&&String(s.fcPick)===sid;
+      h+=`<div class="fc-bar${edit?' edit':''}${pick?' pick':''}${q.paused?' paused':''}" data-fc-act="bar" data-ship="${s.id}" data-seq="${sid}" title="${q.name} · ${q.mode==='rr'?'轮询':'依次'} · ${(q.targets||[]).length}个目标${q.force?' · 强制开火':''}${pick?' · 唯一开火序列':''}">`
+        +`<span class="no">${pick?'★':''}${i+1}</span><span class="md">${q.mode==='rr'?'轮':'依'}</span><span class="ct">${(q.targets||[]).length}</span>`
+        +`</div>`;
+    }
+  }else{ // 舰队:各舰现有序列铺成一排(带舰名标签;空槽不画 —— 几艘舰 x 5 个空槽全是噪声),同样点条进序列态
+    let n=0;
     for(const x of _sb){
       const xs=fcSeqsOf(x)||[];
-      if(!xs.length)continue;
-      h+='<div style="color:#7f93ad;font-size:11px;margin:5px 0 2px">'+((typeof xhName==='function')?xhName(x):(x.name||('舰'+x.id)))+'</div>';
       for(const q of xs){
-        const sid=String(q.id);
-        h+=`<div class="fc-bar${q.paused?' paused':''}" title="${q.name} · ${q.mode==='rr'?'轮询':'依次'} · ${(q.targets||[]).length}个目标${q.force?' · 强制开火':''}">`
-          +`<span class="md">${q.mode==='rr'?'轮':'依'}</span><span class="ct">${(q.targets||[]).length}</span>`
-          +`<span class="fc-btn${q.force?' on':''}" data-fc-act="force" data-ship="${x.id}" data-seq="${sid}" title="强制开火:这条序列的目标哪怕在射程外也自动开火(主炮不看把握门、导弹不看射程);仍要定出位置、主炮仍要对准">强制</span>`
-          +`<span class="fc-btn${q.paused?' on':''}" data-fc-act="pause" data-ship="${x.id}" data-seq="${sid}" title="暂停后该序列不参与解算">${q.paused?'恢复':'暂停'}</span>`
-          +'</div>';
+        const sid=String(q.id),edit=!!(subj&&String(subj.id)===String(x.id)&&String(subj.fcEditId)===sid),pick=!!(x.fcBig==='pick'&&String(x.fcPick)===sid);
+        h+=`<div class="fc-bar${edit?' edit':''}${pick?' pick':''}${q.paused?' paused':''}" data-fc-act="bar" data-ship="${x.id}" data-seq="${sid}" title="${x.name} · ${q.name} · ${q.mode==='rr'?'轮询':'依次'} · ${(q.targets||[]).length}个目标${q.force?' · 强制开火':''}">`
+          +`<span class="no">${pick?'★':''}${++n}</span><span class="md">${q.mode==='rr'?'轮':'依'}</span><span class="ct">${(q.targets||[]).length}</span>`
+          +`<span style="font-size:10px;color:#7f93ad;margin-left:2px;white-space:nowrap;overflow:hidden">${x.name}</span>`
+          +`</div>`;
       }
     }
-    setHTMLStable(list,h||'<div class="fc-empty">选中舰没有火控序列</div>',force);
-    return;
-  }
-  const pk2=document.getElementById('fcPickBtn');if(pk2)pk2.style.display='';
-  const seqs=fcSeqsOf(s)||[];
-  const cap=(typeof FC_MAX_SEQS==='number')?FC_MAX_SEQS:5;
-  const big=(s.fcBig==='pick');
-  fcPickBtnSync(s); // RF8b「选择」钮在标题栏(#fcSec .fc-hd),不在本容器里,单独同步一次状态
-  let h='<div class="fc-bars">';
-  for(let i=0;i<cap;i++){
-    const q=seqs[i];
-    if(!q){h+=`<div class="fc-bar empty" title="空序列槽(中键点敌舰建序列,Shift+中键追加)"><span class="no">${i+1}</span></div>`;continue;}
-    const sid=String(q.id),edit=String(s.fcEditId)===sid,pick=big&&String(s.fcPick)===sid;
-    h+=`<div class="fc-bar${edit?' edit':''}${pick?' pick':''}${q.paused?' paused':''}" data-fc-act="bar" data-seq="${sid}" title="${q.name} · ${q.mode==='rr'?'轮询':'依次'} · ${(q.targets||[]).length}个目标${q.force?' · 强制开火':''}${pick?' · ★当前唯一开火序列':(big?' · 点击改为用这条打':'')} · 点击进入序列态(地图显示数据链)">`
-      +`<span class="no">${pick?'★':''}${i+1}</span><span class="md">${q.mode==='rr'?'轮':'依'}</span><span class="ct">${(q.targets||[]).length}</span>`
-      +`</div>`;
   }
   h+='</div>';
-  const cur=seqs.find(q=>String(q.id)===String(s.fcEditId))||null; // 详情只画序列态那一条,不再全量铺开(用户定案:信息简单即可)
-  if(!seqs.length)h+='<div class="fc-empty">无火控序列 · Shift+中键点敌舰即可选定</div>';
+  const total=many?_sb.reduce((a,x)=>a+((fcSeqsOf(x)||[]).length),0):seqs.length;
+  const cur=seqs.find(q=>String(q.id)===String(subj&&subj.fcEditId))||null; // 详情只画序列态那一条,不再全量铺开(用户定案:信息简单即可)
+  if(!total)h+='<div class="fc-empty">无火控序列 · Shift+中键点敌舰即可选定</div>';
   else if(!cur)h+='<div class="fc-empty">点方条进入序列态 · 地图显示数据链</div>';
   else{
-    const sid=String(cur.id),rr=(cur.mode==='rr');
+    const sid=String(cur.id),rr=(cur.mode==='rr'),sh=String(subj.id);
     h+=`<div class="fc-det"><div class="fc-row">`
-      +`<span class="nm">${cur.name||('火控序列'+sid)}</span>`
-      +`<span class="fc-btn${rr?' on':''}" data-fc-act="mode" data-seq="${sid}" title="依次=打死一个再换;轮询=每次齐射换一个">${rr?'轮询':'依次'}</span>`
+      +`<span class="nm">${many?(subj.name+' · '):''}${cur.name||('火控序列'+sid)}</span>`
+      +`<span class="fc-btn${rr?' on':''}" data-fc-act="mode" data-ship="${sh}" data-seq="${sid}" title="依次=打死一个再换;轮询=每次齐射换一个">${rr?'轮询':'依次'}</span>`
       +(cur.paused?'<span class="fc-tag paused">已暂停 · 不开火</span>':'') // RF8 详情区也给一条红标:方条变红了,展开的详情里却没有对应提示会显得断裂
-      +`<span class="fc-btn${cur.force?' on':''}" data-fc-act="force" data-seq="${sid}" title="强制开火:这条序列的目标哪怕在射程外也自动开火(主炮不看 10% 自动开火门、导弹不看 40 万射程);仍要定出位置、主炮仍要对准">强制</span>`
-      +`<span class="fc-btn${cur.paused?' on':''}" data-fc-act="pause" data-seq="${sid}" title="暂停后该序列不参与解算">${cur.paused?'恢复':'暂停'}</span>`
-      +`<span class="fc-btn danger" data-fc-act="del" data-seq="${sid}" title="删除整条序列">删除</span>`
+      +`<span class="fc-btn${cur.force?' on':''}" data-fc-act="force" data-ship="${sh}" data-seq="${sid}" title="强制开火:这条序列的目标哪怕在射程外也自动开火(主炮不看 10% 自动开火门、导弹不看 40 万射程);仍要定出位置、主炮仍要对准">强制</span>`
+      +`<span class="fc-btn${cur.paused?' on':''}" data-fc-act="pause" data-ship="${sh}" data-seq="${sid}" title="暂停后该序列不参与解算">${cur.paused?'恢复':'暂停'}</span>`
+      +`<span class="fc-btn danger" data-fc-act="del" data-ship="${sh}" data-seq="${sid}" title="删除整条序列">删除</span>`
       +`</div>`;
     (cur.targets||[]).forEach((t,i)=>{
       const am=!t.allow||t.allow.mac!==false,ms=!t.allow||t.allow.msl!==false;
       h+=`<div class="fc-it">`
         +`<span class="nm">${i+1}. ${fcUiName(t)}</span>`
         +`<span class="hp">${fcUiHp(t)}</span>`
-        +`<span class="fc-btn${am?' on':''}" data-fc-act="mac" data-seq="${sid}" data-idx="${i}" title="主炮许可">炮</span>`
-        +`<span class="fc-btn${ms?' on':''}" data-fc-act="msl" data-seq="${sid}" data-idx="${i}" title="导弹许可">弹</span>`
-        +`<span class="fc-btn danger" data-fc-act="delt" data-seq="${sid}" data-idx="${i}" title="从序列移除该目标">✕</span>`
+        +`<span class="fc-btn${am?' on':''}" data-fc-act="mac" data-ship="${sh}" data-seq="${sid}" data-idx="${i}" title="主炮许可">炮</span>`
+        +`<span class="fc-btn${ms?' on':''}" data-fc-act="msl" data-ship="${sh}" data-seq="${sid}" data-idx="${i}" title="导弹许可">弹</span>`
+        +`<span class="fc-btn danger" data-fc-act="delt" data-ship="${sh}" data-seq="${sid}" data-idx="${i}" title="从序列移除该目标">✕</span>`
         +`</div>`;
     });
     h+='</div>';
@@ -525,8 +526,9 @@ function fcPickBtnSync(s){ // RF8b 同步标题栏「选择」钮:它在 #fcSec 
   b.title=on?`当前只用 ${q?q.name:'选中序列'} 开火;再按一次回到轮询(多条序列轮流)`
             :'把当前序列态那条设为唯一开火序列(序列即火力模板);默认是轮询,多条轮流开火';
 }
-on('fcPickBtn','click',()=>{ // RF8b 舰级「选择」:序列态那条 → 唯一开火序列;再按回轮询
-  const s=selBlue()[0];
+on('fcPickBtn','click',()=>{ // RF8b 舰级「选择」:序列态那条 → 唯一开火序列;再按回轮询。舰队时作用在序列态主体舰上(2026-10-02)
+  const all=selBlue();let s=all[0];
+  if(all.length>1){s=null;for(const x of all){const q=(typeof fcSeq==='function')?fcSeq(x.fcEditId):null;if(q&&String(q.shipId)===String(x.id)){s=x;break;}}}
   if(!s)return;
   if(typeof fcSetBig!=='function'||typeof fcSetPick!=='function')return;
   if(s.fcBig==='pick'){
@@ -543,15 +545,16 @@ on('fcPickBtn','click',()=>{ // RF8b 舰级「选择」:序列态那条 → 唯�
 on('fcList','click',e=>{
   const el=e.target&&e.target.closest?e.target.closest('[data-fc-act]'):null;
   if(!el)return;
-  const sh=el.dataset.ship!==undefined?((typeof objById==='function')?objById(el.dataset.ship):null):null; // 舰队视图的条目带 data-ship(2026-10-01):动作落到那一艘上
+  const sh=el.dataset.ship!==undefined?((typeof objById==='function')?objById(el.dataset.ship):null):null; // 条目带 data-ship(2026-10-01):动作落到那一艘上
   const s=sh||selBlue()[0];if(!s)return;
+  if(selBlue().length>1){for(const x of selBlue())if(x!==s&&typeof fcSetEdit==='function')fcSetEdit(x,null);} // 舰队:序列态只有一份,动作舰之外的全清(详情跟着走)
   // RF8b 这里【不能】统一 `if(!seq)return`:舰级动作(不带 data-seq)会在进 switch 之前被静默吃掉,
   // 按钮渲染得好好的、title 也在,就是永远不响应 —— RF8 的大序列钮正是这么"按不动"的。改成逐分支自检。
   const seq=fcUiSeq(s,el.dataset.seq);
   const idx=Number(el.dataset.idx),t=(seq&&seq.targets||[])[idx];
   switch(el.dataset.fcAct){
     case 'bar':
-      if(!seq)return;
+      if(!seq)return; // 舰队下方条带 data-ship:上面已把主体解析成那一艘,下面的选择 / 序列态逻辑与单舰同一段
       if(s.fcBig==='pick'&&typeof fcSetPick==='function'&&String(s.fcPick)!==String(seq.id)){ // RF8 选择模式下点别的方条 = 改选它来打(顺带进序列态,看得见链)
         fcSetPick(s,seq.id);
         if(typeof fcSetEdit==='function')fcSetEdit(s,seq.id);
