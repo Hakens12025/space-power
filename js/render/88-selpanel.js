@@ -159,12 +159,33 @@ function updateFcPanel(force){ // 由 updateSelPanel 每 20 帧重渲(与卡片�
      好让它重新显示的那一瞬内容就是对的,而不是等下一个 20 帧拍子。
      #fcList 的委托与 #fcPickBtn 都挂在静态节点上,父容器隐不隐藏与它们无关,不用动。 */
   const _sb=selBlue();
-  const hasFc=_sb.length===1&&typeof fcSeqsOf==='function'&&(fcSeqsOf(_sb[0])||[]).length>0;
+  const hasFc=_sb.length>0&&typeof fcSeqsOf==='function'&&_sb.some(x=>(fcSeqsOf(x)||[]).length>0); // 2026-10-01 用户:舰队层面(多选 / 编队)有火控也显示,统一整个舰队的火控序列
   const sec=document.getElementById('fcSec');
   if(sec){const d=hasFc?'block':'none';if(sec.style.display!==d)sec.style.display=d;}
   const s=_sb[0];
   if(!s){setHTMLStable(list,'<div class="fc-empty">未选中我方舰船</div>',force);return;}
   if(typeof fcSeqsOf!=='function'){setHTMLStable(list,'<div class="fc-empty">火控引擎未就绪</div>',force);return;}
+  if(_sb.length>1){ // 舰队视图:选中各舰的全部序列统一列出,每条带 强制(不论距离开火)/暂停;点条不进序列态(那是单舰视图的事,要看详情点选那一艘)
+    const pk=document.getElementById('fcPickBtn');if(pk)pk.style.display='none'; // 舰级「选择」钮只对单舰有意义,舰队视图藏掉
+    fcPickBtnSync(null);
+    let h='';
+    for(const x of _sb){
+      const xs=fcSeqsOf(x)||[];
+      if(!xs.length)continue;
+      h+='<div style="color:#7f93ad;font-size:11px;margin:5px 0 2px">'+((typeof xhName==='function')?xhName(x):(x.name||('舰'+x.id)))+'</div>';
+      for(const q of xs){
+        const sid=String(q.id);
+        h+=`<div class="fc-bar${q.paused?' paused':''}" title="${q.name} · ${q.mode==='rr'?'轮询':'依次'} · ${(q.targets||[]).length}个目标${q.force?' · 强制开火':''}">`
+          +`<span class="md">${q.mode==='rr'?'轮':'依'}</span><span class="ct">${(q.targets||[]).length}</span>`
+          +`<span class="fc-btn${q.force?' on':''}" data-fc-act="force" data-ship="${x.id}" data-seq="${sid}" title="强制开火:这条序列的目标哪怕在射程外也自动开火(主炮不看把握门、导弹不看射程);仍要定出位置、主炮仍要对准">强制</span>`
+          +`<span class="fc-btn${q.paused?' on':''}" data-fc-act="pause" data-ship="${x.id}" data-seq="${sid}" title="暂停后该序列不参与解算">${q.paused?'恢复':'暂停'}</span>`
+          +'</div>';
+      }
+    }
+    setHTMLStable(list,h||'<div class="fc-empty">选中舰没有火控序列</div>',force);
+    return;
+  }
+  const pk2=document.getElementById('fcPickBtn');if(pk2)pk2.style.display='';
   const seqs=fcSeqsOf(s)||[];
   const cap=(typeof FC_MAX_SEQS==='number')?FC_MAX_SEQS:5;
   const big=(s.fcBig==='pick');
@@ -522,7 +543,8 @@ on('fcPickBtn','click',()=>{ // RF8b 舰级「选择」:序列态那条 → 唯�
 on('fcList','click',e=>{
   const el=e.target&&e.target.closest?e.target.closest('[data-fc-act]'):null;
   if(!el)return;
-  const s=selBlue()[0];if(!s)return;
+  const sh=el.dataset.ship!==undefined?((typeof objById==='function')?objById(el.dataset.ship):null):null; // 舰队视图的条目带 data-ship(2026-10-01):动作落到那一艘上
+  const s=sh||selBlue()[0];if(!s)return;
   // RF8b 这里【不能】统一 `if(!seq)return`:舰级动作(不带 data-seq)会在进 switch 之前被静默吃掉,
   // 按钮渲染得好好的、title 也在,就是永远不响应 —— RF8 的大序列钮正是这么"按不动"的。改成逐分支自检。
   const seq=fcUiSeq(s,el.dataset.seq);
