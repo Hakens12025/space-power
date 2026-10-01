@@ -172,7 +172,7 @@ function fireMissiles(shooter,target,n){ // 射手齐射:受发射单元(同时�
   const D0=isShip?Math.max(1,V.len(V.sub(tp0,shooter.pos))):20000*CFG.scale; // 2026-09-26 x1/5(单局地图):区域齐射的距离级原 100000
   // 速度剖面(v122):巡航vPeak(距离自适应,留20%距离加减速)+ 终端vTerm + 燃料预留(滑行修正+终端机动)
   const vTerm=(isNet?PHYS.v(300):PHYS.v(800))*MSL_VK; // 物理 300 / 800 km/s      // 组网需低速机动/直射几乎不减速
-  const netReserve=isNet?PHYS.t(400):PHYS.t(200); // 物理 400 / 200 s     // 预留燃料:滑行修正转向+终端机动
+  const netReserve=isNet?PHYS.t(150):PHYS.t(200); // 物理 150 / 200 s     // 预留燃料:终端机动。2026-10-01 组网 400→150(用户:防过度减速 —— 原来 400 的预留把巡航钉死在 vTerm,整条弹道都在慢性减速;现在上限随油量线性降,刹回 vTerm 的油由上限公式自己保证(任何时候 油量 >= 预留 + (v−vTerm)/加速度),预留只留终端机动)
   const baseMaxV=Math.sqrt((2*MSL_A*D0+vTerm*vTerm)/2); // DS190:加速度 200→150,系数同步 2×150=300 // 距离允许的峰值(加速+减速≈0.8D0,留巡航段)
   const baseVPeak=Math.max(vTerm,Math.min((isNet?PHYS.v(700):PHYS.v(900))*MSL_VK,baseMaxV));
   // DS190:原 baseDecel 在此计算但全函数无人读取(写进弹丸的是下面按组算的 pDecel),合并时一并清掉这个死变量

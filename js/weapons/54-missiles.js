@@ -120,9 +120,10 @@ function mslWingForm(M){ // 2026-10-01 两翼攻击队形(demos/weapons/导弹�
       const cap=Math.floor(L.length/2)*MSL_WING.S;
       for(const g of L){g.wing=true;g.wSlot=(g.rk%2?-1:1)*Math.max(0,cap-Math.floor(g.rk/2)*MSL_WING.S);g.wW=w;
         const kk=Math.max(0,Math.min(1,(g.ds-MSL_WING.conv)/MSL_WING.convW));g.pe=Math.hypot(g.ds,Math.abs(g.wSlot)*(0.35+0.55*kk));}
-      for(const g of L)g.aC=Math.min(g.vPeak,g.vTerm+Math.max(0,g.fuel-(g.netReserve||20))*MSL_A); // 现实油门上限:安全帽同式(56)—— 预留油不许动,巡航常被钉在 vTerm 附近;同步解按这个上限算,不按 vPeak
-      let T=0;for(const g of L)T=Math.max(T,mslWingTau(g.pe,g.aC,g.vTerm,Math.max(g.spd||0,200*MSL_VK)));
-      for(const g of L){g.wT=T;g.wV=Math.max(g.aC*MSL_WING.FLOOR,Math.min(g.aC,g.pe/Math.max(1,T))); // 同步巡航速度:可以低于 vTerm(领先的少烧油慢慢飞);wDec<0 ⇒ 减速段永远不进,一路巡航到底
+      for(const g of L)g.aC=Math.min(g.vPeak,g.vTerm+Math.max(0,g.fuel-(g.netReserve||20))*MSL_A); // 现实油门上限:安全帽同式(56)—— 预留油不许动;上限随油量线性降(油多的人天然快,追得上),烧进预留以下回落到 vTerm
+      let T=Infinity;for(const g of L)T=Math.min(T,mslWingTau(g.pe,g.aC,g.vTerm,Math.max(g.spd||0,200*MSL_VK))); // 2026-10-01 用户:锚定最前面那组(剩余耗时最短)—— 领先的不减速,后面的尽量追
+      let Ts=L[0].wTs;Ts=(Ts===undefined||T<Ts)?T:Ts+(T-Ts)*0.25;L[0].wTs=Ts; // 平滑只在 T 变大的方向起作用:T 缩小(接近目标 / 换了更前面的组)即时跟 —— 平滑滞后不许刹住最前面那组;变大(目标估计挪远)才慢慢跟,防来回烧油
+      for(const g of L){g.wT=T;g.wV=Math.min(g.aC,g.pe/Math.max(1,Ts)); // 同步巡航速度 = 不超过自己的现实上限:领先的顶上限(不减速),后面的被钳在上限(全力追)
         g.wDec=(g.wV*g.wV-g.vTerm*g.vTerm)/(2*MSL_A);}}}
 }
 /* 2026-09-30 断链的导弹只用自己知道的(用户):导弹带一份自己的目标记录 p.tk = {pos, vel, t, sig, a}(52 出膛时按母舰的估计写;在网上时随母舰的估计更新,导引头看见时用自己量到的),
