@@ -691,17 +691,18 @@ function drawFollowLinks(){
   }
   if(began){ctx.setLineDash([]);ctx.lineDashOffset=0;ctx.restore();}
 }
-function drawFcChain(){ // RF7 火控序列态的数据链(蓝色铁路线):主体舰 → T1 → T2 …,只画当前编辑序列的链。
-  // 序列态 = 主体舰(selBlue()[0])选中 且 fcEditId 指向自己的序列 —— Shift+中键选定与火控计算机点方条都会置它;
-  // 再点同一根方条 fcSetEdit(s,null) 退出,链随之熄灭。铁路线画法:主线 + 垂直短刺(枕木),数据链蓝 #4fe0ff(canvas 侧既有的强调青,83:218 传感器圈同款,不新造颜色)。
+function drawFcChain(){ // RF7 火控序列态的数据链(蓝色铁路线):主体舰 → T1 → T2 …,画所有处于序列态的选中舰的链(2026-10-02 用户:多选 / 编队中键后每艘都建了序列,只画第一艘的线不对)。
+  // 序列态 = 某艘选中舰的 fcEditId 指向自己的序列 —— 中键快速交战 / Shift+中键选定 / 火控计算机点方条都会置它;
+  // 再点同一根方条 fcSetEdit(s,null) 退出,链随之熄灭(舰队火控的方条只留一份序列态,见 88)。铁路线画法:主线 + 垂直短刺(枕木),数据链蓝 #4fe0ff(canvas 侧既有的强调青,83:218 传感器圈同款,不新造颜色)。
   if(typeof fcSeq!=='function'||typeof selBlue!=='function')return; // 58 缺席时整段静默(typeof 守卫口径同 drawRadial)
-  const s=selBlue()[0];if(!s||s.dead)return;
-  const q=fcSeq(s.fcEditId);if(!q||q.shipId!==s.id||!(q.targets||[]).length)return;
+ for(const s of selBlue()){ // 2026-10-02 每艘各画各的链(单选时就是原来那一艘)
+  if(!s||s.dead)continue;
+  const q=fcSeq(s.fcEditId);if(!q||String(q.shipId)!==String(s.id)||!(q.targets||[]).length)continue;
   const pts=[toScreen(s.pos[0],s.pos[1])];
   for(const it of q.targets){ // 链节点按序列顺序:死目标由 58 的清理段 splice,这里只管画活着的
     if(it.tid){const t=(typeof fcShip==='function')?fcShip(it.tid):null,tp=(t&&!t.dead)?viewPos(t):null;if(tp)pts.push(toScreen(tp[0],tp[1]));} // 2026-09-28 我方知道的位置;交代不出就跳过这一节
   }
-  if(pts.length<2)return;
+  if(pts.length<2)continue;
   ctx.save();
   const path=()=>{ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i][0],pts[i][1]);}; // 整条链一次成 path:虚线相位沿路径自动连续,分段画会让每段从头开始、节点处流断
   // ① 底轨:暗实线,链的本体(RF7d 起从原来的主线降为底色,亮度让给上面的流动层)
@@ -736,4 +737,5 @@ function drawFcChain(){ // RF7 火控序列态的数据链(蓝色铁路线):主�
   ctx.globalAlpha=q.paused?.35:.9; // 节点圈:每个目标一个小空心圈,链的"站点"
   for(let i=1;i<pts.length;i++){ctx.beginPath();ctx.arc(pts[i][0],pts[i][1],4,0,6.283);ctx.stroke();}
   ctx.restore();
+ }
 }

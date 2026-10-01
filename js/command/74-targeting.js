@@ -69,9 +69,10 @@ function fcEditFollowSel(sub){ // RF7b 序列态是【瞬时 UI 模式】,不是
   // 退出序列态只是面板不高亮、地图不画蓝链,序列照常解算照常开火。
   if(typeof rad!=='undefined'&&rad&&rad.open)return; // 轮盘开着不动上下文:radOpen 的三种上下文判定依赖它,交互中途抽走会让"追加"静默变成"新建"
   if(typeof ships==='undefined')return;
+  const sel=(typeof selBlue==='function')?selBlue():[]; // 2026-10-02 用户:多选 / 编队中键给每艘都建了序列,每艘都该亮蓝链 —— 选中的【全部】保留序列态,只清没被选中的(防陈旧上下文的原意不变;单选时就是只留第一艘,行为同前)
   for(const s of ships){
     if(s.fcEditId==null)continue;
-    if(sub&&s===sub)continue;
+    if(sel.indexOf(s)>=0)continue;
     s.fcEditId=null;
   }
 }
