@@ -11,7 +11,7 @@ const GUIDE_SEEK=MSL_CFG.ladarRange; // 导弹自主导引范围(km)=主动LADAR
 /* 2026-09-30 导弹组网(用户):弹与弹 MM(可见光圈的一半)、弹与舰(含前出浮标)MS 以内连一条边;一组导弹经弹弹链能连到任何一艘我方船(舰与舰之间量子通信,算一个节点)就「在网上」(p.online):
    回传自身状态(我方画真位置、选中面板照实报)、收数据链引导(guideSide 只给在网上的)。每个感知节拍重算一次;刚发射的算在网上(52 fireMissiles) */
 const MSL_LINK={MM:87750*CFG.scale,MS:90000*CFG.scale};
-const MSL_WING={S:5000*CFG.scale,FLOOR:0.62,conv:25000*CFG.scale,convW:80000*CFG.scale}; // 2026-10-01 两翼攻击队形(用户,演示页 demos/weapons/导弹组网.html):S = 槽位间距 0.5 万;FLOOR = 同步巡航下限(x vPeak,且不低于 1.05 x vTerm);conv / convW = 终端几公里开始收拢、收拢带多宽 // 2026-10-01 用户:组网半径 x1.5(弹弹 5.85 万 → 8.775 万,弹舰 6 万 → 9 万);同日可见光圈 x1.5,弹弹距离不再跟着可见光圈走(原来写成可见光圈的倍数)
+const MSL_WING={S:5000*CFG.scale,FLOOR:0.85,conv:25000*CFG.scale,convW:80000*CFG.scale,DASH:30000*CFG.scale}; // 2026-10-01 两翼攻击队形(用户,演示页 demos/weapons/导弹组网.html):S = 槽位间距 0.5 万;FLOOR = 会合段同步巡航的下限(x 现实油门上限:领先的最多减速这么多,再不够就早到,绝不爬行);conv / convW = 终端几公里开始收拢、收拢带多宽;DASH = 冲刺段起点(= 导引头主动锁定范围,盖过近防外圈):以内不再减速,保持速度命中 // 2026-10-01 用户:组网半径 x1.5(弹弹 5.85 万 → 8.775 万,弹舰 6 万 → 9 万);同日可见光圈 x1.5,弹弹距离不再跟着可见光圈走(原来写成可见光圈的倍数)
 let mslNetT=0;
 function mslNetStep(dt){
   mslNetT+=dt;if(mslNetT<SENS.TICK)return;mslNetT=0;
@@ -121,9 +121,9 @@ function mslWingForm(M){ // 2026-10-01 两翼攻击队形(demos/weapons/导弹�
       for(const g of L){g.wing=true;g.wSlot=(g.rk%2?-1:1)*Math.max(0,cap-Math.floor(g.rk/2)*MSL_WING.S);g.wW=w;
         const kk=Math.max(0,Math.min(1,(g.ds-MSL_WING.conv)/MSL_WING.convW));g.pe=Math.hypot(g.ds,Math.abs(g.wSlot)*(0.35+0.55*kk));}
       for(const g of L)g.aC=Math.min(g.vPeak,g.vTerm+Math.max(0,g.fuel-(g.netReserve||20))*MSL_A); // 现实油门上限:安全帽同式(56)—— 预留油不许动;上限随油量线性降(油多的人天然快,追得上),烧进预留以下回落到 vTerm
-      let T=Infinity;for(const g of L)T=Math.min(T,mslWingTau(g.pe,g.aC,g.vTerm,Math.max(g.spd||0,200*MSL_VK))); // 2026-10-01 用户:锚定最前面那组(剩余耗时最短)—— 领先的不减速,后面的尽量追
-      let Ts=L[0].wTs;Ts=(Ts===undefined||T<Ts)?T:Ts+(T-Ts)*0.25;L[0].wTs=Ts; // 平滑只在 T 变大的方向起作用:T 缩小(接近目标 / 换了更前面的组)即时跟 —— 平滑滞后不许刹住最前面那组;变大(目标估计挪远)才慢慢跟,防来回烧油
-      for(const g of L){g.wT=T;g.wV=Math.min(g.aC,g.pe/Math.max(1,Ts)); // 同步巡航速度 = 不超过自己的现实上限:领先的顶上限(不减速),后面的被钳在上限(全力追)
+      let T=0;for(const g of L)T=Math.max(T,mslWingTau(g.pe,g.aC,g.vTerm,Math.max(g.spd||0,200*MSL_VK))); // 2026-10-01 用户(饱和攻击两段式):会合段锚定全体同时到 —— T = 最慢一组的剩余耗时,尾随的顶上限追,领先的稍微减速收队(下限 FLOOR)
+      let Ts=L[0].wTs;Ts=Ts===undefined?T:Ts+(T-Ts)*0.25;L[0].wTs=Ts; // 轻量平滑:目标估计挪动 / 新波入列时 T 不抖,防来回烧油
+      for(const g of L){g.wT=T;g.wV=Math.max(g.aC*MSL_WING.FLOOR,Math.min(g.aC,g.pe/Math.max(1,Ts))); // 同步巡航速度:尾随的钳在上限(全力追),领先的最多减到 0.85 x 上限(稍微减速;再不够就早到一点);冲刺段(DASH 内)不再减速,见 56
         g.wDec=(g.wV*g.wV-g.vTerm*g.vTerm)/(2*MSL_A);}}}
 }
 /* 2026-09-30 断链的导弹只用自己知道的(用户):导弹带一份自己的目标记录 p.tk = {pos, vel, t, sig, a}(52 出膛时按母舰的估计写;在网上时随母舰的估计更新,导引头看见时用自己量到的),

@@ -289,6 +289,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         // 燃料对称安全帽:按当前速度减速回vTerm需(vTerm外的燃料),再留净机动燃料——超了自动降速(加速多久留多久减速/滑行修正吃油→降速)
         const safe=Math.max(p.vTerm,p.vTerm+Math.max(0,p.fuel-(p.netReserve||20))*MSL_A); // DS190:安全帽折算同步 150(用 200 会高估减速能力→放宽减速段→命中速度偏高)
         spdDes=Math.min(spdDes,safe);
+        if(p.wing&&dist<MSL_WING.DASH)spdDes=Math.max(spdDes,p.spd); // 2026-10-01 用户(饱和攻击冲刺段):进了导引头锁定范围(3 万,盖过近防外圈)就不再减速 —— 保持进入时的速度命中,上面的刹车曲线与安全帽一并不管(冲刺不需要留刹车的油),缩短在近防圈里的暴露时间
         if(coast&&spdDes>p.spd&&p.fuel<=(p.keep||0))spdDes=p.spd; // 加速不许动用末段预留(原来直射弹的终端速度够不着,安全帽从不起作用,一路加速把油烧光)
       }else{ // 旧逻辑兜底(手动构造的导弹)
         const ang=vn>5?V.angle(V.norm(p.vel),dir):0;
