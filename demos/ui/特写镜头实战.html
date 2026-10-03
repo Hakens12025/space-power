@@ -35,6 +35,7 @@ table.lg th{color:var(--dim);font-weight:normal}
   <span class="g">倍速:</span><span id="rates"></span><button class="t on" id="tc">接触降速</button>
   <span class="g">选中:</span><span id="sels"></span>
   <span class="g">显示:</span><button class="t on" id="big">放大 1.5 倍</button><button class="t" id="aid">取景辅助</button><button class="t on" id="auto">打完自动下一局</button>
+  <span class="g">预判镜头:</span><button class="t on" id="preNew">新方案</button><button class="t" id="trail">弹的拖影(主视角没有)</button>
 </div>
 <div class="wrap">
   <div class="side"><canvas id="cv"></canvas><div class="mono" id="hud"></div></div>
@@ -58,7 +59,7 @@ const mulberry=a=>()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+M
 const binom=(n,p)=>{let k=0;for(let i=0;i<n;i++)if(rnd()<p)k++;return k;};
 const hyp=Math.hypot,dist=(a,b)=>hyp(a[0]-b[0],a[1]-b[1]),unit=v=>{const l=hyp(v[0],v[1])||1;return [v[0]/l,v[1]/l];};
 const pHit=d=>1/(1+Math.pow(d/K.MAC_D50,K.MAC_K));
-const ST={now:0,run:true,rate:12,tc:true,eff:0,band:0,hold:0,big:true,aid:false,auto:true,sel:'all',seed:1,last:0,endW:-1};
+const ST={preNew:true,trail:false,now:0,run:true,rate:12,tc:true,eff:0,band:0,hold:0,big:true,aid:false,auto:true,sel:'all',seed:1,last:0,endW:-1};
 
 /* ================= 世界 ================= */
 let Wd=null;
@@ -146,15 +147,16 @@ function visPass(){ // 我方看不看得见(同 projSeen 的口径):炮弹在�
 const viewPos=s=>{const tk=Wd.know.blue.get(s.id);return tk&&tk.fix?dr(tk):null;};
 const contactFix=s=>!!Wd.know.blue.get(s.id).fix;
 
-/* ================= 导演 + 镜头:照搬引擎 render/84-scene.js(1ad8107),VIEW = 蓝方 ================= */
+/* ================= 导演 + 镜头:照搬引擎 render/84-scene.js(1ad8107),VIEW = 蓝方;与引擎不同:慢飞弧度 RHO 1.8 → 1.3(用户:定位镜头的失重感抹平一点)、预判新方案(ST.preNew) ================= */
 const I={FIT:0.7,SHOT_MAX:7000,CTX_T:240,CTX_F0:40000,CTX_F1:50000,CTX_E0:50000,CTX_E1:60000,
-  OM:5,ZE:0.85,SOFT:0.12,DB:15,T_OUT:0.35,T_IN:1.2,ZWAIT:0.8,ZRATE:1.8,FK:1,FMAX:4,PUSH:1.6,PUSH_T0:2.5,PUSH_T1:0.8,SLOW_T:3,RHO:1.8,RHO_Q:1.4,MIN_KM:2500,CIWS_KM:800,SLOW:{fix:1,id:1,vis:1},
+  OM:5,ZE:0.85,SOFT:0.12,DB:15,T_OUT:0.35,T_IN:1.2,ZWAIT:0.8,ZRATE:1.8,FK:1,FMAX:4,PUSH:1.6,PUSH_T0:2.5,PUSH_T1:0.8,SLOW_T:3,RHO:1.3,RHO_Q:1.4,MIN_KM:2500,CIWS_KM:800,SLOW:{fix:1,id:1,vis:1},
   W:416,H:260,HDR:20,INC_IN:80000,INC_OUT:100000,LEAD:0.4,FADE_IN:6,FADE_OUT:9,T_PAN:0.45,T_ANC:0.25,SX:30,SY:24,CUT:150,
   OUT_HI:1.2,OUT_LO:0.8,SPLIT:60000,JOIN:48000,IND:24,
   DW:{kill:3500,loss:3500,hit:2500,id:3000,fix:3000,shell:3500,ciws:2500,vis:3000},EVMS:{kill:6000,loss:6000,id:9000,fix:9000,vis:9000,hit:4500,ciws:4500,shell:5000},SHELL_BACK:200000,SHELL_GAP:30000,SHELL_NEAR:10000,
   COOL:3000,GRACE:500,KILL_HIT:3000,HIT_R:5000,
   RING:['察觉','来袭','防御','挨打','出手','战果'],RC:{fix:'察觉',id:'察觉',vis:'察觉',shell:'来袭',ciws:'防御',loss:'挨打',kill:'战果'},URG:{loss:1,kill:1},RING_WAIT:1500,MIN_SHOT:2500,VIS_COOL:30000,
-  PRE_S:3,PRE_MIN:0.4,POST:1200,PRE_COOL:4000,ATTR_R:20000};
+  PRE_S:3,PRE_MIN:0.4,POST:1200,PRE_COOL:4000,ATTR_R:20000,
+  PRE_MIN2:1.0,PRE_VIEW:0.8,PRE_HOLD:700,PRE_POST2:800,PRE_WMAX:60000}; // 预判新方案:离命中至少 PRE_MIN2 墙钟秒才切;框按弹在命中前 PRE_VIEW 秒的位置定(框宽封顶 PRE_WMAX km)、整段不缩放;命中后定格 PRE_HOLD ms;打空 PRE_POST2 ms 收
 function insetReset(){Object.assign(I,{csk:'',lastK:'',kk:'',pcx:0,pcy:0,ax:0,ay:0,ox:0,oy:0,lpx:0,lpy:0,vcx:0,vcy:0,lzg:null,zin:0,fly:null,lz:0,vo:[0,0,0,0,0],key:'',sk:null,cut:-1e9,cool:-1e9,
   a:0,last:null,fx:null,mskip:null,rc:-1,rt:-1e9,shT:-1e9,dir:null,ev:[],seq:0,prj:new Map(),by:new Map(),preT:new Map(),preSeen:new WeakSet(),out:new Set(),outK:'',dead:new Set(),idc:new Map(),
   fixd:new Set(),fix0:true,hits:new WeakSet(),shs:new WeakSet(),cws:new WeakSet(),shr:new WeakSet(),vin:new Map(),vit:new Map(),cx:0,cy:0,z:1,on:false,t0g:-1,T:null});}
@@ -168,14 +170,17 @@ const insetName=s=>Wd.know.blue.get(s.id)&&Wd.know.blue.get(s.id).id?s.name:'敌
 const insetVelV=s=>s.side==='blue'?[s.vel[0],s.vel[1]]:(Wd.know.blue.get(s.id).estV||null);
 const insetShPos=s=>(!s||s.dead)?null:(s.side==='blue'?s.pos:(contactFix(s)?viewPos(s):null));
 const insetShName=s=>s.side==='blue'?s.name:insetName(s);
-function insetEta(p,tq){if(p.type==='mac')return p.tt-p.age;const tv=insetVelV(p.target),dx=tq[0]-p.pos[0],dy=tq[1]-p.pos[1],d=hyp(dx,dy)||1,vc=((p.vel[0]-(tv?tv[0]:0))*dx+(p.vel[1]-(tv?tv[1]:0))*dy)/d;return vc>1?d/vc:Infinity;}
-function insetPre(now,inc,sel,idle,lg){const rt=insetRate();if(!(rt>0))return null;let best=null;
+function insetEta(p,tq,tv0){if(p.type==='mac'&&p.side==='blue')return p.tt-p.age;const tv=tv0||insetVelV(p.target),dx=tq[0]-p.pos[0],dy=tq[1]-p.pos[1],d=hyp(dx,dy)||1,vc=((p.vel[0]-(tv?tv[0]:0))*dx+(p.vel[1]-(tv?tv[1]:0))*dy)/d;return vc>1?d/vc:Infinity;}
+function insetShellTg(p){const u=unit(p.vel);let b=null,bd=Infinity;for(const s of alive('blue')){const rx=s.pos[0]-p.pos[0],ry=s.pos[1]-p.pos[1],a=rx*u[0]+ry*u[1];if(a>0&&Math.abs(rx*u[1]-ry*u[0])<I.SHELL_NEAR&&a<bd){bd=a;b=s;}}return b;} // 敌方炮弹冲哪艘我舰来:前方、横向 SHELL_NEAR 以内最近的
+function insetPre(now,inc,sel,idle,lg){const rt=insetRate();if(!(rt>0))return null;let best=null;const MIN=ST.preNew?I.PRE_MIN2:I.PRE_MIN;
   const ok=(p,tg,kill)=>!I.preSeen.has(p)&&(kill||!(now-(I.preT.get(tg.id)||-1e9)<I.PRE_COOL));
-  if(lg('来袭'))for(const m of inc){if(!idle&&sel.indexOf(m.tgt)<0)continue;const w=m.eta/rt;if(!(w>=I.PRE_MIN&&w<=I.PRE_S)||!ok(m.p,m.tgt,false))continue;
+  if(lg('来袭'))for(const m of inc){if(!idle&&sel.indexOf(m.tgt)<0)continue;const w=m.eta/rt;if(!(w>=MIN&&w<=I.PRE_S)||!ok(m.p,m.tgt,false))continue;
     const sc=2.1+1/w;if(!best||sc>best.sc)best={sc,p:2.1,kind:'in',proj:m.p,tg:m.tgt,sh:m.p.shooter};}
+  if(ST.preNew&&lg('来袭'))for(const p of Wd.proj){if(p.done||p.type!=='mac'||p.side==='blue'||!p.sb)continue;const tg=insetShellTg(p);if(!tg||(!idle&&sel.indexOf(tg)<0))continue; // 新方案:来袭炮弹也有预判段
+    const w=insetEta(p,tg.pos,tg.vel)/rt;if(!(w>=MIN&&w<=I.PRE_S)||!ok(p,tg,false))continue;const sc=2.1+1/w;if(!best||sc>best.sc)best={sc,p:2.1,kind:'in',proj:p,tg,sh:p.shooter};}
   if(lg('出手'))for(const p of Wd.proj){if(p.done||p.side!=='blue'||!p.target||p.target.dead)continue;
     const tg=p.target;if(!idle&&sel.indexOf(p.shooter)<0&&!sel.some(s=>s.tgt===tg))continue;const tq=insetShPos(tg);if(!tq)continue;
-    const w=insetEta(p,tq)/rt;if(!(w>=I.PRE_MIN&&w<=I.PRE_S))continue;
+    const w=insetEta(p,tq)/rt;if(!(w>=MIN&&w<=I.PRE_S))continue;
     const kill=Wd.know.blue.get(tg.id).id&&(p.type==='mac'?p.dmg:p.count*p.dmgPer)>=tg.hp;
     if(!ok(p,tg,kill))continue;const sc=(kill?2.6:1.8)+1/w;if(!best||sc>best.sc)best={sc,p:kill?2.6:1.8,kind:kill?'kill':'out',proj:p,tg,sh:p.shooter};}
   return best;}
@@ -254,34 +259,41 @@ function insetCtx(D,J,inc){const ctx=[],ind=[],sq=insetShPos(D.sh),my=(D.sj&&!D.
   if(my)for(const m of inc)if(m.tgt===my&&ind.length<I.IND)ind.push({pos:m.p.pos,col:'255,154,85',lbl:isFinite(m.eta)?Math.round(m.eta*10)+' s':''});
   if(D.k==='pre'){if(!D.proj.done)ctx.push({p:[D.proj.pos[0],D.proj.pos[1]],w:1});}
   else if(D.k==='m'){const m=inc.find(m=>m.tgt===D.sj);if(m)ctx.push({p:[m.p.pos[0],m.p.pos[1]],w:1});}
-  else if(sq)ctx.push({p:[sq[0],sq[1]],w:1});
-  else if(D.sj&&D.sj.side!=='blue'){let b=null,bd=I.CTX_E1;for(const o of Wd.ships){if(o.dead||o.side!=='blue')continue;const d=dist(o.pos,J.p);if(d<bd){bd=d;b=o;}}if(b)ctx.push({p:[b.pos[0],b.pos[1]],w:1});}
+  else if(sq&&!(ST.preNew&&D.hitT))ctx.push({p:[sq[0],sq[1]],w:1});
+  else if(D.sj&&D.sj.side!=='blue'&&!(ST.preNew&&D.hitT)){let b=null,bd=I.CTX_E1;for(const o of Wd.ships){if(o.dead||o.side!=='blue')continue;const d=dist(o.pos,J.p);if(d<bd){bd=d;b=o;}}if(b)ctx.push({p:[b.pos[0],b.pos[1]],w:1});}
   return {ctx,ind};}
 function insetPlaySub(D,now,inc){
-  if(D.k==='pre'){if(D.end<0&&(D.proj.done||Wd.proj.indexOf(D.proj)<0))D.end=now;if(D.end>=0&&now-D.end>=I.POST&&D.el>=I.MIN_SHOT)return null;}
+  if(D.k==='pre'){if(D.end<0&&(D.proj.done||Wd.proj.indexOf(D.proj)<0))D.end=now;if(D.end>=0&&now-D.end>=(ST.preNew?I.PRE_POST2:I.POST)&&(ST.preNew||D.el>=I.MIN_SHOT))return null;}
   if(D.k==='m'){if(inc.some(m=>m.tgt===D.sj))D.gm=-1;else{if(!(D.gm>=0))D.gm=now;if(now-D.gm>=I.GRACE)return null;}}
   const J=insetSjPos(D);
   if(!J){if(D.gl<0)D.gl=now;return (D.sub&&now-D.gl<I.GRACE)?D.sub:null;}D.gl=-1;
   const C=insetCtx(D,J,inc),rt=insetRate();let lbl,etaW=null;
-  if(D.k==='pre'){const eta=D.end<0?insetEta(D.proj,J.p):Infinity,tg=D.sj;if(rt>0&&isFinite(eta))etaW=eta/rt;
-    const w=rt>0&&eta>0&&isFinite(eta)?' · '+(eta/rt).toFixed(1)+' s':'';
-    lbl=(D.kind==='in'?'预判 · 来袭 → '+tg.name:(D.kind==='kill'?'预判 · 可能击沉 → ':'预判 · '+insetShName(D.sh)+' → ')+insetName(tg))+w;}
+  if(D.k==='pre'){let eta=D.end<0?insetEta(D.proj,J.p,J.v):Infinity;const tg=D.sj;
+    if(ST.preNew&&D.end<0){D.me=Math.min(D.me===undefined?Infinity:D.me,eta);if(eta<-0.05||(eta===Infinity&&D.me<1)){D.end=now;D.miss=true;eta=Infinity;}} // 新方案:过了最近点还没打中 = 打空,不再跟着弹走
+    if(rt>0&&isFinite(eta))etaW=eta/rt;
+    if(ST.preNew&&!D.lock){const P=D.proj.pos,dx=P[0]-J.p[0],dy=P[1]-J.p[1],d=hyp(dx,dy)||1,vc=Math.max(1,-((D.proj.vel[0]-J.v[0])*dx+(D.proj.vel[1]-J.v[1])*dy)/d);D.lock={u:[dx/d,dy/d],dE:vc*rt*I.PRE_VIEW,W:0};} // 锁框:弹从哪边来、命中前 PRE_VIEW 秒在多远
+    const w=rt>0&&eta>0&&isFinite(eta)?' · '+(eta/rt).toFixed(1)+' s':(D.end>=0&&(D.miss||D.proj.done)?' · 没打中':'');
+    let cn=0;for(const x of D.evs)if(x.k==='ciws')cn+=x.n||0;
+    lbl=(cn?'近防拦下 '+cn+' 枚 · ':'')+(D.kind==='in'?'预判 · 来袭 → '+tg.name:(D.kind==='kill'?'预判 · 可能击沉 → ':'预判 · '+insetShName(D.sh)+' → ')+insetName(tg))+w;}
   else if(D.k==='m'){const L=inc.filter(m=>m.tgt===D.sj);lbl='播放 · 来袭导弹 → '+D.sj.name+(L.length&&isFinite(L[0].eta)?' · '+Math.round(L[0].eta*10)+' s':'');}
   else lbl='播放 · '+insetLbl(D)+(D.sh?' ← '+insetShName(D.sh):'');
   const sq=insetShPos(D.sh);D.cl=sq?[sq.slice(),[J.p[0],J.p[1]]]:null;
-  D.sub={key:D.key,sk:D.sk,kk:'',j:J.j,kind:D.k,S:[J.p[0],J.p[1]],V:[J.v[0],J.v[1]],vm:J.vm,ctx:C.ctx,eta:etaW,ciws:D.k==='ciws'||D.evs.some(e=>e.k==='ciws'),ind:C.ind,lbl};
+  D.sub={key:D.key,sk:D.sk,kk:'',j:J.j,kind:D.k,S:[J.p[0],J.p[1]],V:[J.v[0],J.v[1]],vm:J.vm,ctx:C.ctx,eta:etaW,ciws:D.k==='ciws'||D.evs.some(e=>e.k==='ciws'),ind:C.ind,lbl,lock:(ST.preNew&&D.lock&&(D.k==='pre'||now-(D.hitT||-1e9)<I.PRE_HOLD))?D.lock:null};
   return D.sub;}
 function insetCi(e){const c=e.c||I.RC[e.k];return c?I.RING.indexOf(c):-1;}
 function insetDd(ci){const N=I.RING.length,rc=I.rc;if(rc<0||ci<0)return 0;return (ci-rc+N)%N||N;}
 function insetLegal(ci,h){const N=I.RING.length,Kk=(N-1)>>1,rc=I.rc;if(rc<0||ci<0||Kk*h>=N)return true;const d=(ci-rc+N)%N;return d>=1&&d<=Kk*h;}
 function insetDirector(now,dt,inc,ss,sel){
   const idle=!sel.length,thr=!!(ss&&ss.wm>0);let D=I.dir,sub=null;
-  if(D&&((D.k==='m'&&!idle)||(thr&&D.p<2))){if(D.k!=='m')I.rt=now;D=I.dir=null;I.cool=now;I.fx=null;}
+  const preRun=ST.preNew&&D&&D.k==='pre'&&D.end<0; // 新方案:弹还在飞的预判段不让别的抢(损失 / 击沉除外)
+  if(D&&((D.k==='m'&&!idle)||(thr&&D.p<2&&!preRun))){if(D.k!=='m')I.rt=now;D=I.dir=null;I.cool=now;I.fx=null;}
   if(D&&D.k==='shell')for(const e of I.ev)if(!e.shown&&e.k==='shell')e.shown=true;
   if(D&&D.k!=='m')for(const e of I.ev){if(e.shown||!e.ship||e.ship.id!==D.sk)continue;
-    const ci=insetCi(e),u=!!I.URG[e.k];if(!u&&ci!==I.rc&&!insetLegal(ci,1))continue;
+    const ci=insetCi(e),u=!!I.URG[e.k];
+    if(ST.preNew&&D.k==='pre'&&!u&&!D.proj.done){if(e.k==='hit'||e.k==='ciws'||e.k==='shell'){e.shown=true;D.evs.push(e);}continue;} // 新方案:弹还在飞,同一艘船的别的事只收进来,不把预判段改成别的镜头
+    if(!u&&ci!==I.rc&&!insetLegal(ci,1))continue;
     e.shown=true;D.evs.push(e);D.n++;if(e.q&&(e.k==='kill'||e.k==='loss'))D.sq=e.q.slice();
-    if(D.k==='pre'){D.k=e.k;D.p=e.p;D.end=-1;D.dwell=D.el+(I.DW[e.k]||3000);}else D.dwell=Math.max(D.dwell,D.el+(I.DW[e.k]||3000));
+    if(D.k==='pre'){D.k=e.k;D.p=ST.preNew?Math.max(D.p,e.p):e.p;D.end=-1;D.dwell=D.el+(I.DW[e.k]||3000)+(ST.preNew?I.PRE_HOLD:0);D.hitT=now;}else D.dwell=Math.max(D.dwell,D.el+(I.DW[e.k]||3000));
     if(e.k==='hit'||e.k==='kill'||e.k==='loss')insetFx(D,now,e.k);
     if(!u&&ci>=0)I.rc=ci;}
   if(D){sub=insetPlaySub(D,now,inc);if(sub){if(!I.fly)D.el+=dt*1000;if(D.el>=Math.min(D.dwell,D.k==='m'?Infinity:I.SHOT_MAX))sub=null;}if(!sub){if(D.k!=='m')I.rt=now;D=I.dir=null;I.cool=now;I.fx=null;}}
@@ -289,11 +301,11 @@ function insetDirector(now,dt,inc,ss,sel){
   const cool=!idle&&now-I.cool<I.COOL,dd=e=>I.URG[e.k]?0:insetDd(insetCi(e));let C=[];
   for(const e of I.ev){if(e.shown)continue;
     if((e.k==='hit'||e.k==='ciws')&&!idle&&e.ship&&sel.indexOf(e.ship)<0&&!sel.some(s=>s.tgt===e.ship)){e.shown=true;e.skip=true;continue;}
-    if(e.p<2&&(cool||thr))continue;if(D&&e.p<=D.p)continue;
+    if(e.p<2&&(cool||thr))continue;if(D&&e.p<=D.p)continue;if(preRun&&!I.URG[e.k])continue;
     if(!I.URG[e.k]&&(!cut||!insetLegal(insetCi(e),hop)))continue;C.push(e);}
   if(C.length>1)C.sort(hop>1?(a,b)=>dd(a)-dd(b)||b.p-a.p||a.seq-b.seq:(a,b)=>b.p-a.p||a.seq-b.seq);
   {const d0=hop>1&&C.length?dd(C[0]):Infinity,pr=((idle||now-I.cool>=I.COOL)&&cut)?insetPre(now,inc,sel,idle,c=>{const ci=I.RING.indexOf(c);return insetLegal(ci,hop)&&insetDd(ci)<=d0;}):null;
-    if(pr&&(!D||pr.p>D.p)&&!(thr&&pr.p<2)){const N=insetShot('pre',pr.p,pr.tg,now,{proj:pr.proj,sh:pr.sh,kind:pr.kind,dwell:Infinity,end:-1}),s2=insetPlaySub(N,now,inc);
+    if(pr&&(!D||pr.p>D.p)&&!(thr&&pr.p<2)&&!preRun){const N=insetShot('pre',pr.p,pr.tg,now,{proj:pr.proj,sh:pr.sh,kind:pr.kind,dwell:Infinity,end:-1}),s2=insetPlaySub(N,now,inc);
       if(s2){I.preSeen.add(pr.proj);I.preT.set(pr.tg.id,now);I.dir=D=N;sub=s2;I.fx=null;I.rc=I.RING.indexOf(pr.kind==='in'?'来袭':'出手');C=C.filter(e=>I.URG[e.k]&&e.p>N.p);}}}
   for(const e of C){const N=insetBuild(e,now);if(!N)continue;I.dir=D=N;sub=insetPlaySub(N,now,inc);{const ci=insetCi(e);if(ci>=0&&!I.URG[e.k])I.rc=ci;}break;}
   if(!D&&idle&&inc.length&&inc[0].tgt!==I.mskip){const tg=inc[0].tgt,N=insetShot('m',0.5,tg,now,{key:'m:'+tg.id,dwell:Infinity,gm:-1}),s=insetPlaySub(N,now,inc);if(s){I.dir=N;sub=s;}}
@@ -303,7 +315,10 @@ function insetZoomPath(p0,p1,rho){const ux0=p0[0],uy0=p0[1],w0=p0[2],ux1=p1[0],u
   else{const d1=Math.sqrt(d2),b0=(w1*w1-w0*w0+r4*d2)/(2*w0*r2*d1),b1=(w1*w1-w0*w0-r4*d2)/(2*w1*r2*d1),q0=Math.log(Math.sqrt(b0*b0+1)-b0),q1=Math.log(Math.sqrt(b1*b1+1)-b1);S=(q1-q0)/rho;
     f=s=>{const u=s*S,ch=Math.cosh(q0),uu=w0/(r2*d1)*(ch*Math.tanh(rho*u+q0)-Math.sinh(q0));return [ux0+uu*dx,uy0+uu*dy,w0*ch/Math.cosh(rho*u+q0)];};}
   f.dur=Math.abs(S)*rho/Math.SQRT2;return f;}
-function insetTarget(sub,w,hp,zMax){const S=sub.S,tv=I.CTX_T/10/2,pts=[S,[S[0]+sub.V[0]*tv,S[1]+sub.V[1]*tv],[S[0]-sub.V[0]*tv,S[1]-sub.V[1]*tv]];
+function insetTarget(sub,w,hp,zMax){
+  if(sub.lock){const L=sub.lock,S=sub.S,ex=L.u[0]*L.dE,ey=L.u[1]*L.dE;if(!L.W)L.W=Math.max(Math.min(Math.max(Math.abs(ex)/0.6,Math.abs(ey)/(0.6*hp/w)),I.PRE_WMAX),w/zMax); // 目标在远侧约 1/3、弹从近侧进框;框宽开播时定死
+    const cx=S[0]+ex/3,cy=S[1]+ey/3;return {bx:cx,by:cy,lx:0,ly:0,cx,cy,w:L.W};}
+  const S=sub.S,tv=I.CTX_T/10/2,pts=[S,[S[0]+sub.V[0]*tv,S[1]+sub.V[1]*tv],[S[0]-sub.V[0]*tv,S[1]-sub.V[1]*tv]];
   for(const c of sub.ctx)pts.push([S[0]+c.w*(c.p[0]-S[0]),S[1]+c.w*(c.p[1]-S[1])]);
   let x0=1e18,x1=-1e18,y0=1e18,y1=-1e18;for(const p of pts){x0=Math.min(x0,p[0]);x1=Math.max(x1,p[0]);y0=Math.min(y0,p[1]);y1=Math.max(y1,p[1]);}
   let W=Math.max((x1-x0)/I.FIT,(y1-y0)/(I.FIT*hp/w),1e-6);
@@ -314,6 +329,8 @@ function insetTarget(sub,w,hp,zMax){const S=sub.S,tv=I.CTX_T/10/2,pts=[S,[S[0]+s
 function insetSD(c,t,i,T,dt){if(!(dt>0))return c;const om=2/T,x=om*dt,e=1/(1+x+0.48*x*x+0.235*x*x*x),ch=c-t,v=I.vo[i],tp=(v+om*ch)*dt;
   let o=t+(ch+tp)*e;I.vo[i]=(v-om*tp)*e;if((t-c>0)===(o>t)){o=t;I.vo[i]=0;}return o;}
 function insetCam(sub,T,w,hp,dt,now){const ltz=Math.log(w/T.w),S=sub.S;
+  if(sub.lock){if(sub.key!==I.key){if(I.key){I.cut=now;REC.mark('cut',now);}I.key=sub.key;I.csk=sub.sk;I.lastK=sub.kind||'';I.fly=null;} // 预判新方案:直接切过去,整段钉在目标上、不缩放
+    I.pcx=T.cx;I.pcy=T.cy;I.lz=ltz;I.lzg=ltz;I.zin=0;I.ax=S[0];I.ay=S[1];I.lpx=I.lpy=0;I.ox=T.cx-S[0];I.oy=T.cy-S[1];I.vcx=I.vcy=0;I.vo.fill(0);I.kk=sub.kk;return;}
   const pin=z=>{I.ax=S[0];I.ay=S[1];I.lpx=T.lx;I.lpy=T.ly;I.ox=I.pcx-S[0]-T.lx/z;I.oy=I.pcy-S[1]-T.ly/z;I.vcx=I.vcy=0;I.vo.fill(0);I.kk=sub.kk;};
   if(sub.key!==I.key){
     if(!I.key){I.pcx=T.cx;I.pcy=T.cy;I.lz=ltz;I.fly=null;pin(w/T.w);}
@@ -396,6 +413,7 @@ function drawInsetView(g,now){const w=I.W,h=I.H,z=I.z,X=x=>(x-I.cx)*z+w/2,Y=y=>(
   for(const x of Wd.shieldFX){const k=(now-x.tw)/(x.k==='break'?500:300);if(k<0||k>=1||!x.vis)continue;const s=x.s,p=s.side==='blue'?s.pos:viewPos(s);if(!p)continue;
     g.strokeStyle=x.k==='break'?'rgba(255,255,255,'+(1-k)+')':'rgba(120,220,255,'+(1-k)+')';g.lineWidth=x.k==='break'?2:1.5;g.beginPath();g.arc(X(p[0]),Y(p[1]),12+(x.k==='break'?10*k:0),0,6.2832);g.stroke();g.lineWidth=1;}
   for(const p of Wd.proj){if(p.done||!p.sb)continue;const x=X(p.pos[0]),y=Y(p.pos[1]);if(x<-10||x>w+10||y<-10||y>h+10)continue;
+    if(ST.trail){const r=insetRate()*z*0.06,tx=p.vel[0]*r,ty=p.vel[1]*r,l=hyp(tx,ty),k=l>80?80/l:1;g.strokeStyle=p.type==='mac'?'rgba(255,255,255,.45)':'rgba(255,170,120,.45)';g.lineWidth=2;g.beginPath();g.moveTo(x,y);g.lineTo(x-tx*k,y-ty*k);g.stroke();g.lineWidth=1;} // 拖影 = 弹最近 0.06 墙钟秒走过的那段(主视角没有)
     if(p.type==='mac'){g.fillStyle='#fff';g.fillRect(x-2,y-2,4,4);continue;}
     const col=p.side==='red'?'#ff6b6b':'#ffd166',n=Math.min(8,p.count);g.fillStyle=col;for(let i=0;i<n;i++){const a=i/n*6.283+p.grp*0.45;g.fillRect(x+Math.cos(a)*4.5-1.2,y+Math.sin(a)*4.5-1.2,2.4,2.4);}
     g.strokeStyle='rgba(255,255,255,.55)';g.lineWidth=0.8;g.beginPath();g.arc(x,y,5,0,6.283);g.stroke();g.lineWidth=1;}
@@ -479,7 +497,7 @@ const $=id=>document.getElementById(id);
 $('play').onclick=()=>{ST.run=!ST.run;$('play').textContent=ST.run?'暂停':'继续';};
 $('again').onclick=()=>startMatch(ST.seed);$('next').onclick=()=>startMatch(ST.seed+1);
 const tog=(id,k,f)=>{$(id).onclick=()=>{ST[k]=!ST[k];$(id).classList.toggle('on',ST[k]);if(f)f();};};
-tog('tc','tc');tog('big','big',layout);tog('aid','aid');tog('auto','auto');
+tog('tc','tc');tog('preNew','preNew',()=>{$('preNew').textContent=ST.preNew?'新方案':'引擎现状';});tog('trail','trail');tog('big','big',layout);tog('aid','aid');tog('auto','auto');
 {const R=$('rates');for(const r of [1,2,4,8,12,50]){const b=document.createElement('button');b.className='t'+(r===ST.rate?' on':'');b.textContent='x'+r;b.onclick=()=>{ST.rate=r;for(const x of R.children)x.classList.toggle('on',x===b);};R.appendChild(b);}}
 {const S=$('sels');for(const [k,t] of [['none','不选'],['b1','巴黎-01'],['b2','马拉松-01'],['b3','波长-01'],['all','全舰队']]){const b=document.createElement('button');b.className='t'+(k===ST.sel?' on':'');b.textContent=t;b.onclick=()=>{ST.sel=k;for(const x of S.children)x.classList.toggle('on',x===b);};S.appendChild(b);}}
 window.addEventListener('resize',layout);
