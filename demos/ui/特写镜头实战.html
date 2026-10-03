@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>特写镜头实战</title>
+<style>
+:root{--bg:#05070c;--panel:#0b1018;--line:#1e2836;--txt:#c7d0dc;--dim:#5f7083;--acc:#5aa7ff;--amb:#ffd166}
+body{margin:0;background:var(--bg);color:var(--txt);font:13px "Microsoft YaHei",sans-serif}
+header{padding:12px 16px 4px}h1{font-size:16px;margin:0;color:var(--acc)}
+p.n{color:var(--dim);margin:4px 0;font-size:12px;line-height:1.6}
+.wrap{display:flex;flex-wrap:wrap;gap:14px;padding:8px 16px;align-items:flex-start}
+canvas{display:block;border:1px solid var(--line);background:#05070c}
+.ctl{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;padding:6px 16px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.ctl .g{color:var(--dim);margin-left:10px}
+button.t{background:#101722;color:var(--txt);border:1px solid var(--line);padding:3px 10px;cursor:pointer;font:12px "Microsoft YaHei",sans-serif}
+button.t.on{border-color:var(--acc);color:#fff;background:#12233a}
+.mono{font:12px Consolas,"Microsoft YaHei",monospace;color:var(--dim);white-space:pre;line-height:1.5}
+table.lg{border-collapse:collapse;font:12px Consolas,"Microsoft YaHei",monospace}
+table.lg td,table.lg th{padding:2px 8px;border-bottom:1px solid #121a26;text-align:left;white-space:nowrap}
+table.lg th{color:var(--dim);font-weight:normal}
+.bad{color:#ff8a7a}.ok{color:#8fd18b}.mid{color:#ffd166}
+.side{display:flex;flex-direction:column;gap:8px}
+</style>
+</head>
+<body>
+<header>
+<h1>特写镜头实战 · 3v3 远距离炮弹 / 导弹交战</h1>
+<p class="n">独立演示页(不加载引擎)。小模拟按引擎现在的数值:开局相距约 32 万 km、雷达 24.6 万定位、红外 19.2 万认出、可见光圈 15.8 万;主炮 1 万 km/游戏秒、命中率 7.3 万处 50%(10% 以上才开)、装填 60 游戏秒、600 伤;导弹一组 12 枚、约 4500 km/游戏秒、40 万内发射;近防外圈 / 内圈各掷一次;护盾先吃伤害。<br>
+导演(事件成环、预判段、炮弹来路、插队、冷却)与镜头(连续取景、钉在主体上 + 前视、飞过去、最近 2500 km)照搬引擎现在的代码 —— 这一版如实复现现在的毛病,先看问题再改。<br>
+左 = 特写(只画我方知道的);右 = 全局真值(琥珀框 = 特写此刻拍到的范围,暗的弹 = 我方看不见)。倍速 = 你选的上限,开着「接触降速」时同引擎:定位 x12、导弹带 x8、炮战带(3 万)x4。</p>
+</header>
+<div class="ctl">
+  <button class="t" id="play">暂停</button><button class="t" id="again">重开本局</button><button class="t" id="next">下一局</button><span class="mono" id="seed"></span>
+  <span class="g">倍速:</span><span id="rates"></span><button class="t on" id="tc">接触降速</button>
+  <span class="g">选中:</span><span id="sels"></span>
+  <span class="g">显示:</span><button class="t on" id="big">放大 1.5 倍</button><button class="t" id="aid">取景辅助</button><button class="t on" id="auto">打完自动下一局</button>
+</div>
+<div class="wrap">
+  <div class="side"><canvas id="cv"></canvas><div class="mono" id="hud"></div></div>
+  <div class="side"><canvas id="ov"></canvas><div class="mono" id="stat"></div></div>
+</div>
+<div class="wrap"><canvas id="ch"></canvas></div>
+<p class="n" style="padding:0 16px">上图 = 最近 60 墙钟秒:曲线 = 特写框宽(对数纵轴,虚线 = 最近 2500 km 的框宽);色带 = 正在播的镜头(按环上的类);下面的刻度 = 事件进队列(实心 = 播了,空心 = 没播就过期)。红点 = 硬切,琥珀段 = 飞过去。</p>
+<div class="wrap"><div><div class="mono" style="margin-bottom:4px">镜头记录(最近 16 段)· 关键物 = 预判段的那颗弹 / 炮弹来路的那颗炮弹 / 来袭导弹;「在框内」按帧计</div><table class="lg" id="log"></table></div></div>
+<script>
+"use strict";
+/* ================= 数值:照引擎 2026-10-04(km、游戏秒) ================= */
+const K={VIS_R:157950,RADAR:246000,ID_R:192000,SENSE:1,LOST:3,
+  MAC_V:10000,MAC_D50:73000,MAC_K:4,MAC_AUTO:0.1,MAC_DMG:600,MAC_RL:60,
+  MSL_N:12,MSL_RL:60,MSL_A:150,MSL_VP:4500,MSL_FUEL:44.7,MSL_RANGE:400000,MSL_HIT:400,MSL_KIN:0.075/1000,
+  SH_REGEN:60,SH_RESTART:10,TC_CAP:[12,8,4],TC_NAME:['','定位','导弹带','炮战带'],TC_HOLD:4,TC_TAU:0.35,GUN_BAND:30000,FAR:900000};
+const CLS={FF:{hp:550,sh:200,acc:100,vmax:800,cruise:500,ciws:[18750,0.4,6000,0.85],md:12,ammo:768},
+           CA:{hp:900,sh:300,acc:75,vmax:700,cruise:400,ciws:[11250,0.25,3750,0.4],md:15,ammo:960}};
+CLS.CL=CLS.FF;
+let rnd=Math.random;
+const mulberry=a=>()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};
+const binom=(n,p)=>{let k=0;for(let i=0;i<n;i++)if(rnd()<p)k++;return k;};
+const hyp=Math.hypot,dist=(a,b)=>hyp(a[0]-b[0],a[1]-b[1]),unit=v=>{const l=hyp(v[0],v[1])||1;return [v[0]/l,v[1]/l];};
+const pHit=d=>1/(1+Math.pow(d/K.MAC_D50,K.MAC_K));
+const ST={now:0,run:true,rate:12,tc:true,eff:0,band:0,hold:0,big:true,aid:false,auto:true,sel:'all',seed:1,last:0,endW:-1};
+
+/* ================= 世界 ================= */
+let Wd=null;
+function newWorld(seed){
+  rnd=mulberry(seed*7919+13);
+  const ships=[],byId={},mk=(id,name,cls,side,slot)=>{const c=CLS[cls],s={id,name,cls,side,slot,pos:[0,0],vel:[0,0],hp:c.hp,hpMax:c.hp,sh:c.sh,shMax:c.sh,shDown:0,dead:false,gcd:20+rnd()*40,mcd:2+rnd()*20,ammo:c.ammo,tgt:null};ships.push(s);byId[id]=s;return s;};
+  mk('b1','巴黎-01','FF','blue',[0,0]);mk('b2','马拉松-01','CA','blue',[-8000,9000]);mk('b3','波长-01','CL','blue',[-8000,-9000]);
+  mk('r1','叛军·护卫-01','FF','red',[0,0]);mk('r2','叛军·巡洋-01','CA','red',[-9000,-10000]);mk('r3','叛军·护卫-02','FF','red',[-9000,10000]);
+  const ry=(rnd()-0.5)*140000,rx=300000+rnd()*40000,h0=Math.atan2(ry,rx);
+  const F={blue:{ax:0,ay:0,hd:h0+(rnd()-0.5)*0.4,R0:90000,dir:rnd()<0.5?1:-1,jk:0,jt:0},red:{ax:rx,ay:ry,hd:h0+Math.PI+(rnd()-0.5)*0.4,R0:105000,dir:rnd()<0.5?1:-1,jk:0,jt:0}};
+  for(const k in F)F[k].hd0=F[k].hd;
+  for(const s of ships){const f=F[s.side],c=Math.cos(f.hd),n=Math.sin(f.hd),sp=CLS[s.cls].cruise*0.8;s.pos=[f.ax+c*s.slot[0]-n*s.slot[1],f.ay+n*s.slot[0]+c*s.slot[1]];s.vel=[c*sp,n*sp];}
+  const know={blue:new Map(),red:new Map()};
+  for(const s of ships)know[s.side==='blue'?'red':'blue'].set(s.id,{fix:false,est:null,estT:-1e9,estV:null,last:-1e9,id:false,vis:false});
+  Wd={t:0,ships,byId,F,know,proj:[],hitFX:[],shieldFX:[],ciwsFX:[],SHELL_TR:[],trc:[],senseT:0};
+}
+const alive=side=>Wd.ships.filter(s=>s.side===side&&!s.dead);
+const dr=tk=>tk.estV?[tk.est[0]+tk.estV[0]*Math.min(3,Wd.t-tk.estT),tk.est[1]+tk.estV[1]*Math.min(3,Wd.t-tk.estT)]:tk.est; // 航位推算(同引擎 insetDR,封顶 3 游戏秒)
+function sense(side){ // 雷达定位 / 红外认出 / 可见光圈,每 SENSE 游戏秒一拍;估计 = 这一拍的位置,速度 = 两拍差分
+  const mine=alive(side);
+  for(const [id,tk] of Wd.know[side]){const e=Wd.byId[id];if(e.dead){tk.vis=false;continue;}
+    let d=Infinity;for(const s of mine)d=Math.min(d,dist(s.pos,e.pos));
+    if(d<=K.RADAR){const dt=Wd.t-tk.estT;tk.estV=(tk.fix&&tk.est&&dt>0.5)?[(e.pos[0]-tk.est[0])/dt,(e.pos[1]-tk.est[1])/dt]:null;
+      tk.est=e.pos.slice();tk.estT=Wd.t;tk.last=Wd.t;tk.fix=true;if(d<=K.ID_R)tk.id=true;tk.vis=d<=K.VIS_R;}
+    else{tk.vis=false;if(tk.fix&&Wd.t-tk.last>K.LOST){tk.fix=false;tk.estV=null;}}}
+}
+function fleetStep(side,dt){ // 舰队:没定位 = 朝开局方向走;定位了 = 远了靠近、近了拉开、合适就横移,每 25~55 秒变一次向
+  const F=Wd.F[side],mine=alive(side);if(!mine.length)return;
+  let cx=0,cy=0,n=0;for(const [id,tk] of Wd.know[side]){if(Wd.byId[id].dead||!tk.fix)continue;const p=dr(tk);cx+=p[0];cy+=p[1];n++;}
+  let goal=F.hd0;
+  if(n){cx/=n;cy/=n;const a=Math.atan2(cy-F.ay,cx-F.ax),d=hyp(cx-F.ax,cy-F.ay);goal=d>F.R0+15000?a:(d<F.R0-15000?a+Math.PI:a+F.dir*Math.PI/2);
+    if(Wd.t>=F.jt){F.jt=Wd.t+25+rnd()*30;F.jk=(rnd()-0.5)*0.8;if(rnd()<0.3)F.dir=-F.dir;}goal+=F.jk;}
+  const dh=((goal-F.hd)%(2*Math.PI)+3*Math.PI)%(2*Math.PI)-Math.PI;F.hd+=Math.max(-0.04*dt,Math.min(0.04*dt,dh));
+  let sp=Infinity;for(const s of mine)sp=Math.min(sp,CLS[s.cls].cruise);
+  const c=Math.cos(F.hd),sn=Math.sin(F.hd);F.ax+=c*sp*dt;F.ay+=sn*sp*dt;
+  for(const s of mine){const C=CLS[s.cls],gx=F.ax+c*s.slot[0]-sn*s.slot[1],gy=F.ay+sn*s.slot[0]+c*s.slot[1];
+    let ex=(gx-s.pos[0])*0.08,ey=(gy-s.pos[1])*0.08;const el=hyp(ex,ey);if(el>400){ex*=400/el;ey*=400/el;}
+    const dvx=c*sp+ex-s.vel[0],dvy=sn*sp+ey-s.vel[1],dl=hyp(dvx,dvy),m=Math.min(1,C.acc*dt/(dl||1));s.vel[0]+=dvx*m;s.vel[1]+=dvy*m;
+    const v=hyp(s.vel[0],s.vel[1]);if(v>C.vmax){s.vel[0]*=C.vmax/v;s.vel[1]*=C.vmax/v;}
+    s.pos[0]+=s.vel[0]*dt;s.pos[1]+=s.vel[1]*dt;}
+}
+function weapons(s,dt){ // 打最近的已定位敌舰:主炮命中率 >= 10% 才开,导弹 40 万内齐射一组
+  s.gcd-=dt;s.mcd-=dt;let best=null,bd=Infinity,bp=null;
+  for(const [id,tk] of Wd.know[s.side]){const e=Wd.byId[id];if(e.dead||!tk.fix)continue;const p=dr(tk),d=dist(p,s.pos);if(d<bd){bd=d;best=e;bp=p;}}
+  s.tgt=best;if(!best)return;const tk=Wd.know[s.side].get(best.id);
+  if(s.gcd<=0&&pHit(bd)>=K.MAC_AUTO){fireMac(s,best,bp,tk.estV||[0,0],bd);s.gcd=K.MAC_RL*(0.9+0.2*rnd());}
+  if(s.mcd<=0&&bd<=K.MSL_RANGE&&s.ammo>=K.MSL_N){s.ammo-=K.MSL_N;s.mcd=K.MSL_RL*(0.9+0.2*rnd());const u=unit([bp[0]-s.pos[0],bp[1]-s.pos[1]]),sp=Math.max(200,hyp(s.vel[0],s.vel[1]));
+    Wd.proj.push({type:'missile',side:s.side,shooter:s,target:best,pos:s.pos.slice(),vel:[u[0]*sp,u[1]*sp],spd:sp,count:K.MSL_N,dmgPer:CLS[s.cls].md,fuel:K.MSL_FUEL,age:0,lost:-1,done:false,cO:false,cI:false,grp:Math.floor(rnd()*7)});}
+}
+function fireMac(s,e,tp,tv,d){ // 出膛 = 舰速 + 轴向 1 万;按估计算提前量;命中照 S 形掷一次,不中就偏开
+  const rx=tp[0]-s.pos[0],ry=tp[1]-s.pos[1],wx=tv[0]-s.vel[0],wy=tv[1]-s.vel[1],V=K.MAC_V,a=wx*wx+wy*wy-V*V,b=2*(rx*wx+ry*wy),c=rx*rx+ry*ry,disc=Math.max(0,b*b-4*a*c);
+  const t=Math.max((-b-Math.sqrt(disc))/(2*a),(-b+Math.sqrt(disc))/(2*a));let ux=rx+wx*t,uy=ry+wy*t;const L=hyp(ux,uy)||1;ux/=L;uy/=L;
+  const hit=rnd()<pHit(d);if(!hit){const ang=(1200+rnd()*Math.max(3000,d*0.03))/L*(rnd()<0.5?-1:1),cs=Math.cos(ang),sn=Math.sin(ang);[ux,uy]=[ux*cs-uy*sn,ux*sn+uy*cs];}
+  Wd.proj.push({type:'mac',side:s.side,shooter:s,target:e,pos:s.pos.slice(),vel:[s.vel[0]+ux*V,s.vel[1]+uy*V],age:0,tt:t,hit,dmg:K.MAC_DMG,done:false,tr:null});
+}
+function stepMac(p,dt){p.age+=dt;
+  if(p.hit){const e=p.target;if(e.dead)p.hit=false;else{const tl=p.tt-p.age+dt;if(tl<=dt){p.pos=e.pos.slice();p.done=true;damage(e,p.dmg,p.shooter,'mac');return;}
+    const ax=e.pos[0]+e.vel[0]*tl,ay=e.pos[1]+e.vel[1]*tl;p.vel=[(ax-p.pos[0])/tl,(ay-p.pos[1])/tl];}}
+  p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;if(p.age>p.tt+40||hyp(p.pos[0],p.pos[1])>K.FAR)p.done=true;}
+function stepMsl(p,dt){const e=p.target;p.age+=dt;let v=hyp(p.vel[0],p.vel[1])||1,ux=p.vel[0]/v,uy=p.vel[1]/v;
+  if(e&&!e.dead){const rx=e.pos[0]-p.pos[0],ry=e.pos[1]-p.pos[1],d=hyp(rx,ry),tg=d/Math.max(1000,p.spd),g=unit([rx+e.vel[0]*tg,ry+e.vel[1]*tg]);
+    const ang=Math.atan2(ux*g[1]-uy*g[0],ux*g[0]+uy*g[1]),m=Math.max(-1.2*dt,Math.min(1.2*dt,ang)),cs=Math.cos(m),sn=Math.sin(m);[ux,uy]=[ux*cs-uy*sn,ux*sn+uy*cs];
+    const C=CLS[e.cls].ciws;if(!p.cO&&d<=C[0]){p.cO=true;ciws(p,e,binom(p.count,C[1]));}if(!p.done&&!p.cI&&d<=C[2]){p.cI=true;ciws(p,e,binom(p.count,C[3]));}if(p.done)return;
+    const vx=ux*p.spd-e.vel[0],vy=uy*p.spd-e.vel[1],vv=vx*vx+vy*vy,tc=Math.max(0,Math.min(dt,(rx*vx+ry*vy)/(vv||1)));
+    if(hyp(rx-vx*tc,ry-vy*tc)<=K.MSL_HIT){p.pos=[e.pos[0]+e.vel[0]*tc,e.pos[1]+e.vel[1]*tc];p.done=true;damage(e,p.count*p.dmgPer*(1+K.MSL_KIN*Math.sqrt(vv)),p.shooter,'msl');return;}}
+  else if(p.lost<0)p.lost=p.age;
+  if(p.fuel>0&&p.spd<K.MSL_VP){const a=Math.min(K.MSL_A*dt,K.MSL_VP-p.spd);p.spd+=a;p.fuel-=a/K.MSL_A;}
+  p.vel=[ux*p.spd,uy*p.spd];p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;if(p.age>160||(p.lost>=0&&p.age>p.lost+30))p.done=true;}
+function ciws(p,e,k){if(!(k>0))return;p.count-=k;Wd.ciwsFX.push({vic:e,n:k,pos:p.pos.slice(),tw:ST.now});Wd.trc.push({s:e,p:p.pos.slice(),tw:ST.now});if(p.count<=0)p.done=true;}
+function damage(e,dmg,src,kind){ // 护盾先吃(破了 10 秒后重启),剩下打船体;我方看不看得见 = 打在我舰上,或那艘敌舰我方定得出
+  const vis=e.side==='blue'||Wd.know.blue.get(e.id).fix;
+  if(e.shDown<=0&&e.sh>0){const a=Math.min(e.sh,dmg);e.sh-=a;dmg-=a;Wd.shieldFX.push({s:e,k:'hit',pos:e.pos.slice(),tw:ST.now,vis,big:kind==='mac'});
+    if(e.sh<=1e-9){e.sh=0;e.shDown=K.SH_RESTART;Wd.shieldFX.push({s:e,k:'break',pos:e.pos.slice(),tw:ST.now,vis});}}
+  if(dmg>0){e.hp-=dmg;Wd.hitFX.push({pos:e.pos.slice(),vic:e,big:false,vis,tw:ST.now});
+    if(e.hp<=0){e.hp=0;e.dead=true;e.vel=[0,0];Wd.hitFX.push({pos:e.pos.slice(),vic:e,big:true,vis,tw:ST.now});}}}
+function simStep(dt){const w=Wd;w.t+=dt;
+  if(w.t>=w.senseT){w.senseT=w.t+K.SENSE;sense('blue');sense('red');}
+  fleetStep('blue',dt);fleetStep('red',dt);
+  for(const s of w.ships){if(s.dead)continue;if(s.shDown>0){s.shDown-=dt;if(s.shDown<=0){s.shDown=0;s.sh=0;}}else if(s.sh<s.shMax)s.sh=Math.min(s.shMax,s.sh+s.shMax/K.SH_REGEN*dt);weapons(s,dt);}
+  for(const p of w.proj)if(!p.done)(p.type==='mac'?stepMac:stepMsl)(p,dt);}
+function visPass(){ // 我方看不看得见(同 projSeen 的口径):炮弹在可见光圈里、敌方导弹在雷达里、我方导弹在网上;对方炮弹第一次被看见记一条来路
+  const B=alive('blue'),near=(p,R)=>B.some(s=>dist(s.pos,p)<=R);
+  for(const p of Wd.proj){if(p.done){p.sb=false;continue;}p.sb=p.type==='missile'?(p.side==='blue'||near(p.pos,K.RADAR)):near(p.pos,K.VIS_R);
+    if(p.type==='mac'&&p.side==='red'&&p.sb&&!p.tr){p.tr={a:p.pos.slice(),u:unit(p.vel),p:p,tw:ST.now};Wd.SHELL_TR.push(p.tr);}}}
+const viewPos=s=>{const tk=Wd.know.blue.get(s.id);return tk&&tk.fix?dr(tk):null;};
+const contactFix=s=>!!Wd.know.blue.get(s.id).fix;
+
+/* ================= 导演 + 镜头:照搬引擎 render/84-scene.js(1ad8107),VIEW = 蓝方 ================= */
+const I={FIT:0.7,SHOT_MAX:7000,CTX_T:240,CTX_F0:40000,CTX_F1:50000,CTX_E0:50000,CTX_E1:60000,
+  OM:5,ZE:0.85,SOFT:0.12,DB:15,T_OUT:0.35,T_IN:1.2,ZWAIT:0.8,ZRATE:1.8,FK:1,FMAX:4,PUSH:1.6,PUSH_T0:2.5,PUSH_T1:0.8,SLOW_T:3,RHO:1.8,RHO_Q:1.4,MIN_KM:2500,CIWS_KM:800,SLOW:{fix:1,id:1,vis:1},
+  W:416,H:260,HDR:20,INC_IN:80000,INC_OUT:100000,LEAD:0.4,FADE_IN:6,FADE_OUT:9,T_PAN:0.45,T_ANC:0.25,SX:30,SY:24,CUT:150,
+  OUT_HI:1.2,OUT_LO:0.8,SPLIT:60000,JOIN:48000,IND:24,
+  DW:{kill:3500,loss:3500,hit:2500,id:3000,fix:3000,shell:3500,ciws:2500,vis:3000},EVMS:{kill:6000,loss:6000,id:9000,fix:9000,vis:9000,hit:4500,ciws:4500,shell:5000},SHELL_BACK:200000,SHELL_GAP:30000,SHELL_NEAR:10000,
+  COOL:3000,GRACE:500,KILL_HIT:3000,HIT_R:5000,
+  RING:['察觉','来袭','防御','挨打','出手','战果'],RC:{fix:'察觉',id:'察觉',vis:'察觉',shell:'来袭',ciws:'防御',loss:'挨打',kill:'战果'},URG:{loss:1,kill:1},RING_WAIT:1500,MIN_SHOT:2500,VIS_COOL:30000,
+  PRE_S:3,PRE_MIN:0.4,POST:1200,PRE_COOL:4000,ATTR_R:20000};
+function insetReset(){Object.assign(I,{csk:'',lastK:'',kk:'',pcx:0,pcy:0,ax:0,ay:0,ox:0,oy:0,lpx:0,lpy:0,vcx:0,vcy:0,lzg:null,zin:0,fly:null,lz:0,vo:[0,0,0,0,0],key:'',sk:null,cut:-1e9,cool:-1e9,
+  a:0,last:null,fx:null,mskip:null,rc:-1,rt:-1e9,shT:-1e9,dir:null,ev:[],seq:0,prj:new Map(),by:new Map(),preT:new Map(),preSeen:new WeakSet(),out:new Set(),outK:'',dead:new Set(),idc:new Map(),
+  fixd:new Set(),fix0:true,hits:new WeakSet(),shs:new WeakSet(),cws:new WeakSet(),shr:new WeakSet(),vin:new Map(),vit:new Map(),cx:0,cy:0,z:1,on:false,t0g:-1,T:null});}
+const insetMed=a=>{const b=a.slice().sort((p,q)=>p-q),n=b.length;return n?(n%2?b[(n-1)/2]:(b[n/2-1]+b[n/2])/2):0;};
+function insetRate(){return ST.run?ST.eff:0;}
+function insetIncoming(){const out=[];for(const p of Wd.proj){if(p.type!=='missile'||p.done||p.side==='blue'||!p.target||p.target.dead||p.target.side!=='blue'||!p.sb)continue;
+  const dx=p.target.pos[0]-p.pos[0],dy=p.target.pos[1]-p.pos[1],d=hyp(dx,dy)||1,vc=((p.vel[0]-p.target.vel[0])*dx+(p.vel[1]-p.target.vel[1])*dy)/d;out.push({p,tgt:p.target,d,eta:vc>1?d/vc:Infinity});}
+  return out.sort((a,b)=>a.eta-b.eta);}
+function insetPush(e,now){e.seq=++I.seq;e.t=now;I.ev.push(e);EVLOG.push({tw:now,k:e.k,e});}
+const insetName=s=>Wd.know.blue.get(s.id)&&Wd.know.blue.get(s.id).id?s.name:'敌舰';
+const insetVelV=s=>s.side==='blue'?[s.vel[0],s.vel[1]]:(Wd.know.blue.get(s.id).estV||null);
+const insetShPos=s=>(!s||s.dead)?null:(s.side==='blue'?s.pos:(contactFix(s)?viewPos(s):null));
+const insetShName=s=>s.side==='blue'?s.name:insetName(s);
+function insetEta(p,tq){if(p.type==='mac')return p.tt-p.age;const tv=insetVelV(p.target),dx=tq[0]-p.pos[0],dy=tq[1]-p.pos[1],d=hyp(dx,dy)||1,vc=((p.vel[0]-(tv?tv[0]:0))*dx+(p.vel[1]-(tv?tv[1]:0))*dy)/d;return vc>1?d/vc:Infinity;}
+function insetPre(now,inc,sel,idle,lg){const rt=insetRate();if(!(rt>0))return null;let best=null;
+  const ok=(p,tg,kill)=>!I.preSeen.has(p)&&(kill||!(now-(I.preT.get(tg.id)||-1e9)<I.PRE_COOL));
+  if(lg('来袭'))for(const m of inc){if(!idle&&sel.indexOf(m.tgt)<0)continue;const w=m.eta/rt;if(!(w>=I.PRE_MIN&&w<=I.PRE_S)||!ok(m.p,m.tgt,false))continue;
+    const sc=2.1+1/w;if(!best||sc>best.sc)best={sc,p:2.1,kind:'in',proj:m.p,tg:m.tgt,sh:m.p.shooter};}
+  if(lg('出手'))for(const p of Wd.proj){if(p.done||p.side!=='blue'||!p.target||p.target.dead)continue;
+    const tg=p.target;if(!idle&&sel.indexOf(p.shooter)<0&&!sel.some(s=>s.tgt===tg))continue;const tq=insetShPos(tg);if(!tq)continue;
+    const w=insetEta(p,tq)/rt;if(!(w>=I.PRE_MIN&&w<=I.PRE_S))continue;
+    const kill=Wd.know.blue.get(tg.id).id&&(p.type==='mac'?p.dmg:p.count*p.dmgPer)>=tg.hp;
+    if(!ok(p,tg,kill))continue;const sc=(kill?2.6:1.8)+1/w;if(!best||sc>best.sc)best={sc,p:kill?2.6:1.8,kind:kill?'kill':'out',proj:p,tg,sh:p.shooter};}
+  return best;}
+function insetShellAtUs(r){const sel=selShips(),L=sel.length?sel:alive('blue');
+  for(const s of L){const rx=s.pos[0]-r.a[0],ry=s.pos[1]-r.a[1];if(rx*r.u[0]+ry*r.u[1]>0&&Math.abs(rx*r.u[1]-ry*r.u[0])<I.SHELL_NEAR)return s;}return null;}
+function insetEvents(now){const kq=[],adv=Wd.t!==I.t0g;I.t0g=Wd.t;
+  const prv=I.prj,cur=new Map(),hat=new Map();
+  for(const p of Wd.proj)if(!p.done&&p.target)cur.set(p,{sh:p.shooter,tg:p.target,x:p.pos[0],y:p.pos[1]});
+  const nh=[],ns=[];
+  for(const h of Wd.hitFX)if(!I.hits.has(h)){I.hits.add(h);nh.push(h);}
+  for(const x of Wd.shieldFX)if(!I.shs.has(x)){I.shs.add(x);ns.push(x);}
+  for(const h of nh.concat(ns)){let b=null,bd=I.ATTR_R;for(const [q,o] of prv){if(cur.has(q))continue;const d=hyp(o.x-h.pos[0],o.y-h.pos[1]);if(d<bd){bd=d;b=o;}}if(b){hat.set(h,b);I.by.set(b.tg.id,b.sh);}}
+  I.prj=cur;
+  for(const s of Wd.ships){
+    if(s.dead){if(!I.dead.has(s.id)){I.dead.add(s.id);
+        if(s.side==='blue'){kq.push(s.pos);insetPush({k:'loss',p:2.2,ship:s,sh:I.by.get(s.id)||null,q:s.pos.slice(),lbl:'损失 '+s.name},now);}
+        else{const q=viewPos(s);if(q){kq.push(q);insetPush({k:'kill',p:2,ship:s,sh:I.by.get(s.id)||null,q:q.slice(),lbl:'击沉 '+insetName(s)},now);}}}
+      continue;}
+    if(s.side==='blue')continue;
+    const tk=Wd.know.blue.get(s.id),c=!!tk.id;if(c&&I.idc.get(s.id)===false)insetPush({k:'id',p:1.2,ship:s,lbl:'认出 '+s.name},now);I.idc.set(s.id,c);
+    if(adv){const iv=tk.fix&&tk.vis,o=I.vin.get(s.id);I.vin.set(s.id,iv);
+      if(iv&&o===false&&now-(I.vit.get(s.id)||-1e9)>=I.VIS_COOL&&viewPos(s)){I.vit.set(s.id,now);insetPush({k:'vis',p:1.4,ship:s,lbl:'进入可见光 · '+insetName(s)+' · 命中加成'},now);}}}
+  if(adv){const f0=I.fix0;I.fix0=false;for(const [id,tk] of Wd.know.blue){if(!tk.fix||I.fixd.has(id))continue;I.fixd.add(id);if(!f0)insetPush({k:'fix',p:1.6,ship:Wd.byId[id],lbl:'定位 · 疑似舰船'},now);}}
+  const G=new Map(),add=(v,h,hull,brk)=>{if(!h.vis)return;for(const q of kq)if(hyp(q[0]-h.pos[0],q[1]-h.pos[1])<I.KILL_HIT)return;
+    let g=G.get(v);if(!g)G.set(v,g={pos:h.pos,hull:false,brk:false,at:null});if(hull)g.hull=true;if(brk)g.brk=true;if(!g.at)g.at=hat.get(h)||null;};
+  for(const h of nh)if(!h.big)add(h.vic,h,true,false);
+  for(const x of ns)if(x.s.side==='blue'||x.k==='break')add(x.s,x,false,x.k==='break');
+  for(const [v,g] of G){const sh=g.at?g.at.sh:null;
+    if(v.side==='blue'){if(!v.dead)insetPush({k:'hit',p:1.5,c:(g.hull||g.brk)?'挨打':'防御',ship:v,sh,w:'中弹',nm:v.name,shd:!g.hull,brk:g.brk,lbl:'中弹 '+v.name},now);continue;}
+    let r=null,rq=null,bd=I.HIT_R;for(const s of Wd.ships){if(s.dead||s.side==='blue'||!contactFix(s))continue;const q=viewPos(s);if(!q)continue;const d=hyp(q[0]-g.pos[0],q[1]-g.pos[1]);if(d<bd){bd=d;r=s;rq=q;}}
+    if(r)insetPush({k:'hit',p:1.5,c:'战果',ship:r,sh,q:rq.slice(),w:'命中',nm:insetName(r),shd:!g.hull,brk:g.brk,lbl:'命中 '+insetName(r)},now);}
+  const CW=new Map();for(const x of Wd.ciwsFX){if(I.cws.has(x))continue;I.cws.add(x);const v=x.vic;if(v&&!v.dead&&v.side==='blue')CW.set(v,(CW.get(v)||0)+x.n);}
+  for(const [v,n] of CW)insetPush({k:'ciws',p:1.3,ship:v,n,lbl:'近防拦下 '+n+' 枚 → '+v.name},now);
+  for(const r of Wd.SHELL_TR){if(I.shr.has(r))continue;I.shr.add(r);const tg=now-I.shT<I.SHELL_GAP?null:insetShellAtUs(r);if(!tg)continue;I.shT=now;const L=I.SHELL_BACK;
+    insetPush({k:'shell',p:1.7,ship:tg,q:[r.a[0],r.a[1]],q2:[r.a[0]-r.u[0]*L,r.a[1]-r.u[1]*L],pr:r.p,lbl:'炮弹来路 → '+tg.name},now);}
+  I.ev=I.ev.filter(e=>now-e.t<(I.EVMS[e.k]||6000));
+}
+function insetSubject(sel,inc){const key='s:'+sel.map(s=>s.id).join(',');let keep=sel;
+  if(sel.length>=2){if(I.outK!==key){I.outK=key;I.out.clear();}const O=I.out;
+    if(sel.length===2){const a=sel[0],b=sel[1],d=dist(a.pos,b.pos);if(O.has(b.id)?d>=I.JOIN:d>I.SPLIT){O.add(b.id);keep=[a];}else O.delete(b.id);}
+    else{const mx=insetMed(sel.map(s=>s.pos[0])),my=insetMed(sel.map(s=>s.pos[1])),d=sel.map(s=>hyp(s.pos[0]-mx,s.pos[1]-my)),lim=Math.max(3*insetMed(d),15000);
+      keep=[];for(let i=0;i<sel.length;i++){const s=sel[i];if(O.has(s.id)?d[i]<I.OUT_LO*lim:d[i]<=I.OUT_HI*lim){O.delete(s.id);keep.push(s);}else O.add(s.id);}
+      if(!keep.length){keep=sel;O.clear();}}}
+  let ax=0,ay=0,vx=0,vy=0,vm=1;for(const s of keep){ax+=s.pos[0];ay+=s.pos[1];vx+=s.vel[0];vy+=s.vel[1];vm=Math.max(vm,CLS[s.cls].vmax);}
+  const k=keep.length;ax/=k;ay/=k;vx/=k;vy/=k;
+  const ind=[],I0=I.INC_IN,I1=I.INC_OUT,near=p=>{let m=Infinity;for(const s of keep)m=Math.min(m,dist(p,s.pos));return m;};
+  const wt=d=>{const t=(I1-d)/(I1-I0);return t<=0?0:(t>=1?1:t*t*(3-2*t));};let wm=0;
+  for(const m of inc){if(sel.indexOf(m.tgt)<0)continue;const d=near(m.p.pos);if(keep.indexOf(m.tgt)>=0){const g=wt(d);if(g>wm)wm=g;}
+    if(ind.length<I.IND)ind.push({pos:m.p.pos,col:'255,154,85',lbl:isFinite(m.eta)?Math.round(m.eta*10)+' s':Math.round(d/1000)+'k'});}
+  const L=[],seen=new Set();
+  for(const s of keep){const t=s.tgt;if(!t||t.dead||seen.has(t.id))continue;seen.add(t.id);const p=viewPos(t);if(!p)continue;L.push({pos:p,col:'255,107,107',lbl:Math.round(near(p)/1000)+'k',d:near(p)});}
+  const Q=sel.filter(s=>keep.indexOf(s)<0).map(s=>({pos:s.pos,col:'111,180,255',lbl:s.name,d:hyp(s.pos[0]-ax,s.pos[1]-ay)}));
+  L.sort((a,b)=>a.d-b.d);Q.sort((a,b)=>a.d-b.d);for(const it of L.concat(Q))if(ind.length<I.IND)ind.push(it);
+  const cw=(d,a,b)=>{const t=(b-d)/(b-a);return t<=0?0:(t>=1?1:t*t*(3-2*t));},ctx=keep.map(s=>({p:s.pos,w:1}));
+  for(const m of inc)if(keep.indexOf(m.tgt)>=0){const g=wt(near(m.p.pos));if(g>0)ctx.push({p:m.p.pos,w:g});}
+  for(const it of L){const g=cw(it.d,I.CTX_E0,I.CTX_E1);if(g>0)ctx.push({p:it.pos,w:g});}
+  for(const o of Wd.ships){if(o.dead||sel.indexOf(o)>=0)continue;if(o.side==='blue'){const g=cw(near(o.pos),I.CTX_F0,I.CTX_F1);if(g>0)ctx.push({p:o.pos,w:g});}
+    else if(contactFix(o)){const p=viewPos(o);const g=cw(near(p),I.CTX_E0,I.CTX_E1);if(g>0)ctx.push({p,w:g});}}
+  return {key,sk:k===1?keep[0].id:key,kk:keep.map(s=>s.id).join(','),j:false,kind:'home',S:[ax,ay],V:[vx,vy],vm,ctx,eta:null,ciws:false,ind,wm,
+    lbl:sel.length===1?'特写 · '+sel[0].name:'特写 · '+sel.length+' 艘'+(keep.length<sel.length?'(离群 '+(sel.length-keep.length)+')':'')};}
+function insetSjPos(D){const s=D.sj;
+  if(s&&!s.dead){if(s.side==='blue')return {p:s.pos,v:s.vel,vm:CLS[s.cls].vmax,j:false};const p=insetShPos(s);return p?{p,v:insetVelV(s)||[0,0],vm:800,j:true}:null;}
+  return D.sq?{p:D.sq,v:[0,0],vm:1,j:false}:null;}
+function insetShot(k,p,sj,now,o){const q=++I.seq;return Object.assign({k,p,key:k+':'+q,sj,sq:null,sk:sj?sj.id:'q'+q,sh:null,org:null,evs:[],n:1,el:0,dwell:I.DW[k]||3000,t0:now,gl:-1,sub:null,cl:null},o||{});}
+function insetFx(D,now,k){const J=insetSjPos(D);if(!J)return;const my=!!(D.sj&&D.sj.side==='blue');I.fx={x:J.p[0],y:J.p[1],s:(my&&!D.sj.dead)?D.sj:null,t0:now,big:k!=='hit',col:(k==='loss'||my)?'255,107,107':'255,209,102'};}
+function insetLbl(D){const E=D.evs,e=E[E.length-1];if(!e)return '';
+  if(e.k==='ciws'){let n=0;for(const x of E)if(x.k==='ciws')n+=x.n||0;return '近防拦下 '+n+' 枚 → '+e.ship.name;}
+  if(e.k==='hit'){const H=E.filter(x=>x.k==='hit');let b=false,a=true;for(const x of H){if(x.brk)b=true;if(!x.shd)a=false;}const m=H.length,x=m>1?' ×'+m:'';return b?'护盾击破 · '+e.nm+(m>1?' · '+e.w+x:''):e.w+x+' '+e.nm+(a?' · 护盾挡住':'');}
+  return e.lbl||'';}
+function insetCol(D){if(!D)return '#cfe6ff';const my=!!(D.sj&&D.sj.side==='blue');return D.k==='m'?'rgb(255,154,85)':((D.k==='loss'||(my&&D.k!=='pre'))?'#ff6b6b':'#ffd166');}
+function insetBuild(e,now){const D=insetShot(e.k,e.p,e.ship||null,now,{evs:[e],sq:(e.k!=='shell'&&e.q)?e.q.slice():null,sh:(e.sh&&e.sh!==e.ship)?e.sh:null,org:e.k==='shell'?e.q2:null});
+  if(!insetSjPos(D))return null;e.shown=true;I.fx=null;if(e.k==='hit'||e.k==='kill'||e.k==='loss')insetFx(D,now,e.k);return D;}
+function insetCtx(D,J,inc){const ctx=[],ind=[],sq=insetShPos(D.sh),my=(D.sj&&!D.sj.dead&&D.sj.side==='blue')?D.sj:null;
+  if(sq)ind.push({pos:sq,col:D.sh.side==='blue'?'111,180,255':'255,107,107',lbl:'射手'});
+  if(D.org)ind.push({pos:D.org,col:'255,120,90',lbl:'来路'});
+  if(my)for(const m of inc)if(m.tgt===my&&ind.length<I.IND)ind.push({pos:m.p.pos,col:'255,154,85',lbl:isFinite(m.eta)?Math.round(m.eta*10)+' s':''});
+  if(D.k==='pre'){if(!D.proj.done)ctx.push({p:[D.proj.pos[0],D.proj.pos[1]],w:1});}
+  else if(D.k==='m'){const m=inc.find(m=>m.tgt===D.sj);if(m)ctx.push({p:[m.p.pos[0],m.p.pos[1]],w:1});}
+  else if(sq)ctx.push({p:[sq[0],sq[1]],w:1});
+  else if(D.sj&&D.sj.side!=='blue'){let b=null,bd=I.CTX_E1;for(const o of Wd.ships){if(o.dead||o.side!=='blue')continue;const d=dist(o.pos,J.p);if(d<bd){bd=d;b=o;}}if(b)ctx.push({p:[b.pos[0],b.pos[1]],w:1});}
+  return {ctx,ind};}
+function insetPlaySub(D,now,inc){
+  if(D.k==='pre'){if(D.end<0&&(D.proj.done||Wd.proj.indexOf(D.proj)<0))D.end=now;if(D.end>=0&&now-D.end>=I.POST&&D.el>=I.MIN_SHOT)return null;}
+  if(D.k==='m'){if(inc.some(m=>m.tgt===D.sj))D.gm=-1;else{if(!(D.gm>=0))D.gm=now;if(now-D.gm>=I.GRACE)return null;}}
+  const J=insetSjPos(D);
+  if(!J){if(D.gl<0)D.gl=now;return (D.sub&&now-D.gl<I.GRACE)?D.sub:null;}D.gl=-1;
+  const C=insetCtx(D,J,inc),rt=insetRate();let lbl,etaW=null;
+  if(D.k==='pre'){const eta=D.end<0?insetEta(D.proj,J.p):Infinity,tg=D.sj;if(rt>0&&isFinite(eta))etaW=eta/rt;
+    const w=rt>0&&eta>0&&isFinite(eta)?' · '+(eta/rt).toFixed(1)+' s':'';
+    lbl=(D.kind==='in'?'预判 · 来袭 → '+tg.name:(D.kind==='kill'?'预判 · 可能击沉 → ':'预判 · '+insetShName(D.sh)+' → ')+insetName(tg))+w;}
+  else if(D.k==='m'){const L=inc.filter(m=>m.tgt===D.sj);lbl='播放 · 来袭导弹 → '+D.sj.name+(L.length&&isFinite(L[0].eta)?' · '+Math.round(L[0].eta*10)+' s':'');}
+  else lbl='播放 · '+insetLbl(D)+(D.sh?' ← '+insetShName(D.sh):'');
+  const sq=insetShPos(D.sh);D.cl=sq?[sq.slice(),[J.p[0],J.p[1]]]:null;
+  D.sub={key:D.key,sk:D.sk,kk:'',j:J.j,kind:D.k,S:[J.p[0],J.p[1]],V:[J.v[0],J.v[1]],vm:J.vm,ctx:C.ctx,eta:etaW,ciws:D.k==='ciws'||D.evs.some(e=>e.k==='ciws'),ind:C.ind,lbl};
+  return D.sub;}
+function insetCi(e){const c=e.c||I.RC[e.k];return c?I.RING.indexOf(c):-1;}
+function insetDd(ci){const N=I.RING.length,rc=I.rc;if(rc<0||ci<0)return 0;return (ci-rc+N)%N||N;}
+function insetLegal(ci,h){const N=I.RING.length,Kk=(N-1)>>1,rc=I.rc;if(rc<0||ci<0||Kk*h>=N)return true;const d=(ci-rc+N)%N;return d>=1&&d<=Kk*h;}
+function insetDirector(now,dt,inc,ss,sel){
+  const idle=!sel.length,thr=!!(ss&&ss.wm>0);let D=I.dir,sub=null;
+  if(D&&((D.k==='m'&&!idle)||(thr&&D.p<2))){if(D.k!=='m')I.rt=now;D=I.dir=null;I.cool=now;I.fx=null;}
+  if(D&&D.k==='shell')for(const e of I.ev)if(!e.shown&&e.k==='shell')e.shown=true;
+  if(D&&D.k!=='m')for(const e of I.ev){if(e.shown||!e.ship||e.ship.id!==D.sk)continue;
+    const ci=insetCi(e),u=!!I.URG[e.k];if(!u&&ci!==I.rc&&!insetLegal(ci,1))continue;
+    e.shown=true;D.evs.push(e);D.n++;if(e.q&&(e.k==='kill'||e.k==='loss'))D.sq=e.q.slice();
+    if(D.k==='pre'){D.k=e.k;D.p=e.p;D.end=-1;D.dwell=D.el+(I.DW[e.k]||3000);}else D.dwell=Math.max(D.dwell,D.el+(I.DW[e.k]||3000));
+    if(e.k==='hit'||e.k==='kill'||e.k==='loss')insetFx(D,now,e.k);
+    if(!u&&ci>=0)I.rc=ci;}
+  if(D){sub=insetPlaySub(D,now,inc);if(sub){if(!I.fly)D.el+=dt*1000;if(D.el>=Math.min(D.dwell,D.k==='m'?Infinity:I.SHOT_MAX))sub=null;}if(!sub){if(D.k!=='m')I.rt=now;D=I.dir=null;I.cool=now;I.fx=null;}}
+  const free=!D||D.k==='m',hop=free?1+Math.max(0,Math.floor((now-(idle?I.rt:Math.max(I.rt,I.cool+I.COOL)))/I.RING_WAIT)):1,cut=free||D.el>=I.MIN_SHOT;
+  const cool=!idle&&now-I.cool<I.COOL,dd=e=>I.URG[e.k]?0:insetDd(insetCi(e));let C=[];
+  for(const e of I.ev){if(e.shown)continue;
+    if((e.k==='hit'||e.k==='ciws')&&!idle&&e.ship&&sel.indexOf(e.ship)<0&&!sel.some(s=>s.tgt===e.ship)){e.shown=true;e.skip=true;continue;}
+    if(e.p<2&&(cool||thr))continue;if(D&&e.p<=D.p)continue;
+    if(!I.URG[e.k]&&(!cut||!insetLegal(insetCi(e),hop)))continue;C.push(e);}
+  if(C.length>1)C.sort(hop>1?(a,b)=>dd(a)-dd(b)||b.p-a.p||a.seq-b.seq:(a,b)=>b.p-a.p||a.seq-b.seq);
+  {const d0=hop>1&&C.length?dd(C[0]):Infinity,pr=((idle||now-I.cool>=I.COOL)&&cut)?insetPre(now,inc,sel,idle,c=>{const ci=I.RING.indexOf(c);return insetLegal(ci,hop)&&insetDd(ci)<=d0;}):null;
+    if(pr&&(!D||pr.p>D.p)&&!(thr&&pr.p<2)){const N=insetShot('pre',pr.p,pr.tg,now,{proj:pr.proj,sh:pr.sh,kind:pr.kind,dwell:Infinity,end:-1}),s2=insetPlaySub(N,now,inc);
+      if(s2){I.preSeen.add(pr.proj);I.preT.set(pr.tg.id,now);I.dir=D=N;sub=s2;I.fx=null;I.rc=I.RING.indexOf(pr.kind==='in'?'来袭':'出手');C=C.filter(e=>I.URG[e.k]&&e.p>N.p);}}}
+  for(const e of C){const N=insetBuild(e,now);if(!N)continue;I.dir=D=N;sub=insetPlaySub(N,now,inc);{const ci=insetCi(e);if(ci>=0&&!I.URG[e.k])I.rc=ci;}break;}
+  if(!D&&idle&&inc.length&&inc[0].tgt!==I.mskip){const tg=inc[0].tgt,N=insetShot('m',0.5,tg,now,{key:'m:'+tg.id,dwell:Infinity,gm:-1}),s=insetPlaySub(N,now,inc);if(s){I.dir=N;sub=s;}}
+  return sub;}
+function insetZoomPath(p0,p1,rho){const ux0=p0[0],uy0=p0[1],w0=p0[2],ux1=p1[0],uy1=p1[1],w1=p1[2],dx=ux1-ux0,dy=uy1-uy0,d2=dx*dx+dy*dy,r2=rho*rho,r4=r2*r2;let f,S;
+  if(d2<1e-6){S=Math.log(w1/w0)/rho;f=s=>[ux0+s*dx,uy0+s*dy,w0*Math.exp(rho*s*S)];}
+  else{const d1=Math.sqrt(d2),b0=(w1*w1-w0*w0+r4*d2)/(2*w0*r2*d1),b1=(w1*w1-w0*w0-r4*d2)/(2*w1*r2*d1),q0=Math.log(Math.sqrt(b0*b0+1)-b0),q1=Math.log(Math.sqrt(b1*b1+1)-b1);S=(q1-q0)/rho;
+    f=s=>{const u=s*S,ch=Math.cosh(q0),uu=w0/(r2*d1)*(ch*Math.tanh(rho*u+q0)-Math.sinh(q0));return [ux0+uu*dx,uy0+uu*dy,w0*ch/Math.cosh(rho*u+q0)];};}
+  f.dur=Math.abs(S)*rho/Math.SQRT2;return f;}
+function insetTarget(sub,w,hp,zMax){const S=sub.S,tv=I.CTX_T/10/2,pts=[S,[S[0]+sub.V[0]*tv,S[1]+sub.V[1]*tv],[S[0]-sub.V[0]*tv,S[1]-sub.V[1]*tv]];
+  for(const c of sub.ctx)pts.push([S[0]+c.w*(c.p[0]-S[0]),S[1]+c.w*(c.p[1]-S[1])]);
+  let x0=1e18,x1=-1e18,y0=1e18,y1=-1e18;for(const p of pts){x0=Math.min(x0,p[0]);x1=Math.max(x1,p[0]);y0=Math.min(y0,p[1]);y1=Math.max(y1,p[1]);}
+  let W=Math.max((x1-x0)/I.FIT,(y1-y0)/(I.FIT*hp/w),1e-6);
+  if(sub.eta!=null&&isFinite(sub.eta)){const t=(I.PUSH_T0-Math.max(0,sub.eta))/(I.PUSH_T0-I.PUSH_T1),g=t<=0?0:(t>=1?1:t*t*(3-2*t));W/=1+(I.PUSH-1)*g;}
+  W=Math.max(W,w/zMax);
+  const vv=hyp(sub.V[0],sub.V[1]),ls=vv>1e-9?Math.sqrt(Math.min(1,vv/(sub.vm||1)))*I.LEAD:0,lx=ls?sub.V[0]/vv*ls*w/2:0,ly=ls?sub.V[1]/vv*ls*hp/2:0;
+  return {bx:(x0+x1)/2,by:(y0+y1)/2,lx,ly,cx:(x0+x1)/2+lx*W/w,cy:(y0+y1)/2+ly*W/w,w:W};}
+function insetSD(c,t,i,T,dt){if(!(dt>0))return c;const om=2/T,x=om*dt,e=1/(1+x+0.48*x*x+0.235*x*x*x),ch=c-t,v=I.vo[i],tp=(v+om*ch)*dt;
+  let o=t+(ch+tp)*e;I.vo[i]=(v-om*tp)*e;if((t-c>0)===(o>t)){o=t;I.vo[i]=0;}return o;}
+function insetCam(sub,T,w,hp,dt,now){const ltz=Math.log(w/T.w),S=sub.S;
+  const pin=z=>{I.ax=S[0];I.ay=S[1];I.lpx=T.lx;I.lpy=T.ly;I.ox=I.pcx-S[0]-T.lx/z;I.oy=I.pcy-S[1]-T.ly/z;I.vcx=I.vcy=0;I.vo.fill(0);I.kk=sub.kk;};
+  if(sub.key!==I.key){
+    if(!I.key){I.pcx=T.cx;I.pcy=T.cy;I.lz=ltz;I.fly=null;pin(w/T.w);}
+    else if(sub.sk!==I.csk){const w0=w/Math.exp(I.lz),d=hyp(T.cx-I.pcx,T.cy-I.pcy)/w0,slow=!!I.SLOW[sub.kind],back=!slow&&!!I.SLOW[I.lastK];
+      if(slow||back||d<=I.FMAX){const f=insetZoomPath([I.pcx,I.pcy,w0],[T.cx,T.cy,T.w],slow||back?I.RHO:I.RHO_Q);
+        const du=slow?I.SLOW_T*Math.max(0.8,Math.min(1.7,0.8+0.12*f.dur)):(back?Math.max(0.9,I.SLOW_T*0.6):Math.max(0.45,Math.min(1.4,f.dur*0.55*I.FK)));
+        I.fly={f,t0:now,dur:du*1000,c0:[T.cx,T.cy],soft:slow||back};REC.mark('fly',now,du*1000);}
+      else{I.pcx=T.cx;I.pcy=T.cy;I.lz=ltz;I.fly=null;I.cut=now;pin(w/T.w);REC.mark('cut',now);}}
+    I.lzg=ltz;I.zin=0;I.key=sub.key;I.csk=sub.sk;I.lastK=sub.kind||'';}
+  if(I.fly){const F=I.fly,k=Math.min(1,(now-F.t0)/F.dur),e=F.soft?k*k*k*(k*(6*k-15)+10):(k<0.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2),q=F.f(e);
+    I.pcx=q[0]+(T.cx-F.c0[0])*e;I.pcy=q[1]+(T.cy-F.c0[1])*e;I.lz=Math.log(w/q[2]);if(k>=1){I.fly=null;I.lzg=I.lz;pin(Math.exp(I.lz));}return;}
+  if(sub.kk!==I.kk){I.ox+=I.ax-S[0];I.oy+=I.ay-S[1];I.ax=S[0];I.ay=S[1];I.kk=sub.kk;}
+  if(sub.j){I.ax=insetSD(I.ax,S[0],3,I.T_ANC,dt);I.ay=insetSD(I.ay,S[1],4,I.T_ANC,dt);}else{I.ax=S[0];I.ay=S[1];I.vo[3]=I.vo[4]=0;}
+  const band=Math.log(1+I.DB/100);if(I.lzg===null)I.lzg=ltz;
+  if(ltz<I.lzg-band*0.5){I.lzg=ltz;I.zin=0;}else if(ltz>I.lzg+band){I.zin+=dt;if(I.zin>=I.ZWAIT)I.lzg=ltz;}else I.zin=0;
+  const lz0=I.lz,lz1=insetSD(lz0,I.lzg,2,I.lzg<lz0?I.T_OUT:I.T_IN,dt),mx=Math.log(I.ZRATE)*dt;I.lz=Math.max(lz0-mx,Math.min(lz0+mx,lz1));
+  I.lpx=insetSD(I.lpx,T.lx,0,I.T_PAN,dt);I.lpy=insetSD(I.lpy,T.ly,1,I.T_PAN,dt);
+  const z=Math.exp(I.lz),ex=(T.bx-I.ax-I.ox)*z,ey=(T.by-I.ay-I.oy)*z,SXp=I.SOFT*w,SYp=I.SOFT*hp,om=I.OM;
+  const gx=I.ox+(ex-Math.max(-SXp,Math.min(SXp,ex)))/z,gy=I.oy+(ey-Math.max(-SYp,Math.min(SYp,ey)))/z;
+  I.vcx+=(om*om*(gx-I.ox)-2*I.ZE*om*I.vcx)*dt;I.vcy+=(om*om*(gy-I.oy)-2*I.ZE*om*I.vcy)*dt;I.ox+=I.vcx*dt;I.oy+=I.vcy*dt;
+  const hx=(w/2-I.SX)/z,hy=(hp/2-I.SY)/z,rx=S[0]-I.ax-I.lpx/z,ry=S[1]-I.ay-I.lpy/z;
+  if(rx-I.ox>hx){I.ox=rx-hx;I.vcx=Math.max(I.vcx,0);}else if(rx-I.ox<-hx){I.ox=rx+hx;I.vcx=Math.min(I.vcx,0);}
+  if(ry-I.oy>hy){I.oy=ry-hy;I.vcy=Math.max(I.vcy,0);}else if(ry-I.oy<-hy){I.oy=ry+hy;I.vcy=Math.min(I.vcy,0);}
+  I.pcx=I.ax+I.ox+I.lpx/z;I.pcy=I.ay+I.oy+I.lpy/z;}
+const selShips=()=>{const B=Wd.ships.filter(s=>s.side==='blue');const m={none:[],b1:[B[0]],b2:[B[1]],b3:[B[2]],all:B}[ST.sel]||[];return m.filter(s=>!s.dead);};
+function insetFrame(now,dt){ // 同引擎 drawInset 的前半段:事件 → 导演 → 取景 → 镜头 → 淡入淡出
+  insetEvents(now);
+  const inc=insetIncoming(),sel=selShips(),sk=sel.map(s=>s.id).join(',');
+  if(sk!==I.sk){const first=I.sk===null;I.sk=sk;if(sk&&!first){I.dir=null;I.fx=null;I.cool=now;}}
+  if(I.mskip&&!inc.some(m=>m.tgt===I.mskip))I.mskip=null;
+  const ss=sel.length?insetSubject(sel,inc):null;
+  let sub=insetDirector(now,dt,inc,ss,sel)||ss;const fade=!sub&&!!I.last&&I.a>0.02;if(fade)sub=I.last;
+  const off=()=>{I.on=false;I.a=0;I.key='';I.last=null;return null;};
+  if(!sub)return off();
+  const w=I.W,hp=I.H-I.HDR,zMax=60/(sub.ciws?I.CIWS_KM:I.MIN_KM),T=insetTarget(sub,w,hp,zMax);
+  insetCam(sub,T,w,hp,dt,now);
+  const z=Math.exp(I.lz);I.cx=I.pcx;I.cy=I.pcy-I.HDR/(2*z);I.z=z;I.T=T;
+  if(fade){I.a*=Math.exp(-dt*I.FADE_OUT);if(I.a<0.02)return off();}else{I.a+=(1-I.a)*(1-Math.exp(-dt*I.FADE_IN));I.last=sub;}
+  I.on=true;return sub;}
+
+/* ================= 记录:框宽曲线 / 镜头段 / 事件 ================= */
+const REC={w:[],marks:[],mark(k,t,dur){this.marks.push({k,t,dur:dur||0});}};
+let EVLOG=[],SHOTS=[],CUR=null,STAT=null;
+const CLSCOL={'察觉':'#5aa7ff','来袭':'#ff9a55','防御':'#5fe0d0','挨打':'#ff6b6b','出手':'#ffd166','战果':'#8fd18b',home:'#56657a',m:'#c46a2c'};
+const shotCls=sub=>sub.kind==='home'?'home':(sub.kind==='m'?'m':(sub.kind==='pre'?(I.dir&&I.dir.kind==='in'?'来袭':'出手'):(I.dir&&I.dir.evs.length?(I.RING[insetCi(I.dir.evs[I.dir.evs.length-1])]||'home'):'home')));
+function inFrame(p){const z=I.z,sx=(p[0]-I.cx)*z+I.W/2,sy=(p[1]-I.cy)*z+I.H/2;return sx>=0&&sx<=I.W&&sy>=I.HDR&&sy<=I.H;}
+function keyObj(){const D=I.dir;if(!D)return null;if(D.k==='pre')return D.proj;if(D.k==='shell')return D.evs[0].pr;
+  if(D.k==='m'){const m=insetIncoming().find(m=>m.tgt===D.sj);return m?m.p:null;}return null;}
+function track(sub,now){
+  if(!sub||!I.on){if(CUR){SHOTS.push(CUR);CUR=null;}REC.w.push({t:now,w:null,c:null});return;}
+  if(!CUR||CUR.key!==sub.key){if(CUR)SHOTS.push(CUR);CUR={key:sub.key,k:sub.kind,lbl:sub.lbl,tg:Wd.t,t0:now,t1:now,n:0,sin:0,kn:0,kin:0,kvis:0,minKm:Infinity};}
+  const c=shotCls(sub);CUR.c=c;CUR.lbl=sub.lbl;CUR.k=sub.kind;CUR.t1=now;CUR.n++;if(inFrame(sub.S))CUR.sin++;CUR.minKm=Math.min(CUR.minKm,60/I.z);
+  const o=keyObj();if(o&&!o.done){CUR.kn++;if(inFrame(o.pos)){CUR.kin++;if(o.sb)CUR.kvis++;}}
+  REC.w.push({t:now,w:I.W/I.z,c});}
+
+/* ================= 画 ================= */
+const cv=document.getElementById('cv'),ov=document.getElementById('ov'),ch=document.getElementById('ch');
+function setup(c,w,h){const d=window.devicePixelRatio||1;c.width=Math.round(w*d);c.height=Math.round(h*d);c.style.width=w+'px';c.style.height=h+'px';const g=c.getContext('2d');g.setTransform(d,0,0,d,0,0);return g;}
+let G,GO,GC,OVW=520,OVH=390,CHW=1000;
+function layout(){const k=ST.big?1.5:1;G=setup(cv,I.W*k,I.H*k);OVH=Math.round(I.H*k);OVW=Math.round(OVH*4/3);GO=setup(ov,OVW,OVH);CHW=Math.min(1400,Math.max(700,window.innerWidth-40));GC=setup(ch,CHW,130);}
+const fmtKm=v=>v>=10000?(v/10000).toFixed(v>=100000?0:1)+' 万 km':Math.round(v)+' km';
+function shipGlyph(g,x,y,s,col,sc){const v=s.vel,a=hyp(v[0],v[1])>1?Math.atan2(v[1],v[0]):0,r=(s.cls==='CA'?8:6)*sc;
+  g.save();g.translate(x,y);g.rotate(a);g.fillStyle=col;g.beginPath();g.moveTo(r,0);g.lineTo(-r*0.8,r*0.6);g.lineTo(-r*0.5,0);g.lineTo(-r*0.8,-r*0.6);g.closePath();g.fill();g.restore();}
+function drawInsetView(g,now){const w=I.W,h=I.H,z=I.z,X=x=>(x-I.cx)*z+w/2,Y=y=>(y-I.cy)*z+h/2;
+  g.fillStyle='#070a10';g.fillRect(0,0,w,h);
+  if(!I.on){g.fillStyle='#3a4658';g.font='12px "Microsoft YaHei"';g.fillText('特写收起(没有可播的镜头)',w/2-80,h/2);return;}
+  g.save();g.globalAlpha=Math.max(0.15,I.a);
+  {const st0=40/z,e=Math.pow(10,Math.floor(Math.log10(st0))),st=st0/e<2?2*e:(st0/e<5?5*e:10*e);g.fillStyle='rgba(90,120,160,.09)'; // 网格(1-2-5 阶梯)
+    for(let x=Math.floor((I.cx-w/2/z)/st)*st;x<I.cx+w/2/z;x+=st)g.fillRect(Math.round(X(x)),0,1,h);for(let y=Math.floor((I.cy-h/2/z)/st)*st;y<I.cy+h/2/z;y+=st)g.fillRect(0,Math.round(Y(y)),w,1);}
+  {g.beginPath();g.rect(0,0,w,h);for(const s of alive('blue')){g.moveTo(X(s.pos[0])+K.VIS_R*z,Y(s.pos[1]));g.arc(X(s.pos[0]),Y(s.pos[1]),K.VIS_R*z,0,6.2832);}g.fillStyle='rgba(0,0,0,.32)';g.fill('evenodd');} // 可见光圈外压暗
+  for(const r of Wd.SHELL_TR){const k=(now-r.tw)/8000;if(k<0||k>=1)continue;const al=1-k,a=[X(r.a[0]),Y(r.a[1])],e=r.p.pos;
+    g.strokeStyle='rgba(255,120,90,'+(0.8*al).toFixed(3)+')';g.lineWidth=1;g.beginPath();g.moveTo(a[0],a[1]);g.lineTo(X(e[0]),Y(e[1]));g.stroke();
+    g.setLineDash([6,5]);g.strokeStyle='rgba(255,120,90,'+(0.45*al).toFixed(3)+')';g.beginPath();g.moveTo(a[0],a[1]);g.lineTo(X(r.a[0]-r.u[0]*I.SHELL_BACK),Y(r.a[1]-r.u[1]*I.SHELL_BACK));g.stroke();g.setLineDash([]);}
+  const D=I.dir;if(D&&D.cl){g.strokeStyle=D.sh&&D.sh.side==='blue'?'rgba(111,180,255,.5)':'rgba(255,107,107,.5)';g.setLineDash([5,4]);g.beginPath();g.moveTo(X(D.cl[0][0]),Y(D.cl[0][1]));g.lineTo(X(D.cl[1][0]),Y(D.cl[1][1]));g.stroke();g.setLineDash([]);}
+  g.font='10px "Microsoft YaHei"';
+  for(const s of Wd.ships){let p;if(s.side==='blue')p=s.pos;else{if(s.dead){continue;}p=viewPos(s);if(!p)continue;}
+    const x=X(p[0]),y=Y(p[1]);if(x<-40||x>w+40||y<-40||y>h+40)continue;
+    if(s.dead){g.strokeStyle='#5f7083';g.beginPath();g.moveTo(x-4,y-4);g.lineTo(x+4,y+4);g.moveTo(x+4,y-4);g.lineTo(x-4,y+4);g.stroke();continue;}
+    shipGlyph(g,x,y,s,s.side==='blue'?'#6fb4ff':'#ff6b6b',1);g.fillStyle=s.side==='blue'?'#9cc8ff':'#ff9a9a';g.fillText(s.side==='blue'?s.name:insetName(s),x+9,y-6);}
+  for(const x of Wd.shieldFX){const k=(now-x.tw)/(x.k==='break'?500:300);if(k<0||k>=1||!x.vis)continue;const s=x.s,p=s.side==='blue'?s.pos:viewPos(s);if(!p)continue;
+    g.strokeStyle=x.k==='break'?'rgba(255,255,255,'+(1-k)+')':'rgba(120,220,255,'+(1-k)+')';g.lineWidth=x.k==='break'?2:1.5;g.beginPath();g.arc(X(p[0]),Y(p[1]),12+(x.k==='break'?10*k:0),0,6.2832);g.stroke();g.lineWidth=1;}
+  for(const p of Wd.proj){if(p.done||!p.sb)continue;const x=X(p.pos[0]),y=Y(p.pos[1]);if(x<-10||x>w+10||y<-10||y>h+10)continue;
+    if(p.type==='mac'){g.fillStyle='#fff';g.fillRect(x-2,y-2,4,4);continue;}
+    const col=p.side==='red'?'#ff6b6b':'#ffd166',n=Math.min(8,p.count);g.fillStyle=col;for(let i=0;i<n;i++){const a=i/n*6.283+p.grp*0.45;g.fillRect(x+Math.cos(a)*4.5-1.2,y+Math.sin(a)*4.5-1.2,2.4,2.4);}
+    g.strokeStyle='rgba(255,255,255,.55)';g.lineWidth=0.8;g.beginPath();g.arc(x,y,5,0,6.283);g.stroke();g.lineWidth=1;}
+  for(const t of Wd.trc){const k=(now-t.tw)/150;if(k<0||k>=1)continue;const s=t.s.pos;g.strokeStyle='rgba(159,245,234,'+(1-k)+')';g.beginPath();g.moveTo(X(s[0]),Y(s[1]));g.lineTo(X(t.p[0]),Y(t.p[1]));g.stroke();}
+  for(const h of Wd.hitFX){const k=(now-h.tw)/1200;if(k<0||k>=1||!h.vis)continue;g.strokeStyle='rgba(255,209,102,'+(1-k)+')';g.beginPath();g.arc(X(h.pos[0]),Y(h.pos[1]),(h.big?14:6)+(h.big?50:24)*k,0,6.283);g.stroke();}
+  const F=I.fx;if(F){const k=(now-F.t0)/(F.big?1500:1200);if(k>=1||k<0)I.fx=null;else{const p=F.s?F.s.pos:[F.x,F.y],x=X(p[0]),y=Y(p[1]);g.globalAlpha=(1-k)*I.a;g.strokeStyle=g.fillStyle='rgb('+F.col+')';g.lineWidth=1.5;
+    g.beginPath();g.arc(x,y,F.big?14+70*k:8+40*k,0,6.2832);g.stroke();g.beginPath();g.arc(x,y,Math.max(0.1,(F.big?10:6)*(1-k)),0,6.2832);g.fill();g.globalAlpha=I.a;g.lineWidth=1;}}
+  if(ST.aid&&I.T){const T=I.T;g.strokeStyle='rgba(255,209,102,.5)';g.setLineDash([4,3]);g.strokeRect(w/2-I.SOFT*w,(h+I.HDR)/2-I.SOFT*(h-I.HDR),2*I.SOFT*w,2*I.SOFT*(h-I.HDR));g.setLineDash([]);
+    const sub=I.last;if(sub)for(const c of sub.ctx){g.fillStyle='rgba(255,209,102,'+(0.3+0.6*c.w)+')';g.fillRect(X(c.p[0])-2,Y(c.p[1])-2,4,4);}
+    g.strokeStyle='#ffd166';const tx=X(T.cx),ty=Y(T.cy)+I.HDR/2;g.beginPath();g.moveTo(tx-5,ty);g.lineTo(tx+5,ty);g.moveTo(tx,ty-5);g.lineTo(tx,ty+5);g.stroke();}
+  {const sub=I.last,mx=w/2,my=(h+I.HDR)/2;let n=0;if(sub)for(const it of sub.ind){if(n>=5)break;const x=X(it.pos[0]),y=Y(it.pos[1]);if(x>=0&&x<=w&&y>=I.HDR&&y<=h)continue; // 框外指示
+    const dx=x-mx,dy=y-my,t=Math.min((w/2-12)/Math.abs(dx||1e-9),((h-I.HDR)/2-12)/Math.abs(dy||1e-9)),ex=mx+dx*t,ey=my+dy*t,a=Math.atan2(dy,dx);n++;
+    g.save();g.translate(ex,ey);g.rotate(a);g.fillStyle='rgb('+it.col+')';g.beginPath();g.moveTo(7,0);g.lineTo(-4,5);g.lineTo(-4,-5);g.closePath();g.fill();g.restore();
+    g.fillStyle='rgb('+it.col+')';g.fillText(it.lbl||'',Math.min(w-60,Math.max(4,ex-20)),Math.min(h-4,Math.max(I.HDR+12,ey-8)));}}
+  g.fillStyle='#8a97a8';g.fillRect(10,h-12,60,1.5);g.fillText(fmtKm(60/z),12,h-16); // 比例尺 60 px
+  g.restore();
+  g.fillStyle='rgba(5,7,12,.92)';g.fillRect(0,0,w,I.HDR);g.font='11px "Microsoft YaHei"';g.fillStyle=insetCol(I.dir);g.fillText(I.last?I.last.lbl:'',8,14);
+  const kc=(now-I.cut)/I.CUT;if(kc>=0&&kc<1){g.fillStyle='rgba(5,7,12,'+(0.55*(1-kc)).toFixed(3)+')';g.fillRect(0,0,w,h);}}
+const OVC={cx:0,cy:0,s:0};
+function drawOverview(g){const w=OVW,h=OVH;g.fillStyle='#05070c';g.fillRect(0,0,w,h);
+  let x0=1e18,x1=-1e18,y0=1e18,y1=-1e18;const inc=p=>{x0=Math.min(x0,p[0]);x1=Math.max(x1,p[0]);y0=Math.min(y0,p[1]);y1=Math.max(y1,p[1]);};
+  for(const s of Wd.ships)inc(s.pos);if(I.on){inc([I.cx-I.W/2/I.z,I.cy-I.H/2/I.z]);inc([I.cx+I.W/2/I.z,I.cy+I.H/2/I.z]);}
+  const tw=Math.max(60000,(x1-x0)*1.25,(y1-y0)*1.25*w/h),ts=w/tw,tcx=(x0+x1)/2,tcy=(y0+y1)/2;
+  if(!OVC.s){OVC.s=ts;OVC.cx=tcx;OVC.cy=tcy;}else{OVC.s+=(ts-OVC.s)*0.05;OVC.cx+=(tcx-OVC.cx)*0.08;OVC.cy+=(tcy-OVC.cy)*0.08;}
+  const s=OVC.s,X=x=>(x-OVC.cx)*s+w/2,Y=y=>(y-OVC.cy)*s+h/2;
+  for(const b of alive('blue')){g.fillStyle='rgba(90,167,255,.05)';g.beginPath();g.arc(X(b.pos[0]),Y(b.pos[1]),K.VIS_R*s,0,6.283);g.fill();}
+  for(const p of Wd.proj){if(p.done)continue;const x=X(p.pos[0]),y=Y(p.pos[1]);
+    if(p.type==='mac'){g.fillStyle=p.sb?'#fff':'rgba(255,255,255,.25)';g.fillRect(x-1.5,y-1.5,3,3);if(p.side==='red'&&p.sb){g.strokeStyle='rgba(255,120,90,.5)';g.beginPath();g.moveTo(x,y);const u=unit(p.vel);g.lineTo(x-u[0]*14,y-u[1]*14);g.stroke();}}
+    else{g.fillStyle=p.side==='red'?(p.sb?'#ff6b6b':'rgba(255,107,107,.3)'):'#ffd166';g.beginPath();g.arc(x,y,2.5,0,6.283);g.fill();}}
+  g.font='10px "Microsoft YaHei"';
+  for(const sh of Wd.ships){const x=X(sh.pos[0]),y=Y(sh.pos[1]);if(sh.dead){g.strokeStyle='#5f7083';g.beginPath();g.moveTo(x-4,y-4);g.lineTo(x+4,y+4);g.moveTo(x+4,y-4);g.lineTo(x-4,y+4);g.stroke();continue;}
+    shipGlyph(g,x,y,sh,sh.side==='blue'?'#6fb4ff':(contactFix(sh)?'#ff6b6b':'#7a3b3b'),0.8);g.fillStyle='#8a97a8';g.fillText(sh.name.replace('叛军·',''),x+7,y-5);}
+  if(I.on){g.strokeStyle='rgba(255,209,102,'+(0.3+0.7*I.a)+')';g.lineWidth=1.5;const fw=I.W/I.z*s,fh=I.H/I.z*s;g.strokeRect(X(I.cx)-fw/2,Y(I.cy)-fh/2,Math.max(2,fw),Math.max(2,fh));g.lineWidth=1;}
+  g.fillStyle='#5f7083';g.fillText('全局真值 · 宽 '+fmtKm(w/s)+(I.on?' · 琥珀框 = 特写':' · 特写收起'),6,14);}
+function drawChart(g,now){const w=CHW,h=130,T0=now-60000,X=t=>(t-T0)/60000*(w-50)+40,LY=v=>{const a=Math.log(5000),b=Math.log(1e6);return 8+(1-(Math.log(v)-a)/(b-a))*70;};
+  g.fillStyle='#05070c';g.fillRect(0,0,w,h);g.font='10px Consolas';g.fillStyle='#5f7083';
+  for(const v of [1e4,1e5,1e6]){const y=LY(v);g.fillRect(40,y,w-50,1);g.fillText(v>=1e4?(v/1e4)+'万':v,4,y+3);}
+  g.setLineDash([3,3]);g.strokeStyle='rgba(255,209,102,.35)';const ym=LY(I.W/(60/I.MIN_KM));g.beginPath();g.moveTo(40,ym);g.lineTo(w-10,ym);g.stroke();g.setLineDash([]);
+  g.strokeStyle='#cfe6ff';g.beginPath();let pen=false;for(const r of REC.w){if(r.t<T0)continue;if(r.w==null){pen=false;continue;}const x=X(r.t),y=LY(Math.max(5000,Math.min(1e6,r.w)));if(pen)g.lineTo(x,y);else{g.moveTo(x,y);pen=true;}}g.stroke();
+  for(const r of REC.w){if(r.t<T0||!r.c)continue;g.fillStyle=CLSCOL[r.c]||'#56657a';g.fillRect(X(r.t),84,Math.max(1,(w-50)/3600+0.6),10);}
+  for(const m of REC.marks){if(m.t<T0)continue;if(m.k==='cut'){g.fillStyle='#ff6b6b';g.beginPath();g.arc(X(m.t),80,3,0,6.283);g.fill();}else{g.fillStyle='rgba(255,209,102,.6)';g.fillRect(X(m.t),78,Math.max(1,m.dur/60000*(w-50)),3);}}
+  for(const e of EVLOG){if(e.tw<T0)continue;const c=CLSCOL[I.URG[e.k]?(e.k==='loss'?'挨打':'战果'):(I.RING[insetCi(e.e)]||'home')]||'#888',x=X(e.tw);g.strokeStyle=g.fillStyle=c;
+    if(e.e.shown&&!e.e.skip)g.fillRect(x-2,100,4,8);else g.strokeRect(x-2,100,4,8);}
+  g.fillStyle='#5f7083';g.fillText('镜头',4,93);g.fillText('事件',4,108);
+  let lx=40;for(const k of ['察觉','来袭','防御','挨打','出手','战果','home','m']){g.fillStyle=CLSCOL[k];g.fillRect(lx,118,10,8);g.fillStyle='#8a97a8';const t=k==='home'?'主镜头':(k==='m'?'来袭垫场':k);g.fillText(t,lx+13,126);lx+=t.length*11+24;}}
+function pct(a,b){if(!b)return '<td>—</td>';const v=Math.round(a/b*100),c=v>=80?'ok':(v>=40?'mid':'bad');return '<td class="'+c+'">'+v+'%</td>';}
+const KNAME={home:'主镜头',m:'来袭垫场',pre:'预判',fix:'定位',id:'认出',vis:'进可见光',shell:'炮弹来路',ciws:'近防',hit:'中弹/命中',loss:'损失',kill:'击沉'};
+function drawLog(){const L=SHOTS.concat(CUR?[CUR]:[]).slice(-16).reverse();let s='<tr><th>游戏秒</th><th>镜头</th><th>标题</th><th>墙钟秒</th><th>主体在框内</th><th>关键物在框内</th><th>…且看得见</th><th>最近比例尺(60px)</th></tr>';
+  for(const r of L)s+='<tr><td>'+r.tg.toFixed(0)+'</td><td style="color:'+(CLSCOL[r.c]||'#888')+'">'+(KNAME[r.k]||r.k)+'</td><td>'+r.lbl.replace(/</g,'&lt;')+'</td><td>'+((r.t1-r.t0)/1000).toFixed(1)+'</td>'+pct(r.sin,r.n)+pct(r.kin,r.kn)+pct(r.kvis,r.kn)+'<td>'+fmtKm(r.minKm)+'</td></tr>';
+  document.getElementById('log').innerHTML=s;}
+function drawHud(){const sh=s=>s.name+(s.dead?' 沉':' 血 '+Math.round(s.hp)+'/'+s.hpMax+' 盾 '+Math.round(s.sh)+(s.shDown>0?'(重启)':''));
+  const nm=Wd.proj.filter(p=>!p.done&&p.type==='mac').length,ng=Wd.proj.filter(p=>!p.done&&p.type==='missile').length;
+  document.getElementById('hud').textContent='游戏 '+Wd.t.toFixed(0)+' s · 倍速 x'+ST.rate+(ST.eff<ST.rate-0.01?' → x'+ST.eff.toFixed(1)+' '+K.TC_NAME[ST.band]:'')+' · 在飞炮弹 '+nm+' · 导弹组 '+ng+'\n'+
+    Wd.ships.filter(s=>s.side==='blue').map(sh).join('  |  ')+'\n'+Wd.ships.filter(s=>s.side==='red').map(sh).join('  |  ');
+  const ev={},cnt=k=>ev[k]||(ev[k]={n:0,s:0,x:0});for(const e of EVLOG){const c=cnt(e.k);c.n++;if(e.e.shown&&!e.e.skip)c.s++;else if(e.e.skip)c.x++;}
+  const cuts=REC.marks.filter(m=>m.k==='cut').length,flys=REC.marks.filter(m=>m.k==='fly').length;
+  document.getElementById('stat').textContent='本局事件(进队列 / 播了 / 因选中滤掉):\n'+Object.keys(ev).map(k=>'  '+(KNAME[k]||k)+' '+ev[k].n+' / '+ev[k].s+(ev[k].x?' / '+ev[k].x:'')).join('\n')+'\n镜头 '+(SHOTS.length+(CUR?1:0))+' 段 · 硬切 '+cuts+' · 飞过去 '+flys;}
+
+/* ================= 主循环 ================= */
+function tcBand(){let b=0;const mine=alive('blue');
+  for(const [id,tk] of Wd.know.blue){if(Wd.byId[id].dead||!tk.fix)continue;b=Math.max(b,1);const p=dr(tk);let d=Infinity;for(const x of mine)d=Math.min(d,dist(p,x.pos));if(d<=K.GUN_BAND)b=3;else if(d<=K.MSL_RANGE)b=Math.max(b,2);}
+  if(b<2)for(const p of Wd.proj)if(p.type==='missile'&&!p.done&&p.side==='red'&&p.sb){b=2;break;}return b;}
+function tcStep(rdt){if(!ST.tc){ST.band=0;ST.eff=ST.rate;return ST.eff;}const b=tcBand();
+  if(b>=ST.band){ST.band=b;ST.hold=K.TC_HOLD;}else{ST.hold-=rdt;if(ST.hold<=0){ST.band=b;ST.hold=K.TC_HOLD;}}
+  const want=Math.min(ST.rate,ST.band>0?K.TC_CAP[ST.band-1]:Infinity);if(!(ST.eff>0))ST.eff=want;ST.eff+=(want-ST.eff)*(1-Math.exp(-rdt/K.TC_TAU));if(Math.abs(ST.eff-want)<0.02)ST.eff=want;return ST.eff;}
+function startMatch(seed){ST.seed=seed;ST.endW=-1;ST.eff=0;ST.band=0;ST.hold=0;newWorld(seed);insetReset();REC.w=[];REC.marks=[];EVLOG=[];SHOTS=[];CUR=null;OVC.s=0;
+  document.getElementById('seed').textContent='第 '+seed+' 局';}
+function tick(dt){ST.now+=dt*1000;const now=ST.now,eff=tcStep(dt);let g=dt*eff;while(g>1e-9){const h=Math.min(0.05,g);simStep(h);g-=h;}
+  visPass();const sub=insetFrame(now,dt);track(sub,now);
+  Wd.proj=Wd.proj.filter(p=>!p.done);const old=t=>now-t.tw<3000;Wd.hitFX=Wd.hitFX.filter(old);Wd.shieldFX=Wd.shieldFX.filter(old);Wd.ciwsFX=Wd.ciwsFX.filter(old);Wd.trc=Wd.trc.filter(old);Wd.SHELL_TR=Wd.SHELL_TR.filter(r=>now-r.tw<10000);
+  REC.w=REC.w.filter(r=>now-r.t<62000);
+  if(ST.endW<0&&(!alive('blue').length||!alive('red').length))ST.endW=now;
+  if(ST.endW>=0&&ST.auto&&now-ST.endW>8000){if(CUR){SHOTS.push(CUR);CUR=null;}startMatch(ST.seed+1);}}
+let hudT=0;
+function frame(ts){const dt=Math.min(0.05,(ts-(ST.last||ts))/1000);ST.last=ts;if(ST.run&&dt>0)tick(dt);
+  const k=ST.big?1.5:1;G.save();G.scale(k,k);drawInsetView(G,ST.now);G.restore();drawOverview(GO);drawChart(GC,ST.now);
+  if(ts-hudT>250){hudT=ts;drawHud();drawLog();}requestAnimationFrame(frame);}
+
+/* ================= 控件 ================= */
+const $=id=>document.getElementById(id);
+$('play').onclick=()=>{ST.run=!ST.run;$('play').textContent=ST.run?'暂停':'继续';};
+$('again').onclick=()=>startMatch(ST.seed);$('next').onclick=()=>startMatch(ST.seed+1);
+const tog=(id,k,f)=>{$(id).onclick=()=>{ST[k]=!ST[k];$(id).classList.toggle('on',ST[k]);if(f)f();};};
+tog('tc','tc');tog('big','big',layout);tog('aid','aid');tog('auto','auto');
+{const R=$('rates');for(const r of [1,2,4,8,12,50]){const b=document.createElement('button');b.className='t'+(r===ST.rate?' on':'');b.textContent='x'+r;b.onclick=()=>{ST.rate=r;for(const x of R.children)x.classList.toggle('on',x===b);};R.appendChild(b);}}
+{const S=$('sels');for(const [k,t] of [['none','不选'],['b1','巴黎-01'],['b2','马拉松-01'],['b3','波长-01'],['all','全舰队']]){const b=document.createElement('button');b.className='t'+(k===ST.sel?' on':'');b.textContent=t;b.onclick=()=>{ST.sel=k;for(const x of S.children)x.classList.toggle('on',x===b);};S.appendChild(b);}}
+window.addEventListener('resize',layout);
+layout();startMatch(1);requestAnimationFrame(frame);
+</script>
+</body>
+</html>
