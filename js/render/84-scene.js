@@ -84,11 +84,11 @@ function drawTrails(hide){ // hide:传感器画面里只画我方(同主画面�
 }
 /* 2026-09-26 左下角特写窗口(用户:"点击马拉松船,我就能看到这艘船的特写……舰队也是,自适应的拉到舰队的缩放大小……要能够看到地图背景的放大效果")。
    业内叫画中画 / 单位特写镜头(picture-in-picture / unit cam):取景照 Cinemachine 的 Target Group + 临界阻尼(Unity SmoothDamp)+ 前视,播放照转播的回放导演台(replay director) */
-const INSET={FIT:0.7,SHOT_MAX:7000,CTX_T:240,CTX_F0:40000,CTX_F1:50000,CTX_E0:50000,CTX_E1:60000,csk:'',lastK:'',pcx:0,pcy:0,vcx:0,vcy:0,lzg:null,zin:0,fly:null, // 取景:语境落在框宽 x FIT 内;同主体镜头最长 ms;速度前后各看 CTX_T/2 物理秒;主镜头把友舰 4~5 万、已定位敌舰 / 锁定目标 5~6 万 km(x scale)渐进框进来
+const INSET={FIT:0.7,SHOT_MAX:7000,CTX_T:240,CTX_F0:40000,CTX_F1:50000,CTX_E0:50000,CTX_E1:60000,csk:'',lastK:'',kk:'',pcx:0,pcy:0,ax:0,ay:0,ox:0,oy:0,lpx:0,lpy:0,vcx:0,vcy:0,lzg:null,zin:0,fly:null, // 取景:语境落在框宽 x FIT 内;同主体镜头最长 ms;速度前后各看 CTX_T/2 物理秒;主镜头把友舰 4~5 万、已定位敌舰 / 锁定目标 5~6 万 km(x scale)渐进框进来
   OM:5,ZE:0.85,SOFT:0.12,DB:15,T_OUT:0.35,T_IN:1.2,ZWAIT:0.8,ZRATE:1.8,FK:1,FMAX:4,PUSH:1.6,PUSH_T0:2.5,PUSH_T1:0.8,SLOW_T:3,RHO:1.8,RHO_Q:1.4,MIN_KM:2500,CIWS_KM:800,SLOW:{fix:1,id:1,vis:1}, // 2026-10-04 镜头新方案(用户在演示页 demos/ui/特写镜头手感.html 定的):平移弹簧固有频率 / 阻尼比 / 软区占框;缩放死区 % / 拉远 / 推近 s / 推近前等待 s / 最快 x/s;快飞时长系数 / 快飞最远屏宽;命中前推近上限与起止墙钟秒;发现类慢飞秒 / 弧度,快飞弧度;最近只到比例尺 60 px = MIN_KM km(近防拦截镜头 CIWS_KM,用户:最大缩放 2500 km);慢飞的镜头类型
   W:416,H:260,WB:480,HB:300,WIDE:2200,MIN_W:240,HDR:20,M:12,GAP:10,CUE:16,bot:64,top:60,botT:-1e9,ro:null,x:0,y:0,w:0,h:0,on:false,cx:0,cy:0,z:1, // 框 / 宽屏框 / 最小宽 / 标题条高 / 边距 / 日标让位外扩 px
-  INC_IN:80000,INC_OUT:100000,LEAD:0.3,FADE_IN:6,FADE_OUT:9,ON_A:0.05, // 威胁权重满 / 归零的距离 km(x scale)/ 前视上限占半宽(竖直占半高)/ 淡入淡出 1/s / 可点门槛
-  SX:30,SY:24,CUT:150, // 主体安全边 px / 切镜遮罩 ms
+  INC_IN:80000,INC_OUT:100000,LEAD:0.4,FADE_IN:6,FADE_OUT:9,ON_A:0.05, // 威胁权重满 / 归零的距离 km(x scale)/ 前视上限占半宽(竖直占半高)/ 淡入淡出 1/s / 可点门槛
+  T_PAN:0.45,T_ANC:0.25,SX:30,SY:24,CUT:150, // 前视平滑 s / 敌舰锚点平滑 s(估计按感知拍跳)/ 主体安全边 px / 切镜遮罩 ms
   OUT_HI:1.2,OUT_LO:0.8,SPLIT:60000,JOIN:48000,CL:18,IND:24,INDN:5, // 离群迟滞 / 两艘拆开与合拢 km / 框外指示聚类 px、输入上限、最多几簇
   DW:{kill:3500,loss:3500,hit:2500,id:3000,fix:3000,shell:3500,ciws:2500,vis:3000},EVMS:{kill:6000,loss:6000,id:9000,fix:9000,vis:9000,hit:4500,ciws:4500,shell:5000},SHELL_BACK:200000,SHELL_GAP:30000,SHELL_NEAR:10000,shT:-1e9, // 2026-09-28 炮弹来路回放限流(用户:特写跳来跳去、剧烈缩放 —— 红方抽奖开炮之后来路一局几十条):两段至少隔 SHELL_GAP 墙钟 ms,只放冲我方(有选中时冲选中舰)来的,横向 SHELL_NEAR km 内
    // 每类停留 / 事件寿命 ms;炮弹来路回放往回框多远 km(x scale)
@@ -96,7 +96,7 @@ const INSET={FIT:0.7,SHOT_MAX:7000,CTX_T:240,CTX_F0:40000,CTX_F1:50000,CTX_E0:50
   HOV:5000, // 指针多久没动就不再算悬停 ms
   RING:['察觉','来袭','防御','挨打','出手','战果'],RC:{fix:'察觉',id:'察觉',vis:'察觉',shell:'来袭',ciws:'防御',loss:'挨打',kill:'战果'},URG:{loss:1,kill:1},RING_WAIT:1500,MIN_SHOT:2500,VIS_COOL:30000,rc:-1,rt:-1e9, // 2026-09-29 事件分类成环(用户):每类播完只能接环上往后 1~(N-1)/2 类,任意两类不双向;接不上每等 RING_WAIT ms 多走一步;损失 / 击沉不看环;非插队的段至少播 MIN_SHOT ms 才让切;同一艘进可见光圈的冷却 ms。加事件 = 在 RC 登记一行(中弹 / 命中按情况在 insetEvents 里定 c)
   PRE_S:3,PRE_MIN:0.4,POST:1200,PRE_COOL:4000,ATTR_R:20000,lrt:1, // 预判:离命中 PRE_MIN~PRE_S 墙钟秒切过去、弹没了再停 POST ms、同一目标冷却 ms;命中归到消失弹丸的半径 km(x scale)
-  lz:0,vo:[0,0,0],key:'',sk:'',t:0,a:0,cut:-1e9,cool:-1e9,hov:false,mx:0,my:0,mt:-1e9,gm:false,hide:false,vpri:0,err:false,last:null,fx:null,mskip:null,cv:null,g:null,
+  lz:0,vo:[0,0,0,0,0],key:'',sk:'',t:0,a:0,cut:-1e9,cool:-1e9,hov:false,mx:0,my:0,mt:-1e9,gm:false,hide:false,vpri:0,err:false,last:null,fx:null,mskip:null,cv:null,g:null,
   dir:null,ev:[],seq:0,prj:new Map(),by:new Map(),preT:new Map(),preSeen:new WeakSet(),out:new Set(),outK:'',dead:new Set(),idc:new Map(),fixd:new WeakSet(),fix0:true,hits:new WeakSet(),shr:new WeakSet(),shs:new WeakSet(),cws:new WeakSet(),vin:new Map(),vit:new Map(),t0:-1,arr:null,
   lod0:{hideBlue:new Set(),hideRed:new Set(),aggs:[],live:false}}; // 特写不做聚合:画特写时把 lodNow 临时换成这个空的
 function insetHit(sx,sy){return INSET.on&&sx>=INSET.x&&sx<=INSET.x+INSET.w&&sy>=INSET.y&&sy<=INSET.y+INSET.h;} // 点在特写框里:输入层吞掉,不落到框底下的地图
@@ -148,7 +148,7 @@ function insetShellAtUs(r,side){const sel=selectedShips().filter(s=>s.side===sid
 function insetEvents(now){ // 导演的事件源(只读我方知道的事):损失 / 击沉 / 中弹(含护盾挡住、护盾击破)/ 命中 / 近防拦下 / 认出 / 首次定位 / 进可见光圈 / 炮弹来路;换局清空
   const nm=simTime<INSET.t0||INSET.arr!==ships; // 换局(同尾迹:按舰船表换没换判)
   if(nm||INSET.gm!==adminMode||INSET.vw!==VIEW){INSET.ev.length=0;INSET.dir=null;INSET.fx=null;INSET.last=null;INSET.key='';INSET.gm=adminMode;INSET.vw=VIEW;INSET.rc=-1;INSET.vin.clear();} // 换局或全知开关变了:全知时记的真值不留,旧取景不拿来淡出
-  if(nm){INSET.dead.clear();INSET.idc.clear();INSET.fixd=new WeakSet();INSET.fix0=true;INSET.arr=ships;INSET.prj=new Map();INSET.by.clear();INSET.preT.clear();INSET.shr=new WeakSet();INSET.shT=-1e9;INSET.vit.clear();INSET.csk='';INSET.lastK='';INSET.fly=null;INSET.lzg=null;}
+  if(nm){INSET.dead.clear();INSET.idc.clear();INSET.fixd=new WeakSet();INSET.fix0=true;INSET.arr=ships;INSET.prj=new Map();INSET.by.clear();INSET.preT.clear();INSET.shr=new WeakSet();INSET.shT=-1e9;INSET.vit.clear();INSET.csk='';INSET.lastK='';INSET.kk='';INSET.fly=null;INSET.lzg=null;}
   const adv=simTime!==INSET.t0,S=CFG.scale,kq=[];INSET.t0=simTime;
   const prv=INSET.prj,cur=new Map(),hat=new Map(); // 2026-09-27 命中归属:每帧记下在飞的主炮弹 / 导弹(谁打谁),新冒出的命中闪光归到这一帧刚消失、离它最近的那颗
   for(const p of projectiles)if((p.type==='mac'||p.type==='missile')&&!p.done&&p.shooter&&p.target&&p.target.side)cur.set(p,{sh:p.shooter,tg:p.target,x:p.pos[0],y:p.pos[1]});
@@ -215,7 +215,7 @@ function insetSubject(sel,inc,lbl){ // 选中舰的主镜头:主体 = 在队舰�
   if(!INSET.hide)for(const it of L){const g=cw(it.d,INSET.CTX_E0*S,INSET.CTX_E1*S);if(g>0)ctx.push({p:it.pos,w:g});}
   for(const o of ships){if(o.dead||sel.indexOf(o)>=0)continue;if(o.side===VIEW){const g=cw(near(o.pos),INSET.CTX_F0*S,INSET.CTX_F1*S);if(g>0)ctx.push({p:o.pos,w:g});}
     else if(!INSET.hide&&(adminMode||contactFix(o,VIEW))){const p=viewPos(o);if(!p)continue;const g=cw(near(p),INSET.CTX_E0*S,INSET.CTX_E1*S);if(g>0)ctx.push({p:p,w:g});}}
-  return {key:key,sk:k===1?keep[0].id:key,kind:'home',S:[ax,ay],V:[vx,vy],vm:vm,ctx:ctx,eta:null,ciws:false,ind:ind,wm:wm,
+  return {key:key,sk:k===1?keep[0].id:key,kk:keep.map(s=>s.id).join(','),j:false,kind:'home',S:[ax,ay],V:[vx,vy],vm:vm,ctx:ctx,eta:null,ciws:false,ind:ind,wm:wm,
     lbl:lbl||(sel.length===1?'特写 · '+sel[0].name:'特写 · '+sel.length+' 艘'+(keep.length<sel.length?'(离群 '+(sel.length-keep.length)+')':''))};
 }
 function insetVm(s){let m=1;for(const g of (s.speedGears||[]))if(g>m)m=g;return m;}
@@ -261,7 +261,7 @@ function insetPlaySub(D,now,inc){ // 播放中这一帧:主体位置 + 语境 + 
   else if(D.k==='m'){const L=inc.filter(m=>m.tgt===D.sj);lbl='播放 · 来袭导弹 → '+D.sj.name+(L.length&&isFinite(L[0].eta)?' · '+Math.round(SHOW.t(L[0].eta))+' s':'');}
   else lbl='播放 · '+insetLbl(D)+(D.sh?' ← '+insetShName(D.sh):'');
   const sq=insetShPos(D.sh);D.cl=sq?[sq.slice(),[J.p[0],J.p[1]]]:null; // 因果连线:射手 → 主体
-  D.sub={key:D.key,sk:D.sk,kind:D.k,S:[J.p[0],J.p[1]],V:[J.v[0],J.v[1]],vm:J.vm,ctx:C.ctx,eta:etaW,ciws:D.k==='ciws'||D.evs.some(e=>e.k==='ciws'),ind:C.ind,lbl:lbl}; // ciws = 近防拦截来袭导弹的镜头:可以比 MIN_KM 更近
+  D.sub={key:D.key,sk:D.sk,kk:'',j:J.j,kind:D.k,S:[J.p[0],J.p[1]],V:[J.v[0],J.v[1]],vm:J.vm,ctx:C.ctx,eta:etaW,ciws:D.k==='ciws'||D.evs.some(e=>e.k==='ciws'),ind:C.ind,lbl:lbl}; // ciws = 近防拦截来袭导弹的镜头:可以比 MIN_KM 更近
   return D.sub;
 }
 function insetCi(e){const c=e.c||INSET.RC[e.k];return c?INSET.RING.indexOf(c):-1;} // 事件在环上是第几类(-1 = 不进环)
@@ -309,30 +309,35 @@ function insetTarget(sub,w,hp,zMax){ // 目标取景:主体 + 速度前后 CTX_T
   let W=Math.max((x1-x0)/INSET.FIT,(y1-y0)/(INSET.FIT*hp/w),1e-6);
   if(sub.eta!=null&&isFinite(sub.eta)){const t=(INSET.PUSH_T0-Math.max(0,sub.eta))/(INSET.PUSH_T0-INSET.PUSH_T1),g=t<=0?0:(t>=1?1:t*t*(3-2*t));W/=1+(INSET.PUSH-1)*g;} // 离命中 PUSH_T0 → PUSH_T1 墙钟秒连续推近
   W=Math.max(W,w/zMax);
-  const vv=Math.hypot(sub.V[0],sub.V[1]),ls=vv>1e-9?Math.sqrt(Math.min(1,vv/(sub.vm||1)))*INSET.LEAD:0;
-  return {cx:(x0+x1)/2+(ls?sub.V[0]/vv*ls*W/2:0),cy:(y0+y1)/2+(ls?sub.V[1]/vv*ls*W/2*hp/w:0),w:W};
+  const vv=Math.hypot(sub.V[0],sub.V[1]),ls=vv>1e-9?Math.sqrt(Math.min(1,vv/(sub.vm||1)))*INSET.LEAD:0,lx=ls?sub.V[0]/vv*ls*w/2:0,ly=ls?sub.V[1]/vv*ls*hp/2:0; // 前视 px:速度开平方,上限半宽(竖直半高)的 LEAD
+  return {bx:(x0+x1)/2,by:(y0+y1)/2,lx:lx,ly:ly,cx:(x0+x1)/2+lx*W/w,cy:(y0+y1)/2+ly*W/w,w:W};
 }
-function insetCam(sub,T,w,hp,dt,now){ // 镜头运动:换主体 = 飞过去(发现类慢飞、回主镜头中速、其余快飞;快飞超过 FMAX 屏宽才硬切);同主体 = 缩放死区 + 拉远快推近慢 + 限速,平移弹簧追软区;主体不出安全框
-  const ltz=Math.log(w/T.w);
-  if(sub.key!==INSET.key){
-    if(!INSET.key){INSET.pcx=T.cx;INSET.pcy=T.cy;INSET.lz=ltz;INSET.vcx=INSET.vcy=0;INSET.vo[2]=0;INSET.fly=null;}
-    else if(sub.sk!==INSET.csk){const w0=w/Math.exp(INSET.lz),dist=Math.hypot(T.cx-INSET.pcx,T.cy-INSET.pcy)/w0,slow=!!INSET.SLOW[sub.kind],back=!slow&&!!INSET.SLOW[INSET.lastK];
-      if(slow||back||dist<=INSET.FMAX){const f=insetZoomPath([INSET.pcx,INSET.pcy,w0],[T.cx,T.cy,T.w],slow||back?INSET.RHO:INSET.RHO_Q);
-        const d=slow?INSET.SLOW_T*Math.max(0.8,Math.min(1.7,0.8+0.12*f.dur)):(back?Math.max(0.9,INSET.SLOW_T*0.6):Math.max(0.45,Math.min(1.4,f.dur*0.55*INSET.FK)));
-        INSET.fly={f:f,t0:now,dur:d*1000,c0:[T.cx,T.cy],soft:slow||back};}
-      else{INSET.pcx=T.cx;INSET.pcy=T.cy;INSET.lz=ltz;INSET.vcx=INSET.vcy=0;INSET.vo[2]=0;INSET.fly=null;INSET.cut=now;}}
-    INSET.lzg=ltz;INSET.zin=0;INSET.key=sub.key;INSET.csk=sub.sk;INSET.lastK=sub.kind||'';}
-  if(INSET.fly){const F=INSET.fly,k=Math.min(1,(now-F.t0)/F.dur),e=F.soft?k*k*k*(k*(6*k-15)+10):(k<0.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2),q=F.f(e); // 慢飞五次缓动、快飞三次;目标在动就把漂移按进度加回去
-    INSET.pcx=q[0]+(T.cx-F.c0[0])*e;INSET.pcy=q[1]+(T.cy-F.c0[1])*e;INSET.lz=Math.log(w/q[2]);if(k>=1){INSET.fly=null;INSET.vcx=INSET.vcy=0;INSET.vo[2]=0;INSET.lzg=INSET.lz;}return;}
-  const band=Math.log(1+INSET.DB/100);if(INSET.lzg===null)INSET.lzg=ltz;
-  if(ltz<INSET.lzg-band*0.5){INSET.lzg=ltz;INSET.zin=0;}else if(ltz>INSET.lzg+band){INSET.zin+=dt;if(INSET.zin>=INSET.ZWAIT)INSET.lzg=ltz;}else INSET.zin=0; // 要装下新东西立刻拉远;想推近要持续 ZWAIT 秒
-  const lz0=INSET.lz,lz1=insetSD(lz0,INSET.lzg,2,INSET.lzg<lz0?INSET.T_OUT:INSET.T_IN,dt),mx=Math.log(INSET.ZRATE)*dt;INSET.lz=Math.max(lz0-mx,Math.min(lz0+mx,lz1));
-  const z=Math.exp(INSET.lz),ex=(T.cx-INSET.pcx)*z,ey=(T.cy-INSET.pcy)*z,SXp=INSET.SOFT*w,SYp=INSET.SOFT*hp,om=INSET.OM; // 目标点在软区里不追,出了软区按弹簧(固有频率 OM、阻尼比 ZE)追软区边
-  const gx=INSET.pcx+(ex-Math.max(-SXp,Math.min(SXp,ex)))/z,gy=INSET.pcy+(ey-Math.max(-SYp,Math.min(SYp,ey)))/z;
-  INSET.vcx+=(om*om*(gx-INSET.pcx)-2*INSET.ZE*om*INSET.vcx)*dt;INSET.vcy+=(om*om*(gy-INSET.pcy)-2*INSET.ZE*om*INSET.vcy)*dt;INSET.pcx+=INSET.vcx*dt;INSET.pcy+=INSET.vcy*dt;
-  const S=sub.S,hx=(w/2-INSET.SX)/z,hy=(hp/2-INSET.SY)/z;
-  if(S[0]-INSET.pcx>hx){INSET.pcx=S[0]-hx;INSET.vcx=Math.max(INSET.vcx,0);}else if(S[0]-INSET.pcx<-hx){INSET.pcx=S[0]+hx;INSET.vcx=Math.min(INSET.vcx,0);}
-  if(S[1]-INSET.pcy>hy){INSET.pcy=S[1]-hy;INSET.vcy=Math.max(INSET.vcy,0);}else if(S[1]-INSET.pcy<-hy){INSET.pcy=S[1]+hy;INSET.vcy=Math.min(INSET.vcy,0);}
+function insetCam(sub,T,w,hp,dt,now){ // 镜头运动:换主体 = 飞过去(发现类慢飞、回主镜头中速、其余快飞;快飞超过 FMAX 屏宽才硬切);同主体 = 缩放死区 + 拉远快推近慢 + 限速;镜头钉在主体上走(锚点 + 偏移 + 前视),偏移弹簧追软区;主体不出安全框
+  const ltz=Math.log(w/T.w),S=sub.S,I=INSET;
+  const pin=z=>{I.ax=S[0];I.ay=S[1];I.lpx=T.lx;I.lpy=T.ly;I.ox=I.pcx-S[0]-T.lx/z;I.oy=I.pcy-S[1]-T.ly/z;I.vcx=I.vcy=0;I.vo.fill(0);I.kk=sub.kk;}; // 画面不动,记成锚点 + 偏移 + 前视
+  if(sub.key!==I.key){
+    if(!I.key){I.pcx=T.cx;I.pcy=T.cy;I.lz=ltz;I.fly=null;pin(w/T.w);}
+    else if(sub.sk!==I.csk){const w0=w/Math.exp(I.lz),dist=Math.hypot(T.cx-I.pcx,T.cy-I.pcy)/w0,slow=!!I.SLOW[sub.kind],back=!slow&&!!I.SLOW[I.lastK];
+      if(slow||back||dist<=I.FMAX){const f=insetZoomPath([I.pcx,I.pcy,w0],[T.cx,T.cy,T.w],slow||back?I.RHO:I.RHO_Q);
+        const d=slow?I.SLOW_T*Math.max(0.8,Math.min(1.7,0.8+0.12*f.dur)):(back?Math.max(0.9,I.SLOW_T*0.6):Math.max(0.45,Math.min(1.4,f.dur*0.55*I.FK)));
+        I.fly={f:f,t0:now,dur:d*1000,c0:[T.cx,T.cy],soft:slow||back};}
+      else{I.pcx=T.cx;I.pcy=T.cy;I.lz=ltz;I.fly=null;I.cut=now;pin(w/T.w);}}
+    I.lzg=ltz;I.zin=0;I.key=sub.key;I.csk=sub.sk;I.lastK=sub.kind||'';}
+  if(I.fly){const F=I.fly,k=Math.min(1,(now-F.t0)/F.dur),e=F.soft?k*k*k*(k*(6*k-15)+10):(k<0.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2),q=F.f(e); // 慢飞五次缓动、快飞三次;目标在动就把漂移按进度加回去
+    I.pcx=q[0]+(T.cx-F.c0[0])*e;I.pcy=q[1]+(T.cy-F.c0[1])*e;I.lz=Math.log(w/q[2]);if(k>=1){I.fly=null;I.lzg=I.lz;pin(Math.exp(I.lz));}return;}
+  if(sub.kk!==I.kk){I.ox+=I.ax-S[0];I.oy+=I.ay-S[1];I.ax=S[0];I.ay=S[1];I.kk=sub.kk;} // 在队的舰变了(离群 / 回队):中心不跳
+  if(sub.j){I.ax=insetSD(I.ax,S[0],3,I.T_ANC,dt);I.ay=insetSD(I.ay,S[1],4,I.T_ANC,dt);}else{I.ax=S[0];I.ay=S[1];I.vo[3]=I.vo[4]=0;}
+  const band=Math.log(1+I.DB/100);if(I.lzg===null)I.lzg=ltz;
+  if(ltz<I.lzg-band*0.5){I.lzg=ltz;I.zin=0;}else if(ltz>I.lzg+band){I.zin+=dt;if(I.zin>=I.ZWAIT)I.lzg=ltz;}else I.zin=0; // 要装下新东西立刻拉远;想推近要持续 ZWAIT 秒
+  const lz0=I.lz,lz1=insetSD(lz0,I.lzg,2,I.lzg<lz0?I.T_OUT:I.T_IN,dt),mx=Math.log(I.ZRATE)*dt;I.lz=Math.max(lz0-mx,Math.min(lz0+mx,lz1));
+  I.lpx=insetSD(I.lpx,T.lx,0,I.T_PAN,dt);I.lpy=insetSD(I.lpy,T.ly,1,I.T_PAN,dt); // 前视不过软区:船队一动就往航向让出画面
+  const z=Math.exp(I.lz),ex=(T.bx-I.ax-I.ox)*z,ey=(T.by-I.ay-I.oy)*z,SXp=I.SOFT*w,SYp=I.SOFT*hp,om=I.OM; // 语境中心的偏移在软区里不追,出了软区按弹簧(固有频率 OM、阻尼比 ZE)追软区边
+  const gx=I.ox+(ex-Math.max(-SXp,Math.min(SXp,ex)))/z,gy=I.oy+(ey-Math.max(-SYp,Math.min(SYp,ey)))/z;
+  I.vcx+=(om*om*(gx-I.ox)-2*I.ZE*om*I.vcx)*dt;I.vcy+=(om*om*(gy-I.oy)-2*I.ZE*om*I.vcy)*dt;I.ox+=I.vcx*dt;I.oy+=I.vcy*dt;
+  const hx=(w/2-I.SX)/z,hy=(hp/2-I.SY)/z,rx=S[0]-I.ax-I.lpx/z,ry=S[1]-I.ay-I.lpy/z; // 主体此刻那一点不出安全框
+  if(rx-I.ox>hx){I.ox=rx-hx;I.vcx=Math.max(I.vcx,0);}else if(rx-I.ox<-hx){I.ox=rx+hx;I.vcx=Math.min(I.vcx,0);}
+  if(ry-I.oy>hy){I.oy=ry-hy;I.vcy=Math.max(I.vcy,0);}else if(ry-I.oy<-hy){I.oy=ry+hy;I.vcy=Math.min(I.vcy,0);}
+  I.pcx=I.ax+I.ox+I.lpx/z;I.pcy=I.ay+I.oy+I.lpy/z;
 }
 function insetSD(c,t,i,T,dt){ // 临界阻尼平滑(Unity Mathf.SmoothDamp;Game Programming Gems 4, Lowe):速度存在 INSET.vo[i],不过冲
   if(!(dt>0))return c;const om=2/T,x=om*dt,e=1/(1+x+0.48*x*x+0.235*x*x*x),ch=c-t,v=INSET.vo[i],tp=(v+om*ch)*dt;
@@ -382,9 +387,9 @@ function drawInset(){
   if(!INSET.cv)INSET.cv=document.createElement('canvas');
   if(INSET.cv.width!==pw||INSET.cv.height!==ph){INSET.cv.width=pw;INSET.cv.height=ph;INSET.g=null;}
   if(!INSET.g)INSET.g=INSET.cv.getContext('2d');
-  const g=INSET.g,ctx0=ctx,c0x=cam.x,c0y=cam.y,c0z=cam.zoom,W0=W,H0=H,lod=lodNow,comp=typeof TERR!=='undefined'?TERR.comp:null;
+  const g=INSET.g,ctx0=ctx,c0x=cam.x,c0y=cam.y,c0z=cam.zoom,W0=W,H0=H,lod=lodNow,vw0=vtW,comp=typeof TERR!=='undefined'?TERR.comp:null;
   g.setTransform(dpr,0,0,dpr,0,0);
-  ctx=g;cam.x=cx;cam.y=cy;cam.zoom=z;W=w;H=h;lodNow=INSET.lod0;
+  ctx=g;cam.x=cx;cam.y=cy;cam.zoom=z;W=w;H=h;lodNow=INSET.lod0;vtW=vtWeights(1/z); // 2026-10-04 层级权重也按特写自己的缩放算(用户:滚轮缩放主镜头时特写背景抽动 —— 底色 vtBg 原来读主镜头的层级权重)
   try{
     ctx.fillStyle=vtBg();ctx.fillRect(0,0,w,h);
     for(const c of STAR_TILE.cv)if(c)ctx.drawImage(c,0,0,Math.min(c.width,pw),Math.min(c.height,ph),0,0,Math.min(c.width/dpr,w),Math.min(c.height/dpr,h)); // 天在屏幕空间,借主画面的贴图
@@ -405,7 +410,7 @@ function drawInset(){
     drawProjectiles();if(typeof drawMslPred==='function')drawMslPred();if(typeof drawShellTraces==='function')drawShellTraces();drawHits();drawCiwsFx();if(typeof drawShieldFx==='function')drawShieldFx();insetCausal();
     const F=INSET.fx;if(F){const k=(now-F.t0)/(F.big?1500:1200);if(k>=1||k<0)INSET.fx=null;else{const p=F.s?F.s.pos:[F.x,F.y],q=toScreen(p[0],p[1]);ctx.globalAlpha=1-k;ctx.strokeStyle=ctx.fillStyle='rgb('+F.col+')';ctx.lineWidth=1.5; // 开播自带爆闪:hitFX 只活 1.2 游戏秒,切过去时多半已经没了
       ctx.beginPath();ctx.arc(q[0],q[1],F.big?14+70*k:8+40*k,0,6.2832);ctx.stroke();ctx.beginPath();ctx.arc(q[0],q[1],Math.max(0.1,(F.big?10:6)*(1-k)),0,6.2832);ctx.fill();ctx.globalAlpha=1;}}
-  }finally{ctx=ctx0;cam.x=c0x;cam.y=c0y;cam.zoom=c0z;W=W0;H=H0;lodNow=lod;}
+  }finally{ctx=ctx0;cam.x=c0x;cam.y=c0y;cam.zoom=c0z;W=W0;H=H0;lodNow=lod;vtW=vw0;}
   INSET.x=x;INSET.y=y;INSET.w=w;INSET.h=h;INSET.on=INSET.a>INSET.ON_A;
   ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=INSET.a;ctx.drawImage(INSET.cv,Math.round(x*dpr),Math.round(y*dpr));ctx.restore(); // 1:1 贴在整数设备像素上
   ctx.save();try{ctx.globalAlpha=INSET.a;
