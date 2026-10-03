@@ -56,20 +56,6 @@ function reassignNets(side){ // 网间协同分配:待分配网(目标已灭)补
     }
   }
 }
-const NET_COMM=30000*CFG.scale; // v125:网内通信距离——断网超过此距离计时自毁。2026-09-26 x1/5(单局地图):原 150000
-function updateNets(dt){ // v125:网内连接检查(仅地雷网)——雷组离网中心>NET_COMM=断网,计时10s没回自毁;清理空网(飞行攻击不要求组间通信)
-  for(const [netId,net] of nets){
-    const members=net.groups.map(g=>projectiles.find(p=>p.group===g&&p.type==='missile'&&!p.done&&p.mine)).filter(Boolean);
-    if(members.length<=1){continue;} // DS160:v125遗留bug——此处删网会误删普通攻击网(members只算雷导弹,攻击网恒0→每tick被删→网卡片/DS147分配器/组网转移全失效);删除交给下方alive检查(1129)
-    let cx=0,cy=0,cz=0;
-    members.forEach(p=>{cx+=p.pos[0];cy+=p.pos[1];cz+=p.pos[2];});
-    cx/=members.length;cy/=members.length;cz/=members.length;
-    for(const p of members){
-      if(V.len(V.sub(p.pos,[cx,cy,cz]))>NET_COMM){ // 离网中心超通信距离=断网
-        p.netBroken=(p.netBroken||0)+dt;
-        if(p.netBroken>10){p.done=true;}
-      }else p.netBroken=0; // 回网(飞回中心)恢复
-    }
-  }
+function updateNets(dt){ // 清理空网(网里一组活弹都没有了)。2026-10-03 原来的「雷离网中心 > 3 万计时 10 秒自毁」删了(用户:与导弹组网重叠;断链的雷照样待命)
   for(const [netId,net] of nets){const alive=net.groups.some(g=>projectiles.some(p=>p.group===g&&p.type==='missile'&&!p.done));if(!alive)nets.delete(netId);}
 }

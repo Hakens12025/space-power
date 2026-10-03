@@ -8,7 +8,7 @@ const MSL_CFG={
   ladarRange:30000*CFG.scale,    // LADAR 有效距离(=GUIDE_SEEK,末端开启后精确锁定)。2026-09-26 x1/5(单局地图):原 150000
 };
 const GUIDE_SEEK=MSL_CFG.ladarRange; // 导弹自主导引范围(km)=主动LADAR末端开启后(范围内自主锁定,不耗通道)
-/* 2026-09-30 导弹组网(用户):弹与弹 MM(可见光圈的一半)、弹与舰(含前出浮标)MS 以内连一条边;一组导弹经弹弹链能连到任何一艘我方船(舰与舰之间量子通信,算一个节点)就「在网上」(p.online):
+/* 2026-09-30 导弹组网(用户):弹与弹 MM、弹与舰(含前出浮标)MS 以内连一条边(数见 MSL_LINK);一组导弹经弹弹链能连到任何一艘我方船(舰与舰之间量子通信,算一个节点)就「在网上」(p.online):
    回传自身状态(我方画真位置、选中面板照实报)、收数据链引导(guideSide 只给在网上的)。每个感知节拍重算一次;刚发射的算在网上(52 fireMissiles) */
 const MSL_LINK={MM:87750*CFG.scale,MS:90000*CFG.scale};
 const MSL_SWARM={S:20000*CFG.scale,COH:0.7,FLOOR:0.85,conv:25000*CFG.scale,convW:125000*CFG.scale,DASH:30000*CFG.scale,RES:2,DEAD:0.035,HYST:0.03};
@@ -28,6 +28,9 @@ function mslNetStep(dt){
     for(const p of M)p.nb=[]; // 邻接:三关系算法的"导弹间关系"输入(所有活弹,含雷 / 布雷途中 —— 它们也是中继节点);MM2 用上面直连 / 接力那两个同款
     for(let i=0;i<M.length;i++)for(let j=i+1;j<M.length;j++){const g=M[i],q=M[j],dx=g.pos[0]-q.pos[0],dy=g.pos[1]-q.pos[1],dz=g.pos[2]-q.pos[2];
       if(dx*dx+dy*dy+dz*dz<MM2){g.nb.push(q);q.nb.push(g);}}
+    for(const p of M){if(p.online||p.mine||p.park)continue;let best=null; // 2026-10-03 目标沿链传导(用户:攻击目标顺着数据链传;同演示页 demos/weapons/导弹组网.html):断链的组采纳一跳邻组里更新的目标记录(新 0.2 秒以上才换),整团往同一个目标聚;在网上的听舰队
+      for(const q of p.nb)if(!q.done&&q.tk&&q.target&&(!best||q.tk.t>best.tk.t))best=q;
+      if(best&&(!p.tk||best.tk.t>p.tk.t+0.2))mslTkFrom(p,best);}
     for(const p of projectiles)if(p.type==='mac'&&!p.done&&!p.pg&&p.shooter&&p.shooter.side===side)mslPredAdd(p,'mac'); // 炮弹:出膛状态本来就知道,直线外推
   }
   mslPredStep();
@@ -111,6 +114,12 @@ function mslTkSet(p,q,sig){ // 更新导弹自己的目标记录(原地改)
   const v=p.target.vel;k.pos[0]=q[0];k.pos[1]=q[1];k.pos[2]=q[2]||0;k.vel[0]=v[0];k.vel[1]=v[1];k.vel[2]=v[2];k.t=simTime; // 目标速度仍取真值(接触没有速度估计,已登记的口子)
   if(sig)k.sig=sig;k.a=trkAccPrior(p.target,{idn:!!k.sig});
 }
+function mslTkFrom(p,q){ // 采纳邻组 q 的目标与记录(目标沿链传导):重新排速度、掉进脱锁时按新记录重算预计拦截点
+  let k=p.tk;if(!k)k=p.tk={pos:[0,0,0],vel:[0,0,0],t:0,sig:null,a:0};const s=q.tk;
+  for(let i=0;i<3;i++){k.pos[i]=s.pos[i];k.vel[i]=s.vel[i];}k.t=s.t;k.sig=s.sig;k.a=s.a;
+  p.target=q.target;p.cruise=false;p.chaffed=false;p.lastKpos=null;p.guideMode='';p.vCmd=undefined;
+}
+function mslSwarmOn(p){return !!(p.nb&&p.target&&p.nb.some(q=>!q.done&&!q.park&&q.target===p.target));} // 有没有同目标的邻组(聚集攻击中),右栏状态读
 function mslBasket(p){const k=p.tk;if(!k)return null;const u=simTime-k.t;return {x:k.pos[0]+k.vel[0]*u,y:k.pos[1]+k.vel[1]*u,z:k.pos[2]+k.vel[2]*u,r:GUIDE_SEEK+0.5*k.a*u*u};} // 预计目标位置 + 再捕获半径
 function mslSeekB(p,R,ok,noBasket){ // 断链的导弹自己挑目标(b);R / ok 同 mslSeek;noBasket = 雷的触发(守着自己的点,不看预计位置)
   const side=p.shooter.side,k=p.tk,bk=noBasket?null:mslBasket(p),lim=Math.log(MSL_SIM);let best=null,bs=Infinity,bd=Infinity;

@@ -211,10 +211,10 @@ function drawShieldFx(){
   }
   ctx.restore();
 }
-function drawChain(p0){ // 2026-10-01 传播链路(用户:点一枚导弹,看到链本身 —— 在圈里就相连,一条线串完,能回舰就续到舰,到不了就停在最后一枚上,不叫断链):取选中组所在的连通簇(弹弹 ≤MM、弹舰/浮标 ≤MS),最小生成树(Prim,从选中组起每次接上最近的一枚)画成尽量短的一株线;有成员够得着舰就把树接到最近那艘上,末段换亮色。同网虚线(v140)与 📡 直连舰的线(只表示分到了通道)都由此取代
-  const side=p0.shooter&&p0.shooter.side;if(!side)return;
+function drawChain(p0){ // 2026-10-03:只画在网上的(断链的成员我方不知道它在哪,原来按真位置连 = 泄漏),最小生成树改 O(n²)。 2026-10-01 传播链路(用户:点一枚导弹,看到链本身 —— 在圈里就相连,一条线串完,能回舰就续到舰,到不了就停在最后一枚上,不叫断链):取选中组所在的连通簇(弹弹 ≤MM、弹舰/浮标 ≤MS),最小生成树(Prim,从选中组起每次接上最近的一枚)画成尽量短的一株线;有成员够得着舰就把树接到最近那艘上,末段换亮色。同网虚线(v140)与 📡 直连舰的线(只表示分到了通道)都由此取代
+  const side=p0.shooter&&p0.shooter.side;if(!side||!p0.online)return;
   const M=[];
-  for(const p of projectiles)if(p.type==='missile'&&!p.done&&p.shooter&&p.shooter.side===side)M.push(p);
+  for(const p of projectiles)if(p.type==='missile'&&!p.done&&p.online&&p.shooter&&p.shooter.side===side)M.push(p);
   const MM=MSL_LINK.MM*MSL_LINK.MM,MS=MSL_LINK.MS*MSL_LINK.MS;
   const cl=[p0],seen=new Set([p0]),st=[p0]; // 连通簇:从选中组灌水
   while(st.length){const x=st.pop();
@@ -226,16 +226,13 @@ function drawChain(p0){ // 2026-10-01 传播链路(用户:点一枚导弹,看到
   let shipEnd=null,sd=MS;
   for(const g of cl)for(const f of F){const dx=g.pos[0]-f.pos[0],dy=g.pos[1]-f.pos[1],dz=g.pos[2]-(f.pos[2]||0),q=dx*dx+dy*dy+dz*dz;
     if(q<sd){sd=q;shipEnd=[g,f];}} // 簇里够得着舰的成员里取最近的那艘
-  const inn=new Set(cl),par=new Map(); // Prim 最小生成树:每轮把离树最近的组接进来
-  const key=g=>{let best=null,bd=Infinity;for(const [k,v] of par){const dx=g.pos[0]-k.pos[0],dy=g.pos[1]-k.pos[1],dz=g.pos[2]-k.pos[2],q=dx*dx+dy*dy+dz*dz;if(q<bd){bd=q;best=k;}}return [best,bd];};
-  const pend=cl.filter(g=>g!==p0);par.set(p0,null);
-  while(pend.length){let bi=0,bg=null,bb=Infinity;
-    for(let i=0;i<pend.length;i++){const [k,q]=key(pend[i]);if(q<bb){bb=q;bg=k;bi=i;}}
-    const g=pend.splice(bi,1)[0];par.set(g,bg);}
+  const n=cl.length,bd=new Float64Array(n).fill(Infinity),bp=new Int32Array(n).fill(-1),inT=new Uint8Array(n);bd[0]=0; // Prim 最小生成树:每轮把离树最近的组接进来,接进来后只更新它到其余组的距离
   ctx.save();ctx.lineWidth=1;
   ctx.strokeStyle='rgba(84,224,208,.5)';
   ctx.beginPath();
-  for(const [g,k] of par){if(!k)continue;const a2=toScreen(g.pos[0],g.pos[1]),b2=toScreen(k.pos[0],k.pos[1]);ctx.moveTo(a2[0],a2[1]);ctx.lineTo(b2[0],b2[1]);}
+  for(let it=0;it<n;it++){let u=-1,ub=Infinity;for(let i=0;i<n;i++)if(!inT[i]&&bd[i]<ub){ub=bd[i];u=i;}if(u<0)break;inT[u]=1;
+    if(bp[u]>=0){const a2=toScreen(cl[u].pos[0],cl[u].pos[1]),b2=toScreen(cl[bp[u]].pos[0],cl[bp[u]].pos[1]);ctx.moveTo(a2[0],a2[1]);ctx.lineTo(b2[0],b2[1]);}
+    const g=cl[u];for(let i=0;i<n;i++){if(inT[i])continue;const dx=cl[i].pos[0]-g.pos[0],dy=cl[i].pos[1]-g.pos[1],dz=cl[i].pos[2]-g.pos[2],q=dx*dx+dy*dy+dz*dz;if(q<bd[i]){bd[i]=q;bp[i]=u;}}}
   ctx.stroke();
   if(shipEnd){const g=shipEnd[0],f=shipEnd[1],a2=toScreen(g.pos[0],g.pos[1]),b2=toScreen(f.pos[0],f.pos[1]); // 回舰的那一段
     ctx.strokeStyle='rgba(84,224,208,.9)';ctx.lineWidth=1.5;

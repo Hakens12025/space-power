@@ -2,25 +2,26 @@
 /* RF1: 提取自 stepSim 的 S5-S11 段(原 07-missiles.js L236-631):弹丸上限裁剪→拦截弹预收集→引导分配→网检查→
    四弹型主循环→过滤。各弹型分支提为子函数,原外层循环的 continue 早退定点转为 return(内层扫描循环的
    continue 保留原样),控制流与原版逐段一致。 */
+const PROJ_CAP=1200,PROJ_KEEP=900; // 2026-10-03 弹丸上限:超过 PROJ_CAP 才裁,飞行弹保 PROJ_KEEP 个(雷豁免);原来 400 / 200
 function stepProjectiles(dt){
   // ===== 战斗更新 =====
-  if(projectiles.length>400){ // v126(外援E):雷豁免;飞行弹按"剩余命中时间"保最迫近(脱靶/游魂优先砍,不再砍最老)
+  if(projectiles.length>PROJ_CAP){ // v126(外援E):雷豁免;飞行弹按"剩余命中时间"保最迫近(脱靶/游魂优先砍,不再砍最老)。2026-10-03 上限 400 → PROJ_CAP(用户:导弹弹药 x4 后正常交战也会撞上,超了会悄悄删掉飞行中的导弹)
     const persist=projectiles.filter(p=>p.mine);
     const volatile=projectiles.filter(p=>!p.mine);
     volatile.sort((a,b)=>{
       const ta=a.target&&!a.target.dead?V.len(V.sub(a.pos,a.target.pos))/Math.max(300,V.len(a.vel)):1e9;
       const tb=b.target&&!b.target.dead?V.len(V.sub(b.pos,b.target.pos))/Math.max(300,V.len(b.vel)):1e9;
-      return ta-tb; // 剩余命中时间短的(最迫近)排前,保前200
+      return ta-tb; // 剩余命中时间短的(最迫近)排前,保前 PROJ_KEEP
     });
-    projectiles=persist.concat(volatile.slice(0,200));
-    volatile.slice(200).forEach(p=>p.done=true); // 被裁标done,引用干净失效
+    projectiles=persist.concat(volatile.slice(0,PROJ_KEEP));
+    volatile.slice(PROJ_KEEP).forEach(p=>p.done=true); // 被裁标done,引用干净失效
   }
   // v119:预收集活跃拦截弹(按阵营),供导弹蛇形判定O(1)跳过——原为O(P²)全表扫描
   const icBlue=[],icRed=[];
   for(const q of projectiles){if(q.type==='interceptor'&&!q.done){(q.shooter.side==='blue'?icBlue:icRed).push(q);}}
   mslNetStep(dt); // 2026-09-30 导弹组网:每个感知节拍重算哪些导弹组连得到舰队(weapons/54)
   guideMissiles(); // T1:每tick重算引导分配(自导/链导/脱锁),供下方追击门判定
-  updateNets(dt); // v125:网内连接检查——断网(离网中心>NET_COMM)计时,10s没回自毁
+  updateNets(dt); // 清理空网(2026-10-03 雷离网中心计时自毁那条删了)
   for(const p of projectiles){ // 四弹型主循环(RF1:分支体在下方四个子函数)
     const x0=p.pos[0],y0=p.pos[1];
     if(p.type==='decoy')stepDecoyProj(p,dt);
@@ -108,7 +109,7 @@ function mslSwarmStep(p,tp,dist,dir0){ // 2026-10-01 三关系公共段:① 油�
   const nb=[]; // 同目的地的邻组:追目标 = 同一目标;打空地 = 布雷点在同一片(6 万内)
   for(const q of (p.nb||[])){if(q.done)continue;
     if(p.park){if(q.park&&Math.hypot(q.parkPt[0]-p.parkPt[0],q.parkPt[1]-p.parkPt[1])<60000*CFG.scale)nb.push(q);}
-    else if(q.tgt===p.tgt&&!q.park)nb.push(q);}
+    else if(!q.park&&p.target&&q.target===p.target)nb.push(q);} // 2026-10-03 修:原来比 q.tgt === p.tgt,引擎里没有 tgt 字段(演示页才有),恒为真 —— 打不同目标的组被凑成一团
   let cx=0,cy=0;for(const q of nb){cx+=q.pos[0];cy+=q.pos[1];}
   const dCen=nb.length?Math.hypot(cx/nb.length-p.pos[0],cy/nb.length-p.pos[1]):0;
   const dEff=dist+0.5*dCen; // 有效路程 = 到目的地距离 + 离局部质心距离的一半(聚拢的弯路不自欺)

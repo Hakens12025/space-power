@@ -258,7 +258,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
     const total=aliveHits.reduce((n,p)=>n+(p.count||0),0);
     const dmgSum=aliveHits.reduce((n,p)=>n+(p.dmg||0),0);
     const dist=list=>{const m={};list.forEach(k=>m[k]=(m[k]||0)+1);return Object.keys(m).map(k=>k+' ×'+m[k]).join(' · ');};
-    const stts=dist(aliveHits.map(p=>p.mine?'伏击雷':p.cruise?'巡飞搜索':p.park?(p.mineOk?'布雷中':'飞向点位'):(p.netOff?'组网包抄':((p.coastT>0||p.guideMode==='coast')?'脱锁':'突击'))));
+    const stts=dist(aliveHits.map(p=>p.mine?'伏击雷':p.cruise?'巡飞搜索':p.park?(p.mineOk?'布雷中':'飞向点位'):(mslSwarmOn(p)?'聚集攻击':((p.coastT>0||p.guideMode==='coast')?'脱锁':'突击'))));
     const tgts=dist(aliveHits.map(p=>p.target?(p.target.side!==undefined?xhName(p.target):'区域'):'无'));
     const gds=dist(aliveHits.map(p=>p.guideMode==='self'?'自主':p.guideMode==='link'?'数据链':p.guideMode==='coast'?'脱锁':'本地'));
     const minFuel=Math.min(...aliveHits.map(p=>p.fuel||0));
@@ -303,7 +303,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
     ].map(it=>`<span class="fi"><i>${it[0]}</i><b>${it[1]}</b></span>`).join('');
     const rp=(m.shooter&&m.shooter.side===VIEW&&!adminMode&&!projSeen(m)&&m.rep)?m.rep:null; // 2026-09-30 断链又看不见:只报最后一次回报的(位置取推测位置),不读真值
     const mv=rp?Object.assign(Object.create(m),{mine:rp.mine,cruise:rp.cruise,park:rp.park,mineOk:rp.mineOk,coastT:0,target:rp.tgt,fuel:rp.fuel,count:rp.count,vel:[rp.dir[0]*rp.spd,rp.dir[1]*rp.spd,rp.dir[2]*rp.spd],pos:m.pg?mslPredPos(m.pg,simTime):rp.pos,guideMode:'coast'}):m;
-    const stt=mv.mine?'伏击雷 · 静默待命':mv.cruise?'巡飞搜索 · 导引头开着':mv.park?(mv.mineOk?'飞向布雷点':'飞向点位 · 导引头搜索'):(mv.netOff?'组网包抄':(mv.coastT>0?'脱锁滑行':'突击中'));
+    const stt=mv.mine?'伏击雷 · 静默待命':mv.cruise?'巡飞搜索 · 导引头开着':mv.park?(mv.mineOk?'飞向布雷点':'飞向点位 · 导引头搜索'):((!rp&&mslSwarmOn(m))?'聚集攻击':(mv.coastT>0?'脱锁滑行':'突击中'));
     const tgt=mv.target?(mv.target.side!==undefined?xhName(mv.target):(mv.target.pos?'区域点':'—')):(mv.mine?'无(待触发)':'无');
     const tq=mv.target?(mv.target.side===undefined?mv.target.pos:(mv.guideMode==='self'?mv.target.pos:viewPos(mv.target))):null,tdist=tq?V.len(V.sub(tq,mv.pos)):0; // 2026-09-28 名字打码、距离按我方知道的位置(导引头自己看见的用真值)
     const fu=Math.max(0,Math.min(100,mv.fuel||0)); // 燃料满值100s,直接当百分比
