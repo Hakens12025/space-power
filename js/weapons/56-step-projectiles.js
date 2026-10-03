@@ -140,7 +140,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         p.vel=[0,0,0];p.spd=0;
         let trig=null;
         const trigR=p.trigRadius||12000*CFG.scale; // 2026-09-26 x1/5(单局地图):原 60000
-        trig=(p.online?mslSeek:mslSeekB)(p,trigR,s=>!(p.trigMode==='big'&&shipValue(s)<3)&&!(p.trigMode==='engine'&&!s.flame&&!s.sideFlame),true); // 2026-09-30 断链的雷按 b 挑(不看预计位置);2026-09-28 触发走导引头(同 LOAL:看得见才算、分不出民船诱饵、挑最近)。big 只伏击巡洋级+;engine 只打引擎开着的
+        trig=!mslSeekDue(p)?null:(p.online?mslSeek:mslSeekB)(p,trigR,s=>!(p.trigMode==='big'&&shipValue(s)<3)&&!(p.trigMode==='engine'&&!s.flame&&!s.sideFlame),true); // 2026-09-30 断链的雷按 b 挑(不看预计位置);2026-09-28 触发走导引头(同 LOAL:看得见才算、分不出民船诱饵、挑最近)。big 只伏击巡洋级+;engine 只打引擎开着的
         if(trig){
           p.mine=false;p.target=trig; // 二次点火:变普通追击导弹扑上去
         }else if(p.online&&p.lastTarget&&!p.lastTarget.dead){ // 2026-09-30 要在网上才知道原目标的下落;DS156 脱锁雷复活:重新获得原目标信息(被网络点亮)且还在警戒圈→复活追击(未竟任务继续)
@@ -153,12 +153,12 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         return;
       }
       if(p.cruise){ // 2026-09-28 巡飞搜索(没勾「变雷」的弹到点后,用户:「不选中就一直飞」):不喷火直飞,导引头一路找;原目标被母舰重新定位就回去追;出游玩区消失
-        const t=p.online?mslSeek(p):mslSeekB(p); // 2026-09-30 断链的按 b 挑
+        const t=!mslSeekDue(p)?null:p.online?mslSeek(p):mslSeekB(p); // 2026-09-30 断链的按 b 挑;2026-10-03 每 0.2 游戏秒找一次
         if(t)mslAcquire(p,t);
         else if(p.online&&p.lastTarget&&!p.lastTarget.dead&&trkFix(trkOf(p.shooter.side,p.lastTarget))){p.cruise=false;p.target=p.lastTarget;p.lastKpos=null;}
         else{p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;return;}
       }
-      if(p.park){const t=p.online?mslSeek(p):mslSeekB(p);if(t)mslAcquire(p,t);} // 2026-09-28 LOAL:区域齐射 / 布雷途中导引头一路找,看见就扑
+      if(p.park){const t=!mslSeekDue(p)?null:p.online?mslSeek(p):mslSeekB(p);if(t)mslAcquire(p,t);} // 2026-09-28 LOAL:区域齐射 / 布雷途中导引头一路找,看见就扑
       if(p.park){ // 飞向布雷点:接近减速,到位布设成雷(太空停车零耗)
         const toP=V.sub(p.parkPt,p.pos);
         const pdist=V.len(toP);
@@ -234,7 +234,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         }
       }
       if(!p.target){ // DS147:link网待分配中,滑行等待分配器补目标(不脱锁不变雷);2026-09-28 等的时候导引头也在找
-        const t=p.online?mslSeek(p):mslSeekB(p);if(t)mslAcquire(p,t);
+        const t=!mslSeekDue(p)?null:p.online?mslSeek(p):mslSeekB(p);if(t)mslAcquire(p,t);
         else{p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;return;}
       }
       // T1引导门:自导(≤MSL_CFG.ladar)或数据链引导 → 追击;脱锁(超自导+无通道/目标熄灭)→ 飞最后已知位置,到点变地雷待命(v126定稿,不自毁)
@@ -243,7 +243,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
          远距离打的是发射与飞行途中的估计,椭圆比导引头的自导范围还大就大概率扑空。目标速度暂用真值(内核不估计速度,已知口子)。 */
       let tp=null;
       if(p.guided&&p.target){tp=(p.guideMode==='self')?p.target.pos:((typeof contactPos==='function')?contactPos(p.target,p.shooter.side):p.target.pos);if(!tp){p.guided=false;p.guideMode='coast';}}
-      if(!p.guided){const t=p.online?mslSeek(p):mslSeekB(p);if(t){mslAcquire(p,t);tp=t.pos;}} // 2026-09-28 LOAL:脱锁途中导引头看见别的就扑;2026-09-30 断链的按 b 挑
+      if(!p.guided){const t=!mslSeekDue(p)?null:p.online?mslSeek(p):mslSeekB(p);if(t){mslAcquire(p,t);tp=t.pos;}} // 2026-09-28 LOAL:脱锁途中导引头看见别的就扑;2026-09-30 断链的按 b 挑
       if(!p.guided){
         if(!p.lastKpos)p.lastKpos=[p.pos[0]+p.vel[0]*20,p.pos[1]+p.vel[1]*20,p.pos[2]+p.vel[2]*20]; // 记最后已知(WR1:没有记录就沿当前航向;原来这里读目标真值)
         const toK=V.sub(p.lastKpos,p.pos);

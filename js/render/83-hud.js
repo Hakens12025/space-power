@@ -135,12 +135,13 @@ function drawHits(){ // 命中特效:命中点爆闪+十字,随时间淡出
    打掉的几颗在命中点炸小火花(weapons/56 结算时 spawnCiwsFX 出)。全按墙钟走,几倍速都看得见;暂停时不出新曳光 */
 const CIWS_FX={HOLD:0.1,N:2,FIRE:10,SPREAD:2/57.3,OFF:0.012,LEN:0.1,REACH:1.25,LIFE:0.45,LIFE_J:0.2,PUFF_T:0.7,PUFF_D:0.25,PUFF_R0:0.015,PUFF_R1:0.09,PUFF_REF:6000};
 // FIRE = 每流每秒几发;SPREAD = 散布(弧度);OFF = 流间夹角;LEN = 曳光长度 / 内圈;REACH = 飞到内圈几倍处灭;LIFE + 随机 LIFE_J = 一发飞几秒;PUFF_T = 火花寿命,PUFF_D = 最多错开几秒,PUFF_R0~R1 = 散开半径 / PUFF_REF km
-const CIWS_ST=new WeakMap(),CIWS_TR=[],CIWS_CLK={t:0};
+const CIWS_ST=new WeakMap(),CIWS_TR=[],CIWS_CLK={t:0},CIWS_MS=[];
 function drawCiwsFx(){
   const C=CIWS_FX,now=nowMs(),dtw=runDt(CIWS_CLK,0.05);
+  const MS=CIWS_MS;MS.length=0;if(dtw>0)for(const p of projectiles)if(p.type==='missile'&&!p.done&&p.shooter)MS.push(p); // 2026-10-03 性能:导弹先挑出来一次、按距离平方比(原来每艘船每帧把全场弹丸扫一遍、逐个开方)
   if(dtw>0)for(const x of ships){
     if(x.dead||x.ciwsGunOn===false)continue;const k=ciwsOf(x);if(!k||!(k.inner>0))continue; // 2026-09-29 曳光 = 近防炮,看它自己的开关
-    let m=null,md=k.inner;for(const p of projectiles){if(p.type!=='missile'||p.done||!p.shooter||p.shooter.side===x.side)continue;const d=Math.hypot(p.pos[0]-x.pos[0],p.pos[1]-x.pos[1]);if(d<md){md=d;m=p;}}
+    let m=null,md=k.inner*k.inner;for(const p of MS){if(p.shooter.side===x.side)continue;const dx=p.pos[0]-x.pos[0],dy=p.pos[1]-x.pos[1],d=dx*dx+dy*dy;if(d<md){md=d;m=p;}}
     let st=CIWS_ST.get(x);
     if(m){if(!st){st={acc:0,a:0,t:0};CIWS_ST.set(x,st);}st.a=Math.atan2(m.pos[1]-x.pos[1],m.pos[0]-x.pos[0]);st.t=now;}
     if(!st)continue;if(now-st.t>C.HOLD*1000){CIWS_ST.delete(x);continue;}
