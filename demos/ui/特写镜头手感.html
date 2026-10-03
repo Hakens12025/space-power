@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>特写镜头手感</title>
+<style>
+:root{--bg:#05070c;--panel:#0b1018;--line:#1e2836;--txt:#c7d0dc;--dim:#5f7083;--acc:#5aa7ff;--amb:#ffd166}
+body{margin:0;background:var(--bg);color:var(--txt);font:13px "Microsoft YaHei",sans-serif}
+header{padding:12px 16px 4px}h1{font-size:16px;margin:0;color:var(--acc)}
+p.n{color:var(--dim);margin:4px 0;font-size:12px;line-height:1.6}
+.wrap{display:flex;flex-wrap:wrap;gap:14px;padding:8px 16px;align-items:flex-start}
+canvas{display:block;border:1px solid var(--line);background:#05070c}
+.ctl{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:6px 16px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+button.t{background:#101722;color:var(--txt);border:1px solid var(--line);padding:3px 10px;cursor:pointer;font:12px "Microsoft YaHei",sans-serif}
+button.t.on{border-color:var(--acc);color:#fff;background:#12233a}
+.sl{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:4px 18px;padding:8px 16px}
+.sl label{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:12px}
+.sl label span.k{width:120px;flex:none}.sl input{flex:1}.sl span.v{width:56px;color:var(--txt);text-align:right;font-family:Consolas,monospace}
+#info{font:12px Consolas,"Microsoft YaHei",monospace;color:var(--dim);white-space:pre}
+.side{display:flex;flex-direction:column;gap:10px}
+</style>
+</head>
+<body>
+<header>
+<h1>特写镜头手感 · 以前 / 现在 / 新方案</h1>
+<p class="n">独立演示页(不加载引擎)。一段 40 秒循环的脚本化战斗:我方舰队航行 → 定位远处敌巡洋 → 敌方导弹来袭(近防拦下两枚、一枚打在护盾上)→ 我方主炮命中、第二发击沉 → 远处冒出另一艘敌舰(远距离换主体)。三种镜头用同一份切镜表,只有镜头运动不同。<br>
+以前 = 09-28 那版(连续缩放 + 多点取景 + 临界阻尼 + 近就滑、远就切 + 击沉定点机位);现在 = 09-29 那版(三档景别整段不换 + 钉在主体上 + 换主体硬切 + 推一档);新方案 = 连续缩放加惰性(死区、拉远快推近慢、限速)+ 弹簧追(软区)+ 近距离飞过去切镜 + 连续推近。下面的滑块只调新方案。</p>
+</header>
+<div class="ctl">
+  <span>镜头:</span><button class="t" data-m="old">以前</button><button class="t" data-m="now">现在</button><button class="t on" data-m="new">新方案</button>
+  <span style="margin-left:12px">回放:</span><button class="t" id="play">暂停</button><button class="t" id="restart">从头</button>
+  <button class="t" data-sp="0.5">0.5×</button><button class="t on" data-sp="1">1×</button><button class="t" data-sp="2">2×</button>
+  <span style="margin-left:12px">显示:</span><button class="t on" id="big">放大 1.5 倍</button><button class="t" id="aid">取景辅助</button>
+</div>
+<div class="wrap">
+  <div><canvas id="cv"></canvas></div>
+  <div class="side"><canvas id="ov"></canvas><div id="info"></div></div>
+</div>
+<div class="wrap"><canvas id="ch"></canvas></div>
+<p class="n" style="padding:0 16px">下图 = 本轮框宽(对数纵轴)随时间:越平越稳,锯齿 = 呼吸,竖直跳 = 硬切(红点),琥珀色段 = 飞过去切镜。灰色竖线 = 切镜表里的换镜时刻。</p>
+<div class="sl" id="sl"></div>
+<script>
+"use strict";
+/* ================= 场景:世界坐标 km,y 向下;预先按 60 Hz 算好整轮 40 秒 ================= */
+const LOOP=40,DT=1/60,N=Math.round(LOOP/DT)+1;
+const E={}; // id → {name,side,pos:[N][2],vel,alive:[N],known:[N]}
+function mkEnt(id,name,side){E[id]={name,side,x:new Float32Array(N),y:new Float32Array(N),vx:new Float32Array(N),vy:new Float32Array(N),alive:new Uint8Array(N),known:new Uint8Array(N)};return E[id];}
+const A=mkEnt('A','巴黎-01','blue'),B=mkEnt('B','马拉松-01','blue'),C=mkEnt('C','波长-01','blue'),E1=mkEnt('E1','叛军·巡洋-01','red'),E2=mkEnt('E2','叛军·护卫-04','red');
+const PROJ=[],FX=[]; // 弹:{kind,t0,t1,from,to,x[],y[],fate};特效:{t,kind,x,y,ent}
+(function sim(){
+  const pA=t=>[-30000+1400*t,6000*Math.sin(t*0.15)];
+  for(let i=0;i<N;i++){const t=i*DT,a=pA(t),a2=pA(t+0.01);
+    A.x[i]=a[0];A.y[i]=a[1];A.vx[i]=(a2[0]-a[0])/0.01;A.vy[i]=(a2[1]-a[1])/0.01;A.alive[i]=1;A.known[i]=1;
+    B.x[i]=a[0]-7000;B.y[i]=a[1]+6000+1500*Math.sin(t*0.3);B.vx[i]=A.vx[i];B.vy[i]=A.vy[i]+450*Math.cos(t*0.3);B.alive[i]=1;B.known[i]=1;
+    C.x[i]=a[0]-4000;C.y[i]=a[1]-7000;C.vx[i]=A.vx[i];C.vy[i]=A.vy[i];C.alive[i]=1;C.known[i]=1;
+    E2.x[i]=150000-300*t;E2.y[i]=60000;E2.vx[i]=-300;E2.vy[i]=0;E2.alive[i]=1;E2.known[i]=t>=32?1:0;}
+  let e1dead=-1;
+  for(let i=0;i<N;i++){const t=i*DT;
+    if(e1dead>=0&&t>=e1dead){E1.x[i]=E1.x[i-1];E1.y[i]=E1.y[i-1];E1.vx[i]=0;E1.vy[i]=0;E1.alive[i]=0;E1.known[i]=1;continue;}
+    E1.x[i]=60000-650*t;E1.y[i]=-35000+520*t;E1.vx[i]=-650;E1.vy[i]=520;E1.alive[i]=1;E1.known[i]=t>=4.5?1:0;
+    if(i===0)continue;
+    // 弹在下面单独推
+    if(PROJ.length&&e1dead<0){}
+  }
+  // 导弹 3 枚:t=5 从 E1 出发、追 A,9000 km/s;离 A 6000 km 时近防打掉两枚,第一枚打在护盾上
+  const idx=t=>Math.min(N-1,Math.max(0,Math.round(t/DT)));
+  for(let k=0;k<3;k++){const t0=5+k*0.25,i0=idx(t0);let x=E1.x[i0]+k*900,y=E1.y[i0]-k*700;const P={kind:'msl',t0,t1:-1,x:[],y:[],fate:k===0?'hit':'ciws'};
+    for(let i=i0;i<N;i++){const dx=A.x[i]-x,dy=A.y[i]-y,d=Math.hypot(dx,dy),s=9000*DT;P.x.push(x);P.y.push(y);
+      if(P.fate==='ciws'&&d<6000){P.t1=i*DT;FX.push({t:P.t1,kind:'ciws',x,y});break;}
+      if(d<s){P.t1=i*DT;FX.push({t:P.t1,kind:'shield',ent:'A',x:A.x[i],y:A.y[i]});break;}
+      x+=dx/d*s;y+=dy/d*s;}
+    PROJ.push(P);}
+  // 主炮两发:t=19 / t=24 从 A 打 E1,15000 km/s(按提前量直线飞)
+  for(const [t0,fate] of [[19,'hit'],[24,'kill']]){const i0=idx(t0);let x=A.x[i0],y=A.y[i0];
+    let tt=0;for(let it=0;it<6;it++){const j=idx(t0+tt);tt=Math.hypot(E1.x[j]-x,E1.y[j]-y)/15000;} // 迭代提前量
+    const j1=idx(t0+tt),ux=(E1.x[j1]-x)/(15000*tt),uy=(E1.y[j1]-y)/(15000*tt);const P={kind:'mac',t0,t1:t0+tt,x:[],y:[],fate};
+    for(let i=i0;i<=j1;i++){P.x.push(x);P.y.push(y);x+=ux*15000*DT;y+=uy*15000*DT;}
+    PROJ.push(P);FX.push({t:P.t1,kind:fate==='kill'?'kill':'hit',ent:'E1',x:E1.x[j1],y:E1.y[j1]});
+    if(fate==='kill'){const kd=P.t1;for(let i=idx(kd);i<N;i++){E1.x[i]=E1.x[idx(kd)];E1.y[i]=E1.y[idx(kd)];E1.vx[i]=0;E1.vy[i]=0;E1.alive[i]=0;}}}
+})();
+const tMsl=PROJ.filter(p=>p.kind==='msl'&&p.fate==='hit')[0].t1,tS1=PROJ.filter(p=>p.kind==='mac')[0].t1,tS2=PROJ.filter(p=>p.kind==='mac')[1].t1;
+/* ================= 切镜表(三种镜头共用):主体 + 语境 + 离命中时刻 ================= */
+const SHOTS=[ // [开始, 结束, 类型, 主体, 语境, 命中时刻, 标题]
+  [0,4.5,'home'],[4.5,7.5,'fix','E1',['A'],null,'定位 · 疑似舰船'],[7.5,tMsl-3,'home'],
+  [tMsl-3,tMsl+1.8,'pre','A',['msl0'],tMsl,'预判 · 来袭 → 巴黎-01'],[tMsl+1.8,tS1-2.6,'home'],
+  [tS1-2.6,tS1+1.2,'pre','E1',['mac0','A'],tS1,'预判 · 巴黎-01 → 敌舰'],[tS1+1.2,tS2-2.6,'home'],
+  [tS2-2.6,tS2+3,'pre','E1',['mac1','A'],tS2,'预判 · 可能击沉 → 敌舰'],[tS2+3,32,'home'],
+  [32,35.5,'fix','E2',[],null,'定位 · 疑似舰船(远处)'],[35.5,LOOP+1,'home']];
+function shotAt(t){for(const s of SHOTS)if(t>=s[0]&&t<s[1])return s;return SHOTS[0];}
+const I=t=>Math.min(N-1,Math.max(0,Math.round(t/DT)));
+function entPos(id,t){const e=E[id],i=I(t);return [e.x[i],e.y[i]];}
+function entVel(id,t){const e=E[id],i=I(t);return [e.vx[i],e.vy[i]];}
+function projPos(key,t){const kind=key.slice(0,3),k=+key.slice(3),L=PROJ.filter(p=>p.kind===kind),P=L[k];if(!P||t<P.t0||(P.t1>=0&&t>P.t1))return null;const j=Math.min(P.x.length-1,Math.round((t-P.t0)/DT));return [P.x[j],P.y[j]];}
+function ptOf(key,t){return E[key]?entPos(key,t):projPos(key,t);}
+function shotInfo(s,t){ // 这一刻的主体 / 速度 / 语境(带权重)/ 离命中
+  if(s[2]==='home'){ // 主镜头:选中的 A + 编队 B C;来袭导弹按距离渐进纳入(8 万内全进,10 万外不进)
+    const S=entPos('A',t),V=entVel('A',t),ctx=[{p:entPos('B',t),w:1},{p:entPos('C',t),w:1}];
+    for(let k=0;k<3;k++){const p=projPos('msl'+k,t);if(!p)continue;const d=Math.hypot(p[0]-S[0],p[1]-S[1]),w=Math.max(0,Math.min(1,(100000-d)/20000));if(w>0)ctx.push({p,w,threat:1});}
+    const ep=entPos('E1',t);if(E1.known[I(t)]){const d=Math.hypot(ep[0]-S[0],ep[1]-S[1]),w=Math.max(0,Math.min(1,(60000-d)/10000));if(w>0)ctx.push({p:ep,w,foe:1});}
+    return {key:'home',S,V,ctx,group:['A','B','C'],eta:null,lbl:'特写 · 3 艘'};}
+  const S=entPos(s[3],t),V=entVel(s[3],t),ctx=[];for(const k of s[4]){const p=ptOf(k,t);if(p)ctx.push({p,w:1});}
+  return {key:s[3]+'@'+s[0].toFixed(2),subj:s[3],S,V,ctx,eta:s[5]!=null?s[5]-t:null,lbl:s[6],kill:s[2]==='pre'&&s[5]===tS2&&t>=tS2};
+}
+/* ================= 三种镜头 ================= */
+const VW=416,VH=260,HDR=20,HP=VH-HDR,SX=30,SY=24;
+const P={om:5,ze:0.85,soft:0.12,lead:0.3,db:15,tout:0.35,tin:1.2,zwait:0.8,zrate:1.8,fk:1,fmax:4,push:1.6,fit:0.7}; // 新方案参数
+const cam={mode:'new',cx:0,cy:0,lz:Math.log(VW/40000),vx:0,vy:0,vz:0,key:'',cut:-9,fly:null,lzGoal:null,zin:0,ox:0,oy:0,vo:[0,0,0],lv:1,ax:0,ay:0};
+function sd(c,t,v,T,dt){const om=2/T,x=om*dt,e=1/(1+x+0.48*x*x+0.235*x*x*x),ch=c-t,tp=(v+om*ch)*dt;let o=t+(ch+tp)*e,nv=(v-om*tp)*e;if((t-c>0)===(o>t)){o=t;nv=0;}return [o,nv];} // 临界阻尼(Unity SmoothDamp)
+function bboxW(info,span,useW){ // 取景点包围盒:主体 + 速度前后 span 秒 + 语境(按权重往主体收)
+  const S=info.S,pts=[S,[S[0]+info.V[0]*span,S[1]+info.V[1]*span],[S[0]-info.V[0]*span,S[1]-info.V[1]*span]];
+  for(const c of info.ctx){const w=useW?c.w:1;pts.push([S[0]+w*(c.p[0]-S[0]),S[1]+w*(c.p[1]-S[1])]);}
+  let x0=1e18,x1=-1e18,y0=1e18,y1=-1e18;for(const p of pts){x0=Math.min(x0,p[0]);x1=Math.max(x1,p[0]);y0=Math.min(y0,p[1]);y1=Math.max(y1,p[1]);}return {x0,x1,y0,y1,pts};}
+const ss=x=>x<=0?0:x>=1?1:x*x*(3-2*x);
+// ---- 以前(09-28):连续多点取景 + 临界阻尼(平移 0.45 / 拉远 0.3 / 推近 0.6)+ 近就滑远就切 + 击沉定点机位 + 推近封顶 0.5
+function camOld(info,dt,t){
+  const pg=info.eta!=null?0.5*ss((2.5-info.eta)/1.5):0,b=bboxW(info,3,true),S=info.S;
+  if(pg>0)for(let i=3;i<b.pts.length;i++){const p=b.pts[i];p[0]=S[0]+(1-pg)*(p[0]-S[0]);p[1]=S[1]+(1-pg)*(p[1]-S[1]);}
+  let x0=1e18,x1=-1e18,y0=1e18,y1=-1e18;for(const p of b.pts){x0=Math.min(x0,p[0]);x1=Math.max(x1,p[0]);y0=Math.min(y0,p[1]);y1=Math.max(y1,p[1]);}
+  const vv=Math.hypot(info.V[0],info.V[1]),ls=Math.sqrt(Math.min(1,vv/1500)),Lx=vv?info.V[0]/vv*ls*0.4*VW/2:0,Ly=vv?info.V[1]/vv*ls*0.4*HP/2:0;
+  let tz=Math.min(VW/6000,Math.max(16,VW-0.34*VW-2*Math.abs(Lx))/Math.max(1,x1-x0),Math.max(16,HP-0.34*HP-2*Math.abs(Ly))/Math.max(1,y1-y0));
+  const still=info.kill; // 击沉:定点机位
+  const tlz=Math.log(tz),tcx=(x0+x1)/2+Lx/tz,tcy=(y0+y1)/2+Ly/tz;
+  if(info.key!==cam.key){const zc=Math.exp(cam.lz);if(cam.key&&Math.hypot(tcx-cam.cx,tcy-cam.cy)*zc<=0.6*VW&&Math.abs(tlz-cam.lz)<=Math.log(6)){cam.ox=cam.cx-S[0];cam.oy=cam.cy-S[1];}
+    else{cam.ox=tcx-S[0];cam.oy=tcy-S[1];cam.lz=tlz;cam.vo=[0,0,0];if(cam.key)mark('cut',t);}cam.key=info.key;}
+  if(still){if(!cam.still){cam.still=[cam.cx,cam.cy];}cam.cx=cam.still[0];cam.cy=cam.still[1];return;}cam.still=null;
+  let r=sd(cam.ox,tcx-S[0],cam.vo[0],0.45,dt);cam.ox=r[0];cam.vo[0]=r[1];r=sd(cam.oy,tcy-S[1],cam.vo[1],0.45,dt);cam.oy=r[0];cam.vo[1]=r[1];
+  r=sd(cam.lz,tlz,cam.vo[2],tlz<cam.lz?0.3:0.6,dt);cam.lz=r[0];cam.vo[2]=r[1];if(cam.lz>tlz+Math.log(1.5)){cam.lz=tlz+Math.log(1.5);cam.vo[2]=0;}
+  cam.cx=S[0]+cam.ox;cam.cy=S[1]+cam.oy;
+}
+// ---- 现在(09-29):三档景别(1.2 / 4 / 12 万)开播挑一档整段不换、主镜头降档稳 2 秒;钉在主体上 + 前视死区;换主体硬切;推近一档
+const LVL=[12000,40000,120000];
+function fitLvl(info){const S=info.S;for(let i=0;i<3;i++){const hx=LVL[i]*0.35,hy=hx*HP/VW;if(info.ctx.every(c=>c.threat||c.foe||Math.abs(c.p[0]-S[0])<=hx&&Math.abs(c.p[1]-S[1])<=hy))return i;}return 0;}
+function camNow(info,dt,t){
+  const S=info.S;let lv=fitLvl(info);
+  if(info.key!==cam.key){const newSubj=(info.subj||'A')!==(cam.subj||'A');cam.lv0=lv;cam.lv=lv;cam.punch=false;cam.hd=-1;
+    if(newSubj||!cam.key){cam.lz=Math.log(VW/LVL[lv]);cam.ax=S[0];cam.ay=S[1];cam.ox=0;cam.oy=0;cam.vo=[0,0,0];if(cam.key)mark('cut',t);}cam.key=info.key;cam.subj=info.subj||'A';}
+  if(info.key==='home'){if(lv>cam.lv){cam.lv=lv;cam.hd=-1;}else if(lv<cam.lv){if(cam.hd<0)cam.hd=t;else if(t-cam.hd>=2){cam.lv=lv;cam.hd=-1;}}else cam.hd=-1;}
+  if(info.eta!=null&&!cam.punch&&info.eta<=1){cam.punch=true;cam.lv=Math.max(0,cam.lv0-1);}
+  const zt=Math.log(VW/LVL[cam.lv]);let r=sd(cam.lz,zt,cam.vo[2],0.25,dt);cam.lz=r[0];cam.vo[2]=r[1];const z=Math.exp(cam.lz);
+  const vv=Math.hypot(info.V[0],info.V[1]),ls=Math.sqrt(Math.min(1,vv/1500)),lx=vv?info.V[0]/vv*ls*0.4*VW/2/z:0,ly=vv?info.V[1]/vv*ls*0.4*HP/2/z:0;
+  const ex=(cam.ox-lx)*z,ey=(cam.oy-ly)*z,DX=0.1*VW,DY=0.1*HP;
+  r=sd(cam.ox,Math.abs(ex)>DX?lx+Math.sign(ex)*DX/z:cam.ox,cam.vo[0],0.45,dt);cam.ox=r[0];cam.vo[0]=r[1];r=sd(cam.oy,Math.abs(ey)>DY?ly+Math.sign(ey)*DY/z:cam.oy,cam.vo[1],0.45,dt);cam.oy=r[0];cam.vo[1]=r[1];
+  cam.cx=S[0]+cam.ox;cam.cy=S[1]+cam.oy;
+}
+// ---- 新方案:连续缩放加惰性 + 弹簧追(软区)+ 近距离飞过去(van Wijk 平滑缩放平移)+ 连续推近
+function interpZoom(p0,p1,rho){ // van Wijk & Nuij 2003(d3.interpolateZoom 同款):p = [cx, cy, 框宽]
+  const ux0=p0[0],uy0=p0[1],w0=p0[2],ux1=p1[0],uy1=p1[1],w1=p1[2],dx=ux1-ux0,dy=uy1-uy0,d2=dx*dx+dy*dy,r2=rho*rho,r4=r2*r2;let f,S;
+  if(d2<1e-6){S=Math.log(w1/w0)/rho;f=s=>[ux0+s*dx,uy0+s*dy,w0*Math.exp(rho*s*S)];}
+  else{const d1=Math.sqrt(d2),b0=(w1*w1-w0*w0+r4*d2)/(2*w0*r2*d1),b1=(w1*w1-w0*w0-r4*d2)/(2*w1*r2*d1),q0=Math.log(Math.sqrt(b0*b0+1)-b0),q1=Math.log(Math.sqrt(b1*b1+1)-b1);S=(q1-q0)/rho;
+    f=s=>{const u=s*S,ch=Math.cosh(q0),uu=w0/(r2*d1)*(ch*Math.tanh(rho*u+q0)-Math.sinh(q0));return [ux0+uu*dx,uy0+uu*dy,w0*ch/Math.cosh(rho*u+q0)];};}
+  f.dur=Math.abs(S)*rho/Math.SQRT2;return f;}
+function newTarget(info){ // 目标:中心(主体 + 前视)、框宽(包围盒 / 留白,推近按离命中连续收)
+  const b=bboxW(info,2.5,true),vv=Math.hypot(info.V[0],info.V[1]);
+  let w=Math.max((b.x1-b.x0)/P.fit,(b.y1-b.y0)/(P.fit*HP/VW),9000);w=Math.min(w,260000);
+  if(info.eta!=null){const g=ss((2.5-Math.max(0,info.eta))/1.7);w/=1+(P.push-1)*g;} // 离命中 2.5 → 0.8 秒连续推近
+  const ls=Math.sqrt(Math.min(1,vv/1500))*P.lead,L=vv?[info.V[0]/vv*ls*w/2,info.V[1]/vv*ls*w/2*HP/VW]:[0,0];
+  const cx=info.S[0]*(info.group?0:1)+(info.group?(b.x0+b.x1)/2:0),cy=info.S[1]*(info.group?0:1)+(info.group?(b.y0+b.y1)/2:0);
+  return {cx:cx+L[0],cy:cy+L[1],w};}
+function camNew(info,dt,t){
+  const T=newTarget(info),S=info.S;
+  if(info.key!==cam.key){const newSubj=(info.subj||'A')!==(cam.subj||'A');
+    if(!cam.key){cam.cx=T.cx;cam.cy=T.cy;cam.lz=Math.log(VW/T.w);}
+    else if(newSubj){const w0=VW/Math.exp(cam.lz),dist=Math.hypot(T.cx-cam.cx,T.cy-cam.cy)/w0;
+      if(dist<=P.fmax){const f=interpZoom([cam.cx,cam.cy,w0],[T.cx,T.cy,T.w],1.4);cam.fly={f,t0:t,dur:Math.max(0.45,Math.min(1.4,f.dur*0.55*P.fk)),T0:{cx:T.cx,cy:T.cy}};mark('fly',t,cam.fly.dur);}
+      else{cam.cx=T.cx;cam.cy=T.cy;cam.lz=Math.log(VW/T.w);cam.vx=cam.vy=cam.vz=0;mark('cut',t);}}
+    cam.lzGoal=Math.log(VW/T.w);cam.zin=0;cam.key=info.key;cam.subj=info.subj||'A';}
+  if(cam.fly){const F=cam.fly,k=Math.min(1,(t-F.t0)/F.dur),e=k<0.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2,q=F.f(e); // 飞:沿 van Wijk 弧线(三次缓入缓出),目标在动就把漂移按进度加回去
+    cam.cx=q[0]+(T.cx-F.T0.cx)*e;cam.cy=q[1]+(T.cy-F.T0.cy)*e;cam.lz=Math.log(VW/q[2]);if(k>=1){cam.fly=null;cam.vx=cam.vy=cam.vz=0;cam.lzGoal=cam.lz;}return;}
+  // 缩放:死区 + 拉远快 / 推近慢(先等 zwait 秒)+ 限速
+  const lzT=Math.log(VW/T.w),band=Math.log(1+P.db/100);
+  if(lzT<cam.lzGoal-band*0.5){cam.lzGoal=lzT;cam.zin=0;}                   // 要装下新东西:立刻拉远(拉远的死区只有一半)
+  else if(lzT>cam.lzGoal+band){cam.zin+=dt;if(cam.zin>=P.zwait)cam.lzGoal=lzT;} // 想推近:持续 zwait 秒才推
+  else cam.zin=0;
+  let r=sd(cam.lz,cam.lzGoal,cam.vz,cam.lzGoal<cam.lz?P.tout:P.tin,dt);const mx=Math.log(P.zrate)*dt;cam.lz=Math.max(cam.lz-mx,Math.min(cam.lz+mx,r[0]));cam.vz=r[1];
+  const z=Math.exp(cam.lz);
+  // 平移:目标点在软区里不追;出了软区按弹簧(固有频率 om、阻尼比 ze)追软区边
+  const ex=(T.cx-cam.cx)*z,ey=(T.cy-cam.cy)*z,SXp=P.soft*VW,SYp=P.soft*HP;
+  const gx=cam.cx+(ex-Math.max(-SXp,Math.min(SXp,ex)))/z,gy=cam.cy+(ey-Math.max(-SYp,Math.min(SYp,ey)))/z;
+  const om=P.om,ax=om*om*(gx-cam.cx)-2*P.ze*om*cam.vx,ay=om*om*(gy-cam.cy)-2*P.ze*om*cam.vy;cam.vx+=ax*dt;cam.vy+=ay*dt;cam.cx+=cam.vx*dt;cam.cy+=cam.vy*dt;
+  const hx=(VW/2-SX)/z,hy=(HP/2-SY)/z; // 硬边:主体不出安全框
+  if(S[0]-cam.cx>hx){cam.cx=S[0]-hx;cam.vx=Math.max(cam.vx,0);}else if(S[0]-cam.cx<-hx){cam.cx=S[0]+hx;cam.vx=Math.min(cam.vx,0);}
+  if(S[1]-cam.cy>hy){cam.cy=S[1]-hy;cam.vy=Math.max(cam.vy,0);}else if(S[1]-cam.cy<-hy){cam.cy=S[1]+hy;cam.vy=Math.min(cam.vy,0);}
+}
+/* ================= 记录:框宽曲线 / 切镜 ================= */
+const REC={w:[],marks:[]};
+function mark(kind,t,dur){REC.marks.push({kind,t,dur:dur||0});if(kind==='cut')cam.cut=performance.now();}
+/* ================= 画 ================= */
+const ST={t:0,run:true,sp:1,big:true,aid:false,last:0};
+const cv=document.getElementById('cv'),ov=document.getElementById('ov'),ch=document.getElementById('ch');
+function setup(c,w,h){const d=window.devicePixelRatio||1;c.width=Math.round(w*d);c.height=Math.round(h*d);c.style.width=w+'px';c.style.height=h+'px';const g=c.getContext('2d');g.setTransform(d,0,0,d,0,0);return g;}
+let G,GO,GC;function layout(){const k=ST.big?1.5:1;G=setup(cv,VW*k,VH*k);GO=setup(ov,300,260);GC=setup(ch,Math.min(980,window.innerWidth-40),90);}
+const hash=(a,b)=>{let h=(a*374761393+b*668265263)|0;h=(h^(h>>>13))*1274126177|0;return ((h^(h>>>16))>>>0)/4294967296;};
+function drawView(t,info){
+  const k=ST.big?1.5:1,g=G,z=Math.exp(cam.lz),W=VW,H=VH,sx=x=>(x-cam.cx)*z+W/2,sy=y=>(y-cam.cy)*z+(H+HDR)/2;
+  g.save();g.scale(k,k);g.fillStyle='#070a12';g.fillRect(0,0,W,H);
+  // 星点:按世界格子撒,镜头一动就看得出(两层大小)
+  for(const cell of [6000,30000]){const x0=cam.cx-W/2/z,x1=cam.cx+W/2/z,y0=cam.cy-H/2/z,y1=cam.cy+H/2/z,i0=Math.floor(x0/cell),i1=Math.floor(x1/cell),j0=Math.floor(y0/cell),j1=Math.floor(y1/cell);
+    if((i1-i0)*(j1-j0)>900)continue;
+    for(let i=i0;i<=i1;i++)for(let j=j0;j<=j1;j++){for(let q=0;q<3;q++){const h1=hash(i*7+q,j*13+cell),h2=hash(i*31+q,j*3+cell*2),px=sx((i+h1)*cell),py=sy((j+h2)*cell);g.fillStyle='rgba(200,215,235,'+(cell>10000?0.55:0.3)+')';g.fillRect(px,py,cell>10000?1.6:1,cell>10000?1.6:1);}}}
+  // 网格(1 万 km)
+  g.strokeStyle='rgba(90,167,255,.07)';g.lineWidth=1;const gs=10000;for(let x=Math.ceil((cam.cx-W/2/z)/gs)*gs;x<cam.cx+W/2/z;x+=gs){g.beginPath();g.moveTo(sx(x),0);g.lineTo(sx(x),H);g.stroke();}
+  for(let y=Math.ceil((cam.cy-H/2/z)/gs)*gs;y<cam.cy+H/2/z;y+=gs){g.beginPath();g.moveTo(0,sy(y));g.lineTo(W,sy(y));g.stroke();}
+  // 弹
+  for(const P of PROJ){if(t<P.t0||(P.t1>=0&&t>P.t1))continue;const j=Math.min(P.x.length-1,Math.round((t-P.t0)/DT)),tl=P.kind==='mac'?25:40;
+    g.strokeStyle=P.kind==='mac'?'rgba(255,240,200,.7)':'rgba(255,154,85,.6)';g.lineWidth=1.2;g.beginPath();for(let q=Math.max(0,j-tl);q<=j;q++){const X=sx(P.x[q]),Y=sy(P.y[q]);q===Math.max(0,j-tl)?g.moveTo(X,Y):g.lineTo(X,Y);}g.stroke();
+    g.fillStyle=P.kind==='mac'?'#fff3d0':'#ff9a55';g.beginPath();g.arc(sx(P.x[j]),sy(P.y[j]),P.kind==='mac'?2.2:2.6,0,6.283);g.fill();}
+  // 船
+  for(const id in E){const e=E[id],i=I(t);if(!e.known[i])continue;const X=sx(e.x[i]),Y=sy(e.y[i]),ang=Math.atan2(e.vy[i],e.vx[i]),col=e.side==='blue'?'#5aa7ff':'#ff6b6b';
+    g.save();g.translate(X,Y);g.rotate(ang);g.fillStyle=e.alive[i]?col:'rgba(90,96,104,.9)';g.strokeStyle='rgba(0,0,0,.7)';g.lineWidth=1.5;g.beginPath();g.moveTo(9,0);g.lineTo(-6,4.5);g.lineTo(-4,0);g.lineTo(-6,-4.5);g.closePath();g.stroke();g.fill();g.restore();
+    g.fillStyle=e.alive[i]?col:'#5f7083';g.font='10px "Microsoft YaHei"';g.fillText(e.name+(e.alive[i]?'':'(残骸)'),X+11,Y-6);}
+  // 特效
+  for(const f of FX){const a=t-f.t;if(a<0||a>1.2)continue;const X=sx(f.x),Y=sy(f.y),k2=a/1.2;
+    if(f.kind==='shield'){g.strokeStyle='rgba(120,190,255,'+(1-k2)+')';g.lineWidth=2;g.beginPath();g.arc(sx(A.x[I(t)]),sy(A.y[I(t)]),14+10*k2,0,6.283);g.stroke();}
+    else if(f.kind==='ciws'){g.fillStyle='rgba(255,220,150,'+(1-k2)+')';for(let q=0;q<6;q++){const an=q*1.05+f.t;g.fillRect(X+Math.cos(an)*12*k2,Y+Math.sin(an)*12*k2,2,2);}}
+    else{g.strokeStyle='rgba(255,209,102,'+(1-k2)+')';g.lineWidth=f.kind==='kill'?2.5:1.5;g.beginPath();g.arc(X,Y,(f.kind==='kill'?16:8)+(f.kind==='kill'?60:30)*k2,0,6.283);g.stroke();}}
+  // 取景辅助:新方案的软区 + 语境点
+  if(ST.aid){g.strokeStyle='rgba(255,209,102,.5)';g.setLineDash([4,3]);if(cam.mode==='new')g.strokeRect(W/2-P.soft*W,(H+HDR)/2-P.soft*HP,2*P.soft*W,2*P.soft*HP);g.setLineDash([]);
+    g.fillStyle='rgba(255,209,102,.8)';for(const c of info.ctx){g.beginPath();g.arc(sx(c.p[0]),sy(c.p[1]),3*Math.max(0.3,c.w),0,6.283);g.fill();}}
+  // 切镜遮罩 + 标题条 + 比例尺
+  const kc=(performance.now()-cam.cut)/150;if(kc>=0&&kc<1){g.fillStyle='rgba(5,7,12,'+(0.55*(1-kc)).toFixed(3)+')';g.fillRect(0,0,W,H);}
+  g.fillStyle='rgba(5,7,12,.9)';g.fillRect(0,0,W,HDR);g.fillStyle=info.key==='home'?'#cfe6ff':'#ffd166';g.font='11px "Microsoft YaHei"';g.fillText((info.key==='home'?'':'播放 · ')+info.lbl+(info.eta!=null&&info.eta>0?' · '+info.eta.toFixed(1)+' s':''),7,14);
+  const bk=60/z,p10=Math.pow(10,Math.floor(Math.log10(bk))),bkm=Math.max(p10,Math.round(bk/p10)*p10),bp=bkm*z;g.fillStyle='#8fd0ff';g.font='10px Consolas';g.textAlign='right';g.fillText(bkm.toLocaleString('en-US')+' km',W-7,H-12);g.fillRect(W-7-bp,H-7,bp,2);g.textAlign='left';
+  g.strokeStyle=info.key==='home'?'rgba(143,208,255,.55)':'rgba(255,209,102,.85)';g.lineWidth=1;g.strokeRect(0.5,0.5,W-1,H-1);
+  g.restore();
+}
+function drawOverview(t){
+  const g=GO,W=300,H=260,X0=-60000,X1=170000,Y0=-60000,Y1=90000,k=Math.min(W/(X1-X0),H/(Y1-Y0)),sx=x=>(x-X0)*k,sy=y=>(y-Y0)*k;
+  g.fillStyle='#070a12';g.fillRect(0,0,W,H);g.strokeStyle='#1e2836';g.strokeRect(0.5,0.5,W-1,H-1);
+  for(const id in E){const e=E[id],i=I(t);if(!e.known[i])continue;g.fillStyle=e.side==='blue'?'#5aa7ff':(e.alive[i]?'#ff6b6b':'#5f7083');g.fillRect(sx(e.x[i])-2,sy(e.y[i])-2,4,4);}
+  for(const P of PROJ){if(t<P.t0||(P.t1>=0&&t>P.t1))continue;const j=Math.min(P.x.length-1,Math.round((t-P.t0)/DT));g.fillStyle=P.kind==='mac'?'#fff3d0':'#ff9a55';g.fillRect(sx(P.x[j])-1,sy(P.y[j])-1,2,2);}
+  const z=Math.exp(cam.lz),w=VW/z,h=VH/z;g.strokeStyle='#ffd166';g.lineWidth=1.2;g.strokeRect(sx(cam.cx-w/2),sy(cam.cy-(VH+HDR)/2/z+HDR/z),w*k,(h-HDR/z)*k);
+  g.fillStyle='#5f7083';g.font='10px "Microsoft YaHei"';g.fillText('全局(琥珀框 = 特写镜头)',6,14);
+}
+function drawChart(){
+  const g=GC,W=parseFloat(GC.canvas.style.width),H=90,lw0=Math.log(8000),lw1=Math.log(300000),X=t=>8+(W-16)*t/LOOP,Y=w=>H-8-(H-16)*(Math.log(w)-lw0)/(lw1-lw0);
+  g.fillStyle='#070a12';g.fillRect(0,0,W,H);g.strokeStyle='#1e2836';g.strokeRect(0.5,0.5,W-1,H-1);
+  g.strokeStyle='rgba(143,208,255,.12)';for(const s of SHOTS){g.beginPath();g.moveTo(X(s[0]),4);g.lineTo(X(s[0]),H-4);g.stroke();}
+  g.fillStyle='rgba(255,209,102,.18)';for(const m of REC.marks)if(m.kind==='fly')g.fillRect(X(m.t),4,X(m.t+m.dur)-X(m.t),H-8);
+  g.strokeStyle='#8fd0ff';g.lineWidth=1.4;g.beginPath();REC.w.forEach((p,i)=>{i?g.lineTo(X(p[0]),Y(p[1])):g.moveTo(X(p[0]),Y(p[1]));});g.stroke();
+  g.fillStyle='#ff6b6b';for(const m of REC.marks)if(m.kind==='cut'){g.beginPath();g.arc(X(m.t),6,2.5,0,6.283);g.fill();}
+  g.fillStyle='#5f7083';g.font='10px Consolas';for(const w of [10000,40000,120000]){g.fillText((w/1e4)+'万',W-34,Y(w)+3);}
+}
+function stats(){ // 本轮:切镜数、平均每秒缩放变化(呼吸)
+  let lzs=0;for(let i=1;i<REC.w.length;i++)lzs+=Math.abs(Math.log(REC.w[i][1])-Math.log(REC.w[i-1][1]));const dur=REC.w.length?REC.w[REC.w.length-1][0]-REC.w[0][0]:0;
+  return {cuts:REC.marks.filter(m=>m.kind==='cut').length,flys:REC.marks.filter(m=>m.kind==='fly').length,zps:dur>0?lzs/dur:0};}
+/* ================= 主循环 ================= */
+function step(dt){ // 镜头按固定小步推进(墙钟),场景时间按倍速走
+  ST.t+=dt*ST.sp;if(ST.t>=LOOP){ST.t-=LOOP;REC.w=[];REC.marks=[];cam.key='';}
+  const s=shotAt(ST.t),info=shotInfo(s,ST.t);
+  (cam.mode==='old'?camOld:cam.mode==='now'?camNow:camNew)(info,dt*ST.sp,ST.t);
+  REC.w.push([ST.t,VW/Math.exp(cam.lz)]);return info;}
+function frame(now){const dt=Math.min(0.05,(now-(ST.last||now))/1000);ST.last=now;let info;
+  if(ST.run){const n=Math.max(1,Math.round(dt/(1/120)));for(let i=0;i<n;i++)info=step(dt/n);}else info=shotInfo(shotAt(ST.t),ST.t);
+  drawView(ST.t,info);drawOverview(ST.t);drawChart();const s=stats();
+  document.getElementById('info').textContent='时间 '+ST.t.toFixed(1)+' / '+LOOP+' s\n镜头 '+({old:'以前',now:'现在',new:'新方案'})[cam.mode]+'\n框宽 '+Math.round(VW/Math.exp(cam.lz)).toLocaleString('en-US')+' km\n本轮硬切 '+s.cuts+' 次 · 飞过去 '+s.flys+' 次\n缩放变化 '+s.zps.toFixed(2)+' /s(对数,越小越稳)';
+  requestAnimationFrame(frame);}
+/* ================= 控件 ================= */
+const SL=[['om','弹簧频率(越大越紧)',1.5,12,0.5,''],['ze','阻尼比(<1 带回弹)',0.5,1.3,0.05,''],['soft','软区(占框宽)',0,0.35,0.01,''],['lead','前视',0,0.6,0.05,''],['db','缩放死区',0,40,1,'%'],
+  ['tout','拉远用时',0.1,1.5,0.05,'s'],['tin','推近用时',0.3,3,0.1,'s'],['zwait','推近前等待',0,2,0.1,'s'],['zrate','缩放最快',1.2,4,0.1,'×/s'],['fk','飞过去时长系数',0.3,2,0.05,''],['fmax','飞过去最远',1,10,0.5,'屏宽'],['push','命中前推近上限',1,2.5,0.05,'×'],['fit','取景留白',0.5,0.9,0.02,'']];
+const SLd=document.getElementById('sl');
+for(const [k,lb,a,b,st,u] of SL){const L=document.createElement('label');L.innerHTML='<span class="k">'+lb+'</span><input type="range" min="'+a+'" max="'+b+'" step="'+st+'" value="'+P[k]+'"><span class="v">'+P[k]+u+'</span>';
+  const inp=L.querySelector('input'),v=L.querySelector('.v');inp.addEventListener('input',()=>{P[k]=+inp.value;v.textContent=inp.value+u;});SLd.appendChild(L);}
+document.querySelectorAll('button[data-m]').forEach(b=>b.addEventListener('click',()=>{cam.mode=b.dataset.m;cam.key='';cam.fly=null;REC.w=[];REC.marks=[];document.querySelectorAll('button[data-m]').forEach(x=>x.classList.toggle('on',x===b));}));
+document.querySelectorAll('button[data-sp]').forEach(b=>b.addEventListener('click',()=>{ST.sp=+b.dataset.sp;document.querySelectorAll('button[data-sp]').forEach(x=>x.classList.toggle('on',x===b));}));
+document.getElementById('play').addEventListener('click',e=>{ST.run=!ST.run;e.target.textContent=ST.run?'暂停':'播放';});
+document.getElementById('restart').addEventListener('click',()=>{ST.t=0;cam.key='';cam.fly=null;REC.w=[];REC.marks=[];});
+document.getElementById('big').addEventListener('click',e=>{ST.big=!ST.big;e.target.classList.toggle('on',ST.big);layout();});
+document.getElementById('aid').addEventListener('click',e=>{ST.aid=!ST.aid;e.target.classList.toggle('on',ST.aid);});
+layout();requestAnimationFrame(frame);
+window.__demo={cam,REC,ST,SHOTS,step,stats,P}; // 无头测量用
+</script>
+</body>
+</html>
