@@ -41,6 +41,7 @@ const ENV_CFG={
   RF_BURST:{K:8,W:1.5,GAP:200,DUR:[20,60],RISE:3,FALL:10,T_MAX:36000}, // 甲 恒星射电暴(2026-09-30 用户拍板):暴发时噪声系数 x K(锥心 241 倍)、锥宽 x W;两次之间空 GAP 游戏秒(指数分布的均值,加上持续 ⇒ 平均 240 秒一次),持续 DUR,开头 RISE 秒升起、结尾 FALL 秒回落;时间表生成到 T_MAX 秒
   CLUT_RES:4000*CFG.scale,AST_KM:800*CFG.scale, // 2026-09-26 x1/5(单局地图):原 20000 / 4000。ENV2 雷达杂波:贴着天体盘面 / 小行星本体(体型 x AST_KM)CLUT_RES 以内的慢目标,回波混进杂波(过 MTI)           // 动目标显示门限 km/s:场内径向速度低于它的回波被当成杂波。DD 速度档 250 / 500 / 800,所以"在动"几乎都滤不掉,停下来 / 贴着切向走才滤得掉
   SUN_HALF_DEG:10,    // 恒星禁区的缺省半角(度)
+  BODY_CUT:3000*CFG.scale, // 2026-10-03 绕行点再往外放这么多:船加减速 x4 / 转向 x3 后在拐点切弯更狠(离拐点 passBy 就转向下一个点),原来贴着「半径 + BODY_CLEAR」那圈绕会擦到盘面
   BODY_CLEAR:3000*CFG.scale, // 2026-09-30 用户:舰船不准进入天体与恒星(障碍表 envObstacles)—— 命令点落在盘面外 BODY_CLEAR 以内推到这一圈上,航线穿过这一圈就绕行(envBodyOut / envDetour);盘面本身是物理硬边(physics/31)。3000 < 杂波区 CLUT_RES,贴着行星停进杂波区的战术照旧
   STAR_R:696000,      // ENV2 位置型恒星的缺省光球半径 km(真太阳;红外页的 R_SAT)
   BODY_HEAT:2,        // ENV2 天体背阴面的自身热。单位 = 背景单位(与 envBg、云的 v 同一单位:1 = SENS.BG_G0 = 一条发现线);v1 只有红外视图读
@@ -136,7 +137,7 @@ function envDetourSeg(a,b,ok,out,skip,dep){ // 绕开 a→b 上最先碰到的�
   envDetourSeg(prev,b,ok,out,B,dep+1);
 }
 function envDetourAround(B,a,b,ok){ // 绕天体 B 从 a 到 b:切线出发 → 沿圈 → 切线到达。点取在外切多边形上(每段都与圈相切、不进圈,每个拐角最多 30°);两侧都算,取弧短且各点都可用的一侧
-  const R=B.r+ENV_CFG.BODY_CLEAR,TW=2*Math.PI,nrm=x=>((x%TW)+TW)%TW;
+  const R=B.r+ENV_CFG.BODY_CLEAR+ENV_CFG.BODY_CUT,TW=2*Math.PI,nrm=x=>((x%TW)+TW)%TW;
   const pa=Math.atan2(a[1]-B.y,a[0]-B.x),pb=Math.atan2(b[1]-B.y,b[0]-B.x),aa=Math.acos(R/Math.max(R,Math.hypot(a[0]-B.x,a[1]-B.y))),ab=Math.acos(R/Math.max(R,Math.hypot(b[0]-B.x,b[1]-B.y)));
   let best=null,bs=Infinity;
   for(const sg of [1,-1]){const t1=pa+sg*aa,D=nrm(sg*(pb-sg*ab-t1)),n=Math.max(1,Math.ceil(D/(Math.PI/6))),h=D/(2*n),rv=R/Math.cos(h),W=[];
