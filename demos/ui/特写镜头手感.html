@@ -82,11 +82,11 @@ const PROJ=[],FX=[]; // 弹:{kind,t0,t1,from,to,x[],y[],fate};特效:{t,kind,x,y
 const tMsl=PROJ.filter(p=>p.kind==='msl'&&p.fate==='hit')[0].t1,tS1=PROJ.filter(p=>p.kind==='mac')[0].t1,tS2=PROJ.filter(p=>p.kind==='mac')[1].t1;
 /* ================= 切镜表(三种镜头共用):主体 + 语境 + 离命中时刻 ================= */
 const SHOTS=[ // [开始, 结束, 类型, 主体, 语境, 命中时刻, 标题]
-  [0,4.5,'home'],[4.5,7.5,'fix','E1',['A'],null,'定位 · 疑似舰船'],[7.5,tMsl-3,'home'],
+  [0,4.5,'home'],[4.5,10,'fix','E1',['A'],null,'定位 · 疑似舰船'],[10,tMsl-3,'home'],
   [tMsl-3,tMsl+1.8,'pre','A',['msl0'],tMsl,'预判 · 来袭 → 巴黎-01'],[tMsl+1.8,tS1-2.6,'home'],
   [tS1-2.6,tS1+1.2,'pre','E1',['mac0','A'],tS1,'预判 · 巴黎-01 → 敌舰'],[tS1+1.2,tS2-2.6,'home'],
-  [tS2-2.6,tS2+3,'pre','E1',['mac1','A'],tS2,'预判 · 可能击沉 → 敌舰'],[tS2+3,32,'home'],
-  [32,35.5,'fix','E2',[],null,'定位 · 疑似舰船(远处)'],[35.5,LOOP+1,'home']];
+  [tS2-2.6,tS2+3,'pre','E1',['mac1','A'],tS2,'预判 · 可能击沉 → 敌舰'],[tS2+3,31.5,'home'],
+  [31.5,37.5,'fix','E2',[],null,'定位 · 疑似舰船(远处)'],[37.5,LOOP+1,'home']];
 function shotAt(t){for(const s of SHOTS)if(t>=s[0]&&t<s[1])return s;return SHOTS[0];}
 const I=t=>Math.min(N-1,Math.max(0,Math.round(t/DT)));
 function entPos(id,t){const e=E[id],i=I(t);return [e.x[i],e.y[i]];}
@@ -98,13 +98,13 @@ function shotInfo(s,t){ // 这一刻的主体 / 速度 / 语境(带权重)/ 离�
     const S=entPos('A',t),V=entVel('A',t),ctx=[{p:entPos('B',t),w:1},{p:entPos('C',t),w:1}];
     for(let k=0;k<3;k++){const p=projPos('msl'+k,t);if(!p)continue;const d=Math.hypot(p[0]-S[0],p[1]-S[1]),w=Math.max(0,Math.min(1,(100000-d)/20000));if(w>0)ctx.push({p,w,threat:1});}
     const ep=entPos('E1',t);if(E1.known[I(t)]){const d=Math.hypot(ep[0]-S[0],ep[1]-S[1]),w=Math.max(0,Math.min(1,(60000-d)/10000));if(w>0)ctx.push({p:ep,w,foe:1});}
-    return {key:'home',S,V,ctx,group:['A','B','C'],eta:null,lbl:'特写 · 3 艘'};}
+    return {kind:'home',key:'home',S,V,ctx,group:['A','B','C'],eta:null,lbl:'特写 · 3 艘'};}
   const S=entPos(s[3],t),V=entVel(s[3],t),ctx=[];for(const k of s[4]){const p=ptOf(k,t);if(p)ctx.push({p,w:1});}
-  return {key:s[3]+'@'+s[0].toFixed(2),subj:s[3],S,V,ctx,eta:s[5]!=null?s[5]-t:null,lbl:s[6],kill:s[2]==='pre'&&s[5]===tS2&&t>=tS2};
+  return {kind:s[2],key:s[3]+'@'+s[0].toFixed(2),subj:s[3],S,V,ctx,eta:s[5]!=null?s[5]-t:null,lbl:s[6],kill:s[2]==='pre'&&s[5]===tS2&&t>=tS2};
 }
 /* ================= 三种镜头 ================= */
 const VW=416,VH=260,HDR=20,HP=VH-HDR,SX=30,SY=24;
-const P={om:5,ze:0.85,soft:0.12,lead:0.3,db:15,tout:0.35,tin:1.2,zwait:0.8,zrate:1.8,fk:1,fmax:4,push:1.6,fit:0.7}; // 新方案参数
+const P={om:5,ze:0.85,soft:0.12,lead:0.3,db:15,tout:0.35,tin:1.2,zwait:0.8,zrate:1.8,fk:1,fmax:4,push:1.6,fit:0.7,slowT:3,rho:1.8}; // slowT / rho:发现敌舰这类镜头的慢飞(谷歌地球式)时长与弧度 // 新方案参数
 const cam={mode:'new',cx:0,cy:0,lz:Math.log(VW/40000),vx:0,vy:0,vz:0,key:'',cut:-9,fly:null,lzGoal:null,zin:0,ox:0,oy:0,vo:[0,0,0],lv:1,ax:0,ay:0};
 function sd(c,t,v,T,dt){const om=2/T,x=om*dt,e=1/(1+x+0.48*x*x+0.235*x*x*x),ch=c-t,tp=(v+om*ch)*dt;let o=t+(ch+tp)*e,nv=(v-om*tp)*e;if((t-c>0)===(o>t)){o=t;nv=0;}return [o,nv];} // 临界阻尼(Unity SmoothDamp)
 function bboxW(info,span,useW){ // 取景点包围盒:主体 + 速度前后 span 秒 + 语境(按权重往主体收)
@@ -162,10 +162,13 @@ function camNew(info,dt,t){
   if(info.key!==cam.key){const newSubj=(info.subj||'A')!==(cam.subj||'A');
     if(!cam.key){cam.cx=T.cx;cam.cy=T.cy;cam.lz=Math.log(VW/T.w);}
     else if(newSubj){const w0=VW/Math.exp(cam.lz),dist=Math.hypot(T.cx-cam.cx,T.cy-cam.cy)/w0;
-      if(dist<=P.fmax){const f=interpZoom([cam.cx,cam.cy,w0],[T.cx,T.cy,T.w],1.4);cam.fly={f,t0:t,dur:Math.max(0.45,Math.min(1.4,f.dur*0.55*P.fk)),T0:{cx:T.cx,cy:T.cy}};mark('fly',t,cam.fly.dur);}
+      const slow=info.kind==='fix',back=!slow&&info.kind==='home'&&cam.lastKind==='fix'; // 发现敌舰:谷歌地球式慢飞;从发现镜头回主镜头:中速;抢时间的预判 / 命中:快飞
+      if(slow||back||dist<=P.fmax){const rho=slow||back?P.rho:1.4,f=interpZoom([cam.cx,cam.cy,w0],[T.cx,T.cy,T.w],rho);
+        const dur=slow?P.slowT*Math.max(0.8,Math.min(1.7,0.8+0.12*f.dur)):back?Math.max(0.9,P.slowT*0.6):Math.max(0.45,Math.min(1.4,f.dur*0.55*P.fk));
+        cam.fly={f,t0:t,dur,T0:{cx:T.cx,cy:T.cy},soft:slow||back};mark('fly',t,dur);}
       else{cam.cx=T.cx;cam.cy=T.cy;cam.lz=Math.log(VW/T.w);cam.vx=cam.vy=cam.vz=0;mark('cut',t);}}
-    cam.lzGoal=Math.log(VW/T.w);cam.zin=0;cam.key=info.key;cam.subj=info.subj||'A';}
-  if(cam.fly){const F=cam.fly,k=Math.min(1,(t-F.t0)/F.dur),e=k<0.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2,q=F.f(e); // 飞:沿 van Wijk 弧线(三次缓入缓出),目标在动就把漂移按进度加回去
+    cam.lzGoal=Math.log(VW/T.w);cam.zin=0;cam.key=info.key;cam.subj=info.subj||'A';cam.lastKind=info.kind;}
+  if(cam.fly){const F=cam.fly,k=Math.min(1,(t-F.t0)/F.dur),e=F.soft?k*k*k*(k*(6*k-15)+10):(k<0.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2),q=F.f(e); // 慢飞用五次缓动(起步落地更柔) // 飞:沿 van Wijk 弧线(三次缓入缓出),目标在动就把漂移按进度加回去
     cam.cx=q[0]+(T.cx-F.T0.cx)*e;cam.cy=q[1]+(T.cy-F.T0.cy)*e;cam.lz=Math.log(VW/q[2]);if(k>=1){cam.fly=null;cam.vx=cam.vy=cam.vz=0;cam.lzGoal=cam.lz;}return;}
   // 缩放:死区 + 拉远快 / 推近慢(先等 zwait 秒)+ 限速
   const lzT=Math.log(VW/T.w),band=Math.log(1+P.db/100);
@@ -257,7 +260,7 @@ function frame(now){const dt=Math.min(0.05,(now-(ST.last||now))/1000);ST.last=no
   requestAnimationFrame(frame);}
 /* ================= 控件 ================= */
 const SL=[['om','弹簧频率(越大越紧)',1.5,12,0.5,''],['ze','阻尼比(<1 带回弹)',0.5,1.3,0.05,''],['soft','软区(占框宽)',0,0.35,0.01,''],['lead','前视',0,0.6,0.05,''],['db','缩放死区',0,40,1,'%'],
-  ['tout','拉远用时',0.1,1.5,0.05,'s'],['tin','推近用时',0.3,3,0.1,'s'],['zwait','推近前等待',0,2,0.1,'s'],['zrate','缩放最快',1.2,4,0.1,'×/s'],['fk','飞过去时长系数',0.3,2,0.05,''],['fmax','飞过去最远',1,10,0.5,'屏宽'],['push','命中前推近上限',1,2.5,0.05,'×'],['fit','取景留白',0.5,0.9,0.02,'']];
+  ['tout','拉远用时',0.1,1.5,0.05,'s'],['tin','推近用时',0.3,3,0.1,'s'],['zwait','推近前等待',0,2,0.1,'s'],['zrate','缩放最快',1.2,4,0.1,'×/s'],['slowT','发现敌舰时的飞行时长',1,6,0.25,'s'],['rho','飞行弧度(越大拉得越高)',1,3,0.1,''],['fk','快飞时长系数',0.3,2,0.05,''],['fmax','快飞最远',1,10,0.5,'屏宽'],['push','命中前推近上限',1,2.5,0.05,'×'],['fit','取景留白',0.5,0.9,0.02,'']];
 const SLd=document.getElementById('sl');
 for(const [k,lb,a,b,st,u] of SL){const L=document.createElement('label');L.innerHTML='<span class="k">'+lb+'</span><input type="range" min="'+a+'" max="'+b+'" step="'+st+'" value="'+P[k]+'"><span class="v">'+P[k]+u+'</span>';
   const inp=L.querySelector('input'),v=L.querySelector('.v');inp.addEventListener('input',()=>{P[k]=+inp.value;v.textContent=inp.value+u;});SLd.appendChild(L);}
