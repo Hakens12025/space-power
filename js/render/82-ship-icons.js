@@ -6,7 +6,7 @@ const LADAR_WARN_W=6; // RF7e 被照射告警圈的脉冲角频率(rad/【墙钟
 
 // TIER1 4 舰种正式映射:旧三键 CRUISER/FRIGATE/SCOUT 已由 03-ships.js 的 normCls 在 makeShip 入口归一化,这里不再需要过渡键。
 // 10a 的 HULL.SC / HULL_LABEL.SC / HULL_BASE.SC 按拍板保留不动(轮廓资产留着,等 4 舰种数值定稿再决定去留),只是暂时无人引用。
-const CLS_HULL={FF:'DD',DD:'SC',CA:'CA',BB:'BB',CV:'CV',CL:'DD'}; // 2026-09-30 舰种重排后的轮廓对照(用户:不换成参考图轮廓;巡洋舰和巡游舰的大小要和以前一样):护卫舰与巡游舰用原驱逐轮廓、巡洋用原巡洋轮廓 —— 与重排前逐个相同;新的驱逐舰用闲置的侦察轮廓(细长楔形,7.4);BB 空位 / 航母不变
+const CLS_HULL={FF:'DD',DD:'SC',CA:'CA',BB:'BB',CV:'CV',CL:'CL'}; // 2026-10-05 巡游舰有了自己的外形(render/82-shipart); // 2026-09-30 舰种重排后的轮廓对照(用户:不换成参考图轮廓;巡洋舰和巡游舰的大小要和以前一样):护卫舰与巡游舰用原驱逐轮廓、巡洋用原巡洋轮廓 —— 与重排前逐个相同;新的驱逐舰用闲置的侦察轮廓(细长楔形,7.4);BB 空位 / 航母不变
 function shipHull(s){return kindOf(s)==='ship'?(CLS_HULL[s.cls]||'DD'):'UNK';} // TK4c:不是船的东西(石头)没有舰种轮廓,一律通用轮廓 —— 否则查不到舰种会落到 'DD'
 function shipTier(s){return s.tier||2;}                       // 未标 Tier 的舰按 T2(中性尺寸/亮度)
 function shipIdentHull(s){                                    // 识别分层:未达识别级的敌舰只给通用轮廓
@@ -46,7 +46,7 @@ function hullZoomRaw(){ // 未钳位的系数(判"该不该换记号"用)
   return HULL_ZOOM.LAND*Math.pow(cam.zoom*vtLandKmpp(1),HULL_ZOOM.A);
 }
 function hullZoomF(){return Math.max(HULL_ZOOM.MARK,Math.min(HULL_ZOOM.MAX,hullZoomRaw()));} // 轮廓 / 尾焰 / 告警圈 / 锁定圈 / 虚影共用的系数;下限 = MARK(记号模式下那几样按这个尺寸画)
-const SHIP_K=0.6; // 舰标 / 舰形轮廓再缩到 0.6(同演示页 红外效果.html;拉远换记号不变、石头不缩),免得船比行星还显眼
+const SHIP_K=0.6*1.5; // 2026-10-05 用户:美术资源缩放尺度 = 1.5(船、尾焰、弹、命中特效、残骸、浮标都跟这个系数一起放大,武器对船的倍数不变)。原注: 舰标 / 舰形轮廓再缩到 0.6(同演示页 红外效果.html;拉远换记号不变、石头不缩),免得船比行星还显眼
 function shipZoomF(){return hullZoomF()*SHIP_K;} // 舰船(活船、残骸、尾焰、锁定圈、虚影)用的系数
 function shipMarkMode(){return hullZoomRaw()<HULL_ZOOM.MARK;}
 function drawShipMark(s,p,color){ // A:拉远后的记号。我方 = 沿船头的小箭头;敌方接触 = 小菱形(不分舰种 / 分级 / 认没认出)
@@ -237,11 +237,12 @@ function drawShip(s){
   ctx.strokeStyle=bodyColor; ctx.fillStyle=bodyColor;
   const fx=s.facing[0], fy=s.facing[1];
   const ang=Math.atan2(fy,fx);
+  const art=!shipMarkMode()&&shipIdentHull(s)!=='UNK'&&typeof SA==='object'&&SA.icon(ctx,shipIdentHull(s),shipIdentTier(s),s.side==='red'?'red':'blue',p[0],p[1],ang,shipZoomF()); // 2026-10-05 新舰标贴图(render/82-shipart);画不了才退回下面的纯色轮廓
   ctx.save();
   ctx.translate(p[0],p[1]);
   ctx.rotate(ang);
   {const zf=shipZoomF();ctx.scale(zf,zf);} // SN9 舰体随缩放变(见文件头 HULL_ZOOM);包在这一对 save/restore 里,不外溢
-  if(!shipMarkMode()&&shipIdentHull(s)!=='UNK')drawHull(ctx,shipIdentHull(s),shipIdentTier(s),bodyColor,'fill'); // 4 舰种 × T1/T2/T3,几何见 10a-ship-hulls.js。TIER1 轮廓与尺寸同一个遮蔽口径,未识别接触画 UNK+T2
+  if(!art&&!shipMarkMode()&&shipIdentHull(s)!=='UNK')drawHull(ctx,shipIdentHull(s),shipIdentTier(s),bodyColor,'fill'); // 4 舰种 × T1/T2/T3,几何见 10a-ship-hulls.js。TIER1 轮廓与尺寸同一个遮蔽口径,未识别接触画 UNK+T2
   ctx.restore();
   if(shipMarkMode())drawShipMark(s,p,bodyColor); // SZ1-A 拉远后换记号
   else if(shipIdentHull(s)==='UNK')drawUnkMark(p,r,bodyColor); // 2026-09-26 没认出:不转的空心菱形(原 UNK 三角沿船头画,像箭头,还泄露朝向)

@@ -372,7 +372,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
   title.textContent=sel.length>1?`已选 ${sel.length} 艘`:'实时状态';
   // 固定信息(舰船类数据,整局不变) → 底栏
   if(ciN)ciN.textContent=s.name;
-  // 2026-10-04 用户:肖像先不显示(脱离原参考风格,等新风格);舰名区只剩名字,上面已 ptSet(null)
+  if(typeof ptSet==='function')ptSet(s); // 2026-10-05 新风格的侧视肖像(render/82-shipart)重新显示;2026-10-04 曾因脱离原参考风格收起
   if(ciC)ciC.textContent=(CLS_NAME[s.cls]||s.cls)+' · '+(TIER_LABEL[s.tier]||'T2');
   if(ciSp)ciSp.innerHTML=specItems(s).map(it=>`<span class="fi"><i>${it[0]}</i><b>${it[1]}</b></span>`).join(''); // 标签上/数值下的读数柱
   // 变化信息(武器库状态) → 右栏
