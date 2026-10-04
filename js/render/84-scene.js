@@ -393,6 +393,7 @@ function drawInset(){
   try{
     ctx.fillStyle=vtBg();ctx.fillRect(0,0,w,h);
     for(const c of STAR_TILE.cv)if(c)ctx.drawImage(c,0,0,Math.min(c.width,pw),Math.min(c.height,ph),0,0,Math.min(c.width/dpr,w),Math.min(c.height/dpr,h)); // 天在屏幕空间,借主画面的贴图
+    if(vtW[1]>0.01)gridNested(1,vtW[1],1);if(vtW[2]>0.01)gridNested(C_LS,vtW[2],2);if(vtW[3]>0.01)gridNested(C_LS,vtW[3],3); // 2026-10-04 网格同主画面的层(不写刻度);天在屏幕空间,没有它特写里就没有跟着世界走的参照(用户:特写依然不随着舰队航线方向移动 —— 镜头钉在船队上,画面看着像停着)
     if(md!=='ir'&&ENV.clouds.length&&typeof terrWantX==='function'&&TERR.sig!==null){ // 尘埃云按特写自己的缩放级画(用户:"小窗要保持应有的渲染尺度");红外画面主画面不建块,特写也不要
       if(TERR.xw.some(T=>TERR.tiles.get(T.key)!==T)||TERR.xa.some(T=>TERR.tiles.get(T.key)!==T))TERR.xkey=''; // 块被主镜头腾掉了:下一次重建
       TERR.xL=terrLevel(z,TERR.xL);terrWantX(TERR.xL,cx,cy,z,w,h);
