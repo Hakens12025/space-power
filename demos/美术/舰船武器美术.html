@@ -409,7 +409,8 @@ function rawBar(raw){return 100*LAND_KMPP*Math.pow(HULL_ZOOM.LAND/raw,1/HULL_ZOO
 const FEA_CV=document.createElement('canvas'),FEA_G=FEA_CV.getContext('2d');
 function feathered(g,fe,x,y,R,fn){if(fe<0.05){fn(g,x,y);return;} // fn(g2,cx,cy) 把物体画在 (cx,cy);R = 物体外接半径(CSS px)
   const S=Math.ceil(2*R*DPR)+4;if(FEA_CV.width<S||FEA_CV.height<S){FEA_CV.width=Math.max(FEA_CV.width,S);FEA_CV.height=Math.max(FEA_CV.height,S);}
-  const c=S/(2*DPR);FEA_G.setTransform(1,0,0,1,0,0);FEA_G.clearRect(0,0,S,S);FEA_G.setTransform(DPR,0,0,DPR,0,0);fn(FEA_G,c,c);
+  const c=S/(2*DPR);FEA_G.setTransform(1,0,0,1,0,0);FEA_G.clearRect(0,0,FEA_CV.width,FEA_CV.height); // 整张清:模糊会采到源矩形外一圈,留着上一个的残影就成了杂点
+  FEA_G.setTransform(DPR,0,0,DPR,0,0);fn(FEA_G,c,c);
   g.save();g.filter='blur('+(fe*DPR).toFixed(2)+'px)';g.drawImage(FEA_CV,0,0,S,S,x-c,y-c,S/DPR,S/DPR);g.restore();}
 function trueZf(k){return hullZ(k)*SHIP_K*V.tk;}
 function kmpp(){return V.bar/100;}
