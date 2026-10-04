@@ -312,7 +312,7 @@ function insetDirector(now,dt,inc,ss,sel){
     if(e.p<2&&(cool||thr))continue;if(D&&e.p<=D.p)continue;if(preRun&&!I.URG[e.k])continue;
     if(!I.URG[e.k]&&(!cut||!insetLegal(insetCi(e),ST.preNew?Math.max(hop,1+Math.floor((now-e.t)/I.RING_WAIT)):hop)))continue;C.push(e);} // 新方案:绕路按这条事件自己等了多久算(原来按特写空了多久,交战时从不空,察觉类一直接不上、过期)
   if(C.length>1)C.sort(hop>1?(a,b)=>dd(a)-dd(b)||b.p-a.p||a.seq-b.seq:(a,b)=>b.p-a.p||a.seq-b.seq);
-  const urgQ=ST.preNew&&I.ev.some(e=>!e.shown&&I.URG[e.k]); // 新方案:已经发生的损失 / 击沉在排队时不开新预判(原来「可能击沉」预判抢在真击沉前面,真的那条等到过期)
+  const urgQ=ST.preNew&&(I.ev.some(e=>!e.shown&&I.URG[e.k])||C.some(e=>now-e.t>(I.EVMS[e.k]||6000)*0.5)); // 新方案:已经发生的损失 / 击沉在排队时不开新预判(原来「可能击沉」预判抢在真击沉前面,真的那条等到过期)
   {const d0=hop>1&&C.length?dd(C[0]):Infinity,pr=((idle||now-I.cool>=I.COOL)&&cut&&!urgQ)?insetPre(now,inc,sel,idle,c=>{const ci=I.RING.indexOf(c);return insetLegal(ci,hop)&&insetDd(ci)<=d0;}):null;
     if(pr&&(!D||pr.p>D.p)&&!(thr&&pr.p<2)&&!preRun){const N=insetShot('pre',pr.p,pr.tg,now,{proj:pr.proj,sh:pr.sh,kind:pr.kind,dwell:Infinity,end:-1}),s2=insetPlaySub(N,now,inc);
       if(s2){I.preSeen.add(pr.proj);I.preT.set(pr.tg.id,now);I.dir=D=N;sub=s2;I.fx=null;I.rc=I.RING.indexOf(pr.kind==='in'?'来袭':'出手');C=C.filter(e=>I.URG[e.k]&&e.p>N.p);}}}
@@ -341,7 +341,7 @@ function insetSD(c,t,i,T,dt){if(!(dt>0))return c;const om=2/T,x=om*dt,e=1/(1+x+0
 function insetCam(sub,T,w,hp,dt,now){const ltz=Math.log(w/T.w),S=sub.S;
   const pin=z=>{I.ax=S[0];I.ay=S[1];I.lpx=T.lx;I.lpy=T.ly;I.ox=I.pcx-S[0]-T.lx/z;I.oy=I.pcy-S[1]-T.ly/z;I.vcx=I.vcy=0;I.vo.fill(0);I.kk=sub.kk;};
   if(sub.lock&&sub.key!==I.key&&I.key){const w0=w/Math.exp(I.lz),d=hyp(T.cx-I.pcx,T.cy-I.pcy)/w0; // 新方案:近就滑过去(用户:来袭垫场和预判之间瞬移),远过 FMAX 屏宽才切
-    if(d<=I.FMAX){const f=insetZoomPath([I.pcx,I.pcy,w0],[T.cx,T.cy,T.w],I.RHO_P),du=preGlide(f.dur);I.fly={f,t0:now,dur:du*1000,c0:[T.cx,T.cy],w1:T.w,soft:false};REC.mark('fly',now,du*1000);}
+    if(d<=I.FMAX){const f=insetZoomPath([I.pcx,I.pcy,w0],[T.cx,T.cy,T.w],I.RHO_P),du=Math.min(preGlide(f.dur),Math.max(0.3,(sub.eta!=null&&isFinite(sub.eta)?sub.eta:9)-I.PRE_SEE));I.fly={f,t0:now,dur:du*1000,c0:[T.cx,T.cy],w1:T.w,soft:false};REC.mark('fly',now,du*1000);}
     else{I.pcx=T.cx;I.pcy=T.cy;I.lz=ltz;I.fly=null;I.cut=now;pin(w/T.w);REC.mark('cut',now);}
     I.lzg=ltz;I.zin=0;I.key=sub.key;I.csk=sub.sk;I.lastK=sub.kind||'';}
   if(sub.key!==I.key){
