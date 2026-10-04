@@ -31,13 +31,14 @@ ul b{color:var(--txt);font-weight:normal}
 <h1>舰船武器美术 · 战术层尺寸</h1>
 <p class="n">独立演示页(不加载引擎)。默认比例尺 = 引擎战术落点:左下比例尺 100 px = 2.5 万 km(每像素 250 km)。舰标大小照引擎:系数 = 0.55 x (缩放 / 战术落点)^0.4,钳在 0.45 ~ 1.9,舰船再 x 0.6;
 原始系数低于 0.45(比例尺约 4.1 万起)船换箭头 / 菱形,弹同时换简易记号 —— 代表显示;以上是真显示。<br>
-「真显示放大」= 真显示的船、武器、效果在引擎尺寸上再乘的倍数(默认 1.25,用户 10-05:真图放大一点点);切换点和代表显示的记号不跟着变,行星照实际大小。<br>
+「美术整体缩放」= 一个总系数:船、尾焰、导弹 / 拦截弹、主炮弹、雷、诱饵、命中 / 击沉、近防火花、护盾受击、残骸全部一起乘(默认 1.25,用户 10-05:真图放大一点点;想让船再大一点,其他跟着一起大);武器对船的倍数不变。切换点和代表显示的记号不跟着变,行星照实际大小。<br>
+特效随缩放(用户 10-05):命中 / 击沉、近防火花、护盾受击的大小 = 战术落点上的大小 x 船的(不钳)系数开平方 —— 船缩到 0.5,特效缩到 0.71;拉过切换点以后船换了记号,特效照样慢慢变。<br>
 舰船 = 引擎现在的轮廓(护卫用原驱逐轮廓、驱逐用细长楔形、巡洋、航母;没认出的是通用灰轮廓)。武器尺寸以最小的船(护卫 T1)的舰长为基准:物品本体(成组导弹算整组外框)不超过 0.8 倍;尾焰、拖影、爆炸、光晕是效果,不算。
 滚轮缩放、拖动平移;上面「灰度」「模糊」是检验:去色后还分得清敌我、糊一点还认得出。</p>
 </header>
 <div class="bar">
   <span class="g">比例尺 100 px = <input id="bar" type="range" min="0" max="1000"><b id="barV"></b></span>
-  <span class="g">真显示放大 <input id="tk" type="range" min="100" max="200" value="125" style="width:110px"><b id="tkV"></b></span>
+  <span class="g">美术整体缩放 <input id="tk" type="range" min="100" max="200" value="125" style="width:110px"><b id="tkV"></b></span>
   <span class="g"><button class="t" data-z="25000">战术落点</button><button class="t" data-z="41000">切换点前</button><button class="t" data-z="42000">切换点后</button><button class="t" data-z="100000">舰队落点</button><button class="t" data-z="3000">拉近</button></span>
   <span class="g"><button class="t" data-k="gray">灰度</button><button class="t" data-k="blur">模糊 1px</button><button class="t on" data-k="lab">标签</button><button class="t" data-k="pause">暂停</button></span>
   <span id="read"></span>
@@ -47,7 +48,7 @@ ul b{color:var(--txt);font-weight:normal}
 <h2>战术场景</h2>
 <p class="n">按靶场摆:蓝方巡洋 / 护卫 / 驱逐在靶场蓝方那三个位置,红方护卫 / 驱逐 / 巡洋在三个靶的位置,两边各再加一艘航母,红方最右那个灰的是没认出的接触(通用轮廓、固定 T2、不画尾焰)。
 左上是靶场那颗行星:冰巨星,半径 7 万 km,位置照靶场(离蓝方巡洋约 13 万 km),照实际大小画,亮面朝靶场恒星(屏幕上 149°)。双方导弹 1 / 3 / 5 枚一组对射,前六成航程喷火、之后滑行;红方那组 5 枚被蓝方驱逐舰的拦截弹在半路打掉;
-主炮弹双方各两发;蓝方 5 枚那组击沉红方护卫舰,之后留残骸;雷各一颗、诱饵各一枚。14 秒一轮。</p>
+主炮弹双方各两发(红方打蓝方巡洋那发被护盾挡住:护盾受击);红方 3 枚那组冲蓝方驱逐,进近防内圈被曳光打掉(近防火花);蓝方 5 枚那组击沉红方护卫舰,之后留残骸;雷各一颗、诱饵各一枚。14 秒一轮。</p>
 <canvas id="scene"></canvas>
 </section>
 
@@ -58,9 +59,16 @@ ul b{color:var(--txt);font-weight:normal}
 </section>
 
 <section>
+<h2>特效随缩放</h2>
+<p class="n">每列一个比例尺,第一行是巡洋舰 T1(拉过切换点后是箭头),下面是同一时刻定格的特效。表头「船 x / 特效 x」都是相对战术落点的倍数。</p>
+<canvas id="fxc"></canvas>
+</section>
+
+<section>
 <h2>和引擎现在的差别</h2>
 <ul>
-<li><b>真显示放大</b>:真显示的船、武器、效果在引擎尺寸上再乘「真显示放大」(默认 1.25,等于把引擎的 SHIP_K 0.6 调到 0.75);切换点、代表显示的记号不变,武器对船的倍数不变。</li>
+<li><b>美术整体缩放</b>:所有真显示资产在引擎尺寸上再乘这一个数(默认 1.25,等于把引擎的 SHIP_K 0.6 调到 0.75);切换点、代表显示的记号不变,武器对船的倍数不变。</li>
+<li><b>特效随缩放</b>:引擎里命中 / 击沉跟船同一个系数、拉过切换点就停住不变;近防火花是固定像素、完全不变;护盾受击半径跟船、线宽固定。这里三样都改成「战术落点的大小 x 船的不钳系数开平方」,拉远到战区层约 0.48 倍、拉到最近约 1.8 倍。</li>
 <li><b>行星</b>:照抄 81-art 的冰巨星画法(地表噪声分档色带 + 暗斑、4 阶明暗朝恒星、大气边缘光),只做了靶场那一颗,照实际大小。</li>
 <li><b>舰船</b>:轮廓、尺寸、Tier 明暗都照引擎;舰体从纯色平涂改成阵营色材质 —— 按固定左上光朝光亮、背光暗,外加约 0.8 px 暗描边;舰长 ≥ 12 px 时朝光的边亮一档;炮塔等构件照旧压暗。阵营色仍占整个剪影,6 px 时也分得清敌我。</li>
 <li><b>导弹</b>:弹身从灰色 + 约 1 px 阵营色环带改成整枚阵营色;尾焰从两方同为橙色改成带阵营色(蓝方蓝白、红方橙红)。单枚 0.55 倍最小舰长,成组每枚 0.36 倍,5 枚一组整组外框 0.79 倍。去掉了引擎里 4.5~5 px 的像素下限,和船同一个系数缩放,所以任何缩放下都比船小;弹长 &lt; 5 px 时画成一道阵营色短划。</li>
@@ -288,6 +296,35 @@ function drawBoom(g,o,x,y,a,t,z){const kill=o.kind==='kill',mac=o.type==='mac',h
     for(const e of o.em){const k=a/(e[2]+0.8);if(k>=1)continue;const d=e[1]*Math.sqrt(a)*z,f=0.6+0.4*Math.sin(t*20+e[3]);blit(g,fx('ember'),x+Math.cos(e[0])*d,y+Math.sin(e[0])*d,2.4*z,(1-k)*f,true);}
     for(const s of o.sec){const b=a-s[0];if(b<0||b>0.5)continue;const k=b/0.5,sx=x+s[1]*z,sy=y+s[2]*z;blit(g,fx('flash'),sx,sy,10*z*(1-0.3*k),1-k,true);blit(g,fx('fire'),sx,sy,(3+6*Math.sqrt(k))*z,(1-k)*0.9,true);}}}
 
+/* ---------- 特效随缩放(新,用户 10-05):命中 / 击沉、近防火花、护盾受击 = 战术落点上的大小 x 船的(不钳)系数开平方;再乘美术整体缩放 ---------- */
+function fxK(k){return Math.sqrt(rawZ(k)/HULL_ZOOM.LAND);}            // 1 = 战术落点;船缩 0.5 → 0.71;用不钳的原始系数,拉过切换点照样变
+function fxZ(k){return 1.92*HULL_ZOOM.LAND*SHIP_K*V.tk*fxK(k);}      // 命中 / 击沉的尺寸系数(战术落点上 = 引擎的 artZ x 整体缩放)
+
+/* 近防(照抄 83-hud drawCiwsFx):曳光从舰往外飞、飞出内圈外一点就灭(线宽固定);打掉的每枚一朵火花(点 + 扩散圈,大小乘特效系数) */
+const CIWS_FX={N:2,FIRE:10,SPREAD:2/57.3,OFF:0.012,LEN:0.1,REACH:1.25,LIFE:0.45,LIFE_J:0.2,PUFF_T:0.7,PUFF_D:0.25,PUFF_R0:0.015,PUFF_R1:0.09,PUFF_REF:6000,INNER:4200}; // INNER = 防空核心的近防内圈 km(weapons/51 ciws_core)
+function ciwsPlan(v){const S=SH[v.ciws],C=CIWS_FX;v.ts=null; // 弹进内圈那一刻开火,0.3 秒后打掉
+  for(let t=v.t0;t<=v.t0+v.F;t+=0.01){const m=salvoAt(v,t),p=shipPos(S,t);if(Math.hypot(m.x-p[0],m.y-p[1])<=C.INNER){v.ts=t;break;}}
+  if(v.ts===null)return;v.tk=v.ts+0.3;const m=salvoAt(v,v.tk),r=rng(v.sd*7+1),r2=rng(v.sd*11+3);
+  v.pf=Array.from({length:Math.min(16,v.n)},()=>{const a=r()*6.283,rr=C.PUFF_REF*(C.PUFF_R0+r()*(C.PUFF_R1-C.PUFF_R0));return [m.x+Math.cos(a)*rr,m.y+Math.sin(a)*rr,r()*C.PUFF_D];});
+  v.tr=[];const n=Math.round((v.tk+0.1-v.ts)*C.FIRE*C.N);
+  for(let i=0;i<n;i++){const t=v.ts+i/(C.FIRE*C.N),m2=salvoAt(v,Math.min(t,v.tk-1e-3)),q=shipPos(S,t),j=Math.floor(r2()*C.N);
+    v.tr.push({t,a:Math.atan2(m2.y-q[1],m2.x-q[0])+(j-(C.N-1)/2)*C.OFF+(r2()*2-1)*C.SPREAD,life:C.LIFE+r2()*C.LIFE_J});}}
+function drawPuff(g,x,y,gg,fk){const a=1-gg/CIWS_FX.PUFF_T;
+  g.fillStyle='rgba(255,220,150,'+(0.9*a).toFixed(3)+')';g.beginPath();g.arc(x,y,Math.max(1,3*(1-gg)*fk),0,6.283);g.fill();
+  g.strokeStyle='rgba(255,170,90,'+(0.7*a).toFixed(3)+')';g.lineWidth=1.2;g.beginPath();g.arc(x,y,(2+gg*18)*fk,0,6.283);g.stroke();}
+
+/* 护盾受击(照抄 83-hud drawShieldFx 的 hit):弧画在罩子上(半径跟船),线宽和命中点的亮斑乘特效系数 */
+const SHD={K:2,HIT_T:0.3,COL:{blue:[110,210,255],red:[255,150,110]}};
+function sRgba(c,a){return css(c,Math.max(0,Math.min(1,a)));}
+function sArc(g,x,y,r,a0,a1,col,w){g.strokeStyle=col;g.lineWidth=w;g.beginPath();g.arc(x,y,r,a0,a1);g.stroke();}
+function shieldR(h,tier,zf,mk){return mk?(SHIP_MARK_R+1)*SHD.K:hullSize(h,tier)*zf*1.5*SHD.K;} // 引擎 shieldR = 图标半径 x 1.5/0.78 x K
+function drawShieldHit(g,cx,cy,R,a,side,u,fk,Lt,big){const C=SHD.COL[side],k=1-u,w=big?0.8:0.3; // Lt = 战术落点上的罩子半径 / K
+  sArc(g,cx,cy,R,a-w*(0.4+u),a+w*(0.4+u),sRgba([255,255,255],0.9*k*k),(big?3.5:2.2)*fk);
+  sArc(g,cx,cy,R,a+w*0.4+u*2.2,a+w*0.4+u*2.2+0.25,sRgba(C,0.8*k),2*fk);sArc(g,cx,cy,R,a-w*0.4-u*2.2-0.25,a-w*0.4-u*2.2,sRgba(C,0.8*k),2*fk);
+  sArc(g,cx,cy,R,0,6.283,sRgba(C,0.45*k*(big?1:0.5)),1.6*fk);
+  const px=cx+Math.cos(a)*R,py=cy+Math.sin(a)*R,gr=Lt*(big?1.6:0.7)*fk,rg=g.createRadialGradient(px,py,0,px,py,gr);
+  rg.addColorStop(0,sRgba([255,255,255],0.85*k));rg.addColorStop(1,sRgba(C,0));g.fillStyle=rg;g.beginPath();g.arc(px,py,gr,0,6.283);g.fill();}
+
 /* ---------- 代表显示(照抄引擎):船的记号 82-ship-icons drawShipMark、弹类记号 83-hud projMark ---------- */
 function shipMark(g,x,y,rot,side,own){const R=SHIP_MARK_R;g.save();g.translate(x,y);g.fillStyle=css(SIDE[side]);g.beginPath();
   if(own){g.rotate(rot);g.moveTo(R,0);g.lineTo(-R+1,R-1);g.lineTo(-R+2.2,0);g.lineTo(-R+1,-R+1);}else{g.moveTo(R,0);g.lineTo(0,R);g.lineTo(-R,0);g.lineTo(0,-R);}
@@ -312,8 +349,8 @@ const SH={};{const cnt={};SHIPS.forEach((s,i)=>{SH[s.id]=s;s.sd=i*37+5;s.h=s.unk
   s.name=s.unk?'未知接触':(s.side==='red'?'敌·':'')+CLS_NAME[s.cls]+cnt[key]+' T'+s.tier;});}
 const SALVO=[
   {side:'blue',from:'b2',to:'r3',n:6,t0:0.5,F:8,arc:0.12,kill:true},{side:'blue',from:'b4',to:'r2',n:3,t0:2.2,F:7.5,arc:-0.1},{side:'blue',from:'b3',to:'r1',n:1,t0:4.0,F:7,arc:0.08},
-  {side:'red',from:'r1',to:'b2',n:6,t0:1.0,F:9,arc:-0.12,icp:{by:'b3',at:0.7,F:2.4,n:16}},{side:'red',from:'r2',to:'b4',n:3,t0:3.0,F:8,arc:0.1},{side:'red',from:'r4',to:'b1',n:1,t0:4.6,F:7.5,arc:-0.08}];
-const SHELLS=[{side:'blue',from:'b2',to:'r1',t0:1.2,F:2.0},{side:'red',from:'r1',to:'b2',t0:3.6,F:2.0},{side:'blue',from:'b1',to:'r2',t0:6.2,F:2.2},{side:'red',from:'r4',to:'b3',t0:9.0,F:2.2}];
+  {side:'red',from:'r1',to:'b2',n:6,t0:1.0,F:9,arc:-0.12,icp:{by:'b3',at:0.7,F:2.4,n:16}},{side:'red',from:'r2',to:'b3',n:3,t0:3.0,F:8,arc:0.1,ciws:'b3'},{side:'red',from:'r4',to:'b1',n:1,t0:4.6,F:7.5,arc:-0.08}];
+const SHELLS=[{side:'blue',from:'b2',to:'r1',t0:1.2,F:2.0},{side:'red',from:'r1',to:'b2',t0:3.6,F:2.0,shield:true},{side:'blue',from:'b1',to:'r2',t0:6.2,F:2.2},{side:'red',from:'r4',to:'b3',t0:9.0,F:2.2}];
 const MINES=[{side:'blue',x:-18000,y:50000},{side:'red',x:-4000,y:-52000}];
 const DECOYS=[{side:'blue',from:'b1',dx:24000,dy:-16000,t0:1.5,F:11,sd:3},{side:'red',from:'r4',dx:-20000,dy:18000,t0:3.5,F:10,sd:8}];
 function shipPos(s,tau){const w=2*Math.PI/LOOP,ph=s.sd*0.7;return [s.x+1500*Math.sin(w*tau+ph),s.y+900*Math.sin(2*w*tau+ph*1.3),(s.side==='red'?Math.PI:0)+0.12*Math.sin(w*tau+ph*0.6)];}
@@ -323,8 +360,11 @@ function salvoAt(v,tau){const u=(tau-v.t0)/v.F;if(u<0||u>1)return null;const A=s
   return {x:A[0]+dx*u+nx*arc*s,y:A[1]+dy*u+ny*arc*s,rot:Math.atan2(dy+ny*arc*ds,dx+nx*arc*ds),u};}
 const BOOMS=[];
 SALVO.forEach((v,i)=>{v.sd=i*13+3;if(v.icp){v.tm=v.t0+v.icp.at*v.F;const m=salvoAt(v,v.tm-1e-3);v.mp=m;BOOMS.push({t:v.tm,x:m.x,y:m.y,o:mkBoom('hit','mac',i*31+7)});}
-  else{const th=v.t0+v.F,p=shipPos(SH[v.to],th);BOOMS.push({t:th,x:p[0],y:p[1],o:mkBoom(v.kill?'kill':'hit','missile',i*31+7)});}});
-SHELLS.forEach((s,i)=>{const th=s.t0+s.F,p=shipPos(SH[s.to],th);BOOMS.push({t:th,x:p[0],y:p[1],o:mkBoom('hit','mac',i*17+101)});});
+  else if(!v.ciws){const th=v.t0+v.F,p=shipPos(SH[v.to],th);BOOMS.push({t:th,x:p[0],y:p[1],o:mkBoom(v.kill?'kill':'hit','missile',i*31+7)});}});
+const SHD_HITS=[];
+SHELLS.forEach((s,i)=>{const th=s.t0+s.F,p=shipPos(SH[s.to],th);if(s.shield){const A=shipPos(SH[s.from],s.t0);SHD_HITS.push({t:th,id:s.to,a:Math.atan2(A[1]-p[1],A[0]-p[0]),big:false});}
+  else BOOMS.push({t:th,x:p[0],y:p[1],o:mkBoom('hit','mac',i*17+101)});});
+SALVO.forEach(v=>{if(v.ciws)ciwsPlan(v);});
 
 /* ---------- 靶场的行星(照抄 81-art 的行星画法,只留冰巨星):靶场 world.bodies 那一颗,中心 (-159000, -70800)、半径 7 万 km;
    类型 / 种子按引擎 world/12 envBodyHash 算出来是冰巨星 / 332175;靶场恒星在 (-6545191, 3750000),屏幕上光从 149° 来;没有碎石环。照实际大小画 ---------- */
@@ -369,7 +409,7 @@ function grid(g,k){const want=70*k;let st=Math.pow(10,Math.floor(Math.log10(want
   g.fillStyle='rgba(90,130,170,.09)';const x0=V.cx-SWd/2*k,y0=V.cy-SHt/2*k;
   for(let x=Math.ceil(x0/st)*st;x<x0+SWd*k;x+=st)g.fillRect(Math.round((x-x0)/k),0,1,SHt);
   for(let y=Math.ceil(y0/st)*st;y<y0+SHt*k;y+=st)g.fillRect(0,Math.round((y-y0)/k),SWd,1);}
-function drawScene(wt,sT){const g=SCG,k=kmpp(),raw=rawZ(k),zf=trueZf(k),mk=raw<HULL_ZOOM.MARK,z=1.92*zf,tau=sT%LOOP;
+function drawScene(wt,sT){const g=SCG,k=kmpp(),raw=rawZ(k),zf=trueZf(k),mk=raw<HULL_ZOOM.MARK,z=fxZ(k),fk=fxK(k)*V.tk,tau=sT%LOOP;
   g.setTransform(DPR,0,0,DPR,0,0);g.fillStyle='#05070c';g.fillRect(0,0,SWd,SHt);grid(g,k);
   const S=(x,y)=>[(x-V.cx)/k+SWd/2,(y-V.cy)/k+SHt/2];
   {const p=S(PLANET.x,PLANET.y);drawPlanet(g,p[0],p[1],PLANET.r/k);}
@@ -388,9 +428,17 @@ function drawScene(wt,sT){const g=SCG,k=kmpp(),raw=rawZ(k),zf=trueZf(k),mk=raw<H
     if(v.icp){const by=SH[v.icp.by],ti=v.tm-v.icp.F,ui=(tau-ti)/v.icp.F;if(ui>=0&&ui<1){const A=shipPos(by,ti),x=A[0]+(v.mp.x-A[0])*ui,y=A[1]+(v.mp.y-A[1])*ui,p=S(x,y),rot=Math.atan2(v.mp.y-A[1],v.mp.x-A[0]);
       if(mk)projMark(g,'interceptor',false,p[0],p[1],rot,by.side,v.icp.n);else drawMsl(g,p[0],p[1],rot,by.side,'inter',v.icp.n,true,zf,wt,v.sd+5);}
       if(tau>=v.tm)continue;}
+    if(v.ciws&&v.ts!==null&&tau>=v.tk)continue;
     const m=salvoAt(v,tau);if(!m)continue;const p=S(m.x,m.y);
     if(mk)projMark(g,'missile',false,p[0],p[1],m.rot,v.side,v.n);else drawMsl(g,p[0],p[1],m.rot,v.side,'msl',v.n,m.u<0.6,zf,wt,v.sd);}
   for(const b of BOOMS){const a=tau-b.t;if(a<0||a>(b.o.kind==='kill'?3:1))continue;const p=S(b.x,b.y);drawBoom(g,b.o,p[0],p[1],a,wt,z);}
+  for(const v of SALVO){if(!v.ciws||v.ts===null)continue;const sh=SH[v.ciws],C=CIWS_FX;g.save();g.lineCap='round';g.lineWidth=1.6;
+    for(const t of v.tr){const gg=tau-t.t;if(gg<0||gg>t.life)continue;const o=shipPos(sh,t.t),r1=gg/t.life*C.INNER*C.REACH,r0=Math.max(0,r1-C.LEN*C.INNER),c=Math.cos(t.a),n=Math.sin(t.a),p0=S(o[0]+c*r0,o[1]+n*r0),p1=S(o[0]+c*r1,o[1]+n*r1);
+      g.strokeStyle='rgba(255,240,170,'+(0.9*(1-gg/t.life)).toFixed(3)+')';g.beginPath();g.moveTo(p0[0],p0[1]);g.lineTo(p1[0],p1[1]);g.stroke();}
+    for(const q of v.pf){const gg=tau-v.tk-q[2];if(gg<0||gg>C.PUFF_T)continue;const p=S(q[0],q[1]);drawPuff(g,p[0],p[1],gg,fk);}
+    g.restore();}
+  for(const h of SHD_HITS){const u=(tau-h.t)/SHD.HIT_T;if(u<0||u>1)continue;const s=SH[h.id],p0=shipPos(s,h.t),p=S(p0[0],p0[1]);
+    drawShieldHit(g,p[0],p[1],shieldR(s.h,s.tier,zf,mk),h.a,s.side,u,fk,hullSize(s.h,s.tier)*HULL_ZOOM.LAND*SHIP_K*1.5,h.big);}
   if(V.lab){g.font='10px "Microsoft YaHei"';g.textAlign='center';g.textBaseline='top';
     for(const s of SHIPS){const td=dead.get(s.id),p0=shipPos(s,td!==undefined?td:tau),p=S(p0[0],p0[1]),r=mk?SHIP_MARK_R+3:shipLen(s.h,s.unk?2:s.tier,zf)*0.45+4;
       g.fillStyle=td!==undefined?'rgba(150,160,175,.65)':(s.unk?'rgba(160,170,185,.85)':'rgba(199,208,220,.8)');g.fillText(s.name+(td!==undefined?'(残骸)':''),p[0],p[1]+r);}}
@@ -429,6 +477,31 @@ function drawTab(wt){const g=TG;g.setTransform(DPR,0,0,DPR,0,0);g.fillStyle='#05
   let y=HEAD;for(const r of ROWS){g.fillStyle='#1e2836';g.fillRect(0,y,TWd,1);g.font='12px "Microsoft YaHei"';g.textAlign='left';g.textBaseline='middle';g.fillStyle='#c7d0dc';g.fillText(r.nm,10,y+r.h/2-4);
     let x=X0;COLS.forEach((c,i)=>{g.save();g.beginPath();g.rect(x+1,y+1,CW[i]-1,r.h-1);g.clip();cell(g,r,c,x,y,CW[i],r.h,wt);g.restore();x+=CW[i];});y+=r.h;}}
 
+/* ---------- 特效随缩放对照:每列一个比例尺,特效定格在同一时刻 ---------- */
+const FXC_BARS=[3000,10000,25000,41000,100000,1000000],FXC_W=172,FXC_X0=118,FXC_HEAD=44;
+const FXC_ROWS=[{nm:'巡洋舰 T1',k:'ship',h:56},{nm:'导弹命中',k:'hit',h:84},{nm:'击沉',k:'kill',h:132},{nm:'近防火花',k:'puff',h:72},{nm:'护盾受击',k:'shd',h:96}];
+const FXB={hit:mkBoom('hit','missile',3),kill:mkBoom('kill','missile',5)};
+const FC=$('fxc'),FG=FC.getContext('2d'),FWd=FXC_X0+FXC_W*FXC_BARS.length,FHt=FXC_HEAD+FXC_ROWS.reduce((a,r)=>a+r.h,0)+4;
+FC.style.width=FWd+'px';FC.style.height=FHt+'px';FC.width=Math.round(FWd*DPR);FC.height=Math.round(FHt*DPR);
+function drawFxc(wt){const g=FG;g.setTransform(DPR,0,0,DPR,0,0);g.fillStyle='#05070c';g.fillRect(0,0,FWd,FHt);
+  FXC_BARS.forEach((bar,i)=>{const k=bar/100,raw=rawZ(k),mk=raw<HULL_ZOOM.MARK,x=FXC_X0+i*FXC_W,cx=x+FXC_W/2;
+    g.textAlign='center';g.textBaseline='top';g.font='12px "Microsoft YaHei"';g.fillStyle=bar===25000?'#6fdc8c':'#5aa7ff';g.fillText('比例尺 '+fmtKm(bar)+(bar===25000?'(战术落点)':''),cx,6);
+    g.font='10px "Microsoft YaHei"';g.fillStyle='#5f7083';g.fillText((mk?'船 = 箭头':'船 x'+(hullZ(k)/HULL_ZOOM.LAND).toFixed(2))+' · 特效 x'+fxK(k).toFixed(2),cx,24);
+    g.fillStyle='#1e2836';g.fillRect(x,0,1,FHt);});
+  let y=FXC_HEAD;
+  for(const r of FXC_ROWS){g.fillStyle='#1e2836';g.fillRect(0,y,FWd,1);g.font='12px "Microsoft YaHei"';g.textAlign='left';g.textBaseline='middle';g.fillStyle='#c7d0dc';g.fillText(r.nm,10,y+r.h/2-4);
+    FXC_BARS.forEach((bar,i)=>{const k=bar/100,mk=rawZ(k)<HULL_ZOOM.MARK,zf=trueZf(k),z=fxZ(k),fk=fxK(k)*V.tk,x=FXC_X0+i*FXC_W,cx=x+FXC_W/2,cy=y+(r.h-14)/2;let txt='';
+      g.save();g.beginPath();g.rect(x+1,y+1,FXC_W-1,r.h-1);g.clip();
+      if(r.k==='ship'){if(mk)shipMark(g,cx,cy,0,'blue',true);else shipArt(g,'CA',1,'blue',cx,cy,0,zf);txt=mk?'箭头 7 px':'舰长 '+shipLen('CA',1,zf).toFixed(1)+' px';}
+      else if(r.k==='hit'){drawBoom(g,FXB.hit,cx,cy,0.06,wt,z);txt='闪光半径 '+(16*z).toFixed(1)+' px';}
+      else if(r.k==='kill'){drawBoom(g,FXB.kill,cx,cy,0.2,wt,z);txt='闪光半径 '+(34*z).toFixed(1)+' px';}
+      else if(r.k==='puff'){drawPuff(g,cx-18,cy,0.08,fk);drawPuff(g,cx+18,cy,0.4,fk);txt='火花圈 '+((2+0.4*18)*fk).toFixed(1)+' px';}
+      else{const R=shieldR('CA',1,zf,mk);if(mk)shipMark(g,cx,cy,0,'blue',true);else shipArt(g,'CA',1,'blue',cx,cy,0,zf);
+        g.strokeStyle=sRgba(SHD.COL.blue,0.25);g.lineWidth=1;g.beginPath();g.arc(cx,cy,R,0,6.283);g.stroke(); // 罩子(参照)
+        drawShieldHit(g,cx,cy,R,-2.3,'blue',0.25,fk,hullSize('CA',1)*HULL_ZOOM.LAND*SHIP_K*1.5,false);txt='亮弧线宽 '+(2.2*fk).toFixed(1)+' px';}
+      g.restore();g.font='10px "Microsoft YaHei"';g.textAlign='center';g.textBaseline='top';g.fillStyle='#5f7083';g.fillText(txt,cx,y+r.h-14);});
+    y+=r.h;}}
+
 /* ---------- 读数与操作 ---------- */
 let lastRead='';
 function readout(){const k=kmpp(),raw=rawZ(k),zf=trueZf(k),mk=raw<HULL_ZOOM.MARK;$('barV').textContent=fmtKm(V.bar);$('tkV').textContent='x'+V.tk.toFixed(2);
@@ -451,7 +524,7 @@ addEventListener('resize',fitScene);
 fitScene();setBar(V.bar);
 let sT=0,last=performance.now(),frame=0;
 function loop(now){const dt=Math.min(0.1,(now-last)/1000);last=now;if(!V.pause)sT+=dt;const wt=now/1000;
-  drawScene(wt,sT);if(frame++%3===0)drawTab(wt);readout();requestAnimationFrame(loop);}
+  drawScene(wt,sT);if(frame%3===0)drawTab(wt);if(frame%3===1)drawFxc(wt);frame++;readout();requestAnimationFrame(loop);}
 requestAnimationFrame(loop);
 </script>
 </body>
