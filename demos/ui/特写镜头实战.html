@@ -147,10 +147,10 @@ function visPass(){ // 我方看不看得见(同 projSeen 的口径):炮弹在�
 const viewPos=s=>{const tk=Wd.know.blue.get(s.id);return tk&&tk.fix?dr(tk):null;};
 const contactFix=s=>!!Wd.know.blue.get(s.id).fix;
 
-/* ================= 导演 + 镜头:照搬引擎 render/84-scene.js(1ad8107),VIEW = 蓝方;与引擎不同:慢飞弧度 RHO 1.8 → 1.3(用户:定位镜头的失重感抹平一点)、预判新方案(ST.preNew) ================= */
+/* ================= 导演 + 镜头:照搬引擎 render/84-scene.js(1ad8107),VIEW = 蓝方;前视同引擎 2026-10-04(LEAD 0.5、巡航即满、平滑 1.5 s、主体最多偏到满前视);与引擎不同:慢飞弧度 RHO 1.8 → 1.3(用户:定位镜头的失重感抹平一点)、预判新方案(ST.preNew) ================= */
 const I={FIT:0.7,SHOT_MAX:7000,CTX_T:240,CTX_F0:40000,CTX_F1:50000,CTX_E0:50000,CTX_E1:60000,
   OM:5,ZE:0.85,SOFT:0.12,DB:15,T_OUT:0.35,T_IN:1.2,ZWAIT:0.8,ZRATE:1.8,FK:1,FMAX:4,PUSH:1.6,PUSH_T0:2.5,PUSH_T1:0.8,SLOW_T:3,RHO:1.3,RHO_Q:1.4,MIN_KM:2500,CIWS_KM:800,SLOW:{fix:1,id:1,vis:1},
-  W:416,H:260,HDR:20,INC_IN:80000,INC_OUT:100000,LEAD:0.4,FADE_IN:6,FADE_OUT:9,T_PAN:0.45,T_ANC:0.25,SX:30,SY:24,CUT:150,
+  W:416,H:260,HDR:20,INC_IN:80000,INC_OUT:100000,LEAD:0.5,LEAD_V:0.5,FADE_IN:6,FADE_OUT:9,T_PAN:1.5,T_ANC:0.25,SX:30,SY:24,CUT:150,
   OUT_HI:1.2,OUT_LO:0.8,SPLIT:60000,JOIN:48000,IND:24,
   DW:{kill:3500,loss:3500,hit:2500,id:3000,fix:3000,shell:3500,ciws:2500,vis:3000},EVMS:{kill:6000,loss:6000,id:9000,fix:9000,vis:9000,hit:4500,ciws:4500,shell:5000},SHELL_BACK:200000,SHELL_GAP:30000,SHELL_NEAR:10000,
   COOL:3000,GRACE:500,KILL_HIT:3000,HIT_R:5000,
@@ -333,8 +333,10 @@ function insetTarget(sub,w,hp,zMax){
   let W=Math.max((x1-x0)/I.FIT,(y1-y0)/(I.FIT*hp/w),1e-6);
   if(sub.eta!=null&&isFinite(sub.eta)){const t=(I.PUSH_T0-Math.max(0,sub.eta))/(I.PUSH_T0-I.PUSH_T1),g=t<=0?0:(t>=1?1:t*t*(3-2*t));W/=1+(I.PUSH-1)*g;}
   W=Math.max(W,w/zMax);
-  const vv=hyp(sub.V[0],sub.V[1]),ls=vv>1e-9?Math.sqrt(Math.min(1,vv/(sub.vm||1)))*I.LEAD:0,lx=ls?sub.V[0]/vv*ls*w/2:0,ly=ls?sub.V[1]/vv*ls*hp/2:0;
-  return {bx:(x0+x1)/2,by:(y0+y1)/2,lx,ly,cx:(x0+x1)/2+lx*W/w,cy:(y0+y1)/2+ly*W/w,w:W};}
+  const vv=hyp(sub.V[0],sub.V[1]),ls=vv>1e-9?Math.sqrt(Math.min(1,vv/(I.LEAD_V*(sub.vm||1))))*I.LEAD:0,lx=ls?sub.V[0]/vv*ls*w/2:0,ly=ls?sub.V[1]/vv*ls*hp/2:0;
+  const mx=I.LEAD*W/2,my=mx*hp/w,cx=Math.max(S[0]-mx,Math.min(S[0]+mx,(x0+x1)/2+lx*W/w)),cy=Math.max(S[1]-my,Math.min(S[1]+my,(y0+y1)/2+ly*W/w));
+  for(const c of sub.ctx){const px=S[0]+c.w*(c.p[0]-S[0]),py=S[1]+c.w*(c.p[1]-S[1]);W=Math.max(W,2*Math.abs(px-cx)/I.FIT,2*Math.abs(py-cy)/(I.FIT*hp/w));}
+  return {bx:cx-lx*W/w,by:cy-ly*W/w,lx,ly,cx,cy,w:W};}
 function insetSD(c,t,i,T,dt){if(!(dt>0))return c;const om=2/T,x=om*dt,e=1/(1+x+0.48*x*x+0.235*x*x*x),ch=c-t,v=I.vo[i],tp=(v+om*ch)*dt;
   let o=t+(ch+tp)*e;I.vo[i]=(v-om*tp)*e;if((t-c>0)===(o>t)){o=t;I.vo[i]=0;}return o;}
 function insetCam(sub,T,w,hp,dt,now){const ltz=Math.log(w/T.w),S=sub.S;
