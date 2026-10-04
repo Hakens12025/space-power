@@ -84,7 +84,7 @@ function drawTrails(hide){ // hide:传感器画面里只画我方(同主画面�
 }
 /* 2026-09-26 左下角特写窗口(用户:"点击马拉松船,我就能看到这艘船的特写……舰队也是,自适应的拉到舰队的缩放大小……要能够看到地图背景的放大效果")。
    业内叫画中画 / 单位特写镜头(picture-in-picture / unit cam):取景照 Cinemachine 的 Target Group + 临界阻尼(Unity SmoothDamp)+ 前视,播放照转播的回放导演台(replay director) */
-const INSET={FIT:0.7,SHOT_MAX:7000,CTX_T:240,CTX_F0:40000,CTX_F1:50000,CTX_E0:50000,CTX_E1:60000,csk:'',lastK:'',kk:'',pcx:0,pcy:0,ax:0,ay:0,ox:0,oy:0,lpx:0,lpy:0,vcx:0,vcy:0,lzg:null,zin:0,fly:null, // 取景:语境落在框宽 x FIT 内;同主体镜头最长 ms;速度前后各看 CTX_T/2 物理秒;主镜头把友舰 4~5 万、已定位敌舰 / 锁定目标 5~6 万 km(x scale)渐进框进来
+const INSET={FIT:0.7,FIT_MIN:0.26,SHOT_MAX:7000,CTX_T:240,CTX_F0:40000,CTX_F1:50000,CTX_E0:50000,CTX_E1:60000,csk:'',lastK:'',kk:'',pcx:0,pcy:0,ax:0,ay:0,ox:0,oy:0,lpx:0,lpy:0,vcx:0,vcy:0,lzg:null,zin:0,fly:null, // 取景:语境落在框宽 x FIT 内(给前视留余量后最少 FIT_MIN);同主体镜头最长 ms;速度前后各看 CTX_T/2 物理秒;主镜头把友舰 4~5 万、已定位敌舰 / 锁定目标 5~6 万 km(x scale)渐进框进来
   OM:5,ZE:0.85,SOFT:0.12,DB:15,T_OUT:0.35,T_IN:1.2,ZWAIT:0.8,ZRATE:1.8,FK:1,FMAX:4,PUSH:1.6,PUSH_T0:2.5,PUSH_T1:0.8,SLOW_T:3,RHO:1.3,RHO_Q:1.4,MIN_KM:2500,CIWS_KM:800,SLOW:{fix:1,id:1,vis:1}, // 2026-10-04 镜头新方案(用户在演示页 demos/ui/特写镜头手感.html 定的):平移弹簧固有频率 / 阻尼比 / 软区占框;缩放死区 % / 拉远 / 推近 s / 推近前等待 s / 最快 x/s;快飞时长系数 / 快飞最远屏宽;命中前推近上限与起止墙钟秒;发现类慢飞秒 / 弧度,快飞弧度;最近只到比例尺 60 px = MIN_KM km(近防拦截镜头 CIWS_KM,用户:最大缩放 2500 km);慢飞的镜头类型
   W:416,H:260,WB:480,HB:300,WIDE:2200,MIN_W:240,HDR:20,M:12,GAP:10,CUE:16,bot:64,top:60,botT:-1e9,ro:null,x:0,y:0,w:0,h:0,on:false,cx:0,cy:0,z:1, // 框 / 宽屏框 / 最小宽 / 标题条高 / 边距 / 日标让位外扩 px
   INC_IN:80000,INC_OUT:100000,LEAD:0.5,LEAD_V:0.5,FADE_IN:6,FADE_OUT:9,ON_A:0.05, // 威胁权重满 / 归零的距离 km(x scale)/ 前视上限占半宽(竖直占半高)、速度到最高档的几成就满 / 淡入淡出 1/s / 可点门槛
@@ -330,10 +330,10 @@ function insetTarget(sub,w,hp,zMax){ // 目标取景:主体 + 速度前后 CTX_T
   const S=sub.S,tv=PHYS.t(INSET.CTX_T)/2,pts=[S,[S[0]+sub.V[0]*tv,S[1]+sub.V[1]*tv],[S[0]-sub.V[0]*tv,S[1]-sub.V[1]*tv]];
   for(const c of sub.ctx)pts.push([S[0]+c.w*(c.p[0]-S[0]),S[1]+c.w*(c.p[1]-S[1])]);
   let x0=1e18,x1=-1e18,y0=1e18,y1=-1e18;for(const p of pts){x0=Math.min(x0,p[0]);x1=Math.max(x1,p[0]);y0=Math.min(y0,p[1]);y1=Math.max(y1,p[1]);}
-  let W=Math.max((x1-x0)/INSET.FIT,(y1-y0)/(INSET.FIT*hp/w),1e-6);
+  const vv=Math.hypot(sub.V[0],sub.V[1]),ls=vv>1e-9?Math.sqrt(Math.min(1,vv/(INSET.LEAD_V*(sub.vm||1))))*INSET.LEAD:0,lx=ls?sub.V[0]/vv*ls*w/2:0,ly=ls?sub.V[1]/vv*ls*hp/2:0; // 前视 px:速度到最高档的 LEAD_V 就满,上限半宽(竖直半高)的 LEAD(2026-10-04 用户:船往右走,镜头要慢慢多往右走、把船靠在左边 —— 原来巡航时只偏一成多,看不出)
+  let W=Math.max((x1-x0)/Math.max(INSET.FIT_MIN,INSET.FIT-2*Math.abs(lx)/w),(y1-y0)/(Math.max(INSET.FIT_MIN,INSET.FIT-2*Math.abs(ly)/hp)*hp/w),1e-6); // 框给前视留出两倍余量(同 09-28):船越快,航迹越长、前视越大,框就越宽 —— 加速拉远、减速推近(2026-10-04 用户:以前除了前视偏移还有大小缩放)
   if(sub.eta!=null&&isFinite(sub.eta)){const t=(INSET.PUSH_T0-Math.max(0,sub.eta))/(INSET.PUSH_T0-INSET.PUSH_T1),g=t<=0?0:(t>=1?1:t*t*(3-2*t));W/=1+(INSET.PUSH-1)*g;} // 离命中 PUSH_T0 → PUSH_T1 墙钟秒连续推近
   W=Math.max(W,w/zMax);
-  const vv=Math.hypot(sub.V[0],sub.V[1]),ls=vv>1e-9?Math.sqrt(Math.min(1,vv/(INSET.LEAD_V*(sub.vm||1))))*INSET.LEAD:0,lx=ls?sub.V[0]/vv*ls*w/2:0,ly=ls?sub.V[1]/vv*ls*hp/2:0; // 前视 px:速度到最高档的 LEAD_V 就满,上限半宽(竖直半高)的 LEAD(2026-10-04 用户:船往右走,镜头要慢慢多往右走、把船靠在左边 —— 原来巡航时只偏一成多,看不出)
   const hm=sub.kind==='home',mx=INSET.LEAD*W/2,my=mx*hp/w,qx=(x0+x1)/2+lx*W/w,qy=(y0+y1)/2+ly*W/w,cx=hm?Math.max(S[0]-mx,Math.min(S[0]+mx,qx)):qx,cy=hm?Math.max(S[1]-my,Math.min(S[1]+my,qy)):qy; // 主镜头:主体离中心最多偏到满前视,语境已经把框往别处带时不再叠前视(单选一艘、友舰在旁边时原来被挤到安全边);框宽不跟前视走(用户:前视缩放有阶梯感)
   return {bx:cx-lx*W/w,by:cy-ly*W/w,lx:lx,ly:ly,cx:cx,cy:cy,w:W};
 }
