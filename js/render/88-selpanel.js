@@ -372,7 +372,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
   title.textContent=sel.length>1?`已选 ${sel.length} 艘`:'实时状态';
   // 固定信息(舰船类数据,整局不变) → 底栏
   if(ciN)ciN.textContent=s.name;
-  if(typeof ptSet==='function')ptSet(s); // 2026-09-30 用户:舰名区变成 图 + 名(render/88-portrait)
+  // 2026-10-04 用户:肖像先不显示(脱离原参考风格,等新风格);舰名区只剩名字,上面已 ptSet(null)
   if(ciC)ciC.textContent=(CLS_NAME[s.cls]||s.cls)+' · '+(TIER_LABEL[s.tier]||'T2');
   if(ciSp)ciSp.innerHTML=specItems(s).map(it=>`<span class="fi"><i>${it[0]}</i><b>${it[1]}</b></span>`).join(''); // 标签上/数值下的读数柱
   // 变化信息(武器库状态) → 右栏
@@ -411,7 +411,7 @@ bindCmdBar();
      近防只管自己的两件(CIWS_SUB:近防导弹 ciwsOn / 近防炮 ciwsGunOn),不碰火控;上一级的勾按下一级算,没全勾显示半勾 ⊟。火炮 / 导弹 / 近防点名字向右展开具体武器(2026-09-29 用户:原向上),最右边 ⌖ = 强行开火(command/71 的 toggleWeapon → 70 的 mdWeaponPick)。激光目前没有,灰着占位。
    菜单内容随 updateCmdBar(每 20 帧)重画,所以状态与脉冲的亮灭跟得上;点菜单与钮以外的地方关。 */
 const CMDPOP={kind:null,sub:null,el:null,btn:null};
-const WPN_CATS=[['mac','火炮'],['msl','导弹'],['laser','激光'],['ciws','近防'],['buoy','特殊']]; // 2026-09-27 特殊类:前出浮标(先只给「波长」)
+const WPN_CATS=[['mac','火炮'],['msl','导弹'],['laser','激光'],['ciws','近防'],['buoy','特殊']]; // 2026-09-27 特殊类:前出浮标(先只给「巡游舰」)
 const RADAR_ITEMS=[['silent','静默'],['pulse','脉冲'],['paint','发射'],['jam','干扰']];
 const RADAR_TIP={silent:'静默:一点不响,只靠红外看;对方听不见我',pulse:'脉冲:雷达只照一拍 —— 照得到的接触拿到位置和速度;对方只在这一拍听得到我',paint:'发射:雷达一直照,定位最快最准、也只有它能持续跟住远处的冷目标;代价是对方在约两倍距离上一直听得见我',jam:'干扰:发射机改去造噪声,压住对方对我的照射回波;更吵,而且自己拿不到照射定位'};
 function wpnFcOn(x){return !!(x.autoEngage&&x.roe!=='hold');}

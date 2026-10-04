@@ -20,7 +20,7 @@ function rdvHash(a,b){let h=2166136261;const s=a+'|'+b;for(let i=0;i<s.length;i+
 function rdvEsmBrg(E,L,k){return k.tb+(rdvHash(L.id||'bcn',E.id)*2-1)*k.half*0.6;} // 这条静听记录画在哪个方位:量到的方位 + 每一对固定的偏移(± 0.6 x 半宽,随积累收窄);雷达异常圈也读它
 function rdvEsmRc(E,L,k){return k.rr+(rdvHash(E.id,L.id||'bcn')*2-1)*k.sr*0.6;} // 画在多远:幅度测距 + 每一对固定的偏移(± 0.6 x 纵向误差)
 function rdvPow(E){return Math.min(1,Math.sqrt(Math.max(0,E.emit||0)/RDV.EMIT_TOP));} // 功率系数 √(emit / 巡洋舰),封顶 1:民船 0.39、驱逐 / 诱饵 0.71、巡洋 / 浮标 1
-function rdvStdRefl(){return SENS.CLS.FF.size*SENS.CLS.FF.stealth;} // 标准目标:一艘护卫舰(巴黎级,2026-09-30 重排前叫驱逐舰)的雷达反射
+function rdvStdRefl(){return SENS.CLS.FF.size*SENS.CLS.FF.stealth;} // 标准目标:一艘护卫舰(护卫舰,2026-09-30 重排前叫驱逐舰)的雷达反射
 function rdvPainters(){const a=[];for(const s of ships)if(s.side===VIEW&&!s.dead&&s.emitMode==='paint')a.push(s);for(const o of rockObjs())if(o.kind==='buoy'&&o.side===VIEW&&!o.dead&&o.emitMode==='paint')a.push(o);return a;} // 2026-09-29 用户:浮标开着照射也画它的范围
 function rdvDop(vr,a){ // 负 = 在接近:暖;正 = 在远离:冷(同演示页 dopCol)
   const t=Math.max(-1,Math.min(1,vr/600)),b=[232,238,244],e=t<0?[255,120,50]:[80,170,255],u=Math.abs(t);

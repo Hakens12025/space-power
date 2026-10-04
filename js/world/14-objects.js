@@ -6,7 +6,7 @@
    · 诱饵 lure:记在放它的一方;飞到指定点后慢慢漂,一直开着雷达,隔一阵点一次火。带 spoof ——
      只靠听辐射指纹认到「疑似」时,航迹报它冒充的驱逐舰(sensors/24 的 trkIdType),自动开火会上当;照射认出或贴近看清就露出真身。
    · 浮标 buoy:记在放它的一方,type 'beacon' ⇒ 当探测站时按信标的系数(sensors/22);飞到指定点停下,平时被动(红外 + 静听),
-     遥控 on = 开照射(只有这时它才会被对方听见)。武器「前出浮标」先只给名字以「波长」开头的船(ships/11 的 makeShip)。
+     遥控 on = 开照射(只有这时它才会被对方听见)。武器「前出浮标」先只给巡游舰(舰种 CL;ships/11 的 makeShip)。
    自己一方不探测自己的物体(sensors/21 的 detectFor);推进在 stepObjects(core/05 的 stepSim 每拍调)。
    ============================================================================ */
 const OBJ_CFG={ // 物理单位(km/s、s),用的地方经 PHYS 换算
@@ -39,7 +39,7 @@ function objSpawnCivs(){ // 对局开局撒民船(scenario/91 的 initFleet 在�
 }
 function launchLure(shooter,pt){ // K1 诱饵:从放它的船身边飞到 pt(飞的那段在点火),到位后漂着冒充一艘驱逐舰
   const L=OBJ_CFG.LURE,o=makeObj('lure',shooter.side,'诱饵',shooter.pos,{size:L.SIZE,stealth:0.4,emit:1,hp:L.HP,maxHp:L.HP,
-    dest:[pt[0],pt[1],0],life:PHYS.t(L.LIFE),burnCd:PHYS.t(L.BURN_EVERY)*Math.random(),burnT:0,spoof:{kind:'ship',cls:'FF',tier:2},spoofName:'叛军·护卫-'+(11+(++OBJ_SEQ))});
+    dest:[pt[0],pt[1],0],life:PHYS.t(L.LIFE),burnCd:PHYS.t(L.BURN_EVERY)*Math.random(),burnT:0,spoof:{kind:'ship',cls:'FF',tier:2},spoofName:'敌·护卫舰'+(11+(++OBJ_SEQ))});
   setEmit(o,'paint');rocks.push(o);return o;
 }
 function launchBuoy(shooter,pt){ // K3 前出浮标:飞到 pt 停下

@@ -2,15 +2,15 @@
 /* RF1: 拆自 js/03-ships.js L3-25,L65-71,L78-143,L151-183(舰种表/Tier 层/shipStats/makeShip)。纯移动无逻辑改动;SN4:感知数值表只有一份,住 sensors/20-signature 的 SENS(按舰种的行表是 SENS.CLS),本文件只负责把它烘焙到实例。 */
 let shipSeq=0;
 // TIER1 删除死表 CLS_SHAPE(旧几何代号 blk/tri/trl):已被 10a/10b 的 HULL 轮廓系统完全取代,全库零读取点
-const CLS_NAME={FF:'巴黎级护卫舰 (Paris)',DD:'戟级驱逐舰 (Halberd)',CA:'马拉松级巡洋舰 (Marathon)',BB:'战列舰位 (待定)',CV:'新纪元级航母 (Epoch)',CL:'波长级巡游舰 (Wavelength)'}; // 2026-09-30 按 UNSC 原作重排(用户,issue #1):巴黎 = 护卫舰 FF、戟级 = 驱逐舰 DD、新纪元 = 航母;波长单列一类;BB 留空位
+const CLS_NAME={FF:'护卫舰',DD:'驱逐舰',CA:'巡洋舰',BB:'战列舰(待定)',CV:'航母',CL:'巡游舰'}; // 舰种名只留通用叫法,舰船用占位名「舰种 + 编号」(2026-10-04 用户:脱离原作语境);2026-09-30 重排:BB 留空位、CL 单列一类
 const CLS_ORDER=['FF','DD','CA','BB','CV','CL']; // 舰种排列(加船条等列表用)
 const CLS_SHORT={FF:'护卫舰',DD:'驱逐舰',CA:'巡洋舰',BB:'战列舰',CV:'航母',CL:'巡游舰'}; // 舰种短名(悬停卡) // TIER1 4 舰种级名;BB/CV 是临时文案 TODO(NAME) 待定级名(会直接显示在 info 面板与编辑器菜单上)
 const CLS_ALIAS={CRUISER:'CA',FRIGATE:'FF',SCOUT:'FF'}; // TIER1 旧舰种名别名:全库唯一保留旧名的地方,只服务旧存档与旧导出场景(SCOUT 按拍板折进 DD)
 function normCls(c){return CLS_ALIAS[c]||(CLS_MOB[c]?c:'FF');} // TIER1 舰种归一化:只在 makeShip 运行期调用,不在顶层求值,故不受同文件里 CLS_MOB 定义靠后的影响
 const CLS_MOB={ // 舰种差异化机动:转向率 / 推进加速度(太空无速度上限,持续加速) v119:drift参数已随旧内核删除
-  FF:{turnRate:PHYS.w(0.078),thrust:PHYS.a(0.6),speedGears:[0,PHYS.v(25),PHYS.v(50),PHYS.v(80),-1]}, // 2026-10-04 用户:加减速 x0.6(1.0 → 0.6 km/s²,约 61 g),转向不动。2026-10-03 用户(推荐档):加减速 x4(0.25 → 1.0 km/s²,约 102 g)、转向 x3(1.5 → 4.5°/s);DD / CL 克隆自动跟上。2026-10-02 加减速 x5(0.05 → 0.25) // 2026-09-26 曾降到 1/4(5.1 g) // TIER1 原 FRIGATE 巴黎级:均衡(基准档),数值原样搬;SCOUT 折进 DD,其 0.4/25/[0,300,600,1000] 一并退役
+  FF:{turnRate:PHYS.w(0.078),thrust:PHYS.a(0.6),speedGears:[0,PHYS.v(25),PHYS.v(50),PHYS.v(80),-1]}, // 2026-10-04 用户:加减速 x0.6(1.0 → 0.6 km/s²,约 61 g),转向不动。2026-10-03 用户(推荐档):加减速 x4(0.25 → 1.0 km/s²,约 102 g)、转向 x3(1.5 → 4.5°/s);DD / CL 克隆自动跟上。2026-10-02 加减速 x5(0.05 → 0.25) // 2026-09-26 曾降到 1/4(5.1 g) // TIER1 原 FRIGATE 护卫舰:均衡(基准档),数值原样搬;SCOUT 折进 DD,其 0.4/25/[0,300,600,1000] 一并退役
   /* 2026-09-26 用户:"舰船的加速减速度我们需要调整,使其加减速更慢" —— 推进加速度降到 1/4(原 DD 20 / CA 15 km/s²);驱逐舰到高速档 800 km/s 约 160 s。这一轮只看速度,不动武器与闪避的数 */
-  CA:{turnRate:PHYS.w(0.048),thrust:PHYS.a(0.45),speedGears:[0,PHYS.v(20),PHYS.v(40),PHYS.v(70),-1]}, // 2026-10-04 用户:加减速 x0.6(0.75 → 0.45 km/s²),转向不动。2026-10-03 用户(推荐档):加减速 x4(0.1875 → 0.75 km/s²)、转向 x3(0.9 → 2.75°/s);BB / CV 克隆自动跟上。2026-09-26 物理单位:速度档 20 / 40 / 70 km/s // TIER1 原 CRUISER 马拉松级:重,加速适中;DS148速度档按舰种(巡洋偏慢) // 2026-10-02 用户:加减速能力 x5(0.0375 → 0.1875,物理 18.7 g;BB / CV 克隆自动跟上);转向 / 速度档不动
+  CA:{turnRate:PHYS.w(0.048),thrust:PHYS.a(0.45),speedGears:[0,PHYS.v(20),PHYS.v(40),PHYS.v(70),-1]}, // 2026-10-04 用户:加减速 x0.6(0.75 → 0.45 km/s²),转向不动。2026-10-03 用户(推荐档):加减速 x4(0.1875 → 0.75 km/s²)、转向 x3(0.9 → 2.75°/s);BB / CV 克隆自动跟上。2026-09-26 物理单位:速度档 20 / 40 / 70 km/s // TIER1 原 CRUISER 巡洋舰:重,加速适中;DS148速度档按舰种(巡洋偏慢) // 2026-10-02 用户:加减速能力 x5(0.0375 → 0.1875,物理 18.7 g;BB / CV 克隆自动跟上);转向 / 速度档不动
 };
 const CLS_STRUCT={ // RF3 舰体表:结构(非武器数据,从原 CLS_WPN 拆出;武器数值已移 weapons/51-defs 的 WPN 定义表)
   FF:{hp:550, shield:200}, // 2026-09-29 shield = 护盾(用户:舰队护盾,血量没船体高;weapons/55) // TIER1 原 FRIGATE 护卫
@@ -27,9 +27,9 @@ CLS_MOB.BB={...CLS_MOB.CA,speedGears:CLS_MOB.CA.speedGears.slice()};   // TODO(T
 CLS_MOB.CV={...CLS_MOB.CA,speedGears:CLS_MOB.CA.speedGears.slice()};   // TODO(TIER-BAL) 航母机动待标定
 CLS_STRUCT.BB={...CLS_STRUCT.CA};                                          // TODO(TIER-BAL) 战列舰体待标定
 CLS_STRUCT.CV={...CLS_STRUCT.CA};
-CLS_MOB.DD={...CLS_MOB.FF,speedGears:CLS_MOB.FF.speedGears.slice()};   // TODO(TIER-BAL) 2026-09-30 戟级驱逐舰:先照搬护卫舰(用户:数值不用管)
-CLS_MOB.CL={...CLS_MOB.FF,speedGears:CLS_MOB.FF.speedGears.slice()};   // 波长级巡游舰:沿用重排前(原驱逐舰)的数值
-CLS_STRUCT.DD={...CLS_STRUCT.FF};                                          // TODO(TIER-BAL) 戟级舰体待标定
+CLS_MOB.DD={...CLS_MOB.FF,speedGears:CLS_MOB.FF.speedGears.slice()};   // TODO(TIER-BAL) 2026-09-30 驱逐舰:先照搬护卫舰(用户:数值不用管)
+CLS_MOB.CL={...CLS_MOB.FF,speedGears:CLS_MOB.FF.speedGears.slice()};   // 巡游舰:沿用重排前(原驱逐舰)的数值
+CLS_STRUCT.DD={...CLS_STRUCT.FF};                                          // TODO(TIER-BAL) 驱逐舰舰体待标定
 CLS_STRUCT.CL={...CLS_STRUCT.FF};                                          // TODO(TIER-BAL) 航母舰体待标定(武器差异在 CLS_LOADOUT.CV:不装主炮)
 /* ==== TIER-BAL:START —— 4 舰种 × T1/T2/T3 数值层(未平衡) ====
    形状:base 表(按舰种,上面那五张)× tier 乘数层(按分级,可按舰种覆盖)→ shipStats(cls,tier) → makeShip 一次性烘焙到实例。
@@ -117,7 +117,7 @@ function makeShip(cls,name,pos,facing,vel,side,tier){ // TIER1 加第 7 参 tier
     speedGears:(st.speedGears||[0,250,500,800,-1]).slice(), // TIER1 速度档烘焙到实例(05-motion:13 speedGearsOf 改实例优先):tier 影响速度档的唯一通路;拷副本防表被原地改写
     hp:st.hp, maxHp:st.hp, shMax:st.shield||0, sh:st.shield||0, shDown:0, macCd:0, missileArm:null, ammo:lw.ammo, macDmg:lw.macDmg, missDmg:lw.missDmg, interceptor:lw.inter||0, interMax:lw.inter||0, lockedTarget:null, lockPlayer:false, dead:false, // DS167:interMax=拦截弹库存上限(资源纪律判定用)
     macReload:lw.mac||0, macSigma:sReq(lw,'macSigma','resolveLoadout'), // RF3 MAC 装填秒烘焙;WR1 起射程字段换成角散布 macSigma(走 sReq:配装缺字段当场抛,不许静默退化)
-    cells:(lw.cells||4), cellTimer:Array(lw.cells||4).fill(0), // 发射单元(v119):巴黎4单元/同时4组/每组独立装填
+    cells:(lw.cells||4), cellTimer:Array(lw.cells||4).fill(0), // 发射单元(v119):护卫舰4单元/同时4组/每组独立装填
     mslPer:lw.mslPer||12, mslReload:lw.mslReload||60, // RF3 导弹每组枚数/单元装填秒/射程烘焙(原为 fireMissiles/S15b/enemyAI 散落字面量)
     guideChan:st.guideChan, // SN1 数据链引导通道(来源 weapons/51-defs 的 CLS_LINK,CA 3网/DD 1网):同时引导超自导范围的导弹数。原来的 ||4 是个假兜底 —— DD 真值就是 1,字段一旦丢了它会把 DD 悄悄涨到 4 而不是报错
     chaffRate:(lw.chaffRate!==undefined?lw.chaffRate:0.25), // 干扰弹(v119):数值概念——命中时导弹再丢随机数判被勾走。!==undefined 口径:chaffRate 是 'prob' 字段、钳到 [0,1] 就明确允许 0(本舰不带干扰弹),|| 会把这个合法 0 悄悄换成 DD 的 0.25(等于给 CA/BB/CV 凭空调强)
@@ -137,6 +137,6 @@ function makeShip(cls,name,pos,facing,vel,side,tier){ // TIER1 加第 7 参 tier
     ecmPower:sReq(st,'ecmPower','shipStats'), // SN4 干扰强度不再配一个开关布尔:它是 jam 档的强度(每拍削弱对方的照射驻留,只削回波、不削红外)。sReq 只拒 undefined,合法 0(不带干扰机)照常穿过
     // TK1 原来这里的三行感知数据(两方的等级 / 误差椭圆接触 / 最后定位记录)搬进了 sensors/24 的航迹表 TRK,由上面的 trkAdopt 登记;字段说明也搬过去了。TK1~TK3a 过渡期旧名字经转发访问器照旧可读写(TK3b 改墓碑、TK3c 删)
   });
-  if(/^波长/.test(name||'')){sh.weapons=sh.weapons.concat([{kind:'buoy',label:'前出浮标'}]);sh.buoys=sh.buoysMax=(typeof OBJ_CFG!=='undefined'?OBJ_CFG.BUOY.N:2);} // 2026-09-27 用户:前出浮标是特殊武器,先只给「波长」(按舰名)
+  if(sh.cls==='CL'){sh.weapons=sh.weapons.concat([{kind:'buoy',label:'前出浮标'}]);sh.buoys=sh.buoysMax=(typeof OBJ_CFG!=='undefined'?OBJ_CFG.BUOY.N:2);} // 2026-09-27 用户:前出浮标是特殊武器,先只给巡游舰;2026-10-04 改按舰种 CL(原来按舰名开头认,舰名换成占位名后认不出)
   return sh;
 }

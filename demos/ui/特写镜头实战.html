@@ -66,8 +66,8 @@ let Wd=null;
 function newWorld(seed){
   rnd=mulberry(seed*7919+13);
   const ships=[],byId={},mk=(id,name,cls,side,slot)=>{const c=CLS[cls],s={id,name,cls,side,slot,pos:[0,0],vel:[0,0],hp:c.hp,hpMax:c.hp,sh:c.sh,shMax:c.sh,shDown:0,dead:false,gcd:20+rnd()*40,mcd:2+rnd()*20,ammo:c.ammo,tgt:null};ships.push(s);byId[id]=s;return s;};
-  mk('b1','巴黎-01','FF','blue',[0,0]);mk('b2','马拉松-01','CA','blue',[-8000,9000]);mk('b3','波长-01','CL','blue',[-8000,-9000]);
-  mk('r1','叛军·护卫-01','FF','red',[0,0]);mk('r2','叛军·巡洋-01','CA','red',[-9000,-10000]);mk('r3','叛军·护卫-02','FF','red',[-9000,10000]);
+  mk('b1','护卫舰1','FF','blue',[0,0]);mk('b2','巡洋舰1','CA','blue',[-8000,9000]);mk('b3','巡游舰1','CL','blue',[-8000,-9000]);
+  mk('r1','敌·护卫舰1','FF','red',[0,0]);mk('r2','敌·巡洋舰1','CA','red',[-9000,-10000]);mk('r3','敌·护卫舰2','FF','red',[-9000,10000]);
   const ry=(rnd()-0.5)*140000,rx=300000+rnd()*40000,h0=Math.atan2(ry,rx);
   const F={blue:{ax:0,ay:0,hd:h0+(rnd()-0.5)*0.4,R0:90000,dir:rnd()<0.5?1:-1,jk:0,jt:0},red:{ax:rx,ay:ry,hd:h0+Math.PI+(rnd()-0.5)*0.4,R0:105000,dir:rnd()<0.5?1:-1,jk:0,jt:0}};
   for(const k in F)F[k].hd0=F[k].hd;
@@ -465,7 +465,7 @@ function drawOverview(g){const w=OVW,h=OVH;g.fillStyle='#05070c';g.fillRect(0,0,
     else{g.fillStyle=p.side==='red'?(p.sb?'#ff6b6b':'rgba(255,107,107,.3)'):'#ffd166';g.beginPath();g.arc(x,y,2.5,0,6.283);g.fill();}}
   g.font='10px "Microsoft YaHei"';
   for(const sh of Wd.ships){const x=X(sh.pos[0]),y=Y(sh.pos[1]);if(sh.dead){g.strokeStyle='#5f7083';g.beginPath();g.moveTo(x-4,y-4);g.lineTo(x+4,y+4);g.moveTo(x+4,y-4);g.lineTo(x-4,y+4);g.stroke();continue;}
-    shipGlyph(g,x,y,sh,sh.side==='blue'?'#6fb4ff':(contactFix(sh)?'#ff6b6b':'#7a3b3b'),0.8);g.fillStyle='#8a97a8';g.fillText(sh.name.replace('叛军·',''),x+7,y-5);}
+    shipGlyph(g,x,y,sh,sh.side==='blue'?'#6fb4ff':(contactFix(sh)?'#ff6b6b':'#7a3b3b'),0.8);g.fillStyle='#8a97a8';g.fillText(sh.name.replace('敌·',''),x+7,y-5);}
   if(I.on){g.strokeStyle='rgba(255,209,102,'+(0.3+0.7*I.a)+')';g.lineWidth=1.5;const fw=I.W/I.z*s,fh=I.H/I.z*s;g.strokeRect(X(I.cx)-fw/2,Y(I.cy)-fh/2,Math.max(2,fw),Math.max(2,fh));g.lineWidth=1;}
   g.fillStyle='#5f7083';g.fillText('全局真值 · 宽 '+fmtKm(w/s)+(I.on?' · 琥珀框 = 特写':' · 特写收起'),6,14);}
 function drawChart(g,now){const w=CHW,h=130,T0=now-60000,X=t=>(t-T0)/60000*(w-50)+40,LY=v=>{const a=Math.log(5000),b=Math.log(1e6);return 8+(1-(Math.log(v)-a)/(b-a))*70;};
@@ -519,7 +519,7 @@ $('again').onclick=()=>startMatch(ST.seed);$('next').onclick=()=>startMatch(ST.s
 const tog=(id,k,f)=>{$(id).onclick=()=>{ST[k]=!ST[k];$(id).classList.toggle('on',ST[k]);if(f)f();};};
 tog('tc','tc');tog('preNew','preNew',()=>{$('preNew').textContent=ST.preNew?'新方案':'引擎现状';});tog('trail','trail');tog('big','big',layout);tog('aid','aid');tog('auto','auto');
 {const R=$('rates');for(const r of [1,2,4,8,12,50]){const b=document.createElement('button');b.className='t'+(r===ST.rate?' on':'');b.textContent='x'+r;b.onclick=()=>{ST.rate=r;for(const x of R.children)x.classList.toggle('on',x===b);};R.appendChild(b);}}
-{const S=$('sels');for(const [k,t] of [['none','不选'],['b1','巴黎-01'],['b2','马拉松-01'],['b3','波长-01'],['all','全舰队']]){const b=document.createElement('button');b.className='t'+(k===ST.sel?' on':'');b.textContent=t;b.onclick=()=>{ST.sel=k;for(const x of S.children)x.classList.toggle('on',x===b);};S.appendChild(b);}}
+{const S=$('sels');for(const [k,t] of [['none','不选'],['b1','护卫舰1'],['b2','巡洋舰1'],['b3','巡游舰1'],['all','全舰队']]){const b=document.createElement('button');b.className='t'+(k===ST.sel?' on':'');b.textContent=t;b.onclick=()=>{ST.sel=k;for(const x of S.children)x.classList.toggle('on',x===b);};S.appendChild(b);}}
 window.addEventListener('resize',layout);
 layout();startMatch(1);requestAnimationFrame(frame);
 </script>

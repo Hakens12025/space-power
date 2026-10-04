@@ -46,7 +46,7 @@ button.t.on{border-color:var(--acc);color:#fff;background:#12233a}
 const LOOP=40,DT=1/60,N=Math.round(LOOP/DT)+1;
 const E={}; // id → {name,side,pos:[N][2],vel,alive:[N],known:[N]}
 function mkEnt(id,name,side){E[id]={name,side,x:new Float32Array(N),y:new Float32Array(N),vx:new Float32Array(N),vy:new Float32Array(N),alive:new Uint8Array(N),known:new Uint8Array(N)};return E[id];}
-const A=mkEnt('A','巴黎-01','blue'),B=mkEnt('B','马拉松-01','blue'),C=mkEnt('C','波长-01','blue'),E1=mkEnt('E1','叛军·巡洋-01','red'),E2=mkEnt('E2','叛军·护卫-04','red');
+const A=mkEnt('A','护卫舰1','blue'),B=mkEnt('B','巡洋舰1','blue'),C=mkEnt('C','巡游舰1','blue'),E1=mkEnt('E1','敌·巡洋舰1','red'),E2=mkEnt('E2','敌·护卫舰4','red');
 const PROJ=[],FX=[]; // 弹:{kind,t0,t1,from,to,x[],y[],fate};特效:{t,kind,x,y,ent}
 (function sim(){
   const pA=t=>[-30000+1400*t,6000*Math.sin(t*0.15)];
@@ -83,8 +83,8 @@ const tCiws=Math.min(...FX.filter(f=>f.kind==='ciws').map(f=>f.t)),tMsl=PROJ.fil
 /* ================= 切镜表(三种镜头共用):主体 + 语境 + 离命中时刻 ================= */
 const SHOTS=[ // [开始, 结束, 类型, 主体, 语境, 命中时刻, 标题]
   [0,4.5,'home'],[4.5,10,'fix','E1',['A'],null,'定位 · 疑似舰船'],[10,tMsl-3,'home'],
-  [tMsl-3,tMsl+1.8,'pre','A',['msl0'],tMsl,'预判 · 来袭 → 巴黎-01'],[tMsl+1.8,tS1-2.6,'home'],
-  [tS1-2.6,tS1+1.2,'pre','E1',['mac0','A'],tS1,'预判 · 巴黎-01 → 敌舰'],[tS1+1.2,tS2-2.6,'home'],
+  [tMsl-3,tMsl+1.8,'pre','A',['msl0'],tMsl,'预判 · 来袭 → 护卫舰1'],[tMsl+1.8,tS1-2.6,'home'],
+  [tS1-2.6,tS1+1.2,'pre','E1',['mac0','A'],tS1,'预判 · 护卫舰1 → 敌舰'],[tS1+1.2,tS2-2.6,'home'],
   [tS2-2.6,tS2+3,'pre','E1',['mac1','A'],tS2,'预判 · 可能击沉 → 敌舰'],[tS2+3,31.5,'home'],
   [31.5,37.5,'fix','E2',[],null,'定位 · 疑似舰船(远处)'],[37.5,LOOP+1,'home']];
 function shotAt(t){for(const s of SHOTS)if(t>=s[0]&&t<s[1])return s;return SHOTS[0];}
@@ -102,7 +102,7 @@ function shotInfo(s,t){ // 这一刻的主体 / 速度 / 语境(带权重)/ 离�
   const S=entPos(s[3],t),V=entVel(s[3],t),ctx=[];for(const k of s[4]){const p=ptOf(k,t);if(p)ctx.push({p,w:1});}
   const ciws=s[5]===tMsl&&t>=tCiws; // 近防开始拦截来袭导弹:这一段可以比下限更近
   if(ciws)for(let k=1;k<3;k++){const p=projPos('msl'+k,t);if(p)ctx.push({p,w:1});}
-  return {ciws,kind:s[2],key:s[3]+'@'+s[0].toFixed(2),subj:s[3],S,V,ctx,eta:s[5]!=null?s[5]-t:null,lbl:ciws?'近防 · 拦截来袭导弹 → 巴黎-01':s[6],kill:s[2]==='pre'&&s[5]===tS2&&t>=tS2};
+  return {ciws,kind:s[2],key:s[3]+'@'+s[0].toFixed(2),subj:s[3],S,V,ctx,eta:s[5]!=null?s[5]-t:null,lbl:ciws?'近防 · 拦截来袭导弹 → 护卫舰1':s[6],kill:s[2]==='pre'&&s[5]===tS2&&t>=tS2};
 }
 /* ================= 三种镜头 ================= */
 const VW=416,VH=260,HDR=20,HP=VH-HDR,SX=30,SY=24;

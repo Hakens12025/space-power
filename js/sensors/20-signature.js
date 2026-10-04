@@ -57,7 +57,7 @@
 const SENS = {
   /* ---- 舰种行:四个字段取代旧的八个。ecmPower 不在替换之列,它是干扰强度不是感知量,搭这张表的车 ---- */
   CLS: {
-    FF: { size: 0.70, stealth: 0.60, emit: 1.0, recv: 1.0, ecmPower: 0.3 }, // 巴黎级:小、低反射、基准雷达
+    FF: { size: 0.70, stealth: 0.60, emit: 1.0, recv: 1.0, ecmPower: 0.3 }, // 护卫舰:小、低反射、基准雷达
     /* SN6:CA 的 emit/recv 由 3.0 压到 2.0。3.0 的理由是"把照射量程抬到 260k 贴住 83-hud 那个 250k 圈",
        但它同时让 CA 被听见的距离是 DD 的 3 倍 —— 一个舰种就把整条梯子的上端拖大 3 倍,一层视图装不下两种船
        (尺度预算 B7 舰种差 3.0 超支)。压到 2.0 之后:雷达 x1.41、被 CA 听见 x2,仍然"大船看得远也更吵",
@@ -65,7 +65,7 @@ const SENS = {
        ⚠ 这会让本文件原来那条 SN5 靶场约束("CA 的 emit x recv >= 7.87,否则靶场三个靶一个都照不到")不成立。
          那条约束是驻留模型下的说法;椭圆模型里火控距离几乎不随 emit x recv 变(2/2 到 4/4 只在 17~21 万之间),
          怎么调都够不着 20.2 万的靶 —— 要动的是【靶的站位】,见 scenario/90-envs 的靶场与 todo-plan.md B12。 */
-    CA: { size: 1.00, stealth: 1.00, emit: 2.0, recv: 2.0, ecmPower: 0.5 }, // 马拉松级:大、无外形处理、大雷达
+    CA: { size: 1.00, stealth: 1.00, emit: 2.0, recv: 2.0, ecmPower: 0.5 }, // 巡洋舰:大、无外形处理、大雷达
   },
 
   /* ---- 通道一 光学/红外(纯被动) ---- */
@@ -130,7 +130,7 @@ const SENS = {
 };
 SENS.CLS.BB = { ...SENS.CLS.CA };  // TODO(TIER-BAL) 战列感知待标定
 SENS.CLS.CV = { ...SENS.CLS.CA };
-SENS.CLS.DD = { ...SENS.CLS.FF };  // TODO(TIER-BAL) 2026-09-30 戟级:先照搬护卫舰
+SENS.CLS.DD = { ...SENS.CLS.FF };  // TODO(TIER-BAL) 2026-09-30 驱逐舰:先照搬护卫舰
 SENS.CLS.CL = { ...SENS.CLS.FF };  // TODO(TIER-BAL) 航母感知待标定
 /* 派生常数:写成乘法而不是 Math.pow,免得在顶层依赖别的文件;三条律的分母全在这里,22-percep 只乘不除 */
 SENS.K_IR = SENS.IR_DET * SENS.IR_DET;                                                   // 3.24e10
