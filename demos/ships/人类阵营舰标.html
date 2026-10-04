@@ -398,6 +398,7 @@ const STYLES=[
  STYLES.length=0;STYLES.push({id:'FIN',name:'重工长舰定稿',ref:'护卫 b / 驱逐 a / 巡游 / 巡洋 / 航母 B',pal:IL.pal,ships:{FF:FFr,DD:DDr,CL:CLr,CA:CAr,CV:CVB},side:SV,
    d:'四艘统一到航母 B 的细节密度:分块装甲 + 黄色标线 + 斜向阵营色条、背脊阶梯式上层建筑 + 通风口、雷达罩与桅、透灯的舱门 / 发射格 / 机库门、边灯、近防炮、炮管冷却环与制退器、推进喷口罩。'},IL);}
 const CLS=[['FF','护卫'],['DD','驱逐'],['CL','巡游'],['CA','巡洋'],['CV','航母']];
+const SA_K={CA:0.92,CV:0.88}; // 2026-10-05 用户:巡洋 / 航母体型稍小(同引擎 82-shipart 的 SA_K);只乘在游戏尺寸上(战术场景、剪影检验、尺寸表),大图不乘
 const SKM={FF:{L:48,W:1/5.5},DD:{L:60,W:1/4.8},CL:{L:48,W:1/5.5},CA:{L:75,W:1/4.0},CV:{L:94,W:1/3.0}}; // 巡游舰同护卫一档(机动 / 舰体数值沿用护卫)
 
 /* ===== 引擎现在的轮廓(对照,照抄 js/ships/10-hull-geometry.js;CLS_HULL:护卫 = DD 轮廓、驱逐 = SC 轮廓)===== */
@@ -554,12 +555,12 @@ function drawTac(t){const k=V.bar/100,raw=rawZ(k),mk=raw<HULL_ZOOM.MARK,zf=zfOf(
     ['blue','red'].forEach((f,si)=>{CLS.forEach(([kk],j)=>{const x=x0+si*(nC*sp+midGap)+j*sp+sp/2,ang=(si?Math.PI:0)+0.35*Math.sin(t/2600+ri*1.3+j*0.7)*(si?-1:1);
       if(mk){shipMark(g,x,cy,ang,f,f==='blue');return;}
       if(r.eng)feathered(g,fe,x,cy,40*zf,(g2,X,Y)=>drawEng(g2,kk,X,Y,ang,zf,'icon',f));
-      else{const sh=r.ships[kk];if(!sh)return;feathered(g,fe,x,cy,sh.L*0.62*pxu+4,(g2,X,Y)=>drawShip(g2,r,sh,X,Y,ang,pxu,'icon',f));}});});});
+      else{const sh=r.ships[kk];if(!sh)return;feathered(g,fe,x,cy,sh.L*0.62*pxu+4,(g2,X,Y)=>drawShip(g2,r,sh,X,Y,ang,pxu*(SA_K[kk]||1),'icon',f));}});});});
   g.fillStyle=mk?'#ff8f6b':'#6fdc8c';g.font='11px "Microsoft YaHei"';g.textAlign='right';g.textBaseline='top';g.fillText(mk?'代表显示':'真显示',TW-8,6);}
 
 /* ===== 档位骨架表 ===== */
 function buildSk(){const zt=zfOf(HULL_ZOOM.LAND);let h='<table class="sk"><tr><th>舰种</th><th>舰长(单位)</th><th>系数 1 时舰长</th><th>战术落点舰长</th><th>目标宽长比</th>'+STYLES.map((s,i)=>'<th>'+(i+1)+' '+s.name+' 实测宽长比</th>').join('')+'</tr>';
-  CLS.forEach(([k,nm])=>{const q=SKM[k];h+='<tr><td>'+nm+'</td><td>'+q.L+'</td><td>'+(q.L*PXU).toFixed(1)+' px</td><td>'+(q.L*PXU*zt).toFixed(1)+' px</td><td>1 : '+(1/q.W).toFixed(1)+'</td>'+
+  CLS.forEach(([k,nm])=>{const q=SKM[k];h+='<tr><td>'+nm+'</td><td>'+q.L+'</td><td>'+(q.L*PXU*(SA_K[k]||1)).toFixed(1)+' px</td><td>'+(q.L*PXU*(SA_K[k]||1)*zt).toFixed(1)+' px</td><td>1 : '+(1/q.W).toFixed(1)+'</td>'+
     STYLES.map(s=>{const sh=s.ships[k];if(!sh)return '<td>—</td>';const b=bbox(solids(sh)),r=b.w/b.h,tg=1/q.W,ok=Math.abs(r/tg-1)<0.15;return '<td class="'+(ok?'ok':'bad')+'">1 : '+r.toFixed(2)+'</td>';}).join('')+'</tr>';});
   h+='</table><p class="n">实测宽长比 = 剪影外接框(含外伸、舰岛);偏离目标 15% 以内记绿(只当趋势参考,不卡死)。</p>';document.getElementById('sk').innerHTML=h;}
 
@@ -575,7 +576,7 @@ function drawChk(){const rows=[{name:'引擎现在(对照)',eng:true}].concat(ST
   const g=setup(chkC,W,H);g.fillStyle='#070a10';g.fillRect(0,0,W,H);
   let gx=X0;GW.forEach(q=>{g.fillStyle='#5aa7ff';g.font='11px "Microsoft YaHei"';g.textAlign='center';g.textBaseline='top';g.fillText(q[2],gx+q[1]*nC/2,6);gx+=q[1]*nC+16;});
   g.fillText('两两差异(切换点尺寸)',gx+180,6);
-  const sil=(r,kk,zf)=>r.eng?(g2,x,y)=>drawEng(g2,kk,x,y,0,zf,'sil','blue'):(r.ships[kk]?(g2,x,y)=>drawShip(g2,r,r.ships[kk],x,y,0,PXU*zf,'sil','blue'):null);
+  const sil=(r,kk,zf)=>r.eng?(g2,x,y)=>drawEng(g2,kk,x,y,0,zf,'sil','blue'):(r.ships[kk]?(g2,x,y)=>drawShip(g2,r,r.ships[kk],x,y,0,PXU*zf*(SA_K[kk]||1),'sil','blue'):null);
   rows.forEach((r,ri)=>{const y0=24+RH*ri,cy=y0+RH/2-4;g.fillStyle='#1e2836';g.fillRect(0,y0,W,1);g.fillStyle=ri?'#c7d0dc':'#5f7083';g.font='12px "Microsoft YaHei"';g.textAlign='left';g.textBaseline='middle';g.fillText(ri?ri+' '+r.name:r.name,10,cy);
     let gx=X0;GW.forEach((q,gi)=>{CLS.forEach(([kk],j)=>{const x=gx+q[1]*j+q[1]/2,fn=sil(r,kk,q[0]);if(!fn)return;
         if(gi===3)blurBlit(g,x,cy,q[1],fn);else fn(g,x,cy);});
@@ -615,7 +616,7 @@ function drawPorts(){const st=STYLES[0],rows=CLS.filter(([k])=>st.side&&st.side[
 
 /* ===== 操作 ===== */
 function readout(){const k=V.bar/100,raw=rawZ(k),mk=raw<HULL_ZOOM.MARK,zf=zfOf(hullZ(k)),fe=mk?0:featherPx(V.bar);document.getElementById('barV').textContent=fmtKm(V.bar);document.getElementById('tkV').textContent='x'+V.tk.toFixed(2);
-  document.getElementById('read').textContent=mk?'代表显示:箭头 / 菱形':'舰长 护 '+(48*PXU*zf).toFixed(1)+' / 驱 '+(60*PXU*zf).toFixed(1)+' / 巡 '+(75*PXU*zf).toFixed(1)+' / 航 '+(94*PXU*zf).toFixed(1)+' px'+(fe>=0.05?' · 羽化 '+fe.toFixed(2)+' px':'');}
+  document.getElementById('read').textContent=mk?'代表显示:箭头 / 菱形':'舰长 护 '+(48*PXU*zf).toFixed(1)+' / 驱 '+(60*PXU*zf).toFixed(1)+' / 巡 '+(75*0.92*PXU*zf).toFixed(1)+' / 航 '+(94*0.88*PXU*zf).toFixed(1)+' px'+(fe>=0.05?' · 羽化 '+fe.toFixed(2)+' px':'');}
 function setBar(b){V.bar=Math.max(1000,Math.min(100000,b));document.getElementById('bar').value=Math.round(Math.log(V.bar/1000)/Math.log(100)*1000);readout();}
 document.getElementById('bar').addEventListener('input',e=>{V.bar=1000*Math.pow(100,e.target.value/1000);readout();});
 document.getElementById('tk').addEventListener('input',e=>{V.tk=e.target.value/100;readout();buildSk();drawChk();});

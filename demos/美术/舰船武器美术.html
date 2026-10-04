@@ -226,6 +226,7 @@ const SA=(()=>{
   const SHIPS={FF:FFr,DD:DDr,CL:CLr,CA:CAr,CV:CVB};
   const H2C={DD:'FF',SC:'DD',CL:'CL',CA:'CA',CV:'CV'};              // 轮廓键(82 CLS_HULL)→ 舰种
   const PXU=17.36/48;                                                // 舰标系数 1 时每单位几 px(护卫舰长 = 改版前的 17.36 px)
+  const SA_K={CA:0.92,CV:0.88};                                     // 2026-10-05 用户:巡洋 / 航母体型稍小(驱逐→巡洋 x1.15、巡洋→航母 x1.2;原来每档 x1.25);外形不变,只整体缩
 
   /* ---------- 颜色 / 多边形 ---------- */
   const FAC={blue:{edge:'#7cc0ff',tint:'#5aa7ff',glow:'#9fdcff'},red:{edge:'#ff9a90',tint:'#ff6b6b',glow:'#ffb48a'}};
@@ -306,7 +307,7 @@ const SA=(()=>{
   /* ---------- 载入时重算舰体轮廓 / 尺寸 / 尾焰喷口(1 个 HULL 单位 = 舰长的 1/2.5)---------- */
   for(const h in H2C){const sh=SHIPS[H2C[h]],s=sh.L/2.5;
     HULL[h]={parts:sh.parts.filter(p=>p.t==='hull').map(p=>({p:'poly',pts:p.p.map(([x,y])=>[x/s,y/s])}))};
-    HULL_BASE[h]=PXU*s;
+    HULL_BASE[h]=PXU*s*(SA_K[H2C[h]]||1);
     if(typeof ART_NOZ==='object'){const b=bbox(solids(sh));ART_NOZ[h]={e:sh.parts.filter(p=>p.t==='eng').map(p=>[p.x/s,p.y/s,p.r/s]),hw:(b.y1-b.y0)/2/s*0.85,bx:(b.x1-0.18*sh.L)/s};}}
   if(typeof HULL_LABEL==='object')HULL_LABEL.CL='巡游';
 
@@ -316,7 +317,7 @@ const SA=(()=>{
     const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');g.setTransform(D,0,0,D,S/2,S/2);draw(g,sh,0,0,rq,pxu,full?'full':'icon',f,tl,0.3);
     c.Lq=Lq;if(fe<0.05)return c;const c2=document.createElement('canvas');c2.width=c2.height=S;const g2=c2.getContext('2d');g2.filter='blur('+(fe*D).toFixed(2)+'px)';g2.drawImage(c,0,0);c2.Lq=Lq;return c2;} // 羽化:整张模糊(逐笔模糊会让描边和填色各糊各的)
   function icon(g,h,tier,f,x,y,rot,zf,fe){const k=H2C[h];if(!k)return false;
-    const sh=SHIPS[k],tl=(typeof TIER_LIGHT==='object'&&TIER_LIGHT[tier])||0,pxu=PXU*zf*((typeof TIER_SCALE==='object'&&TIER_SCALE[tier])||1),Lp=sh.L*pxu;
+    const sh=SHIPS[k],tl=(typeof TIER_LIGHT==='object'&&TIER_LIGHT[tier])||0,pxu=PXU*zf*(SA_K[k]||1)*((typeof TIER_SCALE==='object'&&TIER_SCALE[tier])||1),Lp=sh.L*pxu;
     const li=Math.round(Math.log2(Lp)*8),Lq=Math.pow(2,li/8),nr=Lp<20?48:96,ab=((Math.round(rot/(2*Math.PI)*nr)%nr)+nr)%nr,fb=Math.round((fe||0)*10),D=window.devicePixelRatio||1,full=Lp>=30; // 拉近到舰长 30 px 起画完整细节(skill:L3 档)
     const kk=l=>h+tier+f+(full?'F':'')+'|'+l+'|'+ab+'|'+nr+'|'+fb+'|'+D;let c=CACHE.get(kk(li));
     if(!c){const now=performance.now(),cost=full?4:1;if(now-TICK>8){TICK=now;NEW=0;}
