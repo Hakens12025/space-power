@@ -310,8 +310,7 @@ function insetTarget(sub,w,hp,zMax){ // 目标取景:主体 + 速度前后 CTX_T
   if(sub.eta!=null&&isFinite(sub.eta)){const t=(INSET.PUSH_T0-Math.max(0,sub.eta))/(INSET.PUSH_T0-INSET.PUSH_T1),g=t<=0?0:(t>=1?1:t*t*(3-2*t));W/=1+(INSET.PUSH-1)*g;} // 离命中 PUSH_T0 → PUSH_T1 墙钟秒连续推近
   W=Math.max(W,w/zMax);
   const vv=Math.hypot(sub.V[0],sub.V[1]),ls=vv>1e-9?Math.sqrt(Math.min(1,vv/(INSET.LEAD_V*(sub.vm||1))))*INSET.LEAD:0,lx=ls?sub.V[0]/vv*ls*w/2:0,ly=ls?sub.V[1]/vv*ls*hp/2:0; // 前视 px:速度到最高档的 LEAD_V 就满,上限半宽(竖直半高)的 LEAD(2026-10-04 用户:船往右走,镜头要慢慢多往右走、把船靠在左边 —— 原来巡航时只偏一成多,看不出)
-  const mx=INSET.LEAD*W/2,my=mx*hp/w,cx=Math.max(S[0]-mx,Math.min(S[0]+mx,(x0+x1)/2+lx*W/w)),cy=Math.max(S[1]-my,Math.min(S[1]+my,(y0+y1)/2+ly*W/w)); // 主体离中心最多偏到满前视:语境已经把框往别处带时不再叠前视(单选一艘、友舰在旁边时原来被挤到安全边)
-  for(const c of sub.ctx){const px=S[0]+c.w*(c.p[0]-S[0]),py=S[1]+c.w*(c.p[1]-S[1]);W=Math.max(W,2*Math.abs(px-cx)/INSET.FIT,2*Math.abs(py-cy)/(INSET.FIT*hp/w));} // 偏出去装不下的语境靠拉远
+  const hm=sub.kind==='home',mx=INSET.LEAD*W/2,my=mx*hp/w,qx=(x0+x1)/2+lx*W/w,qy=(y0+y1)/2+ly*W/w,cx=hm?Math.max(S[0]-mx,Math.min(S[0]+mx,qx)):qx,cy=hm?Math.max(S[1]-my,Math.min(S[1]+my,qy)):qy; // 主镜头:主体离中心最多偏到满前视,语境已经把框往别处带时不再叠前视(单选一艘、友舰在旁边时原来被挤到安全边);框宽不跟前视走(用户:前视缩放有阶梯感)
   return {bx:cx-lx*W/w,by:cy-ly*W/w,lx:lx,ly:ly,cx:cx,cy:cy,w:W};
 }
 function insetCam(sub,T,w,hp,dt,now){ // 镜头运动:换主体 = 飞过去(发现类慢飞、回主镜头中速、其余快飞;快飞超过 FMAX 屏宽才硬切);同主体 = 缩放死区 + 拉远快推近慢 + 限速;镜头钉在主体上走(锚点 + 偏移 + 前视),偏移弹簧追软区;主体不出安全框
@@ -330,13 +329,13 @@ function insetCam(sub,T,w,hp,dt,now){ // 镜头运动:换主体 = 飞过去(发�
   if(sub.kk!==I.kk){I.ox+=I.ax-S[0];I.oy+=I.ay-S[1];I.ax=S[0];I.ay=S[1];I.kk=sub.kk;} // 在队的舰变了(离群 / 回队):中心不跳
   if(sub.j){I.ax=insetSD(I.ax,S[0],3,I.T_ANC,dt);I.ay=insetSD(I.ay,S[1],4,I.T_ANC,dt);}else{I.ax=S[0];I.ay=S[1];I.vo[3]=I.vo[4]=0;}
   const band=Math.log(1+I.DB/100);if(I.lzg===null)I.lzg=ltz;
-  if(ltz<I.lzg-band*0.5){I.lzg=ltz;I.zin=0;}else if(ltz>I.lzg+band){I.zin+=dt;if(I.zin>=I.ZWAIT)I.lzg=ltz;}else I.zin=0; // 要装下新东西立刻拉远;想推近要持续 ZWAIT 秒
+  if(ltz<I.lzg-band*0.5){I.lzg=ltz+band*0.5;I.zin=0;}else if(ltz>I.lzg+band){I.zin+=dt;if(I.zin>=I.ZWAIT)I.lzg=ltz-band;}else if(ltz<I.lzg+band*0.9)I.zin=0; // 要装下新东西立刻拉远;想推近要持续 ZWAIT 秒;出了死区贴着死区边连续跟、目标退回死区里才重新等(2026-10-04 用户:缩放有阶梯感 —— 原来一出死区就跳到目标再停住,目标慢慢变就一停一动)
   const lz0=I.lz,lz1=insetSD(lz0,I.lzg,2,I.lzg<lz0?I.T_OUT:I.T_IN,dt),mx=Math.log(I.ZRATE)*dt;I.lz=Math.max(lz0-mx,Math.min(lz0+mx,lz1));
   I.lpx=insetSD(I.lpx,T.lx,0,I.T_PAN,dt);I.lpy=insetSD(I.lpy,T.ly,1,I.T_PAN,dt); // 前视不过软区:船队一动就往航向让出画面
   const z=Math.exp(I.lz),ex=(T.bx-I.ax-I.ox)*z,ey=(T.by-I.ay-I.oy)*z,SXp=I.SOFT*w,SYp=I.SOFT*hp,om=I.OM; // 语境中心的偏移在软区里不追,出了软区按弹簧(固有频率 OM、阻尼比 ZE)追软区边
   const gx=I.ox+(ex-Math.max(-SXp,Math.min(SXp,ex)))/z,gy=I.oy+(ey-Math.max(-SYp,Math.min(SYp,ey)))/z;
   I.vcx+=(om*om*(gx-I.ox)-2*I.ZE*om*I.vcx)*dt;I.vcy+=(om*om*(gy-I.oy)-2*I.ZE*om*I.vcy)*dt;I.ox+=I.vcx*dt;I.oy+=I.vcy*dt;
-  const hx=(w/2-I.SX)/z,hy=(hp/2-I.SY)/z,rx=S[0]-I.ax-I.lpx/z,ry=S[1]-I.ay-I.lpy/z; // 主体此刻那一点不出安全框
+  const hx=(sub.kind==='home'?Math.min(w/2-I.SX,I.LEAD*w/2):w/2-I.SX)/z,hy=(sub.kind==='home'?Math.min(hp/2-I.SY,I.LEAD*hp/2):hp/2-I.SY)/z,rx=S[0]-I.ax-I.lpx/z,ry=S[1]-I.ay-I.lpy/z; // 主体此刻那一点不出安全框;主镜头更严:最多偏到满前视(软区留下的旧偏移不再叠在前视上)
   if(rx-I.ox>hx){I.ox=rx-hx;I.vcx=Math.max(I.vcx,0);}else if(rx-I.ox<-hx){I.ox=rx+hx;I.vcx=Math.min(I.vcx,0);}
   if(ry-I.oy>hy){I.oy=ry-hy;I.vcy=Math.max(I.vcy,0);}else if(ry-I.oy<-hy){I.oy=ry+hy;I.vcy=Math.min(I.vcy,0);}
   I.pcx=I.ax+I.ox+I.lpx/z;I.pcy=I.ay+I.oy+I.lpy/z;
