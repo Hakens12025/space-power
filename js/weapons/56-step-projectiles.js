@@ -91,7 +91,7 @@ function stepCPA2(p,u,dt){ // 这一拍 p 相对 u 走过的线段(p 已推进�
   const v=u.vel||[0,0,0],sx=(p.vel[0]-v[0])*dt,sy=(p.vel[1]-v[1])*dt,sz=(p.vel[2]-v[2])*dt,rx=p.pos[0]-u.pos[0]-sx,ry=p.pos[1]-u.pos[1]-sy,rz=p.pos[2]-u.pos[2]-sz,ss=sx*sx+sy*sy+sz*sz,k=ss>0?Math.max(0,Math.min(1,-(rx*sx+ry*sy+rz*sz)/ss)):1;
   return (rx+k*sx)**2+(ry+k*sy)**2+(rz+k*sz)**2;
 }
-function stepMacProj(p,dt){ // MAC轴炮:沿发射时船头直飞,命中或到预测时间失的
+function stepMacProj(p,dt){ // 主炮(轴炮):沿发射时船头直飞,命中或到预测时间失的
       p.age=(p.age||0)+dt;
       p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;
       if(p.ground){ // 2026-09-27 打空地的炮弹:对方每艘船都按本拍相对线段的最近点判(与下面同式),碰到第一艘就算
@@ -134,7 +134,7 @@ function mslSwarmVc(p,tp,sw){ // ② 同步:与一跳邻组比【按能力天花
   const vc=Math.max(sw.aC*MSL_SWARM.FLOOR,Math.min(sw.aC,sw.dEff/Math.max(1,etaRef)));
   if(p.vCmd===undefined||Math.abs(vc-p.vCmd)>Math.max(MSL_SWARM.HYST*p.vCmd,15))p.vCmd=vc;
   return p.vCmd;}
-function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+暴力加速,射后不管,组网转移(一弹传三代)
+function stepMissileProj(p,dt,icBlue,icRed){ // 导弹:继承载机速度+暴力加速,射后不管,组网转移(一弹传三代)
       p.age=(p.age||0)+dt;
       if(p.mine){ // 伏击雷(已布设):静止待命,自带被动传感器自主触发,点火=情报
         p.vel=[0,0,0];p.spd=0;

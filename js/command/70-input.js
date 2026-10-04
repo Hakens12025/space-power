@@ -219,7 +219,7 @@ function mdWeaponPick(e,sx,sy){ // 选定武器攻击:点目标 / 点空位置
       {
         const hiters=atk.filter(x=>engageable(t,x));
         if(hiters.length){
-          if(selWeapon==='mac'){hiters.forEach(x=>{if(hasMAC(x)){x.lockedTarget=t;x.driftFire=true;x.driftFireT=60;x.forceMac={t:t,pt:null,T:60};}});} // 2026-09-27 强行开火:转向对准就开一炮(weapons/57),不看武器勾没勾 // DS171:M3 lockPlayer→driftFire;TIER1 MAC 舰种门改能力谓词 hasMAC
+          if(selWeapon==='mac'){hiters.forEach(x=>{if(hasMAC(x)){x.lockedTarget=t;x.driftFire=true;x.driftFireT=60;x.forceMac={t:t,pt:null,T:60};}});} // 2026-09-27 强行开火:转向对准就开一炮(weapons/57),不看武器勾没勾 // DS171:M3 lockPlayer→driftFire;TIER1 主炮 舰种门改能力谓词 hasMAC
           else{hiters.forEach(x=>{if(x.ammo>0)orderMissileSalvo(x,t,salvoCount);});}
         }
       }

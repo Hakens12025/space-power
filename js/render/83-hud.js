@@ -65,9 +65,9 @@ function drawRange(){ // 测距工具(按住C):起点(或跟随船)→鼠标目�
   const sel=controlledShips();
   if(sel.length===1&&rangeB){
     const dd=V.len(V.sub(rangeB,sel[0].pos));
-    const macT=dd/CFG.macSpd; // MAC:直线匀速(CFG.macSpd)
+    const macT=dd/CFG.macSpd; // 主炮:直线匀速(CFG.macSpd)
     const misT=estimateMissileTime(sel[0].pos,sel[0].vel,rangeB);
-    txt+=` · MAC ${SHOW.t(macT).toFixed(1)}s · 射手 ${misT>=0?SHOW.t(misT).toFixed(1)+'s':'∞'}`; // 2026-09-26 物理秒
+    txt+=` · 主炮 ${SHOW.t(macT).toFixed(1)}s · 导弹 ${misT>=0?SHOW.t(misT).toFixed(1)+'s':'∞'}`; // 2026-09-26 物理秒
   }
   ctx.font='bold 13px Consolas';ctx.textAlign='center';
   ctx.lineWidth=4;ctx.strokeStyle='rgba(0,0,0,.85)';

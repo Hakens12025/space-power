@@ -1,6 +1,6 @@
 "use strict";
 /* RF1: 提取自 stepSim 的 S14-S17 段(原 07-missiles.js L636-698):武器冷却/发射单元装填/齐射开火延迟 →
-   自动索敌交战 → 近防自动拦截 → MAC 锁定自动开火。四个循环原样保留(内层 continue 不变)。 */
+   自动索敌交战 → 近防自动拦截 → 主炮 锁定自动开火。四个循环原样保留(内层 continue 不变)。 */
 const FT_N=2; // 2026-09-29 强制目标点(74 中键点空地)每件勾着的武器打几次就撤(导弹按组)
 function stepWeaponSystems(dt){
   for(const s of ships){ // 武器冷却 + 发射单元装填 + 齐射开火延迟(v119:单元独立装填60s)
@@ -78,7 +78,7 @@ function stepWeaponSystems(dt){
         if(appr>0)threat=true;
       }
       if(!threat)continue; // 在远离/横移:追不上,不浪费
-      if(projectiles.some(q=>q.type==='interceptor'&&!q.done&&q.target===p))continue; // 该来袭组已有拦截弹在追:防重复(一组射手只吃一次拦截)
+      if(projectiles.some(q=>q.type==='interceptor'&&!q.done&&q.target===p))continue; // 该来袭组已有拦截弹在追:防重复(一组导弹只吃一次拦截)
       const need=Math.ceil((p.count||16)*1.2); // 拦截弹数 = 来袭颗数×1.2 向上取整(覆盖拦截失败)
       if(x.interceptor>=need){
         x.interceptor-=need;x.ciwsCd=PHYS.t(30); // 拦截弹发射间隔冷却(物理 30 s)
@@ -104,7 +104,7 @@ function stepWeaponSystems(dt){
     if(fp&&roeOK&&!s.dead){if(macShootPt(s,fp.pt))fp.n.mac++;}
     else if(roeOK&&!s.dead&&mt&&!mt.dead&&mt.side!==s.side&&s.macCd<=0&&hasMAC(s)&&macAligned(s,mt)){ // WR1:自动开火只在把握 >= MAC_AUTO_P 时打(没有射程门了);距离按估计位置量。这一条【不看 autoEngage】,红方 bot 的开火实际走的就是它
       const mp=macPred(s,mt); if(mp&&((typeof fcForce==='function'&&fcForce(s,'mac'))||macHitProb(s,V.len(V.sub(mp,s.pos)),mt)>=MAC_AUTO_P))fireMAC(s,mt); // 2026-09-29 强制开火的序列不看把握门
-    } // TIER1 MAC 舰种门改能力谓词
+    } // TIER1 主炮 舰种门改能力谓词
     if(s.roeCd>0)s.roeCd-=dt;
   }
   for(const s of ships){const f=s.fTgt;if(!f)continue; // 强制目标点:勾着的每件武器都打够 FT_N 次就撤(没勾的不等;一件没勾 = 立刻撤,一发不打)

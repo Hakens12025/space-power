@@ -266,7 +266,7 @@ function trStatLines(t,idx){ // 单个靶的读数(4 行)
   const dps=(span>0.5)?(st.dmg/span):null;
   const used=Math.max(0,(t.interMax||0)-(t.interceptor||0));
   return `<div><b>${t.name}</b> 承伤 ${Math.round(st.dmg)} · 命中 ${st.hits} 次 · 均输出 ${dps===null?'—':(Math.round(SHOW.w(dps))+'/s')} <span style="color:var(--dim)">(${span>0?Math.round(SHOW.t(span)):0}s)</span></div>`+
-    `<div>　MAC ${st.macHits} 发/${Math.round(st.macDmg)} · 导弹 ${st.mslHits} 次/${Math.round(st.mslDmg)}</div>`+
+    `<div>　主炮 ${st.macHits} 发/${Math.round(st.macDmg)} · 导弹 ${st.mslHits} 次/${Math.round(st.mslDmg)}</div>`+
     `<div>　到达 ${st.arrived}${st.reArr?('(+'+st.reArr+'复锁)'):''} → 干扰 -${st.chaffed} → 内圈 -${st.ciwsIn} → 命中 ${st.pierced} 枚</div>`+
     `<div>　拦截弹 ${t.interceptor||0}/${t.interMax||0}<span style="color:var(--dim)">(已用 ${used})</span></div>`+
     trVisWarn(t);
@@ -293,7 +293,7 @@ function updRangePanel(){ // 只刷读数与旋钮值,不重建 DOM。由 core/9
     const st=ts[i].rangeStat;
     if(st){T.dmg+=st.dmg;T.hits+=st.hits;T.arrived+=st.arrived;T.reArr+=st.reArr;T.chaffed+=st.chaffed;T.ciwsIn+=st.ciwsIn;T.pierced+=st.pierced;T.macDmg+=st.macDmg;T.mslDmg+=st.mslDmg;}
   }
-  html+=`<div class="tr-sum">合计 承伤 ${Math.round(T.dmg)} · 命中 ${T.hits} 次 · MAC ${Math.round(T.macDmg)} / 导弹 ${Math.round(T.mslDmg)}</div>`+
+  html+=`<div class="tr-sum">合计 承伤 ${Math.round(T.dmg)} · 命中 ${T.hits} 次 · 主炮 ${Math.round(T.macDmg)} / 导弹 ${Math.round(T.mslDmg)}</div>`+
     `<div class="tr-sum">合计 到达 ${T.arrived}${T.reArr?('(+'+T.reArr+')'):''} → 干扰 -${T.chaffed} → 内圈 -${T.ciwsIn} → 命中 ${T.pierced}</div>`;
   trReadEl.innerHTML=html;
 }

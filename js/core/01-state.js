@@ -28,7 +28,7 @@ let rangeMode=false,rangeA=null,rangeB=null,rangeFollow=null,mouseX=0,mouseY=0; 
 let rangeMoved=false,rangeArm=false; // 测距:是否移动过/是否按住中(待命判定)
 let ctrlArm=false;                    // Ctrl全弹:按下待发,松开触发(避免与Ctrl+右键锁定/编组冲突)
 let selWeapon=null;                   // T/R选定武器('mac'/'missile'):点击敌舰攻击,非发射指令
-let salvoCount=1;                     // 射手齐射轮数(组)。SL1:调它的快捷栏已删,今后恒为 1(52-fire / 70-input / 71-keys 仍读)
+let salvoCount=1;                     // 导弹齐射轮数(组)。SL1:调它的快捷栏已删,今后恒为 1(52-fire / 70-input / 71-keys 仍读)
 let missileMode='auto';               // 导弹模式(v122):auto=自动(正常船组网/noNet船直射) / net=强制组网 / direct=直射。SL1:写点已随快捷栏删,恒为 auto(52-fire 仍读)
 let selMissile=null;                  // 选中的导弹组实体(可点选/布设伏击雷/设置)
 let selBuoy=null;                     // 2026-09-29 选中的我方前出浮标(点它 → 底栏雷达:静默 / 脉冲 / 发射,飞行中也行)

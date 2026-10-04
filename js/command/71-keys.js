@@ -12,9 +12,9 @@ const ACTIONS=[
   {id:'del_last_order',label:'删除最后一个命令点',keys:['Backspace']},
   {id:'range',label:'测距工具',keys:['KeyC']},
   {id:'turn_cmd',label:'船头转向命令(点地图设定方向)',keys:['KeyV']},
-  {id:'fire_mac',label:'MAC攻击(选中舰·锁定目标)',keys:['KeyT']},
+  {id:'fire_mac',label:'主炮攻击(选中舰·锁定目标)',keys:['KeyT']},
   {id:'drift_fire',label:'🎯漂移射击(锁定后Ctrl+T,60s,命令照走)',keys:['Ctrl+KeyT']}, // DS171 M3
-  {id:'fire_missile',label:'射手导弹攻击(选中舰·锁定目标)',keys:['KeyR']},
+  {id:'fire_missile',label:'导弹攻击(选中舰·锁定目标)',keys:['KeyR']},
   {id:'cease_fire',label:'停火(解除锁定)',keys:['KeyX']},
   {id:'reverse',label:'倒车(反推倒退)',keys:['KeyG']},
   // fire_all(全弹发射)绑 Ctrl 单键:用臂逻辑处理(松开触发),避免与 Ctrl+右键锁定/编组冲突
@@ -44,7 +44,7 @@ function endRange(){ // 结束测距:清除线
 }
 function toggleWeapon(w){ // T/R:选定武器进行攻击选择(点击敌舰攻击),再按取消
   if(selWeapon===w){selWeapon=null;updSelWeaponTip();return;}
-  if(typeof clearPendings==='function')clearPendings(); // FL1 与其它点选待命态互斥(三个 arm 点同一条纪律)。不清的话:T/R 与【跟随目标】并存 → updSelWeaponTip 里 pendingFollow 优先,MAC 提示一个字都出不来;而左键消费串里 selWeapon 排在前面,那一下真走 MAC 攻击,下一次左键才命中跟随分支、无声下达整队跟随令
+  if(typeof clearPendings==='function')clearPendings(); // FL1 与其它点选待命态互斥(三个 arm 点同一条纪律)。不清的话:T/R 与【跟随目标】并存 → updSelWeaponTip 里 pendingFollow 优先,主炮 提示一个字都出不来;而左键消费串里 selWeapon 排在前面,那一下真走 主炮 攻击,下一次左键才命中跟随分支、无声下达整队跟随令
   if(typeof updFmBar==='function')updFmBar();
   selWeapon=w;
   updSelWeaponTip(); // RF4b 可见提示走底栏上方 #cmdTip(旧的顶部状态条 RF2 起就被藏死,2026-09-22 连代码一起删)
@@ -90,7 +90,7 @@ function doAction(id){
         if(typeof updSelWeaponTip==='function')updSelWeaponTip(); // 把 V 接进 #cmdTip 提示体系(它原来走的是被 RF2 藏死的顶部状态条,不接的话按 V 之后屏幕上一个字都没有)
       }
       break;}
-    case 'fire_mac':toggleWeapon('mac');break; // T:选定MAC武器,点击敌舰攻击(非发射指令)
+    case 'fire_mac':toggleWeapon('mac');break; // T:选定主炮武器,点击敌舰攻击(非发射指令)
     case 'drift_fire':{ // DS171 M3:Ctrl+T 漂移射击(60s限时,命令照走,机头找窗口);再按取消;lit波动不退出
       const sel=controlledShips().filter(s=>!s.dead&&s.lockedTarget&&!s.lockedTarget.dead&&s.lockedTarget.side!==s.side&&s.macDmg>0);
       if(sel.length){
@@ -98,7 +98,7 @@ function doAction(id){
         sel.forEach(s=>{s.driftFire=on;s.driftFireT=on?60:0;});
       }
       break;}
-    case 'fire_missile':toggleWeapon('missile');break; // R:选定射手武器,点击敌舰攻击
+    case 'fire_missile':toggleWeapon('missile');break; // R:选定导弹武器,点击敌舰攻击
     case 'cease_fire':ceaseFire();break; // X:停火(解除锁定)
     case 'reverse':{ // G:倒车(反推倒退)——选中舰朝船头反方向机动6k(机头不翻,用反推)
       const sel=controlledShips();
@@ -111,7 +111,7 @@ function doAction(id){
     case 'fire_all':{ // Ctrl:全弹发射(选中舰·锁定目标)
       const sel=selectedShips().filter(s=>s.side==='blue'&&!s.dead);
       sel.forEach(s=>{const t=s.lockedTarget;if(!t||t.dead)return;
-        if(hasMAC(s)&&macAligned(s,t)&&s.macCd<=0)fireMAC(s,t); // TIER1 MAC 舰种门改能力谓词
+        if(hasMAC(s)&&macAligned(s,t)&&s.macCd<=0)fireMAC(s,t); // TIER1 主炮 舰种门改能力谓词
         if(s.ammo>0)orderMissileSalvo(s,t,salvoCount);});
       break;}
     case 'del_last_order':{

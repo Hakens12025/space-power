@@ -8,11 +8,11 @@
       (macOn/mslOn) > 序列目标许可(allow);57 里原有的三层检查一行不动 —— 序列只做减法不做加法。
    ② 序列存【id 不存对象引用】(shipId / tid)。持对象引用的东西(弹丸/nets)
       换局时会把上一局的舰拖进新一局(见 91-init 的 KIMI146 注释),而序列活得比弹丸久,更不能持引用。
-   ③ 指针一律逐武器成对(rot / fcSeqCur / fcTgt / fcFrom / fcFired 全是 {mac,msl}):MAC 30s 一发、导弹 60s
+   ③ 指针一律逐武器成对(rot / fcSeqCur / fcTgt / fcFrom / fcFired 全是 {mac,msl}):主炮 30s 一发、导弹 60s
       装填一组,两者节拍完全不同,共用一个指针会互相拖着走。
    踩过的坑(全部来自实读代码,不是猜测):
    · 陷阱一:lockedTarget 同时是【转向指令】。physics/31-step-ships:74-80 的战斗转向段是朝 macPred(s,lockedTarget)
-     摆机头的,所以 lockedTarget 必须跟 MAC 指针走(mac 优先),否则船头去追导弹目标、主炮永远进不了 macAligned
+     摆机头的,所以 lockedTarget 必须跟 主炮 指针走(mac 优先),否则船头去追导弹目标、主炮永远进不了 macAligned
      的对准门(MAC_ALIGN)。
    · 陷阱二:driftFire 自带 60s 倒计时(31-step-ships:75)。一艘正在执行移动命令的舰全靠 driftFire 才抢得到机头,
      倒计时一到主炮就【静默哑火】(不报错不打日志)。所以解算出 mac 目标时必须每 tick 续期,不是置一次 true 就完事。
@@ -209,7 +209,7 @@ function stepFireControl(dt){ // RF5 每 tick 前置决策:清理失效序列 �
     const rm=fcSolve(s,seqs,'mac'),rs=fcSolve(s,seqs,'msl');
     s.fcTgt.mac=rm.tgt;s.fcFrom.mac=rm.from;
     s.fcTgt.msl=rs.tgt;s.fcFrom.msl=rs.from;
-    // 3. 陷阱一:lockedTarget 同时是 physics/31 战斗转向的转向指令,必须 MAC 优先
+    // 3. 陷阱一:lockedTarget 同时是 physics/31 战斗转向的转向指令,必须 主炮 优先
     s.lockedTarget=s.fcTgt.mac||s.fcTgt.msl||null;
     s.lockPlayer=false; // 与 57 自动索敌写锁定时的口径一致(DS176 起该字段已退役,只留兼容)
     // 4. 陷阱二:driftFire 有 60s 倒计时,不每 tick 续期的话,执行着移动命令的舰打满 60s 后主炮会静默哑火

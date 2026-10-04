@@ -116,7 +116,7 @@ function stepShipsMotion(dt){
       applyHeading(s,tDesired,dt); // RF10
       if(V.angle(s.facing,tDesired)<0.02){s.turnTarget=null;} // FM3-0:删"单纯转头"死标志复位。KIMI151修:调头完成清除(同旗舰分支根因——原残留导致航线走完后做陈旧调头)
     }
-    // 战斗转向(v118,移动+攻击一体):锁定目标且MAC可用 → 运动不冻结。
+    // 战斗转向(v118,移动+攻击一体):锁定目标且主炮可用 → 运动不冻结。
     // DS171 M3:driftFire 承接 lockPlayer 职能(60s限时)——命令照走,非硬机动段机头归瞄准(全向找窗口,对准1.1°即自动开火);硬机动段(刹车/爬行/调头)机头让位(v130机动可靠性不劣化);T收编为纯指定(有令船不抢机头,窗口自然出现才打)
     if(s.lockedTarget&&!s.lockedTarget.dead&&s.lockedTarget.side!==s.side&&s.macDmg>0){
       if(s.driftFire){s.driftFireT=(s.driftFireT||0)-dt;if(s.driftFireT<=0){s.driftFire=false;}} // 60s限时
