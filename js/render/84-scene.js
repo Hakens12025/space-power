@@ -85,7 +85,7 @@ function drawTrails(hide){ // hide:传感器画面里只画我方(同主画面�
 /* 2026-09-26 左下角特写窗口(用户:"点击马拉松船,我就能看到这艘船的特写……舰队也是,自适应的拉到舰队的缩放大小……要能够看到地图背景的放大效果")。
    业内叫画中画 / 单位特写镜头(picture-in-picture / unit cam):取景照 Cinemachine 的 Target Group + 临界阻尼(Unity SmoothDamp)+ 前视,播放照转播的回放导演台(replay director) */
 const INSET={FIT:0.7,FIT_MIN:0.26,SHOT_MAX:7000,CTX_T:240,CTX_F0:40000,CTX_F1:50000,CTX_E0:50000,CTX_E1:60000,csk:'',lastK:'',kk:'',pcx:0,pcy:0,ax:0,ay:0,ox:0,oy:0,lpx:0,lpy:0,vcx:0,vcy:0,lzg:null,zin:0,fly:null, // 取景:语境落在框宽 x FIT 内(给前视留余量后最少 FIT_MIN);同主体镜头最长 ms;速度前后各看 CTX_T/2 物理秒;主镜头把友舰 4~5 万、已定位敌舰 / 锁定目标 5~6 万 km(x scale)渐进框进来
-  OM:5,ZE:0.85,SOFT:0.12,DB:15,T_OUT:0.35,T_IN:1.2,ZWAIT:0.8,ZRATE:1.8,FK:1,FMAX:4,PUSH:1.6,PUSH_T0:2.5,PUSH_T1:0.8,SLOW_T:3,RHO:1.3,RHO_Q:1.4,MIN_KM:2500,CIWS_KM:800,SLOW:{fix:1,id:1,vis:1}, // 2026-10-04 镜头新方案(用户在演示页 demos/ui/特写镜头手感.html 定的):平移弹簧固有频率 / 阻尼比 / 软区占框;缩放死区 % / 拉远 / 推近 s / 推近前等待 s / 最快 x/s;快飞时长系数 / 快飞最远屏宽;命中前推近上限与起止墙钟秒;发现类慢飞秒 / 弧度,快飞弧度;最近只到比例尺 60 px = MIN_KM km(近防拦截镜头 CIWS_KM,用户:最大缩放 2500 km);慢飞的镜头类型
+  OM:5,ZE:0.85,SOFT:0.12,DB:15,T_OUT:0.35,T_IN:1.2,ZWAIT:0.8,ZRATE:1.8,FK:1,FMAX:4,PUSH:1.6,PUSH_T0:2.5,PUSH_T1:0.8,PUSH_MAX:0.5,PUSH_HOLD:1200,SLOW_T:3,RHO:1.3,RHO_Q:1.4,MIN_KM:2500,CIWS_KM:800,SLOW:{fix:1,id:1,vis:1}, // 2026-10-04 镜头新方案(用户在演示页 demos/ui/特写镜头手感.html 定的):平移弹簧固有频率 / 阻尼比 / 软区占框;缩放死区 % / 拉远 / 推近 s / 推近前等待 s / 最快 x/s;快飞时长系数 / 快飞最远屏宽;命中前推近上限与起止墙钟秒;发现类慢飞秒 / 弧度,快飞弧度;最近只到比例尺 60 px = MIN_KM km(近防拦截镜头 CIWS_KM,用户:最大缩放 2500 km);慢飞的镜头类型
   W:416,H:260,WB:480,HB:300,WIDE:2200,MIN_W:240,HDR:20,M:12,GAP:10,CUE:16,bot:64,top:60,botT:-1e9,ro:null,x:0,y:0,w:0,h:0,on:false,cx:0,cy:0,z:1, // 框 / 宽屏框 / 最小宽 / 标题条高 / 边距 / 日标让位外扩 px
   INC_IN:80000,INC_OUT:100000,LEAD:0.5,LEAD_V:0.5,FADE_IN:6,FADE_OUT:9,ON_A:0.05, // 威胁权重满 / 归零的距离 km(x scale)/ 前视上限占半宽(竖直占半高)、速度到最高档的几成就满 / 淡入淡出 1/s / 可点门槛
   T_PAN:1.5,T_ANC:0.25,SX:30,SY:24,CUT:150, // 前视平滑 s / 敌舰锚点平滑 s(估计按感知拍跳)/ 主体安全边 px / 切镜遮罩 ms
@@ -97,7 +97,7 @@ const INSET={FIT:0.7,FIT_MIN:0.26,SHOT_MAX:7000,CTX_T:240,CTX_F0:40000,CTX_F1:50
   RING:['察觉','来袭','防御','挨打','出手','战果'],RC:{fix:'察觉',id:'察觉',vis:'察觉',shell:'来袭',ciws:'防御',loss:'挨打',kill:'战果'},URG:{loss:1,kill:1},RING_WAIT:1500,MIN_SHOT:2500,VIS_COOL:30000,rc:-1,rt:-1e9, // 2026-09-29 事件分类成环(用户):每类播完只能接环上往后 1~(N-1)/2 类,任意两类不双向;接不上每等 RING_WAIT ms 多走一步;损失 / 击沉不看环;非插队的段至少播 MIN_SHOT ms 才让切;同一艘进可见光圈的冷却 ms。加事件 = 在 RC 登记一行(中弹 / 命中按情况在 insetEvents 里定 c)
   PRE_S:3,PRE_SEE:0.5,PRE_VIEW:0.8,PRE_HOLD:700,PRE_POST:800,PRE_WMAX:60000,RHO_P:1.2,DISC_R:80000,PRE_COOL:4000,ATTR_R:20000,lrt:1, // 预判(2026-10-04 用户在演示页 demos/ui/特写镜头实战.html 定的):离命中 ≤ PRE_S 且够「滑过去 + PRE_SEE」墙钟秒才开播,沿弧度 RHO_P 滑过去;开播锁框:按弹在命中前 PRE_VIEW 秒的位置定(框宽封顶 PRE_WMAX km)、整段不缩放;命中后定格 PRE_HOLD ms;弹没了 / 打空 PRE_POST ms 收;同一目标冷却 ms;同类发现并成一段的半径 km;命中归到消失弹丸的半径 km(x scale)
   lz:0,vo:[0,0,0,0,0],key:'',sk:'',t:0,a:0,cut:-1e9,cool:-1e9,hov:false,mx:0,my:0,mt:-1e9,gm:false,hide:false,vpri:0,err:false,last:null,fx:null,mskip:null,cv:null,g:null,
-  dir:null,ev:[],seq:0,prj:new Map(),by:new Map(),preT:new Map(),preSeen:new WeakSet(),out:new Set(),outK:'',dead:new Set(),idc:new Map(),fixd:new WeakSet(),fix0:true,hits:new WeakSet(),shr:new WeakSet(),shs:new WeakSet(),cws:new WeakSet(),vin:new Map(),vit:new Map(),t0:-1,arr:null,
+  dir:null,ph:new Map(),ev:[],seq:0,prj:new Map(),by:new Map(),preT:new Map(),preSeen:new WeakSet(),out:new Set(),outK:'',dead:new Set(),idc:new Map(),fixd:new WeakSet(),fix0:true,hits:new WeakSet(),shr:new WeakSet(),shs:new WeakSet(),cws:new WeakSet(),vin:new Map(),vit:new Map(),t0:-1,arr:null,
   lod0:{hideBlue:new Set(),hideRed:new Set(),aggs:[],live:false}}; // 特写不做聚合:画特写时把 lodNow 临时换成这个空的
 function insetHit(sx,sy){return INSET.on&&sx>=INSET.x&&sx<=INSET.x+INSET.w&&sy>=INSET.y&&sy<=INSET.y+INSET.h;} // 点在特写框里:输入层吞掉,不落到框底下的地图
 function insetClick(){const k1=vtAnim?vtAnim.k1:cam.zoom;zAnim=null;vtAnim={k0:cam.zoom,k1:k1,x0:cam.x,y0:cam.y,x1:INSET.cx,y1:INSET.cy,t0:nowMs(),dur:420};} // 点特写框:主镜头飞到特写中心;跳层动画正在跑就沿用它的目标缩放,不截断跳层
@@ -195,6 +195,8 @@ function insetEvents(now){ // 导演的事件源(只读我方知道的事):损�
    装不下的语境画框边箭头;同一主体的下一件事并进来接着拍。2026-10-04 镜头运动换成用户在演示页 demos/ui/特写镜头手感.html 定的新方案(用户:三档景别太死板):
    连续取景加惰性(insetTarget / insetCam)、弹簧追软区、换主体飞过去(发现类慢飞)、最近只到比例尺 2500 km。
    业内做法:Cinemachine 的 Framing Transposer(死区 / 软区 / 阻尼 / 前视)+ van Wijk 平滑缩放平移(flyTo)+ 转播的"同主体不切" */
+function insetPushG(etaW){const t=(INSET.PUSH_T0-Math.max(0,etaW))/(INSET.PUSH_T0-INSET.PUSH_T1);return INSET.PUSH_MAX*(t<=0?0:(t>=1?1:t*t*(3-2*t)));} // 选中舰主镜头推近:离命中 PUSH_T0 → PUSH_T1 墙钟秒把其余语境收向主体,封顶 PUSH_MAX(09-27 用户:缩放太猛 → 封顶一半)
+function insetPushHold(key,g){const now=nowMs(),o=INSET.ph.get(key);if(!o||g>=o.g||now-o.t>INSET.PUSH_HOLD){if(INSET.ph.size>32)INSET.ph.clear();INSET.ph.set(key,{g:g,t:now});return g;}return o.g;} // 推近后弹没了(命中 / 被拦)保持 PUSH_HOLD,不立刻弹回
 function insetSubject(sel,inc,lbl){ // 选中舰的主镜头:主体 = 在队舰的中心(离群的改画框外指示,带迟滞);语境 = 在队舰 + 来袭导弹 / 锁定目标 / 附近友舰 / 已定位敌舰,按远近渐进框进来(权重)
   const S=CFG.scale,key='s:'+sel.map(s=>s.id).join(',');let keep=sel;
   if(sel.length>=2){if(INSET.outK!==key){INSET.outK=key;INSET.out.clear();}const O=INSET.out;
@@ -211,16 +213,18 @@ function insetSubject(sel,inc,lbl){ // 选中舰的主镜头:主体 = 在队舰�
   for(const m of inc){if(sel.indexOf(m.tgt)<0)continue;const d=near(m.p.pos);
     if(keep.indexOf(m.tgt)>=0){const g=wt(d);if(g>wm)wm=g;}
     if(ind.length<INSET.IND)ind.push({pos:m.p.pos,col:'255,154,85',lbl:isFinite(m.eta)?Math.round(SHOW.t(m.eta))+' s':Math.round(d/1000)+'k'});}
+  let pm=null;for(const m of inc)if(keep.indexOf(m.tgt)>=0&&(!pm||m.eta<pm.eta))pm=m;const prt=insetRate(),pg=insetPushHold(key,pm&&prt>0&&isFinite(pm.eta)?insetPushG(pm.eta/prt):0); // 2026-10-04 找回(09-27 有、09-29 重做时丢了):导弹快打到在队舰时只留在队舰和那枚导弹,其余语境收向主体
   const L=[],seen=new Set();
   for(const s of keep){const t=s.lockedTarget;if(!t||t.dead||seen.has(t.id))continue;seen.add(t.id);const p=viewPos(t);if(!p)continue;const d=near(p);L.push({pos:p,col:'255,107,107',lbl:Math.round(d/1000)+'k',d:d});} // 几艘锁同一个目标只算一条
   const Q=sel.filter(s=>keep.indexOf(s)<0).map(s=>({pos:s.pos,col:'111,180,255',lbl:s.name,d:Math.hypot(s.pos[0]-ax,s.pos[1]-ay)}));
   L.sort((a,b)=>a.d-b.d);Q.sort((a,b)=>a.d-b.d);for(const it of L.concat(Q))if(ind.length<INSET.IND)ind.push(it); // 优先级:来袭(按到达时间)> 锁定 > 离群
-  const cw=(d,a,b)=>{const t=(b-d)/(b-a);return t<=0?0:(t>=1?1:t*t*(3-2*t));},ctx=keep.map(s=>({p:s.pos,w:1}));
-  for(const m of inc)if(keep.indexOf(m.tgt)>=0){const g=wt(near(m.p.pos));if(g>0)ctx.push({p:m.p.pos,w:g});}
-  if(!INSET.hide)for(const it of L){const g=cw(it.d,INSET.CTX_E0*S,INSET.CTX_E1*S);if(g>0)ctx.push({p:it.pos,w:g});}
-  for(const o of ships){if(o.dead||sel.indexOf(o)>=0)continue;if(o.side===VIEW){const g=cw(near(o.pos),INSET.CTX_F0*S,INSET.CTX_F1*S);if(g>0)ctx.push({p:o.pos,w:g});}
-    else if(!INSET.hide&&(adminMode||contactFix(o,VIEW))){const p=viewPos(o);if(!p)continue;const g=cw(near(p),INSET.CTX_E0*S,INSET.CTX_E1*S);if(g>0)ctx.push({p:p,w:g});}}
-  return {key:key,sk:k===1?keep[0].id:key,kk:keep.map(s=>s.id).join(','),j:false,kind:'home',S:[ax,ay],V:[vx,vy],vm:vm,ctx:ctx,eta:null,ciws:false,ind:ind,wm:wm,
+  const cw=(d,a,b)=>{const t=(b-d)/(b-a);return t<=0?0:(t>=1?1:t*t*(3-2*t));},ctx=keep.map(s=>({p:s.pos,w:1})),q=1-pg;let wl=Math.max(wm,pg); // wl = 前视让位的权重
+  for(const m of inc)if(keep.indexOf(m.tgt)>=0){const g=wt(near(m.p.pos));if(g>0)ctx.push({p:m.p.pos,w:g*q});}
+  if(pm&&pg>0)ctx.push({p:pm.p.pos,w:1});
+  if(!INSET.hide)for(const it of L){const g=wt(it.d);if(g>0){ctx.push({p:it.pos,w:g*q});if(g>wl)wl=g;}} // 锁定目标按来袭导弹同一套距离权重(8 万全纳入、10 万移出;2026-10-04 找回 09-28 的距离,0c7c9e5 起误用了敌舰的 5~6 万)
+  for(const o of ships){if(o.dead||sel.indexOf(o)>=0)continue;if(o.side===VIEW){const g=cw(near(o.pos),INSET.CTX_F0*S,INSET.CTX_F1*S);if(g>0)ctx.push({p:o.pos,w:g*q});}
+    else if(!INSET.hide&&(adminMode||contactFix(o,VIEW))){const p=viewPos(o);if(!p)continue;const g=cw(near(p),INSET.CTX_E0*S,INSET.CTX_E1*S);if(g>0){ctx.push({p:p,w:g*q});if(g>wl)wl=g;}}}
+  return {key:key,sk:k===1?keep[0].id:key,kk:keep.map(s=>s.id).join(','),j:false,kind:'home',S:[ax,ay],V:[vx,vy],vm:vm,ctx:ctx,eta:null,ciws:false,ind:ind,wm:wm,pg:pg,wl:wl,
     lbl:lbl||(sel.length===1?'特写 · '+sel[0].name:'特写 · '+sel.length+' 艘'+(keep.length<sel.length?'(离群 '+(sel.length-keep.length)+')':''))};
 }
 function insetVm(s){let m=1;for(const g of (s.speedGears||[]))if(g>m)m=g;return m;}
@@ -326,13 +330,13 @@ function insetZoomPath(p0,p1,rho){ // 平滑缩放平移(van Wijk & Nuij 2003,d3
   f.dur=Math.abs(S)*rho/Math.SQRT2;return f;}
 function insetTarget(sub,w,hp,zMax){ // 目标取景:主体 + 速度前后 CTX_T/2 + 语境(按权重往主体收)的包围盒中心 + 前视;框宽 = 包围盒 / FIT,离命中连续推近,不近于 zMax;预判段锁框
   if(sub.lock){const L=sub.lock,S=sub.S,ex=L.u[0]*L.dE,ey=L.u[1]*L.dE;if(!L.W)L.W=Math.max(Math.min(Math.max(Math.abs(ex)/0.6,Math.abs(ey)/(0.6*hp/w)),INSET.PRE_WMAX*CFG.scale),w/zMax); // 目标在远侧约 1/3、弹从近侧进框;框宽开播时定死
-    const cx=S[0]+ex/3,cy=S[1]+ey/3;return {bx:cx,by:cy,lx:0,ly:0,cx:cx,cy:cy,w:L.W};}
-  const S=sub.S,tv=PHYS.t(INSET.CTX_T)/2,pts=[S,[S[0]+sub.V[0]*tv,S[1]+sub.V[1]*tv],[S[0]-sub.V[0]*tv,S[1]-sub.V[1]*tv]];
+    if(sub.eta!=null&&isFinite(sub.eta)){const t=(INSET.PRE_VIEW-Math.max(0,sub.eta))/(INSET.PRE_VIEW-0.2),g=t<=0?0:(t>=1?1:t*t*(3-2*t));if(g>(L.g||0))L.g=g;} // 2026-10-04 找回命中前推近:弹进框后(命中前 PRE_VIEW → 0.2 秒)绕着目标推近到 1/PUSH,命中后定格时保持
+    const k=1+(INSET.PUSH-1)*(L.g||0),cx=S[0]+ex/3/k,cy=S[1]+ey/3/k;return {bx:cx,by:cy,lx:0,ly:0,cx:cx,cy:cy,w:Math.max(L.W/k,w/zMax)};}
+  const S=sub.S,tv=PHYS.t(INSET.CTX_T)/2*(1-(sub.pg||0)),pts=[S,[S[0]+sub.V[0]*tv,S[1]+sub.V[1]*tv],[S[0]-sub.V[0]*tv,S[1]-sub.V[1]*tv]];
   for(const c of sub.ctx)pts.push([S[0]+c.w*(c.p[0]-S[0]),S[1]+c.w*(c.p[1]-S[1])]);
   let x0=1e18,x1=-1e18,y0=1e18,y1=-1e18;for(const p of pts){x0=Math.min(x0,p[0]);x1=Math.max(x1,p[0]);y0=Math.min(y0,p[1]);y1=Math.max(y1,p[1]);}
-  const vv=Math.hypot(sub.V[0],sub.V[1]),ls=vv>1e-9?Math.sqrt(Math.min(1,vv/(INSET.LEAD_V*(sub.vm||1))))*INSET.LEAD:0,lx=ls?sub.V[0]/vv*ls*w/2:0,ly=ls?sub.V[1]/vv*ls*hp/2:0; // 前视 px:速度到最高档的 LEAD_V 就满,上限半宽(竖直半高)的 LEAD(2026-10-04 用户:船往右走,镜头要慢慢多往右走、把船靠在左边 —— 原来巡航时只偏一成多,看不出)
+  const vv=Math.hypot(sub.V[0],sub.V[1]),ls=vv>1e-9?Math.sqrt(Math.min(1,vv/(INSET.LEAD_V*(sub.vm||1))))*INSET.LEAD*(1-(sub.wl||0)):0,lx=ls?sub.V[0]/vv*ls*w/2:0,ly=ls?sub.V[1]/vv*ls*hp/2:0; // 前视 px:速度到最高档的 LEAD_V 就满,上限半宽(竖直半高)的 LEAD;来袭导弹 / 锁定目标 / 已定位敌舰框进来、或在推近时按权重让位(09-28 有、09-29 丢了,2026-10-04 找回)(2026-10-04 用户:船往右走,镜头要慢慢多往右走、把船靠在左边 —— 原来巡航时只偏一成多,看不出)
   let W=Math.max((x1-x0)/Math.max(INSET.FIT_MIN,INSET.FIT-2*Math.abs(lx)/w),(y1-y0)/(Math.max(INSET.FIT_MIN,INSET.FIT-2*Math.abs(ly)/hp)*hp/w),1e-6); // 框给前视留出两倍余量(同 09-28):船越快,航迹越长、前视越大,框就越宽 —— 加速拉远、减速推近(2026-10-04 用户:以前除了前视偏移还有大小缩放)
-  if(sub.eta!=null&&isFinite(sub.eta)){const t=(INSET.PUSH_T0-Math.max(0,sub.eta))/(INSET.PUSH_T0-INSET.PUSH_T1),g=t<=0?0:(t>=1?1:t*t*(3-2*t));W/=1+(INSET.PUSH-1)*g;} // 离命中 PUSH_T0 → PUSH_T1 墙钟秒连续推近
   W=Math.max(W,w/zMax);
   const hm=sub.kind==='home',mx=INSET.LEAD*W/2,my=mx*hp/w,qx=(x0+x1)/2+lx*W/w,qy=(y0+y1)/2+ly*W/w,cx=hm?Math.max(S[0]-mx,Math.min(S[0]+mx,qx)):qx,cy=hm?Math.max(S[1]-my,Math.min(S[1]+my,qy)):qy; // 主镜头:主体离中心最多偏到满前视,语境已经把框往别处带时不再叠前视(单选一艘、友舰在旁边时原来被挤到安全边);框宽不跟前视走(用户:前视缩放有阶梯感)
   return {bx:cx-lx*W/w,by:cy-ly*W/w,lx:lx,ly:ly,cx:cx,cy:cy,w:W};
@@ -361,8 +365,8 @@ function insetCam(sub,T,w,hp,dt,now){ // 镜头运动:换主体 = 飞过去(发�
   if(sub.kk!==I.kk){I.ox+=I.ax-S[0];I.oy+=I.ay-S[1];I.ax=S[0];I.ay=S[1];I.kk=sub.kk;} // 在队的舰变了(离群 / 回队):中心不跳
   if(sub.j){I.ax=insetSD(I.ax,S[0],3,I.T_ANC,dt);I.ay=insetSD(I.ay,S[1],4,I.T_ANC,dt);}else{I.ax=S[0];I.ay=S[1];I.vo[3]=I.vo[4]=0;}
   const band=Math.log(1+I.DB/100);if(I.lzg===null)I.lzg=ltz;
-  if(ltz<I.lzg-band*0.5){I.lzg=ltz+band*0.5;I.zin=0;}else if(ltz>I.lzg+band){I.zin+=dt;if(I.zin>=I.ZWAIT)I.lzg=ltz-band;}else if(ltz<I.lzg+band*0.9)I.zin=0; // 要装下新东西立刻拉远;想推近要持续 ZWAIT 秒;出了死区贴着死区边连续跟、目标退回死区里才重新等(2026-10-04 用户:缩放有阶梯感 —— 原来一出死区就跳到目标再停住,目标慢慢变就一停一动)
-  const lz0=I.lz,lz1=insetSD(lz0,I.lzg,2,I.lzg<lz0?I.T_OUT:I.T_IN,dt),mx=Math.log(I.ZRATE)*dt;I.lz=Math.max(lz0-mx,Math.min(lz0+mx,lz1));
+  if(sub.pg>0&&ltz>I.lzg){I.lzg=ltz;I.zin=0;}else if(ltz<I.lzg-band*0.5){I.lzg=ltz+band*0.5;I.zin=0;}else if(ltz>I.lzg+band){I.zin+=dt;if(I.zin>=I.ZWAIT)I.lzg=ltz-band;}else if(ltz<I.lzg+band*0.9)I.zin=0; // 要装下新东西立刻拉远;想推近要持续 ZWAIT 秒;出了死区贴着死区边连续跟、目标退回死区里才重新等(2026-10-04 用户:缩放有阶梯感 —— 原来一出死区就跳到目标再停住,目标慢慢变就一停一动)
+  const lz0=I.lz,lz1=insetSD(lz0,I.lzg,2,I.lzg<lz0||sub.pg>0?I.T_OUT:I.T_IN,dt),mx=Math.log(I.ZRATE)*dt;I.lz=Math.max(lz0-mx,Math.min(lz0+mx,lz1));
   I.lpx=insetSD(I.lpx,T.lx,0,I.T_PAN,dt);I.lpy=insetSD(I.lpy,T.ly,1,I.T_PAN,dt); // 前视不过软区:船队一动就往航向让出画面
   const z=Math.exp(I.lz),ex=(T.bx-I.ax-I.ox)*z,ey=(T.by-I.ay-I.oy)*z,SXp=I.SOFT*w,SYp=I.SOFT*hp,om=I.OM; // 语境中心的偏移在软区里不追,出了软区按弹簧(固有频率 OM、阻尼比 ZE)追软区边
   const gx=I.ox+(ex-Math.max(-SXp,Math.min(SXp,ex)))/z,gy=I.oy+(ey-Math.max(-SYp,Math.min(SYp,ey)))/z;
