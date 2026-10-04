@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<title>星空美术</title>
+<style>
+html,body{margin:0;height:100%;background:#05070c;overflow:hidden;font:12px "Microsoft YaHei",sans-serif;color:#c7d0dc}
+#cv{position:fixed;left:0;top:0;display:block;cursor:grab}
+#top{position:fixed;left:0;right:0;top:0;height:40px;display:flex;gap:14px;align-items:center;padding:0 12px;background:rgba(5,7,12,.9);border-bottom:1px solid #1e2836;user-select:none}
+#top h1{font-size:14px;margin:0;color:#5aa7ff;letter-spacing:1px;font-weight:normal}
+#top .g{display:flex;gap:4px;align-items:center;color:#5f7083}
+button{background:#101722;color:#c7d0dc;border:1px solid #1e2836;padding:3px 9px;cursor:pointer;font:12px "Microsoft YaHei",sans-serif}
+button.on{border-color:#5aa7ff;color:#fff;background:#12233a}
+#read{color:#8fa0b0;font:12px Consolas,"Microsoft YaHei",monospace;white-space:nowrap}
+#list{position:fixed;left:10px;top:52px;width:150px;background:rgba(11,16,22,.88);border:1px solid #1e2836;padding:6px 8px;user-select:none;max-height:calc(100% - 120px);overflow:auto}
+#list .h{color:#5aa7ff;margin:6px 0 3px}
+#list .h.n{color:#d9a066}
+#list button{display:block;width:100%;text-align:left;margin:2px 0;padding:2px 7px}
+#info{position:fixed;right:10px;bottom:10px;width:440px;color:#8fa0b0;line-height:1.6;background:rgba(11,16,22,.88);border:1px solid #1e2836;padding:6px 9px}
+#info b{color:#c7d0dc;font-weight:normal}
+</style></head><body>
+<canvas id="cv"></canvas>
+<div id="top"><h1>星空美术</h1>
+  <span class="g">跳层 <button data-t="1">战术层</button><button data-t="2">舰队层</button><button data-t="3">战区层</button></span>
+  <span class="g"><button id="bSun">太阳线</button><button id="bNew" class="on">新地形(未进引擎)</button><button id="bInfo" class="on">说明</button></span>
+  <span id="read"></span></div>
+<div id="list"></div>
+<div id="info">
+<b>星图照引擎</b>:底色 / 网格 / 比例尺 / 四边刻度尺 / 星空 / 舰标缩放系数 / 行星 / 恒星 / 星云 / 碎石的画法与比例,都是 <b>星图展示.js</b> 里抄的引擎原文(2026-10-05);开页在战术层落点(比例尺 100 px = 2.5 万 km)。
+滚轮缩放、拖动平移、1 / 2 / 3 跳层。拉远过舰船换箭头那一点(比例尺约 4.1 万 km)碎石换成小方块 —— 同引擎。<br>
+<b>世界</b>:按引擎对局的写法摆一张展示图(游玩区 306 万 x 172.1 万):七种行星各一颗(气态、冰巨星带碎石环)、一朵尘埃云、四片小行星 + 20 颗零散、四种碎石带(弧带 / 流带 / 分叉 / 喷流)、一颗恒星在 700 万 km 外。
+碎石带本身引擎地图上不画,只看得到撒出来的石头;这里也一样。碎石全部按「已认出」画。<br>
+<b>未进引擎</b>(左栏橙色):彗星 / 卫星 / 电离云 / 辐射带 / 据点,画法取自 demos/地图组/新地形.html,只换成同一套比例尺;卫星的地表改用引擎的行星画法(岩质 / 冰质)。
+</div>
+<script src="星图展示.js"></script>
+<script>
+"use strict";
+/* 星空美术(2026-10-05 用户:美术组里的东西是真的会画进引擎里的东西;这一页专门展示星空美术,星图展示法与引擎一致)。
+   舰船、尾焰、导弹、残骸、浮标在 舰船武器美术.html。旧版整页在 存档/美术资产_2026-10-05前.html。 */
+const cv=document.getElementById('cv'),g=cv.getContext('2d');let W=0,H=0,DPR=1;
+const $=id=>document.getElementById(id);
+const AW=3060000,AH=1721250; // 游玩区(core/01 ARENA_W / ARENA_H)
+const STAR=[-6100000,-3600000];
+/* ---------- 展示世界(写法同引擎场景的 world;行星没写 name ⇒ 地图上叫「天体」,同对局)---------- */
+const PL={gas:[-880000,-300000,145600,4101],icegiant:[-160000,470000,100000,4102],rock:[560000,-470000,60000,4103],ice:[1180000,330000,48000,4104],
+  desert:[-1200000,520000,80000,4105],lava:[260000,180000,52000,4106],terra:[1220000,-420000,88000,4107]};
+const WORLD={stars:[{x:STAR[0],y:STAR[1]}],
+  bodies:Object.keys(PL).map(k=>({x:PL[k][0],y:PL[k][1],r:PL[k][2],type:k,seed:PL[k][3]})),
+  clouds:[{x:1650000,y:850000,a:2000000,b:1200000,ang:24,seed:20}],
+  asteroids:[{x:-520000,y:-60000,r:80000,n:25,seed:311,clear:30000,name:'小行星'},{x:300000,y:-120000,r:70000,n:25,seed:312,clear:30000,name:'小行星'},
+    {x:780000,y:560000,r:90000,n:25,seed:313,clear:30000,name:'小行星'},{x:-1250000,y:-450000,r:60000,n:25,seed:314,clear:30000,name:'小行星'}],
+  belts:[{kind:'弧带',seed:9101,n:220,w:22000,c:0.6},{kind:'流带',seed:9202,n:220,w:18000,c:0.5},{kind:'分叉',seed:9303,n:240,w:20000,c:0.5},{kind:'喷流',seed:9404,n:200,w:26000,c:0.4},
+    {kind:'行星环',x:PL.gas[0],y:PL.gas[1],br:PL.gas[2],seed:9505,n:110,w:20000,c:0.5},{kind:'行星环',x:PL.icegiant[0],y:PL.icegiant[1],br:PL.icegiant[2],seed:9606,n:90,w:20000,c:0.4}]};
+{const r=XT.artRng(77);for(let m=0;m<20;m++)WORLD.asteroids.push({x:Math.round((r()-0.5)*AW*0.96),y:Math.round((r()-0.5)*AH*0.96),r:1,n:1,seed:500+m,clear:30000,name:'小行星'});} // 零散 20 颗(同对局 matchGenWorld 的写法:一颗一条)
+XT.setWorld(WORLD,{arena:{x0:-AW/2,y0:-AH/2,x1:AW/2,y1:AH/2},avoid:[]});
+XT.opt.rulerTop=44;
+
+/* ---------- 未进引擎的新地形(画法与数照 demos/地图组/新地形.html;位置挪进这张展示图)---------- */
+const TK=10;
+const N={COMET:{R:3000,TAIL:300000,W0:10000,W1:60000,V:60,MU:1.5e12,P0:[-1450000,-60000],CYC:6000,T0:1500,DUST:{A:400,K:0.7,N:150}},
+  MOON:{V:20},BELT:{R0:1.2,R1:2.2},STA:{CAP_R:30000,VIS:120000}};
+const NEW={on:true,
+  moons:[{p:'gas',orb:480000,ph:0.9,r:26000,type:'rock',seed:71},{p:'gas',orb:640000,ph:3.6,r:19000,type:'ice',seed:72},{p:'icegiant',orb:360000,ph:5.2,r:14000,type:'ice',seed:73}],
+  rad:['gas','icegiant'],
+  ion:{x:-560000,y:300000,a:300000,b:170000,ang:15*Math.PI/180,cell:3000},
+  sta:[{name:'据点甲',x:-300000,y:-640000,holder:null},{name:'据点乙',x:900000,y:-80000,holder:'blue'},{name:'据点丙',x:-1350000,y:150000,holder:'red'}]};
+function hash2(i,j,s){let h=Math.imul(i|0,374761393)^Math.imul(j|0,668265263)^Math.imul(s|0,1442695041);h=Math.imul(h^(h>>>13),1274126177);return ((h^(h>>>16))>>>0)/4294967296;}
+function vnoise(x,y,s){const i=Math.floor(x),j=Math.floor(y),fx=x-i,fy=y-j,u=fx*fx*(3-2*fx),v=fy*fy*(3-2*fy);
+  const a=hash2(i,j,s),b=hash2(i+1,j,s),c=hash2(i,j+1,s),d=hash2(i+1,j+1,s);return a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v;}
+function fbm(x,y,s,o){let t=0,a=0.5,f=1,n=0;for(let k=0;k<o;k++){t+=a*vnoise(x*f,y*f,s+k*31);n+=a;a*=0.5;f*=2.07;}return t/n;}
+function ionRaw(I,x,y){const dx=x-I.x,dy=y-I.y,c=Math.cos(I.ang),s=Math.sin(I.ang),u=dx*c+dy*s,v=-dx*s+dy*c;
+  const q=(u/I.a)**2+(v/I.b)**2,n=fbm(x/140e3,y/140e3,7,4),q2=q*(0.7+0.6*n);if(q2>=1)return 0;
+  return Math.pow(1-q2,1.2)*(0.7+0.6*fbm(x/45e3,y/45e3,19,4));}
+function ionBuild(I){const ex=Math.sqrt((I.a*Math.cos(I.ang))**2+(I.b*Math.sin(I.ang))**2)*1.35,ey=Math.sqrt((I.a*Math.sin(I.ang))**2+(I.b*Math.cos(I.ang))**2)*1.35;
+  I.x0=I.x-ex;I.y0=I.y-ey;I.nx=Math.ceil(2*ex/I.cell)+1;I.ny=Math.ceil(2*ey/I.cell)+1;
+  const cvI=document.createElement('canvas');cvI.width=I.nx;cvI.height=I.ny;const gi=cvI.getContext('2d'),im=gi.createImageData(I.nx,I.ny);
+  for(let j=0;j<I.ny;j++)for(let i=0;i<I.nx;i++){const v=Math.min(1,ionRaw(I,I.x0+i*I.cell,I.y0+j*I.cell)),o=(j*I.nx+i)*4;im.data[o]=120+60*v;im.data[o+1]=110+90*v;im.data[o+2]=255;im.data[o+3]=Math.round(170*Math.pow(v,0.8));}
+  gi.putImageData(im,0,0);I.img=cvI;}
+ionBuild(NEW.ion);
+function cometPath(){const C=N.COMET,T=C.CYC,o={px:new Float64Array(T+2),py:new Float64Array(T+2),vx:new Float64Array(T+2),vy:new Float64Array(T+2)};
+  let x=C.P0[0],y=C.P0[1],u=C.V*TK,v=0;
+  for(let k=0;k<=T+1;k++){o.px[k]=x;o.py[k]=y;o.vx[k]=u;o.vy[k]=v;const dx=STAR[0]-x,dy=STAR[1]-y,r=Math.hypot(dx,dy),a=C.MU/(r*r);u+=a*dx/r;v+=a*dy/r;x+=u;y+=v;}
+  return o;}
+const COMET=cometPath();
+function cometAt(t){const C=COMET;t=Math.max(0,Math.min(N.COMET.CYC,t));const i=Math.min(N.COMET.CYC-1,Math.floor(t)),f=t-i,L=A=>A[i]+(A[i+1]-A[i])*f;return [L(C.px),L(C.py),L(C.vx),L(C.vy)];}
+function cometT(){return N.COMET.T0;} // 本页定格:开页时已经飞了 T0 游戏秒(新地形.html 的开页时刻)
+function cometPuffs(){const D=N.COMET.DUST,tc=cometT(),A=D.A,dA=A/D.N,beta=2*N.COMET.TAIL/(A*A),ph=tc%dA,out=[];
+  for(let i=0;i<D.N;i++){const a=i*dA+ph,r=tc-a;if(r<0)break;const s=cometAt(r),sx=s[0]-STAR[0],sy=s[1]-STAR[1],sl=Math.hypot(sx,sy),ux=sx/sl,uy=sy/sl,u=a/A,j=hash2(Math.round(r/dA),1,77);
+    const w=N.COMET.W0+(N.COMET.W1-N.COMET.W0)*Math.pow(u,0.8),lat=(j-0.5)*0.45*w;
+    const bx=s[0]+D.K*s[2]*a+0.5*beta*ux*a*a,by=s[1]+D.K*s[3]*a+0.5*beta*uy*a*a;out.push({bx,by,x:bx-uy*lat,y:by+ux*lat,w,amp:Math.pow(1-u,0.8)*(0.65+0.35*j),a});}
+  for(let i=0;i<out.length;i++){const q=out[Math.min(out.length-1,i+1)],p=out[Math.max(0,i-1)],k=(i>0&&i<out.length-1)?2:1;out[i].ds=Math.max(50,Math.hypot(q.bx-p.bx,q.by-p.by)/k);out[i].dir=Math.atan2(q.by-p.by,q.bx-p.bx);}
+  return out;}
+const PUFFS=cometPuffs();
+function puffSpr(rgb){const c=document.createElement('canvas');c.width=c.height=64;const q=c.getContext('2d'),gr=q.createRadialGradient(32,32,0,32,32,32);gr.addColorStop(0,'rgba('+rgb+',1)');gr.addColorStop(0.45,'rgba('+rgb+',.45)');gr.addColorStop(1,'rgba('+rgb+',0)');q.fillStyle=gr;q.fillRect(0,0,64,64);return c;}
+function glowSpr(){const c=document.createElement('canvas');c.width=c.height=64;const q=c.getContext('2d'),gr=q.createRadialGradient(32,32,0,32,32,32);gr.addColorStop(0,'rgba(255,255,255,1)');gr.addColorStop(0.25,'rgba(200,230,255,.6)');gr.addColorStop(1,'rgba(140,190,255,0)');q.fillStyle=gr;q.fillRect(0,0,64,64);return c;}
+const PUFF=puffSpr('255,236,206'),GLOW=glowSpr();
+const SIDE={blue:[90,167,255],red:[255,107,107]};
+const css=(c,a)=>'rgba('+c[0]+','+c[1]+','+c[2]+','+(a===undefined?1:a)+')';
+function moonPos(m){const P=PL[m.p];return [P[0]+Math.cos(m.ph)*m.orb,P[1]+Math.sin(m.ph)*m.orb];}
+function drawNew(now){const S=XT.toScreen,z=XT.cam.zoom;
+  {const I=NEW.ion,p=S(I.x0-I.cell/2,I.y0-I.cell/2);g.imageSmoothingEnabled=true;g.globalAlpha=0.85;g.drawImage(I.img,p[0],p[1],I.nx*I.cell*z,I.ny*I.cell*z);g.globalAlpha=1;
+    const c=S(I.x,I.y);g.fillStyle='rgba(190,180,255,.55)';g.font='11px "Microsoft YaHei"';g.textAlign='center';g.textBaseline='alphabetic';g.fillText('电离云',c[0],c[1]);}
+  for(const k of NEW.rad){const P=PL[k],p=S(P[0],P[1]),r0=P[2]*N.BELT.R0*z,r1=P[2]*N.BELT.R1*z;
+    const gr=g.createRadialGradient(p[0],p[1],r0,p[0],p[1],r1),sh=0.8+0.2*Math.sin(now*1.3);gr.addColorStop(0,'rgba(150,230,170,0)');gr.addColorStop(0.25,'rgba(150,230,170,'+(0.13*sh).toFixed(3)+')');gr.addColorStop(0.7,'rgba(150,230,170,'+(0.07*sh).toFixed(3)+')');gr.addColorStop(1,'rgba(150,230,170,0)');
+    g.fillStyle=gr;g.beginPath();g.arc(p[0],p[1],r1,0,6.283);g.arc(p[0],p[1],r0,0,6.283,true);g.fill();
+    g.fillStyle='rgba(160,230,180,.6)';g.font='11px "Microsoft YaHei"';g.textAlign='center';g.textBaseline='alphabetic';g.fillText('辐射带',p[0],p[1]-r1-4);}
+  {const n=cometAt(cometT()),p=S(n[0],n[1]);g.save();g.globalCompositeOperation='lighter';
+    for(const f of PUFFS){const q=S(f.x,f.y),rw=f.w/2*z*1.25;if(q[0]<-rw*2||q[0]>W+rw*2||q[1]<-rw*2||q[1]>H+rw*2)continue;
+      const al=1.5*f.amp*f.ds/f.w;if(al<0.004)continue;g.globalAlpha=Math.min(1,al);g.save();g.translate(q[0],q[1]);g.rotate(f.dir);g.drawImage(PUFF,-rw*1.7,-rw,rw*3.4,rw*2);g.restore();}
+    g.globalAlpha=1;const gr=Math.max(6,N.COMET.R*5*z);g.drawImage(GLOW,p[0]-gr,p[1]-gr,2*gr,2*gr);g.restore();
+    const tc=cometT();g.strokeStyle='rgba(200,225,255,.22)';g.lineWidth=1;g.setLineDash([3,6]);g.beginPath();g.moveTo(p[0],p[1]);
+    for(let dt=60;dt<=1800&&tc+dt<=N.COMET.CYC;dt+=60){const s2=cometAt(tc+dt),e=S(s2[0],s2[1]);g.lineTo(e[0],e[1]);}g.stroke();g.setLineDash([]);
+    g.fillStyle='rgba(210,230,255,.7)';g.font='11px "Microsoft YaHei"';g.textAlign='center';g.textBaseline='alphabetic';g.fillText('彗星',p[0],p[1]-Math.max(10,gr*0.6));}
+  for(const m of NEW.moons){const P=PL[m.p],pc=S(P[0],P[1]);g.strokeStyle='rgba(160,170,190,.12)';g.lineWidth=1;g.beginPath();g.arc(pc[0],pc[1],m.orb*z,0,6.283);g.stroke();
+    const q=moonPos(m),p=S(q[0],q[1]),r=m.r*z;if(p[0]+r<0||p[0]-r>W||p[1]+r<0||p[1]-r>H)continue;
+    const u=XT.envSunDirAt(q,[0,0]),la=u?Math.atan2(u[1],u[0]):null,b={x:q[0],y:q[1],r:m.r,type:m.type,seed:m.seed};
+    if(!XT.artPlanet(g,b,p[0],p[1],r,la)){g.fillStyle='rgba(58,64,78,.92)';g.beginPath();g.arc(p[0],p[1],Math.max(r,3),0,6.283);g.fill();}}
+  for(const T of NEW.sta){const p=S(T.x,T.y),cr=N.STA.CAP_R*z;g.strokeStyle='rgba(180,190,205,.3)';g.setLineDash([4,5]);g.lineWidth=1;g.beginPath();g.arc(p[0],p[1],cr,0,6.283);g.stroke();g.setLineDash([]);
+    if(T.holder==='blue'){g.strokeStyle=css(SIDE.blue,0.22);g.beginPath();g.arc(p[0],p[1],N.STA.VIS*z,0,6.283);g.stroke();} // 自己的据点画可见光圈(新地形.html:视角 = 蓝方)
+    const R=7;g.fillStyle='rgba(0,0,0,.8)';g.beginPath();for(let k=0;k<8;k++){const a=(k+0.5)/8*6.283;g.lineTo(p[0]+Math.cos(a)*(R+1.5),p[1]+Math.sin(a)*(R+1.5));}g.fill();
+    g.fillStyle='rgb(120,128,140)';g.beginPath();for(let k=0;k<8;k++){const a=(k+0.5)/8*6.283;g.lineTo(p[0]+Math.cos(a)*R,p[1]+Math.sin(a)*R);}g.fill();
+    g.fillStyle=T.holder?css(SIDE[T.holder]):'rgba(200,205,215,.5)';g.beginPath();g.arc(p[0],p[1],2.6,0,6.283);g.fill();
+    g.fillStyle='rgba(200,206,220,.75)';g.font='11px "Microsoft YaHei"';g.textAlign='center';g.textBaseline='alphabetic';g.fillText(T.name+(T.holder?(T.holder==='blue'?' · 蓝':' · 红'):' · 中立'),p[0],p[1]+cr+12);}
+}
+
+/* ---------- 左栏:跳到每一样(落在给定的层) ---------- */
+function rockCenter(kind){const R=XT.rocks().filter(s=>s.belt===kind);if(!R.length)return null;let x=0,y=0;for(const s of R){x+=s.pos[0];y+=s.pos[1];}return [x/R.length,y/R.length];}
+const JUMP=[
+  ['已进引擎',null],
+  ['恒星',()=>[STAR,2]],
+  ...Object.keys(PL).map(k=>[XT.ART_PL_NAME[k],()=>[[PL[k][0],PL[k][1]],k==='gas'||k==='icegiant'?2:1]]),
+  ['行星环(气态)',()=>[[PL.gas[0],PL.gas[1]],2]],
+  ['尘埃云',()=>[[1150000,500000],2]],
+  ['小行星区',()=>[[WORLD.asteroids[0].x,WORLD.asteroids[0].y],1]],
+  ...['弧带','流带','分叉','喷流'].map(k=>['碎石带 · '+k,()=>{const c=rockCenter(k);return c?[c,2]:null;}]),
+  ['游玩区全图',()=>[[0,0],3]],
+  ['未进引擎',null],
+  ['彗星',()=>{const n=cometAt(cometT());return [[n[0]-80000,n[1]],1];}],
+  ['卫星',()=>[moonPos(NEW.moons[0]),1]],
+  ['电离云',()=>[[NEW.ion.x,NEW.ion.y],2]],
+  ['辐射带',()=>[[PL.gas[0],PL.gas[1]],2]],
+  ['据点',()=>[[NEW.sta[0].x,NEW.sta[0].y],1]]];
+{const L=$('list');for(const [nm,f] of JUMP){if(!f){const d=document.createElement('div');d.className='h'+(nm==='未进引擎'?' n':'');d.textContent=nm;L.appendChild(d);continue;}
+  const b=document.createElement('button');b.textContent=nm;b.onclick=()=>{const r=f();if(r)XT.jumpTier(r[1],r[0]);};L.appendChild(b);}}
+
+/* ---------- 交互 ---------- */
+function resize(){DPR=window.devicePixelRatio||1;W=innerWidth;H=innerHeight;cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);cv.style.width=W+'px';cv.style.height=H+'px';}
+addEventListener('resize',resize);resize();
+let drag=null;
+cv.addEventListener('mousedown',e=>{drag={x:e.clientX,y:e.clientY,cx:XT.cam.x,cy:XT.cam.y};cv.style.cursor='grabbing';});
+addEventListener('mousemove',e=>{if(!drag)return;XT.cam.x=drag.cx-(e.clientX-drag.x)/XT.cam.zoom;XT.cam.y=drag.cy-(e.clientY-drag.y)/XT.cam.zoom;});
+addEventListener('mouseup',()=>{drag=null;cv.style.cursor='grab';});
+cv.addEventListener('wheel',e=>{e.preventDefault();XT.zoomAt(e.clientX,e.clientY,Math.pow(XT.WHEEL_ZOOM_BASE,-e.deltaY));},{passive:false});
+for(const b of document.querySelectorAll('[data-t]'))b.onclick=()=>XT.jumpTier(+b.dataset.t);
+addEventListener('keydown',e=>{if(e.key==='1'||e.key==='2'||e.key==='3')XT.jumpTier(+e.key);});
+$('bSun').onclick=()=>{XT.opt.sun=!XT.opt.sun;$('bSun').classList.toggle('on',XT.opt.sun);};
+$('bNew').onclick=()=>{NEW.on=!NEW.on;$('bNew').classList.toggle('on',NEW.on);};
+$('bInfo').onclick=()=>{const v=$('info').style.display==='none';$('info').style.display=v?'':'none';$('bInfo').classList.toggle('on',v);};
+
+/* ---------- 主循环 ---------- */
+XT.cam.x=PL.lava[0]-90000;XT.cam.y=PL.lava[1]-20000;XT.jumpTier(1); // 开页:战术层落点,熔岩行星 + 旁边的小行星区
+let lastRead='';
+function readout(){const k=1/XT.cam.zoom,bar=100*k,mk=XT.shipMarkMode(),pend=XT.cloudPending();
+  const s='比例尺 100 px = '+(bar>=10000?(Math.round(bar/1000)/10)+' 万':Math.round(bar))+' km · 每像素 '+Math.round(k)+' km · '+XT.VT.NAME[XT.vtTierNow()]+' · 舰标系数 '+XT.shipZoomF().toFixed(3)+' · '+(mk?'代表显示':'真显示')+(pend?' · 星云采样中 '+pend+' 块':'');
+  if(s!==lastRead){$('read').textContent=s;lastRead=s;}}
+function frame(t){g.setTransform(DPR,0,0,DPR,0,0);XT.begin(g,W,H);
+  XT.drawBack();XT.drawEnv();XT.drawArena();if(NEW.on)drawNew(t/1000);XT.drawRocks();XT.drawRuler();
+  readout();requestAnimationFrame(frame);}
+requestAnimationFrame(frame);
+</script>
+</body></html>
