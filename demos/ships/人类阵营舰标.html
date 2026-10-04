@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>人类阵营舰标</title>
+<style>
+:root{--bg:#05070c;--panel:#0b1018;--line:#1e2836;--txt:#c7d0dc;--dim:#5f7083;--acc:#5aa7ff}
+body{margin:0;background:var(--bg);color:var(--txt);font:13px "Microsoft YaHei",sans-serif}
+header{padding:12px 16px 4px}h1{font-size:16px;margin:0;color:var(--acc)}
+p.n{color:var(--dim);margin:4px 0;font-size:12px;line-height:1.6}
+.ctl{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;padding:6px 16px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.ctl .g{color:var(--dim);margin-left:10px}
+button.t{background:#101722;color:var(--txt);border:1px solid var(--line);padding:3px 10px;cursor:pointer;font:12px "Microsoft YaHei",sans-serif}
+button.t.on{border-color:var(--acc);color:#fff;background:#12233a}
+.grp{padding:10px 16px 4px;border-bottom:1px solid #111a26}
+.grp h2{font-size:14px;margin:0 0 2px;color:#dfe8f3}.grp h2 b{color:var(--acc);margin-right:8px}
+.grp .d{color:var(--dim);font-size:12px;margin-bottom:6px}
+.row{display:flex;flex-wrap:wrap;gap:10px}
+.cell{background:var(--panel);border:1px solid var(--line);padding:6px}
+.cell .cap{font-size:12px;color:var(--dim);margin-bottom:4px}.cell .cap b{color:var(--txt);margin-right:6px}
+canvas{display:block}
+#map{border:1px solid var(--line);margin:10px 16px}
+</style>
+</head>
+<body>
+<header>
+<h1>新舰标 · 人类阵营(实用导向 / 工程美感 / 棱角分明)· 5 组风格方向</h1>
+<p class="n">独立演示页(不加载引擎,不参考任何原作外形)。俯视舰标,舰首朝右;每组覆盖 护卫 / 驱逐 / 巡洋 / 航母。大图按同一比例画(看得出舰种大小差),下面一排是地图上的实际尺寸(16 / 24 / 36 px 长,斜放一个看转向后的样子)。<br>
+页面最下面是地图模拟:每组一支编队按地图尺寸在网格上缓慢转向,左蓝右红,用来判断缩小以后还认不认得出、组与组之间分不分得开。</p>
+</header>
+<div class="ctl">
+  <span class="g">阵营色:</span><button class="t on" data-f="blue">蓝方</button><button class="t" data-f="red">红方</button>
+  <span class="g">大图:</span><button class="t on" id="det">细节线</button><button class="t on" id="grid">网格底</button>
+</div>
+<div id="groups"></div>
+<p class="n" style="padding:0 16px">地图模拟(按地图尺寸:航母约 45 px 长、护卫约 22 px)</p>
+<canvas id="map"></canvas>
+<script>
+"use strict";
+/* ===== 画法小工具:x 朝舰首(右),y 横向;单位 ≈ 巡洋舰长 85 ===== */
+const MIR=h=>{const o=h.map(p=>p.slice());for(let i=h.length-1;i>=0;i--){const [x,y]=h[i];if(y!==0)o.push([x,-y]);}return o;}; // 只给 y>=0 那一半(从舰首到舰尾),镜像成整块
+const RC=(x0,y0,x1,y1)=>[[x0,y0],[x1,y0],[x1,y1],[x0,y1]];
+const CB=(x0,x1,hw,cf,cr)=>MIR([[x1,0],[x1,hw-cf],[x1-cf,hw],[x0+cr,hw],[x0,hw-cr],[x0,0]]); // 倒角块:舰首倒 cf、舰尾倒 cr
+const HEX=(x0,x1,hw)=>MIR([[x1,0],[x1-(x1-x0)*0.25,hw],[x0+(x1-x0)*0.25,hw],[x0,0]]);
+const OCT=(cx,cy,r)=>{const o=[];for(let i=0;i<8;i++){const a=Math.PI/8+i*Math.PI/4;o.push([cx+r*Math.cos(a),cy+r*Math.sin(a)]);}return o;};
+const FLIP=p=>p.map(([x,y])=>[x,-y]);
+const S2=(t,p)=>[{t,p},{t,p:FLIP(p)}]; // 左右一对
+const H=p=>({t:'H',p}),G=p=>({t:'G',p}),RD=p=>({t:'R',p}),PL=p=>({t:'P',p}),DK=p=>({t:'K',p}),GL=p=>({t:'L',p}),LN=p=>({t:'N',p}),DE=p=>({t:'D',p});
+const ZZ=(x0,x1,hw,st)=>{const o=[];let k=0;for(let x=x0;x<=x1+1e-9;x+=st,k++)o.push([x,k%2?hw:-hw]);return LN(o);}; // 桁架斜撑
+const GRID=(x0,y0,x1,y1,nx,ny)=>{const o=[];for(let i=1;i<nx;i++){const x=x0+(x1-x0)*i/nx;o.push(LN([[x,y0],[x,y1]]));}for(let j=1;j<ny;j++){const y=y0+(y1-y0)*j/ny;o.push(LN([[x0,y],[x1,y]]));}return o;};
+const BOX=(x0,y0,x1,y1)=>LN([[x0,y0],[x1,y0],[x1,y1],[x0,y1],[x0,y0]]);
+
+/* ===== 5 组 x 4 舰种 ===== */
+const GROUPS=[
+ {id:'A',name:'桁架模块',d:'外露的桁架脊梁,模块用夹具挂在两侧;舰首是倒角指挥块,舰尾是推进块。拼装出来的工业感,一看就知道哪块是干什么的。',ships:{
+  FF:{L:56,parts:[H(RC(-18,-2,12,2)),H(CB(12,25,7,3,1)),G(RC(25,-1,31,1)),...S2('H',RC(-10,2,4,7)),H(CB(-25,-16,5,0,2)),
+     ZZ(-16,12,2,3),LN([[-6,2],[-6,7]]),LN([[-2,2],[-2,7]]),LN([[-6,-2],[-6,-7]]),LN([[-2,-2],[-2,-7]]),PL(CB(15,23,4,2,0)),GL(RC(-27,-2.5,-25,2.5))]},
+  DD:{L:70,parts:[H(RC(-24,-2.2,18,2.2)),H(CB(18,33,8,4,1)),G(RC(33,-1.2,38,1.2)),...S2('H',RC(-6,2.2,10,9)),...S2('H',RC(-21,2.2,-9,8)),
+     ...S2('R',[[-9,8],[-21,8],[-23,15],[-11,15]]),H(CB(-32,-22,7,0,2)),ZZ(-22,18,2.2,4),PL(CB(21,30,5,3,0)),
+     LN([[2,2.2],[2,9]]),LN([[2,-2.2],[2,-9]]),...GRID(-6,3.5,10,8,3,1),GL(RC(-34,1.5,-32,5.5)),GL(RC(-34,-5.5,-32,-1.5))]},
+  CA:{L:92,parts:[H(RC(-30,-2.5,22,2.5)),H(CB(20,42,11,6,2)),G(RC(42,-1.6,50,1.6)),...S2('H',RC(6,2.5,19,11)),...S2('H',RC(-12,2.5,3,12)),...S2('H',RC(-27,2.5,-15,10)),
+     ...S2('R',[[-15,10],[-27,10],[-30,19],[-18,19]]),H(CB(-42,-28,10,0,3)),PL(CB(24,39,8,4,1)),ZZ(-28,20,2.5,4),
+     ...GRID(-11,4,2,11,4,2),...GRID(-11,-11,2,-4,4,2),LN([[12,2.5],[12,11]]),LN([[12,-2.5],[12,-11]]),
+     GL(RC(-44,-7,-42,-3)),GL(RC(-44,-2,-42,2)),GL(RC(-44,3,-42,7))]},
+  CV:{L:96,parts:[H(RC(-36,-3,26,3)),H(CB(24,40,9,5,2)),...S2('H',[[-30,12],[30,12],[34,16],[34,20],[30,24],[-30,24],[-33,21],[-33,15]]),
+     ...S2('H',RC(8,3,16,12)),...S2('H',RC(-20,3,-12,12)),H(CB(-50,-34,12,0,3)),PL(CB(27,37,6,3,1)),ZZ(-34,24,3,4),
+     ...S2('K',RC(28,15,33,21)),DE([[-26,18],[27,18]]),DE([[-26,-18],[27,-18]]),...S2('L',RC(-35,15,-33,21)),
+     GL(RC(-52,-9,-50,-5)),GL(RC(-52,-3.5,-50,-0.5)),GL(RC(-52,0.5,-50,3.5)),GL(RC(-52,5,-50,9))]}}},
+ {id:'B',name:'楔形装甲',d:'一整块多面装甲壳,楔形舰首,装甲带一层层往后叠;武器做成嵌进壳里的炮廓。轮廓最干净,缩小以后最像一个「箭头」。',ships:{
+  FF:{L:54,parts:[H(MIR([[25,0],[10,5],[-10,9],[-20,9],[-25,6],[-25,0]])),G(RC(22,-0.8,28,0.8)),PL(MIR([[14,0],[4,3.6],[-12,6.6],[-19,5],[-19,0]])),
+     LN([[25,0],[-25,0]]),LN([[10,5],[4,0],[10,-5]]),LN([[-10,9],[-12,6.6]]),LN([[-10,-9],[-12,-6.6]]),GL(RC(-27,-3,-25,3))]},
+  DD:{L:68,parts:[H(MIR([[33,0],[18,5],[8,6],[6,9],[-14,11],[-26,11],[-32,7],[-32,0]])),...S2('H',RC(0,9,8,13)),...S2('G',RC(8,10.4,13,11.6)),G(RC(30,-0.9,35,0.9)),
+     PL(MIR([[16,0],[8,4.2],[-12,8],[-24,8],[-27,5],[-27,0]])),LN([[33,0],[-32,0]]),LN([[18,5],[12,0],[18,-5]]),LN([[6,9],[-2,4.5],[-12,8]]),LN([[6,-9],[-2,-4.5],[-12,-8]]),
+     GL(RC(-34,2,-32,5)),GL(RC(-34,-5,-32,-2))]},
+  CA:{L:92,parts:[H(MIR([[43,0],[28,6],[20,8],[17,12],[-6,14],[-10,17],[-30,17],[-40,12],[-42,8],[-42,0]])),G(RC(43,-1.2,50,1.2)),
+     PL(MIR([[30,0],[20,5.5],[-6,10],[-30,12],[-37,8],[-37,0]])),PL(HEX(18,28,4)),PL(HEX(2,12,4.5)),G(RC(28,-0.9,36,0.9)),G(RC(12,1,17,2)),G(RC(12,-2,17,-1)),
+     LN([[43,0],[30,0]]),LN([[-6,0],[-37,0]]),LN([[28,6],[22,0],[28,-6]]),LN([[17,12],[6,7]]),LN([[17,-12],[6,-7]]),LN([[-10,17],[-14,11]]),LN([[-10,-17],[-14,-11]]),
+     GL(RC(-44,-8,-42,-4)),GL(RC(-44,-2,-42,2)),GL(RC(-44,4,-42,8))]},
+  CV:{L:100,parts:[H(MIR([[50,0],[34,7],[24,16],[-30,20],[-46,16],[-50,10],[-50,0]])),PL(RC(-40,-5,36,5)),DE([[-36,0],[34,0]]),LN([[-40,5],[36,5]]),LN([[-40,-5],[36,-5]]),
+     ...S2('K',RC(-20,14,10,17)),PL(RC(-12,-15,2,-10)),BOX(-12,-15,2,-10),LN([[34,7],[24,0],[34,-7]]),LN([[24,16],[14,9]]),LN([[24,-16],[14,-9]]),
+     GL(RC(-52,-11,-50,-7)),GL(RC(-52,-4.5,-50,-1.5)),GL(RC(-52,1.5,-50,4.5)),GL(RC(-52,7,-50,11))]}}},
+ {id:'C',name:'双体外伸',d:'双体 / 三体船:主体之外用支柱把武器舱、机库外伸出去,横向很宽、重心低,像一座稳定的炮台。剪影里有「空隙」,和别的组一眼分得开。',ships:{
+  FF:{L:56,parts:[H(MIR([[25,0],[16,3.5],[-22,3.5],[-25,2],[-25,0]])),G(RC(25,-0.8,30,0.8)),...S2('H',[[6,9.5],[2,11],[-14,11],[-16,9.5],[-14,8],[2,8]]),...S2('H',RC(-6,3.5,-2,8)),
+     PL(MIR([[18,0],[14,2],[4,2],[4,0]])),LN([[16,0],[-22,0]]),GL(RC(-27,-1.5,-25,1.5)),...S2('L',RC(-17,8.8,-15.5,10.2))]},
+  DD:{L:70,parts:[...S2('H',[[30,7],[24,10],[-29,10],[-32,8.5],[-32,5.5],[-29,4],[24,4]]),H(RC(-8,-7,12,7)),PL(OCT(6,0,3)),G(RC(9,-0.7,16,0.7)),
+     LN([[24,7],[-29,7]]),LN([[24,-7],[-29,-7]]),BOX(-8,-4,12,4),...S2('L',RC(-34,5.5,-32,8.5))]},
+  CA:{L:94,parts:[H(MIR([[43,0],[30,5],[-38,5],[-42,3],[-42,0]])),G(RC(43,-1.4,50,1.4)),...S2('H',[[22,17],[16,20],[-28,20],[-31,18.5],[-31,15.5],[-28,14],[16,14]]),
+     ...S2('H',RC(8,5,13,14)),...S2('H',RC(-20,5,-15,14)),PL(OCT(18,0,3.5)),G(RC(21,-0.8,28,0.8)),PL(OCT(-4,0,3.5)),G(RC(-1,-0.8,6,0.8)),
+     ...GRID(-24,15,12,19,6,1),...GRID(-24,-19,12,-15,6,1),LN([[30,0],[-38,0]]),GL(RC(-44,-2,-42,2)),...S2('L',RC(-33,15.5,-31,18.5))]},
+  CV:{L:100,parts:[...S2('H',[[44,19],[36,24],[-46,24],[-50,21],[-50,17],[-46,14],[36,14]]),H(RC(-40,-14,36,14)),...S2('K',RC(30,-10,36,-2)),
+     DE([[-36,0],[30,0]]),DE([[-36,7],[30,7]]),DE([[-36,-7],[30,-7]]),PL(RC(-6,20,6,23)),BOX(-6,20,6,23),LN([[36,19],[-46,19]]),LN([[36,-19],[-46,-19]]),
+     ...S2('L',RC(-52,17,-50,21))]}}},
+ {id:'D',name:'长脊散热',d:'细长脊梁串起舰首舱、反应堆和推进锥,两侧是大面积散热翼(竖条纹)。硬科幻的工程逻辑:热要散出去,所以翼越大船越能打。',ships:{
+  FF:{L:56,parts:[H(RC(-20,-1.5,15,1.5)),H(HEX(15,25,4)),H(OCT(-10,0,4.5)),...S2('R',[[8,1.5],[-4,1.5],[-7,10],[5,10]]),H(MIR([[-20,0],[-20,2.5],[-25,4.5],[-25,0]])),
+     PL(OCT(-10,0,2.6)),LN([[15,0],[25,0]]),GL(RC(-27,-3.5,-25,3.5))]},
+  DD:{L:72,parts:[H(RC(-26,-2,20,2)),H(HEX(20,32,5)),G(RC(32,-0.8,38,0.8)),H(OCT(-1,0,5.5)),...S2('R',[[16,2],[6,2],[4,11],[14,11]]),...S2('R',[[-10,2],[-22,2],[-25,14],[-13,14]]),
+     H(MIR([[-26,0],[-26,3],[-32,5.5],[-32,0]])),PL(OCT(-1,0,3.2)),LN([[20,0],[32,0]]),GL(RC(-34,-4.5,-32,4.5))]},
+  CA:{L:96,parts:[H(RC(-34,-2.2,26,2.2)),H(RC(26,-3,46,3)),G(RC(46,-1.2,52,1.2)),H(HEX(12,26,7)),H(OCT(-6,0,7.5)),...S2('R',[[-14,2.2],[-30,2.2],[-34,22],[-18,22]]),
+     ...S2('R',[[10,2.2],[2,2.2],[0,12],[8,12]]),H(MIR([[-34,0],[-34,4],[-42,7],[-42,0]])),PL(RC(28,-2,44,2)),PL(OCT(-6,0,4.5)),LN([[12,0],[26,0]]),GL(RC(-44,-6,-42,6))]},
+  CV:{L:98,parts:[H(RC(-40,-3,30,3)),H(HEX(28,44,8)),H(CB(2,22,13,3,3)),H(CB(-24,-4,13,3,3)),...S2('R',[[-28,3],[-40,3],[-44,22],[-32,22]]),H(MIR([[-40,0],[-40,5],[-50,8],[-50,0]])),
+     ...S2('K',RC(5,9,19,12)),...S2('K',RC(-21,9,-7,12)),PL(CB(4,20,7,2,2)),PL(CB(-22,-6,7,2,2)),LN([[28,0],[44,0]]),GL(RC(-52,-7,-50,7))]}}},
+ {id:'E',name:'集装块体',d:'方块分段、一节一节接起来,中段是集装箱格架,炮塔就是方块上的方块。像货船改装来的军舰,朴素、好修、量大。',ships:{
+  FF:{L:52,parts:[H(CB(10,25,5,2.5,0)),H(RC(-8,-7,10,7)),H(CB(-25,-8,6,0,1.5)),...GRID(-8,-7,10,7,3,2),PL(RC(14,-2,20,2)),GL(RC(-27,1.5,-25,4)),GL(RC(-27,-4,-25,-1.5))]},
+  DD:{L:68,parts:[H(CB(18,33,6,3,0)),H(RC(2,-9,18,9)),H(RC(-16,-11,2,11)),H(CB(-32,-16,8,0,2)),...S2('H',RC(6,9,14,12)),...S2('G',RC(14,10,19,11)),
+     ...GRID(-16,-11,2,11,3,4),BOX(5,-5,15,5),GL(RC(-34,1.5,-32,5)),GL(RC(-34,-5,-32,-1.5))]},
+  CA:{L:92,parts:[H(CB(26,43,8,4,0)),H(RC(6,-13,26,13)),H(RC(-18,-16,6,16)),H(RC(-34,-12,-18,12)),H(CB(-42,-34,8,0,2)),G(RC(43,-1,50,1)),
+     PL(RC(12,-3,18,3)),G(RC(18,-0.8,24,0.8)),PL(RC(-2,-3,4,3)),G(RC(4,-0.8,10,0.8)),...GRID(-18,-16,6,16,4,4),BOX(-32,-8,-20,8),
+     GL(RC(-44,-6,-42,-3)),GL(RC(-44,-1.5,-42,1.5)),GL(RC(-44,3,-42,6))]},
+  CV:{L:100,parts:[H(CB(-42,44,18,6,4)),PL(RC(-36,-8,40,8)),DE([[-34,0],[38,0]]),...S2('H',RC(-30,18,20,22)),...GRID(-30,18,20,22,8,1),...GRID(-30,-22,20,-18,8,1),
+     PL(RC(-6,-17,8,-12)),BOX(-6,-17,8,-12),H(CB(-50,-42,12,0,3)),LN([[-36,8],[40,8]]),LN([[-36,-8],[40,-8]]),
+     GL(RC(-52,-9,-50,-5)),GL(RC(-52,-3,-50,0)),GL(RC(-52,0,-50,3)),GL(RC(-52,5,-50,9))]}}},
+];
+const CLS=[['FF','护卫'],['DD','驱逐'],['CA','巡洋'],['CV','航母']];
+const PAL={
+ blue:{base:'#20354b',plate:'#2c4866',edge:'#8ec8ff',line:'#5d8dbf',gun:'#121c28',rad:'#25394a',radLine:'#6f9fc4',deck:'#9cc9f0',dark:'#0c141e',glow:'#a6e2ff',icon:'#6fb4ff',iconLine:'#183049'},
+ red:{base:'#4b2020',plate:'#662c2c',edge:'#ff9e92',line:'#c4675d',gun:'#281212',rad:'#4a2a28',radLine:'#c88a7a',deck:'#f0aaa0',dark:'#1e0c0c',glow:'#ffc6a0',icon:'#ff6b6b',iconLine:'#4b1818'}};
+const ST={f:'blue',det:true,grid:true};
+
+/* ===== 画一艘 ===== */
+function path(g,p){g.beginPath();g.moveTo(p[0][0],p[0][1]);for(let i=1;i<p.length;i++)g.lineTo(p[i][0],p[i][1]);g.closePath();}
+function poly(g,p){g.beginPath();g.moveTo(p[0][0],p[0][1]);for(let i=1;i<p.length;i++)g.lineTo(p[i][0],p[i][1]);}
+function drawShip(g,des,pal,sc,x,y,ang,full){ // sc = 像素 / 单位;full = 大图(带细节),否则按地图舰标的画法
+  g.save();g.translate(x,y);g.rotate(ang);g.scale(sc,sc);g.lineJoin='miter';g.miterLimit=4;
+  const solid=des.parts.filter(p=>p.t==='H'||p.t==='G'||p.t==='R');
+  if(!full){ // 地图舰标:实心阵营色 + 一圈暗边,够大时补一条中线;舰尾一点亮
+    g.strokeStyle=pal.iconLine;g.lineWidth=1.6/sc;for(const p of solid){path(g,p.p);g.stroke();}
+    g.fillStyle=pal.icon;for(const p of solid){path(g,p.p);g.fill();}
+    if(sc*des.L>=30){g.strokeStyle=pal.iconLine;g.lineWidth=0.8/sc;g.globalAlpha=0.6;for(const p of des.parts)if(p.t==='K'){path(g,p.p);g.stroke();}g.globalAlpha=1;}
+    g.fillStyle=pal.glow;for(const p of des.parts)if(p.t==='L'){path(g,p.p);g.fill();}
+    g.restore();return;}
+  g.strokeStyle=pal.edge;g.lineWidth=2.6/sc;for(const p of solid){path(g,p.p);g.stroke();} // 外轮廓:先描粗边再填色,只剩并集的外沿
+  for(const p of solid){path(g,p.p);g.fillStyle=p.t==='G'?pal.gun:(p.t==='R'?pal.rad:pal.base);g.fill();}
+  for(const p of des.parts)if(p.t==='P'){path(g,p.p);g.fillStyle=pal.plate;g.fill();if(ST.det){g.strokeStyle=pal.line;g.lineWidth=1/sc;g.stroke();}}
+  for(const p of des.parts)if(p.t==='K'){path(g,p.p);g.fillStyle=pal.dark;g.fill();}
+  if(ST.det){
+    for(const p of des.parts)if(p.t==='R'){g.save();path(g,p.p);g.clip();g.strokeStyle=pal.radLine;g.lineWidth=0.8/sc;let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;for(const q of p.p){x0=Math.min(x0,q[0]);x1=Math.max(x1,q[0]);y0=Math.min(y0,q[1]);y1=Math.max(y1,q[1]);}
+      g.beginPath();for(let xx=Math.ceil(x0/1.6)*1.6;xx<x1;xx+=1.6){g.moveTo(xx,y0);g.lineTo(xx,y1);}g.stroke();g.restore();path(g,p.p);g.strokeStyle=pal.line;g.lineWidth=1/sc;g.stroke();}
+    g.strokeStyle=pal.line;g.lineWidth=1/sc;for(const p of des.parts)if(p.t==='N'){poly(g,p.p);g.stroke();}
+    g.strokeStyle=pal.deck;g.setLineDash([3/sc*2,3/sc*2]);for(const p of des.parts)if(p.t==='D'){poly(g,p.p);g.stroke();}g.setLineDash([]);
+    for(const p of des.parts)if(p.t==='G'){path(g,p.p);g.strokeStyle=pal.edge;g.lineWidth=0.8/sc;g.stroke();}}
+  for(const p of des.parts)if(p.t==='L'){path(g,p.p);g.fillStyle=pal.glow;g.shadowColor=pal.glow;g.shadowBlur=6;g.fill();g.shadowBlur=0;}
+  g.restore();
+}
+function setup(c,w,h){const d=window.devicePixelRatio||1;c.width=Math.round(w*d);c.height=Math.round(h*d);c.style.width=w+'px';c.style.height=h+'px';const g=c.getContext('2d');g.setTransform(d,0,0,d,0,0);return g;}
+function bg(g,w,h,step){g.fillStyle='#070a10';g.fillRect(0,0,w,h);if(!ST.grid)return;g.fillStyle='rgba(90,120,160,.10)';for(let x=step;x<w;x+=step)g.fillRect(Math.round(x),0,1,h);for(let y=step;y<h;y+=step)g.fillRect(0,Math.round(y),w,1);}
+
+/* ===== 页面 ===== */
+const BW=240,BH=150,BIG=2.15; // 大图:同一比例(像素 / 单位)
+const cells=[];
+function build(){const root=document.getElementById('groups');root.innerHTML='';cells.length=0;
+  for(const gp of GROUPS){const div=document.createElement('div');div.className='grp';div.innerHTML='<h2><b>'+gp.id+'</b>'+gp.name+'</h2><div class="d">'+gp.d+'</div>';const row=document.createElement('div');row.className='row';div.appendChild(row);
+    for(const [k,nm] of CLS){const c=document.createElement('div');c.className='cell';const cap=document.createElement('div');cap.className='cap';cap.innerHTML='<b>'+nm+'</b>'+gp.name+' · '+k;
+      const big=document.createElement('canvas'),sm=document.createElement('canvas');c.appendChild(cap);c.appendChild(big);c.appendChild(sm);row.appendChild(c);cells.push({gp,k,big,sm});}
+    root.appendChild(div);}
+  drawCells();}
+function drawCells(){const pal=PAL[ST.f];
+  for(const c of cells){const des=c.gp.ships[c.k],g=setup(c.big,BW,BH);bg(g,BW,BH,20);drawShip(g,des,pal,BIG,BW/2+2,BH/2,0,true);
+    const s=setup(c.sm,BW,46);s.fillStyle='#070a10';s.fillRect(0,0,BW,46);let x=8;
+    for(const len of [16,24,36]){const sc=len/des.L;drawShip(s,des,pal,sc,x+len/2,23,0,false);x+=len+16;}
+    drawShip(s,des,pal,36/des.L,x+22,23,-0.5,false);
+    s.fillStyle='#3b4a5c';s.font='10px Consolas';s.fillText('16 / 24 / 36 px',BW-86,42);}}
+const mapC=document.getElementById('map');let MW=1100,MH=420,mg;
+function layoutMap(){MW=Math.min(1300,Math.max(700,window.innerWidth-34));mg=setup(mapC,MW,MH);}
+function drawMap(t){mg.fillStyle='#070a10';mg.fillRect(0,0,MW,MH);mg.fillStyle='rgba(90,120,160,.08)';for(let x=40;x<MW;x+=40)mg.fillRect(x,0,1,MH);for(let y=40;y<MH;y+=40)mg.fillRect(0,y,MW,1);
+  const sc=0.45,rowH=MH/GROUPS.length;
+  GROUPS.forEach((gp,i)=>{const cy=rowH*(i+0.5);mg.fillStyle='#4a5a6e';mg.font='11px "Microsoft YaHei"';mg.fillText(gp.id+' '+gp.name,8,cy-rowH*0.32);
+    for(const side of ['blue','red']){const dir=side==='blue'?1:-1,base=side==='blue'?MW*0.28:MW*0.72;
+      ['FF','DD','CA','CV'].forEach((k,j)=>{const des=gp.ships[k],a=(side==='blue'?0:Math.PI)+0.45*Math.sin(t/2600+i*1.3+j*0.7)*dir; // 四艘横排,各自慢慢转向
+        drawShip(mg,des,PAL[side],sc,base+(j-1.5)*72*dir,cy+4,a,false);});}});}
+function frame(t){drawMap(t);requestAnimationFrame(frame);}
+for(const b of document.querySelectorAll('[data-f]'))b.onclick=()=>{ST.f=b.dataset.f;for(const x of document.querySelectorAll('[data-f]'))x.classList.toggle('on',x===b);drawCells();};
+document.getElementById('det').onclick=e=>{ST.det=!ST.det;e.target.classList.toggle('on',ST.det);drawCells();};
+document.getElementById('grid').onclick=e=>{ST.grid=!ST.grid;e.target.classList.toggle('on',ST.grid);drawCells();};
+window.addEventListener('resize',layoutMap);
+build();layoutMap();requestAnimationFrame(frame);
+</script>
+</body>
+</html>
