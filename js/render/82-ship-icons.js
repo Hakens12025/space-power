@@ -176,7 +176,7 @@ function drawShip(s){
     view=contactState(s,VIEW);
     if(view==='heat'){const tk=trkOf(VIEW,s);if(trkMem(tk)){const q=toScreen(tk.lastPos[0],tk.lastPos[1]);if(q[0]>=-40&&q[0]<=W+40&&q[1]>=-40&&q[1]<=H+40)drawMemory(s,q);}return;} // 2026-09-30 用户:出现过的东西一直留着 —— 只剩红外(热)的,定过位又不动就在最后所见处画记忆(原来热态整个不画,记号就没了);热区本身照旧不画
     if(view==='none')return;
-    const cp=contactPos(s,VIEW);
+    const cp=viewPos(s); // 2026-10-04 走 viewPos:可见光圈里画真实位置
     if(!cp)return;
     dispPos=cp;
   }

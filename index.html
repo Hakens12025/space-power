@@ -120,15 +120,15 @@
 <script src="js/core/00-config.js?v=20260929cl"></script>
 <script src="js/core/01-state.js?v=20260929a85"></script>
 <script src="js/ships/10-hull-geometry.js?v=20260923"></script>
-<script src="js/ships/11-classes.js?v=20261003ag"></script>
+<script src="js/ships/11-classes.js?v=20261004a6"></script>
 <script src="js/world/12-env.js?v=20261003cut"></script><!-- ENV1 环境系统:太阳禁区 + 天体 + 石头(TK4c)。必须在 sensors/ 之前:23-cov 加载期的梯子反解会读 optLum -->
 <script src="js/world/13-dust.js?v=20260930a2"></script><!-- ENV2 世界层的尘埃云:噪声与背景亮度(envDustOne / envCloudDensity / envBg)。与 12-env 同属世界层,排在 sensors/ 之前;顶层只有声明,运行期才读 ENV -->
 <script src="js/world/14-objects.js?v=20261002bn"></script><!-- 2026-09-27 民船 / 诱饵 / 前出浮标(与石头同一张登记表 rocks[])-->
 <script src="js/world/15-belts.js?v=20260929bt"></script><!-- 2026-09-29 碎石带:对局按种子生成形状、撒石头(world/12 envSpawnRocks 末尾调) -->
 <script src="js/sensors/20-signature.js?v=20260930rc"></script>
-<script src="js/sensors/21-detect.js?v=20260930cl"></script>
+<script src="js/sensors/21-detect.js?v=20261004tr2"></script>
 <script src="js/sensors/22-percep.js?v=20260930cl"></script><!-- SN4 感知纯函数层:零顶层执行(只声明模块私有的 Float64Array 缓冲与三个纯字面量常量,不读 SENS/sReq/ships 任何东西)、不调 on()、不是 core/99,所以两条加载顺序硬约束都不涉及;跨文件引用(SENS 在 20-signature、sReq 在 00-config)全部运行期解析,与 formation/39-fmcaps 同口径 —— 排在 21-detect 之后只为目录编号好读,换到别处也不会错 -->
-<script src="js/sensors/23-cov.js?v=20261001v9"></script><!-- SN6 误差椭圆感知内核:同样零顶层执行(只声明;ladApply 不在加载期跑) -->
+<script src="js/sensors/23-cov.js?v=20261004xf"></script><!-- SN6 误差椭圆感知内核:同样零顶层执行(只声明;ladApply 不在加载期跑) -->
 <script src="js/sensors/24-track.js?v=20260929pf"></script><!-- TK1 航迹表(每方一张 WeakMap):顶层只建 TRK 与 TRK_FWD、只调同文件的函数;ships/11 的 makeShip 虽然排在它前面,但只在运行期调 trkAdopt(init 与判据里),所以不构成加载顺序约束 -->
 <script src="js/sensors/25-optpair.js?v=20260930c6"></script><!-- ENV2 成对光学模型(晒热 / 杂散光 / 云背景):顶层只有声明,22-percep 的精算步与弹丸路径在运行期调 -->
 <script src="js/physics/30-motion.js?v=20260923"></script>
@@ -143,11 +143,11 @@
 <script src="js/weapons/50-missile-spec.js?v=20260928e1"></script>
 <script src="js/weapons/51-defs.js?v=20261002am"></script>
 <script src="js/weapons/51-ciws.js?v=20260930rc"></script>
-<script src="js/weapons/52-fire.js?v=20261003ag"></script>
+<script src="js/weapons/52-fire.js?v=20261004k5"></script>
 <script src="js/weapons/53-nets.js?v=20261003fx"></script>
-<script src="js/weapons/54-missiles.js?v=20261003pf"></script>
+<script src="js/weapons/54-missiles.js?v=20261004rk2"></script>
 <script src="js/weapons/55-damage.js?v=20260929pg"></script>
-<script src="js/weapons/56-step-projectiles.js?v=20261003pf"></script>
+<script src="js/weapons/56-step-projectiles.js?v=20261004rk2"></script>
 <script src="js/weapons/57-step-weapons.js?v=20260929cl"></script>
 <script src="js/weapons/58-firecontrol.js?v=20260929dc"></script><!-- RF5 火控计算机引擎:序列数据模型+stepFireControl/Post。位置只为目录编号可读性(编号 58 > 57,归位到 weapons 块末尾),跨文件引用全在运行期解析:本文件顶层只有 const/let/function 声明,零顶层执行 -->
 <script src="js/core/05-sim.js?v=20260929cl"></script>
@@ -161,19 +161,19 @@
 <script src="js/render/80-camera.js?v=20260923"></script>
 <script src="js/render/81-background.js?v=20260926v8"></script>
 <script src="js/render/81-terrain.js?v=20260929cl"></script><!-- ENV2 地形瓦片服务:云浓度的世界锚定瓦片(粗到细、每帧工作量封顶、LRU)+ 合成缓存(双缓冲、1:1 贴图)。顶层只有 const / function 与一个惰性求和的 let(TERR_DUST_NORM,同 world/13 的 ENV_DUST_NORM),运行期由 81-env 的 mapTileFrame 调;与 81-background 共用编号 81 -->
-<script src="js/render/81-env.js?v=20260930ir2"></script><!-- ENV1 环境底图(天体 + 太阳方向)。与 81-background 共用编号 81。ENV2:改成 kind x view 登记表(ENV_VIEWS.map)+ 云 / 影子 / 天体 / 恒星的海图画法,版本号随之换 -->
-<script src="js/render/82-ship-icons.js?v=20260930sz"></script>
+<script src="js/render/81-env.js?v=20261004vp"></script><!-- ENV1 环境底图(天体 + 太阳方向)。与 81-background 共用编号 81。ENV2:改成 kind x view 登记表(ENV_VIEWS.map)+ 云 / 影子 / 天体 / 恒星的海图画法,版本号随之换 -->
+<script src="js/render/82-ship-icons.js?v=20261004vp"></script>
 <script src="js/render/82-rocks.js?v=20260930rc"></script><!-- TK4c 石头的航迹(第二个循环)。与 82-ship-icons / 82-lod 共用编号 82 -->
-<script src="js/render/82-lod.js?v=20260928zk"></script><!-- SN6 聚合层:舰 → 舰队框 → 舰队组;与 82-ship-icons 共用编号 -->
-<script src="js/render/83-hud.js?v=20261003pf"></script>
-<script src="js/render/84-scene.js?v=20261004st"></script>
+<script src="js/render/82-lod.js?v=20261004vp"></script><!-- SN6 聚合层:舰 → 舰队框 → 舰队组;与 82-ship-icons 共用编号 -->
+<script src="js/render/83-hud.js?v=20261004vp"></script>
+<script src="js/render/84-scene.js?v=20261004nsw3"></script>
 <script src="js/render/84-fmplot.js?v=20260923"></script><!-- FM4 编队能力站位的地图可视化。与 84-scene 共用编号 84(先例:weapons/51-defs 与 51-ciws),都属于“场景图层”;顶层只有 const/function,零顶层执行,由 84-scene 的 render() 运行期调用 -->
 <script src="js/render/85-settings.js?v=20260926e"></script>
 <script src="js/render/85-tutorial.js?v=20260930rc"></script><!-- RF5-D 教程面板。与 85-settings 共用编号 85(先例:weapons/51-defs 与 51-ciws),语义上教程与设置相邻。顶层调用 on(),故必须晚于 core/00;其余引用全在运行期解析 -->
-<script src="js/render/86-irview.js?v=20260930mn"></script><!-- 红外画面:右下角「红外」钮(MAPV.mode === 'ir');演示页 红外效果.html 的甲画法,物理走引擎的传感器模型 -->
+<script src="js/render/86-irview.js?v=20261004ob"></script><!-- 红外画面:右下角「红外」钮(MAPV.mode === 'ir');演示页 红外效果.html 的甲画法,物理走引擎的传感器模型 -->
 <script src="js/render/86-radarview.js?v=20260930rc"></script><!-- 雷达画面:右下角「雷达」钮(MAPV.mode === 'radar');演示页 雷达效果.html 的画法,数据走引擎现有的雷达模型 -->
-<script src="js/render/86-ir2view.js?v=20260930rr"></script><!-- 红外2:右下角「红外」钮(MAPV.mode === 'ir');演示页 地图组/红外2.html 的「按选择」+ 红外仪表,可见光圈里借 86-irview 的红外画面 -->
-<script src="js/render/86-sensorfx.js?v=20260930nr"></script><!-- 红外 / 雷达画面的小特效:雾染色、扫描扇、角标、滤镜、切换扫描线与文字(演示页 sensors/传感器视角特效.html) -->
+<script src="js/render/86-ir2view.js?v=20261004xf"></script><!-- 红外2:右下角「红外」钮(MAPV.mode === 'ir');演示页 地图组/红外2.html 的「按选择」+ 红外仪表,可见光圈里借 86-irview 的红外画面 -->
+<script src="js/render/86-sensorfx.js?v=20261004nosw"></script><!-- 红外 / 雷达画面的小特效:雾染色、扫描扇、角标、滤镜、切换扫描线与文字(演示页 sensors/传感器视角特效.html) -->
 <script src="js/render/87-fmbar.js?v=20260926k"></script><!-- FM1 编队书签栏 + 编队菜单。与 87-fleetcards 共用编号 87(先例:weapons/51-defs 与 51-ciws、render/85-settings 与 85-tutorial),语义上都是"舰队编成"的呈现。顶层只有 on(...) 委托挂载,故必须晚于 core/00;updFmBar() 由 core/99 每 20 帧调用,其余跨文件引用全在运行期解析 -->
 <script src="js/render/88-portrait.js?v=20260930rc"></script><!-- 2026-09-30 底栏舰名区的侧视肖像(UNSC 手画矢量);ptSet 由 88-selpanel 调 -->
 <script src="js/render/88-selpanel.js?v=20261003fx"></script>

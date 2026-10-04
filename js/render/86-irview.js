@@ -3,7 +3,7 @@
    红外1 画面(2026-09-30 起只被 86-ir2view 裁进可见光圈里用:irvUpdate / drawIrFx;原来是右下角「红外」钮的整屏画面):演示页 demos/地图组/红外效果.html 的甲画法搬进引擎,物理全走引擎的传感器模型。
    每个热源(非我方的船、石头)在我方看得最清楚的那艘船眼里是一团:有效亮度 = senseOptLoWith(晒热 / 杂散光 / 云背景 / 消光),三道门 = senseOptBlocked。
    一道门(2026-09-28 用户):每一处热的色阶值 = GAIN x 这一份热的有效信噪比 K_IR·lo/d²(船身、尾焰、轮廓、导弹同一条),不分类型;
-   团画在物体所在处,不偏(2026-09-28 用户:删掉红外的偏移);一定位就在 GLIDE 秒里缩成定位后的小团,丢了定位再慢慢胀回去;定位了的红外被三道门挡住也照画(热是物体固有的);
+   团画在物体所在处,不偏(2026-09-28 用户:删掉红外的偏移);一定位就在 GLIDE 秒里缩成定位后的小团,丢了定位再慢慢胀回去;定位了的红外不受日光禁区挡(热是物体固有的),天体照样挡(2026-10-04 用户:天体挡红外,irvBlk);
    团的大小 = 不确定:等面积半径按以前热区的对数压缩,屏幕上夹在热晕最小半径(irvGlowMin:舰标团;画轮廓时比轮廓大一圈)与 UNC_CAP 倍之间;弥散:圆的、轻微扭曲、缓慢翻涌,剖面画在色阶上(中心 = 一道门的峰值色阶,按 TW x 团半径平滑落回本底,不读亮度);定位的另有亮核;
    石头又大又冷,近到填满距离(FILL_K x 认出距离 x √体型)以内亮度不再涨(点源 → 扩展源),船与导弹当点源。
    背景:尘埃云(envBgParts,按光照;乘地图同一个显示增益)、位置型恒星的光晕、天体盘(朝阳面亮、背阴面 heat)。
@@ -40,10 +40,11 @@ function irvSrc(){ // 热源:非本方的船、石头(2026-09-27 自己放的浮
   const a=IRV_SRC.a;let n=0;for(const s of ships)if(s.side!==VIEW&&!s.dead)a[n++]=s;for(const r of rocks)if(!r.dead&&r.side!==VIEW)a[n++]=r;a.length=n;IRV_SRC.f=f;return a; // 按下标填、最后截长度(先清零再 push 会反复重分配底层存储)
 }
 function irvV(snr){return snr>=1?IRV_C.DET_V*Math.pow(snr,IRV_C.CONTRAST):IRV_C.GAIN*Math.pow(snr,IRV_C.SUB_P);} // 一道门:信噪比 → 色阶值;内核发现门限(信噪比 1)以下按 SUB_P 次方淡出(远处淡淡一团),门下封顶 GAIN,发现门处跳到 DET_V(增益调高以后不许跑在内核前面)
-function irvHill(t,obs,kn){ // 一座山:信噪比(一道门的输入),取看得最清楚的那艘我方船。kn = 我方已定位它:日光禁区 / 天体遮挡不挡(2026-09-30 自己尾焰致盲删了),照画它的热(用户:红外是固有的特性,可见光里红团不许消失)
+function irvBlk(o,t,kn){return kn?(ENV.bodies.length>0&&envOccluded(o.pos,t.pos)):senseOptBlocked(o,t);} // o 看 t 被挡住:没定位 = 三道门(25 senseOptBlocked);定位了(kn)只剩天体遮挡(2026-10-04 用户:天体挡红外)
+function irvHill(t,obs,kn){ // 一座山:信噪比(一道门的输入),取看得最清楚的那艘我方船。kn = 我方已定位它:日光禁区不挡、天体照挡(irvBlk,2026-10-04)(2026-09-30 自己尾焰致盲删了),照画它的热(用户:红外是固有的特性,可见光里红团不许消失)
   let best=null,bg=NaN,tSh=false;const lit=envHasLight(),nb=ENV.bodies.length>0;
   for(let n=0;n<obs.length;n++){const o=obs[n];
-    if(!kn&&senseOptBlocked(o,t))continue;
+    if(irvBlk(o,t,kn))continue;
     if(bg!==bg){bg=ENV.clouds.length?envBg(t.pos,'opt'):0;tSh=lit&&nb&&envInShadow(t.pos);}
     const lo=senseOptLoWith(o,t,bg,tSh,lit&&!(nb&&envInShadow(o.pos)));if(!(lo>0))continue;
     const dx=t.pos[0]-o.pos[0],dy=t.pos[1]-o.pos[1],dz=(t.pos[2]||0)-(o.pos[2]||0),d=Math.max(1,Math.hypot(dx,dy,dz));
@@ -112,7 +113,7 @@ function irvFireQ(t){return Math.ceil(fireLvl(t)*IRV_C.FIRE_Q);} // 开火热分
 function irvjStCh(r,t){return r.fl!==t.flame||r.sf!==t.sideFlame||r.em!==t.emitMode||r.fh!==irvFireQ(t)||r.fx!==t.facing[0]||r.fy!==t.facing[1];}
 function irvjStSet(r,t){r.fl=t.flame;r.sf=t.sideFlame;r.em=t.emitMode;r.fh=irvFireQ(t);r.fx=t.facing[0];r.fy=t.facing[1];}
 function irvjPhys(t,obs,kn){const h=irvHill(t,obs,kn);if(h)h.tl=irvTail(t,h);return h;}
-function irvjVis(m,t,obs,chk,kn){for(let k=0;k<obs.length;k++)if(chk&(1<<k)){if(kn||!senseOptBlocked(obs[k],t))m|=1<<k;else m&=~(1<<k);}return m;}
+function irvjVis(m,t,obs,chk,kn){for(let k=0;k<obs.length;k++)if(chk&(1<<k)){if(!irvBlk(obs[k],t,kn))m|=1<<k;else m&=~(1<<k);}return m;}
 function irvjQ(r,p){if(p===0){if(!r.in0){r.in0=true;IRVJ.q0.push(r);}}else if(!r.in0&&!r.in1){r.in1=true;IRVJ.q1.push(r);}}
 function irvjDrain(q,cap,obs,p0){
   let n=0,h=0;
@@ -187,7 +188,7 @@ function irvjUpdate(full,gch){ // 返回脏矩形 [i0,i1,j0,j1] 列表;null = �
     const pm=nw||!r.ep||r.px!==ep[0]||r.py!==ep[1],sc=nw||irvjStCh(r,t);r.mv=pm&&!nw;r.ep=ep;
     if(pm){r.px=ep[0];r.py=ep[1];}if(sc)irvjStSet(r,t);
     const so=irvSilOn(t),fxd=contactFix(t,VIEW);if(so!==r.so||fxd!==r.fxd){r.so=so;r.fxd=fxd;r.need=true;} // 内核认出 / 定位变了:轮廓与亮核跟着重画(静止的石头不会因为挪动而重贴)。fxd 不叫 fx:r.fx 是 irvjStSet 存的机头朝向
-    const kn=adminMode||fxd,kc=kn!==r.kn;r.kn=kn; // 定位与否变了:看不看得见要重判(定位了就不受三道门挡)
+    const kn=adminMode||fxd,kc=kn!==r.kn;r.kn=kn; // 定位与否变了:看不看得见要重判(定位了只剩天体挡)
     {const op=so?viewPos(t):null;r.smv=!!op&&(!r.op||r.op[0]!==op[0]||r.op[1]!==op[1]);if(!op)r.op=null;else if(!r.op)r.op=[op[0],op[1]];else{r.op[0]=op[0];r.op[1]=op[1];}if(r.smv)r.need=true;} // 轮廓画在我方知道的位置(用户选甲:物体本身;红晕按红外那一层略偏、翻涌)
     if(r.ph){const g=irvGlyph(t),bR=irvBlobRt(t,g,ep[2]);if(Math.abs(bR-r.bR)>IRV_C.R_TOL*r.bR||(IRVJ.ch-r.qs)*IRV_C.WARP*bR>=IRV_C.CHURN_STEP)r.need=true;} // 团大小变了、或翻涌累计把形状挪够了:重贴
     const chk=(gch||pm||sc||kc)?all:cm;

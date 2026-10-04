@@ -174,7 +174,11 @@ function contactIdn(s,side){return contactIdLvl(s,side)>=ID_SUS;} // TK2.6:「�
 /* TK2.6 身份档位与类型的门面(与 contactIdn 同一家;三档的定义见 sensors/24)。自己这一方恒为确认 */
 function contactIdLvl(s,side){return !s?ID_UNK:(s.side===side?ID_CON:trkIdLvl(trkOf(side,s)));}
 function contactIdType(s,side){return !s?null:(s.side===side?{kind:s.kind||'ship',cls:s.cls||null,tier:s.tier||null}:trkIdType(trkOf(side,s)));}
-function sigClassLabel(s){return '未知热源';} // 2026-09-26 用户:没认出的一律「未知热源」(原按 size 分大 / 中 / 小型热源);船与石头同一个字
+const SIG_TIER=[0.45,0.85]; // 2026-10-04 用户:定位了没认出的按船体自身的热分档 —— 船体热 < 0.45 小型、< 0.85 中等、其余大型(护卫 / 驱逐 / 巡游 0.7、巡洋 / 战列 / 航母 1.0、碎石中位 0.18、民船 0.6~1.4)
+function sigClassLabel(s){ // 没认出的一律「未知热源」(2026-09-26 用户);2026-10-04 用户:定位了的按亮度反推大小,报小 / 中等 / 大型热源 —— 用船体自身的热(体型 x (1 + 雷达废热)):定位后距离与太阳方位都知道,晒热 / 尾焰 / 开火都能扣掉;开着雷达偏亮一点、民船混在里面,是红外的骗人空间
+  if(!contactFix(s,VIEW))return '未知热源';
+  const h=optLum(s)-sReq(s,'size','ship')*(engPowerOf(s)+firePowerOf(s));
+  return h<SIG_TIER[0]?'小型热源':(h<SIG_TIER[1]?'中等热源':'大型热源');}
 function contactAge(s,side){return trkAge(trkOf(side,s));} // 距最后一次【定得出位置】的秒数(从未定位过 = 1e9)。SN6f:原来是"被光学或照射扫到",见 detectFor 里最后定位记录的刷新规则。TK2.0 起读航迹表
 /* ================= 接触的【显示态】:全库唯一的状态机(SN6f)=================
    用户实报:"只要存在热源的三角箭头就不显示热区……现在会出现只显示椭圆和陈旧、但不显示热区的情况。

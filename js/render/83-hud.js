@@ -76,7 +76,14 @@ function drawRange(){ // 测距工具(按住C):起点(或跟随船)→鼠标目�
   ctx.fillText(txt,q[0],q[1]-14);
   ctx.restore();
 }
-function viewPos(s){return (adminMode||s.side===VIEW)?s.pos:contactPos(s,VIEW);} // 2026-09-28 画面上对方东西画在哪 / 量多远的唯一出处:我方知道的位置(估计;GM 真值),交代不出给 null(不拿真值兜底)
+const VP_VIS={fr:-1,m:new Map()};
+function viewInVis(s){ // 2026-10-04 用户:对方的东西进了我方可见光圈(全知圈,我方船 / 浮标任一)就画真实位置 —— 圈里本来什么都看得清,估计只在感知节拍(1 游戏秒)更新,画估计会一段一段跳;每帧算一次
+  if(VP_VIS.fr!==frameN){VP_VIS.fr=frameN;VP_VIS.m.clear();}
+  let v=VP_VIS.m.get(s);if(v!==undefined)return v;v=false;
+  for(const d of ships)if(d.side===VIEW&&!d.dead&&senseVis(d,s)){v=true;break;}
+  if(!v)for(const o of rockObjs())if(o.kind==='buoy'&&o.side===VIEW&&!o.dead&&senseVis(o,s)){v=true;break;}
+  VP_VIS.m.set(s,v);return v;}
+function viewPos(s){return (adminMode||s.side===VIEW||viewInVis(s))?s.pos:contactPos(s,VIEW);} // 2026-09-28 画面上对方东西画在哪 / 量多远的唯一出处:我方知道的位置(估计;GM 真值),交代不出给 null(不拿真值兜底)
 function projSeen(p){return adminMode||!p.shooter||trkSees(VIEW,p)||(p.type==='missile'&&p.online&&p.shooter.side===VIEW);} // 2026-09-28 我方看不看得见这枚弹:画、点选、选中面板同一道门(2026-09-29 自己的弹也按视野)
 function drawLocks(){ // 火力锁定:红色虚线
   for(const s of ships){
@@ -230,14 +237,12 @@ function drawChain(p0){ // 2026-10-03:只画在网上的(断链的成员我方�
   const n=cl.length,bd=new Float64Array(n).fill(Infinity),bp=new Int32Array(n).fill(-1),inT=new Uint8Array(n);bd[0]=0; // Prim 最小生成树:每轮把离树最近的组接进来,接进来后只更新它到其余组的距离
   ctx.save();ctx.lineWidth=1;
   ctx.strokeStyle='rgba(84,224,208,.5)';
-  ctx.beginPath();
   for(let it=0;it<n;it++){let u=-1,ub=Infinity;for(let i=0;i<n;i++)if(!inT[i]&&bd[i]<ub){ub=bd[i];u=i;}if(u<0)break;inT[u]=1;
-    if(bp[u]>=0){const a2=toScreen(cl[u].pos[0],cl[u].pos[1]),b2=toScreen(cl[bp[u]].pos[0],cl[bp[u]].pos[1]);ctx.moveTo(a2[0],a2[1]);ctx.lineTo(b2[0],b2[1]);}
+    if(bp[u]>=0){const a2=toScreen(cl[u].pos[0],cl[u].pos[1]),b2=toScreen(cl[bp[u]].pos[0],cl[bp[u]].pos[1]);clipLine(a2[0],a2[1],b2[0],b2[1]);} // 每条边裁到屏幕单独描(2026-10-04 性能)
     const g=cl[u];for(let i=0;i<n;i++){if(inT[i])continue;const dx=cl[i].pos[0]-g.pos[0],dy=cl[i].pos[1]-g.pos[1],dz=cl[i].pos[2]-g.pos[2],q=dx*dx+dy*dy+dz*dz;if(q<bd[i]){bd[i]=q;bp[i]=u;}}}
-  ctx.stroke();
   if(shipEnd){const g=shipEnd[0],f=shipEnd[1],a2=toScreen(g.pos[0],g.pos[1]),b2=toScreen(f.pos[0],f.pos[1]); // 回舰的那一段
     ctx.strokeStyle='rgba(84,224,208,.9)';ctx.lineWidth=1.5;
-    ctx.beginPath();ctx.moveTo(a2[0],a2[1]);ctx.lineTo(b2[0],b2[1]);ctx.stroke();}
+    clipLine(a2[0],a2[1],b2[0],b2[1]);}
   ctx.restore();
 }
 function drawProjectiles(){ // 弹丸/导弹
@@ -413,13 +418,34 @@ function drawSignalView() {
 }
 
 /* ================= SN6 接触层:定得出位置的接触画误差椭圆(跟着「缩圈」钮);定不出位置的(热区)地图上不画(用户 2026-09-25)================= */
+const DASH_ARC_MAX=4000; // 虚线圆一圈最多几段:超了每段按比例拉长(只在极近的缩放下发生)
+function dashArc(cx,cy,r,len){ // 2026-10-04 性能(用户:选中导弹后 WASD 平移卡):虚线圆自己切成短线段、每段单独描(段长 = 间隔 = len px),屏幕外的段不画。实测 DPR 2 平移(GPU):每段单独描与不画几乎一样,整圈一条路径、setLineDash 都掉近一半帧
+  const n=Math.min(DASH_ARC_MAX,Math.max(12,Math.round(Math.PI*r/len))),da=2*Math.PI/n,ch=Math.cos(da/2),sh=Math.sin(da/2),cd=Math.cos(da),sd=Math.sin(da),m=len+2;
+  let x=r,y=0;
+  for(let i=0;i<n;i++){const px=cx+x,py=cy+y;
+    if(px>-m&&py>-m&&px<W+m&&py<H+m){ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(cx+x*ch-y*sh,cy+x*sh+y*ch);ctx.stroke();}
+    const nx=x*cd-y*sd;y=x*sd+y*cd;x=nx;}}
+const CLIP_T=[0,1];
+function clipSegT(x0,y0,x1,y1,m){ // 线段裁到屏幕(外扩 m px)的参数区间,写进 CLIP_T;整段在屏外返回 false(Liang–Barsky)
+  const dx=x1-x0,dy=y1-y0;let t0=0,t1=1;
+  const ps=[-dx,dx,-dy,dy],qs=[x0+m,W+m-x0,y0+m,H+m-y0];
+  for(let i=0;i<4;i++){const p=ps[i],q=qs[i];if(p===0){if(q<0)return false;continue;}const r=q/p;if(p<0){if(r>t1)return false;if(r>t0)t0=r;}else{if(r<t0)return false;if(r<t1)t1=r;}}
+  CLIP_T[0]=t0;CLIP_T[1]=t1;return true;}
+function dashLine(x0,y0,x1,y1,len){ // 2026-10-04 性能:虚线先裁到屏幕,再自己切段、每段单独描(花纹按离起点的距离对齐,平移时不爬)。GPU 上实测 setLineDash 的虚线裁短了也贵
+  const dx=x1-x0,dy=y1-y0,L=Math.hypot(dx,dy);if(L<1e-6||!clipSegT(x0,y0,x1,y1,len*2))return;
+  const ux=dx/L,uy=dy/L,d0=CLIP_T[0]*L,d1=CLIP_T[1]*L,P=2*len;
+  for(let a=Math.floor(d0/P)*P;a<d1;a+=P){const s0=Math.max(a,d0),s1=Math.min(a+len,d1);if(s1<=s0)continue;
+    ctx.beginPath();ctx.moveTo(x0+ux*s0,y0+uy*s0);ctx.lineTo(x0+ux*s1,y0+uy*s1);ctx.stroke();}}
+function clipLine(x0,y0,x1,y1){ // 实线裁到屏幕再单独描(2026-10-04 性能:伸出屏外很远的线整条描,DPR 2 下按整段的包围盒出遮罩)
+  if(!clipSegT(x0,y0,x1,y1,4))return;const dx=x1-x0,dy=y1-y0,t0=CLIP_T[0],t1=CLIP_T[1];
+  ctx.beginPath();ctx.moveTo(x0+dx*t0,y0+dy*t0);ctx.lineTo(x0+dx*t1,y0+dy*t1);ctx.stroke();}
 function drawMissileIntent(g){ // v129:选中导弹/网→显示组网圈与引导圈(2026-10-01)、目标虚线、目的地标记、火控母舰连线
   if(!adminMode&&g.shooter&&g.shooter.side!=='blue')return; // 2026-09-28 敌方弹的意图(目标、引导舰)我方不知道
   const sp=toScreen(g.pos[0],g.pos[1]);
-  { // 2026-10-01 用户:画组网圈与引导圈,两种画法(2026-09-30 触发圈不画了)。组网圈 = 弹与弹通信距离(weapons/54 MSL_LINK.MM,8.775 万):青色虚线;引导圈 = 导引头自主导引范围(GUIDE_SEEK,3 万):琥珀色实线
+  { // 2026-10-01 用户:画组网圈与引导圈,两种画法(2026-09-30 触发圈不画了)。组网圈 = 弹与弹通信距离(weapons/54 MSL_LINK.MM,6.1425 万):青色虚线(dashArc);引导圈 = 导引头自主导引范围(GUIDE_SEEK,3 万):琥珀色实线
     const r1=MSL_LINK.MM*cam.zoom,r2=GUIDE_SEEK*cam.zoom;
     ctx.save();ctx.lineWidth=1;ctx.font='10px "Microsoft YaHei",sans-serif';ctx.textAlign='center';ctx.textBaseline='bottom';
-    ctx.strokeStyle='rgba(84,224,208,.5)';ctx.setLineDash([6,6]);ctx.beginPath();ctx.arc(sp[0],sp[1],r1,0,6.283);ctx.stroke();ctx.setLineDash([]);
+    ctx.strokeStyle='rgba(84,224,208,.5)';dashArc(sp[0],sp[1],r1,6);
     ctx.strokeStyle='rgba(255,209,102,.5)';ctx.beginPath();ctx.arc(sp[0],sp[1],r2,0,6.283);ctx.stroke();
     if(r1>40){ctx.fillStyle='rgba(84,224,208,.8)';ctx.fillText('组网',sp[0],sp[1]-r1-2);}
     if(r2>40){ctx.fillStyle='rgba(255,209,102,.8)';ctx.fillText('导引',sp[0],sp[1]-r2-2);}
@@ -435,9 +461,7 @@ function drawMissileIntent(g){ // v129:选中导弹/网→显示组网圈与引�
   if(dest){
     const dp=toScreen(dest[0],dest[1]);
     ctx.save();
-    ctx.strokeStyle=destCol;ctx.lineWidth=1;ctx.setLineDash([4,4]);
-    ctx.beginPath();ctx.moveTo(sp[0],sp[1]);ctx.lineTo(dp[0],dp[1]);ctx.stroke();
-    ctx.setLineDash([]);
+    ctx.strokeStyle=destCol;ctx.lineWidth=1;dashLine(sp[0],sp[1],dp[0],dp[1],4);
     ctx.strokeStyle=destCol;ctx.lineWidth=1.5;
     ctx.beginPath();ctx.arc(dp[0],dp[1],5,0,6.283);ctx.stroke();
     ctx.fillStyle=destCol;ctx.font='10px "Microsoft YaHei"';ctx.textAlign='left';ctx.textBaseline='bottom';

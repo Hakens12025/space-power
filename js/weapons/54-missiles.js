@@ -10,7 +10,7 @@ const MSL_CFG={
 const GUIDE_SEEK=MSL_CFG.ladarRange; // 导弹自主导引范围(km)=主动LADAR末端开启后(范围内自主锁定,不耗通道)
 /* 2026-09-30 导弹组网(用户):弹与弹 MM、弹与舰(含前出浮标)MS 以内连一条边(数见 MSL_LINK);一组导弹经弹弹链能连到任何一艘我方船(舰与舰之间量子通信,算一个节点)就「在网上」(p.online):
    回传自身状态(我方画真位置、选中面板照实报)、收数据链引导(guideSide 只给在网上的)。每个感知节拍重算一次;刚发射的算在网上(52 fireMissiles) */
-const MSL_LINK={MM:87750*CFG.scale,MS:90000*CFG.scale};
+const MSL_LINK={MM:61425*CFG.scale,MS:63000*CFG.scale}; // 2026-10-03 用户:组网圈 x0.7(8.775 / 9 万 → 6.1425 / 6.3 万),导引圈 GUIDE_SEEK 不变
 const MSL_SWARM={S:20000*CFG.scale,COH:0.7,FLOOR:0.85,conv:25000*CFG.scale,convW:125000*CFG.scale,DASH:30000*CFG.scale,RES:2,DEAD:0.035,HYST:0.03};
   // 2026-10-01 三关系算法(用户拍板:间距 3 万 / 聚合力 0.6,演示页 demos/weapons/导弹组网.html):S = 间距(分离半径);COH = 聚合力;FLOOR = 同步减速下限(x 能力天花板,
   // 等不起就掉队);conv / convW = 聚集力距目标几公里开始淡出、淡出带多宽;DASH = 冲刺段起点(= 导引头锁定范围,盖过近防外圈)以内不再减速;RES = 冲刺预留油(秒);
@@ -125,10 +125,10 @@ function mslTkFrom(p,q){ // 采纳邻组 q 的目标与记录(目标沿链传导
 }
 function mslSwarmOn(p){return !!(p.nb&&p.target&&p.nb.some(q=>!q.done&&!q.park&&q.target===p.target));} // 有没有同目标的邻组(聚集攻击中),右栏状态读
 function mslBasket(p){const k=p.tk;if(!k)return null;const u=simTime-k.t;return {x:k.pos[0]+k.vel[0]*u,y:k.pos[1]+k.vel[1]*u,z:k.pos[2]+k.vel[2]*u,r:GUIDE_SEEK+0.5*k.a*u*u};} // 预计目标位置 + 再捕获半径
-function mslSeekB(p,R,ok,noBasket){ // 断链的导弹自己挑目标(b);R / ok 同 mslSeek;noBasket = 雷的触发(守着自己的点,不看预计位置)
+function mslSeekB(p,R,ok,noBasket){ // 断链的导弹自己挑目标(b);R / ok 同 mslSeek,R 缺省 = 导引头 3 万(2026-10-03 用户:断链只认导弹周围 3 万内的目标,同演示页);noBasket = 雷的触发(守着自己的点,不看预计位置)
   const side=p.shooter.side,k=p.tk,bk=noBasket?null:mslBasket(p),lim=Math.log(MSL_SIM);let best=null,bs=Infinity,bd=Infinity;
   const tryT=t=>{if(t.dead||t.side===side||t.hp===undefined||(ok&&!ok(t)))return;
-    const dp=Math.hypot(t.pos[0]-p.pos[0],t.pos[1]-p.pos[1]);if(R&&dp>=R)return;
+    const dp=Math.hypot(t.pos[0]-p.pos[0],t.pos[1]-p.pos[1]);if(dp>=(R||GUIDE_SEEK))return;
     const d=bk?Math.hypot(t.pos[0]-bk.x,t.pos[1]-bk.y):dp;if(bk&&d>bk.r)return;
     let q=0;if(k&&k.sig){q=Math.abs(Math.log((t.size||1e-9)/k.sig));if(q>lim+1e-9)return;}
     if(!missSeeT(p,t,true))return;
@@ -137,6 +137,30 @@ function mslSeekB(p,R,ok,noBasket){ // 断链的导弹自己挑目标(b);R / ok 
   for(const o of rockObjs())tryT(o);
   return best;
 }
+const MSL_RKA={CLEAR:700*CFG.scale,DT:0.2}; // 2026-10-04 用户:导弹规避碎石 —— CLEAR = 让开距离(碎石命中半径 MAC_HIT_R 400 + 余量 300);DT = 每组多久查一次前方(游戏秒,按组号错开)
+function mslRkDue(p){const k=Math.floor((simTime+((p.group||0)%10)*CFG.step)/MSL_RKA.DT);if(p.rkK===k)return false;p.rkK=k;return true;}
+function mslRockAvoid(p,dir,dist){ // 2026-10-04 用户:导弹规避碎石,很小的动作、很小的油 —— 沿计划航向看导引头距离(且不超过目标)以内、会从 CLEAR 以内擦过的最近一块,航向偏到刚好擦过它的那一侧;过去了回到原航向。瞄的就是这块不躲
+  const C=MSL_RKA.CLEAR;
+  if(mslRkDue(p)){p.rkA=null;const L=Math.min(GUIDE_SEEK,dist),G=rockGrid(),c=G.cell,x0=p.pos[0],y0=p.pos[1],x1=x0+dir[0]*L,y1=y0+dir[1]*L;
+    const ix0=Math.floor((Math.min(x0,x1)-C)/c),ix1=Math.floor((Math.max(x0,x1)+C)/c),iy0=Math.floor((Math.min(y0,y1)-C)/c),iy1=Math.floor((Math.max(y0,y1)+C)/c);
+    if((ix1-ix0+1)*(iy1-iy0+1)<=64){let bt=Infinity;
+      for(let ix=ix0;ix<=ix1;ix++)for(let iy=iy0;iy<=iy1;iy++){const a=G.map.get(rockKey(ix,iy));if(!a)continue;
+        for(let j=0;j<a.length;j++){const k=rocks[a[j]];if(!k||k.dead||k.kind!=='rock'||k===p.target)continue;
+          const rx=k.pos[0]-x0,ry=k.pos[1]-y0,t=rx*dir[0]+ry*dir[1];if(t<=0||t>L||t>=bt)continue;
+          if(Math.abs(dir[0]*ry-dir[1]*rx)<C){bt=t;p.rkA=k;}}}}}
+  const k=p.rkA;if(!k)return dir;if(k.dead){p.rkA=null;return dir;}
+  const rx=k.pos[0]-p.pos[0],ry=k.pos[1]-p.pos[1];if(rx*dir[0]+ry*dir[1]<=0){p.rkA=null;return dir;} // 过去了
+  const nx=-dir[1]*C,ny=dir[0]*C,a1=V.norm([rx+nx,ry+ny,0]),a2=V.norm([rx-nx,ry-ny,0]); // 碎石两侧各 C 的擦边点,取离计划航向近的那一侧(转得最少)
+  return (a1[0]*dir[0]+a1[1]*dir[1]>=a2[0]*dir[0]+a2[1]*dir[1])?[a1[0],a1[1],dir[2]]:[a2[0],a2[1],dir[2]];}
+function mslCoastAvoid(p,dt){ // 2026-10-04 用户:规避进导弹所有飞行状态 —— 直线滑行的(巡飞 / 等分配 / 干扰脱锁那 2 秒)照原航向飞,前方要擦着碎石就小偏一下、过去了转回原航向;不加减速,转向率与耗油同追击段
+  const vn=V.len(p.vel);
+  if(vn>1){if(p.crDir&&simTime-(p.crT||0)>0.5)p.crDir=null;p.crT=simTime; // crDir = 开始躲之前的航向;中途去过别的飞法就作废
+    const cur=[p.vel[0]/vn,p.vel[1]/vn,p.vel[2]/vn],d=mslRockAvoid(p,p.crDir||cur,GUIDE_SEEK);if(p.rkA&&!p.crDir)p.crDir=cur;
+    const want=p.rkA?d:p.crDir;
+    if(want){const ang=V.angle(cur,want);
+      if(!p.rkA&&ang<0.002)p.crDir=null; // 转回来了
+      else if(ang>1e-6&&p.fuel>0){const nd=V.slerp(cur,want,Math.min(1,1.2/(1+vn/(1800*MSL_VK))*dt));p.fuel=Math.max(0,p.fuel-V.angle(cur,nd)*turnFuelCost(vn));p.vel=[nd[0]*vn,nd[1]*vn,nd[2]*vn];}}}
+  p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;}
 // DS147:missReport 已取消(数据链纯单向,导弹不回报传感器;导弹的探测只用于自身导引/复锁/飞最后已知变雷)
 function guideSide(side){ // 一方数据链网络的引导分配(v125:按网分配,每网占1通道,网内所有组共享引导)
   const gs=ships.filter(s=>s.side===side&&!s.dead&&(s.guideChan||0)>0); // 有火控通道的存活舰

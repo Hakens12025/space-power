@@ -135,7 +135,7 @@ function mapShipBoxes(x,y,z,out){ // ENV2 此视图里画得出来的舰船(同 
   // 舰标 + 上面的高度标 / 血条(r+22)+ 下面的舰名与等级(r+34),半宽取舰标与 SHIP_HW 里大的(保守,不量字)
   out.length=0;
   for(const s of ships){let p=s.pos;
-    if(!adminMode&&s.side!==VIEW){const v=contactState(s,VIEW);if(v==='none'||v==='heat')continue;p=contactPos(s,VIEW);if(!p)continue;}
+    if(!adminMode&&s.side!==VIEW){const v=contactState(s,VIEW);if(v==='none'||v==='heat')continue;p=viewPos(s);if(!p)continue;} // 2026-10-04 走 viewPos
     const sx=(p[0]-x)*z+W/2,sy=(p[1]-y)*z+H/2;if(sx<-120||sx>W+120||sy<-120||sy>H+120)continue; // 离视口远的先剔掉(每帧都要核一遍字,舰船多时省掉 shipIconR)
     const r=shipIconR(s),hw=Math.max(r+8,MAP_LAB.SHIP_HW);
     if(sx+hw<0||sx-hw>W||sy+r+34<0||sy-r-22>H)continue;

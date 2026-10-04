@@ -1,13 +1,12 @@
 "use strict";
 /* ============================================================================
-   传感器画面的小特效(2026-09-30 用户从演示页 demos/sensors/传感器视角特效.html 挑了 1 2 3 4 5 8 9;同日 1 圈边呼吸线有 bug,用户让删了):
+   传感器画面的小特效(2026-09-30 用户从演示页 demos/sensors/传感器视角特效.html 挑了 1 2 3 4 5 8 9;同日 1 圈边呼吸线有 bug,用户让删了;2026-10-04 2 雷达扫描扇也删了(用户:回老样子,只留照射覆盖那片圈,扫描扇费性能)):
    · 只在红外 / 雷达画面:3 灰雾按画面染色(84 drawVisFog 读 sfxFog)、5 四角角标 + 顶栏下方的视角标签、8 滤镜(淡淡一层主色 + 暗角);
-   · 雷达画面:2 开着照射的我方船 / 浮标的覆盖里转一道扫描扇(按游戏时间转,跟倍速,暂停就停);
    · 任何画面切换:4 一道扫描线从上往下扫过、9 切换文字(同换层大字 render/80 drawTierFx 的样子)。
-   闪烁、切换动画走墙钟(界面动画的规矩)。贴图都预渲染一次,每帧只旋转 / 平移 / 调透明度;覆盖大到整屏都在里面就不贴扇。
+   闪烁、切换动画走墙钟(界面动画的规矩)。贴图都预渲染一次,每帧只平移 / 调透明度。
    ============================================================================ */
-const SFX_C={SWEEP_T:4,SWEEP_W:40,WIPE_MS:380,TITLE_MS:700,HUD_M:6,HUD_L:26,FILT_A:0.05,VIG_A:0.35,FOG_A:0.40};
-  // SWEEP_T / SWEEP_W = 扫描扇转一圈几游戏秒、扇尾多宽(度);WIPE_MS / TITLE_MS = 切换扫描线 / 切换文字多久(同换层 VT_FX_MS);
+const SFX_C={WIPE_MS:380,TITLE_MS:700,HUD_M:6,HUD_L:26,FILT_A:0.05,VIG_A:0.35,FOG_A:0.40};
+  // WIPE_MS / TITLE_MS = 切换扫描线 / 切换文字多久(同换层 VT_FX_MS);
   // HUD_M / HUD_L = 角标离屏边 / 边长 px;FILT_A / VIG_A = 滤镜主色与暗角的透明度;FOG_A = 染色雾的深浅(普通画面的灰雾是 VISF.A 0.32)
 const SFX_COL={map:[190,215,240],ir:[255,150,70],radar:[84,224,208]},SFX_FOG={ir:[26,4,2],radar:[0,16,18]}; // 各画面的主色;雾的颜色(红外偏暗红、雷达偏暗青)
 const SFX_TITLE={map:['VISUAL','普通视角'],ir:['INFRARED','红外视角'],radar:['RADAR','雷达视角']};
@@ -16,23 +15,13 @@ function sfxMode(){return typeof MAPV!=='undefined'?MAPV.mode:'map';}
 function sfxSensor(){const m=sfxMode();return m==='ir'||m==='radar';}
 function sfxCol(md,a){const c=SFX_COL[md]||SFX_COL.map;return 'rgba('+c[0]+','+c[1]+','+c[2]+','+a.toFixed(3)+')';}
 function sfxFog(){const md=sfxMode(),c=SFX_FOG[md];return c?{fill:'rgba('+c[0]+','+c[1]+','+c[2]+','+SFX_C.FOG_A+')',key:md==='ir'?1:2}:null;} // 3 染色雾的填充色;普通画面 null(照旧黑)
-function sfxSpr(){ // 预渲染的贴图(第一次用到时建):扫描扇、切换扫描线、暗角
+function sfxSpr(){ // 预渲染的贴图(第一次用到时建):切换扫描线、暗角
   if(SFX.spr)return SFX.spr;
   const mk=(w,h,fn)=>{const c=document.createElement('canvas');c.width=w;c.height=h;fn(c.getContext('2d'),w,h);return c;};
   SFX.spr={
-    sweep:mk(256,256,(g,w,h)=>{const cx=w/2,cy=h/2,R=w/2,N=SFX_C.SWEEP_W; // 前沿最亮、往后按角度淡出
-      for(let k=0;k<N;k++){const al=0.22*Math.pow(1-k/N,2);g.fillStyle='rgba(84,224,208,'+al.toFixed(3)+')';g.beginPath();g.moveTo(cx,cy);g.arc(cx,cy,R,-(k+1)*Math.PI/180,-k*Math.PI/180);g.closePath();g.fill();}
-      g.strokeStyle='rgba(160,255,240,.55)';g.lineWidth=1.2;g.beginPath();g.moveTo(cx,cy);g.lineTo(cx+R,cy);g.stroke();}),
     wipe:mk(8,64,(g,w,h)=>{const gr=g.createLinearGradient(0,0,0,h);gr.addColorStop(0,'rgba(255,255,255,0)');gr.addColorStop(0.8,'rgba(255,255,255,.25)');gr.addColorStop(0.97,'rgba(255,255,255,.95)');gr.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=gr;g.fillRect(0,0,w,h);}), // 下沿亮、往上拖尾
     vig:mk(256,256,(g,w,h)=>{const gr=g.createRadialGradient(w/2,h/2,w*0.28,w/2,h/2,w*0.72);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(0,0,0,1)');g.fillStyle=gr;g.fillRect(0,0,w,h);})};
   return SFX.spr;
-}
-function drawSfxSweep(){ // 2 雷达画面:开着照射的我方船 / 浮标(86-radarview rdvPainters)的覆盖里转一道扫描扇,不指向任何目标
-  if(sfxMode()!=='radar'||typeof rdvPainters!=='function')return;
-  const sp=sfxSpr().sweep,t=simTime+acc,rf=rdvStdRefl(),big=2.5*Math.hypot(W,H);
-  for(const s of rdvPainters()){const p=toScreen(s.pos[0],s.pos[1]),R=actRangeOf(s,rf)*cam.zoom;if(R<12||R>big||p[0]+R<0||p[0]-R>W||p[1]+R<0||p[1]-R>H)continue;
-    const a=((t/SFX_C.SWEEP_T)%1)*2*Math.PI+irvPh(s);
-    ctx.save();ctx.beginPath();ctx.arc(p[0],p[1],R,0,2*Math.PI);ctx.clip();ctx.translate(p[0],p[1]);ctx.rotate(a);ctx.imageSmoothingEnabled=true;ctx.drawImage(sp,-R,-R,2*R,2*R);ctx.restore();}
 }
 function drawSfxFilter(){ // 8 滤镜:整屏淡淡一层画面主色 + 暗角(画在地图内容之上、特写窗与各种交互层之下)
   if(!sfxSensor())return;

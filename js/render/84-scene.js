@@ -458,7 +458,6 @@ function render(){
   drawVisFog(); // 2026-09-26 可见光圈的灰色迷雾,画在一切接触之前;2026-09-30 用户:红外 / 雷达画面也分出亮的可见光区域和暗的圈外(原来只在普通地图画面)
   if(irOn)drawIr2View(); // 2026-09-30 红外2(用户:「红外」钮直接换成它)
   if(rdOn)drawRadarView();
-  if(typeof drawSfxSweep==='function')drawSfxSweep(); // 2026-09-30 雷达扫描扇(render/86-sensorfx)
   if(typeof drawSunLines==='function')drawSunLines(); // 「太阳线」钮:叠在普通 / 红外 / 雷达任一画面上
   drawSignalView(); // SN6 信号视野(右下角工具钮):我方每艘舰的【被探测范围】。画在最底下——它是底图
   /* SN6 聚合层:先算出这一帧哪些船被收进了框(按屏幕像素,带迟滞),画的时候跳过它们,最后把框画上去。

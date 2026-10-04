@@ -24,7 +24,7 @@
 - 热循环(`sensePairGrades`)里不许除法、开方、Math 调用、分配;这些都放 `sensePrepare`。剪枝上界必须含照射那一路(否则冷目标主炮静默哑火)。
 - 热循环里的内联副本(太阳禁区、恒星射频噪声锥、射电天体锥、MTI、天体遮挡)与函数版(`envSunBlind` / `envRfNoise` / `envMtiBlind` / `envOccluded` 等)必须同式,改一边就改另一边。自己的尾焰不致盲自己(2026-09-30 用户)。
 - 航位推算(2026-09-27):没有量测、或已定位的航迹这一拍只剩单站光学方位 ⇒ 误差按 ½·a·τ² 长(`kin.tau` = 距上次测到位置的秒数,存在航迹 `tk.tau`;a = `trkAccPrior`),红外看得见它没在喷就不长;有测距或多站交会的一拍照旧复利(梯子标定只在这一路)。陈旧(coast)与失联位置都走 `trkDR`;速度只在测到位置的一拍更新。单站方位续着的估计点 = 方位线上、离观测站与推算点等远。
-- 扫描:`s.pingReq` 的船在下一拍照射一拍(`detectLoop` 里临时 `setEmit`,节拍末尾回原档,`s.pingT` 记时刻)。静默交叉定位预览读 `ladTriFix(基线)`。
+- 扫描:`s.pingReq` 的船在下一拍照射一拍(`detectLoop` 里临时 `setEmit`,节拍末尾回原档,`s.pingT` 记时刻)。静默交叉定位预览读 `ladTriFix(基线)`;交叉定位多远有用只由梯子 `LAD.optCross`(10.4 万)定,改 `COV.TH0.opt` 会被反解抵消。
 - 全知圈(可见光,不从红外拆出):每艘舰自己的半径 `s.visR` = `COV.VIS_R`(15.795 万 x scale,2026-10-01 x1.5 再 x0.9)x 星云消光(八个方向各一段的透过率取平均,还是正圆,下限 `VIS_DUST_MIN`)x 天体影子 `VIS_SHADOW`,每拍 `visRadiusOf` 重算(前出浮标也有,x `OBJ_CFG.BUOY.VIS` 0.7);圈内、视线不被天体挡住的一切这一拍直接定位并确认(通道 `vis`,`senseVis` 判,不经热循环;弹丸同样,自己打出去的也不例外 —— `projVisibleTo` 没有己方捷径)。双方对称;灰雾(84 的 `drawVisFog`)画的是同一个圈。
 - 静听用的接收机档次只问 22 `lisRecvOf`(= recv x 舰种静听倍数 `SENS.LIS_K`;波长 70 万由 `LAD.clLis` 反解,2026-09-30):判定、精度、雷达画面远端、右栏读数都读它;照射照读 recv。
 - 静听带幅度测距(RSS):纵向误差 = 距离 x `COV.RSS_UNK`(没听出型号)/ `COV.RSS_ID`(听出型号,与 `L_LIS` 同一个门)。雷达画面的高斯团读 21 的 `esmHear` 写的 `k.rr` / `k.sr`,与 23 的静听量测同式,改一边就改另一边。
@@ -35,5 +35,5 @@
 - 同一张登记表 `rocks[]` 里还有民船 `civ` / 诱饵 `lure` / 前出浮标 `buoy`(world/14,2026-09-27):自己一方放的不当目标;诱饵带 `spoof`,「疑似」档报它冒充的驱逐舰;浮标 `type:'beacon'` 进探测站表,`on` 才照射(`senseKACT`),`emit`(被听见多远)/ `recv`(静听)取信标系数;照射那一路(判定、显示距离、定位精度)用 `SENS.BEACON_ACT`,由 `LAD.buoyAct`(25 万,对反射 1)反解(2026-09-30,`actProdOf`)。
 - 导弹导引头看热用 weapons/54 的 `missLum` = `optLum(t, MSL_SEEK_P)`(同一个公式,档位表换成 N1 之前的,用户 2026-09-27 选不跟)。
 - 记忆(2026-09-27,RTS 迷雾的"最后所见"):最后一次定位时不动的(`trkStill`,低于 `TRK_STILL_V`)失联后不计时丢弃(`trkMem`);我方全知圈重新扫过那一点却没量到它 ⇒ `memGone` 清掉;握着时 `lastType` 记下认出的类型,画记忆用它。动的目标照旧陈旧 → 失联 → `CONTACT_GHOST_TTL` 后消失。
-- 已知的真值口子(没修):目标速度、高度 Z、`sigClassLabel` 读真 `size`、击沉按真值 `.dead` 过滤。
+- 已知的真值口子(没修):目标速度、高度 Z、`sigClassLabel`(定位了没认出的报小 / 中等 / 大型热源,按船体自身热 = 体型 x (1 + 雷达废热),分界 `SIG_TIER` 0.45 / 0.85)读真 `size`、击沉按真值 `.dead` 过滤。
 - 性能缓存(2026-09-29,石头上千块):`trkEach` 只走每方的非空航迹清单(24 `trkActive`)—— 航迹字段只许 `trkStep` 改(它标脏);静止石头的影子 / 云背景 / 光学上界 / 雷达量与「在不在杂波里」缓存在石头的 `spc` 上,键 = `ENV.rev` + 位置、`ROCK_DEADS` + `rocks.length` + `ROCK_EPOCH`(world/12)。`rocks` 只追加、不删不重排(打碎只标 dead);挪静止石头要 `ROCK_EPOCH++`,打碎要 `ROCK_DEADS++`(weapons/55),否则网格与缓存都是旧的。

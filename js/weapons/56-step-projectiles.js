@@ -156,7 +156,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         const t=!mslSeekDue(p)?null:p.online?mslSeek(p):mslSeekB(p); // 2026-09-30 断链的按 b 挑;2026-10-03 每 0.2 游戏秒找一次
         if(t)mslAcquire(p,t);
         else if(p.online&&p.lastTarget&&!p.lastTarget.dead&&trkFix(trkOf(p.shooter.side,p.lastTarget))){p.cruise=false;p.target=p.lastTarget;p.lastKpos=null;}
-        else{p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;return;}
+        else{mslCoastAvoid(p,dt);return;}
       }
       if(p.park){const t=!mslSeekDue(p)?null:p.online?mslSeek(p):mslSeekB(p);if(t)mslAcquire(p,t);} // 2026-09-28 LOAL:区域齐射 / 布雷途中导引头一路找,看见就扑
       if(p.park){ // 飞向布雷点:接近减速,到位布设成雷(太空停车零耗)
@@ -170,7 +170,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
           return;
         }
         const psw=mslSwarmStep(p,p.parkPt,pdist,V.norm(toP)); // 2026-10-01 用户:打空地也要看得出组网 —— 三关系同样生效,目的地 = 布雷点,同目的地的邻组一起同步 / 聚拢
-        const pdir=psw.dir;
+        const pdir=mslRockAvoid(p,psw.dir,pdist); // 2026-10-04 规避碎石(54)
         let pspdDes=p.vPeak?Math.min(mslSwarmVc(p,p.parkPt,psw),psw.aC):Infinity;
         if(p.mineOk&&pdist<90000)pspdDes=Math.min(pspdDes,Math.max(1500*MSL_VK,Math.sqrt(2*MSL_A*pdist*0.6))); // 接近减速(只有要变雷的才减)。DS190:曲线也按 150 算——朋友版这处漏改,会按 200 的能力规划刹车→冲过布设点
         if(p.fuel>0){
@@ -198,7 +198,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
       // 干扰脱锁滑行(v125):脱锁后先直线飞2秒(飞过目标),再复锁——复锁靠转弯耗燃料,燃料尽转不动就失的
       if(p.chaffed){
         p.chaffT=(p.chaffT||0)+dt;
-        if(p.chaffT<2){p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;return;}
+        if(p.chaffT<2){mslCoastAvoid(p,dt);return;}
         // v135:脱锁2s滑行结束→直插(目标太近,翼面偏移会绕圈);chaffed保留供复锁判定。组网偏移 2026-10-01 已拆(54 翼面),这里不用再清
       }
       // 组网转移(DS147):目标没了——干扰复锁优先;link网(接入母舰火控)交给智能分配器按需求重分配;非link网独立重选最近
@@ -235,7 +235,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
       }
       if(!p.target){ // DS147:link网待分配中,滑行等待分配器补目标(不脱锁不变雷);2026-09-28 等的时候导引头也在找
         const t=!mslSeekDue(p)?null:p.online?mslSeek(p):mslSeekB(p);if(t)mslAcquire(p,t);
-        else{p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;return;}
+        else{mslCoastAvoid(p,dt);return;}
       }
       // T1引导门:自导(≤MSL_CFG.ladar)或数据链引导 → 追击;脱锁(超自导+无通道/目标熄灭)→ 飞最后已知位置,到点变地雷待命(v126定稿,不自毁)
       /* WR1 引导段的目标位置只有两个来路:导引头自己看见(guideMode 'self')⇒ 真值;靠母舰数据链('link')⇒ 母舰对它的【估计位置】(contactPos)。
@@ -252,7 +252,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
           if(!p.mineOk){p.cruise=true;p.lastTarget=p.target;p.target=null;return;}
           p.mine=true;p.vel=[0,0,0];p.spd=0;p.target=null;p.trigRadius=p.trigRadius||12000*CFG.scale;return; // 2026-09-26 x1/5(单局地图):缺省原 60000
         }
-        const kdir=V.norm(toK);
+        const kdir=mslRockAvoid(p,V.norm(toK),kdist); // 2026-10-04 规避碎石(54)
         // 飞向最后已知位置(巡航加速:有燃料就飞快点到点变雷,燃料尽只能滑行)
         const kvn=V.len(p.vel);
         if(p.fuel>0){ // 朝最后已知位置加速到巡航(用剩余燃料,能到就行)
@@ -304,7 +304,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
       const dir0=V.norm([tp[0]+tv[0]*tLead+evX-p.pos[0],tp[1]+tv[1]*tLead+evY-p.pos[1],tp[2]+tv[2]*tLead-p.pos[2]]); // WR1:瞄估计位置(带前置量 / 蛇形)
       // ===== 2026-10-01 三关系算法(用户,演示页 demos/weapons/导弹组网.html):公共段在 mslSwarmStep / mslSwarmVc(打空地同样用) =====
       const sw=mslSwarmStep(p,tp,dist,dir0),aC=sw.aC,nb=sw.nb,dEff=sw.dEff;
-      const dir=sw.dir;
+      const dir=mslRockAvoid(p,sw.dir,dist); // 2026-10-04 规避碎石(54):前方要擦着碎石时航向小偏一下
       const aim=[p.pos[0]+dir[0]*500000*CFG.scale,p.pos[1]+dir[1]*500000*CFG.scale,p.pos[2]];
       const coast=dist>GUIDE_SEEK&&!nearIc; // 2026-09-27 三段飞法(用户:"导弹本身的燃料控制,提升射程"):进自己导引头的范围之前是加速 / 滑行段,之后是末段
       // 速度剖面(v122):巡航vPeak高速飞(加速燃料),合适位置按距离减速到vTerm(减速燃料与加速对称),燃料对称安全帽兜底
@@ -333,7 +333,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
       let nd;
       if(vn>1&&p.fuel>0){ // 转向耗燃料(v122:越快转向越贵 0.5~3.0/rad);燃料耗尽无法转向,只能直线滑行
         const cur=V.norm(p.vel),ang=V.angle(cur,dir);
-        if(coast&&ang<1.5&&dist*Math.sin(ang)<MSL_MISS)nd=cur; // 滑行段:照当前航向飞下去的脱靶量在容差内就不修正(原来每拍都微调,全程喷火)
+        if(coast&&!p.rkA&&ang<1.5&&dist*Math.sin(ang)<MSL_MISS)nd=cur; // 正在躲碎石时不走这条(2026-10-04);滑行段:照当前航向飞下去的脱靶量在容差内就不修正(原来每拍都微调,全程喷火)
         else{nd=V.slerp(cur,dir,Math.min(1,turnRate*dt));
         p.fuel=Math.max(0,p.fuel-V.angle(cur,nd)*turnFuelCost(vn));}
       }else if(vn>1){nd=V.norm(p.vel);} // 无燃料:保持方向直线滑行
@@ -379,7 +379,8 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 射手导弹:继承载机速度+
         if(hitCount>survHit)spawnCiwsFX(p.pos,hitCount-survHit,p.shooter,p.target); // 2026-09-28 近防炮打掉的那几颗炸小火花(render/83)
         if(typeof rangeDefTally==='function')rangeDefTally(p.target,p,decoy,hitCount-survHit,survHit); // RANGE1 防御链埋点:到达/干扰弹勾走/内圈拦掉/实际命中四段读数。没有这一步,用户调 chaffRate 与 innerIntercept 只能看总伤害变化,看不到"拦掉几颗",等于盲调
         if(survHit>0){
-          const finalDmg=Math.max(1,Math.round(survHit*(p.missDmg||12)*sectorDmgMult)); // DS155:×扇面倍增
+          const rv=Math.hypot(p.vel[0]-p.target.vel[0],p.vel[1]-p.target.vel[1],p.vel[2]-p.target.vel[2]);
+          const finalDmg=Math.max(1,Math.round(survHit*(p.missDmg||12)*(1+MSL_KIN*rv)*sectorDmgMult)); // DS155:×扇面倍增;2026-10-03 + 动能(爆炸 x MSL_KIN x 撞击相对速度,线性添头)
           if(applyDamage(p.target,finalDmg,p.shooter,'missile',p)>0)spawnHit(p.pos,'missile',p.shooter,p.target); // RANGE1 补第 4 实参 kind='missile'。2026-09-29 全被护盾挡住不出船体命中闪光(护盾特效在 55)
         }
         if(decoy>0){ // 脱锁的n颗:继续飞(飞过目标),target清空走组网转移复锁,复锁靠转弯耗燃料

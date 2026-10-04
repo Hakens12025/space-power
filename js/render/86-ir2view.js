@@ -5,7 +5,7 @@
    · 选中一艘:它自己的环。选中几艘:各艘一个环,叠着的地方归离得近的那艘;每个目标只画在一个环上 —— 那个方位的环露在外面、看它最清楚的那艘
      (用户选甲:舰队数据链认得出同一个目标);地图上画交集(照 86-radarview「被听见」:看得见的每艘一块扇形求交,围死才画;2026-09-30 用户:只用短波 —— 尾焰 + 开火,环外沿那段热;船体自身热、晒热不算);左边一个红外仪表(方位从选中这几艘的中心量)。
      没选:各船圈内红外 + 全舰队仪表,不画环。
-   · 物理同 irvHill:senseOptLoWith / senseOptBlocked / K_IR / 石头填满距离;定位了的不受日光禁区 / 天体遮挡挡(自己的尾焰不挡自己,2026-09-30)。发现门 = 内核(信噪比 1),不另加增益。
+   · 物理同 irvHill:senseOptLoWith / senseOptBlocked / K_IR / 石头填满距离;定位了的不受日光禁区挡、天体照挡(irvBlk,2026-10-04 用户;自己的尾焰不挡自己,2026-09-30)。发现门 = 内核(信噪比 1),不另加增益。
    · 温度:senseOptParts 的自身热(石头 T_ROCK、船 T_HULL)/ 尾焰 / 晒热;开火那份(firePowerOf)从自身热里拆出来,温度随 fireLvl 退回船体温度。
    · 红外异常(83-hud anomScan 报的,带源):红外2 里弹在环 / 仪表外沿,围出交集的多边形也闪一下;主视角:全舰短波围得出交集就像以前一样在交集处画圈(ir2ZoneOf,83 画),
      围不出就弹在可见光圈边上(ir2AnomDraw)。
@@ -45,7 +45,7 @@ function ir2HotShare(o,t){ // 这一对里短波(尾焰 + 开火,环的外沿那
   if(t.kind==='rock')return 0;const q=senseOptParts(o,t),fire=sReq(t,'size','ship')*firePowerOf(t),tot=q.self+q.plume+q.solar;return tot>0?Math.min(1,(q.plume+fire)/tot):0;
 }
 function ir2Snr(o,t,bg,tSh,oLit,kn){ // o 看 t 的信噪比(同 irvHill 的一对:三道门、有效亮度、石头近到填满距离后不再变亮);看不见 = 0
-  if(!kn&&senseOptBlocked(o,t))return 0;
+  if(irvBlk(o,t,kn))return 0;
   const lo=senseOptLoWith(o,t,bg,tSh,oLit);if(!(lo>0))return 0;
   const dx=t.pos[0]-o.pos[0],dy=t.pos[1]-o.pos[1],dz=(t.pos[2]||0)-(o.pos[2]||0),d=Math.max(1,Math.sqrt(dx*dx+dy*dy+dz*dz)),dF=t.kind==='rock'?IRV_C.FILL_K*LAD.optIdent*Math.sqrt(t.size):0;
   return SENS.K_IR*lo/Math.pow(Math.max(d,dF),2);
@@ -142,10 +142,11 @@ function ir2Update(){
 }
 /* ---- 交集(照 86-radarview 的「被听见」:rdvLob / rdvClip / rdvArea)---- */
 function ir2Cen(P){let a=0,x=0,y=0;for(let i=0;i<P.length;i++){const p=P[i],q=P[(i+1)%P.length],c=p[0]*q[1]-q[0]*p[1];a+=c;x+=(p[0]+q[0])*c;y+=(p[1]+q[1])*c;}return Math.abs(a)>1e-9?[x/(3*a),y/(3*a)]:[P[0][0],P[0][1]];} // 多边形的面积中心
-function ir2Wedges(t,obs,snl){ // 短波看得见(信噪比过发现门)的每艘一块扇形求交:半宽 = 环上那团的角宽,远端 = 短波最亮的船在这个亮度下能在多远,方位按每一对固定挪开(同雷达画面,显示层防泄露);
+function ir2Wedges(t,obs,snl){ // 短波看得见(信噪比过发现门)的每艘一块扇形求交:半宽 = 内核这条方位的角误差(2026-10-04,原 = 环上那团的角宽),远端 = 短波最亮的船在这个亮度下能在多远,方位按每一对固定挪开(同雷达画面,显示层防泄露);
   // 围死(不碰任何一块的远端)→ {P, area, c 面积中心, r 等面积半径},否则 null(红外没有测距)
   const Lm=ir2LumHot(),W=[];
-  for(let i=0;i<obs.length;i++){const s=snl[i];if(!(s>=1))continue;const o=obs[i],h=Math.max(IR2_C.SMIN,Math.min(IR2_C.SMAX,IR2_C.SIG0/Math.sqrt(s)))*Math.PI/180;
+  const th=COV.TH0.opt*Math.sqrt(SENS.K_IR/SENS.A_IR); // 2026-10-04 用户:楔形半宽 = 内核这条方位的角误差(1σ,信噪比 1 处现为 3.96°)÷ √短波信噪比,与内核定位同一把尺(原来写死 SIG0 8°)
+  for(let i=0;i<obs.length;i++){const s=snl[i];if(!(s>=1))continue;const o=obs[i],h=Math.max(IR2_C.SMIN*Math.PI/180,Math.min(IR2_C.SMAX*Math.PI/180,th/Math.sqrt(s)));
     W.push({org:[o.pos[0],o.pos[1]],R:Math.sqrt(SENS.K_IR*Lm/s),half:h,brg:Math.atan2(t.pos[1]-o.pos[1],t.pos[0]-o.pos[0])+(rdvHash(o.id,t.id)*2-1)*h*0.6});}
   if(W.length<2)return null;
   let P=null;for(const w of W){const L=rdvLob(w,w.brg);P=P?rdvClip(P,L):L;if(!P.length)return null;}
@@ -160,7 +161,7 @@ function ir2ZoneOf(t,obs){ // 主视角的红外异常用:按 obs(全舰)短波�
 function ir2Zones(){ // 红外2 多选时的交集(只用短波:尾焰 + 开火),每 ZONE_T 墙钟秒重算
   const now=nowMs()/1000;if(now-IR2.zt<IR2_C.ZONE_T)return IR2.zones;IR2.zt=now;
   const RS=IR2.RS,out=[];if(RS.length<2){IR2.zones=out;return out;}
-  IR2.rec.forEach((rc,t)=>{if(rc.wi>0||!rc.snH||t.dead)return;const z=ir2Wedges(t,RS,rc.snH);if(z){z.t=t;out.push(z);}}); // 可见光圈里的不画(实际位置已经看得见)
+  IR2.rec.forEach((rc,t)=>{if(rc.wi>0||!rc.snH||t.dead||contactFix(t,VIEW))return;const z=ir2Wedges(t,RS,rc.snH);if(z){z.t=t;out.push(z);}}); // 可见光圈里的不画(实际位置已经看得见);内核定位了也不画(2026-10-04:换成定位记号 + 热源标签)
   IR2.zones=out;return out;
 }
 function ir2ZonePath(z){ctx.beginPath();for(let i=0;i<z.P.length;i++){const q=toScreen(z.P[i][0],z.P[i][1]);if(i)ctx.lineTo(q[0],q[1]);else ctx.moveTo(q[0],q[1]);}ctx.closePath();}

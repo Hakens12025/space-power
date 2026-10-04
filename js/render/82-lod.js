@@ -155,7 +155,7 @@ function lodDrawShip(s) {
   if (e >= 1) return;
   const tw = s._lodW;
   if (e <= 0 || !tw) { drawShip(s); return; }
-  const me = (s.side !== VIEW && typeof contactPos === 'function' && !adminMode) ? contactPos(s, VIEW) : s.pos;
+  const me = viewPos(s); // 2026-10-04 走 viewPos(可见光圈里画真实位置)
   if (!me) { drawShip(s); return; }
   const ee = e * e * (3 - 2 * e), p0 = toScreen(me[0], me[1]), p1 = toScreen(tw[0], tw[1]);
   ctx.save();
