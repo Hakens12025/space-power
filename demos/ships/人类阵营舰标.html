@@ -36,12 +36,12 @@ table.sk th{color:var(--dim);font-weight:normal}
 <h1>新舰标 · 人类阵营 · 重工长舰定稿(护卫 b / 驱逐 a / 巡洋 / 航母 B)</h1>
 <p class="n">独立演示页(不加载引擎)。10-05 定稿:第 3 组「重工长舰」(参照无尽的拉格朗日),护卫 b(两侧前伸炮舱)、驱逐 a(长主炮管 + 后部导弹舷台)、巡洋、航母 B(斜角甲板);四艘统一到航母 B 的细节密度。第二行是原版作对照。<br>
 之前各版整页存档在 <code>demos/ships/风格存档/</code>(1 初稿五组、2 五种设计语言、3 骨架生成四组、4 六组参照手画、5 重工护卫驱逐备选、6 重工航母三方案、7 重工航母 BC 精修)。<br>
-骨架:舰长每档 x1.25(护卫保持引擎现在的大小)、越大越敦实(宽长比只当趋势)。第一眼看到的是战术层的大小(比例尺 100 px = 2.5 万 km,美术整体缩放 1.5),拉过切换点换箭头 / 菱形;1.5 万 km 起边界羽化(最强 0.5 px)。细节大图在页底,点任意一艘放大。</p>
+骨架:舰长每档 x1.25(护卫保持引擎现在的大小)、越大越敦实(宽长比只当趋势)。第一眼看到的是战术层的大小(比例尺 100 px = 2.5 万 km,美术整体缩放 1.3),拉过切换点换箭头 / 菱形;1.5 万 km 起边界羽化(最强 0.5 px)。细节大图在页底,点任意一艘放大。</p>
 </header>
 <div class="ctl">
   <span class="g">比例尺 100 px =</span><input id="bar" type="range" min="0" max="1000"><b id="barV" style="min-width:64px"></b>
   <button class="t" data-z="25000">战术落点</button><button class="t" data-z="41000">切换点前</button><button class="t" data-z="42000">切换点后</button><button class="t" data-z="10000">1 万</button><button class="t" data-z="3000">拉近</button>
-  <span class="g">美术整体缩放</span><input id="tk" type="range" min="100" max="200" value="150" style="width:90px"><b id="tkV"></b>
+  <span class="g">美术整体缩放</span><input id="tk" type="range" min="100" max="200" value="130" style="width:90px"><b id="tkV"></b>
   <span class="g">检验</span><button class="t" data-k="gray">灰度</button><button class="t" data-k="blur">模糊 1px</button><button class="t on" data-k="feather">羽化</button>
   <span class="g">大图阵营</span><button class="t on" data-f="blue">蓝</button><button class="t" data-f="red">红</button>
   <span id="read"></span>
@@ -522,7 +522,7 @@ function drawEng(g,k,x,y,ang,zf,mode,f){const h=ENG_H[k],sc=HULL_BASE[h]*zf,SOL=
 
 /* ===== 缩放(照引擎)、羽化、记号 ===== */
 const HULL_ZOOM={A:0.4,LAND:0.55,MARK:0.45,MAX:1.9},SHIP_K=0.6,LAND_KMPP=250,SHIP_MARK_R=4;
-const V={bar:25000,tk:1.5,gray:false,blur:false,feather:true}; // tk = 美术整体缩放(10-05 用户定 1.5)
+const V={bar:25000,tk:1.3,gray:false,blur:false,feather:true}; // tk = 美术整体缩放(10-05 用户定 1.3)
 function rawZ(k){return HULL_ZOOM.LAND*Math.pow(LAND_KMPP/k,HULL_ZOOM.A);}
 function hullZ(k){return Math.max(HULL_ZOOM.MARK,Math.min(HULL_ZOOM.MAX,rawZ(k)));}
 function zfOf(h){return h*SHIP_K*V.tk;}                     // 舰标系数(含美术整体缩放)

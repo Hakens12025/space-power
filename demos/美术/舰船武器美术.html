@@ -31,7 +31,7 @@ ul b{color:var(--txt);font-weight:normal}
 <h1>舰船武器美术 · 战术层尺寸</h1>
 <p class="n">独立演示页(不加载引擎)。默认比例尺 = 引擎战术落点:左下比例尺 100 px = 2.5 万 km(每像素 250 km)。舰标大小照引擎:系数 = 0.55 x (缩放 / 战术落点)^0.4,钳在 0.45 ~ 1.9,舰船再 x 0.6;
 原始系数低于 0.45(比例尺约 4.1 万起)船换箭头 / 菱形,弹同时换简易记号 —— 代表显示;以上是真显示。<br>
-「美术整体缩放」= 一个总系数:船、尾焰、导弹 / 拦截弹、主炮弹、雷、诱饵、命中 / 击沉、近防火花、护盾受击、残骸全部一起乘(默认 1.5,用户 10-05 定;想让船再大一点,其他跟着一起大);武器对船的倍数不变。切换点和代表显示的记号不跟着变,行星照实际大小。<br>
+「美术整体缩放」= 一个总系数:船、尾焰、导弹 / 拦截弹、主炮弹、雷、诱饵、命中 / 击沉、近防火花、护盾受击、残骸全部一起乘(默认 1.3,用户 10-05 定(先 1.5 后改 1.3);想让船再大一点,其他跟着一起大);武器对船的倍数不变。切换点和代表显示的记号不跟着变,行星照实际大小。<br>
 边界羽化(用户 10-05):比例尺 1.5 万 km 起渐入、3 万 km 满,把船、残骸、导弹 / 拦截弹、雷、诱饵先画到离屏再带 0.5 px 的轻微模糊贴回,抹掉几像素大小时明暗台阶的锯齿和转向时的闪;尾焰、爆炸、行星本来就软,不羽化;拉过切换点的记号不羽化。顶栏「羽化」可开关对比。<br>
 特效随缩放(用户 10-05):命中 / 击沉、近防火花、护盾受击的大小 = 战术落点上的大小 x 船的(不钳)系数开平方 —— 船缩到 0.5,特效缩到 0.71;拉过切换点以后船换了记号,特效照样慢慢变。<br>
 舰船 = 引擎现在的轮廓(护卫用原驱逐轮廓、驱逐用细长楔形、巡洋、航母;没认出的是通用灰轮廓)。武器尺寸以最小的船(护卫 T1)的舰长为基准:物品本体(成组导弹算整组外框)不超过 0.8 倍;尾焰、拖影、爆炸、光晕是效果,不算。
@@ -39,7 +39,7 @@ ul b{color:var(--txt);font-weight:normal}
 </header>
 <div class="bar">
   <span class="g">比例尺 100 px = <input id="bar" type="range" min="0" max="1000"><b id="barV"></b></span>
-  <span class="g">美术整体缩放 <input id="tk" type="range" min="100" max="200" value="150" style="width:110px"><b id="tkV"></b></span>
+  <span class="g">美术整体缩放 <input id="tk" type="range" min="100" max="200" value="130" style="width:110px"><b id="tkV"></b></span>
   <span class="g"><button class="t" data-z="25000">战术落点</button><button class="t" data-z="41000">切换点前</button><button class="t" data-z="42000">切换点后</button><button class="t" data-z="100000">舰队落点</button><button class="t" data-z="3000">拉近</button></span>
   <span class="g"><button class="t" data-k="gray">灰度</button><button class="t" data-k="blur">模糊 1px</button><button class="t on" data-k="feather">羽化</button><button class="t on" data-k="lab">标签</button><button class="t" data-k="pause">暂停</button></span>
   <span id="read"></span>
@@ -400,7 +400,7 @@ function drawPlanet(g,x,y,r){const T=planetTex(),rs=r*T.N/(T.N-2);if(x+rs*1.2<0|
   if(V.lab){g.font='10px "Microsoft YaHei"';g.textAlign='center';g.textBaseline='top';g.fillStyle='rgba(200,206,220,.72)';g.fillText(PLANET.name,x,y+r+9);}}
 
 /* ---------- 视图 ---------- */
-const V={bar:25000,cx:-62000,cy:-10000,tk:1.5,gray:false,blur:false,feather:true,lab:true,pause:false}; // tk = 美术整体缩放
+const V={bar:25000,cx:-62000,cy:-10000,tk:1.3,gray:false,blur:false,feather:true,lab:true,pause:false}; // tk = 美术整体缩放
 /* 边界羽化(用户 10-05:1.5 万 km 以上微弱羽化,抹掉明暗的像素台阶):比例尺(100 px 代表的 km)从 FROM 渐入、到 FULL 满,满了 PX 像素模糊。
    物体先画进离屏小画布,再整张带模糊贴回(逐笔模糊会让暗描边和填色各糊各的) */
 const FEATHER={FROM:15000,FULL:30000,PX:0.5}; // PX:用户 10-05 定 0.5

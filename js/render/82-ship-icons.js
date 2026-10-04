@@ -46,7 +46,7 @@ function hullZoomRaw(){ // 未钳位的系数(判"该不该换记号"用)
   return HULL_ZOOM.LAND*Math.pow(cam.zoom*vtLandKmpp(1),HULL_ZOOM.A);
 }
 function hullZoomF(){return Math.max(HULL_ZOOM.MARK,Math.min(HULL_ZOOM.MAX,hullZoomRaw()));} // 轮廓 / 尾焰 / 告警圈 / 锁定圈 / 虚影共用的系数;下限 = MARK(记号模式下那几样按这个尺寸画)
-const SHIP_K=0.6*1.5; // 2026-10-05 用户:美术资源缩放尺度 = 1.5(船、尾焰、弹、命中特效、残骸、浮标都跟这个系数一起放大,武器对船的倍数不变)。原注: 舰标 / 舰形轮廓再缩到 0.6(同演示页 红外效果.html;拉远换记号不变、石头不缩),免得船比行星还显眼
+const SHIP_K=0.6*1.3; // 2026-10-05 用户:美术资源缩放尺度 = 1.3(同日先定 1.5 又改 1.3;船、尾焰、弹、命中特效、残骸、浮标都跟这个系数一起放大,武器对船的倍数不变)。原注: 舰标 / 舰形轮廓再缩到 0.6(同演示页 红外效果.html;拉远换记号不变、石头不缩),免得船比行星还显眼
 function shipZoomF(){return hullZoomF()*SHIP_K;} // 舰船(活船、残骸、尾焰、锁定圈、虚影)用的系数
 function shipMarkMode(){return hullZoomRaw()<HULL_ZOOM.MARK;}
 function drawShipMark(s,p,color){ // A:拉远后的记号。我方 = 沿船头的小箭头;敌方接触 = 小菱形(不分舰种 / 分级 / 认没认出)
