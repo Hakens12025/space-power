@@ -58,6 +58,8 @@ let scMTI2 = 0, scRfC2 = new Float64Array(4), scRfN = new Float64Array(4); // EN
 let scDLit = null, scDSX = null, scDSY = null; // ENV2 观测方看得见光源(Uint8)+ 从它指向光源的方向(位置型恒星每船不同)
 let scTDir = null, scTBg = null, scTSh = null, scCOn = 0; // ENV2 目标:这一对跟方向有关(Uint8)/ 云背景 / 在影子里(Uint8),精算步不重算
 let scON = 0, scOCap = 0, scOX = null, scOY = null, scOR2 = null; // ENV2 天体摊平(遮挡的内联副本读)
+let scIonN = 0; const scIonX = new Float64Array(8), scIonY = new Float64Array(8), scIonR2 = new Float64Array(8); // 2026-10-05 电离云的外接圆(world/16;一局至多 2 片):热循环里先内联判连线碰不碰,碰了才调 senseIonK
+let scTBelt = null; // 2026-10-05 目标在辐射带里时照射判式的倍数 RADAR^-4(否则 1;world/16 featRadIn)
 let scRbN = 0, scRbCap = 0, scRbU = null, scRbC = null; const scRbX = new Float64Array(4), scRbT = new Float64Array(10); // 乙 正在吵的射电天体:每 (探测方, 天体) 的方向与四档 cos^2 门槛、四档噪声增量(sensePrepare 填)
 let scLitC2 = 1;                   // ENV2 光源禁区的 cos^2 半角
 const scT2 = [0, 0];               // ENV2 sensePrepare 的两格草稿
@@ -79,6 +81,7 @@ function senseGrowT(n) { // 目标侧扩容:同上
   scBIR = new Float64Array(c); scBRF = new Float64Array(c); scBACT = new Float64Array(c); scBMax = new Float64Array(c);
   scInF = new Uint8Array(c); scTVX = new Float64Array(c); scTVY = new Float64Array(c); scTVZ = new Float64Array(c); // ENV1
   scTDir = new Uint8Array(c); scTBg = new Float64Array(c); scTSh = new Uint8Array(c); // ENV2
+  scTBelt = new Float64Array(c); // 2026-10-05
   scTCap = c;
 }
 function senseGrowO(n) { // ENV2 天体侧扩容:同上
@@ -128,7 +131,7 @@ function senseVis(d, t) { // 2026-09-26 可见光圈:目标在探测方自己的
 function visRadiusOf(s) { // 2026-09-27 全知圈半径:基准 x 星云消光(八个方向各取一段 VIS_R 的透过率取平均,下限 VIS_DUST_MIN)x 天体影子(VIS_SHADOW)
   const R0 = COV.VIS_R, p = s.pos;
   let f = 1;
-  if (ENV.clouds.length) { let T = 0; for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; T += envExt(p, [p[0] + R0 * Math.cos(a), p[1] + R0 * Math.sin(a), p[2]], 8); } f = Math.max(COV.VIS_DUST_MIN, T / 8); } // 2026-09-30 用户:原来只量东西两段,星云在正南北时圈不缩
+  if (envBgOn()) { let T = 0; for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; T += envExt(p, [p[0] + R0 * Math.cos(a), p[1] + R0 * Math.sin(a), p[2]], 8); } f = Math.max(COV.VIS_DUST_MIN, T / 8); } // 2026-09-30 用户:原来只量东西两段,星云在正南北时圈不缩
   if (ENV.bodies.length && envInShadow(p)) f *= COV.VIS_SHADOW;
   return R0 * f;
 }
@@ -160,7 +163,7 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
      所以这一段整个删掉 —— dt 参数留着:sensePrepare 的签名是判定与 sensePairAt 的契约面,而且
      将来若要把"这一拍盯了多久"喂进热循环,入口还在。 */
   /* ENV1 环境(world/12):太阳禁区的方向、杂波的动目标显示门限。空环境 ⇒ scDLit 全 0、scInF 全 0,热循环里那两支一次都不进 */
-  const lit = envHasLight(), nb = ENV.bodies.length > 0, cOn = ENV.clouds.length > 0; // ENV2 空环境 ⇒ scDLit / scTDir 全 0、scON = 0
+  const lit = envHasLight(), nb = ENV.bodies.length > 0, cOn = envBgOn(); // 2026-10-05 尘埃云或彗尾(world/16)。ENV2 空环境 ⇒ scDLit / scTDir 全 0、scON = 0
   scCOn = cOn ? 1 : 0; // ENV2 有云 ⇒ 每一对都有消光,光学还在的对都要精算
   scLitC2 = ENV.stars.length ? ENV.stars[0].c2 : 1;
   scMTI2 = envClutterOn() ? ENV_CFG.MTI_V * ENV_CFG.MTI_V : 0; // ENV2 杂波源:天体盘面、小行星
@@ -169,6 +172,8 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
     if (m > 0) { if (nd * m > scRbCap) { scRbCap = Math.max(16, nd * m * 2); scRbU = new Float64Array(2 * scRbCap); scRbC = new Float64Array(4 * scRbCap); }
       for (let j = 0; j < nd; j++) { const d = j < dets.length ? dets[j] : bcons[j - dets.length]; let q = j * m;
         for (let b = 0; b < on.length; b++) { if (!on[b]) continue; envRfBodyCone(ENV.bodies[b], d.pos, scRbT); scRbU[2 * q] = scRbT[0]; scRbU[2 * q + 1] = scRbT[1]; for (let i = 0; i < 4; i++) scRbC[4 * q + i] = scRbT[2 + i]; q++; } } } }
+  scIonN = Math.min(8, ENV.ions.length); for (let k = 0; k < scIonN; k++) { const I = ENV.ions[k]; scIonX[k] = I.x; scIonY[k] = I.y; scIonR2[k] = I.r2; }
+  const radOn = ENV.bodies.length > 0, beltK = Math.pow(FEAT_CFG.RAD.RADAR, -4);
   const B = envOccluders(); senseGrowO(B.length); scON = B.length; // 2026-10-05 天体 + 此刻的卫星 / 彗核(world/16),与 envOccluded 同一张表
   for (let b = 0; b < scON; b++) { scOX[b] = B[b].x; scOY[b] = B[b].y; scOR2[b] = B[b].r2; }
   let mIR = 0, mRF = 0, mACT = 0;
@@ -194,7 +199,7 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
       lum = senseLoOf(optLum(t), 0, solMax, 0, bg); loud = rfLoudOf(t); rfl = reflOf(t); // ENV2 scSigIR 是光学上界,空环境时逐位等于 optLum
       if (t.kind === 'rock') t.spc = { rev: ENV.rev, x: p[0], y: p[1], z: p[2], tSh, bg, solMax, lum, loud, rfl };
     }
-    scSigIR[i] = lum; scSigRF[i] = loud; scRefl[i] = rfl;
+    scSigIR[i] = lum; scSigRF[i] = loud; scRefl[i] = rfl; scTBelt[i] = radOn && featRadIn(p) ? beltK : 1; // 2026-10-05 辐射带:带里的目标雷达发现距离 x RADAR
     scTDir[i] = solMax > 0 ? 1 : 0; scTBg[i] = bg; scTSh[i] = tSh;
     const bIR = lum * mIR, bRF = loud * mRF, bA4 = rfl * mACT;
     const bA2 = Math.sqrt(bA4); // 照射的界在 d^4 空间,必须在这里开方换算到 d^2 空间才能和另两路取 max(见文件头 blocker A)
@@ -225,9 +230,11 @@ function sensePairGrades(j, ti) {
   if (scDLit[j] === 1) { const k = -(dx * scDSX[j] + dy * scDSY[j]); if (k > 0) { const kk = k * k, l2 = dx * dx + dy * dy; if (kk > l2 * scRfC2[3]) nz = kk > l2 * scRfC2[0] ? scRfN[0] : (kk > l2 * scRfC2[1] ? scRfN[1] : (kk > l2 * scRfC2[2] ? scRfN[2] : scRfN[3])); } }
   if (scRbN > 0) { const l2 = dx * dx + dy * dy; for (let b = 0; b < scRbN; b++) { const q = j * scRbN + b, k = -(dx * scRbU[2 * q] + dy * scRbU[2 * q + 1]); if (k > 0) { const kk = k * k, o = 4 * q; if (kk > l2 * scRbC[o + 3]) nz += kk > l2 * scRbC[o] ? scRbX[0] : (kk > l2 * scRbC[o + 1] ? scRbX[1] : (kk > l2 * scRbC[o + 2] ? scRbX[2] : scRbX[3])); } } } // 乙 正在吵的射电天体方向再加一份(噪声功率相加,按天体顺序)。与 envRfNoise 同式
   const sr = scSigRF[ti];
-  if (sr !== 0) { r = sr * scKRF[j]; const dn = d2 * nz; if (dn < r) g |= 4; } // 静默目标 sigRF 恒 0,这一路整段跳过;单程:距离按 噪声^(-1/2)
+  let ik = -1; // 2026-10-05 电离云的雷达波段衰减 e^2τ(world/16):只在不衰减也够得着、连线又碰到某片云的外接圆时才算(这一处调函数是例外:一局至多 2 片云,碰到的对很少)
+  if (scIonN > 0) { const ax = scDX[j], ay = scDY[j], vx = -dx, vy = -dy, l2 = vx * vx + vy * vy; for (let k = 0; k < scIonN; k++) { const wx = scIonX[k] - ax, wy = scIonY[k] - ay; let t = l2 > 0 ? (wx * vx + wy * vy) / l2 : 0; t = t < 0 ? 0 : (t > 1 ? 1 : t); const ex = wx - vx * t, ey = wy - vy * t; if (ex * ex + ey * ey < scIonR2[k]) { ik = 0; break; } } }
+  if (sr !== 0) { r = sr * scKRF[j]; let dn = d2 * nz; if (ik === 0 && dn < r) { ik = senseIonK(j, ti); } if (ik > 0) dn *= ik; if (dn < r) g |= 4; } // 静默目标 sigRF 恒 0,这一路整段跳过;单程:距离按 噪声^(-1/2)
   r = scRefl[ti] * scKACT[j];
-  if (r !== 0) { const dd = d2 * d2 * nz; if (dd < r) g |= 16; } // 比四次方以避免开方;双程:距离按 噪声^(-1/4)
+  if (r !== 0) { let dd = d2 * d2 * nz * scTBelt[ti]; if (ik === 0 && dd < r) { ik = senseIonK(j, ti); } if (ik > 0) dd *= ik * ik; if (dd < r) g |= 16; } // 比四次方以避免开方;双程:距离按 噪声^(-1/4);辐射带里的目标再乘 RADAR^-4
   /* ENV1 太阳禁区:探测方看目标的视线落在太阳那个锥里 ⇒ 光学与静听这一拍没有量测(照射不受影响)。只看 XY。
      dx 是"目标指向探测方",视线是它的反向,所以点积取负。与 world/12 的 envSunBlind 同式(那边给弹丸与判据用),判据逐对钉着 */
   if (scDLit[j] === 1 && (g & 15) !== 0) { const k = -(dx * scDSX[j] + dy * scDSY[j]); if (k > 0 && k * k > (dx * dx + dy * dy) * scLitC2) g &= 48; } // ENV2 方向按观测方取;影子里的观测方 scDLit=0,不晃
@@ -285,12 +292,14 @@ function senseSeesOptical(lum, d, pos, bg) { // 探测器 d 能否光学看到�
   if (envOccluders().length && envOccluded(d.pos, pos)) return false; // ENV2 天体挡视线(含会动的卫星 / 彗核)
   lum = senseLoOf(lum, 0, 0, senseGlareAt(d.pos, pos), bg || 0); // ENV2 杂散光 + 云背景(弹丸没有相位);都为 0 时原值
   const dx = d.pos[0] - pos[0], dy = d.pos[1] - pos[1], dz = d.pos[2] - pos[2], d2 = dx * dx + dy * dy + dz * dz, r = lum * senseKIR(d);
-  return d2 < r && (!ENV.clouds.length || d2 < r * envExt(d.pos, pos, 8)); // ENV2 消光只在不算它也看得见时才算(沿线至多 8 点)
+  return d2 < r && (!envBgOn() || d2 < r * envExt(d.pos, pos, 8)); // ENV2 消光只在不算它也看得见时才算(沿线至多 8 点)
 }
+const SIK_A = [0, 0], SIK_B = [0, 0];
+function senseIonK(j, ti) { SIK_A[0] = scDX[j]; SIK_A[1] = scDY[j]; SIK_B[0] = scTX[ti]; SIK_B[1] = scTY[ti]; return featIonK2(SIK_A, SIK_B); } // 热循环里的电离云衰减(见上)
 function senseSeesActive(refl, d, pos, vel) { // 探测器 d 的照射能否打到位于 pos、反射 refl 的东西(不照射时 senseKACT 恒 0,自然为假)。vel 可省
   if (envMtiBlind(d.pos, pos, vel)) return false; // ENV1:杂波里的慢目标被动目标显示滤掉(空环境 / 不给速度时恒假)
   if (envOccluders().length && envOccluded(d.pos, pos)) return false; // ENV2 天体挡视线(含会动的卫星 / 彗核)
   const dx = d.pos[0] - pos[0], dy = d.pos[1] - pos[1], dz = d.pos[2] - pos[2];
   const d2 = dx * dx + dy * dy + dz * dz;
-  return d2 * d2 * envRfNoise(d.pos, pos) < refl * senseKACT(d); // ENV2 恒星射频噪声锥,与热循环同式
+  return d2 * d2 * envRfNoise(d.pos, pos) * featRadarK4(d.pos, pos) < refl * senseKACT(d); // ENV2 恒星射频噪声锥,与热循环同式;2026-10-05 电离云 + 辐射带(world/16)
 }

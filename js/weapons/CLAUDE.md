@@ -42,3 +42,4 @@
 - 逐武器各一个指针;`seq` 模式每次从 0 扫,`rr` 从 `rot` 扫并把 `rot` 钉在真正选中的那一项。按 pick 过滤时 `continue` 跳过,不许筛数组(`fcFrom` 存的是下标)。
 - 删掉被选中的序列要兜底改选第一条,一条不剩退回 `'rr'`。
 - 四个陷阱:`lockedTarget` 同时是转向指令(主炮目标优先);`driftFire` 有 60 s 倒计时,执行移动命令的舰每拍续期;`orderMissileSalvo` 是延迟发射,下令 ≠ 打了;开火来源只认 52 写的 `s.fcFired` 标记,不许拿 `macCd` / `ammo` 做差分。
+- 新地形(world/16,2026-10-05):导弹组网的连边(弹舰 / 弹弹 / 邻接)距离按连线穿过电离云的透过率缩(`featIonK2`,54 `mslNetStep`);辐射带里护盾每游戏秒掉 `RAD.DRAIN`、不回充、船体不扣血(55 `stepShields`);卫星 / 彗核同天体一样挡弹(56 `projBlock` 读 `envOccluders`)。

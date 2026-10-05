@@ -39,5 +39,6 @@ function shieldFx(s,k,src,p,big){
 function stepShields(dt){ // 每一步:破了的倒数重启,在的一直回
   for(const s of ships){if(s.dead||!(s.shMax>0))continue;
     if(s.shDown>0){s.shDown-=dt;if(s.shDown<=0){s.shDown=0;s.sh=0;shieldFx(s,'restart');}}
+    else if(ENV.bodies.length&&featRadIn(s.pos)){if(s.sh>0)s.sh=Math.max(0,s.sh-FEAT_CFG.RAD.DRAIN*dt);} // 2026-10-05 辐射带(world/16):护盾每游戏秒掉 DRAIN、不回充,船体不扣血
     else if(s.sh<s.shMax){s.sh=Math.min(s.shMax,s.sh+s.shMax/SHIELD.REGEN_S*dt);if(s.sh>=s.shMax)shieldFx(s,'full');}}
 }

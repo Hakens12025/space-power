@@ -66,13 +66,14 @@ function envDustOne(c,x,y,minKm){ // ENV2 一朵云在世界点 (x,y) 的浓度 
 function envCloudDensity(x,y,minKm){const C=ENV.clouds;let s=0;for(let i=0;i<C.length;i++)s+=envDustOne(C[i],x,y,minKm);return s;}
   // ENV2 各云浓度之和,不截顶(与 envBg 同一种聚合;地图只在填充透明度上截顶)。空环境返回字面量 +0。minKm 同样必传(见 envDustOne)
 function envBgParts(p,band,minKm,out){ // ENV2 [有光时的背景, 无光 / 在影子里时的背景];视图把光照与浓度分开缓存时用,免得抄公式
-  const o=out||[0,0];o[0]=0;o[1]=0;const C=ENV.clouds;if(!C.length||!p||band!=='opt')return o;
+  const o=out||[0,0];o[0]=0;o[1]=0;const C=ENV.clouds;if(!p||band!=='opt')return o;
   const mk=isFinite(minKm)?minKm:ENV_CFG.DUST.MIN_KM;
   for(let i=0;i<C.length;i++){const c=C[i],d=envDustOne(c,p[0],p[1],mk);if(d>0){o[0]+=c.v*d;o[1]+=c.v*d*c.dark;}}
+  if(featTailOn()){const t=FEAT_CFG.COMET.BG*featTailAt(p[0],p[1]);o[0]+=t;o[1]+=t;} // 2026-10-05 彗尾的背景(world/16;尾心 BG 个背景单位)
   return o;
 }
 function envBg(p,band,minKm){ // ENV2 某点某波段的背景亮度(背景单位,1 = SENS.BG_G0)。minKm 缺省 DUST.MIN_KM = 物理尺度,与镜头无关。只有光学有云背景,静听 / 照射恒 0
-  if(!ENV.clouds.length||!p||band!=='opt')return 0;
+  if(!envBgOn()||!p||band!=='opt')return 0; // 2026-10-05 尘埃云或彗尾(world/16)
   const q=envBgParts(p,band,minKm,ENV_T2);
   return (envHasLight()&&!envInShadow(p))?q[0]:q[1];
 }
@@ -84,10 +85,10 @@ function envExtNode(I,J){ // ENV2 EXT_G 公里格点 (I,J) 上各云浓度之和
   const q=(J-bj*E.CH)*E.CH+(I-bi*E.CH);let v=b[q];if(v!==v){v=envCloudDensity(I*G,J*G,2*G);b[q]=v;}return v;
 }
 function envExt(p,q,nMax){ // ENV2 世界点 p → q 的透过率 0..1(沿线每格一点、双线性,至多 nMax 点,缺省 64);没有云时恒 1
-  if(!ENV.clouds.length)return 1;
+  if(!ENV.clouds.length)return featTailOn()?Math.exp(-featTailTau(p,q)):1; // 2026-10-05 彗尾的消光(world/16)
   const G=ENV_CFG.DUST.EXT_G,ax=p[0]/G,ay=p[1]/G,bx=q[0]/G,by=q[1]/G,L=Math.hypot(bx-ax,by-ay),n=Math.max(2,Math.min(nMax||64,Math.ceil(L)));
   let s=0;
   for(let i=0;i<n;i++){const u=(i+0.5)/n,x=ax+(bx-ax)*u,y=ay+(by-ay)*u,I=Math.floor(x),J=Math.floor(y),fx=x-I,fy=y-J;
     const d00=envExtNode(I,J),d10=envExtNode(I+1,J),d01=envExtNode(I,J+1),d11=envExtNode(I+1,J+1),d0=d00+(d10-d00)*fx,d1=d01+(d11-d01)*fx;s+=d0+(d1-d0)*fy;}
-  return Math.exp(-s*L*G/n/ENV_CFG.DUST.EXT_TAU);
+  return Math.exp(-s*L*G/n/ENV_CFG.DUST.EXT_TAU-(featTailOn()?featTailTau(p,q):0));
 }

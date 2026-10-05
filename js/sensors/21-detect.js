@@ -92,7 +92,7 @@ function esmHear(side,L,E,dd){ // L(我方听者)这一拍听到 E 的雷达;dd 
   k.n+=1;k.hits++;k.tb=tb;k.t=simTime;k.org=[L.pos[0],L.pos[1]];
   const st=Math.sqrt(1-1/Math.pow(1+COV.FADE_HOLD,2*SENS.TICK)); // 盯着看的稳态 / 单次量测
   k.half=Math.min(Math.PI/2-0.01,Math.max(ESM_CFG.SMIN,ESM_CFG.K*sig*Math.max(st,1/Math.sqrt(k.n))));
-  k.R=Math.max(dd*1.05,hearRangeOf(E,lisRecvOf(L))/Math.sqrt(envRfNoise(L.pos,E.pos))); // 远端 = 这个方向上听得见的最远距离(恒星噪声锥里更近)
+  k.R=Math.max(dd*1.05,hearRangeOf(E,lisRecvOf(L))/Math.sqrt(envRfNoise(L.pos,E.pos)*featIonK2(L.pos,E.pos))); // 远端 = 这个方向上听得见的最远距离(恒星噪声锥里、穿过电离云更近)
   k.rr=dd;k.sr=dd*(dd*sig<=E.size*COV.L_LIS?COV.RSS_ID:COV.RSS_UNK)*Math.max(st,1/Math.sqrt(k.n)); // 2026-09-26 幅度测距(与 23-cov 的静听量测同式):距离与它的纵向误差,雷达画面的高斯团用
 }
 function esmEach(side,f){ // 逐个辐射源给 f(E, [{L,k}]);顺手忘掉太久没听到的
@@ -236,7 +236,7 @@ function contactPos(s,side){
 function projVisibleTo(p,detSide){ // 2026-09-29 用户:自己打出去的炮弹 / 导弹也按视野看(原来己方弹永远可见);模拟不读它,只管画面
   const {dets,bcons}=detectorsOf(detSide);
   const sg=projSig(p);
-  const lum=sg.lum,refl=sg.refl,bg=ENV.clouds.length?envBg(p.pos,'opt'):0; // ENV2 云背景每颗弹丸算一次
+  const lum=sg.lum,refl=sg.refl,bg=envBgOn()?envBg(p.pos,'opt'):0; // ENV2 云背景每颗弹丸算一次
   for(const d of dets){if(senseVis(d,p)||senseSeesOptical(lum,d,p.pos,bg)||senseSeesActive(refl,d,p.pos,p.vel))return true;} // 2026-09-26 可见光圈内的弹丸也一清二楚 // 照射那一路:不在 paint 档时 senseKACT 恒 0,判据天然为假,这里不必再判一次发射档
   for(const b of bcons){if(senseVis(b,p)||senseSeesOptical(lum,b,p.pos,bg)||senseSeesActive(refl,b,p.pos,p.vel))return true;} // 信标恒在照射(BEACON_EMIT/BEACON_RECV),对反射 1.0 的目标正好 300,000 —— 与全库既有的信标 300k 逐位相同
   return false;

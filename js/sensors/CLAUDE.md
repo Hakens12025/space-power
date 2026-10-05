@@ -24,6 +24,7 @@
 - 热循环(`sensePairGrades`)里不许除法、开方、Math 调用、分配;这些都放 `sensePrepare`。剪枝上界必须含照射那一路(否则冷目标主炮静默哑火)。
 - 热循环里的内联副本(太阳禁区、恒星射频噪声锥、射电天体锥、MTI、天体遮挡)与函数版(`envSunBlind` / `envRfNoise` / `envMtiBlind` / `envOccluded` 等)必须同式,改一边就改另一边。自己的尾焰不致盲自己(2026-09-30 用户)。
 - 挡视线的天体表只认 world/16 `envOccluders()`(天体 + 此刻的卫星 / 彗核,按 simTime 缓存;2026-10-05):`envOccluded`、热循环的 `scOX`、信号视野、挡弹、红外 / 雷达画面都读它,守卫写 `envOccluders().length`,不再写 `ENV.bodies.length`;影子、射电、杂波仍只看 `ENV.bodies`。
+- 新地形的场(world/16,2026-10-05):电离云只挡雷达波段 —— 照射判式 d^4 再乘 e^4τ、静听 d^2 乘 e^2τ(热循环里先内联判连线碰不碰云的外接圆,碰了才调 `senseIonK`,是「热循环不调函数」的例外);辐射带里的目标照射判式乘 `RAD.RADAR`^-4(`scTBelt`);函数版 `senseSeesActive` / 21 的静听远端用 `featRadarK4` / `featIonK2`,与热循环同式。彗尾进光学的背景(world/13 `envBgParts`)与消光(`envExt`);光学背景 / 消光的守卫写 `envBgOn()`(尘埃云或彗尾),不再写 `ENV.clouds.length`。
 - 航位推算(2026-09-27):没有量测、或已定位的航迹这一拍只剩单站光学方位 ⇒ 误差按 ½·a·τ² 长(`kin.tau` = 距上次测到位置的秒数,存在航迹 `tk.tau`;a = `trkAccPrior`),红外看得见它没在喷就不长;有测距或多站交会的一拍照旧复利(梯子标定只在这一路)。陈旧(coast)与失联位置都走 `trkDR`;速度只在测到位置的一拍更新。单站方位续着的估计点 = 方位线上、离观测站与推算点等远。
 - 扫描:`s.pingReq` 的船在下一拍照射一拍(`detectLoop` 里临时 `setEmit`,节拍末尾回原档,`s.pingT` 记时刻)。静默交叉定位预览读 `ladTriFix(基线)`;交叉定位多远有用只由梯子 `LAD.optCross`(10.4 万)定,改 `COV.TH0.opt` 会被反解抵消。
 - 全知圈(可见光,不从红外拆出):每艘舰自己的半径 `s.visR` = `COV.VIS_R`(15.795 万 x scale,2026-10-01 x1.5 再 x0.9)x 星云消光(八个方向各一段的透过率取平均,还是正圆,下限 `VIS_DUST_MIN`)x 天体影子 `VIS_SHADOW`,每拍 `visRadiusOf` 重算(前出浮标也有,x `OBJ_CFG.BUOY.VIS` 0.7);圈内、视线不被天体挡住的一切这一拍直接定位并确认(通道 `vis`,`senseVis` 判,不经热循环;弹丸同样,自己打出去的也不例外 —— `projVisibleTo` 没有己方捷径)。双方对称;灰雾(84 的 `drawVisFog`)画的是同一个圈。

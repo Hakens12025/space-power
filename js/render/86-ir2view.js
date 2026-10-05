@@ -91,7 +91,7 @@ function ir2Bg(r){ // 本底:星云沿视线的发光(从圈边往外)、恒星�
   if(k&&k[2]===ENV.rev&&Math.abs(k[3]-R0)<IR2_C.NEB_DR*R0&&Math.hypot(k[0]-c[0],k[1]-c[1])<IR2_C.NEB_DR*R0)return;
   r.bk=[c[0],c[1],ENV.rev,R0];
   const N=IR2_C.N,M=IR2_C.M,NB=IR2_C.NEB_NB,L=IR2_C.NEB_L,BG=r.BG,BGN=r.BGN,neb=new Float32Array(NB),pN=ir2Plk(IR2_C.T_NEB),pS=ir2Plk(IR2_C.T_SUN),pB=ir2Plk(IR2_C.T_BODY);
-  if(ENV.clouds.length)for(let i=0;i<NB;i++){const a=i/NB*2*Math.PI,ux=Math.cos(a),uy=Math.sin(a),t=envExt([c[0]+ux*R0,c[1]+uy*R0],[c[0]+ux*(R0+L),c[1]+uy*(R0+L)],32);neb[i]=-IR2_C.NEB_K*Math.log(Math.max(1e-9,t));}
+  if(envBgOn())for(let i=0;i<NB;i++){const a=i/NB*2*Math.PI,ux=Math.cos(a),uy=Math.sin(a),t=envExt([c[0]+ux*R0,c[1]+uy*R0],[c[0]+ux*(R0+L),c[1]+uy*(R0+L)],32);neb[i]=-IR2_C.NEB_K*Math.log(Math.max(1e-9,t));}
   const u=(envHasLight()&&!(ENV.bodies.length&&envInShadow(c)))?envSunDirAt(c,[0,0]):null,sb=u?Math.atan2(u[1],u[0]):0,bd=[];
   for(const b of envOccluders()){const D=Math.hypot(b.x-c[0],b.y-c[1]);if(D>b.r&&D>R0)bd.push([Math.atan2(b.y-c[1],b.x-c[0]),Math.asin(b.r/D),b.heat]);}
   for(let i=0;i<N;i++){const a=i/N*2*Math.PI,f=i/N*NB,i0=Math.floor(f)%NB,i1=(i0+1)%NB,w=f-Math.floor(f),nv=neb[i0]*(1-w)+neb[i1]*w;
@@ -126,7 +126,7 @@ function ir2Update(){
     const sn=rc.sn;let keep=rock&&!reset&&rc.ev===ENV.rev&&rc.kn===kn&&rc.age<IR2_C.PO_N; // 石头:我方船挪得不到距离的 PO_K、世界没变、定位没变 ⇒ 信噪比照用上次的
     if(keep)for(let i=0;i<S.length;i++){const o=S[i],dx=o.pos[0]-rc.po[2*i],dy=o.pos[1]-rc.po[2*i+1],px=t.pos[0]-o.pos[0],py=t.pos[1]-o.pos[1];if(dx*dx+dy*dy>IR2_C.PO_K*IR2_C.PO_K*(px*px+py*py)){keep=false;break;}}
     if(keep)rc.age++;
-    else{const bg=ENV.clouds.length?envBg(t.pos,'opt'):0,tSh=lit&&nb&&envInShadow(t.pos);
+    else{const bg=envBgOn()?envBg(t.pos,'opt'):0,tSh=lit&&nb&&envInShadow(t.pos);
       for(let i=0;i<S.length;i++){sn[i]=ir2Snr(S[i],t,bg,tSh,oL[i],kn);rc.po[2*i]=S[i].pos[0];rc.po[2*i+1]=S[i].pos[1];}
       if(rock)rc.snH=null;else{const L=rc.snH&&rc.snH.length===S.length?rc.snH:(rc.snH=new Float64Array(S.length));for(let i=0;i<S.length;i++)L[i]=sn[i]>0?sn[i]*ir2HotShare(S[i],t):0;}rc.ev=ENV.rev;rc.kn=kn;rc.age=0;} // 短波信噪比(交集只用它;石头没有)
     let wi=0;for(let i=0;i<IS.length;i++){const ux=t.pos[0]-IS[i].pos[0],uy=t.pos[1]-IS[i].pos[1];wi=Math.max(wi,ir2W(Math.sqrt(ux*ux+uy*uy),rw[i]));}rc.wi=wi;
@@ -160,7 +160,7 @@ function ir2Wedges(t,obs,snl){ // 短波看得见(信噪比过发现门)的每�
   const area=rdvArea(P);return {P:P,area:area,c:ir2Cen(P),r:Math.sqrt(area/Math.PI)};
 }
 function ir2ZoneOf(t,obs){ // 主视角的红外异常用:按 obs(全舰)短波现算这一个源的交集(不读红外2 的缓存,红外没点开也能用;异常很少,只在报的那一刻算)
-  const lit=envHasLight(),nb=ENV.bodies.length>0,bg=ENV.clouds.length?envBg(t.pos,'opt'):0,tSh=lit&&nb&&envInShadow(t.pos),kn=adminMode||contactFix(t,VIEW);
+  const lit=envHasLight(),nb=ENV.bodies.length>0,bg=envBgOn()?envBg(t.pos,'opt'):0,tSh=lit&&nb&&envInShadow(t.pos),kn=adminMode||contactFix(t,VIEW);
   return ir2Wedges(t,obs,obs.map(o=>{const s=ir2Snr(o,t,bg,tSh,lit&&!(nb&&envInShadow(o.pos)),kn);return s>0?s*ir2HotShare(o,t):0;}));
 }
 function ir2Zones(){ // 红外2 多选时的交集(只用短波:尾焰 + 开火),每 ZONE_T 墙钟秒重算
@@ -286,7 +286,7 @@ function ir2AnomDraw(L,now){ // 红外2:它上的那个环的外沿 + 围出交�
         for(let j=0;j<P.length;j++)if(j!==k&&Math.hypot(x-P[j][0],y-P[j][1])<RO[j])cv2=true;if(!cv2)ir2AnomTick(x,y,Math.cos(a),Math.sin(a),al);} // 被别的环盖住的那段外沿不弹
       for(const z of IR2.zones)if(z.t===t){ir2ZonePath(z);ctx.strokeStyle='rgba(255,245,200,'+al.toFixed(2)+')';ctx.lineWidth=2.5;ctx.stroke();}
       continue;}
-    const O=irvObs(),P=O.map(s=>toScreen(s.pos[0],s.pos[1])),R=O.map(ir2RIn),lit=envHasLight(),nb=ENV.bodies.length>0,bg=ENV.clouds.length?envBg(t.pos,'opt'):0,tSh=lit&&nb&&envInShadow(t.pos),kn=adminMode||contactFix(t,VIEW);
+    const O=irvObs(),P=O.map(s=>toScreen(s.pos[0],s.pos[1])),R=O.map(ir2RIn),lit=envHasLight(),nb=ENV.bodies.length>0,bg=envBgOn()?envBg(t.pos,'opt'):0,tSh=lit&&nb&&envInShadow(t.pos),kn=adminMode||contactFix(t,VIEW);
     let k=-1,ks=-1;
     for(let i=0;i<O.length;i++){const a=Math.atan2(t.pos[1]-O[i].pos[1],t.pos[0]-O[i].pos[0]),x=P[i][0]+Math.cos(a)*(R[i]+3),y=P[i][1]+Math.sin(a)*(R[i]+3);let cv2=false;
       for(let j=0;j<O.length;j++)if(j!==i&&Math.hypot(x-P[j][0],y-P[j][1])<R[j])cv2=true;if(cv2)continue;

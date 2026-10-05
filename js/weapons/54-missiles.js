@@ -24,12 +24,13 @@ function mslNetStep(dt){
   for(const side of ['blue','red']){
     const F=[];for(const s of ships)if(s.side===side&&!s.dead)F.push(s.pos);for(const o of rockObjs())if(o.kind==='buoy'&&o.side===side&&!o.dead)F.push(o.pos);
     const M=projectiles.filter(p=>p.type==='missile'&&!p.done&&p.shooter&&p.shooter.side===side),q=[],was=M.map(p=>p.online!==false);
-    for(const p of M){p.online=false;for(const f of F){const dx=p.pos[0]-f[0],dy=p.pos[1]-f[1],dz=p.pos[2]-(f[2]||0);if(dx*dx+dy*dy+dz*dz<MS2){p.online=true;q.push(p);break;}}} // 直连舰队
-    for(let i=0;i<q.length;i++){const a=q[i];for(const b of M){if(b.online)continue;const dx=a.pos[0]-b.pos[0],dy=a.pos[1]-b.pos[1],dz=a.pos[2]-b.pos[2];if(dx*dx+dy*dy+dz*dz<MM2){b.online=true;q.push(b);}}} // 经弹弹链接力
+    const ion=ENV.ions.length>0,lk=function(a,b,d2,R2){return d2<R2&&(!ion||d2*featIonK2(a,b)<R2);}; // 2026-10-05 电离云挡组网(用户改的):连边距离 x 这条线穿过电离云的透过率(world/16)
+    for(const p of M){p.online=false;for(const f of F){const dx=p.pos[0]-f[0],dy=p.pos[1]-f[1],dz=p.pos[2]-(f[2]||0);if(lk(p.pos,f,dx*dx+dy*dy+dz*dz,MS2)){p.online=true;q.push(p);break;}}} // 直连舰队
+    for(let i=0;i<q.length;i++){const a=q[i];for(const b of M){if(b.online)continue;const dx=a.pos[0]-b.pos[0],dy=a.pos[1]-b.pos[1],dz=a.pos[2]-b.pos[2];if(lk(a.pos,b.pos,dx*dx+dy*dy+dz*dz,MM2)){b.online=true;q.push(b);}}} // 经弹弹链接力
     M.forEach((p,i)=>{if(p.online){mslRep(p);if(p.pg)mslPredDel(p.pg);}else if(was[i]&&!p.pg&&p.rep)mslPredAdd(p,'msl');}); // 在网上每拍回报;刚断链按最后一次回报建推测
     for(const p of M)p.nb=[]; // 邻接:三关系算法的"导弹间关系"输入(所有活弹,含雷 / 布雷途中 —— 它们也是中继节点);MM2 用上面直连 / 接力那两个同款
     for(let i=0;i<M.length;i++)for(let j=i+1;j<M.length;j++){const g=M[i],q=M[j],dx=g.pos[0]-q.pos[0],dy=g.pos[1]-q.pos[1],dz=g.pos[2]-q.pos[2];
-      if(dx*dx+dy*dy+dz*dz<MM2){g.nb.push(q);q.nb.push(g);}}
+      if(lk(g.pos,q.pos,dx*dx+dy*dy+dz*dz,MM2)){g.nb.push(q);q.nb.push(g);}}
     for(const p of M){if(p.online||p.mine||p.park)continue;let best=null; // 2026-10-03 目标沿链传导(用户:攻击目标顺着数据链传;同演示页 demos/weapons/导弹组网.html):断链的组采纳一跳邻组里更新的目标记录(新 0.2 秒以上才换),整团往同一个目标聚;在网上的听舰队
       for(const q of p.nb)if(!q.done&&q.tk&&q.target&&(!best||q.tk.t>best.tk.t))best=q;
       if(best&&(!p.tk||best.tk.t>p.tk.t+0.2))mslTkFrom(p,best);}

@@ -35,6 +35,17 @@ function rdvCoverage(P){
   for(const s of P){const p=toScreen(s.pos[0],s.pos[1]),R=actRangeOf(s,rf)*cam.zoom;X.beginPath();X.arc(p[0],p[1],R,0,2*Math.PI);X.fill();}
   ctx.save();ctx.globalAlpha=0.06;ctx.drawImage(RDV.cov,0,0,W,H);ctx.restore(); // 重叠不叠加、不画各自轮廓
 }
+const RDV_ION={key:'',P:[]};
+function rdvIonShade(E,p,Rw){ // 每个方向照射够得着的距离:d x e^τ(d) = Rw(电离云双程衰减,同热循环的判式);镜头 / 舰位 / 世界变了才重算(96 个方向、每个方向二分 10 次)
+  const z=cam.zoom,key=Math.round(E.pos[0]/500)+'|'+Math.round(E.pos[1]/500)+'|'+Math.round(Rw)+'|'+ENV.rev;
+  if(key!==RDV_ION.key){RDV_ION.key=key;const P=RDV_ION.P;P.length=0;let any=false;const N=96,q=[0,0];
+    for(let i=0;i<N;i++){const a=i/N*2*Math.PI,ux=Math.cos(a),uy=Math.sin(a);let lo=0,hi=Rw;q[0]=E.pos[0]+ux*Rw;q[1]=E.pos[1]+uy*Rw;
+      if(featIonTau(E.pos,q)>0){any=true;for(let k=0;k<10;k++){const m=(lo+hi)/2;q[0]=E.pos[0]+ux*m;q[1]=E.pos[1]+uy*m;if(m*Math.exp(featIonTau(E.pos,q))<=Rw)lo=m;else hi=m;}}else lo=Rw;
+      P.push(ux*lo,uy*lo);}
+    if(!any)P.length=0;}
+  const P=RDV_ION.P;if(!P.length)return;
+  ctx.beginPath();ctx.arc(p[0],p[1],Rw*z+2,0,2*Math.PI);ctx.moveTo(p[0]+P[0]*z,p[1]+P[1]*z);for(let i=2;i<P.length;i+=2)ctx.lineTo(p[0]+P[i]*z,p[1]+P[i+1]*z);ctx.closePath();
+  ctx.fillStyle='rgba(0,0,0,0.45)';ctx.fill('evenodd');}
 function rdvSelected(E){ // 选中的那艘:虚线轮廓 + 天体身后的雷达阴影(暗扇)
   const p=toScreen(E.pos[0],E.pos[1]),Rw=actRangeOf(E,rdvStdRefl()),R=Rw*cam.zoom;
   ctx.save();ctx.setLineDash([4,5]);ctx.strokeStyle='rgba(111,180,255,0.35)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(p[0],p[1],R,0,2*Math.PI);ctx.stroke();ctx.setLineDash([]);
@@ -49,6 +60,7 @@ function rdvSelected(E){ // 选中的那艘:虚线轮廓 + 天体身后的雷达
     const a0=Math.atan2(dy,dx),hh=Math.asin(b.r/D),t=Math.sqrt(D*D-b.r*b.r),F=Rw*2;
     const Q=[[Math.cos(a0-hh)*t,Math.sin(a0-hh)*t],[Math.cos(a0-hh)*F,Math.sin(a0-hh)*F],[Math.cos(a0+hh)*F,Math.sin(a0+hh)*F],[Math.cos(a0+hh)*t,Math.sin(a0+hh)*t]];
     ctx.beginPath();Q.forEach(function(q,i){const s=toScreen(E.pos[0]+q[0],E.pos[1]+q[1]);if(i)ctx.lineTo(s[0],s[1]);else ctx.moveTo(s[0],s[1]);});ctx.closePath();ctx.fillStyle='rgba(0,0,0,0.45)';ctx.fill();}
+  if(ENV.ions.length)rdvIonShade(E,p,Rw); // 2026-10-05 电离云挡住的那部分照射覆盖(world/16):同天体身后的雷达阴影一样压暗
   ctx.restore();
 }
 /* ---- 被听见:扇形求交(Sutherland–Hodgman,凸多边形都按逆时针)/ 高斯概率团 ---- */

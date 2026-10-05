@@ -45,7 +45,7 @@ function irvHill(t,obs,kn){ // 一座山:信噪比(一道门的输入),取看得
   let best=null,bg=NaN,tSh=false;const lit=envHasLight(),nb=ENV.bodies.length>0;
   for(let n=0;n<obs.length;n++){const o=obs[n];
     if(irvBlk(o,t,kn))continue;
-    if(bg!==bg){bg=ENV.clouds.length?envBg(t.pos,'opt'):0;tSh=lit&&nb&&envInShadow(t.pos);}
+    if(bg!==bg){bg=envBgOn()?envBg(t.pos,'opt'):0;tSh=lit&&nb&&envInShadow(t.pos);}
     const lo=senseOptLoWith(o,t,bg,tSh,lit&&!(nb&&envInShadow(o.pos)));if(!(lo>0))continue;
     const dx=t.pos[0]-o.pos[0],dy=t.pos[1]-o.pos[1],dz=(t.pos[2]||0)-(o.pos[2]||0),d=Math.max(1,Math.hypot(dx,dy,dz));
     const dF=t.kind==='rock'?IRV_C.FILL_K*LAD.optIdent*Math.sqrt(t.size):0,snr=SENS.K_IR*lo/Math.pow(Math.max(d,dF),2); // 石头近到填满模糊斑后不再变亮;船、导弹当点源
@@ -342,8 +342,14 @@ function irvNoise(n,ep){ // 两个预生成的高斯池(各乘 1/√2),换颗粒
     Z.P=mk();Z.Q=mk();Z.len=len;Z.ep=NaN;}
   if(ep!==Z.ep||Z.oP+n>Z.len||Z.oQ+n>Z.len){const m=Z.len-n+1;Z.oP=Math.floor(irvNzRnd()*m);Z.oQ=Math.floor(irvNzRnd()*m);Z.ep=ep;}
 }
-function irvBgBuild(){irvB.fill(0);IRVC.cloudPend=false;irvCloudAdd(irvB);if(ENV.stars.length)irvHaloAdd(irvB);}
-function irvCompose(i0,i1,j0,j1){const F=irvF,Hh=irvH,Bb=irvB,gw=irvGW,k=IRV_C.BG_K;for(let j=j0;j<=j1;j++){const r=j*gw;for(let q=r+i0;q<=r+i1;q++)F[q]=Hh[q]+Bb[q]*k;}if(ENV.bodies.length)irvBodiesAdd(i0,i1,j0,j1);} // 尘埃与光晕压到 BG_K:被太阳照亮的云不许盖过热源
+function irvBgBuild(){irvB.fill(0);IRVC.cloudPend=false;irvCloudAdd(irvB);if(featTailOn())irvTailAdd(irvB);if(ENV.stars.length)irvHaloAdd(irvB);}
+function irvTailAdd(F){ // 2026-10-05 彗尾的背景(world/16:BG x 浓度,同 envBgParts 那一份),只扫尾巴外接框盖到的格
+  const gw=irvGW,gh=irvGH,C=IRV_C.CELL,z=cam.zoom,x0=cam.x-W/2/z,y0=cam.y-H/2/z,K=FEAT_CFG.COMET.BG;
+  for(const T of featTailGrids()){if(!T)continue;const B=T.bx,i0=Math.max(0,Math.floor((B[0]-x0)*z/C)),i1=Math.min(gw-1,Math.ceil((B[2]-x0)*z/C)),j0=Math.max(0,Math.floor((B[1]-y0)*z/C)),j1=Math.min(gh-1,Math.ceil((B[3]-y0)*z/C));
+    for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const v=featGridAt(T,x0+i*C/z,y0+j*C/z);if(v>0)F[j*gw+i]+=K*v;}}}
+const IRV_MK={k:0,t:-1e9,s:NaN};
+function irvMoverKey(){if(!featMovers().length&&!featTailOn())return 0;const n=nowMs();if(n-IRV_MK.t>=400&&simTime!==IRV_MK.s){IRV_MK.t=n;IRV_MK.s=simTime;IRV_MK.k++;}return IRV_MK.k;} // 墙钟至少隔 0.4 秒一次(高倍速下不每帧整张重算)
+function irvCompose(i0,i1,j0,j1){const F=irvF,Hh=irvH,Bb=irvB,gw=irvGW,k=IRV_C.BG_K;for(let j=j0;j<=j1;j++){const r=j*gw;for(let q=r+i0;q<=r+i1;q++)F[q]=Hh[q]+Bb[q]*k;}if(envOccluders().length)irvBodiesAdd(i0,i1,j0,j1);} // 尘埃与光晕压到 BG_K:被太阳照亮的云不许盖过热源
 function irvFc(x0,y0,x1,y1,dpr){ // 缓存的设备像素矩形里重画:清掉、放大贴小图(与整张贴同一变换)、叠热轮廓
   const X=IRVC.fx,C=IRV_C.CELL;if(x1<=x0||y1<=y0)return;
   X.save();X.setTransform(1,0,0,1,0,0);X.beginPath();X.rect(x0,y0,x1-x0,y1-y0);X.clip();X.clearRect(x0,y0,x1-x0,y1-y0);
@@ -354,7 +360,7 @@ function irvFc(x0,y0,x1,y1,dpr){ // 缓存的设备像素矩形里重画:清掉�
 }
 function irvUpdate(){
   const V=IRVC,C=IRV_C.CELL,dpr=devicePixelRatio||1,rs=irvGrid(),gw=irvGW,gh=irvGH,n=gw*gh;
-  const vs=[cam.x,cam.y,cam.zoom,W,H,dpr,adminMode,VIEW],gs=[ENV.rev]; // adminMode:切 GM 时轮廓要整张重画
+  const vs=[cam.x,cam.y,cam.zoom,W,H,dpr,adminMode,VIEW],gs=[ENV.rev,irvMoverKey()]; // 2026-10-05 卫星 / 彗核 / 彗尾在动:隔一会儿整张重算(irvMoverKey) // adminMode:切 GM 时轮廓要整张重画
   const md=!V.live,view=rs||md||irvNe(vs,V.vs),glob=md||irvNe(gs,V.gs),pv=V.vs;
   IRVJ.pan=(view&&!rs&&!md&&!glob&&pv&&pv[2]===cam.zoom&&pv[3]===W&&pv[4]===H&&pv[5]===dpr&&pv[6]===adminMode&&pv[7]===VIEW)?[-(cam.x-pv[0])*cam.zoom/C,-(cam.y-pv[1])*cam.zoom/C]:null; // 2026-09-29 性能:纯平移(只有镜头中心变了)时山的形状不变,irvjUpdate 把贴片整体挪过去
   if(md){IRVJ.reset=true;V.live=true;}
