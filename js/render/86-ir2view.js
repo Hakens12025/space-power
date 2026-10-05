@@ -93,7 +93,7 @@ function ir2Bg(r){ // 本底:星云沿视线的发光(从圈边往外)、恒星�
   const N=IR2_C.N,M=IR2_C.M,NB=IR2_C.NEB_NB,L=IR2_C.NEB_L,BG=r.BG,BGN=r.BGN,neb=new Float32Array(NB),pN=ir2Plk(IR2_C.T_NEB),pS=ir2Plk(IR2_C.T_SUN),pB=ir2Plk(IR2_C.T_BODY);
   if(ENV.clouds.length)for(let i=0;i<NB;i++){const a=i/NB*2*Math.PI,ux=Math.cos(a),uy=Math.sin(a),t=envExt([c[0]+ux*R0,c[1]+uy*R0],[c[0]+ux*(R0+L),c[1]+uy*(R0+L)],32);neb[i]=-IR2_C.NEB_K*Math.log(Math.max(1e-9,t));}
   const u=(envHasLight()&&!(ENV.bodies.length&&envInShadow(c)))?envSunDirAt(c,[0,0]):null,sb=u?Math.atan2(u[1],u[0]):0,bd=[];
-  for(const b of ENV.bodies){const D=Math.hypot(b.x-c[0],b.y-c[1]);if(D>b.r&&D>R0)bd.push([Math.atan2(b.y-c[1],b.x-c[0]),Math.asin(b.r/D),b.heat]);}
+  for(const b of envOccluders()){const D=Math.hypot(b.x-c[0],b.y-c[1]);if(D>b.r&&D>R0)bd.push([Math.atan2(b.y-c[1],b.x-c[0]),Math.asin(b.r/D),b.heat]);}
   for(let i=0;i<N;i++){const a=i/N*2*Math.PI,f=i/N*NB,i0=Math.floor(f)%NB,i1=(i0+1)%NB,w=f-Math.floor(f),nv=neb[i0]*(1-w)+neb[i1]*w;
     let sv=0;if(u){const d=ir2Wrap(a-sb)*180/Math.PI;sv=IR2_C.SUN_G*Math.exp(-d*d/(2*IR2_C.SUN_SIG*IR2_C.SUN_SIG));}
     let bh=-1;for(const q of bd)if(Math.abs(ir2Wrap(a-q[0]))<q[1])bh=Math.max(bh,q[2]);

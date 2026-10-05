@@ -40,7 +40,7 @@ function irvSrc(){ // 热源:非本方的船、石头(2026-09-27 自己放的浮
   const a=IRV_SRC.a;let n=0;for(const s of ships)if(s.side!==VIEW&&!s.dead)a[n++]=s;for(const r of rocks)if(!r.dead&&r.side!==VIEW)a[n++]=r;a.length=n;IRV_SRC.f=f;return a; // 按下标填、最后截长度(先清零再 push 会反复重分配底层存储)
 }
 function irvV(snr){return snr>=1?IRV_C.DET_V*Math.pow(snr,IRV_C.CONTRAST):IRV_C.GAIN*Math.pow(snr,IRV_C.SUB_P);} // 一道门:信噪比 → 色阶值;内核发现门限(信噪比 1)以下按 SUB_P 次方淡出(远处淡淡一团),门下封顶 GAIN,发现门处跳到 DET_V(增益调高以后不许跑在内核前面)
-function irvBlk(o,t,kn){return kn?(ENV.bodies.length>0&&envOccluded(o.pos,t.pos)):senseOptBlocked(o,t);} // o 看 t 被挡住:没定位 = 三道门(25 senseOptBlocked);定位了(kn)只剩天体遮挡(2026-10-04 用户:天体挡红外)
+function irvBlk(o,t,kn){return kn?(envOccluders().length>0&&envOccluded(o.pos,t.pos)):senseOptBlocked(o,t);} // o 看 t 被挡住:没定位 = 三道门(25 senseOptBlocked);定位了(kn)只剩天体遮挡(2026-10-04 用户:天体挡红外)
 function irvHill(t,obs,kn){ // 一座山:信噪比(一道门的输入),取看得最清楚的那艘我方船。kn = 我方已定位它:日光禁区不挡、天体照挡(irvBlk,2026-10-04)(2026-09-30 自己尾焰致盲删了),照画它的热(用户:红外是固有的特性,可见光里红团不许消失)
   let best=null,bg=NaN,tSh=false;const lit=envHasLight(),nb=ENV.bodies.length>0;
   for(let n=0;n<obs.length;n++){const o=obs[n];
@@ -281,7 +281,7 @@ function irvCloudAdd(F){
 const IRV_SD=[0,0],IRV_BP=[0,0];
 function irvBodiesAdd(ri0,ri1,rj0,rj1){
   const F=irvF,gw=irvGW,C=IRV_C.CELL,VM=IRV_C.VMAX,edge=1;
-  for(const b of ENV.bodies){
+  for(const b of envOccluders()){ // 2026-10-05 含会动的卫星 / 彗核
     IRV_BP[0]=b.x;IRV_BP[1]=b.y;const ps=toScreen(b.x,b.y),rc=b.r*cam.zoom/C,pcx=ps[0]/C,pcy=ps[1]/C,u=envSunDirAt(IRV_BP,IRV_SD),lit=!!(u&&rc>0),NIGHT=b.heat;
     const i0=Math.max(ri0,Math.floor(pcx-rc-edge)),i1=Math.min(ri1,Math.ceil(pcx+rc+edge)),j0=Math.max(rj0,Math.floor(pcy-rc-edge)),j1=Math.min(rj1,Math.ceil(pcy+rc+edge));
     const ro=rc+0.5*edge,rn=rc-0.5*edge;

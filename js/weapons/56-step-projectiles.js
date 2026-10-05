@@ -60,7 +60,7 @@ const PB_CAND=[]; // projBlock 的候选草稿(不重入)
 function projBlock(p,x0,y0,dt){
   const x1=p.pos[0],y1=p.pos[1],dx=x1-x0,dy=y1-y0,l2=dx*dx+dy*dy;if(!(l2>0))return;
   const kind=p.type==='mac'?'mac':'missile';
-  for(const b of ENV.bodies){
+  for(const b of envOccluders()){ // 2026-10-05 天体 + 会动的卫星 / 彗核(world/16)
     const fx=x0-b.x,fy=y0-b.y,bb=fx*dx+fy*dy,cc=fx*fx+fy*fy-b.r2,disc=bb*bb-l2*cc;if(disc<0)continue;
     const t=(-bb-Math.sqrt(disc))/l2;if(t>1||(t<0&&cc>0))continue; // 这一步没碰到盘(起点在盘里 cc<=0 也算碰到)
     const u=Math.max(0,t);p.done=true;spawnHit([x0+dx*u,y0+dy*u,p.pos[2]||0],kind,p.shooter,null);return;

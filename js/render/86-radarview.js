@@ -45,7 +45,7 @@ function rdvSelected(E){ // 选中的那艘:虚线轮廓 + 天体身后的雷达
   {const on=envRfBodiesOn(),o=RDV_RB;for(let b=0;b<ENV.bodies.length;b++){if(!on[b])continue;envRfBodyCone(ENV.bodies[b],E.pos,o);const a=Math.atan2(o[1],o[0]); // 乙 正在吵的射电天体:同样四档由外往里叠,紫色(同 envRfNoise 那一份锥)
     for(let i=3;i>=0;i--){const w=o[6+i];ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.arc(p[0],p[1],R,a-w,a+w);ctx.closePath();ctx.fillStyle='rgba(200,150,255,0.05)';ctx.fill();}
     ctx.fillStyle='#c8a0ff';ctx.font='11px "Microsoft YaHei",sans-serif';const q=Math.min(R*0.6,180);ctx.fillText('天体射电',p[0]+Math.cos(a)*q,p[1]+Math.sin(a)*q);}}
-  for(const b of ENV.bodies){const dx=b.x-E.pos[0],dy=b.y-E.pos[1],D=Math.hypot(dx,dy);if(D<=b.r||D-b.r>Rw)continue;
+  for(const b of envOccluders()){const dx=b.x-E.pos[0],dy=b.y-E.pos[1],D=Math.hypot(dx,dy);if(D<=b.r||D-b.r>Rw)continue; // 2026-10-05 含会动的卫星 / 彗核
     const a0=Math.atan2(dy,dx),hh=Math.asin(b.r/D),t=Math.sqrt(D*D-b.r*b.r),F=Rw*2;
     const Q=[[Math.cos(a0-hh)*t,Math.sin(a0-hh)*t],[Math.cos(a0-hh)*F,Math.sin(a0-hh)*F],[Math.cos(a0+hh)*F,Math.sin(a0+hh)*F],[Math.cos(a0+hh)*t,Math.sin(a0+hh)*t]];
     ctx.beginPath();Q.forEach(function(q,i){const s=toScreen(E.pos[0]+q[0],E.pos[1]+q[1]);if(i)ctx.lineTo(s[0],s[1]);else ctx.moveTo(s[0],s[1]);});ctx.closePath();ctx.fillStyle='rgba(0,0,0,0.45)';ctx.fill();}

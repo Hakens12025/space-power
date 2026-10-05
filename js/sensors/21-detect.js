@@ -147,7 +147,7 @@ function detectFor(detSide,tgtSide,dt){
        DS183 那条纪律("拿静听去写 seenPos 等于凭空把距离变出来")原样成立:单站静听永远 fix=false,进不来。 */
     trkStep(tk,t,obs,el); // 先验增长 + 逐站信息累加 + 解椭圆 → 定得出位置就记最后定位 → 存握没握着
     if(!(c.n>0)&&tk.lastPos&&!tk.memGone&&trkStill(tk))for(const d of all){const R=d.visR||COV.VIS_R,q=tk.lastPos; // 2026-09-27 记忆:全知圈重新扫过那一点却没看到它 ⇒ 清掉
-      if(Math.hypot(d.pos[0]-q[0],d.pos[1]-q[1])<R&&!(ENV.bodies.length&&envOccluded(d.pos,q))){tk.memGone=true;break;}}
+      if(Math.hypot(d.pos[0]-q[0],d.pos[1]-q[1])<R&&!(envOccluders().length&&envOccluded(d.pos,q))){tk.memGone=true;break;}}
   }
 }
 

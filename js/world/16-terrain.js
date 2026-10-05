@@ -50,3 +50,15 @@ function featFbm(x,y,s,o){let t=0,a=0.5,f=1,n=0;for(let k=0;k<o;k++){t+=a*featNo
 function featIonRaw(I,x,y){const dx=x-I.x,dy=y-I.y;if(dx*dx+dy*dy>=I.r2)return 0;const u=dx*I.ca+dy*I.sa,v=-dx*I.sa+dy*I.ca;
   const q=(u/I.a)*(u/I.a)+(v/I.b)*(v/I.b),q2=q*(0.7+0.6*featFbm(x/140e3,y/140e3,I.seed+7,4));if(q2>=1)return 0;
   return Math.pow(1-q2,1.2)*(0.7+0.6*featFbm(x/45e3,y/45e3,I.seed+19,4));}
+
+/* ---- 第 2 步(2026-10-05):会动的天体 —— 卫星、彗核(半径 COMET.R)同行星一样挡视线 / 挡弹 / 船不能进,被追上推开不掉血(physics/31 的硬边)。
+   envOccluders() = 天体 + 此刻的会动天体,挡视线的地方(world/12 envOccluded、sensors/22 热循环、25 信号视野、weapons/56 挡弹、红外 / 雷达画面)都读它;
+   影子、射电、杂波仍只看 ENV.bodies。按 simTime 与世界 rev 缓存,条目是复用的对象 {x,y,r,r2,heat} ---- */
+const FEAT_MV={t:NaN,rev:-1,mv:[],occ:null,q:[0,0,0,0]};
+function featMovers(){
+  const M=FEAT_MV;if(M.t===simTime&&M.rev===ENV.rev)return M.mv;
+  M.t=simTime;M.rev=ENV.rev;M.occ=null;const L=M.mv,q=M.q,mk=function(i){return L[i]||(L[i]={x:0,y:0,r:0,r2:0,heat:0});};let n=0;
+  for(const m of ENV.moons){if(!ENV.bodies[m.b])continue;featMoonPos(m,simTime,q);const o=mk(n++);o.x=q[0];o.y=q[1];o.r=m.r;o.r2=m.r*m.r;o.heat=ENV_CFG.BODY_HEAT;}
+  if(ENV.stars.length)for(let i=0;i<ENV.comets.length;i++){featCometAt(i,featCometT(i,simTime),q);const R=FEAT_CFG.COMET.R,o=mk(n++);o.x=q[0];o.y=q[1];o.r=R;o.r2=R*R;o.heat=ENV_CFG.BODY_HEAT;}
+  L.length=n;return L;}
+function envOccluders(){const L=featMovers();if(!L.length)return ENV.bodies;const M=FEAT_MV;if(!M.occ)M.occ=ENV.bodies.concat(L);return M.occ;}

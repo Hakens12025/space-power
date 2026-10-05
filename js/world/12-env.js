@@ -126,8 +126,9 @@ function envInClutter(p,self){ // ENV2 p 在雷达杂波里:贴着天体盘面�
   return false;
 }
 /* ---- 2026-09-30 舰船不准进入天体与恒星(用户:寻路绕过去、点天体就去天体旁边;太阳也不准驶入):盘面是硬边(physics/31);命令层(formation/44 ordRoute、bots/61)用下面几个把命令点推出、把航线绕开 ---- */
-const ENV_OBS={rev:-1,a:[]};
-function envObstacles(){if(ENV_OBS.rev!==ENV.rev){const a=[];for(const s of ENV.stars)a.push({x:s.x,y:s.y,r:s.r,r2:s.r*s.r});for(const b of ENV.bodies)a.push(b);ENV_OBS.a=a;ENV_OBS.rev=ENV.rev;}return ENV_OBS.a;} // 障碍表 = 恒星 + 天体({x,y,r,r2}),按 ENV.rev 缓存
+const ENV_OBS={rev:-1,a:[],t:NaN,m:null};
+function envObstacles(){if(ENV_OBS.rev!==ENV.rev){const a=[];for(const s of ENV.stars)a.push({x:s.x,y:s.y,r:s.r,r2:s.r*s.r});for(const b of ENV.bodies)a.push(b);ENV_OBS.a=a;ENV_OBS.rev=ENV.rev;ENV_OBS.t=NaN;}
+  const L=featMovers();if(!L.length)return ENV_OBS.a;if(ENV_OBS.t!==simTime){ENV_OBS.m=ENV_OBS.a.concat(L);ENV_OBS.t=simTime;}return ENV_OBS.m;} // 障碍表 = 恒星 + 天体({x,y,r,r2}),按 ENV.rev 缓存;2026-10-05 再加此刻的卫星 / 彗核(world/16 featMovers,按 simTime)
 function envBodyOut(p,ref,ok){ // 点 p 落在某个天体「半径 + BODY_CLEAR」以内 ⇒ 沿 天体中心 → p 推到这一圈上(p 正在中心时朝 ref);ok(q) 为假(比如出了游玩区)就沿圈往两边找最近的可用点。原地改并返回 p
   const m=ENV_CFG.BODY_CLEAR;
   for(const b of envObstacles()){const R=b.r+m;let dx=p[0]-b.x,dy=p[1]-b.y,d=Math.hypot(dx,dy);if(d>=R)continue;
@@ -231,7 +232,7 @@ function envInShadow(p){ // ENV2 p 在任一天体的本影里(XY)。u = 天体�
   return false;
 }
 function envOccluded(a,b){ // ENV2 a→b 视线(XY)穿过某个天体圆盘;端点在某个圆盘里时那个天体对这一对不算(拍板点 1:天体当不了藏身处)。第 4a 步 22-percep 热循环里会有一份逐位同式的副本
-  const B=ENV.bodies;if(!B.length)return false;
+  const B=envOccluders();if(!B.length)return false; // 2026-10-05 天体 + 会动的卫星 / 彗核(world/16)
   const vx=b[0]-a[0],vy=b[1]-a[1],l2=vx*vx+vy*vy;
   for(let i=0;i<B.length;i++){const o=B[i],wx=o.x-a[0],wy=o.y-a[1],pr=wx*vx+wy*vy;
     if(pr>0&&pr<l2){const cr=wx*vy-wy*vx;

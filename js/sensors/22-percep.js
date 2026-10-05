@@ -123,7 +123,7 @@ function senseKIR(d) { // 探测方光学系数。舰与信标唯一的差别在
 function senseVis(d, t) { // 2026-09-26 可见光圈:目标在探测方自己的圈 visR 以内、视线不被天体挡住 ⇒ 看得一清二楚(2026-09-29 前出浮标也有,0.7 倍)
   const dx = t.pos[0] - d.pos[0], dy = t.pos[1] - d.pos[1], dz = (t.pos[2] || 0) - (d.pos[2] || 0);
   const R = d.visR || COV.VIS_R; // 2026-09-27 每艘自己的全知圈(visRadiusOf,感知节拍开头写)
-  return dx * dx + dy * dy + dz * dz < R * R && !(ENV.bodies.length && envOccluded(d.pos, t.pos));
+  return dx * dx + dy * dy + dz * dz < R * R && !(envOccluders().length && envOccluded(d.pos, t.pos));
 }
 function visRadiusOf(s) { // 2026-09-27 全知圈半径:基准 x 星云消光(八个方向各取一段 VIS_R 的透过率取平均,下限 VIS_DUST_MIN)x 天体影子(VIS_SHADOW)
   const R0 = COV.VIS_R, p = s.pos;
@@ -169,7 +169,7 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
     if (m > 0) { if (nd * m > scRbCap) { scRbCap = Math.max(16, nd * m * 2); scRbU = new Float64Array(2 * scRbCap); scRbC = new Float64Array(4 * scRbCap); }
       for (let j = 0; j < nd; j++) { const d = j < dets.length ? dets[j] : bcons[j - dets.length]; let q = j * m;
         for (let b = 0; b < on.length; b++) { if (!on[b]) continue; envRfBodyCone(ENV.bodies[b], d.pos, scRbT); scRbU[2 * q] = scRbT[0]; scRbU[2 * q + 1] = scRbT[1]; for (let i = 0; i < 4; i++) scRbC[4 * q + i] = scRbT[2 + i]; q++; } } } }
-  const B = ENV.bodies; senseGrowO(B.length); scON = B.length;
+  const B = envOccluders(); senseGrowO(B.length); scON = B.length; // 2026-10-05 天体 + 此刻的卫星 / 彗核(world/16),与 envOccluded 同一张表
   for (let b = 0; b < scON; b++) { scOX[b] = B[b].x; scOY[b] = B[b].y; scOR2[b] = B[b].r2; }
   let mIR = 0, mRF = 0, mACT = 0;
   for (let i = 0; i < nd; i++) {
@@ -282,14 +282,14 @@ function projSig(p) { // 弹丸的亮度与反射。常数由旧模型的可见�
 }
 function senseSeesOptical(lum, d, pos, bg) { // 探测器 d 能否光学看到位于 pos、亮度 lum 的东西。ENV2 bg = pos 处的云背景(调用方每颗弹丸算一次),可省
   if (envSunBlind(d.pos, pos)) return false; // ENV1:弹丸与舰船同一套环境 —— 太阳禁区(空环境时恒假)
-  if (ENV.bodies.length && envOccluded(d.pos, pos)) return false; // ENV2 天体挡视线
+  if (envOccluders().length && envOccluded(d.pos, pos)) return false; // ENV2 天体挡视线(含会动的卫星 / 彗核)
   lum = senseLoOf(lum, 0, 0, senseGlareAt(d.pos, pos), bg || 0); // ENV2 杂散光 + 云背景(弹丸没有相位);都为 0 时原值
   const dx = d.pos[0] - pos[0], dy = d.pos[1] - pos[1], dz = d.pos[2] - pos[2], d2 = dx * dx + dy * dy + dz * dz, r = lum * senseKIR(d);
   return d2 < r && (!ENV.clouds.length || d2 < r * envExt(d.pos, pos, 8)); // ENV2 消光只在不算它也看得见时才算(沿线至多 8 点)
 }
 function senseSeesActive(refl, d, pos, vel) { // 探测器 d 的照射能否打到位于 pos、反射 refl 的东西(不照射时 senseKACT 恒 0,自然为假)。vel 可省
   if (envMtiBlind(d.pos, pos, vel)) return false; // ENV1:杂波里的慢目标被动目标显示滤掉(空环境 / 不给速度时恒假)
-  if (ENV.bodies.length && envOccluded(d.pos, pos)) return false; // ENV2 天体挡视线
+  if (envOccluders().length && envOccluded(d.pos, pos)) return false; // ENV2 天体挡视线(含会动的卫星 / 彗核)
   const dx = d.pos[0] - pos[0], dy = d.pos[1] - pos[1], dz = d.pos[2] - pos[2];
   const d2 = dx * dx + dy * dy + dz * dz;
   return d2 * d2 * envRfNoise(d.pos, pos) < refl * senseKACT(d); // ENV2 恒星射频噪声锥,与热循环同式
