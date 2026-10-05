@@ -63,6 +63,7 @@ table{border-collapse:collapse;font-size:12px;margin-top:6px}td,th{border:1px so
 <tr><td>A 光点群</td><td>一组画成一小团闪烁的光点(1 / 3 / 5 个,白芯 + 阵营色光晕),各带一丝很短的阵营色尾</td><td>纹理粒度 + 数量(Bertin 的纹理粒度;subitizing)</td><td>5 个单像素点排成骰子五点(单枚也一样)</td><td>「一团碎点」对「一道实线」,成组时最好认;像一群小型杀伤器</td><td>单枚时只剩一个光点,和 B 差不多;闪烁要是太跳会抢眼</td></tr>
 <tr><td>B 白芯亮珠</td><td>圆珠:白芯 + 阵营色外圈 + 光晕,尾焰缩成一小团;成组排成一字横队</td><td>闭合 / 长宽比(圆 vs 长条)+ 明度(白芯)</td><td>白点 + 紧贴的阵营色圈</td><td>单枚也成立(圆点对短划);白芯在去色后依然最亮</td><td>2 px 的珠子白芯和外圈会糊成一个浅色点;记号和诱饵(紫点 + 圈)同族,要靠中心颜色分</td></tr>
 <tr><td>C 闪烁信标</td><td>形状照现在(阵营色短划 / 楔形),每枚机头加一盏白色频闪灯:每 0.45 秒亮 0.12 秒,各组相位错开</td><td>时间通道(闪烁;前注意特征里最抢眼的一类)</td><td>现在的记号 + 同步闪的白心</td><td>和尺寸无关,1 px 也成立;导弹那套画法完全不动</td><td>静止截图里看不出;一屏几十组拦截弹一起闪会很吵、抢注意力</td></tr>
+<tr><td>D 青环 + 青焰(旧做法改良,10-06 用户提)</td><td>弹体照现在(阵营色),加两道青色环带;尾焰换回两方同色的青色。弹长 &lt; 5 px 画短划时,中间一截换青色</td><td>色相(青 vs 阵营色)</td><td>现在的记号外加一圈青色</td><td>色相是小尺寸下最强的通道;放大后弹体上的环好看、有细节</td><td>战术层尾焰(约 7 px)比弹体(约 3 px)大,一眼看到的主要是尾焰 —— 红方拦截弹带青色尾焰,会被看成蓝方的东西;蓝方的青焰和蓝焰只差约 30° 色相;两道环在战术层(弹长 &lt; 5 px)画不开</td></tr>
 </table>
 </section>
 
@@ -563,6 +564,7 @@ const ZF=HULL_ZOOM.LAND*SHIP_K*V.tk; // 战术落点的舰标缩放系数(= 引�
 function icpCloud(n,sd){if(n===1)return [[0,0]];const r=rng(sd*7+n),P=[];for(let i=0;i<n;i++){const a=i/n*6.283+(r()-0.5)*0.9,d=0.45+0.55*r();P.push([Math.cos(a)*d,Math.sin(a)*d]);}return P;}
 function drawIcpOpt(g,opt,x,y,rot,side,count,zf,t,sd){
   if(opt==='now'){drawMsl(g,x,y,rot,side,'inter',count,true,zf,t,sd);return;}
+  if(opt==='D'){drawIcpD(g,x,y,rot,side,count,zf,t,sd);return;}
   const n=shownN(count),L=LFF(zf),col=SIDE[side],c=Math.cos(rot),s=Math.sin(rot);
   const W=(px,py)=>[x+px*c-py*s,y+px*s+py*c]; // 机体坐标(+x = 飞行方向)→ 屏幕
   if(opt==='A'){ // 光点群:团半径 0.3 LFF;每点白芯 + 阵营色光晕 + 一丝短尾,亮度各自闪
@@ -587,15 +589,25 @@ function drawIcpOpt(g,opt,x,y,rot,side,count,zf,t,sd){
     for(const f of F){const q=W((f[0]-cx+0.42)*Lg,f[1]*Lg);blit(g,fx('glow'+side),q[0],q[1],0.32*L,1,true);g.fillStyle='#fff';g.beginPath();g.arc(q[0],q[1],Math.max(0.65,0.1*L),0,6.283);g.fill();}
     return;}
   function artLen(n){return mslLen(zf,n,'inter');}}
+const ICP_CY=[90,232,238]; // 旧做法的青色(10-05 前 81-art 拦截弹的环带色)
+function drawIcpD(g,x,y,rot,side,count,zf,t,sd){ // D 旧做法改良:弹体阵营色 + 两道青色环带,尾焰换回两方同色的青色 'inter'(其余同现在的 drawMsl)
+  const n=shownN(count),Lg=mslLen(zf,n,'inter'),F=FORM[n],cx=mslBox(zf,n,'inter')[2],c=Math.cos(rot),s=Math.sin(rot),w=MW.inter;
+  if(Lg<5){let xm=0;for(const f of F)xm=Math.min(xm,f[0]);const b=(xm-cx-0.5)*Lg;plume(g,'inter',1,x+b*c,y+b*s,rot+Math.PI,Lg*(n>1?2.6:1.8)*flick(t,sd),Math.max(1.4,Lg*(n>1?1.1:0.7)),0.85);}
+  else for(const f of F){const fx_=(f[0]-cx-0.5)*Lg,fy=f[1]*Lg;plume(g,'inter',1,x+fx_*c-fy*s,y+fx_*s+fy*c,rot+Math.PI,Lg*1.35*flick(t,sd+f[1]*3),Math.max(1.6,Lg*0.45),0.95);}
+  for(let i=F.length-1;i>=0;i--){const f=F[i],fx_=(f[0]-cx)*Lg,fy=f[1]*Lg;g.save();g.translate(x+fx_*c-fy*s,y+fx_*s+fy*c);g.rotate(rot);mslGlyph(g,'inter',side,Lg,rot);
+    if(Lg<5){g.strokeStyle=css(ICP_CY);g.lineWidth=0.8;g.beginPath();g.moveTo(-Lg*0.12,0);g.lineTo(Lg*0.16,0);g.stroke();} // 短划:中间一截换青色(两道环在 5 px 以下画不开)
+    else{g.scale(Lg,Lg);g.fillStyle=css(ICP_CY);g.fillRect(0.06,-w-0.015,0.07,2*w+0.03);g.fillRect(-0.12,-w-0.015,0.07,2*w+0.03);}
+    g.restore();}}
 function icpBlink(t,sd){return ((t+(sd%17)*0.071)%0.45)<0.12;}
 function icpMark(g,opt,x,y,rot,side,cnt,t,sd){ // 代表显示:固定像素(同引擎 projMark 的规矩:外框 ≤ 6 px、阵营色)
   if(opt==='now'){projMark(g,'interceptor',false,x,y,rot,side,cnt);return;}
+  if(opt==='D'){projMark(g,'interceptor',false,x,y,rot,side,cnt);g.strokeStyle=css(ICP_CY);g.lineWidth=1;g.beginPath();g.arc(x,y,3.1,0,6.283);g.stroke();return;}
   const col=PROJ_MK['i'+side];
   if(opt==='A'){g.fillStyle=col;const D=[[0,0],[-1.9,-1.9],[1.9,-1.9],[-1.9,1.9],[1.9,1.9]];for(const d of D)g.fillRect(Math.round(x+d[0])-0.6,Math.round(y+d[1])-0.6,1.2,1.2);return;}
   if(opt==='B'){g.strokeStyle=PROJ_MK[side];g.lineWidth=1.1;g.beginPath();g.arc(x,y,1.9,0,6.283);g.stroke();g.fillStyle='#fff';g.beginPath();g.arc(x,y,1.3,0,6.283);g.fill();return;}
   if(opt==='C'){projMark(g,'interceptor',false,x,y,rot,side,cnt);if(icpBlink(t,sd)){g.fillStyle='#fff';g.beginPath();g.arc(x,y,1.3,0,6.283);g.fill();}return;}}
 
-const OPTS=[{id:'now',nm:'现状(引擎)'},{id:'A',nm:'A 光点群'},{id:'B',nm:'B 白芯亮珠'},{id:'C',nm:'C 闪烁信标'}];
+const OPTS=[{id:'now',nm:'现状(引擎)'},{id:'A',nm:'A 光点群'},{id:'B',nm:'B 白芯亮珠'},{id:'C',nm:'C 闪烁信标'},{id:'D',nm:'D 青环 + 青焰'}];
 function cv(id,w,h){const c=$(id)||document.createElement('canvas');c.width=Math.round(w*DPR);c.height=Math.round(h*DPR);c.style.width=w+'px';c.style.height=h+'px';const g=c.getContext('2d');g.setTransform(DPR,0,0,DPR,0,0);return c;}
 function zoomCopy(src,dst,k){const w=src.width/DPR,h=src.height/DPR,d=cv(dst,w*k,h*k),g=d.getContext('2d');g.setTransform(1,0,0,1,0,0);g.imageSmoothingEnabled=false;g.drawImage(src,0,0,src.width,src.height,0,0,d.width,d.height);}
 function label(g,x,y,s,col){g.save();g.font='11px "Microsoft YaHei"';g.fillStyle=col||'#9aa8b8';g.textBaseline='middle';g.fillText(s,x,y);g.restore();}
