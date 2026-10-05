@@ -519,12 +519,13 @@ function staC(g,own,px,big){const base=staBase(own),tr=staTrim(own);
 const STA_DRAW={A:staA,B:staB,C:staC};
 function staSprite(v,own,D){const Dq=Math.pow(2,Math.round(Math.log2(Math.max(4,D))*4)/4),key=v+own+Dq+'|'+DPR;let c=STA_SPR.get(key);if(c)return c;
   const S=Math.ceil((Dq*1.2+6)*DPR);c=mkCv(S,S);const g=c.getContext('2d'),s=Dq/2;g.setTransform(DPR*s,0,0,DPR*s,S/2,S/2);g.lineJoin='round';STA_DRAW[v](g,own,1/s,Dq>=44);c.Dq=Dq;STA_SPR.set(key,c);return c;}
-/* 代表显示(拉远过切换点):8 px 八角记号,固定像素;中立 = 灰空心;自己的 = 蓝实心;敌方的 = 红粗边 + 中心点(去色后也分得开) */
-function staMark(g,x,y,own){const P=circlePoly(5,8,0.5).map(q=>[x+q[0],y+q[1]]);g.save();
-  if(own==='neutral'){path(g,P);g.strokeStyle='#a0aab9';g.lineWidth=1.5;g.stroke();}
-  else if(own==='blue'){path(g,P);g.fillStyle=css(SIDE.blue);g.fill();}
-  else{path(g,P);g.strokeStyle=css(SIDE.red);g.lineWidth=2;g.stroke();g.fillStyle=css(SIDE.red);g.beginPath();g.arc(x,y,1.6,0,6.283);g.fill();}
-  g.restore();}
+/* 代表显示(拉远过切换点):侧视雷达碟小图标(约 11 x 12 px,固定像素;用户 10-05:原来的八角记号看着就是一个点)。归属:中立 = 灰空心、自己的 = 蓝实心、敌方 = 红粗边(去色后也分得开) */
+function staMark(q,x,y,own){const col=own==='neutral'?'#a0aab9':css(SIDE[own]);q.save();q.translate(x-0.9,y-0.8);q.scale(1.15,1.15);q.strokeStyle=col;q.fillStyle=col;q.lineCap='round';q.lineJoin='round';
+  q.lineWidth=1.5;q.beginPath();q.moveTo(-3.4,6);q.lineTo(3.4,6);q.moveTo(0,6);q.lineTo(-0.2,1.4);q.stroke(); // 底座 + 立柱
+  q.save();q.translate(1.2,-0.8);q.rotate(0.65);q.beginPath();q.ellipse(0,0,5.2,2.6,0,0,Math.PI);q.closePath(); // 碟:半椭圆的碗,口朝右上
+  if(own==='blue')q.fill();else{q.lineWidth=own==='red'?1.7:1.2;q.stroke();}
+  q.lineWidth=1.1;q.beginPath();q.moveTo(0,0);q.lineTo(0,-3.2);q.stroke();q.beginPath();q.arc(0,-3.6,1.05,0,6.283);q.fill();q.restore(); // 馈源杆 + 馈源
+  q.restore();}
 let STA_OWN='neutral';
 function drawStation(g,v,t){const p=XT.toScreen(STA.x,STA.y),z=XT.cam.zoom,own=STA_OWN==='cap'?'neutral':STA_OWN,cr=30000*z;
   if(own==='blue'){g.strokeStyle=css(SIDE.blue,0.2);g.lineWidth=1;g.beginPath();g.arc(p[0],p[1],120000*z,0,6.283);g.stroke();} // 自己的据点:可见光 12 万
@@ -534,7 +535,7 @@ function drawStation(g,v,t){const p=XT.toScreen(STA.x,STA.y),z=XT.cam.zoom,own=S
   else{const D=staD(),c=staSprite(v,own,D),w=c.width/DPR*D/c.Dq;g.drawImage(c,p[0]-w/2,p[1]-w/2,w,w);
     if(own!=='neutral'){const on=(t*0.8)%1<0.3;if(on)blit(g,BEACON[own],p[0],p[1],D*0.75,0.35,true);}} // 归属灯一闪:整站外发一层阵营色光(效果)
   const lab=({neutral:'中立',blue:'蓝方',red:'红方',cap:'中立(蓝方占领中)'})[STA_OWN];
-  XT.mapText('据点 · '+lab,TXT,p[0],p[1]+(XT.shipMarkMode()?9:staD()*0.55+9));
+  XT.mapText('据点 · '+lab,TXT,p[0],p[1]+(XT.shipMarkMode()?13:staD()*0.55+9));
   refShip(g,'CV',STA.x+9000,STA.y-13000,0,'航母 T1(参照)');refShip(g,'CA',STA.x-9500,STA.y-13000,0,'巡洋 T1');
   const H0=420,cw=SECS[4].cw;g.save();g.fillStyle='rgba(5,7,12,.78)';g.fillRect(cw-306,H0-118,300,112);g.font='10px "Microsoft YaHei"';g.fillStyle='rgba(160,172,188,.8)';g.textAlign='left';g.textBaseline='top';g.fillText('放大看形状(不是游戏尺寸)',cw-300,H0-114);
   ['neutral','blue','red'].forEach((o,i)=>{const c=staSprite(v,o,84),w=c.width/DPR;g.drawImage(c,cw-256+i*96-w/2,H0-58-w/2,w,w);});g.restore();}
@@ -551,7 +552,7 @@ const SECS=[
     c:()=>[ION.x,ION.y],views:[['全貌',1900],['舰队层',1000],['战术层(云里)',250]],vars:ION_VARS},
   {id:'rad',nm:'辐射带',note:'气态巨行星必带、冰巨星一半;行星半径 1.2~2.2 倍;带里雷达发现 x0.5(杂波),护盾每游戏秒掉 4、不回充。边界是硬的(进去就掉),所以三个方案都给内外边线。这颗行星同时带碎石环(1.6~2.6 倍),两样叠在一起是对局里会出现的情形。',
     c:()=>[GP.x,GP.y],views:[['全貌',1500],['舰队层',1000],['战术层(带边)',250,()=>[GP.x+GP.r*1.7,GP.y]]],vars:RAD_VARS},
-  {id:'sta',nm:'据点',note:'每局 1~2 个;3 万 km 内只有一方的船待满 30 游戏秒 = 拿下(虚线圈 = 占领圈,实弧 = 占领进度);只给视野(可见光 12 万 + 红外 19.2 万)。本体战术落点约 20 px(航母 T1 12.9 px 的 1.55 倍),跟美术整体缩放一起缩放;归属色落在整圈描边、材质与灯上;拉远过切换点换 8 px 八角记号。',
+  {id:'sta',nm:'据点',note:'每局 1~2 个;3 万 km 内只有一方的船待满 30 游戏秒 = 拿下(虚线圈 = 占领圈,实弧 = 占领进度);只给视野(可见光 12 万 + 红外 19.2 万)。本体战术落点约 20 px(航母 T1 12.9 px 的 1.55 倍),跟美术整体缩放一起缩放;归属色落在整圈描边、材质与灯上;拉远过切换点换侧视雷达碟小图标(中立灰空心 / 自己的蓝实心 / 敌方红粗边)。',
     c:()=>[STA.x,STA.y],views:[['战术层',250],['切换点后',420],['舰队层',1000],['拉近',40]],vars:STA_VARS,own:true}];
 const GAP=6;
 for(const s of SECS){const el=document.createElement('section');

@@ -201,7 +201,7 @@ function drawRad(now){const C=N.BELT.COL,sh=0.8+0.2*Math.sin(now*1.3),z=XT.cam.z
     XT.mapText('辐射带',css(C,0.7),c[0],c[1]-r1-9);}}
 
 /* 据点(A 环形站):八节环舱 + 四根辐条 + 中心枢纽 + 两个对接臂;本体战术落点约 20 px(比航母 T1 12.9 px 大,当地标),跟舰标同一个缩放系数;
-   归属色落在整圈外缘描边、材质(带三成归属色)与环上四盏灯;拉远过切换点换 8 px 八角记号(中立灰空心 / 自己的蓝实心 / 敌方红粗边 + 中心点) */
+   归属色落在整圈外缘描边、材质(带三成归属色)与环上四盏灯;拉远过切换点换侧视雷达碟小图标(中立灰空心 / 自己的蓝实心 / 敌方红粗边) */
 function staBase(own){const b=[118,124,136];return own==='neutral'?b:mix(b,SIDE[own],0.3);}
 function staTrim(own){return own==='neutral'?[150,158,172]:SIDE[own];}
 function plate(q,P,base,px,ow){path(q,P);q.strokeStyle='rgba(0,0,0,.85)';q.lineWidth=(ow||1.8)*px;q.stroke();q.fillStyle=css(base);q.fill();
@@ -223,19 +223,21 @@ function staA(q,own,px,big){const base=staBase(own),tr=staTrim(own);
 const STA_SPR=new Map();
 function staSprite(own,D){const Dq=Math.pow(2,Math.round(Math.log2(Math.max(4,D))*4)/4),key=own+Dq+'|'+DPR;let c=STA_SPR.get(key);if(c)return c;
   const S=Math.ceil((Dq*1.2+6)*DPR);c=mkCv(S,S);const q=c.getContext('2d'),s=Dq/2;q.setTransform(DPR*s,0,0,DPR*s,S/2,S/2);q.lineJoin='round';staA(q,own,1/s,Dq>=44);c.Dq=Dq;STA_SPR.set(key,c);return c;}
-function staMark(x,y,own){const P=circlePoly(5,8,0.5).map(v=>[x+v[0],y+v[1]]);g.save();
-  if(own==='neutral'){path(g,P);g.strokeStyle='#a0aab9';g.lineWidth=1.5;g.stroke();}
-  else if(own==='blue'){path(g,P);g.fillStyle=css(SIDE.blue);g.fill();}
-  else{path(g,P);g.strokeStyle=css(SIDE.red);g.lineWidth=2;g.stroke();g.fillStyle=css(SIDE.red);g.beginPath();g.arc(x,y,1.6,0,6.283);g.fill();}
-  g.restore();}
+/* 代表显示(拉远过切换点):侧视雷达碟小图标(约 11 x 12 px,固定像素;用户 10-05:原来的八角记号看着就是一个点)。归属:中立 = 灰空心、自己的 = 蓝实心、敌方 = 红粗边(去色后也分得开) */
+function staMark(q,x,y,own){const col=own==='neutral'?'#a0aab9':css(SIDE[own]);q.save();q.translate(x-0.9,y-0.8);q.scale(1.15,1.15);q.strokeStyle=col;q.fillStyle=col;q.lineCap='round';q.lineJoin='round';
+  q.lineWidth=1.5;q.beginPath();q.moveTo(-3.4,6);q.lineTo(3.4,6);q.moveTo(0,6);q.lineTo(-0.2,1.4);q.stroke(); // 底座 + 立柱
+  q.save();q.translate(1.2,-0.8);q.rotate(0.65);q.beginPath();q.ellipse(0,0,5.2,2.6,0,0,Math.PI);q.closePath(); // 碟:半椭圆的碗,口朝右上
+  if(own==='blue')q.fill();else{q.lineWidth=own==='red'?1.7:1.2;q.stroke();}
+  q.lineWidth=1.1;q.beginPath();q.moveTo(0,0);q.lineTo(0,-3.2);q.stroke();q.beginPath();q.arc(0,-3.6,1.05,0,6.283);q.fill();q.restore(); // 馈源杆 + 馈源
+  q.restore();}
 const BEACON={blue:rad([[0,'rgba(90,167,255,0)'],[0.6,'rgba(90,167,255,.35)'],[0.8,'rgba(90,167,255,.12)'],[1,'rgba(90,167,255,0)']],96),red:rad([[0,'rgba(255,107,107,0)'],[0.6,'rgba(255,107,107,.35)'],[0.8,'rgba(255,107,107,.12)'],[1,'rgba(255,107,107,0)']],96)};
 function drawStations(now){const z=XT.cam.zoom,mk=XT.shipMarkMode(),D=N.STA.PX/(0.55*0.78)*XT.shipZoomF();
   for(const T of NEW.sta){const p=XT.toScreen(T.x,T.y),own=T.holder||'neutral',cr=N.STA.CAP_R*z;
     if(own==='blue'){g.strokeStyle=css(SIDE.blue,0.2);g.lineWidth=1;g.beginPath();g.arc(p[0],p[1],N.STA.VIS*z,0,6.283);g.stroke();} // 自己的据点:可见光 12 万(新地形.html:视角 = 蓝方)
     g.save();g.setLineDash([4,5]);g.strokeStyle=own==='neutral'?'rgba(180,190,205,.32)':css(SIDE[own],0.4);g.lineWidth=1;g.beginPath();g.arc(p[0],p[1],cr,0,6.283);g.stroke();g.restore(); // 占领圈 3 万 km
-    if(mk)staMark(p[0],p[1],own);
+    if(mk)staMark(g,p[0],p[1],own);
     else{const c=staSprite(own,D),w=c.width/DPR*D/c.Dq;g.drawImage(c,p[0]-w/2,p[1]-w/2,w,w);if(own!=='neutral'&&(now*0.8)%1<0.3)blit(g,BEACON[own],p[0],p[1],D*0.75,0.35,true);} // 归属灯一闪(效果)
-    XT.mapText(T.name+' · '+(own==='neutral'?'中立':(own==='blue'?'蓝方':'红方')),TXT,p[0],p[1]+(mk?9:D*0.55+9));}}
+    XT.mapText(T.name+' · '+(own==='neutral'?'中立':(own==='blue'?'蓝方':'红方')),TXT,p[0],p[1]+(mk?13:D*0.55+9));}}
 function drawNew(now){drawIon();drawRad(now);drawComet();for(const m of NEW.moons)drawMoon(m);drawStations(now);}
 
 /* ---------- 左栏:跳到每一样(落在给定的层) ---------- */
