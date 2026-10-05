@@ -74,7 +74,7 @@ function matchGenWorld(seed,B,R){
     w.ions=[];for(let n=Math.floor(q()*3),k=0;k<n;k++){const P=pt(0.9),a=150000+250000*q(); // 电离云 0~2 片:半轴 15~40 万
       w.ions.push({x:Math.round(P[0]),y:Math.round(P[1]),a:Math.round(a),b:Math.round(Math.max(150000,a*(0.5+0.5*q()))),ang:Math.round(q()*180),seed:Math.floor(q()*1e6)});}
     w.stations=[];for(let n=1+Math.floor(q()*2),k=0,m=0;k<40&&m<n;k++){const P=pt(0.8); // 据点 1~2 个:离两军重心 30 万以上、离天体 半径 + 6 万 以上、彼此 40 万以上
-      if(Math.hypot(P[0]-B[0],P[1]-B[1])<300000||Math.hypot(P[0]-R[0],P[1]-R[1])<300000||w.bodies.some(function(b){return Math.hypot(P[0]-b.x,P[1]-b.y)<b.r+60000;})||w.stations.some(function(o){return Math.hypot(P[0]-o.x,P[1]-o.y)<400000;}))continue;
+      if(Math.hypot(P[0]-B[0],P[1]-B[1])<300000*CFG.scale||Math.hypot(P[0]-R[0],P[1]-R[1])<300000*CFG.scale||w.bodies.some(function(b){return Math.hypot(P[0]-b.x,P[1]-b.y)<b.r+60000*CFG.scale;})||w.stations.some(function(o){return Math.hypot(P[0]-o.x,P[1]-o.y)<400000*CFG.scale;}))continue;
       w.stations.push({x:Math.round(P[0]),y:Math.round(P[1]),name:'据点'+'甲乙'[m]});m++;}}
   return w;
 }
