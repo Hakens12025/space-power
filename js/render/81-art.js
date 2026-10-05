@@ -219,7 +219,7 @@ function artBuoy(g,x,y,rot,side,on){const t=artNow(),R=artBuoyR(),q=artLocalL(ro
    七种(world/12 envReset 给每个天体定 type / seed):地表按种子在球面上取 3D 噪声、色调分几档(平涂的样子);明暗(光从 +x、仰角 22°、分 4 阶,夜面压成深蓝黑)
    与大气边缘光单独一张、每帧转到恒星方向贴;真撒出了「行星环」碎石带的画环(world/15 BELT_RING_GEO:半径、横向剖面同撒石头的高斯;背光那侧有行星的影子);熔岩的裂缝自己发光(夜面也看得见)。
    贴图按直径分档(32 ~ 512 设备像素,更大的拉伸贴),按行分帧生成、最近一次要的先做;要的那档没好就用已好的别的档,都没有就画原来的双色圆 */
-const ART_PL_NAME={rock:'岩质行星',ice:'冰质行星',desert:'荒漠行星',lava:'熔岩行星',terra:'类地行星',icegiant:'冰巨星',gas:'气态巨行星'}; // 地图上的类型 tag
+const ART_PL_NAME={rock:'岩质行星',ice:'冰质行星',desert:'荒漠行星',lava:'熔岩行星',terra:'类地行星',icegiant:'冰巨星',gas:'气态巨行星',luna:'岩质卫星',europa:'冰质卫星'}; // 地图上的类型 tag(luna / europa = 卫星,2026-10-05 world/16)
 const ART_PT={
   rock:{base:[128,116,104],atm:null,dot:[150,140,128]},
   ice:{base:[196,214,228],atm:[160,210,255],tilt:0.55,dot:[196,214,228]},
@@ -227,7 +227,8 @@ const ART_PT={
   lava:{atm:[255,120,60],emit:[255,128,44],dot:[170,80,50]},
   terra:{atm:[120,180,255],tilt:1.2,dot:[90,140,190]},
   icegiant:{atm:[150,220,255],tilt:1.25,pal:[[124,194,218],[104,174,204],[142,208,228],[96,160,194],[116,186,212],[132,200,222]],dot:[124,194,218]},
-  gas:{atm:[255,214,160],tilt:1.15,pal:[[214,186,146],[176,134,98],[228,210,176],[158,116,82],[204,168,126],[188,150,112]],dot:[214,186,146]}};
+  gas:{atm:[255,214,160],tilt:1.15,pal:[[214,186,146],[176,134,98],[228,210,176],[158,116,82],[204,168,126],[188,150,112]],dot:[214,186,146]},
+  luna:{atm:null,dot:[150,148,144]},europa:{atm:null,dot:[200,208,214]}}; // 2026-10-05 卫星专用地表(演示页 demos/美术/星空美术.html 选定的方案 C):岩质 = 灰白高地 + 暗色月海 + 陨坑;冰质 = 浅冰 + 红褐裂纹
 for(const k in ART_PT){const T=ART_PT[k].tilt||0;ART_PT[k].ax=[0,-Math.sin(T),Math.cos(T)];ART_PT[k].e2=[0,Math.cos(T),Math.sin(T)];}
 function artH3(x,y,z,sd){let h=Math.imul(x,374761393)+Math.imul(y,668265263)+Math.imul(z,1440662683)+Math.imul(sd,2246822519)|0;h=Math.imul(h^(h>>>13),1274126177);h^=h>>>16;return (h>>>0)/4294967296;}
 function artVn(x,y,z,sd){const xi=Math.floor(x),yi=Math.floor(y),zi=Math.floor(z),xf=x-xi,yf=y-yi,zf=z-zi,u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf),w=zf*zf*(3-2*zf);
@@ -238,6 +239,9 @@ function artQ(v,n){return Math.floor(v*n+0.5)/n;}
 const ART_CR={};
 function artCraters(sd){if(ART_CR[sd])return ART_CR[sd];const r=artRng(sd*31+5),a=[];for(let i=0;i<34;i++){const z=r()*2-1,t=r()*2*Math.PI,q=Math.sqrt(1-z*z);a.push([q*Math.cos(t),q*Math.sin(t),z,0.03+Math.pow(r(),2.2)*0.16]);}return ART_CR[sd]=a;}
 function artSurf(type,sd,x,y,z){const P=ART_PT[type];
+  if(type==='luna'){const mare=artFbm(x*1.3,y*1.3,z*1.3,sd,4),hi=artFbm(x*4,y*4,z*4,sd+3,3);let c=mare>0.56?[96,96,102]:(mare>0.53?[128,126,124]:[170,167,160]);const k=0.9+0.18*Math.floor(hi*4)/4;c=[c[0]*k,c[1]*k,c[2]*k];
+    for(const q of artCraters(sd)){const cd=x*q[0]+y*q[1]+z*q[2];if(cd<0.9)continue;const a=Math.sqrt(Math.max(0,2*(1-cd)));if(a>q[3]*1.25)continue;const f=a<q[3]*0.78?0.8:(a<q[3]?1.18:1.06);c=[c[0]*f,c[1]*f,c[2]*f];}return c;}
+  if(type==='europa'){const f=artFbm(x*2.2,y*2.2,z*2.2,sd,4),rid=1-Math.abs(2*artFbm(x*5,y*5,z*5,sd+7,4)-1);if(rid>0.965)return [150,96,74];if(rid>0.94)return [186,150,128];const k=0.92+0.1*Math.floor(f*4)/4;return [214*k,222*k,228*k];}
   if(type==='rock'){const f=artFbm(x*2.4,y*2.4,z*2.4,sd,4),m=artFbm(x*1.2,y*1.2,z*1.2,sd+5,3);let k=0.82+0.34*(artQ(f,6)-0.5);if(m>0.55)k*=0.74;else if(m>0.52)k*=0.86;
     for(const c of artCraters(sd)){const cd=x*c[0]+y*c[1]+z*c[2];if(cd<0.9)continue;const a=Math.sqrt(Math.max(0,2*(1-cd))),r=c[3];if(a>r*1.25)continue;k*=a<r*0.78?0.8:(a<r?1.2:1.06);}
     return [P.base[0]*k,P.base[1]*k,P.base[2]*k];}

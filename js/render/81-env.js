@@ -23,13 +23,14 @@
    ENV2 地图上的字(尘埃云 / 天体名 / 太阳 / 恒星)与日标图标都是预渲染的小贴图(mapText / mapCueSpr),每次 1 次 drawImage、1:1:补充规格 B 的稳态 <= 50 µs
    (任务 4 起尘埃云与天体名随合成缓存画一次,不再每帧贴;太阳 / 恒星的字与日标仍每帧贴)。
    ============================================================================ */
-const ENV_KIND_OF={stars:['star'],bodies:['body','shadow'],clouds:['cloud'],
-  asteroids:[],belts:[]}; // ENV2 世界层每个键 → 视图里的类。asteroids 就是石头:走 82-rocks 的航迹画法(带迷雾),不是地图事实;红外里它们是热源。belts(碎石带,world/15)同理:带本身不画
+const ENV_KIND_OF={stars:['star'],bodies:['body','shadow','rad'],clouds:['cloud'],
+  asteroids:[],belts:[],comets:['comet'],moons:['moon'],ions:['ion'],stations:['station']}; // ENV2 世界层每个键 → 视图里的类。asteroids 就是石头:走 82-rocks 的航迹画法(带迷雾),不是地图事实;红外里它们是热源。belts(碎石带,world/15)同理:带本身不画
 const ENV_VIEWS={}; // ENV2 视图名 → {order, slot, pre?, kinds:{类名 → 画法对象 | null}}
-ENV_VIEWS.map={order:['cloud','shadow','body','star'],slot:'frame',pre:mapTileFrame,kinds:{
+ENV_VIEWS.map={order:['cloud','ion','shadow','rad','body','comet','moon','star','station'],slot:'frame',pre:mapTileFrame,kinds:{ // 2026-10-05 新地形(world/16)的画法在 render/81-feat,都是 frame 槽
   cloud:{tile:mapCloudPaint,need:function(){return ENV.clouds.length>0;}}, // 2026-09-26 用户:尘埃云的中文标注不要了(原 comp:mapCloudLabels)
   shadow:{comp:mapShadows},   // ENV2 补充规格 C:影子是矢量虚线(每个天体 2 条,Liang–Barsky 裁到视图),不进瓦片 —— 瓦片于是只依赖云的几何,换光照不作废;任务 4 起画进合成缓存(矢量的键含世界 rev)
-  body:{comp:mapBodies}, star:{frame:mapStar}}};
+  body:{comp:mapBodies}, star:{frame:mapStar},
+  ion:{frame:function(){featIon();}},rad:{frame:function(){featRad();}},comet:{frame:function(){featComet();}},moon:{frame:function(){featMoons();}},station:{frame:function(){featStations();}}}}; // 81-feat 在本文件之后加载:运行期再取
 function drawEnvView(view){const V=ENV_VIEWS[view];if(!V)return;const took=V.pre?V.pre(V):false; // ENV2 任务 4:pre 返回真 = comp 槽已经在贴上去的合成缓存里,不再每帧画
   for(const k of V.order){const e=V.kinds[k];if(!e)continue;if(e.comp&&!took)e.comp();if(e[V.slot])e[V.slot]();}}
 function drawEnv(){drawEnvView('map');} // ENV2 名字不变:84-scene 的 typeof 守卫仍指向已声明符号(R2)

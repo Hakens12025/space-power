@@ -64,6 +64,18 @@ function matchGenWorld(seed,B,R){
   { const q=envRng(seed*7+5); // 2026-09-30 射电(用户拍板):另一条种子随机流,前面的地形不变
     if(w.stars)w.stars[0].rfb=envRfBursts(q); // 甲 恒星射电暴的时间表
     for(const b of w.bodies)b.rf=envRfBodySched(q);} // 乙 哪些天体是射电天体、什么时候在吵
+  { const q=envRng(seed*17+3),A2=ARENA||{x0:mx-ARENA_W/2,y0:my-ARENA_H/2},pt=function(k){return [A2.x0+ARENA_W*(0.5+(q()-0.5)*k),A2.y0+ARENA_H*(0.5+(q()-0.5)*k)];}; // 2026-10-05 新地形(world/16;数照 demos/地图组/新地形.html):又一条种子流,前面的地形不变
+    if(w.stars&&q()<0.6){const P=pt(0.7),th=q()*2*Math.PI,t0=1500,L=PHYS.v(FEAT_CFG.COMET.V)*t0; // 彗星:有恒星的局 60% 一颗(没恒星没有尾巴,不生成);开局时已飞了 t0 游戏秒,彗核大约在游玩区中部 7 成里
+      w.comets=[{x:Math.round(P[0]-Math.cos(th)*L),y:Math.round(P[1]-Math.sin(th)*L),vx:Math.cos(th),vy:Math.sin(th),t0:t0}];}
+    w.moons=[];w.bodies.forEach(function(b,bi){const big=b.type==='gas'||b.type==='icegiant',n=Math.floor(q()*(big?3:2)),used=[]; // 卫星:气态 / 冰巨星 0~2 颗、其余 0~1;半径 0.12~0.25 倍、轨道 3~5 倍,两颗的轨道错开
+      for(let k=0;k<n;k++){const r=Math.round(b.r*(0.12+0.13*q())),orb=Math.round(b.r*(3+2*q())),ph=q()*2*Math.PI,dir=q()<0.5?1:-1,ty=q()<0.55?'luna':'europa',sd=Math.floor(q()*1e6);
+        if(used.some(function(u){return Math.abs(u[0]-orb)<u[1]+r+20000;}))continue;used.push([orb,r]);w.moons.push({b:bi,orb:orb,ph:ph,r:r,dir:dir,type:ty,seed:sd});}
+      if(b.type==='gas'||(b.type==='icegiant'&&q()<0.5))b.rad=true;}); // 辐射带:气态必带、冰巨星一半
+    w.ions=[];for(let n=Math.floor(q()*3),k=0;k<n;k++){const P=pt(0.9),a=150000+250000*q(); // 电离云 0~2 片:半轴 15~40 万
+      w.ions.push({x:Math.round(P[0]),y:Math.round(P[1]),a:Math.round(a),b:Math.round(Math.max(150000,a*(0.5+0.5*q()))),ang:Math.round(q()*180),seed:Math.floor(q()*1e6)});}
+    w.stations=[];for(let n=1+Math.floor(q()*2),k=0,m=0;k<40&&m<n;k++){const P=pt(0.8); // 据点 1~2 个:离两军重心 30 万以上、离天体 半径 + 6 万 以上、彼此 40 万以上
+      if(Math.hypot(P[0]-B[0],P[1]-B[1])<300000||Math.hypot(P[0]-R[0],P[1]-R[1])<300000||w.bodies.some(function(b){return Math.hypot(P[0]-b.x,P[1]-b.y)<b.r+60000;})||w.stations.some(function(o){return Math.hypot(P[0]-o.x,P[1]-o.y)<400000;}))continue;
+      w.stations.push({x:Math.round(P[0]),y:Math.round(P[1]),name:'据点'+'甲乙'[m]});m++;}}
   return w;
 }
 function matchSync(){ // 顶栏钮的字与提示跟着当前场景走(进 / 出对局、场景菜单切走,都经过 initFleet ⇒ 由它调)

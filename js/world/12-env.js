@@ -57,13 +57,13 @@ const ENV_CFG={
 const ENV_BODY_TYPES=['gas','icegiant','rock','ice','desert','lava','terra'],ENV_BODY_W=[0.26,0.20,0.14,0.13,0.12,0.10,0.05]; // 2026-10-04 天体类型(地表画法 render/81-art + 地图 tag)与出现权重:气态 / 冰巨星多、类地最少(用户)
 function envBodyType(u){let a=0;for(let i=0;i<ENV_BODY_TYPES.length;i++){a+=ENV_BODY_W[i];if(u<a)return ENV_BODY_TYPES[i];}return ENV_BODY_TYPES[0];} // u ∈ [0,1)
 function envBodyHash(b,i){let h=Math.imul((i|0)+1,73856093)^Math.imul(Math.round(b.r)|0,83492791);const nm=String(b.name||'');for(let k=0;k<nm.length;k++)h=Math.imul(h^nm.charCodeAt(k),16777619);h=Math.imul(h^(h>>>13),1274126177);return ((h^(h>>>16))>>>0)/4294967296;} // 场景没写类型 / 种子的天体按 序号 + 半径 + 名字 取一个固定的(2026-10-05 用户:原来按坐标,靶场一拖天体类型就变)
-const ENV_KEYS=['stars','bodies','clouds','asteroids','belts']; // ENV2 world 认识的键:envReset 见到别的键当场抛(ENV1 时拼错 feilds 会静默成空环境);视图的登记表以它为锚
+const ENV_KEYS=['stars','bodies','clouds','asteroids','belts','comets','moons','ions','stations']; // ENV2 world 认识的键:envReset 见到别的键当场抛(ENV1 时拼错 feilds 会静默成空环境);视图的登记表以它为锚
 /* 2026-09-29 用户取消无限远的方向型太阳(ENV1 的 sun),光源只剩位置型恒星。
    ENV2 stars:[{x,y,r,half,c2}](c2 = cos^2 半角,热循环免开方) / bodies:[{x,y,r,r2,heat,name,rf,type,seed}](type / seed 只给画面用) / clouds:[{x,y,a,b,ang,ca,sa,r,r2,seed,v,dark}](r = 外接圆半径) / asteroids:[{x,y,r,n,seed,smin,smax,clear,name}] / rev(每次 envReset 加 1,给视图缓存当键)。
    ENV2 单写者:全库只有 envReset 写 ENV。ENV 本身 seal(不许加键),列表与条目由 envReset 整体换成冻结的新对象 ⇒ 严格模式下别处改条目、改列表、给 ENV 加键会当场抛 TypeError。
    ⚠ ENV2 seal 不拦替换已有的键:ENV.stars=[…]、ENV.bodies=[…]、ENV.rev++ 运行期都不抛,这一类只靠 verify.sh 的唯一写入口检查(W1 / W2)抓 */
 const ENV=Object.seal({stars:Object.freeze([]),bodies:Object.freeze([]),clouds:Object.freeze([]),
-  asteroids:Object.freeze([]),belts:Object.freeze([]),rev:0}); // 2026-09-29 belts = 碎石带的结构清单(world/15)
+  asteroids:Object.freeze([]),belts:Object.freeze([]),comets:Object.freeze([]),moons:Object.freeze([]),ions:Object.freeze([]),stations:Object.freeze([]),rev:0}); // 2026-09-29 belts = 碎石带的结构清单(world/15);2026-10-05 新地形(world/16):comets:[{x,y,vx,vy,t0}](轨迹起点、单位速度方向、开局时已飞的游戏秒)/ moons:[{b,orb,ph,r,dir,type,seed}](b = 母行星下标)/ ions:[{x,y,a,b,ang,ca,sa,r,r2,seed}](ang 弧度,r = 浓度可能非 0 的外接圆)/ stations:[{x,y,name}];天体多一个字段 rad(带辐射带)
 const ENV_T2=[0,0]; // ENV2 本层的两格草稿(envBg 取 envBgParts 的结果用,免分配)。⚠ 共用草稿:拿到的结果要在调别的写它的函数之前读完(今天只有 envBg 写;4a 起 envSunBlind 也写,落地时核一次)
 
 /* 按场景的 world 定义重建环境。缺省 / 没有 world ⇒ 空环境(太阳 null、所有列表为空)。
@@ -76,17 +76,25 @@ function envReset(w){
     for(const g of ['stars','bodies','clouds','asteroids'])for(const e of (w[g]||[]))
       if(!isFinite(e.x)||!isFinite(e.y)||(g==='stars'||g==='clouds'?(e.r!==undefined&&!(e.r>0)):!(e.r>0)))throw new Error('ENV2 '+g+' 条目缺坐标或半径');
     for(const e of (w.belts||[]))if(typeof e.kind!=='string'||!isFinite(e.seed)||!(e.n>0)||!(e.w>0)||!isFinite(e.c))throw new Error('碎石带条目缺 kind / seed / n / w / c'); // 2026-09-29 world/15
+    for(const e of (w.comets||[]))if(!isFinite(e.x)||!isFinite(e.y)||!isFinite(e.vx)||!isFinite(e.vy)||!(e.t0>=0))throw new Error('彗星条目缺 x / y / vx / vy / t0'); // 2026-10-05 world/16
+    for(const e of (w.moons||[]))if(!(e.b>=0&&e.b<(w.bodies||[]).length)||!(e.orb>0)||!(e.r>0)||!isFinite(e.ph))throw new Error('卫星条目缺母行星下标 b / orb / r / ph');
+    for(const e of (w.ions||[]))if(!isFinite(e.x)||!isFinite(e.y)||!(e.a>0)||!(e.b>0))throw new Error('电离云条目缺 x / y / a / b');
+    for(const e of (w.stations||[]))if(!isFinite(e.x)||!isFinite(e.y))throw new Error('据点条目缺坐标');
   }
-  const st=[],bd=[],cl=[],ast=[],blt=[];
+  const st=[],bd=[],cl=[],ast=[],blt=[],cm=[],mn=[],io=[],sta=[];
   for(const s of (w&&w.stars)||[]){const h=num(s.half,ENV_CFG.SUN_HALF_DEG)*Math.PI/180,c=Math.cos(h); // ENV2 位置型恒星;half 单位是度,c2 = cos^2 半角
     st.push(F({x:s.x,y:s.y,r:num(s.r,ENV_CFG.STAR_R),half:h*180/Math.PI,c2:c*c,rfb:Array.isArray(s.rfb)?F(s.rfb.slice()):null}));} // rfb = 射电暴时间表 [开始, 持续, …](对局按种子生成,envRfBursts);没有 = 不暴发
   let bi=0;for(const b of (w&&w.bodies)||[]){const u=envBodyHash(b,bi++);bd.push(F({x:b.x,y:b.y,r:b.r,r2:b.r*b.r,heat:num(b.heat,ENV_CFG.BODY_HEAT),name:b.name||'天体',rf:b.rf?F({on0:!!b.rf.on0,sw:F(b.rf.sw.slice())}):null,
-    type:ENV_BODY_TYPES.indexOf(b.type)>=0?b.type:envBodyType(u),seed:isFinite(b.seed)?b.seed|0:Math.floor(u*1e6)}));} // ENV2 天体:XY 上无限高的柱,挡视线、投影子;rf = 乙 射电开关表(envRfBodySched),没有 = 不是射电天体
+    type:ENV_BODY_TYPES.indexOf(b.type)>=0?b.type:envBodyType(u),seed:isFinite(b.seed)?b.seed|0:Math.floor(u*1e6),rad:!!b.rad}));} // ENV2 天体:XY 上无限高的柱,挡视线、投影子;rf = 乙 射电开关表(envRfBodySched),没有 = 不是射电天体
   for(const c of (w&&w.clouds)||[]){const a=num(c.a,D.A),b=num(c.b,D.B),ang=num(c.ang,D.ANG),r=(D.R2+D.WBR)*Math.max(a,b); // ENV2 尘埃云:生成点 (x,y) + 椭圆本体;r = 浓度可能非 0 的外接圆
     cl.push(F({x:c.x,y:c.y,a:a,b:b,ang:ang,ca:Math.cos(ang*Math.PI/180),sa:Math.sin(ang*Math.PI/180),r:r,r2:r*r,seed:c.seed|0,v:num(c.v,D.V),dark:num(c.dark,D.DARK)}));}
   for(const a of (w&&w.asteroids)||[])ast.push(F({x:a.x,y:a.y,r:a.r,n:a.n|0,seed:a.seed|0,smin:num(a.smin,ENV_CFG.ROCK_SFD.MIN),smax:num(a.smax,ENV_CFG.ROCK_SFD.MAX),clear:num(a.clear,0),name:a.name||'小行星'})); // ENV2 小行星:只用来撒石头,不带光学杂波、不带 MTI
   for(const e of (w&&w.belts)||[])blt.push(F(Object.assign({},e))); // 2026-09-29 碎石带:原样冻结,形状在 world/15 撒石头时按各自的种子生成
-  ENV.belts=F(blt);ENV.stars=F(st);ENV.bodies=F(bd);ENV.clouds=F(cl);ENV.asteroids=F(ast);ENV.rev++; // ENV2 整体换成冻结的新列表
+  for(const c of (w&&w.comets)||[]){const l=Math.hypot(c.vx,c.vy)||1;cm.push(F({x:c.x,y:c.y,vx:c.vx/l,vy:c.vy/l,t0:c.t0}));} // 2026-10-05 新地形(world/16)
+  for(const m of (w&&w.moons)||[])mn.push(F({b:m.b|0,orb:m.orb,ph:m.ph,r:m.r,dir:m.dir<0?-1:1,type:m.type==='europa'?'europa':'luna',seed:m.seed|0}));
+  for(const c of (w&&w.ions)||[]){const g=num(c.ang,0)*Math.PI/180,r=1.35*Math.max(c.a,c.b);io.push(F({x:c.x,y:c.y,a:c.a,b:c.b,ang:g,ca:Math.cos(g),sa:Math.sin(g),r:r,r2:r*r,seed:c.seed|0}));} // ang 写度、存弧度
+  for(const s of (w&&w.stations)||[])sta.push(F({x:s.x,y:s.y,name:s.name||'据点'}));
+  ENV.belts=F(blt);ENV.comets=F(cm);ENV.moons=F(mn);ENV.ions=F(io);ENV.stations=F(sta);ENV.stars=F(st);ENV.bodies=F(bd);ENV.clouds=F(cl);ENV.asteroids=F(ast);ENV.rev++; // ENV2 整体换成冻结的新列表
 }
 /* 太阳禁区:从 from 看 to 的视线落在太阳那个锥里。⚠ 22-percep 的热循环里有一份同式的内联副本(热循环不许调函数),判据 ENV_SENSE 钉着两者逐对相同 */
 function envSunBlind(from,to){ // ENV2 光源方向按观测方取;观测方在天体影子里看不到光源 ⇒ 不致盲(光学与静听一起解除)
