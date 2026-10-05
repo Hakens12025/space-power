@@ -28,7 +28,7 @@ button.on{border-color:#5aa7ff;color:#fff;background:#12233a}
 滚轮缩放、拖动平移、1 / 2 / 3 跳层。拉远过舰船换箭头那一点(比例尺约 4.1 万 km)碎石换成小方块 —— 同引擎。<br>
 <b>世界</b>:按引擎对局的写法摆一张展示图(游玩区 306 万 x 172.1 万):七种行星各一颗(气态、冰巨星带碎石环)、一朵尘埃云、四片小行星 + 20 颗零散、四种碎石带(弧带 / 流带 / 分叉 / 喷流)、一颗恒星在 700 万 km 外。
 碎石带本身引擎地图上不画,只看得到撒出来的石头;这里也一样。碎石全部按「已认出」画。<br>
-<b>未进引擎</b>(左栏橙色):彗星 / 卫星 / 电离云 / 辐射带 / 据点,机制与数照 demos/地图组/新地形.html,画法是 新地形美术.html 里选定的方案:彗星 B 海图尾、卫星 C 专用地表、电离云 C 雷达噪点(加一点羽化)、辐射带 B 辉光环、据点 A 环形站(战术落点约 20 px,比航母大)。
+<b>未进引擎</b>(左栏橙色):彗星 / 卫星 / 电离云 / 辐射带 / 据点,机制与数照 demos/地图组/新地形.html,画法是 新地形美术.html 里选定的方案:彗星 B 海图尾、卫星 C 专用地表、电离云 A 海图(叠一点柔化噪点)、辐射带 B 辉光环、据点 A 环形站(战术落点约 20 px,比航母大)。
 </div>
 <script src="星图展示.js"></script>
 <script>
@@ -54,10 +54,10 @@ XT.setWorld(WORLD,{arena:{x0:-AW/2,y0:-AH/2,x1:AW/2,y1:AH/2},avoid:[]});
 XT.opt.rulerTop=44;
 
 /* ---------- 未进引擎的新地形:机制与数照 demos/地图组/新地形.html,位置挪进这张展示图;画法是 新地形美术.html 里用户选定的方案
-   (10-05:彗星 B 海图尾 / 卫星 C 专用地表 + 走过的一段轨道 / 电离云 C 雷达噪点 + 一点羽化 / 辐射带 B 辉光环 / 据点 A 环形站) ---------- */
+   (10-05:彗星 B 海图尾 / 卫星 C 专用地表 + 走过的一段轨道 / 电离云 A 海图 + 一点柔化噪点 / 辐射带 B 辉光环 / 据点 A 环形站) ---------- */
 const TK=10;
 const N={COMET:{R:3000,TAIL:300000,W0:10000,W1:60000,V:60,MU:1.5e12,P0:[-1450000,-60000],CYC:6000,T0:1500,DUST:{A:400,K:0.7,N:150}},
-  BELT:{R0:1.2,R1:2.2,COL:[200,230,110]},STA:{CAP_R:30000,VIS:120000,PX:20},ION:{FEATHER:0.6}};
+  BELT:{R0:1.2,R1:2.2,COL:[200,230,110]},STA:{CAP_R:30000,VIS:120000,PX:20},ION:{FEATHER:0.8,NOISE_A:0.3}};
 const NEW={on:true,
   moons:[{p:'gas',orb:480000,ph:0.9,r:26000,lu:'luna',seed:71,dir:1,nm:'岩质卫星'},{p:'gas',orb:640000,ph:3.6,r:19000,lu:'europa',seed:72,dir:-1,nm:'冰质卫星'},{p:'icegiant',orb:360000,ph:5.2,r:14000,lu:'europa',seed:73,dir:1,nm:'冰质卫星'}],
   rad:['gas','icegiant'],
@@ -165,7 +165,7 @@ function drawMoon(m){const P=PL[m.p],c=XT.toScreen(P[0],P[1]),z=XT.cam.zoom,R=m.
   else{const T=ownMoonTex(m),rs=r*T.n0/(T.n0-2);g.drawImage(T.s,p[0]-rs,p[1]-rs,2*rs,2*rs);g.save();g.translate(p[0],p[1]);g.rotate(la);g.drawImage(T.h,-rs,-rs,2*rs,2*rs);g.restore();}
   XT.mapText(m.nm,TXT,p[0],p[1]+Math.max(3,r)+9);}
 
-/* 电离云(C 雷达噪点):只挡雷达 —— 浓的地方噪点密;噪点是一张屏幕上铺的细噪点(钉在世界上)按浓度遮罩,带一点羽化(用户 10-05);外沿实线 + 雷达减半那条虚线;颜色洋红(不撞尘埃云的灰紫 → 青蓝) */
+/* 电离云(A 海图 + 一点柔化噪点,用户 10-05 改选):只挡雷达 —— 同星云的画法,洋红低透明填充 + 三档等值线;上面叠一层很淡的噪点(屏幕上铺的细噪点钉在世界上、按浓度遮罩、模糊 0.8 px,整层 3 成透明度);颜色洋红(不撞尘埃云的灰紫 → 青蓝) */
 function ionRaw(I,x,y){const dx=x-I.x,dy=y-I.y,c=Math.cos(I.ang),s=Math.sin(I.ang),u=dx*c+dy*s,v=-dx*s+dy*c;
   const q=(u/I.a)**2+(v/I.b)**2,n=fbm(x/140e3,y/140e3,7,4),q2=q*(0.7+0.6*n);if(q2>=1)return 0;
   return Math.pow(1-q2,1.2)*(0.7+0.6*fbm(x/45e3,y/45e3,19,4));} // 同 新地形.html
@@ -183,13 +183,13 @@ const ION_NOISE=(()=>{const n0=Math.round(192*(window.devicePixelRatio||1)),c=mk
   const o=mkCv(n0,n0),oq=o.getContext('2d');oq.filter='blur('+(N.ION.FEATHER*(window.devicePixelRatio||1)).toFixed(2)+'px)';oq.drawImage(B,-n0,-n0);return o;})();
 const ION_OC={cv:null,g:null},ION_ISO={};
 function ionIso(L){return ION_ISO[L]||(ION_ISO[L]=isoPath(IG.G,IG.nx,IG.ny,IG.x0,IG.y0,IG.c,L));}
-function drawIon(){drawGridImg(g,ION_FILL,IG.x0,IG.y0,IG.c,0.35);
+function drawIon(){drawGridImg(g,ION_FILL,IG.x0,IG.y0,IG.c);
   if(!ION_OC.cv){ION_OC.cv=mkCv(1,1);ION_OC.g=ION_OC.cv.getContext('2d');}const c=ION_OC.cv,o=ION_OC.g,w=Math.round(W*DPR),h=Math.round(H*DPR);if(c.width!==w||c.height!==h){c.width=w;c.height=h;}
   o.setTransform(1,0,0,1,0,0);o.globalCompositeOperation='source-over';o.clearRect(0,0,w,h);const n0=ION_NOISE.width,org=XT.toScreen(0,0),ox=((Math.round(org[0]*DPR)%n0)+n0)%n0,oy=((Math.round(org[1]*DPR)%n0)+n0)%n0;
   for(let x=ox-n0;x<w;x+=n0)for(let y=oy-n0;y<h;y+=n0)o.drawImage(ION_NOISE,x,y);
   o.globalCompositeOperation='destination-in';o.setTransform(DPR,0,0,DPR,0,0);drawGridImg(o,ION_MASK,IG.x0,IG.y0,IG.c);
-  g.drawImage(c,0,0,W,H);
-  strokeWorld(g,ionIso(0.12),'rgba(232,160,236,.36)');strokeWorld(g,ionIso(0.45),'rgba(245,190,248,.5)',1,[4,4]);
+  g.save();g.globalAlpha=N.ION.NOISE_A;g.drawImage(c,0,0,W,H);g.restore();
+  strokeWorld(g,ionIso(0.12),'rgba(225,150,232,.22)');strokeWorld(g,ionIso(0.4),'rgba(232,160,236,.32)');strokeWorld(g,ionIso(0.7),'rgba(245,190,248,.46)');
   const p=XT.toScreen(NEW.ion.x,NEW.ion.y);XT.mapText('电离云','rgba(232,176,240,.72)',p[0],p[1]);}
 
 /* 辐射带(B 辉光环):行星半径 1.2~2.2 倍的黄绿光带,径向渐变、慢慢呼吸(墙钟),内外淡边线 */

@@ -24,7 +24,7 @@ canvas{display:block;border:1px solid var(--line);background:#05070c;cursor:grab
 </head>
 <body>
 <header>
-<h1>新地形美术<span>未进引擎 · 方案对比 · 10-05 已选:彗星 B / 卫星 C / 电离云 C(加一点羽化)/ 辐射带 B / 据点 A,已搬进 星空美术.html</span></h1>
+<h1>新地形美术<span>未进引擎 · 方案对比 · 10-05 已选:彗星 B / 卫星 C / 电离云 A(叠一点柔化噪点;先选 C 又改 A)/ 辐射带 B / 据点 A,已搬进 星空美术.html</span></h1>
 <p class="n">五种新地形(机制照 demos/地图组/新地形.html,数值不动)每种三个美术方案并排,三列同一个镜头、同一比例尺;滚轮缩放、拖动平移,三列一起动。
 星图(底色、网格、比例尺、星空、行星、恒星方向、碎石)走 星图展示.js —— 引擎画法的抄本,比例与引擎一致;旁边的参照船是引擎现在的舰标贴图(巡洋 T1 / 航母 T1)。<br>
 画法照 skill「太空战平面设计要素与规范」:地图事实沿用引擎星云的语言(单色、低透明、有清楚的线、带字),不同地形靠<b>色相 + 纹理</b>分(选择性通道),浓淡 / 强弱靠<b>明度与等值线</b>(有序通道);
@@ -445,9 +445,9 @@ const ION_ISO={};function ionIso(L){return ION_ISO[L]||(ION_ISO[L]=isoPath(IG.G,
 function ionLabel(g){const p=XT.toScreen(ION.x,ION.y);XT.mapText('电离云','rgba(232,176,240,.72)',p[0],p[1]);}
 function ionRef(g){refShip(g,'CA',ION.x+ION.a*0.55,ION.y+30000,0,'巡洋 T1(参照)');}
 const ION_VARS=[
-  ['A 海图:同星云的画法,洋红低透明 + 三档等值线',g=>{drawGridImg(g,ION_A,IG.x0,IG.y0,IG.c);strokeWorld(g,ionIso(0.12),'rgba(225,150,232,.22)');strokeWorld(g,ionIso(0.4),'rgba(232,160,236,.32)');strokeWorld(g,ionIso(0.7),'rgba(245,190,248,.46)');ionLabel(g);ionRef(g);}],
+  ['✓ 选定(星空美术里再叠一点柔化噪点)· A 海图:同星云的画法,洋红低透明 + 三档等值线',g=>{drawGridImg(g,ION_A,IG.x0,IG.y0,IG.c);strokeWorld(g,ionIso(0.12),'rgba(225,150,232,.22)');strokeWorld(g,ionIso(0.4),'rgba(232,160,236,.32)');strokeWorld(g,ionIso(0.7),'rgba(245,190,248,.46)');ionLabel(g);ionRef(g);}],
   ['B 帘纹:顺着长轴的细带(像极光),外沿一圈虚线',g=>{drawGridImg(g,ION_B,IG.x0,IG.y0,IG.c);strokeWorld(g,ionIso(0.12),'rgba(232,160,236,.34)',1,[5,5]);ionLabel(g);ionRef(g);}],
-  ['✓ 选定 · C 雷达噪点:浓处噪点密(只挡雷达的意思),外沿实线 + 雷达减半那条虚线',(g,W,H)=>{drawGridImg(g,ION_A,IG.x0,IG.y0,IG.c,0.35);ionSpeckle(g,W,H);strokeWorld(g,ionIso(0.12),'rgba(232,160,236,.36)');strokeWorld(g,ionIso(0.45),'rgba(245,190,248,.5)',1,[4,4]);ionLabel(g);ionRef(g);}]];
+  ['C 雷达噪点:浓处噪点密(只挡雷达的意思),外沿实线 + 雷达减半那条虚线',(g,W,H)=>{drawGridImg(g,ION_A,IG.x0,IG.y0,IG.c,0.35);ionSpeckle(g,W,H);strokeWorld(g,ionIso(0.12),'rgba(232,160,236,.36)');strokeWorld(g,ionIso(0.45),'rgba(245,190,248,.5)',1,[4,4]);ionLabel(g);ionRef(g);}]];
 
 /* ================= 辐射带(雷达杂波 + 掉护盾,边界是硬的) ================= */
 function annulus(g,c,r0,r1){g.beginPath();g.arc(c[0],c[1],r1,0,6.283);g.arc(c[0],c[1],r0,0,6.283,true);}
