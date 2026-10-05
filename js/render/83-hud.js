@@ -186,22 +186,23 @@ function drawChain(p0){ // 2026-10-03:只画在网上的(断链的成员我方�
   const M=[];
   for(const p of projectiles)if(p.type==='missile'&&!p.done&&p.online&&p.shooter&&p.shooter.side===side)M.push(p);
   const MM=MSL_LINK.MM*MSL_LINK.MM,MS=MSL_LINK.MS*MSL_LINK.MS;
+  const ion=ENV.ions.length>0,lk=function(a,b,d2,R2){return d2<R2&&(!ion||d2*featIonK2(a,b)<R2);}; // 2026-10-05 连边同 weapons/54 mslNetStep:电离云挡组网
   const cl=[p0],seen=new Set([p0]),st=[p0]; // 连通簇:从选中组灌水
   while(st.length){const x=st.pop();
     for(const p of M){if(seen.has(p))continue;const dx=p.pos[0]-x.pos[0],dy=p.pos[1]-x.pos[1],dz=p.pos[2]-x.pos[2];
-      if(dx*dx+dy*dy+dz*dz<MM){seen.add(p);cl.push(p);st.push(p);}}}
+      if(lk(x.pos,p.pos,dx*dx+dy*dy+dz*dz,MM)){seen.add(p);cl.push(p);st.push(p);}}}
   const F=[];
   for(const s of ships)if(s.side===side&&!s.dead)F.push(s);
   for(const o of rockObjs())if(o.kind==='buoy'&&o.side===side&&!o.dead)F.push(o);
   let shipEnd=null,sd=MS;
   for(const g of cl)for(const f of F){const dx=g.pos[0]-f.pos[0],dy=g.pos[1]-f.pos[1],dz=g.pos[2]-(f.pos[2]||0),q=dx*dx+dy*dy+dz*dz;
-    if(q<sd){sd=q;shipEnd=[g,f];}} // 簇里够得着舰的成员里取最近的那艘
+    if(q<sd&&lk(g.pos,f.pos,q,MS)){sd=q;shipEnd=[g,f];}} // 簇里够得着舰的成员里取最近的那艘
   const n=cl.length,bd=new Float64Array(n).fill(Infinity),bp=new Int32Array(n).fill(-1),inT=new Uint8Array(n);bd[0]=0; // Prim 最小生成树:每轮把离树最近的组接进来,接进来后只更新它到其余组的距离
   ctx.save();ctx.lineWidth=1;
   ctx.strokeStyle='rgba(84,224,208,.5)';
   for(let it=0;it<n;it++){let u=-1,ub=Infinity;for(let i=0;i<n;i++)if(!inT[i]&&bd[i]<ub){ub=bd[i];u=i;}if(u<0)break;inT[u]=1;
     if(bp[u]>=0){const a2=toScreen(cl[u].pos[0],cl[u].pos[1]),b2=toScreen(cl[bp[u]].pos[0],cl[bp[u]].pos[1]);clipLine(a2[0],a2[1],b2[0],b2[1]);} // 每条边裁到屏幕单独描(2026-10-04 性能)
-    const g=cl[u];for(let i=0;i<n;i++){if(inT[i])continue;const dx=cl[i].pos[0]-g.pos[0],dy=cl[i].pos[1]-g.pos[1],dz=cl[i].pos[2]-g.pos[2],q=dx*dx+dy*dy+dz*dz;if(q<bd[i]){bd[i]=q;bp[i]=u;}}}
+    const g=cl[u];for(let i=0;i<n;i++){if(inT[i])continue;const dx=cl[i].pos[0]-g.pos[0],dy=cl[i].pos[1]-g.pos[1],dz=cl[i].pos[2]-g.pos[2],q=dx*dx+dy*dy+dz*dz;if(q<bd[i]&&lk(g.pos,cl[i].pos,q,MM)){bd[i]=q;bp[i]=u;}}}
   if(shipEnd){const g=shipEnd[0],f=shipEnd[1],a2=toScreen(g.pos[0],g.pos[1]),b2=toScreen(f.pos[0],f.pos[1]); // 回舰的那一段
     ctx.strokeStyle='rgba(84,224,208,.9)';ctx.lineWidth=1.5;
     clipLine(a2[0],a2[1],b2[0],b2[1]);}

@@ -129,7 +129,7 @@ function irvjCalib(src,obs){ // 进红外画面时标定一次:每个源算一�
   IRVJ.cost=IRVJ.cost0=n?Math.max(0.05,(t-t0)*1000/n):2;
 }
 function irvZf(t){return t.kind==='rock'?hullZoomF():shipZoomF();} // 舰船按 shipZoomF(再缩 SHIP_K),石头按 hullZoomF
-function irvBodyR(t){return t.kind==='rock'?hullSize('UNK',2)*0.78*Math.sqrt(t.size/0.7):hullSize(t.cls,t.tier||2)*0.78;} // 图标半径(未乘缩放系数)
+function irvBodyR(t){return t.kind==='rock'?hullSize('UNK',2)*0.78*Math.sqrt(t.size/0.7):hullSize(CLS_HULL[t.cls]||'DD',t.tier||2)*0.78;} // 图标半径(未乘缩放系数);2026-10-05 hullSize 吃轮廓键(82 CLS_HULL),原来直接给舰种键:护卫落到默认 7、驱逐拿了护卫的尺寸
 const IRV_PH=new WeakMap();
 function irvPh(t){let h=IRV_PH.get(t);if(h===undefined){h=0;const id=String(t.id);for(let i=0;i<id.length;i++)h=(h*31+id.charCodeAt(i))|0;h=(h&1023)/1023*2*Math.PI;IRV_PH.set(t,h);}return h;} // 每个源自己的翻涌相位(算一次)
 function irvGlyph(t){const it=adminMode?{kind:t.kind||'ship'}:contactIdType(t,VIEW);return Math.min(IRV_C.SIG_MAX_PX,IRV_C.GLYPH*shipIconR(t)*((it&&it.kind==='rock')?Math.sqrt(t.size/0.7):1));} // 舰标团半径(px):与主视图舰标同一个(没认出不暴露舰种;认出是石头才按 √体型)
@@ -164,7 +164,7 @@ function irvjKeep(a,b){
 }
 function irvSilOn(t){return contactFix(t,VIEW)&&contactIdn(t,VIEW);} // 2026-09-28 出轮廓 = 蓝方内核认出且定位(用户:红外认出了主视图却没有;原来按体型与距离自己判,和内核两把尺子)
 function irvjSilKey(e){if(!e)return '';return irvLutK(irvT(e.v))+'|'+irvLutK(irvT(e.vt))+'|'+Math.round(e.a*255);}
-function irvSilR(t){return (t.kind==='rock'?irvBodyR(t)*1.06:hullSize(t.cls,t.tier||2)*1.6)*irvZf(t)+2;} // 热轮廓外接半径(px)
+function irvSilR(t){return (t.kind==='rock'?irvBodyR(t)*1.06:hullSize(CLS_HULL[t.cls]||'DD',t.tier||2)*1.6)*irvZf(t)+2;} // 热轮廓外接半径(px)
 function irvjBox(t,ep){const p=toScreen(ep[0],ep[1]),R=irvSilR(t);return [p[0]-R,p[1]-R,p[0]+R,p[1]+R];}
 function irvjCells(b){const C=IRV_C.CELL;return [Math.max(0,Math.floor(b[0]/C)),Math.min(irvGW-1,Math.ceil(b[2]/C)),Math.max(0,Math.floor(b[1]/C)),Math.min(irvGH-1,Math.ceil(b[3]/C))];}
 function irvjUpdate(full,gch){ // 返回脏矩形 [i0,i1,j0,j1] 列表;null = 整张
@@ -424,7 +424,7 @@ function irvSilPath(X,t,e){
     for(let i=0;i<ROCK_SHAPE.length;i++){const a=i/ROCK_SHAPE.length*2*Math.PI,q=r*ROCK_SHAPE[i];if(i)X.lineTo(Math.cos(a)*q,Math.sin(a)*q);else X.moveTo(Math.cos(a)*q,Math.sin(a)*q);}
     X.closePath();X.fill();return;}
   drawHull(X,CLS_HULL[t.cls]||'DD',t.tier||2,col,'fill'); // 舰种 → 轮廓走 82 的对照表
-  if(t.flame&&e.vt>0){const sz=hullSize(t.cls,t.tier||2);X.save();X.scale(sz,sz);X.fillStyle=irvLutHex(irvT(e.vt));X.beginPath();X.ellipse(t.flame>0?-1.0:1.35,0,0.22,0.16,0,0,2*Math.PI);X.fill();X.restore();}
+  if(t.flame&&e.vt>0){const sz=hullSize(CLS_HULL[t.cls]||'DD',t.tier||2);X.save();X.scale(sz,sz);X.fillStyle=irvLutHex(irvT(e.vt));X.beginPath();X.ellipse(t.flame>0?-1.0:1.35,0,0.22,0.16,0,0,2*Math.PI);X.fill();X.restore();}
 }
 const IRV_SPR={k:'',m:new Map()};
 function irvSilSprite(t,e,zf,dpr){ // 预渲染精灵:按舰型、颜色档、尾焰、缩放缓存
