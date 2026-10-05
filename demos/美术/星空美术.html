@@ -28,7 +28,7 @@ button.on{border-color:#5aa7ff;color:#fff;background:#12233a}
 滚轮缩放、拖动平移、1 / 2 / 3 跳层。拉远过舰船换箭头那一点(比例尺约 4.1 万 km)碎石换成小方块 —— 同引擎。<br>
 <b>世界</b>:按引擎对局的写法摆一张展示图(游玩区 306 万 x 172.1 万):七种行星各一颗(气态、冰巨星带碎石环)、一朵尘埃云、四片小行星 + 20 颗零散、四种碎石带(弧带 / 流带 / 分叉 / 喷流)、一颗恒星在 700 万 km 外。
 碎石带本身引擎地图上不画,只看得到撒出来的石头;这里也一样。碎石全部按「已认出」画。<br>
-<b>未进引擎</b>(左栏橙色):彗星 / 卫星 / 电离云 / 辐射带 / 据点,画法取自 demos/地图组/新地形.html,只换成同一套比例尺;卫星的地表改用引擎的行星画法(岩质 / 冰质)。
+<b>未进引擎</b>(左栏橙色):彗星 / 卫星 / 电离云 / 辐射带 / 据点,机制与数照 demos/地图组/新地形.html,画法是 新地形美术.html 里选定的方案:彗星 B 海图尾、卫星 C 专用地表、电离云 C 雷达噪点(加一点羽化)、辐射带 B 辉光环、据点 A 环形站(战术落点约 20 px,比航母大)。
 </div>
 <script src="星图展示.js"></script>
 <script>
@@ -53,73 +53,190 @@ const WORLD={stars:[{x:STAR[0],y:STAR[1]}],
 XT.setWorld(WORLD,{arena:{x0:-AW/2,y0:-AH/2,x1:AW/2,y1:AH/2},avoid:[]});
 XT.opt.rulerTop=44;
 
-/* ---------- 未进引擎的新地形(画法与数照 demos/地图组/新地形.html;位置挪进这张展示图)---------- */
+/* ---------- 未进引擎的新地形:机制与数照 demos/地图组/新地形.html,位置挪进这张展示图;画法是 新地形美术.html 里用户选定的方案
+   (10-05:彗星 B 海图尾 / 卫星 C 专用地表 + 走过的一段轨道 / 电离云 C 雷达噪点 + 一点羽化 / 辐射带 B 辉光环 / 据点 A 环形站) ---------- */
 const TK=10;
 const N={COMET:{R:3000,TAIL:300000,W0:10000,W1:60000,V:60,MU:1.5e12,P0:[-1450000,-60000],CYC:6000,T0:1500,DUST:{A:400,K:0.7,N:150}},
-  MOON:{V:20},BELT:{R0:1.2,R1:2.2},STA:{CAP_R:30000,VIS:120000}};
+  BELT:{R0:1.2,R1:2.2,COL:[200,230,110]},STA:{CAP_R:30000,VIS:120000,PX:20},ION:{FEATHER:0.6}};
 const NEW={on:true,
-  moons:[{p:'gas',orb:480000,ph:0.9,r:26000,type:'rock',seed:71},{p:'gas',orb:640000,ph:3.6,r:19000,type:'ice',seed:72},{p:'icegiant',orb:360000,ph:5.2,r:14000,type:'ice',seed:73}],
+  moons:[{p:'gas',orb:480000,ph:0.9,r:26000,lu:'luna',seed:71,dir:1,nm:'岩质卫星'},{p:'gas',orb:640000,ph:3.6,r:19000,lu:'europa',seed:72,dir:-1,nm:'冰质卫星'},{p:'icegiant',orb:360000,ph:5.2,r:14000,lu:'europa',seed:73,dir:1,nm:'冰质卫星'}],
   rad:['gas','icegiant'],
-  ion:{x:-560000,y:300000,a:300000,b:170000,ang:15*Math.PI/180,cell:3000},
+  ion:{x:-560000,y:300000,a:300000,b:170000,ang:15*Math.PI/180,cell:1500},
   sta:[{name:'据点甲',x:-300000,y:-640000,holder:null},{name:'据点乙',x:900000,y:-80000,holder:'blue'},{name:'据点丙',x:-1350000,y:150000,holder:'red'}]};
+const SIDE=XT.ART_SIDE,ART_L=XT.ART_L,TXT='rgba(200,206,220,.72)'; // TXT = 81-env 地图上天体名字的颜色
+function mix(a,b,k){return [a[0]+(b[0]-a[0])*k,a[1]+(b[1]-a[1])*k,a[2]+(b[2]-a[2])*k];}
+function lit(c,k){return k>=0?mix(c,[255,255,255],k):mix(c,[0,0,0],-k);}
+function css(c,a){return 'rgba('+Math.round(c[0])+','+Math.round(c[1])+','+Math.round(c[2])+','+(a===undefined?1:a)+')';}
+function rng(seed){let a=seed>>>0;return ()=>{a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296;};}
+function mkCv(w,h){const c=document.createElement('canvas');c.width=Math.max(1,Math.ceil(w));c.height=Math.max(1,Math.ceil(h));return c;}
+function path(q,P){q.beginPath();q.moveTo(P[0][0],P[0][1]);for(let i=1;i<P.length;i++)q.lineTo(P[i][0],P[i][1]);q.closePath();}
+function c01(v){return v<0?0:(v>1?1:v);}
+function sstep(a,b,x){const t=c01((x-a)/(b-a));return t*t*(3-2*t);}
+function rad(stops,sz){const c=mkCv(sz,sz),q=c.getContext('2d'),gr=q.createRadialGradient(sz/2,sz/2,0,sz/2,sz/2,sz/2);for(const s of stops)gr.addColorStop(s[0],s[1]);q.fillStyle=gr;q.fillRect(0,0,sz,sz);return c;}
+function blit(q,c,x,y,r,a,add){if(a<=0.003||r<=0.2)return;q.save();if(add)q.globalCompositeOperation='lighter';q.globalAlpha=Math.min(1,a);q.drawImage(c,x-r,y-r,2*r,2*r);q.restore();}
 function hash2(i,j,s){let h=Math.imul(i|0,374761393)^Math.imul(j|0,668265263)^Math.imul(s|0,1442695041);h=Math.imul(h^(h>>>13),1274126177);return ((h^(h>>>16))>>>0)/4294967296;}
 function vnoise(x,y,s){const i=Math.floor(x),j=Math.floor(y),fx=x-i,fy=y-j,u=fx*fx*(3-2*fx),v=fy*fy*(3-2*fy);
   const a=hash2(i,j,s),b=hash2(i+1,j,s),c=hash2(i,j+1,s),d=hash2(i+1,j+1,s);return a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v;}
 function fbm(x,y,s,o){let t=0,a=0.5,f=1,n=0;for(let k=0;k<o;k++){t+=a*vnoise(x*f,y*f,s+k*31);n+=a;a*=0.5;f*=2.07;}return t/n;}
-function ionRaw(I,x,y){const dx=x-I.x,dy=y-I.y,c=Math.cos(I.ang),s=Math.sin(I.ang),u=dx*c+dy*s,v=-dx*s+dy*c;
-  const q=(u/I.a)**2+(v/I.b)**2,n=fbm(x/140e3,y/140e3,7,4),q2=q*(0.7+0.6*n);if(q2>=1)return 0;
-  return Math.pow(1-q2,1.2)*(0.7+0.6*fbm(x/45e3,y/45e3,19,4));}
-function ionBuild(I){const ex=Math.sqrt((I.a*Math.cos(I.ang))**2+(I.b*Math.sin(I.ang))**2)*1.35,ey=Math.sqrt((I.a*Math.sin(I.ang))**2+(I.b*Math.cos(I.ang))**2)*1.35;
-  I.x0=I.x-ex;I.y0=I.y-ey;I.nx=Math.ceil(2*ex/I.cell)+1;I.ny=Math.ceil(2*ey/I.cell)+1;
-  const cvI=document.createElement('canvas');cvI.width=I.nx;cvI.height=I.ny;const gi=cvI.getContext('2d'),im=gi.createImageData(I.nx,I.ny);
-  for(let j=0;j<I.ny;j++)for(let i=0;i<I.nx;i++){const v=Math.min(1,ionRaw(I,I.x0+i*I.cell,I.y0+j*I.cell)),o=(j*I.nx+i)*4;im.data[o]=120+60*v;im.data[o+1]=110+90*v;im.data[o+2]=255;im.data[o+3]=Math.round(170*Math.pow(v,0.8));}
-  gi.putImageData(im,0,0);I.img=cvI;}
-ionBuild(NEW.ion);
+function h3(x,y,z,sd){let h=Math.imul(x,374761393)+Math.imul(y,668265263)+Math.imul(z,1440662683)+Math.imul(sd,2246822519)|0;h=Math.imul(h^(h>>>13),1274126177);h^=h>>>16;return (h>>>0)/4294967296;} // 同 81-art artH3 / artVn / artFbm
+function vn3(x,y,z,sd){const xi=Math.floor(x),yi=Math.floor(y),zi=Math.floor(z),xf=x-xi,yf=y-yi,zf=z-zi,u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf),w=zf*zf*(3-2*zf);
+  const a=h3(xi,yi,zi,sd),b=h3(xi+1,yi,zi,sd),c=h3(xi,yi+1,zi,sd),d=h3(xi+1,yi+1,zi,sd),e=h3(xi,yi,zi+1,sd),f=h3(xi+1,yi,zi+1,sd),gg=h3(xi,yi+1,zi+1,sd),hh=h3(xi+1,yi+1,zi+1,sd);
+  const x1=a+(b-a)*u,x2=c+(d-c)*u,x3=e+(f-e)*u,x4=gg+(hh-gg)*u,y1=x1+(x2-x1)*v,y2=x3+(x4-x3)*v;return y1+(y2-y1)*w;}
+function fbm3(x,y,z,sd,oct){let s=0,a=0.5,f=1,n=0;for(let i=0;i<oct;i++){s+=a*vn3(x*f+11.3*i,y*f,z*f,sd+i*17);n+=a;a*=0.5;f*=2.03;}return s/n;}
+function isoPath(G,nx,ny,x0,y0,cell,L){const p=new Path2D(); // 网格 → 等值线(marching squares,同 81-terrain terrIsoRow 的分支),路径用世界坐标(km)
+  for(let j=0;j<ny-1;j++)for(let i=0;i<nx-1;i++){const a=G[j*nx+i],b=G[j*nx+i+1],c=G[(j+1)*nx+i+1],d=G[(j+1)*nx+i],cs=(a>=L?8:0)|(b>=L?4:0)|(c>=L?2:0)|(d>=L?1:0);if(cs===0||cs===15)continue;
+    const X0=x0+i*cell,Y0=y0+j*cell,X1=X0+cell,Y1=Y0+cell,tx=X0+(L-a)/(b-a)*cell,ry=Y0+(L-b)/(c-b)*cell,bx=X0+(L-d)/(c-d)*cell,ly=Y0+(L-a)/(d-a)*cell;
+    switch(cs){case 1:case 14:p.moveTo(X0,ly);p.lineTo(bx,Y1);break;case 2:case 13:p.moveTo(bx,Y1);p.lineTo(X1,ry);break;case 3:case 12:p.moveTo(X0,ly);p.lineTo(X1,ry);break;
+      case 4:case 11:p.moveTo(tx,Y0);p.lineTo(X1,ry);break;case 6:case 9:p.moveTo(tx,Y0);p.lineTo(bx,Y1);break;case 7:case 8:p.moveTo(X0,ly);p.lineTo(tx,Y0);break;
+      case 5:case 10:{const up=(a+b+c+d)/4>=L;if((cs===5)===up){p.moveTo(X0,ly);p.lineTo(tx,Y0);p.moveTo(bx,Y1);p.lineTo(X1,ry);}else{p.moveTo(tx,Y0);p.lineTo(X1,ry);p.moveTo(X0,ly);p.lineTo(bx,Y1);}break;}}}
+  return p;}
+function gridImg(G,nx,ny,fn){const c=mkCv(nx,ny),q=c.getContext('2d'),im=q.createImageData(nx,ny),d=im.data;
+  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const v=fn(G[j*nx+i],i,j);if(!v)continue;const o=(j*nx+i)*4;d[o]=v[0];d[o+1]=v[1];d[o+2]=v[2];d[o+3]=v[3];}
+  q.putImageData(im,0,0);return c;}
+function drawGridImg(q,img,x0,y0,cell,a){const z=XT.cam.zoom,p=XT.toScreen(x0-cell/2,y0-cell/2);q.save();q.imageSmoothingEnabled=true;q.globalAlpha=a===undefined?1:a;q.drawImage(img,p[0],p[1],img.width*cell*z,img.height*cell*z);q.restore();}
+function strokeWorld(q,P,col,w,dash){const z=XT.cam.zoom,o=XT.toScreen(0,0);q.save();q.translate(o[0],o[1]);q.scale(z,z);q.strokeStyle=col;q.lineWidth=(w||1)/z;if(dash)q.setLineDash(dash.map(v=>v/z));q.stroke(P);q.restore();}
+function laAt(x,y){return Math.atan2(STAR[1]-y,STAR[0]-x);} // 屏幕上指向恒星的方向(y 不翻转)
+
+/* 彗星(B 海图尾):尾巴 = 一路撒出的物质团(同 新地形.html,定格在 T0)铺成的浓度格,画法同星云 —— 低透明填充 + 两条等值线(尾边 / 尾心);
+   彗核照实际大小(半径 3000 km)、亮面朝恒星,朝恒星那侧两道喷流,外面一团彗发(效果) */
 function cometPath(){const C=N.COMET,T=C.CYC,o={px:new Float64Array(T+2),py:new Float64Array(T+2),vx:new Float64Array(T+2),vy:new Float64Array(T+2)};
   let x=C.P0[0],y=C.P0[1],u=C.V*TK,v=0;
   for(let k=0;k<=T+1;k++){o.px[k]=x;o.py[k]=y;o.vx[k]=u;o.vy[k]=v;const dx=STAR[0]-x,dy=STAR[1]-y,r=Math.hypot(dx,dy),a=C.MU/(r*r);u+=a*dx/r;v+=a*dy/r;x+=u;y+=v;}
   return o;}
 const COMET=cometPath();
 function cometAt(t){const C=COMET;t=Math.max(0,Math.min(N.COMET.CYC,t));const i=Math.min(N.COMET.CYC-1,Math.floor(t)),f=t-i,L=A=>A[i]+(A[i+1]-A[i])*f;return [L(C.px),L(C.py),L(C.vx),L(C.vy)];}
-function cometT(){return N.COMET.T0;} // 本页定格:开页时已经飞了 T0 游戏秒(新地形.html 的开页时刻)
-function cometPuffs(){const D=N.COMET.DUST,tc=cometT(),A=D.A,dA=A/D.N,beta=2*N.COMET.TAIL/(A*A),ph=tc%dA,out=[];
+function cometT(){return N.COMET.T0;} // 本页定格:开页时已经飞了 T0 游戏秒
+const PUFFS=(()=>{const D=N.COMET.DUST,tc=cometT(),A=D.A,dA=A/D.N,beta=2*N.COMET.TAIL/(A*A),ph=tc%dA,out=[];
   for(let i=0;i<D.N;i++){const a=i*dA+ph,r=tc-a;if(r<0)break;const s=cometAt(r),sx=s[0]-STAR[0],sy=s[1]-STAR[1],sl=Math.hypot(sx,sy),ux=sx/sl,uy=sy/sl,u=a/A,j=hash2(Math.round(r/dA),1,77);
-    const w=N.COMET.W0+(N.COMET.W1-N.COMET.W0)*Math.pow(u,0.8),lat=(j-0.5)*0.45*w;
-    const bx=s[0]+D.K*s[2]*a+0.5*beta*ux*a*a,by=s[1]+D.K*s[3]*a+0.5*beta*uy*a*a;out.push({bx,by,x:bx-uy*lat,y:by+ux*lat,w,amp:Math.pow(1-u,0.8)*(0.65+0.35*j),a});}
-  for(let i=0;i<out.length;i++){const q=out[Math.min(out.length-1,i+1)],p=out[Math.max(0,i-1)],k=(i>0&&i<out.length-1)?2:1;out[i].ds=Math.max(50,Math.hypot(q.bx-p.bx,q.by-p.by)/k);out[i].dir=Math.atan2(q.by-p.by,q.bx-p.bx);}
-  return out;}
-const PUFFS=cometPuffs();
-function puffSpr(rgb){const c=document.createElement('canvas');c.width=c.height=64;const q=c.getContext('2d'),gr=q.createRadialGradient(32,32,0,32,32,32);gr.addColorStop(0,'rgba('+rgb+',1)');gr.addColorStop(0.45,'rgba('+rgb+',.45)');gr.addColorStop(1,'rgba('+rgb+',0)');q.fillStyle=gr;q.fillRect(0,0,64,64);return c;}
-function glowSpr(){const c=document.createElement('canvas');c.width=c.height=64;const q=c.getContext('2d'),gr=q.createRadialGradient(32,32,0,32,32,32);gr.addColorStop(0,'rgba(255,255,255,1)');gr.addColorStop(0.25,'rgba(200,230,255,.6)');gr.addColorStop(1,'rgba(140,190,255,0)');q.fillStyle=gr;q.fillRect(0,0,64,64);return c;}
-const PUFF=puffSpr('255,236,206'),GLOW=glowSpr();
-const SIDE={blue:[90,167,255],red:[255,107,107]};
-const css=(c,a)=>'rgba('+c[0]+','+c[1]+','+c[2]+','+(a===undefined?1:a)+')';
+    const w=N.COMET.W0+(N.COMET.W1-N.COMET.W0)*Math.pow(u,0.8),lat=(j-0.5)*0.45*w,bx=s[0]+D.K*s[2]*a+0.5*beta*ux*a*a,by=s[1]+D.K*s[3]*a+0.5*beta*uy*a*a;
+    out.push({bx,by,x:bx-uy*lat,y:by+ux*lat,w,amp:Math.pow(1-u,0.8)*(0.65+0.35*j)});}
+  for(let i=0;i<out.length;i++){const q=out[Math.min(out.length-1,i+1)],p=out[Math.max(0,i-1)],k=(i>0&&i<out.length-1)?2:1;out[i].ds=Math.max(50,Math.hypot(q.bx-p.bx,q.by-p.by)/k);}
+  return out;})();
+const NUC=(()=>{const s=cometAt(cometT());return [s[0],s[1]];})();
+const TG=(()=>{const c=2000;let x0=1e18,y0=1e18,x1=-1e18,y1=-1e18;for(const p of PUFFS){const r=p.w*0.75;x0=Math.min(x0,p.x-r);y0=Math.min(y0,p.y-r);x1=Math.max(x1,p.x+r);y1=Math.max(y1,p.y+r);}
+  const nx=Math.ceil((x1-x0)/c)+2,ny=Math.ceil((y1-y0)/c)+2,G=new Float32Array(nx*ny);
+  for(const p of PUFFS){const sg=p.w/4,R=3*sg,wt=p.amp*p.ds/(sg*2.5066),i0=Math.max(0,Math.floor((p.x-R-x0)/c)),i1=Math.min(nx-1,Math.ceil((p.x+R-x0)/c)),j0=Math.max(0,Math.floor((p.y-R-y0)/c)),j1=Math.min(ny-1,Math.ceil((p.y+R-y0)/c));
+    for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const dx=x0+i*c-p.x,dy=y0+j*c-p.y;G[j*nx+i]+=wt*Math.exp(-(dx*dx+dy*dy)/(2*sg*sg));}}
+  return {x0,y0,nx,ny,c,G};})(); // 尾巴浓度格(同 新地形.html tailGrid,格距 2000 km);尾心浓度约 1 = 背景 3 个单位
+const TAIL_IMG=gridImg(TG.G,TG.nx,TG.ny,v=>{const u=Math.min(1,v);return u>0.01?[240,224,196,Math.round(255*0.34*Math.pow(u,0.7))]:null;});
+const TAIL_ISO=[[0.12,'rgba(245,226,192,.30)'],[0.3,'rgba(250,234,206,.48)']].map(q=>[isoPath(TG.G,TG.nx,TG.ny,TG.x0,TG.y0,TG.c,q[0]),q[1]]);
+const COMA=rad([[0,'rgba(255,255,255,1)'],[0.18,'rgba(225,240,255,.55)'],[0.5,'rgba(170,205,255,.16)'],[1,'rgba(140,190,255,0)']],128);
+const NUC_SPR=(()=>{const n0=160,c=mkCv(n0,n0),q=c.getContext('2d'),s=n0/2*0.86,r=rng(311),n=12,P=[];q.translate(n0/2,n0/2);q.scale(s,s);const px=1/s; // 冰岩块:贴图里光从 +x 来,画的时候转到恒星方向
+  for(let i=0;i<n;i++){const a=i/n*6.283+(r()-0.5)*0.3,rr=(i%3===0?0.72:0.86)+0.16*r();P.push([Math.cos(a)*rr*1.08,Math.sin(a)*rr*0.86]);}
+  const L3=[Math.cos(0.55),0,Math.sin(0.55)],base=[86,92,104],cx=0.16,cy=0.02;q.lineJoin='round';
+  path(q,P);q.strokeStyle='rgba(0,0,0,.85)';q.lineWidth=2.2*px;q.stroke();
+  for(let i=0;i<n;i++){const a=P[i],b=P[(i+1)%n],mx=(a[0]+b[0])/2-cx,my=(a[1]+b[1])/2-cy,ml=Math.hypot(mx,my)||1,sl=0.8+0.5*r(),nx=mx/ml*sl,ny=my/ml*sl,nl=Math.hypot(nx,ny,1),d=(nx*L3[0]+ny*L3[1]+L3[2])/nl,k=(d-0.5)*1.5+(r()-0.5)*0.1;
+    q.fillStyle=css(lit(base,Math.max(-0.8,Math.min(0.55,k))));q.beginPath();q.moveTo(cx,cy);q.lineTo(a[0],a[1]);q.lineTo(b[0],b[1]);q.closePath();q.fill();q.strokeStyle=q.fillStyle;q.lineWidth=0.6*px;q.stroke();}
+  q.save();path(q,P);q.clip();for(let i=0;i<9;i++){const x=0.1+r()*0.75,y=(r()-0.5)*1.1,R=0.04+r()*0.07;q.fillStyle='rgba(228,238,250,'+(0.35+0.4*r()).toFixed(2)+')';q.beginPath();q.ellipse(x,y,R*1.6,R,r()*3,0,6.283);q.fill();} // 亮面的霜斑
+  const sh=q.createLinearGradient(-1,0,0.2,0);sh.addColorStop(0,'rgba(4,8,20,.8)');sh.addColorStop(1,'rgba(4,8,20,0)');q.fillStyle=sh;q.fillRect(-1.2,-1.2,1.4,2.4);q.restore(); // 背光那半压暗
+  c.k=1/0.86;return c;})();
+const JET=(()=>{const w=128,h=32,c=mkCv(w,h),q=c.getContext('2d'),gr=q.createLinearGradient(0,0,w,0);gr.addColorStop(0,'rgba(235,248,255,.85)');gr.addColorStop(0.5,'rgba(190,225,255,.3)');gr.addColorStop(1,'rgba(160,205,255,0)');
+  q.fillStyle=gr;q.beginPath();q.moveTo(0,h/2-3);q.lineTo(w,h/2-14);q.lineTo(w,h/2+14);q.lineTo(0,h/2+3);q.closePath();q.fill();return c;})();
+function drawComet(){const z=XT.cam.zoom,p=XT.toScreen(NUC[0],NUC[1]),R=N.COMET.R*z,la=laAt(NUC[0],NUC[1]),cr=Math.max(7,Math.min(5*R,2.2*R+40));
+  g.save();g.strokeStyle='rgba(200,225,255,.2)';g.lineWidth=1;g.setLineDash([3,6]);g.beginPath();g.moveTo(p[0],p[1]); // 接下来半小时(游戏时间)的轨迹
+  for(let dt=60;dt<=1800&&cometT()+dt<=N.COMET.CYC;dt+=60){const s=cometAt(cometT()+dt),e=XT.toScreen(s[0],s[1]);g.lineTo(e[0],e[1]);}g.stroke();g.restore();
+  drawGridImg(g,TAIL_IMG,TG.x0,TG.y0,TG.c);for(const q of TAIL_ISO)strokeWorld(g,q[0],q[1],1);
+  blit(g,COMA,p[0],p[1],cr,0.55,true);
+  if(R<2){g.fillStyle='rgb(206,216,230)';g.beginPath();g.arc(p[0],p[1],2,0,6.283);g.fill();}
+  else{g.save();g.translate(p[0],p[1]);g.rotate(la);g.globalCompositeOperation='lighter';for(const da of [-0.32,0.22]){g.save();g.rotate(da);g.globalAlpha=0.55;g.drawImage(JET,R*0.7,-R*0.55,R*2.4,R*1.1);g.restore();}g.restore();
+    g.save();g.translate(p[0],p[1]);g.rotate(la);const s=R*NUC_SPR.k;g.drawImage(NUC_SPR,-s,-s,2*s,2*s);g.restore();}
+  XT.mapText('彗星','rgba(210,230,255,.75)',p[0],p[1]+Math.max(4,R)+10);}
+
+/* 卫星(C):专用地表 —— 岩质 = 灰白高地 + 暗色月海 + 陨坑,冰质 = 浅冰 + 红褐裂纹;明暗同 81-art artPShade(光从 +x、仰角 22°、分 4 阶),画时转到恒星方向;轨道只画走过的一段(越近越亮)+ 前方一小段点线 */
 function moonPos(m){const P=PL[m.p];return [P[0]+Math.cos(m.ph)*m.orb,P[1]+Math.sin(m.ph)*m.orb];}
-function drawNew(now){const S=XT.toScreen,z=XT.cam.zoom;
-  {const I=NEW.ion,p=S(I.x0-I.cell/2,I.y0-I.cell/2);g.imageSmoothingEnabled=true;g.globalAlpha=0.85;g.drawImage(I.img,p[0],p[1],I.nx*I.cell*z,I.ny*I.cell*z);g.globalAlpha=1;
-    const c=S(I.x,I.y);g.fillStyle='rgba(190,180,255,.55)';g.font='11px "Microsoft YaHei"';g.textAlign='center';g.textBaseline='alphabetic';g.fillText('电离云',c[0],c[1]);}
-  for(const k of NEW.rad){const P=PL[k],p=S(P[0],P[1]),r0=P[2]*N.BELT.R0*z,r1=P[2]*N.BELT.R1*z;
-    const gr=g.createRadialGradient(p[0],p[1],r0,p[0],p[1],r1),sh=0.8+0.2*Math.sin(now*1.3);gr.addColorStop(0,'rgba(150,230,170,0)');gr.addColorStop(0.25,'rgba(150,230,170,'+(0.13*sh).toFixed(3)+')');gr.addColorStop(0.7,'rgba(150,230,170,'+(0.07*sh).toFixed(3)+')');gr.addColorStop(1,'rgba(150,230,170,0)');
-    g.fillStyle=gr;g.beginPath();g.arc(p[0],p[1],r1,0,6.283);g.arc(p[0],p[1],r0,0,6.283,true);g.fill();
-    g.fillStyle='rgba(160,230,180,.6)';g.font='11px "Microsoft YaHei"';g.textAlign='center';g.textBaseline='alphabetic';g.fillText('辐射带',p[0],p[1]-r1-4);}
-  {const n=cometAt(cometT()),p=S(n[0],n[1]);g.save();g.globalCompositeOperation='lighter';
-    for(const f of PUFFS){const q=S(f.x,f.y),rw=f.w/2*z*1.25;if(q[0]<-rw*2||q[0]>W+rw*2||q[1]<-rw*2||q[1]>H+rw*2)continue;
-      const al=1.5*f.amp*f.ds/f.w;if(al<0.004)continue;g.globalAlpha=Math.min(1,al);g.save();g.translate(q[0],q[1]);g.rotate(f.dir);g.drawImage(PUFF,-rw*1.7,-rw,rw*3.4,rw*2);g.restore();}
-    g.globalAlpha=1;const gr=Math.max(6,N.COMET.R*5*z);g.drawImage(GLOW,p[0]-gr,p[1]-gr,2*gr,2*gr);g.restore();
-    const tc=cometT();g.strokeStyle='rgba(200,225,255,.22)';g.lineWidth=1;g.setLineDash([3,6]);g.beginPath();g.moveTo(p[0],p[1]);
-    for(let dt=60;dt<=1800&&tc+dt<=N.COMET.CYC;dt+=60){const s2=cometAt(tc+dt),e=S(s2[0],s2[1]);g.lineTo(e[0],e[1]);}g.stroke();g.setLineDash([]);
-    g.fillStyle='rgba(210,230,255,.7)';g.font='11px "Microsoft YaHei"';g.textAlign='center';g.textBaseline='alphabetic';g.fillText('彗星',p[0],p[1]-Math.max(10,gr*0.6));}
-  for(const m of NEW.moons){const P=PL[m.p],pc=S(P[0],P[1]);g.strokeStyle='rgba(160,170,190,.12)';g.lineWidth=1;g.beginPath();g.arc(pc[0],pc[1],m.orb*z,0,6.283);g.stroke();
-    const q=moonPos(m),p=S(q[0],q[1]),r=m.r*z;if(p[0]+r<0||p[0]-r>W||p[1]+r<0||p[1]-r>H)continue;
-    const u=XT.envSunDirAt(q,[0,0]),la=u?Math.atan2(u[1],u[0]):null,b={x:q[0],y:q[1],r:m.r,type:m.type,seed:m.seed};
-    if(!XT.artPlanet(g,b,p[0],p[1],r,la)){g.fillStyle='rgba(58,64,78,.92)';g.beginPath();g.arc(p[0],p[1],Math.max(r,3),0,6.283);g.fill();}}
-  for(const T of NEW.sta){const p=S(T.x,T.y),cr=N.STA.CAP_R*z;g.strokeStyle='rgba(180,190,205,.3)';g.setLineDash([4,5]);g.lineWidth=1;g.beginPath();g.arc(p[0],p[1],cr,0,6.283);g.stroke();g.setLineDash([]);
-    if(T.holder==='blue'){g.strokeStyle=css(SIDE.blue,0.22);g.beginPath();g.arc(p[0],p[1],N.STA.VIS*z,0,6.283);g.stroke();} // 自己的据点画可见光圈(新地形.html:视角 = 蓝方)
-    const R=7;g.fillStyle='rgba(0,0,0,.8)';g.beginPath();for(let k=0;k<8;k++){const a=(k+0.5)/8*6.283;g.lineTo(p[0]+Math.cos(a)*(R+1.5),p[1]+Math.sin(a)*(R+1.5));}g.fill();
-    g.fillStyle='rgb(120,128,140)';g.beginPath();for(let k=0;k<8;k++){const a=(k+0.5)/8*6.283;g.lineTo(p[0]+Math.cos(a)*R,p[1]+Math.sin(a)*R);}g.fill();
-    g.fillStyle=T.holder?css(SIDE[T.holder]):'rgba(200,205,215,.5)';g.beginPath();g.arc(p[0],p[1],2.6,0,6.283);g.fill();
-    g.fillStyle='rgba(200,206,220,.75)';g.font='11px "Microsoft YaHei"';g.textAlign='center';g.textBaseline='alphabetic';g.fillText(T.name+(T.holder?(T.holder==='blue'?' · 蓝':' · 红'):' · 中立'),p[0],p[1]+cr+12);}
-}
+const OWN_MOON={};
+function diskTex(n0,f){const c=mkCv(n0,n0),q=c.getContext('2d'),im=q.createImageData(n0,n0),d=im.data,R=n0/2-1,h=n0/2;
+  for(let j=0;j<n0;j++)for(let i=0;i<n0;i++){const dx=(i+0.5-h)/R,dy=(j+0.5-h)/R,d2=dx*dx+dy*dy;if(d2>1+4/R)continue;const a=c01((1-Math.sqrt(d2))*R+0.5);if(a<=0)continue;f(dx,dy,Math.sqrt(Math.max(0,1-d2)),a,d,(j*n0+i)*4);}
+  q.putImageData(im,0,0);return c;}
+function ownMoonTex(m){if(OWN_MOON[m.seed])return OWN_MOON[m.seed];const n0=256,r=rng(m.seed*31+5),cr=[];for(let i=0;i<46;i++){const z=r()*2-1,t=r()*6.283,q=Math.sqrt(1-z*z);cr.push([q*Math.cos(t),q*Math.sin(t),z,0.025+Math.pow(r(),2.4)*0.14]);}
+  const s=diskTex(n0,(x,y,z,a,d,o)=>{let c;
+    if(m.lu==='luna'){const mare=fbm3(x*1.3,y*1.3,z*1.3,m.seed,4),hi=fbm3(x*4,y*4,z*4,m.seed+3,3);c=mare>0.56?[96,96,102]:(mare>0.53?[128,126,124]:[170,167,160]);const k=0.9+0.18*Math.floor(hi*4)/4;c=c.map(v=>v*k);
+      for(const q of cr){const cd=x*q[0]+y*q[1]+z*q[2];if(cd<0.9)continue;const aa=Math.sqrt(Math.max(0,2*(1-cd)));if(aa>q[3]*1.25)continue;const f=aa<q[3]*0.78?0.8:(aa<q[3]?1.18:1.06);c=c.map(v=>v*f);}}
+    else{const f=fbm3(x*2.2,y*2.2,z*2.2,m.seed,4),rid=1-Math.abs(2*fbm3(x*5,y*5,z*5,m.seed+7,4)-1);c=[214,222,228].map(v=>v*(0.92+0.1*Math.floor(f*4)/4));if(rid>0.965)c=[150,96,74];else if(rid>0.94)c=[186,150,128];}
+    d[o]=c[0];d[o+1]=c[1];d[o+2]=c[2];d[o+3]=a*255;});
+  const E=22*Math.PI/180,Lx=Math.cos(E),Lz=Math.sin(E),h=diskTex(n0,(x,y,z,a,d,o)=>{const b=x*Lx+z*Lz;let v=sstep(-0.05,0.16,b)*(0.3+0.7*Math.max(0,b))*(0.8+0.2*z);v=Math.min(1,Math.ceil(v*4-0.15)/4);d[o]=4;d[o+1]=8;d[o+2]=20;d[o+3]=a*255*(1-Math.max(0.06,v))*0.97;});
+  return OWN_MOON[m.seed]={s,h,n0};}
+function drawMoon(m){const P=PL[m.p],c=XT.toScreen(P[0],P[1]),z=XT.cam.zoom,R=m.orb*z,n=24,span=1.25;g.lineWidth=1.2;
+  for(let i=0;i<n;i++){const a0=m.ph-m.dir*span*(1-i/n),a1=m.ph-m.dir*span*(1-(i+1)/n);g.strokeStyle='rgba(175,185,205,'+(0.32*Math.pow((i+1)/n,1.5)).toFixed(3)+')';g.beginPath();g.arc(c[0],c[1],R,Math.min(a0,a1),Math.max(a0,a1));g.stroke();}
+  g.save();g.setLineDash([2,5]);g.strokeStyle='rgba(175,185,205,.22)';g.lineWidth=1;g.beginPath();const b0=m.ph,b1=m.ph+m.dir*0.3;g.arc(c[0],c[1],R,Math.min(b0,b1),Math.max(b0,b1));g.stroke();g.restore();
+  const q=moonPos(m),p=XT.toScreen(q[0],q[1]),r=m.r*z,la=laAt(q[0],q[1]);
+  if(p[0]+r<-20||p[0]-r>W+20||p[1]+r<-20||p[1]-r>H+20)return;
+  if(r<3){g.fillStyle='rgba(150,150,155,.95)';g.beginPath();g.arc(p[0],p[1],3,0,6.283);g.fill();}
+  else{const T=ownMoonTex(m),rs=r*T.n0/(T.n0-2);g.drawImage(T.s,p[0]-rs,p[1]-rs,2*rs,2*rs);g.save();g.translate(p[0],p[1]);g.rotate(la);g.drawImage(T.h,-rs,-rs,2*rs,2*rs);g.restore();}
+  XT.mapText(m.nm,TXT,p[0],p[1]+Math.max(3,r)+9);}
+
+/* 电离云(C 雷达噪点):只挡雷达 —— 浓的地方噪点密;噪点是一张屏幕上铺的细噪点(钉在世界上)按浓度遮罩,带一点羽化(用户 10-05);外沿实线 + 雷达减半那条虚线;颜色洋红(不撞尘埃云的灰紫 → 青蓝) */
+function ionRaw(I,x,y){const dx=x-I.x,dy=y-I.y,c=Math.cos(I.ang),s=Math.sin(I.ang),u=dx*c+dy*s,v=-dx*s+dy*c;
+  const q=(u/I.a)**2+(v/I.b)**2,n=fbm(x/140e3,y/140e3,7,4),q2=q*(0.7+0.6*n);if(q2>=1)return 0;
+  return Math.pow(1-q2,1.2)*(0.7+0.6*fbm(x/45e3,y/45e3,19,4));} // 同 新地形.html
+const IG=(()=>{const I=NEW.ion,ex=Math.sqrt((I.a*Math.cos(I.ang))**2+(I.b*Math.sin(I.ang))**2)*1.35,ey=Math.sqrt((I.a*Math.sin(I.ang))**2+(I.b*Math.cos(I.ang))**2)*1.35,c=I.cell;
+  const x0=I.x-ex,y0=I.y-ey,nx=Math.ceil(2*ex/c)+1,ny=Math.ceil(2*ey/c)+1,G=new Float32Array(nx*ny);
+  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++)G[j*nx+i]=ionRaw(I,x0+i*c,y0+j*c);return {x0,y0,nx,ny,c,G};})();
+const ION_LO=[150,96,178],ION_HI=[238,132,232];
+function ionCol(v,a){const u=Math.min(1,v/0.8),c=mix(ION_LO,ION_HI,u);return [c[0],c[1],c[2],a];}
+const ION_FILL=gridImg(IG.G,IG.nx,IG.ny,v=>v>0.003?ionCol(v,Math.round(255*0.22*Math.pow(Math.min(1,v),0.7))):null);
+const ION_MASK=gridImg(IG.G,IG.nx,IG.ny,v=>v>0.003?[255,255,255,Math.round(255*Math.min(1,v*1.15))]:null);
+const ION_NOISE=(()=>{const n0=Math.round(192*(window.devicePixelRatio||1)),c=mkCv(n0,n0),q=c.getContext('2d'),im=q.createImageData(n0,n0),d=im.data,r=rng(901);
+  for(let k=0;k<n0*n0;k++){const v=r(),o=k*4;if(v<0.32){const cc=ionCol(0.6+0.4*r(),0);d[o]=cc[0];d[o+1]=cc[1];d[o+2]=cc[2];d[o+3]=Math.round(255*(0.45+0.5*r()));}}
+  q.putImageData(im,0,0);
+  const B=mkCv(n0*3,n0*3),bq=B.getContext('2d');for(let i=0;i<3;i++)for(let j=0;j<3;j++)bq.drawImage(c,i*n0,j*n0); // 羽化:三乘三拼起来再模糊、取中间那块 ⇒ 平铺不露缝
+  const o=mkCv(n0,n0),oq=o.getContext('2d');oq.filter='blur('+(N.ION.FEATHER*(window.devicePixelRatio||1)).toFixed(2)+'px)';oq.drawImage(B,-n0,-n0);return o;})();
+const ION_OC={cv:null,g:null},ION_ISO={};
+function ionIso(L){return ION_ISO[L]||(ION_ISO[L]=isoPath(IG.G,IG.nx,IG.ny,IG.x0,IG.y0,IG.c,L));}
+function drawIon(){drawGridImg(g,ION_FILL,IG.x0,IG.y0,IG.c,0.35);
+  if(!ION_OC.cv){ION_OC.cv=mkCv(1,1);ION_OC.g=ION_OC.cv.getContext('2d');}const c=ION_OC.cv,o=ION_OC.g,w=Math.round(W*DPR),h=Math.round(H*DPR);if(c.width!==w||c.height!==h){c.width=w;c.height=h;}
+  o.setTransform(1,0,0,1,0,0);o.globalCompositeOperation='source-over';o.clearRect(0,0,w,h);const n0=ION_NOISE.width,org=XT.toScreen(0,0),ox=((Math.round(org[0]*DPR)%n0)+n0)%n0,oy=((Math.round(org[1]*DPR)%n0)+n0)%n0;
+  for(let x=ox-n0;x<w;x+=n0)for(let y=oy-n0;y<h;y+=n0)o.drawImage(ION_NOISE,x,y);
+  o.globalCompositeOperation='destination-in';o.setTransform(DPR,0,0,DPR,0,0);drawGridImg(o,ION_MASK,IG.x0,IG.y0,IG.c);
+  g.drawImage(c,0,0,W,H);
+  strokeWorld(g,ionIso(0.12),'rgba(232,160,236,.36)');strokeWorld(g,ionIso(0.45),'rgba(245,190,248,.5)',1,[4,4]);
+  const p=XT.toScreen(NEW.ion.x,NEW.ion.y);XT.mapText('电离云','rgba(232,176,240,.72)',p[0],p[1]);}
+
+/* 辐射带(B 辉光环):行星半径 1.2~2.2 倍的黄绿光带,径向渐变、慢慢呼吸(墙钟),内外淡边线 */
+function drawRad(now){const C=N.BELT.COL,sh=0.8+0.2*Math.sin(now*1.3),z=XT.cam.zoom;
+  for(const k of NEW.rad){const P=PL[k],c=XT.toScreen(P[0],P[1]),r0=P[2]*N.BELT.R0*z,r1=P[2]*N.BELT.R1*z;
+    const gr=g.createRadialGradient(c[0],c[1],r0,c[0],c[1],r1);gr.addColorStop(0,css(C,0.02));gr.addColorStop(0.25,css(C,0.2*sh));gr.addColorStop(0.7,css(C,0.11*sh));gr.addColorStop(1,css(C,0.02));
+    g.fillStyle=gr;g.beginPath();g.arc(c[0],c[1],r1,0,6.283);g.arc(c[0],c[1],r0,0,6.283,true);g.fill('evenodd');
+    g.strokeStyle=css(C,0.25);g.lineWidth=1;for(const r of [r0,r1]){g.beginPath();g.arc(c[0],c[1],r,0,6.283);g.stroke();}
+    XT.mapText('辐射带',css(C,0.7),c[0],c[1]-r1-9);}}
+
+/* 据点(A 环形站):八节环舱 + 四根辐条 + 中心枢纽 + 两个对接臂;本体战术落点约 20 px(比航母 T1 12.9 px 大,当地标),跟舰标同一个缩放系数;
+   归属色落在整圈外缘描边、材质(带三成归属色)与环上四盏灯;拉远过切换点换 8 px 八角记号(中立灰空心 / 自己的蓝实心 / 敌方红粗边 + 中心点) */
+function staBase(own){const b=[118,124,136];return own==='neutral'?b:mix(b,SIDE[own],0.3);}
+function staTrim(own){return own==='neutral'?[150,158,172]:SIDE[own];}
+function plate(q,P,base,px,ow){path(q,P);q.strokeStyle='rgba(0,0,0,.85)';q.lineWidth=(ow||1.8)*px;q.stroke();q.fillStyle=css(base);q.fill();
+  let cx=0,cy=0;for(const v of P){cx+=v[0];cy+=v[1];}cx/=P.length;cy/=P.length;q.lineWidth=0.8*px;q.lineCap='round';
+  for(let i=0;i<P.length;i++){const a=P[i],b=P[(i+1)%P.length],ex=b[0]-a[0],ey=b[1]-a[1],l=Math.hypot(ex,ey)||1;let nx=ey/l,ny=-ex/l;if(nx*((a[0]+b[0])/2-cx)+ny*((a[1]+b[1])/2-cy)<0){nx=-nx;ny=-ny;}
+    const d=nx*ART_L[0]+ny*ART_L[1];if(Math.abs(d)<0.2)continue;q.strokeStyle=css(lit(base,d>0?0.4*d:0.45*d),0.9);q.beginPath();q.moveTo(a[0],a[1]);q.lineTo(b[0],b[1]);q.stroke();}} // 朝光的边亮、背光的边暗(同舰标的倒角)
+function arcPoly(r0,r1,a0,a1,n){const P=[];for(let i=0;i<=n;i++){const a=a0+(a1-a0)*i/n;P.push([Math.cos(a)*r1,Math.sin(a)*r1]);}for(let i=n;i>=0;i--){const a=a0+(a1-a0)*i/n;P.push([Math.cos(a)*r0,Math.sin(a)*r0]);}return P;}
+function circlePoly(r,n,ph){const P=[];for(let i=0;i<n;i++){const a=(i+(ph||0))/n*6.283;P.push([Math.cos(a)*r,Math.sin(a)*r]);}return P;}
+function rectP(x0,y0,x1,y1){return [[x0,y0],[x1,y0],[x1,y1],[x0,y1]];}
+function staA(q,own,px,big){const base=staBase(own),tr=staTrim(own);
+  for(const a of [Math.PI/4,Math.PI*5/4]){q.save();q.rotate(a);plate(q,rectP(0.86,-0.07,1.06,0.07),lit(base,-0.1),px);plate(q,rectP(1.0,-0.11,1.08,0.11),lit(base,-0.25),px);q.restore();} // 对接臂
+  for(let k=0;k<4;k++){q.save();q.rotate(k*Math.PI/2);plate(q,rectP(0.2,-0.045,0.72,0.045),lit(base,-0.2),px,1.4);q.restore();} // 辐条
+  for(let k=0;k<8;k++){const a0=(k+0.06)/8*6.283-Math.PI/8,a1=(k+0.94)/8*6.283-Math.PI/8,am=(a0+a1)/2,d=Math.cos(am)*ART_L[0]+Math.sin(am)*ART_L[1];plate(q,arcPoly(0.7,0.92,a0,a1,8),lit(base,0.22*d),px);
+    if(big){q.fillStyle='rgba(255,226,160,.85)';for(let i=1;i<6;i++){const a=a0+(a1-a0)*i/6;q.fillRect(Math.cos(a)*0.81-0.6*px,Math.sin(a)*0.81-0.6*px,1.2*px,1.2*px);}}} // 环舱 + 舷窗
+  plate(q,circlePoly(0.25,20),lit(base,0.12),px);plate(q,circlePoly(0.13,16),lit(base,-0.3),px,1.2);
+  q.fillStyle=css(lit(tr,0.3));q.beginPath();q.arc(0,0,0.05,0,6.283);q.fill();
+  q.strokeStyle=css(tr,0.95);q.lineWidth=1.3*px;q.beginPath();q.arc(0,0,0.96,0,6.283);q.stroke(); // 归属色外缘
+  const c=staTrim(own);for(let k=0;k<4;k++){const a=k*Math.PI/2+Math.PI/8,x=Math.cos(a)*0.81,y=Math.sin(a)*0.81;q.fillStyle='rgba(0,0,0,.8)';q.beginPath();q.arc(x,y,0.045+0.9*px,0,6.283);q.fill();q.fillStyle=css(lit(c,0.25));q.beginPath();q.arc(x,y,0.045,0,6.283);q.fill();}} // 环上四盏归属色灯
+const STA_SPR=new Map();
+function staSprite(own,D){const Dq=Math.pow(2,Math.round(Math.log2(Math.max(4,D))*4)/4),key=own+Dq+'|'+DPR;let c=STA_SPR.get(key);if(c)return c;
+  const S=Math.ceil((Dq*1.2+6)*DPR);c=mkCv(S,S);const q=c.getContext('2d'),s=Dq/2;q.setTransform(DPR*s,0,0,DPR*s,S/2,S/2);q.lineJoin='round';staA(q,own,1/s,Dq>=44);c.Dq=Dq;STA_SPR.set(key,c);return c;}
+function staMark(x,y,own){const P=circlePoly(5,8,0.5).map(v=>[x+v[0],y+v[1]]);g.save();
+  if(own==='neutral'){path(g,P);g.strokeStyle='#a0aab9';g.lineWidth=1.5;g.stroke();}
+  else if(own==='blue'){path(g,P);g.fillStyle=css(SIDE.blue);g.fill();}
+  else{path(g,P);g.strokeStyle=css(SIDE.red);g.lineWidth=2;g.stroke();g.fillStyle=css(SIDE.red);g.beginPath();g.arc(x,y,1.6,0,6.283);g.fill();}
+  g.restore();}
+const BEACON={blue:rad([[0,'rgba(90,167,255,0)'],[0.6,'rgba(90,167,255,.35)'],[0.8,'rgba(90,167,255,.12)'],[1,'rgba(90,167,255,0)']],96),red:rad([[0,'rgba(255,107,107,0)'],[0.6,'rgba(255,107,107,.35)'],[0.8,'rgba(255,107,107,.12)'],[1,'rgba(255,107,107,0)']],96)};
+function drawStations(now){const z=XT.cam.zoom,mk=XT.shipMarkMode(),D=N.STA.PX/(0.55*0.78)*XT.shipZoomF();
+  for(const T of NEW.sta){const p=XT.toScreen(T.x,T.y),own=T.holder||'neutral',cr=N.STA.CAP_R*z;
+    if(own==='blue'){g.strokeStyle=css(SIDE.blue,0.2);g.lineWidth=1;g.beginPath();g.arc(p[0],p[1],N.STA.VIS*z,0,6.283);g.stroke();} // 自己的据点:可见光 12 万(新地形.html:视角 = 蓝方)
+    g.save();g.setLineDash([4,5]);g.strokeStyle=own==='neutral'?'rgba(180,190,205,.32)':css(SIDE[own],0.4);g.lineWidth=1;g.beginPath();g.arc(p[0],p[1],cr,0,6.283);g.stroke();g.restore(); // 占领圈 3 万 km
+    if(mk)staMark(p[0],p[1],own);
+    else{const c=staSprite(own,D),w=c.width/DPR*D/c.Dq;g.drawImage(c,p[0]-w/2,p[1]-w/2,w,w);if(own!=='neutral'&&(now*0.8)%1<0.3)blit(g,BEACON[own],p[0],p[1],D*0.75,0.35,true);} // 归属灯一闪(效果)
+    XT.mapText(T.name+' · '+(own==='neutral'?'中立':(own==='blue'?'蓝方':'红方')),TXT,p[0],p[1]+(mk?9:D*0.55+9));}}
+function drawNew(now){drawIon();drawRad(now);drawComet();for(const m of NEW.moons)drawMoon(m);drawStations(now);}
 
 /* ---------- 左栏:跳到每一样(落在给定的层) ---------- */
 function rockCenter(kind){const R=XT.rocks().filter(s=>s.belt===kind);if(!R.length)return null;let x=0,y=0;for(const s of R){x+=s.pos[0];y+=s.pos[1];}return [x/R.length,y/R.length];}

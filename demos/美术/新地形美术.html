@@ -24,7 +24,7 @@ canvas{display:block;border:1px solid var(--line);background:#05070c;cursor:grab
 </head>
 <body>
 <header>
-<h1>新地形美术<span>未进引擎 · 方案对比</span></h1>
+<h1>新地形美术<span>未进引擎 · 方案对比 · 10-05 已选:彗星 B / 卫星 C / 电离云 C(加一点羽化)/ 辐射带 B / 据点 A,已搬进 星空美术.html</span></h1>
 <p class="n">五种新地形(机制照 demos/地图组/新地形.html,数值不动)每种三个美术方案并排,三列同一个镜头、同一比例尺;滚轮缩放、拖动平移,三列一起动。
 星图(底色、网格、比例尺、星空、行星、恒星方向、碎石)走 星图展示.js —— 引擎画法的抄本,比例与引擎一致;旁边的参照船是引擎现在的舰标贴图(巡洋 T1 / 航母 T1)。<br>
 画法照 skill「太空战平面设计要素与规范」:地图事实沿用引擎星云的语言(单色、低透明、有清楚的线、带字),不同地形靠<b>色相 + 纹理</b>分(选择性通道),浓淡 / 强弱靠<b>明度与等值线</b>(有序通道);
@@ -377,7 +377,7 @@ function cometLabel(g,p){XT.mapText('彗星','rgba(210,230,255,.75)',p[0],p[1]+M
 function cometRef(g){refShip(g,'CA',NUC[0]+9000,NUC[1]-14000,0,'巡洋 T1(参照)');}
 const COMET_VARS=[
   ['A 光团尾:一团团暖白光叠出来,没有线',g=>{cometPath(g);puffs(g,1);const p=drawNucleus(g,0.8);cometLabel(g,p);cometRef(g);}],
-  ['B 海图尾:同星云的画法,低透明填充 + 两条等值线(尾心 / 尾边)',g=>{cometPath(g);drawGridImg(g,TAIL_IMG,TG.x0,TG.y0,TG.c);for(const q of TAIL_ISO)strokeWorld(g,q[0],q[1],1);const p=drawNucleus(g,0.55);cometLabel(g,p);cometRef(g);}],
+  ['✓ 选定 · B 海图尾:同星云的画法,低透明填充 + 两条等值线(尾心 / 尾边)',g=>{cometPath(g);drawGridImg(g,TAIL_IMG,TG.x0,TG.y0,TG.c);for(const q of TAIL_ISO)strokeWorld(g,q[0],q[1],1);const p=drawNucleus(g,0.55);cometLabel(g,p);cometRef(g);}],
   ['C 流线尾:淡光团 + 顺着尾巴流出去的细丝',g=>{cometPath(g);puffs(g,0.45);streamers(g);const p=drawNucleus(g,0.7);cometLabel(g,p);cometRef(g);}]];
 function streamers(g){const z=XT.cam.zoom,K=9;g.save();g.globalCompositeOperation='lighter';g.lineCap='round';
   for(let k=0;k<K;k++){const o=(k/(K-1)-0.5)*0.9,sd=hash2(k,3,91);let prev=null;
@@ -415,7 +415,7 @@ function moonRef(g){const q=moonPos(MOONS[0]);refShip(g,'CA',q[0]+MOONS[0].r+160
 const MOON_VARS=[
   ['A 引擎行星画法 + 整圈轨道',g=>{for(const m of MOONS){orbitFull(g,m);}for(const m of MOONS)moonDraw(g,m,'eng');moonRef(g);}],
   ['B 引擎行星画法 + 走过的一段轨道(越近越亮)+ 前方点线',g=>{for(const m of MOONS)orbitTrail(g,m);for(const m of MOONS)moonDraw(g,m,'eng');moonRef(g);}],
-  ['C 卫星专用地表(月海陨坑 / 冰面裂纹)+ 走过的一段轨道',g=>{for(const m of MOONS)orbitTrail(g,m);for(const m of MOONS)moonDraw(g,m,'own');moonRef(g);}]];
+  ['✓ 选定 · C 卫星专用地表(月海陨坑 / 冰面裂纹)+ 走过的一段轨道',g=>{for(const m of MOONS)orbitTrail(g,m);for(const m of MOONS)moonDraw(g,m,'own');moonRef(g);}]];
 
 /* ================= 电离云(只挡雷达波段) ================= */
 function ionRaw(I,x,y){const dx=x-I.x,dy=y-I.y,c=Math.cos(I.ang),s=Math.sin(I.ang),u=dx*c+dy*s,v=-dx*s+dy*c;
@@ -431,8 +431,10 @@ const ION_B=gridImg(IG.G,IG.nx,IG.ny,(v,i,j)=>{if(v<=0.003)return null;const x=I
   const st=0.5+0.5*Math.sin((w/7000+2.6*fbm(u/70000,w/70000,23,3))*6.283),k=0.45+0.55*st*st;return ionCol(v,Math.round(255*0.36*Math.pow(Math.min(1,v),0.7)*k));}); // 帘纹:顺着长轴的细带
 const ION_MASK=gridImg(IG.G,IG.nx,IG.ny,v=>v>0.003?[255,255,255,Math.round(255*Math.min(1,v*1.15))]:null); // 方案 C 的遮罩:浓的地方噪点密
 const ION_NOISE=(()=>{const N=Math.round(192*DPR),c=mkCv(N,N),g=c.getContext('2d'),im=g.createImageData(N,N),d=im.data,r=rng(901);
-  for(let k=0;k<N*N;k++){const q=r(),o=k*4;if(q<0.3){const cc=ionCol(0.6+0.4*r(),0);d[o]=cc[0];d[o+1]=cc[1];d[o+2]=cc[2];d[o+3]=Math.round(255*(0.35+0.5*r()));}}
-  g.putImageData(im,0,0);return c;})(); // 一张 192 px 的细噪点(设备像素一粒),按屏幕铺、钉在世界上
+  for(let k=0;k<N*N;k++){const q=r(),o=k*4;if(q<0.32){const cc=ionCol(0.6+0.4*r(),0);d[o]=cc[0];d[o+1]=cc[1];d[o+2]=cc[2];d[o+3]=Math.round(255*(0.45+0.5*r()));}}
+  g.putImageData(im,0,0);
+  const B=mkCv(N*3,N*3),bg=B.getContext('2d');for(let i=0;i<3;i++)for(let j=0;j<3;j++)bg.drawImage(c,i*N,j*N); // 用户 10-05 选 C 并要「一点点羽化」:三乘三拼起来再模糊 0.6 px、取中间那块 ⇒ 平铺不露缝
+  const o=mkCv(N,N),og=o.getContext('2d');og.filter='blur('+(0.6*DPR).toFixed(2)+'px)';og.drawImage(B,-N,-N);return o;})(); // 一张 192 px 的细噪点,按屏幕铺、钉在世界上
 const ION_OC={cv:null,g:null};
 function ionSpeckle(g,W,H){if(!ION_OC.cv){ION_OC.cv=mkCv(1,1);ION_OC.g=ION_OC.cv.getContext('2d');}const c=ION_OC.cv,o=ION_OC.g,w=Math.round(W*DPR),h=Math.round(H*DPR);if(c.width!==w||c.height!==h){c.width=w;c.height=h;}
   o.setTransform(1,0,0,1,0,0);o.globalCompositeOperation='source-over';o.clearRect(0,0,w,h);const N=ION_NOISE.width,org=XT.toScreen(0,0),ox=((Math.round(org[0]*DPR)%N)+N)%N,oy=((Math.round(org[1]*DPR)%N)+N)%N;
@@ -445,7 +447,7 @@ function ionRef(g){refShip(g,'CA',ION.x+ION.a*0.55,ION.y+30000,0,'巡洋 T1(参�
 const ION_VARS=[
   ['A 海图:同星云的画法,洋红低透明 + 三档等值线',g=>{drawGridImg(g,ION_A,IG.x0,IG.y0,IG.c);strokeWorld(g,ionIso(0.12),'rgba(225,150,232,.22)');strokeWorld(g,ionIso(0.4),'rgba(232,160,236,.32)');strokeWorld(g,ionIso(0.7),'rgba(245,190,248,.46)');ionLabel(g);ionRef(g);}],
   ['B 帘纹:顺着长轴的细带(像极光),外沿一圈虚线',g=>{drawGridImg(g,ION_B,IG.x0,IG.y0,IG.c);strokeWorld(g,ionIso(0.12),'rgba(232,160,236,.34)',1,[5,5]);ionLabel(g);ionRef(g);}],
-  ['C 雷达噪点:浓处噪点密(只挡雷达的意思),外沿实线 + 雷达减半那条虚线',(g,W,H)=>{drawGridImg(g,ION_A,IG.x0,IG.y0,IG.c,0.35);ionSpeckle(g,W,H);strokeWorld(g,ionIso(0.12),'rgba(232,160,236,.36)');strokeWorld(g,ionIso(0.45),'rgba(245,190,248,.5)',1,[4,4]);ionLabel(g);ionRef(g);}]];
+  ['✓ 选定 · C 雷达噪点:浓处噪点密(只挡雷达的意思),外沿实线 + 雷达减半那条虚线',(g,W,H)=>{drawGridImg(g,ION_A,IG.x0,IG.y0,IG.c,0.35);ionSpeckle(g,W,H);strokeWorld(g,ionIso(0.12),'rgba(232,160,236,.36)');strokeWorld(g,ionIso(0.45),'rgba(245,190,248,.5)',1,[4,4]);ionLabel(g);ionRef(g);}]];
 
 /* ================= 辐射带(雷达杂波 + 掉护盾,边界是硬的) ================= */
 function annulus(g,c,r0,r1){g.beginPath();g.arc(c[0],c[1],r1,0,6.283);g.arc(c[0],c[1],r0,0,6.283,true);}
@@ -456,7 +458,7 @@ function radRef(g){refShip(g,'CA',GP.x+GP.r*1.7,GP.y-GP.r*0.25,Math.PI/2,'巡洋
 const RAD_VARS=[
   ['A 危险区斜线:黄绿斜线阴影 + 内外两圈实线(进去就掉护盾)',(g,W,H)=>{const q=radGeo();g.save();annulus(g,q.c,q.r0,q.r1);g.fillStyle=css(RAD.COL,0.05);g.fill('evenodd');g.clip('evenodd');
     g.strokeStyle=css(RAD.COL,0.17);g.lineWidth=1;g.beginPath();for(let k=-H;k<W+H;k+=9){g.moveTo(k,0);g.lineTo(k+H,H);}g.stroke();g.restore();radRing(g,q.c,q.r0,0.45);radRing(g,q.c,q.r1,0.45);radLabel(g,q.c,q.r1);radRef(g);}],
-  ['B 辉光环:径向渐变的光带,慢慢呼吸,边线淡',(g,W,H,t)=>{const q=radGeo(),sh=0.8+0.2*Math.sin(t*1.3);const gr=g.createRadialGradient(q.c[0],q.c[1],q.r0,q.c[0],q.c[1],q.r1);
+  ['✓ 选定 · B 辉光环:径向渐变的光带,慢慢呼吸,边线淡',(g,W,H,t)=>{const q=radGeo(),sh=0.8+0.2*Math.sin(t*1.3);const gr=g.createRadialGradient(q.c[0],q.c[1],q.r0,q.c[0],q.c[1],q.r1);
     gr.addColorStop(0,css(RAD.COL,0.02));gr.addColorStop(0.25,css(RAD.COL,0.2*sh));gr.addColorStop(0.7,css(RAD.COL,0.11*sh));gr.addColorStop(1,css(RAD.COL,0.02));
     g.fillStyle=gr;annulus(g,q.c,q.r0,q.r1);g.fill('evenodd');radRing(g,q.c,q.r0,0.25);radRing(g,q.c,q.r1,0.25);radLabel(g,q.c,q.r1);radRef(g);}],
   ['C 粒子流:绕行星流动的虚线圈(被困住的带电粒子,内外反向)+ 内外实线',(g,W,H,t)=>{const q=radGeo();g.fillStyle=css(RAD.COL,0.04);annulus(g,q.c,q.r0,q.r1);g.fill('evenodd');
@@ -537,7 +539,7 @@ function drawStation(g,v,t){const p=XT.toScreen(STA.x,STA.y),z=XT.cam.zoom,own=S
   const H0=420,cw=SECS[4].cw;g.save();g.fillStyle='rgba(5,7,12,.78)';g.fillRect(cw-306,H0-118,300,112);g.font='10px "Microsoft YaHei"';g.fillStyle='rgba(160,172,188,.8)';g.textAlign='left';g.textBaseline='top';g.fillText('放大看形状(不是游戏尺寸)',cw-300,H0-114);
   ['neutral','blue','red'].forEach((o,i)=>{const c=staSprite(v,o,84),w=c.width/DPR;g.drawImage(c,cw-256+i*96-w/2,H0-58-w/2,w,w);});g.restore();}
 const BEACON={blue:rad([[0,'rgba(90,167,255,.0)'],[0.6,'rgba(90,167,255,.35)'],[0.8,'rgba(90,167,255,.12)'],[1,'rgba(90,167,255,0)']],96),red:rad([[0,'rgba(255,107,107,0)'],[0.6,'rgba(255,107,107,.35)'],[0.8,'rgba(255,107,107,.12)'],[1,'rgba(255,107,107,0)']],96)};
-const STA_VARS=[['A 环形站:八节环舱 + 辐条 + 枢纽',(g,W,H,t)=>drawStation(g,'A',t)],['B 桁架站:十字桁架 + 太阳能板 + 中央舱段',(g,W,H,t)=>drawStation(g,'B',t)],['C 八角堡垒:装甲台 + 对接坞 + 穹顶',(g,W,H,t)=>drawStation(g,'C',t)]];
+const STA_VARS=[['✓ 选定 · A 环形站:八节环舱 + 辐条 + 枢纽',(g,W,H,t)=>drawStation(g,'A',t)],['B 桁架站:十字桁架 + 太阳能板 + 中央舱段',(g,W,H,t)=>drawStation(g,'B',t)],['C 八角堡垒:装甲台 + 对接坞 + 穹顶',(g,W,H,t)=>drawStation(g,'C',t)]];
 
 /* ================= 页面:每种地形一节,三列同一个镜头 ================= */
 const SECS=[
