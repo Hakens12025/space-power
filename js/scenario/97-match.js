@@ -44,8 +44,9 @@ function matchGenWorld(seed,B,R){
   const w={bodies:[],clouds:[],asteroids:[]};
   if(r()<0.5)r(); // 2026-09-29 用户:取消无限远的方向型太阳 —— 这一半改成没有太阳(照样掷一次,同一个种子后面的地形不变)
   else{const a=r()*2*Math.PI,d=6e6+r()*3e6;w.stars=[{x:Math.round(mx+Math.cos(a)*d),y:Math.round(my+Math.sin(a)*d)}];}
-  for(let n=Math.floor(r()*3),k=0;k<40&&w.bodies.length<n;k++){const p=inA(),rad=70000*(0.6+r()*1.4); // 2026-09-29 用户:天体大小要有差异 —— 木星级 7 万 x 0.6~2 倍(原 5~8 万)。2026-09-26 中心摆进游玩区,离两军重心 >= 半径+10 万、彼此 >= 两半径+10 万,摆不下就少摆:原 对阵轴上、离两军 40 万、彼此 80 万
-    if(far(p,B,rad+100000*CFG.scale)&&far(p,R,rad+100000*CFG.scale)&&w.bodies.every(function(b){return far(p,[b.x,b.y],rad+b.r+100000*CFG.scale);}))w.bodies.push({x:Math.round(p[0]),y:Math.round(p[1]),r:Math.round(rad)});}
+  const tq=envRng(seed*13+9); // 2026-10-04 天体类型另一条种子流(world/12 envBodyType):前面的地形随机序列不变;气态半径 x1.3(用户:气态的天体往大的方向偏)
+  for(let n=Math.floor(r()*3),k=0;k<40&&w.bodies.length<n;k++){const p=inA(),ty=envBodyType(tq()),sd=Math.floor(tq()*1e6),rad=70000*(0.6+r()*1.4)*(ty==='gas'?1.3:1); // 2026-09-29 用户:天体大小要有差异 —— 木星级 7 万 x 0.6~2 倍(原 5~8 万)。2026-09-26 中心摆进游玩区,离两军重心 >= 半径+10 万、彼此 >= 两半径+10 万,摆不下就少摆:原 对阵轴上、离两军 40 万、彼此 80 万
+    if(far(p,B,rad+100000*CFG.scale)&&far(p,R,rad+100000*CFG.scale)&&w.bodies.every(function(b){return far(p,[b.x,b.y],rad+b.r+100000*CFG.scale);}))w.bodies.push({x:Math.round(p[0]),y:Math.round(p[1]),r:Math.round(rad),type:ty,seed:sd});}
   for(let n=Math.floor(r()*3),k=0;k<n;k++){const p=at(r()*1.6-0.8,r()*2-1),a=2e6*Math.pow(8,r()),b=a*(0.4+0.6*r());
     w.clouds.push({x:Math.round(p[0]),y:Math.round(p[1]),a:Math.round(a),b:Math.round(b),ang:Math.round(r()*180),seed:Math.floor(r()*1e6)});}
   for(let k=0,m=0;k<80&&m<4;k++){ // 2026-09-27 N3(用户批准):4 片小行星带,前两片摆在两军之间的航路附近(沿对阵轴 -0.3~1.3 倍间距、横向 ±30 万),后两片在游玩区里随便摆;成片的石头既是假目标也是雷达杂波区

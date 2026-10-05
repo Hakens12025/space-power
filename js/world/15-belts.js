@@ -59,7 +59,7 @@ const BLT_MK={ // 每种结构:(随机流, 条目) → 若干股 {pl, wf, df}
       out.push({pl,wf:u=>e.w*(0.15+0.7*u),df:u=>lp(u)*(1-0.75*u)*te(u)});}
     return out;}, // 撞击碎片扇:几道从一点射出的细流,近处密而窄、远处稀而宽
   '行星环':(r,e)=>{const S=BELT_SHP,R=e.br*bltRr(r,S.RING_K),w=e.br*bltRr(r,S.RING_W),pl=bltPoly(u=>[e.x+R*Math.cos(u*2*Math.PI),e.y+R*Math.sin(u*2*Math.PI)],96,true),lp=bltLump(r,pl.len,true,e.c);
-    return [{pl,wf:()=>w,df:lp}];}, // 环宽按行星半径另掷(条目里的带宽不用)
+    return [{pl,wf:()=>w,df:lp,R,w}];}, // 环宽按行星半径另掷(条目里的带宽不用);R / w 给画面(BELT_RING_GEO)
 };
 function bltPlaceOk(st){ // 中线至少 INSIDE 在游玩区里、每个点离每艘船 AVOID 以上
   const A=ARENA,av2=BELT_CFG.AVOID*BELT_CFG.AVOID;let k=0,n=0;
@@ -67,12 +67,15 @@ function bltPlaceOk(st){ // 中线至少 INSIDE 在游玩区里、每个点离�
     for(const sh of ships){const dx=sh.pos[0]-q[0],dy=sh.pos[1]-q[1];if(dx*dx+dy*dy<av2)return false;}}
   return n>0&&k/n>=BELT_CFG.INSIDE;
 }
+const BELT_RING_GEO=[]; // 2026-10-04 真撒出来的行星环 {x,y,R,w}(行星中心、环半径、横向高斯的 σ):render/81-art 照它画环,画面与碎石对得上
 function envSpawnBelts(){ // world/12 envSpawnRocks 末尾调:没有游玩区(靶场 / 测试预设)不撒
+  BELT_RING_GEO.length=0;
   if(!ARENA)return;
   for(const e of ENV.belts){
     const r=envRng(e.seed),mk=BLT_MK[e.kind];if(!mk)continue;let st=null;
     for(let k=0;k<BELT_CFG.TRIES&&!st;k++){const s=mk(r,e);if(bltPlaceOk(s))st=s;}
     if(!st)continue; // 摆不下就不要这个结构
+    if(e.kind==='行星环')BELT_RING_GEO.push({x:e.x,y:e.y,R:st[0].R,w:st[0].w});
     const tot=st.reduce((a,s)=>a+s.pl.len,0);let n=0;
     for(let k=0;k<e.n*80&&n<e.n;k++){ // 按长度挑一股,沿线按 df 拒绝采样,横向高斯;每次固定取数(被丢也取),可复现
       let x0=r()*tot,s=st[st.length-1];for(const q of st){if(x0<q.pl.len){s=q;break;}x0-=q.pl.len;}

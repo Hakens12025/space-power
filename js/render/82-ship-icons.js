@@ -2,7 +2,7 @@
 const LADAR_WARN_W=6; // RF7e 被照射告警圈的脉冲角频率(rad/【墙钟】秒)。abs 折半波形,视觉闪烁约 1.9 次/秒 —— 数值沿用改前的 6,只把时基从 simTime 换成墙钟,手感不变
 /* ================= 舰体图标:游戏适配层 =================
    纯几何在 10a-ship-hulls.js。这里只做"游戏舰船 → (轮廓, Tier)"的映射,
-   以及 drawShip / drawWreck / drawFlame 的绘制流程。 */
+   以及 drawShip / drawWreck 的绘制流程。 */
 
 // TIER1 4 舰种正式映射:旧三键 CRUISER/FRIGATE/SCOUT 已由 03-ships.js 的 normCls 在 makeShip 入口归一化,这里不再需要过渡键。
 // 10a 的 HULL.SC / HULL_LABEL.SC / HULL_BASE.SC 按拍板保留不动(轮廓资产留着,等 4 舰种数值定稿再决定去留),只是暂时无人引用。
@@ -101,17 +101,8 @@ function drawRwrSpike(p,th,R,alpha){
   ctx.closePath();ctx.fill();
   ctx.restore();
 }
-function drawWreck(s,p,r){ // 残骸:空心轮廓+裂纹+暗色,留名标记
-  const ang=Math.atan2(s.facing[1],s.facing[0]);
-  ctx.save();
-  ctx.translate(p[0],p[1]);
-  ctx.rotate(ang);
-  ctx.save();{const zf=shipZoomF();ctx.scale(zf,zf);}drawHull(ctx,shipIdentHull(s),shipIdentTier(s),'#a0aab9','outline');ctx.restore(); // 2026-09-28 没认出的残骸画通用轮廓(原来真舰种)。SN9 残骸跟活船同一个系数;只包舰体这一笔 —— 下面的裂纹用的是传进来的 r(已含系数),一起包进来会被乘两次;原注: // 残骸:空心轮廓,不带阵营色。TIER1 残骸尺寸也走遮蔽口径(方案原文说残骸是已死舰可以保留真实 tier,但残骸在场上留很久,不遮蔽等于给"打死的是几级"留一个稳定读数)
-  // 裂纹(断开感)
-  ctx.strokeStyle='rgba(200,210,225,.5)';ctx.lineWidth=1;
-  ctx.beginPath();ctx.moveTo(-r*0.7,-r*0.7);ctx.lineTo(r*0.3,r*0.3);ctx.stroke();
-  ctx.beginPath();ctx.moveTo(r*0.4,-r*0.6);ctx.lineTo(-r*0.4,r*0.4);ctx.stroke();
-  ctx.restore();
+function drawWreck(s,p,r){ // 残骸:裂成两截的轮廓 + 断口余烬(render/81-art artWreck,2026-10-04),留名标记
+  artWreck(s,p);
   // 名字带残骸标记
   if(cam.zoom>0.0008){
     ctx.fillStyle='rgba(150,160,175,.65)';ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';
@@ -186,6 +177,7 @@ function drawShip(s){
   if(view==='coast'||view==='ghost'){drawContactMark(s,p,view);return;} // TK4c:记号抽成函数(石头的陈旧 / 失联照同一个画法),画法一笔没改
   const r=Math.round(shipIconR(s)); // 图标半径:屏幕固定尺寸,但随舰种/Tier 变化(标签/选中圈/尾焰基准)
   if(s.dead){drawWreck(s,p,r);return;} // 残骸:空心图标,不再有舰体数据(幽灵/陈旧已在上面 return,不会走到这儿)
+  if(s.side!==VIEW&&typeof ir2InPic==='function'&&ir2InPic(dispPos))return; // 红外画面圈里的非我方船只显示红外画面画的样子(同碎石,2026-10-05 用户);残骸、陈旧 / 失联记号、记忆在上面照画
   // DS181 S3:⚠被照射告警(敌方雷达以照射模式对我驻留达阈值)→黄框闪烁(信息战灵魂提示)
   // SN4:驻留键换成 act(雷达的【照射】模式;静听 lis 与它是同一部设备的两种模式,不是两条通道)。
   //   键名一改,原来那句裸读就变成「undefined 大于某数」恒 false —— 告警圈永远不画、一行错都不报,所以必须与内核同一提交改完。
@@ -228,8 +220,8 @@ function drawShip(s){
     ctx.closePath();ctx.fill();
   }
 
-  // 推进器尾焰(后主推进 / 前向反推 / 侧向辅助)
-  if(adminMode||s.side===VIEW||contactIdn(s,VIEW))drawFlame(s,p,r); // 2026-09-28 没认出的不画尾焰 / 侧推:它们按真实朝向画,等于泄漏朝向(UNK 记号 09-26 已改成不转的菱形)
+  // 推进器尾焰(后主推进 / 前向反推 / 侧向辅助;2026-10-04 换成 render/81-art 的焰瓣贴图,挂在舰标的喷口上)
+  if(adminMode||s.side===VIEW||contactIdn(s,VIEW))artFlames(s,p); // 2026-09-28 没认出的不画尾焰 / 侧推:它们按真实朝向画,等于泄漏朝向(UNK 记号 09-26 已改成不转的菱形)
   {const erg=emitRippleRgb(s);if(erg)drawEmitRipple(p,shipIconR(s),erg);} // EM1 发射机开着 ⇒ 涟漪(画在舰体之下)
   if(typeof drawShieldBubble==='function')drawShieldBubble(s,p); // 2026-09-29 护盾罩子(render/83)
   // 舰体图标(wows式:按舰种形状,图标自身带朝向)
@@ -290,42 +282,4 @@ function drawShip(s){
   if(isSel)drawOrders(s); // 选中的船画完整航路
   // SN6e:原来这里有一句 ctx.restore() 配上面幽灵/陈旧的 save() —— 那两档现在画完记号就 return 了,
   //      save/restore 在那一支里自成一对,这里不再需要(留着就是一次不配对的 restore,会把状态栈掏穿)
-}
-function drawFlame(s,p,r){
-  const fx=s.facing[0],fy=s.facing[1];
-  const fl=Math.hypot(fx,fy);
-  if(fl<0.05||(Math.abs(s.flame)<0.05&&Math.abs(s.sideFlame)<0.05))return; // v119:s.side是阵营字符串'blue'/'red',算术为NaN,应为sideFlame
-  const ang=Math.atan2(fy,fx);
-  const zf=shipZoomF(); // SN9 尾焰长度跟舰体同一个系数:不跟的话拉远时 20px 的焰拖在 12px 的船后面
-  if(s.flame>0.05){ // 后主推进:船尾喷焰
-    const L=(10+10*s.flame)*zf;
-    ctx.fillStyle='rgba(90,167,255,.45)';
-    ctx.beginPath();
-    ctx.moveTo(p[0]-Math.cos(ang)*r*0.8,p[1]-Math.sin(ang)*r*0.8);
-    ctx.lineTo(p[0]-Math.cos(ang)*r*0.8-Math.cos(ang+1.05)*L,p[1]-Math.sin(ang)*r*0.8-Math.sin(ang+1.05)*L);
-    ctx.lineTo(p[0]-Math.cos(ang)*r*0.8-Math.cos(ang-1.05)*L,p[1]-Math.sin(ang)*r*0.8-Math.sin(ang-1.05)*L);
-    ctx.closePath();ctx.fill();
-  }
-  if(s.flame<-0.05){ // 前向反推(刹车):船头喷焰
-    const L=(10+10*(-s.flame))*zf;
-    ctx.fillStyle='rgba(255,154,85,.4)';
-    ctx.beginPath();
-    ctx.moveTo(p[0]+Math.cos(ang)*r*0.8,p[1]+Math.sin(ang)*r*0.8);
-    ctx.lineTo(p[0]+Math.cos(ang)*r*0.8+Math.cos(ang+1.05)*L,p[1]+Math.sin(ang)*r*0.8+Math.sin(ang+1.05)*L);
-    ctx.lineTo(p[0]+Math.cos(ang)*r*0.8+Math.cos(ang-1.05)*L,p[1]+Math.sin(ang)*r*0.8+Math.sin(ang-1.05)*L);
-    ctx.closePath();ctx.fill();
-  }
-  if(s.sideFlame>0.05&&s.turnAim){ // 侧向辅助推进器:目标方向反侧喷射(反作用力推向目标)
-    const df=V.norm(s.turnAim),fc=V.norm([Math.cos(ang),Math.sin(ang),0]);
-    let perp=V.sub(df,V.mul(fc,V.dot(df,fc))); // 目标在船侧的垂直分量
-    const pl=V.len(perp);
-    if(pl>0.1){
-      perp=V.norm(perp);
-      const px=p[0]-perp[0]*r, py=p[1]-perp[1]*r; // 反侧(背离目标方向)
-      ctx.fillStyle='rgba(255,224,102,.5)';
-      ctx.beginPath();
-      ctx.arc(px,py,(2+3*s.sideFlame)*zf,0,6.283); // v119:同上,side→sideFlame
-      ctx.fill();
-    }
-  }
 }

@@ -7,16 +7,15 @@
      · 实况、没认出:通用轮廓 + T2 尺寸 + 红色、名字写"X 型热源"(sigClassLabel 只读 size);
        石头冷、不发射、不动 ⇒ 船的那一支在这种船身上也不画速度箭头 / 尾焰 / 涟漪 / 高度标 / 目的地线,所以这里也不画;
      · 被收进红方接触群的(82-lod 的 hideRed)不画 —— 与船一样。⚠ 船的收拢 / 散开有 0.25 秒过渡(_lodE),石头没有:聚合动画那一瞬分得开,记在备忘里;
-     · 认出之后(光学贴近到认出距离、或照射认出)换成石头的记号:灰色不规则多边形 + "碎石",不再有等级标签(它不是目标了)。
+     · 认出之后(光学贴近到认出距离、或照射认出)换成石头的记号:切面石头(render/81-art artRock),不再有等级标签(它不是目标了)。
    GM 下照真值全画成石头。
    ============================================================================ */
 const ROCK_RGB='177,167,152'; // 认出之后的石头色:灰褐,与敌我两色都分得开(2026-09-26 调亮约 15%:星云底上看不清)
 const ROCK_SHAPE=[1,0.72,0.95,0.68,0.9,0.78,1.05]; // 不规则多边形的七个顶点半径系数
 
-function drawRocks(ownOnly){ // ownOnly = 传感器画面(红外 / 雷达):只画自己的浮标(它和我方舰一样是自己的东西,三种画面都画;2026-09-28 用户:红外 / 雷达画面里看不见自己的浮标)
+function drawRocks(){ // 自己的浮标先画(不在自己的航迹表里),再画航迹表里的石头 / 民船 / 诱饵 / 敌方浮标;红外 / 雷达画面同主画面
   if(!rocks.length)return;
   for(const s of rocks)if(!s.dead&&s.kind==='buoy'&&s.side===VIEW)drawOwnBuoy(s); // 2026-09-27 自己的浮标:不在自己的航迹表里,单独画
-  if(ownOnly)return;
   if(adminMode){for(const s of rocks)if(!s.dead&&s.side!==VIEW)drawRockAt(s,s.pos,'live',true);return;}
   trkEach(VIEW,function(tk,st){
     const s=trkSrc(tk);if(s.dead)return; // 2026-09-29 被打碎的碎石不再画(weapons/55)
@@ -28,6 +27,7 @@ function drawRocks(ownOnly){ // ownOnly = 传感器画面(红外 / 雷达):只�
   });
 }
 function drawRockAt(s,pos,st,known,tpo){ // tpo:按这个类型画(记忆用最后认出的类型),缺省问航迹
+  if(s.kind==='rock'&&typeof ir2InPic==='function'&&ir2InPic(pos))return; // 红外画面圈里的碎石由红外画面画(发光的橙色,同以前);圈外照旧(2026-10-05 用户)
   const p=toScreen(pos[0],pos[1]);
   if(p[0]<-40||p[0]>W+40||p[1]<-40||p[1]>H+40)return;
   if((st==='coast'||st==='ghost')&&!adminMode&&trkMem(trkOf(VIEW,s))){const lt=trkOf(VIEW,s).lastType;ctx.save();ctx.globalAlpha=0.42;drawRockAt(s,pos,'live',!!lt,lt);ctx.restore();return;} // 2026-09-27 记忆:按最后所见调暗画
@@ -59,13 +59,7 @@ function drawRockAt(s,pos,st,known,tpo){ // tpo:按这个类型画(记忆用最�
   ctx.fillStyle='rgba('+ROCK_RGB+',.85)';ctx.strokeStyle='rgba('+ROCK_RGB+',1)';ctx.lineWidth=1;
   const zs=Math.sqrt(s.size/0.7); // 体型差要看得出来(用户 2026-09-26:"碎石的 size 看上去都一个大小")
   if(shipMarkMode()){const h=Math.max(1.5,Math.min(5,2.5*zs));ctx.fillRect(p[0]-h,p[1]-h,2*h,2*h);}
-  else{
-    const rr=r*zs;
-    const a0=Math.atan2(s.facing[1],s.facing[0]),n=ROCK_SHAPE.length;
-    ctx.beginPath();
-    for(let k=0;k<n;k++){const a=a0+k*2*Math.PI/n,q=rr*ROCK_SHAPE[k];if(k===0)ctx.moveTo(p[0]+Math.cos(a)*q,p[1]+Math.sin(a)*q);else ctx.lineTo(p[0]+Math.cos(a)*q,p[1]+Math.sin(a)*q);}
-    ctx.closePath();ctx.fill();ctx.stroke();
-  }
+  else artRock(ctx,p[0],p[1],r*zs,artIdSeed(s),!!s.ast); // 2026-10-04 切面石头(render/81-art):光向固定,所以贴图不随 facing 转
   // 2026-09-26 用户:碎石的中文标注不要了
   ctx.restore();
 }
@@ -84,11 +78,13 @@ function drawObjKnown(s,p,r,tp){ // 2026-09-27 认出来的民船 / 诱饵 / 敌
   if(cam.zoom>0.0008){ctx.fillStyle='rgba(215,226,240,.8)';ctx.fillText(lb,p[0],p[1]+r+6);}
   ctx.restore();
 }
-function drawOwnBuoy(s){ // 自己的浮标:蓝色小圈;开着照射时外面加一圈
+function drawOwnBuoy(s){ // 自己的浮标;开着照射时一圈圈脉冲;拉远到舰船换箭头时画蓝圈
   const p=toScreen(s.pos[0],s.pos[1]);if(p[0]<-40||p[0]>W+40||p[1]<-40||p[1]>H+40)return;
-  ctx.save();ctx.strokeStyle='#5aa7ff';ctx.fillStyle='#5aa7ff';ctx.lineWidth=1.4;ctx.beginPath();ctx.arc(p[0],p[1],4,0,6.283);ctx.stroke();ctx.beginPath();ctx.arc(p[0],p[1],1.5,0,6.283);ctx.fill();
-  if(s.on){ctx.globalAlpha=0.6;ctx.beginPath();ctx.arc(p[0],p[1],8,0,6.283);ctx.stroke();ctx.globalAlpha=1;}
-  if(typeof selBuoy!=='undefined'&&selBuoy===s){ctx.strokeStyle='#ffe066';ctx.lineWidth=1.6;ctx.beginPath();ctx.arc(p[0],p[1],12,0,6.283);ctx.stroke();} // 2026-09-29 选中(同舰船选中圈的颜色)
-  if(cam.zoom>0.0008){ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillStyle='rgba(143,208,255,.9)';ctx.fillText(s.name+(s.dest?' · 飞行':(s.on?' · 照射':' · 被动')),p[0],p[1]+8);}
+  const mk=shipMarkMode(),R=mk?4:artBuoyR();ctx.save(); // 2026-10-05 用户:舰船换成箭头的那个缩放起改画蓝圈(拉远了美术浮标看不见)
+  if(mk){ctx.strokeStyle='#5aa7ff';ctx.fillStyle='#5aa7ff';ctx.lineWidth=1.4;ctx.beginPath();ctx.arc(p[0],p[1],4,0,6.283);ctx.stroke();ctx.beginPath();ctx.arc(p[0],p[1],1.5,0,6.283);ctx.fill();
+    if(s.on){ctx.globalAlpha=0.6;ctx.beginPath();ctx.arc(p[0],p[1],8,0,6.283);ctx.stroke();ctx.globalAlpha=1;}}
+  else artBuoy(ctx,p[0],p[1],0,s.side,!!s.on); // 2026-10-04 中心舱 + 太阳能板 + 天线,开照射有脉冲环(render/81-art)
+  if(typeof selBuoy!=='undefined'&&selBuoy===s){ctx.strokeStyle='#ffe066';ctx.lineWidth=1.6;ctx.beginPath();ctx.arc(p[0],p[1],Math.max(12,R*1.9),0,6.283);ctx.stroke();} // 2026-09-29 选中(同舰船选中圈的颜色)
+  if(cam.zoom>0.0008){ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillStyle='rgba(143,208,255,.9)';ctx.fillText(s.name+(s.dest?' · 飞行':(s.on?' · 照射':' · 被动')),p[0],p[1]+Math.max(8,R*1.6));}
   ctx.restore();
 }

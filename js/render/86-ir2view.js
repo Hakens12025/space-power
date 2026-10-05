@@ -1,7 +1,7 @@
 "use strict";
 /* ============================================================================
    红外2(右下角「红外」钮,MAPV.mode === 'ir';2026-09-30 用户:演示页 demos/地图组/红外2.html 的「按选择」+ 一个红外仪表做进引擎,「红外」钮直接换成它)。
-   · 可见光圈(s.visR)里 = 红外1(86-irview 的整屏画面裁进圈里);圈外的热按方位压到圈外一环上:角度 = 方位,厚度 = 温度(内冷外热、对数),颜色 = 一道门 irvV。
+   · 可见光圈(s.visR)里 = 红外1(86-irview 的整屏画面裁进圈里);圈外的热按方位压到圈外一环上:角度 = 方位,厚度 = 波长(2026-10-05 用户选连续光谱:内沿 25 µm、外沿 1.5 µm 对数,每份热按普朗克曲线铺满厚度,热的亮在外侧、冷的亮在内侧),颜色 = 一道门 irvV。
    · 选中一艘:它自己的环。选中几艘:各艘一个环,叠着的地方归离得近的那艘;每个目标只画在一个环上 —— 那个方位的环露在外面、看它最清楚的那艘
      (用户选甲:舰队数据链认得出同一个目标);地图上画交集(照 86-radarview「被听见」:看得见的每艘一块扇形求交,围死才画;2026-09-30 用户:只用短波 —— 尾焰 + 开火,环外沿那段热;船体自身热、晒热不算);左边一个红外仪表(方位从选中这几艘的中心量)。
      没选:各船圈内红外 + 全舰队仪表,不画环。
@@ -11,11 +11,11 @@
      围不出就弹在可见光圈边上(ir2AnomDraw)。
    · 只在点开时算。环的数据:船等每帧重算,静止石头分 K 帧轮一遍(各占一个槽,重算那个槽时先减旧的再加新的);环的像素每帧按格上色。
    ============================================================================ */
-const IR2_C={BAND:65,FEATHER:16,EDGE:'rgba(255,150,70,.5)',EDGE_W:1,RIN_MIN:30,N:540,M:10,T0:100,T1:6000,RSIG:0.14,
+const IR2_C={BAND:65,FEATHER:16,EDGE:'rgba(255,150,70,.5)',EDGE_W:1,RIN_MIN:30,N:540,M:10,T0:100,T1:6000,RSIG:0.14,LAM_IN:25,LAM_OUT:1.5,
   // BAND = 环厚 px(2026-09-30 用户:稍微厚一点,52 → 65);FEATHER = 两艘的环交界处羽化的宽度 px(同日用户);EDGE / EDGE_W = 环外沿的线(用户:黄色勾边太粗,2 px 实色 → 1 px 半透明);RIN_MIN = 环内沿至少多少 px(拉远时可见光圈在屏幕上太小);N = 一圈几格(2026-09-30 用户:往演示页红外2 的分辨率靠、不完全一致,360 → 540,演示页 720);M = 厚度分几档(8 → 10,演示页 12);T0 / T1 = 内沿 / 外沿温度 K(对数刻度);RSIG = 谱宽(厚度的几成)
   T_ROCK:150,T_SOLAR:250,T_HULL:300,T_PLUME:1500,T_FIRE:3000,T_NEB:100,T_BODY:200,T_SUN:5800,
-  SIG0:8,SMIN:0.6,SMAX:25,XF:0.1,K:16,CULL:0.001,PO_K:0.002,PO_N:8,
-  // 团的角宽(度,高斯 σ)= SIG0 / √信噪比,夹在 [SMIN, SMAX];XF = 可见光圈边内外各几成里渐变交接;K = 静止石头分几帧轮一遍;CULL = 峰值低于它的团不铺(色阶差不到一档),团的尾巴铺到 CULL / 10 为止;
+  SIG0:8,SMIN:0.6,SMAX:5,XF:0.1,K:16,CULL:0.001,PO_K:0.002,PO_N:8,
+  // 团的角宽(度,高斯 σ)= 内核的方位误差(ir2ThDeg,信噪比 1 处 3.96°,同交集楔形)/ √信噪比,夹在 [SMIN, SMAX](2026-10-05 用户:原 SIG0 8° / √信噪比、封顶 25°,圈边一艘冷船就抹 6.6°;封顶改 5°,更宽的只变暗);LAM_IN / LAM_OUT = 厚度的波长范围 µm(内沿 / 外沿);XF = 可见光圈边内外各几成里渐变交接;K = 静止石头分几帧轮一遍;CULL = 峰值低于它的团不铺(色阶差不到一档),团的尾巴铺到 CULL / 10 为止;
   // 石头的信噪比:我方船挪得不到距离的 PO_K 就照用上次的,至多连用 PO_N 轮
   NEB_K:0.02,NEB_L:2500000*CFG.scale,NEB_NB:180,NEB_DR:0.02,SUN_G:3,SUN_SIG:12,
   // 本底:星云发光 = NEB_K x 沿视线的光深(从圈边往外 NEB_L km,一圈 NEB_NB 个方向);环心挪动超过 NEB_DR x 圈半径才重算;恒星眩光峰值(色阶值)与角宽(度)
@@ -28,9 +28,14 @@ function ir2Wrap(a){a=(a+Math.PI)%(2*Math.PI);if(a<0)a+=2*Math.PI;return a-Math.
 function ir2Rho(T){return Math.max(0,Math.min(1,Math.log(T/IR2_C.T0)/Math.log(IR2_C.T1/IR2_C.T0)));} // 温度 → 厚度位置(0 = 内沿冷,1 = 外沿热)
 const IR2_PROF=new Map();
 function ir2Prof(rho){const q=Math.round(rho*200);let p=IR2_PROF.get(q);if(p)return p;p=new Float32Array(IR2_C.M);for(let m=0;m<IR2_C.M;m++){const x=(m+0.5)/IR2_C.M-q/200;p[m]=Math.exp(-x*x/(2*IR2_C.RSIG*IR2_C.RSIG));}IR2_PROF.set(q,p);return p;} // 厚度方向的谱:以 rho 为心的高斯,峰 = 1
+const IR2_PLK=new Map();
+function ir2Plk(T){const q=Math.max(1,Math.round(T/5));let p=IR2_PLK.get(q);if(p)return p;const M=IR2_C.M;p=new Float32Array(M);let mx=0; // 2026-10-05 厚度方向的谱:普朗克 λB_λ(每对数波长)在各厚度档的值,峰 = 1(取景范围里的最大值)
+  for(let m=0;m<M;m++){const lam=IR2_C.LAM_IN*Math.pow(IR2_C.LAM_OUT/IR2_C.LAM_IN,(m+0.5)/M),x=14388/(lam*q*5),f=x>60?0:Math.pow(x,4)/Math.expm1(x);p[m]=f;if(f>mx)mx=f;}
+  if(mx>0)for(let m=0;m<M;m++)p[m]/=mx;IR2_PLK.set(q,p);return p;}
+function ir2ThDeg(){return COV.TH0.opt*Math.sqrt(SENS.K_IR/SENS.A_IR)*180/Math.PI;} // 内核红外这条方位的角误差(1σ,信噪比 1 处,度)
 function ir2Ring(){const n=IR2_C.N*IR2_C.M,S=[];for(let k=0;k<IR2_C.K;k++)S.push(new Float32Array(IR2_C.N*2));return {V:new Float32Array(n),SS:new Float64Array(IR2_C.N*2),S:S,D:new Float32Array(n),BG:new Float32Array(n),BGN:new Float32Array(IR2_C.N),bk:null,c:[0,0],R0:0};}
   // 一个环:V = 本底 BG + 石头 SS(各槽之和;石头只有自身热 / 晒热两种温度,每个方位只记这两个数,合成时再按谱摊开)+ 这一帧的船 D
-function ir2At(V,a,rho){ // 环上方位 a(弧度)、厚度位置 rho 的值:方位 x 温度双线性
+function ir2At(V,a,rho){ // 环上方位 a(弧度)、厚度位置 rho 的值:方位 x 厚度(波长)双线性
   const N=IR2_C.N,M=IR2_C.M,f=a/(2*Math.PI)*N,k0=((Math.floor(f)%N)+N)%N,k1=(k0+1)%N,u=f-Math.floor(f),g=Math.max(0,Math.min(M-1,rho*M-0.5)),m0=Math.floor(g),m1=Math.min(M-1,m0+1),t=g-m0;
   return (V[k0*M+m0]*(1-t)+V[k0*M+m1]*t)*(1-u)+(V[k1*M+m0]*(1-t)+V[k1*M+m1]*t)*u;
 }
@@ -59,19 +64,19 @@ function ir2Comps(o,t){ // 船等(石头走 ir2SplatRock)的亮度拆成几份 [
   return out;
 }
 const IR2_PK={bi:0,pk:0,w:0}; // ir2Peak 的结果(免分配)
-function ir2Peak(BGN,b,snr,share){ // 一团的峰值 = 一道门 irvV(发现了的再比本底亮出同样一截),角宽 = SIG0 / √信噪比(抹宽的弱信号峰值按宽度压低);高斯权重写进 IR2.gw。太暗 = false
+function ir2Peak(BGN,b,snr,share){ // 一团的峰值 = 一道门 irvV(发现了的再比本底亮出同样一截),角宽 = 内核方位误差 / √信噪比、封顶 SMAX(抹宽的弱信号峰值按宽度压低);高斯权重写进 IR2.gw。太暗 = false
   if(!(snr>0)||!(share>0))return false;
-  const N=IR2_C.N,bi=((Math.round(b/(2*Math.PI)*N)%N)+N)%N,sig=Math.max(IR2_C.SMIN,Math.min(IR2_C.SMAX,IR2_C.SIG0/Math.sqrt(snr)));
-  const pk=share*irvV(snr)*(snr>=1?1+BGN[bi]/IRV_C.V0:1)*Math.min(1,Math.sqrt(IR2_C.SIG0/sig)),cl=IR2_C.CULL;if(pk<cl)return false;
+  const N=IR2_C.N,bi=((Math.round(b/(2*Math.PI)*N)%N)+N)%N,th=ir2ThDeg(),sig=Math.max(IR2_C.SMIN,Math.min(IR2_C.SMAX,th/Math.sqrt(snr)));
+  const pk=share*irvV(snr)*(snr>=1?1+BGN[bi]/IRV_C.V0:1)*Math.min(1,Math.sqrt(th/sig)),cl=IR2_C.CULL;if(pk<cl)return false;
   const sb=sig/360*N,e=-0.5/(sb*sb),w=Math.min(Math.ceil(3.5*sb),Math.ceil(sb*Math.sqrt(2*Math.log(pk/(0.1*cl))))); // 尾巴铺到 CULL / 10
   if(!IR2.gw||IR2.gw.length<2*w+1)IR2.gw=new Float64Array(2*(2*w+1));const G=IR2.gw;
   G[w]=1;let g=1,r=Math.exp(e);const c2=Math.exp(2*e);for(let k=1;k<=w;k++){g*=r;r*=c2;G[w+k]=g;G[w-k]=g;} // exp(e k²) 递推:相邻两格之比 exp(e(2k-1))
   IR2_PK.bi=bi;IR2_PK.pk=pk;IR2_PK.w=w;return true;
 }
-function ir2Splat(buf,BGN,b,snr,comps,share){ // 一个热源压到环上(船等):按亮度份额放在各自的温度上
+function ir2Splat(buf,BGN,b,snr,comps,share){ // 一个热源压到环上(船等):按亮度份额分给各份,各按自己温度的黑体谱铺开
   if(!ir2Peak(BGN,b,snr,share))return;
   const N=IR2_C.N,M=IR2_C.M,bi=IR2_PK.bi,pk=IR2_PK.pk,w=IR2_PK.w,G=IR2.gw,cl=IR2_C.CULL;let tot=0;for(const c of comps)tot+=c[0];if(!(tot>0))return;
-  for(const c of comps){if(!(c[0]>0))continue;const val=pk*c[0]/tot*c[2];if(val<0.1*cl)continue;const pr=ir2Prof(ir2Rho(c[1]));
+  for(const c of comps){if(!(c[0]>0))continue;const val=pk*c[0]/tot*c[2];if(val<0.1*cl)continue;const pr=ir2Plk(c[1]);
     for(let k=-w;k<=w;k++){let j=bi+k;if(j<0)j+=N;else if(j>=N)j-=N;const aw=val*G[k+w],b0=j*M;for(let m=0;m<M;m++)buf[b0+m]+=aw*pr[m];}}
 }
 function ir2SplatRock(buf2,BGN,b,snr,o,t,share){ // 石头压到环上:只记自身热(翻滚时慢慢明暗)与晒热两个数
@@ -85,7 +90,7 @@ function ir2Bg(r){ // 本底:星云沿视线的发光(从圈边往外)、恒星�
   const c=r.c,R0=r.R0,k=r.bk;
   if(k&&k[2]===ENV.rev&&Math.abs(k[3]-R0)<IR2_C.NEB_DR*R0&&Math.hypot(k[0]-c[0],k[1]-c[1])<IR2_C.NEB_DR*R0)return;
   r.bk=[c[0],c[1],ENV.rev,R0];
-  const N=IR2_C.N,M=IR2_C.M,NB=IR2_C.NEB_NB,L=IR2_C.NEB_L,BG=r.BG,BGN=r.BGN,neb=new Float32Array(NB),pN=ir2Prof(ir2Rho(IR2_C.T_NEB)),pS=ir2Prof(ir2Rho(IR2_C.T_SUN)),pB=ir2Prof(ir2Rho(IR2_C.T_BODY));
+  const N=IR2_C.N,M=IR2_C.M,NB=IR2_C.NEB_NB,L=IR2_C.NEB_L,BG=r.BG,BGN=r.BGN,neb=new Float32Array(NB),pN=ir2Plk(IR2_C.T_NEB),pS=ir2Plk(IR2_C.T_SUN),pB=ir2Plk(IR2_C.T_BODY);
   if(ENV.clouds.length)for(let i=0;i<NB;i++){const a=i/NB*2*Math.PI,ux=Math.cos(a),uy=Math.sin(a),t=envExt([c[0]+ux*R0,c[1]+uy*R0],[c[0]+ux*(R0+L),c[1]+uy*(R0+L)],32);neb[i]=-IR2_C.NEB_K*Math.log(Math.max(1e-9,t));}
   const u=(envHasLight()&&!(ENV.bodies.length&&envInShadow(c)))?envSunDirAt(c,[0,0]):null,sb=u?Math.atan2(u[1],u[0]):0,bd=[];
   for(const b of ENV.bodies){const D=Math.hypot(b.x-c[0],b.y-c[1]);if(D>b.r&&D>R0)bd.push([Math.atan2(b.y-c[1],b.x-c[0]),Math.asin(b.r/D),b.heat]);}
@@ -133,7 +138,7 @@ function ir2Update(){
     if(inst&&wi<1){let k=-1;for(let i=0;i<S.length;i++)if(sn[i]>0&&(k<0||sn[i]>sn[k]))k=i; // 仪表:看得最清楚的那艘的信噪比,方位从仪表那几艘的中心量
       if(k>=0){const b=Math.atan2(t.pos[1]-inst.c[1],t.pos[0]-inst.c[0]);if(rock)ir2SplatRock(inst.S[rc.slot],inst.BGN,b,sn[k],S[k],t,1-wi);else ir2Splat(inst.D,inst.BGN,b,sn[k],ir2Comps(S[k],t),1-wi);}}
   }
-  const N=IR2_C.N,M=IR2_C.M,pR=ir2Prof(ir2Rho(IR2_C.T_ROCK)),pO=ir2Prof(ir2Rho(IR2_C.T_SOLAR));
+  const N=IR2_C.N,M=IR2_C.M,pR=ir2Plk(IR2_C.T_ROCK),pO=ir2Plk(IR2_C.T_SOLAR);
   for(const r of all){const SS=r.SS,V=r.V,BG=r.BG,D=r.D;
     if(reset||fr%(K*64)===0){SS.fill(0);for(const B of r.S)for(let q=0;q<SS.length;q++)SS[q]+=B[q];} // 隔一阵整份重加一次,免得加减来回攒误差
     else{const B=r.S[slot];for(let q=0;q<SS.length;q++)SS[q]+=B[q];}
@@ -228,6 +233,7 @@ function ir2InBlit(P,R,win){ // 可见光圈里贴红外1 的画面:圈的并集
 }
 function ir2RingAt(V,c,x,y,rho){let a=Math.atan2(y-c[1],x-c[0]);if(a<0)a+=2*Math.PI;return ir2At(V,a,rho);} // 环心 c 的环上、屏幕点 (x, y) 那个方位
 function ir2Circles(g,P,R){for(let i=0;i<P.length;i++){g.moveTo(P[i][0]+R[i],P[i][1]);g.arc(P[i][0],P[i][1],R[i],0,2*Math.PI);}} // 同向的几个圆:nonzero 下就是并集
+function ir2InPic(p){if(typeof MAPV==='undefined'||MAPV.mode!=='ir')return false;for(const s of IR2.IS){const R=ir2RW(s),dx=p[0]-s.pos[0],dy=p[1]-s.pos[1];if(dx*dx+dy*dy<R*R)return true;}return false;} // 这一点在红外画面(可见光圈里的红外1)里:那里的碎石由红外画面画成发光的橙色,82-rocks 不再叠主视角的石头(2026-10-05 用户)
 function drawIr2View(){ // 每帧入口(84-scene,MAPV.mode === 'ir';画在地图 / 天体之后、接触之前)
   ir2Update();
   const IS=IR2.IS,RS=IR2.RS,PI=IS.map(s=>toScreen(s.pos[0],s.pos[1])),RII=IS.map(ir2RIn);
@@ -252,7 +258,7 @@ function ir2HudPlace(R){ // 仪表放哪(半径 R 连底板):左边(加舰条与
   for(const c of [L,Rt]){const y=Math.max(c.top+R,Math.min((c.top+c.bot)/2,c.bot-R));if(free(c.x,y))return c;}
   return L;
 }
-function drawIr2Hud(){ // 红外仪表(左边加舰条与特写窗之间,被页面面板挡住就放右边,见 ir2HudPlace;没选 = 全舰队,选几艘 = 那几艘):方位从中心量,径向 = 温度;中间画队形(缩小,只示意)
+function drawIr2Hud(){ // 红外仪表(左边加舰条与特写窗之间,被页面面板挡住就放右边,见 ir2HudPlace;没选 = 全舰队,选几艘 = 那几艘):方位从中心量,径向 = 波长(同环);中间画队形(缩小,只示意)
   const inst=IR2.inst,QS=IR2.QS;IR2.hudC=null;if(!inst||!QS||!QS.length)return;
   const r0=IR2_C.INST_R,B=IR2_C.INST_B,ro=r0+B,pad=IR2_C.INST_PAD,C=IR2_C.CELL,now=nowMs();
   if(now-IR2.hudT>500||!IR2.hud){IR2.hudT=now;IR2.hud=ir2HudPlace(ro+pad);}

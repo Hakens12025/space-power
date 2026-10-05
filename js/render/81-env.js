@@ -87,7 +87,7 @@ function mapCloudPaint(g,T){ // ENV2 云的海图画法(只在离屏瓦片上):�
   for(let k=0;k<T.piso.length;k++){g.strokeStyle=MAP_CLOUD.LINE[k];g.stroke(T.piso[k]);}
 }
 function mapCloudGain(mk){let u=Math.max(0,Math.min(1,Math.log2(mk/MAP_CLOUD.G0)/MAP_CLOUD.GL));u=u*u*(3-2*u);return 1+(MAP_CLOUD.GM-1)*u;} // ENV2 拉远的显示增益:只放大亮度不挪位置
-function mapVecKey(){return (mapSunOn()?'s':'')+'r'+ENV.rev;} // 矢量层的键:世界 rev +「太阳线」开关(云的字删掉之后,键里不再有字的位置)
+function mapVecKey(){return (mapSunOn()?'s':'')+'r'+ENV.rev+'a'+ART_PJ.ver;} // 矢量层的键:世界 rev +「太阳线」开关(云的字删掉之后,键里不再有字的位置)+ 行星贴图又生成好一张(render/81-art)
 function mapCloudLabels(){ // ENV2 comp 槽(任务 2 / 审查问题 6):每朵要带字的云在它"屏幕上可见部分里的一点"写一行"尘埃云"(位置由 mapLabPlan 定、钉在世界上;
   // 原来只写在云心、云心不在屏里就没有字,还会压在舰名上)。字是预渲染的小贴图(见 mapText)。返回写了几行
   if(!ENV.clouds.length)return 0;
@@ -248,16 +248,19 @@ function mapBodies(){ // ENV2 comp 槽(任务 4:画进当前视图 —— 合成
     if(p[0]+r<0||p[0]-r>VW||p[1]+r<0||p[1]-r>VH)continue;       // 视图包围盒剔除
     n++;let a0=0,hasL=false;
     if(lit&&envSunDirAt([b.x,b.y],u)){const q=mapTS(b.x+u[0]*1e6,b.y+u[1]*1e6);a0=Math.atan2(q[1]-p[1],q[0]-p[0]);hasL=true;} // 屏幕上的光源方向(不假定 y 轴朝哪,同日标)
-    if(r<3){g.fillStyle=MAP_BODY.LIT;g.beginPath();g.arc(p[0],p[1],3,0,6.283);g.fill();continue;}
+    const tg=ART_PL_NAME[b.type]||'',rg=hasL?artRingOf(b):null,ty=p[1]+Math.max(3,r)*(rg?rg.k+2.2*rg.w:1)+9; // 2026-10-04 类型 tag 写在盘下面(带环的写在环外)
+    if(r<3){artPlanet(g,b,p[0],p[1],r,hasL?a0:null);mapText(tg,MAP_BODY.TXT,p[0],ty);continue;}
     if(r>big){ // 拉得很近:不画巨型圆,填 盘∩视口 的有界多边形;不描边、不写字
       const P=mapDiskPoly(p[0],p[1],r);if(P){g.fillStyle=MAP_BODY.DARK;mapFillPoly(P);}
-      if(hasL){const P2=mapDiskPoly(p[0],p[1],r,Math.cos(a0),Math.sin(a0));if(P2){g.fillStyle=MAP_BODY.LIT;mapFillPoly(P2);}}
+      if(hasL){const P2=mapDiskPoly(p[0],p[1],r,Math.cos(a0),Math.sin(a0));if(P2){g.fillStyle=artCss((ART_PT[b.type]||ART_PT.gas).dot,0.92);mapFillPoly(P2);}} // 2026-10-04 亮面用这种行星的主色(贴图拉到这么大已经糊了)
       continue;
     }
-    g.fillStyle=MAP_BODY.DARK;g.beginPath();g.arc(p[0],p[1],r,0,6.283);g.fill();
-    if(hasL){g.fillStyle=MAP_BODY.LIT;g.beginPath();g.arc(p[0],p[1],r,a0-Math.PI/2,a0+Math.PI/2);g.closePath();g.fill();}
-    g.strokeStyle=MAP_BODY.EDGE;g.lineWidth=1;g.beginPath();g.arc(p[0],p[1],r,0,6.283);g.stroke();
-    if(r>24)mapText(b.name,MAP_BODY.TXT,p[0],p[1]); // ENV2 名字走预渲染的小贴图(审查第 3 条)
+    if(artPlanet(g,b,p[0],p[1],r,hasL?a0:null)){if(!hasL){g.strokeStyle=MAP_BODY.EDGE;g.lineWidth=1;g.beginPath();g.arc(p[0],p[1],r,0,6.283);g.stroke();}} // 2026-10-05 没有恒星:全黑 + 一圈淡描边(同双色圆),地图上还找得到
+    else{ // 2026-10-04 行星贴图(render/81-art);还没生成好就画原来的双色圆
+      g.fillStyle=MAP_BODY.DARK;g.beginPath();g.arc(p[0],p[1],r,0,6.283);g.fill();
+      if(hasL){g.fillStyle=MAP_BODY.LIT;g.beginPath();g.arc(p[0],p[1],r,a0-Math.PI/2,a0+Math.PI/2);g.closePath();g.fill();}
+      g.strokeStyle=MAP_BODY.EDGE;g.lineWidth=1;g.beginPath();g.arc(p[0],p[1],r,0,6.283);g.stroke();}
+    mapText(r>24?b.name+' · '+tg:tg,MAP_BODY.TXT,p[0],ty); // ENV2 名字走预渲染的小贴图(审查第 3 条);2026-10-04 名字从盘心挪到盘下、跟 tag 一行(盘上画了地表)
   }
   g.restore();return n;
 }

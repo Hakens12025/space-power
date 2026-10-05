@@ -100,44 +100,6 @@ function drawLocks(){ // 火力锁定:红色虚线
     ctx.restore();
   }
 }
-function drawHits(){ // 命中特效:命中点爆闪+十字,随时间淡出
-  for(const h of hitFX){
-    if(!adminMode&&!h.vis[VIEW])continue; // 2026-09-28 我方看不见的命中 / 击沉不画(52 的 spawnHit 出的时候判)
-    const p=toScreen(h.pos[0],h.pos[1]);
-    const a=Math.max(0,h.t/1.2);
-    const prog=1-h.t/1.2;
-    ctx.save();
-    ctx.globalAlpha=a*0.95;
-    if(h.big){ // v127 击毁爆炸升级:双层冲击波环+碎片粒子+中心辉光闪
-      ctx.strokeStyle=h.type==='mac'?'#ffb84d':'#ff6b6b';
-      ctx.lineWidth=3;
-      ctx.beginPath();ctx.arc(p[0],p[1],Math.min(46,prog*90+6),0,6.283);ctx.stroke();
-      ctx.strokeStyle='rgba(255,180,90,.5)';
-      ctx.lineWidth=1.4;
-      ctx.beginPath();ctx.arc(p[0],p[1],Math.min(30,prog*60+4),0,6.283);ctx.stroke();
-      // 碎片粒子
-      if(!h.debris)h.debris=Array.from({length:12+Math.floor(Math.random()*5)},()=>[Math.random()*6.28,Math.random()*30+10]);
-      for(const d of h.debris){
-        const dx=Math.cos(d[0])*d[1]*prog, dy=Math.sin(d[0])*d[1]*prog;
-        ctx.strokeStyle='rgba(255,190,110,.7)';ctx.lineWidth=1.2;
-        ctx.beginPath();ctx.moveTo(p[0]+dx*0.6,p[1]+dy*0.6);ctx.lineTo(p[0]+dx,p[1]+dy);ctx.stroke();
-      }
-      // 中心辉光闪
-      ctx.fillStyle=`rgba(255,220,150,${a*0.8})`;
-      ctx.beginPath();ctx.arc(p[0],p[1],Math.max(1,10*(1-prog)),0,6.283);ctx.fill();
-    }else{ // 普通命中
-      ctx.strokeStyle=h.type==='mac'?'#ffb84d':'#ff6b6b';
-      ctx.lineWidth=2.2;
-      ctx.beginPath();ctx.arc(p[0],p[1],Math.min(20,(1.2-h.t)*46+6),0,6.283);ctx.stroke();
-      ctx.strokeStyle='#ffd166';ctx.lineWidth=1.6;
-      ctx.beginPath();
-      ctx.moveTo(p[0]-9,p[1]);ctx.lineTo(p[0]+9,p[1]);
-      ctx.moveTo(p[0],p[1]-9);ctx.lineTo(p[0],p[1]+9);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-}
 /* 2026-09-28 近防炮特效(用户在 demos/weapons/近防炮特效.html 调定):导弹进了某艘船的近防内圈,这艘船朝它打几串曳光,目标没了再打 HOLD 秒;
    打掉的几颗在命中点炸小火花(weapons/56 结算时 spawnCiwsFX 出)。全按墙钟走,几倍速都看得见;暂停时不出新曳光 */
 const CIWS_FX={HOLD:0.1,N:2,FIRE:10,SPREAD:2/57.3,OFF:0.012,LEN:0.1,REACH:1.25,LIFE:0.45,LIFE_J:0.2,PUFF_T:0.7,PUFF_D:0.25,PUFF_R0:0.015,PUFF_R1:0.09,PUFF_REF:6000};
@@ -245,50 +207,37 @@ function drawChain(p0){ // 2026-10-03:只画在网上的(断链的成员我方�
     clipLine(a2[0],a2[1],b2[0],b2[1]);}
   ctx.restore();
 }
+/* 2026-10-05 代表显示(用户:拉远后船显示箭头,切换点就用船换箭头的切换点;美术物品要比船小、要分得出敌我):
+   拉远到 shipMarkMode 起弹类换简易记号 —— 改美术前那套的形状(点 / 点群 / 紫点),都比船的记号(箭头 7 px、菱形 8 px)小,整组外框也小,用阵营色;
+   雷原来是菱形,会和敌方接触的菱形混,改空心方块;主炮弹原来是白方块,改沿飞行方向的短划。 */
+const PROJ_MK={blue:'#5aa7ff',red:'#ff6b6b',iblue:'#a9d2ff',ired:'#ffb3b3'}; // i* = 拦截弹:阵营色调亮
+function projMark(p,x,y,rot,side,cnt){
+  const col=PROJ_MK[side];ctx.fillStyle=col;ctx.strokeStyle=col;
+  if(p.type==='decoy'){ctx.lineWidth=1;ctx.beginPath();ctx.arc(x,y,2.4,0,6.283);ctx.stroke();ctx.fillStyle='rgba(200,120,255,.95)';ctx.beginPath();ctx.arc(x,y,1.5,0,6.283);ctx.fill();return;} // 紫点 + 阵营色圈,外径约 5.8 px
+  if(p.type==='mac'){const c=Math.cos(rot)*2.5,s=Math.sin(rot)*2.5;ctx.lineWidth=1.6;ctx.beginPath();ctx.moveTo(x-c,y-s);ctx.lineTo(x+c,y+s);ctx.stroke();return;} // 5 px 短划
+  if(p.mine){ctx.lineWidth=1.2;ctx.strokeRect(x-2.3,y-2.3,4.6,4.6);return;} // 外框约 5.8 px
+  if(p.type==='interceptor')ctx.fillStyle=PROJ_MK['i'+side];
+  const n=Math.min(cnt,3);
+  if(n===1){ctx.beginPath();ctx.arc(x,y,1.6,0,6.283);ctx.fill();return;}
+  for(let i=0;i<n;i++){const a=rot+i/n*6.283;ctx.fillRect(x+Math.cos(a)*1.9-0.9,y+Math.sin(a)*1.9-0.9,1.8,1.8);} // 2~3 点,第一颗朝飞行方向;外框约 5.6 px
+}
 function drawProjectiles(){ // 弹丸/导弹
+  const mk=shipMarkMode();
   for(const p of projectiles){
     if(!projSeen(p))continue; // 感知层 v4:普通模式敌方弹药只有被探测到才显示 v119:读缓存 TK4a:缓存在航迹表的目击集合里
     const s=toScreen(p.pos[0],p.pos[1]);
-    if(p.type==='decoy'){ // 诱饵弹:紫色点(模拟舰船信号骗拦截)
-      ctx.fillStyle='rgba(200,120,255,.9)';
-      ctx.beginPath();ctx.arc(s[0],s[1],3,0,6.283);ctx.fill();
-      continue;
-    }
+    const sd=(p.group||0)*1.7,side=p.shooter&&p.shooter.side==='red'?'red':'blue',rot=Math.atan2(p.vel[1],p.vel[0]); // 2026-10-04 弹的画法换成 render/81-art(朝向 = 速度方向)
+    if(s[0]<-60||s[0]>W+60||s[1]<-60||s[1]>H+60){if(p!==selMissile)continue;}
+    if(p.type==='decoy'){if(mk)projMark(p,s[0],s[1],rot,side,1);else artDecoy(ctx,s[0],s[1],rot,sd);continue;} // 诱饵弹:脉动的假热源(模拟舰船信号骗拦截)
     if(p.type==='mac'){
-      ctx.fillStyle='#ffffff';ctx.fillRect(s[0]-2,s[1]-2,4,4);
+      if(mk)projMark(p,s[0],s[1],rot,side,1);else artShell(ctx,s[0],s[1],rot,side);
     }else{ // 导弹组/拦截导弹组(显示剩余数量)
       const vn=V.len(p.vel);
       const redSide=p.shooter&&p.shooter.side==='red'; // v136:敌方导弹红色标志;KIMI146:提升到外层块(原在内层else,箭头区引用抛 redSide is not defined = 导弹一发射UI全崩)
       const cnt=Math.min(p.count||16,16);
-      const baseCol=redSide?'#ff6b6b':(p.type==='interceptor'?'#9ff5ea':'#ffd166');
-      if(p.mine){ // 伏击雷:v133显眼——亮橙红大菱形+呼吸闪烁+中心亮点
-        const pulse=1+0.15*Math.sin((p.age||0)*3);
-        ctx.save();ctx.translate(s[0],s[1]);
-        ctx.fillStyle='rgba(255,120,70,.9)';
-        ctx.beginPath();ctx.moveTo(0,-6*pulse);ctx.lineTo(6*pulse,0);ctx.lineTo(0,6*pulse);ctx.lineTo(-6*pulse,0);ctx.closePath();ctx.fill();
-        ctx.strokeStyle='rgba(255,195,120,.95)';ctx.lineWidth=1.2;
-        ctx.beginPath();ctx.moveTo(0,-6*pulse);ctx.lineTo(6*pulse,0);ctx.lineTo(0,6*pulse);ctx.lineTo(-6*pulse,0);ctx.closePath();ctx.stroke();
-        ctx.fillStyle='rgba(255,238,205,.95)';
-        ctx.beginPath();ctx.arc(0,0,2,0,6.283);ctx.fill();
-        ctx.restore();
-      }else{
-        if(cnt>1){ // v140:组内每颗导弹散布显示;v142:fillRect+点数上限8颗(减渲染开销防卡)
-          const showCnt=Math.min(cnt,8);
-          const rr=4.5;
-          for(let i=0;i<showCnt;i++){
-            const a=(i/showCnt)*6.283+((p.group||0)%7)*0.45; // 环形散布(组编号错相位避免重叠;拦截/诱饵弹无group容错)
-            ctx.fillStyle=baseCol;
-            ctx.fillRect(s[0]+Math.cos(a)*rr-1.2,s[1]+Math.sin(a)*rr-1.2,2.4,2.4); // fillRect比arc快
-          }
-          ctx.strokeStyle='rgba(255,255,255,.55)';ctx.lineWidth=0.8;
-          ctx.beginPath();ctx.arc(s[0],s[1],5,0,6.283);ctx.stroke(); // 组轮廓圈
-        }else{
-          ctx.strokeStyle='rgba(255,255,255,.8)';ctx.lineWidth=1;
-          ctx.beginPath();ctx.arc(s[0],s[1],p.count?6.5:3.5,0,6.283);ctx.stroke();
-          ctx.fillStyle=baseCol;
-          ctx.beginPath();ctx.arc(s[0],s[1],p.count?5:2.5,0,6.283);ctx.fill();
-        }
-      }
+      if(mk)projMark(p,s[0],s[1],rot,side,cnt);
+      else if(p.mine)artMine(ctx,s[0],s[1],(sd%6)*0.17,side); // 伏击雷:六角壳体 + 天线 + 闪烁指示灯
+      else artMsl(ctx,s[0],s[1],rot,{kind:p.type==='interceptor'?'inter':'msl',side,count:cnt,burn:p.type==='interceptor'||(p.lit===undefined?p.fuel>0:p.lit),sd}); // 一组画 1 / 3 / 5 枚;这一拍烧油才有尾焰(同 sensors/22 projSig)
       // 选中高亮 + v129:目标虚线/目的地/触发圈/火控母舰连线(点选导弹或网,网内所有组一起)
       if(p===selMissile){
         ctx.strokeStyle='#4fe0ff';ctx.lineWidth=2;

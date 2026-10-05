@@ -185,7 +185,6 @@ function drawAggs() {
     const sel = a.ships.some(m => selected.indexOf(m.id) >= 0);
     const al = (a.alpha === undefined) ? 1 : a.alpha;   // SN8 框随成员的收拢度淡入
     if (al <= 0.01) continue;
-    if (a.side !== 'blue' && typeof MAPV !== 'undefined' && MAPV.mode !== 'map' && !adminMode) continue; // 对局里的红外 / 雷达画面:敌方只以热 / 回波出现
     if (a.ax !== a.x || a.ay !== a.y) {   // 被挪开过:留一根引线指回原位
       ctx.save(); ctx.strokeStyle = col; ctx.globalAlpha = .5 * al; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(a.ax, a.ay); ctx.lineTo(a.x, a.y); ctx.stroke();
