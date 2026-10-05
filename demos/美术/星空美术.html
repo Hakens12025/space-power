@@ -20,7 +20,7 @@ button.on{border-color:#5aa7ff;color:#fff;background:#12233a}
 <canvas id="cv"></canvas>
 <div id="top"><h1>星空美术</h1>
   <span class="g">跳层 <button data-t="1">战术层</button><button data-t="2">舰队层</button><button data-t="3">战区层</button></span>
-  <span class="g"><button id="bSun">太阳线</button><button id="bNew" class="on">新地形(未进引擎)</button><button id="bInfo" class="on">说明</button></span>
+  <span class="g"><button id="bSun">太阳线</button><button id="bNew" class="on">新地形</button><button id="bInfo" class="on">说明</button></span>
   <span id="read"></span></div>
 <div id="list"></div>
 <div id="info">
@@ -28,7 +28,7 @@ button.on{border-color:#5aa7ff;color:#fff;background:#12233a}
 滚轮缩放、拖动平移、1 / 2 / 3 跳层。拉远过舰船换箭头那一点(比例尺约 4.1 万 km)碎石换成小方块 —— 同引擎。<br>
 <b>世界</b>:按引擎对局的写法摆一张展示图(游玩区 306 万 x 172.1 万):七种行星各一颗(气态、冰巨星带碎石环)、一朵尘埃云、四片小行星 + 20 颗零散、四种碎石带(弧带 / 流带 / 分叉 / 喷流)、一颗恒星在 700 万 km 外。
 碎石带本身引擎地图上不画,只看得到撒出来的石头;这里也一样。碎石全部按「已认出」画。<br>
-<b>未进引擎</b>(左栏橙色):彗星 / 卫星 / 电离云 / 辐射带 / 据点,机制与数照 demos/地图组/新地形.html,画法是 新地形美术.html 里选定的方案:彗星 B 海图尾、卫星 C 专用地表、电离云 A 海图(叠一点柔化噪点)、辐射带 B 辉光环、据点 A 环形站(战术落点约 20 px,比航母大)。
+<b>新地形</b>(左栏橙色,10-05 已进引擎:world/16-terrain.js + render/81-feat.js):彗星 / 卫星 / 电离云 / 辐射带 / 据点,机制与数照 demos/地图组/新地形.html,画法是 新地形美术.html 里选定的方案:彗星 B 海图尾、卫星 C 专用地表、电离云 A 海图(叠一点柔化噪点)、辐射带 B 辉光环、据点 A 环形站(战术落点约 20 px,比航母大)。
 </div>
 <script src="星图展示.js"></script>
 <script>
@@ -53,7 +53,7 @@ const WORLD={stars:[{x:STAR[0],y:STAR[1]}],
 XT.setWorld(WORLD,{arena:{x0:-AW/2,y0:-AH/2,x1:AW/2,y1:AH/2},avoid:[]});
 XT.opt.rulerTop=44;
 
-/* ---------- 未进引擎的新地形:机制与数照 demos/地图组/新地形.html,位置挪进这张展示图;画法是 新地形美术.html 里用户选定的方案
+/* ---------- 新地形(10-05 已进引擎 world/16 + render/81-feat;这里是画法原稿):机制与数照 demos/地图组/新地形.html,位置挪进这张展示图;画法是 新地形美术.html 里用户选定的方案
    (10-05:彗星 B 海图尾 / 卫星 C 专用地表 + 走过的一段轨道 / 电离云 A 海图 + 一点柔化噪点 / 辐射带 B 辉光环 / 据点 A 环形站) ---------- */
 const TK=10;
 const N={COMET:{R:3000,TAIL:300000,W0:10000,W1:60000,V:60,MU:1.5e12,P0:[-1450000,-60000],CYC:6000,T0:1500,DUST:{A:400,K:0.7,N:150}},
@@ -251,13 +251,13 @@ const JUMP=[
   ['小行星区',()=>[[WORLD.asteroids[0].x,WORLD.asteroids[0].y],1]],
   ...['弧带','流带','分叉','喷流'].map(k=>['碎石带 · '+k,()=>{const c=rockCenter(k);return c?[c,2]:null;}]),
   ['游玩区全图',()=>[[0,0],3]],
-  ['未进引擎',null],
+  ['新地形',null],
   ['彗星',()=>{const n=cometAt(cometT());return [[n[0]-80000,n[1]],1];}],
   ['卫星',()=>[moonPos(NEW.moons[0]),1]],
   ['电离云',()=>[[NEW.ion.x,NEW.ion.y],2]],
   ['辐射带',()=>[[PL.gas[0],PL.gas[1]],2]],
   ['据点',()=>[[NEW.sta[0].x,NEW.sta[0].y],1]]];
-{const L=$('list');for(const [nm,f] of JUMP){if(!f){const d=document.createElement('div');d.className='h'+(nm==='未进引擎'?' n':'');d.textContent=nm;L.appendChild(d);continue;}
+{const L=$('list');for(const [nm,f] of JUMP){if(!f){const d=document.createElement('div');d.className='h'+(nm==='新地形'?' n':'');d.textContent=nm;L.appendChild(d);continue;}
   const b=document.createElement('button');b.textContent=nm;b.onclick=()=>{const r=f();if(r)XT.jumpTier(r[1],r[0]);};L.appendChild(b);}}
 
 /* ---------- 交互 ---------- */
