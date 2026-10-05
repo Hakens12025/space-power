@@ -242,7 +242,9 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
   if(fmBox&&fmBox.style.display!=='none')fmBox.style.display='none';
   if(typeof ptSet==='function')ptSet(null); // 2026-09-30 底栏肖像同样先收起,只有下面选中舰船那一支再亮出来(同一个 JS 任务里改,不闪)
   if(box.style.display!=='block')box.style.display='block';
-  if(selBuoy&&(selBuoy.dead||rocks.indexOf(selBuoy)<0))selBuoy=null; // 2026-09-29 浮标没了 / 换局:撤选中
+  if(selBuoy&&(selBuoy.dead||(selBuoy.kind==='station'?featStaObs('blue').indexOf(selBuoy)<0:rocks.indexOf(selBuoy)<0)))selBuoy=null; // 2026-09-29 浮标没了 / 换局:撤选中(10-05 据点易手同)
+  if(selBuoy&&selBuoy.kind==='station'){const o=selBuoy;title.textContent='据点';if(ciN)ciN.textContent=o.name;if(ciC)ciC.textContent='蓝方';if(ciSp)ciSp.innerHTML=''; // 2026-10-05 用户:据点能开雷达(巡洋舰同级),底栏雷达遥控
+    box.innerHTML=`<div class="row"><span class="k">雷达</span><span class="v">${o.on?'照射':'被动 · 只看和听'}</span></div>`;updateCmdBar([]);return;}
   if(selBuoy){ // 2026-09-29 用户:点浮标 → 底栏雷达开照射 / 打脉冲(飞行中也行);原来武器菜单「特殊」里的逐个开关已删
     const o=selBuoy;title.textContent='前出浮标';if(ciN)ciN.textContent=o.name;if(ciC)ciC.textContent=o.owner?o.owner.name:'—';if(ciSp)ciSp.innerHTML='';
     box.innerHTML=`<div class="row"><span class="k">状态</span><span class="v">${o.dest?'飞行中':'就位'}</span></div>`

@@ -13,9 +13,9 @@ const WPN={ // 定义(Definition):全局一份的不变模板,数值原样搬自
   msl_light:{kind:'msl',label:'导弹',missDmg:12,ammo:768,cells:4,mslPer:12,mslReload:PHYS.t(600)},  // DD 导弹:64组×12(2026-10-02 用户:数量 x4,192 → 768;KIMI154:每组16→12)
   msl_heavy:{kind:'msl',label:'导弹',missDmg:15,ammo:960,cells:6,mslPer:12,mslReload:PHYS.t(600)}, // CA 导弹:80组×12(2026-10-02 用户:数量 x4,240 → 960;KIMI154)
   // 2026-09-28 用户:拦截圈 x1.5(外圈 / 内圈:防空核心 1.25 万 / 4000 → 1.875 万 / 6000,自防御 7500 / 2500 → 1.125 万 / 3750;先试过 x2)
-  // 2026-10-05 用户:近防圈 x0.7(外圈 / 内圈:防空核心 1.875 万 / 6000 → 1.3125 万 / 4200,自防御 1.125 万 / 3750 → 7875 / 2625);阵型从近防推,跟着缩(formation/39 fmBandRadii)
-  ciws_core:{kind:'ciws',label:'拦截',outer:13125*CFG.scale,outerIntercept:0.40,inner:4200*CFG.scale,innerIntercept:0.85,chaffRate:0.25,inter:384}, // DD 防空核心,干扰中。2026-09-26 跟阵型走(旧值 x0.5,阵型倍数 0.5):原 outer 25000 / inner 8000
-  ciws_self:{kind:'ciws',label:'拦截',outer:7875*CFG.scale,outerIntercept:0.25,inner:2625*CFG.scale,innerIntercept:0.40,chaffRate:0.15,inter:320}, // CA 自防御,干扰弱(大目标)。2026-09-26 跟阵型走(旧值 x0.5):原 outer 15000 / inner 5000
+  // 2026-10-05 用户:近防圈 x1.2(防空核心 1.3125 万 / 4200 → 1.575 万 / 5040,自防御 7875 / 2625 → 9450 / 3150;都再乘 CFG.scale);阵型从近防推,跟着大 20%。同日更早:近防圈 x0.7(外圈 / 内圈:防空核心 1.875 万 / 6000 → 1.3125 万 / 4200,自防御 1.125 万 / 3750 → 7875 / 2625);阵型从近防推,跟着缩(formation/39 fmBandRadii)
+  ciws_core:{kind:'ciws',label:'拦截',outer:15750*CFG.scale,outerIntercept:0.40,inner:5040*CFG.scale,innerIntercept:0.85,chaffRate:0.25,inter:384}, // DD 防空核心,干扰中。2026-09-26 跟阵型走(旧值 x0.5,阵型倍数 0.5):原 outer 25000 / inner 8000
+  ciws_self:{kind:'ciws',label:'拦截',outer:9450*CFG.scale,outerIntercept:0.25,inner:3150*CFG.scale,innerIntercept:0.40,chaffRate:0.15,inter:320}, // CA 自防御,干扰弱(大目标)。2026-09-26 跟阵型走(旧值 x0.5):原 outer 15000 / inner 5000
 };
 /* SN1 数据链表(Link):舰种 → 同时引导超自导范围的导弹数。原先寄住在 sensors/20-signature 的那张按舰种感知表里,SN1 迁来 ——
    guideChan 不是感知量,它只是搭那张表的车被 shipStats 烘焙:唯一的逻辑消费者是 weapons/54-missiles 的通道分配,

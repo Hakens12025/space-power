@@ -5,10 +5,10 @@
 - `91-init.js` `initFleet`(跨系统的全局 reset)/ `initEnemy`;按场景的 `world` 调 `envReset` 并撒石头;对局另撒民船(world/14 的 `objSpawnCivs`),对局的石头是 4 片小行星带 + 20 颗零散(97 的 `matchGenWorld`);按场景定 GM
 - `95-range.js` 靶场:靶伤害统计、靶 AI、参数面板(localStorage)、世界副本 `rangeWorld`
 - `96-spawn.js` 添加舰船小菜单 `#spawnBar`
-- `97-match.js` 对局:`MATCH`、红方出生 `matchPlaceRed`、`matchTick`、结果卡 `#matchEnd`;顶栏「全知」钮 `gmSync`;天体类型另一条种子流(world/12 `envBodyType` 权重:气态 / 冰巨星多、类地最少),气态半径 x1.3
+- `97-match.js` 对局:`MATCH`、红方出生 `matchPlaceRed`、`matchTick`、结果卡 `#matchEnd`;顶栏「全知」钮 `gmSync`;天体类型另一条种子流,按离恒星的区挑(world/12 `envBodyZone`:热区 / 宜居带 700~800 万 / 温区 / 雪线 850 万外;类地只在宜居带,没有恒星不出;都不画),半径按类型偏置 `ENV_BODY_K`(气态 1.3 … 熔岩 0.5)
 
 ## 规矩
-- 和感知 / 交战 / 游玩区挂钩的长度一律写成 `基准 * CFG.scale`(core/00 的统一尺度倍数,现为 1);速度、时间、角度、像素、亮度不乘。改倍数要看的漂移比值写在 `CFG.scale` 的注释里。
+- 和感知 / 交战 / 游玩区挂钩的长度一律写成 `基准 * CFG.scale`(core/00 的统一尺度倍数,现为 0.6);速度、时间、角度、像素、亮度不乘;舰船 / 导弹 / 拦截弹 / 主炮弹 / 民船 / 诱饵 / 浮标的速度(与加速度)另乘统一速度倍数 `CFG.vscale`(现为 0.7;舰船乘 `CFG.vscale / 0.7`,写的是 0.7 时的实际值)。改倍数要看的漂移比值写在 `CFG.scale` 的注释里。
 - 靶场是测试沙盘:带全套天体(太阳、行星、尘埃云、小行星),开局全知(`adminMode=true`);顶栏「全知」钮 / F8 切到"只看我方感知"。
 - 靶场顶栏「靶场参数」钮开关参数面板 `#trPanel`(95;进靶场自动弹一次)。
 - 靶场顶栏「蓝方视角 / 红方视角」(`VIEW`,97 的 `gmSync` 管显隐、出靶场复位):只换画面从谁的感知看,选中与下令仍是蓝方。

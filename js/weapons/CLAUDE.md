@@ -3,12 +3,12 @@
 ## 文件
 - `50-missile-spec.js` 导弹规格;`51-defs.js` 武器定义表 `WPN`、配装 `CLS_LOADOUT`、`resolveLoadout(cls,tier)`、命中率函数
 - `51-ciws.js` 近防谓词 / 过载 / 扇面;`52-fire.js` 主炮 / 诱饵 / 拦截弹 / 齐射发射链、开火暴露置位、命中闪光 `spawnHit` / 近防火花 `spawnCiwsFX`(看得见的口径 `fxVis`)
-- `53-nets.js` 数据链网分配;`54-missiles.js` 导弹引导(`MSL_CFG` / `missSee`);主炮前出奖励 `MAC_FWD` / `macFwdK`(52;对方在我方可见光圈里 / 被我方雷达照到,命中曲线的距离按 1.6 / 1.3 缩,`macHitProb` / `macShotSigma` 带目标就算);盲射导引头 `MSL_BLIND`(54 `missSeeT` 的 blind:探测圈 2 万 x 目标体型、看热 x2/3,只给 `mslSeek`);`56-step-projectiles.js` 天体 / 碎石挡弹 `projBlock`(炮弹 / 导弹 / 拦截弹;碎石被打碎、导弹组少一颗);导弹速度曲线乘 `MSL_VK`(1/2,加速度 `MSL_A` 再 x2:2026-10-03 用户,燃料秒数不变 ⇒ 同样的油换两倍速度变化)、拦截弹乘 `INT_VK`(1/3),都在 52;`55-damage.js` `applyDamage`(碎石被打中就碎;先扣护盾,打破后多出的进船体;返回进船体的伤害,调用方据此出不出船体命中闪光)、护盾回充 / 重启 `stepShields`(`SHIELD`:空到满 60、破后 10 游戏秒重启;盾值在 ships/11 `CLS_STRUCT.shield`)
+- `53-nets.js` 数据链网分配;`54-missiles.js` 导弹引导(`MSL_CFG` / `missSee`);主炮前出奖励 `MAC_FWD` / `macFwdK`(52;对方在我方可见光圈里 / 被我方雷达照到,命中曲线的距离按 1.6 / 1.3 缩,`macHitProb` / `macShotSigma` 带目标就算);盲射导引头 `MSL_BLIND`(54 `missSeeT` 的 blind:探测圈 2 万 x 目标体型、看热 x2/3,只给 `mslSeek`);`56-step-projectiles.js` 天体 / 碎石挡弹 `projBlock`(炮弹 / 导弹 / 拦截弹;碎石被打碎、导弹组少一颗);导弹速度曲线乘 `MSL_VK`(1/2 x `CFG.vscale`,加速度 `MSL_A` 再 x2:2026-10-03 用户,燃料秒数不变 ⇒ 同样的油换两倍速度变化)、拦截弹乘 `INT_VK`(1/2 x `CFG.vscale`),都在 52;`55-damage.js` `applyDamage`(碎石被打中就碎;先扣护盾,打破后多出的进船体;返回进船体的伤害,调用方据此出不出船体命中闪光)、护盾回充 / 重启 `stepShields`(`SHIELD`:空到满 60、破后 10 游戏秒重启;盾值在 ships/11 `CLS_STRUCT.shield`)
 - `56-step-projectiles.js` 弹丸推进与引导;`57-step-weapons.js` 冷却 / 装填 / 自动索敌与自动齐射;`58-firecontrol.js` 火控序列引擎侧(`fcGate` / `fcSolve` / `fcRuns`)
 
 ## 射程与瞄准
 - 设计数据按现实单位写,经 core/00 的 `PHYS` 换成引擎单位(速度 x `TIME_K`、加速度 x `TIME_K`²、时长 / `TIME_K`);引擎内部按"游戏秒"跑(1 游戏秒 = `TIME_K` 物理秒),内部的导引 / 控制常数仍是游戏单位。
-- 和感知 / 交战 / 游玩区挂钩的长度一律写成 `基准 * CFG.scale`(core/00 的统一尺度倍数,现为 1);速度、时间、角度、像素、亮度不乘。改倍数要看的漂移比值写在 `CFG.scale` 的注释里。
+- 和感知 / 交战 / 游玩区挂钩的长度一律写成 `基准 * CFG.scale`(core/00 的统一尺度倍数,现为 0.6);速度、时间、角度、像素、亮度不乘;舰船 / 导弹 / 拦截弹 / 主炮弹 / 民船 / 诱饵 / 浮标的速度(与加速度)另乘统一速度倍数 `CFG.vscale`(现为 0.7;舰船乘 `CFG.vscale / 0.7`,写的是 0.7 时的实际值)。改倍数要看的漂移比值写在 `CFG.scale` 的注释里。
 - 没有射程门。命中率是 S 形 P(d) = 1/(1+(d/d50)^`MAC_K`),d50 由 `macSigma` 反算(11.3 万);每发的角散布 `macShotSigma(s,d)` 按 P(d) 反推,封顶 `MAC_SIG_CAP` 1.944°(约 25.5 万起),到顶以后命中率按固定角散布算(20 / 30 / 40 万 9.2% / 3.1% / 2.4%);`macHitProb` 两段都包含,实打与曲线一致。距离一律调 `macHitProb` / `macRangeAt` / `macEffRange`(= 50% 把握距离),不写公里数。
 - 导弹射程 = 设计包线 `LAD.msl`(40 万 x scale,2026-09-28),`mslReach(s)` 直接读它。
 - 导弹组网(2026-09-30):弹与弹 `MSL_LINK.MM`(6.1425 万,不跟可见光圈走)、弹与舰 / 前出浮标 `MSL_LINK.MS`(6.3 万)以内连边,能经弹弹链连到任何一艘我方船的组 `p.online`(54 `mslNetStep`,每个感知节拍重算,出膛算在网上)。在网上 = 回传自身状态(我方画真位置,render/83 `projSeen`)+ 收数据链引导(`guideSide` 只给在网上的);断链的只剩导引头与脱锁飞法。

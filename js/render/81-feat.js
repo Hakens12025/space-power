@@ -181,8 +181,9 @@ function featStaMark(x,y,own){ // 代表显示:侧视雷达碟小图标(约 11 x
   ctx.restore();}
 const FEAT_BEACON={};
 function featBeacon(own){return FEAT_BEACON[own]||(FEAT_BEACON[own]=artRad([[0,artCss(ART_SIDE[own],0)],[0.6,artCss(ART_SIDE[own],0.35)],[0.8,artCss(ART_SIDE[own],0.12)],[1,artCss(ART_SIDE[own],0)]],96));} // 归属灯一闪:整站外发一层阵营色光(效果)
+function featStaPx(){return shipMarkMode()?12:FEAT_R.STA_PX/(HULL_ZOOM.LAND*SHIP_K)*shipZoomF();} // 据点图标此刻的跨度 px(换记号后约 12);70-input 点选同一个数
 function featStations(){if(!ENV.stations.length)return;
-  const z=cam.zoom,mk=shipMarkMode(),Dp=FEAT_R.STA_PX/(HULL_ZOOM.LAND*SHIP_K)*shipZoomF(),C=FEAT_CFG.STA,on=(nowMs()/1000*0.8)%1<0.3,P=FEAT_CP2;ctx.save();
+  const z=cam.zoom,mk=shipMarkMode(),Dp=featStaPx(),C=FEAT_CFG.STA,on=(nowMs()/1000*0.8)%1<0.3,P=FEAT_CP2;ctx.save();
   for(const T of featStaState()){const p=toScreen(T.x,T.y),cr=C.CAP_R*z,own=T.holder||'neutral',vr=T.obs.visR*z; // 2026-10-05 第 4 步:归属 / 占领进度读 world/16
     if(T.holder===VIEW&&vr>2){ctx.strokeStyle=artCss(ART_SIDE[own],0.2);ctx.lineWidth=1;featCircle(p[0],p[1],vr);} // 自己拿着的据点:它的可见光圈
     if(p[0]+cr<-10||p[0]-cr>W+10||p[1]+cr<-10||p[1]-cr>H+10)continue;
@@ -190,6 +191,7 @@ function featStations(){if(!ENV.stations.length)return;
     const prog=T.cap&&T.prog>0&&(adminMode||T.cap===VIEW); // 占领进度只给正在占的那一方看(全知除外):对方的进度会把看不见的敌舰交代出来
     if(prog){const a1=T.prog/C.CAP_T*2*Math.PI,n=Math.max(8,Math.ceil(a1*cr/6));P.length=0;for(let k=0;k<=n;k++){const a=-Math.PI/2+a1*k/n;P.push(p[0]+Math.cos(a)*cr,p[1]+Math.sin(a)*cr);}
       ctx.strokeStyle=artCss(ART_SIDE[T.cap],0.9);ctx.lineWidth=2.5;featSegs(P,false);} // 占领进度:占领方的颜色,从正上方顺时针
+    if(typeof selBuoy!=='undefined'&&selBuoy===T.obs){ctx.strokeStyle='#ffe066';ctx.lineWidth=1.6;ctx.beginPath();ctx.arc(p[0],p[1],Math.max(12,Dp*0.65),0,6.283);ctx.stroke();} // 2026-10-05 选中(同浮标)
     if(mk)featStaMark(p[0],p[1],own);
     else{const c=featStaSpr(own,Dp),w=c.width/artDpr()*Dp/c.Dq;ctx.drawImage(c,p[0]-w/2,p[1]-w/2,w,w);if(own!=='neutral'&&on)artBlit(ctx,featBeacon(own),p[0],p[1],Dp*0.75,0.35,true);}
     const lab=(own==='neutral'?'中立':(own==='blue'?'蓝方':'红方'))+(prog?' · '+(T.cap==='blue'?'蓝方':'红方')+'占领中 '+Math.floor(T.prog)+'/'+C.CAP_T+' s':'');

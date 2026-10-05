@@ -33,7 +33,7 @@ function irvUnc(t){ // 不确定半径(km):离最近那艘我方船 d,按目标�
   let d=Infinity,o=null;for(const s of ships)if(s.side===VIEW&&!s.dead){const ex=t.pos[0]-s.pos[0],ey=t.pos[1]-s.pos[1],e=Math.sqrt(ex*ex+ey*ey);if(e<d){d=e;o=s;}} // sqrt:Math.hypot 会分配
   return o?d*Math.sqrt(IRV_C.PH_K*covTheta('opt',o,t,d,sReq(t,'size','ship')*(t.heatK===undefined?1:t.heatK))):0;
 }
-function irvObs(){const a=[];for(const s of ships)if(s.side===VIEW&&!s.dead)a.push(s);return a;} // 本视角的船(VIEW)
+function irvObs(){const a=[];for(const s of ships)if(s.side===VIEW&&!s.dead)a.push(s);for(const o of featStaObs(VIEW))a.push(o);return a;} // 本视角的船(VIEW)+ 拿着的据点(2026-10-05 用户:据点也显示红外,圈里贴红外画面)
 const IRV_SRC={a:[],f:-1};
 function irvSrc(){ // 热源:非本方的船、石头(2026-09-27 自己放的浮标不算)。2026-09-30 性能:同一帧里红外1 / 红外2 共用一份,数组原地重填(原来每次新建一个上千项的数组,红外画面每帧分配多、垃圾回收频繁、卡顿)
   const f=typeof frameN!=='undefined'?frameN:-1;if(f>=0&&f===IRV_SRC.f)return IRV_SRC.a;

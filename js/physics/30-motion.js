@@ -148,7 +148,7 @@ function routeCap(s,dist){ // 反向传播:从视界处倒推回当前段,返回
   }
   return Math.sqrt(U*U+2*s.thrust*GUIDE_EFF*Math.max(0,dist-routeMargin())); // 当前段:折扣随 dist->0 归零 // 再把"从这里减到 U"的接近段并进去
 }
-function cruiseOf(s){return s.speedCmd===-1?SPD_UNCAP:(s.speedCmd===0?0:(s.speedCmd>0?s.speedCmd:800));} // v119:速度令0=定速停→返回0让内核刹停(原回退800致"按停反而加速")
+function cruiseOf(s){return s.speedCmd===-1?SPD_UNCAP:(s.speedCmd===0?0:(s.speedCmd>0?s.speedCmd:speedGearsOf(s)[3]));} // 2026-10-05 兜底改本舰高速档(原写死 800) // v119:速度令0=定速停→返回0让内核刹停(原回退800致"按停反而加速")
 function applyHeading(s,dir,dt){ // RF10 朝向的唯一出口(改造前五个地方各自 slerp 到 s.facing):运动学插值,与推力无关 —— 转向即反作用轮
   if(!dir)return;
   const ang=V.angle(s.facing,dir);

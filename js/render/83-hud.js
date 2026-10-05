@@ -443,7 +443,7 @@ function drawHoverRings(){
       ring(p,actRangeOf(s),'雷达 '+Math.round(actRangeOf(s)/1000)+'k(对标准目标)'+(s.emitMode==='silent'?' · 现在静默':''));
   }
   {const bu=hoverRing==='emit'&&typeof selBuoyOk==='function'?selBuoyOk():null; // 2026-09-29 用户:选中浮标时也看得到它的雷达范围
-    if(bu){const p=toScreen(bu.pos[0],bu.pos[1]),r=actRangeOf(bu);ring(p,r,'浮标雷达 '+Math.round(r/1000)+'k(对标准目标)'+(bu.on?'':' · 现在被动'));}}
+    if(bu){const p=toScreen(bu.pos[0],bu.pos[1]),r=actRangeOf(bu);ring(p,r,(bu.kind==='station'?'据点雷达 ':'浮标雷达 ')+Math.round(r/1000)+'k(对标准目标)'+(bu.on?'':' · 现在被动'));}}
 }
 /* 2026-09-27 雷达异常 / 红外异常(用户:「当出现了异常的时候,直接在主视角上面标注」;选「只报没定位的」「标在异常处、淡出」)。
    不另做探测,复用两份现成的数据:
@@ -513,8 +513,8 @@ function drawForceMarks(){ // 2026-09-27 主炮打空地:还没打出去的炮�
 const PING_FX=new Map(),PING_MS=900; // 2026-09-27 扫描的脉冲圈:船 → {看到的 pingT, 墙钟起点}
 function drawPings(){ // 一圈从船身扩到雷达量程(对标准目标),墙钟 PING_MS 内淡出;敌方的只在全知时画
   const now=nowMs(),lim=2*Math.hypot(W,H);
-  for(let g=0;g<2;g++)for(const s of (g?rockObjs():ships)){if(s.pingT===undefined||s.dead||(s.kind&&s.kind!=='buoy')||(s.side!=='blue'&&!adminMode))continue;let f=PING_FX.get(s);if(!f||f.pt!==s.pingT){f={pt:s.pingT,t0:now};PING_FX.set(s,f);}} // 2026-09-29 浮标的脉冲也画圈
-  if(PING_FX.size>64)for(const s of PING_FX.keys())if(s.dead||(ships.indexOf(s)<0&&rocks.indexOf(s)<0))PING_FX.delete(s); // 换局 / 沉了的清掉(沉了的不会再进上面那个循环)
+  for(let g=0;g<3;g++)for(const s of (g===2?(ENV.stations.length?featStaState().map(T=>T.obs):[]):(g?rockObjs():ships))){if(s.pingT===undefined||s.dead||(s.kind&&s.kind!=='buoy'&&s.kind!=='station')||(s.side!=='blue'&&!adminMode))continue;let f=PING_FX.get(s);if(!f||f.pt!==s.pingT){f={pt:s.pingT,t0:now};PING_FX.set(s,f);}} // 2026-09-29 浮标的脉冲也画圈
+  if(PING_FX.size>64)for(const s of PING_FX.keys())if(s.dead||(s.kind==='station'?featStaState().every(T=>T.obs!==s):(ships.indexOf(s)<0&&rocks.indexOf(s)<0)))PING_FX.delete(s); // 换局 / 沉了的清掉(沉了的不会再进上面那个循环)
   for(const [s,f] of PING_FX){if(f.done)continue;const k=(now-f.t0)/PING_MS;if(k>=1||k<0||s.dead){f.done=k>=1||s.dead;continue;} // 2026-09-27 修:播完只标 done,不删 —— 删了下一帧会当成新扫描重播,脉冲一直循环(用户实报)
     const R=actRangeOf(s)*Math.sqrt(k)*cam.zoom;if(R<2||R>lim)continue;const p=toScreen(s.pos[0],s.pos[1]);
     ctx.save();ctx.globalAlpha=0.7*(1-k);ctx.strokeStyle=s.side==='blue'?'#6fb4ff':'#ff6b6b';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(p[0],p[1],R,0,6.283);ctx.stroke();ctx.restore();}

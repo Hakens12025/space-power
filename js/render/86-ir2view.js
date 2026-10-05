@@ -104,11 +104,12 @@ function ir2Own(i,x,y){const P=IR2.P,RI=IR2.RI;let bj=-1,be=Infinity;for(let j=0
 const IR2_EXPO=[0.25,0.5,0.75]; // ir2Expo 的三个采样点(提到外面,每次调用不新建)
 function ir2Expo(i,b){let n=0;for(let q=0;q<3;q++){const r=IR2.RI[i]+IR2_EXPO[q]*IR2_C.BAND;if(ir2Own(i,IR2.P[i][0]+Math.cos(b)*r,IR2.P[i][1]+Math.sin(b)*r))n++;}return n;} // 第 i 艘的环在方位 b 上露出来几个点(共三个)
 function ir2Update(){
-  const obs=irvObs(),sel=VIEW==='blue'?selectedShips().filter(s=>!s.dead&&s.side===VIEW):[];
-  const RS=sel,IS=sel.length?sel:obs,QS=sel.length===1?null:(sel.length?sel:(obs.length?obs:null)),S=sel.length?sel:obs; // 环 / 圈内红外 / 仪表各用哪几艘;S = 算物理的观测方
+  const obs=irvObs(),sb=typeof selBuoyOk==='function'?selBuoyOk():null,sel=VIEW!=='blue'?[]:(sb&&sb.kind==='station'&&sb.side===VIEW?[sb]:selectedShips().filter(s=>!s.dead&&s.side===VIEW)); // 2026-10-05 选中自己的据点 = 它的环(同单选一艘)
+  const RS=sel,IS=sel.length?sel:obs,QS=sel.length>1?sel:null,S=sel.length?sel:obs; // 环 / 圈内红外 / 仪表各用哪几艘;S = 算物理的观测方。2026-10-05 用户:没选不画仪表(舰多了乱),选了几艘才有
   const key=VIEW+'|'+S.map(s=>s.id).join(',')+'|'+RS.length+'|'+(QS?1:0)+'|'+(adminMode?1:0),reset=key!==IR2.key;
   if(reset){IR2.key=key;IR2.rec.clear();IR2.rings=RS.map(ir2Ring);IR2.inst=QS?ir2Ring():null;IR2.zones=[];IR2.zt=-1e9;}
   IR2.RS=RS;IR2.IS=IS;IR2.QS=QS;IR2.S=S;IR2.P=RS.map(s=>toScreen(s.pos[0],s.pos[1]));IR2.RI=RS.map(ir2RIn);
+  if(!RS.length&&!QS)return; // 没选:没有环也没有仪表,逐源的信噪比没人用
   IR2.wt+=runDt(IR2.clk,0.1); // 闪烁按真实时间走、只在跑的时候走(2026-09-30 试过跟游戏倍速,用户:不要随游戏速度变)
   const src=irvSrc(),sk=IR2.skN||(IR2.skN=[]);sk.length=0;sk.push(cam.x,cam.y,cam.zoom,W,H,ENV.rev,ROCK_EPOCH);for(const s of S)sk.push(s.pos[0],s.pos[1],s.visR||0);for(const t of src)if(t.kind!=='rock')sk.push(t.pos[0],t.pos[1],t.flame||0,t.sideFlame?1:0,t.fireHot||0); // 稳态:暂停、镜头 / 船 / 世界都没变 ⇒ 环的数据不重算
   let same=!(typeof running!=='undefined'&&running)&&!reset&&!!IR2.sk&&IR2.sk.length===sk.length;if(same)for(let i=0;i<sk.length;i++)if(sk[i]!==IR2.sk[i]){same=false;break;}
@@ -258,7 +259,7 @@ function ir2HudPlace(R){ // 仪表放哪(半径 R 连底板):左边(加舰条与
   for(const c of [L,Rt]){const y=Math.max(c.top+R,Math.min((c.top+c.bot)/2,c.bot-R));if(free(c.x,y))return c;}
   return L;
 }
-function drawIr2Hud(){ // 红外仪表(左边加舰条与特写窗之间,被页面面板挡住就放右边,见 ir2HudPlace;没选 = 全舰队,选几艘 = 那几艘):方位从中心量,径向 = 波长(同环);中间画队形(缩小,只示意)
+function drawIr2Hud(){ // 红外仪表(左边加舰条与特写窗之间,被页面面板挡住就放右边,见 ir2HudPlace;多选 = 那几艘,没选 / 单选不画):方位从中心量,径向 = 波长(同环);中间画队形(缩小,只示意)
   const inst=IR2.inst,QS=IR2.QS;IR2.hudC=null;if(!inst||!QS||!QS.length)return;
   const r0=IR2_C.INST_R,B=IR2_C.INST_B,ro=r0+B,pad=IR2_C.INST_PAD,C=IR2_C.CELL,now=nowMs();
   if(now-IR2.hudT>500||!IR2.hud){IR2.hudT=now;IR2.hud=ir2HudPlace(ro+pad);}
@@ -270,7 +271,7 @@ function drawIr2Hud(){ // 红外仪表(左边加舰条与特写窗之间,被页�
   ctx.strokeStyle=IR2_C.EDGE;ctx.lineWidth=IR2_C.EDGE_W;ctx.beginPath();ctx.arc(cx,cy,ro,0,2*Math.PI);ctx.stroke();ir2Ticks(a=>[cx+Math.cos(a)*(ro+2),cy+Math.sin(a)*(ro+2)]);
   let mx=1;for(const s of QS)mx=Math.max(mx,Math.hypot(s.pos[0]-inst.c[0],s.pos[1]-inst.c[1]));const sc=(r0-10)/mx;
   ctx.fillStyle='#5aa7ff';for(const s of QS){ctx.beginPath();ctx.arc(cx+(s.pos[0]-inst.c[0])*sc,cy+(s.pos[1]-inst.c[1])*sc,2.5,0,2*Math.PI);ctx.fill();}
-  ctx.font='11px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='alphabetic';ctx.fillStyle='#8fa0b0';ctx.fillText(IR2.RS.length?'红外仪表 · 选中 '+QS.length+' 艘':'红外仪表 · 全舰队',cx,cy+ro+pad-5);
+  ctx.font='11px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='alphabetic';ctx.fillStyle='#8fa0b0';ctx.fillText('红外仪表 · 选中 '+QS.length+' 艘',cx,cy+ro+pad-5);
   ctx.restore();IR2.hudC=[cx,cy,ro];
   if(typeof ANOM!=='undefined'){ctx.save();for(const e of ANOM.list){if(e.k!=='ir'||!e.s)continue;const al=Math.max(0,1-(now-e.t0)/1000/IR2_C.FLASH_S);if(!al)continue; // 仪表外沿的异常刻痕
     const a=Math.atan2(e.s.pos[1]-inst.c[1],e.s.pos[0]-inst.c[0]);ir2AnomTick(cx+Math.cos(a)*(ro+3),cy+Math.sin(a)*(ro+3),Math.cos(a),Math.sin(a),al);}ctx.restore();}
@@ -281,7 +282,7 @@ function ir2AnomDraw(L,now){ // 红外2:它上的那个环的外沿 + 围出交�
   ctx.save();
   const ir=typeof MAPV!=='undefined'&&MAPV.mode==='ir';
   for(const e of L){const t=e.s,al=Math.max(0,1-(now-e.t0)/1000/IR2_C.FLASH_S);if(!al||!t||t.dead)continue;
-    if(ir){const rc=IR2.rec.get(t),P=IR2.P;
+    if(ir&&IR2.RS&&IR2.RS.length){const rc=IR2.rec.get(t),P=IR2.P; // 没选(没有环)走下面主视角那套:可见光圈边上
       if(rc&&rc.k>=0&&rc.k<P.length){const k=rc.k,RO=IR2.RI.map(r=>r+IR2_C.BAND),a=rc.b,x=P[k][0]+Math.cos(a)*(RO[k]+3),y=P[k][1]+Math.sin(a)*(RO[k]+3);let cv2=false;
         for(let j=0;j<P.length;j++)if(j!==k&&Math.hypot(x-P[j][0],y-P[j][1])<RO[j])cv2=true;if(!cv2)ir2AnomTick(x,y,Math.cos(a),Math.sin(a),al);} // 被别的环盖住的那段外沿不弹
       for(const z of IR2.zones)if(z.t===t){ir2ZonePath(z);ctx.strokeStyle='rgba(255,245,200,'+al.toFixed(2)+')';ctx.lineWidth=2.5;ctx.stroke();}

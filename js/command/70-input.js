@@ -160,6 +160,7 @@ function updSelWeaponTip(){ // RF4b 待命提示:底栏上方 #cmdTip 常显(旧
 function buoyAt(sx,sy){ // 2026-09-29 命中最近的我方前出浮标(屏幕 14 px 内,飞行中也算)
   let best=null,bd=14;
   for(const o of rocks){if(o.dead||o.kind!=='buoy'||o.side!=='blue')continue;const p=toScreen(o.pos[0],o.pos[1]),d=Math.hypot(p[0]-sx,p[1]-sy);if(d<bd){bd=d;best=o;}}
+  for(const o of featStaObs('blue')){const p=toScreen(o.pos[0],o.pos[1]),d=Math.hypot(p[0]-sx,p[1]-sy);if(d<Math.max(bd,featStaPx()*0.5)){bd=d;best=o;}} // 2026-10-05 自己拿着的据点也走这条(底栏雷达遥控它);命中圈至少半个图标
   return best;
 }
 function groupAt(sx,sy){ // 命中最近的导弹组(屏幕距离,可点选,半径30px)

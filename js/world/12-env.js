@@ -54,8 +54,20 @@ const ENV_CFG={
     FL0:500000,OCT:9,GAIN:0.78,WARP:0.35,Q0:0.78,G:4,QM:0.45,FM:0.2,XO:2,XA:0.4, // 丝:b2ea0f4 的脊状分形 + XO 层粗褶;QM / FM = 分辨不出时补的期望
     EXT_TAU:150000,EXT_G:50000} // 消光:浓度 1 走 EXT_TAU km 光深为 1;沿线浓度取 EXT_G km 格点
 };
-const ENV_BODY_TYPES=['gas','icegiant','rock','ice','desert','lava','terra'],ENV_BODY_W=[0.26,0.20,0.14,0.13,0.12,0.10,0.05]; // 2026-10-04 天体类型(地表画法 render/81-art + 地图 tag)与出现权重:气态 / 冰巨星多、类地最少(用户)
-function envBodyType(u){let a=0;for(let i=0;i<ENV_BODY_TYPES.length;i++){a+=ENV_BODY_W[i];if(u<a)return ENV_BODY_TYPES[i];}return ENV_BODY_TYPES[0];} // u ∈ [0,1)
+const ENV_BODY_TYPES=['gas','icegiant','rock','ice','desert','lava','terra']; // 2026-10-04 天体类型(地表画法 render/81-art + 地图 tag)
+/* 2026-10-05 用户:不同天体不同的大小偏置;类地只在宜居带出现;加雪线(宜居带、雪线都不画)。
+   按离恒星的距离分区挑类型(权重顺序同 ENV_BODY_TYPES):热区(宜居带内侧)多熔岩 / 荒漠,宜居带才出类地,雪线外多冰质 / 冰巨星;没有恒星不出类地。
+   距离是恒星的属性(km,不跟 CFG.scale);恒星在游玩区中心 600 ~ 900 万外,宜居带 / 雪线一般斜着穿过游玩区的一部分 */
+const ENV_HZ=[7000000,8000000],ENV_SNOW=8500000;
+const ENV_BODY_W={
+  hot: [0.26,0.08,0.18,0.04,0.20,0.24,0],    // 离恒星 < 宜居带内沿
+  hz:  [0.22,0.10,0.18,0.06,0.16,0.08,0.20], // 宜居带:只有这里出类地
+  warm:[0.26,0.20,0.14,0.13,0.12,0.10,0],    // 宜居带外、雪线内(= 原来的权重去掉类地)
+  cold:[0.26,0.30,0.12,0.22,0.06,0.04,0],    // 雪线外
+  none:[0.26,0.20,0.14,0.13,0.12,0.10,0]};   // 没有恒星
+const ENV_BODY_K={gas:1.3,icegiant:1,terra:0.7,desert:0.65,rock:0.6,ice:0.55,lava:0.5}; // 半径偏置(97-match 乘在 7 万 x 0.6~2 上;固定场景按写的半径)
+function envBodyZone(x,y,stars){if(!stars||!stars.length)return 'none';const d=Math.hypot(x-stars[0].x,y-stars[0].y);return d<ENV_HZ[0]?'hot':(d<=ENV_HZ[1]?'hz':(d<ENV_SNOW?'warm':'cold'));}
+function envBodyType(u,zone){const W=ENV_BODY_W[zone]||ENV_BODY_W.none;let t=0;for(const w of W)t+=w;let a=0;for(let i=0;i<W.length;i++){a+=W[i]/t;if(u<a)return ENV_BODY_TYPES[i];}return ENV_BODY_TYPES[0];} // u ∈ [0,1)
 function envBodyHash(b,i){let h=Math.imul((i|0)+1,73856093)^Math.imul(Math.round(b.r)|0,83492791);const nm=String(b.name||'');for(let k=0;k<nm.length;k++)h=Math.imul(h^nm.charCodeAt(k),16777619);h=Math.imul(h^(h>>>13),1274126177);return ((h^(h>>>16))>>>0)/4294967296;} // 场景没写类型 / 种子的天体按 序号 + 半径 + 名字 取一个固定的(2026-10-05 用户:原来按坐标,靶场一拖天体类型就变)
 const ENV_KEYS=['stars','bodies','clouds','asteroids','belts','comets','moons','ions','stations']; // ENV2 world 认识的键:envReset 见到别的键当场抛(ENV1 时拼错 feilds 会静默成空环境);视图的登记表以它为锚
 /* 2026-09-29 用户取消无限远的方向型太阳(ENV1 的 sun),光源只剩位置型恒星。
@@ -85,7 +97,7 @@ function envReset(w){
   for(const s of (w&&w.stars)||[]){const h=num(s.half,ENV_CFG.SUN_HALF_DEG)*Math.PI/180,c=Math.cos(h); // ENV2 位置型恒星;half 单位是度,c2 = cos^2 半角
     st.push(F({x:s.x,y:s.y,r:num(s.r,ENV_CFG.STAR_R),half:h*180/Math.PI,c2:c*c,rfb:Array.isArray(s.rfb)?F(s.rfb.slice()):null}));} // rfb = 射电暴时间表 [开始, 持续, …](对局按种子生成,envRfBursts);没有 = 不暴发
   let bi=0;for(const b of (w&&w.bodies)||[]){const u=envBodyHash(b,bi++);bd.push(F({x:b.x,y:b.y,r:b.r,r2:b.r*b.r,heat:num(b.heat,ENV_CFG.BODY_HEAT),name:b.name||'天体',rf:b.rf?F({on0:!!b.rf.on0,sw:F(b.rf.sw.slice())}):null,
-    type:ENV_BODY_TYPES.indexOf(b.type)>=0?b.type:envBodyType(u),seed:isFinite(b.seed)?b.seed|0:Math.floor(u*1e6),rad:!!b.rad}));} // ENV2 天体:XY 上无限高的柱,挡视线、投影子;rf = 乙 射电开关表(envRfBodySched),没有 = 不是射电天体
+    type:ENV_BODY_TYPES.indexOf(b.type)>=0?b.type:envBodyType(u,envBodyZone(b.x,b.y,w&&w.stars)),seed:isFinite(b.seed)?b.seed|0:Math.floor(u*1e6),rad:!!b.rad}));} // ENV2 天体:XY 上无限高的柱,挡视线、投影子;rf = 乙 射电开关表(envRfBodySched),没有 = 不是射电天体
   for(const c of (w&&w.clouds)||[]){const a=num(c.a,D.A),b=num(c.b,D.B),ang=num(c.ang,D.ANG),r=(D.R2+D.WBR)*Math.max(a,b); // ENV2 尘埃云:生成点 (x,y) + 椭圆本体;r = 浓度可能非 0 的外接圆
     cl.push(F({x:c.x,y:c.y,a:a,b:b,ang:ang,ca:Math.cos(ang*Math.PI/180),sa:Math.sin(ang*Math.PI/180),r:r,r2:r*r,seed:c.seed|0,v:num(c.v,D.V),dark:num(c.dark,D.DARK)}));}
   for(const a of (w&&w.asteroids)||[])ast.push(F({x:a.x,y:a.y,r:a.r,n:a.n|0,seed:a.seed|0,smin:num(a.smin,ENV_CFG.ROCK_SFD.MIN),smax:num(a.smax,ENV_CFG.ROCK_SFD.MAX),clear:num(a.clear,0),name:a.name||'小行星'})); // ENV2 小行星:只用来撒石头,不带光学杂波、不带 MTI
