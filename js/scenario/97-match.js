@@ -5,7 +5,7 @@
    用来验证"摸黑 → 谁先亮灯 → 火控窗口 → 开火"这条核心循环好不好玩,其余一切都为它让路。
      · 3 对 3 镜像(CA + 2 DD),双方静默、熄火、静止开局,相距 MATCH.OPEN。
      · 红方出生方位在 ±MATCH.ARC 内随机(scenario/91 的 initEnemy 调 matchPlaceRed)—— 位置固定的话就没有"找"这回事,迷雾形同虚设。
-     · 战场中心(场景的 objective)双方都知道:那是遭遇战的标准假定,也是红方 AI 无接触时的去向(bots/61 的 aiObjective)。
+     · 战场中心(场景的 objective)双方都知道:那是遭遇战的标准假定,(2026-10-05 红方 AI 重做后不再读它:没有位置先验,见 bots/59)。
      · 胜负 = 一方全灭(core/05 的 S20 原样,只置 victoryShown / defeatShown 两个标志)。结果卡片只在对局里弹。
    开局间距 300 万 = 10 光秒(H1 形态 H;原 120 万):演示页尺度预算里的"开局间距 >= 最远的雷达发现(H1 下 281 万)"那条单边硬规则 —— 再近的话一开雷达就互相发现,接敌阶段不存在。
    ⚠ 引擎里没有战场边界(CFG.world 只管星空贴图与开局镜头),所以"战场 200 万"不是一个要改的数,摆得开就是了。
@@ -83,7 +83,7 @@ function matchSync(){ // 顶栏钮的字与提示跟着当前场景走(进 / 出
   const on=matchIsOn();
   b.textContent=on?'回靶场':'对局';
   b.classList.toggle('on',on);
-  b.title=on?'回到靶场(当前这一局作废) · 种子 '+MATCH.seed:'进入对局:3 对 3,双方静默开局、相距 180 万公里;每局一个种子,定红方来向与地形(太阳 / 行星 / 尘埃云 / 小行星)。全灭对方获胜';
+  b.title=on?'回到靶场(当前这一局作废) · 种子 '+MATCH.seed:'进入对局:3 对 4,双方静默开局、相距 180 万公里;每局一个种子,定红方来向与地形(太阳 / 行星 / 尘埃云 / 小行星)。全灭对方获胜';
   const card=document.getElementById('matchEnd');if(card)card.hidden=true;
   MATCH.shown=false;MATCH.t0=0;
   MATCH.nBlue=ships.filter(s=>s.side==='blue').length;MATCH.nRed=ships.filter(s=>s.side==='red').length;
