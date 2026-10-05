@@ -69,7 +69,7 @@ table{border-collapse:collapse;font-size:12px;margin-top:6px}td,th{border:1px so
 <tr><td>A 光点群</td><td>一组画成一小团闪烁的光点(1 / 3 / 5 个,白芯 + 阵营色光晕),各带一丝很短的阵营色尾</td><td>纹理粒度 + 数量(Bertin 的纹理粒度;subitizing)</td><td>5 个单像素点排成骰子五点(单枚也一样)</td><td>「一团碎点」对「一道实线」,成组时最好认;像一群小型杀伤器</td><td>单枚时只剩一个光点,和 B 差不多;闪烁要是太跳会抢眼</td></tr>
 <tr><td>B 白芯亮珠</td><td>圆珠:白芯 + 阵营色外圈 + 光晕,尾焰缩成一小团;成组排成一字横队</td><td>闭合 / 长宽比(圆 vs 长条)+ 明度(白芯)</td><td>白点 + 紧贴的阵营色圈</td><td>单枚也成立(圆点对短划);白芯在去色后依然最亮</td><td>2 px 的珠子白芯和外圈会糊成一个浅色点;记号和诱饵(紫点 + 圈)同族,要靠中心颜色分</td></tr>
 <tr><td>C 闪烁信标</td><td>形状照现在(阵营色短划 / 楔形),每枚机头加一盏白色频闪灯:每 0.45 秒亮 0.12 秒,各组相位错开</td><td>时间通道(闪烁;前注意特征里最抢眼的一类)</td><td>现在的记号 + 同步闪的白心</td><td>和尺寸无关,1 px 也成立;导弹那套画法完全不动</td><td>静止截图里看不出;一屏几十组拦截弹一起闪会很吵、抢注意力</td></tr>
-<tr><td>D 阵营色 + 青环(10-06 用户提)</td><td>弹体满阵营色、长度同导弹;两道青色环,比弹身宽、上下各伸出一点;尾焰照现在(阵营色)。战术层画短划时,环画成横穿短划的青色小竖条(单枚两道、成组每枚一道)</td><td>形状细节(短划上的横条)+ 色相点缀;阵营仍由弹体与尾焰的颜色定</td><td>现在的记号外加一圈青色</td><td>敌我和现在一样清楚;放大后就是「阵营色弹体 + 两道青环」</td><td>战术层的环只有 1~2 px 的小竖条,蓝方的青环和蓝色弹体色相接近;成组时每枚 2.7 px 只够一道环</td></tr>
+<tr><td>D 阵营色 + 青环(10-06 用户提;同日:一个环就行)</td><td>弹体满阵营色、长度照现在(导弹的 0.85 倍);中段一道青色环,比弹身宽、上下各伸出一点;尾焰照现在(阵营色)。战术层画短划时,环画成横穿短划中段的青色小竖条</td><td>形状细节(短划上的横条)+ 色相点缀;阵营仍由弹体与尾焰的颜色定</td><td>现在的记号外加一圈青色</td><td>敌我和现在一样清楚;放大后就是「阵营色弹体 + 一道青环」</td><td>战术层的环只是 1~2 px 的小竖条,蓝方的青环和蓝色弹体色相接近</td></tr>
 </table>
 </section>
 
@@ -596,14 +596,14 @@ function drawIcpOpt(g,opt,x,y,rot,side,count,zf,t,sd){
     return;}
   function artLen(n){return mslLen(zf,n,'inter');}}
 const ICP_CY=[90,232,238]; // 旧做法的青色(10-05 前 81-art 拦截弹的环带色)
-function drawIcpD(g,x,y,rot,side,count,zf,t,sd){ // D 阵营色 + 青环(10-06 用户):尾焰照现在(阵营色),弹体用满阵营色、长度同导弹;青色只在环上,环比弹身宽、两边各伸出一点
-  const n=shownN(count),Lg=mslLen(zf,n,'msl'),F=FORM[n],cx=mslBox(zf,n,'msl')[2],c=Math.cos(rot),s=Math.sin(rot),w=MW.msl,col=SIDE[side];
+function drawIcpD(g,x,y,rot,side,count,zf,t,sd){ // D 阵营色 + 青环(10-06 用户:一个环就行):尾焰照现在(阵营色),弹体满阵营色、长度照现在(导弹的 0.85 倍);青色只在一道环上,环比弹身宽、两边各伸出一点
+  const n=shownN(count),Lg=mslLen(zf,n,'inter'),F=FORM[n],cx=mslBox(zf,n,'inter')[2],c=Math.cos(rot),s=Math.sin(rot),w=MW.msl,col=SIDE[side];
   if(Lg<5){let xm=0;for(const f of F)xm=Math.min(xm,f[0]);const b=(xm-cx-0.5)*Lg;plume(g,'int'+side,1,x+b*c,y+b*s,rot+Math.PI,Lg*(n>1?2.6:1.8)*flick(t,sd),Math.max(1.4,Lg*(n>1?1.1:0.7)),0.85);}
   else for(const f of F){const fx_=(f[0]-cx-0.5)*Lg,fy=f[1]*Lg;plume(g,'int'+side,1,x+fx_*c-fy*s,y+fx_*s+fy*c,rot+Math.PI,Lg*1.35*flick(t,sd+f[1]*3),Math.max(1.6,Lg*0.45),0.95);}
   for(let i=F.length-1;i>=0;i--){const f=F[i],fx_=(f[0]-cx)*Lg,fy=f[1]*Lg;g.save();g.translate(x+fx_*c-fy*s,y+fx_*s+fy*c);g.rotate(rot);
     if(Lg<5){g.lineCap='round';g.strokeStyle=css(col);g.lineWidth=1.1;g.beginPath();g.moveTo(-Lg*0.42,0);g.lineTo(Lg*0.42,0);g.stroke(); // 阵营色短划
-      g.lineCap='butt';g.strokeStyle=css(ICP_CY);g.lineWidth=0.75;const xs=n>1?[0]:[-0.17*Lg,0.17*Lg];g.beginPath();for(const xr of xs){g.moveTo(xr,-0.95);g.lineTo(xr,0.95);}g.stroke();} // 环:横穿弹身、上下各伸出一点(成组每枚只够画一道)
-    else{mslGlyph(g,'msl',side,Lg,rot);g.scale(Lg,Lg);g.fillStyle=css(ICP_CY);for(const xr of [0.04,-0.16])g.fillRect(xr,-w-0.04,0.07,2*w+0.08);} // 两道环比弹身宽
+      g.lineCap='butt';g.strokeStyle=css(ICP_CY);g.lineWidth=0.75;g.beginPath();g.moveTo(0,-0.95);g.lineTo(0,0.95);g.stroke();} // 环:横穿弹身中段、上下各伸出一点
+    else{mslGlyph(g,'msl',side,Lg,rot);g.scale(Lg,Lg);g.fillStyle=css(ICP_CY);g.fillRect(-0.06,-w-0.04,0.08,2*w+0.08);} // 一道环,比弹身宽
     g.restore();}}
 function icpBlink(t,sd){return ((t+(sd%17)*0.071)%0.45)<0.12;}
 function icpMark(g,opt,x,y,rot,side,cnt,t,sd){ // 代表显示:固定像素(同引擎 projMark 的规矩:外框 ≤ 6 px、阵营色)
