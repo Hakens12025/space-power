@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>拦截弹区分方案</title>
+<style>
+:root{--bg:#05070c;--panel:#0b1018;--line:#1e2836;--txt:#c7d0dc;--dim:#5f7083;--acc:#5aa7ff}
+body{margin:0;background:var(--bg);color:var(--txt);font:13px "Microsoft YaHei",sans-serif}
+h1{font-size:17px;margin:14px 18px 4px}h1 span{font-size:12px;color:var(--dim);font-weight:normal;margin-left:10px}
+h2{font-size:14px;margin:0 0 6px}
+section{margin:10px 18px 16px;padding:10px 12px;background:var(--panel);border:1px solid var(--line)}
+p.n{margin:2px 0 8px;color:#9aa8b8;line-height:1.6;max-width:1180px}
+.bar{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;padding:8px 18px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(5,7,12,.96);z-index:2}
+label{cursor:pointer;user-select:none}
+canvas{display:block;border:1px solid var(--line);background:#05070c}
+.grid{display:grid;grid-template-columns:repeat(2,max-content);gap:10px}
+.cap{font-size:12px;color:#9aa8b8;margin:4px 0 2px}
+table{border-collapse:collapse;font-size:12px;margin-top:6px}td,th{border:1px solid var(--line);padding:4px 8px;text-align:left;vertical-align:top}th{color:#9aa8b8;font-weight:normal}
+.gray canvas{filter:grayscale(1)}.blur canvas.live{filter:blur(1px)}.gray.blur canvas.live{filter:grayscale(1) blur(1px)}
+</style>
+</head>
+<body>
+<h1>拦截弹区分方案<span>未进引擎 · 方案对比 · 2026-10-05 用户:拦截弹和导弹区分不是特别清楚</span></h1>
+<div class="bar">
+  <label><input type="checkbox" id="cGray"> 去色测试</label>
+  <label><input type="checkbox" id="cBlur"> 眯眼测试(模糊 1 px,只作用于原大画布)</label>
+  <label><input type="checkbox" id="cPause"> 暂停</label>
+</div>
+
+<section>
+<h2>为什么现在分不清</h2>
+<p class="n">战术落点上最小的船(护卫 T1)长 7.45 px。导弹单枚 = 0.55 倍 = 4.1 px,拦截弹单枚再短一成五 = 3.5 px,成组每枚只有 2.7 / 2.3 px —— 全都低于 5 px 的门槛,所以引擎里两种弹在战术层<b>都画成一道阵营色短划 + 一团阵营色尾焰</b>,只差「拦截弹短一成五、线宽 0.8 对 1、颜色调亮 0.35」。这三样都是连续的小差别,单独看一枚时读不出来。<br>
+另外两条边界:主炮弹在战术层是约 20 px 的亮白拖尾(所以拦截弹不能做成曳光长线,会和主炮弹混);阵营照旧走颜色(skill 第 10 节),所以方案只动<b>形状 / 纹理 / 明度 / 闪烁</b>,导弹本身不改。<br>C 方案靠闪烁,截图看不出,要看动的。</p>
+</section>
+
+<section>
+<h2>并排(战术落点原大)</h2>
+<p class="n">每行一个方案。左边蓝方、右边红方,各是 导弹 1 枚 / 导弹一组 / 拦截弹 1 枚 / 拦截弹一组;最右是参照:主炮弹、雷、诱饵、护卫 T1、巡洋 T1。下面那张是同一张图放大 3 倍看像素(最近邻,不插值)。</p>
+<canvas id="line" class="live"></canvas>
+<div class="cap">放大 3 倍</div>
+<canvas id="lineZ"></canvas>
+</section>
+
+<section>
+<h2>混战(战术落点原大)</h2>
+<p class="n">同一段 6 秒的循环:红方导弹(6 枚一组 / 3 枚一组 / 1 枚)往左飞,蓝方舰船放拦截弹(16 枚一组 / 4 枚一组)迎上去;蓝方导弹往右飞,红方拦截弹迎上去;中间各一发主炮弹、一颗雷、一枚诱饵。四个画面同一时刻。</p>
+<div class="grid" id="mixes"></div>
+</section>
+
+<section>
+<h2>代表显示(拉过切换点后的记号)</h2>
+<p class="n">现在的记号:导弹 1~3 个点、拦截弹同形调亮,问题一样。每个方案配一个记号,和真显示同一个母题。参照:主炮弹短划、雷空心方块、诱饵紫点 + 阵营圈、我方箭头、敌方菱形。</p>
+<canvas id="marks" class="live"></canvas>
+<div class="cap">放大 3 倍</div>
+<canvas id="marksZ"></canvas>
+</section>
+
+<section>
+<h2>三个方案</h2>
+<table>
+<tr><th>方案</th><th>拦截弹画成</th><th>区分靠的通道</th><th>记号</th><th>好处</th><th>风险</th></tr>
+<tr><td>A 光点群</td><td>一组画成一小团闪烁的光点(1 / 3 / 5 个,白芯 + 阵营色光晕),各带一丝很短的阵营色尾</td><td>纹理粒度 + 数量(Bertin 的纹理粒度;subitizing)</td><td>5 个单像素点排成骰子五点(单枚也一样)</td><td>「一团碎点」对「一道实线」,成组时最好认;像一群小型杀伤器</td><td>单枚时只剩一个光点,和 B 差不多;闪烁要是太跳会抢眼</td></tr>
+<tr><td>B 白芯亮珠</td><td>圆珠:白芯 + 阵营色外圈 + 光晕,尾焰缩成一小团;成组排成一字横队</td><td>闭合 / 长宽比(圆 vs 长条)+ 明度(白芯)</td><td>白点 + 紧贴的阵营色圈</td><td>单枚也成立(圆点对短划);白芯在去色后依然最亮</td><td>2 px 的珠子白芯和外圈会糊成一个浅色点;记号和诱饵(紫点 + 圈)同族,要靠中心颜色分</td></tr>
+<tr><td>C 闪烁信标</td><td>形状照现在(阵营色短划 / 楔形),每枚机头加一盏白色频闪灯:每 0.45 秒亮 0.12 秒,各组相位错开</td><td>时间通道(闪烁;前注意特征里最抢眼的一类)</td><td>现在的记号 + 同步闪的白心</td><td>和尺寸无关,1 px 也成立;导弹那套画法完全不动</td><td>静止截图里看不出;一屏几十组拦截弹一起闪会很吵、抢注意力</td></tr>
+</table>
+</section>
+
+<script>
+"use strict";
+/* 拦截弹区分方案(2026-10-05 用户:拦截弹和导弹区分不是特别清楚)。
+   下面 @@LIB 那一段从 demos/美术/舰船武器美术.html 原样抽出(舰标贴图抄本、尾焰、导弹 / 拦截弹、雷、诱饵、主炮弹、代表显示记号 —— 那页与引擎一致);
+   本页只加三个候选画法 drawIcpOpt / icpMark,其他东西照引擎画。全部按战术落点原大(shipZoomF = LAND 0.55 x SHIP_K 0.6 x 美术整体缩放 1.3)。 */
+const $=id=>document.getElementById(id);
+const DPR=Math.max(1,window.devicePixelRatio||1);
+
+/* ---------- 照抄引擎的数 ---------- */
+const HULL={
+  DD:{parts:[{p:'poly',pts:[[1.50,0],[0.58,0.22],[-0.88,0.20],[-0.98,0]],mirror:true},{p:'line',x1:0.06,y1:-0.48,x2:0.06,y2:0.48,w:0.11},{p:'rect',x:0.52,y:-0.12,w:0.26,h:0.24,dark:0.50}]},
+  CA:{parts:[{p:'poly',pts:[[1.52,0],[0.64,0.32],[-0.90,0.30],[-1.02,0]],mirror:true},{p:'rect',x:-0.16,y:-0.58,w:0.36,h:0.40},{p:'rect',x:0.58,y:-0.14,w:0.28,h:0.28,dark:0.50},{p:'rect',x:-0.74,y:-0.14,w:0.28,h:0.28,dark:0.50}]},
+  CV:{parts:[{p:'poly',pts:[[1.18,0.44],[1.44,0.14],[1.44,-0.44],[-1.14,-0.44],[-1.14,0.44]]},{p:'line',x1:1.12,y1:0,x2:-1.02,y2:0,w:0.09,dark:0.55},{p:'rect',x:-0.34,y:-0.76,w:0.48,h:0.32}]},
+  UNK:{parts:[{p:'poly',pts:[[1.40,0],[-0.70,0.52]],mirror:true}]},
+  SC:{parts:[{p:'poly',pts:[[1.56,0],[-0.72,0.26]],mirror:true},{p:'line',x1:-0.86,y1:-0.38,x2:-0.86,y2:0.38,w:0.16}]},
+};
+const HULL_BASE={DD:7.0,CA:8.8,BB:11.0,CV:11.4,SC:7.4,UNK:8.0},TIER_SCALE={1:1.00,2:1.13,3:1.28},TIER_LIGHT={1:-0.22,2:0.00,3:0.34};
+const CLS_HULL={FF:'DD',DD:'SC',CL:'CL',CA:'CA',CV:'CV'},CLS_NAME={FF:'护卫舰',DD:'驱逐舰',CL:'巡游舰',CA:'巡洋舰',CV:'航母'};
+const HULL_ZOOM={A:0.4,LAND:0.55,MARK:0.45,MAX:1.9},SHIP_K=0.6,SHIP_MARK_R=4,LAND_KMPP=250; // 战术落点:比例尺 100 px = 2.5 万 km
+const ART_NOZ={DD:{e:[[-0.9,0.07,0.05],[-0.9,-0.07,0.05]],hw:0.21,bx:0.58},CA:{e:[[-0.95,0.13,0.05],[-0.98,0,0.055],[-0.95,-0.13,0.05]],hw:0.31,bx:0.62},
+  CV:{e:[[-1.14,0.12,0.05],[-1.14,-0.12,0.05],[-1.14,0.32,0.05],[-1.14,-0.32,0.05]],hw:0.44,bx:1.16},SC:{e:[[-0.74,0.1,0.045],[-0.74,-0.1,0.045]],hw:0.22,bx:0.6}};
+const SIDE={blue:[90,167,255],red:[255,107,107],neutral:[160,170,185]};
+const ART_L=[Math.cos(-125*Math.PI/180),Math.sin(-125*Math.PI/180)]; // 固定光向:左上
+function hullSize(h,t){return (HULL_BASE[h]||7)*(TIER_SCALE[t]||1);}
+function rawZ(k){return HULL_ZOOM.LAND*Math.pow(LAND_KMPP/k,HULL_ZOOM.A);}
+function hullZ(k){return Math.max(HULL_ZOOM.MARK,Math.min(HULL_ZOOM.MAX,rawZ(k)));}
+
+/* ---------- 舰船贴图:js/render/82-shipart.js 的抄本(2026-10-05,重工长舰;原稿 demos/ships/人类阵营舰标.html)。只改一处:羽化量由调用方传(icon 的第 9 个参数 fe),
+   引擎里它自己按 cam.zoom 算。载入时同引擎重算 HULL / HULL_BASE / ART_NOZ ⇒ 下面的尾焰、残骸、尺寸都跟着新外形 ---------- */
+const SA_NEW_MAX=8; // 每帧新建贴图的预算(简化画法一张记 1、完整细节一张记 4)
+const SA=(()=>{
+  const MIR=h=>{const o=h.map(p=>p.slice());for(let i=h.length-1;i>=0;i--){const [x,y]=h[i];if(y!==0)o.push([x,-y]);}return o;};
+  const RC=(x0,y0,x1,y1)=>[[x0,y0],[x1,y0],[x1,y1],[x0,y1]];
+  const CB=(x0,x1,hw,cf,cr)=>MIR([[x1,0],[x1,hw-cf],[x1-cf,hw],[x0+cr,hw],[x0,hw-cr],[x0,0]]);
+  const CBY=(x0,y0,x1,y1,c)=>[[x0+c,y0],[x1-c,y0],[x1,y0+c],[x1,y1-c],[x1-c,y1],[x0+c,y1],[x0,y1-c],[x0,y0+c]];
+  const POD=(x0,y0,x1,y1,cb,c)=>[[x1-cb,y0],[x1,y0+cb],[x1,y1-cb],[x1-cb,y1],[x0+c,y1],[x0,y1-c],[x0,y0+c],[x0+c,y0]];
+  const OCT=(cx,cy,r)=>{const o=[];for(let i=0;i<8;i++){const a=Math.PI/8+i*Math.PI/4;o.push([cx+r*Math.cos(a),cy+r*Math.sin(a)]);}return o;};
+  const MV=(p,dx,dy)=>p.map(([x,y])=>[x+dx,y+dy]);
+  const FL=p=>p.map(([x,y])=>[x,-y]).reverse();
+  const CIRC=(x,y,r,n=20)=>{const o=[];for(let i=0;i<=n;i++){const a=i/n*6.283;o.push([x+Math.cos(a)*r,y+Math.sin(a)*r]);}return o;};
+  function sym(o){const m=Object.assign({},o);if(o.p)m.p=FL(o.p);if(o.y!==undefined)m.y=-o.y;if(o.pts)m.pts=o.pts.map(([x,y])=>[x,-y]);if(o.a!==undefined)m.a=-o.a;return [o,m];}
+  const hull=(p,m='hull')=>({t:'hull',p,m}),blk=(p,h,m='blk')=>({t:'blk',p,h,m}),pan=(p,m)=>({t:'pan',p,m}),rec=p=>({t:'rec',p}),rad=p=>({t:'rad',p}),haz=p=>({t:'haz',p}),
+    seam=(pts,m='seam',w=0.35)=>({t:'seam',pts,m,w}),deck=pts=>({t:'deck',pts}),win=pts=>({t:'win',pts}),riv=pts=>({t:'riv',pts}),
+    eng=(x,y,r)=>({t:'eng',x,y,r}),tur=(x,y,r,n,len,bw,a,h,m)=>({t:'tur',x,y,r,n,len,bw,a:a||0,h:h||r*0.32,m:m||'acc'});
+  const ov=p=>Object.assign(p,{over:true});
+  const ROW=(x0,x1,y,n)=>{const o=[];for(let i=0;i<n;i++)o.push([x0+(x1-x0)*(n>1?i/(n-1):0.5),y]);return o;};
+  const PANELS=(segs,y0,y1)=>segs.flatMap(([a,b],k)=>sym(pan(RC(a,y0,b,y1),k%2?'p2':'hull')));
+ const CIRCP=(x,y,r,n)=>CIRC(x,y,r,n).slice(0,-1),SEMI=(cx,cy,r,n=10)=>{const o=[[cx+r,cy]];for(let i=1;i<n;i++){const t=i/n*Math.PI;o.push([cx+Math.cos(t)*r,cy-Math.sin(t)*r]);}o.push([cx-r,cy]);return o;};
+ const LIGHTS=(x0,x1,y,n)=>win(ROW(x0,x1,y,n)),VENTS=(x0,x1,y,n)=>ROW(x0,x1,y,n).map(([x,yy])=>ov(rec(RC(x-1,yy-0.5,x+1,yy+0.5))));   // 甲板边灯 / 机库灯;背脊通风口                                                                                     // 甲板边灯 / 机库灯(小亮点)
+
+  const PAL={hull:'#a8afb7',p2:'#99a1aa',blk:'#b6bdc5',top:'#cdd3d9',acc:'#7a828b',trench:'#252a30',seam:'#6c747d',mark:'#d9a43a',win:'#ffe6b0',riv:'#e0e5ea',deck:'#8e969f'};
+ const FFr={L:48,parts:[hull(MIR([[20,0],[20,1.8],[18,2.6],[-18,2.6],[-19,3.4],[-23,3.4],[-24,2.8],[-24,0]])),hull(RC(20,-0.45,24,0.45),'acc'),
+   ...sym(hull(CBY(-2,2.2,12,4.4,0.8),'blk')),...sym(blk(RC(12,3.0,16.5,3.6),0.3,'acc')),...sym(seam([[13.6,3.0],[13.6,3.6]],'seam',0.2)),                    // 两侧前伸炮舱 + 炮管(分节)
+   ...sym(pan(RC(-1.4,3.7,10,4.1),'team')),...sym(rec(RC(1,2.8,4,3.4))),...sym(rec(RC(5,2.8,8,3.4))),...sym(win(ROW(1.8,7.2,3.1,4))),...sym(ov(haz(RC(11.1,2.4,11.8,4.2)))),   // 炮舱:舱门透灯、前端警示
+   ...[[-17,-11],[-10,-4],[13,19]].flatMap(([a,b],k)=>sym(pan(RC(a,1.0,b,2.4),k%2?'p2':'hull'))),...sym(pan(RC(14,2.0,18,2.4),'mark')),pan([[17,-1.8],[19,-1.8],[17.6,1.8],[15.6,1.8]],'team'),
+   blk(CBY(-14,-1.9,10,1.9,0.6),0.9),...VENTS(-13,-10,0,3),blk(CBY(-8,-1.3,4,1.3,0.4),0.7,'top'),blk(OCT(-4.5,0,0.8),0.4,'top'),seam([[-8,0],[-12,0]],'acc',0.3),  // 背脊两层 + 雷达罩 + 桅
+   win([[4.05,-0.7],[4.05,0],[4.05,0.7]]),tur(-17,0,0.9,2,2.4,0.22,Math.PI),LIGHTS(-16,-3,2.5,5),LIGHTS(-16,-3,-2.5,5),
+   blk(CBY(-23,-2.8,-17.5,2.8,0.8),0.9,'acc'),...[-1.4,1.4].map(y=>blk(CBY(-24.2,y-1.0,-22,y+1.0,0.3),0.4,'acc')),...sym(riv(ROW(-16,18,2.45,9))),
+   eng(-24,1.4,0.95),eng(-24,-1.4,0.95)]};
+ const DDr={L:60,parts:[hull(MIR([[16,0],[16,2.4],[13,3.4],[-8,3.4],[-10,6.2],[-22,6.2],[-24,4.6],[-30,4.6],[-30,0]])),hull(RC(16,-0.9,28,0.9),'acc'),blk(RC(26,-1.4,30,1.4),0.5,'acc'),
+   ...[18,20.5,23].map(x=>seam([[x,-0.9],[x,0.9]],'seam',0.25)),seam([[26.2,-1.1],[29.8,-1.1]],'seam',0.15),seam([[26.2,1.1],[29.8,1.1]],'seam',0.15),        // 长主炮:冷却环 + 炮口制退器
+   blk(RC(4,-1.6,16,1.6),0.6,'acc'),ov(haz(RC(14.6,-1.6,15.6,1.6))),seam([[5,0],[14,0]],'seam',0.3),                                                          // 炮座
+   ...[[-8,-1],[0,7],[8,15]].flatMap(([a,b],k)=>sym(pan(RC(a,1.0,b,3.2),k%2?'p2':'hull'))),...sym(pan(RC(9,2.8,14.5,3.3),'mark')),pan([[11,-3.2],[13,-3.2],[11.6,3.2],[9.6,3.2]],'team'),
+   ...[-21,-18.4,-15.8,-13.2].flatMap(x=>sym(rec(RC(x,3.9,x+2,5.7)))),...[-21,-18.4,-15.8,-13.2].flatMap(x=>sym(win([[x+1,4.8]]))),                            // 后部导弹舷台:发射格透灯
+   ...sym(pan(RC(-21.5,5.75,-10.5,6.1),'team')),...sym(ov(haz(RC(-10.9,3.6,-10.3,6.0)))),...sym(tur(-23,4.0,0.95,2,2.4,0.22,2.4)),
+   blk(CBY(-20,-2.6,-2,2.6,0.8),1.0),...VENTS(-19,-16,0,3),blk(CBY(-13,-1.7,-4,1.7,0.6),0.9,'top'),blk(OCT(-9,0,1.0),0.5,'top'),seam([[-13,0],[-18,0]],'acc',0.35),
+   win([[-3.95,-1],[-3.95,-0.33],[-3.95,0.33],[-3.95,1]]),LIGHTS(-6,12,3.0,7),LIGHTS(-6,12,-3.0,7),
+   ...sym(rad(RC(-29,4.6,-25,5.6))),blk(CBY(-29.5,-3.8,-23,3.8,0.8),1.0,'acc'),...[-2.6,0,2.6].map(y=>blk(CBY(-30.2,y-1.0,-28,y+1.0,0.3),0.4,'acc')),...sym(riv(ROW(-8,14,3.25,8))),
+   eng(-30,2.6,1.15),eng(-30,-2.6,1.15),eng(-30,0,1.05)]};
+ const CLr={L:48,parts:[hull(MIR([[18,0],[18,1.6],[15,2.4],[-16,2.4],[-17,3.2],[-23,3.2],[-24,2.6],[-24,0]])),hull(RC(18,-0.35,24,0.35),'acc'),blk(OCT(22.6,0,0.7),0.3,'top'),        // 巡游舰:细长舰体 + 前探测桅
+   ...sym(hull(CBY(-20,2.0,-6,4.4,0.6),'blk')),...[-18.4,-15.4,-12.4,-9.4].flatMap(x=>sym(blk(OCT(x+1.2,3.2,0.95),0.45,'top'))),...sym(ov(haz(RC(-6.9,2.2,-6.2,4.2)))),...sym(pan(RC(-19.4,4.0,-6.6,4.3),'team')),  // 两侧浮标架 + 浮标
+   blk(CIRCP(4,0,3.4,16),0.9,'top'),...[0,1,2,3].map(k=>{const t=k*Math.PI/4;return ov(seam([[4+Math.cos(t)*3.1,Math.sin(t)*3.1],[4-Math.cos(t)*3.1,-Math.sin(t)*3.1]],'seam',0.18));}),blk(OCT(4,0,0.7),0.4,'acc'),   // 雷达碟 + 辐条 + 馈源
+   ...[[-16,-9],[-5,0.4],[8,15]].flatMap(([a,b],k)=>sym(pan(RC(a,1.0,b,2.2),k%2?'p2':'hull'))),...sym(pan(RC(14,1.8,17.4,2.2),'mark')),pan([[16,-1.6],[17.6,-1.6],[16.4,1.6],[14.8,1.6]],'team'),
+   blk(CBY(8,-1.5,14,1.5,0.4),0.7,'top'),win([[14.05,-0.6],[14.05,0],[14.05,0.6]]),seam([[10,0],[8.4,0]],'acc',0.3),
+   blk(CBY(-16,-1.5,-1,1.5,0.4),0.7),...VENTS(-14,-11,0,3),LIGHTS(-15,-3,1.9,5),LIGHTS(-15,-3,-1.9,5),
+   blk(CBY(-23,-2.6,-17.5,2.6,0.7),0.9,'acc'),...[-1.2,1.2].map(y=>blk(CBY(-24.2,y-0.9,-22,y+0.9,0.3),0.4,'acc')),...sym(riv(ROW(-16,16,2.25,9))),eng(-24,1.2,0.9),eng(-24,-1.2,0.9)]};
+ const CAr={L:75,parts:[hull(MIR([[30,0],[30,4.6],[26,6.2],[-26,6.2],[-27,9.4],[-37.5,9.4],[-37.5,0]])),...sym(hull(RC(-18,6.2,14,8.6),'blk')),
+   hull(RC(30,-1.3,37.5,1.3),'acc'),blk(RC(34.5,-1.8,37.5,1.8),0.5,'acc'),...[31.5,33].map(x=>seam([[x,-1.3],[x,1.3]],'seam',0.3)),seam([[34.7,-1.5],[37.3,-1.5]],'seam',0.15),seam([[34.7,1.5],[37.3,1.5]],'seam',0.15),
+   blk(RC(22,-2,30,2),0.6,'acc'),ov(haz(RC(28.8,-2,29.8,2))),                                                                                                     // 脊轴主炮:冷却环、制退器、炮座警示
+   ...PANELS([[-24,-14],[-12,-2],[0,10],[12,22]],1.6,5.6),...sym(pan(RC(-16,7.6,12,8.2),'team')),...sym(pan(RC(22,5.2,28,5.8),'mark')),...sym(pan(RC(-17,6.4,-14,7.2),'mark')),
+   pan([[24,-5.8],[27,-5.8],[25,5.8],[22,5.8]],'team'),
+   ...[-16,-12,0,4,8].flatMap(x=>sym(rec(RC(x,7.0,x+3.2,8.2)))),...[-16,-12,0,4,8].flatMap(x=>sym(win([[x+1.6,7.6]]))),                                          // 侧装甲带:舱口透灯
+   blk(CBY(-22,-3.6,20,3.6,1.2),1.2),...VENTS(-20,-15,0,3),blk(CBY(-12,-2.6,6,2.6,0.8),1.3,'top'),blk(CBY(-8,-1.6,2,1.6,0.5),0.8,'top'),blk(OCT(-3,0,1.1),0.55,'top'),
+   seam([[-8,0],[-14,0]],'acc',0.4),win([[6.05,-1.8],[6.05,-0.6],[6.05,0.6],[6.05,1.8]]),win([[2.05,-0.9],[2.05,0.9]]),                                         // 多层上层建筑 + 雷达罩 + 桅
+   tur(14,0,2.4,2,7,0.55,0,1.4),tur(-17,0,2.2,2,6,0.5,Math.PI,1.4),...sym(tur(-6,7.4,1.2,2,3,0.3,0.3)),...sym(tur(20,5.6,0.95,2,2.4,0.22,0.5)),...sym(tur(-24,6.6,0.95,2,2.4,0.22,2.6)),
+   LIGHTS(-22,22,5.2,10),LIGHTS(-22,22,-5.2,10),
+   blk(CBY(-36.5,-7.8,-27,7.8,1.4),1.2,'acc'),...sym(rad(RC(-35,7.8,-29,9.4))),...[-6,-2.2,2.2,6].map(y=>blk(CBY(-38,y-1.3,-35,y+1.3,0.4),0.5,'acc')),
+   seam([[30,-1.3],[30,1.3]]),...sym(riv(ROW(-22,26,5.9,14))),eng(-37.5,2.2,1.3),eng(-37.5,-2.2,1.3),eng(-37.5,6,1.2),eng(-37.5,-6,1.2)]};
+ const CVB={L:94,parts:[hull([[47,0.5],[47,3.6],[43,6.4],[-40,6.4],[-44,5],[-47,5],[-47,-6.6],[-44,-8.4],[32,-8.4],[40,-6.2],[45,-3]]),                                // 主舰体
+   hull([[-34,6.2],[22,6.2],[44,9.2],[40,12.6],[24,15.6],[-26,15.6],[-34,11.8]],'deck'),                                                                        // 一侧斜角飞行甲板
+   ...[-22,-2,16].map(x=>blk(RC(x,5.4,x+3.4,7.6),0.4,'acc')),                                                                                                    // 甲板支架
+   deck([[-28,13.2],[38,9.4]]),deck([[-30,9.4],[20,9.4]]),...[-24,-21,-18].map(x=>seam([[x,8],[x+1.2,14.6]],'seam',0.18)),                                   // 斜向起降线、直通甲板线、拦阻索
+   ...[-12,6].map(x=>pan(RC(x,10,x+5.5,13.6),'elev')),ov(haz(RC(-34,7,-32.8,11.6))),
+   LIGHTS(-24,22,15.1,14),LIGHTS(-30,18,6.8,12),win([[42.6,9.6],[39.4,12.2],[30,14.4]]),...[pan(RC(-24,15.0,22,15.4),'team')],
+   ...[[-40,-29],[-28,-17],[-16,-5],[-4,7],[8,19],[20,31]].map(([a,b],k)=>pan(RC(a,-7.8,b,5.8),k%2?'p2':'hull')),pan(RC(-40,5.6,40,6.1),'mark'),pan([[30,-8.2],[34,-8.2],[40,-2],[36,-2]],'team'),
+   ...[-36,-29,-22].map(x=>rec(RC(x,-8.2,x+5,-6.8))),LIGHTS(-35,-18.5,-7.5,6),                                                                                  // 舷侧机库门(透灯)
+   blk(CBY(-32,-6,30,4,1),1.0),blk(CBY(-26,-4.8,16,2.6,0.8),0.9,'top'),...VENTS(-20,10,-1.2,6),                                                                 // 背脊两层
+   blk(CBY(-16,-13,8,-7.2,1.2),1.9,'top'),blk(CBY(-12,-12.2,4,-8.2,0.8),1.2,'top'),blk(OCT(-4,-10.2,1.3),0.7,'top'),seam([[-14,-10.2],[-21,-10.2]],'acc',0.4), // 多层舰岛 + 雷达罩 + 桅
+   win([[8.05,-12],[8.05,-10.6],[8.05,-9.2],[8.05,-7.8]]),win([[4.05,-11],[4.05,-9.6]]),
+   tur(39,-1.6,1.8,2,5,0.4,0,1.2),tur(28,-6.6,1.05,2,2.8,0.26,-0.5),tur(-30,-7.2,1.05,2,2.8,0.26,-2.4),tur(30,5.0,1.05,2,2.8,0.26,0.6),                          // 舰首主炮 + 近防炮
+   blk(CBY(-46.5,-7.4,-40,5.4,1),1.1,'acc'),...[-5.2,-1.6,2].map(y=>blk(CBY(-47,y-1.3,-44,y+1.3,0.4),0.5,'acc')),riv(ROW(-38,40,4.9,16)),riv(ROW(-38,30,-6.6,15)),
+   eng(-47,2,1.4),eng(-47,-1.6,1.4),eng(-47,-5.2,1.4)]};
+ const SV={
+  FF:{L:48,parts:[hull([[20,-1.6],[21,-0.6],[20,1.0],[15,2.4],[-23,2.4],[-24,1.6],[-24,-1.6]]),hull(RC(20,-0.9,24,-0.3),'acc'),blk(OCT(23.6,-0.6,0.6),0.25,'top'),
+    hull(CBY(-24,-2.6,-17,2.6,0.6),'acc'),...[-1.4,1.0].map(y=>blk(CBY(-24.6,y-0.8,-23,y+0.8,0.2),0.3,'acc')),
+    ...[[-16,-9],[-8,-1],[0,7],[8,15]].map(([a,b],k)=>pan(RC(a,-1.2,b,2.0),k%2?'p2':'hull')),pan(RC(-16,-1.6,19,-1.3),'mark'),pan([[17,-1.6],[19,-1.6],[17,2.2],[15,2.2]],'team'),
+    hull(CBY(-2,0.2,12,2.2,0.6),'blk'),blk(RC(12,0.9,16.5,1.4),0.25,'acc'),pan(RC(-1.4,0.5,10,0.95),'team'),rec(RC(1,1.2,4,1.8)),rec(RC(5,1.2,8,1.8)),win(ROW(1.8,7.2,1.5,4)),ov(haz(RC(11.1,0.3,11.8,2.1))),
+    blk(CBY(-14,-2.8,10,-1.6,0.4),0.5),blk(CBY(-8,-3.9,4,-2.8,0.4),0.5,'top'),hull(SEMI(-4.5,-3.9,1.0),'top'),win(ROW(-6.5,3,-3.35,7)),
+    seam([[-10.5,-2.8],[-10.5,-7.4]],'acc',0.3),seam([[-12,-6.6],[-9,-6.6]],'acc',0.25),blk(CBY(-18.4,-3.4,-16.6,-2.8,0.2),0.25,'acc'),seam([[-18.4,-3.1],[-21,-3.4]],'acc',0.2),
+    win(ROW(-15,-2,0.4,6)),riv(ROW(-22,18,2.0,12)),eng(-24.6,-1.4,0.9),eng(-24.6,1.0,0.9)]},
+  DD:{L:60,parts:[hull([[16,-1.8],[17,-0.8],[16,1.2],[12,2.8],[-29,2.8],[-30,2.0],[-30,-1.8]]),hull(RC(16,-1.3,28,-0.5),'acc'),blk(RC(26,-1.7,30,-0.1),0.3,'acc'),...[18,20.5,23].map(x=>seam([[x,-1.3],[x,-0.5]],'seam',0.25)),
+    blk(CBY(4,-2.8,16,-1.8,0.3),0.4,'acc'),ov(haz(RC(14.6,-2.8,15.6,-1.8))),
+    hull(CBY(-22,-2.6,-10,2.8,0.5),'blk'),...[-21,-18.4,-15.8,-13.2].map(x=>rec(RC(x,-2.6,x+2,-2.0))),...[-21,-18.4,-15.8,-13.2].map(x=>win([[x+1,-2.3]])),pan(RC(-21.5,1.8,-10.5,2.4),'team'),
+    hull(CBY(-30,-2.8,-23,2.8,0.6),'acc'),...[-1.6,0.6,2.0].map(y=>blk(CBY(-30.6,y-0.7,-29,y+0.7,0.2),0.3,'acc')),
+    ...[[-9,-2],[-1,6],[7,15]].map(([a,b],k)=>pan(RC(a,-1.4,b,2.4),k%2?'p2':'hull')),pan(RC(-9,-1.8,15,-1.5),'mark'),pan([[11,-1.8],[13,-1.8],[11,2.6],[9,2.6]],'team'),
+    blk(CBY(-20,-2.8,-2,-1.8,0.4),0.5),blk(CBY(-13,-4.3,-4,-2.8,0.4),0.5,'top'),hull(SEMI(-9,-4.3,1.1),'top'),win(ROW(-12,-5,-3.55,6)),
+    seam([[-15.5,-2.8],[-15.5,-8]],'acc',0.3),seam([[-17,-7.2],[-14,-7.2]],'acc',0.25),blk(CBY(-24,-3.4,-22.2,-2.8,0.2),0.25,'acc'),
+    win(ROW(-8,12,0.6,8)),riv(ROW(-28,14,2.4,14)),eng(-30.6,-1.6,1.0),eng(-30.6,0.6,1.0),eng(-30.6,2.0,0.8)]},
+  CL:{L:48,parts:[hull([[18,-1.4],[19,-0.6],[18,0.9],[14,2.0],[-23,2.0],[-24,1.4],[-24,-1.4]]),hull(RC(18,-0.7,24,-0.3),'acc'),blk(OCT(23.6,-0.5,0.55),0.25,'top'),
+    hull(CBY(-24,-2.2,-18,2.2,0.5),'acc'),...[-1.0,1.0].map(y=>blk(CBY(-24.6,y-0.7,-23,y+0.7,0.2),0.3,'acc')),
+    ...[[-16,-9],[-5,0.4],[8,14]].map(([a,b],k)=>pan(RC(a,-0.9,b,1.6),k%2?'p2':'hull')),pan(RC(-16,-1.4,17,-1.15),'mark'),pan([[16,-1.4],[17.6,-1.4],[16,1.8],[14.4,1.8]],'team'),
+    blk(CBY(-20,-2.6,-6,-1.4,0.4),0.4,'blk'),...[-18.4,-15.4,-12.4,-9.4].map(x=>blk(OCT(x+1.2,-3.3,0.8),0.35,'top')),ov(haz(RC(-6.9,-2.6,-6.2,-1.4))),pan(RC(-19.4,-1.3,-6.6,-0.9),'team'),
+    blk(CBY(3,-3.0,5,-1.4,0.2),0.3,'acc'),hull([[0.2,-3.4],[2,-5.6],[5,-7.0],[7.6,-7.2],[7.9,-6.6],[5.2,-6.2],[2.6,-4.8],[1.0,-3.0]],'top'),seam([[4,-3.4],[6.4,-5.2]],'acc',0.25),blk(OCT(6.6,-5.4,0.35),0.2,'top'),   // 雷达碟(侧看是斜着的碗)
+    blk(CBY(8,-2.6,14,-1.4,0.3),0.4,'top'),win(ROW(9,13.4,-2.0,4)),seam([[10.5,-2.6],[10.5,-6.2]],'acc',0.25),
+    win(ROW(-15,-3,0.4,5)),riv(ROW(-22,16,1.7,11)),eng(-24.6,-1.0,0.8),eng(-24.6,1.0,0.8)]},
+  CA:{L:75,parts:[hull([[30,-3.0],[31.5,-1.4],[30,1.8],[25,3.2],[-36,3.2],[-37.5,2.2],[-37.5,-3.0]]),hull(RC(30,-1.5,37.5,-0.5),'acc'),blk(RC(34.5,-1.9,37.5,-0.1),0.3,'acc'),...[31.5,33].map(x=>seam([[x,-1.5],[x,-0.5]],'seam',0.3)),
+    blk(CBY(22,-3.9,30,-3.0,0.3),0.4,'acc'),ov(haz(RC(28.8,-3.9,29.8,-3.0))),hull(CBY(-37.5,-3.6,-27,3.6,0.8),'acc'),...[-2.2,0,2.2].map(y=>blk(CBY(-38.2,y-0.8,-36.6,y+0.8,0.2),0.3,'acc')),
+    ...[[-26.5,-19],[14,22]].map(([a,b],k)=>pan(RC(a,-2.4,b,2.6),k%2?'p2':'hull')),pan(RC(-18,-0.6,14,1.9),'blk'),...[-16,-12,0,4,8].map(x=>rec(RC(x,0.0,x+3.2,1.3))),...[-16,-12,0,4,8].map(x=>win([[x+1.6,0.65]])),pan(RC(-18,1.9,14,2.3),'team'),
+    pan(RC(-26,-3.0,28,-2.7),'mark'),pan([[24,-3.0],[27,-3.0],[25,3.2],[22,3.2]],'team'),
+    blk(CBY(10.5,-4.7,17.5,-3.0,0.6),0.6,'acc'),blk(RC(17.5,-4.2,24,-3.6),0.25,'acc'),blk(CBY(-20.5,-4.7,-13.5,-3.0,0.6),0.6,'acc'),blk(RC(-27,-4.2,-20.5,-3.6),0.25,'acc'),
+    blk(CBY(-12,-5.4,6,-3.0,0.6),0.6),blk(CBY(-8,-7.0,2,-5.4,0.5),0.5,'top'),hull(SEMI(-3,-7.0,1.2),'top'),win(ROW(-10,4,-4.3,9)),win(ROW(-6.5,0.5,-6.2,5)),
+    seam([[-10,-7.0],[-10,-11.2]],'acc',0.35),seam([[-11.8,-10.2],[-8.2,-10.2]],'acc',0.25),seam([[-11.2,-8.8],[-8.8,-8.8]],'acc',0.25),
+    blk(CBY(19.2,-3.6,20.8,-3.0,0.2),0.25,'acc'),blk(CBY(-24.8,-3.6,-23.2,-3.0,0.2),0.25,'acc'),rad(RC(-35,-4.0,-29,-3.0)),
+    riv(ROW(-26,28,2.8,16)),eng(-38.2,-2.2,1.1),eng(-38.2,0,1.1),eng(-38.2,2.2,1.0)]},
+  CV:{L:94,parts:[hull([[47,-3.4],[47,-1.0],[43,2.6],[38,3.8],[-46,3.8],[-47,2.8],[-47,-3.4]]),hull(CBY(-47,-4.0,-40,3.8,0.8),'acc'),...[-2.4,0,2.4].map(y=>blk(CBY(-47.7,y-0.9,-46,y+0.9,0.2),0.3,'acc')),
+    hull([[-34,-4.6],[42,-4.6],[44.4,-3.9],[42,-3.4],[-34,-3.4]],'deck'),win(ROW(-30,40,-4.0,16)),ov(haz(RC(-34,-4.6,-32.8,-3.4))),pan(RC(-30,-4.55,40,-4.35),'team'),   // 斜角飞行甲板(侧看是一片)
+    ...[[-38,-29],[-29,-20],[-20,-11],[8,17],[17,26],[26,35]].map(([a,b],k)=>pan(RC(a,-2.8,b,3.2),k%2?'p2':'hull')),pan(RC(-38,-3.4,38,-3.1),'mark'),pan([[36,-3.4],[39,-3.4],[37,3.4],[34,3.4]],'team'),
+    ...[-36,-28,-20].map(x=>rec(RC(x,-1.6,x+5,1.6))),...[-36,-28,-20].map(x=>win(ROW(x+1,x+4,0,3))),                                                                // 舷侧机库门(透灯)
+    blk(CBY(-16,-9.0,8,-4.6,0.8),0.7,'top'),blk(CBY(-12,-11.6,4,-9.0,0.6),0.6,'top'),hull(SEMI(-4,-11.6,1.4),'top'),win(ROW(-14,6,-6.8,11)),win(ROW(-10,2,-10.3,7)),     // 多层舰岛 + 雷达罩
+    seam([[-14,-11.6],[-14,-16.4]],'acc',0.4),seam([[-16,-15.2],[-12,-15.2]],'acc',0.3),seam([[-15.4,-13.6],[-12.6,-13.6]],'acc',0.3),
+    blk(CBY(35,-4.6,41,-3.4,0.3),0.4,'acc'),blk(RC(41,-4.3,46.6,-3.8),0.2,'acc'),blk(CBY(27.4,-4.0,29.4,-3.4,0.2),0.25,'acc'),blk(CBY(-31,-4.0,-29,-3.4,0.2),0.25,'acc'),
+    riv(ROW(-38,36,3.4,20)),eng(-47.7,-2.4,1.2),eng(-47.7,0,1.2),eng(-47.7,2.4,1.1)]}};
+
+  const SHIPS={FF:FFr,DD:DDr,CL:CLr,CA:CAr,CV:CVB};
+  const H2C={DD:'FF',SC:'DD',CL:'CL',CA:'CA',CV:'CV'};              // 轮廓键(82 CLS_HULL)→ 舰种
+  const PXU=17.36/48;                                                // 舰标系数 1 时每单位几 px(护卫舰长 = 改版前的 17.36 px)
+  const SA_K={CA:0.92,CV:0.88};                                     // 2026-10-05 用户:巡洋 / 航母体型稍小(驱逐→巡洋 x1.15、巡洋→航母 x1.2;原来每档 x1.25);外形不变,只整体缩
+
+  /* ---------- 颜色 / 多边形 ---------- */
+  const FAC={blue:{edge:'#7cc0ff',tint:'#5aa7ff',glow:'#9fdcff'},red:{edge:'#ff9a90',tint:'#ff6b6b',glow:'#ffb48a'}};
+  const hex2=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+  const css=(c,a)=>(a===undefined?'rgb(':'rgba(')+c.map(v=>Math.round(Math.max(0,Math.min(255,v)))).join(',')+(a===undefined?')':','+a+')');
+  const mix=(a,b,k)=>[a[0]+(b[0]-a[0])*k,a[1]+(b[1]-a[1])*k,a[2]+(b[2]-a[2])*k];
+  const shade=(c,k)=>k>=0?mix(c,[255,255,255],Math.min(1,k)*0.42):mix(c,[0,0,0],Math.min(1,-k)*0.55);
+  const tierTint=(c,k)=>k>=0?mix(c,[255,255,255],k):mix(c,[0,0,0],-k);
+  function mat(m,T,f){if(m==='team')return mix(hex2(FAC[f].tint),[24,30,40],0.12);return mix(hex2(PAL[m]||PAL.hull),hex2(FAC[f].tint),T);}
+  function area(P){let A=0;for(let i=0;i<P.length;i++){const a=P[i],b=P[(i+1)%P.length];A+=a[0]*b[1]-b[0]*a[1];}return A/2;}
+  function outN(P){const s=area(P)>0?1:-1,o=[];for(let i=0;i<P.length;i++){const a=P[i],b=P[(i+1)%P.length],ex=b[0]-a[0],ey=b[1]-a[1],l=Math.hypot(ex,ey)||1;o.push(s>0?[ey/l,-ex/l]:[-ey/l,ex/l]);}return o;}
+  function insetC(P,d){const N=outN(P),n=P.length,L=[];for(let i=0;i<n;i++){const a=P[i],b=P[(i+1)%n],l=Math.hypot(b[0]-a[0],b[1]-a[1])||1;L.push([a[0]-N[i][0]*d,a[1]-N[i][1]*d,(b[0]-a[0])/l,(b[1]-a[1])/l]);}
+    const o=[];for(let i=0;i<n;i++){const A=L[(i-1+n)%n],B=L[i],cr=A[2]*B[3]-A[3]*B[2];if(Math.abs(cr)<1e-6){o.push([B[0],B[1]]);continue;}const t=((B[0]-A[0])*B[3]-(B[1]-A[1])*B[2])/cr;o.push([A[0]+A[2]*t,A[1]+A[3]*t]);}return o;}
+  function path(g,P){g.beginPath();g.moveTo(P[0][0],P[0][1]);for(let i=1;i<P.length;i++)g.lineTo(P[i][0],P[i][1]);g.closePath();}
+  function line(g,P){g.beginPath();g.moveTo(P[0][0],P[0][1]);for(let i=1;i<P.length;i++)g.lineTo(P[i][0],P[i][1]);}
+  function turPoly(t){const r=t.r,c=Math.cos(t.a),s=Math.sin(t.a),loc=[[r,-0.55*r],[r,0.55*r],[0.45*r,r],[-0.85*r,r],[-r,0.65*r],[-r,-0.65*r],[-0.85*r,-r],[0.45*r,-r]];return loc.map(([x,y])=>[t.x+x*c-y*s,t.y+x*s+y*c]);}
+  function barPolys(t){const c=Math.cos(t.a),s=Math.sin(t.a),o=[];for(let i=0;i<t.n;i++){const off=(i-(t.n-1)/2)*t.bw*2.3,x0=t.r*0.5,x1=t.r*0.5+t.len,w=t.bw/2;
+    o.push([[x0,off-w],[x1,off-w],[x1,off+w],[x0,off+w]].map(([x,y])=>[t.x+x*c-y*s,t.y+x*s+y*c]));}return o;}
+  function solids(sh){if(sh.sol)return sh.sol;const o=[];for(const p of sh.parts){if(p.t==='hull'||p.t==='blk'||p.t==='rad')o.push(p.p);else if(p.t==='tur'){o.push(turPoly(p));for(const b of barPolys(p))o.push(b);}}return sh.sol=o;}
+  function bbox(sol){let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;for(const P of sol)for(const [x,y] of P){x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);}return {x0,x1,y0,y1,w:x1-x0,h:y1-y0};}
+
+  /* ---------- 画一艘:mode 'icon' 地图舰标 / 'full' 肖像(完整画法);tl = Tier 明暗 ---------- */
+  function draw(g,sh,x,y,ang,sc,mode,f,tl,TT){
+    const c=Math.cos(-ang),s=Math.sin(-ang),LX=Math.cos(-125*Math.PI/180),LY=Math.sin(-125*Math.PI/180),lx=LX*c-LY*s,ly=LX*s+LY*c; // 固定光向转进船体坐标(屏幕上光不跟船转)
+    const F=FAC[f],T=TT||0.16,u=1/sc,SOL=solids(sh);
+    g.save();g.translate(x,y);g.rotate(ang);g.scale(sc,sc);g.lineJoin='round';
+    if(mode==='icon'){const base=tierTint(hex2(F.tint),tl||0),Lp=sc*sh.L,R=sh.L*0.3,gr=g.createLinearGradient(-lx*R,-ly*R,lx*R,ly*R);
+      gr.addColorStop(0,css(shade(base,-0.6)));gr.addColorStop(0.5,css(base));gr.addColorStop(1,css(shade(base,0.6)));
+      g.strokeStyle='rgba(0,0,0,.75)';g.lineWidth=1.6*u;for(const P of SOL){path(g,P);g.stroke();}
+      g.fillStyle=gr;for(const P of SOL){path(g,P);g.fill();}
+      if(Lp>=16){for(const p of sh.parts){
+          if(p.t==='rad'){path(g,p.p);g.fillStyle=css(shade(base,-0.75));g.fill();}
+          else if(p.t==='hull'&&(p.m==='deck'||p.m==='acc')){path(g,p.p);g.fillStyle=css(shade(base,-0.35));g.fill();}
+          else if(p.t==='rec'){path(g,p.p);g.fillStyle=css(shade(base,-0.9));g.fill();}}
+        if(Lp>=24)for(const p of sh.parts)if(p.t==='blk'||p.t==='tur'){path(g,p.t==='tur'?turPoly(p):p.p);g.fillStyle=css(shade(base,0.45));g.fill();}}
+      if(Lp>=10)for(const p of sh.parts)if(p.t==='eng'){g.fillStyle=F.glow;g.beginPath();g.arc(p.x-0.4,p.y,Math.max(p.r*0.8,0.7*u),0,6.283);g.fill();}
+      g.restore();return;}
+    g.strokeStyle=F.edge;g.lineWidth=2.2*u;for(const P of SOL){path(g,P);g.stroke();}                                          // 外轮廓:阵营色粗描 + 填底 = 只剩并集外沿
+    g.fillStyle=css(mat('trench',T,f));for(const P of SOL){path(g,P);g.fill();}
+    for(const p of sh.parts)if(p.t==='hull'){const b=mat(p.m,T,f);path(g,p.p);g.fillStyle=css(b);g.fill();bevel(g,p.p,b,lx,ly,0.85);}
+    for(const p of sh.parts)if(p.t==='pan'&&!p.over&&p.m!=='team'){const b=mat(p.m,T,f);path(g,p.p);g.fillStyle=css(b);g.fill();bevel(g,p.p,b,lx,ly,0.45);}
+    for(const p of sh.parts)if(p.t==='pan'&&!p.over&&p.m==='team'){const b=mat(p.m,T,f);path(g,p.p);g.fillStyle=css(b);g.fill();bevel(g,p.p,b,lx,ly,0.3);}
+    for(const p of sh.parts)if(p.t==='haz'&&!p.over)hazard(g,p.p);
+    for(const p of sh.parts)if(p.t==='rad')radiator(g,p.p,T,lx,ly,f);
+    for(const p of sh.parts)if(p.t==='rec'&&!p.over)recess(g,p.p,T,lx,ly,f);
+    for(const p of sh.parts)if(p.t==='seam'&&!p.over){g.strokeStyle=css(mat(p.m,T,f));g.lineWidth=p.w;g.globalAlpha=p.m==='seam'?0.8:0.9;line(g,p.pts);g.stroke();g.globalAlpha=1;}
+    for(const p of sh.parts)if(p.t==='deck'){g.strokeStyle='rgba(235,240,245,.55)';g.lineWidth=0.35;g.setLineDash([1.6,1.2]);line(g,p.pts);g.stroke();g.setLineDash([]);}
+    const up=sh.parts.filter(p=>p.t==='blk'||p.t==='tur');                                                                      // 凸起:先投影,再画台体
+    g.fillStyle='rgba(0,0,0,.34)';for(const p of up){const k=p.h*1.3;for(const P of (p.t==='tur'?[turPoly(p)].concat(barPolys(p)):[p.p])){path(g,MV(P,-lx*k,-ly*k));g.fill();}}
+    for(const p of up){if(p.t==='tur'){for(const b of barPolys(p)){const bc=mat('acc',T,f);path(g,b);g.fillStyle=css(shade(bc,-0.25));g.fill();bevel(g,b,bc,lx,ly,Math.min(0.22,p.bw*0.35));}
+        frustum(g,turPoly(p),p.h,mat(p.m,T,f),mat('top',T,f),lx,ly);g.fillStyle=css(shade(mat('top',T,f),-0.3));g.beginPath();g.arc(p.x-Math.cos(p.a)*p.r*0.3,p.y-Math.sin(p.a)*p.r*0.3,p.r*0.22,0,6.283);g.fill();}
+      else frustum(g,p.p,p.h,mat(p.m,T,f),p.m==='top'?mat(p.m,T,f).map(v=>Math.min(255,v*1.06)):shade(mat(p.m,T,f),0.18),lx,ly);}
+    for(const p of sh.parts){if(!p.over)continue;
+      if(p.t==='pan'){const b=mat(p.m,T,f);path(g,p.p);g.fillStyle=css(b);g.fill();bevel(g,p.p,b,lx,ly,0.3);}
+      else if(p.t==='rec')recess(g,p.p,T,lx,ly,f);else if(p.t==='haz')hazard(g,p.p);
+      else if(p.t==='seam'){g.strokeStyle=css(mat(p.m,T,f));g.lineWidth=p.w;g.globalAlpha=0.85;line(g,p.pts);g.stroke();g.globalAlpha=1;}}
+    for(const p of sh.parts)if(p.t==='riv'){g.fillStyle=css(mat('riv',T,f));for(const q of p.pts){g.beginPath();g.arc(q[0],q[1],0.32,0,6.283);g.fill();}}
+    for(const p of sh.parts)if(p.t==='win'){g.fillStyle=PAL.win;g.shadowColor=PAL.win;g.shadowBlur=4;for(const q of p.pts)g.fillRect(q[0]-0.35,q[1]-0.35,0.7,0.7);g.shadowBlur=0;}
+    for(const p of sh.parts)if(p.t==='eng'){g.globalCompositeOperation='source-over';g.fillStyle='rgba(20,24,30,1)';g.fillRect(p.x-0.3,p.y-p.r*0.85,1.4,p.r*1.7);g.globalCompositeOperation='lighter';
+      const R=p.r*3.6,gr=g.createRadialGradient(p.x-0.6,p.y,0,p.x-0.6,p.y,R),gc=hex2(F.glow);
+      gr.addColorStop(0,'rgba(255,255,255,.95)');gr.addColorStop(0.18,'rgba('+gc.join(',')+',.85)');gr.addColorStop(1,'rgba('+gc.join(',')+',0)');g.fillStyle=gr;g.beginPath();g.arc(p.x-0.6,p.y,R,0,6.283);g.fill();}
+    g.globalCompositeOperation='source-over';g.restore();}
+  function bevel(g,P,b,lx,ly,bw){const N=outN(P);g.save();path(g,P);g.clip();g.lineWidth=bw*2;g.lineCap='square';
+    for(let i=0;i<P.length;i++){const a=P[i],q=P[(i+1)%P.length],d=N[i][0]*lx+N[i][1]*ly;g.strokeStyle=css(shade(b,d>0?d*0.9:d*0.8));g.beginPath();g.moveTo(a[0],a[1]);g.lineTo(q[0],q[1]);g.stroke();}g.restore();}
+  function frustum(g,P,h,side,top,lx,ly){const I=insetC(P,Math.min(h,0.45*Math.sqrt(Math.abs(area(P))))),N=outN(P);
+    for(let i=0;i<P.length;i++){const j=(i+1)%P.length,d=N[i][0]*lx+N[i][1]*ly;g.beginPath();g.moveTo(P[i][0],P[i][1]);g.lineTo(P[j][0],P[j][1]);g.lineTo(I[j][0],I[j][1]);g.lineTo(I[i][0],I[i][1]);g.closePath();
+      g.fillStyle=css(shade(side,d*1.1));g.fill();g.strokeStyle=css(shade(side,d*1.1));g.lineWidth=0.08;g.stroke();}
+    path(g,I);g.fillStyle=css(top);g.fill();g.strokeStyle=css(shade(top,-0.35));g.lineWidth=0.18;g.stroke();path(g,P);g.strokeStyle='rgba(0,0,0,.35)';g.lineWidth=0.2;g.stroke();}
+  function recess(g,P,T,lx,ly,f){const N=outN(P),b=mat('trench',T,f);path(g,P);g.fillStyle=css(b);g.fill();g.save();path(g,P);g.clip();g.lineWidth=1.6;
+    for(let i=0;i<P.length;i++){const a=P[i],q=P[(i+1)%P.length],d=N[i][0]*lx+N[i][1]*ly;g.strokeStyle=d>0?'rgba(0,0,0,.6)':'rgba(255,255,255,'+(0.1*-d).toFixed(3)+')';g.beginPath();g.moveTo(a[0],a[1]);g.lineTo(q[0],q[1]);g.stroke();}g.restore();}
+  function radiator(g,P,T,lx,ly,f){const b=mix(hex2('#353b44'),hex2(FAC[f].tint),T*0.8);path(g,P);g.fillStyle=css(b);g.fill();g.save();path(g,P);g.clip();
+    let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;for(const q of P){x0=Math.min(x0,q[0]);x1=Math.max(x1,q[0]);y0=Math.min(y0,q[1]);y1=Math.max(y1,q[1]);}
+    const vert=(y1-y0)>(x1-x0);g.strokeStyle='rgba(150,165,180,.45)';g.lineWidth=0.25;g.beginPath();
+    if(vert)for(let yy=y0+0.9;yy<y1;yy+=1.1){g.moveTo(x0,yy);g.lineTo(x1,yy);}else for(let xx=x0+0.9;xx<x1;xx+=1.1){g.moveTo(xx,y0);g.lineTo(xx,y1);}g.stroke();g.restore();bevel(g,P,b,lx,ly,0.35);}
+  function hazard(g,P){path(g,P);g.fillStyle='#d4ae38';g.fill();g.save();path(g,P);g.clip();let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;for(const q of P){x0=Math.min(x0,q[0]);x1=Math.max(x1,q[0]);y0=Math.min(y0,q[1]);y1=Math.max(y1,q[1]);}
+    g.fillStyle='#1c1c1c';for(let k=x0-(y1-y0)-2;k<x1+2;k+=1.8){g.beginPath();g.moveTo(k,y0);g.lineTo(k+0.9,y0);g.lineTo(k+0.9+(y1-y0),y1);g.lineTo(k+(y1-y0),y1);g.closePath();g.fill();}g.restore();}
+
+  /* ---------- 载入时重算舰体轮廓 / 尺寸 / 尾焰喷口(1 个 HULL 单位 = 舰长的 1/2.5)---------- */
+  for(const h in H2C){const sh=SHIPS[H2C[h]],s=sh.L/2.5;
+    HULL[h]={parts:sh.parts.filter(p=>p.t==='hull').map(p=>({p:'poly',pts:p.p.map(([x,y])=>[x/s,y/s])}))};
+    HULL_BASE[h]=PXU*s*(SA_K[H2C[h]]||1);
+    if(typeof ART_NOZ==='object'){const b=bbox(solids(sh));ART_NOZ[h]={e:sh.parts.filter(p=>p.t==='eng').map(p=>[p.x/s,p.y/s,p.r/s]),hw:(b.y1-b.y0)/2/s*0.85,bx:(b.x1-0.18*sh.L)/s};}}
+  if(typeof HULL_LABEL==='object')HULL_LABEL.CL='巡游';
+
+  /* ---------- 地图舰标:贴图缓存 ---------- */
+  const CACHE=new Map();let NEW=0,TICK=0;
+    function build(sh,f,tl,Lq,rq,fe,D,full){const b=bbox(solids(sh)),pxu=Lq/sh.L,R=Math.hypot(Math.max(-b.x0,b.x1),Math.max(-b.y0,b.y1))*pxu+3+fe*3,S=Math.ceil(2*R*D);
+    const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');g.setTransform(D,0,0,D,S/2,S/2);draw(g,sh,0,0,rq,pxu,full?'full':'icon',f,tl,0.3);
+    c.Lq=Lq;if(fe<0.05)return c;const c2=document.createElement('canvas');c2.width=c2.height=S;const g2=c2.getContext('2d');g2.filter='blur('+(fe*D).toFixed(2)+'px)';g2.drawImage(c,0,0);c2.Lq=Lq;return c2;} // 羽化:整张模糊(逐笔模糊会让描边和填色各糊各的)
+  function icon(g,h,tier,f,x,y,rot,zf,fe){const k=H2C[h];if(!k)return false;
+    const sh=SHIPS[k],tl=(typeof TIER_LIGHT==='object'&&TIER_LIGHT[tier])||0,pxu=PXU*zf*(SA_K[k]||1)*((typeof TIER_SCALE==='object'&&TIER_SCALE[tier])||1),Lp=sh.L*pxu;
+    const li=Math.round(Math.log2(Lp)*8),Lq=Math.pow(2,li/8),nr=Lp<20?48:96,ab=((Math.round(rot/(2*Math.PI)*nr)%nr)+nr)%nr,fb=Math.round((fe||0)*10),D=window.devicePixelRatio||1,full=Lp>=30; // 拉近到舰长 30 px 起画完整细节(skill:L3 档)
+    const kk=l=>h+tier+f+(full?'F':'')+'|'+l+'|'+ab+'|'+nr+'|'+fb+'|'+D;let c=CACHE.get(kk(li));
+    if(!c){const now=performance.now(),cost=full?4:1;if(now-TICK>8){TICK=now;NEW=0;}
+      if(NEW+cost>SA_NEW_MAX){for(let d=1;d<=4&&!c;d++)c=CACHE.get(kk(li-d))||CACHE.get(kk(li+d));                                // 这一帧建够了:先借相邻尺寸档
+        if(!c){draw(g,sh,x,y,rot,pxu,'icon',f,tl);return true;}}                                                                   // 借不到:直接画简化画法(不羽化)
+      else{NEW+=cost;c=build(sh,f,tl,Lq,ab/nr*2*Math.PI,fb/10,D,full);if(CACHE.size>1500)CACHE.clear();CACHE.set(kk(li),c);}}
+    const w=c.width/D*Lp/c.Lq;g.drawImage(c,x-w/2,y-w/2,w,w);return true;}
+
+  /* ---------- 底栏肖像:侧视,离屏画好再带阵营色背光贴回;尾焰从喷口往后拉 ---------- */
+  function portrait(g,cls,f,W,H){const sv=SV[cls];if(!sv)return false;
+    const b=bbox(solids(sv)),pad=5,sc=Math.min((W-pad*2-10)/b.w,(H-pad*2)/b.h),cx=W/2-(b.x0+b.x1)/2*sc+5,cy=H/2-(b.y0+b.y1)/2*sc,D=window.devicePixelRatio||1;
+    const oc=document.createElement('canvas');oc.width=Math.ceil(W*D);oc.height=Math.ceil(H*D);const o=oc.getContext('2d');o.setTransform(D,0,0,D,0,0);draw(o,sv,cx,cy,0,sc,'full',f,0);
+    g.save();g.shadowColor=css(hex2(FAC[f].tint),0.6);g.shadowBlur=Math.max(5,sc*2.2);g.drawImage(oc,0,0,W,H);g.restore();
+    g.save();g.globalCompositeOperation='lighter';const E=hex2(FAC[f].glow);
+    for(const p of sv.parts)if(p.t==='eng'){const ex=cx+p.x*sc,ey=cy+p.y*sc,r=Math.max(1.6,p.r*sc),pl=g.createLinearGradient(ex,0,ex-r*6,0);pl.addColorStop(0,css(E,0.55));pl.addColorStop(1,css(E,0));
+      g.fillStyle=pl;g.beginPath();g.moveTo(ex,ey-r*0.5);g.lineTo(ex-r*6,ey-r*0.15);g.lineTo(ex-r*6,ey+r*0.15);g.lineTo(ex,ey+r*0.5);g.closePath();g.fill();}
+    g.restore();return true;}
+
+  return {has:h=>!!H2C[h],icon,portrait,hasSide:c=>!!SV[c]};
+})();
+
+/* ---------- 小工具(同 81-art) ---------- */
+function mix(a,b,k){return [a[0]+(b[0]-a[0])*k,a[1]+(b[1]-a[1])*k,a[2]+(b[2]-a[2])*k];}
+function lit(c,k){return k>=0?mix(c,[255,255,255],k):mix(c,[0,0,0],-k);}
+function css(c,a){return 'rgba('+Math.round(c[0])+','+Math.round(c[1])+','+Math.round(c[2])+','+(a===undefined?1:a)+')';}
+function rng(seed){let a=seed>>>0;return ()=>{a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296;};}
+function mkCv(w,h){const c=document.createElement('canvas');c.width=Math.max(1,Math.ceil(w));c.height=Math.max(1,Math.ceil(h));return c;}
+function path(g,P){g.beginPath();g.moveTo(P[0][0],P[0][1]);for(let i=1;i<P.length;i++)g.lineTo(P[i][0],P[i][1]);g.closePath();}
+function area(P){let A=0;for(let i=0;i<P.length;i++){const a=P[i],b=P[(i+1)%P.length];A+=a[0]*b[1]-b[0]*a[1];}return A/2;}
+function localL(rot){const c=Math.cos(rot),s=Math.sin(rot);return [ART_L[0]*c+ART_L[1]*s,-ART_L[0]*s+ART_L[1]*c];} // 固定光向转进物体坐标(+x = 船头)
+function flick(t,sd){return 1+0.07*Math.sin(t*31+sd)+0.05*Math.sin(t*53+sd*1.7)+0.04*Math.sin(t*97+sd*2.3);}
+
+/* ---------- 舰体几何 ---------- */
+const POLY={},EXT={};
+function polyPts(pt){const P=pt.pts.map(q=>[q[0],q[1]]);if(pt.mirror)for(let i=pt.pts.length-1;i>=0;i--){if(Math.abs(pt.pts[i][1])<1e-9)continue;P.push([pt.pts[i][0],-pt.pts[i][1]]);}return P;}
+function hullPolys(h){return POLY[h]||(POLY[h]=HULL[h].parts.filter(p=>p.p==='poly').map(polyPts));}
+function rectYs(p){return p.p==='mirror'?[p.y,-p.y-p.h]:[p.y];}
+function hullExt(h){if(EXT[h])return EXT[h];let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;const add=(x,y)=>{x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);};
+  for(const p of HULL[h].parts){if(p.p==='poly')for(const q of polyPts(p))add(q[0],q[1]);
+    else if(p.p==='line'){const w=(p.w||0.08)/2;if(p.x1===p.x2){add(p.x1-w,p.y1);add(p.x1+w,p.y2);}else{add(p.x1,p.y1-w);add(p.x2,p.y2+w);}}
+    else for(const y of rectYs(p)){add(p.x,y);add(p.x+p.w,y+p.h);}}
+  return EXT[h]={len:x1-x0,wid:y1-y0};}
+function shipLen(h,tier,zf){return hullExt(h).len*hullSize(h,tier)*zf;}
+const FF_LEN=hullExt('DD').len*hullSize('DD',1); // 最小的船(护卫 T1)在系数 1 下的舰长 px
+function LFF(zf){return FF_LEN*zf;}
+
+/* ---------- 尾焰贴图(照抄 81-art;msl* / int* 是新加的带阵营色的导弹 / 拦截弹尾焰) ---------- */
+const PL_COL={main:[[50,110,255],[100,175,255],[185,228,255]],retro:[[255,95,30],[255,150,60],[255,210,140]],side:[[255,190,80],[255,222,140],[255,244,210]],
+  msl:[[255,150,50],[255,205,110],[255,240,200]],inter:[[40,200,220],[110,235,240],[210,252,255]],
+  mslblue:[[60,130,255],[120,190,255],[205,235,255]],mslred:[[255,70,50],[255,140,90],[255,220,190]],
+  intblue:[[90,190,255],[170,228,255],[232,248,255]],intred:[[255,120,140],[255,180,190],[255,234,238]]};
+const PL_W={main:1,retro:0.9,side:1.3,msl:0.85,inter:0.75,mslblue:0.85,mslred:0.85,intblue:0.75,intred:0.75};
+const PL=new Map(),PL_SW=256,PL_H=64,PL_O=10;
+function plSpr(kind,lod){const key=kind+lod;let c=PL.get(key);if(c)return c;
+  c=mkCv(PL_SW,PL_H);const g=c.getContext('2d'),C=PL_COL[kind],W=PL_W[kind],cy=PL_H/2,L=PL_SW-PL_O-4;
+  const lobe=(len,w0,w1,col,a)=>{const x0=PL_O,x1=x0+len*L,gr=g.createLinearGradient(x0,0,x1,0);gr.addColorStop(0,css(col,a));gr.addColorStop(0.45,css(col,a*0.7));gr.addColorStop(1,css(col,0));g.fillStyle=gr;
+    g.beginPath();g.moveTo(x0,cy-w0);g.bezierCurveTo(x0+len*L*0.25,cy-w1,x0+len*L*0.6,cy-w1*0.7,x1,cy);g.bezierCurveTo(x0+len*L*0.6,cy+w1*0.7,x0+len*L*0.25,cy+w1,x0,cy+w0);g.closePath();g.fill();};
+  lobe(1.0,9*W,14*W,C[0],0.5);lobe(0.74,6.5*W,9.5*W,C[1],0.72);lobe(0.48,4.2*W,5.5*W,C[2],0.92);lobe(0.24,2.4*W,2.8*W,[255,255,255],1);
+  if(lod>=2&&kind==='main')for(let i=0;i<4;i++){const x=PL_O+L*(0.1+0.1*i),hw=2.6*W*(1-i*0.18),hl=5*(1-i*0.12);g.fillStyle='rgba(255,255,255,'+(0.32-i*0.07).toFixed(2)+')';
+    g.beginPath();g.moveTo(x-hl,cy);g.lineTo(x,cy-hw);g.lineTo(x+hl,cy);g.lineTo(x,cy+hw);g.closePath();g.fill();}
+  const rg=g.createRadialGradient(PL_O,cy,0,PL_O,cy,14*W);rg.addColorStop(0,'rgba(255,255,255,.9)');rg.addColorStop(0.3,css(C[2],0.6));rg.addColorStop(1,css(C[1],0));g.fillStyle=rg;g.beginPath();g.arc(PL_O,cy,14*W,0,6.283);g.fill();
+  PL.set(key,c);return c;}
+function plume(g,kind,lod,x,y,ang,len,wid,a){if(len<0.5||a<=0)return;const c=plSpr(kind,lod),sx=len/(PL_SW-PL_O-4),sy=wid/PL_H;
+  g.save();g.translate(x,y);g.rotate(ang);g.globalCompositeOperation='lighter';g.globalAlpha=Math.min(1,a);g.drawImage(c,-PL_O*sx,-PL_H/2*sy,PL_SW*sx,PL_H*sy);g.restore();}
+
+/* ---------- 发光贴图(照抄 81-art;glow* 是雷指示灯的阵营色光) ---------- */
+const FX={};
+function rad(stops,sz){const c=mkCv(sz,sz),g=c.getContext('2d'),gr=g.createRadialGradient(sz/2,sz/2,0,sz/2,sz/2,sz/2);for(const s of stops)gr.addColorStop(s[0],s[1]);g.fillStyle=gr;g.fillRect(0,0,sz,sz);return c;}
+function fx(k){if(FX[k])return FX[k];let c;
+  if(k==='decoy')c=rad([[0,'rgba(255,245,255,1)'],[0.18,'rgba(230,170,255,.85)'],[0.5,'rgba(170,100,255,.3)'],[1,'rgba(150,80,255,0)']],64);
+  else if(k==='glowblue')c=rad([[0,'rgba(150,200,255,.9)'],[1,'rgba(90,167,255,0)']],32);
+  else if(k==='glowred')c=rad([[0,'rgba(255,170,160,.9)'],[1,'rgba(255,107,107,0)']],32);
+  else if(k==='flash')c=rad([[0,'rgba(255,255,255,1)'],[0.2,'rgba(255,246,214,.9)'],[0.5,'rgba(255,200,120,.3)'],[1,'rgba(255,170,80,0)']],128);
+  else if(k==='flashB')c=rad([[0,'rgba(255,255,255,1)'],[0.2,'rgba(220,240,255,.9)'],[0.5,'rgba(140,200,255,.3)'],[1,'rgba(100,170,255,0)']],128);
+  else if(k==='fire')c=rad([[0,'rgba(255,240,200,1)'],[0.3,'rgba(255,170,70,.95)'],[0.65,'rgba(220,80,30,.55)'],[1,'rgba(120,30,10,0)']],128);
+  else if(k==='smoke')c=rad([[0,'rgba(128,122,118,.7)'],[0.55,'rgba(100,96,94,.4)'],[1,'rgba(80,78,78,0)']],64);
+  else if(k==='ember')c=rad([[0,'rgba(255,230,180,1)'],[0.35,'rgba(255,140,50,.8)'],[1,'rgba(255,90,20,0)']],32);
+  else if(k==='ring'||k==='ringB'){const col=k==='ring'?'255,226,180':'120,190,255';c=rad([[0,'rgba('+col+',0)'],[0.84,'rgba('+col+',0)'],[0.94,'rgba('+col+',.9)'],[1,'rgba('+col+',0)']],256);} // ringB:浮标照射的脉冲环(同 81-art)
+  return FX[k]=c;}
+function blit(g,c,x,y,r,a,add){if(a<=0.003||r<=0.2)return;g.save();if(add)g.globalCompositeOperation='lighter';g.globalAlpha=Math.min(1,a);g.drawImage(c,x-r,y-r,2*r,2*r);g.restore();}
+
+/* ---------- 舰船(真显示):认出的画贴图(SA.icon,同引擎 82-ship-icons drawShip);没认出的画灰色空心菱形,半径 = 图标半径(同引擎 drawUnkMark / shipIconR) ---------- */
+function unkR(zf){return hullSize('UNK',2)*0.78*zf;}
+function drawUnk(g,x,y,r){g.save();g.beginPath();g.moveTo(x+r,y);g.lineTo(x,y+r);g.lineTo(x-r,y);g.lineTo(x,y-r);g.closePath();
+  g.globalAlpha=0.25;g.fillStyle='#a0aab9';g.fill();g.globalAlpha=1;g.strokeStyle='#a0aab9';g.lineWidth=1.5;g.stroke();g.restore();}
+function shipIcon(g,h,tier,side,x,y,rot,zf,fe){if(h==='UNK'){drawUnk(g,x,y,unkR(zf));return;}SA.icon(g,h,tier,side,x,y,rot,zf,fe);}
+
+/* 舰船尾焰(照抄 81-art artFlames,参数改成显式):mf > 0 主推、< 0 反推;sf 侧推,sg 侧推朝哪一舷 */
+function shipFlames(g,h,tier,x,y,rot,zf,mf,sf,sg,t,sd){
+  const N=ART_NOZ[h];if(!N)return;const sc=hullSize(h,tier)*zf,c=Math.cos(rot),sn=Math.sin(rot),Lpx=2.5*sc,lod=Lpx>=40?2:1;
+  const P=(hx,hy)=>[x+(hx*c-hy*sn)*sc,y+(hx*sn+hy*c)*sc];
+  if(mf>0.05){const k=Math.min(1,mf),len=Lpx*(0.5+0.9*k)*flick(t,sd);
+    if(Lpx<16){let ym=0,rm=0,xm=0;for(const e of N.e){ym=Math.max(ym,Math.abs(e[1]));rm=Math.max(rm,e[2]);xm=Math.min(xm,e[0]);}const q=P(xm,0);plume(g,'main',1,q[0],q[1],rot+Math.PI,len,Math.max(3.2,(ym+rm)*2*sc*2.8),0.6+0.4*k);}
+    else for(const e of N.e){const q=P(e[0],e[1]);plume(g,'main',lod,q[0],q[1],rot+Math.PI,len*(0.85+e[2]*3),Math.max(3,e[2]*sc*13),0.6+0.4*k);}}
+  if(mf<-0.05){const k=Math.min(1,-mf),len=Lpx*0.38*k*flick(t,sd+3);for(const s of [1,-1]){const q=P(N.bx,s*N.hw*0.85);plume(g,'retro',lod,q[0],q[1],rot+s*0.35,len,Math.max(2.6,0.06*sc*6),0.6+0.4*k);}}
+  if(sf>0.05){const len=Lpx*0.2*flick(t,sd+7);for(const xb of [0.5,-0.55]){const q=P(xb,sg*N.hw);plume(g,'side',1,q[0],q[1],rot+sg*Math.PI/2,len,Math.max(2.6,0.05*sc*6.5),0.95);}}}
+
+/* 残骸(照抄 81-art artWreck):轮廓沿锯齿断口裂成两截、焦黑、断口余烬、周围碎片,不分敌我 */
+const CUT=[[-0.06,-2],[-0.1,-0.16],[0.02,-0.05],[-0.12,0.06],[-0.02,0.18],[-0.08,2]];
+function drawWreck(g,h,tier,x,y,rot,zf,t,sd){const P=hullPolys(h)[0],sc=hullSize(h,tier)*zf,px=1/sc,r=rng(sd),base=[58,60,66];
+  const pieces=[{reg:[...CUT,[3,2],[3,-2]],dx:0.07,dy:-0.03,dr:0.13},{reg:[...CUT.slice().reverse(),[-3,-2],[-3,2]],dx:-0.05,dy:0.03,dr:-0.09}];
+  for(const pc of pieces){const q=localL(rot+pc.dr),l=Math.hypot(q[0],q[1])||1,ux=q[0]/l,uy=q[1]/l;
+    g.save();g.translate(x,y);g.rotate(rot);g.translate(pc.dx*sc,pc.dy*sc);g.rotate(pc.dr);g.scale(sc,sc);g.lineJoin='round';
+    path(g,pc.reg);g.clip();
+    path(g,P);g.strokeStyle='rgba(0,0,0,.85)';g.lineWidth=2.4*px;g.stroke();g.fillStyle=css(base);g.fill();
+    g.save();path(g,P);g.clip();g.fillStyle=css(lit(base,0.2));g.beginPath();g.moveTo(-uy*3,ux*3);g.lineTo(-uy*3+ux*3,ux*3+uy*3);g.lineTo(uy*3+ux*3,-ux*3+uy*3);g.lineTo(uy*3,-ux*3);g.closePath();g.fill();
+    for(let i=0;i<4;i++){g.fillStyle='rgba(18,16,16,.55)';g.beginPath();g.arc(-0.8+r()*1.6,(r()-0.5)*0.3,0.06+r()*0.08,0,6.283);g.fill();}g.restore();
+    path(g,P);g.strokeStyle=css(SIDE.neutral,0.45);g.lineWidth=0.9*px;g.stroke();g.restore();}
+  const c=Math.cos(rot),sn=Math.sin(rot),er=Math.max(1.6,sc*0.12);
+  for(let i=0;i<6;i++){const k=i/5,hy=-0.16+0.34*k,hx=-0.07+Math.sin(i*2.1)*0.05,f=0.5+0.5*Math.sin(t*(7+i)+(sd%10)+i*1.3);blit(g,fx('ember'),x+(hx*c-hy*sn)*sc,y+(hx*sn+hy*c)*sc,er,0.35+0.55*f,true);}
+  for(let i=0;i<5;i++){const a=r()*6.283,d=(0.7+r()*0.6)*sc,bs=(0.05+r()*0.05)*sc,ro=r()*6.283;
+    g.save();g.translate(x+Math.cos(a)*d,y+Math.sin(a)*d);g.rotate(ro);g.fillStyle='rgb(64,66,72)';g.fillRect(-bs,-bs*0.5,2*bs,bs);g.fillStyle='rgba(150,152,160,.8)';g.fillRect(-bs,-bs*0.5,2*bs,Math.max(0.6,bs*0.3));g.restore();}}
+
+/* ---------- 导弹 / 拦截弹(新):整枚阵营色,尺寸按最小舰长,和船同一个系数缩放(没有像素下限) ---------- */
+const FORM={1:[[0,0]],3:[[0.45,0],[-0.15,-0.32],[-0.15,0.32]],5:[[0.45,0],[-0.15,-0.32],[-0.15,0.32],[-0.75,-0.64],[-0.75,0.64]]}; // 楔形队形,单位 = 弹长
+const MW={msl:0.08,inter:0.055};
+function mslPoly(w){return [[0.5,0],[0.40,-w*0.55],[0.27,-w],[-0.34,-w],[-0.43,-w-0.12],[-0.5,-w-0.12],[-0.46,-w],[-0.5,-w*0.6],[-0.5,w*0.6],[-0.46,w],[-0.5,w+0.12],[-0.43,w+0.12],[-0.34,w],[0.27,w],[0.40,w*0.55]];}
+const MP={msl:mslPoly(MW.msl),inter:mslPoly(MW.inter)};
+function shownN(c){return c>=6?5:(c>=3?3:1);} // 一组画 1 / 3 / 5 枚(同引擎)
+function mslLen(zf,n,kind){return LFF(zf)*(n>1?0.36:0.55)*(kind==='inter'?0.85:1);} // 单枚 0.55、成组每枚 0.36 倍最小舰长(5 枚整组外框 0.79)
+function mslBox(zf,n,kind){const Lg=mslLen(zf,n,kind),w=MW[kind]+0.12;let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+  for(const f of FORM[n]){x0=Math.min(x0,f[0]-0.5);x1=Math.max(x1,f[0]+0.5);y0=Math.min(y0,f[1]-w);y1=Math.max(y1,f[1]+w);}return [(x1-x0)*Lg,(y1-y0)*Lg,(x0+x1)/2];}
+function mslGlyph(g,kind,side,Lg,rot){const col=kind==='inter'?lit(SIDE[side],0.35):SIDE[side];
+  if(Lg<5){g.strokeStyle=css(col);g.lineWidth=kind==='inter'?0.8:1;g.lineCap='round';g.beginPath();g.moveTo(-Lg*0.42,0);g.lineTo(Lg*0.42,0);g.stroke();return;} // < 5 px:一道阵营色短划
+  const P=MP[kind],w=MW[kind],px=1/Lg,up=localL(rot)[1]<0;
+  g.save();g.scale(Lg,Lg);g.lineJoin='round';
+  path(g,P);g.strokeStyle='rgba(0,0,0,.8)';g.lineWidth=1.4*px;g.stroke();
+  const gr=g.createLinearGradient(0,-w,0,w);gr.addColorStop(0,css(lit(col,up?0.35:-0.4)));gr.addColorStop(0.5,css(col));gr.addColorStop(1,css(lit(col,up?-0.4:0.35)));g.fillStyle=gr;g.fill();
+  g.save();path(g,P);g.clip();
+  g.fillStyle=css(lit(col,0.55));g.fillRect(0.27,-w-0.02,0.25,2*w+0.04);                                // 弹头亮一档
+  g.fillStyle=css(lit(col,-0.5));g.fillRect(-0.5,-w-0.14,0.18,0.14);g.fillRect(-0.5,w,0.18,0.14);   // 尾鳍
+  g.fillStyle='rgba(18,20,24,.92)';g.fillRect(-0.5,-w*0.6,0.045,w*1.2);g.restore();                  // 喷口
+  g.restore();}
+function drawMsl(g,x,y,rot,side,kind,count,burn,zf,t,sd){
+  const n=shownN(count),Lg=mslLen(zf,n,kind),F=FORM[n],cx=mslBox(zf,n,kind)[2],c=Math.cos(rot),s=Math.sin(rot),pk=(kind==='inter'?'int':'msl')+side;
+  if(burn){if(Lg<5){let xm=0;for(const f of F)xm=Math.min(xm,f[0]);const b=(xm-cx-0.5)*Lg;plume(g,pk,1,x+b*c,y+b*s,rot+Math.PI,Lg*(n>1?2.6:1.8)*flick(t,sd),Math.max(1.4,Lg*(n>1?1.1:0.7)),0.85);} // 弹太小:一组一道
+    else for(const f of F){const fx_=(f[0]-cx-0.5)*Lg,fy=f[1]*Lg;plume(g,pk,1,x+fx_*c-fy*s,y+fx_*s+fy*c,rot+Math.PI,Lg*1.35*flick(t,sd+f[1]*3),Math.max(1.6,Lg*0.45),0.95);}}
+  for(let i=F.length-1;i>=0;i--){const f=F[i],fx_=(f[0]-cx)*Lg,fy=f[1]*Lg;g.save();g.translate(x+fx_*c-fy*s,y+fx_*s+fy*c);g.rotate(rot);mslGlyph(g,kind,side,Lg,rot);g.restore();}}
+
+/* ---------- 雷(新):六角壳体阵营色暗调 + 阵营色描边 + 阵营色指示灯;连天线 0.67 倍最小舰长 ---------- */
+const HEX=(()=>{const P=[];for(let i=0;i<6;i++){const a=i/6*2*Math.PI;P.push([Math.cos(a),Math.sin(a)]);}return {P,Q:P.map(p=>[p[0]*0.6,p[1]*0.6])};})();
+function facets(g,P,Q,q,base){for(let i=0;i<P.length;i++){const a=P[i],b=P[(i+1)%P.length],nx=(a[0]+b[0])/2,ny=(a[1]+b[1])/2,l=Math.hypot(nx,ny)||1,d=(nx*q[0]+ny*q[1])/l;
+    g.fillStyle=css(d>=0?lit(base,0.55*d):lit(base,0.6*d));g.beginPath();g.moveTo(a[0],a[1]);g.lineTo(b[0],b[1]);g.lineTo(Q[(i+1)%Q.length][0],Q[(i+1)%Q.length][1]);g.lineTo(Q[i][0],Q[i][1]);g.closePath();g.fill();}
+  path(g,Q);g.fillStyle=css(lit(base,0.1));g.fill();}
+const MINE_R=0.22; // 壳体半径 = 0.22 倍最小舰长;天线伸到 1.52 R
+function drawMine(g,x,y,rot,side,zf,t){const R=MINE_R*LFF(zf),col=SIDE[side],base=lit(col,-0.45),q=localL(rot),px=1/R;
+  g.save();g.translate(x,y);g.rotate(rot);g.scale(R,R);g.lineJoin='round';
+  for(const [cs,w] of [['rgba(0,0,0,.8)',1.6],[css(lit(col,-0.1)),0.7]]){g.strokeStyle=cs;g.lineWidth=w*px;for(let i=0;i<3;i++){const a=i/3*2*Math.PI+0.5;g.beginPath();g.moveTo(Math.cos(a)*0.8,Math.sin(a)*0.8);g.lineTo(Math.cos(a)*1.52,Math.sin(a)*1.52);g.stroke();}}
+  path(g,HEX.P);g.strokeStyle='rgba(0,0,0,.8)';g.lineWidth=2*px;g.stroke();facets(g,HEX.P,HEX.Q,q,base);
+  path(g,HEX.P);g.strokeStyle=css(col,0.95);g.lineWidth=1.1*px;g.stroke();
+  const on=(t*0.85)%1<0.35;g.fillStyle=css(on?lit(col,0.55):lit(col,-0.5));g.beginPath();g.arc(0,0,0.3,0,6.283);g.fill();g.restore();
+  if(on)blit(g,fx('glow'+side),x,y,R*1.6,0.55,true);}
+
+/* ---------- 诱饵(紫色假热源光晕照旧,罐体改阵营色;罐长 0.38 倍最小舰长) ---------- */
+function drawDecoy(g,x,y,rot,side,zf,t,sd){const z=1.92*zf,k=0.75+0.25*Math.sin(t*9+sd)*Math.sin(t*5.3+sd),R=7*z*(0.85+0.15*k),L=0.38*LFF(zf);
+  plume(g,'side',1,x-Math.cos(rot)*L*0.5,y-Math.sin(rot)*L*0.5,rot+Math.PI,9*z*flick(t,sd),3*z,0.35);
+  blit(g,fx('decoy'),x,y,R,k,true);
+  g.save();g.translate(x,y);g.rotate(rot);g.fillStyle='rgba(0,0,0,.8)';g.fillRect(-L*0.5-0.7,-L*0.22-0.7,L+1.4,L*0.44+1.4);g.fillStyle=css(SIDE[side]);g.fillRect(-L*0.5,-L*0.22,L,L*0.44);g.restore();}
+
+/* ---------- 浮标(照抄 81-art artBuoy / 82-rocks drawOwnBuoy):中心舱 + 两片太阳能板 + 天线 + 阵营色指示灯;开照射有脉冲环;拉过切换点画蓝圈 ---------- */
+const OCT=(()=>{const P=[];for(let i=0;i<8;i++){const a=(i+0.5)/8*2*Math.PI;P.push([Math.cos(a)*0.42,Math.sin(a)*0.42]);}return {P,Q:P.map(p=>[p[0]*0.55,p[1]*0.55])};})();
+function buoyR(zf){return 2.5*1.92*zf;} // 引擎 artBuoyR = 2.5 x artZ
+function drawBuoy(g,x,y,rot,side,on,zf,t){const R=buoyR(zf),q=localL(rot),col=SIDE[side]||SIDE.blue;
+  if(on){const ph=(t%1.4)/1.4;blit(g,fx(side==='red'?'ring':'ringB'),x,y,(3+16*ph)*R/5.2,0.8*(1-ph),true);}
+  g.save();g.translate(x,y);g.rotate(rot);g.scale(R,R);const px=1/R;g.lineJoin='round';
+  g.strokeStyle='rgba(150,158,170,.9)';g.lineWidth=1.2*px;g.beginPath();g.moveTo(0,-1.35);g.lineTo(0,1.35);g.stroke();
+  for(const sg of [1,-1]){const d=-sg*q[1],pane=lit([34,58,104],0.35*d);g.fillStyle='rgba(0,0,0,.8)';g.fillRect(-0.48,sg>0?0.38:-1.42,0.96,1.04);
+    g.fillStyle=css(pane);g.fillRect(-0.42,sg>0?0.44:-1.36,0.84,0.92);g.strokeStyle=css(lit(pane,0.35),0.8);g.lineWidth=0.5*px;g.beginPath();
+    for(const gx of [-0.14,0.14]){g.moveTo(gx,sg>0?0.44:-1.36);g.lineTo(gx,sg>0?1.36:-0.44);}g.moveTo(-0.42,sg>0?0.9:-0.9);g.lineTo(0.42,sg>0?0.9:-0.9);g.stroke();}
+  g.strokeStyle='rgba(0,0,0,.85)';g.lineWidth=1.6*px;g.beginPath();g.moveTo(0.3,0);g.lineTo(1.15,0);g.stroke();g.strokeStyle='rgba(190,198,210,.95)';g.lineWidth=0.8*px;g.stroke();
+  path(g,OCT.P);g.strokeStyle='rgba(0,0,0,.85)';g.lineWidth=1.6*px;g.stroke();facets(g,OCT.P,OCT.Q,q,[120,128,140]);
+  const bl=on?0.6+0.4*Math.sin(t*8):((t*0.7)%1<0.25?1:0.25);g.fillStyle=css(col,bl);g.beginPath();g.arc(0,0,0.13,0,6.283);g.fill();g.beginPath();g.arc(1.15,0,0.09,0,6.283);g.fill();
+  g.restore();}
+function buoyMark(g,x,y,on){g.save();g.strokeStyle='#5aa7ff';g.fillStyle='#5aa7ff';g.lineWidth=1.4;g.beginPath();g.arc(x,y,4,0,6.283);g.stroke();g.beginPath();g.arc(x,y,1.5,0,6.283);g.fill();
+  if(on){g.globalAlpha=0.6;g.beginPath();g.arc(x,y,8,0,6.283);g.stroke();}g.restore();}
+
+/* ---------- 主炮弹(照抄 81-art):白芯 + 阵营色拖尾 + 亮弹头 ---------- */
+const SHS={};
+function shellSpr(side){if(SHS[side])return SHS[side];const W=256,H=32,c=mkCv(W,H),g=c.getContext('2d'),col=side==='red'?[255,150,90]:[130,195,255],cy=H/2;
+  let gr=g.createLinearGradient(0,0,W-8,0);gr.addColorStop(0,css(col,0));gr.addColorStop(0.7,css(col,0.35));gr.addColorStop(1,css(col,0.85));g.fillStyle=gr;
+  g.beginPath();g.moveTo(0,cy);g.lineTo(W-12,cy-4.5);g.lineTo(W-6,cy);g.lineTo(W-12,cy+4.5);g.closePath();g.fill();
+  gr=g.createLinearGradient(W*0.35,0,W-6,0);gr.addColorStop(0,'rgba(255,255,255,0)');gr.addColorStop(1,'rgba(255,255,255,1)');g.fillStyle=gr;g.fillRect(W*0.35,cy-1.1,W*0.65-6,2.2);
+  const rg=g.createRadialGradient(W-8,cy,0,W-8,cy,9);rg.addColorStop(0,'rgba(255,255,255,1)');rg.addColorStop(0.4,css(col,0.75));rg.addColorStop(1,css(col,0));g.fillStyle=rg;g.fillRect(W-17,cy-9,17,18);
+  return SHS[side]=c;}
+function shellLen(zf){return 24*1.92*zf;}
+function drawShell(g,x,y,rot,side,zf){const L=shellLen(zf),h=9*1.92*zf;g.save();g.translate(x,y);g.rotate(rot);g.globalCompositeOperation='lighter';g.drawImage(shellSpr(side),-L*(248/256),-h/2,L,h);g.restore();}
+
+/* ---------- 命中 / 击沉(照抄 81-art) ---------- */
+function mkBoom(kind,type,sd){const r=rng(sd*977+13),o={kind,type,sp:[],db:[],em:[],sm:[],sec:[]};
+  const nS=kind==='kill'?16:(type==='mac'?10:7);for(let i=0;i<nS;i++)o.sp.push([r()*6.283,40+r()*90,0.25+r()*0.35]);
+  const nM=kind==='kill'?5:2;for(let i=0;i<nM;i++)o.sm.push([r()*6.283,6+r()*14,0.6+r()*0.6]);
+  if(kind==='kill'){for(let i=0;i<10;i++){const n=3+Math.floor(r()*2),pts=[];for(let k=0;k<n;k++){const a=k/n*6.283+r()*0.6;pts.push([Math.cos(a)*(0.5+r()*0.5),Math.sin(a)*(0.5+r()*0.5)]);}
+      o.db.push({a:r()*6.283,v:18+r()*40,s:1.2+r()*2.2,w:(r()-0.5)*6,pts,ori:Math.sign(area(pts))});}
+    for(let i=0;i<14;i++)o.em.push([r()*6.283,8+r()*30,1.2+r()*1.4,r()*10]);
+    o.sec=[[0.35,(r()-0.5)*18,(r()-0.5)*18],[0.75,(r()-0.5)*22,(r()-0.5)*22],[1.15,(r()-0.5)*16,(r()-0.5)*16]];}
+  return o;}
+function drawBoom(g,o,x,y,a,t,z){const kill=o.kind==='kill',mac=o.type==='mac',hs=kill?1:0.6;
+  {const d=kill?0.28:0.16,k=1-a/d;if(k>0)blit(g,fx(mac&&!kill?'flashB':'flash'),x,y,(kill?34:mac?13:16)*z*(1.2-0.4*k),k,true);}
+  if(kill&&a<0.9){const k=a/0.9;blit(g,fx('ring'),x,y,(8+58*Math.sqrt(k))*z,0.9*(1-k),true);}
+  if(!mac||kill){const d=kill?1.4:0.8,k=a/d;if(k<1)blit(g,fx('fire'),x,y,(kill?(7+18*Math.sqrt(k)):(4+9*Math.sqrt(k)))*z,(1-k)*(1-k)*0.95,true);}
+  for(const s of o.sm){const k=a/(s[2]*(kill?2:1));if(k>=1)continue;const R=(4+s[1]*1.3*k)*z*(kill?1.6:1)*hs,dd=s[1]*0.6*k*z*hs;blit(g,fx('smoke'),x+Math.cos(s[0])*dd,y+Math.sin(s[0])*dd,R,0.6*(1-k)*Math.min(1,a*8),false);}
+  for(const s of o.sp){if(a>s[2])continue;const k=a/s[2],d=s[1]*a*z;plume(g,mac?'inter':'msl',1,x+Math.cos(s[0])*d,y+Math.sin(s[0])*d,s[0]+Math.PI,(3+6*(1-k))*z,2.2*z,1-k);}
+  if(kill){
+    for(const b of o.db){const k=a/2.6;if(k>=1)continue;const d=b.v*(1-Math.exp(-a*1.6))/1.6*z,px=x+Math.cos(b.a)*d,py=y+Math.sin(b.a)*d,rot=b.w*a,q=localL(rot);
+      g.save();g.translate(px,py);g.rotate(rot);g.scale(b.s*z,b.s*z);g.globalAlpha=1-k*k;path(g,b.pts);g.fillStyle='rgb(92,94,102)';g.fill();g.lineWidth=0.45;g.lineCap='round';
+      for(let i=0;i<b.pts.length;i++){const p1=b.pts[i],p2=b.pts[(i+1)%b.pts.length],ex=p2[0]-p1[0],ey=p2[1]-p1[1],l=Math.hypot(ex,ey)||1,dd=(b.ori*ey*q[0]-b.ori*ex*q[1])/l;if(dd<=0)continue;
+        g.strokeStyle=css(lit([90,92,98],0.6*dd));g.beginPath();g.moveTo(p1[0],p1[1]);g.lineTo(p2[0],p2[1]);g.stroke();}
+      g.restore();}
+    for(const e of o.em){const k=a/(e[2]+0.8);if(k>=1)continue;const d=e[1]*Math.sqrt(a)*z,f=0.6+0.4*Math.sin(t*20+e[3]);blit(g,fx('ember'),x+Math.cos(e[0])*d,y+Math.sin(e[0])*d,2.4*z,(1-k)*f,true);}
+    for(const s of o.sec){const b=a-s[0];if(b<0||b>0.5)continue;const k=b/0.5,sx=x+s[1]*z,sy=y+s[2]*z;blit(g,fx('flash'),sx,sy,10*z*(1-0.3*k),1-k,true);blit(g,fx('fire'),sx,sy,(3+6*Math.sqrt(k))*z,(1-k)*0.9,true);}}}
+
+/* ---------- 特效随缩放(新,用户 10-05):命中 / 击沉、近防火花、护盾受击 = 战术落点上的大小 x 船的(不钳)系数开平方;再乘美术整体缩放 ---------- */
+function fxK(k){return Math.sqrt(rawZ(k)/HULL_ZOOM.LAND);}            // 1 = 战术落点;船缩 0.5 → 0.71;用不钳的原始系数,拉过切换点照样变
+function fxZ(k){return 1.92*HULL_ZOOM.LAND*SHIP_K*V.tk*fxK(k);}      // 命中 / 击沉的尺寸系数(战术落点上 = 引擎的 artZ x 整体缩放)
+
+/* 近防(照抄 83-hud drawCiwsFx):曳光从舰往外飞、飞出内圈外一点就灭(线宽固定);打掉的每枚一朵火花(点 + 扩散圈,大小乘特效系数) */
+const CIWS_FX={N:2,FIRE:10,SPREAD:2/57.3,OFF:0.012,LEN:0.1,REACH:1.25,LIFE:0.45,LIFE_J:0.2,PUFF_T:0.7,PUFF_D:0.25,PUFF_R0:0.015,PUFF_R1:0.09,PUFF_REF:6000,INNER:4200}; // INNER = 防空核心的近防内圈 km(weapons/51 ciws_core)
+function ciwsPlan(v){const S=SH[v.ciws],C=CIWS_FX;v.ts=null; // 弹进内圈那一刻开火,0.3 秒后打掉
+  for(let t=v.t0;t<=v.t0+v.F;t+=0.01){const m=salvoAt(v,t),p=shipPos(S,t);if(Math.hypot(m.x-p[0],m.y-p[1])<=C.INNER){v.ts=t;break;}}
+  if(v.ts===null)return;v.tk=v.ts+0.3;const m=salvoAt(v,v.tk),r=rng(v.sd*7+1),r2=rng(v.sd*11+3);
+  v.pf=Array.from({length:Math.min(16,v.n)},()=>{const a=r()*6.283,rr=C.PUFF_REF*(C.PUFF_R0+r()*(C.PUFF_R1-C.PUFF_R0));return [m.x+Math.cos(a)*rr,m.y+Math.sin(a)*rr,r()*C.PUFF_D];});
+  v.tr=[];const n=Math.round((v.tk+0.1-v.ts)*C.FIRE*C.N);
+  for(let i=0;i<n;i++){const t=v.ts+i/(C.FIRE*C.N),m2=salvoAt(v,Math.min(t,v.tk-1e-3)),q=shipPos(S,t),j=Math.floor(r2()*C.N);
+    v.tr.push({t,a:Math.atan2(m2.y-q[1],m2.x-q[0])+(j-(C.N-1)/2)*C.OFF+(r2()*2-1)*C.SPREAD,life:C.LIFE+r2()*C.LIFE_J});}}
+function drawPuff(g,x,y,gg,fk){const a=1-gg/CIWS_FX.PUFF_T;
+  g.fillStyle='rgba(255,220,150,'+(0.9*a).toFixed(3)+')';g.beginPath();g.arc(x,y,Math.max(1,3*(1-gg)*fk),0,6.283);g.fill();
+  g.strokeStyle='rgba(255,170,90,'+(0.7*a).toFixed(3)+')';g.lineWidth=1.2;g.beginPath();g.arc(x,y,(2+gg*18)*fk,0,6.283);g.stroke();}
+
+/* 护盾受击(照抄 83-hud drawShieldFx 的 hit):弧画在罩子上(半径跟船),线宽和命中点的亮斑乘特效系数 */
+const SHD={K:2,HIT_T:0.3,COL:{blue:[110,210,255],red:[255,150,110]}};
+function sRgba(c,a){return css(c,Math.max(0,Math.min(1,a)));}
+function sArc(g,x,y,r,a0,a1,col,w){g.strokeStyle=col;g.lineWidth=w;g.beginPath();g.arc(x,y,r,a0,a1);g.stroke();}
+function shieldR(h,tier,zf,mk){return mk?(SHIP_MARK_R+1)*SHD.K:hullSize(h,tier)*zf*1.5*SHD.K;} // 引擎 shieldR = 图标半径 x 1.5/0.78 x K
+function drawShieldHit(g,cx,cy,R,a,side,u,fk,Lt,big){const C=SHD.COL[side],k=1-u,w=big?0.8:0.3; // Lt = 战术落点上的罩子半径 / K
+  sArc(g,cx,cy,R,a-w*(0.4+u),a+w*(0.4+u),sRgba([255,255,255],0.9*k*k),(big?3.5:2.2)*fk);
+  sArc(g,cx,cy,R,a+w*0.4+u*2.2,a+w*0.4+u*2.2+0.25,sRgba(C,0.8*k),2*fk);sArc(g,cx,cy,R,a-w*0.4-u*2.2-0.25,a-w*0.4-u*2.2,sRgba(C,0.8*k),2*fk);
+  sArc(g,cx,cy,R,0,6.283,sRgba(C,0.45*k*(big?1:0.5)),1.6*fk);
+  const px=cx+Math.cos(a)*R,py=cy+Math.sin(a)*R,gr=Lt*(big?1.6:0.7)*fk,rg=g.createRadialGradient(px,py,0,px,py,gr);
+  rg.addColorStop(0,sRgba([255,255,255],0.85*k));rg.addColorStop(1,sRgba(C,0));g.fillStyle=rg;g.beginPath();g.arc(px,py,gr,0,6.283);g.fill();}
+
+/* ---------- 代表显示(照抄引擎):船的记号 82-ship-icons drawShipMark、弹类记号 83-hud projMark ---------- */
+function shipMark(g,x,y,rot,side,own){const R=SHIP_MARK_R;g.save();g.translate(x,y);g.fillStyle=css(SIDE[side]);g.beginPath();
+  if(own){g.rotate(rot);g.moveTo(R,0);g.lineTo(-R+1,R-1);g.lineTo(-R+2.2,0);g.lineTo(-R+1,-R+1);}else{g.moveTo(R,0);g.lineTo(0,R);g.lineTo(-R,0);g.lineTo(0,-R);}
+  g.closePath();g.fill();g.restore();}
+const PROJ_MK={blue:'#5aa7ff',red:'#ff6b6b',iblue:'#a9d2ff',ired:'#ffb3b3'};
+function projMark(g,type,mine,x,y,rot,side,cnt){const col=PROJ_MK[side];g.fillStyle=col;g.strokeStyle=col;
+  if(type==='decoy'){g.lineWidth=1;g.beginPath();g.arc(x,y,2.4,0,6.283);g.stroke();g.fillStyle='rgba(200,120,255,.95)';g.beginPath();g.arc(x,y,1.5,0,6.283);g.fill();return;}
+  if(type==='mac'){const c=Math.cos(rot)*2.5,s=Math.sin(rot)*2.5;g.lineWidth=1.6;g.beginPath();g.moveTo(x-c,y-s);g.lineTo(x+c,y+s);g.stroke();return;}
+  if(mine){g.lineWidth=1.2;g.strokeRect(x-2.3,y-2.3,4.6,4.6);return;}
+  if(type==='interceptor')g.fillStyle=PROJ_MK['i'+side];
+  const n=Math.min(cnt,3);if(n===1){g.beginPath();g.arc(x,y,1.6,0,6.283);g.fill();return;}
+  for(let i=0;i<n;i++){const a=rot+i/n*6.283;g.fillRect(x+Math.cos(a)*1.9-0.9,y+Math.sin(a)*1.9-0.9,1.8,1.8);}}
+const V={tk:1.3};
+const ZF=HULL_ZOOM.LAND*SHIP_K*V.tk; // 战术落点的舰标缩放系数(= 引擎 shipZoomF 0.429)
+
+/* ---------- 三个候选:尺寸都按最小舰长 LFF 的倍数(同导弹,没有像素下限),一组画 1 / 3 / 5 个(shownN) ---------- */
+function icpCloud(n,sd){if(n===1)return [[0,0]];const r=rng(sd*7+n),P=[];for(let i=0;i<n;i++){const a=i/n*6.283+(r()-0.5)*0.9,d=0.45+0.55*r();P.push([Math.cos(a)*d,Math.sin(a)*d]);}return P;}
+function drawIcpOpt(g,opt,x,y,rot,side,count,zf,t,sd){
+  if(opt==='now'){drawMsl(g,x,y,rot,side,'inter',count,true,zf,t,sd);return;}
+  const n=shownN(count),L=LFF(zf),col=SIDE[side],c=Math.cos(rot),s=Math.sin(rot);
+  const W=(px,py)=>[x+px*c-py*s,y+px*s+py*c]; // 机体坐标(+x = 飞行方向)→ 屏幕
+  if(opt==='A'){ // 光点群:团半径 0.3 LFF;每点白芯 + 阵营色光晕 + 一丝短尾,亮度各自闪
+    const P=icpCloud(n,sd),Rc=n>1?0.34*L:0,rg=0.28*L,rc=Math.max(0.6,0.09*L);
+    for(let i=0;i<P.length;i++){const q=W(P[i][0]*Rc,P[i][1]*Rc),k=0.72+0.28*Math.sin(t*13+i*2.1+sd);
+      g.strokeStyle=css(col,0.55*k);g.lineWidth=0.6;g.beginPath();g.moveTo(q[0],q[1]);g.lineTo(q[0]-c*0.32*L,q[1]-s*0.32*L);g.stroke();
+      blit(g,fx('glow'+side),q[0],q[1],rg,0.95*k,true);
+      g.fillStyle='rgba(255,255,255,'+(0.75+0.25*k).toFixed(2)+')';g.beginPath();g.arc(q[0],q[1],rc,0,6.283);g.fill();}
+    return;}
+  if(opt==='B'){ // 白芯亮珠:珠半径 0.13 LFF,一字横队(间距 0.16 LFF),尾焰一小团
+    const r=0.13*L,off=n===1?[0]:(n===3?[-1,0,1]:[-2,-1,0,1,2]);
+    for(const k of off){const q=W(-Math.abs(k)*0.05*L,k*0.16*L);
+      plume(g,'int'+side,1,q[0]-c*r,q[1]-s*r,rot+Math.PI,0.55*L*flick(t,sd+k),2.2*r,0.75);}
+    for(const k of off){const q=W(-Math.abs(k)*0.05*L,k*0.16*L);
+      blit(g,fx('glow'+side),q[0],q[1],2.4*r,0.8,true);
+      g.fillStyle=css(col);g.beginPath();g.arc(q[0],q[1],r,0,6.283);g.fill();
+      g.fillStyle='#fff';g.beginPath();g.arc(q[0],q[1],r*0.58,0,6.283);g.fill();}
+    return;}
+  if(opt==='C'){ // 闪烁信标:形状照现在(阵营色短划 / 楔形),每枚机头加一盏白色频闪灯 —— 每 0.45 秒亮 0.12 秒,各组相位错开
+    drawMsl(g,x,y,rot,side,'inter',count,true,zf,t,sd);if(!icpBlink(t,sd))return;
+    const F=FORM[n],Lg=artLen(n),cx=n===1?0:(n===3?0.15:-0.15);
+    for(const f of F){const q=W((f[0]-cx+0.42)*Lg,f[1]*Lg);blit(g,fx('glow'+side),q[0],q[1],0.32*L,1,true);g.fillStyle='#fff';g.beginPath();g.arc(q[0],q[1],Math.max(0.65,0.1*L),0,6.283);g.fill();}
+    return;}
+  function artLen(n){return mslLen(zf,n,'inter');}}
+function icpBlink(t,sd){return ((t+(sd%17)*0.071)%0.45)<0.12;}
+function icpMark(g,opt,x,y,rot,side,cnt,t,sd){ // 代表显示:固定像素(同引擎 projMark 的规矩:外框 ≤ 6 px、阵营色)
+  if(opt==='now'){projMark(g,'interceptor',false,x,y,rot,side,cnt);return;}
+  const col=PROJ_MK['i'+side];
+  if(opt==='A'){g.fillStyle=col;const D=[[0,0],[-1.9,-1.9],[1.9,-1.9],[-1.9,1.9],[1.9,1.9]];for(const d of D)g.fillRect(Math.round(x+d[0])-0.6,Math.round(y+d[1])-0.6,1.2,1.2);return;}
+  if(opt==='B'){g.strokeStyle=PROJ_MK[side];g.lineWidth=1.1;g.beginPath();g.arc(x,y,1.9,0,6.283);g.stroke();g.fillStyle='#fff';g.beginPath();g.arc(x,y,1.3,0,6.283);g.fill();return;}
+  if(opt==='C'){projMark(g,'interceptor',false,x,y,rot,side,cnt);if(icpBlink(t,sd)){g.fillStyle='#fff';g.beginPath();g.arc(x,y,1.3,0,6.283);g.fill();}return;}}
+
+const OPTS=[{id:'now',nm:'现状(引擎)'},{id:'A',nm:'A 光点群'},{id:'B',nm:'B 白芯亮珠'},{id:'C',nm:'C 闪烁信标'}];
+function cv(id,w,h){const c=$(id)||document.createElement('canvas');c.width=Math.round(w*DPR);c.height=Math.round(h*DPR);c.style.width=w+'px';c.style.height=h+'px';const g=c.getContext('2d');g.setTransform(DPR,0,0,DPR,0,0);return c;}
+function zoomCopy(src,dst,k){const w=src.width/DPR,h=src.height/DPR,d=cv(dst,w*k,h*k),g=d.getContext('2d');g.setTransform(1,0,0,1,0,0);g.imageSmoothingEnabled=false;g.drawImage(src,0,0,src.width,src.height,0,0,d.width,d.height);}
+function label(g,x,y,s,col){g.save();g.font='11px "Microsoft YaHei"';g.fillStyle=col||'#9aa8b8';g.textBaseline='middle';g.fillText(s,x,y);g.restore();}
+
+/* ---------- 并排 ---------- */
+const COLS=[['导弹 1','msl',1],['导弹组','msl',6],['拦截弹 1','icp',1],['拦截弹组','icp',16]],REF=[['主炮弹','shell'],['雷','mine'],['诱饵','decoy'],['护卫 T1','FF'],['巡洋 T1','CA']];
+const LW=96,CW=56,RH=34,TOP=22;
+function drawLine(t){const nc=COLS.length*2+REF.length,w=LW+nc*CW+20,h=TOP+OPTS.length*RH+6,c=cv('line',w,h),g=c.getContext('2d');g.fillStyle='#05070c';g.fillRect(0,0,w,h);
+  let x0=LW;for(const side of ['blue','red'])for(const col of COLS){label(g,x0+4,10,col[0],side==='blue'?'#8fc2ff':'#ff9a9a');x0+=CW;}
+  for(const r of REF){label(g,x0+4,10,r[0]);x0+=CW;}
+  OPTS.forEach((o,ri)=>{const y=TOP+ri*RH+RH/2;label(g,6,y,o.nm,'#c7d0dc');let x=LW;
+    for(const side of ['blue','red'])for(const col of COLS){const cx=x+CW/2,rot=side==='blue'?0:Math.PI;
+      if(col[1]==='msl')drawMsl(g,cx,y,rot,side,'msl',col[2],true,ZF,t,ri*3+x);else drawIcpOpt(g,o.id,cx,y,rot,side,col[2],ZF,t,ri*3+x);x+=CW;}
+    for(const r of REF){const cx=x+CW/2;
+      if(r[1]==='shell')drawShell(g,cx+8,y,0,'blue',ZF);else if(r[1]==='mine')drawMine(g,cx,y,0.3,'blue',ZF,t);else if(r[1]==='decoy')drawDecoy(g,cx,y,0,'blue',ZF,t,5);
+      else shipIcon(g,CLS_HULL[r[1]],1,'blue',cx,y,0,ZF,0);x+=CW;}
+    g.strokeStyle='#121a26';g.beginPath();g.moveTo(0,TOP+ri*RH);g.lineTo(w,TOP+ri*RH);g.stroke();});
+  zoomCopy(c,'lineZ',3);}
+
+/* ---------- 混战:6 秒循环,像素坐标(战术落点原大) ---------- */
+const MW_=380,MH_=210,LOOPM=6;
+const MSH=[{side:'blue',cls:'CA',x:52,y:105},{side:'blue',cls:'FF',x:64,y:58},{side:'blue',cls:'CL',x:64,y:152},{side:'red',cls:'CA',x:330,y:100},{side:'red',cls:'DD',x:318,y:52},{side:'red',cls:'FF',x:322,y:156}];
+const MOV=[ // 直线飞行:k = 种类,a / b = 起止点,t0 / t1 = 起止时刻(秒,循环内)
+  {k:'msl',side:'red',n:6,a:[300,92],b:[90,104],t0:0,t1:6},{k:'msl',side:'red',n:3,a:[292,60],b:[110,70],t0:0.6,t1:6},{k:'msl',side:'red',n:1,a:[300,150],b:[95,150],t0:1.2,t1:6},
+  {k:'icp',side:'blue',n:16,a:[70,104],b:[190,100],t0:1.5,t1:4.5},{k:'icp',side:'blue',n:4,a:[78,64],b:[180,68],t0:2.2,t1:5},
+  {k:'msl',side:'blue',n:3,a:[80,120],b:[300,128],t0:0,t1:6},{k:'msl',side:'blue',n:1,a:[82,48],b:[296,40],t0:0.8,t1:6},
+  {k:'icp',side:'red',n:6,a:[306,126],b:[200,126],t0:2,t1:5},
+  {k:'shell',side:'blue',a:[60,100],b:[330,98],t0:1,t1:1.6},{k:'shell',side:'red',a:[322,150],b:[64,150],t0:3.3,t1:3.9},
+  {k:'decoy',side:'red',a:[318,52],b:[250,30],t0:0,t1:6}];
+const MSTAT=[{k:'mine',side:'blue',x:190,y:182},{k:'mine',side:'red',x:205,y:24}];
+function drawMix(o,t){const c=cv('mix_'+o.id,MW_,MH_),g=c.getContext('2d'),tau=t%LOOPM;g.fillStyle='#05070c';g.fillRect(0,0,MW_,MH_);
+  for(const m of MSTAT)drawMine(g,m.x,m.y,0.3,m.side,ZF,t);
+  for(const s of MSH)shipIcon(g,CLS_HULL[s.cls],1,s.side,s.x,s.y,s.side==='blue'?0:Math.PI,ZF,0);
+  MOV.forEach((m,i)=>{const u=(tau-m.t0)/(m.t1-m.t0);if(u<0||u>1)return;const x=m.a[0]+(m.b[0]-m.a[0])*u,y=m.a[1]+(m.b[1]-m.a[1])*u,rot=Math.atan2(m.b[1]-m.a[1],m.b[0]-m.a[0]);
+    if(m.k==='msl')drawMsl(g,x,y,rot,m.side,'msl',m.n,true,ZF,t,i*7);else if(m.k==='icp')drawIcpOpt(g,o.id,x,y,rot,m.side,m.n,ZF,t,i*7);
+    else if(m.k==='shell')drawShell(g,x,y,rot,m.side,ZF);else if(m.k==='decoy')drawDecoy(g,x,y,rot,m.side,ZF,t,i);});
+  label(g,6,10,o.nm,'#c7d0dc');}
+
+/* ---------- 代表显示 ---------- */
+const MCOL=[['导弹 1','msl',1],['导弹 3','msl',3],['拦截弹 1','icp',1],['拦截弹组','icp',16]],MREF=[['主炮弹','mac'],['雷','mine'],['诱饵','decoy'],['我方船','own'],['敌方','enemy']];
+function drawMarks(t){const MC=56,nc=MCOL.length*2+MREF.length,w=LW+nc*MC+20,h=TOP+OPTS.length*26+6,c=cv('marks',w,h),g=c.getContext('2d');g.fillStyle='#05070c';g.fillRect(0,0,w,h);
+  let x0=LW;for(const side of ['blue','red'])for(const col of MCOL){label(g,x0+2,10,col[0],side==='blue'?'#8fc2ff':'#ff9a9a');x0+=MC;}for(const r of MREF){label(g,x0+2,10,r[0]);x0+=MC;}
+  OPTS.forEach((o,ri)=>{const y=TOP+ri*26+13;label(g,6,y,o.nm,'#c7d0dc');let x=LW;
+    for(const side of ['blue','red'])for(const col of MCOL){const cx=x+MC/2,rot=side==='blue'?0:Math.PI;if(col[1]==='msl')projMark(g,'missile',false,cx,y,rot,side,col[2]);else icpMark(g,o.id,cx,y,rot,side,col[2],t,x);x+=MC;}
+    for(const r of MREF){const cx=x+MC/2;if(r[1]==='mac')projMark(g,'mac',false,cx,y,0,'blue',1);else if(r[1]==='mine')projMark(g,'missile',true,cx,y,0,'blue',1);else if(r[1]==='decoy')projMark(g,'decoy',false,cx,y,0,'blue',1);
+      else shipMark(g,cx,y,0,r[1]==='own'?'blue':'red',r[1]==='own');x+=MC;}});
+  zoomCopy(c,'marksZ',3);}
+
+{const M=$('mixes');for(const o of OPTS){const d=document.createElement('div'),c=document.createElement('canvas');c.id='mix_'+o.id;c.className='live';d.appendChild(c);M.appendChild(d);}}
+for(const id of ['cGray','cBlur'])$(id).addEventListener('change',()=>{document.body.classList.toggle('gray',$('cGray').checked);document.body.classList.toggle('blur',$('cBlur').checked);});
+let T0=performance.now(),TP=0;
+function frame(now){if(!$('cPause').checked)TP=(now-T0)/1000;drawLine(TP);for(const o of OPTS)drawMix(o,TP);drawMarks(TP);requestAnimationFrame(frame);}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
