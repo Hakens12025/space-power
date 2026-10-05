@@ -13,7 +13,7 @@ const FEAT_CFG={
   MOON:{V:20},                                                         // 卫星轨道速度 km/s(物理)
   ION:{TAU_HALF:1.27,CELL:4000,N:200},                                 // 电离云:云心到云边(短轴方向)的雷达波段光学深度;感知用的浓度格(格距至少 CELL km、每边至多 N 格)
   RAD:{R0:1.2,R1:2.2,RADAR:0.5,DRAIN:4},                               // 辐射带内外半径(x 行星半径;rad 为真的天体)、带里目标的雷达发现距离倍数、护盾每游戏秒掉多少(不回充)
-  STA:{CAP_R:30000}};                                                 // 据点占领半径(第 4 步接占领机制)
+  STA:{CAP_R:30000,CAP_T:30,DECAY:0.5,VIS:120000}};                   // 据点:占领半径 km、单方待满几游戏秒拿下、没人时进度每游戏秒退多少、归属方的可见光圈(红外照舰船口径 19.2 万)
 
 /* ---- 彗星 ---- */
 const FEAT_CP={rev:-1,p:[]}; // 每颗彗星的轨迹表 {px,py,vx,vy}(Float64,CYC+2 格),世界 rev 变了重算
@@ -110,3 +110,20 @@ function featTailTau(a,b){ // a→b 连线穿过彗尾的红外 / 可见光光�
 function envBgOn(){return ENV.clouds.length>0||featTailOn();} // 光学背景 / 消光有没有东西(尘埃云或彗尾):原来写 ENV.clouds.length 的守卫都改问它
 function featIonK2(a,b){return ENV.ions.length?Math.exp(2*featIonTau(a,b)):1;} // 单程(静听 / 组网)判式 d^2 要乘的系数:距离按 e^-τ 缩
 function featRadarK4(a,b){const k=featIonK2(a,b);return k*k*(ENV.bodies.length&&featRadIn(b)?Math.pow(FEAT_CFG.RAD.RADAR,-4):1);} // 照射判式 d^4 要乘的系数:电离云双程 + 目标在辐射带里
+
+/* ---- 第 4 步(2026-10-05):据点 —— 3 万 km 内只有一方(活着的)舰船、待满 CAP_T 游戏秒 = 拿下;两方都在 = 僵持不动;没人 = 进度慢慢退;
+   拿下后一直是这一方的,直到别人来抢。归属方多一个观测站(sensors/21 detectorsOf 收进去):只有光学 —— 红外照舰船口径、可见光圈 VIS,不听不照;
+   归属双方都看得到(地图事实)。状态不进 ENV(运行期会变):世界换了据点位置、或模拟时间倒回去(新开一局)才清 ---- */
+const FEAT_STA={key:'',t:-1,st:[]};
+function featStaState(){
+  const M=FEAT_STA,S=ENV.stations;let key='';for(const s of S)key+=s.x+','+s.y+'|';
+  if(key!==M.key||simTime<M.t){M.key=key;M.st=S.map(function(s,i){return {i:i,x:s.x,y:s.y,name:s.name,holder:null,cap:null,prog:0,
+    obs:{id:'sta'+i,name:s.name,kind:'station',side:null,pos:[s.x,s.y,0],recv:0,emit:0,emitMode:'silent',cls:'STA',visR:FEAT_CFG.STA.VIS,dead:false}};});} // 观测站:recv 0 / 不照射 ⇒ 静听与照射两路系数恒 0
+  M.t=simTime;return M.st;}
+function featStaStep(dt){ // core/05 每一步调
+  if(!ENV.stations.length)return;const C=FEAT_CFG.STA,R2=C.CAP_R*C.CAP_R;
+  for(const T of featStaState()){let b=false,r=false;
+    for(const s of ships){if(s.dead)continue;const dx=s.pos[0]-T.x,dy=s.pos[1]-T.y;if(dx*dx+dy*dy<R2){if(s.side==='blue')b=true;else if(s.side==='red')r=true;}}
+    if(b!==r){const sd=b?'blue':'red';if(sd!==T.holder){if(T.cap!==sd){T.cap=sd;T.prog=0;}T.prog+=dt;if(T.prog>=C.CAP_T){T.holder=sd;T.prog=0;T.cap=null;T.obs.side=sd;}}}
+    else if(!b)T.prog=Math.max(0,T.prog-C.DECAY*dt);}}
+function featStaObs(side){const L=[];if(!ENV.stations.length)return L;for(const T of featStaState())if(T.holder===side)L.push(T.obs);return L;} // 这一方拿着的据点的观测站

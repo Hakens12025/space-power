@@ -29,12 +29,12 @@ function drawVisFog(B){
   }
   const fz=typeof sfxFog==='function'?sfxFog():null; // 2026-09-30 红外 / 雷达画面里雾按画面染色(render/86-sensorfx)
   const g=B.g,t=B.tg,sp=(x,y)=>{const q=toScreen(x,y);return [q[0]/K,q[1]/K];},q4=v=>Math.round(v*4),S=[fz?fz.key:0],L=[];
-  if(!(fz&&fz.key===1))for(let gi=0;gi<2;gi++)for(const s of (gi?rockObjs():ships)){ // 2026-09-30 用户:红外画面里不挖可见光圈(主视角那块亮的范围删掉),雾铺满整屏
-    if(s.dead||s.side!==VIEW||(s.kind&&s.kind!=='buoy'))continue; // 2026-09-29 前出浮标也挖一个圈(0.7 倍)
+  if(!(fz&&fz.key===1))for(let gi=0;gi<3;gi++)for(const s of (gi===2?featStaObs(VIEW):(gi?rockObjs():ships))){ // 2026-10-05 拿下的据点也挖一个圈(world/16) // 2026-09-30 用户:红外画面里不挖可见光圈(主视角那块亮的范围删掉),雾铺满整屏
+    if(s.dead||s.side!==VIEW||(s.kind&&s.kind!=='buoy'&&s.kind!=='station'))continue; // 2026-09-29 前出浮标也挖一个圈(0.7 倍)
     const RV=s.visR||COV.VIS_R,R=RV*cam.zoom/K; // 2026-09-27 每艘自己的全知圈(按所处环境缩)
     const c=sp(s.pos[0],s.pos[1]);if(c[0]+R<0||c[0]-R>w||c[1]+R<0||c[1]-R>h)continue;
     const sh=[];L.push(c,sh,R);S.push(q4(c[0]),q4(c[1]),q4(R),-1);
-    for(const b of ENV.bodies){ // 天体背后的视线阴影:两条切线之间、切点往外的那一块
+    for(const b of envOccluders()){ // 天体背后的视线阴影:两条切线之间、切点往外的那一块(2026-10-05 含会动的卫星 / 彗核)
       const dx=b.x-s.pos[0],dy=b.y-s.pos[1],D=Math.hypot(dx,dy);if(!(D>b.r)||D-b.r>RV)continue;
       const a=Math.atan2(dy,dx),hw=Math.asin(b.r/D),tl=Math.sqrt(D*D-b.r*b.r),Lf=D+2*RV;
       for(const q of [[Math.cos(a-hw)*tl,Math.sin(a-hw)*tl],[Math.cos(a-hw)*Lf,Math.sin(a-hw)*Lf],[Math.cos(a+hw)*Lf,Math.sin(a+hw)*Lf],[Math.cos(a+hw)*tl,Math.sin(a+hw)*tl]]){const r=sp(s.pos[0]+q[0],s.pos[1]+q[1]);sh.push(r);S.push(q4(r[0]),q4(r[1]));}

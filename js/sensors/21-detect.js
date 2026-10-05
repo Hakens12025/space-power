@@ -40,6 +40,7 @@ function detectorsOf(side){ // 该阵营的传感器网络:存活舰 + 前出浮
   const dets=ships.filter(s=>s.side===side&&!s.dead);
   const bcons=[];
   for(const o of rocks)if(o.kind==='buoy'&&o.side===side&&!o.dead)bcons.push(o); // 2026-09-27 K3 前出浮标:被动时也是探测站(照射那一路看 o.on,sensors/22 的 senseKACT)
+  for(const o of featStaObs(side))bcons.push(o); // 2026-10-05 拿下的据点(world/16):只有光学的观测站(recv 0、不照射)
   return {dets,bcons};
   /* SN4:舰船的两条被动通道(光学、静听)是永远开着的接收机,emitMode 只决定
      【照射】那一路开不开,而那道门在 22-percep 的 senseKACT 里(非 paint 恒返回系数 0,热循环
@@ -51,6 +52,7 @@ function detectLoop(dt){ // 一个感知节拍:蓝网络探红(litBlue)、红网
   const el=(typeof dt==='number'&&isFinite(dt)&&dt>0)?dt:SENS.TICK; // SN4:core/05 透传实际累计的模拟秒;判定里手摇 detectLoop() 不传参,按标称节拍算
   for(const s of ships)if(!s.dead)s.visR=visRadiusOf(s); // 2026-09-27 每艘自己的全知圈,每拍按所处环境重算一次
   for(const o of rocks)if(o.kind==='buoy'&&!o.dead)o.visR=visRadiusOf(o)*OBJ_CFG.BUOY.VIS; // 2026-09-29 前出浮标的可见光圈:舰船的 0.7 倍,同样按环境缩
+  if(ENV.stations.length)for(const T of featStaState())T.obs.visR=visRadiusOf(T.obs)*FEAT_CFG.STA.VIS/COV.VIS_R; // 2026-10-05 据点的可见光圈 12 万,同样按环境缩
   const pg=PING_TMP;pg.length=0; // 2026-09-27 扫描(用户选 A):s.pingReq 的船只在这一拍照射(对方也只在这一拍听得到),节拍末尾回到原来的发射档
   for(const s of ships.concat(rocks))if(s.pingReq){s.pingReq=false;if(s.dead)continue;pg.push(s,s.emitMode);if(s.emitMode!=='paint')setEmit(s,'paint');if(s.kind==='buoy'){s.pingOn=s.on;s.on=true;}s.pingT=simTime;} // 2026-09-29 浮标的照射看 on,这一拍临时打开 // 2026-09-27 民船的导航雷达也走这条路(world/14)
   detectFor('blue','red',el);

@@ -2,7 +2,7 @@
 /* ============================================================================
    2026-10-05 新地形的地图画法(世界层 world/16;用户在 demos/美术/星空美术.html 选定,方案对比在 demos/美术/新地形美术.html):
    彗星 B 海图尾 / 卫星 C 专用地表 + 走过的一段轨道 / 电离云 A 海图 + 一点柔化噪点 / 辐射带 B 辉光环 / 据点 A 环形站(拉远过 MARK 换侧视雷达碟)。
-   挂在 81-env 的登记表 ENV_VIEWS.map 上(frame 槽,每帧画在主画布上);都是地图事实,不分 GM(同行星、尘埃云)。第 1 步只画,据点全是中立。
+   挂在 81-env 的登记表 ENV_VIEWS.map 上(frame 槽,每帧画在主画布上);都是地图事实,不分 GM(同行星、尘埃云);据点的归属与占领进度读 world/16 featStaState(第 4 步)。
    性能(render/CLAUDE.md 的规矩):渐变、噪声、浓度格只在建贴图 / 建缓存时做;电离云整层画进一张视口大小的缓存,镜头不动就只贴 1 次;
    电离云浓度格按工作量分帧建(FEAT_R.BUDGET ms);彗尾的浓度格按彗核相对坐标存,隔 FEAT_R.TAIL_DT 游戏秒才重建;
    圆 / 弧 / 长折线只描视口里的段(featSegs),虚线走 83 的 dashArc / dashLine。
@@ -179,12 +179,19 @@ function featStaMark(x,y,own){ // 代表显示:侧视雷达碟小图标(约 11 x
   if(own===VIEW)ctx.fill();else{ctx.lineWidth=own==='neutral'?1.2:1.7;ctx.stroke();}
   ctx.lineWidth=1.1;ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(0,-3.2);ctx.stroke();ctx.beginPath();ctx.arc(0,-3.6,1.05,0,2*Math.PI);ctx.fill();ctx.restore(); // 馈源杆 + 馈源
   ctx.restore();}
+const FEAT_BEACON={};
+function featBeacon(own){return FEAT_BEACON[own]||(FEAT_BEACON[own]=artRad([[0,artCss(ART_SIDE[own],0)],[0.6,artCss(ART_SIDE[own],0.35)],[0.8,artCss(ART_SIDE[own],0.12)],[1,artCss(ART_SIDE[own],0)]],96));} // 归属灯一闪:整站外发一层阵营色光(效果)
 function featStations(){if(!ENV.stations.length)return;
-  const z=cam.zoom,mk=shipMarkMode(),Dp=FEAT_R.STA_PX/(HULL_ZOOM.LAND*SHIP_K)*shipZoomF();ctx.save();
-  for(const s of ENV.stations){const p=toScreen(s.x,s.y),cr=FEAT_CFG.STA.CAP_R*z,own='neutral'; // 第 1 步:据点都是中立(占领机制第 4 步接)
+  const z=cam.zoom,mk=shipMarkMode(),Dp=FEAT_R.STA_PX/(HULL_ZOOM.LAND*SHIP_K)*shipZoomF(),C=FEAT_CFG.STA,on=(nowMs()/1000*0.8)%1<0.3,P=FEAT_CP2;ctx.save();
+  for(const T of featStaState()){const p=toScreen(T.x,T.y),cr=C.CAP_R*z,own=T.holder||'neutral',vr=T.obs.visR*z; // 2026-10-05 第 4 步:归属 / 占领进度读 world/16
+    if(T.holder===VIEW&&vr>2){ctx.strokeStyle=artCss(ART_SIDE[own],0.2);ctx.lineWidth=1;featCircle(p[0],p[1],vr);} // 自己拿着的据点:它的可见光圈
     if(p[0]+cr<-10||p[0]-cr>W+10||p[1]+cr<-10||p[1]-cr>H+10)continue;
-    ctx.strokeStyle='rgba(180,190,205,.32)';ctx.lineWidth=1;dashArc(p[0],p[1],cr,4); // 占领圈 3 万 km
+    ctx.strokeStyle=own==='neutral'?'rgba(180,190,205,.32)':artCss(ART_SIDE[own],0.4);ctx.lineWidth=1;dashArc(p[0],p[1],cr,4); // 占领圈 3 万 km
+    const prog=T.cap&&T.prog>0&&(adminMode||T.cap===VIEW); // 占领进度只给正在占的那一方看(全知除外):对方的进度会把看不见的敌舰交代出来
+    if(prog){const a1=T.prog/C.CAP_T*2*Math.PI,n=Math.max(8,Math.ceil(a1*cr/6));P.length=0;for(let k=0;k<=n;k++){const a=-Math.PI/2+a1*k/n;P.push(p[0]+Math.cos(a)*cr,p[1]+Math.sin(a)*cr);}
+      ctx.strokeStyle=artCss(ART_SIDE[T.cap],0.9);ctx.lineWidth=2.5;featSegs(P,false);} // 占领进度:占领方的颜色,从正上方顺时针
     if(mk)featStaMark(p[0],p[1],own);
-    else{const c=featStaSpr(own,Dp),w=c.width/artDpr()*Dp/c.Dq;ctx.drawImage(c,p[0]-w/2,p[1]-w/2,w,w);}
-    mapText(s.name+' · 中立',MAP_BODY.TXT,p[0],p[1]+(mk?13:Dp*0.55+9));}
+    else{const c=featStaSpr(own,Dp),w=c.width/artDpr()*Dp/c.Dq;ctx.drawImage(c,p[0]-w/2,p[1]-w/2,w,w);if(own!=='neutral'&&on)artBlit(ctx,featBeacon(own),p[0],p[1],Dp*0.75,0.35,true);}
+    const lab=(own==='neutral'?'中立':(own==='blue'?'蓝方':'红方'))+(prog?' · '+(T.cap==='blue'?'蓝方':'红方')+'占领中 '+Math.floor(T.prog)+'/'+C.CAP_T+' s':'');
+    mapText(T.name+' · '+lab,MAP_BODY.TXT,p[0],p[1]+(mk?13:Dp*0.55+9));}
   ctx.restore();}
