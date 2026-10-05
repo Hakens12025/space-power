@@ -217,7 +217,7 @@ function projMark(p,x,y,rot,side,cnt){
   if(p.type==='decoy'){ctx.lineWidth=1;ctx.beginPath();ctx.arc(x,y,2.4,0,6.283);ctx.stroke();ctx.fillStyle='rgba(200,120,255,.95)';ctx.beginPath();ctx.arc(x,y,1.5,0,6.283);ctx.fill();return;} // 紫点 + 阵营色圈,外径约 5.8 px
   if(p.type==='mac'){const c=Math.cos(rot)*2.5,s=Math.sin(rot)*2.5;ctx.lineWidth=1.6;ctx.beginPath();ctx.moveTo(x-c,y-s);ctx.lineTo(x+c,y+s);ctx.stroke();return;} // 5 px 短划
   if(p.mine){ctx.lineWidth=1.2;ctx.strokeRect(x-2.3,y-2.3,4.6,4.6);return;} // 外框约 5.8 px
-  if(p.type==='interceptor')ctx.fillStyle=PROJ_MK['i'+side];
+  if(p.type==='interceptor'){ctx.strokeStyle=PROJ_MK[side];ctx.lineWidth=1.1;ctx.beginPath();ctx.arc(x,y,1.9,0,6.283);ctx.stroke();ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(x,y,1.3,0,6.283);ctx.fill();return;} // 2026-10-06 拦截弹 = 白点 + 紧贴的阵营色圈(同真显示的白芯亮珠;外径 4.9 px)
   const n=Math.min(cnt,3);
   if(n===1){ctx.beginPath();ctx.arc(x,y,1.6,0,6.283);ctx.fill();return;}
   for(let i=0;i<n;i++){const a=rot+i/n*6.283;ctx.fillRect(x+Math.cos(a)*1.9-0.9,y+Math.sin(a)*1.9-0.9,1.8,1.8);} // 2~3 点,第一颗朝飞行方向;外框约 5.6 px
