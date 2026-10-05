@@ -3,7 +3,7 @@
    导引头画面 2026-09-28 删掉(用户:小窗是主视角的放大特写,不能和主视角不一样;它画的是导弹看见的真实位置,而导弹不回传)。
    选中一艘有主炮的我方舰 ⇒ 主炮火控窗:命中率随距离的 S 形曲线(weapons/52 的 macHitProb),标出主炮目标此刻的距离与把握,下面写散布、飞行、装填、机头偏角。
    画在 index.html 的 #pipCv(右栏 #pipBox);core/99 每帧调 pipFrame,每 PIP.EVERY 帧画一次。 */
-const PIP={EVERY:3,XMAX:200000*CFG.scale,n:0,w:0,h:0,dpr:0,hd:''};
+const PIP={EVERY:3,XMAX:300000*CFG.scale,n:0,w:0,h:0,dpr:0,hd:''}; // 2026-10-05 横轴 20 万 → 30 万:主炮命中率曲线往外拉 x1.543(weapons/52)
 function pipFrame(){
   if(++PIP.n%PIP.EVERY)return;
   const box=document.getElementById('pipBox'),cv=document.getElementById('pipCv');if(!box||!cv)return;

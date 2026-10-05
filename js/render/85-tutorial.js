@@ -60,7 +60,7 @@ const TUT_HTML=`
 
     <p>弹速 <code class="num">3000 公里/秒</code>，是光速的百分之一；提前量按你与目标的相对速度算，飞行时间就是距离除以炮速。装填 <code class="num">300 秒</code>，伤害护卫舰、巡洋舰的主炮都是 <code class="num">600</code>：护卫舰结构 <code class="num">550</code>，挨一炮就沉；巡洋舰 <code class="num">900</code>，要两炮。</p>
 
-    <p>主炮没有射程门，只有把握。命中率随距离走一条陡的 S 形：<code class="num">3 万公里</code>内几乎必中（约 <code class="num">97%</code>），<code class="num">7.3 万</code>是一半，过了这个拐点掉得很快，<code class="num">12.6 万</code>只剩 <code class="num">10%</code>，<code class="num">20 万</code>约 <code class="num">2%</code>。自动开火只打把握不低于 <code class="num">10%</code> 的目标，所以远处也会开炮；但开炮会亮一下，炮弹划过对方的可见光圈时也会暴露来路，远射是拿自己的位置去赌一个小概率的一炮沉船。光标停在主炮上画出的两个圈就是 <code class="num">50%</code> 与 <code class="num">10%</code> 两条线。</p>
+    <p>主炮没有射程门，只有把握。命中率随距离走一条陡的 S 形：<code class="num">4.7 万公里</code>内几乎必中（约 <code class="num">97%</code>），<code class="num">11.3 万</code>是一半，过了这个拐点掉得很快，<code class="num">19.6 万</code>只剩 <code class="num">10%</code>，<code class="num">30 万</code>约 <code class="num">3%</code>。自动开火只打把握不低于 <code class="num">10%</code> 的目标，所以远处也会开炮；但开炮会亮一下，炮弹划过对方的可见光圈时也会暴露来路，远射是拿自己的位置去赌一个小概率的一炮沉船。光标停在主炮上画出的两个圈就是 <code class="num">50%</code> 与 <code class="num">10%</code> 两条线。</p>
 
     <p>不过真正决定这一炮打不打得出去的，是你定没定出目标的位置：定不出来，站在射程圈正中间也一发不发。</p>
 
@@ -80,13 +80,13 @@ const TUT_HTML=`
 
     <h3 class="tut-h3">拦截弹：为什么不用你管</h3>
 
-    <p>拦截是完全自动的，你要做的决定只有武器菜单「近防」展开后的两个勾：近防导弹（外圈拦截弹）和近防炮（内圈）各自开还是关；两个没全勾时，上一级「近防」显示半勾。来袭导弹进入预警距离（外圈的两倍，护卫舰是 <code class="num">5 万公里</code>）之后，只要本阵营的传感器看得见这枚弹、而且它被判定为威胁，近防就会发射拦截弹迎上去；同一个来袭组已经有拦截弹在追时不会重复发射，发射间隔 <code class="num">3 秒</code>。消耗按来袭枚数的 <code class="num">1.2 倍</code>取整，所以接一个 <code class="num">12 枚</code>的组要吃掉 <code class="num">15 枚</code>拦截弹——这是你的弹药，不是免费的。</p>
+    <p>拦截是完全自动的，你要做的决定只有武器菜单「近防」展开后的两个勾：近防导弹（外圈拦截弹）和近防炮（内圈）各自开还是关；两个没全勾时，上一级「近防」显示半勾。来袭导弹进入预警距离（外圈的两倍，护卫舰是 <code class="num">2.6 万公里</code>）之后，只要本阵营的传感器看得见这枚弹、而且它被判定为威胁，近防就会发射拦截弹迎上去；同一个来袭组已经有拦截弹在追时不会重复发射，发射间隔 <code class="num">3 秒</code>。消耗按来袭枚数的 <code class="num">1.2 倍</code>取整，所以接一个 <code class="num">12 枚</code>的组要吃掉 <code class="num">15 枚</code>拦截弹——这是你的弹药，不是免费的。</p>
 
-    <p>防御分两层。外圈是拦截弹，内圈是近防炮，打进内圈的来袭弹还要再过一次近防判定：护卫舰内圈 <code class="num">8000 公里</code>、拦截强度上限 <code class="num">0.85</code>，巡洋舰内圈 <code class="num">5000 公里</code>、上限 <code class="num">0.40</code>。这里要特别看清「上限」两个字：每次结算实际拦掉的比例是在 <code class="num">0</code> 到这个上限之间随机取的，平均只有上限的一半，下面那条过载还会把它再往下压。所以一组 <code class="num">12 枚</code>的来袭弹被干扰弹勾走三枚、剩九枚进内圈，指望护卫舰只放过一两枚是估高了，平均会有 <code class="num">5 枚</code>左右落地。至于干扰弹本身，每次结算逐枚掷一次，把来袭弹勾走的概率护卫舰是 <code class="num">0.25</code>、巡洋舰是 <code class="num">0.15</code>。</p>
+    <p>防御分两层。外圈是拦截弹，内圈是近防炮，打进内圈的来袭弹还要再过一次近防判定：护卫舰内圈 <code class="num">4200 公里</code>、拦截强度上限 <code class="num">0.85</code>，巡洋舰内圈 <code class="num">2625 公里</code>、上限 <code class="num">0.40</code>。这里要特别看清「上限」两个字：每次结算实际拦掉的比例是在 <code class="num">0</code> 到这个上限之间随机取的，平均只有上限的一半，下面那条过载还会把它再往下压。所以一组 <code class="num">12 枚</code>的来袭弹被干扰弹勾走三枚、剩九枚进内圈，指望护卫舰只放过一两枚是估高了，平均会有 <code class="num">5 枚</code>左右落地。至于干扰弹本身，每次结算逐枚掷一次，把来袭弹勾走的概率护卫舰是 <code class="num">0.25</code>、巡洋舰是 <code class="num">0.15</code>。</p>
 
     <p>近防会过载，这是防守方最该记住的一条：同时来袭 <code class="num">n</code> 组时，每组的拦截效率要乘以 <code class="num">1/(1+(n−1)×0.6)</code>；如果这些组还是从不同扇面来的，再乘一次 <code class="num">1/(1+(扇面数−1)×1.5)</code>。两个方向各来两组，比一个方向来四组难挡得多——上面那个自动组网包抄，打的正是这个算式。</p>
 
-    <p>还有一条储备纪律：拦截弹库存低于三成时，近防只拦已经逼近到外圈一半距离以内的目标（护卫舰是 <code class="num">1.25 万公里</code>），远处的一律放过。所以打到后半场，你会看到明明有弹却「不拦了」，那是它在攒最后一道防线。</p>
+    <p>还有一条储备纪律：拦截弹库存低于三成时，近防只拦已经逼近到外圈一半距离以内的目标（护卫舰约 <code class="num">6600 公里</code>），远处的一律放过。所以打到后半场，你会看到明明有弹却「不拦了」，那是它在攒最后一道防线。</p>
 
     <h3 class="tut-h3">两个舰种的读数</h3>
 
@@ -99,11 +99,11 @@ const TUT_HTML=`
       </thead>
       <tbody>
         <tr><td>结构</td><td><code class="num">550</code></td><td><code class="num">900</code></td></tr>
-        <tr><td>加速度</td><td><code class="num">20 km/s²</code></td><td><code class="num">15 km/s²</code></td></tr>
+        <tr><td>加速度</td><td><code class="num">0.3 km/s²</code></td><td><code class="num">0.225 km/s²</code></td></tr>
         <tr><td>转向率</td><td><code class="num">14.9°/秒</code></td><td><code class="num">9.17°/秒</code></td></tr>
         <tr><td>主炮</td><td><code class="num">600</code> 伤害 · <code class="num">300 秒</code>装填</td><td><code class="num">600</code> 伤害 · <code class="num">300 秒</code>装填</td></tr>
         <tr><td>导弹</td><td><code class="num">4</code> 单元 · <code class="num">192 枚</code> · 单枚 <code class="num">12</code></td><td><code class="num">6</code> 单元 · <code class="num">240 枚</code> · 单枚 <code class="num">15</code></td></tr>
-        <tr><td>近防内外圈</td><td>外 <code class="num">25k</code> · 内 <code class="num">8k 公里</code></td><td>外 <code class="num">15k</code> · 内 <code class="num">5k 公里</code></td></tr>
+        <tr><td>近防内外圈</td><td>外 <code class="num">13.1k</code> · 内 <code class="num">4.2k 公里</code></td><td>外 <code class="num">7.9k</code> · 内 <code class="num">2.6k 公里</code></td></tr>
         <tr><td>内圈拦截上限</td><td><code class="num">0.85</code></td><td><code class="num">0.40</code></td></tr>
         <tr><td>拦截弹库存</td><td><code class="num">384 枚</code></td><td><code class="num">320 枚</code></td></tr>
         <tr><td>基础信号</td><td><code class="num">0.7</code></td><td><code class="num">1.0</code></td></tr>
@@ -184,7 +184,7 @@ const TUT_HTML=`
       </tbody>
     </table>
 
-    <p>把光标停在武器菜单的任意一项上，地图会给选中舰画出对应的射程圈：主炮画把握 <code class="num">50%</code> 与 <code class="num">10%</code> 两圈（<code class="num">7.3 万</code> / <code class="num">12.6 万</code>），导弹 <code class="num">40 万公里</code>，拦截画的是内外两个圈。这是最快确认「够不够得着」的办法，但要给它加一条限定：真正卡这个圈的只有导弹，自动齐射会先查距离再下令；主炮的自动开火不查射程、只查把握，把握不低于 <code class="num">10%</code>、目标定出了位置、机头又摆进了对准窗口就开火。</p>
+    <p>把光标停在武器菜单的任意一项上，地图会给选中舰画出对应的射程圈：主炮画把握 <code class="num">50%</code> 与 <code class="num">10%</code> 两圈（<code class="num">11.3 万</code> / <code class="num">19.6 万</code>），导弹 <code class="num">40 万公里</code>，拦截画的是内外两个圈。这是最快确认「够不够得着」的办法，但要给它加一条限定：真正卡这个圈的只有导弹，自动齐射会先查距离再下令；主炮的自动开火不查射程、只查把握，把握不低于 <code class="num">10%</code>、目标定出了位置、机头又摆进了对准窗口就开火。</p>
   </section>
 
   <section class="tut-sec" id="tut-firstrun">

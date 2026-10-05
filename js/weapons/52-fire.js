@@ -33,7 +33,7 @@ const MSL_ACC=PHYS.a(1.5), MSL_FUEL=PHYS.t(447.2)*Math.sqrt(CFG.scale); // 2026-
 const MSL_VK=0.5,MSL_A=MSL_ACC*MSL_VK*2; // 2026-10-03 用户:导弹加减速能力 x2(燃料秒数不变 ⇒ 同样的油换两倍的速度变化;最高速度仍受巡航上限)。 // 2026-09-29 用户:导弹速度 1/4,同日又 x2 → 1/2 —— 整条速度曲线(巡航上限、终端速度、减速下限、加速度 MSL_A、转弯的速度尺度)一起乘 MSL_VK,燃料秒数不变 ⇒ 实测速度正好 1/4。MSL_ACC 原值留给侦察信标(56 stepBeaconProj)
 const MSL_KIN=0.05/PHYS.v(100); // 2026-10-04 用户:线性斜率调低,7.5% → 5%(300 km/s +15%、400 km/s +20%)。2026-10-03 用户:动能线性加伤、只是添头 —— 每 100 km/s 相对速度加爆炸的一份,不封顶;命中结算在 56
 const INT_VK=1/3; // 2026-09-29 用户:拦截弹速度 1/3(56 stepInterceptorProj 的加速度、上限、下限、转弯尺度,与发射初速下限一起乘)
-const MAC_K=4,MAC_Z50=0.6745; // 2026-09-28 命中率改 S 形(用户选拐点 7.3 万):P(d) = 1/(1+(d/d50)^MAC_K),d50 = 散布反算的 50% 距离(z50:P(|N(0,1)|<z)=0.5)。3 万 97% / 7.3 万 50% / 12.6 万 10% / 20 万 2%
+const MAC_K=4,MAC_Z50=0.6745; // 2026-09-28 命中率改 S 形(用户选拐点 7.3 万):P(d) = 1/(1+(d/d50)^MAC_K),d50 = 散布反算的 50% 距离(z50:P(|N(0,1)|<z)=0.5)。3 万 97% / 7.3 万 50% / 12.6 万 10% / 20 万 2%;2026-10-05 整条 x1.543(macSigma 0.005248、封顶 1.944°):4.7 万 97% / 11.3 万 50% / 19.6 万 10% / 20 / 30 / 40 万 9.2% / 3.1% / 2.4%
 /* WR1 自动开火的把握下限。没有射程门之后,"打不打"只剩两个成本:30 秒装填,以及【开火暴露】(FX1:开火后 8 秒亮一档)。
    所以纯按期望伤害算,20% 把握也值得打 —— 实测红方 bot 因此从 94 万公里就开始放炮(命中率 20.7%),整局双方各打五六十发、命中九发,读起来是"对着远处喷"。
    定成 0.5:【自动化只打过半把握的】,想赌远射自己下令(玩家的火控序列不受这条限制,那是他自己的决定)。与 bots/61 红方 bot 的门同一档,双方口径一致。
@@ -52,7 +52,7 @@ function erfInv(x){ // Winitzki 近似 + 两步牛顿(按 erfApprox)
   return y;
 }
 function macD50(sig){return sig>0?MAC_HIT_R/(sig*MAC_Z50):0;}
-const MAC_SIG_CAP=3*Math.PI/180; // 2026-09-28 用户:每发角散布封顶 3°(约 16.5 万起;原封顶 0.5 弧度 = 28.6°,远射满天飞)。再远按固定 3° 的一维高斯算:20 / 30 / 40 万命中 3.0% / 2.0% / 1.5%(远射 = 抽奖)
+const MAC_SIG_CAP=1.944*Math.PI/180; // 2026-10-05 用户:整条命中率曲线往外拉(50% 7.3 万 → 11.3 万,x1.543),封顶角跟散布同比缩 3° → 1.944°,远射那段一起往外拉。2026-09-28 用户:每发角散布封顶 3°(约 16.5 万起;原封顶 0.5 弧度 = 28.6°,远射满天飞)。再远按固定 3° 的一维高斯算:20 / 30 / 40 万命中 3.0% / 2.0% / 1.5%(远射 = 抽奖)
 function macHitCap(d){return erfApprox(MAC_HIT_R/(Math.SQRT2*d*MAC_SIG_CAP));} // 散布到顶以后的命中率
 /* 2026-09-29 用户:雷达现在是纯信息位置,前出没有好处 —— 奖励前出:对方在我方可见光圈里 / 被我方雷达照到,命中曲线的距离按 VIS / RAD 缩(拉长曲线,用户选):
    2026-09-29 用户:远处几乎没提升,要更明显 → 1.236 / 1.136 调到 1.6 / 1.3(用户选只拉长曲线):7.3 万 50% → 87% / 74%,10 万 22% → 65% / 45%,20 万 3.0% → 10.5% / 4.9%,40 万 1.5% → 2.4% / 2.0%。判据读我方航迹这一拍有没有可见光 / 照射量测(不读真值),两个都有取可见光 */
@@ -190,7 +190,7 @@ function fireMissiles(shooter,target,n){ // 导弹齐射:受发射单元(同时�
     nets.get(netId).groups.push(gid);
     projectiles.push({type:'missile',group:gid,count:shooter.mslPer||12, // KIMI154:每组16→12颗(用户令砍导弹:齐射密度-25%,拦截需求同步降,反清屏延续);RF3 枚数读烘焙字段(定义在 weapons/51-defs)
       pos:[shooter.pos[0]+perp[0]*off,shooter.pos[1]+perp[1]*off,shooter.pos[2]+perp[2]*off],
-      vel:[shooter.vel[0]+perp[0]*lane*10,shooter.vel[1]+perp[1]*lane*10,shooter.vel[2]+perp[2]*lane*10], // 继承载机速度矢量+轻微侧向发散
+      vel:[shooter.vel[0]+axis[0]*200*MSL_VK+perp[0]*lane*10,shooter.vel[1]+axis[1]*200*MSL_VK+perp[1]*lane*10,shooter.vel[2]+axis[2]*200*MSL_VK+perp[2]*lane*10], // 继承载机速度矢量+轻微侧向发散;2026-10-05 加朝目标的弹射分量(= 初速下限):船停着时原来只剩 ±5 横向、弹先横着出去再掉头 90°
       target:isShip?target:null, shooter, dmg:shooter.missDmg*(shooter.mslPer||12), missDmg:shooter.missDmg, // 组总伤害 + 单颗伤害(v119,命中按单颗算)
       spd:Math.max(200*MSL_VK,V.len(shooter.vel)), // 初始速率=载机速率
       fuel:MSL_FUEL, age:0, // 燃料(秒,WR1 起是常量 MSL_FUEL:mslReach 从它现算)+ 飞行年龄(近防发射判定)

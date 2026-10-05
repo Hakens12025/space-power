@@ -11,10 +11,12 @@ const GUIDE_SEEK=MSL_CFG.ladarRange; // 导弹自主导引范围(km)=主动LADAR
 /* 2026-09-30 导弹组网(用户):弹与弹 MM、弹与舰(含前出浮标)MS 以内连一条边(数见 MSL_LINK);一组导弹经弹弹链能连到任何一艘我方船(舰与舰之间量子通信,算一个节点)就「在网上」(p.online):
    回传自身状态(我方画真位置、选中面板照实报)、收数据链引导(guideSide 只给在网上的)。每个感知节拍重算一次;刚发射的算在网上(52 fireMissiles) */
 const MSL_LINK={MM:61425*CFG.scale,MS:63000*CFG.scale}; // 2026-10-03 用户:组网圈 x0.7(8.775 / 9 万 → 6.1425 / 6.3 万),导引圈 GUIDE_SEEK 不变
-const MSL_SWARM={S:20000*CFG.scale,COH:0.7,FLOOR:0.85,conv:25000*CFG.scale,convW:125000*CFG.scale,DASH:30000*CFG.scale,RES:2,DEAD:0.035,HYST:0.03};
+const MSL_SWARM={S:20000*CFG.scale,COH:0.7,FLOOR:0.85,conv:25000*CFG.scale,convW:125000*CFG.scale,DASH:30000*CFG.scale,RES:2,DEAD:0.035,HYST:0.03,DEV:0.26};
   // 2026-10-01 三关系算法(用户拍板:间距 3 万 / 聚合力 0.6,演示页 demos/weapons/导弹组网.html):S = 间距(分离半径);COH = 聚合力;FLOOR = 同步减速下限(x 能力天花板,
   // 等不起就掉队);conv / convW = 聚集力距目标几公里开始淡出、淡出带多宽;DASH = 冲刺段起点(= 导引头锁定范围,盖过近防外圈)以内不再减速;RES = 冲刺预留油(秒);
-  // DEAD = 转向死区(2°,不追微小抖动);HYST = 调度滞回(x,不为噪声重新加减速)
+  // DEAD = 转向死区(2°,不追微小抖动);HYST = 调度滞回(x,不为噪声重新加减速);DEV = 排斥最多把航向从「目标 + 聚拢」的方向拉开 15°(2026-10-05 用户:刚出膛挤在一起的几组被排斥推着转圈、白烧油 ——
+  // 十几个邻组的排斥相加能把弹推到背后,实测远靶出膛 2~20 秒平均偏 56°、最坏 117°;只封排斥不封聚拢(用户:抱团不能弱 —— 先试过两样合起来封 15°,团明显松了),
+  // 三种靶距平均:出膛偏 20°,团心均距 30 / 60 秒 10.6k / 6.2k,比不封顶时(13.0k / 9.5k)还紧。封顶 = Reynolds 群体转向的转向力上限)
 let mslNetT=0; // 组网 / 邻接重算的节拍累加器(每感知拍一次)
 function mslNetStep(dt){
   mslNetT+=dt;if(mslNetT<SENS.TICK)return;mslNetT=0;

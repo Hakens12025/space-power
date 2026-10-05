@@ -55,7 +55,7 @@ function fmCapW(k) { const d = FM_DIM.find(x => x.k === k); return d && isFinite
 /* 五个功能带,半径各有各的物理依据(fmBandRadii 现算,不写死):
      core   0                      阵心,旗舰专属
      close  min(inner) × 0.9       贴身带。护卫必须罩得住旗舰才拿得到内圈叠乘
-     body   贴身带外 + 12000       被护圈
+     body   贴身带外 + 8400        被护圈
      screen max(body+minIn, minOut×2)  屏护圈
      picket screen × 2             哨戒带 */
 const FM_BANDS = ['core', 'close', 'body', 'screen', 'picket'];
@@ -267,7 +267,7 @@ function fmBandRadii(list, flag, bm, P) {
      玩家要是把下游也填了,那就以玩家填的为准。 */
   const ovr = k => { const o = fmBandOvr(P, k); return fmBandReady(o) ? o.r : null; };
   const close = ovr('close') !== null ? ovr('close') : minIn * 0.9 * m;
-  const body = ovr('body') !== null ? ovr('body') : (minIn * 0.9 + 12000 * CFG.scale) * m;
+  const body = ovr('body') !== null ? ovr('body') : (minIn * 0.9 + 8400 * CFG.scale) * m; // 2026-10-05 近防 x0.7,贴身带外的间隔也 x0.7(原 12000),整套阵型等比缩
   const screen = ovr('screen') !== null ? ovr('screen') : Math.max(body + minIn * m, minOut * 2 * m);
   const picket = ovr('picket') !== null ? ovr('picket') : screen * 2;
   const BR = { core: 0, close, body, screen, picket, baseGap: minIn * 2 };

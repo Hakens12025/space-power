@@ -122,7 +122,9 @@ function mslSwarmStep(p,tp,dist,dir0){ // 2026-10-01 三关系公共段:① 油�
       let px=0,py=0;const rs=MSL_SWARM.S;
       for(const q of nb){const dx=p.pos[0]-q.pos[0],dy=p.pos[1]-q.pos[1],dq=Math.hypot(dx,dy);
         if(dq>1&&dq<rs){px+=dx/dq*(1-dq/rs);py+=dy/dq*(1-dq/rs);}}
-      const cand=V.norm([dir0[0]+MSL_SWARM.COH*fadeT*fadeC*tc[0]+px*fadeT*0.8,dir0[1]+MSL_SWARM.COH*fadeT*fadeC*tc[1]+py*fadeT*0.8,dir0[2]]);
+      const hx=dir0[0]+MSL_SWARM.COH*fadeT*fadeC*tc[0],hy=dir0[1]+MSL_SWARM.COH*fadeT*fadeC*tc[1],cC=V.norm([hx,hy,dir0[2]]); // 目标 + 聚拢(聚拢单独最多偏约 44°,拽不到背后)
+      let cand=V.norm([hx+px*fadeT*0.8,hy+py*fadeT*0.8,dir0[2]]);
+      {const dv=V.angle(cC,cand);if(dv>MSL_SWARM.DEV)cand=V.slerp(cC,cand,MSL_SWARM.DEV/dv);} // 排斥最多把航向从「目标 + 聚拢」拉开 DEV(54)
       const ca=Math.atan2(cand[1],cand[0])-Math.atan2(p.vel[1],p.vel[0]),ca2=Math.atan2(Math.sin(ca),Math.cos(ca));
       dir=Math.abs(ca2)<MSL_SWARM.DEAD?[p.vel[0]/vn,p.vel[1]/vn,0]:cand;}} // 转向死区 2°:不追微小抖动,省下微转向的油
   return {dir:dir,dEff:dEff,nb:nb,aC:aC,cx:cx,cy:cy};}
