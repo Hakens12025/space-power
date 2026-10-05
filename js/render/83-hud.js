@@ -125,14 +125,14 @@ function drawCiwsFx(){
     const p0=toScreen(o[0]+c*r0,o[1]+n*r0),p1=toScreen(o[0]+c*r1,o[1]+n*r1);
     ctx.strokeStyle='rgba(255,240,170,'+(0.9*(1-g/t.life)).toFixed(3)+')';ctx.beginPath();ctx.moveTo(p0[0],p0[1]);ctx.lineTo(p1[0],p1[1]);ctx.stroke();
   }
-  ctx.lineWidth=1.2;
+  ctx.lineWidth=1.2;const fk=artFxK()*SHIP_K/0.6; // 2026-10-05 火花随缩放:战术落点上的大小 x 船的(不钳)系数开平方,再乘美术整体缩放(SHIP_K / 0.6)
   for(let i=ciwsFX.length-1;i>=0;i--){ // 火花:被打掉的每颗一朵,错开一点炸
     const f=ciwsFX[i],g0=(now-f.tw)/1000;if(g0>C.PUFF_D+C.PUFF_T||g0<0){ciwsFX.splice(i,1);continue;}
     if(!adminMode&&!f.vis[VIEW])continue;
     if(!f.pf){const R=C.PUFF_REF*CFG.scale;f.pf=Array.from({length:Math.min(16,f.n)},()=>{const a=Math.random()*6.283,r=R*(C.PUFF_R0+Math.random()*(C.PUFF_R1-C.PUFF_R0));return [f.pos[0]+Math.cos(a)*r,f.pos[1]+Math.sin(a)*r,Math.random()*C.PUFF_D];});}
     for(const q of f.pf){const g=g0-q[2];if(g<0||g>C.PUFF_T)continue;const p=toScreen(q[0],q[1]),a=1-g/C.PUFF_T;
-      ctx.fillStyle='rgba(255,220,150,'+(0.9*a).toFixed(3)+')';ctx.beginPath();ctx.arc(p[0],p[1],Math.max(1,3*(1-g)),0,6.283);ctx.fill();
-      ctx.strokeStyle='rgba(255,170,90,'+(0.7*a).toFixed(3)+')';ctx.beginPath();ctx.arc(p[0],p[1],2+g*18,0,6.283);ctx.stroke();}
+      ctx.fillStyle='rgba(255,220,150,'+(0.9*a).toFixed(3)+')';ctx.beginPath();ctx.arc(p[0],p[1],Math.max(1,3*(1-g)*fk),0,6.283);ctx.fill();
+      ctx.strokeStyle='rgba(255,170,90,'+(0.7*a).toFixed(3)+')';ctx.beginPath();ctx.arc(p[0],p[1],(2+g*18)*fk,0,6.283);ctx.stroke();}
   }
   ctx.restore();
 }
@@ -164,11 +164,11 @@ function drawShieldFx(){
     if(!adminMode&&!e.vis[VIEW])continue;
     const s=e.s,q=(adminMode||s.side===VIEW)?s.pos:(viewPos(s)||e.pos),p=toScreen(q[0],q[1]),R=shieldR(s),L=R/F.K,C=F.COL[s.side]||F.COL.blue,cx=p[0],cy=p[1],u=a/T,k=1-u;
     if(cx<-R*3||cx>W+R*3||cy<-R*3||cy>H+R*3)continue;
-    if(e.k==='hit'){const w=e.big?0.8:0.3;
-      shdArc(cx,cy,R,e.a-w*(0.4+u),e.a+w*(0.4+u),shdRgba([255,255,255],0.9*k*k),e.big?3.5:2.2); // 命中点一段亮弧往两边铺开
-      shdArc(cx,cy,R,e.a+w*0.4+u*2.2,e.a+w*0.4+u*2.2+0.25,shdRgba(C,0.8*k),2);shdArc(cx,cy,R,e.a-w*0.4-u*2.2-0.25,e.a-w*0.4-u*2.2,shdRgba(C,0.8*k),2); // 沿罩面跑开的涟漪
-      shdArc(cx,cy,R,0,6.283,shdRgba(C,0.45*k*(e.big?1:0.5)),1.6); // 整层闪一下
-      const px=cx+Math.cos(e.a)*R,py=cy+Math.sin(e.a)*R,gr=L*(e.big?1.6:0.7),rg=ctx.createRadialGradient(px,py,0,px,py,gr);rg.addColorStop(0,shdRgba([255,255,255],0.85*k));rg.addColorStop(1,shdRgba(C,0));ctx.fillStyle=rg;ctx.beginPath();ctx.arc(px,py,gr,0,6.283);ctx.fill();}
+    if(e.k==='hit'){const w=e.big?0.8:0.3,fk=artFxK()*SHIP_K/0.6,Lt=L*(shipMarkMode()?1:HULL_ZOOM.LAND*SHIP_K/shipZoomF()); // 2026-10-05 受击随缩放:线宽、亮斑 = 战术落点上的大小 x 船的(不钳)系数开平方(再乘美术整体缩放);罩子半径照旧跟船
+      shdArc(cx,cy,R,e.a-w*(0.4+u),e.a+w*(0.4+u),shdRgba([255,255,255],0.9*k*k),(e.big?3.5:2.2)*fk); // 命中点一段亮弧往两边铺开
+      shdArc(cx,cy,R,e.a+w*0.4+u*2.2,e.a+w*0.4+u*2.2+0.25,shdRgba(C,0.8*k),2*fk);shdArc(cx,cy,R,e.a-w*0.4-u*2.2-0.25,e.a-w*0.4-u*2.2,shdRgba(C,0.8*k),2*fk); // 沿罩面跑开的涟漪
+      shdArc(cx,cy,R,0,6.283,shdRgba(C,0.45*k*(e.big?1:0.5)),1.6*fk); // 整层闪一下
+      const px=cx+Math.cos(e.a)*R,py=cy+Math.sin(e.a)*R,gr=Lt*(e.big?1.6:0.7)*artFxK(),rg=ctx.createRadialGradient(px,py,0,px,py,gr);rg.addColorStop(0,shdRgba([255,255,255],0.85*k));rg.addColorStop(1,shdRgba(C,0));ctx.fillStyle=rg;ctx.beginPath();ctx.arc(px,py,gr,0,6.283);ctx.fill();}
     else if(e.k==='break'){
       if(!e.sh){e.sh=[];for(let n=0;n<14;n++)e.sh.push({c:(n+Math.random()*0.5)/14*6.283,w:6.283/14*(0.55+Math.random()*0.35),v:0.5+Math.random()*0.9,r:(Math.random()-0.5)*3});
         e.sp=[];for(let n=0;n<22;n++)e.sp.push({c:e.a+(Math.random()-0.5)*2.4,v:0.8+Math.random()*1.6});}
@@ -228,7 +228,7 @@ function drawProjectiles(){ // 弹丸/导弹
     const s=toScreen(p.pos[0],p.pos[1]);
     const sd=(p.group||0)*1.7,side=p.shooter&&p.shooter.side==='red'?'red':'blue',rot=Math.atan2(p.vel[1],p.vel[0]); // 2026-10-04 弹的画法换成 render/81-art(朝向 = 速度方向)
     if(s[0]<-60||s[0]>W+60||s[1]<-60||s[1]>H+60){if(p!==selMissile)continue;}
-    if(p.type==='decoy'){if(mk)projMark(p,s[0],s[1],rot,side,1);else artDecoy(ctx,s[0],s[1],rot,sd);continue;} // 诱饵弹:脉动的假热源(模拟舰船信号骗拦截)
+    if(p.type==='decoy'){if(mk)projMark(p,s[0],s[1],rot,side,1);else artDecoy(ctx,s[0],s[1],rot,sd,side);continue;} // 诱饵弹:脉动的假热源(模拟舰船信号骗拦截)
     if(p.type==='mac'){
       if(mk)projMark(p,s[0],s[1],rot,side,1);else artShell(ctx,s[0],s[1],rot,side);
     }else{ // 导弹组/拦截导弹组(显示剩余数量)
