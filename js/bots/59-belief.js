@@ -3,7 +3,7 @@
    回答「对方还没定位的船可能在哪」。业内叫贝叶斯搜索 / 搜索论(Koopman);海军叫目标不确定区(AOU)。
    不分阵营:BEL[side] = side 这一方对对方的信念(以后同一套也能开蓝方,和旧红方对打比强弱)。两块:
      P      搜索图(游玩区 NX x NY 格)—— 开局没有位置先验(整个游玩区均匀)、按对方最高速度往外摊(可达域膨胀)、
-            自己的传感器扫过没发现就按发现概率降(「没找到」也是信息);
+            自己的传感器扫过没发现就按发现概率降(「没找到」也是信息);看到过的红外方位按「可能是对方战舰」并进来(belFlash,熄火后也记得);
      clues  线索 —— 定位接触(fix)、丢了的接触(dr,航位推算点)、只有方位的接触(brg,楔形)、
             听到的雷达(esm,方位 + 幅度测距,读雷达画面同一份 rdvEsmBrg / rdvEsmRc)、炮弹来路(shell,往回的线)。
    ⚠ 只读这一方自己知道的:航迹表、ESM、SHELL_TR、地图事实。不读对方真值;量测记录里的真距离(ch[2])、
@@ -62,8 +62,10 @@ function belClues(B,side){ // 线索:每次更新重列(都是这一拍这一方
   ESM[side].forEach(function(m,E){const tk=trkOf(side,E);if(tk&&!trkFoe(tk))return; // 已认出不是船的(民船导航雷达)不算
     m.forEach(function(k,Ls){if(simTime-k.t>ESM_CFG.FADE||!k.org)return;
     const a=rdvEsmBrg(E,Ls,k),r=rdvEsmRc(E,Ls,k); // 与雷达画面画的同一份(render/86-radarview)
-    L.push({k:'esm',src:E,x:k.org[0]+Math.cos(a)*r,y:k.org[1]+Math.sin(a)*r,ox:k.org[0],oy:k.org[1],a:a,half:k.half,rr:r,sr:k.sr||0});});});
+    L.push({k:'esm',src:E,x:k.org[0]+Math.cos(a)*r,y:k.org[1]+Math.sin(a)*r,ox:k.org[0],oy:k.org[1],a:a,half:k.half,rr:r,sr:k.sr||0,t:k.t});});}); // t = 最近一次听到(持续照射的每拍都在刷新)
   for(const r of SHELL_TR[side])L.push({k:'shell',x:r.a[0],y:r.a[1],ux:-r.u[0],uy:-r.u[1],len:BEL_C.SHELL_L,t:r.t});
+  for(const p of projectiles){if(p.type!=='missile'||p.done||!p.shooter||p.shooter.side===side||!trkSees(side,p))continue; // 2026-10-06 用户:「ai不会反向推断炮弹和导弹的来袭方向?」—— 看得见的来袭导弹沿来向往回延长(同炮弹来路一类,mis 标记;导弹会拐弯,只当方向)
+    const v=Math.hypot(p.vel[0],p.vel[1]);if(!(v>0))continue;L.push({k:'shell',mis:true,x:p.pos[0],y:p.pos[1],ux:-p.vel[0]/v,uy:-p.vel[1]/v,len:LAD.msl,t:simTime});}
   return L;
 }
 function belStep(side,dt){ // 每 DT 游戏秒一次:膨胀 → 扫过没发现的降 → 归一 → 列线索
@@ -78,7 +80,22 @@ function belStep(side,dt){ // 每 DT 游戏秒一次:膨胀 → 扫过没发现�
   B.clues=belClues(B,side);
   for(const c of B.clues)if(c.k==='fix'){const i=Math.floor((c.x-B.A.x0)/B.cw),j=Math.floor((c.y-B.A.y0)/B.ch);if(i>=0&&i<B.nx&&j>=0&&j<B.ny)B.P[j*B.nx+i]*=0.2;} // 定位了的那艘不再是「没定位的船」
   for(let k=0;k<B.P.length;k++)if(B.P[k]<BEL_C.FLOOR)B.P[k]=BEL_C.FLOOR;
-  belNorm(B);B.t=simTime;B.ver++;return B;
+  belNorm(B);belFlash(B,side);B.t=simTime;B.ver++;return B;
+}
+function belAng(d){return Math.atan2(Math.sin(d),Math.cos(d));}
+function belFlash(B,side){ // 2026-10-06 用户:「让红方把看到过的闪光方位记进搜索面」—— 红外方位(brg)并进搜索图(概率数据关联 PDA 式的混合更新):
+  // P' = (1-w)·P + w·P·[在楔形里] / P(楔形),总量不变;w = 这个热源是对方战舰的概率 = 没定位的对方 /(它们 + 没认出的民船)(民船数是地图规则 world/14)。
+  // 同一来源的方位转出楔形半宽、或观测点挪出一格才再并一次(同一次看见不越乘越尖;换了位置再看到 = 新的交叉)。之后照常按最高速度膨胀 = 记得那里闪过,但它可能已经走开
+  const opp=belOpp(side),nE=ships.filter(s=>s.side===opp&&!s.dead).length;let nFix=0,civId=0; // 对方还剩几艘:同 belParticles(开局编成公开、击沉看残骸)
+  for(const c of B.clues)if(c.k==='fix'&&c.src&&trkPid(trkOf(side,c.src)))nFix++;
+  trkEach(side,function(tk){const t=trkIdType(tk);if(t&&t.kind==='civ')civId++;});
+  const nU=Math.max(0,nE-nFix),civ=Math.max(0,OBJ_CFG.CIV.N-civId),w=nU>0?nU/(nU+civ):0;if(!(w>0))return;
+  const M=B.flash||(B.flash=new Map()),P=B.P,nx=B.nx,ny=B.ny,inW=B.Q;
+  for(const c of B.clues){if(c.k!=='brg'||!c.src)continue;const a=Math.atan2(c.uy,c.ux),h=Math.max(Math.PI/180,2*(c.th||0)),L=M.get(c.src)||[]; // 半宽 = 2 倍角误差(至少 1°)
+    if(L.some(m=>Math.abs(belAng(a-m.a))<h&&Math.hypot(c.x-m.x,c.y-m.y)<B.cw))continue;
+    let m=0;for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const k=j*nx+i,dx=B.A.x0+(i+0.5)*B.cw-c.x,dy=B.A.y0+(j+0.5)*B.ch-c.y;inW[k]=Math.abs(belAng(Math.atan2(dy,dx)-a))<=h?1:0;if(inW[k])m+=P[k];}
+    if(m>0)for(let k=0;k<P.length;k++)P[k]=(1-w)*P[k]+(inW[k]?w*P[k]/m:0);
+    L.push({a:a,x:c.x,y:c.y});if(L.length>8)L.shift();M.set(c.src,L);}
 }
 
 /* ---- 2026-10-05 第 3 步:后验样本(决策论规划器 bots/60 用;业内:粒子近似的信念 + 混合模型)----
