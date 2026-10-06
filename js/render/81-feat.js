@@ -60,24 +60,25 @@ function featIonNoise(D){if(FEAT_ION.noise&&FEAT_ION.noise.D===D)return FEAT_ION
   const o=artCv(N,N),og=o.getContext('2d');og.filter='blur('+(FEAT_R.ION_FEATHER*D).toFixed(2)+'px)';og.drawImage(B,-N,-N);o.D=D;return FEAT_ION.noise=o;}
 function featIon(){if(!ENV.ions.length)return;featIonWork();
   const D=window.devicePixelRatio||1,w=Math.round(W*D),h=Math.round(H*D),z=cam.zoom,vis=[];
-  for(const J of FEAT_ION.jobs){if(!J.done)continue;const s=(J.x0-cam.x)*z+W/2,t=(J.y0-cam.y)*z+H/2,e=J.nx*J.cell*z;if(s+e<0||t+e<0||s>W||t>H)continue;vis.push(J);}
+  FEAT_ION.jobs.forEach(function(J,k){if(!J.done)return;const o=featIonOff(k);J.ox=o[0];J.oy=o[1];const s=(J.x0+J.ox-cam.x)*z+W/2,t=(J.y0+J.oy-cam.y)*z+H/2,e=J.nx*J.cell*z;if(s+e<0||t+e<0||s>W||t>H)return;vis.push(J);}); // 2026-10-06 漂移偏移(world/16 featIonOff)
   if(!vis.length)return;
   if(!FEAT_ION.cv){FEAT_ION.cv=artCv(1,1);FEAT_ION.g=FEAT_ION.cv.getContext('2d');FEAT_ION.nv=artCv(1,1);FEAT_ION.ng=FEAT_ION.nv.getContext('2d');}
-  const C=FEAT_ION.cv,G=FEAT_ION.g,key=cam.x+'|'+cam.y+'|'+z+'|'+w+'|'+h+'|'+vis.length+'|'+ENV.rev;
+  let dk='';for(const J of vis)dk+=Math.round(J.ox*z*2)+','+Math.round(J.oy*z*2)+';'; // 云漂过半个像素才重画缓存
+  const C=FEAT_ION.cv,G=FEAT_ION.g,key=cam.x+'|'+cam.y+'|'+z+'|'+w+'|'+h+'|'+vis.length+'|'+ENV.rev+'|'+dk;
   if(key!==FEAT_ION.key){FEAT_ION.key=key; // 镜头动了(或云刚建好)才重画缓存:填充 + 噪点层(细噪点按浓度遮罩,3 成透明)+ 三档等值线
     if(C.width!==w||C.height!==h){C.width=w;C.height=h;FEAT_ION.nv.width=w;FEAT_ION.nv.height=h;}
     G.setTransform(1,0,0,1,0,0);G.clearRect(0,0,w,h);G.setTransform(D,0,0,D,0,0);
     const NV=FEAT_ION.nv,NG=FEAT_ION.ng,noise=featIonNoise(D),N=noise.width,org=toScreen(0,0),ox=((Math.round(org[0]*D)%N)+N)%N,oy=((Math.round(org[1]*D)%N)+N)%N; // 噪点钉在世界上:平移时不爬
-    for(const J of vis){featImgAt(G,J.fill,J.x0,J.y0,J.cell);
-      const s=Math.max(0,Math.floor(((J.x0-cam.x)*z+W/2)*D)),t=Math.max(0,Math.floor(((J.y0-cam.y)*z+H/2)*D)),e=Math.ceil(J.nx*J.cell*z*D),x1=Math.min(w,s+e+2),y1=Math.min(h,t+e+2);
+    for(const J of vis){featImgAt(G,J.fill,J.x0+J.ox,J.y0+J.oy,J.cell);
+      const s=Math.max(0,Math.floor(((J.x0+J.ox-cam.x)*z+W/2)*D)),t=Math.max(0,Math.floor(((J.y0+J.oy-cam.y)*z+H/2)*D)),e=Math.ceil(J.nx*J.cell*z*D),x1=Math.min(w,s+e+2),y1=Math.min(h,t+e+2);
       if(x1<=s||y1<=t)continue;NG.setTransform(1,0,0,1,0,0);NG.globalCompositeOperation='source-over';NG.clearRect(s,t,x1-s,y1-t);
       NG.save();NG.beginPath();NG.rect(s,t,x1-s,y1-t);NG.clip(); // 只在这朵云的外接框里铺噪点(轴对齐矩形裁剪)
       for(let x=ox+N*Math.floor((s-ox)/N);x<x1;x+=N)for(let y=oy+N*Math.floor((t-oy)/N);y<y1;y+=N)NG.drawImage(noise,x,y);
-      NG.globalCompositeOperation='destination-in';NG.setTransform(D,0,0,D,0,0);featImgAt(NG,J.mask,J.x0,J.y0,J.cell);NG.restore();
+      NG.globalCompositeOperation='destination-in';NG.setTransform(D,0,0,D,0,0);featImgAt(NG,J.mask,J.x0+J.ox,J.y0+J.oy,J.cell);NG.restore();
       G.save();G.setTransform(1,0,0,1,0,0);G.globalAlpha=FEAT_R.ION_NOISE_A;G.drawImage(NV,s,t,x1-s,y1-t,s,t,x1-s,y1-t);G.restore();}
-    for(const J of vis){featIsoDraw(G,J.iso[0],0,0,'rgba(225,150,232,.22)');featIsoDraw(G,J.iso[1],0,0,'rgba(232,160,236,.32)');featIsoDraw(G,J.iso[2],0,0,'rgba(245,190,248,.46)');}}
+    for(const J of vis){featIsoDraw(G,J.iso[0],J.ox,J.oy,'rgba(225,150,232,.22)');featIsoDraw(G,J.iso[1],J.ox,J.oy,'rgba(232,160,236,.32)');featIsoDraw(G,J.iso[2],J.ox,J.oy,'rgba(245,190,248,.46)');}}
   ctx.drawImage(C,0,0,W,H);
-  for(const J of vis){const p=toScreen(J.I.x,J.I.y);mapText('电离云',FEAT_R.TXT_ION,p[0],p[1]);}}
+  for(const J of vis){const p=toScreen(J.I.x+J.ox,J.I.y+J.oy);mapText('电离云',FEAT_R.TXT_ION,p[0],p[1]);}}
 
 /* ================= 辐射带(B 辉光环) ================= */
 let FEAT_RAD=null;

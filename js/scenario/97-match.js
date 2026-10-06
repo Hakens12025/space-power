@@ -11,7 +11,8 @@
    ⚠ 引擎里没有战场边界(CFG.world 只管星空贴图与开局镜头),所以"战场 200 万"不是一个要改的数,摆得开就是了。
    2026-09-26 整体 x1/5,上文旧数按 1/5 读(开局间距 60 万);并且现在【有】边界了:单局游玩区 ARENA(80 万 x 45 万,轴对齐,中心 = 两军重心连线中点)由 matchPlaceRed 设,
    舰船出不去(physics/31)、弹丸出界消失(weapons)。红方来向 ±60° 在 45 万高的矩形里装不下,收成 ±ARC(见 MATCH)。 */
-const MATCH={OPEN:1800000*CFG.scale,ARC:20*Math.PI/180,shown:false,t0:0,nBlue:0,nRed:0,theta:0,seed:0,blueC:null,redC:null,
+const MATCH={OPEN:1800000, // 2026-10-06 用户:开局距离单独放大回去(不乘 CFG.scale)
+  ARC:20*Math.PI/180,shown:false,t0:0,nBlue:0,nRed:0,theta:0,seed:0,blueC:null,redC:null,
   fix:Math.floor(+new URLSearchParams(location.search).get('seed')||0)}; // 2026-09-29 用户:开局间距 120 万 → 180 万(随游玩区 x1.5;原 09-28 60 万 → 120 万)。 seed = 这一局的种子(定红方来向与整个世界);fix = 地址 ?seed=N 固定种子(重放同一张图)。2026-09-26 x1/5(单局地图):OPEN 原 3000000;ARC 原 60°,改 20°:两军纵向错开至多 60 万·sin20° ≈ 20.5 万,各离游玩区上下边 >= 22.5-10.3-阵型半宽 ≈ 9.7 万
 function matchIdx(){for(let i=0;i<TEST_ENVS.length;i++)if(TEST_ENVS[i].match)return i;return -1;}
 function matchIsOn(){const e=curEnv();return !!(e&&e.match);}

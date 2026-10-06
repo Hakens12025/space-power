@@ -37,7 +37,7 @@ function rdvCoverage(P){
 }
 const RDV_ION={key:'',P:[]};
 function rdvIonShade(E,p,Rw){ // 每个方向照射够得着的距离:d x e^τ(d) = Rw(电离云双程衰减,同热循环的判式);镜头 / 舰位 / 世界变了才重算(96 个方向、每个方向二分 10 次)
-  const z=cam.zoom,key=Math.round(E.pos[0]/500)+'|'+Math.round(E.pos[1]/500)+'|'+Math.round(Rw)+'|'+ENV.rev;
+  const z=cam.zoom,key=Math.round(E.pos[0]/500)+'|'+Math.round(E.pos[1]/500)+'|'+Math.round(Rw)+'|'+ENV.rev+'|'+featIonEpoch(); // 云在漂(world/16):漂过 500 km 重算
   if(key!==RDV_ION.key){RDV_ION.key=key;const P=RDV_ION.P;P.length=0;let any=false;const N=96,q=[0,0];
     for(let i=0;i<N;i++){const a=i/N*2*Math.PI,ux=Math.cos(a),uy=Math.sin(a);let lo=0,hi=Rw;q[0]=E.pos[0]+ux*Rw;q[1]=E.pos[1]+uy*Rw;
       if(featIonTau(E.pos,q)>0){any=true;for(let k=0;k<10;k++){const m=(lo+hi)/2;q[0]=E.pos[0]+ux*m;q[1]=E.pos[1]+uy*m;if(m*Math.exp(featIonTau(E.pos,q))<=Rw)lo=m;else hi=m;}}else lo=Rw;

@@ -172,7 +172,7 @@ function sensePrepare(dets, bcons, tgts, dt) { // dets=存活舰(探测方) bcon
     if (m > 0) { if (nd * m > scRbCap) { scRbCap = Math.max(16, nd * m * 2); scRbU = new Float64Array(2 * scRbCap); scRbC = new Float64Array(4 * scRbCap); }
       for (let j = 0; j < nd; j++) { const d = j < dets.length ? dets[j] : bcons[j - dets.length]; let q = j * m;
         for (let b = 0; b < on.length; b++) { if (!on[b]) continue; envRfBodyCone(ENV.bodies[b], d.pos, scRbT); scRbU[2 * q] = scRbT[0]; scRbU[2 * q + 1] = scRbT[1]; for (let i = 0; i < 4; i++) scRbC[4 * q + i] = scRbT[2 + i]; q++; } } } }
-  scIonN = Math.min(8, ENV.ions.length); for (let k = 0; k < scIonN; k++) { const I = ENV.ions[k]; scIonX[k] = I.x; scIonY[k] = I.y; scIonR2[k] = I.r2; }
+  scIonN = Math.min(8, ENV.ions.length); for (let k = 0; k < scIonN; k++) { const I = ENV.ions[k], o = featIonOff(k); scIonX[k] = I.x + o[0]; scIonY[k] = I.y + o[1]; scIonR2[k] = I.r2; } // 2026-10-06 电离云在漂:外接圆按此刻位置(world/16 featIonOff)
   const radOn = ENV.bodies.length > 0, beltK = Math.pow(FEAT_CFG.RAD.RADAR, -4);
   const B = envOccluders(); senseGrowO(B.length); scON = B.length; // 2026-10-05 天体 + 此刻的卫星 / 彗核(world/16),与 envOccluded 同一张表
   for (let b = 0; b < scON; b++) { scOX[b] = B[b].x; scOY[b] = B[b].y; scOR2[b] = B[b].r2; }

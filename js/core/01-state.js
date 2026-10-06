@@ -4,7 +4,7 @@
 /* ================= 全局状态 ================= */
 let ships=[], formations={}, selected=[], simTime=0, projectiles=[], victoryShown=false, defeatShown=false; // FL1:groups 编组名册层已删除,编队是唯一的一层(formations['1'..'4'],见 js/formation/42-formation.js)
 let ARENA=null; // 单局游玩区 {x0,y0,x1,y1}(km,轴对齐矩形);null = 不设边界(靶场 / 测试预设)。对局开局时由 scenario/97 设(用户 2026-09-26:"战术大小=单局的地图大小")
-const ARENA_W=3060000*CFG.scale, ARENA_H=1721250*CFG.scale; // 游玩区尺寸 km。2026-09-29 用户:长宽各 x1.5(原 240 万 x 135 万),随后再 x0.85(360 万 x 202.5 万 → 306 万 x 172.1 万);两军在中央
+const ARENA_W=3060000, ARENA_H=1721250; // 游玩区尺寸 km。2026-10-06 用户:「只把游玩区和开局距离单独放大回去」—— 不再乘 CFG.scale(其余长度照旧乘)。2026-09-29 用户:长宽各 x1.5(原 240 万 x 135 万),随后再 x0.85(360 万 x 202.5 万 → 306 万 x 172.1 万);两军在中央
 function arenaIn(p){return !ARENA||(p[0]>=ARENA.x0&&p[0]<=ARENA.x1&&p[1]>=ARENA.y0&&p[1]<=ARENA.y1);} // 点在不在游玩区里(没有边界恒真)
 let rocks=[], rockSeq=0; // TK4b 物理世界登记表的第二段(舰船之后):环境生成的非舰船物体(ENV1 的石头)。initFleet 换局清空;枚举顺序 = ships 再 rocks(sensors/24 的 trkEach)
 let running=false, rate=1, acc=0, last=0; // 默认开局暂停,按空格开始

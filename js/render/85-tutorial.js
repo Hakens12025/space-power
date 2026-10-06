@@ -52,7 +52,7 @@ const TUT_HTML=`
 
     <h3 class="tut-h3">地形</h3>
 
-    <p>行星、卫星和彗核都挡视线、挡炮弹,船开不进去;卫星和彗核在动,被它追上会把船推开,不掉血。电离云(洋红)只挡雷达:照射、静听和导弹组网穿过它都会变近,云心里照射距离只剩三成左右,红外和可见光不受影响。辐射带(行星外的黄绿光环,气态巨行星必带)里的目标雷达发现距离减半,船待在带里护盾每分钟(游戏时钟)掉 <code class="num">24</code>、不回充。彗尾挡红外和可见光,横穿一次信号剩两成,尾巴里的背景也更亮。据点(拉远后是雷达碟图标)<code class="num">3 万公里</code>内只有你的船、待满 <code class="num">5 分钟</code>(游戏时钟)就归你,之后它给你 <code class="num">10.8 万公里</code>的可见光圈和红外视野,还带一部和巡洋舰同级的雷达:平时静默,点它选中后用底栏雷达钮开照射或扫描一次;对方抢回去之前一直是你的,易手时雷达回到静默。</p>
+    <p>行星、卫星和彗核都挡视线、挡炮弹,船开不进去;卫星和彗核在动,被它追上会把船推开,不掉血。电离云(洋红,会以约 <code class="num">3 km/s</code> 慢慢漂)只挡雷达:照射、静听和导弹组网穿过它都会变近,云心里照射距离只剩三成左右,红外和可见光不受影响。辐射带(行星外的黄绿光环,气态巨行星必带)里的目标雷达发现距离减半,船待在带里护盾每分钟(游戏时钟)掉 <code class="num">24</code>、不回充。彗尾挡红外和可见光,横穿一次信号剩两成,尾巴里的背景也更亮。据点(拉远后是雷达碟图标)<code class="num">3 万公里</code>内只有你的船、待满 <code class="num">5 分钟</code>(游戏时钟)就归你,之后它给你 <code class="num">10.8 万公里</code>的可见光圈和红外视野,还带一部和巡洋舰同级的雷达:平时静默,点它选中后用底栏雷达钮开照射或扫描一次;对方抢回去之前一直是你的,易手时雷达回到静默。</p>
   </section>
 
   <section class="tut-sec" id="tut-weapons">
@@ -103,7 +103,7 @@ const TUT_HTML=`
       </thead>
       <tbody>
         <tr><td>结构</td><td><code class="num">550</code></td><td><code class="num">900</code></td></tr>
-        <tr><td>加速度</td><td><code class="num">0.3 km/s²</code></td><td><code class="num">0.225 km/s²</code></td></tr>
+        <tr><td>加速度</td><td><code class="num">0.24 km/s²</code></td><td><code class="num">0.18 km/s²</code></td></tr>
         <tr><td>转向率</td><td><code class="num">14.9°/秒</code></td><td><code class="num">9.17°/秒</code></td></tr>
         <tr><td>主炮</td><td><code class="num">600</code> 伤害 · <code class="num">300 秒</code>装填</td><td><code class="num">600</code> 伤害 · <code class="num">300 秒</code>装填</td></tr>
         <tr><td>导弹</td><td><code class="num">4</code> 单元 · <code class="num">192 枚</code> · 单枚 <code class="num">12</code></td><td><code class="num">6</code> 单元 · <code class="num">240 枚</code> · 单枚 <code class="num">15</code></td></tr>

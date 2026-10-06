@@ -11,7 +11,7 @@ const FEAT_CFG={
   COMET:{R:3000,TAIL:300000,W0:10000,W1:60000,V:60,MU:1.5e12,CYC:20000,BG:3,TAU:1.6,CELL:4000,DT:2, // BG = 尾心背景(背景单位,红外 / 可见光);TAU = 在 1/3 尾长处横穿尾巴的光学深度;尾巴浓度格的格距 km、隔几游戏秒重建 // 彗核半径 km、尾长、尾宽(核 / 尾端)、进场速度 km/s(物理)、恒星引力常数、轨迹积分多少游戏秒(演示页 6000 是循环演示用;走完就停在终点)
     DUST:{A:400,K:0.7,N:150}},                                         // 尾巴:最老那团多少游戏秒、出核时带走彗核速度的几成、团数
   MOON:{V:20},                                                         // 卫星轨道速度 km/s(物理)
-  ION:{TAU_HALF:1.27,CELL:4000,N:200},                                 // 电离云:云心到云边(短轴方向)的雷达波段光学深度;感知用的浓度格(格距至少 CELL km、每边至多 N 格)
+  ION:{TAU_HALF:1.27,CELL:4000,N:200,DRIFT:3},                                 // 电离云:云心到云边(短轴方向)的雷达波段光学深度;感知用的浓度格(格距至少 CELL km、每边至多 N 格)
   RAD:{R0:1.2,R1:2.2,RADAR:0.5,DRAIN:4},                               // 辐射带内外半径(x 行星半径;rad 为真的天体)、带里目标的雷达发现距离倍数、护盾每游戏秒掉多少(不回充)
   STA:{CAP_R:30000*CFG.scale,CAP_T:30,DECAY:0.5,VIS:108000*CFG.scale}}; // 2026-10-05 用户:可视圈 x0.9(据点 12 万 → 10.8 万)。 与交战 / 感知挂钩的长度乘 CFG.scale(scenario/CLAUDE.md)。据点:占领半径 km、单方待满几游戏秒拿下、没人时进度每游戏秒退多少、归属方的可见光圈(红外照舰船口径 19.2 万)
 
@@ -71,6 +71,11 @@ function envOccluders(){const L=featMovers();if(!L.length)return ENV.bodies;cons
    · 彗尾:红外 / 可见光的背景加 BG x 浓度(world/13 envBg),连线穿过尾巴按光学深度消光(envExt);浓度格隔 COMET.DT 游戏秒按此刻的物质团重建,
      横穿深度按「1/3 尾长处横穿 = TAU」标定。没有彗星(或没有恒星)时这几样恒为 0 / 1,与改前逐位相同。 */
 const FEAT_IG={rev:-1,g:[]};
+/* 2026-10-06 用户:「电离云会慢慢飘,速度很慢」(选:约 3 km/s、方向按每片云的种子、漂出游玩区就算了)。
+   世界里存的是开局位置;此刻的位置 = 开局位置 + 漂移偏移 featIonOff(k)(同彗星按 simTime 算,不改冻结的 ENV)。浓度格仍按开局位置建,采样时把查询点按偏移挪回去 */
+const FEAT_IO=[0,0];
+function featIonOff(k){const I=ENV.ions[k],a=((Math.imul(((I.seed|0)+1)|0,2654435761)>>>0)/4294967296)*2*Math.PI,d=PHYS.v(FEAT_CFG.ION.DRIFT)*simTime;FEAT_IO[0]=Math.cos(a)*d;FEAT_IO[1]=Math.sin(a)*d;return FEAT_IO;} // 复用一个数组(热路径不分配)
+function featIonEpoch(){return Math.floor(PHYS.v(FEAT_CFG.ION.DRIFT)*simTime/500);} // 漂移每过 500 km 变一次:按位置缓存的地方拿它进键
 function featIonGrid(k){if(FEAT_IG.rev!==ENV.rev){FEAT_IG.rev=ENV.rev;FEAT_IG.g=[];}
   let T=FEAT_IG.g[k];if(T)return T;const I=ENV.ions[k],C=FEAT_CFG.ION,c=Math.max(C.CELL,2*I.r/C.N),n=Math.ceil(2*I.r/c)+1,G=new Float32Array(n*n),x0=I.x-I.r,y0=I.y-I.r;
   for(let j=0;j<n;j++)for(let i=0;i<n;i++)G[j*n+i]=featIonRaw(I,x0+i*c,y0+j*c);
@@ -84,8 +89,8 @@ function featSegCircle(a,b,cx,cy,r,out){ // 线段 a→b 落在圆里的那一�
 const FEAT_T2=[0,0];
 function featIonTau(a,b){ // a→b 连线穿过电离云的雷达波段光学深度(没有电离云恒 0)
   if(!ENV.ions.length)return 0;let tau=0;const L=Math.hypot(b[0]-a[0],b[1]-a[1]),q=FEAT_T2;
-  for(let k=0;k<ENV.ions.length;k++){const I=ENV.ions[k];if(!featSegCircle(a,b,I.x,I.y,I.r,q))continue;const T=featIonGrid(k),len=(q[1]-q[0])*L,n=Math.min(80,Math.max(1,Math.ceil(len/4000)));let s=0;
-    for(let i=0;i<n;i++){const t=q[0]+(q[1]-q[0])*(i+0.5)/n;s+=featGridAt(T,a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t);}tau+=s*(len/n)/T.L;}
+  for(let k=0;k<ENV.ions.length;k++){const I=ENV.ions[k],o=featIonOff(k),ox=o[0],oy=o[1];if(!featSegCircle(a,b,I.x+ox,I.y+oy,I.r,q))continue;const T=featIonGrid(k),len=(q[1]-q[0])*L,n=Math.min(80,Math.max(1,Math.ceil(len/4000)));let s=0;
+    for(let i=0;i<n;i++){const t=q[0]+(q[1]-q[0])*(i+0.5)/n;s+=featGridAt(T,a[0]+(b[0]-a[0])*t-ox,a[1]+(b[1]-a[1])*t-oy);}tau+=s*(len/n)/T.L;} // 漂移:查询点按偏移挪回开局坐标
   return tau;}
 function featRadIn(p){for(const b of ENV.bodies){if(!b.rad)continue;const dx=p[0]-b.x,dy=p[1]-b.y,d2=dx*dx+dy*dy,r0=b.r*FEAT_CFG.RAD.R0,r1=b.r*FEAT_CFG.RAD.R1;if(d2>=r0*r0&&d2<=r1*r1)return true;}return false;} // p 在某条辐射带里
 function featTailOn(){return ENV.comets.length>0&&ENV.stars.length>0;}
