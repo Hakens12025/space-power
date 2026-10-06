@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<title>新地形</title>
+<style>
+html,body{margin:0;height:100%;background:#070a0e;overflow:hidden;font:12px "Microsoft YaHei",sans-serif;color:#cfd8e0}
+#cv{position:fixed;left:0;top:0;display:block}
+#ui{position:fixed;left:10px;bottom:10px;display:flex;flex-direction:column;gap:5px;user-select:none;background:rgba(11,16,22,.88);border:1px solid #2a3642;padding:6px 8px}
+#ui .row{display:flex;gap:3px;align-items:center;flex-wrap:wrap}
+#ui button{background:#141b23;color:#9fb0c0;border:1px solid #2a3642;padding:4px 9px;font:inherit;cursor:pointer}
+#ui button.on{background:#1d3a5a;color:#e8f2ff;border-color:#4a7fb0}
+#ui .lab{color:#8fa0b0;margin:0 4px 0 10px}
+#ui .lab:first-child{margin-left:0}
+#ui input[type=range]{width:84px;accent-color:#4a7fb0}
+#ui .val{font:12px Consolas,monospace;color:#cfd8e0;min-width:70px}
+#read{position:fixed;right:10px;top:8px;font:12px Consolas,"Microsoft YaHei",monospace;color:#8fa0b0;white-space:pre;line-height:1.55;background:rgba(11,16,22,.88);border:1px solid #2a3642;padding:6px 8px;min-width:250px}
+#info{position:fixed;right:10px;bottom:10px;width:430px;color:#8fa0b0;line-height:1.6;background:rgba(11,16,22,.88);border:1px solid #2a3642;padding:6px 9px}
+#info b{color:#cfd8e0;font-weight:normal}
+#hint{position:fixed;left:10px;top:8px;color:#5f7080;line-height:1.7}
+</style></head><body>
+<canvas id="cv"></canvas>
+<div id="hint">左键选船 · 右键给选中的船下目的地 · 拖动平移 · 滚轮缩放 · R 开关选中船的雷达 · F 选中船齐射三组导弹<br>
+画面从所选视角看:自己的船照画,敌船只在被发现时画(可见光圈里 = 真身,雷达 = 真身带方框,只有红外 = 一团热);选中船画它的雷达 / 红外 / 可见光覆盖</div>
+<div id="read"></div>
+<div id="info">
+<b>彗星</b> 每局 60% 一颗;彗核半径 3000 km(挡视线、挡弹、不能进),60 km/s 进场、被恒星引力拉成弧线(越走越慢);尾巴 = 彗核一路撒出的物质被光压推开,往后拖并弯向背离恒星,长约 30 万、宽 1 万 → 6 万。尾里红外 / 可见光背景亮(尾心 3 个背景单位),横穿整条尾巴光学深度 1.6(信号剩两成);雷达不受影响。<br>
+<b>卫星</b> 气态 / 冰巨星 0~2 颗、其余行星 0~1 颗;半径 = 行星 0.12~0.25 倍,轨道 3~5 倍,20 km/s;同行星一样挡视线 / 红外 / 弹,船绕开、被追上推开不掉血。<br>
+<b>电离云</b> 每局 0~2 片,半轴 15~40 万;只挡雷达波段:照射 / 静听 / <b>导弹组网</b>都按穿过的光学深度衰减(云心到云边 1.27 ⇒ 云心里雷达发现 24.6 万 → 约 7 万);红外、可见光、舰与舰之间的量子通信不受影响。<br>
+<b>辐射带</b> 气态巨行星必带、冰巨星一半;行星半径 1.2~2.2 倍;带里的目标雷达发现距离 x0.5(杂波),护盾每游戏秒掉 4、不回充,船体不扣血。<br>
+<b>据点</b> 每局 1~2 个;3 万 km 内只有一方的船待满 30 游戏秒 = 拿下;只给视野:可见光圈 12 万 + 红外 19.2 万;归属对方看得到(灯是阵营色),别人来抢之前一直是你的。
+</div>
+<div id="ui">
+  <div class="row"><span class="lab">视角</span><button data-v="blue" class="on">蓝方</button><button data-v="red">红方</button><button data-v="all">全知</button>
+    <span class="lab">地形</span><button data-f="comet" class="on">彗星</button><button data-f="moon" class="on">卫星</button><button data-f="ion" class="on">电离云</button><button data-f="belt" class="on">辐射带</button><button data-f="sta" class="on">据点</button></div>
+  <div class="row"><span class="lab">时间</span><button id="pause">暂停</button><input type="range" id="spd" min="5" max="120" step="5" value="30"><span class="val" id="spdV"></span>
+    <span class="lab">镜头</span><button id="zT">战术层 2.5 万</button><button id="zF">舰队层 10 万</button><button id="zA">看全图</button>
+    <span class="lab">选中船</span><button id="bR">雷达</button><button id="bF">齐射</button><button id="tCov" class="on">覆盖范围</button><button id="reset">重来</button></div>
+</div>
+<script>
+"use strict";
+/* 新地形演示页(2026-10-05 用户:地图结构加 彗星 / 卫星 / 电离云 / 辐射带 / 中立据点(据点只作视野);电离云挡导弹组网是用户改的,其余按初稿默认)。
+   不加载引擎,数值与式子归本页。ENG 一段抄自引擎 2026-10-05 的现值(传感器距离、组网圈、船速、护盾),只为让画面和对局同尺度;N 一段是本页要定的。
+   传感器是简化版:可见光圈 = 圈内看得见(天体挡);雷达 = 发现距离 x 电离云透过率 x 辐射带杂波;红外 = 发现距离 x 彗尾透过率 / √(1 + 背景);静听 = 对方开雷达时按电离云透过率衰减。 */
+const TK=10; // 1 游戏秒 = 10 物理秒(同引擎 TIME_K);速度按物理 km/s 写,x TK 成每游戏秒公里
+const ENG={RADAR:246000,IR:192000,VIS:158000,HEARD:492000,MM:61425,MS:63000,REGEN_S:60,CLEAR:3000,
+  SHIP:{FF:{v:40,sh:200,pts:[[1.5,0],[0.58,0.22],[-0.88,0.2],[-0.98,0]],base:7.0},CA:{v:35,sh:300,pts:[[1.52,0],[0.64,0.32],[-0.9,0.3],[-1.02,0]],base:8.8},CL:{v:40,sh:200,pts:[[1.5,0],[0.58,0.22],[-0.88,0.2],[-0.98,0]],base:7.0}},
+  MSL_V:300,MSL_A:20,MSL_TURN:0.6,MSL_HIT:2500};
+const N={ // 本页要定的数(2026-10-05 用户批准初稿)
+  COMET:{R:3000,TAIL:300000,W0:10000,W1:60000,V:60,BG:3,TAU:1.6, // 彗核半径、尾长、尾宽(核 / 尾端)、进场速度 km/s、尾心背景、横穿尾巴的光学深度
+    MU:1.5e12,P0:[-1.5e6,420e3],CYC:6000,T0:1500,                 // 恒星引力常数(只为让轨迹往恒星那侧弯约 35°)、进场点、一趟多少游戏秒(出区域从头再来,演示用)、开页时已经飞了多久
+    DUST:{A:400,K:0.7,N:150}},                                     // 尾巴(只一条,2026-10-05 用户):最老那团多少游戏秒、出核时带走彗核速度的几成(其余被甩在后面 ⇒ 尾巴往后拖、弯)、团数
+  MOON:{V:20},                                                      // 卫星轨道速度 km/s
+  ION:{TAU_HALF:1.27},                                              // 云心到云边(短轴方向)的雷达波段光学深度
+  BELT:{R0:1.2,R1:2.2,RADAR:0.5,DRAIN:4},                           // 内外半径(x 行星半径)、带里雷达发现倍数、护盾每游戏秒掉多少
+  STA:{CAP_R:30000,CAP_T:30,VIS:120000,IR:192000}                   // 占领半径、占领时间(游戏秒)、据点的可见光圈 / 红外
+};
+const STAR=[-4.0e6,-3.0e6]; // 恒星在区域左上方很远处:行星亮面、彗尾方向都按它
+const FEAT={comet:true,moon:true,ion:true,belt:true,sta:true};
+const cv=document.getElementById('cv'),g=cv.getContext('2d');let W=0,H=0,DPR=1;
+const cam={x:0,y:0,kmpp:1000};
+let VIEW='blue',paused=false,SPD=30,simT=0,sel=null,showCov=true;
+let W0=null; // 世界
+
+/* ---------- 噪声(电离云的形状)---------- */
+function hash2(i,j,s){let h=Math.imul(i|0,374761393)^Math.imul(j|0,668265263)^Math.imul(s|0,1442695041);h=Math.imul(h^(h>>>13),1274126177);return ((h^(h>>>16))>>>0)/4294967296;}
+function vnoise(x,y,s){const i=Math.floor(x),j=Math.floor(y),fx=x-i,fy=y-j,u=fx*fx*(3-2*fx),v=fy*fy*(3-2*fy);
+  const a=hash2(i,j,s),b=hash2(i+1,j,s),c=hash2(i,j+1,s),d=hash2(i+1,j+1,s);return a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v;}
+function fbm(x,y,s,o){let t=0,a=0.5,f=1,n=0;for(let k=0;k<o;k++){t+=a*vnoise(x*f,y*f,s+k*31);n+=a;a*=0.5;f*=2.07;}return t/n;}
+
+/* ---------- 世界 ---------- */
+function build(){
+  const w={};
+  w.planets=[{name:'气态巨行星',x:250e3,y:-120e3,r:110e3,belt:true,col:[214,186,146]},{name:'岩质行星',x:-420e3,y:260e3,r:55e3,belt:false,col:[150,140,128]}];
+  w.moons=[{p:0,orb:380e3,ph:0.5,r:22e3,dir:1},{p:0,orb:520e3,ph:3.3,r:16e3,dir:-1},{p:1,orb:230e3,ph:1.2,r:8e3,dir:1}];
+  w.ion={x:-250e3,y:-230e3,a:300e3,b:170e3,ang:15*Math.PI/180,cell:3000};
+  w.comet=cometPath();
+  w.sta=[{name:'据点甲',x:-60e3,y:380e3,holder:null,prog:0,cap:null},{name:'据点乙',x:-200e3,y:-560e3,holder:null,prog:0,cap:null}]; // 都在卫星轨道外
+  const S=(id,side,cls,x,y,route,radar)=>{const c=ENG.SHIP[cls];return {id,side,cls,name:(side==='blue'?'蓝':'红')+id,x,y,hd:side==='blue'?0:Math.PI,radar:!!radar,sh:c.sh,shMax:c.sh,route,ri:0,dest:null};};
+  w.ships=[
+    S('巡洋1','blue','CA',-780e3,-60e3,[[-250e3,-230e3],[100e3,-380e3],[-500e3,-120e3]],true),   // 开着雷达穿电离云
+    S('护卫1','blue','FF',-760e3,120e3,[[-350e3,110e3],[150e3,170e3],[520e3,130e3],[-200e3,140e3]],false), // 跟着彗星走
+    S('巡游1','blue','CL',-700e3,330e3,[[-60e3,380e3]],false),                                          // 去占据点甲
+    S('巡洋1','red','CA',780e3,40e3,[[430e3,60e3],[250e3,90e3],[60e3,-60e3],[300e3,-330e3]],true),   // 开着雷达绕气态巨行星的辐射带
+    S('护卫1','red','FF',760e3,300e3,[[-60e3,380e3]],false),                                            // 来抢据点甲
+    S('巡游1','red','CL',720e3,-350e3,[[-200e3,-560e3]],false)                                       // 去占据点乙
+  ];
+  w.msl=[];w.fx=[];w.edges=[];
+  ionBuild(w.ion);
+  return w;
+}
+function norm(v){const l=Math.hypot(v[0],v[1])||1;return [v[0]/l,v[1]/l];}
+
+/* 电离云:椭圆 + 噪声扭曲的浓度场,按 cell 公里一格存成网格(采样双线性);光学深度系数 L 按「云心 → 短轴边」标定成 TAU_HALF */
+function ionRaw(I,x,y){const dx=x-I.x,dy=y-I.y,c=Math.cos(I.ang),s=Math.sin(I.ang),u=dx*c+dy*s,v=-dx*s+dy*c;
+  const q=(u/I.a)**2+(v/I.b)**2,n=fbm(x/140e3,y/140e3,7,4),q2=q*(0.7+0.6*n);if(q2>=1)return 0;
+  return Math.pow(1-q2,1.2)*(0.7+0.6*fbm(x/45e3,y/45e3,19,4));}
+function ionBuild(I){const ex=Math.sqrt((I.a*Math.cos(I.ang))**2+(I.b*Math.sin(I.ang))**2)*1.35,ey=Math.sqrt((I.a*Math.sin(I.ang))**2+(I.b*Math.cos(I.ang))**2)*1.35;
+  I.x0=I.x-ex;I.y0=I.y-ey;I.nx=Math.ceil(2*ex/I.cell)+1;I.ny=Math.ceil(2*ey/I.cell)+1;I.g=new Float32Array(I.nx*I.ny);
+  for(let j=0;j<I.ny;j++)for(let i=0;i<I.nx;i++)I.g[j*I.nx+i]=ionRaw(I,I.x0+i*I.cell,I.y0+j*I.cell);
+  I.L=1;let s=0;const st=1000,ux=-Math.sin(I.ang),uy=Math.cos(I.ang);for(let d=0;d<I.b*1.4;d+=st)s+=ionAt(I,I.x+ux*d,I.y+uy*d)*st;I.L=s/N.ION.TAU_HALF;
+  const cvI=document.createElement('canvas');cvI.width=I.nx;cvI.height=I.ny;const gi=cvI.getContext('2d'),im=gi.createImageData(I.nx,I.ny);
+  for(let k=0;k<I.nx*I.ny;k++){const v=Math.min(1,I.g[k]);const o=k*4;im.data[o]=120+60*v;im.data[o+1]=110+90*v;im.data[o+2]=255;im.data[o+3]=Math.round(170*Math.pow(v,0.8));}
+  gi.putImageData(im,0,0);I.img=cvI;}
+function ionAt(I,x,y){const fx=(x-I.x0)/I.cell,fy=(y-I.y0)/I.cell;if(fx<0||fy<0||fx>=I.nx-1||fy>=I.ny-1)return 0;const i=fx|0,j=fy|0,u=fx-i,v=fy-j,G=I.g,n=I.nx,a=G[j*n+i],b=G[j*n+i+1],c=G[(j+1)*n+i],d=G[(j+1)*n+i+1];
+  return a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v;}
+function tauIon(p,q){if(!FEAT.ion)return 0;const I=W0.ion,L=Math.hypot(q[0]-p[0],q[1]-p[1]),n=Math.min(80,Math.max(1,Math.ceil(L/4000)));let s=0;
+  for(let k=0;k<n;k++){const f=(k+0.5)/n;s+=ionAt(I,p[0]+(q[0]-p[0])*f,p[1]+(q[1]-p[1])*f);}return s*(L/n)/I.L;}
+
+/* 彗星:彗核受恒星引力沿弧线走(轨道表按 1 游戏秒一格预先积分);尾巴 = 彗核一路撒出来的物质 ——
+   出核时带走彗核速度的 K 成(其余被甩在后面)、再被光压往背离恒星的方向推(0.5·β·a²,β 定成最老那团刚好在尾长处),
+   所以尾巴往后拖并弯向背离恒星(只一条,不分离子尾 / 尘埃尾)。遮挡:各团的高斯按团距加权铺进网格(中心线浓度 ≈ 1 - (a/A)^0.8),
+   光学深度系数按「在 1/3 尾长处横穿」标定成 N.COMET.TAU */
+let TAILK=1;
+function cometPath(){const C=N.COMET,T=C.CYC,o={px:new Float64Array(T+2),py:new Float64Array(T+2),vx:new Float64Array(T+2),vy:new Float64Array(T+2)};
+  let x=C.P0[0],y=C.P0[1],u=C.V*TK,v=0;
+  for(let k=0;k<=T+1;k++){o.px[k]=x;o.py[k]=y;o.vx[k]=u;o.vy[k]=v;const dx=STAR[0]-x,dy=STAR[1]-y,r=Math.hypot(dx,dy),a=C.MU/(r*r);u+=a*dx/r;v+=a*dy/r;x+=u;y+=v;}
+  return o;}
+function cometT(){return (simT+N.COMET.T0)%N.COMET.CYC;} // 本趟飞了多少游戏秒
+function cometAt(t){const C=W0.comet;t=Math.max(0,Math.min(N.COMET.CYC,t));const i=Math.min(N.COMET.CYC-1,Math.floor(t)),f=t-i,L=(A)=>A[i]+(A[i+1]-A[i])*f;return [L(C.px),L(C.py),L(C.vx),L(C.vy)];}
+function cometNuc(){const s=cometAt(cometT());return [s[0],s[1]];}
+function cometPuffs(){ // 尾巴此刻的各团(按出核编号固定随机数,年龄越大离核越远、越宽、越淡)
+  const D=N.COMET.DUST,tc=cometT(),A=D.A,dA=A/D.N,beta=2*N.COMET.TAIL/(A*A),ph=tc%dA,out=[];
+  for(let i=0;i<D.N;i++){const a=i*dA+ph,r=tc-a;if(r<0)break;const s=cometAt(r),sx=s[0]-STAR[0],sy=s[1]-STAR[1],sl=Math.hypot(sx,sy),ux=sx/sl,uy=sy/sl,u=a/A,j=hash2(Math.round(r/dA),1,77);
+    const w=N.COMET.W0+(N.COMET.W1-N.COMET.W0)*Math.pow(u,0.8),lat=(j-0.5)*0.45*w; // 每团固定的小横偏 = 顺着尾巴往外流的条纹
+    const bx=s[0]+D.K*s[2]*a+0.5*beta*ux*a*a,by=s[1]+D.K*s[3]*a+0.5*beta*uy*a*a;out.push({bx,by,x:bx-uy*lat,y:by+ux*lat,w,amp:Math.pow(1-u,0.8)*(0.65+0.35*j),a});}
+  for(let i=0;i<out.length;i++){const q=out[Math.min(out.length-1,i+1)],p=out[Math.max(0,i-1)],k=(i>0&&i<out.length-1)?2:1;out[i].ds=Math.max(50,Math.hypot(q.bx-p.bx,q.by-p.by)/k);out[i].dir=Math.atan2(q.by-p.by,q.bx-p.bx);} // 团距、方向按不带横偏的中心线量
+  return out;}
+const TG={cell:4000,g:null,t:-1};
+function tailGrid(){const tc=cometT();if(TG.g&&Math.abs(tc-TG.t)<0.5)return;TG.t=tc;const P=cometPuffs(),c=TG.cell;let x0=1e18,y0=1e18,x1=-1e18,y1=-1e18;
+  for(const p of P){const r=p.w*0.75;x0=Math.min(x0,p.x-r);y0=Math.min(y0,p.y-r);x1=Math.max(x1,p.x+r);y1=Math.max(y1,p.y+r);}
+  TG.x0=x0;TG.y0=y0;TG.nx=Math.ceil((x1-x0)/c)+2;TG.ny=Math.ceil((y1-y0)/c)+2;TG.g=new Float32Array(TG.nx*TG.ny);
+  for(const p of P){const sg=p.w/4,R=3*sg,wt=p.amp*p.ds/(sg*2.5066),i0=Math.max(0,Math.floor((p.x-R-x0)/c)),i1=Math.min(TG.nx-1,Math.ceil((p.x+R-x0)/c)),j0=Math.max(0,Math.floor((p.y-R-y0)/c)),j1=Math.min(TG.ny-1,Math.ceil((p.y+R-y0)/c));
+    for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const dx=x0+i*c-p.x,dy=y0+j*c-p.y;TG.g[j*TG.nx+i]+=wt*Math.exp(-(dx*dx+dy*dy)/(2*sg*sg));}}}
+function tailAt(x,y){if(!FEAT.comet)return 0;tailGrid();const fx=(x-TG.x0)/TG.cell,fy=(y-TG.y0)/TG.cell;if(fx<0||fy<0||fx>=TG.nx-1||fy>=TG.ny-1)return 0;
+  const i=fx|0,j=fy|0,u=fx-i,v=fy-j,G=TG.g,n=TG.nx,a=G[j*n+i],b=G[j*n+i+1],cc=G[(j+1)*n+i],d=G[(j+1)*n+i+1];return a+(b-a)*u+(cc-a)*v+(a-b-cc+d)*u*v;}
+function tauTail(p,q){if(!FEAT.comet)return 0;const L=Math.hypot(q[0]-p[0],q[1]-p[1]),n=Math.min(80,Math.max(1,Math.ceil(L/3000)));let s=0;
+  for(let k=0;k<n;k++){const f=(k+0.5)/n;s+=tailAt(p[0]+(q[0]-p[0])*f,p[1]+(q[1]-p[1])*f);}return s*(L/n)*TAILK;}
+function tailCal(){TG.g=null;const P=cometPuffs(),p=P[Math.floor(P.length/3)],nx=-Math.sin(p.dir),ny=Math.cos(p.dir);let s=0;const on=FEAT.comet;FEAT.comet=true;
+  for(let w=-150e3;w<150e3;w+=1000)s+=tailAt(p.x+nx*w,p.y+ny*w)*1000;FEAT.comet=on;TAILK=N.COMET.TAU/Math.max(1e-9,s);}
+
+/* 遮挡物:行星、卫星、彗核(都挡视线、挡弹、不能进) */
+function moonPos(m){const P=W0.planets[m.p],a=m.ph+m.dir*(N.MOON.V*TK/m.orb)*simT;return [P.x+Math.cos(a)*m.orb,P.y+Math.sin(a)*m.orb];}
+function circles(){const C=[];for(const P of W0.planets)C.push([P.x,P.y,P.r]);if(FEAT.moon)for(const m of W0.moons){const q=moonPos(m);C.push([q[0],q[1],m.r]);}
+  if(FEAT.comet){const n=cometNuc();C.push([n[0],n[1],N.COMET.R]);}return C;}
+let CIR=[];
+function segBlocked(p,q){for(const c of CIR){const dx=q[0]-p[0],dy=q[1]-p[1],L2=dx*dx+dy*dy||1;let t=((c[0]-p[0])*dx+(c[1]-p[1])*dy)/L2;t=Math.max(0,Math.min(1,t));
+  const ex=p[0]+dx*t-c[0],ey=p[1]+dy*t-c[1];if(ex*ex+ey*ey<c[2]*c[2])return true;}return false;}
+function rayHit(p,dir,R){let best=R;for(const c of CIR){const fx=p[0]-c[0],fy=p[1]-c[1],b=fx*dir[0]+fy*dir[1],cc=fx*fx+fy*fy-c[2]*c[2],disc=b*b-cc;if(disc<0)continue;const t=-b-Math.sqrt(disc);if(t>0&&t<best)best=t;}return best;}
+function inBelt(p){if(!FEAT.belt)return false;for(const P of W0.planets){if(!P.belt)continue;const d=Math.hypot(p[0]-P.x,p[1]-P.y);if(d>=P.r*N.BELT.R0&&d<=P.r*N.BELT.R1)return true;}return false;}
+function inIon(p){return FEAT.ion&&ionAt(W0.ion,p[0],p[1])>0.05;}
+
+/* ---------- 传感器(简化)---------- */
+function observers(side){const O=[];for(const s of W0.ships)if(s.side===side)O.push({p:[s.x,s.y],vis:ENG.VIS,ir:ENG.IR,radar:s.radar?ENG.RADAR:0});
+  if(FEAT.sta)for(const S of W0.sta)if(S.holder===side)O.push({p:[S.x,S.y],vis:N.STA.VIS,ir:N.STA.IR,radar:0});return O;}
+function detect(side,t){const r={vis:false,radar:false,ir:false,heard:false},tp=[t.x,t.y],bg=N.COMET.BG*tailAt(t.x,t.y),belt=inBelt(tp);
+  for(const o of observers(side)){const d=Math.hypot(tp[0]-o.p[0],tp[1]-o.p[1]);if(d>ENG.HEARD)continue;if(segBlocked(o.p,tp))continue;
+    if(d<o.vis)r.vis=true;
+    if(o.radar&&d<o.radar*Math.exp(-tauIon(o.p,tp))*(belt?N.BELT.RADAR:1))r.radar=true;
+    if(d<o.ir*Math.exp(-tauTail(o.p,tp))/Math.sqrt(1+bg))r.ir=true;
+    if(t.radar&&d<ENG.HEARD*Math.exp(-tauIon(o.p,tp)))r.heard=true;}
+  return r;}
+
+/* ---------- 推进 ---------- */
+function stepShip(s,dt){
+  const c=ENG.SHIP[s.cls],v=c.v*TK,tg=s.dest||s.route[s.ri];let dx=tg[0]-s.x,dy=tg[1]-s.y,d=Math.hypot(dx,dy);
+  if(d<6000){if(s.dest){s.route=[s.dest];s.ri=0;s.dest=null;}else if(s.route.length>1)s.ri=(s.ri+1)%s.route.length;}
+  else{let ux=dx/d,uy=dy/d;
+    for(const C of CIR){const cx=C[0]-s.x,cy=C[1]-s.y,cd=Math.hypot(cx,cy),ahead=cx*ux+cy*uy,side=-cx*uy+cy*ux,clr=C[2]+ENG.CLEAR+8000; // 前方有遮挡物挡道就往旁边偏
+      if(ahead>0&&ahead<Math.min(d,cd)+C[2]&&Math.abs(side)<clr&&cd-C[2]<120e3){const sg=side>0?-1:1,k=1-Math.abs(side)/clr,tx=-uy*sg,ty=ux*sg;ux+=tx*k*1.5;uy+=ty*k*1.5;const l=Math.hypot(ux,uy);ux/=l;uy/=l;}}
+    const st=Math.min(d,v*dt);s.x+=ux*st;s.y+=uy*st;const ha=Math.atan2(uy,ux);let dh=ha-s.hd;dh=Math.atan2(Math.sin(dh),Math.cos(dh));s.hd+=Math.max(-0.3*dt,Math.min(0.3*dt,dh));}
+  for(const C of CIR){const ex=s.x-C[0],ey=s.y-C[1],ed=Math.hypot(ex,ey),m=C[2]+ENG.CLEAR;if(ed<m){s.x=C[0]+ex/(ed||1)*m;s.y=C[1]+ey/(ed||1)*m;}} // 被卫星 / 彗核追上:推开,不掉血
+  if(inBelt([s.x,s.y]))s.sh=Math.max(0,s.sh-N.BELT.DRAIN*dt);else s.sh=Math.min(s.shMax,s.sh+s.shMax/ENG.REGEN_S*dt);}
+function stepSta(S,dt){const h=new Set();for(const s of W0.ships)if(Math.hypot(s.x-S.x,s.y-S.y)<N.STA.CAP_R)h.add(s.side);
+  if(h.size===1){const sd=[...h][0];if(sd!==S.holder){if(S.cap!==sd){S.cap=sd;S.prog=0;}S.prog+=dt;if(S.prog>=N.STA.CAP_T){S.holder=sd;S.prog=0;S.cap=null;}}}
+  else if(h.size===0)S.prog=Math.max(0,S.prog-dt*0.5);}
+function fire(s){let best=null,bd=1e18;for(const e of W0.ships){if(e.side===s.side)continue;const dt=detect(s.side,e),d=Math.hypot(e.x-s.x,e.y-s.y)*((dt.vis||dt.radar||dt.ir)?1:3);if(d<bd){bd=d;best=e;}}
+  if(!best)return;const ax=norm([best.x-s.x,best.y-s.y]);
+  for(let k=-1;k<=1;k++)W0.msl.push({side:s.side,x:s.x-ax[1]*k*2500,y:s.y+ax[0]*k*2500,vx:ax[0]*500-ax[1]*k*60,vy:ax[1]*500+ax[0]*k*60,tgt:best,age:0,online:true});}
+function stepMsl(m,dt){m.age+=dt;const t=m.tgt,dx=t.x-m.x,dy=t.y-m.y,d=Math.hypot(dx,dy),sp=Math.hypot(m.vx,m.vy)||1;
+  let h=Math.atan2(m.vy,m.vx);const want=Math.atan2(dy,dx);let dh=want-h;dh=Math.atan2(Math.sin(dh),Math.cos(dh));h+=Math.max(-ENG.MSL_TURN*dt,Math.min(ENG.MSL_TURN*dt,dh));
+  const v2=Math.min(ENG.MSL_V*TK,sp+ENG.MSL_A*TK*dt);m.vx=Math.cos(h)*v2;m.vy=Math.sin(h)*v2;m.x+=m.vx*dt;m.y+=m.vy*dt;
+  if(d<ENG.MSL_HIT){W0.fx.push({x:m.x,y:m.y,t:simT,c:m.side});return false;}
+  for(const C of CIR)if(Math.hypot(m.x-C[0],m.y-C[1])<C[2]){W0.fx.push({x:m.x,y:m.y,t:simT,c:'neutral'});return false;}
+  return m.age<500;}
+function netStep(){ // 导弹组网:弹弹 MM、弹舰 MS 以内连边,连边距离 x 这条线穿过电离云的透过率(用户:电离云挡组网);能连到己方任一艘船的组在网上
+  W0.edges=[];for(const side of ['blue','red']){const M=W0.msl.filter(m=>m.side===side),Sh=W0.ships.filter(s=>s.side===side);for(const m of M)m.online=false;const q=[];
+    for(const m of M)for(const s of Sh){const d=Math.hypot(m.x-s.x,m.y-s.y);if(d<ENG.MS&&d<ENG.MS*Math.exp(-tauIon([m.x,m.y],[s.x,s.y]))){if(!m.online){m.online=true;q.push(m);}W0.edges.push([m,s,side]);}}
+    for(let i=0;i<M.length;i++)for(let j=i+1;j<M.length;j++){const a=M[i],b=M[j],d=Math.hypot(a.x-b.x,a.y-b.y);if(d<ENG.MM&&d<ENG.MM*Math.exp(-tauIon([a.x,a.y],[b.x,b.y]))){W0.edges.push([a,b,side]);(a.nb=a.nb||[]).push(b);(b.nb=b.nb||[]).push(a);}}
+    while(q.length){const a=q.pop();for(const b of (a.nb||[]))if(!b.online){b.online=true;q.push(b);}}for(const m of M)m.nb=null;}}
+function step(dt){simT+=dt;CIR=circles();for(const s of W0.ships)stepShip(s,dt);if(FEAT.sta)for(const S of W0.sta)stepSta(S,dt);
+  W0.msl=W0.msl.filter(m=>stepMsl(m,dt));W0.fx=W0.fx.filter(f=>simT-f.t<20);}
+
+/* ---------- 画 ---------- */
+const toS=(x,y)=>[(x-cam.x)/cam.kmpp+W/2,(y-cam.y)/cam.kmpp+H/2];
+const toW=(sx,sy)=>[(sx-W/2)*cam.kmpp+cam.x,(sy-H/2)*cam.kmpp+cam.y];
+function zoomRaw(){return 0.55*Math.pow(250/cam.kmpp,0.4);} // 同引擎 hullZoomRaw:战术落点 250 km/px 上 = 0.55
+const SIDE={blue:[90,167,255],red:[255,107,107],neutral:[160,170,185]};
+const css=(c,a)=>'rgba('+c[0]+','+c[1]+','+c[2]+','+(a===undefined?1:a)+')';
+let STARS=null;
+function starTile(){const c=document.createElement('canvas');c.width=c.height=512;const q=c.getContext('2d');for(let i=0;i<260;i++){const a=Math.random();q.fillStyle='rgba(200,210,230,'+(0.15+0.5*a*a).toFixed(2)+')';q.fillRect(Math.random()*512,Math.random()*512,a>0.92?1.6:1,a>0.92?1.6:1);}return c;}
+let PUFF=null;
+function puffSpr(rgb){const c=document.createElement('canvas');c.width=c.height=64;const q=c.getContext('2d'),gr=q.createRadialGradient(32,32,0,32,32,32);gr.addColorStop(0,'rgba('+rgb+',1)');gr.addColorStop(0.45,'rgba('+rgb+',.45)');gr.addColorStop(1,'rgba('+rgb+',0)');q.fillStyle=gr;q.fillRect(0,0,64,64);return c;}
+let GLOW=null;
+function glowSpr(){const c=document.createElement('canvas');c.width=c.height=64;const q=c.getContext('2d'),gr=q.createRadialGradient(32,32,0,32,32,32);gr.addColorStop(0,'rgba(255,255,255,1)');gr.addColorStop(0.25,'rgba(200,230,255,.6)');gr.addColorStop(1,'rgba(140,190,255,0)');q.fillStyle=gr;q.fillRect(0,0,64,64);return c;}
+function drawBody(x,y,r,col,shade){const p=toS(x,y),R=r/cam.kmpp;if(p[0]+R<0||p[0]-R>W||p[1]+R<0||p[1]-R>H)return;const la=Math.atan2(STAR[1]-y,STAR[0]-x);
+  const gr=g.createRadialGradient(p[0]+Math.cos(la)*R*0.45,p[1]+Math.sin(la)*R*0.45,R*0.1,p[0],p[1],R*1.05);gr.addColorStop(0,css(col));gr.addColorStop(0.55,css(col.map(v=>v*0.55)));gr.addColorStop(1,css([10,14,24]));
+  g.fillStyle=gr;g.beginPath();g.arc(p[0],p[1],Math.max(1.5,R),0,6.283);g.fill();if(shade){g.strokeStyle='rgba(170,180,200,.35)';g.lineWidth=1;g.stroke();}}
+function draw(){
+  g.setTransform(DPR,0,0,DPR,0,0);g.fillStyle='#070a0e';g.fillRect(0,0,W,H);
+  if(!STARS)STARS=starTile();const ox=((-cam.x/cam.kmpp*0.08)%512+512)%512,oy=((-cam.y/cam.kmpp*0.08)%512+512)%512;for(let x=ox-512;x<W;x+=512)for(let y=oy-512;y<H;y+=512)g.drawImage(STARS,x,y);
+  const now=performance.now()/1000;
+  if(FEAT.ion){const I=W0.ion,p=toS(I.x0-I.cell/2,I.y0-I.cell/2);g.imageSmoothingEnabled=true;g.globalAlpha=0.85;g.drawImage(I.img,p[0],p[1],I.nx*I.cell/cam.kmpp,I.ny*I.cell/cam.kmpp);g.globalAlpha=1;
+    const c=toS(I.x,I.y);g.fillStyle='rgba(190,180,255,.55)';g.font='11px "Microsoft YaHei"';g.textAlign='center';g.fillText('电离云',c[0],c[1]);}
+  if(FEAT.belt)for(const P of W0.planets){if(!P.belt)continue;const p=toS(P.x,P.y),r0=P.r*N.BELT.R0/cam.kmpp,r1=P.r*N.BELT.R1/cam.kmpp;
+    const gr=g.createRadialGradient(p[0],p[1],r0,p[0],p[1],r1);const sh=0.8+0.2*Math.sin(now*1.3);gr.addColorStop(0,'rgba(150,230,170,0)');gr.addColorStop(0.25,'rgba(150,230,170,'+(0.13*sh).toFixed(3)+')');gr.addColorStop(0.7,'rgba(150,230,170,'+(0.07*sh).toFixed(3)+')');gr.addColorStop(1,'rgba(150,230,170,0)');
+    g.fillStyle=gr;g.beginPath();g.arc(p[0],p[1],r1,0,6.283);g.arc(p[0],p[1],r0,0,6.283,true);g.fill();
+    g.fillStyle='rgba(160,230,180,.6)';g.font='11px "Microsoft YaHei"';g.textAlign='center';g.fillText('辐射带',p[0],p[1]-r1-4);}
+  if(FEAT.comet){const n=cometNuc(),p=toS(n[0],n[1]);if(!PUFF)PUFF=puffSpr('255,236,206');if(!GLOW)GLOW=glowSpr();
+    g.save();g.globalCompositeOperation='lighter';
+    for(const f of cometPuffs()){const q=toS(f.x,f.y),rw=f.w/2/cam.kmpp*1.25;if(q[0]<-rw*2||q[0]>W+rw*2||q[1]<-rw*2||q[1]>H+rw*2)continue; // 每团顺着尾巴方向拉长成椭圆,团距越大越淡(按单位长度的量)
+      const al=1.5*f.amp*f.ds/f.w;if(al<0.004)continue;g.globalAlpha=Math.min(1,al);g.save();g.translate(q[0],q[1]);g.rotate(f.dir);g.drawImage(PUFF,-rw*1.7,-rw,rw*3.4,rw*2);g.restore();}
+    g.globalAlpha=1;const gr=Math.max(6,N.COMET.R*5/cam.kmpp);g.drawImage(GLOW,p[0]-gr,p[1]-gr,2*gr,2*gr);g.restore();
+    const tc=cometT();g.strokeStyle='rgba(200,225,255,.22)';g.lineWidth=1;g.setLineDash([3,6]);g.beginPath();g.moveTo(p[0],p[1]); // 预计轨迹(弧线)
+    for(let dt=60;dt<=1800&&tc+dt<=N.COMET.CYC;dt+=60){const s2=cometAt(tc+dt),e=toS(s2[0],s2[1]);g.lineTo(e[0],e[1]);}g.stroke();g.setLineDash([]);
+    g.fillStyle='rgba(210,230,255,.7)';g.font='11px "Microsoft YaHei"';g.textAlign='center';g.fillText('彗星',p[0],p[1]-Math.max(10,gr*0.6));}
+  for(const P of W0.planets){drawBody(P.x,P.y,P.r,P.col,true);const p=toS(P.x,P.y);g.fillStyle='rgba(200,206,220,.7)';g.font='11px "Microsoft YaHei"';g.textAlign='center';g.fillText(P.name,p[0],p[1]+P.r/cam.kmpp+13);}
+  if(FEAT.moon)for(const m of W0.moons){const P=W0.planets[m.p],pc=toS(P.x,P.y);g.strokeStyle='rgba(160,170,190,.12)';g.lineWidth=1;g.beginPath();g.arc(pc[0],pc[1],m.orb/cam.kmpp,0,6.283);g.stroke();
+    const q=moonPos(m);drawBody(q[0],q[1],m.r,[170,170,178],true);}
+  if(FEAT.sta)for(const S of W0.sta){const p=toS(S.x,S.y),cr=N.STA.CAP_R/cam.kmpp;g.strokeStyle='rgba(180,190,205,.3)';g.setLineDash([4,5]);g.lineWidth=1;g.beginPath();g.arc(p[0],p[1],cr,0,6.283);g.stroke();g.setLineDash([]);
+    if(S.cap&&S.prog>0){g.strokeStyle=css(SIDE[S.cap],0.9);g.lineWidth=2.5;g.beginPath();g.arc(p[0],p[1],cr,-Math.PI/2,-Math.PI/2+S.prog/N.STA.CAP_T*6.283);g.stroke();}
+    if(S.holder&&(VIEW==='all'||S.holder===VIEW)){const vr=N.STA.VIS/cam.kmpp;g.strokeStyle=css(SIDE[S.holder],0.22);g.lineWidth=1;g.beginPath();g.arc(p[0],p[1],vr,0,6.283);g.stroke();}
+    const R=7;g.fillStyle='rgba(0,0,0,.8)';g.beginPath();for(let k=0;k<8;k++){const a=(k+0.5)/8*6.283;g.lineTo(p[0]+Math.cos(a)*(R+1.5),p[1]+Math.sin(a)*(R+1.5));}g.fill();
+    g.fillStyle='rgb(120,128,140)';g.beginPath();for(let k=0;k<8;k++){const a=(k+0.5)/8*6.283;g.lineTo(p[0]+Math.cos(a)*R,p[1]+Math.sin(a)*R);}g.fill();
+    g.fillStyle=S.holder?css(SIDE[S.holder]):'rgba(200,205,215,.5)';g.beginPath();g.arc(p[0],p[1],2.6,0,6.283);g.fill();
+    g.fillStyle='rgba(200,206,220,.75)';g.font='11px "Microsoft YaHei"';g.textAlign='center';g.fillText(S.name+(S.holder?(S.holder==='blue'?' · 蓝':' · 红'):' · 中立'),p[0],p[1]+cr+12);}
+  if(sel&&showCov&&(VIEW==='all'||sel.side===VIEW))drawCov(sel);
+  for(const e of W0.edges){if(VIEW!=='all'&&e[2]!==VIEW)continue;const a=toS(e[0].x,e[0].y),b=toS(e[1].x,e[1].y);g.strokeStyle=css(SIDE[e[2]],0.3);g.lineWidth=1;g.beginPath();g.moveTo(a[0],a[1]);g.lineTo(b[0],b[1]);g.stroke();}
+  for(const m of W0.msl){if(VIEW!=='all'&&m.side!==VIEW){const d=detect(VIEW,m);if(!d.vis&&!d.radar)continue;}const p=toS(m.x,m.y),h=Math.atan2(m.vy,m.vx);
+    g.save();g.translate(p[0],p[1]);g.rotate(h);g.beginPath();g.moveTo(5,0);g.lineTo(-4,-3);g.lineTo(-4,3);g.closePath();if(m.online||m.side!==VIEW&&VIEW!=='all'){g.fillStyle=css(SIDE[m.side]);g.fill();}else{g.strokeStyle=css(SIDE[m.side]);g.lineWidth=1.2;g.stroke();}g.restore();
+    if(!m.online&&(VIEW==='all'||m.side===VIEW)){g.fillStyle='rgba(200,206,220,.6)';g.font='10px "Microsoft YaHei"';g.textAlign='left';g.fillText('断链',p[0]+6,p[1]-4);}}
+  for(const f of W0.fx){const p=toS(f.x,f.y),k=(simT-f.t)/20;g.strokeStyle=css(SIDE[f.c]||SIDE.neutral,1-k);g.lineWidth=1.5;g.beginPath();g.arc(p[0],p[1],4+14*k,0,6.283);g.stroke();}
+  for(const s of W0.ships)drawShip(s,now);
+  if(sel){const p=toS(sel.x,sel.y);g.strokeStyle='#ffe066';g.lineWidth=1.5;g.beginPath();g.arc(p[0],p[1],14,0,6.283);g.stroke();}
+  const bar=100;g.fillStyle='rgba(143,208,255,.8)';g.fillRect(14,H-140,bar,3);g.font='11px Consolas';g.textAlign='left';g.fillText(Math.round(bar*cam.kmpp).toLocaleString('en-US')+' km',14,H-146);
+}
+function drawShip(s,now){
+  let mode='true';if(VIEW!=='all'&&s.side!==VIEW){const d=detect(VIEW,s);if(d.vis)mode='true';else if(d.radar)mode='radar';else if(d.ir)mode='ir';else return;}
+  const p=toS(s.x,s.y),col=SIDE[s.side];
+  if(mode==='ir'){const gr=g.createRadialGradient(p[0],p[1],0,p[0],p[1],11);gr.addColorStop(0,'rgba(255,170,90,.75)');gr.addColorStop(1,'rgba(255,120,60,0)');g.fillStyle=gr;g.beginPath();g.arc(p[0],p[1],11,0,6.283);g.fill();return;} // 只有红外:一团热,不给形状
+  if(s.radar&&(mode==='true'||VIEW==='all'||s.side===VIEW)){const k=(now*0.6)%1;g.strokeStyle=css(col,0.5*(1-k));g.lineWidth=1;g.beginPath();g.arc(p[0],p[1],8+18*k,0,6.283);g.stroke();}
+  const raw=zoomRaw();
+  if(raw<0.45){g.save();g.translate(p[0],p[1]);g.fillStyle=css(col);if(s.side===VIEW||VIEW==='all'){g.rotate(s.hd);g.beginPath();g.moveTo(5,0);g.lineTo(-3,-3.5);g.lineTo(-1,0);g.lineTo(-3,3.5);g.closePath();g.fill();}else{g.beginPath();g.moveTo(0,-4);g.lineTo(4,0);g.lineTo(0,4);g.lineTo(-4,0);g.closePath();g.fill();}g.restore();}
+  else{const zf=0.6*Math.min(1.9,raw),c=ENG.SHIP[s.cls],sc=c.base*zf,P=c.pts.concat(c.pts.slice(1,-1).reverse().map(q=>[q[0],-q[1]]));
+    g.save();g.translate(p[0],p[1]);g.rotate(s.hd);g.scale(sc,sc);g.beginPath();g.moveTo(P[0][0],P[0][1]);for(let i=1;i<P.length;i++)g.lineTo(P[i][0],P[i][1]);g.closePath();g.fillStyle=css(col);g.fill();g.restore();}
+  if(mode==='radar'){g.strokeStyle=css(col,0.8);g.lineWidth=1;g.strokeRect(p[0]-8,p[1]-8,16,16);}
+  g.fillStyle='rgba(200,210,225,.75)';g.font='10px "Microsoft YaHei"';g.textAlign='center';g.fillText(s.name,p[0],p[1]+17);
+  if(mode==='true'&&(s.side===VIEW||VIEW==='all')){g.fillStyle='rgba(0,0,0,.6)';g.fillRect(p[0]-10,p[1]+20,20,2.5);g.fillStyle='#6fc3ff';g.fillRect(p[0]-10,p[1]+20,20*s.sh/s.shMax,2.5);}}
+function drawCov(s){ // 选中船的覆盖:沿 120 条射线走,遇天体停;雷达按电离云透过率缩、红外按彗尾透过率缩
+  const o=[s.x,s.y],K=120;
+  const ray=(R0,tauF,stepKm)=>{const P=[];for(let k=0;k<K;k++){const a=k/K*6.283,dir=[Math.cos(a),Math.sin(a)],hit=rayHit(o,dir,R0);let r=hit;
+      if(tauF){let tau=0,prev=o;for(let d=stepKm;d<=hit;d+=stepKm){const q=[o[0]+dir[0]*d,o[1]+dir[1]*d];tau+=tauF(prev,q);prev=q;if(d>R0*Math.exp(-tau)){r=d;break;}}}
+      P.push(toS(o[0]+dir[0]*r,o[1]+dir[1]*r));}return P;};
+  const poly=(P,fill,stroke)=>{g.beginPath();g.moveTo(P[0][0],P[0][1]);for(const q of P)g.lineTo(q[0],q[1]);g.closePath();g.fillStyle=fill;g.fill();g.strokeStyle=stroke;g.lineWidth=1;g.stroke();};
+  poly(ray(ENG.VIS,null,0),'rgba(230,236,245,.05)','rgba(230,236,245,.35)');
+  poly(ray(ENG.IR,(a,b)=>tauTail(a,b),4000),'rgba(255,150,80,.04)','rgba(255,150,80,.5)');
+  if(s.radar)poly(ray(ENG.RADAR,(a,b)=>tauIon(a,b),4000),'rgba(90,167,255,.05)','rgba(90,167,255,.6)');}
+
+/* ---------- 读数 ---------- */
+function readout(){const L=[];L.push('游戏时间 '+Math.round(simT)+' s(物理 '+Math.round(simT*TK/60)+' 分)  视角 '+({blue:'蓝方',red:'红方',all:'全知'})[VIEW]);
+  if(sel){const p=[sel.x,sel.y],bg=N.COMET.BG*tailAt(sel.x,sel.y);L.push('选中 '+sel.name+' '+sel.cls+'  雷达 '+(sel.radar?'开':'关')+'  护盾 '+Math.round(sel.sh)+'/'+sel.shMax);
+    L.push('  所在:'+([inIon(p)?'电离云':'',inBelt(p)?'辐射带(护盾 -4/s)':'',bg>0.3?'彗尾(背景 '+bg.toFixed(1)+')':''].filter(Boolean).join(' · ')||'开阔空间'));}
+  const me=VIEW==='all'?null:VIEW;
+  for(const side of me?[me]:['blue','red']){const foe=side==='blue'?'red':'blue';L.push((side==='blue'?'蓝方':'红方')+'看'+(foe==='blue'?'蓝方':'红方')+':');
+    for(const e of W0.ships){if(e.side!==foe)continue;const d=detect(side,e);L.push('  '+e.name.padEnd(4,' ')+' '+[d.vis?'可见光':'',d.radar?'雷达':'',d.ir?'红外':'',d.heard?'听到':''].filter(Boolean).join(' / ')+((d.vis||d.radar||d.ir||d.heard)?'':'—'));}}
+  if(FEAT.sta)for(const S of W0.sta)L.push(S.name+' '+(S.holder?(S.holder==='blue'?'蓝方':'红方'):'中立')+(S.cap&&S.prog>0?'  '+(S.cap==='blue'?'蓝':'红')+'方占领中 '+Math.round(S.prog)+'/'+N.STA.CAP_T+' s':''));
+  const on=W0.msl.filter(m=>m.online).length;if(W0.msl.length)L.push('导弹组 '+W0.msl.length+'(在网上 '+on+',断链 '+(W0.msl.length-on)+')');
+  document.getElementById('read').textContent=L.join('\n');}
+
+/* ---------- 交互 ---------- */
+function resize(){DPR=window.devicePixelRatio||1;W=innerWidth;H=innerHeight;cv.width=W*DPR;cv.height=H*DPR;cv.style.width=W+'px';cv.style.height=H+'px';}
+addEventListener('resize',resize);resize();
+let drag=null;
+cv.addEventListener('mousedown',e=>{if(e.button===2){if(sel&&(VIEW==='all'||sel.side===VIEW)){sel.dest=toW(e.clientX,e.clientY);}return;}
+  let hit=null,hd=14;for(const s of W0.ships){if(VIEW!=='all'&&s.side!==VIEW){const d=detect(VIEW,s);if(!d.vis&&!d.radar)continue;}const p=toS(s.x,s.y),d=Math.hypot(p[0]-e.clientX,p[1]-e.clientY);if(d<hd){hd=d;hit=s;}}
+  if(hit){sel=hit;syncBtns();return;}drag={x:e.clientX,y:e.clientY,cx:cam.x,cy:cam.y};});
+addEventListener('mousemove',e=>{if(!drag)return;cam.x=drag.cx-(e.clientX-drag.x)*cam.kmpp;cam.y=drag.cy-(e.clientY-drag.y)*cam.kmpp;});
+addEventListener('mouseup',()=>{drag=null;});
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+cv.addEventListener('wheel',e=>{e.preventDefault();const w0=toW(e.clientX,e.clientY),k=e.deltaY>0?1.15:1/1.15;cam.kmpp=Math.max(40,Math.min(6000,cam.kmpp*k));const w1=toW(e.clientX,e.clientY);cam.x+=w0[0]-w1[0];cam.y+=w0[1]-w1[1];},{passive:false});
+function myShip(){return sel&&(VIEW==='all'||sel.side===VIEW)?sel:null;}
+addEventListener('keydown',e=>{if(e.code==='KeyR'){const s=myShip();if(s){s.radar=!s.radar;syncBtns();}}if(e.code==='KeyF'){const s=myShip();if(s)fire(s);}if(e.code==='Space'){paused=!paused;syncBtns();e.preventDefault();}});
+for(const b of document.querySelectorAll('[data-v]'))b.onclick=()=>{VIEW=b.dataset.v;if(sel&&VIEW!=='all'&&sel.side!==VIEW)sel=null;syncBtns();};
+for(const b of document.querySelectorAll('[data-f]'))b.onclick=()=>{FEAT[b.dataset.f]=!FEAT[b.dataset.f];syncBtns();};
+document.getElementById('pause').onclick=()=>{paused=!paused;syncBtns();};
+const spdEl=document.getElementById('spd');spdEl.oninput=()=>{SPD=+spdEl.value;syncBtns();};
+document.getElementById('zT').onclick=()=>{cam.kmpp=250;if(sel){cam.x=sel.x;cam.y=sel.y;}};
+document.getElementById('zF').onclick=()=>{cam.kmpp=1000;if(sel){cam.x=sel.x;cam.y=sel.y;}};
+document.getElementById('zA').onclick=fitAll;
+document.getElementById('bR').onclick=()=>{const s=myShip();if(s){s.radar=!s.radar;syncBtns();}};
+document.getElementById('bF').onclick=()=>{const s=myShip();if(s)fire(s);};
+document.getElementById('tCov').onclick=()=>{showCov=!showCov;syncBtns();};
+document.getElementById('reset').onclick=()=>{simT=0;W0=build();tailCal();sel=null;syncBtns();};
+function fitAll(){cam.x=0;cam.y=-60e3;cam.kmpp=Math.max(2.15e6/W,1.35e6/H);}
+function syncBtns(){for(const b of document.querySelectorAll('[data-v]'))b.classList.toggle('on',b.dataset.v===VIEW);for(const b of document.querySelectorAll('[data-f]'))b.classList.toggle('on',FEAT[b.dataset.f]);
+  document.getElementById('pause').textContent=paused?'继续':'暂停';document.getElementById('spdV').textContent='x'+SPD+' 游戏秒/秒';
+  const s=myShip();document.getElementById('bR').classList.toggle('on',!!(s&&s.radar));document.getElementById('tCov').classList.toggle('on',showCov);}
+
+/* ---------- 主循环 ---------- */
+W0=build();tailCal();fitAll();syncBtns();
+let last=performance.now(),rdT=0;
+function frame(t){const dtw=Math.min(0.1,(t-last)/1000);last=t;
+  if(!paused){let left=dtw*SPD;while(left>0){const d=Math.min(0.5,left);step(d);left-=d;}}else CIR=circles();
+  netStep();draw();rdT+=dtw;if(rdT>0.2){rdT=0;readout();}requestAnimationFrame(frame);}
+requestAnimationFrame(frame);
+</script>
+</body></html>

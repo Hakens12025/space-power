@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>导弹组网 · 聚集攻击(demo)</title>
+<style>
+html,body{margin:0;background:#05070c;overflow:hidden;font-family:"Microsoft YaHei",sans-serif;color:#cdd6e4}
+#cv{display:block}
+.panel{position:absolute;background:rgba(8,12,20,.85);border:1px solid #1c2736;padding:10px 12px;font-size:12px;line-height:1.8;border-radius:4px}
+#ui{top:12px;left:12px;width:236px}
+#stats{top:12px;right:12px;width:252px}
+#info{bottom:12px;left:12px;width:270px;display:none}
+button{background:#152030;color:#cdd6e4;border:1px solid #2a3a50;padding:3px 10px;margin:2px 2px 2px 0;font-size:12px;cursor:pointer;border-radius:3px}
+button:hover{background:#1d2c42}
+select,input[type=range]{background:#152030;color:#cdd6e4;border:1px solid #2a3a50;font-size:12px;vertical-align:middle}
+.k{color:#7f93ad}
+h4{margin:0 0 4px;font-size:12px;color:#9fb4d0}
+hr{border:none;border-top:1px solid #1c2736;margin:6px 0}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="ui" class="panel">
+  <h4>导弹组网 · 聚集攻击(demo)</h4>
+  <div><button id="bWave">单舰一波(3 组)</button><button id="bTri">单舰三波</button><button id="bTri3">三舰齐射(各 3 组)</button></div>
+  <div><button id="bReset">清场重置</button><button id="bPause">暂停</button></div>
+  <hr>
+  <div>聚集攻击 <input type="checkbox" id="cSwarm" checked></div>
+  <div>速度决策 <select id="sMode"><option value="marg">边际贡献(新)</option><option value="sync">同步(旧三关系)</option><option value="dash">各自冲</option></select></div>
+  <div>靶子运动(满速 80 km/s) <select id="sTM"><option>迎头</option><option>背离</option><option>横穿</option><option>规避</option></select></div>
+  <div><button id="bCmp">三种决策对比(同场景各跑一遍)</button></div>
+  <div>链显示 <select id="sChain"><option value="always">总是</option><option value="sel">选中时</option><option value="off">关</option></select></div>
+  <div>通信圈 <input type="checkbox" id="cRing" checked></div>
+  <div class="k">间距(分离) <input type="range" id="rS" min="2000" max="30000" step="500" value="5000" style="width:110px"> <span id="vS"></span></div>
+  <div class="k">聚合力 <input type="range" id="rC" min="0" max="20" step="1" value="9" style="width:110px"> <span id="vC"></span></div>
+  <div class="k">时间倍速 <input type="range" id="rSpd" min="1" max="20" step="1" value="8" style="width:110px"> <span id="vSpd"></span></div>
+  <hr>
+  <div class="k">左键:选导弹组;点红舰 = 蓝舰指派目标</div>
+  <div class="k">在网 = 链能回到蓝舰(听指派);断链组照最后传导的目标飞,导引头 3 万内按默认规则挑最近的</div>
+</div>
+<div id="stats" class="panel"><h4>态势</h4><div id="stBody"></div></div>
+<div id="info" class="panel"><h4>导弹组</h4><div id="inBody"></div></div>
+<script>
+"use strict";
+/* 组网回传 + 聚集攻击的机制演示:不加载引擎、数值自足。
+   链:弹弹 8.775 万(组网圈)、弹舰 9 万;指派沿链传导;断链后只剩默认引导(最后记录 + 导引头 3 万内挑最近)。
+   三关系算法(2026-10-01 用户:从头写 —— 导弹间关系 / 目标距离 / 自身油量,没有簇级计算、没有集结点、没有槽位):
+   ① 油量 → 速度天花板 aC = 当前速度 + (油 − 转向预留 RES)·加速度(2026-10-03 用户:去掉末速 —— 不再给刹车留油,烧油不会逼着减速;油不够只保持速度滑行);
+   ② 目标距离 + 一跳邻居 → 同步:有效路程 = 到目标距离 + 离局部质心距离的一半;与一跳邻居比到达时刻、等最慢的(一跳一跳传开),
+      下限 0.85·aC(等不起就掉队);调度滞回 3%,不为噪声重新加减速;
+   ③ 邻居 → 聚拢:质心吸引(权重随离质心距离衰减)+ 间距排斥 + 2° 转向死区;聚集力距目标 15 万内淡出。
+   冲刺段(距目标 3 万 = 导引头锁定范围)不减速,带速命中。
+   2026-10-03 伤害 = 爆炸 + 动能(用户:线性动能加伤,动能只是个添头):爆炸 12(同原来),动能 = 爆炸 x 7.5% / 每 100 km/s 相对速度,不封顶(400 km/s +30%)。
+   命中结算同引擎近防:命中点 4 万内同扇面的组数与扇面数 → 过载 → 活下来几枚(演示页取期望,不掷骰子)、扇面加成。
+   边际贡献(新版速度决策):每组每步比「冲」(油允许的最快)与「等」(同步到邻组的到达时刻)两个方案,各算「我按这个方案到」给同目标这一片带来的总伤害增量(有我 − 没我),
+   取大的(大 5% 以上才换);只用自己与一跳邻居广播的到达时刻 / 撞击速度 —— 仍然是导弹对导弹的局部规则,冲刺段不减速的规则交给这个比较。 */
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+let W=0,H=0,SC=1;
+function fit(){W=cv.width=innerWidth;H=cv.height=innerHeight;}
+addEventListener('resize',fit);fit();
+const AR={w:900000,h:900000}; // 2026-10-03 60 万 x 36 万 → 90 万 x 90 万:背离 / 横穿 80 km/s 的靶子跑 300 秒不撞边(原来撞边反弹成迎头;纵向太窄,导弹瞄着横穿靶子的未来位置先飞出场外消失)
+const MM=87750,MS=90000,SEEK=30000,HIT=800,TERM=25000;
+const ACC=150,TURN_COST=spd=>Math.min(8,2+spd/2000),FUEL0=45,FUEL_KEEP=0.2,RES=FUEL0*FUEL_KEEP; // ACC:2026-10-03 同引擎导弹加减速 x2(75 → 150);RES = 转向修正预留的油(2026-10-03 去掉末速后唯一的预留)
+const V={sub:(a,b)=>[a[0]-b[0],a[1]-b[1]],len:a=>Math.hypot(a[0],a[1]),dot:(a,b)=>a[0]*b[0]+a[1]*b[1],
+  norm:a=>{const l=Math.hypot(a[0],a[1])||1;return[a[0]/l,a[1]/l];}};
+const opt={swarm:true,chain:'always',ring:true,S:5000,COH:0.9,spd:8,mode:'marg'};
+const CNT=12,EXPL=12,KIN=0.075/1000,CIWS_IN=0.85,OV_R=40000; // 每组几枚 / 爆炸(每枚)/ 动能系数(每 1000 游戏单位 = 100 km/s 相对速度加爆炸的 7.5%)/ 近防内圈拦截率(驱逐防空核心)/ 过载统计半径(同引擎 4 万)
+function kin(v){return EXPL*KIN*v;} // 动能那份:随相对速度线性
+function sectorOf(a){if(a>=-Math.PI/4&&a<Math.PI/4)return 0;if(a>=Math.PI/4&&a<3*Math.PI/4)return 1;if(a>=-3*Math.PI/4&&a<-Math.PI/4)return 3;return 2;} // 同引擎:目标的四个扇面
+function survE(ng,ns){return 1-0.5*CIWS_IN/(1+(ng-1)*0.6)/(1+Math.max(0,ns-1)*1.5);} // 活下来的比例(期望):同扇面组数 ng、扇面数 ns 越多近防越吃力(同引擎 ciwsSectorOverload)
+function multS(ns){return 1+0.5*Math.max(0,ns-1);} // 扇面伤害加成(同引擎:每多一个受击扇面 +50%)
+let TOT={dmg:0,eff:0,n:0,v:0},CMP=null;
+const TM={'迎头':[-1,0],'背离':[1,0],'横穿':[0,1],'规避':'jink'}; // 2026-10-03 用户:靶子一律引擎满速,只改方向(这里只存方向,速度看各靶子的 vmax)
+let UNB=false; // 对比时不设边界:靶子不反弹、导弹飞出场地不消失(游戏的游玩区 306 万 x 172 万,远大于演示场地;高速靶 133 秒就撞边反弹成迎头)
+// 2026-10-03 靶子运动:迎头 = 朝发射舰开来,背离 = 逃,横穿 = 垂直于来向,规避 = 每 15 秒在横穿方向左右各偏 60° 变向
+let tmode='迎头';
+function tmVel(r){const m=TM[tmode];if(m==='jink'){const k=Math.floor(simT/15),a=Math.PI/2+(k%2?1:-1)*Math.PI/3;return[Math.cos(a)*r.vmax,Math.sin(a)*r.vmax];}return[m[0]*r.vmax,m[1]*r.vmax];}
+function tmStep(r,dt){if(r.dead)return;const b=tmVel(r);r.flip=r.flip||[1,1]; // 碰到场地边就把那个分量反过来(规避 / 横穿时来回);按翻转后的实际速度判断是否在往外走(原来按翻转前的判,碰边后每步来回翻)
+  if(!UNB)for(let i=0;i<2;i++){const lo=20000,hi=(i?AR.h:AR.w)-20000,v=b[i]*r.flip[i];if((r.pos[i]<lo&&v<0)||(r.pos[i]>hi&&v>0))r.flip[i]*=-1;}
+  const w=[b[0]*r.flip[0],b[1]*r.flip[1]],sp=Math.hypot(r.vel[0],r.vel[1]);if(!(dt>0)||sp<1){r.vel=w;return;}
+  const a0=Math.atan2(r.vel[1],r.vel[0]);let da=Math.atan2(w[1],w[0])-a0;da-=Math.round(da/(2*Math.PI))*2*Math.PI;
+  const mx=r.acc*dt/sp,a=a0+Math.max(-mx,Math.min(mx,da)),s2=sp+Math.max(-r.acc*dt,Math.min(r.acc*dt,Math.hypot(w[0],w[1])-sp)); // 满速转弯:推力全给向心,角速度 = 推力 / 速度(80 km/s 时 7.2°/s)
+  r.vel=[Math.cos(a)*s2,Math.sin(a)*s2];}
+let simT=0,run=true,gid=0,groups=[],fx=[],queue=[],waves=[],ships,reds,assign=0,sel=null;
+function reset(){simT=0;gid=0;groups=[];fx=[];queue=[];waves=[];sel=null;assign=0;TOT={dmg:0,eff:0,n:0,v:0};
+  ships=[{pos:[60000,AR.h/2-70000],name:'巡游舰1'},{pos:[60000,AR.h/2],name:'巡游舰2'},{pos:[60000,AR.h/2+70000],name:'巡游舰3'}]; // 三舰横向散开 7 万:看得出来是三股弹道
+  reds=[{pos:[480000,AR.h/2+30000],vel:[0,0],vmax:800,acc:100,name:'敌·驱逐舰',hp:750,dead:false}, // 结构 550 + 护盾 200(同引擎护卫 / 驱逐);vmax / acc = 引擎护卫级最高档 80 km/s、推力 1.0 km/s²(驱逐归护卫级)
+        {pos:[430000,AR.h/2-60000],vel:[0,0],vmax:800,acc:100,name:'敌·护卫舰',hp:750,dead:false}];
+  for(const r of reds)r.vel=tmVel(r);}
+reset();
+function prd(rec){const u=simT-rec.t;return[rec.pos[0]+rec.vel[0]*u,rec.pos[1]+rec.vel[1]*u];}
+function launch(n,si){si=si||0;const sh=ships[si],w={id:waves.length+1,n:n,hit:[]};waves.push(w);
+  const t=reds[assign],dir=V.norm(V.sub(t.pos,sh.pos)),per=[-dir[1],dir[0]];
+  for(let i=0;i<n;i++){const off=(i-(n-1)/2)*120;
+    groups.push({id:++gid,wv:w,pos:[sh.pos[0]+per[0]*off,sh.pos[1]+per[1]*off],dir:dir.slice(),
+      spd:400,fuel:FUEL0, // 2026-10-03 去掉末速:不再有巡航峰值 / 末速 / 减速点,速度上限只看油
+      tgt:assign,rec:{pos:t.pos.slice(),vel:t.vel.slice(),t:simT},online:true,mode:'link',
+      nb:[],eta:0,spdDes:0,aim:null,done:false,cnt:CNT,pk:null,etaP:0,vrelP:0});}}
+function triWave(){queue.push([simT,3],[simT+15,3],[simT+30,3]);}
+function launch3(){for(let i=0;i<3;i++)launch(3,i);} // 三舰同时各射 3 组:看三股弹道汇成一团
+function mesh(){
+  for(const g of groups)if(!g.done){g.online=false;g.nb=[];}
+  const live=groups.filter(g=>!g.done);
+  for(let i=0;i<live.length;i++)for(let j=i+1;j<live.length;j++){
+    if(V.len(V.sub(live[i].pos,live[j].pos))<MM){live[i].nb.push(live[j]);live[j].nb.push(live[i]);}}
+  const q=[];
+  const nearS=p=>{let bd=Infinity;for(const sh of ships)bd=Math.min(bd,V.len(V.sub(p,sh.pos)));return bd;};
+  for(const g of live)if(nearS(g.pos)<MS){g.online=true;q.push(g);}
+  for(let i=0;i<q.length;i++)for(const nb of q[i].nb)if(!nb.online){nb.online=true;q.push(nb);}
+  for(const g of live){
+    if(g.online){const t=reds[assign];g.tgt=assign;g.rec={pos:t.pos.slice(),vel:t.vel.slice(),t:simT};g.mode='link';continue;} // 在网:听蓝舰指派,记录每拍刷新
+    for(const nb of g.nb)if(nb.rec.t>g.rec.t+0.2){g.rec={pos:nb.rec.pos.slice(),vel:nb.rec.vel.slice(),t:nb.rec.t};g.tgt=nb.tgt;} // 目标沿链传导:邻居的记录更新就采纳
+    g.mode='coast';
+    const pr=prd(g.rec);let best=-1,bd=1e18;
+    for(let k=0;k<reds.length;k++){const d=V.len(V.sub(reds[k].pos,pr));if(d<bd){bd=d;best=k;}}
+    if(best>=0&&V.len(V.sub(reds[best].pos,g.pos))<SEEK){g.tgt=best;g.rec={pos:reds[best].pos.slice(),vel:reds[best].vel.slice(),t:simT};g.mode='self';}} // 断链的默认规则:导引头 3 万内挑离预计点最近的
+}
+function guide(g){ // 三关系算法(2026-10-01 用户:从头写 —— 导弹间关系 / 目标距离 / 自身油量,没有簇级计算):
+  // ① 油量 → 速度天花板 aC = 当前速度 + (油 − 转向预留 RES)·加速度(2026-10-03 去掉末速):能用的油全拿来加速最快能到多快;烧油不会逼着减速
+  // ② 目标距离 + 一跳邻居 → 同步:有效路程 = 到目标距离 + 离局部质心距离的一半(聚拢的弯路不自欺);与一跳邻居比到达时刻、等最慢的(一跳一跳传开),
+  //    等不起就 0.85·aC 为下限 —— 油少的慢弹自动被等,太慢就掉队,有界的照顾
+  // ③ 邻居 → 聚拢:质心吸引(权重随离质心距离衰减,收拢了就不再拉)+ 间距排斥 + 2° 转向死区;调度滞回 3%,不为噪声重新加减速;冲刺段(3 万)不减速
+  const pr=prd(g.rec),d0=V.len(V.sub(pr,g.pos)),rv=V.len([g.dir[0]*g.spd-g.rec.vel[0],g.dir[1]*g.spd-g.rec.vel[1]]),tL=Math.max(0.4,d0/Math.max(500,rv)),to=V.norm(V.sub([pr[0]+g.rec.vel[0]*tL,pr[1]+g.rec.vel[1]*tL],g.pos)); // 2026-10-03 同引擎前置追踪:瞄目标未来位置(提前量 = 距离 / 相对速度),原来瞄当前位置 = 追尾,运动靶几乎打不中
+  const aC=g.spd+Math.max(0,g.fuel-RES)*ACC; // 能用的油全拿来加速,最快能到多快(不给刹车留油)
+  let cx=0,cy=0;for(const nb of g.nb){cx+=nb.pos[0];cy+=nb.pos[1];}
+  const n=g.nb.length,cen=n?[cx/n,cy/n]:null,dCen=cen?Math.hypot(cen[0]-g.pos[0],cen[1]-g.pos[1]):0;
+  const dEff=d0+0.5*dCen;
+  const aCof=x=>x.spd+Math.max(0,x.fuel-RES)*ACC; // 任何一组的"能力天花板"(邻居的速度与油量沿链可读)
+  let etaRef=dEff/aC; // 无邻居 / 基准:按自己的天花板尽快到
+  let dir=to;
+  if(n&&opt.swarm&&g.mode!=='self'&&g.fuel>RES){ // 2026-10-03 油到转向预留线以下就不再为聚拢转向:预留只给末段对准(原来聚拢把预留烧光、末段转不动打空)
+    for(const nb of g.nb){ // 一跳邻居的到达时刻按【它的能力天花板】算,不按它当前的速度 —— 按当前速度的话最慢的一组会把所有人拖到减速下限齐飞,距离差永远冻结
+      const dj=Math.hypot(pr[0]-nb.pos[0],pr[1]-nb.pos[1])+0.5*Math.hypot(cen[0]-nb.pos[0],cen[1]-nb.pos[1]);
+      etaRef=Math.max(etaRef,dj/aCof(nb));}
+    const fadeT=Math.max(0,Math.min(1,(d0-TERM)/125000)),fadeC=Math.max(0.15,Math.min(1,dCen/15000));
+    if(fadeT>0){
+      const tc=V.norm([cen[0]-g.pos[0],cen[1]-g.pos[1]]);
+      let px=0,py=0;const rs=opt.S;
+      for(const nb of g.nb){const dx=g.pos[0]-nb.pos[0],dy=g.pos[1]-nb.pos[1],dq=Math.hypot(dx,dy);
+        if(dq>1&&dq<rs){px+=dx/dq*(1-dq/rs);py+=dy/dq*(1-dq/rs);}}
+      dir=V.norm([to[0]+opt.COH*fadeT*fadeC*tc[0]+px*fadeT*0.8,to[1]+opt.COH*fadeT*fadeC*tc[1]+py*fadeT*0.8]);
+      const ca=Math.atan2(dir[1],dir[0])-Math.atan2(g.dir[1],g.dir[0]),ca2=Math.atan2(Math.sin(ca),Math.cos(ca));
+      if(Math.abs(ca2)<0.035)dir=[g.dir[0],g.dir[1]];}} // 转向死区 2°
+  const vc=Math.max(aC*0.85,Math.min(aC,dEff/Math.max(1,etaRef))); // 同步速度:等得起就等,等不起掉队
+  if(g.vCmd===undefined||Math.abs(vc-g.vCmd)>Math.max(0.03*g.vCmd,15))g.vCmd=vc; // 调度滞回 3%:不为噪声重新加减速
+  const tv=reds[g.tgt].vel,vrel=v=>Math.hypot(v*to[0]-tv[0],v*to[1]-tv[1]); // 按某个速度撞上去时的相对速度
+  let sd;
+  if(opt.mode==='dash')sd=aC; // 各自冲:谁也不等
+  else if(opt.mode==='marg')sd=margPick(g,pr,dEff,aC,Math.min(g.vCmd,aC),vrel); // 边际贡献(新)
+  else{sd=Math.min(g.vCmd,aC);if(d0<SEEK)sd=Math.max(sd,g.spd);} // 同步(旧):冲刺段进了导引头范围不再减速,带速命中
+  g.spdDes=sd;g.etaP=dEff/Math.max(300,sd);g.vrelP=vrel(opt.mode==='marg'&&g.vImp?g.vImp:sd);g.eta=dEff/Math.max(300,g.spd);g.aim=[g.pos[0]+dir[0]*80000,g.pos[1]+dir[1]*80000]; // etaP / vrelP = 广播给邻组的计划到达时刻与撞击相对速度
+}
+
+function margPick(g,pr,dEff,aC,vS,vrel){ // 边际贡献:冲 / 等 两个方案,各算「我按这个方案到」给同目标这一片的总伤害增量(有我 − 没我),取大的(大 5% 以上才换)
+  const same=g.nb.filter(nb=>nb.tgt===g.tgt&&!nb.done),sec=p=>sectorOf(Math.atan2(p[1]-pr[1],p[0]-pr[0])),sMe=sec(g.pos);
+  const vImp=v=>v>=aC?aC:Math.max(v,aC-2*Math.max(0,g.spd-v)); // 撞上时的速度:等 = 先减速到 v 等人(烧 spd − v 的油)、末段再加速,比冲少两倍的速度差;本来就比 v 慢就不用减,照样能加到 aC
+  const val=v=>{const tMe=dEff/Math.max(300,v);
+    const A=same.filter(nb=>Math.abs((nb.etaP||1e9)-tMe)*Math.max(300,nb.spd)<OV_R); // 和我一起到的:到时相距在过载统计半径以内
+    const M=A.map(nb=>({s:sec(nb.pos),vr:nb.vrelP||nb.spd,cnt:nb.cnt})),me={s:sMe,vr:vrel(vImp(v)),cnt:g.cnt};
+    const tot=S=>{let t=0;for(const x of S){let ng=0;const ss=new Set();for(const y of S){ss.add(y.s);if(y.s===x.s)ng++;}t+=x.cnt*survE(ng,ss.size)*(EXPL+kin(x.vr))*multS(ss.size);}return t;};
+    return tot(M.concat([me]))-tot(M);};
+  const mD=val(aC),mS=val(vS);g.mD=mD;g.mS=mS;
+  let pk=g.pk||(mD>=mS?'冲':'等');const cur=pk==='冲'?mD:mS,alt=pk==='冲'?mS:mD;if(alt>cur*1.05)pk=pk==='冲'?'等':'冲';g.pk=pk;
+  g.vImp=vImp(pk==='冲'?aC:vS);return pk==='冲'?aC:vS;
+}
+function move(g,dt){
+  const fr=g.fuel-RES; // 2026-10-03 加减速只能用预留以上的油:预留只给转向(原来「等」的减速能把预留烧光,末段转不动)
+  if(fr>0){const dv=Math.max(-ACC*dt,Math.min(ACC*dt,g.spdDes-g.spd)),c=Math.abs(dv)/ACC;
+    if(c>fr){g.spd+=dv*fr/c;g.fuel-=fr;}else{g.spd+=dv;g.fuel-=c;}}
+  if(g.aim){const des=V.norm(V.sub(g.aim,g.pos));
+    let ang=Math.atan2(des[1],des[0])-Math.atan2(g.dir[1],g.dir[0]);ang=Math.atan2(Math.sin(ang),Math.cos(ang));
+    const tr=1.2/(1+g.spd/900),r=Math.max(-tr*dt,Math.min(tr*dt,ang)),na=Math.atan2(g.dir[1],g.dir[0])+r;
+    g.dir=[Math.cos(na),Math.sin(na)];
+    if(g.fuel>0)g.fuel=Math.max(0,g.fuel-Math.abs(r)*TURN_COST(g.spd));} // 转向按弧度耗油(同引擎公式)
+  g.pos[0]+=g.dir[0]*g.spd*dt;g.pos[1]+=g.dir[1]*g.spd*dt;}
+function impact(g){
+  const t=reds[g.tgt];
+  if(t.dead){g.done=true;fx.push({p:g.pos.slice(),t0:simT,r:3000});return;} // 追着已沉的记录飞:扑空自毁(断链不知道它死了)
+  if(V.len(V.sub(t.pos,g.pos))<HIT){
+    g.done=true;g.wv.hit.push(simT);fx.push({p:t.pos.slice(),t0:simT,r:9000});
+    const sec=p=>sectorOf(Math.atan2(p[1]-t.pos[1],p[0]-t.pos[0])),s0=sec(g.pos),ss=new Set([s0]);let ng=1;
+    for(const q of groups){if(q===g||q.done)continue;if(V.len(V.sub(q.pos,g.pos))<OV_R){const s=sec(q.pos);if(s===s0)ng++;ss.add(s);}} // 同引擎:命中点 4 万内的组,同扇面计过载
+    const vr=Math.hypot(g.dir[0]*g.spd-t.vel[0],g.dir[1]*g.spd-t.vel[1]),sh=Math.round(g.cnt*survE(ng,ss.size)),dmg=sh*(EXPL+kin(vr))*multS(ss.size),eff=Math.min(dmg,Math.max(0,t.hp));
+    t.hp-=dmg;g.wv.dmg=(g.wv.dmg||0)+dmg;g.wv.eff=(g.wv.eff||0)+eff;TOT.dmg+=dmg;TOT.eff+=eff;TOT.n++;TOT.v+=vr;
+    if(t.hp<=0){t.dead=true;t.vel=[0,0];fx.push({p:t.pos.slice(),t0:simT,r:40000});
+      const o=reds.findIndex(x=>!x.dead);if(o>=0)assign=o;}} // 在网的下一拍就换指派;断链的还照旧记录飞
+  if(!UNB&&(g.pos[0]<0||g.pos[0]>AR.w||g.pos[1]<0||g.pos[1]>AR.h))g.done=true;
+  if(g.fuel<=0&&g.aim&&V.dot(g.dir,V.norm(V.sub(g.aim,g.pos)))<0)g.done=true;} // 油尽且已在远离目标(滑行也追不上):收掉,同引擎口径
+let meshT=0,acc=0,last=0;
+function step(dt){simT+=dt;
+  for(let i=queue.length-1;i>=0;i--)if(simT>=queue[i][0]){launch(queue[i][1]);queue.splice(i,1);}
+  for(const r of reds){tmStep(r,dt);r.pos[0]+=r.vel[0]*dt;r.pos[1]+=r.vel[1]*dt;}
+  meshT+=dt;if(meshT>=0.25){meshT=0;mesh();}
+  for(const g of groups)if(!g.done){guide(g);move(g,dt);impact(g);}
+  groups=groups.filter(g=>!g.done);fx=fx.filter(f=>simT-f.t0<1.4);
+  if(sel&&sel.done)sel=null;}
+function w2s(p){return[(p[0]-AR.w/2)*SC+W/2,(p[1]-AR.h/2)*SC+H/2];}
+function draw(){
+  SC=Math.min((W-560)/AR.w,(H-40)/AR.h);
+  ctx.fillStyle='#05070c';ctx.fillRect(0,0,W,H);
+  const g0=50000;ctx.strokeStyle='#10141c';ctx.lineWidth=1;ctx.beginPath();
+  for(let x=0;x<=AR.w;x+=g0){const a=w2s([x,0]),b=w2s([x,AR.h]);ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);}
+  for(let y=0;y<=AR.h;y+=g0){const a=w2s([0,y]),b=w2s([AR.w,y]);ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);}
+  ctx.stroke();
+  ctx.strokeStyle='#1c2736';const c0=w2s([0,0]),c1=w2s([AR.w,AR.h]);ctx.strokeRect(c0[0],c0[1],c1[0]-c0[0],c1[1]-c0[1]);
+  for(let si=0;si<ships.length;si++){const sp=w2s(ships[si].pos);
+    if(opt.ring){ctx.strokeStyle='rgba(84,224,208,.18)';ctx.setLineDash([6,6]);ctx.beginPath();ctx.arc(sp[0],sp[1],MS*SC,0,6.283);ctx.stroke();ctx.setLineDash([]);} // 弹舰 9 万:链回舰的门
+    ctx.fillStyle='#6db4ff';ctx.beginPath();ctx.moveTo(sp[0],sp[1]-8);ctx.lineTo(sp[0]+6,sp[1]+5);ctx.lineTo(sp[0]-6,sp[1]+5);ctx.closePath();ctx.fill();
+    ctx.fillStyle='#9fc4ee';ctx.font='11px "Microsoft YaHei"';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(ships[si].name+'(发射舰)',sp[0]+9,sp[1]-8);
+    ships[si].scr=[sp[0],sp[1]];}
+  for(let k=0;k<reds.length;k++){const r=reds[k],rp=w2s(r.pos);
+    ctx.fillStyle=r.dead?'#4a4f58':'#ff6b6b';
+    ctx.save();ctx.translate(rp[0],rp[1]);ctx.rotate(0.785);ctx.fillRect(-5,-5,10,10);ctx.restore();
+    ctx.fillStyle=r.dead?'#666':'#e88';ctx.font='11px "Microsoft YaHei"';ctx.fillText(r.name+(r.dead?'(沉)':''),rp[0]+9,rp[1]-8);
+    if(k===assign&&!r.dead){ctx.strokeStyle='rgba(255,107,107,.9)';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(rp[0],rp[1],12,0,6.283);ctx.stroke();
+      ctx.fillStyle='rgba(255,107,107,.85)';ctx.fillText('指派',rp[0]+9,rp[1]+8);}}
+  if(opt.chain!=='off'){
+    const vis=g=>{if(opt.chain==='always')return true;return sel&&g===sel||sel&&g.nb.indexOf(sel)>=0;};
+    ctx.lineWidth=0.8;ctx.strokeStyle='rgba(84,224,208,.3)';ctx.setLineDash([3,4]);ctx.beginPath();
+    for(const g of groups){if(!vis(g))continue;const a=w2s(g.pos);
+      for(const nb of g.nb)if(vis(nb)&&nb.id>g.id){const b=w2s(nb.pos);ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);}}
+    ctx.stroke();ctx.setLineDash([]);
+    ctx.strokeStyle='rgba(84,224,208,.85)';ctx.beginPath();
+    for(const g of groups)if(vis(g)){let bi=-1,bd=MS;for(let si=0;si<ships.length;si++){const d=V.len(V.sub(g.pos,ships[si].pos));if(d<bd){bd=d;bi=si;}}
+      if(bi>=0){const a=w2s(g.pos);ctx.moveTo(a[0],a[1]);ctx.lineTo(ships[bi].scr[0],ships[bi].scr[1]);}}
+    ctx.stroke();} // 真实链:弹弹边 + 只有够得着舰的那组连回最近的舰
+  for(const g of groups){const p=w2s(g.pos),on=g.online;
+    ctx.save();if(!on)ctx.globalAlpha=0.55;
+    ctx.strokeStyle=on?'rgba(255,255,255,.55)':'rgba(255,255,255,.3)';ctx.lineWidth=0.8;
+    if(!on)ctx.setLineDash([3,3]);ctx.beginPath();ctx.arc(p[0],p[1],5,0,6.283);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle=on?'#ffd166':'#9c834c';
+    for(let i=0;i<4;i++){const a=i/4*6.283+g.id*0.5;ctx.fillRect(p[0]+Math.cos(a)*3-1,p[1]+Math.sin(a)*3-1,2,2);}
+    ctx.fillStyle=on?'rgba(255,209,102,.8)':'rgba(156,131,76,.8)';ctx.font='9px Consolas';ctx.textAlign='center';ctx.textBaseline='bottom';
+    ctx.fillText(Math.round(g.eta)+'s'+(opt.mode==='marg'&&g.pk?' '+g.pk:''),p[0],p[1]-8);
+    ctx.fillStyle='#2a3a50';ctx.fillRect(p[0]-8,p[1]+7,16,2);
+    ctx.fillStyle=g.fuel>FUEL0*FUEL_KEEP?'#54e0d0':'#e0a54e';ctx.fillRect(p[0]-8,p[1]+7,16*Math.max(0,g.fuel/FUEL0),2);
+    ctx.restore();
+    if(g===sel){ctx.strokeStyle='#4fe0ff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(p[0],p[1],12,0,6.283);ctx.stroke();}
+    if(opt.ring&&g===sel){ctx.strokeStyle='rgba(255,209,102,.3)';ctx.lineWidth=1;ctx.setLineDash([5,5]);ctx.beginPath();ctx.arc(p[0],p[1],MM*SC,0,6.283);ctx.stroke();ctx.setLineDash([]);
+      ctx.strokeStyle='rgba(255,209,102,.45)';ctx.beginPath();ctx.arc(p[0],p[1],SEEK*SC,0,6.283);ctx.stroke();}} // 选中:组网圈(弹弹)与导引圈(3 万)
+  for(const f of fx){const u=(simT-f.t0)/1.4,p=w2s(f.p);
+    ctx.strokeStyle='rgba(255,'+Math.round(180-120*u)+',80,'+(0.9*(1-u)).toFixed(2)+')';ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(p[0],p[1],Math.max(2,f.r*SC*(0.2+u)),0,6.283);ctx.stroke();}
+  stats();}
+function stats(){
+  const live=groups,on=live.filter(g=>g.online).length;
+  let h='<div>在场 <b class="y">'+live.length+'</b> 组 · 在网 <b class="t">'+on+'</b> · 指派 <b class="r">'+reds[assign].name+'</b></div>';
+  h+='<div class="k">三关系:油量天花板 / 一跳邻居同步 / 质心聚拢 · 决策:'+({marg:'边际贡献',sync:'同步',dash:'各自冲'})[opt.mode]+'</div>';
+  h+='<div>累计伤害 <b>'+Math.round(TOT.eff)+'</b>(含过量 '+Math.round(TOT.dmg)+')· 命中 '+TOT.n+' 组 · 均撞击 '+(TOT.n?Math.round(TOT.v/TOT.n/10):0)+' km/s</div>';
+  for(const r of reds)h+='<div class="k">'+r.name+' '+(r.dead?'已沉':Math.round(r.hp)+' / 750')+'</div>';
+  if(CMP)h+='<hr><div class="k">对比(同场景、期望伤害):</div>'+CMP.map(x=>'<div class="k">'+x+'</div>').join('');
+  for(const w of waves){if(!w.hit.length&&live.every(g=>g.wv!==w))continue;
+    const mx=Math.max.apply(null,w.hit),mn=Math.min.apply(null,w.hit);
+    h+='<div class="k">波'+w.id+':命中 '+w.hit.length+'/'+w.n+(w.hit.length>1?(' · 弹着窗 '+(mx-mn).toFixed(1)+' s'):'')+(w.dmg?' · 伤害 '+Math.round(w.eff):'')+'</div>';}
+  document.getElementById('stBody').innerHTML=h;
+  const el=document.getElementById('info');
+  if(!sel){el.style.display='none';return;}
+  el.style.display='block';
+  const m={link:'链导(听蓝舰指派)',self:'自导(导引头)',coast:'断链(默认规则)'}[sel.mode];
+  document.getElementById('inBody').innerHTML=
+    '<div>状态 <b class="y">'+m+'</b>'+(sel.online?' · <b class="t">在网</b>':' · 断链')+'</div>'+
+    '<div class="k">波'+sel.wv.id+' · 燃料 '+Math.round(sel.fuel/FUEL0*100)+'% · '+Math.round(sel.spd)+' km/s</div>'+
+    '<div class="k">目标 '+reds[sel.tgt].name+' · 到达 '+Math.round(sel.eta)+' s · 邻居 '+sel.nb.length+' 组</div>'+
+    (sel.mD!==undefined?'<div class="k">决策 <b>'+sel.pk+'</b> · 冲的边际贡献 '+Math.round(sel.mD)+' · 等的 '+Math.round(sel.mS)+'</div>':'');}
+function frame(t){requestAnimationFrame(frame);
+  const dt=Math.min(0.1,(t-last)/1000||0);last=t;
+  if(run){acc+=dt*opt.spd;let n=0;while(acc>=0.05&&n++<400){step(0.05);acc-=0.05;}}
+  draw();}
+requestAnimationFrame(frame);
+cv.addEventListener('mousedown',e=>{const mx=e.clientX,my=e.clientY;
+  let best=null,bd=14;
+  for(const g of groups){const p=w2s(g.pos),d=Math.hypot(p[0]-mx,p[1]-my);if(d<bd){bd=d;best=g;}}
+  if(best){sel=best;stats();return;}
+  for(let k=0;k<reds.length;k++){const p=w2s(reds[k].pos),d=Math.hypot(p[0]-mx,p[1]-my);
+    if(d<16&&!reds[k].dead){assign=k;stats();return;}}
+  sel=null;stats();});
+document.getElementById('bWave').onclick=()=>launch(3);
+document.getElementById('bTri').onclick=()=>triWave();
+document.getElementById('bTri3').onclick=()=>launch3();
+document.getElementById('bReset').onclick=()=>reset();
+document.getElementById('bPause').onclick=function(){run=!run;this.textContent=run?'暂停':'继续';};
+document.getElementById('cSwarm').onchange=function(){opt.swarm=this.checked;};
+document.getElementById('sMode').onchange=function(){opt.mode=this.value;};
+function compare(tms){const md=opt.mode,rn=run,tm0=tmode;run=false;UNB=true;const out=[]; // 每种靶子运动 x 三个场景 x 三种决策各跑一遍(期望伤害、无随机,可复现);目标不沉,比纯伤害
+  for(const tm of (tms||Object.keys(TM))){tmode=tm;
+    for(const sc of [['三舰齐射',launch3],['单舰三波',triWave],['三波隔40s',()=>queue.push([simT,3],[simT+40,3],[simT+80,3])]]){const cell=[];
+      for(const m of [['sync','同步'],['dash','冲'],['marg','新']]){
+        reset();for(const r of reds)r.hp=1e9;opt.mode=m[0];sc[1]();let k=0;while((groups.length||queue.length)&&k++<12000)step(0.05);
+        cell.push(m[1]+' '+Math.round(TOT.dmg)+'('+TOT.n+'中/'+(TOT.n?Math.round(TOT.v/TOT.n/10):0)+')');}
+      out.push(tm+' · '+sc[0]+':'+cell.join(' · '));}}
+  UNB=false;tmode=tm0;reset();opt.mode=md;run=rn;CMP=out;stats();return out;}
+document.getElementById('bCmp').onclick=()=>compare();
+document.getElementById('sTM').onchange=function(){tmode=this.value;for(const r of reds){r.flip=null;r.vel=tmVel(r);}};
+document.getElementById('sChain').onchange=function(){opt.chain=this.value;};
+document.getElementById('cRing').onchange=function(){opt.ring=this.checked;};
+document.getElementById('rS').oninput=function(){opt.S=+this.value;document.getElementById('vS').textContent=(this.value/10000).toFixed(1)+' 万';};
+document.getElementById('rC').oninput=function(){opt.COH=+this.value/10;document.getElementById('vC').textContent=(+this.value/10).toFixed(1);};
+document.getElementById('rSpd').oninput=function(){opt.spd=+this.value;document.getElementById('vSpd').textContent=this.value+'x';};
+document.getElementById('rS').oninput();document.getElementById('rC').oninput();document.getElementById('rSpd').oninput();
+addEventListener('keydown',e=>{if(e.code==='Space'){e.preventDefault();run=!run;document.getElementById('bPause').textContent=run?'暂停':'继续';}});
+if(new URLSearchParams(location.search).get('auto')==='1')setTimeout(triWave,2000);
+</script>
+</body>
+</html>

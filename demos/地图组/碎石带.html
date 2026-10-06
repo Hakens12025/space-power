@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<title>碎石带</title>
+<style>
+html,body{margin:0;height:100%;background:#070a0e;overflow:hidden;font:12px "Microsoft YaHei",sans-serif;color:#cfd8e0}
+#cv{position:fixed;left:0;top:0;display:block}
+#ui{position:fixed;left:10px;bottom:10px;display:flex;flex-direction:column;gap:5px;user-select:none;background:rgba(11,16,22,.88);border:1px solid #2a3642;padding:6px 8px}
+#ui .row{display:flex;gap:3px;align-items:center;flex-wrap:wrap}
+#ui button{background:#141b23;color:#9fb0c0;border:1px solid #2a3642;padding:4px 9px;font:inherit;cursor:pointer}
+#ui button.on{background:#7a2a18;color:#fff0e0;border-color:#c0502a}
+#ui .lab{color:#8fa0b0;margin:0 4px 0 10px}
+#ui .lab:first-child{margin-left:0}
+#ui input[type=range]{width:84px;accent-color:#c0502a}
+#ui .val{font:12px Consolas,monospace;color:#cfd8e0;min-width:92px}
+#read{position:fixed;right:10px;top:8px;font:12px Consolas,"Microsoft YaHei",monospace;color:#8fa0b0;white-space:pre;line-height:1.55;background:rgba(11,16,22,.88);border:1px solid #2a3642;padding:6px 8px}
+#hint{position:fixed;left:10px;top:8px;color:#5f7080;line-height:1.7}
+</style></head><body>
+<canvas id="cv"></canvas>
+<div id="hint">拖动平移 · 滚轮缩放 · 光标 = 从蓝方开局点朝光标打一发炮弹(沿途 400 km 内有石头就被第一块挡下)<br>
+地图上不画碎石带本身,只画石头;「骨架」只是调试开关 · 「杂波」= 石头周围雷达看不见慢目标的范围<br>
+每个结构的块数 / 带宽 / 聚团各自在下面的范围里随机;结构数量也随机,类型从勾着的里面抽</div>
+<div id="read"></div>
+<div id="ui">
+  <div class="row"><span class="lab">种子</span><button id="sdDn">−</button><span class="val" id="sdV" style="min-width:40px"></span><button id="sdUp">+</button><button id="sdRnd">随机</button>
+    <span class="lab">显示</span><button id="tSkel">骨架</button><button id="tClut">杂波</button><button id="tSrc">按来源上色</button><button id="tOld" class="on">现有石头</button><button id="fit">看全图</button></div>
+  <div class="row" id="types"><span class="lab">类型</span></div>
+  <div class="row"><span class="lab">结构数</span><input type="range" id="cntLo"><input type="range" id="cntHi"><span class="val" id="cntV"></span>
+    <span class="lab">行星环概率</span><input type="range" id="ringP" min="0" max="1" step="0.05"><span class="val" id="ringPV" style="min-width:40px"></span></div>
+  <div class="row"><span class="lab">块数</span><input type="range" id="nLo"><input type="range" id="nHi"><span class="val" id="nV"></span>
+    <span class="lab">带宽</span><input type="range" id="wLo"><input type="range" id="wHi"><span class="val" id="wV"></span>
+    <span class="lab">聚团</span><input type="range" id="cLo"><input type="range" id="cHi"><span class="val" id="cV"></span></div>
+</div>
+<script>
+"use strict";
+/* 碎石带独立演示页(2026-09-29 用户:"给地图添加一些碎石带,不在地图上显示,就是碎石呈形状在里面分布更密集的一种结构";先做地图组,不进引擎。
+   同日第二轮:块数 / 带宽 / 聚团每个结构各自随机,结构类型多来几种;第三轮:类型只留 弧带 / 流带 / 行星环 / 分叉 / 喷流)。
+   不加载引擎,数值与式子归本页。ENG 一段抄自引擎 2026-09-29 的值,只为让画面与对局同尺度;BELT / SHP 两段是本页要定的。
+   地图上不画带本身(黑暗森林:引擎里石头走航迹迷雾,没发现就看不见);「骨架」只是调试开关。
+   结构 = 一股或几股"带":每股 = 一条中线(折线,带法向)+ 横向高斯(宽 wf(u))+ 沿线密度 df(u)(聚团噪声 x 收尖),石头按它拒绝采样。 */
+
+/* ---- 引擎当前值(抄完归本页)---- */
+const ENG={AW:3060000,AH:1721250,OPEN:1800000,ARC:20,     // 游玩区长宽 km、开局间距、红方来向 ±度
+  PL_R:70000,PL_K:[0.6,2],                               // 行星:木星级 7 万 x 0.6~2
+  CL_N:4,CL_R:[60000,100000],CL_ROCKS:25,SCAT:20,CLEAR:30000, // 现有的小行星团(圆)4 片 x 25 块、零散 20 块、离船 3 万
+  SFD:{A:1.25,MIN:0.2,MAX:4},                            // 石头体型的截断幂律(小的最多)
+  HIT_R:400,                                             // 炮弹命中 / 挡弹半径 km:弹道 400 km 内有石头,第一块把它挡下(石头碎掉)
+  AST_KM:800,CLUT_RES:4000};                             // 雷达杂波:石头 体型 x 800 + 4000 km 以内的慢目标,回波混进杂波
+/* ---- 碎石带:每张图、每个结构掷的范围 ---- */
+const BELT={CNT:[2,4],          // 每张图几个结构(不含行星环)
+  N:[80,320],                   // 每个结构的块数(行星环取一半)
+  W:[8000,45000],               // 带宽 km(横向高斯 ±1σ;各类型在它上面再乘自己的系数)
+  C:[0.2,0.9],                  // 聚团:0 = 均匀,1 = 成串的团、团间有空档
+  RING_P:0.5,                   // 每颗行星带环的概率
+  LUMP:120000,                  // 聚团的尺度:沿带每这么远一个起伏
+  AVOID:150000,INSIDE:0.7,      // 中线离两军开局位置至少这么远;中线至少七成在游玩区里
+  TYPES:['弧带','流带','分叉','喷流'],ON:{}};           // 行星环不在这里:每颗行星按 RING_P 单独掷
+BELT.TYPES.forEach(t=>{BELT.ON[t]=true;});
+const SHP={ARC_R:[400000,1100000],ARC_SPAN:[40,110],   // 弧带:大圆的一段(半径 km、张角 度,圆心可在游玩区外)
+  STR_L:[700000,1600000],STR_BEND:0.25,                // 流带:长 km、弯曲(二次曲线控制点横移 / 长)
+  FORK_L1:[400000,800000],FORK_L2:[300000,700000],FORK_ANG:[15,35], // 分叉:主干长、分支长 km、分支张角 度
+  JET_L:[400000,1000000],JET_HALF:[12,35],JET_K:[5,9], // 喷流(撞击碎片扇):长 km、半张角 度、几道
+  RING_K:[1.6,2.6],RING_W:[0.2,0.5]};                  // 行星环:半径、宽(x 行星半径)
+const COL={'弧带':'#d9a06a','流带':'#8fc7a0','分叉':'#b4e070','喷流':'#ff8a5c','行星环':'#a9a0e0','团':'#9aa3ad','零散':'#c7ccd2'};
+
+/* ---- 随机:两条流,世界(开局、行星、现有石头)与碎石带分开,调带的参数不挪别的东西 ---- */
+function rng(seed){let a=seed>>>0;return function(){a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};}
+function gauss(r){let u=0;while(u===0)u=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*r());}
+function rockSize(u){const A=ENG.SFD.A,a=ENG.SFD.MIN,b=ENG.SFD.MAX;return a*Math.pow(1-u*(1-Math.pow(a/b,A)),-1/A);}
+const far=(p,q,d)=>Math.hypot(p[0]-q[0],p[1]-q[1])>=d,rr=(r,a)=>a[0]+r()*(a[1]-a[0]),DEG=Math.PI/180,HW=ENG.AW/2,HH=ENG.AH/2;
+
+let SEED=1,WORLD=null,BELTS=[],ROCKS=[],STATS=null;
+const VIEW={skel:false,clut:false,src:false,old:true};
+
+function genWorld(seed){ // 开局 / 行星 / 现有石头:与引擎 matchGenWorld 同一套规则(游玩区中心在原点)
+  const r=rng(seed*7919+1),th=(r()*2-1)*ENG.ARC*DEG,ux=Math.cos(th),uy=Math.sin(th),D=ENG.OPEN;
+  const B=[-ux*D/2,-uy*D/2],R=[ux*D/2,uy*D/2],inA=()=>[(r()*2-1)*HW,(r()*2-1)*HH];
+  const planets=[];
+  for(let n=Math.floor(r()*3),k=0;k<40&&planets.length<n;k++){const p=inA(),rad=ENG.PL_R*rr(r,ENG.PL_K);
+    if(far(p,B,rad+100000)&&far(p,R,rad+100000)&&planets.every(b=>far(p,[b.x,b.y],rad+b.r+100000)))planets.push({x:p[0],y:p[1],r:rad});}
+  const W={B,R,planets,old:[]};
+  const ok=(x,y)=>Math.abs(x)<=HW&&Math.abs(y)<=HH&&far([x,y],B,ENG.CLEAR)&&far([x,y],R,ENG.CLEAR)&&planets.every(b=>far([x,y],[b.x,b.y],b.r+ENG.CLEAR));
+  for(let k=0,m=0;k<80&&m<ENG.CL_N;k++){ // 4 片圆形小行星团:前两片在两军之间的航路附近
+    const q=m<2?[B[0]+ux*D*(r()*1.6-0.3)-uy*(r()*2-1)*300000,B[1]+uy*D*(r()*1.6-0.3)+ux*(r()*2-1)*300000]:inA(),rad=rr(r,ENG.CL_R);
+    if(Math.abs(q[0])>HW||Math.abs(q[1])>HH||!far(q,B,rad+ENG.CLEAR)||!far(q,R,rad+ENG.CLEAR)||planets.some(b=>!far(q,[b.x,b.y],b.r+rad)))continue;
+    for(let i=0,c=0;i<ENG.CL_ROCKS*20&&c<ENG.CL_ROCKS;i++){const a=r()*2*Math.PI,d=Math.sqrt(r())*rad,x=q[0]+Math.cos(a)*d,y=q[1]+Math.sin(a)*d,s=rockSize(r());if(ok(x,y)){W.old.push({x,y,s,src:'团'});c++;}}
+    m++;}
+  for(let i=0,c=0;i<ENG.SCAT*20&&c<ENG.SCAT;i++){const p=inA(),s=rockSize(r());if(ok(p[0],p[1])){W.old.push({x:p[0],y:p[1],s,src:'零散'});c++;}}
+  W.ok=ok;return W;
+}
+
+/* ---- 股:中线折线 + 横向宽 wf(u) + 沿线密度 df(u) ∈ [0,1] ---- */
+function polyOf(f,n,closed){ // 参数曲线 f(u) 采成折线:点、累计长度、单位法向
+  const P=[];for(let i=0;i<=n;i++)P.push(f(i/n));
+  const L=[0];for(let i=1;i<P.length;i++)L.push(L[i-1]+Math.hypot(P[i][0]-P[i-1][0],P[i][1]-P[i-1][1]));
+  const N=P.map((p,i)=>{const a=P[Math.max(0,i-1)],b=P[Math.min(P.length-1,i+1)],dx=b[0]-a[0],dy=b[1]-a[1],l=Math.hypot(dx,dy)||1;return [-dy/l,dx/l];});
+  return {P,L,N,len:L[L.length-1],closed};
+}
+function polyAt(pl,u){ // u ∈ [0,1] 按弧长 → [x, y, nx, ny]
+  const s=u*pl.len,L=pl.L;let i=1;while(i<L.length-1&&L[i]<s)i++;
+  const t=(s-L[i-1])/((L[i]-L[i-1])||1),a=pl.P[i-1],b=pl.P[i],na=pl.N[i-1],nb=pl.N[i];
+  return [a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,na[0]+(nb[0]-na[0])*t,na[1]+(nb[1]-na[1])*t];
+}
+function lumpOf(r,len,closed,c){ // 沿线聚团:每 LUMP km 一个结点的值噪声,平方后压出空档;按最大值归一到 [0,1];闭合的首尾接上
+  const n=Math.max(2,Math.round(len/BELT.LUMP)),v=[];for(let i=0;i<=n;i++)v.push(r());if(closed)v[n]=v[0];const top=(1-c)+1.6*c;
+  return u=>{const x=Math.min(n-1e-9,Math.max(0,u*n)),i=Math.floor(x),f=x-i,s=(1-Math.cos(f*Math.PI))/2,q=v[i]+(v[i+1]-v[i])*s;return ((1-c)+1.6*c*q*q)/top;};
+}
+const TAP={both:u=>Math.pow(Math.max(0,Math.sin(Math.PI*u)),0.6),start:u=>Math.pow(Math.min(1,u*2),0.6),end:u=>Math.pow(Math.min(1,(1-u)*2),0.6)}; // 收尖:两头 / 只起点 / 只终点
+const strand=(pl,wf,df)=>({pl,wf,df});
+function bez(P0,P1,P2){return u=>{const v=1-u;return [v*v*P0[0]+2*v*u*P1[0]+u*u*P2[0],v*v*P0[1]+2*v*u*P1[1]+u*u*P2[1]];};}
+function randBez(r,L){const P0=[(r()*2-1)*HW,(r()*2-1)*HH],th=r()*2*Math.PI,P2=[P0[0]+Math.cos(th)*L,P0[1]+Math.sin(th)*L],off=(r()*2-1)*SHP.STR_BEND*L;
+  return bez(P0,[(P0[0]+P2[0])/2-Math.sin(th)*off,(P0[1]+P2[1])/2+Math.cos(th)*off],P2);}
+const rndC=(r,k)=>[(r()*2-1)*HW*k,(r()*2-1)*HH*k];
+const MK={ // 每种结构:(随机流, {n,w,c}) → 若干股
+  '弧带':(r,p)=>{const C=rndC(r,1.4),R=rr(r,SHP.ARC_R),a0=r()*2*Math.PI,sp=rr(r,SHP.ARC_SPAN)*DEG,t=TAP.both;
+    const pl=polyOf(u=>[C[0]+R*Math.cos(a0+u*sp),C[1]+R*Math.sin(a0+u*sp)],96,false),lp=lumpOf(r,pl.len,false,p.c);
+    return [strand(pl,u=>p.w*(0.4+0.6*t(u)),u=>lp(u)*t(u))];},
+  '流带':(r,p)=>{const pl=polyOf(randBez(r,rr(r,SHP.STR_L)),96,false),lp=lumpOf(r,pl.len,false,p.c),t=TAP.both;
+    return [strand(pl,u=>p.w*(0.4+0.6*t(u)),u=>lp(u)*t(u))];},
+  '分叉':(r,p)=>{const P0=rndC(r,0.8),th=r()*2*Math.PI,L1=rr(r,SHP.FORK_L1),bd=(r()*2-1)*0.15*L1,J=[P0[0]+Math.cos(th)*L1,P0[1]+Math.sin(th)*L1];
+    const trunk=polyOf(bez(P0,[(P0[0]+J[0])/2-Math.sin(th)*bd,(P0[1]+J[1])/2+Math.cos(th)*bd],J),60,false),lt=lumpOf(r,trunk.len,false,p.c),ts=TAP.start,te=TAP.end;
+    const out=[strand(trunk,u=>p.w*(0.4+0.6*ts(u)),u=>lt(u)*ts(u))];
+    for(const sg of [1,-1]){const a=th+sg*rr(r,SHP.FORK_ANG)*DEG,L2=rr(r,SHP.FORK_L2),E=[J[0]+Math.cos(a)*L2,J[1]+Math.sin(a)*L2],M=[J[0]+Math.cos(th)*L2*0.35,J[1]+Math.sin(th)*L2*0.35];
+      const pl=polyOf(bez(J,M,E),60,false),lp=lumpOf(r,pl.len,false,p.c);out.push(strand(pl,u=>p.w*0.7*(0.4+0.6*te(u)),u=>lp(u)*te(u)));}
+    return out;}, // Y 形:主干起点收尖,两支从汇合处顺着主干方向弯出去、末端收尖
+  '喷流':(r,p)=>{const O=rndC(r,0.8),th=r()*2*Math.PI,L=rr(r,SHP.JET_L),hf=rr(r,SHP.JET_HALF)*DEG,K=Math.round(rr(r,SHP.JET_K)),te=TAP.end,out=[];
+    for(let i=0;i<K;i++){const a=th+(r()*2-1)*hf,Lk=L*(0.55+0.45*r()),S=[O[0]+Math.cos(a)*Lk*0.04,O[1]+Math.sin(a)*Lk*0.04],E=[O[0]+Math.cos(a)*Lk,O[1]+Math.sin(a)*Lk];
+      const pl=polyOf(u=>[S[0]+(E[0]-S[0])*u,S[1]+(E[1]-S[1])*u],40,false),lp=lumpOf(r,pl.len,false,p.c);
+      out.push(strand(pl,u=>p.w*(0.15+0.7*u),u=>lp(u)*(1-0.75*u)*te(u)));}
+    return out;}, // 撞击碎片扇:几道从一点射出的细流,近处密而窄、远处稀而宽
+};
+function placeOk(strands,W){let k=0,n=0;for(const s of strands)for(const q of s.pl.P){n++;if(Math.abs(q[0])<=HW&&Math.abs(q[1])<=HH)k++;if(!far(q,W.B,BELT.AVOID)||!far(q,W.R,BELT.AVOID))return false;}return k/n>=BELT.INSIDE;}
+function strandPick(S,x){for(const s of S.strands){if(x<s.pl.len)return s;x-=s.pl.len;}return S.strands[S.strands.length-1];}
+function scatter(r,S,W){ // 撒石头:按长度挑一股,沿线按 df 拒绝采样,横向高斯
+  const tot=S.strands.reduce((a,s)=>a+s.pl.len,0);S.len=tot;S.rocks=[];
+  for(let k=0;k<S.n*80&&S.rocks.length<S.n;k++){const st=strandPick(S,r()*tot),u=r();if(r()>st.df(u))continue;
+    const q=polyAt(st.pl,u),o=gauss(r)*st.wf(u),x=q[0]+q[2]*o,y=q[1]+q[3]*o,s=rockSize(r());if(W.ok(x,y))S.rocks.push({x,y,s,src:S.kind});}
+}
+function genBelts(seed,W){
+  const r=rng(seed*104729+7),out=[],types=BELT.TYPES.filter(t=>BELT.ON[t]);
+  const cnt=types.length?Math.round(rr(r,[BELT.CNT[0]-0.49,BELT.CNT[1]+0.49])):0;
+  const par=()=>({n:Math.round(rr(r,BELT.N)),w:rr(r,BELT.W),c:rr(r,BELT.C)});
+  for(let i=0;i<cnt;i++){const kind=types[Math.floor(r()*types.length)],p=par();
+    for(let k=0;k<60;k++){const st=MK[kind](r,p);if(placeOk(st,W)){out.push({kind,strands:st,n:p.n,w:p.w,c:p.c});break;}}}
+  for(const b of W.planets)if(r()<BELT.RING_P){const p=par(),R=b.r*rr(r,SHP.RING_K);p.n=Math.round(p.n/2);p.w=b.r*rr(r,SHP.RING_W);
+    const pl=polyOf(u=>[b.x+R*Math.cos(u*2*Math.PI),b.y+R*Math.sin(u*2*Math.PI)],96,true),lp=lumpOf(r,pl.len,true,p.c),st=[strand(pl,()=>p.w,lp)];
+    if(placeOk(st,W))out.push({kind:'行星环',strands:st,n:p.n,w:p.w,c:p.c});}
+  for(const S of out)scatter(r,S,W);
+  return out;
+}
+
+/* ---- 读数:炮弹横穿被挡、杂波覆盖(蒙特卡罗,只在重新生成时算)---- */
+function segHits(ax,ay,bx,by,list){ // 线段 a→b 上 HIT_R 以内的石头,按离 a 的距离排
+  const vx=bx-ax,vy=by-ay,l2=vx*vx+vy*vy||1,out=[];
+  for(const k of list){const t=Math.max(0,Math.min(1,((k.x-ax)*vx+(k.y-ay)*vy)/l2)),dx=ax+vx*t-k.x,dy=ay+vy*t-k.y;if(dx*dx+dy*dy<ENG.HIT_R*ENG.HIT_R)out.push({k,d:t*Math.sqrt(l2)});}
+  return out.sort((p,q)=>p.d-q.d);
+}
+function inClutter(x,y,list){for(const k of list){const q=k.s*ENG.AST_KM+ENG.CLUT_RES,dx=x-k.x,dy=y-k.y;if(dx*dx+dy*dy<q*q)return true;}return false;}
+function calcStats(){
+  const r=rng(SEED*31+3),all=ROCKS,S={belts:[]};
+  for(const b of BELTS){let blk=0,cl=0,ws=0;const N=300;
+    for(let i=0;i<N;i++){ // 横穿:随便一股、随便一处,沿法向 ±45°,长 ±2.5 个当地宽;杂波:按撒石头同样的分布取点
+      const st=strandPick(b,r()*b.len),u=r(),q=polyAt(st.pl,u),w=st.wf(u),a=(r()*2-1)*Math.PI/4,c=Math.cos(a),s=Math.sin(a),dx=q[2]*c-q[3]*s,dy=q[2]*s+q[3]*c;ws+=w;
+      if(segHits(q[0]-dx*2.5*w,q[1]-dy*2.5*w,q[0]+dx*2.5*w,q[1]+dy*2.5*w,all).length)blk++;
+      for(let k=0;k<50;k++){const s2=strandPick(b,r()*b.len),u2=r();if(r()>s2.df(u2))continue;const q2=polyAt(s2.pl,u2),o=gauss(r)*s2.wf(u2);if(inClutter(q2[0]+q2[2]*o,q2[1]+q2[3]*o,all))cl++;break;}}
+    const area=b.len*2*ws/N;
+    S.belts.push({kind:b.kind,n:b.rocks.length,len:b.len,w:b.w,c:b.c,gap:Math.sqrt(area/Math.max(1,b.rocks.length)),blk:blk/N,cl:cl/N});}
+  { // 对照:游玩区里随便一处(不管有没有带),同样长 15 万 km 的一段弹道
+    let blk=0,cl=0;const N=600,L=75000;
+    for(let i=0;i<N;i++){const x=(r()*2-1)*HW,y=(r()*2-1)*HH,a=r()*Math.PI,dx=Math.cos(a)*L,dy=Math.sin(a)*L;if(segHits(x-dx,y-dy,x+dx,y+dy,all).length)blk++;if(inClutter(x,y,all))cl++;}
+    S.field={blk:blk/N,cl:cl/N,L:2*L};}
+  S.n={belt:BELTS.reduce((a,b)=>a+b.rocks.length,0),old:VIEW.old?WORLD.old.length:0};
+  STATS=S;
+}
+function regen(worldToo){
+  if(worldToo||!WORLD)WORLD=genWorld(SEED);
+  BELTS=genBelts(SEED,WORLD);
+  ROCKS=[].concat(...BELTS.map(b=>b.rocks),VIEW.old?WORLD.old:[]);
+  calcStats();CLUT_DIRTY=true;draw();
+}
+
+/* ---- 画面 ---- */
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');let DPR=1,VW=0,VH=0;
+const cam={x:0,y:0,k:1};let MOUSE=null,CLUT_DIRTY=true;const CLC=document.createElement('canvas'),CLG=CLC.getContext('2d');
+function resize(){DPR=window.devicePixelRatio||1;VW=innerWidth;VH=innerHeight;cv.width=Math.round(VW*DPR);cv.height=Math.round(VH*DPR);cv.style.width=VW+'px';cv.style.height=VH+'px';CLC.width=cv.width;CLC.height=cv.height;CLUT_DIRTY=true;draw();}
+function fit(){cam.x=0;cam.y=0;cam.k=Math.min(VW/(ENG.AW*1.08),VH/(ENG.AH*1.15));CLUT_DIRTY=true;draw();}
+const ts=(x,y)=>[(x-cam.x)*cam.k+VW/2,(y-cam.y)*cam.k+VH/2],tw=(sx,sy)=>[(sx-VW/2)/cam.k+cam.x,(sy-VH/2)/cam.k+cam.y];
+function drawClutter(){ // 杂波范围:并成一片(重叠不叠亮),离屏画、按透明度贴
+  if(CLUT_DIRTY){CLG.setTransform(DPR,0,0,DPR,0,0);CLG.clearRect(0,0,VW,VH);CLG.fillStyle='#ffbf50';CLG.beginPath();
+    for(const k of ROCKS){const p=ts(k.x,k.y),q=Math.max(0.6,(k.s*ENG.AST_KM+ENG.CLUT_RES)*cam.k);if(p[0]<-q||p[0]>VW+q||p[1]<-q||p[1]>VH+q)continue;CLG.moveTo(p[0]+q,p[1]);CLG.arc(p[0],p[1],q,0,2*Math.PI);}
+    CLG.fill();CLUT_DIRTY=false;}
+  ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=0.22;ctx.drawImage(CLC,0,0);ctx.restore();
+}
+function drawSkel(b){ // 调试:每股的中线 + 两侧 ±1σ
+  ctx.save();ctx.strokeStyle=COL[b.kind];
+  for(const st of b.strands)for(const sg of [0,-1,1]){ctx.setLineDash(sg?[3,5]:[6,5]);ctx.globalAlpha=sg?0.3:0.7;ctx.beginPath();
+    for(let i=0;i<=120;i++){const u=i/120,q=polyAt(st.pl,u),o=sg*st.wf(u),p=ts(q[0]+q[2]*o,q[1]+q[3]*o);if(i)ctx.lineTo(p[0],p[1]);else ctx.moveTo(p[0],p[1]);}ctx.stroke();}
+  const q=polyAt(b.strands[0].pl,0.5),p=ts(q[0],q[1]);ctx.setLineDash([]);ctx.globalAlpha=1;ctx.fillStyle=COL[b.kind];ctx.fillText(b.kind,p[0]+6,p[1]-6);ctx.restore();
+}
+function draw(){
+  if(!WORLD)return;
+  ctx.setTransform(DPR,0,0,DPR,0,0);ctx.fillStyle='#070a0e';ctx.fillRect(0,0,VW,VH);ctx.font='12px "Microsoft YaHei",sans-serif';
+  { const a=ts(-HW,-HH),b=ts(HW,HH);ctx.strokeStyle='rgba(120,150,180,.35)';ctx.lineWidth=1;ctx.strokeRect(a[0],a[1],b[0]-a[0],b[1]-a[1]);
+    ctx.fillStyle='#4a5a6a';ctx.fillText('游玩区 '+(ENG.AW/1e4).toFixed(0)+' 万 x '+(ENG.AH/1e4).toFixed(1)+' 万 km',a[0]+4,a[1]-6); }
+  for(const b of WORLD.planets){const p=ts(b.x,b.y);ctx.fillStyle='#2b3440';ctx.beginPath();ctx.arc(p[0],p[1],Math.max(2,b.r*cam.k),0,2*Math.PI);ctx.fill();ctx.strokeStyle='#4d5b6b';ctx.stroke();}
+  if(VIEW.clut)drawClutter();
+  if(VIEW.skel)for(const b of BELTS)drawSkel(b);
+  for(const k of ROCKS){const p=ts(k.x,k.y);if(p[0]<-4||p[0]>VW+4||p[1]<-4||p[1]>VH+4)continue; // 石头:画成点,半径随 √体型;真实本体(体型 x 800 km)放大到看得见
+    const rr2=Math.max(1,Math.sqrt(k.s)*1.1,k.s*ENG.AST_KM*cam.k);ctx.fillStyle=VIEW.src?COL[k.src]:'#9aa3ad';ctx.fillRect(p[0]-rr2/2,p[1]-rr2/2,rr2,rr2);}
+  for(const [c,col,nm] of [[WORLD.B,'#5aa7ff','蓝方开局'],[WORLD.R,'#ff6b6b','红方开局']]){const p=ts(c[0],c[1]);ctx.fillStyle=col;ctx.beginPath();ctx.arc(p[0],p[1],5,0,2*Math.PI);ctx.fill();ctx.fillText(nm,p[0]+8,p[1]+4);}
+  let shot=null;
+  if(MOUSE){ // 从蓝方开局点朝光标打一发
+    const w=tw(MOUSE[0],MOUSE[1]),B=WORLD.B,h=segHits(B[0],B[1],w[0],w[1],ROCKS),a=ts(B[0],B[1]),D=Math.hypot(w[0]-B[0],w[1]-B[1])||1;
+    const end=h.length?[B[0]+(w[0]-B[0])*h[0].d/D,B[1]+(w[1]-B[1])*h[0].d/D]:w,e=ts(end[0],end[1]);
+    ctx.save();ctx.setLineDash([4,4]);ctx.strokeStyle='rgba(255,255,255,.45)';ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(e[0],e[1]);ctx.stroke();
+    if(h.length){const q=ts(h[0].k.x,h[0].k.y);ctx.setLineDash([]);ctx.strokeStyle='#ff5040';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(q[0],q[1],7,0,2*Math.PI);ctx.stroke();
+      ctx.strokeStyle='rgba(255,80,64,.25)';ctx.setLineDash([2,4]);const m=ts(w[0],w[1]);ctx.beginPath();ctx.moveTo(e[0],e[1]);ctx.lineTo(m[0],m[1]);ctx.stroke();}
+    ctx.restore();shot={h,d:D,cl:inClutter(w[0],w[1],ROCKS)};}
+  readout(shot);
+}
+const km=v=>v>=1e4?(v/1e4).toFixed(v>=1e5?0:1)+' 万':Math.round(v)+'';
+const pad=(s,n)=>{s=String(s);let w=0;for(const ch of s)w+=ch.charCodeAt(0)>255?2:1;return s+' '.repeat(Math.max(0,n-w));}; // 中文按两格对齐
+function readout(shot){
+  const S=STATS,L=[];
+  L.push('碎石  带里 '+S.n.belt+' 块 · 现有 '+S.n.old+' 块(团 + 零散)  合计 '+(S.n.belt+S.n.old));
+  L.push('');
+  L.push(pad('结构',8)+pad('块数',6)+pad('宽 km',8)+pad('聚团',6)+pad('长 km',8)+pad('间距 km',9)+pad('横穿被挡',10)+'带里杂波');
+  for(const b of S.belts)L.push(pad(b.kind,8)+pad(b.n,6)+pad(km(b.w),8)+pad(b.c.toFixed(2),6)+pad(km(b.len),8)+pad(km(b.gap),9)+pad(Math.round(b.blk*100)+'%',10)+Math.round(b.cl*100)+'%');
+  if(!S.belts.length)L.push('  (没有结构)');
+  L.push('游玩区随便一处:长 '+km(S.field.L)+' km 的一段弹道被挡 '+Math.round(S.field.blk*100)+'% · 在杂波里 '+Math.round(S.field.cl*100)+'%');
+  L.push('');
+  if(shot)L.push('光标  离蓝方 '+km(shot.d)+' km · '+(shot.h.length?'炮弹在 '+km(shot.h[0].d)+' km 处被挡下(路上 '+shot.h.length+' 块)':'炮弹一路通过')+' · 光标处'+(shot.cl?'在杂波里(雷达看不见慢目标)':'不在杂波里'));
+  else L.push('光标  移到地图上看一发炮弹');
+  document.getElementById('read').textContent=L.join('\n');
+}
+
+/* ---- 交互 ---- */
+let drag=null;
+cv.addEventListener('mousedown',e=>{drag={x:e.clientX,y:e.clientY,cx:cam.x,cy:cam.y};});
+window.addEventListener('mousemove',e=>{if(e.target!==cv&&!drag){if(MOUSE){MOUSE=null;draw();}return;}MOUSE=[e.clientX,e.clientY];
+  if(drag){cam.x=drag.cx-(e.clientX-drag.x)/cam.k;cam.y=drag.cy-(e.clientY-drag.y)/cam.k;CLUT_DIRTY=true;}draw();});
+window.addEventListener('mouseup',()=>{drag=null;});
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+cv.addEventListener('wheel',e=>{e.preventDefault();const w=tw(e.clientX,e.clientY),f=Math.pow(1.0015,-e.deltaY);cam.k=Math.max(VW/(ENG.AW*20),Math.min(0.05,cam.k*f));
+  const w2=tw(e.clientX,e.clientY);cam.x+=w[0]-w2[0];cam.y+=w[1]-w2[1];CLUT_DIRTY=true;draw();},{passive:false});
+function bindPair(lo,hi,key,min,max,step,fmt){ // 一对滑块 = 一个 [下限, 上限] 范围;拖过头就把另一头推着走
+  const a=document.getElementById(lo),b=document.getElementById(hi),v=document.getElementById(key+'V');
+  for(const el of [a,b]){el.min=min;el.max=max;el.step=step;}a.value=BELT[key.toUpperCase()][0];b.value=BELT[key.toUpperCase()][1];
+  const show=()=>{v.textContent=fmt(+a.value)+' ~ '+fmt(+b.value);};show();
+  a.addEventListener('input',()=>{if(+a.value>+b.value)b.value=a.value;BELT[key.toUpperCase()]=[+a.value,+b.value];show();regen(false);});
+  b.addEventListener('input',()=>{if(+b.value<+a.value)a.value=b.value;BELT[key.toUpperCase()]=[+a.value,+b.value];show();regen(false);});
+}
+bindPair('cntLo','cntHi','cnt',0,8,1,x=>x+' 个');bindPair('nLo','nHi','n',20,600,10,x=>x+' 块');bindPair('wLo','wHi','w',3000,100000,1000,x=>km(x));bindPair('cLo','cHi','c',0,1,0.05,x=>x.toFixed(2));
+{const el=document.getElementById('ringP'),v=document.getElementById('ringPV');el.value=BELT.RING_P;v.textContent=Math.round(BELT.RING_P*100)+'%';
+  el.addEventListener('input',()=>{BELT.RING_P=+el.value;v.textContent=Math.round(BELT.RING_P*100)+'%';regen(false);});}
+{const row=document.getElementById('types');for(const t of BELT.TYPES){const b=document.createElement('button');b.textContent=t;b.className='on';b.style.borderLeft='3px solid '+COL[t];
+  b.onclick=()=>{BELT.ON[t]=!BELT.ON[t];b.classList.toggle('on',BELT.ON[t]);regen(false);};row.appendChild(b);}}
+function setSeed(s){SEED=Math.max(1,s|0);document.getElementById('sdV').textContent=SEED;regen(true);}
+document.getElementById('sdDn').onclick=()=>setSeed(SEED-1);document.getElementById('sdUp').onclick=()=>setSeed(SEED+1);
+document.getElementById('sdRnd').onclick=()=>setSeed(1+Math.floor(Math.random()*9999));
+for(const [id,key] of [['tSkel','skel'],['tClut','clut'],['tSrc','src'],['tOld','old']])document.getElementById(id).onclick=function(){VIEW[key]=!VIEW[key];this.classList.toggle('on',VIEW[key]);if(key==='old')regen(false);else draw();};
+document.getElementById('fit').onclick=fit;
+window.addEventListener('resize',resize);
+resize();fit();setSeed(1);
+</script></body></html>

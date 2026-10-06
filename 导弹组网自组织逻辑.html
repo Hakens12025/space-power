@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>导弹组网自组织 · 逻辑说明</title>
+<style>
+:root{color-scheme:dark}
+body{margin:0;background:#0a0e14;color:#c8d2e0;font:15px/1.85 "Microsoft YaHei",sans-serif;padding:0 0 120px}
+.wrap{max-width:920px;margin:0 auto;padding:40px 28px}
+h1{font-size:26px;color:#e8f0fa;border-bottom:1px solid #223047;padding-bottom:14px;letter-spacing:1px}
+h1 small{display:block;font-size:13px;color:#6d8098;font-weight:normal;margin-top:8px;letter-spacing:0}
+h2{font-size:19px;color:#9fc4ee;margin:52px 0 6px;border-left:4px solid #3a6a92;padding-left:12px}
+h3{font-size:15px;color:#c9a86a;margin:30px 0 4px}
+p{margin:10px 0}
+.k{color:#7f93ad}
+.num{font-family:Consolas,monospace;color:#8fd3c8;background:#101823;padding:1px 7px;border-radius:3px;font-size:13.5px}
+code{font-family:Consolas,monospace;color:#8fd3c8;background:#101823;padding:1px 6px;border-radius:3px;font-size:13.5px}
+.box{background:#0e1520;border:1px solid #1c2a3d;border-radius:8px;padding:14px 20px;margin:18px 0}
+.box h4{margin:0 0 8px;font-size:13px;color:#7fa8cc;letter-spacing:2px}
+.warn{border-color:#5a4020;background:#161208}
+.warn h4{color:#d8a860}
+.gut{border-color:#1f4a3a;background:#0a1712}
+.gut h4{color:#7fce9e}
+table{border-collapse:collapse;margin:14px 0;width:100%;font-size:13.5px}
+th,td{border:1px solid #223047;padding:6px 12px;text-align:left}
+th{color:#9fb4d0;background:#0e1520;font-weight:normal}
+td{color:#b8c6d8}
+td:first-child{color:#8fd3c8;font-family:Consolas,monospace;white-space:nowrap}
+pre.code{background:#0c1420;border:1px solid #1c2a3d;border-radius:8px;padding:14px 18px;overflow-x:auto;font:12.5px/1.7 Consolas,monospace;color:#b8d0c8;white-space:pre}
+pre.code::-webkit-scrollbar{height:8px}pre.code::-webkit-scrollbar-thumb{background:#223047;border-radius:4px}
+.svg{display:block;margin:20px auto;max-width:100%}
+.toc{background:#0e1520;border:1px solid #1c2a3d;border-radius:8px;padding:16px 24px;font-size:13.5px;line-height:2.1}
+.toc a{color:#9fc4ee;text-decoration:none}
+.toc a:hover{color:#d0e6ff}
+.foot{color:#5d6f85;font-size:12px;margin-top:70px;border-top:1px solid #1c2a3d;padding-top:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>导弹组网自组织 · 逻辑说明
+<small>演示页 demos/weapons/导弹组网.html · 引擎实现 js/weapons/54-missiles.js(组网) + 56-step-projectiles.js(飞行) · 2026-10-01/02</small></h1>
+
+<div class="toc">
+<b class="k">目录</b><br>
+<a href="#s0">〇 整体图景:两层各自回答一个问题</a><br>
+<a href="#s1">一 组网层:链路、在线、回传(每 1 游戏秒一次)</a><br>
+<a href="#s2">二 三关系算法:每枚导弹每拍只读三样东西</a><br>
+<a href="#s3">三 两段式飞行:会合可微减速,冲刺绝不减速</a><br>
+<a href="#s4">四 数值总表</a><br>
+<a href="#s5">五 演化史与踩过的四个退化点(重要)</a><br>
+<a href="#s6">六 打空地、断链、与舰队的分工</a><br>
+<a href="#s7">七 完整代码(引擎实现在用什么)</a>
+</div>
+
+<h2 id="s0">〇 整体图景:两层各自回答一个问题</h2>
+<p>整套机制分两层。<b>组网层</b>回答"<span class="k">谁知道什么</span>"——哪些导弹连得回舰队、谁在回传、谁断链只剩自己;<b>行为层</b>(三关系算法)回答"<span class="k">怎么飞</span>"——多股导弹怎么自己并成一团、同刻弹着,同时谁也不把油烧干。两层完全解耦:组网断了,三关系照样在弹与弹之间生效,因为它的输入只有邻居、到目标的距离和自己的油——不依赖舰队。</p>
+
+<svg class="svg" width="860" height="300" viewBox="0 0 860 300">
+<defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#3a6a92"/></marker></defs>
+<rect x="10" y="30" width="380" height="240" rx="10" fill="#0e1520" stroke="#1c2a3d"/>
+<text x="200" y="58" fill="#9fc4ee" text-anchor="middle" font-size="15">组网层(每感知节拍 1 游戏秒)</text>
+<text x="30" y="92" fill="#8fa4bd" font-size="12.5">弹弹 8.775 万以内连边</text>
+<text x="30" y="118" fill="#8fa4bd" font-size="12.5">弹舰 / 浮标 9 万以内连边</text>
+<text x="30" y="144" fill="#8fa4bd" font-size="12.5">BFS:连得到任何一艘舰 = 在网</text>
+<text x="30" y="170" fill="#8fa4bd" font-size="12.5">在网 → 回传状态 + 收数据链引导</text>
+<text x="30" y="196" fill="#8fa4bd" font-size="12.5">断链 → 只剩自己的导引头 + 推测弹标</text>
+<text x="30" y="228" fill="#6d8098" font-size="11.5">产物:邻接表 p.nb(所有活弹,含雷)</text>
+<rect x="470" y="30" width="380" height="240" rx="10" fill="#0e1520" stroke="#1c2a3d"/>
+<text x="660" y="58" fill="#9fc4ee" text-anchor="middle" font-size="15">行为层(每仿真步 0.02 游戏秒)</text>
+<text x="490" y="92" fill="#8fa4bd" font-size="12.5">① 油量 → 能力天花板 aC</text>
+<text x="490" y="118" fill="#8fa4bd" font-size="12.5">② 目标距离 + 一跳邻居 → 同步速度</text>
+<text x="490" y="144" fill="#8fa4bd" font-size="12.5">③ 邻居 → 质心聚拢 + 间距排斥</text>
+<text x="490" y="170" fill="#8fa4bd" font-size="12.5">冲刺段(3 万内)不减速</text>
+<text x="490" y="196" fill="#8fa4bd" font-size="12.5">输入只有 p.nb / 距离 / 自己的油</text>
+<text x="490" y="228" fill="#6d8098" font-size="11.5">断链照常工作——纯导弹-导弹规则</text>
+<line x1="390" y1="150" x2="466" y2="150" stroke="#3a6a92" stroke-width="1.5" marker-end="url(#ar)"/>
+<text x="428" y="140" fill="#6d8098" text-anchor="middle" font-size="11">p.nb</text>
+</svg>
+
+<h2 id="s1">一 组网层:链路、在线、回传</h2>
+<p>每个感知节拍(1 游戏秒),<code>mslNetStep</code> 对蓝红各做一遍:</p>
+<p><b>1) 建邻接。</b>把本方所有活着的导弹组两两配对,中心距小于 <span class="num">8.775 万 km</span>(弹弹通信距离,MSL_LINK.MM)就连一条边,彼此记进对方的邻接表 <code>p.nb</code>。布了雷的、飞向布雷点的也算——它们同样是中继节点。这是 O(n²) 的距离检查,几百组以内每秒一次毫无压力。</p>
+<p><b>2) 判在线。</b>再看弹到本方舰船 / 前出浮标的距离,小于 <span class="num">9 万 km</span>(弹舰距离,MSL_LINK.MS)的组标记"直连舰队";然后从这些直连组出发,沿弹弹边做宽度优先扩散——扩散到的都算<b>在线</b>。也就是说:一簇导弹只要有一组够得着任何一艘舰,整簇都在网上。</p>
+<p><b>3) 在线的义务与权利。</b>在线的组每拍把自身状态(位置、剩几枚、剩多少油、在追谁)回传舰队,画面上按真实位置画,选中面板照实报;同时有资格收舰队的数据链引导(火控通道喂目标估计位置,通道数有限,54 的 guideSide 分配)。刚断链的那一拍,按最后一次回报建一条"推测弹标"沿程序外推,直到重新上网、被看见、或推出游玩区才撤。</p>
+<p><b>4) 断链的降级。</b>断链的组不再读目标死活、不再翻舰队航迹表,只靠发射时带的和沿途更新的那份目标记录飞;导引头看得见原目标的照追,另锁新目标的走默认规则(按体型相似度挑,详见断链备忘)。这一层的详细规则在"导弹组网(二)"那次提交里,本文不展开。</p>
+
+<h2 id="s2">二 三关系算法:每枚导弹每拍只读三样东西</h2>
+<p>这是最终形态(2026-10-02,间距 2 万 / 聚合力 0.7)。没有集结点、没有槽位、没有簇级计算——每枚导弹、每个仿真步,只读<b>邻居(位置和油)</b>、<b>自己到目标的距离</b>、<b>自己的油</b>,在 <code>mslSwarmStep</code>(①③)和 <code>mslSwarmVc</code>(②)两个函数里算出这一拍的航向和速度指令。</p>
+
+<h3>① 自身油量 → 能力天花板</h3>
+<div class="box"><code>aC = min( vPeak, vTerm + (油 − 2 秒冲刺预留) × 加速度 )</code></div>
+<p>油烧得越多,天花板越低——谁也不可能被要求飞出自己油量允许的速度。vPeak 在发射时算好,带"整箱油预算":加速占一半(<code>(FUEL·0.75·ACC + vTerm)/2</code>),没有这条预算的话天花板只留 2 秒预留,会把全员放到过度加速、20 秒烧空(实测过)。保底 vTerm 保证转弯机动始终够用。</p>
+
+<h3>② 目标距离 + 一跳邻居 → 同步</h3>
+<p>先算<b>有效路程</b>:<code>dEff = 到目标距离 + 0.5 × 离局部质心的距离</code>——要并团就得走弯路,调度不能按直线自欺。然后与<b>一跳邻居</b>(邻接表里同目标的组)比到达时刻,注意用的是<b>按能力天花板算的 eta</b>,不是按当前速度:</p>
+<div class="box"><code>etaRef = max( dEff/aC, max over 邻居 (dj / aC邻居) )</code><br>
+<code>vCmd = clamp( dEff / etaRef, 0.85·aC, aC )</code>&nbsp;&nbsp;<span class="k">// 等最慢的;等不起(低于下限 15%)就掉队</span><br>
+<code>只在 |vCmd − 旧指令| &gt; 3% 时才执行</code>&nbsp;&nbsp;<span class="k">// 调度滞回,不为噪声重新加减速</span></div>
+<p>油多的新弹 aC 高、eta 小、自己会追,别人不必傻等;油烧多的领先弹 aC 低、eta 大,全簇适当放慢等它——"照顾弱者"从公式里自然长出来,而 0.85 下限保证等不起时宁可分队弹着,绝不爬行。<b>一跳一跳传播</b>就够了:信息沿链自然扩散,不需要全簇泛洪。</p>
+
+<h3>③ 邻居 → 聚拢(航向)</h3>
+<div class="box"><code>dir = norm( 目标方向 + COH·fadeT·fadeC·质心方向 + 0.8·fadeT·排斥向量 )</code></div>
+<p><b>质心吸引</b>把散开的弹道拢成一团,权重随离质心的距离衰减(fadeC)——已经收拢的不再拉,转向油只花在还没并进来的弹上;<b>间距排斥</b>在比 <span class="num">2 万 km</span>(间距 S)近时互推,不叠在一起;<b>2° 转向死区</b>不追微小抖动。整个聚集力距目标 <span class="num">2.5 万</span>起、在 <span class="num">12.5 万</span>带内线性淡出(fadeT),接近目标后只剩目标牵引。</p>
+
+<svg class="svg" width="860" height="270" viewBox="0 0 860 270">
+<circle cx="790" cy="135" r="22" fill="#3a1410" stroke="#ff6b6b"/>
+<text x="790" y="140" fill="#ff9a8a" text-anchor="middle" font-size="11">目标</text>
+<g stroke="#4fe0d0" stroke-width="1" stroke-dasharray="4 4" opacity=".5">
+<line x1="150" y1="70" x2="250" y2="105"/><line x1="150" y1="200" x2="250" y2="150"/>
+<line x1="250" y1="105" x2="255" y2="150"/><line x1="250" y1="150" x2="255" y2="105"/>
+<line x1="255" y1="150" x2="330" y2="135"/><line x1="330" y1="135" x2="255" y2="150"/>
+</g>
+<g fill="#ffd166">
+<circle cx="150" cy="70" r="5"/><circle cx="150" cy="200" r="5"/><circle cx="120" cy="135" r="5"/>
+<circle cx="255" cy="105" r="5"/><circle cx="250" cy="150" r="5"/><circle cx="330" cy="135" r="5"/>
+</g>
+<g stroke="#84e0d0" stroke-width="1.6" fill="none" opacity=".85">
+<path d="M150,70 Q220,90 268,118" marker-end="url(#ar2)"/>
+<path d="M150,200 Q220,175 268,152" marker-end="url(#ar2)"/>
+<path d="M120,135 L320,135" marker-end="url(#ar2)"/>
+</g>
+<defs><marker id="ar2" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#84e0d0"/></marker></defs>
+<circle cx="330" cy="135" r="46" fill="none" stroke="#2a4a5a" stroke-dasharray="3 5"/>
+<text x="330" y="196" fill="#6d8098" text-anchor="middle" font-size="11">局部质心</text>
+<text x="120" y="46" fill="#ffd166" font-size="11">三股弹道</text>
+<text x="410" y="70" fill="#84e0d0" font-size="11.5">① 质心吸引(随收拢衰减)</text>
+<text x="410" y="100" fill="#84e0d0" font-size="11.5">② 间距排斥(&lt; 2 万互推)</text>
+<text x="410" y="130" fill="#84e0d0" font-size="11.5">③ 目标牵引(15 万内聚集力淡出)</text>
+<text x="410" y="166" fill="#8fa4bd" font-size="11.5">同步速度:与一跳邻居按能力比 eta</text>
+<text x="410" y="192" fill="#8fa4bd" font-size="11.5">虚线 = 组网链(8.775 万)</text>
+</svg>
+
+<h2 id="s3">三 两段式飞行:会合可微减速,冲刺绝不减速</h2>
+<p>速度指令分两段(2026-10-01 拍板"饱和攻击两段式")。<b>会合段</b>即上面 ② 解出的同步巡航:尾随的顶天花板追,领先的最多减到 0.85×天花板——"稍微减速收队",绝不刹车爬行。<b>冲刺段</b>在距目标 <span class="num">3 万 km</span>(= 导引头主动锁定范围,恰好盖过近防外圈 1.875 万)生效:不再减速,保持进入速度带速命中,上面的刹车曲线与燃料安全帽一并不管——冲刺不需要留刹车的油,意义是缩短在近防圈里的暴露时间。</p>
+<p>燃料总账:每枚导弹一生只烧三笔油——一次加速到排定速度、聚拢修正的转向、终端冲刺。巡航本身免费。</p>
+
+<h2 id="s4">四 数值总表</h2>
+<table>
+<tr><th>量</th><th>值</th><th>说明</th></tr>
+<tr><td>MSL_LINK.MM / MS</td><td>8.775 万 / 9 万 km</td><td>弹弹 / 弹舰(浮标)通信距离;曾在 5.85/6 万基础上 ×1.5</td></tr>
+<tr><td>MSL_SWARM.S</td><td>2 万 km</td><td>间距(分离半径);从 3 万收窄</td></tr>
+<tr><td>MSL_SWARM.COH</td><td>0.7</td><td>聚合力;从 0.6 上调</td></tr>
+<tr><td>MSL_SWARM.FLOOR</td><td>0.85 × aC</td><td>同步减速下限,等不起就掉队</td></tr>
+<tr><td>MSL_SWARM.conv / convW</td><td>2.5 万 / 12.5 万 km</td><td>聚集力距目标多远开始淡出、淡出带多宽</td></tr>
+<tr><td>MSL_SWARM.DASH</td><td>3 万 km</td><td>冲刺段起点 = 导引头锁定范围,盖过近防外圈 1.875 万</td></tr>
+<tr><td>MSL_SWARM.RES</td><td>2 游戏秒</td><td>冲刺预留油(秒);发射 vPeak 另带整箱油一半的加速预算</td></tr>
+<tr><td>MSL_SWARM.DEAD / HYST</td><td>2° / 3%</td><td>转向死区 / 调度滞回</td></tr>
+<tr><td>打空地</td><td>目的地 = 布雷点</td><td>同片(6 万内)的邻组一起同步聚拢,三关系公共段共用</td></tr>
+</table>
+
+<h2 id="s5">五 演化史与踩过的四个退化点</h2>
+<p>最终形态不是一次设计出来的,四代方案每个都留下一条硬教训:</p>
+
+<h3>第一代 · OFF_L 固定包抄(v121 遗产)</h3>
+<p>发射时按组序摆好"直插 / 上翼 / 下翼"三个方向,侧翼 +12% 配速。问题:只认同一次齐射,多波之间毫无关系——用户在靶场看到"三波还是三波"。</p>
+
+<h3>第二代 · 翼面槽位(冻结不重排)</h3>
+<p>一个连通簇 = 一面翼,槽位按入列次序左右交替。两个坑:</p>
+<div class="box warn"><h4>退化点一 · 槽位不认边</h4>
+<p>槽位按入列次序分配,下面舰的弹会被分到上面的翼尖——整组横穿编队过去,转向油翻倍,烧到只剩 8/45,被燃料安全帽钉死在最低速爬行,掉队 25 秒。修法:槽位左右跟组所在的那一侧(后来干脆随槽位一起删掉)。</p></div>
+<div class="box warn"><h4>退化点二 · 按距离重排槽位</h4>
+<p>槽位按当前离轴距离每拍重排,超车的一瞬间左右互换,弹道来回横穿白烧转向油。修法:槽位在入列那一刻冻结。</p></div>
+
+<h3>第三代 · 显式集结点</h3>
+<p>簇心→目标连线上、距目标 10 万处取一个集结点,各组先飞"集结点 + 槽位"再转冲刺。弹着窗最好看(1.6 秒),但用户指出方向性问题:</p>
+<div class="box gut"><h4>设计转折 · 集结点必须自然涌现</h4>
+<p>"集结点不是显式指派的,而是导弹-导弹 / 导弹-目标聚合算法自然实现的。"于是拆掉集结点和全部槽位,换质心吸引 + 间距排斥——并团反而更早更紧(105 秒就收到 ±1.4 万)。</p></div>
+
+<h3>第四代 · 三关系(最终)</h3>
+<div class="box warn"><h4>退化点三 · 分离力持续抖动</h4>
+<p>紧密编队里人人都被排斥力推着,航向每拍微抖,微转向不停烧油——每组各有一枚被耗到油 18%、掉队 25 秒(弹着窗 32 秒)。修法:分离半径收窄、权重减半、加 2° 转向死区。</p></div>
+<div class="box warn"><h4>退化点四 · 按当前速度算同步(最隐蔽)</h4>
+<p>同步参照一开始用邻居<b>当前速度</b>的到达时刻:最慢的一组 eta 最大,人人等它,全体滑到 0.85 减速下限、1586 均速齐飞——所有组同速,距离差永远冻结,弹着窗 18 秒。改成按<b>能力天花板</b>算 eta 后立刻收敛到 1.9 秒。<b>教训:同步要比"能跑多快",不能比"现在跑多快"。</b></p></div>
+
+<div class="box gut"><h4>附带教训 · 平滑的方向性</h4>
+<p>同步锚点 T 的平滑滞后会刹住最前面那组(它定义 T,T 缩小时滞后值比它大,指令让它减速)。修法:平滑只在 T 变大的方向起作用,缩小即时跟。</p></div>
+
+<h2 id="s6">六 打空地、断链、与舰队的分工</h2>
+<p><b>打空地。</b>区域齐射的弹走"飞向布雷点"分支,三关系抽成公共函数(<code>mslSwarmStep / mslSwarmVc</code>)后同样生效:目的地 = 布雷点,同片 6 万内的邻组一起同步聚拢——三舰对同一点各射一组,±3.5 万的散布 40 秒后收到 ±0.8 万。瞄不同点(相距 6 万以上)的弹互不组网,各飞各的,这是有意的。</p>
+<p><b>断链。</b>三关系的输入全在弹上(邻接表每拍重建、距离自己量、油是自己的),断链只影响"回传显示 + 数据链引导"两件事,聚集与同步照常。画面上选中一枚导弹,能看到它所在连通簇的最小生成树链路,够得着舰就多一段亮线——那是组网层的直读。</p>
+<p><b>与舰队的分工。</b>舰队只做一件事:指派目标(火控序列沿数据链传导)。怎么飞、什么时候到、跟谁并团,全部是弹与弹之间的事——这正是"组队逻辑只针对导弹-导弹"的边界。</p>
+
+
+<h2 id="s7">七 完整代码(引擎实现在用什么)</h2>
+<p class="k">以下为引擎当前的真实代码,逐字未改(含行内注释)。<code>54-missiles.js</code> 的组网层、<code>56-step-projectiles.js</code> 的三关系公共段与两个调用点、<code>52-fire.js</code> 的发射预算。</p>
+<h3>7.1 常数(weapons/54)</h3>
+<pre class="code">const MSL_SWARM={S:20000*CFG.scale,COH:0.7,FLOOR:0.85,conv:25000*CFG.scale,convW:125000*CFG.scale,DASH:30000*CFG.scale,RES:2,DEAD:0.035,HYST:0.03};
+  // 2026-10-01 三关系算法(用户拍板:间距 3 万 / 聚合力 0.6,演示页 demos/weapons/导弹组网.html):S = 间距(分离半径);COH = 聚合力;FLOOR = 同步减速下限(x 能力天花板,
+  // 等不起就掉队);conv / convW = 聚集力距目标几公里开始淡出、淡出带多宽;DASH = 冲刺段起点(= 导引头锁定范围,盖过近防外圈)以内不再减速;RES = 冲刺预留油(秒);
+  // DEAD = 转向死区(2°,不追微小抖动);HYST = 调度滞回(x,不为噪声重新加减速)
+let mslNetT=0; // 组网 / 邻接重算的节拍累加器(每感知拍一次)</pre>
+<h3>7.2 组网层全文 mslNetStep(weapons/54,每感知拍 1 游戏秒一次)</h3>
+<pre class="code">function mslNetStep(dt){
+  mslNetT+=dt;if(mslNetT&lt;SENS.TICK)return;mslNetT=0;
+  const MS2=MSL_LINK.MS*MSL_LINK.MS,MM2=MSL_LINK.MM*MSL_LINK.MM;
+  for(const side of [&#x27;blue&#x27;,&#x27;red&#x27;]){
+    const F=[];for(const s of ships)if(s.side===side&amp;&amp;!s.dead)F.push(s.pos);for(const o of rockObjs())if(o.kind===&#x27;buoy&#x27;&amp;&amp;o.side===side&amp;&amp;!o.dead)F.push(o.pos);
+    const M=projectiles.filter(p=&gt;p.type===&#x27;missile&#x27;&amp;&amp;!p.done&amp;&amp;p.shooter&amp;&amp;p.shooter.side===side),q=[],was=M.map(p=&gt;p.online!==false);
+    for(const p of M){p.online=false;for(const f of F){const dx=p.pos[0]-f[0],dy=p.pos[1]-f[1],dz=p.pos[2]-(f[2]||0);if(dx*dx+dy*dy+dz*dz&lt;MS2){p.online=true;q.push(p);break;}}} // 直连舰队
+    for(let i=0;i&lt;q.length;i++){const a=q[i];for(const b of M){if(b.online)continue;const dx=a.pos[0]-b.pos[0],dy=a.pos[1]-b.pos[1],dz=a.pos[2]-b.pos[2];if(dx*dx+dy*dy+dz*dz&lt;MM2){b.online=true;q.push(b);}}} // 经弹弹链接力
+    M.forEach((p,i)=&gt;{if(p.online){mslRep(p);if(p.pg)mslPredDel(p.pg);}else if(was[i]&amp;&amp;!p.pg&amp;&amp;p.rep)mslPredAdd(p,&#x27;msl&#x27;);}); // 在网上每拍回报;刚断链按最后一次回报建推测
+    for(const p of M)p.nb=[]; // 邻接:三关系算法的&quot;导弹间关系&quot;输入(所有活弹,含雷 / 布雷途中 —— 它们也是中继节点);MM2 用上面直连 / 接力那两个同款
+    for(let i=0;i&lt;M.length;i++)for(let j=i+1;j&lt;M.length;j++){const g=M[i],q=M[j],dx=g.pos[0]-q.pos[0],dy=g.pos[1]-q.pos[1],dz=g.pos[2]-q.pos[2];
+      if(dx*dx+dy*dy+dz*dz&lt;MM2){g.nb.push(q);q.nb.push(g);}}
+    for(const p of projectiles)if(p.type===&#x27;mac&#x27;&amp;&amp;!p.done&amp;&amp;!p.pg&amp;&amp;p.shooter&amp;&amp;p.shooter.side===side)mslPredAdd(p,&#x27;mac&#x27;); // 炮弹:出膛状态本来就知道,直线外推
+  }
+  mslPredStep();
+}
+/* 2026-09-30 推测弹标(用户:断链又看不见的导弹、看不见的炮弹给一个推测位置,画暗淡的弹标):按最后一次回报(导弹)/ 出膛状态(炮弹)往前推。
+   每条独立于真实弹丸(弹没了推测还在,不泄漏);只在这几种情况下撤:再连上网、推出游玩区、推进已知天体 / 恒星、推到我方可见光圈里却没看见(同航迹记忆 memGone)。
+   看得见的时候按看到的重新起算。导弹的推法 = 它断链时在执行的程序:雷不动;飞向点位 / 预计拦截点(mslCoastPt),到点勾了「变雷」停下,没勾接着直飞;巡飞直飞。速度按回报时的 */
+const MSL_PRED=[];
+function mslCoastPt(p){ // 掉进脱锁时的预计拦截点(按导弹自己的目标记录外推);guideSide 与推测共用,没有记录给 null
+  const bk=mslBasket(p);if(!bk)return null;const kv=p.tk.vel,tt=Math.max(0.3,Math.hypot(bk.x-p.pos[0],bk.y-p.pos[1],bk.z-p.pos[2])/Math.max(500,V.len(V.sub(p.vel,kv))));
+  return [bk.x+kv[0]*tt,bk.y+kv[1]*tt,bk.z+kv[2]*tt];
+}
+function mslRep(p){ // 在网上时每拍记一份回报(原地改):位置、方向、速率、在执行的程序、剩几颗、剩多少油、在追谁
+  let r=p.rep;if(!r)r=p.rep={t:0,pos:[0,0,0],dir:[1,0,0],spd:0,aim:null,mine:false,mineOk:false,park:false,cruise:false,count:0,fuel:0,tgt:null};
+  const vn=V.len(p.vel);r.t=simTime;r.pos[0]=p.pos[0];r.pos[1]=p.pos[1];r.pos[2]=p.pos[2];if(vn&gt;0){r.dir[0]=p.vel[0]/vn;r.dir[1]=p.vel[1]/vn;r.dir[2]=p.vel[2]/vn;}r.spd=vn;
+  r.mine=!!p.mine;r.mineOk=!!p.mineOk;r.park=!!p.park;r.cruise=!!p.cruise;r.count=p.count;r.fuel=p.fuel;r.tgt=p.target;
+  r.aim=(p.mine||p.cruise)?null:(p.park&amp;&amp;p.parkPt?p.parkPt.slice():mslCoastPt(p));
+}
+function mslPredAdd(p,k){const r=p.rep,g=k===&#x27;mac&#x27;?{k:k,side:p.shooter.side,src:p,t:simTime,pos:p.pos.slice(),vel:p.vel.slice()}:{k:k,side:p.shooter.side,src:p,t:r.t,pos:r.pos.slice(),dir:r.dir.slice(),spd:r.spd,aim:r.aim&amp;&amp;r.aim.slice(),mine:r.mine,mineOk:r.mineOk};MSL_PRED.push(g);p.pg=g;}
+function mslPredDel(g){const i=MSL_PRED.indexOf(g);if(i&gt;=0)MSL_PRED.splice(i,1);if(g.src)g.src.pg=null;}
+function mslPredPos(g,now){ // 推测记录此刻在哪
+  const u=now-g.t;
+  if(g.k===&#x27;mac&#x27;)return [g.pos[0]+g.vel[0]*u,g.pos[1]+g.vel[1]*u,g.pos[2]+g.vel[2]*u];
+  if(g.mine)return g.pos.slice();
+  const s=g.spd*u;
+  if(g.aim){const dx=g.aim[0]-g.pos[0],dy=g.aim[1]-g.pos[1],dz=g.aim[2]-g.pos[2],d=Math.hypot(dx,dy,dz)||1;
+    if(s&lt;d)return [g.pos[0]+dx/d*s,g.pos[1]+dy/d*s,g.pos[2]+dz/d*s];
+    if(g.mineOk)return g.aim.slice();
+    return [g.aim[0]+dx/d*(s-d),g.aim[1]+dy/d*(s-d),g.aim[2]+dz/d*(s-d)];}
+  return [g.pos[0]+g.dir[0]*s,g.pos[1]+g.dir[1]*s,g.pos[2]+g.dir[2]*s];
+}
+function mslPredStep(){ // 每个感知节拍:看得见的重新起算,该撤的撤
+  const obs=envObstacles();
+  for(let i=MSL_PRED.length-1;i&gt;=0;i--){const g=MSL_PRED[i],src=g.src,alive=!!src&amp;&amp;!src.done;
+    if(alive&amp;&amp;trkSees(g.side,src)){g.t=simTime;g.pos=src.pos.slice();if(g.k===&#x27;mac&#x27;)g.vel=src.vel.slice();else{const vn=V.len(src.vel);if(vn&gt;0){g.dir=[src.vel[0]/vn,src.vel[1]/vn,src.vel[2]/vn];g.spd=vn;}}continue;}
+    const P=mslPredPos(g,simTime);let gone=!!ARENA&amp;&amp;!arenaIn(P);
+    if(!gone)for(const b of obs){const dx=P[0]-b.x,dy=P[1]-b.y;if(dx*dx+dy*dy&lt;b.r2){gone=true;break;}}
+    if(!gone)for(const s of ships){if(s.side!==g.side||s.dead)continue;const R=s.visR||COV.VIS_R,dx=P[0]-s.pos[0],dy=P[1]-s.pos[1];if(dx*dx+dy*dy&lt;R*R){gone=true;break;}}
+    if(gone)mslPredDel(g);
+  }
+}</pre>
+<p class="k">配套的回报 mslRep / 推测弹标 MSL_PRED 一族见"导弹组网(三)"提交;上面与自组织直接相关的是最后两段 for——邻接表的构建。</p>
+<h3>7.3 三关系公共段全文 mslSwarmStep / mslSwarmVc(weapons/56)</h3>
+<pre class="code">function mslSwarmStep(p,tp,dist,dir0){ // 2026-10-01 三关系公共段:① 油量 → 能力天花板;③ 邻居 → 聚拢(质心吸引 + 间距排斥 + 死区)。追目标与打空地(目的地 = 布雷点)同用
+  const aC=p.vPeak?Math.min(p.vPeak,p.vTerm+Math.max(0,p.fuel-MSL_SWARM.RES)*MSL_A):0; // ① 油烧得越多天花板越低,谁也不会被要求飞出自己油量允许的速度
+  const nb=[]; // 同目的地的邻组:追目标 = 同一目标;打空地 = 布雷点在同一片(6 万内)
+  for(const q of (p.nb||[])){if(q.done)continue;
+    if(p.park){if(q.park&amp;&amp;Math.hypot(q.parkPt[0]-p.parkPt[0],q.parkPt[1]-p.parkPt[1])&lt;60000*CFG.scale)nb.push(q);}
+    else if(q.tgt===p.tgt&amp;&amp;!q.park)nb.push(q);}
+  let cx=0,cy=0;for(const q of nb){cx+=q.pos[0];cy+=q.pos[1];}
+  const dCen=nb.length?Math.hypot(cx/nb.length-p.pos[0],cy/nb.length-p.pos[1]):0;
+  const dEff=dist+0.5*dCen; // 有效路程 = 到目的地距离 + 离局部质心距离的一半(聚拢的弯路不自欺)
+  let dir=dir0;
+  if(nb.length&amp;&amp;p.guideMode!==&#x27;self&#x27;){ // ③ 聚拢;聚集力距目标 conv 起淡出
+    const fadeT=Math.max(0,Math.min(1,(dist-MSL_SWARM.conv)/MSL_SWARM.convW));
+    if(fadeT&gt;0){
+      const vn=V.len(p.vel)||1,fadeC=Math.max(0.15,Math.min(1,dCen/(15000*CFG.scale)));
+      const tc=[(cx/nb.length-p.pos[0])/dCen,(cy/nb.length-p.pos[1])/dCen];
+      let px=0,py=0;const rs=MSL_SWARM.S;
+      for(const q of nb){const dx=p.pos[0]-q.pos[0],dy=p.pos[1]-q.pos[1],dq=Math.hypot(dx,dy);
+        if(dq&gt;1&amp;&amp;dq&lt;rs){px+=dx/dq*(1-dq/rs);py+=dy/dq*(1-dq/rs);}}
+      const cand=V.norm([dir0[0]+MSL_SWARM.COH*fadeT*fadeC*tc[0]+px*fadeT*0.8,dir0[1]+MSL_SWARM.COH*fadeT*fadeC*tc[1]+py*fadeT*0.8,dir0[2]]);
+      const ca=Math.atan2(cand[1],cand[0])-Math.atan2(p.vel[1],p.vel[0]),ca2=Math.atan2(Math.sin(ca),Math.cos(ca));
+      dir=Math.abs(ca2)&lt;MSL_SWARM.DEAD?[p.vel[0]/vn,p.vel[1]/vn,0]:cand;}} // 转向死区 2°:不追微小抖动,省下微转向的油
+  return {dir:dir,dEff:dEff,nb:nb,aC:aC,cx:cx,cy:cy};}
+function mslSwarmVc(p,tp,sw){ // ② 同步:与一跳邻组比【按能力天花板算】的到达时刻,等最慢的(下限 FLOOR·aC,等不起掉队),滞回 HYST
+  let etaRef=sw.dEff/Math.max(1,sw.aC); // 无邻组 / 基准:按自己的天花板尽快到
+  for(const q of sw.nb){const aQ=Math.min(q.vPeak||p.vPeak,q.vTerm+Math.max(0,(q.fuel||0)-MSL_SWARM.RES)*MSL_A);
+    const dj=Math.hypot(tp[0]-q.pos[0],tp[1]-q.pos[1])+0.5*Math.hypot(sw.cx/sw.nb.length-q.pos[0],sw.cy/sw.nb.length-q.pos[1]);
+    etaRef=Math.max(etaRef,dj/Math.max(1,aQ));}
+  const vc=Math.max(sw.aC*MSL_SWARM.FLOOR,Math.min(sw.aC,sw.dEff/Math.max(1,etaRef)));
+  if(p.vCmd===undefined||Math.abs(vc-p.vCmd)&gt;Math.max(MSL_SWARM.HYST*p.vCmd,15))p.vCmd=vc;
+  return p.vCmd;}</pre>
+<h3>7.4 调用点一:追目标分支(weapons/56,stepMissileProj 内)</h3>
+<pre class="code">      const dir0=V.norm([tp[0]+tv[0]*tLead+evX-p.pos[0],tp[1]+tv[1]*tLead+evY-p.pos[1],tp[2]+tv[2]*tLead-p.pos[2]]); // WR1:瞄估计位置(带前置量 / 蛇形)
+      // ===== 2026-10-01 三关系算法(用户,演示页 demos/weapons/导弹组网.html):公共段在 mslSwarmStep / mslSwarmVc(打空地同样用) =====
+      const sw=mslSwarmStep(p,tp,dist,dir0),aC=sw.aC,nb=sw.nb,dEff=sw.dEff;
+      const dir=sw.dir;
+      const aim=[p.pos[0]+dir[0]*500000*CFG.scale,p.pos[1]+dir[1]*500000*CFG.scale,p.pos[2]];
+      const coast=dist&gt;GUIDE_SEEK&amp;&amp;!nearIc; // 2026-09-27 三段飞法(用户:&quot;导弹本身的燃料控制,提升射程&quot;):进自己导引头的范围之前是加速 / 滑行段,之后是末段
+      // 速度剖面(v122):巡航vPeak高速飞(加速燃料),合适位置按距离减速到vTerm(减速燃料与加速对称),燃料对称安全帽兜底
+      let spdDes=Infinity;
+      if(p.vPeak){ // 2026-10-01 三关系:巡航速度 = 同步指令(mslSwarmVc 解出),天花板 aC 封顶;不再有减速段 —— 冲刺段(DASH 内)不减速,带速命中
+        spdDes=Math.min(mslSwarmVc(p,tp,sw),aC);
+        // DS191(用户令&quot;越快越不好转弯,不能无脑快&quot;):大转弯(与当前航向夹角 &gt;~17°)限速,降速才转得动
+        const angTo=vn&gt;5?V.angle(V.norm(p.vel),dir):0;
+        if(angTo&gt;0.3)spdDes=Math.min(spdDes,Math.max(p.vTerm,2500));
+        if(dist&lt;MSL_SWARM.DASH)spdDes=Math.max(spdDes,p.spd); // 冲刺段:进了导引头锁定范围不再减速,保持速度命中,缩短在近防圈里的暴露时间
+        if(coast&amp;&amp;spdDes&gt;p.spd&amp;&amp;p.fuel&lt;=(p.keep||0))spdDes=p.spd; // 加速不许动用末段预留
+      }else{ // 旧逻辑兜底(手动构造的导弹)
+        const ang=vn&gt;5?V.angle(V.norm(p.vel),dir):0;
+        if(ang&gt;0.25)spdDes=Math.min(spdDes,1800+ang*5200); // 需大机动:限速换取转向(越快越拐不过弯)
+        if(dist&lt;90000)spdDes=Math.min(spdDes,Math.max(1500*MSL_VK,Math.sqrt(2*MSL_A*dist*0.6))); // DS190
+      }</pre>
+<h3>7.5 调用点二:打空地分支(weapons/56,飞向布雷点)</h3>
+<pre class="code">        const psw=mslSwarmStep(p,p.parkPt,pdist,V.norm(toP)); // 2026-10-01 用户:打空地也要看得出组网 —— 三关系同样生效,目的地 = 布雷点,同目的地的邻组一起同步 / 聚拢
+        const pdir=psw.dir;
+        let pspdDes=p.vPeak?Math.min(mslSwarmVc(p,p.parkPt,psw),psw.aC):Infinity;
+        if(p.mineOk&amp;&amp;pdist&lt;90000)pspdDes=Math.min(pspdDes,Math.max(1500*MSL_VK,Math.sqrt(2*MSL_A*pdist*0.6))); // 接近减速(只有要变雷的才减)。DS190:曲线也按 150 算——朋友版这处漏改,会按 200 的能力规划刹车→冲过布设点
+        if(p.fuel&gt;0){
+          let dv=Math.max(-MSL_A*dt,Math.min(MSL_A*dt,pspdDes-p.spd)); // DS190
+          if(dv&gt;0&amp;&amp;p.fuel&lt;=MSL_LOAL_KEEP)dv=0; // 2026-09-28 加速不动末段预留
+          const cost=Math.abs(dv)/MSL_A; // DS190
+          if(cost&gt;p.fuel){dv*=p.fuel/cost;p.fuel=0;}
+          else p.fuel-=cost;
+          p.spd+=dv;
+        }
+        const ptn=2.0/(1+pvn/2500);
+        let pnd;
+        if(pvn&gt;1&amp;&amp;p.fuel&gt;0){
+          const cur=V.norm(p.vel);
+          pnd=V.slerp(cur,pdir,Math.min(1,ptn*dt));
+          p.fuel=Math.max(0,p.fuel-V.angle(cur,pnd)*turnFuelCost(pvn)); // v122:转向越快越贵
+        }else if(pvn&gt;1){pnd=V.norm(p.vel);}
+        else pnd=pdir;
+        p.vel=[pnd[0]*p.spd,pnd[1]*p.spd,pnd[2]*p.spd];</pre>
+<h3>7.6 发射:峰值油量预算与弹上字段(weapons/52)</h3>
+<pre class="code">  const baseVPeak=Math.max(vTerm,Math.min((isNet?PHYS.v(700):PHYS.v(900))*MSL_VK,baseMaxV,(MSL_FUEL*0.75*MSL_A+vTerm)/2)); // 2026-10-01 再加整箱油预算:加速占一半(同演示页;没这条的话三关系的能力天花板只留 2 秒冲刺预留,会把全员放到 3500 过度加速、20 秒烧空)
+      nb:[], vCmd:undefined, // 2026-10-01 三关系算法:nb = 组网圈内的邻组(54 mslNetStep 每感知拍建);vCmd = 同步速度指令(带滞回)</pre>
+
+<div class="foot">
+导弹组网自组织逻辑说明 · 生成于 2026-10-02 · 对应演示页 demos/weapons/导弹组网.html(三关系最终形态)与引擎提交 9169e5b / 0629d88 / 96b4224 / a81a3f7 / 69f1a28 / aaa122e
+</div>
+</div>
+</body>
+</html>

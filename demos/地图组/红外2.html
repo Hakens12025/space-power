@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<title>红外2</title>
+<style>
+html,body{margin:0;height:100%;background:#070a0e;overflow:hidden;font:12px "Microsoft YaHei",sans-serif;color:#cfd8e0}
+#cv{position:fixed;left:0;top:0;display:block}
+#ui{position:fixed;left:10px;bottom:10px;display:flex;flex-direction:column;gap:5px;user-select:none;background:rgba(11,16,22,.88);border:1px solid #2a3642;padding:6px 8px}
+#ui .row{display:flex;gap:3px;align-items:center;flex-wrap:wrap}
+#ui button,#fleet button{background:#141b23;color:#9fb0c0;border:1px solid #2a3642;padding:4px 9px;font:inherit;cursor:pointer}
+#ui button.on,#fleet button.on{background:#7a2a18;color:#fff0e0;border-color:#c0502a}
+#ui .lab{color:#8fa0b0;margin:0 4px 0 10px}
+#ui .lab:first-child{margin-left:0}
+#fleet{position:fixed;right:10px;bottom:10px;display:flex;flex-direction:column;gap:3px;user-select:none;background:rgba(11,16,22,.88);border:1px solid #2a3642;padding:6px 8px}
+#fleet .row{display:flex;gap:3px;align-items:center}
+#fleet .nm{width:92px;font:12px Consolas,"Microsoft YaHei",monospace;color:#d9a0a0}
+#fleet .ttl{color:#8fa0b0;margin-bottom:2px}
+#fleet button{padding:2px 7px}
+#read{position:fixed;right:10px;top:8px;font:12px Consolas,"Microsoft YaHei",monospace;color:#8fa0b0;white-space:pre;line-height:1.55;background:rgba(11,16,22,.88);border:1px solid #2a3642;padding:6px 8px;min-width:260px}
+#hint{position:fixed;left:10px;top:8px;color:#5f7080;line-height:1.7}
+</style></head><body>
+<canvas id="cv"></canvas>
+<div id="hint">红外2:全舰队(或只画选中那艘)—— 各船可见光圈(15.8 万 km)并起来,以内照红外1,热画在实际位置;圈外的热按方位外推到外面那一环上(角度 = 方位,颜色 = 亮度,深红 = 本底)<br>
+点我方船选中(环跟着换)· Shift+点 = 多选加 / 减(多选时各艘画自己的环、每个目标只在一个环上 + 左边仪表 + 地图上画交集)· 拖船(上帝视角下敌舰 / 石头也能拖)· 拖空白处平移 · 滚轮缩放 · 光标放在环上看那个方位的读数<br>
+环的厚度 = 温度:内沿冷(石头、熄火的船体)、外沿热(尾焰、开火、恒星)· 尾焰会抖,石头翻滚时慢慢明暗<br>厚度轴(左下切换):温度 / A 重排(压掉中间空的温度段)/ B 连续光谱(厚度 = 波长,每份热按黑体谱铺开)/ C 厚度 = 信噪比、颜色 = 温度 / D 厚度 = 时间(内沿此刻,往外 60 游戏秒前)、颜色 = 温度;画格:现状 = 引擎的格子,加密 = 2 px<br>新发现 / 点火 / 开火(信号过发现门时)在环外沿那个方位弹一道刻痕 · 自己和我方其他船的热不上环<br>画法「按选择」:单选看那艘自己的环、多选看各艘的环(每个目标只一次)+ 交集 + 仪表;其余几种留着对比</div>
+<div id="read"></div>
+<div id="fleet"></div>
+<div id="ui">
+  <div class="row"><span class="lab">选择</span><button id="selAll">全选</button><span class="lab">点船 = 只选这艘 · Shift+点 = 加 / 减</span></div>
+  <div class="row"><span class="lab">画法</span><button data-fm="sel" class="on">按选择</button><button data-fm="circ">1 正圆</button><button data-fm="inst">2 仪表</button><button data-fm="each">3 各自正圆</button><button data-fm="blob">4 融球</button><button data-fm="hull">凸包(旧)</button></div>
+  <div class="row"><span class="lab">厚度轴</span><button data-ax="T">温度(旧)</button><button data-ax="A">A 重排</button><button data-ax="B" class="on">B 连续光谱</button><button data-ax="C">C 强度 + 颜色</button><button data-ax="D">D 时间瀑布</button>
+    <span class="lab">画格</span><button data-res="old" class="on">现状 5 px · 540 x 10</button><button data-res="fine">加密 2 px · 1440 x 24</button>
+    <span class="lab">角宽</span><button data-rule="old">旧 8°/√信噪比 · ≤25°</button><button data-rule="new" class="on">新 3.96°/√信噪比 · ≤8°</button></div>
+  <div class="row"><span class="lab">视角</span><button id="vPl" class="on">玩家</button><button id="vGod">上帝</button>
+    <span class="lab">时间</span><button data-sp="0" class="on">暂停</button><button data-sp="1">×1</button><button data-sp="10">×10</button>
+    <span class="lab"></span><button id="reset">重来</button><button id="fit">看全图</button></div>
+  <div class="row"><span class="lab">颗粒</span><input type="range" id="gCell" min="2" max="12" step="1"><span id="gCellV" style="min-width:36px"></span>
+    <span class="lab">粗糙</span><input type="range" id="gGrain" min="0" max="0.8" step="0.05"><span id="gGrainV" style="min-width:36px"></span>
+    <span class="lab">灵敏度</span><input type="range" id="gSens" min="1" max="10" step="0.5"><span id="gSensV" style="min-width:36px"></span>
+    <span class="lab">闪烁</span><input type="range" id="gFlk" min="0" max="2" step="0.1"><span id="gFlkV" style="min-width:36px"></span></div>
+  <div class="row"><span class="lab">地形</span><button id="tSun" class="on">恒星</button><button id="tNeb" class="on">星云</button><button id="tPl" class="on">行星</button><button id="tRock" class="on">碎石带</button></div>
+</div>
+<script>
+"use strict";
+/* ============================================================================
+   红外2 独立演示页(2026-09-29 用户:「完全重做红外的显示……将整个红外图压缩为一个环,深红为本底红外,颜色代表亮度,亮的位置代表方位」;
+   「只画选中的那艘,时间先不做,当前的作为红外2存在,先保留之前的红外,自己的尾烟、自身的红外剔除掉,改成环上那个方位闪一下」)。
+   不加载引擎,数值与式子归本页;物理按引擎红外的规矩简化(一道门、色阶、恒星禁区、星云本底与消光、天体挡视线)。
+   业内同类:战斗机雷达告警接收机(RWR)的威胁显示、声呐的方位显示 —— 只给方位不给距离。
+   · 2026-09-29 用户:全舰队显示。试过两种都不对 —— 各船圈并起来的花瓣轮廓(同一个目标在几段上都出现、看着像 n 个,圈里铺满底色也挡地图)、
+     全舰队一个圆角凸包(一艘船极度前出就把环拉得很长)。现在:环在屏幕上会碰上的船连成一组(缩远了就并得多),每组一个圆角凸包的环,方位从组中心量;
+     每个热源只画在看它最清楚的那艘所在的组(有一艘看得见就算),本底每组从自己中心算;可见光圈里不铺底色,只把热半透明地叠在地图上。单艘时就是原来的环。
+   · 2026-09-30 用户:圈和环之间有盖不到的空当。现在环的内沿贴着可见光圈(外沿不变):温度一层层平行于外沿,腰上多出来的那截从最冷那层往里褪成本底(不编信息);
+     每一点的方位 = 垂直外沿找到外沿上那一点,再从组中心量(方位从外沿一路垂直往里,不会围着组中心转出放射纹)。
+   · 2026-09-30 用户:还是不满意,四种都做、切换对比(左下「舰队画法」):1 正圆 —— 每组一个外接正圆环,环里面整块照红外1;2 仪表 —— 左边一个舰队仪表
+     (同 RWR 告警器的方位显示,方位从舰队中心量)+ 地图上只画选中那艘的环;3 各自正圆(默认)—— 每艘一个正圆环,叠着的地方归离得近的那艘(画接缝),
+     每个目标只画在一艘上:那个方位的环露在外面、看它最清楚的那艘;4 融球 —— 可见光圈平滑地融在一起(Inigo Quilez 的 smooth-min),方位从组中心沿射线量;凸包(旧)= 上面那版。
+   · 2026-09-30 用户:「舰船各自显示各自的,如果选中了多艘舰船,那就显示仪表」+「把内部的可视红外区域弄回来」—— 画法「按选择」(默认):单选 = 那艘自己的环;
+     多选 = 地图上只画各艘可见光圈里的红外,圈外的都在左边仪表上(方位从选中这几艘的中心量);没选 = 不画。可见光圈里恢复红外1 的整块画面(星云自身发光、行星温热、颗粒、底噪)。
+     同日用户:多选时各艘也画自己的环、忠实显示自己看到的(不去重,同一个目标会在几艘的环上 —— 几个方位一对就是交叉定位),仪表保留、给合起来的唯一值;
+     环叠着的地方归离得近的那艘(同 3),被别的环盖住的那段外沿不弹异常刻痕。
+     同日用户:「模仿我们的雷达的画法,画那种交集」—— 照引擎雷达画面的「被听见」(render/86-radarview rdvZones):多选时,每艘看得见(过发现门)的,
+     一块「方位 ± 环上那团的角宽、远端 = 最亮的船(LUM_MAX)在这个亮度下能在多远」的扇形,求交(Sutherland–Hodgman);被方位线围死(不碰任何一块的远端)
+     才在地图上画多边形,越小越亮;围不死(单站 / 方位几乎平行)不画 —— 红外没有测距,环上已经有了。方位按每一对固定挪开 ± 0.6 x 角宽(同雷达:显示层防泄露);
+     可见光圈里的不画。
+     同日用户选「甲 完美关联」(舰队数据链认得出同一个目标)并指出:各艘忠实显示时同一个目标在几个环上各一团,看着就是鬼影 ——
+     多选改回每个目标只在一个环上(同 3:那个方位的环露在外面、看它最清楚的那艘);从几个角度看交给交集。
+     别的几种画法对选中的船照旧能切,留着对比。
+   · 以选中的我方船为心:可见光圈(VIS_R)以内照红外1 —— 热画在实际位置(本底 = 星云自身发光,行星一块温热);圈外的热按方位外推到圈外那一环上(环内沿 = 圈边,厚 BAND px)。
+     环一圈 N 格,每格的值 = 本底(星云从圈边往外沿视线的浓度、恒星眩光、行星的热)+ 每个圈外热源一团;跨圈边的热源在内外 XF 成里渐变交接。
+   · 一个热源:信噪比 = 亮度 / 0.7 x (19.2 万 / 距离)² x 星云消光(石头的距离不小于填满距离 FILL_K x OPT_ID x √体型,峰值因此封顶);落在恒星禁区里、被行星挡住的看不见。
+     峰值 = 一道门 irvV(信噪比)(发现了的再比本底亮出同样一截);角宽 = SIG0 / √信噪比(信号越强越窄;距离只经信噪比进来);
+     比 SIG0 宽的弱信号峰值按宽度压低(总量守恒)。
+   · 自己与我方其他船不是热源;自己的尾焰不致盲(用户:剔除)。
+   · 环的灵敏度 SENS:显示用的信噪比 x SENS(发现门也按它)。
+   · 环的厚度 = 温度(内沿冷、外沿热,对数刻度):一个热源按亮度份额拆成 船体 300 K / 尾焰 1500 K / 开火(3000 K 起,余热按指数变暗变冷,在环上往内滑、并进船体),石头 150 K,行星 200 K,星云冷发光 100 K(只抬内沿),恒星 5800 K(外沿);
+     每份在厚度方向是一个有宽度的峰(黑体谱本来宽);隔着星云按光深往内(冷)偏(变红)。热的一定是船在点火;只在内沿亮的,分不清石头还是熄火的船。
+   · 闪烁(墙钟):尾焰不规则地抖,石头各有周期慢慢明暗(翻滚),船体稳。
+   · 异常(只报圈外的):信噪比刚过发现门,或点火 / 开火时信号在发现门以上 ⇒ 环外沿那个方位一道亮刻痕,FLASH_S 秒淡出(环里不亮)。
+   · 2026-10-05 用户:环糊(亮团被压扁、快进可见光圈都分不清 —— 画格分辨率)+ 只有长波短波、环的中间层永远空。左下两组切换对比:
+     画格「现状」= 引擎的数(5 px 一格、方位 540 格、厚度 10 格、环厚 65 px),「加密」= 2 px、1440 x 24;
+     厚度轴五种:温度(现状)/ A 重排(温度到厚度分段:100~330 K 占内半、330~1300 K 压成细缝、1300~6000 K 占外半)/
+     B 连续光谱(厚度 = 波长 25 µm(内沿)~ 1.5 µm(外沿)对数,每份热按普朗克曲线 λB_λ 铺满厚度、峰 = 1;隔着星云不再往内偏)/
+     C 强度 + 颜色(厚度 = 显示信噪比 0.1 ~ 1000 对数,发现门在 1/4;颜色 = 按亮度加权的平均温度,冷橙红 → 热蓝白;本底铺满厚度)/
+     D 时间瀑布(厚度 = 时间,内沿此刻、每 D_DT 游戏秒往外挪一档、共 M 档;移动目标拖出斜线 = 方位变化率;颜色同 C)。
+     同日用户选 B、不加密、改角宽规则:新 = TH1 / √信噪比(引擎内核的方位误差,同交集楔形),封顶 SMAX2 8°(原 8° / √信噪比、封顶 25°,圈边一艘冷船就抹 6.6°);
+     可见光圈 11.7 万 → 15.8 万、环的灵敏度 x3 → x1,对齐引擎现值。
+   ============================================================================ */
+const DEG=Math.PI/180;
+const IRX={VIS_R:158000,BAND:65,RIN_MIN:30,XF:0.1,N:720,SENS:1,GAP_F:16, // 环厚 40 → 52(用户:x1.3);GAP_F = 圈与环之间的空当里,信号往里褪成本底的长度(px);SENS = 环的灵敏度(显示用的信噪比 x SENS,用户:靠近碎石堆要很近才亮)
+  // 2026-09-29 用户:可见光圈以内照红外1(热画在实际位置),圈外用环外推 —— 可见光圈半径 km(引擎 COV.VIS_R)、环厚 px、环内沿至少多少 px、圈边内外各 XF 成渐变交接;环一圈多少格(0.5°)
+  SRC_PX:5,NEB_E:0.03,                 // 圈内:热源团的 σ(px,x √(体型 / 0.7))、星云自身发光(色阶值 x 浓度)
+  COLD_R:192000,LUM0:0.7,              // 发现门:一艘熄火驱逐舰(亮度 0.7)在 19.2 万 km 处信噪比 = 1(引擎的红外冷发现)
+  ENG:{off:0,side:15,main:25},FIRE:20,FIRE_TL:5,FIRE_TT:2.5,FIRE_END:20, // 引擎档在舰体之上加的亮度;开火的余热(2026-09-29 用户:亮一下就突然没了不好)—— 开火一刻加的亮度、亮度按指数退的时间常数、温度往船体温度降的时间常数、多少秒后不算(墙钟)
+  ROCK_K:0.4,FILL_K:1/3,OPT_ID:120000,  // 石头自身热 = 体型 x ROCK_K;石头近到 FILL_K x 认出距离 OPT_ID x √体型 以内亮度不再涨(点源 → 扩展源,同引擎 86-irview irvHill;2026-09-30 用户:船靠近碎石依然巨亮)
+  SIG0:8,SMIN:0.6,SMAX:25,             // 团的角宽(度,高斯 σ)= SIG0 / √信噪比,夹在 [SMIN, SMAX](旧规则)
+  TH1:3.96,SMAX2:8,                    // 2026-10-05 新规则:σ = TH1 / √信噪比(TH1 = 引擎内核信噪比 1 处的方位误差 1σ,同地图上交集楔形的半宽),夹在 [SMIN, SMAX2];更宽的只变暗
+  GAIN:0.2,SUB_P:0.64,DET_V:0.862,CONTRAST:0.928,V0:0.02,VMAX:1000,NOISE:0.004, // 一道门与色阶(同引擎 86-irview)
+  SUN_HALF:10,SUN_G:3,SUN_SIG:12,      // 恒星:禁区半角(度,里面的目标被淹没)、眩光峰值(色阶值)与角宽(度)
+  NEB_K:0.02,STAR_R:696000,NEB_TAU:150000,NEB_L:2500000,NEB_STEP:40, // 星云:本底 = NEB_K x 沿线浓度积分(每 NEB_TAU km 光深 1)、积分多远、分几段;STAR_R = 恒星半径(算行星本影)
+  PL_V:0.15,                             // 行星自身热(色阶值),占它的视角
+  BLOB_K:1.2,INST_R:46, // 画法 4 融球:平滑并集圆滑多少(x BAND px);画法 2 仪表:内圈半径 px
+  LUM_MAX:46,ZONE_S:200000,ZONE_ARC:8, // 交集:最亮的船(巡洋 1 + 主推 25 + 开火 20)算扇形远端、多边形亮度刻度(√面积 2000 ~ 20 万 km)、扇形远弧分几段
+  FLASH_S:1.5,CD:3, // 异常:外沿刻痕几秒淡出、同一目标冷却秒(2026-09-29 用户:异常只在环外显示,环里不亮)
+  CELL:5,NOISE_MS:200,GRAIN:0.3, // 颗粒感(2026-09-29 用户:要红外1 那样的颗粒感):格子 px(先在粗格子上算、平滑放大)、底噪隔多久换一次(同红外1)、亮处的乘性颗粒(2026-09-29 用户:环上的强信号不要歪扭 —— 方位扭曲 / 翻涌去掉)
+  M:12,T0:100,T1:6000,RSIG:0.14,T_NEB:100,T_ROCK:150,T_PL:200,T_HULL:300,T_PLUME:1500,T_FIRE:3000,T_SUN:5800,REDDEN:0.15, // 2026-09-29 用户:环的厚度 = 温度(内冷外热,对数刻度 T0~T1 K)—— 分几档、谱宽(厚度的几成)、各东西的温度、隔着星云每 1 光深往内(冷)偏几成
+  LAM_IN:25,LAM_OUT:1.5,D_DT:2,         // 2026-10-05 B 连续光谱的波长范围(µm,内沿 / 外沿);D 时间瀑布每档几游戏秒;环厚 52 → 65 对齐引擎
+  FLK:1,FLK_PLUME:0.35,LC_A:[0.2,0.5],LC_P:[5,30]}; // 闪烁(墙钟):总幅度(滑块)、尾焰抖动幅度、石头翻滚的明暗幅度与周期(秒);船体不闪
+const IRV_T0=-0.1,IRV_RAMP=[[IRV_T0,[40,6,6]],[0,[92,10,18]],[0.25,[150,30,20]],[0.5,[220,80,30]],[0.75,[255,170,60]],[1,[255,245,210]]]; // 色阶(同引擎,本底那档调成用户图里的深红)
+const LUT=(function(){const L=new Uint8ClampedArray(256*3);for(let k=0;k<256;k++){const t=IRV_T0+k/255*(1-IRV_T0);let a=0;while(a<IRV_RAMP.length-2&&t>IRV_RAMP[a+1][0])a++;
+  const p=IRV_RAMP[a],q=IRV_RAMP[a+1],u=Math.max(0,Math.min(1,(t-p[0])/(q[0]-p[0])));for(let c=0;c<3;c++)L[k*3+c]=Math.round(p[1][c]+(q[1][c]-p[1][c])*u);}return L;})();
+function irvT(v){if(!(v!==0)||!isFinite(v))return 0;const t=Math.sign(v)*Math.log(1+Math.abs(v)/IRX.V0)/Math.log(1+IRX.VMAX/IRX.V0);return t>1?1:(t<IRV_T0?IRV_T0:t);}
+function lutK(v){return Math.round((irvT(v)-IRV_T0)/(1-IRV_T0)*255);}
+function irvV(snr){return snr>=1?IRX.DET_V*Math.pow(snr,IRX.CONTRAST):IRX.GAIN*Math.pow(snr,IRX.SUB_P);}
+function rng(seed){let a=seed>>>0;return function(){a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};}
+const wrapA=a=>{a=(a+Math.PI)%(2*Math.PI);if(a<0)a+=2*Math.PI;return a-Math.PI;};
+
+/* ---- 世界(单局尺度:游玩区 306 万 x 172 万 km;屏幕 y 朝下,方位同)---- */
+let WORLD=null;const TER={sun:true,neb:true,pl:true,rock:true};
+function reset(){
+  const r=rng(7);
+  WORLD={own:[{name:'巡洋舰1',x:-900000,y:-40000,h:0,size:1.0},{name:'护卫舰1',x:-930000,y:45000,h:0,size:0.7},{name:'巡游舰1',x:-870000,y:95000,h:0,size:0.7}],
+    foes:[{name:'敌·巡洋舰1',x:450000,y:-150000,size:1.0,eng:'off',vx:-40,vy:10},
+          {name:'敌·护卫舰1',x:-560000,y:-260000,size:0.7,eng:'off',vx:20,vy:30},
+          {name:'敌·护卫舰2',x:700000,y:320000,size:0.7,eng:'main',vx:-80,vy:-30}],
+    star:{x:3200000,y:2600000},planet:{x:-150000,y:420000,r:95000},
+    nebs:[{x:250000,y:-520000,a:650000,b:300000,ang:25*DEG}],rocks:[]};
+  WORLD.foes.forEach((f,i)=>{f.fireT=-1e9;f.det=false;f.cd=-1e9;f.engPrev=f.eng;f.fph=i*2.1;});
+  for(let i=0;i<140;i++){const u=r(),g=(r()+r()+r()-1.5)*30000,th=-0.35,L=1100000,x0=-450000,y0=150000;
+    WORLD.rocks.push({name:'碎石',x:x0+Math.cos(th)*L*u-Math.sin(th)*g,y:y0+Math.sin(th)*L*u+Math.cos(th)*g,size:0.2*Math.pow(1-r()*0.99,-0.8),det:false,cd:-1e9,lcA:IRX.LC_A[0]+r()*(IRX.LC_A[1]-IRX.LC_A[0]),lcP:IRX.LC_P[0]+r()*(IRX.LC_P[1]-IRX.LC_P[0]),lcPh:r()*2*Math.PI});}
+  SELS=[WORLD.own[0]];FLASH.length=0;
+}
+function nebRho(x,y){let s=0;for(const n of WORLD.nebs){const dx=x-n.x,dy=y-n.y,c=Math.cos(n.ang),sn=Math.sin(n.ang),u=(dx*c+dy*sn)/n.a,v=(-dx*sn+dy*c)/n.b;s+=Math.exp(-(u*u+v*v));}return s;} // 星云浓度(几朵椭圆高斯)
+function nebCol(x0,y0,x1,y1){const n=IRX.NEB_STEP;let s=0;for(let i=0;i<n;i++){const t=(i+0.5)/n;s+=nebRho(x0+(x1-x0)*t,y0+(y1-y0)*t);}return s*Math.hypot(x1-x0,y1-y0)/n;} // 沿线浓度积分(km)
+function occluded(o,t){const P=WORLD.planet;if(!TER.pl)return false;const vx=t.x-o.x,vy=t.y-o.y,l2=vx*vx+vy*vy,wx=P.x-o.x,wy=P.y-o.y,pr=wx*vx+wy*vy;if(!(pr>0&&pr<l2))return false;const cr=wx*vy-wy*vx;return cr*cr<P.r*P.r*l2;}
+function inShadow(o){ // 在行星的本影里(同引擎 envInShadow:会聚的锥,长 Lu = r x 距恒星 / (R恒星 - r))
+  if(!TER.pl||!TER.sun)return false;const P=WORLD.planet,S=WORLD.star,R=IRX.STAR_R,ax=S.x-P.x,ay=S.y-P.y,l=Math.hypot(ax,ay)||1,ux=ax/l,uy=ay/l,dx=o.x-P.x,dy=o.y-P.y,along=-(dx*ux+dy*uy),perp=Math.abs(dx*uy-dy*ux);
+  if(!(along>0)||!(R>P.r))return false;const Lu=P.r*l/(R-P.r);return along<Lu&&perp<P.r*(1-along/Lu);}
+function compsOf(s){ // 一个热源拆成几份 [亮度(不闪的平均), 温度 K, 闪烁倍率]:船体(稳)/ 尾焰(抖)/ 开火(退);石头只有本体(翻滚时慢慢明暗)。闪烁走墙钟
+  // 闪烁只乘在那一份自己身上、不进信噪比(原来进了:尾焰一抖,峰值跟着变,冷的船体那一份反向跟着跳)
+  const t=NOW/1000,F=IRX.FLK;
+  if(s.name==='碎石')return [[s.size*IRX.ROCK_K,IRX.T_ROCK,Math.max(0,1+F*s.lcA*Math.sin(2*Math.PI*t/s.lcP+s.lcPh))]];
+  const out=[[s.size,IRX.T_HULL,1]];
+  if(s.eng&&s.eng!=='off'){const ph=s.fph||0,fl=0.5*Math.sin(2*Math.PI*7.3*t+ph)+0.3*Math.sin(2*Math.PI*11.9*t+1.7*ph)+0.2*Math.sin(2*Math.PI*3.1*t+2.3*ph);out.push([IRX.ENG[s.eng],IRX.T_PLUME,Math.max(0,1+F*IRX.FLK_PLUME*fl)]);}
+  if(s.fireT>-1e8){const age=(NOW-s.fireT)/1000;if(age<IRX.FIRE_END)out.push([IRX.FIRE*Math.exp(-age/IRX.FIRE_TL),IRX.T_HULL+(IRX.T_FIRE-IRX.T_HULL)*Math.exp(-age/IRX.FIRE_TT),1]);} // 余热:越来越暗、越来越冷(环上从外侧往内侧滑,并进船体的热)
+  return out;
+}
+
+/* ---- 环:每格的值 ---- */
+function makeRing(){return ringSize({});}
+function ringSize(r){const N=IRX.N,M=IRX.M;if(r.N===N&&r.M===M)return r; // 一艘船的环:V2[方位格 x M + 厚度档]、VT = V2 x 温度位置(C / D 上色用)、本底;D 的历史 H / HT[档 x N]
+  r.N=N;r.M=M;r.V2=new Float64Array(N*M);r.VT=new Float64Array(N*M);r.BG=new Float64Array(N);r.NEBA=new Float64Array(N);r.SUNA=new Float64Array(N);r.PLA=new Uint8Array(N);
+  r.CUR=new Float64Array(N);r.CT=new Float64Array(N);r.H=new Float64Array(N*M);r.HT=new Float64Array(N*M);r.hT=undefined;return r;}
+let NOW=0,GT=0,AX='B',RES='old',RULE='new'; // GT = 游戏时间(秒,D 用);AX = 厚度轴;RES = 画格
+function applyRes(){IRX.CELL=RES==='fine'?2:5;IRX.N=RES==='fine'?1440:540;IRX.M=AX==='D'?30:(RES==='fine'?24:10);
+  for(const k in POOL)delete POOL[k];for(const k in PROF)delete PROF[k];for(const k in PLK)delete PLK[k];
+  const el=document.getElementById('gCell');if(el){el.value=IRX.CELL;document.getElementById('gCellV').textContent=IRX.CELL+' px';}}
+const AXK=[[100,0],[330,0.48],[1300,0.52],[6000,1]];
+function rhoOf(T){if(AX!=='A')return tRho(T);const L=Math.log(Math.max(IRX.T0,Math.min(IRX.T1,T)));for(let i=0;i<3;i++){const a=Math.log(AXK[i][0]),b=Math.log(AXK[i+1][0]);if(L<=b||i===2)return AXK[i][1]+(AXK[i+1][1]-AXK[i][1])*Math.max(0,Math.min(1,(L-a)/(b-a)));}return 1;} // A:分段压掉 330~1300 K
+function TofRho(r){if(AX!=='A')return IRX.T0*Math.pow(IRX.T1/IRX.T0,r);for(let i=0;i<3;i++)if(r<=AXK[i+1][1]||i===2){const u=(r-AXK[i][1])/(AXK[i+1][1]-AXK[i][1]);return Math.exp(Math.log(AXK[i][0])+u*(Math.log(AXK[i+1][0])-Math.log(AXK[i][0])));}return IRX.T1;}
+const PLK={};function plk(T){const q=Math.max(1,Math.round(T/5));let p=PLK[q];if(p)return p;const M=IRX.M;p=new Float64Array(M);let mx=0; // B:普朗克 λB_λ(每对数波长)在各厚度档的值,峰 = 1
+  for(let m=0;m<M;m++){const lam=IRX.LAM_IN*Math.pow(IRX.LAM_OUT/IRX.LAM_IN,(m+0.5)/M),x=14388/(lam*q*5),f=x>60?0:Math.pow(x,4)/Math.expm1(x);p[m]=f;if(f>mx)mx=f;}
+  if(mx>0)for(let m=0;m<M;m++)p[m]/=mx;return PLK[q]=p;}
+const HUE=[[0,[255,90,40]],[0.35,[255,170,60]],[0.6,[255,235,170]],[1,[175,215,255]]];
+function hueCol(v,tr){const l=Math.max(0,Math.min(1,(irvT(v)-IRV_T0)/(1-IRV_T0))),t=Math.max(0,Math.min(1,tr));let a=0;while(a<HUE.length-2&&t>HUE[a+1][0])a++; // C / D:亮度 = 一道门的色阶位置,颜色 = 平均温度
+  const p=HUE[a],q=HUE[a+1],u=(t-p[0])/(q[0]-p[0]),k=Math.pow(l,0.85),o=[0,0,0];for(let c=0;c<3;c++){const h=p[1][c]+(q[1][c]-p[1][c])*u,b=[40,6,6][c];o[c]=b+(h-b)*k;}return o;}
+function tRho(T){return Math.max(0,Math.min(1,Math.log(T/IRX.T0)/Math.log(IRX.T1/IRX.T0)));} // 温度 → 厚度位置(0 = 内沿冷,1 = 外沿热)
+const PROF={};function prof(rho){const q=Math.round(rho*200);let p=PROF[q];if(p)return p;p=new Float64Array(IRX.M);for(let m=0;m<IRX.M;m++){const x=(m+0.5)/IRX.M-q/200;p[m]=Math.exp(-x*x/(2*IRX.RSIG*IRX.RSIG));}return PROF[q]=p;} // 厚度方向的谱:以 rho 为心的高斯,峰 = 1
+function sources(){return WORLD.foes.concat(TER.rock?WORLD.rocks:[]);}
+function sunBear(o){return Math.atan2(WORLD.star.y-o.y,WORLD.star.x-o.x);}
+function sense(o,s){ // 从 o 看 s:方位、信噪比、看不看得见(恒星禁区 / 行星挡)
+  const dx=s.x-o.x,dy=s.y-o.y,d=Math.max(1,Math.hypot(dx,dy)),b=Math.atan2(dy,dx);
+  const blind=TER.sun&&!inShadow(o)&&Math.abs(wrapA(b-sunBear(o)))<IRX.SUN_HALF*DEG,hid=blind||occluded(o,s);
+  const tau=TER.neb?nebCol(o.x,o.y,s.x,s.y)/IRX.NEB_TAU:0,comps=compsOf(s);let lum=0;for(const c of comps)lum+=c[0];
+  const dF=s.name==='碎石'?IRX.FILL_K*IRX.OPT_ID*Math.sqrt(s.size):0,snr=lum/IRX.LUM0*Math.pow(IRX.COLD_R/Math.max(d,dF),2)*Math.exp(-tau); // 石头贴近到填满距离后不再变亮;船当点源
+  return {b,d,snr,hid,blind,tau,comps,lum};
+}
+function wIn(d){const a=IRX.VIS_R*(1-IRX.XF),b=IRX.VIS_R*(1+IRX.XF);if(d<=a)return 1;if(d>=b)return 0;const t=(b-d)/(b-a);return t*t*(3-2*t);} // 圈内的份额:圈边内外各 XF 成里渐变
+function groupsOf(list){ // 两艘船的环在屏幕上会碰上就连成一组(单链接):一艘极度前出的船自己一组,不把别人的环拉长(2026-09-29 用户)
+  const n=list.length,par=list.map((_,i)=>i),f=i=>par[i]===i?i:(par[i]=f(par[i])),L=2*radii()[1]/cam.k;
+  for(let i=0;i<n;i++)for(let j=i+1;j<n;j++)if(Math.hypot(list[i].x-list[j].x,list[i].y-list[j].y)<L)par[f(i)]=f(j);
+  const m=new Map();list.forEach((o,i)=>{const r=f(i);if(!m.has(r))m.set(r,[]);m.get(r).push(o);});return [...m.values()];
+}
+let FM='sel'; // 画法:sel 按选择(单选 = 那艘自己的环,多选 = 仪表)/ circ 正圆 / inst 仪表 / each 各自正圆 / blob 融球 / hull 凸包(旧);都只管选中的船
+const POOL={};function ringOf(kind,i){const p=POOL[kind]||(POOL[kind]=[]);return p[i]||(p[i]=makeRing());} // 环数据按画法 + 序号复用
+function senseAll(list){ // 每个热源从每艘船看一遍:bi = 看得最清楚的那艘(看不见的不算,-1 = 哪艘都看不见)、ni = 最近的那艘、wi = 在可见光圈里的份额、any = 最大信噪比
+  return sources().map(s=>{const qs=list.map(k=>sense(k,s));let bi=-1,ni=0,wi=0,any=0;
+    qs.forEach((q,i)=>{if(q.d<qs[ni].d)ni=i;wi=Math.max(wi,wIn(q.d));any=Math.max(any,q.snr);if(!q.hid&&(bi<0||q.snr>qs[bi].snr))bi=i;});return {s:s,qs:qs,bi:bi,ni:ni,wi:wi,any:any};});}
+function subSense(E,i){return E.map(e=>{const q=e.qs[i];return {s:e.s,qs:[q],bi:q.hid?-1:0,ni:0,wi:wIn(q.d),any:q.snr};});} // 只留第 i 艘看到的
+function ringQ(e,i,b,k,out){ // 上环的那一份:第 i 艘看到的(方位换成这个环的原点量的 b);k = 画在第几个环;out = 算不算圈外(异常只报圈外)
+  const d=e.qs[e.ni].d,q=i>=0&&!e.qs[i].hid?Object.assign({},e.qs[i],{b:b,d:d}):{b:b,d:d,hid:true,blind:false,snr:e.any,tau:0,comps:[],lum:0};q.s=e.s;q.k=k;q.out=out;return q;}
+function smooth01(x){x=Math.max(0,Math.min(1,x));return x*x*(3-2*x);}
+function ringFillGroup(g){ // 一个环:本底从它的原点 g.c 算(星云从 g.R0 km 往外积分),再叠上归它的热源;厚度轴按 AX
+  const N=IRX.N,M=IRX.M,VR=g.R0||IRX.VIS_R,o=g.c,sb=sunBear(o),lit=TER.sun&&!inShadow(o),rg=ringSize(g.rg),V2=rg.V2,VT=rg.VT,BG=rg.BG,NEBA=rg.NEBA,SUNA=rg.SUNA,PLA=rg.PLA;
+  NEBA.fill(0);SUNA.fill(0);PLA.fill(0);
+  if(TER.neb){for(let i=0;i<N;i+=2){const th=i/N*2*Math.PI,c=Math.cos(th),sn=Math.sin(th);NEBA[i]=IRX.NEB_K*nebCol(o.x+c*VR,o.y+sn*VR,o.x+c*IRX.NEB_L,o.y+sn*IRX.NEB_L)/IRX.NEB_TAU;}
+    for(let i=1;i<N;i+=2)NEBA[i]=(NEBA[i-1]+NEBA[(i+1)%N])/2;} // 星云本底:从圈边往外积分;隔格算,中间取两边平均
+  if(lit)for(let i=0;i<N;i++){const a=wrapA(i/N*2*Math.PI-sb)/DEG;SUNA[i]=IRX.SUN_G*Math.exp(-a*a/(2*IRX.SUN_SIG*IRX.SUN_SIG));} // 恒星眩光(在行星影子里没有)
+  if(TER.pl){const P=WORLD.planet,D=Math.hypot(P.x-o.x,P.y-o.y);if(D>P.r&&D>VR){const c=Math.atan2(P.y-o.y,P.x-o.x),hw=Math.asin(P.r/D);
+    for(let i=0;i<N;i++){const th=i/N*2*Math.PI;if(Math.abs(wrapA(th-c))<hw)PLA[i]=1;}}} // 圈外的行星:挡住它身后的本底,自己有一点热
+  for(let i=0;i<N;i++){const k=PLA[i]?0.3:1;BG[i]=(NEBA[i]+SUNA[i])*k+(PLA[i]?IRX.PL_V:0);} // BG = 这个方位的本底总量(发现了的热按它比本底亮出一截;读数)
+  const S=[]; // 各热源:峰值(一道门)与角宽(同原来)
+  for(const e of g.src){const q=e.q,b=q.b,bi=Math.round((b<0?b+2*Math.PI:b)/(2*Math.PI)*N)%N,bg=BG[bi];
+    const sn=q.snr*IRX.SENS,w0=RULE==='new'?IRX.TH1:IRX.SIG0,sig=Math.max(IRX.SMIN,Math.min(RULE==='new'?IRX.SMAX2:IRX.SMAX,w0/Math.sqrt(Math.max(sn,1e-9)))),pk=(1-e.wi)*irvV(sn)*(sn>=1?1+bg/IRX.V0:1)*Math.min(1,Math.sqrt(w0/sig)), // 显示用信噪比 x SENS;角宽按 RULE;抹得比基准宽的弱信号峰值按宽度比的平方根压低
+      sb2=sig*DEG/(2*Math.PI)*N;q.pk=pk;q.sig=sig;if(pk<1e-4||!(q.lum>0))continue;S.push({q:q,bi:bi,sn:sn,sb2:sb2,w:Math.ceil(4*sb2),pk:pk});}
+  const tN=tRho(IRX.T_NEB),tS=tRho(IRX.T_SUN),tP=tRho(IRX.T_PL);
+  if(AX==='D'){ // 时间瀑布:此刻每个方位的总量(本底 + 各热源)与温度加权,写进历史第 0 档(内沿);按游戏时间每 D_DT 秒往外挪一档
+    const CUR=rg.CUR,CT=rg.CT,H=rg.H,HT=rg.HT;
+    for(let i=0;i<N;i++){const k=PLA[i]?0.3:1,a=NEBA[i]*k,b=SUNA[i]*k,c=PLA[i]?IRX.PL_V:0;CUR[i]=a+b+c;CT[i]=a*tN+b*tS+c*tP;}
+    for(const s of S)for(const c of s.q.comps){if(!(c[0]>0))continue;const val=s.pk*c[0]/s.q.lum*c[2],tr=tRho(c[1]);
+      for(let k=-s.w;k<=s.w;k++){const j=((s.bi+k)%N+N)%N,aw=val*Math.exp(-k*k/(2*s.sb2*s.sb2));CUR[j]+=aw;CT[j]+=aw*tr;}}
+    if(rg.hT===undefined){rg.hT=GT;for(let m=0;m<M;m++){H.set(CUR,m*N);HT.set(CT,m*N);}} // 刚开:整段历史先填此刻
+    let sh=Math.floor((GT-rg.hT)/IRX.D_DT);if(sh>0){rg.hT+=sh*IRX.D_DT;sh=Math.min(sh,M);H.copyWithin(sh*N,0,(M-sh)*N);HT.copyWithin(sh*N,0,(M-sh)*N);for(let m=1;m<sh;m++){H.set(CUR,m*N);HT.set(CT,m*N);}}
+    H.set(CUR,0);HT.set(CT,0);
+    for(let m=0;m<M;m++)for(let i=0;i<N;i++){V2[i*M+m]=H[m*N+i];VT[i*M+m]=HT[m*N+i];}
+    return;}
+  V2.fill(0);VT.fill(0);
+  if(AX==='C'){ // 厚度 = 信噪比:本底铺满厚度;每个热源一团放在自己的信噪比处(各份同一个位置),VT 记温度
+    for(let i=0;i<N;i++){const k=PLA[i]?0.3:1,a=NEBA[i]*k,b=SUNA[i]*k,c=PLA[i]?IRX.PL_V:0,v=a+b+c,t=a*tN+b*tS+c*tP;for(let m=0;m<M;m++){V2[i*M+m]=v;VT[i*M+m]=t;}}
+    for(const s of S){const pr=prof(Math.max(0,Math.min(1,(Math.log10(Math.max(s.sn,1e-3))+1)/4)));
+      for(const c of s.q.comps){if(!(c[0]>0))continue;const val=s.pk*c[0]/s.q.lum*c[2],tr=tRho(c[1]);
+        for(let k=-s.w;k<=s.w;k++){const j=((s.bi+k)%N+N)%N,aw=val*Math.exp(-k*k/(2*s.sb2*s.sb2)),b0=j*M;for(let m=0;m<M;m++){const v=aw*pr[m];V2[b0+m]+=v;VT[b0+m]+=v*tr;}}}}
+    return;}
+  const P=(T,tau)=>AX==='B'?plk(T):prof(Math.max(0,rhoOf(T)-IRX.REDDEN*(tau||0))); // 温度 / A / B:各份在厚度方向的谱
+  const pN=P(IRX.T_NEB),pS=P(IRX.T_SUN),pP=P(IRX.T_PL);
+  for(let i=0;i<N;i++){const k=PLA[i]?0.3:1;for(let m=0;m<M;m++)V2[i*M+m]=(NEBA[i]*pN[m]+SUNA[i]*pS[m])*k+(PLA[i]?IRX.PL_V*pP[m]:0);} // 星云是冷的发光(内沿),恒星最热(外沿);底噪不在这里加:按格子加(drawView)
+  for(const s of S)for(const c of s.q.comps){if(!(c[0]>0))continue;const val=s.pk*c[0]/s.q.lum*c[2],pr=P(c[1],s.q.tau); // 按亮度份额分给各份,放在各自的谱上;隔着星云往内(冷)偏(B 不偏)
+    for(let k=-s.w;k<=s.w;k++){const j=((s.bi+k)%N+N)%N,aw=val*Math.exp(-k*k/(2*s.sb2*s.sb2)),b0=j*M;for(let m=0;m<M;m++)V2[b0+m]+=aw*pr[m];}}
+}
+
+/* ---- 异常:刚过发现门 / 点火 / 开火(信号在门上)⇒ 那个方位闪一下 ---- */
+const FLASH=[];
+function anomScan(seens){ // seens = 每艘显示的船各一份 seen;刚过发现门 / 点火 / 开火 ⇒ 记一次(刻痕画在那个方向露在外面、离它最近的船的外沿)
+  const best=new Map();
+  for(const seen of seens)for(const q of seen){const b=best.get(q.s);if(!b)best.set(q.s,{out:q.out,det:!q.hid&&q.snr*IRX.SENS>=1});else{b.out=b.out&&q.out;b.det=b.det||(!q.hid&&q.snr*IRX.SENS>=1);}}
+  for(const [s,b] of best){const det=b.out&&b.det,burn=s.eng&&s.eng!=='off'&&s.engPrev!==s.eng,fire=s.fireT>-1e8&&s.fireT!==s.fireSeen;
+    if(det&&(!s.det||burn||fire)&&NOW-s.cd>IRX.CD*1000){FLASH.push({t0:NOW,s:s});s.cd=NOW;} // 刚过发现门 / 点火 / 开火
+    s.det=det;if(s.eng)s.engPrev=s.eng;if(fire)s.fireSeen=s.fireT;}
+  while(FLASH.length&&(NOW-FLASH[0].t0)/1000>IRX.FLASH_S)FLASH.shift();
+}
+
+/* ---- 画面 ---- */
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');let DPR=1,VW=0,VH=0;
+const cam={x:-300000,y:60000,k:1/1500};let SELS=[],GOD=false,RATE=0,MOUSE=null,LAST=0;
+function resize(){DPR=window.devicePixelRatio||1;VW=innerWidth;VH=innerHeight;cv.width=Math.round(VW*DPR);cv.height=Math.round(VH*DPR);cv.style.width=VW+'px';cv.style.height=VH+'px';}
+const ts=(x,y)=>[(x-cam.x)*cam.k+VW/2,(y-cam.y)*cam.k+VH/2],tw=(sx,sy)=>[(sx-VW/2)/cam.k+cam.x,(sy-VH/2)/cam.k+cam.y];
+const LAY=[0,1].map(()=>{const c=document.createElement('canvas');return {c:c,g:c.getContext('2d'),img:null};}); // 圈内一层、环一层
+const RC=document.createElement('canvas'),RG=RC.getContext('2d'); // 环合成用:外沿以内、再挖掉可见光圈
+function hsh(i,j,e){let h=(Math.imul(i,374761393)+Math.imul(j,668265263)+Math.imul(e,1274126177))|0;h=Math.imul(h^(h>>>13),1103515245);h^=h>>>16;return (h>>>0)/4294967296;} // 格子噪声(可复现)
+function ringAt(rg,a,rho){return ringAtA(rg.V2,a,rho);} // 某艘船的环上某方位(弧度)、某厚度位置(0 内沿 ~ 1 外沿)的值:方位 x 厚度双线性
+function ringAtA(V2,a,rho){
+  const N=IRX.N,M=IRX.M,f=a/(2*Math.PI)*N,k0=Math.floor(f)%N,k1=(k0+1)%N,u=f-Math.floor(f),g=Math.max(0,Math.min(M-1,rho*M-0.5)),m0=Math.floor(g),m1=Math.min(M-1,m0+1),t=g-m0;
+  return (V2[k0*M+m0]*(1-t)+V2[k0*M+m1]*t)*(1-u)+(V2[k1*M+m0]*(1-t)+V2[k1*M+m1]*t)*u;
+}
+function radii(){const rIn=Math.max(IRX.RIN_MIN,IRX.VIS_R*cam.k);return [rIn,rIn+IRX.BAND];} // 环内沿 = 可见光圈在屏幕上的边
+function visArcs(P,k,R){ // 第 k 个圆(屏幕,半径 R)没被别的同半径圆盖住的弧段 [[a0,a1],...](弧度,a0 < a1,可能跨 2π)
+  const cov=[];
+  for(let j=0;j<P.length;j++){if(j===k)continue;const dx=P[j][0]-P[k][0],dy=P[j][1]-P[k][1],d=Math.hypot(dx,dy);
+    if(d<1e-6){if(j<k)return [];continue;} // 重合:只留前一个
+    if(d>=2*R)continue;const c=Math.atan2(dy,dx),h=Math.acos(d/(2*R));cov.push([c-h,c+h]);}
+  if(!cov.length)return [[0,2*Math.PI]];
+  const ev=[];for(const [a,b] of cov){let a0=((a%(2*Math.PI))+2*Math.PI)%(2*Math.PI),b0=a0+(b-a);if(b0>2*Math.PI){ev.push([a0,2*Math.PI],[0,b0-2*Math.PI]);}else ev.push([a0,b0]);}
+  ev.sort((x,y)=>x[0]-y[0]);const out=[];let cur=0;
+  for(const [a,b] of ev){if(a>cur)out.push([cur,a]);cur=Math.max(cur,b);}
+  if(cur<2*Math.PI)out.push([cur,2*Math.PI]);
+  return out;
+}
+function inArcs(arcs,a){a=((a%(2*Math.PI))+2*Math.PI)%(2*Math.PI);for(const [x,y] of arcs)if(a>=x&&a<=y)return true;return false;}
+function hullOf(P){ // 屏幕点的凸包(Andrew 单调链);1~2 个点原样返回
+  if(P.length<3)return P.slice();
+  const q=P.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]),cr=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]),lo=[],up=[];
+  for(const p of q){while(lo.length>=2&&cr(lo[lo.length-2],lo[lo.length-1],p)<=0)lo.pop();lo.push(p);}
+  for(let i=q.length-1;i>=0;i--){const p=q[i];while(up.length>=2&&cr(up[up.length-2],up[up.length-1],p)<=0)up.pop();up.push(p);}
+  lo.pop();up.pop();const h=lo.concat(up);return h.length?h:[q[0]];
+}
+function segD(p,a,b){const vx=b[0]-a[0],vy=b[1]-a[1],l2=vx*vx+vy*vy;let t=l2?((p[0]-a[0])*vx+(p[1]-a[1])*vy)/l2:0;t=Math.max(0,Math.min(1,t));return Math.hypot(p[0]-a[0]-vx*t,p[1]-a[1]-vy*t);}
+function hullD(H,p){ // 点到凸包的距离(包里 = 0);圆角凸包 = 到它距离 <= R 的点
+  if(H.length===1)return Math.hypot(p[0]-H[0][0],p[1]-H[0][1]);
+  if(H.length===2)return segD(p,H[0],H[1]);
+  let sg=0,ins=true;for(let i=0;i<H.length;i++){const a=H[i],b=H[(i+1)%H.length],c=(b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0]);if(c!==0){if(!sg)sg=Math.sign(c);else if(Math.sign(c)!==sg){ins=false;break;}}}
+  if(ins)return 0;let d=Infinity;for(let i=0;i<H.length;i++)d=Math.min(d,segD(p,H[i],H[(i+1)%H.length]));return d;
+}
+function hullNear(H,p){ // 凸包边上离 p 最近的点 q、朝外的方向 n、距离 d(包里 d = 0,n 取最近那条边的外法线;s = 带符号距离,包里为负)
+  if(H.length===1){const dx=p[0]-H[0][0],dy=p[1]-H[0][1],l=Math.hypot(dx,dy);return {d:l,s:l,q:H[0],n:l>1e-9?[dx/l,dy/l]:[1,0]};}
+  let best=null;const ne=H.length===2?1:H.length;
+  for(let i=0;i<ne;i++){const a=H[i],b=H[(i+1)%H.length],vx=b[0]-a[0],vy=b[1]-a[1],l2=vx*vx+vy*vy;let t=l2?((p[0]-a[0])*vx+(p[1]-a[1])*vy)/l2:0;t=Math.max(0,Math.min(1,t));
+    const q=[a[0]+vx*t,a[1]+vy*t],d=Math.hypot(p[0]-q[0],p[1]-q[1]);if(!best||d<best.d)best={d:d,q:q,a:a,b:b};}
+  const ins=H.length>=3&&hullD(H,p)===0;
+  if(!ins&&best.d>1e-9)return {d:best.d,s:best.d,q:best.q,n:[(p[0]-best.q[0])/best.d,(p[1]-best.q[1])/best.d]};
+  const vx=best.b[0]-best.a[0],vy=best.b[1]-best.a[1],l=Math.hypot(vx,vy)||1;let n=[vy/l,-vx/l],mx=0,my=0;for(const h of H){mx+=h[0]/H.length;my+=h[1]/H.length;}
+  if((best.q[0]-mx)*n[0]+(best.q[1]-my)*n[1]<0)n=[-n[0],-n[1]];return {d:0,s:ins?-best.d:0,q:best.q,n:n};
+}
+function bandAt(G,p,rIn,rOut){ // 环上一点 -> 方位(垂直外沿找到外沿上那一点,从组中心量)、温度位置 rho(按到外沿的距离)、f = 比环厚出来那截往里褪成本底的系数
+  const h=hullNear(G.H,p);let a=Math.atan2(h.q[1]+h.n[1]*rOut-G.c[1],h.q[0]+h.n[0]*rOut-G.c[0]);if(a<0)a+=2*Math.PI;
+  return {a:a,rho:Math.max(0,Math.min(1,(h.d-rIn)/(rOut-rIn))),f:Math.exp(-Math.max(0,rIn-h.s)/IRX.GAP_F)};
+}
+function rayHit(H,c,a,R){ // 从舰队中心 c 沿方位 a 出去,到凸包距离正好 = R 的那一点(凸的,只碰一次;二分)
+  let lo=0,hi=R;for(const h of H)hi=Math.max(hi,Math.hypot(h[0]-c[0],h[1]-c[1])+R);hi+=2;
+  for(let k=0;k<28;k++){const m=(lo+hi)/2;if(hullD(H,[c[0]+Math.cos(a)*m,c[1]+Math.sin(a)*m])<R)lo=m;else hi=m;}
+  return [c[0]+Math.cos(a)*lo,c[1]+Math.sin(a)*lo];
+}
+function polyP(g,q){g.moveTo(q[0][0],q[0][1]);for(let i=1;i<q.length;i++)g.lineTo(q[i][0],q[i][1]);g.closePath();}
+function circlesP(g,P,r){for(const q of P){g.moveTo(q[0]+r,q[1]);g.arc(q[0],q[1],r,0,2*Math.PI);}} // 几个同向的圆:nonzero 下就是并集
+function bboxOf(P,r){let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;for(const q of P){const rr=q.length>2?q[2]+r:r;x0=Math.min(x0,q[0]-rr);x1=Math.max(x1,q[0]+rr);y0=Math.min(y0,q[1]-rr);y1=Math.max(y1,q[1]+rr);}return [x0,y0,x1,y1];}
+function ticks(g,at){g.strokeStyle='rgba(255,200,150,.55)';g.lineWidth=1;for(let t=0;t<12;t++){const a=t*30*DEG,q=at(a);if(!q)continue;const l=t%3===0?7:4;g.beginPath();g.moveTo(q[0],q[1]);g.lineTo(q[0]+Math.cos(a)*l,q[1]+Math.sin(a)*l);g.stroke();}} // 方位刻度:每 30°,东南西北长一点
+function circum(a,b,c){const d=2*(a[0]*(b[1]-c[1])+b[0]*(c[1]-a[1])+c[0]*(a[1]-b[1]));if(Math.abs(d)<1e-9)return null;const a2=a[0]*a[0]+a[1]*a[1],b2=b[0]*b[0]+b[1]*b[1],c2=c[0]*c[0]+c[1]*c[1],x=(a2*(b[1]-c[1])+b2*(c[1]-a[1])+c2*(a[1]-b[1]))/d,y=(a2*(c[0]-b[0])+b2*(a[0]-c[0])+c2*(b[0]-a[0]))/d;return [x,y,Math.hypot(a[0]-x,a[1]-y)];}
+function mec(P){ // 屏幕点的最小外接圆 [x, y, r](点少,暴力:两点为直径 / 三点外接圆里最小的、套得住全部的)
+  if(P.length===1)return [P[0][0],P[0][1],0];let best=null;const ok=c=>P.every(p=>Math.hypot(p[0]-c[0],p[1]-c[1])<=c[2]*(1+1e-9)+1e-6);
+  for(let i=0;i<P.length;i++)for(let j=i+1;j<P.length;j++){const c=[(P[i][0]+P[j][0])/2,(P[i][1]+P[j][1])/2,Math.hypot(P[i][0]-P[j][0],P[i][1]-P[j][1])/2];if((!best||c[2]<best[2])&&ok(c))best=c;
+    for(let k=j+1;k<P.length;k++){const c3=circum(P[i],P[j],P[k]);if(c3&&(!best||c3[2]<best[2])&&ok(c3))best=c3;}}
+  return best||[P[0][0],P[0][1],0];
+}
+function sminK(a,b,k){const h=Math.max(k-Math.abs(a-b),0)/k;return Math.min(a,b)-h*h*k*0.25;} // 平滑最小值(Inigo Quilez 的多项式 smooth-min)
+function blobD(Q,x,y,r,k){let d=Infinity;for(const q of Q){const di=Math.hypot(x-q[0],y-q[1])-r;d=d===Infinity?di:sminK(d,di,k);}return d;} // 到融球边的带符号距离(里面为负)
+function blobRay(Q,c,a,lev,r,k){ // 从组中心 c 沿方位 a 出去,融球距离 = lev 的最外那一点(从外面大步往里找、再二分)
+  let t=0;for(const q of Q)t=Math.max(t,Math.hypot(q[0]-c[0],q[1]-c[1]));t+=r+lev+k+6;const ca=Math.cos(a),sa=Math.sin(a),at=u=>blobD(Q,c[0]+ca*u,c[1]+sa*u,r,k);
+  while(t>0&&at(t)>=lev)t-=3;if(t<=0)return [c[0],c[1]];let lo=t,hi=t+3;for(let i=0;i<10;i++){const m=(lo+hi)/2;if(at(m)<lev)lo=m;else hi=m;}return [c[0]+ca*lo,c[1]+sa*lo];
+}
+/* 每种画法给出一份视图 V:rings(环数据)、seen(每个热源上哪个环 k、方位 b)、inner(圈里按实际位置画的热)、vis(可见光圈的屏幕位置)、bb(要算的屏幕范围)、
+   inside / cell(屏幕上一点 -> 第 k 个环、方位 a、温度位置 rho、系数 f)、pathOut / pathIn(环外沿以内 / 里面那块的路径)、edge(环外沿上某方位的点)、strokes、name */
+function viewEach(list,E,kind,faith){ // faith:各艘忠实显示自己看到的(不去重,多选用);否则 3 各自正圆:每艘一个正圆环(贴着自己的可见光圈),叠着的地方归离得近的那艘;每个目标只画在一艘上 —— 那个方位的环露在外面、看它最清楚的那艘
+  const R=radii(),rIn=R[0],rOut=R[1],B=rOut-rIn,P=list.map(o=>ts(o.x,o.y)),C=IRX.CELL;
+  const own=(i,x,y)=>{let bj=-1,bd=Infinity;for(let j=0;j<P.length;j++){const d=Math.hypot(x-P[j][0],y-P[j][1]);if(d<rIn)return false;if(d<bd){bd=d;bj=j;}}return bj===i;}; // 这一点在第 i 艘的环上:不在谁的圈里、离它最近
+  const expo=(i,b)=>{let n=0;for(const f of [0.25,0.5,0.75]){const r=rIn+f*B;if(own(i,P[i][0]+Math.cos(b)*r,P[i][1]+Math.sin(b)*r))n++;}return n;}; // 第 i 艘的环在方位 b 上露出来几个点(共三个)
+  const rings=list.map((o,i)=>({c:{x:o.x,y:o.y},R0:IRX.VIS_R,rg:ringOf(kind,i),src:[]})),seen=[],inner=[];
+  if(faith)for(const e of E){for(let i=0;i<list.length;i++){const qi=e.qs[i],wi=wIn(qi.d),q=ringQ({s:e.s,qs:[qi],ni:0,any:qi.snr},qi.hid?-1:0,qi.b,i,wi<0.5);seen.push(q); // 第 i 艘自己看到的:方位、信噪比都是它的
+      if(wi<1&&!qi.hid)rings[i].src.push({q:q,wi:wi});}
+    if(e.wi>0)inner.push({s:e.s,w:e.wi,snr:e.any});}
+  else for(const e of E){let k=-1,kx=-1;
+    for(let i=0;i<list.length;i++){if(e.qs[i].hid)continue;const x=Math.min(2,expo(i,e.qs[i].b));if(k<0||x>kx||(x===kx&&e.qs[i].snr>e.qs[k].snr)){k=i;kx=x;}} // 露出两个点以上的当一样,再比谁看得清
+    const kk=k>=0?k:e.ni,q=ringQ(e,k,e.qs[kk].b,kk,e.wi<0.5);seen.push(q);
+    if(e.wi>0)inner.push({s:e.s,w:e.wi,snr:e.any});
+    if(e.wi<1&&k>=0)rings[k].src.push({q:q,wi:e.wi});}
+  for(const r of rings)ringFillGroup(r);
+  return {kind:kind,rings:rings,seen:seen,inner:inner,vis:P,bb:bboxOf(P,rOut),inMsg:'可见光圈内(半径 '+(IRX.VIS_R/1e4).toFixed(1)+' 万 km):照红外1,热画在实际位置',
+    inside:p=>P.some(q=>Math.hypot(p[0]-q[0],p[1]-q[1])<rIn),nearIn:(x,y)=>P.some(q=>Math.hypot(x-q[0],y-q[1])<rIn+2*C),
+    cell:(x,y)=>{let bj=0,bd=Infinity;for(let j=0;j<P.length;j++){const d=Math.hypot(x-P[j][0],y-P[j][1]);if(d<bd){bd=d;bj=j;}}
+      if(bd<rIn-2*C||bd>=rOut+2*C)return null;let a=Math.atan2(y-P[bj][1],x-P[bj][0]);if(a<0)a+=2*Math.PI;return {k:bj,a:a,rho:(bd-rIn)/B,f:1};},
+    pathOut:g=>circlesP(g,P,rOut),pathIn:g=>circlesP(g,P,rIn),
+    edge:(k,a)=>{const x=P[k][0]+Math.cos(a)*(rOut+3),y=P[k][1]+Math.sin(a)*(rOut+3);for(let j=0;j<P.length;j++)if(j!==k&&Math.hypot(x-P[j][0],y-P[j][1])<rOut)return null;return [x,y,Math.cos(a),Math.sin(a)];}, // 被别的环盖住的那段外沿不弹
+    strokes:g=>{g.strokeStyle='rgba(0,0,0,.55)';g.lineWidth=1;g.beginPath(); // 接缝:两艘的环交界(离两艘一样近、不在谁的圈里、没有更近的第三艘)
+      for(let i=0;i<P.length;i++)for(let j=i+1;j<P.length;j++){const dx=P[j][0]-P[i][0],dy=P[j][1]-P[i][1],D=Math.hypot(dx,dy);if(D<1e-6||D>=2*rOut)continue;
+        const mx=(P[i][0]+P[j][0])/2,my=(P[i][1]+P[j][1])/2,ux=-dy/D,uy=dx/D,t0=Math.sqrt(Math.max(0,rIn*rIn-D*D/4)),t1=Math.sqrt(rOut*rOut-D*D/4);
+        for(const sg of [1,-1]){let pen=false;for(let n=0;n<=16;n++){const t=sg*(t0+(t1-t0)*n/16),x=mx+ux*t,y=my+uy*t,di=Math.hypot(x-P[i][0],y-P[i][1]);let okp=di>=rIn-0.5;
+          for(let m=0;m<P.length&&okp;m++)if(m!==i&&m!==j&&Math.hypot(x-P[m][0],y-P[m][1])<di-0.5)okp=false;
+          if(okp){if(pen)g.lineTo(x,y);else g.moveTo(x,y);}pen=okp;}}}
+      g.stroke();
+      for(let k=0;k<P.length;k++){const arcs=visArcs(P,k,rOut);g.strokeStyle='#ff8a2a';g.lineWidth=2;for(const [a,b] of arcs){g.beginPath();g.arc(P[k][0],P[k][1],rOut,a,b);g.stroke();}
+        ticks(g,a=>inArcs(arcs,a)?[P[k][0]+Math.cos(a)*(rOut+2),P[k][1]+Math.sin(a)*(rOut+2)]:null);}},
+    name:k=>list[k].name+' 的环'+(faith?'(它自己看到的)':'')};
+}
+function viewCirc(list,E){ // 1 正圆:每组一个正圆环(最小外接圆套住这组的可见光圈),环里面整块照红外1(热画在实际位置),环外的才压到环上;两组的环会碰上就并成一组
+  const R=radii(),rIn=R[0],B=IRX.BAND,P=list.map(o=>ts(o.x,o.y)),G=list.map((o,i)=>[i]),CC=IRX.CELL;let C=null;
+  for(;;){C=G.map(g=>{const m=mec(g.map(i=>P[i]));return [m[0],m[1],m[2]+rIn];});let hit=false;
+    for(let a=0;a<G.length&&!hit;a++)for(let b=a+1;b<G.length&&!hit;b++)if(Math.hypot(C[a][0]-C[b][0],C[a][1]-C[b][1])<C[a][2]+C[b][2]+2*B){G[a]=G[a].concat(G[b]);G.splice(b,1);hit=true;}
+    if(!hit)break;}
+  const gof=[];G.forEach((g,k)=>g.forEach(i=>gof[i]=k));
+  const rings=C.map((c,k)=>{const w=tw(c[0],c[1]);return {c:{x:w[0],y:w[1]},R0:c[2]/cam.k,rg:ringOf('circ',k),src:[],ships:G[k].map(i=>list[i])};});
+  const X=IRX.XF*rIn,seen=[],inner=[];
+  for(const e of E){const p=ts(e.s.x,e.s.y);let w=0;for(const c of C)w=Math.max(w,smooth01((c[2]+X-Math.hypot(p[0]-c[0],p[1]-c[1]))/(2*X))); // 在环里面的份额(内沿内外各 X px 渐变)
+    const wi=Math.max(w,e.wi),kk=gof[e.bi>=0?e.bi:e.ni],rc=rings[kk].c,q=ringQ(e,e.bi,Math.atan2(e.s.y-rc.y,e.s.x-rc.x),kk,wi<0.5);seen.push(q);
+    const sn=e.wi>0?e.any:(e.bi>=0?e.qs[e.bi].snr:0);if(wi>0&&sn>0)inner.push({s:e.s,w:wi,snr:sn}); // 可见光圈外、环里面:被恒星 / 行星挡住的不画
+    if(wi<1&&e.bi>=0)rings[kk].src.push({q:q,wi:wi});}
+  for(const r of rings)ringFillGroup(r);
+  return {kind:'circ',rings:rings,seen:seen,inner:inner,vis:P,bb:bboxOf(C,B),inMsg:'环里面:照红外1,热画在实际位置(可见光圈外也画)',
+    inside:p=>C.some(c=>Math.hypot(p[0]-c[0],p[1]-c[1])<c[2]),nearIn:(x,y)=>C.some(c=>Math.hypot(x-c[0],y-c[1])<c[2]+2*CC),
+    cell:(x,y)=>{let bk=0,bd=Infinity;for(let k=0;k<C.length;k++){const d=Math.hypot(x-C[k][0],y-C[k][1])-C[k][2];if(d<bd){bd=d;bk=k;}}
+      if(bd<-2*CC||bd>=B+2*CC)return null;let a=Math.atan2(y-C[bk][1],x-C[bk][0]);if(a<0)a+=2*Math.PI;return {k:bk,a:a,rho:bd/B,f:1};},
+    pathOut:g=>{for(const c of C){g.moveTo(c[0]+c[2]+B,c[1]);g.arc(c[0],c[1],c[2]+B,0,2*Math.PI);}},
+    pathIn:g=>{for(const c of C){g.moveTo(c[0]+c[2],c[1]);g.arc(c[0],c[1],c[2],0,2*Math.PI);}},
+    edge:(k,a)=>{const r=C[k][2]+B+3;return [C[k][0]+Math.cos(a)*r,C[k][1]+Math.sin(a)*r,Math.cos(a),Math.sin(a)];},
+    strokes:g=>{for(const c of C){g.strokeStyle='#ff8a2a';g.lineWidth=2;g.beginPath();g.arc(c[0],c[1],c[2]+B,0,2*Math.PI);g.stroke();ticks(g,a=>[c[0]+Math.cos(a)*(c[2]+B+2),c[1]+Math.sin(a)*(c[2]+B+2)]);}},
+    name:k=>'第 '+(k+1)+' 组('+rings[k].ships.map(o=>o.name).join('、')+')'};
+}
+function viewBlob(list,E){ // 4 融球(metaball / 平滑并集):可见光圈平滑地融在一起,环 = 离融球 0 ~ BAND px 的一圈,里面照红外1;方位从组中心沿射线量(凹处会拉扯,对比用)
+  const R=radii(),rIn=R[0],B=IRX.BAND,KB=IRX.BLOB_K*B,CC=IRX.CELL,P=list.map(o=>ts(o.x,o.y)),n=P.length,par=P.map((_,i)=>i),f=i=>par[i]===i?i:(par[i]=f(par[i]));
+  for(let i=0;i<n;i++)for(let j=i+1;j<n;j++)if(Math.hypot(P[i][0]-P[j][0],P[i][1]-P[j][1])<2*rIn+KB/2)par[f(i)]=f(j); // 融得上(两圈中间那段也在融球里)的才一组
+  const m=new Map();P.forEach((_,i)=>{const r=f(i);if(!m.has(r))m.set(r,[]);m.get(r).push(i);});const G=[...m.values()],gof=[];G.forEach((g,k)=>g.forEach(i=>gof[i]=k));
+  const GS=G.map(g=>{const Q=g.map(i=>P[i]);let cx=0,cy=0;for(const q of Q){cx+=q[0]/Q.length;cy+=q[1]/Q.length;}return {Q:Q,c:[cx,cy]};});
+  const Dm=(x,y)=>{let k=0,d=Infinity;for(let i=0;i<GS.length;i++){const di=blobD(GS[i].Q,x,y,rIn,KB);if(di<d){d=di;k=i;}}return [k,d];};
+  const rings=GS.map((S,k)=>{const w=tw(S.c[0],S.c[1]);return {c:{x:w[0],y:w[1]},R0:IRX.VIS_R,rg:ringOf('blob',k),src:[],ships:G[k].map(i=>list[i])};});
+  const X=IRX.XF*rIn,seen=[],inner=[];
+  for(const e of E){const p=ts(e.s.x,e.s.y),wi=Math.max(e.wi,smooth01((X-Dm(p[0],p[1])[1])/(2*X))),kk=gof[e.bi>=0?e.bi:e.ni],rc=rings[kk].c,q=ringQ(e,e.bi,Math.atan2(e.s.y-rc.y,e.s.x-rc.x),kk,wi<0.5);seen.push(q);
+    const sn=e.wi>0?e.any:(e.bi>=0?e.qs[e.bi].snr:0);if(wi>0&&sn>0)inner.push({s:e.s,w:wi,snr:sn});
+    if(wi<1&&e.bi>=0)rings[kk].src.push({q:q,wi:wi});}
+  for(const r of rings)ringFillGroup(r);
+  for(const S of GS){S.out=[];S.inn=[];for(let t=0;t<180;t++){const a=t/180*2*Math.PI;S.out.push(blobRay(S.Q,S.c,a,B,rIn,KB));S.inn.push(blobRay(S.Q,S.c,a,0,rIn,KB));}}
+  return {kind:'blob',rings:rings,seen:seen,inner:inner,vis:P,bb:bboxOf(P,rIn+B+KB),inMsg:'融球里面:照红外1,热画在实际位置(可见光圈外也画)',
+    inside:p=>Dm(p[0],p[1])[1]<0,nearIn:(x,y)=>Dm(x,y)[1]<2*CC,
+    cell:(x,y)=>{const r=Dm(x,y);if(r[1]<-2*CC||r[1]>=B+2*CC)return null;const c=GS[r[0]].c;let a=Math.atan2(y-c[1],x-c[0]);if(a<0)a+=2*Math.PI;return {k:r[0],a:a,rho:r[1]/B,f:1};},
+    pathOut:g=>{for(const S of GS)polyP(g,S.out);},pathIn:g=>{for(const S of GS)polyP(g,S.inn);},
+    edge:(k,a)=>{const S=GS[k],q=blobRay(S.Q,S.c,a,B+3,rIn,KB);return [q[0],q[1],Math.cos(a),Math.sin(a)];},
+    strokes:g=>{for(const S of GS){g.strokeStyle='#ff8a2a';g.lineWidth=2;g.beginPath();polyP(g,S.out);g.stroke();ticks(g,a=>blobRay(S.Q,S.c,a,B+2,rIn,KB));}},
+    name:k=>'第 '+(k+1)+' 组('+rings[k].ships.map(o=>o.name).join('、')+')'};
+}
+function viewInner(list,E){ // 多选时的地图:只画各艘可见光圈里的红外(照红外1),圈外的都在仪表上
+  const rIn=radii()[0],C=IRX.CELL,P=list.map(o=>ts(o.x,o.y)),inner=[];for(const e of E)if(e.wi>0)inner.push({s:e.s,w:e.wi,snr:e.any});
+  return {kind:'inner',rings:[],seen:[],inner:inner,vis:P,bb:bboxOf(P,rIn+2*C),inMsg:'可见光圈内(半径 '+(IRX.VIS_R/1e4).toFixed(1)+' 万 km):照红外1,热画在实际位置',
+    inside:p=>P.some(q=>Math.hypot(p[0]-q[0],p[1]-q[1])<rIn),nearIn:(x,y)=>P.some(q=>Math.hypot(x-q[0],y-q[1])<rIn+2*C),
+    cell:()=>null,pathOut:()=>{},pathIn:g=>circlesP(g,P,rIn),edge:()=>[0,0,1,0],strokes:()=>{},name:()=>''};
+}
+function viewInst(list,E){ // 2 仪表:左边一个固定大小的仪表(同 RWR 告警器的方位显示、潜艇的声呐面板),方位从选中这几艘的中心量、径向 = 温度;可见光圈里的热不上仪表(地图上看得见)
+  const r0=IRX.INST_R,B=IRX.BAND,ro=r0+B,CC=IRX.CELL,IC=[ro+28,VH/2],cw={x:0,y:0};for(const o of list){cw.x+=o.x/list.length;cw.y+=o.y/list.length;}
+  const ring={c:cw,R0:IRX.VIS_R,rg:ringOf('inst',0),src:[]},seen=[];
+  for(const e of E){const q=ringQ(e,e.bi,Math.atan2(e.s.y-cw.y,e.s.x-cw.x),0,e.wi<0.5);seen.push(q);if(e.wi<1&&e.bi>=0)ring.src.push({q:q,wi:e.wi});}
+  ringFillGroup(ring);
+  const circ=(g,r)=>{g.moveTo(IC[0]+r,IC[1]);g.arc(IC[0],IC[1],r,0,2*Math.PI);};
+  return {kind:'inst',hud:true,rings:[ring],seen:seen,inner:[],vis:null,bb:[IC[0]-ro-4,IC[1]-ro-4,IC[0]+ro+4,IC[1]+ro+4],inMsg:'仪表中间:选中这几艘的队形(缩小,只示意)',
+    inside:p=>Math.hypot(p[0]-IC[0],p[1]-IC[1])<r0,
+    cell:(x,y)=>{const d=Math.hypot(x-IC[0],y-IC[1]);if(d<r0-2*CC||d>=ro+2*CC)return null;let a=Math.atan2(y-IC[1],x-IC[0]);if(a<0)a+=2*Math.PI;return {k:0,a:a,rho:(d-r0)/B,f:1};},
+    pathOut:g=>circ(g,ro),pathIn:g=>circ(g,r0),
+    edge:(k,a)=>[IC[0]+Math.cos(a)*(ro+3),IC[1]+Math.sin(a)*(ro+3),Math.cos(a),Math.sin(a)],
+    under:g=>{g.fillStyle='rgba(11,16,22,.92)';g.strokeStyle='#2a3642';g.lineWidth=1;g.beginPath();g.arc(IC[0],IC[1],ro+24,0,2*Math.PI);g.fill();g.stroke();},
+    strokes:g=>{g.strokeStyle='#ff8a2a';g.lineWidth=2;g.beginPath();g.arc(IC[0],IC[1],ro,0,2*Math.PI);g.stroke();ticks(g,a=>[IC[0]+Math.cos(a)*(ro+2),IC[1]+Math.sin(a)*(ro+2)]);
+      let mx=1;for(const o of list)mx=Math.max(mx,Math.hypot(o.x-cw.x,o.y-cw.y));const sc=(r0-10)/mx; // 仪表中间:我方队形(缩小到内圈里,只示意)
+      g.fillStyle='#5aa7ff';for(const o of list){g.beginPath();g.arc(IC[0]+(o.x-cw.x)*sc,IC[1]+(o.y-cw.y)*sc,2.5,0,2*Math.PI);g.fill();}
+      g.fillStyle='#8fa0b0';g.fillText('红外仪表',IC[0]-24,IC[1]+ro+19);},
+    name:()=>'仪表(方位从选中这几艘的中心量)'};
+}
+function viewHull(list,E){ // 凸包(旧,09-30 那版):环会碰上的船一组,外沿 = 圆角凸包,内沿贴着可见光圈;方位 / 温度见 bandAt
+  const R=radii(),rIn=R[0],rOut=R[1],CC=IRX.CELL,P=list.map(o=>ts(o.x,o.y)),groups=groupsOf(list),gof=new Map();groups.forEach((g,k)=>g.forEach(o=>gof.set(o,k)));
+  const rings=groups.map((g,k)=>{const c={x:0,y:0};for(const o of g){c.x+=o.x/g.length;c.y+=o.y/g.length;}return {ships:g,c:c,R0:IRX.VIS_R,rg:ringOf('hull',k),src:[]};}),seen=[],inner=[];
+  for(const e of E){const kk=gof.get(list[e.bi>=0?e.bi:e.ni]),rc=rings[kk].c,q=ringQ(e,e.bi,Math.atan2(e.s.y-rc.y,e.s.x-rc.x),kk,e.wi<0.5);seen.push(q);
+    if(e.wi>0)inner.push({s:e.s,w:e.wi,snr:e.any});if(e.wi<1&&e.bi>=0)rings[kk].src.push({q:q,wi:e.wi});}
+  for(const r of rings)ringFillGroup(r);
+  const GS=rings.map(r=>({H:hullOf(r.ships.map(o=>ts(o.x,o.y))),c:ts(r.c.x,r.c.y)}));
+  for(const S of GS){S.out=[];for(let t=0;t<180;t++)S.out.push(rayHit(S.H,S.c,t/180*2*Math.PI,rOut));}
+  return {kind:'hull',rings:rings,seen:seen,inner:inner,vis:P,bb:bboxOf(P,rOut),inMsg:'可见光圈内(半径 '+(IRX.VIS_R/1e4).toFixed(1)+' 万 km):照红外1,热画在实际位置',
+    inside:p=>P.some(q=>Math.hypot(p[0]-q[0],p[1]-q[1])<rIn),nearIn:(x,y)=>P.some(q=>Math.hypot(x-q[0],y-q[1])<rIn+2*CC),
+    cell:(x,y)=>{let dv=Infinity;for(const q of P)dv=Math.min(dv,Math.hypot(x-q[0],y-q[1]));if(dv<=rIn-2*CC)return null;
+      let d=Infinity,k=0;GS.forEach((S,i)=>{const dd=hullD(S.H,[x,y]);if(dd<d){d=dd;k=i;}});if(d>=rOut+2*CC)return null;const b=bandAt(GS[k],[x,y],rIn,rOut);return {k:k,a:b.a,rho:b.rho,f:b.f};},
+    pathOut:g=>{for(const S of GS)polyP(g,S.out);},pathIn:g=>circlesP(g,P,rIn),
+    edge:(k,a)=>{const q=rayHit(GS[k].H,GS[k].c,a,rOut+3);return [q[0],q[1],Math.cos(a),Math.sin(a)];},
+    strokes:g=>{for(const S of GS){g.strokeStyle='#ff8a2a';g.lineWidth=2;g.beginPath();polyP(g,S.out);g.stroke();ticks(g,a=>rayHit(S.H,S.c,a,rOut+2));}},
+    name:k=>'第 '+(k+1)+' 组('+rings[k].ships.map(o=>o.name).join('、')+')'};
+}
+function zLob(w){const n=IRX.ZONE_ARC,R=w.R/Math.cos(w.h/n),P=[[w.o[0],w.o[1]]];for(let i=0;i<=n;i++){const a=w.b-w.h+2*w.h*i/n;P.push([w.o[0]+Math.cos(a)*R,w.o[1]+Math.sin(a)*R]);}return P;} // 远弧放大 1/cos,弦只会把区域放大
+function zClip(P,Q){let out=P;for(let i=0;i<Q.length&&out.length;i++){const a=Q[i],b=Q[(i+1)%Q.length],inp=out,side=p=>(b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0]);out=[];
+  for(let k=0;k<inp.length;k++){const p=inp[k],q=inp[(k+1)%inp.length],sp=side(p),sq=side(q);if(sp>=0)out.push(p);if((sp>=0)!==(sq>=0)){const t=sp/(sp-sq);out.push([p[0]+(q[0]-p[0])*t,p[1]+(q[1]-p[1])*t]);}}}return out;}
+function zArea(P){let s=0;for(let i=0;i<P.length;i++){const p=P[i],q=P[(i+1)%P.length];s+=p[0]*q[1]-q[0]*p[1];}return Math.abs(s)/2;}
+function irZones(list,E){ // 多选时的交集(照雷达画面「被听见」):每艘看得见(过发现门)的一块扇形,求交;围死才要
+  const out=[];
+  E.forEach((e,j)=>{if(e.wi>0)return;const W=[]; // 可见光圈里的不画(实际位置已经看得见)
+    for(let i=0;i<list.length;i++){const q=e.qs[i],sn=q.snr*IRX.SENS;if(q.hid||sn<1)continue;
+      const h=Math.max(IRX.SMIN,Math.min(IRX.SMAX,IRX.SIG0/Math.sqrt(sn)))*DEG; // 半宽 = 环上那团的角宽
+      W.push({o:[list[i].x,list[i].y],b:q.b+(hsh(i+1,j+1,7)*2-1)*h*0.6,h:h,R:IRX.COLD_R*Math.sqrt(IRX.LUM_MAX/(IRX.LUM0*q.snr))});} // 方位按每一对固定挪开 ± 0.6 x 半宽;远端 = 最亮的船在这个亮度下能在多远
+    if(W.length<2)return;
+    let P=null;for(const w of W){const L=zLob(w);P=P?zClip(P,L):L;if(!P.length)break;}
+    if(!P||P.length<3)return;
+    for(const p of P)for(const w of W)if(Math.hypot(p[0]-w.o[0],p[1]-w.o[1])>=w.R*(1-1e-6))return; // 碰到远端 = 围不死,不画
+    out.push({P:P,area:zArea(P),n:W.length});});
+  return out;
+}
+function drawZones(Z){ // 越小越亮(同雷达画面的围死多边形,颜色换成红外的暖色)
+  for(const z of Z){const u=Math.max(0,Math.min(1,Math.log(IRX.ZONE_S/Math.sqrt(z.area))/Math.log(100)));
+    ctx.beginPath();z.P.forEach((p,i)=>{const q=ts(p[0],p[1]);if(i)ctx.lineTo(q[0],q[1]);else ctx.moveTo(q[0],q[1]);});ctx.closePath();
+    ctx.fillStyle='rgba(255,150,70,'+(0.05+0.3*u).toFixed(3)+')';ctx.fill();ctx.strokeStyle='rgba(255,175,95,'+(0.35+0.5*u).toFixed(3)+')';ctx.lineWidth=1;ctx.stroke();}
+}
+function drawView(V){ // 画一份视图(各画法共用):同红外1 的质感 —— 屏幕上 CELL px 一格(锚在屏幕上);里面(V.nearIn)照红外1 整块画;环按 V.cell 取值
+  const C=IRX.CELL,rIn=radii()[0],ep=Math.floor(NOW/IRX.NOISE_MS),bb=V.bb;
+  const i0=Math.max(-1,Math.floor(bb[0]/C)-1),i1=Math.min(Math.ceil(VW/C)+1,Math.ceil(bb[2]/C)+1),j0=Math.max(-1,Math.floor(bb[1]/C)-1),j1=Math.min(Math.ceil(VH/C)+1,Math.ceil(bb[3]/C)+1);
+  const nw=i1-i0+1,nh=j1-j0+1;if(nw<=0||nh<=0)return;
+  for(const L of LAY)if(L.c.width!==nw||L.c.height!==nh||!L.img){L.c.width=nw;L.c.height=nh;L.img=L.g.createImageData(nw,nh);}
+  const DI=LAY[0].img.data,DR=LAY[1].img.data,PL=WORLD.planet,pic=V.nearIn,src=V.inner.map(e=>{const q=ts(e.s.x,e.s.y),bg=TER.neb?IRX.NEB_E*nebRho(e.s.x,e.s.y):0,sg=Math.max(3,IRX.SRC_PX*Math.sqrt(e.s.size/0.7));
+    return {x:q[0],y:q[1],pk:e.w*irvV(e.snr)*(e.snr>=1?1+bg/IRX.V0:1),k:-0.5/(sg*sg),r2:16*sg*sg};});
+  for(let j=0;j<nh;j++)for(let i=0;i<nw;i++){const cx=(i0+i+0.5)*C,cy=(j0+j+0.5)*C,o4=(j*nw+i)*4,gi=i0+i,gj=j0+j;
+    if(pic&&pic(cx,cy)){const w=tw(cx,cy);let v=TER.neb?IRX.NEB_E*nebRho(w[0],w[1]):0;if(TER.pl&&Math.hypot(w[0]-PL.x,w[1]-PL.y)<PL.r)v=Math.max(v,IRX.PL_V); // 里面:照红外1 —— 星云自身发光、行星一块温热、热在实际位置
+      for(const e of src){const ex=cx-e.x,ey=cy-e.y,d2=ex*ex+ey*ey;if(d2<e.r2)v+=e.pk*Math.exp(d2*e.k);}
+      v=v*(1+IRX.GRAIN*(hsh(gi,gj,0)*2-1))+IRX.NOISE*(hsh(gi+977,gj+131,ep)*2-1);const k=lutK(v)*3;DI[o4]=LUT[k];DI[o4+1]=LUT[k+1];DI[o4+2]=LUT[k+2];DI[o4+3]=255;}else DI[o4+3]=0;
+    const r=V.cell(cx,cy); // 环:这个环朝这个方位看到的热(从内沿到外沿 = 冷到热)
+    if(r){const rgr=V.rings[r.k].rg;let w=ringAtA(rgr.V2,r.a,r.rho)*r.f;const tr=(AX==='C'||AX==='D')&&w>1e-9?ringAtA(rgr.VT,r.a,r.rho)*r.f/w:0;w=w*(1+IRX.GRAIN*(hsh(gi,gj,0)*2-1))+IRX.NOISE*(hsh(gi+977,gj+131,ep)*2-1);
+      if(AX==='C'||AX==='D'){const c=hueCol(w,tr);DR[o4]=c[0];DR[o4+1]=c[1];DR[o4+2]=c[2];}else{const k=lutK(w)*3;DR[o4]=LUT[k];DR[o4+1]=LUT[k+1];DR[o4+2]=LUT[k+2];}DR[o4+3]=255;}else DR[o4+3]=0;}
+  for(const L of LAY)L.g.putImageData(L.img,0,0);
+  if(V.under)V.under(ctx);
+  if(V.rings.length){if(RC.width!==cv.width||RC.height!==cv.height){RC.width=cv.width;RC.height=cv.height;}
+    RG.setTransform(DPR,0,0,DPR,0,0);RG.clearRect(0,0,VW,VH);RG.save();RG.beginPath();V.pathOut(RG);RG.clip();RG.imageSmoothingEnabled=true;RG.drawImage(LAY[1].c,i0*C,j0*C,nw*C,nh*C);RG.restore();
+    RG.globalCompositeOperation='destination-out';RG.beginPath();V.pathIn(RG);RG.fill();RG.globalCompositeOperation='source-over'; // 挖掉里面那块
+    ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(RC,0,0);ctx.restore();}
+  if(pic){ctx.save();ctx.beginPath();V.pathIn(ctx);ctx.clip();ctx.imageSmoothingEnabled=true;ctx.drawImage(LAY[0].c,i0*C,j0*C,nw*C,nh*C);ctx.restore();}
+  V.strokes(ctx);
+  if(V.vis){const P=V.vis;ctx.strokeStyle='rgba(255,200,150,.35)';ctx.lineWidth=1;ctx.setLineDash([4,4]);for(let k=0;k<P.length;k++)for(const [a,b] of visArcs(P,k,rIn)){ctx.beginPath();ctx.arc(P[k][0],P[k][1],rIn,a,b);ctx.stroke();}ctx.setLineDash([]);} // 可见光圈(并起来):里面实际可见
+  const qOf=new Map();for(const q of V.seen)if(q.k>=0&&q.out&&!q.hid){if(!qOf.has(q.s))qOf.set(q.s,[]);qOf.get(q.s).push(q);} // 同一个热源可能在几个环上(各艘忠实显示时)
+  for(const f of FLASH){const qs=qOf.get(f.s),al=Math.max(0,1-(NOW-f.t0)/1000/IRX.FLASH_S);if(!qs||!al)continue; // 异常:它上的环的外沿,那个方位一道亮刻痕往外弹、淡出
+    for(const q of qs){const e=V.edge(q.k,q.b<0?q.b+2*Math.PI:q.b),l=7+14*(1-al);if(!e)continue;ctx.strokeStyle='rgba(255,245,200,'+al.toFixed(2)+')';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(e[0],e[1]);ctx.lineTo(e[0]+e[2]*l,e[1]+e[3]*l);ctx.stroke();}}
+}
+function shipGlyph(p,h,col,sel){ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(h);ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(9,0);ctx.lineTo(-6,-5);ctx.lineTo(-3,0);ctx.lineTo(-6,5);ctx.closePath();ctx.fill();
+  if(sel){ctx.strokeStyle='#ffe066';ctx.lineWidth=1.4;ctx.beginPath();ctx.arc(0,0,12,0,2*Math.PI);ctx.stroke();}ctx.restore();}
+function draw(){
+  ctx.setTransform(DPR,0,0,DPR,0,0);ctx.fillStyle='#070a0e';ctx.fillRect(0,0,VW,VH);ctx.font='12px "Microsoft YaHei",sans-serif';
+  {const a=ts(-1530000,-860625),b=ts(1530000,860625);ctx.strokeStyle='rgba(120,150,180,.3)';ctx.lineWidth=1;ctx.strokeRect(a[0],a[1],b[0]-a[0],b[1]-a[1]);}
+  if(TER.neb)for(const n of WORLD.nebs){const p=ts(n.x,n.y);ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(n.ang);ctx.scale(n.a*cam.k,n.b*cam.k);const g=ctx.createRadialGradient(0,0,0,0,0,1.6);g.addColorStop(0,'rgba(90,110,140,.22)');g.addColorStop(1,'rgba(90,110,140,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,1.6,0,2*Math.PI);ctx.fill();ctx.restore();}
+  if(TER.pl){const P=WORLD.planet,p=ts(P.x,P.y);ctx.fillStyle='#2b3440';ctx.beginPath();ctx.arc(p[0],p[1],Math.max(3,P.r*cam.k),0,2*Math.PI);ctx.fill();ctx.strokeStyle='#4d5b6b';ctx.stroke();}
+  if(TER.sun){const S=WORLD.star,p=ts(S.x,S.y);if(p[0]>=0&&p[0]<=VW&&p[1]>=0&&p[1]<=VH){ctx.fillStyle='#ffb04a';ctx.beginPath();ctx.arc(p[0],p[1],Math.max(6,696000*cam.k),0,2*Math.PI);ctx.fill();}
+    else{let dx=p[0]-VW/2,dy=p[1]-VH/2;const l=Math.hypot(dx,dy);dx/=l;dy/=l;const t=Math.min((VW/2-30)/Math.abs(dx||1e-9),(VH/2-30)/Math.abs(dy||1e-9)),q=[VW/2+dx*t,VH/2+dy*t];
+      ctx.fillStyle='rgba(255,190,90,.9)';ctx.beginPath();ctx.arc(q[0],q[1],6,0,2*Math.PI);ctx.fill();ctx.fillText('恒星',q[0]-dx*26-12,q[1]-dy*26+4);}}
+  if(GOD){ // 上帝视角:真身
+    if(TER.rock)for(const k of WORLD.rocks){const p=ts(k.x,k.y);ctx.fillStyle='#8b949d';const r=Math.max(1.2,Math.sqrt(k.size)*1.2);ctx.fillRect(p[0]-r/2,p[1]-r/2,r,r);}
+    for(const f of WORLD.foes){const p=ts(f.x,f.y);shipGlyph(p,Math.atan2(f.vy,f.vx),'#ff6b6b',false);ctx.fillStyle='#d98080';ctx.fillText(f.name+(f.eng!=='off'?' · '+({side:'侧推',main:'主推'})[f.eng]:''),p[0]+12,p[1]+4);}}
+  const sel=SELS.filter(s=>WORLD.own.includes(s));let VS=[],Z=null;
+  if(sel.length){const E=senseAll(sel);if(FM==='sel'&&sel.length>1)Z=irZones(sel,E); // 多选:地图上画交集
+    if(FM==='sel')VS=sel.length===1?[viewEach(sel,E,'sel')]:[viewEach(sel,E,'each'),viewInst(sel,E)]; // 单选 = 那艘自己的环;多选 = 各艘的环、每个目标只在一个环上(甲:数据链认得出同一个目标)+ 仪表
+    else if(FM==='inst')VS=[viewEach([sel[0]],subSense(E,0),'sel'),viewInst(sel,E)];
+    else VS=[FM==='circ'?viewCirc(sel,E):FM==='blob'?viewBlob(sel,E):FM==='hull'?viewHull(sel,E):viewEach(sel,E,'each')];}
+  if(VS.length)anomScan([VS[VS.length-1].seen]); // 仪表那种按舰队(最后一份)报
+  for(const V of VS)if(!V.hud)drawView(V);
+  if(Z)drawZones(Z);
+  for(const s of WORLD.own){const p=ts(s.x,s.y);shipGlyph(p,s.h,'#5aa7ff',SELS.includes(s));ctx.fillStyle='#8fb8e0';ctx.fillText(s.name,p[0]+14,p[1]+16);} // 我方船画在环之上
+  for(const V of VS)if(V.hud)drawView(V); // 仪表盖在船上面
+  readout(VS,Z);
+}
+const FM_NAME={circ:'1 正圆 —— 每组一个外接正圆环,环里面照红外1',inst:'2 仪表 —— 左边舰队仪表(方位从舰队中心量)+ 地图上只画选中那艘的环',
+  each:'3 各自正圆 —— 每艘一个环,叠着的地方归近的那艘,每个目标只在一艘上',blob:'4 融球 —— 可见光圈平滑融在一起,方位从组中心沿射线量',hull:'凸包(旧)—— 圆角凸包,内沿贴着可见光圈'};
+function readout(VS,Z){
+  const n=SELS.length,L=[];L.push(!n?'没选船 · 点我方船选中,Shift+点多选':FM==='sel'?(n===1?'选中 '+SELS[0].name+' · 它自己的环':'选中 '+n+' 艘 · 各艘的环(每个目标只在一个环上)+ 地图上的交集 + 左边仪表'):'选中 '+n+' 艘 · '+FM_NAME[FM]);
+  if(MOUSE)for(let m=VS.length-1;m>=0;m--){const V=VS[m]; // 仪表盖在最上面,先看它
+    if(V.inside(MOUSE)){L.push(V.inMsg);break;}
+    const r=V.cell(MOUSE[0],MOUSE[1]);if(!r||r.rho>1.15)continue;
+    const rg=V.rings[r.k].rg,a=r.a,rho=Math.max(0,Math.min(1,r.rho)),i=Math.round(a/(2*Math.PI)*IRX.N)%IRX.N,brg=(Math.round(a/DEG)+90)%360;
+    const v0=ringAt(rg,a,rho),mt=v0>1e-9?ringAtA(rg.VT,a,rho)/v0:0,axL=AX==='B'?'波长 ≈ '+(IRX.LAM_IN*Math.pow(IRX.LAM_OUT/IRX.LAM_IN,rho)).toFixed(1)+' µm':AX==='C'?'信噪比 ≈ '+Math.pow(10,4*rho-1).toPrecision(2)+' · 平均温度 ≈ '+Math.round(TofRho(mt))+' K':AX==='D'?'≈ '+Math.round(rho*IRX.M*IRX.D_DT)+' 游戏秒前 · 平均温度 ≈ '+Math.round(TofRho(mt))+' K':'温度 ≈ '+Math.round(TofRho(rho))+' K';
+    L.push(V.name(r.k)+' 朝 '+brg+'° · '+axL+' · 值 '+(v0*r.f).toFixed(3)+'(本底 '+rg.BG[i].toFixed(3)+')');
+    if(GOD){const near=V.seen.filter(q=>{if(q.k!==r.k)return false;const b=q.b<0?q.b+2*Math.PI:q.b;return Math.abs(wrapA(b-a))<Math.max(2,(q.sig||2)*2)*DEG;}).sort((x,y)=>y.snr-x.snr).slice(0,6);
+      for(const q of near)L.push('  '+q.s.name.padEnd(8,' ')+' 离舰队 '+Math.round(q.d/1e4)+' 万 km · 信噪比 '+q.snr.toFixed(q.snr<0.1?3:2)+(q.hid?' · 哪艘都看不见(恒星 / 行星)':' · 角宽 '+(q.sig?q.sig.toFixed(1):'—')+'°'));}
+    break;}
+  if(VS.length){let n=0;for(const q of VS[VS.length-1].seen)if(!q.hid&&q.snr*IRX.SENS>=1)n++;L.push('过发现门的热源 '+n+' 个'+(Z?' · 围死的交集 '+Z.length+' 块':''));}
+  document.getElementById('read').textContent=L.join('\n');
+}
+function fleetUI(){ // 敌舰的引擎档 / 开火(上帝视角才显示名字,玩家视角也能按 —— 演示用)
+  const el=document.getElementById('fleet');let h='<div class="ttl">敌舰(演示控制)</div>';
+  WORLD.foes.forEach((f,i)=>{h+='<div class="row"><span class="nm">'+(GOD?f.name:'敌舰 '+(i+1))+'</span>';
+    for(const [k,l] of [['off','熄火'],['side','侧推'],['main','主推']])h+='<button data-i="'+i+'" data-e="'+k+'" class="'+(f.eng===k?'on':'')+'">'+l+'</button>';
+    h+='<button data-i="'+i+'" data-f="1">开火</button></div>';});
+  el.innerHTML=h;
+}
+document.getElementById('fleet').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const f=WORLD.foes[+b.dataset.i];if(!f)return;
+  if(b.dataset.e)f.eng=b.dataset.e;if(b.dataset.f)f.fireT=NOW;fleetUI();});
+
+/* ---- 交互 ---- */
+let drag=null;
+function pick(sx,sy){const all=WORLD.own.concat(GOD?WORLD.foes.concat(TER.rock?WORLD.rocks:[]):[]);let best=null,bd=14;for(const s of all){const p=ts(s.x,s.y),d=Math.hypot(p[0]-sx,p[1]-sy);if(d<bd){bd=d;best=s;}}return best;}
+cv.addEventListener('mousedown',e=>{const s=pick(e.clientX,e.clientY);if(s){if(WORLD.own.includes(s)){const i=SELS.indexOf(s);if(e.shiftKey){if(i>=0)SELS.splice(i,1);else SELS.push(s);}else if(i<0)SELS=[s];} // Shift+点 = 加 / 减;点没选的 = 只选它;点已选的先不动(好拖),松手没拖才只留它
+  drag={o:s,x:e.clientX,y:e.clientY,shift:e.shiftKey};}else drag={pan:true,x:e.clientX,y:e.clientY,cx:cam.x,cy:cam.y};});
+window.addEventListener('mousemove',e=>{MOUSE=(e.target===cv||drag)?[e.clientX,e.clientY]:null;
+  if(drag&&drag.pan){cam.x=drag.cx-(e.clientX-drag.x)/cam.k;cam.y=drag.cy-(e.clientY-drag.y)/cam.k;}
+  else if(drag&&drag.o){if(Math.hypot(e.clientX-drag.x,e.clientY-drag.y)>3)drag.moved=true;const w=tw(e.clientX,e.clientY);drag.o.x=w[0];drag.o.y=w[1];}});
+window.addEventListener('mouseup',()=>{if(drag&&drag.o&&!drag.moved&&!drag.shift&&SELS.includes(drag.o))SELS=[drag.o];drag=null;});
+cv.addEventListener('wheel',e=>{e.preventDefault();const w=tw(e.clientX,e.clientY);cam.k=Math.max(1/40000,Math.min(1/50,cam.k*Math.pow(1.0015,-e.deltaY)));const w2=tw(e.clientX,e.clientY);cam.x+=w[0]-w2[0];cam.y+=w[1]-w2[1];},{passive:false});
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+document.getElementById('vPl').onclick=()=>{GOD=false;document.getElementById('vPl').classList.add('on');document.getElementById('vGod').classList.remove('on');fleetUI();};
+document.getElementById('vGod').onclick=()=>{GOD=true;document.getElementById('vGod').classList.add('on');document.getElementById('vPl').classList.remove('on');fleetUI();};
+for(const b of document.querySelectorAll('[data-sp]'))b.onclick=()=>{RATE=+b.dataset.sp;for(const x of document.querySelectorAll('[data-sp]'))x.classList.toggle('on',x===b);};
+for(const [id,k] of [['tSun','sun'],['tNeb','neb'],['tPl','pl'],['tRock','rock']])document.getElementById(id).onclick=function(){TER[k]=!TER[k];this.classList.toggle('on',TER[k]);};
+document.getElementById('reset').onclick=()=>{reset();fleetUI();};
+document.getElementById('selAll').onclick=()=>{SELS=WORLD.own.slice();};
+for(const b of document.querySelectorAll('[data-fm]'))b.onclick=()=>{FM=b.dataset.fm;for(const x of document.querySelectorAll('[data-fm]'))x.classList.toggle('on',x===b);};
+for(const [id,key,fmt] of [['gCell','CELL',x=>x+' px'],['gGrain','GRAIN',x=>x.toFixed(2)],['gSens','SENS',x=>'x'+x],['gFlk','FLK',x=>'x'+x.toFixed(1)]]){const el=document.getElementById(id),v=document.getElementById(id+'V');el.value=IRX[key];v.textContent=fmt(IRX[key]);
+  el.addEventListener('input',()=>{IRX[key]=+el.value;v.textContent=fmt(IRX[key]);});}
+for(const b of document.querySelectorAll('[data-ax]'))b.onclick=()=>{AX=b.dataset.ax;for(const x of document.querySelectorAll('[data-ax]'))x.classList.toggle('on',x===b);
+  if(AX==='D'&&RATE===0){RATE=1;for(const x of document.querySelectorAll('[data-sp]'))x.classList.toggle('on',x.dataset.sp==='1');} // 瀑布要时间走起来
+  applyRes();};
+for(const b of document.querySelectorAll('[data-rule]'))b.onclick=()=>{RULE=b.dataset.rule;for(const x of document.querySelectorAll('[data-rule]'))x.classList.toggle('on',x===b);};
+for(const b of document.querySelectorAll('[data-res]'))b.onclick=()=>{RES=b.dataset.res;for(const x of document.querySelectorAll('[data-res]'))x.classList.toggle('on',x===b);applyRes();};
+document.getElementById('fit').onclick=()=>{cam.x=0;cam.y=0;cam.k=Math.min(VW/3300000,VH/1900000);};
+function frame(t){requestAnimationFrame(frame);const dt=LAST?Math.min(0.1,(t-LAST)/1000):0;LAST=t;NOW=performance.now();
+  if(RATE>0){const k=dt*RATE*10;GT+=k;for(const f of WORLD.foes){f.x+=f.vx*k;f.y+=f.vy*k;}} // x1 = 每真实秒 10 游戏秒(同引擎的 TIME_K)
+  draw();}
+window.addEventListener('resize',resize);
+resize();applyRes();reset();fleetUI();requestAnimationFrame(frame);
+</script></body></html>

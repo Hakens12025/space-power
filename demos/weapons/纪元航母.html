@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>航母 · 反辐射 / 激光 / 舰载机(demo)</title>
+<style>
+html,body{margin:0;background:#05070c;overflow:hidden;font-family:"Microsoft YaHei",Consolas,sans-serif;color:#cdd6e4;user-select:none}
+#cv{display:block;cursor:crosshair}
+.panel{position:absolute;background:rgba(8,12,20,.86);border:1px solid #1c2736;border-radius:4px;font-size:12px}
+#top{top:10px;left:50%;transform:translateX(-50%);padding:6px 14px;display:flex;gap:14px;align-items:center;white-space:nowrap}
+#top b{color:#9fc4ee}
+button{background:#152030;color:#cdd6e4;border:1px solid #2a3a50;padding:3px 10px;margin:0 2px;font-size:12px;cursor:pointer;border-radius:3px}
+button:hover{background:#1d2c42}
+button.on{background:#1d3a52;border-color:#3a6a92;color:#bfe3ff}
+button.warn{border-color:#7a4a1a;color:#ffd9a0}
+#bar{bottom:10px;left:50%;transform:translateX(-50%);padding:7px 12px;display:flex;gap:6px;align-items:center;white-space:nowrap}
+#bar .sep{width:1px;height:22px;background:#1c2736;margin:0 4px}
+#info{top:10px;left:10px;width:250px;padding:8px 10px;line-height:1.7}
+#info h4{margin:0 0 4px;font-size:12px;color:#9fb4d0}
+#info .k{color:#7f93ad}
+#info .ac{font-size:11px;line-height:1.5}
+#log{bottom:10px;left:10px;width:330px;padding:6px 10px;font-size:11px;line-height:1.6;color:#8fa4bd;pointer-events:none}
+#log .e{color:#ffd166}#log .r{color:#ff9a8a}#log .g{color:#7fe0c8}
+#tip{position:absolute;bottom:64px;left:50%;transform:translateX(-50%);font-size:12px;color:#ffd166;text-shadow:0 0 4px #000;pointer-events:none}
+#scale{position:absolute;bottom:52px;right:12px;font-size:11px;color:#7f93ad;pointer-events:none}
+#end{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(3,5,10,.55);font-size:34px;letter-spacing:6px}
+#end.win{color:#7fe0c8}#end.lose{color:#ff8a7a}
+.k{color:#7f93ad}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="top" class="panel"><b>航母 · 新武器演示</b><span>模拟时间 <b id="clk">00:00</b></span>
+  <span><button data-spd="0">∥</button><button data-spd="1">1×</button><button data-spd="2" class="on">2×</button><button data-spd="4">4×</button><button data-spd="8">8×</button></span>
+  <button id="bRst">重开</button><span class="k">滚轮缩放 · 右键拖动/WASD 平移 · 空格暂停 · Esc 取消武器</span></div>
+<div id="bar" class="panel">
+  <button id="bRadar">雷达:静默</button><div class="sep"></div>
+  <button id="bMsl">导弹 <span id="nMsl"></span></button>
+  <button id="bArm">反辐射 <span id="nArm"></span></button>
+  <button id="bLsr">激光照射</button><button id="bPD" class="on">点防:开</button><div class="sep"></div>
+  <button id="bSct">放侦察机 <span id="nSct"></span></button>
+  <button id="bStr">攻击机出击 <span id="nStr"></span></button>
+  <button id="bRcl">召回</button>
+</div>
+<div id="info" class="panel"></div>
+<div id="log" class="panel"></div>
+<div id="tip"></div><div id="scale"></div><div id="end"></div>
+<script>
+"use strict";
+/* 航母一舰演示三件新武器(2026-10-02 用户:反辐射-激光-飞机,多机制多内容,操作风格与尺度同引擎):
+   反辐射 —— 打"行为"不是打"船":听到就能打(点雷达异常圈发射,不需要定位);目标关机就守在最后听见的位置(变雷等再开机);
+             任何射频源都是合法目标(民船导航雷达每 15 秒 ping 一次 = 天然诱饵);命中 = 伤害 + 雷达断电 25 秒;干扰弹对它无效。
+   激光   —— 近距确定性武器:4 万内光速必中(无 S 形概率),持续照射 90/秒;发热管理(连射过热锁 8 秒);开火 = 光学信标,
+             敌方 100 万内立刻拿到你的方位;点防模式自动照射来袭导弹(2.5 万,每 1.2 秒烧掉一组里的 8 枚)。
+   舰载机 —— 可回收的传感器+轻打击:侦察机(600 km/s,可见 8 万/热 15 万/听射频 40 万,绕轨点巡逻)把舰队的画面带出去;
+             攻击机带一枚轻弹(80 伤)打了就回舰再挂弹(25 秒);都脆,进对方近防圈(1.875 万)就是活靶。
+   感知(黑暗森林):可见光圈 15.8 万;主推在跑的船 35 万外看得见热;开照射的雷达 49 万内被听见(异常圈,方位 ±3°、距离 ±8%)。
+   数值与引擎同尺度:游戏秒、km;导弹 12 枚×15 伤、40 万门;命中先扣护盾(空到满 60 秒、破后 10 秒重启)。
+   2026-10-02 追加(用户):① 导弹 / 反辐射自动躲避天体 —— 前望航程与盘面相交就沿切线绕,绕行时微微掉速(=转向的油,ARM 另多烧燃料);
+   ② 飞机概率规避:导弹 50% > 近防炮 30% > 激光 12%(敌舰会还击咬飞机的齐射、近防圈离散开火、25k 内点防激光),躲过 = 侧向急闪;
+   ③ 右键点地图 = 航母转向那个点(右键拖动仍是平移)。 */
+const TAU=Math.PI*2;
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+let W=0,H=0,DPR=1;
+function fit(){DPR=window.devicePixelRatio||1;W=innerWidth;H=innerHeight;cv.width=W*DPR;cv.height=H*DPR;cv.style.width=W+'px';cv.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0);}
+addEventListener('resize',fit);fit();
+const C={ARENA:{w:1000000,h:600000},TIME_K:10,
+  VIS:158000,IR:350000,HEAR:490000,HEAR_AC:400000,VIS_AC:80000,IR_AC:150000,
+  RADAR_ACT:246000,BEACON:1000000,
+  MSL:{spd:1800,dmg:15,n:12,gate:400000,ciws:.35,chaffBlue:.20,chaffRed:.15},
+  ARM:{spd:3000,fuel:260,dmg:220,seek:300000,loiter:120,outage:25} /* fuel = 寿命秒:90 只能飞 27 万,够不着听见距离上的目标(实测 35 万外油尽坠弹),260 ≈ 78 万盖满 */,
+  LSR:{range:40000,dps:90,heat:30,cool:12,lock:8,pdR:25000,pdT:1.2,pdKill:8},
+  SHD:{full:60,re:10},
+  PLANET:{x:580000,y:220000,r:90000},
+  AC_EVADE:{msl:0.5,ciws:0.3,lsr:0.12}}; /* 2026-10-02 飞机概率规避:导弹 > 近防炮 > 激光,依次衰减;躲过 = 侧向急闪(看得见),没躲过 = 吃伤 */
+const rnd=(a,b)=>a+Math.random()*(b-a);
+function acJink(q){ // 规避成功的侧向急闪:看得见的一下横跳
+  const sp=Math.hypot(q.vx,q.vy)||1,px=-q.vy/sp,py=q.vx/sp,sg=Math.random()<0.5?1:-1;
+  q.vx+=px*sg*500;q.vy+=py*sg*500;fx(q.x,q.y,2500,'pd');}
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+const norm=(x,y)=>{const l=Math.hypot(x,y)||1;return[x/l,y/l];};
+const ang=(x,y)=>Math.atan2(y,x);
+const rot=(a,b)=>{let d=b-a;while(d>Math.PI)d-=TAU;while(d<-Math.PI)d+=TAU;return d;};
+function los(a,b){const p=C.PLANET,dx=b.x-a.x,dy=b.y-a.y,L2=dx*dx+dy*dy;if(!L2)return true;
+  const t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/L2));const qx=a.x+dx*t-p.x,qy=a.y+dy*t-p.y;
+  return qx*qx+qy*qy>=p.r*p.r;}
+let simT=0,spd=2,paused=false,over=null,selWeapon=null,pdOn=true,beaconT=0;
+let ships=[],acs=[],projs=[],arms=[],anoms=[],fxs=[],logs=[];
+let cam={x:300000,y:300000,z:1/700};
+const keys={};
+const player=()=>ships[0];
+function mkShip(o){return Object.assign({x:0,y:0,vx:0,vy:0,thrust:false,dest:null,radarOn:false,radarDead:0,
+  hp:100,maxHp:100,sh:0,maxSh:0,shT:0,dead:false,ai:'hunt',aiT:0,pingT:rnd(0,15),salvoCd:20,salvos:0,seen:false,heat:false},o);}
+function reset(){
+  simT=0;over=null;selWeapon=null;pdOn=true;beaconT=0;ships=[];acs=[];projs=[];arms=[];anoms=[];fxs=[];logs=[];
+  ships.push(mkShip({side:'blue',cls:'cv',name:'纪元-01',x:120000,y:300000,hp:1400,maxHp:1400,sh:400,maxSh:400,msl:6,arm:6}));
+  ships.push(mkShip({side:'red',cls:'dd',name:'敌·驱逐舰1',x:780000,y:150000,hp:550,maxHp:550,sh:200,maxSh:200,salvos:4,wp:[{x:600000,y:400000},{x:850000,y:140000}]}));
+  ships.push(mkShip({side:'red',cls:'dd',name:'敌·驱逐舰2',x:820000,y:460000,hp:550,maxHp:550,sh:200,maxSh:200,salvos:4,wp:[{x:700000,y:480000},{x:880000,y:320000}]}));
+  ships.push(mkShip({side:'civ',cls:'civ',name:'民船·晨星',x:500000,y:500000,hp:200,maxHp:200,dest:{x:450000,y:120000}}));
+  for(let i=0;i<4;i++)acs.push({kind:'scout',st:'idle',x:0,y:0,vx:0,vy:0,hp:60,i,orb:null,tgt:null,arm:0});
+  for(let i=0;i<4;i++)acs.push({kind:'strike',st:'idle',x:0,y:0,vx:0,vy:0,hp:60,i:4+i,orb:null,tgt:null,arm:0});
+  cam={x:350000,y:300000,z:1/700};
+  log('纪元-01 就位 · 左下武器栏或按提示操作','g');
+}
+function log(t,c){logs.unshift({t:simT,s:t,c:c||''});if(logs.length>6)logs.pop();}
+const fmtT=s=>{const p=Math.floor(s*C.TIME_K),m=Math.floor(p/60),q=p%60;return (m<10?'0':'')+m+':'+(q<10?'0':'')+q;};
+function toScreen(x,y){return[(x-cam.x)*cam.z+W/2,(y-cam.y)*cam.z+H/2];}
+function toWorld(sx,sy){return[(sx-W/2)/cam.z+cam.x,(sy-H/2)/cam.z+cam.y];}
+/* ---------- 感知 ---------- */
+function ownEyes(){const a=[{x:player().x,y:player().y,vis:C.VIS,ir:C.IR,hear:C.HEAR}];
+  for(const q of acs)if(q.st!=='idle'&&q.st!=='dock')a.push({x:q.x,y:q.y,vis:C.VIS_AC,ir:C.IR_AC,hear:C.HEAR_AC});return a;}
+function sense(){
+  const eyes=ownEyes();
+  for(const s of ships){
+    if(s.side==='blue'){s.seen=true;continue;}
+    s.seen=false;s.heat=false;
+    for(const e of eyes){
+      if(s.dead)break;
+      const d=Math.hypot(s.x-e.x,s.y-e.y);
+      if(d<e.vis&&los(e,s)){s.seen=true;break;}
+      if(s.thrust&&d<e.ir&&los(e,s)){s.seen=true;s.heat=true;break;}
+    }
+    if(!s.dead&&s.radarOn){for(const e of eyes){if(Math.hypot(s.x-e.x,s.y-e.y)<e.hear){touchAnom(s);break;}}}
+  }
+}
+const anoms_src=new Map();
+function touchAnom(src){let a=anoms_src.get(src);
+  if(!a){a={src,pos:{x:src.x+rnd(-1,1)*Math.hypot(src.x-cam.x,src.y-cam.y)*0.05,y:src.y+rnd(-1,1)*12000},t:0,seed:Math.random()};anoms_src.set(src,a);}
+  a.t=simT;a.pos.x+=(src.x-a.pos.x)*0.02;a.pos.y+=(src.y-a.pos.y)*0.02;}
+function anomList(){const out=[];for(const a of anoms_src.values())if(simT-a.t<8&&!a.src.dead)out.push(a);return out;}
+/* 敌方对玩家的感知(镜像) */
+function redFixes(){
+  const p=player();if(p.dead)return null;
+  for(const s of ships){if(s.side!=='red'||s.dead)continue;
+    const d=dist(s,p);
+    if(d<C.VIS&&los(s,p))return s;
+    if(s.radarOn&&d<C.RADAR_ACT&&los(s,p))return s;
+    if(p.thrust&&d<C.IR&&los(s,p))return s;
+    if(beaconT>0&&d<C.BEACON)return s;
+    if(p.radarOn&&d<C.HEAR)return s; // 听到玩家照射:49 万内拿到 fix(EM 环的另一半,原来只有激光信标)
+  }
+  return null;
+}
+/* ---------- 开火 ---------- */
+const OBSTACLES=()=>[C.PLANET]; /* 障碍表:演示里是行星;引擎里同式可挂碎石带(2026-10-02 用户:导弹撞上碎石就消失,要能躲) */
+function dodgeObstacle(o,dt,homingTurn){ // 导弹/反辐射避障:前望 40 秒航程与任一盘面(+1.2 万余量)相交 ⇒ 沿切线侧绕;返回 true=正在绕(调用方微微掉速 = 转向的油,微弱)
+  const look=o.spd*40+20000,ex=o.x+Math.cos(o.a)*look,ey=o.y+Math.sin(o.a)*look;
+  for(const pl of OBSTACLES()){
+    const dx=ex-o.x,dy=ey-o.y,L2=dx*dx+dy*dy;if(!L2)continue;
+    let t=((pl.x-o.x)*dx+(pl.y-o.y)*dy)/L2;t=Math.max(0,Math.min(1,t));
+    const qx=o.x+dx*t-pl.x,qy=o.y+dy*t-pl.y,R=pl.r+12000;
+    if(qx*qx+qy*qy>=R*R)continue;
+    const bc=Math.atan2(pl.y-o.y,pl.x-o.x);
+    const side=Math.sin(rot(o.a,bc))>0?-1:1;
+    const want=bc+side*(Math.PI/2+0.3); // 切线再往外偏 17°:航向永远指向盘面侧外,不与盘面相切擦边
+    const tr=(homingTurn||0.8);
+    o.a+=Math.max(-tr*dt,Math.min(tr*dt,rot(o.a,want)));
+    return true;
+  }
+  return false;
+}
+function fireMsl(sh,tgt,n,dmg,side,vp){vp=vp||C.MSL.spd;projs.push({type:'msl',side,x:sh.x,y:sh.y,a:ang(tgt.x-sh.x,tgt.y-sh.y),spd:vp*.4,n,dmg,tgt,vp});}
+function fireArm(tgtPt,srcShip){
+  const p=player();if(p.arm<=0)return tip('反辐射弹尽');
+  p.arm--;
+  const src=srcShip||nearestEmitter(tgtPt);
+  arms.push({x:p.x,y:p.y,a:ang(tgtPt.x-p.x,tgtPt.y-p.y),spd:C.ARM.spd*.4,vp:C.ARM.spd,fuel:C.ARM.fuel,tgt:src||null,
+    lx:tgtPt.x,ly:tgtPt.y,st:'cruise',lt:0,orbA:rnd(0,TAU)});
+  log('反辐射发射 → '+(src?src.name:'方位'),'e');updBar();
+}
+function nearestEmitter(pt){let best=null,bd=1e18;
+  for(const s of ships){if(s.dead||s===player()||!s.radarOn)continue;const d=Math.hypot(s.x-pt.x,s.y-pt.y);if(d<bd){bd=d;best=s;}}
+  return best;}
+function applyDmg(s,amt,k){
+  if(s.dead)return;
+  if(s.sh>0){s.sh-=amt;if(s.sh<0){s.hp+=s.sh;s.sh=0;s.shT=-C.SHD.re;}fx(s.x,s.y,9000,'shd');}
+  else s.hp-=amt;
+  fx(s.x,s.y,14000,k||'hit');
+  if(s.hp<=0){s.dead=true;s.radarOn=false;fx(s.x,s.y,60000,'kill');
+    log(s.name+' 沉没','r');
+    if(s.side==='red'&&!ships.some(q=>q.side==='red'&&!q.dead))end(true);
+    if(s.side==='blue')end(false);}
+}
+function fx(x,y,r,k){fxs.push({x,y,r,t:0,k});}
+function end(w){over=w?'win':'lose';const e=document.getElementById('end');e.style.display='flex';e.className=w?'win':'lose';e.textContent=w?'敌 舰 全 灭':'纪 元 沉 没';}
+/* ---------- 更新 ---------- */
+function step(dt){
+  simT+=dt;beaconT=Math.max(0,beaconT-dt);
+  for(const s of ships){
+    if(s.dead)continue;
+    if(s.radarDead>0){s.radarDead-=dt;s.radarOn=false;}
+    if(s.sh>0&&s.sh<s.maxSh)s.sh=Math.min(s.maxSh,s.sh+s.maxSh/C.SHD.full*dt);
+    if(s.sh===0&&s.shT<0){s.shT+=dt;if(s.shT>=0){s.shT=0;s.sh=1;}}
+    if(s.dest&&!(s.side==='civ'&&dist(s,s.dest)<30000)){
+      const d=dist(s,s.dest);
+      if(d<Math.max(8000,s.spd*8)){s.vx*=0.9;s.vy*=0.9;if(d<4000)s.dest=null;}
+      else{const[u,v]=norm(s.dest.x-s.x,s.dest.y-s.y);const sp=s.side==='blue'?350:(s.side==='red'?400:50);
+        s.vx+=u*20*dt;s.vy+=v*20*dt;const cur=Math.hypot(s.vx,s.vy);if(cur>sp){s.vx*=sp/cur;s.vy*=sp/cur;}}
+    }else{s.vx*=0.985;s.vy*=0.985;}
+    s.thrust=Math.hypot(s.vx,s.vy)>30;
+    s.x+=s.vx*dt;s.y+=s.vy*dt;
+    if(s.side==='civ'&&(!s.dest||dist(s,s.dest)<30000))s.dest={x:rnd(150000,850000),y:rnd(80000,520000)};
+    if(s.side==='civ'){s.pingT-=dt;s.radarOn=s.pingT<1.2&&s.pingT>0;if(s.pingT<=0)s.pingT=15;}
+  }
+  aiRed(dt);
+  /* 舰载机 */
+  for(const q of acs){
+    if(q.st==='idle'||q.st==='dock'){
+      if(q.st==='dock'){q.arm-=dt;if(q.arm<=0){q.st='idle';log((q.kind==='scout'?'侦察机':'攻击机')+(q.i+1)+' 挂弹完毕','g');}}
+      q.x=player().x;q.y=player().y;continue;}
+    if(q.hp<=0){q.dead=true;q.st='idle';q.x=player().x;q.y=player().y;q.hp=60;log((q.kind==='scout'?'侦察机':'攻击机')+(q.i+1)+' 被击落','r');continue;}
+    q.dead=false;
+    const sp=q.kind==='scout'?1500:1300;let tx=q.x,ty=q.y;
+    if(q.st==='out')  {tx=q.orb.x;ty=q.orb.y;if(Math.hypot(q.x-tx,q.y-ty)<20000)q.st='orbit';}
+    if(q.st==='orbit'){q.orbA=(q.orbA||0)+dt*0.15;tx=q.orb.x+Math.cos(q.orbA)*15000;ty=q.orb.y+Math.sin(q.orbA)*15000;}
+    if(q.st==='atk')  {tx=q.tgt.x;ty=q.tgt.y;
+      if(q.tgt.dead){q.st='ret';}
+      else if(Math.hypot(q.x-q.tgt.x,q.y-q.tgt.y)<60000){fireMsl(q,q.tgt,1,80,'blue',2400);q.st='ret';log('攻击机投放轻弹','e');}}
+    if(q.st==='ret')  {tx=player().x;ty=player().y;if(Math.hypot(q.x-tx,q.y-ty)<9000){q.st='dock';q.arm=25;}}
+    const[u,v]=norm(tx-q.x,ty-q.y);q.vx+=u*40*dt;q.vy+=v*40*dt;
+    const cur=Math.hypot(q.vx,q.vy);if(cur>sp){q.vx*=sp/cur;q.vy*=sp/cur;}
+    q.x+=q.vx*dt;q.y+=q.vy*dt;
+    if(!los({x:q.x,y:q.y},player())){/* 绕行星不做,直线即可 */}
+    /* 敌近防打飞机 */
+    for(const s of ships)if(s.side==='red'&&!s.dead&&Math.hypot(s.x-q.x,s.y-q.y)<18750){ /* 敌近防:0.5 秒一发,30% 被飞机闪掉 */
+      q.ciwsT=(q.ciwsT===undefined?rnd(0,0.5):q.ciwsT)-dt;
+      if(q.ciwsT<=0){q.ciwsT=0.5;
+        if(Math.random()<C.AC_EVADE.ciws){acJink(q);log('飞机闪过近防炮','g');}
+        else q.hp-=30;}
+    }
+  }
+  /* 导弹 */
+  for(const p of projs){
+    if(p.tgt&&p.tgt.dead){p.done=true;continue;}
+    const d=p.tgt?Math.hypot(p.tgt.x-p.x,p.tgt.y-p.y):1e9;
+    const dodging=dodgeObstacle(p,dt,1.2/(1+p.spd/900)); // 2026-10-02 自动躲避天体:躲避时完全接管转向(原来与归航同速反向正好抵消,弹道笔直撞盘),绕行时微微掉速(转向的油)
+    if(!dodging&&p.tgt){const want=ang(p.tgt.x-p.x,p.tgt.y-p.y);const tr=1.2/(1+p.spd/900);
+      p.a+=Math.max(-tr*dt,Math.min(tr*dt,rot(p.a,want)));}
+    if(dodging)p.spd*=Math.max(0.7,p.spd-40*dt);
+    p.spd=Math.min(p.vp,p.spd+75*dt);
+    p.x+=Math.cos(p.a)*p.spd*dt;p.y+=Math.sin(p.a)*p.spd*dt;
+    const pl=C.PLANET;if(Math.hypot(p.x-pl.x,p.y-pl.y)<pl.r){p.done=true;fx(p.x,p.y,4000,'hit');continue;}
+    if(p.x<0||p.x>C.ARENA.w||p.y<0||p.y>C.ARENA.h)p.done=true;
+    /* 近防:对方舰在 1.875 万内,弹按比例被拦 */
+    for(const s of ships)if(s.side!==p.side&&!s.dead&&Math.hypot(s.x-p.x,s.y-p.y)<18750)p.n-=p.n*(p.n>=6?C.MSL.ciws:0.12)*dt; /* 齐射被面拦截,单发(轻弹)穿得快、只吃低拦截率 */
+    if(d<2200&&p.tgt){p.done=true;
+      if(p.side!=='blue'&&p.tgt.kind){ /* 命中飞机:50% 被侧闪掉(2026-10-02) */
+        if(Math.random()<C.AC_EVADE.msl){acJink(p.tgt);log('飞机闪过导弹齐射','g');}
+        else{p.tgt.hp=0;}
+        continue;
+      }
+      const ch=p.side==='blue'?C.MSL.chaffRed:C.MSL.chaffBlue;
+      const n=Math.round(p.n*(1-ch));
+      if(n>0){applyDmg(p.tgt,n*p.dmg,'msl');log(p.tgt.name+' 中弹 '+n+' 枚 × '+p.dmg,'e');}
+      else log(p.tgt.name+' 齐射全被干扰弹勾走','g');}
+  }
+  projs=projs.filter(p=>!p.done&&p.n>=0.5);
+  /* 反辐射 */
+  for(const a of arms){
+    a.fuel-=dt;if(a.fuel<=0){a.done=true;continue;}
+    if(a.st==='cruise'){
+      let see=null;
+      if(a.tgt&&!a.tgt.dead&&a.tgt.radarOn&&Math.hypot(a.tgt.x-a.x,a.tgt.y-a.y)<C.ARM.seek){see=a.tgt;a.lx=a.tgt.x;a.ly=a.tgt.y;}
+      else if(a.tgt&&a.tgt.dead)a.tgt=null;
+      /* 中途不改咬别的开机源(2026-10-02:否则民船一 ping 就把弹拐走,永远到不了目标)—— 只咬发射目标;守候期才重新搜(见 loiter) */
+      const tx=see?see.x:a.lx,ty=see?see.y:a.ly;
+      const d=Math.hypot(tx-a.x,ty-a.y);
+      if(see&&d<2000){a.done=true;applyDmg(see,C.ARM.dmg,'arm');
+        if(see.radarDead!==undefined){see.radarDead=C.ARM.outage;see.radarOn=false;}
+        log('反辐射命中 '+see.name+' · 雷达断电 '+C.ARM.outage+' 秒','e');continue;}
+      if(!see&&d<4000){a.st='loiter';a.lt=C.ARM.loiter;a.home=a.tgt;a.tgt=null;log('反辐射守在信号点,等它再开机','g');}
+      const want=ang(tx-a.x,ty-a.y),tr=1.2/(1+a.spd/900);
+      if(!dodgeObstacle(a,dt,tr))a.a+=Math.max(-tr*dt,Math.min(tr*dt,rot(a.a,want))); // 2026-10-02 避天体接管转向(同导弹组)
+      else{a.spd*=Math.max(0.7,a.spd-40*dt);a.fuel-=dt*0.3;}
+      a.spd=Math.min(a.vp,a.spd+75*dt);
+    }else{ /* loiter:绕点,开机源进 30 万就扑 */
+      a.lt-=dt;if(a.lt<=0){a.done=true;continue;}
+      a.spd=Math.max(400,a.spd-60*dt);a.orbA+=dt*0.5;
+      const tx=a.lx+Math.cos(a.orbA)*7000,ty=a.ly+Math.sin(a.orbA)*7000;
+      a.a=ang(tx-a.x,ty-a.y);
+      /* 守候再捕获:原目标 30 万内重开机优先(守株待兔就是等它);其他开机源只认 6 万内路过的 —— 民船要当诱饵得真拖到守候点旁边,30 万内随便勾走守候弹就太便宜了 */
+      let e=null;
+      if(a.home&&!a.home.dead&&a.home.radarOn&&Math.hypot(a.home.x-a.x,a.home.y-a.y)<C.ARM.seek)e=a.home;
+      else{const n2=nearestEmitter({x:a.x,y:a.y});if(n2&&Math.hypot(n2.x-a.x,n2.y-a.y)<60000)e=n2;}
+      if(e){
+        if(Math.hypot(e.x-a.x,e.y-a.y)<30000){ /* 守候弹就坐在信号点旁,雷达在 1.5 万内重新开机 = 当场命中(无源导引头 + 近炸;敌舰一次规避挪约 1 万,半径小于它就永远差一点 —— 实测 8 千打不着) */
+          a.done=true;applyDmg(e,C.ARM.dmg,'arm');if(e.radarDead!==undefined){e.radarDead=C.ARM.outage;e.radarOn=false;}
+          log('守候弹命中 '+e.name+' · 雷达断电 '+C.ARM.outage+' 秒','e');
+        }else{a.tgt=e;a.st='cruise';a.spd=Math.max(a.spd,1200);log('反辐射重新咬住 '+e.name,'e');}}
+    }
+    a.x+=Math.cos(a.a)*a.spd*dt;a.y+=Math.sin(a.a)*a.spd*dt;
+    const pl=C.PLANET;if(Math.hypot(a.x-pl.x,a.y-pl.y)<pl.r){a.done=true;fx(a.x,a.y,4000,'arm');}
+    if(a.x<0||a.x>C.ARENA.w||a.y<0||a.y>C.ARENA.h)a.done=true;
+  }
+  arms=arms.filter(a=>!a.done);
+  sense();
+  /* 敌点防激光 vs 飞机:25k 内咬最近一架,1.2 秒一发,12% 被闪(2026-10-02) */
+  beamE=null;
+  for(const s of ships){if(s.side!=='red'||s.dead)continue;
+    let g=null,bd=C.LSR.pdR;
+    for(const q of acs)if(q.st!=='idle'&&q.st!=='dock'&&!q.dead){const d=Math.hypot(s.x-q.x,s.y-q.y);if(d<bd){bd=d;g=q;}}
+    if(g){s.pdT=(s.pdT||0)-dt;
+      if(s.pdT<=0){s.pdT=1.2;
+        if(Math.random()<C.AC_EVADE.lsr){acJink(g);log('飞机闪过点防激光','g');}
+        else{g.hp-=50;fx(g.x,g.y,4000,'hit');}}
+      beamE={x0:s.x,y0:s.y,x1:g.x,y1:g.y};
+    }
+  }
+  /* 激光 */
+  lsr(dt);
+  for(const f of fxs)f.t+=dt;
+  fxs=fxs.filter(f=>f.t<1.4);
+  updInfo();updBar();
+}
+let beam={on:false,x0:0,y0:0,x1:0,y1:0,pd:false},heat=0,heatLock=0,pdTgt=null,pdT=0,beamE=null;
+function lsr(dt){
+  const p=player();if(p.dead){beam.on=false;return;}
+  heat=Math.max(0,heat-C.LSR.cool*dt);
+  if(heatLock>0){heatLock-=dt;beam.on=false;return;}
+  beam.on=false;
+  /* 点防:自动烧 2.5 万内来袭弹 */
+  if(pdOn){
+    let g=null,bd=C.LSR.pdR;
+    for(const q of projs)if(q.side!=='blue'){const d=Math.hypot(q.x-p.x,q.y-p.y);if(d<bd){bd=d;g=q;}}
+    if(g){heat+=C.LSR.heat*dt;beaconT=2;
+      beam={on:true,x0:p.x,y0:p.y,x1:g.x,y1:g.y,pd:true};
+      pdT+=dt;g.n-=C.LSR.pdKill/C.LSR.pdT*dt;
+      if(g.n<=0.5){g.done=true;fx(g.x,g.y,9000,'pd');log('点防烧掉一组来袭弹','g');pdT=0;}
+      if(heat>=100){heatLock=C.LSR.lock;log('激光过热,锁定 '+C.LSR.lock+' 秒','r');}
+      return;}
+    pdT=0;
+  }
+  /* 照射:选中目标且 4 万内且通视 */
+  const t=lsrTgt;
+  if(t&&!t.dead&&t.seen&&dist(t,p)<C.LSR.range&&los(p,t)){
+    heat+=C.LSR.heat*dt;beaconT=2;
+    beam={on:true,x0:p.x,y0:p.y,x1:t.x,y1:t.y,pd:false};
+    applyDmg(t,C.LSR.dps*dt,'lsr');
+    if(heat>=100){heatLock=C.LSR.lock;log('激光过热,锁定 '+C.LSR.lock+' 秒','r');lsrTgt=null;}
+  }
+}
+let lsrTgt=null;
+/* ---------- 敌 AI ---------- */
+function aiRed(dt){
+  const p=player();
+  for(const s of ships){
+    if(s.side!=='red'||s.dead)continue;
+    /* 反辐射威胁:20 万内有蓝方 ARM → 静默规避 */
+    let armNear=false;
+    for(const a of arms)if(a.tgt===s&&Math.hypot(a.x-s.x,a.y-s.y)<200000)armNear=true; /* 只躲"还在咬着我的"弹;守候弹(已清 tgt)不吓人 —— 贴脸条款会把它当威胁,敌舰躲一次只挪 1 万,永远压死 */
+    const committed=s.ai==='track'&&dist(s,player())<300000; /* 交战距离内宁可顶着反辐射也要持续照射:打了再说 —— 这正是反辐射惩罚的抉择时刻 */
+    if(armNear&&s.ai!=='evade'&&!committed){s.ai='evade';s.aiT=25;s.radarOn=false;log(s.name+' 探到反辐射,静默规避','g');}
+    s.aiT-=dt;
+    if(s.ai==='evade'){
+      if(!s.dest||s.aiT>24){const[u,v]=norm(s.x-p.x,s.y-p.y);s.dest={x:Math.max(0,Math.min(C.ARENA.w,s.x+u*400000)),y:Math.max(0,Math.min(C.ARENA.h,s.y+v*400000))};}
+      if(s.aiT<=0)s.ai='hunt';
+      continue;
+    }
+    const fix=redFixes();
+    if(fix){s.ai='track';s.lastFix={x:p.x,y:p.y};}
+    if(s.ai==='track'){
+      s.radarOn=true;
+      s.dest=s.lastFix?{x:s.lastFix.x,y:s.lastFix.y}:null;
+      s.salvoCd-=dt;
+      if(fix&&dist(s,p)<350000&&s.salvoCd<=0&&s.salvos>0){s.salvoCd=40;s.salvos--;fireMsl(s,p,C.MSL.n,12,'red');log(s.name+' 齐射!','r');}
+
+      if(!fix&&(!s.lastFix||dist(s,s.lastFix)<30000)&&s.aiT<-20){s.ai='hunt';s.radarOn=false;}
+    }
+    /* 2026-10-02 还击(hunt / track 都还击,evade 分支上面 continue 了):150k 内有敌机(咬我的优先)就分一组齐射打它 —— 给「飞机闪导弹」一个看得见的对手 */
+    s.acCd=(s.acCd||0)-dt;
+    if(s.acCd<=0&&s.salvos>0){
+      let g=null,bd=150000;
+      for(const q of acs)if(q.st!=='idle'&&q.st!=='dock'&&!q.dead){const d=Math.hypot(s.x-q.x,s.y-q.y)*(q.st==='atk'&&q.tgt===s?0.6:1);if(d<bd){bd=d;g=q;}}
+      if(g){s.acCd=40;s.salvos--;fireMsl(s,g,C.MSL.n,12,'red');log(s.name+' 对飞机齐射!','r');}
+    }
+    if(false){ /* hunt:巡逻 + 定期开照射 2 秒扫;新鲜异常(含民船 ping)会去查 */
+      s.pingT-=dt;
+      if(s.pingT<=0){s.pingT=25;s.radarOn=true;s.aiT=2;}
+      if(s.radarOn&&s.aiT<=0)s.radarOn=false;
+      if(!s.dest||dist(s,s.dest)<40000){
+        let go=null,bd=1e18;
+        for(const a of anomListRed())if(!a.src.seen){const d=Math.hypot(a.pos.x-s.x,a.pos.y-s.y);if(d<bd){bd=d;go=a.pos;}}
+        s.wpi=((s.wpi||0)+1)%s.wp.length;
+        s.dest=go||s.wp[s.wpi];
+      }
+    }
+  }
+}
+function anomListRed(){const out=[];const p=player();
+  if(p.radarOn)for(const s of ships)if(s.side==='red'&&!s.dead&&dist(s,p)<C.HEAR)out.push({pos:{x:p.x+rnd(-30000,30000),y:p.y+rnd(-30000,30000)},src:p});
+  for(const s of ships)if(s.side==='civ'&&!s.dead&&s.radarOn)for(const r of ships)if(r.side==='red'&&!r.dead&&dist(r,s)<C.HEAR)out.push({pos:{x:s.x+rnd(-30000,30000),y:s.y+rnd(-30000,30000)},src:s});
+  return out;}
+/* ---------- 输入 ---------- */
+function tip(t){const e=document.getElementById('tip');e.textContent=t||'';clearTimeout(tip._t);if(t)tip._t=setTimeout(()=>e.textContent='',2500);}
+addEventListener('keydown',e=>{
+  keys[e.code]=true;
+  if(e.code==='Space'){e.preventDefault();paused=!paused;}
+  if(e.code==='Escape'){selWeapon=null;lsrTgt=null;updBar();}
+});
+addEventListener('keyup',e=>keys[e.code]=false);
+let drag=null;
+cv.addEventListener('mousedown',e=>{
+  if(e.button===2)drag={x:e.clientX,y:e.clientY,cx:cam.x,cy:cam.y,moved:false};
+  if(e.button===0)leftClick(e.clientX,e.clientY);
+});
+addEventListener('mousemove',e=>{
+  if(drag){const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>4)drag.moved=true;
+    cam.x=drag.cx-dx/cam.z;cam.y=drag.cy-dy/cam.z;}
+});
+addEventListener('mouseup',e=>{if(e.button===2){
+  if(drag&&!drag.moved&&!over){const[wx,wy]=toWorld(e.clientX,e.clientY);
+    player().dest={x:Math.max(0,Math.min(C.ARENA.w,wx)),y:Math.max(0,Math.min(C.ARENA.h,wy))};
+    log('纪元-01 转向 '+(wx/10000).toFixed(0)+' 万,'+(wy/10000).toFixed(0)+' 万','g');}
+  setTimeout(()=>drag=null,0);}});
+addEventListener('contextmenu',e=>e.preventDefault());
+cv.addEventListener('wheel',e=>{e.preventDefault();
+  const[wx,wy]=toWorld(e.clientX,e.clientY);
+  cam.z*=e.deltaY<0?1.15:1/1.15;cam.z=Math.max(1/2500,Math.min(1/80,cam.z));
+  const[wx2,wy2]=toWorld(e.clientX,e.clientY);cam.x+=wx-wx2;cam.y+=wy-wy2;
+},{passive:false});
+function leftClick(sx,sy){
+  if(over)return;
+  const[wx,wy]=toWorld(sx,sy);
+  const hit=shipAt(sx,sy);
+  if(selWeapon==='msl'){const p=player();
+    if(!hit||hit.side!=='red'||!hit.seen)return tip('导弹要点看得见的敌舰');
+    if(dist(p,hit)>C.MSL.gate)return tip('超出 40 万发射门');
+    if(p.msl<=0)return tip('发射单元装填中');
+    p.msl--;fireMsl(p,hit,C.MSL.n,C.MSL.dmg,'blue');log('纪元齐射 → '+hit.name,'e');selWeapon=null;updBar();return;}
+  if(selWeapon==='arm'){
+    let pt=null,src=null;
+    if(hit&&hit.side!=='blue'&&hit.radarOn){pt={x:hit.x,y:hit.y};src=hit;}
+    else{const a=anomList().find(q=>Math.hypot(q.pos.x-wx,q.pos.y-wy)<q.pos.r||Math.hypot(q.pos.x-wx,q.pos.y-wy)<30000/cam.z+15000);
+      if(a){pt=a.pos;src=a.src.radarOn?a.src:null;}}
+    if(!pt)return tip('反辐射要点 雷达异常圈 或 开机中的敌舰');
+    fireArm(pt,src);selWeapon=null;updBar();return;}
+  if(selWeapon==='lsr'){
+    if(!hit||hit.side!=='red'||!hit.seen)return tip('激光要点看得见的敌舰');
+    lsrTgt=hit;log('激光照射 → '+hit.name,'e');selWeapon=null;updBar();return;}
+  if(selWeapon==='scout'){const q=acs.find(a=>a.kind==='scout'&&a.st==='idle');
+    if(!q)return tip('没有待命侦察机');
+    q.st='out';q.orb={x:wx,y:wy};q.vx=0;q.vy=0;log('侦察机'+(q.i+1)+' → 巡逻点','g');selWeapon=null;updBar();return;}
+  if(selWeapon==='strike'){const q=acs.find(a=>a.kind==='strike'&&a.st==='idle');
+    if(!q)return tip('没有待命攻击机');
+    if(!hit||hit.side!=='red'||!hit.seen)return tip('攻击机要点看得见的敌舰');
+    q.st='atk';q.tgt=hit;q.vx=0;q.vy=0;log('攻击机'+(q.i+1)+' 出击 → '+hit.name,'e');selWeapon=null;updBar();return;}
+  /* 无武器:点信息 */
+  selInfo=hit||player();
+  updInfo();
+}
+let selInfo=null;
+function shipAt(sx,sy){
+  for(const s of ships){if(s.dead)continue;
+    if(s.side!=='blue'&&!s.seen)continue;
+    const p=toScreen(s.x,s.y);if(Math.hypot(p[0]-sx,p[1]-sy)<16)return s;}
+  return null;
+}
+/* 底栏 */
+const $=id=>document.getElementById(id);
+function updBar(){
+  const p=player();
+  $('nMsl').textContent='×'+p.msl;$('nArm').textContent='×'+p.arm;
+  $('nSct').textContent=acs.filter(a=>a.kind==='scout'&&a.st==='idle').length+'/'+4;
+  $('nStr').textContent=acs.filter(a=>a.kind==='strike'&&a.st==='idle').length+'/'+4;
+  $('bRadar').textContent='雷达:'+(p.radarOn?'照射':'静默');
+  $('bRadar').className=p.radarOn?'on warn':'';
+  $('bPD').textContent='点防:'+(pdOn?'开':'关');$('bPD').className=pdOn?'on':'';
+  for(const[b,w]of[['bMsl','msl'],['bArm','arm'],['bLsr','lsr'],['bSct','scout'],['bStr','strike']])
+    $(b).className=(selWeapon===w?'on ':'')+( $(b).className.includes('warn')?'warn':'');
+}
+$('bRadar').onclick=()=>{const p=player();p.radarOn=!p.radarOn;log(p.radarOn?'照射开机 —— 49 万内都听得见你':'雷达静默','g');updBar();};
+$('bMsl').onclick=()=>{selWeapon=selWeapon==='msl'?null:'msl';tip('点要打的敌舰(40 万内)');updBar();};
+$('bArm').onclick=()=>{selWeapon=selWeapon==='arm'?null:'arm';tip('点雷达异常圈 —— 听到就能打');updBar();};
+$('bLsr').onclick=()=>{selWeapon=selWeapon==='lsr'?null:'lsr';tip('点 4 万内的敌舰持续照射');updBar();};
+$('bPD').onclick=()=>{pdOn=!pdOn;updBar();};
+$('bSct').onclick=()=>{selWeapon=selWeapon==='scout'?null:'scout';tip('点地图放侦察机去巡逻');updBar();};
+$('bStr').onclick=()=>{selWeapon=selWeapon==='strike'?null:'strike';tip('点敌舰,攻击机带一枚轻弹');updBar();};
+$('bRcl').onclick=()=>{for(const q of acs)if(q.st==='out'||q.st==='orbit'||q.st==='atk')q.st='ret';log('舰载机召回','g');};
+$('bRst').onclick=()=>{$('end').style.display='none';reset();};
+document.querySelectorAll('#top [data-spd]').forEach(b=>b.onclick=()=>{spd=+b.dataset.spd;paused=spd===0;
+  document.querySelectorAll('#top [data-spd]').forEach(x=>x.className=x===b?'on':'');});
+function updInfo(){
+  const s=selInfo&&!selInfo.dead?selInfo:player();
+  let h='<h4>'+(s.side==='blue'?'纪元-01(航母)':s.name)+'</h4>';
+  if(s.side==='blue'){
+    h+='<div class="k">结构 '+Math.max(0,Math.round(s.hp))+'/'+s.maxHp+' · 护盾 '+Math.round(s.sh)+'/'+s.maxSh+'</div>';
+    h+='<div class="k">热 '+Math.round(heat)+'%'+(heatLock>0?' · 过热锁定 '+heatLock.toFixed(0)+'s':'')+'</div>';
+    h+='<div class="k">机组:</div><div class="ac">';
+    for(const q of acs)h+=(''+(q.i+1)+(q.kind==='scout'?'侦':'攻')+' '+(q.st==='idle'?'待命':q.st==='dock'?'挂弹'+Math.ceil(q.arm)+'s':q.st==='out'?'转场':q.st==='orbit'?'巡逻':q.st==='atk'?'出击':'返航')+'<br>');
+    h+='</div>';
+    if(lsrTgt&&!lsrTgt.dead)h+='<div class="k">照射目标:'+lsrTgt.name+'</div>';
+  }else{
+    h+='<div class="k">结构 '+Math.max(0,Math.round(s.hp))+'/'+s.maxHp+' · 护盾 '+Math.round(s.sh)+'</div>';
+    h+='<div class="k">雷达:'+(s.radarDead>0?'断电 '+Math.round(s.radarDead)+'s':(s.radarOn?'照射中':'静默'))+'</div>';
+  }
+  $('info').innerHTML=h;
+  $('log').innerHTML=logs.map(l=>'<div class="'+l.c+'">'+fmtT(l.t)+' '+l.s+'</div>').join('');
+  $('clk').textContent=fmtT(simT);
+}
+/* ---------- 画 ---------- */
+function draw(){
+  ctx.fillStyle='#05070c';ctx.fillRect(0,0,W,H);
+  /* 网格 */
+  ctx.strokeStyle='#10141c';ctx.lineWidth=1;ctx.beginPath();
+  const g=100000/cam.z>40?100000:500000;
+  for(let x=0;x<=C.ARENA.w;x+=g){const a=toScreen(x,0),b=toScreen(x,C.ARENA.h);ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);}
+  for(let y=0;y<=C.ARENA.h;y+=g){const a=toScreen(0,y),b=toScreen(C.ARENA.w,y);ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);}
+  ctx.stroke();
+  const c0=toScreen(0,0),c1=toScreen(C.ARENA.w,C.ARENA.h);
+  ctx.strokeStyle='#1c2736';ctx.strokeRect(c0[0],c0[1],c1[0]-c0[0],c1[1]-c0[1]);
+  /* 行星 */
+  const pl=C.PLANET,pp=toScreen(pl.x,pl.y),pr=pl.r*cam.z;
+  ctx.fillStyle='#11161f';ctx.beginPath();ctx.arc(pp[0],pp[1],pr,0,TAU);ctx.fill();
+  ctx.strokeStyle='#2a3444';ctx.stroke();
+  /* 异常圈(我听见的) */
+  for(const a of anomList()){
+    const p=toScreen(a.pos.x,a.pos.y),r=Math.max(20,(20000+Math.hypot(a.pos.x-player().x,a.pos.y-player().y)*0.08)*cam.z);
+    const age=(simT-a.t)/8;
+    ctx.strokeStyle='rgba(255,120,90,'+(0.5*(1-age*0.6)).toFixed(2)+')';
+    ctx.setLineDash([5,4]);ctx.beginPath();ctx.arc(p[0],p[1],r*(0.85+age*0.5),0,TAU);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='rgba(255,150,110,.8)';ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.fillText('雷达异常',p[0],p[1]-r-4);
+    if(selWeapon==='arm'){ctx.strokeStyle='rgba(255,180,80,.5)';ctx.beginPath();ctx.arc(p[0],p[1],r+6,0,TAU);ctx.stroke();}
+  }
+  /* 可见光圈(选中) */
+  const sel=selInfo&&!selInfo.dead?selInfo:player();
+  if(sel.side==='blue'){const p=toScreen(sel.x,sel.y);
+    ctx.strokeStyle='rgba(120,160,200,.2)';ctx.setLineDash([6,6]);ctx.beginPath();ctx.arc(p[0],p[1],C.VIS*cam.z,0,TAU);ctx.stroke();ctx.setLineDash([]);}
+  /* 舰船 */
+  for(const s of ships){
+    if(s.dead)continue;
+    if(s.side!=='blue'&&!s.seen)continue;
+    const p=toScreen(s.x,s.y);
+    ctx.save();ctx.translate(p[0],p[1]);
+    const hd=ang(s.vx,s.vy);ctx.rotate(hd);
+    if(s.cls==='cv'){
+      ctx.fillStyle='#6db4ff';ctx.beginPath();
+      ctx.moveTo(20,0);ctx.lineTo(6,-7);ctx.lineTo(-18,-7);ctx.lineTo(-18,7);ctx.lineTo(6,7);ctx.closePath();ctx.fill();
+      ctx.strokeStyle='rgba(160,200,255,.5)';ctx.beginPath();ctx.moveTo(16,-1);ctx.lineTo(-14,-1);ctx.stroke();
+      ctx.fillStyle='#9fc4ee';ctx.fillRect(2,-6,6,4);
+    }else if(s.cls==='dd'){
+      ctx.fillStyle=s.side==='red'?'#ff6b6b':'#6db4ff';
+      ctx.beginPath();ctx.moveTo(14,0);ctx.lineTo(-8,-7);ctx.lineTo(-8,7);ctx.closePath();ctx.fill();
+    }else{
+      ctx.fillStyle='#b8a990';ctx.fillRect(-7,-5,14,10);
+    }
+    ctx.restore();
+    ctx.fillStyle=s.side==='red'?'#e88':'#9fc4ee';ctx.font='11px "Microsoft YaHei"';ctx.textAlign='left';
+    ctx.fillText(s.name+(s.side!=='blue'&&s.heat?'(热)':''),p[0]+12,p[1]-10);
+    if(s.radarOn){ctx.strokeStyle='rgba(255,200,120,.6)';ctx.beginPath();ctx.arc(p[0],p[1],9,0,TAU);ctx.stroke();}
+    if(s.radarDead>0){ctx.fillStyle='#ffd166';ctx.fillText('雷达断电 '+Math.ceil(s.radarDead)+'s',p[0]+12,p[1]+14);}
+    /* 血条 */
+    const w=30,q=Math.max(0,s.hp/s.maxHp);
+    ctx.fillStyle='#222';ctx.fillRect(p[0]-w/2,p[1]+18,w,3);
+    ctx.fillStyle=s.side==='red'?'#ff8a7a':'#7fe0c8';ctx.fillRect(p[0]-w/2,p[1]+18,w*q,3);
+    if(s.sh>0){ctx.fillStyle='rgba(120,180,255,.7)';ctx.fillRect(p[0]-w/2,p[1]+22,w*(s.sh/s.maxSh),2);}
+  }
+  /* 舰载机 */
+  for(const q of acs){
+    if(q.st==='idle'||q.st==='dock')continue;
+    const p=toScreen(q.x,q.y);
+    ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(ang(q.vx,q.vy));
+    ctx.fillStyle=q.kind==='scout'?'#7fd8ff':'#ffd166';
+    ctx.beginPath();ctx.moveTo(8,0);ctx.lineTo(-5,-5);ctx.lineTo(-5,5);ctx.closePath();ctx.fill();
+    ctx.restore();
+    if(q.kind==='scout'){const r=C.VIS_AC*cam.z;
+      ctx.strokeStyle='rgba(127,216,255,.15)';ctx.beginPath();ctx.arc(p[0],p[1],r,0,TAU);ctx.stroke();}
+  }
+  /* 导弹组 */
+  for(const p of projs){
+    const s=toScreen(p.x,p.y);
+    ctx.fillStyle=p.side==='blue'?'#ffd166':'#ff9a6b';
+    const n=Math.min(6,Math.ceil(p.n/2));
+    for(let i=0;i<n;i++){const a=i/n*TAU+p.x*0.01;ctx.fillRect(s[0]+Math.cos(a)*5-1.5,s[1]+Math.sin(a)*5-1.5,3,3);}
+    ctx.strokeStyle=p.side==='blue'?'rgba(255,209,102,.5)':'rgba(255,154,107,.5)';
+    ctx.beginPath();ctx.arc(s[0],s[1],7,0,TAU);ctx.stroke();
+  }
+  /* 反辐射弹 */
+  for(const a of arms){
+    const s=toScreen(a.x,a.y);
+    ctx.save();ctx.translate(s[0],s[1]);ctx.rotate(a.a);
+    ctx.fillStyle=a.st==='loiter'?'#c8a060':'#ff8c4a';
+    ctx.beginPath();ctx.moveTo(9,0);ctx.lineTo(0,-4);ctx.lineTo(-6,0);ctx.lineTo(0,4);ctx.closePath();ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle='rgba(255,140,74,.4)';ctx.beginPath();ctx.moveTo(s[0],s[1]);
+    const t=toScreen(a.x-Math.cos(a.a)*30000/a.spd*600,a.y-Math.sin(a.a)*30000/a.spd*600);ctx.lineTo(t[0],t[1]);ctx.stroke();
+    if(a.st==='loiter'){ctx.strokeStyle='rgba(255,180,80,.35)';ctx.setLineDash([3,3]);ctx.beginPath();ctx.arc(s[0],s[1],C.ARM.seek*cam.z,0,TAU);ctx.stroke();ctx.setLineDash([]);
+      ctx.fillStyle='#c8a060';ctx.font='10px Consolas';ctx.textAlign='center';ctx.fillText('守候'+Math.ceil(a.lt)+'s',s[0],s[1]-12);}
+  }
+  /* 激光 */
+  if(beam.on){
+    const a=toScreen(beam.x0,beam.y0),b=toScreen(beam.x1,beam.y1);
+    ctx.strokeStyle=beam.pd?'rgba(127,240,226,.9)':'rgba(255,255,255,.9)';
+    ctx.lineWidth=beam.pd?1.2:2.2;
+    ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();
+    ctx.strokeStyle=beam.pd?'rgba(127,240,226,.25)':'rgba(160,220,255,.3)';ctx.lineWidth=beam.pd?3:6;
+    ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();
+    ctx.lineWidth=1;
+  }
+  /* 敌点防激光 */
+  if(beamE){const a=toScreen(beamE.x0,beamE.y0),b=toScreen(beamE.x1,beamE.y1);
+    ctx.strokeStyle='rgba(255,154,107,.85)';ctx.lineWidth=1.2;
+    ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();
+    ctx.strokeStyle='rgba(255,154,107,.25)';ctx.lineWidth=3.2;
+    ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();ctx.lineWidth=1;}
+  /* 航母航向命令 */
+  const pd2=player().dest;
+  if(pd2){const a=toScreen(player().x,player().y),b=toScreen(pd2.x,pd2.y);
+    ctx.strokeStyle='rgba(109,180,255,.4)';ctx.setLineDash([6,5]);
+    ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();ctx.setLineDash([]);
+    ctx.strokeStyle='rgba(109,180,255,.7)';ctx.beginPath();ctx.arc(b[0],b[1],6,0,TAU);ctx.stroke();}
+  /* 特效 */
+  for(const f of fxs){
+    const u=f.t/1.4,p=toScreen(f.x,f.y);
+    const col=f.k==='kill'?'255,120,80':f.k==='shd'?'120,180,255':f.k==='pd'?'127,240,226':f.k==='arm'?'255,160,90':'255,200,120';
+    ctx.strokeStyle='rgba('+col+','+(0.9*(1-u)).toFixed(2)+')';ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(p[0],p[1],Math.max(2,f.r*cam.z*(0.2+u)),0,TAU);ctx.stroke();ctx.lineWidth=1;
+  }
+  /* 热条(右下) */
+  ctx.fillStyle='#222';ctx.fillRect(W-160,H-40,120,6);
+  ctx.fillStyle=heatLock>0?'#ff8a7a':(heat>70?'#ffd166':'#7fe0c8');
+  ctx.fillRect(W-160,H-40,120*Math.min(1,heat/100),6);
+  ctx.fillStyle='#7f93ad';ctx.font='10px "Microsoft YaHei"';ctx.textAlign='right';ctx.fillText('激光热',W-34,H-44);
+  const sb=100000*cam.z;
+  $('scale').textContent='┃'+Math.round(sb)+'px = 10 万 km';
+}
+/* ---------- 主循环 ---------- */
+let acc=0,last=0;
+function frame(t){
+  requestAnimationFrame(frame);
+  const dt=Math.min(0.1,(t-last)/1000||0);last=t;
+  const sp=60/cam.z;
+  if(keys.KeyW)cam.y-=sp*dt;if(keys.KeyS)cam.y+=sp*dt;if(keys.KeyA)cam.x-=sp*dt;if(keys.KeyD)cam.x+=sp*dt;
+  if(!paused&&!over){acc+=dt*spd;let n=0;while(acc>=0.05&&n++<200){step(0.05);acc-=0.05;}}
+  draw();
+}
+reset();updBar();updInfo();
+requestAnimationFrame(frame);
+/* ?auto=1 自动演示:放侦察机 → 有异常打反辐射 → 敌近了照射 */
+if(new URLSearchParams(location.search).get('auto')==='1'){
+  setTimeout(()=>{$('bSct').onclick();leftClick(W*0.55,H*0.45);},1500);
+  setTimeout(()=>{const a=anomList()[0];if(a)fireArm(a.pos,a.src.radarOn?a.src:null);},16000);
+  setTimeout(()=>{const e=ships.find(s=>s.side==='red'&&s.seen);if(e){lsrTgt=e;}},40000);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<title>传感器视角特效</title>
+<style>
+html,body{margin:0;height:100%;background:#070a0e;overflow:hidden;font:12px "Microsoft YaHei",sans-serif;color:#cfd8e0}
+#cv{position:fixed;left:0;top:0;display:block}
+#ui{position:fixed;left:10px;bottom:10px;display:flex;flex-direction:column;gap:6px;user-select:none;background:rgba(11,16,22,.9);border:1px solid #2a3642;padding:8px 10px;max-width:560px}
+#ui .row{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+#ui button{background:#141b23;color:#9fb0c0;border:1px solid #2a3642;padding:4px 10px;font:inherit;cursor:pointer}
+#ui button.on{background:#1f3a52;color:#e8f4ff;border-color:#4f8fc0}
+#ui label{display:flex;gap:4px;align-items:center;margin-right:10px;cursor:pointer;color:#b8c6d4}
+#ui .lab{color:#8fa0b0;margin-right:4px}
+#hint{position:fixed;right:10px;top:8px;color:#6f8090;line-height:1.7;text-align:right;background:rgba(11,16,22,.8);padding:6px 10px;border:1px solid #1e2934}
+</style></head><body>
+<canvas id="cv"></canvas>
+<div id="hint">传感器视角的小特效(2026-09-30 用户:红外 / 雷达视角也分可见光区域,整体的信息视角不够酷)<br>
+不加载引擎,只看效果;拖我方船挪位置 · 点船选中 · 每个效果单独开关</div>
+<div id="ui">
+  <div class="row"><span class="lab">画面</span><button data-md="map">普通</button><button data-md="ir" class="on">红外</button><button data-md="radar">雷达</button></div>
+  <div class="row">
+    <label><input type="checkbox" id="fxRim" checked>1 可见光圈边缘柔光(慢呼吸)</label>
+    <label><input type="checkbox" id="fxSweep" checked>2 雷达扫描扇</label>
+    <label><input type="checkbox" id="fxTint" checked>3 雾按画面染色</label>
+  </div>
+  <div class="row">
+    <label><input type="checkbox" id="fxWipe">4 切换时扫描线</label>
+    <label><input type="checkbox" id="fxHud" checked>5 角标 + 视角标签</label>
+    <label><input type="checkbox" id="fxLines">6 扫描纹</label>
+    <label><input type="checkbox" id="fxGlow">7 圈内微亮</label>
+  </div>
+  <div class="row">
+    <label><input type="checkbox" id="fxFilter" checked>8 滤镜(淡淡的主色 + 暗角)</label>
+    <label><input type="checkbox" id="fxTitle" checked>9 切换时的文字提示(同战术 / 舰队 / 战区换层)</label>
+  </div>
+</div>
+<script>
+"use strict";
+/* ============================================================================
+   传感器视角特效演示页(2026-09-30 用户:「红外视角和雷达视角会不管主视角的亮的可见光区域和暗的不可见光区域……整体的这种信息视角当前的做法还不够酷,给一些小小的简单的特效」)。
+   引擎里已经让三种画面都画可见光圈灰雾(render/84 drawVisFog);这页只试特效,不加载引擎,数值与画法归本页。
+   画法都按引擎的性能规矩:每帧不新建渐变(光晕、扫描扇、扫描线都是预渲染贴图,贴的时候只旋转 / 平移 / 调透明度),不画整屏大 path。
+   ============================================================================ */
+const FX={FILT_A:0.05,VIG_A:0.35,TITLE_MS:700,RIM_T:3.2,RIM_A:[0.35,0.75],SWEEP_T:4,SWEEP_W:40,WIPE_MS:380,HUD_M:14,HUD_L:26,LINE_GAP:3,LINE_A:0.05,LINE_V:18,GLOW_A:0.05,FOG_A:0.32};
+  // FILT_A / VIG_A = 滤镜主色与暗角的透明度;TITLE_MS = 切换文字多久淡完(同引擎换层 VT_FX_MS);RIM_T / RIM_A = 圈边呼吸周期(秒)与透明度上下限;SWEEP_T / SWEEP_W = 扫描扇转一圈几秒、扇尾多宽(度);WIPE_MS = 切换扫描线扫过全屏的毫秒;HUD_M / HUD_L = 角标离屏边 / 边长 px;
+  // LINE_GAP / LINE_A / LINE_V = 扫描纹行距 px、透明度、往下漂的速度 px/s;GLOW_A = 圈内微亮的透明度;FOG_A = 雾的深浅(同引擎 VISF.A)
+const MODE_COL={map:[190,215,240],ir:[255,150,70],radar:[84,224,208]}; // 各画面的主色:普通淡蓝白、红外琥珀、雷达青
+const FOG_COL={map:[0,0,0],ir:[26,4,2],radar:[0,16,18]}; // 雾的颜色(染色开着时)
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');let W=0,H=0,DPR=1;
+function resize(){DPR=devicePixelRatio||1;W=innerWidth;H=innerHeight;cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);cv.style.width=W+'px';cv.style.height=H+'px';}
+function rng(seed){let a=seed>>>0;return function(){a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};}
+/* ---- 场景:几艘我方船(各带可见光圈)、一颗天体、几个接触;全用屏幕像素 ---- */
+const S={ships:[{x:0.40,y:0.52,r:95,paint:true},{x:0.52,y:0.40,r:88,paint:false},{x:0.47,y:0.66,r:92,paint:true}],sel:0,
+  body:{x:0.70,y:0.28,r:38},stars:[],rets:[{x:0.62,y:0.55},{x:0.80,y:0.62},{x:0.30,y:0.30}],zone:[[0.74,0.44],[0.80,0.42],[0.83,0.50],[0.76,0.52]]};
+{const r=rng(7);for(let i=0;i<420;i++)S.stars.push([r(),r(),r()<0.1?1.6:0.9,0.25+r()*0.5]);}
+let MODE='ir',MODE0='ir',SWT=-1e9,T0=performance.now();
+const px=p=>[p.x*W,p.y*H];
+/* ---- 预渲染贴图(只建一次)---- */
+function sprite(w,h,fn){const c=document.createElement('canvas');c.width=w;c.height=h;fn(c.getContext('2d'),w,h);return c;}
+const SWEEP=sprite(256,256,(g,w,h)=>{const cx=w/2,cy=h/2,R=w/2,N=FX.SWEEP_W; // 扫描扇:前沿最亮、往后按角度淡出(一圈只在这里算一次)
+  for(let k=0;k<N;k++){const a0=-(k+1)*Math.PI/180,a1=-k*Math.PI/180,al=0.22*Math.pow(1-k/N,2);g.fillStyle='rgba(84,224,208,'+al.toFixed(3)+')';g.beginPath();g.moveTo(cx,cy);g.arc(cx,cy,R,a0,a1);g.closePath();g.fill();}
+  g.strokeStyle='rgba(160,255,240,.55)';g.lineWidth=1.2;g.beginPath();g.moveTo(cx,cy);g.lineTo(cx+R,cy);g.stroke();});
+const WIPE=sprite(8,64,(g,w,h)=>{const gr=g.createLinearGradient(0,0,0,h);gr.addColorStop(0,'rgba(255,255,255,0)');gr.addColorStop(0.8,'rgba(255,255,255,.25)');gr.addColorStop(0.97,'rgba(255,255,255,.95)');gr.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=gr;g.fillRect(0,0,w,h);}); // 切换扫描线:下沿亮、往上拖尾
+const LINES=sprite(4,FX.LINE_GAP,(g,w,h)=>{g.fillStyle='rgba(0,0,0,1)';g.fillRect(0,0,w,1);});let LPAT=null;
+const FOGC=document.createElement('canvas'),FOGG=FOGC.getContext('2d');
+const VIG=sprite(256,256,(g,w,h)=>{const gr=g.createRadialGradient(w/2,h/2,w*0.28,w/2,h/2,w*0.72);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(0,0,0,1)');g.fillStyle=gr;g.fillRect(0,0,w,h);}); // 暗角:预渲染一张,贴满全屏
+const TITLE={map:['VISUAL','普通视角'],ir:['INFRARED','红外视角'],radar:['RADAR','雷达视角']};
+/* ---- 可见光圈并起来的外轮廓:每个圆没被别的圆盖住的弧段 ---- */
+function visArcs(P,R,k){const cov=[];for(let j=0;j<P.length;j++){if(j===k)continue;const dx=P[j][0]-P[k][0],dy=P[j][1]-P[k][1],d=Math.hypot(dx,dy);if(d<1e-6)continue;
+    const c=(d*d+R[k]*R[k]-R[j]*R[j])/(2*d*R[k]);if(c>=1)continue;if(c<=-1)return [];const m=Math.atan2(dy,dx),h=Math.acos(c);cov.push([m-h,m+h]);}
+  if(!cov.length)return [[0,2*Math.PI]];const ev=[];for(const [a,b] of cov){const a0=((a%(2*Math.PI))+2*Math.PI)%(2*Math.PI),b0=a0+(b-a);if(b0>2*Math.PI)ev.push([a0,2*Math.PI],[0,b0-2*Math.PI]);else ev.push([a0,b0]);}
+  ev.sort((x,y)=>x[0]-y[0]);const out=[];let cur=0;for(const [a,b] of ev){if(a>cur)out.push([cur,a]);cur=Math.max(cur,b);}if(cur<2*Math.PI)out.push([cur,2*Math.PI]);return out;}
+/* ---- 画 ---- */
+const on=id=>document.getElementById(id).checked;
+function rgba(c,a){return 'rgba('+c[0]+','+c[1]+','+c[2]+','+a.toFixed(3)+')';}
+function drawBase(){ctx.fillStyle='#070a0e';ctx.fillRect(0,0,W,H);
+  for(const s of S.stars){ctx.fillStyle='rgba(200,215,235,'+s[3]+')';ctx.fillRect(s[0]*W,s[1]*H,s[2],s[2]);}
+  ctx.strokeStyle='rgba(60,110,130,.16)';ctx.lineWidth=1;for(let x=0;x<W;x+=120){ctx.fillStyle='rgba(60,110,130,.16)';ctx.fillRect(x,0,1,H);}for(let y=0;y<H;y+=120)ctx.fillRect(0,y,W,1);
+  const b=px(S.body);ctx.fillStyle='#2b3440';ctx.beginPath();ctx.arc(b[0],b[1],S.body.r,0,2*Math.PI);ctx.fill();ctx.fillStyle='#8fa0b0';ctx.textAlign='center';ctx.fillText('天体',b[0],b[1]+4);ctx.textAlign='left';}
+function drawFog(P,R){ // 同引擎 drawVisFog:整屏铺暗,再把各船的圈挖掉(染色开着时雾带画面的主色)
+  if(FOGC.width!==cv.width||FOGC.height!==cv.height){FOGC.width=cv.width;FOGC.height=cv.height;}
+  const g=FOGG,fc=on('fxTint')?FOG_COL[MODE]:FOG_COL.map,a=on('fxTint')&&MODE!=='map'?FX.FOG_A+0.08:FX.FOG_A;
+  g.setTransform(DPR,0,0,DPR,0,0);g.globalCompositeOperation='source-over';g.clearRect(0,0,W,H);g.fillStyle=rgba(fc,a);g.fillRect(0,0,W,H);
+  g.globalCompositeOperation='destination-out';g.beginPath();for(let i=0;i<P.length;i++){g.moveTo(P[i][0]+R[i],P[i][1]);g.arc(P[i][0],P[i][1],R[i],0,2*Math.PI);}g.fill();g.globalCompositeOperation='source-over';
+  ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(FOGC,0,0);ctx.restore();}
+function drawSensor(P,R,t){
+  if(MODE==='radar'){ // 雷达:照射覆盖(淡青)、回波方块、围死的多边形(同引擎 86-radarview 的样子,示意)
+    for(let i=0;i<P.length;i++)if(S.ships[i].paint){ctx.fillStyle='rgba(111,180,255,.06)';ctx.beginPath();ctx.arc(P[i][0],P[i][1],R[i]*3.2,0,2*Math.PI);ctx.fill();}
+    for(const r of S.rets){const q=px(r);ctx.fillStyle='rgba(232,238,244,.9)';ctx.fillRect(q[0]-3.5,q[1]-3.5,7,7);}
+    ctx.beginPath();S.zone.forEach((z,i)=>{const q=[z[0]*W,z[1]*H];if(i)ctx.lineTo(q[0],q[1]);else ctx.moveTo(q[0],q[1]);});ctx.closePath();ctx.fillStyle='rgba(84,224,208,.16)';ctx.fill();ctx.strokeStyle='rgba(84,224,208,.6)';ctx.stroke();
+    if(on('fxSweep'))for(let i=0;i<P.length;i++)if(S.ships[i].paint){const RR=R[i]*3.2,a=((t/FX.SWEEP_T)%1)*2*Math.PI+i*1.7; // 扫描扇:预渲染一张,贴的时候只转角度
+      ctx.save();ctx.beginPath();ctx.arc(P[i][0],P[i][1],RR,0,2*Math.PI);ctx.clip();ctx.translate(P[i][0],P[i][1]);ctx.rotate(a);ctx.drawImage(SWEEP,-RR,-RR,2*RR,2*RR);ctx.restore();}}
+  if(MODE==='ir'){ // 红外:选中那艘的环 + 圈里的热(示意)
+    const k=S.sel,p=P[k],ri=R[k],ro=ri+60;ctx.save();ctx.beginPath();ctx.arc(p[0],p[1],ro,0,2*Math.PI);ctx.arc(p[0],p[1],ri,0,2*Math.PI,true);ctx.fillStyle='rgba(96,16,14,.82)';ctx.fill('evenodd');
+    ctx.clip('evenodd');for(const [a,w,c] of [[0.3,0.5,'rgba(240,120,40,.55)'],[2.2,0.35,'rgba(220,90,30,.45)'],[4.4,0.25,'rgba(255,190,90,.7)']]){ctx.fillStyle=c;ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.arc(p[0],p[1],ro,a-w/2,a+w/2);ctx.closePath();ctx.fill();}
+    ctx.restore();ctx.strokeStyle='rgba(255,150,70,.5)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(p[0],p[1],ro,0,2*Math.PI);ctx.stroke();
+    for(let i=0;i<P.length;i++){ctx.fillStyle='rgba(70,12,12,.55)';ctx.beginPath();ctx.arc(P[i][0],P[i][1],R[i],0,2*Math.PI);ctx.fill();}}}
+function drawRim(P,R,t){ // 1 可见光圈并起来的外轮廓:三层描边(宽淡 → 窄亮)做柔光,透明度慢呼吸
+  const c=MODE_COL[MODE],k=0.5+0.5*Math.sin(2*Math.PI*t/FX.RIM_T),a=FX.RIM_A[0]+(FX.RIM_A[1]-FX.RIM_A[0])*k;
+  ctx.save();for(const [w,m] of [[7,0.10],[3.5,0.22],[1.2,0.9]]){ctx.strokeStyle=rgba(c,a*m);ctx.lineWidth=w;
+    for(let i=0;i<P.length;i++)for(const [a0,a1] of visArcs(P,R,i)){ctx.beginPath();ctx.arc(P[i][0],P[i][1],R[i],a0,a1);ctx.stroke();}}ctx.restore();}
+function drawGlow(P,R){ctx.save();ctx.fillStyle=rgba(MODE_COL[MODE],FX.GLOW_A);ctx.beginPath();for(let i=0;i<P.length;i++){ctx.moveTo(P[i][0]+R[i],P[i][1]);ctx.arc(P[i][0],P[i][1],R[i],0,2*Math.PI);}ctx.fill();ctx.restore();} // 7 圈内微亮
+function drawShips(P){for(let i=0;i<P.length;i++){const p=P[i];ctx.save();ctx.translate(p[0],p[1]);ctx.fillStyle='#5aa7ff';ctx.beginPath();ctx.moveTo(9,0);ctx.lineTo(-6,-5);ctx.lineTo(-3,0);ctx.lineTo(-6,5);ctx.closePath();ctx.fill();
+  if(i===S.sel){ctx.strokeStyle='#ffe066';ctx.lineWidth=1.4;ctx.beginPath();ctx.arc(0,0,12,0,2*Math.PI);ctx.stroke();}ctx.restore();}}
+function drawHud(t){ // 5 四角角标 + 视角标签(普通画面不画)
+  if(MODE==='map')return;const c=MODE_COL[MODE],m=FX.HUD_M,L=FX.HUD_L;ctx.save();ctx.strokeStyle=rgba(c,0.75);ctx.lineWidth=2;
+  for(const [x,y,sx,sy] of [[m,m,1,1],[W-m,m,-1,1],[m,H-m,1,-1],[W-m,H-m,-1,-1]]){ctx.beginPath();ctx.moveTo(x,y+sy*L);ctx.lineTo(x,y);ctx.lineTo(x+sx*L,y);ctx.stroke();}
+  const blink=(t%1)<0.6;ctx.fillStyle=rgba(c,blink?0.95:0.25);ctx.beginPath();ctx.arc(m+10,m+14,3.5,0,2*Math.PI);ctx.fill();
+  ctx.fillStyle=rgba(c,0.9);ctx.font='bold 12px Consolas,"Microsoft YaHei"';ctx.fillText(MODE==='ir'?'IR · 红外视角':'RADAR · 雷达视角',m+20,m+18);ctx.restore();}
+function drawLines(t){ // 6 扫描纹:一张 1 x LINE_GAP 的纹理铺满,往下慢慢漂
+  if(!LPAT)LPAT=ctx.createPattern(LINES,'repeat');const off=(t*FX.LINE_V)%FX.LINE_GAP;ctx.save();ctx.globalAlpha=FX.LINE_A;ctx.translate(0,off);ctx.fillStyle=LPAT;ctx.fillRect(0,-FX.LINE_GAP,W,H+FX.LINE_GAP);ctx.restore();}
+function drawWipe(now){ // 4 切换扫描线:一条亮线从上往下扫过去,线上方一小段染上新画面的主色
+  const k=(now-SWT)/FX.WIPE_MS;if(k<0||k>=1)return;const y=k*(H+40)-20,c=MODE_COL[MODE];
+  ctx.save();ctx.globalAlpha=1-k*0.6;ctx.drawImage(WIPE,0,y-64,W,64);ctx.fillStyle=rgba(c,0.10*(1-k));ctx.fillRect(0,0,W,y);ctx.restore();}
+function drawFilter(){if(MODE==='map')return;ctx.save();ctx.fillStyle=rgba(MODE_COL[MODE],FX.FILT_A);ctx.fillRect(0,0,W,H);ctx.globalAlpha=FX.VIG_A;ctx.drawImage(VIG,0,0,W,H);ctx.restore();} // 8 滤镜:整屏淡淡一层主色 + 暗角
+function drawTitle(now){ // 9 切换时的文字提示:照引擎换层大字(render/80 drawTierFx)—— 快进慢出、放在上方三分之一处、两条线从中线往上下扫开
+  const p=(now-SWT)/FX.TITLE_MS;if(!(p>=0&&p<1))return;const a=p<0.12?p/0.12:Math.pow(1-(p-0.12)/0.88,2),cx=W/2,cy=H/2,ty=Math.round(H*0.30),c=MODE_COL[MODE];
+  ctx.save();const e=1-Math.pow(1-Math.min(1,p/0.65),3),half=(H/2)*e;
+  for(let k=0;k<3;k++){const off=half-k*5;if(off<0||off>H/2)continue;ctx.fillStyle=rgba(c,a*[0.55,0.25,0.1][k]);ctx.fillRect(0,Math.round(cy-off),W,1);ctx.fillRect(0,Math.round(cy+off),W,1);}
+  ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=rgba(c,a*0.9);ctx.font='600 30px Consolas';if('letterSpacing' in ctx)ctx.letterSpacing='10px';ctx.fillText(TITLE[MODE][0],cx+5,ty-8);
+  if('letterSpacing' in ctx)ctx.letterSpacing='4px';ctx.fillStyle=rgba(c,a*0.6);ctx.font='13px "Microsoft YaHei"';ctx.fillText(TITLE[MODE][1],cx+2,ty+20);if('letterSpacing' in ctx)ctx.letterSpacing='0px';
+  ctx.fillStyle=rgba(c,a*0.5);ctx.fillRect(Math.round(cx-190),ty-8,60,1);ctx.fillRect(Math.round(cx+130),ty-8,60,1);ctx.restore();
+}
+function frame(){requestAnimationFrame(frame);const now=performance.now(),t=(now-T0)/1000;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  const P=S.ships.map(px),R=S.ships.map(s=>s.r);
+  drawBase();drawFog(P,R);if(on('fxGlow')&&MODE!=='map')drawGlow(P,R);drawSensor(P,R,t);if(on('fxRim'))drawRim(P,R,t);drawShips(P);
+  if(on('fxFilter'))drawFilter();if(on('fxLines')&&MODE!=='map')drawLines(t);if(on('fxHud'))drawHud(t);if(on('fxWipe'))drawWipe(now);if(on('fxTitle'))drawTitle(now);}
+/* ---- 交互 ---- */
+let drag=null;
+cv.addEventListener('mousedown',e=>{const P=S.ships.map(px);let k=-1,bd=16;P.forEach((p,i)=>{const d=Math.hypot(p[0]-e.clientX,p[1]-e.clientY);if(d<bd){bd=d;k=i;}});if(k>=0){S.sel=k;drag=k;}});
+window.addEventListener('mousemove',e=>{if(drag===null)return;S.ships[drag].x=e.clientX/W;S.ships[drag].y=e.clientY/H;});
+window.addEventListener('mouseup',()=>{drag=null;});
+for(const b of document.querySelectorAll('[data-md]'))b.onclick=()=>{if(b.dataset.md===MODE)return;MODE0=MODE;MODE=b.dataset.md;SWT=performance.now();for(const x of document.querySelectorAll('[data-md]'))x.classList.toggle('on',x===b);};
+window.addEventListener('resize',resize);resize();requestAnimationFrame(frame);
+</script></body></html>
