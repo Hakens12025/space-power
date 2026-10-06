@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>对局回放</title>
+<style>
+:root{--bg:#070b12;--panel:#0d131d;--line:#1d2836;--txt:#c9d3df;--dim:#6f7d8e;--blue:#6fb4ff;--red:#ff6a5a;--neu:#9aa3ad;--acc:#ffc878}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:13px/1.45 "Microsoft YaHei","PingFang SC",system-ui,sans-serif;overflow:hidden}
+#app{display:grid;grid-template-columns:1fr 340px;grid-template-rows:40px 1fr 74px;height:100%}
+#top{grid-column:1/3;display:flex;align-items:center;gap:12px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+#top b{color:#fff;letter-spacing:1px}
+#meta{color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#cvWrap{position:relative;overflow:hidden}
+#cv{position:absolute;inset:0;width:100%;height:100%;cursor:grab}
+#drop{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;color:var(--dim);pointer-events:none}
+#drop .big{font-size:18px;color:var(--txt)}
+#side{grid-row:2/4;grid-column:2;border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}
+.sec{padding:8px 10px;border-bottom:1px solid var(--line)}
+.sec h4{margin:0 0 6px;font-size:12px;color:var(--dim);font-weight:normal;letter-spacing:1px}
+.seg{display:flex;gap:4px}
+.seg button,.btn{background:#121b28;color:var(--txt);border:1px solid var(--line);border-radius:4px;padding:4px 8px;cursor:pointer;font:inherit}
+.seg button.on{border-color:var(--acc);color:var(--acc)}
+.btn:hover,.seg button:hover{border-color:#3a4c63}
+label.ck{display:inline-flex;align-items:center;gap:4px;margin-right:8px;color:var(--dim);cursor:pointer;white-space:nowrap}
+#why{font-size:12px;white-space:pre-wrap;word-break:break-all;color:var(--acc);min-height:18px}
+#roster{font-size:12px}
+#roster .r{display:flex;justify-content:space-between;gap:6px}
+#roster .dead{opacity:.4;text-decoration:line-through}
+#evWrap{flex:1;min-height:0;display:flex;flex-direction:column}
+#evList{flex:1;overflow:auto;font-size:12px;padding:0 4px 8px}
+#evList div{padding:1px 6px;border-radius:3px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#evList div:hover{background:#152030}
+#evList div.cur{background:#1d2a3c}
+#evList .t{color:var(--dim);margin-right:6px}
+#bot{grid-column:1;display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:6px 12px;border-top:1px solid var(--line);background:var(--panel)}
+#tl{width:100%;height:56px;cursor:pointer;display:block}
+#clock{font-variant-numeric:tabular-nums;min-width:150px;text-align:right}
+#clock small{display:block;color:var(--dim)}
+select{background:#121b28;color:var(--txt);border:1px solid var(--line);border-radius:4px;padding:3px}
+.b{color:var(--blue)}.rr{color:var(--red)}.n{color:var(--neu)}
+@media (max-width:760px){#app{grid-template-columns:1fr;grid-template-rows:40px 55vh 74px 1fr}#side{grid-row:4;grid-column:1;border-left:0}#bot{grid-column:1}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="top"><b>对局回放</b><button class="btn" id="open">打开录像…</button><input type="file" id="file" accept=".json" hidden><span id="meta">还没打开录像(tools/replay/录像/*.json,也可以直接拖进来)</span></div>
+  <div id="cvWrap"><canvas id="cv"></canvas><div id="drop"><div class="big">把录像 .json 拖到这里</div><div>录一局:node tools/replay/run.mjs 种子 打法 上限游戏秒</div></div></div>
+  <div id="side">
+    <div class="sec"><h4>视角</h4><div class="seg" id="views"><button data-v="all" class="on">全知</button><button data-v="red">红方视角</button><button data-v="blue">蓝方视角</button></div>
+      <div style="margin-top:6px"><label class="ck"><input type="checkbox" id="ckBel" checked>搜索图</label><label class="ck"><input type="checkbox" id="ckTruth">叠真实位置</label><label class="ck"><input type="checkbox" id="ckMap" checked>地图</label><label class="ck"><input type="checkbox" id="ckName" checked>名字</label></div></div>
+    <div class="sec"><h4 id="whyH">红方此刻</h4><div id="why"></div></div>
+    <div class="sec"><h4 id="rosH">舰船</h4><div id="roster"></div></div>
+    <div class="sec" style="padding-bottom:4px"><h4>事件(点一条跳过去)</h4>
+      <label class="ck"><input type="checkbox" data-k="fire" checked>开火</label><label class="ck"><input type="checkbox" data-k="hit" checked>命中</label><label class="ck"><input type="checkbox" data-k="kill" checked>击沉</label><label class="ck"><input type="checkbox" data-k="trk">航迹</label></div>
+    <div id="evWrap"><div id="evList"></div></div>
+  </div>
+  <div id="bot"><div class="seg"><button class="btn" id="play">▶ 播放</button><select id="spd"><option value="10">10 游戏秒/秒</option><option value="30" selected>30 游戏秒/秒</option><option value="100">100 游戏秒/秒</option><option value="300">300 游戏秒/秒</option></select></div>
+    <canvas id="tl"></canvas><div id="clock">—</div></div>
+</div>
+<script>
+"use strict";
+/* 对局回放(tools/replay):读 rec.js 录的 json,不加载引擎。坐标单位 = 100 km(录制时取整)。
+   视角:全知 = 双方真实位置与所有弹;红方 / 蓝方视角 = 这一方自己的船 + 它的接触(定位实心 / 推算空心 / 记忆虚线;只有方位的不上图,列在舰船栏)
+   + 它看得见的弹 + 它记下的炮弹来路 + 它的搜索图与当前线索。只有方位的接触不画方位线(游戏规矩:感知信号不画指向线)。 */
+const $=id=>document.getElementById(id);
+const cv=$('cv'),g=cv.getContext('2d'),tl=$('tl'),tg=tl.getContext('2d');
+let R=null,T=0,view='all',playing=false,cam={x:0,y:0,z:1},belCv=null,belKey='';
+const ST=['','只有方位','定位','推算','记忆'],COL={blue:'#6fb4ff',red:'#ff6a5a',neutral:'#9aa3ad'};
+const sideOf=s=>s.civ?'neutral':s.side;
+function fmtClock(t){const s=Math.round(t*(R?R.meta.timeK:10)),h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return (h?h+':':'')+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0');}
+function load(text,name){
+  try{R=JSON.parse(text);}catch(e){alert('不是录像文件:'+e.message);return;}
+  R.idx=R.frames.map(f=>f.t);R.T1=R.frames[R.frames.length-1].t;
+  const m=R.meta,res=m.result||{},W={blue:'蓝方胜',red:'红方胜',draw:'平局'}[res.winner]||'?';
+  $('meta').textContent=`${name||''}  种子 ${m.seed} · 蓝方「${{radar:'一直照射',silent:'静默',turtle:'不动',rush:'冲脸'}[m.pol]||m.pol}」· 红方条令「${m.doctrine}」· ${W}(${res.t} 游戏秒,剩 蓝 ${res.left?res.left.blue:'?'} 红 ${res.left?res.left.red:'?'})${res.err?' · 出错:'+res.err:''}`;
+  $('drop').style.display='none';T=0;fit();buildEvents();draw();
+}
+$('open').onclick=()=>$('file').click();
+$('file').onchange=e=>{const f=e.target.files[0];if(f)f.text().then(t=>load(t,f.name));};
+document.addEventListener('dragover',e=>e.preventDefault());
+document.addEventListener('drop',e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(f)f.text().then(t=>load(t,f.name));});
+/* ---- 相机:单位 = 录像单位(100 km) ---- */
+function size(){const r=cv.getBoundingClientRect(),d=devicePixelRatio||1;cv.width=r.width*d;cv.height=r.height*d;g.setTransform(d,0,0,d,0,0);const q=tl.getBoundingClientRect();tl.width=q.width*d;tl.height=q.height*d;tg.setTransform(d,0,0,d,0,0);}
+function fit(){if(!R)return;const a=R.arena,r=cv.getBoundingClientRect();cam.x=(a.x0+a.x1)/2;cam.y=(a.y0+a.y1)/2;cam.z=Math.min(r.width/(a.x1-a.x0),r.height/(a.y1-a.y0))*0.95;}
+const W2S=(x,y)=>{const r=cv.getBoundingClientRect();return [(x-cam.x)*cam.z+r.width/2,(y-cam.y)*cam.z+r.height/2];};
+let drag=null;
+cv.addEventListener('mousedown',e=>{drag={x:e.clientX,y:e.clientY,cx:cam.x,cy:cam.y};cv.style.cursor='grabbing';});
+addEventListener('mouseup',()=>{drag=null;cv.style.cursor='grab';});
+addEventListener('mousemove',e=>{if(!drag)return;cam.x=drag.cx-(e.clientX-drag.x)/cam.z;cam.y=drag.cy-(e.clientY-drag.y)/cam.z;draw();});
+cv.addEventListener('wheel',e=>{e.preventDefault();const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top,wx=cam.x+(mx-r.width/2)/cam.z,wy=cam.y+(my-r.height/2)/cam.z;
+  cam.z*=Math.exp(-e.deltaY*0.0015);cam.x=wx-(mx-r.width/2)/cam.z;cam.y=wy-(my-r.height/2)/cam.z;draw();},{passive:false});
+cv.addEventListener('dblclick',()=>{fit();draw();});
+/* ---- 时间 ---- */
+function fIdx(t){const a=R.idx;let lo=0,hi=a.length-1;while(lo<hi){const m=(lo+hi+1)>>1;if(a[m]<=t)lo=m;else hi=m-1;}return lo;}
+$('play').onclick=()=>{playing=!playing;$('play').textContent=playing?'❚❚ 暂停':'▶ 播放';if(playing){if(T>=R.T1)T=0;last=performance.now();requestAnimationFrame(tick);}};
+let last=0;
+function tick(now){if(!playing||!R)return;const dt=Math.min(0.1,(now-last)/1000);last=now;T=Math.min(R.T1,T+dt*(+$('spd').value));draw();if(T>=R.T1){playing=false;$('play').textContent='▶ 播放';return;}requestAnimationFrame(tick);}
+function seekTl(e){if(!R)return;const r=tl.getBoundingClientRect();T=Math.max(0,Math.min(R.T1,(e.clientX-r.left)/r.width*R.T1));draw();}
+let tlDrag=false;tl.addEventListener('mousedown',e=>{tlDrag=true;seekTl(e);});addEventListener('mousemove',e=>{if(tlDrag)seekTl(e);});addEventListener('mouseup',()=>tlDrag=false);
+addEventListener('keydown',e=>{if(!R)return;if(e.code==='Space'){e.preventDefault();$('play').click();}
+  else if(e.code==='ArrowRight'){T=Math.min(R.T1,T+(e.shiftKey?60:R.meta.frame));draw();}else if(e.code==='ArrowLeft'){T=Math.max(0,T-(e.shiftKey?60:R.meta.frame));draw();}});
+document.querySelectorAll('#views button').forEach(b=>b.onclick=()=>{view=b.dataset.v;document.querySelectorAll('#views button').forEach(x=>x.classList.toggle('on',x===b));draw();});
+['ckBel','ckTruth','ckMap','ckName'].forEach(k=>$(k).onchange=draw);
+document.querySelectorAll('[data-k]').forEach(c=>c.onchange=buildEvents);
+addEventListener('resize',()=>{size();draw();});
+/* ---- 事件列表 ---- */
+const nm=i=>i>=0&&R.ships[i]?R.ships[i].name:'?',cls=i=>i>=0&&R.ships[i]?({blue:'b',red:'rr',neutral:'n'})[sideOf(R.ships[i])]:'n';
+function evText(e){const k=e[1];
+  if(k==='fire')return `<span class="${cls(e[2])}">${nm(e[2])}</span> ${e[3]==='m'?'导弹 ×'+e[4]:'主炮'}${e[5]>=0?' → '+nm(e[5]):''}${e[6]?' <span class="n">'+e[6].split(' 线索')[0].split(' 推演')[0]+'</span>':''}`;
+  if(k==='hit')return `<span class="${cls(e[3])}">${nm(e[3])}</span> 的${e[4]==='mac'?'主炮':'导弹'}打中 <span class="${cls(e[2])}">${nm(e[2])}</span>:船体 -${e[5]}${e[6]?' 护盾 -'+e[6]:''}`;
+  if(k==='kill')return `<b>击沉 <span class="${cls(e[2])}">${nm(e[2])}</span></b>(${e[4]==='mac'?'主炮':'导弹'},<span class="${cls(e[3])}">${nm(e[3])}</span>)`;
+  if(k==='trk')return `${e[2]==='red'?'<span class="rr">红方</span>':'<span class="b">蓝方</span>'}对 <span class="${cls(e[3])}">${nm(e[3])}</span>:${ST[e[4]]||'没发现'} → ${ST[e[5]]||'没发现'}`;
+  return JSON.stringify(e);}
+let EVR=[];
+function buildEvents(){if(!R)return;const on={};document.querySelectorAll('[data-k]').forEach(c=>on[c.dataset.k]=c.checked);
+  const L=$('evList');L.innerHTML='';EVR=[];
+  for(const e of R.events){if(!on[e[1]])continue;const d=document.createElement('div');d.innerHTML=`<span class="t">${fmtClock(e[0])}</span>${evText(e)}`;d.title=e[0]+' 游戏秒';d.onclick=()=>{T=e[0];draw();};L.appendChild(d);EVR.push([e[0],d]);}
+  hiliteEv(true);}
+let curEv=null;
+function hiliteEv(scroll){let c=null;for(const [t,d] of EVR){if(t<=T)c=d;else break;}if(c!==curEv){if(curEv)curEv.classList.remove('cur');if(c){c.classList.add('cur');if(scroll||playing)c.scrollIntoView({block:'nearest'});}curEv=c;}}
+/* ---- 画 ---- */
+function belImg(side){const L=R.bel.filter(b=>b.side===side&&b.t<=T+1e-6);const b=L[L.length-1];if(!b)return null;const key=side+b.t;if(key===belKey)return {cv:belCv,b};
+  belCv=belCv||document.createElement('canvas');belCv.width=b.nx;belCv.height=b.ny;const c=belCv.getContext('2d'),im=c.createImageData(b.nx,b.ny),s=atob(b.P);
+  for(let k=0;k<s.length;k++){const v=s.charCodeAt(k)/255,o=k*4;im.data[o]=255;im.data[o+1]=Math.round(60+150*v);im.data[o+2]=30;im.data[o+3]=Math.round(120*v);}
+  c.putImageData(im,0,0);belKey=key;return {cv:belCv,b};}
+function ell(x,y,a,b,ang){const p=W2S(x,y);g.beginPath();g.ellipse(p[0],p[1],Math.max(1,a*cam.z),Math.max(1,b*cam.z),ang,0,Math.PI*2);}
+function ship(p,ang,col,fill){const r=Math.max(4,Math.min(9,cam.z*600));g.save();g.translate(p[0],p[1]);g.rotate(ang);g.beginPath();g.moveTo(r,0);g.lineTo(-r*0.7,r*0.6);g.lineTo(-r*0.4,0);g.lineTo(-r*0.7,-r*0.6);g.closePath();
+  if(fill){g.fillStyle=col;g.fill();}else{g.strokeStyle=col;g.lineWidth=1.3;g.stroke();}g.restore();}
+function diamond(p,col,mode){const r=5;g.beginPath();g.moveTo(p[0],p[1]-r);g.lineTo(p[0]+r,p[1]);g.lineTo(p[0],p[1]+r);g.lineTo(p[0]-r,p[1]);g.closePath();
+  if(mode==='fill'){g.fillStyle=col;g.fill();}else{g.setLineDash(mode==='dash'?[2,2]:[]);g.strokeStyle=col;g.lineWidth=1.3;g.stroke();g.setLineDash([]);}}
+function label(p,t,col){if(!$('ckName').checked)return;g.fillStyle=col;g.font='11px "Microsoft YaHei",sans-serif';g.fillText(t,p[0]+8,p[1]-6);}
+function draw(){
+  const r=cv.getBoundingClientRect();g.clearRect(0,0,r.width,r.height);g.fillStyle='#070b12';g.fillRect(0,0,r.width,r.height);
+  if(!R){drawTl();return;}
+  const fi=fIdx(T),f=R.frames[fi],a=R.arena,z=cam.z;
+  /* 游玩区 */
+  let p0=W2S(a.x0,a.y0),p1=W2S(a.x1,a.y1);g.strokeStyle='#26354a';g.lineWidth=1;g.strokeRect(p0[0],p0[1],p1[0]-p0[0],p1[1]-p0[1]);
+  /* 地图 */
+  if($('ckMap').checked){const M=R.map;
+    for(const c of M.clouds){ell(c[0],c[1],c[2],c[3],c[4]*Math.PI/180);g.fillStyle='rgba(130,110,170,.06)';g.fill();}
+    M.ions.forEach((c,k)=>{const o=f.io?f.io[k]:[0,0];ell(c[0]+o[0],c[1]+o[1],c[2],c[3],c[4]);g.fillStyle='rgba(220,60,200,.07)';g.fill();g.strokeStyle='rgba(220,60,200,.35)';g.stroke();});
+    g.fillStyle='rgba(150,160,175,.35)';for(const q of M.rocks){const p=W2S(q[0],q[1]);g.fillRect(p[0],p[1],1,1);}
+    for(const s of M.asteroids){ell(s[0],s[1],s[2],s[2],0);g.strokeStyle='rgba(150,160,175,.18)';g.stroke();}
+    for(const b of M.bodies){ell(b[0],b[1],b[2],b[2],0);g.fillStyle='#1f2633';g.fill();g.strokeStyle='#3b4658';g.stroke();const p=W2S(b[0],b[1]);if($('ckName').checked){g.fillStyle='#5b687a';g.font='11px sans-serif';g.fillText(b[4]+(b[3]?'·'+b[3]:''),p[0]-16,p[1]+3);}}
+    if(f.mo)for(const m of f.mo){ell(m[0],m[1],140,140,0);g.fillStyle='#2b3342';g.fill();}
+    if(f.cm)for(const m of f.cm){const p=W2S(m[0],m[1]);g.fillStyle='#bfe8ff';g.beginPath();g.arc(p[0],p[1],3,0,7);g.fill();}
+    M.stations.forEach((s,k)=>{const p=W2S(s[0],s[1]),h=f.st?f.st[k]:'';g.strokeStyle=h?COL[h]:'#9aa3ad';g.lineWidth=1.5;g.strokeRect(p[0]-5,p[1]-5,10,10);label(p,s[2]+(h?(h==='red'?'·红':'·蓝'):'·中立'),'#8a96a6');});}
+  /* 搜索图 */
+  const bs=view==='all'?'red':view;
+  if($('ckBel').checked){const B=belImg(bs);if(B){const q0=W2S(B.b.A[0],B.b.A[1]),q1=W2S(B.b.A[2],B.b.A[3]);g.imageSmoothingEnabled=true;g.drawImage(B.cv,q0[0],q0[1],q1[0]-q0[0],q1[1]-q0[1]);}}
+  const V=view==='all'?null:f.v[view];
+  /* 炮弹来路(这一方记下的) */
+  if(V)for(const t of V.tr){const A=W2S(t[0],t[1]),Bp=W2S(t[2],t[3]),E=W2S(t[0]-t[4]*3000,t[1]-t[5]*3000);g.strokeStyle='rgba(255,200,120,.8)';g.lineWidth=1.2;g.beginPath();g.moveTo(A[0],A[1]);g.lineTo(Bp[0],Bp[1]);g.stroke();
+    g.setLineDash([4,4]);g.strokeStyle='rgba(255,200,120,.35)';g.beginPath();g.moveTo(A[0],A[1]);g.lineTo(E[0],E[1]);g.stroke();g.setLineDash([]);}
+  /* 弹 */
+  for(const p of f.p){const vis=view==='all'||(view==='red'?(p[5]&1):(p[5]&2));if(!vis)continue;const q=W2S(p[2],p[3]),col=p[1]==='r'?COL.red:(p[1]==='b'?COL.blue:COL.neutral);
+    g.fillStyle=col;if(p[0]==='m'){g.beginPath();g.arc(q[0],q[1],2.2+Math.min(2,p[4]/12),0,7);g.fill();}else{g.globalAlpha=.8;g.fillRect(q[0]-1,q[1]-1,2,2);g.globalAlpha=1;}}
+  for(const o of f.o){if(V&&o[1]!==view[0])continue;const q=W2S(o[2],o[3]);g.strokeStyle=o[1]==='r'?COL.red:COL.blue;g.lineWidth=1;g.beginPath();g.arc(q[0],q[1],o[0]==='b'?4:3,0,7);g.stroke();if(o[0]==='l'){g.beginPath();g.moveTo(q[0]-3,q[1]-3);g.lineTo(q[0]+3,q[1]+3);g.stroke();}}
+  /* 船 */
+  R.ships.forEach((s,i)=>{const d=f.s[i],sd=sideOf(s),own=V&&s.side===view;if(V&&!own&&!$('ckTruth').checked)return;const q=W2S(d[0],d[1]);
+    const ghost=V&&!own;g.globalAlpha=ghost?0.28:(d[5]&1?0.35:1);
+    if(d[5]&1){g.strokeStyle=COL[sd];g.beginPath();g.moveTo(q[0]-4,q[1]-4);g.lineTo(q[0]+4,q[1]+4);g.moveTo(q[0]+4,q[1]-4);g.lineTo(q[0]-4,q[1]+4);g.stroke();}
+    else{ship(q,d[2],COL[sd],!s.civ);if(d[5]&2){g.strokeStyle=COL[sd];g.globalAlpha*=0.5;g.beginPath();g.arc(q[0],q[1],11,0,7);g.stroke();}if(d[5]&8){g.fillStyle='#fff';g.fillRect(q[0]-1,q[1]-1,2,2);}}
+    if(!s.civ)label(q,s.name+(d[5]&1?'(沉)':''),COL[sd]);g.globalAlpha=1;});
+  /* 这一方的接触 */
+  if(V)for(const k of V.k){const s=R.ships[k[0]];if(k[2]===null)continue;const q=W2S(k[2],k[3]),col=COL[sideOf(s)];diamond(q,col,k[1]===2?'fill':(k[1]===3?'line':'dash'));if(!s.civ||k[4])label(q,(k[4]?s.name:'未识别')+' · '+ST[k[1]],col);}
+  /* AI 线索 */
+  const AV=view==='all'?f.v.red:V;
+  if(AV&&AV.cs)for(const c of AV.cs){const q=W2S(c[1],c[2]);g.fillStyle=c[0]==='fix'?'rgba(255,90,90,.9)':(c[0]==='esm'?'rgba(200,120,255,.75)':'rgba(255,230,120,.75)');g.fillRect(q[0]-2,q[1]-2,4,4);}
+  if(AV&&AV.cl){const q=W2S(AV.cl[0],AV.cl[1]);g.strokeStyle='rgba(255,200,120,.95)';g.lineWidth=1.5;g.beginPath();g.moveTo(q[0]-7,q[1]);g.lineTo(q[0]+7,q[1]);g.moveTo(q[0],q[1]-7);g.lineTo(q[0],q[1]+7);g.stroke();
+    g.setLineDash([5,5]);g.beginPath();g.arc(q[0],q[1],Math.max(6,AV.cl[2]*z),0,7);g.stroke();g.setLineDash([]);}
+  /* 比例尺 */
+  let L=1000;for(const c of [100,200,500,1000,2000,5000,10000,20000])if(c*z>=80){L=c;break;}
+  g.strokeStyle='#8a96a6';g.lineWidth=1;g.beginPath();g.moveTo(16,r.height-18);g.lineTo(16+L*z,r.height-18);g.stroke();g.fillStyle='#8a96a6';g.font='11px sans-serif';g.fillText((L/100)+' 万 km',16,r.height-24);
+  side(f);drawTl();hiliteEv(false);
+  $('clock').innerHTML=`${fmtClock(T)}<small>${T.toFixed(0)} 游戏秒 / ${R.T1.toFixed(0)}</small>`;
+}
+function side(f){
+  const sd=view==='all'?'red':view,V=f.v[sd];$('whyH').textContent=(sd==='red'?'红方':'蓝方')+'此刻'+(view==='all'?'(全知下看红方)':'');
+  $('why').textContent=V&&V.why?V.why.split(' | ').join('\n'):(sd==='blue'?'蓝方是基准脚本,没有指挥层':'—');
+  const own=view==='all'?null:view,H=[];
+  R.ships.forEach((s,i)=>{if(s.civ)return;if(own&&s.side!==own)return;const d=f.s[i];H.push(`<div class="r ${d[5]&1?'dead':''}"><span class="${s.side==='red'?'rr':'b'}">${s.name}</span><span>${d[3]}/${s.hp}${s.sh?' 盾 '+d[4]:''}${d[5]&2?' · 雷达':''}${d[5]&4?' · 点火':''}</span></div>`);});
+  if(own){const V2=f.v[own],m=new Map(V2.k.map(k=>[k[0],k]));H.push('<div style="margin-top:4px;color:var(--dim)">接触</div>');
+    R.ships.forEach((s,i)=>{if(s.side===own)return;const k=m.get(i);if(s.civ&&!k)return;H.push(`<div class="r"><span class="${s.civ?'n':(s.side==='red'?'rr':'b')}">${s.civ?s.name:(k&&k[4]?s.name:s.name+'(真名)')}</span><span>${k?ST[k[1]]+(k[4]?' · 认出':''):'没发现'}</span></div>`);});}
+  $('rosH').textContent=own?(own==='red'?'红方舰船与接触':'蓝方舰船与接触'):'双方舰船';$('roster').innerHTML=H.join('');}
+function drawTl(){const r=tl.getBoundingClientRect(),w=r.width,h=r.height;tg.clearRect(0,0,w,h);tg.fillStyle='#0a1019';tg.fillRect(0,0,w,h);if(!R)return;
+  const X=t=>t/R.T1*w;
+  for(const e of R.events){const x=X(e[0]);if(e[1]==='fire'){const s=R.ships[e[2]];tg.fillStyle=s&&s.side==='red'?'rgba(255,106,90,.55)':'rgba(111,180,255,.55)';tg.fillRect(x,s&&s.side==='red'?8:22,1,10);}
+    else if(e[1]==='kill'){const s=R.ships[e[2]];tg.fillStyle=s&&s.side==='red'?'#ff6a5a':'#6fb4ff';tg.fillRect(x-1,2,3,h-4);}
+    else if(e[1]==='trk'&&e[5]===2){tg.fillStyle=e[2]==='red'?'rgba(255,106,90,.9)':'rgba(111,180,255,.9)';tg.fillRect(x,e[2]==='red'?38:46,2,6);}}
+  tg.fillStyle='#6f7d8e';tg.font='10px sans-serif';tg.fillText('红开火',4,16);tg.fillText('蓝开火',4,30);tg.fillText('定位(红/蓝)',4,52);
+  const x=X(T);tg.fillStyle='#ffc878';tg.fillRect(x-1,0,2,h);}
+size();draw();
+</script>
+</body>
+</html>
