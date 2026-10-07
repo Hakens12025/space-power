@@ -511,11 +511,11 @@ function drawAnomalies(){
   ctx.restore();
   if(irs.length&&typeof ir2AnomDraw==='function')ir2AnomDraw(irs,now);
 }
-/* 2026-10-08 用户:主视角外的红外 / 雷达异常画方向箭头。从画面中心朝异常那一点,落在靠边的一圈上,再顺着往里收到不压界面(顶栏 / 底栏 / 右栏 / 左上列表 / 右下按钮 / 特写窗 / 比例尺 / 刻度尺);
+/* 2026-10-08 用户:主视角外的红外 / 雷达异常画方向箭头。从画面中心朝异常那一点,落在画面中心的一个圆上(半径 RK x 屏幕短边;用户:不要在边界显示),压着界面就顺着往里收(顶栏 / 底栏 / 右栏 / 左上列表 / 右下按钮 / 特写窗 / 比例尺 / 刻度尺);
    没人管 LIFE 毫秒淡出(墙钟,暂停也走);鼠标停在箭头上 = 停住、全亮,移开后重新淡出,寿命按悬停过几次减半(6 → 3 → 1.5 秒);
    自己平移过去,异常那一点进了画面(不压界面)就收箭头、在那里把异常动画重播一遍。
    异常那一点:雷达异常 / 围出交集的红外异常 = 画圈那一点;只有方位的红外异常 = 刻痕那一点(看它的那艘可见光圈边上,方位定格在报的那一刻)。 */
-const ANAR={a:[],LIFE:6000,ML:64,MT:94,MR:28,MB:28,HIT:16,SZ:10,ob:null,obT:-1e9,t:-1e9,v:null, // 箭头 / 寿命 / 左上右下边距(躲开刻度尺)/ 悬停半径 / 箭头大小 px
+const ANAR={a:[],LIFE:6000,RK:0.35,ML:64,MT:94,MR:28,MB:28,HIT:16,SZ:10,ob:null,obT:-1e9,t:-1e9,v:null, // 箭头 / 寿命 / 箭头所在圆的半径(屏幕短边的几倍)/ 算「进了画面」的左上右下边距(躲开刻度尺)/ 悬停半径 / 箭头大小 px
   SEL:'#hud,#tools .seg,#fmBar,#spawnBar,#selPanel,#trPanel,#cmdBar,#fmMenu,#cmdTip,#cmdPop,#mapTag,#matchEnd'}; // 压在画布上的界面
 function anarObs(now){ // 界面占的矩形(DOM 每 300 ms 量一次;特写窗每帧读)
   if(!ANAR.ob||now-ANAR.obT>300){const R=[];for(const el of document.querySelectorAll(ANAR.SEL)){const r=el.getBoundingClientRect();if(r.width<1||r.height<1)continue;const cs=getComputedStyle(el);if(cs.display==='none'||cs.visibility==='hidden'||+cs.opacity===0)continue;R.push([r.left,r.top,r.right,r.bottom]);}
@@ -533,12 +533,11 @@ function anarAdd(e,now){ // 新报的异常:在画面外 ⇒ 建箭头,返回 tr
   ANAR.a.push(a);return true;}
 function anarDraw(now){
   if(simTime<ANAR.t||ANAR.v!==VIEW)ANAR.a.length=0;ANAR.t=simTime;ANAR.v=VIEW;if(!ANAR.a.length)return; // 换局 / 换视角
-  const R=anarObs(now),cx=(ANAR.ML+W-ANAR.MR)/2,cy=(ANAR.MT+H-ANAR.MB)/2,drawn=[];ctx.save();ctx.font='11px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='middle';
+  const R=anarObs(now),cx=W/2,cy=H/2,drawn=[];ctx.save();ctx.font='11px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='middle';
   for(let i=ANAR.a.length-1;i>=0;i--){const a=ANAR.a[i],q=anarTgt(a);if(!q){ANAR.a.splice(i,1);continue;}const p=toScreen(q[0],q[1]);
     if(anarSeen(p,R)){ANAR.a.splice(i,1);ANOM.list.push(Object.assign({},a.e,{t0:now,ar:false}));continue;} // 平移过来了:收箭头,在那一点重播
     let ux=p[0]-cx,uy=p[1]-cy;const l=Math.hypot(ux,uy)||1;ux/=l;uy/=l;
-    let s=Infinity;if(ux>1e-9)s=Math.min(s,(W-ANAR.MR-cx)/ux);else if(ux<-1e-9)s=Math.min(s,(ANAR.ML-cx)/ux);if(uy>1e-9)s=Math.min(s,(H-ANAR.MB-cy)/uy);else if(uy<-1e-9)s=Math.min(s,(ANAR.MT-cy)/uy);
-    s-=ANAR.SZ;while(s>0&&anarHit(cx+ux*s,cy+uy*s,ANAR.SZ+6,R))s-=6;s=Math.max(0,s); // 靠边那一圈,压着界面就顺着往里收
+    let s=ANAR.RK*Math.min(W,H);while(s>0&&anarHit(cx+ux*s,cy+uy*s,ANAR.SZ+6,R))s-=6;s=Math.max(0,s); // 画面中心那个圆上,压着界面就顺着往里收
     const x=cx+ux*s,y=cy+uy*s,hv=Math.hypot(mouseX-x,mouseY-y)<ANAR.HIT;a.sx=x;a.sy=y;
     if(hv)a.hov=true;else if(a.hov){a.hov=false;a.n++;a.dur=ANAR.LIFE/Math.pow(2,a.n);a.t0=now;} // 移开:重新淡出,寿命减半
     const k=a.hov?0:(now-a.t0)/a.dur;if(k>=1){ANAR.a.splice(i,1);continue;}
