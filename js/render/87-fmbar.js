@@ -349,7 +349,7 @@ function fmbRefreshSel(){ // 改了 selected 之后把两个面板叫醒(不等�
      【排在编队分支之前】,所以框选一批导弹之后再点【选中全队】,船确实选上了、右键也确实下的编队令,
      但右栏会一直卡在"导弹群 N 组"、#selFm 停在 display:none —— 本按钮 title 承诺的"右栏切到编队数据"当场失效。
      FL1 之前信息区在左边 #fmMenu 里不经过那道闸,所以这是本轮把信息区搬到右侧带出来的回归。 */
-  selMissile=null;selNet=null;selMissileHits=[];
+  selSet('ship',selected); // 2026-10-08 走选中的唯一写入口(command/69):导弹 / 浮标 / 只看信息一并清
   if(typeof updateSelPanel==='function')updateSelPanel();
 }
 /* FM6:编队菜单里那两个「武装/兑现跟随」的函数整个删除 —— 跟随已下沉成底栏的标准控件,

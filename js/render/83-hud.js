@@ -629,9 +629,9 @@ function drawTargeting(){
   }
   ctx.restore();
 }
-function drawSelEnt(){ // 2026-10-08 选中的「只看信息」实体:画着它的那一点套黄圈(同选中浮标的圈色)
-  const s=typeof selEntOk==='function'?selEntOk():null;if(!s)return;const q=s.side===VIEW?s.pos:viewPos(s);if(!q)return;const p=toScreen(q[0],q[1]);
-  const r=Math.max(12,(!s.kind&&typeof shipIconR==='function'?shipIconR(s):6)+8);ctx.save();ctx.strokeStyle='#ffe066';ctx.lineWidth=1.6;ctx.beginPath();ctx.arc(p[0],p[1],r,0,6.283);ctx.stroke();ctx.restore();
+function drawSelEnt(){ // 2026-10-08 选中的「只看信息」实体:画着它的那一点套黄圈(同选中浮标的圈色);位置与大小走实体登记表(command/69)
+  const s=typeof selEntOk==='function'?selEntOk():null;if(!s)return;const K=entKind(s),q=K.at(s,false,VIEW);if(!q)return;const p=toScreen(q[0],q[1]);
+  const r=K===ENT.ship?Math.max(12,shipIconR(s)+8):(K===ENT.obj?14:K.r(s)+4);ctx.save();ctx.strokeStyle='#ffe066';ctx.lineWidth=1.6;ctx.beginPath();ctx.arc(p[0],p[1],r,0,6.283);ctx.stroke();ctx.restore(); // 舰船跟舰标、卫星 / 彗星 / 据点套在它的点选圈外
 }
 function drawBuoyAim(){ // 2026-10-08 用户:选定「前出浮标」后,舰船 → 鼠标的延长线 = 浮标会往哪飞;舰到鼠标实线,往后虚线延长到飞出地图那一点(靶场没有边界画到 BUOY.FAR)
   if(selWeapon!=='buoy'||typeof buoyLauncher!=='function')return;const s=buoyLauncher();if(!s)return;

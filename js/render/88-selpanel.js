@@ -252,12 +252,9 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
       +(o.life>0?`<div class="row"><span class="k">剩余</span><span class="v">${Math.round(SHOW.t(o.life))} s</span></div>`:'');
     updateCmdBar([]);return;
   }
-  {const se=typeof selEntOk==='function'?selEntOk():null; // 2026-10-08 用户「所有实体都能点」:只看信息、不能下令。对方的东西按悬停信息卡那几行(command/74 xhCardHTML;方位 / 距离量自第一艘还在的我方舰,写在「参照」行)
-  if(se){if(ciSp)ciSp.innerHTML='';
-    if(se.side===VIEW){title.textContent='诱饵';if(ciN)ciN.textContent=se.name;if(ciC)ciC.textContent='我方';
-      box.innerHTML=`<div class="row"><span class="k">状态</span><span class="v">${se.dest?'飞行中':'漂流 · 冒充驱逐舰'}</span></div>`+(se.life>0?`<div class="row"><span class="k">剩余</span><span class="v">${Math.round(SHOW.t(se.life))} s</span></div>`:'');}
-    else{const ref=ships.find(x=>x.side===VIEW&&!x.dead),h=(ref&&typeof xhCardHTML==='function')?xhCardHTML(se,ref):'';title.textContent='目标信息';if(ciN)ciN.textContent=typeof xhName==='function'?xhName(se):'未知接触';if(ciC)ciC.textContent='只看信息';
-      box.innerHTML=h.replace(/^<div class="nm[^"]*">[\s\S]*?<\/div>/,'').replace(/<div><span class="k">/g,'<div class="row"><span class="k">')+(ref?`<div class="row"><span class="k">参照</span><span class="v">${ref.name}</span></div>`:'');}
+  {const se=typeof selEntOk==='function'?selEntOk():null; // 2026-10-08 用户「所有实体都能点」:只看信息、不能下令。标题 / 名字 / 那几行都由实体登记表给(command/69:对方的东西 = 悬停信息卡那几行,方位 / 距离量自第一艘还在的我方舰,写在「参照」行)
+  if(se){const K=entKind(se),ref=ships.find(x=>x.side===VIEW&&!x.dead);if(ciSp)ciSp.innerHTML='';
+    title.textContent=K.title(se);if(ciN)ciN.textContent=K.name(se);if(ciC)ciC.textContent=se.side===VIEW?'我方':'只看信息';box.innerHTML=K.info(se,ref);
     updateCmdBar([]);return;}}
   // 导弹群/导弹组/信标视图:Shift+点选或框选导弹(选择机制在 70-input) → 右栏切实时弹道数据,底栏切固定参数,按钮组置灰
   // RF4a 框选聚合:selMissileHits 里存活组>1 → 汇总视图(状态/目标/引导分布);代表组=剩余弹头最多者

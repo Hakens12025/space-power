@@ -76,22 +76,9 @@ function ghostCommit(){
   GHOST_MODES[g.mode].commit(s,g);
 }
 let mmbTimer=null;      // RF5 Phase C 中键长按开轮盘的定时器句柄。同上就近声明(只被本文件 down/move/up/blur 四处读写);与 core/01-state 的 rmbTimer 是两回事,不要复用
-function shipAt(sx,sy){
-  /* SN6:先看点没点在【聚合框】上 —— 框里的船已经不画在自己的位置上了,不这么做就永远点不到它们。
-     框的判定矩形读的是 lodBuild 定好的同一个 a.x/a.y(画一处、点另一处是最难查的那种错)。 */
-  if(typeof lodAggAt==='function'){
-    const a=lodAggAt(sx,sy);
-    if(a&&a.side==='blue')return a.ships.find(function(x){return !x.dead;})||null;
-  }
-  const w=worldAt(sx,sy);
-  let best=null,bd=1e18;
-  for(const s of ships){
-    if(s.dead)continue; // 残骸不可选中
-    if(s.side!=='blue')continue; // RF2 简化UI:只可选己方舰(GM 也不例外;原为未点亮敌舰不可选/GM 可选敌)
-    const d=Math.hypot(s.pos[0]-w[0],s.pos[1]-w[1]);
-    if(d<60/cam.zoom && d<bd){bd=d;best=s;}
-  }
-  return best;
+function shipAt(sx,sy){ // 我方舰(60 px;编队聚合框先看 —— 框里的船不画在自己的位置上,SN6)。2026-10-08 走实体登记表(command/69 entPick)
+  const h=entPick(sx,sy,{agg:'blue',k:['ship'],side:'blue',ok:o=>o.side==='blue'}); // RF2 简化UI:只可选己方舰(GM 也不例外)
+  return h?h.o:null;
 }
 /* RF4b 敌舰命中测试(右键指定目标 / T·R 点击攻击 / RF5 悬停准星,三条路都只调它)。
    SN6d:门与命中点【都】换成 contactPos —— 原来是"门看 litBlue>=1、命中测试打 s.pos(真值)"。
@@ -102,28 +89,9 @@ function shipAt(sx,sy){
      · 交代不出位置就返回 null ⇒ 热区接触点不到(门)
      · 画在哪就点在哪(实况读估计 c.x/c.y、幽灵陈旧读外推)⇒ 不会画一处点另一处
    ⚠ GM 旁路留在调用方:contactPos 只讲感知事实,不读 adminMode。 */
-function targetAt(sx,sy){
-  const w=worldAt(sx,sy);
-  let best=null,bd=1e18;
-  if(adminMode){ // GM:按真值扫红舰(旁路迷雾,口径与改前相同)
-    for(const s of ships){
-      if(s.dead||s.side!=='red')continue;
-      const q=s.pos;
-      const d=Math.hypot(q[0]-w[0],q[1]-w[1]);
-      if(d<60/cam.zoom && d<bd){bd=d;best=s;}
-    }
-    return best;
-  }
-  /* TK2.3:非 GM 只能点【蓝方航迹表里】的东西 —— 点在估计位置上,交代不出位置的航迹点不到;按注册表顺序走、严格小于取舍,与改前逐拍相同。
-     返回的仍是源对象(锁定 / 火控序列拿它当句柄) */
-  trkEach('blue',tk=>{
-    if(trkGone(tk)||!trkFoe(tk))return; // 2026-09-30 用户:选中舰后准星能吸到碎石 —— 已确认不是船的(碎石、民船)不当目标,同 24 trkFoe(显示 / 玩家火控的口径)
-    if(!trkPos(tk))return; // LL11 交代不出位置的航迹(热态 heat)不画、也不吸附:影像先进了可见光圈、航迹下一拍才定位时,viewPos 已给影像位置
-    const q=viewPos(trkSrc(tk));if(!q)return; // LL9 点在画它的那一点(render/83 viewPos:可见光圈里是每帧影像,圈外与 trkPos 同一个估计)
-    const d=Math.hypot(q[0]-w[0],q[1]-w[1]);
-    if(d<60/cam.zoom && d<bd){bd=d;best=trkSrc(tk);}
-  });
-  return best;
+function targetAt(sx,sy){ // 2026-10-08 走实体登记表(command/69 entPick):蓝方航迹表里交代得出位置的、不是已认出的非船(trkFoe),点在画它的那一点,60 px;GM 按真值扫红舰
+  const h=entPick(sx,sy,{k:adminMode?['ship']:['ship','obj'],side:'blue',r:60,ok:o=>adminMode?o.side==='red':(o.side!=='blue'&&trkFoe(trkOf('blue',o)))});
+  return h?h.o:null; // 返回源对象(锁定 / 火控序列拿它当句柄)
 }
 function clearPendings(){
   /* 所有【点选待命态】的统一清口 —— 这些状态两两互斥:同时置位时,左键消费串里排在前面的那个会先吃掉
@@ -160,58 +128,24 @@ function updSelWeaponTip(){ // RF4b 待命提示:底栏上方 #cmdTip 常显(旧
   tip.style.display='none';
 }
 function buoyLauncher(){for(const x of controlledShips())if((x.buoys||0)>0)return x;return null;} // 2026-10-08 放浮标的那艘(受控舰里第一艘还有浮标的;预览线 render/83 drawBuoyAim 同一艘)
-function buoyAt(sx,sy){ // 2026-09-29 命中最近的我方前出浮标(屏幕 14 px 内,飞行中也算)
-  let best=null,bd=14;
-  for(const o of rocks){if(o.dead||o.kind!=='buoy'||o.side!=='blue')continue;const p=toScreen(o.pos[0],o.pos[1]),d=Math.hypot(p[0]-sx,p[1]-sy);if(d<bd){bd=d;best=o;}}
-  for(const o of featStaObs('blue')){const p=toScreen(o.pos[0],o.pos[1]),d=Math.hypot(p[0]-sx,p[1]-sy);if(d<Math.max(bd,featStaPx()*0.5)){bd=d;best=o;}} // 2026-10-05 自己拿着的据点也走这条(底栏雷达遥控它);命中圈至少半个图标
-  return best;
-}
-const ENT_HIT=24; // 2026-10-08 点选「只看信息」实体的命中半径(屏幕 px;比船的 60 px 小,不抢框选的起点)
-function entAt(sx,sy){ // 2026-10-08 用户「所有实体都能点」:对方的东西(船 / 浮标 / 诱饵 / 民船 / 碎石)点在画它的那一点(viewPos,同 targetAt 的口径,但不挑是不是船);自己放的诱饵读本体
-  if(typeof lodAggAt==='function'){const a=lodAggAt(sx,sy);if(a&&a.side!=='blue'){const s=a.ships.find(x=>!viewDead(x));if(s)return s;}} // 对方的接触群(菱形框):给其中一艘
-  const w=worldAt(sx,sy);let best=null,bd=ENT_HIT/cam.zoom;
-  const hit=(s,q)=>{if(!q)return;const d=Math.hypot(q[0]-w[0],q[1]-w[1]);if(d<bd){bd=d;best=s;}};
-  if(adminMode){for(const s of ships)if(!s.dead&&s.side!==VIEW)hit(s,s.pos);for(const o of rocks)if(!o.dead&&o.side!==VIEW)hit(o,o.pos);}
-  else trkEach(VIEW,tk=>{if(trkGone(tk)||!trkPos(tk))return;const s=trkSrc(tk);if(!viewDead(s))hit(s,viewPos(s));}); // 交代不出位置的(热态)不画也点不到
-  for(const o of rockObjs())if(!o.dead&&o.side===VIEW&&o.kind!=='buoy')hit(o,o.pos); // 自己放的诱饵(浮标走 buoyAt)
-  return best;
-}
-function selEntOk(){const s=selEnt;if(!s)return null; // 选了别的(船 / 导弹 / 浮标)、沉了、换局、交代不出位置 ⇒ 撤
-  const own=s.side===VIEW;if(selected.length||selMissile||selBuoy||(own?s.dead:viewDead(s))||(s.kind?!rocks.includes(s):!ships.includes(s))||(!own&&!viewPos(s))){selEnt=null;return null;}
-  return s;}
-const CAMF={o:null,k:'',lock:false,on:false,lx:0,ly:0,lz:0}; // 2026-10-08 用户:左键双击任何实体 → 镜头跟随它。o 跟谁 / k 'proj' 导弹组、'obj' 其余 / lock 飞到了就钉死 / lx ly lz 上一帧自己摆的镜头
-function camFollowPos(F){const o=F.o; // 画在哪就跟到哪(对方的读我方看到的位置,不拿真值)
-  if(F.k==='proj')return (!o.done&&projSeen(o))?projViewPos(o):null;
-  if(o.side===VIEW||o.kind==='station')return o.dead?null:o.pos;
-  return viewDead(o)?null:viewPos(o);}
-function camFollowStop(){CAMF.o=null;CAMF.lock=false;CAMF.on=false;} // 2026-10-08 用户:跟随开始 / 结束都不弹提示
+function buoyAt(sx,sy){ // 我方前出浮标(14 px,飞行中也算)/ 自己拿着的据点(至少半个图标):底栏雷达遥控它们。2026-10-08 走实体登记表
+  const h=entPick(sx,sy,{k:['obj','sta'],ok:(o,K)=>K.sel(o)==='buoy'});return h?h.o:null;}
+function entAt(sx,sy){ // 2026-10-08 用户「所有实体都能点」:只看信息的那些(对方的船 / 浮标 / 诱饵 / 民船 / 碎石、自己的诱饵、别人的据点、卫星、彗星),走实体登记表
+  const h=entPick(sx,sy,{agg:'red',ok:(o,K)=>K.sel(o)==='info'});return h?h.o:null;}
+const CAMF={o:null,K:null,lock:false,on:false,lx:0,ly:0,lz:0}; // 2026-10-08 用户:左键双击任何实体 → 镜头跟随它。o 跟谁 / K 它在实体登记表里是哪一类 / lock 飞到了就钉死 / lx ly lz 上一帧自己摆的镜头
+function camFollowStop(){CAMF.o=null;CAMF.K=null;CAMF.lock=false;CAMF.on=false;} // 2026-10-08 用户:跟随开始 / 结束都不弹提示
 function camFollowTick(dt){const F=CAMF;if(!F.o)return;
   if(F.on&&cam.zoom===F.lz&&(cam.x!==F.lx||cam.y!==F.ly)){camFollowStop();return;} // 别的操作挪了镜头(右键拖 / WASD / 数字键 / 特写跳转)⇒ 不再跟;缩放照常(滚轮会动 cam.x / y,这一帧再对回去)
-  const q=camFollowPos(F);if(!q){camFollowStop();return;}
+  const q=F.K.live(F.o)?F.K.at(F.o,false,VIEW):null;if(!q){camFollowStop();return;} // 画在哪就跟到哪(对方的读我方看到的位置,不拿真值);沉了 / 没了 / 交代不出位置就停
   if(F.lock){cam.x=q[0];cam.y=q[1];}
   else{const k=1-Math.exp(-dt*8);cam.x+=(q[0]-cam.x)*k;cam.y+=(q[1]-cam.y)*k;if(Math.hypot(q[0]-cam.x,q[1]-cam.y)*cam.zoom<1){cam.x=q[0];cam.y=q[1];F.lock=true;}} // 先平滑飞过去,到了钉死(不拖尾)
   if(typeof zAnim!=='undefined'&&zAnim){zAnim.sx=W/2;zAnim.sy=H/2;zAnim.wx=cam.x;zAnim.wy=cam.y;if(zAnim.k!==undefined){zAnim.cx=cam.x;zAnim.cy=cam.y;}} // 2026-10-08 用户:滚轮不取消跟随 —— 缩放锚点改到跟随的目标(画面中心),render/80 的缩放动画照走、不当成别人动了镜头而让位;缩到上下限时也不会只平移不缩放
   F.on=true;F.lx=cam.x;F.ly=cam.y;F.lz=cam.zoom;}
-function entScrD(o,sx,sy){const q=(o.side===VIEW||adminMode)?o.pos:viewPos(o);if(!q)return Infinity;const p=toScreen(q[0],q[1]);return Math.hypot(p[0]-sx,p[1]-sy);} // 画着它的那一点离光标几 px
-function camPickAt(sx,sy){ // 双击命中:我方浮标 / 我方船 / 其余实体里离光标最近的;都没有再看导弹组
-  let best=null,bd=Infinity;for(const o of [buoyAt(sx,sy),shipAt(sx,sy),entAt(sx,sy)]){if(!o)continue;const d=entScrD(o,sx,sy);if(d<bd){bd=d;best=o;}}
-  if(best)return {o:best,k:'obj',n:(best.side===VIEW||adminMode)?best.name:(typeof xhName==='function'?xhName(best):'未知接触')};
-  const g=groupAt(sx,sy);return g?{o:g,k:'proj',n:'导弹组'}:null;}
 function onDblClick(e){if(e.button!==0)return;const sx=e.clientX,sy=e.clientY;if(typeof insetHit==='function'&&insetHit(sx,sy))return;
-  const t=camPickAt(sx,sy);
-  if(t){CAMF.o=t.o;CAMF.k=t.k;CAMF.lock=false;CAMF.on=false;}
+  const h=entPick(sx,sy,{agg:'all',ok:(o,K)=>K.follow}); // 能跟随的里离光标最近的(导弹组排在后面)
+  if(h){CAMF.o=h.o;CAMF.K=h.K;CAMF.lock=false;CAMF.on=false;}
   else if(CAMF.o)camFollowStop();}
-function groupAt(sx,sy){ // 命中最近的导弹组(屏幕距离,可点选,半径30px)
-  const w=worldAt(sx,sy);
-  let best=null,bd=30/cam.zoom;
-  for(const p of projAll()){ // LL9 连余像(画着的对方弹在消失的光到之前也点得到;关开关就是 projectiles)
-    if(p.type!=='missile'||!projSeen(p))continue; // 2026-09-28 看不见的弹点不到;LL9 没了不再判 p.done:projViewPos 对己方 / 关开关已消失的给 null,对方的看弹影
-    const q=projViewPos(p);if(!q)continue; // LL5 点在画它的那一点(render/83:我方看到的弹影,GM / 自己的弹是真位置)
-    const d=Math.hypot(q[0]-w[0],q[1]-w[1]);
-    if(d<bd){bd=d;best=p;}
-  }
-  return best;
-}
+function groupAt(sx,sy){const h=entPick(sx,sy,{k:['msl']});return h?h.o:null;} // 最近的导弹组(30 px;LL9 连余像、点在画它的那一点)。2026-10-08 走实体登记表
 function orderAt(sx,sy){ // 命中最近的命令点(屏幕距离)
   let best=null,bd=14;
   // FM1:原先这里还有一段编队专用命中(读 F.arrived/F.queue/F.curType,算 F.dest+formationOff(s) 与 queue 各点,
@@ -300,34 +234,17 @@ function mdPending(e,sx,sy){ // 六条 pending*(转向 / 布防 / 跟随 / 信�
   }
   return false;
 }
-let rangeDrag=null; // ENV2 靶场全知时按住拖动的东西:{o 实体 | si 据点 / mi 卫星 / ci 彗星 / bi 天体的下标, dx, dy, sx, sy, moved}
-function rangeDragAt(sx,sy){ // ENV2 靶场沙盘:12 px 内最近的舰船(敌我)/ 石头,其次据点、卫星、彗星(10-08),再次天体圆盘。2026-09-28 用户:不开全知也能拖(按真实位置抓,靶场是测试台)
+let rangeDrag=null; // ENV2 靶场按住拖动的东西:entPick 的结果 {o, K} + dx, dy, sx, sy, moved
+function rangeDragAt(sx,sy){ // ENV2 靶场沙盘(2026-09-28 用户:不开全知也能拖,按真实位置抓,靶场是测试台)。2026-10-08 走实体登记表:舰船 / 石头 12 px、据点 / 卫星 / 彗星(用户:算实体)、天体圆盘排最后;电离云 / 辐射带这类面不拖
   const env=curEnv();if(!env||!env.range)return null;
-  const w=worldAt(sx,sy);let best=null,bd=144;
-  for(const list of [ships,rocks])for(const o of list){if(o.dead)continue;const p=toScreen(o.pos[0],o.pos[1]),d=(p[0]-sx)*(p[0]-sx)+(p[1]-sy)*(p[1]-sy);if(d<bd){bd=d;best={o:o,dx:o.pos[0]-w[0],dy:o.pos[1]-w[1]};}}
-  if(best)return best;
-  const ST=ENV.stations;for(let i=0;i<ST.length;i++){const p=toScreen(ST[i].x,ST[i].y),r=Math.max(12,featStaPx()*0.5);if((p[0]-sx)*(p[0]-sx)+(p[1]-sy)*(p[1]-sy)<r*r)return {si:i,dx:ST[i].x-w[0],dy:ST[i].y-w[1]};} // 2026-10-08 用户:据点也能拖(半个图标或 12 px 内)
-  const MN=ENV.moons,hit=(q,r)=>{const p=toScreen(q[0],q[1]);return (p[0]-sx)*(p[0]-sx)+(p[1]-sy)*(p[1]-sy)<r*r;}; // 2026-10-08 用户:彗星、卫星算实体,也能拖(电离云 / 辐射带这类面不拖)
-  for(let i=0;i<MN.length;i++){if(!ENV.bodies[MN[i].b])continue;const q=featMoonPos(MN[i],simTime);if(hit(q,Math.max(12,MN[i].r*cam.zoom)))return {mi:i,dx:q[0]-w[0],dy:q[1]-w[1]};}
-  for(let i=0;i<ENV.comets.length;i++){const q=featCometAt(i,featCometT(i,simTime));if(hit(q,Math.max(12,FEAT_CFG.COMET.R*cam.zoom)))return {ci:i,dx:q[0]-w[0],dy:q[1]-w[1]};}
-  const B=(rangeWorld&&rangeWorld.bodies)||[];
-  for(let i=0;i<B.length;i++){const b=B[i],p=toScreen(b.x,b.y),r=Math.max(6,b.r*cam.zoom);if((p[0]-sx)*(p[0]-sx)+(p[1]-sy)*(p[1]-sy)<r*r)return {bi:i,dx:b.x-w[0],dy:b.y-w[1]};}
-  return null;
+  const h=entPick(sx,sy,{drag:true});if(!h)return null;const w=worldAt(sx,sy);h.dx=h.p[0]-w[0];h.dy=h.p[1]-w[1];return h;
 }
-function rangeDragTo(x,y){ // ENV2 舰船 / 石头直接写位置(靶连锚点一起挪,免得闪避机动拽回去);天体改 rangeWorld 再 envReset,不直写 ENV
-  const g=rangeDrag,w=worldAt(x,y),nx=w[0]+g.dx,ny=w[1]+g.dy;
-  if(g.o){g.o.pos=[nx,ny,g.o.pos[2]||0];if(g.o.rangeAnchor)g.o.rangeAnchor=g.o.pos.slice();ROCK_EPOCH++;if(typeof llJump==='function')llJump(g.o);} // 2026-09-29 石头挪了:world/12 的网格重建;LL1 瞬移清光锥层历史(sensors/26)
-  else if(g.si!==undefined){const S=rangeWorld.stations[g.si];S.x=nx;S.y=ny;envReset(rangeWorld);featStaMoved(g.si,nx,ny);} // 据点同天体:改 rangeWorld 再 envReset,归属 / 占领进度照留
-  else if(g.mi!==undefined){const m=rangeWorld.moons[g.mi],B=ENV.bodies[m.b],dx=nx-B.x,dy=ny-B.y,orb=Math.max(B.r+m.r,Math.hypot(dx,dy)); // 卫星:绕同一颗行星,轨道半径 = 拖到的距离(不进行星),相位让它此刻正好在光标下
-    m.orb=orb;m.ph=Math.atan2(dy,dx)-(m.dir<0?-1:1)*(PHYS.v(FEAT_CFG.MOON.V)/orb)*simTime;envReset(rangeWorld);}
-  else if(g.ci!==undefined){const c=rangeWorld.comets[g.ci],q=featCometAt(g.ci,featCometT(g.ci,simTime));c.x+=nx-q[0];c.y+=ny-q[1];envReset(rangeWorld);} // 彗星:整条轨迹的起点跟着挪(恒星远,轨迹近似平移;每次按此刻的偏差补,拖着不累积)
-  else{const b=rangeWorld.bodies[g.bi];b.x=nx;b.y=ny;envReset(rangeWorld);}
-}
+function rangeDragTo(x,y){const g=rangeDrag,w=worldAt(x,y);g.K.drag(g,w[0]+g.dx,w[1]+g.dy);} // 各类自己的拖法在 command/69(舰船 / 石头直接写位置,世界里的东西改 rangeWorld 再 envReset)
 function mdLeft(e,sx,sy){ // 左键
   const ord=orderAt(sx,sy);
   if(ord){ // 命中命令点 → 拖拽调整位置
     dragOrder=ord;
-    if(ord.ship){selected=[ord.ship.id];selMissile=null;selNet=null;selMissileHits=[];selBuoy=null;} // FL1:orderAt 扫的是全部蓝舰的 orders(不限选中),所以这条路径能在"导弹选中态"下把 selected 改成舰船;不清的话 88-selpanel 的导弹早退会挡在编队/单舰分支前面,右栏切不过来
+    if(ord.ship)selSet('ship',[ord.ship.id]); // FL1:orderAt 扫的是全部蓝舰的 orders(不限选中),所以这条路径能在"导弹选中态"下把 selected 改成舰船;不清的话 88-selpanel 的导弹早退会挡在编队/单舰分支前面,右栏切不过来
     selDrag=null;
     return;
   }
@@ -335,21 +252,14 @@ function mdLeft(e,sx,sy){ // 左键
   const sh=shipAt(sx,sy);
   if(e.shiftKey){ // Shift=选导弹(单击选最近的,拖动框选导弹群)
     const g=groupAt(sx,sy);
-    if(g){selMissile=g;selNet=g.netId||null;selMissileHits=[g];selected=[];selDrag=null;return;}
-    selMissile=null;selNet=null;selMissileHits=[];
+    if(g){selSet('msl',g);selDrag=null;return;}
+    selSet('ship',selected);
     selDrag={x0:sx,y0:sy,x1:sx,y1:sy,missileMode:true};
     return;
   }
-  const b=buoyAt(sx,sy); // 2026-09-29 点中我方浮标 → 选中它(右栏 / 底栏雷达切到浮标)。浮标比船离光标近就先选浮标:船的点选圈 60 px(舰队层 6 万 km),刚放出去的浮标总在圈里
-  if(b&&(!sh||(()=>{const p=toScreen(sh.pos[0],sh.pos[1]),q=toScreen(b.pos[0],b.pos[1]);return Math.hypot(q[0]-sx,q[1]-sy)<Math.hypot(p[0]-sx,p[1]-sy);})())){ // 一样近(刚发射还叠在船上)让给船
-    selBuoy=b;selMissile=null;selNet=null;selMissileHits=[];selected=[];selDrag=null;if(typeof updateSelPanel==='function')updateSelPanel();return;}
-  const et=entAt(sx,sy); // 2026-10-08 用户「所有实体都能点」:选中看信息(右栏),不能下令。比船离光标近就先选它(同浮标;船的点选圈 60 px,舰队层盖得住旁边的东西)
-  if(et&&(!sh||entScrD(et,sx,sy)<entScrD(sh,sx,sy))){selEnt=et;selMissile=null;selNet=null;selMissileHits=[];selected=[];selBuoy=null;selDrag=null;if(typeof updateSelPanel==='function')updateSelPanel();return;}
-  if(!sh){ // 没点中船 → 看导弹组(导弹组可点选;v125点中组=选整个网)
-    const g=groupAt(sx,sy);
-    if(g){selMissile=g;selNet=g.netId||null;selMissileHits=[g];selected=[];selDrag=null;selBuoy=null;return;}
-  }
-  selMissile=null;selNet=null;selMissileHits=[];selBuoy=null;selEnt=null; // 没点中导弹组 / 浮标 / 实体 → 取消它们的选中
+  const h=entPick(sx,sy,{agg:'all',ok:(o,K)=>!!K.sel(o)}),sk=h?h.K.sel(h.o):null; // 2026-10-08 实体登记表(command/69):能选的里离光标最近的一个 —— 我方舰 60 px、我方浮标 14 px、其余 24 px(比船近才先选它;刚放出去的浮标叠在船上让给船);导弹组排在后面
+  if(sk&&sk!=='ship'){selSet(sk,h.o);selDrag=null;if(typeof updateSelPanel==='function')updateSelPanel();return;} // 浮标 / 据点(底栏雷达)、导弹组(v125 点中组 = 选整个网)、只看信息
+  selSet('ship',selected); // 没点中它们 → 取消它们的选中,舰船照旧往下走
   if(e.ctrlKey){
     if(sh){selected.includes(sh.id)?selected.splice(selected.indexOf(sh.id),1):selected.push(sh.id);}
   }else{
@@ -476,18 +386,18 @@ window.addEventListener('mouseup',e=>{
     const clicked=Math.abs(selDrag.x1-selDrag.x0)<5&&Math.abs(selDrag.y1-selDrag.y0)<5;
     if(clicked){
       const s=shipAt(selDrag.x0,selDrag.y0);
-      if(s){selected=[s.id];}
+      if(s)selSet('ship',[s.id]);
     }else if(selDrag.missileMode){ // Shift框选:选导弹群(不是船)
       const x=Math.min(selDrag.x0,selDrag.x1),y=Math.min(selDrag.y0,selDrag.y1);
       const w=Math.abs(selDrag.x1-selDrag.x0),h=Math.abs(selDrag.y1-selDrag.y0);
       const inBox=projectiles.filter(p=>p.type==='missile'&&!p.done&&projSeen(p)&&(adminMode||(p.shooter&&p.shooter.side==='blue'))); // 2026-09-28 框选只选我方弹(敌方弹单点看得见的)
       const hits=inBox.filter(p=>{const q=projViewPos(p);if(!q)return false;const sp=toScreen(q[0],q[1]);return sp[0]>=x&&sp[0]<=x+w&&sp[1]>=y&&sp[1]<=y+h;}); // LL5 框的是画它的那一点(render/83 projViewPos)
       if(hits.length){
-        selected=[]; // KIMI146修:清掉拖拽过程中误选的舰船,导弹信息面板才显示得出来
+        // KIMI146修:清掉拖拽过程中误选的舰船,导弹信息面板才显示得出来(selSet 一并清)
         // RF4a 框选聚合:全部存活组进 selMissileHits(右栏汇总视图);代表组=剩余弹头最多者(原为"数组第一个",旧注释写的"最近"名不副实)
         const alive=hits.filter(p=>!p.done);
+        selSet('msl',alive.slice().sort((a,b)=>(b.count||0)-(a.count||0))[0]||hits[0]);
         selMissileHits=alive;
-        selMissile=alive.slice().sort((a,b)=>(b.count||0)-(a.count||0))[0]||hits[0];
         selNet=alive.length===1&&selMissile?(selMissile.netId||null):null; // 多组时网选中无意义;单组保持"点中组=选整个网"语义
       }
     }

@@ -154,7 +154,7 @@ function doAction(id){
     if(lastDigit&&lastDigit.code===id&&now-lastDigit.time<400){ // 双击:跳镜头到编队几何中心
       let x=0,y=0;mates.forEach(s=>{x+=s.pos[0];y+=s.pos[1];});cam.x=x/mates.length;cam.y=y/mates.length;
     }else{
-      selMissile=null;selNet=null;selMissileHits=[]; // FL1:selected 与导弹选中态互斥(70-input 选导弹时会清 selected,反向原来没人做)——不清的话 88-selpanel 的导弹早退会挡在编队分支前面,右栏切不过来
+      selSet('ship',selected); // 2026-10-08 走选中的唯一写入口(command/69):导弹 / 浮标 / 只看信息一并清。FL1:selected 与导弹选中态互斥(70-input 选导弹时会清 selected,反向原来没人做)——不清的话 88-selpanel 的导弹早退会挡在编队分支前面,右栏切不过来
       selected=mates.map(s=>s.id);
     }
     lastDigit={code:id,time:now};
