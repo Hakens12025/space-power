@@ -14,11 +14,14 @@ function stepProjectiles(dt){
       return ta-tb; // 剩余命中时间短的(最迫近)排前,保前 PROJ_KEEP
     });
     projectiles=persist.concat(volatile.slice(0,PROJ_KEEP));
-    volatile.slice(PROJ_KEEP).forEach(p=>p.done=true); // 被裁标done,引用干净失效
+    volatile.slice(PROJ_KEEP).forEach(p=>{p.done=true;if(typeof llGone==='function')llGone(p,simTime);}); // 被裁标done,引用干净失效;LL1 裁掉的不经下面的过滤,在这里登记消失(sensors/26)
   }
   // v119:预收集活跃拦截弹(按阵营),供导弹蛇形判定O(1)跳过——原为O(P²)全表扫描
-  const icBlue=[],icRed=[];
-  for(const q of projectiles){if(q.type==='interceptor'&&!q.done){(q.shooter.side==='blue'?icBlue:icRed).push(q);}}
+  // LL11 用户 10-07:蛇形只看导弹这一方看得见的对方拦截弹(trkSees),存的是这一方看到的位置:光速延迟开着取弹影(projLook,连余像),关着取真位置;icBlue = 红方看到的蓝方拦截弹
+  const icBlue=[],icRed=[],icLL=typeof llOnNow==='function'&&llOnNow();let mB=false,mR=false;
+  for(const q of projectiles)if(q.type==='missile'&&!q.done&&q.shooter){if(q.shooter.side==='blue')mB=true;else mR=true;} // LL11 对方没有在飞的导弹就不用求这一方的弹影
+  if(mB||mR)for(const q of (icLL?projAll():projectiles)){if(q.type!=='interceptor'||(!icLL&&q.done))continue;const ob=q.shooter.side==='blue'?'red':'blue';if(!(ob==='blue'?mB:mR)||!trkSees(ob,q))continue;
+    const x=icLL?projLook(q,ob):q;if(x)(q.shooter.side==='blue'?icBlue:icRed).push(icLL?x.pos.slice():x.pos);} // LL11 关着存真弹的位置数组本身(同改前逐步读它此刻的位置);弹影代理复用,开着拷一份
   mslNetStep(dt); // 2026-09-30 导弹组网:每个感知节拍重算哪些导弹组连得到舰队(weapons/54)
   guideMissiles(); // T1:每tick重算引导分配(自导/链导/脱锁),供下方追击门判定
   updateNets(dt); // 清理空网(2026-10-03 雷离网中心计时自毁那条删了)
@@ -32,22 +35,25 @@ function stepProjectiles(dt){
     if(!p.done&&(p.type==='mac'||p.type==='missile'||p.type==='interceptor'))projBlock(p,x0,y0,dt); // 2026-09-29 天体 / 碎石挡弹
   }
   shellTraceStep();
-  projectiles=projectiles.filter(p=>!p.done);
+  projectiles=projectiles.filter(p=>!p.done||(typeof llGone==='function'&&llGone(p,simTime+dt))); // LL1 滤掉的弹顺手登记消失时刻(sensors/26 llGone 恒返回 false,只记录)
 }
 /* 2026-09-28 炮弹来路(反炮兵定位 counter-battery 的最简形态;用户:「顺着敌方火炮划过我方的可见光完全感知区,反向延长这个线条,来看看炮弹是从哪里来的,导弹不行」)。
    对方的主炮弹被我方看见(可见光圈或雷达照到,trkSees)⇒ 记下第一次看见的点 a、看得见的最后一点 b 和飞行方向:开火那一刻的射手就在这条线往回延长的某处(不知道开火时刻,所以只有线没有点)。
    只记几何,不记射手是谁;两方对称,SHELL_TR.red 是红方知道的(bots 读),SHELL_TR.blue 画在我方地图上(render/83)。导弹会拐弯,不做。 */
 const SHELL_TR={blue:[],red:[],KEEP:60}; // KEEP:一条记录留多少游戏秒
 function shellTraceStep(){
+  const llon=typeof llOnNow==='function'&&llOnNow(); // LL5 光速延迟开着:a / b 取这一方看到的弹影(sensors/21 projLook),r.t 是看见的时刻(到达),另记 a 的影像时刻 r.te
   for(const side of ['blue','red']){
     const L=SHELL_TR[side];
-    for(const p of projectiles){
+    for(const p of (llon?projAll():projectiles)){ // LL7 开着时连余像:对方的弹消失(标 done、滤出弹表)的光还没到,这一方照样看得见它在飞
       if(p.type!=='mac'||!p.shooter||p.shooter.side===side)continue;
       const r0=p.tr&&p.tr[side];if(r0&&r0.out)continue; // 已经穿出可见光圈:这一段定了
       const vis=trkSees(side,p); // 2026-09-28 用户:雷达照得到的炮弹就是看得见 —— 与地图上画不画这发炮弹同一个判据(可见光圈或雷达;原来只认可见光圈,雷达照到的炮弹有点没线)
-      if(r0){if(vis)r0.b=[p.pos[0],p.pos[1]];else r0.out=true;continue;} // 还看得见就把轨迹末端 b 往前推
+      const q=llon&&vis?projLook(p,side):p;if(!q)continue; // LL5 弹影(看得见时才取;两拍之间按看见它的那只眼)
+      if(r0){if(vis)r0.b=[q.pos[0],q.pos[1]];else r0.out=true;continue;} // 还看得见就把轨迹末端 b 往前推
       if(!vis)continue;
-      const v=Math.hypot(p.vel[0],p.vel[1])||1,r={a:[p.pos[0],p.pos[1]],b:[p.pos[0],p.pos[1]],u:[p.vel[0]/v,p.vel[1]/v],t:simTime};
+      const v=Math.hypot(q.vel[0],q.vel[1])||1,r={a:[q.pos[0],q.pos[1]],b:[q.pos[0],q.pos[1]],u:[q.vel[0]/v,q.vel[1]/v],t:simTime};
+      if(q!==p)r.te=q.llT; // LL5 a 那张弹影的时刻
       (p.tr||(p.tr={}))[side]=r;L.push(r);
     }
     while(L.length&&simTime-L[0].t>SHELL_TR.KEEP)L.shift();
@@ -138,6 +144,7 @@ function mslSwarmVc(p,tp,sw){ // ② 同步:与一跳邻组比【按能力天花
   return p.vCmd;}
 function stepMissileProj(p,dt,icBlue,icRed){ // 导弹:继承载机速度+暴力加速,射后不管,组网转移(一弹传三代)
       p.age=(p.age||0)+dt;
+      const llon=typeof llOnNow==='function'&&llOnNow(); // LL7 光速延迟开着:导引与重选读导弹知道的(导引头影像 / 舰队估计),命中触发读真值
       if(p.mine){ // 伏击雷(已布设):静止待命,自带被动传感器自主触发,点火=情报
         p.vel=[0,0,0];p.spd=0;
         let trig=null;
@@ -145,7 +152,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 导弹:继承载机速度+暴力
         trig=!mslSeekDue(p)?null:(p.online?mslSeek:mslSeekB)(p,trigR,s=>!(p.trigMode==='big'&&shipValue(s)<3)&&!(p.trigMode==='engine'&&!s.flame&&!s.sideFlame),true); // 2026-09-30 断链的雷按 b 挑(不看预计位置);2026-09-28 触发走导引头(同 LOAL:看得见才算、分不出民船诱饵、挑最近)。big 只伏击巡洋级+;engine 只打引擎开着的
         if(trig){
           p.mine=false;p.target=trig; // 二次点火:变普通追击导弹扑上去
-        }else if(p.online&&p.lastTarget&&!p.lastTarget.dead){ // 2026-09-30 要在网上才知道原目标的下落;DS156 脱锁雷复活:重新获得原目标信息(被网络点亮)且还在警戒圈→复活追击(未竟任务继续)
+        }else if(p.online&&p.lastTarget&&!contactDead(p.lastTarget,p.shooter.side)){ // LL6 死活按舰队看见的;2026-09-30 要在网上才知道原目标的下落;DS156 脱锁雷复活:重新获得原目标信息(被网络点亮)且还在警戒圈→复活追击(未竟任务继续)
           const lq=contactPos(p.lastTarget,p.shooter.side); // 2026-09-28 距离按母舰网络的估计位置量(原来量真值)
           if(trkFix(trkOf(p.shooter.side,p.lastTarget))&&lq&&V.len(V.sub(lq,p.pos))<=(p.trigRadius||12000*CFG.scale)*2){ // 2026-09-26 x1/5(单局地图):缺省原 60000
             p.mine=false;p.target=p.lastTarget;p.chaffed=false;p.lastKpos=null;p.guided=true; // 复活=重新入引导(目标在自导范围,网已点亮)
@@ -157,7 +164,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 导弹:继承载机速度+暴力
       if(p.cruise){ // 2026-09-28 巡飞搜索(没勾「变雷」的弹到点后,用户:「不选中就一直飞」):不喷火直飞,导引头一路找;原目标被母舰重新定位就回去追;出游玩区消失
         const t=!mslSeekDue(p)?null:p.online?mslSeek(p):mslSeekB(p); // 2026-09-30 断链的按 b 挑;2026-10-03 每 0.2 游戏秒找一次
         if(t)mslAcquire(p,t);
-        else if(p.online&&p.lastTarget&&!p.lastTarget.dead&&trkFix(trkOf(p.shooter.side,p.lastTarget))){p.cruise=false;p.target=p.lastTarget;p.lastKpos=null;}
+        else if(p.online&&p.lastTarget&&!contactDead(p.lastTarget,p.shooter.side)&&trkFix(trkOf(p.shooter.side,p.lastTarget))){p.cruise=false;p.target=p.lastTarget;p.lastKpos=null;} // LL6 死活按舰队看见的
         else{mslCoastAvoid(p,dt);return;}
       }
       if(p.park){const t=!mslSeekDue(p)?null:p.online?mslSeek(p):mslSeekB(p);if(t)mslAcquire(p,t);} // 2026-09-28 LOAL:区域齐射 / 布雷途中导引头一路找,看见就扑
@@ -204,18 +211,19 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 导弹:继承载机速度+暴力
         // v135:脱锁2s滑行结束→直插(目标太近,翼面偏移会绕圈);chaffed保留供复锁判定。组网偏移 2026-10-01 已拆(54 翼面),这里不用再清
       }
       // 组网转移(DS147):目标没了——干扰复锁优先;link网(接入母舰火控)交给智能分配器按需求重分配;非link网独立重选最近
-      if(!p.target||(p.target.dead&&p.online)){ // 2026-09-30 断链的不知道目标死了(照自己的记录飞,下面的脱锁路)
+      if(!p.target||(p.online&&(contactDead(p.target,p.shooter.side)||llSeekDead(p.target,p.pos)))){ // 2026-09-30 断链的不知道目标死了(照自己的记录飞,下面的脱锁路);LL6 在网上的:舰队看见的或自己导引头看见的(同 54 guideSide 的 needGuide)
         // TK2.1:下面四处「射手这一方知道什么」改读航迹表;挑目标的三处从这一方的航迹表里枚举(按注册表顺序、严格小于的并列取舍都与原来遍历 ships 相同),
         //       距离与角度仍按真值几何量(那是弹体自己的导引头在看,不是情报)
         // v125:干扰脱锁优先复锁原目标(lastTarget),复锁靠转弯耗燃料;贴脸直插(v135)
         // DS190/DS191(用户令):不再固定复锁原目标,改选"最不用转弯"的已点亮目标(角度最小),
         // 全角度含正后方 180°(背后目标也复锁、走大圈,不变雷)。配合翻倍的转向油耗与下面的大转弯限速,绕圈复锁自然被燃料惩罚。
-        if(p.online&&p.chaffed&&p.lastTarget&&!p.lastTarget.dead&&trkFix(trkOf(p.shooter.side,p.lastTarget))){ // 2026-09-30 复锁挑舰队航迹表里的目标:要在网上
+        if(p.online&&p.chaffed&&p.lastTarget&&!contactDead(p.lastTarget,p.shooter.side)&&trkFix(trkOf(p.shooter.side,p.lastTarget))){ // 2026-09-30 复锁挑舰队航迹表里的目标:要在网上;LL6 死活按舰队看见的
           const pdir=V.norm(p.vel);
           let bestT=null,bestAng=Math.PI+1;
           trkEach(p.shooter.side,tk=>{
             if(trkGone(tk)||!trkFix(tk)||!trkPid(tk))return; // WCS1:导弹自己重选只挑认出是船的
-            const s=trkSrc(tk),a=V.angle(pdir,V.norm(V.sub(s.pos,p.pos)));
+            const s=trkSrc(tk),sp=llon?trkPos(tk):s.pos;if(!sp)return; // LL7 开着时角度按舰队的估计位置量(关着照旧量真值)
+            const a=V.angle(pdir,V.norm(V.sub(sp,p.pos)));
             if(a<bestAng){bestAng=a;bestT=s;}
           });
           if(bestT){p.target=bestT;p.chaffed=false;}
@@ -223,14 +231,15 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 导弹:继承载机速度+暴力
                // 注意:按当前进入条件(lastTarget 存活且已定位)与扫描判据完全一致,lastTarget 自己必被选中,此分支逻辑上不可达;
                // 保留是为了将来放宽进入条件时不至于裸奔,不要因为"看着没用"就删。
             p.chaffed=false;p.guided=false;
-            p.lastKpos=(p.lastTarget&&!p.lastTarget.dead)?p.lastTarget.pos.slice():p.pos.slice();
+            const bk=llon?mslBasket(p):null; // LL7 开着时飞自己目标记录 p.tk 外推的点(不读原目标此刻的真值)
+            p.lastKpos=(p.lastTarget&&!contactDead(p.lastTarget,p.shooter.side))?(llon?(bk?[bk.x,bk.y,bk.z]:p.pos.slice()):p.lastTarget.pos.slice()):p.pos.slice(); // LL6 死活按舰队看见的(在网上的分支里)
           }
         }else if(p.guideMode==='link'){ // DS147:接入母舰火控 → 待分配,分配器(每0.5s)按需求补目标;先滑行不失的
           p.target=null; // 2026-09-28 场上没有可分配的目标也不自毁(用户:没耗尽燃料前还能一直运动):下面滑行 + 导引头一路找
         }else if(!p.online){p.target=null; // 2026-09-30 断链:不翻舰队航迹表,下面导引头按 b 挑
         }else{ // 非link:独立重选最近(原逻辑,散兵游勇)
           let nt=null,nd=1e18;
-          trkEach(p.shooter.side,tk=>{if(!trkGone(tk)&&trkFix(tk)&&trkPid(tk)){const s=trkSrc(tk),d=V.len(V.sub(s.pos,p.pos));if(d<nd){nd=d;nt=s;}}});
+          trkEach(p.shooter.side,tk=>{if(!trkGone(tk)&&trkFix(tk)&&trkPid(tk)){const s=trkSrc(tk),sp=llon?trkPos(tk):s.pos;if(!sp)return;const d=V.len(V.sub(sp,p.pos));if(d<nd){nd=d;nt=s;}}}); // LL7 开着时距离按舰队的估计位置量
           if(nt){p.target=nt;}
           else p.target=null; // 2026-09-28 没有可重选的也不自毁:下面滑行 + 导引头一路找
         }
@@ -244,8 +253,8 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 导弹:继承载机速度+暴力
          估计位置交代不出(接触丢了)⇒ 这一拍按脱锁处理,走下面那条滑行路,不许回落真值。这是"射程无限、只是精准度问题"在导弹上的那一半:
          远距离打的是发射与飞行途中的估计,椭圆比导引头的自导范围还大就大概率扑空。目标速度暂用真值(内核不估计速度,已知口子)。 */
       let tp=null;
-      if(p.guided&&p.target){tp=(p.guideMode==='self')?p.target.pos:((typeof contactPos==='function')?contactPos(p.target,p.shooter.side):p.target.pos);if(!tp){p.guided=false;p.guideMode='coast';}}
-      if(!p.guided){const t=!mslSeekDue(p)?null:p.online?mslSeek(p):mslSeekB(p);if(t){mslAcquire(p,t);tp=t.pos;}} // 2026-09-28 LOAL:脱锁途中导引头看见别的就扑;2026-09-30 断链的按 b 挑
+      if(p.guided&&p.target){tp=llon?mslAimNow(p,p.target,p.guideMode==='self'):((p.guideMode==='self')?p.target.pos:((typeof contactPos==='function')?contactPos(p.target,p.shooter.side):p.target.pos));if(!tp){p.guided=false;p.guideMode='coast';}} // LL7 开着:自导读导引头影像、链导读舰队的 contactKin,都推到此刻(54 mslAimNow)
+      if(!p.guided){const t=!mslSeekDue(p)?null:p.online?mslSeek(p):mslSeekB(p);if(t){mslAcquire(p,t);tp=llon?mslAimNow(p,t,true):t.pos;if(!tp){p.guided=false;p.guideMode='coast';}}} // 2026-09-28 LOAL:脱锁途中导引头看见别的就扑;2026-09-30 断链的按 b 挑
       if(!p.guided){
         if(!p.lastKpos)p.lastKpos=[p.pos[0]+p.vel[0]*20,p.pos[1]+p.vel[1]*20,p.pos[2]+p.vel[2]*20]; // 记最后已知(WR1:没有记录就沿当前航向;原来这里读目标真值)
         const toK=V.sub(p.lastKpos,p.pos);
@@ -289,15 +298,15 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 导弹:继承载机速度+暴力
       const dist=V.len(toT);
       const vn=V.len(p.vel);
       // —— 前置追踪:瞄目标未来位置(直接撞上,不追尾不减速) ——
-      const tv=p.target.vel;
+      const tv=llon?mslAimVel(p,p.target,p.guideMode==='self'):p.target.vel; // LL7 开着:自导读导引头影像的速度、链导读舰队的(断链的不读舰队态势图,审查第 5 条)
       const relV=[p.vel[0]-tv[0],p.vel[1]-tv[1],p.vel[2]-tv[2]];
       const relSpd=Math.max(500,V.len(relV)); // 相对接近速度
       const tLead=Math.max(0.4,dist/relSpd);  // 预估到达时间(前置量)
       // 攻击模式智能选择:有拦截弹+燃料足 → 蛇形走位(难拦但耗油、弹道偏);否则 → 突击(直线全速不规避)
       let evX=0,evY=0;
-      const icArr=p.shooter.side==='blue'?icRed:icBlue; // v119:读预收集表,平方距离免开方
+      const icArr=p.shooter.side==='blue'?icRed:icBlue; // v119:读预收集表,平方距离免开方;LL11 表里是这一方看到的对方拦截弹位置
       let nearIc=false;
-      for(let i=0;i<icArr.length;i++){const q=icArr[i];const ddx=q.pos[0]-p.pos[0],ddy=q.pos[1]-p.pos[1],ddz=q.pos[2]-p.pos[2];if(ddx*ddx+ddy*ddy+ddz*ddz<156250000*CFG.scale*CFG.scale){nearIc=true;break;}} // 12500²(= DD 近防外圈)。2026-09-26 跟近防走:原 25000²
+      for(let i=0;i<icArr.length;i++){const q=icArr[i];const ddx=q[0]-p.pos[0],ddy=q[1]-p.pos[1],ddz=q[2]-p.pos[2];if(ddx*ddx+ddy*ddy+ddz*ddz<156250000*CFG.scale*CFG.scale){nearIc=true;break;}} // 12500²(= DD 近防外圈)。2026-09-26 跟近防走:原 25000²
       if(nearIc&&p.fuel>20){ // 蛇形:横向正弦摆动,幅度随接近收敛(远处难拦,近处收拢命中)
         const dirT=V.norm(V.sub(tp,p.pos));
         const sw=Math.sin((p.age||0)*6)*Math.min(8000*CFG.scale,dist*0.3); // 2026-09-26 x1/5(单局地图):幅度上限原 40000
@@ -342,10 +351,10 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 导弹:继承载机速度+暴力
       else nd=dir;
       p.vel=[nd[0]*p.spd,nd[1]*p.spd,nd[2]*p.spd];
       p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;
-      if(p.fuel<=0&&V.dot(p.vel,V.sub(p.target.pos,p.pos))<0){ // v125:燃料尽且正在远离目标(转不动追不上)→失的自毁(否则永恒漂流)
+      if(p.fuel<=0&&V.dot(p.vel,V.sub(llon?tp:p.target.pos,p.pos))<0){ // v125:燃料尽且正在远离目标(转不动追不上)→失的自毁(否则永恒漂流);LL7 开着时按导弹知道的目标位置 tp 判
         p.done=true;return;
       }
-      if(dist<800){ // 命中:近防分层拦截(外圈拦截导弹/内圈近防炮)+ 扇面过载。2026-09-26 单局地图刻意不缩:组网两组包抄的末端脱靶约 470~680km(速度 / 转向率不缩),缩到 160 实测自动齐射命中 0
+      if(stepCPA2(p,p.target,dt)<640000){ // LL11 命中触发按真值(这一步相对线段离目标最近 < 800,开关开 / 关同一口径;用户 10-07,原来关着按瞄准点 dist<800)。命中:近防分层拦截(外圈拦截导弹/内圈近防炮)+ 扇面过载。2026-09-26 单局地图刻意不缩:组网两组包抄的末端脱靶约 470~680km(速度 / 转向率不缩),缩到 160 实测自动齐射命中 0
         if(p.target.type==='decoy'){p.done=true;return;} // DS166:撞上诱饵=扑空(诱饵无装甲,导弹白烧)
         let surv=1;
         // 来袭导弹方向 → 船的扇面;统计同扇面来袭组数 + 受击扇面数
@@ -399,17 +408,22 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 导弹:继承载机速度+暴力
 function stepInterceptorProj(p,dt){ // 拦截导弹(v114):燃料模式可出远门;主动拦截;1颗拦1颗,消耗自身
       p.age=(p.age||0)+dt;
       if(p.fuel<=0){p.done=true;return;} // 燃料耗尽自毁(v118:燃料=寿命,耗尽即失效)
+      {const h=icHome(p),hx=p.pos[0]-h[0],hy=p.pos[1]-h[1],hz=p.pos[2]-h[2];if(hx*hx+hy*hy+hz*hz>(p.icR2||Infinity)){p.done=true;return;}} // 10-07 出了发射舰的防区就自毁(52 INT_ZONE_K)
+      const f0=p.fuel; // 10-07 油至少按时间烧(燃料 = 寿命;原来到顶速后直飞不耗油)
       if(!p.target||p.target.done||((p.target.count??1)<=0)){ // 目标失效/拦完:重选前方目标;KIMI146修:诱饵弹无count字段,(count||0)<=0恒真→每tick重复重选(??1后只在done时才重选)
         p.target=findInterceptorTarget(p);
       }
       if(!p.target){p.done=true;return;} // 前方无来袭:结束(防泄漏)
       const toT=V.sub(p.target.pos,p.pos);
-      const dist=V.len(toT);
-      const tv=p.target.vel;
+      const dist=V.len(toT); // 真值距离:只给下面的拦截判定(物理)
+      let gp=p.target.pos,tv=p.target.vel,gd=dist; // LL7 制导读的目标位置 / 速度 / 距离:光速延迟开着时是拦截弹导引头看到的影像推到此刻(sensors/26 llSeek),看不到就照原航向飞
+      if(typeof llOnNow==='function'&&llOnNow()){const im=llSeek(p,p.target);
+        if(im&&im!==p.target){const a=simTime-im.llT;gp=[im.pos[0]+im.vel[0]*a,im.pos[1]+im.vel[1]*a,im.pos[2]+im.vel[2]*a];tv=im.vel;gd=V.len(V.sub(gp,p.pos));}
+        else if(!im){gp=[p.pos[0]+p.vel[0],p.pos[1]+p.vel[1],p.pos[2]+p.vel[2]];tv=MAC_V0;gd=0;}}
       const relV=[p.vel[0]-tv[0],p.vel[1]-tv[1],p.vel[2]-tv[2]];
       const relSpd=Math.max(300,V.len(relV));
-      const tLead=Math.max(0.3,dist/relSpd);
-      const aim=[p.target.pos[0]+tv[0]*tLead,p.target.pos[1]+tv[1]*tLead,p.target.pos[2]+tv[2]*tLead];
+      const tLead=Math.max(0.3,gd/relSpd);
+      const aim=[gp[0]+tv[0]*tLead,gp[1]+tv[1]*tLead,gp[2]+tv[2]*tLead];
       const dir=V.norm(V.sub(aim,p.pos));
       const vn=V.len(p.vel);
       // 燃料模式(v118):加速400/上限24000/燃料60s,加减速/转向都耗燃料;转向更强但更耗油
@@ -424,6 +438,7 @@ function stepInterceptorProj(p,dt){ // 拦截导弹(v114):燃料模式可出远�
       if(vn>1&&p.fuel>0){const cur=V.norm(p.vel);nd=V.slerp(cur,dir,Math.min(1,4.5/(1+vn/(3000*INT_VK))*dt));p.fuel=Math.max(0,p.fuel-V.angle(cur,nd)*0.8);} // 转向更强(4.5)但更耗油(0.8/rad)
       else if(vn>1){nd=V.norm(p.vel);}
       else nd=dir;
+      if(f0-p.fuel<dt)p.fuel=Math.max(0,f0-dt);
       p.vel=[nd[0]*p.spd,nd[1]*p.spd,nd[2]*p.spd];
       p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;
       // 拦截判定:接近来袭导弹<1500 → 1颗拦1颗,逐颗概率;消耗自身;拦完继续往前拦下一个(不瞎追)

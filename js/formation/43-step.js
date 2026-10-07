@@ -16,16 +16,16 @@ function fmSpd(F, mates) {
      而终点位置【不受影响】—— 每艘船在下令那一刻就拿到了自己的绝对终点,不是实时算出来的。
      KIMI151b 的两条特殊语义保留:speedCmd===0(定速停)拉停全队;===-1(不限速)不参与平均。
      用处:physics/31 给编队成员的速度上限(2026-10-06 用户选回加权平均)+ 编队菜单读数 + 跟随态槽位旋转限速。 */
-  const list = mates || fmShips(F);
-  let sum = 0, n = 0, stop = false;
+  const list = mates || fmShips(F), uni = !!F && F.spdMode === 'min'; // 2026-10-07 用户:编队菜单「统一速度」= 全队不超过最慢那艘的档位(87 的速度钮);缺省 = 加权
+  let sum = 0, n = 0, lo = Infinity, stop = false;
   for (const m of list) {
     if (m.speedCmd === 0) { stop = true; continue; }
     if (m.speedCmd === -1) continue;
-    sum += cruiseOf(m); n++;
+    const v = cruiseOf(m); sum += v; n++; if (v < lo) lo = v;
   }
   if (stop) return 0;
   if (!n) return Infinity; // 全员不限速 → 编队不加额外上限(改前这里回退 500,是个没来由的降档)
-  return sum / n;
+  return uni ? lo : sum / n;
 }
 
 function stepFormation(F, dt) {

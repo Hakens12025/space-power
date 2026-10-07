@@ -4,16 +4,16 @@
 // v126 导弹探测配置(留改型口子:以后不同导弹型号改这里数值)
 const MSL_CFG={
   passive:20000*CFG.scale,       // 导弹被动探测(看热):目标亮度在 被动距离×光学亮度 内 → 导弹自己"看到"(可锁);SN4 亮度函数改由感知内核 sensors/22-percep 提供。2026-09-26 x1/5(单局地图):原 100000
-  ladar:30000*CFG.scale,         // 导弹主动光雷达(测距测速):**最后阶段开启**,3万=这玩意(自主导引范围)。2026-09-26 x1/5(单局地图):原 150000
-  ladarRange:30000*CFG.scale,    // LADAR 有效距离(=GUIDE_SEEK,末端开启后精确锁定)。2026-09-26 x1/5(单局地图):原 150000
+  ladar:15000*CFG.scale,         // 导弹主动光雷达(测距测速):**最后阶段开启**,= 自主导引范围。2026-10-07 用户:导引圈 x0.5(3 万 → 1.5 万)。2026-09-26 x1/5(单局地图):原 150000
+  ladarRange:15000*CFG.scale,    // LADAR 有效距离(=GUIDE_SEEK,末端开启后精确锁定;10-07 x0.5 同上)。2026-09-26 x1/5(单局地图):原 150000
 };
 const GUIDE_SEEK=MSL_CFG.ladarRange; // 导弹自主导引范围(km)=主动LADAR末端开启后(范围内自主锁定,不耗通道)
 /* 2026-09-30 导弹组网(用户):弹与弹 MM、弹与舰(含前出浮标)MS 以内连一条边(数见 MSL_LINK);一组导弹经弹弹链能连到任何一艘我方船(舰与舰之间量子通信,算一个节点)就「在网上」(p.online):
    回传自身状态(我方画真位置、选中面板照实报)、收数据链引导(guideSide 只给在网上的)。每个感知节拍重算一次;刚发射的算在网上(52 fireMissiles) */
-const MSL_LINK={MM:61425*CFG.scale,MS:63000*CFG.scale}; // 2026-10-03 用户:组网圈 x0.7(8.775 / 9 万 → 6.1425 / 6.3 万),导引圈 GUIDE_SEEK 不变
+const MSL_LINK={MM:30712.5*CFG.scale,MS:31500*CFG.scale}; // 2026-10-07 用户:组网圈 x0.5(6.1425 / 6.3 万 → 3.07125 / 3.15 万);10-03 x0.7
 const MSL_SWARM={S:20000*CFG.scale,COH:0.7,FLOOR:0.85,conv:25000*CFG.scale,convW:125000*CFG.scale,DASH:30000*CFG.scale,RES:2,DEAD:0.035,HYST:0.03,DEV:0.26};
   // 2026-10-01 三关系算法(用户拍板:间距 3 万 / 聚合力 0.6,演示页 demos/weapons/导弹组网.html):S = 间距(分离半径);COH = 聚合力;FLOOR = 同步减速下限(x 能力天花板,
-  // 等不起就掉队);conv / convW = 聚集力距目标几公里开始淡出、淡出带多宽;DASH = 冲刺段起点(= 导引头锁定范围,盖过近防外圈)以内不再减速;RES = 冲刺预留油(秒);
+  // 等不起就掉队);conv / convW = 聚集力距目标几公里开始淡出、淡出带多宽;DASH = 冲刺段起点(原 = 导引头锁定范围;10-07 导引圈 x0.5 时不动,仍盖过近防外圈)以内不再减速;RES = 冲刺预留油(秒);
   // DEAD = 转向死区(2°,不追微小抖动);HYST = 调度滞回(x,不为噪声重新加减速);DEV = 排斥最多把航向从「目标 + 聚拢」的方向拉开 15°(2026-10-05 用户:刚出膛挤在一起的几组被排斥推着转圈、白烧油 ——
   // 十几个邻组的排斥相加能把弹推到背后,实测远靶出膛 2~20 秒平均偏 56°、最坏 117°;只封排斥不封聚拢(用户:抱团不能弱 —— 先试过两样合起来封 15°,团明显松了),
   // 三种靶距平均:出膛偏 20°,团心均距 30 / 60 秒 10.6k / 6.2k,比不封顶时(13.0k / 9.5k)还紧。封顶 = Reynolds 群体转向的转向力上限)
@@ -85,40 +85,61 @@ function missLumC(t){if(MSL_LUM.t!==simTime){MSL_LUM.t=simTime;MSL_LUM.m.clear()
 const MSL_SEEK_DT=0.2; // 2026-10-03 性能:导引头找新目标(发射后锁定 / 断链挑目标 / 雷的触发)每组每 0.2 游戏秒找一次,按组号错开(原来每步 0.02 秒都找,几百组时占模拟大半)
 function mslSeekDue(p){const k=Math.floor((simTime+((p.group||0)%10)*CFG.step)/MSL_SEEK_DT);if(p.skK===k)return false;p.skK=k;return true;}
 /* 2026-09-29 用户:盲射时导引头弱一点(原来几乎都能认准目标),按导弹自己的探测圈和目标体型算(用户选:2 万 x 体型,看热一起按同一倍数减)。
-   只管盲射找目标(mslSeek:区域齐射 / 巡飞 / 脱锁 / 变雷触发);追自己目标的导弹(missSee)照旧 */
-const MSL_BLIND={R:20000*CFG.scale,K:2/3}; // R = 盲射探测圈(x 目标体型,驱逐 1.4 万 / 巡洋 2 万);K = 看热距离的倍数(= R / 末端 LADAR 3 万)
-function missSeeT(p,t,blind){ // 导弹自身探测(信息源):被动看热(被动距离×目标光学亮度) 或 末端主动LADAR(MSL_CFG.ladar=导引头,最后阶段开启)
+   只管盲射找目标(mslSeek:区域齐射 / 巡飞 / 脱锁 / 变雷触发);追自己目标的导弹(missSeeT 不带 blind)照旧 */
+const MSL_BLIND={R:10000*CFG.scale,K:2/3}; // R = 盲射探测圈(x 目标体型);K = 看热距离的倍数(= R / 末端 LADAR 1.5 万)。10-07 跟导引圈一起 x0.5(原 2 万),比例不变
+function missSeeT(p,t,blind,im0){ // 导弹自身探测(信息源):被动看热(被动距离×目标光学亮度) 或 末端主动LADAR(MSL_CFG.ladar=导引头,最后阶段开启)
   if(!t||!t.side)return false;
-  if(envOccluders().length&&envOccluded(p.pos,t.pos))return false; // ENV2 天体挡视线:被动看热与末端 LADAR 一起挡
-  const d=V.len(V.sub(t.pos,p.pos));
-  if(d<MSL_CFG.passive*missLumC(t)*(blind?MSL_BLIND.K:1))return true; // 2026-09-27 导引头看热改读 missLum(用户选「不跟」N1 的新亮度) // SN4 被动看热改读感知内核的 optLum(体型×(1+引擎档+发射档)):引擎开着或正在照射的目标看得远,熄火静默的冷目标难看到。量级注意:新口径约为旧口径的 2 倍(冷 DD 3.5 万→7 万、满推 CA 22 万→40 万),但下一行 15 万那道末端 LADAR 门在 15 万内恒为真,所以只有 15 万外才看得出差别——表现是热目标更早被自导接管、超视距链导通道占用相应变少(2026-09-26 整体 x1/5,本注释旧数按 1/5 读)
+  if(im0===undefined&&typeof llOnNow==='function'&&llOnNow()&&mslSeekFar(p,t,mslSeekR(t,blind),Infinity))return false; // LL7 预筛:影像肯定在导引头够不着的地方(严格上界,不改结果)
+  const im=im0===undefined?(typeof llSeek==='function'?llSeek(p,t):t):im0;if(!im)return false; // LL7 导引头单眼看的是推迟时刻的影像(sensors/26 llSeek;调用方算过就传 im0;关开关 = 目标本身);光还没到 = 看不见
+  if(envOccluders().length&&envOccluded(p.pos,im.pos))return false; // ENV2 天体挡视线:被动看热与末端 LADAR 一起挡
+  const d=V.len(V.sub(im.pos,p.pos));
+  if(d<MSL_CFG.passive*(im===t?missLumC(t):llSeekLum(im,missLum))*(blind?MSL_BLIND.K:1))return true; // LL7 影像的看热亮度按 te 所在那一格算、同一步同一格只算一次(sensors/26) // 2026-09-27 导引头看热改读 missLum(用户选「不跟」N1 的新亮度) // SN4 被动看热改读感知内核的 optLum(体型×(1+引擎档+发射档)):引擎开着或正在照射的目标看得远,熄火静默的冷目标难看到。量级注意:新口径约为旧口径的 2 倍(冷 DD 3.5 万→7 万、满推 CA 22 万→40 万),但下一行 15 万那道末端 LADAR 门在 15 万内恒为真,所以只有 15 万外才看得出差别——表现是热目标更早被自导接管、超视距链导通道占用相应变少(2026-09-26 整体 x1/5,本注释旧数按 1/5 读)
   if(d<(blind?MSL_BLIND.R*(t.size||0):MSL_CFG.ladar))return true; // 末端LADAR开启(MSL_CFG.ladar):精确测距测速
   return false;
 }
-function missSee(p){return missSeeT(p,p.target);} // 导引头看不看得见自己的目标
+let MSL_LMAX=0; // LL7 导引头被动看热距离的上界系数(x 体型 = 最远距离;亮度取最亮的引擎档 + 最响的发射档废热 + 开火热),第一次用时算
+function mslSeekFar(p,t,Rs,bd){ // LL7 光速延迟开着时的预筛(严格:弹速 ≤ BMAX·c ⇒ 影像离此刻位置不超过 BMAX 倍光行距离;不开方):导引头到 t 影像的三维距离肯定 ≥ Rs、或水平距离肯定 ≥ bd ⇒ true
+  const B=LL_CFG.BMAX,dx=t.pos[0]-p.pos[0],dy=t.pos[1]-p.pos[1],dz=t.pos[2]-p.pos[2],h2=dx*dx+dy*dy,a=Rs*(1+B);
+  if(h2+dz*dz>=a*a)return true; // 三维:影像距离 ≥ 此刻距离 /(1 + B)
+  if(bd<Infinity){const k=B/(1-B),m=(bd+k*Math.abs(dz))/(1-k);if(h2>=m*m)return true;} // 水平:影像水平距离 ≥ 水平距离 − k·三维距离 ≥ 水平距离·(1 − k) − k·|dz|
+  return false;
+}
+function mslSeekR(t,blind){ // LL7 导引头看得见 t 的最远距离上界(任何引擎档 / 发射档 / 开火热下),预筛用
+  if(!MSL_LMAX){let e=0;for(const k in SENS.EMIT_P)if(SENS.EMIT_P[k]>e)e=SENS.EMIT_P[k];MSL_LMAX=MSL_CFG.passive*(1+Math.max(MSL_SEEK_P.P_ENG_MAIN,MSL_SEEK_P.P_ENG_REV,MSL_SEEK_P.P_ENG_SIDE)+COV.HEAT_EMIT*e+MSL_SEEK_P.P_FIRE);} // 连被动看热的距离系数一起算好
+  const sz=t.size||0;return Math.max(MSL_LMAX*sz*(blind?MSL_BLIND.K:1),blind?MSL_BLIND.R*sz:MSL_CFG.ladar); // 自身热倍率 heatK 只有石头有(0.5 < 1),不乘照样是上界
+}
+function mslAimNow(p,t,self){ // LL7 光速延迟开着时导弹此刻瞄的目标位置(56 stepMissileProj):自导 = 导引头影像(sensors/26 llSeek),链导 = 舰队的 contactKin(sensors/21);都按位置对应的时刻推到此刻;交代不出给 null
+  if(self){const im=llSeek(p,t);if(!im)return null;const a=im===t?0:simTime-im.llT;return a>0?[im.pos[0]+im.vel[0]*a,im.pos[1]+im.vel[1]*a,im.pos[2]+im.vel[2]*a]:(im===t?im.pos:im.pos.slice());}
+  const k=contactKin(t,p.shooter.side);return k?macKinNow(k):null;
+}
+function mslAimVel(p,t,self){if(self){const im=llSeek(p,t);return (im&&im.vel)||MAC_V0;}const k=contactKin(t,p.shooter.side);return (k&&k.vel)||MAC_V0;} // LL7 同上,速度(不知道就按不动)
 /* 2026-09-28 发射后锁定(LOAL,鱼叉「只给方位发射」的用法;用户:「识别到目标后自动攻击」):没有目标(区域齐射 / 巡飞 / 数据链待分配)
    或丢了目标的导弹一路开着导引头找,看见就扑,挑最近的。导引头分不出民船、诱饵与敌舰(用户选「认不出」);石头没有结构值,不算。
    看得多远同 missSeeT:冷船靠末端 LADAR 约 3 万,点火 / 刹车的船远得多(被动看热按亮度线性放大)。 */
 function mslSeek(p,R,ok){
   const side=p.shooter.side;let best=null,bd=R||Infinity;
-  const tryT=t=>{if(t.dead||t.side===side||t.hp===undefined||(ok&&!ok(t)))return;
-    const d=Math.hypot(t.pos[0]-p.pos[0],t.pos[1]-p.pos[1]);if(d<bd&&missSeeT(p,t,true)){bd=d;best=t;}};
+  const llon=typeof llOnNow==='function'&&llOnNow();
+  const tryT=t=>{if(llSeekDead(t,p.pos)||t.side===side||t.hp===undefined)return; // LL6 死活按导引头自己看见的(击沉的光走到弹上才算;sensors/26)
+    if(llon&&mslSeekFar(p,t,mslSeekR(t,true),bd))return; // LL7 预筛(严格上界):影像肯定比已挑中的远、或导引头肯定够不着
+    const im=typeof llSeek==='function'?llSeek(p,t):t;if(!im||(ok&&!ok(im)))return; // LL7 距离、引擎档(雷的 engine 触发)读导引头看到的影像
+    const d=Math.hypot(im.pos[0]-p.pos[0],im.pos[1]-p.pos[1]);if(d<bd&&missSeeT(p,t,true,im)){bd=d;best=t;}};
   for(const s of ships)tryT(s);
   for(const o of rockObjs())tryT(o); // 2026-09-29 静止石头没有结构值,tryT 本来就跳过它们:只走会动的物体
   return best;
 }
-function mslAcquire(p,t){ // 导引头锁上 t:从布雷 / 巡飞 / 脱锁转成自导追击(下一拍 guideSide 按 missSee 续 self)
+function mslAcquire(p,t){ // 导引头锁上 t:从布雷 / 巡飞 / 脱锁转成自导追击(下一拍 guideSide 按 missSeeT 续 self)
   p.target=t;p.park=false;p.cruise=false;p.mine=false;p.chaffed=false;p.lastKpos=null;
   p.guided=true;p.guideMode='self';p.vCmd=undefined; // 换了目标重新排速度
 }
 /* 2026-09-30 断链的导弹只用自己知道的(用户):导弹带一份自己的目标记录 p.tk = {pos, vel, t, sig, a}(52 出膛时按母舰的估计写;在网上时随母舰的估计更新,导引头看见时用自己量到的),
    断链后不读目标的真实死活、不翻舰队航迹表:飞向按记录外推的点,导引头按 b「最像原目标」挑(用户选 b):体型比在 MSL_SIM 以内、最像的优先,并列取离预计位置最近;
-   只认再捕获范围(预计位置 + 导引头 3 万 + ½·a·τ²,τ = 最后一次拿到目标信息后的时间,a 同航迹表的先验 trkAccPrior)里的;原目标型号不知道 ⇒ 取离预计位置最近 */
+   只认再捕获范围(预计位置 + 导引头 GUIDE_SEEK + ½·a·τ²,τ = 最后一次拿到目标信息后的时间,a 同航迹表的先验 trkAccPrior)里的;原目标型号不知道 ⇒ 取离预计位置最近 */
 const MSL_SIM=1.25;
 function mslSigOf(t,side){const ty=trkIdType(trkOf(side,t)),c=ty&&ty.kind==='ship'&&ty.cls&&SENS.CLS[ty.cls];return c?c.size:null;} // 母舰认出的型号 → 体型;没认出给 null
-function mslTkSet(p,q,sig){ // 更新导弹自己的目标记录(原地改)
+function mslTkSet(p,q,sig,v,te){ // 更新导弹自己的目标记录(原地改);LL7 v / te = 这份速度与位置 q 对应的时刻(导引头影像 / sensors/21 contactKin 给;关开关时就是真速度与此刻)
   let k=p.tk;if(!k)k=p.tk={pos:[0,0,0],vel:[0,0,0],t:0,sig:null,a:0};
-  const v=p.target.vel;k.pos[0]=q[0];k.pos[1]=q[1];k.pos[2]=q[2]||0;k.vel[0]=v[0];k.vel[1]=v[1];k.vel[2]=v[2];k.t=simTime; // 目标速度仍取真值(接触没有速度估计,已登记的口子)
+  if(!v)v=MAC_V0; // LL7 我方不知道速度时按不动记,不拿真值兜底
+  k.pos[0]=q[0];k.pos[1]=q[1];k.pos[2]=q[2]||0;k.vel[0]=v[0];k.vel[1]=v[1];k.vel[2]=v[2];k.t=te;
   if(sig)k.sig=sig;k.a=trkAccPrior(p.target,{idn:!!k.sig});
 }
 function mslTkFrom(p,q){ // 采纳邻组 q 的目标与记录(目标沿链传导):重新排速度、掉进脱锁时按新记录重算预计拦截点
@@ -128,13 +149,16 @@ function mslTkFrom(p,q){ // 采纳邻组 q 的目标与记录(目标沿链传导
 }
 function mslSwarmOn(p){return !!(p.nb&&p.target&&p.nb.some(q=>!q.done&&!q.park&&q.target===p.target));} // 有没有同目标的邻组(聚集攻击中),右栏状态读
 function mslBasket(p){const k=p.tk;if(!k)return null;const u=simTime-k.t;return {x:k.pos[0]+k.vel[0]*u,y:k.pos[1]+k.vel[1]*u,z:k.pos[2]+k.vel[2]*u,r:GUIDE_SEEK+0.5*k.a*u*u};} // 预计目标位置 + 再捕获半径
-function mslSeekB(p,R,ok,noBasket){ // 断链的导弹自己挑目标(b);R / ok 同 mslSeek,R 缺省 = 导引头 3 万(2026-10-03 用户:断链只认导弹周围 3 万内的目标,同演示页);noBasket = 雷的触发(守着自己的点,不看预计位置)
+function mslSeekB(p,R,ok,noBasket){ // 断链的导弹自己挑目标(b);R / ok 同 mslSeek,R 缺省 = 导引头 GUIDE_SEEK(2026-10-03 用户:断链只认导弹周围导引头范围内的目标,同演示页);noBasket = 雷的触发(守着自己的点,不看预计位置)
   const side=p.shooter.side,k=p.tk,bk=noBasket?null:mslBasket(p),lim=Math.log(MSL_SIM);let best=null,bs=Infinity,bd=Infinity;
-  const tryT=t=>{if(t.dead||t.side===side||t.hp===undefined||(ok&&!ok(t)))return;
-    const dp=Math.hypot(t.pos[0]-p.pos[0],t.pos[1]-p.pos[1]);if(dp>=(R||GUIDE_SEEK))return;
-    const d=bk?Math.hypot(t.pos[0]-bk.x,t.pos[1]-bk.y):dp;if(bk&&d>bk.r)return;
+  const llon=typeof llOnNow==='function'&&llOnNow();
+  const tryT=t=>{if(llSeekDead(t,p.pos)||t.side===side||t.hp===undefined)return; // LL6 断链:死活只读导引头看见的
+    if(llon&&mslSeekFar(p,t,mslSeekR(t,true),R||GUIDE_SEEK))return; // LL7 预筛(严格上界):影像肯定在挑选半径外、或导引头肯定够不着
+    const im=typeof llSeek==='function'?llSeek(p,t):t;if(!im||(ok&&!ok(im)))return; // LL7 距离、引擎档读导引头看到的影像(sensors/26 llSeek)
+    const dp=Math.hypot(im.pos[0]-p.pos[0],im.pos[1]-p.pos[1]);if(dp>=(R||GUIDE_SEEK))return;
+    const d=bk?Math.hypot(im.pos[0]-bk.x,im.pos[1]-bk.y):dp;if(bk&&d>bk.r)return;
     let q=0;if(k&&k.sig){q=Math.abs(Math.log((t.size||1e-9)/k.sig));if(q>lim+1e-9)return;}
-    if(!missSeeT(p,t,true))return;
+    if(!missSeeT(p,t,true,im))return;
     if(q<bs-1e-9||(q<=bs+1e-9&&d<bd)){bs=q;bd=d;best=t;}};
   for(const s of ships)tryT(s);
   for(const o of rockObjs())tryT(o);
@@ -167,21 +191,26 @@ function mslCoastAvoid(p,dt){ // 2026-10-04 用户:规避进导弹所有飞行�
 // DS147:missReport 已取消(数据链纯单向,导弹不回报传感器;导弹的探测只用于自身导引/复锁/飞最后已知变雷)
 function guideSide(side){ // 一方数据链网络的引导分配(v125:按网分配,每网占1通道,网内所有组共享引导)
   const gs=ships.filter(s=>s.side===side&&!s.dead&&(s.guideChan||0)>0); // 有火控通道的存活舰
-  const ms=projectiles.filter(p=>p.type==='missile'&&!p.done&&!p.park&&!p.mine&&p.target&&p.target.side&&p.target.side!==side&&(!p.target.dead||!p.online)); // 2026-09-30 断链的不知道目标死了,照样按自己的记录飞
+  const ms=projectiles.filter(p=>p.type==='missile'&&!p.done&&!p.park&&!p.mine&&p.target&&p.target.side&&p.target.side!==side&&(!p.online||!contactDead(p.target,side))); // 2026-09-30 断链的不知道目标死了,照样按自己的记录飞;LL6 在网上的按舰队看见的死活
   const parks=projectiles.filter(p=>p.type==='missile'&&!p.done&&p.park&&!p.mine&&p.shooter&&p.shooter.side===side); // DS192:空目标 park 弹(区域齐射/布雷途中),下面吃富余通道
   if(!ms.length&&!parks.length)return;
+  const llon=typeof llOnNow==='function'&&llOnNow(); // LL7 光速延迟开着:导引头看推迟时刻的影像
   for(const p of ms){ // 标定引导需求:导弹自己探测到目标(被动看热/末端LADAR)→ 自导(不耗通道);没看到且网络未点亮 → 需引导/脱锁
     p.guided=false; // KIMI146修:每tick无状态重算——原只置true永不复位,脱锁状态机整体失效(失去信息仍全知追击,架空导弹设计规范§1/§2)
-    p.needGuide=p.target.dead||!missSee(p);
-    if(!p.needGuide){p.guided=true;p.coastT=0;p.guideMode='self';p.lastKpos=p.target.pos.slice();mslTkSet(p,p.target.pos,p.target.size);} // 导引头自己量到的
-    else if(p.online&&!p.target.dead){const q=contactPos(p.target,side);if(q)mslTkSet(p,q,mslSigOf(p.target,side));} // 在网上:随母舰的估计更新
+    const T=p.target,P=p.pos,dd=p.online?(contactDead(T,side)||llSeekDead(T,P)):llSeekDead(T,P); // LL6 在网上:舰队看见的或导引头看见的;断链:只读导引头看见的(不读舰队态势图,审查第 5 条)
+    let far=false;if(llon&&!dd){const dx=T.pos[0]-P[0],dy=T.pos[1]-P[1],dz=T.pos[2]-P[2],a=mslSeekR(T,false)*(1+LL_CFG.BMAX);far=dx*dx+dy*dy+dz*dz>=a*a;} // LL7 预筛(严格上界,同 mslSeekFar):导引头肯定够不着,不用求影像
+    const im=dd||far?null:(llon?llSeek(p,T):T); // LL7 导引头单眼看到的影像(关开关 = 目标本身)
+    p.needGuide=dd||far||!missSeeT(p,T,false,im);
+    if(!p.needGuide){p.guided=true;p.coastT=0;p.guideMode='self';const te=im===T?simTime:im.llT,a=simTime-te; // 导引头自己量到的;LL7 位置 / 速度 / 时刻都是影像的(mslBasket 从 te 外推)
+      p.lastKpos=a>0?[im.pos[0]+im.vel[0]*a,im.pos[1]+im.vel[1]*a,im.pos[2]+im.vel[2]*a]:im.pos.slice();mslTkSet(p,im.pos,T.size,im.vel,te);}
+    else if(p.online&&!contactDead(T,side)){const k=contactKin(T,side);if(k)mslTkSet(p,k.pos,mslSigOf(T,side),k.vel,k.t);} // 在网上:随母舰的估计更新;LL6 死活按舰队看见的;LL7 速度与时刻按 sensors/21 contactKin(t = 位置对应的时刻)
   }
   // v125:按网分组——每个网(有超自导需求的)占1通道,网内所有组共享
   const netMap=new Map();
   for(const p of ms){
     if(!p.needGuide||!p.online)continue; // 2026-09-30 断链(不在导弹网上)的收不到数据链引导
     const key=p.netId||('g'+p.group);
-    if(!netMap.has(key))netMap.set(key,{groups:[],shooter:p.shooter,target:p.target,canGuide:!p.target.dead&&trkFix(trkOf(side,p.target))}); // 数据链要母舰定得出目标位置 // DS191:死目标不占通道(空发射不吃火控,双保险)
+    if(!netMap.has(key))netMap.set(key,{groups:[],shooter:p.shooter,target:p.target,canGuide:!contactDead(p.target,side)&&trkFix(trkOf(side,p.target))}); // LL6 死活按舰队看见的 // 数据链要母舰定得出目标位置 // DS191:死目标不占通道(空发射不吃火控,双保险)
     netMap.get(key).groups.push(p);
   }
   const chan={};for(const s of gs)chan[s.id]=s.guideChan||0;
@@ -198,7 +227,7 @@ function guideSide(side){ // 一方数据链网络的引导分配(v125:按网分
   if(left.length){
     const fctrlOf=n=>{const nn=nets.get(n.groups[0].netId);return nn&&nn.fctrl==='hold'?1:0;};
     const val=n=>shipValue(n.target); // TIER1 舰种威胁硬编码改数据驱动谓词(值不变)
-    const tti=n=>{const q=contactPos(n.target,n.groups[0].shooter.side);if(!q)return Infinity;const relV=V.sub(n.groups[0].vel,n.target.vel);return V.len(V.sub(q,n.groups[0].pos))/Math.max(500,V.len(relV));}; // 2026-09-28 按我方知道的位置排(原来量真值);交代不出排最后
+    const tti=n=>{const k=contactKin(n.target,n.groups[0].shooter.side);if(!k)return Infinity;const q=macKinNow(k),relV=V.sub(n.groups[0].vel,k.vel||MAC_V0);return V.len(V.sub(q,n.groups[0].pos))/Math.max(500,V.len(relV));}; // 2026-09-28 按我方知道的位置排(原来量真值);交代不出排最后;LL7 位置按 contactKin 的时刻推到此刻、速度读它
     left.sort((a,b)=>fctrlOf(b)-fctrlOf(a)||tti(a)-tti(b)||val(b)-val(a)); // hold网优先
     for(const n of left){
       let best=null,bd=1e18;

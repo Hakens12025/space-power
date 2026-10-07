@@ -2,7 +2,7 @@
 /* RF1: 拆自 js/02-state.js 全文,并收编 09 的 cv,ctx 与旧 18 号文件的 adminMode(跨系统全局集中声明)。纯移动无逻辑改动。
    SL1(2026-09-22 瘦身):回放 / demo 录制 / 舰队卡 / 右键菜单待命态 / 互搏 / 设置面板键位重绑 / 面板开关状态 / 简化UI总开关 的全局声明已随各自系统整体删除。 */
 /* ================= 全局状态 ================= */
-let ships=[], formations={}, selected=[], simTime=0, projectiles=[], victoryShown=false, defeatShown=false; // FL1:groups 编组名册层已删除,编队是唯一的一层(formations['1'..'4'],见 js/formation/42-formation.js)
+let ships=[], formations={}, selected=[], simTime=0, projectiles=[], victoryShown=false, defeatShown=false, victoryT=Infinity, defeatT=Infinity; // FL1:groups 编组名册层已删除,编队是唯一的一层(formations['1'..'4'],见 js/formation/42-formation.js)
 let ARENA=null; // 单局游玩区 {x0,y0,x1,y1}(km,轴对齐矩形);null = 不设边界(靶场 / 测试预设)。对局开局时由 scenario/97 设(用户 2026-09-26:"战术大小=单局的地图大小")
 const ARENA_W=3060000, ARENA_H=1721250; // 游玩区尺寸 km。2026-10-06 用户:「只把游玩区和开局距离单独放大回去」—— 不再乘 CFG.scale(其余长度照旧乘)。2026-09-29 用户:长宽各 x1.5(原 240 万 x 135 万),随后再 x0.85(360 万 x 202.5 万 → 306 万 x 172.1 万);两军在中央
 function arenaIn(p){return !ARENA||(p[0]>=ARENA.x0&&p[0]<=ARENA.x1&&p[1]>=ARENA.y0&&p[1]<=ARENA.y1);} // 点在不在游玩区里(没有边界恒真)
@@ -35,6 +35,7 @@ let selBuoy=null;                     // 2026-09-29 选中的我方前出浮标(
 let selMissileHits=[];                // RF4a Shift框选导弹群:框内全部存活组(右栏聚合视图用);单点选中时=[该组],取消选中时=[]
 let selNet=null;                      // v125:选中的导弹网(点中网内任一组=选整个网)
 let pendingFollow=null;             // FM6 底栏【跟随】待命态：置 true 后等玩家点一艘我方舰；作用域由【点下去那一刻的 selected】决定(舰队/单舰 × 舰队/单舰 四种)，不预存来源 —— 预存的话选中一变它就过期了
+let pendingFcNew=null;              // 2026-10-07 用户:火控计算机点「+」后的待命态,等左键点一艘敌舰注册新序列(command/70 mdPending → 74 fcRegister);进 clearPendings
                                       // → command/70-input 的左键分支调 followPick(舰)（render/88-selpanel），它再调 41-follow 的 followAssign 做作用域解析
                                       // 与 pendingTurn 一族同一套配方(点一下就消耗掉)
 let cv,ctx; // RF1 收编自 09-render-bg.js:全局 canvas 句柄(声明集中到 core,init() 里赋值)

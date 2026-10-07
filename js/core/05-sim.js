@@ -12,18 +12,20 @@ function stepSim(dt){
   stepShipsMotion(dt); // S4 舰船运动主循环(→ physics/31)
   if(typeof stepObjects==='function')stepObjects(dt); // 2026-09-27 民船 / 诱饵 / 浮标的推进(world/14)
   stepProjectiles(dt); // S5-S11 弹丸:裁剪→预收集→引导→网检查→五弹型主循环→过滤(→ weapons/56)
-  if(selMissile&&selMissile.done)selMissile=null; // 选中的导弹组没了 → 取消选中
+  if(selMissile&&(typeof projViewGone==='function'?projViewGone(selMissile):selMissile.done))selMissile=null; // 选中的导弹组没了 → 取消选中;LL9 对方的弹按弹影(余像消失才算没了,render/83 projViewGone)
   for(const h of hitFX)h.t-=dt; // 命中特效寿命
-  hitFX=hitFX.filter(h=>h.t>0);
+  hitFX=hitFX.filter(h=>h.seeT?simTime+dt<llFxEnd(h):h.t>0); // LL6 登记了到达的(光速延迟开着)按模拟时间:最晚看见的那一方看见后再留 1.2 游戏秒,两方都看不见的过了事件时刻 + 1.2 删(sensors/26 llFxEnd)
+  if(typeof llOnNow==='function'&&llOnNow()){llFxSweep(ciwsFX,simTime+dt);llFxSweep(shieldFX,simTime+dt);} // LL6 近防火花 / 护盾特效同样按模拟时间清(画面只管画,审查第 20 条);关开关时照旧由画面按墙钟删
   if(typeof stepShields==='function')stepShields(dt); // 2026-09-29 护盾回充 / 重启(weapons/55)
   featStaStep(dt); // 2026-10-05 据点占领(world/16)
   stepWeaponSystems(dt); // S14-S17 武器冷却/自动索敌/近防自动拦截/主炮 自动开火(→ weapons/57)
   if(typeof stepFireControlPost==='function')stepFireControlPost(dt); // RF5 S17b 火控序列后置收账(→ weapons/58):读 52-fire 打的 fcFired 开火标记,推进序列内(rr)与序列间指针、给指定点记齐射组数。必须紧跟 S14-S17(本 tick 的发射结果只在这一段有效),且必须早于 S18 靶场AI —— 后者每 tick 无条件覆写靶的 autoEngage/lockedTarget/driftFire
   if(typeof rangeTargetAI==='function')rangeTargetAI(dt); // RANGE1 靶场 AI:每 tick 清靶的交战态(autoEngage/lockedTarget/driftFire)+ 按面板参数刷闪避机动点 + 定时放诱饵弹。放在 enemyAI 之前,靶本来就被 enemyAI 的 isTarget 早退跳过,两者不冲突
   enemyAI(dt);
+  if(typeof llStep==='function')llStep(simTime+dt,dt); // LL1 光锥层段尾采样(sensors/26):在所有改状态的段之后、胜负之前,记 simTime + dt;关开关时首行返回
   // 胜负(两个标志由 scenario/97-match 的 matchTick 读来弹结果卡片)
   const redA=ships.some(s=>s.side==='red'&&!s.dead);
   const blueA=ships.some(s=>s.side==='blue'&&!s.dead);
-  if(!redA&&!victoryShown&&ships.some(s=>s.side==='red')){victoryShown=true;} // v119:空场景守卫
-  if(!blueA&&!defeatShown&&ships.some(s=>s.side==='blue')){defeatShown=true;} // v119:空场景守卫
+  if(!redA&&!victoryShown&&ships.some(s=>s.side==='red')){victoryShown=true;victoryT=simTime+dt;} // v119:空场景守卫;LL9 记下置位那一步的模拟时刻(97 结果卡片按它比先后,不按帧)
+  if(!blueA&&!defeatShown&&ships.some(s=>s.side==='blue')){defeatShown=true;defeatT=simTime+dt;} // v119:空场景守卫
 }

@@ -34,7 +34,7 @@ const SHIELD={REGEN_S:60,RESTART_S:10}; // 游戏秒:空到满 / 破后重启
 let shieldFX=[]; // {s,k:'hit'|'break'|'restart'|'full',a:打来的方向,big,tw,vis,pos}
 function shieldFx(s,k,src,p,big){
   let a=0;if(p&&p.pos&&p.vel)a=Math.atan2(-p.vel[1],-p.vel[0]);else if(src&&src.pos)a=Math.atan2(src.pos[1]-s.pos[1],src.pos[0]-s.pos[0]); // 从哪边打来:弹的来向(没有弹就按打它的那艘船)
-  shieldFX.push({s:s,k:k,a:a,big:!!big,tw:nowMs(),vis:fxVis(s.pos,src,s),pos:s.pos.slice()});
+  const e={s:s,k:k,a:a,big:!!big,tw:nowMs(),vis:fxVis(s.pos,src,s),pos:s.pos.slice()};if(typeof llFx==='function')llFx(e,s.pos,src,s);shieldFX.push(e); // LL6 光速延迟开着时登记到达(sensors/26;画面按 fxSeen 到达才播)
 }
 function stepShields(dt){ // 每一步:破了的倒数重启,在的一直回
   for(const s of ships){if(s.dead||!(s.shMax>0))continue;

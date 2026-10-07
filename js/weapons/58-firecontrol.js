@@ -26,6 +26,8 @@
 const FC_MAX_SEQS=5;  // RF7 每舰序列上限 = 火控计算机的方条数(88-selpanel 画五根竖条,一条一槽)。不封顶方条就得滚动,违背"简单"的要求
 let fireSeqs=[];      // RF5 全部火控序列(扁平数组,创建顺序即 UI 显示顺序与执行器下标口径)
 let fcSeqSeq=0;       // RF5 序列 id 自增源;91-init 换局时与 fireSeqs 一起归零
+let fcGrpSeq=0;       // 2026-10-07 用户:舰队火控「块」号自增源(序列的 grp:舰队中键一次给全队建的那批共用一个,74 xhQuickEngage 写;88 按它分组画);91-init 一起归零
+function fcNewGrp(){return ++fcGrpSeq;}
 function fcShip(id){ // RF5 按 id 取舰(序列存 id 不存引用,每次用时现解析)
   if(typeof ships==='undefined'||!id)return null;
   for(const s of ships)if(s.id===id)return s;
@@ -110,11 +112,20 @@ function fcRemove(seqId){ // RF5 撤销整条序列
     if(s.fcBig==='pick'){const rest=fcSeqsOf(s);if(rest.length)s.fcPick=rest[0].id;else s.fcBig='rr';}
   }
 }
+function fcReorder(mv,before){ // 2026-10-07 用户:火控计算机里拖动 = 序列优先级。把 mv 里的序列整组挪到 before 里最靠前那条之前(before 为空 = 挪到最后);
+  // 每艘的序列先后 = fireSeqs 里的先后(fcSeqsOf 按它),解算规则照旧;挪过的舰把逐武器指针归零,下一次从最上面那条扫起
+  const set=new Set(mv),grp=fireSeqs.filter(q=>set.has(q));if(!grp.length)return;
+  fireSeqs=fireSeqs.filter(q=>!set.has(q));
+  let i=fireSeqs.length;if(before)for(const q of before){const k=fireSeqs.indexOf(q);if(k>=0&&k<i)i=k;}
+  fireSeqs.splice(i,0,...grp);
+  for(const q of grp){const s=fcShip(q.shipId);if(s&&s.fcSeqCur){s.fcSeqCur.mac=0;s.fcSeqCur.msl=0;}}
+}
 function fcToggleForce(seqId){ // 2026-09-29 用户:强制开火 —— 这条序列的目标哪怕在射程外也自动开火(57:主炮不看 MAC_AUTO_P、导弹不看 mslReach);仍要定出位置(fcGate)、主炮仍要对准
   const q=fcSeq(seqId);if(!q)return;
   q.force=!q.force;
 }
-function fcForce(s,kind){ // 该舰这一拍这类武器解算出的目标,来自一条强制开火的序列?
+function fcForce(s,kind){ // 该舰这一拍这类武器解算出的目标,来自一条强制开火的序列?(10-07 起也包括:没有在跑的序列时,中键选定的目标 s.pickTid)
+  if(s&&s.pickTid!=null&&!fcActive(s))return !!(s.lockedTarget&&String(s.lockedTarget.id)===String(s.pickTid));
   const f=s&&s.fcFrom?s.fcFrom[kind]:-1;if(!(f>=0))return false;
   const q=fcSeqsOf(s)[f];return !!(q&&q.force);
 }
@@ -159,7 +170,7 @@ function fcSetPick(s,seqId){ // RF8 指定唯一开火序列(只在 pick 模式�
 function fcGate(s,it,kind){ // RF5 单个目标项对某类武器的全部门:许可→存活→定位(WR1 起没有射程这一道)。任一不过返回 null(调用方跳到下一个,两种模式都不许停摆)
   if(!it||!it.allow||!it.allow[kind])return null;
   const t=fcShip(it.tid);
-  if(!t||t.dead||t.side===s.side)return null; // side 同侧直接排除:免得把友舰写进 lockedTarget(它同时是转向指令)
+  if(!t||contactDead(t,s.side)||t.side===s.side)return null; // LL6 死活按这一方看见的(sensors/21 contactDead;command/74 radOpen / radTick 同口径)// side 同侧直接排除:免得把友舰写进 lockedTarget(它同时是转向指令)
   if(!trkFoe(trkOf(s.side,t)))return null; // TK4c:已确认不是船(石头)⇒ 这一项跳过(序列里留着,认出之前下的令不作废,只是不再对它开火)
   if(!trkFix(trkOf(s.side,t)))return null; // 两类武器同一道门:定得出位置。打不打得中是散布与椭圆的事
   return t;
@@ -188,10 +199,10 @@ function stepFireControl(dt){ // RF5 每 tick 前置决策:清理失效序列 �
   if(!fireSeqs.length)return;
   // 1. 清理:目标 id 解析不到活舰的移除;targets 清空的序列整条撤
   for(let i=fireSeqs.length-1;i>=0;i--){
-    const q=fireSeqs[i];
+    const q=fireSeqs[i],own=fcShip(q.shipId),sd=own?own.side:null; // LL6 序列属主那一方
     for(let j=q.targets.length-1;j>=0;j--){
       const it=q.targets[j];
-      if(it.tid){const t=fcShip(it.tid);if(!t||t.dead)q.targets.splice(j,1);}
+      if(it.tid){const t=fcShip(it.tid);if(!t||(sd?contactDead(t,sd):t.dead))q.targets.splice(j,1);} // LL6 属主那一方看见沉了才删(找不到属主照旧读真值)
       else q.targets.splice(j,1); // 没有 tid:脏数据
     }
     if(!q.targets.length)fcRemove(q.id); // 倒序遍历,fcRemove 内部 splice 掉的正是当前项,不影响后续下标

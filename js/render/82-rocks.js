@@ -18,7 +18,7 @@ function drawRocks(){ // 自己的浮标先画(不在自己的航迹表里),再�
   for(const s of rocks)if(!s.dead&&s.kind==='buoy'&&s.side===VIEW)drawOwnBuoy(s); // 2026-09-27 自己的浮标:不在自己的航迹表里,单独画
   if(adminMode){for(const s of rocks)if(!s.dead&&s.side!==VIEW)drawRockAt(s,s.pos,'live',true);return;}
   trkEach(VIEW,function(tk,st){
-    const s=trkSrc(tk);if(s.dead)return; // 2026-09-29 被打碎的碎石不再画(weapons/55)
+    const s=trkSrc(tk);if(viewDead(s))return; // 2026-09-29 被打碎的碎石不再画(weapons/55);LL6 民船 / 诱饵 / 浮标按我方看见的(石头不记历史,照旧真值)
     if(kindOf(s)==='ship')return; // 2026-09-27 石头之外还有民船 / 诱饵 / 敌方浮标(world/14),都走这条
     if(st==='heat'){if(trkMem(tk))drawRockAt(s,tk.lastPos,'ghost',false);return;} // 2026-09-30 用户:被雷达扫出来的碎石关了雷达也要留着 —— 只剩红外(热)的,定过位又不动就在最后所见处画记忆;热区本身照旧不画
     const cp=trkPos(tk);if(!cp)return;
@@ -32,7 +32,7 @@ function drawRockAt(s,pos,st,known,tpo){ // tpo:按这个类型画(记忆用最�
   if(p[0]<-40||p[0]>W+40||p[1]<-40||p[1]>H+40)return;
   if((st==='coast'||st==='ghost')&&!adminMode&&trkMem(trkOf(VIEW,s))){const lt=trkOf(VIEW,s).lastType;ctx.save();ctx.globalAlpha=0.42;drawRockAt(s,pos,'live',!!lt,lt);ctx.restore();return;} // 2026-09-27 记忆:按最后所见调暗画
   if(st==='coast'||st==='ghost'){drawContactMark(s,p,st);return;}
-  const r=Math.round(shipIconR(s));
+  const r=Math.round(shipIconR(s)),fc=((adminMode||s.side===VIEW)?s:(viewLook(s)||LOOK0)).facing; // LL9 朝向读我方看到的最新影像(同舰标,render/83 viewLook)
   if(!known){
     /* 与 drawShip 里那艘静止、熄火、静默、没认出的红舰逐笔同序:舰体(或拉远后的菱形记号)→ 名字 → 等级 */
     const bodyColor='#a0aab9'; // 2026-09-27 用户:未知热源用灰色(--side-neutral),与没认出的船同色
@@ -40,7 +40,7 @@ function drawRockAt(s,pos,st,known,tpo){ // tpo:按这个类型画(记忆用最�
     ctx.strokeStyle=bodyColor;ctx.fillStyle=bodyColor;
     ctx.save();
     ctx.translate(p[0],p[1]);
-    ctx.rotate(Math.atan2(s.facing[1],s.facing[0]));
+    ctx.rotate(Math.atan2(fc[1],fc[0]));
     {const zf=hullZoomF();ctx.scale(zf,zf);}
     if(!shipMarkMode()&&shipIdentHull(s)!=='UNK')drawHull(ctx,shipIdentHull(s),shipIdentTier(s),bodyColor,'fill');
     ctx.restore();
@@ -53,7 +53,7 @@ function drawRockAt(s,pos,st,known,tpo){ // tpo:按这个类型画(记忆用最�
     return;
   }
   {const tp=tpo||(adminMode?{kind:kindOf(s)}:(contactIdType(s,VIEW)||{kind:'rock'})); // 2026-09-27 按【认出的类型】画:诱饵在「疑似」档画成它冒充的敌舰
-    if(tp.kind!=='rock'){drawObjKnown(s,p,r,tp);return;}}
+    if(tp.kind!=='rock'){drawObjKnown(s,p,r,tp,fc);return;}}
   /* 认出来了:石头的记号。大小跟着同一个缩放系数走(与舰标同一条律),半径再乘 √(体型/0.7)(面积 ∝ 体型,与红外画面 irvBodyR 同式)—— 认出之后体型已经不是秘密 */
   ctx.save();
   ctx.fillStyle='rgba('+ROCK_RGB+',.85)';ctx.strokeStyle='rgba('+ROCK_RGB+',1)';ctx.lineWidth=1;
@@ -63,16 +63,16 @@ function drawRockAt(s,pos,st,known,tpo){ // tpo:按这个类型画(记忆用最�
   // 2026-09-26 用户:碎石的中文标注不要了
   ctx.restore();
 }
-function drawObjKnown(s,p,r,tp){ // 2026-09-27 认出来的民船 / 诱饵 / 敌方浮标,以及冒充成舰船的诱饵
+function drawObjKnown(s,p,r,tp,fc){ // 2026-09-27 认出来的民船 / 诱饵 / 敌方浮标,以及冒充成舰船的诱饵;LL9 fc = 画面上的朝向(drawRockAt 给,读影像)
   ctx.save();ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';
   if(tp.kind==='ship'){ // 冒充:画成一艘敌方驱逐舰(与没认全的红舰同一套)
     if(shipMarkMode())drawShipMark(s,p,'#ff6b6b');
-    else if(!(typeof SA==='object'&&SA.icon(ctx,CLS_HULL[tp.cls]||'DD',tp.tier||2,'red',p[0],p[1],Math.atan2(s.facing[1],s.facing[0]),shipZoomF()))){ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(Math.atan2(s.facing[1],s.facing[0]));{const zf=shipZoomF();ctx.scale(zf,zf);}drawHull(ctx,CLS_HULL[tp.cls]||'DD',tp.tier||2,'#ff6b6b','fill');ctx.restore();} // 2026-10-05 与真敌舰同一张贴图(render/82-shipart),否则一眼看出是诱饵
+    else if(!(typeof SA==='object'&&SA.icon(ctx,CLS_HULL[tp.cls]||'DD',tp.tier||2,'red',p[0],p[1],Math.atan2(fc[1],fc[0]),shipZoomF()))){ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(Math.atan2(fc[1],fc[0]));{const zf=shipZoomF();ctx.scale(zf,zf);}drawHull(ctx,CLS_HULL[tp.cls]||'DD',tp.tier||2,'#ff6b6b','fill');ctx.restore();} // 2026-10-05 与真敌舰同一张贴图(render/82-shipart),否则一眼看出是诱饵
     if(cam.zoom>0.0008){ctx.fillStyle='rgba(215,226,240,.8)';ctx.fillText(s.spoofName||s.name,p[0],p[1]+r+6);}
     ctx.restore();return;}
   const col=tp.kind==='civ'?'#a0aab9':(tp.kind==='lure'?'#d9a066':'#c890ff'),lb=({civ:'民船',lure:'诱饵',buoy:'浮标'})[tp.kind]||'';
   ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=1.3;
-  if(tp.kind==='civ'){ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(Math.atan2(s.facing[1],s.facing[0]));{const zf=shipZoomF();ctx.scale(zf,zf);}drawHull(ctx,'DD',2,col,'outline');ctx.restore();}
+  if(tp.kind==='civ'){ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(Math.atan2(fc[1],fc[0]));{const zf=shipZoomF();ctx.scale(zf,zf);}drawHull(ctx,'DD',2,col,'outline');ctx.restore();}
   else if(tp.kind==='lure'){const q=Math.max(4,r*0.8);ctx.beginPath();ctx.moveTo(p[0]-q,p[1]-q);ctx.lineTo(p[0]+q,p[1]+q);ctx.moveTo(p[0]+q,p[1]-q);ctx.lineTo(p[0]-q,p[1]+q);ctx.stroke();}
   else{ctx.beginPath();ctx.arc(p[0],p[1],4,0,6.283);ctx.stroke();}
   if(cam.zoom>0.0008){ctx.fillStyle='rgba(215,226,240,.8)';ctx.fillText(lb,p[0],p[1]+r+6);}

@@ -49,32 +49,42 @@ function belAssets(side){ // 这一方的探测站:活船 + 自己的前出浮�
   return a;
 }
 function belClues(B,side){ // 线索:每次更新重列(都是这一拍这一方知道的东西)
+  // LL8 每条线索带 tArr(这一方最晚何时已经知道,恒 ≤ 此刻)与 te(位置 / 方向对应的时刻):态势图里的(fix / dr / brg)tArr = 此刻,te 同 sensors/21 contactKin 的 t,方位不知道距离 te 记 tArr;
+  // esm tArr = 听到的那一拍,te 按幅度测距估;shell tArr = 看见的时刻 r.t、te = 首见那张弹影的时刻 r.te;来袭导弹 tArr = 此刻、te = 弹影时刻。关开关时 te = tArr
   const L=[],own=belAssets(side),byId=new Map();for(const d of own)byId.set(d.id,d);
-  const vmax=belVmax();
+  const vmax=belVmax(),llon=typeof llOnNow==='function'&&llOnNow();
   trkEach(side,function(tk,st){
     if(trkGone(tk)||!trkFoe(tk))return;const s=tk.src;if(s.side===side)return; // 自己一方的(船、自己放的诱饵 / 浮标)不算;没认出的石头照样是线索(这一方不知道它是石头)
-    if(st==='live'){const p=trkPos(tk);if(p)L.push({k:'fix',src:s,x:p[0],y:p[1],r:tk.cov.r1||0});}
-    else if(st==='coast'||st==='ghost'){const p=trkPos(tk);if(p)L.push({k:'dr',src:s,x:p[0],y:p[1],r:(tk.cov.r1||0)+vmax*trkAge(tk)*0.5});}
+    const te=(st==='live'||(st==='coast'&&!(tk.lastPos&&tk.lastVel)))&&tk.lastT>-1e8?tk.lastT:simTime; // LL8 估计点对应的时刻(实况 = 影像时刻 lastT,外推过的 = 此刻)
+    if(st==='live'){const p=trkPos(tk);if(p)L.push({k:'fix',src:s,x:p[0],y:p[1],r:tk.cov.r1||0,tArr:simTime,te:te});}
+    else if(st==='coast'||st==='ghost'){const p=trkPos(tk);if(p)L.push({k:'dr',src:s,x:p[0],y:p[1],r:(tk.cov.r1||0)+vmax*trkAge(tk)*0.5,tArr:simTime,te:te});}
     else if(st==='heat'){const c=tk.cov&&tk.cov.ch;if(!c)return;
       for(const chn of ['opt','lis','act']){const m=c[chn];if(!m)continue;const d=byId.get(m[4]);if(!d)continue;
-        const u=trkBearing(tk,d.pos);L.push({k:'brg',ch:chn,src:s,x:d.pos[0],y:d.pos[1],ux:u[0],uy:u[1],th:m[1]/m[2]});}} // th = 横向误差 / 距离 = 这条方位的角误差(红外环上那团的角宽同一个量);不单独读 m[2]
+        const u=trkBearing(tk,d.pos,m);L.push({k:'brg',ch:chn,src:s,x:d.pos[0],y:d.pos[1],ux:u[0],uy:u[1],th:m[1]/m[2],tArr:simTime,te:simTime});}} // th = 横向误差 / 距离 = 这条方位的角误差(红外环上那团的角宽同一个量);不单独读 m[2]
   });
   ESM[side].forEach(function(m,E){const tk=trkOf(side,E);if(tk&&!trkFoe(tk))return; // 已认出不是船的(民船导航雷达)不算
     m.forEach(function(k,Ls){if(simTime-k.t>ESM_CFG.FADE||!k.org)return;
     const a=rdvEsmBrg(E,Ls,k),r=rdvEsmRc(E,Ls,k); // 与雷达画面画的同一份(render/86-radarview)
-    L.push({k:'esm',src:E,x:k.org[0]+Math.cos(a)*r,y:k.org[1]+Math.sin(a)*r,ox:k.org[0],oy:k.org[1],a:a,half:k.half,rr:r,sr:k.sr||0,t:k.t});});}); // t = 最近一次听到(持续照射的每拍都在刷新)
-  for(const r of SHELL_TR[side])L.push({k:'shell',x:r.a[0],y:r.a[1],ux:-r.u[0],uy:-r.u[1],len:BEL_C.SHELL_L,t:r.t});
-  for(const p of projectiles){if(p.type!=='missile'||p.done||!p.shooter||p.shooter.side===side||!trkSees(side,p))continue; // 2026-10-06 用户:「ai不会反向推断炮弹和导弹的来袭方向?」—— 看得见的来袭导弹沿来向往回延长(同炮弹来路一类,mis 标记;导弹会拐弯,只当方向)
-    const v=Math.hypot(p.vel[0],p.vel[1]);if(!(v>0))continue;L.push({k:'shell',mis:true,x:p.pos[0],y:p.pos[1],ux:-p.vel[0]/v,uy:-p.vel[1]/v,len:LAD.msl,t:simTime});}
+    L.push({k:'esm',src:E,x:k.org[0]+Math.cos(a)*r,y:k.org[1]+Math.sin(a)*r,ox:k.org[0],oy:k.org[1],a:a,half:k.half,rr:r,sr:k.sr||0,t:k.t,tArr:k.t,te:llon?k.t-r/LL_C:k.t});});}); // t = 最近一次听到(持续照射的每拍都在刷新)
+  const SH=llon&&SHELL_TR[side].length>1?SHELL_TR[side].slice().sort((a,b)=>(a.t-b.t)||(a.te-b.te)):SHELL_TR[side]; // LL8 开着时同一拍首见的几发按弹影时刻排(弹表 / 余像表的先后取决于此刻真弹消失没有,不许漏进线索顺序)
+  for(const r of SH)L.push({k:'shell',x:r.a[0],y:r.a[1],ux:-r.u[0],uy:-r.u[1],len:BEL_C.SHELL_L,t:r.t,tArr:r.t,te:r.te!==undefined?r.te:r.t});
+  const MS=llon?[]:null; // LL8 开着时来袭导弹线索按组号排(弹表 / 余像表的先后取决于此刻真弹消失没有,不许漏进线索顺序)
+  for(const p of (llon?projAll():projectiles)){if(p.type!=='missile'||(!llon&&p.done)||!p.shooter||p.shooter.side===side||!trkSees(side,p))continue; // 2026-10-06 用户:「ai不会反向推断炮弹和导弹的来袭方向?」—— 看得见的来袭导弹沿来向往回延长(同炮弹来路一类,mis 标记;导弹会拐弯,只当方向);LL8 开着时连余像(sensors/21 projAll),不读真弹的 done
+    const q=llon?projLook(p,side):p;if(!q)continue; // LL8 开着时读这一方看到的弹影(位置 / 速度是影像那一刻的);光还没到、看到的已是消失之后给 null
+    const v=Math.hypot(q.vel[0],q.vel[1]);if(!(v>0))continue;const c={k:'shell',mis:true,x:q.pos[0],y:q.pos[1],ux:-q.vel[0]/v,uy:-q.vel[1]/v,len:LAD.msl,t:simTime,tArr:simTime,te:q!==p?q.llT:simTime};
+    if(MS)MS.push([p.group||0,c]);else L.push(c);}
+  if(MS&&MS.length){MS.sort((a,b)=>a[0]-b[0]);for(const m of MS)L.push(m[1]);}
   return L;
 }
 function belStep(side,dt){ // 每 DT 游戏秒一次:膨胀 → 扫过没发现的降 → 归一 → 列线索
   const B=belOf(side);if(!B)return null;
   B.acc=(B.acc||0)+dt;if(B.acc<BEL_C.DT&&B.ver)return B;const el=B.acc;B.acc=0;
   B.sp+=belVmax()*el;while(B.sp>=Math.min(B.cw,B.ch)){B.sp-=Math.min(B.cw,B.ch);belDilate(B);}
+  const llon=typeof llOnNow==='function'&&llOnNow();
   for(const d of belAssets(side)){
     belCarve(B,d.pos[0],d.pos[1],d.visR||(d.kind==='buoy'?0:COV.VIS_R),BEL_C.PD_VIS);
-    if(d.emitMode==='paint'||simTime-(d.pingT===undefined?-1e9:d.pingT)<=el)belCarve(B,d.pos[0],d.pos[1],actRangeOf(d,rdvStdRefl()),BEL_C.PD_ACT);
+    const pe=(d.pingT===undefined?-1e9:d.pingT)+SENS.TICK; // LL8 扫描脉冲 [pingT, pingT + TICK] 照完、回波到齐的时刻
+    if(d.emitMode==='paint'||(llon?(pe>simTime-el&&pe<=simTime):simTime-(d.pingT===undefined?-1e9:d.pingT)<=el))belCarve(B,d.pos[0],d.pos[1],actRangeOf(d,rdvStdRefl()),BEL_C.PD_ACT); // LL8 开着时窗口平移:回波到齐的时刻落在这次更新覆盖的 (此刻 − el, 此刻] 里才削(不加门:每次扫描恰好削一次)
     belCarve(B,d.pos[0],d.pos[1],B.irR,BEL_C.PD_IR);
   }
   B.clues=belClues(B,side);
@@ -86,7 +96,7 @@ function belAng(d){return Math.atan2(Math.sin(d),Math.cos(d));}
 function belFlash(B,side){ // 2026-10-06 用户:「让红方把看到过的闪光方位记进搜索面」—— 红外方位(brg)并进搜索图(概率数据关联 PDA 式的混合更新):
   // P' = (1-w)·P + w·P·[在楔形里] / P(楔形),总量不变;w = 这个热源是对方战舰的概率 = 没定位的对方 /(它们 + 没认出的民船)(民船数是地图规则 world/14)。
   // 同一来源的方位转出楔形半宽、或观测点挪出一格才再并一次(同一次看见不越乘越尖;换了位置再看到 = 新的交叉)。之后照常按最高速度膨胀 = 记得那里闪过,但它可能已经走开
-  const opp=belOpp(side),nE=ships.filter(s=>s.side===opp&&!s.dead).length;let nFix=0,civId=0; // 对方还剩几艘:同 belParticles(开局编成公开、击沉看残骸)
+  const opp=belOpp(side),nE=ships.filter(s=>s.side===opp&&!contactDead(s,side)).length;let nFix=0,civId=0; // 对方还剩几艘:开局编成公开(顶栏「3 对 4」)、击沉看残骸;LL6 击沉按这一方看见的(sensors/21 contactDead)
   for(const c of B.clues)if(c.k==='fix'&&c.src&&trkPid(trkOf(side,c.src)))nFix++;
   trkEach(side,function(tk){const t=trkIdType(tk);if(t&&t.kind==='civ')civId++;});
   const nU=Math.max(0,nE-nFix),civ=Math.max(0,OBJ_CFG.CIV.N-civId),w=nU>0?nU/(nU+civ):0;if(!(w>0))return;
@@ -96,40 +106,4 @@ function belFlash(B,side){ // 2026-10-06 用户:「让红方把看到过的闪�
     let m=0;for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const k=j*nx+i,dx=B.A.x0+(i+0.5)*B.cw-c.x,dy=B.A.y0+(j+0.5)*B.ch-c.y;inW[k]=Math.abs(belAng(Math.atan2(dy,dx)-a))<=h?1:0;if(inW[k])m+=P[k];}
     if(m>0)for(let k=0;k<P.length;k++)P[k]=(1-w)*P[k]+(inW[k]?w*P[k]/m:0);
     L.push({a:a,x:c.x,y:c.y});if(L.length>8)L.shift();M.set(c.src,L);}
-}
-
-/* ---- 2026-10-05 第 3 步:后验样本(决策论规划器 bots/60 用;业内:粒子近似的信念 + 混合模型)----
-   线索按来源分组(同一个雷达源的几条静听方位、红外方位相乘 = 交叉定位),炮弹来路合成一组,剩下「还没线索的对方船」按搜索图;
-   每组的质量 = 估计是几艘对方战舰:认出是船 1、没认出 0.5(不知道 = 一半一半)、炮弹来路 1(开炮的只能是战舰);
-   没线索那一组 = 对方还剩几艘 - 定位了的 - 各组质量。样本按质量分,每个样本的权 w = 它代表的「几艘」。 */
-function belRng(seed){let a=seed>>>0;return function(){a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};}
-function belWrap(a){a=(a+Math.PI)%(2*Math.PI);if(a<0)a+=2*Math.PI;return a-Math.PI;}
-function belLik(B,c,x,y){ // 一条线索在 (x,y) 的似然(不归一)
-  if(c.k==='esm'){const dx=x-c.ox,dy=y-c.oy,d=Math.hypot(dx,dy),da=belWrap(Math.atan2(dy,dx)-c.a),sa=Math.max(c.half,1e-3),sr=Math.max(c.sr,B.cw);return Math.exp(-da*da/(2*sa*sa)-(d-c.rr)*(d-c.rr)/(2*sr*sr));}
-  if(c.k==='brg'){const dx=x-c.x,dy=y-c.y;if(dx*c.ux+dy*c.uy<=0)return 0;const da=belWrap(Math.atan2(dy,dx)-Math.atan2(c.uy,c.ux)),s=Math.max(c.th,1e-3);return Math.exp(-da*da/(2*s*s));}
-  if(c.k==='shell'){const dx=x-c.x,dy=y-c.y,al=dx*c.ux+dy*c.uy;if(al<0||al>c.len)return 0;const pe=dx*c.uy-dy*c.ux,s=Math.max(B.cw,belVmax()*(simTime-c.t));return Math.exp(-pe*pe/(2*s*s));} // 射手开炮后还在走:横向不确定按最高速度 x 过了多久长
-  const dx=x-c.x,dy=y-c.y,s=Math.max(B.cw*0.5,c.r||0);return Math.exp(-(dx*dx+dy*dy)/(2*s*s)); // dr / 没认出的 fix
-}
-function belParticles(side,K){
-  const B=BEL[side];if(!B)return null;if(B.pv===B.ver&&B.pk===K&&B.parts)return B.parts;
-  const opp=belOpp(side),nE=ships.filter(s=>s.side===opp&&!s.dead).length; // 对方还剩几艘:开局编成公开(顶栏「3 对 4」),击沉看残骸(同 trkGone 的口子)
-  const fixed=[],groups=new Map(),shells=[];
-  for(const c of B.clues){
-    if(c.k==='fix'){const tk=trkOf(side,c.src);if(tk&&trkPid(tk)){fixed.push({src:c.src,x:c.x,y:c.y,s:Math.max(1,c.r||0),st:trkState(tk)});continue;}}
-    if(c.k==='shell'){shells.push(c);continue;}
-    if(!c.src)continue;let g=groups.get(c.src);if(!g){g={src:c.src,cl:[],emit:false};groups.set(c.src,g);}g.cl.push(c);if(c.k==='esm')g.emit=true;}
-  const comps=[];
-  groups.forEach(function(g){const tk=trkOf(side,g.src);g.q=(tk&&trkPid(tk))?1:0.5;g.lik=function(x,y){let l=1;for(const c of g.cl)l*=belLik(B,c,x,y);return l;};comps.push(g);});
-  if(shells.length)comps.push({src:null,q:1,emit:false,shell:true,lik:function(x,y){let l=0;for(const c of shells)l=Math.max(l,belLik(B,c,x,y));return l;}});
-  let sq=0;for(const g of comps)sq+=g.q;
-  comps.push({src:null,q:Math.max(0,nE-fixed.length-sq),bg:true,lik:function(){return 1;}});
-  const N=B.nx*B.ny,flo=1/(N*1000),out=[],rnd=belRng(B.ver*7919+K);let tq=0;for(const g of comps)tq+=g.q;
-  comps.forEach(function(g,gi){g.n=0;if(!(g.q>0))return;const cum=new Float64Array(N);let t=0;
-    for(let j=0;j<B.ny;j++)for(let i=0;i<B.nx;i++){const k=j*B.nx+i;t+=(B.P[k]+flo)*g.lik(B.A.x0+(i+0.5)*B.cw,B.A.y0+(j+0.5)*B.ch);cum[k]=t;}
-    if(!(t>0))return;const n=Math.max(4,Math.round(K*g.q/Math.max(tq,1e-9))),ps=[];let sx=0,sy=0;
-    for(let m=0;m<n;m++){const u=rnd()*t;let lo=0,hi=N-1;while(lo<hi){const mid=(lo+hi)>>1;if(cum[mid]<u)lo=mid+1;else hi=mid;}
-      const x=B.A.x0+((lo%B.nx)+rnd())*B.cw,y=B.A.y0+(((lo/B.nx)|0)+rnd())*B.ch;ps.push({x:x,y:y,w:g.q/n,g:gi});sx+=x;sy+=y;}
-    g.cx=sx/n;g.cy=sy/n;let v=0;for(const p of ps)v+=(p.x-g.cx)*(p.x-g.cx)+(p.y-g.cy)*(p.y-g.cy);g.sp=Math.sqrt(v/n);g.n=n;
-    for(const p of ps)out.push(p);});
-  B.parts={P:out,comps:comps,fixed:fixed,nE:nE};B.pv=B.ver;B.pk=K;return B.parts;
 }

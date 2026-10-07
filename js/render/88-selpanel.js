@@ -137,97 +137,97 @@ function fcUiName(t){ // 目标项 → 显示名(舰目标现查 ships 表)
 function fcUiHp(t){ // 目标项 → HP 百分比(查不到显示破折号)
   if(!t||t.tid==null)return '—';
   const o=objById(t.tid);
-  if(!o||o.dead||!o.maxHp)return '—';
+  if(!o||(adminMode?o.dead:contactDead(o,'blue'))||!o.maxHp)return '—'; // LL6 沉没按我方看见的(GM 真值)
   if(!adminMode&&o.side!=='blue'&&!(contactIdn(o,'blue')&&contactFix(o,'blue')))return '—'; // 2026-09-28 与悬停卡同一道门:认出且定位才报结构(原来无门,真血量照报,还能分出船和非船)
-  return Math.max(0,Math.round(o.hp/o.maxHp*100))+'%';
+  const L=(adminMode||o.side==='blue')?o:viewLook(o);if(!L)return '—'; // LL9 结构读我方看到的最新影像(同悬停卡,render/83 viewLook)
+  return Math.max(0,Math.round(L.hp/o.maxHp*100))+'%';
 }
 function fcUiSeq(s,sid){ // 按 id 字符串取回序列对象(id 类型不确定,统一 String 比较)
   if(!s||typeof fcSeqsOf!=='function')return null;
   return (fcSeqsOf(s)||[]).find(q=>String(q.id)===String(sid))||null;
 }
 function updateFcPanel(force){ // 由 updateSelPanel 每 20 帧重渲(与卡片状态同拍);写入一律走 setHTMLStable,force=点击后必须立即回显
-  // RF7 重做:五根竖直方条 = 五个序列槽(上限 FC_MAX_SEQS,一条一槽,空槽画暗不可点),点方条 = 进入该序列的【序列态】
-  // (面板高亮 + 地图亮蓝色数据链,见 83-hud drawFcChain),再点同一根 = 退出。方条下方只放当前序列的简要详情。
-  // 2026-10-02 用户:舰队层面(多选 / 编队)走【和单舰一样的逻辑】—— 方条 + 点条进序列态 + 同样的详情,只是对象变成所有选中的舰:
-  // 方条铺开各舰的序列(带舰名标签),点某条 = 进那一艘那条的序列态(其他选舰的序列态清掉,详情只有一份),动作经 data-ship 落到对应舰上
+  /* 2026-10-07 用户:单舰与舰队同一个版式(fcPanelHTML)—— 一行一个大块:左边标签框(单舰「序列 n」/ 舰队「块 n」= 一次给全队建的那批,weapons/58 grp)、
+     竖线、右边内容;序列态那行展开成目标与操作,其余行收成一行摘要;最后一格「+」(点它再左键点敌舰建序列,command/70 → 74 fcRegister);
+     按住标签上下拖 = 改优先级(58 fcReorder,越靠上越先扫,解算规则照旧);点标签 = 进 / 出序列态(地图亮蓝色数据链,83-hud drawFcChain)。
+     舰队视图里各舰单独建的序列不显示。 */
   const list=document.getElementById('fcList');
   if(!list)return;
-  /* FL1 火控计算机改成【条件显示】:选中的任一舰有火控序列就出现(单舰 / 舰队同一条式)。
-     开关放在这里而不是 updateSelPanel 里,是因为本函数是唯一每拍必经的火控入口 ——
-     updateSelPanel 有 6 个提前 return(导弹群/单导弹/信标/未选中/编队/单舰),而它在【函数开头】无条件调本函数,
-     所以那 6 支全都走得到这一段。放到 updateSelPanel 尾部的话有五支漏掉,面板会赖在屏幕上。
-     display 必须写 'block' 不能写 'flex':#fcSec 内部是块级的 .fc-hd + #fcList 两行,flex 会把它们挤成一行。
-     刻意【不早退】:隐藏期间照常把内容渲进 #fcList(setHTMLStable 内容没变就一个节点都不动,零开销),
-     好让它重新显示的那一瞬内容就是对的,而不是等下一个 20 帧拍子。
-     #fcList 的委托与 #fcPickBtn 都挂在静态节点上,父容器隐不隐藏与它们无关,不用动。 */
+  /* FL1 显隐放在这里而不是 updateSelPanel 里:本函数是唯一每拍必经的火控入口(updateSelPanel 有 6 个提前 return,而它在函数开头无条件调本函数)。
+     display 必须写 'block' 不能写 'flex':#fcSec 内部是块级的 .fc-hd + #fcList 两行。#fcList 的委托与 #fcPickBtn 都挂在静态节点上,显隐与它们无关。 */
   const _sb=selBlue();
-  const hasFc=_sb.length>0&&typeof fcSeqsOf==='function'&&_sb.some(x=>(fcSeqsOf(x)||[]).length>0);
+  const hasFc=_sb.length>0&&typeof fcSeqsOf==='function'; // 2026-10-07 用户:火控计算机默认显示(选中我方舰就在)
   const sec=document.getElementById('fcSec');
   if(sec){const d=hasFc?'block':'none';if(sec.style.display!==d)sec.style.display=d;}
-  const s=_sb[0];
-  if(!s){setHTMLStable(list,'<div class="fc-empty">未选中我方舰船</div>',force);return;}
+  if(fcDrag)return; // 拖动中不重渲:行的位置要稳住(松手后立即 force 重渲)
+  if(!_sb.length){setHTMLStable(list,'<div class="fc-empty">未选中我方舰船</div>',force);return;}
   if(typeof fcSeqsOf!=='function'){setHTMLStable(list,'<div class="fc-empty">火控引擎未就绪</div>',force);return;}
-  const many=_sb.length>1;
-  const seqOf=(x,sid)=>((typeof fcSeq==='function')?fcSeq(sid):null); // 序列按 id 全局可查(shipId 校验在下面)
-  let subj=s; // 序列态主体舰:多选时 = 选中的舰里 fcEditId 指向有效序列的那艘(委托里点条时会把别的清掉,这里只找不写)
-  if(many){subj=null;for(const x of _sb){const q=(typeof fcSeq==='function')?fcSeq(x.fcEditId):null;if(q&&String(q.shipId)===String(x.id)){subj=x;break;}}}
   const pk=document.getElementById('fcPickBtn');if(pk)pk.style.display='';
-  const seqs=(subj?(fcSeqsOf(subj)||[]):[]);
-  const cap=(typeof FC_MAX_SEQS==='number')?FC_MAX_SEQS:5;
-  const big=subj&&subj.fcBig==='pick';
-  fcPickBtnSync(subj); // RF8b「选择」钮在标题栏(#fcSec .fc-hd),不在本容器里,单独同步一次状态;舰队无序列态时灭
-  let h='<div class="fc-bars">';
-  if(!many){ // 单舰:五个序列槽(空槽画暗)
-    for(let i=0;i<cap;i++){
-      const q=seqs[i];
-      if(!q){h+=`<div class="fc-bar empty" title="空序列槽(中键点敌舰建序列,Shift+中键追加)"><span class="no">${i+1}</span></div>`;continue;}
-      const sid=String(q.id),edit=String(s.fcEditId)===sid,pick=big&&String(s.fcPick)===sid;
-      h+=`<div class="fc-bar${edit?' edit':''}${pick?' pick':''}${q.paused?' paused':''}" data-fc-act="bar" data-ship="${s.id}" data-seq="${sid}" title="${q.name} · ${q.mode==='rr'?'轮询':'依次'} · ${(q.targets||[]).length}个目标${q.force?' · 强制开火':''}${pick?' · 唯一开火序列':''}">`
-        +`<span class="no">${pick?'★':''}${i+1}</span><span class="md">${q.mode==='rr'?'轮':'依'}</span><span class="ct">${(q.targets||[]).length}</span>`
-        +`</div>`;
-    }
-  }else{ // 舰队:各舰现有序列铺成一排(带舰名标签;空槽不画 —— 几艘舰 x 5 个空槽全是噪声),同样点条进序列态
-    let n=0;
-    for(const x of _sb){
-      const xs=fcSeqsOf(x)||[];
-      for(const q of xs){
-        const sid=String(q.id),edit=!!(subj&&String(subj.id)===String(x.id)&&String(subj.fcEditId)===sid),pick=!!(x.fcBig==='pick'&&String(x.fcPick)===sid);
-        h+=`<div class="fc-bar${edit?' edit':''}${pick?' pick':''}${q.paused?' paused':''}" data-fc-act="bar" data-ship="${x.id}" data-seq="${sid}" title="${x.name} · ${q.name} · ${q.mode==='rr'?'轮询':'依次'} · ${(q.targets||[]).length}个目标${q.force?' · 强制开火':''}">`
-          +`<span class="no">${pick?'★':''}${++n}</span><span class="md">${q.mode==='rr'?'轮':'依'}</span><span class="ct">${(q.targets||[]).length}</span>`
-          +`<span style="font-size:10px;color:#7f93ad;margin-left:2px;white-space:nowrap;overflow:hidden">${x.name}</span>`
-          +`</div>`;
-      }
-    }
-  }
-  h+='</div>';
-  const total=many?_sb.reduce((a,x)=>a+((fcSeqsOf(x)||[]).length),0):seqs.length;
-  const cur=seqs.find(q=>String(q.id)===String(subj&&subj.fcEditId))||null; // 详情只画序列态那一条,不再全量铺开(用户定案:信息简单即可)
-  if(!total)h+='<div class="fc-empty">无火控序列 · Shift+中键点敌舰即可选定</div>';
-  else if(!cur)h+='<div class="fc-empty">点方条进入序列态 · 地图显示数据链</div>';
-  else{
-    const sid=String(cur.id),rr=(cur.mode==='rr'),sh=String(subj.id);
-    h+=`<div class="fc-det"><div class="fc-row">`
-      +`<span class="nm">${many?(subj.name+' · '):''}${cur.name||('火控序列'+sid)}</span>`
-      +`<span class="fc-btn${rr?' on':''}" data-fc-act="mode" data-ship="${sh}" data-seq="${sid}" title="依次=打死一个再换;轮询=每次齐射换一个">${rr?'轮询':'依次'}</span>`
-      +(cur.paused?'<span class="fc-tag paused">已暂停 · 不开火</span>':'') // RF8 详情区也给一条红标:方条变红了,展开的详情里却没有对应提示会显得断裂
-      +`<span class="fc-btn${cur.force?' on':''}" data-fc-act="force" data-ship="${sh}" data-seq="${sid}" title="强制开火:这条序列的目标哪怕在射程外也自动开火(主炮不看 10% 自动开火门、导弹不看 40 万射程);仍要定出位置、主炮仍要对准">强制</span>`
-      +`<span class="fc-btn${cur.paused?' on':''}" data-fc-act="pause" data-ship="${sh}" data-seq="${sid}" title="暂停后该序列不参与解算">${cur.paused?'恢复':'暂停'}</span>`
-      +`<span class="fc-btn danger" data-fc-act="del" data-ship="${sh}" data-seq="${sid}" title="删除整条序列">删除</span>`
-      +`</div>`;
-    (cur.targets||[]).forEach((t,i)=>{
-      const am=!t.allow||t.allow.mac!==false,ms=!t.allow||t.allow.msl!==false;
-      h+=`<div class="fc-it">`
-        +`<span class="nm">${i+1}. ${fcUiName(t)}</span>`
-        +`<span class="hp">${fcUiHp(t)}</span>`
-        +`<span class="fc-btn${am?' on':''}" data-fc-act="mac" data-ship="${sh}" data-seq="${sid}" data-idx="${i}" title="主炮许可">炮</span>`
-        +`<span class="fc-btn${ms?' on':''}" data-fc-act="msl" data-ship="${sh}" data-seq="${sid}" data-idx="${i}" title="导弹许可">弹</span>`
-        +`<span class="fc-btn danger" data-fc-act="delt" data-ship="${sh}" data-seq="${sid}" data-idx="${i}" title="从序列移除该目标">✕</span>`
-        +`</div>`;
-    });
+  setHTMLStable(list,fcPanelHTML(_sb),force);
+}
+function fcBlocks(sel){ // 舰队的「块」= 选中舰的序列按 grp 分组(58 fcGrpSeq),按 fireSeqs 里的先后排(拖动改的就是它);没有 grp 的(单舰时建的)不在里面
+  const B=new Map();
+  for(const q of fireSeqs){if(!q.grp)continue;const s=sel.find(x=>String(x.id)===String(q.shipId));if(!s)continue;let b=B.get(q.grp);if(!b){b={g:q.grp,m:[]};B.set(q.grp,b);}b.m.push({s,q});}
+  return [...B.values()]; // Map 按首次出现的先后 = 每块最靠前那条在 fireSeqs 里的位置
+}
+function fcRowsOf(sel){ // 火控计算机的行:单舰 = 它的每条序列;舰队 = 每一块。行 {key,label,m:[{s,q}]},动作都作用在 m 里每艘的那条上
+  if(sel.length===1){const s=sel[0];return fcSeqsOf(s).map((q,i)=>({key:'s'+q.id,label:'序列'+(i+1),m:[{s,q}]}));}
+  return fcBlocks(sel).map((b,i)=>({key:'g'+b.g,label:'块'+(i+1),m:b.m}));
+}
+function fcBlkCur(bl){return bl.find(b=>b.m.some(o=>String(o.s.fcEditId)===String(o.q.id)))||null;} // 序列态那行 / 块(行里有一艘的编辑序列是它的那条)
+function fcBlkPick(b){return !!b&&b.m.every(o=>o.s.fcBig==='pick'&&String(o.s.fcPick)===String(o.q.id));} // 这行是行里每艘的唯一开火序列
+function fcBlkPickSync(b){const el=document.getElementById('fcPickBtn');if(!el)return;const on=fcBlkPick(b);el.classList.toggle('on',on); // 标题栏「选择」钮跟着序列态那块
+  el.title=on?'这一块是块里每艘的唯一开火序列;再按一次回到轮询(多条序列轮流)':'把选中的块设为块里每艘的唯一开火序列;默认是轮询,多条轮流开火';}
+function fcPanelHTML(sel){
+  const many=sel.length>1,rows=fcRowsOf(sel),cur=fcBlkCur(rows);
+  if(many)fcBlkPickSync(cur);else fcPickBtnSync(sel[0]); // RF8b「选择」钮在标题栏(#fcSec .fc-hd),单独同步
+  let h='<div class="fc-rows">';
+  for(const r of rows){
+    const q0=r.m[0].q,n=(q0.targets||[]).length,pk=fcBlkPick(r),ps=r.m.every(o=>o.q.paused),fo=r.m.every(o=>o.q.force),rr=q0.mode==='rr',ex=r===cur,k=r.key;
+    h+=`<div class="fc-r${ex?' edit':''}${ps?' paused':''}" data-row="${k}">`
+      +`<div class="fc-lab" data-fc-drag="${k}" title="${r.label}${many?' · '+r.m.length+' 艘':''} · 点一下${ex?'收起':'展开'} · 按住上下拖 = 改优先级(越靠上越先打)${pk?' · 唯一开火序列':''}"><span class="no">${pk?'★':''}${r.label}</span><span class="ct">${n}</span></div>`;
+    if(ex){
+      h+=`<div class="fc-body"><div class="fc-row"><span class="nm">${many?r.m.length+' 艘':''}</span>`
+        +`<span class="fc-btn${rr?' on':''}" data-fc-act="rmode" data-row="${k}" title="依次=打死一个再换;轮询=每次齐射换一个${many?'(块里每艘一起改)':''}">${rr?'轮询':'依次'}</span>`
+        +`<span class="fc-btn${fo?' on':''}" data-fc-act="rforce" data-row="${k}" title="强制开火:目标哪怕在射程外也自动开火(主炮不看把握门、导弹不看射程);仍要定出位置、主炮仍要对准">强制</span>`
+        +`<span class="fc-btn${ps?' on':''}" data-fc-act="rpause" data-row="${k}" title="暂停后这条不参与解算">${ps?'恢复':'暂停'}</span>`
+        +`<span class="fc-btn danger" data-fc-act="rdel" data-row="${k}" title="删除${many?'整块(块里每艘的这条)':'整条序列'}">删除</span></div>`;
+      (q0.targets||[]).forEach((t,i)=>{
+        const am=!t.allow||t.allow.mac!==false,ms=!t.allow||t.allow.msl!==false,tid=String(t.tid);
+        h+=`<div class="fc-it"><span class="nm">${i+1}. ${fcUiName(t)}</span><span class="hp">${fcUiHp(t)}</span>`
+          +`<span class="fc-btn${am?' on':''}" data-fc-act="rmac" data-row="${k}" data-tid="${tid}" title="主炮许可">炮</span>`
+          +`<span class="fc-btn${ms?' on':''}" data-fc-act="rmsl" data-row="${k}" data-tid="${tid}" title="导弹许可">弹</span>`
+          +`<span class="fc-btn danger" data-fc-act="rdelt" data-row="${k}" data-tid="${tid}" title="移除该目标">✕</span></div>`;
+      });
+      h+='</div>';
+    }else h+=`<div class="fc-body fc-sum" data-fc-act="rsel" data-row="${k}" title="点一下展开">${rr?'轮询':'依次'}${fo?' · 强制':''}${ps?' · 已暂停':''} · ${(q0.targets||[]).map(fcUiName).join(' · ')}</div>`;
     h+='</div>';
   }
-  setHTMLStable(list,h,force);
+  const full=!many&&rows.length>=FC_MAX_SEQS;
+  h+=`<div class="fc-r fc-plus">`+(full?`<div class="fc-lab fc-new empty" title="序列已满(每舰最多 ${FC_MAX_SEQS} 条)"><span class="no">+</span></div>`
+      :`<div class="fc-lab fc-new${pendingFcNew?' on':''}" data-fc-act="new" title="${pendingFcNew?'正在等你左键点一艘敌舰 · 再点「+」取消':'新建火控序列:点这里,再左键点一艘敌舰'+(many?'(选中多艘 = 建一块)':'')}"><span class="no">+</span></div>`)
+    +(rows.length?'':`<div class="fc-hint">点「+」再左键点敌舰 = 新建火控序列${many?'(一块)':''} · 中键点敌舰 = 选定目标强制开火</div>`)+'</div>';
+  return h+'</div>';
 }
+function fcRowSel(sel,r){ // 点标签 / 摘要 = 进这行的序列态(行里每艘都亮数据链),再点同一行 = 退出;单舰在「选择」模式下点别的序列 = 改选它来打(RF8 规矩照旧)
+  if(sel.length===1){const s=sel[0],q=r.m[0].q;if(s.fcBig==='pick'&&String(s.fcPick)!==String(q.id)){fcSetPick(s,q.id);fcSetEdit(s,q.id);return;}}
+  const on=r.m.some(o=>String(o.s.fcEditId)===String(o.q.id));
+  for(const x of sel)fcSetEdit(x,null);
+  if(!on)for(const o of r.m)fcSetEdit(o.s,o.q.id);
+}
+function fcRowAct(el){ // 一行的动作,作用在行里每艘的那条上(单舰就是那一条);开关类先按行里现状定一个新值再统一写,免得各艘翻来翻去
+  const sel=selBlue(),r=fcRowsOf(sel).find(x=>x.key===el.dataset.row);if(!r)return;
+  const a=el.dataset.fcAct,q0=r.m[0].q,tid=el.dataset.tid,ti=q=>(q.targets||[]).findIndex(x=>String(x.tid)===String(tid));
+  if(a==='rsel'){fcRowSel(sel,r);return;}
+  if(a==='rmode'){const m=q0.mode==='rr'?'seq':'rr';for(const o of r.m)fcSetMode(o.q.id,m);return;}
+  if(a==='rpause'){const v=!r.m.every(o=>o.q.paused);for(const o of r.m)if(!!o.q.paused!==v)fcTogglePause(o.q.id);return;}
+  if(a==='rforce'){const v=!r.m.every(o=>o.q.force);for(const o of r.m)if(!!o.q.force!==v)fcToggleForce(o.q.id);return;}
+  if(a==='rdel'){for(const o of r.m)fcRemove(o.q.id);return;}
+  const t0=q0.targets[ti(q0)];if(!t0)return;
+  if(a==='rdelt'){for(const o of r.m){const i=ti(o.q);if(i>=0)fcRemoveTarget(o.q.id,i);}return;}
+  if(a==='rmac'||a==='rmsl'){const k=a.slice(1),v=!(!t0.allow||t0.allow[k]!==false);for(const o of r.m){const i=ti(o.q);if(i>=0)fcSetAllow(o.q.id,i,k,v);}}
+}
+let fcDrag=null; // 2026-10-07 用户:按住标签上下拖 = 改优先级。{key,y0,moved,drop,rows:[{key,el,mid}],plus};drop = 插到哪一行之前(null = 最后)
 function updateSelPanel(){ // frame 低频调用(每20帧)
   const box=document.getElementById('selInfo');
   const title=document.getElementById('selTitle');
@@ -287,10 +287,10 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
     updateCmdBar([]);
     return;
   }
-  const m=(selMissile&&!selMissile.done)?selMissile:null;
+  const mq=selMissile?projViewLook(selMissile):null,m=mq?selMissile:null; // LL9 还在不在、对方弹的速度读主视角画它的弹影(render/83 projViewLook:对方的余像消失才算没了;自己的 / 关开关 = 真弹没 done)
   if(m&&m.type==='missile'&&!adminMode&&m.shooter&&m.shooter.side!=='blue'){ // 2026-09-28 敌方弹:只报看得见的量(射手、燃料、目标我方不知道)
     title.textContent='敌方导弹';if(ciN)ciN.textContent='敌方导弹';if(ciC)ciC.textContent='—';if(ciSp)ciSp.innerHTML='';
-    box.innerHTML=`<div class="row"><span class="k">速度</span><span class="v">${Math.round(SHOW.v(V.len(m.vel)))} km/s</span></div>`;
+    box.innerHTML=`<div class="row"><span class="k">速度</span><span class="v">${Math.round(SHOW.v(V.len(mq.vel)))} km/s</span></div>`;
     updateCmdBar([]);return;
   }
   if(m&&m.type==='missile'){
@@ -307,7 +307,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
     const mv=rp?Object.assign(Object.create(m),{mine:rp.mine,cruise:rp.cruise,park:rp.park,mineOk:rp.mineOk,coastT:0,target:rp.tgt,fuel:rp.fuel,count:rp.count,vel:[rp.dir[0]*rp.spd,rp.dir[1]*rp.spd,rp.dir[2]*rp.spd],pos:m.pg?mslPredPos(m.pg,simTime):rp.pos,guideMode:'coast'}):m;
     const stt=mv.mine?'伏击雷 · 静默待命':mv.cruise?'巡飞搜索 · 导引头开着':mv.park?(mv.mineOk?'飞向布雷点':'飞向点位 · 导引头搜索'):((!rp&&mslSwarmOn(m))?'聚集攻击':(mv.coastT>0?'脱锁滑行':'突击中'));
     const tgt=mv.target?(mv.target.side!==undefined?xhName(mv.target):(mv.target.pos?'区域点':'—')):(mv.mine?'无(待触发)':'无');
-    const tq=mv.target?(mv.target.side===undefined?mv.target.pos:(mv.guideMode==='self'?mv.target.pos:viewPos(mv.target))):null,tdist=tq?V.len(V.sub(tq,mv.pos)):0; // 2026-09-28 名字打码、距离按我方知道的位置(导引头自己看见的用真值)
+    const tq=mv.target?(mv.target.side===undefined?mv.target.pos:((mv.guideMode==='self'&&!adminMode)?(typeof llSeekView==='function'?llSeekView(mv,mv.target):mv.target.pos):viewPos(mv.target))):null,tdist=tq?V.len(V.sub(tq,mv.pos)):0; // 2026-09-28 名字打码、距离按我方知道的位置(导引头自己看见的用导引头那一眼,LL9 sensors/26 llSeekView;LL11 GM 画真值,走 viewPos)
     const fu=Math.max(0,Math.min(100,mv.fuel||0)); // 燃料满值100s,直接当百分比
     box.innerHTML=`
       <div class="hpbar"><i style="width:${fu}%;background:${fu>30?'var(--state-active)':'var(--state-warn)'}"></i></div>
@@ -378,16 +378,17 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
   if(ciC)ciC.textContent=(CLS_NAME[s.cls]||s.cls)+' · '+(TIER_LABEL[s.tier]||'T2');
   if(ciSp)ciSp.innerHTML=specItems(s).map(it=>`<span class="fi"><i>${it[0]}</i><b>${it[1]}</b></span>`).join(''); // 标签上/数值下的读数柱
   // 变化信息(武器库状态) → 右栏
-  const t=s.lockedTarget&&!s.lockedTarget.dead?s.lockedTarget:null;
+  const t=s.lockedTarget&&!contactDead(s.lockedTarget,s.side)?s.lockedTarget:null; // LL6 锁定目标死活按本方看见的
   const tq=t?viewPos(t):null; // 2026-09-28 目标行:名字打码、距离按我方知道的位置,交代不出写位置不明(原来真名 + 真实距离)
-  const fr=Math.max(0,Math.min(1,s.hp/s.maxHp));
+  const fr=Math.max(0,Math.min(1,s.hp/s.maxHp)),eta=typeof llHitEta==='function'?llHitEta(s,s.side,adminMode):-1; // LL9 命中倒计时:看见来袭炮弹本身、它瞄着这艘时(sensors/26 llHitEta),右栏我舰状态加一行;LL11 GM 按真弹算
   box.innerHTML=`
     <div class="hpbar"><i style="width:${fr*100}%;background:${fr>0.35?'var(--state-ok)':'var(--state-warn)'}"></i></div>
     <div class="row"><span class="k">结构</span><span class="v">${Math.max(0,Math.round(s.hp))} / ${s.maxHp}</span></div>
     ${s.shMax>0?`<div class="row"><span class="k">护盾</span><span class="v">${s.shDown>0?'重启中 '+Math.ceil(SHOW.t(s.shDown))+' 秒':Math.round(s.sh)+' / '+s.shMax}</span></div>`:''}
+    ${eta>=0?`<div class="row"><span class="k">命中倒计时</span><span class="v" style="color:var(--state-warn)">${SHOW.t(eta).toFixed(1)} 秒 · 来袭炮弹</span></div>`:''}
     <div class="row"><span class="k">速度</span><span class="v">${Math.round(SHOW.v(V.len(s.vel)))} km/s</span></div>
     <div class="row"><span class="k">加速度</span><span class="v">${engRows(s)}</span></div>
-    <div class="row"><span class="k">目标</span><span class="v">${t?xhName(t)+' · '+(tq?Math.round(V.len(V.sub(tq,s.pos))/1000)+'k':'位置不明'):'—'}</span></div>
+    <div class="row"><span class="k">目标</span><span class="v">${t?xhName(t)+' · '+(tq?Math.round(V.len(V.sub(tq,s.pos))/1000)+'k'+viewAgeTxt(t):'位置不明'):'—'}</span></div>
     ${senseRows(s)}
     ${weaponRows(s)}`; // SN4 blocker E:三行辐射读数插在「我在哪儿怎么动」与「我能打什么」之间 —— 中间这一组回答的是「我被看见多少」
   updateCmdBar(sel);
@@ -525,12 +526,14 @@ function fcPickBtnSync(s){ // RF8b 同步标题栏「选择」钮:它在 #fcSec 
   const on=!!(s&&s.fcBig==='pick');
   b.classList.toggle('on',on);
   const q=(s&&on&&typeof fcSeq==='function')?fcSeq(s.fcPick):null;
-  b.title=on?`当前只用 ${q?q.name:'选中序列'} 开火;再按一次回到轮询(多条序列轮流)`
+  b.title=on?`当前只用 ${q?'序列'+(fcSeqsOf(s).indexOf(q)+1):'选中序列'} 开火;再按一次回到轮询(多条序列轮流)`
             :'把当前序列态那条设为唯一开火序列(序列即火力模板);默认是轮询,多条轮流开火';
 }
 on('fcPickBtn','click',()=>{ // RF8b 舰级「选择」:序列态那条 → 唯一开火序列;再按回轮询。舰队时作用在序列态主体舰上(2026-10-02)
   const all=selBlue();let s=all[0];
-  if(all.length>1){s=null;for(const x of all){const q=(typeof fcSeq==='function')?fcSeq(x.fcEditId):null;if(q&&String(q.shipId)===String(x.id)){s=x;break;}}}
+  if(all.length>1){const b=fcBlkCur(fcBlocks(all));if(!b)return; // 2026-10-07 舰队:作用在序列态那块的每艘上(块 = 唯一开火序列 ↔ 回轮询)
+    if(fcBlkPick(b))for(const o of b.m)fcSetBig(o.s,'rr');else for(const o of b.m)fcSetPick(o.s,o.q.id);
+    updateFcPanel(true);return;}
   if(!s)return;
   if(typeof fcSetBig!=='function'||typeof fcSetPick!=='function')return;
   if(s.fcBig==='pick'){
@@ -547,36 +550,30 @@ on('fcPickBtn','click',()=>{ // RF8b 舰级「选择」:序列态那条 → 唯�
 on('fcList','click',e=>{
   const el=e.target&&e.target.closest?e.target.closest('[data-fc-act]'):null;
   if(!el)return;
-  const sh=el.dataset.ship!==undefined?((typeof objById==='function')?objById(el.dataset.ship):null):null; // 条目带 data-ship(2026-10-01):动作落到那一艘上
-  const s=sh||selBlue()[0];if(!s)return;
-  if(selBlue().length>1){for(const x of selBlue())if(x!==s&&typeof fcSetEdit==='function')fcSetEdit(x,null);} // 舰队:序列态只有一份,动作舰之外的全清(详情跟着走)
-  // RF8b 这里【不能】统一 `if(!seq)return`:舰级动作(不带 data-seq)会在进 switch 之前被静默吃掉,
-  // 按钮渲染得好好的、title 也在,就是永远不响应 —— RF8 的大序列钮正是这么"按不动"的。改成逐分支自检。
-  const seq=fcUiSeq(s,el.dataset.seq);
-  const idx=Number(el.dataset.idx),t=(seq&&seq.targets||[])[idx];
-  switch(el.dataset.fcAct){
-    case 'bar':
-      if(!seq)return; // 舰队下方条带 data-ship:上面已把主体解析成那一艘,下面的选择 / 序列态逻辑与单舰同一段
-      if(s.fcBig==='pick'&&typeof fcSetPick==='function'&&String(s.fcPick)!==String(seq.id)){ // RF8 选择模式下点别的方条 = 改选它来打(顺带进序列态,看得见链)
-        fcSetPick(s,seq.id);
-        if(typeof fcSetEdit==='function')fcSetEdit(s,seq.id);
-        break;
-      }
-      // RF8 选择模式下点【已选中】那条只切序列态显示,【不清 fcPick】—— 清了就等于这艘舰一条序列都不打,而按钮上还写着"选择",
-      // 玩家看不出自己刚把火力关了。要停火用底栏火控开关或暂停该序列,不该是"再点一下方条"的副作用。
-      if(typeof fcSetEdit==='function')fcSetEdit(s,String(s.fcEditId)===String(seq.id)?null:seq.id);
-      break; // RF7 点方条:进入序列态,再点同一根=退出(fcSetEdit 传 null 即清编辑态,地图蓝链随之熄灭)
-    case 'mode':if(!seq)return;if(typeof fcSetMode==='function')fcSetMode(seq.id,seq.mode==='rr'?'seq':'rr');break;
-    case 'pause':if(!seq)return;if(typeof fcTogglePause==='function')fcTogglePause(seq.id);break;
-    case 'force':if(!seq)return;if(typeof fcToggleForce==='function')fcToggleForce(seq.id);break; // 2026-09-29 强制开火
-    case 'del':if(!seq)return;if(typeof fcRemove==='function')fcRemove(seq.id);break;
-    case 'delt':if(!seq)return;if(typeof fcRemoveTarget==='function')fcRemoveTarget(seq.id,idx);break;
-    case 'mac':case 'msl':{if(!seq)return; // 许可徽标取反;allow 缺省视为 true,与 fcNew 的缺省口径一致
-      const k=el.dataset.fcAct;
-      if(t&&typeof fcSetAllow==='function')fcSetAllow(seq.id,idx,k,!(!t.allow||t.allow[k]!==false));
-      break;}
-  }
+  if(el.dataset.fcAct==='new'){const on=!!pendingFcNew;clearPendings();if(!on){pendingFcNew=true;updSelWeaponTip();}updateFcPanel(true);return;} // 2026-10-07「+」:进 / 退待命(与其它点选待命态互斥)
+  if(el.dataset.row!==undefined)fcRowAct(el); // 2026-10-07 行的动作(单舰一条 / 舰队一块,fcRowAct)
   updateFcPanel(true); // 立即回显,不等下一个 20 帧拍子;force 绕过 setHTMLStable 的 hover 推迟——此刻光标必然正停在刚点的那个元素上
+});
+on('fcList','pointerdown',e=>{ // 2026-10-07 标签:按下记起点;松手时没挪过 = 点(进 / 出序列态),挪过 5 px = 拖动排序
+  if(e.button!==0)return;
+  const lab=e.target&&e.target.closest?e.target.closest('[data-fc-drag]'):null;if(!lab)return;
+  e.preventDefault();
+  fcDrag={key:lab.dataset.fcDrag,y0:e.clientY,moved:false,drop:undefined,plus:document.querySelector('#fcList .fc-plus'),
+    rows:[...document.querySelectorAll('#fcList .fc-r[data-row]')].map(r=>{const b=r.getBoundingClientRect();return {key:r.dataset.row,el:r,mid:(b.top+b.bottom)/2};})};
+});
+window.addEventListener('pointermove',e=>{
+  const d=fcDrag;if(!d)return;
+  if(!d.moved&&Math.abs(e.clientY-d.y0)<5)return;
+  d.moved=true;let drop=null;for(const r of d.rows)if(e.clientY<r.mid){drop=r.key;break;} // 插到第一条中线在光标下方的那行之前;都不在 = 最后
+  d.drop=drop;
+  for(const r of d.rows){r.el.classList.toggle('dragging',r.key===d.key);r.el.classList.toggle('drop-before',r.key===drop&&drop!==d.key);}
+  if(d.plus)d.plus.classList.toggle('drop-before',drop===null);
+});
+window.addEventListener('pointerup',()=>{
+  const d=fcDrag;if(!d)return;fcDrag=null;
+  const sel=selBlue(),rows=fcRowsOf(sel),r=rows.find(x=>x.key===d.key);
+  if(r){if(!d.moved)fcRowSel(sel,r);else if(d.drop!==d.key){const b=d.drop?rows.find(x=>x.key===d.drop):null;fcReorder(r.m.map(o=>o.q),b?b.m.map(o=>o.q):null);}}
+  updateFcPanel(true);
 });
 
 /* ============ FM6 底栏【跟随】标准控件 ============

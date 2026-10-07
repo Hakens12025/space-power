@@ -58,15 +58,15 @@ function artPlume(g,kind,lod,x,y,ang,len,wid,a){if(len<0.5||a<=0)return;const c=
 const ART_NOZ={DD:{e:[[-0.9,0.07,0.05],[-0.9,-0.07,0.05]],hw:0.21,bx:0.58},CA:{e:[[-0.95,0.13,0.05],[-0.98,0,0.055],[-0.95,-0.13,0.05]],hw:0.31,bx:0.62},
   BB:{e:[[-1.06,0.1,0.055],[-1.06,-0.1,0.055],[-1.0,0.27,0.05],[-1.0,-0.27,0.05]],hw:0.43,bx:0.72},CV:{e:[[-1.14,0.12,0.05],[-1.14,-0.12,0.05],[-1.14,0.32,0.05],[-1.14,-0.32,0.05]],hw:0.44,bx:1.16},
   SC:{e:[[-0.74,0.1,0.045],[-0.74,-0.1,0.045]],hw:0.22,bx:0.6}};
-function artFlames(s,p){ // 主推从每个喷口朝船尾喷(舰标 < 16 px 并成一道);反推 = 船头两侧斜向前(橙);侧推 = 背离转向目标那一侧前后两个短喷(黄白)
-  const fx=s.facing[0],fy=s.facing[1];if(Math.hypot(fx,fy)<0.05)return;const mf=s.flame||0,sf=s.sideFlame||0;if(Math.abs(mf)<0.05&&Math.abs(sf)<0.05)return;
+function artFlames(s,p,L){ // 主推从每个喷口朝船尾喷(舰标 < 16 px 并成一道);反推 = 船头两侧斜向前(橙);侧推 = 背离转向目标那一侧前后两个短喷(黄白)。LL9 L = 画面上它此刻的样子(render/83 viewLook;对方读影像:朝向 / 引擎档 / 转向方向),缺省本体
+  const lk=L||s,fx=lk.facing[0],fy=lk.facing[1];if(Math.hypot(fx,fy)<0.05)return;const mf=lk.flame||0,sf=lk.sideFlame||0;if(Math.abs(mf)<0.05&&Math.abs(sf)<0.05)return;
   const cls=shipIdentHull(s),N=ART_NOZ[cls]||ART_NOZ.DD,sc=hullSize(cls,shipIdentTier(s))*shipZoomF(),rot=Math.atan2(fy,fx),c=Math.cos(rot),sn=Math.sin(rot),Lpx=2.5*sc,t=artNow(),sd=(artIdSeed(s)%97)*0.37,lod=Lpx>=40?2:1;
   const P=(hx,hy)=>[p[0]+(hx*c-hy*sn)*sc,p[1]+(hx*sn+hy*c)*sc];
   if(mf>0.05){const k=Math.min(1,mf),len=Lpx*(0.5+0.9*k)*artFlick(t,sd);
     if(Lpx<16){let ym=0,rm=0,xm=0;for(const e of N.e){ym=Math.max(ym,Math.abs(e[1]));rm=Math.max(rm,e[2]);xm=Math.min(xm,e[0]);}const q=P(xm,0);artPlume(ctx,'main',1,q[0],q[1],rot+Math.PI,len,Math.max(3.2,(ym+rm)*2*sc*2.8),0.6+0.4*k);}
     else for(const e of N.e){const q=P(e[0],e[1]);artPlume(ctx,'main',lod,q[0],q[1],rot+Math.PI,len*(0.85+e[2]*3),Math.max(3,e[2]*sc*13),0.6+0.4*k);}}
   if(mf<-0.05){const k=Math.min(1,-mf),len=Lpx*0.38*k*artFlick(t,sd+3);for(const sg of [1,-1]){const q=P(N.bx,sg*N.hw*0.85);artPlume(ctx,'retro',lod,q[0],q[1],rot+sg*0.35,len,Math.max(2.6,0.06*sc*6),0.6+0.4*k);}}
-  if(sf>0.05&&s.turnAim){const a=s.turnAim,al=Math.hypot(a[0],a[1])||1,dl=(a[0]*c+a[1]*sn)/al,px_=a[0]/al-c*dl,py_=a[1]/al-sn*dl;
+  if(sf>0.05&&lk.turnAim){const a=lk.turnAim,al=Math.hypot(a[0],a[1])||1,dl=(a[0]*c+a[1]*sn)/al,px_=a[0]/al-c*dl,py_=a[1]/al-sn*dl;
     if(Math.hypot(px_,py_)>0.1){const sg=-Math.sign(-px_*sn+py_*c)||1,len=Lpx*0.2*artFlick(t,sd+7); // 背离目标的那一侧(反作用力推向目标)
       for(const xb of [0.5,-0.55]){const q=P(xb,sg*N.hw);artPlume(ctx,'side',1,q[0],q[1],rot+sg*Math.PI/2,len,Math.max(2.6,0.05*sc*6.5),0.95);}}}
 }
@@ -193,9 +193,9 @@ function artDrawBoom(g,o,x,y,a,t){const z=artFxZ(),kill=o.kind==='kill',mac=o.ty
       g.restore();}
     for(const e of o.em){const k=a/(e[2]+0.8);if(k>=1)continue;const d=e[1]*Math.sqrt(a)*z,f=0.6+0.4*Math.sin(t*20+e[3]);artBlit(g,artFxSpr('ember'),x+Math.cos(e[0])*d,y+Math.sin(e[0])*d,2.4*z,(1-k)*f,true);}
     for(const s of o.sec){const b=a-s[0];if(b<0||b>0.5)continue;const k=b/0.5,sx=x+s[1]*z,sy=y+s[2]*z;artBlit(g,artFxSpr('flash'),sx,sy,10*z*(1-0.3*k),1-k,true);artBlit(g,artFxSpr('fire'),sx,sy,(3+6*Math.sqrt(k))*z,(1-k)*0.9,true);}}}
-function artHits(){ // 84-scene 调(主画面与特写):hitFX 里新出现的一条记一份墙钟起点;看不见的不画(52 spawnHit 判 vis)
+function artHits(){ // 84-scene 调(主画面与特写):hitFX 里新出现的一条记一份墙钟起点;看不见的不画(52 spawnHit 判 vis;LL6 光速延迟开着时按到达 fxSeen)
   const t=artNow(),L=ART_BOOM.list;
-  for(const h of hitFX){if(ART_BOOM.seen.has(h))continue;ART_BOOM.seen.add(h);if(!adminMode&&!(h.vis&&h.vis[VIEW]))continue;
+  for(const h of hitFX){if(ART_BOOM.seen.has(h))continue;if(!adminMode&&!fxSeen(h,VIEW)){if(!h.seeT)ART_BOOM.seen.add(h);continue;}ART_BOOM.seen.add(h); // LL6 光速延迟开着(登记了到达):光到本视角那一帧才记墙钟起点、开播(sensors/21 fxSeen);没登记的照旧按 vis
     L.push(Object.assign({h,t0:t,pos:h.pos.slice()},artMkBoom(h.big?'kill':'hit',h.type==='mac'?'mac':'missile',(L.length*131+Math.floor(h.pos[0]))|0)));}
   let w=0;for(let i=0;i<L.length;i++){const b=L[i],a=t-b.t0;if(a>(b.kind==='kill'?3:1)||a<0)continue;L[w++]=b;
     const p=toScreen(b.pos[0],b.pos[1]);if(p[0]<-120||p[0]>W+120||p[1]<-120||p[1]>H+120)continue;artDrawBoom(ctx,b,p[0],p[1],a,t);}
@@ -220,11 +220,12 @@ const ART_CUT=[[-0.06,-2],[-0.1,-0.16],[0.02,-0.05],[-0.12,0.06],[-0.02,0.18],[-
 const ART_HULLP={};
 function artHullPoly(cls){if(ART_HULLP[cls])return ART_HULLP[cls];const def=HULL[cls]||HULL.DD,pt=def.parts.find(q=>q.p==='poly'),P=pt.pts.map(q=>[q[0],q[1]]);
   if(pt.mirror)for(let i=pt.pts.length-1;i>=0;i--){if(Math.abs(pt.pts[i][1])<1e-9)continue;P.push([pt.pts[i][0],-pt.pts[i][1]]);}return ART_HULLP[cls]=P;}
-function artWreck(s,p){const cls=shipIdentHull(s),sc=hullSize(cls,shipIdentTier(s))*shipZoomF(),rot=Math.atan2(s.facing[1],s.facing[0]),t=artNow(),sd=artIdSeed(s);
-  artFeathered(ctx,artFe(),p[0],p[1],sc*1.6+6,function(q,cx,cy){artWreckBody(q,s,cx,cy);}); // 2026-10-05 船体两截与碎片带边界羽化(同舰标);断口余烬是效果,不羽化
+function artWreck(s,p,L){const f=(L||s).facing,cls=shipIdentHull(s),sc=hullSize(cls,shipIdentTier(s))*shipZoomF(),rot=Math.atan2(f[1],f[0]),t=artNow(),sd=artIdSeed(s); // LL9 L = 画面上它此刻的样子(朝向读影像,同舰标),缺省本体
+  artFeathered(ctx,artFe(),p[0],p[1],sc*1.6+6,function(q,cx,cy){artWreckBody(q,s,cx,cy,rot);}); // 2026-10-05 船体两截与碎片带边界羽化(同舰标);断口余烬是效果,不羽化
   const c=Math.cos(rot),sn=Math.sin(rot),er=Math.max(1.6,sc*0.12);
   for(let i=0;i<6;i++){const k=i/5,hy=-0.16+0.34*k,hx=-0.07+Math.sin(i*2.1)*0.05,f=0.5+0.5*Math.sin(t*(7+i)+(sd%10)+i*1.3);artBlit(ctx,artFxSpr('ember'),p[0]+(hx*c-hy*sn)*sc,p[1]+(hx*sn+hy*c)*sc,er,0.35+0.55*f,true);}} // 断口余烬
-function artWreckBody(g,s,x0,y0){const cls=shipIdentHull(s),P=artHullPoly(cls),sc=hullSize(cls,shipIdentTier(s))*shipZoomF(),px=1/sc,rot=Math.atan2(s.facing[1],s.facing[0]),sd=artIdSeed(s),r=artRng(sd),base=[58,60,66];
+function artWreckBody(g,s,x0,y0,rot){ // LL9 rot 由 artWreck 给(同一份影像朝向)
+  const cls=shipIdentHull(s),P=artHullPoly(cls),sc=hullSize(cls,shipIdentTier(s))*shipZoomF(),px=1/sc,sd=artIdSeed(s),r=artRng(sd),base=[58,60,66];
   const pieces=[{reg:[...ART_CUT,[3,2],[3,-2]],dx:0.07,dy:-0.03,dr:0.13},{reg:[...ART_CUT.slice().reverse(),[-3,-2],[-3,2]],dx:-0.05,dy:0.03,dr:-0.09}];
   for(const pc of pieces){const q=artLocalL(rot+pc.dr),l=Math.hypot(q[0],q[1])||1,ux=q[0]/l,uy=q[1]/l;
     g.save();g.translate(x0,y0);g.rotate(rot);g.translate(pc.dx*sc,pc.dy*sc);g.rotate(pc.dr);g.scale(sc,sc);g.lineJoin='round';

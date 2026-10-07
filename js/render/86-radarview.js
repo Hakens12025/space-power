@@ -91,7 +91,7 @@ function rdvZones(){ // 我方对每部听到过的敌方雷达的区域;最多�
   const now=performance.now()/1000;if(now-RDV.t<RDV.T)return RDV.zones;RDV.t=now;
   const out=[],T15=SENS.TICK*1.5;
   esmEach(VIEW,function(E,a){
-    if(E.dead)return;
+    if(viewDead(E))return; // LL6 沉没按我方看见的(render/83 viewDead)
     let use=a.filter(x=>simTime-x.k.t<=ESM_CFG.FADE);const fresh=use.length>0;if(!fresh)use=a;
     let P=null,t=-1e9,n=0;
     for(const x of use){x.brg=rdvEsmBrg(E,x.L,x.k);t=Math.max(t,x.k.t);n+=x.k.hits;if(!P||P.length){const w=rdvLob(x.k,x.brg);P=P?rdvClip(P,w):w;}}
@@ -136,8 +136,8 @@ function rdvDrawReturns(){
     const act=trkCh(tk,'act');if(!act)return;
     const s=trkSrc(tk),q=trkPos(tk);if(!q)return;
     const o=byId.get(act[4]),p=toScreen(q[0],q[1]);if(p[0]<-20||p[0]>W+20||p[1]<-20||p[1]>H+20)return;
-    let vr=0;const sv=s.vel||[0,0,0];
-    if(o){const dx=s.pos[0]-o.pos[0],dy=s.pos[1]-o.pos[1],l=Math.hypot(dx,dy)||1,ov=o.vel||[0,0,0];vr=((sv[0]-ov[0])*dx+(sv[1]-ov[1])*dy)/l;}
+    let vr=0;const lw=typeof llOnNow==='function'&&llOnNow()&&!adminMode,sv=(lw?contactVel(s,VIEW):s.vel)||[0,0,0]; // LL4 光速延迟开着:多普勒与速度线读我方知道的速度(contactVel),视线方向读量测记录里的影像方位
+    if(o){if(lw){const ov=o.vel||[0,0,0];vr=(sv[0]-ov[0])*act[5]+(sv[1]-ov[1])*act[6];}else{const dx=s.pos[0]-o.pos[0],dy=s.pos[1]-o.pos[1],l=Math.hypot(dx,dy)||1,ov=o.vel||[0,0,0];vr=((sv[0]-ov[0])*dx+(sv[1]-ov[1])*dy)/l;}}
     const lv=trkIdLvl(tk),ty=lv===ID_UNK?null:trkIdType(tk),rock=ty&&ty.kind==='rock'&&lv===ID_CON,al=st==='live'?1:0.5;
     if(rock){ctx.fillStyle='rgba(150,158,166,'+(0.8*al).toFixed(2)+')';ctx.fillRect(p[0]-2.5,p[1]-2.5,5,5);return;} // 确认是石头:灰色小方块,不画速度
     if(st==='live'&&(sv[0]||sv[1])){ctx.strokeStyle=rdvDop(vr,0.8);ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(p[0]+sv[0]*300*cam.zoom,p[1]+sv[1]*300*cam.zoom);ctx.stroke();}

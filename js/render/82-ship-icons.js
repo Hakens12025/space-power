@@ -101,8 +101,12 @@ function drawRwrSpike(p,th,R,alpha){
   ctx.closePath();ctx.fill();
   ctx.restore();
 }
+function drawHitEta(p,R,eta){ // LL9 命中倒计时的读数:告警弧那一圈的右上方,物理秒,告警橙
+  const a=R*0.7071,x=p[0]+a+2,y=p[1]-a,t='命中 '+SHOW.t(eta).toFixed(1)+' s';
+  ctx.save();ctx.font='bold 11px Consolas';ctx.textAlign='left';ctx.textBaseline='bottom';ctx.lineWidth=3;ctx.strokeStyle='rgba(0,0,0,.8)';ctx.strokeText(t,x,y);ctx.fillStyle='rgb(255,154,85)';ctx.fillText(t,x,y);ctx.restore();
+}
 function drawWreck(s,p,r){ // 残骸:裂成两截的轮廓 + 断口余烬(render/81-art artWreck,2026-10-04),留名标记
-  artWreck(s,p);
+  artWreck(s,p,(adminMode||s.side===VIEW)?s:(viewLook(s)||LOOK0)); // LL9 朝向读我方看到的影像(render/83 viewLook)
   // 名字带残骸标记
   if(cam.zoom>0.0008){
     ctx.fillStyle='rgba(150,160,175,.65)';ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';
@@ -176,15 +180,17 @@ function drawShip(s){
   if((view==='coast'||view==='ghost')&&trkMem(trkOf(VIEW,s))){drawMemory(s,p);return;} // 2026-09-27 记忆:不动的目标出了全知圈,按最后所见调暗画
   if(view==='coast'||view==='ghost'){drawContactMark(s,p,view);return;} // TK4c:记号抽成函数(石头的陈旧 / 失联照同一个画法),画法一笔没改
   const r=Math.round(shipIconR(s)); // 图标半径:屏幕固定尺寸,但随舰种/Tier 变化(标签/选中圈/尾焰基准)
-  if(s.dead){drawWreck(s,p,r);return;} // 残骸:空心图标,不再有舰体数据(幽灵/陈旧已在上面 return,不会走到这儿)
+  if(viewDead(s)){drawWreck(s,p,r);return;} // LL6 我方看见沉了才画残骸(render/83 viewDead;GM 真值)。残骸:空心图标,不再有舰体数据(幽灵/陈旧已在上面 return,不会走到这儿)
+  const L=(adminMode||s.side===VIEW)?s:(viewLook(s)||LOOK0); // LL9 对方的速度箭头 / 尾焰 / 朝向 / 高度标 / 护盾读我方看到的最新影像(render/83 viewLook:看见击沉之前照样在走、在喷,不按真值画成停车熄火);光还没到的按 LOOK0(不画这几样)
   if(s.side!==VIEW&&typeof ir2InPic==='function'&&ir2InPic(dispPos))return; // 红外画面圈里的非我方船只显示红外画面画的样子(同碎石,2026-10-05 用户);残骸、陈旧 / 失联记号、记忆在上面照画
   // DS181 S3:⚠被照射告警(敌方雷达以照射模式对我驻留达阈值)→黄框闪烁(信息战灵魂提示)
   // SN4:驻留键换成 act(雷达的【照射】模式;静听 lis 与它是同一部设备的两种模式,不是两条通道)。
   //   键名一改,原来那句裸读就变成「undefined 大于某数」恒 false —— 告警圈永远不画、一行错都不报,所以必须与内核同一提交改完。
-  if(!s.dead){
+  if(!viewDead(s)){ // LL6 同上
     // SN6:判据换成【对方这一拍有没有一条照射量测打在我身上】。那正是 c.ch.act 记的东西,不需要阈值,
     //      顺带解掉一桩旧账:那个阈值曾经是本文件与 21-detect 各手抄一份的字面量,SN4 把它收进感知表一处,SN6 连常数都不需要了。
-    const act=trkPaintedBy(s);   // TK2.4:对方航迹表里【对我】握着的那条接触这一拍的照射量测(跨表读只有这一个出口)
+    const lw=typeof llOnNow==='function'&&llOnNow(),fo=lw&&!adminMode&&s.side!==VIEW; // LL4 光速延迟开着:我方舰读被照射告警(单程到达);对方舰上的弧仍是我方这一拍的照射回波(不拿对方自己的告警)
+    const act=fo?trkCh(trkOf(VIEW,s),'act'):trkPaintedBy(s);   // TK2.4:对方航迹表里【对我】握着的那条接触这一拍的照射量测(跨表读只有这一个出口)
     if(act){
       // RF7e 相位改挂【墙钟】,原来挂 simTime。simTime 按倍速推进(core/99 的 acc+=dt*rate),于是倍速一提闪烁跟着提:
       // x50 下每帧相位推进约 5 弧度,远超 60fps 的采样极限,呼吸退化成高频乱闪——这就是"闪动频率随时间越来越快"的来源。
@@ -192,21 +198,22 @@ function drawShip(s){
       const twms=nowMs();
       const pulse=0.45+0.35*Math.abs(Math.sin(twms*0.001*LADAR_WARN_W));
       // RWR1:闭合黄圈 → 朝照射源方位的告警弧(见文件头 drawRwrSpike)。呼吸相位照旧挂墙钟。
-      const painter=(typeof shipById==='function')?shipById(act[4]):null;
-      if(painter&&!painter.dead)drawRwrSpike(p,Math.atan2(painter.pos[1]-s.pos[1],painter.pos[0]-s.pos[0]),shipIconR(s)+RWR.GAP,pulse);
+      const pw=lw&&!fo,painter=pw?null:((typeof shipById==='function')?shipById(act[4]):null); // LL6 光速延迟开着时我方舰的告警记录本身已按光锥判过(照射源在推迟时刻还活着、还在照),不再查照射源此刻的真值
+      if(pw||(painter&&!painter.dead))drawRwrSpike(p,lw?(fo?Math.atan2(-act[6],-act[5]):Math.atan2(act[6],act[5])):Math.atan2(painter.pos[1]-s.pos[1],painter.pos[0]-s.pos[0]),shipIconR(s)+RWR.GAP,pulse); // LL4 方向读记录里的影像方位:告警记的是我指向照射源的影像,回波记的是我方眼指向它的影像(反过来就是它指向我方眼)
     }
+    if(s.side===VIEW&&typeof llHitEta==='function'){const eta=llHitEta(s,VIEW,adminMode);if(eta>=0)drawHitEta(p,shipIconR(s)+RWR.GAP,eta);} // LL9 命中倒计时:看见来袭炮弹本身、它瞄着这艘时,在告警弧那一圈写秒数(sensors/26 llHitEta;不画弹道线 / 目标圈 / 方位线;LL11 GM 按真弹算)
   }
   const isSel=selected.includes(s.id);
-  const zc=s.pos[2];
+  const zc=L.pos[2];
 
   // 舰体颜色统一(高度差用 ▲▼ 标记表达,不靠变色)
   const bodyColor=(s.side!==VIEW&&shipIdentHull(s)==='UNK')?'#a0aab9':(s.side==='red'?'#ff6b6b':'#5aa7ff'); // 阵营色;本视角没认出的对方画灰 // 2026-09-27 用户:未知热源用灰色(--side-neutral),认出是敌舰才红
 
   // 速度矢量箭头(2D投影)
-  const vn=V.len(s.vel);
+  const vn=V.len(L.vel);
   if(vn>1){
     const vl=Math.min(44,vn*60*cam.zoom);
-    const dx=s.vel[0]/vn, dy=s.vel[1]/vn;
+    const dx=L.vel[0]/vn, dy=L.vel[1]/vn;
     const x2=p[0]+dx*vl, y2=p[1]+dy*vl;
     ctx.strokeStyle='rgba(255,255,255,.5)'; ctx.lineWidth=1.2;
     ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(x2,y2);ctx.stroke();
@@ -221,13 +228,13 @@ function drawShip(s){
   }
 
   // 推进器尾焰(后主推进 / 前向反推 / 侧向辅助;2026-10-04 换成 render/81-art 的焰瓣贴图,挂在舰标的喷口上)
-  if(adminMode||s.side===VIEW||contactIdn(s,VIEW))artFlames(s,p); // 2026-09-28 没认出的不画尾焰 / 侧推:它们按真实朝向画,等于泄漏朝向(UNK 记号 09-26 已改成不转的菱形)
+  if(adminMode||s.side===VIEW||contactIdn(s,VIEW))artFlames(s,p,L); // 2026-09-28 没认出的不画尾焰 / 侧推:它们按真实朝向画,等于泄漏朝向(UNK 记号 09-26 已改成不转的菱形)
   {const erg=emitRippleRgb(s);if(erg)drawEmitRipple(p,shipIconR(s),erg);} // EM1 发射机开着 ⇒ 涟漪(画在舰体之下)
-  if(typeof drawShieldBubble==='function')drawShieldBubble(s,p); // 2026-09-29 护盾罩子(render/83)
+  if(typeof drawShieldBubble==='function')drawShieldBubble(s,p,L); // 2026-09-29 护盾罩子(render/83)
   // 舰体图标(wows式:按舰种形状,图标自身带朝向)
   ctx.save();
   ctx.strokeStyle=bodyColor; ctx.fillStyle=bodyColor;
-  const fx=s.facing[0], fy=s.facing[1];
+  const fx=L.facing[0], fy=L.facing[1];
   const ang=Math.atan2(fy,fx);
   const art=!shipMarkMode()&&shipIdentHull(s)!=='UNK'&&typeof SA==='object'&&SA.icon(ctx,shipIdentHull(s),shipIdentTier(s),s.side==='red'?'red':'blue',p[0],p[1],ang,shipZoomF()); // 2026-10-05 新舰标贴图(render/82-shipart);画不了才退回下面的纯色轮廓
   ctx.save();

@@ -153,7 +153,7 @@ function fmbInfo(st){
       '<div class="row"><span class="k">模式</span><span class="v" data-lf="mode">—</span></div>'+
       '<div class="row"><span class="k">跟随目标</span><span class="v" data-lf="ftgt">—</span></div>'+
       '<div class="row"><span class="k">中心 · 均速</span><span class="v" data-lf="ctr">—</span></div>'+
-      '<div class="row"><span class="k">平均档位</span><span class="v" data-lf="spd">—</span></div>'+
+      '<div class="row"><span class="k" data-lf="spdk">平均档位</span><span class="v" data-lf="spd">—</span></div>'+
       '<div class="row"><span class="k">离位</span><span class="v" data-lf="dev">—</span></div>'+
       '<div class="row"><span class="k">战力</span><span class="v" data-lf="hp">—</span></div>'+
       '<div class="hpbar"><i data-lf="hpbar"></i></div>'+
@@ -162,7 +162,7 @@ function fmbInfo(st){
         '<span class="dot"></span><span class="nm"></span><span class="fg"></span>'+
         '<span class="hpbar"><i></i></span></div>').join('');
     const q=k=>info.querySelector('[data-lf="'+k+'"]');
-    fmUi.leaf={flag:q('flag'),state:q('state'),mode:q('mode'),ftgt:q('ftgt'),ctr:q('ctr'),spd:q('spd'),dev:q('dev'),hp:q('hp'),hpbar:q('hpbar')};
+    fmUi.leaf={flag:q('flag'),state:q('state'),mode:q('mode'),ftgt:q('ftgt'),ctr:q('ctr'),spd:q('spd'),spdk:q('spdk'),dev:q('dev'),hp:q('hp'),hpbar:q('hpbar')};
     fmUi.mem={};
     st.list.forEach(s=>{
       const el=info.querySelector('.fm-mem[data-fms="'+s.id+'"]');
@@ -179,6 +179,7 @@ function fmbInfo(st){
   set(L.mode,fmbModeText(st.mode)); // FM3-1 三模式文案统一走 fmbModeText
   set(L.ftgt,st.ftName);
   set(L.ctr,Math.round(st.cx/1000)+'k, '+Math.round(st.cy/1000)+'k · '+Math.round(SHOW.v(st.avgV))+' km/s');
+  set(L.spdk,st.F.spdMode==='min'?'统一档位':'平均档位'); // 10-07 速度两选一:统一 = 最慢那艘的档位
   set(L.spd,st.uncap?'不限速':(st.spd===0?'0 · 定速停':Math.round(SHOW.v(st.spd))+' km/s')); // FM2:加权平均,不再是组内最低
   set(L.dev,(st.dev/1000).toFixed(1)+'k');
   set(L.hp,Math.round(st.hpFrac*100)+'% · '+Math.round(st.hp)+'/'+Math.round(st.mhp));
@@ -254,6 +255,13 @@ function fmbActsBuild(){
       '</div>'+
     '</div>'+
     '<div class="fm-mdesc" data-lf="mdesc">—</div>'+
+    '<div class="fm-grp g-par">'+ // 2026-10-07 用户:速度控制两选一(43 fmSpd 读 F.spdMode)
+      '<span class="fm-lb">速度</span>'+
+      '<div class="fm-seg">'+
+        '<button class="btn" data-fma="v-avg" title="加权速度 · 全队不超过各舰档位按舰数的加权平均;慢船按自己的档位走,会落在后面">加权速度</button>'+
+        '<button class="btn" data-fma="v-min" title="统一速度 · 全队不超过最慢那艘的档位,一起走、途中不散">统一速度</button>'+
+      '</div>'+
+    '</div>'+
     // 随模式变化:固定
     '<div class="fm-grp g-act2 fm-mode fm-hide" data-fmm="fixed">'+
       '<button class="btn qbtn" data-fma="resnap" title="把各舰【此刻】的相对位置与朝向重新固定下来(重拍快照)。手动把船摆好之后按它">重新固定</button>'+
@@ -273,6 +281,7 @@ function fmbActsBuild(){
   fmUi.act={
     mFixed:acts.querySelector('[data-fma="m-fixed"]'), // FM3-1
     mSlot:acts.querySelector('[data-fma="m-slot"]'),
+    vAvg:acts.querySelector('[data-fma="v-avg"]'),vMin:acts.querySelector('[data-fma="v-min"]'), // 10-07 速度两选一
     mDesc:acts.querySelector('[data-lf="mdesc"]'), // FM5b 模式说明行:叶子节点,只改 textContent
     /* FM4b 随模式显隐的块。FM6c 改成【数组】:改前是以 data-fmm 为键的字典,而阵型模式下有两块
        (编组控制 / 带半径滑块)共用 data-fmm="slot",后写的把先写的顶掉 —— 「编组控制」那一块
@@ -288,6 +297,7 @@ function fmbActsSync(F){ // 模式高亮与随模式显隐都跟着【当前展�
   fmUi.act.modes.forEach(el=>{el.classList.toggle('fm-hide',el.getAttribute('data-fmm')!==md);});
   if(fmUi.act.mFixed)fmUi.act.mFixed.classList.toggle('on',md==='fixed');
   if(fmUi.act.mSlot)fmUi.act.mSlot.classList.toggle('on',md==='slot');
+  const vm=F?(F.spdMode==='min'?'min':'avg'):null;if(fmUi.act.vAvg)fmUi.act.vAvg.classList.toggle('on',vm==='avg');if(fmUi.act.vMin)fmUi.act.vMin.classList.toggle('on',vm==='min');
   // FM5b 分段控件下的模式说明行:长文案走 fmbModeText 唯一出处(与右栏 #selFm 的"模式"读数同一句话)
   if(fmUi.act.mDesc){const d=md?fmbModeText(md):'—';if(fmUi.act.mDesc.textContent!==d)fmUi.act.mDesc.textContent=d;}
 }
@@ -400,6 +410,7 @@ function fmbAct(a){
       if(a==='m-fixed'&&F.src==='snapshot')break;
       if(typeof fmSetSrc==='function')fmSetSrc(F,a==='m-fixed'?'snapshot':'generated');
       break;
+    case 'v-avg':case 'v-min':F.spdMode=a==='v-min'?'min':'avg';break; // 10-07 速度两选一:physics/31 的编队上限经 43 fmSpd 当拍生效
   }
   updFmBar(); // 立即回显,不等下一个 20 帧拍子
   if(typeof updateSelPanel==='function')updateSelPanel(); // 信息区在右轨,得连它一起叫醒

@@ -203,6 +203,8 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #matchEnd.lose{border-color:var(--state-danger)}
 #matchEnd .me-title{font-size:30px;letter-spacing:.4em;text-indent:.4em;color:var(--state-ok);line-height:1.3}
 #matchEnd.lose .me-title{color:var(--state-danger)}
+#matchEnd.draw{border-color:var(--side-neutral)} /* LL9 平局:中性灰,不借胜利的绿、也不借战败的红 */
+#matchEnd.draw .me-title{color:var(--side-neutral)}
 #matchEnd .me-sub{font-size:var(--fs-read);color:var(--txt);margin-top:var(--sp-1)}
 #matchEnd .me-stat{font-family:var(--ff-mono);font-size:var(--fs-body);color:var(--txt-dim);margin-top:var(--sp-4)}
 #matchEnd .me-btns{display:flex;gap:var(--sp-3);justify-content:center;margin-top:var(--sp-5)}
@@ -324,6 +326,28 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #fcList .fc-it .nm{flex:1;min-width:0;color:var(--txt-read);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #fcList .fc-it .hp{flex:none;min-width:30px;text-align:right;font-family:var(--ff-mono);font-size:var(--fs-micro);letter-spacing:var(--ls-read);font-variant-numeric:tabular-nums;color:var(--txt-dim)}
 #fcList .fc-ft{display:flex;align-items:center;gap:var(--sp-1);justify-content:flex-end;margin-top:var(--sp-1)}
+/* 2026-10-07 用户:火控计算机一行一个大块(88 fcPanelHTML):左边标签框(高度跟右边内容走)| 竖线 | 右边内容;最后一格「+」与标签框同宽;按住标签拖 = 改优先级 */
+#fcList .fc-rows{display:flex;flex-direction:column;gap:var(--sp-1)}
+#fcList .fc-r{display:flex;align-items:stretch;border:var(--bw) solid var(--line);border-radius:var(--r-md);background:var(--srf-sunk);padding:3px}
+#fcList .fc-r.edit{border-color:var(--state-select)}
+#fcList .fc-r.paused{border-style:dashed;border-color:var(--state-danger)}
+#fcList .fc-r.dragging{opacity:.45}
+#fcList .fc-r.drop-before{box-shadow:0 -3px 0 var(--state-active)} /* 拖动时插入位置 */
+#fcList .fc-lab{flex:none;width:46px;min-height:30px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);cursor:grab;user-select:none;touch-action:none}
+#fcList .fc-lab:hover{border-color:var(--line-acc);background-color:var(--srf-hover)}
+#fcList .fc-r.edit .fc-lab{border-color:var(--state-select);background:var(--srf-sel)}
+#fcList .fc-lab .no{font-size:var(--fs-label);color:var(--txt-hi);line-height:1;white-space:nowrap}
+#fcList .fc-lab .ct{font-family:var(--ff-mono);font-size:var(--fs-micro);font-variant-numeric:tabular-nums;color:var(--txt-mute);line-height:1}
+#fcList .fc-r.paused .fc-lab .no,#fcList .fc-r.paused .fc-lab .ct{color:var(--state-danger)}
+#fcList .fc-body{flex:1;min-width:0;margin-left:6px;padding-left:6px;border-left:var(--bw) solid var(--line);display:flex;flex-direction:column;justify-content:center}
+#fcList .fc-sum{cursor:pointer;font-size:var(--fs-label);color:var(--txt-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;line-height:30px}
+#fcList .fc-r.fc-plus{border-color:transparent;background:none;align-items:center}
+#fcList .fc-new{cursor:pointer}
+#fcList .fc-new .no{font-size:var(--fs-title);color:var(--txt-dim)}
+#fcList .fc-new.on{border-color:var(--state-active);background:var(--srf-sel)}
+#fcList .fc-new.on .no{color:var(--state-active)}
+#fcList .fc-new.empty{opacity:.35;cursor:default}
+#fcList .fc-hint{flex:1;min-width:0;margin-left:8px;font-size:var(--fs-label);color:var(--txt-mute);line-height:var(--lh-tight)}
 
 /* 底部操作栏(底坞居中)三区:舰名区 | 规格读数列 | 开关组。窄窗时规格列换行,按钮组不拆散 */
 #cmdBar{left:50%;transform:translateX(-50%);bottom:var(--gut);display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:var(--sp-2) var(--sp-4);padding:var(--sp-2) var(--sp-4);z-index:var(--z-bar);width:min(1160px,calc(100% - var(--gut)*2))} /* 显式宽度:shrink-to-fit 下带 flex:1 子项会把整条压成窄柱(实测381px全叠起来) */

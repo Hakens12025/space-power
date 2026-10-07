@@ -48,7 +48,7 @@ function ghostFm(g){ // 虚影作用于哪支编队(单舰虚影返回 null)。�
 }
 function ghostArm(sx,sy,shift){
   const sel=(typeof selBlue==='function')?selBlue():[];
-  const busy=pendingTurn||selWeapon||pendingFollow; // FL1 跟随点选待命时不许右键长按虚影插进来
+  const busy=pendingTurn||selWeapon||pendingFollow||pendingFcNew; // FL1 跟随点选待命时不许右键长按虚影插进来
   if(busy)return false;
   /* FM6 作用域扩到编队:选中集合恰好等于某支编队的全部活船时,长按右键定的是【阵型朝向】。
      判据复用 fmSameShips —— 与右键移动"选中什么就命令什么"(FM2)完全同一个口径,不另立一套,
@@ -118,7 +118,8 @@ function targetAt(sx,sy){
      返回的仍是源对象(锁定 / 火控序列拿它当句柄) */
   trkEach('blue',tk=>{
     if(trkGone(tk)||!trkFoe(tk))return; // 2026-09-30 用户:选中舰后准星能吸到碎石 —— 已确认不是船的(碎石、民船)不当目标,同 24 trkFoe(显示 / 玩家火控的口径)
-    const q=trkPos(tk);if(!q)return;
+    if(!trkPos(tk))return; // LL11 交代不出位置的航迹(热态 heat)不画、也不吸附:影像先进了可见光圈、航迹下一拍才定位时,viewPos 已给影像位置
+    const q=viewPos(trkSrc(tk));if(!q)return; // LL9 点在画它的那一点(render/83 viewPos:可见光圈里是每帧影像,圈外与 trkPos 同一个估计)
     const d=Math.hypot(q[0]-w[0],q[1]-w[1]);
     if(d<60/cam.zoom && d<bd){bd=d;best=trkSrc(tk);}
   });
@@ -130,7 +131,7 @@ function clearPendings(){
      清单原本在右键取消与 91-init 各手抄一遍,漏一个就留下幽灵待命态。
      (任务系统那五个待命态 2026-09-22 随任务 AI 整套删除,这里不再有它们。) */
   selWeapon=null;pendingTurn=null; // FM3-0:删 pendingTurnNoFm(Shift+V"单纯转头"整套删除,它只喂过船上那个写-only 的"单纯转头"死标志);2026-09-22 舰队卡右键菜单的移动/路径点待命态随右键菜单一起删
-  pendingFollow=null; // SL1b(2026-09-22):布防 / 信标 / 手动 / 布雷四族点选待命态随舰队卡一起失去唯一入口,整套删除
+  pendingFollow=null;pendingFcNew=null; // SL1b(2026-09-22):布防 / 信标 / 手动 / 布雷四族点选待命态随舰队卡一起失去唯一入口,整套删除
   updSelWeaponTip();
 }
 let CMDTIP_FLASH=null; // 2026-09-29 一次性回执 {text, until}:显示 ms 毫秒后自己收起
@@ -151,6 +152,7 @@ function updSelWeaponTip(){ // RF4b 待命提示:底栏上方 #cmdTip 常显(旧
     tip.textContent='跟随:'+who+' → 点一艘我方舰(点编队里任一艘 = 跟随那支编队) · 右键取消';
     tip.style.display='block';return;
   }
+  if(pendingFcNew){tip.textContent='火控「+」:左键点一艘敌舰 = 新建一条火控序列'+((typeof selBlue==='function'&&selBlue().length>1)?'(舰队 = 一块)':'')+' · 右键或再点「+」取消';tip.style.display='block';return;} // 2026-10-07 用户
   if(selWeapon==='buoy'){tip.textContent='⌖ 已选定 · 放浮标:点地图上的位置 · 右键取消';tip.style.display='block';return;}
   if(selWeapon){tip.textContent='⌖ 已选定 · '+(selWeapon==='mac'?'主炮强行开火:点敌舰或空地(转向对准即发一炮)':'导弹强行开火:点敌舰齐射 · 点空地 = 区域齐射')+' · 右键取消';tip.style.display='block';return;}
   if(pendingTurn){tip.textContent='转向:点击地图设定方向(速度不变) · 再按 V 取消 · 右键取消';tip.style.display='block';return;}
@@ -166,9 +168,10 @@ function buoyAt(sx,sy){ // 2026-09-29 命中最近的我方前出浮标(屏幕 1
 function groupAt(sx,sy){ // 命中最近的导弹组(屏幕距离,可点选,半径30px)
   const w=worldAt(sx,sy);
   let best=null,bd=30/cam.zoom;
-  for(const p of projectiles){
-    if(p.type!=='missile'||p.done||!projSeen(p))continue; // 2026-09-28 看不见的弹点不到
-    const d=Math.hypot(p.pos[0]-w[0],p.pos[1]-w[1]);
+  for(const p of projAll()){ // LL9 连余像(画着的对方弹在消失的光到之前也点得到;关开关就是 projectiles)
+    if(p.type!=='missile'||!projSeen(p))continue; // 2026-09-28 看不见的弹点不到;LL9 没了不再判 p.done:projViewPos 对己方 / 关开关已消失的给 null,对方的看弹影
+    const q=projViewPos(p);if(!q)continue; // LL5 点在画它的那一点(render/83:我方看到的弹影,GM / 自己的弹是真位置)
+    const d=Math.hypot(q[0]-w[0],q[1]-w[1]);
     if(d<bd){bd=d;best=p;}
   }
   return best;
@@ -215,8 +218,8 @@ function mdWeaponPick(e,sx,sy){ // 选定武器攻击:点目标 / 点空位置
   if(e.button===0&&selWeapon){ // 选定武器攻击:点击目标/空位置指定
     let t=targetAt(sx,sy)||shipAt(sx,sy); // RF4b 敌舰优先(shipAt 已限定蓝方,原路径在简化UI后点敌舰落空)
     const atk=controlledShips();
-    if(t&&!t.dead&&!atk.some(x=>x.side===t.side)&&!atk.some(x=>engageable(t,x)))t=null; // 2026-09-27 点中的是打不了的接触(没定位):按那个位置打空地(强行开火)
-    if(t&&!t.dead){ // 点中舰船:按攻击方各自阵营探测门控(GM能指挥敌方,但各边只能打自己探测到的)
+    if(t&&!contactDead(t,'blue')&&!atk.some(x=>x.side===t.side)&&!atk.some(x=>engageable(t,x)))t=null; // LL6 死活按我方(下令的一方)看见的。2026-09-27 点中的是打不了的接触(没定位):按那个位置打空地(强行开火)
+    if(t&&!contactDead(t,'blue')){ // LL6 同上。点中舰船:按攻击方各自阵营探测门控(GM能指挥敌方,但各边只能打自己探测到的)
       {
         const hiters=atk.filter(x=>engageable(t,x));
         if(hiters.length){
@@ -247,6 +250,11 @@ function mdPending(e,sx,sy){ // 六条 pending*(转向 / 布防 / 跟随 / 信�
     pendingTurn=null;updSelWeaponTip(); // FL1:V 已接进 #cmdTip,清标志就必须同步刷提示(updSelWeaponTip 是边沿触发、无兜底刷新)
     return true;
   }
+  if(e.button===0&&pendingFcNew){ // 2026-10-07 用户:火控计算机点「+」后左键点敌舰 = 注册一条新序列(74 fcRegister;舰队 = 一块);点空了照旧待命(吞掉这一击,不清选中)
+    const t=targetAt(sx,sy);
+    if(t&&t.side!=='blue'&&!contactDead(t,'blue')&&typeof fcRegister==='function'){pendingFcNew=null;fcRegister(selBlue(),t);updSelWeaponTip();}
+    return true;
+  }
   if(e.button===0&&pendingFollow){ // FM6 跟随点选:底栏点【跟随】进入待命,再点一艘我方舰兑现(作用域按【此刻】的 selected 现算)
     const t=(typeof shipAt==='function')?shipAt(sx,sy):null;
     if(t&&!t.dead&&t.side==='blue'&&typeof followAssign==='function')followPick(t);
@@ -268,7 +276,7 @@ function rangeDragAt(sx,sy){ // ENV2 靶场沙盘:12 px 内最近的舰船(敌�
 }
 function rangeDragTo(x,y){ // ENV2 舰船 / 石头直接写位置(靶连锚点一起挪,免得闪避机动拽回去);天体改 rangeWorld 再 envReset,不直写 ENV
   const g=rangeDrag,w=worldAt(x,y),nx=w[0]+g.dx,ny=w[1]+g.dy;
-  if(g.o){g.o.pos=[nx,ny,g.o.pos[2]||0];if(g.o.rangeAnchor)g.o.rangeAnchor=g.o.pos.slice();ROCK_EPOCH++;} // 2026-09-29 石头挪了:world/12 的网格重建
+  if(g.o){g.o.pos=[nx,ny,g.o.pos[2]||0];if(g.o.rangeAnchor)g.o.rangeAnchor=g.o.pos.slice();ROCK_EPOCH++;if(typeof llJump==='function')llJump(g.o);} // 2026-09-29 石头挪了:world/12 的网格重建;LL1 瞬移清光锥层历史(sensors/26)
   else{const b=rangeWorld.bodies[g.bi];b.x=nx;b.y=ny;envReset(rangeWorld);}
 }
 function mdLeft(e,sx,sy){ // 左键
@@ -319,7 +327,7 @@ function mdMiddle(e,sx,sy){ // RF5 中键:短按=快速交战(原「拖拽平移
 function mdRight(e,sx,sy){ // 右键:单击=直接移动,按住350ms=移动虚影(RF11),拖动=平移
   if(e.ctrlKey){ctrlArm=false;return;} // RF5 Ctrl+右键退化成空操作(只清全弹臂):被拆的那一支既不置 panning 也不置 rmbClick,【从不下移动命令】;不在这里 return 的话它会掉进本分支,沿用旧习惯 Ctrl+右键点敌舰的玩家会整队清空航线直冲敌舰坐标。敌舰目标由中键快速交战独占。清全弹臂这一手必须留——不清,松开 Ctrl 会触发 fire_all(71-keys:229)误发射
   /* FL1:门要与 clearPendings 的覆盖面对齐,否则"提示说右键取消、实际却发出一条移动令"(本行原注释记的正是这个坑)。 */
-  if(pendingTurn||selWeapon||pendingFollow){ // 点选待命状态:右键取消(SL1b 起只剩这三族)
+  if(pendingTurn||selWeapon||pendingFollow||pendingFcNew){ // 点选待命状态:右键取消(SL1b 起只剩这三族;10-07 加火控「+」)
     clearPendings();
     if(typeof updFmBar==='function')updFmBar(); // 让【跟随目标】那个钮熄灭
     return;
@@ -336,7 +344,7 @@ function mdRight(e,sx,sy){ // 右键:单击=直接移动,按住350ms=移动虚�
 }
 function mdInset(e){ // 特写框里:左键 = 主镜头飞过去;右键 = 取消待命态,没有待命态就跳过这段播放;中键只挡浏览器自动滚动
   if(e.button===1){if(e.preventDefault)e.preventDefault();return;}
-  if(e.button===2){if(pendingTurn||selWeapon||pendingFollow){clearPendings();if(typeof updFmBar==='function')updFmBar();}else if(typeof insetSkip==='function')insetSkip();return;}
+  if(e.button===2){if(pendingTurn||selWeapon||pendingFollow||pendingFcNew){clearPendings();if(typeof updFmBar==='function')updFmBar();}else if(typeof insetSkip==='function')insetSkip();return;}
   if(e.button===0&&typeof insetClick==='function')insetClick();
 }
 let insetCur=false; // 指针此刻在不在特写框上(只在进出时改 cursor)
@@ -423,7 +431,7 @@ window.addEventListener('mouseup',e=>{
       const x=Math.min(selDrag.x0,selDrag.x1),y=Math.min(selDrag.y0,selDrag.y1);
       const w=Math.abs(selDrag.x1-selDrag.x0),h=Math.abs(selDrag.y1-selDrag.y0);
       const inBox=projectiles.filter(p=>p.type==='missile'&&!p.done&&projSeen(p)&&(adminMode||(p.shooter&&p.shooter.side==='blue'))); // 2026-09-28 框选只选我方弹(敌方弹单点看得见的)
-      const hits=inBox.filter(p=>{const sp=toScreen(p.pos[0],p.pos[1]);return sp[0]>=x&&sp[0]<=x+w&&sp[1]>=y&&sp[1]<=y+h;});
+      const hits=inBox.filter(p=>{const q=projViewPos(p);if(!q)return false;const sp=toScreen(q[0],q[1]);return sp[0]>=x&&sp[0]<=x+w&&sp[1]>=y&&sp[1]<=y+h;}); // LL5 框的是画它的那一点(render/83 projViewPos)
       if(hits.length){
         selected=[]; // KIMI146修:清掉拖拽过程中误选的舰船,导弹信息面板才显示得出来
         // RF4a 框选聚合:全部存活组进 selMissileHits(右栏汇总视图);代表组=剩余弹头最多者(原为"数组第一个",旧注释写的"最近"名不副实)
@@ -480,5 +488,5 @@ function controlledShips(){ // 可控制目标:GM(管理员)下敌我皆可,普�
   return adminMode?sel:sel.filter(s=>s.side==='blue');
 }
 function engageable(t,sh){ // 能否攻击:敌方 + 攻击方阵营定得出它的位置
-  return t&&!t.dead&&t.side!==sh.side&&contactFix(t,sh.side);
+  return t&&!contactDead(t,sh.side)&&t.side!==sh.side&&contactFix(t,sh.side); // LL6 死活按攻击方看见的
 }

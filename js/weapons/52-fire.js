@@ -1,17 +1,20 @@
 "use strict";
 /* RF1: 拆自 js/03-ships.js L335-493(主炮/诱饵/拦截弹/齐射发射链 + hitFX/nets 实体状态)。纯移动无逻辑改动。 */
 function macPred(s,t){ // 目标未来位置(提前量,主炮 0.1c飞行时间);KIMI151:相对速度提前量——弹丸继承舰速后,提前量必须用(目标速-本舰速),否则行进间射击系统性脱靶
-  // WR1:位置用【估计位置】(contactPos;交代不出位置 ⇒ 返回 null,调用方不许回落真值),速度暂用真值(内核不估计速度,已知口子)
-  const tp=(typeof contactPos==='function')?contactPos(t,s.side):t.pos; if(!tp)return null;
+  // WR1:位置用【估计位置】(交代不出位置 ⇒ 返回 null,调用方不许回落真值);LL7 读 contactKin(sensors/21):位置先按它的时刻推到此刻(提前时间 = (simTime − t) + 飞行时间),关开关时 = contactPos + 真速度(逐位同改前)
+  const k=(typeof contactKin==='function')?contactKin(t,s.side):{pos:t.pos,vel:t.vel,t:simTime}; if(!k)return null;
+  const tp=macKinNow(k),v=k.vel||MAC_V0;
   const d=V.len(V.sub(tp,s.pos));
   const tt=d/CFG.macSpd;
-  return [tp[0]+(t.vel[0]-s.vel[0])*tt,tp[1]+(t.vel[1]-s.vel[1])*tt,tp[2]+(t.vel[2]-s.vel[2])*tt];
+  return [tp[0]+(v[0]-s.vel[0])*tt,tp[1]+(v[1]-s.vel[1])*tt,tp[2]+(v[2]-s.vel[2])*tt];
 }
+const MAC_V0=[0,0,0]; // LL7 我方不知道它的速度(光速延迟开着、还没测到过速度)时按不动算,不拿真值兜底
+function macKinNow(k){const a=simTime-k.t;if(!(a>0)||!k.vel)return k.pos;return [k.pos[0]+k.vel[0]*a,k.pos[1]+k.vel[1]*a,k.pos[2]+k.vel[2]*a];} // LL7 contactKin 的 {pos, vel, t} 推到此刻:位置对应的时刻已是此刻(关开关 / 陈旧 / 失联)时原样返回
 function macPtLead(s,pt){const tt=V.len(V.sub(pt,s.pos))/CFG.macSpd;return [pt[0]-s.vel[0]*tt,pt[1]-s.vel[1]*tt,(pt[2]||0)-s.vel[2]*tt];} // 2026-09-28 打空地的提前量:炮弹带着本舰速度,机头要瞄 点 − 本舰速度 x 飞行时间(与 macPred 同一个相对参照系;原来直接瞄点,行进中系统性偏向本舰运动方向)
 const MAC_ALIGN=0.1*Math.PI/180; // 2026-09-28 用户:轴炮是最大的炮,转到位、停稳再开 —— 机头方位与瞄准点方位差在这以内才许开(原 0.02 rad ≈ 1.1°:机头一扫进窗口就开、船还在转)
 function macAimErr(s,p){const a=Math.atan2(s.facing[1],s.facing[0])-Math.atan2(p[1]-s.pos[1],p[0]-s.pos[0]);return Math.abs(Math.atan2(Math.sin(a),Math.cos(a)));} // 机头方位与瞄准点方位之差(只比水平面:炮弹方位取机头,俯仰取瞄准线)
 function macAligned(s,t){ // 轴炮对准:机头是否转到预测点上(MAC_ALIGN)
-  if(!t||t.dead||t.side===s.side)return false;
+  if(!t||contactDead(t,s.side)||t.side===s.side)return false; // LL6 死活按这一方看见的(sensors/21 contactDead)
   const mp=macPred(s,t); if(!mp)return false; // WR1:没有估计位置就没有窗口
   return macAimErr(s,mp)<MAC_ALIGN;
 }
@@ -81,6 +84,7 @@ function fireMACAt(shooter,pt){ // 2026-09-27 主炮打空地(强行开火):朝�
   const L=macPtLead(shooter,pt),d=V.len(V.sub(L,shooter.pos)),tt=d/CFG.macSpd,dir=V.norm(V.sub(L,shooter.pos)), // 出膛方位沿机头轴线 + 散布,俯仰取瞄准线(见 fireMAC 同一条)
    ang=Math.atan2(shooter.facing[1],shooter.facing[0])+gaussRand()*macShotSigma(shooter,d),hxy=Math.hypot(dir[0],dir[1]);
   projectiles.push({type:'mac',pos:shooter.pos.slice(),vel:[Math.cos(ang)*hxy*CFG.macSpd+shooter.vel[0],Math.sin(ang)*hxy*CFG.macSpd+shooter.vel[1],dir[2]*CFG.macSpd+shooter.vel[2]],target:null,ground:true,shooter,pred:pt.slice(),tt,age:0,dmg:shooter.macDmg});
+  if(typeof llBorn==='function')llBorn(projectiles[projectiles.length-1]); // LL1 弹丸出生登记(sensors/26 光锥层;只记录不改模拟)
   shooter.fireHot=SENS.FIRE_S;shooter.macCd=shooter.macReload||0;
 }
 function macShootPt(s,pt){ // 转向带提前量的那个点(每拍重设 turnTarget,朝向层对准后会清掉),对准就朝它开一炮;开出去返回 true。⌖ 打空地与强制目标点共用(57)
@@ -90,7 +94,7 @@ function macShootPt(s,pt){ // 转向带提前量的那个点(每拍重设 turnTa
 }
 function fireMAC(shooter,target){ // 主炮(轴炮):沿机头轴线直射(调用方先查 macAligned:机头转到位才开);没中接着飞(weapons/56)
   if(shooter.noFire)return; // RANGE1 禁火总闸门 1/3:靶场的靶只挨打不还手。这是 主炮 发射的唯一实现,GM 手动锁定/自动索敌/AI 三条路径最终都落到这里。注意这是个【静默】开关(不报错不打日志),将来若误给蓝舰置了 noFire 会毫无线索,置位处只有 initEnemy 的靶语义包一处
-  if(shooter.side===target.side||shooter.dead||target.dead)return;
+  if(shooter.side===target.side||shooter.dead||contactDead(target,shooter.side))return; // LL6 目标死活按这一方看见的
   if(!contactFix(target,shooter.side))return; // 定得出位置就许开火;瞄的是估计位置,椭圆大就是打不中
   const pred=macPred(shooter,target); if(!pred)return; // WR1:交代不出估计位置就不开火(不回落真值)
   const d=V.len(V.sub(pred,shooter.pos)); // WR1:飞行距离按预测点算(没有射程门了,d 只决定弹丸寿命)
@@ -100,6 +104,7 @@ function fireMAC(shooter,target){ // 主炮(轴炮):沿机头轴线直射(调用
   const ang=Math.atan2(shooter.facing[1],shooter.facing[0])+da; // 2026-09-28 用户:轴炮对准再射 —— 出膛方位沿机头轴线 + 散布(对准门收到 0.1°,4 万处偏不到 70 km,远小于命中半径 400;原来 1.1° 窗口擦边就开,只好改沿精确瞄准线)
   const hxy=Math.hypot(dir[0],dir[1]); // KIMI146修:xy分量按朝向的xy模长缩放——原直接用满macSpd再叠dir[2]·macSpd,合速度超0.1c且弹道≠机头轴线(带俯仰时必脱靶)
   projectiles.push({type:'mac',pos:shooter.pos.slice(),vel:[Math.cos(ang)*hxy*CFG.macSpd+shooter.vel[0],Math.sin(ang)*hxy*CFG.macSpd+shooter.vel[1],dir[2]*CFG.macSpd+shooter.vel[2]],target,shooter,pred,tt,age:0,dmg:shooter.macDmg}); // KIMI151:弹丸继承舰速(出膛矢量=舰速+机头轴×0.1c,相对舰体初速仍0.1c)
+  if(typeof llBorn==='function')llBorn(projectiles[projectiles.length-1]); // LL1 弹丸出生登记(sensors/26 光锥层;只记录不改模拟)
   shooter.fireHot=SENS.FIRE_S; // FX1 开火暴露(见 sensors/20 的 P_FIRE):与冷却同一处置位 —— 这里是 主炮 唯一的发射成功点
   shooter.macCd=shooter.macReload||0; // TIER1 改读实例烘焙的装填秒:原 CLS_WPN[shooter.cls].mac 无兜底,舰种不在表里就 TypeError 崩整帧(加 BB/CV 后风险放大)
   if(shooter.fcFired&&shooter.fcTgt&&shooter.fcTgt.mac===target)shooter.fcFired.mac=true; // RF5 开火来源标记(主炮 唯一的发射成功点,弹丸已入 projectiles、冷却已置位):火控序列的指针只认这个显式标记。绝不允许用 macCd/ammo 差分推断——任务系统/靶场AI/敌方AI/手动齐射都会动那两个字段,差分会让序列指针幽灵前进。RF5 核查修:标记再收窄成「打的正是本 tick 序列解算出来的那个目标」,否则玩家手动打第三方(71-keys/72-右键菜单)也会推动序列指针,序列自己那一发被白白跳过
@@ -109,33 +114,40 @@ function fxVis(pos,sh,vic){ // 2026-09-28 vis = 我方看不看得见这一下:�
   const see=sd=>!!((sh&&sh.side===sd)||(vic&&vic.side===sd)||ships.some(s=>s.side===sd&&!s.dead&&Math.hypot(s.pos[0]-pos[0],s.pos[1]-pos[1])<(s.visR||COV.VIS_R))||rocks.some(o=>o.kind==='buoy'&&o.side===sd&&!o.dead&&Math.hypot(o.pos[0]-pos[0],o.pos[1]-pos[1])<(o.visR||0)));
   return {blue:see('blue'),red:see('red')}; // 两方各记一份(画面按当前视角 VIEW 读)
 }
-function spawnHit(pos,type,sh,vic){hitFX.push({pos:pos.slice(),t:1.2,type,vis:fxVis(pos,sh,vic),vic:vic||null});} // 2026-09-29 vic = 挨打的是什么(撞天体为 null、碎石 / 民船也在这里):小窗只报打在舰船上的
+function spawnHit(pos,type,sh,vic){const h={pos:pos.slice(),t:1.2,type,vis:fxVis(pos,sh,vic),vic:vic||null};if(typeof llFx==='function')llFx(h,pos,sh,vic);hitFX.push(h);} // LL6 光速延迟开着时登记到达(条目挂 seeT,画面按 fxSeen 到达才播;sensors/26) // 2026-09-29 vic = 挨打的是什么(撞天体为 null、碎石 / 民船也在这里):小窗只报打在舰船上的
 let ciwsFX=[]; // 2026-09-28 近防炮打掉的导弹火花 {pos,n,tw,vis}:weapons/56 结算时出,render/83 drawCiwsFx 按墙钟画完就删(不进 hitFX:小窗导演会把它当中弹)
-function spawnCiwsFX(pos,n,sh,vic){ciwsFX.push({pos:pos.slice(),n,tw:nowMs(),vis:fxVis(pos,sh,vic),vic:vic||null});} // vic = 那组导弹冲着的船(小窗「近防拦下」绑它)
-function findInterceptorTarget(p){ // 拦截弹重选目标:前方最近的来袭导弹,诱饵弹优先(信号强,为真导弹让路)
+function spawnCiwsFX(pos,n,sh,vic){const f={pos:pos.slice(),n,tw:nowMs(),vis:fxVis(pos,sh,vic),vic:vic||null};if(typeof llFx==='function')llFx(f,pos,sh,vic);ciwsFX.push(f);} // LL6 同 spawnHit:登记到达 // vic = 那组导弹冲着的船(小窗「近防拦下」绑它)
+const INT_ZONE_K=3; // 2026-10-07 用户「拦截弹无限射程燃料」:拦截弹的防区 = 预警距离(防空核心近防外圈 x2)的几倍,跟着发射舰走;同日用户:巡洋舰也和护卫 / 巡游一样(约 5.7 万 km,原来按自己的外圈约 3.4 万)
+const INT_ZONE_R2=(INT_ZONE_K*2*WPN.ciws_core.outer)**2; // 防区半径的平方,各舰种同一个
+function icHome(p){const s=p.shooter;if(s&&!s.dead)p.icLast=s.pos;return p.icLast;} // 防区中心 = 发射舰此刻位置;发射舰沉了用最后位置
+function findInterceptorTarget(p){ // 拦截弹重选目标:前方最近的来袭导弹,诱饵弹优先(信号强,为真导弹让路);只认本方看得见的、在发射舰防区内的(10-07:原来全场扫描、不看距离不看可见,会满图追)
   let best=null,bd=1e18,bestDecoy=false;
-  const vd=V.norm(p.vel);
+  const vd=V.norm(p.vel),side=p.shooter.side,llon=typeof llOnNow==='function'&&llOnNow(),h=icHome(p),R2=p.icR2||Infinity;
   for(const q of projectiles){
-    if(q.type==='decoy'){ // 诱饵弹:高优先级骗拦截
-      if(q.done||q.shooter.side===p.shooter.side)continue;
-      const dq=V.len(V.sub(q.pos,p.pos));
-      if(dq<bd&&dq>0&&V.dot(V.norm(V.sub(q.pos,p.pos)),vd)>0){bd=dq;best=q;bestDecoy=true;}
-    }else if(q.type==='missile'){
-      if(q.done||(q.count||0)<=0||q.coastT>0||q.shooter.side===p.shooter.side)continue;
-      const dq=V.len(V.sub(q.pos,p.pos));
-      if(!bestDecoy&&dq<bd&&dq>0&&V.dot(V.norm(V.sub(q.pos,p.pos)),vd)>0){bd=dq;best=q;}
-    }
+    const dec=q.type==='decoy';
+    if(!dec&&q.type!=='missile')continue;
+    if(q.done||q.shooter.side===side)continue;
+    if(!dec&&((q.count||0)<=0||q.coastT>0))continue;
+    if(!trkSees(side,q))continue;
+    const qq=llon?projLook(q,side):q;if(!qq)continue; // 位置读这一方看到的(光速延迟开着取弹影)
+    const hx=qq.pos[0]-h[0],hy=qq.pos[1]-h[1],hz=qq.pos[2]-h[2];if(hx*hx+hy*hy+hz*hz>R2)continue;
+    const dq=V.len(V.sub(qq.pos,p.pos));
+    if(!(dq>0)||V.dot(V.norm(V.sub(qq.pos,p.pos)),vd)<=0)continue;
+    if(dec){if(dq<bd){bd=dq;best=q;bestDecoy=true;}}
+    else if(!bestDecoy&&dq<bd){bd=dq;best=q;}
   }
   return best;
 }
 function fireDecoy(shooter){ // v125 诱饵弹:模拟舰船热信号骗敌方拦截弹/传感器(对抗玩法)
   projectiles.push({type:'decoy',pos:shooter.pos.slice(),vel:shooter.vel.slice(),
     target:null,shooter,spd:Math.max(PHYS.v(30)*INT_VK,V.len(shooter.vel)),age:0,fuel:PHYS.t(600)});
+  if(typeof llBorn==='function')llBorn(projectiles[projectiles.length-1]); // LL1 弹丸出生登记(sensors/26 光锥层;只记录不改模拟)
 }
 function fireInterceptor(shooter,targetMissile,count){ // 发射拦截导弹实体(燃料模式v114:可出远门防御)
   projectiles.push({type:'interceptor',count:count||16,pos:shooter.pos.slice(),vel:shooter.vel.slice(),
     target:targetMissile,shooter,spd:Math.max(PHYS.v(30)*INT_VK,V.len(shooter.vel)),age:0,fuel:PHYS.t(600),
-    hitMul:(shooter.interHitMul||1)}); // RANGE1 拦截弹命中率倍率随弹出膛(07-missiles 的 hitRate 末尾乘它)。外圈拦截率的真实旋钮是这个:CLS_CIWS.outerIntercept 是死字段,声明后全库零读取,面板绝不能放它
+    hitMul:(shooter.interHitMul||1),icLast:shooter.pos.slice(),icR2:INT_ZONE_R2}); // icR2 = 防区半径的平方(INT_ZONE_R2)。RANGE1 拦截弹命中率倍率随弹出膛(07-missiles 的 hitRate 末尾乘它)。外圈拦截率的真实旋钮是这个:CLS_CIWS.outerIntercept 是死字段,声明后全库零读取,面板绝不能放它
+  if(typeof llBorn==='function')llBorn(projectiles[projectiles.length-1]); // LL1 弹丸出生登记(sensors/26 光锥层;只记录不改模拟)
 }
 let missileGroupSeq=0;
 let netSeq=0;                 // 导弹网序列号(v125:一次齐射=一个网,单组也算网)
@@ -145,7 +157,7 @@ function orderMissileSalvo(shooter,target,n){ // 齐射指令(v119·单元制):�
   if(shooter.noFire)return; // RANGE1 禁火总闸门 2/3:齐射下令的唯一实现(唯一写 shooter.missileArm 的地方),挡住 enemyAI / 任务系统 deny·strike / T·R 选武器点击三条下令路径
   if(shooter.missileArm)return; // 已在装填
   const isShip=target&&kindOf(target)!=='point'; // TK4b:点与物体的判别统一走 kindOf(原来看 side 是不是 undefined,石头进来会被当成点)
-  if(isShip&&(shooter.side===target.side||target.dead))return;
+  if(isShip&&(shooter.side===target.side||contactDead(target,shooter.side)))return; // LL6 目标死活按这一方看见的
   if(isShip&&!contactFix(target,shooter.side))return; // 定不出位置不许对舰齐射;要打就走区域齐射
   if(shooter.ammo<(shooter.mslPer||12))return; // 弹药不足。RF6 修:原写死 16,是每组 16 枚时代的遗留(KIMI154 把每组改 12 时漏改此处与 fireMissiles 的组数上限),后果是每舰末尾 12 枚永远打不出去(DD 192 枚只能打 15 组、CA 240 枚只能打 19 组)
   const avail=readyCells(shooter);
@@ -156,9 +168,10 @@ function fireMissiles(shooter,target,n){ // 导弹齐射:受发射单元(同时�
   if(shooter.noFire)return; // RANGE1 禁火总闸门 3/3:真正生成导弹弹丸的唯一实现,挡住 missileArm 倒计时残留(即使某条路径漏进了下令,弹丸也生不出来)
   const isShip=target&&kindOf(target)!=='point'; // 有 side 才是舰船,否则当空位置(区域目标) TK4b:判别统一走 kindOf
   if(shooter.dead)return;
-  if(isShip&&(shooter.side===target.side||target.dead))return;
+  if(isShip&&(shooter.side===target.side||contactDead(target,shooter.side)))return; // LL6 目标死活按这一方看见的
   // WR1:发射方向、速度剖面、直插方向全部按【估计位置】算(原来读 target.pos 真值)。交代不出估计位置就不发。区域齐射的点本来就是玩家给的。
   const tp0=isShip?((typeof contactPos==='function')?contactPos(target,shooter.side):null):target.pos; if(!tp0)return;
+  const kk=isShip?((typeof contactKin==='function')?contactKin(target,shooter.side):{pos:tp0,vel:target.vel,t:simTime}):null; // LL7 导弹自己的目标记录按 contactKin:t = 位置对应的时刻(mslBasket 从那一刻外推),关开关时 = 估计位置 + 真速度 + 此刻
   const rounds=Math.min(n||salvoCount,readyCells(shooter),Math.floor(shooter.ammo/(shooter.mslPer||12))); // 组数=min(请求,就绪单元,弹药)。RF6 修:分母原写死 16 而每组实耗 mslPer=12(见下方 shooter.ammo-=shooter.mslPer),两处口径不一致导致末尾 12 枚成死弹
   if(rounds<=0)return; // 无就绪发射单元或弹药不足
   // 占用 rounds 个发射单元(独立装填60s)
@@ -201,9 +214,10 @@ function fireMissiles(shooter,target,n){ // 导弹齐射:受发射单元(同时�
       guided:false, coastT:0, guideMode:null, lastKpos:null, guidedBy:null, // T1引导:自导/链导/脱锁(超自导范围无通道→滑行10s自毁)
       chaffed:false,chaffT:0,lastTarget:null, // v125 干扰弹脱锁
       online:true, // 2026-09-30 导弹组网:出膛时在舰队旁,算在网上;之后每个感知节拍由 54 的 mslNetStep 重算
-      tk:isShip?{pos:tp0.slice(),vel:target.vel.slice(),t:simTime,sig:mslSigOf(target,shooter.side),a:trkAccPrior(target,{idn:!!mslSigOf(target,shooter.side)})}:null, // 2026-09-30 导弹自己的目标记录(54 mslTkSet 更新;断链后只靠它)
+      tk:isShip?{pos:kk.pos.slice(),vel:(kk.vel||MAC_V0).slice(),t:kk.t,sig:mslSigOf(target,shooter.side),a:trkAccPrior(target,{idn:!!mslSigOf(target,shooter.side)})}:null, // 2026-09-30 导弹自己的目标记录(54 mslTkSet 更新;断链后只靠它)
       // TK4a:弹丸不再带可见性字段(看不看得见搬进航迹表的目击集合,sensors/24 的 trkSees);原来六个弹丸字面量里各有一对初值 false
     });
+    if(typeof llBorn==='function')llBorn(projectiles[projectiles.length-1]); // LL1 弹丸出生登记(sensors/26 光锥层;只记录不改模拟)
     shooter.ammo-=shooter.mslPer||12; // KIMI154:每组12颗;RF3 枚数读烘焙字段
   }
   if(rounds>0)shooter.fireHot=SENS.FIRE_S; // FX1 开火暴露:真发出去了才亮(rounds=0 是弹药 / 单元不足的空转)

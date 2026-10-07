@@ -2,8 +2,8 @@
 /* RF1: 拆自 js/04-targeting.js L2-79(网分配器)+ js/07-missiles.js L87-103(NET_COMM/updateNets)。recomputeNetOff(组网偏移)2026-10-01 随包抄几何一起拆掉,翼面在 54 mslWingForm。 */
 /* ================= DS147 智能目标分配器:网按"目标所需网数"协同 ================= */
 let netAllocT=0; // DS147:分配器节流计时(每0.5s平衡一次)
-function netDemand(t){ // 目标需要几个网来打(舰种威胁:巡洋核心3网/护卫2网/巡游1网)
-  if(!t||t.dead)return 0;
+function netDemand(t,side){ // 目标需要几个网来打(舰种威胁:巡洋核心3网/护卫2网/巡游1网);LL6 side = 分配的那一方(死活按它看见的)
+  if(!t||contactDead(t,side))return 0;
   return shipValue(t); // TIER1 舰种威胁硬编码改数据驱动谓词(值不变:巡洋3/护卫2/其余1)
 }
 function netAllocCount(side,targetId){ // 该目标当前被多少【接入母舰火控(link)】的网锁定(按网去重)
@@ -11,7 +11,7 @@ function netAllocCount(side,targetId){ // 该目标当前被多少【接入母�
   for(const p of projectiles){
     if(p.type!=='missile'||p.done||!p.netId)continue;
     if(p.shooter&&p.shooter.side!==side)continue;
-    if(!p.target||p.target.dead||p.target.id!==targetId)continue;
+    if(!p.target||contactDead(p.target,side)||p.target.id!==targetId)continue; // LL6 死活按这一方看见的
     if(p.guideMode!=='link')continue; // 仅数据链引导的网参与协同
     if(seen.has(p.netId))continue;
     seen.add(p.netId);c++;
@@ -26,12 +26,12 @@ function reassignNets(side){ // 网间协同分配:待分配网(目标已灭)补
     if(p.type!=='missile'||p.done||!p.netId)continue;
     if(p.shooter&&p.shooter.side!==side)continue;
     if(p.guideMode!=='link')continue; // 前提:网接入母舰火控
-    if(!p.target||p.target.dead)freeNets.add(p.netId);
+    if(!p.target||contactDead(p.target,side))freeNets.add(p.netId); // LL6 目标死活按这一方看见的(link 网在网上,读舰队态势图)
   }
   if(!freeNets.size)return;
-  cands.sort((a,b)=>(netDemand(b)-netAllocCount(side,b.id))-(netDemand(a)-netAllocCount(side,a.id))); // 缺口最大优先
+  cands.sort((a,b)=>(netDemand(b,side)-netAllocCount(side,b.id))-(netDemand(a,side)-netAllocCount(side,a.id))); // 缺口最大优先
   for(const t of cands){
-    while(netAllocCount(side,t.id)<netDemand(t)&&freeNets.size){
+    while(netAllocCount(side,t.id)<netDemand(t,side)&&freeNets.size){
       const nid=freeNets.values().next().value;freeNets.delete(nid);
       for(const p of projectiles){
         if(p.type==='missile'&&!p.done&&p.netId===nid){
@@ -44,7 +44,7 @@ function reassignNets(side){ // 网间协同分配:待分配网(目标已灭)补
   }
   // 剩余网:需求全满足后,追加到价值最高的目标(不浪费火力)
   if(freeNets.size&&cands.length){
-    const top=cands.slice().sort((a,b)=>netDemand(b)-netDemand(a))[0];
+    const top=cands.slice().sort((a,b)=>netDemand(b,side)-netDemand(a,side))[0];
     while(freeNets.size){
       const nid=freeNets.values().next().value;freeNets.delete(nid);
       for(const p of projectiles){

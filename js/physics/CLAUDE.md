@@ -1,7 +1,7 @@
 # js/physics —— 运动内核与航线
 
 ## 文件
-- `30-motion.js` 推进模型(三舱 × 双喷口 ±60°,`engSolveForce`)、`steerToVel`、`guideTo`、刹车曲线 `brakeCurveSpd`、过弯限速 `cornerSpd`、反向速度传播 `routeCap` / `routeUsable` / `routeMargin`
+- `30-motion.js` 推进模型(三舱 × 双喷口 ±60°,`engSolveForce`)、`steerToVel`、`guideTo`、刹车曲线 `brakeCurveSpd`、过弯限速 `cornerSpd`、反向速度传播 `routeCap` / `routeUsable` / `routeMargin`、锁定目标在本方看来沉没没有 `ltDead`
 - `31-step-ships.js` 舰船运动主循环:编队 / 命令 / 刹车 / 战斗转向 / 朝向层 / 积分
 - `32-route-refine.js` 航线细化:下令后分帧微调拐点瞄准点(`rrStart` / `rrTick` / `rrApply`)
 
@@ -18,4 +18,5 @@
 - 评估基准不许读被调的参数:`RR_TOL=5000` 是字面量,不读 `CFG.passBy` / `ROUTE_TOL`。
 - 改 30-motion 的公式时,`tools/train/env_torch.py` 有一份移植(评测台用)要同步。
 - 对局游玩区的硬边只在 `stepShipsMotion` 积分之后夹一处(位置夹进 `ARENA`、朝外速度清零),别处不再各写一份。天体与恒星的盘面(world/12 `envObstacles`)是同一处的第二道硬边:推回盘面、朝里的速度清零;绕行在命令层(formation/44 `ordRoute`),不在运动内核里。
+- 锁定目标的死活(30 滑行段顺航向对齐 / 推进段让机头归瞄、31 空闲锁定漂移 / 战斗转向)一律问 `ltDead`(= sensors/21 `contactDead(锁定目标, 本方)`,光速延迟开着时击沉的光到达本方才算):这几处是转向决策,与 weapons/57、58 同口径,不是积分物理;积分、碰撞、刹车停稳照旧读真值。没载入感知层的场合(tools/train)`ltDead` 回落真值。
 - 块注释里不要写 `v*/` 这类形状(会提前结束注释)。

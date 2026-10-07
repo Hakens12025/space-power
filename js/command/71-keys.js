@@ -92,7 +92,7 @@ function doAction(id){
       break;}
     case 'fire_mac':toggleWeapon('mac');break; // T:选定主炮武器,点击敌舰攻击(非发射指令)
     case 'drift_fire':{ // DS171 M3:Ctrl+T 漂移射击(60s限时,命令照走,机头找窗口);再按取消;lit波动不退出
-      const sel=controlledShips().filter(s=>!s.dead&&s.lockedTarget&&!s.lockedTarget.dead&&s.lockedTarget.side!==s.side&&s.macDmg>0);
+      const sel=controlledShips().filter(s=>!s.dead&&s.lockedTarget&&!contactDead(s.lockedTarget,s.side)&&s.lockedTarget.side!==s.side&&s.macDmg>0); // LL6 锁定目标死活按本方看见的
       if(sel.length){
         const on=!sel[0].driftFire;
         sel.forEach(s=>{s.driftFire=on;s.driftFireT=on?60:0;});
@@ -110,7 +110,7 @@ function doAction(id){
       break;}
     case 'fire_all':{ // Ctrl:全弹发射(选中舰·锁定目标)
       const sel=selectedShips().filter(s=>s.side==='blue'&&!s.dead);
-      sel.forEach(s=>{const t=s.lockedTarget;if(!t||t.dead)return;
+      sel.forEach(s=>{const t=s.lockedTarget;if(!t||contactDead(t,s.side))return; // LL6 死活按本方看见的
         if(hasMAC(s)&&macAligned(s,t)&&s.macCd<=0)fireMAC(s,t); // TIER1 主炮 舰种门改能力谓词
         if(s.ammo>0)orderMissileSalvo(s,t,salvoCount);});
       break;}

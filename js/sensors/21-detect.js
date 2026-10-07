@@ -55,9 +55,12 @@ function detectLoop(dt){ // 一个感知节拍:蓝网络探红(litBlue)、红网
   if(ENV.stations.length)for(const T of featStaState())T.obs.visR=visRadiusOf(T.obs)*FEAT_CFG.STA.VIS/COV.VIS_R; // 2026-10-05 据点的可见光圈 12 万,同样按环境缩
   const pg=PING_TMP;pg.length=0; // 2026-09-27 扫描(用户选 A):s.pingReq 的船只在这一拍照射(对方也只在这一拍听得到),节拍末尾回到原来的发射档
   const pq=ships.concat(rocks);if(ENV.stations.length)for(const T of featStaState())pq.push(T.obs); // 2026-10-05 据点也能扫描一次
-  for(const s of pq)if(s.pingReq){s.pingReq=false;if(s.dead)continue;pg.push(s,s.emitMode);if(s.emitMode!=='paint')setEmit(s,'paint');if(s.kind==='buoy'){s.pingOn=s.on;s.on=true;}s.pingT=simTime;} // 2026-09-29 浮标的照射看 on,这一拍临时打开 // 2026-09-27 民船的导航雷达也走这条路(world/14)
+  const llon=llOnNow(); // LL4 光速延迟开着:扫描只记 pingT,sensors/26 记成独立的脉冲区间 [pingT, pingT + TICK],不临时改发射档、不回原档(玩家与 bot 的命令不会被吞)
+  for(const s of pq)if(s.pingReq){s.pingReq=false;if(s.dead)continue;if(llon){s.pingT=simTime;continue;}pg.push(s,s.emitMode);if(s.emitMode!=='paint')setEmit(s,'paint');if(s.kind==='buoy'){s.pingOn=s.on;s.on=true;}s.pingT=simTime;} // 2026-09-29 浮标的照射看 on,这一拍临时打开 // 2026-09-27 民船的导航雷达也走这条路(world/14)
   detectFor('blue','red',el);
   detectFor('red','blue',el);
+  if(llon){llRwr('blue',el);llRwr('red',el);} // LL4 被照射告警单独一遍(单程到达,不经热循环的早退;24 trkPaintedBy 开着时读它)
+  if(llon){llStaSee('blue',el);llStaSee('red',el);} // LL6 据点归属:可见光圈里看得到、或照射往返照得到的据点,按光到达更新这一方看到的归属(sensors/26;staHolderSeen 读它)
   /* 被照射告警(上升沿)→ 图标闪烁(信息战的灵魂提示)。
      SN6:判据从"照射驻留越过一个阈值"换成【对方这一拍有没有一条照射量测打在我身上】——
      c.ch.act 就是那件事,不需要阈值。原来那个 0.3 是 21-detect 与 82-ship-icons 两份手抄,
@@ -66,8 +69,10 @@ function detectLoop(dt){ // 一个感知节拍:蓝网络探红(litBlue)、红网
   /* SN6:updateESMFixes 已删。它做的事(被动射频只给方位、产物是一片不确定区)现在是模型本身的一部分:
      一条只有静听量测的接触,covSolve 解出来纵向就是 COV.HUGE,cov.fix=false —— 那就是"没有位置的接触",
      渲染层照 cov 画热区(SN6 阶段 2)。存旧椭圆的那张 Map 随之退役,不再有人往里写。 */
-  for(const p of projectiles){trkSeeSet('blue',p,projVisibleTo(p,'blue'));trkSeeSet('red',p,projVisibleTo(p,'red'));}
-  for(let i=0;i<pg.length;i+=2){if(pg[i].emitMode!==pg[i+1])setEmit(pg[i],pg[i+1]);if(pg[i].kind==='buoy')pg[i].on=!!pg[i].pingOn;} // 扫描完回到原档(弹丸可见性也吃到这一拍的照射)
+  if(llon)llPvTick(); // LL5 弹丸可见性的眼表每拍重建
+  for(const p of projectiles){trkSeeSet('blue',p,projVisibleTo(p,'blue',el));trkSeeSet('red',p,projVisibleTo(p,'red',el));}
+  if(llon){const G=LL.gone;for(let i=0;i<G.length;i++){const p=G[i].p;if(p){trkSeeSet('blue',p,projVisibleTo(p,'blue',el));trkSeeSet('red',p,projVisibleTo(p,'red',el));}}} // LL5 余像表:消失了的弹在光到之前照样看得见(sensors/26 llProjVis 判)
+  for(let i=0;i<pg.length;i+=2){if(pg[i].emitMode!==pg[i+1])setEmit(pg[i],pg[i+1]);if(pg[i].kind==='buoy')pg[i].on=!!pg[i].pingOn;} // 扫描完回到原档(弹丸可见性也吃到这一拍的照射);LL4 开着时 pg 是空的,这一句只给关开关的旧路径
   // v119:弹丸可见性每节拍算一次,热路径(56/57/83)读缓存 TK4a:缓存从弹丸身上搬进航迹表的目击集合(trkSees 读)
 }
 
@@ -86,16 +91,16 @@ const PING_TMP=[]; // 扫描这一拍的草稿:[船, 原发射档, ...]
 const ESM_CFG={K:2,SMIN:Math.PI/180,FADE:90,DROP:600};
 const ESM={blue:new Map(),red:new Map()};
 function esmReset(){ESM.blue.clear();ESM.red.clear();}
-function esmHear(side,L,E,dd){ // L(我方听者)这一拍听到 E 的雷达;dd = 两者距离
-  const sig=covTheta('lis',L,E,dd);if(!(sig>0))return;
+function esmHear(side,L,E,dd,img){ // L(我方听者)这一拍听到 E 的雷达;dd = 两者距离。LL3 img = L 眼里 E 的影像(方位、距离、响度都读它;表的键仍是 E 本身),不给 = E
+  const I=img||E,sig=covTheta('lis',L,I,dd);if(!(sig>0))return;
   let m=ESM[side].get(E);if(!m)ESM[side].set(E,m=new Map());
-  const tb=Math.atan2(E.pos[1]-L.pos[1],E.pos[0]-L.pos[0]);let k=m.get(L);
+  const tb=Math.atan2(I.pos[1]-L.pos[1],I.pos[0]-L.pos[0]);let k=m.get(L);
   if(!k||simTime-k.t>ESM_CFG.FADE){k={n:0,hits:0,tb:tb,half:Math.PI/2,t:simTime};m.set(L,k);}
   if(k.n>0){const dl=Math.abs(Math.atan2(Math.sin(tb-k.tb),Math.cos(tb-k.tb)))/(k.half/2);k.n*=Math.exp(-dl*dl);}
   k.n+=1;k.hits++;k.tb=tb;k.t=simTime;k.org=[L.pos[0],L.pos[1]];
   const st=Math.sqrt(1-1/Math.pow(1+COV.FADE_HOLD,2*SENS.TICK)); // 盯着看的稳态 / 单次量测
   k.half=Math.min(Math.PI/2-0.01,Math.max(ESM_CFG.SMIN,ESM_CFG.K*sig*Math.max(st,1/Math.sqrt(k.n))));
-  k.R=Math.max(dd*1.05,hearRangeOf(E,lisRecvOf(L))/Math.sqrt(envRfNoise(L.pos,E.pos)*featIonK2(L.pos,E.pos))); // 远端 = 这个方向上听得见的最远距离(恒星噪声锥里、穿过电离云更近)
+  k.R=Math.max(dd*1.05,hearRangeOf(I,lisRecvOf(L))/Math.sqrt(envRfNoise(L.pos,I.pos)*featIonK2(L.pos,I.pos))); // 远端 = 这个方向上听得见的最远距离(恒星噪声锥里、穿过电离云更近)
   k.rr=dd;k.sr=dd*(dd*sig<=E.size*COV.L_LIS?COV.RSS_ID:COV.RSS_UNK)*Math.max(st,1/Math.sqrt(k.n)); // 2026-09-26 幅度测距(与 23-cov 的静听量测同式):距离与它的纵向误差,雷达画面的高斯团用
 }
 function esmEach(side,f){ // 逐个辐射源给 f(E, [{L,k}]);顺手忘掉太久没听到的
@@ -110,17 +115,19 @@ function esmEach(side,f){ // 逐个辐射源给 f(E, [{L,k}]);顺手忘掉太久
 function detectFor(detSide,tgtSide,dt){
   const {dets,bcons}=detectorsOf(detSide);
   if(!dets.length&&!bcons.length)return;
-  const tgts=ships.filter(t=>t.side===tgtSide&&!t.dead);
-  for(let i=0;i<rocks.length;i++)if(!rocks[i].dead&&rocks[i].side!==detSide)tgts.push(rocks[i]); // 2026-09-27 自己一方放的诱饵 / 浮标不探测 // TK4c:石头两方都探测,接在对方舰船之后 —— 舰船在缓冲里的下标不变,每个目标的椭圆各推各的,所以舰船的航迹逐位不受影响
+  const on=llOnNow(); // LL3 光速延迟开着:目标表按这一方看见的死活取舍,逐对读影像(sensors/26 llPairs)
+  const tgts=ships.filter(t=>t.side===tgtSide&&!(on?contactDead(t,detSide):t.dead)); // LL3 沉了的光到这一方之前照常探测(影像里还活着),到了就移出、航迹照旧冻结(审查第 3 条)
+  for(let i=0;i<rocks.length;i++)if(!(on?contactDead(rocks[i],detSide):rocks[i].dead)&&rocks[i].side!==detSide)tgts.push(rocks[i]); // 2026-09-27 自己一方放的诱饵 / 浮标不探测 // TK4c:石头两方都探测,接在对方舰船之后 —— 舰船在缓冲里的下标不变,每个目标的椭圆各推各的,所以舰船的航迹逐位不受影响
   if(!tgts.length)return;
   const el=(typeof dt==='number'&&isFinite(dt)&&dt>0)?dt:SENS.TICK;
-  sensePrepare(dets,bcons,tgts,el); // 一次预计算喂满整个 O(N^2):除法与开方全在这一步
   /* ⚠ 这个顺序【必须】与 sensePrepare 填缓冲的顺序逐格一致(先 dets 后 bcons):
      热循环按下标 j 取目标与探测方的系数,而椭圆要知道 j 对应的是【哪一艘】(信息按站累加,不再取最好的那一档)。
      两边错位的话,算出来的椭圆会拿 A 舰的精度挂在 B 舰的方位上 —— 数值全程合法,一行错都不报。 */
-  const all=dets.concat(bcons);
+  const all=dets.concat(bcons),nd=all.length;
+  const LP=on?llPairs(detSide,all,tgts,el):null; // LL3 逐对影像:运动体 m、眼 j 在 m*nd+j(与热循环同一个下标);关开关 null = 旧路径
+  sensePrepare(dets,bcons,tgts,el,LP); // 一次预计算喂满整个 O(N^2):除法与开方全在这一步
   for(let ti=0;ti<tgts.length;ti++){
-    const t=tgts[ti];
+    const t=tgts[ti],m=LP?LP.tm[ti]:-1;
     /* TK2.0:这一方对 t 的那条航迹(sensors/24)。原来是五个按阵营拼出来的舰上字段名;现在生产者直接写表,不经转发访问器 */
     const tk=trkEnsure(detSide,t), c=tk.cov||(tk.cov=newCov()); // 接触对象的字面量全库只有 newCov 一份,这里补建也调它(判据夹具会把它置空)
     if(c.r1===undefined)throw new Error('SN6 接触对象键名不对(应为 newCov 那一套):'+((t&&t.name)||String(t))); // 换键名时漏改的地方会静默算成 NaN,再静默派生出"没握着"
@@ -128,15 +135,23 @@ function detectFor(detSide,tgtSide,dt){
        旧内核逐目标取"最好的那一档",而信息是可加的 —— 三艘船各看一眼,
        合起来比任何一艘单独看都准,尤其是方位交会。所以这里不收敛,把每一站都交给 stepCov。 */
     const obs=[];
-    for(let j=0;j<all.length;j++){
+    for(let j=0;j<nd;j++){
       const p=sensePairGrades(j,ti); // 打包三条通道(各 0 / 1),0 = 这一对三条通道全都够不着(整目标早退已经在里面)
-      const d=all[j], v=senseVis(d,t); // 2026-09-26 可见光圈:不经热循环(圈内对数很少),太阳禁区 / 尾焰 / 云都不挡,只有天体挡
+      const d=all[j], im=m<0?t:LP.img[m*nd+j], v=im!==null&&senseVis(d,im); // 2026-09-26 可见光圈:不经热循环(圈内对数很少),太阳禁区 / 尾焰 / 云都不挡,只有天体挡 // LL3 im = 这只眼看到的影像(null = 光还没到,热循环那一对也已给 0)
       if(p===0&&!v)continue;
-      const q=p===0?0:senseResolve(j,ti,d,t,p);if(q===0&&!v)continue; // ENV2 待定位的对在热循环外精算光学档与有效亮度
-      const dx=d.pos[0]-t.pos[0], dy=d.pos[1]-t.pos[1], dz=d.pos[2]-t.pos[2];
+      let q=p===0?0:senseResolve(j,ti,d,im,p);if(q===0&&!v)continue; // ENV2 待定位的对在热循环外精算光学档与有效亮度
+      const dx=d.pos[0]-im.pos[0], dy=d.pos[1]-im.pos[1], dz=d.pos[2]-im.pos[2];
       const dd=Math.sqrt(dx*dx+dy*dy+dz*dz);
-      obs.push({det:d,dd:dd,g:{opt:q&3,lis:(q>>2)&3,act:(q>>4)&3,vis:v?1:0},lo:senseLastLo()});
-      if(q&12)esmHear(detSide,d,t,dd); // 听到对方雷达:记一次(雷达画面的"被听见"区域读它)
+      const ir=m<0?t:LP.imgR[m*nd+j]; // LL3 射频用的影像(发射档 = 到达窗口里最响的一档;23 的静听 / 照射通道与 ESM 读它,光学读 im)
+      if(p&128){ // LL4 照射混合的对:bit7 从热循环的原值读(senseResolve 的 g & 60 会掩掉,审查第 13 条),按这一对的发射时刻窗口精算
+        const k=llActPair(d,dd,el);q&=~128;
+        if(k===0)q&=~16; // 发射时刻窗口里没照过:没有回波
+        else if(k===2&&m>=0){const ta=LL_AT,ia=llActImg(t,j,detSide,ta);q&=~16; // 窗口末尾已经不照了:回波看到的是最后一次照射反射回来那一刻,单独成一条量测(影像时刻不同)
+          if(ia){const ax=d.pos[0]-ia.pos[0],ay=d.pos[1]-ia.pos[1],az=d.pos[2]-ia.pos[2];obs.push({det:d,dd:Math.sqrt(ax*ax+ay*ay+az*az),g:{opt:0,lis:0,act:1,vis:0},lo:0,img:ia,imgR:ia,te:ta});}}
+        if(q===0&&!v)continue;
+      }
+      obs.push({det:d,dd:dd,g:{opt:q&3,lis:(q>>2)&3,act:(q>>4)&3,vis:v?1:0},lo:senseLastLo(),img:im,imgR:ir,te:m<0?simTime:LP.te[m*nd+j]}); // LL3 img / te:这条量测看到的是 te 时刻的影像(23 stepCov 用它定视线与估计点,24 trkStep 记 lastT = te)
+      if(q&12)esmHear(detSide,d,t,dd,ir); // 听到对方雷达:记一次(雷达画面的"被听见"区域读它)
     }
     /* TK2.0:下面两段注释说的三件事(椭圆推进、最后定位记录、握没握着)按原来的先后搬进了 sensors/24 的 trkStep,一句调用做完 */
     /* ---- 最后一次【定得出位置】的记录(SN6f:刷新规则换了,见下)----
@@ -180,7 +195,8 @@ function contactIdType(s,side){return !s?null:(s.side===side?{kind:s.kind||'ship
 const SIG_TIER=[0.45,0.85]; // 2026-10-04 用户:定位了没认出的按船体自身的热分档 —— 船体热 < 0.45 小型、< 0.85 中等、其余大型(护卫 / 驱逐 / 巡游 0.7、巡洋 / 战列 / 航母 1.0、碎石中位 0.18、民船 0.6~1.4)
 function sigClassLabel(s){ // 没认出的一律「未知热源」(2026-09-26 用户);2026-10-04 用户:定位了的按亮度反推大小,报小 / 中等 / 大型热源 —— 用船体自身的热(体型 x (1 + 雷达废热)):定位后距离与太阳方位都知道,晒热 / 尾焰 / 开火都能扣掉;开着雷达偏亮一点、民船混在里面,是红外的骗人空间
   if(!contactFix(s,VIEW))return '未知热源';
-  const h=optLum(s)-sReq(s,'size','ship')*(engPowerOf(s)+firePowerOf(s));
+  const L=adminMode?s:contactLook(s,VIEW);if(!L)return '未知热源'; // LL9 按我方看到的最新影像(那一刻的引擎档 / 发射档 / 开火热;关开关 = 本体)
+  const h=optLum(L)-sReq(L,'size','ship')*(engPowerOf(L)+firePowerOf(L));
   return h<SIG_TIER[0]?'小型热源':(h<SIG_TIER[1]?'中等热源':'大型热源');}
 function contactAge(s,side){return trkAge(trkOf(side,s));} // 距最后一次【定得出位置】的秒数(从未定位过 = 1e9)。SN6f:原来是"被光学或照射扫到",见 detectFor 里最后定位记录的刷新规则。TK2.0 起读航迹表
 /* ================= 接触的【显示态】:全库唯一的状态机(SN6f)=================
@@ -236,7 +252,65 @@ function contactPos(s,side){
   return trkPos(trkOf(side,s)); // TK2.0:live/coast 给估计、ghost 外推、heat/none 给 null —— 三条规则原样搬进 sensors/24 的 trkPos
 }
 
-function projVisibleTo(p,detSide){ // 2026-09-29 用户:自己打出去的炮弹 / 导弹也按视野看(原来己方弹永远可见);模拟不读它,只管画面
+/* ================= LL2 光速延迟的门面(2026-10-07;与 contactPos 同一家,名字永久不改)=================
+   开关看 sensors/26 在换局时锁存的 LL.on;关着时每个门面一律返回旧表达式(s.dead / s.vel / 真对象 / p.pos / T.holder / h.vis[side] /
+   contactPos + 真速度 + 此刻),开着时只读态势图与光锥层。自己这一方的东西不延迟(光速延迟只作用于敌我之间的观测)。GM 旁路由调用方自己做。
+   消费方逐步换读法:LL3 起 detectFor(contactDead)、render/83 anomScan 与 86 红外画面(contactLook);LL5 起弹丸的画面 / 点选 / 炮弹来路 / 接触降速(projLook、projAll);LL6 起决策 / 显示层读对方死活一律 contactDead(trkGone 同口径)、特效按 fxSeen、据点归属按 staHolderSeen。 */
+function llOnNow(){return typeof LL!=='undefined'&&LL.on;} // LL2 门面的开关(锁存值,不读 CFG.lightLag)
+function contactDead(s,side){ // LL2 这一方看见它沉了没有:光到达这一方最近那只眼才算;这一步刚沉、段尾还没登记的谁都还没看见
+  if(!llOnNow()||s.side===side||s.kind==='rock')return s.dead; // LL6 石头不记历史,照旧读真值
+  if(!s.dead)return false; // LL7 快路径(因果安全):此刻还活着 ⇒ 从没沉过(东西不会复活)⇒ 不可能已被看见沉没;只有此刻已沉的才查光锥层的击沉记录
+  const r=LL_H.get(s);if(!r||r.kind!==0)return s.dead; // LL2 光锥层不记的(石头、指定点)照旧读真值
+  if(!r.ldead)return false;
+  return r.dEv?simTime>=r.dEv.seeT[side]:true; // LL2 建记录时就已沉了的(没有事件)= 早就看见
+}
+function contactVel(s,side){ // LL2 这一方知道的速度:最后一次定得出位置那一拍的速度(航迹 lastVel);没有给 null
+  if(!llOnNow()||s.side===side)return s.vel;
+  const tk=trkOf(side,s);return (tk&&tk.lastVel)||null;
+}
+function contactLook(s,side){ // LL2 每帧的显示影像代理:这一方的眼里最新的那张(位置 / 速度 / 朝向 / 引擎档 / 开火热 / 发射档 / dead 都是那一刻的);光还没送到给 null
+  if(!llOnNow()||s.side===side)return s;
+  const r=LL_H.get(s);if(!r)return llNoRec(s);if(r.kind!==0)return s; // LL3 没有记录的对方运动体(两帧之间才加的船)= 光还没到,给 null(审查第 4 条);石头 / 指定点 / 据点给本体
+  return llLook(r,side);
+}
+function contactKin(s,side){ // LL2 火控用的 {pos, vel, t}:t = pos 对应的时刻(实况 = 影像时刻 lastT,陈旧 / 失联 = 已外推到此刻),提前量按 (simTime − t) + 飞行时间,不许再拿 contactAge 配 contactPos(审查第 1 条);交代不出位置给 null
+  if(!s)return null;
+  if(!llOnNow()||s.side===side){const pos=contactPos(s,side);return pos?{pos:pos,vel:s.vel,t:simTime}:null;}
+  const tk=trkOf(side,s),pos=trkPos(tk);if(!pos)return null; // LL7 开着时航迹只查一次(同 contactPos 的对方分支,火控每步都调)
+  const st=trkState(tk);
+  const img=st==='live'||(st==='coast'&&!(tk.lastPos&&tk.lastVel)); // LL2 trkPos 这两种给的是估计点 c.x/c.y 本身(没外推),时刻 = 最后一次定位那一拍
+  return {pos:pos,vel:tk.lastVel||null,t:img&&tk.lastT>-1e8?tk.lastT:simTime};
+}
+function projImg(p,side){ // LL2 弹影位置:这一方眼里最新的那张;光还没到、或看见的已是消失之后给 null;己方的弹不延迟(审查第 12 条)。LL5 读 projLook 的位置(数组随代理复用,要留存请拷贝)
+  if(!llOnNow()||!p.llR)return p.pos;
+  const q=projLook(p,side);return q?q.pos:null;
+}
+function projLook(p,side){ // LL5 弹在这一方眼里的样子:影像代理(位置 / 速度 / lit / 颗数是那一刻的,其余经原型读真弹),按感知节拍里看见它的那只眼(sensors/26 llProjLook);关开关给弹本身;己方的弹不延迟,消失了给 null;对方的光还没到或看见的已是消失之后给 null
+  if(!llOnNow()||!p.llR)return p;
+  if(p.shooter&&p.shooter.side===side)return p.done?null:p;
+  return llProjLook(p.llR,side);
+}
+const PROJ_ALL={a:[],pr:null,n:-1,g:-1,k:-1}; // LL5 projAll 的拼接缓存(弹表引用 / 长度、余像表长度、光锥层步号都没变就复用)
+function projAll(){ // LL5 弹表 + 余像(消失了、消失的光还没到的弹;只在光速延迟开着时有):画面与只读消费方枚举弹丸用它,看不看得见照旧问 trkSees / projSeen、画在哪问 projLook;模拟、近防与拦截只走 projectiles
+  if(!llOnNow()||!LL.gone.length)return projectiles;
+  const C=PROJ_ALL;if(C.pr===projectiles&&C.n===projectiles.length&&C.g===LL.gone.length&&C.k===LL.k)return C.a;
+  const a=C.a,G=LL.gone,cut=simTime-LL_PVS.rm/LL_C;a.length=0; // 消失得比「最远看得见的距离 / c」还早的,谁的眼里都已消失
+  for(let i=0;i<projectiles.length;i++)a.push(projectiles[i]);
+  for(let i=G.length-1;i>=0&&G[i].tDone>=cut;i--)if(G[i].p)a.push(G[i].p); // 余像表按消失时刻排
+  C.pr=projectiles;C.n=projectiles.length;C.g=G.length;C.k=LL.k;return a;
+}
+function staHolderSeen(T,side){ // LL2 这一方看到的据点归属;LL6 只在看得见据点时(可见光圈 / 照射往返)按光到达更新(sensors/26 llStaSee);自己拿着的、自己刚丢的(丢了只能是对方拿走)当场知道
+  if(!llOnNow())return T.holder;
+  const r=LL_H.get(T);if(!r||r.kind!==3)return T.holder;
+  return (T.holder===side||r.seenH[side]===side)?T.holder:r.seenH[side];
+}
+function fxSeen(h,side){ // LL2 这一方看没看见这一下(命中闪光 / 近防火花 / 护盾):有 seeT(LL6 起登记)就按光到达,没有照旧读 vis
+  if(llOnNow()&&h.seeT)return simTime>=h.seeT[side];
+  return h.vis&&h.vis[side];
+}
+
+function projVisibleTo(p,detSide,el){ // 2026-09-29 用户:自己打出去的炮弹 / 导弹也按视野看(原来己方弹永远可见);模拟不读它,只管画面
+  if(p.llR&&llOnNow())return llProjVis(p,detSide,(typeof el==='number'&&el>0)?el:SENS.TICK); // LL5 光速延迟开着:对方的弹逐眼按弹影判、记下看见它的眼(sensors/26),照射按往返窗口;el = 这一拍的秒数
   const {dets,bcons}=detectorsOf(detSide);
   const sg=projSig(p);
   const lum=sg.lum,refl=sg.refl,bg=envBgOn()?envBg(p.pos,'opt'):0; // ENV2 云背景每颗弹丸算一次

@@ -16,8 +16,8 @@ function initFleet(){
   if(typeof MSL_PRED!=='undefined')MSL_PRED.length=0; // 2026-09-30 推测弹标随局清空
   if(typeof aiRedReset==='function')aiRedReset(); // AI1 换局清红方 AI 的信念(目标点 / 最后已知位置 / 搜索进度),否则带着上一局的记忆开局
   if(typeof esmReset==='function')esmReset(); // 换局清听到的敌方雷达记录(键是舰对象,旧局的船不该留着)
-  if(typeof fireSeqs!=='undefined'){fireSeqs=[];fcSeqSeq=0;} // RF5 火控序列换局清空(与 nets.clear() 同族):shipSeq 每局归零重排,不清会让上一局的序列按 id 精准挂到新一局的另一艘船上
-  selMissile=null;selNet=null;selMissileHits=[];victoryShown=false;defeatShown=false; // RF4a 框选聚合态一并清(否则引用旧局弹丸对象)
+  if(typeof fireSeqs!=='undefined'){fireSeqs=[];fcSeqSeq=0;fcGrpSeq=0;} // RF5 火控序列换局清空(与 nets.clear() 同族):shipSeq 每局归零重排,不清会让上一局的序列按 id 精准挂到新一局的另一艘船上
+  selMissile=null;selNet=null;selMissileHits=[];victoryShown=false;defeatShown=false;victoryT=Infinity;defeatT=Infinity; // RF4a 框选聚合态一并清(否则引用旧局弹丸对象)
   if(typeof clearPendings==='function')clearPendings(); // KIMI146:交互pending态也清——原 pendingBeacon/pendingManual 等引用旧局舰对象(点地图把信标挂到已不存在的船上)。
   rangeFollow=null;
   adminMode=!!env.range; // ENV2 靶场是全知沙盘、对局只看我方感知(用户 2026-09-25);F8 / 顶栏「全知」钮照样能切
@@ -62,6 +62,7 @@ function initFleet(){
   initEnemy();
   if(typeof envReset==='function'){const w0=typeof matchWorld==='function'?matchWorld(env.world):env.world;rangeWorld=env.range&&w0?JSON.parse(JSON.stringify(w0)):null;envReset(rangeWorld||w0);envSpawnRocks();} // ENV2 靶场拖天体改的是这份副本(scenario/95 的 rangeWorld),不动场景表 // ENV1 / TK4c:按场景的 world 重建环境(太阳 / 残骸场)并撒石头。没有 world 的场景 ⇒ 空环境、零块石头。放在 initEnemy 之后:石头的 id 与舰船的 id 各走各的计数器,谁先谁后都不影响舰船。ENV2 太阳方位为 'rand' 的场景先经 matchWorld 掷成具体方位(envReset 不掷骰子)
   if(env.match&&typeof objSpawnCivs==='function')objSpawnCivs(); // 2026-09-27 K2 对局撒民船(world/14)
+  if(typeof llReset==='function')llReset(); // LL1 光锥层换局(sensors/26):开关在这里锁存,开局已在场的物体记成「早已存在」;须在撒完民船之后、首拍 detectLoop 之前
   if(typeof TRK_TN!=='undefined'){TRK_TN.blue=0;TRK_TN.red=0;} // TK4c 航迹号每局从 1 发
   /* SN6c:**开局先跑一拍感知**。感知是每秒一拍的节拍(stepSim 的 S1),不先跑一拍的话开局第一秒
      所有接触都是 lit=0 —— 热区层与椭圆层都没东西可画,画面上是一片空,直到一秒后才"啪"地出现。

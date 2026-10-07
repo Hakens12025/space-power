@@ -241,10 +241,12 @@ function stepCov(t, c, obs, el, idOut, kin) { // TK2.6:可选的 idOut 记下这
   /* 2026-09-27 航位推算(用户选 A + B):没有量测、或已定位的航迹这一拍只剩单站光学方位 ⇒ 误差按未知加速度长 ½·a·τ²(τ = 距上次测到位置的秒数,
      a = kin.a 这一方对它最大加速度的先验),不再按复利涨;红外看得见它没在喷(速度没变)就不长、τ 也不走。
      有测距(照射 / 静听幅度 / 可见圈)或多站交会的一拍照旧复利 —— 梯子的标定(covSteady)只在这一路上,不受影响。 */
-  let rng = false, nOpt = 0, oDet = null;
-  for (const ob of obs) { const g = ob.g; if (g.act || g.lis || g.vis) rng = true; if (g.opt) { nOpt++; oDet = ob.det; } }
+  /* LL3 光速延迟(sensors/26):每条量测带它看到的影像 ob.img(te 时刻的样子)与 ob.te。视线方向、通道形状、量程、引擎档都读影像;
+     估计点取 te 最大(最新)那条的影像位置;单站方位续推用那条光学量测的影像。手搭的 obs 没有 img / te ⇒ 读 t 本身(旧口径)。 */
+  let rng = false, nOpt = 0, oDet = null, oImg = t, bo = null;
+  for (const ob of obs) { const g = ob.g; if (g.act || g.lis || g.vis) rng = true; if (g.opt) { nOpt++; oDet = ob.det; oImg = ob.img || t; } if (!bo || ob.te > bo.te) bo = ob; }
   const posM = rng || nOpt >= 2, K = !!kin && !posM && (nOpt === 0 || c.fix);
-  if (kin) kin.pm = posM;
+  if (kin) { kin.pm = posM; kin.ob = bo; } // LL3 kin.ob:给出估计点的那条量测(24 trkStep 记 lastT = 它的 te)
   const fd = c.n > 0 ? COV.FADE_HOLD : COV.FADE_LOST;
   const gm = Math.pow(1 + fd, el), off = COV.GROW / fd;
   /* 滤波器的【状态】是钳位之前的真实轴长 r1/r2;a1/a2 只是它钳到 AMAX 之后的显示值。
@@ -253,7 +255,7 @@ function stepCov(t, c, obs, el, idOut, kin) { // TK2.6:可选的 idOut 记下这
   const BIG = COV.HUGE * 1e3;
   let p1, p2, coastSeen = false;
   if (K) {
-    coastSeen = nOpt > 0 && !(engPowerOf(t) > 0);
+    coastSeen = nOpt > 0 && !(engPowerOf(oImg) > 0);
     const gk = coastSeen ? 0 : kin.a * (kin.tau * el + 0.5 * el * el);
     if (!coastSeen) kin.tau += el;
     p1 = Math.min(BIG, c.r1 + gk); p2 = Math.min(BIG, c.r2 + gk);
@@ -269,15 +271,16 @@ function stepCov(t, c, obs, el, idOut, kin) { // TK2.6:可选的 idOut 记下这
   let n = 0, rBound = 1e9, idn = false, idBy = '';
   c.ch = { opt: null, lis: null, act: null, vis: null };
   for (const ob of obs) {
-    const d = ob.det, g = ob.g, dd = ob.dd || 1;
+    const d = ob.det, g = ob.g, dd = ob.dd || 1, im = ob.img || t; // LL3 im = 这条量测看到的影像
     /* 椭圆是二维的(用户 2026-09-19 拍板),所以视线单位向量只取 XY 分量并在 XY 内归一化;
        而 dd 是【三维】距离,三条量程律照三维算。目标正上方时 XY 退化,随便给一个方向。 */
-    let ux = t.pos[0] - d.pos[0], uy = t.pos[1] - d.pos[1];
+    let ux = im.pos[0] - d.pos[0], uy = im.pos[1] - d.pos[1];
     const dxy = Math.sqrt(ux * ux + uy * uy);
     if (dxy > 1e-6) { ux /= dxy; uy /= dxy; } else { ux = 1; uy = 0; }
     for (const ch of ['opt', 'lis', 'act', 'vis']) { // vis = 可见光圈(2026-09-26)
       const lo = ch === 'opt' ? ob.lo : undefined; // ENV2 这一对的有效光学亮度;手搭的 obs 没有 lo ⇒ 标称值
-      const sh = covShape(ch, g[ch], d, t, dd, lo); if (!sh) continue;
+      const ic = (ch === 'lis' || ch === 'act') ? (ob.imgR || im) : im; // LL3 射频两条通道读发射档取到达窗口覆盖的影像(静听响度、干扰),光学 / 可见光读 te 那一刻的
+      const sh = covShape(ch, g[ch], d, ic, dd, lo); if (!sh) continue;
       covAddMeas(J, ux, uy, sh[2] ? sh[0] * iw : COV.HUGE, sh[1] * iw);  // 真量测进信息矩阵;界只钳上限
       n++;
       if (!sh[2] && sh[0] < rBound) rBound = sh[0];
@@ -285,9 +288,9 @@ function stepCov(t, c, obs, el, idOut, kin) { // TK2.6:可选的 idOut 记下这
       if (sh[3] && idOut) idOut[ch] = true; // TK2.6:idBy 只记【第一个】认出它的通道(按探测站、通道的先后),同一拍里 1 号站静听认出、2 号站照射认出时 idBy 是 lis —— 身份三档要知道照射也认出来了
       const cur = c.ch[ch];
       if (!cur || sh[1] < cur[1]) {
-        const R = ch === 'vis' ? (d.visR || COV.VIS_R) : covDetOf(ch, d, t, lo); // 信噪比问"我有多少信号" ⇒ 发现域
+        const R = ch === 'vis' ? (d.visR || COV.VIS_R) : covDetOf(ch, d, ic, lo); // 信噪比问"我有多少信号" ⇒ 发现域
         const snr = (ch === 'act' ? 4 : 2) * 10 * Math.log10(R / dd);  // 被动 (R/d)^2、照射 (R/d)^4,折成 dB
-        c.ch[ch] = [sh[0], sh[1], dd, snr, d.id];       // 末位是探到它的那一艘(画单条方位线要用)
+        c.ch[ch] = [sh[0], sh[1], dd, snr, d.id, ux, uy];       // 第 5 格是探到它的那一艘(画单条方位线要用);LL3 末尾两格 = 这条量测量到的方位(XY 单位向量,指向影像;24 trkBearing 读)
       }
     }
   }
@@ -300,9 +303,10 @@ function stepCov(t, c, obs, el, idOut, kin) { // TK2.6:可选的 idOut 记下这
      与 coasting 的语义一致 —— 丢了航迹就不知道重新出现的是不是同一艘。 */
   if (idn) { c.idn = true; c.idBy = idBy; }
   if (n > 0) {
-    c.x = t.pos[0]; c.y = t.pos[1]; c.age = 0; c.seen = true;
+    const bp = (bo && bo.img || t).pos; // LL3 估计点 = te 最大那条量测的影像
+    c.x = bp[0]; c.y = bp[1]; c.age = 0; c.seen = true;
     if (K && oDet && kin.dr) { // 单站方位续着的航迹:方向是量出来的,距离还是推算的 —— 估计点放在这条方位线上、离观测站与推算点一样远
-      const ox = oDet.pos[0], oy = oDet.pos[1], bx = t.pos[0] - ox, by = t.pos[1] - oy, bl = Math.hypot(bx, by) || 1, rd = Math.hypot(kin.dr[0] - ox, kin.dr[1] - oy);
+      const ox = oDet.pos[0], oy = oDet.pos[1], bx = oImg.pos[0] - ox, by = oImg.pos[1] - oy, bl = Math.hypot(bx, by) || 1, rd = Math.hypot(kin.dr[0] - ox, kin.dr[1] - oy);
       c.x = ox + bx / bl * rd; c.y = oy + by / bl * rd;
     }
   } else c.age += el;

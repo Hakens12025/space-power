@@ -105,14 +105,19 @@ function matchExit(){
 /* 每帧(挂在 core/99 的 frame 里,render 之前;typeof 守卫):对局分出胜负 ⇒ 停表、弹结果卡片。只弹一次。 */
 function matchTick(){
   if(MATCH.shown||!matchIsOn()||!(victoryShown||defeatShown))return;
+  const vT=victoryShown?victoryT:Infinity,dT=defeatShown?defeatT:Infinity; // LL9 胜负按两个标志置位那一步的模拟时刻比先后(core/05 记的),不按帧:高倍速一帧里先后全灭也分得清
+  let res=vT<dT?'win':(dT<vT?'lose':'tie'); // tie = 同一步双方全灭
+  if(res==='win'&&typeof llOnNow==='function'&&llOnNow()){ // LL6 光速延迟开着:胜利卡等最后一艘敌舰沉没的光到达我方才弹;等光期间我方也全灭 = 平局(敌方真实先灭,我方没留下看见它的眼)
+    let seen=-Infinity;for(const s of ships)if(s.side==='red'){const t=llDeadSeeT(s,'blue');if(t>seen)seen=t;} // sensors/26:我方看见每艘敌舰沉没的时刻
+    if(seen>dT)res='lost';else if(seen>simTime)return;}
   MATCH.shown=true;running=false;
   const card=document.getElementById('matchEnd');if(!card)return;
-  const win=victoryShown&&!defeatShown;
+  const draw=res==='tie'||res==='lost',win=res==='win';
   const bAlive=ships.filter(s=>s.side==='blue'&&!s.dead).length,rAlive=ships.filter(s=>s.side==='red'&&!s.dead).length;
   const mm=String(Math.floor(simTime/60)).padStart(2,'0'),ss=String(Math.floor(simTime%60)).padStart(2,'0');
-  card.classList.toggle('lose',!win);
-  document.getElementById('meTitle').textContent=win?'胜利':'战败';
-  document.getElementById('meSub').textContent=win?'敌方舰队全灭':'我方舰队全灭';
+  card.classList.toggle('lose',res==='lose');card.classList.toggle('draw',draw); // LL9 平局单独样式(不借战败的红)
+  document.getElementById('meTitle').textContent=draw?'平局':(win?'胜利':'战败');
+  document.getElementById('meSub').textContent=res==='lost'?'双方舰队全灭(敌方先灭,击沉的光没等到我方)':(res==='tie'?'双方舰队同时全灭':(win?'敌方舰队全灭':'我方舰队全灭'));
   document.getElementById('meStat').textContent='用时 '+mm+':'+ss+' · 我方幸存 '+bAlive+'/'+MATCH.nBlue+' · 击沉 '+(MATCH.nRed-rAlive)+'/'+MATCH.nRed+' · 种子 '+MATCH.seed;
   card.hidden=false;
 }

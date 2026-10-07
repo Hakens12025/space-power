@@ -77,18 +77,36 @@ function drawRange(){ // 测距工具(按住C):起点(或跟随船)→鼠标目�
   ctx.restore();
 }
 const VP_VIS={fr:-1,m:new Map()};
-function viewInVis(s){ // 2026-10-04 用户:对方的东西进了我方可见光圈(全知圈,我方船 / 浮标任一)就画真实位置 —— 圈里本来什么都看得清,估计只在感知节拍(1 游戏秒)更新,画估计会一段一段跳;每帧算一次
+function viewInVis(s){ // 2026-10-04 用户:对方的东西进了我方可见光圈(全知圈,我方船 / 浮标任一)就画每帧的样子 —— 圈里本来什么都看得清,估计只在感知节拍(1 游戏秒)更新,画估计会一段一段跳;每帧算一次
   if(VP_VIS.fr!==frameN){VP_VIS.fr=frameN;VP_VIS.m.clear();}
   let v=VP_VIS.m.get(s);if(v!==undefined)return v;v=false;
-  for(const d of ships)if(d.side===VIEW&&!d.dead&&senseVis(d,s)){v=true;break;}
-  if(!v)for(const o of rockObjs())if(o.kind==='buoy'&&o.side===VIEW&&!o.dead&&senseVis(o,s)){v=true;break;}
+  const ll=typeof llOnNow==='function'&&llOnNow()&&s.side!==VIEW&&s.kind!=='rock',K2=ll?(1+LL_CFG.BMAX)*(1+LL_CFG.BMAX):1; // LL9 光速延迟开着:逐眼用这只眼看到的影像判圈(sensors/26 llImgFor;静止石头不记历史,照旧比本体);先按此刻距离 /(1 + BMAX) 预筛(影像离此刻位置不超过 BMAX 倍光行距离,预筛不改结果)
+  for(let g=0;g<2&&!v;g++)for(const d of (g?rockObjs():ships)){if(d.side!==VIEW||d.dead||(g&&d.kind!=='buoy'))continue;
+    if(!ll){if(senseVis(d,s)){v=true;break;}continue;}
+    const R=d.visR||COV.VIS_R,dx=s.pos[0]-d.pos[0],dy=s.pos[1]-d.pos[1],dz=(s.pos[2]||0)-(d.pos[2]||0);if(dx*dx+dy*dy+dz*dz>R*R*K2)continue;
+    const im=llImgFor(s,d);if(im&&senseVis(d,im)){v=true;break;}}
   VP_VIS.m.set(s,v);return v;}
-function viewPos(s){return (adminMode||s.side===VIEW||viewInVis(s))?s.pos:contactPos(s,VIEW);} // 2026-09-28 画面上对方东西画在哪 / 量多远的唯一出处:我方知道的位置(估计;GM 真值),交代不出给 null(不拿真值兜底)
+function viewPos(s){ // 2026-09-28 画面上对方东西画在哪 / 量多远的唯一出处:我方知道的位置(估计;GM 真值),交代不出给 null(不拿真值兜底)
+  if(adminMode||s.side===VIEW)return s.pos;
+  if(viewInVis(s)){const L=contactLook(s,VIEW);if(L)return L.pos;} // LL9 圈里画每帧的影像(这一方最新那张;关开关 = 真实位置)
+  return contactPos(s,VIEW);}
+const LOOK0={pos:[0,0,0],vel:[0,0,0],facing:[1,0,0],flame:0,sideFlame:0,turnAim:null,hp:0,sh:0,shMax:0,shDown:0}; // LL9 光还没送到时的样子:不动、熄火、朝 +X、不画护盾(不拿真值兜底)
+function viewLook(s){return adminMode?s:contactLook(s,VIEW);} // LL9 画面上对方的东西此刻是什么样子(速度 / 朝向 / 引擎档 / 结构 / 护盾):这一方最新那张影像(sensors/21 contactLook;光还没到给 null),自己的 / 关开关 / GM 是本体
+function viewAge(s){ // LL9 情报龄(游戏秒):我方关于它的消息有多旧 = 光行时间 + 距上次量测(圈里画每帧影像时只有光行时间);自己的 / GM 给 0,交代不出给 NaN
+  if(adminMode||s.side===VIEW)return 0;
+  if(viewInVis(s)){const L=contactLook(s,VIEW);if(L)return L.llT===L.llT&&L.llT!==undefined?simTime-L.llT:0;}
+  const a=contactAge(s,VIEW);return a<1e8?a:NaN;}
+function viewAgeTxt(s){const a=viewAge(s);return a>0?' · '+(SHOW.t(a)<10?SHOW.t(a).toFixed(1):Math.round(SHOW.t(a)))+' 秒前':'';} // LL9 情报龄的读数(物理秒;悬停卡方位行、右栏目标行;实况舰标不写)
+function viewDead(s){return adminMode?s.dead:contactDead(s,VIEW);} // LL6 画面上对方的东西沉了没有的唯一出处:我方看见的(sensors/21 contactDead,光速延迟开着时击沉的光到达我方才算;GM 真值)
 function projSeen(p){return adminMode||!p.shooter||trkSees(VIEW,p)||(p.type==='missile'&&p.online&&p.shooter.side===VIEW);} // 2026-09-28 我方看不看得见这枚弹:画、点选、选中面板同一道门(2026-09-29 自己的弹也按视野)
+function projViewLook(p){return (adminMode||!(typeof llOnNow==='function'&&llOnNow()))?(p.done?null:p):projLook(p,VIEW);} // LL5 画面上这发弹画成什么样(位置 / 速度 / lit / 颗数):GM 与关开关画真弹,开着画我方看到的弹影(sensors/21 projLook;己方的弹不延迟);消失了的、余像过了光到达的给 null
+function projViewPos(p){const q=projViewLook(p);return q?q.pos:null;} // LL5 弹画在哪 / 点在哪的唯一出处(画与点同读它)
+function projViewGone(p){return (!adminMode&&typeof llOnNow==='function'&&llOnNow()&&p.shooter&&p.shooter.side!==VIEW)?!projLook(p,VIEW):!!p.done;} // LL9 选中的对方弹什么时候算没了(core/05 取消选中):光速延迟开着按弹影(消失的光到了才没),自己的 / 关开关 / GM 按真弹
 function drawLocks(){ // 火力锁定:红色虚线
   for(const s of ships){
-    if(s.dead||!s.lockedTarget||s.lockedTarget.dead||s.lockedTarget.side===s.side)continue;
+    if(s.dead||!s.lockedTarget||viewDead(s.lockedTarget)||s.lockedTarget.side===s.side)continue; // LL6 锁定目标的死活按我方看见的
     if(!adminMode&&s.side==='red')continue; // 普通模式:敌方攻击目标不可见
+    if(selected.indexOf(s.id)<0)continue; // 2026-10-07 用户:选中的舰才画它的锁定红线,不用一直显示
     const tq=viewPos(s.lockedTarget);if(!tq)continue; // 2026-09-28 画到我方知道的位置;接触丢了就不画(原来一直套在真值上)
     const p=toScreen(s.pos[0],s.pos[1]);
     const q=toScreen(tq[0],tq[1]);
@@ -104,15 +122,23 @@ function drawLocks(){ // 火力锁定:红色虚线
    打掉的几颗在命中点炸小火花(weapons/56 结算时 spawnCiwsFX 出)。全按墙钟走,几倍速都看得见;暂停时不出新曳光 */
 const CIWS_FX={HOLD:0.1,N:2,FIRE:10,SPREAD:2/57.3,OFF:0.012,LEN:0.1,REACH:1.25,LIFE:0.45,LIFE_J:0.2,PUFF_T:0.7,PUFF_D:0.25,PUFF_R0:0.015,PUFF_R1:0.09,PUFF_REF:6000};
 // FIRE = 每流每秒几发;SPREAD = 散布(弧度);OFF = 流间夹角;LEN = 曳光长度 / 内圈;REACH = 飞到内圈几倍处灭;LIFE + 随机 LIFE_J = 一发飞几秒;PUFF_T = 火花寿命,PUFF_D = 最多错开几秒,PUFF_R0~R1 = 散开半径 / PUFF_REF km
-const CIWS_ST=new WeakMap(),CIWS_TR=[],CIWS_CLK={t:0},CIWS_MS=[];
+const CIWS_ST=new WeakMap(),CIWS_TR=[],CIWS_CLK={t:0},CIWS_MS=[],CIWS_MV=[]; // LL9 CIWS_MV = 光速延迟开着时我方的导弹(连余像)
+const FX_RUN={c:[],s:[]}; // LL6 光速延迟开着时已开播的近防火花 / 护盾特效 {f,t0}:到达本视角那一帧定墙钟起点;条目由 core/05 按模拟时间删,删了也照样播完
+function fxRunAdd(A,R,now){const k=VIEW==='blue'?'rb':'rr';for(const f of A){if(f[k]||!f.seeT||!fxSeen(f,VIEW))continue;f[k]=1;R.push({f:f,t0:now});}return R;} // LL6 把这一帧刚到达本视角的条目接进 R(每条每个视角只接一次;sensors/21 fxSeen)
 function drawCiwsFx(){
   const C=CIWS_FX,now=nowMs(),dtw=runDt(CIWS_CLK,0.05);
   const MS=CIWS_MS;MS.length=0;if(dtw>0)for(const p of projectiles)if(p.type==='missile'&&!p.done&&p.shooter)MS.push(p); // 2026-10-03 性能:导弹先挑出来一次、按距离平方比(原来每艘船每帧把全场弹丸扫一遍、逐个开方)
+  const lw=dtw>0&&!adminMode&&typeof llOnNow==='function'&&llOnNow(),MV=CIWS_MV;MV.length=0;if(lw)for(const p of projAll())if(p.type==='missile'&&p.shooter&&p.shooter.side===VIEW&&p.llR)MV.push(p); // LL9 对方的船开近防:按我方看到的它(最新影像)和我方导弹在那一刻的位置判(连已消失的,那一刻还在飞)
   if(dtw>0)for(const x of ships){
-    if(x.dead||x.ciwsGunOn===false)continue;const k=ciwsOf(x);if(!k||!(k.inner>0))continue; // 2026-09-29 曳光 = 近防炮,看它自己的开关
-    let m=null,md=k.inner*k.inner;for(const p of MS){if(p.shooter.side===x.side)continue;const dx=p.pos[0]-x.pos[0],dy=p.pos[1]-x.pos[1],d=dx*dx+dy*dy;if(d<md){md=d;m=p;}}
+    const fo=lw&&x.side!==VIEW,L=fo?contactLook(x,VIEW):x; // LL9 fo = 对方的船:沉没、在不在开火、朝哪开都读影像(沉的光到之前照样开;关开关 / GM / 自己的读本体)
+    if(!L||L.dead||x.ciwsGunOn===false)continue;const k=ciwsOf(x);if(!k||!(k.inner>0))continue; // 2026-09-29 曳光 = 近防炮,看它自己的开关
+    let m=null,mx=0,my=0,md=k.inner*k.inner;
+    if(!fo){for(const p of MS){if(p.shooter.side===x.side)continue;const dx=p.pos[0]-x.pos[0],dy=p.pos[1]-x.pos[1],d=dx*dx+dy*dy;if(d<md){md=d;m=p;mx=p.pos[0];my=p.pos[1];}}}
+    else{const te=L.llT,lag=2*LL_CFG.BMAX*LL_C*(simTime-te)+k.inner,b=LL.tmp; // 预筛:影像与弹在 te 的位置各离此刻不超过 BMAX 倍光行距离(预筛不改结果)
+      for(const p of MV){const ex=p.pos[0]-x.pos[0],ey=p.pos[1]-x.pos[1];if(ex*ex+ey*ey>lag*lag||!llAt(p.llR,te,b))continue;
+        const dx=b[0]-L.pos[0],dy=b[1]-L.pos[1],d=dx*dx+dy*dy;if(d<md){md=d;m=p;mx=b[0];my=b[1];}}}
     let st=CIWS_ST.get(x);
-    if(m){if(!st){st={acc:0,a:0,t:0};CIWS_ST.set(x,st);}st.a=Math.atan2(m.pos[1]-x.pos[1],m.pos[0]-x.pos[0]);st.t=now;}
+    if(m){if(!st){st={acc:0,a:0,t:0};CIWS_ST.set(x,st);}st.a=Math.atan2(my-L.pos[1],mx-L.pos[0]);st.t=now;}
     if(!st)continue;if(now-st.t>C.HOLD*1000){CIWS_ST.delete(x);continue;}
     st.acc+=dtw*C.FIRE*C.N;
     while(st.acc>=1){st.acc-=1;const j=Math.floor(Math.random()*C.N);CIWS_TR.push({s:x,R:k.inner,a:st.a+(j-(C.N-1)/2)*C.OFF+(Math.random()*2-1)*C.SPREAD,t0:now,life:C.LIFE+Math.random()*C.LIFE_J});}
@@ -121,14 +147,16 @@ function drawCiwsFx(){
   for(let i=CIWS_TR.length-1;i>=0;i--){ // 曳光:从舰出发往外飞,飞出内圈外一点就灭;开火的船我方看得见(自己的 / 定得出位置的)才画
     const t=CIWS_TR[i],g=(now-t.t0)/1000;if(g>t.life||g<0){CIWS_TR.splice(i,1);continue;}
     if(!(adminMode||t.s.side===VIEW||contactFix(t.s,VIEW)))continue;
-    const r1=g/t.life*t.R*C.REACH,r0=Math.max(0,r1-C.LEN*t.R),c=Math.cos(t.a),n=Math.sin(t.a),o=t.s.pos;
+    const o=(adminMode||t.s.side===VIEW)?t.s.pos:viewPos(t.s);if(!o)continue; // LL9 对方的船从画它的那一点打出去(不读真位置)
+    const r1=g/t.life*t.R*C.REACH,r0=Math.max(0,r1-C.LEN*t.R),c=Math.cos(t.a),n=Math.sin(t.a);
     const p0=toScreen(o[0]+c*r0,o[1]+n*r0),p1=toScreen(o[0]+c*r1,o[1]+n*r1);
     ctx.strokeStyle='rgba(255,240,170,'+(0.9*(1-g/t.life)).toFixed(3)+')';ctx.beginPath();ctx.moveTo(p0[0],p0[1]);ctx.lineTo(p1[0],p1[1]);ctx.stroke();
   }
   ctx.lineWidth=1.2;const fk=artFxK()*SHIP_K/0.6; // 2026-10-05 火花随缩放:战术落点上的大小 x 船的(不钳)系数开平方,再乘美术整体缩放(SHIP_K / 0.6)
-  for(let i=ciwsFX.length-1;i>=0;i--){ // 火花:被打掉的每颗一朵,错开一点炸
-    const f=ciwsFX[i],g0=(now-f.tw)/1000;if(g0>C.PUFF_D+C.PUFF_T||g0<0){ciwsFX.splice(i,1);continue;}
-    if(!adminMode&&!f.vis[VIEW])continue;
+  const run=!adminMode&&typeof llOnNow==='function'&&llOnNow(),RL=run?fxRunAdd(ciwsFX,FX_RUN.c,now):ciwsFX; // LL6 光速延迟开着:到达本视角才开播(FX_RUN);关开关 / GM 照旧按出的那一刻
+  for(let i=RL.length-1;i>=0;i--){ // 火花:被打掉的每颗一朵,错开一点炸
+    const f=run?RL[i].f:RL[i],g0=(now-(run?RL[i].t0:f.tw))/1000;if(g0>C.PUFF_D+C.PUFF_T||g0<0){RL.splice(i,1);continue;}
+    if(!run&&!adminMode&&!f.vis[VIEW])continue;
     if(!f.pf){const R=C.PUFF_REF*CFG.scale;f.pf=Array.from({length:Math.min(16,f.n)},()=>{const a=Math.random()*6.283,r=R*(C.PUFF_R0+Math.random()*(C.PUFF_R1-C.PUFF_R0));return [f.pos[0]+Math.cos(a)*r,f.pos[1]+Math.sin(a)*r,Math.random()*C.PUFF_D];});}
     for(const q of f.pf){const g=g0-q[2];if(g<0||g>C.PUFF_T)continue;const p=toScreen(q[0],q[1]),a=1-g/C.PUFF_T;
       ctx.fillStyle='rgba(255,220,150,'+(0.9*a).toFixed(3)+')';ctx.beginPath();ctx.arc(p[0],p[1],Math.max(1,3*(1-g)*fk),0,6.283);ctx.fill();
@@ -144,24 +172,25 @@ function shieldR(s){return shipIconR(s)*(shipMarkMode()?1:1.5/0.78)*SHD_FX.K;}
 function shieldSeen(s){return adminMode||s.side===VIEW||!!trkCh(trkOf(VIEW,s),'vis');}
 function shdRgba(c,a){return 'rgba('+c[0]+','+c[1]+','+c[2]+','+Math.max(0,Math.min(1,a)).toFixed(3)+')';}
 function shdArc(x,y,r,a0,a1,col,w){ctx.strokeStyle=col;ctx.lineWidth=w;ctx.beginPath();ctx.arc(x,y,r,a0,a1);ctx.stroke();}
-function drawShieldBubble(s,p){ // drawShip 调(舰体之下)
-  if(!(s.shMax>0)||!shieldSeen(s))return;
+function drawShieldBubble(s,p,L){ // drawShip 调(舰体之下);LL9 L = 画面上它此刻的样子(render/83 viewLook:对方读影像那一刻的盾量 / 重启),缺省本体
+  const v=L||s;if(!(v.shMax>0)||!shieldSeen(s))return;
   const C=SHD_FX.COL[s.side]||SHD_FX.COL.blue,R=shieldR(s),x=p[0],y=p[1],G=SHD_FX.GLOW;
   ctx.save();
-  if(s.shDown>0){const q=1-s.shDown/SHIELD.RESTART_S;ctx.setLineDash([3,4]);shdArc(x,y,R,-1.571,-1.571+6.283*q,shdRgba(C,0.28),1.2);ctx.setLineDash([]);}
-  else{const f=s.sh/s.shMax,g=ctx.createRadialGradient(x,y,R*0.55,x,y,R);g.addColorStop(0,shdRgba(C,0));g.addColorStop(1,shdRgba(C,0.10*G*(0.3+0.7*f)));ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,R,0,6.283);ctx.fill();
+  if(v.shDown>0){const q=1-v.shDown/SHIELD.RESTART_S;ctx.setLineDash([3,4]);shdArc(x,y,R,-1.571,-1.571+6.283*q,shdRgba(C,0.28),1.2);ctx.setLineDash([]);}
+  else{const f=v.sh/v.shMax,g=ctx.createRadialGradient(x,y,R*0.55,x,y,R);g.addColorStop(0,shdRgba(C,0));g.addColorStop(1,shdRgba(C,0.10*G*(0.3+0.7*f)));ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,R,0,6.283);ctx.fill();
     shdArc(x,y,R,0,6.283,shdRgba(C,(0.15+0.55*f)*G+0.05),1.3);
     if(f<1){const ph=SHD_W*SHD_FX.FLOW*2.2;for(let k=0;k<3;k++){const a0=ph+k*2.094;shdArc(x,y,R,a0,a0+0.35+0.5*f,shdRgba(C,0.35+0.5*f),2);}}}
   ctx.restore();
 }
 function drawShieldFx(){
   const now=nowMs();SHD_W+=runDt(SHD_CLK,0.05);
-  if(!shieldFX.length)return;
+  const run=!adminMode&&typeof llOnNow==='function'&&llOnNow(),RL=run?fxRunAdd(shieldFX,FX_RUN.s,now):shieldFX; // LL6 同 drawCiwsFx:光速延迟开着时到达本视角才开播
+  if(!RL.length)return;
   ctx.save();
-  for(let i=shieldFX.length-1;i>=0;i--){const e=shieldFX[i],a=(now-e.tw)/1000,F=SHD_FX;
+  for(let i=RL.length-1;i>=0;i--){const e=run?RL[i].f:RL[i],a=(now-(run?RL[i].t0:e.tw))/1000,F=SHD_FX;
     const T=e.k==='hit'?F.HIT_T*(e.big?1.6:1):(e.k==='break'?F.BRK_T:(e.k==='restart'?F.RST_T:F.FULL_T));
-    if(a>T||a<0){shieldFX.splice(i,1);continue;}
-    if(!adminMode&&!e.vis[VIEW])continue;
+    if(a>T||a<0){RL.splice(i,1);continue;}
+    if(!run&&!adminMode&&!e.vis[VIEW])continue;
     const s=e.s,q=(adminMode||s.side===VIEW)?s.pos:(viewPos(s)||e.pos),p=toScreen(q[0],q[1]),R=shieldR(s),L=R/F.K,C=F.COL[s.side]||F.COL.blue,cx=p[0],cy=p[1],u=a/T,k=1-u;
     if(cx<-R*3||cx>W+R*3||cy<-R*3||cy>H+R*3)continue;
     if(e.k==='hit'){const w=e.big?0.8:0.3,fk=artFxK()*SHIP_K/0.6,Lt=L*(shipMarkMode()?1:HULL_ZOOM.LAND*SHIP_K/shipZoomF()); // 2026-10-05 受击随缩放:线宽、亮斑 = 战术落点上的大小 x 船的(不钳)系数开平方(再乘美术整体缩放);罩子半径照旧跟船
@@ -224,21 +253,22 @@ function projMark(p,x,y,rot,side,cnt){
 }
 function drawProjectiles(){ // 弹丸/导弹
   const mk=shipMarkMode();
-  for(const p of projectiles){
+  for(const p of projAll()){ // LL5 连余像一起画(消失了、消失的光还没到我方的弹;关开关就是 projectiles)
     if(!projSeen(p))continue; // 感知层 v4:普通模式敌方弹药只有被探测到才显示 v119:读缓存 TK4a:缓存在航迹表的目击集合里
-    const s=toScreen(p.pos[0],p.pos[1]);
-    const sd=(p.group||0)*1.7,side=p.shooter&&p.shooter.side==='red'?'red':'blue',rot=Math.atan2(p.vel[1],p.vel[0]); // 2026-10-04 弹的画法换成 render/81-art(朝向 = 速度方向)
+    const q=projViewLook(p);if(!q)continue; // LL5 位置 / 速度 / lit / 颗数读我方看到的弹影
+    const s=toScreen(q.pos[0],q.pos[1]);
+    const sd=(p.group||0)*1.7,side=p.shooter&&p.shooter.side==='red'?'red':'blue',rot=Math.atan2(q.vel[1],q.vel[0]); // 2026-10-04 弹的画法换成 render/81-art(朝向 = 速度方向)
     if(s[0]<-60||s[0]>W+60||s[1]<-60||s[1]>H+60){if(p!==selMissile)continue;}
     if(p.type==='decoy'){if(mk)projMark(p,s[0],s[1],rot,side,1);else artDecoy(ctx,s[0],s[1],rot,sd,side);continue;} // 诱饵弹:脉动的假热源(模拟舰船信号骗拦截)
     if(p.type==='mac'){
       if(mk)projMark(p,s[0],s[1],rot,side,1);else artShell(ctx,s[0],s[1],rot,side);
     }else{ // 导弹组/拦截导弹组(显示剩余数量)
-      const vn=V.len(p.vel);
+      const vn=V.len(q.vel);
       const redSide=p.shooter&&p.shooter.side==='red'; // v136:敌方导弹红色标志;KIMI146:提升到外层块(原在内层else,箭头区引用抛 redSide is not defined = 导弹一发射UI全崩)
-      const cnt=Math.min(p.count||16,16);
+      const cnt=Math.min(q.count||16,16);
       if(mk)projMark(p,s[0],s[1],rot,side,cnt);
       else if(p.mine)artMine(ctx,s[0],s[1],(sd%6)*0.17,side); // 伏击雷:六角壳体 + 天线 + 闪烁指示灯
-      else artMsl(ctx,s[0],s[1],rot,{kind:p.type==='interceptor'?'inter':'msl',side,count:cnt,burn:p.type==='interceptor'||(p.lit===undefined?p.fuel>0:p.lit),sd}); // 一组画 1 / 3 / 5 枚;这一拍烧油才有尾焰(同 sensors/22 projSig)
+      else artMsl(ctx,s[0],s[1],rot,{kind:p.type==='interceptor'?'inter':'msl',side,count:cnt,burn:p.type==='interceptor'||(q.lit===undefined?p.fuel>0:q.lit),sd}); // 一组画 1 / 3 / 5 枚;这一拍烧油才有尾焰(同 sensors/22 projSig)
       // 选中高亮 + v129:目标虚线/目的地/触发圈/火控母舰连线(点选导弹或网,网内所有组一起)
       if(p===selMissile){
         ctx.strokeStyle='#4fe0ff';ctx.lineWidth=2;
@@ -250,15 +280,15 @@ function drawProjectiles(){ // 弹丸/导弹
       // DS169 信息分层:常态只画细箭头,文字数据收进选中态(点选/网选才显示速率/剩余/燃料/目标)
       if(vn>1){
         const vl=Math.min(42,vn*0.01*cam.zoom);
-        const dx=p.vel[0]/vn,dy=p.vel[1]/vn;
+        const dx=q.vel[0]/vn,dy=q.vel[1]/vn;
         ctx.strokeStyle=redSide?'rgba(255,93,93,.7)':'rgba(255,209,102,.7)';ctx.lineWidth=1.1;
         ctx.beginPath();ctx.moveTo(s[0],s[1]);ctx.lineTo(s[0]+dx*vl,s[1]+dy*vl);ctx.stroke();
         if(p===selMissile){ // 选中:数据行
           ctx.fillStyle=redSide?'rgba(255,93,93,.9)':(p.type==='interceptor'?'rgba(127,240,226,.9)':'rgba(255,209,102,.85)');
           ctx.font='10px Consolas';ctx.textAlign='left';ctx.textBaseline='top';
-          const rem=p.count||16;
-          if(p.type==='interceptor')ctx.fillText(`⛔拦截 ▲${Math.round(vn)}(剩${rem}颗${p.fuel>0?' ⛽'+Math.round(p.fuel):' ⛽尽'})`,s[0]+7,s[1]+7);
-          else if(p.shooter&&p.shooter.side!==VIEW&&!adminMode)ctx.fillText(`▲${Math.round(SHOW.v(vn))}`,s[0]+7,s[1]+7); // 2026-09-28 敌方弹只报看得见的量(速度)
+          const rem=q.count||16,en=p.shooter&&p.shooter.side!==VIEW&&!adminMode; // LL9 颗数读弹影(那一刻的);对方的拦截弹燃料我方不知道,不报
+          if(p.type==='interceptor')ctx.fillText(en?`⛔拦截 ▲${Math.round(SHOW.v(vn))}(剩${rem}颗)`:`⛔拦截 ▲${Math.round(SHOW.v(vn))}(剩${rem}颗${p.fuel>0?' ⛽'+Math.round(p.fuel):' ⛽尽'})`,s[0]+7,s[1]+7); // LL11 速度经 SHOW.v 换成物理 km/s(同导弹那一行)
+          else if(en)ctx.fillText(`▲${Math.round(SHOW.v(vn))}`,s[0]+7,s[1]+7); // 2026-09-28 敌方弹只报看得见的量(速度)
           else ctx.fillText(`▲${Math.round(SHOW.v(vn))}(剩${rem}颗)${p.fuel>0?' ⛽'+Math.round(SHOW.t(p.fuel)):' ⛽尽'} · ${p.target?xhName(p.target):'无目标'}${p.coastT>0?' 🔓脱'+Math.round(SHOW.t(p.coastT))+'s':''}`,s[0]+7,s[1]+7);
         }
       }else if(p.mine&&p===selMissile){
@@ -392,7 +422,7 @@ function clipLine(x0,y0,x1,y1){ // 实线裁到屏幕再单独描(2026-10-04 性
 function drawMissileIntent(g){ // v129:选中导弹/网→显示组网圈与引导圈(2026-10-01)、目标虚线、目的地标记、火控母舰连线
   if(!adminMode&&g.shooter&&g.shooter.side!=='blue')return; // 2026-09-28 敌方弹的意图(目标、引导舰)我方不知道
   const sp=toScreen(g.pos[0],g.pos[1]);
-  { // 2026-10-01 用户:画组网圈与引导圈,两种画法(2026-09-30 触发圈不画了)。组网圈 = 弹与弹通信距离(weapons/54 MSL_LINK.MM,6.1425 万):青色虚线(dashArc);引导圈 = 导引头自主导引范围(GUIDE_SEEK,3 万):琥珀色实线
+  { // 2026-10-01 用户:画组网圈与引导圈,两种画法(2026-09-30 触发圈不画了)。组网圈 = 弹与弹通信距离(weapons/54 MSL_LINK.MM):青色虚线(dashArc);引导圈 = 导引头自主导引范围(GUIDE_SEEK):琥珀色实线
     const r1=MSL_LINK.MM*cam.zoom,r2=GUIDE_SEEK*cam.zoom;
     ctx.save();ctx.lineWidth=1;ctx.font='10px "Microsoft YaHei",sans-serif';ctx.textAlign='center';ctx.textBaseline='bottom';
     ctx.strokeStyle='rgba(84,224,208,.5)';dashArc(sp[0],sp[1],r1,6);
@@ -405,7 +435,7 @@ function drawMissileIntent(g){ // v129:选中导弹/网→显示组网圈与引�
   let dest=null,destLbl='',destCol='rgba(255,255,255,.45)';
   if(g.park&&g.parkPt){dest=g.parkPt;destLbl='📍布雷点';destCol='rgba(255,154,85,.95)';}
   else{
-    if(g.target&&!g.target.dead){const tq=g.guideMode==='self'?g.target.pos:viewPos(g.target);if(tq){dest=tq;destLbl=xhName(g.target);destCol='rgba(255,107,107,.95)';}} // 2026-09-28 数据链段画我方知道的位置、名字打码;导引头自己看见的才用真值
+    if(g.target&&!viewDead(g.target)){const tq=(g.guideMode==='self'&&!adminMode)?(typeof llSeekView==='function'?llSeekView(g,g.target):g.target.pos):viewPos(g.target);if(tq){dest=tq;destLbl=xhName(g.target);destCol='rgba(255,107,107,.95)';}} // 2026-09-28 数据链段画我方知道的位置、名字打码;导引头自己看见的用导引头那一眼(LL9 sensors/26 llSeekView:光速延迟开着是推迟到弹上的影像,关着是真值;LL11 GM 画真值,走 viewPos)
     if(!dest&&g.lastKpos){dest=g.lastKpos;destLbl='⏳最后已知';destCol='rgba(200,210,220,.85)';}
   }
   if(dest){
@@ -457,7 +487,7 @@ function anomScan(now){
   if(simTime<ANOM.t||ANOM.v!==VIEW){ANOM.m=new WeakMap();ANOM.list.length=0;ANOM.v=VIEW;ANOM.base=true;}ANOM.t=simTime; // 换局 / 换视角(base:这之后第一拍已经在的接触只记不报)
   if(typeof trkEach==='function')trkEach(VIEW,(tk,st)=>{const s=trkSrc(tk);let a=ANOM.m.get(s);if(!a){a={ir:false,fl:0,fh:false,rd:-1e9,pend:false,ck:-1e9};ANOM.m.set(s,a);}
     const ir=st==='heat'&&!!trkCh(tk,'opt');
-    if(ir){const fl=s.flame||0,fh=(s.fireHot||0)>0;if(!a.ir&&ANOM.base){}else if(!a.ir||(fl&&!a.fl)||(fh&&!a.fh))a.pend=true;a.fl=fl;a.fh=fh; // 第一次出现 / 点火 / 开火:待报。2026-09-29 用户:刚进对局时已经在的东西不报红外异常
+    if(ir){const sl=typeof contactLook==='function'?contactLook(s,VIEW):s,fl=sl?sl.flame||0:0,fh=sl?(sl.fireHot||0)>0:false;if(!a.ir&&ANOM.base){}else if(!a.ir||(fl&&!a.fl)||(fh&&!a.fh))a.pend=true;a.fl=fl;a.fh=fh; // 第一次出现 / 点火 / 开火:待报。2026-09-29 用户:刚进对局时已经在的东西不报红外异常;LL3 点火 / 开火按这一方最新那张影像(contactLook,光到了才算)
       if(a.pend&&simTime-a.ck>=1){a.ck=simTime;const h=irvHill(s,irvObs());if(h&&h.snr>=1){a.pend=false;const z=typeof ir2ZoneOf==='function'?ir2ZoneOf(s,irvObs()):null;ANOM.list.push(z?{k:'ir',s:s,x:z.c[0],y:z.c[1],r:z.r,t0:now}:{k:'ir',s:s,t0:now});}}} // 红外画面里够亮才报,不够亮每游戏秒再看一次;带源 s(刻痕按它的方位画,86-ir2view)
     else a.pend=false;
     a.ir=ir;});
@@ -532,7 +562,7 @@ function drawTargeting(){
   const sub=(typeof selBlue==='function')?selBlue()[0]:null;
   if(!sub||sub.dead)return; // RF5 只在存在主体舰(选中蓝舰第一艘)时激活,与 74 的门控同口径
   const sx=pt[0],sy=pt[1];
-  const tgt=(xh.snap&&!xh.snap.dead)?xh.snap:null;
+  const tgt=(xh.snap&&!viewDead(xh.snap))?xh.snap:null; // LL6 死活按我方看见的
   ctx.save();
   // RF5 十字准星:中心留空,吸上目标就提亮成命令色——"吸附成功"这件事本身要有反馈
   ctx.strokeStyle=tgt?'rgba(255,224,102,.9)':'rgba(160,170,185,.5)'; // 吸附=--state-select #ffe066 / 空载=--side-neutral #a0aab9(中性,不抢戏)
@@ -672,7 +702,7 @@ function drawFcChain(){ // RF7 火控序列态的数据链(蓝色铁路线):主�
   const q=fcSeq(s.fcEditId);if(!q||String(q.shipId)!==String(s.id)||!(q.targets||[]).length)continue;
   const pts=[toScreen(s.pos[0],s.pos[1])];
   for(const it of q.targets){ // 链节点按序列顺序:死目标由 58 的清理段 splice,这里只管画活着的
-    if(it.tid){const t=(typeof fcShip==='function')?fcShip(it.tid):null,tp=(t&&!t.dead)?viewPos(t):null;if(tp)pts.push(toScreen(tp[0],tp[1]));} // 2026-09-28 我方知道的位置;交代不出就跳过这一节
+    if(it.tid){const t=(typeof fcShip==='function')?fcShip(it.tid):null,tp=(t&&!viewDead(t))?viewPos(t):null;if(tp)pts.push(toScreen(tp[0],tp[1]));} // 2026-09-28 我方知道的位置;交代不出就跳过这一节;LL6 死活按我方看见的
   }
   if(pts.length<2)continue;
   ctx.save();

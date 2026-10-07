@@ -39,7 +39,7 @@ const TRK={blue:new WeakMap(),red:new WeakMap(),vis:{blue:new WeakSet(),red:new 
 function trkTab(side){return side==='blue'?TRK.blue:TRK.red;}
 
 /* 唯一的航迹工厂;不往任何表里登记。newCov() 每船两次,与原来舰船字面量里的调用次数相同 */
-function trkNew(by,src){return {src:src,by:by,held:false,cov:newCov(),lastT:-1e9,lastPos:null,lastVel:null,idc:false,tn:0,tau:0,lastType:null,memGone:false};} // 2026-09-27 追加 lastType(最后一次认出的类型)/ memGone(记忆已被重新看过、清掉) // 2026-09-27 追加 tau:距上次测到位置的秒数(23 的航位推算误差按它长) // TK2.6 追加 idc:【确认】锁存(光学或照射认出过它、且接触一直握着)。TK4c 追加 tn:航迹号(0 = 还没发)
+function trkNew(by,src){return {src:src,by:by,held:false,cov:newCov(),lastT:-1e9,lastPos:null,lastVel:null,idc:false,tn:0,tau:0,lastType:null,memGone:false,llZ:0,llEye:null};} // LL2 追加 llZ(影像高度)/ llEye(给出最新影像的那只眼),LL3 起 trkStep 写 // 2026-09-27 追加 lastType(最后一次认出的类型)/ memGone(记忆已被重新看过、清掉) // 2026-09-27 追加 tau:距上次测到位置的秒数(23 的航位推算误差按它长) // TK2.6 追加 idc:【确认】锁存(光学或照射认出过它、且接触一直握着)。TK4c 追加 tn:航迹号(0 = 还没发)
 
 /* O(1) 查表,【永远不建】。非对象、或从没登记过的对象(弹丸、{pos} 指定点、梯子的假船、沙盘克隆、判据的裸对象)一律 null */
 function trkOf(side,src){return (src!==null&&typeof src==='object')?(trkTab(side).get(src)||null):null;}
@@ -63,10 +63,12 @@ function trkEnsure(side,src){const m=trkTab(side);let k=m.get(src);if(k===undefi
 function trkStep(tk,t,obs,el){
   const c=tk.cov;
   TRK_IDO.opt=TRK_IDO.lis=TRK_IDO.act=TRK_IDO.vis=false;          // TK2.6:模块级草稿,每拍清零后交给内核记【哪几条通道认出了它】(不分配)
-  TRK_KIN.tau=tk.tau;TRK_KIN.a=trkAccPrior(t,c);TRK_KIN.dr=(c.fix&&tk.lastPos&&tk.lastVel)?trkDR(tk):null;
+  TRK_KIN.tau=tk.tau;TRK_KIN.a=trkAccPrior(t,c);TRK_KIN.dr=(c.fix&&tk.lastPos&&tk.lastVel)?(typeof llOnNow==='function'&&llOnNow()?trkDRAt(tk,obs):trkDR(tk)):null; // LL3 开着时推算点取到那条光学量测的影像时刻(审查:推到此刻再配 te 的方位,lastT 又记 te,每拍多推 v·τ)
   const held=stepCov(t,c,obs,el,TRK_IDO,TRK_KIN);
   tk.tau=TRK_KIN.tau;
-  if(c.fix&&c.n>0){tk.lastT=simTime;tk.lastPos=[c.x,c.y,t.pos[2]];if(TRK_KIN.pm||!tk.lastVel)tk.lastVel=t.vel.slice();} // 2026-09-27 速度只在测到位置的一拍更新(单站方位量不出速度)
+  const ob=TRK_KIN.ob,im=(ob&&ob.img)||t; // LL3 给出估计点的那条量测(23 stepCov 挑的 te 最大那条)与它看到的影像;关开关时 im = t、te = simTime
+  if(c.n>0){tk.llZ=im.pos[2];tk.llEye=ob?ob.det:null;} // LL3 估计点的高度与给出它的那只眼(trkPos 开着时读 llZ)
+  if(c.fix&&c.n>0){tk.lastT=(ob&&ob.te!==undefined)?ob.te:simTime;tk.lastPos=[c.x,c.y,im.pos[2]];if(TRK_KIN.pm||!tk.lastVel)tk.lastVel=im.vel.slice();} // 2026-09-27 速度只在测到位置的一拍更新(单站方位量不出速度) // LL3 lastT = 影像时刻 te(光行时间自动进 contactAge 与航位推算),高度与速度取影像
   if(held&&tk.tn===0)tk.tn=++TRK_TN[tk.by]; // TK4c 航迹号:这一方第一次握住它的那一拍发号,之后终身不变(丢了再捡回来还是这个号)。只用于显示 —— 不当键、不当种子、不参与任何取舍
   if(held){if(TRK_IDO.opt||TRK_IDO.act||TRK_IDO.vis)tk.idc=true;}else tk.idc=false; // TK2.6 确认锁存:光学轮廓或照射回波认出过 ⇒ 确认;接触丢了才清。与椭圆的身份位同一拍立、同一拍清
   tk.held=held;(tk.by==='blue'?TRK_ACT.blue:TRK_ACT.red).dirty=true; // 2026-09-29 状态可能变了:下一次 trkEach 重建非空清单
@@ -101,8 +103,8 @@ function trkState(tk){
    ⚠ 高度取源的真值 z(椭圆模型是二维的)—— 改前就是这样,原样保留 */
 function trkPos(tk){
   const st=trkState(tk);
-  if(st==='live'){const c=tk.cov;return [c.x,c.y,tk.src.pos[2]];}
-  if(st==='coast'&&!(tk.lastPos&&tk.lastVel)){const c=tk.cov;return [c.x,c.y,tk.src.pos[2]];}
+  if(st==='live'){const c=tk.cov;return [c.x,c.y,typeof llOnNow==='function'&&llOnNow()?tk.llZ:tk.src.pos[2]];} // LL3 光速延迟开着:高度取估计点那张影像的(llZ),关着照旧读真值
+  if(st==='coast'&&!(tk.lastPos&&tk.lastVel)){const c=tk.cov;return [c.x,c.y,typeof llOnNow==='function'&&llOnNow()?tk.llZ:tk.src.pos[2]];}
   if(st!=='ghost'&&st!=='coast')return null;
   return trkDR(tk); // 2026-09-27 陈旧(coast)也按最后一次定位 + 速度外推(航位推算);原来停在最后一次量测上
 }
@@ -110,15 +112,15 @@ function trkPos(tk){
 
 /* ---- 通往真值的三条具名通道:全库只在这里定义,grep 得到、以后拆得掉 ----
    trkSrc     锁定 / 集火 / 火控序列 / 弹丸目标要的那个对象句柄(武器仍瞄对象,不瞄航迹)
-   trkGone    源已经没了(沉了)—— 保留今天的"击沉泄漏":消费方照旧按真值 dead 过滤,是否堵上等用户拍板
+   trkGone    源已经没了(沉了)—— 这一方看见的(sensors/21 contactDead:光速延迟开着时击沉的光到达这一方才算,关着读真值;「没观测也知道击沉」照旧,只延迟到光到达)
    trkBearing 从 from 指向源的单位方位,逐浮点复刻 bots/60 信念层里那一句(方位是合法情报,距离不是) */
 function trkSrc(tk){return tk.src;}
-function trkGone(tk){return !!tk.src.dead;}
-function trkBearing(tk,from){const s=tk.src,dx=s.pos[0]-from[0],dy=s.pos[1]-from[1],l=Math.hypot(dx,dy)||1;return [dx/l,dy/l];}
+function trkGone(tk){return !!(typeof contactDead==='function'?contactDead(tk.src,tk.by):tk.src.dead);} // LL6 按观测方 tk.by 看见的死活(关开关时与 tk.src.dead 同值)
+function trkBearing(tk,from,ch){if(ch&&ch.length>6&&typeof llOnNow==='function'&&llOnNow())return [ch[5],ch[6]];const s=tk.src,dx=s.pos[0]-from[0],dy=s.pos[1]-from[1],l=Math.hypot(dx,dy)||1;return [dx/l,dy/l];} // LL3 ch = 那条量测记录(23 c.ch[通道]):光速延迟开着时读它量到的影像方位(从量测那一刻的眼指过去),关着照旧
 
-/* 被照射告警的唯一跨表读:对方那张表里【对我】握着的接触,这一拍有没有一条照射量测;有就给那条量测记录(末位是照射源 id),没有给 null */
+/* 被照射告警的唯一跨表读:对方那张表里【对我】握着的接触,这一拍有没有一条照射量测;有就给那条量测记录(第 5 格是照射源 id),没有给 null(LL4 光速延迟开着时改读 LL_RWR) */
 function trkCh(tk,k){const c=tk&&tk.cov&&tk.cov.ch;return (c&&c[k])||null;} // 2026-09-29 这条航迹这一拍某条通道('opt' / 'lis' / 'act' / 'vis')的量测,没有给 null
-function trkPaintedBy(s){return trkCh(trkOf(s.side==='blue'?'red':'blue',s),'act');}
+function trkPaintedBy(s){if(typeof llOnNow==='function'&&llOnNow())return llRwrOf(s);return trkCh(trkOf(s.side==='blue'?'red':'blue',s),'act');} // LL4 光速延迟开着:读 sensors/26 的被照射告警 LL_RWR(单程到达,比对方收到回波早 τ;格位同 act 量测,末两格是指向照射源影像的方位)
 
 /* 唯一的枚举原语:按【物理注册表】的顺序走(ships 按下标,TK4b 起接着走 rocks),跳过自己这一方(查询那一刻判)、没有航迹的、以及显示态为 none 的
    ——存在不等于知道。fn 返回 true 就停下并返回 true。不排序、不建航迹、不调随机数、除调用方自己的闭包外不分配。
@@ -173,7 +175,7 @@ function trkPid(tk){return trkIdLvl(tk)>=ID_SUS&&trkIdType(tk).kind==='ship';}
 const ID_UNK=0, ID_SUS=1, ID_CON=2;
 const TRK_TN={blue:0,red:0}; // TK4c 两方各自的航迹号计数器;initFleet 每局归零(旧局船的航迹保留旧号,不重发)
 const TRK_IDO={opt:false,lis:false,act:false,vis:false}; // vis = 可见光圈(2026-09-26)
-const TRK_KIN={tau:0,a:0,dr:null,pm:false}; // 2026-09-27 航位推算:交给 23 stepCov 的输入输出(τ、加速度先验、推算点)
+const TRK_KIN={tau:0,a:0,dr:null,pm:false,ob:null}; // 2026-09-27 航位推算:交给 23 stepCov 的输入输出(τ、加速度先验、推算点);LL3 ob = 给出估计点的那条量测
 let TRK_AMAX=0;
 function trkAccPrior(t,c){ // 这一方对它最大加速度的先验 km/游戏秒²:认出了按它的舰级(公开数据;石头为 0),没认出按舰级表里最猛的一档
   if(!TRK_AMAX)for(const k in CLS_MOB)if(CLS_MOB[k].thrust>TRK_AMAX)TRK_AMAX=CLS_MOB[k].thrust;
@@ -184,6 +186,11 @@ const TRK_STILL_V=PHYS.v(1); // 最后一次定位时速度低于这个就算"�
 function trkStill(tk){const v=tk.lastVel;return !!(v&&Math.hypot(v[0],v[1])<TRK_STILL_V);}
 function trkMem(tk){return !!(tk&&tk.lastPos&&!tk.memGone&&trkStill(tk));} // 2026-09-27 记忆(用户:「探测出来的目标出了全知圈也不要消失,类似 rts 的那种做法,不动的目标保留在原地,动了的目标就走陈旧机制」):RTS 迷雾的"最后所见"
 function trkDR(tk){const lp=tk.lastPos,lv=tk.lastVel;if(!lp||!lv)return null;const a=trkAge(tk);return [lp[0]+lv[0]*a,lp[1]+lv[1]*a,lp[2]+(lv[2]||0)*a];} // 航位推算点(dead reckoning):最后一次定位 + 最后速度 x 距那次的秒数
+function trkDRAt(tk,obs){ // LL3 光速延迟开着时单站方位续推用的推算点:推到这一拍光学量测(23 stepCov 的 oDet = 最后一条有光学的)的影像时刻 te,与那条方位同一时刻(lastT 也是影像时刻)
+  const lp=tk.lastPos,lv=tk.lastVel;if(!lp||!lv)return null;
+  let te=simTime;for(let i=0;i<obs.length;i++){const o=obs[i];if(o.g.opt)te=o.te===undefined?simTime:o.te;}
+  const a=te-tk.lastT;return [lp[0]+lv[0]*a,lp[1]+lv[1]*a,lp[2]+(lv[2]||0)*a];
+}
 
 /* 这条航迹的身份档位。夹具写出来的"idc 为真但 idn 为假"读作未知、"idn 为真但 idc 为假"读作疑似 —— 容忍不一致的人造状态,不抛 */
 function trkIdLvl(tk){return !(tk&&tk.held&&tk.cov&&tk.cov.idn)?ID_UNK:(tk.idc?ID_CON:ID_SUS);}

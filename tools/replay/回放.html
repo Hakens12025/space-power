@@ -30,7 +30,7 @@ label.ck{display:inline-flex;align-items:center;gap:4px;margin-right:8px;color:v
 #roster .dead{opacity:.4;text-decoration:line-through}
 #evWrap{flex:1;min-height:0;display:flex;flex-direction:column}
 #evList{flex:1;overflow:auto;font-size:12px;padding:0 4px 8px}
-#evList div{padding:1px 6px;border-radius:3px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#evList div{padding:1px 6px;border-radius:3px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;content-visibility:auto;contain-intrinsic-size:auto 19px} /* LL10 列表外的行不排版:切视角重排列表时只排看得见的几行 */
 #evList div:hover{background:#152030}
 #evList div.cur{background:#1d2a3c}
 #evList .t{color:var(--dim);margin-right:6px}
@@ -63,18 +63,22 @@ select{background:#121b28;color:var(--txt);border:1px solid var(--line);border-r
 "use strict";
 /* 对局回放(tools/replay):读 rec.js 录的 json,不加载引擎。坐标单位 = 100 km(录制时取整)。
    视角:全知 = 双方真实位置与所有弹;红方 / 蓝方视角 = 这一方自己的船 + 它的接触(定位实心 / 推算空心 / 记忆虚线;只有方位的不上图,列在舰船栏)
-   + 它看得见的弹 + 它记下的炮弹来路 + 它的搜索图与当前线索。只有方位的接触不画方位线(游戏规矩:感知信号不画指向线)。 */
+   + 它看得见的弹 + 它记下的炮弹来路 + 它的搜索图与当前线索。只有方位的接触不画方位线(游戏规矩:感知信号不画指向线)。
+   LL10 v2 录像(光速延迟):红 / 蓝视角的弹画这一方眼里的弹影(含真弹消失后、光还没到的余像),命中 / 击沉 / 开火(LL11:看见开火闪光)的刻度与事件列表按这一方看见的时刻,
+   据点归属画这一方看到的,舰船栏的接触带情报龄;全知照旧画真值。v1 录像没有这些格,照旧按真值画。 */
 const $=id=>document.getElementById(id);
 const cv=$('cv'),g=cv.getContext('2d'),tl=$('tl'),tg=tl.getContext('2d');
 let R=null,T=0,view='all',playing=false,cam={x:0,y:0,z:1},belCv=null,belKey='';
 const ST=['','只有方位','定位','推算','记忆'],COL={blue:'#6fb4ff',red:'#ff6a5a',neutral:'#9aa3ad'};
 const sideOf=s=>s.civ?'neutral':s.side;
 function fmtClock(t){const s=Math.round(t*(R?R.meta.timeK:10)),h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return (h?h+':':'')+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0');}
+function ageTxt(a){if(!(a>0))return '';const s=a*(R.meta.timeK||10);return ' · '+(s<10?s.toFixed(1):Math.round(s))+' 秒前';} // LL10 接触的情报龄(v2;录的是游戏秒,显示物理秒,同游戏里的悬停卡)
 function load(text,name){
   try{R=JSON.parse(text);}catch(e){alert('不是录像文件:'+e.message);return;}
   R.idx=R.frames.map(f=>f.t);R.T1=R.frames[R.frames.length-1].t;
+  R.v2=(R.v||1)>=2;R.ev={};for(const v of ['all','red','blue']){const L=[];for(const e of R.events){const t=evT(e,v);if(t!==null)L.push([t,e]);}L.sort((a,b)=>a[0]-b[0]);R.ev[v]=L;} // LL10 每个视角的事件按这一方看见的时刻排好一次(切视角不再算)
   const m=R.meta,res=m.result||{},W={blue:'蓝方胜',red:'红方胜',draw:'平局'}[res.winner]||'?';
-  $('meta').textContent=`${name||''}  种子 ${m.seed} · 蓝方「${{radar:'一直照射',silent:'静默',turtle:'不动',rush:'冲脸'}[m.pol]||m.pol}」· 红方条令「${m.doctrine}」· ${W}(${res.t} 游戏秒,剩 蓝 ${res.left?res.left.blue:'?'} 红 ${res.left?res.left.red:'?'})${res.err?' · 出错:'+res.err:''}`;
+  $('meta').textContent=`${name||''}  种子 ${m.seed} · 蓝方「${{radar:'一直照射',silent:'静默',turtle:'不动',rush:'冲脸'}[m.pol]||m.pol}」· 红方条令「${m.doctrine}」${m.ll===undefined?'':' · 光速延迟'+(m.ll?'开':'关')}· ${W}(${res.t} 游戏秒,剩 蓝 ${res.left?res.left.blue:'?'} 红 ${res.left?res.left.red:'?'})${res.err?' · 出错:'+res.err:''}`;
   $('drop').style.display='none';T=0;fit();buildEvents();draw();
 }
 $('open').onclick=()=>$('file').click();
@@ -101,7 +105,7 @@ function seekTl(e){if(!R)return;const r=tl.getBoundingClientRect();T=Math.max(0,
 let tlDrag=false;tl.addEventListener('mousedown',e=>{tlDrag=true;seekTl(e);});addEventListener('mousemove',e=>{if(tlDrag)seekTl(e);});addEventListener('mouseup',()=>tlDrag=false);
 addEventListener('keydown',e=>{if(!R)return;if(e.code==='Space'){e.preventDefault();$('play').click();}
   else if(e.code==='ArrowRight'){T=Math.min(R.T1,T+(e.shiftKey?60:R.meta.frame));draw();}else if(e.code==='ArrowLeft'){T=Math.max(0,T-(e.shiftKey?60:R.meta.frame));draw();}});
-document.querySelectorAll('#views button').forEach(b=>b.onclick=()=>{view=b.dataset.v;document.querySelectorAll('#views button').forEach(x=>x.classList.toggle('on',x===b));draw();});
+document.querySelectorAll('#views button').forEach(b=>b.onclick=()=>{view=b.dataset.v;document.querySelectorAll('#views button').forEach(x=>x.classList.toggle('on',x===b));if(R&&R.v2)buildEvents(false);draw();}); // LL10 v2 的事件列表按这个视角看见的时刻重排(v1 各视角一样,不重排;切视角不滚动列表,同改前)
 ['ckBel','ckTruth','ckMap','ckName'].forEach(k=>$(k).onchange=draw);
 document.querySelectorAll('[data-k]').forEach(c=>c.onchange=buildEvents);
 addEventListener('resize',()=>{size();draw();});
@@ -113,11 +117,17 @@ function evText(e){const k=e[1];
   if(k==='kill')return `<b>击沉 <span class="${cls(e[2])}">${nm(e[2])}</span></b>(${e[4]==='mac'?'主炮':'导弹'},<span class="${cls(e[3])}">${nm(e[3])}</span>)`;
   if(k==='trk')return `${e[2]==='red'?'<span class="rr">红方</span>':'<span class="b">蓝方</span>'}对 <span class="${cls(e[3])}">${nm(e[3])}</span>:${ST[e[4]]||'没发现'} → ${ST[e[5]]||'没发现'}`;
   return JSON.stringify(e);}
+function evT(e,v){ // LL10 这件事在视角 v 里的时刻:全知 / v1 录像 / 航迹 = 记录的时刻;红 / 蓝视角的命中、击沉、开火(LL11 看见开火闪光)= 这一方看见的时刻(null = 这一方一直没看见;缺格回落记录的时刻)
+  if(v==='all'||!R.v2)return e[0];
+  const j=e[1]==='kill'?5:((e[1]==='hit'||e[1]==='fire')?7:-1);if(j<0)return e[0];
+  const s=e[v==='red'?j:j+1];return s===undefined?e[0]:s;}
 let EVR=[];
-function buildEvents(){if(!R)return;const on={};document.querySelectorAll('[data-k]').forEach(c=>on[c.dataset.k]=c.checked);
-  const L=$('evList');L.innerHTML='';EVR=[];
-  for(const e of R.events){if(!on[e[1]])continue;const d=document.createElement('div');d.innerHTML=`<span class="t">${fmtClock(e[0])}</span>${evText(e)}`;d.title=e[0]+' 游戏秒';d.onclick=()=>{T=e[0];draw();};L.appendChild(d);EVR.push([e[0],d]);}
-  hiliteEv(true);}
+function buildEvents(sc){if(!R)return;const on={};document.querySelectorAll('[data-k]').forEach(c=>on[c.dataset.k]=c.checked);
+  const L=$('evList'),H=[],TS=[];
+  for(const [t,e] of R.ev[view]){if(!on[e[1]])continue;H.push(`<div title="${t} 游戏秒${t!==e[0]?'(实际 '+e[0]+')':''}"><span class="t">${fmtClock(t)}</span>${evText(e)}${t>e[0]?' <span class="n">+'+((t-e[0])*(R.meta.timeK||10)).toFixed(1)+' 秒</span>':''}</div>`);TS.push(t);} // LL10 时刻按这个视角看见的,比实际晚多少(物理秒)写在末尾
+  L.innerHTML=H.join('');EVR=TS.map((t,i)=>[t,L.children[i]]); // LL10 一次写进整张列表(切视角要重排,逐行建节点太慢),点击走下面的委托
+  hiliteEv(sc!==false);} // LL10 切视角时传 false:不滚动(滚动会强制同步排版)
+$('evList').addEventListener('click',e=>{const d=e.target.closest('#evList>div');if(!d)return;const i=Array.prototype.indexOf.call($('evList').children,d);if(i>=0&&EVR[i]){T=EVR[i][0];draw();}}); // LL10 点一条跳到这个视角里它的时刻
 let curEv=null;
 function hiliteEv(scroll){let c=null;for(const [t,d] of EVR){if(t<=T)c=d;else break;}if(c!==curEv){if(curEv)curEv.classList.remove('cur');if(c){c.classList.add('cur');if(scroll||playing)c.scrollIntoView({block:'nearest'});}curEv=c;}}
 /* ---- 画 ---- */
@@ -134,7 +144,7 @@ function label(p,t,col){if(!$('ckName').checked)return;g.fillStyle=col;g.font='1
 function draw(){
   const r=cv.getBoundingClientRect();g.clearRect(0,0,r.width,r.height);g.fillStyle='#070b12';g.fillRect(0,0,r.width,r.height);
   if(!R){drawTl();return;}
-  const fi=fIdx(T),f=R.frames[fi],a=R.arena,z=cam.z;
+  const fi=fIdx(T),f=R.frames[fi],a=R.arena,z=cam.z,V=view==='all'?null:f.v[view]; // LL10 V 提前:据点归属也要按视角取
   /* 游玩区 */
   let p0=W2S(a.x0,a.y0),p1=W2S(a.x1,a.y1);g.strokeStyle='#26354a';g.lineWidth=1;g.strokeRect(p0[0],p0[1],p1[0]-p0[0],p1[1]-p0[1]);
   /* 地图 */
@@ -146,16 +156,16 @@ function draw(){
     for(const b of M.bodies){ell(b[0],b[1],b[2],b[2],0);g.fillStyle='#1f2633';g.fill();g.strokeStyle='#3b4658';g.stroke();const p=W2S(b[0],b[1]);if($('ckName').checked){g.fillStyle='#5b687a';g.font='11px sans-serif';g.fillText(b[4]+(b[3]?'·'+b[3]:''),p[0]-16,p[1]+3);}}
     if(f.mo)for(const m of f.mo){ell(m[0],m[1],140,140,0);g.fillStyle='#2b3342';g.fill();}
     if(f.cm)for(const m of f.cm){const p=W2S(m[0],m[1]);g.fillStyle='#bfe8ff';g.beginPath();g.arc(p[0],p[1],3,0,7);g.fill();}
-    M.stations.forEach((s,k)=>{const p=W2S(s[0],s[1]),h=f.st?f.st[k]:'';g.strokeStyle=h?COL[h]:'#9aa3ad';g.lineWidth=1.5;g.strokeRect(p[0]-5,p[1]-5,10,10);label(p,s[2]+(h?(h==='red'?'·红':'·蓝'):'·中立'),'#8a96a6');});}
+    M.stations.forEach((s,k)=>{const p=W2S(s[0],s[1]),h=V&&V.st?V.st[k]:(f.st?f.st[k]:'');g.strokeStyle=h?COL[h]:'#9aa3ad';g.lineWidth=1.5;g.strokeRect(p[0]-5,p[1]-5,10,10);label(p,s[2]+(h?(h==='red'?'·红':'·蓝'):'·中立'),'#8a96a6');});} // LL10 红 / 蓝视角画这一方看到的据点归属(v2)
   /* 搜索图 */
   const bs=view==='all'?'red':view;
   if($('ckBel').checked){const B=belImg(bs);if(B){const q0=W2S(B.b.A[0],B.b.A[1]),q1=W2S(B.b.A[2],B.b.A[3]);g.imageSmoothingEnabled=true;g.drawImage(B.cv,q0[0],q0[1],q1[0]-q0[0],q1[1]-q0[1]);}}
-  const V=view==='all'?null:f.v[view];
   /* 炮弹来路(这一方记下的) */
   if(V)for(const t of V.tr){const A=W2S(t[0],t[1]),Bp=W2S(t[2],t[3]),E=W2S(t[0]-t[4]*3000,t[1]-t[5]*3000);g.strokeStyle='rgba(255,200,120,.8)';g.lineWidth=1.2;g.beginPath();g.moveTo(A[0],A[1]);g.lineTo(Bp[0],Bp[1]);g.stroke();
     g.setLineDash([4,4]);g.strokeStyle='rgba(255,200,120,.35)';g.beginPath();g.moveTo(A[0],A[1]);g.lineTo(E[0],E[1]);g.stroke();g.setLineDash([]);}
   /* 弹 */
-  for(const p of f.p){const vis=view==='all'||(view==='red'?(p[5]&1):(p[5]&2));if(!vis)continue;const q=W2S(p[2],p[3]),col=p[1]==='r'?COL.red:(p[1]==='b'?COL.blue:COL.neutral);
+  const iv=R.v2&&V?(view==='red'?6:8):2; // LL10 红 / 蓝视角画这一方眼里的弹影(v2 的第 6、7 / 8、9 格),全知与 v1 画真实位置
+  for(const p of f.p){const vis=view==='all'?!(p[5]&4):(view==='red'?(p[5]&1):(p[5]&2));if(!vis||p[iv]==null)continue;const q=W2S(p[iv],p[iv+1]),col=p[1]==='r'?COL.red:(p[1]==='b'?COL.blue:COL.neutral); // LL10 bit4 = 真弹已消失的余像,全知不画;弹影是 null(光还没到)不画
     g.fillStyle=col;if(p[0]==='m'){g.beginPath();g.arc(q[0],q[1],2.2+Math.min(2,p[4]/12),0,7);g.fill();}else{g.globalAlpha=.8;g.fillRect(q[0]-1,q[1]-1,2,2);g.globalAlpha=1;}}
   for(const o of f.o){if(V&&o[1]!==view[0])continue;const q=W2S(o[2],o[3]);g.strokeStyle=o[1]==='r'?COL.red:COL.blue;g.lineWidth=1;g.beginPath();g.arc(q[0],q[1],o[0]==='b'?4:3,0,7);g.stroke();if(o[0]==='l'){g.beginPath();g.moveTo(q[0]-3,q[1]-3);g.lineTo(q[0]+3,q[1]+3);g.stroke();}}
   /* 船 */
@@ -183,11 +193,11 @@ function side(f){
   const own=view==='all'?null:view,H=[];
   R.ships.forEach((s,i)=>{if(s.civ)return;if(own&&s.side!==own)return;const d=f.s[i];H.push(`<div class="r ${d[5]&1?'dead':''}"><span class="${s.side==='red'?'rr':'b'}">${s.name}</span><span>${d[3]}/${s.hp}${s.sh?' 盾 '+d[4]:''}${d[5]&2?' · 雷达':''}${d[5]&4?' · 点火':''}</span></div>`);});
   if(own){const V2=f.v[own],m=new Map(V2.k.map(k=>[k[0],k]));H.push('<div style="margin-top:4px;color:var(--dim)">接触</div>');
-    R.ships.forEach((s,i)=>{if(s.side===own)return;const k=m.get(i);if(s.civ&&!k)return;H.push(`<div class="r"><span class="${s.civ?'n':(s.side==='red'?'rr':'b')}">${s.civ?s.name:(k&&k[4]?s.name:s.name+'(真名)')}</span><span>${k?ST[k[1]]+(k[4]?' · 认出':''):'没发现'}</span></div>`);});}
+    R.ships.forEach((s,i)=>{if(s.side===own)return;const k=m.get(i);if(s.civ&&!k)return;H.push(`<div class="r"><span class="${s.civ?'n':(s.side==='red'?'rr':'b')}">${s.civ?s.name:(k&&k[4]?s.name:s.name+'(真名)')}</span><span>${k?ST[k[1]]+(k[4]?' · 认出':'')+ageTxt(k[5]):'没发现'}</span></div>`);});}
   $('rosH').textContent=own?(own==='red'?'红方舰船与接触':'蓝方舰船与接触'):'双方舰船';$('roster').innerHTML=H.join('');}
 function drawTl(){const r=tl.getBoundingClientRect(),w=r.width,h=r.height;tg.clearRect(0,0,w,h);tg.fillStyle='#0a1019';tg.fillRect(0,0,w,h);if(!R)return;
   const X=t=>t/R.T1*w;
-  for(const e of R.events){const x=X(e[0]);if(e[1]==='fire'){const s=R.ships[e[2]];tg.fillStyle=s&&s.side==='red'?'rgba(255,106,90,.55)':'rgba(111,180,255,.55)';tg.fillRect(x,s&&s.side==='red'?8:22,1,10);}
+  for(const [t,e] of R.ev[view]){const x=X(t);if(e[1]==='fire'){const s=R.ships[e[2]];tg.fillStyle=s&&s.side==='red'?'rgba(255,106,90,.55)':'rgba(111,180,255,.55)';tg.fillRect(x,s&&s.side==='red'?8:22,1,10);}
     else if(e[1]==='kill'){const s=R.ships[e[2]];tg.fillStyle=s&&s.side==='red'?'#ff6a5a':'#6fb4ff';tg.fillRect(x-1,2,3,h-4);}
     else if(e[1]==='trk'&&e[5]===2){tg.fillStyle=e[2]==='red'?'rgba(255,106,90,.9)':'rgba(111,180,255,.9)';tg.fillRect(x,e[2]==='red'?38:46,2,6);}}
   tg.fillStyle='#6f7d8e';tg.font='10px sans-serif';tg.fillText('红开火',4,16);tg.fillText('蓝开火',4,30);tg.fillText('定位(红/蓝)',4,52);

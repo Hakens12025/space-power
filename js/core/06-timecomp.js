@@ -27,8 +27,9 @@ function tcBand(){
     let d=Infinity;for(const x of mine)d=Math.min(d,Math.hypot(p[0]-x.pos[0],p[1]-x.pos[1]));   // ① 到【估计位置】的距离,不是真值
     if(d<=LAD.gun)b=3;else if(d<=LAD.msl)b=Math.max(b,2);
   });
-  if(b<2)for(const p of projectiles){                 // ④ 看得见的来袭导弹
-    if(p.type==='missile'&&!p.done&&trkSees('blue',p)&&p.shooter&&p.shooter.side==='red'){b=2;break;} // TK4a:目击读航迹表
+  const ll=typeof llOnNow==='function'&&llOnNow(); // LL5 光速延迟开着:连余像一起看(sensors/21 projAll),「还在」= 我方看到的弹影还在(projImg),不读真弹的 done
+  if(b<2)for(const p of (ll?projAll():projectiles)){                 // ④ 看得见的来袭导弹
+    if(p.type==='missile'&&trkSees('blue',p)&&p.shooter&&p.shooter.side==='red'&&(ll?projImg(p,'blue')!==null:!p.done)){b=2;break;} // TK4a:目击读航迹表
   }
   return b;
 }

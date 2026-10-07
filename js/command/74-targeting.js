@@ -90,7 +90,7 @@ function xhTick(dt){ // RF5 准星每帧状态机:命中测试 → 停留累加 
   if(hit!==xh.cand){xh.cand=hit;xh.dwellT=0;} // 换目标/没命中 → 计时清零
   else if(hit)xh.dwellT+=d;
   const gm=(typeof adminMode!=='undefined'&&adminMode);
-  if(xh.snap&&(xh.snap.dead||(!gm&&!(typeof contactPos==='function'&&contactPos(xh.snap,'blue')))))xh.snap=null; // 目标死亡或【位置交代不出来了】:立即清。SN6d:复查条件必须与 targetAt 的门同源 —— 原来这里复查的是 litBlue,于是一个吸住之后失去定位的接触会一直挂在准星上,而它本该退回热区
+  if(xh.snap&&((gm?xh.snap.dead:contactDead(xh.snap,'blue'))||(!gm&&!(typeof contactPos==='function'&&contactPos(xh.snap,'blue')))))xh.snap=null; // LL6 死亡按我方看见的(GM 真值)。目标死亡或【位置交代不出来了】:立即清。SN6d:复查条件必须与 targetAt 的门同源 —— 原来这里复查的是 litBlue,于是一个吸住之后失去定位的接触会一直挂在准星上,而它本该退回热区
   if(!hit)xh.snap=null;
   else if(xh.dwellT>=XH_DWELL)xh.snap=hit;
   if(rad.open)xhCardHide(); // RF5 Phase C 轮盘开着时收起 #xhTip:长按开盘那一瞬光标必然停在目标身上,而目标正是轮盘圆心(radOpen 拿 toScreen(t.pos) 当 anchor),卡片钉在光标+16px 就必然糊进盘面右下象限,盖住 hub 读数井与右下扇区(八武器时整整盖住一瓣)。卡片上的目标名/方位/结构,hub 与扇区读数都有,收起不丢信息
@@ -119,11 +119,12 @@ function xhCardHTML(s,sub){ // RF5 信息卡内容:按认没认出、定没定�
   const itp=gm?{kind:kindOf(s)}:(contactIdType(s,'blue')||{kind:'ship'}),notShip=!masked&&itp.kind!=='ship'; // TK4c:认出来不是船 ⇒ 没有舰种、结构与速度可报。2026-09-27 按认出的类型判(诱饵在「疑似」档冒充驱逐舰,不许说破)
   if(notShip)rows.push(['类别',({rock:'碎石',civ:'民船',lure:'诱饵',buoy:'浮标'})[itp.kind]+' · 不是舰船']);
   else if(!masked)rows.push(['舰种',((typeof CLS_SHORT!=='undefined'&&CLS_SHORT[s.cls])||'未知')+' · T'+tier]); // 2026-09-30 舰种名按舰种查(重排后轮廓与舰种不再一一对应) // RF5 兜底文案改中文'未知'(原为直接吐 hull 代码):HULL_LABEL(ships/10)只有 DD/CA/BB/CV/SC 五个键,查不到时会渲染出 "UNK舰" 这种非中文串,违反 UI 全中文。识别级:舰种与分级解禁(与 82 放行真实轮廓/尺寸、87-fleetcards 的分级徽标同为 litBlue>=2)
-  rows.push(['方位',cp?String(Math.round(brg)%360).padStart(3,'0')+'° · '+Math.round(dist/1000)+'k':'位置不明']); // 探测级也给:这一档只有方位与距离是可信的
+  rows.push(['方位',cp?String(Math.round(brg)%360).padStart(3,'0')+'° · '+Math.round(dist/1000)+'k'+(typeof viewAgeTxt==='function'?viewAgeTxt(s):''):'位置不明']); // 探测级也给:这一档只有方位与距离是可信的;LL9 带情报龄(光行时间 + 距上次量测,render/83 viewAgeTxt)
   {const tk=(!gm&&s.side!=='blue')?trkOf('blue',s):null;if(tk&&tk.tn)rows.push(['航迹','T'+String(tk.tn).padStart(2,'0')]);} // TK4c 航迹号:没认出的接触都叫「未知接触」,靠它指认是哪一条
   if(!masked&&!notShip&&(gm||s.side==='blue'||contactFix(s,'blue'))){ // 定得出位置才追加数值
-    rows.push(['结构',Math.max(0,Math.round(s.hp))+'/'+Math.round(s.maxHp)]);
-    rows.push(['速度',Math.round(SHOW.v((typeof V!=='undefined'&&V.len)?V.len(s.vel):Math.hypot(s.vel[0],s.vel[1])))+' km/s']); // 2026-09-27 经 SHOW 换回物理单位(原来把引擎单位标成 m/s)
+    const L=(gm||s.side==='blue'||typeof viewLook!=='function')?s:viewLook(s); // LL9 结构与速度读我方看到的最新影像(render/83 viewLook;光还没到写破折号)
+    rows.push(['结构',L?Math.max(0,Math.round(L.hp))+'/'+Math.round(s.maxHp):'—']);
+    rows.push(['速度',L?Math.round(SHOW.v((typeof V!=='undefined'&&V.len)?V.len(L.vel):Math.hypot(L.vel[0],L.vel[1])))+' km/s':'—']); // 2026-09-27 经 SHOW 换回物理单位(原来把引擎单位标成 m/s)
   }
   return `<div class="nm${masked?' unk':''}">${masked?'未知接触':s.name}</div>`+ // 类名对齐 css 的 #xhTip 节:.unk=未达识别级的禁用态色,与地图上降级成 UNK 的轮廓同一语义
     rows.map(r=>`<div><span class="k">${r[0]}</span><span class="v">${r[1]}</span></div>`).join('');
@@ -148,12 +149,11 @@ function xhCardHide(){ // RF5 收起信息卡(用 _shown 记账,免得每帧都�
   if(el)el.style.display='none';
   xh._shown=false;xh._html='';xh._w=0;
 }
-function xhQuickEngage(append){ // RF5 中键短按 = 快速交战:选中的蓝舰 + 当前吸附目标 → 新建一条火控序列(allow 缺省 = 全武器许可)
-  // RF7 append=按下中键那一瞬 Shift 在按:目标【追加】进当前编辑序列(无编辑序列则等价新建)。这是火控序列的选定手势。
-  // 2026-09-29 用户:框选后中键,选中的【每一艘】蓝舰都进火控序列(原来只有第一艘)
+function xhQuickEngage(append){ // RF5 中键短按:选中的蓝舰 + 当前吸附目标。2026-10-07 用户改:中键 = 选定目标(强制开火,不建序列);Shift+中键 = 往序列态那条 / 那块追加
+  // append=按下中键那一瞬 Shift 在按。新序列只从火控计算机的「+」建(fcRegister)
   const sub=xhSubject();
   if(!sub)return false;
-  const t=(xh.snap&&!xh.snap.dead)?xh.snap:null;
+  const t=(xh.snap&&!contactDead(xh.snap,sub.side))?xh.snap:null; // LL6 死活按下令的一方看见的
   const sel=(typeof selBlue==='function')?selBlue():[sub];
   if(!t){ // 2026-09-29 用户:中键点空地 = 给选中的舰一个强制目标点(不进火控计算机)。走目标的路 —— 57 的自动开火循环按武器勾选打、不看射程,
     // 插在锁定目标 / 火控序列前面;勾着的每件武器打 2 次就撤,一件没勾就一发不打(用户:强制开火服从火控;⌖ 红点的单次开火另走自己的逻辑)
@@ -164,19 +164,38 @@ function xhQuickEngage(append){ // RF5 中键短按 = 快速交战:选中的蓝�
     if(typeof updateSelPanel==='function')updateSelPanel();
     return n>0;
   }
-  if(typeof fcNew!=='function')return false;
-  const tgt={tid:t.id};
-  let ok=false;
-  for(const s of sel){
-    if(append){
-      const q0=(typeof fcSeq==='function')?fcSeq(s.fcEditId):null;
-      const cur=(q0&&q0.shipId===s.id)?q0:null; // 编辑上下文可能指向别舰/已删序列(与 radOpen 同一道防线)
-      if(t&&cur&&(cur.targets||[]).some(x=>x.tid&&String(x.tid)===String(t.id))){ok=true;continue;} // 去重:已在链里,再按只是确认,不重复入队
-      if(typeof fcAppend==='function'&&fcAppend(s,tgt)!=null)ok=true; // 无编辑序列时 fcAppend 内部等价 fcNew;触顶(FC_MAX_SEQS)返回 null
-    }else if(fcNew(s,tgt)!=null)ok=true; // 建序列会顺带打开火控(58-firecontrol 的副作用),这是预期行为;RF7 触顶返回 null
+  if(!append){ // 2026-10-07 用户:中键点敌舰 = 选定目标:选中的舰一直对它强制开火,目标没了才停(weapons/57 读 s.pickTid,有火控序列在跑的先按序列打)
+    let busy=0;
+    for(const s of sel){s.pickTid=t.id;s.fTgt=null;if(!s.autoEngage||s.roe!=='free'){s.autoEngage=true;s.roe='free';}if(typeof fcActive==='function'&&fcActive(s))busy++;} // 同 fcNew:选定要响,火控总闸得开
+    if(typeof cmdTipFlash==='function')cmdTipFlash('⌖ 选定 '+((typeof xhName==='function')?xhName(t):t.name)+':'+sel.length+' 艘强制开火'+(busy?' · '+busy+' 艘有火控序列在跑、先按序列打':''),2500);
+    if(typeof updateSelPanel==='function')updateSelPanel();
+    return true;
   }
+  /* Shift+中键:往序列态那条(舰队 = 那块)追加目标。新序列只从火控计算机的「+」建(fcRegister),这里不再新建 */
+  if(typeof fcAppend!=='function')return false;
+  const tgt={tid:t.id};
+  let ok=false,g=null;
+  if(sel.length>1){for(const s of sel){const q=(typeof fcSeq==='function')?fcSeq(s.fcEditId):null;if(q&&q.shipId===s.id&&q.grp){g=q.grp;break;}}}
+  for(const s of sel){
+    let cur=null;
+    if(g!=null)cur=fireSeqs.find(q=>q.shipId===s.id&&q.grp===g)||null; // 舰队:这艘在块 g 里的那条(块里没有它就跳过)
+    else if(sel.length===1){const q0=(typeof fcSeq==='function')?fcSeq(s.fcEditId):null;cur=(q0&&q0.shipId===s.id)?q0:null;} // 编辑上下文可能指向别舰/已删序列(与 radOpen 同一道防线)
+    if(!cur)continue;
+    if(!cur.targets.some(x=>x.tid&&String(x.tid)===String(t.id))){fcSetEdit(s,cur.id);fcAppend(s,tgt);} // 去重:已在链里,再按只是确认
+    ok=true;
+  }
+  if(!ok&&typeof cmdTipFlash==='function')cmdTipFlash('Shift+中键 = 往选中的火控序列追加目标:先在火控计算机里点一条序列'+(sel.length>1?'(块)':'')+',或点「+」新建',2500);
   if(ok&&typeof updateSelPanel==='function')updateSelPanel(); // 立刻刷右栏火控面板,不等 frame 的 20 帧低频刷新
   return ok;
+}
+function fcRegister(sel,t){ // 2026-10-07 用户:新火控序列只从火控计算机的「+」建(点「+」→ 左键点敌舰,70 mdPending):单舰 = 一条;舰队 = 一块(每艘一条、同一个 grp)
+  if(!t||typeof fcNew!=='function')return false;
+  if(!sel.length){if(typeof cmdTipFlash==='function')cmdTipFlash('先选中我方舰,再点「+」',2500);return false;}
+  const tgt={tid:t.id},g=(sel.length>1&&typeof fcNewGrp==='function')?fcNewGrp():null;let n=0;
+  for(const s of sel){const id=fcNew(s,tgt);if(id!=null){if(g!=null)fcSeq(id).grp=g;n++;}} // fcNew 把新序列置为编辑上下文:建完就在序列态,Shift+中键直接往里追加
+  if(typeof cmdTipFlash==='function')cmdTipFlash(n?'火控序列已建:'+((typeof xhName==='function')?xhName(t):t.name)+(g!=null?'(块,'+n+' 艘)':'')+' · Shift+中键往里追加目标':'序列已满(每舰最多 '+FC_MAX_SEQS+' 条)',2500);
+  if(typeof updateSelPanel==='function')updateSelPanel();
+  return n>0;
 }
 
 /* ================= RF5 Phase C:目标轮盘(数据侧) =================
@@ -231,13 +250,13 @@ function radClose(){ // RF5 关轮盘(短按中键 / Esc / 目标或序列失效
   rad.items=[];rad.split=false;rad.mode=null;rad.seqName='';rad.page=0;
   rad.hover.side=null;rad.hover.idx=-1;
 }
-function radOpen(sx,sy,shift){ // RF5 中键长按 = 开目标轮盘。三种上下文在【开的这一瞬间】就提交 fc*,误触也不丢进度(序列立刻出现在右栏火控计算机里)
+function radOpen(sx,sy,shift){ // RF5 中键长按 = 开目标轮盘。开的这一瞬间就提交 fc*:目标已在序列态那条 = 编辑;Shift + 不在 = 追加;2026-10-07 起其余不开(不再新建)
   if(typeof rangeMode!=='undefined'&&rangeMode)return false; // 与 70-input 定时器里那道早退同口径:测距下中键无语义
   const sub=xhSubject();
   if(!sub)return false;
   const t=xh.snap;
   // 定时器跨了 350ms,这中间目标可能已死/已失去接触(xhTick 每帧会清 snap)。判不过就什么都不提交
-  if(!t||t.dead)return false;
+  if(!t||contactDead(t,sub.side))return false; // LL6 死活按下令的一方看见的(同 weapons/58 fcGate)
   if(typeof fcSeq!=='function'||typeof fcNew!=='function')return false; // 沿用本库 typeof 守卫口径(58 缺席时本文件仍不崩)
   const q0=fcSeq(sub.fcEditId);                        // fcEditId 为 null 时 fcSeq 遍历一圈返回 null(id 由 ++fcSeqSeq 从 1 起,撞不上 null),安全
   const cur=(q0&&q0.shipId===sub.id)?q0:null;          // 与 fcAppend 同一道防线:编辑上下文可能指向别舰或已删的序列
@@ -247,7 +266,7 @@ function radOpen(sx,sy,shift){ // RF5 中键长按 = 开目标轮盘。三种上
   else if(shift&&cur&&typeof fcAppend==='function'){                    // ② Shift + 不在序列 → 追加进当前编辑序列
     seqId=fcAppend(sub,{tid:t.id});
     const qa=fcSeq(seqId);tgtIdx=qa?qa.targets.length-1:-1;ctx='append'; // 追加项恒在末尾
-  }else{seqId=fcNew(sub,{tid:t.id});tgtIdx=0;ctx='new';}                 // ③ 无 Shift(或压根没有有效编辑上下文)→ 新建下一条序列。fcNew 自带副作用(强开 autoEngage+roe='free'),任务书确认为预期
+  }else{if(typeof cmdTipFlash==='function')cmdTipFlash(cur?'目标轮盘只改序列态那条:目标不在里面,按住 Shift 长按把它追加进去':'目标轮盘只改已有序列:先在火控计算机里点一条序列,或点「+」新建',2500);return false;} // ③ 2026-10-07 用户:轮盘只改已有序列(新序列只从火控计算机的「+」建),不再新建
   const q=fcSeq(seqId);
   if(!q||tgtIdx<0||!q.targets[tgtIdx])return false;
   const tq=viewPos(t),p=(tq&&typeof toScreen==='function')?toScreen(tq[0],tq[1]):[sx,sy]; // 2026-09-28 锚在我方知道的位置 // 锚定:开启瞬间目标的屏幕位置,钉住不动(引线由 89 每帧连到目标当前位置)。这是 74 唯一一次自己碰坐标,再没有第二处
@@ -282,7 +301,7 @@ function radTick(){ // RF5 轮盘每帧维护:序列/目标失效自关 → 按 
   const i=q.targets.findIndex(x=>x.tid&&x.tid===rad.tid);
   if(i<0){radClose();return;}                      // 目标死亡/被清理段 splice 掉 → 关轮盘(任务书要求)
   const t=fcShip(rad.tid);
-  if(!t||t.dead){radClose();return;}
+  if(!t||contactDead(t,sub.side)){radClose();return;} // LL6 属主那一方看见沉了才关(同 weapons/58 fcGate)
   rad.tgtIdx=i; // 【易腐下标】58 的清理段每 tick 会 splice 掉解析不到活舰的项,同序列里另一艘先死会让后面的项整体前移。不按 tid 复解算,fcSetAllow 会改到别人头上
   rad.split=(q.targets.length>=2);
   rad.mode=rad.split?q.mode:null;

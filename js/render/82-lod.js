@@ -140,7 +140,7 @@ function lodBuild(dtIn) {   // dtIn:判据用的时钟覆盖(同 camZoomStep);�
   for (const s of ships) {
     const a = inAgg.get(s), tgt = a ? 1 : 0;
     if (a) s._lodW = [a.wx, a.wy];
-    if (s._lodE === undefined || s.dead) s._lodE = tgt;
+    if (s._lodE === undefined || viewDead(s)) s._lodE = tgt; // LL6 沉没按我方看见的(render/83 viewDead)
     else if (s._lodE < tgt) s._lodE = Math.min(tgt, s._lodE + stepE);
     else if (s._lodE > tgt) s._lodE = Math.max(tgt, s._lodE - stepE);
   }

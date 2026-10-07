@@ -162,7 +162,7 @@ function steerToVel(s,want,dt){ // v119运动内核:期望速度导引——推�
   if(need<(s.coasting?onT:ENG_HYS_OFF)){ // 达标:熄火滑行/停稳(点着火时仍用原 0.5 熄火,停稳判据不变)
     s.coasting=true;
     if(V.len(s.vel)<1&&Math.abs(want[0])+Math.abs(want[1])+Math.abs(want[2])<0.5)s.vel=[0,0,0];
-    else if(V.len(s.vel)>5&&!s.turnTarget&&!(s.driftFire&&s.lockedTarget&&!s.lockedTarget.dead)){ // DS192:滑行段顺航向对齐--机头以转向率追平速度方向,消除"速度贴住指令后姿态冻结"的持续漂移;战斗占用(driftFire瞄准/V调头令)不抢机头
+    else if(V.len(s.vel)>5&&!s.turnTarget&&!(s.driftFire&&s.lockedTarget&&!ltDead(s))){ // LL6 锁定目标的死活按本方看见的(ltDead,本文件末;转向决策,不是积分物理)。DS192:滑行段顺航向对齐--机头以转向率追平速度方向,消除"速度贴住指令后姿态冻结"的持续漂移;战斗占用(driftFire瞄准/V调头令)不抢机头
       applyHeading(s,V.norm(s.vel),dt); // RF10 经 applyHeading
     }
     return;
@@ -174,7 +174,7 @@ function steerToVel(s,want,dt){ // v119运动内核:期望速度导引——推�
   // RF6 补 !s.turnTarget:上面的滑行段(DS192)早就给 V 调头令让了位,推进段却没有——RF6 之前 turnTarget 与移动令不可能共存,
   // 所以这条不对称一直没暴露。朝向层移出 if/else 链之后,推进段每步把机头强行归到推力方向,朝向层转的那一点下一步就被抹掉,
   // 现象是"边走边转"只转出一步的量(实测 4 秒 0.3°)然后原地不动。玩家显式的转向令优先级高于推力方向对齐。
-  if(wantSpd>1&&!s.turnTarget&&!(s.driftFire&&s.lockedTarget&&!s.lockedTarget.dead&&!s.crawling&&!s.brake)){ // DS174(KIMI建议):driftFire激活且非硬机动→机头归战斗转向瞄准,加减速段不被推力方向拖(找窗口效率翻倍);其余走原逻辑
+  if(wantSpd>1&&!s.turnTarget&&!(s.driftFire&&s.lockedTarget&&!ltDead(s)&&!s.crawling&&!s.brake)){ // LL6 锁定目标死活按本方看见的。DS174(KIMI建议):driftFire激活且非硬机动→机头归战斗转向瞄准,加减速段不被推力方向拖(找窗口效率翻倍);其余走原逻辑
     const wd=[want[0]/wantSpd,want[1]/wantSpd,want[2]/wantSpd];
     let turn=true;
     if(velSpd>1&&wantSpd<velSpd&&!s.crawling){ // v130:减速中目标在身后不掉头(反推倒刹);crawl(冲过头)允许掉头回正,不反推飞离
@@ -221,3 +221,4 @@ function guideTo(s,pT,vT,cap,useCurve,dt){ // DS191:统一导引律--有界推�
   const spd=useCurve?Math.min(cap,brakeCurveSpd(s,err)):cap;
   steerToVel(s,[vT[0]+dir[0]*spd,vT[1]+dir[1]*spd,vT[2]+dir[2]*spd],dt);
 }
+function ltDead(s){return typeof contactDead==='function'?contactDead(s.lockedTarget,s.side):s.lockedTarget.dead;} // LL6 锁定目标在本方看来沉了没有(sensors/21 contactDead;光速延迟开着时击沉的光到达本方才算)。机头归瞄 / 空闲漂移 / 战斗转向是转向决策,与 weapons/57、58 同口径;没载入感知层的场合(tools/train)读真值

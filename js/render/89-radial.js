@@ -165,7 +165,7 @@ function drawRadial(){
 
   /* ---- 1. 引线:轮盘钉在开启瞬间的屏幕位置不跟着目标跑(跟着跑的话扇区是移动靶,点不中),
            目标跑出外环后画一条细虚线把两者接回来。这是"标注"不是"命令",所以用中性灰而非命令黄 ---- */
-  const tq=(tgt&&!tgt.dead)?viewPos(tgt):null;
+  const tq=(tgt&&!viewDead(tgt))?viewPos(tgt):null; // LL6 死活按我方看见的(render/83 viewDead)
   if(tq&&typeof toScreen==='function'){
     const q=toScreen(tq[0],tq[1]);
     const dx=q[0]-cx,dy=q[1]-cy,d=Math.hypot(dx,dy);

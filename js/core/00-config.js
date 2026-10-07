@@ -64,6 +64,7 @@ const CFG={
   gridMin: 40, gridMax: 130,// 网格目标屏幕间距 px
   passBy: 5000,             // 路径点"经过"判定距离 km
   macSpd: PHYS.v(1000),     // 主炮炮弹速度:物理 1000 km/s ≈ 0.33% 光速(2026-09-29 用户:炮弹速度 1/3,原 3000)
+  lightLag: true,           // LL9 光速延迟开关(sensors/26 光锥层):默认开(用户 10-07:宇宙沙盒的重要机制之一);关掉 = 旧口径(逐位对照用)。llReset 换局时锁存,中途改下一局才生效
 };
 CFG.macSpd*=CFG.vscale; // 2026-10-05 用户:主炮弹速也跟统一速度旋钮(物理 1000 km/s x vscale)
 

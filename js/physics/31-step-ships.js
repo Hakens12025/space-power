@@ -106,7 +106,7 @@ function stepShipsMotion(dt){
       // (71-keys 的 turn_cmd 确实是这么做的),语义实际是"取消移动、原地滑行调头"。朝向与速度矢量在太空里本就解耦,没有理由串行。
     }else if(s.patrol&&s.patrol.length){ // 巡逻:路径点首尾循环
       s.orders=s.patrol.map(p=>({pos:p.slice(),type:'pass'}));
-    }else if(s.lockedTarget&&!s.lockedTarget.dead){ // 空闲但锁定(v114):不刹车,保持漂移当移动炮台,机头找窗口
+    }else if(s.lockedTarget&&!ltDead(s)){ // LL6 死活按本方看见的(physics/30 ltDead)。空闲但锁定(v114):不刹车,保持漂移当移动炮台,机头找窗口
       // 不推进不刹车:速度保持(惯性滑行),下方战斗转向负责对准
     }else{ // 无orders无命令:默认停车(不漂移乱飞) v119:期望速度=0
       steerToVel(s,[0,0,0],dt);
@@ -120,7 +120,7 @@ function stepShipsMotion(dt){
     }
     // 战斗转向(v118,移动+攻击一体):锁定目标且主炮可用 → 运动不冻结。
     // DS171 M3:driftFire 承接 lockPlayer 职能(60s限时)——命令照走,非硬机动段机头归瞄准(全向找窗口,对准1.1°即自动开火);硬机动段(刹车/爬行/调头)机头让位(v130机动可靠性不劣化);T收编为纯指定(有令船不抢机头,窗口自然出现才打)
-    if(s.lockedTarget&&!s.lockedTarget.dead&&s.lockedTarget.side!==s.side&&s.macDmg>0){
+    if(s.lockedTarget&&!ltDead(s)&&s.lockedTarget.side!==s.side&&s.macDmg>0){ // LL6 锁定目标死活按本方看见的(转向决策)
       if(s.driftFire){s.driftFireT=(s.driftFireT||0)-dt;if(s.driftFireT<=0){s.driftFire=false;}} // 60s限时
       const idle=!s.orders.length&&!s.formation&&!s.follow&&!s.turnTarget&&!s.brake; // FL1:跟随中的舰不算空闲,不许被战斗转向抢机头
       if(!s.ftAim&&(idle||(s.driftFire&&!s.crawling&&!s.turnTarget&&!s.brake))){ // 硬机动段让位;2026-09-29 主炮正朝一个点对准时也让位(57 的 ftAim)
