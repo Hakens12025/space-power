@@ -93,7 +93,7 @@ const INSET={FIT:0.7,FIT_MIN:0.26,SHOT_MAX:7000,CTX_T:240,CTX_F0:40000,CTX_F1:50
    // 每类停留 / 事件寿命 ms;炮弹来路回放往回框多远 km(x scale)
   COOL:3000,GRACE:500,KILL_HIT:3000,HIT_R:5000, // 冷却 / 来袭导弹与主体丢位置的宽限 ms;击沉吞命中 / 命中绑敌舰 km
   HOV:5000, // 指针多久没动就不再算悬停 ms
-  uw:null,uh:null,RW:null,RH:null,aw:0,ah:0,MIN_H:150,REV_K:3,REV_OUT:1.25,REV_FREE:80000,REV_MIN_KM:5000,REV_SOFT:0.25,rev:false,btn:[],drag:null, // 2026-10-08 用户(演示页 demos/ui/特写镜头实战.html 定):uw / uh = 右上角拖出来的大小(null = 自动);RW / RH = 取景基准(null = 自动大小,「自适应」= 点的那一刻的窗口);aw / ah = 这一帧的自动大小。反层:主画面比特写还近(没东西播时主画面宽 < REV_FREE km)→ 导演照播,取景至少主画面的 REV_K 倍宽,比例尺 60 px 不小于 REV_MIN_KM(弹性宽 REV_SOFT),拉回 REV_OUT 倍才出
+  uw:null,uh:null,RW:null,RH:null,aw:0,ah:0,MIN_H:150,REV_K:3,REV_OUT:1.25,REV_FREE_BAR:10000,REV_MIN_KM:5000,REV_SOFT:0.25,rev:false,btn:[],drag:null, // 2026-10-08 用户(演示页 demos/ui/特写镜头实战.html 定):uw / uh = 右上角拖出来的大小(null = 自动);RW / RH = 取景基准(null = 自动大小,「自适应」= 点的那一刻的窗口);aw / ah = 这一帧的自动大小。反层:主画面比特写还近 = 主画面每像素公里数小于特写的(没东西播时主画面比例尺 100 px < REV_FREE_BAR km;都按比例尺比,与屏幕宽无关,10-08 用户:缩放到 5000 km 没出)→ 导演照播,取景至少主画面的 REV_K 倍宽,比例尺 60 px 不小于 REV_MIN_KM(弹性宽 REV_SOFT),拉回 REV_OUT 倍才出
   RING:['察觉','来袭','防御','挨打','出手','战果'],RC:{fix:'察觉',id:'察觉',vis:'察觉',shell:'来袭',ciws:'防御',loss:'挨打',kill:'战果'},URG:{loss:1,kill:1},RING_WAIT:1500,MIN_SHOT:2500,VIS_COOL:30000,rc:-1,rt:-1e9, // 2026-09-29 事件分类成环(用户):每类播完只能接环上往后 1~(N-1)/2 类,任意两类不双向;接不上每等 RING_WAIT ms 多走一步;损失 / 击沉不看环;非插队的段至少播 MIN_SHOT ms 才让切;同一艘进可见光圈的冷却 ms。加事件 = 在 RC 登记一行(中弹 / 命中按情况在 insetEvents 里定 c)
   PRE_S:3,PRE_SEE:0.5,PRE_VIEW:0.8,PRE_HOLD:700,PRE_POST:800,PRE_WMAX:60000,RHO_P:1.2,DISC_R:80000,PRE_COOL:4000,ATTR_R:20000,lrt:1, // 预判(2026-10-04 用户在演示页 demos/ui/特写镜头实战.html 定的):离命中 ≤ PRE_S 且够「滑过去 + PRE_SEE」墙钟秒才开播,沿弧度 RHO_P 滑过去;开播锁框:按弹在命中前 PRE_VIEW 秒的位置定(框宽封顶 PRE_WMAX km)、整段不缩放;命中后定格 PRE_HOLD ms;弹没了 / 打空 PRE_POST ms 收;同一目标冷却 ms;同类发现并成一段的半径 km;命中归到消失弹丸的半径 km(x scale)
   lz:0,vo:[0,0,0,0,0],key:'',sk:'',t:0,a:0,cut:-1e9,cool:-1e9,hov:false,mx:0,my:0,mt:-1e9,gm:false,vpri:0,err:false,last:null,fx:null,mskip:null,cv:null,g:null,
@@ -439,9 +439,9 @@ function drawInset(){
   const ss=sel.length?insetSubject(sel,inc):null;
   const md=typeof MAPV!=='undefined'?MAPV.mode:''; // 红外画面:特写不建尘埃云块、不补日标(下面两处)
   let sub=insetDirector(now,dt,inc,ss,sel)||ss;const fade=!sub&&!!INSET.last&&INSET.last!==INSET_FREE&&INSET.a>0.02;if(fade)sub=INSET.last; // 淡出:拿上一帧的取景接着画
-  const mvw=W/cam.zoom,mvh=H/cam.zoom; // 主画面此刻看到的宽高 km(反层用)
-  if(!sub){ // 2026-10-08 反层:没东西可播(也没选中)时,主画面拉得够近(宽 < REV_FREE)照样亮出来,看主画面周围
-    if(!INSET.rev&&mvw<INSET.REV_FREE)INSET.rev=true;else if(INSET.rev&&mvw>INSET.REV_FREE*INSET.REV_OUT)INSET.rev=false;
+  const mvw=W/cam.zoom,mvh=H/cam.zoom,mvk=1/cam.zoom; // 主画面此刻看到的宽高 km、每像素 km(反层用)
+  if(!sub){ // 2026-10-08 反层:没东西可播(也没选中)时,主画面拉得够近(比例尺 < REV_FREE_BAR)照样亮出来,看主画面周围
+    const bar=mvk*VT.BAR_PX;if(!INSET.rev&&bar<INSET.REV_FREE_BAR)INSET.rev=true;else if(INSET.rev&&bar>INSET.REV_FREE_BAR*INSET.REV_OUT)INSET.rev=false;
     if(!INSET.rev){insetOff();return;}sub=INSET_FREE;}
   if(now-INSET.botT>500){INSET.botT=now;const cb=document.getElementById('cmdBar'),sb=document.getElementById('spawnBar'); // 底边让开指令栏,顶边让开加船条;指令栏尺寸一变立刻重读
     if(cb){INSET.bot=Math.max(44,H-cb.getBoundingClientRect().top);if(!INSET.ro&&typeof ResizeObserver==='function'){INSET.ro=new ResizeObserver(()=>{INSET.botT=-1e9;});INSET.ro.observe(cb);}}
@@ -456,7 +456,7 @@ function drawInset(){
   else{
   // 2026-10-04 取景新方案(用户在演示页定的):目标按取景点连续算(insetTarget),镜头运动见 insetCam;最近只到比例尺 60 px = MIN_KM(近防拦截镜头 CIWS_KM),也不近于舰标最大那一档
   const zMax=Math.min(Math.pow(HULL_ZOOM.MAX/HULL_ZOOM.LAND,1/HULL_ZOOM.A)/vtLandKmpp(1),60/(sub.ciws?INSET.CIWS_KM:INSET.MIN_KM)),T=insetTarget(sub,RW,rhp,zMax); // 2026-10-08 按取景基准 RW x RH 取景:窗口改大小比例尺不变、船在屏幕上不动
-  const vis=w*T.w/RW;if(!INSET.rev&&mvw<vis)INSET.rev=true;else if(INSET.rev&&mvw>vis*INSET.REV_OUT)INSET.rev=false; // 反层:主画面比特写此刻看到的还近就进,拉回 REV_OUT 倍才出(迟滞)
+  const ik=T.w/RW;if(!INSET.rev&&mvk<ik)INSET.rev=true;else if(INSET.rev&&mvk>ik*INSET.REV_OUT)INSET.rev=false; // 反层:主画面每像素公里数比特写(正常取景)还小 = 比特写还近就进,拉回 REV_OUT 倍才出(迟滞)
   if(INSET.rev){const need=INSET.REV_K*Math.max(mvw,mvh*RW/rhp);if(T.w<need)T.w=need;T.w=insetRevFloor(T.w,RW);} // 反层里导演照播:取景至少主画面的 REV_K 倍宽,比例尺 60 px 不小于 REV_MIN_KM(弹性)
   insetCam(sub,T,RW,rhp,dt,now);}
   const z=Math.exp(INSET.lz),cx=INSET.pcx+(w-RW)/(2*z),cy=INSET.pcy+(rhp-h)/(2*z);INSET.cx=cx;INSET.cy=cy;INSET.z=z; // 取景中心钉在基准区(窗口左下角 RW x 画面高)中心,多出来的往右 / 往上;cx / cy = 窗口中心对着的世界点(画面区在标题条下面)
