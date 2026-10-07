@@ -128,10 +128,6 @@ function updSelWeaponTip(){ // RF4b 待命提示:底栏上方 #cmdTip 常显(旧
   tip.style.display='none';
 }
 function buoyLauncher(){for(const x of controlledShips())if((x.buoys||0)>0)return x;return null;} // 2026-10-08 放浮标的那艘(受控舰里第一艘还有浮标的;预览线 render/83 drawBuoyAim 同一艘)
-function buoyAt(sx,sy){ // 我方前出浮标(14 px,飞行中也算)/ 自己拿着的据点(至少半个图标):底栏雷达遥控它们。2026-10-08 走实体登记表
-  const h=entPick(sx,sy,{k:['obj','sta'],ok:(o,K)=>K.sel(o)==='buoy'});return h?h.o:null;}
-function entAt(sx,sy){ // 2026-10-08 用户「所有实体都能点」:只看信息的那些(对方的船 / 浮标 / 诱饵 / 民船 / 碎石、自己的诱饵、别人的据点、卫星、彗星),走实体登记表
-  const h=entPick(sx,sy,{agg:'red',ok:(o,K)=>K.sel(o)==='info'});return h?h.o:null;}
 const CAMF={o:null,K:null,lock:false,on:false,lx:0,ly:0,lz:0}; // 2026-10-08 用户:左键双击任何实体 → 镜头跟随它。o 跟谁 / K 它在实体登记表里是哪一类 / lock 飞到了就钉死 / lx ly lz 上一帧自己摆的镜头
 function camFollowStop(){CAMF.o=null;CAMF.K=null;CAMF.lock=false;CAMF.on=false;} // 2026-10-08 用户:跟随开始 / 结束都不弹提示
 function camFollowTick(dt){const F=CAMF;if(!F.o)return;

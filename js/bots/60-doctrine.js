@@ -270,7 +270,7 @@ function aicDoBuoy(X){let e=null;for(const s of X.mine)if(s.buoys>0){e=s;break;}
   const a=Math.atan2(e.pos[1]-X.E[1],e.pos[0]-X.E[0])+((e.id.charCodeAt(e.id.length-1)%2)?1:-1)*Math.PI/3,r=Math.min(Math.hypot(e.pos[0]-X.E[0],e.pos[1]-X.E[1]),0.5*actRangeOf({type:'beacon'},rdvStdRefl()));
   X.plan[e.id].buoy=ordArenaClamp([X.E[0]+Math.cos(a)*r,X.E[1]+Math.sin(a)*r]);X.mem.buoy=true;}
 function aicBuoyLive(X){for(const o of rockObjs())if(o.kind==='buoy'&&o.side===X.side&&!o.dead)return true;return false;} // 10-07 用户「放慢」:同一时间只用一个,前一个没了再放(原来开局一两分钟就放完 3 个)
-function aicPingBuoy(X){let who=null,wd=Infinity;for(const o of rockObjs()){if(o.kind!=='buoy'||o.side!==X.side||o.dead||o.dest)continue; // 到位了的浮标里,圈心在它照射量程里、离圈心最近的(10-07 用户放宽:只罩住一部分圈也扫,扫不到就从搜索图里划掉)
+function aicPingBuoy(X){let who=null,wd=Infinity;for(const o of rockObjs()){if(o.kind!=='buoy'||o.side!==X.side||o.dead)continue; // 浮标里(10-08 起方向式、一直在飞),圈心在它照射量程里、离圈心最近的(10-07 用户放宽:只罩住一部分圈也扫,扫不到就从搜索图里划掉)
   const d=Math.hypot(o.pos[0]-X.E[0],o.pos[1]-X.E[1]);if(d<=actRangeOf(o,rdvStdRefl())&&d<wd){wd=d;who=o;}}return who;}
 function aicDoBuoyPing(X){const o=aicPingBuoy(X);if(!o)return false;X.A.bping=o;X.A.pulseT=0;} // 执行层(61)让它扫一拍
 

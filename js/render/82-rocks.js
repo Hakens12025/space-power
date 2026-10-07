@@ -85,6 +85,6 @@ function drawOwnBuoy(s){ // 自己的浮标;开着照射时一圈圈脉冲;拉�
     if(s.on){ctx.globalAlpha=0.6;ctx.beginPath();ctx.arc(p[0],p[1],8,0,6.283);ctx.stroke();ctx.globalAlpha=1;}}
   else artBuoy(ctx,p[0],p[1],0,s.side,!!s.on); // 2026-10-04 中心舱 + 太阳能板 + 天线,开照射有脉冲环(render/81-art)
   if(typeof selBuoy!=='undefined'&&selBuoy===s){ctx.strokeStyle='#ffe066';ctx.lineWidth=1.6;ctx.beginPath();ctx.arc(p[0],p[1],Math.max(12,R*1.9),0,6.283);ctx.stroke();} // 2026-09-29 选中(同舰船选中圈的颜色)
-  if(cam.zoom>0.0008&&!lblPut(s.name+(s.dest?' · 飞行':(s.on?' · 照射':' · 被动')),p[0],p[1]+Math.max(8,R*1.6),1,'rgba(143,208,255,.9)')){ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillStyle='rgba(143,208,255,.9)';ctx.fillText(s.name+(s.dest?' · 飞行':(s.on?' · 照射':' · 被动')),p[0],p[1]+Math.max(8,R*1.6));}
+  if(cam.zoom>0.0008&&!lblPut(s.name+(s.on?' · 照射':' · 被动'),p[0],p[1]+Math.max(8,R*1.6),1,'rgba(143,208,255,.9)')){ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillStyle='rgba(143,208,255,.9)';ctx.fillText(s.name+(s.on?' · 照射':' · 被动'),p[0],p[1]+Math.max(8,R*1.6));}
   ctx.restore();
 }
