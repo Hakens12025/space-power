@@ -93,12 +93,29 @@ const INSET={FIT:0.7,FIT_MIN:0.26,SHOT_MAX:7000,CTX_T:240,CTX_F0:40000,CTX_F1:50
    // 每类停留 / 事件寿命 ms;炮弹来路回放往回框多远 km(x scale)
   COOL:3000,GRACE:500,KILL_HIT:3000,HIT_R:5000, // 冷却 / 来袭导弹与主体丢位置的宽限 ms;击沉吞命中 / 命中绑敌舰 km
   HOV:5000, // 指针多久没动就不再算悬停 ms
+  uw:null,uh:null,RW:null,RH:null,aw:0,ah:0,MIN_H:150,REV_K:3,REV_OUT:1.25,REV_FREE:80000,REV_MIN_KM:5000,REV_SOFT:0.25,rev:false,btn:[],drag:null, // 2026-10-08 用户(演示页 demos/ui/特写镜头实战.html 定):uw / uh = 右上角拖出来的大小(null = 自动);RW / RH = 取景基准(null = 自动大小,「自适应」= 点的那一刻的窗口);aw / ah = 这一帧的自动大小。反层:主画面比特写还近(没东西播时主画面宽 < REV_FREE km)→ 导演照播,取景至少主画面的 REV_K 倍宽,比例尺 60 px 不小于 REV_MIN_KM(弹性宽 REV_SOFT),拉回 REV_OUT 倍才出
   RING:['察觉','来袭','防御','挨打','出手','战果'],RC:{fix:'察觉',id:'察觉',vis:'察觉',shell:'来袭',ciws:'防御',loss:'挨打',kill:'战果'},URG:{loss:1,kill:1},RING_WAIT:1500,MIN_SHOT:2500,VIS_COOL:30000,rc:-1,rt:-1e9, // 2026-09-29 事件分类成环(用户):每类播完只能接环上往后 1~(N-1)/2 类,任意两类不双向;接不上每等 RING_WAIT ms 多走一步;损失 / 击沉不看环;非插队的段至少播 MIN_SHOT ms 才让切;同一艘进可见光圈的冷却 ms。加事件 = 在 RC 登记一行(中弹 / 命中按情况在 insetEvents 里定 c)
   PRE_S:3,PRE_SEE:0.5,PRE_VIEW:0.8,PRE_HOLD:700,PRE_POST:800,PRE_WMAX:60000,RHO_P:1.2,DISC_R:80000,PRE_COOL:4000,ATTR_R:20000,lrt:1, // 预判(2026-10-04 用户在演示页 demos/ui/特写镜头实战.html 定的):离命中 ≤ PRE_S 且够「滑过去 + PRE_SEE」墙钟秒才开播,沿弧度 RHO_P 滑过去;开播锁框:按弹在命中前 PRE_VIEW 秒的位置定(框宽封顶 PRE_WMAX km)、整段不缩放;命中后定格 PRE_HOLD ms;弹没了 / 打空 PRE_POST ms 收;同一目标冷却 ms;同类发现并成一段的半径 km;命中归到消失弹丸的半径 km(x scale)
   lz:0,vo:[0,0,0,0,0],key:'',sk:'',t:0,a:0,cut:-1e9,cool:-1e9,hov:false,mx:0,my:0,mt:-1e9,gm:false,vpri:0,err:false,last:null,fx:null,mskip:null,cv:null,g:null,
   dir:null,ph:new Map(),ev:[],seq:0,prj:new Map(),pfly:new WeakMap(),pend:[],tpf:-1e9,by:new Map(),preT:new Map(),preSeen:new WeakSet(),out:new Set(),outK:'',dead:new Set(),idc:new Map(),fixd:new WeakSet(),fix0:true,hits:new WeakSet(),shr:new WeakSet(),shs:new WeakSet(),cws:new WeakSet(),vin:new Map(),vit:new Map(),t0:-1,arr:null,
   lod0:{hideBlue:new Set(),hideRed:new Set(),aggs:[],live:false}}; // 特写不做聚合:画特写时把 lodNow 临时换成这个空的
 function insetHit(sx,sy){return INSET.on&&sx>=INSET.x&&sx<=INSET.x+INSET.w&&sy>=INSET.y&&sy<=INSET.y+INSET.h;} // 点在特写框里:输入层吞掉,不落到框底下的地图
+const INSET_FREE={lbl:'主画面周围',ind:[],ctx:[],kind:'free'}; // 2026-10-08 反层的空镜:没东西可播时看主画面周围
+function insetRevFloor(Tw,RW){const m=RW*INSET.REV_MIN_KM/60,sw=m*INSET.REV_SOFT,u=(Tw-m)/sw;return u>30?Tw:m+sw*Math.log1p(Math.exp(u));} // 反层的弹性下限:取景宽(基准宽 RW 对应的 km)贴着「比例尺 60 px = REV_MIN_KM」平滑收住(softplus),远高于下限时不变
+function insetFreeCam(mvw,mvh,RW,rhp,dt){ // 反层空镜的镜头:以主画面中心为中心、宽 = 主画面的 REV_K 倍(弹性下限),平滑跟上;导演有镜头了照常飞过去(key 不同)
+  const Tw=insetRevFloor(INSET.REV_K*Math.max(mvw,mvh*RW/rhp),RW),tlz=Math.log(RW/Tw),a=1-Math.exp(-dt*4);
+  if(INSET.key!=='free'){if(INSET.a<0.02){INSET.pcx=cam.x;INSET.pcy=cam.y;INSET.lz=tlz;}INSET.key='free';INSET.csk='free';INSET.lastK='';INSET.fly=null;INSET.dir=null;}
+  INSET.pcx+=(cam.x-INSET.pcx)*a;INSET.pcy+=(cam.y-INSET.pcy)*a;INSET.lz+=(tlz-INSET.lz)*a;}
+function insetChromeAt(sx,sy){if(!insetHit(sx,sy))return null;if(sx>=INSET.x+INSET.w-16&&sy<=INSET.y+16)return 'corner';for(const b of INSET.btn)if(sx>=b.x&&sx<=b.x+b.w&&sy>=b.y&&sy<=b.y+b.h)return b.k;return null;} // 指针在标题条按钮 / 右上角拖柄上?
+function insetRebase(nw,nh,auto){const old=INSET.RW||INSET.aw,k=nw/old;INSET.RW=auto?null:nw;INSET.RH=auto?null:nh; // 取景基准换成 nw x nh,镜头按同一比例立刻缩放(暂停也生效):船变大、位置跟着基准区挪
+  if(INSET.on&&old>0&&k>0&&isFinite(k)){const l=Math.log(k);INSET.lz+=l;if(INSET.lzg!==null)INSET.lzg+=l;INSET.fly=null;}}
+function insetChromeDown(sx,sy){const k=insetChromeAt(sx,sy);if(!k)return false; // 70-input mdInset 调:吞掉 = 不再当作「主镜头飞到特写中心」
+  if(k==='corner')INSET.drag={x:sx,y:sy,w:INSET.w,h:INSET.h};
+  else if(k==='fit'){INSET.uw=INSET.w;INSET.uh=INSET.h;insetRebase(INSET.w,INSET.h,false);} // 「自适应」:以当前窗口为新的取景基准(一次性按钮)
+  else if(k==='reset'){INSET.uw=INSET.uh=null;insetRebase(INSET.aw,INSET.ah,true);} // 「重置」:回默认大小与默认取景
+  return true;}
+function insetDragMove(sx,sy){const D=INSET.drag;if(!D)return false;INSET.uw=D.w+(sx-D.x);INSET.uh=D.h-(sy-D.y);return true;} // 框钉在左下角:往右拉变宽、往上拉变高(夹在 drawInset 里做)
+function insetDragEnd(){if(!INSET.drag)return false;INSET.drag=null;return true;}
 function insetClick(){const k1=vtAnim?vtAnim.k1:cam.zoom;zAnim=null;vtAnim={k0:cam.zoom,k1:k1,x0:cam.x,y0:cam.y,x1:INSET.cx,y1:INSET.cy,t0:nowMs(),dur:420};} // 点特写框:主镜头飞到特写中心;跳层动画正在跑就沿用它的目标缩放,不截断跳层
 function insetSkip(){const D=INSET.dir;if(D&&D.k==='m')INSET.mskip=D.sj;INSET.dir=null;INSET.fx=null;for(const e of INSET.ev)e.shown=true;INSET.cool=nowMs();} // 右键点框:跳过这段播放、清空队列
 const insetMed=a=>{const b=a.slice().sort((p,q)=>p-q),n=b.length;return n?(n%2?b[(n-1)/2]:(b[n/2-1]+b[n/2])/2):0;};
@@ -394,7 +411,7 @@ function insetSD(c,t,i,T,dt){ // 临界阻尼平滑(Unity Mathf.SmoothDamp;Game 
   if(!(dt>0))return c;const om=2/T,x=om*dt,e=1/(1+x+0.48*x*x+0.235*x*x*x),ch=c-t,v=INSET.vo[i],tp=(v+om*ch)*dt;
   let o=t+(ch+tp)*e;INSET.vo[i]=(v-om*tp)*e;if((t-c>0)===(o>t)){o=t;INSET.vo[i]=0;}return o;
 }
-function insetOff(){INSET.on=false;INSET.a=0;INSET.key='';INSET.last=null;if(typeof terrXOff==='function')terrXOff();}
+function insetOff(){INSET.on=false;INSET.a=0;INSET.key='';INSET.last=null;INSET.rev=false;if(typeof terrXOff==='function')terrXOff();}
 function insetCue(x,y,w,h){ // 日标被特写框盖住时让位(落点公式同 81-env 的 mapLightCue):整张被盖住就沿同一条射线挪到框外,盖住一部分就把框里那一截补画在框上
   if(typeof mapCueSpr!=='function')return;let dx=0,dy=0,lb='';
   if(ENV.stars.length){const p=toScreen(ENV.stars[0].x,ENV.stars[0].y);if(p[0]>=0&&p[0]<=W&&p[1]>=0&&p[1]<=H)return;dx=p[0]-W/2;dy=p[1]-H/2;lb='恒星';}
@@ -421,18 +438,28 @@ function drawInset(){
   if(INSET.mskip&&!inc.some(m=>m.tgt===INSET.mskip))INSET.mskip=null;
   const ss=sel.length?insetSubject(sel,inc):null;
   const md=typeof MAPV!=='undefined'?MAPV.mode:''; // 红外画面:特写不建尘埃云块、不补日标(下面两处)
-  let sub=insetDirector(now,dt,inc,ss,sel)||ss;const fade=!sub&&!!INSET.last&&INSET.a>0.02;if(fade)sub=INSET.last; // 淡出:拿上一帧的取景接着画
-  if(!sub){insetOff();return;}
+  let sub=insetDirector(now,dt,inc,ss,sel)||ss;const fade=!sub&&!!INSET.last&&INSET.last!==INSET_FREE&&INSET.a>0.02;if(fade)sub=INSET.last; // 淡出:拿上一帧的取景接着画
+  const mvw=W/cam.zoom,mvh=H/cam.zoom; // 主画面此刻看到的宽高 km(反层用)
+  if(!sub){ // 2026-10-08 反层:没东西可播(也没选中)时,主画面拉得够近(宽 < REV_FREE)照样亮出来,看主画面周围
+    if(!INSET.rev&&mvw<INSET.REV_FREE)INSET.rev=true;else if(INSET.rev&&mvw>INSET.REV_FREE*INSET.REV_OUT)INSET.rev=false;
+    if(!INSET.rev){insetOff();return;}sub=INSET_FREE;}
   if(now-INSET.botT>500){INSET.botT=now;const cb=document.getElementById('cmdBar'),sb=document.getElementById('spawnBar'); // 底边让开指令栏,顶边让开加船条;指令栏尺寸一变立刻重读
     if(cb){INSET.bot=Math.max(44,H-cb.getBoundingClientRect().top);if(!INSET.ro&&typeof ResizeObserver==='function'){INSET.ro=new ResizeObserver(()=>{INSET.botT=-1e9;});INSET.ro.observe(cb);}}
     let tl=60;if(sb){const r=sb.getBoundingClientRect();if(r.height>0)tl=Math.max(tl,r.bottom+INSET.GAP);}INSET.top=tl;}
-  const yb=H-INSET.bot-INSET.GAP,w=Math.min(W>=INSET.WIDE?INSET.WB:INSET.W,Math.round(W*0.3),Math.floor((yb-INSET.top)*1.6)),h=Math.round(w/1.6);
-  if(!(w>=INSET.MIN_W)){insetOff();return;} // 屏太小:不画(同"无对象"那条路)
-  const dpr=window.devicePixelRatio||1,x=Math.round(INSET.M*dpr)/dpr,y=Math.floor((yb-h)*dpr)/dpr,HDR=INSET.HDR,hp=h-HDR;
+  const yb=H-INSET.bot-INSET.GAP,w0=Math.min(W>=INSET.WIDE?INSET.WB:INSET.W,Math.round(W*0.3),Math.floor((yb-INSET.top)*1.6)),h0=Math.round(w0/1.6);
+  if(!(w0>=INSET.MIN_W)){insetOff();return;} // 屏太小:不画(同"无对象"那条路)
+  INSET.aw=w0;INSET.ah=h0;
+  const w=INSET.uw===null?w0:Math.round(Math.max(INSET.MIN_W,Math.min(W-2*INSET.M,INSET.uw))),h=INSET.uh===null?h0:Math.round(Math.max(INSET.MIN_H,Math.min(yb-INSET.top,INSET.uh))); // 2026-10-08 右上角拖出来的大小(夹在屏里)
+  const RW=INSET.RW||w0,RH=INSET.RH||h0; // 取景基准:默认 = 自动大小;「自适应」= 点的那一刻的窗口
+  const dpr=window.devicePixelRatio||1,x=Math.round(INSET.M*dpr)/dpr,y=Math.floor((yb-h)*dpr)/dpr,HDR=INSET.HDR,hp=h-HDR,rhp=RH-HDR;
+  if(sub===INSET_FREE)insetFreeCam(mvw,mvh,RW,rhp,dt);
+  else{
   // 2026-10-04 取景新方案(用户在演示页定的):目标按取景点连续算(insetTarget),镜头运动见 insetCam;最近只到比例尺 60 px = MIN_KM(近防拦截镜头 CIWS_KM),也不近于舰标最大那一档
-  const zMax=Math.min(Math.pow(HULL_ZOOM.MAX/HULL_ZOOM.LAND,1/HULL_ZOOM.A)/vtLandKmpp(1),60/(sub.ciws?INSET.CIWS_KM:INSET.MIN_KM)),T=insetTarget(sub,w,hp,zMax);
-  insetCam(sub,T,w,hp,dt,now);
-  const z=Math.exp(INSET.lz),cx=INSET.pcx,cy=INSET.pcy-HDR/(2*z);INSET.cx=cx;INSET.cy=cy;INSET.z=z; // 画面区在标题条下面:中心往上挪半个标题条
+  const zMax=Math.min(Math.pow(HULL_ZOOM.MAX/HULL_ZOOM.LAND,1/HULL_ZOOM.A)/vtLandKmpp(1),60/(sub.ciws?INSET.CIWS_KM:INSET.MIN_KM)),T=insetTarget(sub,RW,rhp,zMax); // 2026-10-08 按取景基准 RW x RH 取景:窗口改大小比例尺不变、船在屏幕上不动
+  const vis=w*T.w/RW;if(!INSET.rev&&mvw<vis)INSET.rev=true;else if(INSET.rev&&mvw>vis*INSET.REV_OUT)INSET.rev=false; // 反层:主画面比特写此刻看到的还近就进,拉回 REV_OUT 倍才出(迟滞)
+  if(INSET.rev){const need=INSET.REV_K*Math.max(mvw,mvh*RW/rhp);if(T.w<need)T.w=need;T.w=insetRevFloor(T.w,RW);} // 反层里导演照播:取景至少主画面的 REV_K 倍宽,比例尺 60 px 不小于 REV_MIN_KM(弹性)
+  insetCam(sub,T,RW,rhp,dt,now);}
+  const z=Math.exp(INSET.lz),cx=INSET.pcx+(w-RW)/(2*z),cy=INSET.pcy+(rhp-h)/(2*z);INSET.cx=cx;INSET.cy=cy;INSET.z=z; // 取景中心钉在基准区(窗口左下角 RW x 画面高)中心,多出来的往右 / 往上;cx / cy = 窗口中心对着的世界点(画面区在标题条下面)
   if(fade){INSET.a*=Math.exp(-dt*INSET.FADE_OUT);if(INSET.a<0.02){insetOff();return;}}else{INSET.a+=(1-INSET.a)*(1-Math.exp(-dt*INSET.FADE_IN));INSET.last=sub;} // 淡入 / 淡出。2026-09-26 删掉"重复时收起"(用户:"在战斗的时候整个特写都不显示")
   const pw=Math.round(w*dpr),ph=Math.round(h*dpr);
   if(!INSET.cv)INSET.cv=document.createElement('canvas');
@@ -485,7 +512,7 @@ function drawInset(){
   ctx.strokeStyle=D?'rgba(255,209,102,.85)':'rgba(143,208,255,.55)';ctx.lineWidth=1;ctx.strokeRect(x+0.5,y+0.5,w-1,h-1); // 播放中琥珀色边框
   ctx.fillStyle='rgba(5,7,12,.88)';ctx.fillRect(x+1,y+1,w-2,HDR-1);
   if(D&&D.dwell<Infinity){ctx.fillStyle='rgba(255,209,102,.85)';ctx.fillRect(x+1,y+HDR-2,Math.max(0,1-D.el/D.dwell)*(w-2),2);} // 播放进度条:还剩多久
-  ctx.font='11px "Microsoft YaHei"';ctx.textAlign='left';ctx.fillStyle=D?insetCol(D):'#cfe6ff';ctx.fillText(sub.lbl,x+7,y+HDR/2+1,w-14);
+  ctx.font='11px "Microsoft YaHei"';ctx.textAlign='left';ctx.fillStyle=D?insetCol(D):'#cfe6ff';ctx.fillText(sub.lbl,x+7,y+HDR/2+1,Math.max(20,w-150));insetChrome(x,y,w);
   const bk=60/z,pw10=Math.pow(10,Math.floor(Math.log10(bk))),bkm=Math.max(pw10,Math.round(bk/pw10)*pw10),bp=bkm*z,bs=bkm.toLocaleString('en-US')+' km'; // 小比例尺:取整到一位有效数字,数字和条一起收在右下角
   ctx.font='10px Consolas';const R=x+w-7,bw=Math.max(bp,ctx.measureText(bs).width)+6;
   ctx.fillStyle='rgba(5,7,12,.6)';ctx.fillRect(R-bw+3,y+h-22,bw,19);
@@ -493,6 +520,11 @@ function drawInset(){
   }finally{ctx.restore();} // 中途抛错也不让主画布的 save 栈失衡
   if(md!=='ir'&&INSET.a>=0.95)insetCue(x,y,w,h); // 淡入淡出时不补:半透明的框压不住日标
 }
+function insetChrome(x,y,w){const H=INSET.HDR,B=[{k:'fit',t:'自适应',w:46},{k:'reset',t:'重置',w:34}];let bx=x+w-18;INSET.btn=[]; // 2026-10-08 标题条右边:「自适应」「重置」(一次性按钮)+ 右上角拖柄(小直角);反层时标一下
+  ctx.font='11px "Microsoft YaHei"';ctx.textAlign='left';ctx.textBaseline='middle';ctx.lineWidth=1;
+  for(let i=B.length-1;i>=0;i--){const b=B[i];bx-=b.w+4;ctx.fillStyle='#101722';ctx.fillRect(bx,y+3,b.w,H-6);ctx.strokeStyle='#3a4e6a';ctx.strokeRect(bx+0.5,y+3.5,b.w-1,H-7);ctx.fillStyle='#c7d0dc';ctx.fillText(b.t,bx+5,y+H/2+1);INSET.btn.push({k:b.k,x:bx,y:y+3,w:b.w,h:H-6});}
+  if(INSET.rev){ctx.fillStyle='rgba(143,208,255,.95)';ctx.fillText('反层',bx-30,y+H/2+1);}
+  ctx.strokeStyle='#8fb8e8';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x+w-12,y+2);ctx.lineTo(x+w-2,y+2);ctx.lineTo(x+w-2,y+12);ctx.stroke();ctx.lineWidth=1;}
 function render(){
   artTick(); // 2026-10-04 行星贴图分帧生成(render/81-art,每帧 ART_BUDGET ms)
   /* SN6 三级星图:先推进跳层动画、算出这一档缩放落在哪一层(连续权重 + 带迟滞的离散层),

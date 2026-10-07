@@ -343,11 +343,12 @@ function mdRight(e,sx,sy){ // 右键:单击=直接移动,按住350ms=移动虚�
   },350);
 }
 function mdInset(e){ // 特写框里:左键 = 主镜头飞过去;右键 = 取消待命态,没有待命态就跳过这段播放;中键只挡浏览器自动滚动
+  if(e.button===0&&typeof insetChromeDown==='function'&&insetChromeDown(e.clientX,e.clientY))return; // 2026-10-08 标题条「自适应」「重置」/ 右上角拖柄(render/84)
   if(e.button===1){if(e.preventDefault)e.preventDefault();return;}
   if(e.button===2){if(pendingTurn||selWeapon||pendingFollow||pendingFcNew){clearPendings();if(typeof updFmBar==='function')updFmBar();}else if(typeof insetSkip==='function')insetSkip();return;}
   if(e.button===0&&typeof insetClick==='function')insetClick();
 }
-let insetCur=false; // 指针此刻在不在特写框上(只在进出时改 cursor)
+let insetCur=''; // 指针在特写框上要的 cursor(只在变了时改):框上手形、右上角拖柄斜箭头
 function onMouseDown(e){
   const sx=e.clientX,sy=e.clientY;
   if(mdRadial(e,sx,sy))return;
@@ -360,6 +361,7 @@ function onMouseDown(e){
 }
 window.addEventListener('mousemove',e=>{
   mouseX=e.clientX;mouseY=e.clientY; // 全程记录鼠标位置(测距起点等用)
+  if(typeof insetDragMove==='function'&&insetDragMove(e.clientX,e.clientY))return; // 2026-10-08 正在拖特写框右上角
   if(mmbTimer&&mmb&&Math.abs(e.clientX-mmb.sx)+Math.abs(e.clientY-mmb.sy)>5){clearTimeout(mmbTimer);mmbTimer=null;} // RF5 Phase C 中键长按期间位移>5px:取消开轮盘。必须插在这一行【之后】、测距早退【之前】,否则测距里甩鼠标取消不掉;阈值 5px 与下面 mouseup 的 moved 判定同源,不另设常数。只清定时器不清 mmb,moved 判定照旧生效
   if(rangeMode){ // 测距中:起点跟随船(若选中),目标点跟随鼠标
     if(rangeFollow&&!rangeFollow.dead)rangeA=rangeFollow.pos.slice();
@@ -367,7 +369,7 @@ window.addEventListener('mousemove',e=>{
     rangeMoved=true;
     return;
   }
-  const inIn=typeof insetHit==='function'&&insetHit(e.clientX,e.clientY);if(inIn!==insetCur){insetCur=inIn;cv.style.cursor=inIn?'pointer':'';} // 2026-09-26 特写框上换手形指针
+  const inIn=typeof insetHit==='function'&&insetHit(e.clientX,e.clientY),cu=inIn?((typeof insetChromeAt==='function'&&insetChromeAt(e.clientX,e.clientY))==='corner'?'nesw-resize':'pointer'):'';if(cu!==insetCur){insetCur=cu;cv.style.cursor=cu;} // 2026-09-26 特写框上换手形指针
   if(inIn){if(typeof xhOff==='function')xhOff();} // 2026-09-26 框上不吸附框下的敌舰、不弹信息卡
   else if(typeof xhFeed==='function')xhFeed(e.clientX,e.clientY); // RF5 悬停准星喂入(command/74)。放这里:测距在上面 return 了(准星不该在那个模式下出现),又早于 dragOrder 的 return(否则拖命令点时十字会冻在拖拽起点)
   if(rangeDrag){ // ENV2 靶场沙盘拖动:过 5 px 才算拖,并取消这一击的点选 / 框选
@@ -407,6 +409,7 @@ function updateDragSel(){
   }
 }
 window.addEventListener('mouseup',e=>{
+  if(typeof insetDragEnd==='function'&&insetDragEnd())return; // 2026-10-08 拖特写框右上角结束
   if(e.button===1&&mmb){ // RF5 中键抬起:短按且未拖动 → 快速交战(准星吸附的敌舰建火控序列)
     // 必须排在下面 dragOrder 那条早退【之前】:它不分按键、也不清 mmb。拖命令点时抬中键会被那条 return 吃掉,
     // 旧时间戳留在 mmb 里,下一次真正的短按 held 算出来是几秒 → 被判成长按而静默什么都不做,快速交战被吞掉一次(第二下才生效),屏幕上还没有任何提示。
