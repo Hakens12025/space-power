@@ -385,12 +385,12 @@ function insetFrame(now,dt){ // 同引擎 drawInset 的前半段:事件 → 导�
   if(sk!==I.sk){const first=I.sk===null;I.sk=sk;if(sk&&!first){I.dir=null;I.fx=null;I.cool=now;}}
   if(I.mskip&&!inc.some(m=>m.tgt===I.mskip))I.mskip=null;
   const ss=sel.length?insetSubject(sel,inc):null;
-  let sub=insetDirector(now,dt,inc,ss,sel)||ss;const fade=!sub&&!!I.last&&I.last!==FREE_SUB&&I.a>0.02;if(fade)sub=I.last;
+  let sub=insetDirector(now,dt,inc,ss,sel)||ss;
   const off=()=>{I.on=false;I.a=0;I.key='';I.last=null;I.rev=false;return null;};
   const mv=mainView();
-  if(!sub){ // 2026-10-08 反层:没东西可播、也没选中,主画面拉得够近(宽 < REV_FREE)照样亮出来,看主画面周围
-    const bar=100/OVC.s;if(!I.rev&&bar<I.REV_FREE)I.rev=true;else if(I.rev&&bar>I.REV_FREE*I.REV_OUT)I.rev=false; // 10-08 改按比例尺(100 px)比,与画面宽无关
-    return I.rev?insetFree(mv,dt):off();}
+  if(!sub){const bar=100/OVC.s;if(!I.rev&&bar<I.REV_FREE)I.rev=true;else if(I.rev&&bar>I.REV_FREE*I.REV_OUT)I.rev=false;if(I.rev)return insetFree(mv,dt);} // 10-08 用户:取消选中后小窗消失又出现 —— 先判反层、再判淡出,在反层里直接平滑换成主画面周围
+  const fade=!sub&&!!I.last&&I.last!==FREE_SUB&&I.a>0.02;if(fade)sub=I.last;
+  if(!sub)return off(); // 不在反层、也没在淡出:收起
   const w=I.RW,hp=I.RH-I.HDR,zMax=60/(sub.ciws?I.CIWS_KM:I.MIN_KM),T=insetTarget(sub,w,hp,zMax); // 2026-10-08 按取景基准 RW x RH 取景:窗口改大小比例尺不变(看到更多星图),「自适应」才把基准换成当前窗口
   const ik=T.w/I.RW,mk=OVC.s>0?1/OVC.s:Infinity; // 每像素 km:特写正常取景 / 主画面
   const mb=mk*100;if(!I.rev&&mk<ik&&mb<I.REV_FREE)I.rev=true;else if(I.rev&&(mk>ik*I.REV_OUT||mb>I.REV_FREE*I.REV_OUT))I.rev=false; // 10-08 用户:目标是 6000 以下才出反层 // 反层:主画面比特写还近就进,拉回到 REV_OUT 倍才出(迟滞)

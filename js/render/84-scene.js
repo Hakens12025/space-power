@@ -438,11 +438,13 @@ function drawInset(){
   if(INSET.mskip&&!inc.some(m=>m.tgt===INSET.mskip))INSET.mskip=null;
   const ss=sel.length?insetSubject(sel,inc):null;
   const md=typeof MAPV!=='undefined'?MAPV.mode:''; // 红外画面:特写不建尘埃云块、不补日标(下面两处)
-  let sub=insetDirector(now,dt,inc,ss,sel)||ss;const fade=!sub&&!!INSET.last&&INSET.last!==INSET_FREE&&INSET.a>0.02;if(fade)sub=INSET.last; // 淡出:拿上一帧的取景接着画
+  let sub=insetDirector(now,dt,inc,ss,sel)||ss;
   const mvw=W/cam.zoom,mvh=H/cam.zoom,mvk=1/cam.zoom,mbar=mvk*VT.BAR_PX; // 主画面此刻看到的宽高 km、每像素 km、比例尺(100 px)km(反层用)
   if(!sub){ // 2026-10-08 反层:没东西可播(也没选中)时,主画面拉得够近(比例尺 < REV_BAR)照样亮出来,看主画面周围
     if(!INSET.rev&&mbar<INSET.REV_BAR)INSET.rev=true;else if(INSET.rev&&mbar>INSET.REV_BAR*INSET.REV_OUT)INSET.rev=false;
-    if(!INSET.rev){insetOff();return;}sub=INSET_FREE;}
+    if(INSET.rev)sub=INSET_FREE;} // 先判反层、再判淡出(用户:取消选中后小窗消失又出现)—— 在反层里就直接平滑换成主画面周围,不先收起
+  const fade=!sub&&!!INSET.last&&INSET.last!==INSET_FREE&&INSET.a>0.02;if(fade)sub=INSET.last; // 淡出:拿上一帧的取景接着画
+  if(!sub){insetOff();return;}
   if(now-INSET.botT>500){INSET.botT=now;const cb=document.getElementById('cmdBar'),sb=document.getElementById('spawnBar'); // 底边让开指令栏,顶边让开加船条;指令栏尺寸一变立刻重读
     if(cb){INSET.bot=Math.max(44,H-cb.getBoundingClientRect().top);if(!INSET.ro&&typeof ResizeObserver==='function'){INSET.ro=new ResizeObserver(()=>{INSET.botT=-1e9;});INSET.ro.observe(cb);}}
     let tl=60;if(sb){const r=sb.getBoundingClientRect();if(r.height>0)tl=Math.max(tl,r.bottom+INSET.GAP);}INSET.top=tl;}
