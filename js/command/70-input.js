@@ -190,6 +190,7 @@ function camFollowTick(dt){const F=CAMF;if(!F.o)return;
   const q=camFollowPos(F);if(!q){camFollowStop();return;}
   if(F.lock){cam.x=q[0];cam.y=q[1];}
   else{const k=1-Math.exp(-dt*8);cam.x+=(q[0]-cam.x)*k;cam.y+=(q[1]-cam.y)*k;if(Math.hypot(q[0]-cam.x,q[1]-cam.y)*cam.zoom<1){cam.x=q[0];cam.y=q[1];F.lock=true;}} // 先平滑飞过去,到了钉死(不拖尾)
+  if(typeof zAnim!=='undefined'&&zAnim){zAnim.sx=W/2;zAnim.sy=H/2;zAnim.wx=cam.x;zAnim.wy=cam.y;if(zAnim.k!==undefined){zAnim.cx=cam.x;zAnim.cy=cam.y;}} // 2026-10-08 用户:滚轮不取消跟随 —— 缩放锚点改到跟随的目标(画面中心),render/80 的缩放动画照走、不当成别人动了镜头而让位;缩到上下限时也不会只平移不缩放
   F.on=true;F.lx=cam.x;F.ly=cam.y;F.lz=cam.zoom;}
 function entScrD(o,sx,sy){const q=(o.side===VIEW||adminMode)?o.pos:viewPos(o);if(!q)return Infinity;const p=toScreen(q[0],q[1]);return Math.hypot(p[0]-sx,p[1]-sy);} // 画着它的那一点离光标几 px
 function camPickAt(sx,sy){ // 双击命中:我方浮标 / 我方船 / 其余实体里离光标最近的;都没有再看导弹组
