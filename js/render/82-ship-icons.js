@@ -39,14 +39,14 @@ function shipIdentTier(s){                                    // TIER1 分级遮
         制图综合里叫符号抽象(小比例尺下象形符号换成抽象点符号);记号读起来是"位置标记",不是"船身"。
    ⚠ 换不换记号只看【全场同一个系数】,不看任何一艘船的字段 —— 所有舰在同一个缩放上一起换,切换时机不泄漏体型 / 分级。
    ⚠ 菱形不带朝向:接触的朝向本来就只由轮廓承载,拉远之后读不出来;速度箭头照画。 */
-const HULL_ZOOM={A:0.4,LAND:0.55,MARK:0.45,MAX:1.9}; // LAND:战术落点上的系数(CA 14px);MARK:低于它换记号;MAX:CA 最大 48px(演示页预算 B5 的 HULL_PX)
+const HULL_ZOOM={A:0.4,LAND:0.55,MARK:0.55*Math.pow(28/30,0.4),MAX:1.9}; // LAND:战术落点上的系数(CA 14px);MARK:低于它换记号(2026-10-08 用户:切换点 = 比例尺 3 万、战术层 2.8 万 ⇒ 0.55 x (2.8/3)^0.4 ≈ 0.535;原 0.45);MAX:CA 最大 48px(演示页预算 B5 的 HULL_PX)
 const SHIP_MARK_R=4;                                  // 记号的半径(px):箭头长 2R-1、菱形对角 2R
 function hullZoomRaw(){ // 未钳位的系数(判"该不该换记号"用)
   if(typeof vtLandKmpp!=='function'||!(cam.zoom>0))return 1;
   return HULL_ZOOM.LAND*Math.pow(cam.zoom*vtLandKmpp(1),HULL_ZOOM.A);
 }
 function hullZoomF(){return Math.max(HULL_ZOOM.MARK,Math.min(HULL_ZOOM.MAX,hullZoomRaw()));} // 轮廓 / 尾焰 / 告警圈 / 锁定圈 / 虚影共用的系数;下限 = MARK(记号模式下那几样按这个尺寸画)
-const SHIP_K=0.6*1.3; // 2026-10-05 用户:美术资源缩放尺度 = 1.3(同日先定 1.5 又改 1.3;船、尾焰、弹、命中特效、残骸、浮标都跟这个系数一起放大,武器对船的倍数不变)。原注: 舰标 / 舰形轮廓再缩到 0.6(同演示页 红外效果.html;拉远换记号不变、石头不缩),免得船比行星还显眼
+const SHIP_K=0.6*1.45; // 2026-10-08 用户:美术整体缩放 1.3 → 1.45。2026-10-05 用户:美术资源缩放尺度 = 1.3(同日先定 1.5 又改 1.3;船、尾焰、弹、命中特效、残骸、浮标都跟这个系数一起放大,武器对船的倍数不变)。原注: 舰标 / 舰形轮廓再缩到 0.6(同演示页 红外效果.html;拉远换记号不变、石头不缩),免得船比行星还显眼
 function shipZoomF(){return hullZoomF()*SHIP_K;} // 舰船(活船、残骸、尾焰、锁定圈、虚影)用的系数
 function shipMarkMode(){return hullZoomRaw()<HULL_ZOOM.MARK;}
 function drawShipMark(s,p,color){ // A:拉远后的记号。我方 = 沿船头的小箭头;敌方接触 = 小菱形(不分舰种 / 分级 / 认没认出)

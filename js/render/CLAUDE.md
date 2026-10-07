@@ -1,7 +1,7 @@
 # js/render —— 呈现层(画布、HUD、右栏、轮盘、教程)
 
 ## 文件
-- `80-camera.js` 相机与平滑缩放(`zAnim` / `camZoomStep` / `vtClampK`);`80-viewtier.js` 三级星图(`VT.BAR_KM` / `VT.BAR_PX`:比例尺条固定长度,三层落点 = 条代表 2.5 万 / 10 万 / 100 万 km、`vtLandKmpp`、`vtWeights` / `vtTier`、刻度尺与换挡特效)
+- `80-camera.js` 相机与平滑缩放(`zAnim` / `camZoomStep` / `vtClampK`);`80-viewtier.js` 三级星图(`VT.BAR_KM` / `VT.BAR_PX`:比例尺条固定长度,三层落点 = 条代表 2.8 万 / 12 万 / 100 万 km(战术层跟 `CFG.scale`)、`vtLandKmpp`、`vtWeights` / `vtTier`、刻度尺与换挡特效)
 - `81-background.js` 底色、嵌套网格、星空贴图 `STAR_TILE`;`81-env.js` 世界层的地图视图(`ENV_VIEWS` / `ENV_KIND_OF` / `drawEnvView`、标签 `mapLabPlan`);太阳线 `drawSunLines`(右下角开关 `SUNL.on`:选中舰的禁区锥 + 天体影子线,关着都不画);`81-terrain.js` 地形瓦片服务 `TERR`(采样在后台线程 `terrWkInit`);`81-art.js` 美术资产(原稿 demos/美术/美术资产.html;手画矢量 + 固定光向 `ART_L`,尺寸跟舰标同一个系数 `artZ`,动画走墙钟):尾焰 `artFlames`(挂舰标喷口 `ART_NOZ`)、弹 `artMsl` / `artShell` / `artDecoy` / `artMine`(导弹 / 拦截弹 / 雷 / 诱饵整体阵营色、尺寸按最小舰长 `artLFF` 无像素下限,导弹尾焰带阵营色;10-05 原稿 demos/美术/舰船武器美术.html;拦截弹走 `artIcp` 白芯亮珠:阵营色圆珠 + 白芯 + 光晕、一组排一字横队,10-06 原稿 demos/美术/拦截弹区分方案.html 的 B)、命中 / 击沉 `artHits`(墙钟另记一份,`h.big` = 击沉;命中的烟 x0.6;大小 `artFxZ` = 战术落点大小 x 船的不钳系数开平方 `artFxK`,83 的近防火花 / 护盾受击同一个系数)、行星 `artPlanet`(七种 + 地图 tag `ART_PL_NAME`;贴图按行分帧生成 `artTick`,好了 `ART_PJ.ver` 进 81-env 合成缓存的键,没好画双色圆;环只画真撒出来的行星环 world/15 `BELT_RING_GEO`;没有恒星照着:整盘压成夜面 + 淡描边,不画环和边缘光,熔岩裂缝照样发光)、石头 `artRock`、残骸 `artWreck`、浮标 `artBuoy`;残骸 / 导弹 / 雷 / 诱饵比例尺 1.5 万 km 起羽化(`artFe` / `artFeathered`:画进离屏再整张模糊);贴图都按尺寸分档缓存,导弹贴图每帧最多新建 `ART_MNEW_MAX` 张
 - `81-feat.js` 新地形的地图画法(2026-10-05,世界层 world/16;原稿 demos/美术/星空美术.html):彗星 / 卫星 / 电离云 / 辐射带 / 据点,挂 81-env 登记表的 frame 槽、都是地图事实;电离云整层画进视口大小的缓存(镜头不动、云漂不过半个像素只贴 1 次)、浓度格按墙钟预算分帧建、按开局位置建、画时加漂移偏移 world/16 `featIonOff`;彗尾浓度格按彗核相对坐标存、隔 `FEAT_R.TAIL_DT` 游戏秒重建;卫星走 81-art `artPlanet`(地表 `luna` / `europa`);据点本体战术落点 `FEAT_R.STA_PX` 20 px、拉远过 `MARK` 换侧视雷达碟(中立灰空心 / `VIEW` 自己的实心 / 敌方粗边);据点的占领进度弧与「占领中」只给正在占的那一方画(全知除外:对方的进度会交代出看不见的敌舰),自己拿着的据点画它的可见光圈,点选进 `selBuoy`(底栏雷达同浮标,`featStaPx` = 图标跨度、点选同一个数);可见光灰雾(84 `drawVisFog`)也给自己的据点挖圈
 - `82-shipart.js` 舰船美术(2026-10-05 定稿「重工长舰」,原稿 demos/ships/人类阵营舰标.html):地图舰标 `SA.icon`(剪影涂阵营色 + 固定左上光;舰长 ≥ 30 px 换完整细节;按 轮廓 / Tier / 阵营 / 尺寸档 / 朝向档 / 羽化档 缓存贴图,每帧新建有预算 `SA_NEW_MAX`,超了借相邻尺寸档)、底栏侧视肖像 `SA.portrait`;载入时按新外形重算 `HULL` / `HULL_BASE` / `ART_NOZ`(残骸、红外、诱饵冒充、选中圈、尾焰都跟着新外形),巡游舰有自己的轮廓 `CL`
@@ -26,7 +26,7 @@
 - 陈旧 / 失联画记号(`CONTACT_MARK_R` 实线小圈 + 虚线不确定圈),画完直接 return,不走舰体 / 速度 / 尾焰 / 命令连线那条链。不动的目标(`trkMem`)改画记忆:按最后认出的类型调暗画(舰船 `drawMemory`,石头等走 `drawRockAt` 的类型参数)。
 - 红方没有舰队层:只按屏幕距离聚已定位的接触,构成里没认出的记 `?`。敌方的目的地线、命令连线不画(GM 除外)。
 - 取景与缩放两头不许读任何接触的位置;信号视野按基准接收机算,不读敌舰的 `recv`。
-- 舰体大小系数全场同一个数(`hullZoomF`;舰船再乘 `SHIP_K` 0.78(0.6 x 美术整体缩放 1.3,10-05)即 `shipZoomF`,石头不乘),不读任何一艘船的字段;拉远到 `MARK` 以下全体换记号(弹类同一个点换简易记号 83 `projMark`:比船的记号小、阵营色)。
+- 舰体大小系数全场同一个数(`hullZoomF`;舰船再乘 `SHIP_K` 0.87(0.6 x 美术整体缩放 1.45,10-08)即 `shipZoomF`,石头不乘),不读任何一艘船的字段;拉远到 `MARK` 以下全体换记号(弹类同一个点换简易记号 83 `projMark`:比船的记号小、阵营色)。
 - 冒充成舰船的诱饵必须和真敌舰画得一模一样:82-rocks drawObjKnown 与 drawShip 都走 `SA.icon`,不许另画。
 
 ## 性能
