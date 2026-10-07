@@ -512,7 +512,7 @@ function drawInset(){
   ctx.strokeStyle=D?'rgba(255,209,102,.85)':'rgba(143,208,255,.55)';ctx.lineWidth=1;ctx.strokeRect(x+0.5,y+0.5,w-1,h-1); // 播放中琥珀色边框
   ctx.fillStyle='rgba(5,7,12,.88)';ctx.fillRect(x+1,y+1,w-2,HDR-1);
   if(D&&D.dwell<Infinity){ctx.fillStyle='rgba(255,209,102,.85)';ctx.fillRect(x+1,y+HDR-2,Math.max(0,1-D.el/D.dwell)*(w-2),2);} // 播放进度条:还剩多久
-  ctx.font='11px "Microsoft YaHei"';ctx.textAlign='left';ctx.fillStyle=D?insetCol(D):'#cfe6ff';ctx.fillText(sub.lbl,x+7,y+HDR/2+1,Math.max(20,w-150));insetChrome(x,y,w);
+  ctx.font='11px "Microsoft YaHei"';ctx.textAlign='left';ctx.fillStyle=D?insetCol(D):'#cfe6ff';ctx.fillText(sub.lbl,x+7,y+HDR/2+1,Math.max(20,w-100));insetChrome(x,y,w);
   const bk=60/z,pw10=Math.pow(10,Math.floor(Math.log10(bk))),bkm=Math.max(pw10,Math.round(bk/pw10)*pw10),bp=bkm*z,bs=bkm.toLocaleString('en-US')+' km'; // 小比例尺:取整到一位有效数字,数字和条一起收在右下角
   ctx.font='10px Consolas';const R=x+w-7,bw=Math.max(bp,ctx.measureText(bs).width)+6;
   ctx.fillStyle='rgba(5,7,12,.6)';ctx.fillRect(R-bw+3,y+h-22,bw,19);
@@ -520,9 +520,15 @@ function drawInset(){
   }finally{ctx.restore();} // 中途抛错也不让主画布的 save 栈失衡
   if(md!=='ir'&&INSET.a>=0.95)insetCue(x,y,w,h); // 淡入淡出时不补:半透明的框压不住日标
 }
-function insetChrome(x,y,w){const H=INSET.HDR,B=[{k:'fit',t:'自适应',w:46},{k:'reset',t:'重置',w:34}];let bx=x+w-18;INSET.btn=[]; // 2026-10-08 标题条右边:「自适应」「重置」(一次性按钮)+ 右上角拖柄(小直角);反层时标一下
+const INSET_TIP={fit:'自适应:按当前窗口大小重新取景',reset:'重置:回默认大小与取景'}; // 图标按钮的悬停提示
+function insetIcon(g,k,cx,cy){g.strokeStyle=g.fillStyle='#c7d0dc';g.lineWidth=1.3;g.lineCap='butt';g.beginPath(); // 2026-10-08 用户:按钮做成图标 —— fit = 四角括号(按窗口填满),reset = 回转箭头
+  if(k==='fit'){const a=5,l=3.2;for(const sx of [-1,1])for(const sy of [-1,1]){g.moveTo(cx+sx*a,cy+sy*(a-l));g.lineTo(cx+sx*a,cy+sy*a);g.lineTo(cx+sx*(a-l),cy+sy*a);}g.stroke();g.fillRect(cx-1,cy-1,2,2);}
+  else{const r=4.2,t1=1.75*Math.PI;g.arc(cx,cy,r,0.15*Math.PI,t1);g.stroke();const px=cx+r*Math.cos(t1),py=cy+r*Math.sin(t1),tx=-Math.sin(t1),ty=Math.cos(t1);
+    g.beginPath();g.moveTo(px+tx*2.6,py+ty*2.6);g.lineTo(px-tx*1.2-ty*2.4,py-ty*1.2+tx*2.4);g.lineTo(px-tx*1.2+ty*2.4,py-ty*1.2-tx*2.4);g.closePath();g.fill();}
+  g.lineWidth=1;}
+function insetChrome(x,y,w){const H=INSET.HDR,B=[{k:'fit',w:18},{k:'reset',w:18}];let bx=x+w-18;INSET.btn=[]; // 2026-10-08 标题条右边:「自适应」「重置」(一次性图标按钮)+ 右上角拖柄(小直角);反层时标一下
   ctx.font='11px "Microsoft YaHei"';ctx.textAlign='left';ctx.textBaseline='middle';ctx.lineWidth=1;
-  for(let i=B.length-1;i>=0;i--){const b=B[i];bx-=b.w+4;ctx.fillStyle='#101722';ctx.fillRect(bx,y+3,b.w,H-6);ctx.strokeStyle='#3a4e6a';ctx.strokeRect(bx+0.5,y+3.5,b.w-1,H-7);ctx.fillStyle='#c7d0dc';ctx.fillText(b.t,bx+5,y+H/2+1);INSET.btn.push({k:b.k,x:bx,y:y+3,w:b.w,h:H-6});}
+  for(let i=B.length-1;i>=0;i--){const b=B[i];bx-=b.w+4;ctx.fillStyle='#101722';ctx.fillRect(bx,y+3,b.w,H-6);ctx.strokeStyle='#3a4e6a';ctx.strokeRect(bx+0.5,y+3.5,b.w-1,H-7);insetIcon(ctx,b.k,bx+b.w/2,y+H/2);INSET.btn.push({k:b.k,x:bx,y:y+3,w:b.w,h:H-6});}
   if(INSET.rev){ctx.fillStyle='rgba(143,208,255,.95)';ctx.fillText('反层',bx-30,y+H/2+1);}
   ctx.strokeStyle='#8fb8e8';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x+w-12,y+2);ctx.lineTo(x+w-2,y+2);ctx.lineTo(x+w-2,y+12);ctx.stroke();ctx.lineWidth=1;}
 function render(){

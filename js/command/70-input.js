@@ -369,7 +369,8 @@ window.addEventListener('mousemove',e=>{
     rangeMoved=true;
     return;
   }
-  const inIn=typeof insetHit==='function'&&insetHit(e.clientX,e.clientY),cu=inIn?((typeof insetChromeAt==='function'&&insetChromeAt(e.clientX,e.clientY))==='corner'?'nesw-resize':'pointer'):'';if(cu!==insetCur){insetCur=cu;cv.style.cursor=cu;} // 2026-09-26 特写框上换手形指针
+  const inIn=typeof insetHit==='function'&&insetHit(e.clientX,e.clientY),ck=inIn&&typeof insetChromeAt==='function'?insetChromeAt(e.clientX,e.clientY):null,cu=inIn?(ck==='corner'?'nesw-resize':'pointer'):'';if(cu!==insetCur){insetCur=cu;cv.style.cursor=cu;}
+  {const tt=(ck&&typeof INSET_TIP!=='undefined'&&INSET_TIP[ck])||'';if(cv.title!==tt)cv.title=tt;} // 2026-10-08 特写标题条图标按钮的悬停提示 // 2026-09-26 特写框上换手形指针
   if(inIn){if(typeof xhOff==='function')xhOff();} // 2026-09-26 框上不吸附框下的敌舰、不弹信息卡
   else if(typeof xhFeed==='function')xhFeed(e.clientX,e.clientY); // RF5 悬停准星喂入(command/74)。放这里:测距在上面 return 了(准星不该在那个模式下出现),又早于 dragOrder 的 return(否则拖命令点时十字会冻在拖拽起点)
   if(rangeDrag){ // ENV2 靶场沙盘拖动:过 5 px 才算拖,并取消这一击的点选 / 框选

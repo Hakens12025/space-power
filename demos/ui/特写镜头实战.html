@@ -476,10 +476,16 @@ function drawInsetView(g,now){const w=I.W,h=I.H,z=I.z,X=x=>(x-I.cx)*z+w/2,Y=y=>(
   g.fillStyle='rgba(5,7,12,.92)';g.fillRect(0,0,w,I.HDR);g.font='11px "Microsoft YaHei"';g.fillStyle=insetCol(I.dir);g.fillText(I.last?I.last.lbl:'',8,14);
   const kc=(now-I.cut)/I.CUT;if(kc>=0&&kc<1){g.fillStyle='rgba(5,7,12,'+(0.55*(1-kc)).toFixed(3)+')';g.fillRect(0,0,w,h);}
   insetChrome(g);}
-function insetChrome(g){const w=I.W,H=I.HDR; // 标题条右边:「自适应」「重置」+ 右上角拖柄(小直角);反层时标一下
-  g.font='11px "Microsoft YaHei"';const B=[{k:'fit',t:'自适应',w:46},{k:'reset',t:'重置',w:34}];let x=w-18;I.btn=[];
+const INSET_TIP={fit:'自适应:按当前窗口大小重新取景',reset:'重置:回默认大小与取景'}; // 图标按钮的悬停提示
+function insetIcon(g,k,cx,cy){g.strokeStyle=g.fillStyle='#c7d0dc';g.lineWidth=1.3;g.lineCap='butt';g.beginPath(); // 2026-10-08 用户:按钮做成图标 —— fit = 四角括号(按窗口填满),reset = 回转箭头
+  if(k==='fit'){const a=5,l=3.2;for(const sx of [-1,1])for(const sy of [-1,1]){g.moveTo(cx+sx*a,cy+sy*(a-l));g.lineTo(cx+sx*a,cy+sy*a);g.lineTo(cx+sx*(a-l),cy+sy*a);}g.stroke();g.fillRect(cx-1,cy-1,2,2);}
+  else{const r=4.2,t1=1.75*Math.PI;g.arc(cx,cy,r,0.15*Math.PI,t1);g.stroke();const px=cx+r*Math.cos(t1),py=cy+r*Math.sin(t1),tx=-Math.sin(t1),ty=Math.cos(t1);
+    g.beginPath();g.moveTo(px+tx*2.6,py+ty*2.6);g.lineTo(px-tx*1.2-ty*2.4,py-ty*1.2+tx*2.4);g.lineTo(px-tx*1.2+ty*2.4,py-ty*1.2-tx*2.4);g.closePath();g.fill();}
+  g.lineWidth=1;}
+function insetChrome(g){const w=I.W,H=I.HDR; // 标题条右边:「自适应」「重置」(图标按钮)+ 右上角拖柄(小直角);反层时标一下
+  g.font='11px "Microsoft YaHei"';const B=[{k:'fit',w:18},{k:'reset',w:18}];let x=w-18;I.btn=[];
   for(let i=B.length-1;i>=0;i--){const b=B[i];x-=b.w+4; // 一次性按钮(不是开关)
-    g.fillStyle='#101722';g.fillRect(x,3,b.w,H-6);g.strokeStyle='#3a4e6a';g.strokeRect(x+0.5,3.5,b.w-1,H-7);g.fillStyle='#c7d0dc';g.fillText(b.t,x+5,14);I.btn.push({k:b.k,x,y:3,w:b.w,h:H-6});}
+    g.fillStyle='#101722';g.fillRect(x,3,b.w,H-6);g.strokeStyle='#3a4e6a';g.strokeRect(x+0.5,3.5,b.w-1,H-7);insetIcon(g,b.k,x+b.w/2,H/2);I.btn.push({k:b.k,x,y:3,w:b.w,h:H-6});}
   if(I.rev){g.fillStyle='rgba(143,208,255,.95)';g.fillText('反层',x-30,14);}
   g.strokeStyle='#8fb8e8';g.lineWidth=2;g.beginPath();g.moveTo(w-12,2);g.lineTo(w-2,2);g.lineTo(w-2,12);g.stroke();g.lineWidth=1;}
 const OVC={cx:0,cy:0,s:0,man:false}; // man = 手动(滚轮 / 拖动过):不再自动看全局
@@ -565,7 +571,7 @@ ov.addEventListener('mousedown',e=>{const p=ovPos(e),q=insetLocal(p);
 addEventListener('mousemove',e=>{const p=ovPos(e);
   if(DRAG&&DRAG.k==='size'){const k=INSR.k;I.W=DRAG.W+(p[0]-DRAG.x)/k;I.H=DRAG.H-(p[1]-DRAG.y)/k;insetClamp();if(I.z>0)insetPlace();return;} // 窗钉在左下角:往右拉变宽、往上拉变高;画面钉在基准区上,船在屏幕上不动
   if(DRAG&&DRAG.k==='pan'){OVC.cx=DRAG.cx-(p[0]-DRAG.x)/OVC.s;OVC.cy=DRAG.cy-(p[1]-DRAG.y)/OVC.s;return;}
-  const q=insetLocal(p);ov.style.cursor=q?(isCorner(q)?'nesw-resize':(insetBtnAt(q)?'pointer':'default')):'grab';});
+  const q=insetLocal(p),bk=q?insetBtnAt(q):null;ov.style.cursor=q?(isCorner(q)?'nesw-resize':(bk?'pointer':'default')):'grab';const tt=(bk&&INSET_TIP[bk])||'';if(ov.title!==tt)ov.title=tt;});
 addEventListener('mouseup',()=>{DRAG=null;});
 ov.addEventListener('wheel',e=>{e.preventDefault();const p=ovPos(e);if(insetLocal(p)||!OVC.s)return;OVC.man=true;$('mvAuto').classList.remove('on');
   const wx=OVC.cx+(p[0]-OVW/2)/OVC.s,wy=OVC.cy+(p[1]-OVH/2)/OVC.s;OVC.s*=Math.exp(-e.deltaY*0.0015);OVC.cx=wx-(p[0]-OVW/2)/OVC.s;OVC.cy=wy-(p[1]-OVH/2)/OVC.s;},{passive:false});
