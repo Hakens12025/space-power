@@ -11,7 +11,8 @@
    ⚠ 引擎里没有战场边界(CFG.world 只管星空贴图与开局镜头),所以"战场 200 万"不是一个要改的数,摆得开就是了。
    2026-09-26 整体 x1/5,上文旧数按 1/5 读(开局间距 60 万);并且现在【有】边界了:单局游玩区 ARENA(80 万 x 45 万,轴对齐,中心 = 两军重心连线中点)由 matchPlaceRed 设,
    舰船出不去(physics/31)、弹丸出界消失(weapons)。红方来向 ±60° 在 45 万高的矩形里装不下,收成 ±ARC(见 MATCH)。 */
-const MATCH={OPEN:1800000, // 2026-10-06 用户:开局距离单独放大回去(不乘 CFG.scale)
+const MATCH={OPEN:1800000*CFG.space, // 2026-10-08 乘星空倍数(core/00 CFG.space)
+  // 2026-10-06 用户:开局距离单独放大回去(不乘 CFG.scale)
   ARC:20*Math.PI/180,shown:false,t0:0,nBlue:0,nRed:0,theta:0,seed:0,blueC:null,redC:null,
   fix:Math.floor(+new URLSearchParams(location.search).get('seed')||0)}; // 2026-09-29 用户:开局间距 120 万 → 180 万(随游玩区 x1.5;原 09-28 60 万 → 120 万)。 seed = 这一局的种子(定红方来向与整个世界);fix = 地址 ?seed=N 固定种子(重放同一张图)。2026-09-26 x1/5(单局地图):OPEN 原 3000000;ARC 原 60°,改 20°:两军纵向错开至多 60 万·sin20° ≈ 20.5 万,各离游玩区上下边 >= 22.5-10.3-阵型半宽 ≈ 9.7 万
 function matchIdx(){for(let i=0;i<TEST_ENVS.length;i++)if(TEST_ENVS[i].match)return i;return -1;}
@@ -39,16 +40,16 @@ function matchWorld(w){ // 对局:按种子生成整个世界;别的场景原样
    2026-09-26 单局地图(游玩区 ARENA 80 万 x 45 万):太阳 / 恒星 / 尘埃云照原世界尺度不动;行星与小行星改摆进游玩区(见行内),上文行星与小行星的旧数作废。 */
 function matchGenWorld(seed,B,R){
   const r=envRng(seed*2+1),D=Math.hypot(R[0]-B[0],R[1]-B[1])||1,ux=(R[0]-B[0])/D,uy=(R[1]-B[1])/D,mx=(B[0]+R[0])/2,my=(B[1]+R[1])/2;
-  const DW=3000000,at=function(s,t){return [mx+(ux*s-uy*t)*DW,my+(uy*s+ux*t)*DW];}; // 2026-09-26 尘埃云按原世界尺度摆(世界不缩):原来乘 D,D 缩成 60 万后钉住原 300 万
+  const DW=3000000*CFG.space,at=function(s,t){return [mx+(ux*s-uy*t)*DW,my+(uy*s+ux*t)*DW];}; // 2026-09-26 尘埃云按原世界尺度摆(世界不缩):原来乘 D,D 缩成 60 万后钉住原 300 万
   const A=ARENA||{x0:mx-ARENA_W/2,y0:my-ARENA_H/2},inA=function(){return [A.x0+r()*ARENA_W,A.y0+r()*ARENA_H];}; // 2026-09-26 游玩区里均匀取一点
   const far=function(p,q,d){return Math.hypot(p[0]-q[0],p[1]-q[1])>=d;};
   const w={bodies:[],clouds:[],asteroids:[]};
   if(r()<0.5)r(); // 2026-09-29 用户:取消无限远的方向型太阳 —— 这一半改成没有太阳(照样掷一次,同一个种子后面的地形不变)
-  else{const a=r()*2*Math.PI,d=6e6+r()*3e6;w.stars=[{x:Math.round(mx+Math.cos(a)*d),y:Math.round(my+Math.sin(a)*d)}];}
+  else{const a=r()*2*Math.PI,d=(6e6+r()*3e6)*CFG.space;w.stars=[{x:Math.round(mx+Math.cos(a)*d),y:Math.round(my+Math.sin(a)*d)}];}
   const tq=envRng(seed*13+9); // 2026-10-04 天体类型另一条种子流(world/12 envBodyType):前面的地形随机序列不变;气态半径 x1.3(用户:气态的天体往大的方向偏)
-  for(let n=Math.floor(r()*3),k=0;k<40&&w.bodies.length<n;k++){const p=inA(),ty=envBodyType(tq(),envBodyZone(p[0],p[1],w.stars)),sd=Math.floor(tq()*1e6),rad=70000*(0.6+r()*1.4)*ENV_BODY_K[ty]; // 2026-10-05 类型按离恒星的区挑、半径按类型偏置(world/12)。 2026-09-29 用户:天体大小要有差异 —— 木星级 7 万 x 0.6~2 倍(原 5~8 万)。2026-09-26 中心摆进游玩区,离两军重心 >= 半径+10 万、彼此 >= 两半径+10 万,摆不下就少摆:原 对阵轴上、离两军 40 万、彼此 80 万
+  for(let n=Math.floor(r()*3),k=0;k<40&&w.bodies.length<n;k++){const p=inA(),ty=envBodyType(tq(),envBodyZone(p[0],p[1],w.stars)),sd=Math.floor(tq()*1e6),rad=70000*(0.6+r()*1.4)*ENV_BODY_K[ty]*CFG.space; // 2026-10-05 类型按离恒星的区挑、半径按类型偏置(world/12)。 2026-09-29 用户:天体大小要有差异 —— 木星级 7 万 x 0.6~2 倍(原 5~8 万)。2026-09-26 中心摆进游玩区,离两军重心 >= 半径+10 万、彼此 >= 两半径+10 万,摆不下就少摆:原 对阵轴上、离两军 40 万、彼此 80 万
     if(far(p,B,rad+100000*CFG.scale)&&far(p,R,rad+100000*CFG.scale)&&w.bodies.every(function(b){return far(p,[b.x,b.y],rad+b.r+100000*CFG.scale);}))w.bodies.push({x:Math.round(p[0]),y:Math.round(p[1]),r:Math.round(rad),type:ty,seed:sd});}
-  for(let n=Math.floor(r()*3),k=0;k<n;k++){const p=at(r()*1.6-0.8,r()*2-1),a=2e6*Math.pow(8,r()),b=a*(0.4+0.6*r());
+  for(let n=Math.floor(r()*3),k=0;k<n;k++){const p=at(r()*1.6-0.8,r()*2-1),a=2e6*Math.pow(8,r())*CFG.space,b=a*(0.4+0.6*r());
     w.clouds.push({x:Math.round(p[0]),y:Math.round(p[1]),a:Math.round(a),b:Math.round(b),ang:Math.round(r()*180),seed:Math.floor(r()*1e6)});}
   for(let k=0,m=0;k<80&&m<4;k++){ // 2026-09-27 N3(用户批准):4 片小行星带,前两片摆在两军之间的航路附近(沿对阵轴 -0.3~1.3 倍间距、横向 ±30 万),后两片在游玩区里随便摆;成片的石头既是假目标也是雷达杂波区
     const q=m<2?[B[0]+ux*D*(r()*1.6-0.3)-uy*(r()*2-1)*300000*CFG.scale,B[1]+uy*D*(r()*1.6-0.3)+ux*(r()*2-1)*300000*CFG.scale]:inA(),rad=(60000+r()*40000)*CFG.scale,sd=Math.floor(r()*1e6);
@@ -70,10 +71,10 @@ function matchGenWorld(seed,B,R){
       w.comets=[{x:Math.round(P[0]-Math.cos(th)*L),y:Math.round(P[1]-Math.sin(th)*L),vx:Math.cos(th),vy:Math.sin(th),t0:t0}];}
     w.moons=[];w.bodies.forEach(function(b,bi){const big=b.type==='gas'||b.type==='icegiant',n=Math.floor(q()*(big?3:2)),used=[]; // 卫星:气态 / 冰巨星 0~2 颗、其余 0~1;半径 0.12~0.25 倍、轨道 3~5 倍,两颗的轨道错开
       for(let k=0;k<n;k++){const r=Math.round(b.r*(0.12+0.13*q())),orb=Math.round(b.r*(3+2*q())),ph=q()*2*Math.PI,dir=q()<0.5?1:-1,ty=q()<0.55?'luna':'europa',sd=Math.floor(q()*1e6);
-        if(used.some(function(u){return Math.abs(u[0]-orb)<u[1]+r+20000;}))continue;used.push([orb,r]);w.moons.push({b:bi,orb:orb,ph:ph,r:r,dir:dir,type:ty,seed:sd});}
+        if(used.some(function(u){return Math.abs(u[0]-orb)<u[1]+r+20000*CFG.space;}))continue;used.push([orb,r]);w.moons.push({b:bi,orb:orb,ph:ph,r:r,dir:dir,type:ty,seed:sd});}
       if(b.type==='gas'||(b.type==='icegiant'&&q()<0.5))b.rad=true;}); // 辐射带:气态必带、冰巨星一半
-    w.ions=[];for(let n=Math.floor(q()*3),k=0;k<n;k++){const P=pt(0.9),a=150000+250000*q(); // 电离云 0~2 片:半轴 15~40 万
-      w.ions.push({x:Math.round(P[0]),y:Math.round(P[1]),a:Math.round(a),b:Math.round(Math.max(150000,a*(0.5+0.5*q()))),ang:Math.round(q()*180),seed:Math.floor(q()*1e6)});}
+    w.ions=[];for(let n=Math.floor(q()*3),k=0;k<n;k++){const P=pt(0.9),a=(150000+250000*q())*CFG.space; // 电离云 0~2 片:半轴 15~40 万
+      w.ions.push({x:Math.round(P[0]),y:Math.round(P[1]),a:Math.round(a),b:Math.round(Math.max(150000*CFG.space,a*(0.5+0.5*q()))),ang:Math.round(q()*180),seed:Math.floor(q()*1e6)});}
     w.stations=[];for(let n=1+Math.floor(q()*2),k=0,m=0;k<40&&m<n;k++){const P=pt(0.8); // 据点 1~2 个:离两军重心 30 万以上、离天体 半径 + 6 万 以上、彼此 40 万以上
       if(Math.hypot(P[0]-B[0],P[1]-B[1])<300000*CFG.scale||Math.hypot(P[0]-R[0],P[1]-R[1])<300000*CFG.scale||w.bodies.some(function(b){return Math.hypot(P[0]-b.x,P[1]-b.y)<b.r+60000*CFG.scale;})||w.stations.some(function(o){return Math.hypot(P[0]-o.x,P[1]-o.y)<400000*CFG.scale;}))continue;
       w.stations.push({x:Math.round(P[0]),y:Math.round(P[1]),name:'据点'+'甲乙'[m]});m++;}}
