@@ -247,7 +247,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
     box.innerHTML=`<div class="row"><span class="k">雷达</span><span class="v">${o.on?'照射':'被动 · 只看和听'}</span></div>`;updateCmdBar([]);return;}
   if(selBuoy){ // 2026-09-29 用户:点浮标 → 底栏雷达开照射 / 打脉冲(飞行中也行);原来武器菜单「特殊」里的逐个开关已删
     const o=selBuoy;title.textContent='前出浮标';if(ciN)ciN.textContent=o.name;if(ciC)ciC.textContent=o.owner?o.owner.name:'—';if(ciSp)ciSp.innerHTML='';
-    box.innerHTML=`<div class="row"><span class="k">状态</span><span class="v">${o.dest?'飞行中':'就位'}</span></div>`
+    box.innerHTML=`<div class="row"><span class="k">状态</span><span class="v">${o.flame?'飞行中 · 点火':'飞行中 · 熄火滑行'}</span></div>`
       +`<div class="row"><span class="k">雷达</span><span class="v">${o.on?'照射 · 对方听得见':'被动 · 只看和听'}</span></div>`
       +(o.life>0?`<div class="row"><span class="k">剩余</span><span class="v">${Math.round(SHOW.t(o.life))} s</span></div>`:'');
     updateCmdBar([]);return;
@@ -449,7 +449,7 @@ function cmdPopEl(){
     cmdPopRender();});
   d.addEventListener('mouseover',e=>{const b=e.target.closest('button');if(!b)return;const a=b.dataset.a,v=b.dataset.v,s=selBlue()[0];let tip='';
     if(a==='radar'){hoverRing='emit';tip=RADAR_TIP[v]||'';}
-    else if(a==='force'&&v==='buoy'){hoverRing=null;tip='放浮标:点地图上的位置,浮标飞过去停下(飞的那段在点火,远处看得见);平时被动看和听,在菜单里点它一下就开照射(开着才会被对方听见)。右键取消';}
+    else if(a==='force'&&v==='buoy'){hoverRing=null;tip='放浮标:点一个方向,浮标沿舰船 → 鼠标一直飞,不停,飞出地图消失(起飞那一小段点火,远处看得见,之后熄火滑行);平时被动看和听,点浮标本身 → 底栏雷达开照射(开着才会被对方听见)。右键取消';}
     else if(a==='force'){hoverRing=v;tip='强行开火:点一艘敌舰打它,或点地图上的位置(导弹 = 区域齐射,主炮 = 转向那个点开一炮);不看武器勾没勾。右键取消';}
     else if((a==='wchk'||a==='sub')&&KIND_INFO[v]&&s){hoverRing=v;tip=KIND_INFO[v].tip(s);}
     else if(a==='csub'&&s&&wpnHas(s,'ciws')){const c=ciwsOf(s);hoverRing=v;tip=v==='ciwsMsl'?`近防导弹 · 外圈 ${Math.round(c.outer/1000)}k 拦截弹 · 库存 ${s.interceptor||0} 枚 · 来袭导弹进预警距离自动发射迎上去(消耗弹药)`:`近防炮 · 内圈 ${Math.round(c.inner/1000)}k · 打进内圈的来袭弹再过一道拦截(不耗弹药)`;}

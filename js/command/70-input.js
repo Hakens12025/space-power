@@ -153,12 +153,13 @@ function updSelWeaponTip(){ // RF4b 待命提示:底栏上方 #cmdTip 常显(旧
     tip.style.display='block';return;
   }
   if(pendingFcNew){tip.textContent='火控「+」:左键点一艘敌舰 = 新建一条火控序列'+((typeof selBlue==='function'&&selBlue().length>1)?'(舰队 = 一块)':'')+' · 右键或再点「+」取消';tip.style.display='block';return;} // 2026-10-07 用户
-  if(selWeapon==='buoy'){tip.textContent='⌖ 已选定 · 放浮标:点地图上的位置 · 右键取消';tip.style.display='block';return;}
+  if(selWeapon==='buoy'){tip.textContent='⌖ 已选定 · 放浮标:点一个方向(沿舰船 → 鼠标一直飞,飞出地图消失) · 右键取消';tip.style.display='block';return;}
   if(selWeapon){tip.textContent='⌖ 已选定 · '+(selWeapon==='mac'?'主炮强行开火:点敌舰或空地(转向对准即发一炮)':'导弹强行开火:点敌舰齐射 · 点空地 = 区域齐射')+' · 右键取消';tip.style.display='block';return;}
   if(pendingTurn){tip.textContent='转向:点击地图设定方向(速度不变) · 再按 V 取消 · 右键取消';tip.style.display='block';return;}
   if(CMDTIP_FLASH&&nowMs()<CMDTIP_FLASH.until){tip.textContent=CMDTIP_FLASH.text;tip.style.display='block';return;} // 2026-09-29 一次性回执(中键打空地) // FL1 把 V 也接进来:它原本只走那个被 RF2 藏死的顶部状态条,按 V 之后玩家看不到任何提示
   tip.style.display='none';
 }
+function buoyLauncher(){for(const x of controlledShips())if((x.buoys||0)>0)return x;return null;} // 2026-10-08 放浮标的那艘(受控舰里第一艘还有浮标的;预览线 render/83 drawBuoyAim 同一艘)
 function buoyAt(sx,sy){ // 2026-09-29 命中最近的我方前出浮标(屏幕 14 px 内,飞行中也算)
   let best=null,bd=14;
   for(const o of rocks){if(o.dead||o.kind!=='buoy'||o.side!=='blue')continue;const p=toScreen(o.pos[0],o.pos[1]),d=Math.hypot(p[0]-sx,p[1]-sy);if(d<bd){bd=d;best=o;}}
@@ -210,9 +211,9 @@ function mdRadial(e,sx,sy){ // RF5 Phase C 轮盘开着时的两段早退(盘内
   return false;
 }
 function mdWeaponPick(e,sx,sy){ // 选定武器攻击:点目标 / 点空位置
-  if(e.button===0&&selWeapon==='buoy'){ // 2026-09-27 放前出浮标:点哪儿飞到哪儿(world/14 的 launchBuoy)
-    const w=worldAt(sx,sy),pt=ordArenaClamp([w[0],w[1],0]);
-    for(const x of controlledShips())if((x.buoys||0)>0&&typeof launchBuoy==='function'){launchBuoy(x,pt);break;} // 一次放一个
+  if(e.button===0&&selWeapon==='buoy'){ // 2026-09-27 放前出浮标(world/14 的 launchBuoy);10-08 方向式:点的那一点只定方位,不夹进游玩区
+    const w=worldAt(sx,sy),x=buoyLauncher();
+    if(x&&typeof launchBuoy==='function')launchBuoy(x,[w[0],w[1],0]); // 一次放一个
     selWeapon=null;updSelWeaponTip();if(typeof updateSelPanel==='function')updateSelPanel();return true;
   }
   if(e.button===0&&selWeapon){ // 选定武器攻击:点击目标/空位置指定

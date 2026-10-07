@@ -591,6 +591,20 @@ function drawTargeting(){
   }
   ctx.restore();
 }
+function drawBuoyAim(){ // 2026-10-08 用户:选定「前出浮标」后,舰船 → 鼠标的延长线 = 浮标会往哪飞;舰到鼠标实线,往后虚线延长到飞出地图那一点(靶场没有边界画到 BUOY.FAR)
+  if(selWeapon!=='buoy'||typeof buoyLauncher!=='function')return;const s=buoyLauncher();if(!s)return;
+  const w=worldAt(mouseX,mouseY),dx=w[0]-s.pos[0],dy=w[1]-s.pos[1],d=Math.hypot(dx,dy);if(!(d>1e-6))return;const ux=dx/d,uy=dy/d;
+  let L=ARENA?Infinity:OBJ_CFG.BUOY.FAR*CFG.scale;if(ARENA){if(ux>1e-9)L=Math.min(L,(ARENA.x1-s.pos[0])/ux);else if(ux<-1e-9)L=Math.min(L,(ARENA.x0-s.pos[0])/ux);
+    if(uy>1e-9)L=Math.min(L,(ARENA.y1-s.pos[1])/uy);else if(uy<-1e-9)L=Math.min(L,(ARENA.y0-s.pos[1])/uy);}
+  L=Math.max(0,L);const p=toScreen(s.pos[0],s.pos[1]),lp=Math.min(L*cam.zoom,4*(W+H)),m=Math.min(d*cam.zoom,lp),e=[p[0]+ux*lp,p[1]+uy*lp]; // 屏幕上最多画 4 倍屏宽高(再远画布外,省得坐标太大)
+  ctx.save();ctx.strokeStyle='#ffe066';ctx.lineWidth=1.2; // = --state-select(我下的命令)
+  ctx.globalAlpha=.8;ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(p[0]+ux*m,p[1]+uy*m);ctx.stroke();
+  if(lp>m){ctx.globalAlpha=.5;ctx.setLineDash([7,6]);ctx.beginPath();ctx.moveTo(p[0]+ux*m,p[1]+uy*m);ctx.lineTo(e[0],e[1]);ctx.stroke();ctx.setLineDash([]);}
+  if(L*cam.zoom<=lp){ctx.globalAlpha=.8;ctx.beginPath();ctx.moveTo(e[0]-5,e[1]-5);ctx.lineTo(e[0]+5,e[1]+5);ctx.moveTo(e[0]+5,e[1]-5);ctx.lineTo(e[0]-5,e[1]+5);ctx.stroke(); // 出地图那一点画个叉
+    ctx.font='10px "Microsoft YaHei"';ctx.fillStyle='#ffe066';ctx.textAlign='left';ctx.textBaseline='bottom';ctx.fillText('出地图',e[0]+7,e[1]-3);}
+  const ax=p[0]+ux*m,ay=p[1]+uy*m;ctx.globalAlpha=.9;ctx.beginPath();ctx.moveTo(ax+ux*7,ay+uy*7);ctx.lineTo(ax-ux*3-uy*5,ay-uy*3+ux*5);ctx.moveTo(ax+ux*7,ay+uy*7);ctx.lineTo(ax-ux*3+uy*5,ay-uy*3-ux*5);ctx.stroke(); // 鼠标处一个箭头标飞行方向
+  ctx.restore();
+}
 /* RF7d 数据链流动:虚线段长 + 间隔,周期 = 两者之和(lineDashOffset 按周期取模才不会随时间累积成大数丢精度) */
 const FC_FLOW_DASH=[9,15];                                     // 亮段 9px / 暗段 15px
 const FC_FLOW_PERIOD=FC_FLOW_DASH[0]+FC_FLOW_DASH[1];          // 24px

@@ -5,14 +5,14 @@
    · 民船 civ:中立,沿随机航点往返,快到航点时点火转向(远处看是一次「点火」);一部分带导航雷达,隔一阵扫一拍(远处听到是「脉冲」)。
    · 诱饵 lure:记在放它的一方;飞到指定点后慢慢漂,一直开着雷达,隔一阵点一次火。带 spoof ——
      只靠听辐射指纹认到「疑似」时,航迹报它冒充的驱逐舰(sensors/24 的 trkIdType),自动开火会上当;照射认出或贴近看清就露出真身。
-   · 浮标 buoy:记在放它的一方,type 'beacon' ⇒ 当探测站时按信标的系数(sensors/22);飞到指定点停下,平时被动(红外 + 静听),
+   · 浮标 buoy:记在放它的一方,type 'beacon' ⇒ 当探测站时按信标的系数(sensors/22);朝一个方向一直飞(10-08 起不停,出地图消失),平时被动(红外 + 静听),
      遥控 on = 开照射(只有这时它才会被对方听见)。武器「前出浮标」先只给巡游舰(舰种 CL;ships/11 的 makeShip)。
    自己一方不探测自己的物体(sensors/21 的 detectFor);推进在 stepObjects(core/05 的 stepSim 每拍调)。
    ============================================================================ */
 const OBJ_CFG={ // 物理单位(km/s、s),用的地方经 PHYS 换算;速度再乘 CFG.vscale(core/00 统一速度旋钮,2026-10-05)
   CIV:{N:5,SPD:[20,50],SIZE:[0.5,1.4],HP:200,TURN:60,RADAR:0.5,EMIT:0.3,PING:150}, // 数量 / 巡航速度 / 体型 / 结构 / 转向点火秒 / 带导航雷达的比例 / 雷达档 / 隔几秒扫一拍
   LURE:{HP:60,LIFE:3000,FLY:150,DRIFT:15,BURN_EVERY:300,BURN:30,SIZE:0.7}, // 结构 / 寿命 / 飞过去的速度 / 到位后漂的速度 / 隔多久点一次火 / 点多久 / 体型(冒充 DD)
-  BUOY:{N:3,HP:40,FLY:150,LIFE:6000,SIZE:0.15,VIS:0.7}, // 每舰几个 / 结构 / 飞行速度 / 到位后的寿命 / 体型(小而冷)/ 可见光圈是舰船的几倍(2026-09-29 用户)
+  BUOY:{N:3,HP:40,FLY:150,BURN:30,FAR:3000000,SIZE:0.15,VIS:0.7}, // 每舰几个 / 结构 / 飞行速度 / 起飞点火几秒后熄火滑行 / 没有游玩区(靶场)时飞多远 km 收掉 / 体型(小而冷)/ 可见光圈是舰船的几倍(2026-09-29 用户)
 };
 let OBJ_SEQ=0;
 const ROBJ={arr:null,n:-1,list:[]};
@@ -42,10 +42,11 @@ function launchLure(shooter,pt){ // K1 诱饵:从放它的船身边飞到 pt(飞
     dest:[pt[0],pt[1],0],life:PHYS.t(L.LIFE),burnCd:PHYS.t(L.BURN_EVERY)*Math.random(),burnT:0,spoof:{kind:'ship',cls:'FF',tier:2},spoofName:'敌·护卫舰'+(11+(++OBJ_SEQ))});
   setEmit(o,'paint');rocks.push(o);return o;
 }
-function launchBuoy(shooter,pt){ // K3 前出浮标:飞到 pt 停下
+function launchBuoy(shooter,pt){ // K3 前出浮标:2026-10-08 用户改方向式 —— 朝 pt 的方位出发一直飞,不停、不计时,飞出地图消失(红方条令传的落点也只当方向用)
   if(!(shooter.buoys>0))return null;shooter.buoys--;
-  const B=OBJ_CFG.BUOY,o=makeObj('buoy',shooter.side,'浮标-'+(++OBJ_SEQ),shooter.pos,{type:'beacon',on:false,size:B.SIZE,emit:SENS.BEACON_EMIT,recv:SENS.BEACON_RECV,hp:B.HP,maxHp:B.HP,
-    dest:[pt[0],pt[1],0],life:PHYS.t(B.LIFE),owner:shooter,visR:COV.VIS_R*B.VIS});
+  let dx=pt[0]-shooter.pos[0],dy=pt[1]-shooter.pos[1],d=Math.hypot(dx,dy);if(!(d>1e-6)){dx=shooter.facing[0];dy=shooter.facing[1];d=Math.hypot(dx,dy)||1;}
+  const B=OBJ_CFG.BUOY,v=PHYS.v(B.FLY)*CFG.vscale,u=[dx/d,dy/d,0],o=makeObj('buoy',shooter.side,'浮标-'+(++OBJ_SEQ),shooter.pos,{type:'beacon',on:false,size:B.SIZE,emit:SENS.BEACON_EMIT,recv:SENS.BEACON_RECV,hp:B.HP,maxHp:B.HP,
+    dir:u,vel:[u[0]*v,u[1]*v,0],facing:u.slice(),flame:1,burnT:PHYS.t(B.BURN),org:shooter.pos.slice(),owner:shooter,visR:COV.VIS_R*B.VIS});
   rocks.push(o);return o;
 }
 function buoySetOn(o,on){if(!o||o.dead)return;o.on=!!on;setEmit(o,o.on?'paint':'silent');} // 遥控:开 = 照射(被对方听见),关 = 回到被动
@@ -70,9 +71,11 @@ function stepObjects(dt){
       o.pos[0]+=o.vel[0]*dt;o.pos[1]+=o.vel[1]*dt;
       o.burnCd-=dt;if(o.burnCd<=0){o.burnCd=PHYS.t(L.BURN_EVERY);o.burnT=PHYS.t(L.BURN);}
       if(o.burnT>0){o.burnT-=dt;o.flame=1;}else o.flame=0;
-    }else if(o.kind==='buoy'){
-      if(o.dest){objFly(o,dt,PHYS.v(OBJ_CFG.BUOY.FLY)*CFG.vscale);continue;}
-      o.life-=dt;if(o.life<=0)o.dead=true;
+    }else if(o.kind==='buoy'){ // 2026-10-08 方向式:匀速直飞,起飞点火 BURN 秒后熄火滑行(浮标是小而冷的被动眼睛,一路点火就一路是热源);出游玩区 / 靶场飞出 FAR 就收掉(不算击沉,不夹回边上)
+      const B=OBJ_CFG.BUOY;o.pos[0]+=o.vel[0]*dt;o.pos[1]+=o.vel[1]*dt;
+      if(o.burnT>0){o.burnT-=dt;if(o.burnT<=0)o.flame=0;}
+      if(ARENA?!arenaIn(o.pos):Math.hypot(o.pos[0]-o.org[0],o.pos[1]-o.org[1])>B.FAR*CFG.scale)o.dead=true;
+      continue;
     }
     if(ARENA&&!arenaIn(o.pos)){o.pos[0]=Math.max(ARENA.x0,Math.min(ARENA.x1,o.pos[0]));o.pos[1]=Math.max(ARENA.y0,Math.min(ARENA.y1,o.pos[1]));}
   }
