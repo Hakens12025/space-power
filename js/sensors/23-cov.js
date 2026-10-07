@@ -86,8 +86,9 @@ const LAD = {
 };
 LAD.SENSE_K=1.5; // 2026-10-08 用户:红外 / 雷达 / 静听的感知距离同时 x1.5(「重点在远:更远能画出多边形、定位,整个感知能力都上升」)—— 发现、定位 / 火控、认出、单舰测距、照射椭圆转向点、巡游舰静听、浮标雷达一起乘;武器射程与可见光圈不乘。连带:刚能发现时的方位误差变成 2/3(红外 3° → 2°,静听 20° → 13.3°)
 for(const k of ['optColdMin','radarMin','heardMin','optCross','lisCross','radarLook','clLis','buoyAct','lisIdent','radarIdent','optIdent','optRange','actTurn'])LAD[k]*=LAD.SENSE_K;
-LAD.RADAR_K=0.85; // 2026-10-08 用户:雷达的性能 x0.85 —— 我方主动雷达的发现、火控、认出、照射椭圆转向点、浮标雷达;被听见的距离(静听那条)不乘
-for(const k of ['radarMin','radarLook','radarIdent','actTurn','buoyAct'])LAD[k]*=LAD.RADAR_K;
+LAD.RADAR_K=0.85; // 2026-10-08 用户:雷达的性能 x0.85 —— 我方主动雷达的发现、火控、认出、照射椭圆转向点、浮标雷达;同日:被静听的数值也随之下降 —— 雷达辐射弱了:被听见的距离(听见、巡游舰静听)乘 RADAR_K;耳朵没变,刚听到时的方位误差保持不变,所以静听交叉定位与听出型号乘 √RADAR_K(方位误差 ∝ 听见距离 / 交叉定位距离²)
+for(const k of ['radarMin','radarLook','radarIdent','actTurn','buoyAct','heardMin','clLis'])LAD[k]*=LAD.RADAR_K;
+for(const k of ['lisCross','lisIdent'])LAD[k]*=Math.sqrt(LAD.RADAR_K);
 
 /* 1 光秒 = 这么多公里。这个尺度上真正有意义的单位是光秒(主炮射程 15 万 = 0.5 光秒;2026-09-26 x1/5 后是 3 万 = 0.1 光秒),
    所以它不只给 COV.AMAX 用 —— 舰队层与战区层的地面刻度也读它。 */
