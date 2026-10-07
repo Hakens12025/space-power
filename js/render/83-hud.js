@@ -497,9 +497,10 @@ function anomScan(now){
     if(k.t>a.rd){if(k.t-a.rd>ANOM.GAP){const g=rdvEsmBrg(E,b.L,k),rc=rdvEsmRc(E,b.L,k);ANOM.list.push({k:'rd',x:k.org[0]+Math.cos(g)*rc,y:k.org[1]+Math.sin(g)*rc,r:Math.sqrt(k.sr*k.rr*k.half),t0:now});}a.rd=k.t;}});
 }
 function drawAnomalies(){
-  const now=nowMs();anomScan(now);if(!ANOM.list.length)return;
+  const now=nowMs();anomScan(now);anarDraw(now);if(!ANOM.list.length)return;
   const drawn=[],irs=[];ctx.save();ctx.font='11px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='bottom';
   for(let i=ANOM.list.length-1;i>=0;i--){const e=ANOM.list[i],k=(now-e.t0)/ANOM.LIFE;if(k>=1||k<0){ANOM.list.splice(i,1);continue;}
+    if(e.ar===undefined)e.ar=anarAdd(e,now);if(e.ar)continue; // 2026-10-08 报的那一刻在主视角外 ⇒ 改画方向箭头(anarDraw),这里不画
     if(e.k==='ir'&&(e.x===undefined||MAPV.mode==='ir')){irs.push(e);continue;} // 2026-09-30 用户:红外异常的刻痕交给 86-ir2view(红外画面在环外沿,主视角在可见光圈边上);主视角里短波(尾焰 / 开火)围出了交集的照旧画圈(落在交集处)
     const p=toScreen(e.x,e.y);if(p[0]<-40||p[0]>W+40||p[1]<-40||p[1]>H+40)continue;
     if(drawn.some(d=>d[2]===e.k&&Math.hypot(d[0]-p[0],d[1]-p[1])<40))continue;drawn.push([p[0],p[1],e.k]);
@@ -509,6 +510,44 @@ function drawAnomalies(){
     ctx.fillStyle='rgb('+col+')';ctx.fillText(e.k==='ir'?'红外异常':'雷达异常',p[0],p[1]-R-2);}
   ctx.restore();
   if(irs.length&&typeof ir2AnomDraw==='function')ir2AnomDraw(irs,now);
+}
+/* 2026-10-08 用户:主视角外的红外 / 雷达异常画方向箭头。从画面中心朝异常那一点,落在靠边的一圈上,再顺着往里收到不压界面(顶栏 / 底栏 / 右栏 / 左上列表 / 右下按钮 / 特写窗 / 比例尺 / 刻度尺);
+   没人管 LIFE 毫秒淡出(墙钟,暂停也走);鼠标停在箭头上 = 停住、全亮,移开后重新淡出,寿命按悬停过几次减半(6 → 3 → 1.5 秒);
+   自己平移过去,异常那一点进了画面(不压界面)就收箭头、在那里把异常动画重播一遍。
+   异常那一点:雷达异常 / 围出交集的红外异常 = 画圈那一点;只有方位的红外异常 = 刻痕那一点(看它的那艘可见光圈边上,方位定格在报的那一刻)。 */
+const ANAR={a:[],LIFE:6000,ML:64,MT:94,MR:28,MB:28,HIT:16,SZ:10,ob:null,obT:-1e9,t:-1e9,v:null, // 箭头 / 寿命 / 左上右下边距(躲开刻度尺)/ 悬停半径 / 箭头大小 px
+  SEL:'#hud,#tools .seg,#fmBar,#spawnBar,#selPanel,#trPanel,#cmdBar,#fmMenu,#cmdTip,#cmdPop,#mapTag,#matchEnd'}; // 压在画布上的界面
+function anarObs(now){ // 界面占的矩形(DOM 每 300 ms 量一次;特写窗每帧读)
+  if(!ANAR.ob||now-ANAR.obT>300){const R=[];for(const el of document.querySelectorAll(ANAR.SEL)){const r=el.getBoundingClientRect();if(r.width<1||r.height<1)continue;const cs=getComputedStyle(el);if(cs.display==='none'||cs.visibility==='hidden'||+cs.opacity===0)continue;R.push([r.left,r.top,r.right,r.bottom]);}
+    R.push([0,H-40,140,H]);ANAR.ob=R;ANAR.obT=now;} // 左下角比例尺(画布上画的)
+  return INSET.on?ANAR.ob.concat([[INSET.x,INSET.y,INSET.x+INSET.w,INSET.y+INSET.h]]):ANAR.ob;}
+function anarHit(x,y,r,R){for(const b of R)if(x+r>b[0]&&x-r<b[2]&&y+r>b[1]&&y-r<b[3])return true;return false;}
+function anarSeen(p,R){return p[0]>=ANAR.ML&&p[0]<=W-ANAR.MR&&p[1]>=ANAR.MT&&p[1]<=H-ANAR.MB&&!anarHit(p[0],p[1],0,R);} // 这一点在画面里、没被界面压着
+function anarTgt(a){if(!a.ob)return [a.x,a.y];if(a.ob.dead)return null;const R=ir2RW(a.ob);return [a.ob.pos[0]+Math.cos(a.ang)*R,a.ob.pos[1]+Math.sin(a.ang)*R];} // 异常那一点(世界)
+function anarAdd(e,now){ // 新报的异常:在画面外 ⇒ 建箭头,返回 true
+  let a={k:e.k,e:e,t0:now,dur:ANAR.LIFE,n:0,hov:false,x:e.x,y:e.y,ob:null,ang:0};
+  if(e.x===undefined){const t=e.s;if(!t||typeof ir2Eye!=='function')return false;let bd=Infinity; // 只有方位的红外:取刻痕离镜头最近的那艘
+    for(const o of irvObs()){const q=ir2Eye(t,o);if(!q)continue;const g=Math.atan2(q[1]-o.pos[1],q[0]-o.pos[0]),R=ir2RW(o),d=Math.hypot(o.pos[0]+Math.cos(g)*R-cam.x,o.pos[1]+Math.sin(g)*R-cam.y);if(d<bd){bd=d;a.ob=o;a.ang=g;}}
+    if(!a.ob)return false;}
+  const q=anarTgt(a);if(!q||anarSeen(toScreen(q[0],q[1]),anarObs(now)))return false;
+  ANAR.a.push(a);return true;}
+function anarDraw(now){
+  if(simTime<ANAR.t||ANAR.v!==VIEW)ANAR.a.length=0;ANAR.t=simTime;ANAR.v=VIEW;if(!ANAR.a.length)return; // 换局 / 换视角
+  const R=anarObs(now),cx=(ANAR.ML+W-ANAR.MR)/2,cy=(ANAR.MT+H-ANAR.MB)/2,drawn=[];ctx.save();ctx.font='11px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='middle';
+  for(let i=ANAR.a.length-1;i>=0;i--){const a=ANAR.a[i],q=anarTgt(a);if(!q){ANAR.a.splice(i,1);continue;}const p=toScreen(q[0],q[1]);
+    if(anarSeen(p,R)){ANAR.a.splice(i,1);ANOM.list.push(Object.assign({},a.e,{t0:now,ar:false}));continue;} // 平移过来了:收箭头,在那一点重播
+    let ux=p[0]-cx,uy=p[1]-cy;const l=Math.hypot(ux,uy)||1;ux/=l;uy/=l;
+    let s=Infinity;if(ux>1e-9)s=Math.min(s,(W-ANAR.MR-cx)/ux);else if(ux<-1e-9)s=Math.min(s,(ANAR.ML-cx)/ux);if(uy>1e-9)s=Math.min(s,(H-ANAR.MB-cy)/uy);else if(uy<-1e-9)s=Math.min(s,(ANAR.MT-cy)/uy);
+    s-=ANAR.SZ;while(s>0&&anarHit(cx+ux*s,cy+uy*s,ANAR.SZ+6,R))s-=6;s=Math.max(0,s); // 靠边那一圈,压着界面就顺着往里收
+    const x=cx+ux*s,y=cy+uy*s,hv=Math.hypot(mouseX-x,mouseY-y)<ANAR.HIT;a.sx=x;a.sy=y;
+    if(hv)a.hov=true;else if(a.hov){a.hov=false;a.n++;a.dur=ANAR.LIFE/Math.pow(2,a.n);a.t0=now;} // 移开:重新淡出,寿命减半
+    const k=a.hov?0:(now-a.t0)/a.dur;if(k>=1){ANAR.a.splice(i,1);continue;}
+    if(drawn.some(d=>d[2]===a.k&&Math.hypot(d[0]-x,d[1]-y)<24))continue;drawn.push([x,y,a.k]); // 同一处的同类只画一个
+    const col=a.k==='ir'?'255,180,84':'84,224,208',S=ANAR.SZ,px=-uy,py=ux;ctx.globalAlpha=1-k*k;
+    ctx.fillStyle='rgb('+col+')';ctx.strokeStyle='rgba(8,12,18,.85)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(x+ux*S,y+uy*S);ctx.lineTo(x-ux*S*0.6+px*S*0.75,y-uy*S*0.6+py*S*0.75);ctx.lineTo(x-ux*S*0.25,y-uy*S*0.25);ctx.lineTo(x-ux*S*0.6-px*S*0.75,y-uy*S*0.6-py*S*0.75);ctx.closePath();ctx.stroke();ctx.fill();
+    if(a.hov){ctx.strokeStyle='rgb('+col+')';ctx.lineWidth=1;ctx.beginPath();ctx.arc(x,y,ANAR.HIT,0,6.283);ctx.stroke();}
+    ctx.fillText(a.k==='ir'?'红外异常':'雷达异常',x-ux*(S+28),y-uy*(S+10));}
+  ctx.restore();
 }
 const SHTR={MS:8000,SEG:10,LEN:3000000}; // 2026-09-28 炮弹来路线:墙钟亮多久 / 分几段渐隐 / 没有游玩区时往回画多长 km
 const SHTR_W=new WeakMap(); // 记录 → 第一次画的墙钟
