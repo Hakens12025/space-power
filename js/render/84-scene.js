@@ -484,12 +484,12 @@ function drawInset(){
     drawArena();
     drawVisFog(VISX); // 可见光圈灰雾:圈外的敌舰画面比圈内暗(2026-09-30 红外 / 雷达画面也画)
     drawTrails();
-    for(const s of ships)drawShip(s); // 2026-10-05 红外 / 雷达画面同主画面:主视角的东西照画
+    SHIP_LBL.on=true;SHIP_LBL.list.length=0;for(const s of ships)drawShip(s);SHIP_LBL.on=false;insetLabels(); // 2026-10-05 红外 / 雷达画面同主画面:主视角的东西照画。2026-10-08 舰名延后统一摆(字号随缩放、互不重叠)
     if(typeof drawRocks==='function')drawRocks();
     insetTrails();drawProjectiles();if(typeof drawMslPred==='function')drawMslPred();if(typeof drawShellTraces==='function')drawShellTraces();artHits();drawCiwsFx();if(typeof drawShieldFx==='function')drawShieldFx();insetCausal();
     const F=INSET.fx;if(F){const k=(now-F.t0)/(F.big?1500:1200);if(k>=1||k<0)INSET.fx=null;else{const p=F.s?F.s.pos:[F.x,F.y],q=toScreen(p[0],p[1]);ctx.globalAlpha=1-k;ctx.strokeStyle=ctx.fillStyle='rgb('+F.col+')';ctx.lineWidth=1.5; // 开播自带爆闪:hitFX 只活 1.2 游戏秒,切过去时多半已经没了
       ctx.beginPath();ctx.arc(q[0],q[1],F.big?14+70*k:8+40*k,0,6.2832);ctx.stroke();ctx.beginPath();ctx.arc(q[0],q[1],Math.max(0.1,(F.big?10:6)*(1-k)),0,6.2832);ctx.fill();ctx.globalAlpha=1;}}
-  }finally{ctx=ctx0;cam.x=c0x;cam.y=c0y;cam.zoom=c0z;W=W0;H=H0;lodNow=lod;vtW=vw0;}
+  }finally{SHIP_LBL.on=false;ctx=ctx0;cam.x=c0x;cam.y=c0y;cam.zoom=c0z;W=W0;H=H0;lodNow=lod;vtW=vw0;}
   INSET.x=x;INSET.y=y;INSET.w=w;INSET.h=h;INSET.on=INSET.a>INSET.ON_A;
   ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=INSET.a;ctx.drawImage(INSET.cv,Math.round(x*dpr),Math.round(y*dpr));ctx.restore(); // 1:1 贴在整数设备像素上
   ctx.save();try{ctx.globalAlpha=INSET.a;
@@ -526,6 +526,11 @@ function insetIcon(g,k,cx,cy){g.strokeStyle=g.fillStyle='#c7d0dc';g.lineWidth=1.
   else{const r=4.2,t1=1.75*Math.PI;g.arc(cx,cy,r,0.15*Math.PI,t1);g.stroke();const px=cx+r*Math.cos(t1),py=cy+r*Math.sin(t1),tx=-Math.sin(t1),ty=Math.cos(t1);
     g.beginPath();g.moveTo(px+tx*2.6,py+ty*2.6);g.lineTo(px-tx*1.2-ty*2.4,py-ty*1.2+tx*2.4);g.lineTo(px-tx*1.2+ty*2.4,py-ty*1.2-tx*2.4);g.closePath();g.fill();}
   g.lineWidth=1;}
+function insetLabels(){ // 2026-10-08 用户:小窗里舰名自适应(比例尺 3 万 km 时互相重叠)—— 字号跟船的不钳系数开平方(8~11 px);按 选中 > 我方 > 其他 摆,撞上已摆的就不写、记到那一个后面「+N」
+  const L=SHIP_LBL.list;if(!L.length)return;const fs=Math.max(8,Math.min(11,Math.round(10*Math.sqrt(Math.max(0.2,hullZoomRaw()/HULL_ZOOM.LAND))))),K=[];
+  ctx.font=fs+'px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';L.sort((a,b)=>a.pri-b.pri);
+  for(const o of L){const hw=ctx.measureText(o.t).width/2+2,b={x0:o.x-hw,x1:o.x+hw,y0:o.y-1,y1:o.y+fs+1,o:o,n:0},hit=K.find(q=>q.x0<b.x1&&b.x0<q.x1&&q.y0<b.y1&&b.y0<q.y1);if(hit)hit.n++;else K.push(b);}
+  ctx.fillStyle='rgba(215,226,240,.8)';for(const b of K)ctx.fillText(b.n?b.o.t+' +'+b.n:b.o.t,b.o.x,b.o.y);}
 function insetChrome(x,y,w){const H=INSET.HDR,B=[{k:'fit',w:18},{k:'reset',w:18}];let bx=x+w-18;INSET.btn=[]; // 2026-10-08 标题条右边:「自适应」「重置」(一次性图标按钮)+ 右上角拖柄(小直角);反层时标一下
   ctx.font='11px "Microsoft YaHei"';ctx.textAlign='left';ctx.textBaseline='middle';ctx.lineWidth=1;
   for(let i=B.length-1;i>=0;i--){const b=B[i];bx-=b.w+4;ctx.fillStyle='#101722';ctx.fillRect(bx,y+3,b.w,H-6);ctx.strokeStyle='#3a4e6a';ctx.strokeRect(bx+0.5,y+3.5,b.w-1,H-7);insetIcon(ctx,b.k,bx+b.w/2,y+H/2);INSET.btn.push({k:b.k,x:bx,y:y+3,w:b.w,h:H-6});}

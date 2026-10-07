@@ -49,6 +49,7 @@ function hullZoomF(){return Math.max(HULL_ZOOM.MARK,Math.min(HULL_ZOOM.MAX,hullZ
 const SHIP_K=0.6*1.45; // 2026-10-08 用户:美术整体缩放 1.3 → 1.45。2026-10-05 用户:美术资源缩放尺度 = 1.3(同日先定 1.5 又改 1.3;船、尾焰、弹、命中特效、残骸、浮标都跟这个系数一起放大,武器对船的倍数不变)。原注: 舰标 / 舰形轮廓再缩到 0.6(同演示页 红外效果.html;拉远换记号不变、石头不缩),免得船比行星还显眼
 function shipZoomF(){return hullZoomF()*SHIP_K;} // 舰船(活船、残骸、尾焰、锁定圈、虚影)用的系数
 function shipMarkMode(){return hullZoomRaw()<HULL_ZOOM.MARK;}
+const SHIP_LBL={on:false,list:[]}; // 2026-10-08 舰名延后统一摆(特写窗用,见 84 insetLabels):on 时 drawShip 只登记不画
 function drawShipMark(s,p,color){ // A:拉远后的记号。我方 = 沿船头的小箭头;敌方接触 = 小菱形(不分舰种 / 分级 / 认没认出)
   const R=SHIP_MARK_R;
   ctx.save();ctx.translate(p[0],p[1]);ctx.fillStyle=color;
@@ -267,8 +268,9 @@ function drawShip(s){
   // 名称(没认出显示"大/中/小热源",认出显示舰名)
   if(cam.zoom>0.0008){
     const lbl=(shipIdentHull(s)==='UNK')?sigClassLabel(s):s.name; // ID1:名字与轮廓同一个口径 —— 轮廓打码了,名字就不许是真名(原来各判各的:identQ===1)
-    ctx.fillStyle='rgba(215,226,240,.8)';ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';
-    ctx.fillText(lbl,p[0],p[1]+r+6);
+    if(SHIP_LBL.on)SHIP_LBL.list.push({t:lbl,x:p[0],y:p[1]+r+6,pri:selected.includes(s)?0:(s.side===VIEW?1:2)}); // 2026-10-08 特写窗:先收齐,画完舰船再统一摆(84 insetLabels:字号随缩放、撞上就并成「+N」)
+    else{ctx.fillStyle='rgba(215,226,240,.8)';ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';
+    ctx.fillText(lbl,p[0],p[1]+r+6);}
   }
   // 当前目标连线。FM2:每艘船(散船/旗舰/僚舰)都持有自己的令,所以这里【只读自己的 orders】——
   // FM1 那段"僚舰去读旗舰 orders 再叠自己的阵位偏移"的特例整体删除,编队的每个终点现在天然各画各的。
