@@ -86,7 +86,7 @@ function stepWeaponSystems(dt){
       }
       if(!threat)continue; // 在远离/横移:追不上,不浪费
       if(projectiles.some(q=>q.type==='interceptor'&&!q.done&&q.target===p))continue; // 该来袭组已有拦截弹在追:防重复(一组导弹只吃一次拦截)
-      const need=Math.max(2,q.count||16); // 2026-10-07 用户:一组拦截弹的颗数 = 来袭那组的颗数,最少 2 颗(原来 x1.2 向上取整);LL7 颗数读弹影(关开关 = 真弹)
+      const need=Math.ceil((q.count||16)*1.2); // 拦截弹数 = 来袭颗数×1.2 向上取整(覆盖拦截失败;10-07 试过 1:1、16 局蓝方拦截率 70.9% → 63.0%,用户改回);LL7 颗数读弹影(关开关 = 真弹)
       if(x.interceptor>=need){
         x.interceptor-=need;x.ciwsCd=PHYS.t(30); // 拦截弹发射间隔冷却(物理 30 s)
         fireInterceptor(x,p,need);
