@@ -136,4 +136,5 @@ function featStaStep(dt){ // core/05 每一步调
     for(const s of ships){if(s.dead)continue;const dx=s.pos[0]-T.x,dy=s.pos[1]-T.y;if(dx*dx+dy*dy<R2){if(s.side==='blue')b=true;else if(s.side==='red')r=true;}}
     if(b!==r){const sd=b?'blue':'red';if(sd!==T.holder){if(T.cap!==sd){T.cap=sd;T.prog=0;}T.prog+=dt;if(T.prog>=C.CAP_T){T.holder=sd;T.prog=0;T.cap=null;T.obs.side=sd;T.obs.on=false;setEmit(T.obs,'silent');}}}
     else if(!b)T.prog=Math.max(0,T.prog-C.DECAY*dt);}}
+function featStaMoved(i,x,y){const M=FEAT_STA,T=M.st[i];if(!T)return;T.x=x;T.y=y;T.obs.pos=[x,y,0];let key='';for(const s of ENV.stations)key+=s.x+','+s.y+'|';M.key=key;} // 2026-10-08 靶场拖据点(command/70 rangeDragTo):只挪位置,归属 / 占领进度照留(不然 featStaState 见位置变了会整张重建)
 function featStaObs(side){const L=[];if(!ENV.stations.length)return L;for(const T of featStaState())if(T.holder===side)L.push(T.obs);return L;} // 这一方拿着的据点的观测站

@@ -300,12 +300,13 @@ function mdPending(e,sx,sy){ // 六条 pending*(转向 / 布防 / 跟随 / 信�
   }
   return false;
 }
-let rangeDrag=null; // ENV2 靶场全知时按住拖动的东西:{o 实体 | bi 天体下标, dx, dy, sx, sy, moved}
+let rangeDrag=null; // ENV2 靶场全知时按住拖动的东西:{o 实体 | si 据点下标 | bi 天体下标, dx, dy, sx, sy, moved}
 function rangeDragAt(sx,sy){ // ENV2 靶场沙盘:12 px 内最近的舰船(敌我)/ 石头,其次天体圆盘。2026-09-28 用户:不开全知也能拖(按真实位置抓,靶场是测试台)
   const env=curEnv();if(!env||!env.range)return null;
   const w=worldAt(sx,sy);let best=null,bd=144;
   for(const list of [ships,rocks])for(const o of list){if(o.dead)continue;const p=toScreen(o.pos[0],o.pos[1]),d=(p[0]-sx)*(p[0]-sx)+(p[1]-sy)*(p[1]-sy);if(d<bd){bd=d;best={o:o,dx:o.pos[0]-w[0],dy:o.pos[1]-w[1]};}}
   if(best)return best;
+  const ST=ENV.stations;for(let i=0;i<ST.length;i++){const p=toScreen(ST[i].x,ST[i].y),r=Math.max(12,featStaPx()*0.5);if((p[0]-sx)*(p[0]-sx)+(p[1]-sy)*(p[1]-sy)<r*r)return {si:i,dx:ST[i].x-w[0],dy:ST[i].y-w[1]};} // 2026-10-08 用户:据点也能拖(半个图标或 12 px 内)
   const B=(rangeWorld&&rangeWorld.bodies)||[];
   for(let i=0;i<B.length;i++){const b=B[i],p=toScreen(b.x,b.y),r=Math.max(6,b.r*cam.zoom);if((p[0]-sx)*(p[0]-sx)+(p[1]-sy)*(p[1]-sy)<r*r)return {bi:i,dx:b.x-w[0],dy:b.y-w[1]};}
   return null;
@@ -313,6 +314,7 @@ function rangeDragAt(sx,sy){ // ENV2 靶场沙盘:12 px 内最近的舰船(敌�
 function rangeDragTo(x,y){ // ENV2 舰船 / 石头直接写位置(靶连锚点一起挪,免得闪避机动拽回去);天体改 rangeWorld 再 envReset,不直写 ENV
   const g=rangeDrag,w=worldAt(x,y),nx=w[0]+g.dx,ny=w[1]+g.dy;
   if(g.o){g.o.pos=[nx,ny,g.o.pos[2]||0];if(g.o.rangeAnchor)g.o.rangeAnchor=g.o.pos.slice();ROCK_EPOCH++;if(typeof llJump==='function')llJump(g.o);} // 2026-09-29 石头挪了:world/12 的网格重建;LL1 瞬移清光锥层历史(sensors/26)
+  else if(g.si!==undefined){const S=rangeWorld.stations[g.si];S.x=nx;S.y=ny;envReset(rangeWorld);featStaMoved(g.si,nx,ny);} // 据点同天体:改 rangeWorld 再 envReset,归属 / 占领进度照留
   else{const b=rangeWorld.bodies[g.bi];b.x=nx;b.y=ny;envReset(rangeWorld);}
 }
 function mdLeft(e,sx,sy){ // 左键
