@@ -29,7 +29,7 @@ table.lg th{color:var(--dim);font-weight:normal}
 <p class="n">独立演示页(不加载引擎)。小模拟按引擎现在的数值:开局相距约 32 万 km、雷达 24.6 万定位、红外 19.2 万认出、可见光圈 15.8 万;主炮 1 万 km/游戏秒、命中率 7.3 万处 50%(10% 以上才开)、装填 60 游戏秒、600 伤;导弹一组 12 枚、约 4500 km/游戏秒、40 万内发射;近防外圈 / 内圈各掷一次;护盾先吃伤害。<br>
 导演(事件成环、预判段、炮弹来路、插队、冷却)与镜头(连续取景、钉在主体上 + 前视、飞过去、最近 2500 km)照搬引擎现在的代码 —— 这一版如实复现现在的毛病,先看问题再改。<br>
 左 = 特写(只画我方知道的);右 = 全局真值(琥珀框 = 特写此刻拍到的范围,暗的弹 = 我方看不见)。倍速 = 你选的上限,开着「接触降速」时同引擎:定位 x12、导弹带 x8、炮战带(3 万)x4。</p>
-<p class="n">2026-10-08 加(用户):① 右边那张改成「主画面」—— 滚轮缩放、拖动平移(一碰就停掉自动看全局,点「自动看全局」回去);特写窗照引擎叠在主画面左下角。② <b>反层</b>:主画面拉得比特写窗此刻看到的还近,特写窗反过来拍更宽的:导演照播,取景至少是主画面的 K 倍宽,不再推近到舰船尺度,框出主画面在哪;没东西可播(也没选中)时,主画面宽度小于「无选中触发」也照样亮出来,看主画面周围。③ 特写窗右上角小直角拖动改大小(任意长宽比);默认改大小时比例尺不变 = 看到更多星图;标题条「自适应」= 以当前窗口为新的取景基准(船变大),「重置」= 回默认大小与默认基准。</p>
+<p class="n">2026-10-08 加(用户):① 右边那张改成「主画面」—— 滚轮缩放、拖动平移(一碰就停掉自动看全局,点「自动看全局」回去);特写窗照引擎叠在主画面左下角。② <b>反层</b>:主画面拉得比特写窗此刻看到的还近,特写窗反过来拍更宽的:导演照播,取景至少是主画面的 K 倍宽,不再推近到舰船尺度,框出主画面在哪;没东西可播(也没选中)时,主画面宽度小于「无选中触发」也照样亮出来,看主画面周围。③ 特写窗右上角小直角拖动改大小(任意长宽比);默认改大小时比例尺不变、船在屏幕上原地不动(取景钉在窗口左下角那块),拉大只是往右 / 往上多看到星图;标题条「自适应」(按钮,点一下)= 按当前窗口大小重新分配取景,立刻生效(暂停也一样):窗口大了船就大、位置可能变;「重置」= 回默认大小与默认取景。</p>
 </header>
 <div class="ctl">
   <button class="t" id="play">暂停</button><button class="t" id="again">重开本局</button><button class="t" id="next">下一局</button><span class="mono" id="seed"></span>
@@ -396,17 +396,21 @@ function insetFrame(now,dt){ // 同引擎 drawInset 的前半段:事件 → 导�
   if(!I.rev&&mv.w<vis)I.rev=true;else if(I.rev&&mv.w>vis*I.REV_OUT)I.rev=false; // 反层:主画面比特写还近就进,拉回到 REV_OUT 倍才出(迟滞)
   if(I.rev){const need=I.REV_K*Math.max(mv.w,mv.h*I.RW/(I.RH-I.HDR));if(T.w<need)T.w=need;} // 反层里导演照播,按取景基准至少是主画面的 REV_K 倍宽(不推近到舰船尺度);窗口改大小照样只是多看到星图
   insetCam(sub,T,w,hp,dt,now);
-  const z=Math.exp(I.lz);I.cx=I.pcx;I.cy=I.pcy-I.HDR/(2*z);I.z=z;I.T=T;
+  const z=Math.exp(I.lz);I.z=z;insetPlace();I.T=T;
   if(fade){I.a*=Math.exp(-dt*I.FADE_OUT);if(I.a<0.02)return off();}else{I.a+=(1-I.a)*(1-Math.exp(-dt*I.FADE_IN));I.last=sub;}
   I.on=true;return sub;}
 
 const FREE_SUB={lbl:'主画面周围(反层)',ctx:[],ind:[],kind:'free'};
+function insetPlace(){const z=I.z; // 2026-10-08 用户:拖边缘时船在屏幕上不动 —— 取景中心 (pcx, pcy) 钉在基准区中心;基准区 = 窗口左下角 RW x (RH - 标题条),多出来的往右 / 往上
+  I.cx=I.pcx+(I.W-I.RW)/(2*z);I.cy=I.pcy+((I.RH-I.HDR)-I.H)/(2*z);} // I.cx / I.cy = 窗口中心对着的世界点(画法照旧按窗口中心算)
+function insetRebase(W,H){const k=W/I.RW; // 「自适应」/「重置」:取景基准换成 W x H,镜头按同一比例立刻缩放(暂停也生效);船变大、位置跟着基准区挪
+  I.RW=W;I.RH=H;if(I.on&&I.z>0){I.lz+=Math.log(k);if(I.lzg!==null)I.lzg+=Math.log(k);I.z=Math.exp(I.lz);if(I.fly)I.fly=null;insetPlace();}}
 function mainView(){return OVC.s>0?{cx:OVC.cx,cy:OVC.cy,w:OVW/OVC.s,h:OVH/OVC.s}:{cx:0,cy:0,w:Infinity,h:Infinity};} // 主画面此刻的中心与宽高(km)
 function insetFree(mv,dt){ // 反层的空镜:以主画面中心为中心、宽 = 主画面的 REV_K 倍,平滑跟上;导演有镜头了照常飞过去
   const Tw=I.REV_K*Math.max(mv.w,mv.h*I.RW/(I.RH-I.HDR)),tlz=Math.log(I.RW/Tw),a=1-Math.exp(-dt*4);
   if(I.key!=='free'){if(!I.on||!I.key){I.pcx=mv.cx;I.pcy=mv.cy;I.lz=tlz;}I.key='free';I.csk='free';I.lastK='';I.fly=null;I.dir=null;}
   I.pcx+=(mv.cx-I.pcx)*a;I.pcy+=(mv.cy-I.pcy)*a;I.lz+=(tlz-I.lz)*a;
-  const z=Math.exp(I.lz);I.cx=I.pcx;I.cy=I.pcy-I.HDR/(2*z);I.z=z;I.T=null;
+  const z=Math.exp(I.lz);I.z=z;insetPlace();I.T=null;
   I.a+=(1-I.a)*(1-Math.exp(-dt*I.FADE_IN));I.last=FREE_SUB;I.on=true;return null;}
 
 /* ================= 记录:框宽曲线 / 镜头段 / 事件 ================= */
@@ -475,8 +479,8 @@ function drawInsetView(g,now){const w=I.W,h=I.H,z=I.z,X=x=>(x-I.cx)*z+w/2,Y=y=>(
   insetChrome(g);}
 function insetChrome(g){const w=I.W,H=I.HDR; // 标题条右边:「自适应」「重置」+ 右上角拖柄(小直角);反层时标一下
   g.font='11px "Microsoft YaHei"';const B=[{k:'fit',t:'自适应',w:46},{k:'reset',t:'重置',w:34}];let x=w-18;I.btn=[];
-  for(let i=B.length-1;i>=0;i--){const b=B[i];x-=b.w+4;const on=b.k==='fit'?(I.RW!==I.W||I.RH!==I.H):(I.W!==I.W0||I.H!==I.H0||I.RW!==I.W0||I.RH!==I.H0);
-    g.fillStyle=on?'#12233a':'#0d131c';g.fillRect(x,3,b.w,H-6);g.strokeStyle=on?'#5aa7ff':'#2a3a52';g.strokeRect(x+0.5,3.5,b.w-1,H-7);g.fillStyle=on?'#dfe9f5':'#6b7a8c';g.fillText(b.t,x+5,14);I.btn.push({k:b.k,x,y:3,w:b.w,h:H-6});}
+  for(let i=B.length-1;i>=0;i--){const b=B[i];x-=b.w+4; // 一次性按钮(不是开关)
+    g.fillStyle='#101722';g.fillRect(x,3,b.w,H-6);g.strokeStyle='#3a4e6a';g.strokeRect(x+0.5,3.5,b.w-1,H-7);g.fillStyle='#c7d0dc';g.fillText(b.t,x+5,14);I.btn.push({k:b.k,x,y:3,w:b.w,h:H-6});}
   if(I.rev){g.fillStyle='rgba(143,208,255,.95)';g.fillText('反层',x-30,14);}
   g.strokeStyle='#8fb8e8';g.lineWidth=2;g.beginPath();g.moveTo(w-12,2);g.lineTo(w-2,2);g.lineTo(w-2,12);g.stroke();g.lineWidth=1;}
 const OVC={cx:0,cy:0,s:0,man:false}; // man = 手动(滚轮 / 拖动过):不再自动看全局
@@ -558,10 +562,10 @@ const isCorner=q=>q[0]>=I.W-16&&q[1]<=16;
 let DRAG=null;
 ov.addEventListener('mousedown',e=>{const p=ovPos(e),q=insetLocal(p);
   if(q){if(isCorner(q)){DRAG={k:'size',x:p[0],y:p[1],W:I.W,H:I.H};e.preventDefault();return;}
-    const b=insetBtnAt(q);if(b==='fit'){I.RW=I.W;I.RH=I.H;}else if(b==='reset'){I.W=I.W0;I.H=I.H0;I.RW=I.W0;I.RH=I.H0;insetClamp();}return;}
+    const b=insetBtnAt(q);if(b==='fit')insetRebase(I.W,I.H);else if(b==='reset'){I.W=I.W0;I.H=I.H0;insetClamp();insetRebase(I.W0,I.H0);}return;}
   if(!OVC.s)return;OVC.man=true;$('mvAuto').classList.remove('on');DRAG={k:'pan',x:p[0],y:p[1],cx:OVC.cx,cy:OVC.cy};ov.style.cursor='grabbing';});
 addEventListener('mousemove',e=>{const p=ovPos(e);
-  if(DRAG&&DRAG.k==='size'){const k=INSR.k;I.W=DRAG.W+(p[0]-DRAG.x)/k;I.H=DRAG.H-(p[1]-DRAG.y)/k;insetClamp();return;} // 窗钉在左下角:往右拉变宽、往上拉变高
+  if(DRAG&&DRAG.k==='size'){const k=INSR.k;I.W=DRAG.W+(p[0]-DRAG.x)/k;I.H=DRAG.H-(p[1]-DRAG.y)/k;insetClamp();if(I.z>0)insetPlace();return;} // 窗钉在左下角:往右拉变宽、往上拉变高;画面钉在基准区上,船在屏幕上不动
   if(DRAG&&DRAG.k==='pan'){OVC.cx=DRAG.cx-(p[0]-DRAG.x)/OVC.s;OVC.cy=DRAG.cy-(p[1]-DRAG.y)/OVC.s;return;}
   const q=insetLocal(p);ov.style.cursor=q?(isCorner(q)?'nesw-resize':(insetBtnAt(q)?'pointer':'default')):'grab';});
 addEventListener('mouseup',()=>{DRAG=null;});
