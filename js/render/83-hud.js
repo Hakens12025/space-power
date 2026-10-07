@@ -211,7 +211,7 @@ function drawChain(p0){ // 2026-10-03:只画在网上的(断链的成员我方�
 /* 2026-10-05 代表显示(用户:拉远后船显示箭头,切换点就用船换箭头的切换点;美术物品要比船小、要分得出敌我):
    拉远到 shipMarkMode 起弹类换简易记号 —— 改美术前那套的形状(点 / 点群 / 紫点),都比船的记号(箭头 7 px、菱形 8 px)小,整组外框也小,用阵营色;
    雷原来是菱形,会和敌方接触的菱形混,改空心方块;主炮弹原来是白方块,改沿飞行方向的短划。 */
-const PROJ_MK={blue:'#5aa7ff',red:'#ff6b6b',iblue:'#a9d2ff',ired:'#ffb3b3'}; // i* = 拦截弹:阵营色调亮
+const PROJ_MK={blue:'#5aa7ff',red:'#ff6b6b'};
 function projMark(p,x,y,rot,side,cnt){
   const col=PROJ_MK[side];ctx.fillStyle=col;ctx.strokeStyle=col;
   if(p.type==='decoy'){ctx.lineWidth=1;ctx.beginPath();ctx.arc(x,y,2.4,0,6.283);ctx.stroke();ctx.fillStyle='rgba(200,120,255,.95)';ctx.beginPath();ctx.arc(x,y,1.5,0,6.283);ctx.fill();return;} // 紫点 + 阵营色圈,外径约 5.8 px

@@ -78,11 +78,11 @@ const ART_FORM={1:[[0,0]],3:[[0.45,0],[-0.15,-0.32],[-0.15,0.32]],5:[[0.45,0],[-
 const ART_FCX={1:0,3:0.15,5:-0.15}; // 队形外接框的中心(x),贴图以它为中心
 function artShown(c){return c>=6?5:(c>=3?3:1);}
 function artMslPoly(w){return [[0.5,0],[0.40,-w*0.55],[0.27,-w],[-0.34,-w],[-0.43,-w-0.12],[-0.5,-w-0.12],[-0.46,-w],[-0.5,-w*0.6],[-0.5,w*0.6],[-0.46,w],[-0.5,w+0.12],[-0.43,w+0.12],[-0.34,w],[0.27,w],[0.40,w*0.55]];}
-const ART_MP={msl:artMslPoly(0.08),inter:artMslPoly(0.055)},ART_MW={msl:0.08,inter:0.055};
-function artMslLen(n,kind){return artLFF()*(n>1?0.36:0.55)*(kind==='inter'?0.85:1);}
-function artMslGlyph(g,kind,side,Lg,rot){const col=kind==='inter'?artLit(ART_SIDE[side],0.35):ART_SIDE[side]; // 一枚,机头朝 +x(调用方已转好)
-  if(Lg<5){g.strokeStyle=artCss(col);g.lineWidth=kind==='inter'?0.8:1;g.lineCap='round';g.beginPath();g.moveTo(-Lg*0.42,0);g.lineTo(Lg*0.42,0);g.stroke();return;} // < 5 px:一道阵营色短划
-  const P=ART_MP[kind],w=ART_MW[kind],px=1/Lg,up=artLocalL(rot)[1]<0;
+const ART_MP=artMslPoly(0.08),ART_MW=0.08; // 弹身轮廓与半宽(单位 = 弹长)
+function artMslLen(n){return artLFF()*(n>1?0.36:0.55);}
+function artMslGlyph(g,side,Lg,rot){const col=ART_SIDE[side]; // 一枚,机头朝 +x(调用方已转好)
+  if(Lg<5){g.strokeStyle=artCss(col);g.lineWidth=1;g.lineCap='round';g.beginPath();g.moveTo(-Lg*0.42,0);g.lineTo(Lg*0.42,0);g.stroke();return;} // < 5 px:一道阵营色短划
+  const P=ART_MP,w=ART_MW,px=1/Lg,up=artLocalL(rot)[1]<0;
   g.save();g.scale(Lg,Lg);g.lineJoin='round';
   artPath(g,P);g.strokeStyle='rgba(0,0,0,.8)';g.lineWidth=1.4*px;g.stroke();
   const gr=g.createLinearGradient(0,-w,0,w);gr.addColorStop(0,artCss(artLit(col,up?0.35:-0.4)));gr.addColorStop(0.5,artCss(col));gr.addColorStop(1,artCss(artLit(col,up?-0.4:0.35)));g.fillStyle=gr;g.fill();
@@ -92,22 +92,22 @@ function artMslGlyph(g,kind,side,Lg,rot){const col=kind==='inter'?artLit(ART_SID
   g.fillStyle='rgba(18,20,24,.92)';g.fillRect(-0.5,-w*0.6,0.045,w*1.2);g.restore(); // 喷口
   g.restore();}
 const ART_MS=new Map(),ART_ROT=72,ART_ROT_S=36,ART_MNEW_MAX=4; // 方向分档:弹长 < 8 px 时 36 档;每帧最多新建 4 张,超了借相邻尺寸档
-function artMslKey(kind,side,n,ab,li,nr,fb){return (((((li+80)*2+(nr===ART_ROT?1:0))*72+ab)*6+n)*6+(kind==='inter'?3:0)+(side==='red'?1:(side==='blue'?0:2)))*6+fb;} // 数字键(DPR 变了整张表清掉,见 artTick);fb = 羽化档 0~5
-function artMslSpr(kind,side,n,ab,li,nr,fb){const key=artMslKey(kind,side,n,ab,li,nr,fb);let c=ART_MS.get(key);if(c)return c;ART_MNEW++;
+function artMslKey(side,n,ab,li,nr,fb){return (((((li+80)*2+(nr===ART_ROT?1:0))*72+ab)*6+n)*3+(side==='red'?1:(side==='blue'?0:2)))*6+fb;} // 数字键(DPR 变了整张表清掉,见 artTick);fb = 羽化档 0~5
+function artMslSpr(side,n,ab,li,nr,fb){const key=artMslKey(side,n,ab,li,nr,fb);let c=ART_MS.get(key);if(c)return c;ART_MNEW++;
   const D=artDpr(),Lg=Math.pow(2,li/4),rot=ab/nr*2*Math.PI,R=Lg*(n>1?1.45:0.75)+3+fb,sz=Math.ceil(2*R*D);c=artCv(sz,sz);const g=c.getContext('2d');g.setTransform(D,0,0,D,sz/2,sz/2);
   const cr=Math.cos(rot),sr=Math.sin(rot),cx=ART_FCX[n],F=ART_FORM[n];
-  for(let i=F.length-1;i>=0;i--){const f=F[i],fx=(f[0]-cx)*Lg,fy=f[1]*Lg;g.save();g.translate(fx*cr-fy*sr,fx*sr+fy*cr);g.rotate(rot);artMslGlyph(g,kind,side,Lg,rot);g.restore();}
+  for(let i=F.length-1;i>=0;i--){const f=F[i],fx=(f[0]-cx)*Lg,fy=f[1]*Lg;g.save();g.translate(fx*cr-fy*sr,fx*sr+fy*cr);g.rotate(rot);artMslGlyph(g,side,Lg,rot);g.restore();}
   if(fb>0){const c2=artCv(sz,sz),g2=c2.getContext('2d');g2.filter='blur('+(fb/10*D).toFixed(2)+'px)';g2.drawImage(c,0,0);c=c2;} // 羽化:整张模糊
   c.Lq=Lg;if(ART_MS.size>4000)ART_MS.clear();ART_MS.set(key,c);return c;}
 function artMsl(g,x,y,rot,o){ // o = {kind:'msl'|'inter', side, count, burn, sd}
   if(o.kind==='inter'){artIcp(g,x,y,rot,o);return;} // 2026-10-06 拦截弹换白芯亮珠(下面 artIcp)
-  const n=artShown(o.count||1),F=ART_FORM[n],cx=ART_FCX[n],Lg=artMslLen(n,o.kind),li=Math.round(Math.log2(Lg)*4),nr=Lg<8?ART_ROT_S:ART_ROT,ab=((Math.round(rot/(2*Math.PI)*nr)%nr)+nr)%nr,fb=Math.round(artFe()*10),cr=Math.cos(rot),sr=Math.sin(rot);
-  if(o.burn){const pk=(o.kind==='inter'?'int':'msl')+(o.side==='red'?'red':'blue'),t=artNow();
+  const n=artShown(o.count||1),F=ART_FORM[n],cx=ART_FCX[n],Lg=artMslLen(n),li=Math.round(Math.log2(Lg)*4),nr=Lg<8?ART_ROT_S:ART_ROT,ab=((Math.round(rot/(2*Math.PI)*nr)%nr)+nr)%nr,fb=Math.round(artFe()*10),cr=Math.cos(rot),sr=Math.sin(rot);
+  if(o.burn){const pk='msl'+(o.side==='red'?'red':'blue'),t=artNow();
     if(Lg<5){let xm=0;for(const f of F)xm=Math.min(xm,f[0]);const b=(xm-cx-0.5)*Lg;artPlume(g,pk,1,x+b*cr,y+b*sr,rot+Math.PI,Lg*(n>1?2.6:1.8)*artFlick(t,o.sd||0),Math.max(1.4,Lg*(n>1?1.1:0.7)),0.85);} // 弹太小:一组一道
     else for(const f of F){const fx=(f[0]-cx-0.5)*Lg,fy=f[1]*Lg;artPlume(g,pk,1,x+fx*cr-fy*sr,y+fx*sr+fy*cr,rot+Math.PI,Lg*1.35*artFlick(t,(o.sd||0)+f[1]*3),Math.max(1.6,Lg*0.45),0.95);}}
-  let c=ART_MS.get(artMslKey(o.kind,o.side,n,ab,li,nr,fb));
-  for(let d=1;!c&&ART_MNEW>=ART_MNEW_MAX&&d<=6;d++)c=ART_MS.get(artMslKey(o.kind,o.side,n,ab,li-d,nr,fb))||ART_MS.get(artMslKey(o.kind,o.side,n,ab,li+d,nr,fb)); // 这一帧建够了:先借相邻尺寸档
-  if(!c)c=artMslSpr(o.kind,o.side,n,ab,li,nr,fb);
+  let c=ART_MS.get(artMslKey(o.side,n,ab,li,nr,fb));
+  for(let d=1;!c&&ART_MNEW>=ART_MNEW_MAX&&d<=6;d++)c=ART_MS.get(artMslKey(o.side,n,ab,li-d,nr,fb))||ART_MS.get(artMslKey(o.side,n,ab,li+d,nr,fb)); // 这一帧建够了:先借相邻尺寸档
+  if(!c)c=artMslSpr(o.side,n,ab,li,nr,fb);
   const w=c.width/artDpr()*Lg/c.Lq;g.drawImage(c,x-w/2,y-w/2,w,w);} // 贴图按 2^(1/4) 一档缓存,缩放中不每帧重建
 /* 2026-10-06 拦截弹 = 白芯亮珠(用户从 demos/美术/拦截弹区分方案.html 选 B):阵营色圆珠 + 白芯 + 阵营色光晕,尾焰缩成一小团;
    一组画 1 / 3 / 5 颗排一字横队(间距 0.13 LFF、两翼略后,5 颗整排 0.78 倍最小舰长)—— 和导弹的短划 / 楔形靠「圆 vs 长条」+ 白芯分开,敌我照旧看颜色 */
