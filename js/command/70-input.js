@@ -184,10 +184,10 @@ function camFollowPos(F){const o=F.o; // 画在哪就跟到哪(对方的读我�
   if(F.k==='proj')return (!o.done&&projSeen(o))?projViewPos(o):null;
   if(o.side===VIEW||o.kind==='station')return o.dead?null:o.pos;
   return viewDead(o)?null:viewPos(o);}
-function camFollowStop(msg){CAMF.o=null;CAMF.lock=false;CAMF.on=false;if(msg)cmdTipFlash(msg,1500);}
+function camFollowStop(){CAMF.o=null;CAMF.lock=false;CAMF.on=false;} // 2026-10-08 用户:跟随开始 / 结束都不弹提示
 function camFollowTick(dt){const F=CAMF;if(!F.o)return;
-  if(F.on&&cam.zoom===F.lz&&(cam.x!==F.lx||cam.y!==F.ly)){camFollowStop('镜头跟随已取消');return;} // 别的操作挪了镜头(右键拖 / WASD / 数字键 / 特写跳转)⇒ 不再跟;缩放照常(滚轮会动 cam.x / y,这一帧再对回去)
-  const q=camFollowPos(F);if(!q){camFollowStop('镜头跟随结束:目标没了');return;}
+  if(F.on&&cam.zoom===F.lz&&(cam.x!==F.lx||cam.y!==F.ly)){camFollowStop();return;} // 别的操作挪了镜头(右键拖 / WASD / 数字键 / 特写跳转)⇒ 不再跟;缩放照常(滚轮会动 cam.x / y,这一帧再对回去)
+  const q=camFollowPos(F);if(!q){camFollowStop();return;}
   if(F.lock){cam.x=q[0];cam.y=q[1];}
   else{const k=1-Math.exp(-dt*8);cam.x+=(q[0]-cam.x)*k;cam.y+=(q[1]-cam.y)*k;if(Math.hypot(q[0]-cam.x,q[1]-cam.y)*cam.zoom<1){cam.x=q[0];cam.y=q[1];F.lock=true;}} // 先平滑飞过去,到了钉死(不拖尾)
   F.on=true;F.lx=cam.x;F.ly=cam.y;F.lz=cam.zoom;}
@@ -198,8 +198,8 @@ function camPickAt(sx,sy){ // 双击命中:我方浮标 / 我方船 / 其余实�
   const g=groupAt(sx,sy);return g?{o:g,k:'proj',n:'导弹组'}:null;}
 function onDblClick(e){if(e.button!==0)return;const sx=e.clientX,sy=e.clientY;if(typeof insetHit==='function'&&insetHit(sx,sy))return;
   const t=camPickAt(sx,sy);
-  if(t){CAMF.o=t.o;CAMF.k=t.k;CAMF.lock=false;CAMF.on=false;cmdTipFlash('镜头跟随:'+t.n+' · 右键拖动 / WASD / 双击空地取消',2500);}
-  else if(CAMF.o)camFollowStop('镜头跟随已取消');}
+  if(t){CAMF.o=t.o;CAMF.k=t.k;CAMF.lock=false;CAMF.on=false;}
+  else if(CAMF.o)camFollowStop();}
 function groupAt(sx,sy){ // 命中最近的导弹组(屏幕距离,可点选,半径30px)
   const w=worldAt(sx,sy);
   let best=null,bd=30/cam.zoom;
