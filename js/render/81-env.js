@@ -245,8 +245,8 @@ function mapBodies(){ // ENV2 comp 槽(任务 4:画进当前视图 —— 合成
   const g=mapG(),VW=mapVW(),VH=mapVH(),z=mapVZ(),big=3*Math.max(VW,VH),lit=envHasLight(),u=MAP_T2;let n=0;
   g.save();
   for(const b of B){
-    const p=mapTS(b.x,b.y),r=b.r*z;
-    if(p[0]+r<0||p[0]-r>VW||p[1]+r<0||p[1]-r>VH)continue;       // 视图包围盒剔除
+    const p=mapTS(b.x,b.y),r=b.r*z,rk=artRingOf(b),e=r*(rk?rk.k+2.2*rk.w:1.16)+2; // 2026-10-08 剔除按画出来的范围(环到 k + 2.2σ 倍半径、大气边 1.16 倍):原来只按盘,盘在视图外、环伸进来时环被剔掉 —— 合成缓存平移时整格拷来的那几格就留下一块没环的矩形
+    if(p[0]+e<0||p[0]-e>VW||p[1]+e<0||p[1]-e>VH)continue;       // 视图包围盒剔除
     n++;let a0=0,hasL=false;
     if(lit&&envSunDirAt([b.x,b.y],u)){const q=mapTS(b.x+u[0]*1e6,b.y+u[1]*1e6);a0=Math.atan2(q[1]-p[1],q[0]-p[0]);hasL=true;} // 屏幕上的光源方向(不假定 y 轴朝哪,同日标)
     const tg=ART_PL_NAME[b.type]||'',rg=hasL?artRingOf(b):null,ty=p[1]+Math.max(3,r)*(rg?rg.k+2.2*rg.w:1)+9; // 2026-10-04 类型 tag 写在盘下面(带环的写在环外)
