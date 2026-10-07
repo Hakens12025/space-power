@@ -37,7 +37,7 @@ table.lg th{color:var(--dim);font-weight:normal}
   <span class="g">选中:</span><span id="sels"></span>
   <span class="g">显示:</span><button class="t on" id="big">放大 1.5 倍</button><button class="t" id="aid">取景辅助</button><button class="t on" id="auto">打完自动下一局</button>
   <span class="g">主画面:</span><button class="t on" id="mvAuto">自动看全局</button>
-  <span class="g">反层 K:</span><input id="revK" type="range" min="15" max="60" value="30" style="width:90px"><span class="mono" id="revKv"></span><span class="g">无选中触发 主画面比例尺(100 px)&lt;</span><input id="revF" type="range" min="2" max="40" value="10" style="width:110px"><span class="mono" id="revFv"></span>
+  <span class="g">反层 K:</span><input id="revK" type="range" min="15" max="60" value="30" style="width:90px"><span class="mono" id="revKv"></span><span class="g">反层门槛 主画面比例尺(100 px)&lt;</span><input id="revF" type="range" min="2" max="40" value="6" style="width:110px"><span class="mono" id="revFv"></span>
   <span class="g">导演 / 镜头改动:</span><button class="t on" id="preNew">新方案</button><button class="t" id="trail">弹的拖影(主视角没有)</button>
 </div>
 <div class="wrap">
@@ -153,7 +153,7 @@ const contactFix=s=>!!Wd.know.blue.get(s.id).fix;
 /* ================= 导演 + 镜头:照搬引擎 render/84-scene.js(1ad8107),VIEW = 蓝方;前视 / 缩放死区同引擎 2026-10-04(LEAD 0.4、按最高档、平滑 0.45 s、主镜头主体最多偏到满前视;死区出界贴边连续跟);与引擎不同:慢飞弧度 RHO 1.8 → 1.3(用户:定位镜头的失重感抹平一点)、预判新方案(ST.preNew) ================= */
 const I={FIT:0.7,FIT_MIN:0.26,SHOT_MAX:7000,CTX_T:240,CTX_F0:40000,CTX_F1:50000,CTX_E0:50000,CTX_E1:60000,
   OM:5,ZE:0.85,SOFT:0.12,DB:15,T_OUT:0.35,T_IN:1.2,ZWAIT:0.8,ZRATE:1.8,FK:1,FMAX:4,PUSH:1.6,PUSH_T0:2.5,PUSH_T1:0.8,PUSH_MAX:0.5,PUSH_HOLD:1200,SLOW_T:3,RHO:1.3,RHO_Q:1.4,MIN_KM:2500,CIWS_KM:800,SLOW:{fix:1,id:1,vis:1},
-  W:416,H:260,HDR:20,W0:416,H0:260,RW:416,RH:260,MIN_W:240,MIN_H:150,REV_K:3,REV_OUT:1.25,REV_FREE:10000,REV_MIN_KM:5000,REV_SOFT:0.25,rev:false,btn:[],INC_IN:80000,INC_OUT:100000,LEAD:0.4,FADE_IN:6,FADE_OUT:9,T_PAN:0.45,T_ANC:0.25,SX:30,SY:24,CUT:150,
+  W:416,H:260,HDR:20,W0:416,H0:260,RW:416,RH:260,MIN_W:240,MIN_H:150,REV_K:3,REV_OUT:1.25,REV_FREE:6000,REV_MIN_KM:5000,REV_SOFT:0.25,rev:false,btn:[],INC_IN:80000,INC_OUT:100000,LEAD:0.4,FADE_IN:6,FADE_OUT:9,T_PAN:0.45,T_ANC:0.25,SX:30,SY:24,CUT:150,
   OUT_HI:1.2,OUT_LO:0.8,SPLIT:60000,JOIN:48000,IND:24,
   DW:{kill:3500,loss:3500,hit:2500,id:3000,fix:3000,shell:3500,ciws:2500,vis:3000},EVMS:{kill:6000,loss:6000,id:9000,fix:9000,vis:9000,hit:4500,ciws:4500,shell:5000},SHELL_BACK:200000,SHELL_GAP:30000,SHELL_NEAR:10000,
   COOL:3000,GRACE:500,KILL_HIT:3000,HIT_R:5000,
@@ -393,7 +393,7 @@ function insetFrame(now,dt){ // 同引擎 drawInset 的前半段:事件 → 导�
     return I.rev?insetFree(mv,dt):off();}
   const w=I.RW,hp=I.RH-I.HDR,zMax=60/(sub.ciws?I.CIWS_KM:I.MIN_KM),T=insetTarget(sub,w,hp,zMax); // 2026-10-08 按取景基准 RW x RH 取景:窗口改大小比例尺不变(看到更多星图),「自适应」才把基准换成当前窗口
   const ik=T.w/I.RW,mk=OVC.s>0?1/OVC.s:Infinity; // 每像素 km:特写正常取景 / 主画面
-  if(!I.rev&&mk<ik)I.rev=true;else if(I.rev&&mk>ik*I.REV_OUT)I.rev=false; // 反层:主画面比特写还近就进,拉回到 REV_OUT 倍才出(迟滞)
+  const mb=mk*100;if(!I.rev&&mk<ik&&mb<I.REV_FREE)I.rev=true;else if(I.rev&&(mk>ik*I.REV_OUT||mb>I.REV_FREE*I.REV_OUT))I.rev=false; // 10-08 用户:目标是 6000 以下才出反层 // 反层:主画面比特写还近就进,拉回到 REV_OUT 倍才出(迟滞)
   if(I.rev){const need=I.REV_K*Math.max(mv.w,mv.h*I.RW/(I.RH-I.HDR));if(T.w<need)T.w=need;T.w=revFloor(T.w);} // 反层里导演照播,按取景基准至少是主画面的 REV_K 倍宽(不推近到舰船尺度);窗口改大小照样只是多看到星图
   insetCam(sub,T,w,hp,dt,now);
   const z=Math.exp(I.lz);I.z=z;insetPlace();I.T=T;
