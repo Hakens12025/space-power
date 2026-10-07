@@ -434,7 +434,7 @@ function onWheel(e){e.preventDefault(); // preventDefault 仍是第一句(注册
   if(typeof rad!=='undefined'&&rad.open&&typeof radialInBand==='function'&&radialInBand(e.clientX,e.clientY)){ // RF5 Phase C 轮盘开 && 指针在环带内 = 翻页;环带外照常缩放。环带几何(内外半径/两个半环的角度区间与断口)只在 render/89 定义一份,这里一律调函数
     if(typeof radPage==='function')radPage(e.deltaY>0?1:-1);return;} // 下滚=往后翻,与浏览器一致;只取符号
   zoomAt(e.clientX,e.clientY,Math.pow(wheelZoomBase(),-e.deltaY));}
-const WHEEL_NOTCHES=30; // 2026-10-08 用户:滚轮稍微增强 —— 从战术层滚到舰队层 30 格(一格约 1.05 倍;原来按旧层算,现层下约 37 格、一格约 1.04 倍)。滚轮一格 = deltaY 100
+const WHEEL_NOTCHES=33; // 2026-10-08 用户:滚轮稍微增强 —— 从战术层滚到舰队层 30 格(一格约 1.05 倍;原来按旧层算,现层下约 37 格、一格约 1.04 倍);同日又「稍微降低一点点」→ 33 格(一格约 1.045 倍)。滚轮一格 = deltaY 100
 function wheelZoomBase(){return Math.pow(VT.BAR_KM[2]/VT.BAR_KM[1],1/(WHEEL_NOTCHES*100));} // 直接读 render/80 的两层落点(本文件先于它加载,所以现算),层改了格数照旧
 // RF5 失焦清理 +mmb:不清的话切窗回来会残留一个"按下未抬起"的中键计时,回来随手一抬就误触快速交战
 window.addEventListener('blur',()=>{rangeDrag=null;ghostMove=null;panning=null;selDrag=null;rmbClick=null;dragOrder=null;mmb=null;clearTimeout(rmbTimer);rmbTimer=null;clearTimeout(mmbTimer);mmbTimer=null;/* RF5 Phase C:不清的话切窗回来会凭空弹出轮盘 */for(const k in camKeys)camKeys[k]=false;}); // v119:失焦清相机键位,防切窗后镜头卡移动
