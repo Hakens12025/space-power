@@ -11,7 +11,7 @@
    ============================================================================ */
 const IRV_C={CELL:6,V0:0.02,VMAX:1000,CULL:0.0003,SIG_MIN:0.7,NOISE:0.005,NOISE_MS:200,TAIL_K:4,POS_P:3,MIX:0.875,
   BG_K:0.1,CLOUD_M:8,CLOUD_LV:4,CLOUD_SYNC:400,CLOUD_BATCH:1500,CLOUD_COARSE:1200,
-  GAIN:0.2,SUB_P:0.64,DET_V:0.862,CONTRAST:0.928,FILL_K:1/3,GLYPH:1.3,SIG_MAX_PX:30,MSL_PX:3,CORE:0.4,CORE_W:0.45,
+  GAIN:0.2,SUB_P:0.64,DET_V:0.862,CONTRAST:0.928,FILL_K:1/3,GLYPH:1.3,ZK_MAX:1.4,SIG_MAX_PX:30,MSL_PX:3,CORE:0.4,CORE_W:0.45,
   UNC_K:0.75,UNC_CAP:4,PH_K:0.3,GLIDE:0.6,EP_PX:0.5,FIRE_GROW:1,FIRE_Q:12,TW:2.0,PLAT:0.7,WARP:0.05,CHURN:0.15,CHURN_STEP:0.1,R_TOL:0.05,WIN_M:48};
   // WIN_M = 窗口在可见光圈外接框外留的余量(CSS px,见 irvUpdateWin)
   // 一道门:信噪比 >= 1(内核发现门)色阶值 = DET_V x 信噪比^CONTRAST,< 1 = GAIN x 信噪比^SUB_P 淡出(见 irvV;2026-09-29 用户:旧开局距离 120 万、没有星云时开局就能淡淡看见对方,SUB_P 3 → 0.64,门下封顶仍是 GAIN)。2026-09-28 用户:发现即可见 —— 发现门处 0.22 → 0.35(DET_V),信噪比 1000 处照旧 0.94(CONTRAST 1.14 → 0.928);门下不动(没发现的暗热与星云混在一起);发现了的热再乘 (1 + 所在处底 / V0),比底亮出同样一截(irvjSplats;原来底把热的对比度又吃一次);BG_K = 背景(云 / 恒星光晕)压暗倍数;FILL_K = 石头填满距离 / (认出距离 x √体型)
@@ -151,7 +151,8 @@ function irvZf(t){return t.kind==='rock'?hullZoomF():shipZoomF();} // 舰船按 
 function irvBodyR(t){return t.kind==='rock'?hullSize('UNK',2)*0.78*Math.sqrt(t.size/0.7):hullSize(CLS_HULL[t.cls]||'DD',t.tier||2)*0.78;} // 图标半径(未乘缩放系数);2026-10-05 hullSize 吃轮廓键(82 CLS_HULL),原来直接给舰种键:护卫落到默认 7、驱逐拿了护卫的尺寸
 const IRV_PH=new WeakMap();
 function irvPh(t){let h=IRV_PH.get(t);if(h===undefined){h=0;const id=String(t.id);for(let i=0;i<id.length;i++)h=(h*31+id.charCodeAt(i))|0;h=(h&1023)/1023*2*Math.PI;IRV_PH.set(t,h);}return h;} // 每个源自己的翻涌相位(算一次)
-function irvGlyph(t){const it=adminMode?{kind:t.kind||'ship'}:contactIdType(t,VIEW);return Math.min(IRV_C.SIG_MAX_PX,IRV_C.GLYPH*shipIconR(t)*((it&&it.kind==='rock')?Math.sqrt(t.size/0.7):1));} // 舰标团半径(px):与主视图舰标同一个(没认出不暴露舰种;认出是石头才按 √体型)
+function irvZoomK(){return Math.min(IRV_C.ZK_MAX,Math.sqrt(hullZoomRaw()/HULL_ZOOM.LAND));} // 2026-10-08 用户:缩放时热晕跟着变一点点、要有上限 —— 战术落点上的大小 x 船的不钳系数开平方(同特效随缩放,约缩放的 0.2 次方),封顶 ZK_MAX;拉过切换点不再跳成记号的固定尺寸
+function irvGlyph(t){const it=adminMode?{kind:t.kind||'ship'}:contactIdType(t,VIEW),r=hullSize(shipIdentHull(t),shipIdentTier(t))*0.78*HULL_ZOOM.LAND*SHIP_K*irvZoomK();return Math.min(IRV_C.SIG_MAX_PX,IRV_C.GLYPH*r*((it&&it.kind==='rock')?Math.sqrt(t.size/0.7):1));} // 舰标团半径(px):与主视图舰标同一个(没认出不暴露舰种;认出是石头才按 √体型)
 function irvGlowMin(t,g){return (!shipMarkMode()&&!adminMode&&irvSilOn(t))?Math.max(g,irvSilR(t)):g;} // 热晕最小半径(px):画轮廓时不小于轮廓(用户:显形了也要有红色团;轮廓叠在团上,四周露出红晕)
 function irvBlobR(g,gm,rk){const Rk=IRV_C.UNC_K*COV.AMAX*Math.log(1+Math.max(0,rk)/COV.AMAX);return Math.max(IRV_C.SIG_MIN,Math.max(gm,Math.min(IRV_C.UNC_CAP*g,Rk*cam.zoom))/IRV_C.CELL);} // 团半径(格):误差圈 rk(km)按热区的对数压缩,下限 = 热晕最小半径 gm,上限 = UNC_CAP x 舰标团 g(上限不跟轮廓变,出轮廓那一下不跳)
 function irvBlobRt(t,g,rk,ti){return irvBlobR(g,irvGlowMin(t,g),rk)+IRV_C.FIRE_GROW*fireLvl(ti||t)*g/IRV_C.CELL;} // 这一团的半径(格):不确定 + 开火那份热胀出来的。LL3 ti = 画这团的那张影像(开火热按它)
