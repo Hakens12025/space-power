@@ -50,6 +50,7 @@ const SHIP_K=0.6*1.45; // 2026-10-08 用户:美术整体缩放 1.3 → 1.45。20
 function shipZoomF(){return hullZoomF()*SHIP_K;} // 舰船(活船、残骸、尾焰、锁定圈、虚影)用的系数
 function shipMarkMode(){return hullZoomRaw()<HULL_ZOOM.MARK;}
 const SHIP_LBL={on:false,list:[]}; // 2026-10-08 舰名延后统一摆(特写窗用,见 84 insetLabels):on 时 drawShip 只登记不画
+function lblPut(t,x,y,pri,c){if(!SHIP_LBL.on)return false;SHIP_LBL.list.push({t:t,x:x,y:y,pri:pri,c:c});return true;} // 2026-10-08 用户:小窗里的名字走同一个通道(残骸 / 石头 / 物体 / 浮标同舰名);on 时登记、返回 true,调用方就不自己画
 function drawShipMark(s,p,color){ // A:拉远后的记号。我方 = 沿船头的小箭头;敌方接触 = 小菱形(不分舰种 / 分级 / 认没认出)
   const R=SHIP_MARK_R;
   ctx.save();ctx.translate(p[0],p[1]);ctx.fillStyle=color;
@@ -109,7 +110,7 @@ function drawHitEta(p,R,eta){ // LL9 命中倒计时的读数:告警弧那一圈
 function drawWreck(s,p,r){ // 残骸:裂成两截的轮廓 + 断口余烬(render/81-art artWreck,2026-10-04),留名标记
   artWreck(s,p,(adminMode||s.side===VIEW)?s:(viewLook(s)||LOOK0)); // LL9 朝向读我方看到的影像(render/83 viewLook)
   // 名字带残骸标记
-  if(cam.zoom>0.0008){
+  if(cam.zoom>0.0008&&!lblPut(xhName(s)+' ☠',p[0],p[1]+r+6,3,'rgba(150,160,175,.65)')){
     ctx.fillStyle='rgba(150,160,175,.65)';ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';
     ctx.fillText(xhName(s)+' ☠',p[0],p[1]+r+6); // 2026-09-28 名字打码(没认出写「未知接触」)
   }

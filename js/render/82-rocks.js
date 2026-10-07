@@ -46,7 +46,7 @@ function drawRockAt(s,pos,st,known,tpo){ // tpo:按这个类型画(记忆用最�
     ctx.restore();
     if(shipMarkMode())drawShipMark(s,p,bodyColor);else if(shipIdentHull(s)==='UNK')drawUnkMark(p,r,bodyColor); // 2026-09-26 与没认出的船同一个空心菱形
     ctx.restore();
-    if(cam.zoom>0.0008){
+    if(cam.zoom>0.0008&&!lblPut(sigClassLabel(s),p[0],p[1]+r+6,2)){
       ctx.fillStyle='rgba(215,226,240,.8)';ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';
       ctx.fillText(sigClassLabel(s),p[0],p[1]+r+6);
     }
@@ -68,14 +68,14 @@ function drawObjKnown(s,p,r,tp,fc){ // 2026-09-27 认出来的民船 / 诱饵 / 
   if(tp.kind==='ship'){ // 冒充:画成一艘敌方驱逐舰(与没认全的红舰同一套)
     if(shipMarkMode())drawShipMark(s,p,'#ff6b6b');
     else if(!(typeof SA==='object'&&SA.icon(ctx,CLS_HULL[tp.cls]||'DD',tp.tier||2,'red',p[0],p[1],Math.atan2(fc[1],fc[0]),shipZoomF()))){ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(Math.atan2(fc[1],fc[0]));{const zf=shipZoomF();ctx.scale(zf,zf);}drawHull(ctx,CLS_HULL[tp.cls]||'DD',tp.tier||2,'#ff6b6b','fill');ctx.restore();} // 2026-10-05 与真敌舰同一张贴图(render/82-shipart),否则一眼看出是诱饵
-    if(cam.zoom>0.0008){ctx.fillStyle='rgba(215,226,240,.8)';ctx.fillText(s.spoofName||s.name,p[0],p[1]+r+6);}
+    if(cam.zoom>0.0008&&!lblPut(s.spoofName||s.name,p[0],p[1]+r+6,2)){ctx.fillStyle='rgba(215,226,240,.8)';ctx.fillText(s.spoofName||s.name,p[0],p[1]+r+6);}
     ctx.restore();return;}
   const col=tp.kind==='civ'?'#a0aab9':(tp.kind==='lure'?'#d9a066':'#c890ff'),lb=({civ:'民船',lure:'诱饵',buoy:'浮标'})[tp.kind]||'';
   ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=1.3;
   if(tp.kind==='civ'){ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(Math.atan2(fc[1],fc[0]));{const zf=shipZoomF();ctx.scale(zf,zf);}drawHull(ctx,'DD',2,col,'outline');ctx.restore();}
   else if(tp.kind==='lure'){const q=Math.max(4,r*0.8);ctx.beginPath();ctx.moveTo(p[0]-q,p[1]-q);ctx.lineTo(p[0]+q,p[1]+q);ctx.moveTo(p[0]+q,p[1]-q);ctx.lineTo(p[0]-q,p[1]+q);ctx.stroke();}
   else{ctx.beginPath();ctx.arc(p[0],p[1],4,0,6.283);ctx.stroke();}
-  if(cam.zoom>0.0008){ctx.fillStyle='rgba(215,226,240,.8)';ctx.fillText(lb,p[0],p[1]+r+6);}
+  if(cam.zoom>0.0008&&!lblPut(lb,p[0],p[1]+r+6,2)){ctx.fillStyle='rgba(215,226,240,.8)';ctx.fillText(lb,p[0],p[1]+r+6);}
   ctx.restore();
 }
 function drawOwnBuoy(s){ // 自己的浮标;开着照射时一圈圈脉冲;拉远到舰船换箭头时画蓝圈
@@ -85,6 +85,6 @@ function drawOwnBuoy(s){ // 自己的浮标;开着照射时一圈圈脉冲;拉�
     if(s.on){ctx.globalAlpha=0.6;ctx.beginPath();ctx.arc(p[0],p[1],8,0,6.283);ctx.stroke();ctx.globalAlpha=1;}}
   else artBuoy(ctx,p[0],p[1],0,s.side,!!s.on); // 2026-10-04 中心舱 + 太阳能板 + 天线,开照射有脉冲环(render/81-art)
   if(typeof selBuoy!=='undefined'&&selBuoy===s){ctx.strokeStyle='#ffe066';ctx.lineWidth=1.6;ctx.beginPath();ctx.arc(p[0],p[1],Math.max(12,R*1.9),0,6.283);ctx.stroke();} // 2026-09-29 选中(同舰船选中圈的颜色)
-  if(cam.zoom>0.0008){ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillStyle='rgba(143,208,255,.9)';ctx.fillText(s.name+(s.dest?' · 飞行':(s.on?' · 照射':' · 被动')),p[0],p[1]+Math.max(8,R*1.6));}
+  if(cam.zoom>0.0008&&!lblPut(s.name+(s.dest?' · 飞行':(s.on?' · 照射':' · 被动')),p[0],p[1]+Math.max(8,R*1.6),1,'rgba(143,208,255,.9)')){ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillStyle='rgba(143,208,255,.9)';ctx.fillText(s.name+(s.dest?' · 飞行':(s.on?' · 照射':' · 被动')),p[0],p[1]+Math.max(8,R*1.6));}
   ctx.restore();
 }
