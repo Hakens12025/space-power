@@ -512,7 +512,7 @@ function drawAnomalies(){
   if(irs.length&&typeof ir2AnomDraw==='function')ir2AnomDraw(irs,now);
 }
 /* 2026-10-08 用户:主视角外的红外 / 雷达异常画方向箭头。从画面中心朝异常那一点,落在画面中心的一个圆上(半径 RK x 屏幕短边;用户:不要在边界显示),压着界面就顺着往里收(顶栏 / 底栏 / 右栏 / 左上列表 / 右下按钮 / 特写窗 / 比例尺 / 刻度尺);
-   没人管 LIFE 毫秒淡出(墙钟,暂停也走);鼠标停在箭头上 = 停住、全亮,移开后重新淡出,寿命按悬停过几次减半(6 → 3 → 1.5 秒);
+   没人管 LIFE 毫秒淡出(墙钟,暂停也走);鼠标停在箭头上 = 停住、全亮,移开后从全亮重新淡出:第一次移开照样给满 LIFE(用户:原来第一次就减半,悬停过的比没碰过的消失得还早),之后每多悬停一次减半(6 → 6 → 3 → 1.5 秒);
    自己平移过去,异常那一点进了画面(不压界面)就收箭头、在那里把异常动画重播一遍。
    异常那一点:雷达异常 / 围出交集的红外异常 = 画圈那一点;只有方位的红外异常 = 刻痕那一点(看它的那艘可见光圈边上,方位定格在报的那一刻)。 */
 const ANAR={a:[],LIFE:6000,RK:0.35,ML:64,MT:94,MR:28,MB:28,HIT:16,SZ:10,ob:null,obT:-1e9,t:-1e9,v:null, // 箭头 / 寿命 / 箭头所在圆的半径(屏幕短边的几倍)/ 算「进了画面」的左上右下边距(躲开刻度尺)/ 悬停半径 / 箭头大小 px
@@ -539,7 +539,7 @@ function anarDraw(now){
     let ux=p[0]-cx,uy=p[1]-cy;const l=Math.hypot(ux,uy)||1;ux/=l;uy/=l;
     let s=ANAR.RK*Math.min(W,H);while(s>0&&anarHit(cx+ux*s,cy+uy*s,ANAR.SZ+6,R))s-=6;s=Math.max(0,s); // 画面中心那个圆上,压着界面就顺着往里收
     const x=cx+ux*s,y=cy+uy*s,hv=Math.hypot(mouseX-x,mouseY-y)<ANAR.HIT;a.sx=x;a.sy=y;
-    if(hv)a.hov=true;else if(a.hov){a.hov=false;a.n++;a.dur=ANAR.LIFE/Math.pow(2,a.n);a.t0=now;} // 移开:重新淡出,寿命减半
+    if(hv)a.hov=true;else if(a.hov){a.hov=false;a.n++;a.dur=ANAR.LIFE/Math.pow(2,a.n-1);a.t0=now;} // 移开:重新淡出;第一次满寿命,之后每次减半
     const k=a.hov?0:(now-a.t0)/a.dur;if(k>=1){ANAR.a.splice(i,1);continue;}
     if(drawn.some(d=>d[2]===a.k&&Math.hypot(d[0]-x,d[1]-y)<24))continue;drawn.push([x,y,a.k]); // 同一处的同类只画一个
     const col=a.k==='ir'?'255,180,84':'84,224,208',S=ANAR.SZ,px=-uy,py=ux;ctx.globalAlpha=1-k*k;
