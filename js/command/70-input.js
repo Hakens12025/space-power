@@ -166,6 +166,40 @@ function buoyAt(sx,sy){ // 2026-09-29 命中最近的我方前出浮标(屏幕 1
   for(const o of featStaObs('blue')){const p=toScreen(o.pos[0],o.pos[1]),d=Math.hypot(p[0]-sx,p[1]-sy);if(d<Math.max(bd,featStaPx()*0.5)){bd=d;best=o;}} // 2026-10-05 自己拿着的据点也走这条(底栏雷达遥控它);命中圈至少半个图标
   return best;
 }
+const ENT_HIT=24; // 2026-10-08 点选「只看信息」实体的命中半径(屏幕 px;比船的 60 px 小,不抢框选的起点)
+function entAt(sx,sy){ // 2026-10-08 用户「所有实体都能点」:对方的东西(船 / 浮标 / 诱饵 / 民船 / 碎石)点在画它的那一点(viewPos,同 targetAt 的口径,但不挑是不是船);自己放的诱饵读本体
+  if(typeof lodAggAt==='function'){const a=lodAggAt(sx,sy);if(a&&a.side!=='blue'){const s=a.ships.find(x=>!viewDead(x));if(s)return s;}} // 对方的接触群(菱形框):给其中一艘
+  const w=worldAt(sx,sy);let best=null,bd=ENT_HIT/cam.zoom;
+  const hit=(s,q)=>{if(!q)return;const d=Math.hypot(q[0]-w[0],q[1]-w[1]);if(d<bd){bd=d;best=s;}};
+  if(adminMode){for(const s of ships)if(!s.dead&&s.side!==VIEW)hit(s,s.pos);for(const o of rocks)if(!o.dead&&o.side!==VIEW)hit(o,o.pos);}
+  else trkEach(VIEW,tk=>{if(trkGone(tk)||!trkPos(tk))return;const s=trkSrc(tk);if(!viewDead(s))hit(s,viewPos(s));}); // 交代不出位置的(热态)不画也点不到
+  for(const o of rockObjs())if(!o.dead&&o.side===VIEW&&o.kind!=='buoy')hit(o,o.pos); // 自己放的诱饵(浮标走 buoyAt)
+  return best;
+}
+function selEntOk(){const s=selEnt;if(!s)return null; // 选了别的(船 / 导弹 / 浮标)、沉了、换局、交代不出位置 ⇒ 撤
+  const own=s.side===VIEW;if(selected.length||selMissile||selBuoy||(own?s.dead:viewDead(s))||(s.kind?!rocks.includes(s):!ships.includes(s))||(!own&&!viewPos(s))){selEnt=null;return null;}
+  return s;}
+const CAMF={o:null,k:'',lock:false,on:false,lx:0,ly:0,lz:0}; // 2026-10-08 用户:左键双击任何实体 → 镜头跟随它。o 跟谁 / k 'proj' 导弹组、'obj' 其余 / lock 飞到了就钉死 / lx ly lz 上一帧自己摆的镜头
+function camFollowPos(F){const o=F.o; // 画在哪就跟到哪(对方的读我方看到的位置,不拿真值)
+  if(F.k==='proj')return (!o.done&&projSeen(o))?projViewPos(o):null;
+  if(o.side===VIEW||o.kind==='station')return o.dead?null:o.pos;
+  return viewDead(o)?null:viewPos(o);}
+function camFollowStop(msg){CAMF.o=null;CAMF.lock=false;CAMF.on=false;if(msg)cmdTipFlash(msg,1500);}
+function camFollowTick(dt){const F=CAMF;if(!F.o)return;
+  if(F.on&&cam.zoom===F.lz&&(cam.x!==F.lx||cam.y!==F.ly)){camFollowStop('镜头跟随已取消');return;} // 别的操作挪了镜头(右键拖 / WASD / 数字键 / 特写跳转)⇒ 不再跟;缩放照常(滚轮会动 cam.x / y,这一帧再对回去)
+  const q=camFollowPos(F);if(!q){camFollowStop('镜头跟随结束:目标没了');return;}
+  if(F.lock){cam.x=q[0];cam.y=q[1];}
+  else{const k=1-Math.exp(-dt*8);cam.x+=(q[0]-cam.x)*k;cam.y+=(q[1]-cam.y)*k;if(Math.hypot(q[0]-cam.x,q[1]-cam.y)*cam.zoom<1){cam.x=q[0];cam.y=q[1];F.lock=true;}} // 先平滑飞过去,到了钉死(不拖尾)
+  F.on=true;F.lx=cam.x;F.ly=cam.y;F.lz=cam.zoom;}
+function entScrD(o,sx,sy){const q=(o.side===VIEW||adminMode)?o.pos:viewPos(o);if(!q)return Infinity;const p=toScreen(q[0],q[1]);return Math.hypot(p[0]-sx,p[1]-sy);} // 画着它的那一点离光标几 px
+function camPickAt(sx,sy){ // 双击命中:我方浮标 / 我方船 / 其余实体里离光标最近的;都没有再看导弹组
+  let best=null,bd=Infinity;for(const o of [buoyAt(sx,sy),shipAt(sx,sy),entAt(sx,sy)]){if(!o)continue;const d=entScrD(o,sx,sy);if(d<bd){bd=d;best=o;}}
+  if(best)return {o:best,k:'obj',n:(best.side===VIEW||adminMode)?best.name:(typeof xhName==='function'?xhName(best):'未知接触')};
+  const g=groupAt(sx,sy);return g?{o:g,k:'proj',n:'导弹组'}:null;}
+function onDblClick(e){if(e.button!==0)return;const sx=e.clientX,sy=e.clientY;if(typeof insetHit==='function'&&insetHit(sx,sy))return;
+  const t=camPickAt(sx,sy);
+  if(t){CAMF.o=t.o;CAMF.k=t.k;CAMF.lock=false;CAMF.on=false;cmdTipFlash('镜头跟随:'+t.n+' · 右键拖动 / WASD / 双击空地取消',2500);}
+  else if(CAMF.o)camFollowStop('镜头跟随已取消');}
 function groupAt(sx,sy){ // 命中最近的导弹组(屏幕距离,可点选,半径30px)
   const w=worldAt(sx,sy);
   let best=null,bd=30/cam.zoom;
@@ -300,11 +334,13 @@ function mdLeft(e,sx,sy){ // 左键
   const b=buoyAt(sx,sy); // 2026-09-29 点中我方浮标 → 选中它(右栏 / 底栏雷达切到浮标)。浮标比船离光标近就先选浮标:船的点选圈 60 px(舰队层 6 万 km),刚放出去的浮标总在圈里
   if(b&&(!sh||(()=>{const p=toScreen(sh.pos[0],sh.pos[1]),q=toScreen(b.pos[0],b.pos[1]);return Math.hypot(q[0]-sx,q[1]-sy)<Math.hypot(p[0]-sx,p[1]-sy);})())){ // 一样近(刚发射还叠在船上)让给船
     selBuoy=b;selMissile=null;selNet=null;selMissileHits=[];selected=[];selDrag=null;if(typeof updateSelPanel==='function')updateSelPanel();return;}
+  const et=entAt(sx,sy); // 2026-10-08 用户「所有实体都能点」:选中看信息(右栏),不能下令。比船离光标近就先选它(同浮标;船的点选圈 60 px,舰队层盖得住旁边的东西)
+  if(et&&(!sh||entScrD(et,sx,sy)<entScrD(sh,sx,sy))){selEnt=et;selMissile=null;selNet=null;selMissileHits=[];selected=[];selBuoy=null;selDrag=null;if(typeof updateSelPanel==='function')updateSelPanel();return;}
   if(!sh){ // 没点中船 → 看导弹组(导弹组可点选;v125点中组=选整个网)
     const g=groupAt(sx,sy);
     if(g){selMissile=g;selNet=g.netId||null;selMissileHits=[g];selected=[];selDrag=null;selBuoy=null;return;}
   }
-  selMissile=null;selNet=null;selMissileHits=[];selBuoy=null; // 没点中导弹组 / 浮标 → 取消它们的选中
+  selMissile=null;selNet=null;selMissileHits=[];selBuoy=null;selEnt=null; // 没点中导弹组 / 浮标 / 实体 → 取消它们的选中
   if(e.ctrlKey){
     if(sh){selected.includes(sh.id)?selected.splice(selected.indexOf(sh.id),1):selected.push(sh.id);}
   }else{

@@ -591,6 +591,10 @@ function drawTargeting(){
   }
   ctx.restore();
 }
+function drawSelEnt(){ // 2026-10-08 选中的「只看信息」实体:画着它的那一点套黄圈(同选中浮标的圈色)
+  const s=typeof selEntOk==='function'?selEntOk():null;if(!s)return;const q=s.side===VIEW?s.pos:viewPos(s);if(!q)return;const p=toScreen(q[0],q[1]);
+  const r=Math.max(12,(!s.kind&&typeof shipIconR==='function'?shipIconR(s):6)+8);ctx.save();ctx.strokeStyle='#ffe066';ctx.lineWidth=1.6;ctx.beginPath();ctx.arc(p[0],p[1],r,0,6.283);ctx.stroke();ctx.restore();
+}
 function drawBuoyAim(){ // 2026-10-08 用户:选定「前出浮标」后,舰船 → 鼠标的延长线 = 浮标会往哪飞;舰到鼠标实线,往后虚线延长到飞出地图那一点(靶场没有边界画到 BUOY.FAR)
   if(selWeapon!=='buoy'||typeof buoyLauncher!=='function')return;const s=buoyLauncher();if(!s)return;
   const w=worldAt(mouseX,mouseY),dx=w[0]-s.pos[0],dy=w[1]-s.pos[1],d=Math.hypot(dx,dy);if(!(d>1e-6))return;const ux=dx/d,uy=dy/d;

@@ -31,6 +31,7 @@ let selWeapon=null;                   // T/R选定武器('mac'/'missile'):点击
 let salvoCount=1;                     // 导弹齐射轮数(组)。SL1:调它的快捷栏已删,今后恒为 1(52-fire / 70-input / 71-keys 仍读)
 let missileMode='auto';               // 导弹模式(v122):auto=自动(正常船组网/noNet船直射) / net=强制组网 / direct=直射。SL1:写点已随快捷栏删,恒为 auto(52-fire 仍读)
 let selMissile=null;                  // 选中的导弹组实体(可点选/布设伏击雷/设置)
+let selEnt=null;                      // 2026-10-08 选中的只看信息的实体(对方的船 / 浮标 / 诱饵 / 民船 / 碎石、自己放的诱饵):不能下令;读它一律走 70-input 的 selEntOk
 let selBuoy=null;                     // 2026-09-29 选中的我方前出浮标(点它 → 底栏雷达:静默 / 脉冲 / 发射,飞行中也行)
 let selMissileHits=[];                // RF4a Shift框选导弹群:框内全部存活组(右栏聚合视图用);单点选中时=[该组],取消选中时=[]
 let selNet=null;                      // v125:选中的导弹网(点中网内任一组=选整个网)
