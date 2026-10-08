@@ -117,6 +117,8 @@ function fxVis(pos,sh,vic){ // 2026-09-28 vis = 我方看不看得见这一下:�
 function spawnHit(pos,type,sh,vic){const h={pos:pos.slice(),t:1.2,type,vis:fxVis(pos,sh,vic),vic:vic||null};if(typeof llFx==='function')llFx(h,pos,sh,vic);hitFX.push(h);} // LL6 光速延迟开着时登记到达(条目挂 seeT,画面按 fxSeen 到达才播;sensors/26) // 2026-09-29 vic = 挨打的是什么(撞天体为 null、碎石 / 民船也在这里):小窗只报打在舰船上的
 let ciwsFX=[]; // 2026-09-28 近防炮打掉的导弹火花 {pos,n,tw,vis}:weapons/56 结算时出,render/83 drawCiwsFx 按墙钟画完就删(不进 hitFX:小窗导演会把它当中弹)
 function spawnCiwsFX(pos,n,sh,vic){const f={pos:pos.slice(),n,tw:nowMs(),vis:fxVis(pos,sh,vic),vic:vic||null};if(typeof llFx==='function')llFx(f,pos,sh,vic);ciwsFX.push(f);} // LL6 同 spawnHit:登记到达 // vic = 那组导弹冲着的船(小窗「近防拦下」绑它)
+let sdFX=[]; // 2026-10-08 用户:导弹燃料耗尽 / 拦截弹没目标不再瞬间消失 —— 自毁小特效 {pos,tw,vis,side,big}:render/83 drawSdFx 按墙钟画完就删(不进 hitFX:小窗导演会把它当中弹)
+function spawnSD(p){const f={pos:p.pos.slice(),tw:nowMs(),vis:fxVis(p.pos,p.shooter,null),side:p.shooter?p.shooter.side:null,big:p.type==='missile'};if(typeof llFx==='function')llFx(f,p.pos,p.shooter,null);sdFX.push(f);} // 看不看得见同命中闪光(fxVis);光速延迟开着登记到达
 const INT_ZONE_R2=(WPN.icp_core.zoneK*WPN.icp_core.warnK*WPN.icp_core.outer)**2; // 2026-10-07 用户「拦截弹无限射程燃料」:防区半径 = 预警距离(防空核心拦截弹 outer x warnK)x zoneK,跟着发射舰走;同日用户:各舰种同一个(约 5.7 万 km)。存的是平方
 function icHome(p){const s=p.shooter;if(s&&!s.dead)p.icLast=s.pos;return p.icLast;} // 防区中心 = 发射舰此刻位置;发射舰沉了用最后位置
 function findInterceptorTarget(p){ // 拦截弹重选目标:前方最近的来袭导弹,诱饵弹优先(信号强,为真导弹让路);只认本方看得见的、在发射舰防区内的(10-07:原来全场扫描、不看距离不看可见,会满图追)

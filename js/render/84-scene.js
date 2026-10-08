@@ -485,7 +485,7 @@ function drawInset(){
     drawVisFog(VISX); // 可见光圈灰雾:圈外的敌舰画面比圈内暗(2026-09-30 红外 / 雷达画面也画)
     drawTrails();
     SHIP_LBL.on=true;SHIP_LBL.list.length=0;for(const s of ships)drawShip(s);if(typeof drawRocks==='function')drawRocks();SHIP_LBL.on=false;insetLabels(); // 2026-10-05 红外 / 雷达画面同主画面:主视角的东西照画。2026-10-08 名字延后统一摆(字号随缩放、互不重叠;舰船、残骸、石头 / 物体、浮标同一个通道)
-    insetTrails();drawProjectiles();if(typeof drawMslPred==='function')drawMslPred();if(typeof drawShellTraces==='function')drawShellTraces();artHits();drawCiwsFx();if(typeof drawShieldFx==='function')drawShieldFx();insetCausal();
+    insetTrails();drawProjectiles();if(typeof drawMslPred==='function')drawMslPred();if(typeof drawShellTraces==='function')drawShellTraces();artHits();drawCiwsFx();drawSdFx();if(typeof drawShieldFx==='function')drawShieldFx();insetCausal();
     const F=INSET.fx;if(F){const k=(now-F.t0)/(F.big?1500:1200);if(k>=1||k<0)INSET.fx=null;else{const p=F.s?F.s.pos:[F.x,F.y],q=toScreen(p[0],p[1]);ctx.globalAlpha=1-k;ctx.strokeStyle=ctx.fillStyle='rgb('+F.col+')';ctx.lineWidth=1.5; // 开播自带爆闪:hitFX 只活 1.2 游戏秒,切过去时多半已经没了
       ctx.beginPath();ctx.arc(q[0],q[1],F.big?14+70*k:8+40*k,0,6.2832);ctx.stroke();ctx.beginPath();ctx.arc(q[0],q[1],Math.max(0.1,(F.big?10:6)*(1-k)),0,6.2832);ctx.fill();ctx.globalAlpha=1;}}
   }finally{SHIP_LBL.on=false;ctx=ctx0;cam.x=c0x;cam.y=c0y;cam.zoom=c0z;W=W0;H=H0;lodNow=lod;vtW=vw0;}
@@ -564,7 +564,7 @@ function render(){
   if(typeof drawShellTraces==='function')drawShellTraces(); // 2026-09-28 敌方炮弹来路(render/83)
   drawHoverRings();if(typeof drawPings==='function')drawPings();if(typeof drawForceMarks==='function')drawForceMarks();if(typeof drawAnomalies==='function')drawAnomalies(); // 2026-09-27 雷达异常 / 红外异常(render/83) // 2026-09-27 扫描脉冲圈(render/83)。RF2 简化UI:底栏武器钮 hover 时选中舰的射程圈
   if(irOn&&typeof drawIr2Hud==='function')drawIr2Hud(); // 2026-09-30 红外仪表(左边,加舰条与特写窗之间)
-  artHits();drawCiwsFx(); // 2026-09-28 近防炮曳光 + 火花(render/83);2026-10-04 命中 / 击沉换成 render/81-art
+  artHits();drawCiwsFx();drawSdFx(); // 2026-10-08 自毁小特效(render/83);2026-09-28 近防炮曳光 + 火花(render/83);2026-10-04 命中 / 击沉换成 render/81-art
   if(typeof drawShieldFx==='function')drawShieldFx(); // 2026-09-29 护盾打中 / 击破 / 重启 / 回满(render/83)
   drawLocks();
   if(typeof drawFmStations==='function')drawFmStations(); // FM4 编队能力站位(带半径圈+站位点+离位细线)。排在跟随连线【之前】:它是"队形的底图"(常驻结构),而跟随连线是"正在进行的关系",后者该压在上面

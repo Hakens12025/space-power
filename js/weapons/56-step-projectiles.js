@@ -87,7 +87,7 @@ function stepDecoyProj(p,dt){ // 诱饵弹(v125):直线飞模拟舰船信号,燃
       p.age=(p.age||0)+dt;
       p.fuel=(p.fuel||0)-dt;
       if(p.fuel<=0){ // DS166:诱饵燃料尽=扑空——咬住诱饵的导弹(勾走状态)一起自毁
-        for(const m of projectiles){if(m.type==='missile'&&m.target===p){m.done=true;}}
+        for(const m of projectiles){if(m.type==='missile'&&m.target===p){spawnSD(m);m.done=true;}} // 2026-10-08 自毁带特效(52 spawnSD)
         p.done=true;return;}
       p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;
       return;
@@ -351,7 +351,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 导弹:继承载机速度+暴力
       else nd=dir;
       p.vel=[nd[0]*p.spd,nd[1]*p.spd,nd[2]*p.spd];
       p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;
-      if(p.fuel<=0&&V.dot(p.vel,V.sub(llon?tp:p.target.pos,p.pos))<0){ // v125:燃料尽且正在远离目标(转不动追不上)→失的自毁(否则永恒漂流);LL7 开着时按导弹知道的目标位置 tp 判
+      if(p.fuel<=0&&V.dot(p.vel,V.sub(llon?tp:p.target.pos,p.pos))<0){spawnSD(p); // 2026-10-08 自毁带特效;v125:燃料尽且正在远离目标(转不动追不上)→失的自毁(否则永恒漂流);LL7 开着时按导弹知道的目标位置 tp 判
         p.done=true;return;
       }
       if(stepCPA2(p,p.target,dt)<640000){ // LL11 命中触发按真值(这一步相对线段离目标最近 < 800,开关开 / 关同一口径;用户 10-07,原来关着按瞄准点 dist<800)。命中:近防分层拦截(外圈拦截导弹/内圈近防炮)+ 扇面过载。2026-09-26 单局地图刻意不缩:组网两组包抄的末端脱靶约 470~680km(速度 / 转向率不缩),缩到 160 实测自动齐射命中 0
@@ -407,13 +407,13 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 导弹:继承载机速度+暴力
 }
 function stepInterceptorProj(p,dt){ // 拦截导弹(v114):燃料模式可出远门;主动拦截;1颗拦1颗,消耗自身
       p.age=(p.age||0)+dt;
-      if(p.fuel<=0){p.done=true;return;} // 燃料耗尽自毁(v118:燃料=寿命,耗尽即失效)
-      {const h=icHome(p),hx=p.pos[0]-h[0],hy=p.pos[1]-h[1],hz=p.pos[2]-h[2];if(hx*hx+hy*hy+hz*hz>(p.icR2||Infinity)){p.done=true;return;}} // 10-07 出了发射舰的防区就自毁(52 INT_ZONE_R2)
+      if(p.fuel<=0){spawnSD(p);p.done=true;return;} // 燃料耗尽自毁(2026-10-08 带特效)(v118:燃料=寿命,耗尽即失效)
+      {const h=icHome(p),hx=p.pos[0]-h[0],hy=p.pos[1]-h[1],hz=p.pos[2]-h[2];if(hx*hx+hy*hy+hz*hz>(p.icR2||Infinity)){spawnSD(p);p.done=true;return;}} // 10-07 出了发射舰的防区就自毁(52 INT_ZONE_R2)
       const f0=p.fuel; // 10-07 油至少按时间烧(燃料 = 寿命;原来到顶速后直飞不耗油)
       if(!p.target||p.target.done||((p.target.count??1)<=0)){ // 目标失效/拦完:重选前方目标;KIMI146修:诱饵弹无count字段,(count||0)<=0恒真→每tick重复重选(??1后只在done时才重选)
         p.target=findInterceptorTarget(p);
       }
-      if(!p.target){p.done=true;return;} // 前方无来袭:结束(防泄漏)
+      if(!p.target){spawnSD(p);p.done=true;return;} // 2026-10-08 自毁带特效;前方无来袭:结束(防泄漏)
       const toT=V.sub(p.target.pos,p.pos);
       const dist=V.len(toT); // 真值距离:只给下面的拦截判定(物理)
       let gp=p.target.pos,tv=p.target.vel,gd=dist; // LL7 制导读的目标位置 / 速度 / 距离:光速延迟开着时是拦截弹导引头看到的影像推到此刻(sensors/26 llSeek),看不到就照原航向飞

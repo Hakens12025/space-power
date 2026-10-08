@@ -21,7 +21,7 @@ function stepSim(dt){
   if(selMissile&&(typeof projViewGone==='function'?projViewGone(selMissile):selMissile.done))selMissile=null; // 选中的导弹组没了 → 取消选中;LL9 对方的弹按弹影(余像消失才算没了,render/83 projViewGone)
   for(const h of hitFX)h.t-=dt; // 命中特效寿命
   hitFX=hitFX.filter(h=>h.seeT?simTime+dt<llFxEnd(h):h.t>0); // LL6 登记了到达的(光速延迟开着)按模拟时间:最晚看见的那一方看见后再留 1.2 游戏秒,两方都看不见的过了事件时刻 + 1.2 删(sensors/26 llFxEnd)
-  if(typeof llOnNow==='function'&&llOnNow()){llFxSweep(ciwsFX,simTime+dt);llFxSweep(shieldFX,simTime+dt);} // LL6 近防火花 / 护盾特效同样按模拟时间清(画面只管画,审查第 20 条);关开关时照旧由画面按墙钟删
+  if(typeof llOnNow==='function'&&llOnNow()){llFxSweep(ciwsFX,simTime+dt);llFxSweep(shieldFX,simTime+dt);llFxSweep(sdFX,simTime+dt);} // LL6 近防火花 / 护盾特效同样按模拟时间清(画面只管画,审查第 20 条);关开关时照旧由画面按墙钟删
   if(typeof stepShields==='function')stepShields(dt); // 2026-09-29 护盾回充 / 重启(weapons/55)
   featStaStep(dt); // 2026-10-05 据点占领(world/16)
   stepWeaponSystems(dt); // S14-S17 武器冷却/自动索敌/近防自动拦截/主炮 自动开火(→ weapons/57)

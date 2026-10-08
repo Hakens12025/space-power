@@ -13,7 +13,7 @@ function initFleet(){
   if(typeof detT!=='undefined')detT=0;if(typeof mslNetT!=='undefined')mslNetT=0;if(typeof netAllocT!=='undefined')netAllocT=0; // 2026-10-08 用户:联机对局不同步(导弹组网)—— 模拟里按节拍累加的计时器换局归零:探测结算 sensors/21、组网重算 weapons/54、组网分配 weapons/53。不归零的话上一局 / 靶场跑过多少拍会留成相位差,两边开局就不在同一个节拍上
   if(typeof missileGroupSeq!=='undefined'){missileGroupSeq=0;netSeq=0;}if(typeof fmSeq!=='undefined')fmSeq=0;if(typeof OBJ_SEQ!=='undefined')OBJ_SEQ=0; // 编号计数器同样从 0 起(导弹组号进命令参数,command/68 按它找弹)
   simTime=0;simSeed(env.match&&MATCH.seed?Math.imul(MATCH.seed,2654435761):Math.floor(Math.random()*4294967296)); // 2026-10-08 联机第 2 步:模拟的随机数按对局种子起流(core/00 simRand;靶场照旧每次不同)
-  hitFX=[];ciwsFX=[];shieldFX=[];nets.clear();
+  hitFX=[];ciwsFX=[];shieldFX=[];sdFX=[];nets.clear();
   if(typeof SHELL_TR!=='undefined'){SHELL_TR.blue.length=0;SHELL_TR.red.length=0;} // 2026-09-28 炮弹来路记录随局清空
   if(typeof MSL_PRED!=='undefined')MSL_PRED.length=0; // 2026-09-30 推测弹标随局清空
   if(typeof aiRedReset==='function')aiRedReset(); // AI1 换局清红方 AI 的信念(目标点 / 最后已知位置 / 搜索进度),否则带着上一局的记忆开局

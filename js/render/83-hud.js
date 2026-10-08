@@ -123,7 +123,7 @@ function drawLocks(){ // 火力锁定:红色虚线
 const CIWS_FX={HOLD:0.1,N:2,FIRE:10,SPREAD:2/57.3,OFF:0.012,LEN:0.1,REACH:1.25,LIFE:0.45,LIFE_J:0.2,PUFF_T:0.7,PUFF_D:0.25,PUFF_R0:0.015,PUFF_R1:0.09,PUFF_REF:6000};
 // FIRE = 每流每秒几发;SPREAD = 散布(弧度);OFF = 流间夹角;LEN = 曳光长度 / 内圈;REACH = 飞到内圈几倍处灭;LIFE + 随机 LIFE_J = 一发飞几秒;PUFF_T = 火花寿命,PUFF_D = 最多错开几秒,PUFF_R0~R1 = 散开半径 / PUFF_REF km
 const CIWS_ST=new WeakMap(),CIWS_TR=[],CIWS_CLK={t:0},CIWS_MS=[],CIWS_MV=[]; // LL9 CIWS_MV = 光速延迟开着时我方的导弹(连余像)
-const FX_RUN={c:[],s:[]}; // LL6 光速延迟开着时已开播的近防火花 / 护盾特效 {f,t0}:到达本视角那一帧定墙钟起点;条目由 core/05 按模拟时间删,删了也照样播完
+const FX_RUN={c:[],s:[],d:[]}; // LL6 光速延迟开着时已开播的近防火花 / 护盾特效 {f,t0}:到达本视角那一帧定墙钟起点;条目由 core/05 按模拟时间删,删了也照样播完
 function fxRunAdd(A,R,now){const k=VIEW==='blue'?'rb':'rr';for(const f of A){if(f[k]||!f.seeT||!fxSeen(f,VIEW))continue;f[k]=1;R.push({f:f,t0:now});}return R;} // LL6 把这一帧刚到达本视角的条目接进 R(每条每个视角只接一次;sensors/21 fxSeen)
 function drawCiwsFx(){
   const C=CIWS_FX,now=nowMs(),dtw=runDt(CIWS_CLK,0.05);
@@ -164,6 +164,22 @@ function drawCiwsFx(){
   }
   ctx.restore();
 }
+/* 2026-10-08 自毁(用户:导弹燃料耗尽、拦截弹没目标不要瞬间消失):在消失处闪一下 + 一圈阵营色冲击环 + 几粒碎片向外飞,墙钟 SD_FX.T 秒;比命中小,拦截弹再小一号。
+   数据 weapons/52 的 sdFX(spawnSD);看不看得见同近防火花(vis / 光速延迟开着按到达 FX_RUN.d) */
+const SD_FX={T:0.6,R:14,N:6,FLASH:0.12}; // 时长 / 冲击环半径 px(战术落点上)/ 碎片数 / 闪光时长(墙钟秒)
+function drawSdFx(){if(!sdFX.length&&!FX_RUN.d.length)return;
+  const now=nowMs(),run=!adminMode&&typeof llOnNow==='function'&&llOnNow(),RL=run?fxRunAdd(sdFX,FX_RUN.d,now):sdFX,fk=artFxK()*SHIP_K/0.6;
+  ctx.save();ctx.lineWidth=1.2;
+  for(let i=RL.length-1;i>=0;i--){const f=run?RL[i].f:RL[i],g=(now-(run?RL[i].t0:f.tw))/1000;if(g>SD_FX.T||g<0){RL.splice(i,1);continue;}
+    if(!run&&!adminMode&&!f.vis[VIEW])continue;
+    const p=toScreen(f.pos[0],f.pos[1]);if(p[0]<-60||p[0]>W+60||p[1]<-60||p[1]>H+60)continue;
+    const u=g/SD_FX.T,a=1-u,k=(f.big?1:0.7)*fk,c=palSide(f.side)==='blue'?'110,190,255':'255,140,110';
+    if(g<SD_FX.FLASH){ctx.fillStyle='rgba(255,245,220,'+(0.95*(1-g/SD_FX.FLASH)).toFixed(3)+')';ctx.beginPath();ctx.arc(p[0],p[1],(2.5+g*20)*k,0,6.283);ctx.fill();}
+    ctx.strokeStyle='rgba('+c+','+(0.75*a).toFixed(3)+')';ctx.beginPath();ctx.arc(p[0],p[1],(3+u*SD_FX.R)*k,0,6.283);ctx.stroke();
+    if(!f.db)f.db=Array.from({length:SD_FX.N},(_,j)=>[(j+Math.random()*0.6)/SD_FX.N*6.283,0.6+Math.random()*0.6]); // 碎片方向 / 快慢(只是画面,不进模拟)
+    ctx.fillStyle='rgba(255,200,140,'+(0.8*a).toFixed(3)+')';
+    for(const d of f.db){const r=(2+u*SD_FX.R*1.3*d[1])*k;ctx.fillRect(p[0]+Math.cos(d[0])*r-0.8,p[1]+Math.sin(d[0])*r-0.8,1.6,1.6);}}
+  ctx.restore();}
 /* 2026-09-29 护盾(用户在 demos/weapons/护盾特效.html 调定):罩子半径 = 舰标半长 x K(按我方看到的舰标,没认出不暴露舰种);常亮随盾量,回充时边上三段流光,
    破盾期间一圈暗虚线的重启进度;打中 / 击破 / 重启 / 回满的特效按墙钟放(weapons/55 的 shieldFX)。对方的船只在我方可见光圈里才画罩子 */
 const SHD_FX={K:2,GLOW:0.2,HIT_T:0.3,BRK_T:0.5,FLOW:0.5,RST_T:0.6,FULL_T:0.5,COL:{blue:[110,210,255],red:[255,150,110]}};
