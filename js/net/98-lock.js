@@ -21,6 +21,7 @@ const LOCK={on:false,ended:false,host:false,u:0,q:[],log:[],gack:0,gseq:0,got:0,
   // 查分叉:LOCK.dbg=[] 与 LOCK.dbgN(前几拍),lockTick 逐拍记校验和与执行的命令
 const LOCK_C={SEND:100,HB:200,LEAD:300,LEAD_S:3,HASH:250,RR:10,BATCH:300,BUF0:250,BUF1:1000,JIT_K:0.99,CORR:0.5}; // 广播间隔 ms(Supabase 免费档整个项目每秒 100 条,超了断线,不往上提)/ 加入方心跳 ms / 主机最多领先几拍、几秒 / 几拍对一次校验和 / 航线细化几拍一次 / 一次最多带几条命令 / 加入方缓冲上下限 ms / 广播间隔峰值每条衰减 / 加入方几秒内补齐差距
 function lockBegin(isHost,seed,peerName){ // 两人到齐:主机定种子发出来,双方都从这里开局
+  if(NET.mode==='ws'){LOCK_C.SEND=50;LOCK_C.BUF0=120;}else{LOCK_C.SEND=100;LOCK_C.BUF0=250;} // 自己的服务器没有消息额度、网络稳:广播加倍、缓冲下限收小;Supabase 免费档每秒 100 条,照旧
   Object.assign(LOCK,{on:true,ended:false,host:isHost,doneMe:false,donePeer:false,endAt:-1,u:0,q:[],log:[],gack:0,gseq:0,got:0,my:[],mySeq:0,seed:seed,ack:0,hs:[],hx:new Map(),bad:false,okN:0,acc:0,peer:peerName||'对手',hr:0,uT:0,jit:0,lastArr:0,rtt:0,gT:0,gTa:0,stall:false});
   if(typeof spmShow==='function')spmShow('');
   ME=isHost?'blue':'red';VIEW=ME;adminMode=false;CFG.lightLag=true; // 光速延迟两边同开(llReset 开局锁存)

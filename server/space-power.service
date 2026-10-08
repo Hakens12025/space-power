@@ -1,0 +1,18 @@
+[Unit]
+Description=space-power 联机服务器(游戏页面 + websocket 中转,仓库 server/relay.mjs)
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/node /opt/space-power/relay.mjs --port 18802 --www /opt/space-power/www
+Restart=always
+RestartSec=2
+User=spacepower
+Group=spacepower
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths=/opt/space-power
+
+[Install]
+WantedBy=multi-user.target
