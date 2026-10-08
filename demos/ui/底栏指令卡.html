@@ -68,7 +68,12 @@ html,body{margin:0;height:100%;background:var(--void);color:var(--txt);font-fami
 .prog{height:5px;background:var(--srf-sunk);border-radius:1px;overflow:hidden}
 .prog i{display:block;height:100%;background:var(--state-ok)}
 .prog.ld i{background:var(--acc)}
-.cells{display:flex;gap:2px;height:7px}
+.cells{display:flex;gap:2px;height:10px}
+.cells i.gap{flex:0 0 4px;background:transparent}
+.cells i.ok[data-seg]{cursor:pointer}
+.cells i.ok[data-seg]:hover{outline:1px solid var(--txt-hi)}
+.cells i.pk{animation:breathe 1.1s ease-in-out infinite} /* 选中的这一发 / 这一组:泛白的呼吸灯 */
+@keyframes breathe{0%,100%{background:#d9f3e2;box-shadow:0 0 2px 1px rgba(255,255,255,.3)}50%{background:#fff;box-shadow:0 0 7px 2px rgba(255,255,255,.9)}}
 .cells i{flex:1;background:var(--srf-sunk);border-radius:1px;position:relative;overflow:hidden}
 .cells i b{position:absolute;left:0;top:0;bottom:0;background:var(--acc)}
 .cells i.ok{background:var(--state-ok)}
@@ -106,7 +111,7 @@ html,body{margin:0;height:100%;background:var(--void);color:var(--txt);font-fami
   <h1>底栏指令卡 · 演示</h1>
   <div class="row" id="pick"></div>
   <div class="row"><button class="btn" id="tx">演示时间 x10</button><button class="btn" id="auto">自动开火目标:有</button></div>
-  <p>每件武器一颗钮:<b style="color:var(--txt)">点钮</b> = 强行开火,再点地图上的目标或空地(右键 / Esc 取消);<b style="color:var(--txt)">右上角小勾</b> = 自动开火开关;钮上直接画装填进度、剩余弹药与快捷键(T 主炮 · R 导弹 · B 浮标 · X 停火)。</p>
+  <p><b style="color:var(--txt)">点绿条</b> = 选这一发 / 这一组(导弹每个发射单元一条、主炮每艘一条,可多选、可跨船、主炮导弹可一起选),泛白呼吸 = 选中,再点取消;选好了点目标或空地 = 选了几条发几条(右键 / Esc 全部取消)。点钮的空白处 = 就绪的全选;浮标点钮放一个。<b style="color:var(--txt)">右上角小勾</b> = 自动开火开关;钮上直接画装填进度、剩余弹药与快捷键(T 主炮 · R 导弹 · B 浮标 · X 停火)。</p>
   <p>近防没有强行开火,上下两行各管一件:拦截弹(外圈)、近防炮(内圈)。鼠标停在每件武器上画它的圈。多选时勾是三态(全开 / 部分 / 全关),读数合计。悬停舰名看规格。</p>
 </div>
 <div id="log" class="panel"></div>
@@ -128,35 +133,59 @@ const SH=[mk('CA','巡洋舰1',-60,20),mk('FF','护卫舰1',-90,-40),mk('CL','�
 const FOES=[{x:260,y:-30,nm:'敌·驱逐舰'},{x:330,y:70,nm:'敌·巡洋舰'}];
 const PICKS=[['巡洋舰1',[0]],['护卫舰1',[1]],['巡游舰1',[2]],['三艘多选',[0,1,2]]];
 let sel=[0],armed=null,tx=1,autoTgt=true,pop=null;const FX=[];const LOG=[];
+const PK={mac:new Set(),msl:new Set()}; // 选中的绿条:主炮按船(SH 下标)、导弹按「船:发射单元」;点目标 / 空地 = 把选中的全发出去(用户:点了多少就发射多少)
 function S(){return sel.map(i=>SH[i]);}
 function log(t){LOG.unshift(t);if(LOG.length>14)LOG.pop();document.getElementById('log').innerHTML=LOG.map(x=>'<div>'+x+'</div>').join('');}
 /* ---- 武器动作 ---- */
 function canMac(s){return CLS[s.cls].mac>0;}
 function ready(s,k){if(k==='mac')return canMac(s)&&s.macCd<=0;if(k==='msl')return s.groups>0&&s.cellT.some(t=>t<=0);if(k==='buoy')return s.buoys>0;return false;}
-function fire(s,k,pt,why){
+function fire(s,k,pt,why,cell,quiet){
   if(k==='mac'){if(!ready(s,'mac'))return false;s.macCd=CLS[s.cls].mac;FX.push({a:[s.x,s.y],b:pt,c:'#ffe066',t:0.5});}
-  else if(k==='msl'){const i=s.cellT.findIndex(t=>t<=0);if(i<0||s.groups<=0)return false;s.cellT[i]=60;s.groups--;FX.push({a:[s.x,s.y],b:pt,c:'#5aa7ff',t:1.2,dash:1});}
+  else if(k==='msl'){const i=cell!==undefined?cell:s.cellT.findIndex(t=>t<=0);if(i<0||s.cellT[i]>0||s.groups<=0)return false;s.cellT[i]=60;s.groups--;FX.push({a:[s.x,s.y],b:pt,c:'#5aa7ff',t:1.2,dash:1});}
   else if(k==='buoy'){if(s.buoys<=0)return false;s.buoys--;FX.push({a:[s.x,s.y],b:pt,c:'#c890ff',t:1.5,dash:1});}
-  log(s.name+' '+({mac:'主炮',msl:'导弹',buoy:'浮标'})[k]+(why?' · '+why:' · 强行开火'));return true;}
-function arm(k){const L=S().filter(s=>k==='mac'?canMac(s):(k==='buoy'?s.buoys>0:s.groups>0));if(!L.length){tip('选中的船没有可用的'+({mac:'主炮',msl:'导弹',buoy:'浮标'})[k],1600);return;}
+  if(!quiet)log(s.name+' '+({mac:'主炮',msl:'导弹',buoy:'浮标'})[k]+(why?' · '+why:' · 强行开火'));return true;}
+/* ---- 逐条选(用户:直接点绿条选这一发 / 这一组,再点取消;选了几条再点目标 / 空地就发几条)---- */
+function pkN(){return PK.mac.size+PK.msl.size;}
+function pkClear(){PK.mac.clear();PK.msl.clear();}
+function pkPrune(){for(const k of [...PK.mac])if(!sel.includes(+k)||SH[+k].macCd>0)PK.mac.delete(k); // 换了选中 / 被自动开火用掉的就撤
+  for(const k of [...PK.msl]){const [i,c]=k.split(':').map(Number);if(!sel.includes(i)||SH[i].cellT[c]>0)PK.msl.delete(k);}
+  for(const i of sel){const s=SH[i],n=[...PK.msl].filter(k=>+k.split(':')[0]===i);while(n.length>s.groups)PK.msl.delete(n.pop());}} // 选的组数不超过库存
+function pkTip(){if(!pkN()){if(armed!=='buoy')tip('');return;}
+  tip('已选 '+[PK.mac.size?'主炮 '+PK.mac.size+' 门':'',PK.msl.size?'导弹 '+PK.msl.size+' 组':''].filter(Boolean).join(' · ')+' → 点目标或空地发射 · 再点绿条取消这一条 · 右键 / Esc 全部取消',0);}
+function pkSeg(key){const a=key.split(':'),w=a[0],i=+a[1],s=SH[i];if(armed==='buoy')armed=null;
+  if(w==='mac'){if(s.macCd>0){tip('主炮装填中',1200);return;}const k=String(i);PK.mac.has(k)?PK.mac.delete(k):PK.mac.add(k);}
+  else{const c=+a[2],k=i+':'+c;if(PK.msl.has(k))PK.msl.delete(k);else{if(s.cellT[c]>0){tip('这个发射单元在装填',1200);return;}
+    if([...PK.msl].filter(x=>+x.split(':')[0]===i).length>=s.groups){tip('库存只剩 '+s.groups+' 组',1200);return;}PK.msl.add(k);}}
+  pkTip();render();}
+function pkAll(w){ // 点钮的空白处 / 快捷键 T R:就绪的全选,已经全选了就全取消
+  const keys=[];for(const i of sel){const s=SH[i];if(w==='mac'){if(canMac(s)&&s.macCd<=0)keys.push(String(i));}else{let n=0;s.cellT.forEach((t,c)=>{if(t<=0&&n<s.groups){keys.push(i+':'+c);n++;}});}}
+  if(!keys.length){tip('没有就绪的'+(w==='mac'?'主炮':'导弹'),1200);return;}if(armed==='buoy')armed=null;
+  const all=keys.every(k=>PK[w].has(k));for(const k of keys)all?PK[w].delete(k):PK[w].add(k);pkTip();render();}
+function pkFire(pt,why){const cnt=new Map();const add=(s,k)=>{const m=cnt.get(s)||{mac:0,msl:0};m[k]++;cnt.set(s,m);};
+  for(const k of PK.mac){const s=SH[+k];if(fire(s,'mac',pt,why,undefined,true))add(s,'mac');}
+  for(const k of PK.msl){const [i,c]=k.split(':').map(Number);if(fire(SH[i],'msl',pt,why,c,true))add(SH[i],'msl');}
+  for(const [s,m] of cnt)log(s.name+' '+[m.mac?'主炮 '+m.mac:'',m.msl?'导弹 '+m.msl+' 组':''].filter(Boolean).join(' · ')+' · '+why);
+  pkClear();return cnt.size;}
+function arm(k){pkClear();const L=S().filter(s=>k==='mac'?canMac(s):(k==='buoy'?s.buoys>0:s.groups>0));if(!L.length){tip('选中的船没有可用的'+({mac:'主炮',msl:'导弹',buoy:'浮标'})[k],1600);return;}
   armed=armed===k?null:k;tip(armed?'点目标或空地 = '+({mac:'主炮强行开火',msl:'导弹齐射',buoy:'放浮标(朝那个方向)'})[k]+' · 右键 / Esc 取消':'',0);render();}
 function toggleAuto(k){const L=S().filter(s=>k==='mac'?canMac(s):true),on=L.every(s=>s.auto[k]);for(const s of L)s.auto[k]=!on;log((on?'关 ':'开 ')+({mac:'主炮',msl:'导弹'})[k]+'自动开火 · '+L.length+' 艘');render();}
 function toggleCiws(f){const L=S(),on=L.every(s=>s[f]);for(const s of L)s[f]=!on;log((on?'关 ':'开 ')+(f==='ciwsMsl'?'近防导弹':'近防炮')+' · '+L.length+' 艘');render();}
-function cease(){for(const s of S()){s.auto.mac=false;s.auto.msl=false;}armed=null;log('停火 · 自动开火全关');render();}
+function cease(){for(const s of S()){s.auto.mac=false;s.auto.msl=false;}armed=null;pkClear();log('停火 · 自动开火全关');render();}
 /* ---- 底栏 ---- */
 const tri=a=>a.every(Boolean)?2:(a.some(Boolean)?1:0);
 function ck(k,v){return '<div class="ck'+(v===2?' on':(v===1?' half':''))+'" data-ck="'+k+'" title="自动开火:勾上 = 火控自己找目标开火"><span>'+(v===2?'✓':'')+'</span></div>';}
 function wbNone(lb){return '<div class="wb none"><div class="hd"><span class="lb">'+lb+'</span></div><div class="na">无</div></div>';} // 这一格的武器选中的船都没有:位置照留,写「无」
 function wbMac(L){const M=L.filter(canMac);if(!M.length)return wbNone('主炮');
-  const rd=M.filter(s=>s.macCd<=0).length,cd=Math.max(...M.map(s=>s.macCd)),p=M.length===1?1-M[0].macCd/CLS[M[0].cls].mac:rd/M.length;
-  return '<div class="wb'+(armed==='mac'?' armed':'')+'" data-w="mac" title="点 = 主炮强行开火(再点目标 / 空地)· 快捷键 T"><div class="hd"><span class="lb">主炮</span><span class="key">T</span></div>'+ck('mac',tri(M.map(s=>s.auto.mac)))
-   +'<div class="prog'+(p<1?' ld':'')+'"><i style="width:'+Math.round(p*100)+'%"></i></div>'
-   +'<div class="rd"><span>'+(M.length===1?(rd?'就绪':Math.ceil(cd)+' s'):rd+'/'+M.length+' 就绪')+'</span><span class="dim">'+(M.length===1?'30 s/发':M.length+' 门')+'</span></div></div>';}
+  const rd=M.filter(s=>s.macCd<=0).length,cd=Math.max(...M.map(s=>s.macCd)),np=PK.mac.size;
+  const segs=M.map(s=>{const i=SH.indexOf(s);return s.macCd<=0?'<i class="ok'+(PK.mac.has(String(i))?' pk':'')+'" data-seg="mac:'+i+'" title="'+s.name+' 主炮:点 = 选这一发 / 再点取消"></i>':'<i><b style="width:'+Math.round((1-s.macCd/CLS[s.cls].mac)*100)+'%"></b></i>';}).join('');
+  return '<div class="wb'+(np?' armed':'')+'" data-w="mac" title="点绿条 = 选这一发(每艘一条,可多选),再点目标 / 空地发射;点钮的空白处或 T = 就绪的全选"><div class="hd"><span class="lb">主炮</span><span class="key">T</span></div>'+ck('mac',tri(M.map(s=>s.auto.mac)))
+   +'<div class="cells">'+segs+'</div>'
+   +'<div class="rd"><span>'+(np?'已选 '+np:(M.length===1?(rd?'就绪':Math.ceil(cd)+' s'):rd+'/'+M.length+' 就绪'))+'</span><span class="dim">'+(M.length===1?'30 s/发':M.length+' 门')+'</span></div></div>';}
 function wbMsl(L){if(!L.length||!L.some(s=>CLS[s.cls].cells>0))return wbNone('导弹');const cells=L.flatMap(s=>s.cellT),g=L.reduce((n,s)=>n+s.groups,0),rd=cells.filter(t=>t<=0).length;
-  const segs=L.length===1?cells.map(t=>t<=0?'<i class="ok"></i>':'<i><b style="width:'+Math.round((1-t/60)*100)+'%"></b></i>').join(''):'';
-  return '<div class="wb'+(armed==='msl'?' armed':'')+(g<=0?' dis':'')+'" data-w="msl" title="点 = 导弹强行齐射(再点目标 / 空地)· 快捷键 R"><div class="hd"><span class="lb">导弹</span><span class="key">R</span></div>'+ck('msl',tri(L.map(s=>s.auto.msl)))
-   +(L.length===1?'<div class="cells">'+segs+'</div>':'<div class="prog'+(rd<cells.length?' ld':'')+'"><i style="width:'+Math.round(rd/cells.length*100)+'%"></i></div>')
-   +'<div class="rd"><span>'+rd+'/'+cells.length+' 单元</span><span>'+g+' 组</span></div></div>';}
+  const np=PK.msl.size,segs=L.filter(s=>s.cellT.length).map(s=>{const i=SH.indexOf(s);return s.cellT.map((t,c)=>t<=0&&s.groups>0?'<i class="ok'+(PK.msl.has(i+':'+c)?' pk':'')+'" data-seg="msl:'+i+':'+c+'" title="'+s.name+' 发射单元 '+(c+1)+':点 = 选这一组 / 再点取消"></i>':'<i><b style="width:'+(t>0?Math.round((1-t/60)*100):0)+'%"></b></i>').join('');}).join('<i class="gap"></i>'); // 多选:按船分组,中间留缝
+  return '<div class="wb'+(np?' armed':'')+(g<=0?' dis':'')+'" data-w="msl" title="点绿条 = 选这一组(每个发射单元一条,可多选),再点目标 / 空地 = 发射选中的几组;点钮的空白处或 R = 就绪的全选"><div class="hd"><span class="lb">导弹</span><span class="key">R</span></div>'+ck('msl',tri(L.map(s=>s.auto.msl)))
+   +'<div class="cells">'+segs+'</div>'
+   +'<div class="rd"><span>'+(np?'已选 '+np+' 组':rd+'/'+cells.length+' 单元')+'</span><span>'+g+' 组</span></div></div>';}
 function wbCiws(L){const m=tri(L.map(s=>s.ciwsMsl)),g=tri(L.map(s=>s.ciwsGun)),n=L.reduce((a,s)=>a+s.icp,0),cls=v=>v===2?' on':(v===1?' mix':'');
   return '<div class="wb ciws" data-hr="ciws" title="近防:来袭才自动开火,没有强行开火"><div class="hd"><span class="lb">近防</span></div>'
    +'<div class="halves"><div class="half'+cls(m)+'" data-cw="ciwsMsl" title="拦截弹(外圈):右边是剩余颗数">拦截弹<b>'+n+'</b></div><div class="half'+cls(g)+'" data-cw="ciwsGun" title="近防炮(内圈)">近防炮</div></div></div>';}
@@ -182,18 +211,19 @@ function patch(a,b){ // 把 a 改成 b 的样子:同结构只改变了的文字�
     for(const at of [...y.attributes])if(x.getAttribute(at.name)!==at.value)x.setAttribute(at.name,at.value);
     if(x.nodeName!=='CANVAS')patch(x,y);}}
 const TPL=document.createElement('div');let portKey='',portEl=null;
-function render(){const L=S();
+function render(){pkPrune();const L=S();
   TPL.innerHTML=shipBlock(L)+'<div class="sec card">'+wbMac(L)+wbMsl(L)+wbBuoy(L)+wbCiws(L)+'</div>'+sideBlock(L);patch(document.getElementById('bar'),TPL);
   const pc=document.getElementById('port'),pk=pc?L[0].cls+sel.join():'';if(pc&&(pk!==portKey||pc!==portEl)){drawPort(pc,L[0].cls);portEl=pc;}portKey=pk;
-  document.getElementById('map').classList.toggle('armed',!!armed);}
+  document.getElementById('map').classList.toggle('armed',!!armed||pkN()>0);}
 function drawPort(cv,cls){const g=cv.getContext('2d'),w=cv.width,h=cv.height,L=cls==='CA'?1:0.78;g.clearRect(0,0,w,h);g.save();g.translate(w/2,h/2);
   g.fillStyle='#9fd4ff';g.strokeStyle='#5aa7ff';g.lineWidth=1.5;g.beginPath();g.moveTo(-60*L,-6);g.lineTo(44*L,-8);g.lineTo(62*L,0);g.lineTo(44*L,8);g.lineTo(-60*L,6);g.closePath();g.globalAlpha=.25;g.fill();g.globalAlpha=1;g.stroke();
   g.fillStyle='#5aa7ff';g.fillRect(-20*L,-14,22*L,8);g.fillStyle='#54e0d0';g.fillRect(-66*L,-3,6,6);g.restore();}
 /* ---- 交互 ---- */
 const bar=document.getElementById('bar');
-bar.addEventListener('mousedown',e=>{if(e.button!==0)return;const t=e.target.closest('[data-ck],[data-cw],[data-w],[data-p],[data-stop]');if(!t)return;
+bar.addEventListener('mousedown',e=>{if(e.button!==0)return;const t=e.target.closest('[data-seg],[data-ck],[data-cw],[data-w],[data-p],[data-stop]');if(!t)return;
+  if(t.dataset.seg){pkSeg(t.dataset.seg);return;}
   if(t.dataset.ck){toggleAuto(t.dataset.ck);return;}if(t.dataset.cw){toggleCiws(t.dataset.cw);return;}
-  if(t.dataset.w){if(!t.classList.contains('dis'))arm(t.dataset.w);return;}if(t.dataset.stop){cease();return;}
+  if(t.dataset.w){if(t.classList.contains('dis'))return;if(t.dataset.w==='buoy')arm('buoy');else pkAll(t.dataset.w);return;}if(t.dataset.stop){cease();return;}
   if(t.dataset.p)openPop(t.dataset.p,t);});
 let hov=null,hovHi=null; // 悬停在哪件上:mac / msl / buoy / ciws / radar(同引擎 83-hud 的 hoverRing);hovHi = 近防里停在哪一行(icp / gun),那一圈加亮
 bar.addEventListener('mouseover',e=>{const t=e.target.closest('[data-cw],[data-w],[data-hr],[data-p]');hovHi=t&&t.dataset.cw?(t.dataset.cw==='ciwsMsl'?'icp':'gun'):null;
@@ -209,13 +239,14 @@ function openPop(k,el){const p=document.getElementById('pop');if(pop===k){p.styl
   p.style.display='flex';p.style.left=r.left+'px';p.style.bottom=(innerHeight-r.top+6)+'px';
   p.onclick=e=>{const b=e.target.closest('[data-v]');if(!b)return;for(const s of S())s.radar=b.dataset.v;p.style.display='none';pop=null;render();};}
 let tipT=Infinity;function tip(t,ms){const d=document.getElementById('tip');d.textContent=t;d.style.display=t?'block':'none';tipT=ms?performance.now()+ms:Infinity;} // ms = 几毫秒后自己消失,0 = 一直显示
-window.addEventListener('keydown',e=>{const k=e.code;if(k==='KeyT')arm('mac');else if(k==='KeyR')arm('msl');else if(k==='KeyB')arm('buoy');else if(k==='KeyX')cease();else if(k==='Escape'&&armed){armed=null;tip('');render();}});
+window.addEventListener('keydown',e=>{const k=e.code;if(k==='KeyT')pkAll('mac');else if(k==='KeyR')pkAll('msl');else if(k==='KeyB')arm('buoy');else if(k==='KeyX')cease();else if(k==='Escape'&&(armed||pkN())){armed=null;pkClear();tip('');render();}});
 /* 地图 */
 const cv=document.getElementById('map'),g=cv.getContext('2d');let W=0,H=0;
 function rs(){W=cv.width=innerWidth;H=cv.height=innerHeight;}rs();addEventListener('resize',rs);
 const toS=(x,y)=>[W/2-80+x*1.4,H/2-60+y*1.4],toW=(sx,sy)=>[(sx-W/2+80)/1.4,(sy-H/2+60)/1.4];
-cv.addEventListener('mousedown',e=>{if(e.button===2){if(armed){armed=null;tip('');render();}return;}
+cv.addEventListener('mousedown',e=>{if(e.button===2){if(armed||pkN()){armed=null;pkClear();tip('');render();}return;}
   const w=toW(e.clientX,e.clientY);
+  if(pkN()){let pt=w,hit=FOES.find(f=>Math.hypot(f.x-w[0],f.y-w[1])<16);if(hit)pt=[hit.x,hit.y];const n=pkFire(pt,hit?'打 '+hit.nm:'打空地');if(n)tip('');else tip('选中的都不能发了',1500);render();return;}
   if(armed){let pt=w,hit=FOES.find(f=>Math.hypot(f.x-w[0],f.y-w[1])<16);if(hit)pt=[hit.x,hit.y];let n=0;for(const s of S())if(fire(s,armed,pt,hit?'打 '+hit.nm:'打空地'))n++;
     armed=null;if(n)tip('');else tip('没有就绪的',1500);render();return;}
   const i=SH.findIndex(s=>Math.hypot(s.x-w[0],s.y-w[1])<14);if(i>=0){sel=e.shiftKey||e.ctrlKey?(sel.includes(i)?sel.filter(x=>x!==i):sel.concat(i)):[i];syncPick();render();}});
