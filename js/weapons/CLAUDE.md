@@ -36,6 +36,7 @@
 - 光锥层登记(sensors/26,2026-10-07):`projectiles.push` 之后紧跟 `llBorn(新弹)`;弹从数组里拿掉的路径(56 的过滤、超上限裁剪)调 `llGone(p, 时刻)`。新增 push 点或删弹路径漏了不报错,光锥层就少了这发弹。
 
 ## 定义与配装
+- 近防两圈 10-08 放大(用户:外圈 x1.5、内圈 x1.2,阵型不动):实战 / 画面读 `outer` / `inner`,编队站位(formation/39)与红方 AI 的编队环 / 收拢距离读改前的 `fmOuter` / `fmInner`(51-ciws `ciwsRingsFm`)。拦截弹预警距离与防区跟着外圈一起变大。
 - 近防是三件独立武器(2026-10-07 用户):拦截弹 `icp_*` / 近防炮 `gun_*` / 干扰弹 `chf_*`(`_core` 防空核心、`_self` 自防御),各自的参数全在 `WPN` 里(原来写死在 52 / 56 / 57 的数也搬进去了),配装解析另存一份 `lw.wp[kind]`、makeShip 烘焙成 `s.icp` / `s.gun`(干扰弹烘焙成 `s.chaffRate`);菜单仍归在「近防」下。近防炮(10-07 用户):命中率 70%、不随机打折,这艘船近防圈里同时满 `ovN` 4 组才过载(51-ciws `gunInCircle` / `gunOverload`)。巡游舰配装 `msl_cl`(2 个发射单元)、没有主炮。 加新武器 = `WPN` 加一条 + `CLS_LOADOUT` 加一行;按钮 / 规格条 / hover 圈都由 `s.weapons` 清单驱动。运行时状态(`macCd` / `ammo` 等)平铺在舰船实例上。
 - 新增顶层 const 前先全库 grep 同名(跨 script 重名会让整个文件语法报废)。weapons 在 formation 之后加载,载入期不许读 formation 的顶层量(改成惰性函数)。
 

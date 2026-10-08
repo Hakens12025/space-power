@@ -8,6 +8,7 @@ function wpnDefOf(cls,kind){ // 舰种配装里这一类武器的定义(没装�
 function icpOf(s){return (s&&s.icp)||wpnDefOf(s&&s.cls,'icp');} // 拦截弹的参数
 function gunOf(s){return (s&&s.gun)||wpnDefOf(s&&s.cls,'gun');} // 近防炮的参数
 function ciwsRingsOf(s){const a=icpOf(s),b=gunOf(s);return {outer:a?a.outer:0,inner:b?b.inner:0,innerIntercept:b?b.innerIntercept:0};} // 「近防」两圈(外圈 = 拦截弹、内圈 = 近防炮):只给菜单 / 光圈 / 编队这些按两圈看的地方
+function ciwsRingsFm(s){const a=icpOf(s),b=gunOf(s);return {outer:a?(a.fmOuter||a.outer):0,inner:b?(b.fmInner||b.inner):0,innerIntercept:b?b.innerIntercept:0};} // 编队用的两圈(2026-10-08 用户:圈放大了阵型不动 —— formation/39 与红方 AI 的编队距离读这个)
 function gunOverload(g,ng,sects){ // 近防炮过载:近防圈里同时有 ovN 组以上来袭开始,每多一组摊薄 ovK × 圈里来袭的扇面每多一个摊薄 sectK(v121:多方向包抄明显强于单方向堆)
   return 1/(1+Math.max(0,ng-g.ovN+1)*g.ovK)*(1/(1+Math.max(0,sects-1)*g.sectK));
 }

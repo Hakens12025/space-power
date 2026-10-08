@@ -10,7 +10,7 @@
    实测在异构舰队上贪心比最优平均差 8.2%、最坏 25%,96% 的轮次都不是最优解 —— 所以这里换匈牙利。
 
    【与全局状态的关系】本层【只读】传进来的舰对象与参数,不读 ships / formations,不写任何舰的字段。
-   唯一的外部依赖是 51-ciws 的 ciwsRingsOf(实例优先取近防参数),运行期解析,不在顶层求值。 */
+   唯一的外部依赖是 51-ciws 的 ciwsRingsFm(实例优先取近防参数),运行期解析,不在顶层求值。 */
 
 /* ---------------- ① 能力维度 ---------------- */
 /* 九个维度,每个都由【配装字段】算出,与舰种 tag 无关:同样是 DD,换了近防件读数就变。
@@ -33,8 +33,8 @@
    损失按定义可加 —— 这条不用回沙盘重测也成立。
    它【只进站位重要性 prio】,不进契合度 fit —— 见 fit() 里 FM8 那段:乘在 req 权重上会被归一化约掉。 */
 const FM_DIM = [
-  { k: 'aaClose', nm: '防空·贴身', ab: '贴身', w: 0.44, f: s => { const c = ciwsRingsOf(s); return (c.inner || 0) * (c.innerIntercept || 0); } },
-  { k: 'aaChan', nm: '防空·通道', ab: '通道', w: 1.00, f: s => { const c = ciwsRingsOf(s); return (s.interMax || 0) * (c.outer || 0); } },
+  { k: 'aaClose', nm: '防空·贴身', ab: '贴身', w: 0.44, f: s => { const c = ciwsRingsFm(s); return (c.inner || 0) * (c.innerIntercept || 0); } },
+  { k: 'aaChan', nm: '防空·通道', ab: '通道', w: 1.00, f: s => { const c = ciwsRingsFm(s); return (s.interMax || 0) * (c.outer || 0); } },
   { k: 'gun', nm: '主炮', ab: '主炮', w: 0.36, f: s => s.macReload ? (s.macDmg || 0) / s.macReload : 0 },
   { k: 'act', nm: '主动·照射', ab: '照射', w: 0.36, f: s => sReq(s, 'emit') * sReq(s, 'recv') }, // SN4:维键 ir→act。旧读数是探测力的平方,那个字段第二段删了;新模型里「能主动照多远」由发射机与接收机共同决定(照射量程正比于 emit·recv 的四次方根),这里取乘积本身 = 量程的四次方,与下面 lis 同口径、两维之间可比
   { k: 'lis', nm: '被动·静听', ab: '静听', w: 0.11, f: s => { const r = sReq(s, 'recv'); return r * r; } }, // SN4:维键 esm→lis(与内核 trk 的 opt/lis/act 同一套词汇)。静听量程正比于 recv 的平方根,故读数取 recv 的平方,同为量程的四次方。act 与 lis 是同一部雷达的两种模式,但【读的是两个字段】—— 今天两列读数相等是四舰种 emit===recv 的数值退化,见顶部 SN4 那段
@@ -204,7 +204,7 @@ function fmSlotsOf(P) { return (P && P.slots && P.slots.length) ? P.slots.filter
    两艘 inner×innerIntercept 相同但 inner 不同的舰,在贴身站位上的契合度并不相同。 */
 function fmSwapKey(s) {
   const v = FM_DIM.map(d => (d.f(s) || 0).toFixed(6));
-  v.push((ciwsRingsOf(s).inner || 0).toFixed(3));
+  v.push((ciwsRingsFm(s).inner || 0).toFixed(3));
   return v.join('|');
 }
 
@@ -253,7 +253,7 @@ function fmBandRadii(list, flag, bm, P) {
   const inns = [], outs = [];
   list.forEach(s => {
     if (s === flag) return;
-    const c = ciwsRingsOf(s);
+    const c = ciwsRingsFm(s);
     if (s.ciwsGunOn !== false && c.inner > 0) inns.push(c.inner * FM_CIWS_K); // 2026-09-29 内圈 = 近防炮的开关
     if (s.ciwsOn && c.outer > 0) outs.push(c.outer * FM_CIWS_K);
   });
@@ -276,13 +276,13 @@ function fmBandRadii(list, flag, bm, P) {
 }
 
 /* FM6n【贴身带的可用上限】= 护卫里最小的那个近防内圈。贴身维在 fmPlanStations 的 fit() 里有一道
-   硬门:`st.r > ciwsRingsOf(s).inner ⇒ 该维归零`,是个【阶跃】不是渐变 —— 实测 9 舰编队里贴身带
+   硬门:`st.r > ciwsRingsFm(s).inner ⇒ 该维归零`,是个【阶跃】不是渐变 —— 实测 9 舰编队里贴身带
    8000 时总契合 7.600,8001 时掉到 5.600(两个贴身站位从 1.00 变 0.00),指派也跟着重排。
    自动值刻意取 minIn×0.9(留 10% 余量)就是为了永远落在门内。玩家手改超过这条线不拦,
    但编组控制页会把那条带标黄提醒 —— 这是四条带里【唯一】与算法强相关的一条。 */
 function fmBandCloseCap(list, flag) {
   let mn = Infinity;
-  list.forEach(s => { if (s === flag) return; const c = ciwsRingsOf(s); if (s.ciwsGunOn !== false && c.inner > 0) mn = Math.min(mn, c.inner); });
+  list.forEach(s => { if (s === flag) return; const c = ciwsRingsFm(s); if (s.ciwsGunOn !== false && c.inner > 0) mn = Math.min(mn, c.inner); });
   return isFinite(mn) ? mn : 4000 * CFG.scale; // 2026-09-26 兜底 = 现 DD 内圈(原 8000)
 }
 
@@ -378,7 +378,7 @@ function fmPlanStations(list, P, flagId, slotsOverride) {
     for (const k in st.req) {
       const w = st.req[k];
       let have = (fmCapOf(s, k) || 0) / (nrm[k] || 1);
-      if (k === 'aaClose' && st.r > ciwsRingsOf(s).inner) have = 0;
+      if (k === 'aaClose' && st.r > ciwsRingsFm(s).inner) have = 0;
       dot += w * Math.min(1, have); wsum += w;
     }
     return wsum ? dot / wsum : 0;
@@ -458,9 +458,9 @@ function fmAssess(PL) {
       : ('　（' + g.ships.slice(0, 3).join('、') + ' 等 ' + g.ships.length + ' 艘）');
     if (gr !== 'F' && g.worst) {
       const have = (fmCapOf(g.worst.s, g.cap) || 0) / (nrm[g.cap] || 1);
-      const gated = (g.cap === 'aaClose' && g.r > ciwsRingsOf(g.worst.s).inner);
+      const gated = (g.cap === 'aaClose' && g.r > ciwsRingsFm(g.worst.s).inner);
       r += '　← 最弱的 ' + g.worst.s.name + ' 只有 ' + have.toFixed(2)
-        + (gated ? ('（站位 ' + Math.round(g.r).toLocaleString('en-US') + ' 超出它的内圈 ' + Math.round(ciwsRingsOf(g.worst.s).inner).toLocaleString('en-US') + '，该维归零）') : '');
+        + (gated ? ('（站位 ' + Math.round(g.r).toLocaleString('en-US') + ' 超出它的内圈 ' + Math.round(ciwsRingsFm(g.worst.s).inner).toLocaleString('en-US') + '，该维归零）') : '');
     }
     rows.push({ g: gr, n: g.nm, r, f: avg });
   }

@@ -130,7 +130,7 @@ function aicThreat(X){return !!X.tgt||!!(X.inc&&X.inc.length)||X.mine.some(e=>tr
 function aicFmOn(X){return !!AIC_C.FM_ON&&X.mine.length>1&&aicThreat(X);}
 function aicFormation(X){ // 10-08 编队移动:中心 = 树给各舰的点的平均,各舰站固定环形槽位(按舰号,不随方位重排),到位的压到最慢那艘的最高档
   if(!aicFmOn(X)){X.A.fmC=null;return;}const L=X.mine.filter(e=>!X.plan[e.id].sta);if(L.length<2){X.A.fmC=null;return;}X.fm=true;
-  const n=L.length,D=(AIC_C.COVER_K||0.8)*WPN.icp_core.outer*WPN.icp_core.warnK,r=n===2?D/2:D/(2*Math.sin(Math.PI/n)),ids=L.map(e=>e.id).sort();let cx=0,cy=0,vmin=Infinity;
+  const n=L.length,D=(AIC_C.COVER_K||0.8)*WPN.icp_core.fmOuter*WPN.icp_core.warnK,r=n===2?D/2:D/(2*Math.sin(Math.PI/n)),ids=L.map(e=>e.id).sort();let cx=0,cy=0,vmin=Infinity;
   for(const e of L){cx+=X.plan[e.id].pos[0]/n;cy+=X.plan[e.id].pos[1]/n;vmin=Math.min(vmin,speedGearsOf(e)[3]);}
   if(AIC_C.FM_VK){let q=X.A.fmC;if(!q){q=[0,0];for(const e of L){q[0]+=e.pos[0]/n;q[1]+=e.pos[1]/n;}} // 10-09 只给编队中心一个点限速(从船队实际中心起步),槽位相对中心固定 —— 各舰分开限速会把队形扯散(实测交战中指令点间距中位 1.9 万 vs 编队要求的 1900 km)
     const lim=vmin*AIC_C.FM_VK*X.dt,dx=cx-q[0],dy=cy-q[1],d=Math.hypot(dx,dy);if(d>lim){cx=q[0]+dx/d*lim;cy=q[1]+dy/d*lim;}X.A.fmC=[cx,cy];}
@@ -164,7 +164,7 @@ function aicKeepMoving(X){ // 10-08 不许干停:没定位到目标时,到了站
       const a=Math.atan2(e.pos[1]-c[1],e.pos[0]-c[0])+Math.PI/3;pl.pos=[c[0]+Math.cos(a)*R,c[1]+Math.sin(a)*R];pl.gear=1;}}}
 function aicCover(X){ // 10-07 互相掩护:有威胁时整队按比例往中心收,使每艘离最近友舰不超过 拦截弹预警圈 x COVER_K(队友的拦截弹等来袭弹进它自己的预警圈才发)
   const L=X.mine;if(L.length<2||!AIC_C.COVER_K)return;if(!aicThreat(X))return;
-  const D=AIC_C.COVER_K*WPN.icp_core.outer*WPN.icp_core.warnK;let cx=0,cy=0,m=0;
+  const D=AIC_C.COVER_K*WPN.icp_core.fmOuter*WPN.icp_core.warnK;let cx=0,cy=0,m=0; // 10-08 圈放大、阵型不动:收拢距离读改前的外圈(51-defs fmOuter)
   for(const e of L){const p=X.plan[e.id].pos;cx+=p[0]/L.length;cy+=p[1]/L.length;}
   for(const e of L){const p=X.plan[e.id].pos;let n=Infinity;for(const f of L)if(f!==e){const q=X.plan[f.id].pos;n=Math.min(n,Math.hypot(p[0]-q[0],p[1]-q[1]));}m=Math.max(m,n);}
   if(m<=D)return;const k=D/m;for(const e of L){const p=X.plan[e.id].pos;p[0]=cx+(p[0]-cx)*k;p[1]=cy+(p[1]-cy)*k;}}
