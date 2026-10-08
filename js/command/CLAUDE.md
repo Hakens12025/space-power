@@ -1,12 +1,14 @@
 # js/command —— 玩家指令层(鼠标 / 键盘 → 命令)
 
 ## 文件
+- `68-cmd.js` 操作命令层(2026-10-08):命令登记 `CMD_FNS`、发命令 `cmdIssue` / 执行 `cmdRun`、参数编号 `cmdSer` / `cmdDes`、`cx*` 命令函数、录制 `CMD.rec`
 - `69-entities.js` 实体登记表(2026-10-08):每类实体(舰船 / 石头与物体 / 据点 / 卫星 / 彗星 / 导弹组 / 天体)登记一次 —— 列出、画在哪点在哪、点选半径、能不能选 / 跟随 / 拖、右栏只看信息;统一点选 `entPick`、选中写入口 `selSet`
 - `70-input.js` 鼠标:`onMouseDown` 分发、选择谓词(`selectedShips` / `controlledShips` / `engageable`)、右键长按虚影(`ghostArm` / `ghostAim` / `ghostCommit`)
 - `71-keys.js` 键盘与 `ACTIONS` 表
 - `74-targeting.js` 悬停准星、吸附、敌舰信息卡、中键快速交战与目标轮盘的输入侧状态机
 
 ## 规矩
+- 界面里会改模拟的操作一律走 command/68 的命令:调用已登记的模拟入口(`CMD_FNS`),或写一个 `cx*` 命令函数(参数只给舰船 / 目标 / 点,不读选中、不读鼠标)再登记进 `CMD_FNS`。不许在界面代码里直接改舰船 / 编队 / 火控序列的字段 —— 联机锁步时那一下只会改到本机,两边当场分叉(2026-10-08)。验收办法:真实点击录下命令,同种子只回放命令,`simHash` 要逐位相同
 - `onMouseDown` 的分发顺序就是优先级:轮盘(`mdRadial`)> 选定武器(`mdWeaponPick`)> pending*(`mdPending`)> 常规键位(`mdLeft` / `mdMiddle` / `mdRight`)。守卫段返回 true = 吞掉这一击。
 - 点选、双击跟随、靶场拖动、准星吸附(`shipAt` / `targetAt` / `buoyAt` / `groupAt`)一律走 69 `entPick`,不许再各写一套遍历;新实体在 69 登记一次。口径:我方舰 60 px、我方浮标 14 px、其余 24 px(比船离光标近才先选它,一样近让给船)、导弹组 30 px 排在其余之后、准星 60 px 且不吸已认出的非船、靶场拖动 12 px 按真实位置;对方的东西点在画它的那一点(航迹交代不出位置的点不到)
 - 选中只经 69 `selSet` 写(`selected` 舰船 / `selMissile` 导弹组 / `selBuoy` 我方浮标或据点 → 底栏雷达遥控 / `selEnt` 只看信息,读它走 `selEntOk`),互斥由它一处清;框选时直接改 `selected` 的那几处例外(按下时已清过)
