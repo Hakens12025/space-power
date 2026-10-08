@@ -468,7 +468,7 @@ function drawHoverRings(){
     const p=toScreen(s.pos[0],s.pos[1]);
     if(hoverRing==='mac'){ring(p,macEffRange(s),'主炮 50% ≈ '+Math.round(macEffRange(s)/1000)+'k');ring(p,macRangeAt(s,0.1),'主炮 10% ≈ '+Math.round(macRangeAt(s,0.1)/1000)+'k');} // WR1:没有射程门,画两档命中率的距离
     else if(hoverRing==='msl')ring(p,mslReach(s),'导弹 射程 ≈ '+Math.round(mslReach(s)/1000)+'k(中段熄火滑行)'); // WR1
-    else if(hoverRing==='ciws'||hoverRing==='ciwsMsl'||hoverRing==='ciwsGun'){const c=ciwsRingsOf(s);if(hoverRing!=='ciwsGun')ring(p,c.outer,'外圈拦截 '+Math.round(c.outer/1000)+'k');if(hoverRing!=='ciwsMsl')ring(p,c.inner,'内圈 '+Math.round(c.inner/1000)+'k');} // 2026-09-29 近防导弹只画外圈、近防炮只画内圈
+    else if(hoverRing==='ciws'||hoverRing==='ciwsMsl'||hoverRing==='ciwsGun'){const c=ciwsRingsOf(s);if(hoverRing!=='ciwsGun')ring(p,c.outer,'拦截弹 '+Math.round(c.outer/1000)+'k');if(hoverRing!=='ciwsMsl')ring(p,c.inner,'近防炮 '+(c.inner<10000?(c.inner/1000).toFixed(1):Math.round(c.inner/1000))+'k');} // 2026-09-29 近防导弹只画外圈、近防炮只画内圈
     else if(hoverRing==='emit'&&typeof actRangeOf==='function') // EM1-B:开了能照多远(按【开着照射】算,不管此刻开没开)。2026-09-29 用户:雷达范围只画照射圈(「被听见」圈与静默交叉定位圈去掉)
       ring(p,actRangeOf(s),'雷达 '+Math.round(actRangeOf(s)/1000)+'k(对标准目标)'+(s.emitMode==='silent'?' · 现在静默':''));
   }

@@ -73,7 +73,7 @@ html,body{margin:0;height:100%;background:var(--void);color:var(--txt);font-fami
 .cells i b{position:absolute;left:0;top:0;bottom:0;background:var(--acc)}
 .cells i.ok{background:var(--state-ok)}
 /* 近防:两半 */
-.wb.ciws{cursor:default;width:78px;padding:4px 5px;gap:2px}
+.wb.ciws{cursor:default;width:96px;padding:4px 5px;gap:2px}
 .halves{display:flex;flex-direction:column;gap:3px}
 .half{border:1px solid var(--line-ctl);border-radius:var(--r-sm);font-size:var(--fs-label);padding:1px 5px;cursor:pointer;color:var(--txt-dim);display:flex;justify-content:space-between;font-variant-numeric:tabular-nums}
 .half b{font-family:var(--ff-mono);font-weight:normal}
@@ -107,7 +107,7 @@ html,body{margin:0;height:100%;background:var(--void);color:var(--txt);font-fami
   <div class="row" id="pick"></div>
   <div class="row"><button class="btn" id="tx">演示时间 x10</button><button class="btn" id="auto">自动开火目标:有</button></div>
   <p>每件武器一颗钮:<b style="color:var(--txt)">点钮</b> = 强行开火,再点地图上的目标或空地(右键 / Esc 取消);<b style="color:var(--txt)">右上角小勾</b> = 自动开火开关;钮上直接画装填进度、剩余弹药与快捷键(T 主炮 · R 导弹 · B 浮标 · X 停火)。</p>
-  <p>近防没有强行开火,两半各管一件:外 = 近防导弹(拦截弹),内 = 近防炮。多选时勾是三态(全开 / 部分 / 全关),读数合计。悬停舰名看规格。</p>
+  <p>近防没有强行开火,上下两行各管一件:拦截弹(外圈)、近防炮(内圈)。鼠标停在每件武器上画它的圈。多选时勾是三态(全开 / 部分 / 全关),读数合计。悬停舰名看规格。</p>
 </div>
 <div id="log" class="panel"></div>
 <div id="bar" class="panel"></div>
@@ -118,9 +118,9 @@ html,body{margin:0;height:100%;background:var(--void);color:var(--txt);font-fami
 "use strict";
 /* ---- 假数据(数值照引擎现状:主炮 30 秒一发、导弹每个发射单元装填 60 秒、库存按组;拦截弹 / 浮标颗数照配装)---- */
 const CLS={
-  CA:{nm:'巡洋舰',tier:'T2',hp:900,sh:300,spec:[['加速','14.7 g'],['转向','2.8°/s'],['照射','331k'],['静听','533k'],['火控通道','3']],mac:30,cells:6,groups:40,icp:320,buoys:0},
-  FF:{nm:'护卫舰',tier:'T2',hp:520,sh:180,spec:[['加速','19.6 g'],['转向','4.5°/s'],['照射','281k'],['静听','470k'],['火控通道','1']],mac:30,cells:4,groups:24,icp:384,buoys:0},
-  CL:{nm:'巡游舰',tier:'T1',hp:420,sh:150,spec:[['加速','19.6 g'],['转向','4.5°/s'],['照射','281k'],['静听','470k'],['火控通道','1']],mac:0,cells:2,groups:12,icp:384,buoys:3},
+  CA:{nm:'巡洋舰',tier:'T2',hp:900,sh:300,spec:[['加速','14.7 g'],['转向','2.8°/s'],['照射','331k'],['静听','533k'],['火控通道','3']],mac:30,cells:6,groups:40,icp:320,buoys:0,rng:{mac50:67801,mac10:117435,msl:240000,icp:8505,gun:2268,radar:331135}},
+  FF:{nm:'护卫舰',tier:'T2',hp:520,sh:180,spec:[['加速','19.6 g'],['转向','4.5°/s'],['照射','281k'],['静听','470k'],['火控通道','1']],mac:30,cells:4,groups:24,icp:384,buoys:0,rng:{mac50:67801,mac10:117435,msl:240000,icp:14175,gun:3629,radar:234148}},
+  CL:{nm:'巡游舰',tier:'T1',hp:420,sh:150,spec:[['加速','19.6 g'],['转向','4.5°/s'],['照射','281k'],['静听','470k'],['火控通道','1']],mac:0,cells:2,groups:12,icp:384,buoys:3,rng:{msl:240000,icp:14175,gun:3629,radar:234148,buoy:191250}},
 };
 function mk(cls,name,x,y){const c=CLS[cls];return {cls,name,x,y,hp:c.hp*(0.6+0.4*Math.random()),sh:c.sh*Math.random(),macCd:0,cellT:Array(c.cells).fill(0),groups:c.groups,icp:c.icp,buoys:c.buoys,
   auto:{mac:true,msl:false},ciwsMsl:true,ciwsGun:true,radar:'silent'};}
@@ -158,8 +158,8 @@ function wbMsl(L){if(!L.length||!L.some(s=>CLS[s.cls].cells>0))return wbNone('�
    +(L.length===1?'<div class="cells">'+segs+'</div>':'<div class="prog'+(rd<cells.length?' ld':'')+'"><i style="width:'+Math.round(rd/cells.length*100)+'%"></i></div>')
    +'<div class="rd"><span>'+rd+'/'+cells.length+' 单元</span><span>'+g+' 组</span></div></div>';}
 function wbCiws(L){const m=tri(L.map(s=>s.ciwsMsl)),g=tri(L.map(s=>s.ciwsGun)),n=L.reduce((a,s)=>a+s.icp,0),cls=v=>v===2?' on':(v===1?' mix':'');
-  return '<div class="wb ciws" title="近防:来袭才自动开火,没有强行开火"><div class="hd"><span class="lb">近防</span></div>'
-   +'<div class="halves"><div class="half'+cls(m)+'" data-cw="ciwsMsl" title="外圈:近防导弹(拦截弹),右边是剩余颗数">外<b>'+n+'</b></div><div class="half'+cls(g)+'" data-cw="ciwsGun" title="内圈:近防炮">内<b>炮</b></div></div></div>';}
+  return '<div class="wb ciws" data-hr="ciws" title="近防:来袭才自动开火,没有强行开火"><div class="hd"><span class="lb">近防</span></div>'
+   +'<div class="halves"><div class="half'+cls(m)+'" data-cw="ciwsMsl" title="拦截弹(外圈):右边是剩余颗数">拦截弹<b>'+n+'</b></div><div class="half'+cls(g)+'" data-cw="ciwsGun" title="近防炮(内圈)">近防炮</div></div></div>';}
 function wbBuoy(L){const B=L.filter(s=>CLS[s.cls].buoys>0);if(!B.length)return wbNone('特殊');const n=B.reduce((a,s)=>a+s.buoys,0);
   return '<div class="wb'+(armed==='buoy'?' armed':'')+(n<=0?' dis':'')+'" data-w="buoy" title="点 = 放前出浮标(再点一个方向)· 快捷键 B"><div class="hd"><span class="lb">浮标</span><span class="key">B</span></div>'
    +'<div class="cells">'+B.flatMap(s=>Array.from({length:CLS[s.cls].buoys},(_,i)=>i<s.buoys?'<i class="ok"></i>':'<i></i>')).join('')+'</div>'
@@ -185,6 +185,9 @@ bar.addEventListener('mousedown',e=>{if(e.button!==0)return;const t=e.target.clo
   if(t.dataset.ck){toggleAuto(t.dataset.ck);return;}if(t.dataset.cw){toggleCiws(t.dataset.cw);return;}
   if(t.dataset.w){if(!t.classList.contains('dis'))arm(t.dataset.w);return;}if(t.dataset.stop){cease();return;}
   if(t.dataset.p)openPop(t.dataset.p,t);});
+let hov=null; // 悬停在哪件上:mac / msl / buoy / ciws / icp / gun / radar(同引擎 83-hud 的 hoverRing)
+bar.addEventListener('mouseover',e=>{const t=e.target.closest('[data-cw],[data-w],[data-hr],[data-p]');hov=!t?null:(t.dataset.cw?(t.dataset.cw==='ciwsMsl'?'icp':'gun'):(t.dataset.w||t.dataset.hr||t.dataset.p));});
+bar.addEventListener('mouseleave',()=>{hov=null;});
 bar.addEventListener('mousemove',e=>{const sp=document.getElementById('spec'),t=e.target.closest('[data-spec]');if(!t){sp.style.display='none';return;}
   const L=S();sp.innerHTML=L.map(s=>'<div style="color:var(--txt-hi)">'+s.name+'</div>'+CLS[s.cls].spec.map(([k,v])=>'<div>'+k+'<b>'+v+'</b></div>').join('')).join('<div style="height:6px"></div>');
   const r=t.getBoundingClientRect();sp.style.display='block';sp.style.left=r.left+'px';sp.style.bottom=(innerHeight-r.top+6)+'px';});
@@ -212,7 +215,22 @@ function draw(){g.fillStyle='#05070c';g.fillRect(0,0,W,H);g.strokeStyle='rgba(30
   SH.forEach((s,i)=>{const p=toS(s.x,s.y),on=sel.includes(i);g.fillStyle='#5aa7ff';g.beginPath();g.moveTo(p[0]+9,p[1]);g.lineTo(p[0]-7,p[1]-5);g.lineTo(p[0]-7,p[1]+5);g.closePath();g.fill();
     if(on){g.strokeStyle='#ffe066';g.beginPath();g.arc(p[0],p[1],13,0,6.283);g.stroke();}g.fillStyle='rgba(215,226,240,.8)';g.fillText(s.name,p[0],p[1]+24);});
   for(const f of FX){const a=toS(f.a[0],f.a[1]),b=toS(f.b[0],f.b[1]);g.strokeStyle=f.c;g.globalAlpha=Math.min(1,f.t*2);g.setLineDash(f.dash?[6,5]:[]);g.beginPath();g.moveTo(a[0],a[1]);g.lineTo(b[0],b[1]);g.stroke();g.setLineDash([]);g.globalAlpha=1;}
+  drawRings();
   g.fillStyle='rgba(106,125,146,.9)';g.textAlign='left';g.fillText('点地图上的蓝船选中(Shift 加选);选定武器后点红色目标或空地开火',16,H-110);}
+/* 悬停的圈:每艘选中的船各画一套(同引擎 83-hud ring:蓝色细圈、字写在圈顶)。演示页的船位置不按真实比例,圈的比例尺跟着悬停的那件自动缩放,让最大那圈落在画面里 */
+const fk=r=>r<10000?(r/1000).toFixed(1)+'k':Math.round(r/1000)+'k';
+function ringsOf(s,k){const R=CLS[s.cls].rng,o=[];
+  if(k==='mac'&&R.mac50){o.push([R.mac50,'主炮 50% ≈ '+fk(R.mac50)]);o.push([R.mac10,'主炮 10% ≈ '+fk(R.mac10)]);}
+  else if(k==='msl'&&R.msl)o.push([R.msl,'导弹 射程 ≈ '+fk(R.msl)+'(中段熄火滑行)']);
+  else if(k==='buoy'&&R.buoy)o.push([R.buoy,'浮标雷达 ≈ '+fk(R.buoy)+'(放出去后以浮标为圆心)']);
+  else if(k==='ciws'||k==='icp'||k==='gun'){if(k!=='gun')o.push([R.icp,'拦截弹 '+fk(R.icp)]);if(k!=='icp')o.push([R.gun,'近防炮 '+fk(R.gun)]);}
+  else if(k==='radar')o.push([R.radar,'雷达 '+fk(R.radar)+'(对标准目标)']);
+  return o;}
+function drawRings(){if(!hov)return;const L=S().map(s=>[s,ringsOf(s,hov)]).filter(x=>x[1].length);if(!L.length)return;
+  const big=Math.max(...L.flatMap(x=>x[1].map(r=>r[0]))),kpp=big/(0.3*Math.min(W,H)); // 每像素几公里
+  g.font='10px Consolas';g.textAlign='center';g.textBaseline='bottom';
+  for(const [s,R] of L){const p=toS(s.x,s.y);for(const [r,t] of R){const px=r/kpp;if(px<4)continue;g.strokeStyle='rgba(90,167,255,.6)';g.lineWidth=1;g.beginPath();g.arc(p[0],p[1],px,0,6.283);g.stroke();g.fillStyle='rgba(143,208,255,.85)';g.fillText(t,p[0],p[1]-px-2);}}
+  g.textBaseline='alphabetic';g.fillStyle='rgba(106,125,146,.9)';g.textAlign='left';g.font='11px "Microsoft YaHei"';g.fillText('比例尺跟着悬停的武器自动缩放:1 像素 ≈ '+Math.round(kpp)+' km',16,H-128);}
 /* 时间 */
 let last=performance.now(),autoT=0,lastBar='';
 function tick(now){const dt=Math.min(0.1,(now-last)/1000)*tx;last=now;
