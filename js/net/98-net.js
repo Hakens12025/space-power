@@ -8,7 +8,7 @@
          房间总线 sp-room-<id> —— 加入 {t:'join'} → 房主答 {t:'ok'} / {t:'no'};双方每 HB 毫秒心跳,PEER_TO 毫秒没声 = 对方走了;
          离开 {t:'bye'};对局数据 {t:'m', d}(第 4 步锁步用)。版本指纹 ver 不同的不许进(锁步要求两边代码逐字相同)。
    ============================================================================ */
-const NET_CFG={SB_URL:'',SB_KEY:'', // Supabase 项目地址与 anon key(公开的那把,前端本来就带;用户注册后填)
+const NET_CFG={SB_URL:'https://vychqfgrwniauccpxtse.supabase.co',SB_KEY:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5Y2hxZmdyd25pYXVjY3B4dHNlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0NTE5NzYsImV4cCI6MjEwNzAyNzk3Nn0.DHg132ToCG1amqVmvxVADWrMd77BNpOvysUJEIheLiI', // Supabase 项目地址与 anon key(公开的那把,前端本来就带;用户注册后填)
   SB_JS:'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js',
   ANN:1500,LIST_TO:5000,HB:1500,PEER_TO:6000}; // 房间广播间隔 / 大厅里多久没听到就当房间没了 / 心跳间隔 / 对方多久没声算走了(毫秒)
 const NET={mode:'',me:null,lobby:null,room:null,rooms:new Map(),ver:'',sb:null,annT:0,hbT:0,

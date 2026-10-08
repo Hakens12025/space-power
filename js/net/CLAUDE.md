@@ -5,6 +5,7 @@
 - `98-lobby.js` 开场菜单与大厅界面 `#spMenu`(样式在 css/app.css 末尾那一节):单人游戏 = 关菜单、照旧是现在的页面;多人游戏 = 大厅(昵称、房间列表、创建 / 加入)→ 房间(房主 / 对手 / 就位)
 
 ## 规矩
+- Supabase 项目 space-power(东京,ref `vychqfgrwniauccpxtse`)。代码里只放项目地址与 anon 公开密钥(本来就公开);`service_role` / secret 密钥与数据库密码绝不进仓库。Realtime 只用广播频道,不建表。
 - 只有在线版(http / https,即 GitHub Pages)出菜单;本地 file:// 照旧直接进靶场,地址加 `?menu=1` 在本地也出。
 - 菜单开着时模拟停着(core/01 `running` 默认 false,单人游戏也是空格开始);键盘在 window 捕获阶段拦掉,菜单里的输入框照常打字。
 - 名字、房间名都来自网上,写进页面一律 `spmEsc` 转义。
