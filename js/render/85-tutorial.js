@@ -32,7 +32,7 @@ const TUT_HTML=`
 
     <p>高度靠图标上方的标记表达。当一艘舰的高度绝对值超过 <code class="num">500 公里</code>，图标上方会出现一个标记：<code class="ui">▲</code> 是青色，表示它在参考平面之上；<code class="ui">▼</code> 是橙色，表示在下方；后面的数字是高度绝对值除以 <code class="num">1000</code> 取整，所以 <code class="ui">▲ 20k</code> 的意思是这艘舰高出 <code class="num">2 万公里</code>。舰体图标本身不会因为高度变色，你只能靠这个标记读高度。要紧的是射程与探测判定一律走三维距离：屏幕上看着快贴在一起的两艘舰，如果一个 <code class="ui">▲ 30k</code>、一个 <code class="ui">▼ 30k</code>，它们之间其实隔着 <code class="num">6 万公里</code>。</p>
 
-    <p>尺度方面，世界是半幅 <code class="num">500k 公里</code>的方形空域，摊开差不多 <code class="num">100 万公里</code>。时间被切成固定的 <code class="num">0.02 秒</code>一步，倍速有 <code class="num">0.5×</code>、<code class="num">1×</code>、<code class="num">2×</code>、<code class="num">5×</code>、<code class="num">10×</code>、<code class="num">20×</code>、<code class="num">50×</code> 七档，开局是 <code class="num">1×</code>，读数在顶栏。暂停时画面照常渲染，只是时间不走，因此暂停下依然可以选舰、平移视角、下命令、开轮盘——那是留给你思考的时间。</p>
+    <p>尺度方面，世界是半幅 <code class="num">500k 公里</code>的方形空域，摊开差不多 <code class="num">100 万公里</code>。时间被切成固定的 <code class="num">0.02 秒</code>一步，倍速有 <code class="num">0.1×</code>、<code class="num">0.2×</code>、<code class="num">0.5×</code>、<code class="num">1×</code>、<code class="num">2×</code>、<code class="num">5×</code>、<code class="num">10×</code> 七档，<code class="num">1×</code> 就是真实时间（游戏里过 1 秒 = 现实 1 秒），开局是 <code class="num">1×</code>，读数在顶栏。暂停时画面照常渲染，只是时间不走，因此暂停下依然可以选舰、平移视角、下命令、开轮盘——那是留给你思考的时间。</p>
   </section>
 
   <section class="tut-sec" id="tut-sensing">
@@ -107,7 +107,7 @@ const TUT_HTML=`
       </thead>
       <tbody>
         <tr><td>结构</td><td><code class="num">550</code></td><td><code class="num">900</code></td></tr>
-        <tr><td>加速度</td><td><code class="num">0.192 km/s²</code></td><td><code class="num">0.144 km/s²</code></td></tr>
+        <tr><td>加速度</td><td><code class="num">0.288 km/s²</code></td><td><code class="num">0.216 km/s²</code></td></tr>
         <tr><td>转向率</td><td><code class="num">14.9°/秒</code></td><td><code class="num">9.17°/秒</code></td></tr>
         <tr><td>主炮</td><td><code class="num">600</code> 伤害 · <code class="num">300 秒</code>装填</td><td><code class="num">600</code> 伤害 · <code class="num">300 秒</code>装填</td></tr>
         <tr><td>导弹</td><td><code class="num">4</code> 单元 · <code class="num">24 组</code>(每组 12 发)· 单发 <code class="num">12</code></td><td><code class="num">6</code> 单元 · <code class="num">40 组</code>(每组 12 发)· 单发 <code class="num">15</code></td></tr>
