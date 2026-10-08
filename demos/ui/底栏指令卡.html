@@ -172,9 +172,19 @@ function shipBlock(L){const s=L[0],c=CLS[s.cls];
 function sideBlock(L){const s=L[0],rl=({silent:'静默',paint:'发射',pulse:'脉冲',jam:'干扰'});const rm=L.every(x=>x.radar===s.radar)?rl[s.radar]:'混合';
   return '<div class="sec side"><div class="sb'+(rm!=='静默'?' on':'')+'" data-p="radar"><span class="l">雷达</span><span class="s">'+rm+'</span></div>'
    +'<div class="sb stop" data-stop="1" title="停火:自动开火全关、撤掉强行开火 · 快捷键 X"><span class="key">X</span><span class="l">停火</span><span class="s">全关</span></div></div>';}
+function patch(a,b){ // 把 a 改成 b 的样子:同结构只改变了的文字和属性,结构不同才整段换(每帧整块重画会让悬停高亮闪、事件丢)
+  if(a.childNodes.length!==b.childNodes.length){a.innerHTML=b.innerHTML;return;}
+  for(let i=0;i<a.childNodes.length;i++){const x=a.childNodes[i],y=b.childNodes[i];
+    if(x.nodeType!==y.nodeType||x.nodeName!==y.nodeName){a.replaceChild(y.cloneNode(true),x);continue;}
+    if(x.nodeType===3){if(x.nodeValue!==y.nodeValue)x.nodeValue=y.nodeValue;continue;}
+    if(x.nodeType!==1)continue;
+    for(const at of [...x.attributes])if(!y.hasAttribute(at.name))x.removeAttribute(at.name);
+    for(const at of [...y.attributes])if(x.getAttribute(at.name)!==at.value)x.setAttribute(at.name,at.value);
+    if(x.nodeName!=='CANVAS')patch(x,y);}}
+const TPL=document.createElement('div');let portKey='',portEl=null;
 function render(){const L=S();
-  document.getElementById('bar').innerHTML=shipBlock(L)+'<div class="sec card">'+wbMac(L)+wbMsl(L)+wbBuoy(L)+wbCiws(L)+'</div>'+sideBlock(L);
-  const pc=document.getElementById('port');if(pc)drawPort(pc,L[0].cls);
+  TPL.innerHTML=shipBlock(L)+'<div class="sec card">'+wbMac(L)+wbMsl(L)+wbBuoy(L)+wbCiws(L)+'</div>'+sideBlock(L);patch(document.getElementById('bar'),TPL);
+  const pc=document.getElementById('port'),pk=pc?L[0].cls+sel.join():'';if(pc&&(pk!==portKey||pc!==portEl)){drawPort(pc,L[0].cls);portEl=pc;}portKey=pk;
   document.getElementById('map').classList.toggle('armed',!!armed);}
 function drawPort(cv,cls){const g=cv.getContext('2d'),w=cv.width,h=cv.height,L=cls==='CA'?1:0.78;g.clearRect(0,0,w,h);g.save();g.translate(w/2,h/2);
   g.fillStyle='#9fd4ff';g.strokeStyle='#5aa7ff';g.lineWidth=1.5;g.beginPath();g.moveTo(-60*L,-6);g.lineTo(44*L,-8);g.lineTo(62*L,0);g.lineTo(44*L,8);g.lineTo(-60*L,6);g.closePath();g.globalAlpha=.25;g.fill();g.globalAlpha=1;g.stroke();
@@ -185,8 +195,9 @@ bar.addEventListener('mousedown',e=>{if(e.button!==0)return;const t=e.target.clo
   if(t.dataset.ck){toggleAuto(t.dataset.ck);return;}if(t.dataset.cw){toggleCiws(t.dataset.cw);return;}
   if(t.dataset.w){if(!t.classList.contains('dis'))arm(t.dataset.w);return;}if(t.dataset.stop){cease();return;}
   if(t.dataset.p)openPop(t.dataset.p,t);});
-let hov=null; // 悬停在哪件上:mac / msl / buoy / ciws / icp / gun / radar(同引擎 83-hud 的 hoverRing)
-bar.addEventListener('mouseover',e=>{const t=e.target.closest('[data-cw],[data-w],[data-hr],[data-p]');hov=!t?null:(t.dataset.cw?(t.dataset.cw==='ciwsMsl'?'icp':'gun'):(t.dataset.w||t.dataset.hr||t.dataset.p));});
+let hov=null,hovHi=null; // 悬停在哪件上:mac / msl / buoy / ciws / radar(同引擎 83-hud 的 hoverRing);hovHi = 近防里停在哪一行(icp / gun),那一圈加亮
+bar.addEventListener('mouseover',e=>{const t=e.target.closest('[data-cw],[data-w],[data-hr],[data-p]');hovHi=t&&t.dataset.cw?(t.dataset.cw==='ciwsMsl'?'icp':'gun'):null;
+  hov=!t?null:(t.dataset.cw?'ciws':(t.dataset.w||t.dataset.hr||t.dataset.p));});
 bar.addEventListener('mouseleave',()=>{hov=null;});
 bar.addEventListener('mousemove',e=>{const sp=document.getElementById('spec'),t=e.target.closest('[data-spec]');if(!t){sp.style.display='none';return;}
   const L=S();sp.innerHTML=L.map(s=>'<div style="color:var(--txt-hi)">'+s.name+'</div>'+CLS[s.cls].spec.map(([k,v])=>'<div>'+k+'<b>'+v+'</b></div>').join('')).join('<div style="height:6px"></div>');
@@ -223,13 +234,17 @@ function ringsOf(s,k){const R=CLS[s.cls].rng,o=[];
   if(k==='mac'&&R.mac50){o.push([R.mac50,'主炮 50% ≈ '+fk(R.mac50)]);o.push([R.mac10,'主炮 10% ≈ '+fk(R.mac10)]);}
   else if(k==='msl'&&R.msl)o.push([R.msl,'导弹 射程 ≈ '+fk(R.msl)+'(中段熄火滑行)']);
   else if(k==='buoy'&&R.buoy)o.push([R.buoy,'浮标雷达 ≈ '+fk(R.buoy)+'(放出去后以浮标为圆心)']);
-  else if(k==='ciws'||k==='icp'||k==='gun'){if(k!=='gun')o.push([R.icp,'拦截弹 '+fk(R.icp)]);if(k!=='icp')o.push([R.gun,'近防炮 '+fk(R.gun)]);}
+  else if(k==='ciws'){o.push([R.icp,'拦截弹 '+fk(R.icp),'icp']);o.push([R.gun,'近防炮 '+fk(R.gun),'gun']);} // 两圈一起画(停在哪一行加亮哪圈,不只画一圈)
   else if(k==='radar')o.push([R.radar,'雷达 '+fk(R.radar)+'(对标准目标)']);
   return o;}
-function drawRings(){if(!hov)return;const L=S().map(s=>[s,ringsOf(s,hov)]).filter(x=>x[1].length);if(!L.length)return;
-  const big=Math.max(...L.flatMap(x=>x[1].map(r=>r[0]))),kpp=big/(0.3*Math.min(W,H)); // 每像素几公里
+let kppNow=0;
+function drawRings(){if(!hov){kppNow=0;return;}const L=S().map(s=>[s,ringsOf(s,hov)]).filter(x=>x[1].length);if(!L.length)return;
+  const big=Math.max(...L.flatMap(x=>x[1].map(r=>r[0]))),want=big/(0.3*Math.min(W,H)); // 每像素几公里
+  kppNow=kppNow?kppNow*Math.pow(want/kppNow,0.25):want;const kpp=kppNow; // 换武器时比例尺平滑过去,不跳
   g.font='10px Consolas';g.textAlign='center';g.textBaseline='bottom';
-  for(const [s,R] of L){const p=toS(s.x,s.y);for(const [r,t] of R){const px=r/kpp;if(px<4)continue;g.strokeStyle='rgba(90,167,255,.6)';g.lineWidth=1;g.beginPath();g.arc(p[0],p[1],px,0,6.283);g.stroke();g.fillStyle='rgba(143,208,255,.85)';g.fillText(t,p[0],p[1]-px-2);}}
+  for(const [s,R] of L){const p=toS(s.x,s.y);for(const [r,t,id] of R){const px=r/kpp;if(px<4)continue;const hi=hovHi&&id===hovHi,lo=hovHi&&id&&id!==hovHi;
+    g.strokeStyle=hi?'rgba(159,212,255,.95)':(lo?'rgba(90,167,255,.3)':'rgba(90,167,255,.6)');g.lineWidth=hi?2:1;g.beginPath();g.arc(p[0],p[1],px,0,6.283);g.stroke();
+    g.fillStyle=lo?'rgba(143,208,255,.45)':'rgba(143,208,255,.85)';g.fillText(t,p[0],p[1]-px-2);}}g.lineWidth=1;
   g.textBaseline='alphabetic';g.fillStyle='rgba(106,125,146,.9)';g.textAlign='left';g.font='11px "Microsoft YaHei"';g.fillText('比例尺跟着悬停的武器自动缩放:1 像素 ≈ '+Math.round(kpp)+' km',16,H-128);}
 /* 时间 */
 let last=performance.now(),autoT=0,lastBar='';
