@@ -150,7 +150,7 @@ const COV = {
    发现域回答"有没有信号",定位域回答"这一拍能测多准"。 */
 /* 干扰机的【烧穿距离】:在它上面 J/S = 1,对方的回波误差正好翻一倍。
    从既有的 ecmPower 推,不另立一张每舰种的表 —— 两张表必然漂移,而漂移在这个系统里是完全静默的。 */
-const jamDOf = s => SENS.JAM_REF / Math.sqrt(sReq(s, 'ecmPower', 'ship'));
+const jamDOf = s => sReq(SENS, 'JAM_REF', 'SENS') / Math.sqrt(sReq(s, 'ecmPower', 'ship')); // 2026-10-09 JAM_REF 走 sReq:缺了当场抛(09-21 起它从没定义过,读出 undefined → 烧穿距离 NaN → 整条航迹的信息矩阵变 NaN,开干扰的船连可见光圈里都定不了位)
 
 function visAccOf(s, lo) { return Math.sqrt(SENS.A_IR * (lo === undefined ? optLum(s) : lo)); } // ENV2 lo = 这一对的有效亮度,不给读标称值
 function hearAccOf(s, recv) { return Math.sqrt(SENS.A_RF * rfLoudOf(s) * (isFinite(recv) ? recv : 1)); }
@@ -359,6 +359,7 @@ function ladApply() {
   /* 发现域:三条律各一个锚,直接除掉参考对自己的缩放因子 */
   SENS.IR_DET = km(LAD.optColdMin) / Math.sqrt(R.size);
   SENS.ACT_DET = km(LAD.radarMin) / Math.pow(R.emit * R.recv * refl, 0.25);
+  SENS.JAM_REF = SENS.ACT_DET * 40000 / 150000; // 2026-10-09 干扰烧穿基准(烧穿距离 = JAM_REF / √ecmPower):保持 09-21 设计时与照射量程的比例(40000 : 150000,当时 DD 7.3 万 / CA 5.66 万),跟着距离阶梯缩放;现值护卫 / 巡游约 11.4 万、巡洋约 8.8 万
   SENS.LIS_DET = km(LAD.heardMin) / Math.sqrt(R.emit * SENS.EMIT_P.paint * R.recv);
   /* 定位域:σ⊥ = d^2*TH0/R(被动)、d^3*TH0/R^2(照射)。令它等于门,解出尺度 R */
   const Ro = LAD.optCross * LAD.optCross * COV.TH0.opt / mslG;

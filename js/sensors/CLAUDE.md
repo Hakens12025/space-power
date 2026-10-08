@@ -12,6 +12,7 @@
 ## 模型
 - 两种看法:光学 / 红外(纯被动,与探测方无关)与雷达(一部设备两种模式:静听 / 照射)。被看方字段 `size` / `stealth`(只乘雷达),探测方字段 `emit` / `recv`。
 - `emitMode ∈ {silent, paint, jam}`,只经 `setEmit` 写(裸赋值是 bug);`silent` 的射频响度恒 0;`jam` 自己拿不到火控级。
+- 干扰只放大对它的照射回波误差(23 `covShape`,x(1 + (d / 烧穿)²)),烧穿距离 = `SENS.JAM_REF` / √`ecmPower`;`JAM_REF` 在 `ladApply` 里按照射量程的固定比例算(40000 : 150000,现值护卫 / 巡游约 11.4 万、巡洋约 8.8 万)。2026-10-09 前它从没定义过(烧穿 NaN → 开干扰的船整条航迹作废、连可见光圈里都看不见);SENS / LAD 的量一律经 `sReq` 读,缺了当场抛。
 - 接触 = 位置估计 + 误差椭圆,不分等级:只问握没握着(`contactHeld`)与定没定位(`contactFix`,椭圆长轴 < `COV.AMAX`;武器开火只看它)。身份只问 `contactIdn`,三条来路:光学贴近(`optIdent`)、照射(`radarIdent`)、静听对方雷达(`lisIdent`,带距离门)。
 - 数值唯一入口是距离梯子 `LAD`:模型常数由 `ladApply()` 反解,不许在 `SENS` / `COV` 里手填。
 
