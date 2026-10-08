@@ -13,7 +13,7 @@ const CMD_FNS=['orderMoveTo','moveShips','fmMoveTo','addWaypoint','fmAppend','fm
   'followAssign','followStopList','fcAppend','fcRemove','fcRemoveTarget','fcReorder','fcSetAllow','fcSetBig','fcSetEdit','fcSetMode','fcSetPick','fcToggleForce','fcTogglePause',
   'launchBuoy','buoySetOn','setEmit','orderMissileSalvo','fireMAC',
   'cxForceMac','cxSalvo','cxCease','cxDriftFire','cxFireAll','cxForcePoint','cxPick','cxFcAppendTo','cxFcRegister','cxTurn','cxReverse','cxDelLastOrder','cxOrderPos',
-  'cxWpn','cxWpnClear','cxCiwsSub','cxPulse','cxObjPulse','cxFmSpdMode']; // 会被界面调用、会改模拟的入口;新加一个界面能触发的改动,先在这里登记
+  'cxWpn','cxWpnClear','cxCiwsSub','cxPulse','cxObjPulse','cxFmSpdMode','cxMslAim','cxMslMineOk']; // 会被界面调用、会改模拟的入口;新加一个界面能触发的改动,先在这里登记
 const CMD_RAW=['stepSim','initFleet','rrTick']; // 这些里面调到上面的入口一律直通(模拟自己在动,不是玩家的操作)
 const CMD_ORIG={};
 /* ---- 参数编号 / 还原 ---- */
@@ -88,3 +88,18 @@ function cxCiwsSub(sel,f,v){for(const x of sel)if(x)x[f]=v;} // 近防两件各�
 function cxPulse(sel){for(const x of sel)if(x)x.pingReq=true;} // 雷达脉冲:下一拍照一拍
 function cxObjPulse(o){if(o&&!o.dead)o.pingReq=true;} // 浮标 / 据点打一拍
 function cxFmSpdMode(F,m){if(F)F.spdMode=m;} // 编队速度两选一(平均 / 最慢)
+/* 2026-10-08 导弹的操作(用户:数据链连着的导弹能改目标,可多选;断链的只能选中看)。只动在网上的组(p.online,模拟状态,两边同值);
+   原来雷改布位 / 底栏「变雷」在界面里直接改导弹,联机只有点的那边生效,一并收进来。 */
+function cxMslAim(L,t,pt){ // t = 改打它(界面已查过定位;不变雷);pt = 飞向这一点,到点按各组的「变雷」停下 / 接着飞
+  const G=(L||[]).filter(p=>p&&p.type==='missile'&&!p.done&&p.online);if(!G.length||(!t&&!pt))return;
+  const mine=new Set(G),part=[]; // 网:整网都改的留着网号;只改了一部分的拆出来另成一个网(网里有组没目标,数据链自动分配会把整网重派,weapons/53 reassignNets)
+  for(const nid of new Set(G.map(p=>p.netId)))if(projectiles.some(q=>q.type==='missile'&&!q.done&&q.netId===nid&&!mine.has(q)))for(const p of G)if(p.netId===nid)part.push(p);
+  if(part.length){const o=nets.get(part[0].netId),id=++netSeq;nets.set(id,{id:id,mode:o?o.mode:'',groups:[],shooter:part[0].shooter,fmt:null,fctrl:'auto',manualTarget:null});
+    for(const p of part){const n0=nets.get(p.netId);if(n0)n0.groups=n0.groups.filter(g=>g!==p.group);p.netId=id;nets.get(id).groups.push(p.group);}}
+  for(const p of G){const side=p.shooter.side,wasMine=p.mine;
+    p.cruise=false;p.mine=false;p.chaffed=false;p.lastKpos=null;p.lastTarget=null;p.coastT=0;p.guideMode='';p.vCmd=undefined; // 换了目标重新排速度,原目标不再回头找
+    if(t){p.target=t;p.park=false;p.parkPt=null;const k=contactKin(t,side);if(k)mslTkSet(p,k.pos,mslSigOf(t,side),k.vel,k.t);} // 目标记录先按舰队的估计写(之后在网上每拍随舰队更新)
+    else{p.target=null;p.park=true;p.parkPt=pt.slice();p.trigRadius=16000*CFG.scale; // 同区域齐射(weapons/52)
+      if(wasMine){p.vel=[0,0,0];p.spd=Math.max(200,p.spd||200);}}}} // 雷是停着的:重新点火(同原来右键改布位)
+function cxMslMineOk(L,v){for(const p of L||[]){if(!p||p.type!=='missile'||p.done||!p.online||p.mine)continue;p.mineOk=v; // 底栏「变雷」:勾 = 到点停下待命,不勾 = 到点接着飞
+  if(v&&p.cruise){p.cruise=false;p.park=true;p.parkPt=ordArenaClamp([p.pos[0],p.pos[1],0]);}}} // 已在巡飞的:就地减速停下

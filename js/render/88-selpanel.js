@@ -286,6 +286,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
       <div class="row"><span class="k">状态</span><span class="v">${stts}</span></div>
       <div class="row"><span class="k">目标</span><span class="v">${tgts}</span></div>
       <div class="row"><span class="k">引导</span><span class="v">${gds}</span></div>
+      <div class="row"><span class="k">数据链</span><span class="v">${(()=>{const n=aliveHits.filter(p=>p.online).length;return '在网 '+n+' 组'+(aliveHits.length-n?' · 断链 '+(aliveHits.length-n)+' 组(只能看)':'');})()}</span></div>
       <div class="row"><span class="k">速度</span><span class="v">${Math.round(SHOW.v(maxSpd))} km/s(最快)</span></div>
       <div class="row"><span class="k">燃料</span><span class="v">最紧 ${minFuel>0?Math.ceil(SHOW.t(minFuel))+'s':'耗尽(滑行)'}</span></div>`;
     updateCmdBar([]);
@@ -512,10 +513,8 @@ function mslSelOwn(){ // 2026-09-28 选中的我方导弹组:点选 = 整个网,
 (function bindMineBtn(){ // 2026-09-28 底栏「变雷」(用户:「导弹也作为可选单位,下部 ui 给一个变雷的选项,不选中就一直飞」)
   const wrap=document.querySelector('#cmdBar .cmd-btns');if(!wrap||document.getElementById('cbMine'))return;
   const b=document.createElement('button');b.className='btn cbtn';b.id='cbMine';b.style.display='none';wrap.appendChild(b);
-  b.addEventListener('click',()=>{const L=mslSelOwn();if(!L.length)return;const v=!L.every(p=>p.mineOk||p.mine);
-    for(const p of L){if(p.mine)continue;p.mineOk=v;
-      if(v&&p.cruise){p.cruise=false;p.park=true;p.parkPt=ordArenaClamp([p.pos[0],p.pos[1],0]);}} // 已在巡飞的:就地减速停下
-    cmdBarSync();updateSelPanel();});
+  b.addEventListener('click',()=>{const L=mslSelOwn().filter(p=>p.online);if(!L.length){cmdTipFlash('选中的导弹都断链了,只能查看',2500);return;} // 2026-10-08 断链的只能看
+    cxMslMineOk(L,!L.every(p=>p.mineOk||p.mine));cmdBarSync();updateSelPanel();}); // 2026-10-08 走命令(command/68):开关值按在网上的组算好
   b.addEventListener('mouseenter',()=>{const t=document.getElementById('cmdTip');if(t){t.style.display='block';t.textContent='变雷:勾上 = 飞到瞄准点停下待命,导引头看见目标再点火扑上去;不勾 = 飞过瞄准点继续直飞,导引头一路找,出游玩区消失。两种都是途中一看见就扑。已经停下的雷不受影响';}});
   b.addEventListener('mouseleave',()=>{if(typeof updSelWeaponTip==='function')updSelWeaponTip();});
 })();

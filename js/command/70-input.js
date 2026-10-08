@@ -93,6 +93,13 @@ function targetAt(sx,sy){ // 2026-10-08 走实体登记表(command/69 entPick):�
   const h=entPick(sx,sy,{k:adminMode?['ship']:['ship','obj'],side:ME,r:60,ok:o=>adminMode?(o.side!==ME&&o.side!=='neutral'):(o.side!==ME&&trkFoe(trkOf(ME,o)))});
   return h?h.o:null; // 返回源对象(锁定 / 火控序列拿它当句柄)
 }
+function mslAimOn(){return typeof mslSelOwn==='function'&&mslSelOwn().length>0;} // 选中了我方导弹(render/88)
+function mslAimAt(sx,sy){ // 2026-10-08 用户:选中我方导弹,中键点已定位的目标 = 改打它(不变雷);点空地(或没定位的)= 飞向那一点,到点按底栏「变雷」停下 / 接着飞。断链的组只能看
+  const L=mslSelOwn(),on=L.filter(p=>p.online),off=L.length-on.length;
+  if(!on.length){cmdTipFlash('选中的导弹都断链了,只能查看',2500);return;}
+  const t=targetAt(sx,sy),ok=!!t&&(adminMode||trkFix(trkOf(ME,t))),w=worldAt(sx,sy);
+  cxMslAim(on,ok?t:null,ok?null:ordArenaClamp([w[0],w[1],0]));
+  cmdTipFlash((ok?'导弹改打这个目标':'导弹改飞向这一点(到点'+(on.every(p=>p.mineOk)?'停下变雷':(on.some(p=>p.mineOk)?'按各组的变雷开关':'接着飞'))+')')+' · '+on.length+' 组'+(off?' · '+off+' 组断链没改':''),2500);}
 function clearPendings(){
   /* 所有【点选待命态】的统一清口 —— 这些状态两两互斥:同时置位时,左键消费串里排在前面的那个会先吃掉
      那一次点击并 return,后面那个【无声留到下一次左键】,而那时它下达的是一条真命令(不只是吃一次点击)。
@@ -268,7 +275,7 @@ function mdMiddle(e,sx,sy){ // RF5 中键:短按=快速交战(原「拖拽平移
   if(e.preventDefault)e.preventDefault(); // 阻止浏览器中键自动滚动
   mmb={t:nowMs(),sx,sy,shift:e.shiftKey}; // RF5 起计时:用墙钟(暂停时也要能交战);位移判定在 mouseup 直接比坐标,中键不再置 panning 所以不能用 panning.moved。RF5 Phase C 追加 shift:三种上下文要的是【按下瞬间】的 Shift,定时器回调里 e 已回收、键也可能松了
   clearTimeout(mmbTimer);mmbTimer=null; // RF5 Phase C 连击防叠表(第四个清理点)
-  if(!(typeof rad!=='undefined'&&rad.open))                      // RF5 Phase C 轮盘已开时中键只承担「短按=关」,不再排新的开
+  if(!(typeof rad!=='undefined'&&rad.open)&&!mslAimOn())          // RF5 Phase C 轮盘已开时中键只承担「短按=关」,不再排新的开;选中我方导弹时中键 = 改目标,不弹轮盘
     mmbTimer=setTimeout(()=>{                                    // RF5 Phase C 长按 350ms 在【松手前】弹轮盘(手柄轮盘的手感),不能等 mouseup
       mmbTimer=null;
       if(!mmb)return;                                            // 已被 mouseup/blur 清账 = 抬手早于 350ms
@@ -369,9 +376,11 @@ window.addEventListener('mouseup',e=>{
     const held=nowMs()-mmb.t;
     const moved=Math.abs(e.clientX-mmb.sx)+Math.abs(e.clientY-mmb.sy)>5; // 中键已不置 panning,位移直接比坐标(不依赖 mousemove 的 panning.moved)
     const mShift=!!mmb.shift; // RF7 取【按下瞬间】的 Shift(与长按轮盘同口径),下一行 mmb 就清了
+    const msx=mmb.sx,msy=mmb.sy;
     mmb=null; // 计时一律就地清账,与下面走不走得到无关
     clearTimeout(mmbTimer);mmbTimer=null; // RF5 Phase C 同理就地清表:位置必须仍在下面 dragOrder 早退之前,否则抬手后轮盘还会迟到 350ms 弹出来
-    if(!dragOrder&&held<MMB_HOLD_MS&&!moved){ // dragOrder 原本就靠早退吃掉中键,语义照旧;长按(>=MMB_HOLD_MS)这里天然什么都不做——轮盘已由 mousedown 的定时器弹出,不必再加互斥
+    if(!dragOrder&&!moved&&mslAimOn()&&!(typeof rad!=='undefined'&&rad.open))mslAimAt(msx,msy); // 选中我方导弹:中键 = 改目标(长短按都算)
+    else if(!dragOrder&&held<MMB_HOLD_MS&&!moved){ // dragOrder 原本就靠早退吃掉中键,语义照旧;长按(>=MMB_HOLD_MS)这里天然什么都不做——轮盘已由 mousedown 的定时器弹出,不必再加互斥
       if(typeof rad!=='undefined'&&rad.open){if(typeof radClose==='function')radClose();} // RF5 Phase C 轮盘开着:短按中键=关
       else if(typeof xhQuickEngage==='function')xhQuickEngage(mShift);                    // RF5 Phase B 快速交战;RF7 带上 Shift:按住=追加进当前编辑序列(选定手势),不按=新建
     }
@@ -411,8 +420,8 @@ window.addEventListener('mouseup',e=>{
       const w=worldAt(rmbClick.sx,rmbClick.sy);
       // DS191(用户令):雷是网的一种形态,不是不能动——选中雷 + 右键点地图 = 重新布位(飞向新点再次布雷,网身份保留)
       if(selMissile&&selMissile.mine&&!selMissile.done&&(adminMode||(selMissile.shooter&&selMissile.shooter.side===ME))){ // 2026-09-28 只能改自己的雷
-        selMissile.mine=false;selMissile.park=true;selMissile.parkPt=ordArenaClamp([w[0],w[1],0]);selMissile.target=null; // 2026-09-26 改布位点夹进 ARENA:区外的点雷一出界就 done
-        selMissile.vel=[0,0,0];selMissile.spd=Math.max(200,selMissile.spd||200);
+        if(selMissile.online)cxMslAim([selMissile],null,ordArenaClamp([w[0],w[1],0])); // 2026-09-26 改布位点夹进 ARENA:区外的点雷一出界就 done;2026-10-08 走命令,断链的只能看
+        else cmdTipFlash('这颗雷断链了,只能查看',2500);
         rmbClick=null;return;
       }
       const targets=controlledShips(); // FM2:【选中什么就命令什么】(RTS)——原来这里 expandToFleet 把单选一艘扩成整组,单独派一艘僚舰会把全队一起指挥走
