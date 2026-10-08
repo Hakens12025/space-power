@@ -427,21 +427,16 @@ function wpnAnyOn(x){return wpnChecked(x,'mac')||wpnChecked(x,'msl');}
 const CIWS_SUB=[['ciwsMsl','近防导弹','ciwsOn'],['ciwsGun','近防炮','ciwsGunOn']]; // 2026-09-29 用户:近防展开两件各自勾;[菜单 id, 名字, 舰船开关字段]
 function ciwsSubOn(x,f){return wpnHas(x,'ciws')&&x[f]!==false;}
 function wpnTri(x,k){if(k!=='ciws')return wpnChecked(x,k)?2:0;const n=CIWS_SUB.filter(c=>ciwsSubOn(x,c[2])).length;return n===CIWS_SUB.length?2:(n?1:0);} // 上一级的勾:2 全勾 / 1 半勾 / 0 不勾
-function ciwsSubToggle(id){const c=CIWS_SUB.find(c=>c[0]===id),sel=selBlue();if(!c||!sel.length)return;const v=!ciwsSubOn(sel[0],c[2]);for(const x of sel)x[c[2]]=v;updateSelPanel();}
+function ciwsSubToggle(id){const c=CIWS_SUB.find(c=>c[0]===id),sel=selBlue();if(!c||!sel.length)return;const v=!ciwsSubOn(sel[0],c[2]);cxCiwsSub(sel,c[2],v);updateSelPanel();} // 2026-10-08 走命令(command/68)
 function wpnToggle(k){
   const sel=selBlue();if(!sel.length||!KIND_INFO[k])return;const v=!wpnChecked(sel[0],k);
-  for(const x of sel){
-    if(k==='ciws'){for(const c of CIWS_SUB)x[c[2]]=v;continue;} // 上一级:没全勾 → 全勾,全勾 → 全关
-    const on=KIND_INFO[k].on;
-    if(v){if(!wpnFcOn(x)){for(const kk of ['mac','msl'])if(kk!==k)x[KIND_INFO[kk].on]=false;x.autoEngage=true;x.roe='free';}x[on]=true;} // 火控从关到开:只开勾的这一件
-    else{x[on]=false;if(!wpnAnyOn(x)){x.autoEngage=false;x.roe='hold';x.lockedTarget=null;}} // 攻击性武器全不勾 = 火控关
-  }
+  cxWpn(sel,k,v); // 2026-10-08 走命令(command/68):ciws 上一级没全勾 → 全勾、全勾 → 全关;火控从关到开只开勾的这一件;攻击性武器全不勾 = 火控关
   updateSelPanel();
 }
-function wpnClearAll(){for(const x of selBlue()){x.autoEngage=false;x.roe='hold';x.lockedTarget=null;x.fTgt=null;x.macOn=false;x.mslOn=false;x.ciwsOn=false;x.ciwsGunOn=false;}updateSelPanel();}
+function wpnClearAll(){cxWpnClear(selBlue());updateSelPanel();} // 2026-10-08 走命令(command/68)
 function radarPulsing(x){const f=(typeof PING_FX!=='undefined')?PING_FX.get(x):null;return !!(x.pingReq||(f&&!f.done));}
 function selBuoyOk(){return (typeof selBuoy!=='undefined'&&selBuoy&&!selBuoy.dead)?selBuoy:null;} // 2026-09-29 选中的我方浮标(底栏雷达作用于它)
-function radarPick(v){const bu=selBuoyOk();if(bu){if(v==='pulse')bu.pingReq=true;else if(typeof buoySetOn==='function')buoySetOn(bu,v==='paint');updateSelPanel();return;}const sel=selBlue();if(!sel.length)return;if(v==='pulse')sel.forEach(x=>{x.pingReq=true;});else sel.forEach(x=>setEmit(x,v));updateSelPanel();}
+function radarPick(v){const bu=selBuoyOk();if(bu){if(v==='pulse')cxObjPulse(bu);else if(typeof buoySetOn==='function')buoySetOn(bu,v==='paint');updateSelPanel();return;}const sel=selBlue();if(!sel.length)return;if(v==='pulse')cxPulse(sel);else sel.forEach(x=>setEmit(x,v));updateSelPanel();} // 2026-10-08 脉冲走命令(command/68),setEmit 本身已登记成命令
 function wpnStat(s,k){return k==='mac'?'伤害 '+(s.macDmg||0)+' · 装填 '+Math.round(SHOW.t(s.macReload||0))+'s':(k==='msl'?(s.mslPer||12)+' 枚/组 · 余 '+(s.ammo||0)+' 枚':'');}
 function cmdPopEl(){
   if(CMDPOP.el)return CMDPOP.el;

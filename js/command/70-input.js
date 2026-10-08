@@ -189,20 +189,20 @@ function mdWeaponPick(e,sx,sy){ // 选定武器攻击:点目标 / 点空位置
       {
         const hiters=atk.filter(x=>engageable(t,x));
         if(hiters.length){
-          if(selWeapon==='mac'){hiters.forEach(x=>{if(hasMAC(x)){x.lockedTarget=t;x.driftFire=true;x.driftFireT=60;x.forceMac={t:t,pt:null,T:60};}});} // 2026-09-27 强行开火:转向对准就开一炮(weapons/57),不看武器勾没勾 // DS171:M3 lockPlayer→driftFire;TIER1 主炮 舰种门改能力谓词 hasMAC
-          else{hiters.forEach(x=>{if(x.ammo>0)orderMissileSalvo(x,t,salvoCount);});}
+          if(selWeapon==='mac')cxForceMac(hiters,t,null); // 2026-10-08 走命令(command/68) // 2026-09-27 强行开火:转向对准就开一炮(weapons/57),不看武器勾没勾 // DS171:M3 lockPlayer→driftFire;TIER1 主炮 舰种门改能力谓词 hasMAC
+          else cxSalvo(hiters,t,null);
         }
       }
     }else if(selWeapon==='missile'){ // 点空白:区域齐射(v114,盲射到空位置)——导弹飞到点位,到了等敌舰进圈自主攻击
       const w=worldAt(sx,sy);
       {
         const pos={pos:ordArenaClamp([w[0],w[1],0])}; // 2026-09-26 区域齐射点夹进 ARENA:区外的点弹一出界就 done,整组白扔
-        atk.forEach(x=>{if(x.ammo>0)orderMissileSalvo(x,pos,salvoCount);});
+        cxSalvo(atk,null,pos.pos);
       }
     }
     else if(selWeapon==='mac'){ // 2026-09-27 主炮打空地(用户选):转向那个点、对准就开一炮,弹道上碰到谁算谁(weapons/57 + 56)
       const w=worldAt(sx,sy),pt=ordArenaClamp([w[0],w[1],0]);
-      atk.forEach(x=>{if(hasMAC(x))x.forceMac={t:null,pt:pt,T:60};});
+      cxForceMac(atk,null,pt);
     }
     selWeapon=null;updSelWeaponTip();
     return true;
@@ -212,7 +212,7 @@ function mdWeaponPick(e,sx,sy){ // 选定武器攻击:点目标 / 点空位置
 function mdPending(e,sx,sy){ // 六条 pending*(转向 / 布防 / 跟随 / 信标 / 手动 / 布雷)的点选兑现
   if(e.button===0&&pendingTurn){ // V键转向:点地图设定方向(调头,速度不变)。FM3-0:Shift+V"单纯转头"分支删除(它设的船上标志全库无读取点,两种转向行为本就一样)
     const w=worldAt(sx,sy);
-    pendingTurn.forEach(s=>{s.turnTarget=[w[0],w[1],0];s.brake=false;}); // RF6 去掉 s.orders=[]:朝向已移交 31-step-ships 的独立朝向层,与移动层并行,转向不必再取消航线
+    cxTurn(pendingTurn,[w[0],w[1],0]); // 2026-10-08 走命令(command/68) // RF6 去掉 s.orders=[]:朝向已移交 31-step-ships 的独立朝向层,与移动层并行,转向不必再取消航线
     pendingTurn=null;updSelWeaponTip(); // FL1:V 已接进 #cmdTip,清标志就必须同步刷提示(updSelWeaponTip 是边沿触发、无兜底刷新)
     return true;
   }
@@ -334,7 +334,7 @@ window.addEventListener('mousemove',e=>{
     // 编队路径现在就是旗舰的 orders,拖旗舰的点即拖整队航线,与散船共用下面这一支。
     const w=worldAt(e.clientX,e.clientY);
     const od=dragOrder.ship.orders[dragOrder.index]; // KIMI146修:存在性防护(拖拽途中点被消费)
-    if(od)od.pos=ordArenaClamp([w[0],w[1],0]); // 2026-09-26 拖命令点也夹进 ARENA(与 mkOrder 同一个夹子)
+    if(od)cxOrderPos(dragOrder.ship,dragOrder.index,ordArenaClamp([w[0],w[1],0])); // 2026-10-08 走命令(command/68) // 2026-09-26 拖命令点也夹进 ARENA(与 mkOrder 同一个夹子)
     return;
   }
   if(selDrag){selDrag.x1=e.clientX;selDrag.y1=e.clientY;

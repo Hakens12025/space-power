@@ -28,6 +28,7 @@ function frame(t){
   updateTop();
 }
 function init(){
+  if(typeof cmdInstall==='function')cmdInstall(); // 2026-10-08 联机第 3 步:界面发出的、会改模拟的操作一律变成命令(command/68)
   cv=document.getElementById('cv');ctx=cv.getContext('2d');
   cv.addEventListener('mousedown',onMouseDown);
   cv.addEventListener('dblclick',onDblClick); // 2026-10-08 左键双击实体 = 镜头跟随(command/70)

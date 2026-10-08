@@ -52,7 +52,7 @@ function toggleWeapon(w){ // T/R:选定武器进行攻击选择(点击敌舰攻�
 function ceaseFire(){ // X:停火,解除所有选中舰锁定
   const sel=controlledShips();
   if(!sel.length)return;
-  sel.forEach(s=>{s.lockedTarget=null;s.lockPlayer=false;s.fTgt=null;}); // 2026-09-29 连强制目标点一起撤
+  cxCease(sel); // 2026-09-29 连强制目标点一起撤;2026-10-08 走命令(command/68)
 }
 function fmAssign(g,sel){ // Ctrl+数字:按当前选中舰建/覆盖编队 g。FL1 一层化后建队只有 fmCreate 一个入口 —— 它自己处理"删旧槽位 / 把船从旧队摘干净 / 分槽 / 不足2艘则清空"并打日志,这里只做转发
   fmCreate(g,sel);
@@ -95,50 +95,14 @@ function doAction(id){
       const sel=controlledShips().filter(s=>!s.dead&&s.lockedTarget&&!contactDead(s.lockedTarget,s.side)&&s.lockedTarget.side!==s.side&&s.macDmg>0); // LL6 锁定目标死活按本方看见的
       if(sel.length){
         const on=!sel[0].driftFire;
-        sel.forEach(s=>{s.driftFire=on;s.driftFireT=on?60:0;});
+        cxDriftFire(sel,on);
       }
       break;}
     case 'fire_missile':toggleWeapon('missile');break; // R:选定导弹武器,点击敌舰攻击
     case 'cease_fire':ceaseFire();break; // X:停火(解除锁定)
-    case 'reverse':{ // G:倒车(反推倒退)——选中舰朝船头反方向机动6k(机头不翻,用反推)
-      const sel=controlledShips();
-      sel.forEach(s=>{
-        const back=V.norm([-s.facing[0],-s.facing[1],-s.facing[2]]);
-        const tgt=[s.pos[0]+back[0]*6000*CFG.scale,s.pos[1]+back[1]*6000*CFG.scale,s.pos[2]+back[2]*6000*CFG.scale]; // 2026-09-26 x1/5(单局地图):原 30000
-        s.orders=[mkOrder(tgt,'stop')];s.brake=false;s.crawling=false; // 2026-09-26 经 mkOrder:命令点夹进 ARENA
-      });
-      break;}
-    case 'fire_all':{ // Ctrl:全弹发射(选中舰·锁定目标)
-      const sel=selectedShips().filter(s=>s.side==='blue'&&!s.dead);
-      sel.forEach(s=>{const t=s.lockedTarget;if(!t||contactDead(t,s.side))return; // LL6 死活按本方看见的
-        if(hasMAC(s)&&macAligned(s,t)&&s.macCd<=0)fireMAC(s,t); // TIER1 主炮 舰种门改能力谓词
-        if(s.ammo>0)orderMissileSalvo(s,t,salvoCount);});
-      break;}
-    case 'del_last_order':{
-      const sel=selectedShips();const halted=new Set();
-      sel.forEach(s=>{
-        if(s.formation){ // 编队命令:整队停车(编队【不解散】)
-          // FM1:原写法遍历全 ships 把同 id 的成员 formation=null + brake=true —— 那是把编队【拆了】才停下来,
-          // 且不清 s.fmSlot。新架构下编队的航线就是旗舰的 s.orders,停车交给 fmHalt(旗舰刹停,成员跟旗舰实时位置自然落回槽位)。
-          // FM1 复核修正:本动作叫"删除最后一个命令点",对散船是 orders.pop()。改前对编队调 fmHalt,
-          // 而 fmHalt 会 orderClear 旗舰 —— 玩家画 6 个点想撤掉最后一个,结果 6 个一次全没,且不可撤销。
-          // 新架构下编队航线就是旗舰的 orders,直接 pop 旗舰末令,两种选择语义终于一致。
-          /* FL2 两种模式各撤各的,但撤的都是【一个编队级航点】:
-               跟随态:航线只在旗舰身上(成员 orders 恒空)→ pop 旗舰一条;
-               阵位态:fmSpread 在下令那一刻把同一个编队级航点展开成【每艘船各一条令】,各舰令数恒等 →
-                      整列各 pop 一条。只撤旗舰那一条的话,剩下的船会继续飞向那个已被撤销的点,编队当场分家。 */
-          if(halted.has(s.formation))return; // 多选同一编队只处理一次
-          halted.add(s.formation);
-          const F=s.formation;
-          /* FM6:原先这里按 F.mode==='follow' 分岔(跟随态只 pop 旗舰一条,成员 orders 恒空)。
-             跟随模式删掉之后编队恒是"各舰各持一条令",只剩下面这一支。 */
-          fmShips(F).forEach(m=>{if(m.orders.length){m.orders.pop();if(!m.orders.length)m.brake=true;}});
-        }else if(s.orders.length){ // 普通命令点:删最后一个
-          s.orders.pop();
-          if(!s.orders.length)s.brake=true;
-        }
-      });
-      break;}
+    case 'reverse':cxReverse(controlledShips());break; // G:倒车(反推倒退)——选中舰朝船头反方向机动 6000 x scale(机头不翻,用反推);2026-10-08 走命令(command/68)
+    case 'fire_all':cxFireAll(selectedShips().filter(s=>s.side==='blue'&&!s.dead));break; // Ctrl:全弹发射(选中舰 · 锁定目标);2026-10-08 走命令(command/68)
+    case 'del_last_order':cxDelLastOrder(selectedShips());break; // 删最后一个命令点:编队整列各撤一条(编队航点在下令那一刻展开成每艘各一条,只撤旗舰会分家),散船撤一条;2026-10-08 走命令(command/68)
   }
   if(/^grp_assign_/.test(id)){
     const g=+id.slice(-1);

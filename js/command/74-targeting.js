@@ -159,14 +159,16 @@ function xhQuickEngage(append){ // RF5 中键短按:选中的蓝舰 + 当前吸�
     // 插在锁定目标 / 火控序列前面;勾着的每件武器打 2 次就撤,一件没勾就一发不打(用户:强制开火服从火控;⌖ 红点的单次开火另走自己的逻辑)
     if(!(xh.pt[0]>=0))return false;
     const w=worldAt(xh.pt[0],xh.pt[1]),pt=ordArenaClamp([w[0],w[1],0]);let n=0;
-    for(const x of sel){x.fTgt={pt:pt.slice(),n:{mac:0,msl:0}};if(typeof wpnChecked==='function'&&(wpnChecked(x,'mac')||wpnChecked(x,'msl')))n++;}
+    for(const x of sel)if(typeof wpnChecked==='function'&&(wpnChecked(x,'mac')||wpnChecked(x,'msl')))n++;
+    cxForcePoint(sel,pt); // 2026-10-08 走命令(command/68)
     if(typeof cmdTipFlash==='function')cmdTipFlash(n?'⌖ 强制目标:'+n+' 艘按勾选的武器朝这个点打(每件 2 次)'+(n<sel.length?' · '+(sel.length-n)+' 艘没勾武器、不开火':''):'⌖ 选中的船都没勾武器,不开火',2500);
     if(typeof updateSelPanel==='function')updateSelPanel();
     return n>0;
   }
   if(!append){ // 2026-10-07 用户:中键点敌舰 = 选定目标:选中的舰一直对它强制开火,目标没了才停(weapons/57 读 s.pickTid,有火控序列在跑的先按序列打)
     let busy=0;
-    for(const s of sel){s.pickTid=t.id;s.fTgt=null;if(!s.autoEngage||s.roe!=='free'){s.autoEngage=true;s.roe='free';}if(typeof fcActive==='function'&&fcActive(s))busy++;} // 同 fcNew:选定要响,火控总闸得开
+    for(const s of sel)if(typeof fcActive==='function'&&fcActive(s))busy++;
+    cxPick(sel,t); // 同 fcNew:选定要响,火控总闸得开;2026-10-08 走命令(command/68)
     if(typeof cmdTipFlash==='function')cmdTipFlash('⌖ 选定 '+((typeof xhName==='function')?xhName(t):t.name)+':'+sel.length+' 艘强制开火'+(busy?' · '+busy+' 艘有火控序列在跑、先按序列打':''),2500);
     if(typeof updateSelPanel==='function')updateSelPanel();
     return true;
@@ -176,14 +178,13 @@ function xhQuickEngage(append){ // RF5 中键短按:选中的蓝舰 + 当前吸�
   const tgt={tid:t.id};
   let ok=false,g=null;
   if(sel.length>1){for(const s of sel){const q=(typeof fcSeq==='function')?fcSeq(s.fcEditId):null;if(q&&q.shipId===s.id&&q.grp){g=q.grp;break;}}}
-  for(const s of sel){
+  for(const s of sel){ // 先判有没有可追加的(提示用),追加本身走命令 cxFcAppendTo(command/68,同一套挑序列的口径)
     let cur=null;
     if(g!=null)cur=fireSeqs.find(q=>q.shipId===s.id&&q.grp===g)||null; // 舰队:这艘在块 g 里的那条(块里没有它就跳过)
     else if(sel.length===1){const q0=(typeof fcSeq==='function')?fcSeq(s.fcEditId):null;cur=(q0&&q0.shipId===s.id)?q0:null;} // 编辑上下文可能指向别舰/已删序列(与 radOpen 同一道防线)
-    if(!cur)continue;
-    if(!cur.targets.some(x=>x.tid&&String(x.tid)===String(t.id))){fcSetEdit(s,cur.id);fcAppend(s,tgt);} // 去重:已在链里,再按只是确认
-    ok=true;
+    if(cur)ok=true;
   }
+  if(ok)cxFcAppendTo(sel,t); // 去重(已在链里再按只是确认)在命令里做
   if(!ok&&typeof cmdTipFlash==='function')cmdTipFlash('Shift+中键 = 往选中的火控序列追加目标:先在火控计算机里点一条序列'+(sel.length>1?'(块)':'')+',或点「+」新建',2500);
   if(ok&&typeof updateSelPanel==='function')updateSelPanel(); // 立刻刷右栏火控面板,不等 frame 的 20 帧低频刷新
   return ok;
@@ -192,7 +193,8 @@ function fcRegister(sel,t){ // 2026-10-07 用户:新火控序列只从火控计�
   if(!t||typeof fcNew!=='function')return false;
   if(!sel.length){if(typeof cmdTipFlash==='function')cmdTipFlash('先选中我方舰,再点「+」',2500);return false;}
   const tgt={tid:t.id},g=(sel.length>1&&typeof fcNewGrp==='function')?fcNewGrp():null;let n=0;
-  for(const s of sel){const id=fcNew(s,tgt);if(id!=null){if(g!=null)fcSeq(id).grp=g;n++;}} // fcNew 把新序列置为编辑上下文:建完就在序列态,Shift+中键直接往里追加
+  for(const s of sel)if(fcSeqsOf(s).length<FC_MAX_SEQS)n++; // 先按每舰上限估能建几条(提示用);建本身走命令 cxFcRegister(command/68):fcNew 把新序列置为编辑上下文,建完就在序列态,Shift+中键直接往里追加
+  cxFcRegister(sel,t);
   if(typeof cmdTipFlash==='function')cmdTipFlash(n?'火控序列已建:'+((typeof xhName==='function')?xhName(t):t.name)+(g!=null?'(块,'+n+' 艘)':'')+' · Shift+中键往里追加目标':'序列已满(每舰最多 '+FC_MAX_SEQS+' 条)',2500);
   if(typeof updateSelPanel==='function')updateSelPanel();
   return n>0;

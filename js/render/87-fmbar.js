@@ -410,7 +410,7 @@ function fmbAct(a){
       if(a==='m-fixed'&&F.src==='snapshot')break;
       if(typeof fmSetSrc==='function')fmSetSrc(F,a==='m-fixed'?'snapshot':'generated');
       break;
-    case 'v-avg':case 'v-min':F.spdMode=a==='v-min'?'min':'avg';break; // 10-07 速度两选一:physics/31 的编队上限经 43 fmSpd 当拍生效
+    case 'v-avg':case 'v-min':cxFmSpdMode(F,a==='v-min'?'min':'avg');break; // 2026-10-08 走命令(command/68) // 10-07 速度两选一:physics/31 的编队上限经 43 fmSpd 当拍生效
   }
   updFmBar(); // 立即回显,不等下一个 20 帧拍子
   if(typeof updateSelPanel==='function')updateSelPanel(); // 信息区在右轨,得连它一起叫醒
