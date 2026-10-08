@@ -713,3 +713,28 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 .fp-knob{display:inline-flex;align-items:center;gap:var(--sp-2)}
 .fp-knob input[type=range]{width:96px;accent-color:var(--acc);background:transparent}
 .fp-knob .fp-v{min-width:34px;text-align:right}
+
+/* ===== 2026-10-08 开场菜单 / 多人大厅(js/net/98-lobby;在线版进来先看到它,本地 file:// 不出)=====
+   盖在所有模态之上(--z-modal + 10);底下的星图照画、模拟停着。颜色全部取 :root token。 */
+#spMenu{position:fixed;inset:0;z-index:calc(var(--z-modal) + 10);background:var(--scrim);display:flex;align-items:center;justify-content:center;font-family:var(--ff-ui);color:var(--txt);padding:0 16px;box-sizing:border-box}
+#spMenu .spm-card{background:var(--srf-modal);border:var(--bw) solid var(--line);border-radius:var(--r-md);padding:var(--sp-6);width:min(520px,100%);box-sizing:border-box}
+#spMenu .spm-title{font-size:30px;letter-spacing:.3em;text-indent:.3em;color:var(--txt-hi);text-align:center;line-height:1.3}
+#spMenu .spm-sub{color:var(--txt-dim);text-align:center;font-size:var(--fs-body);letter-spacing:var(--ls-label);margin-top:var(--sp-1)}
+#spMenu .spm-col{display:flex;flex-direction:column;gap:var(--sp-3);margin:var(--sp-6) auto 0;width:min(240px,100%)}
+#spMenu .spm-big{font-size:var(--fs-title);padding:var(--sp-3) var(--sp-5);color:var(--txt)}
+#spMenu .spm-hd{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);font-size:var(--fs-title);color:var(--txt-hi)}
+#spMenu .spm-row{display:flex;align-items:center;gap:var(--sp-3);margin-top:var(--sp-4)}
+#spMenu .spm-k{color:var(--txt-dim);font-size:var(--fs-label);letter-spacing:var(--ls-label);white-space:nowrap}
+#spMenu input{flex:1;min-width:0;background:var(--srf-sunk);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);color:var(--txt-read);font-family:var(--ff-ui);font-size:var(--fs-read);padding:var(--sp-2)}
+#spMenu input:focus{outline:none;border-color:var(--line-acc)}
+#spMenu .spm-note{font-size:var(--fs-body);color:var(--state-warn);margin-top:var(--sp-3);line-height:var(--lh-body)}
+#spMenu .spm-list{margin-top:var(--sp-4);border:var(--bw) solid var(--line);border-radius:var(--r-sm);background:var(--srf-sunk);max-height:260px;overflow:auto}
+#spMenu .spm-r{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-3);border-top:var(--bw) solid var(--line-hair)}
+#spMenu .spm-r:first-child{border-top:none}
+#spMenu .spm-r .n{flex:1;min-width:0;color:var(--txt-hi);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#spMenu .spm-r .h{color:var(--txt-dim);font-size:var(--fs-body);white-space:nowrap}
+#spMenu .spm-empty{padding:var(--sp-5);text-align:center;color:var(--txt-mute);font-size:var(--fs-body)}
+#spMenu .spm-p{display:flex;justify-content:space-between;align-items:center;padding:var(--sp-3) 0;border-bottom:var(--bw) solid var(--line-hair);margin-top:var(--sp-2)}
+#spMenu .spm-mute{color:var(--txt-mute)}
+#spMenu .spm-st{margin-top:var(--sp-4);color:var(--txt-dim);font-size:var(--fs-body);line-height:var(--lh-body)}
+#spMenu .spm-st.ok{color:var(--state-ok)}
