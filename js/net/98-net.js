@@ -14,6 +14,7 @@ const NET_CFG={SB_URL:'https://vychqfgrwniauccpxtse.supabase.co',SB_KEY:'eyJhbGc
   SB_JS:['js/vendor/supabase-js-2.45.4.umd.js','https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js'], // 先读仓库里那份(同源,不看 CDN 脸色),读不到再去 CDN
   ANN:1500,LIST_TO:5000,HB:1500,PEER_TO:6000,PEER_TO_MATCH:60000,SB_HB:5000,
   NS:(location.search.match(/[?&]ns=([A-Za-z0-9]{1,16})/)||[])[1]||'',
+  SERVER:'http://120.79.201.198:18802/', // 2026-10-08 自己的联机服务器(server/):https 页面(GitHub Pages)点「多人游戏」直接跳过来(98-lobby)—— 那边只能走 Supabase,国内直连被重置、经代理往返 300~500 ms(用户:联机太垃圾了)
   WS:(()=>{const m=location.search.match(/[?&]ws=([A-Za-z0-9.:-]{3,64})/);return m?'ws://'+m[1]+'/ws':(location.protocol==='http:'?'ws://'+location.host+'/ws':'');})()}; // 自己的服务器:从 http 打开 = 页面就是它发的(https 页面不许连没加密的 ws,GitHub Pages 照旧走 Supabase) // 频道名前缀:地址带 ns=xxx 时走另一组频道(测试不进正式大厅,2026-10-08:测试客户端误进了用户的房间) // 房间广播间隔 / 大厅里多久没听到就当房间没了 / 心跳间隔 / 对方多久没声算走了 / 对局中多久没声才算走了(断线重连要时间;关页面会发 bye,照样立刻结束)/ Supabase 连接自己的心跳(默认 30 秒,连接悄悄断了要等很久才重连)(毫秒)
 const NET={mode:'',err:'',me:null,lobby:null,room:null,rooms:new Map(),ver:'',sb:null,annT:0,hbT:0,
   onLobby:null,onRoom:null}; // onLobby(房间列表) / onRoom({t:'joined'|'peer'|'left'|'closed'|'denied'|'msg', ...})

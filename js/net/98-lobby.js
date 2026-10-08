@@ -42,7 +42,8 @@ function spmList(L){if(SPM.view!=='lobby')return;const el=document.getElementByI
     :'<div class="spm-empty">还没有房间,点「创建游戏」开一个</div>';}
 function spmAct(a,v){
   if(a==='solo'){spmShow('');return;} // 单人游戏 = 现在的页面(靶场,空格开始)
-  if(a==='multi'){SPM.note='';netStart(spmList,()=>{if(SPM.view==='lobby')spmRender();});NET.onRoom=spmRoomEv;spmShow('lobby');return;}
+  if(a==='multi'){if(location.protocol==='https:'&&NET_CFG.SERVER&&!/[?&]sb=1/.test(location.search)){location.href=NET_CFG.SERVER;return;} // https 页面连不了服务器的 ws:跳到服务器发的那份页面(地址带 sb=1 才留在这里走 Supabase)
+    SPM.note='';netStart(spmList,()=>{if(SPM.view==='lobby')spmRender();});NET.onRoom=spmRoomEv;spmShow('lobby');return;}
   if(a==='back'){netLeave();spmShow('menu');return;}
   if(a==='retry'){NET.err='';spmRender();netStart(spmList,()=>{if(SPM.view==='lobby')spmRender();});return;} // 联机服务没连上:再拉一次
   if(a==='create'){const n=document.getElementById('spmName'),r=document.getElementById('spmRoomName');if(n)netSetName(n.value);netCreate(r?r.value:'');return;}
