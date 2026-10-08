@@ -29,7 +29,7 @@ function makeObj(kind,side,name,pos,o){ // 字段按感知内核与武器会读�
 function objArenaPt(r){return [ARENA.x0+r()*(ARENA.x1-ARENA.x0),ARENA.y0+r()*(ARENA.y1-ARENA.y0),0];}
 function objSpawnCivs(){ // 对局开局撒民船(scenario/91 的 initFleet 在撒完石头之后调)
   if(!ARENA)return;
-  const C=OBJ_CFG.CIV,r=envRng(Math.floor(Math.random()*1e9)+1);
+  const C=OBJ_CFG.CIV,r=envRng(Math.floor(simRand()*1e9)+1);
   for(let i=0;i<C.N;i++){
     let p=objArenaPt(r);for(let k=0;k<30&&ships.some(s=>Math.hypot(s.pos[0]-p[0],s.pos[1]-p[1])<100000*CFG.scale);k++)p=objArenaPt(r); // 离任何舰船至少 10 万
     const radar=r()<C.RADAR,o=makeObj('civ','neutral','民船-'+(i+1),p,{size:C.SIZE[0]+r()*(C.SIZE[1]-C.SIZE[0]),emit:radar?C.EMIT:0,hp:C.HP,maxHp:C.HP,
@@ -39,7 +39,7 @@ function objSpawnCivs(){ // 对局开局撒民船(scenario/91 的 initFleet 在�
 }
 function launchLure(shooter,pt){ // K1 诱饵:从放它的船身边飞到 pt(飞的那段在点火),到位后漂着冒充一艘驱逐舰
   const L=OBJ_CFG.LURE,o=makeObj('lure',shooter.side,'诱饵',shooter.pos,{size:L.SIZE,stealth:0.4,emit:1,hp:L.HP,maxHp:L.HP,
-    dest:[pt[0],pt[1],0],life:PHYS.t(L.LIFE),burnCd:PHYS.t(L.BURN_EVERY)*Math.random(),burnT:0,spoof:{kind:'ship',cls:'FF',tier:2},spoofName:'敌·护卫舰'+(11+(++OBJ_SEQ))});
+    dest:[pt[0],pt[1],0],life:PHYS.t(L.LIFE),burnCd:PHYS.t(L.BURN_EVERY)*simRand(),burnT:0,spoof:{kind:'ship',cls:'FF',tier:2},spoofName:'敌·护卫舰'+(11+(++OBJ_SEQ))});
   setEmit(o,'paint');rocks.push(o);return o;
 }
 function launchBuoy(shooter,pt){ // K3 前出浮标:2026-10-08 用户改方向式 —— 朝 pt 的方位出发一直飞,不停、不计时,飞出地图消失(红方条令传的落点也只当方向用)
@@ -67,7 +67,7 @@ function stepObjects(dt){
       if(o.radar){o.pingCd-=dt;if(o.pingCd<=0){o.pingCd=PHYS.t(C.PING);o.pingReq=true;}} // 导航雷达扫一拍(sensors/21 的扫描同一条路)
     }else if(o.kind==='lure'){
       const L=OBJ_CFG.LURE;o.life-=dt;if(o.life<=0){o.dead=true;continue;}
-      if(o.dest){if(objFly(o,dt,PHYS.v(L.FLY)*CFG.vscale)){const a=Math.random()*2*Math.PI;o.vel=[Math.cos(a)*PHYS.v(L.DRIFT)*CFG.vscale,Math.sin(a)*PHYS.v(L.DRIFT)*CFG.vscale,0];o.facing=[Math.cos(a),Math.sin(a),0];}continue;}
+      if(o.dest){if(objFly(o,dt,PHYS.v(L.FLY)*CFG.vscale)){const a=simRand()*2*Math.PI;o.vel=[Math.cos(a)*PHYS.v(L.DRIFT)*CFG.vscale,Math.sin(a)*PHYS.v(L.DRIFT)*CFG.vscale,0];o.facing=[Math.cos(a),Math.sin(a),0];}continue;}
       o.pos[0]+=o.vel[0]*dt;o.pos[1]+=o.vel[1]*dt;
       o.burnCd-=dt;if(o.burnCd<=0){o.burnCd=PHYS.t(L.BURN_EVERY);o.burnT=PHYS.t(L.BURN);}
       if(o.burnT>0){o.burnT-=dt;o.flame=1;}else o.flame=0;

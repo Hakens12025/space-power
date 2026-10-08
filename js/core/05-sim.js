@@ -5,6 +5,12 @@
    RF5: 另插 S3b stepFireControl / S17b stepFireControlPost → weapons/58(火控序列)。两段夹住 S4 与 S14-S17:
    前段必须早于 S4(它写的 lockedTarget 同时是战斗转向的转向指令,同 tick 就要被机头归瞄消费)与 S14-S17;
    后段必须紧跟 S14-S17(只有这一段能看到本 tick 的发射结果)且早于 S18 靶场AI。详细理由见各自行内注释。 */
+const SH_F=new Float64Array(1),SH_U=new Uint32Array(SH_F.buffer);
+function simHash(){ // 2026-10-08 联机第 2 步:模拟状态的校验和(按浮点的位,差最后一位也不同)—— 舰船、弹丸、民船 / 诱饵 / 浮标、随机流;锁步时两边隔一阵对一次,不同 = 分叉
+  let h=0x811c9dc5;const f=x=>{SH_F[0]=+x||0;h=Math.imul(h^SH_U[0],16777619);h=Math.imul(h^SH_U[1],16777619);},v=a=>{f(a[0]);f(a[1]);f(a[2]);};
+  f(simTime);f(SIMR.s);for(const s of ships){v(s.pos);v(s.vel);v(s.facing);f(s.hp);f(s.sh||0);f(s.dead?1:0);f(s.flame||0);}
+  for(const p of projectiles){v(p.pos);if(p.vel)v(p.vel);f(p.count||0);f(p.done?1:0);}for(const o of rockObjs()){v(o.pos);v(o.vel);f(o.dead?1:0);f(o.hp||0);}
+  return (h>>>0).toString(16).padStart(8,'0');}
 function stepSim(dt){
   detT+=dt;if(detT>=SENS.TICK){const el=detT;detT=0;detectLoop(el);} // 感知结算(每模拟秒一次,阵营对称)。SN4: 节拍本身一点没变,变的是要把【距上次结算实际过去了多少模拟秒】交给 detectLoop —— 新内核的驻留衰减是解析跳步(x←x·D^dt + g·(1−D^dt)/(1−D)),传 CFG.step=0.02 会把一整秒的衰减当成 0.02 秒算、驻留一路涨穿,传常数 1 又会在倍速/长帧下把真实经过的时间抹平。detT 归零【之前】先存进 el,它就是那个真实秒数(恒 ≥ SENS.TICK,x50 倍速下约 1.00~1.02);阈值也从裸字面量 1 改读 SENS.TICK,节拍从此只有表里那一个定义点
   netAllocT=(netAllocT||0)+dt;if(netAllocT>=0.5){netAllocT=0;reassignNets('blue');reassignNets('red');} // DS147:智能目标分配每0.5s平衡(仅link网按需求)

@@ -197,7 +197,7 @@ function fireMissiles(shooter,target,n){ // 导弹齐射:受发射单元(同时�
   for(let k=0;k<rounds;k++){
     const gid=++missileGroupSeq;
     const lane=k-(rounds-1)/2;
-    const off=(lane*100+(Math.random()-0.5)*80)*CFG.scale; // 100km/道 + 抖动。2026-09-26 x1/5(单局地图):原 500 / 400
+    const off=(lane*100+(simRand()-0.5)*80)*CFG.scale; // 100km/道 + 抖动。2026-09-26 x1/5(单局地图):原 500 / 400
     const pvPeak=baseVPeak;
     const pDecel=(pvPeak*pvPeak-vTerm*vTerm)/(2*MSL_A); // DS190:减速点按 150 km/s² 反推(仍用 200 算会晚刹车→到点速度收不回 vTerm)
     nets.get(netId).groups.push(gid);

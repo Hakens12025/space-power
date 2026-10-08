@@ -75,7 +75,10 @@ const CFG={
 CFG.macSpd*=CFG.vscale; // 2026-10-05 用户:主炮弹速也跟统一速度旋钮(物理 1000 km/s x vscale)
 
 /* ================= 3D 向量工具 ================= */
-function gaussRand(){let u=0,v=0;while(u===0)u=Math.random();while(v===0)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);} // Box-Muller,一次一个。全库唯一一份(2026-09-28 从 weapons/52 挪来,sensors/24 的误差状态也用它)
+const SIMR={s:1}; // 2026-10-08 联机第 2 步:模拟里的随机数一律走这条种子流(mulberry32)—— 同种子 + 同操作 ⇒ 两边逐位相同(锁步要的);画面装饰、玩家编号照用 Math.random
+function simSeed(n){SIMR.s=(n>>>0)||1;} // 91-init 每局开头按对局种子定(靶场随机)
+function simRand(){let t=(SIMR.s=(SIMR.s+0x6D2B79F5)|0);t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296;}
+function gaussRand(){let u=0,v=0;while(u===0)u=simRand();while(v===0)v=simRand();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);} // Box-Muller,一次一个。全库唯一一份(2026-09-28 从 weapons/52 挪来,sensors/24 的误差状态也用它)
 const V={
   add:(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]],
   sub:(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]],

@@ -172,7 +172,7 @@ function rangeTargetAI(dt){ // 每 tick 跑一次,调用点在 stepSim 的 enemy
       t.rgEvT=(t.rgEvT||0)-dt;
       if(t.rgEvT<=0||!t.orders.length){ // 到点换向,或已经走到上一个点(orders 被 shift 空)就立刻换新点
         t.rgEvT=c.evadeT;
-        const a=Math.random()*Math.PI*2,r=Math.sqrt(Math.random())*c.evadeR; // sqrt 让随机点在圆内均匀分布,不是往圆心堆
+        const a=simRand()*Math.PI*2,r=Math.sqrt(simRand())*c.evadeR; // sqrt 让随机点在圆内均匀分布,不是往圆心堆
         const an=t.rangeAnchor||t.pos;
         t.orders=[{pos:[an[0]+Math.cos(a)*r,an[1]+Math.sin(a)*r,an[2]],type:'stop'}];
         t.brake=false;t.turnTarget=null;

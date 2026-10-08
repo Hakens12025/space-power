@@ -10,7 +10,7 @@ function initFleet(){
   selected=[];formations={};projectiles=[];  // FL1:编组名册层已删,换局要清的是编队本身(formations['1'..'4'])
   // KIMI146:换局全量重置战斗状态。原只重置上面4个,导致:①来袭走廊引用旧局弹丸(done永不置位→橙锥永不消失)
   // ②victoryShown/defeatShown不重置→上一局歼灭后,新一局不再报胜/败 ③nets/ESM/导弹选中残留旧局引用
-  simTime=0;
+  simTime=0;simSeed(env.match&&MATCH.seed?Math.imul(MATCH.seed,2654435761):Math.floor(Math.random()*4294967296)); // 2026-10-08 联机第 2 步:模拟的随机数按对局种子起流(core/00 simRand;靶场照旧每次不同)
   hitFX=[];ciwsFX=[];shieldFX=[];nets.clear();
   if(typeof SHELL_TR!=='undefined'){SHELL_TR.blue.length=0;SHELL_TR.red.length=0;} // 2026-09-28 炮弹来路记录随局清空
   if(typeof MSL_PRED!=='undefined')MSL_PRED.length=0; // 2026-09-30 推测弹标随局清空

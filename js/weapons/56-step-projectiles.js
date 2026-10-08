@@ -287,7 +287,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 导弹:继承载机速度+暴力
         for(const q of projectiles){
           if(q.type!=='decoy'||q.done)continue;
           if(V.len(V.sub(q.pos,p.pos))<4000*CFG.scale){ // 2026-09-26 x1/5(单局地图):原 20000
-            if(Math.random()<0.3){p.target=q;q.dead=false;} // 勾走:目标=诱饵实体(补dead字段,转移分支不误判失效;诱饵done时导弹同毁)
+            if(simRand()<0.3){p.target=q;q.dead=false;} // 勾走:目标=诱饵实体(补dead字段,转移分支不误判失效;诱饵done时导弹同毁)
             break;
           }
         }
@@ -378,13 +378,13 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 导弹:继承载机速度+暴力
           const d0=V.len(V.sub(x.pos,p.pos));
           // 外圈由拦截导弹实体负责(飞行中拦截);命中时只剩内圈近防炮
           if(ciws.inner>0&&d0<ciws.inner){ // 内圈:近防炮(免费,近距离才开火)
-            surv*=1-Math.random()*ciws.innerIntercept*ov;
+            surv*=1-simRand()*ciws.innerIntercept*ov;
           }
         }
         // 干扰弹脱锁(v125):n颗被勾走→脱锁(不出伤害/不消失/继续飞可复锁),剩下surv颗命中;复锁靠转弯耗燃料(燃料多能再打)
         let decoy=0;
         const cr=(p.target&&p.target.chaffRate)||0;
-        for(let k=0;k<(p.count||16);k++){if(Math.random()<cr)decoy++;}
+        for(let k=0;k<(p.count||16);k++){if(simRand()<cr)decoy++;}
         const hitCount=(p.count||16)-decoy; // 未脱锁的命中颗
         const survHit=Math.max(0,Math.round(hitCount*surv)); // 内圈近防再拦一层
         if(hitCount>survHit)spawnCiwsFX(p.pos,hitCount-survHit,p.shooter,p.target); // 2026-09-28 近防炮打掉的那几颗炸小火花(render/83)
@@ -450,7 +450,7 @@ function stepInterceptorProj(p,dt){ // 拦截导弹(v114):燃料模式可出远�
         const hitRate=Math.min(1,Math.max(0.12,0.45-Math.min(latV,6000)/6000*0.33)*(p.hitMul||1)); // 直线0.45 / 高速规避~0.12。RANGE1 末尾乘弹上 hitMul(靶场"拦截弹命中率"旋钮,发射时由 fireInterceptor 烘焙进弹丸);外层 min(1,…) 防旋钮开到 2.0× 时概率越界
         const maxKill=Math.min(p.count||16,p.target.count||16); // 拦截弹颗数 vs 来袭颗数
         let killed=0;
-        for(let k=0;k<maxKill;k++){if(Math.random()<hitRate)killed++;}
+        for(let k=0;k<maxKill;k++){if(simRand()<hitRate)killed++;}
         if(killed>0){
           const beforeCnt=p.target.count||16; // v119:按拦截前颗数等比缩放,修二次衰减
           p.target.count=Math.max(0,beforeCnt-killed);
