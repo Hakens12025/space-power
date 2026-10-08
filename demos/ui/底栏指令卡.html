@@ -42,6 +42,10 @@ html,body{margin:0;height:100%;background:var(--void);color:var(--txt);font-fami
 .bars{display:flex;flex-direction:column;gap:3px;margin-top:4px;width:110px}
 .hb{height:4px;background:var(--srf-sunk);border-radius:1px;overflow:hidden}
 .hb i{display:block;height:100%}
+.mrows{display:flex;flex-direction:column;gap:2px;margin-top:3px}
+.mrow{display:flex;align-items:center;gap:6px}
+.mrow .hb{width:90px;flex:none}
+.mrow span{font-size:var(--fs-micro);color:var(--txt-dim);line-height:12px;white-space:nowrap}
 /* 指令卡 */
 .card{display:flex;gap:6px}
 .wb{position:relative;width:114px;height:66px;background:var(--srf-raise);border:1px solid var(--line-ctl);border-radius:var(--r-sm);padding:5px 6px 4px;cursor:pointer;display:flex;flex-direction:column;gap:3px;user-select:none}
@@ -161,8 +165,8 @@ function wbBuoy(L){const B=L.filter(s=>CLS[s.cls].buoys>0);if(!B.length)return w
    +'<div class="cells">'+B.flatMap(s=>Array.from({length:CLS[s.cls].buoys},(_,i)=>i<s.buoys?'<i class="ok"></i>':'<i></i>')).join('')+'</div>'
    +'<div class="rd"><span>余 '+n+'</span><span class="dim">个</span></div></div>';}
 function shipBlock(L){const s=L[0],c=CLS[s.cls];
-  if(L.length>1)return '<div class="sec ship" data-spec="1"><div><div class="nm">'+L.length+' 艘<span class="cl">'+L.map(x=>CLS[x.cls].nm).join(' · ')+'</span></div>'
-    +'<div class="bars">'+L.map(x=>'<div class="hb"><i style="width:'+Math.round(x.hp/CLS[x.cls].hp*100)+'%;background:var(--state-ok)"></i></div>').join('')+'</div></div></div>';
+  if(L.length>1)return '<div class="sec ship" data-spec="1"><div><div class="nm">'+L.length+' 艘</div>' // 多选:每条血条右边写它是哪艘(用户:不要统一放上面)
+    +'<div class="mrows">'+L.map(x=>'<div class="mrow"><div class="hb"><i style="width:'+Math.round(x.hp/CLS[x.cls].hp*100)+'%;background:var(--state-ok)"></i></div><span>'+x.name+'</span></div>').join('')+'</div></div></div>';
   return '<div class="sec ship" data-spec="1"><canvas id="port" width="144" height="80"></canvas><div><div class="nm">'+s.name+'<span class="cl">'+c.nm+' · '+c.tier+'</span></div>'
    +'<div class="bars"><div class="hb" title="结构"><i style="width:'+Math.round(s.hp/c.hp*100)+'%;background:var(--state-ok)"></i></div><div class="hb" title="护盾"><i style="width:'+Math.round(s.sh/c.sh*100)+'%;background:var(--acc)"></i></div></div></div></div>';}
 function sideBlock(L){const s=L[0],rl=({silent:'静默',paint:'发射',pulse:'脉冲',jam:'干扰'});const rm=L.every(x=>x.radar===s.radar)?rl[s.radar]:'混合';
