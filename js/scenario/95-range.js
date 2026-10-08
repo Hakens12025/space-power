@@ -72,11 +72,11 @@ const RANGE_KNOBS=[
   {k:'ecmPower',   nm:'干扰强度',   type:'num', min:0.2,max:1,step:0.1,   fmt:v=>Math.round(v*100)+'%'}, // SN4:电子对抗折进发射档的 jam 档,这一格现在是 jam 削弱【照射驻留】的强度(噪声淹的是雷达回波,淹不了红外)
 ];
 function rangeDefaults(){ // 缺省 = FF(靶用的舰种;2026-09-30 重排前叫 DD)的武器定义基线,这样面板开箱即是"未改动"的对照组。RF3 改读 weapons/51-defs(原 CLS_CIWS.DD/CLS_WPN.DD)
-  const c=(typeof WPN!=='undefined'&&WPN.ciws_core)||{innerIntercept:0.85,chaffRate:0.25};
-  const w=(typeof WPN!=='undefined'&&WPN.ciws_core)||{inter:384};
+  const c=(typeof WPN!=='undefined'&&WPN.gun_core)||{innerIntercept:0.85},f=(typeof WPN!=='undefined'&&WPN.chf_core)||{chaffRate:0.25}; // 2026-10-07 近防拆成拦截弹 / 近防炮 / 干扰弹三件(51-defs)
+  const w=(typeof WPN!=='undefined'&&WPN.icp_core)||{inter:384};
   const sn=SENS.CLS.FF; // SN4:舰种行并进 SENS.CLS(前提 3,数值表只有一份),这里一律取活表。SN2 那条纪律原样有效——绝不在本文件留手抄副本:副本会在表被换掉时原地顶上,面板照常显示旧数并把值写进一个已不存在的字段,最难查的一种静默。本文件头部那句"调用点全部带 typeof 守卫"说的是别人调 95,不是 95 调别人:rangeDefaults 只在运行期被调,而 sensors/20 在 index.html 里排在本文件之前
   return {evadeOn:false,evadeR:6000*CFG.scale,evadeT:20,speedCmd:2, // 2026-09-26 evadeR x1/5:原 30000
-    inter:w.inter,interHitMul:1,inner:c.innerIntercept,chaff:c.chaffRate,
+    inter:w.inter,interHitMul:1,inner:c.innerIntercept,chaff:f.chaffRate,
     decoyAuto:0,size:sReq(sn,'size'),stealth:sReq(sn,'stealth'),emit:1,ecmPower:sReq(sn,'ecmPower')}; // SN4:三格感知缺省跟住活表,字段没了必须当场炸——吐 undefined 会顺着 rangeClampOne 的 Number(undefined)=NaN 一路变成 NaN,经 applyRangeOne 写进靶的 size/stealth,光学亮度与雷达反射全线 NaN 而面板只显示 "NaN"。emit 缺省取索引 1(照射),与 91-init 给靶 setEmit(s,'paint') 同口径,面板开箱即是"未改动"的对照组。⚠ 失败形态是【开局白屏】不是每帧一个异常:loadRangeCfg 在 init() 里、排在 requestAnimationFrame 之前,这里抛错会让 init 整个中止
 }
 function rangeClampOne(src){ // 逐字段钳位。localStorage 里的值可能被手改或来自旧版本:一个 NaN 顺着 speedCmd → cruiseOf → steerToVel 传进运动内核,表现是靶乱飞且一声不吭
@@ -135,7 +135,7 @@ function applyRangeOne(t,c,resetStock){
   if(resetStock)t.interceptor=c.inter;
   else t.interceptor=Math.min(t.interceptor||0,c.inter); // 只往下钳(上限调小了库存要跟着降),绝不上补
   t.interHitMul=c.interHitMul;              // fireInterceptor 发射时烘焙进弹丸的 hitMul
-  if(t.ciws)t.ciws.innerIntercept=c.inner;  // 逐靶可调:命中判定读的是 ciwsOf(x),而 ciwsOf 实例优先(makeShip 已把 ciws 烘焙到实例),写实例即刻生效
+  if(t.gun)t.gun.innerIntercept=c.inner;    // 逐靶可调:命中判定读的是 gunOf(x),实例优先(makeShip 已把近防炮参数烘焙到实例 s.gun,每艘一份),写实例即刻生效
   t.chaffRate=c.chaff;                      // 命中瞬间逐颗掷骰读的就是舰上字段
   t.size=c.size;t.stealth=c.stealth;        // SN4:体型同时喂光学亮度与雷达反射,隐身只乘雷达反射——两格合起来决定蓝方定不定得出它的位置
   setEmit(t,SENS.EMIT_MODES[c.emit]);       // SN4:发射档唯一写入口。c.emit 是【索引】,索引→模式的映射只有 SENS.EMIT_MODES 一份;越界索引会让 setEmit 当场抛,不静默落成静默档

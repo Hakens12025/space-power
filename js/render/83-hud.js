@@ -131,7 +131,7 @@ function drawCiwsFx(){
   const lw=dtw>0&&!adminMode&&typeof llOnNow==='function'&&llOnNow(),MV=CIWS_MV;MV.length=0;if(lw)for(const p of projAll())if(p.type==='missile'&&p.shooter&&p.shooter.side===VIEW&&p.llR)MV.push(p); // LL9 对方的船开近防:按我方看到的它(最新影像)和我方导弹在那一刻的位置判(连已消失的,那一刻还在飞)
   if(dtw>0)for(const x of ships){
     const fo=lw&&x.side!==VIEW,L=fo?contactLook(x,VIEW):x; // LL9 fo = 对方的船:沉没、在不在开火、朝哪开都读影像(沉的光到之前照样开;关开关 / GM / 自己的读本体)
-    if(!L||L.dead||x.ciwsGunOn===false)continue;const k=ciwsOf(x);if(!k||!(k.inner>0))continue; // 2026-09-29 曳光 = 近防炮,看它自己的开关
+    if(!L||L.dead||x.ciwsGunOn===false)continue;const k=gunOf(x);if(!k||!(k.inner>0))continue; // 2026-09-29 曳光 = 近防炮,看它自己的开关
     let m=null,mx=0,my=0,md=k.inner*k.inner;
     if(!fo){for(const p of MS){if(p.shooter.side===x.side)continue;const dx=p.pos[0]-x.pos[0],dy=p.pos[1]-x.pos[1],d=dx*dx+dy*dy;if(d<md){md=d;m=p;mx=p.pos[0];my=p.pos[1];}}}
     else{const te=L.llT,lag=2*LL_CFG.BMAX*LL_C*(simTime-te)+k.inner,b=LL.tmp; // 预筛:影像与弹在 te 的位置各离此刻不超过 BMAX 倍光行距离(预筛不改结果)
@@ -468,7 +468,7 @@ function drawHoverRings(){
     const p=toScreen(s.pos[0],s.pos[1]);
     if(hoverRing==='mac'){ring(p,macEffRange(s),'主炮 50% ≈ '+Math.round(macEffRange(s)/1000)+'k');ring(p,macRangeAt(s,0.1),'主炮 10% ≈ '+Math.round(macRangeAt(s,0.1)/1000)+'k');} // WR1:没有射程门,画两档命中率的距离
     else if(hoverRing==='msl')ring(p,mslReach(s),'导弹 射程 ≈ '+Math.round(mslReach(s)/1000)+'k(中段熄火滑行)'); // WR1
-    else if(hoverRing==='ciws'||hoverRing==='ciwsMsl'||hoverRing==='ciwsGun'){const c=ciwsOf(s);if(hoverRing!=='ciwsGun')ring(p,c.outer,'外圈拦截 '+Math.round(c.outer/1000)+'k');if(hoverRing!=='ciwsMsl')ring(p,c.inner,'内圈 '+Math.round(c.inner/1000)+'k');} // 2026-09-29 近防导弹只画外圈、近防炮只画内圈
+    else if(hoverRing==='ciws'||hoverRing==='ciwsMsl'||hoverRing==='ciwsGun'){const c=ciwsRingsOf(s);if(hoverRing!=='ciwsGun')ring(p,c.outer,'外圈拦截 '+Math.round(c.outer/1000)+'k');if(hoverRing!=='ciwsMsl')ring(p,c.inner,'内圈 '+Math.round(c.inner/1000)+'k');} // 2026-09-29 近防导弹只画外圈、近防炮只画内圈
     else if(hoverRing==='emit'&&typeof actRangeOf==='function') // EM1-B:开了能照多远(按【开着照射】算,不管此刻开没开)。2026-09-29 用户:雷达范围只画照射圈(「被听见」圈与静默交叉定位圈去掉)
       ring(p,actRangeOf(s),'雷达 '+Math.round(actRangeOf(s)/1000)+'k(对标准目标)'+(s.emitMode==='silent'?' · 现在静默':''));
   }

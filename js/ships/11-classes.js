@@ -9,9 +9,11 @@ const CLS_ALIAS={CRUISER:'CA',FRIGATE:'FF',SCOUT:'FF'}; // TIER1 旧舰种名别
 function normCls(c){return CLS_ALIAS[c]||(CLS_MOB[c]?c:'FF');} // TIER1 舰种归一化:只在 makeShip 运行期调用,不在顶层求值,故不受同文件里 CLS_MOB 定义靠后的影响
 const SHIP_VK=CFG.vscale/0.7; // 2026-10-05 用户:舰船回到 0685ea7 那组实际值(下面写的就是旋钮 0.7 时的实际值);仍跟统一速度旋钮,旋钮动了按比例走。原因:出生速度令写死 800 的 bug 让蓝方一直 80 km/s,之前几轮降速都是冲着它去的
 const CLS_MOB={ // 舰种差异化机动:转向率 / 推进加速度(太空无速度上限,持续加速) v119:drift参数已随旧内核删除
-  FF:{turnRate:PHYS.w(0.078),thrust:PHYS.a(0.24)*SHIP_VK,speedGears:[0,PHYS.v(18.75)*SHIP_VK,PHYS.v(37.5)*SHIP_VK,PHYS.v(60)*SHIP_VK,-1]}, // 2026-10-06 用户:加速度 x0.8(0.3 → 0.24 km/s²)。2026-10-05 用户:速度档 x1.5(12.5 / 25 / 40 → 18.75 / 37.5 / 60),加速度不动。同日:用回 0685ea7 的实际值 0.3 km/s²、12.5 / 25 / 40 km/s(撤掉同日的 x0.8 / x1.1 与旋钮 x0.7)。2026-10-04 用户(第二次):加减速 x0.5(0.6 → 0.3 km/s²)、速度档 x0.5(25 / 50 / 80 → 12.5 / 25 / 40 km/s),转向不动。同日第一次:加减速 x0.6(1.0 → 0.6)。2026-10-03 用户(推荐档):加减速 x4(0.25 → 1.0 km/s²,约 102 g)、转向 x3(1.5 → 4.5°/s);DD / CL 克隆自动跟上。2026-10-02 加减速 x5(0.05 → 0.25) // 2026-09-26 曾降到 1/4(5.1 g) // TIER1 原 FRIGATE 护卫舰:均衡(基准档),数值原样搬;SCOUT 折进 DD,其 0.4/25/[0,300,600,1000] 一并退役
+  FF:{turnRate:PHYS.w(0.078),thrust:PHYS.a(0.192)*SHIP_VK, // 2026-10-07 用户:加速度再 x0.8(0.24 → 0.192 km/s²)
+     speedGears:[0,PHYS.v(18.75)*SHIP_VK,PHYS.v(37.5)*SHIP_VK,PHYS.v(60)*SHIP_VK,-1]}, // 2026-10-06 用户:加速度 x0.8(0.3 → 0.24 km/s²)。2026-10-05 用户:速度档 x1.5(12.5 / 25 / 40 → 18.75 / 37.5 / 60),加速度不动。同日:用回 0685ea7 的实际值 0.3 km/s²、12.5 / 25 / 40 km/s(撤掉同日的 x0.8 / x1.1 与旋钮 x0.7)。2026-10-04 用户(第二次):加减速 x0.5(0.6 → 0.3 km/s²)、速度档 x0.5(25 / 50 / 80 → 12.5 / 25 / 40 km/s),转向不动。同日第一次:加减速 x0.6(1.0 → 0.6)。2026-10-03 用户(推荐档):加减速 x4(0.25 → 1.0 km/s²,约 102 g)、转向 x3(1.5 → 4.5°/s);DD / CL 克隆自动跟上。2026-10-02 加减速 x5(0.05 → 0.25) // 2026-09-26 曾降到 1/4(5.1 g) // TIER1 原 FRIGATE 护卫舰:均衡(基准档),数值原样搬;SCOUT 折进 DD,其 0.4/25/[0,300,600,1000] 一并退役
   /* 2026-09-26 用户:"舰船的加速减速度我们需要调整,使其加减速更慢" —— 推进加速度降到 1/4(原 DD 20 / CA 15 km/s²);驱逐舰到高速档 800 km/s 约 160 s。这一轮只看速度,不动武器与闪避的数 */
-  CA:{turnRate:PHYS.w(0.048),thrust:PHYS.a(0.18)*SHIP_VK,speedGears:[0,PHYS.v(15)*SHIP_VK,PHYS.v(30)*SHIP_VK,PHYS.v(52.5)*SHIP_VK,-1]}, // 2026-10-06 用户:加速度 x0.8(0.225 → 0.18 km/s²)。2026-10-05 用户:速度档 x1.5(10 / 20 / 35 → 15 / 30 / 52.5),加速度不动。同日:用回 0685ea7 的实际值 0.225 km/s²、10 / 20 / 35 km/s(撤掉同日的 x0.8 / x1.1 与旋钮 x0.7)。2026-10-04 用户(第二次):加减速 x0.5(0.45 → 0.225 km/s²)、速度档 x0.5(20 / 40 / 70 → 10 / 20 / 35 km/s),转向不动。同日第一次:加减速 x0.6(0.75 → 0.45)。2026-10-03 用户(推荐档):加减速 x4(0.1875 → 0.75 km/s²)、转向 x3(0.9 → 2.75°/s);BB / CV 克隆自动跟上。2026-09-26 物理单位:速度档 20 / 40 / 70 km/s // TIER1 原 CRUISER 巡洋舰:重,加速适中;DS148速度档按舰种(巡洋偏慢) // 2026-10-02 用户:加减速能力 x5(0.0375 → 0.1875,物理 18.7 g;BB / CV 克隆自动跟上);转向 / 速度档不动
+  CA:{turnRate:PHYS.w(0.048),thrust:PHYS.a(0.144)*SHIP_VK, // 2026-10-07 用户:加速度再 x0.8(0.18 → 0.144 km/s²)
+     speedGears:[0,PHYS.v(15)*SHIP_VK,PHYS.v(30)*SHIP_VK,PHYS.v(52.5)*SHIP_VK,-1]}, // 2026-10-06 用户:加速度 x0.8(0.225 → 0.18 km/s²)。2026-10-05 用户:速度档 x1.5(10 / 20 / 35 → 15 / 30 / 52.5),加速度不动。同日:用回 0685ea7 的实际值 0.225 km/s²、10 / 20 / 35 km/s(撤掉同日的 x0.8 / x1.1 与旋钮 x0.7)。2026-10-04 用户(第二次):加减速 x0.5(0.45 → 0.225 km/s²)、速度档 x0.5(20 / 40 / 70 → 10 / 20 / 35 km/s),转向不动。同日第一次:加减速 x0.6(0.75 → 0.45)。2026-10-03 用户(推荐档):加减速 x4(0.1875 → 0.75 km/s²)、转向 x3(0.9 → 2.75°/s);BB / CV 克隆自动跟上。2026-09-26 物理单位:速度档 20 / 40 / 70 km/s // TIER1 原 CRUISER 巡洋舰:重,加速适中;DS148速度档按舰种(巡洋偏慢) // 2026-10-02 用户:加减速能力 x5(0.0375 → 0.1875,物理 18.7 g;BB / CV 克隆自动跟上);转向 / 速度档不动
 };
 const CLS_STRUCT={ // RF3 舰体表:结构(非武器数据,从原 CLS_WPN 拆出;武器数值已移 weapons/51-defs 的 WPN 定义表)
   FF:{hp:550, shield:200}, // 2026-09-29 shield = 护盾(用户:舰队护盾,血量没船体高;weapons/55) // TIER1 原 FRIGATE 护卫
@@ -21,7 +23,7 @@ const CLS_STRUCT={ // RF3 舰体表:结构(非武器数据,从原 CLS_WPN 拆出
 /* FM3-2:原先这里还有一张"舰种战术角色表"(DD 屏护 / CA·BB·CV 主力线),给 40-slots 旧弧线阵与 42/44 换槽分桶用。
    条令站位一路改到 FM4 的能力插槽之后,站位需求按实例配装字段现算(39-fmcaps 的 9 维能力),那张表连同它的名字一起删了 —— 不要再按舰种写角色表。 */
 const CLS_VALUE={FF:2,DD:2,CA:3,BB:3,CV:3,CL:2}; // TIER1 舰种威胁权重 TODO(TIER-BAL)。注意 3 在这里是个阈值:07-missiles.js:297 伏击雷 trigMode 'big' 按 shipValue(s)<3 放行,改这里的数会静默改变伏击名单
-function shipValue(s){return (s&&s.value)||CLS_VALUE[s&&s.cls]||1;} // TIER1 威胁权重查询:实例优先(s.value 待 P2 tier 烘焙,现阶段恒走表),未知舰种回 1——与 ciwsOf/hasMAC 的实例优先口径对齐
+function shipValue(s){return (s&&s.value)||CLS_VALUE[s&&s.cls]||1;} // TIER1 威胁权重查询:实例优先(s.value 待 P2 tier 烘焙,现阶段恒走表),未知舰种回 1——与 icpOf/gunOf/hasMAC 的实例优先口径对齐
 function hasMAC(s){return ((s&&s.macDmg)||0)>0;} // TIER1 是否装备 主炮:按实例 macDmg>0 判定(CV 的 macDmg=0 自动被排除),等价于旧的 cls==='CRUISER'||cls==='FRIGATE'
 /* ===== TIER1 BB/CV 占位:显式克隆 CA,克隆语句本身就是"这不是设计过的数值"的声明;grep TODO(TIER-BAL) 一次全能捞出来 ===== */
 CLS_MOB.BB={...CLS_MOB.CA,speedGears:CLS_MOB.CA.speedGears.slice()};   // TODO(TIER-BAL) 战列机动待标定;speedGears 单独拷副本,否则 BB/CV/CA 共用同一个数组引用
@@ -124,8 +126,8 @@ function makeShip(cls,name,pos,facing,vel,side,tier){ // TIER1 加第 7 参 tier
     guideChan:st.guideChan, // SN1 数据链引导通道(来源 weapons/51-defs 的 CLS_LINK,CA 3网/DD 1网):同时引导超自导范围的导弹数。原来的 ||4 是个假兜底 —— DD 真值就是 1,字段一旦丢了它会把 DD 悄悄涨到 4 而不是报错
     chaffRate:(lw.chaffRate!==undefined?lw.chaffRate:0.25), // 干扰弹(v119):数值概念——命中时导弹再丢随机数判被勾走。!==undefined 口径:chaffRate 是 'prob' 字段、钳到 [0,1] 就明确允许 0(本舰不带干扰弹),|| 会把这个合法 0 悄悄换成 DD 的 0.25(等于给 CA/BB/CV 凭空调强)
     value:st.value, // TIER1 威胁权重烘焙到实例:shipValue(s) 已是实例优先,落地后 04-targeting 网分配与 07:297 伏击雷阈值才吃得到 tier
-    weapons:lw.weapons, // RF3 武器清单(配装解析产物):[{kind:'mac'|'msl'|'ciws',label}]——88-selpanel 由它驱动生成底栏按钮/规格条/右栏状态
-    ciws:{outer:lw.outer,outerIntercept:lw.outerIntercept,inner:lw.inner,innerIntercept:lw.innerIntercept}, // TIER1 近防参数烘焙到实例(ciwsOf 实例优先):07:489 命中判定 / 07:627 每 tick 近防 / 11:394 每帧范围圈三条热路径不再回表,tier 才进得来
+    weapons:lw.weapons, // RF3 武器清单(配装解析产物):[{kind:'mac'|'msl'|'icp'|'gun'|'chaff',label}]——88-selpanel 由它驱动生成底栏按钮/规格条/右栏状态
+    icp:lw.wp.icp||null, gun:lw.wp.gun||null, // 2026-10-07 拦截弹 / 近防炮各自的参数烘焙到实例(weapons/51-ciws 的 icpOf / gunOf 实例优先;原来混在一个 ciws 里)
     orders:[], st:'待机', brake:false, crawling:false, flame:0, sideFlame:0, speedCmd:sg[3], turnTarget:null, // 2026-10-05 用户:改了速度还是 80 km/s —— 出生速度令原写死 800(= 旧驱逐高速档),现取本舰高速档;蓝方没有选档的界面,一直吃这个数
     formation:null,
     roe:'free', roeCd:0, // v125 ROE交战规则:free自由开火/tight克制(被攻击才还击)/hold锁定(禁止开火);roeCd=受击还击冷却

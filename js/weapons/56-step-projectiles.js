@@ -368,17 +368,17 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 导弹:继承载机速度+暴力
           }
         }
         // 过载:同扇面集中攻击越吃力 + 被攻击扇面越多整体越吃力(v121:跨扇面0.5→1.5,多方向包抄明显强于单方向堆)
-        const ov=ciwsSectorOverload(ng,sects.size);
         // DS155 扇面伤害倍增:拦截层的扇面差异被外圈拦截弹/干扰弹稀释(B4实测四方vs单方向≈1.01),
         // 伤害层直接放大——每多一个受击扇面+50%伤害(侧翼洞穿装甲),设计意图1.5真体现
         const sectorDmgMult=1+Math.max(0,sects.size-1)*0.5;
         for(const x of ships){ // 命中点附近每艘近防舰逐层拦截(拦截率×过载因子)
           if(x.side===p.shooter.side||x.dead)continue;
-          const ciws=ciwsOf(x);if(!ciws||x.ciwsGunOn===false)continue; // 2026-09-29 近防炮开关(ciwsGunOn):关 = 内圈不参与;外圈拦截弹看 ciwsOn(57) // TIER1 近防回表改访问器(导弹命中判定热路径,tier 影响防空圈的必经通路)
+          const g=gunOf(x);if(!g||x.ciwsGunOn===false)continue; // 2026-09-29 近防炮开关(ciwsGunOn):关 = 内圈不参与;外圈拦截弹看 ciwsOn(57) // TIER1 近防回表改访问器(导弹命中判定热路径,tier 影响防空圈的必经通路)
           const d0=V.len(V.sub(x.pos,p.pos));
           // 外圈由拦截导弹实体负责(飞行中拦截);命中时只剩内圈近防炮
-          if(ciws.inner>0&&d0<ciws.inner){ // 内圈:近防炮(免费,近距离才开火)
-            surv*=1-simRand()*ciws.innerIntercept*ov;
+          if(g.inner>0&&d0<g.inner){ // 内圈:近防炮(免费,近距离才开火);打掉的比例 = 随机打折 x 命中率 x 过载(gun_*)
+            const o=gunInCircle(x,g,p.shooter.side),ov=gunOverload(g,Math.max(1,o[0]),Math.max(1,o[1])),rv=g.rand>0?(1-g.rand+g.rand*simRand()):1; // 2026-10-07 过载按这艘船近防圈里同时有几组算(gun_* ovN)
+            surv*=1-rv*g.innerIntercept*ov;
           }
         }
         // 干扰弹脱锁(v125):n颗被勾走→脱锁(不出伤害/不消失/继续飞可复锁),剩下surv颗命中;复锁靠转弯耗燃料(燃料多能再打)
@@ -408,7 +408,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 导弹:继承载机速度+暴力
 function stepInterceptorProj(p,dt){ // 拦截导弹(v114):燃料模式可出远门;主动拦截;1颗拦1颗,消耗自身
       p.age=(p.age||0)+dt;
       if(p.fuel<=0){p.done=true;return;} // 燃料耗尽自毁(v118:燃料=寿命,耗尽即失效)
-      {const h=icHome(p),hx=p.pos[0]-h[0],hy=p.pos[1]-h[1],hz=p.pos[2]-h[2];if(hx*hx+hy*hy+hz*hz>(p.icR2||Infinity)){p.done=true;return;}} // 10-07 出了发射舰的防区就自毁(52 INT_ZONE_K)
+      {const h=icHome(p),hx=p.pos[0]-h[0],hy=p.pos[1]-h[1],hz=p.pos[2]-h[2];if(hx*hx+hy*hy+hz*hz>(p.icR2||Infinity)){p.done=true;return;}} // 10-07 出了发射舰的防区就自毁(52 INT_ZONE_R2)
       const f0=p.fuel; // 10-07 油至少按时间烧(燃料 = 寿命;原来到顶速后直飞不耗油)
       if(!p.target||p.target.done||((p.target.count??1)<=0)){ // 目标失效/拦完:重选前方目标;KIMI146修:诱饵弹无count字段,(count||0)<=0恒真→每tick重复重选(??1后只在done时才重选)
         p.target=findInterceptorTarget(p);
@@ -421,33 +421,33 @@ function stepInterceptorProj(p,dt){ // 拦截导弹(v114):燃料模式可出远�
         if(im&&im!==p.target){const a=simTime-im.llT;gp=[im.pos[0]+im.vel[0]*a,im.pos[1]+im.vel[1]*a,im.pos[2]+im.vel[2]*a];tv=im.vel;gd=V.len(V.sub(gp,p.pos));}
         else if(!im){gp=[p.pos[0]+p.vel[0],p.pos[1]+p.vel[1],p.pos[2]+p.vel[2]];tv=MAC_V0;gd=0;}}
       const relV=[p.vel[0]-tv[0],p.vel[1]-tv[1],p.vel[2]-tv[2]];
-      const relSpd=Math.max(300,V.len(relV));
+      const relSpd=Math.max(300,V.len(relV)),w=p.wp||icpOf(p.shooter); // 2026-10-07 拦截弹参数(51-defs icp_*)
       const tLead=Math.max(0.3,gd/relSpd);
       const aim=[gp[0]+tv[0]*tLead,gp[1]+tv[1]*tLead,gp[2]+tv[2]*tLead];
       const dir=V.norm(V.sub(aim,p.pos));
       const vn=V.len(p.vel);
       // 燃料模式(v118):加速400/上限24000/燃料60s,加减速/转向都耗燃料;转向更强但更耗油
       if(p.fuel>0){
-        let dv=Math.max(-400*INT_VK*dt,Math.min(400*INT_VK*dt,24000*INT_VK-p.spd));
-        const cost=Math.abs(dv)/(400*INT_VK);
+        let dv=Math.max(-w.acc*INT_VK*dt,Math.min(w.acc*INT_VK*dt,w.vMax*INT_VK-p.spd));
+        const cost=Math.abs(dv)/(w.acc*INT_VK);
         if(cost>p.fuel){dv*=p.fuel/cost;p.fuel=0;}
         else p.fuel-=cost;
         p.spd+=dv;
       }
       let nd;
-      if(vn>1&&p.fuel>0){const cur=V.norm(p.vel);nd=V.slerp(cur,dir,Math.min(1,4.5/(1+vn/(3000*INT_VK))*dt));p.fuel=Math.max(0,p.fuel-V.angle(cur,nd)*0.8);} // 转向更强(4.5)但更耗油(0.8/rad)
+      if(vn>1&&p.fuel>0){const cur=V.norm(p.vel);nd=V.slerp(cur,dir,Math.min(1,w.turnK/(1+vn/(w.turnV*INT_VK))*dt));p.fuel=Math.max(0,p.fuel-V.angle(cur,nd)*w.turnFuel);} // 转向更强(turnK)但更耗油(turnFuel / rad)
       else if(vn>1){nd=V.norm(p.vel);}
       else nd=dir;
       if(f0-p.fuel<dt)p.fuel=Math.max(0,f0-dt);
       p.vel=[nd[0]*p.spd,nd[1]*p.spd,nd[2]*p.spd];
       p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;
       // 拦截判定:接近来袭导弹<1500 → 1颗拦1颗,逐颗概率;消耗自身;拦完继续往前拦下一个(不瞎追)
-      if(dist<1500){ // 2026-09-26 单局地图刻意不缩:拦截弹末端脱靶约 350~800km(速度 / 转向率不缩),缩到 300 实测大半拦截弹擦肩而过
+      if(dist<w.hitR){ // 拦截判定距离(icp_* hitR)。2026-09-26 单局地图刻意不缩:拦截弹末端脱靶约 350~800km(速度 / 转向率不缩),缩到 300 实测大半拦截弹擦肩而过
         const dirT=V.norm(V.sub(p.target.pos,p.pos));
         const sv=p.target.vel;
         const along=V.dot(sv,dirT);
         const latV=V.len([sv[0]-along*dirT[0],sv[1]-along*dirT[1],sv[2]-along*dirT[2]]);
-        const hitRate=Math.min(1,Math.max(0.12,0.45-Math.min(latV,6000)/6000*0.33)*(p.hitMul||1)); // 直线0.45 / 高速规避~0.12。RANGE1 末尾乘弹上 hitMul(靶场"拦截弹命中率"旋钮,发射时由 fireInterceptor 烘焙进弹丸);外层 min(1,…) 防旋钮开到 2.0× 时概率越界
+        const hitRate=Math.min(1,Math.max(w.hitMin,w.hitMax-Math.min(latV,w.hitLatV)/w.hitLatV*w.hitDrop)*(p.hitMul||1)); // 直线 hitMax / 高速规避 hitMin(icp_*)。RANGE1 末尾乘弹上 hitMul(靶场"拦截弹命中率"旋钮,发射时由 fireInterceptor 烘焙进弹丸);外层 min(1,…) 防旋钮开到 2.0× 时概率越界
         const maxKill=Math.min(p.count||16,p.target.count||16); // 拦截弹颗数 vs 来袭颗数
         let killed=0;
         for(let k=0;k<maxKill;k++){if(simRand()<hitRate)killed++;}

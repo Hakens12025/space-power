@@ -6,6 +6,7 @@
    开关语义:火控=autoEngage+roe 合一(开=free+自动索敌,关=hold+解除锁定);发射档并进「雷达」菜单(见本文件末尾);
    武器开关=macOn/mslOn/ciwsOn(按 kind 映射;近防另有 ciwsGunOn,见 CIWS_SUB)。操作作用于【全部选中蓝舰】,状态读第一艘。
    (右轨的事件流面板与它的写入点 2026-09-22 随事件系统整体删除。) */
+function mslGroupsTxt(s){const per=s.mslPer||12;return Math.floor((s.ammo||0)/per)+'组 · 每组'+per+'发';} // 2026-10-07 用户:导弹数量按组算
 function selBlue(){return selectedShips().filter(s=>s.side===ME&&!s.dead);} // 2026-10-08 选中里我方的(ME;名字沿用)
 /* kind → 开关字段/射程/hover 文案 的映射(武器机制数据从烘焙字段读,源头在 weapons/51-defs) */
 const KIND_INFO={
@@ -17,10 +18,10 @@ const KIND_INFO={
     tip:s=>`主炮(轴炮) · 散布 ${(sReq(s,'macSigma')*1000).toFixed(1)} 毫弧 · 命中率 50% ≈ ${Math.round(macEffRange(s)/1000)}k / 10% ≈ ${Math.round(macRangeAt(s,0.1)/1000)}k · 伤害${s.macDmg||0} · 装填${Math.round(SHOW.t(s.macReload||30))}s · 需火控开+机头对准+跟踪级`},
   msl:{on:'mslOn',
     range:s=>mslReach(s),
-    tip:s=>`导弹齐射 · 射程 ≈ ${Math.round(mslReach(s)/1000)}k(加速 → 熄火滑行 → 末段修正,靠数据链)· 每组${s.mslPer||12}枚×${s.cells||4}单元 · 单元装填${Math.round(SHOW.t(s.mslReload||60))}s · 需火控开+目标跟踪级`},
+    tip:s=>`导弹齐射 · 射程 ≈ ${Math.round(mslReach(s)/1000)}k(加速 → 熄火滑行 → 末段修正,靠数据链)· 库存 ${mslGroupsTxt(s)} · 一次齐射 ${s.cells||4} 组 · 单元装填${Math.round(SHOW.t(s.mslReload||60))}s · 需火控开+目标跟踪级`},
   ciws:{on:'ciwsOn',
-    range:s=>ciwsOf(s).outer,
-    tip:s=>{const c=ciwsOf(s);return `近防 · 外圈${Math.round(c.outer/1000)}k拦截弹 · 内圈${Math.round(c.inner/1000)}k近防炮 · 库存${s.interceptor}枚(被动防御,来袭才发射)`;}},
+    range:s=>ciwsRingsOf(s).outer,
+    tip:s=>{const c=ciwsRingsOf(s);return `近防 · 外圈${Math.round(c.outer/1000)}k拦截弹 · 内圈${Math.round(c.inner/1000)}k近防炮 · 库存${s.interceptor}枚(被动防御,来袭才发射)`;}},
 };
 /* 底栏规格条:舰船类数据直接读直接放,零加工;武器段按清单生成 */
 function specItems(s){
@@ -39,8 +40,8 @@ function specItems(s){
   ];
   for(const w of (s.weapons||[])){
     if(w.kind==='mac')items.push(['主炮',s.macDmg>0?(s.macDmg+'×'+Math.round(SHOW.t(s.macReload))+'s · 50%@'+Math.round(macEffRange(s)/1000)+'k'):'无']); // WR1:规格条带上命中率 50% 的距离
-    else if(w.kind==='msl')items.push(['导弹',s.ammo+'枚×'+s.cells+'组']);
-    else if(w.kind==='ciws'){const c=ciwsOf(s);items.push(['拦截弹',s.interMax+'枚'],['近防',Math.round(c.outer/1000)+'k/'+Math.round(c.inner/1000)+'k']);}
+    else if(w.kind==='msl')items.push(['导弹',mslGroupsTxt(s)],['齐射',(s.cells||0)+'组']); // 2026-10-07 用户:导弹数量按组算(「64组 · 每组12发」),一次齐射几组另列
+    else if(w.kind==='icp'){const c=ciwsRingsOf(s);items.push(['拦截弹',s.interMax+'枚'],['近防',Math.round(c.outer/1000)+'k/'+Math.round(c.inner/1000)+'k']);}
   }
   return items;
 }
@@ -92,8 +93,8 @@ function weaponRows(s){
   let h='';
   for(const w of (s.weapons||[])){
     if(w.kind==='mac')h+=`<div class="row"><span class="k">主炮</span><span class="v">${s.macCd<=0?'就绪':Math.ceil(SHOW.t(s.macCd))+'s'}</span></div>`;
-    else if(w.kind==='msl')h+=`<div class="row"><span class="k">导弹</span><span class="v">${readyCells(s)}/${s.cells}组 · 弹${s.ammo}枚</span></div>`;
-    else if(w.kind==='ciws')h+=`<div class="row"><span class="k">拦截弹</span><span class="v">${s.interceptor}/${s.interMax}枚</span></div>`;
+    else if(w.kind==='msl')h+=`<div class="row"><span class="k">导弹</span><span class="v">就绪 ${readyCells(s)}/${s.cells} · ${mslGroupsTxt(s)}</span></div>`;
+    else if(w.kind==='icp')h+=`<div class="row"><span class="k">拦截弹</span><span class="v">${s.interceptor}/${s.interMax}枚</span></div>`;
     else if(w.kind==='buoy')h+=`<div class="row"><span class="k">前出浮标</span><span class="v">${s.buoys||0}/${s.buoysMax||0}个</span></div>`; // 2026-09-27 K3
   }
   return h;
@@ -330,7 +331,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
      判据直接复用 44-orders 下命令时用的同一个 fmSameShips(RTS 语义:选中什么就是什么),
      免得"面板认它是编队、右键下令却按散船走"这种两份口径。渲染交给 87-fmbar 的 fmbStat/fmbInfo ——
      那两个函数是编队读数的唯一出处,书签栏与本面板共用,不在这里另抄一份算法。 */
-  const _F=(typeof fmSameShips==='function')?fmSameShips(sel):null;
+  const _F=(sel.length>1&&typeof fmSameShips==='function')?fmSameShips(sel):null; // 2026-10-07 单舰编队(只剩 / 只编一艘)单选时右栏照旧显示舰船读数
   if(_F&&typeof fmbStat==='function'&&typeof fmbInfo==='function'){
     const st=fmbStat(_F);
     if(st){
@@ -421,7 +422,7 @@ const WPN_CATS=[['mac','火炮'],['msl','导弹'],['laser','激光'],['ciws','�
 const RADAR_ITEMS=[['silent','静默'],['pulse','脉冲'],['paint','发射'],['jam','干扰']];
 const RADAR_TIP={silent:'静默:一点不响,只靠红外看;对方听不见我',pulse:'脉冲:雷达只照一拍 —— 照得到的接触拿到位置和速度;对方只在这一拍听得到我',paint:'发射:雷达一直照,定位最快最准、也只有它能持续跟住远处的冷目标;代价是对方在约两倍距离上一直听得见我',jam:'干扰:发射机改去造噪声,压住对方对我的照射回波;更吵,而且自己拿不到照射定位'};
 function wpnFcOn(x){return !!(x.autoEngage&&x.roe!=='hold');}
-function wpnHas(x,k){return (x.weapons||[]).some(w=>w.kind===k);}
+function wpnHas(x,k){return (x.weapons||[]).some(w=>w.kind===k||(k==='ciws'&&(w.kind==='icp'||w.kind==='gun')));} // 2026-10-07「近防」类 = 拦截弹 + 近防炮两件
 function wpnChecked(x,k){if(!wpnHas(x,k))return false;if(k==='ciws')return CIWS_SUB.every(c=>x[c[2]]!==false);const ki=KIND_INFO[k];return !!ki&&wpnFcOn(x)&&x[ki.on]!==false;}
 function wpnAnyOn(x){return wpnChecked(x,'mac')||wpnChecked(x,'msl');}
 const CIWS_SUB=[['ciwsMsl','近防导弹','ciwsOn'],['ciwsGun','近防炮','ciwsGunOn']]; // 2026-09-29 用户:近防展开两件各自勾;[菜单 id, 名字, 舰船开关字段]
@@ -437,7 +438,7 @@ function wpnClearAll(){cxWpnClear(selBlue());updateSelPanel();} // 2026-10-08 �
 function radarPulsing(x){const f=(typeof PING_FX!=='undefined')?PING_FX.get(x):null;return !!(x.pingReq||(f&&!f.done));}
 function selBuoyOk(){return (typeof selBuoy!=='undefined'&&selBuoy&&!selBuoy.dead)?selBuoy:null;} // 2026-09-29 选中的我方浮标(底栏雷达作用于它)
 function radarPick(v){const bu=selBuoyOk();if(bu){if(v==='pulse')cxObjPulse(bu);else if(typeof buoySetOn==='function')buoySetOn(bu,v==='paint');updateSelPanel();return;}const sel=selBlue();if(!sel.length)return;if(v==='pulse')cxPulse(sel);else sel.forEach(x=>setEmit(x,v));updateSelPanel();} // 2026-10-08 脉冲走命令(command/68),setEmit 本身已登记成命令
-function wpnStat(s,k){return k==='mac'?'伤害 '+(s.macDmg||0)+' · 装填 '+Math.round(SHOW.t(s.macReload||0))+'s':(k==='msl'?(s.mslPer||12)+' 枚/组 · 余 '+(s.ammo||0)+' 枚':'');}
+function wpnStat(s,k){return k==='mac'?'伤害 '+(s.macDmg||0)+' · 装填 '+Math.round(SHOW.t(s.macReload||0))+'s':(k==='msl'?'余 '+mslGroupsTxt(s):'');}
 function cmdPopEl(){
   if(CMDPOP.el)return CMDPOP.el;
   const d=document.createElement('div');d.id='cmdPop';document.body.appendChild(d);
@@ -450,7 +451,7 @@ function cmdPopEl(){
     else if(a==='force'&&v==='buoy'){hoverRing=null;tip='放浮标:点一个方向,浮标沿舰船 → 鼠标一直飞,不停,飞出地图消失(起飞那一小段点火,远处看得见,之后熄火滑行);平时被动看和听,点浮标本身 → 底栏雷达开照射(开着才会被对方听见)。右键取消';}
     else if(a==='force'){hoverRing=v;tip='强行开火:点一艘敌舰打它,或点地图上的位置(导弹 = 区域齐射,主炮 = 转向那个点开一炮);不看武器勾没勾。右键取消';}
     else if((a==='wchk'||a==='sub')&&KIND_INFO[v]&&s){hoverRing=v;tip=KIND_INFO[v].tip(s);}
-    else if(a==='csub'&&s&&wpnHas(s,'ciws')){const c=ciwsOf(s);hoverRing=v;tip=v==='ciwsMsl'?`近防导弹 · 外圈 ${Math.round(c.outer/1000)}k 拦截弹 · 库存 ${s.interceptor||0} 枚 · 来袭导弹进预警距离自动发射迎上去(消耗弹药)`:`近防炮 · 内圈 ${Math.round(c.inner/1000)}k · 打进内圈的来袭弹再过一道拦截(不耗弹药)`;}
+    else if(a==='csub'&&s&&wpnHas(s,'ciws')){const c=ciwsRingsOf(s);hoverRing=v;tip=v==='ciwsMsl'?`近防导弹 · 外圈 ${Math.round(c.outer/1000)}k 拦截弹 · 库存 ${s.interceptor||0} 枚 · 来袭导弹进预警距离自动发射迎上去(消耗弹药)`:`近防炮 · 内圈 ${Math.round(c.inner/1000)}k · 打进内圈的来袭弹再过一道拦截(不耗弹药)`;}
     else if(a==='clear'){hoverRing=null;tip='取消所有:所有武器都不勾 = 火控关、停火并解除锁定,近防也关';}
     const t=document.getElementById('cmdTip');if(t&&tip){t.style.display='block';t.textContent=tip;}});
   d.addEventListener('mouseleave',()=>{hoverRing=null;if(typeof updSelWeaponTip==='function')updSelWeaponTip();});
@@ -471,7 +472,7 @@ function cmdPopRender(){
     let sub='';const k=CMDPOP.sub;
     if(k==='buoy'){ // 2026-09-29 逐个浮标的开关删了(用户:操作入口放到浮标本身,点浮标 → 底栏雷达)
       sub='<div class="cp-col cp-sub"><div class="cp-row"><button class="btn cp-b cp-name" data-a="sub" data-v="buoy">前出浮标<span class="cp-st">余 '+sel.reduce((a,x)=>a+(x.buoys||0),0)+' 个</span></button><button class="btn cp-ff" data-a="force" data-v="buoy">⌖</button></div>'+'</div>';}
-    else if(k==='ciws'){const cw=ciwsOf(s)||{outer:0,inner:0};
+    else if(k==='ciws'){const cw=ciwsRingsOf(s)||{outer:0,inner:0};
       sub='<div class="cp-col cp-sub">'+CIWS_SUB.map(([id,l,f])=>{const on=ciwsSubOn(s,f),st=id==='ciwsMsl'?'外圈 '+Math.round(cw.outer/1000)+'k · 余 '+(s.interceptor||0)+' 枚':'内圈 '+Math.round(cw.inner/1000)+'k';
         return '<div class="cp-row"><button class="btn cp-b cp-name'+(on?' on':'')+'" data-a="csub" data-v="'+id+'">'+(on?'☑ ':'☐ ')+l+'<span class="cp-st">'+st+'</span></button></div>';}).join('')+'</div>';} // 防御武器没有 ⌖
     else if(k){const ws=(s.weapons||[]).filter(w=>w.kind===k),c=wpnChecked(s,k);

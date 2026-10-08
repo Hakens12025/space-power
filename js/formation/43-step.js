@@ -30,7 +30,7 @@ function fmSpd(F, mates) {
 
 function stepFormation(F, dt) {
   const mates = fmShips(F);
-  if (mates.length < 2) return { dissolved: true }; // 只剩一艘(或全灭)→ 不成队
+  if (mates.length < 1) return { dissolved: true }; // 全灭 → 不成队(2026-10-07 用户:单舰也能编队、指派,剩一艘照样是一队;原来只剩一艘就解散)
   const flag = fmFlag(F, mates);
   if (!flag) return { dissolved: true };
   // 名册漂移兜底:战损/加员/换旗后重排槽位,好让【下一条】编队令按新人数分配阵位,并让跟随关系跟上。

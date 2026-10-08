@@ -44,15 +44,16 @@ function stepShipsMotion(dt){
          代价是它把【个体档位抹平了】——用户实测报的:两艘 800 档的船被加权平均 617 压到 616,
          调档位在阵位态看不出任何效果。fmSpd 保留,但只当两件事用:编队菜单的读数,
          以及跟随态槽位旋转限速的 tipV(那里需要一个【全队统一】的值,否则各成员转速不同、阵型会在转弯时扭曲)。 */
+      let passed=false;
       if(cur.type==='pass'){ // 路径点:掠过即继续,不停车
         if(dist<CFG.passBy){
-          s.orders.shift(); continue;
+          s.orders.shift(); passed=true; // 2026-10-08:经过即删令,这一步只是不导引(惯性滑行);朝向层 / 战斗转向 / 积分 / 硬边照常。原来 continue 连积分一起跳过,船这一步不动 —— AI 每 tick 重下同一个近点时整段冻住(速度读数不为 0、位置不动;红方「整局停着」的真因)
         }
         // RF12/RF13 航线速度规划(用户报"Shift+右键像疯狗一样不减速、每次都冲过头"):
         // 原来这里一律满巡航,拐点只判"进没进 passBy",完全不看后续 —— 掉头这种 180 度偏折也照 800km/s 冲。
         // RF12 先按【下一段】的偏折角限速;RF13 换成从末点倒推的反向传播(详见 30-motion 的 routeCap),
         // 因为 1 步前瞻在"长直段接一个短段再掉头"上必然失败:发现要掉头时物理上已经刹不住了。
-        cap=Math.min(cap,routeCap(s,dist));
+        if(!passed)cap=Math.min(cap,routeCap(s,dist));
       }else{ // 目标点:到位停(DS191:曲线单调收敛,原v124冲过头检测+KIMI151c爬行滞回+120限速补丁全删,不再振荡)
         // RF11 到达朝向(右键长按虚影下的令带 cur.face):【提前起转】——虚影承诺的是"到达即如此",
         // 若等到位再原地转,巡洋舰掉头 180° 要 19.6 秒(turnRate 0.16),那段时间玩家看到的和虚影不一致。
@@ -92,7 +93,7 @@ function stepShipsMotion(dt){
           s.orders.shift(); continue;
         }
       }
-      guideTo(s,cur.pos,[0,0,0],cap,cur.type!=='pass',dt); // DS191:统一导引律(stop 曲线停靠);RF12:pass 的 cap 已含拐角限速+接近段
+      if(!passed)guideTo(s,cur.pos,[0,0,0],cap,cur.type!=='pass',dt); // DS191:统一导引律(stop 曲线停靠);RF12:pass 的 cap 已含拐角限速+接近段
     }
     else if(s.follow&&typeof stepFollow==='function'&&stepFollow(s,dt,typeof fmTipV==='function'?fmTipV(s):cruiseOf(s))){
       /* FL1 跟随分支。位置是选出来的:必须排在 orders 【之后】——

@@ -225,7 +225,7 @@ function fmPgDialInner(F, PL) {
   /* FM9 覆盖圈(各舰自己的防空内圈/外圈)开着时,要把圈也算进贴合半径 ——
      不然圈一开就有半个圈落在画面外,看着像画错了。与沙盘 阵型控制台.html 同一条处理。 */
   if (fmPg.ovIn || fmPg.ovOu) PL.pairs.forEach(pr => {
-    const st = PL.sta[pr.j], c = (typeof ciwsOf === 'function') ? ciwsOf(pr.s) : null;
+    const st = PL.sta[pr.j], c = (typeof ciwsRingsOf === 'function') ? ciwsRingsOf(pr.s) : null;
     if (!st || !c) return;
     const rr = Math.max(fmPg.ovOu && pr.s.ciwsOn ? (c.outer || 0) : 0, fmPg.ovIn && pr.s.ciwsGunOn !== false ? (c.inner || 0) : 0);
     if (rr > 0) maxR = Math.max(maxR, Math.hypot(st.lx, st.ly) + rr);
@@ -267,7 +267,7 @@ function fmPgDialInner(F, PL) {
      不是可点的东西,所以 pointer-events 全关掉,免得抢走插槽圈的拖拽。
      只画【真的开着】的那一圈:外圈看近防导弹 s.ciwsOn、内圈看近防炮 s.ciwsGunOn(2026-09-29 拆两件),关了还画一个圈是骗人的。 */
   if (fmPg.ovIn || fmPg.ovOu) PL.pairs.forEach(pr => {
-    const st = PL.sta[pr.j], c = (typeof ciwsOf === 'function') ? ciwsOf(pr.s) : null;
+    const st = PL.sta[pr.j], c = (typeof ciwsRingsOf === 'function') ? ciwsRingsOf(pr.s) : null;
     if (!st || !c) return;
     const q = px(st.lx, st.ly);
     if (!isFinite(q[0]) || !isFinite(q[1])) return;

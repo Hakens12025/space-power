@@ -8,8 +8,9 @@
 
    根(全部跑)
    ├─ 主线(选择器)
-   │   ├─ 撤:有认出的定位目标、推演打不过 → 退到导弹射程外、静默
-   │   ├─ 打:有认出的定位目标 → 可见光圈里多扇面站位、全队同拍齐射、主炮把握过门、弹在飞而定位变旧就亮灯
+   │   ├─ 撤:有认出的定位目标、推演打不过、逃得掉(对方不在它主炮够得着我的距离里,或比我慢;10-08)→ 退到导弹射程外、静默
+   │   ├─ 打:有认出的定位目标 → 推演挑近距(可见光圈里)或远距(对方主炮命中率降到 STAND_P 处,它逼近就退)站位(10-07);全队攒齐同拍齐射(≥ SALVO_MIN 组)、挑罩着它的友舰最少的打;
+   │   │     手上没有在用的浮标就往目标旁放一个,到位后由它定期扫、弹在飞而定位变旧时补扫,没有浮标罩着才亮一艘船
    │   ├─ 缩圈:有可信线索(选择器)
    │   │   ├─ 认人:线索是没认出的定位 → 进可见光圈(圈里直接认出)
    │   │   ├─ 浮标照射:圈心进了某个到位浮标的照射量程 → 那个浮标扫一拍,船不开(10-07)
@@ -23,7 +24,9 @@
    ├─ 诱饵:第一次进缩圈时往圈心方向放(逼对方出声)
    ├─ 蛇形:离威胁 JINK_R 以内
    └─ 横移:开过火的
-   跑完树先做红外管制(没在打、没暴露:站位挪不到一个可见光圈就不改航向、到点停下;aicQuiet),再收队形:各舰站位离全队中心不超过 (导弹射程 - 可见光圈) / 2 x SUPPORT_K(互相支援,aicSupport)
+   跑完树先挑主炮目标(每艘在定位了的对方里挑命中率最高的,过门就停车开炮;打 / 撤 / 拉扯都一样;aicGuns,10-07),再做红外管制(没在打、没暴露:站位挪不到一个可见光圈就不改航向、到点停下;aicQuiet),
+   再收队形:各舰站位离全队中心不超过 (导弹射程 - 可见光圈) / 2 x SUPPORT_K(互相支援,aicSupport);有威胁时再往中心收到离最近友舰不超过 拦截弹预警圈 x COVER_K(互相掩护,aicCover,10-07);
+   有威胁时走编队(固定环形槽位、统一速度;aicFormation,10-08),最后给指令点限速(每秒不超过最慢那艘最高速 x FM_VK;aicRate,10-08)
    逼近 / 搜索 / 抢据点都不进对方雷达伞(正在持续照射的源:估计点 + 不确定圈 + 它照得到这艘的距离;aicOutside)—— 除非推演打得过(伞里每部雷达按一艘没认出的对方,舰级表各型平均)
    全知画面(render/86-belview)写每拍走到的分支路径。
    ⚠ 只读这一方知道的:信念层的线索 / 搜索图(bots/59)、航迹表(contactFix / trkPid / contactIdn)、自己的船、地图事实、公开的舰级表。 */
@@ -33,9 +36,16 @@ const AIC_DOC=[
   ['搜索','REPLAN_S',10,[5,30],'搜索目标几秒重挑一次'],
   ['搜索','SEARCH_D0',300000,[100000,800000],'搜索打分的距离折扣:分 = 区域概率和 / (1 + 距离 / D0)(游玩区尺度,同游玩区不乘 CFG.scale:10-06 乘着时只在自家附近一片片扫)'],
   ['搜索','SEARCH_HYS',0.8,[0.5,0.95],'旧目标的分 >= 新最好的这个比例就不换(免得来回抖)'],
+  ['搜索','MOVE_ON',1,[0,1],'不许干停(10-08 用户:「搜索状态的每一段的停止时间不能超过 1s」,除非进了伏击):没定位到目标时(搜 / 缩圈),到了搜索点立刻换下一个(排除自己刚扫过的一片),到了站位点就用低档绕着它走,不给「到点停下」的令;0 = 关(同旧)'],
+  ['搜索','ARRIVE_R',11250*CFG.scale,[3000*CFG.scale,50000*CFG.scale],'离搜索点 / 站位点这么近算到了(换下一个搜索点 / 开始绕圈);要大于 ORBIT_R,绕圈的船才一直算「到了」'],
+  ['搜索','ORBIT_R',7500*CFG.scale,[3500*CFG.scale,30000*CFG.scale],'到了站位点绕着它走的半径(用最低档:最小绕圈半径约 1800 km;比据点占领半径 1.8 万小,绕着也占得下)'],
+  ['伏击','AMBUSH_ON',1,[0,1],'伏击判定(10-08 用户:「要有视野且附近有碎石带的情况下才进入伏击判定」,很严格):没定位到目标、这艘在碎石带里(贴着小行星,雷达杂波)、没被照射,且有前出的眼睛 —— 到位的己方浮标(静默时按红外发现距离)或拿着的据点(一直照射)—— 罩住的搜索图概率 ≥ AMBUSH_P ⇒ 原地静默蹲着(唯一允许停下的情况);0 = 关'],
+  ['伏击','AMBUSH_P',0.2,[0.05,0.6],'伏击:前出眼睛探测圈里的搜索图概率至少这么多(对方大概会从那里来)'],
   ['搜索','FOCAL_K',1.0,[0,3],'交汇点偏好:游玩区中部与不归自己的据点附近的格多算这么多(双方都知道的地图事实,不读对方位置)'],
   ['搜索','FOCAL_S',300000,[100000,600000],'交汇点偏好的范围(高斯半径;游玩区尺度,不乘 CFG.scale)'],
   ['辐射管制','PULSE_GAP',60,[20,300],'全队两次扫描的最短间隔(秒;对方静听会把每一拍都记下)'],
+  ['辐射管制','PAINT_BACK',0,[0,1],'被照着就照回去(10-09 子 agent 建议):有定位目标、且本方有船正被对方雷达照着(trkPaintedBy)⇒ 全队开照射 —— 拿 STRIKE_PAINT 的主炮前出奖励,又不对静默的对手白白暴露;0 = 关'],
+  ['辐射管制','STRIKE_PAINT',0,[0,1],'交战时(有定位目标:打 / 撤)全队开照射(10-08 试验:对「常开雷达」机器人,红方导弹伤害只有对方的 1/7 —— 静默时航迹很快变旧,在飞的弹拿不到位置;交战时本来已经暴露);0 = 关'],
   ['交战站位','TRACK_K',0.9,[0.5,1.2],'逼近站位 = 导弹射程的几成'],
   ['交战站位','TRACK_A',0.6,[0.2,1.2],'逼近时各舰沿弧错开的角度(弧度):基线'],
   ['交战站位','STRIKE_K',0.9,[0.5,1.2],'打击站位 = 可见光圈的几倍(圈里:可见光直接定位 + 主炮前出奖励)'],
@@ -43,16 +53,31 @@ const AIC_DOC=[
   ['辐射管制','IR_QUIET',0,[0,1],'红外管制开关(1 开):没在打、没暴露时站位挪不到一个可见光圈不改航向、到点停下、按段长选档。10-06 基准(蓝方脚本不靠红外找人)开 +10、关 +23,稳健先关'],
   ['辐射管制','IR_DUTY',0.1,[0.02,1],'红外管制:没在打、没暴露时,每段路挑最高的速度档,使「加速 + 刹车的点火时间 / 这段总用时」不超过这个数(潜艇的静音航行;10-06 回放:短途也跑满档、走走停停,点火占一半)'],
   ['交战站位','SUPPORT_K',1,[0.5,3],'互相支援:各舰站位离全队中心不超过 (导弹射程 - 可见光圈) / 2 x 这个数 —— 任意两艘相距不超过 射程 - 可见光圈,任何一艘看到 / 被打的对手,别的舰都打得到(10-06 回放:红舰开打时散开 33~98 万,一艘艘被各个击破)'],
+  ['交战站位','COVER_K',0.3,[0,1.5],'互相掩护(10-07;10-09 0.8 → 0.3:编队中心限速后队形跟得上,对「常开雷达」机器人 0.8 是 -0.75、0.3 是 +2.88 [1.36, 4.39]、0.1 是 +2.19;对 v1 都不退步):有威胁时(有定位目标 / 挨打 / 被照射)整队往中心收,使每艘离最近友舰不超过 拦截弹预警圈(icp_core 外圈 x warnK)x 这个数 —— 队友的拦截弹要等来袭弹进它自己的预警圈才发(10-07 基准:红方离最近友舰中位 5.8 万,拦截弹护到队友的只占 2%);0 = 关'],
+  ['队形','FM_ON',1,[0,1],'编队移动(10-08):有威胁时全队按一个中心(树给各舰的点的平均)+ 固定环形槽位走 —— 相邻槽位间距 = 拦截弹预警圈 x COVER_K、座次按舰号固定(不随方位重排)、到位的舰压到最慢那艘的最高档、蛇形全队同拍、不单独横移;抢据点的舰不入队(10-08 归因:收拢被别的舰带动 + 座次 + 蛇形错拍占指令点跳变约 40%);0 = 关(各舰各追各的点)'],
+  ['队形','FM_VK',0.9,[0,1.5],'指令点限速(10-08):有目标或线索时,每艘的指令点每秒最多挪 最慢那艘最高速 x 这个数 —— 估计点跳、动作切换、地形选角跳都变成船追得上的移动(原来交战中指令点平均每秒挪约 4800,船只有 525~600,一直到不了位);就地(指令点 = 船自己)不限;0 = 不限'],
+  ['拉扯','STAND_ON',1,[0,1],'推演挑站位(10-07 用户「按推演挑」):1 = 每拍推演近距(可见光圈里,主炮 + 导弹)与远距(对方主炮够不着、我方导弹够得着)两种,取划算的;0 = 只近距(同旧)'],
+  ['拉扯','STAND_P',0.05,[0.02,0.3],'远距站位:站到对方主炮命中率(舰级表散布,假定它照着我:雷达前出奖励)降到这个数的距离;超过 导弹射程 x TRACK_K 就没有远距这一选'],
+  ['拉扯','EDGE_K',3,[0,10],'远距站位往开阔处绕:站位点被游玩区边界挤掉的距离(按站位距离的比例)x 这个数扣分(对方追过来时不被挤到边上)'],
   ['线索','GIVEUP_S',300,[60,900],'一条线索(按来源)缩了这么久还没定位就放下(10-05 实测:追民船导航雷达追了一整局)'],
   ['线索','IGNORE_S',600,[120,1800],'放下多久'],
   ['侦察资产','LURE_D',0.5,[0.2,0.9],'诱饵放在去圈心的几成路上(横向再偏一点)'],
-  ['武器发射授权','ROUND_N',2,[1,6],'开火 / 还手:每艘导弹几组'],
+  ['侦察资产','BUOY_STRIKE',1,[0,1],'打击时也用浮标(10-07):手上没有在用的就往目标旁放一个(落点同缩圈),到位后由它照射 —— 每 PULSE_GAP 扫一拍看清目标附近还有谁,自己的弹在飞、定位变旧时补扫;船保持静默。0 = 只在缩圈时用(同旧)'],
+  ['侦察资产','LINK_GAP',10,[2,60],'打击时自己的弹在飞、定位变旧:浮标补扫的最短间隔(秒;数据链要位置)。没有罩得住目标的浮标才亮一艘船'],
+  ['武器发射授权','ID_FIRE',0,[0,1],'没认出的定位接触,炮弹 / 导弹来路指向它(aicWarship)就当成在开火的战舰直接打,不再先进可见光圈认人(10-09:放风筝的对手站在圈外开火,红方定位后平均 8 分钟才开第一枪);0 = 关'],
+  ['武器发射授权','AUTO_FC',0,[0,1],'交战时(有定位目标)开火交给引擎自带火控(同玩家的「火控」钮:锁定集火目标、单元就绪就打、主炮自动),不再自己排齐射(10-08 试验:对「常开雷达」机器人,红方导弹 73% 被拦、到达后近防炮挡 45%,对方的只有 56% / 27%);0 = 关'],
+  ['武器发射授权','ROUND_N',2,[1,6],'还手:每艘导弹几组'],
   ['武器发射授权','FIRE_P',0.5,[0.2,0.9],'主动开火的把握:一轮导弹扫过的带子(宽 2 x 导引头距离、长到射程)里有对方战舰的概率过这个才打;一条线索一次、一次只一艘打'],
+  ['武器发射授权','BLIND_N',1,[1,6],'主动开火(没定位、打线索):每次几组(10-07 用户:1 组;原来同还手 2 组)'],
+  ['武器发射授权','BLIND_KEEP',0.5,[0,1],'导弹库存低于开局的这个比例,这艘就不再主动开火(还手照旧;10-07 用户:库存过半才盲打)'],
   ['武器发射授权','SALVO_GAP',20,[5,90],'打击时全队齐射的最短间隔(秒)'],
-  ['武器发射授权','SALVO_READY',0.5,[0.25,1],'打击时就绪单元过这个比例才参加齐射'],
+  ['武器发射授权','SALVO_READY',1,[0.25,1],'打击时就绪单元过这个比例才参加齐射(10-07 0.5 → 1:攒齐一起放)'],
+  ['武器发射授权','SALVO_MIN',5,[1,16],'打击时全队一拍至少放几组(过对方近防炮的过载线 4 组,10-07);射程内各舰能放的加起来不到这个数,就等到全部就绪再放'],
   ['武器发射授权','GUN_P_HID',0.3,[0.05,0.8],'打击时隐蔽的舰主炮至少这个把握才停车开炮(开火闪光 + 炮弹来路会暴露)'],
   ['武器发射授权','GUN_P_EXP',MAC_AUTO_P,[0.02,0.5],'打击时已暴露(照射 / 刚开火 / 点火 / 被照射)的舰主炮的把握门'],
   ['集火','FOCUS_HYS',1.35,[1,3],'集火迟滞:已经在打的那个目标加这个成数'],
+  ['集火','TGT_HOLD',30,[0,120],'集火目标掉出定位(这一方看它没被击沉)⇒ 按最后的位置再撑这么多秒:站位照旧、推演与远近沿用掉之前那一拍、不放齐射(10-08:打 ↔ 逼近来回切占指令点跳变约 22%);0 = 不撑'],
+  ['集火','COVER_W',1,[0,3],'挑目标打落单的(10-07):对方每多一艘定位了、在它拦截弹预警圈里的友舰,分数除以 (1 + 这个数 x 艘数);0 = 不看'],
   ['规避','JINK_S',20,[5,60],'蛇形换边间隔(秒;远程炮弹飞几十秒、瞄的是开火那一刻的预测点)'],
   ['规避','JINK_D',30000*CFG.scale,[0,100000*CFG.scale],'蛇形横向偏移'],
   ['规避','JINK_R',300000*CFG.scale,[0,500000*CFG.scale],'离威胁多近开始蛇形'],
@@ -65,9 +90,13 @@ const AIC_DOC=[
   ['地形','TERR_CLUTTER',0.3,[0,1.5],'站位隐蔽:我贴着天体 / 碎石(雷达杂波,慢下来会被 MTI 当杂波滤掉;envInClutter)'],
   ['地形','TERR_RAD',-0.5,[-2,1],'站位:我在辐射带里(雷达更难发现,但护盾每秒掉血;缺省算亏)'],
   ['地形','TERR_DETOUR',0.5,[0,3],'为隐蔽绕开:站位方位每偏 1 弧度抵掉多少隐蔽分'],
+  ['地形','TERR_HYS',0.3,[0,2],'地形选角迟滞:上一拍选的偏角多算这么多分(10-08:选角来回切占指令点跳变约 7%);0 = 不加'],
   ['交战推演','SIM_T',300,[60,900],'打不打之前推演多少游戏秒的对打(SparCraft 式简化战斗模拟)'],
   ['交战推演','FIGHT_MARGIN',0,[-0.3,0.3],'推演里「打掉对方的 - 自己丢的」至少要多少(按我方总血量的比例)才打;越低越敢打'],
-  ['撤退','WD_K',1.3,[1,2],'推演说打不过 ⇒ 退到导弹射程的几倍外']];
+  ['交战推演','SIM_ICP',0.7,[0.3,0.95],'推演:一组来袭导弹被拦截弹拦上一次,打掉几成(10-07 基准 16 局实测:蓝方 0.81、红方 0.62);每艘罩得住目标的舰每轮齐射拦一组'],
+  ['交战推演','SIM_INFER',1,[0,1],'推演算上没定位的对方(10-07):还活着、没定位的对方战舰数 x 搜索图在目标附近(导弹射程内)的概率,按舰级表平均的一艘折算 —— 它打得到我、我打不到它;0 = 只算定位了的(同旧)'],
+  ['撤退','WD_K',1.3,[1,2],'推演说打不过 ⇒ 退到导弹射程的几倍外'],
+  ['撤退','RUN_CHECK',1,[0,1],'撤之前看逃不逃得掉(10-07):对方有定位了的舰已在它主炮够得着我的距离里(命中率 ≥ STAND_P,雷达前出奖励)、且它最快(舰级表;没认出按最快一型)不比我方最慢的慢 ⇒ 撤不掉:不撤、不选远距,贴到可见光圈以内的就地打(10-07 基准:红舰一半死在撤的路上,机头背对追兵);0 = 照旧']];
 const AIC_PRESET={ // 预设:在稳健上改几条
   稳健:{},
   激进:{GUN_P_HID:0.15,ROUND_N:3,FIRE_P:0.3,SALVO_READY:0.25,FIGHT_MARGIN:-0.15,STRIKE_K:0.7,TRACK_K:0.7}, // 低把握也开炮、一轮多放、敢打、站得近
@@ -78,7 +107,7 @@ aiDoctrine('稳健');
 const AIC={red:null,blue:null};
 function aiRedReset(){AIC.red=null;AIC.blue=null;if(typeof BEL!=='undefined'){BEL.red=null;BEL.blue=null;}} // 换局清空(scenario/91 调)
 function aicOf(side){let A=AIC[side];if(!A||simTime<A.t0){A=AIC[side]={t0:simTime,acc:0,ready:false,why:'',plan:{},goals:{},replanT:1e9,pulseT:1e9,salvoT:1e9,
-  foe:null,lured:false,scoot:{},tried:new Map(),ign:new Map(),mem:new Map(),cbT:1e9,clue:null,fired:new Map()};}return A;}
+  foe:null,lured:false,scoot:{},tried:new Map(),ign:new Map(),mem:new Map(),cbT:1e9,clue:null,fired:new Map(),linkT:1e9,ammo0:{}};}return A;}
 function aicQuiet(X){ // 红外管制(10-06 用户:「我们能够在红外视角上看到很远方位的引擎闪动」;回放:定位前红方 12~40% 的时间开着引擎,蓝方发现红舰 80~90% 是在它刚点过火之后,蓝方脚本 1~2%)。
   // 运动内核航向差约 1° 就点火 ⇒ 没在打、自己也没暴露时:新站位离上次下的点不到一个可见光圈就照旧(到那里看到的差不多),末点停下不掠过(掠过会冲过头再掉头),
   // 按段长选档(IR_DUTY:短途慢走,点火短)。已暴露的不管(点火不再额外暴露)
@@ -92,44 +121,118 @@ function aicSupport(X){ // 互相支援(兰切斯特平方律:分散的一方被
   const L=X.mine;if(L.length<2)return;const R=Math.max(0,(mslReach(L[0])-(L[0].visR||COV.VIS_R))/2*AIC_C.SUPPORT_K);let cx=0,cy=0;
   for(const e of L){cx+=X.plan[e.id].pos[0]/L.length;cy+=X.plan[e.id].pos[1]/L.length;}
   for(const e of L){const p=X.plan[e.id].pos,dx=p[0]-cx,dy=p[1]-cy,d=Math.hypot(dx,dy);if(d>R){p[0]=cx+dx/d*R;p[1]=cy+dy/d*R;}}}
+function aicGuns(X){ // 10-07 主炮挑最打得中的:每艘在定位了、认出是船的对方里挑命中率最高的(多半是冲到跟前的那艘),过门(隐蔽 GUN_P_HID / 已暴露 GUN_P_EXP)就停车开炮;打、撤、拉扯都一样
+  // (10-07 基准:红舰 52 艘里 31 艘死在撤 / 退回站位的路上,机头背对冲上来的蓝舰,挨炮不还手;原来只在打击时对着集火目标开)
+  const A=X.A;for(const e of X.mine){if(!hasMAC(e)||e.macCd>0||A.scoot[e.id]>0)continue;const pl=X.plan[e.id],need=aicExposed(e)?AIC_C.GUN_P_EXP:AIC_C.GUN_P_HID;let bf=null,bp=0;
+    for(const f of X.foes){const p=macHitProb(e,Math.hypot(e.pos[0]-f.pos[0],e.pos[1]-f.pos[1]),f.src);if(p>bp){bp=p;bf=f;}}
+    if(bf&&bp>=need){pl.hold=true;pl.pass=false;pl.gunFoe=bf.src;pl.gunP=need;}}}
+function aicThreat(X){return !!X.tgt||!!(X.inc&&X.inc.length)||X.mine.some(e=>trkPaintedBy(e));} // 有威胁:有定位目标 / 挨打 / 被照射
+function aicFmOn(X){return !!AIC_C.FM_ON&&X.mine.length>1&&aicThreat(X);}
+function aicFormation(X){ // 10-08 编队移动:中心 = 树给各舰的点的平均,各舰站固定环形槽位(按舰号,不随方位重排),到位的压到最慢那艘的最高档
+  if(!aicFmOn(X)){X.A.fmC=null;return;}const L=X.mine.filter(e=>!X.plan[e.id].sta);if(L.length<2){X.A.fmC=null;return;}X.fm=true;
+  const n=L.length,D=(AIC_C.COVER_K||0.8)*WPN.icp_core.outer*WPN.icp_core.warnK,r=n===2?D/2:D/(2*Math.sin(Math.PI/n)),ids=L.map(e=>e.id).sort();let cx=0,cy=0,vmin=Infinity;
+  for(const e of L){cx+=X.plan[e.id].pos[0]/n;cy+=X.plan[e.id].pos[1]/n;vmin=Math.min(vmin,speedGearsOf(e)[3]);}
+  if(AIC_C.FM_VK){let q=X.A.fmC;if(!q){q=[0,0];for(const e of L){q[0]+=e.pos[0]/n;q[1]+=e.pos[1]/n;}} // 10-09 只给编队中心一个点限速(从船队实际中心起步),槽位相对中心固定 —— 各舰分开限速会把队形扯散(实测交战中指令点间距中位 1.9 万 vs 编队要求的 1900 km)
+    const lim=vmin*AIC_C.FM_VK*X.dt,dx=cx-q[0],dy=cy-q[1],d=Math.hypot(dx,dy);if(d>lim){cx=q[0]+dx/d*lim;cy=q[1]+dy/d*lim;}X.A.fmC=[cx,cy];}
+  for(const e of L){const a=2*Math.PI*ids.indexOf(e.id)/n,pl=X.plan[e.id],sx=cx+Math.cos(a)*r,sy=cy+Math.sin(a)*r;pl.pos=[sx,sy];pl.pass=false;pl.fmSlot=true;
+    if(Math.hypot(e.pos[0]-sx,e.pos[1]-sy)<2*D)pl.vCap=vmin;}} // 掉队的全速追上来
+function aicRate(X){ // 10-08 指令点限速:有目标或线索时每艘的点每秒最多挪 最慢那艘最高速 x FM_VK;就地(点 = 船自己)不限
+  const A=X.A;if(!AIC_C.FM_VK)return;if(!(X.tgt||X.clue||aicThreat(X))){A.prevPlan={};return;}A.prevPlan=A.prevPlan||{};let vmin=Infinity;
+  for(const e of X.mine)vmin=Math.min(vmin,speedGearsOf(e)[3]);const lim=vmin*AIC_C.FM_VK*X.dt;
+  for(const e of X.mine){const pl=X.plan[e.id],p=pl.pos,q=A.prevPlan[e.id];
+    if(q&&!pl.fmSlot&&Math.hypot(p[0]-e.pos[0],p[1]-e.pos[1])>=1){const dx=p[0]-q[0],dy=p[1]-q[1],d=Math.hypot(dx,dy);if(d>lim)pl.pos=[q[0]+dx/d*lim,q[1]+dy/d*lim];} // 编队槽位不单独限速(中心已在 aicFormation 限过)
+    A.prevPlan[e.id]=[pl.pos[0],pl.pos[1]];}}
+function aicInDebris(p){ // 碎石带:贴着小行星(world/12 envInClutter 的小行星那一半;贴着天体盘面不算)
+  const C=ENV_CFG.CLUT_RES,G=rockGrid(),c=G.cell,q0=G.maxS*ENV_CFG.AST_KM+C,x0=Math.floor((p[0]-q0)/c),x1=Math.floor((p[0]+q0)/c),y0=Math.floor((p[1]-q0)/c),y1=Math.floor((p[1]+q0)/c);
+  for(let ix=x0;ix<=x1;ix++)for(let iy=y0;iy<=y1;iy++){const a=G.map.get(rockKey(ix,iy));if(!a)continue;
+    for(let j=0;j<a.length;j++){const k=rocks[a[j]];if(!k.ast||k.dead)continue;const dx=p[0]-k.pos[0],dy=p[1]-k.pos[1],q=k.size*ENV_CFG.AST_KM+C;if(dx*dx+dy*dy<q*q)return true;}}
+  return false;}
+function aicEyeP(X){ // 前出的眼睛罩住的搜索图概率(取最大的一只):到位的己方浮标按红外发现距离(静默),拿着的据点按照射量程(一直照射)
+  if(X.eyeP!==undefined)return X.eyeP;const B=X.B;let best=0;
+  const mass=(x,y,R)=>{const i0=Math.max(0,Math.floor((x-R-B.A.x0)/B.cw)),i1=Math.min(B.nx-1,Math.floor((x+R-B.A.x0)/B.cw)),j0=Math.max(0,Math.floor((y-R-B.A.y0)/B.ch)),j1=Math.min(B.ny-1,Math.floor((y+R-B.A.y0)/B.ch));let m=0;
+    for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const dx=B.A.x0+(i+0.5)*B.cw-x,dy=B.A.y0+(j+0.5)*B.ch-y;if(dx*dx+dy*dy<=R*R)m+=B.P[j*B.nx+i];}return m;};
+  for(const o of rockObjs())if(o.kind==='buoy'&&o.side===X.side&&!o.dead)best=Math.max(best,mass(o.pos[0],o.pos[1],B.irR));
+  if(ENV.stations.length)for(const o of featStaObs(X.side))best=Math.max(best,mass(o.pos[0],o.pos[1],Math.max(B.irR,actRangeOf(o,rdvStdRefl()))));
+  return X.eyeP=best;}
+function aicAmbush(X,e){return !!AIC_C.AMBUSH_ON&&!X.tgt&&!trkPaintedBy(e)&&aicInDebris(e.pos)&&aicEyeP(X)>=AIC_C.AMBUSH_P;} // 伏击:碎石带里 + 前出眼睛罩着对方可能来的地方 + 没被照射
+function aicKeepMoving(X){ // 10-08 不许干停:没定位到目标时,到了站位点就用最低档绕着它走(搜索点在 aicDoSearch 里到了就换);只有伏击可以原地蹲
+  if(!AIC_C.MOVE_ON||X.tgt)return;
+  for(const e of X.mine){const pl=X.plan[e.id];if(pl.hold)continue;
+    if(aicAmbush(X,e)){pl.pos=[e.pos[0],e.pos[1]];pl.pass=false;pl.amb=true;X.amb=(X.amb||0)+1;continue;}
+    pl.pass=true;pl.keep=true;const P=pl.pos,R=AIC_C.ORBIT_R; // keep:执行层把太近的路过点往前延(passBy 以内的路过点一到就算经过,每 tick 重下同一点 ⇒ 船不被导引、只滑行)
+    if(Math.hypot(P[0]-e.pos[0],P[1]-e.pos[1])<AIC_C.ARRIVE_R){const c=ARENA?[Math.min(ARENA.x1-R,Math.max(ARENA.x0+R,P[0])),Math.min(ARENA.y1-R,Math.max(ARENA.y0+R,P[1]))]:P; // 绕圈中心往场内收一个半径:整圈都在场内(贴边的点绕出去会被夹回边上、顶墙)
+      const a=Math.atan2(e.pos[1]-c[1],e.pos[0]-c[0])+Math.PI/3;pl.pos=[c[0]+Math.cos(a)*R,c[1]+Math.sin(a)*R];pl.gear=1;}}}
+function aicCover(X){ // 10-07 互相掩护:有威胁时整队按比例往中心收,使每艘离最近友舰不超过 拦截弹预警圈 x COVER_K(队友的拦截弹等来袭弹进它自己的预警圈才发)
+  const L=X.mine;if(L.length<2||!AIC_C.COVER_K)return;if(!aicThreat(X))return;
+  const D=AIC_C.COVER_K*WPN.icp_core.outer*WPN.icp_core.warnK;let cx=0,cy=0,m=0;
+  for(const e of L){const p=X.plan[e.id].pos;cx+=p[0]/L.length;cy+=p[1]/L.length;}
+  for(const e of L){const p=X.plan[e.id].pos;let n=Infinity;for(const f of L)if(f!==e){const q=X.plan[f.id].pos;n=Math.min(n,Math.hypot(p[0]-q[0],p[1]-q[1]));}m=Math.max(m,n);}
+  if(m<=D)return;const k=D/m;for(const e of L){const p=X.plan[e.id].pos;p[0]=cx+(p[0]-cx)*k;p[1]=cy+(p[1]-cy)*k;}}
 function aicCenter(list){let x=0,y=0;for(const s of list){x+=s.pos[0]/list.length;y+=s.pos[1]/list.length;}return [x,y];}
 function aicExposed(e){return e.emitMode!=='silent'||e.fireHot>0||!!e.flame||!!trkPaintedBy(e);} // 自己知道的暴露:照射 / 刚开火 / 点火 / 被照射告警
 function aicValue(side,b){return (contactIdn(b,side)&&typeof shipValue==='function')?shipValue(b):1;} // 认出来才知道值多少
 function aicFoes(side){ // 定位了、认出是船(或疑似)的对方船 {src,pos,a1,st}。没认出的定位接触当线索去跟(在动的也可能是民船,10-05 实测会打民船)
   const L=[];trkEach(side,function(tk){if(trkGone(tk)||!trkFix(tk)||!trkPid(tk))return;const s=trkSrc(tk);if(s.side===side)return;const p=trkPos(tk);if(p)L.push({src:s,pos:p,a1:(tk.cov&&tk.cov.a1)||0,st:trkState(tk)});});
   return L;}
-function aicFocus(A,side,foes){let best=null,bs=-1;for(const f of foes){let sc=aicValue(side,f.src)*1e6/Math.max(1,f.a1||1);if(A.foe===f.src)sc*=AIC_C.FOCUS_HYS;if(sc>bs){bs=sc;best=f;}}return best;}
+function aicFoesShot(side,B,foes){ // 10-09 没认出的定位接触:炮弹 / 导弹来路指向它(aicWarship)⇒ 就是在开火的战舰,当集火目标(原来要先进可见光圈认人;放风筝的对手站在圈外开火,红方一直「认人」不开火)
+  for(const c of B.clues){if(c.k!=='fix'||!c.src||foes.some(f=>f.src===c.src))continue;const tk=trkOf(side,c.src);if(!tk||trkGone(tk)||!trkFix(tk)||trkPid(tk))continue;
+    if(!aicWarship(side,B,{c:c,x:c.x,y:c.y}))continue;const p=trkPos(tk);if(p)foes.push({src:c.src,pos:p,a1:(tk.cov&&tk.cov.a1)||0,st:trkState(tk)});}}
+function aicFocus(A,side,foes){const D=WPN.icp_core.outer*WPN.icp_core.warnK;let best=null,bs=-1;for(const f of foes){let sc=aicValue(side,f.src)*1e6/Math.max(1,f.a1||1);if(A.foe===f.src)sc*=AIC_C.FOCUS_HYS;
+  if(AIC_C.COVER_W){let n=0;for(const g of foes)if(g!==f&&Math.hypot(g.pos[0]-f.pos[0],g.pos[1]-f.pos[1])<=D)n++;sc/=1+AIC_C.COVER_W*n;} // 10-07 打落单的:罩得住它的友舰越多越难打穿
+  if(sc>bs){bs=sc;best=f;}}return best;}
 /* ---- 交战前推演(业内:SparCraft 式简化战斗模拟,星际争霸 AI 竞赛 Churchill & Buro 2012 / 2013)----
-   双方都站在可见光圈里(打击站位)对打 SIM_T 游戏秒:主炮按 S 形命中率(圈里有前出奖励)、导弹一组 = 枚数 x 伤害 x (1 - 干扰)(1 - 内圈 x 过载 / 2)(1 - 外圈) x 多扇面加成
-   (weapons/52、56 同一套)、护盾先扣并按 REGEN_S 回;双方都集火对面最残的;只算期望值、不掷骰子。
-   只用这一方知道的:对方 = 打击目标附近定位了的对方船,认出了按舰种,没认出按舰级表各型的平均(期望)。返回 我方丢的 / 对方丢的(血 + 盾)。 */
-function aicSimUnit(e,L){const st=L?null:e;return st?{hp:Math.max(0,e.hp),sh:Math.max(0,e.sh||0),shMax:e.shMax||0,sig:e.macSigma||0,dmg:e.macDmg||0,rel:e.macReload||60,cells:e.cells||0,mrel:e.mslReload||60,
-    grp:(e.mslPer||12)*(e.missDmg||12),groups:Math.floor((e.ammo||0)/Math.max(1,e.mslPer||12)),inn:(ciwsOf(e)||{}).innerIntercept||0,out:(ciwsOf(e)||{}).outerIntercept||0,ch:e.chaffRate||0,gcd:e.macCd||0,mcd:0}
-  :{hp:L.hp,sh:L.sh,shMax:L.sh,sig:L.sig,dmg:L.dmg,rel:L.rel,cells:L.cells,mrel:L.mrel,grp:L.grp,groups:L.groups,inn:L.inn,out:L.out,ch:L.ch,gcd:0,mcd:0};}
+   双方相距 r 对打 SIM_T 游戏秒(10-07 两种站位各推一遍:近距 = 可见光圈里,远距 = 对方主炮够不着处):主炮按 S 形命中率(圈里可见光、圈外假定互相照着的前出奖励);
+   导弹一方同一拍放的几组算一轮齐射 = 枚数 x 伤害 x (1 - 被拦的组 / 组数 x SIM_ICP)(1 - 近防炮命中率 x 过载(这一轮的组数))(1 - 干扰)(weapons/51、56 同一套),
+   被拦的组 = min(组数, 罩得住目标的舰数:它自己 + 拦截弹预警圈罩得住它的友舰;我方收拢(COVER_K)时互相都罩得住);护盾先扣并按 REGEN_S 回;双方都集火对面最残的;只算期望值、不掷骰子。
+   只用这一方知道的:对方 = 打击目标附近定位了的对方船(认出了按舰种,没认出按舰级表各型的平均),加上没定位的按搜索图折算的一艘(SIM_INFER:打得到我、我打不到它)。返回 我方丢的 / 对方丢的(血 + 盾)。 */
+function aicSimUnit(e,L){if(!L){const g=gunOf(e),w=icpOf(e);return {hp:Math.max(0,e.hp),sh:Math.max(0,e.sh||0),shMax:e.shMax||0,sig:e.macSigma||0,dmg:e.macDmg||0,rel:e.macReload||60,cells:e.cells||0,mrel:e.mslReload||60,
+    grp:(e.mslPer||12)*(e.missDmg||12),groups:Math.floor((e.ammo||0)/Math.max(1,e.mslPer||12)),inn:g?g.innerIntercept:0,gd:g||null,wr:(w&&e.interceptor>0)?w.outer*w.warnK:0,ch:e.chaffRate||0,gcd:e.macCd||0,mcd:0,pos:[e.pos[0],e.pos[1]]};}
+  return {hp:L.hp,sh:L.sh,shMax:L.sh,sig:L.sig,dmg:L.dmg,rel:L.rel,cells:L.cells,mrel:L.mrel,grp:L.grp,groups:L.groups,inn:L.inn,gd:null,wr:L.wr,ch:L.ch,gcd:0,mcd:0,pos:null};}
 function aicSimLoad(cls){const c=cls||null,key=c||'?';if(AIC_SIML[key])return AIC_SIML[key]; // 对方一艘:认出了按舰种;没认出按舰级表各型取平均(不知道是什么 = 各型等可能,取期望;10-06 原来按最坏一型,推演总说打不过、躲一整局)
   const Q=[];for(const k in CLS_LOADOUT){if(c&&k!==c)continue;const lw=resolveLoadout(k,2),st=shipStats(k,2);Q.push({hp:st.hp||0,sh:st.shield||0,sig:lw.macDmg>0?lw.macSigma:0,dmg:lw.macDmg||0,rel:lw.mac||60,cells:lw.cells||0,mrel:lw.mslReload||60,
-    grp:(lw.mslPer||12)*(lw.missDmg||12),groups:Math.floor((lw.ammo||0)/(lw.mslPer||12)),inn:lw.innerIntercept||0,out:lw.outerIntercept||0,ch:lw.chaffRate||0});}
+    grp:(lw.mslPer||12)*(lw.missDmg||12),groups:Math.floor((lw.ammo||0)/(lw.mslPer||12)),inn:lw.innerIntercept||0,wr:lw.wp.icp?lw.wp.icp.outer*lw.wp.icp.warnK:0,ch:lw.chaffRate||0});}
   const L={};for(const f in Q[0]){let t=0,n=0;for(const q of Q){if(f==='sig'&&!(q.sig>0))continue;t+=q[f];n++;}L[f]=n?t/n:0;} // 散布只在有主炮的里平均(没主炮的伤害按 0 已进 dmg 的平均)
   return AIC_SIML[key]=L;}
 const AIC_SIML={};
 function aicSecs(n,da){return Math.max(1,Math.min(4,1+Math.floor((n-1)*da/(Math.PI/2))));} // 按站位间隔,n 艘占几个扇面
-function aicFightSim(side,mine,tgt,foes){
-  return aicFightSimU(mine,foes.filter(f=>Math.hypot(f.pos[0]-tgt.pos[0],f.pos[1]-tgt.pos[1])<=mslReach(mine[0])).map(f=>aicSimUnit(null,aicSimLoad(contactIdn(f.src,side)?normCls(f.src.cls):null))));}
-function aicFightSimU(mine,B){ // 推演本体:我方各舰 vs 一组对方单元
-  const r=(mine[0].visR||COV.VIS_R)*AIC_C.STRIKE_K,dt=5,T=AIC_C.SIM_T,A=mine.map(e=>aicSimUnit(e,null));
+function aicSimFoes(X,foes){ // 推演里的对方:打击目标附近(我方导弹射程内)定位了的 + 没定位的按搜索图折算一艘(SIM_INFER)
+  const side=X.side,T=X.tgt.pos,R=mslReach(X.mine[0]);
+  const B=foes.filter(f=>Math.hypot(f.pos[0]-T[0],f.pos[1]-T[1])<=R).map(f=>Object.assign(aicSimUnit(null,aicSimLoad(contactIdn(f.src,side)?normCls(f.src.cls):null)),{pos:[f.pos[0],f.pos[1]]}));
+  const w=AIC_C.SIM_INFER?aicInferN(X,T,R,foes.length):0;
+  if(w>0.05){const u=aicSimUnit(null,aicSimLoad(null));for(const k of ['hp','sh','shMax','dmg','grp'])u[k]*=w;u.hid=true;B.push(u);}
+  return B;}
+function aicInferN(X,T,R,nFix){ // 没定位但还活着的对方战舰,期望有几艘在 T 附近:(对方还剩几艘 - 定位了的)x 搜索图在半径 R 圈里的概率和(对方还剩几艘同 aicBestShot:开局编成公开、击沉按这一方看见的)
+  const opp=belOpp(X.side),nU=Math.max(0,ships.filter(s=>s.side===opp&&!contactDead(s,X.side)).length-nFix),B=X.B;if(!nU)return 0;
+  const i0=Math.max(0,Math.floor((T[0]-R-B.A.x0)/B.cw)),i1=Math.min(B.nx-1,Math.floor((T[0]+R-B.A.x0)/B.cw)),j0=Math.max(0,Math.floor((T[1]-R-B.A.y0)/B.ch)),j1=Math.min(B.ny-1,Math.floor((T[1]+R-B.A.y0)/B.ch));let m=0;
+  for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const x=B.A.x0+(i+0.5)*B.cw-T[0],y=B.A.y0+(j+0.5)*B.ch-T[1];if(x*x+y*y<=R*R)m+=B.P[j*B.nx+i];}
+  return nU*Math.min(1,m);}
+function aicCanRun(X){ // 10-07 逃不逃得掉:对方有舰已在它主炮够得着我的距离里、且它最快不比我方最慢的慢 ⇒ 撤 / 退到远距都会被追着打
+  if(!AIC_C.RUN_CHECK)return true;let vMe=Infinity;for(const e of X.mine)vMe=Math.min(vMe,speedGearsOf(e)[3]);
+  for(const f of X.foes){const c=contactIdn(f.src,X.side)?normCls(f.src.cls):null,L=aicSimLoad(c);if(!(L.sig>0))continue;
+    const r=macRangeSig(L.sig,AIC_C.STAND_P)*MAC_FWD.RAD,vF=(c&&CLS_MOB[c])?CLS_MOB[c].speedGears[3]:belVmax();let d=Infinity;
+    for(const e of X.mine)d=Math.min(d,Math.hypot(e.pos[0]-f.pos[0],e.pos[1]-f.pos[1]));if(d<r&&vF>=vMe)return false;}
+  return true;}
+function aicSimPick(X,foes){ // 10-07 用户「按推演挑」:近距(可见光圈里)与远距(对方主炮命中率降到 STAND_P 处)各推一遍,取「打掉对方的 - 自己丢的」大的;逃不掉(aicCanRun)只有近距
+  const mine=X.mine,B=aicSimFoes(X,foes),rC=(mine[0].visR||COV.VIS_R)*AIC_C.STRIKE_K,sC=aicFightSimU(mine,B,rC);X.sim=sC;X.mode='close';X.rStand=0;X.run=aicCanRun(X);if(!AIC_C.STAND_ON||!X.run)return;
+  let rS=0;for(const u of B)if(u.sig>0)rS=Math.max(rS,macRangeSig(u.sig,AIC_C.STAND_P)*MAC_FWD.RAD); // 假定对方照着我(圈外的前出奖励)
+  if(!(rS>rC)||rS>mslReach(mine[0])*AIC_C.TRACK_K)return; // 对方没有主炮 / 远距出了射程:只有近距
+  const sS=aicFightSimU(mine,B,rS);if(sS.them-sS.us>=sC.them-sC.us){X.sim=sS;X.mode='stand';X.rStand=rS;}}
+function aicFightSimU(mine,B0,r){ // 推演本体:我方各舰 vs 一组对方单元,相距 r(省略 = 近距)
+  r=r||(mine[0].visR||COV.VIS_R)*AIC_C.STRIKE_K;const dt=5,T=AIC_C.SIM_T,A=mine.map(e=>aicSimUnit(e,null)),B=B0.map(u=>Object.assign({},u));
   if(!B.length)return {us:0,them:0,hp0:1};
-  const kA=aicSecs(A.length,AIC_C.SLOT_A),hpA=A.reduce((t,u)=>t+u.hp+u.sh,0),hpB=B.reduce((t,u)=>t+u.hp+u.sh,0);
-  const hit=(u,d)=>u.sig>0?macHitProb({macSigma:u.sig,side:'x'},d/MAC_FWD.VIS):0; // 圈里互相看得清:前出奖励
-  const grpTo=(u,v,k)=>u.grp*(1-v.ch)*(1-v.inn*ciwsSectorOverload(1,k)/2)*(1-v.out)*(1+0.5*(k-1));
+  const hpA=A.reduce((t,u)=>t+u.hp+u.sh,0),hpB=B.reduce((t,u)=>t+(u.hid?0:u.hp+u.sh),0);
+  const fwd=r<=(mine[0].visR||COV.VIS_R)?MAC_FWD.VIS:MAC_FWD.RAD,hit=u=>u.sig>0?macHitProb({macSigma:u.sig,side:'x'},r/fwd):0; // 圈里互相看得清;圈外假定互相照着
+  const cover=(L,v,all)=>L.filter(u=>u.hp>0&&u.wr>0&&!u.hid&&(u===v||all||(u.pos&&v.pos&&Math.hypot(u.pos[0]-v.pos[0],u.pos[1]-v.pos[1])<=u.wr))).length; // 罩得住 v 的舰(各拦一组)
   const dmgTo=(v,x)=>{if(v.sh>0){const a=Math.min(v.sh,x);v.sh-=a;x-=a;}v.hp-=x;};
-  const pick=L=>{let b=null;for(const v of L)if(v.hp>0&&(!b||v.hp+v.sh<b.hp+b.sh))b=v;return b;};
+  const pick=L=>{let b=null;for(const v of L)if(v.hp>0&&!v.hid&&(!b||v.hp+v.sh<b.hp+b.sh))b=v;return b;}; // 没定位的打不到
   for(let t=0;t<T;t+=dt){
-    for(const [S,O,k] of [[A,B,kA],[B,A,1]]){const v0=pick(O);if(!v0)break;
-      for(const u of S){if(!(u.hp>0))continue;const v=pick(O);if(!v)break;
-        u.gcd-=dt;if(u.dmg>0&&u.gcd<=0){dmgTo(v,hit(u,r)*u.dmg);u.gcd=u.rel;}
-        u.mcd-=dt;if(u.cells>0&&u.groups>0&&u.mcd<=0){const n=Math.min(u.cells,u.groups);dmgTo(v,n*grpTo(u,v,k));u.groups-=n;u.mcd=u.mrel;}}}
+    for(const [S,O,all] of [[A,B,false],[B,A,AIC_C.COVER_K>0]]){const v=pick(O);if(!v)continue;let G=0,W=0;
+      for(const u of S){if(!(u.hp>0))continue;
+        u.gcd-=dt;if(u.dmg>0&&u.gcd<=0){dmgTo(v,hit(u)*u.dmg);u.gcd=u.rel;}
+        u.mcd-=dt;if(u.cells>0&&u.groups>0&&u.mcd<=0){const n=Math.min(u.cells,u.groups);G+=n;W+=n*u.grp;u.groups-=n;u.mcd=u.mrel;}}
+      if(G>0){const g=v.gd||WPN.gun_core,E=Math.min(G,cover(O,v,all)),rv=g.rand>0?1-g.rand/2:1;dmgTo(v,W*(1-E/G*AIC_C.SIM_ICP)*(1-rv*v.inn*gunOverload(g,G,1))*(1-v.ch));}}
     for(const u of A.concat(B))if(u.hp>0&&u.shMax>0)u.sh=Math.min(u.shMax,u.sh+u.shMax/SHIELD.REGEN_S*dt);}
-  const left=L=>L.reduce((t,u)=>t+Math.max(0,u.hp)+(u.hp>0?u.sh:0),0);
+  const left=L=>L.reduce((t,u)=>t+(u.hid?0:Math.max(0,u.hp)+(u.hp>0?u.sh:0)),0);
   return {us:hpA-left(A),them:hpB-left(B),hp0:hpA};}
 /* ---- 搜索:积分图上取盒和 ---- */
 function aicFocal(B,side){ // 每格的交汇点权重:1 + 中部 + 不归自己的据点(高斯)
@@ -139,10 +242,10 @@ function aicFocal(B,side){ // 每格的交汇点权重:1 + 中部 + 不归自己
   return W;}
 function aicSAT(B,P){const nx=B.nx,ny=B.ny,S=new Float64Array((nx+1)*(ny+1));for(let j=0;j<ny;j++){let r=0;for(let i=0;i<nx;i++){r+=P[j*nx+i];S[(j+1)*(nx+1)+i+1]=S[j*(nx+1)+i+1]+r;}}return S;}
 function aicBox(B,S,i,j,r){const nx=B.nx,ny=B.ny,i0=Math.max(0,i-r),i1=Math.min(nx,i+r+1),j0=Math.max(0,j-r),j1=Math.min(ny,j+r+1),W=nx+1;return S[j1*W+i1]-S[j0*W+i1]-S[j1*W+i0]+S[j0*W+i0];}
-function aicSearchGoals(A,B,mine,side){ // 贪心:每艘挑分最高的格,挑完把那一片从草稿里扣掉,下一艘就去别处
+function aicSearchGoals(A,B,mine,side,arr){ // 贪心:每艘挑分最高的格,挑完把那一片从草稿里扣掉,下一艘就去别处;arr = 刚到点的舰(10-08:不留旧目标、不挑自己刚扫过的一片)
   const W=aicFocal(B,side),P=Float32Array.from(B.P,(v,k)=>v*W[k]),r=Math.max(1,Math.round(B.irR/Math.min(B.cw,B.ch))),out={};
-  for(const e of mine){const S=aicSAT(B,P);let bi=-1,bj=-1,bs=-1,old=-1;const g0=A.goals[e.id];
-    for(let j=0;j<B.ny;j++)for(let i=0;i<B.nx;i++){const x=B.A.x0+(i+0.5)*B.cw,y=B.A.y0+(j+0.5)*B.ch,sc=aicBox(B,S,i,j,r)/(1+Math.hypot(x-e.pos[0],y-e.pos[1])/AIC_C.SEARCH_D0);
+  for(const e of mine){const S=aicSAT(B,P);let bi=-1,bj=-1,bs=-1,old=-1;const ar=!!(arr&&arr[e.id]),g0=ar?null:A.goals[e.id],rx=Math.max(B.irR,e.visR||COV.VIS_R);
+    for(let j=0;j<B.ny;j++)for(let i=0;i<B.nx;i++){const x=B.A.x0+(i+0.5)*B.cw,y=B.A.y0+(j+0.5)*B.ch,sc=aicBox(B,S,i,j,r)/(1+Math.hypot(x-e.pos[0],y-e.pos[1])/AIC_C.SEARCH_D0);if(ar&&Math.hypot(x-e.pos[0],y-e.pos[1])<rx)continue;
       if(sc>bs){bs=sc;bi=i;bj=j;}if(g0&&g0.i===i&&g0.j===j)old=sc;}
     if(g0&&old>=bs*AIC_C.SEARCH_HYS){bi=g0.i;bj=g0.j;bs=old;}
     out[e.id]={i:bi,j:bj,x:B.A.x0+(bi+0.5)*B.cw,y:B.A.y0+(bj+0.5)*B.ch};
@@ -197,7 +300,7 @@ function btRun(x,X){if(x.t==='cond')return !!x.f(X);if(x.t==='act'){const r=x.f(
   for(const k of x.k)btRun(k,X);return true;}
 const AIC_TREE=BT.all('根',
   BT.sel('主线',
-    BT.seq('撤',BT.cond('有定位目标',X=>!!X.tgt),BT.cond('推演打不过',X=>X.sim.them-X.sim.us<AIC_C.FIGHT_MARGIN*X.sim.hp0),BT.act('撤',X=>aicDoWithdraw(X))),
+    BT.seq('撤',BT.cond('有定位目标',X=>!!X.tgt),BT.cond('推演打不过',X=>X.sim.them-X.sim.us<AIC_C.FIGHT_MARGIN*X.sim.hp0),BT.cond('逃得掉',X=>X.run),BT.act('撤',X=>aicDoWithdraw(X))),
     BT.seq('打',BT.cond('有定位目标',X=>!!X.tgt),BT.act('打',X=>aicDoStrike(X))),
     BT.seq('缩圈',BT.cond('有可信线索',X=>!!X.clue),BT.act('记线索',X=>aicNoteClue(X)),
       BT.sel('缩圈手段',
@@ -223,25 +326,34 @@ function aicConceal(p,t){const P=[p[0],p[1],0],T=[t[0],t[1],0],C=AIC_C;let c=0;
   if(envClutterOn()&&envInClutter(P))c+=C.TERR_CLUTTER;
   if(ENV.bodies.length&&featRadIn(P))c+=C.TERR_RAD;
   return c;}
-function aicTerrA(X,c,Rs,a0,da,n){ // 站位弧的中心方位:在 a0 左右各偏 0 / 0.5 / 1 / 1.5 弧度里挑「各舰隐蔽分之和 - 绕路」最大的
-  let ba=a0,bv=-Infinity,bc=0;for(const d of [0,-0.5,0.5,-1,1,-1.5,1.5]){let v=-AIC_C.TERR_DETOUR*Math.abs(d),cs=0;
-    for(let i=0;i<n;i++){const q=aicArc(c,Rs[i],a0+d,da,i,n),k=aicConceal(q,c);cs+=k;v+=k;}if(v>bv){bv=v;ba=a0+d;bc=cs;}}
-  X.terr=bc;return ba;}
+function aicTerrA(X,c,Rs,a0,da,n,edge){ // 站位弧的中心方位:在 a0 左右各偏 0 / 0.5 / 1 / 1.5 弧度里挑「各舰隐蔽分之和 - 绕路」最大的;edge(远距站位):再偏到 2.5 弧度,并扣被游玩区边界挤掉的(EDGE_K)
+  let ba=a0,bv=-Infinity,bc=0,bd=0;for(const d of (edge?[0,-0.5,0.5,-1,1,-1.5,1.5,-2,2,-2.5,2.5]:[0,-0.5,0.5,-1,1,-1.5,1.5])){let v=-AIC_C.TERR_DETOUR*Math.abs(d)+(AIC_C.TERR_HYS&&d===X.A.terrD?AIC_C.TERR_HYS:0),cs=0; // 10-08 上一拍选的偏角加 TERR_HYS
+    for(let i=0;i<n;i++){const q=aicArc(c,Rs[i],a0+d,da,i,n),k=aicConceal(q,c);cs+=k;v+=k;if(edge){const p=ordArenaClamp([q[0],q[1]]);v-=AIC_C.EDGE_K*Math.hypot(q[0]-p[0],q[1]-p[1])/Rs[i];}}if(v>bv){bv=v;ba=a0+d;bc=cs;bd=d;}}
+  X.terr=bc;if(AIC_C.TERR_HYS)X.A.terrD=bd;return ba;}
 /* ---- 树上的动作 ---- */
 function aicDoWithdraw(X){const T=[X.tgt.pos[0],X.tgt.pos[1]],a0=Math.atan2(X.fc[1]-T[1],X.fc[0]-T[0]),R=mslReach(X.mine[0])*AIC_C.WD_K;X.threat=T;
   const aT=aicTerrA(X,T,X.mine.map(()=>R),a0,AIC_C.TRACK_A,X.mine.length); // 撤也往对方最看不见的那一侧撤(躲到天体后面、影子里、星云里)
   X.mine.forEach((e,i)=>{X.plan[e.id].pos=aicArc(T,R,aT,AIC_C.TRACK_A,i,X.mine.length);});aicSalvo(X,T);}
-function aicDoStrike(X){const A=X.A,T=[X.tgt.pos[0],X.tgt.pos[1]],a0=Math.atan2(X.fc[1]-T[1],X.fc[0]-T[0]),R=(X.mine[0].visR||COV.VIS_R)*AIC_C.STRIKE_K;X.threat=T;
-  const order=X.mine.slice().sort((p,q)=>Math.atan2(p.pos[1]-T[1],p.pos[0]-T[0])-Math.atan2(q.pos[1]-T[1],q.pos[0]-T[0]));
-  order.forEach((e,i)=>{const sc=A.scoot[e.id]>0;X.plan[e.id].pos=aicArc(T,R,a0+(sc?0.3:0),AIC_C.SLOT_A,i,order.length);});
-  aicSalvo(X,T);
-  for(const e of X.mine){const pl=X.plan[e.id],need=aicExposed(e)?AIC_C.GUN_P_EXP:AIC_C.GUN_P_HID,d=Math.hypot(e.pos[0]-T[0],e.pos[1]-T[1]);pl.gunP=need;
-    if(hasMAC(e)&&e.macCd<=0&&!(A.scoot[e.id]>0)&&macHitProb(e,d,X.tgt.src)>=need){pl.hold=true;pl.pass=false;}}
-  if(X.tgt.st==='coast'&&projectiles.some(p=>p.type==='missile'&&!p.done&&p.shooter&&p.shooter.side===X.side)){let lamp=null,bh=-1;for(const e of X.mine){const h=e.hp/Math.max(1,e.maxHp);if(h>bh){bh=h;lamp=e;}}if(lamp)X.plan[lamp.id].paint=true;}} // 自己的弹在飞、定位变旧:亮一艘(数据链要位置)
+function aicDoStrike(X){const A=X.A,T=[X.tgt.pos[0],X.tgt.pos[1]],a0=Math.atan2(X.fc[1]-T[1],X.fc[0]-T[0]),st=X.mode==='stand',R=st?X.rStand:(X.mine[0].visR||COV.VIS_R)*AIC_C.STRIKE_K;X.threat=T;
+  const rel=e=>{const a=Math.atan2(e.pos[1]-T[1],e.pos[0]-T[0])-a0;return Math.atan2(Math.sin(a),Math.cos(a));},order=X.mine.slice().sort((p,q)=>rel(p)-rel(q)); // 10-09 按相对中线 a0 的方位排座次(原来按 atan2 原值,在 ±180° 断开:西边一方各舰座次整个颠倒、互相交叉 —— 子 agent 查出开局偏向东边的主因)
+  const aS=st?aicTerrA(X,T,order.map(()=>R),a0,AIC_C.SLOT_A,order.length,true):a0; // 远距(拉扯):站位点跟着目标走,它逼近就退;往对方最看不见、又不被边界挤住的一侧绕
+  const fm=aicFmOn(X);order.forEach((e,i)=>{const sc=A.scoot[e.id]>0&&!fm;X.plan[e.id].pos=aicArc(T,R,aS+(sc?0.3:0),AIC_C.SLOT_A,i,order.length);}); // 编队移动时不单独横移
+  if(!X.run)for(const e of X.mine)if(X.foes.some(f=>Math.hypot(e.pos[0]-f.pos[0],e.pos[1]-f.pos[1])<R)){X.plan[e.id].pos=[e.pos[0],e.pos[1]];X.plan[e.id].pass=false;} // 逃不掉:已经贴到站位圈以内的就地打,不往后退(退也是背对着挨炮)
+  aicSalvo(X,T); // 主炮在树后统一挑(aicGuns)
+  const coast=X.tgt.st==='coast',fly=projectiles.some(p=>p.type==='missile'&&!p.done&&p.shooter&&p.shooter.side===X.side);
+  if(AIC_C.BUOY_STRIKE){ // 10-07 打击时也用浮标:没有在用的就往目标旁放一个;到位后定期扫一拍看清目标附近还有谁,弹在飞、定位变旧时补扫,船保持静默
+    if(!aicBuoyLive(X)){X.E=T;aicDoBuoy(X);}
+    const o=aicPingBuoy(X,T);
+    if(o&&(A.pulseT>=AIC_C.PULSE_GAP||(coast&&fly&&A.linkT>=AIC_C.LINK_GAP))){A.bping=o;A.pulseT=0;A.linkT=0;return;}
+    if(o)return;} // 有浮标罩着目标:等它下一拍,不亮船
+  if(coast&&fly){let lamp=null,bh=-1;for(const e of X.mine){const h=e.hp/Math.max(1,e.maxHp);if(h>bh){bh=h;lamp=e;}}if(lamp)X.plan[lamp.id].paint=true;}} // 自己的弹在飞、定位变旧:亮一艘(数据链要位置)
 function aicSalvo(X,T){const A=X.A;for(const e of X.mine)X.plan[e.id].foe=X.tgt.src; // 全队同一拍;只打定位了的(执行层再按本舰距离判)
-  if(A.salvoT<AIC_C.SALVO_GAP)return;let n=0;
-  for(const e of X.mine){const d=Math.hypot(e.pos[0]-T[0],e.pos[1]-T[1]);if(d<=mslReach(e)&&e.ammo>0&&readyCells(e)>=Math.ceil((e.cells||4)*AIC_C.SALVO_READY)){X.plan[e.id].salvo=readyCells(e);n++;}}
-  if(n)A.salvoT=0;}
+  if(A.salvoT<AIC_C.SALVO_GAP||X.tgt.held)return;let G=0,Gmax=0;const go=[]; // 撑着的(掉出定位)不放
+  for(const e of X.mine){const d=Math.hypot(e.pos[0]-T[0],e.pos[1]-T[1]);if(d>mslReach(e)||!(e.ammo>0))continue;
+    const cap=Math.min(e.cells||4,Math.ceil(e.ammo/Math.max(1,e.mslPer||12))),r=Math.min(readyCells(e),cap);Gmax+=cap;
+    if(r>0&&r>=Math.ceil(cap*AIC_C.SALVO_READY)){go.push([e,r]);G+=r;}}
+  if(!go.length||G<Math.min(AIC_C.SALVO_MIN,Gmax))return; // 10-07 攒齐:一拍至少 SALVO_MIN 组(过对方近防炮的过载线)
+  for(const [e,r] of go)X.plan[e.id].salvo=r;A.salvoT=0;}
 function aicNoteClue(X){const A=X.A,c=X.clue.c,k=c.src||X.clue.key;let m=A.mem.get(k);if(!m){m={};A.mem.set(k,m);}X.mem=m; // 每条线索的记忆:放过浮标没有、上一轮打在什么时候
   if(c.src){const t=(A.tried.get(c.src)||0)+X.dt;A.tried.set(c.src,t);if(t>=AIC_C.GIVEUP_S){A.ign.set(c.src,simTime+AIC_C.IGNORE_S);A.tried.delete(c.src);}}
   X.threat=X.E;return true;}
@@ -260,7 +372,7 @@ function aicInUmb(X,e,p){if(X.umbOK)return false;const R0=aicPaintR(e);return X.
 function aicDoApproach(X){ // 逼近到「不确定圈整个进得了我方最远的照射量程」的距离(到了那里雷达一扫就定位,用户:「静听圈都进入了某船的雷达照射范围,我就会开雷达」);圈太大减不出来就停在导弹射程处,等浮标交叉把圈缩小
   let arMax=0;for(const e of X.mine)arMax=Math.max(arMax,actRangeOf(e,rdvStdRefl()));
   const E=X.E,a0=Math.atan2(X.fc[1]-E[1],X.fc[0]-E[0]),rIn=arMax-X.U,R=rIn>(X.mine[0].visR||COV.VIS_R)?Math.min(rIn,mslReach(X.mine[0])*AIC_C.TRACK_K):mslReach(X.mine[0])*AIC_C.TRACK_K;
-  const order=X.mine.slice().sort((p,q)=>Math.atan2(p.pos[1]-E[1],p.pos[0]-E[0])-Math.atan2(q.pos[1]-E[1],q.pos[0]-E[0]));
+  const rel=e=>{const a=Math.atan2(e.pos[1]-E[1],e.pos[0]-E[0])-a0;return Math.atan2(Math.sin(a),Math.cos(a));},order=X.mine.slice().sort((p,q)=>rel(p)-rel(q)); // 10-09 同上:按相对中线排,不在 ±180° 断开
   const pt=aicPainting(X),Rs=order.map(e=>pt?Math.max(R,aicPaintR(e)*1.02):R); // 对方在持续照射:各舰停在它照得到自己的距离外(进去就被它先定位、先挨打)
   const aT=aicTerrA(X,E,Rs,a0,AIC_C.TRACK_A,order.length); // 地形:挑对方最看不见我的那一侧
   order.forEach((e,i)=>{X.plan[e.id].pos=aicOutside(X,e,aicArc(E,Rs[i],aT,AIC_C.TRACK_A,i,order.length));});}
@@ -270,8 +382,8 @@ function aicDoBuoy(X){let e=null;for(const s of X.mine)if(s.buoys>0){e=s;break;}
   const a=Math.atan2(e.pos[1]-X.E[1],e.pos[0]-X.E[0])+((e.id.charCodeAt(e.id.length-1)%2)?1:-1)*Math.PI/3,r=Math.min(Math.hypot(e.pos[0]-X.E[0],e.pos[1]-X.E[1]),0.5*actRangeOf({type:'beacon'},rdvStdRefl()));
   X.plan[e.id].buoy=ordArenaClamp([X.E[0]+Math.cos(a)*r,X.E[1]+Math.sin(a)*r]);X.mem.buoy=true;}
 function aicBuoyLive(X){for(const o of rockObjs())if(o.kind==='buoy'&&o.side===X.side&&!o.dead)return true;return false;} // 10-07 用户「放慢」:同一时间只用一个,前一个没了再放(原来开局一两分钟就放完 3 个)
-function aicPingBuoy(X){let who=null,wd=Infinity;for(const o of rockObjs()){if(o.kind!=='buoy'||o.side!==X.side||o.dead)continue; // 浮标里(10-08 起方向式、一直在飞),圈心在它照射量程里、离圈心最近的(10-07 用户放宽:只罩住一部分圈也扫,扫不到就从搜索图里划掉)
-  const d=Math.hypot(o.pos[0]-X.E[0],o.pos[1]-X.E[1]);if(d<=actRangeOf(o,rdvStdRefl())&&d<wd){wd=d;who=o;}}return who;}
+function aicPingBuoy(X,P){P=P||X.E;let who=null,wd=Infinity;for(const o of rockObjs()){if(o.kind!=='buoy'||o.side!==X.side||o.dead)continue; // 浮标里(10-08 起方向式、一直在飞),圈心(打击时 = 目标)在它照射量程里、离得最近的(10-07 用户放宽:只罩住一部分圈也扫,扫不到就从搜索图里划掉)
+  const d=Math.hypot(o.pos[0]-P[0],o.pos[1]-P[1]);if(d<=actRangeOf(o,rdvStdRefl())&&d<wd){wd=d;who=o;}}return who;}
 function aicDoBuoyPing(X){const o=aicPingBuoy(X);if(!o)return false;X.A.bping=o;X.A.pulseT=0;} // 执行层(61)让它扫一拍
 
 /* ---- 主动开火(10-06 用户:「感觉那个地方是船,就可以开火,但是就不要做成之前的那种全星图随机乱抽奖,这样反而会导致位置暴露」)----
@@ -304,20 +416,21 @@ function aicBestShot(X){const B=X.B,A=X.A,side=X.side; // 每条没打过的线�
     const q={c:c,x:c.x,y:c.y};aicEsmCross(B,q);if(q.cross===undefined&&(c.k==='brg'||c.k==='shell')){const p=aicRayPeak(B,c.x,c.y,c.ux,c.uy,c.k==='shell'?c.len:Math.hypot(B.A.x1-B.A.x0,B.A.y1-B.A.y0));q.x=p[0];q.y=p[1];}
     const w=aicWarship(side,B,q)?1:pWar(c.k);if(w<AIC_C.FIRE_P)continue;
     const S=aicClueSamples(B,q);if(!S.length)continue;const aims=S.slice().sort((a,b)=>b.w-a.w).slice(0,6);aims.push({x:q.x,y:q.y});
-    for(const e of X.mine){if(!(e.ammo>0)||readyCells(e)<1)continue;const ex=aicExposed(e);
+    for(const e of X.mine){if(!(e.ammo>0)||readyCells(e)<1||e.ammo<AIC_C.BLIND_KEEP*(A.ammo0[e.id]||0))continue;const ex=aicExposed(e); // 10-07 库存低于开局的 BLIND_KEEP 不再主动开火
       for(const T of aims){const p=w*aicSweep(e,[T.x,T.y],S);if(p<AIC_C.FIRE_P)continue;
         if(!best||(ex&&!best.ex)||(ex===best.ex&&p>best.p))best={e:e,T:[T.x,T.y],p:p,ex:ex,key:key,q:q,w:w};}}}
   return best;}
-function aicDoShot(X){const s=X.shot,e=s.e,pl=X.plan[e.id];pl.bol=s.T;pl.bolN=Math.min(AIC_C.ROUND_N,readyCells(e));X.A.fired.set(s.key,simTime);
+function aicDoShot(X){const s=X.shot,e=s.e,pl=X.plan[e.id];pl.bol=s.T;pl.bolN=Math.min(AIC_C.BLIND_N,readyCells(e));X.A.fired.set(s.key,simTime);
   const U=aicClueU(s.q);if(hasMAC(e)&&e.macCd<=0&&s.w>=1&&U<=(e.visR||COV.VIS_R))pl.gunPt=[s.T[0],s.T[1],0]; // 主炮:炮弹来路一条直线指回本舰,只在圈够小、确认是战舰时加一炮
   X.why2=Math.round(s.p*100)+'%'+(s.ex?' 已暴露':'');return true;}
-function aicDoSearch(X){const A=X.A;if(A.replanT>=AIC_C.REPLAN_S){A.replanT=0;A.goals=aicSearchGoals(A,X.B,X.mine,X.side);}for(const e of X.mine){const g=A.goals[e.id];if(g)X.plan[e.id].pos=aicOutside(X,e,[g.x,g.y]);}}
+function aicDoSearch(X){const A=X.A;let arr=null;if(AIC_C.MOVE_ON)for(const e of X.mine){const g=A.goals[e.id];if(g&&Math.hypot(e.pos[0]-g.x,e.pos[1]-g.y)<AIC_C.ARRIVE_R)(arr=arr||{})[e.id]=true;} // 10-08 到了搜索点立刻换下一个
+  if(A.replanT>=AIC_C.REPLAN_S||arr){A.replanT=0;A.goals=aicSearchGoals(A,X.B,X.mine,X.side,arr);}for(const e of X.mine){const g=A.goals[e.id];if(g)X.plan[e.id].pos=aicOutside(X,e,[g.x,g.y]);}}
 function aicDoLure(X){let near=null,nd=Infinity;for(const e of X.mine){if((e.lures===undefined?1:e.lures)<=0)continue;const d=Math.hypot(e.pos[0]-X.E[0],e.pos[1]-X.E[1]);if(d<nd){nd=d;near=e;}}
   if(!near)return false;const k=AIC_C.LURE_D,lx=near.pos[0]+(X.E[0]-near.pos[0])*k,ly=near.pos[1]+(X.E[1]-near.pos[1])*k,nx=-(X.E[1]-near.pos[1])/Math.max(1,nd),ny=(X.E[0]-near.pos[0])/Math.max(1,nd),R=mslReach(near)*AIC_C.TRACK_K;
   X.plan[near.id].lure=[lx+nx*R*0.3,ly+ny*R*0.3];X.A.lured=true;}
 function aicDoStations(X){const sts=ENV.stations.length?featStaState().filter(T=>staHolderSeen(T,X.side)!==X.side):[],used=new Set(),cap=X.clue?1:X.mine.length;let any=false; // 搜索时每个据点派一艘、缩圈时最多一艘;至少留一艘干本职;LL6 归属读这一方看到的
   for(const T of sts){if(used.size>=cap||used.size>=X.mine.length-1)break;let w=null,wd=Infinity;for(const e of X.mine){if(used.has(e.id)||aicInUmb(X,e,[T.x,T.y]))continue;const d=Math.hypot(e.pos[0]-T.x,e.pos[1]-T.y);if(d<wd){wd=d;w=e;}} // 据点在对方雷达伞里就不派
-    if(w){used.add(w.id);X.plan[w.id].pos=[T.x,T.y];X.plan[w.id].pass=false;any=true;}}
+    if(w){used.add(w.id);X.plan[w.id].pos=[T.x,T.y];X.plan[w.id].pass=false;X.plan[w.id].sta=true;any=true;}}
   return any;}
 function aicIncoming(X){ // 冲着我来的火:炮弹来路 / 来袭导弹的方向往前延长、擦过我方某艘的可见光圈 ⇒ [{c 线索, ship 被打的那艘}]
   const L=[];for(const c of X.B.clues){if(c.k!=='shell'||c.tArr>simTime)continue;const fx=-c.ux,fy=-c.uy;let hit=null,hd=Infinity; // LL8 只用已经到达这一方的线索(bots/59 的 tArr;来源本来就推迟过,这里核对)
@@ -332,25 +445,36 @@ function aicDoCounter(X){ // 还手(用户:「我单方面打他不还手的」)
       if(hasMAC(e)&&e.macCd<=0&&!pl.gunPt)pl.gunPt=[P[0],P[1],0];}
     X.plan[q.ship.id].ping=true;X.threat=X.threat||[q.c.x,q.c.y];}
   X.A.cbT=0;return n>0||X.inc.length>0;}
-function aicDoJink(X){if(!X.threat)return false;X.mine.forEach((e,i)=>{if(!X.plan[e.id].hold)aicJink(X.plan[e.id],e,X.threat,i);});}
+function aicDoJink(X){if(!X.threat)return false;const fm=aicFmOn(X);X.mine.forEach((e,i)=>{if(!X.plan[e.id].hold)aicJink(X.plan[e.id],e,X.threat,fm?0:i);});} // 编队移动时全队同拍(错拍会把队形拉散)
 /* ---- 入口 ---- */
 function aiCommand(side,dt0,mine){ // 写 AIC[side].plan(每艘一份);DEC_S 游戏秒跑一次树,其余 tick 原样返回。不碰舰船字段
   const A=aicOf(side),C=AIC_C;A.acc+=dt0;if(A.acc<C.DEC_S&&A.ready)return A;const dt=A.acc;A.acc=0;A.ready=true;
   const B=(typeof belStep==='function')?belStep(side,dt):null,plan={};
-  A.replanT+=dt;A.pulseT+=dt;A.salvoT+=dt;A.cbT+=dt;
+  A.replanT+=dt;A.pulseT+=dt;A.salvoT+=dt;A.cbT+=dt;A.linkT+=dt;for(const e of mine)if(A.ammo0[e.id]===undefined)A.ammo0[e.id]=e.ammo||0;
   for(const id in A.scoot){A.scoot[id]-=dt;if(A.scoot[id]<=0)delete A.scoot[id];}
   for(const e of mine)if(e.fireHot>=SENS.FIRE_S-dt)A.scoot[e.id]=C.SCOOT_S; // 刚开过火(主炮或导弹)⇒ 横移
-  for(const e of mine)plan[e.id]={pos:[e.pos[0],e.pos[1]],pass:true,hold:false,paint:false,ping:false,lure:null,buoy:null,bol:null,bolN:0,gunPt:null,foe:null,salvo:0,gunP:0,gear:3};
+  for(const e of mine)plan[e.id]={pos:[e.pos[0],e.pos[1]],pass:true,hold:false,paint:false,ping:false,lure:null,buoy:null,bol:null,bolN:0,gunPt:null,foe:null,gunFoe:null,salvo:0,gunP:0,gear:3,sta:false,vCap:0,amb:false,keep:false};
   A.plan=plan;if(!B){A.why='没有游玩区';return A;}
-  const foes=aicFoes(side),tgt=foes.length?aicFocus(A,side,foes):null;A.foe=tgt?tgt.src:null;
+  const foes=aicFoes(side);if(C.ID_FIRE)aicFoesShot(side,B,foes);let tgt=foes.length?aicFocus(A,side,foes):null;
+  if(tgt){if(C.TGT_HOLD)A.held={src:tgt.src,pos:[tgt.pos[0],tgt.pos[1],tgt.pos[2]||0],a1:tgt.a1,t:simTime};} // 10-08 集火目标掉出定位(没被击沉)⇒ 按最后位置撑 TGT_HOLD 秒
+  else if(C.TGT_HOLD&&A.held&&simTime-A.held.t<=C.TGT_HOLD&&!contactDead(A.held.src,side))tgt={src:A.held.src,pos:A.held.pos,a1:A.held.a1,st:'held',held:true};
+  A.foe=tgt?tgt.src:null;
   const clue=tgt?null:aicClue(B,A);
-  const X={umb:[],side:side,A:A,B:B,mine:mine,plan:plan,dt:dt,fc:aicCenter(mine),tgt:tgt,sim:tgt?aicFightSim(side,mine,tgt,foes):null,clue:clue,E:clue?[clue.x,clue.y]:null,U:clue?aicClueU(clue):0,mem:{},threat:null,path:[]};
+  const X={umb:[],side:side,A:A,B:B,mine:mine,plan:plan,dt:dt,fc:aicCenter(mine),foes:foes,tgt:tgt,sim:null,mode:'close',rStand:0,run:true,clue:clue,E:clue?[clue.x,clue.y]:null,U:clue?aicClueU(clue):0,mem:{},threat:null,path:[]};
+  if(tgt){if(tgt.held&&A.lastSim)Object.assign(X,A.lastSim);else{aicSimPick(X,foes);if(C.TGT_HOLD)A.lastSim={sim:X.sim,mode:X.mode,rStand:X.rStand,run:X.run};}} // 撑着的沿用掉之前那一拍的推演
   X.umb=aicUmbrellas(X);
   if(X.umb.length){const sm=aicFightSimU(mine,X.umb.map(()=>aicSimUnit(null,aicSimLoad(null))));X.umbOK=sm.them-sm.us>=C.FIGHT_MARGIN*sm.hp0;} // 打得过就钻伞,打不过就在伞外:伞里每部雷达按一艘没认出的对方推演
   A.clue=clue?{x:clue.x,y:clue.y,U:X.U,k:clue.c.k}:null;
   btRun(AIC_TREE,X);
+  if(C.STRIKE_PAINT&&tgt)for(const e of mine)plan[e.id].paint=true; // 10-08 试验:交战时全队照射
+  if(C.PAINT_BACK&&tgt&&mine.some(e=>trkPaintedBy(e)))for(const e of mine)plan[e.id].paint=true; // 10-09 被照着才照回去
+  aicGuns(X);
   aicQuiet(X);
+  aicFormation(X);
   aicSupport(X);
+  aicCover(X);
   for(const id in plan)plan[id].pos=ordArenaClamp(plan[id].pos);
-  A.why=X.path.join(' › ')+(X.why2?' 开火把握 '+X.why2:'')+(tgt?' 推演 '+Math.round(X.sim.them)+'/'+Math.round(X.sim.us):'')+(clue?' 线索 '+clue.c.k+(clue.cross!==undefined?'(交叉)':'')+' 圈 '+Math.round(X.U/1000)+'k':'')+(X.terr?' 地形 '+X.terr.toFixed(1):'')+(X.umb.length?' 雷达伞 '+X.umb.length+(X.umbOK?' 打得过':' 躲'):'');return A;
+  aicRate(X);
+  aicKeepMoving(X);
+  A.why=X.path.join(' › ')+(X.why2?' 开火把握 '+X.why2:'')+(tgt?' 推演 '+Math.round(X.sim.them)+'/'+Math.round(X.sim.us)+(X.mode==='stand'?' 远距 '+Math.round(X.rStand/1000)+'k':'')+(X.run?'':' 逃不掉')+(tgt.held?' 撑':''):'')+(X.fm?' 编队':'')+(X.amb?' 伏击 '+X.amb:'')+(clue?' 线索 '+clue.c.k+(clue.cross!==undefined?'(交叉)':'')+' 圈 '+Math.round(X.U/1000)+'k':'')+(X.terr?' 地形 '+X.terr.toFixed(1):'')+(X.umb.length?' 雷达伞 '+X.umb.length+(X.umbOK?' 打得过':' 躲'):'');return A;
 }

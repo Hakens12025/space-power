@@ -3,7 +3,8 @@
 
 移植原则:逐行对着 js/physics/30-motion.js 与 31-step-ships.js 写,不做"等价简化"。
 已知必须复刻的三个怪癖:
-  (1) 航点被消费的那一拍,JS 的 continue 会跳过位置积分(31-step-ships.js:118),船那一拍原地不动。
+  (1) 航点被消费的那一拍:停靠点速度清零、不积分;路过点不导引、按原速度积分(2026-10-08 起;此前 JS 的 continue 连积分一起跳过,
+      船那一拍原地不动 —— AI 每 tick 重下近点时会把船冻住,已在 31-step-ships.js 修掉)。
   (2) facing 用三维:V.slerp 在【正好反平行】时会挑一个平面内的旋转轴,机头会短暂离开 XY 平面。
       简化成 2D 旋转会在掉头航线上悄悄发散。pos/vel 恒在平面内(td 的 z 分量恒为 0),只有 facing 会出平面。
   (3) 迟滞状态 coasting 跨 tick 保持,是环境状态的一部分,不能每步重置。
@@ -332,14 +333,14 @@ class RouteEnv:
             want = dirv * spd.unsqueeze(-1)
             vel, facing, coasting = self._steer(vel, facing, coasting, want, go)
 
-            # 怪癖(1):消费那一拍不积分位置
-            pos = torch.where(go.unsqueeze(-1), pos + vel * dt, pos)
+            # 怪癖(1):停靠点消费那一拍不积分(速度已清零);路过点消费那一拍不导引、照常积分(10-08 同步 31-step-ships)
+            pos = torch.where((go | cons_pass).unsqueeze(-1), pos + vel * dt, pos)
             oi = torch.where(cons, oi + 1, oi)
             t = torch.where(active, t + dt, t)
 
             v_now = self._len(vel)
             peak = torch.where(active, torch.maximum(peak, v_now), peak)
-            arc = torch.where(go, arc + self._len(vel) * dt, arc)
+            arc = torch.where(go | cons_pass, arc + self._len(vel) * dt, arc)
             # 偏靠:只更新【当前目标】与【刚消费的上一个】(按序单调,防折返航线的出航段污染)
             act = torch.minimum(oi, n - 1)
             d_all = self._len(orig - pos.unsqueeze(1))
@@ -440,12 +441,12 @@ class GraphRollout:
                            toWp / dist.clamp_min(1e-6).unsqueeze(-1), self.xhat.expand_as(toWp))
         want = dirv * spd.unsqueeze(-1)
         vel_n, facing_n, coast_n = env._steer(vel0, self.facing, self.coasting, want, go)
-        pos_n = torch.where(go.unsqueeze(-1), self.pos + vel_n * dt, self.pos)
+        pos_n = torch.where((go | cons_pass).unsqueeze(-1), self.pos + vel_n * dt, self.pos) # 10-08 路过点消费那一拍照常积分(同步 31-step-ships)
         oi_n = torch.where(cons, self.oi + 1, self.oi)
         t_n = torch.where(active, self.t + dt, self.t)
         v_now = env._len(vel_n)
         peak_n = torch.where(active, torch.maximum(self.peak, v_now), self.peak)
-        arc_n = torch.where(go, self.arc + v_now * dt, self.arc)
+        arc_n = torch.where(go | cons_pass, self.arc + v_now * dt, self.arc)
         act = torch.minimum(oi_n, self.n - 1)
         d_all = env._len(self.orig - pos_n.unsqueeze(1))
         win = (self.ar >= (act - 1).clamp_min(0).unsqueeze(1)) &               (self.ar <= act.unsqueeze(1)) & active.unsqueeze(1)

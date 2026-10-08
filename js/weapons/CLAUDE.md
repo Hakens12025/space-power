@@ -2,7 +2,7 @@
 
 ## 文件
 - `50-missile-spec.js` 导弹规格;`51-defs.js` 武器定义表 `WPN`、配装 `CLS_LOADOUT`、`resolveLoadout(cls,tier)`、命中率函数
-- `51-ciws.js` 近防谓词 / 过载 / 扇面;`52-fire.js` 主炮 / 诱饵 / 拦截弹 / 齐射发射链、开火暴露置位、命中闪光 `spawnHit` / 近防火花 `spawnCiwsFX`(看得见的口径 `fxVis`)
+- `51-ciws.js` 近防三件的读数入口 `icpOf`(拦截弹)/ `gunOf`(近防炮)/ `ciwsRingsOf`(菜单 / 光圈 / 编队按「近防两圈」看)、近防炮过载 `gunOverload`、扇面;`52-fire.js` 主炮 / 诱饵 / 拦截弹 / 齐射发射链、开火暴露置位、命中闪光 `spawnHit` / 近防火花 `spawnCiwsFX`(看得见的口径 `fxVis`)
 - `53-nets.js` 数据链网分配;`54-missiles.js` 导弹引导(`MSL_CFG` / 导引头 `missSeeT`);主炮前出奖励 `MAC_FWD` / `macFwdK`(52;对方在我方可见光圈里 / 被我方雷达照到,命中曲线的距离按 1.6 / 1.3 缩,`macHitProb` / `macShotSigma` 带目标就算);盲射导引头 `MSL_BLIND`(54 `missSeeT` 的 blind:探测圈 1 万 x 目标体型、看热 x2/3,只给 `mslSeek`);`56-step-projectiles.js` 天体 / 碎石挡弹 `projBlock`(炮弹 / 导弹 / 拦截弹;碎石被打碎、导弹组少一颗);导弹速度曲线乘 `MSL_VK`(1/2 x `CFG.vscale`,加速度 `MSL_A` 再 x2:2026-10-03 用户,燃料秒数不变 ⇒ 同样的油换两倍速度变化)、拦截弹乘 `INT_VK`(1/2 x `CFG.vscale`),都在 52;`55-damage.js` `applyDamage`(碎石被打中就碎;先扣护盾,打破后多出的进船体;返回进船体的伤害,调用方据此出不出船体命中闪光)、护盾回充 / 重启 `stepShields`(`SHIELD`:空到满 60、破后 10 游戏秒重启;盾值在 ships/11 `CLS_STRUCT.shield`)
 - `56-step-projectiles.js` 弹丸推进与引导;`57-step-weapons.js` 冷却 / 装填 / 自动索敌与自动齐射;`58-firecontrol.js` 火控序列引擎侧(`fcGate` / `fcSolve` / `fcRuns`)
 
@@ -24,7 +24,7 @@
 - 自动开火只打把握 ≥ `MAC_AUTO_P`(0.1,约 19.6 万)的;红方 bot 读同一个常量。红方主炮实际从 57 末尾的自动开火走(看 `roe` / `macOn` / `lockedTarget`)。
 - 瞄的是接触的估计位置(`macPred` 走 sensors/21 `contactKin`:位置先按它的时刻 t 推到此刻(52 `macKinNow`),提前时间 = (simTime − t) + 飞行时间;关开关时 = `contactPos` + 真速度,同改前);导弹出膛的 `p.tk`、`mslTkSet`(在网上)、`guideSide` 的排序同口径;交代不出位置就不开火、不转向;我方不知道速度时按不动算(`MAC_V0`),不拿真值兜底。打空地同样按相对参照系提前(`macPtLead`:点 − 本舰速度 x 飞行时间)。轴炮对准再射(2026-09-28 用户):机头方位与瞄准点差在 `MAC_ALIGN` 0.1° 以内才许开(`macAligned` / `macAimErr`,只比水平面),出膛方位沿机头轴线 + 散布、俯仰取瞄准线。数据链引导段瞄估计位置,只有导引头自己看见(`guideMode==='self'`)才用目标本身(光速延迟开着时是导引头影像,54 `mslAimNow` / `mslAimVel`);估计为 null 按脱锁处理,不许回落真值。导弹的命中触发按真值:这一步相对线段离目标最近 < 800(`stepCPA2`),开关开 / 关同一口径(10-07 用户;不按瞄准点距离)。
 - 已知的真值口子:关开关时目标速度仍取真值(开着时读 `contactKin` / 导引头影像的速度);命中判定按真实位置(那是物理);拦截弹重选目标 `findInterceptorTarget` 读真弹的 done / 颗数。
-- 拦截弹防区(2026-10-07 用户「拦截弹无限射程燃料」):防区半径 = 防空核心近防外圈 x2(预警距离)x `INT_ZONE_K` 3,各舰种同一个(`INT_ZONE_R2`;同日用户:巡洋舰也用护卫舰这个),圆心跟着发射舰走(52 `icHome`,沉了用最后位置);出防区自毁(56)。重选目标只认本方看得见的(`trkSees`;光速延迟开着按弹影 `projLook` 量距离)且在防区内的。油至少按时间烧(每游戏秒 1,燃料 = 寿命)。一组的颗数 = 来袭颗数 x1.2 向上取整(57)。
+- 拦截弹防区(2026-10-07 用户「拦截弹无限射程燃料」):防区半径 = 防空核心拦截弹的预警距离(`outer` x `warnK`)x `zoneK`,各舰种同一个(`INT_ZONE_R2`;同日用户:巡洋舰也用护卫舰这个),圆心跟着发射舰走(52 `icHome`,沉了用最后位置);出防区自毁(56)。重选目标只认本方看得见的(`trkSees`;光速延迟开着按弹影 `projLook` 量距离)且在防区内的。油至少按时间烧(每游戏秒 1,燃料 = 寿命)。一组的颗数 = 来袭颗数 x `perK` 向上取整(57)。
 - 前出浮标(2026-09-27):特殊武器 `kind:'buoy'`,只给巡游舰(舰种 CL;ships/11 的 `makeShip`,`s.buoys`);⌖ 点一个方向 → world/14 的 `launchBuoy`(沿舰 → 点一直飞,出地图消失);遥控照射 = 点浮标本身 → 底栏雷达(`buoySetOn`)。不进轮盘。
 - 强行开火(2026-09-27):`s.forceMac = {t|pt, T}` 由 command/70 的 `mdWeaponPick` 写,57 每拍重设 `turnTarget`、对准就开一炮(不看火控、勾选与把握门,60 秒作废);打空地走 52 的 `fireMACAt`,弹丸带 `ground`,56 对对方每艘船按线段最近点判。
 - 炮弹来路(2026-09-28,反炮兵定位的最简形态):对方主炮弹被我方看见(可见光圈或雷达照到,`trkSees`,与地图上画不画它同一个判据)⇒ 56 的 `shellTraceStep` 往 `SHELL_TR[side]` 记首见点 `a`、看得见的最后一点 `b` 与飞行方向 `u`,射手开火时就在 a − u·s 上(光速延迟开着时 a / b / u 取这一方看到的弹影 sensors/21 `projLook`,`t` 是看见的时刻、另记 a 的影像时刻 `te`;枚举走 `projAll`,消失了、光还没到的弹照样记);只记几何不记射手,留 `KEEP` 游戏秒,换局清空(scenario/91)。蓝方的画在地图上(render/83 `drawShellTraces`),红方的给 bots 读。导弹不做。
@@ -36,7 +36,7 @@
 - 光锥层登记(sensors/26,2026-10-07):`projectiles.push` 之后紧跟 `llBorn(新弹)`;弹从数组里拿掉的路径(56 的过滤、超上限裁剪)调 `llGone(p, 时刻)`。新增 push 点或删弹路径漏了不报错,光锥层就少了这发弹。
 
 ## 定义与配装
-- 加新武器 = `WPN` 加一条 + `CLS_LOADOUT` 加一行;按钮 / 规格条 / hover 圈都由 `s.weapons` 清单驱动。运行时状态(`macCd` / `ammo` 等)平铺在舰船实例上。
+- 近防是三件独立武器(2026-10-07 用户):拦截弹 `icp_*` / 近防炮 `gun_*` / 干扰弹 `chf_*`(`_core` 防空核心、`_self` 自防御),各自的参数全在 `WPN` 里(原来写死在 52 / 56 / 57 的数也搬进去了),配装解析另存一份 `lw.wp[kind]`、makeShip 烘焙成 `s.icp` / `s.gun`(干扰弹烘焙成 `s.chaffRate`);菜单仍归在「近防」下。近防炮(10-07 用户):命中率 70%、不随机打折,这艘船近防圈里同时满 `ovN` 4 组才过载(51-ciws `gunInCircle` / `gunOverload`)。巡游舰配装 `msl_cl`(2 个发射单元)、没有主炮。 加新武器 = `WPN` 加一条 + `CLS_LOADOUT` 加一行;按钮 / 规格条 / hover 圈都由 `s.weapons` 清单驱动。运行时状态(`macCd` / `ammo` 等)平铺在舰船实例上。
 - 新增顶层 const 前先全库 grep 同名(跨 script 重名会让整个文件语法报废)。weapons 在 formation 之后加载,载入期不许读 formation 的顶层量(改成惰性函数)。
 
 ## 火控序列

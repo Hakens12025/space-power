@@ -117,8 +117,7 @@ function fxVis(pos,sh,vic){ // 2026-09-28 vis = 我方看不看得见这一下:�
 function spawnHit(pos,type,sh,vic){const h={pos:pos.slice(),t:1.2,type,vis:fxVis(pos,sh,vic),vic:vic||null};if(typeof llFx==='function')llFx(h,pos,sh,vic);hitFX.push(h);} // LL6 光速延迟开着时登记到达(条目挂 seeT,画面按 fxSeen 到达才播;sensors/26) // 2026-09-29 vic = 挨打的是什么(撞天体为 null、碎石 / 民船也在这里):小窗只报打在舰船上的
 let ciwsFX=[]; // 2026-09-28 近防炮打掉的导弹火花 {pos,n,tw,vis}:weapons/56 结算时出,render/83 drawCiwsFx 按墙钟画完就删(不进 hitFX:小窗导演会把它当中弹)
 function spawnCiwsFX(pos,n,sh,vic){const f={pos:pos.slice(),n,tw:nowMs(),vis:fxVis(pos,sh,vic),vic:vic||null};if(typeof llFx==='function')llFx(f,pos,sh,vic);ciwsFX.push(f);} // LL6 同 spawnHit:登记到达 // vic = 那组导弹冲着的船(小窗「近防拦下」绑它)
-const INT_ZONE_K=3; // 2026-10-07 用户「拦截弹无限射程燃料」:拦截弹的防区 = 预警距离(防空核心近防外圈 x2)的几倍,跟着发射舰走;同日用户:巡洋舰也和护卫 / 巡游一样(约 5.7 万 km,原来按自己的外圈约 3.4 万)
-const INT_ZONE_R2=(INT_ZONE_K*2*WPN.ciws_core.outer)**2; // 防区半径的平方,各舰种同一个
+const INT_ZONE_R2=(WPN.icp_core.zoneK*WPN.icp_core.warnK*WPN.icp_core.outer)**2; // 2026-10-07 用户「拦截弹无限射程燃料」:防区半径 = 预警距离(防空核心拦截弹 outer x warnK)x zoneK,跟着发射舰走;同日用户:各舰种同一个(约 5.7 万 km)。存的是平方
 function icHome(p){const s=p.shooter;if(s&&!s.dead)p.icLast=s.pos;return p.icLast;} // 防区中心 = 发射舰此刻位置;发射舰沉了用最后位置
 function findInterceptorTarget(p){ // 拦截弹重选目标:前方最近的来袭导弹,诱饵弹优先(信号强,为真导弹让路);只认本方看得见的、在发射舰防区内的(10-07:原来全场扫描、不看距离不看可见,会满图追)
   let best=null,bd=1e18,bestDecoy=false;
@@ -143,9 +142,10 @@ function fireDecoy(shooter){ // v125 诱饵弹:模拟舰船热信号骗敌方拦
     target:null,shooter,spd:Math.max(PHYS.v(30)*INT_VK,V.len(shooter.vel)),age:0,fuel:PHYS.t(600)});
   if(typeof llBorn==='function')llBorn(projectiles[projectiles.length-1]); // LL1 弹丸出生登记(sensors/26 光锥层;只记录不改模拟)
 }
-function fireInterceptor(shooter,targetMissile,count){ // 发射拦截导弹实体(燃料模式v114:可出远门防御)
-  projectiles.push({type:'interceptor',count:count||16,pos:shooter.pos.slice(),vel:shooter.vel.slice(),
-    target:targetMissile,shooter,spd:Math.max(PHYS.v(30)*INT_VK,V.len(shooter.vel)),age:0,fuel:PHYS.t(600),
+function fireInterceptor(shooter,targetMissile,count){ // 发射拦截导弹实体(燃料模式v114:可出远门防御);参数读发射舰的拦截弹(51-ciws icpOf),弹上带一份 wp
+  const w=icpOf(shooter);
+  projectiles.push({type:'interceptor',count:count||16,pos:shooter.pos.slice(),vel:shooter.vel.slice(),wp:w,
+    target:targetMissile,shooter,spd:Math.max(PHYS.v(w.v0)*INT_VK,V.len(shooter.vel)),age:0,fuel:PHYS.t(w.fuelS),
     hitMul:(shooter.interHitMul||1),icLast:shooter.pos.slice(),icR2:INT_ZONE_R2}); // icR2 = 防区半径的平方(INT_ZONE_R2)。RANGE1 拦截弹命中率倍率随弹出膛(07-missiles 的 hitRate 末尾乘它)。外圈拦截率的真实旋钮是这个:CLS_CIWS.outerIntercept 是死字段,声明后全库零读取,面板绝不能放它
   if(typeof llBorn==='function')llBorn(projectiles[projectiles.length-1]); // LL1 弹丸出生登记(sensors/26 光锥层;只记录不改模拟)
 }

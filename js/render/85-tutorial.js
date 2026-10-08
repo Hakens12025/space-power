@@ -74,7 +74,7 @@ const TUT_HTML=`
 
     <h3 class="tut-h3">导弹：为什么成波打</h3>
 
-    <p>导弹是全场射程最长的武器，自动齐射打到 <code class="num">40 万公里</code>，远超自己雷达定得出位置的距离——打满射程要靠静听、交叉定位或前出舰的数据。定出目标位置就能对舰发射；没定位的接触，用导弹点它就是朝那个位置盲射。飞法分三段：点火加速、熄火滑行（红外里是冷的，只有雷达和可见圈看得到）、进了自己导引头的范围再点火修正；组网包抄的航线是弯的，几乎全程在喷。它以「组」为单位，每组 <code class="num">12 枚</code>；护卫舰 <code class="num">4</code> 个发射单元、载弹 <code class="num">192 枚</code>、单枚伤害 <code class="num">12</code>，巡洋舰 <code class="num">6</code> 个单元、载弹 <code class="num">240 枚</code>、单枚 <code class="num">15</code>。</p>
+    <p>导弹是全场射程最长的武器，自动齐射打到 <code class="num">40 万公里</code>，远超自己雷达定得出位置的距离——打满射程要靠静听、交叉定位或前出舰的数据。定出目标位置就能对舰发射；没定位的接触，用导弹点它就是朝那个位置盲射。飞法分三段：点火加速、熄火滑行（红外里是冷的，只有雷达和可见圈看得到）、进了自己导引头的范围再点火修正；组网包抄的航线是弯的，几乎全程在喷。它以「组」为单位，库存也按组数：护卫舰 <code class="num">4</code> 个发射单元（一次齐射 4 组）、库存 <code class="num">12 组</code>（每组 12 发）、单发伤害 <code class="num">12</code>；巡游舰 <code class="num">2</code> 个单元（一次 2 组）、库存 <code class="num">6 组</code>，没有轴炮；巡洋舰 <code class="num">6</code> 个单元、库存 <code class="num">20 组</code>、单发 <code class="num">15</code>。</p>
 
     <p>没有目标、或者母舰丢了目标的导弹不会闲着：它一路开着自己的导引头找，看见什么就扑上去，挑最近的。导引头分不出民船、诱饵和敌舰，所以盲射有误伤的代价，诱饵也真能骗走导弹。点选一组我方导弹，底栏会出现「变雷」：不勾，导弹飞过瞄准点继续直飞搜索，出了游玩区消失；勾上，它飞到瞄准点停下待命，导引头看见目标再点火。</p>
 
@@ -90,9 +90,9 @@ const TUT_HTML=`
 
     <p>拦截是完全自动的，你要做的决定只有武器菜单「近防」展开后的两个勾：近防导弹（外圈拦截弹）和近防炮（内圈）各自开还是关；两个没全勾时，上一级「近防」显示半勾。来袭导弹进入预警距离（外圈的两倍，护卫舰是 <code class="num">1.9 万公里</code>）之后，只要本阵营的传感器看得见这枚弹（看到的是光送过来的弹影）、而且它被判定为威胁，近防就会发射拦截弹迎上去；同一个来袭组已经有拦截弹在追时不会重复发射，发射间隔 <code class="num">3 秒</code>。拦截弹只在发射舰周围约 <code class="num">5.7 万公里</code>的防区里活动（防区跟着发射舰走，各舰种一样），飞出防区或者油烧完就自毁（油按时间烧，匀速直飞也在烧）；拦完一组只会转去追防区里看得见的下一组。消耗按来袭枚数的 <code class="num">1.2 倍</code>取整，所以接一个 <code class="num">12 枚</code>的组要吃掉 <code class="num">15 枚</code>拦截弹——这是你的弹药，不是免费的。</p>
 
-    <p>防御分两层。外圈是拦截弹，内圈是近防炮，打进内圈的来袭弹还要再过一次近防判定：护卫舰内圈 <code class="num">3020 公里</code>、拦截强度上限 <code class="num">0.85</code>，巡洋舰内圈 <code class="num">1890 公里</code>、上限 <code class="num">0.40</code>。这里要特别看清「上限」两个字：每次结算实际拦掉的比例是在 <code class="num">0</code> 到这个上限之间随机取的，平均只有上限的一半，下面那条过载还会把它再往下压。所以一组 <code class="num">12 枚</code>的来袭弹被干扰弹勾走三枚、剩九枚进内圈，指望护卫舰只放过一两枚是估高了，平均会有 <code class="num">5 枚</code>左右落地。至于干扰弹本身，每次结算逐枚掷一次，把来袭弹勾走的概率护卫舰是 <code class="num">0.25</code>、巡洋舰是 <code class="num">0.15</code>。</p>
+    <p>防御分两层。外圈是拦截弹，内圈是近防炮，打进内圈的来袭弹还要再过一次近防炮：护卫舰内圈 <code class="num">3020 公里</code>、巡洋舰内圈 <code class="num">1890 公里</code>，命中率都是 <code class="num">70%</code>，不随机打折。所以一组 <code class="num">12 枚</code>的来袭弹被干扰弹勾走三枚、剩九枚进内圈，没过载时近防炮打掉六枚，落地三枚左右。至于干扰弹本身，每次结算逐枚掷一次，把来袭弹勾走的概率护卫舰是 <code class="num">0.25</code>、巡洋舰是 <code class="num">0.15</code>。</p>
 
-    <p>近防会过载，这是防守方最该记住的一条：同时来袭 <code class="num">n</code> 组时，每组的拦截效率要乘以 <code class="num">1/(1+(n−1)×0.6)</code>；如果这些组还是从不同扇面来的，再乘一次 <code class="num">1/(1+(扇面数−1)×1.5)</code>。两个方向各来两组，比一个方向来四组难挡得多——上面那个自动组网包抄，打的正是这个算式。</p>
+    <p>近防炮会过载，这是防守方最该记住的一条：一艘船的近防圈里同时有 <code class="num">4</code> 组以上来袭，它就顾不过来了，圈里有 <code class="num">n</code> 组时命中率要乘以 <code class="num">1/(1+(n−3)×0.6)</code>；如果圈里这些组还是从不同扇面来的，再乘一次 <code class="num">1/(1+(扇面数−1)×1.5)</code>。所以饱和攻击要的是「同时」挤进近防圈，从几个方向一起进来更难挡。</p>
 
     <p>还有一条储备纪律：拦截弹库存低于三成时，近防只拦已经逼近到外圈一半距离以内的目标（护卫舰约 <code class="num">4700 公里</code>），远处的一律放过。所以打到后半场，你会看到明明有弹却「不拦了」，那是它在攒最后一道防线。</p>
 
@@ -107,12 +107,12 @@ const TUT_HTML=`
       </thead>
       <tbody>
         <tr><td>结构</td><td><code class="num">550</code></td><td><code class="num">900</code></td></tr>
-        <tr><td>加速度</td><td><code class="num">0.24 km/s²</code></td><td><code class="num">0.18 km/s²</code></td></tr>
+        <tr><td>加速度</td><td><code class="num">0.192 km/s²</code></td><td><code class="num">0.144 km/s²</code></td></tr>
         <tr><td>转向率</td><td><code class="num">14.9°/秒</code></td><td><code class="num">9.17°/秒</code></td></tr>
         <tr><td>主炮</td><td><code class="num">600</code> 伤害 · <code class="num">300 秒</code>装填</td><td><code class="num">600</code> 伤害 · <code class="num">300 秒</code>装填</td></tr>
-        <tr><td>导弹</td><td><code class="num">4</code> 单元 · <code class="num">192 枚</code> · 单枚 <code class="num">12</code></td><td><code class="num">6</code> 单元 · <code class="num">240 枚</code> · 单枚 <code class="num">15</code></td></tr>
+        <tr><td>导弹</td><td><code class="num">4</code> 单元 · <code class="num">12 组</code>(每组 12 发)· 单发 <code class="num">12</code></td><td><code class="num">6</code> 单元 · <code class="num">20 组</code>(每组 12 发)· 单发 <code class="num">15</code></td></tr>
         <tr><td>近防内外圈</td><td>外 <code class="num">9.5k</code> · 内 <code class="num">3.0k 公里</code></td><td>外 <code class="num">5.7k</code> · 内 <code class="num">1.9k 公里</code></td></tr>
-        <tr><td>内圈拦截上限</td><td><code class="num">0.85</code></td><td><code class="num">0.40</code></td></tr>
+        <tr><td>近防炮命中率</td><td><code class="num">70%</code></td><td><code class="num">70%</code></td></tr>
         <tr><td>拦截弹库存</td><td><code class="num">384 枚</code></td><td><code class="num">320 枚</code></td></tr>
         <tr><td>基础信号</td><td><code class="num">0.7</code></td><td><code class="num">1.0</code></td></tr>
         <tr><td>雷达截面</td><td><code class="num">0.6</code></td><td><code class="num">1.0</code></td></tr>
