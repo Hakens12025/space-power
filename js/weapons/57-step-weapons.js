@@ -89,7 +89,7 @@ function stepWeaponSystems(dt){
       const need=Math.ceil((q.count||16)*w.perK); // 拦截弹数 = 来袭颗数×1.2 向上取整(覆盖拦截失败;10-07 试过 1:1、16 局蓝方拦截率 70.9% → 63.0%,用户改回);LL7 颗数读弹影(关开关 = 真弹)
       if(x.interceptor>=need){
         x.interceptor-=need;x.ciwsCd=PHYS.t(w.cdS); // 拦截弹发射间隔冷却(cdS 物理秒)
-        fireInterceptor(x,p,need);
+        fireInterceptor(x,p,need,q); // q = 这艘看到的来袭弹(光速延迟开着是弹影):出膛朝它瞄
       }
       break;
     }

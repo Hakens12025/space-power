@@ -10,9 +10,9 @@
 const WPN={ // 定义(Definition):全局一份的不变模板,数值原样搬自原 CLS_WPN/CLS_CIWS 表
   mac_light:{kind:'mac',label:'主炮',macDmg:600,mac:PHYS.t(600),macSigma:0.005248},  // DD 轴炮。2026-09-29 装填 300 → 600 秒(用户)。2026-09-28 伤害 220 → 600(用户:一炮打死护卫舰;DD 550 一炮、CA 900 两炮)。macSigma 定 50% 距离:0.005248 ⇒ 11.3 万(2026-10-05 用户:整条曲线往外拉,原 0.0081 ⇒ 7.3 万),曲线形状见 weapons/52 的 MAC_K(4.6 万 97% / 19.6 万 10%)
   mac_heavy:{kind:'mac',label:'主炮',macDmg:600,mac:PHYS.t(600),macSigma:0.005248},  // CA/BB 轴炮。2026-09-28 伤害 400 → 600(BB 靠下方 CLS_LOADOUT 克隆自动跟上)。WR1:先与 DD 同一个散布,以后要分再填
-  msl_light:{kind:'msl',label:'导弹',missDmg:12,ammo:144,cells:4,mslPer:12,mslReload:PHYS.t(600)},  // 护卫舰导弹:12 组 x 12 发(2026-10-07 用户:按组定库存,原 64 组;2026-10-02 曾 x4;KIMI154:每组16→12)
-  msl_cl:{kind:'msl',label:'导弹',missDmg:12,ammo:72,cells:2,mslPer:12,mslReload:PHYS.t(600)}, // 巡游舰导弹:6 组 x 12 发,一次射两组(发射单元 2)(2026-10-07 用户)
-  msl_heavy:{kind:'msl',label:'导弹',missDmg:15,ammo:240,cells:6,mslPer:12,mslReload:PHYS.t(600)}, // 巡洋舰导弹:20 组 x 12 发(2026-10-07 用户:按组定库存,原 80 组;2026-10-02 曾 x4;KIMI154)
+  msl_light:{kind:'msl',label:'导弹',missDmg:12,ammo:288,cells:4,mslPer:12,mslReload:PHYS.t(600)},  // 护卫舰导弹:24 组 x 12 发(2026-10-08 用户:全体导弹数量 x2;2026-10-07 用户:按组定库存,原 64 组;2026-10-02 曾 x4;KIMI154:每组16→12)
+  msl_cl:{kind:'msl',label:'导弹',missDmg:12,ammo:144,cells:2,mslPer:12,mslReload:PHYS.t(600)}, // 巡游舰导弹:12 组 x 12 发(10-08 x2),一次射两组(发射单元 2)(2026-10-07 用户)
+  msl_heavy:{kind:'msl',label:'导弹',missDmg:15,ammo:480,cells:6,mslPer:12,mslReload:PHYS.t(600)}, // 巡洋舰导弹:40 组 x 12 发(10-08 x2;2026-10-07 用户:按组定库存,原 80 组;2026-10-02 曾 x4;KIMI154)
   // 2026-09-28 用户:拦截圈 x1.5(外圈 / 内圈:防空核心 1.25 万 / 4000 → 1.875 万 / 6000,自防御 7500 / 2500 → 1.125 万 / 3750;先试过 x2)
   // 2026-10-05 用户:近防圈 x1.2(防空核心 1.3125 万 / 4200 → 1.575 万 / 5040,自防御 7875 / 2625 → 9450 / 3150;都再乘 CFG.scale);阵型从近防推,跟着大 20%。同日更早:近防圈 x0.7(外圈 / 内圈:防空核心 1.875 万 / 6000 → 1.3125 万 / 4200,自防御 1.125 万 / 3750 → 7875 / 2625);阵型从近防推,跟着缩(formation/39 fmBandRadii)
   /* 2026-10-07 用户:近防拆成三件独立武器(原来一件 ciws_core / ciws_self 混着装)。数值原样搬过来,原来写死在 52 / 56 / 57 / 51-ciws 里的也搬进表;档位照旧:

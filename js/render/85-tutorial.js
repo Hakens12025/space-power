@@ -110,7 +110,7 @@ const TUT_HTML=`
         <tr><td>加速度</td><td><code class="num">0.192 km/s²</code></td><td><code class="num">0.144 km/s²</code></td></tr>
         <tr><td>转向率</td><td><code class="num">14.9°/秒</code></td><td><code class="num">9.17°/秒</code></td></tr>
         <tr><td>主炮</td><td><code class="num">600</code> 伤害 · <code class="num">300 秒</code>装填</td><td><code class="num">600</code> 伤害 · <code class="num">300 秒</code>装填</td></tr>
-        <tr><td>导弹</td><td><code class="num">4</code> 单元 · <code class="num">12 组</code>(每组 12 发)· 单发 <code class="num">12</code></td><td><code class="num">6</code> 单元 · <code class="num">20 组</code>(每组 12 发)· 单发 <code class="num">15</code></td></tr>
+        <tr><td>导弹</td><td><code class="num">4</code> 单元 · <code class="num">24 组</code>(每组 12 发)· 单发 <code class="num">12</code></td><td><code class="num">6</code> 单元 · <code class="num">40 组</code>(每组 12 发)· 单发 <code class="num">15</code></td></tr>
         <tr><td>近防内外圈</td><td>外 <code class="num">9.5k</code> · 内 <code class="num">3.0k 公里</code></td><td>外 <code class="num">5.7k</code> · 内 <code class="num">1.9k 公里</code></td></tr>
         <tr><td>近防炮命中率</td><td><code class="num">70%</code></td><td><code class="num">70%</code></td></tr>
         <tr><td>拦截弹库存</td><td><code class="num">384 枚</code></td><td><code class="num">320 枚</code></td></tr>
