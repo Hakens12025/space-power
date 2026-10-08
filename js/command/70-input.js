@@ -77,7 +77,7 @@ function ghostCommit(){
 }
 let mmbTimer=null;      // RF5 Phase C 中键长按开轮盘的定时器句柄。同上就近声明(只被本文件 down/move/up/blur 四处读写);与 core/01-state 的 rmbTimer 是两回事,不要复用
 function shipAt(sx,sy){ // 我方舰(60 px;编队聚合框先看 —— 框里的船不画在自己的位置上,SN6)。2026-10-08 走实体登记表(command/69 entPick)
-  const h=entPick(sx,sy,{agg:'blue',k:['ship'],side:'blue',ok:o=>o.side==='blue'}); // RF2 简化UI:只可选己方舰(GM 也不例外)
+  const h=entPick(sx,sy,{agg:'blue',k:['ship'],side:ME,ok:o=>o.side===ME}); // 2026-10-08 ME:联机加入方选自己的(红方) // RF2 简化UI:只可选己方舰(GM 也不例外)
   return h?h.o:null;
 }
 /* RF4b 敌舰命中测试(右键指定目标 / T·R 点击攻击 / RF5 悬停准星,三条路都只调它)。
@@ -90,7 +90,7 @@ function shipAt(sx,sy){ // 我方舰(60 px;编队聚合框先看 —— 框里�
      · 画在哪就点在哪(实况读估计 c.x/c.y、幽灵陈旧读外推)⇒ 不会画一处点另一处
    ⚠ GM 旁路留在调用方:contactPos 只讲感知事实,不读 adminMode。 */
 function targetAt(sx,sy){ // 2026-10-08 走实体登记表(command/69 entPick):蓝方航迹表里交代得出位置的、不是已认出的非船(trkFoe),点在画它的那一点,60 px;GM 按真值扫红舰
-  const h=entPick(sx,sy,{k:adminMode?['ship']:['ship','obj'],side:'blue',r:60,ok:o=>adminMode?o.side==='red':(o.side!=='blue'&&trkFoe(trkOf('blue',o)))});
+  const h=entPick(sx,sy,{k:adminMode?['ship']:['ship','obj'],side:ME,r:60,ok:o=>adminMode?(o.side!==ME&&o.side!=='neutral'):(o.side!==ME&&trkFoe(trkOf(ME,o)))});
   return h?h.o:null; // 返回源对象(锁定 / 火控序列拿它当句柄)
 }
 function clearPendings(){
@@ -149,7 +149,7 @@ function orderAt(sx,sy){ // 命中最近的命令点(屏幕距离)
   // 新架构下编队的路径【就是旗舰的 s.orders】,旗舰是 ships 里一艘普通蓝舰,下面这个循环天然命中它;
   // 成员不持令(orders 恒空)所以循环对它们空转,"隐形锚点也能拖"那类 bug 从源头上不存在了。
   for(const s of ships){
-    if(s.side==='red')continue;
+    if(s.side!==ME)continue;
     for(let i=0;i<s.orders.length;i++){
       const p=toScreen(s.orders[i].pos[0],s.orders[i].pos[1]);
       const d=Math.hypot(p[0]-sx,p[1]-sy);
@@ -184,8 +184,8 @@ function mdWeaponPick(e,sx,sy){ // 选定武器攻击:点目标 / 点空位置
   if(e.button===0&&selWeapon){ // 选定武器攻击:点击目标/空位置指定
     let t=targetAt(sx,sy)||shipAt(sx,sy); // RF4b 敌舰优先(shipAt 已限定蓝方,原路径在简化UI后点敌舰落空)
     const atk=controlledShips();
-    if(t&&!contactDead(t,'blue')&&!atk.some(x=>x.side===t.side)&&!atk.some(x=>engageable(t,x)))t=null; // LL6 死活按我方(下令的一方)看见的。2026-09-27 点中的是打不了的接触(没定位):按那个位置打空地(强行开火)
-    if(t&&!contactDead(t,'blue')){ // LL6 同上。点中舰船:按攻击方各自阵营探测门控(GM能指挥敌方,但各边只能打自己探测到的)
+    if(t&&!contactDead(t,ME)&&!atk.some(x=>x.side===t.side)&&!atk.some(x=>engageable(t,x)))t=null; // LL6 死活按我方(下令的一方)看见的。2026-09-27 点中的是打不了的接触(没定位):按那个位置打空地(强行开火)
+    if(t&&!contactDead(t,ME)){ // LL6 同上。点中舰船:按攻击方各自阵营探测门控(GM能指挥敌方,但各边只能打自己探测到的)
       {
         const hiters=atk.filter(x=>engageable(t,x));
         if(hiters.length){
@@ -218,12 +218,12 @@ function mdPending(e,sx,sy){ // 六条 pending*(转向 / 布防 / 跟随 / 信�
   }
   if(e.button===0&&pendingFcNew){ // 2026-10-07 用户:火控计算机点「+」后左键点敌舰 = 注册一条新序列(74 fcRegister;舰队 = 一块);点空了照旧待命(吞掉这一击,不清选中)
     const t=targetAt(sx,sy);
-    if(t&&t.side!=='blue'&&!contactDead(t,'blue')&&typeof fcRegister==='function'){pendingFcNew=null;fcRegister(selBlue(),t);updSelWeaponTip();}
+    if(t&&t.side!==ME&&!contactDead(t,ME)&&typeof fcRegister==='function'){pendingFcNew=null;fcRegister(selBlue(),t);updSelWeaponTip();}
     return true;
   }
   if(e.button===0&&pendingFollow){ // FM6 跟随点选:底栏点【跟随】进入待命,再点一艘我方舰兑现(作用域按【此刻】的 selected 现算)
     const t=(typeof shipAt==='function')?shipAt(sx,sy):null;
-    if(t&&!t.dead&&t.side==='blue'&&typeof followAssign==='function')followPick(t);
+    if(t&&!t.dead&&t.side===ME&&typeof followAssign==='function')followPick(t);
     else pendingFollow=null;
     updSelWeaponTip(); // 收掉 #cmdTip 上的待命提示
     return true;
@@ -259,7 +259,7 @@ function mdLeft(e,sx,sy){ // 左键
   if(e.ctrlKey){
     if(sh){selected.includes(sh.id)?selected.splice(selected.indexOf(sh.id),1):selected.push(sh.id);}
   }else{
-    if((!sh||(sh.side==='red'&&!adminMode))&&!selDrag)selected=[]; // GM下可点选敌舰
+    if((!sh||(sh.side!==ME&&!adminMode))&&!selDrag)selected=[]; // GM下可点选敌舰
     selDrag={x0:sx,y0:sy,x1:sx,y1:sy};
   }
 }
@@ -356,7 +356,7 @@ function updateDragSel(){
   const w=Math.abs(selDrag.x1-selDrag.x0),h=Math.abs(selDrag.y1-selDrag.y0);
   selected=[];
   for(const s of ships){
-    if(s.side!=='blue'||s.dead)continue; // RF2 简化UI:框选仅己方(原 GM 框选含敌)
+    if(s.side!==ME||s.dead)continue; // RF2 简化UI:框选仅己方(原 GM 框选含敌)
     const p=toScreen(s.pos[0],s.pos[1]);
     if(p[0]>=x&&p[0]<=x+w&&p[1]>=y&&p[1]<=y+h)selected.push(s.id);
   }
@@ -386,7 +386,7 @@ window.addEventListener('mouseup',e=>{
     }else if(selDrag.missileMode){ // Shift框选:选导弹群(不是船)
       const x=Math.min(selDrag.x0,selDrag.x1),y=Math.min(selDrag.y0,selDrag.y1);
       const w=Math.abs(selDrag.x1-selDrag.x0),h=Math.abs(selDrag.y1-selDrag.y0);
-      const inBox=projectiles.filter(p=>p.type==='missile'&&!p.done&&projSeen(p)&&(adminMode||(p.shooter&&p.shooter.side==='blue'))); // 2026-09-28 框选只选我方弹(敌方弹单点看得见的)
+      const inBox=projectiles.filter(p=>p.type==='missile'&&!p.done&&projSeen(p)&&(adminMode||(p.shooter&&p.shooter.side===ME))); // 2026-09-28 框选只选我方弹(敌方弹单点看得见的)
       const hits=inBox.filter(p=>{const q=projViewPos(p);if(!q)return false;const sp=toScreen(q[0],q[1]);return sp[0]>=x&&sp[0]<=x+w&&sp[1]>=y&&sp[1]<=y+h;}); // LL5 框的是画它的那一点(render/83 projViewPos)
       if(hits.length){
         // KIMI146修:清掉拖拽过程中误选的舰船,导弹信息面板才显示得出来(selSet 一并清)
@@ -410,7 +410,7 @@ window.addEventListener('mouseup',e=>{
     if(!rMoved){ // 右键:未拖拽平移 → 点空地/友舰=移动,Shift+右键=追加路径点。RF5 拆掉了原「点中敌舰=指定打击目标」(RF4b)整支:它直写 lockedTarget/driftFire,与火控序列抢同一个字段,交战入口统一走中键快速交战
       const w=worldAt(rmbClick.sx,rmbClick.sy);
       // DS191(用户令):雷是网的一种形态,不是不能动——选中雷 + 右键点地图 = 重新布位(飞向新点再次布雷,网身份保留)
-      if(selMissile&&selMissile.mine&&!selMissile.done&&(adminMode||(selMissile.shooter&&selMissile.shooter.side==='blue'))){ // 2026-09-28 只能改自己的雷
+      if(selMissile&&selMissile.mine&&!selMissile.done&&(adminMode||(selMissile.shooter&&selMissile.shooter.side===ME))){ // 2026-09-28 只能改自己的雷
         selMissile.mine=false;selMissile.park=true;selMissile.parkPt=ordArenaClamp([w[0],w[1],0]);selMissile.target=null; // 2026-09-26 改布位点夹进 ARENA:区外的点雷一出界就 done
         selMissile.vel=[0,0,0];selMissile.spd=Math.max(200,selMissile.spd||200);
         rmbClick=null;return;
@@ -442,7 +442,7 @@ window.addEventListener('blur',()=>{rangeDrag=null;ghostMove=null;panning=null;s
 function selectedShips(){return selected.map(id=>shipById(id)).filter(Boolean);}
 function controlledShips(){ // 可控制目标:GM(管理员)下敌我皆可,普通模式只控制我方
   const sel=selectedShips().filter(s=>!s.dead);
-  return adminMode?sel:sel.filter(s=>s.side==='blue');
+  return adminMode?sel:sel.filter(s=>s.side===ME);
 }
 function engageable(t,sh){ // 能否攻击:敌方 + 攻击方阵营定得出它的位置
   return t&&!contactDead(t,sh.side)&&t.side!==sh.side&&contactFix(t,sh.side); // LL6 死活按攻击方看见的

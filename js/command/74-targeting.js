@@ -90,7 +90,7 @@ function xhTick(dt){ // RF5 准星每帧状态机:命中测试 → 停留累加 
   if(hit!==xh.cand){xh.cand=hit;xh.dwellT=0;} // 换目标/没命中 → 计时清零
   else if(hit)xh.dwellT+=d;
   const gm=(typeof adminMode!=='undefined'&&adminMode);
-  if(xh.snap&&((gm?xh.snap.dead:contactDead(xh.snap,'blue'))||(!gm&&!(typeof contactPos==='function'&&contactPos(xh.snap,'blue')))))xh.snap=null; // LL6 死亡按我方看见的(GM 真值)。目标死亡或【位置交代不出来了】:立即清。SN6d:复查条件必须与 targetAt 的门同源 —— 原来这里复查的是 litBlue,于是一个吸住之后失去定位的接触会一直挂在准星上,而它本该退回热区
+  if(xh.snap&&((gm?xh.snap.dead:contactDead(xh.snap,ME))||(!gm&&!(typeof contactPos==='function'&&contactPos(xh.snap,ME)))))xh.snap=null; // LL6 死亡按我方看见的(GM 真值)。目标死亡或【位置交代不出来了】:立即清。SN6d:复查条件必须与 targetAt 的门同源 —— 原来这里复查的是 litBlue,于是一个吸住之后失去定位的接触会一直挂在准星上,而它本该退回热区
   if(!hit)xh.snap=null;
   else if(xh.dwellT>=XH_DWELL)xh.snap=hit;
   if(rad.open)xhCardHide(); // RF5 Phase C 轮盘开着时收起 #xhTip:长按开盘那一瞬光标必然停在目标身上,而目标正是轮盘圆心(radOpen 拿 toScreen(t.pos) 当 anchor),卡片钉在光标+16px 就必然糊进盘面右下象限,盖住 hub 读数井与右下扇区(八武器时整整盖住一瓣)。卡片上的目标名/方位/结构,hub 与扇区读数都有,收起不丢信息
@@ -98,7 +98,7 @@ function xhTick(dt){ // RF5 准星每帧状态机:命中测试 → 停留累加 
 }
 function xhName(s){ // RF5 可外传的目标名:没认出的敌舰不吐真名(卡片 / 轮盘同一口径,免得一处打码另一处泄底)
   const gm=(typeof adminMode!=='undefined'&&adminMode);
-  return (!gm&&s.side!=='blue'&&!contactIdn(s,'blue'))?'未知接触':s.name; // ID1:原判据 litBlue<2;身份问 contactIdn TK4b:「不是我方」才打码(原写「是红方」:中立的石头会被当成自己人吐真名)
+  return (!gm&&s.side!==ME&&!contactIdn(s,ME))?'未知接触':s.name; // ID1:原判据 litBlue<2;身份问 contactIdn TK4b:「不是我方」才打码(原写「是红方」:中立的石头会被当成自己人吐真名)
 }
 function xhCardHTML(s,sub){ // RF5 信息卡内容:按认没认出、定没定位。只产 HTML 字符串,DOM 与样式属渲染侧
   const gm=(typeof adminMode!=='undefined'&&adminMode);
@@ -114,15 +114,15 @@ function xhCardHTML(s,sub){ // RF5 信息卡内容:按认没认出、定没定�
     :((typeof shipIdentTier==='function')?shipIdentTier(s):(s.tier||2));   // 非 GM:shipIdentTier 对 litBlue<2 一律返回 2,GM 下会把 T3 敌舰写成 T2
   // GM 全显是【信息卡独有】的偏差:82 的两个函数都不看 adminMode,GM 下地图图标依然遮蔽(litBlue===1 照画 UNK/T2),
   // 卡片这里会比图标多说一层。这是任务书拍板允许的唯一不一致——不要为了对齐去改 82。
-  const masked=!gm&&!contactIdn(s,'blue'); // ID1:原判据 hull==='UNK'||q<2; // hull==='UNK' 正是 82 的严格 litBlue===1 那一档;q<2 顺手兜住 litBlue===0 的幽灵接触(82 那一档故意漏着,见其 TIER1 注释;非 GM 下 targetAt 已把它挡在吸附之外,这里只是兜底)
+  const masked=!gm&&!contactIdn(s,ME); // ID1:原判据 hull==='UNK'||q<2; // hull==='UNK' 正是 82 的严格 litBlue===1 那一档;q<2 顺手兜住 litBlue===0 的幽灵接触(82 那一档故意漏着,见其 TIER1 注释;非 GM 下 targetAt 已把它挡在吸附之外,这里只是兜底)
   const rows=[];
-  const itp=gm?{kind:kindOf(s)}:(contactIdType(s,'blue')||{kind:'ship'}),notShip=!masked&&itp.kind!=='ship'; // TK4c:认出来不是船 ⇒ 没有舰种、结构与速度可报。2026-09-27 按认出的类型判(诱饵在「疑似」档冒充驱逐舰,不许说破)
+  const itp=gm?{kind:kindOf(s)}:(contactIdType(s,ME)||{kind:'ship'}),notShip=!masked&&itp.kind!=='ship'; // TK4c:认出来不是船 ⇒ 没有舰种、结构与速度可报。2026-09-27 按认出的类型判(诱饵在「疑似」档冒充驱逐舰,不许说破)
   if(notShip)rows.push(['类别',({rock:'碎石',civ:'民船',lure:'诱饵',buoy:'浮标'})[itp.kind]+' · 不是舰船']);
   else if(!masked)rows.push(['舰种',((typeof CLS_SHORT!=='undefined'&&CLS_SHORT[s.cls])||'未知')+' · T'+tier]); // 2026-09-30 舰种名按舰种查(重排后轮廓与舰种不再一一对应) // RF5 兜底文案改中文'未知'(原为直接吐 hull 代码):HULL_LABEL(ships/10)只有 DD/CA/BB/CV/SC 五个键,查不到时会渲染出 "UNK舰" 这种非中文串,违反 UI 全中文。识别级:舰种与分级解禁(与 82 放行真实轮廓/尺寸、87-fleetcards 的分级徽标同为 litBlue>=2)
   rows.push(['方位',cp?String(Math.round(brg)%360).padStart(3,'0')+'° · '+Math.round(dist/1000)+'k'+(typeof viewAgeTxt==='function'?viewAgeTxt(s):''):'位置不明']); // 探测级也给:这一档只有方位与距离是可信的;LL9 带情报龄(光行时间 + 距上次量测,render/83 viewAgeTxt)
-  {const tk=(!gm&&s.side!=='blue')?trkOf('blue',s):null;if(tk&&tk.tn)rows.push(['航迹','T'+String(tk.tn).padStart(2,'0')]);} // TK4c 航迹号:没认出的接触都叫「未知接触」,靠它指认是哪一条
-  if(!masked&&!notShip&&(gm||s.side==='blue'||contactFix(s,'blue'))){ // 定得出位置才追加数值
-    const L=(gm||s.side==='blue'||typeof viewLook!=='function')?s:viewLook(s); // LL9 结构与速度读我方看到的最新影像(render/83 viewLook;光还没到写破折号)
+  {const tk=(!gm&&s.side!==ME)?trkOf(ME,s):null;if(tk&&tk.tn)rows.push(['航迹','T'+String(tk.tn).padStart(2,'0')]);} // TK4c 航迹号:没认出的接触都叫「未知接触」,靠它指认是哪一条
+  if(!masked&&!notShip&&(gm||s.side===ME||contactFix(s,ME))){ // 定得出位置才追加数值
+    const L=(gm||s.side===ME||typeof viewLook!=='function')?s:viewLook(s); // LL9 结构与速度读我方看到的最新影像(render/83 viewLook;光还没到写破折号)
     rows.push(['结构',L?Math.max(0,Math.round(L.hp))+'/'+Math.round(s.maxHp):'—']);
     rows.push(['速度',L?Math.round(SHOW.v((typeof V!=='undefined'&&V.len)?V.len(L.vel):Math.hypot(L.vel[0],L.vel[1])))+' km/s':'—']); // 2026-09-27 经 SHOW 换回物理单位(原来把引擎单位标成 m/s)
   }

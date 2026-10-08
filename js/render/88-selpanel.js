@@ -6,7 +6,7 @@
    开关语义:火控=autoEngage+roe 合一(开=free+自动索敌,关=hold+解除锁定);发射档并进「雷达」菜单(见本文件末尾);
    武器开关=macOn/mslOn/ciwsOn(按 kind 映射;近防另有 ciwsGunOn,见 CIWS_SUB)。操作作用于【全部选中蓝舰】,状态读第一艘。
    (右轨的事件流面板与它的写入点 2026-09-22 随事件系统整体删除。) */
-function selBlue(){return selectedShips().filter(s=>s.side==='blue'&&!s.dead);}
+function selBlue(){return selectedShips().filter(s=>s.side===ME&&!s.dead);} // 2026-10-08 选中里我方的(ME;名字沿用)
 /* kind → 开关字段/射程/hover 文案 的映射(武器机制数据从烘焙字段读,源头在 weapons/51-defs) */
 const KIND_INFO={
   // WR1(2026-09-22)射程无限、只是精准度问题:range 的语义改成【命中率 50% 的距离】(主炮)/【动力射程】(导弹),都是从散布 / 燃料现算的,
@@ -137,9 +137,9 @@ function fcUiName(t){ // 目标项 → 显示名(舰目标现查 ships 表)
 function fcUiHp(t){ // 目标项 → HP 百分比(查不到显示破折号)
   if(!t||t.tid==null)return '—';
   const o=objById(t.tid);
-  if(!o||(adminMode?o.dead:contactDead(o,'blue'))||!o.maxHp)return '—'; // LL6 沉没按我方看见的(GM 真值)
-  if(!adminMode&&o.side!=='blue'&&!(contactIdn(o,'blue')&&contactFix(o,'blue')))return '—'; // 2026-09-28 与悬停卡同一道门:认出且定位才报结构(原来无门,真血量照报,还能分出船和非船)
-  const L=(adminMode||o.side==='blue')?o:viewLook(o);if(!L)return '—'; // LL9 结构读我方看到的最新影像(同悬停卡,render/83 viewLook)
+  if(!o||(adminMode?o.dead:contactDead(o,ME))||!o.maxHp)return '—'; // LL6 沉没按我方看见的(GM 真值)
+  if(!adminMode&&o.side!==ME&&!(contactIdn(o,ME)&&contactFix(o,ME)))return '—'; // 2026-09-28 与悬停卡同一道门:认出且定位才报结构(原来无门,真血量照报,还能分出船和非船)
+  const L=(adminMode||o.side===ME)?o:viewLook(o);if(!L)return '—'; // LL9 结构读我方看到的最新影像(同悬停卡,render/83 viewLook)
   return Math.max(0,Math.round(L.hp/o.maxHp*100))+'%';
 }
 function fcUiSeq(s,sid){ // 按 id 字符串取回序列对象(id 类型不确定,统一 String 比较)
@@ -242,7 +242,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
   if(fmBox&&fmBox.style.display!=='none')fmBox.style.display='none';
   if(typeof ptSet==='function')ptSet(null); // 2026-09-30 底栏肖像同样先收起,只有下面选中舰船那一支再亮出来(同一个 JS 任务里改,不闪)
   if(box.style.display!=='block')box.style.display='block';
-  if(selBuoy&&(selBuoy.dead||(selBuoy.kind==='station'?featStaObs('blue').indexOf(selBuoy)<0:rocks.indexOf(selBuoy)<0)))selBuoy=null; // 2026-09-29 浮标没了 / 换局:撤选中(10-05 据点易手同)
+  if(selBuoy&&(selBuoy.dead||(selBuoy.kind==='station'?featStaObs(ME).indexOf(selBuoy)<0:rocks.indexOf(selBuoy)<0)))selBuoy=null; // 2026-09-29 浮标没了 / 换局:撤选中(10-05 据点易手同)
   if(selBuoy&&selBuoy.kind==='station'){const o=selBuoy;title.textContent='据点';if(ciN)ciN.textContent=o.name;if(ciC)ciC.textContent='蓝方';if(ciSp)ciSp.innerHTML=''; // 2026-10-05 用户:据点能开雷达(巡洋舰同级),底栏雷达遥控
     box.innerHTML=`<div class="row"><span class="k">雷达</span><span class="v">${o.on?'照射':'被动 · 只看和听'}</span></div>`;updateCmdBar([]);return;}
   if(selBuoy){ // 2026-09-29 用户:点浮标 → 底栏雷达开照射 / 打脉冲(飞行中也行);原来武器菜单「特殊」里的逐个开关已删
@@ -291,7 +291,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
     return;
   }
   const mq=selMissile?projViewLook(selMissile):null,m=mq?selMissile:null; // LL9 还在不在、对方弹的速度读主视角画它的弹影(render/83 projViewLook:对方的余像消失才算没了;自己的 / 关开关 = 真弹没 done)
-  if(m&&m.type==='missile'&&!adminMode&&m.shooter&&m.shooter.side!=='blue'){ // 2026-09-28 敌方弹:只报看得见的量(射手、燃料、目标我方不知道)
+  if(m&&m.type==='missile'&&!adminMode&&m.shooter&&m.shooter.side!==ME){ // 2026-09-28 敌方弹:只报看得见的量(射手、燃料、目标我方不知道)
     title.textContent='敌方导弹';if(ciN)ciN.textContent='敌方导弹';if(ciC)ciC.textContent='—';if(ciSp)ciSp.innerHTML='';
     box.innerHTML=`<div class="row"><span class="k">速度</span><span class="v">${Math.round(SHOW.v(V.len(mq.vel)))} km/s</span></div>`;
     updateCmdBar([]);return;
@@ -355,12 +355,12 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
        五个读数全部现算现读,一个仿真字段都不写(本面板与 87-fmbar 同一条铁律)。
        "已点亮敌舰"沿用 84-scene 那块画布读数的判据(side==='red' && litBlue),只多一个 !dead ——
        战损舰不出 ships 数组(55-damage 只置 dead=true),不排掉的话打光了敌人读数还挂着。 */
-    const blue=ships.filter(s2=>s2.side==='blue'&&!s2.dead);
-    const fmN=(typeof fmAll==='function')?fmAll().length:0;
+    const blue=ships.filter(s2=>s2.side===ME&&!s2.dead);
+    const fmN=(typeof fmAllMine==='function')?fmAllMine().length:0;
     let hp=0,mhp=0;
     blue.forEach(s2=>{hp+=Math.max(0,s2.hp);mhp+=s2.maxHp||0;});
     const fr=mhp>0?Math.max(0,Math.min(1,hp/mhp)):0;
-    let lit=0;trkEach('blue',tk=>{if(!trkGone(tk)&&trkHeld(tk))lit++;}); // 数蓝方航迹表里握着的接触
+    let lit=0;trkEach(ME,tk=>{if(!trkGone(tk)&&trkHeld(tk))lit++;}); // 数蓝方航迹表里握着的接触
     title.textContent='舰队总览';
     if(ciN)ciN.textContent='—';if(ciC)ciC.textContent='—';if(ciSp)ciSp.innerHTML='';
     box.innerHTML=`
@@ -506,7 +506,7 @@ function cmdBarSync(){ // 三颗钮的字与亮灭;菜单开着就顺手重画
 function mslSelOwn(){ // 2026-09-28 选中的我方导弹组:点选 = 整个网,框选 = 框里的组(GM 下敌方的也算)
   const set=new Set((selMissileHits||[]).filter(p=>p.type==='missile'&&!p.done));
   if(selNet)for(const p of projectiles)if(p.type==='missile'&&!p.done&&p.netId===selNet)set.add(p);
-  return [...set].filter(p=>adminMode||(p.shooter&&p.shooter.side==='blue'));
+  return [...set].filter(p=>adminMode||(p.shooter&&p.shooter.side===ME));
 }
 (function bindMineBtn(){ // 2026-09-28 底栏「变雷」(用户:「导弹也作为可选单位,下部 ui 给一个变雷的选项,不选中就一直飞」)
   const wrap=document.querySelector('#cmdBar .cmd-btns');if(!wrap||document.getElementById('cbMine'))return;

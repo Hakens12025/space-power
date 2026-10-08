@@ -111,7 +111,7 @@ function matchTick(){
   if(res==='win'&&typeof llOnNow==='function'&&llOnNow()){ // LL6 光速延迟开着:胜利卡等最后一艘敌舰沉没的光到达我方才弹;等光期间我方也全灭 = 平局(敌方真实先灭,我方没留下看见它的眼)
     let seen=-Infinity;for(const s of ships)if(s.side===foe){const t=llDeadSeeT(s,ME);if(t>seen)seen=t;} // sensors/26:我方看见每艘敌舰沉没的时刻
     if(seen>dT)res='lost';else if(seen>simTime)return;}
-  MATCH.shown=true;running=false;if(typeof lockEnd==='function')lockEnd(''); // 联机:分出胜负就停锁步
+  MATCH.shown=true;if(typeof LOCK!=='undefined'&&LOCK.on)lockMatchDone();else running=false; // 联机:自己分出胜负先报给对方,锁步照跑到两边都分出(开着光速延迟时赢的一方要等看见沉没的光)
   const card=document.getElementById('matchEnd');if(!card)return;
   const draw=res==='tie'||res==='lost',win=res==='win';
   const bAlive=ships.filter(s=>s.side===ME&&!s.dead).length,rAlive=ships.filter(s=>s.side===foe&&!s.dead).length,nMe=mb?MATCH.nBlue:MATCH.nRed,nFoe=mb?MATCH.nRed:MATCH.nBlue;

@@ -4,3 +4,4 @@ demo_*.json
 tools/train/__pycache__/
 *.pyc
 tools/replay/录像/
+supabase/.temp/

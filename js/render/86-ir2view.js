@@ -106,7 +106,7 @@ function ir2Own(i,x,y){const P=IR2.P,RI=IR2.RI;let bj=-1,be=Infinity;for(let j=0
 const IR2_EXPO=[0.25,0.5,0.75]; // ir2Expo 的三个采样点(提到外面,每次调用不新建)
 function ir2Expo(i,b){let n=0;for(let q=0;q<3;q++){const r=IR2.RI[i]+IR2_EXPO[q]*IR2_C.BAND;if(ir2Own(i,IR2.P[i][0]+Math.cos(b)*r,IR2.P[i][1]+Math.sin(b)*r))n++;}return n;} // 第 i 艘的环在方位 b 上露出来几个点(共三个)
 function ir2Update(){
-  const obs=irvObs(),sb=typeof selBuoyOk==='function'?selBuoyOk():null,sel=VIEW!=='blue'?[]:(sb&&sb.kind==='station'&&sb.side===VIEW?[sb]:selectedShips().filter(s=>!s.dead&&s.side===VIEW)); // 2026-10-05 选中自己的据点 = 它的环(同单选一艘)
+  const obs=irvObs(),sb=typeof selBuoyOk==='function'?selBuoyOk():null,sel=VIEW!==ME?[]:(sb&&sb.kind==='station'&&sb.side===VIEW?[sb]:selectedShips().filter(s=>!s.dead&&s.side===VIEW)); // 2026-10-05 选中自己的据点 = 它的环(同单选一艘)
   const RS=sel,IS=sel.length?sel:obs,QS=sel.length>1?sel:null,S=sel.length?sel:obs; // 环 / 圈内红外 / 仪表各用哪几艘;S = 算物理的观测方。2026-10-05 用户:没选不画仪表(舰多了乱),选了几艘才有
   const key=VIEW+'|'+S.map(s=>s.id).join(',')+'|'+RS.length+'|'+(QS?1:0)+'|'+(adminMode?1:0),reset=key!==IR2.key;
   if(reset){IR2.key=key;IR2.rec.clear();IR2.rings=RS.map(ir2Ring);IR2.inst=QS?ir2Ring():null;IR2.zones=[];IR2.zt=-1e9;}

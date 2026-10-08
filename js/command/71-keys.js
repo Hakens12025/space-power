@@ -55,7 +55,7 @@ function ceaseFire(){ // X:停火,解除所有选中舰锁定
   cxCease(sel); // 2026-09-29 连强制目标点一起撤;2026-10-08 走命令(command/68)
 }
 function fmAssign(g,sel){ // Ctrl+数字:按当前选中舰建/覆盖编队 g。FL1 一层化后建队只有 fmCreate 一个入口 —— 它自己处理"删旧槽位 / 把船从旧队摘干净 / 分槽 / 不足2艘则清空"并打日志,这里只做转发
-  fmCreate(g,sel);
+  fmCreate(fmKey(g),sel); // 2026-10-08 联机:槽位换成编队键(formation/42 fmKey)
 }
 function rateMove(dir){ // v131:变速在预设整数档位间移动(rate不在档位时就近归位)
   let i=RATES.indexOf(rate);
@@ -101,7 +101,7 @@ function doAction(id){
     case 'fire_missile':toggleWeapon('missile');break; // R:选定导弹武器,点击敌舰攻击
     case 'cease_fire':ceaseFire();break; // X:停火(解除锁定)
     case 'reverse':cxReverse(controlledShips());break; // G:倒车(反推倒退)——选中舰朝船头反方向机动 6000 x scale(机头不翻,用反推);2026-10-08 走命令(command/68)
-    case 'fire_all':cxFireAll(selectedShips().filter(s=>s.side==='blue'&&!s.dead));break; // Ctrl:全弹发射(选中舰 · 锁定目标);2026-10-08 走命令(command/68)
+    case 'fire_all':cxFireAll(selectedShips().filter(s=>s.side===ME&&!s.dead));break; // Ctrl:全弹发射(选中舰 · 锁定目标);2026-10-08 走命令(command/68)
     case 'del_last_order':cxDelLastOrder(selectedShips());break; // 删最后一个命令点:编队整列各撤一条(编队航点在下令那一刻展开成每艘各一条,只撤旗舰会分家),散船撤一条;2026-10-08 走命令(command/68)
   }
   if(/^grp_assign_/.test(id)){
@@ -110,7 +110,7 @@ function doAction(id){
   }
   if(/^grp_sel_/.test(id)){
     const g=+id.slice(-1);
-    const F=fmGet(g);
+    const F=fmGet(fmKey(g));
     if(!F)return; // FL1:该槽位没有编队就什么都不做(改前会把 selected 清成空数组——按到空槽位等于取消选中,是个误操作陷阱)
     const mates=fmShips(F); // 名册里还活着的船,顺序即分槽顺序
     if(!mates.length)return;

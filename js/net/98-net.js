@@ -9,9 +9,9 @@
          离开 {t:'bye'};对局数据 {t:'m', d}(第 4 步锁步用)。版本指纹 ver 不同的不许进(锁步要求两边代码逐字相同)。
    ============================================================================ */
 const NET_CFG={SB_URL:'https://vychqfgrwniauccpxtse.supabase.co',SB_KEY:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5Y2hxZmdyd25pYXVjY3B4dHNlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0NTE5NzYsImV4cCI6MjEwNzAyNzk3Nn0.DHg132ToCG1amqVmvxVADWrMd77BNpOvysUJEIheLiI', // Supabase 项目地址与 anon key(公开的那把,前端本来就带;用户注册后填)
-  SB_JS:'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js',
+  SB_JS:['js/vendor/supabase-js-2.45.4.umd.js','https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js'], // 先读仓库里那份(同源,不看 CDN 脸色),读不到再去 CDN
   ANN:1500,LIST_TO:5000,HB:1500,PEER_TO:6000}; // 房间广播间隔 / 大厅里多久没听到就当房间没了 / 心跳间隔 / 对方多久没声算走了(毫秒)
-const NET={mode:'',me:null,lobby:null,room:null,rooms:new Map(),ver:'',sb:null,annT:0,hbT:0,
+const NET={mode:'',err:'',me:null,lobby:null,room:null,rooms:new Map(),ver:'',sb:null,annT:0,hbT:0,
   onLobby:null,onRoom:null}; // onLobby(房间列表) / onRoom({t:'joined'|'peer'|'left'|'closed'|'denied'|'msg', ...})
 function netVer(){ // 版本指纹:页面上全部脚本的 ?v= 拼起来(锁步要两边代码一样;改了任何一个文件、加了版本号就不同)
   let h=0;for(const s of document.querySelectorAll('script[src]')){const t=s.getAttribute('src');for(let i=0;i<t.length;i++)h=(Math.imul(h,31)+t.charCodeAt(i))|0;}return (h>>>0).toString(36);}
@@ -26,14 +26,15 @@ function netBusSB(name){const ch=NET.sb.channel(name,{config:{broadcast:{self:fa
   ch.subscribe(st=>{if(st==='SUBSCRIBED'){ok=true;while(q.length)ch.send({type:'broadcast',event:'m',payload:q.shift()});}});
   return {post:m=>{if(ok)ch.send({type:'broadcast',event:'m',payload:m});else q.push(m);},on:f=>fs.push(f),close:()=>{try{NET.sb.removeChannel(ch);}catch(e){}}};} // 没订上之前发的先排队
 function netBus(name){return NET.mode==='sb'?netBusSB(name):netBusBC(name);}
-function netLoadSB(cb){ // Supabase 脚本按需拉;拉不到就退回本机测试
-  if(window.supabase){cb(true);return;}const s=document.createElement('script');s.src=NET_CFG.SB_JS;s.onload=()=>cb(!!window.supabase);s.onerror=()=>cb(false);document.head.appendChild(s);}
+function netLoadSB(cb){ // Supabase 脚本按需拉;10 秒没拉到算失败(2026-10-08:拉不到不再悄悄退回本机测试 —— 玩家会以为自己在线)
+  if(window.supabase){cb(true);return;}let done=false;const fin=ok=>{if(done)return;done=true;cb(ok);};setTimeout(()=>fin(!!window.supabase),10000);
+  const tryAt=i=>{if(done)return;if(i>=NET_CFG.SB_JS.length){fin(false);return;}const s=document.createElement('script');s.src=NET_CFG.SB_JS[i];s.onload=()=>{if(window.supabase)fin(true);else tryAt(i+1);};s.onerror=()=>{s.remove();tryAt(i+1);};document.head.appendChild(s);};tryAt(0);}
 /* ---- 大厅 ---- */
 function netStart(onLobby,done){ // 进大厅:定传输、开大厅总线、问一声谁有房
   NET.onLobby=onLobby;if(!NET.me)NET.me={id:netId(),name:netName()};NET.ver=netVer();
   const go=()=>{if(!NET.lobby){NET.lobby=netBus('sp-lobby');NET.lobby.on(netLobbyMsg);}NET.lobby.post({t:'ask'});netTick();if(done)done(NET.mode);};
-  if(NET.mode){go();return;}
-  if(NET_CFG.SB_URL&&NET_CFG.SB_KEY)netLoadSB(ok=>{if(ok){NET.sb=window.supabase.createClient(NET_CFG.SB_URL,NET_CFG.SB_KEY);NET.mode='sb';}else NET.mode='bc';go();});
+  if(NET.mode){go();return;}NET.err='';
+  if(NET_CFG.SB_URL&&NET_CFG.SB_KEY)netLoadSB(ok=>{if(ok){NET.sb=window.supabase.createClient(NET_CFG.SB_URL,NET_CFG.SB_KEY);NET.mode='sb';go();}else{NET.err='连不上联机服务:Supabase 的脚本没拉下来(检查网络 / 代理),点「重试」';if(done)done('err');}});
   else{NET.mode='bc';go();}}
 function netLobbyMsg(m){
   if(m.t==='ask'){if(NET.room&&NET.room.host)netAnnounce();return;}
@@ -50,7 +51,7 @@ function netTick(){ // 定时器:房主广播房间、双方心跳、超时判�
     netList();},500);}
 /* ---- 房间 ---- */
 function netRoomBus(id){const b=netBus('sp-room-'+id);b.on(netRoomMsg);return b;}
-function netCreate(name){netLeave();const R={id:netId(),name:(name||'').trim().slice(0,20)||(NET.me.name+'的房间'),host:true,peer:null};
+function netCreate(name){if(!NET.lobby)return;netLeave();const R={id:netId(),name:(name||'').trim().slice(0,20)||(NET.me.name+'的房间'),host:true,peer:null};
   R.bus=netRoomBus(R.id);NET.room=R;netAnnounce();netEmit({t:'joined',room:netRoomView()});}
 function netJoin(id){const r=NET.rooms.get(id);if(!r)return false;if(r.ver!==NET.ver){netEmit({t:'denied',why:'ver'});return false;}
   netLeave();const R={id:id,name:r.name,host:false,peer:null,pending:true};R.bus=netRoomBus(id);NET.room=R;

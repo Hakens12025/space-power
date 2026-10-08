@@ -83,7 +83,7 @@ function drawOwnBuoy(s){ // 自己的浮标;开着照射时一圈圈脉冲;拉�
   const mk=shipMarkMode(),R=mk?4:artBuoyR();ctx.save(); // 2026-10-05 用户:舰船换成箭头的那个缩放起改画蓝圈(拉远了美术浮标看不见)
   if(mk){ctx.strokeStyle='#5aa7ff';ctx.fillStyle='#5aa7ff';ctx.lineWidth=1.4;ctx.beginPath();ctx.arc(p[0],p[1],4,0,6.283);ctx.stroke();ctx.beginPath();ctx.arc(p[0],p[1],1.5,0,6.283);ctx.fill();
     if(s.on){ctx.globalAlpha=0.6;ctx.beginPath();ctx.arc(p[0],p[1],8,0,6.283);ctx.stroke();ctx.globalAlpha=1;}}
-  else artBuoy(ctx,p[0],p[1],0,s.side,!!s.on); // 2026-10-04 中心舱 + 太阳能板 + 天线,开照射有脉冲环(render/81-art)
+  else artBuoy(ctx,p[0],p[1],0,palSide(s.side),!!s.on); // 2026-10-04 中心舱 + 太阳能板 + 天线,开照射有脉冲环(render/81-art)
   if(typeof selBuoy!=='undefined'&&selBuoy===s){ctx.strokeStyle='#ffe066';ctx.lineWidth=1.6;ctx.beginPath();ctx.arc(p[0],p[1],Math.max(12,R*1.9),0,6.283);ctx.stroke();} // 2026-09-29 选中(同舰船选中圈的颜色)
   if(cam.zoom>0.0008&&!lblPut(s.name+(s.on?' · 照射':' · 被动'),p[0],p[1]+Math.max(8,R*1.6),1,'rgba(143,208,255,.9)')){ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillStyle='rgba(143,208,255,.9)';ctx.fillText(s.name+(s.on?' · 照射':' · 被动'),p[0],p[1]+Math.max(8,R*1.6));}
   ctx.restore();

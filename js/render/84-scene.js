@@ -72,7 +72,7 @@ function drawTrails(){
   ctx.save();ctx.lineWidth=1.4;ctx.lineCap='round';
   for(const s of ships){
     const a=viewDead(s)?null:TRAIL.m.get(s.id);if(!a||a.length<3)continue; // LL6 同上
-    ctx.strokeStyle=s.side==='blue'?'rgb(111,180,255)':'rgb(255,107,107)';
+    ctx.strokeStyle=palSide(s.side)==='blue'?'rgb(111,180,255)':'rgb(255,107,107)';
     const n=a.length/3;let px=NaN,py=NaN,lx=0,ly=0;
     for(let i=0;i<n;i++){const x=a[3*i];if(x!==x){px=NaN;continue;}const q=toScreen(x,a[3*i+1]);
       if(px===px){ctx.globalAlpha=0.06+0.69*i/n;ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(q[0],q[1]);ctx.stroke();}
@@ -279,7 +279,7 @@ function insetBuild(e,now){ // 开播:事件 → 镜头(主体 = 事件那艘船
 }
 function insetCtx(D,J,inc){ // 语境:ctx = 要框进来的那一件(弹 / 射手 / 附近我舰);ind = 框外箭头(射手、来路、冲主体来的导弹)
   const ctx=[],ind=[],sq=insetShPos(D.sh),my=(D.sj&&!D.sj.dead&&D.sj.side===VIEW)?D.sj:null;
-  if(sq)ind.push({pos:sq,col:D.sh.side==='blue'?'111,180,255':'255,107,107',lbl:'射手'});
+  if(sq)ind.push({pos:sq,col:palSide(D.sh.side)==='blue'?'111,180,255':'255,107,107',lbl:'射手'});
   if(D.org)ind.push({pos:D.org,col:'255,120,90',lbl:'来路'});
   if(my)for(const m of inc)if(m.tgt===my&&ind.length<INSET.IND)ind.push({pos:m.pos,col:'255,154,85',lbl:isFinite(m.eta)?Math.round(SHOW.t(m.eta))+' s':''});
   if(D.k==='shell'){const e0=D.evs.find(x=>x.k==='shell'),p=e0&&e0.pr,q=p&&(insetLL()||!p.done)&&projSeen(p)?projViewLook(p):null;if(q)ctx.push({p:[q.pos[0],q.pos[1]],w:1});} // 2026-10-04 炮弹来路把那颗炮弹也框进来(原来只框被瞄的船);LL5 框主视角画它的那一点;LL7 开着时还在不在只问弹影
@@ -352,7 +352,7 @@ function insetTrails(){ // 2026-10-04 特写里的弹拖影 = 弹最近 0.06 墙
     const s=toScreen(q.pos[0],q.pos[1]);ctx.strokeStyle=p.type==='mac'?'rgba(255,255,255,.45)':(p.shooter&&p.shooter.side===VIEW?'rgba(255,209,102,.45)':'rgba(255,120,110,.45)');ctx.beginPath();ctx.moveTo(s[0],s[1]);ctx.lineTo(s[0]-tx,s[1]-ty);ctx.stroke();}
   ctx.restore();}
 function insetCausal(){const D=INSET.dir;if(!D||!D.cl)return;const a=toScreen(D.cl[0][0],D.cl[0][1]),b=toScreen(D.cl[1][0],D.cl[1][1]); // 因果连线:射手 → 挨打方的淡虚线
-  ctx.save();ctx.strokeStyle=D.sh&&D.sh.side==='blue'?'rgba(111,180,255,.5)':'rgba(255,107,107,.5)';ctx.lineWidth=1;ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();ctx.restore();}
+  ctx.save();ctx.strokeStyle=D.sh&&palSide(D.sh.side)==='blue'?'rgba(111,180,255,.5)':'rgba(255,107,107,.5)';ctx.lineWidth=1;ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();ctx.restore();}
 function insetZoomPath(p0,p1,rho){ // 平滑缩放平移(van Wijk & Nuij 2003,d3.interpolateZoom / Mapbox flyTo 同款):p = [中心 x, 中心 y, 框宽];f(0..1) → 这一刻的 [x, y, 框宽],f.dur = 路径长度
   const ux0=p0[0],uy0=p0[1],w0=p0[2],ux1=p1[0],uy1=p1[1],w1=p1[2],dx=ux1-ux0,dy=uy1-uy0,d2=dx*dx+dy*dy,r2=rho*rho,r4=r2*r2;let f,S;
   if(d2<1e-6){S=Math.log(w1/w0)/rho;f=s=>[ux0+s*dx,uy0+s*dy,w0*Math.exp(rho*s*S)];}

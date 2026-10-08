@@ -81,7 +81,10 @@ function fmClaim(F, mates) {
   if (changed) fmReslot(F, list);
   return changed;
 }
-function fmName(F) { return (F && F.name) || ('编队' + (F ? F.id : '?')); }
+function fmName(F) { return (F && F.name) || ('编队' + (F ? fmSlot(F) : '?')); }
+function fmKey(g) { return String(typeof ME !== 'undefined' && ME === 'red' ? +g + 4 : +g); } // 2026-10-08 联机:槽位 1~4 → 编队键。加入方(红方)用 5~8,不和主机的 1~4 撞(单人恒为 1~4)
+function fmSlot(F) { return +F.id > 4 ? +F.id - 4 : +F.id; } // 编队键 → 界面上显示的槽位号
+function fmAllMine() { return fmAll().filter(F => { const m = fmShips(F); return m.length && m[0].side === ME; }); } // 只列我方的编队(联机时对方的编队也在同一张表里,画它的站位 = 泄露情报)
 
 function fmShips(F) { // 名册 → 活着的舰对象(顺序按名册)
   if (!F) return [];
@@ -159,7 +162,7 @@ function fmCreate(k, list) { // Ctrl+数字:按选中舰建/覆盖编队。FM7:�
   fmDelete(k);
   if (!alive.length) return null;
   const F = {
-    id: String(k), name: '编队' + k, ships: alive.map(s => s.id), flagship: alive[0].id,
+    id: String(k), name: '编队' + (+k > 4 ? +k - 4 : k), ships: alive.map(s => s.id), flagship: alive[0].id, // 2026-10-08 联机加入方的键是 5~8,名字按槽位写 1~4
     P: fmParamsNew(), src: 'snapshot', follow: null, ang: NaN, dest0: null, n: 0, flagId: null, seq: ++fmSeq, // FM6:motion 轴已删
   };
   /* FM3-1:建队默认 snapshot+static → 'fixed'(用户的方法3:保持建队时的相对位置与朝向)。改前(FM3-0)恒 generated → 'slot'。

@@ -101,10 +101,10 @@ function camJump(t, at) { // at:可省的落点中心 [x,y](2026-09-26 对局开
     VT_FX = { t0: now0, tier: t, up: t > vtCur };
     VT_RULER_T0 = now0;
   }
-  const c = vtCentroid('blue') || [cam.x, cam.y];
+  const c = vtCentroid(ME) || [cam.x, cam.y];
   /* R2(2026-09-21 全库审查):这里原来写的是 typeof byId === 'function' ? byId(...) —— 而 byId 全库没有声明,守卫恒假,
      "战术 / 舰队层跳到选中舰"这条自 SN6 起从来没生效过,一直静默走重心。verify.sh 现在有一条机械检查钉着"被守卫的符号必须存在"。 */
-  const sel = selected.length ? (ships.find(x => x.id === selected[0] && !x.dead && x.side === 'blue') || null) : null;
+  const sel = selected.length ? (ships.find(x => x.id === selected[0] && !x.dead && x.side === ME) || null) : null;
   const to = at || ((t === 3 || !sel) ? c : [sel.pos[0], sel.pos[1]]);
   vtAnim = { k0: cam.zoom, k1: vtClampK(1 / vtLandKmpp(t)), x0: cam.x, y0: cam.y, x1: to[0], y1: to[1], t0: nowMs(), dur: 420 };   // SN8:340 → 420,过冲要有地方坐回来
 }

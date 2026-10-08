@@ -23,6 +23,7 @@ function spmRender(){const c=document.getElementById('spmCard'),v=SPM.view;if(!c
     c.innerHTML='<div class="spm-hd"><span>多人游戏 · 大厅</span><button class="btn" data-a="back">返回</button></div>'
       +'<div class="spm-row"><span class="spm-k">昵称</span><input id="spmName" maxlength="16" value="'+spmEsc(me.name)+'"></div>'
       +(NET.mode==='bc'?'<div class="spm-note">本机测试模式:还没接联机服务(Supabase),只看得到这台电脑上同一个浏览器里开的其他标签页</div>':'')
+      +(NET.err?'<div class="spm-note">'+spmEsc(NET.err)+' <button class="btn" data-a="retry">重试</button></div>':(!NET.mode?'<div class="spm-st">正在连接联机服务…</div>':''))
       +(SPM.note?'<div class="spm-note">'+spmEsc(SPM.note)+'</div>':'')
       +'<div class="spm-list" id="spmList"></div>'
       +'<div class="spm-row"><input id="spmRoomName" maxlength="20" placeholder="房间名(不填 = 昵称的房间)"><button class="btn" data-a="create">创建游戏</button></div>';
@@ -43,6 +44,7 @@ function spmAct(a,v){
   if(a==='solo'){spmShow('');return;} // 单人游戏 = 现在的页面(靶场,空格开始)
   if(a==='multi'){SPM.note='';netStart(spmList,()=>{if(SPM.view==='lobby')spmRender();});NET.onRoom=spmRoomEv;spmShow('lobby');return;}
   if(a==='back'){netLeave();spmShow('menu');return;}
+  if(a==='retry'){NET.err='';spmRender();netStart(spmList,()=>{if(SPM.view==='lobby')spmRender();});return;} // 联机服务没连上:再拉一次
   if(a==='create'){const n=document.getElementById('spmName'),r=document.getElementById('spmRoomName');if(n)netSetName(n.value);netCreate(r?r.value:'');return;}
   if(a==='join'){const n=document.getElementById('spmName');if(n)netSetName(n.value);SPM.note='';netJoin(v);return;}
   if(a==='leave'){netLeave();SPM.note='';spmShow('lobby');return;}}

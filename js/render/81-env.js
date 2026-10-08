@@ -314,7 +314,7 @@ const SUNL_U=[0,0];
 function mapSunOn(){return typeof SUNL!=='undefined'&&SUNL.on;} // 「太阳线」钮:禁区锥与天体背光面的影子线都归它
 function drawSunLines(){ // 「太阳线」钮:选中的那艘我方舰(选了一队 = 第一艘)朝光源的禁区锥;叠在任何画面上
   if(!mapSunOn()||!envHasLight())return;
-  const s=selectedShips().find(x=>x.side==='blue'&&!x.dead);
+  const s=selectedShips().find(x=>x.side===ME&&!x.dead);
   if(!s||(ENV.bodies.length&&envInShadow(s.pos)))return; // 在天体影子里看不到光源,没有禁区
   const u=envSunDirAt(s.pos,SUNL_U);if(!u)return;
   const a=toScreen(s.pos[0],s.pos[1]),b=toScreen(s.pos[0]+u[0]*1e6,s.pos[1]+u[1]*1e6);

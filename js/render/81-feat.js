@@ -195,6 +195,6 @@ function featStations(){if(!ENV.stations.length)return;
     if(typeof selBuoy!=='undefined'&&selBuoy===T.obs){ctx.strokeStyle='#ffe066';ctx.lineWidth=1.6;ctx.beginPath();ctx.arc(p[0],p[1],Math.max(12,Dp*0.65),0,6.283);ctx.stroke();} // 2026-10-05 选中(同浮标)
     if(mk)featStaMark(p[0],p[1],own);
     else{const c=featStaSpr(own,Dp),w=c.width/artDpr()*Dp/c.Dq;ctx.drawImage(c,p[0]-w/2,p[1]-w/2,w,w);if(own!=='neutral'&&on)artBlit(ctx,featBeacon(own),p[0],p[1],Dp*0.75,0.35,true);}
-    const lab=(own==='neutral'?'中立':(own==='blue'?'蓝方':'红方'))+(prog?' · '+(T.cap==='blue'?'蓝方':'红方')+'占领中 '+Math.floor(T.prog)+'/'+C.CAP_T+' s':'');
+    const lab=(own==='neutral'?'中立':(own===ME?'蓝方':'红方'))+(prog?' · '+(T.cap===ME?'蓝方':'红方')+'占领中 '+Math.floor(T.prog)+'/'+C.CAP_T+' s':'');
     mapText(T.name+' · '+lab,MAP_BODY.TXT,p[0],p[1]+(mk?13:Dp*0.55+9));}
   ctx.restore();}

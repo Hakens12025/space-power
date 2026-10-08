@@ -209,7 +209,7 @@ function drawShip(s){
   const zc=L.pos[2];
 
   // 舰体颜色统一(高度差用 ▲▼ 标记表达,不靠变色)
-  const bodyColor=(s.side!==VIEW&&shipIdentHull(s)==='UNK')?'#a0aab9':(s.side==='red'?'#ff6b6b':'#5aa7ff'); // 阵营色;本视角没认出的对方画灰 // 2026-09-27 用户:未知热源用灰色(--side-neutral),认出是敌舰才红
+  const bodyColor=(s.side!==VIEW&&shipIdentHull(s)==='UNK')?'#a0aab9':(palSide(s.side)==='red'?'#ff6b6b':'#5aa7ff'); // 阵营色(2026-10-08 相对:我方蓝、对方红);本视角没认出的对方画灰 // 2026-09-27 用户:未知热源用灰色(--side-neutral),认出是敌舰才红
 
   // 速度矢量箭头(2D投影)
   const vn=V.len(L.vel);
@@ -238,7 +238,7 @@ function drawShip(s){
   ctx.strokeStyle=bodyColor; ctx.fillStyle=bodyColor;
   const fx=L.facing[0], fy=L.facing[1];
   const ang=Math.atan2(fy,fx);
-  const art=!shipMarkMode()&&shipIdentHull(s)!=='UNK'&&typeof SA==='object'&&SA.icon(ctx,shipIdentHull(s),shipIdentTier(s),s.side==='red'?'red':'blue',p[0],p[1],ang,shipZoomF()); // 2026-10-05 新舰标贴图(render/82-shipart);画不了才退回下面的纯色轮廓
+  const art=!shipMarkMode()&&shipIdentHull(s)!=='UNK'&&typeof SA==='object'&&SA.icon(ctx,shipIdentHull(s),shipIdentTier(s),palSide(s.side)==='red'?'red':'blue',p[0],p[1],ang,shipZoomF()); // 2026-10-05 新舰标贴图(render/82-shipart);画不了才退回下面的纯色轮廓
   ctx.save();
   ctx.translate(p[0],p[1]);
   ctx.rotate(ang);
@@ -279,7 +279,7 @@ function drawShip(s){
      红舰被定位之后,它此刻在哪我确实知道,但它【接下来要去哪】永远不该知道 —— 与 SN6e 堵掉的速度箭头 / 尾焰 / 朝向同类,
      那一轮只堵了陈旧与失联两档,实况这一档漏了(todo-plan 2.11 F5 记过)。AI1 之后它更要命:红方的去向 = 它对你位置的【信念】,
      画出来等于把"敌人以为我在哪"直接告诉玩家。口径与 83-hud 的 drawOrders / drawLocks 首行一致。 */
-  const tgtOrd=(s.orders.length&&(s.side==='blue'||adminMode))?s.orders[0]:null;
+  const tgtOrd=(s.orders.length&&(s.side===ME||adminMode))?s.orders[0]:null;
   if(tgtOrd){
     const isPass=tgtOrd.type==='pass';
     const q=toScreen(tgtOrd.pos[0],tgtOrd.pos[1]);

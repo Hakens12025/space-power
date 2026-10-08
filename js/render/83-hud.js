@@ -1,6 +1,6 @@
 "use strict";
 function drawOrders(s){
-  if(!adminMode&&s.side==='red')return; // 普通模式:敌方航线/路径点不可见(情报)
+  if(!adminMode&&s.side!==ME)return; // 普通模式:敌方航线/路径点不可见(情报)
   // FM1:这里原有一段编队早退分支(读 F.dest/F.queue/F.arrived 画阵位点+队列折线,末尾 return)。
   // 那三个字段连同整套"平行于 s.orders 的第二航线结构"已删除,而它的 return 还会把成员的 orders 一并挡掉。
   // 现在编队路径就是【旗舰的 s.orders】,旗舰是一艘普通带令船,下面这套散船画法原样把整条航线画出来;
@@ -105,7 +105,7 @@ function projViewGone(p){return (!adminMode&&typeof llOnNow==='function'&&llOnNo
 function drawLocks(){ // 火力锁定:红色虚线
   for(const s of ships){
     if(s.dead||!s.lockedTarget||viewDead(s.lockedTarget)||s.lockedTarget.side===s.side)continue; // LL6 锁定目标的死活按我方看见的
-    if(!adminMode&&s.side==='red')continue; // 普通模式:敌方攻击目标不可见
+    if(!adminMode&&s.side!==ME)continue; // 普通模式:敌方攻击目标不可见
     if(selected.indexOf(s.id)<0)continue; // 2026-10-07 用户:选中的舰才画它的锁定红线,不用一直显示
     const tq=viewPos(s.lockedTarget);if(!tq)continue; // 2026-09-28 画到我方知道的位置;接触丢了就不画(原来一直套在真值上)
     const p=toScreen(s.pos[0],s.pos[1]);
@@ -257,14 +257,14 @@ function drawProjectiles(){ // 弹丸/导弹
     if(!projSeen(p))continue; // 感知层 v4:普通模式敌方弹药只有被探测到才显示 v119:读缓存 TK4a:缓存在航迹表的目击集合里
     const q=projViewLook(p);if(!q)continue; // LL5 位置 / 速度 / lit / 颗数读我方看到的弹影
     const s=toScreen(q.pos[0],q.pos[1]);
-    const sd=(p.group||0)*1.7,side=p.shooter&&p.shooter.side==='red'?'red':'blue',rot=Math.atan2(q.vel[1],q.vel[0]); // 2026-10-04 弹的画法换成 render/81-art(朝向 = 速度方向)
+    const sd=(p.group||0)*1.7,side=p.shooter?palSide(p.shooter.side):'blue',rot=Math.atan2(q.vel[1],q.vel[0]); // 2026-10-04 弹的画法换成 render/81-art(朝向 = 速度方向)
     if(s[0]<-60||s[0]>W+60||s[1]<-60||s[1]>H+60){if(p!==selMissile)continue;}
     if(p.type==='decoy'){if(mk)projMark(p,s[0],s[1],rot,side,1);else artDecoy(ctx,s[0],s[1],rot,sd,side);continue;} // 诱饵弹:脉动的假热源(模拟舰船信号骗拦截)
     if(p.type==='mac'){
       if(mk)projMark(p,s[0],s[1],rot,side,1);else artShell(ctx,s[0],s[1],rot,side);
     }else{ // 导弹组/拦截导弹组(显示剩余数量)
       const vn=V.len(q.vel);
-      const redSide=p.shooter&&p.shooter.side==='red'; // v136:敌方导弹红色标志;KIMI146:提升到外层块(原在内层else,箭头区引用抛 redSide is not defined = 导弹一发射UI全崩)
+      const redSide=p.shooter&&palSide(p.shooter.side)==='red'; // v136:敌方导弹红色标志;KIMI146:提升到外层块(原在内层else,箭头区引用抛 redSide is not defined = 导弹一发射UI全崩)
       const cnt=Math.min(q.count||16,16);
       if(mk)projMark(p,s[0],s[1],rot,side,cnt);
       else if(p.mine)artMine(ctx,s[0],s[1],(sd%6)*0.17,side); // 伏击雷:六角壳体 + 天线 + 闪烁指示灯
@@ -420,7 +420,7 @@ function clipLine(x0,y0,x1,y1){ // 实线裁到屏幕再单独描(2026-10-04 性
   if(!clipSegT(x0,y0,x1,y1,4))return;const dx=x1-x0,dy=y1-y0,t0=CLIP_T[0],t1=CLIP_T[1];
   ctx.beginPath();ctx.moveTo(x0+dx*t0,y0+dy*t0);ctx.lineTo(x0+dx*t1,y0+dy*t1);ctx.stroke();}
 function drawMissileIntent(g){ // v129:选中导弹/网→显示组网圈与引导圈(2026-10-01)、目标虚线、目的地标记、火控母舰连线
-  if(!adminMode&&g.shooter&&g.shooter.side!=='blue')return; // 2026-09-28 敌方弹的意图(目标、引导舰)我方不知道
+  if(!adminMode&&g.shooter&&g.shooter.side!==ME)return; // 2026-09-28 敌方弹的意图(目标、引导舰)我方不知道
   const sp=toScreen(g.pos[0],g.pos[1]);
   { // 2026-10-01 用户:画组网圈与引导圈,两种画法(2026-09-30 触发圈不画了)。组网圈 = 弹与弹通信距离(weapons/54 MSL_LINK.MM):青色虚线(dashArc);引导圈 = 导引头自主导引范围(GUIDE_SEEK):琥珀色实线
     const r1=MSL_LINK.MM*cam.zoom,r2=GUIDE_SEEK*cam.zoom;
@@ -464,7 +464,7 @@ function drawHoverRings(){
   const ids=selected.slice(); // RF5 Phase C:轮盘 hover 扇区画的射程圈属于【序列属主】,它未必在 selected 里(轮盘开着时玩家仍可改选/取消选中,74 与 89 都已改成认序列属主)。不并进来的话 hover 扇区一个圈都不画
   if(typeof rad!=='undefined'&&rad&&rad.open&&typeof radSubject==='function'){const rs=radSubject();if(rs&&!rs.dead&&ids.indexOf(rs.id)<0)ids.push(rs.id);}
   for(const id of ids){
-    const s=shipById(id);if(!s||s.dead||s.side!=='blue')continue;
+    const s=shipById(id);if(!s||s.dead||s.side!==ME)continue;
     const p=toScreen(s.pos[0],s.pos[1]);
     if(hoverRing==='mac'){ring(p,macEffRange(s),'主炮 50% ≈ '+Math.round(macEffRange(s)/1000)+'k');ring(p,macRangeAt(s,0.1),'主炮 10% ≈ '+Math.round(macRangeAt(s,0.1)/1000)+'k');} // WR1:没有射程门,画两档命中率的距离
     else if(hoverRing==='msl')ring(p,mslReach(s),'导弹 射程 ≈ '+Math.round(mslReach(s)/1000)+'k(中段熄火滑行)'); // WR1
@@ -574,18 +574,18 @@ function drawForceMarks(){ // 2026-09-27 主炮打空地:还没打出去的炮�
   ctx.save();ctx.strokeStyle='rgba(255,209,102,.85)';ctx.fillStyle='rgba(255,209,102,.85)';ctx.lineWidth=1.2;ctx.font='10px Consolas';ctx.textAlign='left';ctx.textBaseline='middle';
   const mk=(pt,lb)=>{const q=toScreen(pt[0],pt[1]);ctx.beginPath();ctx.arc(q[0],q[1],6,0,6.283);ctx.moveTo(q[0]-10,q[1]);ctx.lineTo(q[0]+10,q[1]);ctx.moveTo(q[0],q[1]-10);ctx.lineTo(q[0],q[1]+10);ctx.stroke();ctx.fillText(lb,q[0]+12,q[1]);};
   const done=new Set(); // 2026-09-29 强制目标点(74 中键点空地):同一个点只画一次
-  for(const s of ships){if(s.dead||(s.side!=='blue'&&!adminMode))continue;const ff=s.forceMac;if(ff&&ff.pt)mk(ff.pt,'炮击点');
+  for(const s of ships){if(s.dead||(s.side!==ME&&!adminMode))continue;const ff=s.forceMac;if(ff&&ff.pt)mk(ff.pt,'炮击点');
     const f=s.fTgt;if(f){const k=Math.round(f.pt[0])+','+Math.round(f.pt[1]);if(!done.has(k)){done.add(k);mk(f.pt,'强制目标');}}}
   ctx.restore();
 }
 const PING_FX=new Map(),PING_MS=900; // 2026-09-27 扫描的脉冲圈:船 → {看到的 pingT, 墙钟起点}
 function drawPings(){ // 一圈从船身扩到雷达量程(对标准目标),墙钟 PING_MS 内淡出;敌方的只在全知时画
   const now=nowMs(),lim=2*Math.hypot(W,H);
-  for(let g=0;g<3;g++)for(const s of (g===2?(ENV.stations.length?featStaState().map(T=>T.obs):[]):(g?rockObjs():ships))){if(s.pingT===undefined||s.dead||(s.kind&&s.kind!=='buoy'&&s.kind!=='station')||(s.side!=='blue'&&!adminMode))continue;let f=PING_FX.get(s);if(!f||f.pt!==s.pingT){f={pt:s.pingT,t0:now};PING_FX.set(s,f);}} // 2026-09-29 浮标的脉冲也画圈
+  for(let g=0;g<3;g++)for(const s of (g===2?(ENV.stations.length?featStaState().map(T=>T.obs):[]):(g?rockObjs():ships))){if(s.pingT===undefined||s.dead||(s.kind&&s.kind!=='buoy'&&s.kind!=='station')||(s.side!==ME&&!adminMode))continue;let f=PING_FX.get(s);if(!f||f.pt!==s.pingT){f={pt:s.pingT,t0:now};PING_FX.set(s,f);}} // 2026-09-29 浮标的脉冲也画圈
   if(PING_FX.size>64)for(const s of PING_FX.keys())if(s.dead||(s.kind==='station'?featStaState().every(T=>T.obs!==s):(ships.indexOf(s)<0&&rocks.indexOf(s)<0)))PING_FX.delete(s); // 换局 / 沉了的清掉(沉了的不会再进上面那个循环)
   for(const [s,f] of PING_FX){if(f.done)continue;const k=(now-f.t0)/PING_MS;if(k>=1||k<0||s.dead){f.done=k>=1||s.dead;continue;} // 2026-09-27 修:播完只标 done,不删 —— 删了下一帧会当成新扫描重播,脉冲一直循环(用户实报)
     const R=actRangeOf(s)*Math.sqrt(k)*cam.zoom;if(R<2||R>lim)continue;const p=toScreen(s.pos[0],s.pos[1]);
-    ctx.save();ctx.globalAlpha=0.7*(1-k);ctx.strokeStyle=s.side==='blue'?'#6fb4ff':'#ff6b6b';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(p[0],p[1],R,0,6.283);ctx.stroke();ctx.restore();}
+    ctx.save();ctx.globalAlpha=0.7*(1-k);ctx.strokeStyle=palSide(s.side)==='blue'?'#6fb4ff':'#ff6b6b';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(p[0],p[1],R,0,6.283);ctx.stroke();ctx.restore();}
 }
 /* RF5 悬停准星 / 吸附反馈 / 预览线:表达"我此刻正要下的命令",与 drawOrders/drawRange/drawHoverRings 同族,故归在 83-hud。
    状态 xh(pt/snap/dwellT)由 command/74-targeting 维护,本文件只读不写——状态与绘制分家,同 RF5 Phase A「引擎在 weapons/58、面板在 render/88」的分工。
@@ -736,7 +736,7 @@ function drawFollowLinks(){
   let began=false;
   for(const s of ships){
     if(s.dead||!s.follow)continue;
-    if(!adminMode&&s.side==='red')continue;             // 普通模式:敌方的跟随关系不可见(情报,同 drawOrders 口径)
+    if(!adminMode&&s.side!==ME)continue;             // 普通模式:敌方的跟随关系不可见(情报,同 drawOrders 口径)
     const t=followTargetOf(s);                          // 纯读:只做 ships.find + dead 判定,不推进 s.follow.ang
     if(!t)continue;
     if(selected.indexOf(s.id)<0&&selected.indexOf(t.id)<0)continue;

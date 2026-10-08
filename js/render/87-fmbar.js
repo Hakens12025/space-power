@@ -41,7 +41,7 @@ function fmbFlag(F,list){ // 只读版旗舰:名册优先;名册里那艘没了�
   const f=(F&&F.flagship!=null)?l.find(s=>s.id===F.flagship):null;
   return f||l[0]||null;
 }
-function fmbList(){return (typeof fmAll==='function')?fmAll():[];} // 有活船的编队,顺序由 42 保证稳定
+function fmbList(){return (typeof fmAllMine==='function')?fmAllMine():[];} // 2026-10-08 只列我方的(联机) // 有活船的编队,顺序由 42 保证稳定
 function fmbModeText(mode,short){ // 模式文案的唯一出处(信息区 / 菜单副标题 / 88 右栏共用,免得三处各写各的)。FM6:'follow' 这一档随编队跟随模式删除
   if(mode==='fixed')return short?'固定态':'固定 · 保持建队时的相对位置与朝向';
   return short?'阵型态':'阵型 · 能力站位';  // FM4:机制从「条令防空环」换成「能力插槽 + 最优指派」，文案跟着改 —— 本函数是三处模式文案的唯一出处(左轨菜单/右轨 #selFm/书签副标题)
@@ -362,6 +362,7 @@ function fmbAct(a){
   if(!st){fmUi.open=null;updFmBar();return;}
   switch(a){
     case 'page': // FM4 打开舰队编组控制页(render/89-fmpage)。typeof 守卫:该文件加载晚于本文件时也不至于抛
+      if(typeof LOCK!=='undefined'&&LOCK.on){if(typeof cmdTipFlash==='function')cmdTipFlash('联机对局里暂时不能打开编队编辑页(它的修改还没接进联机同步)',2500);break;} // 2026-10-08 联机:89-fmpage 的编辑还在直接改编队参数,会让两边分叉
       if(typeof fmPageOpen==='function')fmPageOpen(F.id);
       break;
     case 'resnap':{ // FM4b 「重新固定」(FM6e 改名,原名重拍队形;data-fma 不改):把各舰【此刻】的相对位置与朝向拍成新快照。这是固定模式下唯一真正有用的动作

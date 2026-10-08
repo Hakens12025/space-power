@@ -32,7 +32,7 @@ function fmpShowsStations(F) {
 function fmpSelFormations() { // 与选中舰有关的编队(去重,保持 formations 的稳定顺序)
   const out = [];
   if (!selected || !selected.length || typeof fmAll !== 'function') return out;
-  fmAll().forEach(F => {
+  fmAllMine().forEach(F => { // 2026-10-08 只画我方的编队站位(联机时对方的也在表里)
     if (!fmpShowsStations(F)) return;
     /* 【按实际归属判成员,不按名册】fmShips(F) 走的是 F.ships 名册,而一艘船被摘出编队时
        s.formation 先断、名册可能还留着它一拍(战损那一拍两者本来就会短暂不同,见 42 的 fmMembers 注释)。

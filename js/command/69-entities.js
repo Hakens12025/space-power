@@ -16,7 +16,7 @@
    世界列表(卫星 / 彗星 / 天体)每次 envReset 都换新对象,这里给按下标的固定句柄 {kind, i}(entW)。
    ============================================================================ */
 function entSeenAt(o,side){const tk=trkOf(side,o);if(!tk||trkGone(tk)||!trkPos(tk)||viewDead(o))return null;return viewPos(o);} // 对方的东西:航迹交代得出位置才有(LL11:影像先进可见光圈、航迹还没定位时不给)
-function entMine(o,side){return o.side===side||o.side==='blue';} // 读真值的那些:这一方自己的,和蓝方的(靶场能切红方视角,但选中 / 下令永远是蓝方,RF2)
+function entMine(o,side){return o.side===side||o.side===ME;} // 读真值的那些:这一方自己的,和蓝方的(靶场能切红方视角,但选中 / 下令永远是蓝方,RF2)
 function entMoveTo(o,x,y){o.pos=[x,y,o.pos[2]||0];if(o.rangeAnchor)o.rangeAnchor=o.pos.slice();ROCK_EPOCH++;if(typeof llJump==='function')llJump(o);} // 靶场拖舰船 / 石头:靶连锚点一起挪(免得闪避机动拽回去);石头网格重建;LL1 瞬移清光锥层历史
 const ENT_WH={moon:[],comet:[],body:[]};
 function entW(k,i){return ENT_WH[k][i]||(ENT_WH[k][i]={kind:k,i:i});} // 世界列表条目的固定句柄
@@ -28,18 +28,18 @@ const ENT={
   ship:{k:'ship',tier:0,follow:true,
     each(f,truth,side){for(const s of ships)if(!s.dead&&(truth||adminMode||entMine(s,side)))f(s);if(!truth&&!adminMode)trkEach(side,tk=>{const s=trkSrc(tk);if(!s.kind&&!entMine(s,side))f(s);});},
     at(o,truth,side){return (truth||adminMode||entMine(o,side))?o.pos:entSeenAt(o,side);},
-    r(o,drag){return drag?12:(o.side==='blue'?60:24);}, // 我方舰 60 px(选舰的老手感),对方 24 px(不抢框选的起点)
+    r(o,drag){return drag?12:(o.side===ME?60:24);}, // 我方舰 60 px(选舰的老手感),对方 24 px(不抢框选的起点)
     live(o){return !o.dead&&ships.includes(o)&&(entMine(o,VIEW)||adminMode||!viewDead(o));},
-    sel(o){return o.side==='blue'?'ship':'info';}, // 选中 / 下令永远是蓝方(RF2;GM 也不例外)
+    sel(o){return o.side===ME?'ship':'info';}, // 选中 / 下令永远是蓝方(RF2;GM 也不例外)
     drag(h,x,y){entMoveTo(h.o,x,y);},
     title(){return '目标信息';},name(o){return (o.side===VIEW||adminMode)?o.name:xhName(o);},
     info(o,ref){return entCard(o,ref)+entRef(ref);}},
   obj:{k:'obj',tier:0,follow:true, // rocks[]:碎石、民船、诱饵、浮标
     each(f,truth,side){if(truth||adminMode){for(const o of rocks)if(!o.dead)f(o);return;}for(const o of rockObjs())if(!o.dead&&entMine(o,side))f(o);trkEach(side,tk=>{const s=trkSrc(tk);if(s.kind&&!entMine(s,side))f(s);});},
     at(o,truth,side){return (truth||adminMode||entMine(o,side))?o.pos:entSeenAt(o,side);},
-    r(o,drag){return drag?12:(o.kind==='buoy'&&o.side==='blue'?14:24);}, // 我方浮标 14 px(浮标比船离光标近才先选它)
+    r(o,drag){return drag?12:(o.kind==='buoy'&&o.side===ME?14:24);}, // 我方浮标 14 px(浮标比船离光标近才先选它)
     live(o){return !o.dead&&rocks.includes(o)&&(entMine(o,VIEW)||adminMode||!viewDead(o));},
-    sel(o){return (o.kind==='buoy'&&o.side==='blue')?'buoy':'info';},
+    sel(o){return (o.kind==='buoy'&&o.side===ME)?'buoy':'info';},
     drag(h,x,y){entMoveTo(h.o,x,y);},
     title(o){return o.side===VIEW?({lure:'诱饵',buoy:'前出浮标'})[o.kind]||'物体':'目标信息';},name(o){return (o.side===VIEW||adminMode)?o.name:xhName(o);},
     info(o,ref){if(o.side!==VIEW)return entCard(o,ref)+entRef(ref); // 自己放的诱饵
@@ -49,7 +49,7 @@ const ENT={
     at(o){return o.pos;},
     r(o,drag){return Math.max(drag?12:14,featStaPx()*0.5);}, // 至少半个图标
     live(o){return ENV.stations.length>0&&featStaState().some(T=>T.obs===o);},
-    sel(o){return o.side==='blue'?'buoy':'info';}, // 自己拿着的:底栏雷达遥控(同浮标)
+    sel(o){return o.side===ME?'buoy':'info';}, // 自己拿着的:底栏雷达遥控(同浮标)
     drag(h,x,y){const i=featStaState().findIndex(T=>T.obs===h.o);if(i<0||!rangeWorld)return;const S=rangeWorld.stations[i];S.x=x;S.y=y;envReset(rangeWorld);featStaMoved(i,x,y);}, // 改 rangeWorld 再 envReset,归属 / 占领进度照留
     title(){return '据点';},name(o){return o.name;},
     info(o,ref){const T=featStaState().find(T=>T.obs===o),who=s=>s===VIEW?'我方':'对方';
@@ -96,7 +96,7 @@ function entKind(o){if(!o)return null;const k=o.kind;if(k==='moon'||k==='comet'|
    q.agg 先看编队聚合框:'blue' 我方方框给一艘、'red' 对方菱形给一艘、'all' 都看(框里的船不画在自己的位置上,不这么做就点不到它们,SN6)。
    0 档(舰船 / 物体 / 据点 / 卫星 / 彗星)里最近的赢;0 档没命中才看 1 档(导弹组 / 天体);一样近按 ENT_KINDS 顺序。 */
 function entPick(sx,sy,q){q=q||{};const drag=!!q.drag,side=q.side||VIEW,B=[null,null];
-  if(q.agg&&typeof lodAggAt==='function'){const a=lodAggAt(sx,sy);if(a&&(q.agg==='all'||(q.agg==='blue')===(a.side==='blue'))){const s=a.side==='blue'?a.ships.find(x=>!x.dead):a.ships.find(x=>!viewDead(x));if(s&&(!q.ok||q.ok(s,ENT.ship)))return {o:s,K:ENT.ship,d:0,p:s.pos};}}
+  if(q.agg&&typeof lodAggAt==='function'){const a=lodAggAt(sx,sy);if(a&&(q.agg==='all'||(q.agg==='blue')===(a.side==='blue'))){const s=a.side==='blue'?a.ships.find(x=>!x.dead):a.ships.find(x=>!viewDead(x));if(s&&(!q.ok||q.ok(s,ENT.ship)))return {o:s,K:ENT.ship,d:0,p:s.pos};}} // 聚合框的 blue / red 是角色(自己 / 对手,82-lod 按 VIEW 分)
   for(const K of ENT_KINDS){if(q.k&&q.k.indexOf(K.k)<0)continue;if(drag&&!K.drag)continue;const T=K.tier;
     K.each(o=>{if(q.ok&&!q.ok(o,K))return;const p=K.at(o,drag,side);if(!p)return;const s=toScreen(p[0],p[1]),d=Math.hypot(s[0]-sx,s[1]-sy),r=q.r||K.r(o,drag);if(d<r&&(!B[T]||d<B[T].d))B[T]={o:o,K:K,d:d,p:p};},drag,side);}
   return B[0]||B[1];}

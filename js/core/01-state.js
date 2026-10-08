@@ -49,6 +49,7 @@ let cv,ctx; // RF1 收编自 09-render-bg.js:全局 canvas 句柄(声明集中�
      反过来,靠"默认就是 GM"来看见红方的判据会在这里翻红 —— 那正是要它翻的。 */
 let adminMode=false;
 let ME='blue'; // 2026-10-08 联机:我是哪一方(选中 / 下令 / 配色都按它;单人与靶场恒为 blue,联机加入方 = red)
+function palSide(side){return side===ME?'blue':(side==='neutral'?'neutral':'red');} // 配色用的阵营:我方一律画蓝、对方画红(联机加入方看自己也是蓝)
 let VIEW='blue'; // 2026-09-28 画面从哪一方的感知看(用户:靶场里切红蓝视野;选甲:只换看到什么,选中 / 下令永远是蓝方)。只有靶场能切,出靶场复位(scenario/97 的 gmSync)
 function shipById(id){for(let i=0;i<ships.length;i++)if(ships[i].id===id)return ships[i];return undefined;} // R7 按 id 查舰的唯一入口(原来 ships.find(x=>x.id===…) 各写各的有 21 处)。今天是线性查找,舰多了要建索引时只改这一处
 function objById(id){if(!id)return undefined;const s=shipById(id);if(s)return s;for(let i=0;i<rocks.length;i++)if(rocks[i].id===id)return rocks[i];return undefined;} // TK4c 按 id 查【可被瞄准的物体】:先舰船、再石头(火控序列的目标、小窗常驻、轮盘都存 id)。只找舰船的地方照旧用 shipById
