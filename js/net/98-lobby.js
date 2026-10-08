@@ -49,7 +49,7 @@ function spmAct(a,v){
   if(a==='join'){const n=document.getElementById('spmName');if(n)netSetName(n.value);SPM.note='';netJoin(v);return;}
   if(a==='leave'){netLeave();SPM.note='';spmShow('lobby');return;}}
 function spmRoomEv(ev){
-  if(ev.t==='msg'){const d=ev.d||{};if(d.t==='start'&&!LOCK.on){const R=netRoomView();lockBegin(false,d.seed,R&&R.peer?R.peer.name:'');return;}if(LOCK.on)lockOnMsg(d);return;} // 联机第 4 步:主机发来开局种子 / 锁步数据
+  if(ev.t==='msg'){const d=ev.d||{};if((d.t==='start'||d.t==='tk')&&d.seed&&!LOCK.on&&!LOCK.ended&&!(NET.room&&NET.room.host)){const R=netRoomView();lockBegin(false,d.seed,R&&R.peer?R.peer.name:'');if(d.t==='start')return;}if(LOCK.on)lockOnMsg(d);return;} // 开局种子:start 丢了,主机的周期广播 tk 里也带着 // 联机第 4 步:主机发来开局种子 / 锁步数据
   if(LOCK.on&&(ev.t==='left'||ev.t==='closed')){lockEnd('对手 '+LOCK.peer+' 离开了,对局结束');return;}
   if(ev.t==='peer'&&ev.room&&ev.room.peer&&!LOCK.on){SPM.note='';spmShow('room');const nm=ev.room.peer.name;setTimeout(()=>{if(LOCK.on||!NET.room||!NET.room.peer)return;const seed=1+Math.floor(Math.random()*999999999);netSend({t:'start',seed:seed});lockBegin(true,seed,nm);},800);return;} // 对手到了:主机定种子,双方直接开局(用户:进入之后直接开始对局)
   if(ev.t==='joined'||ev.t==='peer'||ev.t==='left'){SPM.note='';spmShow('room');return;} // 第 4 步:peer 到齐(房主收 peer、加入方收 joined)时在这里开局
