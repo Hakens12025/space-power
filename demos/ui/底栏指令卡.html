@@ -48,6 +48,9 @@ html,body{margin:0;height:100%;background:var(--void);color:var(--txt);font-fami
 .wb:hover{background:var(--srf-hover);border-color:var(--line-acc)}
 .wb.armed{border-color:var(--state-select);box-shadow:0 0 0 1px var(--state-select) inset,0 0 10px rgba(255,224,102,.25)}
 .wb.dis{cursor:default;opacity:.55}
+.wb.none{cursor:default;border-style:dashed;border-color:var(--line);background:transparent}
+.wb.none .lb{color:var(--txt-mute)}
+.wb.none .na{flex:1;display:flex;align-items:center;justify-content:center;color:var(--txt-mute);font-size:var(--fs-read)}
 .wb .hd{display:flex;align-items:center;gap:5px;height:16px}
 .wb .lb{color:var(--txt-hi);font-size:var(--fs-body)}
 .wb .key{font-family:var(--ff-mono);font-size:var(--fs-micro);color:var(--txt-dim);border:1px solid var(--line-ctl);border-radius:var(--r-sm);padding:0 3px;line-height:13px}
@@ -66,13 +69,14 @@ html,body{margin:0;height:100%;background:var(--void);color:var(--txt);font-fami
 .cells i b{position:absolute;left:0;top:0;bottom:0;background:var(--acc)}
 .cells i.ok{background:var(--state-ok)}
 /* 近防:两半 */
-.wb.ciws{cursor:default}
-.halves{display:flex;gap:4px;margin-top:1px}
-.half{flex:1;border:1px solid var(--line-ctl);border-radius:var(--r-sm);text-align:center;font-size:var(--fs-label);padding:2px 0;cursor:pointer;color:var(--txt-dim)}
+.wb.ciws{cursor:default;width:78px;padding:4px 5px;gap:2px}
+.halves{display:flex;flex-direction:column;gap:3px}
+.half{border:1px solid var(--line-ctl);border-radius:var(--r-sm);font-size:var(--fs-label);padding:1px 5px;cursor:pointer;color:var(--txt-dim);display:flex;justify-content:space-between;font-variant-numeric:tabular-nums}
+.half b{font-family:var(--ff-mono);font-weight:normal}
 .half:hover{border-color:var(--line-acc);color:var(--txt)}
 .half.on{border-color:var(--state-active);color:var(--state-active);background:rgba(84,224,208,.08)}
 .half.mix{border-color:var(--state-active);color:var(--txt);border-style:dashed}
-/* 右边:雷达 / 跟随 / 停火 */
+/* 右边:雷达 / 停火 */
 .side{display:flex;gap:6px}
 .sb{width:66px;height:66px;background:var(--srf-raise);border:1px solid var(--line-ctl);border-radius:var(--r-sm);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;user-select:none;position:relative}
 .sb:hover{background:var(--srf-hover);border-color:var(--line-acc)}
@@ -81,7 +85,7 @@ html,body{margin:0;height:100%;background:var(--void);color:var(--txt);font-fami
 .sb.on .s{color:var(--state-active)}
 .sb .key{position:absolute;top:3px;left:4px;font-family:var(--ff-mono);font-size:var(--fs-micro);color:var(--txt-dim)}
 .sb.stop .l{color:var(--state-danger)}
-/* 弹出菜单(雷达 / 跟随沿用引擎的一层菜单) */
+/* 弹出菜单(雷达沿用引擎的一层菜单) */
 #pop{position:absolute;display:none;flex-direction:column;gap:3px;padding:5px;z-index:5}
 #pop .btn{min-width:84px;text-align:left}
 /* 提示 */
@@ -115,7 +119,7 @@ const CLS={
   CL:{nm:'巡游舰',tier:'T1',hp:420,sh:150,spec:[['加速','19.6 g'],['转向','4.5°/s'],['照射','281k'],['静听','470k'],['火控通道','1']],mac:0,cells:2,groups:12,icp:384,buoys:3},
 };
 function mk(cls,name,x,y){const c=CLS[cls];return {cls,name,x,y,hp:c.hp*(0.6+0.4*Math.random()),sh:c.sh*Math.random(),macCd:0,cellT:Array(c.cells).fill(0),groups:c.groups,icp:c.icp,buoys:c.buoys,
-  auto:{mac:true,msl:false},ciwsMsl:true,ciwsGun:true,radar:'silent',follow:'待命'};}
+  auto:{mac:true,msl:false},ciwsMsl:true,ciwsGun:true,radar:'silent'};}
 const SH=[mk('CA','巡洋舰1',-60,20),mk('FF','护卫舰1',-90,-40),mk('CL','巡游舰1',-110,60)];
 const FOES=[{x:260,y:-30,nm:'敌·驱逐舰'},{x:330,y:70,nm:'敌·巡洋舰'}];
 const PICKS=[['巡洋舰1',[0]],['护卫舰1',[1]],['巡游舰1',[2]],['三艘多选',[0,1,2]]];
@@ -138,21 +142,21 @@ function cease(){for(const s of S()){s.auto.mac=false;s.auto.msl=false;}armed=nu
 /* ---- 底栏 ---- */
 const tri=a=>a.every(Boolean)?2:(a.some(Boolean)?1:0);
 function ck(k,v){return '<div class="ck'+(v===2?' on':(v===1?' half':''))+'" data-ck="'+k+'" title="自动开火:勾上 = 火控自己找目标开火"><span>'+(v===2?'✓':'')+'</span></div>';}
-function wbMac(L){const M=L.filter(canMac);if(!M.length)return '';
+function wbNone(lb){return '<div class="wb none"><div class="hd"><span class="lb">'+lb+'</span></div><div class="na">无</div></div>';} // 这一格的武器选中的船都没有:位置照留,写「无」
+function wbMac(L){const M=L.filter(canMac);if(!M.length)return wbNone('主炮');
   const rd=M.filter(s=>s.macCd<=0).length,cd=Math.max(...M.map(s=>s.macCd)),p=M.length===1?1-M[0].macCd/CLS[M[0].cls].mac:rd/M.length;
   return '<div class="wb'+(armed==='mac'?' armed':'')+'" data-w="mac" title="点 = 主炮强行开火(再点目标 / 空地)· 快捷键 T"><div class="hd"><span class="lb">主炮</span><span class="key">T</span></div>'+ck('mac',tri(M.map(s=>s.auto.mac)))
    +'<div class="prog'+(p<1?' ld':'')+'"><i style="width:'+Math.round(p*100)+'%"></i></div>'
    +'<div class="rd"><span>'+(M.length===1?(rd?'就绪':Math.ceil(cd)+' s'):rd+'/'+M.length+' 就绪')+'</span><span class="dim">'+(M.length===1?'30 s/发':M.length+' 门')+'</span></div></div>';}
-function wbMsl(L){if(!L.length)return '';const cells=L.flatMap(s=>s.cellT),g=L.reduce((n,s)=>n+s.groups,0),rd=cells.filter(t=>t<=0).length;
+function wbMsl(L){if(!L.length||!L.some(s=>CLS[s.cls].cells>0))return wbNone('导弹');const cells=L.flatMap(s=>s.cellT),g=L.reduce((n,s)=>n+s.groups,0),rd=cells.filter(t=>t<=0).length;
   const segs=L.length===1?cells.map(t=>t<=0?'<i class="ok"></i>':'<i><b style="width:'+Math.round((1-t/60)*100)+'%"></b></i>').join(''):'';
   return '<div class="wb'+(armed==='msl'?' armed':'')+(g<=0?' dis':'')+'" data-w="msl" title="点 = 导弹强行齐射(再点目标 / 空地)· 快捷键 R"><div class="hd"><span class="lb">导弹</span><span class="key">R</span></div>'+ck('msl',tri(L.map(s=>s.auto.msl)))
    +(L.length===1?'<div class="cells">'+segs+'</div>':'<div class="prog'+(rd<cells.length?' ld':'')+'"><i style="width:'+Math.round(rd/cells.length*100)+'%"></i></div>')
    +'<div class="rd"><span>'+rd+'/'+cells.length+' 单元</span><span>'+g+' 组</span></div></div>';}
 function wbCiws(L){const m=tri(L.map(s=>s.ciwsMsl)),g=tri(L.map(s=>s.ciwsGun)),n=L.reduce((a,s)=>a+s.icp,0),cls=v=>v===2?' on':(v===1?' mix':'');
   return '<div class="wb ciws" title="近防:来袭才自动开火,没有强行开火"><div class="hd"><span class="lb">近防</span></div>'
-   +'<div class="halves"><div class="half'+cls(m)+'" data-cw="ciwsMsl" title="外圈:近防导弹(拦截弹)">外</div><div class="half'+cls(g)+'" data-cw="ciwsGun" title="内圈:近防炮">内</div></div>'
-   +'<div class="rd"><span class="dim">拦截弹</span><span>'+n+'</span></div></div>';}
-function wbBuoy(L){const B=L.filter(s=>CLS[s.cls].buoys>0);if(!B.length)return '';const n=B.reduce((a,s)=>a+s.buoys,0);
+   +'<div class="halves"><div class="half'+cls(m)+'" data-cw="ciwsMsl" title="外圈:近防导弹(拦截弹),右边是剩余颗数">外<b>'+n+'</b></div><div class="half'+cls(g)+'" data-cw="ciwsGun" title="内圈:近防炮">内<b>炮</b></div></div></div>';}
+function wbBuoy(L){const B=L.filter(s=>CLS[s.cls].buoys>0);if(!B.length)return wbNone('特殊');const n=B.reduce((a,s)=>a+s.buoys,0);
   return '<div class="wb'+(armed==='buoy'?' armed':'')+(n<=0?' dis':'')+'" data-w="buoy" title="点 = 放前出浮标(再点一个方向)· 快捷键 B"><div class="hd"><span class="lb">浮标</span><span class="key">B</span></div>'
    +'<div class="cells">'+B.flatMap(s=>Array.from({length:CLS[s.cls].buoys},(_,i)=>i<s.buoys?'<i class="ok"></i>':'<i></i>')).join('')+'</div>'
    +'<div class="rd"><span>余 '+n+'</span><span class="dim">个</span></div></div>';}
@@ -163,10 +167,9 @@ function shipBlock(L){const s=L[0],c=CLS[s.cls];
    +'<div class="bars"><div class="hb" title="结构"><i style="width:'+Math.round(s.hp/c.hp*100)+'%;background:var(--state-ok)"></i></div><div class="hb" title="护盾"><i style="width:'+Math.round(s.sh/c.sh*100)+'%;background:var(--acc)"></i></div></div></div></div>';}
 function sideBlock(L){const s=L[0],rl=({silent:'静默',paint:'发射',pulse:'脉冲',jam:'干扰'});const rm=L.every(x=>x.radar===s.radar)?rl[s.radar]:'混合';
   return '<div class="sec side"><div class="sb'+(rm!=='静默'?' on':'')+'" data-p="radar"><span class="l">雷达</span><span class="s">'+rm+'</span></div>'
-   +'<div class="sb" data-p="follow"><span class="l">跟随</span><span class="s">'+s.follow+'</span></div>'
    +'<div class="sb stop" data-stop="1" title="停火:自动开火全关、撤掉强行开火 · 快捷键 X"><span class="key">X</span><span class="l">停火</span><span class="s">全关</span></div></div>';}
 function render(){const L=S();
-  document.getElementById('bar').innerHTML=shipBlock(L)+'<div class="sec card">'+wbMac(L)+wbMsl(L)+wbCiws(L)+wbBuoy(L)+'</div>'+sideBlock(L);
+  document.getElementById('bar').innerHTML=shipBlock(L)+'<div class="sec card">'+wbMac(L)+wbMsl(L)+wbBuoy(L)+wbCiws(L)+'</div>'+sideBlock(L);
   const pc=document.getElementById('port');if(pc)drawPort(pc,L[0].cls);
   document.getElementById('map').classList.toggle('armed',!!armed);}
 function drawPort(cv,cls){const g=cv.getContext('2d'),w=cv.width,h=cv.height,L=cls==='CA'?1:0.78;g.clearRect(0,0,w,h);g.save();g.translate(w/2,h/2);
@@ -183,10 +186,10 @@ bar.addEventListener('mousemove',e=>{const sp=document.getElementById('spec'),t=
   const r=t.getBoundingClientRect();sp.style.display='block';sp.style.left=r.left+'px';sp.style.bottom=(innerHeight-r.top+6)+'px';});
 bar.addEventListener('mouseleave',()=>{document.getElementById('spec').style.display='none';});
 function openPop(k,el){const p=document.getElementById('pop');if(pop===k){p.style.display='none';pop=null;return;}pop=k;
-  const items=k==='radar'?[['silent','静默'],['paint','发射'],['pulse','脉冲'],['jam','干扰']]:[['待命','待命'],['跟随','跟随…'],['解除','解除跟随']];
+  const items=[['silent','静默'],['paint','发射'],['pulse','脉冲'],['jam','干扰']];
   p.innerHTML=items.map(([v,l])=>'<button class="btn" data-v="'+v+'">'+l+'</button>').join('');const r=el.getBoundingClientRect();
   p.style.display='flex';p.style.left=r.left+'px';p.style.bottom=(innerHeight-r.top+6)+'px';
-  p.onclick=e=>{const b=e.target.closest('[data-v]');if(!b)return;for(const s of S()){if(k==='radar')s.radar=b.dataset.v;else s.follow=b.dataset.v==='解除'?'待命':b.dataset.v;}p.style.display='none';pop=null;render();};}
+  p.onclick=e=>{const b=e.target.closest('[data-v]');if(!b)return;for(const s of S())s.radar=b.dataset.v;p.style.display='none';pop=null;render();};}
 let tipT=Infinity;function tip(t,ms){const d=document.getElementById('tip');d.textContent=t;d.style.display=t?'block':'none';tipT=ms?performance.now()+ms:Infinity;} // ms = 几毫秒后自己消失,0 = 一直显示
 window.addEventListener('keydown',e=>{const k=e.code;if(k==='KeyT')arm('mac');else if(k==='KeyR')arm('msl');else if(k==='KeyB')arm('buoy');else if(k==='KeyX')cease();else if(k==='Escape'&&armed){armed=null;tip('');render();}});
 /* 地图 */
