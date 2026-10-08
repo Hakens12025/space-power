@@ -106,27 +106,27 @@ function matchExit(){
 /* 每帧(挂在 core/99 的 frame 里,render 之前;typeof 守卫):对局分出胜负 ⇒ 停表、弹结果卡片。只弹一次。 */
 function matchTick(){
   if(MATCH.shown||!matchIsOn()||!(victoryShown||defeatShown))return;
-  const vT=victoryShown?victoryT:Infinity,dT=defeatShown?defeatT:Infinity; // LL9 胜负按两个标志置位那一步的模拟时刻比先后(core/05 记的),不按帧:高倍速一帧里先后全灭也分得清
+  const mb=ME!=='red',foe=mb?'red':'blue',v0=victoryShown?victoryT:Infinity,d0=defeatShown?defeatT:Infinity,vT=mb?v0:d0,dT=mb?d0:v0; // 2026-10-08 联机:按「我方」判胜负(victoryShown = 红方全灭) // LL9 胜负按两个标志置位那一步的模拟时刻比先后(core/05 记的),不按帧:高倍速一帧里先后全灭也分得清
   let res=vT<dT?'win':(dT<vT?'lose':'tie'); // tie = 同一步双方全灭
   if(res==='win'&&typeof llOnNow==='function'&&llOnNow()){ // LL6 光速延迟开着:胜利卡等最后一艘敌舰沉没的光到达我方才弹;等光期间我方也全灭 = 平局(敌方真实先灭,我方没留下看见它的眼)
-    let seen=-Infinity;for(const s of ships)if(s.side==='red'){const t=llDeadSeeT(s,'blue');if(t>seen)seen=t;} // sensors/26:我方看见每艘敌舰沉没的时刻
+    let seen=-Infinity;for(const s of ships)if(s.side===foe){const t=llDeadSeeT(s,ME);if(t>seen)seen=t;} // sensors/26:我方看见每艘敌舰沉没的时刻
     if(seen>dT)res='lost';else if(seen>simTime)return;}
-  MATCH.shown=true;running=false;
+  MATCH.shown=true;running=false;if(typeof lockEnd==='function')lockEnd(''); // 联机:分出胜负就停锁步
   const card=document.getElementById('matchEnd');if(!card)return;
   const draw=res==='tie'||res==='lost',win=res==='win';
-  const bAlive=ships.filter(s=>s.side==='blue'&&!s.dead).length,rAlive=ships.filter(s=>s.side==='red'&&!s.dead).length;
+  const bAlive=ships.filter(s=>s.side===ME&&!s.dead).length,rAlive=ships.filter(s=>s.side===foe&&!s.dead).length,nMe=mb?MATCH.nBlue:MATCH.nRed,nFoe=mb?MATCH.nRed:MATCH.nBlue;
   const mm=String(Math.floor(simTime/60)).padStart(2,'0'),ss=String(Math.floor(simTime%60)).padStart(2,'0');
   card.classList.toggle('lose',res==='lose');card.classList.toggle('draw',draw); // LL9 平局单独样式(不借战败的红)
   document.getElementById('meTitle').textContent=draw?'平局':(win?'胜利':'战败');
   document.getElementById('meSub').textContent=res==='lost'?'双方舰队全灭(敌方先灭,击沉的光没等到我方)':(res==='tie'?'双方舰队同时全灭':(win?'敌方舰队全灭':'我方舰队全灭'));
-  document.getElementById('meStat').textContent='用时 '+mm+':'+ss+' · 我方幸存 '+bAlive+'/'+MATCH.nBlue+' · 击沉 '+(MATCH.nRed-rAlive)+'/'+MATCH.nRed+' · 种子 '+MATCH.seed;
+  document.getElementById('meStat').textContent='用时 '+mm+':'+ss+' · 我方幸存 '+bAlive+'/'+nMe+' · 击沉 '+(nFoe-rAlive)+'/'+nFoe+' · 种子 '+MATCH.seed;
   card.hidden=false;
 }
 on('btnMatch','click',function(e){e.currentTarget.blur();if(matchIsOn())matchExit();else matchEnter();});
 function gmSync(){ // ENV2 顶栏「全知」钮只在靶场出现,亮灭跟 adminMode 走(F8 与钮共用)
   const b=document.getElementById('btnGM');if(!b)return;
   const e=curEnv(),rg=!!(e&&e.range);b.style.display=rg?'':'none';b.classList.toggle('on',!!adminMode);
-  if(!rg)VIEW='blue'; // 视角切换只在靶场
+  if(!rg)VIEW=ME; // 视角切换只在靶场;2026-10-08 联机加入方看自己(红方)的感知
   const tb=document.getElementById('btnTr');if(tb)tb.style.display=rg?'':'none';
   const v=document.getElementById('btnView');if(v){v.style.display=rg?'':'none';v.textContent=VIEW==='red'?'红方视角':'蓝方视角';v.classList.toggle('on',VIEW==='red');}
 }

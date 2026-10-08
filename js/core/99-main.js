@@ -12,12 +12,13 @@ function frame(t){
   const dt=Math.min(0.1,(t-last)/1000||0);last=t;
   if(++frameN%20===0){updateSelPanel();if(typeof updRangePanel==='function')updRangePanel();if(typeof updFmBar==='function')updFmBar();if(typeof spawnBarBuild==='function'){spawnBarBuild();spawnBarSync();}} // 低频刷新:RF2 选中舰面板;RANGE1 靶场面板读数(SL1 起直接搭这班车 —— 原来由舰队卡的状态刷新顺带调,舰队卡整套删了,面板逻辑保留);FM1 +编队书签栏(搭同一班低频车,它必须幂等且不改仿真状态)
   camHeld(dt);
-  if(running){
+  if(typeof LOCK!=='undefined'&&LOCK.on)lockFrame(dt); // 2026-10-08 联机:推进交给锁步(net/98-lock;航线细化也由它按拍调)
+  else if(running){
     acc+=dt*((typeof tcStep==='function')?tcStep(dt):rate)*RATE_K;let n=0; // 2026-09-27 显示倍数 x RATE_K = 每墙钟秒走几游戏秒(core/01)。 // TC1 接触降速(core/06):对局里握有已定位的接触时,玩家选的倍速只是上限
     while(acc>=CFG.step&&n<100){stepSim(CFG.step);simTime+=CFG.step;acc-=CFG.step;n++;}
     if(n>=100)acc=0;
   }
-  if(typeof rrTick==='function')rrTick(); // RF14 航线细化:分帧推进沙盘搜索。必须排在 stepSim 【之后】——
+  if(typeof rrTick==='function'&&!(typeof LOCK!=='undefined'&&LOCK.on))rrTick(); // RF14 航线细化:分帧推进沙盘搜索。必须排在 stepSim 【之后】——
   // 沙盘会把全局 ships 临时换成单条克隆船,在 stepSim 中途做这件事会让本 tick 剩下的舰船凭空消失。
   // 每帧只烧 RR_BUDGET 步(约 3~5ms),船还在第一段加速时就算完了,玩家看不到卡顿。
   if(typeof camFollowTick==='function')camFollowTick(dt); // 2026-10-08 镜头跟随(command/70):排在 WASD(camHeld)之后,别的操作挪了镜头它这一帧就看得出来

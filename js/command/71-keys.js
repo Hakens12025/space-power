@@ -66,9 +66,9 @@ function rateMove(dir){ // v131:变速在预设整数档位间移动(rate不在�
 }
 function doAction(id){
   switch(id){
-    case 'pause':running=!running;break;
-    case 'slower':rateMove(-1);break;
-    case 'faster':rateMove(1);break;
+    case 'pause':if(typeof lockCtl==='function'&&lockCtl('pause'))break;running=!running;break; // 2026-10-08 联机加入方:倍速 / 暂停发给主机(net/98-lock)
+    case 'slower':if(typeof lockCtl==='function'&&lockCtl('slower'))break;rateMove(-1);break;
+    case 'faster':if(typeof lockCtl==='function'&&lockCtl('faster'))break;rateMove(1);break;
     // 相机平移由 camHeld 持续处理(按住 WASD)
     case 'admin':adminMode=!adminMode;if(typeof gmSync==='function')gmSync();break; // F8 GM 开关。2026-09-22 实现从被删的快捷栏文件搬来:原函数另两句(改顶栏钮颜色 / 打日志)的对象都没了,只剩这一句取反
     case 'range':

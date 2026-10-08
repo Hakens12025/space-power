@@ -31,7 +31,7 @@ function spmRender(){const c=document.getElementById('spmCard'),v=SPM.view;if(!c
     c.innerHTML='<div class="spm-hd"><span>房间:'+spmEsc(R.name)+'</span><button class="btn" data-a="leave">离开房间</button></div>'
       +'<div class="spm-p"><span class="spm-k">房主</span><span>'+spmEsc(host?host.name:'—')+you(host)+'</span></div>'
       +'<div class="spm-p"><span class="spm-k">对手</span><span>'+(guest?spmEsc(guest.name)+you(guest):'<span class="spm-mute">等待加入…</span>')+'</span></div>'
-      +(R.peer?'<div class="spm-st ok">两名玩家已就位。对局同步还没接入(联机第 4 步),现在不会开打</div>':'<div class="spm-st">把这个房间名告诉对方,在大厅里点「加入」</div>');}}
+      +(R.peer?'<div class="spm-st ok">两名玩家已就位,马上开局…</div>':'<div class="spm-st">把这个房间名告诉对方,在大厅里点「加入」</div>');}}
 function spmRooms(){const L=[];const now=Date.now();for(const r of NET.rooms.values())if(now-r.seen<=NET_CFG.LIST_TO)L.push(r);return L.sort((a,b)=>a.name<b.name?-1:1);}
 function spmList(L){if(SPM.view!=='lobby')return;const el=document.getElementById('spmList');if(!el)return;
   const key=L.map(r=>r.id+'|'+r.name+'|'+r.host+'|'+r.full+'|'+(r.ver===NET.ver)).join(';');if(key===SPM.key&&el.childElementCount)return;SPM.key=key; // 没变就不重画(每 0.5 秒都会刷一次)
@@ -47,6 +47,9 @@ function spmAct(a,v){
   if(a==='join'){const n=document.getElementById('spmName');if(n)netSetName(n.value);SPM.note='';netJoin(v);return;}
   if(a==='leave'){netLeave();SPM.note='';spmShow('lobby');return;}}
 function spmRoomEv(ev){
+  if(ev.t==='msg'){const d=ev.d||{};if(d.t==='start'&&!LOCK.on){const R=netRoomView();lockBegin(false,d.seed,R&&R.peer?R.peer.name:'');return;}if(LOCK.on)lockOnMsg(d);return;} // 联机第 4 步:主机发来开局种子 / 锁步数据
+  if(LOCK.on&&(ev.t==='left'||ev.t==='closed')){lockEnd('对手 '+LOCK.peer+' 离开了,对局结束');return;}
+  if(ev.t==='peer'&&ev.room&&ev.room.peer&&!LOCK.on){SPM.note='';spmShow('room');const nm=ev.room.peer.name;setTimeout(()=>{if(LOCK.on||!NET.room||!NET.room.peer)return;const seed=1+Math.floor(Math.random()*999999999);netSend({t:'start',seed:seed});lockBegin(true,seed,nm);},800);return;} // 对手到了:主机定种子,双方直接开局(用户:进入之后直接开始对局)
   if(ev.t==='joined'||ev.t==='peer'||ev.t==='left'){SPM.note='';spmShow('room');return;} // 第 4 步:peer 到齐(房主收 peer、加入方收 joined)时在这里开局
   if(ev.t==='closed'){SPM.note='房主离开了,房间已关闭';spmShow('lobby');return;}
   if(ev.t==='denied'){SPM.note=({full:'房间已满',ver:'版本不同:对方的页面和你的不是同一版,两边都刷新到最新再试',timeout:'房主没有回应'})[ev.why]||'加入失败';spmShow('lobby');}}

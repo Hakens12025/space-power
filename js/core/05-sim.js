@@ -27,7 +27,7 @@ function stepSim(dt){
   stepWeaponSystems(dt); // S14-S17 武器冷却/自动索敌/近防自动拦截/主炮 自动开火(→ weapons/57)
   if(typeof stepFireControlPost==='function')stepFireControlPost(dt); // RF5 S17b 火控序列后置收账(→ weapons/58):读 52-fire 打的 fcFired 开火标记,推进序列内(rr)与序列间指针、给指定点记齐射组数。必须紧跟 S14-S17(本 tick 的发射结果只在这一段有效),且必须早于 S18 靶场AI —— 后者每 tick 无条件覆写靶的 autoEngage/lockedTarget/driftFire
   if(typeof rangeTargetAI==='function')rangeTargetAI(dt); // RANGE1 靶场 AI:每 tick 清靶的交战态(autoEngage/lockedTarget/driftFire)+ 按面板参数刷闪避机动点 + 定时放诱饵弹。放在 enemyAI 之前,靶本来就被 enemyAI 的 isTarget 早退跳过,两者不冲突
-  enemyAI(dt);
+  if(!(typeof LOCK!=='undefined'&&LOCK.on))enemyAI(dt); // 2026-10-08 联机:红方是人在下令,不跑红方 AI
   if(typeof llStep==='function')llStep(simTime+dt,dt); // LL1 光锥层段尾采样(sensors/26):在所有改状态的段之后、胜负之前,记 simTime + dt;关开关时首行返回
   // 胜负(两个标志由 scenario/97-match 的 matchTick 读来弹结果卡片)
   const redA=ships.some(s=>s.side==='red'&&!s.dead);

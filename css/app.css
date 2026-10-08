@@ -738,3 +738,6 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #spMenu .spm-mute{color:var(--txt-mute)}
 #spMenu .spm-st{margin-top:var(--sp-4);color:var(--txt-dim);font-size:var(--fs-body);line-height:var(--lh-body)}
 #spMenu .spm-st.ok{color:var(--state-ok)}
+/* 2026-10-08 联机对局的状态条(js/net/98-lock lockUi):顶栏下方居中 */
+#mpBar{position:fixed;top:calc(var(--bar-h) + var(--gut));left:50%;transform:translateX(-50%);z-index:var(--z-transient);background:var(--srf-panel);border:var(--bw) solid var(--line-acc);border-radius:var(--r-md);padding:var(--sp-1) var(--sp-4);font-family:var(--ff-ui);font-size:var(--fs-body);color:var(--acc-lite);white-space:nowrap;pointer-events:none}
+#mpBar.bad{border-color:var(--state-warn);color:var(--state-warn)}

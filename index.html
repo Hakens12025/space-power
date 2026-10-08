@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Space Power · 骨架</title>
-<link rel="stylesheet" href="css/app.css?v=20261008n1">
+<link rel="stylesheet" href="css/app.css?v=20261008lk">
 </head>
 <body>
 <canvas id="cv"></canvas>
@@ -118,7 +118,7 @@
      硬约束仅两条:core/00 定义 on() 必须最先(85/95/96/97 顶层调用它);core/99 顶层执行 init() 必须最后(且 init 调 loadRangeCfg,
      故 scenario/95 必须在它之前)。其余跨文件引用全在运行期解析,层序排列只为可读性。 -->
 <script src="js/core/00-config.js?v=20261008dt"></script>
-<script src="js/core/01-state.js?v=20261008ar9"></script>
+<script src="js/core/01-state.js?v=20261008lk"></script>
 <script src="js/ships/10-hull-geometry.js?v=20260923"></script>
 <script src="js/ships/11-classes.js?v=20261006a08"></script>
 <script src="js/world/12-env.js?v=20261008sp"></script><!-- ENV1 环境系统:太阳禁区 + 天体 + 石头(TK4c)。必须在 sensors/ 之前:23-cov 加载期的梯子反解会读 optLum -->
@@ -152,7 +152,7 @@
 <script src="js/weapons/56-step-projectiles.js?v=20261008dt"></script>
 <script src="js/weapons/57-step-weapons.js?v=20261007ic4"></script>
 <script src="js/weapons/58-firecontrol.js?v=20261007fc3"></script><!-- RF5 火控计算机引擎:序列数据模型+stepFireControl/Post。位置只为目录编号可读性(编号 58 > 57,归位到 weapons 块末尾),跨文件引用全在运行期解析:本文件顶层只有 const/let/function 声明,零顶层执行 -->
-<script src="js/core/05-sim.js?v=20261008dt"></script>
+<script src="js/core/05-sim.js?v=20261008lk"></script>
 <script src="js/core/06-timecomp.js?v=20261007ll5"></script><!-- TC1 接触降速:frame() 每帧调 tcStep;依赖全部在运行期解析 -->
 <script src="js/bots/59-belief.js?v=20261007ll12"></script><!-- 2026-10-05 红方 AI 信念层:没定位的对方船可能在哪(搜索图 + 线索) -->
 <script src="js/bots/60-doctrine.js?v=20261008dc"></script>
@@ -160,7 +160,7 @@
 <script src="js/command/68-cmd.js?v=20261008c1"></script><!-- 2026-10-08 联机第 3 步:操作命令层(界面发出的、会改模拟的操作一律变成可序列化的命令;单人立刻执行,联机交给锁步)-->
 <script src="js/command/69-entities.js?v=20261008er"></script><!-- 2026-10-08 实体登记表:点选 / 双击跟随 / 靶场拖动 / 右栏只看信息 / 选中写入口 selSet 的统一入口;顶层只有声明 -->
 <script src="js/command/70-input.js?v=20261008c1"></script>
-<script src="js/command/71-keys.js?v=20261008c1"></script>
+<script src="js/command/71-keys.js?v=20261008lk"></script>
 <script src="js/command/74-targeting.js?v=20261008c1"></script><!-- RF5 悬停准星/吸附状态 xh + #xhTip 信息卡。按目录编号序归位在 command 块末尾;顶层只有 let/const/function,零顶层执行,跨文件引用全在运行期解析 -->
 <script src="js/render/80-viewtier.js?v=20261008ak"></script><!-- SN6 三级星图:层界与缩放上下限由距离梯子推出;与 80-camera 共用编号(先例:85-settings/85-tutorial) -->
 <script src="js/render/80-camera.js?v=20260923"></script>
@@ -193,9 +193,10 @@
 <script src="js/scenario/91-init.js?v=20261008dt"></script>
 <script src="js/scenario/95-range.js?v=20261008dt"></script>
 <script src="js/scenario/96-spawn.js?v=20260930rc"></script><!-- FM7 测试用加船小条。放在 95 之后、core/99 之前:它顶层调 on(),而 on() 定义在 core/00 -->
-<script src="js/scenario/97-match.js?v=20261008sp"></script><!-- MT1 对局入口 / 红方摆位 / 结果卡片。顶层调 on(),须在 core/00 之后;matchPlaceRed 被 91-init 运行期调用 -->
+<script src="js/scenario/97-match.js?v=20261008lk"></script><!-- MT1 对局入口 / 红方摆位 / 结果卡片。顶层调 on(),须在 core/00 之后;matchPlaceRed 被 91-init 运行期调用 -->
 <script src="js/net/98-net.js?v=20261008sb"></script><!-- 2026-10-08 联机第 1 步:传输层(Supabase 广播 / 本机标签页 BroadcastChannel)与房间协议 -->
-<script src="js/net/98-lobby.js?v=20261008n1"></script><!-- 2026-10-08 开场菜单与大厅(在线版进来先出;本地 file:// 不出,?menu=1 可开)-->
-<script src="js/core/99-main.js?v=20261008c1"></script>
+<script src="js/net/98-lobby.js?v=20261008lk"></script><!-- 2026-10-08 开场菜单与大厅(在线版进来先出;本地 file:// 不出,?menu=1 可开)-->
+<script src="js/net/98-lock.js?v=20261008lk"></script><!-- 2026-10-08 联机第 4 步:锁步(主机定节拍、命令排拍、校验和对账)-->
+<script src="js/core/99-main.js?v=20261008lk"></script>
 </body>
 </html>
