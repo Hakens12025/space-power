@@ -53,4 +53,5 @@ function palSide(side){return side===ME?'blue':(side==='neutral'?'neutral':'red'
 let VIEW='blue'; // 2026-09-28 画面从哪一方的感知看(用户:靶场里切红蓝视野;选甲:只换看到什么,选中 / 下令永远是蓝方)。只有靶场能切,出靶场复位(scenario/97 的 gmSync)
 function shipById(id){for(let i=0;i<ships.length;i++)if(ships[i].id===id)return ships[i];return undefined;} // R7 按 id 查舰的唯一入口(原来 ships.find(x=>x.id===…) 各写各的有 21 处)。今天是线性查找,舰多了要建索引时只改这一处
 function objById(id){if(!id)return undefined;const s=shipById(id);if(s)return s;for(let i=0;i<rocks.length;i++)if(rocks[i].id===id)return rocks[i];return undefined;} // TK4c 按 id 查【可被瞄准的物体】:先舰船、再石头(火控序列的目标、小窗常驻、轮盘都存 id)。只找舰船的地方照旧用 shipById
-let hoverRing=null;  // RF2 底栏武器钮 hover 时给选中舰画射程圈:'mac'|'msl'|'ciws'(83-hud drawHoverRings 读)
+let hoverRing=null;  // RF2 底栏武器格 hover 时给选中舰画射程圈:'mac'|'msl'|'buoy'|'ciws'(83-hud drawHoverRings 读)
+let hoverRingHi=null; // 2026-10-08 近防格里停在哪一行:'ciwsMsl' 拦截弹 / 'ciwsGun' 近防炮,那一圈加亮(两圈照画)

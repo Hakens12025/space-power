@@ -13,7 +13,7 @@ const CMD_FNS=['orderMoveTo','moveShips','fmMoveTo','addWaypoint','fmAppend','fm
   'followAssign','followStopList','fcAppend','fcRemove','fcRemoveTarget','fcReorder','fcSetAllow','fcSetBig','fcSetEdit','fcSetMode','fcSetPick','fcToggleForce','fcTogglePause',
   'launchBuoy','buoySetOn','setEmit','orderMissileSalvo','fireMAC',
   'cxForceMac','cxSalvo','cxCease','cxDriftFire','cxFireAll','cxForcePoint','cxPick','cxFcAppendTo','cxFcRegister','cxTurn','cxReverse','cxDelLastOrder','cxOrderPos',
-  'cxWpn','cxWpnClear','cxCiwsSub','cxPulse','cxObjPulse','cxFmSpdMode','cxMslAim','cxMslMineOk']; // 会被界面调用、会改模拟的入口;新加一个界面能触发的改动,先在这里登记
+  'cxWpn','cxWpnClear','cxCiwsSub','cxPulse','cxObjPulse','cxFmSpdMode','cxMslAim','cxMslMineOk','cxSalvoCells','cxStop']; // 会被界面调用、会改模拟的入口;新加一个界面能触发的改动,先在这里登记
 const CMD_RAW=['stepSim','initFleet','rrTick']; // 这些里面调到上面的入口一律直通(模拟自己在动,不是玩家的操作)
 const CMD_ORIG={};
 /* ---- 参数编号 / 还原 ---- */
@@ -103,3 +103,5 @@ function cxMslAim(L,t,pt){ // t = 改打它(界面已查过定位;不变雷);pt 
       if(wasMine){p.vel=[0,0,0];p.spd=Math.max(200,p.spd||200);}}}} // 雷是停着的:重新点火(同原来右键改布位)
 function cxMslMineOk(L,v){for(const p of L||[]){if(!p||p.type!=='missile'||p.done||!p.online||p.mine)continue;p.mineOk=v; // 底栏「变雷」:勾 = 到点停下待命,不勾 = 到点接着飞
   if(v&&p.cruise){p.cruise=false;p.park=true;p.parkPt=ordArenaClamp([p.pos[0],p.pos[1],0]);}}} // 已在巡飞的:就地减速停下
+function cxSalvoCells(x,t,pt,cells){if(x&&!x.dead&&x.ammo>0)orderMissileSalvo(x,t||{pos:pt},cells.length,cells);} // 2026-10-08 底栏点绿条:选了哪几个发射单元就用哪几个发(52 orderMissileSalvo 的 cells)
+function cxStop(sel){for(const x of sel)if(x){x.macOn=false;x.mslOn=false;x.autoEngage=false;x.roe='hold';x.lockedTarget=null;x.lockPlayer=false;x.fTgt=null;x.forceMac=null;x.driftFire=false;}} // 2026-10-08 底栏停火(X):自动开火全关,撤强行开火 / 锁定 / 漂移射击;近防不动

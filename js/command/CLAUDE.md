@@ -26,3 +26,4 @@
 - 中键的 `e.preventDefault()` 不能删(挡浏览器自动滚动图标)。
 - `salvoCount` / `missileMode` 恒为 1 / `'auto'`(写入点已删,读点还在)。
 - 导弹操作(10-08 用户):选中我方导弹后中键 = 改目标(点已定位的目标 = 改打它、不变雷;点空地或没定位的 = 飞向那一点,到点按各组「变雷」),长短按都算、不弹轮盘;底栏「变雷」、右键改雷的布位同走 68 `cxMslAim` / `cxMslMineOk`。只动在网上的组(`p.online`),断链的只能选中看;只改了一个网里的一部分 ⇒ 拆出来另成一个网(不然数据链自动分配会整网重派)。
+- 快捷键(10-08 底栏指令卡):T / R = 主炮 / 导弹就绪的全选、全取消(render/88 `wpkAll`,再左键点目标或空地发射,`wpkMouse` 在 `onMouseDown` 里排在 `mdWeaponPick` 之前);B = 放浮标(`toggleWeapon('buoy')`);X = 停火(`wpnStop` → 68 `cxStop`:自动开火全关、撤强行开火 / 锁定 / 漂移射击,近防不动);Esc / 右键 = 取消选中的绿条。选中的绿条是一种点选待命态,`clearPendings` 一并清。导弹指定发射单元走 68 `cxSalvoCells` → weapons/52 `orderMissileSalvo` 的 `cells`。

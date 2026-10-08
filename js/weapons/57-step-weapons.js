@@ -9,7 +9,7 @@ function stepWeaponSystems(dt){
     if(s.cellTimer)for(let i=0;i<s.cellTimer.length;i++)if(s.cellTimer[i]>0)s.cellTimer[i]-=dt;
     if(s.missileArm){ // 齐射装填倒计时
       s.missileArm.t-=dt;
-      if(s.missileArm.t<=0){fireMissiles(s,s.missileArm.target,s.missileArm.n);s.missileArm=null;}
+      if(s.missileArm.t<=0){fireMissiles(s,s.missileArm.target,s.missileArm.n,s.missileArm.cells);s.missileArm=null;}
     }
   }
   // DS147 自动索敌交战(船船协同):按目标所需火力缺口分配(巡洋需3艘/护卫2/巡游1),避免多船全锁同一艘

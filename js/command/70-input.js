@@ -106,7 +106,7 @@ function clearPendings(){
      清单原本在右键取消与 91-init 各手抄一遍,漏一个就留下幽灵待命态。
      (任务系统那五个待命态 2026-09-22 随任务 AI 整套删除,这里不再有它们。) */
   selWeapon=null;pendingTurn=null; // FM3-0:删 pendingTurnNoFm(Shift+V"单纯转头"整套删除,它只喂过船上那个写-only 的"单纯转头"死标志);2026-09-22 舰队卡右键菜单的移动/路径点待命态随右键菜单一起删
-  pendingFollow=null;pendingFcNew=null; // SL1b(2026-09-22):布防 / 信标 / 手动 / 布雷四族点选待命态随舰队卡一起失去唯一入口,整套删除
+  pendingFollow=null;pendingFcNew=null;if(typeof wpkClear==='function')wpkClear(); // 2026-10-08 底栏选中的绿条也是一种待命态 // SL1b(2026-09-22):布防 / 信标 / 手动 / 布雷四族点选待命态随舰队卡一起失去唯一入口,整套删除
   updSelWeaponTip();
 }
 let CMDTIP_FLASH=null; // 2026-09-29 一次性回执 {text, until}:显示 ms 毫秒后自己收起
@@ -116,7 +116,7 @@ function updSelWeaponTip(){ // RF4b 待命提示:底栏上方 #cmdTip 常显(旧
      87-fmbar 原来走的是那个被 RF2 藏死的顶部状态条,提示根本不显示,
      玩家对"我正处在跟随点选待命态"完全无感知(同 toggleWeapon 当年踩过并改走 #cmdTip 的那条)。 */
   const tip=document.getElementById('cmdTip');if(!tip)return;
-  tip.classList.toggle('armed',!!selWeapon||!!(CMDTIP_FLASH&&nowMs()<CMDTIP_FLASH.until)); // 2026-09-29 用户:点了红色瞄准镜分不清是否真的选定 —— 选定(待命)态换醒目样式,与悬停说明区分开
+  tip.classList.toggle('armed',!!selWeapon||(typeof wpkN==='function'&&wpkN()>0)||!!(CMDTIP_FLASH&&nowMs()<CMDTIP_FLASH.until)); // 2026-09-29 用户:点了红色瞄准镜分不清是否真的选定 —— 选定(待命)态换醒目样式,与悬停说明区分开
   /* 三支互斥(三个 arm 点都先 clearPendings),所以判定顺序不影响正确性,只影响可读性。 */
   if(typeof pendingFollow!=='undefined'&&pendingFollow){
     /* FM6 提示要说清【当前作用域】—— 四种组合(舰队/单舰 × 舰队/单舰)里玩家最容易搞混的
@@ -128,6 +128,7 @@ function updSelWeaponTip(){ // RF4b 待命提示:底栏上方 #cmdTip 常显(旧
     tip.style.display='block';return;
   }
   if(pendingFcNew){tip.textContent='火控「+」:左键点一艘敌舰 = 新建一条火控序列'+((typeof selBlue==='function'&&selBlue().length>1)?'(舰队 = 一块)':'')+' · 右键或再点「+」取消';tip.style.display='block';return;} // 2026-10-07 用户
+  if(typeof wpkN==='function'&&wpkN()){tip.textContent=wpkTipText();tip.style.display='block';return;} // 2026-10-08 底栏选中的绿条
   if(selWeapon==='buoy'){tip.textContent='⌖ 已选定 · 放浮标:点一个方向(沿舰船 → 鼠标一直飞,飞出地图消失) · 右键取消';tip.style.display='block';return;}
   if(selWeapon){tip.textContent='⌖ 已选定 · '+(selWeapon==='mac'?'主炮强行开火:点敌舰或空地(转向对准即发一炮)':'导弹强行开火:点敌舰齐射 · 点空地 = 区域齐射')+' · 右键取消';tip.style.display='block';return;}
   if(pendingTurn){tip.textContent='转向:点击地图设定方向(速度不变) · 再按 V 取消 · 右键取消';tip.style.display='block';return;}
@@ -286,7 +287,7 @@ function mdMiddle(e,sx,sy){ // RF5 中键:短按=快速交战(原「拖拽平移
 function mdRight(e,sx,sy){ // 右键:单击=直接移动,按住350ms=移动虚影(RF11),拖动=平移
   if(e.ctrlKey){ctrlArm=false;return;} // RF5 Ctrl+右键退化成空操作(只清全弹臂):被拆的那一支既不置 panning 也不置 rmbClick,【从不下移动命令】;不在这里 return 的话它会掉进本分支,沿用旧习惯 Ctrl+右键点敌舰的玩家会整队清空航线直冲敌舰坐标。敌舰目标由中键快速交战独占。清全弹臂这一手必须留——不清,松开 Ctrl 会触发 fire_all(71-keys:229)误发射
   /* FL1:门要与 clearPendings 的覆盖面对齐,否则"提示说右键取消、实际却发出一条移动令"(本行原注释记的正是这个坑)。 */
-  if(pendingTurn||selWeapon||pendingFollow||pendingFcNew){ // 点选待命状态:右键取消(SL1b 起只剩这三族;10-07 加火控「+」)
+  if(pendingTurn||selWeapon||pendingFollow||pendingFcNew||(typeof wpkN==='function'&&wpkN())){ // 点选待命状态:右键取消(SL1b 起只剩这三族;10-07 加火控「+」)
     clearPendings();
     if(typeof updFmBar==='function')updFmBar(); // 让【跟随目标】那个钮熄灭
     return;
@@ -312,6 +313,7 @@ function onMouseDown(e){
   const sx=e.clientX,sy=e.clientY;
   if(mdRadial(e,sx,sy))return;
   if(typeof insetHit==='function'&&insetHit(sx,sy)){mdInset(e);return;} // 2026-09-26 点在左下角特写框里:不落到框底下的地图
+  if(typeof wpkMouse==='function'&&wpkMouse(e,sx,sy))return; // 2026-10-08 底栏点了绿条:左键 = 把选中的发出去(render/88)
   if(mdWeaponPick(e,sx,sy))return;
   if(mdPending(e,sx,sy))return;
   if(e.button===0)mdLeft(e,sx,sy);

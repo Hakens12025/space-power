@@ -12,10 +12,11 @@ const ACTIONS=[
   {id:'del_last_order',label:'删除最后一个命令点',keys:['Backspace']},
   {id:'range',label:'测距工具',keys:['KeyC']},
   {id:'turn_cmd',label:'船头转向命令(点地图设定方向)',keys:['KeyV']},
-  {id:'fire_mac',label:'主炮攻击(选中舰·锁定目标)',keys:['KeyT']},
+  {id:'fire_mac',label:'主炮:就绪的全选 / 全取消(再点敌舰或空地发射)',keys:['KeyT']}, // 2026-10-08 底栏指令卡
   {id:'drift_fire',label:'🎯漂移射击(锁定后Ctrl+T,60s,命令照走)',keys:['Ctrl+KeyT']}, // DS171 M3
-  {id:'fire_missile',label:'导弹攻击(选中舰·锁定目标)',keys:['KeyR']},
-  {id:'cease_fire',label:'停火(解除锁定)',keys:['KeyX']},
+  {id:'fire_missile',label:'导弹:就绪的发射单元全选 / 全取消(再点敌舰或空地发射)',keys:['KeyR']},
+  {id:'fire_buoy',label:'放前出浮标(再点一个方向)',keys:['KeyB']},
+  {id:'cease_fire',label:'停火(自动开火全关、撤强行开火与锁定;近防不动)',keys:['KeyX']},
   {id:'reverse',label:'倒车(反推倒退)',keys:['KeyG']},
   // fire_all(全弹发射)绑 Ctrl 单键:用臂逻辑处理(松开触发),避免与 Ctrl+右键锁定/编组冲突
 ];
@@ -90,7 +91,7 @@ function doAction(id){
         if(typeof updSelWeaponTip==='function')updSelWeaponTip(); // 把 V 接进 #cmdTip 提示体系(它原来走的是被 RF2 藏死的顶部状态条,不接的话按 V 之后屏幕上一个字都没有)
       }
       break;}
-    case 'fire_mac':toggleWeapon('mac');break; // T:选定主炮武器,点击敌舰攻击(非发射指令)
+    case 'fire_mac':if(typeof wpkAll==='function')wpkAll('mac');break; // T:主炮就绪的全选 / 全取消(底栏指令卡,render/88)
     case 'drift_fire':{ // DS171 M3:Ctrl+T 漂移射击(60s限时,命令照走,机头找窗口);再按取消;lit波动不退出
       const sel=controlledShips().filter(s=>!s.dead&&s.lockedTarget&&!contactDead(s.lockedTarget,s.side)&&s.lockedTarget.side!==s.side&&s.macDmg>0); // LL6 锁定目标死活按本方看见的
       if(sel.length){
@@ -98,8 +99,9 @@ function doAction(id){
         cxDriftFire(sel,on);
       }
       break;}
-    case 'fire_missile':toggleWeapon('missile');break; // R:选定导弹武器,点击敌舰攻击
-    case 'cease_fire':ceaseFire();break; // X:停火(解除锁定)
+    case 'fire_missile':if(typeof wpkAll==='function')wpkAll('msl');break; // R:导弹就绪的发射单元全选 / 全取消
+    case 'fire_buoy':toggleWeapon('buoy');if(typeof updateSelPanel==='function')updateSelPanel();break; // B:放浮标(再点一个方向)
+    case 'cease_fire':if(typeof wpnStop==='function')wpnStop();break; // X:停火(底栏停火钮同一个,render/88)
     case 'reverse':cxReverse(controlledShips());break; // G:倒车(反推倒退)——选中舰朝船头反方向机动 6000 x scale(机头不翻,用反推);2026-10-08 走命令(command/68)
     case 'fire_all':cxFireAll(selectedShips().filter(s=>s.side===ME&&!s.dead));break; // Ctrl:全弹发射(选中舰 · 锁定目标);2026-10-08 走命令(command/68)
     case 'del_last_order':cxDelLastOrder(selectedShips());break; // 删最后一个命令点:编队整列各撤一条(编队航点在下令那一刻展开成每艘各一条,只撤旗舰会分家),散船撤一条;2026-10-08 走命令(command/68)
@@ -147,6 +149,7 @@ window.addEventListener('keydown',e=>{
      全拦一条同教程:不拦的话每个键都穿过遮罩打在战场上——尤其本页带输入控件(select),
      而 Ctrl+数字建队/Backspace 撤点这些发生在看不见的地方比看得见更难查。 */
   if(e.key==='Escape'&&typeof fmPageIsOpen==='function'&&fmPageIsOpen()){e.preventDefault();fmPageClose();return;}
+  if(e.key==='Escape'&&typeof wpkN==='function'&&wpkN()){wpkClear();wpkSync();return;} // 2026-10-08 底栏选中的绿条:Esc 全部取消
   if(typeof fmPageIsOpen==='function'&&fmPageIsOpen())return;
   const ks=eventKeyStr(e);
   // 2026-09-22:这里原先还有场景编辑器的快捷键块、键位重绑的截键、以及设置遮罩开着时"只放行 Esc"的那道门 —— 三样都随各自的系统整体删除。

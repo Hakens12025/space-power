@@ -454,11 +454,11 @@ function drawMissileIntent(g){ // v129:选中导弹/网→显示组网圈与引�
    (原来这上面还有一个「范围模式」函数把全场所有范围圈一次画齐,它的总开关只在被删的快捷栏里写,2026-09-22 一并删了;这里自画同款 arc+顶标) */
 function drawHoverRings(){
   if(!hoverRing)return;
-  const ring=(p,r,text)=>{
+  const ring=(p,r,text,em)=>{ // em:1 加亮(停在这一行)/ -1 调暗(停在另一行)/ 缺省照常
     if(r*cam.zoom<4)return; // 缩太小就不画(弧长不足1px,只剩噪点)
-    ctx.strokeStyle='rgba(90,167,255,.6)';ctx.lineWidth=1;
-    ctx.beginPath();ctx.arc(p[0],p[1],r*cam.zoom,0,6.283);ctx.stroke();
-    ctx.fillStyle='rgba(143,208,255,.85)';ctx.font='10px Consolas';ctx.textAlign='center';ctx.textBaseline='bottom';
+    ctx.strokeStyle=em===1?'rgba(159,212,255,.95)':(em===-1?'rgba(90,167,255,.3)':'rgba(90,167,255,.6)');ctx.lineWidth=em===1?2:1;
+    ctx.beginPath();ctx.arc(p[0],p[1],r*cam.zoom,0,6.283);ctx.stroke();ctx.lineWidth=1;
+    ctx.fillStyle=em===-1?'rgba(143,208,255,.45)':'rgba(143,208,255,.85)';ctx.font='10px Consolas';ctx.textAlign='center';ctx.textBaseline='bottom';
     ctx.fillText(text,p[0],p[1]-r*cam.zoom-2);
   };
   const ids=selected.slice(); // RF5 Phase C:轮盘 hover 扇区画的射程圈属于【序列属主】,它未必在 selected 里(轮盘开着时玩家仍可改选/取消选中,74 与 89 都已改成认序列属主)。不并进来的话 hover 扇区一个圈都不画
@@ -468,7 +468,9 @@ function drawHoverRings(){
     const p=toScreen(s.pos[0],s.pos[1]);
     if(hoverRing==='mac'){ring(p,macEffRange(s),'主炮 50% ≈ '+Math.round(macEffRange(s)/1000)+'k');ring(p,macRangeAt(s,0.1),'主炮 10% ≈ '+Math.round(macRangeAt(s,0.1)/1000)+'k');} // WR1:没有射程门,画两档命中率的距离
     else if(hoverRing==='msl')ring(p,mslReach(s),'导弹 射程 ≈ '+Math.round(mslReach(s)/1000)+'k(中段熄火滑行)'); // WR1
-    else if(hoverRing==='ciws'||hoverRing==='ciwsMsl'||hoverRing==='ciwsGun'){const c=ciwsRingsOf(s);if(hoverRing!=='ciwsGun')ring(p,c.outer,'拦截弹 '+Math.round(c.outer/1000)+'k');if(hoverRing!=='ciwsMsl')ring(p,c.inner,'近防炮 '+(c.inner<10000?(c.inner/1000).toFixed(1):Math.round(c.inner/1000))+'k');} // 2026-09-29 近防导弹只画外圈、近防炮只画内圈
+    else if(hoverRing==='ciws'){const c=ciwsRingsOf(s),hi=hoverRingHi,kf=r=>(r<10000?(r/1000).toFixed(1):Math.round(r/1000))+'k'; // 2026-10-08 用户:停在近防哪里都画两圈,停在哪一行加亮哪圈(原来停一行只画一圈,看着像换掉了)
+      ring(p,c.outer,'拦截弹 '+kf(c.outer),hi==='ciwsMsl'?1:(hi?-1:0));ring(p,c.inner,'近防炮 '+kf(c.inner),hi==='ciwsGun'?1:(hi?-1:0));}
+    else if(hoverRing==='buoy'&&(s.buoys||0)>0){const r=actRangeOf({type:'beacon'});ring(p,r,'浮标雷达 ≈ '+Math.round(r/1000)+'k(放出去后以浮标为圆心)');} // 2026-10-08 用户:每件武器悬停都画圈
     else if(hoverRing==='emit'&&typeof actRangeOf==='function') // EM1-B:开了能照多远(按【开着照射】算,不管此刻开没开)。2026-09-29 用户:雷达范围只画照射圈(「被听见」圈与静默交叉定位圈去掉)
       ring(p,actRangeOf(s),'雷达 '+Math.round(actRangeOf(s)/1000)+'k(对标准目标)'+(s.emitMode==='silent'?' · 现在静默':''));
   }

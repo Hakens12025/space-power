@@ -156,7 +156,7 @@ let missileGroupSeq=0;
 let netSeq=0;                 // 导弹网序列号(v125:一次齐射=一个网,单组也算网)
 const nets=new Map();         // 网元信息 netId -> {id,mode,groups:[gid],shooter,fmt,fctrl:'auto'|'hold',manualTarget}
 function readyCells(s){return s.cellTimer?s.cellTimer.filter(t=>t<=0).length:s.cells||0;} // 就绪发射单元数
-function orderMissileSalvo(shooter,target,n){ // 齐射指令(v119·单元制):取就绪单元,1s后发射;发射单元独立装填60s
+function orderMissileSalvo(shooter,target,n,cells){ // cells:指定用哪几个发射单元(2026-10-08 底栏点绿条选的;缺省按顺序取就绪的) // 齐射指令(v119·单元制):取就绪单元,1s后发射;发射单元独立装填60s
   if(shooter.noFire)return; // RANGE1 禁火总闸门 2/3:齐射下令的唯一实现(唯一写 shooter.missileArm 的地方),挡住 enemyAI / 任务系统 deny·strike / T·R 选武器点击三条下令路径
   if(shooter.missileArm)return; // 已在装填
   const isShip=target&&kindOf(target)!=='point'; // TK4b:点与物体的判别统一走 kindOf(原来看 side 是不是 undefined,石头进来会被当成点)
@@ -165,9 +165,9 @@ function orderMissileSalvo(shooter,target,n){ // 齐射指令(v119·单元制):�
   if(shooter.ammo<(shooter.mslPer||12))return; // 弹药不足。RF6 修:原写死 16,是每组 16 枚时代的遗留(KIMI154 把每组改 12 时漏改此处与 fireMissiles 的组数上限),后果是每舰末尾 12 枚永远打不出去(DD 192 枚只能打 15 组、CA 240 枚只能打 19 组)
   const avail=readyCells(shooter);
   if(avail<=0)return; // 发射单元全在装填
-  shooter.missileArm={t:1,target,n:Math.min(n||salvoCount,avail)};
+  shooter.missileArm={t:1,target,n:Math.min(n||salvoCount,avail),cells:cells||null};
 }
-function fireMissiles(shooter,target,n){ // 导弹齐射:受发射单元(同时组数)与弹药限制;target可以是舰船或空位置(区域齐射)
+function fireMissiles(shooter,target,n,cells){ // 导弹齐射:受发射单元(同时组数)与弹药限制;target可以是舰船或空位置(区域齐射)
   if(shooter.noFire)return; // RANGE1 禁火总闸门 3/3:真正生成导弹弹丸的唯一实现,挡住 missileArm 倒计时残留(即使某条路径漏进了下令,弹丸也生不出来)
   const isShip=target&&kindOf(target)!=='point'; // 有 side 才是舰船,否则当空位置(区域目标) TK4b:判别统一走 kindOf
   if(shooter.dead)return;
@@ -179,6 +179,7 @@ function fireMissiles(shooter,target,n){ // 导弹齐射:受发射单元(同时�
   if(rounds<=0)return; // 无就绪发射单元或弹药不足
   // 占用 rounds 个发射单元(独立装填60s)
   let used=0;
+  if(shooter.cellTimer&&cells)for(const i of cells){if(used<rounds&&shooter.cellTimer[i]<=0){shooter.cellTimer[i]=shooter.mslReload||60;used++;}} // 先用指定的发射单元(还就绪的),不够再按顺序补
   if(shooter.cellTimer)for(let i=0;i<shooter.cellTimer.length&&used<rounds;i++){if(shooter.cellTimer[i]<=0){shooter.cellTimer[i]=shooter.mslReload||60;used++;}} // RF3 装填秒读烘焙字段(原字面量60,定义在 weapons/51-defs)
   // 组间散布(v111):同舰同目标多组不再 0km 叠加成"一发",按组序横散布成扇面(前置追踪会让各道在目标附近收拢)
   const axis=V.norm(V.sub(tp0,shooter.pos));
