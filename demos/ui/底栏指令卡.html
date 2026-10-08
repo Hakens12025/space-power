@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>底栏指令卡</title>
+<!-- 2026-10-08 演示页(不加载引擎):底栏重构成「指令卡平铺」—— 每件武器一颗钮,点钮 = 强行开火(再点目标 / 空地),右上角小勾 = 自动开火开关,钮上直接画装填 / 弹药 / 快捷键。
+     用户痛点:开火要点好几层、状态看不到、自动开火开关藏太深。配色 / 字体抄引擎 css/app.css 的 token。 -->
+<style>
+:root{
+  --void:#05070c;--srf-panel:rgba(9,13,20,.94);--srf-raise:#0e1420;--srf-hover:#16202f;--srf-sunk:#0a0f17;
+  --line-hair:#141c27;--line:#1e2836;--line-ctl:#2a3a50;--line-acc:#34527d;
+  --txt-hi:#e8eef7;--txt:#c7d0dc;--txt-read:#dbe6f2;--txt-dim:#6a7d92;--txt-mute:#46566a;--ink:#03121e;
+  --acc:#5aa7ff;--acc-wash:rgba(90,167,255,.14);--side-hostile:#ff6b6b;
+  --state-select:#ffe066;--state-active:#54e0d0;--state-warn:#ff9a55;--state-ok:#3fbf6f;--state-danger:#ff6b6b;
+  --r-sm:2px;--r-md:3px;
+  --ff-ui:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;--ff-mono:Consolas,"Cascadia Mono","DejaVu Sans Mono",monospace;
+  --fs-micro:10px;--fs-label:11px;--fs-body:12px;--fs-read:13px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:var(--fs-body);overflow:hidden}
+#map{position:absolute;inset:0;display:block;cursor:default}
+#map.armed{cursor:crosshair}
+.panel{position:absolute;background:var(--srf-panel);border:1px solid var(--line);border-radius:var(--r-md)}
+/* 演示控制 */
+#demo{top:12px;left:12px;padding:10px 12px;max-width:440px}
+#demo h1{margin:0 0 6px;font-size:13px;color:var(--txt-hi);font-weight:normal}
+#demo .row{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+#demo p{margin:4px 0;color:var(--txt-dim);font-size:var(--fs-label);line-height:1.6}
+.btn{background:var(--srf-raise);color:var(--txt);border:1px solid var(--line-ctl);border-radius:var(--r-sm);font:inherit;padding:3px 9px;cursor:pointer}
+.btn:hover{background:var(--srf-hover);border-color:var(--line-acc)}
+.btn.on{background:var(--acc-wash);border-color:var(--acc);color:var(--txt-hi)}
+/* 底栏 */
+#bar{left:50%;transform:translateX(-50%);bottom:12px;display:flex;align-items:stretch;gap:0;padding:6px 8px;max-width:calc(100% - 24px)}
+.sec{display:flex;align-items:center;gap:8px;padding:0 10px}
+.sec+.sec{border-left:1px solid var(--line-hair)}
+/* 舰船块 */
+.ship{min-width:190px;cursor:default;position:relative}
+.ship canvas{width:72px;height:40px;flex:none}
+.ship .nm{color:var(--txt-hi);font-size:var(--fs-read)}
+.ship .cl{color:var(--txt-dim);font-size:var(--fs-micro);margin-left:4px}
+.bars{display:flex;flex-direction:column;gap:3px;margin-top:4px;width:110px}
+.hb{height:4px;background:var(--srf-sunk);border-radius:1px;overflow:hidden}
+.hb i{display:block;height:100%}
+/* 指令卡 */
+.card{display:flex;gap:6px}
+.wb{position:relative;width:114px;height:66px;background:var(--srf-raise);border:1px solid var(--line-ctl);border-radius:var(--r-sm);padding:5px 6px 4px;cursor:pointer;display:flex;flex-direction:column;gap:3px;user-select:none}
+.wb:hover{background:var(--srf-hover);border-color:var(--line-acc)}
+.wb.armed{border-color:var(--state-select);box-shadow:0 0 0 1px var(--state-select) inset,0 0 10px rgba(255,224,102,.25)}
+.wb.dis{cursor:default;opacity:.55}
+.wb .hd{display:flex;align-items:center;gap:5px;height:16px}
+.wb .lb{color:var(--txt-hi);font-size:var(--fs-body)}
+.wb .key{font-family:var(--ff-mono);font-size:var(--fs-micro);color:var(--txt-dim);border:1px solid var(--line-ctl);border-radius:var(--r-sm);padding:0 3px;line-height:13px}
+.wb .rd{font-family:var(--ff-mono);font-size:var(--fs-label);color:var(--txt-read);display:flex;justify-content:space-between;font-variant-numeric:tabular-nums}
+.wb .rd .dim{color:var(--txt-dim)}
+.ck{position:absolute;top:3px;right:3px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.ck span{width:14px;height:14px;border:1px solid var(--line-acc);border-radius:var(--r-sm);display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1;color:var(--ink)}
+.ck.on span{background:var(--state-active);border-color:var(--state-active)}
+.ck.half span{background:linear-gradient(135deg,var(--state-active) 50%,transparent 50%);border-color:var(--state-active)}
+.ck:hover span{border-color:var(--txt-hi)}
+.prog{height:5px;background:var(--srf-sunk);border-radius:1px;overflow:hidden}
+.prog i{display:block;height:100%;background:var(--state-ok)}
+.prog.ld i{background:var(--acc)}
+.cells{display:flex;gap:2px;height:7px}
+.cells i{flex:1;background:var(--srf-sunk);border-radius:1px;position:relative;overflow:hidden}
+.cells i b{position:absolute;left:0;top:0;bottom:0;background:var(--acc)}
+.cells i.ok{background:var(--state-ok)}
+/* 近防:两半 */
+.wb.ciws{cursor:default}
+.halves{display:flex;gap:4px;margin-top:1px}
+.half{flex:1;border:1px solid var(--line-ctl);border-radius:var(--r-sm);text-align:center;font-size:var(--fs-label);padding:2px 0;cursor:pointer;color:var(--txt-dim)}
+.half:hover{border-color:var(--line-acc);color:var(--txt)}
+.half.on{border-color:var(--state-active);color:var(--state-active);background:rgba(84,224,208,.08)}
+.half.mix{border-color:var(--state-active);color:var(--txt);border-style:dashed}
+/* 右边:雷达 / 跟随 / 停火 */
+.side{display:flex;gap:6px}
+.sb{width:66px;height:66px;background:var(--srf-raise);border:1px solid var(--line-ctl);border-radius:var(--r-sm);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;user-select:none;position:relative}
+.sb:hover{background:var(--srf-hover);border-color:var(--line-acc)}
+.sb .l{color:var(--txt-hi)}
+.sb .s{font-size:var(--fs-label);color:var(--txt-mute);letter-spacing:.2em;margin-right:-.2em}
+.sb.on .s{color:var(--state-active)}
+.sb .key{position:absolute;top:3px;left:4px;font-family:var(--ff-mono);font-size:var(--fs-micro);color:var(--txt-dim)}
+.sb.stop .l{color:var(--state-danger)}
+/* 弹出菜单(雷达 / 跟随沿用引擎的一层菜单) */
+#pop{position:absolute;display:none;flex-direction:column;gap:3px;padding:5px;z-index:5}
+#pop .btn{min-width:84px;text-align:left}
+/* 提示 */
+#tip{position:absolute;left:50%;transform:translateX(-50%);bottom:96px;padding:5px 10px;color:var(--txt);font-size:var(--fs-label);display:none;white-space:nowrap}
+#spec{position:absolute;display:none;padding:8px 10px;font-size:var(--fs-label);line-height:1.7;z-index:6}
+#spec b{font-family:var(--ff-mono);font-weight:normal;color:var(--txt-read);float:right;margin-left:16px}
+#log{position:absolute;right:12px;top:12px;width:260px;padding:8px 10px;font-size:var(--fs-label);color:var(--txt-dim);line-height:1.6;max-height:40%;overflow:hidden}
+#log div:first-child{color:var(--txt)}
+</style>
+</head>
+<body>
+<canvas id="map"></canvas>
+<div id="demo" class="panel">
+  <h1>底栏指令卡 · 演示</h1>
+  <div class="row" id="pick"></div>
+  <div class="row"><button class="btn" id="tx">演示时间 x10</button><button class="btn" id="auto">自动开火目标:有</button></div>
+  <p>每件武器一颗钮:<b style="color:var(--txt)">点钮</b> = 强行开火,再点地图上的目标或空地(右键 / Esc 取消);<b style="color:var(--txt)">右上角小勾</b> = 自动开火开关;钮上直接画装填进度、剩余弹药与快捷键(T 主炮 · R 导弹 · B 浮标 · X 停火)。</p>
+  <p>近防没有强行开火,两半各管一件:外 = 近防导弹(拦截弹),内 = 近防炮。多选时勾是三态(全开 / 部分 / 全关),读数合计。悬停舰名看规格。</p>
+</div>
+<div id="log" class="panel"></div>
+<div id="bar" class="panel"></div>
+<div id="pop" class="panel"></div>
+<div id="tip" class="panel"></div>
+<div id="spec" class="panel"></div>
+<script>
+"use strict";
+/* ---- 假数据(数值照引擎现状:主炮 30 秒一发、导弹每个发射单元装填 60 秒、库存按组;拦截弹 / 浮标颗数照配装)---- */
+const CLS={
+  CA:{nm:'巡洋舰',tier:'T2',hp:900,sh:300,spec:[['加速','14.7 g'],['转向','2.8°/s'],['照射','331k'],['静听','533k'],['火控通道','3']],mac:30,cells:6,groups:40,icp:320,buoys:0},
+  FF:{nm:'护卫舰',tier:'T2',hp:520,sh:180,spec:[['加速','19.6 g'],['转向','4.5°/s'],['照射','281k'],['静听','470k'],['火控通道','1']],mac:30,cells:4,groups:24,icp:384,buoys:0},
+  CL:{nm:'巡游舰',tier:'T1',hp:420,sh:150,spec:[['加速','19.6 g'],['转向','4.5°/s'],['照射','281k'],['静听','470k'],['火控通道','1']],mac:0,cells:2,groups:12,icp:384,buoys:3},
+};
+function mk(cls,name,x,y){const c=CLS[cls];return {cls,name,x,y,hp:c.hp*(0.6+0.4*Math.random()),sh:c.sh*Math.random(),macCd:0,cellT:Array(c.cells).fill(0),groups:c.groups,icp:c.icp,buoys:c.buoys,
+  auto:{mac:true,msl:false},ciwsMsl:true,ciwsGun:true,radar:'silent',follow:'待命'};}
+const SH=[mk('CA','巡洋舰1',-60,20),mk('FF','护卫舰1',-90,-40),mk('CL','巡游舰1',-110,60)];
+const FOES=[{x:260,y:-30,nm:'敌·驱逐舰'},{x:330,y:70,nm:'敌·巡洋舰'}];
+const PICKS=[['巡洋舰1',[0]],['护卫舰1',[1]],['巡游舰1',[2]],['三艘多选',[0,1,2]]];
+let sel=[0],armed=null,tx=1,autoTgt=true,pop=null;const FX=[];const LOG=[];
+function S(){return sel.map(i=>SH[i]);}
+function log(t){LOG.unshift(t);if(LOG.length>14)LOG.pop();document.getElementById('log').innerHTML=LOG.map(x=>'<div>'+x+'</div>').join('');}
+/* ---- 武器动作 ---- */
+function canMac(s){return CLS[s.cls].mac>0;}
+function ready(s,k){if(k==='mac')return canMac(s)&&s.macCd<=0;if(k==='msl')return s.groups>0&&s.cellT.some(t=>t<=0);if(k==='buoy')return s.buoys>0;return false;}
+function fire(s,k,pt,why){
+  if(k==='mac'){if(!ready(s,'mac'))return false;s.macCd=CLS[s.cls].mac;FX.push({a:[s.x,s.y],b:pt,c:'#ffe066',t:0.5});}
+  else if(k==='msl'){const i=s.cellT.findIndex(t=>t<=0);if(i<0||s.groups<=0)return false;s.cellT[i]=60;s.groups--;FX.push({a:[s.x,s.y],b:pt,c:'#5aa7ff',t:1.2,dash:1});}
+  else if(k==='buoy'){if(s.buoys<=0)return false;s.buoys--;FX.push({a:[s.x,s.y],b:pt,c:'#c890ff',t:1.5,dash:1});}
+  log(s.name+' '+({mac:'主炮',msl:'导弹',buoy:'浮标'})[k]+(why?' · '+why:' · 强行开火'));return true;}
+function arm(k){const L=S().filter(s=>k==='mac'?canMac(s):(k==='buoy'?s.buoys>0:s.groups>0));if(!L.length){tip('选中的船没有可用的'+({mac:'主炮',msl:'导弹',buoy:'浮标'})[k],1600);return;}
+  armed=armed===k?null:k;tip(armed?'点目标或空地 = '+({mac:'主炮强行开火',msl:'导弹齐射',buoy:'放浮标(朝那个方向)'})[k]+' · 右键 / Esc 取消':'',0);render();}
+function toggleAuto(k){const L=S().filter(s=>k==='mac'?canMac(s):true),on=L.every(s=>s.auto[k]);for(const s of L)s.auto[k]=!on;log((on?'关 ':'开 ')+({mac:'主炮',msl:'导弹'})[k]+'自动开火 · '+L.length+' 艘');render();}
+function toggleCiws(f){const L=S(),on=L.every(s=>s[f]);for(const s of L)s[f]=!on;log((on?'关 ':'开 ')+(f==='ciwsMsl'?'近防导弹':'近防炮')+' · '+L.length+' 艘');render();}
+function cease(){for(const s of S()){s.auto.mac=false;s.auto.msl=false;}armed=null;log('停火 · 自动开火全关');render();}
+/* ---- 底栏 ---- */
+const tri=a=>a.every(Boolean)?2:(a.some(Boolean)?1:0);
+function ck(k,v){return '<div class="ck'+(v===2?' on':(v===1?' half':''))+'" data-ck="'+k+'" title="自动开火:勾上 = 火控自己找目标开火"><span>'+(v===2?'✓':'')+'</span></div>';}
+function wbMac(L){const M=L.filter(canMac);if(!M.length)return '';
+  const rd=M.filter(s=>s.macCd<=0).length,cd=Math.max(...M.map(s=>s.macCd)),p=M.length===1?1-M[0].macCd/CLS[M[0].cls].mac:rd/M.length;
+  return '<div class="wb'+(armed==='mac'?' armed':'')+'" data-w="mac" title="点 = 主炮强行开火(再点目标 / 空地)· 快捷键 T"><div class="hd"><span class="lb">主炮</span><span class="key">T</span></div>'+ck('mac',tri(M.map(s=>s.auto.mac)))
+   +'<div class="prog'+(p<1?' ld':'')+'"><i style="width:'+Math.round(p*100)+'%"></i></div>'
+   +'<div class="rd"><span>'+(M.length===1?(rd?'就绪':Math.ceil(cd)+' s'):rd+'/'+M.length+' 就绪')+'</span><span class="dim">'+(M.length===1?'30 s/发':M.length+' 门')+'</span></div></div>';}
+function wbMsl(L){if(!L.length)return '';const cells=L.flatMap(s=>s.cellT),g=L.reduce((n,s)=>n+s.groups,0),rd=cells.filter(t=>t<=0).length;
+  const segs=L.length===1?cells.map(t=>t<=0?'<i class="ok"></i>':'<i><b style="width:'+Math.round((1-t/60)*100)+'%"></b></i>').join(''):'';
+  return '<div class="wb'+(armed==='msl'?' armed':'')+(g<=0?' dis':'')+'" data-w="msl" title="点 = 导弹强行齐射(再点目标 / 空地)· 快捷键 R"><div class="hd"><span class="lb">导弹</span><span class="key">R</span></div>'+ck('msl',tri(L.map(s=>s.auto.msl)))
+   +(L.length===1?'<div class="cells">'+segs+'</div>':'<div class="prog'+(rd<cells.length?' ld':'')+'"><i style="width:'+Math.round(rd/cells.length*100)+'%"></i></div>')
+   +'<div class="rd"><span>'+rd+'/'+cells.length+' 单元</span><span>'+g+' 组</span></div></div>';}
+function wbCiws(L){const m=tri(L.map(s=>s.ciwsMsl)),g=tri(L.map(s=>s.ciwsGun)),n=L.reduce((a,s)=>a+s.icp,0),cls=v=>v===2?' on':(v===1?' mix':'');
+  return '<div class="wb ciws" title="近防:来袭才自动开火,没有强行开火"><div class="hd"><span class="lb">近防</span></div>'
+   +'<div class="halves"><div class="half'+cls(m)+'" data-cw="ciwsMsl" title="外圈:近防导弹(拦截弹)">外</div><div class="half'+cls(g)+'" data-cw="ciwsGun" title="内圈:近防炮">内</div></div>'
+   +'<div class="rd"><span class="dim">拦截弹</span><span>'+n+'</span></div></div>';}
+function wbBuoy(L){const B=L.filter(s=>CLS[s.cls].buoys>0);if(!B.length)return '';const n=B.reduce((a,s)=>a+s.buoys,0);
+  return '<div class="wb'+(armed==='buoy'?' armed':'')+(n<=0?' dis':'')+'" data-w="buoy" title="点 = 放前出浮标(再点一个方向)· 快捷键 B"><div class="hd"><span class="lb">浮标</span><span class="key">B</span></div>'
+   +'<div class="cells">'+B.flatMap(s=>Array.from({length:CLS[s.cls].buoys},(_,i)=>i<s.buoys?'<i class="ok"></i>':'<i></i>')).join('')+'</div>'
+   +'<div class="rd"><span>余 '+n+'</span><span class="dim">个</span></div></div>';}
+function shipBlock(L){const s=L[0],c=CLS[s.cls];
+  if(L.length>1)return '<div class="sec ship" data-spec="1"><div><div class="nm">'+L.length+' 艘<span class="cl">'+L.map(x=>CLS[x.cls].nm).join(' · ')+'</span></div>'
+    +'<div class="bars">'+L.map(x=>'<div class="hb"><i style="width:'+Math.round(x.hp/CLS[x.cls].hp*100)+'%;background:var(--state-ok)"></i></div>').join('')+'</div></div></div>';
+  return '<div class="sec ship" data-spec="1"><canvas id="port" width="144" height="80"></canvas><div><div class="nm">'+s.name+'<span class="cl">'+c.nm+' · '+c.tier+'</span></div>'
+   +'<div class="bars"><div class="hb" title="结构"><i style="width:'+Math.round(s.hp/c.hp*100)+'%;background:var(--state-ok)"></i></div><div class="hb" title="护盾"><i style="width:'+Math.round(s.sh/c.sh*100)+'%;background:var(--acc)"></i></div></div></div></div>';}
+function sideBlock(L){const s=L[0],rl=({silent:'静默',paint:'发射',pulse:'脉冲',jam:'干扰'});const rm=L.every(x=>x.radar===s.radar)?rl[s.radar]:'混合';
+  return '<div class="sec side"><div class="sb'+(rm!=='静默'?' on':'')+'" data-p="radar"><span class="l">雷达</span><span class="s">'+rm+'</span></div>'
+   +'<div class="sb" data-p="follow"><span class="l">跟随</span><span class="s">'+s.follow+'</span></div>'
+   +'<div class="sb stop" data-stop="1" title="停火:自动开火全关、撤掉强行开火 · 快捷键 X"><span class="key">X</span><span class="l">停火</span><span class="s">全关</span></div></div>';}
+function render(){const L=S();
+  document.getElementById('bar').innerHTML=shipBlock(L)+'<div class="sec card">'+wbMac(L)+wbMsl(L)+wbCiws(L)+wbBuoy(L)+'</div>'+sideBlock(L);
+  const pc=document.getElementById('port');if(pc)drawPort(pc,L[0].cls);
+  document.getElementById('map').classList.toggle('armed',!!armed);}
+function drawPort(cv,cls){const g=cv.getContext('2d'),w=cv.width,h=cv.height,L=cls==='CA'?1:0.78;g.clearRect(0,0,w,h);g.save();g.translate(w/2,h/2);
+  g.fillStyle='#9fd4ff';g.strokeStyle='#5aa7ff';g.lineWidth=1.5;g.beginPath();g.moveTo(-60*L,-6);g.lineTo(44*L,-8);g.lineTo(62*L,0);g.lineTo(44*L,8);g.lineTo(-60*L,6);g.closePath();g.globalAlpha=.25;g.fill();g.globalAlpha=1;g.stroke();
+  g.fillStyle='#5aa7ff';g.fillRect(-20*L,-14,22*L,8);g.fillStyle='#54e0d0';g.fillRect(-66*L,-3,6,6);g.restore();}
+/* ---- 交互 ---- */
+const bar=document.getElementById('bar');
+bar.addEventListener('mousedown',e=>{if(e.button!==0)return;const t=e.target.closest('[data-ck],[data-cw],[data-w],[data-p],[data-stop]');if(!t)return;
+  if(t.dataset.ck){toggleAuto(t.dataset.ck);return;}if(t.dataset.cw){toggleCiws(t.dataset.cw);return;}
+  if(t.dataset.w){if(!t.classList.contains('dis'))arm(t.dataset.w);return;}if(t.dataset.stop){cease();return;}
+  if(t.dataset.p)openPop(t.dataset.p,t);});
+bar.addEventListener('mousemove',e=>{const sp=document.getElementById('spec'),t=e.target.closest('[data-spec]');if(!t){sp.style.display='none';return;}
+  const L=S();sp.innerHTML=L.map(s=>'<div style="color:var(--txt-hi)">'+s.name+'</div>'+CLS[s.cls].spec.map(([k,v])=>'<div>'+k+'<b>'+v+'</b></div>').join('')).join('<div style="height:6px"></div>');
+  const r=t.getBoundingClientRect();sp.style.display='block';sp.style.left=r.left+'px';sp.style.bottom=(innerHeight-r.top+6)+'px';});
+bar.addEventListener('mouseleave',()=>{document.getElementById('spec').style.display='none';});
+function openPop(k,el){const p=document.getElementById('pop');if(pop===k){p.style.display='none';pop=null;return;}pop=k;
+  const items=k==='radar'?[['silent','静默'],['paint','发射'],['pulse','脉冲'],['jam','干扰']]:[['待命','待命'],['跟随','跟随…'],['解除','解除跟随']];
+  p.innerHTML=items.map(([v,l])=>'<button class="btn" data-v="'+v+'">'+l+'</button>').join('');const r=el.getBoundingClientRect();
+  p.style.display='flex';p.style.left=r.left+'px';p.style.bottom=(innerHeight-r.top+6)+'px';
+  p.onclick=e=>{const b=e.target.closest('[data-v]');if(!b)return;for(const s of S()){if(k==='radar')s.radar=b.dataset.v;else s.follow=b.dataset.v==='解除'?'待命':b.dataset.v;}p.style.display='none';pop=null;render();};}
+let tipT=Infinity;function tip(t,ms){const d=document.getElementById('tip');d.textContent=t;d.style.display=t?'block':'none';tipT=ms?performance.now()+ms:Infinity;} // ms = 几毫秒后自己消失,0 = 一直显示
+window.addEventListener('keydown',e=>{const k=e.code;if(k==='KeyT')arm('mac');else if(k==='KeyR')arm('msl');else if(k==='KeyB')arm('buoy');else if(k==='KeyX')cease();else if(k==='Escape'&&armed){armed=null;tip('');render();}});
+/* 地图 */
+const cv=document.getElementById('map'),g=cv.getContext('2d');let W=0,H=0;
+function rs(){W=cv.width=innerWidth;H=cv.height=innerHeight;}rs();addEventListener('resize',rs);
+const toS=(x,y)=>[W/2-80+x*1.4,H/2-60+y*1.4],toW=(sx,sy)=>[(sx-W/2+80)/1.4,(sy-H/2+60)/1.4];
+cv.addEventListener('mousedown',e=>{if(e.button===2){if(armed){armed=null;tip('');render();}return;}
+  const w=toW(e.clientX,e.clientY);
+  if(armed){let pt=w,hit=FOES.find(f=>Math.hypot(f.x-w[0],f.y-w[1])<16);if(hit)pt=[hit.x,hit.y];let n=0;for(const s of S())if(fire(s,armed,pt,hit?'打 '+hit.nm:'打空地'))n++;
+    armed=null;if(n)tip('');else tip('没有就绪的',1500);render();return;}
+  const i=SH.findIndex(s=>Math.hypot(s.x-w[0],s.y-w[1])<14);if(i>=0){sel=e.shiftKey||e.ctrlKey?(sel.includes(i)?sel.filter(x=>x!==i):sel.concat(i)):[i];syncPick();render();}});
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+function draw(){g.fillStyle='#05070c';g.fillRect(0,0,W,H);g.strokeStyle='rgba(30,40,54,.5)';g.lineWidth=1;for(let x=(W/2)%60;x<W;x+=60){g.beginPath();g.moveTo(x,0);g.lineTo(x,H);g.stroke();}for(let y=(H/2)%60;y<H;y+=60){g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.stroke();}
+  g.font='11px "Microsoft YaHei"';g.textAlign='center';
+  for(const f of FOES){const p=toS(f.x,f.y);g.strokeStyle='#ff6b6b';g.beginPath();g.moveTo(p[0],p[1]-7);g.lineTo(p[0]+7,p[1]);g.lineTo(p[0],p[1]+7);g.lineTo(p[0]-7,p[1]);g.closePath();g.stroke();g.fillStyle='rgba(215,226,240,.8)';g.fillText(f.nm,p[0],p[1]+20);}
+  SH.forEach((s,i)=>{const p=toS(s.x,s.y),on=sel.includes(i);g.fillStyle='#5aa7ff';g.beginPath();g.moveTo(p[0]+9,p[1]);g.lineTo(p[0]-7,p[1]-5);g.lineTo(p[0]-7,p[1]+5);g.closePath();g.fill();
+    if(on){g.strokeStyle='#ffe066';g.beginPath();g.arc(p[0],p[1],13,0,6.283);g.stroke();}g.fillStyle='rgba(215,226,240,.8)';g.fillText(s.name,p[0],p[1]+24);});
+  for(const f of FX){const a=toS(f.a[0],f.a[1]),b=toS(f.b[0],f.b[1]);g.strokeStyle=f.c;g.globalAlpha=Math.min(1,f.t*2);g.setLineDash(f.dash?[6,5]:[]);g.beginPath();g.moveTo(a[0],a[1]);g.lineTo(b[0],b[1]);g.stroke();g.setLineDash([]);g.globalAlpha=1;}
+  g.fillStyle='rgba(106,125,146,.9)';g.textAlign='left';g.fillText('点地图上的蓝船选中(Shift 加选);选定武器后点红色目标或空地开火',16,H-110);}
+/* 时间 */
+let last=performance.now(),autoT=0,lastBar='';
+function tick(now){const dt=Math.min(0.1,(now-last)/1000)*tx;last=now;
+  for(const s of SH){s.macCd=Math.max(0,s.macCd-dt);for(let i=0;i<s.cellT.length;i++)s.cellT[i]=Math.max(0,s.cellT[i]-dt);}
+  for(const f of FX)f.t-=dt/tx;for(let i=FX.length-1;i>=0;i--)if(FX[i].t<=0)FX.splice(i,1);
+  autoT+=dt;if(autoT>=1){autoT=0;if(autoTgt)for(const s of SH){if(s.auto.mac&&ready(s,'mac'))fire(s,'mac',[FOES[0].x,FOES[0].y],'自动开火');if(s.auto.msl&&ready(s,'msl'))fire(s,'msl',[FOES[1].x,FOES[1].y],'自动开火');}}
+  if(tipT!==Infinity&&now>tipT)tip('');
+  draw();render();requestAnimationFrame(tick);}
+/* 演示控制 */
+function syncPick(){document.querySelectorAll('#pick .btn').forEach((b,j)=>b.classList.toggle('on',JSON.stringify(PICKS[j][1])===JSON.stringify(sel)));}
+document.getElementById('pick').innerHTML=PICKS.map(([l],j)=>'<button class="btn" data-j="'+j+'">'+l+'</button>').join('');
+document.getElementById('pick').onclick=e=>{const b=e.target.closest('[data-j]');if(!b)return;sel=PICKS[+b.dataset.j][1].slice();armed=null;syncPick();render();};
+document.getElementById('tx').onclick=e=>{tx=tx===1?10:1;e.target.classList.toggle('on',tx>1);};
+document.getElementById('auto').onclick=e=>{autoTgt=!autoTgt;e.target.textContent='自动开火目标:'+(autoTgt?'有':'没有');};
+syncPick();log('选中 巡洋舰1');requestAnimationFrame(tick);
+</script>
+</body>
+</html>
