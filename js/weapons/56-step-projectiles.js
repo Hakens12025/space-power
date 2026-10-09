@@ -410,7 +410,7 @@ function stepInterceptorProj(p,dt){ // 拦截导弹(v114):燃料模式可出远�
       if(p.fuel<=0){spawnSD(p);p.done=true;return;} // 燃料耗尽自毁(2026-10-08 带特效)(v118:燃料=寿命,耗尽即失效)
       {const h=icHome(p),hx=p.pos[0]-h[0],hy=p.pos[1]-h[1],hz=p.pos[2]-h[2];if(hx*hx+hy*hy+hz*hz>(p.icR2||Infinity)){spawnSD(p);p.done=true;return;}} // 10-07 出了发射舰的防区就自毁(52 INT_ZONE_R2)
       const f0=p.fuel; // 10-07 油至少按时间烧(燃料 = 寿命;原来到顶速后直飞不耗油)
-      if(!p.target||p.target.done||((p.target.count??1)<=0)){ // 目标失效/拦完:重选前方目标;KIMI146修:诱饵弹无count字段,(count||0)<=0恒真→每tick重复重选(??1后只在done时才重选)
+      if(!p.target||p.target.done||p.target.dead||((p.target.count??1)<=0)){ // 目标失效/拦完:重选前方目标;KIMI146修:诱饵弹无count字段,(count||0)<=0恒真→每tick重复重选(??1后只在done时才重选)
         p.target=findInterceptorTarget(p);
       }
       if(!p.target){spawnSD(p);p.done=true;return;} // 2026-10-08 自毁带特效;前方无来袭:结束(防泄漏)
@@ -448,6 +448,10 @@ function stepInterceptorProj(p,dt){ // 拦截导弹(v114):燃料模式可出远�
         const along=V.dot(sv,dirT);
         const latV=V.len([sv[0]-along*dirT[0],sv[1]-along*dirT[1],sv[2]-along*dirT[2]]);
         const hitRate=Math.min(1,Math.max(w.hitMin,w.hitMax-Math.min(latV,w.hitLatV)/w.hitLatV*w.hitDrop)*(p.hitMul||1)); // 直线 hitMax / 高速规避 hitMin(icp_*)。RANGE1 末尾乘弹上 hitMul(靶场"拦截弹命中率"旋钮,发射时由 fireInterceptor 烘焙进弹丸);外层 min(1,…) 防旋钮开到 2.0× 时概率越界
+        if(p.target.kind==='buoy'){ // 2026-10-09 用户:拦截弹打对方浮标 —— 逐颗掷,中一颗浮标就毁(冒火花),用掉的颗数从组里扣,剩下的转去拦别的
+          let used=0,hit=false;while(used<(p.count||1)&&!hit){used++;if(simRand()<hitRate)hit=true;}
+          p.count=Math.max(0,(p.count||1)-used);if(hit){p.target.hp=0;p.target.dead=true;spawnCiwsFX(p.target.pos,3,p.shooter,null);}
+          if(p.count<=0){p.done=true;return;}p.target=null;return;}
         const maxKill=Math.min(p.count||16,p.target.count||16); // 拦截弹颗数 vs 来袭颗数
         let killed=0;
         for(let k=0;k<maxKill;k++){if(simRand()<hitRate)killed++;}

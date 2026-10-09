@@ -17,13 +17,13 @@ const WPN={ // 定义(Definition):全局一份的不变模板,数值原样搬自
   // 2026-10-05 用户:近防圈 x1.2(防空核心 1.3125 万 / 4200 → 1.575 万 / 5040,自防御 7875 / 2625 → 9450 / 3150;都再乘 CFG.scale);阵型从近防推,跟着大 20%。同日更早:近防圈 x0.7(外圈 / 内圈:防空核心 1.875 万 / 6000 → 1.3125 万 / 4200,自防御 1.125 万 / 3750 → 7875 / 2625);阵型从近防推,跟着缩(formation/39 fmBandRadii)
   /* 2026-10-07 用户:近防拆成三件独立武器(原来一件 ciws_core / ciws_self 混着装)。数值原样搬过来,原来写死在 52 / 56 / 57 / 51-ciws 里的也搬进表;档位照旧:
      _core = 防空核心(护卫 / 巡游 / 驱逐),_self = 自防御(巡洋 / 航母 / 战列)。读数走 51-ciws 的 icpOf / gunOf(实例优先,makeShip 烘焙)。 */
-  // 拦截弹:outer = 外圈半径(显示与编队用);预警距离 = outer x warnK,出了发射舰防区(预警距离 x zoneK)自毁;一组颗数 = 来袭颗数 x perK 向上取整;发射冷却 cdS 物理秒;
+  // 拦截弹:buoyN = 打一个对方浮标派几颗(2026-10-09 用户:拦截弹可以打对方浮标);outer = 外圈半径(显示与编队用);预警距离 = outer x warnK,出了发射舰防区(预警距离 x zoneK)自毁;一组颗数 = 来袭颗数 x perK 向上取整;发射冷却 cdS 物理秒;
   //   库存低于 reserve 时只拦 outer x reserveR 以内的;威胁 = 来袭速度方向与指向我方舰的夹角余弦 > threatCos;离来袭组 hitR 以内拦一轮,命中率 = hitMax - min(横向速度, hitLatV) / hitLatV x hitDrop、
   //   不低于 hitMin;出膛速度 v0、加速 acc、顶速 vMax(都乘 INT_VK)、燃料 fuelS 物理秒;转向率 turnK / (1 + 速度 / (turnV x INT_VK))、每弧度耗油 turnFuel;outerIntercept 只给红方推演读
   // 2026-10-08 用户:近防外圈(拦截弹)x1.5、内圈(近防炮)x1.2,阵型不动 —— 编队站位与红方 AI 的编队距离读 fmOuter / fmInner(改前的圈,51-ciws ciwsRingsFm),实战与画面读 outer / inner
-  icp_core:{kind:'icp',label:'拦截弹',outer:15750*1.5*CFG.scale,fmOuter:15750*CFG.scale,outerIntercept:0.40,inter:384,warnK:2,zoneK:3,perK:1.2,cdS:30,reserve:0.3,reserveR:0.5,threatCos:0.9,
+  icp_core:{kind:'icp',label:'拦截弹',buoyN:2,outer:15750*1.5*CFG.scale,fmOuter:15750*CFG.scale,outerIntercept:0.40,inter:384,warnK:2,zoneK:3,perK:1.2,cdS:30,reserve:0.3,reserveR:0.5,threatCos:0.9,
     hitR:1500,hitMax:0.45,hitMin:0.12,hitDrop:0.33,hitLatV:6000,v0:30,acc:400,vMax:24000,fuelS:600,turnK:4.5,turnV:3000,turnFuel:0.8},
-  icp_self:{kind:'icp',label:'拦截弹',outer:9450*1.5*CFG.scale,fmOuter:9450*CFG.scale,outerIntercept:0.25,inter:320,warnK:2,zoneK:3,perK:1.2,cdS:30,reserve:0.3,reserveR:0.5,threatCos:0.9,
+  icp_self:{kind:'icp',label:'拦截弹',buoyN:2,outer:9450*1.5*CFG.scale,fmOuter:9450*CFG.scale,outerIntercept:0.25,inter:320,warnK:2,zoneK:3,perK:1.2,cdS:30,reserve:0.3,reserveR:0.5,threatCos:0.9,
     hitR:1500,hitMax:0.45,hitMin:0.12,hitDrop:0.33,hitLatV:6000,v0:30,acc:400,vMax:24000,fuelS:600,turnK:4.5,turnV:3000,turnFuel:0.8},
   // 近防炮:导弹撞上目标那一刻,离撞击点 inner 以内的每艘舰各打一次:打掉的比例 = 命中率 innerIntercept x 过载 x 随机(rand = 随机打折的份量:1 = 均匀随机 0~1、平均打一半,0 = 不打折);
   //   过载:这艘船近防圈(inner)里同时有 ovN 组以上来袭时开始,每多一组摊薄 ovK —— 1 / (1 + max(0, 组数 - ovN + 1) x ovK);再乘多方向 1 / (1 + (圈里来袭的扇面数 - 1) x sectK)

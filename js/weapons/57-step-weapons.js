@@ -66,6 +66,7 @@ function stepWeaponSystems(dt){
     if(x.ciwsCd>0){x.ciwsCd-=dt;continue;}
     const llon=typeof llOnNow==='function'&&llOnNow(),xs=x.side==='blue'?'blue':'red'; // LL7 光速延迟开着:位置 / 速度 / 颗数读这一方看到的弹影(sensors/21 projLook),先按真值距离减弹影偏移的严格上界预筛(审查第 23 条)
     const BB=llon?LL_CFG.BMAX:0,DS=llon?Math.max(w.outer*w.warnK+BB/(1-BB)*(LL_PVS.rm+4*BB*LL_C*SENS.TICK),w.outer*w.warnK*(1-BB)/(1-2*BB)):0,DS2=DS*DS; // LL7 不开方的一道粗筛:给弹影的眼上一拍在可见距离 rm 内、之后两边各走不过 BMAX·c,没记眼时按本舰这只眼的推迟算 ⇒ 此刻距离过 DS 的弹影一定在射程外
+    let eng=false; // 这一拍有没有要拦的来袭导弹(有就先顾导弹,不打浮标)
     for(const p of projectiles){
       if(p.type!=='missile'||p.done||p.coastT>0||p.shooter.side===x.side)continue; // T1:脱锁导弹必自毁,近防不浪费弹药
       let q=p;
@@ -91,9 +92,11 @@ function stepWeaponSystems(dt){
         x.interceptor-=need;x.ciwsCd=PHYS.t(w.cdS); // 拦截弹发射间隔冷却(cdS 物理秒)
         fireInterceptor(x,p,need,q); // q = 这艘看到的来袭弹(光速延迟开着是弹影):出膛朝它瞄
       }
-      break;
+      eng=true;break;
     }
+    if(!eng)icpBuoy(x,w,xs);
   }
+  gunBuoys(dt);
   for(const s of ships){const ff=s.forceMac;if(!ff)continue; // 2026-09-27 强行开火(用户:「选择使用某种武器攻击相应鼠标选定位置」):转向目标 / 地面点,对准就开一炮;不看火控、主炮勾选与把握门,60 秒没打出去作废
     ff.T-=dt;const tp=ff.t?((contactDead(ff.t,s.side)||ff.t.side===s.side)?null:macPred(s,ff.t)):null; // LL6 死活按这一方看见的
     if((ff.t&&!tp)||ff.T<=0||s.dead||!hasMAC(s)){s.forceMac=null;continue;}
@@ -118,3 +121,18 @@ function stepWeaponSystems(dt){
     const fc=s.autoEngage&&s.roe!=='hold',on=k=>fc&&(k==='mac'?(hasMAC(s)&&s.macOn!==false):((s.ammo||0)>=(s.mslPer||12)&&s.mslOn!==false));
     if(s.dead||['mac','msl'].every(k=>!on(k)||f.n[k]>=FT_N))s.fTgt=null;}
 }
+/* 2026-10-09 用户:拦截弹和近防炮可以打对方的前出浮标。都只打这一方定位了的(同开火门 contactFix),位置 / 速度读这一方的估计(contactKin / contactPos)。
+   拦截弹:这一拍没有要拦的来袭导弹时,打预警距离(外圈 x warnK)里的对方浮标,一个浮标只派一组(WPN icp_* buoyN 颗),库存低于 reserve 不打(留给导弹);命中判定在 56。
+   近防炮:对方浮标进了近防圈(inner),每游戏秒按 innerIntercept 的把握打掉(冒火花 spawnCiwsFX)。 */
+function icpBuoy(x,w,xs){
+  if(x.interceptor<(x.interMax||x.interceptor)*w.reserve)return;
+  for(const o of rockObjs()){if(o.kind!=='buoy'||o.dead||o.side===xs||!contactFix(o,xs))continue;
+    const k=contactKin(o,xs);if(!k||V.len(V.sub(k.pos,x.pos))>=w.outer*w.warnK)continue;
+    if(projectiles.some(r=>r.type==='interceptor'&&!r.done&&r.target===o))continue; // 已有拦截弹在追
+    const need=w.buoyN||2;if(x.interceptor>=need){x.interceptor-=need;x.ciwsCd=PHYS.t(w.cdS);fireInterceptor(x,o,need,k);}
+    return;}}
+function gunBuoys(dt){
+  for(const x of ships){if(x.dead||x.ciwsGunOn===false)continue;const g=gunOf(x);if(!g||!(g.inner>0))continue;const xs=x.side;
+    for(const o of rockObjs()){if(o.kind!=='buoy'||o.dead||o.side===xs||!contactFix(o,xs))continue;
+      const q=contactPos(o,xs);if(!q)continue;const dx=q[0]-x.pos[0],dy=q[1]-x.pos[1],dz=(q[2]||0)-x.pos[2];if(dx*dx+dy*dy+dz*dz>=g.inner*g.inner)continue;
+      if(simRand()<1-Math.pow(1-g.innerIntercept,dt)){o.hp=0;o.dead=true;spawnCiwsFX(o.pos,3,x,null);}}}}

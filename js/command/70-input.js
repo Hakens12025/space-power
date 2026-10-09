@@ -394,7 +394,7 @@ window.addEventListener('mouseup',e=>{
     if(clicked){
       const s=shipAt(selDrag.x0,selDrag.y0);
       if(s)selSet('ship',[s.id]);
-    }else if(selDrag.missileMode){ // Shift框选:选导弹群(不是船)
+    }else if(selDrag.missileMode||!selected.length){ // Shift框选:选导弹群(不是船);2026-10-09 用户「没办法框选导弹」:不按 Shift 拖框、框里没有我方舰也选框里的导弹
       const x=Math.min(selDrag.x0,selDrag.x1),y=Math.min(selDrag.y0,selDrag.y1);
       const w=Math.abs(selDrag.x1-selDrag.x0),h=Math.abs(selDrag.y1-selDrag.y0);
       const inBox=projectiles.filter(p=>p.type==='missile'&&!p.done&&projSeen(p)&&(adminMode||(p.shooter&&p.shooter.side===ME))); // 2026-09-28 框选只选我方弹(敌方弹单点看得见的)
