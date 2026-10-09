@@ -280,7 +280,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
       ['总枚数',total],
       ['最紧燃料',Math.ceil(SHOW.t(Math.max(0,minFuel)))+'s'],
     ].map(it=>`<span class="fi"><i>${it[0]}</i><b>${it[1]}</b></span>`).join('');
-    const fu=Math.max(0,Math.min(100,minFuel));
+    const fu=Math.max(0,Math.min(100,Math.round(minFuel/MSL_FUEL*100))); // 2026-10-09 按满油的比例(weapons/52 MSL_FUEL);原来按 100 算,满油只画到约 1/3
     box.innerHTML=`
       <div class="hpbar"><i style="width:${fu}%;background:${fu>30?'var(--state-active)':'var(--state-warn)'}"></i></div>
       <div class="row"><span class="k">剩余</span><span class="v">${aliveHits.length} 组 · ${total} 枚</span></div>
@@ -289,7 +289,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
       <div class="row"><span class="k">引导</span><span class="v">${gds}</span></div>
       <div class="row"><span class="k">数据链</span><span class="v">${(()=>{const n=aliveHits.filter(p=>p.online).length;return '在网 '+n+' 组'+(aliveHits.length-n?' · 断链 '+(aliveHits.length-n)+' 组(只能看)':'');})()}</span></div>
       <div class="row"><span class="k">速度</span><span class="v">${Math.round(SHOW.v(maxSpd))} km/s(最快)</span></div>
-      <div class="row"><span class="k">燃料</span><span class="v">最紧 ${minFuel>0?Math.ceil(SHOW.t(minFuel))+'s':'耗尽(滑行)'}</span></div>`;
+      <div class="row"><span class="k">燃料</span><span class="v">最紧 ${minFuel>0?Math.ceil(SHOW.t(minFuel))+'s · '+fu+'%':'耗尽(滑行)'}</span></div>`;
     updateCmdBar([]);
     return;
   }
@@ -314,10 +314,10 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
     const stt=mv.mine?'伏击雷 · 静默待命':mv.cruise?'巡飞搜索 · 导引头开着':mv.park?(mv.mineOk?'飞向布雷点':'飞向点位 · 导引头搜索'):((!rp&&mslSwarmOn(m))?'聚集攻击':(mv.coastT>0?'脱锁滑行':'突击中'));
     const tgt=mv.target?(mv.target.side!==undefined?xhName(mv.target):(mv.target.pos?'区域点':'—')):(mv.mine?'无(待触发)':'无');
     const tq=mv.target?(mv.target.side===undefined?mv.target.pos:((mv.guideMode==='self'&&!adminMode)?(typeof llSeekView==='function'?llSeekView(mv,mv.target):mv.target.pos):viewPos(mv.target))):null,tdist=tq?V.len(V.sub(tq,mv.pos)):0; // 2026-09-28 名字打码、距离按我方知道的位置(导引头自己看见的用导引头那一眼,LL9 sensors/26 llSeekView;LL11 GM 画真值,走 viewPos)
-    const fu=Math.max(0,Math.min(100,mv.fuel||0)); // 燃料满值100s,直接当百分比
+    const fu=Math.max(0,Math.min(100,Math.round((mv.fuel||0)/MSL_FUEL*100))); // 2026-10-09 用户:加速完只剩 1/5 —— 原注释「燃料满值100s」不对,满油是 MSL_FUEL(约 34.6 游戏秒),按 100 画满油只到约 1/3、加速完剩一半显示成 1/5;改按满油的比例
     box.innerHTML=`
       <div class="hpbar"><i style="width:${fu}%;background:${fu>30?'var(--state-active)':'var(--state-warn)'}"></i></div>
-      <div class="row"><span class="k">燃料</span><span class="v">${mv.fuel>0?Math.ceil(SHOW.t(mv.fuel))+'s':'耗尽(滑行)'}</span></div>
+      <div class="row"><span class="k">燃料</span><span class="v">${mv.fuel>0?Math.ceil(SHOW.t(mv.fuel))+'s · '+fu+'%':'耗尽(滑行)'}</span></div>
       <div class="row"><span class="k">状态</span><span class="v">${stt}</span></div>
       <div class="row"><span class="k">剩余</span><span class="v">${mv.count||12} 颗</span></div>
       <div class="row"><span class="k">速度</span><span class="v">${Math.round(SHOW.v(V.len(mv.vel)))} km/s</span></div>
