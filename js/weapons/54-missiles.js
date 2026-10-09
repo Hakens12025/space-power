@@ -10,7 +10,7 @@ const MSL_CFG={
 const GUIDE_SEEK=MSL_CFG.ladarRange; // 导弹自主导引范围(km)=主动LADAR末端开启后(范围内自主锁定,不耗通道)
 /* 2026-09-30 导弹组网(用户):弹与弹 MM、弹与舰(含前出浮标)MS 以内连一条边(数见 MSL_LINK);一组导弹经弹弹链能连到任何一艘我方船(舰与舰之间量子通信,算一个节点)就「在网上」(p.online):
    回传自身状态(我方画真位置、选中面板照实报)、收数据链引导(guideSide 只给在网上的)。每个感知节拍重算一次;刚发射的算在网上(52 fireMissiles) */
-const MSL_LINK={MM:46068.75*CFG.scale,MS:47250*CFG.scale}; // 2026-10-09 用户:组网圈 x1.5(3.07125 / 3.15 万 → 4.607 / 4.725 万,乘 scale 后实际 2.76 / 2.84 万 km)。 2026-10-07 用户:组网圈 x0.5(6.1425 / 6.3 万 → 3.07125 / 3.15 万);10-03 x0.7
+const MSL_LINK={MM:46068.75*CFG.scale}; // 导弹与导弹的组网圈。2026-10-09 用户:舰船 / 浮标 / 据点那一端不再用固定小圈(原 MS 4.725 万 x scale),改成各自的雷达量程(mslLinkNodes)。 2026-10-09 用户:组网圈 x1.5(3.07125 / 3.15 万 → 4.607 / 4.725 万,乘 scale 后实际 2.76 / 2.84 万 km)。 2026-10-07 用户:组网圈 x0.5(6.1425 / 6.3 万 → 3.07125 / 3.15 万);10-03 x0.7
 const MSL_SWARM={S:20000*CFG.scale,COH:0.7,FLOOR:0.85,conv:25000*CFG.scale,convW:125000*CFG.scale,DASH:30000*CFG.scale,RES:2,DEAD:0.035,HYST:0.03,DEV:0.26};
   // 2026-10-01 三关系算法(用户拍板:间距 3 万 / 聚合力 0.6,演示页 demos/weapons/导弹组网.html):S = 间距(分离半径);COH = 聚合力;FLOOR = 同步减速下限(x 能力天花板,
   // 等不起就掉队);conv / convW = 聚集力距目标几公里开始淡出、淡出带多宽;DASH = 冲刺段起点(原 = 导引头锁定范围;10-07 导引圈 x0.5 时不动,仍盖过近防外圈)以内不再减速;RES = 冲刺预留油(秒);
@@ -18,14 +18,20 @@ const MSL_SWARM={S:20000*CFG.scale,COH:0.7,FLOOR:0.85,conv:25000*CFG.scale,convW
   // 十几个邻组的排斥相加能把弹推到背后,实测远靶出膛 2~20 秒平均偏 56°、最坏 117°;只封排斥不封聚拢(用户:抱团不能弱 —— 先试过两样合起来封 15°,团明显松了),
   // 三种靶距平均:出膛偏 20°,团心均距 30 / 60 秒 10.6k / 6.2k,比不封顶时(13.0k / 9.5k)还紧。封顶 = Reynolds 群体转向的转向力上限)
 let mslNetT=0; // 组网 / 邻接重算的节拍累加器(每感知拍一次)
+function mslLinkNodes(side){ // 2026-10-09 用户:这一方能接导弹数据链的节点 —— 舰船 / 前出浮标 / 拿着的据点,圆 = 各自的雷达量程(sensors/22 actRangeOf,不管雷达开没开);render/83 drawChain 同一份
+  const N=[],add=o=>{const r=actRangeOf(o);N.push({o:o,pos:o.pos,R2:r*r});};
+  for(const s of ships)if(s.side===side&&!s.dead)add(s);
+  for(const o of rockObjs())if(o.kind==='buoy'&&o.side===side&&!o.dead)add(o);
+  if(typeof featStaObs==='function')for(const o of featStaObs(side))add(o);
+  return N;}
 function mslNetStep(dt){
   mslNetT+=dt;if(mslNetT<SENS.TICK)return;mslNetT=0;
-  const MS2=MSL_LINK.MS*MSL_LINK.MS,MM2=MSL_LINK.MM*MSL_LINK.MM;
+  const MM2=MSL_LINK.MM*MSL_LINK.MM;
   for(const side of ['blue','red']){
-    const F=[];for(const s of ships)if(s.side===side&&!s.dead)F.push(s.pos);for(const o of rockObjs())if(o.kind==='buoy'&&o.side===side&&!o.dead)F.push(o.pos);
+    const F=mslLinkNodes(side);
     const M=projectiles.filter(p=>p.type==='missile'&&!p.done&&p.shooter&&p.shooter.side===side),q=[],was=M.map(p=>p.online!==false);
     const ion=ENV.ions.length>0,lk=function(a,b,d2,R2){return d2<R2&&(!ion||d2*featIonK2(a,b)<R2);}; // 2026-10-05 电离云挡组网(用户改的):连边距离 x 这条线穿过电离云的透过率(world/16)
-    for(const p of M){p.online=false;for(const f of F){const dx=p.pos[0]-f[0],dy=p.pos[1]-f[1],dz=p.pos[2]-(f[2]||0);if(lk(p.pos,f,dx*dx+dy*dy+dz*dz,MS2)){p.online=true;q.push(p);break;}}} // 直连舰队
+    for(const p of M){p.online=false;for(const f of F){const dx=p.pos[0]-f.pos[0],dy=p.pos[1]-f.pos[1],dz=p.pos[2]-(f.pos[2]||0);if(lk(p.pos,f.pos,dx*dx+dy*dy+dz*dz,f.R2)){p.online=true;q.push(p);break;}}} // 直连:在哪个节点的雷达圆里
     for(let i=0;i<q.length;i++){const a=q[i];for(const b of M){if(b.online)continue;const dx=a.pos[0]-b.pos[0],dy=a.pos[1]-b.pos[1],dz=a.pos[2]-b.pos[2];if(lk(a.pos,b.pos,dx*dx+dy*dy+dz*dz,MM2)){b.online=true;q.push(b);}}} // 经弹弹链接力
     M.forEach((p,i)=>{if(p.online){mslRep(p);if(p.pg)mslPredDel(p.pg);}else if(was[i]&&!p.pg&&p.rep)mslPredAdd(p,'msl');}); // 在网上每拍回报;刚断链按最后一次回报建推测
     for(const p of M)p.nb=[]; // 邻接:三关系算法的"导弹间关系"输入(所有活弹,含雷 / 布雷途中 —— 它们也是中继节点);MM2 用上面直连 / 接力那两个同款
