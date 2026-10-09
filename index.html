@@ -119,7 +119,7 @@
      硬约束仅两条:core/00 定义 on() 必须最先(85/95/96/97 顶层调用它);core/99 顶层执行 init() 必须最后(且 init 调 loadRangeCfg,
      故 scenario/95 必须在它之前)。其余跨文件引用全在运行期解析,层序排列只为可读性。 -->
 <script src="js/core/00-config.js?v=20261009sp"></script>
-<script src="js/core/01-state.js?v=20261009sp"></script>
+<script src="js/core/01-state.js?v=20261009rt"></script>
 <script src="js/ships/10-hull-geometry.js?v=20260923"></script>
 <script src="js/ships/11-classes.js?v=20261009sp"></script>
 <script src="js/world/12-env.js?v=20261008sp"></script><!-- ENV1 环境系统:太阳禁区 + 天体 + 石头(TK4c)。必须在 sensors/ 之前:23-cov 加载期的梯子反解会读 optLum -->
@@ -178,7 +178,7 @@
 <script src="js/render/84-scene.js?v=20261008sd"></script>
 <script src="js/render/84-fmplot.js?v=20261008me"></script><!-- FM4 编队能力站位的地图可视化。与 84-scene 共用编号 84(先例:weapons/51-defs 与 51-ciws),都属于“场景图层”;顶层只有 const/function,零顶层执行,由 84-scene 的 render() 运行期调用 -->
 <script src="js/render/85-settings.js?v=20260926e"></script>
-<script src="js/render/85-tutorial.js?v=20261009lk"></script><!-- RF5-D 教程面板。与 85-settings 共用编号 85(先例:weapons/51-defs 与 51-ciws),语义上教程与设置相邻。顶层调用 on(),故必须晚于 core/00;其余引用全在运行期解析 -->
+<script src="js/render/85-tutorial.js?v=20261009rt"></script><!-- RF5-D 教程面板。与 85-settings 共用编号 85(先例:weapons/51-defs 与 51-ciws),语义上教程与设置相邻。顶层调用 on(),故必须晚于 core/00;其余引用全在运行期解析 -->
 <script src="js/render/86-irview.js?v=20261008zk"></script><!-- 红外画面:右下角「红外」钮(MAPV.mode === 'ir');演示页 红外效果.html 的甲画法,物理走引擎的传感器模型 -->
 <script src="js/render/86-belview.js?v=20261006cd"></script><!-- 2026-10-05 全知下画红方 AI 的信念与条令态 -->
 <script src="js/render/86-radarview.js?v=20261007ll6"></script><!-- 雷达画面:右下角「雷达」钮(MAPV.mode === 'radar');演示页 雷达效果.html 的画法,数据走引擎现有的雷达模型 -->
