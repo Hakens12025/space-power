@@ -253,7 +253,8 @@ const TUT_HTML=`
         <tr><td>轮盘右半左键</td><td>切武器许可</td><td>对当前这个目标即时生效</td></tr>
         <tr><td>轮盘左半左键</td><td>切依次 / 轮询</td><td>序列有两个以上目标时才出现</td></tr>
         <tr><td><code class="key">Shift</code> + 左键点导弹组</td><td>选中该导弹组</td><td>右栏切到导弹汇总视图</td></tr>
-        <tr><td><code class="key">Shift</code> + 左键拖框</td><td>框选导弹群（不按 Shift 拖框、框里没有我方舰时也一样）</td><td>右栏给出成组汇总</td></tr>
+        <tr><td><code class="key">Shift</code> + 左键拖框</td><td>框选导弹群（不按 Shift 拖框、框里没有我方舰时也一样；起手点按在导弹上也能拉框）</td><td>右栏给出成组汇总</td></tr>
+        <tr><td><code class="key">Ctrl</code> + 左键点导弹组</td><td>把这一组加进 / 移出多选（同舰船）；选好一部分中键点目标 1，再选另一部分中键点目标 2</td><td>右栏给出成组汇总</td></tr>
       </tbody>
     </table>
 

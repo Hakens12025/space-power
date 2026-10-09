@@ -93,6 +93,10 @@ function targetAt(sx,sy){ // 2026-10-08 走实体登记表(command/69 entPick):�
   const h=entPick(sx,sy,{k:adminMode?['ship']:['ship','obj'],side:ME,r:60,ok:o=>adminMode?(o.side!==ME&&o.side!=='neutral'):(o.side!==ME&&trkFoe(trkOf(ME,o)))});
   return h?h.o:null; // 返回源对象(锁定 / 火控序列拿它当句柄)
 }
+function mslSelToggle(g){ // 2026-10-09 Ctrl+点导弹组:当前选中的导弹(框选的组 + 点选的整网)展开成组的集合,切这一组;只剩一组也只选这一组(不再扩成整网)
+  const S=typeof mslSelAll==='function'?mslSelAll():new Set();S.has(g)?S.delete(g):S.add(g);
+  const L=[...S].filter(p=>!p.done);if(!L.length){selSet(null);return;}
+  selSet('msl',L.slice().sort((a,b)=>(b.count||0)-(a.count||0))[0]);selMissileHits=L;selNet=null;}
 function mslAimOn(){return typeof mslSelOwn==='function'&&mslSelOwn().length>0;} // 选中了我方导弹(render/88)
 function mslAimAt(sx,sy){ // 2026-10-08 用户:选中我方导弹,中键点已定位的目标 = 改打它(不变雷);点空地(或没定位的)= 飞向那一点,到点按底栏「变雷」停下 / 接着飞。断链的组只能看
   const L=mslSelOwn(),on=L.filter(p=>p.online),off=L.length-on.length;
@@ -262,6 +266,8 @@ function mdLeft(e,sx,sy){ // 左键
     return;
   }
   const h=entPick(sx,sy,{agg:'all',ok:(o,K)=>!!K.sel(o)}),sk=h?h.K.sel(h.o):null; // 2026-10-08 实体登记表(command/69):能选的里离光标最近的一个 —— 我方舰 60 px、我方浮标 14 px、其余 24 px(比船近才先选它;刚放出去的浮标叠在船上让给船);导弹组排在后面
+  if(sk==='msl'&&e.ctrlKey){mslSelToggle(h.o);selDrag=null;if(typeof updateSelPanel==='function')updateSelPanel();return;} // 2026-10-09 用户:Ctrl+点导弹组 = 加进 / 移出多选(同舰船)
+  if(sk==='msl'){selDrag={x0:sx,y0:sy,x1:sx,y1:sy,mslClick:h.o};return;} // 2026-10-09 按在导弹上先不定:松手没拖 = 选整个网(原来的点选),拖了 = 框选(导弹挤成一团时起手点总落在导弹上,原来按下就选中、拉不出框)
   if(sk&&sk!=='ship'){selSet(sk,h.o);selDrag=null;if(typeof updateSelPanel==='function')updateSelPanel();return;} // 浮标 / 据点(底栏雷达)、导弹组(v125 点中组 = 选整个网)、只看信息
   selSet('ship',selected); // 没点中它们 → 取消它们的选中,舰船照旧往下走
   if(e.ctrlKey){
@@ -392,8 +398,9 @@ window.addEventListener('mouseup',e=>{
   if(e.button===0&&selDrag){ // 左键:判定点击 vs 框选
     const clicked=Math.abs(selDrag.x1-selDrag.x0)<5&&Math.abs(selDrag.y1-selDrag.y0)<5;
     if(clicked){
-      const s=shipAt(selDrag.x0,selDrag.y0);
-      if(s)selSet('ship',[s.id]);
+      if(selDrag.mslClick){selSet('msl',selDrag.mslClick);if(typeof updateSelPanel==='function')updateSelPanel();} // 单击导弹组 = 选整个网(同原来)
+      else{const s=shipAt(selDrag.x0,selDrag.y0);
+      if(s)selSet('ship',[s.id]);}
     }else if(selDrag.missileMode||!selected.length){ // Shift框选:选导弹群(不是船);2026-10-09 用户「没办法框选导弹」:不按 Shift 拖框、框里没有我方舰也选框里的导弹
       const x=Math.min(selDrag.x0,selDrag.x1),y=Math.min(selDrag.y0,selDrag.y1);
       const w=Math.abs(selDrag.x1-selDrag.x0),h=Math.abs(selDrag.y1-selDrag.y0);
@@ -405,7 +412,7 @@ window.addEventListener('mouseup',e=>{
         const alive=hits.filter(p=>!p.done);
         selSet('msl',alive.slice().sort((a,b)=>(b.count||0)-(a.count||0))[0]||hits[0]);
         selMissileHits=alive;
-        selNet=alive.length===1&&selMissile?(selMissile.netId||null):null; // 多组时网选中无意义;单组保持"点中组=选整个网"语义
+        selNet=null; // 框选 = 框了哪几组就是哪几组(2026-10-09 用户要一部分打目标 1、一部分打目标 2;原来框到 1 组会扩成整个网)。单击导弹组照旧选整个网
       }
     }
     selDrag=null;

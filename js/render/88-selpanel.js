@@ -582,6 +582,11 @@ function ciBarsSet(sel){const el=document.getElementById('ciBars');if(!el)return
     d.innerHTML=sel.slice(0,3).map(x=>'<div class="nm">'+x.name+'</div>'+specItems(x).map(it=>'<div class="row"><span class="k">'+it[0]+'</span><span class="v">'+it[1]+'</span></div>').join('')).join('');
     const r=sh.getBoundingClientRect();d.style.display='block';d.style.left=Math.round(r.left)+'px';d.style.bottom=Math.round(window.innerHeight-r.top+6)+'px';});
   sh.addEventListener('mouseleave',()=>{if(d)d.style.display='none';});})();
+function mslSelAll(){ // 2026-10-09 选中的导弹组全集(不分敌我):框选 / Ctrl 点的组 + 点选的整网 + 代表组;地图高亮(render/83)与 Ctrl 加减选(command/70)都读它
+  const S=new Set((selMissileHits||[]).filter(p=>p.type==='missile'&&!p.done));
+  if(selNet)for(const p of projectiles)if(p.type==='missile'&&!p.done&&p.netId===selNet)S.add(p);
+  if(selMissile&&!selMissile.done&&selMissile.type==='missile')S.add(selMissile);
+  return S;}
 function mslSelOwn(){ // 2026-09-28 选中的我方导弹组:点选 = 整个网,框选 = 框里的组(GM 下敌方的也算)
   const set=new Set((selMissileHits||[]).filter(p=>p.type==='missile'&&!p.done));
   if(selNet)for(const p of projectiles)if(p.type==='missile'&&!p.done&&p.netId===selNet)set.add(p);

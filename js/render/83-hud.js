@@ -266,13 +266,14 @@ function projMark(p,x,y,rot,side,cnt){
   for(let i=0;i<n;i++){const a=rot+i/n*6.283;ctx.fillRect(x+Math.cos(a)*1.9-0.9,y+Math.sin(a)*1.9-0.9,1.8,1.8);} // 2~3 点,第一颗朝飞行方向;外框约 5.6 px
 }
 function drawProjectiles(){ // 弹丸/导弹
-  const mk=shipMarkMode();
+  const mk=shipMarkMode(),SM=(selMissile||(selMissileHits&&selMissileHits.length))&&typeof mslSelAll==='function'?mslSelAll():null; // 2026-10-09 选中的导弹组全集(多选每组都画圈)
   for(const p of projAll()){ // LL5 连余像一起画(消失了、消失的光还没到我方的弹;关开关就是 projectiles)
     if(!projSeen(p))continue; // 感知层 v4:普通模式敌方弹药只有被探测到才显示 v119:读缓存 TK4a:缓存在航迹表的目击集合里
     const q=projViewLook(p);if(!q)continue; // LL5 位置 / 速度 / lit / 颗数读我方看到的弹影
     const s=toScreen(q.pos[0],q.pos[1]);
     const sd=(p.group||0)*1.7,side=p.shooter?palSide(p.shooter.side):'blue',rot=Math.atan2(q.vel[1],q.vel[0]); // 2026-10-04 弹的画法换成 render/81-art(朝向 = 速度方向)
     if(s[0]<-60||s[0]>W+60||s[1]<-60||s[1]>H+60){if(p!==selMissile)continue;}
+    const pSel=!!SM&&SM.has(p)&&p!==selMissile; // 多选里的其余组
     if(p.type==='decoy'){if(mk)projMark(p,s[0],s[1],rot,side,1);else artDecoy(ctx,s[0],s[1],rot,sd,side);continue;} // 诱饵弹:脉动的假热源(模拟舰船信号骗拦截)
     if(p.type==='mac'){
       if(mk)projMark(p,s[0],s[1],rot,side,1);else artShell(ctx,s[0],s[1],rot,side);
@@ -284,10 +285,11 @@ function drawProjectiles(){ // 弹丸/导弹
       else if(p.mine)artMine(ctx,s[0],s[1],(sd%6)*0.17,side); // 伏击雷:六角壳体 + 天线 + 闪烁指示灯
       else artMsl(ctx,s[0],s[1],rot,{kind:p.type==='interceptor'?'inter':'msl',side,count:cnt,burn:p.type==='interceptor'||(q.lit===undefined?p.fuel>0:q.lit),sd}); // 一组画 1 / 3 / 5 枚;这一拍烧油才有尾焰(同 sensors/22 projSig)
       // 选中高亮 + v129:目标虚线/目的地/触发圈/火控母舰连线(点选导弹或网,网内所有组一起)
+      if(pSel){ctx.strokeStyle='#4fe0ff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(s[0],s[1],12,0,6.283);ctx.stroke();} // 2026-10-09 多选:每组都画选中圈(原来只画代表组,看不出选了哪些)
       if(p===selMissile){
         ctx.strokeStyle='#4fe0ff';ctx.lineWidth=2;
         ctx.beginPath();ctx.arc(s[0],s[1],12,0,6.283);ctx.stroke();
-        const showSet=selNet?projectiles.filter(x=>x.type==='missile'&&!x.done&&x.netId===selNet&&projSeen(x)):[p]; // 2026-09-28 同网里看不见的弹不画
+        const showSet=SM?[...SM].filter(x=>!x.done&&projSeen(x)):[p]; // 2026-09-28 同网里看不见的弹不画;2026-10-09 多选的每组都画目标线
         drawChain(p); // 传播链路:整簇一条线(83 的 drawChain)
         showSet.forEach(g=>{drawMissileIntent(g);});
       }
