@@ -376,6 +376,8 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #ciBars .hb i{display:block;height:100%}
 #ciBars .mrow{display:flex;align-items:center;gap:6px}
 #ciBars .mrow .hb{width:64px;flex:none}
+#ciBars .mrow .hp2{display:flex;flex-direction:column;width:64px;flex:none} /* 2026-10-11 多选:一艘船的护盾条(上)贴着船体条(下),不留缝;护盾条的长度另按 最大护盾 / 最大结构 写在行内 */
+#ciBars .mrow .hp2 .hb{width:100%}
 #ciBars .mrow span{font-size:var(--fs-micro);color:var(--txt-dim);line-height:12px;white-space:nowrap}
 #ciSpecTip{position:fixed;display:none;padding:var(--sp-2) var(--sp-3);z-index:var(--z-flyout);min-width:160px}
 #ciSpecTip .nm{color:var(--txt-hi);font-size:var(--fs-body);margin:4px 0 2px}

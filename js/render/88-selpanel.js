@@ -639,11 +639,13 @@ function wpkHoverTip(t,s){
   el.addEventListener('mouseleave',()=>{hoverRing=null;hoverRingHi=null;if(typeof updSelWeaponTip==='function')updSelWeaponTip();});})();
 /* 舰船块:血条 #ciBars(单选结构 + 护盾;多选每艘一条、舰名写在条右边),悬停舰船块看规格 */
 function ciBarsSet(sel){const el=document.getElementById('ciBars');if(!el)return;let h='';
-  const bar=(f,c)=>'<div class="hb"><i style="width:'+Math.round(Math.max(0,Math.min(1,f))*100)+'%;background:'+c+'"></i></div>',hc=f=>f>0.35?'var(--state-ok)':'var(--state-warn)';
-  if(sel.length===1){const s=sel[0];h=bar(s.hp/s.maxHp,hc(s.hp/s.maxHp))+(s.shMax>0?bar(s.shDown>0?0:s.sh/s.shMax,'var(--acc)'):'');}
-  else if(sel.length>5){const by=new Map();for(const x of sel){if(!by.has(x.cls))by.set(x.cls,[]);by.get(x.cls).push(x);} // 2026-10-11 多于 5 艘按舰种汇总(平均血量),原来只列前 5 艘
-    h=[...by].map(([c,A])=>{const f=A.reduce((a,x)=>a+x.hp/x.maxHp,0)/A.length;return '<div class="mrow">'+bar(f,hc(f))+'<span>'+(CLS_NAME[c]||c)+' ×'+A.length+'</span></div>';}).join('');}
-  else if(sel.length>1){h=sel.map(x=>'<div class="mrow">'+bar(x.hp/x.maxHp,hc(x.hp/x.maxHp))+'<span>'+x.name+'</span></div>').join('');}
+  const cl=v=>Math.max(0,Math.min(1,v)),bar=(f,c,w)=>'<div class="hb"'+(w!==undefined?' style="width:'+(cl(w)*100).toFixed(1)+'%"':'')+'><i style="width:'+Math.round(cl(f)*100)+'%;background:'+c+'"></i></div>',hc=f=>f>0.35?'var(--state-ok)':'var(--state-warn)';
+  const pair=(sh,shMax,hp,maxHp)=>(shMax>0?bar(sh/shMax,'var(--acc)',shMax/maxHp):'')+bar(hp/maxHp,hc(hp/maxHp)); // 2026-10-11 用户:上盾下船体,按船体值的绝对量画 —— 船体条满长 = 最大结构,护盾条长 = 最大护盾 / 最大结构(比绿线短),里面按当前护盾填(护盾被打穿在重启 = 空)
+  const shOf=x=>x.shDown>0?0:(x.sh||0);
+  if(sel.length===1){const s=sel[0];h=pair(shOf(s),s.shMax||0,s.hp,s.maxHp);}
+  else if(sel.length>5){const by=new Map();for(const x of sel){if(!by.has(x.cls))by.set(x.cls,[]);by.get(x.cls).push(x);} // 2026-10-11 多于 5 艘按舰种汇总(这一种合计的护盾 / 结构),原来只列前 5 艘
+    h=[...by].map(([c,A])=>{const t=k=>A.reduce((a,x)=>a+k(x),0);return '<div class="mrow"><div class="hp2">'+pair(t(shOf),t(x=>x.shMax||0),t(x=>x.hp),t(x=>x.maxHp))+'</div><span>'+(CLS_NAME[c]||c)+' ×'+A.length+'</span></div>';}).join('');}
+  else if(sel.length>1){h=sel.map(x=>'<div class="mrow"><div class="hp2">'+pair(shOf(x),x.shMax||0,x.hp,x.maxHp)+'</div><span>'+x.name+'</span></div>').join('');} // 多选:一艘的蓝线贴着绿线(.hp2 不留缝)
   setHTMLStable(el,h,false);}
 (function bindSpecTip(){const sh=document.querySelector('#cmdBar .cmd-ship');if(!sh)return;let d=null;
   sh.addEventListener('mouseenter',()=>{const sel=selBlue();if(!sel.length)return;if(!d){d=document.createElement('div');d.id='ciSpecTip';d.className='panel';document.body.appendChild(d);}

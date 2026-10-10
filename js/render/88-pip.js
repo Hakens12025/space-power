@@ -31,7 +31,7 @@ function pipGun(g,w,h,s,k){ // 火控窗:三条 S 形命中率曲线(起作用�
   const ff=s.forceMac,mt=(typeof fcActive==='function'&&fcActive(s))?(s.fcTgt&&s.fcTgt.mac):(s.lockedTarget||(ff&&ff.t)||null);
   const tp=mt?viewPos(mt):(ff&&ff.pt&&!sec?ff.pt:null),fk=mt&&tp?macFwdK(s.side,mt):1,on=fk===MAC_FWD.VIS?'vis':(fk===MAC_FWD.RAD?'rad':(fk===MAC_FWD.IR?'ir':'def')); // 起作用的那条:目标此刻在可见光圈里 / 被雷达照到 / 红外量到 / 都不是;没目标、打空地 = 默认
   for(const [c] of PIP_C.filter(q=>q[0]!==on).concat(PIP_C.filter(q=>q[0]===on))){const kk=PIP_C.find(q=>q[0]===c)[2],m=typeof kk==='function'?kk():kk,lit=c===on; // 亮的那条最后画(压在上面)
-    g.strokeStyle=pipCol(c,lit?0.75:0.3);g.lineWidth=lit?1.3:0.9;g.setLineDash(lit?[]:[4,3]);g.beginPath();for(let i=0;i<=60;i++){const d=XM*i/60,x=X(d),y=Y(P(d/m));if(i)g.lineTo(x,y);else g.moveTo(x,y);}g.stroke();} // 没起作用的:暗 + 虚线 // 2026-10-11 用户:不要那么亮、细一点(原 1 / 2px、暗的 0.35 / 1.2px)
+    g.strokeStyle=pipCol(c,lit?0.85:0.3);g.lineWidth=lit?1.3:0.9;g.setLineDash(lit?[]:[4,3]);g.beginPath();for(let i=0;i<=60;i++){const d=XM*i/60,x=X(d),y=Y(P(d/m));if(i)g.lineTo(x,y);else g.moveTo(x,y);}g.stroke();} // 没起作用的:暗 + 虚线 // 2026-10-11 用户:不要那么亮、细一点(原 1 / 2px、暗的 0.35 / 1.2px);又说略暗,亮的那条 0.75 → 0.85
   g.setLineDash([]);
   g.font='10px "Microsoft YaHei"';g.textAlign='right';g.textBaseline='top';let lx=R; // 图例:右上角,起作用的那个亮
   for(const [c,nm] of PIP_C.slice().reverse()){g.fillStyle=pipCol(c,c===on?1:0.45);g.fillText(nm,lx,T+2);lx-=g.measureText(nm).width+8;}
