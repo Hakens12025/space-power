@@ -33,14 +33,14 @@ CLS_STRUCT.CV={...CLS_STRUCT.CA};
 CLS_MOB.DD={...CLS_MOB.FF,speedGears:CLS_MOB.FF.speedGears.slice()};   // TODO(TIER-BAL) 2026-09-30 驱逐舰:先照搬护卫舰(用户:数值不用管)
 CLS_MOB.CL={...CLS_MOB.FF,speedGears:CLS_MOB.FF.speedGears.slice()};   // 巡游舰:沿用重排前(原驱逐舰)的数值
 CLS_STRUCT.DD={...CLS_STRUCT.FF};                                          // TODO(TIER-BAL) 驱逐舰舰体待标定
-CLS_STRUCT.CL={...CLS_STRUCT.FF};                                          // TODO(TIER-BAL) 航母舰体待标定(武器差异在 CLS_LOADOUT.CV:不装主炮)
+CLS_STRUCT.CL={...CLS_STRUCT.FF};                                          // TODO(TIER-BAL) 巡游舰舰体待标定
 /* ==== TIER-BAL:START —— 4 舰种 × T1/T2/T3 数值层(未平衡) ====
    形状:base 表(按舰种,上面那五张)× tier 乘数层(按分级,可按舰种覆盖)→ shipStats(cls,tier) → makeShip 一次性烘焙到实例。
    平衡阶段只编辑这一段连续区域:改 TIER_MUL / CLS_TIER_MUL 两个对象即可,任何调用点都不用碰。
    载入顺序红线:本区块顶层禁止引用 10a-ship-hulls.js 的 TIER_SCALE / TIER_ORDER / HULL_LABEL——index.html 里 10a(:172)排在 03(:165)之后,顶层引用会 ReferenceError;所以 tier 键 1/2/3 在这里自己写死。 */
 const TIER_LABEL={1:'T1',2:'T2',3:'T3'}; // TIER1 分级短名。与 10a 的 TIER_SCALE/TIER_LIGHT 同键但不引用它(见上面的载入顺序说明)
 const TIER_FIELD={ // TIER1 字段 → applyTier 策略表。缺省是 'mul'(直乘),所以这里只列非 'mul' 的字段
-  ammo:'int', cells:'int', inter:'int', guideChan:'int', value:'int', // 整数量:乘完四舍五入、下限 1;但原值 ≤0 视为结构性零原样保留,绝不被抬成 1
+  ammo:'int', cells:'int', inter:'int', guideChan:'int', value:'int', macN:'int', // 整数量:乘完四舍五入、下限 1;但原值 ≤0 视为结构性零原样保留,绝不被抬成 1。macN = 轴炮齐射发数(2026-10-10)
   outerIntercept:'prob', innerIntercept:'prob', chaffRate:'prob', ecmPower:'prob', stealth:'prob', // 概率:乘完钳到 [0,1](outerIntercept 是方案原清单外补的——它和 innerIntercept 同为拦截率,漏钳会出现 >1 的拦截概率)。SN4 stealth 必须列在这里:它是 (0,1] 的雷达反射倍率,走缺省的 'mul' 会让某个分级乘出【大于 1】的反射倍率——比 1 大的隐身系数没有物理含义,而且不会报错,只会让那一级的舰在雷达上悄悄比本体还亮
   speedGears:'gears', // 速度档数组:整条曲线乘同一个【标量】k(不是每档给一个乘数),逐项取整;负数=哨兵(-1 不限速)原样保留,不参与乘法
 };
@@ -119,8 +119,8 @@ function makeShip(cls,name,pos,facing,vel,side,tier){ // TIER1 加第 7 参 tier
     pos:pos.slice(), vel:(vel||[0,0,0]).slice(), facing:V.norm(facing), // KIMI146修:vel原直接用传入引用→物理积分原地改写TEST_ENVS/自定义场景预设初速,重开场景继承上局残速
     thrust:st.thrust, turnRate:st.turnRate,
     speedGears:sg, // TIER1 速度档烘焙到实例(05-motion:13 speedGearsOf 改实例优先):tier 影响速度档的唯一通路;拷副本防表被原地改写
-    hp:st.hp, maxHp:st.hp, shMax:st.shield||0, sh:st.shield||0, shDown:0, macCd:0, missileArm:null, ammo:lw.ammo, macDmg:lw.macDmg, missDmg:lw.missDmg, interceptor:lw.inter||0, interMax:lw.inter||0, lockedTarget:null, lockPlayer:false, dead:false, // DS167:interMax=拦截弹库存上限(资源纪律判定用)
-    macReload:lw.mac||0, macSigma:sReq(lw,'macSigma','resolveLoadout'), // RF3 主炮 装填秒烘焙;WR1 起射程字段换成角散布 macSigma(走 sReq:配装缺字段当场抛,不许静默退化)
+    hp:st.hp, maxHp:st.hp, shMax:st.shield||0, sh:st.shield||0, shDown:0, macCds:Array(lw.macN||1).fill(0), missileArm:null, ammo:lw.ammo, macDmg:lw.macDmg, missDmg:lw.missDmg, interceptor:lw.inter||0, interMax:lw.inter||0, lockedTarget:null, lockPlayer:false, dead:false, // DS167:interMax=拦截弹库存上限(资源纪律判定用)。2026-10-10 macCds = 每门轴炮一根装填条(0=就绪,巡洋两门;口径与读法在 weapons/52 的 macReady/macCdNext/macConsume 三件助手)
+    macReload:lw.mac||0, macSigma:sReq(lw,'macSigma','resolveLoadout'), macN:lw.macN||1, // RF3 主炮 装填秒烘焙;WR1 起射程字段换成角散布 macSigma(走 sReq:配装缺字段当场抛,不许静默退化)。macN = 一次开火齐射的发数(2026-10-10 巡洋两发;配装未写 = 单发,发射循环在 weapons/52 的 fireMAC/fireMACAt)
     cells:(lw.cells||4), cellTimer:Array(lw.cells||4).fill(0), // 发射单元(v119):护卫舰4单元/同时4组/每组独立装填
     mslPer:lw.mslPer||12, mslReload:lw.mslReload||60, // RF3 导弹每组枚数/单元装填秒/射程烘焙(原为 fireMissiles/S15b/enemyAI 散落字面量)
     guideChan:st.guideChan, // SN1 数据链引导通道(来源 weapons/51-defs 的 CLS_LINK,CA 3网/DD 1网):同时引导超自导范围的导弹数。原来的 ||4 是个假兜底 —— DD 真值就是 1,字段一旦丢了它会把 DD 悄悄涨到 4 而不是报错

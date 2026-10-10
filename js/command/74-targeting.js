@@ -225,8 +225,8 @@ function radItems(sub,t,it){ // RF5 解算每个武器扇区:allow=计划(许不
     const maxRng=(ki&&ki.maxRange)?ki.maxRange(sub):rng; // RF6 硬上限;无衰减机制的武器(msl/ciws)回退成精确射程
     if(ok&&gated&&maxRng&&dist>=maxRng){ok=false;why='射程外';} // 比硬上限,不比精确射程:两者之间是衰减区(能打,散布变大),判成不可用会与 fcGate/fireMAC 给出相反结论
     if(ok&&gated){
-      const ready=(k==='mac')?((sub.macCd||0)<=0)
-        :((typeof readyCells==='function')?readyCells(sub)>0:true); // 就绪:主炮看冷却 macCd,导弹看就绪发射单元(52-fire 的 readyCells 读 s.cellTimer/s.cells)
+      const ready=(k==='mac')?(macReady(sub)>0)
+        :((typeof readyCells==='function')?readyCells(sub)>0:true); // 就绪:主炮看有没有就绪的炮门(52-fire 的 macReady 读 s.macCds),导弹看就绪发射单元(readyCells 读 s.cellTimer/s.cells)
       if(!ready){ok=false;why='装填中';}
     }
     out.push({kind:k,label:w.label||k,allow:allow,ok:ok,why:why});

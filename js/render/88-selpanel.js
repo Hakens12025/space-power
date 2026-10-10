@@ -15,7 +15,7 @@ const KIND_INFO={
   mac:{on:'macOn',
     range:s=>macEffRange(s),
     maxRange:s=>macRangeAt(s,0.1),
-    tip:s=>`主炮(轴炮) · 散布 ${(sReq(s,'macSigma')*1000).toFixed(1)} 毫弧 · 命中率 50% ≈ ${Math.round(macEffRange(s)/1000)}k / 10% ≈ ${Math.round(macRangeAt(s,0.1)/1000)}k · 伤害${s.macDmg||0} · 装填${Math.round(SHOW.t(s.macReload||30))}s · 需火控开+机头对准+跟踪级`},
+    tip:s=>`主炮(轴炮) · 散布 ${(sReq(s,'macSigma')*1000).toFixed(1)} 毫弧 · 命中率 50% ≈ ${Math.round(macEffRange(s)/1000)}k / 10% ≈ ${Math.round(macRangeAt(s,0.1)/1000)}k · 伤害${s.macDmg||0}${(s.macN||1)>1?'×'+s.macN+'发':''} · 装填${Math.round(SHOW.t(s.macReload||30))}s · 需火控开+机头对准+跟踪级`},
   msl:{on:'mslOn',
     range:s=>mslReach(s),
     tip:s=>`导弹齐射 · 射程 ≈ ${Math.round(mslReach(s)/1000)}k(加速 → 熄火滑行 → 末段修正,靠数据链)· 库存 ${mslGroupsTxt(s)} · 一次齐射 ${s.cells||4} 组 · 单元装填${Math.round(SHOW.t(s.mslReload||60))}s · 需火控开+目标跟踪级`},
@@ -39,7 +39,7 @@ function specItems(s){
     ['火控通道',s.guideChan],
   ];
   for(const w of (s.weapons||[])){
-    if(w.kind==='mac')items.push(['主炮',s.macDmg>0?(s.macDmg+'×'+Math.round(SHOW.t(s.macReload))+'s · 50%@'+Math.round(macEffRange(s)/1000)+'k'):'无']); // WR1:规格条带上命中率 50% 的距离
+    if(w.kind==='mac')items.push(['主炮',s.macDmg>0?(s.macDmg+((s.macN||1)>1?'×'+s.macN+'发':'')+'×'+Math.round(SHOW.t(s.macReload))+'s · 50%@'+Math.round(macEffRange(s)/1000)+'k'):'无']); // WR1:规格条带上命中率 50% 的距离;2026-10-10 macN>1 标出齐射发数
     else if(w.kind==='msl')items.push(['导弹',mslGroupsTxt(s)],['齐射',(s.cells||0)+'组']); // 2026-10-07 用户:导弹数量按组算(「64组 · 每组12发」),一次齐射几组另列
     else if(w.kind==='icp'){const c=ciwsRingsOf(s);items.push(['拦截弹',s.interMax+'枚'],['近防',Math.round(c.outer/1000)+'k/'+Math.round(c.inner/1000)+'k']);}
   }
@@ -92,7 +92,7 @@ function senseRows(s){
 function weaponRows(s){
   let h='';
   for(const w of (s.weapons||[])){
-    if(w.kind==='mac')h+=`<div class="row"><span class="k">主炮</span><span class="v">${s.macCd<=0?'就绪':Math.ceil(SHOW.t(s.macCd))+'s'}</span></div>`;
+    if(w.kind==='mac')h+=`<div class="row"><span class="k">主炮</span><span class="v">${macReady(s)>0?('就绪'+((s.macN||1)>1?' '+macReady(s)+'/'+s.macN:'')):Math.ceil(SHOW.t(macCdNext(s)))+'s'}</span></div>`;
     else if(w.kind==='msl')h+=`<div class="row"><span class="k">导弹</span><span class="v">就绪 ${readyCells(s)}/${s.cells} · ${mslGroupsTxt(s)}</span></div>`;
     else if(w.kind==='icp')h+=`<div class="row"><span class="k">拦截弹</span><span class="v">${s.interceptor}/${s.interMax}枚</span></div>`;
     else if(w.kind==='buoy')h+=`<div class="row"><span class="k">前出浮标</span><span class="v">${s.buoys||0}/${s.buoysMax||0}个</span></div>`; // 2026-09-27 K3
@@ -443,7 +443,7 @@ function wpnClearAll(){cxWpnClear(selBlue());updateSelPanel();} // 2026-10-08 �
 function radarPulsing(x){const f=(typeof PING_FX!=='undefined')?PING_FX.get(x):null;return !!(x.pingReq||(f&&!f.done));}
 function selBuoyOk(){return (typeof selBuoy!=='undefined'&&selBuoy&&!selBuoy.dead)?selBuoy:null;} // 2026-09-29 选中的我方浮标(底栏雷达作用于它)
 function radarPick(v){const bu=selBuoyOk();if(bu){if(v==='pulse')cxObjPulse(bu);else if(typeof buoySetOn==='function')buoySetOn(bu,v==='paint');updateSelPanel();return;}const sel=selBlue();if(!sel.length)return;if(v==='pulse')cxPulse(sel);else sel.forEach(x=>setEmit(x,v));updateSelPanel();} // 2026-10-08 脉冲走命令(command/68),setEmit 本身已登记成命令
-function wpnStat(s,k){return k==='mac'?'伤害 '+(s.macDmg||0)+' · 装填 '+Math.round(SHOW.t(s.macReload||0))+'s':(k==='msl'?'余 '+mslGroupsTxt(s):'');}
+function wpnStat(s,k){return k==='mac'?'伤害 '+(s.macDmg||0)+((s.macN||1)>1?' ×'+s.macN+'发':'')+' · 装填 '+Math.round(SHOW.t(s.macReload||0))+'s':(k==='msl'?'余 '+mslGroupsTxt(s):'');}
 function cmdPopEl(){
   if(CMDPOP.el)return CMDPOP.el;
   const d=document.createElement('div');d.id='cmdPop';document.body.appendChild(d);
@@ -486,7 +486,7 @@ function cmdBarSync(){ // 三颗钮的字与亮灭;菜单开着就顺手重画
     if(ml.length){const on=ml.every(p=>p.mineOk||p.mine);mb.classList.toggle('on',on);setHTMLStable(mb,'<span class="l">变雷</span><span class="s">'+(on?'到点停下':'一直飞')+'</span>',false);}}
 }
 /* ==================== 底栏指令卡(2026-10-08 用户:武器操作不方便 —— 开火要点好几层、状态看不到、自动开火开关藏太深;演示页 demos/ui/底栏指令卡.html 拍板) ====================
-   四格位置固定:主炮 / 导弹 / 特殊 / 近防,选中的船都没有就写「无」。主炮每艘一条、导弹每个发射单元一条:点绿条 = 选这一发 / 这一组(泛白呼吸),再点取消;
+   四格位置固定:主炮 / 导弹 / 特殊 / 近防,选中的船都没有就写「无」。主炮每门一条、导弹每个发射单元一条:点绿条 = 选这一发 / 这一组(泛白呼吸),再点取消;
    选好了左键点敌舰或空地 = 选了几条发几条(wpkMouse,70-input 左键最先问它;主炮 cxForceMac,导弹 cxSalvoCells 指定发射单元)。点格子的空白处 / T R = 就绪的全选、全取消。
    右上角小勾 = 自动开火(wpnToggle → cxWpn);近防两行 = 拦截弹 / 近防炮各自开关(ciwsSubToggle);特殊 = 浮标,点格子放一个(toggleWeapon('buoy'))。悬停画圈(83-hud hoverRing / hoverRingHi)。
    选中的条只在界面这边(WPK),发射才走命令;用掉 / 换了选中自己撤(wpkPrune)。卡片按新 HTML 只改变了的字和属性(domPatch),不整块重画(悬停高亮不闪、点击不丢)。 */
@@ -496,18 +496,19 @@ function wpkClear(){WPK.mac.clear();WPK.msl.clear();}
 function wpkShip(k){for(const x of ships)if(String(x.id)===String(k))return x;return null;}
 function wpkGroups(x){return Math.floor((x.ammo||0)/(x.mslPer||12));}
 function wpkCellOk(x,c){return !!x.cellTimer&&x.cellTimer[c]<=0&&wpkGroups(x)>0;}
+function wpkGunOk(x,g){return !!x.macCds&&x.macCds[g]!==undefined&&x.macCds[g]<=0&&hasMAC(x);} // 2026-10-10 主炮绿条按【门】选(同导弹按单元):这根条对应的炮门就绪才可选 / 才留得住
 function wpkPrune(sel){const ids=new Set(sel.map(x=>String(x.id)));
-  for(const k of [...WPK.mac]){const x=wpkShip(k);if(!ids.has(k)||!x||x.dead||x.macCd>0)WPK.mac.delete(k);}
+  for(const k of [...WPK.mac]){const a=k.split(':'),x=wpkShip(a[0]);if(!ids.has(a[0])||!x||x.dead||!wpkGunOk(x,+a[1]))WPK.mac.delete(k);} // 2026-10-10 键从舰号换成 舰号:门号(装填中的门自动摘牌,同导弹单元)
   for(const k of [...WPK.msl]){const a=k.split(':'),x=wpkShip(a[0]);if(!ids.has(a[0])||!x||x.dead||!wpkCellOk(x,+a[1]))WPK.msl.delete(k);}
   for(const x of sel){const mine=[...WPK.msl].filter(k=>k.split(':')[0]===String(x.id));while(mine.length>wpkGroups(x))WPK.msl.delete(mine.pop());}} // 选的组数不超过库存
 function wpkOther(){if(selWeapon||pendingTurn||pendingFollow||pendingFcNew){const keep={mac:[...WPK.mac],msl:[...WPK.msl]};clearPendings();keep.mac.forEach(k=>WPK.mac.add(k));keep.msl.forEach(k=>WPK.msl.add(k));}} // 别的点选待命态撤掉(互斥),选中的条留着
 function wpkSeg(key){const a=key.split(':'),w=a[0],x=wpkShip(a[1]);if(!x)return;wpkOther();
-  if(w==='mac'){if(x.macCd>0){cmdTipFlash('主炮装填中',1200);return;}const k=String(x.id);WPK.mac.has(k)?WPK.mac.delete(k):WPK.mac.add(k);}
+  if(w==='mac'){const g=+a[2],k=x.id+':'+g;if(WPK.mac.has(k))WPK.mac.delete(k);else{if(!wpkGunOk(x,g)){cmdTipFlash('这根炮管在装填',1200);return;}WPK.mac.add(k);}} // 2026-10-10 按门选:点哪根亮哪根(原来点舰级键,双管舰两根一起亮)
   else{const c=+a[2],k=x.id+':'+c;if(WPK.msl.has(k))WPK.msl.delete(k);else{if(!wpkCellOk(x,c)){cmdTipFlash(wpkGroups(x)>0?'这个发射单元在装填':'导弹打光了',1200);return;}
     if([...WPK.msl].filter(q=>q.split(':')[0]===String(x.id)).length>=wpkGroups(x)){cmdTipFlash('库存只剩 '+wpkGroups(x)+' 组',1200);return;}WPK.msl.add(k);}}
   wpkSync();}
 function wpkAll(w){const sel=selBlue(),keys=[]; // 点格子的空白处 / T R:就绪的全选,已经全选了就全取消
-  for(const x of sel){if(w==='mac'){if(hasMAC(x)&&x.macCd<=0)keys.push(String(x.id));}else if(x.cellTimer){let n=0;x.cellTimer.forEach((t,c)=>{if(t<=0&&n<wpkGroups(x)){keys.push(x.id+':'+c);n++;}});}}
+  for(const x of sel){if(w==='mac'){if(x.macCds)x.macCds.forEach((t,g)=>{if(t<=0)keys.push(x.id+':'+g);});}else if(x.cellTimer){let n=0;x.cellTimer.forEach((t,c)=>{if(t<=0&&n<wpkGroups(x)){keys.push(x.id+':'+c);n++;}});}}
   if(!keys.length){cmdTipFlash('没有就绪的'+(w==='mac'?'主炮':'导弹'),1200);return;}wpkOther();
   const all=keys.every(k=>WPK[w].has(k));for(const k of keys)all?WPK[w].delete(k):WPK[w].add(k);wpkSync();}
 function wpkSync(){if(typeof updSelWeaponTip==='function')updSelWeaponTip();cmdCardSync(selBlue());}
@@ -516,8 +517,8 @@ function wpkMouse(e,sx,sy){ // 70-input 左键最先问它:有选中的条 = 把
   if(e.button!==0||!wpkN())return false;
   let t=targetAt(sx,sy);if(t&&contactDead(t,ME))t=null; // 死活按我方看见的
   const w=worldAt(sx,sy),pt=ordArenaClamp([w[0],w[1],0]);
-  const M=[...WPK.mac].map(wpkShip).filter(x=>x&&!x.dead);
-  if(M.length){const hit=t?M.filter(x=>engageable(t,x)):[],gnd=M.filter(x=>hit.indexOf(x)<0);if(hit.length)cxForceMac(hit,t,null);if(gnd.length)cxForceMac(gnd,null,pt);}
+  const byM=new Map();for(const k of WPK.mac){const a=k.split(':'),x=wpkShip(a[0]);if(!x||x.dead)continue;if(!byM.has(x))byM.set(x,[]);byM.get(x).push(+a[1]);} // 2026-10-10 按门发:同一舰选了几门,强开令就带 n=几门(一门一炮,weapons/57 逐门消耗)
+  for(const [x,G] of byM){if(t&&engageable(t,x))cxForceMac([x],t,null,G.length);else cxForceMac([x],null,pt,G.length);}
   const by=new Map();for(const k of WPK.msl){const a=k.split(':'),x=wpkShip(a[0]);if(!x||x.dead)continue;if(!by.has(x))by.set(x,[]);by.get(x).push(+a[1]);}
   for(const [x,C] of by){if(t&&engageable(t,x))cxSalvoCells(x,t,null,C);else cxSalvoCells(x,null,pt,C);}
   wpkClear();wpkSync();return true;}
@@ -526,10 +527,10 @@ const WPK_TRI=a=>a.length&&a.every(Boolean)?2:(a.some(Boolean)?1:0);
 function wpkCk(k,v){return '<div class="ck'+(v===2?' on':(v===1?' half':''))+'" data-ck="'+k+'"><span>'+(v===2?'✓':'')+'</span></div>';}
 function wpkNone(lb){return '<div class="wb none"><div class="hd"><span class="lb">'+lb+'</span></div><div class="na">无</div></div>';}
 function wpkMacHTML(sel){const M=sel.filter(x=>hasMAC(x));if(!M.length)return wpkNone('主炮');
-  const rd=M.filter(x=>x.macCd<=0).length,np=WPK.mac.size,s0=M[0];
-  const segs=M.map(x=>x.macCd<=0?'<i class="ok'+(WPK.mac.has(String(x.id))?' pk':'')+'" data-seg="mac:'+x.id+'"></i>':'<i><b style="width:'+Math.round(Math.max(0,1-x.macCd/(x.macReload||1))*100)+'%"></b></i>').join('');
+  const rd=M.reduce((n,x)=>n+macReady(x),0),all=M.reduce((n,x)=>n+(x.macCds?x.macCds.length:1),0),np=WPK.mac.size,s0=M[0];
+  const segs=M.map(x=>x.macCds.map((t,g)=>t<=0?'<i class="ok'+(WPK.mac.has(x.id+':'+g)?' pk':'')+'" data-seg="mac:'+x.id+':'+g+'"></i>':'<i><b style="width:'+Math.round(Math.max(0,1-t/(x.macReload||1))*100)+'%"></b></i>').join('')).join('<i class="gap"></i>'); // 2026-10-10 每门炮一根绿条、按【门】选(同导弹格的 cellTimer 画法):点哪根亮哪根、打哪根;同一舰的几根各是各的 data-seg
   return '<div class="wb'+(np?' armed':'')+'" data-w="mac"><div class="hd"><span class="lb">主炮</span><span class="key">T</span></div>'+wpkCk('mac',WPK_TRI(M.map(x=>wpnChecked(x,'mac'))))
-    +'<div class="cells">'+segs+'</div><div class="rd"><span>'+(np?'已选 '+np:(M.length===1?(rd?'就绪':Math.ceil(SHOW.t(s0.macCd))+' s'):rd+'/'+M.length+' 就绪'))+'</span><span class="dim">'+(M.length===1?Math.round(SHOW.t(s0.macReload||0))+' s/发':M.length+' 门')+'</span></div></div>';}
+    +'<div class="cells">'+segs+'</div><div class="rd"><span>'+(np?'已选 '+np+' 门':rd+'/'+all+' 就绪')+'</span><span class="dim">'+(M.length===1?Math.round(SHOW.t(s0.macReload||0))+' s/门':all+' 门')+'</span></div></div>';}
 function wpkMslHTML(sel){const L=sel.filter(x=>wpnHas(x,'msl')&&x.cellTimer);if(!L.length)return wpkNone('导弹');
   const g=L.reduce((n,x)=>n+wpkGroups(x),0),all=L.reduce((n,x)=>n+x.cellTimer.length,0),rd=L.reduce((n,x)=>n+x.cellTimer.filter(t=>t<=0).length,0),np=WPK.msl.size;
   const segs=L.map(x=>x.cellTimer.map((t,c)=>t<=0&&wpkGroups(x)>0?'<i class="ok'+(WPK.msl.has(x.id+':'+c)?' pk':'')+'" data-seg="msl:'+x.id+':'+c+'"></i>':'<i><b style="width:'+(t>0?Math.round(Math.max(0,1-t/(x.mslReload||1))*100):0)+'%"></b></i>').join('')).join('<i class="gap"></i>'); // 多选按船分组,中间留缝
@@ -556,7 +557,7 @@ function cmdCardSync(sel){const el=document.getElementById('cmdCard');if(!el)ret
 function wpkHoverTip(t,s){
   if(t.dataset.cw){const c=ciwsRingsOf(s);return t.dataset.cw==='ciwsMsl'?'拦截弹 · 外圈 '+Math.round(c.outer/1000)+'k · 库存 '+(s.interceptor||0)+' 枚 · 来袭导弹进预警距离自动发射迎上去(消耗弹药)· 点 = 开 / 关':'近防炮 · 内圈 '+(c.inner/1000).toFixed(1)+'k · 打进内圈的导弹每艘拦一次,不耗弹药 · 点 = 开 / 关';}
   const w=t.dataset.w||t.dataset.hr;
-  if(w==='mac')return (KIND_INFO.mac.tip(s))+' —— 点绿条选这一发(每艘一条),再点敌舰或空地发射;点格子空白处或 T = 就绪的全选;右上角小勾 = 自动开火';
+  if(w==='mac')return (KIND_INFO.mac.tip(s))+' —— 点绿条选这一发(每门一条,选几门打几门),再点敌舰或空地发射;点格子空白处或 T = 就绪的全选;右上角小勾 = 自动开火';
   if(w==='msl')return (KIND_INFO.msl.tip(s))+' —— 点绿条选这一组(每个发射单元一条),选几条发几条;点格子空白处或 R = 就绪的全选;右上角小勾 = 自动开火';
   if(w==='buoy')return '放浮标(B):点格子再点一个方向,浮标沿舰船 → 鼠标一直飞,不停,飞出地图消失;平时被动看和听,点浮标本身 → 底栏雷达开照射';
   if(w==='ciws')return KIND_INFO.ciws.tip(s)+' · 两行各管一件,点 = 开 / 关';return '';}

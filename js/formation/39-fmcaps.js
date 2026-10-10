@@ -35,7 +35,7 @@
 const FM_DIM = [
   { k: 'aaClose', nm: '防空·贴身', ab: '贴身', w: 0.44, f: s => { const c = ciwsRingsFm(s); return (c.inner || 0) * (c.innerIntercept || 0); } },
   { k: 'aaChan', nm: '防空·通道', ab: '通道', w: 1.00, f: s => { const c = ciwsRingsFm(s); return (s.interMax || 0) * (c.outer || 0); } },
-  { k: 'gun', nm: '主炮', ab: '主炮', w: 0.36, f: s => s.macReload ? (s.macDmg || 0) / s.macReload : 0 },
+  { k: 'gun', nm: '主炮', ab: '主炮', w: 0.36, f: s => s.macReload ? (s.macDmg || 0) * (s.macN || 1) / s.macReload : 0 }, // 2026-10-10 ×macN:巡洋两发齐射,DPS 翻倍要进能力读数(发射处决见 weapons/52)
   { k: 'act', nm: '主动·照射', ab: '照射', w: 0.36, f: s => sReq(s, 'emit') * sReq(s, 'recv') }, // SN4:维键 ir→act。旧读数是探测力的平方,那个字段第二段删了;新模型里「能主动照多远」由发射机与接收机共同决定(照射量程正比于 emit·recv 的四次方根),这里取乘积本身 = 量程的四次方,与下面 lis 同口径、两维之间可比
   { k: 'lis', nm: '被动·静听', ab: '静听', w: 0.11, f: s => { const r = sReq(s, 'recv'); return r * r; } }, // SN4:维键 esm→lis(与内核 trk 的 opt/lis/act 同一套词汇)。静听量程正比于 recv 的平方根,故读数取 recv 的平方,同为量程的四次方。act 与 lis 是同一部雷达的两种模式,但【读的是两个字段】—— 今天两列读数相等是四舰种 emit===recv 的数值退化,见顶部 SN4 那段
   { k: 'stealth', nm: '隐蔽', ab: '隐蔽', w: 0.06, f: s => 1 / Math.max(0.01, sReq(s, 'size') * sReq(s, 'stealth')) }, // SN4:雷达反射 = 体型 × 反射倍率(与内核 reflOf 同一个乘积),取倒数 = 「越难被照到分越高」。分母兜底 0.01 保留:它守的是值不是字段(反射倍率被 tier 乘到 0 时不至于吐 Infinity 把归一化整列压成 0)。刻意【不】把光学亮度算进来 —— 亮度含 (1+功耗),是每 tick 都在变的动态量,进了这一维会让每次重排给出不一样的指派

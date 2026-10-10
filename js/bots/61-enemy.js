@@ -29,11 +29,11 @@ function botExec(side,dt){
     if(foe){const p=contactPos(foe,side);if(p)d=Math.hypot(p[0]-e.pos[0],p[1]-e.pos[1],(p[2]||0)-e.pos[2]);}
     /* 主炮:只打定位了的、把握过 60 给的门(隐蔽 / 暴露两档);开完一炮记横移 */
     let dg=d;if(gf&&gf!==foe){const p=contactPos(gf,side);dg=p?Math.hypot(p[0]-e.pos[0],p[1]-e.pos[1],(p[2]||0)-e.pos[2]):Infinity;}
-    if(gf&&contactFix(gf,side)&&e.macCd<=0&&hasMAC(e)&&pl.gunP>0&&macHitProb(e,dg,gf)>=pl.gunP&&macAligned(e,gf)){fireMAC(e,gf);if(e.macCd>0)AIC[side].scoot[e.id]=AIC_C.SCOOT_S;}
+    if(gf&&contactFix(gf,side)&&macReady(e)>0&&hasMAC(e)&&pl.gunP>0&&macHitProb(e,dg,gf)>=pl.gunP&&macAligned(e,gf)){if(fireMAC(e,gf))AIC[side].scoot[e.id]=AIC_C.SCOOT_S;} // 2026-10-10 scoot 改读 fireMAC 返回值(双管下「开没开出去」不再能从装填状态差分读出)
     /* 导弹:全队同一拍(60 定),按本舰距离再判 */
     if(foe&&pl.salvo>0&&!AIC_C.AUTO_FC&&e.ammo>0&&readyCells(e)>0&&d<=mslReach(e)){orderMissileSalvo(e,foe,pl.salvo);pl.salvo=0;}
     if(pl.bol){if(e.ammo>0&&readyCells(e)>0)orderMissileSalvo(e,{pos:[pl.bol[0],pl.bol[1],0]},pl.bolN||1);pl.bol=null;} // 打一轮:导弹朝圈心(区域齐射:过点继续直飞找目标)
-    if(pl.gunPt){if(!e.forceMac&&e.macCd<=0&&hasMAC(e))e.forceMac={t:null,pt:pl.gunPt,T:20};pl.gunPt=null;} // 打一轮:主炮朝圈心一炮(weapons/57 强行开火:转头对准、开一炮,炮弹到点消失)
+    if(pl.gunPt){if(!e.forceMac&&macReady(e)>0&&hasMAC(e))e.forceMac={t:null,pt:pl.gunPt,T:20};pl.gunPt=null;} // 打一轮:主炮朝圈心一炮(weapons/57 强行开火:转头对准、开一炮,炮弹到点消失)
   }
 }
 function enemyAI(dt){botExec('red',dt);}

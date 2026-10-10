@@ -38,5 +38,5 @@ function pipGun(g,w,h,s){ // 主炮火控窗:S 形命中率曲线 + 目标此刻
   const mp=mt?macPred(s,mt):tp,ang=mp?V.angle(s.facing,V.norm(V.sub(mp,s.pos))):0;
   g.font='10px Consolas';g.fillStyle='#8fd0ff';g.textBaseline='bottom';
   g.fillText('散布1σ '+Math.round(d*macShotSigma(s,d,mt)).toLocaleString('en-US')+'km / 命中半径 '+MAC_HIT_R+'km',6,h-14);
-  g.fillText('飞行 '+Math.round(SHOW.t(d/CFG.macSpd))+'s · 装填 '+(s.macCd>0?Math.ceil(SHOW.t(s.macCd))+'s':'就绪')+' · 机头 '+(ang<0.02?'对准':(ang*57.2958).toFixed(0)+'°'),6,h-2);
+  g.fillText('飞行 '+Math.round(SHOW.t(d/CFG.macSpd))+'s · 装填 '+(macReady(s)>0?('就绪'+((s.macN||1)>1?' '+macReady(s)+'/'+s.macN:'')):Math.ceil(SHOW.t(macCdNext(s)))+'s')+' · 机头 '+(ang<0.02?'对准':(ang*57.2958).toFixed(0)+'°'),6,h-2);
 }

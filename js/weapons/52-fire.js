@@ -79,35 +79,44 @@ function macEffRange(s){return macRangeAt(s,0.5);} // 有效射程 = 命中率 5
 function mslReach(s){return LAD.msl;} // 2026-09-27 射程 = 设计包线 20 万(用户定;原来是「一半油加速、一半油减速」的动力射程 7.5 万)。靠三段飞法撑住:加速 → 熄火滑行(不耗油)→ 末段用预留燃料修正,见 56 的 stepMissileProj
 const MSL_LOAL_KEEP=PHYS.t(200); // 2026-09-28 区域齐射 / 脱锁的弹加速时不许动用的末段预留(同直射弹 200 s):导引头看见目标时得有油扑上去
 const MSL_MISS=1000*CFG.scale; // 滑行段的脱靶容差 km:照当前航向飞下去、离瞄准点的横向偏差不超过它就不转向(不转 = 不喷 = 红外里是冷的),超了才点火修正
+/* 2026-10-10 双管轴炮:主炮冷却从一根 macCd 标量改成【每门炮一根装填条】s.macCds[](0 = 就绪;与导弹发射单元 cellTimer 同一套先例)。
+   开一炮占一门、各门独立装填 —— 巡洋舰两门 = 底栏绿条两根、连开两炮后一起转装填。这三件助手是全库读写 macCds 的唯一口径
+   (判就绪 / 读倒计时 / 占门),别处不许直翻数组;唯一例外是渲染层绿条按条画进度(只读)。 */
+function macReady(s){const t=s.macCds;if(!t)return (s.macDmg||0)>0?1:0;let n=0;for(let i=0;i<t.length;i++)if(t[i]<=0)n++;return n;} // 就绪炮门数
+function macCdNext(s){const t=s.macCds;if(!t)return 0;let m=Infinity;for(let i=0;i<t.length;i++)if(t[i]>0&&t[i]<m)m=t[i];return isFinite(m)?m:0;} // 最近一门转完装填还要几秒(全就绪 = 0)
+function macConsume(s){const t=s.macCds||[];for(let i=0;i<t.length;i++)if(t[i]<=0){t[i]=s.macReload||0;return true;}return false;} // 占第一根就绪条转装填;没有就绪门返回 false(调用方的门一般已挡,这里兜底防超频)
 function fireMACAt(shooter,pt){ // 2026-09-27 主炮打空地(强行开火):朝那个点开一炮;没有目标,弹道上碰到对方哪艘船算哪艘(56 按 ground 判),飞到那个点消失
-  if(shooter.noFire||shooter.dead)return;
+  if(shooter.noFire||shooter.dead)return false;
   const L=macPtLead(shooter,pt),d=V.len(V.sub(L,shooter.pos)),tt=d/CFG.macSpd,dir=V.norm(V.sub(L,shooter.pos)), // 出膛方位沿机头轴线 + 散布,俯仰取瞄准线(见 fireMAC 同一条)
    ang=Math.atan2(shooter.facing[1],shooter.facing[0])+gaussRand()*macShotSigma(shooter,d),hxy=Math.hypot(dir[0],dir[1]);
+  if(!macConsume(shooter))return false; // 2026-10-10 双管:弹道算好了才占门,后续全是必成路径
   projectiles.push({type:'mac',pos:shooter.pos.slice(),vel:[Math.cos(ang)*hxy*CFG.macSpd+shooter.vel[0],Math.sin(ang)*hxy*CFG.macSpd+shooter.vel[1],dir[2]*CFG.macSpd+shooter.vel[2]],target:null,ground:true,shooter,pred:pt.slice(),tt,age:0,dmg:shooter.macDmg});
   if(typeof llBorn==='function')llBorn(projectiles[projectiles.length-1]); // LL1 弹丸出生登记(sensors/26 光锥层;只记录不改模拟)
-  shooter.fireHot=SENS.FIRE_S;shooter.macCd=shooter.macReload||0;
+  shooter.fireHot=SENS.FIRE_S;
+  return true;
 }
 function macShootPt(s,pt){ // 转向带提前量的那个点(每拍重设 turnTarget,朝向层对准后会清掉),对准就朝它开一炮;开出去返回 true。⌖ 打空地与强制目标点共用(57)
   const tp=macPtLead(s,pt);s.turnTarget=[tp[0],tp[1],0];
-  if(s.macCd<=0&&macAimErr(s,tp)<MAC_ALIGN){fireMACAt(s,pt);return s.macCd>0;}
+  if(macReady(s)>0&&macAimErr(s,tp)<MAC_ALIGN)return fireMACAt(s,pt);
   return false;
 }
-function fireMAC(shooter,target){ // 主炮(轴炮):沿机头轴线直射(调用方先查 macAligned:机头转到位才开);没中接着飞(weapons/56)
-  if(shooter.noFire)return; // RANGE1 禁火总闸门 1/3:靶场的靶只挨打不还手。这是 主炮 发射的唯一实现,GM 手动锁定/自动索敌/AI 三条路径最终都落到这里。注意这是个【静默】开关(不报错不打日志),将来若误给蓝舰置了 noFire 会毫无线索,置位处只有 initEnemy 的靶语义包一处
-  if(shooter.side===target.side||shooter.dead||contactDead(target,shooter.side))return; // LL6 目标死活按这一方看见的
-  if(!contactFix(target,shooter.side))return; // 定得出位置就许开火;瞄的是估计位置,椭圆大就是打不中
-  const pred=macPred(shooter,target); if(!pred)return; // WR1:交代不出估计位置就不开火(不回落真值)
+function fireMAC(shooter,target){ // 主炮(轴炮):沿机头轴线直射(调用方先查 macAligned:机头转到位才开);没中接着飞(weapons/56)。2026-10-10 起返回是否真开出去(双管:占门失败返回 false,红方 AI 的 scoot 标记与 57 的 shot 都改读这个返回值)
+  if(shooter.noFire)return false; // RANGE1 禁火总闸门 1/3:靶场的靶只挨打不还手。这是 主炮 发射的唯一实现,GM 手动锁定/自动索敌/AI 三条路径最终都落到这里。注意这是个【静默】开关(不报错不打日志),将来若误给蓝舰置了 noFire 会毫无线索,置位处只有 initEnemy 的靶语义包一处
+  if(shooter.side===target.side||shooter.dead||contactDead(target,shooter.side))return false; // LL6 目标死活按这一方看见的
+  if(!contactFix(target,shooter.side))return false; // 定得出位置就许开火;瞄的是估计位置,椭圆大就是打不中
+  const pred=macPred(shooter,target); if(!pred)return false; // WR1:交代不出估计位置就不开火(不回落真值)
   const d=V.len(V.sub(pred,shooter.pos)); // WR1:飞行距离按预测点算(没有射程门了,d 只决定弹丸寿命)
   const tt=d/CFG.macSpd; // 飞行时间(主炮 匀速 CFG.macSpd)
   const dir=V.norm(V.sub(pred,shooter.pos)); // 俯仰取瞄准线;方位见下一行
+  const hxy=Math.hypot(dir[0],dir[1]); // KIMI146修:xy分量按朝向的xy模长缩放——原直接用满macSpd再叠dir[2]·macSpd,合速度超0.1c且弹道≠机头轴线(带俯仰时必脱靶)
   const da=gaussRand()*macShotSigma(shooter,d,target); // WR1:每一发都带高斯角散布;2026-09-28 散布按距离反推,打出来的命中率 = macHitProb 的 S 形
   const ang=Math.atan2(shooter.facing[1],shooter.facing[0])+da; // 2026-09-28 用户:轴炮对准再射 —— 出膛方位沿机头轴线 + 散布(对准门收到 0.1°,4 万处偏不到 70 km,远小于命中半径 400;原来 1.1° 窗口擦边就开,只好改沿精确瞄准线)
-  const hxy=Math.hypot(dir[0],dir[1]); // KIMI146修:xy分量按朝向的xy模长缩放——原直接用满macSpd再叠dir[2]·macSpd,合速度超0.1c且弹道≠机头轴线(带俯仰时必脱靶)
+  if(!macConsume(shooter))return false; // 2026-10-10 双管:弹道都算好了才占门(哪门就绪占哪门),后续全是必成路径 —— 一门一炮,两门舰连开两炮是两次调用、各抽各的散布
   projectiles.push({type:'mac',pos:shooter.pos.slice(),vel:[Math.cos(ang)*hxy*CFG.macSpd+shooter.vel[0],Math.sin(ang)*hxy*CFG.macSpd+shooter.vel[1],dir[2]*CFG.macSpd+shooter.vel[2]],target,shooter,pred,tt,age:0,dmg:shooter.macDmg}); // KIMI151:弹丸继承舰速(出膛矢量=舰速+机头轴×0.1c,相对舰体初速仍0.1c)
   if(typeof llBorn==='function')llBorn(projectiles[projectiles.length-1]); // LL1 弹丸出生登记(sensors/26 光锥层;只记录不改模拟)
-  shooter.fireHot=SENS.FIRE_S; // FX1 开火暴露(见 sensors/20 的 P_FIRE):与冷却同一处置位 —— 这里是 主炮 唯一的发射成功点
-  shooter.macCd=shooter.macReload||0; // TIER1 改读实例烘焙的装填秒:原 CLS_WPN[shooter.cls].mac 无兜底,舰种不在表里就 TypeError 崩整帧(加 BB/CV 后风险放大)
-  if(shooter.fcFired&&shooter.fcTgt&&shooter.fcTgt.mac===target)shooter.fcFired.mac=true; // RF5 开火来源标记(主炮 唯一的发射成功点,弹丸已入 projectiles、冷却已置位):火控序列的指针只认这个显式标记。绝不允许用 macCd/ammo 差分推断——任务系统/靶场AI/敌方AI/手动齐射都会动那两个字段,差分会让序列指针幽灵前进。RF5 核查修:标记再收窄成「打的正是本 tick 序列解算出来的那个目标」,否则玩家手动打第三方(71-keys/72-右键菜单)也会推动序列指针,序列自己那一发被白白跳过
+  shooter.fireHot=SENS.FIRE_S; // FX1 开火暴露(见 sensors/20 的 P_FIRE):这里是 主炮 唯一的发射成功点
+  if(shooter.fcFired&&shooter.fcTgt&&shooter.fcTgt.mac===target)shooter.fcFired.mac=true; // RF5 开火来源标记(主炮 唯一的发射成功点,弹丸已入 projectiles、门已转装填):火控序列的指针只认这个显式标记。绝不允许用装填/弹药差分推断——任务系统/靶场AI/敌方AI/手动齐射都会动那两个字段,差分会让序列指针幽灵前进。RF5 核查修:标记再收窄成「打的正是本 tick 序列解算出来的那个目标」,否则玩家手动打第三方(71-keys/72-右键菜单)也会推动序列指针,序列自己那一发被白白跳过
+  return true;
 }
 let hitFX=[]; // 命中特效 {pos,t,type}  — 主炮/导弹命中点的爆闪提示
 function fxVis(pos,sh,vic){ // 2026-09-28 vis = 我方看不看得见这一下:自己打的 / 挨打的是自己 / 落在我方某艘船的全知圈里;画面只画看得见的(原来看不见的地方的命中与击沉也画在真值上)

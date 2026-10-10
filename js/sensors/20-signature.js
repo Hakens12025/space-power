@@ -130,8 +130,8 @@ const SENS = {
 };
 SENS.CLS.BB = { ...SENS.CLS.CA };  // TODO(TIER-BAL) 战列感知待标定
 SENS.CLS.CV = { ...SENS.CLS.CA };
-SENS.CLS.DD = { ...SENS.CLS.FF };  // TODO(TIER-BAL) 2026-09-30 驱逐舰:先照搬护卫舰
-SENS.CLS.CL = { ...SENS.CLS.FF };  // TODO(TIER-BAL) 航母感知待标定
+SENS.CLS.DD = { size: 0.70, stealth: 0.60, emit: 1.4, recv: 1.4, ecmPower: 0.3 }; // 2026-10-10 用户:驱逐舰雷达取中间档(FF 1.0 ↔ CA 2.0 的正中)——照射量程比 FF 远 18%、比 CA 近 15%,被听见同步 x1.18(雷达大一圈、也吵一点的中间船);体型/隐身/干扰照旧,SN5(被动先于主动界)与尺度预算 A9(舰种差 ≤2.5)复核仍成立
+SENS.CLS.CL = { ...SENS.CLS.FF };  // TODO(TIER-BAL) 巡游舰感知待标定(沿用重排前旧驱逐数值)
 /* 派生常数:写成乘法而不是 Math.pow,免得在顶层依赖别的文件;三条律的分母全在这里,22-percep 只乘不除 */
 SENS.K_IR = SENS.IR_DET * SENS.IR_DET;                                                   // 3.24e10
 SENS.K_RF = SENS.LIS_DET * SENS.LIS_DET;                                                 // 3.6e11

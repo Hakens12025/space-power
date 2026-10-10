@@ -4,7 +4,7 @@
 const FT_N=2; // 2026-09-29 强制目标点(74 中键点空地)每件勾着的武器打几次就撤(导弹按组)
 function stepWeaponSystems(dt){
   for(const s of ships){ // 武器冷却 + 发射单元装填 + 齐射开火延迟(v119:单元独立装填60s)
-    if(s.macCd>0)s.macCd-=dt;
+    if(s.macCds)for(let i=0;i<s.macCds.length;i++)if(s.macCds[i]>0)s.macCds[i]-=dt; // 2026-10-10 双管:每门轴炮独立装填(原来一根 macCd 标量)
     if(s.fireHot>0)s.fireHot-=dt; // FX1 开火暴露的倒数(置位在 weapons/52,读取在 sensors/22 的 firePowerOf)
     if(s.cellTimer)for(let i=0;i<s.cellTimer.length;i++)if(s.cellTimer[i]>0)s.cellTimer[i]-=dt;
     if(s.missileArm){ // 齐射装填倒计时
@@ -102,8 +102,8 @@ function stepWeaponSystems(dt){
     if((ff.t&&!tp)||ff.T<=0||s.dead||!hasMAC(s)){s.forceMac=null;continue;}
     let shot=false;
     if(ff.pt)shot=macShootPt(s,ff.pt); // 打空地:同强制目标点(52 macShootPt,按相对参照系提前)
-    else{s.turnTarget=[tp[0],tp[1],0];if(s.macCd<=0&&macAimErr(s,tp)<MAC_ALIGN){fireMAC(s,ff.t);shot=s.macCd>0;}} // 朝向层对准后会清掉 turnTarget,所以每拍重设
-    if(shot){s.forceMac=null;s.turnTarget=null;}
+    else{s.turnTarget=[tp[0],tp[1],0];if(macReady(s)>0&&macAimErr(s,tp)<MAC_ALIGN)shot=fireMAC(s,ff.t);} // 朝向层对准后会清掉 turnTarget,所以每拍重设;2026-10-10 shot 改读 fireMAC 返回值(双管下「开没开出去」不再能从装填状态差分读出)
+    if(shot){ff.n=(ff.n||1)-1;if(ff.n<=0){s.forceMac=null;s.turnTarget=null;}} // 2026-10-10 n:这道令要打几门(绿条按门选),打完一门还有剩就继续瞄下一门;打完 / 超时才撤
   }
   // 锁定自动开火(10秒一轮):机头转到位(MAC_ALIGN)才开炮(不盲射);v125 ROE门控
   for(const s of ships){
@@ -112,7 +112,7 @@ function stepWeaponSystems(dt){
     const fp=(s.fTgt&&s.fTgt.n.mac<FT_N&&hasMAC(s))?s.fTgt:null; // 2026-09-29 强制目标点插队:主炮勾着(roeOK)才转向带提前量的那个点,对准就开一炮
     s.ftAim=!!(fp&&roeOK&&!s.dead)||!!(s.forceMac&&s.forceMac.pt); // 主炮正朝一个点对准(强制目标点 / ⌖ 打空地):physics/31 的战斗转向让位,否则每拍朝向层转到位清掉 turnTarget、战斗转向又拉回锁定目标,来回拉锯永远对不准
     if(fp&&roeOK&&!s.dead){if(macShootPt(s,fp.pt))fp.n.mac++;}
-    else if(roeOK&&!s.dead&&mt&&!contactDead(mt,s.side)&&mt.side!==s.side&&s.macCd<=0&&hasMAC(s)&&macAligned(s,mt)){ // LL6 死活按这一方看见的 // WR1:自动开火只在把握 >= MAC_AUTO_P 时打(没有射程门了);距离按估计位置量。这一条【不看 autoEngage】,红方 bot 的开火实际走的就是它
+    else if(roeOK&&!s.dead&&mt&&!contactDead(mt,s.side)&&mt.side!==s.side&&macReady(s)>0&&hasMAC(s)&&macAligned(s,mt)){ // LL6 死活按这一方看见的 // WR1:自动开火只在把握 >= MAC_AUTO_P 时打(没有射程门了);距离按估计位置量。这一条【不看 autoEngage】,红方 bot 的开火实际走的就是它。2026-10-10 macCd<=0 改 macReady>0(双管:任一门就绪即可开)
       const mp=macPred(s,mt); if(mp&&((typeof fcForce==='function'&&fcForce(s,'mac'))||macHitProb(s,V.len(V.sub(mp,s.pos)),mt)>=MAC_AUTO_P))fireMAC(s,mt); // 2026-09-29 强制开火的序列不看把握门
     } // TIER1 主炮 舰种门改能力谓词
     if(s.roeCd>0)s.roeCd-=dt;

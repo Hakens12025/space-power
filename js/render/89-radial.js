@@ -101,8 +101,8 @@ function radSolve(sub,tgt,kind){
   o.inR=!!(tgt&&o.maxRange>0&&o.dist<o.maxRange);
   o.fade=!!(tgt&&o.range>0&&o.dist>=o.range&&o.inR); // 在衰减区(留给将来想单独着色时用,当前不改渲染)
   if(kind==='mac'){
-    o.rdy=((sub.macCd||0)<=0);
-    o.readyTxt=o.rdy?'就绪':Math.ceil(SHOW.t(sub.macCd))+'s'; // 文案照抄 88-selpanel 的 weaponRows,两处说法必须一样
+    o.rdy=macReady(sub)>0;
+    o.readyTxt=o.rdy?'就绪':Math.ceil(SHOW.t(macCdNext(sub)))+'s'; // 文案照抄 88-selpanel 的 weaponRows,两处说法必须一样(2026-10-10 macCd → macReady/macCdNext 双管口径)
   }else if(kind==='msl'){
     const rc=(typeof readyCells==='function')?readyCells(sub):0; // 52-fire:71,与 weaponRows 同源
     o.rdy=rc>0;

@@ -54,13 +54,13 @@ function cmdInstall(){ // core/99 init 开头调一次(全部脚本已加载)
 /* ============================================================================
    cx* 命令函数:原来散在界面里直接改舰船字段的那些操作。参数只认舰船 / 目标 / 点(调用方从选中算好传进来),不读选中、不读鼠标。
    ============================================================================ */
-function cxForceMac(sel,t,pt){for(const x of sel){if(!x||x.dead||!hasMAC(x))continue; // 主炮强行开火:点中敌舰 = 锁定 + 转向对准就开一炮;点空地 = 朝那个点开一炮(weapons/57)
-  if(t){x.lockedTarget=t;x.driftFire=true;x.driftFireT=60;x.forceMac={t:t,pt:null,T:60};}else x.forceMac={t:null,pt:pt,T:60};}}
+function cxForceMac(sel,t,pt,n){for(const x of sel){if(!x||x.dead||!hasMAC(x))continue; // 主炮强行开火:点中敌舰 = 锁定 + 转向对准就开一炮;点空地 = 朝那个点开一炮(weapons/57)。n = 这次要打的炮门数(2026-10-10 绿条按【门】选:选几门打几门;缺省 1 = 旧口径,选武器直发 / AI / 老调用点都走它)
+  if(t){x.lockedTarget=t;x.driftFire=true;x.driftFireT=60;x.forceMac={t:t,pt:null,T:60,n:Math.max(1,n||1)};}else x.forceMac={t:null,pt:pt,T:60,n:Math.max(1,n||1)};}}
 function cxSalvo(sel,t,pt){for(const x of sel)if(x&&!x.dead&&x.ammo>0)orderMissileSalvo(x,t||{pos:pt},salvoCount);} // 导弹强行开火:点敌舰齐射 / 点空地区域齐射
 function cxCease(sel){for(const s of sel)if(s){s.lockedTarget=null;s.lockPlayer=false;s.fTgt=null;}} // 停火:解除锁定、撤强制目标点
 function cxDriftFire(sel,on){for(const s of sel)if(s){s.driftFire=on;s.driftFireT=on?60:0;}}
 function cxFireAll(sel){for(const s of sel){if(!s||s.dead)continue;const t=s.lockedTarget;if(!t||contactDead(t,s.side))continue;
-  if(hasMAC(s)&&macAligned(s,t)&&s.macCd<=0)fireMAC(s,t);if(s.ammo>0)orderMissileSalvo(s,t,salvoCount);}}
+  if(hasMAC(s)&&macAligned(s,t)&&macReady(s)>0)fireMAC(s,t);if(s.ammo>0)orderMissileSalvo(s,t,salvoCount);}}
 function cxForcePoint(sel,pt){for(const x of sel)if(x)x.fTgt={pt:pt.slice(),n:{mac:0,msl:0}};} // 中键点空地:强制目标点(57 按勾选的武器打,每件 2 次)
 function cxPick(sel,t){for(const s of sel){if(!s||!t)continue;s.pickTid=t.id;s.fTgt=null;if(!s.autoEngage||s.roe!=='free'){s.autoEngage=true;s.roe='free';}}} // 中键点敌舰:选定目标,一直强制开火
 function cxFcAppendTo(sel,t){if(!t)return; // Shift+中键:往序列态那条(舰队 = 那块)追加目标(同 74 xhQuickEngage 原来那段)

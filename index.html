@@ -37,7 +37,7 @@
 <!-- FM1 编队书签栏(左轨顶部,常驻)。这是编队的唯一可见入口。
      刻意不给 class="panel":.panel 带 overflow:hidden + 边框背景,会把一叠独立小条圈成一块面板。内容由 render/87-fmbar.js 填。 -->
 <div id="fmBar"></div>
-<!-- FM7 测试用「加船」小条:挂在左轨书签栏下方。靶场只有 3 艘蓝舰,凑不出两支编队,阵型没法手试。
+<!-- FM7 测试用「加船」小条:挂在左轨书签栏下方。2026-10-10 起靶场默认四舰(CA/DD/FF/CL 各一),要试更多编队 / BB / CV 还是靠它。
      内容由 scenario/96-spawn.js 建。 -->
 <div id="spawnBar"></div>
 <!-- FM1 编队菜单(点书签展开)。.p-title / #fmActs 两个容器必须是【静态元素】(信息区 #selFm 已搬到右轨 #selPanel 里)——
@@ -155,8 +155,9 @@
 <script src="js/weapons/58-firecontrol.js?v=20261007fc3"></script><!-- RF5 火控计算机引擎:序列数据模型+stepFireControl/Post。位置只为目录编号可读性(编号 58 > 57,归位到 weapons 块末尾),跨文件引用全在运行期解析:本文件顶层只有 const/let/function 声明,零顶层执行 -->
 <script src="js/core/05-sim.js?v=20261008sd"></script>
 <script src="js/core/06-timecomp.js?v=20261007ll5"></script><!-- TC1 接触降速:frame() 每帧调 tcStep;依赖全部在运行期解析 -->
+<script src="js/bots/58-league.js?v=20261010lg1"></script><!-- 2026-10-10 红方 AI 联赛的生成文件:实测标定值 + 调好的条令数值(scratchpad duel/league.mjs 写) -->
 <script src="js/bots/59-belief.js?v=20261007ll12"></script><!-- 2026-10-05 红方 AI 信念层:没定位的对方船可能在哪(搜索图 + 线索) -->
-<script src="js/bots/60-doctrine.js?v=20261008cr"></script>
+<script src="js/bots/60-doctrine.js?v=20261010lg1"></script>
 <script src="js/bots/61-enemy.js?v=20261008af1"></script>
 <script src="js/command/68-cmd.js?v=20261008wc"></script><!-- 2026-10-08 联机第 3 步:操作命令层(界面发出的、会改模拟的操作一律变成可序列化的命令;单人立刻执行,联机交给锁步)-->
 <script src="js/command/69-entities.js?v=20261008me"></script><!-- 2026-10-08 实体登记表:点选 / 双击跟随 / 靶场拖动 / 右栏只看信息 / 选中写入口 selSet 的统一入口;顶层只有声明 -->
