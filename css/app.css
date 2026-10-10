@@ -408,7 +408,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #cmdCard .rows{flex:1;display:flex;flex-direction:column;justify-content:flex-start;gap:2px;min-height:0}
 #cmdCard .wr{display:flex;align-items:center;gap:6px;height:23px;border-radius:var(--r-sm);padding:0 3px} /* 2026-10-11 用户:行放大、字大一点(原 18px / 11px) */
 #cmdCard .wr.hi,#cmdCard .wr:hover{background:rgba(90,167,255,.08)}
-#cmdCard .wr .wn{flex:0 0 34px;font-size:var(--fs-read);color:var(--txt);white-space:nowrap}
+#cmdCard .wr .wn{flex:0 0 30px;font-size:var(--fs-read);color:var(--txt);white-space:nowrap}
 #cmdCard .wr .wn[data-rowpick]{cursor:pointer}#cmdCard .wr .wn[data-rowpick]:hover{color:var(--txt-hi);text-decoration:underline dotted}
 #cmdCard .wr .cells{flex:1;min-width:0;height:13px}
 #cmdCard .wr .cells i{min-width:3px}
