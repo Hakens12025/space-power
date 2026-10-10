@@ -25,7 +25,7 @@ const KIND_INFO={
     tip:s=>`导弹齐射 · 射程 ≈ ${Math.round(mslReach(s)/1000)}k(加速 → 熄火滑行 → 末段修正,靠数据链)· 库存 ${mslGroupsTxt(s)} · 一次齐射 ${s.cells||4} 组 · 单元装填${Math.round(SHOW.t(s.mslReload||60))}s · 需火控开+目标跟踪级`},
   ssm:{on:'ssmOn', // 2026-10-11 突击弹
     range:s=>SSM_R,
-    tip:s=>`突击弹 · 出膛自导、不上数据链(打出去就不能改目标) · 射程 ≈ ${Math.round(SSM_R/1000)}k · 速度 x${SSM_VK} · 每组 ${s.ssmPer||6} 发 · 库存 ${Math.floor((s.ssmAmmo||0)/(s.ssmPer||6))} 组 · 一次 ${(s.ssmCells||[]).length} 组 · 单元装填${Math.round(SHOW.t(s.ssmReload||0))}s`},
+    tip:s=>`突击弹 · 出膛自导、不能改目标 · 射程 ≈ ${Math.round(SSM_R/1000)}k · 速度 x${SSM_VK} · 每组 ${s.ssmPer||6} 发 · 库存 ${Math.floor((s.ssmAmmo||0)/(s.ssmPer||6))} 组 · 装填${Math.round(SHOW.t(s.ssmReload||0))}s`},
   ciws:{on:'ciwsOn',
     range:s=>ciwsRingsOf(s).outer,
     tip:s=>{const c=ciwsRingsOf(s);return `近防 · 外圈${Math.round(c.outer/1000)}k拦截弹 · 内圈${Math.round(c.inner/1000)}k近防炮 · 库存${s.interceptor}枚(被动防御,来袭才发射)`;}},
@@ -609,7 +609,7 @@ function cmdCardSync(sel){const el=document.getElementById('cmdCard');if(!el)ret
 function wpkHoverTip(t,s){
   if(t.dataset.cw){const c=ciwsRingsOf(s);return t.dataset.cw==='ciwsMsl'?'拦截弹 · 外圈 '+Math.round(c.outer/1000)+'k · 库存 '+(s.interceptor||0)+' 枚 · 来袭导弹进预警距离自动发射迎上去(消耗弹药)· 点 = 开 / 关':'近防炮 · 内圈 '+(c.inner/1000).toFixed(1)+'k · 打进内圈的导弹每艘拦一次,不耗弹药 · 点 = 开 / 关';}
   if(t.dataset.hr==='ciws')return KIND_INFO.ciws.tip(s)+' · 两行各管一件,点 = 开 / 关';
-  const k=t.dataset.row||(t.dataset.cat==='sp'?'buoy':t.dataset.cat),how=' —— 点绿条逐条选(船多时收成一整条:点 +1、右键 −1、滚轮、拖 = 拉到哪选多少),再点敌舰或空地发射;点行名 = 这一行就绪的全选;右上角大勾 = 这一类的自动开火,行尾小勾 = 这一种的';
+  const k=t.dataset.row||(t.dataset.cat==='sp'?'buoy':t.dataset.cat),how=' —— 点绿条选(船多时成一整条:点 +1 / 右键 −1 / 拖),再点敌舰或空地发射;大勾 = 这一类自动开火,小勾 = 这一种'; // 2026-10-11 说明条不换行,太长两头会被屏幕截掉
   if(k==='mac')return KIND_INFO.mac.tip(s)+how;
   if(k==='sec')return KIND_INFO.sec.tip(s)+how;
   if(k==='msl')return KIND_INFO.msl.tip(s)+how;
