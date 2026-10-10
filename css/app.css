@@ -414,6 +414,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #cmdCard .wr .cells i{min-width:3px}
 #cmdCard .wr .ct{flex:0 0 auto;min-width:30px;text-align:right;font-family:var(--ff-mono);font-size:var(--fs-body);color:var(--txt-read);font-variant-numeric:tabular-nums;white-space:nowrap}
 #cmdCard .wr .ct em{font-style:normal;color:var(--txt-dim)}
+#cmdCard .wb[data-cat="mac"] .wr,#cmdCard .wb[data-cat="msl"] .wr{height:19px} /* 2026-10-11 用户:主炮类、导弹类的行矮一点(原 23px) */
 #cmdCard .wr .ck{position:static;width:18px;height:18px;flex:none}
 #cmdCard .wr .ck span{width:13px;height:13px;font-size:10px}
 #cmdCard .ck.gated span{opacity:.35} /* 总开关关着:分开关的勾照记,但这一类不自动打 */
@@ -423,9 +424,10 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #cmdCard .agg{position:relative;flex:1;display:flex;height:100%;background:var(--srf-sunk);border-radius:1px;overflow:hidden;cursor:ew-resize}
 #cmdCard .agg.sp{cursor:pointer}
 #cmdCard .agg i{flex:none;min-width:0;border-radius:0;position:static;height:100%}
-#cmdCard .wr .cells .agg i{min-width:0} /* 压过上面 .wr .cells i 的 3px 下限(空的那几段不占宽) */
+#cmdCard .wr .cells .agg i{min-width:0;flex:none} /* 压过 .wr .cells i 的 3px 下限与后面 #cmdCard .cells i 的 flex:1(2026-10-11 修:原来被它压过,汇总条五段一律等分 —— 亮绿永远只占五分之一、在装永远占五分之四) */
 #cmdCard .agg i.g{background:var(--state-ok)}#cmdCard .agg.sp i.g{background:#b08cff}
 #cmdCard .agg i.c{background:#276b44} /* 2026-10-11 用户:在装不要蓝色 —— 暗绿,越深越快好 */
+#cmdCard .agg i.bk{position:absolute;left:0;top:0;bottom:0;right:0;pointer-events:none} /* 2026-10-11 顺滑条的小块分隔 + 按密度略压暗(88 wpkBlk) */
 #cmdCard .agg i.p{position:absolute;left:0;top:0;bottom:0;animation:wpkBreathe 1.1s ease-in-out infinite}
 #cmdCard .agg s{position:absolute;top:0;font:10px/15px var(--ff-mono);text-decoration:none;pointer-events:none;white-space:nowrap}
 #cmdCard .agg s.l{left:3px;color:var(--ink)}#cmdCard .agg s.r{right:3px;color:#f2f6fb;text-shadow:0 0 2px #000,0 0 2px #000}
