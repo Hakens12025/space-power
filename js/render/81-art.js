@@ -71,7 +71,7 @@ function artFlames(s,p,L){ // 主推从每个喷口朝船尾喷(舰标 < 16 px �
       for(const xb of [0.5,-0.55]){const q=P(xb,sg*N.hw);artPlume(ctx,'side',1,q[0],q[1],rot+sg*Math.PI/2,len,Math.max(2.6,0.05*sc*6.5),0.95);}}}
 }
 
-/* ---------- 导弹 / 拦截弹(2026-10-05 用户:演示页 demos/美术/舰船武器美术.html 的新画法进引擎):整枚阵营色(按固定光向上下亮暗)+ 弹头亮一档 + 尾鳍暗 + 喷口;
+/* ---------- 导弹 / 拦截弹(2026-10-05 用户:演示页 demos/美术/舰船武器美术.html 的新画法进引擎;10-11 那页拆开,导弹在 demos/美术/导弹类武器美术.html):整枚阵营色(按固定光向上下亮暗)+ 弹头亮一档 + 尾鳍暗 + 喷口;
    尺寸按最小舰长定、和船同一个系数缩放、没有像素下限:单枚 0.55 倍、成组每枚 0.36 倍(5 枚一组整组外框 0.79 倍),拦截弹再 x0.85,任何缩放下都比船小;
    弹长 < 5 px 画一道阵营色短划;尾焰带阵营色;一组画 1 / 3 / 5 枚楔形;贴图按 尺寸档 / 朝向档 / 羽化档 缓存 ---------- */
 const ART_FORM={1:[[0,0]],3:[[0.45,0],[-0.15,-0.32],[-0.15,0.32]],5:[[0.45,0],[-0.15,-0.32],[-0.15,0.32],[-0.75,-0.64],[-0.75,0.64]]}; // 楔形队形,单位 = 弹长,+x = 机头
@@ -109,7 +109,7 @@ function artMsl(g,x,y,rot,o){ // o = {kind:'msl'|'inter', side, count, burn, sd}
   for(let d=1;!c&&ART_MNEW>=ART_MNEW_MAX&&d<=6;d++)c=ART_MS.get(artMslKey(o.side,n,ab,li-d,nr,fb))||ART_MS.get(artMslKey(o.side,n,ab,li+d,nr,fb)); // 这一帧建够了:先借相邻尺寸档
   if(!c)c=artMslSpr(o.side,n,ab,li,nr,fb);
   const w=c.width/artDpr()*Lg/c.Lq;g.drawImage(c,x-w/2,y-w/2,w,w);} // 贴图按 2^(1/4) 一档缓存,缩放中不每帧重建
-/* 2026-10-06 拦截弹 = 白芯亮珠(用户从 demos/美术/拦截弹区分方案.html 选 B):阵营色圆珠 + 白芯 + 阵营色光晕,尾焰缩成一小团;
+/* 2026-10-06 拦截弹 = 白芯亮珠(用户从 demos/美术/拦截弹区分方案.html 选 B;那页 10-11 改名 导弹类武器美术.html):阵营色圆珠 + 白芯 + 阵营色光晕,尾焰缩成一小团;
    一组画 1 / 3 / 5 颗排一字横队(间距 0.13 LFF、两翼略后,5 颗整排 0.78 倍最小舰长)—— 和导弹的短划 / 楔形靠「圆 vs 长条」+ 白芯分开,敌我照旧看颜色 */
 const ART_IB=new Map(); // 珠子贴图:阵营 | 尺寸档 2^(1/4) | 羽化档(DPR 变了随 ART_MS 一起清,见 artTick)
 function artIcpBead(side,li,fb){const key=side+'|'+li+'|'+fb;let c=ART_IB.get(key);if(c)return c;

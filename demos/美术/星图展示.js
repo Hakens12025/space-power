@@ -21,7 +21,7 @@ let vtW=[0,1,0,0],vtCur=1;
 let ARENA=null,ships=[],rocks=[],rockSeq=0; // ships = 撒石头时要避开的点({pos:[x,y,0]});rocks = 撒出来的碎石 / 小行星
 const stars=[];{const r=(function(seed){let a=seed>>>0;return ()=>{a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296;};})(20261005);
   for(let i=0;i<1200;i++){const layer=i<900?0:1;stars.push([(r()*2-1)*CFG.world*1.6,(r()*2-1)*CFG.world*1.6,r()*0.5+0.15,layer===0?1:(r()<0.3?2:1),layer]);}} // 同 core/99-main(引擎用 Math.random,这里给定种子,截图可复现)
-let SHIP_K=0.6*1.3; // 同 82-ship-icons;XT.setArtScale 可改(舰船武器美术页的「美术整体缩放」)
+let SHIP_K=0.6*1.3; // 同 82-ship-icons;XT.setArtScale 可改(舰船 / 火炮 / 导弹三页的「美术整体缩放」)
 const XT_OPT={sun:false,rulerTop:62}; // sun = 「太阳线」钮(影子线);rulerTop = 四边刻度尺贴着的上沿(引擎 62:顶栏下沿)
 let XT_MOVING=false,XT_LASTZ=0; // 这一帧缩放变了 = 引擎的缩放动画中(恒星光晕从 128 那张拉伸)
 const ART_MS=new Map(); // 81-art 导弹贴图表(这里不画导弹;artTick 换 DPR 时清它)
