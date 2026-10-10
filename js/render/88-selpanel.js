@@ -16,6 +16,10 @@ const KIND_INFO={
     range:s=>macEffRange(s),
     maxRange:s=>macRangeAt(s,0.1),
     tip:s=>`主炮(轴炮) · 散布 ${(sReq(s,'macSigma')*1000).toFixed(1)} 毫弧 · 命中率 50% ≈ ${Math.round(macEffRange(s)/1000)}k / 10% ≈ ${Math.round(macRangeAt(s,0.1)/1000)}k · 伤害${s.macDmg||0}${(s.macN||1)>1?'×'+s.macN+'发':''} · 装填${Math.round(SHOW.t(s.macReload||30))}s · 需火控开+机头对准+跟踪级`},
+  sec:{on:'secOn', // 2026-10-11 副炮(炮塔)
+    range:s=>secRangeAt(s,0.5),
+    maxRange:s=>secRangeAt(s,0.1),
+    tip:s=>`副炮(炮塔,不用转船头) · 命中率 50% ≈ ${Math.round(secRangeAt(s,0.5)/1000)}k / 10% ≈ ${Math.round(secRangeAt(s,0.1)/1000)}k · 伤害${s.secDmg||0} × ${(s.secCds||[]).length} 门 · 每门装填${Math.round(SHOW.t(s.secReload||0))}s`},
   msl:{on:'mslOn',
     range:s=>mslReach(s),
     tip:s=>`导弹齐射 · 射程 ≈ ${Math.round(mslReach(s)/1000)}k(加速 → 熄火滑行 → 末段修正,靠数据链)· 库存 ${mslGroupsTxt(s)} · 一次齐射 ${s.cells||4} 组 · 单元装填${Math.round(SHOW.t(s.mslReload||60))}s · 需火控开+目标跟踪级`},
@@ -43,6 +47,7 @@ function specItems(s){
     else if(w.kind==='msl')items.push(['导弹',mslGroupsTxt(s)],['齐射',(s.cells||0)+'组']); // 2026-10-07 用户:导弹数量按组算(「64组 · 每组12发」),一次齐射几组另列
     else if(w.kind==='icp'){const c=ciwsRingsOf(s);items.push(['拦截弹',s.interMax+'枚'],['近防',Math.round(c.outer/1000)+'k/'+Math.round(c.inner/1000)+'k']);}
     else if(w.kind==='lure')items.push(['诱饵',(s.lureMax||0)+'个']); // 2026-10-11
+    else if(w.kind==='sec')items.push(['副炮',(s.secDmg||0)+'×'+(s.secCds||[]).length+'门×'+Math.round(SHOW.t(s.secReload||0))+'s · 50%@'+Math.round(secRangeAt(s,0.5)/1000)+'k']); // 2026-10-11
   }
   return items;
 }
@@ -97,6 +102,7 @@ function weaponRows(s){
     else if(w.kind==='msl')h+=`<div class="row"><span class="k">导弹</span><span class="v">就绪 ${readyCells(s)}/${s.cells} · ${mslGroupsTxt(s)}</span></div>`;
     else if(w.kind==='icp')h+=`<div class="row"><span class="k">拦截弹</span><span class="v">${s.interceptor}/${s.interMax}枚</span></div>`;
     else if(w.kind==='buoy')h+=`<div class="row"><span class="k">前出浮标</span><span class="v">${s.buoys||0}/${s.buoysMax||0}个</span></div>`; // 2026-09-27 K3
+    else if(w.kind==='sec')h+=`<div class="row"><span class="k">副炮</span><span class="v">就绪 ${secReady(s)}/${(s.secCds||[]).length}</span></div>`; // 2026-10-11
     else if(w.kind==='lure')h+=`<div class="row"><span class="k">诱饵</span><span class="v">${s.lureN||0}/${s.lureMax||0}个</span></div>`; // 2026-10-11
   }
   return h;
@@ -431,7 +437,7 @@ const RADAR_TIP={silent:'静默:一点不响,只靠红外看;对方听不见我'
 function wpnFcOn(x){return !!(x.autoEngage&&x.roe!=='hold');}
 function wpnHas(x,k){return (x.weapons||[]).some(w=>w.kind===k||(k==='ciws'&&(w.kind==='icp'||w.kind==='gun')));} // 2026-10-07「近防」类 = 拦截弹 + 近防炮两件
 function wpnChecked(x,k){if(!wpnHas(x,k))return false;if(k==='ciws')return CIWS_SUB.every(c=>x[c[2]]!==false);return !!KIND_INFO[k]&&wpnFcOn(x)&&wpnOn(x,k);} // 2026-10-11 = 火控开 且 总开关 且 分开关(weapons/51 wpnOn)
-function wpnAnyOn(x){return wpnChecked(x,'mac')||wpnChecked(x,'msl');}
+function wpnAnyOn(x){return wpnChecked(x,'mac')||wpnChecked(x,'sec')||wpnChecked(x,'msl');}
 const CIWS_SUB=[['ciwsMsl','近防导弹','ciwsOn'],['ciwsGun','近防炮','ciwsGunOn']]; // 2026-09-29 用户:近防展开两件各自勾;[菜单 id, 名字, 舰船开关字段]
 function ciwsSubOn(x,f){return wpnHas(x,'ciws')&&x[f]!==false;}
 function wpnTri(x,k){if(k!=='ciws')return wpnChecked(x,k)?2:0;const n=CIWS_SUB.filter(c=>ciwsSubOn(x,c[2])).length;return n===CIWS_SUB.length?2:(n?1:0);} // 上一级的勾:2 全勾 / 1 半勾 / 0 不勾
@@ -500,12 +506,13 @@ function cmdBarSync(){ // 三颗钮的字与亮灭;菜单开着就顺手重画
    选中的条只在界面这边,发射才走命令(cxForceMac / cxSalvoCells);用掉 / 换了选中自己撤(wpkPrune)。卡片按新 HTML 只改变了的字和属性(domPatch)。悬停画圈(83-hud hoverRing / hoverRingHi)。 */
 const WROW={ // 一行 = 一种武器:cat 哪一格;has 这艘有没有;cd 装填条(0 = 就绪);rl 满装填秒;stock 还能打几次(导弹按组);aim 挑谁打('nose' 先看机头);sp 特殊(点了再点方向放)
   mac:{cat:'mac',nm:'轴炮',has:x=>hasMAC(x)&&!!x.macCds,cd:x=>x.macCds,rl:x=>x.macReload||1,stock:null,aim:'nose',busy:'这根炮管在装填'},
+  sec:{cat:'mac',nm:'副炮',has:x=>!!x.secCds&&x.secCds.length>0,cd:x=>x.secCds,rl:x=>x.secReload||1,stock:null,aim:'near',busy:'这门副炮在装填'}, // 2026-10-11 炮塔:挑离目标最近的
   msl:{cat:'msl',nm:'反舰',has:x=>wpnHas(x,'msl')&&!!x.cellTimer,cd:x=>x.cellTimer,rl:x=>x.mslReload||1,stock:x=>wpkGroups(x),aim:'near',busy:'这个发射单元在装填',out:'导弹打光了'},
   buoy:{cat:'sp',nm:'浮标',has:x=>wpnHas(x,'buoy'),sp:true,n:x=>x.buoysMax||0,left:x=>x.buoys||0,none:'没有浮标了'},
   lure:{cat:'sp',nm:'诱饵',has:x=>wpnHas(x,'lure'),sp:true,n:x=>x.lureMax||0,left:x=>x.lureN||0,none:'没有诱饵了'}, // 2026-10-11
 };
 const WCAT=[['mac','主炮','T'],['msl','导弹','R'],['sp','特殊','']];
-const WPK={mac:new Set(),msl:new Set()},WAGG=new Map(),WMODE={},WCW={}; // WPK = 逐条选的(键 舰号:第几门 / 第几单元);WAGG = 汇总档每种选了几发;WMODE / WCW = 每行当前的档与绿条区宽度(下一次重画按它定档)
+const WPK={mac:new Set(),sec:new Set(),msl:new Set()},WAGG=new Map(),WMODE={},WCW={}; // WPK = 逐条选的(键 舰号:第几门 / 第几单元);WAGG = 汇总档每种选了几发;WMODE / WCW = 每行当前的档与绿条区宽度(下一次重画按它定档)
 let WDRAG=null; // 汇总条上按住拖:{k,x0,mv}
 function wpkN(){let n=0;for(const k in WPK)n+=WPK[k].size;for(const v of WAGG.values())n+=v;return n;}
 function wpkClear(){for(const k in WPK)WPK[k].clear();WAGG.clear();}
@@ -550,6 +557,7 @@ function wpkMouse(e,sx,sy){ // 70-input 左键最先问它:有选中的 = 把它
   for(const [k,x,u] of wpkPlan(t,pt)){const q=k+':'+x.id;if(!by.has(q))by.set(q,{k:k,x:x,U:[]});by.get(q).U.push(u);}
   for(const {k,x,U} of by.values()){const hit=t&&engageable(t,x); // 同一舰同一种:主炮带 n = 几门(一门一炮,weapons/57 逐门消耗),导弹指定发射单元
     if(k==='mac'){if(hit)cxForceMac([x],t,null,U.length);else cxForceMac([x],null,pt,U.length);}
+    else if(k==='sec'){if(hit)cxSecFire(x,t,null,U.length);else cxSecFire(x,null,pt,U.length);}
     else if(k==='msl'){if(hit)cxSalvoCells(x,t,null,U);else cxSalvoCells(x,null,pt,U);}}
   wpkClear();wpkSync();return true;}
 function wpnStop(){const sel=selBlue();if(typeof clearPendings==='function')clearPendings();if(sel.length)cxStop(sel);updateSelPanel();} // 停火钮 / X
@@ -596,6 +604,7 @@ function wpkHoverTip(t,s){
   if(t.dataset.hr==='ciws')return KIND_INFO.ciws.tip(s)+' · 两行各管一件,点 = 开 / 关';
   const k=t.dataset.row||(t.dataset.cat==='sp'?'buoy':t.dataset.cat),how=' —— 点绿条逐条选(船多时收成一整条:点 +1、右键 −1、滚轮、拖 = 拉到哪选多少),再点敌舰或空地发射;点行名 = 这一行就绪的全选;右上角大勾 = 这一类的自动开火,行尾小勾 = 这一种的';
   if(k==='mac')return KIND_INFO.mac.tip(s)+how;
+  if(k==='sec')return KIND_INFO.sec.tip(s)+how;
   if(k==='msl')return KIND_INFO.msl.tip(s)+how;
   if(k==='buoy')return '放浮标:点这一行再点一个方向,浮标沿舰船 → 鼠标一直飞,不停,飞出地图消失;平时被动看和听,点浮标本身 → 底栏雷达开照射';
   if(k==='lure')return '放诱饵:点这一行再点地图上一点,离那一点最近的船放一个;诱饵飞过去('+OBJ_CFG.LURE.FLY+' km/s),到了慢慢漂,一直开着雷达、隔 '+OBJ_CFG.LURE.BURN_EVERY+' s 点一次火,冒充一艘护卫舰 —— 对方只靠听的时候会当真(自动开火上当);被雷达照到认出、或贴近看清就露馅。存在 '+OBJ_CFG.LURE.LIFE+' s、结构 '+OBJ_CFG.LURE.HP;
@@ -617,7 +626,7 @@ function wpkHoverTip(t,s){
   window.addEventListener('mouseup',()=>{if(WDRAG&&!WDRAG.mv)wpkAggSet(WDRAG.k,(WAGG.get(WDRAG.k)||0)+1);WDRAG=null;});
   el.addEventListener('wheel',e=>{const ag=e.target.closest('[data-agg]');if(!ag)return;e.preventDefault();const k=ag.dataset.agg;wpkAggSet(k,(WAGG.get(k)||0)+(e.deltaY<0?1:-1));},{passive:false});
   el.addEventListener('mouseover',e=>{const t=e.target.closest('[data-cw],[data-row],[data-cat],[data-hr]'),cat=t&&(t.dataset.cat||(t.dataset.row&&WROW[t.dataset.row].cat));
-    hoverRingHi=!t?null:(t.dataset.cw||t.dataset.row||null);hoverRing=!t?null:(t.dataset.cw||t.dataset.hr?'ciws':(t.dataset.row||(cat==='sp'?'buoy':cat)));
+    hoverRingHi=!t?null:(t.dataset.cw||t.dataset.row||null);hoverRing=!t?null:(t.dataset.cw||t.dataset.hr?'ciws':(cat==='sp'?'buoy':cat)); // 2026-10-11 圈按类画(一类几种都画),停在哪一行那一种加亮(83 drawHoverRings)
     const tip=document.getElementById('cmdTip'),s=selBlue()[0];if(!tip||!t||!s||wpkN())return;const x=wpkHoverTip(t,s);if(x){tip.style.display='block';tip.textContent=x;}});
   el.addEventListener('mouseleave',()=>{hoverRing=null;hoverRingHi=null;if(typeof updSelWeaponTip==='function')updSelWeaponTip();});})();
 /* 舰船块:血条 #ciBars(单选结构 + 护盾;多选每艘一条、舰名写在条右边),悬停舰船块看规格 */

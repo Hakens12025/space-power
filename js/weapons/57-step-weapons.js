@@ -4,6 +4,7 @@
 const FT_N=2; // 2026-09-29 强制目标点(74 中键点空地)每件勾着的武器打几次就撤(导弹按组)
 function stepWeaponSystems(dt){
   for(const s of ships){ // 武器冷却 + 发射单元装填 + 齐射开火延迟(v119:单元独立装填60s)
+    if(s.secCds)for(let i=0;i<s.secCds.length;i++)if(s.secCds[i]>0)s.secCds[i]-=dt; // 2026-10-11 副炮每门独立装填
     if(s.macCds)for(let i=0;i<s.macCds.length;i++)if(s.macCds[i]>0)s.macCds[i]-=dt; // 2026-10-10 双管:每门轴炮独立装填(原来一根 macCd 标量)
     if(s.fireHot>0)s.fireHot-=dt; // FX1 开火暴露的倒数(置位在 weapons/52,读取在 sensors/22 的 firePowerOf)
     if(s.cellTimer)for(let i=0;i<s.cellTimer.length;i++)if(s.cellTimer[i]>0)s.cellTimer[i]-=dt;
@@ -115,6 +116,8 @@ function stepWeaponSystems(dt){
     else if(roeOK&&!s.dead&&mt&&!contactDead(mt,s.side)&&mt.side!==s.side&&macReady(s)>0&&hasMAC(s)&&macAligned(s,mt)){ // LL6 死活按这一方看见的 // WR1:自动开火只在把握 >= MAC_AUTO_P 时打(没有射程门了);距离按估计位置量。这一条【不看 autoEngage】,红方 bot 的开火实际走的就是它。2026-10-10 macCd<=0 改 macReady>0(双管:任一门就绪即可开)
       const mp=macPred(s,mt); if(mp&&((typeof fcForce==='function'&&fcForce(s,'mac'))||macHitProb(s,V.len(V.sub(mp,s.pos)),mt)>=MAC_AUTO_P))fireMAC(s,mt); // 2026-09-29 强制开火的序列不看把握门
     } // TIER1 主炮 舰种门改能力谓词
+    if(s.secCds&&!s.dead&&secReady(s)>0&&wpnOn(s,'sec')&&(s.roe==='free'||(s.roe==='tight'&&s.roeCd>0))&&mt&&!contactDead(mt,s.side)&&mt.side!==s.side){ // 2026-10-11 副炮:炮塔不看机头;同主炮这道门(roe + 总开关 / 分开关,不看 autoEngage —— 红方 bot 也走这里),把握 ≥ MAC_AUTO_P 才打
+      const mp=macPred(s,mt);if(mp&&secHitProb(s,V.len(V.sub(mp,s.pos)),mt)>=MAC_AUTO_P)fireSec(s,mt);}
     if(s.roeCd>0)s.roeCd-=dt;
   }
   for(const s of ships){const f=s.fTgt;if(!f)continue; // 强制目标点:勾着的每件武器都打够 FT_N 次就撤(没勾的不等;一件没勾 = 立刻撤,一发不打)
