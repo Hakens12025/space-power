@@ -3,7 +3,7 @@
    SN6 LOD(聚合层)。与 82-ship-icons 共用编号 82 —— 它决定"这一档缩放下,每艘船还画不画"。
    设计在 demos/sensors/态势感知V3.html;这里是移植。
 
-   ---- 三层,按【屏幕像素】自动切,不按视图层切 ----
+   ---- 三层,按【屏幕像素】自动切,不按视图层切(2026-10-11 起只在代表显示里切:真显示每艘都画,见 lodBuild 开头) ----
      舰      每艘船一个图标(默认)
      舰队    一支编队的屏幕直径小于 FLEET_PX ⇒ 成员互相压 ⇒ 塌成一个舰队框
      舰队组  两个框的屏幕间距小于 GROUP_PX ⇒ 再聚成一组
@@ -56,7 +56,10 @@ function lodBuild(dtIn) {   // dtIn:判据用的时钟覆盖(同 camZoomStep);�
   /* 不聚合的情况:GM —— 那种模式要的就是"每一艘都看得见";
      LOD.off 是给【判定】用的显式开关:有几条探针按像素亮度量别的东西(跟随连线、站位图),
      聚合会把它们的采样场景收成一个框,于是被测代码一行没动、判据却红了。 */
-  if (LOD.off || adminMode) { lodPrev = next; lodNow = L; return; }
+  /* 2026-10-11 用户(同一现象第二次报):船就在面前、在可见光圈里,却只剩一个「群·N」框、看得到构成看不到船 ——
+     聚合只在代表显示里做(拉过 shipMarkMode 的切换点、船换成记号的那一档),真显示每艘都画(我方编队框同一条)。
+     原因:FLEET_PX / GROUP_PX 是舰标还大的时候定的;现在战术层舰标只有 7~11 px,隔 48 px 早就不叠了,按像素聚等于在真显示里凭空多出第三档 */
+  if (LOD.off || adminMode || !shipMarkMode()) { for (const s of ships) s._lodE = undefined; lodPrev = next; lodNow = L; return; }
   /* -- 蓝方:舰 → 舰队(按引擎的编队归属;没编队的自成一支) -- */
   const fleets = new Map();
   for (const s of ships) {
