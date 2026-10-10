@@ -425,9 +425,8 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #cmdCard .agg.sp{cursor:pointer}
 #cmdCard .agg i{flex:none;min-width:0;border-radius:0;position:static;height:100%}
 #cmdCard .wr .cells .agg i{min-width:0;flex:none} /* 压过 .wr .cells i 的 3px 下限与后面 #cmdCard .cells i 的 flex:1(2026-10-11 修:原来被它压过,汇总条五段一律等分 —— 亮绿永远只占五分之一、在装永远占五分之四) */
-#cmdCard .agg i.g{background:linear-gradient(90deg,#5ee391,#2c9655)} /* 2026-10-11 用户:就绪的绿要有渐变 —— 左亮右暗 */#cmdCard .agg.sp i.g{background:#b08cff}
+#cmdCard .agg i.g{background:var(--state-ok)} /* 2026-10-11 用户:条效果回归多武器指令卡演示页 —— 就绪纯绿,渐变感来自后面在装那几段蓝的深浅 */#cmdCard .agg.sp i.g{background:#b08cff}
 #cmdCard .agg i.c{background:var(--acc)} /* 在装:蓝,越深越快好(2026-10-11 先改暗绿,用户又要回蓝:「只要很多就有蓝色」其实是汇总条比例画错,修好后蓝色只在真有在装时出现) */
-#cmdCard .agg i.bk{position:absolute;left:0;top:0;bottom:0;right:0;pointer-events:none} /* 2026-10-11 顺滑条的小块分隔 + 按密度略压暗(88 wpkBlk) */
 #cmdCard .agg i.p{position:absolute;left:0;top:0;bottom:0;animation:wpkBreathe 1.1s ease-in-out infinite}
 #cmdCard .agg s{position:absolute;top:0;font:10px/15px var(--ff-mono);text-decoration:none;pointer-events:none;white-space:nowrap}
 #cmdCard .agg s.l{left:3px;color:var(--ink)}#cmdCard .agg s.r{right:3px;color:#f2f6fb;text-shadow:0 0 2px #000,0 0 2px #000}
