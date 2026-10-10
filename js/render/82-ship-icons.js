@@ -51,11 +51,13 @@ function shipZoomF(){return hullZoomF()*SHIP_K;} // 舰船(活船、残骸、尾
 function shipMarkMode(){return hullZoomRaw()<HULL_ZOOM.MARK;}
 const SHIP_LBL={on:false,list:[]}; // 2026-10-08 舰名延后统一摆(特写窗用,见 84 insetLabels):on 时 drawShip 只登记不画
 function lblPut(t,x,y,pri,c){if(!SHIP_LBL.on)return false;SHIP_LBL.list.push({t:t,x:x,y:y,pri:pri,c:c});return true;} // 2026-10-08 用户:小窗里的名字走同一个通道(残骸 / 石头 / 物体 / 浮标同舰名);on 时登记、返回 true,调用方就不自己画
-function drawShipMark(s,p,color){ // A:拉远后的记号。我方 = 沿船头的小箭头;敌方接触 = 小菱形(不分舰种 / 分级 / 认没认出)
+const SHIP_MARK_MAX=1.35; // 2026-10-11 用户:我方箭头跟着舰船大小走 —— 最小那型(护卫 / 巡游 T2)= 原来的大小(最小值),别的按船体尺寸比开平方略大(驱逐约 1.12、巡洋约 1.2、航母约 1.31),封顶这个倍数;敌方菱形照旧不分大小(不漏舰种)
+function shipMarkK(s){return s.side===VIEW?Math.max(1,Math.min(SHIP_MARK_MAX,Math.sqrt(hullSize(CLS_HULL[s.cls]||'DD',s.tier||2)/hullSize('DD',2)))):1;}
+function drawShipMark(s,p,color){ // A:拉远后的记号。我方 = 沿船头的小箭头(大小随舰船,shipMarkK);敌方接触 = 小菱形(不分舰种 / 分级 / 认没认出)
   const R=SHIP_MARK_R;
   ctx.save();ctx.translate(p[0],p[1]);ctx.fillStyle=color;
   ctx.beginPath();
-  if(s.side===VIEW){ctx.rotate(Math.atan2(s.facing[1],s.facing[0]));ctx.moveTo(R,0);ctx.lineTo(-R+1,R-1);ctx.lineTo(-R+2.2,0);ctx.lineTo(-R+1,-R+1);}
+  if(s.side===VIEW){ctx.rotate(Math.atan2(s.facing[1],s.facing[0]));{const k=shipMarkK(s);ctx.scale(k,k);}ctx.moveTo(R,0);ctx.lineTo(-R+1,R-1);ctx.lineTo(-R+2.2,0);ctx.lineTo(-R+1,-R+1);}
   else{ctx.moveTo(R,0);ctx.lineTo(0,R);ctx.lineTo(-R,0);ctx.lineTo(0,-R);}
   ctx.closePath();ctx.fill();ctx.restore();
 }
@@ -63,7 +65,7 @@ function drawUnkMark(p,r,color){ // 未知热源的记号:不随朝向转的空�
   ctx.save();ctx.beginPath();ctx.moveTo(p[0]+r,p[1]);ctx.lineTo(p[0],p[1]+r);ctx.lineTo(p[0]-r,p[1]);ctx.lineTo(p[0],p[1]-r);ctx.closePath();
   ctx.globalAlpha=0.25;ctx.fillStyle=color;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.stroke();ctx.restore();
 }
-function shipIconR(s){return shipMarkMode()?SHIP_MARK_R+1:hullSize(shipIdentHull(s),shipIdentTier(s))*0.78*shipZoomF();} // 图标半径:标签/选中圈/尾焰的基准 TIER1 tier 也走遮蔽口径,否则选中圈/标签间距照样把分级漏出去
+function shipIconR(s){return shipMarkMode()?SHIP_MARK_R*shipMarkK(s)+1:hullSize(shipIdentHull(s),shipIdentTier(s))*0.78*shipZoomF();} // 图标半径:标签/选中圈/尾焰的基准 TIER1 tier 也走遮蔽口径,否则选中圈/标签间距照样把分级漏出去
 /* RWR1(2026-09-22 用户实报:"我方被敌方雷达照射的黄圈一闪一闪不是特别好,感觉就像是我选中这艘船了一样")。
    改前是一个闭合的黄色脉冲圈(半径 13 x 舰体系数)—— 与选中圈(黄、闭合、同心)只差粗细与闪不闪,一眼分不开。
    换成雷达告警接收机(RWR,radar warning receiver)的读法:在船外侧、【朝着照射源的方位】画一小段弧 + 一个指向船身的小三角 ="波束从那边打过来"。
