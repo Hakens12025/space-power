@@ -69,7 +69,7 @@ function projBlock(p,x0,y0,dt){
   for(const b of envOccluders()){ // 2026-10-05 天体 + 会动的卫星 / 彗核(world/16)
     const fx=x0-b.x,fy=y0-b.y,bb=fx*dx+fy*dy,cc=fx*fx+fy*fy-b.r2,disc=bb*bb-l2*cc;if(disc<0)continue;
     const t=(-bb-Math.sqrt(disc))/l2;if(t>1||(t<0&&cc>0))continue; // 这一步没碰到盘(起点在盘里 cc<=0 也算碰到)
-    const u=Math.max(0,t);p.done=true;spawnHit([x0+dx*u,y0+dy*u,p.pos[2]||0],kind,p.shooter,null);return;
+    const u=Math.max(0,t);p.done=true;spawnHit([x0+dx*u,y0+dy*u,p.pos[2]||0],kind,p.shooter,null,hitW(p));return;
   }
   const R2=MAC_HIT_R*MAC_HIT_R,L=Math.sqrt(l2)+MAC_HIT_R,G=rockGrid(),c=G.cell,ix0=Math.floor((x0-L)/c),ix1=Math.floor((x0+L)/c),iy0=Math.floor((y0-L)/c),iy1=Math.floor((y0+L)/c);
   let cand=null; // 2026-09-29 性能:只取这一步外接框盖到的格(world/12 rockGrid),按注册表下标排好 —— 碰到的先后与逐个扫一样;一步走得太远就退回整表扫
@@ -79,7 +79,7 @@ function projBlock(p,x0,y0,dt){
     if(k.dead||k.kind!=='rock'||k===p.target)continue;
     const ex=k.pos[0]-x0,ey=k.pos[1]-y0;if(Math.abs(ex)>L||Math.abs(ey)>L)continue;
     if(stepCPA2(p,k,dt)>=R2)continue;
-    applyDamage(k,p.missDmg||p.dmg||1,p.shooter,kind,p);spawnHit(k.pos,kind,p.shooter,k);
+    applyDamage(k,p.missDmg||p.dmg||1,p.shooter,kind,p);spawnHit(k.pos,kind,p.shooter,k,hitW(p));
     if(p.type!=='mac'&&(p.count||1)>1){p.count--;if(p.type==='missile')p.dmg=(p.missDmg||12)*p.count;}else{p.done=true;return;}
   }
 }
@@ -102,12 +102,12 @@ function stepMacProj(p,dt){ // 主炮(轴炮):沿发射时船头直飞,命中或
       p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;
       if(p.ground){ // 2026-09-27 打空地的炮弹:对方每艘船都按本拍相对线段的最近点判(与下面同式),碰到第一艘就算
         for(let g=0;g<2;g++)for(const u of (g?rockObjs():ships)){if(u.dead||u.side===p.shooter.side||u.hp===undefined)continue; // 物体里只有带结构值的(民船 / 诱饵 / 浮标)挨得了打;2026-09-29 不再每步拼数组,石头本来就没有结构值(world/14 rockObjs)
-          if(stepCPA2(p,u,dt)<MAC_HIT_R*MAC_HIT_R){if(applyDamage(u,p.dmg,p.shooter,'mac',p)>0)spawnHit(p.pos,'mac',p.shooter,u);p.done=true;return;}}
+          if(stepCPA2(p,u,dt)<MAC_HIT_R*MAC_HIT_R){if(applyDamage(u,p.dmg,p.shooter,'mac',p)>0)spawnHit(p.pos,'mac',p.shooter,u,hitW(p));p.done=true;return;}}
         if(!ARENA&&p.age*CFG.macSpd>MAC_FAR)p.done=true; // 2026-09-28 用户:炮弹射程理论无限 —— 不再到点消失,飞到出游玩区(主循环统一判);靶场没有游玩区,飞出 MAC_FAR 才收
         return;
       }
       const t=p.target; // 2026-09-26 单局地图:MAC_HIT_R 400 < 单拍相对位移约 600km,只看拍末会漏判(实测 90% 带只剩 84%),改按本拍相对线段的最近点判
-      if(t&&!t.dead&&stepCPA2(p,t,dt)<MAC_HIT_R*MAC_HIT_R){if(applyDamage(p.target,p.dmg,p.shooter,'mac',p)>0)spawnHit(p.pos,'mac',p.shooter,p.target);p.done=true;} // RANGE1 补第 4 实参 kind='mac'(靶场分武器统计)
+      if(t&&!t.dead&&stepCPA2(p,t,dt)<MAC_HIT_R*MAC_HIT_R){if(applyDamage(p.target,p.dmg,p.shooter,'mac',p)>0)spawnHit(p.pos,'mac',p.shooter,p.target,hitW(p));p.done=true;} // RANGE1 补第 4 实参 kind='mac'(靶场分武器统计)
       else if(p.age>=p.tt){p.ground=true;} // 2026-09-28 过了预测时间没中:不消失,当成打空地的炮弹接着飞,路上碰到谁算谁(用户:射程理论无限)
 }
 function mslSwarmStep(p,tp,dist,dir0){ // 2026-10-01 三关系公共段:① 油量 → 能力天花板;③ 邻居 → 聚拢(质心吸引 + 间距排斥 + 死区)。追目标与打空地(目的地 = 布雷点)同用
@@ -393,7 +393,7 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 导弹:继承载机速度+暴力
         if(survHit>0){
           const rv=Math.hypot(p.vel[0]-p.target.vel[0],p.vel[1]-p.target.vel[1],p.vel[2]-p.target.vel[2]);
           const finalDmg=Math.max(1,Math.round(survHit*(p.missDmg||12)*(1+MSL_KIN*rv)*sectorDmgMult)); // DS155:×扇面倍增;2026-10-03 + 动能(爆炸 x MSL_KIN x 撞击相对速度,线性添头)
-          if(applyDamage(p.target,finalDmg,p.shooter,'missile',p)>0)spawnHit(p.pos,'missile',p.shooter,p.target); // RANGE1 补第 4 实参 kind='missile'。2026-09-29 全被护盾挡住不出船体命中闪光(护盾特效在 55)
+          if(applyDamage(p.target,finalDmg,p.shooter,'missile',p)>0)spawnHit(p.pos,'missile',p.shooter,p.target,hitW(p)); // RANGE1 补第 4 实参 kind='missile'。2026-09-29 全被护盾挡住不出船体命中闪光(护盾特效在 55)
         }
         if(decoy>0){ // 脱锁的n颗:继续飞(飞过目标),target清空走组网转移复锁,复锁靠转弯耗燃料
           p.count=decoy;

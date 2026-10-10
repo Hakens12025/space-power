@@ -485,7 +485,7 @@ function drawInset(){
     drawVisFog(VISX); // 可见光圈灰雾:圈外的敌舰画面比圈内暗(2026-09-30 红外 / 雷达画面也画)
     drawTrails();
     SHIP_LBL.on=true;SHIP_LBL.list.length=0;for(const s of ships)drawShip(s);if(typeof drawRocks==='function')drawRocks();SHIP_LBL.on=false;insetLabels(); // 2026-10-05 红外 / 雷达画面同主画面:主视角的东西照画。2026-10-08 名字延后统一摆(字号随缩放、互不重叠;舰船、残骸、石头 / 物体、浮标同一个通道)
-    insetTrails();drawProjectiles();if(typeof drawMslPred==='function')drawMslPred();if(typeof drawShellTraces==='function')drawShellTraces();artHits();drawCiwsFx();drawSdFx();if(typeof drawShieldFx==='function')drawShieldFx();insetCausal();
+    insetTrails();artTrails();drawProjectiles();artMuzzles();if(typeof drawMslPred==='function')drawMslPred();if(typeof drawShellTraces==='function')drawShellTraces();artHits();drawCiwsFx();drawSdFx();if(typeof drawShieldFx==='function')drawShieldFx();insetCausal();
     const F=INSET.fx;if(F){const k=(now-F.t0)/(F.big?1500:1200);if(k>=1||k<0)INSET.fx=null;else{const p=F.s?F.s.pos:[F.x,F.y],q=toScreen(p[0],p[1]);ctx.globalAlpha=1-k;ctx.strokeStyle=ctx.fillStyle='rgb('+F.col+')';ctx.lineWidth=1.5; // 开播自带爆闪:hitFX 只活 1.2 游戏秒,切过去时多半已经没了
       ctx.beginPath();ctx.arc(q[0],q[1],F.big?14+70*k:8+40*k,0,6.2832);ctx.stroke();ctx.beginPath();ctx.arc(q[0],q[1],Math.max(0.1,(F.big?10:6)*(1-k)),0,6.2832);ctx.fill();ctx.globalAlpha=1;}}
   }finally{SHIP_LBL.on=false;ctx=ctx0;cam.x=c0x;cam.y=c0y;cam.zoom=c0z;W=W0;H=H0;lodNow=lod;vtW=vw0;}
@@ -560,7 +560,7 @@ function render(){
   if(typeof drawRocks==='function')drawRocks(); // TK4c 石头的航迹:第二个循环,排在舰船之后(石头不在 ships 里);没认出之前与冷船画法一模一样(render/82-rocks)
   drawAggs();
   // DS169:网内细线 2026-10-01 起由传播链路(83 drawChain,选中导弹时画整簇最小生成树)取代信息分层)
-  drawProjectiles();if(typeof drawMslPred==='function')drawMslPred();
+  artTrails();drawProjectiles();artMuzzles();if(typeof drawMslPred==='function')drawMslPred(); // 2026-10-11 弹走过的路(轴炮 / 反舰 / 突击弹)画在弹下面,炮口在上面(render/81-art)
   if(typeof drawShellTraces==='function')drawShellTraces(); // 2026-09-28 敌方炮弹来路(render/83)
   drawHoverRings();if(typeof drawPings==='function')drawPings();if(typeof drawForceMarks==='function')drawForceMarks();if(typeof drawAnomalies==='function')drawAnomalies(); // 2026-09-27 雷达异常 / 红外异常(render/83) // 2026-09-27 扫描脉冲圈(render/83)。RF2 简化UI:底栏武器钮 hover 时选中舰的射程圈
   if(irOn&&typeof drawIr2Hud==='function')drawIr2Hud(); // 2026-09-30 红外仪表(左边,加舰条与特写窗之间)

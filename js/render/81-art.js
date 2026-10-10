@@ -6,7 +6,7 @@
    性能:渐变、噪声只在建贴图时做;每帧只贴图(发光的用 'lighter' 叠加)。行星地表等贴图按行分帧生成(artTick,每帧 ART_BUDGET ms),
    生成好之前先画原来的双色圆;生成完一张 ART_PJ.ver + 1,81-env 合成缓存的键跟着变、重画天体。
    界面动画(尾焰抖动、余烬闪烁、爆炸进度)走墙钟,不跟倍速;尺寸跟舰标同一个缩放系数(artZ)。
-   调用方:82-ship-icons(artFlames / artWreck)、83-hud(artShell / artMsl / artDecoy / artMine / artHits)、81-env(artPlanet / ART_PL_NAME)、82-rocks(artRock / artBuoy)、84-scene(artTick)。
+   调用方:82-ship-icons(artFlames / artWreck)、83-hud(artShell / artChem / artMsl / artSsm / artTrack / artDecoy / artMine / artHits)、84-scene(artTrails / artMuzzles)、81-env(artPlanet / ART_PL_NAME)、82-rocks(artRock / artBuoy)、84-scene(artTick)。
    ============================================================================ */
 const ART_L=(()=>{const a=-125*Math.PI/180;return [Math.cos(a),Math.sin(a)];})(); // 固定光向:左上
 const ART_SIDE={blue:[90,167,255],red:[255,107,107],neutral:[160,170,185]};
@@ -77,19 +77,23 @@ function artFlames(s,p,L){ // 主推从每个喷口朝船尾喷(舰标 < 16 px �
 const ART_FORM={1:[[0,0]],3:[[0.45,0],[-0.15,-0.32],[-0.15,0.32]],5:[[0.45,0],[-0.15,-0.32],[-0.15,0.32],[-0.75,-0.64],[-0.75,0.64]]}; // 楔形队形,单位 = 弹长,+x = 机头
 const ART_FCX={1:0,3:0.15,5:-0.15}; // 队形外接框的中心(x),贴图以它为中心
 function artShown(c){return c>=6?5:(c>=3?3:1);}
-function artMslPoly(w){return [[0.5,0],[0.40,-w*0.55],[0.27,-w],[-0.34,-w],[-0.43,-w-0.12],[-0.5,-w-0.12],[-0.46,-w],[-0.5,-w*0.6],[-0.5,w*0.6],[-0.46,w],[-0.5,w+0.12],[-0.43,w+0.12],[-0.34,w],[0.27,w],[0.40,w*0.55]];}
-const ART_MP=artMslPoly(0.08),ART_MW=0.08; // 弹身轮廓与半宽(单位 = 弹长)
-function artMslLen(n){return artLFF()*(n>1?0.36:0.55);}
+/* 2026-10-11 反舰导弹 = 重弹(用户:太空弹道导弹级、重量级选手;原稿 demos/美术/导弹类武器美术.html):弹体粗、分两级、一对大后掠尾翼;
+   单枚 0.68、3 枚每枚 0.46、5 枚每枚 0.36 倍最小舰长(整组外框 ≤ 0.8);< 5 px 画粗短划 + 亮弹头 */
+const ART_MW=0.115,ART_MP=[[0.5,0],[0.43,-ART_MW*0.45],[0.33,-ART_MW*0.85],[0.24,-ART_MW],[-0.1,-ART_MW],[-0.12,-ART_MW-0.02],[-0.3,-ART_MW-0.02],[-0.37,-ART_MW-0.16],[-0.47,-ART_MW-0.16],[-0.44,-ART_MW-0.02],[-0.5,-ART_MW*0.8],
+  [-0.5,ART_MW*0.8],[-0.44,ART_MW+0.02],[-0.47,ART_MW+0.16],[-0.37,ART_MW+0.16],[-0.3,ART_MW+0.02],[-0.12,ART_MW+0.02],[-0.1,ART_MW],[0.24,ART_MW],[0.33,ART_MW*0.85],[0.43,ART_MW*0.45]]; // 弹身轮廓,半宽 ART_MW(单位 = 弹长)
+function artMslLen(n){return artLFF()*(n===1?0.68:(n===3?0.46:0.36));}
 function artMslGlyph(g,side,Lg,rot){const col=ART_SIDE[side]; // 一枚,机头朝 +x(调用方已转好)
-  if(Lg<5){g.strokeStyle=artCss(col);g.lineWidth=1;g.lineCap='round';g.beginPath();g.moveTo(-Lg*0.42,0);g.lineTo(Lg*0.42,0);g.stroke();return;} // < 5 px:一道阵营色短划
+  if(Lg<5){g.strokeStyle=artCss(col);g.lineWidth=Math.max(1.6,Lg*0.3);g.lineCap='round';g.beginPath();g.moveTo(-Lg*0.4,0);g.lineTo(Lg*0.4,0);g.stroke(); // < 5 px:粗短划 + 亮弹头
+    g.fillStyle=artCss(artLit(col,0.6));g.beginPath();g.arc(Lg*0.4,0,Math.max(0.7,Lg*0.12),0,6.283);g.fill();return;}
   const P=ART_MP,w=ART_MW,px=1/Lg,up=artLocalL(rot)[1]<0;
   g.save();g.scale(Lg,Lg);g.lineJoin='round';
-  artPath(g,P);g.strokeStyle='rgba(0,0,0,.8)';g.lineWidth=1.4*px;g.stroke();
-  const gr=g.createLinearGradient(0,-w,0,w);gr.addColorStop(0,artCss(artLit(col,up?0.35:-0.4)));gr.addColorStop(0.5,artCss(col));gr.addColorStop(1,artCss(artLit(col,up?-0.4:0.35)));g.fillStyle=gr;g.fill();
+  artPath(g,P);g.strokeStyle='rgba(0,0,0,.85)';g.lineWidth=1.5*px;g.stroke();
+  const gr=g.createLinearGradient(0,-w,0,w);gr.addColorStop(0,artCss(artLit(col,up?0.35:-0.45)));gr.addColorStop(0.5,artCss(col));gr.addColorStop(1,artCss(artLit(col,up?-0.45:0.35)));g.fillStyle=gr;g.fill();
   g.save();artPath(g,P);g.clip();
-  g.fillStyle=artCss(artLit(col,0.55));g.fillRect(0.27,-w-0.02,0.25,2*w+0.04); // 弹头亮一档
-  g.fillStyle=artCss(artLit(col,-0.5));g.fillRect(-0.5,-w-0.14,0.18,0.14);g.fillRect(-0.5,w,0.18,0.14); // 尾鳍
-  g.fillStyle='rgba(18,20,24,.92)';g.fillRect(-0.5,-w*0.6,0.045,w*1.2);g.restore(); // 喷口
+  g.fillStyle=artCss(artLit(col,0.5));g.fillRect(0.24,-w-0.02,0.28,2*w+0.04);                                                      // 战斗部亮一档
+  g.fillStyle='rgba(10,12,16,.75)';g.fillRect(0.235,-w,Math.max(0.012,0.8*px),2*w);g.fillRect(-0.11,-w-0.03,Math.max(0.014,0.9*px),2*w+0.06); // 战斗部接缝、级间环
+  g.fillStyle=artCss(artLit(col,-0.5));g.fillRect(-0.5,-w-0.18,0.2,0.16);g.fillRect(-0.5,w+0.02,0.2,0.16);                          // 尾翼暗一档
+  g.fillStyle='rgba(18,20,24,.92)';g.fillRect(-0.5,-w*0.8,0.04,w*1.6);g.restore();                                                    // 喷口
   g.restore();}
 const ART_MS=new Map(),ART_ROT=72,ART_ROT_S=36,ART_MNEW_MAX=4; // 方向分档:弹长 < 8 px 时 36 档;每帧最多新建 4 张,超了借相邻尺寸档
 function artMslKey(side,n,ab,li,nr,fb){return (((((li+80)*2+(nr===ART_ROT?1:0))*72+ab)*6+n)*3+(side==='red'?1:(side==='blue'?0:2)))*6+fb;} // 数字键(DPR 变了整张表清掉,见 artTick);fb = 羽化档 0~5
@@ -102,9 +106,11 @@ function artMslSpr(side,n,ab,li,nr,fb){const key=artMslKey(side,n,ab,li,nr,fb);l
 function artMsl(g,x,y,rot,o){ // o = {kind:'msl'|'inter', side, count, burn, sd}
   if(o.kind==='inter'){artIcp(g,x,y,rot,o);return;} // 2026-10-06 拦截弹换白芯亮珠(下面 artIcp)
   const n=artShown(o.count||1),F=ART_FORM[n],cx=ART_FCX[n],Lg=artMslLen(n),li=Math.round(Math.log2(Lg)*4),nr=Lg<8?ART_ROT_S:ART_ROT,ab=((Math.round(rot/(2*Math.PI)*nr)%nr)+nr)%nr,fb=Math.round(artFe()*10),cr=Math.cos(rot),sr=Math.sin(rot);
-  if(o.burn){const pk='msl'+(o.side==='red'?'red':'blue'),t=artNow();
-    if(Lg<5){let xm=0;for(const f of F)xm=Math.min(xm,f[0]);const b=(xm-cx-0.5)*Lg;artPlume(g,pk,1,x+b*cr,y+b*sr,rot+Math.PI,Lg*(n>1?2.6:1.8)*artFlick(t,o.sd||0),Math.max(1.4,Lg*(n>1?1.1:0.7)),0.85);} // 弹太小:一组一道
-    else for(const f of F){const fx=(f[0]-cx-0.5)*Lg,fy=f[1]*Lg;artPlume(g,pk,1,x+fx*cr-fy*sr,y+fx*sr+fy*cr,rot+Math.PI,Lg*1.35*artFlick(t,(o.sd||0)+f[1]*3),Math.max(1.6,Lg*0.45),0.95);}}
+  const t=artNow(),fl=sd=>artFlick(t*0.5,sd); // 2026-10-11 重弹:尾焰又宽又长、闪得慢
+  if(o.burn){const pk='msl'+(o.side==='red'?'red':'blue');
+    if(Lg<5){let xm=0;for(const f of F)xm=Math.min(xm,f[0]);const b=(xm-cx-0.5)*Lg;artPlume(g,pk,1,x+b*cr,y+b*sr,rot+Math.PI,Lg*(n>1?3.6:3)*fl(o.sd||0),Math.max(2.6,Lg*(n>1?1.5:1.1)),1);} // 弹太小:一组一道
+    else for(const f of F){const fx=(f[0]-cx-0.5)*Lg,fy=f[1]*Lg;artPlume(g,pk,1,x+fx*cr-fy*sr,y+fx*sr+fy*cr,rot+Math.PI,Lg*3.2*fl((o.sd||0)+f[1]*3),Math.max(2.4,Lg*0.9),1);}}
+  else if(Lg>=5){const em=artFxSpr('ember');for(const f of F){const fx=(f[0]-cx-0.5)*Lg,fy=f[1]*Lg;artBlit(g,em,x+fx*cr-fy*sr,y+fx*sr+fy*cr,Math.max(1.4,Lg*0.2),0.55,true);}} // 滑行:喷口余热(画得出弹体才画;战术层几十组同屏时省下每组一次叠加贴图)
   let c=ART_MS.get(artMslKey(o.side,n,ab,li,nr,fb));
   for(let d=1;!c&&ART_MNEW>=ART_MNEW_MAX&&d<=6;d++)c=ART_MS.get(artMslKey(o.side,n,ab,li-d,nr,fb))||ART_MS.get(artMslKey(o.side,n,ab,li+d,nr,fb)); // 这一帧建够了:先借相邻尺寸档
   if(!c)c=artMslSpr(o.side,n,ab,li,nr,fb);
@@ -158,19 +164,113 @@ function artMine(g,x,y,rot,side){const R=0.22*artLFF(),fe=artFe(); // 2026-10-05
     if(on)artBlit(q,artFxSpr('glow'+(side==='red'?'red':'blue')),cx,cy,R*1.6,0.55,true);});}
 
 /* ---------- 主炮弹:白芯 + 阵营色拖尾 + 亮弹头(贴图里弹头在右端) ---------- */
-const ART_SH={};
-function artShellSpr(side){if(ART_SH[side])return ART_SH[side];const W=256,H=32,c=artCv(W,H),g=c.getContext('2d'),col=side==='red'?[255,150,90]:[130,195,255],cy=H/2;
-  let gr=g.createLinearGradient(0,0,W-8,0);gr.addColorStop(0,artCss(col,0));gr.addColorStop(0.7,artCss(col,0.35));gr.addColorStop(1,artCss(col,0.85));g.fillStyle=gr;
-  g.beginPath();g.moveTo(0,cy);g.lineTo(W-12,cy-4.5);g.lineTo(W-6,cy);g.lineTo(W-12,cy+4.5);g.closePath();g.fill();
-  gr=g.createLinearGradient(W*0.35,0,W-6,0);gr.addColorStop(0,'rgba(255,255,255,0)');gr.addColorStop(1,'rgba(255,255,255,1)');g.fillStyle=gr;g.fillRect(W*0.35,cy-1.1,W*0.65-6,2.2);
-  const rg=g.createRadialGradient(W-8,cy,0,W-8,cy,9);rg.addColorStop(0,'rgba(255,255,255,1)');rg.addColorStop(0.4,artCss(col,0.75));rg.addColorStop(1,artCss(col,0));g.fillStyle=rg;g.fillRect(W-17,cy-9,17,18);
+/* 2026-10-11 火炮(用户:轴炮 = 电磁轨道炮,对轴、势大力沉、独一档的强;副炮 = 化学发射药的普通炮弹,没那么强但要有火炮的样子;原稿 demos/美术/火炮类武器美术.html):
+   轴炮弹 = 白热尖锥弹芯 + 阵营色外晕 + 弹头强光 + 激波弧,比原来长 1.6 倍;副炮弹 = 暖色曳光短尾 + 暖白弹头(阵营色光晕),长 0.42 倍。冷白 / 暖黄是两种炮的质感,敌我照旧看阵营色 */
+const ART_SH={},ART_CH={};
+function artShellSpr(side){if(ART_SH[side])return ART_SH[side];const W=512,H=48,c=artCv(W,H),g=c.getContext('2d'),col=ART_SIDE[side]||ART_SIDE.blue,cy=H/2;
+  let gr=g.createLinearGradient(0,0,W-14,0);gr.addColorStop(0,artCss(col,0));gr.addColorStop(0.55,artCss(col,0.16));gr.addColorStop(1,artCss(col,0.75));g.fillStyle=gr; // 阵营色光晕:后细前粗
+  g.beginPath();g.moveTo(0,cy-1.5);g.lineTo(W-16,cy-7);g.lineTo(W-16,cy+7);g.lineTo(0,cy+1.5);g.closePath();g.fill();
+  gr=g.createLinearGradient(0,0,W-8,0);gr.addColorStop(0,'rgba(255,255,255,0)');gr.addColorStop(0.45,'rgba(235,245,255,.45)');gr.addColorStop(1,'rgba(255,255,255,1)');g.fillStyle=gr; // 白色硬芯:往前逐渐变粗成一根尖刺
+  g.beginPath();g.moveTo(0,cy-0.5);g.lineTo(W-22,cy-2.6);g.lineTo(W-6,cy);g.lineTo(W-22,cy+2.6);g.lineTo(0,cy+0.5);g.closePath();g.fill();
+  const rg=g.createRadialGradient(W-12,cy,0,W-12,cy,22);rg.addColorStop(0,'rgba(255,255,255,1)');rg.addColorStop(0.3,artCss(artLit(col,0.65),0.9));rg.addColorStop(1,artCss(col,0));g.fillStyle=rg;g.fillRect(W-34,cy-22,34,44); // 弹头强光
+  g.strokeStyle='rgba(255,255,255,.55)';g.lineWidth=1.2;g.beginPath();g.moveTo(W-20,cy-7);g.quadraticCurveTo(W-6,cy-3,W-2,cy);g.quadraticCurveTo(W-6,cy+3,W-20,cy+7);g.stroke(); // 激波弧(拉近才看得见)
+  g.fillStyle='#fff';g.beginPath();g.moveTo(W-3,cy);g.lineTo(W-14,cy-2.8);g.lineTo(W-28,cy);g.lineTo(W-14,cy+2.8);g.closePath();g.fill(); // 白炽细长弹芯
   return ART_SH[side]=c;}
-function artShell(g,x,y,rot,side){const z=artZ(),L=24*z,h=9*z;g.save();g.translate(x,y);g.rotate(rot);g.globalCompositeOperation='lighter';g.drawImage(artShellSpr(side),-L*(248/256),-h/2,L,h);g.restore();}
+function artShell(g,x,y,rot,side){const z=artZ(),L=38.4*z,h=14*z;g.save();g.translate(x,y);g.rotate(rot);g.globalCompositeOperation='lighter';g.drawImage(artShellSpr(side),-L*(500/512),-h/2,L,h);g.restore();} // 轴炮弹
+function artChemSpr(side){if(ART_CH[side])return ART_CH[side];const W=128,H=32,c=artCv(W,H),g=c.getContext('2d'),col=ART_SIDE[side]||ART_SIDE.blue,cy=H/2;
+  const gr=g.createLinearGradient(0,0,W-10,0);gr.addColorStop(0,'rgba(255,150,60,0)');gr.addColorStop(0.6,'rgba(255,170,80,.35)');gr.addColorStop(1,'rgba(255,220,150,.85)');g.fillStyle=gr; // 暖色曳光尾
+  g.beginPath();g.moveTo(0,cy);g.lineTo(W-12,cy-3);g.lineTo(W-12,cy+3);g.closePath();g.fill();
+  const rg=g.createRadialGradient(W-12,cy,0,W-12,cy,11);rg.addColorStop(0,'rgba(255,246,220,1)');rg.addColorStop(0.35,artCss(col,0.85));rg.addColorStop(1,artCss(col,0));g.fillStyle=rg;g.fillRect(W-24,cy-11,24,22); // 暖白弹头 + 阵营色光晕
+  return ART_CH[side]=c;}
+function artChem(g,x,y,rot,side){const z=artZ(),L=10.08*z,h=7*z;g.save();g.translate(x,y);g.rotate(rot);g.globalCompositeOperation='lighter';g.drawImage(artChemSpr(side),-L*(116/128),-h/2,L,h);g.restore();} // 副炮弹
+function artMzK(){return artFxK()*SHIP_K/0.6;} // 炮口特效的尺寸(同演示页 fxK x 美术整体缩放)
+/* 炮口(只画 VIEW 自己的船、全知两边都画:敌方开火画在真位置会交代位置):轴炮 = 船头沿炮轴的长闪 + 阵营色冲击环 + 前 0.2 秒电弧(0.45 s);
+   副炮 = 炮塔处橙黄火光 0.15 s + 一小股灰烟 0.9 s。83 artTrack 看到我方新出膛的炮弹就登记 */
+const ART_MZ=[];
+function artMuzzleAdd(p,rail){const s=p.shooter,v=p.vel,sv=s.vel||[0,0,0],dx=v[0]-sv[0],dy=v[1]-sv[1],l=Math.hypot(dx,dy)||1;ART_MZ.push({s,rail,t0:artNow(),ux:dx/l,uy:dy/l,side:s.side==='red'?'red':'blue'});if(ART_MZ.length>80)ART_MZ.shift();}
+function artMuzzles(){const t=artNow(),mk=shipMarkMode(),fk=artMzK();let w=0;
+  for(let i=0;i<ART_MZ.length;i++){const m=ART_MZ[i],a=t-m.t0;if(a>(m.rail?0.45:0.9)||a<0)continue;ART_MZ[w++]=m;if(m.s.dead)continue;
+    const q=toScreen(m.s.pos[0],m.s.pos[1]),Ls=mk?0:2.5*hullSize(shipIdentHull(m.s),shipIdentTier(m.s))*shipZoomF(),off=Ls*(m.rail?0.5:0.15),x=q[0]+m.ux*off,y=q[1]+m.uy*off;
+    if(x<-80||x>W+80||y<-80||y>H+80)continue;const rot=Math.atan2(m.uy,m.ux);
+    if(m.rail){const u=a/0.45,col=ART_SIDE[m.side];ctx.save();ctx.translate(x,y);ctx.rotate(rot);ctx.globalCompositeOperation='lighter';
+      const L=(10+24*u)*fk,Wd=(3.4*(1-u)+0.6)*fk;ctx.save();ctx.translate(L*0.35,0);ctx.scale(L*0.6,Wd);ctx.globalAlpha=0.95*(1-u);ctx.drawImage(artFxSpr('flashB'),-1,-1,2,2);ctx.restore(); // 沿炮轴的长闪(圆贴图压扁)
+      ctx.strokeStyle=artCss(artLit(col,0.4),0.75*(1-u));ctx.lineWidth=1.2;ctx.beginPath();ctx.arc(0,0,(3+15*u)*fk,0,6.283);ctx.stroke();
+      if(u<0.45){ctx.strokeStyle='rgba(225,240,255,'+(0.9*(1-u/0.45)).toFixed(3)+')';ctx.lineWidth=0.8; // 电弧
+        for(let k=0;k<4;k++){const an=(k-1.5)*0.9+Math.sin(a*60+k*7)*0.3;let px=0,py=0;ctx.beginPath();ctx.moveTo(0,0);
+          for(let j=1;j<=3;j++){px+=Math.cos(an+Math.sin(a*90+k*3+j)*0.8)*3*fk;py+=Math.sin(an+Math.sin(a*70+k*5+j)*0.8)*3*fk;ctx.lineTo(px,py);}ctx.stroke();}}
+      ctx.restore();}
+    else{const c=m.ux,sn=m.uy;if(a<0.15){const u=a/0.15,R=(2.5+3*u)*fk;artBlit(ctx,artFxSpr('flash'),x+c*R*0.6,y+sn*R*0.6,R*1.6,1-u,true);}
+      const u=a/0.9,R=(1.5+5*u)*fk;ctx.fillStyle='rgba(150,150,158,'+(0.35*(1-u)).toFixed(3)+')';ctx.beginPath();ctx.arc(x+c*(2+4*u)*fk,y+sn*(2+4*u)*fk,R,0,6.283);ctx.fill();}}
+  ART_MZ.length=w;}
+
+/* ---------- 弹走过的路(2026-10-11,只给画面):轴炮电离尾迹、反舰排气尾迹 + 点火闪光、突击弹一串跟着走 + 细尾迹 ----------
+   83 drawProjectiles 每画一发就 artTrack 记一笔(我方看到的弹影位置、世界坐标、墙钟;每 ART_TR_DT 秒一点),弹没了照旧淡完;84 在画弹之前调 artTrails。
+   冷发射(重弹):出膛 ART_IGN 秒才点火 —— 第一次看见时弹龄 < 1 游戏秒才算「刚出膛」 */
+const ART_TR=new Map(),ART_TR_MAX=600,ART_TR_DT={rail:0.1,hvy:0.1,ssm:0.05},ART_TRQ=[],ART_TR_KEEP={rail:1.2,hvy:2.4,ssm:1.6},ART_TR_FADE={rail:0.9,ssm:0.7},ART_IGN=0.18,ART_TRS={};
+function artTrack(p,pos,side,w,lit){const t=artNow();let e=ART_TR.get(p);
+  if(!e){if(ART_TR.size>=ART_TR_MAX)return null;const born=(p.age||0)<1;e={w,side,pts:[],seen:t,t0:t,born,cur:null,igT:-1,igP:null,n:1};ART_TR.set(p,e);
+    if(born&&p.type==='mac'&&p.shooter&&!p.shooter.dead&&(adminMode||p.shooter.side===VIEW))artMuzzleAdd(p,w==='rail');}
+  e.seen=t;e.side=side;e.cur=[pos[0],pos[1]];e.n=p.count||1;const keep=ART_TR_KEEP[w]||0;
+  if(keep){const L=e.pts[e.pts.length-1];if((w!=='hvy'||lit)&&(!L||t-L[0]>=ART_TR_DT[w]))e.pts.push([t,pos[0],pos[1]]);while(e.pts.length&&t-e.pts[0][0]>keep)e.pts.shift();}
+  if(w==='hvy'&&e.born&&e.igT<0&&t-e.t0>=ART_IGN){e.igT=t;e.igP=[pos[0],pos[1]];}
+  return e;}
+function artCold(e){return !!(e&&e.w==='hvy'&&e.born&&artNow()-e.t0<ART_IGN);} // 重弹还在冷发射(没点火)
+function artTrSpr(side){if(ART_TRS[side])return ART_TRS[side];const c=artCv(256,4),g=c.getContext('2d'),col=artLit(ART_SIDE[side]||ART_SIDE.blue,0.55),gr=g.createLinearGradient(0,0,256,0);
+  gr.addColorStop(0,artCss(col,0));gr.addColorStop(0.7,artCss(col,0.2));gr.addColorStop(1,artCss(col,0.45));g.fillStyle=gr;g.fillRect(0,0,256,4);return ART_TRS[side]=c;} // 轴炮尾迹:尾淡头亮
+function artTrQ(P){let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;for(let i=0;i<P.length;i++){const q=ART_TRQ[i]||(ART_TRQ[i]=[0,0]),r=toScreen(P[i][1],P[i][2]);q[0]=r[0];q[1]=r[1];if(r[0]<x0)x0=r[0];if(r[0]>x1)x1=r[0];if(r[1]<y0)y0=r[1];if(r[1]>y1)y1=r[1];}
+  return (x1<-30||x0>W+30||y1<-30||y0>H+30)?null:ART_TRQ;} // 一条路换成屏幕点(复用同一个数组),整条在屏外返回 null
+function artTrails(){const t=artNow(),mk=shipMarkMode(),LF=artLFF(),fk=artMzK();
+  for(const [p,e] of ART_TR){const gone=t-e.seen,fd=ART_TR_FADE[e.w]; // 0.15 s 没被画到 = 弹没了(或出了画面):轴炮 / 突击弹的尾迹按 fd 淡完,排气尾迹自己按年龄淡完
+    if(e.w==='chem'){if(gone>0.15)ART_TR.delete(p);continue;}
+    if(e.w==='hvy'){const last=e.pts.length?e.pts[e.pts.length-1][0]:e.seen;if(gone>0.15&&t-last>ART_TR_KEEP.hvy&&!(e.igT>=0&&t-e.igT<0.6)){ART_TR.delete(p);continue;}}
+    else if(gone>fd+0.15){ART_TR.delete(p);continue;}
+    const k=(e.w!=='hvy'&&gone>0.15)?1-(gone-0.15)/fd:1;
+    if(e.w==='rail'){const o=e.pts[0];if(!o||!e.cur)continue;const a=toScreen(o[1],o[2]),b=toScreen(e.cur[0],e.cur[1]),dx=b[0]-a[0],dy=b[1]-a[1],l=Math.hypot(dx,dy);if(l<1)continue;
+      if(Math.max(a[0],b[0])<-20||Math.min(a[0],b[0])>W+20||Math.max(a[1],b[1])<-20||Math.min(a[1],b[1])>H+20)continue;
+      ctx.save();ctx.translate(a[0],a[1]);ctx.rotate(Math.atan2(dy,dx));ctx.globalCompositeOperation='lighter';ctx.globalAlpha=k;ctx.drawImage(artTrSpr(e.side),0,-0.5,l,1);ctx.restore();continue;} // 电离尾迹:身后一道细线,弹没了原路留 0.9 s
+    if(e.w==='hvy'){ // 排气尾迹:只有烧油时留,越旧越宽越淡(分 4 档各一笔)
+      if(e.igT>=0&&t-e.igT<0.6){const q=toScreen(e.igP[0],e.igP[1]),a=(t-e.igT)/0.6;artBlit(ctx,artFxSpr('flash'),q[0],q[1],(5+9*Math.sqrt(a))*fk,0.95*(1-a)*(1-a),true);artBlit(ctx,artFxSpr('ring'),q[0],q[1],(4+26*Math.sqrt(a))*fk,0.6*(1-a),true);} // 点火:闪光 + 冲击环
+      const P=e.pts;if(P.length<2)continue;const Q=artTrQ(P);if(!Q)continue;const col=artLit(ART_SIDE[e.side]||ART_SIDE.blue,0.35),w0=mk?1:Math.max(1,LF*(e.n>=3?0.17:0.12));
+      ctx.save();ctx.globalCompositeOperation='lighter';ctx.lineCap='butt';
+      for(let bk=0;bk<4;bk++){const kb=(bk+0.5)/4;let any=false;ctx.beginPath();
+        for(let i=1;i<P.length;i++){const a=P[i-1],b=P[i];if(b[0]-a[0]>0.25||t-b[0]>ART_TR_KEEP.hvy)continue;const ag=Math.min(3,Math.floor((t-b[0])/ART_TR_KEEP.hvy*4));if(ag!==bk)continue;
+          ctx.moveTo(Q[i-1][0],Q[i-1][1]);ctx.lineTo(Q[i][0],Q[i][1]);any=true;}
+        if(any){ctx.lineWidth=w0*(1+1.6*kb);ctx.strokeStyle=artCss(col,0.24*(1-kb));ctx.stroke();}}
+      ctx.restore();continue;}
+    if(e.w==='ssm'){const P=e.pts;if(P.length<2)continue;const Q=artTrQ(P);if(!Q)continue;const tc=artLit(ART_SIDE[e.side]||ART_SIDE.blue,0.45);ctx.save();ctx.globalCompositeOperation='lighter';ctx.lineCap='butt';ctx.lineWidth=Math.max(1.1,0.04*LF); // 细尾迹(0.7 s):画出出膛那个急弯
+      for(let bk=0;bk<2;bk++){let any=false;ctx.beginPath();
+        for(let i=1;i<P.length;i++){const a=P[i-1],b=P[i],ag=t-b[0];if(ag>0.7||b[0]-a[0]>0.2||(ag>0.35?1:0)!==bk)continue;ctx.moveTo(Q[i-1][0],Q[i-1][1]);ctx.lineTo(Q[i][0],Q[i][1]);any=true;}
+        if(any){ctx.strokeStyle=artCss(tc,k*(bk?0.2:0.5));ctx.stroke();}}
+      ctx.restore();}}}
+
+/* 突击弹 = 轻弹(2026-10-11 用户:小的、敏捷的;原稿 demos/美术/导弹类武器美术.html):一组画 3 发代表(< 3 颗画 1),排成一串沿走过的路跟着(间距 0.3、单发 0.2 倍最小舰长,整串 0.8);
+   全程在喷、尾焰短而亮闪得急;< 7 px 画亮点(白芯 + 阵营色 + 光晕),拉近画细长弹体 + 前翼 + 尾翼。出膛从舷侧射出再转向(weapons/52 fireMissiles) */
+const ART_DART=[[0.5,0],[0.36,-0.07],[0.2,-0.07],[0.13,-0.17],[0.09,-0.17],[0.1,-0.07],[-0.3,-0.07],[-0.44,-0.21],[-0.5,-0.21],[-0.47,-0.07],[-0.5,-0.05],
+  [-0.5,0.05],[-0.47,0.07],[-0.5,0.21],[-0.44,0.21],[-0.3,0.07],[0.1,0.07],[0.09,0.17],[0.13,0.17],[0.2,0.07],[0.36,0.07]];
+function artDart(g,x,y,rot,side,Lg){const col=ART_SIDE[side],gl=artFxSpr('glow'+side);
+  if(Lg<7){artBlit(g,gl,x,y,Math.max(2.2,Lg*0.9),0.9,true);g.fillStyle=artCss(artLit(col,0.3));g.beginPath();g.arc(x,y,Math.max(0.8,Lg*0.2),0,6.283);g.fill();
+    g.fillStyle='#fff';g.beginPath();g.arc(x,y,Math.max(0.5,Lg*0.12),0,6.283);g.fill();return;}
+  artBlit(g,gl,x,y,Lg*0.6,0.5,true);g.save();g.translate(x,y);g.rotate(rot);g.scale(Lg,Lg);g.lineJoin='round';
+  artPath(g,ART_DART);g.strokeStyle='rgba(0,0,0,.8)';g.lineWidth=1.1/Lg;g.stroke();g.fillStyle=artCss(artLit(col,0.1));g.fill();
+  g.save();artPath(g,ART_DART);g.clip();const up=artLocalL(rot)[1]<0;g.fillStyle=artCss(artLit(col,0.45));g.fillRect(-0.5,up?-0.25:0.02,1,0.23);g.fillStyle=artCss(artLit(col,0.6));g.fillRect(0.3,-0.1,0.22,0.2);g.restore(); // 迎光一侧亮一档、导引头亮一档
+  g.restore();}
+function artSsm(g,e,side,cnt,rot){const L=artLFF(),Lg=0.2*L,gap=0.3*L,n=cnt>=3?3:1,t=artNow(),sd=side==='red'?'red':'blue';
+  const P=[toScreen(e.cur[0],e.cur[1])];let lp=0;for(let i=e.pts.length-1;i>=0&&lp<(n-1)*gap;i--){const q=toScreen(e.pts[i][1],e.pts[i][2]),b=P[P.length-1];lp+=Math.hypot(q[0]-b[0],q[1]-b[1]);P.push(q);} // 屏幕上的路:此刻往回,只换算到够排下这一串
+  const D=[[P[0][0],P[0][1],rot]];
+  for(let j=1;j<n;j++){const d=j*gap;let acc=0,f=null;for(let i=0;i+1<P.length;i++){const a=P[i],b=P[i+1],l=Math.hypot(b[0]-a[0],b[1]-a[1]);if(l>0&&acc+l>=d){const u=(d-acc)/l;f=[a[0]+(b[0]-a[0])*u,a[1]+(b[1]-a[1])*u,Math.atan2(a[1]-b[1],a[0]-b[0])];break;}acc+=l;}
+    if(f)D.push(f);} // 路还没那么长的那几发还在弹舱里(一发接一发出膛)
+  const dot=Lg<7; // 亮点档:只给领头那发画尾焰(尾焰头上自带一团光),几发的点并成两笔填 —— 战术层几十组同屏时每组 3 次贴图而不是 9 次
+  for(let j=0;j<(dot?1:D.length);j++){const q=D[j],c=Math.cos(q[2]),s=Math.sin(q[2]),fl=0.75+0.25*Math.sin(t*61+j*2.3)+0.12*Math.sin(t*137+j);
+    artPlume(g,'msl'+sd,1,q[0]-c*Lg*0.5,q[1]-s*Lg*0.5,q[2]+Math.PI,Math.max(3,Lg*2.6)*fl,Math.max(1.6,Lg*0.7),1);}
+  if(dot){const r0=Math.max(0.8,Lg*0.2),r1=Math.max(0.5,Lg*0.12);g.fillStyle=artCss(artLit(ART_SIDE[sd],0.3));g.beginPath();for(const q of D){g.moveTo(q[0]+r0,q[1]);g.arc(q[0],q[1],r0,0,6.283);}g.fill();
+    g.fillStyle='#fff';g.beginPath();for(const q of D){g.moveTo(q[0]+r1,q[1]);g.arc(q[0],q[1],r1,0,6.283);}g.fill();return;}
+  for(let j=D.length-1;j>=0;j--)artDart(g,D[j][0],D[j][1],D[j][2],sd,Lg);}
 
 /* ---------- 命中 / 击沉(画面层按墙钟另记一份:hitFX 的寿命是 1.2 游戏秒、跟倍速,击沉要放 3 秒)----------
    命中约 1 秒:闪光 → 火球(导弹)/ 蓝白闪(主炮)→ 火花 → 两团烟(2026-10-04 用户:命中的烟半径 x0.6);
    击沉约 3 秒:大闪光 + 冲击波环 + 火球膨胀 + 十块残片(朝光的边亮)飞散减速 + 三次连环小爆炸 + 余烬 + 烟 */
 const ART_BOOM={seen:new WeakSet(),list:[]};
+const ART_HITK={rail:1.25,sec:0.55,hvy:1.3}; // 2026-10-11 命中闪光按武器(weapons/52 hitW):轴炮大一号、副炮小一号、反舰重弹大一号;击沉不变
 function artMkBoom(kind,type,sd){const r=artRng(sd*977+13),o={kind,type,sp:[],db:[],em:[],sm:[],sec:[]};
   const nS=kind==='kill'?16:(type==='mac'?10:7);for(let i=0;i<nS;i++)o.sp.push([r()*6.283,40+r()*90,0.25+r()*0.35]);
   const nM=kind==='kill'?5:2;for(let i=0;i<nM;i++)o.sm.push([r()*6.283,6+r()*14,0.6+r()*0.6]);
@@ -179,7 +279,7 @@ function artMkBoom(kind,type,sd){const r=artRng(sd*977+13),o={kind,type,sp:[],db
     for(let i=0;i<14;i++)o.em.push([r()*6.283,8+r()*30,1.2+r()*1.4,r()*10]);
     o.sec=[[0.35,(r()-0.5)*18,(r()-0.5)*18],[0.75,(r()-0.5)*22,(r()-0.5)*22],[1.15,(r()-0.5)*16,(r()-0.5)*16]];}
   return o;}
-function artDrawBoom(g,o,x,y,a,t){const z=artFxZ(),kill=o.kind==='kill',mac=o.type==='mac',hs=kill?1:0.6; // hs = 烟的半径倍数
+function artDrawBoom(g,o,x,y,a,t){const z=artFxZ()*(o.zk||1),kill=o.kind==='kill',mac=o.type==='mac',hs=kill?1:0.6; // hs = 烟的半径倍数
   {const d=kill?0.28:0.16,k=1-a/d;if(k>0)artBlit(g,artFxSpr(mac&&!kill?'flashB':'flash'),x,y,(kill?34:mac?13:16)*z*(1.2-0.4*k),k,true);}
   if(kill&&a<0.9){const k=a/0.9;artBlit(g,artFxSpr('ring'),x,y,(8+58*Math.sqrt(k))*z,0.9*(1-k),true);}
   if(!mac||kill){const d=kill?1.4:0.8,k=a/d;if(k<1)artBlit(g,artFxSpr('fire'),x,y,(kill?(7+18*Math.sqrt(k)):(4+9*Math.sqrt(k)))*z,(1-k)*(1-k)*0.95,true);}
@@ -196,9 +296,11 @@ function artDrawBoom(g,o,x,y,a,t){const z=artFxZ(),kill=o.kind==='kill',mac=o.ty
 function artHits(){ // 84-scene 调(主画面与特写):hitFX 里新出现的一条记一份墙钟起点;看不见的不画(52 spawnHit 判 vis;LL6 光速延迟开着时按到达 fxSeen)
   const t=artNow(),L=ART_BOOM.list;
   for(const h of hitFX){if(ART_BOOM.seen.has(h))continue;if(!adminMode&&!fxSeen(h,VIEW)){if(!h.seeT)ART_BOOM.seen.add(h);continue;}ART_BOOM.seen.add(h); // LL6 光速延迟开着(登记了到达):光到本视角那一帧才记墙钟起点、开播(sensors/21 fxSeen);没登记的照旧按 vis
-    L.push(Object.assign({h,t0:t,pos:h.pos.slice()},artMkBoom(h.big?'kill':'hit',h.type==='mac'?'mac':'missile',(L.length*131+Math.floor(h.pos[0]))|0)));}
-  let w=0;for(let i=0;i<L.length;i++){const b=L[i],a=t-b.t0;if(a>(b.kind==='kill'?3:1)||a<0)continue;L[w++]=b;
-    const p=toScreen(b.pos[0],b.pos[1]);if(p[0]<-120||p[0]>W+120||p[1]<-120||p[1]>H+120)continue;artDrawBoom(ctx,b,p[0],p[1],a,t);}
+    const sd=(L.length*131+Math.floor(h.pos[0]))|0;
+    if(!h.big&&h.w==='ssm'){const r=artRng(sd+7);for(let j=0;j<4;j++)L.push(Object.assign({h,t0:t+j*0.05,pos:h.pos.slice(),zk:0.42,ox:(r()-0.5)*10,oy:(r()-0.5)*10},artMkBoom('hit','missile',sd+j)));} // 2026-10-11 突击弹:一发一下小爆,一串
+    else L.push(Object.assign({h,t0:t,pos:h.pos.slice(),zk:h.big?1:(ART_HITK[h.w]||1)},artMkBoom(h.big?'kill':'hit',h.type==='mac'?'mac':'missile',sd)));}
+  let w=0;for(let i=0;i<L.length;i++){const b=L[i],a=t-b.t0;if(a>(b.kind==='kill'?3:1))continue;L[w++]=b;if(a<0)continue; // 一串小爆后面几下还没到点:留着
+    const p=toScreen(b.pos[0],b.pos[1]),zf=artFxZ();if(p[0]<-120||p[0]>W+120||p[1]<-120||p[1]>H+120)continue;artDrawBoom(ctx,b,p[0]+(b.ox||0)*zf,p[1]+(b.oy||0)*zf,a,t);}
   L.length=Math.min(w,240);}
 
 /* ---------- 碎石 / 小行星:随机多边形切成小面(顶点偏向光源),每个面按坡向 + 朝上求明暗;大的加陨坑。按(种子、大小、DPR)缓存 ---------- */

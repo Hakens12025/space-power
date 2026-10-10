@@ -147,7 +147,8 @@ function fxVis(pos,sh,vic){ // 2026-09-28 vis = 我方看不看得见这一下:�
   const see=sd=>!!((sh&&sh.side===sd)||(vic&&vic.side===sd)||ships.some(s=>s.side===sd&&!s.dead&&Math.hypot(s.pos[0]-pos[0],s.pos[1]-pos[1])<(s.visR||COV.VIS_R))||rocks.some(o=>o.kind==='buoy'&&o.side===sd&&!o.dead&&Math.hypot(o.pos[0]-pos[0],o.pos[1]-pos[1])<(o.visR||0)));
   return {blue:see('blue'),red:see('red')}; // 两方各记一份(画面按当前视角 VIEW 读)
 }
-function spawnHit(pos,type,sh,vic){const h={pos:pos.slice(),t:1.2,type,vis:fxVis(pos,sh,vic),vic:vic||null};if(typeof llFx==='function')llFx(h,pos,sh,vic);hitFX.push(h);} // LL6 光速延迟开着时登记到达(条目挂 seeT,画面按 fxSeen 到达才播;sensors/26) // 2026-09-29 vic = 挨打的是什么(撞天体为 null、碎石 / 民船也在这里):小窗只报打在舰船上的
+function hitW(p){return p.type==='mac'?(p.sec?'sec':'rail'):(p.type==='missile'?(p.ssm?'ssm':'hvy'):null);} // 2026-10-11 命中闪光的武器标签(只给画面:81-art artHits 按它定大小)
+function spawnHit(pos,type,sh,vic,w){const h={pos:pos.slice(),t:1.2,type,w:w||null,vis:fxVis(pos,sh,vic),vic:vic||null};if(typeof llFx==='function')llFx(h,pos,sh,vic);hitFX.push(h);} // LL6 光速延迟开着时登记到达(条目挂 seeT,画面按 fxSeen 到达才播;sensors/26) // 2026-09-29 vic = 挨打的是什么(撞天体为 null、碎石 / 民船也在这里):小窗只报打在舰船上的
 let ciwsFX=[]; // 2026-09-28 近防炮打掉的导弹火花 {pos,n,tw,vis}:weapons/56 结算时出,render/83 drawCiwsFx 按墙钟画完就删(不进 hitFX:小窗导演会把它当中弹)
 function spawnCiwsFX(pos,n,sh,vic){const f={pos:pos.slice(),n,tw:nowMs(),vis:fxVis(pos,sh,vic),vic:vic||null};if(typeof llFx==='function')llFx(f,pos,sh,vic);ciwsFX.push(f);} // LL6 同 spawnHit:登记到达 // vic = 那组导弹冲着的船(小窗「近防拦下」绑它)
 let sdFX=[]; // 2026-10-08 用户:导弹燃料耗尽 / 拦截弹没目标不再瞬间消失 —— 自毁小特效 {pos,tw,vis,side,big}:render/83 drawSdFx 按墙钟画完就删(不进 hitFX:小窗导演会把它当中弹)
@@ -219,6 +220,7 @@ function fireMissiles(shooter,target,n,cells,w){ // w:打哪一种(MSL_W 反舰�
   // 组间散布(v111):同舰同目标多组不再 0km 叠加成"一发",按组序横散布成扇面(前置追踪会让各道在目标附近收拢)
   const axis=V.norm(V.sub(tp0,shooter.pos));
   let perp=V.norm([-axis[1],axis[0],0]);
+  const fc=shooter.facing,sg=(fc[0]*axis[1]-fc[1]*axis[0])>=0?1:-1,ej=W.ssm?V.norm([-fc[1]*sg,fc[0]*sg,0]):axis; // 2026-10-11 用户:突击弹从朝目标那一舷的弹舱侧射出膛、再转向扑过去(演示页 demos/美术/导弹类武器美术.html);反舰照旧朝目标弹射
   if(!isFinite(perp[0])||V.len(perp)<0.5)perp=[1,0,0]; // 退化兜底
   // v122 导弹模式:auto=默认组网(noNet船直射) / net=强制组网 / direct=直射
   const isNet=!W.ssm&&(missileMode==='net'||(missileMode==='auto'&&!shooter.noNet)); // 突击弹按直射的速度剖面
@@ -243,7 +245,7 @@ function fireMissiles(shooter,target,n,cells,w){ // w:打哪一种(MSL_W 反舰�
     projectiles.push({type:'missile',group:gid,count:W.per,ssm:W.ssm,aK:W.vk,life:W.ssm?ssmLife(pvPeak,MA):0, // 2026-10-11 突击弹:不上数据链(54 组网跳过它)、加速度倍数 aK(52 mslA)、飞够 life 还没中就自毁(56)
       // KIMI154:每组16→12颗(用户令砍导弹:齐射密度-25%,拦截需求同步降,反清屏延续);RF3 枚数读烘焙字段(定义在 weapons/51-defs)
       pos:[shooter.pos[0]+perp[0]*off,shooter.pos[1]+perp[1]*off,shooter.pos[2]+perp[2]*off],
-      vel:[shooter.vel[0]+axis[0]*200*MSL_VK+perp[0]*lane*10,shooter.vel[1]+axis[1]*200*MSL_VK+perp[1]*lane*10,shooter.vel[2]+axis[2]*200*MSL_VK+perp[2]*lane*10], // 继承载机速度矢量+轻微侧向发散;2026-10-05 加朝目标的弹射分量(= 初速下限):船停着时原来只剩 ±5 横向、弹先横着出去再掉头 90°
+      vel:[shooter.vel[0]+ej[0]*200*MSL_VK+perp[0]*lane*10,shooter.vel[1]+ej[1]*200*MSL_VK+perp[1]*lane*10,shooter.vel[2]+ej[2]*200*MSL_VK+perp[2]*lane*10], // 继承载机速度矢量+轻微侧向发散;2026-10-05 加朝目标的弹射分量(= 初速下限):船停着时原来只剩 ±5 横向、弹先横着出去再掉头 90°
       target:isShip?target:null, shooter, dmg:shooter.missDmg*W.per, missDmg:shooter.missDmg, // 组总伤害 + 单颗伤害(v119,命中按单颗算)
       spd:Math.max(200*MSL_VK,V.len(shooter.vel)), // 初始速率=载机速率
       fuel:MSL_FUEL, age:0, // 燃料(秒,WR1 起是常量 MSL_FUEL:mslReach 从它现算)+ 飞行年龄(近防发射判定)
