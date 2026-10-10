@@ -8,7 +8,7 @@ function wpnDefOf(cls,kind){ // 舰种配装里这一类武器的定义(没装�
 function icpOf(s){return (s&&s.icp)||wpnDefOf(s&&s.cls,'icp');} // 拦截弹的参数
 function gunOf(s){return (s&&s.gun)||wpnDefOf(s&&s.cls,'gun');} // 近防炮的参数
 function ciwsRingsOf(s){const a=icpOf(s),b=gunOf(s);return {outer:a?a.outer:0,inner:b?b.inner:0,innerIntercept:b?b.innerIntercept:0};} // 「近防」两圈(外圈 = 拦截弹、内圈 = 近防炮):只给菜单 / 光圈 / 编队这些按两圈看的地方
-const ICP_RADAR_K=1.5; // 2026-10-11 用户:开雷达拦截弹射程增加(选「舰上雷达的发射档」、x1.5):开着照射时预警距离 / 储备线 / 打浮标距离 / 出防区自毁都乘它;代价是一直被对方听见
+const ICP_RADAR_K=1.5*1.1/0.9; // 2026-10-11 用户:开雷达拦截弹射程增加(选「舰上雷达的发射档」、x1.5);同日又「静默 x0.9、开机 x1.1」:外圈(静默)已 x0.9,这里 = 原开机圈 x1.1 / 新外圈 ≈ 1.83:开着照射时预警距离 / 储备线 / 打浮标距离 / 出防区自毁都乘它;代价是一直被对方听见
 function icpRadarK(s){return s&&s.emitMode==='paint'?ICP_RADAR_K:1;} // 这艘船此刻拦截弹射程的倍数(脉冲 / 干扰 / 静默 = 1)
 function ciwsRingsFm(s){const a=icpOf(s),b=gunOf(s);return {outer:a?(a.fmOuter||a.outer):0,inner:b?(b.fmInner||b.inner):0,innerIntercept:b?b.innerIntercept:0};} // 编队用的两圈(2026-10-08 用户:圈放大了阵型不动 —— formation/39 与红方 AI 的编队距离读这个)
 function gunOverload(g,ng,sects){ // 近防炮过载:近防圈里同时有 ovN 组以上来袭开始,每多一组摊薄 ovK × 圈里来袭的扇面每多一个摊薄 sectK(v121:多方向包抄明显强于单方向堆)
