@@ -607,7 +607,7 @@ function cmdCardSync(sel){const el=document.getElementById('cmdCard');if(!el)ret
   CARD_TPL.innerHTML=sel.length?WCAT.map(([c,lb,key])=>wpkCatHTML(c,lb,key,sel)).join('')+wpkCiwsHTML(sel):'';domPatch(el,CARD_TPL);
   for(const z of el.querySelectorAll('.wr > .cells'))WCW[z.parentNode.dataset.row]=z.clientWidth;} // 下一次重画按这个宽度定档
 function wpkHoverTip(t,s){
-  if(t.dataset.cw){const c=ciwsRingsOf(s);return t.dataset.cw==='ciwsMsl'?'拦截弹 · 外圈 '+Math.round(c.outer/1000)+'k · 库存 '+(s.interceptor||0)+' 枚 · 来袭导弹进预警距离自动发射迎上去(消耗弹药)· 点 = 开 / 关':'近防炮 · 内圈 '+(c.inner/1000).toFixed(1)+'k · 打进内圈的导弹每艘拦一次,不耗弹药 · 点 = 开 / 关';}
+  if(t.dataset.cw){const c=ciwsRingsOf(s);return t.dataset.cw==='ciwsMsl'?'拦截弹 · 外圈 '+Math.round(c.outer/1000)+'k(开雷达照射 '+Math.round(c.outer*ICP_RADAR_K/1000)+'k) · 库存 '+(s.interceptor||0)+' 枚 · 来袭导弹进预警距离自动发射迎上去(消耗弹药)· 点 = 开 / 关':'近防炮 · 内圈 '+(c.inner/1000).toFixed(1)+'k · 打进内圈的导弹每艘拦一次,不耗弹药 · 点 = 开 / 关';}
   if(t.dataset.hr==='ciws')return KIND_INFO.ciws.tip(s)+' · 两行各管一件,点 = 开 / 关';
   const k=t.dataset.row||(t.dataset.cat==='sp'?'buoy':t.dataset.cat),how=' —— 点绿条选(船多时成一整条:点 +1 / 右键 −1 / 拖),再点敌舰或空地发射;大勾 = 这一类自动开火,小勾 = 这一种'; // 2026-10-11 说明条不换行,太长两头会被屏幕截掉
   if(k==='mac')return KIND_INFO.mac.tip(s)+how;

@@ -489,7 +489,9 @@ function drawHoverRings(){
       if(wpnHas(s,'msl'))ring(p,mslReach(s),'反舰 射程 ≈ '+Math.round(mslReach(s)/1000)+'k(中段熄火滑行)',em('msl')); // WR1
       if(s.ssmCells&&s.ssmCells.length)ring(p,SSM_R,'突击弹 射程 ≈ '+Math.round(SSM_R/1000)+'k(出膛自导)',em('ssm'));}
     else if(hoverRing==='ciws'){const c=ciwsRingsOf(s),hi=hoverRingHi,kf=r=>(r<10000?(r/1000).toFixed(1):Math.round(r/1000))+'k'; // 2026-10-08 用户:停在近防哪里都画两圈,停在哪一行加亮哪圈(原来停一行只画一圈,看着像换掉了)
-      ring(p,c.outer,'拦截弹 '+kf(c.outer),hi==='ciwsMsl'?1:(hi?-1:0));ring(p,c.inner,'近防炮 '+kf(c.inner),hi==='ciwsGun'?1:(hi?-1:0));}
+      {const on=icpRadarK(s)>1,ro=c.outer*ICP_RADAR_K,ra=on?c.outer:ro; // 2026-10-11 用户:开雷达拦截弹射程 x ICP_RADAR_K —— 两个外圈都画,起作用的照常、另一个暗虚线(同火控窗曲线)
+       ring(p,on?ro:c.outer,'拦截弹 '+kf(on?ro:c.outer)+(on?'(雷达照射中)':'(静默)'),hi==='ciwsMsl'?1:(hi?-1:0));
+       if(ra*cam.zoom>=4){ctx.strokeStyle='rgba(90,167,255,.28)';ctx.lineWidth=1;dashArc(p[0],p[1],ra*cam.zoom,6);ctx.fillStyle='rgba(143,208,255,.4)';ctx.font='10px Consolas';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText('拦截弹 '+kf(ra)+(on?'(静默时)':'(开雷达照射)'),p[0],p[1]-ra*cam.zoom-2);}}ring(p,c.inner,'近防炮 '+kf(c.inner),hi==='ciwsGun'?1:(hi?-1:0));}
     else if(hoverRing==='buoy'&&(s.buoys||0)>0){const r=actRangeOf({type:'beacon'});ring(p,r,'浮标雷达 ≈ '+Math.round(r/1000)+'k(放出去后以浮标为圆心)');} // 2026-10-08 用户:每件武器悬停都画圈
     else if(hoverRing==='emit'&&typeof actRangeOf==='function') // EM1-B:开了能照多远(按【开着照射】算,不管此刻开没开)。2026-09-29 用户:雷达范围只画照射圈(「被听见」圈与静默交叉定位圈去掉)
       ring(p,actRangeOf(s),'雷达 '+Math.round(actRangeOf(s)/1000)+'k(对标准目标)'+(s.emitMode==='silent'?' · 现在静默':''));

@@ -63,22 +63,22 @@ function stepWeaponSystems(dt){
   // 近防自动发射拦截导弹实体(智能按需:1颗拦1颗,防过剩/防多舰重复)
   for(const x of ships){
     if(x.dead)continue;
-    const w=icpOf(x);if(x.ciwsOn===false||!w||w.outer<=0||x.interceptor<=0)continue; // 2026-10-07 拦截弹参数(51-defs icp_*) // TIER1 近防回表改访问器(每 tick 近防循环);RF2 拦截开关:关=整段不走(连冷却都不耗)
+    const w=icpOf(x);if(x.ciwsOn===false||!w||w.outer<=0||x.interceptor<=0)continue;const WO=w.outer*icpRadarK(x); // 2026-10-11 WO = 此刻的外圈(开着雷达照射 x ICP_RADAR_K,weapons/51-ciws) // 2026-10-07 拦截弹参数(51-defs icp_*) // TIER1 近防回表改访问器(每 tick 近防循环);RF2 拦截开关:关=整段不走(连冷却都不耗)
     if(x.ciwsCd===undefined)x.ciwsCd=0;
     if(x.ciwsCd>0){x.ciwsCd-=dt;continue;}
     const llon=typeof llOnNow==='function'&&llOnNow(),xs=x.side==='blue'?'blue':'red'; // LL7 光速延迟开着:位置 / 速度 / 颗数读这一方看到的弹影(sensors/21 projLook),先按真值距离减弹影偏移的严格上界预筛(审查第 23 条)
-    const BB=llon?LL_CFG.BMAX:0,DS=llon?Math.max(w.outer*w.warnK+BB/(1-BB)*(LL_PVS.rm+4*BB*LL_C*SENS.TICK),w.outer*w.warnK*(1-BB)/(1-2*BB)):0,DS2=DS*DS; // LL7 不开方的一道粗筛:给弹影的眼上一拍在可见距离 rm 内、之后两边各走不过 BMAX·c,没记眼时按本舰这只眼的推迟算 ⇒ 此刻距离过 DS 的弹影一定在射程外
+    const BB=llon?LL_CFG.BMAX:0,DS=llon?Math.max(WO*w.warnK+BB/(1-BB)*(LL_PVS.rm+4*BB*LL_C*SENS.TICK),WO*w.warnK*(1-BB)/(1-2*BB)):0,DS2=DS*DS; // LL7 不开方的一道粗筛:给弹影的眼上一拍在可见距离 rm 内、之后两边各走不过 BMAX·c,没记眼时按本舰这只眼的推迟算 ⇒ 此刻距离过 DS 的弹影一定在射程外
     let eng=false; // 这一拍有没有要拦的来袭导弹(有就先顾导弹,不打浮标)
     for(const p of projectiles){
       if(p.type!=='missile'||p.done||p.coastT>0||p.shooter.side===x.side)continue; // T1:脱锁导弹必自毁,近防不浪费弹药
       let q=p;
-      if(llon){const dx=p.pos[0]-x.pos[0],dy=p.pos[1]-x.pos[1],dz=p.pos[2]-x.pos[2],d2=dx*dx+dy*dy+dz*dz;if(d2>=DS2||Math.sqrt(d2)-llPvLag(p,xs,x.pos)>=w.outer*w.warnK)continue; // 弹影肯定在射程外
+      if(llon){const dx=p.pos[0]-x.pos[0],dy=p.pos[1]-x.pos[1],dz=p.pos[2]-x.pos[2],d2=dx*dx+dy*dy+dz*dz;if(d2>=DS2||Math.sqrt(d2)-llPvLag(p,xs,x.pos)>=WO*w.warnK)continue; // 弹影肯定在射程外
         if(!trkSees(xs,p))continue;q=projLook(p,xs);if(!q)continue;}
       const d0=V.len(V.sub(q.pos,x.pos));
       // DS167 拦截弹资源纪律(设计师拍板,敌我一致):库存<30%只拦"进入外圈一半距离"的近目标(储备意识;弹尽=裸奔,弹药管理的代价)
-      if(x.interceptor<(x.interMax||x.interceptor)*w.reserve&&d0>=w.outer*w.reserveR)continue;
+      if(x.interceptor<(x.interMax||x.interceptor)*w.reserve&&d0>=WO*w.reserveR)continue;
       // 智能拦截判定(v118):侦测到 + 射程内 + 确认是威胁(朝友方逼近) + 迎得上去 → 才开火(不无脑打,不浪费)
-      if(d0>=w.outer*w.warnK)continue; // 射程(预警 = 外圈 x warnK)
+      if(d0>=WO*w.warnK)continue; // 射程(预警 = 外圈 x warnK;开着雷达照射外圈 x ICP_RADAR_K)
       if(!trkSees(xs,p))continue; // 侦测到(本阵营传感器网络看得见才拦) v119:读detectLoop缓存 TK4a:缓存在航迹表的目击集合里
       let threat=false;
       {const vl=V.len(q.vel); // 来袭导弹正朝我方某艘舰飞(速度方向与指向它的方向夹角约 25° 以内)= 威胁。2026-09-28 原来直接读来袭弹内部的真实目标 p.target
@@ -135,7 +135,7 @@ function stepWeaponSystems(dt){
 function icpBuoy(x,w,xs){
   if(x.interceptor<(x.interMax||x.interceptor)*w.reserve)return;
   for(const o of rockObjs()){if(o.kind!=='buoy'||o.dead||o.side===xs||!contactFix(o,xs))continue;
-    const k=contactKin(o,xs);if(!k||V.len(V.sub(k.pos,x.pos))>=w.outer*w.warnK)continue;
+    const k=contactKin(o,xs);if(!k||V.len(V.sub(k.pos,x.pos))>=w.outer*icpRadarK(x)*w.warnK)continue;
     if(projectiles.some(r=>r.type==='interceptor'&&!r.done&&r.target===o))continue; // 已有拦截弹在追
     const need=w.buoyN||2;if(x.interceptor>=need){x.interceptor-=need;x.ciwsCd=PHYS.t(w.cdS);fireInterceptor(x,o,need,k);}
     return;}}
