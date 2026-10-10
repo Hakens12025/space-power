@@ -59,17 +59,18 @@ function drawFmStations() {
 
     /* ---- 带半径圈 ---- */
     const T = (typeof fmGeoOf === 'function') ? fmGeoOf(F.P) : null; // FM6:必须与 fmPlanStations 同源,直读站位预设会与玩家调过的 bm 分家
-    const BR = (typeof fmBandRadii === 'function') ? fmBandRadii(list, flag, T ? T.bm : 1) : null;
+    const BR = (typeof fmBandRadii === 'function') ? fmBandRadii(list, flag, T ? T.bm : 1, F.P) : null; // 2026-10-11 补传 F.P:玩家在编组控制页逐条覆盖的带半径也要画出来(规划 fmPlanStations 一直读它)
+    const wd = (T && isFinite(T.widen)) ? T.widen : 1, ang = isFinite(F.ang) ? F.ang : 0; // 2026-10-11 用户:圈要跟站位同一个形状 —— 站位在编队局部系里是 前后 r、左右 r x 扁率(widen),再按阵型朝向 F.ang 转(同 fmOffOf);原来一律画正圆,水下为主(扁率 1.85)看着还是固定模板的圆
     if (BR) {
       ctx.lineWidth = 1;
       for (const bn of FMP_BAND_ORDER) {
         const r = BR[bn] * cam.zoom;
         /* 半径下限 3px:圈缩成一个点时只是一坨噪点。上限 4000px:圈远大于视口时它在屏幕上是一条几乎笔直的线,
            画它没有信息量,而超大半径的 arc 在部分浏览器上是慢路径(同 RF10 那条"别把屏幕长度当循环上界"的精神)。 */
-        if (!isFinite(r) || r < 3 || r > 4000) continue;
+        if (!isFinite(r) || r < 3 || r * Math.max(1, wd) > 4000) continue;
         ctx.strokeStyle = FMP_BAND_COLOR[bn];
         ctx.beginPath();
-        ctx.arc(fp[0], fp[1], r, 0, 6.283);
+        ctx.ellipse(fp[0], fp[1], r, r * wd, ang, 0, 6.283);
         ctx.stroke();
       }
     }
