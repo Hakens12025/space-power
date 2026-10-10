@@ -184,7 +184,7 @@ function fireInterceptor(shooter,targetMissile,count,look){ // 发射拦截导�
     hitMul:(shooter.interHitMul||1),icLast:shooter.pos.slice(),icR2:INT_ZONE_R2});
   {const p=projectiles[projectiles.length-1],q=look||targetMissile,tv=q.vel||MAC_V0;let d=V.norm(V.sub(q.pos,p.pos)); // 2026-10-08 用户:出膛直接朝要拦的目标(原来继承发射舰速度、先顺着船的航向飞出去再拐);瞄点 = 发射舰看到的来袭弹 + 提前量(同 56 飞行中的瞄法),速率不变
     const rv=V.len([d[0]*p.spd-tv[0],d[1]*p.spd-tv[1],d[2]*p.spd-tv[2]]),tL=Math.max(0.3,V.len(V.sub(q.pos,p.pos))/Math.max(300,rv));
-    d=V.norm(V.sub([q.pos[0]+tv[0]*tL,q.pos[1]+tv[1]*tL,q.pos[2]+tv[2]*tL],p.pos));if(d[0]===d[0])p.vel=[d[0]*p.spd,d[1]*p.spd,d[2]*p.spd];} // icR2 = 防区半径的平方(INT_ZONE_R2)。RANGE1 拦截弹命中率倍率随弹出膛(07-missiles 的 hitRate 末尾乘它)。外圈拦截率的真实旋钮是这个:CLS_CIWS.outerIntercept 是死字段,声明后全库零读取,面板绝不能放它
+    d=V.norm(V.sub([q.pos[0]+tv[0]*tL,q.pos[1]+tv[1]*tL,q.pos[2]+tv[2]*tL],p.pos));if(d[0]===d[0]){const e=PHYS.v(w.v0)*INT_VK,sv=shooter.vel;p.vel=[sv[0]+d[0]*e,sv[1]+d[1]*e,sv[2]+d[2]*e];p.spd=Math.max(e,V.len(p.vel));}} // 2026-10-11 用户:舰船速度补回来 —— 出膛速度 = 发射舰速度 + 朝拦截点的弹射速度 v0(10-08 那版只朝目标、按船速的大小飞,船速的方向丢了);之后照旧朝目标转向、加速(56) // icR2 = 防区半径的平方(INT_ZONE_R2)。RANGE1 拦截弹命中率倍率随弹出膛(07-missiles 的 hitRate 末尾乘它)。外圈拦截率的真实旋钮是这个:CLS_CIWS.outerIntercept 是死字段,声明后全库零读取,面板绝不能放它
   if(typeof llBorn==='function')llBorn(projectiles[projectiles.length-1]); // LL1 弹丸出生登记(sensors/26 光锥层;只记录不改模拟)
 }
 let missileGroupSeq=0;
