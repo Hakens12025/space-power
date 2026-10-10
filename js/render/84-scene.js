@@ -445,7 +445,7 @@ function drawInset(){
   const fade=!sub&&!!INSET.last&&INSET.a>0.02;if(fade)sub=INSET.last; // 淡出:拿上一帧的取景接着画(2026-10-08 用户:反层的「主画面周围」退出时也淡出,原来直接消失)
   if(!sub){insetOff();return;}
   if(now-INSET.botT>500){INSET.botT=now;const cb=document.getElementById('cmdBar'),sb=document.getElementById('spawnBar'); // 底边让开指令栏,顶边让开加船条;指令栏尺寸一变立刻重读
-    if(cb){INSET.bot=Math.max(44,H-cb.getBoundingClientRect().top);if(!INSET.ro&&typeof ResizeObserver==='function'){INSET.ro=new ResizeObserver(()=>{INSET.botT=-1e9;});INSET.ro.observe(cb);}}
+    if(cb){INSET.bot=Math.max(44,H-cb.getBoundingClientRect().top)+(typeof scaleLift==='function'&&scaleLift()>0?40:0);if(!INSET.ro&&typeof ResizeObserver==='function'){INSET.ro=new ResizeObserver(()=>{INSET.botT=-1e9;});INSET.ro.observe(cb);}} // 2026-10-10 比例尺挪到底栏上面时(81-background scaleLift)再让出它那一块
     let tl=60;if(sb){const r=sb.getBoundingClientRect();if(r.height>0)tl=Math.max(tl,r.bottom+INSET.GAP);}INSET.top=tl;}
   const yb=H-INSET.bot-INSET.GAP,w0=Math.min(W>=INSET.WIDE?INSET.WB:INSET.W,Math.round(W*0.3),Math.floor((yb-INSET.top)*1.6)),h0=Math.round(w0/1.6);
   if(!(w0>=INSET.MIN_W)){insetOff();return;} // 屏太小:不画(同"无对象"那条路)

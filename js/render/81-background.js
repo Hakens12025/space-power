@@ -114,7 +114,7 @@ function drawGrid(){
   if(vtW[3]>0.01)vtGridLs(vtW[3],3,vtCur===3?wLs:0);   // SN7d:战区层与舰队层是同一张光秒网格(固定资产 + LOD),放射距离环已删
   // 比例尺:左下角,条长固定 VT.BAR_PX,上面的数随缩放连续变(用户 2026-09-26:"不要让比例尺可变,固定长度,变数字");三位有效数字 + 「一格 X km」
   const barPx=VT.BAR_PX,km0=barPx/cam.zoom,pw=Math.pow(10,Math.max(0,Math.floor(Math.log10(km0))-2)),barKm=Math.round(km0/pw)*pw;
-  const bx=12, by=H-14;
+  const bx=12, by=H-14-scaleLift();
   ctx.save();
   ctx.fillStyle='rgba(5,7,12,.72)';
   ctx.fillRect(bx-6,by-24,200,34);
@@ -182,3 +182,5 @@ function drawStars(){
     if(ox>0&&oy>0)ctx.drawImage(c,ox-W,oy-H,W,H);
   }
 }
+const SCL={t:-1e9,lift:0}; // 2026-10-10 比例尺让开底栏:底栏加宽到 1400 后,窄于约 1650 的屏会盖住左下角的比例尺 —— 盖到了就挪到底栏上面(特写窗跟着再往上让,render/84 INSET.bot)
+function scaleLift(){const now=nowMs();if(now-SCL.t>500){SCL.t=now;const cb=document.getElementById('cmdBar');let l=0;if(cb){const r=cb.getBoundingClientRect();if(r.height>0&&r.left<220)l=Math.max(0,H-r.top);}SCL.lift=l;}return SCL.lift;} // 每 0.5 秒读一次底栏的位置
