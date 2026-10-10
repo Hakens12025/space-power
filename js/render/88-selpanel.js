@@ -574,14 +574,17 @@ function wpkNone(lb){return '<div class="wb none"><div class="hd"><span class="l
 function wpkAggHTML(k,U,sel){const R=WROW[k],T=U.length,rd=wkReady(k,sel).length,P=Math.min(WAGG.get(k)||0,rd),pc=v=>(T?v/T*100:0).toFixed(2)+'%',B=[0,0,0,0],rem=[];let rl=1;
   for(const [x,u] of U){const t=R.cd(x)[u];rl=Math.max(rl,R.rl(x));if(t>0&&(!R.stock||R.stock(x)>0)){rem.push(t);B[Math.min(3,Math.floor(t/R.rl(x)*4))]++;}}
   let nx='';if(rem.length){const t0=Math.min(...rem);nx='+'+rem.filter(t=>t<=t0+rl*0.05).length+'·'+Math.ceil(SHOW.t(t0))+'s';} // 下一批:最快那个装好时(再宽 5% 装填)一起好的个数
-  return '<span class="agg"><i class="g" style="width:'+pc(rd)+'"></i>'+B.map((n,i)=>'<i class="c" style="width:'+pc(n)+';opacity:'+[0.9,0.6,0.4,0.22][i]+'"></i>').join('')
-    +'<i class="p" style="width:'+pc(P)+'"></i><s class="l">'+(P?'选 '+P:'')+'</s><s class="r">'+nx+'</s></span>';}
+  const num=rd+'/'+T+(R.stock?'·'+sel.reduce((n,x)=>n+R.stock(x),0)+'组':'')+(nx?' '+nx:''); // 2026-10-11 用户:数字和条结合 —— 读数叠在条的右端
+  return '<span class="agg"><i class="g" style="width:'+pc(rd)+'"></i>'+B.map((n,i)=>'<i class="c" style="width:'+pc(n)+';opacity:'+[0.9,0.65,0.45,0.28][i]+'"></i>').join('')
+    +'<i class="p" style="width:'+pc(P)+'"></i><s class="l">'+(P?'选 '+P:'')+'</s><s class="r">'+num+'</s></span>';}
 function wpkRowHTML(k,sel,gated){const R=WROW[k],own=sel.filter(R.has);if(!own.length)return '';
   if(R.sp){const T=own.reduce((n,x)=>n+R.n(x),0),L=own.reduce((n,x)=>n+R.left(x),0),ag=T*8-2+(own.length-1)*6>(WCW[k]||110);WMODE[k]=ag?'agg':'cell';
-    const segs=ag?'<span class="agg sp"><i class="g" style="width:'+(T?L/T*100:0).toFixed(2)+'%"></i></span>':own.map(x=>Array.from({length:R.n(x)},(_,i)=>'<i class="sp'+(i<R.left(x)?' ok':'')+'"></i>').join('')).join('<i class="gap"></i>');
+    const segs=(ag?'<span class="agg sp"><i class="g" style="width:'+(T?L/T*100:0).toFixed(2)+'%"></i></span>':own.map(x=>Array.from({length:R.n(x)},(_,i)=>'<i class="sp'+(i<R.left(x)?' ok':'')+'"></i>').join('')).join('<i class="gap"></i>'))+'<s class="num">'+L+'/'+T+'</s>'; // 2026-10-11 读数叠在条右端
     return '<div class="wr'+(selWeapon===k?' hi':'')+'" data-row="'+k+'" data-arm="'+k+'"><span class="wn">'+R.nm+'</span><span class="cells'+(ag?' ag':'')+'">'+segs+'</span></div>';} // 2026-10-11 用户:绿条要长,右边读数去掉(余几个挪进悬停说明 wkRowInfo)
   const U=wkUnits(k,own),rd=wkReady(k,own).length,ag=U.length*8-2+(own.length-1)*6>(WCW[k]||110);WMODE[k]=ag?'agg':'cell'; // 每条至少 6px(+2px 间隔、船与船之间 +6px);放不下就收成汇总档
-  const segs=ag?wpkAggHTML(k,U,own):own.map(x=>R.cd(x).map((t,u)=>wkOk(k,x,u)?'<i class="ok'+(WPK[k].has(x.id+':'+u)?' pk':'')+'" data-seg="'+k+':'+x.id+':'+u+'"></i>':'<i><b style="width:'+(t>0?Math.round(Math.max(0,1-t/R.rl(x))*100):0)+'%"></b></i>').join('')).join('<i class="gap"></i>');
+  const ord=x=>R.cd(x).map((t,u)=>[u,t,wkOk(k,x,u)]).sort((a,b)=>(b[2]-a[2])||((a[1]>0?a[1]:1e12)-(b[1]>0?b[1]:1e12))); // 2026-10-11 用户:就绪(绿)永远在左,在装的在右、越快装好越靠左,打光的最右;只改显示顺序,data-seg 仍是那一门 / 那个单元
+  const segs=ag?wpkAggHTML(k,U,own):own.map(x=>ord(x).map(([u,t,ok])=>ok?'<i class="ok'+(WPK[k].has(x.id+':'+u)?' pk':'')+'" data-seg="'+k+':'+x.id+':'+u+'"></i>':'<i><b style="width:'+(t>0?Math.round(Math.max(0,1-t/R.rl(x))*100):0)+'%"></b></i>').join('')).join('<i class="gap"></i>')
+    +'<s class="num">'+rd+'/'+U.length+(R.stock?'·'+own.reduce((n,x)=>n+R.stock(x),0)+'组':'')+'</s>'; // 读数叠在条右端(点击穿过它)
   return '<div class="wr" data-row="'+k+'"><span class="wn" data-rowpick="'+k+'">'+R.nm+'</span><span class="cells'+(ag?' ag" data-agg="'+k+'"':'"')+'>'+segs+'</span>' // 2026-10-11 用户:绿条要长 —— 右边「就绪 / 总数 · 组数」去掉,挪进悬停说明(wkRowInfo)
     +wpkCk('data-sub="'+k+'"',WPK_TRI(own.map(x=>x[KIND_INFO[k].on]!==false)),gated)+'</div>';}
 function wpkCatHTML(c,lb,key,sel){const K=Object.keys(WROW).filter(k=>WROW[k].cat===c&&sel.some(WROW[k].has));if(!K.length)return wpkNone(lb);
