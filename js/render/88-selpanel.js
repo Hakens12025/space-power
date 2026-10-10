@@ -42,6 +42,7 @@ function specItems(s){
     if(w.kind==='mac')items.push(['主炮',s.macDmg>0?(s.macDmg+((s.macN||1)>1?'×'+s.macN+'发':'')+'×'+Math.round(SHOW.t(s.macReload))+'s · 50%@'+Math.round(macEffRange(s)/1000)+'k'):'无']); // WR1:规格条带上命中率 50% 的距离;2026-10-10 macN>1 标出齐射发数
     else if(w.kind==='msl')items.push(['导弹',mslGroupsTxt(s)],['齐射',(s.cells||0)+'组']); // 2026-10-07 用户:导弹数量按组算(「64组 · 每组12发」),一次齐射几组另列
     else if(w.kind==='icp'){const c=ciwsRingsOf(s);items.push(['拦截弹',s.interMax+'枚'],['近防',Math.round(c.outer/1000)+'k/'+Math.round(c.inner/1000)+'k']);}
+    else if(w.kind==='lure')items.push(['诱饵',(s.lureMax||0)+'个']); // 2026-10-11
   }
   return items;
 }
@@ -96,6 +97,7 @@ function weaponRows(s){
     else if(w.kind==='msl')h+=`<div class="row"><span class="k">导弹</span><span class="v">就绪 ${readyCells(s)}/${s.cells} · ${mslGroupsTxt(s)}</span></div>`;
     else if(w.kind==='icp')h+=`<div class="row"><span class="k">拦截弹</span><span class="v">${s.interceptor}/${s.interMax}枚</span></div>`;
     else if(w.kind==='buoy')h+=`<div class="row"><span class="k">前出浮标</span><span class="v">${s.buoys||0}/${s.buoysMax||0}个</span></div>`; // 2026-09-27 K3
+    else if(w.kind==='lure')h+=`<div class="row"><span class="k">诱饵</span><span class="v">${s.lureN||0}/${s.lureMax||0}个</span></div>`; // 2026-10-11
   }
   return h;
 }
@@ -500,6 +502,7 @@ const WROW={ // 一行 = 一种武器:cat 哪一格;has 这艘有没有;cd 装�
   mac:{cat:'mac',nm:'轴炮',has:x=>hasMAC(x)&&!!x.macCds,cd:x=>x.macCds,rl:x=>x.macReload||1,stock:null,aim:'nose',busy:'这根炮管在装填'},
   msl:{cat:'msl',nm:'反舰',has:x=>wpnHas(x,'msl')&&!!x.cellTimer,cd:x=>x.cellTimer,rl:x=>x.mslReload||1,stock:x=>wpkGroups(x),aim:'near',busy:'这个发射单元在装填',out:'导弹打光了'},
   buoy:{cat:'sp',nm:'浮标',has:x=>wpnHas(x,'buoy'),sp:true,n:x=>x.buoysMax||0,left:x=>x.buoys||0,none:'没有浮标了'},
+  lure:{cat:'sp',nm:'诱饵',has:x=>wpnHas(x,'lure'),sp:true,n:x=>x.lureMax||0,left:x=>x.lureN||0,none:'没有诱饵了'}, // 2026-10-11
 };
 const WCAT=[['mac','主炮','T'],['msl','导弹','R'],['sp','特殊','']];
 const WPK={mac:new Set(),msl:new Set()},WAGG=new Map(),WMODE={},WCW={}; // WPK = 逐条选的(键 舰号:第几门 / 第几单元);WAGG = 汇总档每种选了几发;WMODE / WCW = 每行当前的档与绿条区宽度(下一次重画按它定档)
@@ -595,6 +598,7 @@ function wpkHoverTip(t,s){
   if(k==='mac')return KIND_INFO.mac.tip(s)+how;
   if(k==='msl')return KIND_INFO.msl.tip(s)+how;
   if(k==='buoy')return '放浮标:点这一行再点一个方向,浮标沿舰船 → 鼠标一直飞,不停,飞出地图消失;平时被动看和听,点浮标本身 → 底栏雷达开照射';
+  if(k==='lure')return '放诱饵:点这一行再点地图上一点,离那一点最近的船放一个;诱饵飞过去('+OBJ_CFG.LURE.FLY+' km/s),到了慢慢漂,一直开着雷达、隔 '+OBJ_CFG.LURE.BURN_EVERY+' s 点一次火,冒充一艘护卫舰 —— 对方只靠听的时候会当真(自动开火上当);被雷达照到认出、或贴近看清就露馅。存在 '+OBJ_CFG.LURE.LIFE+' s、结构 '+OBJ_CFG.LURE.HP;
   return '';}
 (function bindCmdCard(){const el=document.getElementById('cmdCard');if(!el)return;
   el.addEventListener('mousedown',e=>{

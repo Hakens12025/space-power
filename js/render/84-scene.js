@@ -573,6 +573,7 @@ function render(){
   if(typeof drawGhost==='function')drawGhost(); // RF11 移动虚影:与数据链同层级语义(我下的命令),排在 drawTargeting 之前 —— 准星是"正在进行的交互",比"正要下的命令"更高一层
   if(typeof drawSelEnt==='function')drawSelEnt(); // 2026-10-08 选中的只看信息的实体
   if(typeof drawBuoyAim==='function')drawBuoyAim(); // 2026-10-08 放浮标的方向预览线
+  if(typeof drawLureAim==='function')drawLureAim(); // 2026-10-11 放诱饵的落点预览(render/83)
   if(typeof drawFirePlan==='function')drawFirePlan(); // 2026-10-11 底栏选了几发:会开火的船描白(render/83)
   drawTargeting(); // RF5 图层顺序:准星/吸附圈/预览线表达"正要下的命令",必须压在 drawShip→drawLocks 这一整段"已经发生的事"之上(尤其 drawLocks 的红虚线会连到同一艘敌舰,排在它下面预览线会被压成断线);又必须让位于下面 drawRange/drawSelection/dragOrder 这几项排他交互与屏幕 chrome
   if(typeof drawSfxFilter==='function')drawSfxFilter(); // 2026-09-30 红外 / 雷达画面的滤镜(淡主色 + 暗角),盖地图内容、不盖特写窗与交互层

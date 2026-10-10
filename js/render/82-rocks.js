@@ -15,7 +15,8 @@ const ROCK_SHAPE=[1,0.72,0.95,0.68,0.9,0.78,1.05]; // 不规则多边形的七�
 
 function drawRocks(){ // 自己的浮标先画(不在自己的航迹表里),再画航迹表里的石头 / 民船 / 诱饵 / 敌方浮标;红外 / 雷达画面同主画面
   if(!rocks.length)return;
-  for(const s of rocks)if(!s.dead&&s.kind==='buoy'&&s.side===VIEW)drawOwnBuoy(s); // 2026-09-27 自己的浮标:不在自己的航迹表里,单独画
+  for(const s of rocks)if(!s.dead&&s.kind==='buoy'&&s.side===VIEW)drawOwnBuoy(s);
+  for(const s of rocks)if(!s.dead&&s.kind==='lure'&&s.side===VIEW)drawOwnLure(s); // 2026-10-11 自己放的诱饵(玩家现在能放了),同自己的浮标单独画 // 2026-09-27 自己的浮标:不在自己的航迹表里,单独画
   if(adminMode){for(const s of rocks)if(!s.dead&&s.side!==VIEW)drawRockAt(s,s.pos,'live',true);return;}
   trkEach(VIEW,function(tk,st){
     const s=trkSrc(tk);if(viewDead(s))return; // 2026-09-29 被打碎的碎石不再画(weapons/55);LL6 民船 / 诱饵 / 浮标按我方看见的(石头不记历史,照旧真值)
@@ -78,6 +79,11 @@ function drawObjKnown(s,p,r,tp,fc){ // 2026-09-27 认出来的民船 / 诱饵 / 
   if(cam.zoom>0.0008&&!lblPut(lb,p[0],p[1]+r+6,2)){ctx.fillStyle='rgba(215,226,240,.8)';ctx.fillText(lb,p[0],p[1]+r+6);}
   ctx.restore();
 }
+function drawOwnLure(s){ // 2026-10-11 自己的诱饵:阵营色叉 + 「诱饵 · 冒充护卫舰」(对方只靠听时看到的是一艘护卫舰)
+  const p=toScreen(s.pos[0],s.pos[1]);if(p[0]<-40||p[0]>W+40||p[1]<-40||p[1]>H+40)return;const q=5,c=s.side==='blue'?'#5aa7ff':'#ff6b6b';
+  ctx.save();ctx.strokeStyle=c;ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(p[0]-q,p[1]-q);ctx.lineTo(p[0]+q,p[1]+q);ctx.moveTo(p[0]+q,p[1]-q);ctx.lineTo(p[0]-q,p[1]+q);ctx.stroke();
+  const lb='诱饵 · 冒充护卫舰';if(cam.zoom>0.0008&&!lblPut(lb,p[0],p[1]+10,1,'rgba(143,208,255,.9)')){ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillStyle='rgba(143,208,255,.9)';ctx.fillText(lb,p[0],p[1]+10);}
+  ctx.restore();}
 function drawOwnBuoy(s){ // 自己的浮标;开着照射时一圈圈脉冲;拉远到舰船换箭头时画蓝圈
   const p=toScreen(s.pos[0],s.pos[1]);if(p[0]<-40||p[0]>W+40||p[1]<-40||p[1]>H+40)return;
   const mk=shipMarkMode(),R=mk?4:artBuoyR();ctx.save(); // 2026-10-05 用户:舰船换成箭头的那个缩放起改画蓝圈(拉远了美术浮标看不见)

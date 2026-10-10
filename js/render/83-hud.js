@@ -658,6 +658,9 @@ function drawFirePlan(){ // 2026-10-11 多武器 / 几十艘:底栏选了几发�
   ctx.save();ctx.strokeStyle='#fff';ctx.fillStyle='#fff';ctx.lineWidth=2;ctx.font='10px Consolas';ctx.textAlign='left';ctx.textBaseline='bottom';
   for(const [x,n] of c){const p=toScreen(x.pos[0],x.pos[1]);ctx.beginPath();ctx.arc(p[0],p[1],15,0,6.283);ctx.stroke();ctx.fillText('x'+n,p[0]+13,p[1]-10);}
   ctx.textBaseline='middle';ctx.fillText(P.length+' 发 · '+c.size+' 艘出',mouseX+14,mouseY+16);ctx.restore();}
+function drawLureAim(){ // 2026-10-11 选定「诱饵」后:放它的船 → 鼠标一条实线 + 落点小圈(诱饵飞到点的那一处停下漂着)
+  if(selWeapon!=='lure'||typeof lureLauncher!=='function')return;const w=worldAt(mouseX,mouseY),s=lureLauncher(w);if(!s)return;const p=toScreen(s.pos[0],s.pos[1]);
+  ctx.save();ctx.strokeStyle='#ffe066';ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(mouseX,mouseY);ctx.stroke();ctx.beginPath();ctx.arc(mouseX,mouseY,6,0,6.283);ctx.stroke();ctx.restore();}
 function drawBuoyAim(){ // 2026-10-08 用户:选定「前出浮标」后,舰船 → 鼠标的延长线 = 浮标会往哪飞;舰到鼠标实线,往后虚线延长到飞出地图那一点(靶场没有边界画到 BUOY.FAR)
   if(selWeapon!=='buoy'||typeof buoyLauncher!=='function')return;const s=buoyLauncher();if(!s)return;
   const w=worldAt(mouseX,mouseY),dx=w[0]-s.pos[0],dy=w[1]-s.pos[1],d=Math.hypot(dx,dy);if(!(d>1e-6))return;const ux=dx/d,uy=dy/d;

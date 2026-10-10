@@ -134,11 +134,13 @@ function updSelWeaponTip(){ // RF4b 待命提示:底栏上方 #cmdTip 常显(旧
   if(pendingFcNew){tip.textContent='火控「+」:左键点一艘敌舰 = 新建一条火控序列'+((typeof selBlue==='function'&&selBlue().length>1)?'(舰队 = 一块)':'')+' · 右键或再点「+」取消';tip.style.display='block';return;} // 2026-10-07 用户
   if(typeof wpkN==='function'&&wpkN()){tip.textContent=wpkTipText();tip.style.display='block';return;} // 2026-10-08 底栏选中的绿条
   if(selWeapon==='buoy'){tip.textContent='⌖ 已选定 · 放浮标:点一个方向(沿舰船 → 鼠标一直飞,飞出地图消失) · 右键取消';tip.style.display='block';return;}
+  if(selWeapon==='lure'){tip.textContent='⌖ 已选定 · 放诱饵:点地图上一点(离那一点最近、还有诱饵的船放;诱饵飞过去漂着,冒充一艘护卫舰) · 右键取消';tip.style.display='block';return;} // 2026-10-11
   if(selWeapon){tip.textContent='⌖ 已选定 · '+(selWeapon==='mac'?'主炮强行开火:点敌舰或空地(转向对准即发一炮)':'导弹强行开火:点敌舰齐射 · 点空地 = 区域齐射')+' · 右键取消';tip.style.display='block';return;}
   if(pendingTurn){tip.textContent='转向:点击地图设定方向(速度不变) · 再按 V 取消 · 右键取消';tip.style.display='block';return;}
   if(CMDTIP_FLASH&&nowMs()<CMDTIP_FLASH.until){tip.textContent=CMDTIP_FLASH.text;tip.style.display='block';return;} // 2026-09-29 一次性回执(中键打空地) // FL1 把 V 也接进来:它原本只走那个被 RF2 藏死的顶部状态条,按 V 之后玩家看不到任何提示
   tip.style.display='none';
 }
+function lureLauncher(pt){let b=null,bd=Infinity;for(const x of controlledShips())if((x.lureN||0)>0){const d=Math.hypot(x.pos[0]-pt[0],x.pos[1]-pt[1]);if(d<bd){bd=d;b=x;}}return b;} // 2026-10-11 放诱饵的那艘:离点的位置最近、还有诱饵的受控舰(预览线 render/83 drawLureAim 同一艘)
 function buoyLauncher(){for(const x of controlledShips())if((x.buoys||0)>0)return x;return null;} // 2026-10-08 放浮标的那艘(受控舰里第一艘还有浮标的;预览线 render/83 drawBuoyAim 同一艘)
 const CAMF={o:null,K:null,lock:false,on:false,lx:0,ly:0,lz:0}; // 2026-10-08 用户:左键双击任何实体 → 镜头跟随它。o 跟谁 / K 它在实体登记表里是哪一类 / lock 飞到了就钉死 / lx ly lz 上一帧自己摆的镜头
 function camFollowStop(){CAMF.o=null;CAMF.K=null;CAMF.lock=false;CAMF.on=false;} // 2026-10-08 用户:跟随开始 / 结束都不弹提示
@@ -188,6 +190,8 @@ function mdRadial(e,sx,sy){ // RF5 Phase C 轮盘开着时的两段早退(盘内
   return false;
 }
 function mdWeaponPick(e,sx,sy){ // 选定武器攻击:点目标 / 点空位置
+  if(e.button===0&&selWeapon==='lure'){const w=worldAt(sx,sy),pt=ordArenaClamp([w[0],w[1],0]),x=lureLauncher(pt);if(x)cxLure(x,pt); // 2026-10-11 放诱饵(走命令 command/68)
+    selWeapon=null;updSelWeaponTip();if(typeof updateSelPanel==='function')updateSelPanel();return true;}
   if(e.button===0&&selWeapon==='buoy'){ // 2026-09-27 放前出浮标(world/14 的 launchBuoy);10-08 方向式:点的那一点只定方位,不夹进游玩区
     const w=worldAt(sx,sy),x=buoyLauncher();
     if(x&&typeof launchBuoy==='function')launchBuoy(x,[w[0],w[1],0]); // 一次放一个
