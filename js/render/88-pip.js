@@ -5,8 +5,8 @@
    画在 index.html 的 #pipCv(右栏 #pipBox);core/99 每帧调 pipFrame,每 PIP.EVERY 帧画一次。 */
 const PIP={EVERY:3,XMAX:300000*CFG.scale,n:0,w:0,h:0,dpr:0,hd:''}; // 2026-10-05 横轴 20 万 → 30 万:主炮命中率曲线往外拉 x1.543(weapons/52)
 const PIP_K={mac:{XMAX:300000*CFG.scale,STEP:50000*CFG.scale},sec:{XMAX:100000*CFG.scale,STEP:20000*CFG.scale}}; // 2026-10-11 横轴:轴炮 18 万 / 副炮 6 万(副炮的曲线放在轴炮的轴上只占最左边一小截)
-const PIP_C=[['ir','红外',1],['rad','雷达',()=>MAC_FWD.RAD],['vis','可见光',()=>MAC_FWD.VIS]]; // 2026-10-11 用户:三条曲线都画 —— 红外 = 标准曲线(只靠红外 / 静听定位时用它)、雷达照到 x1.3、在可见光圈里 x1.6(weapons/52 MAC_FWD),颜色取各画面的主色(86-sensorfx SFX_COL)
-function pipCol(k,a){const c=k==='ir'?SFX_COL.ir:(k==='rad'?SFX_COL.radar:SFX_COL.map);return 'rgba('+c[0]+','+c[1]+','+c[2]+','+a+')';}
+const PIP_C=[['def','默认',1,[255,255,255]],['ir','红外',()=>MAC_FWD.IR,[255,100,80]],['rad','雷达',()=>MAC_FWD.RAD,[84,224,208]],['vis','可见光',()=>MAC_FWD.VIS,[110,231,168]]]; // 2026-10-11 用户:四条曲线都画 —— 默认(白,打空地 / 只靠静听定位)、红外量到(红)、雷达照到(青,同雷达画面)、在我方可见光圈里(绿);距离倍数见 weapons/52 MAC_FWD
+function pipCol(k,a){const c=PIP_C.find(q=>q[0]===k)[3];return 'rgba('+c[0]+','+c[1]+','+c[2]+','+a+')';}
 function pipFrame(){
   if(++PIP.n%PIP.EVERY)return;
   const box=document.getElementById('pipBox'),cv=document.getElementById('pipCv');if(!box||!cv)return;
@@ -29,17 +29,18 @@ function pipGun(g,w,h,s,k){ // 火控窗:三条 S 形命中率曲线(起作用�
   g.setLineDash([3,3]);g.strokeStyle='rgba(255,209,102,.45)';g.beginPath();g.moveTo(L,Y(MAC_AUTO_P));g.lineTo(R,Y(MAC_AUTO_P));g.stroke();g.setLineDash([]);
   g.textAlign='right';g.fillStyle='rgba(255,209,102,.7)';g.fillText('自动开火门 '+Math.round(MAC_AUTO_P*100)+'%',R,Y(MAC_AUTO_P)-7);
   const ff=s.forceMac,mt=(typeof fcActive==='function'&&fcActive(s))?(s.fcTgt&&s.fcTgt.mac):(s.lockedTarget||(ff&&ff.t)||null);
-  const tp=mt?viewPos(mt):(ff&&ff.pt&&!sec?ff.pt:null),fk=mt&&tp?macFwdK(s.side,mt):0,on=fk?(fk===MAC_FWD.VIS?'vis':(fk===MAC_FWD.RAD?'rad':'ir')):null; // 起作用的那条:目标此刻在可见光圈里 / 被雷达照到 / 都不是(红外 = 标准);没目标三条都暗
+  const tp=mt?viewPos(mt):(ff&&ff.pt&&!sec?ff.pt:null),fk=mt&&tp?macFwdK(s.side,mt):1,on=fk===MAC_FWD.VIS?'vis':(fk===MAC_FWD.RAD?'rad':(fk===MAC_FWD.IR?'ir':'def')); // 起作用的那条:目标此刻在可见光圈里 / 被雷达照到 / 红外量到 / 都不是;没目标、打空地 = 默认
   for(const [c] of PIP_C.filter(q=>q[0]!==on).concat(PIP_C.filter(q=>q[0]===on))){const kk=PIP_C.find(q=>q[0]===c)[2],m=typeof kk==='function'?kk():kk,lit=c===on; // 亮的那条最后画(压在上面)
-    g.strokeStyle=pipCol(c,lit?1:0.28);g.lineWidth=lit?2:1.2;g.beginPath();for(let i=0;i<=60;i++){const d=XM*i/60,x=X(d),y=Y(P(d/m));if(i)g.lineTo(x,y);else g.moveTo(x,y);}g.stroke();}
+    g.strokeStyle=pipCol(c,lit?1:0.35);g.lineWidth=lit?2:1.2;g.setLineDash(lit?[]:[4,3]);g.beginPath();for(let i=0;i<=60;i++){const d=XM*i/60,x=X(d),y=Y(P(d/m));if(i)g.lineTo(x,y);else g.moveTo(x,y);}g.stroke();} // 没起作用的:暗 + 虚线
+  g.setLineDash([]);
   g.font='10px "Microsoft YaHei"';g.textAlign='right';g.textBaseline='top';let lx=R; // 图例:右上角,起作用的那个亮
   for(const [c,nm] of PIP_C.slice().reverse()){g.fillStyle=pipCol(c,c===on?1:0.45);g.fillText(nm,lx,T+2);lx-=g.measureText(nm).width+8;}
   g.textAlign='left';g.textBaseline='top';g.font='11px "Microsoft YaHei"';
   if(!tp){g.fillStyle='#cfe6ff';g.fillText(mt?'目标定不出位置':(sec?'无目标 · 锁定后显示':'无主炮目标 · 锁定或强行开火后显示'),6,4);return;}
   const d=Math.hypot(tp[0]-s.pos[0],tp[1]-s.pos[1]),pr=P(d,mt),x=X(d),y=Y(pr);
-  g.strokeStyle='rgba(255,255,255,.55)';g.lineWidth=1;g.beginPath();g.moveTo(x,T);g.lineTo(x,B);g.stroke(); // 目标标记改白色(红 / 青已被曲线占用)
-  g.fillStyle='#fff';g.beginPath();g.arc(x,y,3.5,0,6.283);g.fill();
-  g.fillStyle='#cfe6ff';g.fillText((mt?'目标':'炮击点')+' '+(d/1e4).toFixed(1)+' 万 km · 把握 '+(pr>=0.1?Math.round(pr*100):(pr*100).toFixed(1))+'%'+(on==='vis'?' · 可见光加成':(on==='rad'?' · 雷达加成':''))+(d>XM?'(超出图)':''),6,4);
+  g.strokeStyle='rgba(255,224,102,.6)';g.lineWidth=1;g.beginPath();g.moveTo(x,T);g.lineTo(x,B);g.stroke(); // 目标标记用选中黄(白 / 红 / 青 / 绿都给了曲线)
+  g.fillStyle='#ffe066';g.strokeStyle='rgb(5,7,12)';g.beginPath();g.arc(x,y,3.5,0,6.283);g.fill();g.stroke();
+  g.fillStyle='#cfe6ff';g.fillText((mt?'目标':'炮击点')+' '+(d/1e4).toFixed(1)+' 万 km · 把握 '+(pr>=0.1?Math.round(pr*100):(pr*100).toFixed(1))+'%'+(on==='vis'?' · 可见光加成':(on==='rad'?' · 雷达加成':(on==='ir'?' · 红外加成':'')))+(d>XM?'(超出图)':''),6,4);
   g.font='10px Consolas';g.fillStyle='#8fd0ff';g.textBaseline='bottom';
   g.fillText('散布1σ '+Math.round(d*macShotSigma(sec?secAs(s):s,d,mt)).toLocaleString('en-US')+'km / 命中半径 '+MAC_HIT_R+'km',6,h-14);
   if(sec){const n=(s.secCds||[]).length,r=secReady(s),nx=Math.min(...(s.secCds||[]).filter(t=>t>0).concat([Infinity]));
