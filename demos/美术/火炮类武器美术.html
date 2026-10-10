@@ -29,20 +29,22 @@ ul b{color:var(--txt);font-weight:normal}
 <body>
 <header>
 <h1>火炮类武器美术 · 战术层尺寸</h1>
-<p class="n">轴炮弹(主炮弹,已进引擎)和副炮弹(10-11 新武器,<b style="color:#ffc861;font-weight:normal">未进引擎</b>,候选 A / B / C 用顶栏「副炮弹画法」切)。上面的场景只演炮战:轴炮对射(一发被护盾挡住、一发打沉红方护卫舰),两边驱逐舰在近处用副炮连射。<br>为什么副炮弹要另画:轴炮弹在战术层是约 20 px 的白亮拖尾;副炮弹(炮塔、2 门、每发 120)要一眼看出「这是小炮」,又不能抢颜色(颜色只管敌我)。所以三个方案只动 长短 / 粗细 / 成对 / 成串:A 两道并排的短曳光(对应两门炮),B 沿弹道三颗亮点(连射),C 一道又短又细的曳光(就是缩小的轴炮弹)。<br>独立演示页(不加载引擎),默认 = 引擎战术落点(比例尺 100 px = 2.5 万 km);星图、舰标、缩放与羽化照引擎(星图展示.js + 舰标抄本,同原「舰船武器美术」页)。原来的「舰船武器美术」10-11 拆成 舰船美术 / 火炮类武器美术 / 导弹类武器美术 三页,旧版整页在 存档/舰船武器美术_2026-10-11前.html。滚轮缩放、拖动平移;「灰度」「模糊」是检验。</p>
+<p class="n">10-11 用户重画(<b style="color:#ffc861;font-weight:normal">都未进引擎</b>):<b style="font-weight:normal;color:#c7d0dc">轴炮 = 电磁轨道炮</b> —— 只能顺着船轴打,一发势大力沉、独一档的强,所以画得冷、硬、直、快:白炽的细长弹芯,后面拖一道笔直的细亮电离尾迹(比原来的主炮弹长 1.6 倍),弹过去以后原路留一道细线 0.9 秒才淡掉;开火那一刻船头沿船轴炸出一道强闪光、一圈冲击环、几道电弧;打中的爆炸大一号。
+<b style="font-weight:normal;color:#c7d0dc">副炮 = 化学发射药的普通炮弹</b> —— 没那么强,但要有火炮的味道:小弹头 + 暖白曳光芯 + 一小截暖色曳光尾,一轮两发(两门炮);炮口一团橙黄火光加一小股灰烟;打中是小一号的爆炸。<br>
+颜色照旧只管敌我:两种弹的外晕 / 光晕都是阵营色(去色后看形状:细长直线 vs 小亮点成对);冷白 / 暖黄只是质感。顶栏「对照:现引擎轴炮弹」切回现在引擎里的画法对比。上一版副炮弹的 A / B / C 三个候选存档在 存档/火炮类武器美术_2026-10-11候选ABC.html。<br>独立演示页(不加载引擎),默认 = 引擎战术落点(比例尺 100 px = 2.5 万 km);星图、舰标、缩放与羽化照引擎。滚轮缩放、拖动平移;「灰度」「模糊」是检验。</p>
 </header>
 <div class="bar">
   <span class="g">比例尺 100 px = <input id="bar" type="range" min="0" max="1000"><b id="barV"></b></span>
   <span class="g">美术整体缩放 <input id="tk" type="range" min="100" max="200" value="130" style="width:110px"><b id="tkV"></b></span>
   <span class="g"><button class="t" data-z="25000">战术落点</button><button class="t" data-z="41000">切换点前</button><button class="t" data-z="42000">切换点后</button><button class="t" data-z="100000">舰队落点</button><button class="t" data-z="3000">拉近</button></span>
-  <span class="g">副炮弹画法 <button class="t on" data-so="A">A 短曳光成对</button><button class="t" data-so="B">B 连珠</button><button class="t" data-so="C">C 细曳光</button></span>
+  <span class="g"><button class="t" data-old="1">对照:现引擎轴炮弹</button></span>
   <span class="g"><button class="t" data-k="gray">灰度</button><button class="t" data-k="blur">模糊 1px</button><button class="t on" data-k="feather">羽化</button><button class="t on" data-k="lab">标签</button><button class="t" data-k="pause">暂停</button></span>
   <span id="read"></span>
 </div>
 
 <section>
 <h2>战术场景</h2>
-<p class="n">只演炮战。舰船按靶场摆(同舰船美术页),另加一艘红方驱逐在蓝方后排驱逐旁边。轴炮:双方各两发,红方打蓝方巡洋那发被护盾挡住(护盾受击),蓝方巡洋还有一发打沉红方护卫舰、留下残骸。副炮:两艘驱逐在近处对射,每轮两发(两门炮),红方有一发打在护盾上;蓝方巡洋后来也用副炮打红方驱逐。副炮命中用同一个命中特效、小一号(未进引擎)。14 秒一轮。</p>
+<p class="n">只演炮战。舰船按靶场摆(同舰船美术页),另加一艘红方驱逐在蓝方后排驱逐旁边。轴炮(轨道炮):双方各两发,红方打蓝方巡洋那发被护盾挡住(护盾受击),蓝方巡洋还有一发打沉红方护卫舰、留下残骸;每发开火有船头闪光与电弧、弹后留电离尾迹。副炮(化学炮弹):两艘驱逐在近处对射,每轮两发,炮口火光 + 烟,红方有一发打在护盾上;蓝方巡洋后来也用副炮打红方驱逐。拉近(顶栏「拉近」或滚轮)看细节。14 秒一轮。</p>
 <canvas id="scene"></canvas>
 </section>
 
@@ -54,15 +56,15 @@ ul b{color:var(--txt);font-weight:normal}
 
 <section>
 <h2>特效随缩放</h2>
-<p class="n">每列一个比例尺,第一行是巡洋舰 T1(拉过切换点后是箭头),下面是同一时刻定格的炮弹命中特效(副炮命中 = 同一个特效 x0.55,未进引擎)。表头「船 x / 特效 x」都是相对战术落点的倍数。</p>
+<p class="n">每列一个比例尺,第一行是巡洋舰 T1(拉过切换点后是箭头),下面是定格的炮口与命中特效(轴炮命中 x1.25、副炮命中 x0.55,炮口都是新的,都未进引擎)。表头「船 x / 特效 x」都是相对战术落点的倍数。</p>
 <canvas id="fxc"></canvas>
 </section>
 
 <section>
 <h2>和引擎的对应</h2>
 <ul>
-<li><b>已进引擎</b>:轴炮弹(白芯 + 阵营色拖尾 + 亮弹头,js/render/81-art.js)、炮弹命中 / 击沉、护盾受击、代表显示的 5 px 短划(83-hud projMark)。</li>
-<li><b>未进引擎</b>:副炮弹(引擎里现在和轴炮弹画得一模一样)。A / B / C 选定后进 81-art 的弹体画法与 83-hud 的记号;副炮命中小一号也一起进。</li>
+<li><b>已进引擎</b>:现在的轴炮弹(白芯 + 阵营色拖尾 + 亮弹头,js/render/81-art.js,顶栏「对照」看的就是它)、炮弹命中 / 击沉、护盾受击、代表显示的 5 px 短划(83-hud projMark)。</li>
+<li><b>未进引擎</b>:这页的新画法 —— 轨道炮弹体 / 电离尾迹 / 船头闪光与电弧、化学炮弹弹体 / 炮口火光与烟、轴炮命中大一号、副炮命中小一号、两种新记号(轨道炮 6.4 px 细线 + 白点、化学炮弹并排两点)。用户定了再进 81-art(弹体贴图、炮口特效)与 83-hud(记号);引擎里副炮现在和轴炮画得一模一样。</li>
 <li><b>没同步的</b>:美术整体缩放引擎现值 1.45,这页滑块默认 1.3;引擎 10-11 起我方拉远后的箭头随舰种略大,这页没跟。</li>
 </ul>
 </section>
@@ -70,7 +72,7 @@ ul b{color:var(--txt);font-weight:normal}
 <script src="星图展示.js"></script>
 <script>
 "use strict";
-/* 火炮类武器美术(2026-10-11 用户:武器从舰船武器美术里拆出来;上面的动态演示只演火炮打架;副炮弹给候选画法)。由 scratchpad build_art3.py 从原 舰船武器美术.html 生成。
+/* 火炮类武器美术(2026-10-11 用户:武器从舰船武器美术里拆出来;上面的动态演示只演火炮打架;同日重画:轴炮 = 电磁轨道炮、副炮 = 化学炮弹,见「火炮」一段)。由 scratchpad build_art3.py 从原 舰船武器美术.html 生成。
    原页说明:舰船武器美术(2026-10-05 用户:按重新设定的战术层与该层下舰船的缩放,重做独立的舰船 + 武器美术资产页;同日:美术组里的东西是真的会画进引擎里的东西,舰船换成现在的设计)。
    照抄引擎:舰标贴图(js/render/82-shipart.js,下面整段抄本)、舰标缩放与记号(js/render/82-ship-icons.js)、尾焰 / 主炮弹 / 命中 / 击沉 / 残骸 / 浮标(js/render/81-art.js)、
    弹类记号 projMark(js/render/83-hud.js);星图走 星图展示.js。旧版整页在 存档/舰船武器美术_2026-10-05前.html。
@@ -507,22 +509,50 @@ function shellLen(zf){return 24*1.92*zf;}
 function drawShell(g,x,y,rot,side,zf){const L=shellLen(zf),h=9*1.92*zf;g.save();g.translate(x,y);g.rotate(rot);g.globalCompositeOperation='lighter';g.drawImage(shellSpr(side),-L*(248/256),-h/2,L,h);g.restore();}
 
 
-/* ---------- 副炮弹(2026-10-11 新武器,未进引擎):候选画法,顶栏「副炮弹画法」切;尺寸都按轴炮弹(主炮弹)折,比它小 ---------- */
-const SEC_OPTS=[{id:'A',nm:'A 短曳光成对'},{id:'B',nm:'B 连珠'},{id:'C',nm:'C 细曳光'}];
-const SECV={o:'A'};
-function secLen(zf){return shellLen(zf)*0.45;}
-function drawSec(g,x,y,rot,side,zf,opt,t){const L=shellLen(zf),h=9*1.92*zf,c=Math.cos(rot),s=Math.sin(rot);
-  if(opt==='A'){ // 两道并排的短曳光(两门炮):长 0.45、高 0.6 倍轴炮弹,左右各让开 0.55 个弹高
-    const l=L*0.45,hh=h*0.6;for(const k of [-1,1]){const ox=-s*k*hh*0.55,oy=c*k*hh*0.55,bx=-c*k*l*0.06,by=-s*k*l*0.06;g.save();g.translate(x+ox+bx,y+oy+by);g.rotate(rot);g.globalCompositeOperation='lighter';g.drawImage(shellSpr(side),-l*(248/256),-hh/2,l,hh);g.restore();}return;}
-  if(opt==='B'){ // 沿弹道三颗亮点:白芯 + 阵营色光晕,往后一颗比一颗淡
-    const r=h*0.12,gap=L*0.09;for(let i=0;i<3;i++){const px=x-c*gap*i,py=y-s*gap*i,a=1-i*0.3;blit(g,fx('glow'+side),px,py,r*3,0.6*a,true);g.fillStyle='rgba(255,255,255,'+a.toFixed(2)+')';g.beginPath();g.arc(px,py,r,0,6.283);g.fill();}return;}
-  { // C:一道细曳光:长 0.6、高 0.45 倍轴炮弹,略暗
-    const l=L*0.6,hh=h*0.45;g.save();g.translate(x,y);g.rotate(rot);g.globalCompositeOperation='lighter';g.globalAlpha=0.8;g.drawImage(shellSpr(side),-l*(248/256),-hh/2,l,hh);g.restore();}}
-function secMark(g,x,y,rot,side,opt){const col=PROJ_MK[side],c=Math.cos(rot),s=Math.sin(rot);g.fillStyle=col;g.strokeStyle=col; // 代表显示:轴炮弹是 5 px 短划;副炮弹要另一个样子
-  if(opt==='A'){g.lineWidth=1;for(const k of [-1,1]){const ox=-s*k*1.3,oy=c*k*1.3;g.beginPath();g.moveTo(x+ox-c*1.5,y+oy-s*1.5);g.lineTo(x+ox+c*1.5,y+oy+s*1.5);g.stroke();}return;} // 两道并排 3 px
-  if(opt==='B'){for(let i=0;i<3;i++){g.beginPath();g.arc(x-c*2.2*(i-1),y-s*2.2*(i-1),0.8,0,6.283);g.fill();}return;} // 三个点一排
-  g.lineWidth=0.9;g.beginPath();g.moveTo(x-c*1.6,y-s*1.6);g.lineTo(x+c*1.6,y+s*1.6);g.stroke();} // 细短划 3.2 px
-function secPx(zf,opt){const L=shellLen(zf);return opt==='A'?L*0.45*18/256+9*1.92*zf*0.6*1.1:(opt==='B'?L*0.18+9*1.92*zf*0.24:L*0.6*18/256);} // 弹头 / 本体外框(不含拖尾)
+/* ---------- 火炮(2026-10-11 用户重画,未进引擎):轴炮 = 电磁轨道炮(只能顺船轴打、一发势大力沉、独一档的强) —— 冷、硬、直、快;
+   副炮 = 化学发射药的普通炮弹(小、暖、有火药味,没那么强)。阵营色照旧落在弹头外晕 / 光晕上(颜色只管敌我),冷白 / 暖黄只是两种炮的质感 ---------- */
+const GUNV={old:false}; // 顶栏「对照:现引擎轴炮弹」
+const RAILS={};
+function railSpr(side){if(RAILS[side])return RAILS[side];const W=512,H=48,c=mkCv(W,H),g=c.getContext('2d'),col=SIDE[side],cy=H/2;
+  let gr=g.createLinearGradient(0,0,W-14,0);gr.addColorStop(0,css(col,0));gr.addColorStop(0.55,css(col,0.16));gr.addColorStop(1,css(col,0.75));g.fillStyle=gr; // 阵营色光晕:后细前粗
+  g.beginPath();g.moveTo(0,cy-1.5);g.lineTo(W-16,cy-7);g.lineTo(W-16,cy+7);g.lineTo(0,cy+1.5);g.closePath();g.fill();
+  gr=g.createLinearGradient(0,0,W-8,0);gr.addColorStop(0,'rgba(255,255,255,0)');gr.addColorStop(0.45,'rgba(235,245,255,.45)');gr.addColorStop(1,'rgba(255,255,255,1)');g.fillStyle=gr; // 白色硬芯:后面一根细线,往前逐渐变粗成一根尖刺(电离尾迹)
+  g.beginPath();g.moveTo(0,cy-0.5);g.lineTo(W-22,cy-2.6);g.lineTo(W-6,cy);g.lineTo(W-22,cy+2.6);g.lineTo(0,cy+0.5);g.closePath();g.fill();
+  const rg=g.createRadialGradient(W-12,cy,0,W-12,cy,22);rg.addColorStop(0,'rgba(255,255,255,1)');rg.addColorStop(0.3,css(lit(col,0.65),0.9));rg.addColorStop(1,css(col,0));g.fillStyle=rg;g.fillRect(W-34,cy-22,34,44); // 弹头强光
+  g.strokeStyle='rgba(255,255,255,.55)';g.lineWidth=1.2;g.beginPath();g.moveTo(W-20,cy-7);g.quadraticCurveTo(W-6,cy-3,W-2,cy);g.quadraticCurveTo(W-6,cy+3,W-20,cy+7);g.stroke(); // 弹头前的激波弧(拉近才看得见)
+  g.fillStyle='#fff';g.beginPath();g.moveTo(W-3,cy);g.lineTo(W-14,cy-2.8);g.lineTo(W-28,cy);g.lineTo(W-14,cy+2.8);g.closePath();g.fill(); // 白炽细长弹芯
+  return RAILS[side]=c;}
+function railLen(zf){return shellLen(zf)*1.6;} // 比现在的主炮弹长 1.6 倍:又长又直
+function drawRail(g,x,y,rot,side,zf){const L=railLen(zf),h=14*1.92*zf;g.save();g.translate(x,y);g.rotate(rot);g.globalCompositeOperation='lighter';g.drawImage(railSpr(side),-L*(500/512),-h/2,L,h);g.restore();}
+function railTrail(g,ax,ay,bx,by,side,a){if(a<=0.01)return;const col=lit(SIDE[side],0.55),gr=g.createLinearGradient(ax,ay,bx,by); // 弹过去以后原路留一道细线,慢慢淡掉
+  gr.addColorStop(0,css(col,0));gr.addColorStop(0.7,css(col,0.2*a));gr.addColorStop(1,css(col,0.45*a));g.save();g.globalCompositeOperation='lighter';g.strokeStyle=gr;g.lineWidth=1;g.beginPath();g.moveTo(ax,ay);g.lineTo(bx,by);g.stroke();g.restore();}
+const RAIL_MZ=0.45; // 炮口效果的时长(秒)
+function railMuzzle(g,x,y,rot,side,a,fk){const u=a/RAIL_MZ;if(u<0||u>1)return;const col=SIDE[side]; // 船头沿船轴的强闪光 + 冲击环 + 前 0.2 秒的电弧
+  g.save();g.translate(x,y);g.rotate(rot);g.globalCompositeOperation='lighter';
+  const L=(10+24*u)*fk,Wd=(3.4*(1-u)+0.6)*fk,gr=g.createLinearGradient(0,0,L,0);gr.addColorStop(0,'rgba(255,255,255,'+(0.95*(1-u)).toFixed(3)+')');gr.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=gr;g.beginPath();g.ellipse(L*0.35,0,L*0.6,Wd,0,0,6.283);g.fill();
+  g.strokeStyle=css(lit(col,0.4),0.75*(1-u));g.lineWidth=1.2;g.beginPath();g.arc(0,0,(3+15*u)*fk,0,6.283);g.stroke();
+  if(u<0.45){g.strokeStyle='rgba(225,240,255,'+(0.9*(1-u/0.45)).toFixed(3)+')';g.lineWidth=0.8;
+    for(let i=0;i<4;i++){const an=(i-1.5)*0.9+Math.sin(a*60+i*7)*0.3;let px=0,py=0;g.beginPath();g.moveTo(0,0);
+      for(let j=1;j<=3;j++){px+=Math.cos(an+Math.sin(a*90+i*3+j)*0.8)*3*fk;py+=Math.sin(an+Math.sin(a*70+i*5+j)*0.8)*3*fk;g.lineTo(px,py);}g.stroke();}}
+  g.restore();}
+function railMark(g,x,y,rot,side){const c=Math.cos(rot),s=Math.sin(rot);g.strokeStyle=PROJ_MK[side];g.lineWidth=1.2;g.beginPath();g.moveTo(x-c*3.2,y-s*3.2);g.lineTo(x+c*3.2,y+s*3.2);g.stroke(); // 代表显示:6.4 px 细线 + 头上一颗白点
+  g.fillStyle='#fff';g.fillRect(x+c*3.2-0.9,y+s*3.2-0.9,1.8,1.8);}
+const CHEMS={};
+function chemSpr(side){if(CHEMS[side])return CHEMS[side];const W=128,H=32,c=mkCv(W,H),g=c.getContext('2d'),col=SIDE[side],cy=H/2;
+  let gr=g.createLinearGradient(0,0,W-10,0);gr.addColorStop(0,'rgba(255,150,60,0)');gr.addColorStop(0.6,'rgba(255,170,80,.35)');gr.addColorStop(1,'rgba(255,220,150,.85)');g.fillStyle=gr; // 暖色曳光尾(火药里的曳光剂)
+  g.beginPath();g.moveTo(0,cy);g.lineTo(W-12,cy-3);g.lineTo(W-12,cy+3);g.closePath();g.fill();
+  const rg=g.createRadialGradient(W-12,cy,0,W-12,cy,11);rg.addColorStop(0,'rgba(255,246,220,1)');rg.addColorStop(0.35,css(col,0.85));rg.addColorStop(1,css(col,0));g.fillStyle=rg;g.fillRect(W-24,cy-11,24,22); // 暖白弹头 + 阵营色光晕
+  return CHEMS[side]=c;}
+function chemLen(zf){return shellLen(zf)*0.42;}
+function drawChem(g,x,y,rot,side,zf){const L=chemLen(zf),h=7*1.92*zf;g.save();g.translate(x,y);g.rotate(rot);g.globalCompositeOperation='lighter';g.drawImage(chemSpr(side),-L*(116/128),-h/2,L,h);g.restore();}
+function chemMuzzle(g,x,y,rot,a,fk){if(a<0||a>0.9)return;const c=Math.cos(rot),s=Math.sin(rot); // 炮口:橙黄火光 0.15 秒 + 一小股灰烟 0.9 秒胀开淡出
+  if(a<0.15){const u=a/0.15,R=(2.5+3*u)*fk,cx=x+c*R*0.6,cy=y+s*R*0.6,rg=g.createRadialGradient(cx,cy,0,cx,cy,R*1.6);
+    rg.addColorStop(0,'rgba(255,240,190,'+(1-u).toFixed(3)+')');rg.addColorStop(0.4,'rgba(255,160,60,'+(0.8*(1-u)).toFixed(3)+')');rg.addColorStop(1,'rgba(255,120,40,0)');
+    g.save();g.globalCompositeOperation='lighter';g.fillStyle=rg;g.beginPath();g.arc(cx,cy,R*1.6,0,6.283);g.fill();g.restore();}
+  const u=a/0.9,R=(1.5+5*u)*fk;g.fillStyle='rgba(150,150,158,'+(0.35*(1-u)).toFixed(3)+')';g.beginPath();g.arc(x+c*(2+4*u)*fk,y+s*(2+4*u)*fk,R,0,6.283);g.fill();}
+function chemMark(g,x,y,rot,side){const c=Math.cos(rot),s=Math.sin(rot);g.fillStyle=PROJ_MK[side];for(const k of [-1,1])g.fillRect(x-s*k*1.4-0.8,y+c*k*1.4-0.8,1.6,1.6);} // 代表显示:并排两个小点(两门炮)
+const RAIL_HEAD=25/512,CHEM_HEAD=24/128; // 弹头占贴图长度的比例(尺寸对照「弹头 px」用)
 
 /* ---------- 命中 / 击沉(照抄 81-art) ---------- */
 function mkBoom(kind,type,sd){const r=rng(sd*977+13),o={kind,type,sp:[],db:[],em:[],sm:[],sec:[]};
@@ -616,7 +646,7 @@ SALVO.forEach((v,i)=>{v.sd=i*13+3;if(v.icp){v.tm=v.t0+v.icp.at*v.F;const m=salvo
   else if(!v.ciws){const th=v.t0+v.F,p=shipPos(SH[v.to],th);BOOMS.push({t:th,x:p[0],y:p[1],o:mkBoom(v.kill?'kill':'hit','missile',i*31+7)});}});
 const SHD_HITS=[];
 SHELLS.forEach((s,i)=>{const th=s.t0+s.F,p=shipPos(SH[s.to],th);if(s.shield){const A=shipPos(SH[s.from],s.t0);SHD_HITS.push({t:th,id:s.to,a:Math.atan2(A[1]-p[1],A[0]-p[0]),big:false});}
-  else BOOMS.push({t:th,x:p[0],y:p[1],o:mkBoom(s.kill?'kill':'hit','mac',i*17+101)});});
+  else BOOMS.push({t:th,x:p[0],y:p[1],o:mkBoom(s.kill?'kill':'hit','mac',i*17+101),zk:s.kill?1:1.25});}); // 轴炮命中大一号(势大力沉)
 const SEC_SHOTS=[];SECS.forEach((v,i)=>{for(let j=0;j<v.n;j++){const t0=v.t0+j*v.dt,th=t0+v.F,p=shipPos(SH[v.to],th);SEC_SHOTS.push({side:v.side,from:v.from,to:v.to,t0,F:v.F});
   if(v.shieldAt===j){const A=shipPos(SH[v.from],t0);SHD_HITS.push({t:th,id:v.to,a:Math.atan2(A[1]-p[1],A[0]-p[0]),big:false});}else BOOMS.push({t:th,x:p[0],y:p[1],o:mkBoom('hit','mac',i*29+j*7+203),zk:0.55});}}); // 副炮命中:同命中特效、小一号
 SALVO.forEach(v=>{if(v.ciws)ciwsPlan(v);});
@@ -661,10 +691,17 @@ function drawScene(wt,sT){const g=SCG,k=kmpp(),raw=rawZ(k),zf=trueZf(k),mk=raw<H
     shipIcon(g,s.h,s.unk?2:s.tier,s.side,p[0],p[1],p0[2],zf,fe);}
   for(const d of DECOYS){const u=(tau-d.t0)/d.F;if(u<0||u>1)continue;const A=shipPos(SH[d.from],d.t0),p=S(A[0]+d.dx*u,A[1]+d.dy*u),rot=Math.atan2(d.dy,d.dx);
     if(mk)projMark(g,'decoy',false,p[0],p[1],rot,d.side,1);else feathered(g,fe,p[0],p[1],14*zf+8,(g2,x,y)=>drawDecoy(g2,x,y,rot,d.side,zf,wt,d.sd));}
-  for(const s of SHELLS){const u=(tau-s.t0)/s.F;if(u<0||u>=1)continue;const A=shipPos(SH[s.from],s.t0),B=shipPos(SH[s.to],s.t0+s.F),p=S(A[0]+(B[0]-A[0])*u,A[1]+(B[1]-A[1])*u),rot=Math.atan2(B[1]-A[1],B[0]-A[0]);
-    if(mk)projMark(g,'mac',false,p[0],p[1],rot,s.side,1);else drawShell(g,p[0],p[1],rot,s.side,zf);}
-  for(const s of SEC_SHOTS){const u=(tau-s.t0)/s.F;if(u<0||u>=1||dead.has(s.from))continue;const A=shipPos(SH[s.from],s.t0),B=shipPos(SH[s.to],s.t0+s.F),p=S(A[0]+(B[0]-A[0])*u,A[1]+(B[1]-A[1])*u),rot=Math.atan2(B[1]-A[1],B[0]-A[0]);
-    if(mk)secMark(g,p[0],p[1],rot,s.side,SECV.o);else drawSec(g,p[0],p[1],rot,s.side,zf,SECV.o,wt);}
+  for(const s of SHELLS){const u=(tau-s.t0)/s.F;if(u<0||u>=1+0.9/s.F)continue;const sh=SH[s.from],A=shipPos(sh,s.t0),B=shipPos(SH[s.to],s.t0+s.F),rot=Math.atan2(B[1]-A[1],B[0]-A[0]),c=Math.cos(rot),n=Math.sin(rot);
+    const bow=mk?SHIP_MARK_R:shipLen(sh.h,sh.tier,zf)*0.5,a0=S(A[0],A[1]),m0=[a0[0]+c*bow,a0[1]+n*bow],uu=Math.min(1,u),p=S(A[0]+(B[0]-A[0])*uu,A[1]+(B[1]-A[1])*uu);
+    if(!GUNV.old){railTrail(g,m0[0],m0[1],p[0],p[1],s.side,u<1?1:1-(u-1)*s.F/0.9); // 电离尾迹:弹过去后在原路留 0.9 秒
+      const a=tau-s.t0;if(a<RAIL_MZ){const q=shipPos(sh,tau),qs=S(q[0],q[1]);railMuzzle(g,qs[0]+c*bow,qs[1]+n*bow,rot,s.side,a,fk);}}
+    if(u>=1)continue;
+    if(mk){if(GUNV.old)projMark(g,'mac',false,p[0],p[1],rot,s.side,1);else railMark(g,p[0],p[1],rot,s.side);}else if(GUNV.old)drawShell(g,p[0],p[1],rot,s.side,zf);else drawRail(g,p[0],p[1],rot,s.side,zf);}
+  for(const s of SEC_SHOTS){const u=(tau-s.t0)/s.F;if(u<0||u>=1+0.9/s.F||dead.has(s.from))continue;const A=shipPos(SH[s.from],s.t0),B=shipPos(SH[s.to],s.t0+s.F),p=S(A[0]+(B[0]-A[0])*u,A[1]+(B[1]-A[1])*u),rot=Math.atan2(B[1]-A[1],B[0]-A[0]);
+    for(const gi of [-1,1]){const lag=gi>0?0.07:0,uu=(tau-s.t0-lag)/s.F,sh=SH[s.from],q=shipPos(sh,tau),qs=S(q[0],q[1]),c=Math.cos(rot),n=Math.sin(rot),off=(mk?2:shipLen(sh.h,sh.tier,zf)*0.12)*gi; // 一轮两发(两门炮,第二发晚 0.07 秒)
+      const a=tau-s.t0-lag;chemMuzzle(g,qs[0]+c*off*0.5-n*off,qs[1]+n*off*0.5+c*off,rot,a,fk);
+      if(uu<0||uu>=1)continue;const pp=S(A[0]+(B[0]-A[0])*uu-n*off*k,A[1]+(B[1]-A[1])*uu+c*off*k);
+      if(mk)chemMark(g,pp[0],pp[1],rot,s.side);else drawChem(g,pp[0],pp[1],rot,s.side,zf);}}
   for(const v of SALVO){
     if(v.icp){const by=SH[v.icp.by],ti=v.tm-v.icp.F,ui=(tau-ti)/v.icp.F;if(ui>=0&&ui<1){const A=shipPos(by,ti),x=A[0]+(v.mp.x-A[0])*ui,y=A[1]+(v.mp.y-A[1])*ui,p=S(x,y),rot=Math.atan2(v.mp.y-A[1],v.mp.x-A[0]);
       if(mk)projMark(g,'interceptor',false,p[0],p[1],rot,by.side,v.icp.n);else feathered(g,fe,p[0],p[1],RW,(g2,x,y)=>drawMsl(g2,x,y,rot,by.side,'inter',v.icp.n,true,zf,wt,v.sd+5));}
@@ -690,14 +727,14 @@ function drawScene(wt,sT){const g=SCG,k=kmpp(),raw=rawZ(k),zf=trueZf(k),mk=raw<H
 const COLS=[{nm:'拉过切换点',raw:0.40},{nm:'切换点',sub:'真显示最小',raw:0.45},{nm:'战术落点',sub:'默认',raw:0.55},{nm:'系数 1.0',raw:1.0},{nm:'拉到最近',sub:'系数 1.9',raw:1.9},{nm:'放大 2.5 倍',sub:'看形状',raw:1.9,mag:2.5}];
 const CW=[150,150,150,170,190,300],X0=118,HEAD=44;
 const ROWS=[{nm:'护卫舰 FF(参照)',k:'ship',cls:'FF',h:70},{nm:'巡洋舰 CA(参照)',k:'ship',cls:'CA',h:70},
-  {nm:'轴炮弹',k:'shell',h:56},{nm:'副炮弹 A 短曳光成对',k:'sec',o:'A',h:56},{nm:'副炮弹 B 连珠',k:'sec',o:'B',h:56},{nm:'副炮弹 C 细曳光',k:'sec',o:'C',h:56}];
+  {nm:'轴炮弹(电磁轨道炮,新)',k:'rail',h:62},{nm:'轴炮弹(现引擎,对照)',k:'shell',h:56},{nm:'副炮弹(化学炮弹,新)',k:'chem',h:56}];
 const PMK={msl:'missile',inter:'interceptor',shell:'mac',mine:'missile',decoy:'decoy'};
 const TC=$('tab'),TG=TC.getContext('2d'),TWd=X0+CW.reduce((a,b)=>a+b,0),THt=HEAD+ROWS.reduce((a,r)=>a+r.h,0)+4;
 TC.style.width=TWd+'px';TC.style.height=THt+'px';TC.width=Math.round(TWd*DPR);TC.height=Math.round(THt*DPR);
 function colZf(c){return Math.max(HULL_ZOOM.MARK,Math.min(HULL_ZOOM.MAX,c.raw))*SHIP_K*V.tk*(c.mag||1);}
 function bodyPx(r,zf){if(r.k==='inter')return icpPx(zf,r.n);if(r.k==='msl'){const b=mslBox(zf,shownN(r.n),r.k);return Math.max(b[0],b[1]);}
-  if(r.k==='sec')return secPx(zf,r.o);if(r.k==='mine')return 3.04*MINE_R*LFF(zf);if(r.k==='buoy')return 2.84*buoyR(zf);if(r.k==='decoy')return 0.38*LFF(zf);if(r.k==='shell')return 18/256*shellLen(zf);return 0;}
-function markPx(r){return r.k==='sec'?(r.o==='A'?4.2:(r.o==='B'?6:3.2)):r.k==='shell'?5:(r.k==='mine'||r.k==='decoy')?5.8:(r.k==='inter'?4.9:(shownN(r.n)>1?5.6:3.2));}
+  if(r.k==='rail')return RAIL_HEAD*railLen(zf);if(r.k==='chem')return CHEM_HEAD*chemLen(zf);if(r.k==='mine')return 3.04*MINE_R*LFF(zf);if(r.k==='buoy')return 2.84*buoyR(zf);if(r.k==='decoy')return 0.38*LFF(zf);if(r.k==='shell')return 18/256*shellLen(zf);return 0;}
+function markPx(r){return r.k==='rail'?6.4:r.k==='chem'?4.4:r.k==='shell'?5:(r.k==='mine'||r.k==='decoy')?5.8:(r.k==='inter'?4.9:(shownN(r.n)>1?5.6:3.2));}
 function weaponArt(g,r,x,y,side,zf,wt){const sd=side==='red'?5:1;
   if(r.k==='msl'||r.k==='inter')drawMsl(g,x,y,0,side,r.k,r.n,true,zf,wt,sd);else if(r.k==='mine')drawMine(g,x,y,0.3,side,zf,wt);else if(r.k==='decoy')drawDecoy(g,x,y,0,side,zf,wt,sd);}
 function cell(g,r,c,x,y,w,h,wt){const zf=colZf(c),mk=c.raw<HULL_ZOOM.MARK,cy=y+(h-14)/2,xa=x+w*0.28,xb=x+w*0.72,fe=(mk||c.mag)?0:featherPx(rawBar(c.raw)),RS=(hh,t)=>shipLen(hh,t,zf)*0.7+4;let txt='',ok=null;
@@ -706,8 +743,8 @@ function cell(g,r,c,x,y,w,h,wt){const zf=colZf(c),mk=c.raw<HULL_ZOOM.MARK,cy=y+(
     else{if(r.k==='unk'){shipIcon(g,'UNK',2,'neutral',x+w/2,cy,0,zf,0);txt='空心菱形 半径 '+unkR(zf).toFixed(1)+' px';}else{shipIcon(g,hh,tier,'blue',xa,cy,0,zf,fe);shipIcon(g,hh,tier,'red',xb,cy,0,zf,fe);txt='舰长 '+shipLen(hh,tier,zf).toFixed(1)+' px';}}}
   else if(r.k==='buoy'){if(mk){buoyMark(g,xa,cy,false);buoyMark(g,xb,cy,true);txt='蓝圈 8 px';}else{drawBuoy(g,xa,cy,0,'blue',false,zf,wt);drawBuoy(g,xb,cy,0,'blue',true,zf,wt);const b=bodyPx(r,zf);txt='本体 '+b.toFixed(1)+' px = '+(b/LFF(zf)).toFixed(2);ok=b/LFF(zf)<=0.8;}}
   else if(r.k==='wreck'){feathered(g,fe,x+w/2,cy,shipLen('CA',1,zf)*0.8+6,(g2,X,Y)=>drawWreck(g2,'CA',1,X,Y,0.3,zf,wt,7));txt='同船的大小';}
-  else if(r.k==='sec'&&mk){secMark(g,xa,cy,0,'blue',r.o);secMark(g,xb,cy,0,'red',r.o);const m=markPx(r);txt='记号 '+m+' px';ok=m<SHIP_MARK_R*2-1;}
-  else if(r.k==='sec'){const hx=x+w-12;drawSec(g,hx,cy-7,0,'blue',zf,r.o,wt);drawSec(g,hx,cy+7,0,'red',zf,r.o,wt);const b=bodyPx(r,zf),q=b/LFF(zf);txt='弹头 '+b.toFixed(1)+' px = '+q.toFixed(2);ok=q<=0.8;}
+  else if((r.k==='rail'||r.k==='chem')&&mk){const f=r.k==='rail'?railMark:chemMark;f(g,xa,cy,0,'blue');f(g,xb,cy,0,'red');const m=markPx(r);txt='记号 '+m+' px';ok=m<SHIP_MARK_R*2-1;}
+  else if(r.k==='rail'||r.k==='chem'){const hx=x+w-12,f=r.k==='rail'?drawRail:drawChem;f(g,hx,cy-7,0,'blue',zf);f(g,hx,cy+7,0,'red',zf);const b=bodyPx(r,zf),q=b/LFF(zf);txt='弹头 '+b.toFixed(1)+' px = '+q.toFixed(2);ok=q<=0.8;}
   else if(mk){projMark(g,PMK[r.k],r.k==='mine',xa,cy,0,'blue',r.n||1);projMark(g,PMK[r.k],r.k==='mine',xb,cy,0,'red',r.n||1);const m=markPx(r);txt='记号 '+m+' px';ok=m<SHIP_MARK_R*2-1;}
   else{if(r.k==='shell'){const hx=x+w-12;drawShell(g,hx,cy-7,0,'blue',zf);drawShell(g,hx,cy+7,0,'red',zf);}else{const RW=LFF(zf)*2+8;feathered(g,fe,xa,cy,RW,(g2,X,Y)=>weaponArt(g2,r,X,Y,'blue',zf,wt));feathered(g,fe,xb,cy,RW,(g2,X,Y)=>weaponArt(g2,r,X,Y,'red',zf,wt));}
     const b=bodyPx(r,zf),q=b/LFF(zf);txt=(r.k==='shell'?'弹头 ':'本体 ')+b.toFixed(1)+' px = '+q.toFixed(2);ok=q<=0.8;}
@@ -721,7 +758,7 @@ function drawTab(wt){const g=TG;g.setTransform(DPR,0,0,DPR,0,0);g.fillStyle='#05
 
 /* ---------- 特效随缩放对照:每列一个比例尺,特效定格在同一时刻 ---------- */
 const FXC_BARS=[3000,10000,25000,41000,100000,1000000],FXC_W=172,FXC_X0=118,FXC_HEAD=44;
-const FXC_ROWS=[{nm:'巡洋舰 T1',k:'ship',h:56},{nm:'轴炮命中',k:'hit',h:84},{nm:'副炮命中',k:'hit2',h:72},{nm:'击沉',k:'kill',h:132},{nm:'护盾受击',k:'shd',h:96}];
+const FXC_ROWS=[{nm:'巡洋舰 T1',k:'ship',h:56},{nm:'轴炮炮口(新)',k:'rmz',h:80},{nm:'轴炮命中(大一号)',k:'hit',h:96},{nm:'副炮炮口(新)',k:'cmz',h:64},{nm:'副炮命中',k:'hit2',h:72},{nm:'击沉',k:'kill',h:132},{nm:'护盾受击',k:'shd',h:96}];
 const FXB={hit:mkBoom('hit','mac',3),kill:mkBoom('kill','mac',5)};
 const FC=$('fxc'),FG=FC.getContext('2d'),FWd=FXC_X0+FXC_W*FXC_BARS.length,FHt=FXC_HEAD+FXC_ROWS.reduce((a,r)=>a+r.h,0)+4;
 FC.style.width=FWd+'px';FC.style.height=FHt+'px';FC.width=Math.round(FWd*DPR);FC.height=Math.round(FHt*DPR);
@@ -735,7 +772,9 @@ function drawFxc(wt){const g=FG;g.setTransform(DPR,0,0,DPR,0,0);g.fillStyle='#05
     FXC_BARS.forEach((bar,i)=>{const k=bar/100,mk=rawZ(k)<HULL_ZOOM.MARK,zf=trueZf(k),z=fxZ(k),fk=fxK(k)*V.tk,x=FXC_X0+i*FXC_W,cx=x+FXC_W/2,cy=y+(r.h-14)/2;let txt='';
       g.save();g.beginPath();g.rect(x+1,y+1,FXC_W-1,r.h-1);g.clip();
       if(r.k==='ship'){if(mk)shipMark(g,cx,cy,0,'blue',true);else shipIcon(g,'CA',1,'blue',cx,cy,0,zf,featherPx(bar));txt=mk?'箭头 7 px':'舰长 '+shipLen('CA',1,zf).toFixed(1)+' px';}
-      else if(r.k==='hit'){drawBoom(g,FXB.hit,cx,cy,0.06,wt,z);txt='闪光半径 '+(16*z).toFixed(1)+' px';}
+      else if(r.k==='rmz'){railMuzzle(g,cx-20,cy,0,'blue',0.06,fk);railMuzzle(g,cx+10,cy,0,'blue',0.22,fk);txt='0.06 秒 / 0.22 秒';}
+      else if(r.k==='cmz'){chemMuzzle(g,cx-20,cy,0,0.05,fk);chemMuzzle(g,cx+14,cy,0,0.4,fk);txt='火光 0.05 秒 / 烟 0.4 秒';}
+      else if(r.k==='hit'){drawBoom(g,FXB.hit,cx,cy,0.06,wt,z*1.25);txt='闪光半径 '+(16*z*1.25).toFixed(1)+' px(未进引擎:x1.25)';}
       else if(r.k==='hit2'){drawBoom(g,FXB.hit,cx,cy,0.06,wt,z*0.55);txt='闪光半径 '+(16*z*0.55).toFixed(1)+' px(未进引擎)';}
       else if(r.k==='kill'){drawBoom(g,FXB.kill,cx,cy,0.2,wt,z);txt='闪光半径 '+(34*z).toFixed(1)+' px';}
       else if(r.k==='puff'){drawPuff(g,cx-18,cy,0.08,fk);drawPuff(g,cx+18,cy,0.4,fk);txt='火花圈 '+((2+0.4*18)*fk).toFixed(1)+' px';}
@@ -756,7 +795,7 @@ function setBar(b){V.bar=Math.max(2000,Math.min(100000,b));$('bar').value=Math.r
 $('bar').addEventListener('input',e=>{V.bar=2000*Math.pow(50,e.target.value/1000);});
 $('tk').addEventListener('input',e=>{V.tk=e.target.value/100;});
 document.querySelectorAll('button[data-z]').forEach(b=>b.addEventListener('click',()=>setBar(+b.dataset.z)));
-document.querySelectorAll('button[data-so]').forEach(b=>b.addEventListener('click',()=>{SECV.o=b.dataset.so;document.querySelectorAll('button[data-so]').forEach(x=>x.classList.toggle('on',x===b));}));
+document.querySelectorAll('button[data-old]').forEach(b=>b.addEventListener('click',()=>{GUNV.old=!GUNV.old;b.classList.toggle('on',GUNV.old);}));
 document.querySelectorAll('button[data-k]').forEach(b=>b.addEventListener('click',()=>{const k=b.dataset.k;V[k]=!V[k];b.classList.toggle('on',V[k]);
   const f=((V.gray?'grayscale(1) ':'')+(V.blur?'blur(1px)':'')).trim()||'none';SCN.style.filter=f;TC.style.filter=f;}));
 SCN.addEventListener('wheel',e=>{e.preventDefault();const r=SCN.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top,k0=kmpp(),wx=V.cx+(mx-SWd/2)*k0,wy=V.cy+(my-SHt/2)*k0;
