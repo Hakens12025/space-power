@@ -483,8 +483,8 @@ function drawHoverRings(){
     const s=shipById(id);if(!s||s.dead||s.side!==ME)continue;
     const p=toScreen(s.pos[0],s.pos[1]);
     if(hoverRing==='mac'){const hi=hoverRingHi,em=k=>hi===k?1:((hi==='mac'||hi==='sec')?-1:0); // 2026-10-11 主炮一类:轴炮 + 副炮都画,停在哪一行那一种加亮、另一种调暗
-      if(hasMAC(s)){ring(p,macEffRange(s),'轴炮 50% ≈ '+Math.round(macEffRange(s)/1000)+'k',em('mac'));ring(p,macRangeAt(s,0.1),'轴炮 10% ≈ '+Math.round(macRangeAt(s,0.1)/1000)+'k',em('mac'));}
-      if(s.secCds&&s.secCds.length){ring(p,secRangeAt(s,0.5),'副炮 50% ≈ '+Math.round(secRangeAt(s,0.5)/1000)+'k',em('sec'));ring(p,secRangeAt(s,0.1),'副炮 10% ≈ '+Math.round(secRangeAt(s,0.1)/1000)+'k',em('sec'));}} // WR1:没有射程门,画两档命中率的距离
+      if(hasMAC(s))ring(p,macRangeAt(s,MAC_AUTO_P),'轴炮 自动开火 '+Math.round(MAC_AUTO_P*100)+'% ≈ '+Math.round(macRangeAt(s,MAC_AUTO_P)/1000)+'k',em('mac')); // 2026-10-11 用户:只留 10% 自动开火门那一圈,50% 那圈去掉
+      if(s.secCds&&s.secCds.length)ring(p,secRangeAt(s,MAC_AUTO_P),'副炮 自动开火 '+Math.round(MAC_AUTO_P*100)+'% ≈ '+Math.round(secRangeAt(s,MAC_AUTO_P)/1000)+'k',em('sec'));} // WR1:没有射程门,画两档命中率的距离
     else if(hoverRing==='msl'){const hi=hoverRingHi,em=k=>hi===k?1:((hi==='msl'||hi==='ssm')?-1:0); // 2026-10-11 导弹一类:反舰 + 突击弹都画,停在哪一行那一种加亮
       if(wpnHas(s,'msl'))ring(p,mslReach(s),'反舰 射程 ≈ '+Math.round(mslReach(s)/1000)+'k(中段熄火滑行)',em('msl')); // WR1
       if(s.ssmCells&&s.ssmCells.length)ring(p,SSM_R,'突击弹 射程 ≈ '+Math.round(SSM_R/1000)+'k(出膛自导)',em('ssm'));}
