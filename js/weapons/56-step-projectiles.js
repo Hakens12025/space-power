@@ -52,7 +52,7 @@ function shellTraceStep(){
       const q=llon&&vis?projLook(p,side):p;if(!q)continue; // LL5 弹影(看得见时才取;两拍之间按看见它的那只眼)
       if(r0){if(vis)r0.b=[q.pos[0],q.pos[1]];else r0.out=true;continue;} // 还看得见就把轨迹末端 b 往前推
       if(!vis)continue;
-      const v=Math.hypot(q.vel[0],q.vel[1])||1,r={a:[q.pos[0],q.pos[1]],b:[q.pos[0],q.pos[1]],u:[q.vel[0]/v,q.vel[1]/v],t:simTime};
+      const v=Math.hypot(q.vel[0],q.vel[1])||1,r={a:[q.pos[0],q.pos[1]],b:[q.pos[0],q.pos[1]],u:[q.vel[0]/v,q.vel[1]/v],t:simTime,side,sec:!!p.sec,sh:p.shooter}; // 2026-10-11 sec = 副炮弹(画细线);sh 只给画面判「这一方看没看见过射手」(render/83 shtrKnown),bots 不许读
       if(q!==p)r.te=q.llT; // LL5 a 那张弹影的时刻
       (p.tr||(p.tr={}))[side]=r;L.push(r);
     }
@@ -103,7 +103,7 @@ function stepMacProj(p,dt){ // 主炮(轴炮):沿发射时船头直飞,命中或
       if(p.ground){ // 2026-09-27 打空地的炮弹:对方每艘船都按本拍相对线段的最近点判(与下面同式),碰到第一艘就算
         for(let g=0;g<2;g++)for(const u of (g?rockObjs():ships)){if(u.dead||u.side===p.shooter.side||u.hp===undefined)continue; // 物体里只有带结构值的(民船 / 诱饵 / 浮标)挨得了打;2026-09-29 不再每步拼数组,石头本来就没有结构值(world/14 rockObjs)
           if(stepCPA2(p,u,dt)<MAC_HIT_R*MAC_HIT_R){if(applyDamage(u,p.dmg,p.shooter,'mac',p)>0)spawnHit(p.pos,'mac',p.shooter,u,hitW(p));p.done=true;return;}}
-        if(!ARENA&&p.age*CFG.macSpd>MAC_FAR)p.done=true; // 2026-09-28 用户:炮弹射程理论无限 —— 不再到点消失,飞到出游玩区(主循环统一判);靶场没有游玩区,飞出 MAC_FAR 才收
+        if(!ARENA&&p.age*(p.sec?SEC_SPD:CFG.macSpd)>MAC_FAR)p.done=true; // 2026-09-28 用户:炮弹射程理论无限 —— 不再到点消失,飞到出游玩区(主循环统一判);靶场没有游玩区,飞出 MAC_FAR 才收
         return;
       }
       const t=p.target; // 2026-09-26 单局地图:MAC_HIT_R 400 < 单拍相对位移约 600km,只看拍末会漏判(实测 90% 带只剩 84%),改按本拍相对线段的最近点判

@@ -44,7 +44,7 @@ function pipGun(g,w,h,s,k){ // 火控窗:三条 S 形命中率曲线(起作用�
   g.font='10px Consolas';g.fillStyle='#8fd0ff';g.textBaseline='bottom';
   g.fillText('散布1σ '+Math.round(d*macShotSigma(sec?secAs(s):s,d,mt)).toLocaleString('en-US')+'km / 命中半径 '+MAC_HIT_R+'km',6,h-14);
   if(sec){const n=(s.secCds||[]).length,r=secReady(s),nx=Math.min(...(s.secCds||[]).filter(t=>t>0).concat([Infinity]));
-    g.fillText('飞行 '+Math.round(SHOW.t(d/CFG.macSpd))+'s · 装填 '+(r>0?'就绪 '+r+'/'+n:Math.ceil(SHOW.t(nx))+'s')+' · 炮塔(不用转船头)',6,h-2);return;}
+    g.fillText('飞行 '+Math.round(SHOW.t(d/SEC_SPD))+'s · 装填 '+(r>0?'就绪 '+r+'/'+n:Math.ceil(SHOW.t(nx))+'s')+' · 炮塔(不用转船头)',6,h-2);return;} // 2026-10-11 副炮弹速 SEC_SPD(weapons/52)
   const mp=mt?macPred(s,mt):tp,ang=mp?V.angle(s.facing,V.norm(V.sub(mp,s.pos))):0;
   g.fillText('飞行 '+Math.round(SHOW.t(d/CFG.macSpd))+'s · 装填 '+(macReady(s)>0?('就绪'+((s.macN||1)>1?' '+macReady(s)+'/'+s.macN:'')):Math.ceil(SHOW.t(macCdNext(s)))+'s')+' · 机头 '+(ang<0.02?'对准':(ang*57.2958).toFixed(0)+'°'),6,h-2);
 }

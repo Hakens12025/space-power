@@ -1,16 +1,16 @@
 "use strict";
 /* RF1: 拆自 js/03-ships.js L335-493(主炮/诱饵/拦截弹/齐射发射链 + hitFX/nets 实体状态)。纯移动无逻辑改动。 */
-function macPred(s,t){ // 目标未来位置(提前量,主炮 0.1c飞行时间);KIMI151:相对速度提前量——弹丸继承舰速后,提前量必须用(目标速-本舰速),否则行进间射击系统性脱靶
+function macPred(s,t,spd){ // spd:弹速(缺省 = 轴炮 CFG.macSpd;副炮传 SEC_SPD) // 目标未来位置(提前量,主炮 0.1c飞行时间);KIMI151:相对速度提前量——弹丸继承舰速后,提前量必须用(目标速-本舰速),否则行进间射击系统性脱靶
   // WR1:位置用【估计位置】(交代不出位置 ⇒ 返回 null,调用方不许回落真值);LL7 读 contactKin(sensors/21):位置先按它的时刻推到此刻(提前时间 = (simTime − t) + 飞行时间),关开关时 = contactPos + 真速度(逐位同改前)
   const k=(typeof contactKin==='function')?contactKin(t,s.side):{pos:t.pos,vel:t.vel,t:simTime}; if(!k)return null;
   const tp=macKinNow(k),v=k.vel||MAC_V0;
   const d=V.len(V.sub(tp,s.pos));
-  const tt=d/CFG.macSpd;
+  const tt=d/(spd||CFG.macSpd);
   return [tp[0]+(v[0]-s.vel[0])*tt,tp[1]+(v[1]-s.vel[1])*tt,tp[2]+(v[2]-s.vel[2])*tt];
 }
 const MAC_V0=[0,0,0]; // LL7 我方不知道它的速度(光速延迟开着、还没测到过速度)时按不动算,不拿真值兜底
 function macKinNow(k){const a=simTime-k.t;if(!(a>0)||!k.vel)return k.pos;return [k.pos[0]+k.vel[0]*a,k.pos[1]+k.vel[1]*a,k.pos[2]+k.vel[2]*a];} // LL7 contactKin 的 {pos, vel, t} 推到此刻:位置对应的时刻已是此刻(关开关 / 陈旧 / 失联)时原样返回
-function macPtLead(s,pt){const tt=V.len(V.sub(pt,s.pos))/CFG.macSpd;return [pt[0]-s.vel[0]*tt,pt[1]-s.vel[1]*tt,(pt[2]||0)-s.vel[2]*tt];} // 2026-09-28 打空地的提前量:炮弹带着本舰速度,机头要瞄 点 − 本舰速度 x 飞行时间(与 macPred 同一个相对参照系;原来直接瞄点,行进中系统性偏向本舰运动方向)
+function macPtLead(s,pt,spd){const tt=V.len(V.sub(pt,s.pos))/(spd||CFG.macSpd);return [pt[0]-s.vel[0]*tt,pt[1]-s.vel[1]*tt,(pt[2]||0)-s.vel[2]*tt];} // 2026-09-28 打空地的提前量:炮弹带着本舰速度,机头要瞄 点 − 本舰速度 x 飞行时间(与 macPred 同一个相对参照系;原来直接瞄点,行进中系统性偏向本舰运动方向)
 const MAC_ALIGN=0.1*Math.PI/180; // 2026-09-28 用户:轴炮是最大的炮,转到位、停稳再开 —— 机头方位与瞄准点方位差在这以内才许开(原 0.02 rad ≈ 1.1°:机头一扫进窗口就开、船还在转)
 function macAimErr(s,p){const a=Math.atan2(s.facing[1],s.facing[0])-Math.atan2(p[1]-s.pos[1],p[0]-s.pos[0]);return Math.abs(Math.atan2(Math.sin(a),Math.cos(a)));} // 机头方位与瞄准点方位之差(只比水平面:炮弹方位取机头,俯仰取瞄准线)
 function macAligned(s,t){ // 轴炮对准:机头是否转到预测点上(MAC_ALIGN)
@@ -90,24 +90,25 @@ const MSL_MISS=1000*CFG.scale; // 滑行段的脱靶容差 km:照当前航向飞
 function macReady(s){const t=s.macCds;if(!t)return (s.macDmg||0)>0?1:0;let n=0;for(let i=0;i<t.length;i++)if(t[i]<=0)n++;return n;} // 就绪炮门数
 function macCdNext(s){const t=s.macCds;if(!t)return 0;let m=Infinity;for(let i=0;i<t.length;i++)if(t[i]>0&&t[i]<m)m=t[i];return isFinite(m)?m:0;} // 最近一门转完装填还要几秒(全就绪 = 0)
 function macConsume(s){const t=s.macCds||[];for(let i=0;i<t.length;i++)if(t[i]<=0){t[i]=s.macReload||0;return true;}return false;} // 占第一根就绪条转装填;没有就绪门返回 false(调用方的门一般已挡,这里兜底防超频)
-/* 2026-10-11 副炮(多武器清单,用户:炮塔、不用转船头):炮弹同轴炮(CFG.macSpd、命中判定 MAC_HIT_R、weapons/56 同一条命中检查),命中率走同一条 S 形、只换散布 s.secSigma;
+/* 2026-10-11 副炮(多武器清单,用户:炮塔、不用转船头):炮弹弹速 SEC_SPD(10-11 起 300 km/s,原同轴炮 CFG.macSpd)、命中判定同轴炮(MAC_HIT_R、weapons/56 同一条命中检查),命中率走同一条 S 形、只换散布 s.secSigma;
    每门一根装填条 s.secCds[](同 macCds);瞄准 = 朝提前量点直接出膛(不看机头)。自动开火在 57(同主炮那道 roe + 开关门),底栏强行开火 command/68 cxSecFire */
 const secAs=s=>({macSigma:s.secSigma,sigCap:s.secCap,side:s.side}); // 借主炮命中率 / 散布函数的口径(它们只读 macSigma、封顶角 sigCap 与阵营)
 function secHitProb(s,d,t){return macHitProb(secAs(s),d,t);}
 function secRangeAt(s,p){return macRangeSig(s.secSigma,p,s.secCap);} // 命中率恰为 p 的距离
 function secReady(s){const t=s.secCds;if(!t)return 0;let n=0;for(let i=0;i<t.length;i++)if(t[i]<=0)n++;return n;}
+const SEC_SPD=PHYS.v(300)*CFG.vscale/0.7; // 2026-10-11 用户:副炮是化学炮弹,速度不能有轴炮那么快 —— 300 km/s(轴炮 770;写的是速度旋钮 0.7 时的实际值)。飞得久,目标中途转向 / 变速更容易躲开;对直线航行的目标命中率不变
 function secShot(s,aim,d,t){ // 占一门、按散布出膛;返回炮弹速度(占不到门返回 null)
   const sig=macShotSigma(secAs(s),d,t),dir=V.norm(V.sub(aim,s.pos)),ang=Math.atan2(dir[1],dir[0])+gaussRand()*sig,hxy=Math.hypot(dir[0],dir[1]);
   const c=s.secCds||[];let i=0;while(i<c.length&&c[i]>0)i++;if(i>=c.length)return null;c[i]=s.secReload||0;s.fireHot=SENS.FIRE_S;
-  return [Math.cos(ang)*hxy*CFG.macSpd+s.vel[0],Math.sin(ang)*hxy*CFG.macSpd+s.vel[1],dir[2]*CFG.macSpd+s.vel[2]];}
+  return [Math.cos(ang)*hxy*SEC_SPD+s.vel[0],Math.sin(ang)*hxy*SEC_SPD+s.vel[1],dir[2]*SEC_SPD+s.vel[2]];}
 function fireSec(s,t){ // 副炮打舰:同 fireMAC 的门(定得出位置、按估计位置算提前量)
   if(s.noFire||s.dead||!secReady(s)||s.side===t.side||contactDead(t,s.side)||!contactFix(t,s.side))return false;
-  const pred=macPred(s,t);if(!pred)return false;const d=V.len(V.sub(pred,s.pos)),v=secShot(s,pred,d,t);if(!v)return false;
-  projectiles.push({type:'mac',pos:s.pos.slice(),vel:v,target:t,shooter:s,pred,tt:d/CFG.macSpd,age:0,dmg:s.secDmg,sec:true});
+  const pred=macPred(s,t,SEC_SPD);if(!pred)return false;const d=V.len(V.sub(pred,s.pos)),v=secShot(s,pred,d,t);if(!v)return false;
+  projectiles.push({type:'mac',pos:s.pos.slice(),vel:v,target:t,shooter:s,pred,tt:d/SEC_SPD,age:0,dmg:s.secDmg,sec:true});
   if(typeof llBorn==='function')llBorn(projectiles[projectiles.length-1]);return true;}
 function fireSecAt(s,pt){ // 副炮打空地:同 fireMACAt(弹道上碰到对方哪艘算哪艘)
-  if(s.noFire||s.dead||!secReady(s))return false;const L=macPtLead(s,pt),d=V.len(V.sub(L,s.pos)),v=secShot(s,L,d,null);if(!v)return false;
-  projectiles.push({type:'mac',pos:s.pos.slice(),vel:v,target:null,ground:true,shooter:s,pred:pt.slice(),tt:d/CFG.macSpd,age:0,dmg:s.secDmg,sec:true});
+  if(s.noFire||s.dead||!secReady(s))return false;const L=macPtLead(s,pt,SEC_SPD),d=V.len(V.sub(L,s.pos)),v=secShot(s,L,d,null);if(!v)return false;
+  projectiles.push({type:'mac',pos:s.pos.slice(),vel:v,target:null,ground:true,shooter:s,pred:pt.slice(),tt:d/SEC_SPD,age:0,dmg:s.secDmg,sec:true});
   if(typeof llBorn==='function')llBorn(projectiles[projectiles.length-1]);return true;}
 function fireMACAt(shooter,pt){ // 2026-09-27 主炮打空地(强行开火):朝那个点开一炮;没有目标,弹道上碰到对方哪艘船算哪艘(56 按 ground 判),飞到那个点消失
   if(shooter.noFire||shooter.dead)return false;

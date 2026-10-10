@@ -218,7 +218,8 @@ function insetEvents(now){ // 导演的事件源(只读我方知道的事):损�
   const CW=new Map();for(const x of ciwsFX){if(INSET.cws.has(x))continue;if(!adminMode&&x.seeT&&!fxSeen(x,VIEW))continue;INSET.cws.add(x);const v=x.vic;if(v&&!v.dead&&v.side===VIEW&&kindOf(v)==='ship')CW.set(v,(CW.get(v)||0)+(x.n||1));} // 2026-09-29 近防拦下(用户选):我舰近防打掉冲它来的导弹,同一帧的加起来
   for(const [v,n] of CW)insetPush({k:'ciws',p:1.3,ship:v,n:n,lbl:'近防拦下 '+n+' 枚 → '+v.name},now);
   const TR=(typeof SHELL_TR!=='undefined')?(adminMode?SHELL_TR.blue.concat(SHELL_TR.red):SHELL_TR[VIEW]):[],trR=(typeof SHELL_TR!=='undefined')?SHELL_TR.red:[]; // 2026-09-28 炮弹来路回放(用户选):新记下的一条 = 一段,框住首见点与往回 SHELL_BACK 那一段(附近看见它的我方舰由 insetBuild 一起框)
-  for(const r of TR){if(INSET.shr.has(r))continue;INSET.shr.add(r);if(nm)continue;const tg=now-INSET.shT<INSET.SHELL_GAP?null:insetShellAtUs(r,trR.indexOf(r)>=0?'red':'blue');if(!tg)continue;INSET.shT=now;const L=Math.min(shtrBack(r),INSET.SHELL_BACK*S);
+  for(const r of TR){if(INSET.shr.has(r))continue;INSET.shr.add(r);if(nm||shtrKnown(r))continue; // 2026-10-11 射手看得见(归属已知)不播,同主画面(83 shtrKnown)
+   const tg=now-INSET.shT<INSET.SHELL_GAP?null:insetShellAtUs(r,trR.indexOf(r)>=0?'red':'blue');if(!tg)continue;INSET.shT=now;const L=Math.min(shtrBack(r),INSET.SHELL_BACK*S);
     insetPush({k:'shell',p:1.7,ship:tg,q:[r.a[0],r.a[1]],q2:[r.a[0]-r.u[0]*L,r.a[1]-r.u[1]*L],pr:(insetLL()?projAll():projectiles).find(p=>p.tr&&(p.tr.blue===r||p.tr.red===r))||null,lbl:'炮弹来路 → '+tg.name},now);} // pr = 那颗炮弹(已经飞过 / 没了就不播,在播的把它框进来)
   INSET.ev=INSET.ev.filter(e=>now-e.t<(INSET.EVMS[e.k]||6000));
 }

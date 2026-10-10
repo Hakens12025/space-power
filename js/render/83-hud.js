@@ -580,6 +580,9 @@ function anarDraw(now){
 }
 const SHTR={MS:8000,SEG:10,LEN:3000000}; // 2026-09-28 炮弹来路线:墙钟亮多久 / 分几段渐隐 / 没有游玩区时往回画多长 km
 const SHTR_W=new WeakMap(); // 记录 → 第一次画的墙钟
+const SHTR_KN=new WeakMap(); // 记录 → 射手已被这一方看见过(粘住)
+function shtrKnown(r){if(SHTR_KN.get(r))return true;const s=r.sh;if(!s||s.dead)return false; // 2026-10-11 用户:敌方进了可视范围就不画它的炮弹来路,只有未知归属的炮弹才画 —— 射手进过这一方的可见光圈(看得见它开火)= 归属已知,之后一直不画;特写的「炮弹来路」同口径(84)
+  const k=r.side===VIEW?viewInVis(s):ships.some(d=>d.side===r.side&&!d.dead&&senseVis(d,s));if(k)SHTR_KN.set(r,true);return k;} // 全知画两方的记录:另一方的按它自己的可见光圈判
 function shtrBack(r){ // 从首见点往回延长到游玩区边上(没有游玩区画 SHTR.LEN)
   let s=ARENA?Infinity:SHTR.LEN;if(ARENA){const ux=-r.u[0],uy=-r.u[1]; // 2026-09-28 有游玩区就一直画到边上(用户:延长线不够长;原来最多 80 万)
     if(ux>1e-9)s=Math.min(s,(ARENA.x1-r.a[0])/ux);else if(ux<-1e-9)s=Math.min(s,(ARENA.x0-r.a[0])/ux);
@@ -589,14 +592,14 @@ function shtrBack(r){ // 从首见点往回延长到游玩区边上(没有游玩
 function drawShellTraces(){ // 2026-09-28 敌方炮弹被我方看见(可见光圈或雷达):看得见的那一段画实线(a → b),再从 a 沿弹道往回画虚线延长到游玩区边上(weapons/56 的 SHELL_TR);离首见点越远越淡,墙钟 SHTR.MS 后消失
   const L=adminMode?SHELL_TR.blue.concat(SHELL_TR.red):SHELL_TR[VIEW];if(!L.length)return;
   const now=nowMs(),lab=[];ctx.save();ctx.lineWidth=1.4;ctx.setLineDash([7,5]);ctx.font='11px "Microsoft YaHei"';ctx.textBaseline='bottom';
-  for(const r of L){let w0=SHTR_W.get(r);if(w0===undefined){w0=now;SHTR_W.set(r,w0);}const k=(now-w0)/SHTR.MS;if(k>=1||k<0)continue;
+  for(const r of L){if(shtrKnown(r))continue;let w0=SHTR_W.get(r);if(w0===undefined){w0=now;SHTR_W.set(r,w0);}const k=(now-w0)/SHTR.MS;if(k>=1||k<0)continue;const th=r.sec?0.5:1; // 2026-10-11 用户:副炮的来路线细一半,别和轴炮的混
     const A0=k<0.05?k/0.05:1-(k-0.05)/0.95,len=shtrBack(r),col=SHELL_TR.red.indexOf(r)>=0?'111,180,255':'255,120,90'; // 按开炮那一方的阵营色(红方记的是蓝方的炮弹)
     ctx.strokeStyle='rgb('+col+')';
     const a=toScreen(r.a[0],r.a[1]),b=toScreen((r.b||r.a)[0],(r.b||r.a)[1]); // 轨迹:圈里真实飞过的那一段
-    ctx.setLineDash([]);ctx.lineWidth=1.8;ctx.globalAlpha=0.9*A0;ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();ctx.lineWidth=1.4;ctx.setLineDash([7,5]);
+    ctx.setLineDash([]);ctx.lineWidth=1.8*th;ctx.globalAlpha=0.9*A0;ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();ctx.lineWidth=1.4*th;ctx.setLineDash([7,5]);
     for(let i=0;i<SHTR.SEG;i++){const s0=len*i/SHTR.SEG,s1=len*(i+1)/SHTR.SEG,p=toScreen(r.a[0]-r.u[0]*s0,r.a[1]-r.u[1]*s0),q=toScreen(r.a[0]-r.u[0]*s1,r.a[1]-r.u[1]*s1);
       ctx.globalAlpha=0.8*A0*(1-0.6*i/SHTR.SEG);ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();} // 往回延长,远端仍留四成(原来线性淡到 0,看着短)
-ctx.globalAlpha=A0;ctx.setLineDash([]);ctx.beginPath();ctx.arc(a[0],a[1],3,0,6.283);ctx.stroke();ctx.setLineDash([7,5]);
+ctx.globalAlpha=A0;ctx.setLineDash([]);ctx.beginPath();ctx.arc(a[0],a[1],r.sec?2:3,0,6.283);ctx.stroke();ctx.setLineDash([7,5]);
     if(!lab.some(b=>Math.hypot(b[0]-a[0],b[1]-a[1])<60)){lab.push(a);ctx.fillStyle='rgb('+col+')';ctx.fillText('炮弹来路',a[0]+6,a[1]-4);}}
   ctx.restore();
 }
