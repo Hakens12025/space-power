@@ -531,6 +531,12 @@ function fmPgUp() {
   if (fmPg.moved) fmPageRender();
 }
 
+function fmPgReform(F) { // 2026-10-11 用户:换阵型预设后船要当场去新站位(原来只重算站位、不下令,船要等下一道移动令或手按菜单「原地重排」才动,看上去还按旧预设的四圈站着)
+  const L = fmShips(F), fl = L.find(s => s.id === F.flagship) || L[0]; if (!fl || typeof fmMoveTo !== 'function') return;
+  const od = fl.orders && fl.orders.length ? fl.orders[fl.orders.length - 1] : null;
+  if (od) fmMoveTo(F, od.pos.slice(), od.type, od.face);                                       // 在走:按原来的终点用新阵型重新展开(中途的航点不保留)
+  else fmMoveTo(F, [fl.pos[0], fl.pos[1], fl.pos[2]], 'stop', [fl.facing[0], fl.facing[1], 0]); // 停着:就地按新站位摆好,朝向 = 旗舰此刻的船头(同菜单「原地重排」)
+}
 function fmPgAct(a) {
   const F = fmPageF(); if (!F) return;
   if (a === 'reset') {
@@ -541,10 +547,11 @@ function fmPgAct(a) {
     F.P.spread = fmClamp('spread', T0.spread); F.P.spacing = fmClamp('spacing', T0.gap);
     F.P.bm = fmClamp('bm', T0.bm); F.P.widen = fmClamp('widen', T0.widen); F.P.pref = fmClamp('pref', T0.pref); F.P.gcap = fmClamp('gcap', T0.gcap);
     if (typeof fmReslot === 'function') fmReslot(F);
+    if (F.src === 'generated') fmPgReform(F); // 2026-10-11 恢复默认后同样当场摆到新站位
     fmPg.sel = -1; fmPg.zoom = 1; fmPg.pan = [0, 0]; fmPageRender(); return;   // FM6l 视角一并复位
   }
   if (a.indexOf('sc-') === 0) {
-    if (typeof fmSetStance === 'function') fmSetStance(F, a.slice(3));
+    if (typeof fmSetStance === 'function') { const k0 = F.P.stance; fmSetStance(F, a.slice(3)); if (F.P.stance !== k0 && F.src === 'generated') fmPgReform(F); } // 2026-10-11 切了才下令(同一个预设再点不动)
     fmPg.sel = -1; fmPageRender();
     if (typeof updFmBar === 'function') updFmBar();
     return;

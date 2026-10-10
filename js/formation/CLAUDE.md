@@ -19,6 +19,7 @@
 - 编队成员的速度上限 = min(自己的档位 `cruiseOf(s)`, 编队速度 `fmSpd`)(physics/31)。`fmSpd` 两种(编队菜单「速度」钮,`F.spdMode`,2026-10-07 用户):加权速度(缺省)= 全队档位按舰数加权平均,慢船按自己的档位、会落后;统一速度(`'min'`)= 最慢那艘的档位,一起走。没有旗舰让速。
 - `fmReassign` / 跟随配对只许在同 `fmSwapKey` 签名的舰之间交换(否则推翻匈牙利的解);交换 `fmSlot` 时 `fmStn` 一起换。
 - 各种 setter 要有"值没变就整个返回"的空操作守卫(`fmSetSrc` / `fmSetParam` / `fmSetStance` / `fmClaim`),否则会把落盘的配对抹回原序、离位读数乱跳。
+- 换站位预设 / 「恢复默认」只重算站位不会让船动,所以编组控制页切完当场再下一道令(render/89 `fmPgReform`):停着 = 就地按新站位摆(同菜单「原地重排」),在走 = 按旗舰原来的终点重新展开(2026-10-11 用户:换预设后船还按旧预设的四圈站着)。
 - 快照只由「重新固定」重拍(`fmSetSrc(F,'snapshot',true)`);切回固定模式不改快照。换旗时快照不改写,`F.ang` 换参考系。
 - 阵型态下每条令都带 face = 阵型朝向;face 只经 `mkOrder` 构造(补齐三元、挡非有限值)。
 - 舰船不准进入天体与恒星(2026-09-30):`mkOrder` 把命令点推出「半径 + `ENV_CFG.BODY_CLEAR`」的圈;`orderMoveTo` / `orderAppend` / `orderPush` 经 `ordRoute` 在新的一段穿过这圈时先插绕行的经过点(world/12 `envBodyOut` / `envDetour`;绕行点放在再往外 `BODY_CUT` 3000 的圈上,给拐点切弯留余量,2026-10-03)。直接改 `o.pos` 的地方(拖航点)不重新绕,靠 physics/31 的硬边兜底。
