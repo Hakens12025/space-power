@@ -220,7 +220,7 @@ function radItems(sub,t,it){ // RF5 解算每个武器扇区:allow=计划(许不
     const gated=(k==='mac'||k==='msl'); // fcGate 只对这两类有门,fcSetAllow 也只认这两个 kind;将来配装出别的 kind 时只画不判,不凭空造门
     const swf=(ki&&ki.on)?ki.on:null;   // RF5 单舰武器开关的字段名【只从 88-selpanel:19 的 KIND_INFO.on 读】,不写 'macOn'/'mslOn' 字面量(与"门控用谓词、不写 cls==='XXX'"同一条铁律:字面量会静默失配)
     let ok=true,why='';
-    if(swf&&sub[swf]===false){ok=false;why='开关关闭';} // RF5 补齐 57 实际开火门里被漏掉的一层:57:80 的 roeOK 要 macOn!==false、57:33 的自动齐射要 mslOn!==false。漏了它,底栏把主炮点掉之后扇区照样画成可用(三格全绿、无禁用虚线),玩家会反复点许可找原因——而许可本来就是开的
+    if(swf&&!wpnOn(sub,k)){ok=false;why='开关关闭';} // 2026-10-11 总开关 + 分开关(weapons/51 wpnOn) // RF5 补齐 57 实际开火门里被漏掉的一层:57:80 的 roeOK 要 macOn!==false、57:33 的自动齐射要 mslOn!==false。漏了它,底栏把主炮点掉之后扇区照样画成可用(三格全绿、无禁用虚线),玩家会反复点许可找原因——而许可本来就是开的
     if(ok&&gated&&!fix){ok=false;why='未定位';} // 与 fcGate / fireMAC / orderMissileSalvo 同一道定位门
     const maxRng=(ki&&ki.maxRange)?ki.maxRange(sub):rng; // RF6 硬上限;无衰减机制的武器(msl/ciws)回退成精确射程
     if(ok&&gated&&maxRng&&dist>=maxRng){ok=false;why='射程外';} // 比硬上限,不比精确射程:两者之间是衰减区(能打,散布变大),判成不可用会与 fcGate/fireMAC 给出相反结论

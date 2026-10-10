@@ -651,6 +651,13 @@ function drawSelEnt(){ // 2026-10-08 选中的「只看信息」实体:画着它
   const s=typeof selEntOk==='function'?selEntOk():null;if(!s)return;const K=entKind(s),q=K.at(s,false,VIEW);if(!q)return;const p=toScreen(q[0],q[1]);
   const r=K===ENT.ship?Math.max(12,shipIconR(s)+8):(K===ENT.obj?14:K.r(s)+4);ctx.save();ctx.strokeStyle='#ffe066';ctx.lineWidth=1.6;ctx.beginPath();ctx.arc(p[0],p[1],r,0,6.283);ctx.stroke();ctx.restore(); // 舰船跟舰标、卫星 / 彗星 / 据点套在它的点选圈外
 }
+function drawFirePlan(){ // 2026-10-11 多武器 / 几十艘:底栏选了几发、鼠标停在地图上 —— 按发射时同一套挑法(88 wpkPlan)把会开火的船描白、标各出几发,鼠标旁写「几发 · 几艘出」
+  if(typeof wpkN!=='function'||!wpkN()||!cv||document.elementFromPoint(mouseX,mouseY)!==cv)return;
+  let t=targetAt(mouseX,mouseY);if(t&&contactDead(t,ME))t=null;
+  const w=worldAt(mouseX,mouseY),P=wpkPlan(t,ordArenaClamp([w[0],w[1],0])),c=new Map();for(const q of P)c.set(q[1],(c.get(q[1])||0)+1);if(!c.size)return;
+  ctx.save();ctx.strokeStyle='#fff';ctx.fillStyle='#fff';ctx.lineWidth=2;ctx.font='10px Consolas';ctx.textAlign='left';ctx.textBaseline='bottom';
+  for(const [x,n] of c){const p=toScreen(x.pos[0],x.pos[1]);ctx.beginPath();ctx.arc(p[0],p[1],15,0,6.283);ctx.stroke();ctx.fillText('x'+n,p[0]+13,p[1]-10);}
+  ctx.textBaseline='middle';ctx.fillText(P.length+' 发 · '+c.size+' 艘出',mouseX+14,mouseY+16);ctx.restore();}
 function drawBuoyAim(){ // 2026-10-08 用户:选定「前出浮标」后,舰船 → 鼠标的延长线 = 浮标会往哪飞;舰到鼠标实线,往后虚线延长到飞出地图那一点(靶场没有边界画到 BUOY.FAR)
   if(selWeapon!=='buoy'||typeof buoyLauncher!=='function')return;const s=buoyLauncher();if(!s)return;
   const w=worldAt(mouseX,mouseY),dx=w[0]-s.pos[0],dy=w[1]-s.pos[1],d=Math.hypot(dx,dy);if(!(d>1e-6))return;const ux=dx/d,uy=dy/d;

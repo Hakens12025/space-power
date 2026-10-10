@@ -43,7 +43,7 @@
 - 新增顶层 const 前先全库 grep 同名(跨 script 重名会让整个文件语法报废)。weapons 在 formation 之后加载,载入期不许读 formation 的顶层量(改成惰性函数)。
 
 ## 火控序列
-- 序列是"许可"不是"命令":`fcGate` 只做减法,放不开 57 关着的东西。门:舰级开关(`autoEngage`+`roe`、`macOn`/`mslOn`,字段名只从 `KIND_INFO[k].on` 读)→ 定得出位置(`contactFix`)。
+- 序列是"许可"不是"命令":`fcGate` 只做减法,放不开 57 关着的东西。门:舰级开关(`autoEngage`+`roe`、武器开关 51 `wpnOn` = 这一种的分开关 `s[kind+'On']` 且这一类的总开关 `s[类+'Gate']`,类表 `WPN_CAT`;2026-10-11 多武器,底栏一格 = 一类)→ 定得出位置(`contactFix`)。
 - 轮盘的 `radItems`(command/74)与 `radSolve`(render/89)必须与 `fcGate` 逐条同口径、同措辞。
 - `fcRuns(s,q)` 是"这条序列参不参与解算"的唯一真相,`fcSolve` / `fcActive` / `stepFireControl` 共用。
 - 逐武器各一个指针;`seq` 模式每次从 0 扫,`rr` 从 `rot` 扫并把 `rot` 钉在真正选中的那一项。按 pick 过滤时 `continue` 跳过,不许筛数组(`fcFrom` 存的是下标)。

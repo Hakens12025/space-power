@@ -13,7 +13,7 @@ const CMD_FNS=['orderMoveTo','moveShips','fmMoveTo','addWaypoint','fmAppend','fm
   'followAssign','followStopList','fcAppend','fcRemove','fcRemoveTarget','fcReorder','fcSetAllow','fcSetBig','fcSetEdit','fcSetMode','fcSetPick','fcToggleForce','fcTogglePause',
   'launchBuoy','buoySetOn','setEmit','orderMissileSalvo','fireMAC',
   'cxForceMac','cxSalvo','cxCease','cxDriftFire','cxFireAll','cxForcePoint','cxPick','cxFcAppendTo','cxFcRegister','cxTurn','cxReverse','cxDelLastOrder','cxOrderPos',
-  'cxWpn','cxWpnClear','cxCiwsSub','cxPulse','cxObjPulse','cxFmSpdMode','cxMslAim','cxMslMineOk','cxSalvoCells','cxStop']; // 会被界面调用、会改模拟的入口;新加一个界面能触发的改动,先在这里登记
+  'cxWpn','cxWpnGate','cxWpnClear','cxCiwsSub','cxPulse','cxObjPulse','cxFmSpdMode','cxMslAim','cxMslMineOk','cxSalvoCells','cxStop']; // 会被界面调用、会改模拟的入口;新加一个界面能触发的改动,先在这里登记
 const CMD_RAW=['stepSim','initFleet','rrTick']; // 这些里面调到上面的入口一律直通(模拟自己在动,不是玩家的操作)
 const CMD_ORIG={};
 /* ---- 参数编号 / 还原 ---- */
@@ -78,11 +78,13 @@ function cxDelLastOrder(sel){const halted=new Set(); // 删最后一个命令点
     if(s.formation){if(halted.has(s.formation))continue;halted.add(s.formation);fmShips(s.formation).forEach(m=>{if(m.orders.length){m.orders.pop();if(!m.orders.length)m.brake=true;}});}
     else if(s.orders.length){s.orders.pop();if(!s.orders.length)s.brake=true;}}}
 function cxOrderPos(s,i,pt){const od=s&&s.orders[i];if(od)od.pos=[pt[0],pt[1],pt[2]||0];} // 拖命令点(调用方已夹进游玩区)
-function cxWpn(sel,k,v){for(const x of sel){if(!x)continue; // 底栏武器勾选(88-selpanel wpnToggle 原来那段):v = 勾上 / 取消
+function cxWpn(sel,k,v){for(const x of sel){if(!x)continue; // 底栏一行行尾的分开关:只记这一种武器的勾(2026-10-11 起火控开关归格子右上角的总开关 cxWpnGate);关到一件都打不了 = 火控关(同原来)
   if(k==='ciws'){for(const c of CIWS_SUB)x[c[2]]=v;continue;}
-  const on=KIND_INFO[k].on;
-  if(v){if(!wpnFcOn(x)){for(const kk of ['mac','msl'])if(kk!==k)x[KIND_INFO[kk].on]=false;x.autoEngage=true;x.roe='free';}x[on]=true;}
-  else{x[on]=false;if(!wpnAnyOn(x)){x.autoEngage=false;x.roe='hold';x.lockedTarget=null;}}}}
+  x[KIND_INFO[k].on]=v;if(!v&&!wpnAnyOn(x)){x.autoEngage=false;x.roe='hold';x.lockedTarget=null;}}}
+function cxWpnGate(sel,c,v){for(const x of sel){if(!x)continue; // 2026-10-11 底栏格子右上角的总开关(一类武器):火控关着时打开 = 火控开、只开这一类(同原来勾一件);这一类一种都没勾就全勾上;关到哪类都打不了 = 火控关
+  const K=Object.keys(WPN_CAT).filter(k=>WPN_CAT[k]===c&&wpnHas(x,k));
+  if(v){if(!wpnFcOn(x)){for(const cc of new Set(Object.values(WPN_CAT)))x[cc+'Gate']=false;x.autoEngage=true;x.roe='free';}x[c+'Gate']=true;if(!K.some(k=>x[k+'On']!==false))for(const k of K)x[k+'On']=true;}
+  else{x[c+'Gate']=false;if(!wpnAnyOn(x)){x.autoEngage=false;x.roe='hold';x.lockedTarget=null;}}}}
 function cxWpnClear(sel){for(const x of sel)if(x){x.autoEngage=false;x.roe='hold';x.lockedTarget=null;x.fTgt=null;x.macOn=false;x.mslOn=false;x.ciwsOn=false;x.ciwsGunOn=false;}} // 取消所有 = 火控关、停火
 function cxCiwsSub(sel,f,v){for(const x of sel)if(x)x[f]=v;} // 近防两件各自勾
 function cxPulse(sel){for(const x of sel)if(x)x.pingReq=true;} // 雷达脉冲:下一拍照一拍
@@ -104,4 +106,4 @@ function cxMslAim(L,t,pt){ // t = 改打它(界面已查过定位;不变雷);pt 
 function cxMslMineOk(L,v){for(const p of L||[]){if(!p||p.type!=='missile'||p.done||!p.online||p.mine)continue;p.mineOk=v; // 底栏「变雷」:勾 = 到点停下待命,不勾 = 到点接着飞
   if(v&&p.cruise){p.cruise=false;p.park=true;p.parkPt=ordArenaClamp([p.pos[0],p.pos[1],0]);}}} // 已在巡飞的:就地减速停下
 function cxSalvoCells(x,t,pt,cells){if(x&&!x.dead&&x.ammo>0)orderMissileSalvo(x,t||{pos:pt},cells.length,cells);} // 2026-10-08 底栏点绿条:选了哪几个发射单元就用哪几个发(52 orderMissileSalvo 的 cells)
-function cxStop(sel){for(const x of sel)if(x){x.macOn=false;x.mslOn=false;x.autoEngage=false;x.roe='hold';x.lockedTarget=null;x.lockPlayer=false;x.fTgt=null;x.forceMac=null;x.driftFire=false;}} // 2026-10-08 底栏停火(X):自动开火全关,撤强行开火 / 锁定 / 漂移射击;近防不动
+function cxStop(sel){for(const x of sel)if(x){x.macGate=false;x.mslGate=false;x.autoEngage=false;x.roe='hold';x.lockedTarget=null;x.lockPlayer=false;x.fTgt=null;x.forceMac=null;x.driftFire=false;}} // 2026-10-08 底栏停火(X):自动开火全关,撤强行开火 / 锁定 / 漂移射击;近防不动。2026-10-11 关的是各类的总开关,分开关的勾照记
