@@ -26,19 +26,20 @@ const WPN={ // 定义(Definition):全局一份的不变模板,数值原样搬自
   //   不低于 hitMin;出膛速度 v0、加速 acc、顶速 vMax(都乘 INT_VK)、燃料 fuelS 物理秒;转向率 turnK / (1 + 速度 / (turnV x INT_VK))、每弧度耗油 turnFuel;outerIntercept 只给红方推演读
   // 2026-10-08 用户:近防外圈(拦截弹)x1.5、内圈(近防炮)x1.2,阵型不动 —— 编队站位与红方 AI 的编队距离读 fmOuter / fmInner(改前的圈,51-ciws ciwsRingsFm),实战与画面读 outer / inner
   // 2026-10-11 用户:所有舰船的近防圈和拦截圈 x2(外圈 x1.5 x2、内圈 x1.2 x2),阵型不变(fmOuter / fmInner 照旧);预警距离(x warnK)、出防区自毁(x zoneK)、储备线(x reserveR)跟着外圈一起放大
+  // 2026-10-11 用户(再一轮):近防炮内圈 x0.7、拦截弹外圈 x0.8、雷达加成 x0.9(51-ciws ICP_RADAR_K);阵型照旧不动(fmOuter / fmInner)
   // 2026-10-11 用户:静默拦截圈 x0.9、开机(雷达照射)x1.1 —— 外圈(= 静默时)再 x0.9,开雷达倍数 51-ciws ICP_RADAR_K 跟着改成 1.5 x 1.1 / 0.9
-  icp_core:{kind:'icp',label:'拦截弹',buoyN:2,outer:15750*1.5*2*0.9*CFG.scale,fmOuter:15750*CFG.scale,outerIntercept:0.40,inter:384,warnK:2,zoneK:3,perK:1.2,cdS:30,reserve:0.3,reserveR:0.5,threatCos:0.9,
+  icp_core:{kind:'icp',label:'拦截弹',buoyN:2,outer:15750*1.5*2*0.9*0.8*CFG.scale,fmOuter:15750*CFG.scale,outerIntercept:0.40,inter:384,warnK:2,zoneK:3,perK:1.2,cdS:30,reserve:0.3,reserveR:0.5,threatCos:0.9,
     hitR:1500,hitMax:0.45,hitMin:0.12,hitDrop:0.33,hitLatV:6000,v0:30,acc:400,vMax:24000,fuelS:600,turnK:4.5,turnV:3000,turnFuel:0.8},
-  icp_self:{kind:'icp',label:'拦截弹',buoyN:2,outer:9450*1.5*2*0.9*CFG.scale,fmOuter:9450*CFG.scale,outerIntercept:0.25,inter:320,warnK:2,zoneK:3,perK:1.2,cdS:30,reserve:0.3,reserveR:0.5,threatCos:0.9,
+  icp_self:{kind:'icp',label:'拦截弹',buoyN:2,outer:9450*1.5*2*0.9*0.8*CFG.scale,fmOuter:9450*CFG.scale,outerIntercept:0.25,inter:320,warnK:2,zoneK:3,perK:1.2,cdS:30,reserve:0.3,reserveR:0.5,threatCos:0.9,
     hitR:1500,hitMax:0.45,hitMin:0.12,hitDrop:0.33,hitLatV:6000,v0:30,acc:400,vMax:24000,fuelS:600,turnK:4.5,turnV:3000,turnFuel:0.8},
-  icp_dd:{kind:'icp',label:'拦截弹',buoyN:2,outer:12600*1.5*2*0.9*CFG.scale,fmOuter:12600*CFG.scale,outerIntercept:0.35,inter:352,warnK:2,zoneK:3,perK:1.2,cdS:30,reserve:0.3,reserveR:0.5,threatCos:0.9,
+  icp_dd:{kind:'icp',label:'拦截弹',buoyN:2,outer:12600*1.5*2*0.9*0.8*CFG.scale,fmOuter:12600*CFG.scale,outerIntercept:0.35,inter:352,warnK:2,zoneK:3,perK:1.2,cdS:30,reserve:0.3,reserveR:0.5,threatCos:0.9,
     hitR:1500,hitMax:0.45,hitMin:0.12,hitDrop:0.33,hitLatV:6000,v0:30,acc:400,vMax:24000,fuelS:600,turnK:4.5,turnV:3000,turnFuel:0.8}, // 2026-10-10 驱逐档(用户:近防圈介于护卫与巡洋正中):基数 12600 = 核心 15750 与自防御 9450 的中点(乘 1.5 后 18900),inter 352 同为中点;飞行参数与两档一致(那是弹的性能,不是舰种身份)
   // 近防炮:导弹撞上目标那一刻,离撞击点 inner 以内的每艘舰各打一次:打掉的比例 = 命中率 innerIntercept x 过载 x 随机(rand = 随机打折的份量:1 = 均匀随机 0~1、平均打一半,0 = 不打折);
   //   过载:这艘船近防圈(inner)里同时有 ovN 组以上来袭时开始,每多一组摊薄 ovK —— 1 / (1 + max(0, 组数 - ovN + 1) x ovK);再乘多方向 1 / (1 + (圈里来袭的扇面数 - 1) x sectK)
   //   2026-10-07 用户:命中率统一 70%、不随机打折、近防圈里满 4 组才过载(原来 0.85 / 0.40、均匀随机、撞击点 2.4 万内同扇面第 2 组起就过载)
-  gun_core:{kind:'gun',label:'近防炮',inner:5040*1.2*2*CFG.scale,fmInner:5040*CFG.scale,innerIntercept:0.70,rand:0,ovN:4,ovK:0.6,sectK:1.5},
-  gun_self:{kind:'gun',label:'近防炮',inner:3150*1.2*2*CFG.scale,fmInner:3150*CFG.scale,innerIntercept:0.70,rand:0,ovN:4,ovK:0.6,sectK:1.5},
-  gun_dd:{kind:'gun',label:'近防炮',inner:4095*1.2*2*CFG.scale,fmInner:4095*CFG.scale,innerIntercept:0.70,rand:0,ovN:4,ovK:0.6,sectK:1.5}, // 2026-10-10 驱逐档:基数 4095 = 核心 5040 与自防御 3150 的中点;命中率/过载参数与两档一致
+  gun_core:{kind:'gun',label:'近防炮',inner:5040*1.2*2*0.7*CFG.scale,fmInner:5040*CFG.scale,innerIntercept:0.70,rand:0,ovN:4,ovK:0.6,sectK:1.5},
+  gun_self:{kind:'gun',label:'近防炮',inner:3150*1.2*2*0.7*CFG.scale,fmInner:3150*CFG.scale,innerIntercept:0.70,rand:0,ovN:4,ovK:0.6,sectK:1.5},
+  gun_dd:{kind:'gun',label:'近防炮',inner:4095*1.2*2*0.7*CFG.scale,fmInner:4095*CFG.scale,innerIntercept:0.70,rand:0,ovN:4,ovK:0.6,sectK:1.5}, // 2026-10-10 驱逐档:基数 4095 = 核心 5040 与自防御 3150 的中点;命中率/过载参数与两档一致
   // 干扰弹:命中时每颗按 chaffRate 被勾走(不消失、继续飞可复锁),烘焙成舰上的 s.chaffRate
   chf_core:{kind:'chaff',label:'干扰弹',chaffRate:0.25},
   chf_self:{kind:'chaff',label:'干扰弹',chaffRate:0.15},

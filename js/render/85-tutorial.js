@@ -90,13 +90,13 @@ const TUT_HTML=`
 
     <p>拦截是完全自动的，你要做的决定只有底栏「近防」格里的两行：拦截弹（外圈，右边是剩余颗数）和近防炮（内圈）各自开还是关，点一下切一次；多选时没全开的那一行画虚线框。来袭导弹进入预警距离（外圈的两倍，护卫舰是 <code class="num">2.8 万公里</code>）之后，只要本阵营的传感器看得见这枚弹（看到的是光送过来的弹影）、而且它被判定为威胁，近防就会发射拦截弹迎上去；同一个来袭组已经有拦截弹在追时不会重复发射，发射间隔 <code class="num">3 秒</code>。拦截弹只在发射舰周围约 <code class="num">5.7 万公里</code>的防区里活动（防区跟着发射舰走，各舰种一样），飞出防区或者油烧完就自毁（油按时间烧，匀速直飞也在烧）；拦完一组只会转去追防区里看得见的下一组。没有来袭导弹要拦时，近防也会打预警距离里定了位的对方前出浮标（一个浮标派 <code class="num">2</code> 枚拦截弹，库存低于三成就不打），浮标进了近防圈，近防炮也会把它打掉。消耗按来袭枚数的 <code class="num">1.2 倍</code>取整，所以接一个 <code class="num">12 枚</code>的组要吃掉 <code class="num">15 枚</code>拦截弹——这是你的弹药，不是免费的。</p>
 
-    <p>防御分两层。外圈是拦截弹，内圈是近防炮，打进内圈的来袭弹还要再过一次近防炮：护卫舰内圈 <code class="num">7260 公里</code>、巡洋舰内圈 <code class="num">4540 公里</code>，命中率都是 <code class="num">70%</code>，不随机打折。所以一组 <code class="num">12 枚</code>的来袭弹被干扰弹勾走三枚、剩九枚进内圈，没过载时近防炮打掉六枚，落地三枚左右。至于干扰弹本身，每次结算逐枚掷一次，把来袭弹勾走的概率护卫舰是 <code class="num">0.25</code>、巡洋舰是 <code class="num">0.15</code>。</p>
+    <p>防御分两层。外圈是拦截弹，内圈是近防炮，打进内圈的来袭弹还要再过一次近防炮：护卫舰内圈 <code class="num">5080 公里</code>、巡洋舰内圈 <code class="num">3180 公里</code>，命中率都是 <code class="num">70%</code>，不随机打折。所以一组 <code class="num">12 枚</code>的来袭弹被干扰弹勾走三枚、剩九枚进内圈，没过载时近防炮打掉六枚，落地三枚左右。至于干扰弹本身，每次结算逐枚掷一次，把来袭弹勾走的概率护卫舰是 <code class="num">0.25</code>、巡洋舰是 <code class="num">0.15</code>。</p>
 
     <p>近防炮会过载，这是防守方最该记住的一条：一艘船的近防圈里同时有 <code class="num">4</code> 组以上来袭，它就顾不过来了，圈里有 <code class="num">n</code> 组时命中率要乘以 <code class="num">1/(1+(n−3)×0.6)</code>；如果圈里这些组还是从不同扇面来的，再乘一次 <code class="num">1/(1+(扇面数−1)×1.5)</code>。所以饱和攻击要的是「同时」挤进近防圈，从几个方向一起进来更难挡。</p>
 
-    <p>开着雷达照射（底栏雷达的「发射」档）时，拦截弹的射程放大约 <code class="num">1.8</code> 倍（护卫舰外圈 <code class="num">2.55 万</code> → <code class="num">4.68 万公里</code>）：更早、更远地迎上去，储备线、出防区自毁的距离也跟着放大；脉冲、干扰、静默都不算。代价是你一直被对方听见 —— 防守也是一次要不要亮灯的决定。</p>
+    <p>开着雷达照射（底栏雷达的「发射」档）时，拦截弹的射程放大约 <code class="num">1.65</code> 倍（护卫舰外圈 <code class="num">2.04 万</code> → <code class="num">3.37 万公里</code>）：更早、更远地迎上去，储备线、出防区自毁的距离也跟着放大；脉冲、干扰、静默都不算。代价是你一直被对方听见 —— 防守也是一次要不要亮灯的决定。</p>
 
-    <p>还有一条储备纪律：拦截弹库存低于三成时，近防只拦已经逼近到外圈一半距离以内的目标（护卫舰静默时约 <code class="num">1.28 万公里</code>），远处的一律放过。所以打到后半场，你会看到明明有弹却「不拦了」，那是它在攒最后一道防线。</p>
+    <p>还有一条储备纪律：拦截弹库存低于三成时，近防只拦已经逼近到外圈一半距离以内的目标（护卫舰静默时约 <code class="num">1.02 万公里</code>），远处的一律放过。所以打到后半场，你会看到明明有弹却「不拦了」，那是它在攒最后一道防线。</p>
 
     <h3 class="tut-h3">两个舰种的读数</h3>
 
@@ -113,7 +113,7 @@ const TUT_HTML=`
         <tr><td>转向率</td><td><code class="num">14.9°/秒</code></td><td><code class="num">9.17°/秒</code></td></tr>
         <tr><td>主炮</td><td><code class="num">600</code> 伤害 · <code class="num">300 秒</code>装填</td><td><code class="num">600</code> 伤害 · <code class="num">300 秒</code>装填</td></tr>
         <tr><td>导弹</td><td><code class="num">4</code> 单元 · <code class="num">24 组</code>(每组 12 发)· 单发 <code class="num">12</code></td><td><code class="num">6</code> 单元 · <code class="num">40 组</code>(每组 12 发)· 单发 <code class="num">15</code></td></tr>
-        <tr><td>近防内外圈</td><td>外 <code class="num">25.5k</code>（开雷达 <code class="num">46.8k</code>）· 内 <code class="num">7.3k 公里</code></td><td>外 <code class="num">15.3k</code>（开雷达 <code class="num">28.1k</code>）· 内 <code class="num">4.5k 公里</code></td></tr>
+        <tr><td>近防内外圈</td><td>外 <code class="num">20.4k</code>（开雷达 <code class="num">33.7k</code>）· 内 <code class="num">5.1k 公里</code></td><td>外 <code class="num">12.2k</code>（开雷达 <code class="num">20.2k</code>）· 内 <code class="num">3.2k 公里</code></td></tr>
         <tr><td>近防炮命中率</td><td><code class="num">70%</code></td><td><code class="num">70%</code></td></tr>
         <tr><td>拦截弹库存</td><td><code class="num">384 枚</code></td><td><code class="num">320 枚</code></td></tr>
         <tr><td>基础信号</td><td><code class="num">0.7</code></td><td><code class="num">1.0</code></td></tr>
