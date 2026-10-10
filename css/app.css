@@ -382,7 +382,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #ciSpecTip .row{display:flex;justify-content:space-between;gap:var(--sp-4);font-size:var(--fs-label);line-height:1.6;color:var(--txt-dim)}
 #ciSpecTip .row .v{font-family:var(--ff-mono);color:var(--txt-read)}
 #cmdCard{display:flex;gap:8px;flex:1 1 auto;justify-content:center;flex-wrap:wrap} /* 2026-10-10 占满中间的自由空间、四格居中;窄窗换行兜底 */
-#cmdCard .wb{position:relative;flex:1 1 0;min-width:120px;max-width:230px;height:92px;justify-content:space-between;background:var(--srf-raise);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);padding:7px 8px 6px;cursor:pointer;display:flex;flex-direction:column;gap:4px;user-select:none} /* 2026-10-10 用户:中间区域放大后块要跟着填满 —— 定宽 152 改弹性均分(flex:1 basis 0),四格平分 #cmdCard 的宽度;min/max 兜住两头(窄窗缩到 120 起换行,超宽屏单格不超 230) */
+#cmdCard .wb{position:relative;flex:1 1 0;min-width:120px;max-width:230px;height:92px;justify-content:flex-start;background:var(--srf-raise);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);padding:7px 8px 6px;cursor:pointer;display:flex;flex-direction:column;gap:4px;user-select:none} /* 2026-10-10 用户:中间区域放大后块要跟着填满 —— 定宽 152 改弹性均分(flex:1 basis 0),四格平分 #cmdCard 的宽度;min/max 兜住两头(窄窗缩到 120 起换行,超宽屏单格不超 230) */
 #cmdBar:has(#cmdCard:empty):has(#ciSpec:empty)::after{content:'选中舰船后在这里操作武器';order:1;flex:1 1 auto;text-align:center;color:var(--txt-mute);font-size:var(--fs-body);letter-spacing:.1em} /* 2026-10-10 空栏提示 */
 #cmdBar .cmd-btns,#cmdBar>.cmd-sep:nth-last-child(2){order:2} /* 提示排在右边那条分隔线和雷达 / 停火之前 */
 #cmdCard .wb:hover{background:var(--srf-hover);border-color:var(--line-acc)}
@@ -392,6 +392,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #cmdCard .wb.none .lb{color:var(--txt-mute)}
 #cmdCard .wb .na{flex:1;display:flex;align-items:center;justify-content:center;color:var(--txt-mute);font-size:var(--fs-read)}
 #cmdCard .hd{display:flex;align-items:center;gap:5px;height:18px}
+#cmdCard .wb:not(.none) .hd{height:22px;padding-bottom:4px;border-bottom:var(--bw) solid var(--line-ctl)} /* 2026-10-11 用户:类名(主炮 T)下面一条横线,之后才是具体武器;武器行贴着线往下排、左对齐(原来上下均分、近防两行沉底) */
 #cmdCard .lb{color:var(--txt-hi);font-size:var(--fs-body)}
 #cmdCard .key{font-family:var(--ff-mono);font-size:var(--fs-micro);color:var(--txt-dim);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);padding:0 3px;line-height:13px}
 #cmdCard .rd{font-family:var(--ff-mono);font-size:var(--fs-body);color:var(--txt-read);display:flex;justify-content:space-between;font-variant-numeric:tabular-nums}
@@ -402,7 +403,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #cmdCard .ck.part span{background:linear-gradient(135deg,var(--state-active) 50%,transparent 50%);border-color:var(--state-active)}
 #cmdCard .ck:hover span{border-color:var(--txt-hi)}
 /* 2026-10-11 多武器(原稿 demos/ui/多武器指令卡.html):一类几种就几行 —— 名字(点 = 这一行就绪的全选)| 绿条 | 就绪数 | 分开关;右上角的勾 = 这一类的总开关 */
-#cmdCard .rows{flex:1;display:flex;flex-direction:column;justify-content:space-evenly;gap:2px;min-height:0}
+#cmdCard .rows{flex:1;display:flex;flex-direction:column;justify-content:flex-start;gap:2px;min-height:0}
 #cmdCard .wr{display:flex;align-items:center;gap:6px;height:23px;border-radius:var(--r-sm);padding:0 3px} /* 2026-10-11 用户:行放大、字大一点(原 18px / 11px) */
 #cmdCard .wr.hi,#cmdCard .wr:hover{background:rgba(90,167,255,.08)}
 #cmdCard .wr .wn{flex:0 0 34px;font-size:var(--fs-read);color:var(--txt);white-space:nowrap}
