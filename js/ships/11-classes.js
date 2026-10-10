@@ -40,7 +40,7 @@ CLS_STRUCT.CL={...CLS_STRUCT.FF};                                          // TO
    载入顺序红线:本区块顶层禁止引用 10a-ship-hulls.js 的 TIER_SCALE / TIER_ORDER / HULL_LABEL——index.html 里 10a(:172)排在 03(:165)之后,顶层引用会 ReferenceError;所以 tier 键 1/2/3 在这里自己写死。 */
 const TIER_LABEL={1:'T1',2:'T2',3:'T3'}; // TIER1 分级短名。与 10a 的 TIER_SCALE/TIER_LIGHT 同键但不引用它(见上面的载入顺序说明)
 const TIER_FIELD={ // TIER1 字段 → applyTier 策略表。缺省是 'mul'(直乘),所以这里只列非 'mul' 的字段
-  ammo:'int', cells:'int', inter:'int', guideChan:'int', value:'int', macN:'int', lureN:'int', secN:'int', // 整数量:乘完四舍五入、下限 1;但原值 ≤0 视为结构性零原样保留,绝不被抬成 1。macN = 轴炮齐射发数(2026-10-10)
+  ammo:'int', cells:'int', inter:'int', guideChan:'int', value:'int', macN:'int', lureN:'int', secN:'int', ssmCells:'int', ssmPer:'int', ssmAmmo:'int', // 整数量:乘完四舍五入、下限 1;但原值 ≤0 视为结构性零原样保留,绝不被抬成 1。macN = 轴炮齐射发数(2026-10-10)
   outerIntercept:'prob', innerIntercept:'prob', chaffRate:'prob', ecmPower:'prob', stealth:'prob', // 概率:乘完钳到 [0,1](outerIntercept 是方案原清单外补的——它和 innerIntercept 同为拦截率,漏钳会出现 >1 的拦截概率)。SN4 stealth 必须列在这里:它是 (0,1] 的雷达反射倍率,走缺省的 'mul' 会让某个分级乘出【大于 1】的反射倍率——比 1 大的隐身系数没有物理含义,而且不会报错,只会让那一级的舰在雷达上悄悄比本体还亮
   speedGears:'gears', // 速度档数组:整条曲线乘同一个【标量】k(不是每档给一个乘数),逐项取整;负数=哨兵(-1 不限速)原样保留,不参与乘法
 };
@@ -123,6 +123,7 @@ function makeShip(cls,name,pos,facing,vel,side,tier){ // TIER1 加第 7 参 tier
     macReload:lw.mac||0, macSigma:sReq(lw,'macSigma','resolveLoadout'), macN:lw.macN||1, // RF3 主炮 装填秒烘焙;WR1 起射程字段换成角散布 macSigma(走 sReq:配装缺字段当场抛,不许静默退化)。macN = 一次开火齐射的发数(2026-10-10 巡洋两发;配装未写 = 单发,发射循环在 weapons/52 的 fireMAC/fireMACAt)
     cells:(lw.cells||4), cellTimer:Array(lw.cells||4).fill(0), // 发射单元(v119):护卫舰4单元/同时4组/每组独立装填
     secCds:Array(lw.secN||0).fill(0), secDmg:lw.secDmg||0, secReload:lw.secReload||0, secSigma:lw.secSigma||0, secCap:lw.secCap||0, secOn:true, // 2026-10-11 副炮:每门一根装填条(同 macCds),secOn = 底栏分开关(weapons/51 wpnOn)
+    ssmCells:Array(lw.ssmCells||0).fill(0), ssmAmmo:lw.ssmAmmo||0, ssmPer:lw.ssmPer||6, ssmReload:lw.ssmReload||0, ssmOn:true, // 2026-10-11 突击弹:发射单元装填条 / 库存(颗)/ 每组几颗;ssmOn = 底栏分开关
     lureN:lw.lureN||0, lureMax:lw.lureN||0, // 2026-10-11 玩家能放的诱饵(底栏特殊格,command/68 cxLure);红方 AI 自己放的记在 s.lures(bots/61),两份不混
     mslPer:lw.mslPer||12, mslReload:lw.mslReload||60, // RF3 导弹每组枚数/单元装填秒/射程烘焙(原为 fireMissiles/S15b/enemyAI 散落字面量)
     guideChan:st.guideChan, // SN1 数据链引导通道(来源 weapons/51-defs 的 CLS_LINK,CA 3网/DD 1网):同时引导超自导范围的导弹数。原来的 ||4 是个假兜底 —— DD 真值就是 1,字段一旦丢了它会把 DD 悄悄涨到 4 而不是报错

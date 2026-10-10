@@ -5,6 +5,7 @@ const FT_N=2; // 2026-09-29 强制目标点(74 中键点空地)每件勾着的�
 function stepWeaponSystems(dt){
   for(const s of ships){ // 武器冷却 + 发射单元装填 + 齐射开火延迟(v119:单元独立装填60s)
     if(s.secCds)for(let i=0;i<s.secCds.length;i++)if(s.secCds[i]>0)s.secCds[i]-=dt; // 2026-10-11 副炮每门独立装填
+    if(s.ssmCells)for(let i=0;i<s.ssmCells.length;i++)if(s.ssmCells[i]>0)s.ssmCells[i]-=dt; // 2026-10-11 突击弹发射单元装填
     if(s.macCds)for(let i=0;i<s.macCds.length;i++)if(s.macCds[i]>0)s.macCds[i]-=dt; // 2026-10-10 双管:每门轴炮独立装填(原来一根 macCd 标量)
     if(s.fireHot>0)s.fireHot-=dt; // FX1 开火暴露的倒数(置位在 weapons/52,读取在 sensors/22 的 firePowerOf)
     if(s.cellTimer)for(let i=0;i<s.cellTimer.length;i++)if(s.cellTimer[i]>0)s.cellTimer[i]-=dt;
@@ -106,6 +107,10 @@ function stepWeaponSystems(dt){
     else{s.turnTarget=[tp[0],tp[1],0];if(macReady(s)>0&&macAimErr(s,tp)<MAC_ALIGN)shot=fireMAC(s,ff.t);} // 朝向层对准后会清掉 turnTarget,所以每拍重设;2026-10-10 shot 改读 fireMAC 返回值(双管下「开没开出去」不再能从装填状态差分读出)
     if(shot){ff.n=(ff.n||1)-1;if(ff.n<=0){s.forceMac=null;s.turnTarget=null;}} // 2026-10-10 n:这道令要打几门(绿条按门选),打完一门还有剩就继续瞄下一门;打完 / 超时才撤
   }
+  for(const s of ships){ // 2026-10-11 突击弹自动开火:火控开 + 总开关 / 分开关 + 目标(序列 / 锁定)已定位且在 SSM_R 以内 → 就绪的发射单元一起打(红方 autoEngage 恒关,红方 AI 先不用它)
+    if(s.dead||!s.autoEngage||!s.ssmCells||!s.ssmCells.length||!wpnOn(s,'ssm')||(s.ssmAmmo||0)<(s.ssmPer||6))continue;
+    const t=(typeof fcActive==='function'&&fcActive(s))?(s.fcTgt&&s.fcTgt.msl):s.lockedTarget;if(!t||contactDead(t,s.side)||!contactFix(t,s.side))continue;
+    const q=contactPos(t,s.side),rd=s.ssmCells.filter(x=>x<=0).length;if(q&&rd>0&&V.len(V.sub(q,s.pos))<=SSM_R)fireMissiles(s,t,rd,null,SSM_W(s));}
   // 锁定自动开火(10秒一轮):机头转到位(MAC_ALIGN)才开炮(不盲射);v125 ROE门控
   for(const s of ships){
     const roeOK=wpnOn(s,'mac')&&(s.roe==='free'||(s.roe==='tight'&&s.roeCd>0)); // free自由/tight被攻击才还击(roeCd=受击冷却)/hold不开火;RF2 主炮开关:关=不参与自动开火

@@ -12,6 +12,7 @@ const WPN={ // 定义(Definition):全局一份的不变模板,数值原样搬自
   mac_heavy:{kind:'mac',label:'主炮',macDmg:600,mac:PHYS.t(600),macSigma:0.005248},  // 单发重炮(2026-10-10 起 CA 已换 mac_twin,这份留给 BB 待定标定时想用单发的时候)。2026-09-28 伤害 400 → 600。WR1:先与 DD 同一个散布,以后要分再填
   mac_twin:{kind:'mac',label:'主炮',macDmg:600,mac:PHYS.t(600),macSigma:0.005248,macN:2}, // 巡洋舰轴炮。2026-10-10 用户:两发 —— 一次开火齐射两轮(共享装填与预测点、每发独立抽散布),fireMAC/fireMACAt 按 macN 循环;其余参数同 mac_heavy。BB 配装是 CA 的显式克隆,自动跟着两发
   sec_gun:{kind:'sec',label:'副炮',secDmg:120,secReload:PHYS.t(120),secSigma:0.005248*3.39,secCap:1.944*3.39*Math.PI/180,secN:2}, // 2026-10-11 用户(多武器清单):副炮 —— 炮塔(不用转船头),2 门各自装填 120 s(原清单 60 s,用户按 4 倍轴炮 DPS 改),每发 120;散布与封顶角 = 轴炮 x 3.39 ⇒ 命中率 50% 2 万 / 10% 3.5 万(轴炮 6.78 万 / 11.7 万);炮弹同轴炮(weapons/52 fireSec)
+  ssm_x:{kind:'ssm',label:'突击弹',ssmCells:2,ssmPer:6,ssmAmmo:36,ssmReload:PHYS.t(300)}, // 2026-10-11 用户(多武器清单):短程突击弹 —— 出膛自导、不上数据链,射程 SSM_R(6 万)、速度与加速度 x SSM_VK(1.5);2 个发射单元各自装填 300 s、每组 6 发、库存 6 组;单颗伤害同这艘船的反舰导弹(weapons/52 SSM_W)
   lure_x2:{kind:'lure',label:'诱饵',lureN:2}, // 2026-10-11 用户(多武器清单):玩家能放的诱饵(world/14 launchLure,冒充护卫舰),每舰 2 个;红方 AI 放的另记 s.lures(bots/61),这里不动它
   msl_light:{kind:'msl',label:'导弹',missDmg:12,ammo:288,cells:4,mslPer:12,mslReload:PHYS.t(600)},  // 护卫舰导弹:24 组 x 12 发(2026-10-08 用户:全体导弹数量 x2;2026-10-07 用户:按组定库存,原 64 组;2026-10-02 曾 x4;KIMI154:每组16→12)
   msl_cl:{kind:'msl',label:'导弹',missDmg:12,ammo:144,cells:2,mslPer:12,mslReload:PHYS.t(600)}, // 巡游舰导弹:12 组 x 12 发(10-08 x2),一次射两组(发射单元 2)(2026-10-07 用户)
@@ -56,13 +57,13 @@ CLS_LINK.DD={...CLS_LINK.FF}; // TODO(TIER-BAL) 2026-09-30 驱逐舰:先照搬�
 CLS_LINK.CL={...CLS_LINK.FF}; // TODO(TIER-BAL) 巡游舰数据链待标定
 const CLS_LOADOUT={ // 配装(Loadout):舰种 → 武器 id 列表。CV 无主炮=结构事实(不装 mac 即可,hasMAC 按 macDmg=0 自动排除),不是待平衡数值
   FF:['mac_light','msl_light','icp_core','gun_core','chf_core'],
-  CA:['mac_twin','sec_gun','msl_heavy','icp_self','gun_self','chf_self','lure_x2'], // 2026-10-11 加副炮、诱饵 // 2026-10-10 用户:轴炮两发(mac_twin)
+  CA:['mac_twin','sec_gun','msl_heavy','ssm_x','icp_self','gun_self','chf_self','lure_x2'], // 2026-10-11 加副炮、突击弹、诱饵 // 2026-10-10 用户:轴炮两发(mac_twin)
 };
 CLS_LOADOUT.BB=CLS_LOADOUT.CA.slice(); // TODO(TIER-BAL) 战列配装待标定(克隆 CA)
 CLS_LOADOUT.CV=['msl_heavy','icp_self','gun_self','chf_self'];
-CLS_LOADOUT.DD=['mac_light','sec_gun','msl_light','icp_dd','gun_dd','chf_core']; // 2026-10-11 加副炮 // 2026-10-10 用户:舰种分化 —— 近防圈取 FF↔CA 正中(icp_dd/gun_dd),雷达中间档在 20-signature 的 SENS.CLS.DD;机动/舰体/导弹/数据链仍照护卫舰,想再分随时填真值
+CLS_LOADOUT.DD=['mac_light','sec_gun','msl_light','ssm_x','icp_dd','gun_dd','chf_core']; // 2026-10-11 加副炮、突击弹 // 2026-10-10 用户:舰种分化 —— 近防圈取 FF↔CA 正中(icp_dd/gun_dd),雷达中间档在 20-signature 的 SENS.CLS.DD;机动/舰体/导弹/数据链仍照护卫舰,想再分随时填真值
 CLS_LOADOUT.CL=['msl_cl','icp_core','gun_core','chf_core','lure_x2']; // 2026-10-11 加诱饵 // 2026-10-07 用户:巡游舰没有轴炮、导弹一次两组
-const WPN_CAT={mac:'mac',msl:'msl',sec:'mac'}; // 2026-10-11 多武器:每种武器(kind)属于底栏哪一格(类)。一类的总开关 s[类+'Gate'] 与这一种的分开关 s[kind+'On'] 两层「与」
+const WPN_CAT={mac:'mac',msl:'msl',sec:'mac',ssm:'msl'}; // 2026-10-11 多武器:每种武器(kind)属于底栏哪一格(类)。一类的总开关 s[类+'Gate'] 与这一种的分开关 s[kind+'On'] 两层「与」
 function wpnOn(s,k){const c=WPN_CAT[k];return s[k+'On']!==false&&!(c&&s[c+'Gate']===false);} // 这一种武器许不许自动开火(不含火控开没开);57 的开火门、74 / 89 的扇区都问它
 function resolveLoadout(cls,tier){ // 配装 → 扁平武器字段(逐字段过 applyTier/tierMul,与 shipStats 同一套乘数机制)
   const src={};const weapons=[],wp={};

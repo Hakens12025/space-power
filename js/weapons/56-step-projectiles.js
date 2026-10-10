@@ -111,7 +111,7 @@ function stepMacProj(p,dt){ // 主炮(轴炮):沿发射时船头直飞,命中或
       else if(p.age>=p.tt){p.ground=true;} // 2026-09-28 过了预测时间没中:不消失,当成打空地的炮弹接着飞,路上碰到谁算谁(用户:射程理论无限)
 }
 function mslSwarmStep(p,tp,dist,dir0){ // 2026-10-01 三关系公共段:① 油量 → 能力天花板;③ 邻居 → 聚拢(质心吸引 + 间距排斥 + 死区)。追目标与打空地(目的地 = 布雷点)同用
-  const aC=p.vPeak?Math.min(p.vPeak,p.vTerm+Math.max(0,p.fuel-MSL_SWARM.RES)*MSL_A):0; // ① 油烧得越多天花板越低,谁也不会被要求飞出自己油量允许的速度
+  const aC=p.vPeak?Math.min(p.vPeak,p.vTerm+Math.max(0,p.fuel-MSL_SWARM.RES)*mslA(p)):0; // ① 油烧得越多天花板越低,谁也不会被要求飞出自己油量允许的速度
   const nb=[]; // 同目的地的邻组:追目标 = 同一目标;打空地 = 布雷点在同一片(6 万内)
   for(const q of (p.nb||[])){if(q.done)continue;
     if(p.park){if(q.park&&Math.hypot(q.parkPt[0]-p.parkPt[0],q.parkPt[1]-p.parkPt[1])<60000*CFG.scale)nb.push(q);}
@@ -136,7 +136,7 @@ function mslSwarmStep(p,tp,dist,dir0){ // 2026-10-01 三关系公共段:① 油�
   return {dir:dir,dEff:dEff,nb:nb,aC:aC,cx:cx,cy:cy};}
 function mslSwarmVc(p,tp,sw){ // ② 同步:与一跳邻组比【按能力天花板算】的到达时刻,等最慢的(下限 FLOOR·aC,等不起掉队),滞回 HYST
   let etaRef=sw.dEff/Math.max(1,sw.aC); // 无邻组 / 基准:按自己的天花板尽快到
-  for(const q of sw.nb){const aQ=Math.min(q.vPeak||p.vPeak,q.vTerm+Math.max(0,(q.fuel||0)-MSL_SWARM.RES)*MSL_A);
+  for(const q of sw.nb){const aQ=Math.min(q.vPeak||p.vPeak,q.vTerm+Math.max(0,(q.fuel||0)-MSL_SWARM.RES)*mslA(q));
     const dj=Math.hypot(tp[0]-q.pos[0],tp[1]-q.pos[1])+0.5*Math.hypot(sw.cx/sw.nb.length-q.pos[0],sw.cy/sw.nb.length-q.pos[1]);
     etaRef=Math.max(etaRef,dj/Math.max(1,aQ));}
   const vc=Math.max(sw.aC*MSL_SWARM.FLOOR,Math.min(sw.aC,sw.dEff/Math.max(1,etaRef)));
@@ -144,6 +144,7 @@ function mslSwarmVc(p,tp,sw){ // ② 同步:与一跳邻组比【按能力天花
   return p.vCmd;}
 function stepMissileProj(p,dt,icBlue,icRed){ // 导弹:继承载机速度+暴力加速,射后不管,组网转移(一弹传三代)
       p.age=(p.age||0)+dt;
+      if(p.ssm&&p.age>p.life){spawnSD(p);p.done=true;return;} // 2026-10-11 突击弹飞出约 1.4 倍射程还没中:自毁(52 SSM_LIFE)
       const llon=typeof llOnNow==='function'&&llOnNow(); // LL7 光速延迟开着:导引与重选读导弹知道的(导引头影像 / 舰队估计),命中触发读真值
       if(p.mine){ // 伏击雷(已布设):静止待命,自带被动传感器自主触发,点火=情报
         p.vel=[0,0,0];p.spd=0;
@@ -181,11 +182,11 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 导弹:继承载机速度+暴力
         const psw=mslSwarmStep(p,p.parkPt,pdist,V.norm(toP)); // 2026-10-01 用户:打空地也要看得出组网 —— 三关系同样生效,目的地 = 布雷点,同目的地的邻组一起同步 / 聚拢
         const pdir=mslRockAvoid(p,psw.dir,pdist); // 2026-10-04 规避碎石(54)
         let pspdDes=p.vPeak?Math.min(mslSwarmVc(p,p.parkPt,psw),psw.aC):Infinity;
-        if(p.mineOk&&pdist<90000)pspdDes=Math.min(pspdDes,Math.max(1500*MSL_VK,Math.sqrt(2*MSL_A*pdist*0.6))); // 接近减速(只有要变雷的才减)。DS190:曲线也按 150 算——朋友版这处漏改,会按 200 的能力规划刹车→冲过布设点
+        if(p.mineOk&&pdist<90000)pspdDes=Math.min(pspdDes,Math.max(1500*MSL_VK,Math.sqrt(2*mslA(p)*pdist*0.6))); // 接近减速(只有要变雷的才减)。DS190:曲线也按 150 算——朋友版这处漏改,会按 200 的能力规划刹车→冲过布设点
         if(p.fuel>0){
-          let dv=Math.max(-MSL_A*dt,Math.min(MSL_A*dt,pspdDes-p.spd)); // DS190
+          let dv=Math.max(-mslA(p)*dt,Math.min(mslA(p)*dt,pspdDes-p.spd)); // DS190
           if(dv>0&&p.fuel<=MSL_LOAL_KEEP)dv=0; // 2026-09-28 加速不动末段预留
-          const cost=Math.abs(dv)/MSL_A; // DS190
+          const cost=Math.abs(dv)/mslA(p); // DS190
           if(cost>p.fuel){dv*=p.fuel/cost;p.fuel=0;}
           else p.fuel-=cost;
           p.spd+=dv;
@@ -267,10 +268,10 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 导弹:继承载机速度+暴力
         // 飞向最后已知位置(巡航加速:有燃料就飞快点到点变雷,燃料尽只能滑行)
         const kvn=V.len(p.vel);
         if(p.fuel>0){ // 朝最后已知位置加速到巡航(用剩余燃料,能到就行)
-          const kSpdDes=p.mineOk?Math.min((p.vPeak||PHYS.v(700)*MSL_VK),Math.max(1500*MSL_VK,Math.sqrt(2*MSL_A*Math.max(0,kdist-1200)*0.5))):(p.vPeak||PHYS.v(700)*MSL_VK); // DS190;2026-09-28 不变雷的不减速
-          let dv=Math.max(-MSL_A*dt,Math.min(MSL_A*dt,kSpdDes-p.spd)); // DS190
+          const kSpdDes=p.mineOk?Math.min((p.vPeak||PHYS.v(700)*MSL_VK),Math.max(1500*MSL_VK,Math.sqrt(2*mslA(p)*Math.max(0,kdist-1200)*0.5))):(p.vPeak||PHYS.v(700)*MSL_VK); // DS190;2026-09-28 不变雷的不减速
+          let dv=Math.max(-mslA(p)*dt,Math.min(mslA(p)*dt,kSpdDes-p.spd)); // DS190
           if(dv>0&&p.fuel<=MSL_LOAL_KEEP)dv=0; // 2026-09-28 加速不动末段预留
-          const cost=Math.abs(dv)/MSL_A; // DS190
+          const cost=Math.abs(dv)/mslA(p); // DS190
           if(cost>p.fuel){dv*=p.fuel/cost;p.fuel=0;}else p.fuel-=cost;
           p.spd+=dv;
         }
@@ -330,12 +331,12 @@ function stepMissileProj(p,dt,icBlue,icRed){ // 导弹:继承载机速度+暴力
       }else{ // 旧逻辑兜底(手动构造的导弹)
         const ang=vn>5?V.angle(V.norm(p.vel),dir):0;
         if(ang>0.25)spdDes=Math.min(spdDes,1800+ang*5200); // 需大机动:限速换取转向(越快越拐不过弯)
-        if(dist<90000)spdDes=Math.min(spdDes,Math.max(1500*MSL_VK,Math.sqrt(2*MSL_A*dist*0.6))); // DS190
+        if(dist<90000)spdDes=Math.min(spdDes,Math.max(1500*MSL_VK,Math.sqrt(2*mslA(p)*dist*0.6))); // DS190
       }
       // 有限加减速(加速=减速 150 km/s²,DS190) + 燃料限制:加减速/转向都耗燃料,耗尽只能滑行
       if(p.fuel>0){
-        let dv=Math.max(-MSL_A*dt,Math.min(MSL_A*dt,spdDes-p.spd)); // DS190
-        const cost=Math.abs(dv)/MSL_A; // DS190:折算成满油门秒数。朋友版这处 dv 钳到 150 却仍除 200,等于每单位燃料多拿 33% Δv,把 DS190 的削弱抵掉一截——按 150 改齐
+        let dv=Math.max(-mslA(p)*dt,Math.min(mslA(p)*dt,spdDes-p.spd)); // DS190
+        const cost=Math.abs(dv)/mslA(p); // DS190:折算成满油门秒数。朋友版这处 dv 钳到 150 却仍除 200,等于每单位燃料多拿 33% Δv,把 DS190 的削弱抵掉一截——按 150 改齐
         if(cost>p.fuel){dv*=p.fuel/cost;p.fuel=0;}
         else p.fuel-=cost;
         p.spd+=dv;

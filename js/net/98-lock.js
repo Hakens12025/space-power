@@ -90,7 +90,7 @@ function lockEnd(msg){if(!LOCK.on)return;
 function mpPrepRed(){ // 联机:红方是人在玩,开局的开火 / 雷达 / 近防开关照同舰种的蓝方舰(原来红方的这些由红方 AI 管);开局同样编成一队(编队键 5 = 加入方的「编队1」,同 91-init 蓝方的阵型队)
   CMD.raw++;try{mpPrepRed0();}finally{CMD.raw--;}}
 function mpPrepRed0(){
-  const K=['autoEngage','roe','macOn','mslOn','secOn','macGate','mslGate','ciwsOn','ciwsGunOn','lockPlayer'];
+  const K=['autoEngage','roe','macOn','mslOn','secOn','ssmOn','macGate','mslGate','ciwsOn','ciwsGunOn','lockPlayer'];
   for(const s of ships)if(s.side==='red'){const b=ships.find(x=>x.side==='blue'&&x.cls===s.cls);if(!b)continue;for(const k of K)s[k]=b[k];setEmit(s,b.emitMode);s.orders=[];s.brake=true;}
   const R=ships.filter(s=>s.side==='red');if(R.length>=2){const F=fmCreate('5',R);if(F)fmSetSrc(F,'generated');}}
 function lockUi(){ // 顶上一条联机状态;藏掉靶场 / 对局切换 / 全知 / 视角 / 加船这些单人工具

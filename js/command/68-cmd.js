@@ -13,7 +13,7 @@ const CMD_FNS=['orderMoveTo','moveShips','fmMoveTo','addWaypoint','fmAppend','fm
   'followAssign','followStopList','fcAppend','fcRemove','fcRemoveTarget','fcReorder','fcSetAllow','fcSetBig','fcSetEdit','fcSetMode','fcSetPick','fcToggleForce','fcTogglePause',
   'launchBuoy','buoySetOn','setEmit','orderMissileSalvo','fireMAC',
   'cxForceMac','cxSalvo','cxCease','cxDriftFire','cxFireAll','cxForcePoint','cxPick','cxFcAppendTo','cxFcRegister','cxTurn','cxReverse','cxDelLastOrder','cxOrderPos',
-  'cxWpn','cxWpnGate','cxWpnClear','cxCiwsSub','cxPulse','cxObjPulse','cxFmSpdMode','cxMslAim','cxMslMineOk','cxSalvoCells','cxStop','cxLure','cxSecFire']; // 会被界面调用、会改模拟的入口;新加一个界面能触发的改动,先在这里登记
+  'cxWpn','cxWpnGate','cxWpnClear','cxCiwsSub','cxPulse','cxObjPulse','cxFmSpdMode','cxMslAim','cxMslMineOk','cxSalvoCells','cxStop','cxLure','cxSecFire','cxSsmCells']; // 会被界面调用、会改模拟的入口;新加一个界面能触发的改动,先在这里登记
 const CMD_RAW=['stepSim','initFleet','rrTick']; // 这些里面调到上面的入口一律直通(模拟自己在动,不是玩家的操作)
 const CMD_ORIG={};
 /* ---- 参数编号 / 还原 ---- */
@@ -107,5 +107,6 @@ function cxMslMineOk(L,v){for(const p of L||[]){if(!p||p.type!=='missile'||p.don
   if(v&&p.cruise){p.cruise=false;p.park=true;p.parkPt=ordArenaClamp([p.pos[0],p.pos[1],0]);}}} // 已在巡飞的:就地减速停下
 function cxSalvoCells(x,t,pt,cells){if(x&&!x.dead&&x.ammo>0)orderMissileSalvo(x,t||{pos:pt},cells.length,cells);} // 2026-10-08 底栏点绿条:选了哪几个发射单元就用哪几个发(52 orderMissileSalvo 的 cells)
 function cxSecFire(x,t,pt,n){if(!x||x.dead||!x.secCds)return;for(let i=0;i<(n||1);i++)if(!(t?fireSec(x,t):fireSecAt(x,pt)))break;} // 2026-10-11 副炮(底栏选几门打几门):炮塔不用转向,当场出膛(weapons/52)
+function cxSsmCells(x,t,pt,cells){if(x&&!x.dead&&x.ssmCells&&!x.noFire)fireMissiles(x,t||{pos:pt},cells.length,cells,SSM_W(x));} // 2026-10-11 突击弹(底栏选了哪几个发射单元就用哪几个):当场出膛,点空地 = 飞到点位导引头自己找
 function cxLure(x,pt){if(!x||x.dead||!(x.lureN>0)||typeof launchLure!=='function')return;launchLure(x,[pt[0],pt[1],0]);x.lureN--;} // 2026-10-11 放诱饵(底栏特殊格):从这艘船飞到 pt(界面已夹进游玩区),到了漂着冒充护卫舰(world/14)
 function cxStop(sel){for(const x of sel)if(x){x.macGate=false;x.mslGate=false;x.autoEngage=false;x.roe='hold';x.lockedTarget=null;x.lockPlayer=false;x.fTgt=null;x.forceMac=null;x.driftFire=false;}} // 2026-10-08 底栏停火(X):自动开火全关,撤强行开火 / 锁定 / 漂移射击;近防不动。2026-10-11 关的是各类的总开关,分开关的勾照记

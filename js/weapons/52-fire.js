@@ -76,6 +76,11 @@ function macShotSigma(s,d,t){ // 2026-09-28 这一发的角散布:一维高斯�
   return Math.min(s.sigCap||MAC_SIG_CAP,MAC_HIT_R/(d*Math.SQRT2*erfInv(p)));
 }
 function macEffRange(s){return macRangeAt(s,0.5);} // 有效射程 = 命中率 50% 的距离。调用点一律调它,绝不在别处重拼
+function mslA(p){return MSL_A*(p.aK||1);} // 2026-10-11 这一组导弹的加速度(突击弹 x SSM_VK:速度曲线与加速度一起乘,同 10-09 导弹提速的做法);weapons/56 的速度控制都读它
+const SSM_R=100000*CFG.scale,SSM_VK=1.5,SSM_LIFE=1.4; // 2026-10-11 突击弹:射程(自动开火门、悬停圈)6 万 / 速度与加速度倍数 / 飞出约 1.4 倍射程(按巡航速度折成时间)还没打中就自毁
+function MSL_W(s){return {cd:s.cellTimer||[],ammo:'ammo',per:s.mslPer||12,rl:s.mslReload||60,vk:1,ssm:false};} // 2026-10-11 fireMissiles 打哪一种:反舰(缺省)
+function SSM_W(s){return {cd:s.ssmCells||[],ammo:'ssmAmmo',per:s.ssmPer||6,rl:s.ssmReload||60,vk:SSM_VK,ssm:true};} // 突击弹:自己的发射单元 / 库存 / 每组颗数、速度 x SSM_VK、不上数据链
+function ssmLife(vp,a){const L=SSM_R*SSM_LIFE,da=vp*vp/(2*a);return da>=L?Math.sqrt(2*L/a):vp/a+(L-da)/vp;} // 突击弹寿命:从出膛加速到巡航速度 vp、再巡航,飞够 SSM_LIFE 倍射程要的时间(只算一路加速,不算末段机动)
 function mslReach(s){return LAD.msl;} // 2026-09-27 射程 = 设计包线 20 万(用户定;原来是「一半油加速、一半油减速」的动力射程 7.5 万)。靠三段飞法撑住:加速 → 熄火滑行(不耗油)→ 末段用预留燃料修正,见 56 的 stepMissileProj
 const MSL_LOAL_KEEP=PHYS.t(200); // 2026-09-28 区域齐射 / 脱锁的弹加速时不许动用的末段预留(同直射弹 200 s):导引头看见目标时得有油扑上去
 const MSL_MISS=1000*CFG.scale; // 滑行段的脱靶容差 km:照当前航向飞下去、离瞄准点的横向偏差不超过它就不转向(不转 = 不喷 = 红外里是冷的),超了才点火修正
@@ -197,7 +202,7 @@ function orderMissileSalvo(shooter,target,n,cells){ // cells:指定用哪几个�
   if(avail<=0)return; // 发射单元全在装填
   shooter.missileArm={t:1,target,n:Math.min(n||salvoCount,avail),cells:cells||null};
 }
-function fireMissiles(shooter,target,n,cells){ // 导弹齐射:受发射单元(同时组数)与弹药限制;target可以是舰船或空位置(区域齐射)
+function fireMissiles(shooter,target,n,cells,w){ // w:打哪一种(MSL_W 反舰缺省 / SSM_W 突击弹,2026-10-11) // 导弹齐射:受发射单元(同时组数)与弹药限制;target可以是舰船或空位置(区域齐射)
   if(shooter.noFire)return; // RANGE1 禁火总闸门 3/3:真正生成导弹弹丸的唯一实现,挡住 missileArm 倒计时残留(即使某条路径漏进了下令,弹丸也生不出来)
   const isShip=target&&kindOf(target)!=='point'; // 有 side 才是舰船,否则当空位置(区域目标) TK4b:判别统一走 kindOf
   if(shooter.dead)return;
@@ -205,24 +210,24 @@ function fireMissiles(shooter,target,n,cells){ // 导弹齐射:受发射单元(�
   // WR1:发射方向、速度剖面、直插方向全部按【估计位置】算(原来读 target.pos 真值)。交代不出估计位置就不发。区域齐射的点本来就是玩家给的。
   const tp0=isShip?((typeof contactPos==='function')?contactPos(target,shooter.side):null):target.pos; if(!tp0)return;
   const kk=isShip?((typeof contactKin==='function')?contactKin(target,shooter.side):{pos:tp0,vel:target.vel,t:simTime}):null; // LL7 导弹自己的目标记录按 contactKin:t = 位置对应的时刻(mslBasket 从那一刻外推),关开关时 = 估计位置 + 真速度 + 此刻
-  const rounds=Math.min(n||salvoCount,readyCells(shooter),Math.floor(shooter.ammo/(shooter.mslPer||12))); // 组数=min(请求,就绪单元,弹药)。RF6 修:分母原写死 16 而每组实耗 mslPer=12(见下方 shooter.ammo-=shooter.mslPer),两处口径不一致导致末尾 12 枚成死弹
+  const W=w||MSL_W(shooter),rounds=Math.min(n||salvoCount,W.cd.filter(t=>t<=0).length,Math.floor((shooter[W.ammo]||0)/W.per)); // 组数=min(请求,就绪单元,弹药)。RF6 修:分母原写死 16 而每组实耗 mslPer=12(见下方 shooter.ammo-=shooter.mslPer),两处口径不一致导致末尾 12 枚成死弹
   if(rounds<=0)return; // 无就绪发射单元或弹药不足
   // 占用 rounds 个发射单元(独立装填60s)
   let used=0;
-  if(shooter.cellTimer&&cells)for(const i of cells){if(used<rounds&&shooter.cellTimer[i]<=0){shooter.cellTimer[i]=shooter.mslReload||60;used++;}} // 先用指定的发射单元(还就绪的),不够再按顺序补
-  if(shooter.cellTimer)for(let i=0;i<shooter.cellTimer.length&&used<rounds;i++){if(shooter.cellTimer[i]<=0){shooter.cellTimer[i]=shooter.mslReload||60;used++;}} // RF3 装填秒读烘焙字段(原字面量60,定义在 weapons/51-defs)
+  if(cells)for(const i of cells){if(used<rounds&&W.cd[i]<=0){W.cd[i]=W.rl;used++;}} // 先用指定的发射单元(还就绪的),不够再按顺序补
+  for(let i=0;i<W.cd.length&&used<rounds;i++){if(W.cd[i]<=0){W.cd[i]=W.rl;used++;}} // RF3 装填秒读烘焙字段(原字面量60,定义在 weapons/51-defs)
   // 组间散布(v111):同舰同目标多组不再 0km 叠加成"一发",按组序横散布成扇面(前置追踪会让各道在目标附近收拢)
   const axis=V.norm(V.sub(tp0,shooter.pos));
   let perp=V.norm([-axis[1],axis[0],0]);
   if(!isFinite(perp[0])||V.len(perp)<0.5)perp=[1,0,0]; // 退化兜底
   // v122 导弹模式:auto=默认组网(noNet船直射) / net=强制组网 / direct=直射
-  const isNet=missileMode==='net'||(missileMode==='auto'&&!shooter.noNet);
+  const isNet=!W.ssm&&(missileMode==='net'||(missileMode==='auto'&&!shooter.noNet)); // 突击弹按直射的速度剖面
   const D0=isShip?Math.max(1,V.len(V.sub(tp0,shooter.pos))):20000*CFG.scale; // 2026-09-26 x1/5(单局地图):区域齐射的距离级原 100000
   // 速度剖面(v122):巡航vPeak(距离自适应,留20%距离加减速)+ 终端vTerm + 燃料预留(滑行修正+终端机动)
-  const vTerm=(isNet?PHYS.v(300):PHYS.v(800))*MSL_VK; // 物理 300 / 800 km/s      // 组网需低速机动/直射几乎不减速
+  const vTerm=(isNet?PHYS.v(300):PHYS.v(800))*MSL_VK*W.vk,MA=MSL_A*W.vk; // 物理 300 / 800 km/s      // 组网需低速机动/直射几乎不减速
   const netReserve=isNet?PHYS.t(150):PHYS.t(200); // 物理 150 / 200 s     // 预留燃料:终端机动。2026-10-01 组网 400→150(用户:防过度减速 —— 原来 400 的预留把巡航钉死在 vTerm,整条弹道都在慢性减速;现在上限随油量线性降,刹回 vTerm 的油由上限公式自己保证(任何时候 油量 >= 预留 + (v−vTerm)/加速度),预留只留终端机动)
-  const baseMaxV=Math.sqrt((2*MSL_A*D0+vTerm*vTerm)/2); // DS190:加速度 200→150,系数同步 2×150=300 // 距离允许的峰值(加速+减速≈0.8D0,留巡航段)
-  const baseVPeak=Math.max(vTerm,Math.min((isNet?PHYS.v(700):PHYS.v(900))*MSL_VK,baseMaxV,(MSL_FUEL*0.75*MSL_A+vTerm)/2)); // 2026-10-01 再加整箱油预算:加速占一半(同演示页;没这条的话三关系的能力天花板只留 2 秒冲刺预留,会把全员放到 3500 过度加速、20 秒烧空)
+  const baseMaxV=Math.sqrt((2*MA*D0+vTerm*vTerm)/2); // DS190:加速度 200→150,系数同步 2×150=300 // 距离允许的峰值(加速+减速≈0.8D0,留巡航段)
+  const baseVPeak=Math.max(vTerm,Math.min((isNet?PHYS.v(700):PHYS.v(900))*MSL_VK*W.vk,W.ssm?Infinity:baseMaxV,(MSL_FUEL*0.75*MA+vTerm)/2)); // 2026-10-11 突击弹是近距离冲刺:巡航上限不按距离压(不留减速段) // 2026-10-01 再加整箱油预算:加速占一半(同演示页;没这条的话三关系的能力天花板只留 2 秒冲刺预留,会把全员放到 3500 过度加速、20 秒烧空)
   // DS190:原 baseDecel 在此计算但全函数无人读取(写进弹丸的是下面按组算的 pDecel),合并时一并清掉这个死变量
   /* 2026-10-01 聚集 / 同步改由 56 的三关系算法每拍在邻接上算(54 建邻接),发射时不摆任何几何 */
   // v125 网实体:一次齐射=一个网(单组也算网),所有组绑定 netId
@@ -233,27 +238,30 @@ function fireMissiles(shooter,target,n,cells){ // 导弹齐射:受发射单元(�
     const lane=k-(rounds-1)/2;
     const off=(lane*100+(simRand()-0.5)*80)*CFG.scale; // 100km/道 + 抖动。2026-09-26 x1/5(单局地图):原 500 / 400
     const pvPeak=baseVPeak;
-    const pDecel=(pvPeak*pvPeak-vTerm*vTerm)/(2*MSL_A); // DS190:减速点按 150 km/s² 反推(仍用 200 算会晚刹车→到点速度收不回 vTerm)
+    const pDecel=(pvPeak*pvPeak-vTerm*vTerm)/(2*MA); // DS190:减速点按 150 km/s² 反推(仍用 200 算会晚刹车→到点速度收不回 vTerm)
     nets.get(netId).groups.push(gid);
-    projectiles.push({type:'missile',group:gid,count:shooter.mslPer||12, // KIMI154:每组16→12颗(用户令砍导弹:齐射密度-25%,拦截需求同步降,反清屏延续);RF3 枚数读烘焙字段(定义在 weapons/51-defs)
+    projectiles.push({type:'missile',group:gid,count:W.per,ssm:W.ssm,aK:W.vk,life:W.ssm?ssmLife(pvPeak,MA):0, // 2026-10-11 突击弹:不上数据链(54 组网跳过它)、加速度倍数 aK(52 mslA)、飞够 life 还没中就自毁(56)
+      // KIMI154:每组16→12颗(用户令砍导弹:齐射密度-25%,拦截需求同步降,反清屏延续);RF3 枚数读烘焙字段(定义在 weapons/51-defs)
       pos:[shooter.pos[0]+perp[0]*off,shooter.pos[1]+perp[1]*off,shooter.pos[2]+perp[2]*off],
       vel:[shooter.vel[0]+axis[0]*200*MSL_VK+perp[0]*lane*10,shooter.vel[1]+axis[1]*200*MSL_VK+perp[1]*lane*10,shooter.vel[2]+axis[2]*200*MSL_VK+perp[2]*lane*10], // 继承载机速度矢量+轻微侧向发散;2026-10-05 加朝目标的弹射分量(= 初速下限):船停着时原来只剩 ±5 横向、弹先横着出去再掉头 90°
-      target:isShip?target:null, shooter, dmg:shooter.missDmg*(shooter.mslPer||12), missDmg:shooter.missDmg, // 组总伤害 + 单颗伤害(v119,命中按单颗算)
+      target:isShip?target:null, shooter, dmg:shooter.missDmg*W.per, missDmg:shooter.missDmg, // 组总伤害 + 单颗伤害(v119,命中按单颗算)
       spd:Math.max(200*MSL_VK,V.len(shooter.vel)), // 初始速率=载机速率
       fuel:MSL_FUEL, age:0, // 燃料(秒,WR1 起是常量 MSL_FUEL:mslReach 从它现算)+ 飞行年龄(近防发射判定)
       park:!isShip, parkPt:isShip?null:target.pos.slice(), mine:false, mineOk:false, cruise:false, trigRadius:(isShip?24000:16000)*CFG.scale, trigMode:'any', // 2026-09-28 mineOk = 底栏「变雷」:勾了到点停下待命,没勾到点巡飞搜索(cruise) // 区域齐射:飞到点位,到了等敌舰进圈自主攻击(盲射);雷触发圈放大v118。2026-09-26 x1/5(单局地图):原 120000 / 80000
       netId, netFmt:null, // v125 网:所属网 + 网内阵型位(横线/集中)
       nb:[], vCmd:undefined, // 2026-10-01 三关系算法:nb = 组网圈内的邻组(54 mslNetStep 每感知拍建);vCmd = 同步速度指令(带滞回)
-      vPeak:pvPeak, vTerm, decelDist:pDecel, netReserve, keep:isNet?0:netReserve, // v122 速度剖面:巡航/终端/减速点/预留燃料。2026-09-27 keep = 加速段不许动的末段预留:直射弹的终端速度够不着,安全帽管不住它;组网弹由安全帽管(要减速到 vTerm)
+      vPeak:pvPeak, vTerm, decelDist:pDecel, netReserve, keep:(isNet||W.ssm)?0:netReserve, // 突击弹不给末段留油:一路加速冲过去
+       // v122 速度剖面:巡航/终端/减速点/预留燃料。2026-09-27 keep = 加速段不许动的末段预留:直射弹的终端速度够不着,安全帽管不住它;组网弹由安全帽管(要减速到 vTerm)
       guided:false, coastT:0, guideMode:null, lastKpos:null, guidedBy:null, // T1引导:自导/链导/脱锁(超自导范围无通道→滑行10s自毁)
       chaffed:false,chaffT:0,lastTarget:null, // v125 干扰弹脱锁
-      online:true, // 2026-09-30 导弹组网:出膛时在舰队旁,算在网上;之后每个感知节拍由 54 的 mslNetStep 重算
+      online:!W.ssm, // 2026-09-30 导弹组网:出膛时在舰队旁,算在网上;之后每个感知节拍由 54 的 mslNetStep 重算
       tk:isShip?{pos:kk.pos.slice(),vel:(kk.vel||MAC_V0).slice(),t:kk.t,sig:mslSigOf(target,shooter.side),a:trkAccPrior(target,{idn:!!mslSigOf(target,shooter.side)})}:null, // 2026-09-30 导弹自己的目标记录(54 mslTkSet 更新;断链后只靠它)
       // TK4a:弹丸不再带可见性字段(看不看得见搬进航迹表的目击集合,sensors/24 的 trkSees);原来六个弹丸字面量里各有一对初值 false
     });
     if(typeof llBorn==='function')llBorn(projectiles[projectiles.length-1]); // LL1 弹丸出生登记(sensors/26 光锥层;只记录不改模拟)
-    shooter.ammo-=shooter.mslPer||12; // KIMI154:每组12颗;RF3 枚数读烘焙字段
+    if(W.ssm){const q=projectiles[projectiles.length-1];mslRep(q);mslPredAdd(q,'msl');} // 突击弹出膛就离线:挂一个推测弹标(自己只知道它往哪飞,同断链的导弹)
+    shooter[W.ammo]-=W.per; // KIMI154:每组12颗;RF3 枚数读烘焙字段;2026-10-11 突击弹扣自己的库存
   }
   if(rounds>0)shooter.fireHot=SENS.FIRE_S; // FX1 开火暴露:真发出去了才亮(rounds=0 是弹药 / 单元不足的空转)
-  if(shooter.fcFired&&shooter.fcTgt&&shooter.fcTgt.msl&&shooter.fcTgt.msl===target)shooter.fcFired.msl=true; // RF5 开火来源标记(fireMissiles 的发射成功点:早退全在上面,到这里 rounds≥1 组弹丸已入 projectiles)。陷阱三:orderMissileSalvo 只写 missileArm、真发射晚 1s 且中途会被 noFire/dead/弹药不足吞掉,所以标记只能打在这里。RF5 核查修:再收窄成「打的正是序列解算出来的那个目标」,挡掉手动/任务/敌AI 齐射推动序列指针
+  if(!W.ssm&&shooter.fcFired&&shooter.fcTgt&&shooter.fcTgt.msl&&shooter.fcTgt.msl===target)shooter.fcFired.msl=true; // RF5 开火来源标记(fireMissiles 的发射成功点:早退全在上面,到这里 rounds≥1 组弹丸已入 projectiles)。陷阱三:orderMissileSalvo 只写 missileArm、真发射晚 1s 且中途会被 noFire/dead/弹药不足吞掉,所以标记只能打在这里。RF5 核查修:再收窄成「打的正是序列解算出来的那个目标」,挡掉手动/任务/敌AI 齐射推动序列指针
 }

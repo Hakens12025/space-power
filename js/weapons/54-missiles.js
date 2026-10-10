@@ -29,7 +29,7 @@ function mslNetStep(dt){
   const MM2=MSL_LINK.MM*MSL_LINK.MM;
   for(const side of ['blue','red']){
     const F=mslLinkNodes(side);
-    const M=projectiles.filter(p=>p.type==='missile'&&!p.done&&p.shooter&&p.shooter.side===side),q=[],was=M.map(p=>p.online!==false);
+    const M=projectiles.filter(p=>p.type==='missile'&&!p.done&&!p.ssm&&p.shooter&&p.shooter.side===side),q=[],was=M.map(p=>p.online!==false); // 2026-10-11 !p.ssm:突击弹不上数据链、也不给别的弹接力
     const ion=ENV.ions.length>0,lk=function(a,b,d2,R2){return d2<R2&&(!ion||d2*featIonK2(a,b)<R2);}; // 2026-10-05 电离云挡组网(用户改的):连边距离 x 这条线穿过电离云的透过率(world/16)
     for(const p of M){p.online=false;for(const f of F){const dx=p.pos[0]-f.pos[0],dy=p.pos[1]-f.pos[1],dz=p.pos[2]-(f.pos[2]||0);if(lk(p.pos,f.pos,dx*dx+dy*dy+dz*dz,f.R2)){p.online=true;q.push(p);break;}}} // 直连:在哪个节点的雷达圆里
     for(let i=0;i<q.length;i++){const a=q[i];for(const b of M){if(b.online)continue;const dx=a.pos[0]-b.pos[0],dy=a.pos[1]-b.pos[1],dz=a.pos[2]-b.pos[2];if(lk(a.pos,b.pos,dx*dx+dy*dy+dz*dz,MM2)){b.online=true;q.push(b);}}} // 经弹弹链接力
