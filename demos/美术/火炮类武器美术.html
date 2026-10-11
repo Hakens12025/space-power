@@ -29,8 +29,8 @@ ul b{color:var(--txt);font-weight:normal}
 <body>
 <header>
 <h1>火炮类武器美术 · 战术层尺寸</h1>
-<p class="n">10-11 用户重画(<b style="color:#ffc861;font-weight:normal">10-11 已进引擎</b>):<b style="font-weight:normal;color:#c7d0dc">轴炮 = 电磁轨道炮</b> —— 只能顺着船轴打,一发势大力沉、独一档的强,所以画得冷、硬、直、快:白炽的细长弹芯,后面拖一道笔直的细亮电离尾迹(比原来的主炮弹长 1.6 倍),弹过去以后原路留一道细线 0.9 秒才淡掉;开火那一刻船头沿船轴炸出一道强闪光、一圈冲击环、几道电弧;打中的爆炸大一号。
-<b style="font-weight:normal;color:#c7d0dc">副炮 = 化学发射药的普通炮弹</b> —— 没那么强,但要有火炮的味道:小弹头 + 暖白曳光芯 + 一小截暖色曳光尾,一轮两发(两门炮);炮口一团橙黄火光加一小股灰烟;打中是小一号的爆炸。<br>
+<p class="n">10-11 用户重画(<b style="color:#ffc861;font-weight:normal">10-11 已进引擎</b>):<b style="font-weight:normal;color:#c7d0dc">轴炮 = 电磁轨道炮</b> —— 只能顺着船轴打,一发势大力沉、独一档的强,所以画得冷、硬、直、快:白炽的细长弹芯,弹头前一道往后掠约 40° 的激波弧(10-11 用户:原来那道看着是平的),后面拖一道笔直的细亮电离尾迹(比原来的主炮弹长 1.6 倍),弹过去以后原路留一道细线 0.9 秒才淡掉;开火那一刻船头沿船轴炸出一道强闪光、一圈冲击环、几道电弧;打中的爆炸大一号。
+<b style="font-weight:normal;color:#c7d0dc">副炮 = 化学发射药的普通炮弹</b> —— 没那么强,但要有火炮的味道:弹头是一颗圆球(暖白实心核 + 阵营色光晕,不画激波;10-11 用户:原来看着是平的)+ 一小截暖色曳光尾,一轮两发(两门炮);炮口一团橙黄火光加一小股灰烟;打中是小一号的爆炸。<br>
 颜色照旧只管敌我:两种弹的外晕 / 光晕都是阵营色(去色后看形状:细长直线 vs 小亮点成对);冷白 / 暖黄只是质感。顶栏「对照:旧轴炮弹(10-11 前)」切回 10-11 前的画法对比。上一版副炮弹的 A / B / C 三个候选存档在 存档/火炮类武器美术_2026-10-11候选ABC.html。<br>独立演示页(不加载引擎),默认 = 引擎战术落点(比例尺 100 px = 2.5 万 km);星图、舰标、缩放与羽化照引擎。滚轮缩放、拖动平移;「灰度」「模糊」是检验。</p>
 </header>
 <div class="bar">
@@ -513,17 +513,18 @@ function drawShell(g,x,y,rot,side,zf){const L=shellLen(zf),h=9*1.92*zf;g.save();
    副炮 = 化学发射药的普通炮弹(小、暖、有火药味,没那么强)。阵营色照旧落在弹头外晕 / 光晕上(颜色只管敌我),冷白 / 暖黄只是两种炮的质感 ---------- */
 const GUNV={old:false}; // 顶栏「对照:旧轴炮弹(10-11 前)」
 const RAILS={};
-function railSpr(side){if(RAILS[side])return RAILS[side];const W=512,H=48,c=mkCv(W,H),g=c.getContext('2d'),col=SIDE[side],cy=H/2;
-  let gr=g.createLinearGradient(0,0,W-14,0);gr.addColorStop(0,css(col,0));gr.addColorStop(0.55,css(col,0.16));gr.addColorStop(1,css(col,0.75));g.fillStyle=gr; // 阵营色光晕:后细前粗
-  g.beginPath();g.moveTo(0,cy-1.5);g.lineTo(W-16,cy-7);g.lineTo(W-16,cy+7);g.lineTo(0,cy+1.5);g.closePath();g.fill();
-  gr=g.createLinearGradient(0,0,W-8,0);gr.addColorStop(0,'rgba(255,255,255,0)');gr.addColorStop(0.45,'rgba(235,245,255,.45)');gr.addColorStop(1,'rgba(255,255,255,1)');g.fillStyle=gr; // 白色硬芯:后面一根细线,往前逐渐变粗成一根尖刺(电离尾迹)
-  g.beginPath();g.moveTo(0,cy-0.5);g.lineTo(W-22,cy-2.6);g.lineTo(W-6,cy);g.lineTo(W-22,cy+2.6);g.lineTo(0,cy+0.5);g.closePath();g.fill();
-  const rg=g.createRadialGradient(W-12,cy,0,W-12,cy,22);rg.addColorStop(0,'rgba(255,255,255,1)');rg.addColorStop(0.3,css(lit(col,0.65),0.9));rg.addColorStop(1,css(col,0));g.fillStyle=rg;g.fillRect(W-34,cy-22,34,44); // 弹头强光
-  g.strokeStyle='rgba(255,255,255,.55)';g.lineWidth=1.2;g.beginPath();g.moveTo(W-20,cy-7);g.quadraticCurveTo(W-6,cy-3,W-2,cy);g.quadraticCurveTo(W-6,cy+3,W-20,cy+7);g.stroke(); // 弹头前的激波弧(拉近才看得见)
-  g.fillStyle='#fff';g.beginPath();g.moveTo(W-3,cy);g.lineTo(W-14,cy-2.8);g.lineTo(W-28,cy);g.lineTo(W-14,cy+2.8);g.closePath();g.fill(); // 白炽细长弹芯
+function railSpr(side){if(RAILS[side])return RAILS[side];const W=560,H=48,X=500,K=3.89,c=mkCv(W,H),g=c.getContext('2d'),col=SIDE[side],cy=H/2; // 2026-10-11 用户:激波别那么平、稍微后掠。贴图画到屏幕上横向压 K 倍(长 512 px → 38.4、高 48 px → 14),圆的东西先横向拉 K 倍画;X = 弹头中心
+  let gr=g.createLinearGradient(0,0,X+14,0);gr.addColorStop(0,css(col,0));gr.addColorStop(0.55,css(col,0.16));gr.addColorStop(1,css(col,0.75));g.fillStyle=gr; // 阵营色光晕:后细前粗,前沿顺着激波后掠(原来是一道竖直的硬边)
+  g.beginPath();g.moveTo(0,cy-1.5);g.lineTo(X-26,cy-7);g.quadraticCurveTo(X+4,cy-4,X+14,cy);g.quadraticCurveTo(X+4,cy+4,X-26,cy+7);g.lineTo(0,cy+1.5);g.closePath();g.fill();
+  gr=g.createLinearGradient(0,0,X+4,0);gr.addColorStop(0,'rgba(255,255,255,0)');gr.addColorStop(0.45,'rgba(235,245,255,.45)');gr.addColorStop(1,'rgba(255,255,255,1)');g.fillStyle=gr; // 白色硬芯:往前逐渐变粗成一根尖刺
+  g.beginPath();g.moveTo(0,cy-0.5);g.lineTo(X-10,cy-2.6);g.lineTo(X+6,cy);g.lineTo(X-10,cy+2.6);g.lineTo(0,cy+0.5);g.closePath();g.fill();
+  g.save();g.translate(X,cy);g.scale(K,1);const rg=g.createRadialGradient(0,0,0,0,0,7);rg.addColorStop(0,'rgba(255,255,255,1)');rg.addColorStop(0.3,css(lit(col,0.65),0.9));rg.addColorStop(1,css(col,0));g.fillStyle=rg;g.beginPath();g.arc(0,0,7,0,6.283);g.fill();g.restore(); // 弹头强光:屏幕上是圆的(原来贴图里的圆被横向压成一道竖条,看着像一块平板)
+  gr=g.createLinearGradient(X+22,0,X-15,0);gr.addColorStop(0,'rgba(255,255,255,.75)');gr.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=gr; // 激波:弹头前一道往后掠约 40° 的弧(填色不描线,缩小贴图时细线会丢)
+  g.beginPath();g.moveTo(X+22,cy);g.quadraticCurveTo(X+12,cy-7.5,X-14,cy-12);g.quadraticCurveTo(X+5,cy-6.5,X+15,cy);g.quadraticCurveTo(X+5,cy+6.5,X-14,cy+12);g.quadraticCurveTo(X+12,cy+7.5,X+22,cy);g.closePath();g.fill();
+  g.fillStyle='#fff';g.beginPath();g.moveTo(X+9,cy);g.lineTo(X-2,cy-2.8);g.lineTo(X-16,cy);g.lineTo(X-2,cy+2.8);g.closePath();g.fill(); // 白炽细长弹芯
   return RAILS[side]=c;}
 function railLen(zf){return shellLen(zf)*1.6;} // 比现在的主炮弹长 1.6 倍:又长又直
-function drawRail(g,x,y,rot,side,zf){const L=railLen(zf),h=14*1.92*zf;g.save();g.translate(x,y);g.rotate(rot);g.globalCompositeOperation='lighter';g.drawImage(railSpr(side),-L*(500/512),-h/2,L,h);g.restore();}
+function drawRail(g,x,y,rot,side,zf){const L=railLen(zf)*560/512,h=14*1.92*zf;g.save();g.translate(x,y);g.rotate(rot);g.globalCompositeOperation='lighter';g.drawImage(railSpr(side),-L*(500/560),-h/2,L,h);g.restore();} // 贴图 560 px 宽(弹头前留出激波与光晕),每 px 的长度同原来 512 px 那张
 function railTrail(g,ax,ay,bx,by,side,a){if(a<=0.01)return;const col=lit(SIDE[side],0.55),gr=g.createLinearGradient(ax,ay,bx,by); // 弹过去以后原路留一道细线,慢慢淡掉
   gr.addColorStop(0,css(col,0));gr.addColorStop(0.7,css(col,0.2*a));gr.addColorStop(1,css(col,0.45*a));g.save();g.globalCompositeOperation='lighter';g.strokeStyle=gr;g.lineWidth=1;g.beginPath();g.moveTo(ax,ay);g.lineTo(bx,by);g.stroke();g.restore();}
 const RAIL_MZ=0.45; // 炮口效果的时长(秒)
@@ -539,13 +540,13 @@ function railMuzzle(g,x,y,rot,side,a,fk){const u=a/RAIL_MZ;if(u<0||u>1)return;co
 function railMark(g,x,y,rot,side){const c=Math.cos(rot),s=Math.sin(rot);g.strokeStyle=PROJ_MK[side];g.lineWidth=1.2;g.beginPath();g.moveTo(x-c*3.2,y-s*3.2);g.lineTo(x+c*3.2,y+s*3.2);g.stroke(); // 代表显示:6.4 px 细线 + 头上一颗白点
   g.fillStyle='#fff';g.fillRect(x+c*3.2-0.9,y+s*3.2-0.9,1.8,1.8);}
 const CHEMS={};
-function chemSpr(side){if(CHEMS[side])return CHEMS[side];const W=128,H=32,c=mkCv(W,H),g=c.getContext('2d'),col=SIDE[side],cy=H/2;
-  let gr=g.createLinearGradient(0,0,W-10,0);gr.addColorStop(0,'rgba(255,150,60,0)');gr.addColorStop(0.6,'rgba(255,170,80,.35)');gr.addColorStop(1,'rgba(255,220,150,.85)');g.fillStyle=gr; // 暖色曳光尾(火药里的曳光剂)
-  g.beginPath();g.moveTo(0,cy);g.lineTo(W-12,cy-3);g.lineTo(W-12,cy+3);g.closePath();g.fill();
-  const rg=g.createRadialGradient(W-12,cy,0,W-12,cy,11);rg.addColorStop(0,'rgba(255,246,220,1)');rg.addColorStop(0.35,css(col,0.85));rg.addColorStop(1,css(col,0));g.fillStyle=rg;g.fillRect(W-24,cy-11,24,22); // 暖白弹头 + 阵营色光晕
+function chemSpr(side){if(CHEMS[side])return CHEMS[side];const W=140,H=32,X=116,K=2.78,c=mkCv(W,H),g=c.getContext('2d'),col=SIDE[side],cy=H/2; // 2026-10-11 用户:普通炮弹不要激波、像个圆球。贴图画到屏幕上横向压 K 倍(长 128 px → 10.08、高 32 px → 7),圆球先横向拉 K 倍画;X = 弹头中心
+  const gr=g.createLinearGradient(0,0,X+2,0);gr.addColorStop(0,'rgba(255,150,60,0)');gr.addColorStop(0.6,'rgba(255,170,80,.35)');gr.addColorStop(1,'rgba(255,220,150,.85)');g.fillStyle=gr; // 暖色曳光尾,前端收进球里
+  g.beginPath();g.moveTo(0,cy);g.lineTo(X-4,cy-2.6);g.lineTo(X-4,cy+2.6);g.closePath();g.fill();
+  g.save();g.translate(X,cy);g.scale(K,1);const rg=g.createRadialGradient(0,0,0,0,0,7.5);rg.addColorStop(0,'rgba(255,250,232,1)');rg.addColorStop(0.32,'rgba(255,238,200,.95)');rg.addColorStop(0.5,css(col,0.7));rg.addColorStop(1,css(col,0));g.fillStyle=rg;g.beginPath();g.arc(0,0,7.5,0,6.283);g.fill();g.restore(); // 弹头 = 一颗圆球:暖白实心核 + 阵营色光晕(原来贴图里的圆被横向压成一道竖条)
   return CHEMS[side]=c;}
 function chemLen(zf){return shellLen(zf)*0.42;}
-function drawChem(g,x,y,rot,side,zf){const L=chemLen(zf),h=7*1.92*zf;g.save();g.translate(x,y);g.rotate(rot);g.globalCompositeOperation='lighter';g.drawImage(chemSpr(side),-L*(116/128),-h/2,L,h);g.restore();}
+function drawChem(g,x,y,rot,side,zf){const L=chemLen(zf)*140/128,h=7*1.92*zf;g.save();g.translate(x,y);g.rotate(rot);g.globalCompositeOperation='lighter';g.drawImage(chemSpr(side),-L*(116/140),-h/2,L,h);g.restore();} // 贴图 140 px 宽(弹头前留出圆球),每 px 的长度同原来 128 px 那张
 function chemMuzzle(g,x,y,rot,a,fk){if(a<0||a>0.9)return;const c=Math.cos(rot),s=Math.sin(rot); // 炮口:橙黄火光 0.15 秒 + 一小股灰烟 0.9 秒胀开淡出
   if(a<0.15){const u=a/0.15,R=(2.5+3*u)*fk,cx=x+c*R*0.6,cy=y+s*R*0.6,rg=g.createRadialGradient(cx,cy,0,cx,cy,R*1.6);
     rg.addColorStop(0,'rgba(255,240,190,'+(1-u).toFixed(3)+')');rg.addColorStop(0.4,'rgba(255,160,60,'+(0.8*(1-u)).toFixed(3)+')');rg.addColorStop(1,'rgba(255,120,40,0)');
