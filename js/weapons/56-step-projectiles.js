@@ -411,14 +411,15 @@ function stepInterceptorProj(p,dt){ // 拦截导弹(v114):燃料模式可出远�
       if(p.fuel<=0){spawnSD(p);p.done=true;return;} // 燃料耗尽自毁(2026-10-08 带特效)(v118:燃料=寿命,耗尽即失效)
       {const h=icHome(p),hx=p.pos[0]-h[0],hy=p.pos[1]-h[1],hz=p.pos[2]-h[2];if(hx*hx+hy*hy+hz*hz>(p.icR2||Infinity)){spawnSD(p);p.done=true;return;}} // 10-07 出了发射舰的防区就自毁(52 INT_ZONE_R2)
       const f0=p.fuel; // 10-07 油至少按时间烧(燃料 = 寿命;原来到顶速后直飞不耗油)
-      if(!p.target||p.target.done||p.target.dead||((p.target.count??1)<=0)){ // 目标失效/拦完:重选前方目标;KIMI146修:诱饵弹无count字段,(count||0)<=0恒真→每tick重复重选(??1后只在done时才重选)
-        p.target=findInterceptorTarget(p);
+      if(!p.target||p.target.done||p.target.dead||((p.target.count??1)<=0)){ // 目标失效/拦完:重选目标;KIMI146修:诱饵弹无count字段,(count||0)<=0恒真→每tick重复重选(??1后只在done时才重选)
+        p.target=(p.icSeek||0)<=p.age?findInterceptorTarget(p):null;
+        if(!p.target)p.icSeek=p.age+MSL_SEEK_DT;
       }
-      if(!p.target){spawnSD(p);p.done=true;return;} // 2026-10-08 自毁带特效;前方无来袭:结束(防泄漏)
-      const toT=V.sub(p.target.pos,p.pos);
-      const dist=V.len(toT); // 真值距离:只给下面的拦截判定(物理)
-      let gp=p.target.pos,tv=p.target.vel,gd=dist; // LL7 制导读的目标位置 / 速度 / 距离:光速延迟开着时是拦截弹导引头看到的影像推到此刻(sensors/26 llSeek),看不到就照原航向飞
-      if(typeof llOnNow==='function'&&llOnNow()){const im=llSeek(p,p.target);
+      // 2026-10-11 用户:目标没了不自毁 —— 照原航向飞、每 MSL_SEEK_DT 找一次别的来袭弹,油尽 / 出防区才自毁(原来找不到当场自毁)
+      const tg=p.target;
+      const dist=tg?V.len(V.sub(tg.pos,p.pos)):Infinity; // 真值距离:只给下面的拦截判定(物理)
+      let gp=tg?tg.pos:[p.pos[0]+p.vel[0],p.pos[1]+p.vel[1],p.pos[2]+p.vel[2]],tv=tg?tg.vel:MAC_V0,gd=tg?dist:0; // LL7 制导读的目标位置 / 速度 / 距离:光速延迟开着时是拦截弹导引头看到的影像推到此刻(sensors/26 llSeek),看不到就照原航向飞
+      if(tg&&typeof llOnNow==='function'&&llOnNow()){const im=llSeek(p,p.target);
         if(im&&im!==p.target){const a=simTime-im.llT;gp=[im.pos[0]+im.vel[0]*a,im.pos[1]+im.vel[1]*a,im.pos[2]+im.vel[2]*a];tv=im.vel;gd=V.len(V.sub(gp,p.pos));}
         else if(!im){gp=[p.pos[0]+p.vel[0],p.pos[1]+p.vel[1],p.pos[2]+p.vel[2]];tv=MAC_V0;gd=0;}}
       const relV=[p.vel[0]-tv[0],p.vel[1]-tv[1],p.vel[2]-tv[2]];
@@ -442,7 +443,7 @@ function stepInterceptorProj(p,dt){ // 拦截导弹(v114):燃料模式可出远�
       if(f0-p.fuel<dt)p.fuel=Math.max(0,f0-dt);
       p.vel=[nd[0]*p.spd,nd[1]*p.spd,nd[2]*p.spd];
       p.pos[0]+=p.vel[0]*dt;p.pos[1]+=p.vel[1]*dt;p.pos[2]+=p.vel[2]*dt;
-      // 拦截判定:接近来袭导弹<1500 → 1颗拦1颗,逐颗概率;消耗自身;拦完继续往前拦下一个(不瞎追)
+      // 拦截判定:接近来袭导弹<1500 → 1颗拦1颗,逐颗概率;消耗自身;拦完接着找下一个
       if(dist<w.hitR){ // 拦截判定距离(icp_* hitR)。2026-09-26 单局地图刻意不缩:拦截弹末端脱靶约 350~800km(速度 / 转向率不缩),缩到 300 实测大半拦截弹擦肩而过
         const dirT=V.norm(V.sub(p.target.pos,p.pos));
         const sv=p.target.vel;
@@ -465,6 +466,6 @@ function stepInterceptorProj(p,dt){ // 拦截导弹(v114):燃料模式可出远�
           if(p.target.count<=0){p.target.done=true;}
           if(p.count<=0){p.done=true;return;} // 拦截弹打光了
         }
-        p.target=null; // 拦完/未拦完都重选下一个(继续往前,不掉头追)
+        p.target=null; // 拦完/未拦完都重选下一个(前方优先,前方没有才掉头,52 findInterceptorTarget)
       }
 }

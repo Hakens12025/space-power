@@ -157,8 +157,8 @@ let sdFX=[]; // 2026-10-08 用户:导弹燃料耗尽 / 拦截弹没目标不再�
 function spawnSD(p){const f={pos:p.pos.slice(),tw:nowMs(),vis:fxVis(p.pos,p.shooter,null),side:p.shooter?p.shooter.side:null,big:p.type==='missile'};if(typeof llFx==='function')llFx(f,p.pos,p.shooter,null);sdFX.push(f);} // 看不看得见同命中闪光(fxVis);光速延迟开着登记到达
 const INT_ZONE_R2=(WPN.icp_core.zoneK*WPN.icp_core.warnK*WPN.icp_core.outer)**2; // 2026-10-07 用户「拦截弹无限射程燃料」:防区半径 = 预警距离(防空核心拦截弹 outer x warnK)x zoneK,跟着发射舰走;同日用户:各舰种同一个(约 5.7 万 km)。存的是平方
 function icHome(p){const s=p.shooter;if(s&&!s.dead)p.icLast=s.pos;return p.icLast;} // 防区中心 = 发射舰此刻位置;发射舰沉了用最后位置
-function findInterceptorTarget(p){ // 拦截弹重选目标:前方最近的来袭导弹,诱饵弹优先(信号强,为真导弹让路);只认本方看得见的、在发射舰防区内的(10-07:原来全场扫描、不看距离不看可见,会满图追)
-  let best=null,bd=1e18,bestDecoy=false;
+function findInterceptorTarget(p){ // 拦截弹重选目标:最近的来袭导弹(前方优先),诱饵弹优先(信号强,为真导弹让路);只认本方看得见的、在发射舰防区内的(10-07:原来全场扫描、不看距离不看可见,会满图追)
+  let best=null,bd=1e18,bestDecoy=false,bestF=false;
   const vd=V.norm(p.vel),side=p.shooter.side,llon=typeof llOnNow==='function'&&llOnNow(),h=icHome(p),R2=p.icR2||Infinity;
   for(const q of projectiles){
     const dec=q.type==='decoy';
@@ -168,8 +168,10 @@ function findInterceptorTarget(p){ // 拦截弹重选目标:前方最近的来�
     if(!trkSees(side,q))continue;
     const qq=llon?projLook(q,side):q;if(!qq)continue; // 位置读这一方看到的(光速延迟开着取弹影)
     const hx=qq.pos[0]-h[0],hy=qq.pos[1]-h[1],hz=qq.pos[2]-h[2];if(hx*hx+hy*hy+hz*hz>R2)continue;
-    const dq=V.len(V.sub(qq.pos,p.pos));
-    if(!(dq>0)||V.dot(V.norm(V.sub(qq.pos,p.pos)),vd)<=0)continue;
+    const dq=V.len(V.sub(qq.pos,p.pos));if(!(dq>0))continue;
+    const fw=!(V.dot(V.norm(V.sub(qq.pos,p.pos)),vd)<=0); // 2026-10-11 用户:目标没了接着找别的 —— 前方的优先,前方没有才掉头追身后的(原来只认前方)
+    if(bestF&&!fw)continue;
+    if(fw&&!bestF){best=null;bd=1e18;bestDecoy=false;bestF=true;}
     if(dec){if(dq<bd){bd=dq;best=q;bestDecoy=true;}}
     else if(!bestDecoy&&dq<bd){bd=dq;best=q;}
   }

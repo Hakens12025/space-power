@@ -89,8 +89,8 @@ function stepWeaponSystems(dt){
         if(appr>0)threat=true;
       }
       if(!threat)continue; // 在远离/横移:追不上,不浪费
-      if(projectiles.some(q=>q.type==='interceptor'&&!q.done&&q.target===p))continue; // 该来袭组已有拦截弹在追:防重复(一组导弹只吃一次拦截)
-      const need=Math.ceil((q.count||16)*w.perK); // 拦截弹数 = 来袭颗数×1.2 向上取整(覆盖拦截失败;10-07 试过 1:1、16 局蓝方拦截率 70.9% → 63.0%,用户改回);LL7 颗数读弹影(关开关 = 真弹)
+      let cov=0;for(const r of projectiles)if(r.type==='interceptor'&&!r.done&&r.target===p)cov+=r.count||0; // 该来袭组已有拦截弹在追:按颗数抵扣、只补差额(2026-10-11 拦截弹没目标会接着找别的,原来「有人追就不发」会被换过来的几颗残弹挡住整组)
+      const need=Math.ceil((q.count||16)*w.perK)-cov;if(need<=0)continue; // 拦截弹数 = 来袭颗数×1.2 向上取整(覆盖拦截失败;10-07 试过 1:1、16 局蓝方拦截率 70.9% → 63.0%,用户改回);LL7 颗数读弹影(关开关 = 真弹)
       if(x.interceptor>=need){
         x.interceptor-=need;x.ciwsCd=PHYS.t(w.cdS); // 拦截弹发射间隔冷却(cdS 物理秒)
         fireInterceptor(x,p,need,q); // q = 这艘看到的来袭弹(光速延迟开着是弹影):出膛朝它瞄
