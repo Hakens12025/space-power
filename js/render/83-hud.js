@@ -288,8 +288,8 @@ function drawProjectiles(){ // 弹丸/导弹
       const lit=p.type==='interceptor'||(q.lit===undefined?p.fuel>0:q.lit),te=p.type==='missile'&&!p.mine?artTrack(p,q.pos,side,p.ssm?'ssm':'hvy',lit):null; // 2026-10-11 反舰排气尾迹 + 冷发射点火 / 突击弹一串(render/81-art)
       if(mk)projMark(p,s[0],s[1],rot,side,cnt);
       else if(p.mine)artMine(ctx,s[0],s[1],(sd%6)*0.17,side); // 伏击雷:六角壳体 + 天线 + 闪烁指示灯
-      else if(p.ssm)artSsm(ctx,te||{cur:q.pos,pts:[]},side,cnt,rot); // 突击弹 = 轻弹:一串 3 发沿走过的路跟着
-      else artMsl(ctx,s[0],s[1],rot,{kind:p.type==='interceptor'?'inter':'msl',side,count:cnt,burn:lit&&!artCold(te),sd}); // 反舰 = 重弹:冷发射那 0.18 s 不喷 // 一组画 1 / 3 / 5 枚;这一拍烧油才有尾焰(同 sensors/22 projSig)
+      else if(p.ssm)artSsm(ctx,te||{cur:q.pos,pts:[]},side,cnt,rot,artBurn(te,lit)); // 突击弹 = 轻弹:一串 3 发沿走过的路跟着;滑行 / 没油不画尾焰
+      else artMsl(ctx,s[0],s[1],rot,{kind:p.type==='interceptor'?'inter':'msl',side,count:cnt,burn:(p.type==='interceptor'||artBurn(te,lit))&&!artCold(te),sd}); // 反舰 = 重弹:冷发射那 0.18 s 不喷;滑行 / 没油不喷(拦截弹一直在烧) // 一组画 1 / 3 / 5 枚;这一拍烧油才有尾焰(同 sensors/22 projSig)
       // 选中高亮 + v129:目标虚线/目的地/触发圈/火控母舰连线(点选导弹或网,网内所有组一起)
       if(pSel){ctx.strokeStyle='#4fe0ff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(s[0],s[1],12,0,6.283);ctx.stroke();} // 2026-10-09 多选:每组都画选中圈(原来只画代表组,看不出选了哪些)
       if(p===selMissile){

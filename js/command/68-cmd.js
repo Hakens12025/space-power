@@ -61,7 +61,7 @@ function cxCease(sel){for(const s of sel)if(s){s.lockedTarget=null;s.lockPlayer=
 function cxDriftFire(sel,on){for(const s of sel)if(s){s.driftFire=on;s.driftFireT=on?60:0;}}
 function cxFireAll(sel){for(const s of sel){if(!s||s.dead)continue;const t=s.lockedTarget;if(!t||contactDead(t,s.side))continue;
   if(hasMAC(s)&&macAligned(s,t)&&macReady(s)>0)fireMAC(s,t);if(s.ammo>0)orderMissileSalvo(s,t,salvoCount);}}
-function cxForcePoint(sel,pt){for(const x of sel)if(x)x.fTgt={pt:pt.slice(),n:{mac:0,msl:0}};} // 中键点空地:强制目标点(57 按勾选的武器打,每件 2 次)
+function cxForcePoint(sel,pt){for(const x of sel)if(x)x.fTgt={pt:pt.slice(),n:{mac:0,msl:0,sec:0,ssm:0}};} // 中键点空地:强制目标点(57 按允许(绿)的武器打,每件 2 次;10-11 起副炮 / 突击弹也打)
 function cxPick(sel,t){for(const s of sel){if(!s||!t)continue;s.pickTid=t.id;s.fTgt=null;if(!s.autoEngage||s.roe!=='free'){s.autoEngage=true;s.roe='free';}}} // 中键点敌舰:选定目标,一直强制开火
 function cxFcAppendTo(sel,t){if(!t)return; // Shift+中键:往序列态那条(舰队 = 那块)追加目标(同 74 xhQuickEngage 原来那段)
   let g=null;if(sel.length>1){for(const s of sel){const q=fcSeq(s.fcEditId);if(q&&q.shipId===s.id&&q.grp){g=q.grp;break;}}}
@@ -78,9 +78,9 @@ function cxDelLastOrder(sel){const halted=new Set(); // 删最后一个命令点
     if(s.formation){if(halted.has(s.formation))continue;halted.add(s.formation);fmShips(s.formation).forEach(m=>{if(m.orders.length){m.orders.pop();if(!m.orders.length)m.brake=true;}});}
     else if(s.orders.length){s.orders.pop();if(!s.orders.length)s.brake=true;}}}
 function cxOrderPos(s,i,pt){const od=s&&s.orders[i];if(od)od.pos=[pt[0],pt[1],pt[2]||0];} // 拖命令点(调用方已夹进游玩区)
-function cxWpn(sel,k,v){for(const x of sel){if(!x)continue; // 底栏一行行尾的分开关:只记这一种武器的勾(2026-10-11 起火控开关归格子右上角的总开关 cxWpnGate);关到一件都打不了 = 火控关(同原来)
+function cxWpn(sel,k,v){for(const x of sel){if(!x)continue; // 底栏一行行尾的允许 / 禁止(2026-10-11 用户:绿 = 允许、红 = 禁止,只记这一种许不许开火;火控开关归格子右上角的总开关 cxWpnGate,这里不再连带关火控)
   if(k==='ciws'){for(const c of CIWS_SUB)x[c[2]]=v;continue;}
-  x[KIND_INFO[k].on]=v;if(!v&&!wpnAnyOn(x)){x.autoEngage=false;x.roe='hold';x.lockedTarget=null;}}}
+  x[KIND_INFO[k].on]=v;}}
 function cxWpnGate(sel,c,v){for(const x of sel){if(!x)continue; // 2026-10-11 底栏格子右上角的总开关(一类武器):火控关着时打开 = 火控开、只开这一类(同原来勾一件);这一类一种都没勾就全勾上;关到哪类都打不了 = 火控关
   const K=Object.keys(WPN_CAT).filter(k=>WPN_CAT[k]===c&&wpnHas(x,k));
   if(v){if(!wpnFcOn(x)){for(const cc of new Set(Object.values(WPN_CAT)))x[cc+'Gate']=false;x.autoEngage=true;x.roe='free';}x[c+'Gate']=true;if(!K.some(k=>x[k+'On']!==false))for(const k of K)x[k+'On']=true;}

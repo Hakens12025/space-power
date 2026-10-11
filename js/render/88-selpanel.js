@@ -447,7 +447,7 @@ const CIWS_SUB=[['ciwsMsl','近防导弹','ciwsOn'],['ciwsGun','近防炮','ciws
 function ciwsSubOn(x,f){return wpnHas(x,'ciws')&&x[f]!==false;}
 function wpnTri(x,k){if(k!=='ciws')return wpnChecked(x,k)?2:0;const n=CIWS_SUB.filter(c=>ciwsSubOn(x,c[2])).length;return n===CIWS_SUB.length?2:(n?1:0);} // 上一级的勾:2 全勾 / 1 半勾 / 0 不勾
 function ciwsSubToggle(id){const c=CIWS_SUB.find(c=>c[0]===id),sel=selBlue().filter(x=>wpnHas(x,'ciws'));if(!c||!sel.length)return;const v=!sel.every(x=>ciwsSubOn(x,c[2]));cxCiwsSub(sel,c[2],v);updateSelPanel();} // 2026-10-08 走命令(command/68)
-function wpnToggle(k){ // 行尾的分开关:没全勾 → 全勾,全勾 → 全关(2026-10-11 只记这一种的勾,不碰火控;火控归总开关 wpnGateToggle)
+function wpnToggle(k){ // 行尾的允许 / 禁止:不是全绿 → 全绿,全绿 → 全红(2026-10-11 只记这一种许不许开火,不碰火控;火控归总开关 wpnGateToggle)
   const sel=selBlue().filter(x=>wpnHas(x,k));if(!sel.length||!KIND_INFO[k])return;const on=KIND_INFO[k].on,v=!sel.every(x=>x[on]!==false);
   cxWpn(sel,k,v); // 走命令(command/68)
   updateSelPanel();
@@ -502,8 +502,8 @@ function cmdBarSync(){ // 三颗钮的字与亮灭;菜单开着就顺手重画
     if(ml.length){const on=ml.every(p=>p.mineOk||p.mine);mb.classList.toggle('on',on);setHTMLStable(mb,'<span class="l">变雷</span><span class="s">'+(on?'到点停下':'一直飞')+'</span>',false);}}
 }
 /* ==================== 底栏指令卡(2026-10-08 用户:武器操作不方便;演示页 demos/ui/底栏指令卡.html 拍板。2026-10-11 多武器 + 几十艘船:demos/ui/多武器指令卡.html 拍板) ====================
-   四格位置固定:主炮 / 导弹 / 特殊 / 近防,选中的船都没有就写「无」。一类里几种武器就分几行(WROW,一行 = 一种 kind):名字 | 绿条 | 就绪数 | 分开关(cxWpn);
-   格子右上角 = 这一类的总开关(cxWpnGate),自动开火 = 火控开 且 总开关 且 分开关(weapons/51 wpnOn);总开关关着时分开关变淡、勾照记。
+   四格位置固定:主炮 / 导弹 / 特殊 / 近防,选中的船都没有就写「无」。一类里几种武器就分几行(WROW,一行 = 一种 kind):名字 | 绿条 | 就绪数 | 允许 / 禁止(cxWpn:绿 = 允许、红 = 禁止,10-11 起不再是勾);
+   格子右上角 = 这一类的总开关(cxWpnGate),自动开火 = 火控开 且 总开关 且 绿(weapons/51 wpnOn);强制开火只看绿(wpnOk),手动点条照样能打。
    每行按宽度自动切两档:每条放得下 6px 就逐条(点绿条 = 选这一门 / 这一组 WPK,再点取消),放不下就收成一整条汇总(WAGG:点 +1、右键 −1、滚轮、拖 = 拉到哪选多少;
    绿 = 就绪、白 = 选了几发、蓝 = 在装,越深越快好,右边「+n·ts」= t 秒后再好 n 个)。点行名 = 这一行就绪的全选;点格子空白处 / T R = 这一类就绪的全选。
    选好了左键点敌舰或空地发射(wpkMouse,70-input 左键最先问它):逐条选的照选的发,汇总的由 wpkPlan 挑谁打(轴炮先挑机头离目标方位最近的、再按距离;导弹挑最近的),
@@ -569,6 +569,7 @@ function wpkMouse(e,sx,sy){ // 70-input 左键最先问它:有选中的 = 把它
   wpkClear();wpkSync();return true;}
 function wpnStop(){const sel=selBlue();if(typeof clearPendings==='function')clearPendings();if(sel.length)cxStop(sel);updateSelPanel();} // 停火钮 / X
 const WPK_TRI=a=>a.length&&a.every(Boolean)?2:(a.some(Boolean)?1:0);
+function wpkPm(attr,v){return '<div class="ck pm'+(v===2?' ok':(v===1?' part':' no'))+'" '+attr+'><span></span></div>';} // 2026-10-11 用户:行尾 绿 = 允许开火 / 红 = 禁止(自动、强制都看它,手动点条照样能打;weapons/51 wpnOk),多选里一半一半画两色
 function wpkCk(attr,v,gated){return '<div class="ck'+(v===2?' on':(v===1?' part':''))+(gated?' gated':'')+'" '+attr+'><span>'+(v===2?'✓':'')+'</span></div>';}
 function wpkNone(lb){return '<div class="wb none"><div class="hd"><span class="lb">'+lb+'</span></div><div class="na">无</div></div>';}
 function wpkAggHTML(k,U,sel){const R=WROW[k],T=U.length,rd=wkReady(k,sel).length,P=Math.min(WAGG.get(k)||0,rd),pc=v=>(T?v/T*100:0).toFixed(2)+'%',B=[0,0,0,0],rem=[];let rl=1;
@@ -586,7 +587,7 @@ function wpkRowHTML(k,sel,gated){const R=WROW[k],own=sel.filter(R.has);if(!own.l
   const segs=ag?wpkAggHTML(k,U,own):own.map(x=>ord(x).map(([u,t,ok])=>ok?'<i class="ok'+(WPK[k].has(x.id+':'+u)?' pk':'')+'" data-seg="'+k+':'+x.id+':'+u+'"></i>':'<i><b style="width:'+(t>0?Math.round(Math.max(0,1-t/R.rl(x))*100):0)+'%"></b></i>').join('')).join('<i class="gap"></i>') // 条效果同演示页 demos/ui/多武器指令卡.html(用户 10-11:回归它):就绪纯绿、在装暗格里按进度填蓝
     +'<s class="num">'+rd+'/'+U.length+(R.stock?'·'+own.reduce((n,x)=>n+R.stock(x),0)+'组':'')+'</s>'; // 读数叠在条右端(点击穿过它)
   return '<div class="wr" data-row="'+k+'"><span class="wn" data-rowpick="'+k+'">'+R.nm+'</span><span class="cells'+(ag?' ag" data-agg="'+k+'"':'"')+'>'+segs+'</span>' // 2026-10-11 用户:绿条要长 —— 右边「就绪 / 总数 · 组数」去掉,挪进悬停说明(wkRowInfo)
-    +wpkCk('data-sub="'+k+'"',WPK_TRI(own.map(x=>x[KIND_INFO[k].on]!==false)),gated)+'</div>';}
+    +wpkPm('data-sub="'+k+'"',WPK_TRI(own.map(x=>x[KIND_INFO[k].on]!==false)))+'</div>';}
 function wpkCatHTML(c,lb,key,sel){const K=Object.keys(WROW).filter(k=>WROW[k].cat===c&&sel.some(WROW[k].has));if(!K.length)return wpkNone(lb);
   const gate=c==='sp'?null:WPK_TRI(sel.filter(x=>K.some(k=>WROW[k].has(x))).map(x=>wpnFcOn(x)&&x[c+'Gate']!==false)); // 总开关显示 = 火控开 且 这一类开
   const armed=K.some(k=>(WPK[k]&&WPK[k].size)||WAGG.get(k)||selWeapon===k);
@@ -614,7 +615,7 @@ function wkRowInfo(k){const R=WROW[k],own=selBlue().filter(R.has);if(!own.length
 function wpkHoverTip(t,s){
   if(t.dataset.cw){const c=ciwsRingsOf(s);return t.dataset.cw==='ciwsMsl'?'拦截弹 · 外圈 '+Math.round(c.outer/1000)+'k(开雷达照射 '+Math.round(c.outer*ICP_RADAR_K/1000)+'k) · 库存 '+(s.interceptor||0)+' 枚 · 来袭导弹进预警距离自动发射迎上去(消耗弹药)· 点 = 开 / 关':'近防炮 · 内圈 '+(c.inner/1000).toFixed(1)+'k · 打进内圈的导弹每艘拦一次,不耗弹药 · 点 = 开 / 关';}
   if(t.dataset.hr==='ciws')return KIND_INFO.ciws.tip(s)+' · 两行各管一件,点 = 开 / 关';
-  const k=t.dataset.row||(t.dataset.cat==='sp'?'buoy':t.dataset.cat),how=' —— 点绿条选、再点目标发射;大勾 = 这一类自动开火,小勾 = 这一种',ri=t.dataset.row?wkRowInfo(k):''; // 2026-10-11 说明条不换行,太长两头会被屏幕截掉
+  const k=t.dataset.row||(t.dataset.cat==='sp'?'buoy':t.dataset.cat),how=' —— 点绿条选、再点目标发射;大勾 = 这一类自动开火,行尾 绿 = 允许 / 红 = 禁止(强制开火只打绿的)',ri=t.dataset.row?wkRowInfo(k):''; // 2026-10-11 说明条不换行,太长两头会被屏幕截掉
   if(k==='mac')return ri+KIND_INFO.mac.tip(s)+how;
   if(k==='sec')return ri+KIND_INFO.sec.tip(s)+how;
   if(k==='msl')return ri+KIND_INFO.msl.tip(s)+how;

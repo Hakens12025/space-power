@@ -73,7 +73,7 @@ const RANGE_KNOBS=[
 ];
 function rangeDefaults(){ // 缺省 = FF(靶用的舰种;2026-09-30 重排前叫 DD)的武器定义基线,这样面板开箱即是"未改动"的对照组。RF3 改读 weapons/51-defs(原 CLS_CIWS.DD/CLS_WPN.DD)
   const c=(typeof WPN!=='undefined'&&WPN.gun_core)||{innerIntercept:0.85},f=(typeof WPN!=='undefined'&&WPN.chf_core)||{chaffRate:0.25}; // 2026-10-07 近防拆成拦截弹 / 近防炮 / 干扰弹三件(51-defs)
-  const w=(typeof WPN!=='undefined'&&WPN.icp_core)||{inter:384};
+  const w=(typeof WPN!=='undefined'&&(WPN.icp_ff||WPN.icp_core))||{inter:450}; // 2026-10-11 护卫舰拦截弹 450(51-defs icp_ff)
   const sn=SENS.CLS.FF; // SN4:舰种行并进 SENS.CLS(前提 3,数值表只有一份),这里一律取活表。SN2 那条纪律原样有效——绝不在本文件留手抄副本:副本会在表被换掉时原地顶上,面板照常显示旧数并把值写进一个已不存在的字段,最难查的一种静默。本文件头部那句"调用点全部带 typeof 守卫"说的是别人调 95,不是 95 调别人:rangeDefaults 只在运行期被调,而 sensors/20 在 index.html 里排在本文件之前
   return {evadeOn:false,evadeR:6000*CFG.scale,evadeT:20,speedCmd:2, // 2026-09-26 evadeR x1/5:原 30000
     inter:w.inter,interHitMul:1,inner:c.innerIntercept,chaff:f.chaffRate,

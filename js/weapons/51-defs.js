@@ -27,12 +27,13 @@ const WPN={ // 定义(Definition):全局一份的不变模板,数值原样搬自
   // 2026-10-08 用户:近防外圈(拦截弹)x1.5、内圈(近防炮)x1.2,阵型不动 —— 编队站位与红方 AI 的编队距离读 fmOuter / fmInner(改前的圈,51-ciws ciwsRingsFm),实战与画面读 outer / inner
   // 2026-10-11 用户:所有舰船的近防圈和拦截圈 x2(外圈 x1.5 x2、内圈 x1.2 x2),阵型不变(fmOuter / fmInner 照旧);预警距离(x warnK)、出防区自毁(x zoneK)、储备线(x reserveR)跟着外圈一起放大
   // 2026-10-11 用户(再一轮):近防炮内圈 x0.7、拦截弹外圈 x0.8、雷达加成 x0.9(51-ciws ICP_RADAR_K);阵型照旧不动(fmOuter / fmInner)
+  // 2026-10-11 用户(再一轮):非雷达(静默)拦截圈再 x0.9,开雷达照射的射程不变(51-ciws ICP_RADAR_K 跟着 /0.9)
   // 2026-10-11 用户:静默拦截圈 x0.9、开机(雷达照射)x1.1 —— 外圈(= 静默时)再 x0.9,开雷达倍数 51-ciws ICP_RADAR_K 跟着改成 1.5 x 1.1 / 0.9
-  icp_core:{kind:'icp',label:'拦截弹',buoyN:2,outer:15750*1.5*2*0.9*0.8*CFG.scale,fmOuter:15750*CFG.scale,outerIntercept:0.40,inter:384,warnK:2,zoneK:3,perK:1.2,cdS:30,reserve:0.3,reserveR:0.5,threatCos:0.9,
+  icp_core:{kind:'icp',label:'拦截弹',buoyN:2,outer:15750*1.5*2*0.9*0.8*0.9*CFG.scale,fmOuter:15750*CFG.scale,outerIntercept:0.40,inter:384,warnK:2,zoneK:3,perK:1.2,cdS:30,reserve:0.3,reserveR:0.5,threatCos:0.9,
     hitR:1500,hitMax:0.45,hitMin:0.12,hitDrop:0.33,hitLatV:6000,v0:30,acc:400,vMax:24000,fuelS:600,turnK:4.5,turnV:3000,turnFuel:0.8},
-  icp_self:{kind:'icp',label:'拦截弹',buoyN:2,outer:9450*1.5*2*0.9*0.8*CFG.scale,fmOuter:9450*CFG.scale,outerIntercept:0.25,inter:320,warnK:2,zoneK:3,perK:1.2,cdS:30,reserve:0.3,reserveR:0.5,threatCos:0.9,
+  icp_self:{kind:'icp',label:'拦截弹',buoyN:2,outer:9450*1.5*2*0.9*0.8*0.9*CFG.scale,fmOuter:9450*CFG.scale,outerIntercept:0.25,inter:320,warnK:2,zoneK:3,perK:1.2,cdS:30,reserve:0.3,reserveR:0.5,threatCos:0.9,
     hitR:1500,hitMax:0.45,hitMin:0.12,hitDrop:0.33,hitLatV:6000,v0:30,acc:400,vMax:24000,fuelS:600,turnK:4.5,turnV:3000,turnFuel:0.8},
-  icp_dd:{kind:'icp',label:'拦截弹',buoyN:2,outer:12600*1.5*2*0.9*0.8*CFG.scale,fmOuter:12600*CFG.scale,outerIntercept:0.35,inter:352,warnK:2,zoneK:3,perK:1.2,cdS:30,reserve:0.3,reserveR:0.5,threatCos:0.9,
+  icp_dd:{kind:'icp',label:'拦截弹',buoyN:2,outer:12600*1.5*2*0.9*0.8*0.9*CFG.scale,fmOuter:12600*CFG.scale,outerIntercept:0.35,inter:352,warnK:2,zoneK:3,perK:1.2,cdS:30,reserve:0.3,reserveR:0.5,threatCos:0.9,
     hitR:1500,hitMax:0.45,hitMin:0.12,hitDrop:0.33,hitLatV:6000,v0:30,acc:400,vMax:24000,fuelS:600,turnK:4.5,turnV:3000,turnFuel:0.8}, // 2026-10-10 驱逐档(用户:近防圈介于护卫与巡洋正中):基数 12600 = 核心 15750 与自防御 9450 的中点(乘 1.5 后 18900),inter 352 同为中点;飞行参数与两档一致(那是弹的性能,不是舰种身份)
   // 近防炮:导弹撞上目标那一刻,离撞击点 inner 以内的每艘舰各打一次:打掉的比例 = 命中率 innerIntercept x 过载 x 随机(rand = 随机打折的份量:1 = 均匀随机 0~1、平均打一半,0 = 不打折);
   //   过载:这艘船近防圈(inner)里同时有 ovN 组以上来袭时开始,每多一组摊薄 ovK —— 1 / (1 + max(0, 组数 - ovN + 1) x ovK);再乘多方向 1 / (1 + (圈里来袭的扇面数 - 1) x sectK)
@@ -58,16 +59,22 @@ CLS_LINK.BB={...CLS_LINK.CA}; // TODO(TIER-BAL) 战列数据链待标定
 CLS_LINK.CV={...CLS_LINK.CA};
 CLS_LINK.DD={...CLS_LINK.FF}; // TODO(TIER-BAL) 2026-09-30 驱逐舰:先照搬护卫舰
 CLS_LINK.CL={...CLS_LINK.FF}; // TODO(TIER-BAL) 巡游舰数据链待标定
+/* 2026-10-11 用户:按舰种定数量 —— 副炮门数 巡游 2 / 护卫 3 / 驱逐 5 / 巡洋 8;突击弹 驱逐 2 个发射单元、库存 30 组,巡洋 4 个单元、40 组(每组 6 发);
+   拦截弹库存 巡游 300 / 护卫 450 / 驱逐 400 / 巡洋 420(航母照旧 icp_self 320)。规格照抄上面那一件,只换数量 */
+Object.assign(WPN,{sec_cl:{...WPN.sec_gun,secN:2},sec_ff:{...WPN.sec_gun,secN:3},sec_dd:{...WPN.sec_gun,secN:5},sec_ca:{...WPN.sec_gun,secN:8},
+  ssm_dd:{...WPN.ssm_x,ssmCells:2,ssmAmmo:30*6},ssm_ca:{...WPN.ssm_x,ssmCells:4,ssmAmmo:40*6},
+  icp_cl:{...WPN.icp_core,inter:300},icp_ff:{...WPN.icp_core,inter:450},icp_dd4:{...WPN.icp_dd,inter:400},icp_ca:{...WPN.icp_self,inter:420}});
 const CLS_LOADOUT={ // 配装(Loadout):舰种 → 武器 id 列表。CV 无主炮=结构事实(不装 mac 即可,hasMAC 按 macDmg=0 自动排除),不是待平衡数值
-  FF:['mac_light','msl_light','icp_core','gun_core','chf_core'],
-  CA:['mac_twin','sec_gun','msl_heavy','ssm_x','icp_self','gun_self','chf_self','lure_x2'], // 2026-10-11 加副炮、突击弹、诱饵 // 2026-10-10 用户:轴炮两发(mac_twin)
+  FF:['mac_light','sec_ff','msl_light','icp_ff','gun_core','chf_core'], // 2026-10-11 加副炮 3 门、拦截弹 450
+  CA:['mac_twin','sec_ca','msl_heavy','ssm_ca','icp_ca','gun_self','chf_self','lure_x2'], // 2026-10-11 加副炮(8 门)、突击弹(4 单元 / 40 组)、诱饵;拦截弹 420 // 2026-10-10 用户:轴炮两发(mac_twin)
 };
 CLS_LOADOUT.BB=CLS_LOADOUT.CA.slice(); // TODO(TIER-BAL) 战列配装待标定(克隆 CA)
 CLS_LOADOUT.CV=['msl_heavy','icp_self','gun_self','chf_self'];
-CLS_LOADOUT.DD=['mac_light','sec_gun','msl_light','ssm_x','icp_dd','gun_dd','chf_core']; // 2026-10-11 加副炮、突击弹 // 2026-10-10 用户:舰种分化 —— 近防圈取 FF↔CA 正中(icp_dd/gun_dd),雷达中间档在 20-signature 的 SENS.CLS.DD;机动/舰体/导弹/数据链仍照护卫舰,想再分随时填真值
-CLS_LOADOUT.CL=['msl_cl','icp_core','gun_core','chf_core','lure_x2']; // 2026-10-11 加诱饵 // 2026-10-07 用户:巡游舰没有轴炮、导弹一次两组
+CLS_LOADOUT.DD=['mac_light','sec_dd','msl_light','ssm_dd','icp_dd4','gun_dd','chf_core']; // 2026-10-11 加副炮(5 门)、突击弹(2 单元 / 30 组);拦截弹 400 // 2026-10-10 用户:舰种分化 —— 近防圈取 FF↔CA 正中(icp_dd/gun_dd),雷达中间档在 20-signature 的 SENS.CLS.DD;机动/舰体/导弹/数据链仍照护卫舰,想再分随时填真值
+CLS_LOADOUT.CL=['sec_cl','msl_cl','icp_cl','gun_core','chf_core','lure_x2']; // 2026-10-11 加诱饵;加副炮 2 门、拦截弹 300 // 2026-10-07 用户:巡游舰没有轴炮、导弹一次两组
 const WPN_CAT={mac:'mac',msl:'msl',sec:'mac',ssm:'msl'}; // 2026-10-11 多武器:每种武器(kind)属于底栏哪一格(类)。一类的总开关 s[类+'Gate'] 与这一种的分开关 s[kind+'On'] 两层「与」
-function wpnOn(s,k){const c=WPN_CAT[k];return s[k+'On']!==false&&!(c&&s[c+'Gate']===false);} // 这一种武器许不许自动开火(不含火控开没开);57 的开火门、74 / 89 的扇区都问它
+function wpnOk(s,k){return s[k+'On']!==false;} // 2026-10-11 用户:这一种许不许开火(底栏行尾 绿 = 允许 / 红 = 禁止)。强制开火(序列「强制」/ 中键选定 / 中键点空地)只看它;手动点条照样能打
+function wpnOn(s,k){const c=WPN_CAT[k];return s[k+'On']!==false&&!(c&&s[c+'Gate']===false);} // 这一种武器许不许自动开火(不含火控开没开)= 绿 + 这一类的大勾;57 的自动开火门、74 / 89 的扇区都问它
 function resolveLoadout(cls,tier){ // 配装 → 扁平武器字段(逐字段过 applyTier/tierMul,与 shipStats 同一套乘数机制)
   const src={};const weapons=[],wp={};
   for(const id of (CLS_LOADOUT[cls]||CLS_LOADOUT.FF)){

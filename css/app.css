@@ -418,6 +418,9 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #cmdCard .wr .ck{position:static;width:18px;height:18px;flex:none}
 #cmdCard .wr .ck span{width:13px;height:13px;font-size:10px}
 #cmdCard .ck.gated span{opacity:.35} /* 总开关关着:分开关的勾照记,但这一类不自动打 */
+#cmdCard .wr .ck.pm span{border:none;width:11px;height:11px;border-radius:3px} /* 2026-10-11 用户:行尾 绿 = 允许开火 / 红 = 禁止,多选一半一半 */
+#cmdCard .wr .ck.pm.ok span{background:var(--state-ok)}#cmdCard .wr .ck.pm.no span{background:var(--state-danger)}
+#cmdCard .wr .ck.pm.part span{background:linear-gradient(135deg,var(--state-ok) 50%,var(--state-danger) 50%)}#cmdCard .wr .ck.pm:hover span{outline:1px solid var(--txt-hi)}
 #cmdCard .cells i.sp{background:#8a6bd8}#cmdCard .cells i.sp.ok{background:#b08cff}
 /* 汇总档(放不下逐条时):绿 = 就绪、白 = 选了几发、蓝 = 在装(越深越快好) */
 #cmdCard .wr .cells.ag{height:15px}

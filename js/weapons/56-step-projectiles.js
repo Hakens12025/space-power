@@ -29,7 +29,7 @@ function stepProjectiles(dt){
     const x0=p.pos[0],y0=p.pos[1];
     if(p.type==='decoy')stepDecoyProj(p,dt);
     else if(p.type==='mac')stepMacProj(p,dt);
-    else if(p.type==='missile'){const f0=p.fuel;stepMissileProj(p,dt,icBlue,icRed);p.lit=p.fuel<f0;} // 2026-09-27 这一拍烧没烧油 = 喷没喷火(sensors/22 的 projSig 按它给红外亮度)
+    else if(p.type==='missile'){const f0=p.fuel;stepMissileProj(p,dt,icBlue,icRed);p.lit=f0-p.fuel>MSL_LIT*dt;} // 2026-10-11 用户:滑行不喷火 —— 推力不到满油门 MSL_LIT 的微调算滑行(冷弹、不画尾焰);没油了自然不喷 // 2026-09-27 这一拍烧没烧油 = 喷没喷火(sensors/22 的 projSig 按它给红外亮度)
     else if(p.type==='interceptor')stepInterceptorProj(p,dt);
     if(ARENA&&!p.done&&!arenaIn(p.pos))p.done=true; // 2026-09-26 单局地图:四弹型统一在这里判,出了游玩区就消失
     if(!p.done&&(p.type==='mac'||p.type==='missile'||p.type==='interceptor'))projBlock(p,x0,y0,dt); // 2026-09-29 天体 / 碎石挡弹

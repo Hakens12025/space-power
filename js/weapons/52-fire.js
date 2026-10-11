@@ -76,6 +76,7 @@ function macShotSigma(s,d,t){ // 2026-09-28 这一发的角散布:一维高斯�
   return Math.min(s.sigCap||MAC_SIG_CAP,MAC_HIT_R/(d*Math.SQRT2*erfInv(p)));
 }
 function macEffRange(s){return macRangeAt(s,0.5);} // 有效射程 = 命中率 50% 的距离。调用点一律调它,绝不在别处重拼
+const MSL_LIT=0.15; // 2026-10-11 这一拍推力 ≥ 满油门的 15% 才算「在喷」(weapons/56 p.lit:红外亮度与尾焰同一个判断)。实测反舰导弹 18% 的拍是 < 15% 的同步微调(原来都算喷),15~30% 只有 0.8%
 function mslA(p){return MSL_A*(p.aK||1);} // 2026-10-11 这一组导弹的加速度(突击弹 x SSM_VK:速度曲线与加速度一起乘,同 10-09 导弹提速的做法);weapons/56 的速度控制都读它
 const SSM_R=100000*CFG.scale,SSM_VK=1.5,SSM_LIFE=1.4; // 2026-10-11 突击弹:射程(自动开火门、悬停圈)6 万 / 速度与加速度倍数 / 飞出约 1.4 倍射程(按巡航速度折成时间)还没打中就自毁
 function MSL_W(s){return {cd:s.cellTimer||[],ammo:'ammo',per:s.mslPer||12,rl:s.mslReload||60,vk:1,ssm:false};} // 2026-10-11 fireMissiles 打哪一种:反舰(缺省)

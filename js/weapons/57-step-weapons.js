@@ -19,7 +19,7 @@ function stepWeaponSystems(dt){
     if(s.dead||!s.autoEngage)continue;
     if(s.pickTid!=null){const t=objById(s.pickTid);if(!t||contactDead(t,s.side))s.pickTid=null;} // 2026-10-07 用户:中键选定的目标(command/74 写)没了(找不到 / 这一方看见沉了)就放;先于下一行,序列在跑时也照清
     if(typeof fcActive==='function'&&fcActive(s))continue; // RF5 有火控序列的舰:lockedTarget 归序列执行器所有(weapons/58 每 tick 重写),自动索敌整段让出,否则两边抢锁定
-    if(s.pickTid!=null){s.lockedTarget=objById(s.pickTid);s.lockPlayer=false;if(hasMAC(s)&&wpnOn(s,'mac')){s.driftFire=true;s.driftFireT=60;}continue;} // 选定目标:序列之后、自动索敌之前;一直锁着强制开火(58 fcForce)
+    if(s.pickTid!=null){s.lockedTarget=objById(s.pickTid);s.lockPlayer=false;if(hasMAC(s)&&wpnOk(s,'mac')){s.driftFire=true;s.driftFireT=60;}continue;} // 2026-10-11 强制只看绿(wpnOk) // 选定目标:序列之后、自动索敌之前;一直锁着强制开火(58 fcForce)
     if(s.lockedTarget&&!contactDead(s.lockedTarget,s.side)&&!trkFoe(trkOf(s.side,s.lockedTarget)))s.lockedTarget=null; // TK4c:锁着的东西被确认不是船(石头)⇒ 当场解锁、往下重新挑。石头打不死,不解的话自动索敌会在一块认出来的石头上锁到天荒地老;只"往下挑"不够 —— 候选为空时那一支 continue 掉,旧锁原样留着(实测过)
     if(s.lockedTarget&&!contactDead(s.lockedTarget,s.side)){ // 已有锁定;LL6 死活按这一方看见的(sensors/21 contactDead,上一行同)
       /* MT1 修:自动索敌锁着目标时,每拍续上漂移射击(与火控序列 weapons/58 每拍续期是同一个动作)。
@@ -44,17 +44,18 @@ function stepWeaponSystems(dt){
   // RF2 导弹自动齐射(底栏"导弹"开关的自动行为):火控开+导弹开+锁定活目标+已定位+35万内+就绪单元过半 → 下令。
   // 波次节流靠发射单元 60s 独立装填天然限流,无需定时器;敌方不受影响(red 的 autoEngage 恒 false,enemyAI 走自己的 8% 掷骰)。
   for(const s of ships){
-    if(s.dead||!s.autoEngage||!wpnOn(s,'msl'))continue; // 2026-10-11 总开关 + 分开关(weapons/51 wpnOn)
+    if(s.dead||!s.autoEngage||!wpnOk(s,'msl'))continue; // 2026-10-11 绿 = 允许;自动还要这一类的大勾(下面 wpnOn),强制(序列「强制」/ 中键选定 / 中键点空地)只看绿
     if(s.fcFired&&s.fcFired.msl)continue; // RF5 核查修:本 tick 序列刚真发射过(S14 的 missileArm 倒计时就在本函数开头,发完立刻把 missileArm 清空),此刻 s.fcTgt.msl 还是本 tick 开头解算的【旧目标】—— rot 要等 tick 末的 S17b stepFireControlPost 才前进。这里若照排,下一发会继承旧目标,rr 轮询在导弹侧完全失效(实测一轮恰好 2 发,rot 0→1→0 归位,第二个目标永远轮不到)。让出一拍(0.02s)再排,下一 tick 解算出的就是前进后的目标;无序列的舰不长 fcFired 字段,不受影响
     const fp=(s.fTgt&&s.fTgt.n.msl<FT_N)?s.fTgt:null; // 2026-09-29 强制目标点(74 中键点空地)插队:同一道勾选门(本循环开头的 autoEngage / mslOn),区域齐射、不看射程
     if(fp){const ready=readyCells(s);if(!s.missileArm&&ready>=Math.ceil((s.cells||4)/2)){orderMissileSalvo(s,{pos:fp.pt.slice()},Math.min(2,ready));if(s.missileArm)fp.n.msl++;}continue;}
     const t=(typeof fcActive==='function'&&fcActive(s))?(s.fcTgt&&s.fcTgt.msl):s.lockedTarget; // RF5 有序列则目标来源换成序列解算结果(舰);没序列沿用原锁定
     if(!t)continue;
+    const frc=typeof fcForce==='function'&&fcForce(s,'msl');if(!frc&&!wpnOn(s,'msl'))continue;
     if(contactDead(t,s.side)||t.side===s.side)continue; // LL6 死活按这一方看见的
     if(!contactFix(t,s.side))continue; // 与手动齐射同一道定位门
     { // WR1:没有发射门了;自动齐射(玩家的「火控」钮)只在动力射程内打,免得自动化替玩家把弹药扔到滑行段去;距离按估计位置量
       const tp=(typeof contactPos==='function')?contactPos(t,s.side):null; if(!tp)continue;
-      if(!(typeof fcForce==='function'&&fcForce(s,'msl'))&&V.len(V.sub(tp,s.pos))>=mslReach(s))continue; // 2026-09-29 强制开火的序列不看射程
+      if(!frc&&V.len(V.sub(tp,s.pos))>=mslReach(s))continue; // 2026-09-29 强制开火的序列不看射程
     }
     const ready=readyCells(s);
     if(ready<Math.ceil((s.cells||4)/2))continue; // 过半就绪才打,自然成波(导弹Arm/弹药不足由 orderMissileSalvo 内部兜底)
@@ -108,26 +109,32 @@ function stepWeaponSystems(dt){
     if(shot){ff.n=(ff.n||1)-1;if(ff.n<=0){s.forceMac=null;s.turnTarget=null;}} // 2026-10-10 n:这道令要打几门(绿条按门选),打完一门还有剩就继续瞄下一门;打完 / 超时才撤
   }
   for(const s of ships){ // 2026-10-11 突击弹自动开火:火控开 + 总开关 / 分开关 + 目标(序列 / 锁定)已定位且在 SSM_R 以内 → 就绪的发射单元一起打(红方 autoEngage 恒关,红方 AI 先不用它)
-    if(s.dead||!s.autoEngage||!s.ssmCells||!s.ssmCells.length||!wpnOn(s,'ssm')||(s.ssmAmmo||0)<(s.ssmPer||6))continue;
+    if(s.dead||!s.autoEngage||!s.ssmCells||!s.ssmCells.length||!wpnOk(s,'ssm')||(s.ssmAmmo||0)<(s.ssmPer||6))continue; // 2026-10-11 绿 = 允许(强制只看它),自动还要大勾
+    const rd=s.ssmCells.filter(x=>x<=0).length,fp=(s.fTgt&&(s.fTgt.n.ssm||0)<FT_N)?s.fTgt:null; // 中键点空地 = 强制:就绪单元一起打过去(区域齐射)
+    if(fp){if(rd>0){fireMissiles(s,{pos:fp.pt.slice()},rd,null,SSM_W(s));fp.n.ssm=(fp.n.ssm||0)+1;}continue;}
     const t=(typeof fcActive==='function'&&fcActive(s))?(s.fcTgt&&s.fcTgt.msl):s.lockedTarget;if(!t||contactDead(t,s.side)||!contactFix(t,s.side))continue;
-    const q=contactPos(t,s.side),rd=s.ssmCells.filter(x=>x<=0).length;if(q&&rd>0&&V.len(V.sub(q,s.pos))<=SSM_R)fireMissiles(s,t,rd,null,SSM_W(s));}
+    const frc=typeof fcForce==='function'&&fcForce(s,'msl');if(!frc&&!wpnOn(s,'ssm'))continue; // 2026-10-11 用户:强制开火时突击弹也打、不看射程门 SSM_R(超了照样按 SSM_LIFE 自毁)
+    const q=contactPos(t,s.side);if(q&&rd>0&&(frc||V.len(V.sub(q,s.pos))<=SSM_R))fireMissiles(s,t,rd,null,SSM_W(s));}
   // 锁定自动开火(10秒一轮):机头转到位(MAC_ALIGN)才开炮(不盲射);v125 ROE门控
   for(const s of ships){
-    const roeOK=wpnOn(s,'mac')&&(s.roe==='free'||(s.roe==='tight'&&s.roeCd>0)); // free自由/tight被攻击才还击(roeCd=受击冷却)/hold不开火;RF2 主炮开关:关=不参与自动开火
+    const roe=s.roe==='free'||(s.roe==='tight'&&s.roeCd>0),frc=typeof fcForce==='function'&&fcForce(s,'mac'); // free自由/tight被攻击才还击(roeCd=受击冷却)/hold不开火
+    const roeOK=wpnOn(s,'mac')&&roe,frcOK=wpnOk(s,'mac')&&roe; // 2026-10-11 用户:自动开火 = 大勾 + 绿,强制(序列「强制」/ 中键选定 / 中键点空地)只看绿
     const mt=(typeof fcActive==='function'&&fcActive(s))?(s.fcTgt&&s.fcTgt.mac):s.lockedTarget; // RF5 有序列则打序列解算的主炮目标:序列可能只许导弹打(allow.mac=false),这时 lockedTarget 虽被写成导弹目标,主炮也不许跟着开
     const fp=(s.fTgt&&s.fTgt.n.mac<FT_N&&hasMAC(s))?s.fTgt:null; // 2026-09-29 强制目标点插队:主炮勾着(roeOK)才转向带提前量的那个点,对准就开一炮
-    s.ftAim=!!(fp&&roeOK&&!s.dead)||!!(s.forceMac&&s.forceMac.pt); // 主炮正朝一个点对准(强制目标点 / ⌖ 打空地):physics/31 的战斗转向让位,否则每拍朝向层转到位清掉 turnTarget、战斗转向又拉回锁定目标,来回拉锯永远对不准
-    if(fp&&roeOK&&!s.dead){if(macShootPt(s,fp.pt))fp.n.mac++;}
-    else if(roeOK&&!s.dead&&mt&&!contactDead(mt,s.side)&&mt.side!==s.side&&macReady(s)>0&&hasMAC(s)&&macAligned(s,mt)){ // LL6 死活按这一方看见的 // WR1:自动开火只在把握 >= MAC_AUTO_P 时打(没有射程门了);距离按估计位置量。这一条【不看 autoEngage】,红方 bot 的开火实际走的就是它。2026-10-10 macCd<=0 改 macReady>0(双管:任一门就绪即可开)
-      const mp=macPred(s,mt); if(mp&&((typeof fcForce==='function'&&fcForce(s,'mac'))||macHitProb(s,V.len(V.sub(mp,s.pos)),mt)>=MAC_AUTO_P))fireMAC(s,mt); // 2026-09-29 强制开火的序列不看把握门
+    s.ftAim=!!(fp&&frcOK&&!s.dead)||!!(s.forceMac&&s.forceMac.pt); // 主炮正朝一个点对准(强制目标点 / ⌖ 打空地):physics/31 的战斗转向让位,否则每拍朝向层转到位清掉 turnTarget、战斗转向又拉回锁定目标,来回拉锯永远对不准
+    if(fp&&frcOK&&!s.dead){if(macShootPt(s,fp.pt))fp.n.mac++;}
+    else if((frc?frcOK:roeOK)&&!s.dead&&mt&&!contactDead(mt,s.side)&&mt.side!==s.side&&macReady(s)>0&&hasMAC(s)&&macAligned(s,mt)){ // LL6 死活按这一方看见的 // WR1:自动开火只在把握 >= MAC_AUTO_P 时打(没有射程门了);距离按估计位置量。这一条【不看 autoEngage】,红方 bot 的开火实际走的就是它。2026-10-10 macCd<=0 改 macReady>0(双管:任一门就绪即可开)
+      const mp=macPred(s,mt); if(mp&&(frc||macHitProb(s,V.len(V.sub(mp,s.pos)),mt)>=MAC_AUTO_P))fireMAC(s,mt); // 2026-09-29 强制开火的序列不看把握门
     } // TIER1 主炮 舰种门改能力谓词
-    if(s.secCds&&!s.dead&&secReady(s)>0&&wpnOn(s,'sec')&&(s.roe==='free'||(s.roe==='tight'&&s.roeCd>0))&&mt&&!contactDead(mt,s.side)&&mt.side!==s.side){ // 2026-10-11 副炮:炮塔不看机头;同主炮这道门(roe + 总开关 / 分开关,不看 autoEngage —— 红方 bot 也走这里),把握 ≥ MAC_AUTO_P 才打
-      const mp=macPred(s,mt);if(mp&&secHitProb(s,V.len(V.sub(mp,s.pos)),mt)>=MAC_AUTO_P)fireSec(s,mt);}
+    const fps=(s.fTgt&&(s.fTgt.n.sec||0)<FT_N)?s.fTgt:null; // 2026-10-11 用户:强制开火时副炮也打 —— 中键点空地:就绪的门一起打过去,算一次
+    if(fps&&s.secCds&&!s.dead&&secReady(s)>0&&wpnOk(s,'sec')&&roe){while(secReady(s)>0&&fireSecAt(s,fps.pt));fps.n.sec=(fps.n.sec||0)+1;}
+    else if(s.secCds&&!s.dead&&secReady(s)>0&&(frc?wpnOk(s,'sec'):wpnOn(s,'sec'))&&roe&&mt&&!contactDead(mt,s.side)&&mt.side!==s.side){ // 强制(frc:同主炮那条序列 / 中键选定)只看绿、不看把握门 // 2026-10-11 副炮:炮塔不看机头;同主炮这道门(roe + 总开关 / 分开关,不看 autoEngage —— 红方 bot 也走这里),把握 ≥ MAC_AUTO_P 才打
+      const mp=macPred(s,mt,SEC_SPD);if(mp&&(frc||secHitProb(s,V.len(V.sub(mp,s.pos)),mt)>=MAC_AUTO_P))fireSec(s,mt);}
     if(s.roeCd>0)s.roeCd-=dt;
   }
   for(const s of ships){const f=s.fTgt;if(!f)continue; // 强制目标点:勾着的每件武器都打够 FT_N 次就撤(没勾的不等;一件没勾 = 立刻撤,一发不打)
-    const fc=s.autoEngage&&s.roe!=='hold',on=k=>fc&&(k==='mac'?(hasMAC(s)&&wpnOn(s,'mac')):((s.ammo||0)>=(s.mslPer||12)&&wpnOn(s,'msl')));
-    if(s.dead||['mac','msl'].every(k=>!on(k)||f.n[k]>=FT_N))s.fTgt=null;}
+    const fc=s.autoEngage&&s.roe!=='hold',on=k=>fc&&wpnOk(s,k)&&(k==='mac'?hasMAC(s):k==='sec'?!!(s.secCds&&s.secCds.length):k==='ssm'?!!(s.ssmCells&&s.ssmCells.length)&&(s.ssmAmmo||0)>=(s.ssmPer||6):(s.ammo||0)>=(s.mslPer||12)); // 2026-10-11 绿的都算(副炮 / 突击弹也打)
+    if(s.dead||['mac','msl','sec','ssm'].every(k=>!on(k)||(f.n[k]||0)>=FT_N))s.fTgt=null;}
 }
 /* 2026-10-09 用户:拦截弹和近防炮可以打对方的前出浮标。都只打这一方定位了的(同开火门 contactFix),位置 / 速度读这一方的估计(contactKin / contactPos)。
    拦截弹:这一拍没有要拦的来袭导弹时,打预警距离(外圈 x warnK)里的对方浮标,一个浮标只派一组(WPN icp_* buoyN 颗),库存低于 reserve 不打(留给导弹);命中判定在 56。

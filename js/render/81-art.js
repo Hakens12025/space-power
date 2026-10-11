@@ -210,10 +210,11 @@ const ART_TR=new Map(),ART_TR_MAX=600,ART_TR_DT={rail:0.1,hvy:0.1,ssm:0.05},ART_
 function artTrack(p,pos,side,w,lit){const t=artNow();let e=ART_TR.get(p);
   if(!e){if(ART_TR.size>=ART_TR_MAX)return null;const born=(p.age||0)<1;e={w,side,pts:[],seen:t,t0:t,born,cur:null,igT:-1,igP:null,n:1};ART_TR.set(p,e);
     if(born&&p.type==='mac'&&p.shooter&&!p.shooter.dead&&(adminMode||p.shooter.side===VIEW))artMuzzleAdd(p,w==='rail');}
-  e.seen=t;e.side=side;e.cur=[pos[0],pos[1]];e.n=p.count||1;const keep=ART_TR_KEEP[w]||0;
+  e.seen=t;e.side=side;e.cur=[pos[0],pos[1]];e.n=p.count||1;if(lit)e.litT=t;const keep=ART_TR_KEEP[w]||0;
   if(keep){const L=e.pts[e.pts.length-1];if((w!=='hvy'||lit)&&(!L||t-L[0]>=ART_TR_DT[w]))e.pts.push([t,pos[0],pos[1]]);while(e.pts.length&&t-e.pts[0][0]>keep)e.pts.shift();}
   if(w==='hvy'&&e.born&&e.igT<0&&t-e.t0>=ART_IGN){e.igT=t;e.igP=[pos[0],pos[1]];}
   return e;}
+function artBurn(e,lit){return e?(e.litT!==undefined&&artNow()-e.litT<0.12):!!lit;} // 2026-10-11 尾焰画不画:最近 0.12 s 喷过(转向时推力一拍有一拍没有,不让尾焰一闪一闪);滑行 / 没油不画
 function artCold(e){return !!(e&&e.w==='hvy'&&e.born&&artNow()-e.t0<ART_IGN);} // 重弹还在冷发射(没点火)
 function artTrSpr(side){if(ART_TRS[side])return ART_TRS[side];const c=artCv(256,4),g=c.getContext('2d'),col=artLit(ART_SIDE[side]||ART_SIDE.blue,0.55),gr=g.createLinearGradient(0,0,256,0);
   gr.addColorStop(0,artCss(col,0));gr.addColorStop(0.7,artCss(col,0.2));gr.addColorStop(1,artCss(col,0.45));g.fillStyle=gr;g.fillRect(0,0,256,4);return ART_TRS[side]=c;} // 轴炮尾迹:尾淡头亮
@@ -254,13 +255,13 @@ function artDart(g,x,y,rot,side,Lg){const col=ART_SIDE[side],gl=artFxSpr('glow'+
   artPath(g,ART_DART);g.strokeStyle='rgba(0,0,0,.8)';g.lineWidth=1.1/Lg;g.stroke();g.fillStyle=artCss(artLit(col,0.1));g.fill();
   g.save();artPath(g,ART_DART);g.clip();const up=artLocalL(rot)[1]<0;g.fillStyle=artCss(artLit(col,0.45));g.fillRect(-0.5,up?-0.25:0.02,1,0.23);g.fillStyle=artCss(artLit(col,0.6));g.fillRect(0.3,-0.1,0.22,0.2);g.restore(); // 迎光一侧亮一档、导引头亮一档
   g.restore();}
-function artSsm(g,e,side,cnt,rot){const L=artLFF(),Lg=0.2*L,gap=0.3*L,n=cnt>=3?3:1,t=artNow(),sd=side==='red'?'red':'blue';
+function artSsm(g,e,side,cnt,rot,burn){const L=artLFF(),Lg=0.2*L,gap=0.3*L,n=cnt>=3?3:1,t=artNow(),sd=side==='red'?'red':'blue';
   const P=[toScreen(e.cur[0],e.cur[1])];let lp=0;for(let i=e.pts.length-1;i>=0&&lp<(n-1)*gap;i--){const q=toScreen(e.pts[i][1],e.pts[i][2]),b=P[P.length-1];lp+=Math.hypot(q[0]-b[0],q[1]-b[1]);P.push(q);} // 屏幕上的路:此刻往回,只换算到够排下这一串
   const D=[[P[0][0],P[0][1],rot]];
   for(let j=1;j<n;j++){const d=j*gap;let acc=0,f=null;for(let i=0;i+1<P.length;i++){const a=P[i],b=P[i+1],l=Math.hypot(b[0]-a[0],b[1]-a[1]);if(l>0&&acc+l>=d){const u=(d-acc)/l;f=[a[0]+(b[0]-a[0])*u,a[1]+(b[1]-a[1])*u,Math.atan2(a[1]-b[1],a[0]-b[0])];break;}acc+=l;}
     if(f)D.push(f);} // 路还没那么长的那几发还在弹舱里(一发接一发出膛)
   const dot=Lg<7; // 亮点档:只给领头那发画尾焰(尾焰头上自带一团光),几发的点并成两笔填 —— 战术层几十组同屏时每组 3 次贴图而不是 9 次
-  for(let j=0;j<(dot?1:D.length);j++){const q=D[j],c=Math.cos(q[2]),s=Math.sin(q[2]),fl=0.75+0.25*Math.sin(t*61+j*2.3)+0.12*Math.sin(t*137+j);
+  for(let j=0;j<(burn?(dot?1:D.length):0);j++){const q=D[j],c=Math.cos(q[2]),s=Math.sin(q[2]),fl=0.75+0.25*Math.sin(t*61+j*2.3)+0.12*Math.sin(t*137+j);
     artPlume(g,'msl'+sd,1,q[0]-c*Lg*0.5,q[1]-s*Lg*0.5,q[2]+Math.PI,Math.max(3,Lg*2.6)*fl,Math.max(1.6,Lg*0.7),1);}
   if(dot){const r0=Math.max(0.8,Lg*0.2),r1=Math.max(0.5,Lg*0.12);g.fillStyle=artCss(artLit(ART_SIDE[sd],0.3));g.beginPath();for(const q of D){g.moveTo(q[0]+r0,q[1]);g.arc(q[0],q[1],r0,0,6.283);}g.fill();
     g.fillStyle='#fff';g.beginPath();for(const q of D){g.moveTo(q[0]+r1,q[1]);g.arc(q[0],q[1],r1,0,6.283);}g.fill();return;}
