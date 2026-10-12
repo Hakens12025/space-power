@@ -307,6 +307,19 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
     return;
   }
   const mq=selMissile?projViewLook(selMissile):null,m=mq?selMissile:null; // LL9 还在不在、对方弹的速度读主视角画它的弹影(render/83 projViewLook:对方的余像消失才算没了;自己的 / 关开关 = 真弹没 done)
+  if(m&&m.type==='interceptor'){ // 2026-10-12 用户:拦截弹能点 —— 自己的报目标 / 燃料 / 防区;对方的只报速度与弹影颗数(目标、燃料我方不知道)
+    const own=adminMode||(!!m.shooter&&m.shooter.side===ME),rw=(k,v)=>`<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`;
+    title.textContent=own?'拦截弹':'敌方拦截弹';if(ciN)ciN.textContent=own?'拦截弹 #'+m.icId:'敌方拦截弹';if(ciC)ciC.textContent=own?'射手 '+(m.shooter?m.shooter.name:'—'):'—';if(ciSp)ciSp.innerHTML='';
+    if(!own){box.innerHTML=rw('速度',Math.round(SHOW.v(V.len(mq.vel)))+' km/s')+rw('剩余',(mq.count||16)+' 颗');updateCmdBar([]);return;}
+    const t=m.target,tq=!t?null:(t.kind?(viewDead(t)?null:viewPos(t)):(projSeen(t)?projViewPos(t):null)),tdist=tq?V.len(V.sub(tq,m.pos)):0; // 同 83 drawIcpIntent:浮标读航迹位置,弹读弹影
+    const tgt=!t?'无 · 搜索中':(t.kind?xhName(t):(t.type==='decoy'?'诱饵弹':'来袭导弹组'+(tq?' · '+(projViewLook(t).count||16)+' 颗':'')))+(t&&!tq?' · 看不见':'');
+    const s=m.shooter,c=(s&&!s.dead)?s.pos:m.icLast,dh=c?V.len(V.sub(m.pos,c)):0,F0=PHYS.t((m.wp||icpOf(s)).fuelS),fu=Math.max(0,Math.min(100,Math.round((m.fuel||0)/F0*100)));
+    box.innerHTML=`<div class="hpbar"><i style="width:${fu}%;background:${fu>30?'var(--state-active)':'var(--state-warn)'}"></i></div>`
+      +rw('燃料',m.fuel>0?Math.ceil(SHOW.t(m.fuel))+'s · '+fu+'%':'耗尽')+rw('剩余',(m.count||16)+' 颗')+rw('速度',Math.round(SHOW.v(V.len(m.vel)))+' km/s')
+      +rw('目标',tgt+(tdist?' · '+Math.round(tdist/1000)+'k':''))+rw('防区','离发射舰 '+Math.round(dh/1000)+'k / '+Math.round(Math.sqrt(m.icR2||0)/1000)+'k(出圈自毁)')
+      +rw('换目标','中键点来袭导弹组');
+    updateCmdBar([]);return;
+  }
   if(m&&m.type==='missile'&&!adminMode&&m.shooter&&m.shooter.side!==ME){ // 2026-09-28 敌方弹:只报看得见的量(射手、燃料、目标我方不知道)
     title.textContent='敌方导弹';if(ciN)ciN.textContent='敌方导弹';if(ciC)ciC.textContent='—';if(ciSp)ciSp.innerHTML='';
     box.innerHTML=`<div class="row"><span class="k">速度</span><span class="v">${Math.round(SHOW.v(V.len(mq.vel)))} km/s</span></div>`;

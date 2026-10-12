@@ -74,7 +74,7 @@ const ENT={
     title(){return '彗星';},name(){return '彗星';},
     info(o,ref){return entRows([['类别','彗星 · 拖着尾巴(挡红外 / 可见光)'],entBrg(this.at(o),ref)])+entRef(ref);}},
   msl:{k:'msl',tier:1,follow:true, // 导弹组:排在其他实体之后(原 groupAt 只在没点中船时才看)
-    each(f){for(const p of projAll())if(p.type==='missile'&&projSeen(p))f(p);}, // LL9 连余像:画着的对方弹在消失的光到之前也点得到
+    each(f){for(const p of projAll())if((p.type==='missile'||p.type==='interceptor')&&projSeen(p))f(p);}, // LL9 连余像:画着的对方弹在消失的光到之前也点得到;2026-10-12 用户:拦截弹组也能点(选中只这一组,不组网)
     at(p){return projSeen(p)?projViewPos(p):null;}, // LL5 点在画它的那一点;没了给 null
     r(){return 30;},
     live(){return true;}, // 由 at 给不给位置决定
@@ -90,7 +90,7 @@ const ENT={
     title(){return '天体';},name(){return '天体';}},
 };
 const ENT_KINDS=[ENT.ship,ENT.obj,ENT.sta,ENT.moon,ENT.comet,ENT.msl,ENT.body];
-function entKind(o){if(!o)return null;const k=o.kind;if(k==='moon'||k==='comet'||k==='body')return ENT[k];if(k==='station')return ENT.sta;if(o.type==='missile')return ENT.msl;return k?ENT.obj:ENT.ship;}
+function entKind(o){if(!o)return null;const k=o.kind;if(k==='moon'||k==='comet'||k==='body')return ENT[k];if(k==='station')return ENT.sta;if(o.type==='missile'||o.type==='interceptor')return ENT.msl;return k?ENT.obj:ENT.ship;}
 /* 统一的点选:光标 (sx, sy) 附近最近的一个 → {o, K, d, p} 或 null。
    q.k 只看这几类 / q.ok(o,K) 过滤 / q.r 统一半径(盖过各类自己的)/ q.drag 靶场拖动(真实位置、拖动半径、只看能拖的)/ q.side 按哪一方的航迹表 /
    q.agg 先看编队聚合框:'blue' 我方方框给一艘、'red' 对方菱形给一艘、'all' 都看(框里的船不画在自己的位置上,不这么做就点不到它们,SN6)。

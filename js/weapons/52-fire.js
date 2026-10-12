@@ -184,7 +184,7 @@ function fireDecoy(shooter){ // v125 诱饵弹:模拟舰船热信号骗敌方拦
 }
 function fireInterceptor(shooter,targetMissile,count,look){ // 发射拦截导弹实体(燃料模式v114:可出远门防御);参数读发射舰的拦截弹(51-ciws icpOf),弹上带一份 wp
   const w=icpOf(shooter);
-  projectiles.push({type:'interceptor',count:count||16,pos:shooter.pos.slice(),vel:shooter.vel.slice(),wp:w,
+  projectiles.push({type:'interceptor',icId:++icpSeq,count:count||16,pos:shooter.pos.slice(),vel:shooter.vel.slice(),wp:w, // icId = 拦截弹组号(2026-10-12 进命令参数,command/68 按它找弹)
     target:targetMissile,shooter,spd:Math.max(PHYS.v(w.v0)*INT_VK,V.len(shooter.vel)),age:0,fuel:PHYS.t(w.fuelS),
     hitMul:(shooter.interHitMul||1),icLast:shooter.pos.slice(),icR2:INT_ZONE_R2*icpRadarK(shooter)**2}); // 2026-10-11 开着雷达照射发的:防区跟着射程 x ICP_RADAR_K
   {const p=projectiles[projectiles.length-1],q=look||targetMissile,tv=q.vel||MAC_V0;let d=V.norm(V.sub(q.pos,p.pos)); // 2026-10-08 用户:出膛直接朝要拦的目标(原来继承发射舰速度、先顺着船的航向飞出去再拐);瞄点 = 发射舰看到的来袭弹 + 提前量(同 56 飞行中的瞄法),速率不变
@@ -193,6 +193,7 @@ function fireInterceptor(shooter,targetMissile,count,look){ // 发射拦截导�
   if(typeof llBorn==='function')llBorn(projectiles[projectiles.length-1]); // LL1 弹丸出生登记(sensors/26 光锥层;只记录不改模拟)
 }
 let missileGroupSeq=0;
+let icpSeq=0;                 // 拦截弹组号(fireInterceptor 写 icId)
 let netSeq=0;                 // 导弹网序列号(v125:一次齐射=一个网,单组也算网)
 const nets=new Map();         // 网元信息 netId -> {id,mode,groups:[gid],shooter,fmt,fctrl:'auto'|'hold',manualTarget}
 function readyCells(s){return s.cellTimer?s.cellTimer.filter(t=>t<=0).length:s.cells||0;} // 就绪发射单元数

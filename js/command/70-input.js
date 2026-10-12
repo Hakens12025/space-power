@@ -104,6 +104,13 @@ function mslAimAt(sx,sy){ // 2026-10-08 用户:选中我方导弹,中键点已�
   const t=targetAt(sx,sy),ok=!!t&&(adminMode||trkFix(trkOf(ME,t))),w=worldAt(sx,sy);
   cxMslAim(on,ok?t:null,ok?null:ordArenaClamp([w[0],w[1],0]));
   cmdTipFlash((ok?'导弹改打这个目标':'导弹改飞向这一点(到点'+(on.every(p=>p.mineOk)?'停下变雷':(on.some(p=>p.mineOk)?'按各组的变雷开关':'接着飞'))+')')+' · '+on.length+' 组'+(off?' · '+off+' 组断链没改':''),2500);}
+function icpAimOn(){const p=selMissile;return !!p&&p.type==='interceptor'&&!p.done&&(adminMode||(!!p.shooter&&p.shooter.side===ME));} // 2026-10-12 选中了我方拦截弹
+function icpAimAt(sx,sy){ // 2026-10-12 用户:选中我方拦截弹,中键点对方导弹组 = 改拦它;防区外也能选(出防区照旧自毁,给提示);点空了只给提示
+  const p=selMissile,h=entPick(sx,sy,{k:['msl'],ok:o=>o.type==='missile'&&!!o.shooter&&o.shooter.side!==p.shooter.side&&(o.count||0)>0});
+  if(!h){cmdTipFlash('中键点来袭导弹组 = 拦截弹改拦它',2500);return;}
+  cxIcpAim([p],h.o);
+  const s=p.shooter,c=(s&&!s.dead)?s.pos:p.icLast,out=!!c&&(h.p[0]-c[0])**2+(h.p[1]-c[1])**2+((h.p[2]||0)-(c[2]||0))**2>(p.icR2||Infinity); // 防区按画它的那一点量(同 weapons/52 icHome,不调它:它会写弹上的 icLast)
+  cmdTipFlash('拦截弹改拦这组导弹'+(out?' · 目标在防区外,拦截弹出防区会自毁':''),2500);}
 function clearPendings(){
   /* 所有【点选待命态】的统一清口 —— 这些状态两两互斥:同时置位时,左键消费串里排在前面的那个会先吃掉
      那一次点击并 return,后面那个【无声留到下一次左键】,而那时它下达的是一条真命令(不只是吃一次点击)。
@@ -270,7 +277,7 @@ function mdLeft(e,sx,sy){ // 左键
     return;
   }
   const h=entPick(sx,sy,{agg:'all',ok:(o,K)=>!!K.sel(o)}),sk=h?h.K.sel(h.o):null; // 2026-10-08 实体登记表(command/69):能选的里离光标最近的一个 —— 我方舰 60 px、我方浮标 14 px、其余 24 px(比船近才先选它;刚放出去的浮标叠在船上让给船);导弹组排在后面
-  if(sk==='msl'&&e.ctrlKey){mslSelToggle(h.o);selDrag=null;if(typeof updateSelPanel==='function')updateSelPanel();return;} // 2026-10-09 用户:Ctrl+点导弹组 = 加进 / 移出多选(同舰船)
+  if(sk==='msl'&&e.ctrlKey&&h.o.type==='missile'){mslSelToggle(h.o);selDrag=null;if(typeof updateSelPanel==='function')updateSelPanel();return;} // 2026-10-09 用户:Ctrl+点导弹组 = 加进 / 移出多选(同舰船)
   if(sk==='msl'){selDrag={x0:sx,y0:sy,x1:sx,y1:sy,mslClick:h.o};return;} // 2026-10-09 按在导弹上先不定:松手没拖 = 选整个网(原来的点选),拖了 = 框选(导弹挤成一团时起手点总落在导弹上,原来按下就选中、拉不出框)
   if(sk&&sk!=='ship'){selSet(sk,h.o);selDrag=null;if(typeof updateSelPanel==='function')updateSelPanel();return;} // 浮标 / 据点(底栏雷达)、导弹组(v125 点中组 = 选整个网)、只看信息
   selSet('ship',selected); // 没点中它们 → 取消它们的选中,舰船照旧往下走
@@ -286,7 +293,7 @@ function mdMiddle(e,sx,sy){ // RF5 中键:短按=快速交战(原「拖拽平移
   if(e.preventDefault)e.preventDefault(); // 阻止浏览器中键自动滚动
   mmb={t:nowMs(),sx,sy,shift:e.shiftKey}; // RF5 起计时:用墙钟(暂停时也要能交战);位移判定在 mouseup 直接比坐标,中键不再置 panning 所以不能用 panning.moved。RF5 Phase C 追加 shift:三种上下文要的是【按下瞬间】的 Shift,定时器回调里 e 已回收、键也可能松了
   clearTimeout(mmbTimer);mmbTimer=null; // RF5 Phase C 连击防叠表(第四个清理点)
-  if(!(typeof rad!=='undefined'&&rad.open)&&!mslAimOn())          // RF5 Phase C 轮盘已开时中键只承担「短按=关」,不再排新的开;选中我方导弹时中键 = 改目标,不弹轮盘
+  if(!(typeof rad!=='undefined'&&rad.open)&&!mslAimOn()&&!icpAimOn()) // RF5 Phase C 轮盘已开时中键只承担「短按=关」,不再排新的开;选中我方导弹时中键 = 改目标,不弹轮盘
     mmbTimer=setTimeout(()=>{                                    // RF5 Phase C 长按 350ms 在【松手前】弹轮盘(手柄轮盘的手感),不能等 mouseup
       mmbTimer=null;
       if(!mmb)return;                                            // 已被 mouseup/blur 清账 = 抬手早于 350ms
@@ -392,6 +399,7 @@ window.addEventListener('mouseup',e=>{
     mmb=null; // 计时一律就地清账,与下面走不走得到无关
     clearTimeout(mmbTimer);mmbTimer=null; // RF5 Phase C 同理就地清表:位置必须仍在下面 dragOrder 早退之前,否则抬手后轮盘还会迟到 350ms 弹出来
     if(!dragOrder&&!moved&&mslAimOn()&&!(typeof rad!=='undefined'&&rad.open))mslAimAt(msx,msy); // 选中我方导弹:中键 = 改目标(长短按都算)
+    else if(!dragOrder&&!moved&&icpAimOn()&&!(typeof rad!=='undefined'&&rad.open))icpAimAt(msx,msy); // 2026-10-12 选中我方拦截弹:中键 = 改拦哪组(长短按都算)
     else if(!dragOrder&&held<MMB_HOLD_MS&&!moved){ // dragOrder 原本就靠早退吃掉中键,语义照旧;长按(>=MMB_HOLD_MS)这里天然什么都不做——轮盘已由 mousedown 的定时器弹出,不必再加互斥
       if(typeof rad!=='undefined'&&rad.open){if(typeof radClose==='function')radClose();} // RF5 Phase C 轮盘开着:短按中键=关
       else if(typeof xhQuickEngage==='function')xhQuickEngage(mShift);                    // RF5 Phase B 快速交战;RF7 带上 Shift:按住=追加进当前编辑序列(选定手势),不按=新建

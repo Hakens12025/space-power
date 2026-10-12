@@ -297,6 +297,7 @@ function drawProjectiles(){ // 弹丸/导弹
         ctx.beginPath();ctx.arc(s[0],s[1],12,0,6.283);ctx.stroke();
         const showSet=SM?[...SM].filter(x=>!x.done&&projSeen(x)):[p]; // 2026-09-28 同网里看不见的弹不画;2026-10-09 多选的每组都画目标线
         drawChain(p); // 传播链路:整簇一条线(83 的 drawChain)
+        if(p.type==='interceptor')drawIcpIntent(p,s); // 2026-10-12 拦截弹:防区圈 + 目标虚线
         showSet.forEach(g=>{drawMissileIntent(g);});
       }
       // DS169 信息分层:常态只画细箭头,文字数据收进选中态(点选/网选才显示速率/剩余/燃料/目标)
@@ -309,7 +310,7 @@ function drawProjectiles(){ // 弹丸/导弹
           ctx.fillStyle=redSide?'rgba(255,93,93,.9)':(p.type==='interceptor'?'rgba(127,240,226,.9)':'rgba(255,209,102,.85)');
           ctx.font='10px Consolas';ctx.textAlign='left';ctx.textBaseline='top';
           const rem=q.count||16,en=p.shooter&&p.shooter.side!==VIEW&&!adminMode; // LL9 颗数读弹影(那一刻的);对方的拦截弹燃料我方不知道,不报
-          if(p.type==='interceptor')ctx.fillText(en?`⛔拦截 ▲${Math.round(SHOW.v(vn))}(剩${rem}颗)`:`⛔拦截 ▲${Math.round(SHOW.v(vn))}(剩${rem}颗${p.fuel>0?' ⛽'+Math.round(p.fuel):' ⛽尽'})`,s[0]+7,s[1]+7); // LL11 速度经 SHOW.v 换成物理 km/s(同导弹那一行)
+          if(p.type==='interceptor')ctx.fillText(en?`⛔拦截 ▲${Math.round(SHOW.v(vn))}(剩${rem}颗)`:`⛔拦截 ▲${Math.round(SHOW.v(vn))}(剩${rem}颗${p.fuel>0?' ⛽'+Math.round(SHOW.t(p.fuel)):' ⛽尽'})`,s[0]+7,s[1]+7); // 2026-10-12 燃料经 SHOW.t(同导弹那一行;拦截弹能点之前这行到不了)。LL11 速度经 SHOW.v 换成物理 km/s(同导弹那一行)
           else if(en)ctx.fillText(`▲${Math.round(SHOW.v(vn))}`,s[0]+7,s[1]+7); // 2026-09-28 敌方弹只报看得见的量(速度)
           else ctx.fillText(`▲${Math.round(SHOW.v(vn))}(剩${rem}颗)${p.fuel>0?' ⛽'+Math.round(SHOW.t(p.fuel)):' ⛽尽'} · ${p.target?xhName(p.target):'无目标'}${p.coastT>0?' 🔓脱'+Math.round(SHOW.t(p.coastT))+'s':''}`,s[0]+7,s[1]+7);
         }
@@ -441,6 +442,16 @@ function dashLine(x0,y0,x1,y1,len){ // 2026-10-04 性能:虚线先裁到屏幕,�
 function clipLine(x0,y0,x1,y1){ // 实线裁到屏幕再单独描(2026-10-04 性能:伸出屏外很远的线整条描,DPR 2 下按整段的包围盒出遮罩)
   if(!clipSegT(x0,y0,x1,y1,4))return;const dx=x1-x0,dy=y1-y0,t0=CLIP_T[0],t1=CLIP_T[1];
   ctx.beginPath();ctx.moveTo(x0+dx*t0,y0+dy*t0);ctx.lineTo(x0+dx*t1,y0+dy*t1);ctx.stroke();}
+function drawIcpIntent(p,sp){ // 2026-10-12 用户:点拦截弹看到它拦的目标 —— 防区圈(发射舰为心,出圈自毁)+ 到目标的虚线(画在我方看到的位置);对方的意图我方不知道
+  if(!adminMode&&p.shooter&&p.shooter.side!==ME)return;
+  const s=p.shooter,c=(s&&!s.dead)?s.pos:p.icLast,R=Math.sqrt(p.icR2||0)*cam.zoom,col='rgba(127,240,226,';
+  ctx.save();ctx.lineWidth=1;ctx.font='10px "Microsoft YaHei",sans-serif';
+  if(c&&R>4){const cp=toScreen(c[0],c[1]);ctx.strokeStyle=col+'.4)';dashArc(cp[0],cp[1],R,6);if(R>40){ctx.fillStyle=col+'.75)';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText('拦截防区',cp[0],cp[1]-R-2);}}
+  const t=p.target,tq=!t?null:(t.kind?(viewDead(t)?null:viewPos(t)):(projSeen(t)?projViewPos(t):null)); // 打浮标的是物体(读航迹位置),其余是弹(读弹影)
+  if(tq){const dp=toScreen(tq[0],tq[1]);ctx.strokeStyle='rgba(255,107,107,.95)';dashLine(sp[0],sp[1],dp[0],dp[1],4);ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(dp[0],dp[1],9,0,6.283);ctx.stroke();
+    ctx.fillStyle='rgba(255,107,107,.95)';ctx.textAlign='left';ctx.textBaseline='bottom';ctx.fillText('拦截目标',dp[0]+11,dp[1]-2);}
+  ctx.restore();
+}
 function drawMissileIntent(g){ // v129:选中导弹/网→显示组网圈与引导圈(2026-10-01)、目标虚线、目的地标记、火控母舰连线
   if(!adminMode&&g.shooter&&g.shooter.side!==ME)return; // 2026-09-28 敌方弹的意图(目标、引导舰)我方不知道
   const sp=toScreen(g.pos[0],g.pos[1]);
