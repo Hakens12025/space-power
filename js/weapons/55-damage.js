@@ -4,7 +4,7 @@ function applyDamage(s,dmg,src,kind,p){ // 2026-09-29 p = 打中它的那颗弹(
   if(s.dead)return 0;
   if(kindOf(s)==='rock'){s.dead=true;ROCK_DEADS++;return dmg;} // 2026-09-29 用户:碎石会被击毁(原 TK4c 决定 6「打中了也什么都不发生」作废) // TK4c 石头没有结构值,打中了也什么都不发生(弹药白费,决定 6)。命中特效在调用方,照样有
   if(s.shMax>0&&s.shDown<=0&&dmg>0){ // 2026-09-29 护盾:先扣盾,打破后多出的进船体(用户选);破了 SHIELD.RESTART_S 游戏秒后重启、从 0 开始回
-    const a=Math.min(s.sh,dmg);s.sh-=a;dmg-=a;s.roeCd=8;shieldFx(s,'hit',src,p,kind==='mac');
+    const a=Math.min(s.sh,dmg);s.sh-=a;dmg-=a;s.roeCd=8;if(!(p&&p.sec))shieldFx(s,'hit',src,p,kind==='mac'); // 2026-10-17 用户:副炮打在护盾上不出受击特效(击破照出)
     if(s.sh<=1e-9){s.sh=0;s.shDown=SHIELD.RESTART_S;shieldFx(s,'break',src,p);}
     if(dmg<=0)return 0;
   }

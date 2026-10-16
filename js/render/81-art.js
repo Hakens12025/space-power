@@ -297,7 +297,8 @@ function artDrawBoom(g,o,x,y,a,t){const z=artFxZ()*(o.zk||1),kill=o.kind==='kill
     for(const s of o.sec){const b=a-s[0];if(b<0||b>0.5)continue;const k=b/0.5,sx=x+s[1]*z,sy=y+s[2]*z;artBlit(g,artFxSpr('flash'),sx,sy,10*z*(1-0.3*k),1-k,true);artBlit(g,artFxSpr('fire'),sx,sy,(3+6*Math.sqrt(k))*z,(1-k)*0.9,true);}}}
 function artHits(){ // 84-scene 调(主画面与特写):hitFX 里新出现的一条记一份墙钟起点;看不见的不画(52 spawnHit 判 vis;LL6 光速延迟开着时按到达 fxSeen)
   const t=artNow(),L=ART_BOOM.list;
-  for(const h of hitFX){if(ART_BOOM.seen.has(h))continue;if(!adminMode&&!fxSeen(h,VIEW)){if(!h.seeT)ART_BOOM.seen.add(h);continue;}ART_BOOM.seen.add(h); // LL6 光速延迟开着(登记了到达):光到本视角那一帧才记墙钟起点、开播(sensors/21 fxSeen);没登记的照旧按 vis
+  for(const h of hitFX){if(ART_BOOM.seen.has(h))continue;if(h.w==='sec'){ART_BOOM.seen.add(h);continue;} // 2026-10-17 用户:命中提示只要轴炮的,副炮命中不画闪光(击沉的大爆炸另有一条,照画)
+    if(!adminMode&&!fxSeen(h,VIEW)){if(!h.seeT)ART_BOOM.seen.add(h);continue;}ART_BOOM.seen.add(h); // LL6 光速延迟开着(登记了到达):光到本视角那一帧才记墙钟起点、开播(sensors/21 fxSeen);没登记的照旧按 vis
     const sd=(L.length*131+Math.floor(h.pos[0]))|0;
     if(!h.big&&h.w==='ssm'){const r=artRng(sd+7);for(let j=0;j<4;j++)L.push(Object.assign({h,t0:t+j*0.05,pos:h.pos.slice(),zk:0.42,ox:(r()-0.5)*10,oy:(r()-0.5)*10},artMkBoom('hit','missile',sd+j)));} // 2026-10-11 突击弹:一发一下小爆,一串
     else L.push(Object.assign({h,t0:t,pos:h.pos.slice(),zk:h.big?1:(ART_HITK[h.w]||1)},artMkBoom(h.big?'kill':'hit',h.type==='mac'?'mac':'missile',sd)));}

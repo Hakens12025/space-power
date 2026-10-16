@@ -596,7 +596,7 @@ function llHitEta(s,side,gm){ // LL9 我舰 s 被这一方看得见的对方炮�
 }
 function llHeFill(side,M,gm){ // LL9 这一方每艘我舰的命中倒计时(写进 M);LL11 gm = 按真弹
   const R2=MAC_HIT_R*MAC_HIT_R,on=LL.on&&!gm,A=on&&typeof projAll==='function'?projAll():projectiles;
-  for(let i=0;i<A.length;i++){const p=A[i];if(p.type!=='mac'||!p.shooter||p.shooter.side===side||(!gm&&!trkSees(side,p)))continue;
+  for(let i=0;i<A.length;i++){const p=A[i];if(p.type!=='mac'||p.sec||!p.shooter||p.shooter.side===side||(!gm&&!trkSees(side,p)))continue;
     const q=on?projLook(p,side):(p.done?null:p);if(!q)continue;
     const k=q===p?0:simTime-q.llT,X=q.pos,U=q.vel,x=X[0]+U[0]*k,y=X[1]+U[1]*k,z=X[2]+U[2]*k; // 弹影时刻推到此刻
     let best=Infinity,bs=null;

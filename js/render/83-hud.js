@@ -254,7 +254,7 @@ function drawChain(p0){ // 2026-10-03:只画在网上的(断链的成员我方�
 /* 2026-10-05 代表显示(用户:拉远后船显示箭头,切换点就用船换箭头的切换点;美术物品要比船小、要分得出敌我):
    拉远到 shipMarkMode 起弹类换简易记号 —— 改美术前那套的形状(点 / 点群 / 紫点),都比船的记号(箭头 7 px、菱形 8 px)小,整组外框也小,用阵营色;
    雷原来是菱形,会和敌方接触的菱形混,改空心方块;主炮弹原来是白方块,改沿飞行方向的短划。 */
-const PROJ_MK={blue:'#5aa7ff',red:'#ff6b6b'};
+const PROJ_MK={blue:'#5aa7ff',red:'#ff6b6b'},SEC_DIM=0.4; // SEC_DIM:副炮弹的透明度倍数(2026-10-17 用户:副炮显示优先级低)
 function projMark(p,x,y,rot,side,cnt){
   const col=PROJ_MK[side];ctx.fillStyle=col;ctx.strokeStyle=col;
   if(p.type==='decoy'){ctx.lineWidth=1;ctx.beginPath();ctx.arc(x,y,2.4,0,6.283);ctx.stroke();ctx.fillStyle='rgba(200,120,255,.95)';ctx.beginPath();ctx.arc(x,y,1.5,0,6.283);ctx.fill();return;} // 紫点 + 阵营色圈,外径约 5.8 px
@@ -270,7 +270,9 @@ function projMark(p,x,y,rot,side,cnt){
 }
 function drawProjectiles(){ // 弹丸/导弹
   const mk=shipMarkMode(),SM=(selMissile||(selMissileHits&&selMissileHits.length))&&typeof mslSelAll==='function'?mslSelAll():null; // 2026-10-09 选中的导弹组全集(多选每组都画圈)
-  for(const p of projAll()){ // LL5 连余像一起画(消失了、消失的光还没到我方的弹;关开关就是 projectiles)
+  const PA=projAll();
+  for(let ps=0;ps<2;ps++)for(const p of PA){ // LL5 连余像一起画(消失了、消失的光还没到我方的弹;关开关就是 projectiles)
+    if((p.type==='mac'&&!!p.sec)!==(ps===0))continue; // 2026-10-17 用户:副炮显示优先级低 —— 第一遍只画副炮弹(压在轴炮 / 导弹下面),第二遍画其余
     if(!projSeen(p))continue; // 感知层 v4:普通模式敌方弹药只有被探测到才显示 v119:读缓存 TK4a:缓存在航迹表的目击集合里
     const q=projViewLook(p);if(!q)continue; // LL5 位置 / 速度 / lit / 颗数读我方看到的弹影
     const s=toScreen(q.pos[0],q.pos[1]);
@@ -280,7 +282,9 @@ function drawProjectiles(){ // 弹丸/导弹
     if(p.type==='decoy'){if(mk)projMark(p,s[0],s[1],rot,side,1);else artDecoy(ctx,s[0],s[1],rot,sd,side);continue;} // 诱饵弹:脉动的假热源(模拟舰船信号骗拦截)
     if(p.type==='mac'){
       artTrack(p,q.pos,side,p.sec?'chem':'rail'); // 2026-10-11 轴炮电离尾迹 / 我方炮口(render/81-art)
+      const ga=ctx.globalAlpha;if(p.sec)ctx.globalAlpha=ga*SEC_DIM; // 2026-10-17 用户:副炮弹调暗,主要看轴炮和导弹(不然像弹幕游戏)
       if(mk)projMark(p,s[0],s[1],rot,side,1);else if(p.sec)artChem(ctx,s[0],s[1],rot,side);else artShell(ctx,s[0],s[1],rot,side);
+      ctx.globalAlpha=ga;
     }else{ // 导弹组/拦截导弹组(显示剩余数量)
       const vn=V.len(q.vel);
       const redSide=p.shooter&&palSide(p.shooter.side)==='red'; // v136:敌方导弹红色标志;KIMI146:提升到外层块(原在内层else,箭头区引用抛 redSide is not defined = 导弹一发射UI全崩)

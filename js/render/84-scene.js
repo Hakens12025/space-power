@@ -151,9 +151,9 @@ function insetPre(now,inc,sel,idle,lg){ // 2026-09-27 预判式导演(esports �
   if(lg('来袭'))for(const m of inc){if(!idle&&sel.indexOf(m.tgt)<0)continue;const w=m.eta/rt;if(!(w>=MIN(m.tgt.pos)&&w<=INSET.PRE_S)||!ok(m.p,m.tgt,false))continue; // 来袭:快打到我方舰
     const sc=2.1+1/w;if(!best||sc>best.sc)best={sc:sc,p:2.1,kind:'in',proj:m.p,tg:m.tgt,sh:m.p.shooter};}
   const ll=insetLL(); // LL7 来袭炮弹连余像(同 insetIncoming)
-  if(lg('来袭'))for(const p of (ll?projAll():projectiles)){if((!ll&&p.done)||p.type!=='mac'||!p.shooter||p.shooter.side===VIEW||!projSeen(p))continue;const q=projViewLook(p);if(!q)continue;const tg=insetShellTg(q);if(!tg||(!idle&&sel.indexOf(tg)<0))continue; // 2026-10-04 来袭炮弹也有预判段(用户:来袭炮弹的镜头只框我舰,炮弹看不见);LL5 q = 主视角画它的弹影(render/83 projViewLook)
+  if(lg('来袭'))for(const p of (ll?projAll():projectiles)){if((!ll&&p.done)||p.type!=='mac'||p.sec||!p.shooter||p.shooter.side===VIEW||!projSeen(p))continue;const q=projViewLook(p);if(!q)continue;const tg=insetShellTg(q);if(!tg||(!idle&&sel.indexOf(tg)<0))continue; // 2026-10-04 来袭炮弹也有预判段(用户:来袭炮弹的镜头只框我舰,炮弹看不见);LL5 q = 主视角画它的弹影(render/83 projViewLook)
     const w=insetEta(q,tg.pos,tg.vel)/rt;if(!(w>=MIN(tg.pos)&&w<=INSET.PRE_S)||!ok(p,tg,false))continue;const sc=2.1+1/w;if(!best||sc>best.sc)best={sc:sc,p:2.1,kind:'in',proj:p,tg:tg,sh:p.shooter};}
-  if(lg('出手'))for(const p of projectiles){if(p.done||(p.type!=='mac'&&p.type!=='missile')||!p.shooter||p.shooter.side!==VIEW||!p.target||viewDead(p.target)||p.target.side===VIEW||!p.target.side)continue; // 我方打出去的:目标是定得出位置的敌舰;LL6 死活按我方看见的
+  if(lg('出手'))for(const p of projectiles){if(p.done||(p.type!=='mac'&&p.type!=='missile')||p.sec||!p.shooter||p.shooter.side!==VIEW||!p.target||viewDead(p.target)||p.target.side===VIEW||!p.target.side)continue; // 我方打出去的:目标是定得出位置的敌舰;LL6 死活按我方看见的
     const tg=p.target;if(!idle&&sel.indexOf(p.shooter)<0&&!sel.some(s=>s.lockedTarget===tg))continue;const tq=insetShPos(tg);if(!tq)continue;
     const w=insetEta(p,tq)/rt;if(!(w>=MIN(tq)&&w<=INSET.PRE_S))continue;
     const tl=viewLook(tg),kill=!!tl&&(adminMode||contactIdn(tg,VIEW))&&(p.dmg||0)>=tl.hp; // 可能一击击沉:认出且定位时血量本来就显示在悬停卡上(command/74),不是新泄露;LL9 血量读悬停卡同一份影像(render/83 viewLook)
@@ -186,7 +186,7 @@ function insetEvents(now){ // 导演的事件源(只读我方知道的事):损�
     INSET.tpf=simTime;}
   else for(const p of projectiles)if((p.type==='mac'||p.type==='missile')&&!p.done&&p.shooter&&p.target&&p.target.side)cur.set(p,{sh:p.shooter,tg:p.target,x:p.pos[0],y:p.pos[1]});
   const nh=[],ns=[]; // 2026-09-29 这一帧新的命中闪光(只要打在舰船上的:撞天体 / 打碎石 / 打民船不算,原来离我舰近就报成中弹)与护盾被打 / 击破
-  for(const h of hitFX)if(!INSET.hits.has(h)){if(!adminMode&&h.seeT&&!fxSeen(h,VIEW))continue;INSET.hits.add(h);if(h.vic&&kindOf(h.vic)==='ship')nh.push(h);} // LL6 光速延迟开着:光到我方那一帧才算新的(sensors/21 fxSeen)
+  for(const h of hitFX)if(!INSET.hits.has(h)){if(!adminMode&&h.seeT&&!fxSeen(h,VIEW))continue;INSET.hits.add(h);if(h.vic&&kindOf(h.vic)==='ship'&&h.w!=='sec')nh.push(h);} // 2026-10-17 用户:副炮命中不报 // LL6 光速延迟开着:光到我方那一帧才算新的(sensors/21 fxSeen)
   for(const x of shieldFX)if(!INSET.shs.has(x)){if(!adminMode&&x.seeT&&!fxSeen(x,VIEW))continue;INSET.shs.add(x);if(x.k==='hit'||x.k==='break')ns.push(x);} // LL6 同上
   for(const h of nh.concat(ns)){let b=null;
     if(ll&&h.seeT)b=insetAttrLL(h); // LL9 开关开:按命中闪光的事件时刻配对(弹消失与闪光到达不在同一帧)
