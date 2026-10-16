@@ -159,6 +159,7 @@ function starBuild(){
       const x=_mod((st[0]/SPAN*0.5+0.5)*W,W), y=_mod((st[1]/SPAN*0.5+0.5)*H,H), z=st[3];
       g.globalAlpha=st[2];
       g.fillRect(x,y,z,z);
+      if(z>=2&&st[2]>0.58)d2StarFlare(g,x+z/2,y+z/2,st[0]); // art-d2:亮星加两圈硬光晕 + 很短的彩虹碎光(贴图里只画一次)
       /* 压在贴图边上的星要在对边补一笔 —— 平铺接缝处它本来就该连着 */
       if(x+z>W)g.fillRect(x-W,y,z,z);
       if(y+z>H)g.fillRect(x,y-H,z,z);
@@ -166,6 +167,11 @@ function starBuild(){
     }
   }
 }
+function d2StarFlare(g,x,y,sd){ // art-d2:亮星 = 两圈硬边光晕 + 6 根很短的碎光(颜色轮流取 D2.IRI);sd = 星的世界坐标,当随机种子
+  const a0=g.globalAlpha,fs=g.fillStyle;g.globalAlpha=1;
+  g.fillStyle=d2Css(D2.CYAN,0.1);g.beginPath();g.arc(x,y,5.5,0,6.283);g.fill();g.fillStyle=d2Css([238,216,154],0.16);g.beginPath();g.arc(x,y,3.4,0,6.283);g.fill();
+  g.lineWidth=0.9;g.lineCap='round';for(let i=0;i<6;i++){const a=((sd*0.0137+i*1.07)%6.283),r0=2.2,r1=r0+1.8+((i*7+sd)%3);g.strokeStyle=d2Css(D2.IRI[i%6],0.75);g.beginPath();g.moveTo(x+Math.cos(a)*r0,y+Math.sin(a)*r0);g.lineTo(x+Math.cos(a)*r1,y+Math.sin(a)*r1);g.stroke();}
+  g.globalAlpha=a0;g.fillStyle=fs;}
 function drawStars(){
   /* SN6:程序星云(一张 1024 的图上 40 个随机色斑)【已删】。
      用户 2026-09-19:"背景的各种五彩斑斓色块是什么,不要这个"。它本来就不属于这套视觉 ——

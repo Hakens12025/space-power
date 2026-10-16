@@ -51,9 +51,18 @@ function drawVisFog(B){
       g.drawImage(B.tc,0,0);
     }
     g.globalCompositeOperation='source-over';
+    if(!fz)d2FogDots(B,w,h); // art-d2:圈外的网点层跟着灰雾一起重建(红外 / 雷达画面里的染色雾不加)
   }
-  ctx.save();ctx.imageSmoothingEnabled=true;ctx.drawImage(B.cv,0,0,W,H);ctx.restore();
+  ctx.save();ctx.imageSmoothingEnabled=true;ctx.drawImage(B.cv,0,0,W,H);if(!fz&&B.hc)ctx.drawImage(B.hc,0,0,W,H);ctx.restore();
 }
+/* art-d2(命运2风格):可见光圈外除了压暗,再叠一层网点(印刷的网屏)。网点层按 CSS 像素建,只在灰雾重建时重建:
+   铺满网点 → 用灰雾层(1/K 分辨率、放大)做 destination-in,只留圈外的点;网点钉在屏幕上(网屏),不随世界平移 */
+const D2_DOT=(()=>{const c=document.createElement('canvas');c.width=8;c.height=16;const g=c.getContext('2d');g.fillStyle=d2Css(D2.FOG_DOT);
+  for(const [x,y] of [[4,4],[0,12],[8,12]]){g.beginPath();g.arc(x,y,1.35,0,6.283);g.fill();}return c;})();
+function d2FogDots(B,w,h){const K=B.K,cw=w*K,ch=h*K;
+  if(!B.hc||B.hc.width!==cw||B.hc.height!==ch){B.hc=document.createElement('canvas');B.hc.width=cw;B.hc.height=ch;B.hg=B.hc.getContext('2d');B.hp=B.hg.createPattern(D2_DOT,'repeat');}
+  const g=B.hg;g.globalCompositeOperation='source-over';g.clearRect(0,0,cw,ch);g.fillStyle=B.hp;g.fillRect(0,0,cw,ch);
+  g.globalCompositeOperation='destination-in';g.imageSmoothingEnabled=true;g.drawImage(B.cv,0,0,cw,ch);g.globalCompositeOperation='source-over';}
 /* 2026-09-26 特写窗口里的尾迹(用户:"渲染类似于光速延迟里面的尾迹效果",同 demos/lightlag/光速延迟.html 的 trail):每 DT 模拟秒记一次位置,留最近 SPAN 秒,越旧越淡,线头接到此刻。
    敌舰只记我方知道的位置(contactPos:估计 / 外推;交代不出就断开),不画真值 */
 const TRAIL={DT:0.5,SPAN:60,JUMP:20000,t:-1e9,m:new Map(),arr:null,gm:false}; // JUMP:相邻两次记录跳得比这远(km x scale)就断开 —— 瞬移(靶场拖船)不连线

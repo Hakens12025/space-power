@@ -182,7 +182,7 @@ function drawSdFx(){if(!sdFX.length&&!FX_RUN.d.length)return;
   ctx.restore();}
 /* 2026-09-29 护盾(用户在 demos/weapons/护盾特效.html 调定):罩子半径 = 舰标半长 x K(按我方看到的舰标,没认出不暴露舰种);常亮随盾量,回充时边上三段流光,
    破盾期间一圈暗虚线的重启进度;打中 / 击破 / 重启 / 回满的特效按墙钟放(weapons/55 的 shieldFX)。对方的船只在我方可见光圈里才画罩子 */
-const SHD_FX={K:2,GLOW:0.2,HIT_T:0.3,BRK_T:0.5,FLOW:0.5,RST_T:0.6,FULL_T:0.5,COL:{blue:[110,210,255],red:[255,150,110]}};
+const SHD_FX={K:2,GLOW:0.2,HIT_T:0.3,BRK_T:0.5,FLOW:0.5,RST_T:0.6,FULL_T:0.5,COL:{blue:[143,190,220],red:[225,140,110]}}; // art-d2:护盾色压浊;原 [110,210,255] / [255,150,110]
 let SHD_W=0;const SHD_CLK={t:0}; // 流光相位(墙钟,只在跑的时候走)
 function shieldR(s){return shipIconR(s)*(shipMarkMode()?1:1.5/0.78)*SHD_FX.K;}
 function shieldSeen(s){return adminMode||s.side===VIEW||!!trkCh(trkOf(VIEW,s),'vis');}
@@ -193,7 +193,7 @@ function drawShieldBubble(s,p,L){ // drawShip 调(舰体之下);LL9 L = 画面�
   const C=SHD_FX.COL[s.side]||SHD_FX.COL.blue,R=shieldR(s),x=p[0],y=p[1],G=SHD_FX.GLOW;
   ctx.save();
   if(v.shDown>0){const q=1-v.shDown/SHIELD.RESTART_S;ctx.setLineDash([3,4]);shdArc(x,y,R,-1.571,-1.571+6.283*q,shdRgba(C,0.28),1.2);ctx.setLineDash([]);}
-  else{const f=v.sh/v.shMax,g=ctx.createRadialGradient(x,y,R*0.55,x,y,R);g.addColorStop(0,shdRgba(C,0));g.addColorStop(1,shdRgba(C,0.10*G*(0.3+0.7*f)));ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,R,0,6.283);ctx.fill();
+  else{const f=v.sh/v.shMax;shdArc(x,y,R*0.91,0,6.283,shdRgba(C,0.10*G*(0.3+0.7*f)),R*0.18); // art-d2:罩子 = 一圈硬边色带(原来每帧一个径向渐变)
     shdArc(x,y,R,0,6.283,shdRgba(C,(0.15+0.55*f)*G+0.05),1.3);
     if(f<1){const ph=SHD_W*SHD_FX.FLOW*2.2;for(let k=0;k<3;k++){const a0=ph+k*2.094;shdArc(x,y,R,a0,a0+0.35+0.5*f,shdRgba(C,0.35+0.5*f),2);}}}
   ctx.restore();
@@ -210,7 +210,7 @@ function drawShieldFx(){
     const s=e.s,q=(adminMode||s.side===VIEW)?s.pos:(viewPos(s)||e.pos),p=toScreen(q[0],q[1]),R=shieldR(s),L=R/F.K,C=F.COL[s.side]||F.COL.blue,cx=p[0],cy=p[1],u=a/T,k=1-u;
     if(cx<-R*3||cx>W+R*3||cy<-R*3||cy>H+R*3)continue;
     if(e.k==='hit'){const w=e.big?0.8:0.3,fk=artFxK()*SHIP_K/0.6,Lt=L*(shipMarkMode()?1:HULL_ZOOM.LAND*SHIP_K/shipZoomF()); // 2026-10-05 受击随缩放:线宽、亮斑 = 战术落点上的大小 x 船的(不钳)系数开平方(再乘美术整体缩放);罩子半径照旧跟船
-      shdArc(cx,cy,R,e.a-w*(0.4+u),e.a+w*(0.4+u),shdRgba([255,255,255],0.9*k*k),(e.big?3.5:2.2)*fk); // 命中点一段亮弧往两边铺开
+      {const a0=e.a-w*(0.4+u),a1=e.a+w*(0.4+u),n=7,st=(a1-a0)/n;for(let j=0;j<n;j++)shdArc(cx,cy,R,a0+j*st,a0+(j+0.78)*st,shdRgba(D2.IRI[j%6],0.9*k*k),(e.big?3.5:2.2)*fk);} // 命中点一段亮弧往两边铺开(art-d2:切成一段段彩虹碎色)
       shdArc(cx,cy,R,e.a+w*0.4+u*2.2,e.a+w*0.4+u*2.2+0.25,shdRgba(C,0.8*k),2*fk);shdArc(cx,cy,R,e.a-w*0.4-u*2.2-0.25,e.a-w*0.4-u*2.2,shdRgba(C,0.8*k),2*fk); // 沿罩面跑开的涟漪
       shdArc(cx,cy,R,0,6.283,shdRgba(C,0.45*k*(e.big?1:0.5)),1.6*fk); // 整层闪一下
       const px=cx+Math.cos(e.a)*R,py=cy+Math.sin(e.a)*R,gr=Lt*(e.big?1.6:0.7)*artFxK(),rg=ctx.createRadialGradient(px,py,0,px,py,gr);rg.addColorStop(0,shdRgba([255,255,255],0.85*k));rg.addColorStop(1,shdRgba(C,0));ctx.fillStyle=rg;ctx.beginPath();ctx.arc(px,py,gr,0,6.283);ctx.fill();}

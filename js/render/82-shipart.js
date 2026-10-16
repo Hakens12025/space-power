@@ -127,7 +127,7 @@ const SA=(()=>{
   const SA_K={CA:0.92,CV:0.88};                                     // 2026-10-05 用户:巡洋 / 航母体型稍小(驱逐→巡洋 x1.15、巡洋→航母 x1.2;原来每档 x1.25);外形不变,只整体缩
 
   /* ---------- 颜色 / 多边形 ---------- */
-  const FAC={blue:{edge:'#7cc0ff',tint:'#5aa7ff',glow:'#9fdcff'},red:{edge:'#ff9a90',tint:'#ff6b6b',glow:'#ffb48a'}};
+  const FAC={blue:{edge:'#8FB4D4',tint:D2.FAC_HEX.blue,glow:'#B5D3EA'},red:{edge:'#D98068',tint:D2.FAC_HEX.red,glow:'#F0A07A'}}; // art-d2:阵营色压浊(render/80-d2pal);原 #5aa7ff / #ff6b6b
   const hex2=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
   const css=(c,a)=>(a===undefined?'rgb(':'rgba(')+c.map(v=>Math.round(Math.max(0,Math.min(255,v)))).join(',')+(a===undefined?')':','+a+')');
   const mix=(a,b,k)=>[a[0]+(b[0]-a[0])*k,a[1]+(b[1]-a[1])*k,a[2]+(b[2]-a[2])*k];
@@ -151,10 +151,12 @@ const SA=(()=>{
     const c=Math.cos(-ang),s=Math.sin(-ang),LX=Math.cos(-125*Math.PI/180),LY=Math.sin(-125*Math.PI/180),lx=LX*c-LY*s,ly=LX*s+LY*c; // 固定光向转进船体坐标(屏幕上光不跟船转)
     const F=FAC[f],T=TT||0.16,u=1/sc,SOL=solids(sh);
     g.save();g.translate(x,y);g.rotate(ang);g.scale(sc,sc);g.lineJoin='round';
-    if(mode==='icon'){const base=tierTint(hex2(F.tint),tl||0),Lp=sc*sh.L,R=sh.L*0.3,gr=g.createLinearGradient(-lx*R,-ly*R,lx*R,ly*R);
-      gr.addColorStop(0,css(shade(base,-0.6)));gr.addColorStop(0.5,css(base));gr.addColorStop(1,css(shade(base,0.6)));
-      g.strokeStyle='rgba(0,0,0,.75)';g.lineWidth=1.6*u;for(const P of SOL){path(g,P);g.stroke();}
-      g.fillStyle=gr;for(const P of SOL){path(g,P);g.fill();}
+    if(mode==='icon'){const base=tierTint(hex2(F.tint),tl||0),Lp=sc*sh.L,R=sh.L;
+      // art-d2(命运2风格):沿光向的渐变 → 平涂阵营色 + 背光那半边整块压暗一档(硬边);描边减细减淡
+      g.strokeStyle='rgba(0,0,0,.55)';g.lineWidth=1.2*u;for(const P of SOL){path(g,P);g.stroke();}
+      g.fillStyle=css(base);for(const P of SOL){path(g,P);g.fill();}
+      g.save();g.beginPath();for(const P of SOL){g.moveTo(P[0][0],P[0][1]);for(let i=1;i<P.length;i++)g.lineTo(P[i][0],P[i][1]);g.closePath();}g.clip();
+      g.rotate(Math.atan2(ly,lx));g.fillStyle=css(shade(base,-0.5));g.fillRect(-2*R,-2*R,2*R,4*R);g.restore(); // 旋到 +x 朝光,x < 0 一侧是背光面
       if(Lp>=16){for(const p of sh.parts){
           if(p.t==='rad'){path(g,p.p);g.fillStyle=css(shade(base,-0.75));g.fill();}
           else if(p.t==='hull'&&(p.m==='deck'||p.m==='acc')){path(g,p.p);g.fillStyle=css(shade(base,-0.35));g.fill();}
@@ -162,6 +164,7 @@ const SA=(()=>{
         if(Lp>=24)for(const p of sh.parts)if(p.t==='blk'||p.t==='tur'){path(g,p.t==='tur'?turPoly(p):p.p);g.fillStyle=css(shade(base,0.45));g.fill();}}
       if(Lp>=10)for(const p of sh.parts)if(p.t==='eng'){g.fillStyle=F.glow;g.beginPath();g.arc(p.x-0.4,p.y,Math.max(p.r*0.8,0.7*u),0,6.283);g.fill();}
       g.restore();return;}
+    if(D2FULL){d2Full(g,sh,F,lx,ly,u,SOL);g.restore();return;} // art-d2:完整画法也换成平涂(命运2风格),下面的写实画法(倒角 / 台体 / 铆钉 / 窗灯辉光)留着不删,D2FULL 关掉就回来
     g.strokeStyle=F.edge;g.lineWidth=2.2*u;for(const P of SOL){path(g,P);g.stroke();}                                          // 外轮廓:阵营色粗描 + 填底 = 只剩并集外沿
     g.fillStyle=css(mat('trench',T,f));for(const P of SOL){path(g,P);g.fill();}
     for(const p of sh.parts)if(p.t==='hull'){const b=mat(p.m,T,f);path(g,p.p);g.fillStyle=css(b);g.fill();bevel(g,p.p,b,lx,ly,0.85);}
@@ -187,6 +190,30 @@ const SA=(()=>{
       const R=p.r*3.6,gr=g.createRadialGradient(p.x-0.6,p.y,0,p.x-0.6,p.y,R),gc=hex2(F.glow);
       gr.addColorStop(0,'rgba(255,255,255,.95)');gr.addColorStop(0.18,'rgba('+gc.join(',')+',.85)');gr.addColorStop(1,'rgba('+gc.join(',')+',0)');g.fillStyle=gr;g.beginPath();g.arc(p.x-0.6,p.y,R,0,6.283);g.fill();}
     g.globalCompositeOperation='source-over';g.restore();}
+  /* art-d2(命运2风格):完整画法的平涂版。主体 = 阵营色;部件按材质分档(上层建筑亮、炮管 / 尾段暗、标线赭黄);
+     凸起部件留一个平涂投影(偏离光向);背光半边整块压暗;不画倒角、台体、铆钉、窗灯辉光;喷口两圈硬边 */
+  const D2FULL=true;
+  function d2Full(g,sh,F,lx,ly,u,SOL){const base=hex2(F.tint),
+      M={hull:base,p2:shade(base,-0.08),blk:shade(base,0.15),top:shade(base,0.45),acc:shade(base,-0.45),deck:shade(base,-0.25),trench:shade(base,-0.75),seam:shade(base,-0.55),mark:[212,154,63],team:shade(base,0.3)},
+      col=m=>M[m]||base;
+    g.strokeStyle='rgba(0,0,0,.5)';g.lineWidth=1.2*u;for(const P of SOL){path(g,P);g.stroke();}
+    for(const p of sh.parts)if(p.t==='hull'){path(g,p.p);g.fillStyle=css(col(p.m));g.fill();}
+    for(const p of sh.parts)if(p.t==='pan'&&!p.over){path(g,p.p);g.fillStyle=css(col(p.m));g.fill();}
+    for(const p of sh.parts)if(p.t==='rad'||(p.t==='rec'&&!p.over)){path(g,p.p);g.fillStyle=css(col('trench'));g.fill();}
+    for(const p of sh.parts)if(p.t==='seam'&&!p.over){g.strokeStyle=css(col(p.m==='acc'?'acc':'seam'));g.lineWidth=p.w;line(g,p.pts);g.stroke();}
+    const up=sh.parts.filter(p=>p.t==='blk'||p.t==='tur');
+    g.fillStyle='rgba(0,0,0,.3)';for(const p of up){const k=p.h*1.3;for(const P of (p.t==='tur'?[turPoly(p)].concat(barPolys(p)):[p.p])){path(g,MV(P,-lx*k,-ly*k));g.fill();}} // 平涂投影
+    for(const p of up){if(p.t==='tur'){for(const b of barPolys(p)){path(g,b);g.fillStyle=css(col('acc'));g.fill();}path(g,turPoly(p));g.fillStyle=css(col('top'));g.fill();}
+      else{path(g,p.p);g.fillStyle=css(col(p.m==='blk'?'blk':p.m));g.fill();}}
+    for(const p of sh.parts){if(!p.over)continue;
+      if(p.t==='pan'){path(g,p.p);g.fillStyle=css(col(p.m));g.fill();}
+      else if(p.t==='rec'){path(g,p.p);g.fillStyle=css(col('trench'));g.fill();}
+      else if(p.t==='seam'){g.strokeStyle=css(col('seam'));g.lineWidth=p.w;line(g,p.pts);g.stroke();}}
+    for(const p of sh.parts)if(p.t==='win'){g.fillStyle='rgba(255,230,176,.9)';for(const q of p.pts)g.fillRect(q[0]-0.35,q[1]-0.35,0.7,0.7);}
+    g.save();g.beginPath();for(const P of SOL){g.moveTo(P[0][0],P[0][1]);for(let i=1;i<P.length;i++)g.lineTo(P[i][0],P[i][1]);g.closePath();}g.clip();
+    const R=sh.L;g.rotate(Math.atan2(ly,lx));g.fillStyle='rgba(15,17,20,.28)';g.fillRect(-2*R,-2*R,2*R,4*R);g.restore(); // 背光半边压暗
+    const gc=hex2(F.glow);for(const p of sh.parts)if(p.t==='eng'){g.fillStyle='rgb(20,24,30)';g.fillRect(p.x-0.3,p.y-p.r*0.85,1.4,p.r*1.7);
+      g.fillStyle=css(gc,0.45);g.beginPath();g.arc(p.x-0.6,p.y,p.r*2.2,0,6.283);g.fill();g.fillStyle='rgba(255,255,255,.9)';g.beginPath();g.arc(p.x-0.6,p.y,p.r*0.95,0,6.283);g.fill();}}
   function bevel(g,P,b,lx,ly,bw){const N=outN(P);g.save();path(g,P);g.clip();g.lineWidth=bw*2;g.lineCap='square';
     for(let i=0;i<P.length;i++){const a=P[i],q=P[(i+1)%P.length],d=N[i][0]*lx+N[i][1]*ly;g.strokeStyle=css(shade(b,d>0?d*0.9:d*0.8));g.beginPath();g.moveTo(a[0],a[1]);g.lineTo(q[0],q[1]);g.stroke();}g.restore();}
   function frustum(g,P,h,side,top,lx,ly){const I=insetC(P,Math.min(h,0.45*Math.sqrt(Math.abs(area(P))))),N=outN(P);

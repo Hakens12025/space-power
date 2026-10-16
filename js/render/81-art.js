@@ -9,7 +9,7 @@
    调用方:82-ship-icons(artFlames / artWreck)、83-hud(artShell / artChem / artMsl / artSsm / artTrack / artDecoy / artMine / artHits)、84-scene(artTrails / artMuzzles)、81-env(artPlanet / ART_PL_NAME)、82-rocks(artRock / artBuoy)、84-scene(artTick)。
    ============================================================================ */
 const ART_L=(()=>{const a=-125*Math.PI/180;return [Math.cos(a),Math.sin(a)];})(); // 固定光向:左上
-const ART_SIDE={blue:[90,167,255],red:[255,107,107],neutral:[160,170,185]};
+const ART_SIDE={blue:D2.FAC.blue,red:D2.FAC.red,neutral:[160,170,185]}; // art-d2:压浊的阵营色(render/80-d2pal);原 [90,167,255] / [255,107,107]
 const ART_BUDGET=4; // 行星贴图每帧生成预算 ms
 function artMix(a,b,k){return [a[0]+(b[0]-a[0])*k,a[1]+(b[1]-a[1])*k,a[2]+(b[2]-a[2])*k];}
 function artLit(c,k){return k>=0?artMix(c,[255,255,255],k):artMix(c,[0,0,0],-k);}
@@ -45,12 +45,12 @@ const ART_PL_W={main:1,retro:0.9,side:1.3,msl:0.85,inter:0.75,mslblue:0.85,mslre
 const ART_PL=new Map(),ART_PL_SW=256,ART_PL_H=64,ART_PL_O=10;
 function artPlSpr(kind,lod){const key=kind+lod;let c=ART_PL.get(key);if(c)return c;
   c=artCv(ART_PL_SW,ART_PL_H);const g=c.getContext('2d'),C=ART_PL_COL[kind],W=ART_PL_W[kind],cy=ART_PL_H/2,L=ART_PL_SW-ART_PL_O-4;
-  const lobe=(len,w0,w1,col,a)=>{const x0=ART_PL_O,x1=x0+len*L,gr=g.createLinearGradient(x0,0,x1,0);gr.addColorStop(0,artCss(col,a));gr.addColorStop(0.45,artCss(col,a*0.7));gr.addColorStop(1,artCss(col,0));g.fillStyle=gr;
+  const lobe=(len,w0,w1,col,a)=>{const x0=ART_PL_O,x1=x0+len*L;g.fillStyle=artCss(col,a*0.78); // art-d2:每层焰瓣实心(不渐隐),几层套起来就是分层硬边
     g.beginPath();g.moveTo(x0,cy-w0);g.bezierCurveTo(x0+len*L*0.25,cy-w1,x0+len*L*0.6,cy-w1*0.7,x1,cy);g.bezierCurveTo(x0+len*L*0.6,cy+w1*0.7,x0+len*L*0.25,cy+w1,x0,cy+w0);g.closePath();g.fill();};
   lobe(1.0,9*W,14*W,C[0],0.5);lobe(0.74,6.5*W,9.5*W,C[1],0.72);lobe(0.48,4.2*W,5.5*W,C[2],0.92);lobe(0.24,2.4*W,2.8*W,[255,255,255],1);
   if(lod>=2&&kind==='main')for(let i=0;i<4;i++){const x=ART_PL_O+L*(0.1+0.1*i),hw=2.6*W*(1-i*0.18),hl=5*(1-i*0.12);g.fillStyle='rgba(255,255,255,'+(0.32-i*0.07).toFixed(2)+')';
     g.beginPath();g.moveTo(x-hl,cy);g.lineTo(x,cy-hw);g.lineTo(x+hl,cy);g.lineTo(x,cy+hw);g.closePath();g.fill();} // 马赫环
-  const rg=g.createRadialGradient(ART_PL_O,cy,0,ART_PL_O,cy,14*W);rg.addColorStop(0,'rgba(255,255,255,.9)');rg.addColorStop(0.3,artCss(C[2],0.6));rg.addColorStop(1,artCss(C[1],0));g.fillStyle=rg;g.beginPath();g.arc(ART_PL_O,cy,14*W,0,6.283);g.fill(); // 喷口亮斑
+  g.fillStyle=artCss(C[1],0.28);g.beginPath();g.arc(ART_PL_O,cy,11*W,0,6.283);g.fill();g.fillStyle='rgba(255,255,255,.85)';g.beginPath();g.arc(ART_PL_O,cy,5.5*W,0,6.283);g.fill(); // 喷口亮斑(art-d2:两圈硬边)
   ART_PL.set(key,c);return c;}
 function artPlume(g,kind,lod,x,y,ang,len,wid,a){if(len<0.5||a<=0)return;const c=artPlSpr(kind,lod),sx=len/(ART_PL_SW-ART_PL_O-4),sy=wid/ART_PL_H;
   g.save();g.translate(x,y);g.rotate(ang);g.globalCompositeOperation='lighter';g.globalAlpha=Math.min(1,a);g.drawImage(c,-ART_PL_O*sx,-ART_PL_H/2*sy,ART_PL_SW*sx,ART_PL_H*sy);g.restore();}
@@ -131,7 +131,12 @@ function artIcp(g,x,y,rot,o){const L=artLFF(),n=artShown(o.count||1),r=0.13*L,si
   for(const q of P)g.drawImage(sp,q[0]-w/2,q[1]-w/2,w,w);}
 /* 诱饵:脉动的假热源(紫白芯 + 紫晕)+ 一个小罐 + 一道淡尾焰;伏击雷:六角壳体(六个斜面按光)+ 三根天线 + 闪烁指示灯 */
 const ART_FX={};
-function artRad(stops,sz){const c=artCv(sz,sz),g=c.getContext('2d'),gr=g.createRadialGradient(sz/2,sz/2,0,sz/2,sz/2,sz/2);for(const s of stops)gr.addColorStop(s[0],s[1]);g.fillStyle=gr;g.fillRect(0,0,sz,sz);return c;}
+function artRad(stops,sz){ // art-d2(命运2风格):径向渐变 → 5 圈等宽的硬边同心环,每圈取原渐变在该圈中线半径上的颜色(由内往外分档变淡)
+  const c=artCv(sz,sz),g=c.getContext('2d'),h=sz/2,B=5,P=stops.map(s=>{const v=s[1].slice(s[1].indexOf('(')+1,s[1].indexOf(')')).split(',').map(Number);return [s[0],v[0],v[1],v[2],v.length>3?v[3]:1];});
+  for(let j=0;j<B;j++){const o=(j+0.5)/B;let i=0;while(i+2<P.length&&P[i+1][0]<o)i++;const a=P[i],b=P[i+1]||a,t=b[0]>a[0]?Math.max(0,Math.min(1,(o-a[0])/(b[0]-a[0]))):0,L=k=>a[k]+(b[k]-a[k])*t,al=L(4);
+    if(al<=0.004)continue;g.fillStyle='rgba('+Math.round(L(1))+','+Math.round(L(2))+','+Math.round(L(3))+','+al.toFixed(3)+')';
+    g.beginPath();g.arc(h,h,(j+1)/B*h,0,6.2832);if(j>0)g.arc(h,h,j/B*h,0,6.2832,true);g.fill();}
+  return c;}
 function artFxSpr(k){if(ART_FX[k])return ART_FX[k];let c;
   if(k==='decoy')c=artRad([[0,'rgba(255,245,255,1)'],[0.18,'rgba(230,170,255,.85)'],[0.5,'rgba(170,100,255,.3)'],[1,'rgba(150,80,255,0)']],64);
   else if(k==='warm')c=artRad([[0,'rgba(255,190,120,.9)'],[1,'rgba(255,120,60,0)']],32);
@@ -217,8 +222,8 @@ function artTrack(p,pos,side,w,lit){const t=artNow();let e=ART_TR.get(p);
   return e;}
 function artBurn(e,lit){return e?(e.litT!==undefined&&artNow()-e.litT<0.12):!!lit;} // 2026-10-11 尾焰画不画:最近 0.12 s 喷过(转向时推力一拍有一拍没有,不让尾焰一闪一闪);滑行 / 没油不画
 function artCold(e){return !!(e&&e.w==='hvy'&&e.born&&artNow()-e.t0<ART_IGN);} // 重弹还在冷发射(没点火)
-function artTrSpr(side){if(ART_TRS[side])return ART_TRS[side];const c=artCv(256,4),g=c.getContext('2d'),col=artLit(ART_SIDE[side]||ART_SIDE.blue,0.55),gr=g.createLinearGradient(0,0,256,0);
-  gr.addColorStop(0,artCss(col,0));gr.addColorStop(0.7,artCss(col,0.2));gr.addColorStop(1,artCss(col,0.45));g.fillStyle=gr;g.fillRect(0,0,256,4);return ART_TRS[side]=c;} // 轴炮尾迹:尾淡头亮
+function artTrSpr(side){if(ART_TRS[side])return ART_TRS[side];const c=artCv(256,4),g=c.getContext('2d'),col=artLit(ART_SIDE[side]||ART_SIDE.blue,0.55),seg=[[0,110,0.07],[110,180,0.2],[180,256,0.45]];
+  for(const [x0,x1,a] of seg){g.fillStyle=artCss(col,a);g.fillRect(x0,0,x1-x0,4);}return ART_TRS[side]=c;} // 轴炮尾迹:尾淡头亮(art-d2:三段硬边,不渐变)
 function artTrQ(P){let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;for(let i=0;i<P.length;i++){const q=ART_TRQ[i]||(ART_TRQ[i]=[0,0]),r=toScreen(P[i][1],P[i][2]);q[0]=r[0];q[1]=r[1];if(r[0]<x0)x0=r[0];if(r[0]>x1)x1=r[0];if(r[1]<y0)y0=r[1];if(r[1]>y1)y1=r[1];}
   return (x1<-30||x0>W+30||y1<-30||y0>H+30)?null:ART_TRQ;} // 一条路换成屏幕点(复用同一个数组),整条在屏外返回 null
 function artTrails(){const t=artNow(),mk=shipMarkMode(),LF=artLFF(),fk=artMzK();
@@ -236,8 +241,8 @@ function artTrails(){const t=artNow(),mk=shipMarkMode(),LF=artLFF(),fk=artMzK();
       ctx.save();ctx.globalCompositeOperation='lighter';ctx.lineCap='butt';
       for(let bk=0;bk<4;bk++){const kb=(bk+0.5)/4;let any=false;ctx.beginPath();
         for(let i=1;i<P.length;i++){const a=P[i-1],b=P[i];if(b[0]-a[0]>0.25||t-b[0]>ART_TR_KEEP.hvy)continue;const ag=Math.min(3,Math.floor((t-b[0])/ART_TR_KEEP.hvy*4));if(ag!==bk)continue;
-          ctx.moveTo(Q[i-1][0],Q[i-1][1]);ctx.lineTo(Q[i][0],Q[i][1]);any=true;}
-        if(any){ctx.lineWidth=w0*(1+1.6*kb);ctx.strokeStyle=artCss(col,0.24*(1-kb));ctx.stroke();}}
+          const rr=w0*(0.45+0.8*kb);ctx.moveTo(Q[i][0]+rr,Q[i][1]);ctx.arc(Q[i][0],Q[i][1],rr,0,6.283);any=true;} // art-d2:排气尾迹画成网点(越旧越大越淡)
+        if(any){ctx.fillStyle=artCss(col,0.5*(1-kb));ctx.fill();}}
       ctx.restore();continue;}
     if(e.w==='ssm'){const P=e.pts;if(P.length<2)continue;const Q=artTrQ(P);if(!Q)continue;const tc=artLit(ART_SIDE[e.side]||ART_SIDE.blue,0.45);ctx.save();ctx.globalCompositeOperation='lighter';ctx.lineCap='butt';ctx.lineWidth=Math.max(1.1,0.04*LF); // 细尾迹(0.7 s):画出出膛那个急弯
       for(let bk=0;bk<2;bk++){let any=false;ctx.beginPath();
@@ -282,7 +287,10 @@ function artMkBoom(kind,type,sd){const r=artRng(sd*977+13),o={kind,type,sp:[],db
     o.sec=[[0.35,(r()-0.5)*18,(r()-0.5)*18],[0.75,(r()-0.5)*22,(r()-0.5)*22],[1.15,(r()-0.5)*16,(r()-0.5)*16]];}
   return o;}
 function artDrawBoom(g,o,x,y,a,t){const z=artFxZ()*(o.zk||1),kill=o.kind==='kill',mac=o.type==='mac',hs=kill?1:0.6; // hs = 烟的半径倍数
-  {const d=kill?0.28:0.16,k=1-a/d;if(k>0)artBlit(g,artFxSpr(mac&&!kill?'flashB':'flash'),x,y,(kill?34:mac?13:16)*z*(1.2-0.4*k),k,true);}
+  {const d=kill?0.28:0.16,k=1-a/d;if(k>0){artBlit(g,artFxSpr(mac&&!kill?'flashB':'flash'),x,y,(kill?34:mac?13:16)*z*(1.2-0.4*k),k,true);
+    const n=kill?16:9,r0=(kill?14:6)*z,L0=(kill?26:11)*z;g.save();g.lineCap='round';g.lineWidth=Math.max(1,1.4*z); // art-d2:彩虹碎光(颜色轮流取 D2.IRI,方向借火花的随机角)
+    for(let i=0;i<n;i++){const an=o.sp[i%o.sp.length][0]+i*0.37,r1=r0+L0*(0.5+0.5*((i*5)%7)/6)*(1.15-0.35*k);g.strokeStyle=d2Css(D2.IRI[i%6],(0.85*k).toFixed(3));
+      g.beginPath();g.moveTo(x+Math.cos(an)*r0,y+Math.sin(an)*r0);g.lineTo(x+Math.cos(an)*r1,y+Math.sin(an)*r1);g.stroke();}g.restore();}}
   if(kill&&a<0.9){const k=a/0.9;artBlit(g,artFxSpr('ring'),x,y,(8+58*Math.sqrt(k))*z,0.9*(1-k),true);}
   if(!mac||kill){const d=kill?1.4:0.8,k=a/d;if(k<1)artBlit(g,artFxSpr('fire'),x,y,(kill?(7+18*Math.sqrt(k)):(4+9*Math.sqrt(k)))*z,(1-k)*(1-k)*0.95,true);}
   for(const s of o.sm){const k=a/(s[2]*(kill?2:1));if(k>=1)continue;const R=(4+s[1]*1.3*k)*z*(kill?1.6:1)*hs,dd=s[1]*0.6*k*z*hs;artBlit(g,artFxSpr('smoke'),x+Math.cos(s[0])*dd,y+Math.sin(s[0])*dd,R,0.6*(1-k)*Math.min(1,a*8),false);}
@@ -409,17 +417,18 @@ function artTick(){const t0=performance.now(),J=ART_PJ.jobs,D=window.devicePixel
     for(let j=e.row;j<rEnd;j++)for(let i=0;i<M;i++)e.pix(i,j,d,(j*M+i)*4);e.row=rEnd;
     if(e.row>=M){e.g.putImageData(e.im,0,0);e.im=null;e.pix=null;e.done=true;J.splice(bi,1);ART_PJ.ver++;}}}
 function artDisk(N,f){const R=N/2-1,h=N/2;return (i,j,d,o)=>{const dx=(i+0.5-h)/R,dy=(j+0.5-h)/R,d2=dx*dx+dy*dy;if(d2>1+4/R)return;const a=artC01((1-Math.sqrt(d2))*R+0.5);if(a<=0)return;f(dx,dy,Math.sqrt(Math.max(0,1-d2)),a,d,o);};}
-function artPSurf(type,sd,N){return artJob('s'+type+sd+'|'+N,N,artDisk(N,(x,y,z,a,d,o)=>{const c=artSurf(type,sd,x,y,z);d[o]=c[0];d[o+1]=c[1];d[o+2]=c[2];d[o+3]=a*255;}));}
+function d2Post(c){const l=0.3*c[0]+0.59*c[1]+0.11*c[2];if(l<1)return c;const q=Math.max(0.5,Math.round(l/255*5))/5*255,k=q/l;return [c[0]*k,c[1]*k,c[2]*k];} // art-d2:按亮度量化成 5 档平涂(保留色相)
+function artPSurf(type,sd,N){return artJob('s'+type+sd+'|'+N,N,artDisk(N,(x,y,z,a,d,o)=>{const c=d2Post(artSurf(type,sd,x,y,z));d[o]=c[0];d[o+1]=c[1];d[o+2]=c[2];d[o+3]=a*255;}));}
 function artPShade(N){const E=22*Math.PI/180,Lx=Math.cos(E),Lz=Math.sin(E);return artJob('h'+N,N,artDisk(N,(x,y,z,a,d,o)=>{const b=x*Lx+z*Lz;let v=artSstep(-0.05,0.16,b)*(0.3+0.7*Math.max(0,b))*(0.8+0.2*z);v=Math.min(1,Math.ceil(v*4-0.15)/4);
   d[o]=4;d[o+1]=8;d[o+2]=20;d[o+3]=a*255*(1-Math.max(0.06,v))*0.97;}));}
 function artPRim(type,N){const col=ART_PT[type].atm;if(!col)return undefined;const M=Math.round(N*1.16),R=N/2-1,h=M/2,w=type==='gas'?0.05:0.035;
-  return artJob('r'+type+N,M,(i,j,d,o)=>{const dx=(i+0.5-h)/R,dy=(j+0.5-h)/R,r=Math.sqrt(dx*dx+dy*dy);if(r<1-3*w||r>1+3*w)return;const band=Math.exp(-(((r-1)/w)**2)),side=0.12+0.88*Math.pow(artC01(dx/r*0.5+0.5),1.6);
+  return artJob('r'+type+N,M,(i,j,d,o)=>{const dx=(i+0.5-h)/R,dy=(j+0.5-h)/R,r=Math.sqrt(dx*dx+dy*dy);if(r<1-3*w||r>1+3*w)return;const band=(r>=1-0.6*w&&r<1+w)?0.62:((r>=1+w&&r<1+2.2*w)?0.26:0),side=0.12+0.88*Math.pow(artC01(dx/r*0.5+0.5),1.6);
     d[o]=col[0];d[o+1]=col[1];d[o+2]=col[2];d[o+3]=255*band*side*0.85;});}
 function artRingOf(b){for(const q of BELT_RING_GEO)if(q.x===b.x&&q.y===b.y)return {k:Math.round(q.R/b.r*20)/20,w:Math.round(q.w/b.r*40)/40};return null;} // 环半径 / 宽(x 行星半径,量化了好缓存);没撒出来的环不画
 function artPRing(N,k,wk){const Nr=Math.min(N,256),R=Nr/2-1,ko=k+2.2*wk,M=Math.ceil(2*R*ko)+4,h=M/2; // 环贴图最多 256 档(淡的尘带,拉伸看不出)
   return artJob('g'+Nr+'|'+k+'|'+wk,M,(i,j,d,o)=>{const dx=(i+0.5-h)/R,dy=(j+0.5-h)/R,r=Math.sqrt(dx*dx+dy*dy),u=(r-k)/wk;if(u*u>4.84)return; // 横向剖面 = 撒石头的高斯(σ = 环宽),画到 2.2σ
     const a=Math.exp(-0.5*u*u)*(0.7+0.2*Math.sin(u*4.1)+0.1*Math.sin(u*9.3)),sh=(dx<0&&Math.abs(dy)<1)?0.45:1;
-    d[o]=222*sh;d[o+1]=200*sh;d[o+2]=160*sh;d[o+3]=255*artC01(a)*0.5;});} // 背光那侧行星挡住的一条:影子
+    const aq=a>0.66?0.62:(a>0.4?0.4:(a>0.18?0.22:0));d[o]=222*sh;d[o+1]=200*sh;d[o+2]=160*sh;d[o+3]=255*aq*0.5;});} // art-d2:环的浓淡分 3 档硬边 // 背光那侧行星挡住的一条:影子
 function artPEmit(type,sd,N){const col=ART_PT[type].emit;if(!col)return undefined;return artJob('e'+type+sd+'|'+N,N,artDisk(N,(x,y,z,a,d,o)=>{const rid=1-Math.abs(2*artFbm(x*3.6,y*3.6,z*3.6,sd+3,4)-1),k=artSstep(0.9,0.97,rid);if(k<=0)return;
   d[o]=col[0];d[o+1]=col[1];d[o+2]=col[2];d[o+3]=255*k*a;}));}
 function artPlSet(b,N){const ty=b.type||'gas',sd=b.seed|0,rg=artRingOf(b),s=artPSurf(ty,sd,N),h=artPShade(N),r=artPRim(ty,N),g=rg?artPRing(N,rg.k,rg.w):undefined,e=artPEmit(ty,sd,N); // undefined = 这种不需要;null = 还在生成
@@ -432,6 +441,7 @@ function artPlanet(g,b,x,y,r,la){ // 81-env mapBodies 调:画好返回 true;fals
   if(!S)return false;
   const k=S.N/(S.N-2),rs=r*k;
   if(S.g&&!dark){const rr=r*S.gk;g.save();g.translate(x,y);g.rotate(la);g.drawImage(S.g,-rr,-rr,2*rr,2*rr);g.restore();}
+  if(!dark){g.fillStyle=d2Css(D2.CYAN,0.85);g.beginPath();g.arc(x-1.4,y+1.4,r,0,6.283);g.fill();g.fillStyle=d2Css(D2.ROSE,0.85);g.beginPath();g.arc(x+1.4,y-1.4,r,0,6.283);g.fill();} // art-d2:色差镶边(青 / 玫瑰两张错开的圆垫在下面,边上露出细边)
   g.drawImage(S.s,x-rs,y-rs,2*rs,2*rs);
   if(dark){g.fillStyle='rgba(4,8,20,.91)';g.beginPath();g.arc(x,y,r+0.5,0,6.283);g.fill();} // 整盘压成夜面(同明暗贴图里夜面的色和浓度);不画大气边缘光、不画环
   else{g.save();g.translate(x,y);g.rotate(la);g.drawImage(S.h,-rs,-rs,2*rs,2*rs);if(S.r){const rr=rs*1.16;g.globalCompositeOperation='lighter';g.drawImage(S.r,-rr,-rr,2*rr,2*rr);}g.restore();}
