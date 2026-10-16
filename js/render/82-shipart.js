@@ -207,7 +207,7 @@ const SA=(()=>{
     HULL[h]={parts:sh.parts.filter(p=>p.t==='hull').map(p=>({p:'poly',pts:p.p.map(([x,y])=>[x/s,y/s])}))};
     HULL_BASE[h]=PXU*s*(SA_K[H2C[h]]||1);
     if(typeof ART_NOZ==='object'){const b=bbox(solids(sh));ART_NOZ[h]={e:sh.parts.filter(p=>p.t==='eng').map(p=>[p.x/s,p.y/s,p.r/s]),hw:(b.y1-b.y0)/2/s*0.85,bx:(b.x1-0.18*sh.L)/s};}}
-  if(typeof HULL_LABEL==='object')HULL_LABEL.CL='巡游';
+  if(typeof HULL_LABEL==='object')HULL_LABEL.CL='侦察'; // 2026-10-17 用户:巡游舰改名侦察舰
 
   /* ---------- 地图舰标:贴图缓存 ---------- */
   const CACHE=new Map();let NEW=0,TICK=0;
