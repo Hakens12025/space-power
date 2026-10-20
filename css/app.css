@@ -11,7 +11,8 @@
   --srf-panel:rgba(16,16,18,.92); /* 浮在战场上的常驻面板底 */
   --srf-modal:#131315;            /* 模态卡片实底 */
   --srf-raise:rgba(255,255,255,.04); /* 按钮静息底、标题栏 */
-  --srf-hover:#E9E6DF;            /* D2UI 悬停 = 整格反白 */
+  --srf-hover:rgba(255,255,255,.1); /* 一般的悬停底(书签、成员行、表格行这些字是浅色的地方) */
+  --hl:#E9E6DF;                   /* D2UI 整格反白:按钮 / 下拉项 / 可点的行,配 --ink 深字 */
   --srf-sunk:rgba(255,255,255,.07);  /* 槽:进度槽、输入框、列表卡片 */
   --srf-sel:rgba(255,255,255,.11);   /* 选中行底 */
   --scrim:rgba(4,4,6,.74);
@@ -103,14 +104,14 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
   padding:var(--sp-2) var(--sp-3);cursor:pointer;user-select:none;touch-action:manipulation;
   white-space:nowrap;pointer-events:auto}
 .btn:hover,.hbtn:hover,.qbtn:hover,.ed-btn:hover,.tr-tab:hover,.tr-stp:hover{
-  color:var(--ink);border-color:var(--srf-hover);background:var(--srf-hover)} /* D2UI 悬停整格反白 */
+  color:var(--ink);border-color:var(--hl);background:var(--hl)} /* D2UI 悬停整格反白 */
 /* 按下 = 实心强调(手指正按着),与下面的「开启态」是两件事 */
 .btn:active,.hbtn:active,.qbtn:active,.ed-btn:active,.tr-tab:active,.tr-stp:active{
   background:#BDB9B0;border-color:#BDB9B0;color:var(--ink)}
 /* 开启态 = 淡填充 + 彩边彩字(功能持续开着)。原项目根本没有这一态,
    开/关只靠 js 写内联 style.color,于是「按下」比「开着」还醒目 */
 .btn.on,.tr-tab.on{background:var(--acc-wash);border-color:var(--acc);color:var(--txt-hi);box-shadow:inset 0 -2px var(--acc)} /* D2UI 开着:暖白边 + 底边一道实线(D2 选中页签的读法) */
-.btn.on:hover,.tr-tab.on:hover{background:var(--srf-hover);border-color:var(--srf-hover);color:var(--ink)}
+.btn.on:hover,.tr-tab.on:hover{background:var(--hl);border-color:var(--hl);color:var(--ink)}
 .btn.is-dis,.qbtn.is-dis,.ed-btn.is-dis{color:var(--txt-mute);border-color:var(--line);cursor:default;pointer-events:none}
 
 /* --- 变体 --- */
@@ -208,12 +209,12 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
    结果卡片居中偏上,档位用 --z-modal(整档):它要压住右轨与工具栏,但不需要遮罩 —— 战场停在决出胜负那一刻,本来就该看得见。
    注意:#btnMatch 是顶栏里除暂停/倍速/教程之外唯一的钮。 */
 #matchEnd{left:50%;top:32%;transform:translate(-50%,-50%);min-width:340px;padding:var(--sp-6) var(--sp-6) var(--sp-5);text-align:center;z-index:var(--z-modal);
-  border-color:var(--state-ok);box-shadow:0 4px 28px rgba(0,0,0,.6)}
+  border:none;border-top:3px solid var(--state-ok);background:var(--srf-modal);box-shadow:0 10px 32px rgba(0,0,0,.6)} /* D2UI 只留上沿一道结果色 */
 #matchEnd[hidden]{display:none!important}
-#matchEnd.lose{border-color:var(--state-danger)}
-#matchEnd .me-title{font-size:30px;letter-spacing:.4em;text-indent:.4em;color:var(--state-ok);line-height:1.3}
+#matchEnd.lose{border-top-color:var(--state-danger)}
+#matchEnd .me-title{font-size:30px;font-weight:bold;letter-spacing:.4em;text-indent:.4em;color:var(--state-ok);line-height:1.3}
 #matchEnd.lose .me-title{color:var(--state-danger)}
-#matchEnd.draw{border-color:var(--side-neutral)} /* LL9 平局:中性灰,不借胜利的绿、也不借战败的红 */
+#matchEnd.draw{border-top-color:var(--side-neutral)} /* LL9 平局:中性灰,不借胜利的绿、也不借战败的红 */
 #matchEnd.draw .me-title{color:var(--side-neutral)}
 #matchEnd .me-sub{font-size:var(--fs-read);color:var(--txt);margin-top:var(--sp-1)}
 #matchEnd .me-stat{font-family:var(--ff-mono);font-size:var(--fs-body);color:var(--txt-dim);margin-top:var(--sp-4)}
@@ -238,7 +239,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #hud .hbtn.primary:hover{background:#fff;border-color:#fff}
 #btnTut{font:bold var(--fs-read) var(--ff-mono)!important;padding:0!important;min-width:32px}
 #btnTools .dd-car{font-style:normal;font-size:10px;margin-left:var(--sp-2)}
-#btnTools.open{background:var(--srf-hover);border-color:var(--srf-hover);color:var(--ink)}
+#btnTools.open{background:var(--hl);border-color:var(--hl);color:var(--ink)}
 .hudTag{display:none;font-size:var(--fs-body);letter-spacing:.12em;padding:var(--sp-1) var(--sp-3);border:var(--bw) solid currentColor;flex:none;user-select:none}
 .hudTag.on{display:inline-block}
 .hudTag.gm{color:#E3AE4A} .hudTag.rv{color:var(--side-hostile)}
@@ -250,13 +251,13 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #toolsDD .dd-item .t{flex:1}
 #toolsDD .dd-item b{display:block;font-size:var(--fs-read);font-weight:bold;letter-spacing:.06em;color:var(--txt-hi)}
 #toolsDD .dd-item s{display:block;text-decoration:none;font-size:var(--fs-label);color:var(--txt-dim);margin-top:2px}
-#toolsDD .dd-item:hover{background:var(--srf-hover)} #toolsDD .dd-item:hover b,#toolsDD .dd-item:hover s{color:var(--ink)}
+#toolsDD .dd-item:hover{background:var(--hl)} #toolsDD .dd-item:hover b,#toolsDD .dd-item:hover s{color:var(--ink)}
 #toolsDD .sw{width:28px;height:14px;border:var(--bw) solid var(--line-ctl);position:relative;flex:none}
 #toolsDD .sw::after{content:"";position:absolute;top:2px;left:2px;width:8px;height:8px;background:var(--txt-dim)}
 #btnGM.on .sw{border-color:#E3AE4A} #btnGM.on .sw::after{left:16px;background:#E3AE4A}
 #toolsDD .dd-seg{display:flex;padding:var(--sp-1) var(--sp-4) var(--sp-2)}
 #toolsDD .dd-seg button{flex:1;height:28px;margin-left:-1px;border:var(--bw) solid var(--line-ctl);background:none;color:var(--txt);font:var(--fs-body) var(--ff-ui);letter-spacing:.1em;cursor:pointer}
-#toolsDD .dd-seg button:hover{background:var(--srf-hover);color:var(--ink)}
+#toolsDD .dd-seg button:hover{background:var(--hl);color:var(--ink)}
 #toolsDD .dd-seg button.on{background:var(--acc-wash);border-color:var(--txt-hi);color:var(--txt-hi);position:relative;z-index:1}
 #toolsDD .dd-seg button.on[data-v="blue"],#toolsDD .dd-seg button.on[data-sp="blue"]{box-shadow:inset 0 -2px var(--side-friend)}
 #toolsDD .dd-seg button.on[data-v="red"],#toolsDD .dd-seg button.on[data-sp="red"]{box-shadow:inset 0 -2px var(--side-hostile)}
@@ -301,7 +302,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #pipBox .pip-hd #pipHd{flex:1}
 #pipBox .pip-hd .chev{font-style:normal;font-size:var(--fs-body)}
 #pipBox.open .pip-hd .chev{transform:rotate(90deg)}
-#pipBox .pip-hd:hover{background:var(--srf-hover);color:var(--ink)} #pipBox .pip-hd:hover .k{color:#555}
+#pipBox .pip-hd:hover{background:var(--hl);color:var(--ink)} #pipBox .pip-hd:hover .k{color:#555}
 #pipCv{display:none;width:calc(100% - 32px);height:150px;margin:0 var(--sp-5) var(--sp-3)}
 #pipBox.open #pipCv{display:block}
 /* ==================== D2UI 右栏(用户 10-20,原稿 demos/ui/右上角改版.html)====================
@@ -440,11 +441,12 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 
 /* 底部操作栏(底坞)三区:舰名区靠左 | 规格读数列 + 指令卡占中间(卡放大、随宽度铺开) | 雷达/停火竖排靠右。窄窗时规格列与卡换行,按钮组不拆散
    2026-10-10 用户:舰船图标左对齐、雷达与停火一列两排、中间放大铺满 —— 原来整簇居中,两端空挡大、四格卡 114x66 偏小 */
+#cmdBar::after{content:"";position:absolute;left:0;top:0;width:120px;height:2px;background:var(--txt-hi);pointer-events:none} /* D2UI 上沿左端一段亮线,同顶栏 */
 #cmdBar{left:50%;transform:translateX(-50%);bottom:var(--gut);display:flex;flex-wrap:wrap;justify-content:flex-start;align-items:center;gap:var(--sp-2) var(--sp-4);padding:var(--sp-2) var(--sp-4);z-index:var(--z-bar);width:min(1400px,calc(100% - var(--gut)*2))} /* 显式宽度:shrink-to-fit 下带 flex:1 子项会把整条压成窄柱(实测381px全叠起来)。1400 = 中间卡放大后要的宽度(旧 1160 是 114 卡时代) */
 .cmd-ship{display:flex;align-items:center;gap:var(--sp-2);flex:0 0 330px;width:330px;min-width:0} /* 2026-09-30 左图(选中舰船时的侧视肖像 #ciPort)右字;2026-10-10 定宽 330(原 132~370 随内容伸缩:单选带肖像约 420、多选约 260,中间四格的起点跟着跳) */
 .cmd-ship-t{display:flex;flex-direction:column;justify-content:center;min-width:0;max-width:210px;line-height:1.35}
 #ciPort{width:176px;height:60px;flex:none}
-.cmd-ship b{font-size:var(--fs-title);color:var(--txt-hi);font-weight:normal;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cmd-ship b{font-size:var(--fs-title);color:var(--txt-hi);font-weight:bold;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cmd-ship span{font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cmd-sep{width:1px;align-self:stretch;margin:2px 0;background:var(--line-ctl);flex:none}
 #ciSpec{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:var(--sp-1) var(--sp-4);flex:1 1 auto;min-width:280px} /* 2026-10-10 basis 改 auto(原 flex:1 的 basis 0):与放大的卡分自由空间时按内容宽度起算,不挤卡 */
@@ -484,7 +486,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #cmdCard .wb .na{flex:1;display:flex;align-items:center;justify-content:center;color:var(--txt-mute);font-size:var(--fs-read)}
 #cmdCard .hd{display:flex;align-items:center;gap:5px;height:18px}
 #cmdCard .wb:not(.none) .hd{height:22px;padding-bottom:4px;border-bottom:var(--bw) solid var(--line-ctl)} /* 2026-10-11 用户:类名(主炮 T)下面一条横线,之后才是具体武器;武器行贴着线往下排、左对齐(原来上下均分、近防两行沉底) */
-#cmdCard .lb{color:var(--txt-hi);font-size:var(--fs-body)}
+#cmdCard .lb{color:var(--txt-hi);font-size:var(--fs-body);font-weight:bold;letter-spacing:.06em}
 #cmdCard .key{font-family:var(--ff-mono);font-size:var(--fs-micro);color:var(--txt-dim);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);padding:0 3px;line-height:13px}
 #cmdCard .rd{font-family:var(--ff-mono);font-size:var(--fs-body);color:var(--txt-read);display:flex;justify-content:space-between;font-variant-numeric:tabular-nums}
 #cmdCard .rd .dim{color:var(--txt-dim)}
@@ -496,7 +498,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 /* 2026-10-11 多武器(原稿 demos/ui/多武器指令卡.html):一类几种就几行 —— 名字(点 = 这一行就绪的全选)| 绿条 | 就绪数 | 分开关;右上角的勾 = 这一类的总开关 */
 #cmdCard .rows{flex:1;display:flex;flex-direction:column;justify-content:flex-start;gap:2px;min-height:0}
 #cmdCard .wr{display:flex;align-items:center;gap:6px;height:23px;border-radius:var(--r-sm);padding:0 3px} /* 2026-10-11 用户:行放大、字大一点(原 18px / 11px) */
-#cmdCard .wr.hi,#cmdCard .wr:hover{background:rgba(90,167,255,.08)}
+#cmdCard .wr.hi,#cmdCard .wr:hover{background:rgba(255,255,255,.07)}
 #cmdCard .wr .wn{flex:0 0 30px;font-size:var(--fs-read);color:var(--txt);white-space:nowrap}
 #cmdCard .wr .wn[data-rowpick]{cursor:pointer}#cmdCard .wr .wn[data-rowpick]:hover{color:var(--txt-hi);text-decoration:underline dotted}
 #cmdCard .wr .cells{flex:1;min-width:0;height:13px;position:relative}
@@ -561,7 +563,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
    z 取 --z-transient(50)整档:光标能掠过屏幕上任何东西,故必须高于 --z-panel/--z-bar/--z-hud/--z-flyout;
    又必须低于 --z-modal(70),否则一张 pointer-events:none 的卡片会盖住可点的模态。
    位置由 js 每次 mousemove 写 left/top(靠边翻到光标另一侧),故这里 left/top 只给初值。 */
-#xhTip{position:fixed;left:0;top:0;background:var(--srf-modal);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);padding:var(--sp-2) var(--sp-3);font-size:var(--fs-label);color:var(--txt);pointer-events:none;z-index:var(--z-transient);display:none;white-space:nowrap;max-width:240px}
+#xhTip{position:fixed;left:0;top:0;background:var(--srf-modal);border:var(--bw) solid var(--line-ctl);border-top:2px solid var(--txt-hi);border-radius:var(--r-sm);padding:var(--sp-2) var(--sp-3);font-size:var(--fs-label);color:var(--txt);pointer-events:none;z-index:var(--z-transient);display:none;white-space:nowrap;max-width:240px}
 #xhTip .nm{color:var(--txt-hi);font-size:var(--fs-body)}
 #xhTip .k{color:var(--txt-dim);margin-right:var(--sp-2)}
 #xhTip .v{font-family:var(--ff-mono);letter-spacing:var(--ls-read);font-variant-numeric:tabular-nums;color:var(--txt-read)}
@@ -579,7 +581,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 /* 几何:外层 flex 居中 + 卡片定高 + 内层 .tut-body 独立滚动。
    卡片本身 overflow:hidden,长内容只会在 .tut-body 里滚,永远顶不穿视口(早年的设置面板踩过的坑:卡片与内容两套上限互相打架) */
 #tutPanel{width:min(820px,100%);max-height:100%;background:var(--srf-modal);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-md);display:flex;flex-direction:column;overflow:hidden}
-.tut-hd{flex:none;display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4) var(--sp-5);border-bottom:var(--bw) solid var(--line);background:var(--srf-raise)}
+.tut-hd{flex:none;display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4) var(--sp-5);background:var(--band);box-shadow:inset 0 -2px 0 -0px transparent}
 .tut-hd h2{flex:none;font-size:var(--fs-title);color:var(--txt-hi);font-weight:bold;letter-spacing:var(--ls-label)}
 .tut-hd-hint{flex:1;min-width:0;font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* overflow-x 用 auto 不用 hidden:窄窗口下万一某个 nowrap 读数撑宽,它在本容器内横向滚,而不是被切掉半个数字 */
@@ -666,7 +668,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 /* D2UI 起加船住在 #toolsDD 里(阵营两段 → 六个舰种 → 清空) */
 #spawnBar .sp-cls{display:grid;grid-template-columns:repeat(6,1fr);gap:var(--sp-1);padding:0 var(--sp-4) var(--sp-1)}
 #spawnBar .sp-cls button{height:26px;border:var(--bw) solid var(--line);background:none;color:var(--txt);font:bold var(--fs-label) var(--ff-mono);cursor:pointer}
-#spawnBar .sp-cls button:hover{background:var(--srf-hover);border-color:var(--srf-hover);color:var(--ink)}
+#spawnBar .sp-cls button:hover{background:var(--hl);border-color:var(--hl);color:var(--ink)}
 /* FM7 成员行:此刻听别的编队的那几艘压暗,身份格里写 →N */
 #selFm .fm-mem.away{opacity:.5}
 #selFm .fm-mem.away .fg{color:var(--state-warn);font-size:var(--fs-label)}
@@ -678,6 +680,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 .fm-tab.fol .fm-edge{background:var(--state-warn)}
 .fm-tab:hover,.fm-tab.on{transform:translateX(6px);background:var(--srf-hover);border-color:var(--line-acc);color:var(--txt-hi)}
 .fm-tab:hover .fm-nm,.fm-tab.on .fm-nm{color:var(--txt-hi)}
+.fm-tab.on{box-shadow:inset 2px 0 var(--txt-hi)} /* D2UI 当前那条左缘一道暖白(页签选中的读法) */
 /* 战损排在 :hover 之后:同特异度靠书写顺序定优先级,"队里有人快没了"比"鼠标正指着"更该被看见(同 RF8 的 paused) */
 .fm-tab.hurt{border-color:var(--state-warn)}
 /* FM5a 书签仪表化:底部 3px 全宽聚合战力条 = 底槽(.fm-tab::before) + 填充(.fm-hp,宽度%由 87-fmbar 每 20 帧写叶子)。
@@ -756,7 +759,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #fmPage{position:fixed;inset:0;background:var(--scrim);z-index:var(--z-modal);display:none;align-items:center;justify-content:center;padding:var(--gut)}
 #fmPage.on{display:flex}
 #fmPagePanel{width:min(1180px,100%);max-height:100%;background:var(--srf-modal);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-md);display:flex;flex-direction:column;overflow:hidden}
-.fp-hd{flex:none;display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4) var(--sp-5);border-bottom:var(--bw) solid var(--line);background:var(--srf-raise)}
+.fp-hd{flex:none;display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4) var(--sp-5);background:var(--band)}
 .fp-hd h2{flex:none;font-size:var(--fs-title);color:var(--txt-hi);font-weight:bold;letter-spacing:var(--ls-label)}
 .fp-hd-hint{flex:1;min-width:0;font-size:var(--fs-label);color:var(--txt-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fp-body{flex:1;min-height:0;overflow:auto;padding:var(--sp-4) var(--sp-5) var(--sp-6)}
