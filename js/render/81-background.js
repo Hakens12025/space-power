@@ -112,19 +112,17 @@ function drawGrid(){
   const wLs=vtW[2]+vtW[3];                                   // 刻度的透明度跟着【光秒网格整体】的权重走,不跟着某一层走
   if(vtW[2]>0.01)vtGridLs(vtW[2],2,vtCur!==3?wLs:0);
   if(vtW[3]>0.01)vtGridLs(vtW[3],3,vtCur===3?wLs:0);   // SN7d:战区层与舰队层是同一张光秒网格(固定资产 + LOD),放射距离环已删
-  // 比例尺:左下角,条长固定 VT.BAR_PX,上面的数随缩放连续变(用户 2026-09-26:"不要让比例尺可变,固定长度,变数字");三位有效数字 + 「一格 X km」
+  // 比例尺:左下角,条长固定 VT.BAR_PX,上面的数随缩放连续变(用户 2026-09-26:"不要让比例尺可变,固定长度,变数字");三位有效数字。下面那行「一格 X km」10-21 用户去掉
   const barPx=VT.BAR_PX,km0=barPx/cam.zoom,pw=Math.pow(10,Math.max(0,Math.floor(Math.log10(km0))-2)),barKm=Math.round(km0/pw)*pw;
-  const bx=12, by=H-20-scaleLift(); // D2UI 空底栏时比例尺贴底,原来 H-14 下面那行「一格」会被屏幕底边切掉一半
+  const bx=12, by=H-14-scaleLift();
   ctx.save();
   ctx.fillStyle='rgba(16,16,18,.82)'; // D2UI 比例尺换暖白 + Bahnschrift(原浅蓝 / 黄)
-  ctx.fillRect(bx-6,by-24,200,34);
+  ctx.fillRect(bx-6,by-24,200,32);
   ctx.strokeStyle='#E9E6DF';ctx.lineWidth=2;ctx.fillStyle='#E9E6DF';
   ctx.fillRect(bx,by,barPx,4);ctx.strokeRect(bx,by,barPx,4);
   ctx.font='bold 12px Bahnschrift,Consolas';ctx.textAlign='left';ctx.textBaseline='middle';
   const barLbl=barKm.toLocaleString('en-US')+' km';
   ctx.fillText(barLbl,bx,by-9);
-  ctx.font='10px Bahnschrift,Consolas';ctx.fillStyle='#8F8C85';
-  ctx.fillText('一格 '+Math.round(step/1000)+'k km',bx+3,by+12);
   ctx.restore();
 }
 /* 天是【屏幕空间】的。原来星点乘 cam.zoom 跟着一起缩,于是拉到战区层时整片天塌成画面中间一小块、

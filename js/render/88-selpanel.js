@@ -82,6 +82,7 @@ function engRows(s){
    刻意【不给假兜底】:内核没加载好时整段不出行(fail-closed),而不是印一个看着完全正常的数字 ——
    这块面板的全部价值就是这三个数可信。 */
 /* D2UI 右栏部件 */
+function selIco(k){const h=document.getElementById('selHead');if(h&&(h.dataset.ico||'')!==k)h.dataset.ico=k;} // D2UI 抬头右侧暗纹选哪枚(css #selHead[data-ico]):fleet 我方 / enemy 对方舰 / rock civ lure buoy 物体 / sta 据点 / moon comet body 天体 / msl 导弹;'' 不画
 function selHeadSet(sub,band){ // 抬头副标题 + 色带(''= 中性 / ship = 我方 / hostile = 对方);只在变了时写,免得每 20 帧重排
   const h=document.getElementById('selHead'),e=document.getElementById('selSub');
   if(e&&e.innerHTML!==sub)e.innerHTML=sub; // 副标题可带 <i class="chip"> 小方块徽章
@@ -91,16 +92,13 @@ const stRow=(k,v,fr)=>`<span class="k">${k}</span>${fr==null?'<span></span>':`<s
 const SP_IC={eye:'<svg viewBox="0 0 20 20"><path d="M1.5 10S5 4 10 4s8.5 6 8.5 6-3.5 6-8.5 6S1.5 10 1.5 10Z"/><circle cx="10" cy="10" r="2.6"/></svg>',
   ear:'<svg viewBox="0 0 20 20"><path d="M3 10h2M7 6v8M11 3v14M15 7v6M17.5 9.5v1"/></svg>',
   rad:'<svg viewBox="0 0 20 20"><path d="M3 17A10 10 0 0 1 17 3"/><path d="M6.5 17A6.5 6.5 0 0 1 17 6.5"/><circle cx="16" cy="16" r="1.6"/><path d="M16 16 9 9"/></svg>'};
-function sensePerks(s){ // 暴露三格(圆形插槽,亮 = 在暴露)+ 一句旁白。数与 senseRows 同源(83 sigSeen / 22-percep),本文件不重算;内核没好就整段不出
+function sensePerks(s){ // 暴露三格(圆形插槽,亮 = 在暴露)。数与 senseRows 同源(83 sigSeen / 22-percep),本文件不重算;内核没好就整段不出
   if(typeof sigSeen!=='function'||typeof hearRangeOf!=='function'||typeof actRangeOf!=='function')return '';const se=sigSeen(s);if(!se)return '';
-  const k=v=>Math.round(v/1000)+'k',ep=(typeof engPowerOf==='function')?engPowerOf(s):0;
+  const ep=(typeof engPowerOf==='function')?engPowerOf(s):0;
   const est=(ep>=SENS.P_ENG_REV)?'反推':((ep>=SENS.P_ENG_MAIN)?'满推':(ep>0?'机动':'熄火'));
-  const silent=s.emitMode==='silent',jam=s.emitMode==='jam',lb=(typeof emitLabel==='function')?emitLabel(s.emitMode):String(s.emitMode),far=sigKm(se.mx);
+  const silent=s.emitMode==='silent',jam=s.emitMode==='jam';
   const pk=(on,ic,lab,st)=>`<div class="pk${on?' on':''}"><div class="c">${ic}<i class="mo"></i></div><s>${lab}</s><em>${st}</em></div>`; // .mo = 轨道上那颗小点
-  const lore=(ep>0?`尾焰亮着(${est}),${far} 内都看得见你`:`熄火,${far} 外看不见你`)
-    +(silent?';雷达静默,没人听得见。':`;${k(hearRangeOf(s))} 外也听得见你(${lb})`+(jam?',干扰中不照射。':`,照得到 ${k(actRangeOf(s))} 内的标准目标。`));
-  return `<div class="rule"></div><div class="perks">${pk(ep>0,SP_IC.eye,'光学',est)}${pk(!silent,SP_IC.ear,'射频',silent?'静默':'被听见')}${pk(!silent&&!jam,SP_IC.rad,'照射',silent?'未开机':(jam?'干扰中':'照射中'))}</div>
-    <div class="lore">${lore}</div>`;
+  return `<div class="rule"></div><div class="perks">${pk(ep>0,SP_IC.eye,'光学',est)}${pk(!silent,SP_IC.ear,'射频',silent?'静默':'被听见')}${pk(!silent&&!jam,SP_IC.rad,'照射',silent?'未开机':(jam?'干扰中':'照射中'))}</div>`; // 旁白 10-21 用户删
 }
 function senseRows(s){
   if(typeof sigSeen!=='function'||typeof hearRangeOf!=='function'||typeof actRangeOf!=='function')return '';const se=sigSeen(s);if(!se)return '';
@@ -294,21 +292,21 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
   const fmBox=document.getElementById('selFm');
   if(fmBox&&fmBox.style.display!=='none')fmBox.style.display='none';
   ciBarsSet([]); // 2026-10-08 底栏血条同肖像:先收起,选中舰船那一支再画
-  selHeadSet('','');box.classList.remove('d2');const cbar=document.getElementById('cmdBar');if(cbar)cbar.classList.remove('idle'); // 底栏空态只在总览那一支挂(同一个 JS 任务里摘了又挂,不闪) // D2UI 抬头与版式先复位成中性,舰船 / 总览 / 编队那几支再改
+  selHeadSet('','');selIco('');box.classList.remove('d2');const cbar=document.getElementById('cmdBar');if(cbar){cbar.classList.remove('idle');cbar.classList.remove('fm');} // 底栏空态只在总览那一支挂(同一个 JS 任务里摘了又挂,不闪) // D2UI 抬头与版式先复位成中性,舰船 / 总览 / 编队那几支再改
   if(typeof ptSet==='function')ptSet(null); // 2026-09-30 底栏肖像同样先收起,只有下面选中舰船那一支再亮出来(同一个 JS 任务里改,不闪)
   if(box.style.display!=='block')box.style.display='block';
   if(selBuoy&&(selBuoy.dead||(selBuoy.kind==='station'?featStaObs(ME).indexOf(selBuoy)<0:rocks.indexOf(selBuoy)<0)))selBuoy=null; // 2026-09-29 浮标没了 / 换局:撤选中(10-05 据点易手同)
-  if(selBuoy&&selBuoy.kind==='station'){const o=selBuoy;title.textContent='据点';if(ciN)ciN.textContent=o.name;if(ciC)ciC.textContent='蓝方';if(ciSp)ciSp.innerHTML=''; // 2026-10-05 用户:据点能开雷达(巡洋舰同级),底栏雷达遥控
+  if(selBuoy&&selBuoy.kind==='station'){const o=selBuoy;title.textContent='据点';selIco('sta');if(ciN)ciN.textContent=o.name;if(ciC)ciC.textContent='蓝方';if(ciSp)ciSp.innerHTML=''; // 2026-10-05 用户:据点能开雷达(巡洋舰同级),底栏雷达遥控
     box.innerHTML=`<div class="row"><span class="k">雷达</span><span class="v">${o.on?'照射':'被动 · 只看和听'}</span></div>`;updateCmdBar([]);return;}
   if(selBuoy){ // 2026-09-29 用户:点浮标 → 底栏雷达开照射 / 打脉冲(飞行中也行);原来武器菜单「特殊」里的逐个开关已删
-    const o=selBuoy;title.textContent='前出浮标';if(ciN)ciN.textContent=o.name;if(ciC)ciC.textContent=o.owner?o.owner.name:'—';if(ciSp)ciSp.innerHTML='';
+    const o=selBuoy;title.textContent='前出浮标';selIco('buoy');if(ciN)ciN.textContent=o.name;if(ciC)ciC.textContent=o.owner?o.owner.name:'—';if(ciSp)ciSp.innerHTML='';
     box.innerHTML=`<div class="row"><span class="k">状态</span><span class="v">${o.flame?'飞行中 · 点火':'飞行中 · 熄火滑行'}</span></div>`
       +`<div class="row"><span class="k">雷达</span><span class="v">${o.on?'照射 · 对方听得见':'被动 · 只看和听'}</span></div>`;
     updateCmdBar([]);return;
   }
   {const se=typeof selEntOk==='function'?selEntOk():null; // 2026-10-08 用户「所有实体都能点」:只看信息、不能下令。标题 / 名字 / 那几行都由实体登记表给(command/69:对方的东西 = 悬停信息卡那几行,方位 / 距离量自第一艘还在的我方舰,写在「参照」行)
   if(se){const K=entKind(se),ref=ships.find(x=>x.side===VIEW&&!x.dead);if(ciSp)ciSp.innerHTML='';
-    title.textContent=K.title(se);selHeadSet(se.side===VIEW?'我方':'只看信息',se.side&&se.side!==VIEW?'hostile':'');if(ciN)ciN.textContent=K.name(se);if(ciC)ciC.textContent=se.side===VIEW?'我方':'只看信息';box.innerHTML=K.info(se,ref);
+    title.textContent=K.title(se);selIco(K.k==='ship'?(se.side===VIEW?'fleet':'enemy'):K.k==='obj'?({civ:'civ',lure:'lure',buoy:'buoy'}[se.kind]||'rock'):K.k);selHeadSet(se.side===VIEW?'我方':'只看信息',(se.side==='red'||se.side==='blue')&&se.side!==VIEW?'hostile':''); // 中立(碎石 neutral)不挂红带if(ciN)ciN.textContent=K.name(se);if(ciC)ciC.textContent=se.side===VIEW?'我方':'只看信息';box.innerHTML=K.info(se,ref);
     updateCmdBar([]);return;}}
   // 导弹群/导弹组/信标视图:Shift+点选或框选导弹(选择机制在 70-input) → 右栏切实时弹道数据,底栏切固定参数,按钮组置灰
   // RF4a 框选聚合:selMissileHits 里存活组>1 → 汇总视图(状态/目标/引导分布);代表组=剩余弹头最多者
@@ -324,7 +322,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
     const minFuel=Math.min(...aliveHits.map(p=>p.fuel||0));
     const maxSpd=Math.max(...aliveHits.map(p=>V.len(p.vel)));
     const shooters=[...new Set(aliveHits.map(p=>p.shooter&&p.shooter.name).filter(Boolean))];
-    title.textContent='导弹群';
+    title.textContent='导弹群';selIco('msl');
     if(ciN)ciN.textContent=`导弹群 ${aliveHits.length} 组`;
     if(ciC)ciC.textContent='射手 '+(shooters.join(' · ')||'—');
     if(ciSp)ciSp.innerHTML=[
@@ -349,7 +347,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
   const mq=selMissile?projViewLook(selMissile):null,m=mq?selMissile:null; // LL9 还在不在、对方弹的速度读主视角画它的弹影(render/83 projViewLook:对方的余像消失才算没了;自己的 / 关开关 = 真弹没 done)
   if(m&&m.type==='interceptor'){ // 2026-10-12 用户:拦截弹能点 —— 自己的报目标 / 燃料 / 防区;对方的只报速度与弹影颗数(目标、燃料我方不知道)
     const own=adminMode||(!!m.shooter&&m.shooter.side===ME),rw=(k,v)=>`<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`;
-    title.textContent=own?'拦截弹':'敌方拦截弹';if(ciN)ciN.textContent=own?'拦截弹 #'+m.icId:'敌方拦截弹';if(ciC)ciC.textContent=own?'射手 '+(m.shooter?m.shooter.name:'—'):'—';if(ciSp)ciSp.innerHTML='';
+    title.textContent=own?'拦截弹':'敌方拦截弹';selIco('msl');if(ciN)ciN.textContent=own?'拦截弹 #'+m.icId:'敌方拦截弹';if(ciC)ciC.textContent=own?'射手 '+(m.shooter?m.shooter.name:'—'):'—';if(ciSp)ciSp.innerHTML='';
     if(!own){box.innerHTML=rw('速度',Math.round(SHOW.v(V.len(mq.vel)))+' km/s')+rw('剩余',(mq.count||16)+' 颗');updateCmdBar([]);return;}
     const t=m.target,tq=!t?null:(t.kind?(viewDead(t)?null:viewPos(t)):(projSeen(t)?projViewPos(t):null)),tdist=tq?V.len(V.sub(tq,m.pos)):0; // 同 83 drawIcpIntent:浮标读航迹位置,弹读弹影
     const tgt=!t?'无 · 搜索中':(t.kind?xhName(t):(t.type==='decoy'?'诱饵弹':'来袭导弹组'+(tq?' · '+(projViewLook(t).count||16)+' 颗':'')))+(t&&!tq?' · 看不见':'');
@@ -361,12 +359,12 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
     updateCmdBar([]);return;
   }
   if(m&&m.type==='missile'&&!adminMode&&m.shooter&&m.shooter.side!==ME){ // 2026-09-28 敌方弹:只报看得见的量(射手、燃料、目标我方不知道)
-    title.textContent='敌方导弹';if(ciN)ciN.textContent='敌方导弹';if(ciC)ciC.textContent='—';if(ciSp)ciSp.innerHTML='';
+    title.textContent='敌方导弹';selIco('msl');if(ciN)ciN.textContent='敌方导弹';if(ciC)ciC.textContent='—';if(ciSp)ciSp.innerHTML='';
     box.innerHTML=`<div class="row"><span class="k">速度</span><span class="v">${Math.round(SHOW.v(V.len(mq.vel)))} km/s</span></div>`;
     updateCmdBar([]);return;
   }
   if(m&&m.type==='missile'){
-    title.textContent='导弹组';
+    title.textContent='导弹组';selIco('msl');
     if(ciN)ciN.textContent='导弹组 #'+(m.group||'?');
     if(ciC)ciC.textContent='射手 '+(m.shooter?m.shooter.name:'—')+(m.netId?' · 网'+m.netId:'直射');
     if(ciSp)ciSp.innerHTML=[
@@ -403,7 +401,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
   if(_F&&typeof fmbStat==='function'&&typeof fmbInfo==='function'){
     const st=fmbStat(_F);
     if(st){
-      title.textContent=(typeof fmName==='function')?fmName(_F):('编队'+_F.id);selHeadSet('编队 · '+st.list.length+' 艘','ship');
+      title.textContent=(typeof fmName==='function')?fmName(_F):('编队'+_F.id);selIco('fleet');selHeadSet('编队 · '+st.list.length+' 艘','ship');
       box.style.display='none';                       // 单舰信息区让位
       if(fmBox)fmBox.style.display='block';           // 具体值,不能写 ''
       fmbInfo(st);
@@ -415,6 +413,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
         ['战力',Math.round(st.hpFrac*100)+'%'],
         ['离位',(st.dev/1000).toFixed(1)+'k'],
       ].map(it=>`<span class="fi"><i>${it[0]}</i><b>${it[1]}</b></span>`).join('');
+      if(cbar)cbar.classList.add('fm'); // D2UI 编队底栏版式(css #cmdBar.fm)
       updateCmdBar(sel); // 开关仍作用于全部选中蓝舰(多选语义),编队自然也吃得到
       return;
     }
@@ -430,7 +429,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
     blue.forEach(s2=>{hp+=Math.max(0,s2.hp);mhp+=s2.maxHp||0;});
     const fr=mhp>0?Math.max(0,Math.min(1,hp/mhp)):0;
     let lit=0;trkEach(ME,tk=>{if(!trkGone(tk)&&trkHeld(tk))lit++;}); // 数蓝方航迹表里握着的接触
-    title.textContent='舰队总览';selHeadSet(ME==='red'?'红方 · 未选中':'蓝方 · 未选中','');box.classList.add('d2');if(cbar)cbar.classList.add('idle');fleetRowSync(blue);
+    title.textContent='舰队总览';selIco('fleet');selHeadSet(ME==='red'?'红方 · 未选中':'蓝方 · 未选中','');box.classList.add('d2');if(cbar)cbar.classList.add('idle');fleetRowSync(blue);
     if(ciN)ciN.textContent='—';if(ciC)ciC.textContent='—';if(ciSp)ciSp.innerHTML='';
     // D2UI:大数字 = 在役舰数,右边已点亮的敌舰;时间倍速挪给顶栏,操作提示去掉(用户 10-20)
     box.innerHTML=`<div class="bd"><div class="hero"><b class="num">${blue.length}</b><span>艘在役</span><span class="sub"><b class="num">${lit}</b><span>艘敌舰已点亮</span></span></div>
@@ -440,7 +439,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
     updateCmdBar(sel);return;
   }
   const s=sel[0]; // 多选时信息显示第一艘,标题注明数量;操作走 updateCmdBar 的全选语义
-  title.textContent=sel.length>1?`已选 ${sel.length} 艘`:s.name; // D2UI 抬头写舰名(原来写「实时状态」,名字只在底栏)
+  title.textContent=sel.length>1?`已选 ${sel.length} 艘`:s.name;selIco(s.side===VIEW?'fleet':'enemy'); // D2UI 抬头写舰名(原来写「实时状态」,名字只在底栏)
   selHeadSet((sel.length>1?s.name+' · ':'')+(CLS_NAME[s.cls]||s.cls)+'<i class="chip">'+(TIER_LABEL[s.tier]||'T2')+'</i>'+(sel.length>1?'<i class="chip">×'+sel.length+'</i>':''),'ship');box.classList.add('d2');
   // 固定信息(舰船类数据,整局不变) → 底栏
   // 底栏舰船块:单选 = 舰名 / 舰种 / 肖像 / 结构与护盾条;多选 = 「N 艘」+ 每艘一条血条、舰名写在条右边(2026-10-08 用户)。规格(specItems)悬停舰船块才显示(ciSpecTip)

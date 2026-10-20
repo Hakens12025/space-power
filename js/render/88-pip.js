@@ -25,26 +25,31 @@ function pipFrame(){
 on('pipBox','click',e=>{if(e.target.closest('.pip-hd')){e.currentTarget.classList.toggle('open');PIP.n=PIP.EVERY-1;}}); // 点抬头那一行展开 / 折起;展开后下一帧就画
 function pipGun(g,w,h,s,k){ // 火控窗:三条 S 形命中率曲线(起作用的那条亮)+ 目标此刻的距离与把握。k = 'mac' 轴炮 / 'sec' 副炮
   const sec=k==='sec',XM=PIP_K[k].XMAX,P=(d,t)=>sec?secHitProb(s,d,t):macHitProb(s,d,t),L=30,R=w-8,T=22,B=h-30,X=d=>L+(R-L)*Math.min(1,d/XM),Y=pr=>B-(B-T)*pr;
-  g.strokeStyle='rgba(143,208,255,.25)';g.lineWidth=1;g.beginPath();g.moveTo(L,T);g.lineTo(L,B);g.lineTo(R,B);g.stroke();
-  g.font='10px Consolas';g.fillStyle='rgba(143,208,255,.6)';g.textAlign='center';g.textBaseline='top';
-  for(let d=PIP_K[k].STEP;d<=XM+1;d+=PIP_K[k].STEP){const x=X(d);g.fillRect(x,B,1,3);g.fillText((d/1e4)+'万',x,B+4);}
-  g.textAlign='right';g.textBaseline='middle';g.fillText('100%',L-3,T);g.fillText('0',L-3,B);
-  g.setLineDash([3,3]);g.strokeStyle='rgba(255,209,102,.45)';g.beginPath();g.moveTo(L,Y(MAC_AUTO_P));g.lineTo(R,Y(MAC_AUTO_P));g.stroke();g.setLineDash([]);
-  g.textAlign='right';g.fillStyle='rgba(255,209,102,.7)';g.fillText('自动开火门 '+Math.round(MAC_AUTO_P*100)+'%',R,Y(MAC_AUTO_P)-7);
+  const W1='rgba(233,230,223,',NUM='Bahnschrift,Consolas',CJK='"Microsoft YaHei"'; // D2UI(10-21 用户:还是旧的蓝色风格):暖白细线 + Bahnschrift 数字
+  g.fillStyle=W1+'.06)';for(const q of [0.25,0.5,0.75])g.fillRect(L,Math.round(Y(q)),R-L,1);   // 极淡的横向网格
+  g.strokeStyle=W1+'.3)';g.lineWidth=1;g.beginPath();g.moveTo(L+.5,T);g.lineTo(L+.5,B+.5);g.lineTo(R,B+.5);g.stroke();
+  g.font='10px '+NUM;g.fillStyle=W1+'.5)';g.textAlign='center';g.textBaseline='top';
+  for(let d=PIP_K[k].STEP;d<=XM+1;d+=PIP_K[k].STEP){const x=X(d);g.fillRect(x,B,1,3);g.fillText((d/1e4)+'万',x,B+5);}
+  g.textAlign='right';g.textBaseline='middle';g.fillText('100%',L-4,T);g.fillText('0',L-4,B);
+  g.setLineDash([2,3]);g.strokeStyle=W1+'.4)';g.beginPath();g.moveTo(L,Y(MAC_AUTO_P)+.5);g.lineTo(R,Y(MAC_AUTO_P)+.5);g.stroke();g.setLineDash([]);
+  g.font='10px '+CJK;g.textAlign='right';g.textBaseline='bottom';g.fillStyle=W1+'.6)';g.fillText('自动开火 '+Math.round(MAC_AUTO_P*100)+'%',R,Y(MAC_AUTO_P)-2);
   const ff=s.forceMac,mt=(typeof fcActive==='function'&&fcActive(s))?(s.fcTgt&&s.fcTgt.mac):(s.lockedTarget||(ff&&ff.t)||null);
   const tp=mt?viewPos(mt):(ff&&ff.pt&&!sec?ff.pt:null),fk=mt&&tp?macFwdK(s.side,mt):1,on=fk===MAC_FWD.VIS?'vis':(fk===MAC_FWD.RAD?'rad':(fk===MAC_FWD.IR?'ir':'def')); // 起作用的那条:目标此刻在可见光圈里 / 被雷达照到 / 红外量到 / 都不是;没目标、打空地 = 默认
   for(const [c] of PIP_C.filter(q=>q[0]!==on).concat(PIP_C.filter(q=>q[0]===on))){const kk=PIP_C.find(q=>q[0]===c)[2],m=typeof kk==='function'?kk():kk,lit=c===on; // 亮的那条最后画(压在上面)
     g.strokeStyle=pipCol(c,lit?0.85:0.3);g.lineWidth=lit?1.3:0.9;g.setLineDash(lit?[]:[4,3]);g.beginPath();for(let i=0;i<=60;i++){const d=XM*i/60,x=X(d),y=Y(P(d/m));if(i)g.lineTo(x,y);else g.moveTo(x,y);}g.stroke();} // 没起作用的:暗 + 虚线 // 2026-10-11 用户:不要那么亮、细一点(原 1 / 2px、暗的 0.35 / 1.2px);又说略暗,亮的那条 0.75 → 0.85
   g.setLineDash([]);
-  g.font='10px "Microsoft YaHei"';g.textAlign='right';g.textBaseline='top';let lx=R; // 图例:右上角,起作用的那个亮
-  for(const [c,nm] of PIP_C.slice().reverse()){g.fillStyle=pipCol(c,c===on?1:0.45);g.fillText(nm,lx,T+2);lx-=g.measureText(nm).width+8;}
-  g.textAlign='left';g.textBaseline='top';g.font='11px "Microsoft YaHei"';
-  if(!tp){g.fillStyle='#cfe6ff';g.fillText(mt?'目标定不出位置':(sec?'无目标 · 锁定后显示':'无主炮目标 · 锁定或强行开火后显示'),6,4);return;}
+  g.font='10px '+CJK;g.textAlign='right';g.textBaseline='top';let lx=R; // 图例:右上角,名字前一个小色块,起作用的那个亮;底下垫一条半透明面板色,免得压在曲线上读不清
+  {let lw=0;for(const q of PIP_C)lw+=g.measureText(q[1]).width+20;g.fillStyle='rgba(16,16,18,.85)';g.fillRect(R-lw+8,T,lw-8,15);}
+  for(const [c,nm] of PIP_C.slice().reverse()){const a=c===on?1:0.4;g.fillStyle=W1+(c===on?'.95)':'.45)');g.fillText(nm,lx,T+2);lx-=g.measureText(nm).width+4;g.fillStyle=pipCol(c,a);g.fillRect(lx-6,T+5,6,6);lx-=16;}
+  g.textAlign='left';g.textBaseline='top';g.font='11px '+CJK;
+  if(!tp){g.fillStyle=W1+'.62)';g.fillText(mt?'目标定不出位置':(sec?'无目标 · 锁定后显示':'无主炮目标 · 锁定或强行开火后显示'),6,4);return;}
   const d=Math.hypot(tp[0]-s.pos[0],tp[1]-s.pos[1]),pr=P(d,mt),x=X(d),y=Y(pr);
-  g.strokeStyle='rgba(255,224,102,.6)';g.lineWidth=1;g.beginPath();g.moveTo(x,T);g.lineTo(x,B);g.stroke(); // 目标标记用选中黄(白 / 红 / 青 / 绿都给了曲线)
-  g.fillStyle='#ffe066';g.strokeStyle='rgb(5,7,12)';g.beginPath();g.arc(x,y,3.5,0,6.283);g.fill();g.stroke();
-  g.fillStyle='#cfe6ff';g.fillText((mt?'目标':'炮击点')+' '+(d/1e4).toFixed(1)+' 万 km · 把握 '+(pr>=0.1?Math.round(pr*100):(pr*100).toFixed(1))+'%'+(on==='vis'?' · 可见光加成':(on==='rad'?' · 雷达加成':(on==='ir'?' · 红外加成':'')))+(d>XM?'(超出图)':''),6,4);
-  g.font='10px Consolas';g.fillStyle='#8fd0ff';g.textBaseline='bottom';
+  g.strokeStyle=W1+'.45)';g.lineWidth=1;g.beginPath();g.moveTo(Math.round(x)+.5,T);g.lineTo(Math.round(x)+.5,B);g.stroke(); // 目标:一道暖白竖线 + 小菱形(白 / 红 / 青 / 绿都给了曲线)
+  g.fillStyle='#F3F0E9';g.strokeStyle='rgb(16,16,18)';g.lineWidth=1.5;g.beginPath();g.moveTo(x,y-5);g.lineTo(x+5,y);g.lineTo(x,y+5);g.lineTo(x-5,y);g.closePath();g.stroke();g.fill();
+  const pv=(pr>=0.1?Math.round(pr*100):(pr*100).toFixed(1))+'%';                              // 抬头一行:把握大字,其余小字
+  g.font='bold 15px '+NUM;g.fillStyle='#F3F0E9';g.textBaseline='alphabetic';g.fillText(pv,6,16);let tx=6+g.measureText(pv).width+6;
+  g.font='11px '+CJK;g.fillStyle=W1+'.62)';g.fillText((mt?'目标 ':'炮击点 ')+(d/1e4).toFixed(1)+' 万 km'+(on==='vis'?' · 可见光加成':(on==='rad'?' · 雷达加成':(on==='ir'?' · 红外加成':'')))+(d>XM?'(超出图)':''),tx,15);
+  g.font='10px '+NUM+','+CJK;g.fillStyle=W1+'.62)';g.textBaseline='bottom';
   g.fillText('散布1σ '+Math.round(d*macShotSigma(sec?secAs(s):s,d,mt)).toLocaleString('en-US')+'km / 命中半径 '+MAC_HIT_R+'km',6,h-14);
   if(sec){const n=(s.secCds||[]).length,r=secReady(s),nx=Math.min(...(s.secCds||[]).filter(t=>t>0).concat([Infinity]));
     g.fillText('飞行 '+Math.round(SHOW.t(d/SEC_SPD))+'s · 装填 '+(r>0?'就绪 '+r+'/'+n:Math.ceil(SHOW.t(nx))+'s')+' · 炮塔(不用转船头)',6,h-2);return;} // 2026-10-11 副炮弹速 SEC_SPD(weapons/52)

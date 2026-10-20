@@ -75,7 +75,7 @@
   /* ---- 栅格(面板互不重叠的唯一真相源) ---- */
   --gut:10px;
   --bar-h:48px;
-  --rail-top:calc(var(--bar-h) + var(--gut)*2);
+  --rail-top:calc(var(--bar-h) + var(--gut)); /* 顶栏贴顶后少一个 --gut(10-21) */
   --rail-w:260px;
   --dock-b:206px;
 
@@ -151,7 +151,18 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 /* D2UI 面板标题 = 抬头色带:实底 + 粗体暖白字 + 右侧一角淡淡的徽记圆环(D2 说明框抬头的暗纹)+ 下沿左端一小段亮线(页签指示) */
 .panel .p-title{position:relative;overflow:hidden;display:flex;justify-content:space-between;align-items:center;padding:var(--sp-3) var(--sp-4);font-size:var(--fs-label);color:rgba(243,240,233,.7);background:var(--band);letter-spacing:var(--ls-label);user-select:none;flex:none}
 .panel .p-title::after{content:"";position:absolute;left:0;bottom:0;width:28px;height:2px;background:var(--txt-hi);pointer-events:none}
-#selHead::before{content:"";position:absolute;right:-16px;top:-30px;width:112px;height:112px;background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120' fill='none' stroke='white' stroke-width='1.1' stroke-linejoin='miter'><circle cx='60' cy='62' r='46' stroke-opacity='.12'/><path d='M80.3 20.7A20 20 0 1 1 102.3 43.9' stroke-opacity='.12'/><path d='M60 28L68.5 52.4L94.2 52.9L73.7 68.4L81.2 93.1L60 78.4L38.8 93.1L46.3 68.4L25.8 52.9L51.5 52.4Z' stroke-opacity='.14'/><path d='M48.5 76.5A19.8 19.8 0 1 0 51.1 46.3L51.9 48.3A16.1 16.1 0 1 1 52.6 73.1ZM48.9 75.1L37.7 86.9L41.3 90.3L52.5 78.5ZM81.5 85.7L57.9 62.1L54.6 65.4L78.2 89ZM50.3 71.1L63 58.4L62.7 55.6L58.6 51.4L44.6 65.4Z' stroke-opacity='.2'/></svg>") center/contain no-repeat;pointer-events:none} /* D2UI 抬头右侧暗纹:特政军阵营图标的线稿(月圈 + 空心星 + 镰锤 + 右上一段日弧),10-21 用户 */
+#selHead::before{content:"";position:absolute;right:-16px;top:-30px;width:112px;height:112px;background:center/contain no-repeat;pointer-events:none} /* D2UI 抬头右侧暗纹:按选中的东西换(88-selpanel selIco 写 data-ico);没有 data-ico 就不画 */
+#selHead[data-ico="fleet"]::before{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120' fill='none' stroke='white' stroke-width='1.1' stroke-linejoin='miter'><circle cx='60' cy='62' r='46' stroke-opacity='.12'/><path d='M80.3 20.7A20 20 0 1 1 102.3 43.9' stroke-opacity='.12'/><path d='M60 28L68.5 52.4L94.2 52.9L73.7 68.4L81.2 93.1L60 78.4L38.8 93.1L46.3 68.4L25.8 52.9L51.5 52.4Z' stroke-opacity='.14'/><path d='M48.5 76.5A19.8 19.8 0 1 0 51.1 46.3L51.9 48.3A16.1 16.1 0 1 1 52.6 73.1ZM48.9 75.1L37.7 86.9L41.3 90.3L52.5 78.5ZM81.5 85.7L57.9 62.1L54.6 65.4L78.2 89ZM50.3 71.1L63 58.4L62.7 55.6L58.6 51.4L44.6 65.4Z' stroke-opacity='.2'/></svg>")} /* 我方舰队 / 舰船 / 编队:特政军阵营图标线稿(10-21 用户) */
+#selHead[data-ico="enemy"]::before{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120' fill='none' stroke='white' stroke-width='1.1' stroke-linejoin='miter'><path d='M60 14 106 62 60 110 14 62Z' stroke-opacity='0.12'/><path d='M60 36 86 62 60 88 34 62Z' stroke-opacity='0.16'/><path d='M60 2V24M60 100V122M2 62H24M96 62H118' stroke-opacity='0.14'/><circle cx='60' cy='62' r='4' stroke-opacity='0.2'/></svg>")}
+#selHead[data-ico="rock"]::before{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120' fill='none' stroke='white' stroke-width='1.1' stroke-linejoin='miter'><path d='M30 50 48 28 76 24 98 44 94 76 70 96 40 90 24 70Z' stroke-opacity='0.15'/><path d='M48 28 58 52 94 76M58 52 40 90M58 52 98 44' stroke-opacity='0.1'/><path d='M102 92 110 88 114 96 106 100Z M14 30 20 25 25 31 19 35Z' stroke-opacity='0.14'/></svg>")}
+#selHead[data-ico="civ"]::before{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120' fill='none' stroke='white' stroke-width='1.1' stroke-linejoin='miter'><path d='M14 72H94L106 63 94 54H14Z' stroke-opacity='0.15'/><path d='M22 40H40V54H22Z M44 40H62V54H44Z M66 40H84V54H66Z' stroke-opacity='0.12'/><path d='M88 38H96V54H88Z M14 58V68' stroke-opacity='0.15'/></svg>")}
+#selHead[data-ico="lure"]::before{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120' fill='none' stroke='white' stroke-width='1.1' stroke-linejoin='miter'><path d='M60 18 92 98 60 84 28 98Z' stroke-dasharray='5 4' stroke-opacity='0.18'/><path d='M68 26 100 106 68 92 36 106Z' stroke-dasharray='2 5' stroke-opacity='0.1'/></svg>")}
+#selHead[data-ico="buoy"]::before{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120' fill='none' stroke='white' stroke-width='1.1' stroke-linejoin='miter'><circle cx='60' cy='74' r='11' stroke-opacity='0.18'/><path d='M60 63V34M53 84 44 98M67 84 76 98' stroke-opacity='0.16'/><path d='M50 30A10 10 0 0 1 70 30M40 30A20 20 0 0 1 80 30M30 30A30 30 0 0 1 90 30' stroke-opacity='0.12'/></svg>")}
+#selHead[data-ico="sta"]::before{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120' fill='none' stroke='white' stroke-width='1.1' stroke-linejoin='miter'><circle cx='60' cy='62' r='40' stroke-opacity='0.14'/><circle cx='60' cy='62' r='33' stroke-opacity='0.08'/><circle cx='60' cy='62' r='10' stroke-opacity='0.18'/><path d='M60 22V52M60 72V102M20 62H50M70 62H100' stroke-opacity='0.14'/></svg>")}
+#selHead[data-ico="moon"]::before{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120' fill='none' stroke='white' stroke-width='1.1' stroke-linejoin='miter'><circle cx='60' cy='62' r='26' stroke-opacity='0.18'/><circle cx='52' cy='55' r='5' stroke-opacity='0.12'/><circle cx='69' cy='71' r='3.5' stroke-opacity='0.12'/><ellipse cx='60' cy='62' rx='52' ry='16' transform='rotate(-18 60 62)' stroke-opacity='0.1'/></svg>")}
+#selHead[data-ico="comet"]::before{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120' fill='none' stroke='white' stroke-width='1.1' stroke-linejoin='miter'><circle cx='80' cy='42' r='9' stroke-opacity='0.2'/><circle cx='80' cy='42' r='17' stroke-opacity='0.08'/><path d='M72 50 22 100M76 54 34 106M68 46 16 90' stroke-opacity='0.13'/></svg>")}
+#selHead[data-ico="body"]::before{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120' fill='none' stroke='white' stroke-width='1.1' stroke-linejoin='miter'><circle cx='60' cy='62' r='32' stroke-opacity='0.16'/><ellipse cx='60' cy='62' rx='56' ry='12' transform='rotate(-15 60 62)' stroke-opacity='0.12'/><path d='M60 30A20 32 0 0 0 60 94' stroke-opacity='0.09'/></svg>")}
+#selHead[data-ico="msl"]::before{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120' fill='none' stroke='white' stroke-width='1.1' stroke-linejoin='miter'><g transform='rotate(35 60 62)'><path d='M60 16 66 30V80L74 92H46L54 80V30Z' stroke-opacity='0.18'/><path d='M54 40H66' stroke-opacity='0.1'/><circle cx='60' cy='102' r='2.5' stroke-opacity='0.16'/><circle cx='60' cy='112' r='1.6' stroke-opacity='0.1'/></g></svg>")}
 .panel .p-title b{color:var(--txt-hi);font-weight:bold;font-size:var(--fs-read);letter-spacing:.14em;position:relative} /* 名字拉开字距(D2 星图地名的读法) */
 .panel .p-title .hint{position:relative;color:rgba(243,240,233,.55)}
 .panel.hidden{display:none}
@@ -237,7 +248,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
   color:var(--txt-dim);pointer-events:none;text-shadow:0 0 6px #05070c}
 #mapTag b{font-weight:normal;margin-left:6px;font-size:10px;color:var(--txt-mute);letter-spacing:.16em}
 /* D2UI 顶栏三段:左标志 + 场景名 | 正中 倍速与时钟(绝对居中,不随两边宽度漂) | 右 标签 + 下拉 + 教程 + 主按钮 */
-#hud{top:var(--gut);left:var(--gut);right:var(--gut);min-height:var(--bar-h);display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-3) var(--sp-4);overflow:hidden;z-index:var(--z-hud);pointer-events:auto;background:rgba(8,8,10,.9)}
+#hud{top:0;left:var(--gut);right:var(--gut);min-height:var(--bar-h);display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-3) var(--sp-4);overflow:hidden;z-index:var(--z-hud);pointer-events:auto;background:rgba(8,8,10,.9)}
 #hud::after{content:"";position:absolute;left:0;bottom:0;width:120px;height:2px;background:var(--txt-hi);pointer-events:none} /* 下沿左端一段亮线,同面板抬头的页签指示 */
 #hud .logo{font:bold 13px var(--ff-mono);color:var(--txt-hi);letter-spacing:.32em;white-space:nowrap;flex:none}
 #hud .logo span{font:normal var(--fs-body) var(--ff-ui);color:var(--txt-dim);letter-spacing:.2em;margin-left:var(--sp-4);padding-left:var(--sp-4);border-left:var(--bw) solid var(--line-ctl)}
@@ -511,6 +522,11 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #cmdBar .cbtn.on .s{color:var(--state-active)}
 /* 2026-10-08 底栏指令卡(演示页 demos/ui/底栏指令卡.html):主炮 / 导弹 / 特殊三格同大,近防小一号;绿条可点,选中泛白呼吸 */
 #ciSpec:empty,#cmdCard:empty{display:none}
+/* D2UI 选中编队(10-21 用户:「编队1 / 4 艘 · 阵型态」那块太宽,读数挪过来,武器卡别那么挤):名块按内容宽、去掉它后面的分隔线,读数紧贴名字 */
+#cmdBar.fm .cmd-ship{flex:0 0 auto;width:auto}
+#cmdBar.fm .cmd-ship+.cmd-sep{display:none}
+#cmdBar.fm #ciSpec{justify-content:flex-start;gap:var(--sp-1) var(--sp-3);padding:0 var(--sp-2) 0 var(--sp-1)}
+#cmdBar.fm #cmdCard .wb{max-width:300px} /* 省出来的宽度给四格(原上限 230,编队的「16/16·100组」压在格子条上) */
 #ciBars{display:flex;flex-direction:column;gap:3px;margin-top:4px;min-width:120px} /* 2026-10-10 不再定死 110:多选时条右边要放舰名 */
 #ciBars:empty{display:none}
 #ciBars .hb{height:4px;background:var(--srf-sunk);border-radius:1px;overflow:hidden}
@@ -962,5 +978,5 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #spMenu .spm-st{margin-top:var(--sp-4);color:var(--txt-dim);font-size:var(--fs-body);line-height:var(--lh-body)}
 #spMenu .spm-st.ok{color:var(--state-ok)}
 /* 2026-10-08 联机对局的状态条(js/net/98-lock lockUi):顶栏下方居中 */
-#mpBar{position:fixed;top:calc(var(--bar-h) + var(--gut));left:50%;transform:translateX(-50%);z-index:var(--z-transient);background:var(--srf-panel);border:var(--bw) solid var(--line-acc);border-radius:var(--r-md);padding:var(--sp-1) var(--sp-4);font-family:var(--ff-ui);font-size:var(--fs-body);color:var(--acc-lite);white-space:nowrap;pointer-events:none}
+#mpBar{position:fixed;top:var(--bar-h);left:50%;transform:translateX(-50%);z-index:var(--z-transient);background:var(--srf-panel);border:var(--bw) solid var(--line-acc);border-radius:var(--r-md);padding:var(--sp-1) var(--sp-4);font-family:var(--ff-ui);font-size:var(--fs-body);color:var(--acc-lite);white-space:nowrap;pointer-events:none}
 #mpBar.bad{border-color:var(--state-warn);color:var(--state-warn)}
