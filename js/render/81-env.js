@@ -36,8 +36,8 @@ function drawEnvView(view){const V=ENV_VIEWS[view];if(!V)return;const took=V.pre
 function drawEnv(){drawEnvView('map');} // ENV2 名字不变:84-scene 的 typeof 守卫仍指向已声明符号(R2)
 
 /* ---- ENV2 静态贴图层(云):登记表的 pre ---- */
-const MAP_CLOUD={LO:[118,108,160],HI:[110,185,235],A:0.3,ISO:[0.15,0.4,0.7],LINE:['rgba(150,130,200,.22)','rgba(165,140,215,.32)','rgba(190,165,235,.45)'],GM:6,G0:131072,GL:3,BLUR_KM:32768};
-  // ENV2 云的海图配色(同演示页 NEB):浓度低处灰紫、高处青蓝,alpha = A·浓度^0.7(art-d2:填充改走 D2.NEB 三档硬边色带,LO / HI / A 不再用于填充;等值线换紫色调);三档等值线;拉远(minKm 从 G0 起 GL 级)显示增益到 GM 倍;格距 >= BLUR_KM 时等值线描在 3x3 平均上
+const MAP_CLOUD={LO:[118,108,160],HI:[110,185,235],A:0.3,ISO:[0.15,0.4,0.7],LINE:['rgba(150,165,215,.18)','rgba(140,190,235,.28)','rgba(180,225,255,.42)'],GM:6,G0:131072,GL:3,BLUR_KM:32768};
+  // ENV2 云的海图配色(同演示页 NEB):浓度低处灰紫、高处青蓝,alpha = A·浓度^0.7;三档等值线;拉远(minKm 从 G0 起 GL 级)显示增益到 GM 倍;格距 >= BLUR_KM 时等值线描在 3x3 平均上
 const MAP_TILE_PAINT={paint:mapTilePaint,iso:MAP_CLOUD.ISO,gain:mapCloudGain,blur:MAP_CLOUD.BLUR_KM,vec:mapVec,vkey:mapVecKey}; // ENV2 交给地形瓦片服务的上色器;任务 4:vec = 合成缓存的矢量层,vkey = 矢量层的键(世界 rev + 字的位置);
   // 审查第四轮:vdiff = 两个键之间是不是只有字挪了、挪了的新旧字框在哪(合成缓存据此只重画那几格,不整张重拼)
 const MAP_SMALL={}; // ENV2 上色用的小画布(每种格点数一张:17 / 65),putImageData 之后放大贴进瓦片
@@ -77,17 +77,13 @@ function mapSmall(n){ // ENV2 n x n 的小画布与它的 ImageData(复用,不�
   if(!m){const cv0=document.createElement('canvas');cv0.width=n;cv0.height=n;const g=cv0.getContext('2d');m=MAP_SMALL[n]={cv:cv0,g:g,img:g.createImageData(n,n)};}
   return m;
 }
-function mapCloudPaint(g,T){ // ENV2 云的海图画法(只在离屏瓦片上):填充 + 三档等值线,每档一个 path、stroke 一次
-  // art-d2:填充改成三档硬边色带(命运2风格,不要连续渐变)—— 格点先在 U 倍细格上双线性插值,再按等值线同一组浓度档量化成 D2.NEB 的三档不透明度;
-  //        细格再放大贴进瓦片(放大倍数小,色带边只软 1~2 像素)。原来是单色低 alpha、浓度连续上色
-  const n=T.pn,G=T.pg,cp=T.pc,U=4,m=(n-1)*U+1,sm=mapSmall(m),d=sm.img.data,gn=T.pgain||1,I=MAP_CLOUD.ISO,C=D2.NEB.C,A=D2.NEB.A.map(a=>Math.round(255*a));
-  for(let j=0,q=0;j<m;j++){const fy=j/U,y0=Math.min(n-2,fy|0),ty=fy-y0;
-    for(let i=0;i<m;i++,q+=4){const fx=i/U,x0=Math.min(n-2,fx|0),tx=fx-x0,k=y0*n+x0,
-        v=((G[k]*(1-tx)+G[k+1]*tx)*(1-ty)+(G[k+n]*(1-tx)+G[k+n+1]*tx)*ty)*gn,b=v<I[0]?-1:(v<I[1]?0:(v<I[2]?1:2));
-      d[q]=C[0];d[q+1]=C[1];d[q+2]=C[2];d[q+3]=b<0?0:A[b];}}
+function mapCloudPaint(g,T){ // ENV2 云的海图画法(只在离屏瓦片上):单色低 alpha 填充(格点放大、双线性)+ 三档等值线,每档一个 path、stroke 一次
+  const n=T.pn,G=T.pg,cp=T.pc,sm=mapSmall(n),d=sm.img.data,lo=MAP_CLOUD.LO,hi=MAP_CLOUD.HI,A=255*MAP_CLOUD.A,gn=T.pgain||1;
+  for(let k=0,q=0;k<n*n;k++,q+=4){const v=Math.min(1,G[k]*gn),u=Math.min(1,v/0.8); // 只在显示上截顶(浓度本身不截,见 world/13)
+    d[q]=lo[0]+(hi[0]-lo[0])*u;d[q+1]=lo[1]+(hi[1]-lo[1])*u;d[q+2]=lo[2]+(hi[2]-lo[2])*u;d[q+3]=v>0?Math.round(A*Math.pow(v,0.7)):0;}
   sm.g.putImageData(sm.img,0,0);
   g.imageSmoothingEnabled=true;
-  g.drawImage(sm.cv,0,0,m,m,-cp/(2*U),-cp/(2*U),m*cp/U,m*cp/U); // 细格点 i 落在瓦片像素 i·cp/U(= 原格点 i/U 的位置;相邻两块共用边上的格点,拼起来连续)
+  g.drawImage(sm.cv,0,0,n,n,-cp/2,-cp/2,n*cp,n*cp); // 格点 i 落在瓦片像素 i·cp(相邻两块共用边上的格点,拼起来连续)
   g.lineWidth=1;
   for(let k=0;k<T.piso.length;k++){g.strokeStyle=MAP_CLOUD.LINE[k];g.stroke(T.piso[k]);}
 }
