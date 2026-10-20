@@ -84,7 +84,7 @@ function engRows(s){
 /* D2UI 右栏部件 */
 function selHeadSet(sub,band){ // 抬头副标题 + 色带(''= 中性 / ship = 我方 / hostile = 对方);只在变了时写,免得每 20 帧重排
   const h=document.getElementById('selHead'),e=document.getElementById('selSub');
-  if(e&&e.textContent!==sub)e.textContent=sub;
+  if(e&&e.innerHTML!==sub)e.innerHTML=sub; // 副标题可带 <i class="chip"> 小方块徽章
   if(h&&(h.dataset.band||'')!==band)h.dataset.band=band;
 }
 const stRow=(k,v,fr)=>`<span class="k">${k}</span>${fr==null?'<span></span>':`<span class="t"><i style="width:${Math.max(0,Math.min(1,fr))*100}%"></i></span>`}<span class="v">${v}</span>`; // 属性行:右对齐标签 | 细条(没有就空)| 数值
@@ -96,7 +96,7 @@ function sensePerks(s){ // 暴露三格(圆形插槽,亮 = 在暴露)+ 一句旁
   const k=v=>Math.round(v/1000)+'k',ep=(typeof engPowerOf==='function')?engPowerOf(s):0;
   const est=(ep>=SENS.P_ENG_REV)?'反推':((ep>=SENS.P_ENG_MAIN)?'满推':(ep>0?'机动':'熄火'));
   const silent=s.emitMode==='silent',jam=s.emitMode==='jam',lb=(typeof emitLabel==='function')?emitLabel(s.emitMode):String(s.emitMode),far=sigKm(se.mx);
-  const pk=(on,ic,lab,st)=>`<div class="pk${on?' on':''}"><div class="c">${ic}</div><s>${lab}</s><em>${st}</em></div>`;
+  const pk=(on,ic,lab,st)=>`<div class="pk${on?' on':''}"><div class="c">${ic}<i class="mo"></i></div><s>${lab}</s><em>${st}</em></div>`; // .mo = 轨道上那颗小点
   const lore=(ep>0?`尾焰亮着(${est}),${far} 内都看得见你`:`熄火,${far} 外看不见你`)
     +(silent?';雷达静默,没人听得见。':`;${k(hearRangeOf(s))} 外也听得见你(${lb})`+(jam?',干扰中不照射。':`,照得到 ${k(actRangeOf(s))} 内的标准目标。`));
   return `<div class="rule"></div><div class="perks">${pk(ep>0,SP_IC.eye,'光学',est)}${pk(!silent,SP_IC.ear,'射频',silent?'静默':'被听见')}${pk(!silent&&!jam,SP_IC.rad,'照射',silent?'未开机':(jam?'干扰中':'照射中'))}</div>
@@ -276,7 +276,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
   const fmBox=document.getElementById('selFm');
   if(fmBox&&fmBox.style.display!=='none')fmBox.style.display='none';
   ciBarsSet([]); // 2026-10-08 底栏血条同肖像:先收起,选中舰船那一支再画
-  selHeadSet('','');box.classList.remove('d2'); // D2UI 抬头与版式先复位成中性,舰船 / 总览 / 编队那几支再改
+  selHeadSet('','');box.classList.remove('d2');const cbar=document.getElementById('cmdBar');if(cbar)cbar.classList.remove('idle'); // 底栏空态只在总览那一支挂(同一个 JS 任务里摘了又挂,不闪) // D2UI 抬头与版式先复位成中性,舰船 / 总览 / 编队那几支再改
   if(typeof ptSet==='function')ptSet(null); // 2026-09-30 底栏肖像同样先收起,只有下面选中舰船那一支再亮出来(同一个 JS 任务里改,不闪)
   if(box.style.display!=='block')box.style.display='block';
   if(selBuoy&&(selBuoy.dead||(selBuoy.kind==='station'?featStaObs(ME).indexOf(selBuoy)<0:rocks.indexOf(selBuoy)<0)))selBuoy=null; // 2026-09-29 浮标没了 / 换局:撤选中(10-05 据点易手同)
@@ -412,7 +412,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
     blue.forEach(s2=>{hp+=Math.max(0,s2.hp);mhp+=s2.maxHp||0;});
     const fr=mhp>0?Math.max(0,Math.min(1,hp/mhp)):0;
     let lit=0;trkEach(ME,tk=>{if(!trkGone(tk)&&trkHeld(tk))lit++;}); // 数蓝方航迹表里握着的接触
-    title.textContent='舰队总览';selHeadSet(ME==='red'?'红方 · 未选中':'蓝方 · 未选中','');box.classList.add('d2');
+    title.textContent='舰队总览';selHeadSet(ME==='red'?'红方 · 未选中':'蓝方 · 未选中','');box.classList.add('d2');if(cbar)cbar.classList.add('idle');
     if(ciN)ciN.textContent='—';if(ciC)ciC.textContent='—';if(ciSp)ciSp.innerHTML='';
     // D2UI:大数字 = 在役舰数,右边已点亮的敌舰;时间倍速挪给顶栏,操作提示去掉(用户 10-20)
     box.innerHTML=`<div class="bd"><div class="hero"><b class="num">${blue.length}</b><span>艘在役</span><span class="sub"><b class="num">${lit}</b><span>艘敌舰已点亮</span></span></div>
@@ -423,7 +423,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
   }
   const s=sel[0]; // 多选时信息显示第一艘,标题注明数量;操作走 updateCmdBar 的全选语义
   title.textContent=sel.length>1?`已选 ${sel.length} 艘`:s.name; // D2UI 抬头写舰名(原来写「实时状态」,名字只在底栏)
-  selHeadSet((sel.length>1?s.name+' · ':'')+(CLS_NAME[s.cls]||s.cls)+' · '+(TIER_LABEL[s.tier]||'T2'),'ship');box.classList.add('d2');
+  selHeadSet((sel.length>1?s.name+' · ':'')+(CLS_NAME[s.cls]||s.cls)+'<i class="chip">'+(TIER_LABEL[s.tier]||'T2')+'</i>'+(sel.length>1?'<i class="chip">×'+sel.length+'</i>':''),'ship');box.classList.add('d2');
   // 固定信息(舰船类数据,整局不变) → 底栏
   // 底栏舰船块:单选 = 舰名 / 舰种 / 肖像 / 结构与护盾条;多选 = 「N 艘」+ 每艘一条血条、舰名写在条右边(2026-10-08 用户)。规格(specItems)悬停舰船块才显示(ciSpecTip)
   if(ciN)ciN.textContent=sel.length>1?sel.length+' 艘':s.name;
@@ -524,7 +524,7 @@ function cmdPopRender(){
   {const w=d.getBoundingClientRect().width,lx=Math.max(4,Math.min(Math.round(r.left),Math.round(window.innerWidth-w-8)));d.style.left=lx+'px';} // 右边那一列出了屏幕就整个往左挪
 }
 function cmdBarSync(){ // 三颗钮的字与亮灭;菜单开着就顺手重画
-  const sel=selBlue(),s=sel[0],r=document.getElementById('cbRadar'),st=document.getElementById('cbStop');if(st)st.classList.toggle('is-dis',!s);
+  const sel=selBlue(),s=sel[0],r=document.getElementById('cbRadar'),st=document.getElementById('cbStop');if(st){const idle=!s&&!selBuoyOk();st.classList.toggle('is-dis',idle&&!ships.some(x=>x.side===ME&&!x.dead));const sub=st.querySelector('.s'),t=idle?'全舰队':'全关';if(sub&&sub.textContent!==t)sub.textContent=t;} // 没选中时停火作用于全舰队
   const bu=s?null:selBuoyOk(); // 2026-09-29 只选中浮标:雷达钮作用于它(原来按"没选船"禁用,pointer-events:none 点不动)
   if(r){r.classList.toggle('is-dis',!s&&!bu);
     if(bu){const pul=radarPulsing(bu);r.classList.toggle('on',pul||bu.on);setHTMLStable(r,'<span class="l">雷达</span><span class="s">'+(pul?'脉冲':(bu.on?'发射':'静默'))+'</span>',false);}
@@ -601,7 +601,7 @@ function wpkMouse(e,sx,sy){ // 70-input 左键最先问它:有选中的 = 把它
     else if(k==='msl'){if(hit)cxSalvoCells(x,t,null,U);else cxSalvoCells(x,null,pt,U);}
     else if(k==='ssm'){if(hit)cxSsmCells(x,t,null,U);else cxSsmCells(x,null,pt,U);}}
   wpkClear();wpkSync();return true;}
-function wpnStop(){const sel=selBlue();if(typeof clearPendings==='function')clearPendings();if(sel.length)cxStop(sel);updateSelPanel();} // 停火钮 / X
+function wpnStop(){let sel=selBlue();if(!sel.length&&!selBuoyOk()&&!(typeof mslSelOwn==='function'&&mslSelOwn().length))sel=ships.filter(x=>x.side===ME&&!x.dead);if(typeof clearPendings==='function')clearPendings();if(sel.length)cxStop(sel);updateSelPanel();} // 停火钮 / X;D2UI(用户 10-21)什么都没选 = 全舰队停火
 const WPK_TRI=a=>a.length&&a.every(Boolean)?2:(a.some(Boolean)?1:0);
 function wpkPm(attr,v){return '<div class="ck pm'+(v===2?' ok':(v===1?' part':' no'))+'" '+attr+'><span></span></div>';} // 2026-10-11 用户:行尾 绿 = 允许开火 / 红 = 禁止(自动、强制都看它,手动点条照样能打;weapons/51 wpnOk),多选里一半一半画两色
 function wpkCk(attr,v,gated){return '<div class="ck'+(v===2?' on':(v===1?' part':''))+(gated?' gated':'')+'" '+attr+'><span>'+(v===2?'✓':'')+'</span></div>';}

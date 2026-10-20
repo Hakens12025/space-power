@@ -114,7 +114,7 @@ function drawGrid(){
   if(vtW[3]>0.01)vtGridLs(vtW[3],3,vtCur===3?wLs:0);   // SN7d:战区层与舰队层是同一张光秒网格(固定资产 + LOD),放射距离环已删
   // 比例尺:左下角,条长固定 VT.BAR_PX,上面的数随缩放连续变(用户 2026-09-26:"不要让比例尺可变,固定长度,变数字");三位有效数字 + 「一格 X km」
   const barPx=VT.BAR_PX,km0=barPx/cam.zoom,pw=Math.pow(10,Math.max(0,Math.floor(Math.log10(km0))-2)),barKm=Math.round(km0/pw)*pw;
-  const bx=12, by=H-14-scaleLift();
+  const bx=12, by=H-20-scaleLift(); // D2UI 空底栏时比例尺贴底,原来 H-14 下面那行「一格」会被屏幕底边切掉一半
   ctx.save();
   ctx.fillStyle='rgba(16,16,18,.82)'; // D2UI 比例尺换暖白 + Bahnschrift(原浅蓝 / 黄)
   ctx.fillRect(bx-6,by-24,200,34);
