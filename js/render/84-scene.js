@@ -509,19 +509,20 @@ function drawInset(){
     const tw=ctx.measureText(s).width,tx=X-ux*14,ty=Y-uy*14,al=ux>0.3?'right':(ux<-0.3?'left':'center'),bx=al==='right'?tx-tw-2:(al==='left'?tx-2:tx-tw/2-2);
     ctx.fillStyle='rgba(5,7,12,.7)';ctx.fillRect(bx,ty-6,tw+4,12);ctx.textAlign=al;ctx.fillStyle='rgba('+c.col+',.95)';ctx.fillText(s,tx,ty);}
   const D=fade?null:INSET.dir;
-  ctx.strokeStyle=D?'rgba(255,209,102,.85)':'rgba(143,208,255,.55)';ctx.lineWidth=1;ctx.strokeRect(x+0.5,y+0.5,w-1,h-1); // 播放中琥珀色边框
-  ctx.fillStyle='rgba(5,7,12,.88)';ctx.fillRect(x+1,y+1,w-2,HDR-1);
+  ctx.strokeStyle=D?'rgba(255,209,102,.85)':'rgba(233,230,223,.3)'; // D2UI 静息边框换暖白低亮(播放中仍琥珀)
+  ctx.lineWidth=1;ctx.strokeRect(x+0.5,y+0.5,w-1,h-1); // 播放中琥珀色边框
+  ctx.fillStyle='rgba(58,60,64,.94)';ctx.fillRect(x+1,y+1,w-2,HDR-1);if(!D){ctx.fillStyle='#F3F0E9';ctx.fillRect(x+1,y+HDR-2,28,2);} // D2UI 标题条 = 面板抬头色带 + 下沿左端一小段亮线(播放中那里是进度条)
   if(D&&D.dwell<Infinity){ctx.fillStyle='rgba(255,209,102,.85)';ctx.fillRect(x+1,y+HDR-2,Math.max(0,1-D.el/D.dwell)*(w-2),2);} // 播放进度条:还剩多久
-  ctx.font='11px "Microsoft YaHei"';ctx.textAlign='left';ctx.fillStyle=D?insetCol(D):'#cfe6ff';ctx.fillText(sub.lbl,x+7,y+HDR/2+1,Math.max(20,w-100));insetChrome(x,y,w);
+  ctx.font='11px "Microsoft YaHei"';ctx.textAlign='left';ctx.fillStyle=D?insetCol(D):'#F3F0E9';ctx.fillText(sub.lbl,x+7,y+HDR/2+1,Math.max(20,w-100));insetChrome(x,y,w);
   const bk=60/z,pw10=Math.pow(10,Math.floor(Math.log10(bk))),bkm=Math.max(pw10,Math.round(bk/pw10)*pw10),bp=bkm*z,bs=bkm.toLocaleString('en-US')+' km'; // 小比例尺:取整到一位有效数字,数字和条一起收在右下角
-  ctx.font='10px Consolas';const R=x+w-7,bw=Math.max(bp,ctx.measureText(bs).width)+6;
+  ctx.font='10px Bahnschrift,Consolas';const R=x+w-7,bw=Math.max(bp,ctx.measureText(bs).width)+6;
   ctx.fillStyle='rgba(5,7,12,.6)';ctx.fillRect(R-bw+3,y+h-22,bw,19);
-  ctx.textAlign='right';ctx.fillStyle='#8fd0ff';ctx.fillText(bs,R,y+h-15);ctx.fillRect(R-bp,y+h-8,bp,2);ctx.fillRect(R-bp,y+h-10,1,5);ctx.fillRect(R-1,y+h-10,1,5);
+  ctx.textAlign='right';ctx.fillStyle='#E9E6DF';ctx.fillText(bs,R,y+h-15);ctx.fillRect(R-bp,y+h-8,bp,2);ctx.fillRect(R-bp,y+h-10,1,5);ctx.fillRect(R-1,y+h-10,1,5);
   }finally{ctx.restore();} // 中途抛错也不让主画布的 save 栈失衡
   if(md!=='ir'&&INSET.a>=0.95)insetCue(x,y,w,h); // 淡入淡出时不补:半透明的框压不住日标
 }
 const INSET_TIP={fit:'自适应:按当前窗口大小重新取景',reset:'重置:回默认大小与取景'}; // 图标按钮的悬停提示
-function insetIcon(g,k,cx,cy){g.strokeStyle=g.fillStyle='#c7d0dc';g.lineWidth=1.3;g.lineCap='butt';g.beginPath(); // 2026-10-08 用户:按钮做成图标 —— fit = 四角括号(按窗口填满),reset = 回转箭头
+function insetIcon(g,k,cx,cy){g.strokeStyle=g.fillStyle='#DAD6CD';g.lineWidth=1.3;g.lineCap='butt';g.beginPath(); // 2026-10-08 用户:按钮做成图标 —— fit = 四角括号(按窗口填满),reset = 回转箭头
   if(k==='fit'){const a=5,l=3.2;for(const sx of [-1,1])for(const sy of [-1,1]){g.moveTo(cx+sx*a,cy+sy*(a-l));g.lineTo(cx+sx*a,cy+sy*a);g.lineTo(cx+sx*(a-l),cy+sy*a);}g.stroke();g.fillRect(cx-1,cy-1,2,2);}
   else{const r=4.2,t1=1.75*Math.PI;g.arc(cx,cy,r,0.15*Math.PI,t1);g.stroke();const px=cx+r*Math.cos(t1),py=cy+r*Math.sin(t1),tx=-Math.sin(t1),ty=Math.cos(t1);
     g.beginPath();g.moveTo(px+tx*2.6,py+ty*2.6);g.lineTo(px-tx*1.2-ty*2.4,py-ty*1.2+tx*2.4);g.lineTo(px-tx*1.2+ty*2.4,py-ty*1.2-tx*2.4);g.closePath();g.fill();}
@@ -533,8 +534,8 @@ function insetLabels(){ // 2026-10-08 用户:小窗里舰名自适应(比例尺 
   for(const b of K){ctx.fillStyle=b.o.c||'rgba(215,226,240,.8)';ctx.fillText(b.n?b.o.t+' +'+b.n:b.o.t,b.o.x,b.o.y);}} // 颜色跟登记的(残骸灰、我方浮标蓝),没给就是舰名色
 function insetChrome(x,y,w){const H=INSET.HDR,B=[{k:'fit',w:18},{k:'reset',w:18}];let bx=x+w-18;INSET.btn=[]; // 2026-10-08 标题条右边:「自适应」「重置」(一次性图标按钮)+ 右上角拖柄(小直角)。2026-10-08 用户:「反层」字样不要了(标题已写「主画面周围」)
   ctx.font='11px "Microsoft YaHei"';ctx.textAlign='left';ctx.textBaseline='middle';ctx.lineWidth=1;
-  for(let i=B.length-1;i>=0;i--){const b=B[i];bx-=b.w+4;ctx.fillStyle='#101722';ctx.fillRect(bx,y+3,b.w,H-6);ctx.strokeStyle='#3a4e6a';ctx.strokeRect(bx+0.5,y+3.5,b.w-1,H-7);insetIcon(ctx,b.k,bx+b.w/2,y+H/2);INSET.btn.push({k:b.k,x:bx,y:y+3,w:b.w,h:H-6});}
-  ctx.strokeStyle='#8fb8e8';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x+w-12,y+2);ctx.lineTo(x+w-2,y+2);ctx.lineTo(x+w-2,y+12);ctx.stroke();ctx.lineWidth=1;}
+  for(let i=B.length-1;i>=0;i--){const b=B[i];bx-=b.w+4;ctx.fillStyle='rgba(255,255,255,.05)';ctx.fillRect(bx,y+3,b.w,H-6);ctx.strokeStyle='rgba(255,255,255,.24)';ctx.strokeRect(bx+0.5,y+3.5,b.w-1,H-7);insetIcon(ctx,b.k,bx+b.w/2,y+H/2);INSET.btn.push({k:b.k,x:bx,y:y+3,w:b.w,h:H-6});}
+  ctx.strokeStyle='#E9E6DF';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x+w-12,y+2);ctx.lineTo(x+w-2,y+2);ctx.lineTo(x+w-2,y+12);ctx.stroke();ctx.lineWidth=1;}
 function render(){
   artTick(); // 2026-10-04 行星贴图分帧生成(render/81-art,每帧 ART_BUDGET ms)
   /* SN6 三级星图:先推进跳层动画、算出这一档缩放落在哪一层(连续权重 + 带迟滞的离散层),

@@ -116,14 +116,14 @@ function drawGrid(){
   const barPx=VT.BAR_PX,km0=barPx/cam.zoom,pw=Math.pow(10,Math.max(0,Math.floor(Math.log10(km0))-2)),barKm=Math.round(km0/pw)*pw;
   const bx=12, by=H-14-scaleLift();
   ctx.save();
-  ctx.fillStyle='rgba(5,7,12,.72)';
+  ctx.fillStyle='rgba(16,16,18,.82)'; // D2UI 比例尺换暖白 + Bahnschrift(原浅蓝 / 黄)
   ctx.fillRect(bx-6,by-24,200,34);
-  ctx.strokeStyle='#8fd0ff';ctx.lineWidth=2;ctx.fillStyle='#8fd0ff';
+  ctx.strokeStyle='#E9E6DF';ctx.lineWidth=2;ctx.fillStyle='#E9E6DF';
   ctx.fillRect(bx,by,barPx,4);ctx.strokeRect(bx,by,barPx,4);
-  ctx.font='bold 12px Consolas';ctx.textAlign='left';ctx.textBaseline='middle';
+  ctx.font='bold 12px Bahnschrift,Consolas';ctx.textAlign='left';ctx.textBaseline='middle';
   const barLbl=barKm.toLocaleString('en-US')+' km';
   ctx.fillText(barLbl,bx,by-9);
-  ctx.font='10px Consolas';ctx.fillStyle='#ffd166';
+  ctx.font='10px Bahnschrift,Consolas';ctx.fillStyle='#8F8C85';
   ctx.fillText('一格 '+Math.round(step/1000)+'k km',bx+3,by+12);
   ctx.restore();
 }

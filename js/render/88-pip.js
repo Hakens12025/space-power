@@ -16,7 +16,7 @@ function pipFrame(){
   const k=(hoverRingHi==='sec'&&s.secCds&&s.secCds.length)||!hasMAC(s)?'sec':'mac'; // 2026-10-11 用户:悬停底栏副炮那一行 = 画副炮的;其余时候画轴炮的
   const dpr=window.devicePixelRatio||1,w=cv.clientWidth||236,h=cv.clientHeight||150;
   if(PIP.w!==w||PIP.h!==h||PIP.dpr!==dpr){PIP.w=w;PIP.h=h;PIP.dpr=dpr;cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);}
-  const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);g.fillStyle='rgb(5,7,12)';g.fillRect(0,0,w,h);
+  const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);g.fillStyle='rgb(16,16,18)';g.fillRect(0,0,w,h); // D2UI 底色同面板
   const hd=(k==='sec'?'副炮':'轴炮')+'命中率曲线'; // D2UI 抬头已写舰名,这里只写哪门炮
   if(hd!==PIP.hd){PIP.hd=hd;const e=document.getElementById('pipHd');if(e)e.textContent=hd;}
   if(!box.classList.contains('open'))return; // D2UI 默认折起(用户 10-19 方案:调参看的图不该常驻占半栏),折着就不画
