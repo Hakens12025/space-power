@@ -3,76 +3,82 @@
    三条判据:平面硬边(圆角只留 2/3px、阴影只给菜单层)、颜色即语义(战场色只描述
    战术要素,chrome 一律灰阶 + 一个强调蓝)、读数至上(等宽 + tabular-nums + 右对齐)。 */
 :root{
+  /* D2UI(2026-10-20 用户:「用这种风格来做整个 UI」,原稿 demos/ui/右上角改版.html):照命运2菜单 / 物品说明框 ——
+     中性炭黑半透明面、1 px 低亮白线、方角、暖白字;悬停整格反白(暖白底 + 深字);数字用 Bahnschrift。
+     开关的「开」= 暖白边 + 淡白底,不再借蓝色;战术语义色(敌我 / 告警 / 就绪)不动,它们描述的是战场。 */
   /* ---- 面(由底到浮) ---- */
   --void:#05070c;                 /* 页面底,与 canvas 的 #05070c 同值 */
-  --srf-panel:rgba(9,13,20,.94);  /* 浮在战场上的常驻面板底,半透明保留态势透出 */
-  --srf-modal:#0a0e16;            /* 模态卡片实底 */
-  --srf-raise:#0e1420;            /* 抬起面:按钮/芯片静息底、面板标题栏 */
-  --srf-hover:#16202f;            /* hover 行/按钮底 */
-  --srf-sunk:#0a0f17;             /* 下陷面:输入框、列表卡片、进度槽 */
-  --srf-sel:#141a26;              /* 选中行底 */
-  --scrim:rgba(3,5,9,.72);        /* 模态遮罩,一个值收掉原来四种 */
+  --srf-panel:rgba(16,16,18,.92); /* 浮在战场上的常驻面板底 */
+  --srf-modal:#131315;            /* 模态卡片实底 */
+  --srf-raise:rgba(255,255,255,.04); /* 按钮静息底、标题栏 */
+  --srf-hover:#E9E6DF;            /* D2UI 悬停 = 整格反白 */
+  --srf-sunk:rgba(255,255,255,.07);  /* 槽:进度槽、输入框、列表卡片 */
+  --srf-sel:rgba(255,255,255,.11);   /* 选中行底 */
+  --scrim:rgba(4,4,6,.74);
   /* ---- 线 ---- */
-  --line-hair:#141c27;            /* 面板内部行间分隔线 */
-  --line:#1e2836;                 /* 面板外框/区块分隔(旧 --line 提亮 2 阶) */
-  --line-ctl:#2a3a50;             /* 控件边框,与旧 --line2 同值 */
-  --line-acc:#34527d;             /* 控件 hover 边框,补上原来直接跳到 --acc 的中间档 */
+  --line-hair:rgba(255,255,255,.06);
+  --line:rgba(255,255,255,.1);
+  --line-ctl:rgba(255,255,255,.24);
+  --line-acc:rgba(255,255,255,.55);
   /* ---- 字 ---- */
-  --txt-hi:#e8eef7;               /* 标题/强调正文,替原来 12 处 #fff(纯白在近黑底上晕光) */
-  --txt:#c7d0dc;                  /* 正文 */
-  --txt-read:#dbe6f2;             /* 读数专用,原来硬编码 10 次终于进 token */
-  --txt-dim:#6a7d92;              /* 标签/单位/次要说明(旧 --dim 提亮一档) */
-  --txt-mute:#46566a;             /* 禁用态、空状态 */
-  --ink:#03121e;                  /* 实心强调底上的字色,收掉 #04121f / #06121f 的分裂 */
-  /* ---- 强调(UI chrome 唯一彩色) ---- */
-  --acc:#5aa7ff;                  /* 与 canvas 友军蓝对齐;旧 --acc #4aa8ff 与 --blue 合并 */
-  --acc-lite:#9fd4ff;
-  --acc-dim:#2f6fae;
-  --acc-wash:rgba(90,167,255,.14);/* 持续开启态的淡填充:开=淡填充,按下=实心 */
-  --danger-wash:rgba(255,107,107,.10);/* RF8c 禁止态的淡填充,照 --acc-wash 的先例;RGB 与 --state-danger 同源 */
-  /* ---- 战术语义色(只描述战术要素,不做 chrome) ---- */
+  --txt-hi:#F3F0E9;
+  --txt:#DAD6CD;
+  --txt-read:#EDEAE3;
+  --txt-dim:#8F8C85;
+  --txt-mute:#5F5D59;
+  --ink:#141414;                  /* 反白底上的字 */
+  /* ---- 强调:D2UI 起是暖白(开着 / 选中),不再是蓝 ---- */
+  --acc:#E9E6DF;
+  --acc-lite:#FFFFFF;
+  --acc-dim:#8F8C85;
+  --acc-wash:rgba(233,230,223,.13);
+  --danger-wash:rgba(255,107,107,.10);
+  /* ---- 战术语义色(只描述战术要素,不做 chrome;D2UI 未动) ---- */
   --side-friend:#5aa7ff;
   --side-hostile:#ff6b6b;
   --side-neutral:#a0aab9;
-  --state-select:#ffe066;         /* 我选中的 / 我下的命令 */
-  --state-active:#54e0d0;         /* 功能开启 / 数据链在线 */
-  --state-warn:#ff9a55;           /* 告警 / 威胁范围 */
-  --state-ok:#3fbf6f;             /* 成功 / 命中 / 就绪 */
-  --env-sun:#ffd26e;              /* 光源(太阳 / 恒星),与地图上的日标同色 */
-  --state-danger:#ff6b6b;         /* 破坏性动作,刻意与敌方同值:红=敌意/危险是同一语义 */
+  --state-select:#ffe066;
+  --state-active:#54e0d0;
+  --state-warn:#ff9a55;
+  --state-ok:#3fbf6f;
+  --env-sun:#ffd26e;
+  --state-danger:#ff6b6b;
+  /* ---- D2UI 抬头色带 ---- */
+  --band:#3A3C40;                 /* 中性面板的抬头 */
+  --band-friend:#2C4C6E;          /* 我方舰船(友军蓝压浊) */
+  --band-hostile:#6B2F2A;         /* 对方 */
+  --band-alert:#9E3A2E;           /* 告警横条 */
   /* ---- 间距阶 ---- */
   --sp-0:2px; --sp-1:4px; --sp-2:6px; --sp-3:8px; --sp-4:12px; --sp-5:16px; --sp-6:24px;
-  /* ---- 圆角 / 边框 ---- */
-  --r-sm:2px;                     /* 控件:收掉原来 4/5/6 三档 */
-  --r-md:3px;                     /* 面板/卡片/模态:收掉原来 8/10 两档 */
-  --r-dot:50%;                    /* 状态圆点是唯一保留的圆形 */
-  --bw:1px;                       /* 全项目唯一边框宽度,粗细变化改用颜色阶 */
+  /* ---- 圆角 / 边框:D2UI 全方角 ---- */
+  --r-sm:0;
+  --r-md:0;
+  --r-dot:50%;
+  --bw:1px;
   /* ---- 字体 / 字号 / 行高 / 字距 ---- */
   --ff-ui:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;
-  --ff-mono:Consolas,"Cascadia Mono","DejaVu Sans Mono",monospace;
+  --ff-mono:"Bahnschrift",Consolas,"Cascadia Mono","DejaVu Sans Mono",monospace; /* D2UI 读数换 Bahnschrift(Win10+ 自带,DIN 一路),配 tabular-nums 数字等宽;别的系统退回等宽 */
   --fs-micro:10px; --fs-label:11px; --fs-body:12px; --fs-read:13px; --fs-title:15px; --fs-hero:18px;
   --lh-tight:1.2; --lh-body:1.6;
-  --ls-label:.08em;               /* 中文标签字距展开 */
-  --ls-caps:.06em;                /* 拉丁缩写 MAC/ESM/EMCON/LADAR */
-  --ls-read:0;                    /* 读数强制零字距:等宽字加字距会破坏数字列对齐 */
+  --ls-label:.08em;
+  --ls-caps:.06em;
+  --ls-read:0;
   /* ---- 层级阶(唤出者必须低于被唤出者) ---- */
   --z-canvas:1;
-  --z-panel:10;                   /* 常驻信息面板 #selPanel/#fmMenu */
-  --z-bar:20;                     /* 底部指令栏 #cmdBar */
-  --z-hud:30;                     /* 顶栏 */
-  --z-flyout:40;                  /* 由控件唤出的浮层 #trPanel/#fmMenu */
-  --z-transient:50;               /* 临时状态条 #cmdTip/#xhTip */
-  --z-modal:70;                   /* 模态层 #tutOverlay/#fmPage/#matchEnd */
+  --z-panel:10;
+  --z-bar:20;
+  --z-hud:30;
+  --z-flyout:40;
+  --z-transient:50;
+  --z-modal:70;
   /* ---- 栅格(面板互不重叠的唯一真相源) ---- */
-  --gut:10px;                     /* 视口边距 */
-  --bar-h:48px;                   /* 顶栏实际高度 = 32px 按钮 + 8px*2 内边距 */
-  --rail-top:calc(var(--bar-h) + var(--gut)*2);   /* 侧轨顶边,替掉三处硬编码 top:58px */
-  --rail-w:260px;                 /* 侧轨统一宽度,收掉 250/250/290 三种 */
-  --dock-b:206px;                 /* 底部指令栏预留净空:#trPanel/#fmMenu/#selPanel 的底边全部由它派生 */
+  --gut:10px;
+  --bar-h:48px;
+  --rail-top:calc(var(--bar-h) + var(--gut)*2);
+  --rail-w:260px;
+  --dock-b:206px;
 
-  /* ---- 旧 token 别名(勿删) ----
-     js 里 52 处内联 var(--x) 写入靠这段零改动跟随新色板;
-     等哪天把 js 的 style.color 改成 classList 之后才能删。 */
+  /* ---- 旧 token 别名(勿删):js 里内联 var(--x) 靠这段跟随新色板 ---- */
   --bg:var(--void); --panel:var(--srf-modal); --line2:var(--line-ctl);
   --dim:var(--txt-dim); --blue:var(--side-friend); --sel:var(--state-select);
   --teal:var(--state-active); --org:var(--state-warn); --grn:var(--state-ok);
@@ -81,6 +87,7 @@
 @media (max-width:1100px){:root{--dock-b:240px}} /* UI1 窄视口:底部指令栏会多换一行,只改这一个值,#trPanel/#fmMenu/#selPanel 一起让开 */
 
 *{box-sizing:border-box;margin:0;padding:0}
+*{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.28) transparent} /* D2UI 细滚动条 */
 html,body{width:100%;height:100%;overflow:hidden}
 body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:var(--fs-read);line-height:var(--lh-tight);-webkit-font-smoothing:antialiased}
 #cv{position:fixed;inset:0;display:block;cursor:crosshair;z-index:var(--z-canvas)}
@@ -96,14 +103,14 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
   padding:var(--sp-2) var(--sp-3);cursor:pointer;user-select:none;touch-action:manipulation;
   white-space:nowrap;pointer-events:auto}
 .btn:hover,.hbtn:hover,.qbtn:hover,.ed-btn:hover,.tr-tab:hover,.tr-stp:hover{
-  color:var(--txt-hi);border-color:var(--line-acc);background:var(--srf-hover)}
+  color:var(--ink);border-color:var(--srf-hover);background:var(--srf-hover)} /* D2UI 悬停整格反白 */
 /* 按下 = 实心强调(手指正按着),与下面的「开启态」是两件事 */
 .btn:active,.hbtn:active,.qbtn:active,.ed-btn:active,.tr-tab:active,.tr-stp:active{
-  background:var(--acc);border-color:var(--acc);color:var(--ink)}
+  background:#BDB9B0;border-color:#BDB9B0;color:var(--ink)}
 /* 开启态 = 淡填充 + 彩边彩字(功能持续开着)。原项目根本没有这一态,
    开/关只靠 js 写内联 style.color,于是「按下」比「开着」还醒目 */
-.btn.on,.tr-tab.on{background:var(--acc-wash);border-color:var(--acc);color:var(--acc)}
-.btn.on:hover,.tr-tab.on:hover{background:var(--srf-hover);border-color:var(--acc);color:var(--acc-lite)}
+.btn.on,.tr-tab.on{background:var(--acc-wash);border-color:var(--acc);color:var(--txt-hi);box-shadow:inset 0 -2px var(--acc)} /* D2UI 开着:暖白边 + 底边一道实线(D2 选中页签的读法) */
+.btn.on:hover,.tr-tab.on:hover{background:var(--srf-hover);border-color:var(--srf-hover);color:var(--ink)}
 .btn.is-dis,.qbtn.is-dis,.ed-btn.is-dis{color:var(--txt-mute);border-color:var(--line);cursor:default;pointer-events:none}
 
 /* --- 变体 --- */
@@ -119,6 +126,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 /* 危险钮:.qbtn.qstop 与 .ed-btn.danger 原来是同一配方写两遍 */
 .qbtn.qstop,.ed-btn.danger{background:var(--srf-raise);border-color:var(--state-danger);color:var(--state-danger)}
 .qbtn.qstop:hover,.ed-btn.danger:hover{background:var(--state-danger);border-color:var(--state-danger);color:var(--ink)}
+.btn,.hbtn,.qbtn,.ed-btn,.tr-tab,.tr-stp{color:var(--txt)} /* D2UI 静息字从暗灰提到正文灰:方角细线的钮本来就轻,字再暗就像禁用 */
 
 /* ==================== UI1 输入面 ====================
    输入框统一配方(SL1 起旧面板的各路 input 都已删,只剩这一个类) */
@@ -138,9 +146,13 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 .kv .u{font-size:var(--fs-micro);color:var(--txt-dim);margin-left:2px}
 
 /* ---------- 面板通用 ---------- */
-.panel{position:fixed;background:var(--srf-panel);border:var(--bw) solid var(--line);border-radius:var(--r-md);overflow:hidden;z-index:var(--z-panel);pointer-events:auto}
-.panel .p-title{display:flex;justify-content:space-between;align-items:center;padding:var(--sp-2) var(--sp-3);font-size:var(--fs-label);color:var(--txt-dim);border-bottom:var(--bw) solid var(--line);letter-spacing:var(--ls-label);user-select:none;flex:none}
-.panel .p-title b{color:var(--acc);font-weight:normal}
+.panel{position:fixed;background:var(--srf-panel);border:var(--bw) solid var(--line-hair);border-radius:var(--r-md);overflow:hidden;z-index:var(--z-panel);pointer-events:auto}
+/* D2UI 面板标题 = 抬头色带:实底 + 粗体暖白字 + 右侧一角淡淡的徽记圆环(D2 说明框抬头的暗纹)+ 下沿左端一小段亮线(页签指示) */
+.panel .p-title{position:relative;overflow:hidden;display:flex;justify-content:space-between;align-items:center;padding:var(--sp-3) var(--sp-4);font-size:var(--fs-label);color:rgba(243,240,233,.7);background:var(--band);letter-spacing:var(--ls-label);user-select:none;flex:none}
+.panel .p-title::before{content:"";position:absolute;right:-26px;top:-38px;width:96px;height:96px;border-radius:50%;border:13px solid rgba(255,255,255,.05);pointer-events:none}
+.panel .p-title::after{content:"";position:absolute;left:0;bottom:0;width:28px;height:2px;background:var(--txt-hi);pointer-events:none}
+.panel .p-title b{color:var(--txt-hi);font-weight:bold;font-size:var(--fs-read);letter-spacing:.04em;position:relative}
+.panel .p-title .hint{position:relative;color:rgba(243,240,233,.55)}
 .panel.hidden{display:none}
 
 /* ---------- 顶栏 ---------- */
@@ -265,7 +277,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #selInfo .row{display:flex;justify-content:space-between;align-items:center;padding:2px 0;font-size:var(--fs-body)}
 #selInfo .row .k{color:var(--txt-dim)}
 #selInfo .row .v{font-family:var(--ff-mono);letter-spacing:var(--ls-read);font-variant-numeric:tabular-nums;color:var(--txt-read);text-align:right}
-.hpbar{height:6px;border-radius:var(--r-sm);background:var(--srf-sunk);border:var(--bw) solid var(--line);overflow:hidden;margin:var(--sp-1) 0 var(--sp-2)}
+.hpbar{height:5px;border-radius:var(--r-sm);background:var(--srf-sunk);overflow:hidden;margin:var(--sp-1) 0 var(--sp-2)}
 .hpbar i{display:block;height:100%;background:var(--state-ok)}
 /* ---------- RF5 火控计算机(右栏 #selPanel 内,武器库状态之后) ----------
    是本面板的撑高项(flex:1 1 auto):序列多了在面板内部滚动,不外溢也不顶穿。
