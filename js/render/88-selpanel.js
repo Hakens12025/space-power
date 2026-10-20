@@ -133,6 +133,24 @@ function weaponRows(s){
   }
   return h;
 }
+/* D2UI 空栏舰船排(用户 10-21):什么都没选时底栏只剩一排我方舰船的六边形格,点一下选中。
+   超过 FLEET_ROW_MAX 艘按舰种并成一格、写 ×N,点它选中这一种的全部。只在名单 / 低血状态变了才重建(总览每 20 帧刷一次)。 */
+const FLEET_ROW_MAX=12;let fleetRowKey='';
+function fleetRowSync(blue){
+  const el=document.getElementById('cbFleet');if(!el)return;
+  let groups;
+  if(blue.length<=FLEET_ROW_MAX)groups=blue.map(s=>({ids:[s.id],s:s,n:1,low:s.hp/(s.maxHp||1)<0.35}));
+  else{const m=new Map();for(const s of blue){const k=s.cls+'|'+(s.tier||2);if(!m.has(k))m.set(k,{ids:[],s:s,n:0,low:false});const o=m.get(k);o.ids.push(s.id);o.n++;}groups=[...m.values()];}
+  const key=groups.map(o=>o.ids.join('.')+(o.low?'!':'')).join(',');if(key===fleetRowKey)return;fleetRowKey=key;
+  el.innerHTML=groups.map(o=>`<div class="fs${o.low?' low':''}" data-ids="${o.ids.join(',')}" title="${o.n>1?(CLS_NAME[o.s.cls]||o.s.cls)+' ×'+o.n:o.s.name+' · '+(CLS_NAME[o.s.cls]||o.s.cls)}"><canvas width="88" height="100"></canvas>${o.n>1?'<b>×'+o.n+'</b>':''}</div>`).join('');
+  if(typeof SA!=='object'||!SA.badge)return;
+  let Lmax=0;for(const h of ['DD','SC','CL','CA','CV'])Lmax=Math.max(Lmax,SA.len(h,3));
+  [...el.querySelectorAll('canvas')].forEach((c,i)=>{const s=groups[i].s,h=CLS_HULL[s.cls]||'DD',t=s.tier||2,g=c.getContext('2d');
+    g.setTransform(2,0,0,2,0,0);SA.badge(g,h,t,'blue',22,25,-Math.PI/2,26*Math.sqrt(SA.len(h,t)/Lmax));g.globalCompositeOperation='source-in';g.fillStyle='#E9E6DF';g.fillRect(0,0,44,50);}); // 船头朝上;舰长按真实大小开平方,最大那型 26px;压成骨白平涂剪影(D2 徽章里的白色图形)
+}
+on('cbFleet','click',e=>{const el=e.target&&e.target.closest?e.target.closest('.fs'):null;if(!el)return;
+  const ids=el.dataset.ids.split(',').map(x=>{const s=ships.find(y=>String(y.id)===x);return s&&!s.dead?s.id:null;}).filter(x=>x!==null);if(!ids.length)return;
+  selSet('ship',ids);if(typeof fmbRefreshSel==='function')fmbRefreshSel();else updateSelPanel();});
 function updateCmdBar(sel){ // 雷达 / 停火两颗钮 + 指令卡(2026-10-08;跟随钮按用户删了)
   cmdBarSync();cmdCardSync(sel);
 }
@@ -412,7 +430,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
     blue.forEach(s2=>{hp+=Math.max(0,s2.hp);mhp+=s2.maxHp||0;});
     const fr=mhp>0?Math.max(0,Math.min(1,hp/mhp)):0;
     let lit=0;trkEach(ME,tk=>{if(!trkGone(tk)&&trkHeld(tk))lit++;}); // 数蓝方航迹表里握着的接触
-    title.textContent='舰队总览';selHeadSet(ME==='red'?'红方 · 未选中':'蓝方 · 未选中','');box.classList.add('d2');if(cbar)cbar.classList.add('idle');
+    title.textContent='舰队总览';selHeadSet(ME==='red'?'红方 · 未选中':'蓝方 · 未选中','');box.classList.add('d2');if(cbar)cbar.classList.add('idle');fleetRowSync(blue);
     if(ciN)ciN.textContent='—';if(ciC)ciC.textContent='—';if(ciSp)ciSp.innerHTML='';
     // D2UI:大数字 = 在役舰数,右边已点亮的敌舰;时间倍速挪给顶栏,操作提示去掉(用户 10-20)
     box.innerHTML=`<div class="bd"><div class="hero"><b class="num">${blue.length}</b><span>艘在役</span><span class="sub"><b class="num">${lit}</b><span>艘敌舰已点亮</span></span></div>
@@ -524,7 +542,7 @@ function cmdPopRender(){
   {const w=d.getBoundingClientRect().width,lx=Math.max(4,Math.min(Math.round(r.left),Math.round(window.innerWidth-w-8)));d.style.left=lx+'px';} // 右边那一列出了屏幕就整个往左挪
 }
 function cmdBarSync(){ // 三颗钮的字与亮灭;菜单开着就顺手重画
-  const sel=selBlue(),s=sel[0],r=document.getElementById('cbRadar'),st=document.getElementById('cbStop');if(st){const idle=!s&&!selBuoyOk();st.classList.toggle('is-dis',idle&&!ships.some(x=>x.side===ME&&!x.dead));const sub=st.querySelector('.s'),t=idle?'全舰队':'全关';if(sub&&sub.textContent!==t)sub.textContent=t;} // 没选中时停火作用于全舰队
+  const sel=selBlue(),s=sel[0],r=document.getElementById('cbRadar'),st=document.getElementById('cbStop');if(st)st.classList.toggle('is-dis',!s);
   const bu=s?null:selBuoyOk(); // 2026-09-29 只选中浮标:雷达钮作用于它(原来按"没选船"禁用,pointer-events:none 点不动)
   if(r){r.classList.toggle('is-dis',!s&&!bu);
     if(bu){const pul=radarPulsing(bu);r.classList.toggle('on',pul||bu.on);setHTMLStable(r,'<span class="l">雷达</span><span class="s">'+(pul?'脉冲':(bu.on?'发射':'静默'))+'</span>',false);}
@@ -601,7 +619,7 @@ function wpkMouse(e,sx,sy){ // 70-input 左键最先问它:有选中的 = 把它
     else if(k==='msl'){if(hit)cxSalvoCells(x,t,null,U);else cxSalvoCells(x,null,pt,U);}
     else if(k==='ssm'){if(hit)cxSsmCells(x,t,null,U);else cxSsmCells(x,null,pt,U);}}
   wpkClear();wpkSync();return true;}
-function wpnStop(){let sel=selBlue();if(!sel.length&&!selBuoyOk()&&!(typeof mslSelOwn==='function'&&mslSelOwn().length))sel=ships.filter(x=>x.side===ME&&!x.dead);if(typeof clearPendings==='function')clearPendings();if(sel.length)cxStop(sel);updateSelPanel();} // 停火钮 / X;D2UI(用户 10-21)什么都没选 = 全舰队停火
+function wpnStop(){const sel=selBlue();if(typeof clearPendings==='function')clearPendings();if(sel.length)cxStop(sel);updateSelPanel();} // 停火钮 / X
 const WPK_TRI=a=>a.length&&a.every(Boolean)?2:(a.some(Boolean)?1:0);
 function wpkPm(attr,v){return '<div class="ck pm'+(v===2?' ok':(v===1?' part':' no'))+'" '+attr+'><span></span></div>';} // 2026-10-11 用户:行尾 绿 = 允许开火 / 红 = 禁止(自动、强制都看它,手动点条照样能打;weapons/51 wpnOk),多选里一半一半画两色
 function wpkCk(attr,v,gated){return '<div class="ck'+(v===2?' on':(v===1?' part':''))+(gated?' gated':'')+'" '+attr+'><span>'+(v===2?'✓':'')+'</span></div>';}

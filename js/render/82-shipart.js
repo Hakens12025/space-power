@@ -184,5 +184,7 @@ const SA=(()=>{
       else{NEW+=cost;c=build(sh,f,tl,Lq,ab/nr*2*Math.PI,fb/10,D,full);if(CACHE.size>1500)CACHE.clear();CACHE.set(kk(li),c);}}
     const w=c.width/D*Lp/c.Lq;g.drawImage(c,x-w/2,y-w/2,w,w);return true;}
 
-  return {has:h=>!!H2C[h],icon};
+  function badge(g,h,tier,f,x,y,rot,Lpx){const k=H2C[h];if(!k)return false;const sh=SHIPS[k],tl=(typeof TIER_LIGHT==='object'&&TIER_LIGHT[tier])||0;draw(g,sh,x,y,rot,Lpx/sh.L,'icon',f,tl,0.3);return true;} // 界面小格用(88 底栏空栏):指定舰长 px、不羽化、不进缓存
+  function len(h,tier){const k=H2C[h];return k?SHIPS[k].L*(SA_K[k]||1)*((typeof TIER_SCALE==='object'&&TIER_SCALE[tier])||1):0;} // 相对舰长(同一单位,比大小用)
+  return {has:h=>!!H2C[h],icon,badge,len};
 })();

@@ -150,7 +150,6 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 .panel{position:fixed;background:var(--srf-panel);border:var(--bw) solid var(--line-hair);border-radius:var(--r-md);overflow:hidden;z-index:var(--z-panel);pointer-events:auto}
 /* D2UI 面板标题 = 抬头色带:实底 + 粗体暖白字 + 右侧一角淡淡的徽记圆环(D2 说明框抬头的暗纹)+ 下沿左端一小段亮线(页签指示) */
 .panel .p-title{position:relative;overflow:hidden;display:flex;justify-content:space-between;align-items:center;padding:var(--sp-3) var(--sp-4);font-size:var(--fs-label);color:rgba(243,240,233,.7);background:var(--band);letter-spacing:var(--ls-label);user-select:none;flex:none}
-.panel .p-title::before{content:"";position:absolute;right:-22px;top:-40px;width:116px;height:116px;background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120' fill='none' stroke='white' stroke-opacity='.11' stroke-width='1'><circle cx='60' cy='60' r='50'/><circle cx='60' cy='60' r='31'/><path d='M60 10 103.3 85 16.7 85Z'/><path d='M60 110 16.7 35 103.3 35Z' stroke-opacity='.06'/><path d='M0 60H120M60 0V120' stroke-opacity='.06'/><circle cx='60' cy='10' r='3'/><circle cx='103.3' cy='85' r='3'/><circle cx='16.7' cy='85' r='3'/></svg>") center/contain no-repeat;pointer-events:none} /* D2UI 抬头暗纹:圣几何作图线(D2 星图里星球背后那种) */
 .panel .p-title::after{content:"";position:absolute;left:0;bottom:0;width:28px;height:2px;background:var(--txt-hi);pointer-events:none}
 .panel .p-title b{color:var(--txt-hi);font-weight:bold;font-size:var(--fs-read);letter-spacing:.14em;position:relative} /* 名字拉开字距(D2 星图地名的读法) */
 .panel .p-title .hint{position:relative;color:rgba(243,240,233,.55)}
@@ -301,6 +300,26 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 /* 靶场参数面板 #trPanel:SL1(2026-09-22)起藏着;2026-09-28 用户要靶子姿态控制,放出来,入口是靶场顶栏「靶场参数」钮(scenario/97 gmSync 管显隐) */
 
 /* 选中舰实时信息面板(右轨) */
+/* D2UI 外圈勾勒(.d2k 放在面板里第一个子元素):外面 4px 一圈细线,在角上断开、换成亮折角;面板本身不再裁切,勾勒才能伸出去 */
+#selPanel,#cmdBar{overflow:visible}
+.d2k{position:absolute;inset:-5px;pointer-events:none;
+    background:linear-gradient(rgba(233,230,223,.75),rgba(233,230,223,.75)) left top/8px 1px no-repeat,
+    linear-gradient(rgba(233,230,223,.75),rgba(233,230,223,.75)) left top/1px 8px no-repeat,
+    linear-gradient(rgba(233,230,223,.75),rgba(233,230,223,.75)) right top/8px 1px no-repeat,
+    linear-gradient(rgba(233,230,223,.75),rgba(233,230,223,.75)) right top/1px 8px no-repeat,
+    linear-gradient(rgba(233,230,223,.75),rgba(233,230,223,.75)) left bottom/8px 1px no-repeat,
+    linear-gradient(rgba(233,230,223,.75),rgba(233,230,223,.75)) left bottom/1px 8px no-repeat,
+    linear-gradient(rgba(233,230,223,.75),rgba(233,230,223,.75)) right bottom/8px 1px no-repeat,
+    linear-gradient(rgba(233,230,223,.75),rgba(233,230,223,.75)) right bottom/1px 8px no-repeat,
+    linear-gradient(rgba(233,230,223,.16),rgba(233,230,223,.16)) 12px top/calc(50% - 40px) 1px no-repeat,
+    linear-gradient(rgba(233,230,223,.16),rgba(233,230,223,.16)) right 12px top/calc(50% - 40px) 1px no-repeat,
+    linear-gradient(rgba(233,230,223,.16),rgba(233,230,223,.16)) 12px bottom/calc(50% - 40px) 1px no-repeat,
+    linear-gradient(rgba(233,230,223,.16),rgba(233,230,223,.16)) right 12px bottom/calc(50% - 40px) 1px no-repeat,
+    linear-gradient(rgba(233,230,223,.16),rgba(233,230,223,.16)) left 12px/1px calc(50% - 30px) no-repeat,
+    linear-gradient(rgba(233,230,223,.16),rgba(233,230,223,.16)) left bottom 12px/1px calc(50% - 30px) no-repeat,
+    linear-gradient(rgba(233,230,223,.16),rgba(233,230,223,.16)) right top 12px/1px calc(50% - 30px) no-repeat,
+    linear-gradient(rgba(233,230,223,.16),rgba(233,230,223,.16)) right bottom 12px/1px calc(50% - 30px) no-repeat}
+#cmdBar.idle .d2k{display:none}
 #selPanel{top:var(--rail-top);right:var(--gut);width:var(--rail-w);max-height:calc(100% - var(--rail-top) - var(--dock-b));min-height:min(300px,calc(100% - var(--rail-top) - var(--dock-b)));display:flex;flex-direction:column} /* SL1 末项回到 --dock-b:右轨底部原来给事件流面板让出的车道随它一起收回(不能直接到 --gut:实测 vw<1700 时 #cmdBar 会横向侵入右轨) */
 /* FL1 面板高度稳定:#fcSec 原本是本面板【唯一】的撑高项(flex:1 1 auto),它按"有没有火控序列"显隐之后,
    面板高度会随之塌到内容高、跟着跳。修法是两条配合 —— ①给 #selPanel 一个 min-height 造出自由空间
@@ -459,11 +478,19 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 /* 底部操作栏(底坞)三区:舰名区靠左 | 规格读数列 + 指令卡占中间(卡放大、随宽度铺开) | 雷达/停火竖排靠右。窄窗时规格列与卡换行,按钮组不拆散
    2026-10-10 用户:舰船图标左对齐、雷达与停火一列两排、中间放大铺满 —— 原来整簇居中,两端空挡大、四格卡 114x66 偏小 */
 #cmdBar::before{content:"";position:absolute;left:0;top:0;width:120px;height:2px;background:var(--txt-hi);pointer-events:none} /* D2UI 上沿左端一段亮线,同顶栏(用 ::before:::after 是空栏提示) */
-/* D2UI 空栏(用户 10-21:什么都没选时下面一大块不好)—— 只留右端的停火(作用于全舰队),整条缩成贴在原右端的一小块;雷达没有「全舰队」的读法,空着时藏 */
-#cmdBar.idle{left:auto;right:max(var(--gut),calc(50% - 700px));transform:none;width:auto;padding:var(--sp-2)}
-#cmdBar.idle>:not(.cmd-btns){display:none}
-#cmdBar.idle::after{display:none}
-#cmdBar.idle #cbRadar{display:none}
+/* D2UI 空栏(用户 10-21)—— 不画底板,只有一排我方舰船的六边形格(D2 星图底部那排导航),点一下选中;选中后底栏照原样展开 */
+#cmdBar.idle{width:auto;padding:0;background:none;border-color:transparent;box-shadow:none;overflow:visible}
+#cmdBar.idle>:not(#cbFleet),#cmdBar.idle::before,#cmdBar.idle::after{display:none}
+#cbFleet{display:none}
+#cmdBar.idle #cbFleet{display:flex;position:relative;gap:14px;padding:0 6px 2px}
+#cbFleet::before{content:"";position:absolute;left:28px;right:28px;top:25px;height:1px;background:rgba(233,230,223,.32);pointer-events:none} /* 节点连线(穿过每格中心) */
+#cbFleet .fs{position:relative;width:44px;height:50px;flex:0 0 auto;cursor:pointer;background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 44 50' fill='none'><path d='M22 4.8 39.5 14.9V35.1L22 45.2 4.5 35.1V14.9Z' stroke='rgba(233,230,223,.4)'/><path d='M6.66 11.15 2.33 13.65V18.65M37.34 11.15 41.67 13.65V18.65M6.66 38.85 2.33 36.35V31.35M37.34 38.85 41.67 36.35V31.35' stroke='rgba(233,230,223,.85)'/></svg>") center/100% 100% no-repeat}
+#cbFleet .fs::before{content:"";position:absolute;left:8.5px;top:9.4px;right:8.5px;bottom:9.4px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);background:var(--band-friend)} /* 里层实心六边形 = 阵营色 */
+#cbFleet .fs:hover::before{background:var(--hl)}
+#cbFleet .fs:hover canvas{filter:brightness(.12)} /* 反白时剪影变深 */
+#cbFleet .fs.low::before{background:#6B4A26} /* 结构低于 35% */
+#cbFleet .fs canvas{position:absolute;left:0;top:0;width:44px;height:50px;pointer-events:none}
+#cbFleet .fs b{position:absolute;left:50%;bottom:-13px;transform:translateX(-50%);font:600 10px/12px var(--ff-mono);color:var(--txt-hi);letter-spacing:.04em;white-space:nowrap} /* 合并格的 ×N */
 #cmdBar{left:50%;transform:translateX(-50%);bottom:var(--gut);display:flex;flex-wrap:wrap;justify-content:flex-start;align-items:center;gap:var(--sp-2) var(--sp-4);padding:var(--sp-2) var(--sp-4);z-index:var(--z-bar);width:min(1400px,calc(100% - var(--gut)*2))} /* 显式宽度:shrink-to-fit 下带 flex:1 子项会把整条压成窄柱(实测381px全叠起来)。1400 = 中间卡放大后要的宽度(旧 1160 是 114 卡时代) */
 .cmd-ship{display:flex;align-items:center;gap:var(--sp-2);flex:0 0 330px;width:330px;min-width:0} /* 2026-09-30 左图(选中舰船时的侧视肖像 #ciPort)右字;2026-10-10 定宽 330(原 132~370 随内容伸缩:单选带肖像约 420、多选约 260,中间四格的起点跟着跳) */
 .cmd-ship-t{display:flex;flex-direction:column;justify-content:center;min-width:0;max-width:210px;line-height:1.35}
