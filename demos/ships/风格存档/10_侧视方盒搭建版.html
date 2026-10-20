@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>舰船侧视</title>
+<style>
+:root{--bg:#05070c;--panel:#0a0e16;--line:#1e2836;--txt:#c7d0dc;--dim:#6a7d92;--acc:#5aa7ff}
+body{margin:0;background:var(--bg);color:var(--txt);font:13px "Microsoft YaHei",sans-serif}
+header{padding:12px 16px 4px}h1{font-size:16px;margin:0;color:var(--acc)}
+p.n{color:var(--dim);margin:4px 0;font-size:12px;line-height:1.7}
+.ship{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;padding:10px 16px;border-top:1px solid var(--line)}
+.ship .t{width:110px}.ship .t b{display:block;color:#e8eef7;font-weight:normal;font-size:14px}
+.real{display:flex;flex-direction:column;gap:6px}
+.bar{background:var(--panel);border:1px solid var(--line);padding:4px 8px;display:flex;align-items:center;gap:8px;width:330px;box-sizing:border-box}
+.bar i{font-style:normal;display:flex;flex-direction:column;line-height:1.35}.bar i b{color:#e8eef7;font-weight:normal}.bar i span{color:var(--dim);font-size:11px}
+canvas{display:block}
+.big{background:var(--panel);border:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+<h1>舰船侧视(底栏肖像)</h1>
+<p class="n">参照无尽的拉格朗日的舰船展示图:3/4 俯视(同时看到侧面、顶面、舰艏端面),船体由长方体层层叠出来,面上自动铺面板 / 暗槽 / 灯带,顶面撒小凸块;白灰配深色凹处、少量红标记。不画武器。左边两张 = 底栏实际大小(176 x 60),右边放大 3 倍。旧版在 风格存档/8、9。</p>
+</header>
+<div id="list"></div>
+<script>
+"use strict";
+/* ---------- 投影:x 舰长(舰艏 +)、y 纵深(+ 远离观者)、z 向上;斜投影 → 看得到近侧面、顶面、舰艏端面 ---------- */
+const PA=0.32,PB=0.4,ZK=1.55,prj=(p)=>[p[0]+p[1]*PA*ZK,-(p[2]+p[1]*PB)*ZK],VD=[-PA,1,-PB]; // ZK:船体横截面放大(拉格朗日的船比我们的轮廓粗)
+const LIT=(()=>{const v=[-0.3,-0.55,0.78],l=Math.hypot(...v);return v.map(a=>a/l);})();
+const MAT={h:'#c9cdd1',h2:'#b3b8bd',m:'#8a9097',k:'#3b4046',e:'#5c6168'};
+const FAC={blue:{c:'#3f93ff',lite:'#a9d6ff',glow:'#9fdcff',back:'rgba(90,167,255,'},red:{c:'#ff5446',lite:'#ffc7b8',glow:'#ffb48a',back:'rgba(255,107,107,'}};
+const hx=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
+const sh=(c,k)=>c.map(v=>Math.round(k>0?v+(255-v)*k:v*(1+k)));
+const css=(c,a)=>'rgba('+c.join(',')+','+(a==null?1:a)+')';
+function rnd(s){s=Math.abs(Math.floor(s))%2147483646+1;return ()=>{s=(s*16807)%2147483647;return s/2147483647;};}
+const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]],crs=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2],nrm=a=>{const l=Math.hypot(...a)||1;return a.map(v=>v/l);};
+/* ---------- 箱体:舰艏端可收窄(t = 顶降、b = 底升、n = 近侧收、f = 远侧收),舰艉端同理(T / B / N / F) ---------- */
+function B(x0,x1,y0,y1,z0,z1,o){o=o||{};
+  const s=[[x0,y0+(o.N||0),z0+(o.B||0)],[x0,y1-(o.F||0),z0+(o.B||0)],[x0,y1-(o.F||0),z1-(o.T||0)],[x0,y0+(o.N||0),z1-(o.T||0)]];
+  const b=[[x1,y0+(o.n||0),z0+(o.b||0)],[x1,y1-(o.f||0),z0+(o.b||0)],[x1,y1-(o.f||0),z1-(o.t||0)],[x1,y0+(o.n||0),z1-(o.t||0)]];
+  return {s,b,m:o.m||'h',g:o.g==null?1:o.g,gb:o.gb||0,lt:o.lt||0,stripe:o.stripe||null,slots:o.slots||0,bay:o.bay||0,seed:Math.round(x0*31+y0*17+z0*7+x1*3)};}
+function faces(bx){const [s0,s1,s2,s3]=bx.s,[b0,b1,b2,b3]=bx.b;
+  return [{k:'side',q:[s0,b0,b3,s3]},{k:'top',q:[s3,b3,b2,s2]},{k:'bow',q:[b0,b1,b2,b3]}];}
+/* ---------- 船(手搭:主体 + 叠层 + 侧舱 + 舰桥;顶面凸块自动撒) ---------- */
+const SHIPS={
+ CL:{name:'巡游舰',bx:[
+  B(-44,-34,-4,4,-3.4,3.2,{m:'e',t:0.6,b:0.6}),
+  B(-36,24,-3.2,3.2,-2.2,2.2,{t:0.8,b:0.6,n:1,f:1,stripe:[14,17],slots:2}),
+  B(18,36,-3.2,3.2,-2.2,2.2,{t:2.4,b:0.6,n:0.8,f:0.8,T:0.8,B:0.6,N:1,F:1}),
+  B(-34,20,-2.6,2.6,-3.2,-2.2,{m:'k',g:0}),
+  B(-30,10,-2.6,2.6,2.2,3.4,{gb:5}),
+  B(-22,-6,-2,2,3.4,6.6,{t:1,n:0.5,f:0.5,m:'h2',lt:1}),
+  B(-20,-8,-1.4,1.4,6.6,7.4,{m:'k',g:0}),
+  B(-24,-6,-4.4,-3.2,-1.4,1.6,{m:'h2',slots:1})]},
+ FF:{name:'护卫舰',bx:[
+  B(-50,-38,-4,4,-3.6,3.6,{m:'e',t:0.8,b:0.8}),
+  B(-40,30,-3,3,-2,2,{t:0.6,b:0.4,n:0.8,f:0.8,stripe:[20,23],slots:2}),
+  B(26,44,-2.6,2.6,-1.8,1.6,{t:2,b:0.6,n:0.8,f:0.8,T:0.4,N:0.4,F:0.4}),B(42,50,-0.9,0.9,-1,0,{m:'m',t:0.3}),
+  B(-36,22,-2.6,2.6,-3,-2,{m:'k',g:0}),
+  B(-34,16,-2.4,2.4,2,3.2,{gb:6,t:0.6}),
+  B(-12,2,-1.8,1.8,3.2,5,{t:1,m:'h2',lt:1}),
+  B(-30,-12,-2,2,3.2,4,{m:'k',g:0}),
+  B(-28,-6,-4.2,-3,-1.4,1.4,{m:'h2',slots:1}),B(4,16,-3.8,-3,-1,1,{m:'m',g:0})]},
+ DD:{name:'驱逐舰',bx:[
+  B(-50,-36,-5,5,-4.4,4.4,{m:'e',t:1,b:1}),
+  B(-38,30,-4,4,-2.6,2.6,{t:0.6,b:0.6,n:0.8,f:0.8,stripe:[18,21],slots:3}),
+  B(26,44,-3.4,3.4,-2.4,2,{t:1.6,b:0.8,n:0.6,f:0.6,T:0.4,N:0.4,F:0.4}),B(44,47,-2.6,2.6,-1.4,0.6,{m:'h2'}),
+  B(-34,24,-3.4,3.4,-3.8,-2.6,{m:'k',g:0}),
+  B(-36,18,-3.4,3.4,2.6,4,{gb:8,t:0.8}),
+  B(-24,6,-2.8,2.8,4,5.4,{gb:4,t:1}),
+  B(-14,-2,-2,2,5.4,7.4,{t:1.2,m:'h2',lt:1}),
+  B(-32,-8,-5.4,-4,-1.8,2,{m:'h2',slots:1}),B(-6,14,-4.8,-4,-1.4,1.4,{m:'m',g:0}),
+  B(-34,10,-4.4,-4,2.4,3,{m:'k',g:0})]},
+ CA:{name:'巡洋舰',bx:[
+  B(-50,-34,-6.4,6.4,-5.6,5.4,{m:'e',t:1.2,b:1.2}),
+  B(-36,30,-5,5,-3.4,3.2,{t:0.8,b:0.8,n:1,f:1,stripe:[20,24],slots:3}),
+  B(26,48,-4,4,-3,2.6,{t:3.4,b:1,n:1.2,f:1.2,T:0.4,N:0.6,F:0.6}),B(30,46,-3.4,3.4,-3.8,-2.6,{m:'k',g:0,b:0.6}),
+  B(-32,24,-4.4,4.4,-4.8,-3.4,{m:'k',g:0}),
+  B(-34,20,-4.4,4.4,3.2,4.8,{gb:9,t:1}),
+  B(-26,10,-3.6,3.6,4.8,6.6,{gb:5,t:1.2}),
+  B(-16,0,-2.6,2.6,6.6,9,{t:1.4,m:'h2',lt:1}),
+  B(-14,-2,-1.8,1.8,9,9.8,{m:'k',g:0}),
+  B(-30,-4,-6.6,-5,-2.4,2.6,{m:'h2',slots:2}),B(0,16,-6,-5,-1.8,1.8,{m:'h2',slots:1}),
+  B(-32,12,-5.4,-5,3,3.6,{m:'k',g:0}),B(-30,8,-5.2,-4.4,-4.4,-3.4,{m:'m',g:0})]},
+ CV:{name:'航母',bx:[
+  B(-50,-36,-7,7,-5.6,5.6,{m:'e',t:1.2,b:1.2}),
+  B(-38,46,-6.4,6.4,-4.4,3.6,{t:0.6,b:1.2,n:0.6,f:0.6,stripe:[34,38],slots:4,bay:1}),
+  B(-34,40,-6,6,-5.6,-4.4,{m:'k',g:0}),
+  B(-40,48,-6.8,6.8,3.6,4.6,{gb:10,t:0.2}),
+  B(-14,-2,-6.4,-2.6,4.6,9,{t:0.8,m:'h2',lt:1}),
+  B(-12,-4,-5.8,-3.4,9,10,{m:'k',g:0}),
+  B(-30,30,-7.2,-6.4,-3.2,-1.2,{m:'k',g:0}),
+  B(-26,-6,-7.4,-6.4,0,2.6,{m:'h2',slots:1}),B(6,28,-7.4,-6.4,0,2.6,{m:'h2',slots:1})]},
+};
+// 顶面凸块(gb 个):小箱子撒在箱体顶面上,种子固定
+for(const id in SHIPS){const S=SHIPS[id],add=[];for(const bx of S.bx){const n=bx.gb;if(!n)continue;const r=rnd(bx.seed+101);
+  const x0=bx.s[3][0],x1=bx.b[3][0],y0=bx.s[3][1],y1=bx.s[2][1],z=bx.s[3][2];
+  for(let i=0;i<n;i++){const L=1.5+r()*4,W=0.8+r()*(y1-y0)*0.45,H=0.35+r()*0.9,x=x0+1+r()*(x1-x0-L-2),y=y0+0.3+r()*(y1-y0-W-0.6);
+    add.push(B(x,x+L,y,y+W,z,z+H,{m:r()<0.3?'m':'h2',g:0.5}));}}S.bx=S.bx.concat(add);}
+/* ---------- 画 ---------- */
+function qpath(g,Q){g.beginPath();g.moveTo(Q[0][0],Q[0][1]);for(let i=1;i<Q.length;i++)g.lineTo(Q[i][0],Q[i][1]);g.closePath();}
+function faceDetail(g,F,Q3,bx,u,fac){ // 面上细节:在面的局部坐标(u 沿第一条边、v 沿第二条边,世界单位)里画
+  if(bx.g<=0)return;
+  const P=Q3.map(prj),U=Math.hypot(...sub(Q3[1],Q3[0])),V=Math.hypot(...sub(Q3[3],Q3[0]));if(U<0.6||V<0.4)return;
+  const r=rnd(bx.seed*7+(F==='top'?3:F==='bow'?5:1));
+  g.save();qpath(g,P);g.clip();
+  g.transform((P[1][0]-P[0][0])/U,(P[1][1]-P[0][1])/U,(P[3][0]-P[0][0])/V,(P[3][1]-P[0][1])/V,P[0][0],P[0][1]);
+  const lw=u*1.1,dark=a=>'rgba(0,0,0,'+a+')',lite=a=>'rgba(255,255,255,'+a+')';
+  if(F==='side'){
+    let x=0;while(x<U){const w=Math.min(U-x,2.2+r()*4.5);
+      const t=r();if(t<0.38){g.fillStyle=t<0.2?dark(.12):lite(.1);g.fillRect(x+0.35,V*0.12,w-0.7,V*0.76);g.fillStyle=dark(.25);g.fillRect(x+0.35,V*0.12,w-0.7,lw);}
+      else if(t<0.5&&w>2){g.fillStyle=dark(.55);g.fillRect(x+0.5,V*0.3,w-1,V*0.22);}
+      g.fillStyle=dark(.38);g.fillRect(x+w-lw,0,lw,V);g.fillStyle=lite(.14);g.fillRect(x+w,0,lw*0.8,V);x+=w;}
+    g.fillStyle=dark(.3);g.fillRect(0,V*0.62,U,lw);g.fillStyle=lite(.15);g.fillRect(0,V*0.62-lw,U,lw*0.8);
+    for(let i=0;i<bx.slots;i++){const a=r()*(U-8),w=3+r()*5,y=V*(0.68+r()*0.12);g.fillStyle='#1b1f24';g.fillRect(a,y,w,V*0.12);
+      g.fillStyle='#ffe2ad';for(let k=a+0.6;k<a+w-0.4;k+=0.9)if(r()<0.7)g.fillRect(k,y+V*0.04,0.4,V*0.05);}
+    if(r()<0.5){g.fillStyle='#b8392f';g.fillRect(U*(0.2+r()*0.5),V*0.22,0.9,0.5);}
+    if(bx.stripe){g.fillStyle=css(hx(fac.c),.95);g.fillRect(bx.stripe[0]-bx.s[0][0],V*0.08,1.4,V*0.84);g.fillRect(bx.stripe[1]-bx.s[0][0],V*0.08,0.6,V*0.84);}
+    if(bx.lt){g.fillStyle='#d9ecff';g.shadowColor='#a9d6ff';g.shadowBlur=3;g.fillRect(U*0.15,V*0.55,U*0.6,V*0.12);g.shadowBlur=0;}
+    if(bx.bay){g.fillStyle='#14181d';g.fillRect(U-7,V*0.15,6.2,V*0.7);g.fillStyle='#ffd27a';for(let k=U-6.6;k<U-1;k+=1.1){g.fillRect(k,V*0.2,0.35,0.3);g.fillRect(k,V*0.78,0.35,0.3);}}
+  }else if(F==='top'){
+    g.fillStyle=dark(.22);g.fillRect(0,V*0.5-lw/2,U,lw);
+    let x=0;while(x<U){const w=Math.min(U-x,2+r()*5);if(r()<0.4){g.fillStyle=r()<0.5?lite(.12):dark(.1);g.fillRect(x+0.3,r()<0.5?0.3:V*0.5+0.2,w-0.6,V*0.5-0.5);}
+      g.fillStyle=dark(.25);g.fillRect(x+w-lw,0,lw,V);x+=w;}
+    if(r()<0.6){g.fillStyle=dark(.5);const a=r()*(U-3);g.fillRect(a,V*0.15,1.2+r()*2,V*0.25);}
+  }else if(F==='bow'){g.fillStyle=dark(.18);g.fillRect(U*0.1,V*0.1,U*0.8,V*0.8);}
+  g.restore();}
+function drawShip(g,S,fac,u){
+  const key=x=>{let s=[0,0,0];for(const q of x.s.concat(x.b)){s[0]+=q[0];s[1]+=q[1];s[2]+=q[2];}return PA*s[0]/8-s[1]/8+PB*s[2]/8;}; // 离观者越近越后画
+  const list=S.bx.slice().sort((a,b)=>key(a)-key(b));
+  for(const bx of list){const base=hx(MAT[bx.m]);
+    {const pts=bx.s.concat(bx.b).map(prj);g.save();g.globalCompositeOperation='source-atop';g.fillStyle='rgba(0,0,0,.32)';
+      for(const F of faces(bx)){const P=F.q.map(prj).map(q=>[q[0]+0.5,q[1]+1.1]);qpath(g,P);g.fill();}g.restore();}
+    for(const F of faces(bx)){
+      const n=nrm(crs(sub(F.q[1],F.q[0]),sub(F.q[3],F.q[0]))),nv=F.k==='side'?[n[0],-Math.abs(n[1]),n[2]]:F.k==='top'?[n[0],n[1],Math.abs(n[2])]:[Math.abs(n[0]),n[1],n[2]];
+      if(dot(nv,VD)>=0)continue;
+      const lam=Math.max(0,dot(nv,LIT)),k=F.k==='top'?0.03+lam*0.07:F.k==='bow'?-0.12:-0.3+lam*0.2;
+      const P=F.q.map(prj),col=sh(base,k);
+      qpath(g,P);if(F.k==='side'){const y0=Math.min(...P.map(q=>q[1])),y1=Math.max(...P.map(q=>q[1])),gr=g.createLinearGradient(0,y0,0,y1);gr.addColorStop(0,css(sh(col,.12)));gr.addColorStop(1,css(sh(col,-.3)));g.fillStyle=gr;}else g.fillStyle=css(col);g.fill();
+      faceDetail(g,F.k,F.q,bx,u,fac);
+      qpath(g,P);g.strokeStyle='rgba(0,0,0,.45)';g.lineWidth=u;g.stroke();
+      if(F.k==='top'){g.strokeStyle=css(sh(col,.5),.8);g.lineWidth=u*0.9;g.beginPath();g.moveTo(P[0][0],P[0][1]);g.lineTo(P[1][0],P[1][1]);g.stroke();}}}
+}
+function shipBox(S){let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;for(const bx of S.bx)for(const p of bx.s.concat(bx.b)){const q=prj(p);x0=Math.min(x0,q[0]);x1=Math.max(x1,q[0]);y0=Math.min(y0,q[1]);y1=Math.max(y1,q[1]);}return {x0,x1,y0,y1};}
+function portrait(g,S,f,W,H,D){
+  const b=shipBox(S),padL=14,pad=4,sc=Math.min((W-padL-pad)/(b.x1-b.x0),(H-pad*2)/(b.y1-b.y0)),cx=padL+(W-padL-pad)/2-(b.x0+b.x1)/2*sc,cy=H/2-(b.y0+b.y1)/2*sc,u=0.9/(sc*D);
+  const oc=document.createElement('canvas');oc.width=Math.ceil(W*D);oc.height=Math.ceil(H*D);const o=oc.getContext('2d');o.setTransform(D*sc,0,0,D*sc,cx*D,cy*D);o.lineJoin='round';
+  const F=FAC[f];drawShip(o,S,F,u);
+  g.save();g.shadowColor=F.back+'.3)';g.shadowBlur=4*D;g.drawImage(oc,0,0);g.restore();
+  const e=S.bx[0],ec=prj([e.s[0][0],(e.s[0][1]+e.s[1][1])/2,(e.s[0][2]+e.s[2][2])/2]),hh=(e.s[2][2]-e.s[0][2]); // 尾焰:引擎舱舰艉端面中心往后
+  g.save();g.globalCompositeOperation='lighter';const E=hx(F.glow);
+  for(const dz of [-0.25,0.25]){const ex=(cx+ec[0]*sc)*D,ey=(cy+(ec[1]-dz*hh)*sc)*D,R=hh*0.2*sc*D,L=R*6;
+    const rg=g.createRadialGradient(ex,ey,0,ex,ey,R*1.5);rg.addColorStop(0,'rgba(255,255,255,.75)');rg.addColorStop(.35,css(E,.5));rg.addColorStop(1,css(E,0));g.fillStyle=rg;g.beginPath();g.arc(ex,ey,R*1.5,0,6.283);g.fill();
+    const pg=g.createLinearGradient(ex,0,ex-L,0);pg.addColorStop(0,css(E,.4));pg.addColorStop(1,css(E,0));g.fillStyle=pg;g.beginPath();g.moveTo(ex,ey-R*0.7);g.lineTo(ex-L,ey-R*0.2);g.lineTo(ex-L,ey+R*0.2);g.lineTo(ex,ey+R*0.7);g.closePath();g.fill();}
+  g.restore();}
+/* ---------- 页面 ---------- */
+const D=window.devicePixelRatio||1,list=document.getElementById('list');
+function cv(W,H,k){const c=document.createElement('canvas');c.width=Math.round(W*k*D);c.height=Math.round(H*k*D);c.style.width=W*k+'px';c.style.height=H*k+'px';return c;}
+for(const id of ['CL','FF','DD','CA','CV']){const S=SHIPS[id],row=document.createElement('div');row.className='ship';
+  row.innerHTML='<div class="t"><b>'+S.name+'</b></div>';
+  const real=document.createElement('div');real.className='real';
+  for(const f of ['blue','red']){const bar=document.createElement('div');bar.className='bar';const c=cv(176,60,1);portrait(c.getContext('2d'),S,f,176,60,D);bar.appendChild(c);
+    const t=document.createElement('i');t.innerHTML='<b>'+(f==='red'?'敌·':'')+'占位舰名 07</b><span>'+S.name+' · T2</span>';bar.appendChild(t);real.appendChild(bar);}
+  row.appendChild(real);const big=cv(176,60,3);big.className='big';portrait(big.getContext('2d'),S,'blue',176*3,60*3,D);row.appendChild(big);list.appendChild(row);}
+</script>
+</body>
+</html>

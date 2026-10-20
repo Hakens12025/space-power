@@ -2,9 +2,9 @@
 /* RF1: 拆自 js/03-ships.js L3-25,L65-71,L78-143,L151-183(舰种表/Tier 层/shipStats/makeShip)。纯移动无逻辑改动;SN4:感知数值表只有一份,住 sensors/20-signature 的 SENS(按舰种的行表是 SENS.CLS),本文件只负责把它烘焙到实例。 */
 let shipSeq=0;
 // TIER1 删除死表 CLS_SHAPE(旧几何代号 blk/tri/trl):已被 10a/10b 的 HULL 轮廓系统完全取代,全库零读取点
-const CLS_NAME={FF:'护卫舰',DD:'驱逐舰',CA:'巡洋舰',BB:'战列舰(待定)',CV:'航母',CL:'巡游舰'}; // 舰种名只留通用叫法,舰船用占位名「舰种 + 编号」(2026-10-04 用户:脱离原作语境);2026-09-30 重排:BB 留空位、CL 单列一类
+const CLS_NAME={FF:'护卫舰',DD:'驱逐舰',CA:'巡洋舰',BB:'战列舰(待定)',CV:'航母',CL:'侦察舰'}; // 舰种名只留通用叫法,舰船用占位名「舰种 + 编号」(2026-10-04 用户:脱离原作语境);2026-09-30 重排:BB 留空位、CL 单列一类
 const CLS_ORDER=['FF','DD','CA','BB','CV','CL']; // 舰种排列(加船条等列表用)
-const CLS_SHORT={FF:'护卫舰',DD:'驱逐舰',CA:'巡洋舰',BB:'战列舰',CV:'航母',CL:'巡游舰'}; // 舰种短名(悬停卡) // TIER1 4 舰种级名;BB/CV 是临时文案 TODO(NAME) 待定级名(会直接显示在 info 面板与编辑器菜单上)
+const CLS_SHORT={FF:'护卫舰',DD:'驱逐舰',CA:'巡洋舰',BB:'战列舰',CV:'航母',CL:'侦察舰'}; // 舰种短名(悬停卡) // TIER1 4 舰种级名;BB/CV 是临时文案 TODO(NAME) 待定级名(会直接显示在 info 面板与编辑器菜单上)
 const CLS_ALIAS={CRUISER:'CA',FRIGATE:'FF',SCOUT:'FF'}; // TIER1 旧舰种名别名:全库唯一保留旧名的地方,只服务旧存档与旧导出场景(SCOUT 按拍板折进 DD)
 function normCls(c){return CLS_ALIAS[c]||(CLS_MOB[c]?c:'FF');} // TIER1 舰种归一化:只在 makeShip 运行期调用,不在顶层求值,故不受同文件里 CLS_MOB 定义靠后的影响
 const SHIP_VK=CFG.vscale/0.7*1.5; // 2026-10-09 用户:舰船最高速度与加速度 x1.5(速度档与推力都乘 SHIP_VK)。 // 2026-10-05 用户:舰船回到 0685ea7 那组实际值(下面写的就是旋钮 0.7 时的实际值);仍跟统一速度旋钮,旋钮动了按比例走。原因:出生速度令写死 800 的 bug 让蓝方一直 80 km/s,之前几轮降速都是冲着它去的
