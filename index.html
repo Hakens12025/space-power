@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Space Power · 骨架</title>
-<link rel="stylesheet" href="css/app.css?v=20261020u2">
+<link rel="stylesheet" href="css/app.css?v=20261020u3">
 </head>
 <body>
 <canvas id="cv"></canvas>
@@ -61,13 +61,13 @@
 
 <!-- RF2 简化UI:选中舰实时信息面板(右轨)。SL1(2026-09-22 瘦身):旧舰队卡面板 / 事件面板 / 右轨底部的事件流面板已整套删除,右轨只剩这一块 -->
 <div id="selPanel" class="panel">
-  <div class="p-title"><b id="selTitle">未选中</b><span class="hint">左键点选 · 拖拽框选</span></div>
+  <div class="p-title" id="selHead"><b id="selTitle">未选中</b><span class="hint" id="selSub"></span></div><!-- D2UI 抬头色带:名字 + 副标题;色带随选中的东西换(88-selpanel selHeadSet)。操作提示 10-20 用户要求去掉 -->
   <div id="selInfo"></div>
   <!-- FL1 编队信息区:原 #fmMenu 里的 #fmInfo,整块搬到右轨。理由是"左边只放操作、右边只放实时数据"。
        必须是【静态元素】:87-fmbar 的事件委托挂在它身上,而 on() 遇元素不存在只会静默跳过。
        显隐由 88-selpanel 的 updateSelPanel 独占(选中的恰好是一支编队才显示),87-fmbar 只管往里写内容。 -->
   <div id="selFm" style="display:none"></div>
-  <div id="pipBox" style="display:none"><div class="pip-hd" id="pipHd">小窗</div><canvas id="pipCv"></canvas></div><!-- 2026-09-28 右栏小窗:选中有主炮的舰 = 主炮火控(render/88-pip,静态元素) -->
+  <div id="pipBox" style="display:none"><div class="pip-hd"><span class="k">火控</span><span id="pipHd">小窗</span><i class="chev">▸</i></div><canvas id="pipCv"></canvas></div><!-- 2026-09-28 右栏小窗:选中有主炮的舰 = 主炮火控(render/88-pip,静态元素) -->
   <div id="fcSec"><!-- RF5 火控计算机:序列/目标解算列表。#fcList 必须是静态元素——on() 遇元素不存在会静默跳过,动态创建挂不上委托 -->
     <div class="fc-hd">火控计算机<span class="fc-btn" id="fcPickBtn" title="把当前序列态那条设为唯一开火序列;再按一次回到轮询">选择</span></div><!-- RF8b 舰级"选择"钮:刻意【不进 #fcList】——那里每 20 帧重渲一次,且委托要求带 data-seq(舰级动作没有),上一版的大序列钮正是栽在这条上 -->
     <div id="fcList"></div>
@@ -198,8 +198,8 @@
 <script src="js/render/86-sensorfx.js?v=20261004nosw"></script><!-- 红外 / 雷达画面的小特效:雾染色、扫描扇、角标、滤镜、切换扫描线与文字(演示页 sensors/传感器视角特效.html) -->
 <script src="js/render/87-fmbar.js?v=20261008me"></script><!-- FM1 编队书签栏 + 编队菜单。与 87-fleetcards 共用编号 87(先例:weapons/51-defs 与 51-ciws、render/85-settings 与 85-tutorial),语义上都是"舰队编成"的呈现。顶层只有 on(...) 委托挂载,故必须晚于 core/00;updFmBar() 由 core/99 每 20 帧调用,其余跨文件引用全在运行期解析 -->
 <script src="js/render/88-portrait.js?v=20261017pv"></script><!-- 2026-09-30 底栏舰名区的侧视肖像(10-17 起拉格朗日式 3/4 俯视,原稿 demos/ships/舰船侧视.html) -->
-<script src="js/render/88-selpanel.js?v=20261012ic"></script>
-<script src="js/render/88-pip.js?v=20261011gd"></script><!-- 2026-09-28 右栏小窗;运行期才读各层函数 -->
+<script src="js/render/88-selpanel.js?v=20261020u3"></script>
+<script src="js/render/88-pip.js?v=20261020u3"></script><!-- 2026-09-28 右栏小窗;运行期才读各层函数 -->
 <script src="js/render/89-radial.js?v=20261011mw"></script>
 <script src="js/render/89-fmpage.js?v=20261011rf"></script><!-- FM4 舰队编组控制页。与 89-radial 共用编号 89(先例:render/85-settings 与 85-tutorial)。顶层有 on(...) 委托挂载与两条 window 监听,故必须晚于 core/00;其余跨文件引用全在运行期解析 --><!-- RF5 Phase C 目标轮盘的几何与渲染:半径/角度/容量常量与 drawRadial/radialHit/radialInBand/radPages 全在这一份。必须晚于 88-selpanel(扇区射程读数走它的 KIND_INFO);顶层只有 const/let/function,零顶层执行 -->
 <script src="js/scenario/90-envs.js?v=20261017zc"></script>

@@ -295,9 +295,59 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
    (只有 max-height 时高度是内容高,没有自由空间,flex-grow 写了也不生效);②把 #selInfo/#selFm 从
    flex:0 1 auto 改成 1 1 auto 去吸收这份空间。#fcSec 在场时内容本就超过 min-height,增量为 0,原布局不变。
    min() 兜住矮视口:min-height 在 CSS 里胜过 max-height,写死 300px 会在小窗口顶穿右轨。 */
-#pipBox{padding:var(--sp-2) var(--sp-3);border-bottom:var(--bw) solid var(--line);flex:0 0 auto} /* 2026-09-28 右栏小窗(render/88-pip):导引头画面 / 主炮火控 */
-#pipBox .pip-hd{font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label);margin-bottom:var(--sp-1)}
-#pipCv{display:block;width:100%;height:150px}
+#pipBox{border-bottom:var(--bw) solid var(--line-hair);flex:0 0 auto} /* 2026-09-28 右栏小窗(render/88-pip):主炮火控;D2UI 默认折起,点抬头那行展开 */
+#pipBox .pip-hd{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-5);font-size:var(--fs-read);color:var(--txt);cursor:pointer;user-select:none}
+#pipBox .pip-hd .k{width:48px;text-align:right;font-size:var(--fs-body);color:var(--txt-dim);flex:none}
+#pipBox .pip-hd #pipHd{flex:1}
+#pipBox .pip-hd .chev{font-style:normal;font-size:var(--fs-body)}
+#pipBox.open .pip-hd .chev{transform:rotate(90deg)}
+#pipBox .pip-hd:hover{background:var(--srf-hover);color:var(--ink)} #pipBox .pip-hd:hover .k{color:#555}
+#pipCv{display:none;width:calc(100% - 32px);height:150px;margin:0 var(--sp-5) var(--sp-3)}
+#pipBox.open #pipCv{display:block}
+/* ==================== D2UI 右栏(用户 10-20,原稿 demos/ui/右上角改版.html)====================
+   照 D2 物品说明框:色带抬头(舰名 + 副标题,右角淡徽记圆环、右下一小段斜纹)→ 结构大数字 + 两条血条(下沿四分刻度)→
+   右对齐标签配细条 → 暴露三格圆形插槽(亮着的外面多一段琥珀弧,同 D2 强化词条)+ 斜体旁白(前面一小段短线)。不套卡片 */
+#selPanel{width:300px}
+#selHead{flex-direction:column;align-items:stretch;gap:5px;padding:var(--sp-4) var(--sp-5) var(--sp-3)}
+#selHead #selTitle{font-size:19px;line-height:1.15}
+#selHead #selSub{font-size:var(--fs-body);letter-spacing:.1em}
+#selHead[data-band="ship"]{background-color:var(--band-friend)}
+#selHead[data-band="hostile"]{background-color:var(--band-hostile)}
+#selHead[data-band]:not([data-band=""]){background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.12) 0 2px,transparent 2px 6px);background-size:84px 4px;background-position:right 0 bottom 0;background-repeat:no-repeat}
+#selInfo.d2{padding:0;border-bottom:var(--bw) solid var(--line-hair);flex:0 0 auto} /* 不收缩:火控曲线展开后面板顶到上限时,让火控计算机那块(#fcSec,自带滚动)去让,不把目标行挤进滚动里 */
+#selPanel .warn{display:flex;justify-content:space-between;align-items:baseline;background:var(--band-alert);padding:var(--sp-2) var(--sp-5);font-size:var(--fs-read);color:var(--txt-hi)}
+#selPanel .warn .num{font:600 16px var(--ff-mono)}
+#selPanel .bd{padding:var(--sp-5) var(--sp-5) var(--sp-4)}
+#selPanel .hero{display:flex;align-items:baseline;gap:var(--sp-3)}
+#selPanel .hero b{font:600 44px/1 var(--ff-mono);color:var(--txt-hi);font-variant-numeric:tabular-nums}
+#selPanel .hero span{font-size:var(--fs-body);color:var(--txt-dim)}
+#selPanel .hero .sub{margin-left:auto;display:flex;align-items:baseline;gap:var(--sp-2)}
+#selPanel .hero .sub b{font-size:22px}
+#selPanel .hpb{position:relative;margin:var(--sp-3) 0 var(--sp-2);background:var(--srf-sunk)}
+#selPanel .hpb i{display:block;height:6px;background:var(--txt-hi)}
+#selPanel .hpb i.shb{height:3px;background:#9FC9D9;margin-bottom:2px}
+#selPanel .hpb::after{content:"";position:absolute;left:0;right:0;bottom:-6px;height:3px;background:repeating-linear-gradient(90deg,rgba(255,255,255,.28) 0 1px,transparent 1px 25%)} /* 四分刻度 */
+#selPanel .rule{height:1px;background:var(--line);margin:var(--sp-4) 0}
+#selPanel .st{display:grid;grid-template-columns:48px 1fr auto;align-items:center;gap:7px 10px;font-size:var(--fs-body)}
+#selPanel .st .k{text-align:right;color:var(--txt-dim)}
+#selPanel .st .t{height:5px;background:var(--srf-sunk)} #selPanel .st .t i{display:block;height:100%;background:var(--txt-hi)}
+#selPanel .st .v{font:600 var(--fs-read) var(--ff-mono);color:var(--txt-read);font-variant-numeric:tabular-nums;white-space:nowrap}
+#selPanel .st .v small{font:normal var(--fs-body) var(--ff-ui);color:var(--txt-dim);margin-left:3px}
+#selPanel .perks{display:flex;gap:var(--sp-4)}
+#selPanel .pk{text-align:center;width:62px}
+#selPanel .pk .c{position:relative;width:44px;height:44px;border-radius:50%;border:1.5px solid rgba(233,230,223,.42);display:grid;place-items:center;margin:0 auto 6px}
+#selPanel .pk svg{width:20px;height:20px;stroke:var(--txt-hi);fill:none;stroke-width:1.6}
+#selPanel .pk.on .c{background:var(--txt-hi);border-color:var(--txt-hi)} #selPanel .pk.on svg{stroke:var(--ink)}
+#selPanel .pk.on .c::after{content:"";position:absolute;inset:-5px;border-radius:50%;border:1.5px solid transparent;border-top-color:#E3AE4A;border-right-color:#E3AE4A;transform:rotate(-30deg)} /* 亮着的插槽外面一段琥珀弧(D2 强化词条的读法) */
+#selPanel .pk s{display:block;text-decoration:none;font-size:var(--fs-label);color:var(--txt-dim)}
+#selPanel .pk em{display:block;font-style:normal;font-size:var(--fs-body);margin-top:1px;color:var(--txt)}
+#selPanel .pk.on em{color:#E3AE4A}
+#selPanel .lore{font-style:italic;font-size:var(--fs-body);line-height:1.65;color:rgba(233,230,223,.62);margin-top:var(--sp-4)}
+#selPanel .lore::before{content:"";display:block;width:16px;height:1px;background:var(--txt-dim);margin-bottom:var(--sp-2)}
+#selPanel .li{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-5);font-size:var(--fs-read)}
+#selPanel .li .k{width:48px;text-align:right;font-size:var(--fs-body);color:var(--txt-dim);flex:none}
+#selPanel .li .v{flex:1;min-width:0;color:var(--txt-read)}
+#selPanel .li small{font-size:var(--fs-label);color:var(--txt-dim)}
 #selInfo{padding:var(--sp-3);border-bottom:var(--bw) solid var(--line);flex:1 1 auto;min-height:0;overflow-y:auto}
 #selInfo h3{font-size:var(--fs-title);color:var(--txt-hi);margin:0 0 2px}
 #selInfo .sub{font-size:var(--fs-label);color:var(--txt-dim);margin-bottom:var(--sp-2)}
@@ -309,7 +359,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 /* ---------- RF5 火控计算机(右栏 #selPanel 内,武器库状态之后) ----------
    是本面板的撑高项(flex:1 1 auto):序列多了在面板内部滚动,不外溢也不顶穿。
    #selInfo 已带 border-bottom,这里不再补 border-top,避免两条线叠成 2px。 */
-#fcSec{padding:var(--sp-2) var(--sp-3);overflow-y:auto;flex:1 1 auto;min-height:52px} /* basis 必须是 auto:#selPanel 只有 max-height 没有 height(高度按内容撑),basis:0 会让本区永远塌到 min-height;同理百分比 max-height 在这种父容器里退化成 none,两条都实测过 */
+#fcSec{padding:var(--sp-3) var(--sp-5);overflow-y:auto;flex:1 1 auto;min-height:52px} /* basis 必须是 auto:#selPanel 只有 max-height 没有 height(高度按内容撑),basis:0 会让本区永远塌到 min-height;同理百分比 max-height 在这种父容器里退化成 none,两条都实测过 */
 /* RF9 加速度栏:引擎逐行列(多个同时在推时),行高压紧,不撑高整条读数行 */
 /* RF20 引擎仪表灯:四灯常驻只变亮暗,行数恒为一(旧 .eng 是 display:block 逐行列,多舱同时点火时行数跳动带着面板蹦)。
    暗灯保留本色但压到 .22 —— 全灰会读成"没有这个部件",半隐的色才读成"有但没点火"。不加 transition:
@@ -317,7 +367,7 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #selInfo .row .v .eng-l{display:inline-block;margin-left:var(--sp-2);font-size:var(--fs-micro);letter-spacing:var(--ls-label);opacity:.22}
 #selInfo .row .v .eng-l.on{opacity:1}
 #selInfo .row .v .eng-a{color:var(--txt)}
-#fcSec .fc-hd{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-2);font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label);margin-bottom:var(--sp-1)}
+#fcSec .fc-hd{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-2);font-size:var(--fs-body);color:var(--txt-dim);margin-bottom:var(--sp-2)}
 #fcSec .fc-hd .fc-btn{flex:none;letter-spacing:var(--ls-label)} /* RF8b 标题栏里的"选择"钮,沿用 #fcList .fc-btn 的配方(下面那条选择器已含 #fcSec 后代,这里只补 flex 行为) */
 #fcSec .fc-empty{font-size:var(--fs-label);color:var(--txt-mute);line-height:var(--lh-tight);padding:var(--sp-2) 0;text-align:center}
 /* RF7 火控计算机重做:五根竖直方条=五个序列槽,点击进入/退出序列态;.fc-seq 三条为旧富列表样式,只藏不删(html 不再产出该 class) */

@@ -17,9 +17,12 @@ function pipFrame(){
   const dpr=window.devicePixelRatio||1,w=cv.clientWidth||236,h=cv.clientHeight||150;
   if(PIP.w!==w||PIP.h!==h||PIP.dpr!==dpr){PIP.w=w;PIP.h=h;PIP.dpr=dpr;cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);}
   const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);g.fillStyle='rgb(5,7,12)';g.fillRect(0,0,w,h);
-  pipGun(g,w,h,s,k);const hd=(k==='sec'?'副炮火控 · ':'轴炮火控 · ')+s.name;
+  const hd=(k==='sec'?'副炮':'轴炮')+'命中率曲线'; // D2UI 抬头已写舰名,这里只写哪门炮
   if(hd!==PIP.hd){PIP.hd=hd;const e=document.getElementById('pipHd');if(e)e.textContent=hd;}
+  if(!box.classList.contains('open'))return; // D2UI 默认折起(用户 10-19 方案:调参看的图不该常驻占半栏),折着就不画
+  pipGun(g,w,h,s,k);
 }
+on('pipBox','click',e=>{if(e.target.closest('.pip-hd')){e.currentTarget.classList.toggle('open');PIP.n=PIP.EVERY-1;}}); // 点抬头那一行展开 / 折起;展开后下一帧就画
 function pipGun(g,w,h,s,k){ // 火控窗:三条 S 形命中率曲线(起作用的那条亮)+ 目标此刻的距离与把握。k = 'mac' 轴炮 / 'sec' 副炮
   const sec=k==='sec',XM=PIP_K[k].XMAX,P=(d,t)=>sec?secHitProb(s,d,t):macHitProb(s,d,t),L=30,R=w-8,T=22,B=h-30,X=d=>L+(R-L)*Math.min(1,d/XM),Y=pr=>B-(B-T)*pr;
   g.strokeStyle='rgba(143,208,255,.25)';g.lineWidth=1;g.beginPath();g.moveTo(L,T);g.lineTo(L,B);g.lineTo(R,B);g.stroke();
