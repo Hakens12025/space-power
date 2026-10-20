@@ -204,9 +204,8 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #tools .seg .hbtn:last-child{border-radius:0 var(--r-sm) var(--r-sm) 0}
 #tools .seg .hbtn:only-child{border-radius:var(--r-sm)}
 #tools .seg .hbtn.on{position:relative;z-index:1}
-#segTier{position:relative;gap:10px;padding:0 9px}
-#segTier::before{content:"";position:absolute;left:0;right:0;top:calc(50% - 3px);height:6px;pointer-events:none;
-  background:radial-gradient(circle,rgba(233,230,223,.8) 1.6px,transparent 2.2px) left center/6px 6px no-repeat,radial-gradient(circle,rgba(233,230,223,.8) 1.6px,transparent 2.2px) right center/6px 6px no-repeat,linear-gradient(rgba(233,230,223,.32),rgba(233,230,223,.32)) center/100% 1px no-repeat}
+#segTier{position:relative;gap:10px}
+#segTier::before{content:"";position:absolute;left:0;right:0;top:50%;height:1px;pointer-events:none;background:rgba(233,230,223,.32)} /* 节点连线;两端不加点(用户 10-21) */
 #tools #segTier .hbtn{margin-left:0;background:#141416}
 #tools #segTier .hbtn:hover{background:var(--hl)}
 #segTier .hbtn.on::before{content:"";position:absolute;left:50%;top:-9px;width:5px;height:5px;background:var(--txt-hi);transform:translateX(-50%) rotate(45deg)}   /* 亮起来那个的边框压在邻居上面,否则中缝会把高亮边切掉一半 */
