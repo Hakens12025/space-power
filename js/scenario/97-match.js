@@ -83,8 +83,9 @@ function matchGenWorld(seed,B,R){
 function matchSync(){ // 顶栏钮的字与提示跟着当前场景走(进 / 出对局、场景菜单切走,都经过 initFleet ⇒ 由它调)
   const b=document.getElementById('btnMatch');if(!b)return;
   const on=matchIsOn();
-  b.textContent=on?'回靶场':'对局';
-  b.classList.toggle('on',on);
+  b.textContent=on?'回靶场':'开始对局';
+  b.classList.toggle('primary',!on); // D2UI 靶场里「开始对局」是顶栏唯一的主按钮;进了对局「回靶场」退成普通钮
+  const hm=document.getElementById('hudMode');if(hm)hm.textContent=on?'对局':'靶场';
   b.title=on?'回到靶场(当前这一局作废) · 种子 '+MATCH.seed:'进入对局:3 对 4,双方静默开局、相距 180 万公里;每局一个种子,定红方来向与地形(太阳 / 行星 / 尘埃云 / 小行星)。全灭对方获胜';
   const card=document.getElementById('matchEnd');if(card)card.hidden=true;
   MATCH.shown=false;MATCH.t0=0;
@@ -125,13 +126,23 @@ function matchTick(){
 on('btnMatch','click',function(e){e.currentTarget.blur();if(matchIsOn())matchExit();else matchEnter();});
 function gmSync(){ // ENV2 顶栏「全知」钮只在靶场出现,亮灭跟 adminMode 走(F8 与钮共用)
   const b=document.getElementById('btnGM');if(!b)return;
-  const e=curEnv(),rg=!!(e&&e.range);b.style.display=rg?'':'none';b.classList.toggle('on',!!adminMode);
+  const e=curEnv(),rg=!!(e&&e.range);b.classList.toggle('on',!!adminMode); // D2UI 起 #btnGM 在靶场工具下拉里,.on 点亮它的开关
   if(!rg)VIEW=ME; // 视角切换只在靶场;2026-10-08 联机加入方看自己(红方)的感知
-  const tb=document.getElementById('btnTr');if(tb)tb.style.display=rg?'':'none';
-  const v=document.getElementById('btnView');if(v){v.style.display=rg?'':'none';v.textContent=VIEW==='red'?'红方视角':'蓝方视角';v.classList.toggle('on',VIEW==='red');}
+  const v=document.getElementById('btnView');if(v)for(const c of v.children)c.classList.toggle('on',c.dataset.v===VIEW);
+  const tl=document.getElementById('btnTools');if(tl)tl.style.display=rg&&!(typeof LOCK!=='undefined'&&LOCK.on)?'':'none'; // 下拉入口只在靶场;联机时 lockUi 也藏它
+  if(!rg)toolsDD(false);
+  const tg=document.getElementById('tagGM');if(tg)tg.classList.toggle('on',rg&&!!adminMode); // 全知 / 红方视角开着时顶栏挂常驻标签,免得忘了自己在看真值
+  const tr=document.getElementById('tagRV');if(tr)tr.classList.toggle('on',rg&&VIEW==='red');
 }
+function toolsDD(open){ // D2UI 靶场工具下拉:钉在入口钮下方、右缘对齐;点外面关
+  const d=document.getElementById('toolsDD'),b=document.getElementById('btnTools');if(!d||!b)return;
+  if(open===undefined)open=d.hidden;d.hidden=!open;b.classList.toggle('open',open);
+  if(open){const r=b.getBoundingClientRect();d.style.left=Math.max(8,Math.min(r.left,innerWidth-d.offsetWidth-8))+'px';d.style.top=(r.bottom+6)+'px';}
+}
+on('btnTools','click',function(e){e.currentTarget.blur();toolsDD();});
+document.addEventListener('pointerdown',function(e){const d=document.getElementById('toolsDD');if(d&&!d.hidden&&!d.contains(e.target)&&!e.target.closest('#btnTools'))toolsDD(false);});
 on('btnGM','click',function(e){e.currentTarget.blur();adminMode=!adminMode;gmSync();});
-on('btnView','click',function(e){e.currentTarget.blur();VIEW=VIEW==='blue'?'red':'blue';gmSync();}); // 2026-09-28 靶场切红蓝视野
-on('btnTr','click',function(e){e.currentTarget.blur();const p=document.getElementById('trPanel');if(!p)return;const open=p.style.display==='none';p.style.display=open?'flex':'none';if(open&&typeof renderRangePanel==='function')renderRangePanel();}); // 2026-09-28 靶场参数面板的开关
+on('btnView','click',function(e){const c=e.target.closest('[data-v]');if(!c)return;c.blur();VIEW=c.dataset.v;gmSync();}); // 2026-09-28 靶场切红蓝视野;D2UI 改成两段选择
+on('btnTr','click',function(e){e.currentTarget.blur();toolsDD(false);const p=document.getElementById('trPanel');if(!p)return;const open=p.style.display==='none';p.style.display=open?'flex':'none';if(open&&typeof renderRangePanel==='function')renderRangePanel();}); // 2026-09-28 靶场参数面板的开关
 on('meAgain','click',function(){matchEnter();});
 on('meRange','click',function(){matchExit();});

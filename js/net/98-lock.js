@@ -94,7 +94,7 @@ function mpPrepRed0(){
   for(const s of ships)if(s.side==='red'){const b=ships.find(x=>x.side==='blue'&&x.cls===s.cls);if(!b)continue;for(const k of K)s[k]=b[k];setEmit(s,b.emitMode);s.orders=[];s.brake=true;}
   const R=ships.filter(s=>s.side==='red');if(R.length>=2){const F=fmCreate('5',R);if(F)fmSetSrc(F,'generated');}}
 function lockUi(){ // 顶上一条联机状态;藏掉靶场 / 对局切换 / 全知 / 视角 / 加船这些单人工具
-  for(const id of ['btnMatch','btnGM','btnView','btnTr','spawnBar']){const e=document.getElementById(id);if(e)e.style.display='none';}
+  for(const id of ['btnMatch','btnGM','btnView','btnTr','spawnBar','btnTools','tagGM','tagRV']){const e=document.getElementById(id);if(e)e.style.display='none';}
   let b=document.getElementById('mpBar');if(!b){b=document.createElement('div');b.id='mpBar';document.body.appendChild(b);}
   if(!LOCK.uiT)LOCK.uiT=setInterval(()=>{const i=LOCK.info&&nowMs()-LOCK.infoT<6000?' · '+LOCK.info:'';
     const q=(LOCK.on&&NET.room&&NET.room.peer)?Date.now()-NET.room.peer.seen:0; // 对手多久没消息(98-net 按 Date.now 记)

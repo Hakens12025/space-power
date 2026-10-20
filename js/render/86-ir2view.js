@@ -257,7 +257,7 @@ function drawIr2View(){ // 每帧入口(84-scene,MAPV.mode === 'ir';画在地图
   if(RS.length>1){ctx.save();ir2DrawZones();ctx.restore();}
 }
 function ir2HudPlace(R){ // 仪表放哪(半径 R 连底板):左边(加舰条与指令栏之间)被页面面板挡住(比如靶场参数)就换到右边(右栏与右下工具栏之间);每 500 ms 看一次
-  const rc=id=>{const e=document.getElementById(id);if(!e)return null;const r=e.getBoundingClientRect();return r.height>0?r:null;},sb=rc('spawnBar'),cb=rc('cmdBar'),sp=rc('selPanel'),tl=rc('tools');
+  const rc=id=>{const e=document.getElementById(id);if(!e)return null;const r=e.getBoundingClientRect();return r.height>0?r:null;},sb=rc('fmBar'),cb=rc('cmdBar'),sp=rc('selPanel'),tl=rc('tools');
   const free=(x,y)=>{for(const d of [[0,0],[R,0],[-R,0],[0,R],[0,-R]]){const e=document.elementFromPoint(x+d[0],y+d[1]);if(e&&e!==cv)return false;}return true;};
   const L={x:16+R,top:Math.max(60,sb?sb.bottom+8:60),bot:(cb?cb.top:H-60)-8,left:true},Rt={x:W-16-R,top:Math.max(60,sp?sp.bottom+8:60),bot:(tl?tl.top:H-60)-8,left:false};
   for(const c of [L,Rt]){const y=Math.max(c.top+R,Math.min((c.top+c.bot)/2,c.bot-R));if(free(c.x,y))return c;}

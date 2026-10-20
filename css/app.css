@@ -207,8 +207,6 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 /* MT1 对局:顶栏入口钮 + 结果卡片。#btnMatch 是文字钮(.hbtn 的底子是 15px 的图标字号,压回正文字号);进了对局亮成开启态。
    结果卡片居中偏上,档位用 --z-modal(整档):它要压住右轨与工具栏,但不需要遮罩 —— 战场停在决出胜负那一刻,本来就该看得见。
    注意:#btnMatch 是顶栏里除暂停/倍速/教程之外唯一的钮。 */
-#btnMatch,#btnGM{font-size:var(--fs-body);padding:0 var(--sp-3);letter-spacing:var(--ls-label)}
-#btnMatch.on,#btnGM.on{color:var(--acc);border-color:var(--acc);background:var(--acc-wash)}
 #matchEnd{left:50%;top:32%;transform:translate(-50%,-50%);min-width:340px;padding:var(--sp-6) var(--sp-6) var(--sp-5);text-align:center;z-index:var(--z-modal);
   border-color:var(--state-ok);box-shadow:0 4px 28px rgba(0,0,0,.6)}
 #matchEnd[hidden]{display:none!important}
@@ -226,13 +224,42 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #mapTag{position:absolute;left:14px;top:64px;z-index:var(--z-hud);font-size:11px;letter-spacing:.10em;
   color:var(--txt-dim);pointer-events:none;text-shadow:0 0 6px #05070c}
 #mapTag b{font-weight:normal;margin-left:6px;font-size:10px;color:var(--txt-mute);letter-spacing:.16em}
-#hud{top:var(--gut);left:var(--gut);right:var(--gut);min-height:var(--bar-h);display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-3) var(--sp-4);overflow:hidden;z-index:var(--z-hud);pointer-events:auto}
-#hud .logo{font-size:var(--fs-title);color:var(--txt-hi);letter-spacing:var(--ls-caps);font-weight:bold;white-space:nowrap;flex:none}
-#hud .logo span{color:var(--acc)}
-#clock{font-family:var(--ff-mono);font-size:var(--fs-title);color:var(--txt-read);letter-spacing:var(--ls-read);font-variant-numeric:tabular-nums;min-width:70px;flex:none}
-#rate{font-family:var(--ff-mono);font-size:var(--fs-body);color:var(--txt-dim);letter-spacing:var(--ls-read);min-width:30px;flex:none}
-.hudTag{font-size:var(--fs-label);color:var(--txt-dim);padding:var(--sp-0) var(--sp-2);border:var(--bw) solid var(--line-ctl);border-radius:var(--r-sm);flex:none;user-select:none}
-#hudGM.on{color:var(--acc);border-color:var(--acc)}
+/* D2UI 顶栏三段:左标志 + 场景名 | 正中 倍速与时钟(绝对居中,不随两边宽度漂) | 右 标签 + 下拉 + 教程 + 主按钮 */
+#hud{top:var(--gut);left:var(--gut);right:var(--gut);min-height:var(--bar-h);display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-3) var(--sp-4);overflow:hidden;z-index:var(--z-hud);pointer-events:auto;background:rgba(8,8,10,.9)}
+#hud::after{content:"";position:absolute;left:0;bottom:0;width:120px;height:2px;background:var(--txt-hi);pointer-events:none} /* 下沿左端一段亮线,同面板抬头的页签指示 */
+#hud .logo{font:bold 13px var(--ff-mono);color:var(--txt-hi);letter-spacing:.32em;white-space:nowrap;flex:none}
+#hud .logo span{font:normal var(--fs-body) var(--ff-ui);color:var(--txt-dim);letter-spacing:.2em;margin-left:var(--sp-4);padding-left:var(--sp-4);border-left:var(--bw) solid var(--line-ctl)}
+#hud .hud-clock{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:var(--sp-2)}
+#hud .hud-clock .hbtn{min-width:28px;height:28px;font-size:var(--fs-read)}
+#clock{font:600 22px/1 var(--ff-mono);color:var(--txt-hi);letter-spacing:.04em;font-variant-numeric:tabular-nums;min-width:76px;text-align:center;flex:none}
+#rate{font-family:var(--ff-mono);font-size:var(--fs-body);color:var(--txt-dim);letter-spacing:var(--ls-read);min-width:30px;text-align:center;flex:none}
+#hud>.hbtn{font-size:var(--fs-body);padding:0 var(--sp-4);letter-spacing:.1em}
+#hud .hbtn.primary{background:var(--txt-hi);border-color:var(--txt-hi);color:var(--ink);font-weight:bold}
+#hud .hbtn.primary:hover{background:#fff;border-color:#fff}
+#btnTut{font:bold var(--fs-read) var(--ff-mono)!important;padding:0!important;min-width:32px}
+#btnTools .dd-car{font-style:normal;font-size:10px;margin-left:var(--sp-2)}
+#btnTools.open{background:var(--srf-hover);border-color:var(--srf-hover);color:var(--ink)}
+.hudTag{display:none;font-size:var(--fs-body);letter-spacing:.12em;padding:var(--sp-1) var(--sp-3);border:var(--bw) solid currentColor;flex:none;user-select:none}
+.hudTag.on{display:inline-block}
+.hudTag.gm{color:#E3AE4A} .hudTag.rv{color:var(--side-hostile)}
+/* D2UI 靶场工具下拉:实底(压在右栏上面,不能透)、分组小标题、整行反白的项、两段选择、开关 */
+#toolsDD{position:fixed;width:300px;z-index:var(--z-flyout);background:#111214;border-color:var(--line-ctl);box-shadow:0 10px 28px rgba(0,0,0,.55);padding-bottom:var(--sp-2)}
+#toolsDD[hidden]{display:none}
+#toolsDD .dd-h{font-size:var(--fs-label);letter-spacing:.24em;color:var(--txt-dim);padding:var(--sp-3) var(--sp-4) var(--sp-1)}
+#toolsDD .dd-item{display:flex;align-items:center;gap:var(--sp-3);width:100%;padding:var(--sp-2) var(--sp-4);background:none;border:none;color:var(--txt);text-align:left;cursor:pointer;font-family:var(--ff-ui)}
+#toolsDD .dd-item .t{flex:1}
+#toolsDD .dd-item b{display:block;font-size:var(--fs-read);font-weight:bold;letter-spacing:.06em;color:var(--txt-hi)}
+#toolsDD .dd-item s{display:block;text-decoration:none;font-size:var(--fs-label);color:var(--txt-dim);margin-top:2px}
+#toolsDD .dd-item:hover{background:var(--srf-hover)} #toolsDD .dd-item:hover b,#toolsDD .dd-item:hover s{color:var(--ink)}
+#toolsDD .sw{width:28px;height:14px;border:var(--bw) solid var(--line-ctl);position:relative;flex:none}
+#toolsDD .sw::after{content:"";position:absolute;top:2px;left:2px;width:8px;height:8px;background:var(--txt-dim)}
+#btnGM.on .sw{border-color:#E3AE4A} #btnGM.on .sw::after{left:16px;background:#E3AE4A}
+#toolsDD .dd-seg{display:flex;padding:var(--sp-1) var(--sp-4) var(--sp-2)}
+#toolsDD .dd-seg button{flex:1;height:28px;margin-left:-1px;border:var(--bw) solid var(--line-ctl);background:none;color:var(--txt);font:var(--fs-body) var(--ff-ui);letter-spacing:.1em;cursor:pointer}
+#toolsDD .dd-seg button:hover{background:var(--srf-hover);color:var(--ink)}
+#toolsDD .dd-seg button.on{background:var(--acc-wash);border-color:var(--txt-hi);color:var(--txt-hi);position:relative;z-index:1}
+#toolsDD .dd-seg button.on[data-v="blue"],#toolsDD .dd-seg button.on[data-sp="blue"]{box-shadow:inset 0 -2px var(--side-friend)}
+#toolsDD .dd-seg button.on[data-v="red"],#toolsDD .dd-seg button.on[data-sp="red"]{box-shadow:inset 0 -2px var(--side-hostile)}
 #hud .spacer{flex:1;min-width:8px;pointer-events:none}
 /* RF10 引擎模型三选一:连成一组,只有当前模型亮 .on */
 
@@ -586,14 +613,10 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 /* FM7 测试用「加船」小条:贴在左轨书签栏下方,跟着它一起从上往下排。
    与 #fmBar 同一条车道(left/width 对齐),但它是【固定在书签栏之下】的一条,不随编队数上下跑 ——
    书签最多 4 条,所以给书签留 4×27px 的余量,加船条钉在那之下。 */
-#spawnBar{position:fixed;left:var(--gut);top:calc(var(--rail-top) + 118px);
-  display:flex;flex-wrap:wrap;align-items:center;gap:3px;max-width:110px;
-  z-index:var(--z-panel);padding:4px;border:var(--bw) solid var(--line-hair);border-radius:var(--r-sm);
-  background:var(--srf-sunk);opacity:.8}
-#spawnBar:hover{opacity:1}
-#spawnBar .sp-lb{flex:0 0 100%;font-size:var(--fs-label);color:var(--txt-dim);letter-spacing:var(--ls-label)}
-#spawnBar .qbtn{min-width:0;padding:1px 6px;font-size:var(--fs-label)}
-#spawnBar .sp-side.red{color:var(--state-danger);border-color:var(--state-danger)}
+/* D2UI 起加船住在 #toolsDD 里(阵营两段 → 六个舰种 → 清空) */
+#spawnBar .sp-cls{display:grid;grid-template-columns:repeat(6,1fr);gap:var(--sp-1);padding:0 var(--sp-4) var(--sp-1)}
+#spawnBar .sp-cls button{height:26px;border:var(--bw) solid var(--line);background:none;color:var(--txt);font:bold var(--fs-label) var(--ff-mono);cursor:pointer}
+#spawnBar .sp-cls button:hover{background:var(--srf-hover);border-color:var(--srf-hover);color:var(--ink)}
 /* FM7 成员行:此刻听别的编队的那几艘压暗,身份格里写 →N */
 #selFm .fm-mem.away{opacity:.5}
 #selFm .fm-mem.away .fg{color:var(--state-warn);font-size:var(--fs-label)}

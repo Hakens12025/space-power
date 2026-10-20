@@ -29,20 +29,17 @@ function spawnBarBuild() {
   const el = document.getElementById('spawnBar');
   if (!el || el.dataset.built) return;
   el.dataset.built = '1';
-  el.innerHTML = '<span class="sp-lb">加船</span>'
-    + CLS_ORDER.map(c => '<button class="btn qbtn" data-sp="' + c + '" title="在摄像机附近放一艘 ' + c + '（测试用）">' + c + '</button>').join('')
-    + '<button class="btn qbtn sp-side" data-sp="side" title="切换放置阵营">蓝</button>'
-    + '<button class="btn qbtn qstop" data-sp="clr" title="删掉所有用本菜单加出来的船">清</button>';
+  // D2UI(2026-10-20)起住在顶栏「靶场工具」下拉里:阵营两段 → 六个舰种 → 清空
+  el.innerHTML = '<div class="dd-seg sp-sides"><button data-sp="blue" title="放蓝方">蓝方</button><button data-sp="red" title="放红方">红方</button></div>'
+    + '<div class="sp-cls">' + CLS_ORDER.map(c => '<button data-sp="' + c + '" title="在摄像机附近放一艘 ' + c + '（测试用）">' + c + '</button>').join('') + '</div>'
+    + '<button class="dd-item sp-clr" data-sp="clr" title="删掉所有用本菜单加出来的船"><span class="t"><b>清空加的船</b></span></button>';
 }
 function spawnBarSync() {
-  const b = document.querySelector('#spawnBar [data-sp="side"]');
-  if (!b) return;
-  const t = SPWN.side === 'blue' ? '蓝' : '红';
-  if (b.textContent !== t) b.textContent = t;
-  b.classList.toggle('red', SPWN.side !== 'blue');
+  for (const b of document.querySelectorAll('#spawnBar .sp-sides [data-sp]')) b.classList.toggle('on', b.getAttribute('data-sp') === SPWN.side);
 }
 function spawnBarAct(a) {
   if (a === 'side') { SPWN.side = (SPWN.side === 'blue') ? 'red' : 'blue'; spawnBarSync(); return; }
+  if (a === 'blue' || a === 'red') { SPWN.side = a; spawnBarSync(); return; }
   if (a === 'clr') {
     /* 只删自己加的(按名字前缀认)。删之前走 fmOnDeath 那条路把它从每一个编队的名册里摘干净 ——
        直接 splice 掉的话编队名册里会留下一个指向已不存在的舰的 id。 */

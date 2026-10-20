@@ -561,7 +561,7 @@ function drawAnomalies(){
    自己平移过去,异常那一点进了画面(不压界面)就收箭头、在那里把异常动画重播一遍。
    异常那一点:雷达异常 / 围出交集的红外异常 = 画圈那一点;只有方位的红外异常 = 刻痕那一点(看它的那艘可见光圈边上,方位定格在报的那一刻)。 */
 const ANAR={a:[],LIFE:6000,RK:0.35,ML:64,MT:94,MR:28,MB:28,HIT:16,SZ:10,ob:null,obT:-1e9,t:-1e9,v:null, // 箭头 / 寿命 / 箭头所在圆的半径(屏幕短边的几倍)/ 算「进了画面」的左上右下边距(躲开刻度尺)/ 悬停半径 / 箭头大小 px
-  SEL:'#hud,#tools .seg,#fmBar,#spawnBar,#selPanel,#trPanel,#cmdBar,#fmMenu,#cmdTip,#cmdPop,#mapTag,#matchEnd'}; // 压在画布上的界面
+  SEL:'#hud,#toolsDD,#tools .seg,#fmBar,#selPanel,#trPanel,#cmdBar,#fmMenu,#cmdTip,#cmdPop,#mapTag,#matchEnd'}; // 压在画布上的界面
 function anarObs(now){ // 界面占的矩形(DOM 每 300 ms 量一次;特写窗每帧读)
   if(!ANAR.ob||now-ANAR.obT>300){const R=[];for(const el of document.querySelectorAll(ANAR.SEL)){const r=el.getBoundingClientRect();if(r.width<1||r.height<1)continue;const cs=getComputedStyle(el);if(cs.display==='none'||cs.visibility==='hidden'||+cs.opacity===0)continue;R.push([r.left,r.top,r.right,r.bottom]);}
     R.push([0,H-40,140,H]);ANAR.ob=R;ANAR.obT=now;} // 左下角比例尺(画布上画的)
