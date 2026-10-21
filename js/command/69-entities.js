@@ -24,6 +24,10 @@ function entRows(R){return R.filter(Boolean).map(r=>`<div class="row"><span clas
 function entBrg(p,ref){if(!p||!ref)return null;const dx=p[0]-ref.pos[0],dy=p[1]-ref.pos[1];return ['方位',String(Math.round((Math.atan2(dy,dx)*180/Math.PI+360)%360)%360).padStart(3,'0')+'° · '+Math.round(Math.hypot(dx,dy)/1000)+'k'];} // 同悬停信息卡的写法(0° = +X)
 function entCard(o,ref){const h=(ref&&typeof xhCardHTML==='function')?xhCardHTML(o,ref):'';return h.replace(/^<div class="nm[^"]*">[\s\S]*?<\/div>/,'').replace(/<div><span class="k">/g,'<div class="row"><span class="k">');} // 对方的东西:悬停信息卡那几行(command/74)
 function entRef(ref){return ref?entRows([['参照',ref.name]]):'';}
+/* ico(o):右栏抬头暗纹的类别(render/88 selIco → css #selHead[data-ico]):fleet 我方 / enemy 对方 / msl 导弹 / nat 自然结构 / art 人造结构。
+   10-21 用户:结构只分自然 / 人造两枚,以后种类多了也好表示 —— 新实体在这里声明归哪类,界面不再逐个判断。
+   属于对方的东西一律 enemy(对方的诱饵 / 浮标按种类给 art,就等于告诉你那是诱饵) */
+const ENT_FOE=o=>(o.side==='blue'||o.side==='red')&&o.side!==VIEW;
 const ENT={
   ship:{k:'ship',tier:0,follow:true,
     each(f,truth,side){for(const s of ships)if(!s.dead&&(truth||adminMode||entMine(s,side)))f(s);if(!truth&&!adminMode)trkEach(side,tk=>{const s=trkSrc(tk);if(!s.kind&&!entMine(s,side))f(s);});},
@@ -32,7 +36,7 @@ const ENT={
     live(o){return !o.dead&&ships.includes(o)&&(entMine(o,VIEW)||adminMode||!viewDead(o));},
     sel(o){return o.side===ME?'ship':'info';}, // 选中 / 下令永远是蓝方(RF2;GM 也不例外)
     drag(h,x,y){entMoveTo(h.o,x,y);},
-    title(){return '目标信息';},name(o){return (o.side===VIEW||adminMode)?o.name:xhName(o);},
+    title(){return '目标信息';},name(o){return (o.side===VIEW||adminMode)?o.name:xhName(o);},ico(o){return ENT_FOE(o)?'enemy':'fleet';},
     info(o,ref){return entCard(o,ref)+entRef(ref);}},
   obj:{k:'obj',tier:0,follow:true, // rocks[]:碎石、民船、诱饵、浮标
     each(f,truth,side){if(truth||adminMode){for(const o of rocks)if(!o.dead)f(o);return;}for(const o of rockObjs())if(!o.dead&&entMine(o,side))f(o);trkEach(side,tk=>{const s=trkSrc(tk);if(s.kind&&!entMine(s,side))f(s);});},
@@ -41,7 +45,7 @@ const ENT={
     live(o){return !o.dead&&rocks.includes(o)&&(entMine(o,VIEW)||adminMode||!viewDead(o));},
     sel(o){return (o.kind==='buoy'&&o.side===ME)?'buoy':'info';},
     drag(h,x,y){entMoveTo(h.o,x,y);},
-    title(o){return o.side===VIEW?({lure:'诱饵',buoy:'前出浮标'})[o.kind]||'物体':'目标信息';},name(o){return (o.side===VIEW||adminMode)?o.name:xhName(o);},
+    title(o){return o.side===VIEW?({lure:'诱饵',buoy:'前出浮标'})[o.kind]||'物体':'目标信息';},ico(o){return ENT_FOE(o)?'enemy':(o.kind==='rock'?'nat':'art');}, // 碎石 = 自然;民船 / 诱饵 / 浮标 = 人造name(o){return (o.side===VIEW||adminMode)?o.name:xhName(o);},
     info(o,ref){if(o.side!==VIEW)return entCard(o,ref)+entRef(ref); // 自己放的诱饵
       return entRows([['状态',o.dest?'飞行中':'漂流 · 冒充驱逐舰'],o.life>0?['剩余',Math.round(SHOW.t(o.life))+' s']:null]);}},
   sta:{k:'sta',tier:0,follow:true, // 据点(world/16):观测站对象 T.obs 当句柄,归属 = obs.side
@@ -51,7 +55,7 @@ const ENT={
     live(o){return ENV.stations.length>0&&featStaState().some(T=>T.obs===o);},
     sel(o){return o.side===ME?'buoy':'info';}, // 自己拿着的:底栏雷达遥控(同浮标)
     drag(h,x,y){const i=featStaState().findIndex(T=>T.obs===h.o);if(i<0||!rangeWorld)return;const S=rangeWorld.stations[i];S.x=x;S.y=y;envReset(rangeWorld);featStaMoved(i,x,y);}, // 改 rangeWorld 再 envReset,归属 / 占领进度照留
-    title(){return '据点';},name(o){return o.name;},
+    title(){return '据点';},name(o){return o.name;},ico(){return 'art';},
     info(o,ref){const T=featStaState().find(T=>T.obs===o),who=s=>s===VIEW?'我方':'对方';
       return entRows([['归属',T&&T.holder?who(T.holder):'无人'],T&&T.cap?['占领中',who(T.cap)+' '+Math.round(100*T.prog/FEAT_CFG.STA.CAP_T)+'%']:null,entBrg(o.pos,ref)])+entRef(ref);}},
   moon:{k:'moon',tier:0,follow:true,
@@ -62,7 +66,7 @@ const ENT={
     sel(){return 'info';},
     drag(h,x,y){if(!rangeWorld)return;const m=rangeWorld.moons[h.o.i],B=ENV.bodies[m.b],dx=x-B.x,dy=y-B.y,orb=Math.max(B.r+m.r,Math.hypot(dx,dy)); // 绕同一颗行星,轨道半径 = 拖到的距离(不进行星),相位让它此刻正好在光标下
       m.orb=orb;m.ph=Math.atan2(dy,dx)-(m.dir<0?-1:1)*(PHYS.v(FEAT_CFG.MOON.V)/orb)*simTime;envReset(rangeWorld);},
-    title(){return '卫星';},name(){return '卫星';},
+    title(){return '卫星';},name(){return '卫星';},ico(){return 'nat';},
     info(o,ref){return entRows([['类别','卫星 · 绕行星转'],entBrg(this.at(o),ref)])+entRef(ref);}},
   comet:{k:'comet',tier:0,follow:true,
     each(f){for(let i=0;i<ENV.comets.length;i++)f(entW('comet',i));},
@@ -71,7 +75,7 @@ const ENT={
     live(o){return o.i<ENV.comets.length;},
     sel(){return 'info';},
     drag(h,x,y){if(!rangeWorld)return;const c=rangeWorld.comets[h.o.i],q=this.at(h.o);c.x+=x-q[0];c.y+=y-q[1];envReset(rangeWorld);}, // 整条轨迹的起点跟着挪(恒星远,轨迹近似平移;每次按此刻的偏差补,拖着不累积)
-    title(){return '彗星';},name(){return '彗星';},
+    title(){return '彗星';},name(){return '彗星';},ico(){return 'nat';},
     info(o,ref){return entRows([['类别','彗星 · 拖着尾巴(挡红外 / 可见光)'],entBrg(this.at(o),ref)])+entRef(ref);}},
   msl:{k:'msl',tier:1,follow:true, // 导弹组:排在其他实体之后(原 groupAt 只在没点中船时才看)
     each(f){for(const p of projAll())if((p.type==='missile'||p.type==='interceptor')&&projSeen(p))f(p);}, // LL9 连余像:画着的对方弹在消失的光到之前也点得到;2026-10-12 用户:拦截弹组也能点(选中只这一组,不组网)
@@ -79,7 +83,7 @@ const ENT={
     r(){return 30;},
     live(){return true;}, // 由 at 给不给位置决定
     sel(){return 'msl';},
-    title(){return '导弹组';},name(){return '导弹组';}},
+    title(){return '导弹组';},name(){return '导弹组';},ico(){return 'msl';}},
   body:{k:'body',tier:1,follow:false, // 行星 / 天体:只在靶场能拖(盘面大,不参与点选,免得挡框选)
     each(f){for(let i=0;i<ENV.bodies.length;i++)f(entW('body',i));},
     at(o){const b=ENV.bodies[o.i];return b?[b.x,b.y]:null;},
@@ -87,7 +91,7 @@ const ENT={
     live(o){return o.i<ENV.bodies.length;},
     sel(){return null;},
     drag(h,x,y){if(!rangeWorld)return;const b=rangeWorld.bodies[h.o.i];b.x=x;b.y=y;envReset(rangeWorld);},
-    title(){return '天体';},name(){return '天体';}},
+    title(){return '天体';},name(){return '天体';},ico(){return 'nat';}},
 };
 const ENT_KINDS=[ENT.ship,ENT.obj,ENT.sta,ENT.moon,ENT.comet,ENT.msl,ENT.body];
 function entKind(o){if(!o)return null;const k=o.kind;if(k==='moon'||k==='comet'||k==='body')return ENT[k];if(k==='station')return ENT.sta;if(o.type==='missile'||o.type==='interceptor')return ENT.msl;return k?ENT.obj:ENT.ship;}

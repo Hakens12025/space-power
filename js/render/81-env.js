@@ -242,7 +242,7 @@ function mapFillPoly(P){const g=mapG();g.beginPath();g.moveTo(P[0],P[1]);for(let
 const MAP_BODY={DARK:'rgba(58,64,78,.92)',LIT:'rgba(150,156,170,.92)',EDGE:'rgba(170,180,200,.45)',TXT:'rgba(200,206,220,.72)'}; // ENV2 天体配色:灰、不带色相(与云同一路单色)
 function mapBodies(){ // ENV2 comp 槽(任务 4:画进当前视图 —— 合成缓存或主画布;返回画了几个)
   const B=ENV.bodies;if(!B.length)return 0;
-  const g=mapG(),VW=mapVW(),VH=mapVH(),z=mapVZ(),big=3*Math.max(VW,VH),lit=envHasLight(),u=MAP_T2;let n=0;
+  const g=mapG(),VW=mapVW(),VH=mapVH(),z=mapVZ(),big=40*Math.max(VW,VH),lit=envHasLight(),u=MAP_T2;let n=0;
   g.save();
   for(const b of B){
     const p=mapTS(b.x,b.y),r=b.r*z,rk=artRingOf(b),e=Math.max(3,r)*(rk?rk.k+2.2*rk.w:1.16)+30; // 2026-10-08 剔除按画出来的整个范围(环到 k + 2.2σ 倍半径、大气边 1.16 倍、下面那行类型字再 +30):原来只按盘,盘在视图外、环伸进来时环被剔掉 —— 合成缓存平移时整格拷来的那几格就留下一块没环的矩形

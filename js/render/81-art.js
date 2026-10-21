@@ -394,7 +394,7 @@ function artSurf(type,sd,x,y,z){const P=ART_PT[type]||ART_PT.gas,C=P.col,lat=x*P
   const v=lat+(artFbm(x*1.6,y*1.6,z*1.6,sd,4)-0.5)*0.22;return C[((Math.floor(v*2.6+20))%2+2)%2];} // 气态巨行星:两色宽带交替
 /* 分帧生成:一张贴图 = 一个任务(按行做),每帧 artTick 推进 ART_BUDGET ms */
 const ART_PJ={spr:new Map(),jobs:[],ver:0,tick:0};
-function artJob(key,M,pix){let e=ART_PJ.spr.get(key);if(e){if(e.done)return e.c;e.t=ART_PJ.tick;return null;}const c=artCv(M,M),g=c.getContext('2d');
+function artJob(key,M,pix){let e=ART_PJ.spr.get(key);if(e){e.t=ART_PJ.tick;if(e.done)return e.c;return null;}const c=artCv(M,M),g=c.getContext('2d');
   e={c,g,im:g.createImageData(M,M),M,pix,row:0,done:false,t:ART_PJ.tick};ART_PJ.spr.set(key,e);ART_PJ.jobs.push(e);return null;}
 function artReady(key){const e=ART_PJ.spr.get(key);return !!(e&&e.done);}
 function artTick(){const t0=performance.now(),J=ART_PJ.jobs,D=window.devicePixelRatio||1;ART_PJ.tick++;ART_MNEW=0;if(D!==ART_D){ART_D=D;ART_MS.clear();ART_RK.clear();ART_IB.clear();}
@@ -403,14 +403,15 @@ function artTick(){const t0=performance.now(),J=ART_PJ.jobs,D=window.devicePixel
     if(e.row>=M){e.g.putImageData(e.im,0,0);e.im=null;e.pix=null;e.done=true;J.splice(bi,1);ART_PJ.ver++;}}}
 function artDisk(N,f){const R=N/2-1,h=N/2;return (i,j,d,o)=>{const dx=(i+0.5-h)/R,dy=(j+0.5-h)/R,d2=dx*dx+dy*dy;if(d2>1+4/R)return;const a=artC01((1-Math.sqrt(d2))*R+0.5);if(a<=0)return;f(dx,dy,Math.sqrt(Math.max(0,1-d2)),a,d,o);};}
 const ART_XC=-0.12,ART_HW=0.34,ART_HP=0.05; // 明暗:直线切分(光从 +x;切分线在 x = -0.12),交界往背光退 0.34 用网点接上,网点间距 0.05(都按行星半径算,同演示页)
-function artPSurf(type,sd,N){const P=ART_PT[type]||ART_PT.gas,gw=N>=128?1.2/(N/2-1):0,M=[];for(let i=0;i<6;i++){const t=i*Math.PI/6;M.push([-Math.sin(t),Math.cos(t)*P.e2[1],Math.cos(t)*P.e2[2]]);} // 子午面法向
-  return artJob('s'+type+sd+'|'+N,N,artDisk(N,(x,y,z,a,d,o)=>{let c=artSurf(type,sd,x,y,z);
+function artPSurf(type,sd,N){return artJob('s'+type+sd+'|'+N,N,artDisk(N,artSurfPix(type,sd,N/2-1)));}
+function artSurfPix(type,sd,RL){const P=ART_PT[type]||ART_PT.gas,gw=RL>=63?1.2/RL:0,M=[];for(let i=0;i<6;i++){const t=i*Math.PI/6;M.push([-Math.sin(t),Math.cos(t)*P.e2[1],Math.cos(t)*P.e2[2]]);} // 子午面法向
+  return (x,y,z,a,d,o)=>{let c=artSurf(type,sd,x,y,z);
     if(gw){const l=x*P.ax[0]+y*P.ax[1]+z*P.ax[2];let on=false;for(const k of [0,0.4,-0.4,0.75,-0.75])if(Math.abs(l-k)<gw){on=true;break;} // 极细经纬网(印刷星图);小于 128 档不画(会糊成噪点)
       if(!on)for(const n of M)if(Math.abs(x*n[0]+y*n[1]+z*n[2])<gw){on=true;break;}
       if(on)c=artMix(c,[230,223,204],0.14);}
-    d[o]=c[0];d[o+1]=c[1];d[o+2]=c[2];d[o+3]=a*255;}));}
+    d[o]=c[0];d[o+1]=c[1];d[o+2]=c[2];d[o+3]=a*255;};}
 function artPShade(N,night){const C=night||ART_NIGHT,dots=N>=96,rh=ART_HP*0.866,pmin=0.45/(N/2-1); // 背光那半整块压暗;交界网点渐散(小于 96 档网点太细,只留直线切分)
-  return artJob('h'+N+(night?'n':''),N,artDisk(N,(x,y,z,a,d,o)=>{let k=x<ART_XC-ART_HW;
+  return artJob('h'+N+(night?'n':''),N,artDisk(N,(x,y,z,a,d,o)=>{let k=x<ART_XC-ART_HW+0.3*ART_HP;
     if(!k&&dots&&x<ART_XC+ART_HP){const r0=Math.round((y+1)/rh);
       for(let rr=r0-1;rr<=r0+1&&!k;rr++){const cy=rr*rh-1,off=(rr&1)?ART_HP/2:0,c0=Math.round((x-off)/ART_HP);
         for(let cc=c0-1;cc<=c0+1;cc++){const cx=cc*ART_HP+off,rad=ART_HP*0.78*Math.sqrt(artC01((ART_XC-cx)/ART_HW));if(rad>pmin&&(x-cx)*(x-cx)+(y-cy)*(y-cy)<rad*rad){k=true;break;}}}}
@@ -423,22 +424,60 @@ function artPRim(type,N){const P=ART_PT[type]||ART_PT.gas,M=Math.round(N*1.16),R
     if(P.atc){const al=r<1.04?0.256:(r<1.08?0.145:(r<1.14?0.06:0));if(al)over(P.atc,al);}
     if(dx>ART_XC){if(Math.abs(r-cr)<cw)over([143,211,224],0.55);if(Math.abs(r-rr)<rw)over([229,143,158],0.8);}
     if(A<=0)return;d[o]=R0/A;d[o+1]=G0/A;d[o+2]=B0/A;d[o+3]=255*A;});}
-function artPCity(sd,N){if(N<128)return undefined;const Q=N/3; // 类地行星夜半球的城市灯火:陆地里成片的小亮点(只在背光那块贴,见 artPlanet)
-  return artJob('c'+sd+'|'+N,N,artDisk(N,(x,y,z,a,d,o)=>{if(artFbm(x*2.2,y*2.2,z*2.2,sd,6)<0.55||artFbm(x*9,y*9,z*9,sd+7,3)<0.56)return;
-    if(artH3(Math.floor((x+1)*Q),Math.floor((y+1)*Q),7,sd)>0.3)return;d[o]=238;d[o+1]=216;d[o+2]=154;d[o+3]=217*a;}));}
+function artPCity(sd,N){if(N<128)return undefined;return artJob('c'+sd+'|'+N,N,artDisk(N,artCityPix(sd,N/2-1)));} // 类地行星夜半球的城市灯火:陆地里成片的小亮点(只在背光那块贴,见 artPlanet)
+function artCityPix(sd,RL){const Q=(RL+1)*2/3;return (x,y,z,a,d,o)=>{if(artFbm(x*2.2,y*2.2,z*2.2,sd,6)<0.55||artFbm(x*9,y*9,z*9,sd+7,3)<0.56)return; // 灯点约 3 设备像素一格(随档变,放大不变成方块)
+    if(artH3(Math.floor((x+1)*Q),Math.floor((y+1)*Q),7,sd)>0.3)return;d[o]=238;d[o+1]=216;d[o+2]=154;d[o+3]=217*a;};}
 function artRingOf(b){for(const q of BELT_RING_GEO)if(q.x===b.x&&q.y===b.y)return {k:Math.round(q.R/b.r*20)/20,w:Math.round(q.w/b.r*40)/40};return null;} // 环半径 / 宽(x 行星半径,量化了好缓存);没撒出来的环不画
 function artPRing(N,k,wk){const Nr=Math.min(N,256),R=Nr/2-1,ko=k+2.2*wk,M=Math.ceil(2*R*ko)+4,h=M/2; // 环贴图最多 256 档(淡的尘带,拉伸看不出)
   return artJob('g'+Nr+'|'+k+'|'+wk,M,(i,j,d,o)=>{const dx=(i+0.5-h)/R,dy=(j+0.5-h)/R,r=Math.sqrt(dx*dx+dy*dy),u=(r-k)/wk;if(u*u>4.84)return; // 横向剖面 = 撒石头的高斯(σ = 环宽),画到 2.2σ
     const a=Math.exp(-0.5*u*u),q=a>0.7?0.5:(a>0.4?0.32:(a>0.15?0.16:0)),sh=(dx<0&&Math.abs(dy)<1)?0.45:1;if(!q)return; // D2:剖面分 3 档硬边色带(位置、宽度仍是撒石头的高斯)
     d[o]=207*sh;d[o+1]=198*sh;d[o+2]=176*sh;d[o+3]=255*q;});} // 背光那侧行星挡住的一条:影子
-function artPEmit(type,sd,N){const col=(ART_PT[type]||{}).emc;if(!col)return undefined;return artJob('e'+type+sd+'|'+N,N,artDisk(N,(x,y,z,a,d,o)=>{if(1-Math.abs(2*artFbm(x*1.8,y*1.8,z*1.8,sd+3,3)-1)<=0.975)return; // 熔岩裂缝:硬边、不压浊
-  d[o]=col[0];d[o+1]=col[1];d[o+2]=col[2];d[o+3]=255*a;}));}
+function artPEmit(type,sd,N){const col=(ART_PT[type]||{}).emc;if(!col)return undefined;return artJob('e'+type+sd+'|'+N,N,artDisk(N,artEmitPix(col,sd)));}
+function artEmitPix(col,sd){return (x,y,z,a,d,o)=>{if(1-Math.abs(2*artFbm(x*1.8,y*1.8,z*1.8,sd+3,3)-1)<=0.975)return; // 熔岩裂缝:硬边、不压浊
+  d[o]=col[0];d[o+1]=col[1];d[o+2]=col[2];d[o+3]=255*a;};}
 function artPlSet(b,N){const ty=b.type||'gas',sd=b.seed|0,P=ART_PT[ty]||ART_PT.gas,rg=artRingOf(b),s=artPSurf(ty,sd,N),h=artPShade(N,P.night),r=artPRim(ty,N),g=rg?artPRing(N,rg.k,rg.w):undefined,e=artPEmit(ty,sd,N),c=ty==='terra'?artPCity(sd,N):undefined; // undefined = 这种不需要;null = 还在生成
   if(!s||!h||!r||g===null||e===null||c===null)return null;return {s,h,r,g,e,c,N,gk:g?(g.width/2)/(Math.min(N,256)/2-1):0};}
+/* ---------- 行星 LOD 高档(10-21 用户:新画法放大后很粗糙 —— 512 那档贴图被拉伸) ----------
+   屏上直径 > 640 设备像素时:地表 / 城市灯火 / 熔岩裂缝按屏幕分辨率切 256 像素的瓦片,只生成画面里看得见、又落在盘里的那几块(分帧建,没好的那块先用 512 档拉伸垫着);
+   明暗切分 + 交界网点也切瓦片(网点间距封顶 ART_HPX,放大不变成大圆;按光照方向分档缓存);大气 3 圈硬边光晕、色差细边、行星环直接画矢量(放多大都是硬边)。档位 L:贴图直径 512·2^(L/2) ≥ 屏上直径(半档一级) */
+const ART_TL=256,ART_TMAX=260,ART_LAQ=720,ART_HPX=18; // ART_LAQ:光照方向分档(半度);ART_HPX:高档里网点间距的上限(贴图设备像素;18 = 切进高档那一刻与 512 档的间距接上),网点不跟着行星一起变成几百像素的大圆 // 瓦片边长;瓦片缓存上限(256² x 4B ≈ 256KB 一块),超了按最久没用的淘汰
+function artTiles(g,key,x,y,r,mk){const D=artDpr(),L=Math.max(1,Math.ceil(2*Math.log2(2*r*D/512))),DL=Math.round(512*Math.pow(2,L/2)),RL=DL/2-1,h=DL/2,s=r/RL,nT=Math.ceil(DL/ART_TL),T=ART_TL;
+  const VW=(typeof mapVW==='function'?mapVW():W),VH=(typeof mapVH==='function'?mapVH():H),cl=v=>Math.max(0,Math.min(nT-1,Math.floor(v/T)));
+  const x0=cl((-x)/s+h),x1=cl((VW-x)/s+h),y0=cl((-y)/s+h),y1=cl((VH-y)/s+h);let all=true;const pix=mk(RL);
+  for(let ty=y0;ty<=y1;ty++)for(let tx=x0;tx<=x1;tx++){
+    const nx=Math.max(tx*T,Math.min(h,tx*T+T)),ny=Math.max(ty*T,Math.min(h,ty*T+T));if((nx-h)**2+(ny-h)**2>(RL+2)**2)continue; // 瓦片整块在盘外:跳过
+    const c=artJob('T'+key+'|'+L+'|'+tx+','+ty,T,(i,j,d,o)=>{const dx=(tx*T+i+0.5-h)/RL,dy=(ty*T+j+0.5-h)/RL,d2=dx*dx+dy*dy;if(d2>1+4/RL)return;const a=artC01((1-Math.sqrt(d2))*RL+0.5);if(a<=0)return;pix(dx,dy,Math.sqrt(Math.max(0,1-d2)),a,d,o);});
+    if(c)g.drawImage(c,x+(tx*T-h)*s,y+(ty*T-h)*s,T*s+0.6,T*s+0.6);else all=false;}
+  return all;}
+function artShadePix(la,C,RL){const ca=Math.cos(la),sa=Math.sin(la),hp=Math.min(ART_HP,ART_HPX/RL),rh=hp*0.866,pmin=0.45/RL,edge=ART_XC-ART_HW+0.3*hp; // 同 artPShade,只是转到光的方向、网点间距封顶
+  return (x,y,z,a,d,o)=>{const u=x*ca+y*sa,v=-x*sa+y*ca;let k=u<edge;
+    if(!k&&u<ART_XC+hp){const r0=Math.round((v+1)/rh);for(let rr=r0-1;rr<=r0+1&&!k;rr++){const cy=rr*rh-1,off=(rr&1)?hp/2:0,c0=Math.round((u-off)/hp);
+      for(let cc=c0-1;cc<=c0+1;cc++){const cx=cc*hp+off,rad=hp*0.78*Math.sqrt(artC01((ART_XC-cx)/ART_HW));if(rad>pmin&&(u-cx)*(u-cx)+(v-cy)*(v-cy)<rad*rad){k=true;break;}}}}
+    if(!k)return;d[o]=C[0];d[o+1]=C[1];d[o+2]=C[2];d[o+3]=a*255*C[3];};}
+function artTileGc(){if(ART_PJ.spr.size<ART_TMAX+40)return;const a=[];for(const [k,e] of ART_PJ.spr)if(k[0]==='T'&&e.done)a.push([e.t,k]);if(a.length<=ART_TMAX)return;a.sort((p,q)=>p[0]-q[0]);for(let i=0;i<a.length-ART_TMAX;i++)ART_PJ.spr.delete(a[i][1]);}
+function artPlHi(g,b,x,y,r,la,S5){const ty=b.type||'gas',sd=b.seed|0,P=ART_PT[ty]||ART_PT.gas,dark=la===null,u=r/120,TAU=6.2832;artTileGc();
+  if(!dark&&P.atc){g.fillStyle=artCss(P.atc);for(const [k,al] of [[1.14,.06],[1.08,.09],[1.04,.13]]){g.globalAlpha=al;g.beginPath();g.arc(x,y,r*k,0,TAU);g.fill();}g.globalAlpha=1;} // 大气 3 圈硬边光晕
+  const rg=dark?null:artRingOf(b);
+  if(rg){g.save();g.translate(x,y);g.rotate(la);const band=(a0,a1)=>{const r0=r*(rg.k+a0*rg.w),r1=r*(rg.k+a1*rg.w);g.moveTo(r1,0);g.arc(0,0,r1,0,TAU);if(r0>0){g.moveTo(r0,0);g.arc(0,0,r0,0,TAU,true);}};
+    for(const sh of [1,0.45]){g.save();g.beginPath();if(sh===1){g.rect(-1e5,-1e5,2e5,2e5);g.rect(0,-r,-1e5,2*r);g.clip('evenodd');}else{g.rect(-1e5,-r,1e5,2*r);g.clip();} // 背光那侧行星挡住的一条 = 影子
+      for(const [a0,a1,q] of [[-1.948,-1.354,.16],[1.354,1.948,.16],[-1.354,-0.845,.32],[0.845,1.354,.32],[-0.845,0.845,.5]]){g.fillStyle=artCss([207*sh,198*sh,176*sh],q);g.beginPath();band(a0,a1);g.fill();}g.restore();}
+    g.restore();} // 环:剖面 3 档硬边色带(同贴图版)
+  if(S5){const k=S5.N/(S5.N-2),rs=r*k;g.drawImage(S5.s,x-rs,y-rs,2*rs,2*rs);}                        // 512 档垫底,瓦片没好的地方也有东西
+  artTiles(g,'s'+ty+sd,x,y,r,RL=>artSurfPix(ty,sd,RL));
+  const C=P.night||ART_NIGHT;g.fillStyle=artCss(C,C[3]);
+  if(dark){g.beginPath();g.arc(x,y,r+0.5,0,TAU);g.fill();}
+  else{const lq=Math.round(la*ART_LAQ/TAU),lr=lq*TAU/ART_LAQ;artTiles(g,'h'+(P.night?'n':'')+lq,x,y,r,RL=>artShadePix(lr,C,RL));} // 明暗也走瓦片:光照方向每半度一档(行星和恒星不动 = 只建一次)
+  if(ty==='terra'){g.save();if(!dark){g.translate(x,y);g.rotate(la);g.beginPath();g.rect(-3*r,-3*r,(3+ART_XC-ART_HW*0.5)*r,6*r);g.clip();g.rotate(-la);g.translate(-x,-y);}artTiles(g,'c'+sd,x,y,r,RL=>artCityPix(sd,RL));g.restore();} // 城市灯火只在背光那块
+  if(P.emc)artTiles(g,'e'+ty+sd,x,y,r,()=>artEmitPix(P.emc,sd));
+  if(!dark){g.save();g.translate(x,y);g.rotate(la);g.beginPath();g.rect(ART_XC*r,-3*r,4*r,6*r);g.clip();                       // 受光那侧色差细边(玫瑰 + 青)
+    g.lineWidth=Math.max(1.1*u,1);g.strokeStyle='rgba(143,211,224,.55)';g.beginPath();g.arc(0,0,r+Math.max(3*u,2.6),0,TAU);g.stroke();
+    g.lineWidth=Math.max(1.4*u,1.2);g.strokeStyle='rgba(229,143,158,.8)';g.beginPath();g.arc(0,0,r+Math.max(1.4*u,1.2),0,TAU);g.stroke();g.restore();}
+  return true;}
 function artPlanet(g,b,x,y,r,la){ // 81-env mapBodies 调:画好返回 true;false = 还没有任何一档的贴图,调用方照旧画双色圆。la = 屏幕上的光源方向;null = 没有恒星照着(2026-10-05 用户:没有向阳面,全黑)
   const ty=b.type||'gas',dark=la===null;
   if(r<3){g.fillStyle='rgba(58,64,78,.95)';g.beginPath();g.arc(x,y,3,0,6.283);g.fill();if(dark)return true;g.fillStyle=artCss(ART_PT[ty].dot);g.beginPath();g.arc(x,y,3,la-Math.PI/2,la+Math.PI/2);g.closePath();g.fill();return true;}
   const D=artDpr();let N=32;while(N<2*r*D&&N<512)N*=2;
+  if(2*r*D>640){const S5=artPlSet(b,512);if(S5||ART_PJ.spr.has('s'+ty+(b.seed|0)+'|512'))return artPlHi(g,b,x,y,r,la,S5);} // 屏上直径超过 640 设备像素:换瓦片 + 矢量(10-21 用户:放大看粗糙);512 那档先垫着
   let S=artPlSet(b,N);for(const n of [N/2,N*2,N/4,N*4,N/8,N*8,N/16,N/32]){if(S)break;if(n<32||n>512)continue;const e=ART_PJ.spr.get('s'+ty+(b.seed|0)+'|'+n);if(e&&e.done)S=artPlSet(b,n);} // 要的那档没好:先近后远找已好的档
   if(!S)return false;
   const k=S.N/(S.N-2),rs=r*k;
