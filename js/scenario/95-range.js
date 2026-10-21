@@ -209,7 +209,7 @@ function trPoseAct(k){ // 面板按钮:姿态 / 雷达 / 开火闪光 / 开一�
 function trPoseHTML(t){
   if(!t)return '';
   const cur=trPoseKey(t);let h=`<div class="tr-row"><span class="tr-nm">姿态(钉在原地)</span></div><div class="tr-row">`;
-  for(const x of TR_POSES)h+=`<button class="tr-stp${x[0]===cur?' on':''}" data-pose="${x[0]}" style="width:auto;padding:0 6px${x[0]===cur?';border-color:var(--acc);color:var(--acc)':''}">${x[1]}</button>`;
+  for(const x of TR_POSES)h+=`<button class="tr-stp${x[0]===cur?' on':''}" data-pose="${x[0]}" style="width:auto;padding:0 6px">${x[1]}</button>`;
   h+=`</div><div class="tr-row"><button class="tr-stp" data-pose="radar" style="width:auto;padding:0 6px">雷达:${t.emitMode==='paint'?'开':'关'}</button>`+
      `<button class="tr-stp" data-pose="flash" style="width:auto;padding:0 6px">开火闪光</button><button class="tr-stp" data-pose="shot" style="width:auto;padding:0 6px">朝最近蓝舰开一炮</button></div>`;
   return h;

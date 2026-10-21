@@ -34,7 +34,6 @@ function artArea(P){let A=0;for(let i=0;i<P.length;i++){const a=P[i],b=P[(i+1)%P
 function artLocalL(rot){const c=Math.cos(rot),s=Math.sin(rot);return [ART_L[0]*c+ART_L[1]*s,-ART_L[0]*s+ART_L[1]*c];} // 固定光向转进物体坐标(+x = 船头)
 function artFlick(t,sd){return 1+0.07*Math.sin(t*31+sd)+0.05*Math.sin(t*53+sd*1.7)+0.04*Math.sin(t*97+sd*2.3);} // 抖动:三个不成倍数的正弦
 function artC01(v){return v<0?0:(v>1?1:v);}
-function artSstep(a,b,x){const t=artC01((x-a)/(b-a));return t*t*(3-2*t);}
 function artIdSeed(o){const s=String(o&&o.id!==undefined?o.id:'');let h=7;for(let i=0;i<s.length;i++)h=(Math.imul(h,31)+s.charCodeAt(i))|0;return h>>>0;}
 
 /* ---------- 尾焰:四层焰瓣(外焰 → 中焰 → 内焰 → 白芯)+ 喷口亮斑;大图主推加淡淡的马赫环。喷口在贴图 (ART_PL_O, ART_PL_H/2),朝 +x ---------- */
@@ -380,7 +379,6 @@ function artVn(x,y,z,sd){const xi=Math.floor(x),yi=Math.floor(y),zi=Math.floor(z
   const a=artH3(xi,yi,zi,sd),b=artH3(xi+1,yi,zi,sd),c=artH3(xi,yi+1,zi,sd),d=artH3(xi+1,yi+1,zi,sd),e=artH3(xi,yi,zi+1,sd),f=artH3(xi+1,yi,zi+1,sd),gg=artH3(xi,yi+1,zi+1,sd),hh=artH3(xi+1,yi+1,zi+1,sd);
   const x1=a+(b-a)*u,x2=c+(d-c)*u,x3=e+(f-e)*u,x4=gg+(hh-gg)*u,y1=x1+(x2-x1)*v,y2=x3+(x4-x3)*v;return y1+(y2-y1)*w;}
 function artFbm(x,y,z,sd,oct){let s=0,a=0.5,f=1,n=0;for(let i=0;i<oct;i++){s+=a*artVn(x*f+11.3*i,y*f,z*f,sd+i*17);n+=a;a*=0.5;f*=2.03;}return s/n;}
-function artQ(v,n){return Math.floor(v*n+0.5)/n;}
 const ART_CR={};
 function artCraters(sd){if(ART_CR[sd])return ART_CR[sd];const r=artRng(sd*31+5),a=[];for(let i=0;i<34;i++){const z=r()*2-1,t=r()*2*Math.PI,q=Math.sqrt(1-z*z);a.push([q*Math.cos(t),q*Math.sin(t),z,0.03+Math.pow(r(),2.2)*0.16]);}return ART_CR[sd]=a;}
 function artSurf(type,sd,x,y,z){const P=ART_PT[type]||ART_PT.gas,C=P.col,lat=x*P.ax[0]+y*P.ax[1]+z*P.ax[2]; // D2:只两档主色 + 一个特征,轮廓仍是噪声的真实曲折边,只是大块

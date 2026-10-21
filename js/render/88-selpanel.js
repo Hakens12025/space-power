@@ -69,11 +69,6 @@ const ENG_LAMPS=[
   ['侧推','var(--state-select)',s=>!!s.engSide],
   ['姿态','var(--txt-dim)',     s=>!!(s.sideFlame&&!s.engSide)]
 ];
-function engRows(s){
-  const a=s.accNow||0;
-  const lamps=ENG_LAMPS.map(([t,c,on])=>`<span class="eng-l${on(s)?' on':''}" style="color:${c}">${t}</span>`).join('');
-  return `<span class="eng-a">${SHOW.g(a).toFixed(1)} g</span>${lamps}`; // 2026-09-26 物理单位,折成 g
-}
 /* SN4 blocker E【我此刻有多亮】。全库唯一的辐射读数原来在 87-fleetcards 那块被 RF2 藏死的舰队信息面板里(2026-09-22 已整块删除)——
    玩家一个字都看不到,却要靠它决定开不开雷达:这是「隐蔽 vs 精确」这个三角唯一的决策依据。
    #selPanel 正是 RF2 定位的【变化信息】栏,而这三个数每拍都在变(一点火就更亮、一开照射就更亮更吵),归这儿最对。
@@ -306,7 +301,7 @@ function updateSelPanel(){ // frame 低频调用(每20帧)
   }
   {const se=typeof selEntOk==='function'?selEntOk():null; // 2026-10-08 用户「所有实体都能点」:只看信息、不能下令。标题 / 名字 / 那几行都由实体登记表给(command/69:对方的东西 = 悬停信息卡那几行,方位 / 距离量自第一艘还在的我方舰,写在「参照」行)
   if(se){const K=entKind(se),ref=ships.find(x=>x.side===VIEW&&!x.dead);if(ciSp)ciSp.innerHTML='';
-    title.textContent=K.title(se);selIco(K.ico?K.ico(se):''); /* 图标类别由实体登记表给(command/69 ENT 各类的 ico) */selHeadSet(se.side===VIEW?'我方':'只看信息',(se.side==='red'||se.side==='blue')&&se.side!==VIEW?'hostile':''); // 中立(碎石 neutral)不挂红带if(ciN)ciN.textContent=K.name(se);if(ciC)ciC.textContent=se.side===VIEW?'我方':'只看信息';box.innerHTML=K.info(se,ref);
+    title.textContent=K.title(se);selIco(K.ico?K.ico(se):''); /* 图标类别由实体登记表给(command/69 ENT 各类的 ico) */selHeadSet(se.side===VIEW?'我方':'只看信息',(se.side==='red'||se.side==='blue')&&se.side!==VIEW?'hostile':''); /* 中立(碎石 neutral)不挂红带 */if(ciN)ciN.textContent=K.name(se);if(ciC)ciC.textContent=se.side===VIEW?'我方':'只看信息';box.innerHTML=K.info(se,ref);
     updateCmdBar([]);return;}}
   // 导弹群/导弹组/信标视图:Shift+点选或框选导弹(选择机制在 70-input) → 右栏切实时弹道数据,底栏切固定参数,按钮组置灰
   // RF4a 框选聚合:selMissileHits 里存活组>1 → 汇总视图(状态/目标/引导分布);代表组=剩余弹头最多者

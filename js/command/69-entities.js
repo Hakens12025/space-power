@@ -45,7 +45,7 @@ const ENT={
     live(o){return !o.dead&&rocks.includes(o)&&(entMine(o,VIEW)||adminMode||!viewDead(o));},
     sel(o){return (o.kind==='buoy'&&o.side===ME)?'buoy':'info';},
     drag(h,x,y){entMoveTo(h.o,x,y);},
-    title(o){return o.side===VIEW?((OBJ_KIND[o.kind]||{}).name||'物体'):'目标信息';},ico(o){return ENT_FOE(o)?'enemy':((OBJ_KIND[o.kind]||{}).nat?'nat':'art');}, // 名字 / 自然还是人造读 world/14 OBJ_KINDname(o){return (o.side===VIEW||adminMode)?o.name:xhName(o);},
+    title(o){return o.side===VIEW?((OBJ_KIND[o.kind]||{}).name||'物体'):'目标信息';},ico(o){return ENT_FOE(o)?'enemy':((OBJ_KIND[o.kind]||{}).nat?'nat':'art');},name(o){return (o.side===VIEW||adminMode)?o.name:xhName(o);}, // 名字 / 自然还是人造读 world/14 OBJ_KIND
     info(o,ref){if(o.side!==VIEW)return entCard(o,ref)+entRef(ref); // 自己放的诱饵
       return entRows([['状态',o.dest?'飞行中':'漂流 · 冒充驱逐舰'],o.life>0?['剩余',Math.round(SHOW.t(o.life))+' s']:null]);}},
   sta:{k:'sta',tier:0,follow:true, // 据点(world/16):观测站对象 T.obs 当句柄,归属 = obs.side
