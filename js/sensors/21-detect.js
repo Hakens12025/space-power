@@ -48,6 +48,8 @@ function detectorsOf(side){ // 该阵营的传感器网络:存活舰 + 前出浮
      那样整队一进静默就集体失明,而接触全程是合法的"没握着",没有 NaN、没有异常、没有一行日志。 */
 }
 
+function eyesOf(side){const D=detectorsOf(side);return D.dets.concat(D.bcons);} // 这一方的全部眼睛:活船 + 前出浮标 + 拿着的据点(顺序同 detectorsOf)。10-21:「谁是眼睛」只在 detectorsOf 定义一处 —— 原来 7 处各写一份,
+                                                                               // 10-05 加据点时命中特效(weapons/52 fxVis)与「进了可见光圈就画真实位置」(render/83 viewInVis)两处没跟上
 function detectLoop(dt){ // 一个感知节拍:蓝网络探红(litBlue)、红网络探蓝(litRed)——对称,不按玩家视角
   const el=(typeof dt==='number'&&isFinite(dt)&&dt>0)?dt:SENS.TICK; // SN4:core/05 透传实际累计的模拟秒;判定里手摇 detectLoop() 不传参,按标称节拍算
   for(const s of ships)if(!s.dead)s.visR=visRadiusOf(s); // 2026-09-27 每艘自己的全知圈,每拍按所处环境重算一次
@@ -258,7 +260,7 @@ function contactPos(s,side){
    消费方逐步换读法:LL3 起 detectFor(contactDead)、render/83 anomScan 与 86 红外画面(contactLook);LL5 起弹丸的画面 / 点选 / 炮弹来路 / 接触降速(projLook、projAll);LL6 起决策 / 显示层读对方死活一律 contactDead(trkGone 同口径)、特效按 fxSeen、据点归属按 staHolderSeen。 */
 function llOnNow(){return typeof LL!=='undefined'&&LL.on;} // LL2 门面的开关(锁存值,不读 CFG.lightLag)
 function contactDead(s,side){ // LL2 这一方看见它沉了没有:光到达这一方最近那只眼才算;这一步刚沉、段尾还没登记的谁都还没看见
-  if(!llOnNow()||s.side===side||s.kind==='rock')return s.dead; // LL6 石头不记历史,照旧读真值
+  if(!llOnNow()||s.side===side||objStill(s))return s.dead; // LL6 静止的布景(石头)不记历史,照旧读真值
   if(!s.dead)return false; // LL7 快路径(因果安全):此刻还活着 ⇒ 从没沉过(东西不会复活)⇒ 不可能已被看见沉没;只有此刻已沉的才查光锥层的击沉记录
   const r=LL_H.get(s);if(!r||r.kind!==0)return s.dead; // LL2 光锥层不记的(石头、指定点)照旧读真值
   if(!r.ldead)return false;

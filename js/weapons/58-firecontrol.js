@@ -84,7 +84,7 @@ function fcAppend(s,tgt,allow){ // RF5 追加进该舰正在编辑的序列;该�
 }
 function fcSetAllow(seqId,tgtIdx,kind,on){ // RF5 改某目标「许不许某类武器打」(allow 是门控优先级里最细的一层)
   const q=fcSeq(seqId);if(!q)return;
-  if(kind!=='mac'&&kind!=='msl')return;
+  if(!WPN_FC[kind])return; // weapons/51 WPN_FC
   const it=q.targets[tgtIdx];if(!it)return;
   it.allow[kind]=!!on;
 }

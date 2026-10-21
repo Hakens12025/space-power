@@ -15,9 +15,22 @@ const OBJ_CFG={ // 物理单位(km/s、s),用的地方经 PHYS 换算;速度再�
   BUOY:{N:3,HP:40,FLY:210,BURN:30,FAR:3000000,SIZE:0.15,VIS:0.7}, // 每舰几个 / 结构 / 飞行速度 / 起飞点火几秒后熄火滑行 / 没有游玩区(靶场)时飞多远 km 收掉 / 体型(小而冷)/ 可见光圈是舰船的几倍(2026-09-29 用户) 2026-10-09 用户:浮标速度 x1.4(150 → 210)
 };
 let OBJ_SEQ=0;
+/* 物体种类登记(2026-10-21 用户:按种类的判断散在各处、加新种类很难改全 —— 各处问属性、读名字,不再逐个写种类名;加新种类只在这里写一行)。
+   still = 不动的布景:不记光速延迟历史(光锥层查不到记录就给本体)、感知前置量 / 红外画面按位置缓存、分帧轮着算,也不进 rockObjs(不用逐步推进)
+   solid = 弹道的障碍(导弹避让、炮弹撞上;world/12 rockGrid 收进格子)
+   nat   = 自然结构(右栏抬头暗纹,command/69 ENT.ico;不是 nat 的就是人造结构)
+   name / short = 全名 / 简称(右栏标题、雷达圈、悬停卡、地图标签);col = 地图上认出后的轮廓色(render/82 drawObjKnown) */
+const OBJ_KIND={
+  rock:{name:'碎石',short:'碎石',still:true,solid:true,nat:true},
+  civ:{name:'民船',short:'民船',col:'#a0aab9'},
+  lure:{name:'诱饵',short:'诱饵',col:'#d9a066'},
+  buoy:{name:'前出浮标',short:'浮标',col:'#c890ff'},
+  station:{name:'据点',short:'据点'}}; // 据点不在 rocks[] 里(world/16 的观测站),只登记名字
+function objStill(o){const k=OBJ_KIND[o.kind];return !!(k&&k.still);}
+function objSolid(o){const k=OBJ_KIND[o.kind];return !!(k&&k.solid);}
 const ROBJ={arr:null,n:-1,list:[]};
 function rockObjs(){ // 2026-09-29 性能:rocks 里不是静止石头的那几个(民船 / 诱饵 / 浮标),按注册表顺序。rocks 只追加不删,数组 / 长度不变就不重建
-  if(ROBJ.arr!==rocks||ROBJ.n!==rocks.length){ROBJ.arr=rocks;ROBJ.n=rocks.length;ROBJ.list=rocks.filter(o=>o.kind!=='rock');}
+  if(ROBJ.arr!==rocks||ROBJ.n!==rocks.length){ROBJ.arr=rocks;ROBJ.n=rocks.length;ROBJ.list=rocks.filter(o=>!objStill(o));}
   return ROBJ.list;
 }
 function makeObj(kind,side,name,pos,o){ // 字段按感知内核与武器会读到的那几格给齐(sReq 严格取值,缺一格就抛)

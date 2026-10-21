@@ -337,12 +337,12 @@ function llArrive(t){ // LL2 段尾:光越过 seeT 的事件复核一次眼(当�
    开着时没有记录的对方运动体(两帧之间 96-spawn 加的船,下一次 llStep 才登记)一律当「光还没到」(审查第 4 条,llNoRec)。
    ============================================================================ */
 const LL_PR={nd:0,nm:0,cap:0,tm:new Int32Array(16),px:null,py:null,pz:null,pvx:null,pvy:null,pvz:null,lum:null,loud:null,ok:null,te:null,img:[],imgR:[],ref:[],kc:0,ka:null,mx:null}; // LL4 ka / mx = 每只眼的照射系数(往返窗口里照过才给)与「混合」标记,kc 是它们的容量;LL3 一次 detectFor 的逐对缓冲:目标 ti 的运动体号 tm[ti](静止石头 -1),对 (m, 眼 j) 在 m*nd+j;lum / loud = 影像的 optLum / rfLoudOf(22 sensePrepare 按参考影像的环境原地换成上界);img 影像代理(te 那一刻的发射档,光学用;不在给 null);imgR 射频用的代理(发射档 = 到达窗口里最响的一档,与 img 相同时就是 img);ref 每个运动体 te 最大那张(环境量在它那里取)
-function llNoRec(o){return (o.kind==='rock'||o.side===undefined)?o:null;} // LL3 光锥层里查不到记录时:静止石头 / 指定点给本体,其余(没登记的运动体)= 光还没到
+function llNoRec(o){return (objStill(o)||o.side===undefined)?o:null;} // LL3 光锥层里查不到记录时:静止石头 / 指定点给本体,其余(没登记的运动体)= 光还没到
 function llPairs(side,eyes,tgts,el){ // LL3 sensors/21 detectFor 调(eyes = 先舰后浮标 / 据点,与 sensePrepare 同序);关开关给 null(走旧路径)
   if(!LL.on)return null;
   const P=LL_PR,nd=eyes.length,nt=tgts.length,b=LL.tmp,t=simTime,g=side==='blue';
   if(P.tm.length<nt)P.tm=new Int32Array(2*nt);
-  let nm=0;for(let i=0;i<nt;i++)P.tm[i]=tgts[i].kind==='rock'?-1:nm++;
+  let nm=0;for(let i=0;i<nt;i++)P.tm[i]=objStill(tgts[i])?-1:nm++;
   const n=nm*nd;
   if(n>P.cap){const c=Math.max(64,2*n);P.px=new Float64Array(c);P.py=new Float64Array(c);P.pz=new Float64Array(c);P.pvx=new Float64Array(c);P.pvy=new Float64Array(c);P.pvz=new Float64Array(c);P.lum=new Float64Array(c);P.loud=new Float64Array(c);P.ok=new Uint8Array(c);P.te=new Float64Array(c);P.cap=c;}
   P.nd=nd;P.nm=nm;P.img.length=n;P.imgR.length=n;P.ref.length=nm;

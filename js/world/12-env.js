@@ -125,7 +125,7 @@ function rockKey(ix,iy){return (ix+1048576)*2097152+(iy+1048576);}
 function rockGrid(){
   const G=ROCKG;if(G.arr===rocks&&G.n===rocks.length&&G.ep===ROCK_EPOCH)return G;
   const m=new Map(),c=G.cell;let mx=0;
-  for(let i=0;i<rocks.length;i++){const k=rocks[i];if(k.kind!=='rock'&&!k.ast)continue;
+  for(let i=0;i<rocks.length;i++){const k=rocks[i];if(!objSolid(k)&&!k.ast)continue;
     const key=rockKey(Math.floor(k.pos[0]/c),Math.floor(k.pos[1]/c));let a=m.get(key);if(!a){a=[];m.set(key,a);}a.push(i);if(k.size>mx)mx=k.size;}
   G.arr=rocks;G.n=rocks.length;G.ep=ROCK_EPOCH;G.map=m;G.maxS=mx;return G;
 }

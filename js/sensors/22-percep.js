@@ -198,7 +198,7 @@ function sensePrepare(dets, bcons, tgts, dt, LP) { // dets=存活舰(探测方) 
     const p = R !== null ? R.pos : t.pos;
     scTX[i] = p[0]; scTY[i] = p[1]; scTZ[i] = p[2];
     let tSh, bg, solMax, lum, loud, rfl;
-    const K = t.kind === 'rock' ? t.spc : null; // 2026-09-29 性能:静止石头的这几个前置量只随环境版本(ENV.rev)与自己的位置变,缓存在石头上(同一套式子,逐位相同)
+    const K = objStill(t) ? t.spc : null; // 2026-09-29 性能:静止石头的这几个前置量只随环境版本(ENV.rev)与自己的位置变,缓存在石头上(同一套式子,逐位相同)
     if (K && K.rev === ENV.rev && K.x === p[0] && K.y === p[1] && K.z === p[2]) { tSh = K.tSh; bg = K.bg; solMax = K.solMax; lum = K.lum; loud = K.loud; rfl = K.rfl; }
     else {
       tSh = lit && nb && envInShadow(p) ? 1 : 0; bg = cOn ? envBg(p, 'opt') : 0; // ENV2 senseOptLoWith 的前置量(senseResolve 原样递过去)
@@ -206,7 +206,7 @@ function sensePrepare(dets, bcons, tgts, dt, LP) { // dets=存活舰(探测方) 
       if (R !== null) { lum = 0; loud = 0; const q0 = m * nd; for (let j = 0; j < nd; j++) { const q = q0 + j; if (scPOK[q] === 0) continue; const a = senseLoOf(scPIR[q], 0, solMax, 0, bg); scPIR[q] = a; if (a > lum) lum = a; if (scPRF[q] > loud) loud = scPRF[q]; } } // LL3 逐对的光学上界原地写回(同下面那一式),整目标的界取各对最大
       else { lum = senseLoOf(optLum(t), 0, solMax, 0, bg); loud = rfLoudOf(t); } // ENV2 scSigIR 是光学上界,空环境时逐位等于 optLum
       rfl = reflOf(t);
-      if (t.kind === 'rock') t.spc = { rev: ENV.rev, x: p[0], y: p[1], z: p[2], tSh, bg, solMax, lum, loud, rfl };
+      if (objStill(t)) t.spc = { rev: ENV.rev, x: p[0], y: p[1], z: p[2], tSh, bg, solMax, lum, loud, rfl };
     }
     scSigIR[i] = lum; scSigRF[i] = loud; scRefl[i] = rfl; scTBelt[i] = radOn && featRadIn(p) ? beltK : 1; // 2026-10-05 辐射带:带里的目标雷达发现距离 x RADAR
     scTDir[i] = solMax > 0 ? 1 : 0; scTBg[i] = bg; scTSh[i] = tSh;
@@ -214,7 +214,7 @@ function sensePrepare(dets, bcons, tgts, dt, LP) { // dets=存活舰(探测方) 
     const bA2 = Math.sqrt(bA4); // 照射的界在 d^4 空间,必须在这里开方换算到 d^2 空间才能和另两路取 max(见文件头 blocker A)
     scBIR[i] = bIR; scBRF[i] = bRF; scBACT[i] = bA4;
     scBMax[i] = bIR > bRF ? (bIR > bA2 ? bIR : bA2) : (bRF > bA2 ? bRF : bA2);
-    const S = t.kind === 'rock' ? t.spc : null; let inF; // ENV1:只有在杂波里的目标才需要速度(ENV2 杂波 = 天体盘面旁 / 小行星旁)
+    const S = objStill(t) ? t.spc : null; let inF; // ENV1:只有在杂波里的目标才需要速度(ENV2 杂波 = 天体盘面旁 / 小行星旁)
     if (!(scMTI2 > 0)) inF = 0;
     else if (S && S.fq === ROCK_DEADS && S.fn === rocks.length && S.fe === ROCK_EPOCH) inF = S.inF; // 2026-09-29 性能:静止石头在不在杂波里只随附近石头被打碎 / 增减 / 拖动变,按这三个计数缓存
     else { inF = envInClutter(p, t) ? 1 : 0; if (S) { S.inF = inF; S.fq = ROCK_DEADS; S.fn = rocks.length; S.fe = ROCK_EPOCH; } }

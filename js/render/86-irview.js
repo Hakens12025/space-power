@@ -121,7 +121,7 @@ function irvjSg(t,obs,a){ // LL3 热源在每只眼里的影像状态(引擎档 
     if(!ti){a[b]=-9;a[b+1]=0;a[b+2]=0;a[b+3]=0;a[b+4]=0;a[b+5]=0;continue;}
     a[b]=ti.flame;a[b+1]=ti.sideFlame?1:0;a[b+2]=ti.emitMode==='paint'?1:(ti.emitMode==='jam'?2:0);a[b+3]=irvFireQ(ti);a[b+4]=ti.facing[0];a[b+5]=ti.facing[1];}
 }
-function irvjLL(t){return !adminMode&&t.kind!=='rock'&&typeof llOnNow==='function'&&llOnNow();} // LL3 这个源按各眼影像的签名触发重算;GM / 关开关 / 静止石头(不记历史,影像就是本体)照旧比本体
+function irvjLL(t){return !adminMode&&!objStill(t)&&typeof llOnNow==='function'&&llOnNow();} // LL3 这个源按各眼影像的签名触发重算;GM / 关开关 / 静止石头(不记历史,影像就是本体)照旧比本体
 function irvjSrcCh(r,t,obs){ // 热源的重算触发:关开关 / GM / 石头照旧比真值;LL3 开着比各眼影像的状态(审查第 19 条:真值点火时影像还没变,等影像变了才该重算)
   if(!irvjLL(t))return irvjStCh(r,t);
   if(r.sgT===simTime)return false; // LL3 签名只随 simTime 变(眼表一变 irvjUpdate 整个重置):这个 simTime 已经比过 / 记过就不再算
@@ -199,7 +199,7 @@ function irvjUpdate(full,gch){ // 返回脏矩形 [i0,i1,j0,j1] 列表;null = �
     if(pm||sc){cm|=1<<k;r.px=o.pos[0];r.py=o.pos[1];irvjStSet(r,o);}if(pm)om=true;}
   const fr=++IRVJ.fr,dtw=runDt(IRVJ.clk,0.1);IRVJ.wt+=dtw;IRVJ.ch+=dtw*IRV_C.CHURN; // 翻涌相位与定位时团的缩放:真实时间,只在跑的时候走(暂停 = 稳态,不重贴;2026-09-30 试过跟游戏倍速,用户:不要随游戏速度变)
   for(let n=0;n<src.length;n++){const t=src[n];let r=R.get(t),nw=false; // 1) 扫签名 + 离散判定;翻成谁都看不见的当帧去掉
-    if(r&&t.kind==='rock'&&(fr+r.slot)%IRVJ.K!==0){r.seen=fr;continue;} // 2026-09-29 性能:静止石头(上千块)分 K 帧轮一遍;状态最多晚 K 帧跟上,团的缩放按两次之间实际经过的墙钟算
+    if(r&&objStill(t)&&(fr+r.slot)%IRVJ.K!==0){r.seen=fr;continue;} // 2026-09-29 性能:静止石头(上千块)分 K 帧轮一遍;状态最多晚 K 帧跟上,团的缩放按两次之间实际经过的墙钟算
     if(!r){r={slot:(IRVJ.slot++)%IRVJ.K,wt:IRVJ.wt,t:t,px:0,py:0,vis:0,ph:null,sp:[],sil:null,sk:'',sb:null,mv:false,need:false,in0:false,in1:false,seen:0,bR:0,qs:0,w:0,ti:null,sg:null,sgT:NaN};R.set(t,r);nw=true;} // LL3 ti / sg / sgT 在字面量里占位:所有记录同一个形状,每帧扫上千块石头的触发键读取不变成多态
     r.seen=fr;
     const wt=(adminMode||contactFix(t,VIEW))?1:0,gk=1-Math.exp(-(IRVJ.wt-r.wt)/IRV_C.GLIDE);r.wt=IRVJ.wt;r.w=nw?wt:r.w+(wt-r.w)*gk;if(Math.abs(wt-r.w)<0.01)r.w=wt;

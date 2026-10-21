@@ -113,7 +113,7 @@ function ir2Update(){
   IR2.RS=RS;IR2.IS=IS;IR2.QS=QS;IR2.S=S;IR2.P=RS.map(s=>toScreen(s.pos[0],s.pos[1]));IR2.RI=RS.map(ir2RIn);
   if(!RS.length&&!QS)return; // 没选:没有环也没有仪表,逐源的信噪比没人用
   IR2.wt+=runDt(IR2.clk,0.1); // 闪烁按真实时间走、只在跑的时候走(2026-09-30 试过跟游戏倍速,用户:不要随游戏速度变)
-  const src=irvSrc(),sk=IR2.skN||(IR2.skN=[]);sk.length=0;sk.push(cam.x,cam.y,cam.zoom,W,H,ENV.rev,ROCK_EPOCH);for(const s of S)sk.push(s.pos[0],s.pos[1],s.visR||0);for(const t of src)if(t.kind!=='rock')sk.push(t.pos[0],t.pos[1],t.flame||0,t.sideFlame?1:0,t.fireHot||0); // 稳态:暂停、镜头 / 船 / 世界都没变 ⇒ 环的数据不重算
+  const src=irvSrc(),sk=IR2.skN||(IR2.skN=[]);sk.length=0;sk.push(cam.x,cam.y,cam.zoom,W,H,ENV.rev,ROCK_EPOCH);for(const s of S)sk.push(s.pos[0],s.pos[1],s.visR||0);for(const t of src)if(!objStill(t))sk.push(t.pos[0],t.pos[1],t.flame||0,t.sideFlame?1:0,t.fireHot||0); // 稳态:暂停、镜头 / 船 / 世界都没变 ⇒ 环的数据不重算
   let same=!(typeof running!=='undefined'&&running)&&!reset&&!!IR2.sk&&IR2.sk.length===sk.length;if(same)for(let i=0;i<sk.length;i++)if(sk[i]!==IR2.sk[i]){same=false;break;}
   IR2.skN=IR2.sk;IR2.sk=sk;IR2.still=same;if(same)return; // 两个数组轮流用(每帧不新建)
   const fr=++IR2.fr,K=IR2_C.K,slot=fr%K,rings=IR2.rings,inst=IR2.inst,all=inst?rings.concat([inst]):rings;
@@ -123,7 +123,7 @@ function ir2Update(){
   const lit=envHasLight(),nb=ENV.bodies.length>0,oL=S.map(o=>lit&&!(nb&&envInShadow(o.pos))),rw=IS.map(ir2RW);
   for(const t of src){
     let rc=IR2.rec.get(t);if(!rc){rc={slot:(IR2.ns++)%K,sn:null,po:null,ev:-1,kn:null,age:0,k:-1,b:0,wi:0,seen:0};IR2.rec.set(t,rc);}
-    rc.seen=fr;const rock=t.kind==='rock';if(rock&&!reset&&rc.slot!==slot)continue; // 静止石头只在自己的槽那一帧重算
+    rc.seen=fr;const rock=objStill(t);if(rock&&!reset&&rc.slot!==slot)continue; // 静止石头只在自己的槽那一帧重算
     const kn=adminMode||contactFix(t,VIEW);
     if(!rc.sn||rc.sn.length!==S.length){rc.sn=new Float64Array(S.length);rc.po=new Float64Array(2*S.length);rc.ev=-1;}
     const sn=rc.sn;let keep=rock&&!reset&&rc.ev===ENV.rev&&rc.kn===kn&&rc.age<IR2_C.PO_N; // 石头:我方船挪得不到距离的 PO_K、世界没变、定位没变 ⇒ 信噪比照用上次的
@@ -148,7 +148,7 @@ function ir2Update(){
     for(let i=0;i<N;i++){const a=SS[2*i],o=SS[2*i+1],b0=i*M;for(let m=0;m<M;m++)V[b0+m]=BG[b0+m]+a*pR[m]+o*pO[m]+D[b0+m];}} // 石头的两个数按各自的谱摊开
   IR2.rec.forEach((rc,t)=>{if(rc.seen!==fr)IR2.rec.delete(t);}); // forEach:不像 for-of 解构那样每条新建一个 [键, 值]
 }
-function ir2Eye(t,o){if(adminMode||t.kind==='rock'||typeof llOnNow!=='function'||!llOnNow())return t.pos;const im=llImgFor(t,o);return im?im.pos:null;} // LL9 眼 o 看到的 t 在哪(sensors/26 llImgFor,同 ir2Snr 那一份影像;光还没到给 null);GM / 石头 / 关开关 = 真位置
+function ir2Eye(t,o){if(adminMode||objStill(t)||typeof llOnNow!=='function'||!llOnNow())return t.pos;const im=llImgFor(t,o);return im?im.pos:null;} // LL9 眼 o 看到的 t 在哪(sensors/26 llImgFor,同 ir2Snr 那一份影像;光还没到给 null);GM / 石头 / 关开关 = 真位置
 /* ---- 交集(照 86-radarview 的「被听见」:rdvLob / rdvClip / rdvArea)---- */
 function ir2Cen(P){let a=0,x=0,y=0;for(let i=0;i<P.length;i++){const p=P[i],q=P[(i+1)%P.length],c=p[0]*q[1]-q[0]*p[1];a+=c;x+=(p[0]+q[0])*c;y+=(p[1]+q[1])*c;}return Math.abs(a)>1e-9?[x/(3*a),y/(3*a)]:[P[0][0],P[0][1]];} // 多边形的面积中心
 function ir2Wedges(t,obs,snl){ // 短波看得见(信噪比过发现门)的每艘一块扇形求交:半宽 = 内核这条方位的角误差(2026-10-04,原 = 环上那团的角宽),远端 = 短波最亮的船在这个亮度下能在多远,方位按每一对固定挪开(同雷达画面,显示层防泄露);

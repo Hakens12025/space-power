@@ -117,7 +117,7 @@ function xhCardHTML(s,sub){ // RF5 信息卡内容:按认没认出、定没定�
   const masked=!gm&&!contactIdn(s,ME); // ID1:原判据 hull==='UNK'||q<2; // hull==='UNK' 正是 82 的严格 litBlue===1 那一档;q<2 顺手兜住 litBlue===0 的幽灵接触(82 那一档故意漏着,见其 TIER1 注释;非 GM 下 targetAt 已把它挡在吸附之外,这里只是兜底)
   const rows=[];
   const itp=gm?{kind:kindOf(s)}:(contactIdType(s,ME)||{kind:'ship'}),notShip=!masked&&itp.kind!=='ship'; // TK4c:认出来不是船 ⇒ 没有舰种、结构与速度可报。2026-09-27 按认出的类型判(诱饵在「疑似」档冒充驱逐舰,不许说破)
-  if(notShip)rows.push(['类别',({rock:'碎石',civ:'民船',lure:'诱饵',buoy:'浮标'})[itp.kind]+' · 不是舰船']);
+  if(notShip)rows.push(['类别',(OBJ_KIND[itp.kind]||{}).short+' · 不是舰船']); // 名字读 world/14 OBJ_KIND
   else if(!masked)rows.push(['舰种',((typeof CLS_SHORT!=='undefined'&&CLS_SHORT[s.cls])||'未知')+' · T'+tier]); // 2026-09-30 舰种名按舰种查(重排后轮廓与舰种不再一一对应) // RF5 兜底文案改中文'未知'(原为直接吐 hull 代码):HULL_LABEL(ships/10)只有 DD/CA/BB/CV/SC 五个键,查不到时会渲染出 "UNK舰" 这种非中文串,违反 UI 全中文。识别级:舰种与分级解禁(与 82 放行真实轮廓/尺寸、87-fleetcards 的分级徽标同为 litBlue>=2)
   rows.push(['方位',cp?String(Math.round(brg)%360).padStart(3,'0')+'° · '+Math.round(dist/1000)+'k'+(typeof viewAgeTxt==='function'?viewAgeTxt(s):''):'位置不明']); // 探测级也给:这一档只有方位与距离是可信的;LL9 带情报龄(光行时间 + 距上次量测,render/83 viewAgeTxt)
   {const tk=(!gm&&s.side!==ME)?trkOf(ME,s):null;if(tk&&tk.tn)rows.push(['航迹','T'+String(tk.tn).padStart(2,'0')]);} // TK4c 航迹号:没认出的接触都叫「未知接触」,靠它指认是哪一条
@@ -205,7 +205,7 @@ function fcRegister(sel,t){ // 2026-10-07 用户:新火控序列只从火控计�
    短按中键 或 Esc(71-keys)→ radClose;左键点扇区 → radPick(70-input 的 onMouseDown 首行早退,不许落到选舰/框选/命令点拖拽);
    滚轮在环带内 → radPage。两侧全部经 typeof 守卫互调,任一文件缺席另一边仍能独立工作(与本库既有口径一致)。 */
 function radWeapons(s){ // RF5 轮盘的武器项来源:实例烘焙的 s.weapons 清单(RF3 配装产出,加武器只改 51-defs 不改这里),过滤掉 ciws —— 近防是被动防御,与「许不许打这个目标」无关
-  return (s&&s.weapons?s.weapons:[]).filter(w=>w&&w.kind!=='icp'&&w.kind!=='gun'&&w.kind!=='chaff'&&w.kind!=='buoy'&&w.kind!=='lure'&&w.kind!=='sec'&&w.kind!=='ssm'); // 2026-10-11 诱饵 / 副炮 / 突击弹不进火控序列,也不进轮盘 // 2026-09-27 前出浮标不是对目标用的武器,不进轮盘
+  return (s&&s.weapons?s.weapons:[]).filter(w=>w&&WPN_FC[w.kind]); // 10-21 读 weapons/51 WPN_FC(原来是 7 项排除清单) // 2026-10-11 诱饵 / 副炮 / 突击弹不进火控序列,也不进轮盘 // 2026-09-27 前出浮标不是对目标用的武器,不进轮盘
 }
 function radItems(sub,t,it){ // RF5 解算每个武器扇区:allow=计划(许不许打),ok/why=此刻打不打得到。两者刻意分开 —— 目标现在打不到不代表以后打不到,所以禁用态扇区仍可点
   const out=[];
@@ -217,7 +217,7 @@ function radItems(sub,t,it){ // RF5 解算每个武器扇区:allow=计划(许不
     const allow=(!it||!it.allow)||it.allow[k]!==false; // allow 缺省 undefined 语义为【真】:抄 58-firecontrol 的 !==false 口径(88-selpanel:313 同源),别写成 !it.allow[k]
     const ki=(typeof KIND_INFO!=='undefined')?KIND_INFO[k]:null;
     const rng=(ki&&ki.range)?ki.range(sub):0; // 射程走 88 的 KIND_INFO(WR1 起:主炮 = 命中率 50% 距离、导弹 = 动力射程,都是现算的);一律不写字面量
-    const gated=(k==='mac'||k==='msl'); // fcGate 只对这两类有门,fcSetAllow 也只认这两个 kind;将来配装出别的 kind 时只画不判,不凭空造门
+    const gated=!!WPN_FC[k]; // fcGate 只对这两类有门,fcSetAllow 也只认这两个 kind;将来配装出别的 kind 时只画不判,不凭空造门
     const swf=(ki&&ki.on)?ki.on:null;   // RF5 单舰武器开关的字段名【只从 88-selpanel:19 的 KIND_INFO.on 读】,不写 'macOn'/'mslOn' 字面量(与"门控用谓词、不写 cls==='XXX'"同一条铁律:字面量会静默失配)
     let ok=true,why='';
     if(swf&&!wpnOn(sub,k)){ok=false;why='开关关闭';} // 2026-10-11 总开关 + 分开关(weapons/51 wpnOn) // RF5 补齐 57 实际开火门里被漏掉的一层:57:80 的 roeOK 要 macOn!==false、57:33 的自动齐射要 mslOn!==false。漏了它,底栏把主炮点掉之后扇区照样画成可用(三格全绿、无禁用虚线),玩家会反复点许可找原因——而许可本来就是开的
@@ -325,7 +325,7 @@ function radPick(h){ // RF5 左键点扇区:右半=切该武器对该目标的�
   }else{
     const it=rad.items[h.idx];
     if(!it||typeof fcSetAllow!=='function'||typeof fcSeq!=='function')return false;
-    if(it.kind!=='mac'&&it.kind!=='msl')return false; // fcSetAllow 只认这两个 kind,别的 kind 静默不动(不是失败,是那一层门不存在)
+    if(!WPN_FC[it.kind])return false; // fcSetAllow 只认这两个 kind,别的 kind 静默不动(不是失败,是那一层门不存在)
     const q=fcSeq(rad.seqId),tg=q?q.targets[rad.tgtIdx]:null;
     if(!tg)return false;
     const on=!(!tg.allow||tg.allow[it.kind]!==false); // 取反口径抄 88-selpanel:313 —— allow 缺省 undefined 语义为真,别写成 !tg.allow[k]

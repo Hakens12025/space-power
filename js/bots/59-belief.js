@@ -42,12 +42,7 @@ function belCarve(B,x,y,R,pd){ // 以 (x,y) 为心、半径 R 的圈里没发现
   for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const cx=A.x0+(i+0.5)*cw,cy=A.y0+(j+0.5)*ch,dx=cx-x,dy=cy-y;if(dx*dx+dy*dy>R2)continue;
     if(occ){q[0]=cx;q[1]=cy;if(envOccluded(o,q))continue;}P[j*nx+i]*=1-pd;}
 }
-function belAssets(side){ // 这一方的探测站:活船 + 自己的前出浮标 + 拿着的据点(同 sensors/21 detectorsOf)
-  const a=ships.filter(s=>s.side===side&&!s.dead);
-  for(const o of rocks)if(o.kind==='buoy'&&o.side===side&&!o.dead)a.push(o);
-  for(const o of featStaObs(side))a.push(o);
-  return a;
-}
+function belAssets(side){return eyesOf(side);} // 这一方的探测站:活船 + 自己的前出浮标 + 拿着的据点(sensors/21 eyesOf)
 function belClues(B,side){ // 线索:每次更新重列(都是这一拍这一方知道的东西)
   // LL8 每条线索带 tArr(这一方最晚何时已经知道,恒 ≤ 此刻)与 te(位置 / 方向对应的时刻):态势图里的(fix / dr / brg)tArr = 此刻,te 同 sensors/21 contactKin 的 t,方位不知道距离 te 记 tArr;
   // esm tArr = 听到的那一拍,te 按幅度测距估;shell tArr = 看见的时刻 r.t、te = 首见那张弹影的时刻 r.te;来袭导弹 tArr = 此刻、te = 弹影时刻。关开关时 te = tArr

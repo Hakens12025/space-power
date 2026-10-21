@@ -78,10 +78,10 @@ function drawRange(){ // 测距工具(按住C):起点(或跟随船)→鼠标目�
 }
 const VP_VIS={fr:-1,m:new Map()};
 function viewInVis(s){ // 2026-10-04 用户:对方的东西进了我方可见光圈(全知圈,我方船 / 浮标任一)就画每帧的样子 —— 圈里本来什么都看得清,估计只在感知节拍(1 游戏秒)更新,画估计会一段一段跳;每帧算一次
-  if(VP_VIS.fr!==frameN){VP_VIS.fr=frameN;VP_VIS.m.clear();}
+  if(VP_VIS.fr!==frameN){VP_VIS.fr=frameN;VP_VIS.m.clear();VP_VIS.eyes=eyesOf(VIEW);} // 10-21 眼睛走 sensors/21 eyesOf(原来只看船和浮标,漏了拿着的据点)
   let v=VP_VIS.m.get(s);if(v!==undefined)return v;v=false;
-  const ll=typeof llOnNow==='function'&&llOnNow()&&s.side!==VIEW&&s.kind!=='rock',K2=ll?(1+LL_CFG.BMAX)*(1+LL_CFG.BMAX):1; // LL9 光速延迟开着:逐眼用这只眼看到的影像判圈(sensors/26 llImgFor;静止石头不记历史,照旧比本体);先按此刻距离 /(1 + BMAX) 预筛(影像离此刻位置不超过 BMAX 倍光行距离,预筛不改结果)
-  for(let g=0;g<2&&!v;g++)for(const d of (g?rockObjs():ships)){if(d.side!==VIEW||d.dead||(g&&d.kind!=='buoy'))continue;
+  const ll=typeof llOnNow==='function'&&llOnNow()&&s.side!==VIEW&&!objStill(s),K2=ll?(1+LL_CFG.BMAX)*(1+LL_CFG.BMAX):1; // LL9 光速延迟开着:逐眼用这只眼看到的影像判圈(sensors/26 llImgFor;静止石头不记历史,照旧比本体);先按此刻距离 /(1 + BMAX) 预筛(影像离此刻位置不超过 BMAX 倍光行距离,预筛不改结果)
+  for(const d of VP_VIS.eyes){
     if(!ll){if(senseVis(d,s)){v=true;break;}continue;}
     const R=d.visR||COV.VIS_R,dx=s.pos[0]-d.pos[0],dy=s.pos[1]-d.pos[1],dz=(s.pos[2]||0)-(d.pos[2]||0);if(dx*dx+dy*dy+dz*dz>R*R*K2)continue;
     const im=llImgFor(s,d);if(im&&senseVis(d,im)){v=true;break;}}
@@ -518,7 +518,7 @@ function drawHoverRings(){
       ring(p,actRangeOf(s),'雷达 '+Math.round(actRangeOf(s)/1000)+'k(对标准目标)'+(s.emitMode==='silent'?' · 现在静默':''));
   }
   {const bu=hoverRing==='emit'&&typeof selBuoyOk==='function'?selBuoyOk():null; // 2026-09-29 用户:选中浮标时也看得到它的雷达范围
-    if(bu){const p=toScreen(bu.pos[0],bu.pos[1]),r=actRangeOf(bu);ring(p,r,(bu.kind==='station'?'据点雷达 ':'浮标雷达 ')+Math.round(r/1000)+'k(对标准目标)'+(bu.on?'':' · 现在被动'));}}
+    if(bu){const p=toScreen(bu.pos[0],bu.pos[1]),r=actRangeOf(bu);ring(p,r,(OBJ_KIND[bu.kind]||OBJ_KIND.buoy).short+'雷达 '+Math.round(r/1000)+'k(对标准目标)'+(bu.on?'':' · 现在被动'));}}
 }
 /* 2026-09-27 雷达异常 / 红外异常(用户:「当出现了异常的时候,直接在主视角上面标注」;选「只报没定位的」「标在异常处、淡出」)。
    不另做探测,复用两份现成的数据:

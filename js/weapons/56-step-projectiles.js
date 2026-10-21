@@ -76,7 +76,7 @@ function projBlock(p,x0,y0,dt){
   if((ix1-ix0+1)*(iy1-iy0+1)<=64){cand=PB_CAND;cand.length=0;for(let ix=ix0;ix<=ix1;ix++)for(let iy=iy0;iy<=iy1;iy++){const a=G.map.get(rockKey(ix,iy));if(a)for(let j=0;j<a.length;j++)cand.push(a[j]);}if(cand.length>1)cand.sort((u,v)=>u-v);}
   const nC=cand?cand.length:rocks.length;
   for(let j=0;j<nC;j++){const k=cand?rocks[cand[j]]:rocks[j];
-    if(k.dead||k.kind!=='rock'||k===p.target)continue;
+    if(k.dead||!objSolid(k)||k===p.target)continue;
     const ex=k.pos[0]-x0,ey=k.pos[1]-y0;if(Math.abs(ex)>L||Math.abs(ey)>L)continue;
     if(stepCPA2(p,k,dt)>=R2)continue;
     applyDamage(k,p.missDmg||p.dmg||1,p.shooter,kind,p);spawnHit(k.pos,kind,p.shooter,k,hitW(p));

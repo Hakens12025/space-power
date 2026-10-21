@@ -2,7 +2,7 @@
 
 ## 文件
 - `20-signature.js` `SENS` 常数表、`optLum`(光学亮度唯一出处)、发射档 / 引擎档 / 开火档(开火那份热按 22 的 `fireLvl` 在 `FIRE_S` 里线性退完)
-- `21-detect.js` 感知节拍 `detectLoop` / `detectFor`、`setEmit`(发射档唯一写入口)、门面 `contactHeld` / `contactFix` / `contactIdn` / `contactAge` / `contactState` / `contactPos`,光速延迟门面 `contactDead` / `contactVel` / `contactLook` / `contactKin` / `projImg` / `staHolderSeen` / `fxSeen`(LL2;LL3 起 `detectFor` 读 `contactDead`、render 的红外画面与红外异常读 `contactLook`)、弹丸可见性 `projVisibleTo`(LL5 开关开时逐眼按弹影判)、弹影 `projLook` / `projImg`、弹表 + 余像 `projAll`、听到的敌方雷达 `ESM` / `esmHear`(雷达画面读);LL6 起决策 / 显示层读对方死活一律 `contactDead`、特效 `fxSeen`、据点归属 `staHolderSeen`
+- `21-detect.js` 感知节拍 `detectLoop` / `detectFor`、`setEmit`(发射档唯一写入口)、这一方的全部眼睛 `eyesOf`(船 / 浮标 / 据点,只在 `detectorsOf` 定义,别处不另写名单)、门面 `contactHeld` / `contactFix` / `contactIdn` / `contactAge` / `contactState` / `contactPos`,光速延迟门面 `contactDead` / `contactVel` / `contactLook` / `contactKin` / `projImg` / `staHolderSeen` / `fxSeen`(LL2;LL3 起 `detectFor` 读 `contactDead`、render 的红外画面与红外异常读 `contactLook`)、弹丸可见性 `projVisibleTo`(LL5 开关开时逐眼按弹影判)、弹影 `projLook` / `projImg`、弹表 + 余像 `projAll`、听到的敌方雷达 `ESM` / `esmHear`(雷达画面读);LL6 起决策 / 显示层读对方死活一律 `contactDead`、特效 `fxSeen`、据点归属 `staHolderSeen`
 - `22-percep.js` 热循环:`sensePrepare`(O(N) 预计算;LL3 第 5 参 = 26 的逐对缓冲)/ `sensePairGrades`(每条通道 0 / 1,不分强弱档;位:bit0 光学 / bit2 静听 / bit4 照射 / bit6 待定位 / bit7 照射混合待精算)、`senseResolve`(热循环外的精算;它的 `g & 60` 掩掉 bit7,bit7 只从热循环原值读)
 - `23-cov.js` 误差椭圆内核 `stepCov` / `covHeld` / `covTheta`、距离梯子 `LAD` 与反解 `ladApply`、交会预览 `ladTriFix`
 - `24-track.js` 每方一张航迹表 `TRK`(`trkAdopt` / `trkEnsure` / `trkStep` / `trkEach` / `trkFoe` / `trkPid`;`trkGone` = 观测方看见的击沉,读 `contactDead`)

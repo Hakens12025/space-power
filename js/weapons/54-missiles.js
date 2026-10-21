@@ -20,9 +20,7 @@ const MSL_SWARM={S:20000*CFG.scale,COH:0.7,FLOOR:0.85,conv:25000*CFG.scale,convW
 let mslNetT=0; // 组网 / 邻接重算的节拍累加器(每感知拍一次)
 function mslLinkNodes(side){ // 2026-10-09 用户:这一方能接导弹数据链的节点 —— 舰船 / 前出浮标 / 拿着的据点,圆 = 各自的雷达量程(sensors/22 actRangeOf,不管雷达开没开);render/83 drawChain 同一份
   const N=[],add=o=>{const r=actRangeOf(o);N.push({o:o,pos:o.pos,R2:r*r});};
-  for(const s of ships)if(s.side===side&&!s.dead)add(s);
-  for(const o of rockObjs())if(o.kind==='buoy'&&o.side===side&&!o.dead)add(o);
-  if(typeof featStaObs==='function')for(const o of featStaObs(side))add(o);
+  for(const o of eyesOf(side))add(o); // 舰船 / 前出浮标 / 拿着的据点(sensors/21 eyesOf)
   return N;}
 function mslNetStep(dt){
   mslNetT+=dt;if(mslNetT<SENS.TICK)return;mslNetT=0;
@@ -178,7 +176,7 @@ function mslRockAvoid(p,dir,dist){ // 2026-10-04 用户:导弹规避碎石,很�
     const ix0=Math.floor((Math.min(x0,x1)-C)/c),ix1=Math.floor((Math.max(x0,x1)+C)/c),iy0=Math.floor((Math.min(y0,y1)-C)/c),iy1=Math.floor((Math.max(y0,y1)+C)/c);
     if((ix1-ix0+1)*(iy1-iy0+1)<=64){let bt=Infinity;
       for(let ix=ix0;ix<=ix1;ix++)for(let iy=iy0;iy<=iy1;iy++){const a=G.map.get(rockKey(ix,iy));if(!a)continue;
-        for(let j=0;j<a.length;j++){const k=rocks[a[j]];if(!k||k.dead||k.kind!=='rock'||k===p.target)continue;
+        for(let j=0;j<a.length;j++){const k=rocks[a[j]];if(!k||k.dead||!objSolid(k)||k===p.target)continue;
           const rx=k.pos[0]-x0,ry=k.pos[1]-y0,t=rx*dir[0]+ry*dir[1];if(t<=0||t>L||t>=bt)continue;
           if(Math.abs(dir[0]*ry-dir[1]*rx)<C){bt=t;p.rkA=k;}}}}}
   const k=p.rkA;if(!k)return dir;if(k.dead){p.rkA=null;return dir;}

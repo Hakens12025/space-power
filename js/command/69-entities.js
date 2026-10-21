@@ -45,7 +45,7 @@ const ENT={
     live(o){return !o.dead&&rocks.includes(o)&&(entMine(o,VIEW)||adminMode||!viewDead(o));},
     sel(o){return (o.kind==='buoy'&&o.side===ME)?'buoy':'info';},
     drag(h,x,y){entMoveTo(h.o,x,y);},
-    title(o){return o.side===VIEW?({lure:'诱饵',buoy:'前出浮标'})[o.kind]||'物体':'目标信息';},ico(o){return ENT_FOE(o)?'enemy':(o.kind==='rock'?'nat':'art');}, // 碎石 = 自然;民船 / 诱饵 / 浮标 = 人造name(o){return (o.side===VIEW||adminMode)?o.name:xhName(o);},
+    title(o){return o.side===VIEW?((OBJ_KIND[o.kind]||{}).name||'物体'):'目标信息';},ico(o){return ENT_FOE(o)?'enemy':((OBJ_KIND[o.kind]||{}).nat?'nat':'art');}, // 名字 / 自然还是人造读 world/14 OBJ_KINDname(o){return (o.side===VIEW||adminMode)?o.name:xhName(o);},
     info(o,ref){if(o.side!==VIEW)return entCard(o,ref)+entRef(ref); // 自己放的诱饵
       return entRows([['状态',o.dest?'飞行中':'漂流 · 冒充驱逐舰'],o.life>0?['剩余',Math.round(SHOW.t(o.life))+' s']:null]);}},
   sta:{k:'sta',tier:0,follow:true, // 据点(world/16):观测站对象 T.obs 当句柄,归属 = obs.side
@@ -55,7 +55,7 @@ const ENT={
     live(o){return ENV.stations.length>0&&featStaState().some(T=>T.obs===o);},
     sel(o){return o.side===ME?'buoy':'info';}, // 自己拿着的:底栏雷达遥控(同浮标)
     drag(h,x,y){const i=featStaState().findIndex(T=>T.obs===h.o);if(i<0||!rangeWorld)return;const S=rangeWorld.stations[i];S.x=x;S.y=y;envReset(rangeWorld);featStaMoved(i,x,y);}, // 改 rangeWorld 再 envReset,归属 / 占领进度照留
-    title(){return '据点';},name(o){return o.name;},ico(){return 'art';},
+    title(){return OBJ_KIND.station.name;},name(o){return o.name;},ico(){return 'art';},
     info(o,ref){const T=featStaState().find(T=>T.obs===o),who=s=>s===VIEW?'我方':'对方';
       return entRows([['归属',T&&T.holder?who(T.holder):'无人'],T&&T.cap?['占领中',who(T.cap)+' '+Math.round(100*T.prog/FEAT_CFG.STA.CAP_T)+'%']:null,entBrg(o.pos,ref)])+entRef(ref);}},
   moon:{k:'moon',tier:0,follow:true,

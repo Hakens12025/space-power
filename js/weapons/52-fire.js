@@ -146,7 +146,7 @@ function fireMAC(shooter,target){ // 主炮(轴炮):沿机头轴线直射(调用
 }
 let hitFX=[]; // 命中特效 {pos,t,type}  — 主炮/导弹命中点的爆闪提示
 function fxVis(pos,sh,vic){ // 2026-09-28 vis = 我方看不看得见这一下:自己打的 / 挨打的是自己 / 落在我方某艘船的全知圈里;画面只画看得见的(原来看不见的地方的命中与击沉也画在真值上)
-  const see=sd=>!!((sh&&sh.side===sd)||(vic&&vic.side===sd)||ships.some(s=>s.side===sd&&!s.dead&&Math.hypot(s.pos[0]-pos[0],s.pos[1]-pos[1])<(s.visR||COV.VIS_R))||rocks.some(o=>o.kind==='buoy'&&o.side===sd&&!o.dead&&Math.hypot(o.pos[0]-pos[0],o.pos[1]-pos[1])<(o.visR||0)));
+  const see=sd=>!!((sh&&sh.side===sd)||(vic&&vic.side===sd)||eyesOf(sd).some(o=>Math.hypot(o.pos[0]-pos[0],o.pos[1]-pos[1])<(o.visR||(o.kind?0:COV.VIS_R)))); // 10-21 走 sensors/21 eyesOf(原来只看船和浮标,拿着的据点圈里的命中不画)
   return {blue:see('blue'),red:see('red')}; // 两方各记一份(画面按当前视角 VIEW 读)
 }
 function hitW(p){return p.type==='mac'?(p.sec?'sec':'rail'):(p.type==='missile'?(p.ssm?'ssm':'hvy'):null);} // 2026-10-11 命中闪光的武器标签(只给画面:81-art artHits 按它定大小)

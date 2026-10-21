@@ -2,7 +2,7 @@
 
 ## 文件
 - `68-cmd.js` 操作命令层(2026-10-08):命令登记 `CMD_FNS`、发命令 `cmdIssue` / 执行 `cmdRun`、参数编号 `cmdSer` / `cmdDes`、`cx*` 命令函数、录制 `CMD.rec`
-- `69-entities.js` 实体登记表(2026-10-08):每类实体(舰船 / 石头与物体 / 据点 / 卫星 / 彗星 / 导弹组(含拦截弹组)/ 天体)登记一次 —— 列出、画在哪点在哪、点选半径、能不能选 / 跟随 / 拖、右栏只看信息;统一点选 `entPick`、选中写入口 `selSet`
+- `69-entities.js` 实体登记表(2026-10-08):每类实体(舰船 / 石头与物体 / 据点 / 卫星 / 彗星 / 导弹组(含拦截弹组)/ 天体)登记一次 —— 列出、画在哪点在哪、点选半径、能不能选 / 跟随 / 拖、右栏只看信息、抬头图标类别 `ico`;统一点选 `entPick`、选中写入口 `selSet`。物体种类的属性 / 名字(静止、障碍、自然还是人造)在 world/14 `OBJ_KIND`,各处读它、不写种类名
 - `70-input.js` 鼠标:`onMouseDown` 分发、选择谓词(`selectedShips` / `controlledShips` / `engageable`)、右键长按虚影(`ghostArm` / `ghostAim` / `ghostCommit`)
 - `71-keys.js` 键盘与 `ACTIONS` 表
 - `74-targeting.js` 悬停准星、吸附、敌舰信息卡、中键快速交战与目标轮盘的输入侧状态机

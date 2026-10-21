@@ -71,7 +71,7 @@ function drawObjKnown(s,p,r,tp,fc){ // 2026-09-27 认出来的民船 / 诱饵 / 
     else if(!(typeof SA==='object'&&SA.icon(ctx,CLS_HULL[tp.cls]||'DD',tp.tier||2,'red',p[0],p[1],Math.atan2(fc[1],fc[0]),shipZoomF()))){ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(Math.atan2(fc[1],fc[0]));{const zf=shipZoomF();ctx.scale(zf,zf);}drawHull(ctx,CLS_HULL[tp.cls]||'DD',tp.tier||2,'#ff6b6b','fill');ctx.restore();} // 2026-10-05 与真敌舰同一张贴图(render/82-shipart),否则一眼看出是诱饵
     if(cam.zoom>0.0008&&!lblPut(s.spoofName||s.name,p[0],p[1]+r+6,2)){ctx.fillStyle='rgba(215,226,240,.8)';ctx.fillText(s.spoofName||s.name,p[0],p[1]+r+6);}
     ctx.restore();return;}
-  const col=tp.kind==='civ'?'#a0aab9':(tp.kind==='lure'?'#d9a066':'#c890ff'),lb=({civ:'民船',lure:'诱饵',buoy:'浮标'})[tp.kind]||'';
+  const K=OBJ_KIND[tp.kind],col=(K&&K.col)||'#c890ff',lb=(K&&K.short)||''; // 颜色 / 简称读 world/14 OBJ_KIND
   ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=1.3;
   if(tp.kind==='civ'){ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(Math.atan2(fc[1],fc[0]));{const zf=shipZoomF();ctx.scale(zf,zf);}drawHull(ctx,'DD',2,col,'outline');ctx.restore();}
   else if(tp.kind==='lure'){const q=Math.max(4,r*0.8);ctx.beginPath();ctx.moveTo(p[0]-q,p[1]-q);ctx.lineTo(p[0]+q,p[1]+q);ctx.moveTo(p[0]+q,p[1]-q);ctx.lineTo(p[0]-q,p[1]+q);ctx.stroke();}
