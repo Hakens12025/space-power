@@ -144,6 +144,9 @@ function featMoons(){if(!ENV.moons.length)return;
     for(let i=0;i<n;i++){const a0=a-m.dir*span*(1-i/n),a1=a-m.dir*span*(1-(i+1)/n),P=FEAT_MT;P.length=0;P.push(c[0]+Math.cos(a0)*R,c[1]+Math.sin(a0)*R,c[0]+Math.cos(a1)*R,c[1]+Math.sin(a1)*R);
       ctx.strokeStyle='rgba(175,185,205,'+(0.32*Math.pow((i+1)/n,1.5)).toFixed(3)+')';featSegs(P,false);}
     ctx.strokeStyle='rgba(175,185,205,.22)';ctx.lineWidth=1;for(let i=0;i<3;i++){const a0=a+m.dir*0.1*i,a1=a+m.dir*0.1*(i+1);dashLine(c[0]+Math.cos(a0)*R,c[1]+Math.sin(a0)*R,c[0]+Math.cos(a1)*R,c[1]+Math.sin(a1)*R,2.5);} // 前面一小段点线 = 往哪走
+    if(S&&B.r*z>=3){const ux=S.x-B.x,uy=S.y-B.y,ul=Math.hypot(ux,uy)||1,u0=ux/ul,u1=uy/ul,dx=q[0]-B.x,dy=q[1]-B.y,al=dx*u0+dy*u1,pp=-dx*u1+dy*u0; // D2(用户 10-21:卫星阴影有的可以画):
+      if(al>0&&Math.abs(pp)<B.r){const sl=Math.sqrt(B.r*B.r-pp*pp)*0.8,sx=c[0]+(u0*sl-u1*pp)*z,sy=c[1]+(u1*sl+u0*pp)*z; //   卫星在行星朝太阳那侧、挡得住光才画;阴影落在受光那半,沿光的方向压扁
+        ctx.save();ctx.beginPath();ctx.arc(c[0],c[1],B.r*z,0,2*Math.PI);ctx.clip();ctx.fillStyle='rgba(22,26,34,.85)';ctx.beginPath();ctx.ellipse(sx,sy,Math.max(1.5,m.r*z*0.55),Math.max(2,m.r*z),Math.atan2(u1,u0),0,2*Math.PI);ctx.fill();ctx.restore();}}
     if(p[0]+r<-20||p[0]-r>W+20||p[1]+r<-20||p[1]-r>H+20)continue;
     const la=S?Math.atan2(S.y-q[1],S.x-q[0]):null;
     if(!artPlanet(ctx,{x:q[0],y:q[1],r:m.r,type:m.type,seed:m.seed},p[0],p[1],r,la)){ctx.fillStyle=MAP_BODY.DARK;ctx.beginPath();ctx.arc(p[0],p[1],Math.max(r,3),0,2*Math.PI);ctx.fill();} // 地表贴图还没生成好(81-art 分帧建)先画暗盘
