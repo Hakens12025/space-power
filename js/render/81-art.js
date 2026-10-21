@@ -448,11 +448,10 @@ function artPlSet(b,N){const ty=b.type||'gas',sd=b.seed|0,P=ART_PT[ty]||ART_PT.g
    · 地表 / 城市灯火 / 熔岩裂缝按屏幕分辨率切 256 像素的瓦片,只建看得见、落在盘里的几块。档位 L:贴图直径 512·2^(L/2) ≥ 屏上直径(半档一级)。
      生成按块(4 / 8 px):4 个角同一类(同一档颜色 / 都不是陆地…)、在盘内、没有经纬线经过就整块直接填,只在分界、盘边、经纬线处逐像素算(逐像素一块 25~40 ms)。
      没好的那块:先找粗 1~4 档里已好的瓦片裁进它的范围垫着,都没有才露出底下拉伸的 512 档。
-   · 明暗(背光实色 + 交界网点)不切瓦片,画矢量:网点间距 p = min(0.05r, ART_HPX)、带宽 = p x 6.8(与贴图档同比例,
-     拉近后交界是一道硬线 + 一窄条网点,不会变成一大片灰,也不跟着档位跳);用一张两行高的网点花纹贴图竖向平铺,一次填完。
+   · 明暗(背光实色 + 交界网点)不切瓦片,画矢量(artShadeHi):和贴图档同一比例、同一网格,拉近只变清楚、不变样子;不用等生成。
    · 大气 3 圈硬边光晕、色差细边、行星环直接画矢量。
    第一版(3f80832)的明暗瓦片没有垫底,瓦片没好时那块没有阴影,60 帧下要十几秒才补齐 —— 用户看到的「交界线奇怪」。 */
-const ART_TL=256,ART_TMAX=260,ART_HPX=18,ART_TSTALE=90; // 瓦片边长;瓦片缓存上限(256² x 4B ≈ 256KB 一块,超了按最久没用的淘汰);ART_HPX 高档网点间距上限(CSS px;= 切进高档那一刻贴图档的间距);ART_TSTALE 多少拍没人要的未完成瓦片丢掉
+const ART_TL=256,ART_TMAX=260,ART_TSTALE=90; // 瓦片边长;瓦片缓存上限(256² x 4B ≈ 256KB 一块,超了按最久没用的淘汰);ART_TSTALE 多少拍没人要的未完成瓦片丢掉
 function artTileLv(r){const D=artDpr(),L=Math.max(1,Math.ceil(2*Math.log2(2*r*D/512))),DL=Math.round(512*Math.pow(2,L/2));return {L,DL,RL:DL/2-1,h:DL/2,s:r/(DL/2-1),nT:Math.ceil(DL/ART_TL)};}
 function artTileKey(key,L,tx,ty){return 'T'+key+'|'+L+'|'+tx+','+ty;}
 function artTileJob(k,tx,ty,V,Y){ // Y = 这一层:cls(x,y,z) 分类(贵:噪声)/ put(c,x,y,z,a,d,o) 逐像素上色 / fill(c,d,o) 整块填一个像素(可无)/ skip(c) 这一类整块不画(可无)/ grat 经纬网(可无)
@@ -486,23 +485,18 @@ function artTileUnder(g,key,L,x,y,r,X,Y,S){ // 这一块还没好:把粗 1~4 档
 function artTileGc(){const now=ART_PJ.tick,J=ART_PJ.jobs; // 没人要的未完成瓦片(缩放路过的档)丢掉;做好的超过上限按最久没用的淘汰
   for(let i=J.length-1;i>=0;i--){const e=J[i];if(e.tile&&now-e.t>ART_TSTALE){J.splice(i,1);for(const [k,v] of ART_PJ.spr)if(v===e){ART_PJ.spr.delete(k);break;}}}
   if(ART_PJ.spr.size<ART_TMAX+40)return;const a=[];for(const [k,e] of ART_PJ.spr)if(k[0]==='T'&&e.done)a.push([e.t,k]);if(a.length<=ART_TMAX)return;a.sort((p,q)=>p[0]-q[0]);for(let i=0;i<a.length-ART_TMAX;i++)ART_PJ.spr.delete(a[i][1]);}
-const ART_HTN=new Map(); // 交界网点花纹贴图(键:间距 / 带宽 / 宽 / 颜色 / DPR)
-function artShadeSprite(p,hw,C,Ws,D){ // 两行高、Ws 宽:左边实色,右端 p 处是切分线,中间网点(列从切分线起排,同贴图档);行距取整到设备像素,竖向平铺不错位
-  const P2=Math.max(2,Math.round(1.732*p*D)),key=Math.round(p*16)+'|'+Math.round(hw*16)+'|'+Ws+'|'+C.join(',')+'|'+D;let S=ART_HTN.get(key);if(S)return S;if(ART_HTN.size>12)ART_HTN.clear();
-  const c=artCv(Math.ceil(Ws*D),P2),g=c.getContext('2d'),rh=P2/D/2,x0=Ws-p;
-  g.setTransform(D,0,0,D,0,0);g.fillStyle=artCss(C,C[3]);g.beginPath();g.rect(0,0,x0-hw+0.3*p,P2/D);
-  for(let row=-1;row<=2;row++){const cy=row*rh,off=(row&1)?p/2:0;for(let q=-Math.ceil(hw/p)-1;q<=1;q++){const cq=q*p+off,rad=p*0.78*Math.sqrt(artC01(-cq/hw));if(rad>0.45/D){g.moveTo(x0+cq+rad,cy);g.arc(x0+cq,cy,rad,0,6.2832);}}}
-  g.fill();S={c,pm:new WeakMap()};ART_HTN.set(key,S);return S;} // pm:每张画布各建一个花纹对象(主画布 / 地图合成缓存)
-function artShadeHi(g,x,y,r,la,C){ // 高档明暗(见上);光的坐标系:u 朝光、v 沿交界线
-  const D=artDpr(),TAU=6.2832,p=Math.min(ART_HP*r,ART_HPX),hw=p*(ART_HW/ART_HP),VW=(typeof mapVW==='function'?mapVW():W),VH=(typeof mapVH==='function'?mapVH():H),ca=Math.cos(la),sa=Math.sin(la);
+function artShadeHi(g,x,y,r,la,C){ // 高档明暗:与贴图档同一画法、同一比例(网点间距 0.05r、交界带 0.34r,都随行星缩放;网格同 artPShade:行从盘顶起、列从切分线起),
+  // 只是画成矢量 —— 拉近 = 放大同一张图、只变清楚(10-21 用户:封顶那版拉近时交界带越来越窄,明暗样子一直在变,「LOD 更奇怪」)。
+  // 背光实色与网点一条路径一次填(半透明不叠深、没有接缝);只画看得见的那几行。光的坐标系:u 朝光、v 沿交界线
+  const D=artDpr(),TAU=6.2832,p=ART_HP*r,hw=ART_HW*r,rh=p*0.866,uc=ART_XC*r,VW=(typeof mapVW==='function'?mapVW():W),VH=(typeof mapVH==='function'?mapVH():H),ca=Math.cos(la),sa=Math.sin(la);
   let umin=1e9,umax=-1e9,vmin=1e9,vmax=-1e9;for(const [qx,qy] of [[0,0],[VW,0],[0,VH],[VW,VH]]){const dx=qx-x,dy=qy-y,u=dx*ca+dy*sa,v=-dx*sa+dy*ca;umin=Math.min(umin,u);umax=Math.max(umax,u);vmin=Math.min(vmin,v);vmax=Math.max(vmax,v);}
-  const uc=ART_XC*r,ue=uc+p,v0=Math.max(-r,vmin),v1=Math.min(r,vmax);if(ue<umin||v1<=v0)return; // 看得见的部分全在受光那侧
-  g.save();g.translate(x,y);g.rotate(la);g.beginPath();g.arc(0,0,r,0,TAU);g.clip();
-  if(uc-hw-p>umax){g.fillStyle=artCss(C,C[3]);const u0=Math.max(-r,umin);g.fillRect(u0,v0,Math.min(r,umax)-u0,v1-v0);} // 看得见的全在背光实色里
-  else{const Ws=Math.ceil((hw+2*p+Math.hypot(VW,VH))/64)*64,S=artShadeSprite(p,hw,C,Ws,D); // 贴图宽 = 带宽 + 视口对角线:看得见的实色都在贴图里,不另拼实色块(两块半透明拼接会有亮缝)
-    let pt=S.pm.get(g);if(!pt){pt=g.createPattern(S.c,'repeat-y');S.pm.set(g,pt);}pt.setTransform(new DOMMatrix([1/D,0,0,1/D,ue-Ws,-r]));
-    g.fillStyle=pt;const uL=Math.max(-r,umin,ue-Ws);g.fillRect(uL,v0,ue-uL,v1-v0);}
-  g.restore();}
+  const v0=Math.max(-r,vmin),v1=Math.min(r,vmax);if(uc+p<umin||v1<=v0)return; // 看得见的部分全在受光那侧
+  g.save();g.translate(x,y);g.rotate(la);g.beginPath();g.arc(0,0,r,0,TAU);g.clip();g.fillStyle=artCss(C,C[3]);g.beginPath();
+  const us=uc-hw+0.3*p,u0=Math.max(-r,umin)-1;if(us>u0)g.rect(u0,v0-1,Math.min(us,umax+1)-u0,v1-v0+2); // 背光实色(看得见的那段)
+  const a0=Math.max(uc-hw-p,umin-p),a1=Math.min(uc+p,umax+p),pm=0.45/D;
+  if(a1>a0)for(let k=Math.floor((v0+r)/rh)-1,K=Math.ceil((v1+r)/rh)+1;k<=K;k++){const cy=-r+k*rh,off=(k&1)?p/2:0;
+    for(let q=Math.floor((a0-uc-off)/p),Q=Math.ceil((a1-uc-off)/p);q<=Q;q++){const cx=uc+q*p+off,rad=p*0.78*Math.sqrt(artC01((uc-cx)/hw));if(rad>pm){g.moveTo(cx+rad,cy);g.arc(cx,cy,rad,0,TAU);}}}
+  g.fill();g.restore();}
 function artPlHi(g,b,x,y,r,la,S5){const ty=b.type||'gas',sd=b.seed|0,P=ART_PT[ty]||ART_PT.gas,dark=la===null,u=r/120,TAU=6.2832;artTileGc();
   if(!dark&&P.atc){g.fillStyle=artCss(P.atc);for(const [k,al] of [[1.14,.06],[1.08,.09],[1.04,.13]]){g.globalAlpha=al;g.beginPath();g.arc(x,y,r*k,0,TAU);g.fill();}g.globalAlpha=1;} // 大气 3 圈硬边光晕
   const rg=dark?null:artRingOf(b);
@@ -512,7 +506,7 @@ function artPlHi(g,b,x,y,r,la,S5){const ty=b.type||'gas',sd=b.seed|0,P=ART_PT[ty
     g.restore();} // 环:剖面 3 档硬边色带(同贴图版)
   if(S5){const k=S5.N/(S5.N-2),rs=r*k;g.drawImage(S5.s,x-rs,y-rs,2*rs,2*rs);}                        // 512 档垫在最底下
   artTiles(g,'s'+ty+sd,x,y,r,RL=>({cls:(xx,yy,zz)=>artSurf(ty,sd,xx,yy,zz),put:artSurfPut(ty,RL),fill:(c,d,o)=>{d[o]=c[0];d[o+1]=c[1];d[o+2]=c[2];d[o+3]=255;},grat:artGrat(ty,RL)}));
-  const C=P.night||ART_NIGHT,hw=Math.min(ART_HP*r,ART_HPX)*(ART_HW/ART_HP);
+  const C=P.night||ART_NIGHT,hw=ART_HW*r;
   if(dark){g.fillStyle=artCss(C,C[3]);g.beginPath();g.arc(x,y,r+0.5,0,TAU);g.fill();}
   else artShadeHi(g,x,y,r,la,C);
   if(ty==='terra'){g.save();if(!dark){g.translate(x,y);g.rotate(la);g.beginPath();g.rect(-3*r,-3*r,3*r+ART_XC*r-hw*0.5,6*r);g.clip();g.rotate(-la);g.translate(-x,-y);}artTiles(g,'c'+sd,x,y,r,RL=>({cls:artCityCls(sd),put:artCityPut(sd,RL),skip:c=>!c}));g.restore();} // 城市灯火只在背光那块(交界网点那段也不亮)
