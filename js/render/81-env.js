@@ -29,10 +29,10 @@ const ENV_VIEWS={}; // ENV2 视图名 → {order, slot, pre?, kinds:{类名 → 
 ENV_VIEWS.map={order:['cloud','ion','shadow','rad','body','comet','moon','star','station'],slot:'frame',pre:mapTileFrame,kinds:{ // 2026-10-05 新地形(world/16)的画法在 render/81-feat,都是 frame 槽
   cloud:{tile:mapCloudPaint,need:function(){return ENV.clouds.length>0;}}, // 2026-09-26 用户:尘埃云的中文标注不要了(原 comp:mapCloudLabels)
   shadow:{comp:mapShadows},   // ENV2 补充规格 C:影子是矢量虚线(每个天体 2 条,Liang–Barsky 裁到视图),不进瓦片 —— 瓦片于是只依赖云的几何,换光照不作废;任务 4 起画进合成缓存(矢量的键含世界 rev)
-  body:{comp:mapBodies}, star:{frame:mapStar},
+  body:{comp:mapBodies,frame:mapBodiesHi}, star:{frame:mapStar},
   ion:{frame:function(){featIon();}},rad:{frame:function(){featRad();}},comet:{frame:function(){featComet();}},moon:{frame:function(){featMoons();}},station:{frame:function(){featStations();}}}}; // 81-feat 在本文件之后加载:运行期再取
 function drawEnvView(view){const V=ENV_VIEWS[view];if(!V)return;const took=V.pre?V.pre(V):false; // ENV2 任务 4:pre 返回真 = comp 槽已经在贴上去的合成缓存里,不再每帧画
-  for(const k of V.order){const e=V.kinds[k];if(!e)continue;if(e.comp&&!took)e.comp();if(e[V.slot])e[V.slot]();}}
+  for(const k of V.order){const e=V.kinds[k];if(!e)continue;if(e.comp&&!took)e.comp();if(e[V.slot])e[V.slot](took);}} // frame 槽多给一个 took(只有 body 用)
 function drawEnv(){drawEnvView('map');} // ENV2 名字不变:84-scene 的 typeof 守卫仍指向已声明符号(R2)
 
 /* ---- ENV2 静态贴图层(云):登记表的 pre ---- */
@@ -240,21 +240,30 @@ function mapFillPoly(P){const g=mapG();g.beginPath();g.moveTo(P[0],P[1]);for(let
 
 /* ---- ENV2 天体:背阴色整盘 + 朝阳那半盘(那条弦就是明暗交界线)+ 描边 + 名字;每个至多 3 次 arc、2 次 fill、1 次 stroke、1 次 fillText ---- */
 const MAP_BODY={DARK:'rgba(58,64,78,.92)',LIT:'rgba(150,156,170,.92)',EDGE:'rgba(170,180,200,.45)',TXT:'rgba(200,206,220,.72)'}; // ENV2 天体配色:灰、不带色相(与云同一路单色)
-function mapBodies(){ // ENV2 comp 槽(任务 4:画进当前视图 —— 合成缓存或主画布;返回画了几个)
+function mapBodyHi(b,z){return 2*b.r*z*artDpr()>512;} // 这一缩放下这颗行星走不走高档(render/81-art artPlHi:瓦片 + 矢量)。10-21 用户「放很大后影响性能」:高档行星不进合成缓存,每帧直接画(mapBodiesHi)——
+                                                     // 原来画在缓存里,瓦片陆续做好、平移过半个余量都要整张重拼,每次把几十块瓦片重画一遍,平移时一阵一阵卡
+function mapBodies(){ // ENV2 comp 槽(任务 4:画进当前视图 —— 合成缓存或主画布;返回画了几个)。画进合成缓存时跳过高档行星(见 mapBodyHi)
   const B=ENV.bodies;if(!B.length)return 0;
-  const g=mapG(),VW=mapVW(),VH=mapVH(),z=mapVZ(),big=40*Math.max(VW,VH),lit=envHasLight(),u=MAP_T2;let n=0;
-  g.save();
-  for(const b of B){
-    const p=mapTS(b.x,b.y),r=b.r*z,rk=artRingOf(b),e=Math.max(3,r)*(rk?rk.k+2.2*rk.w:1.16)+30; // 2026-10-08 剔除按画出来的整个范围(环到 k + 2.2σ 倍半径、大气边 1.16 倍、下面那行类型字再 +30):原来只按盘,盘在视图外、环伸进来时环被剔掉 —— 合成缓存平移时整格拷来的那几格就留下一块没环的矩形
-    if(p[0]+e<0||p[0]-e>VW||p[1]+e<0||p[1]-e>VH)continue;       // 视图包围盒剔除
-    n++;let a0=0,hasL=false;
+  const g=mapG(),z=mapVZ();let n=0;
+  g.save();for(const b of B){if(MAP_V.on&&mapBodyHi(b,z))continue;n+=mapBody(g,b);}g.restore();return n;
+}
+function mapBodiesHi(took){ // body 的 frame 槽:合成缓存正贴着(took)时,把「贴着的那张缓存的缩放下属于高档」那几颗(缓存里没画)按此刻的镜头直接画到主画布;
+  // 判据用那张缓存自己的缩放 —— 缩放动画中贴的是拉伸的旧缓存,跨过切档点时才不会两边都画或都不画。没贴缓存时 comp 槽已经全画过了
+  if(!took)return;const B=ENV.bodies;if(!B.length)return;const c=TERR.comp,zc=c?c.z:cam.zoom;
+  ctx.save();for(const b of B)if(mapBodyHi(b,zc))mapBody(ctx,b);ctx.restore();
+}
+function mapBody(g,b){ // 画一颗(视图由 MAP_V 定:合成缓存或主画布);返回画了没有(剔除了 = 0)
+  const VW=mapVW(),VH=mapVH(),z=mapVZ(),big=40*Math.max(VW,VH),lit=envHasLight(),u=MAP_T2;
+  {const p=mapTS(b.x,b.y),r=b.r*z,rk=artRingOf(b),e=Math.max(3,r)*(rk?rk.k+2.2*rk.w:1.16)+30; // 2026-10-08 剔除按画出来的整个范围(环到 k + 2.2σ 倍半径、大气边 1.16 倍、下面那行类型字再 +30):原来只按盘,盘在视图外、环伸进来时环被剔掉 —— 合成缓存平移时整格拷来的那几格就留下一块没环的矩形
+    if(p[0]+e<0||p[0]-e>VW||p[1]+e<0||p[1]-e>VH)return 0;       // 视图包围盒剔除
+    let a0=0,hasL=false;
     if(lit&&envSunDirAt([b.x,b.y],u)){const q=mapTS(b.x+u[0]*1e6,b.y+u[1]*1e6);a0=Math.atan2(q[1]-p[1],q[0]-p[0]);hasL=true;} // 屏幕上的光源方向(不假定 y 轴朝哪,同日标)
     const tg=ART_PL_NAME[b.type]||'',rg=hasL?artRingOf(b):null,ty=p[1]+Math.max(3,r)*(rg?rg.k+2.2*rg.w:1)+9; // 2026-10-04 类型 tag 写在盘下面(带环的写在环外)
-    if(r<3){artPlanet(g,b,p[0],p[1],r,hasL?a0:null);mapText(tg,MAP_BODY.TXT,p[0],ty);continue;}
+    if(r<3){artPlanet(g,b,p[0],p[1],r,hasL?a0:null);mapText(tg,MAP_BODY.TXT,p[0],ty);return 1;}
     if(r>big){ // 拉得很近:不画巨型圆,填 盘∩视口 的有界多边形;不描边、不写字
       const P=mapDiskPoly(p[0],p[1],r);if(P){g.fillStyle=MAP_BODY.DARK;mapFillPoly(P);}
       if(hasL){const P2=mapDiskPoly(p[0],p[1],r,Math.cos(a0),Math.sin(a0));if(P2){g.fillStyle=artCss((ART_PT[b.type]||ART_PT.gas).dot,0.92);mapFillPoly(P2);}} // 2026-10-04 亮面用这种行星的主色(贴图拉到这么大已经糊了)
-      continue;
+      return 1;
     }
     if(artPlanet(g,b,p[0],p[1],r,hasL?a0:null)){if(!hasL){g.strokeStyle=MAP_BODY.EDGE;g.lineWidth=1;g.beginPath();g.arc(p[0],p[1],r,0,6.283);g.stroke();}} // 2026-10-05 没有恒星:全黑 + 一圈淡描边(同双色圆),地图上还找得到
     else{ // 2026-10-04 行星贴图(render/81-art);还没生成好就画原来的双色圆
@@ -263,7 +272,7 @@ function mapBodies(){ // ENV2 comp 槽(任务 4:画进当前视图 —— 合成
       g.strokeStyle=MAP_BODY.EDGE;g.lineWidth=1;g.beginPath();g.arc(p[0],p[1],r,0,6.283);g.stroke();}
     mapText(r>24?b.name+' · '+tg:tg,MAP_BODY.TXT,p[0],ty); // ENV2 名字走预渲染的小贴图(审查第 3 条);2026-10-04 名字从盘心挪到盘下、跟 tag 一行(盘上画了地表)
   }
-  g.restore();return n;
+  return 1;
 }
 
 /* ---- ENV2 光源:位置型恒星(光晕 + 光球;屏外画日标)。日标与禁区锥是 ENV1 的画法(2026-09-29 方向型太阳已删) ---- */

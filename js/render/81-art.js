@@ -10,7 +10,7 @@
    ============================================================================ */
 const ART_L=(()=>{const a=-125*Math.PI/180;return [Math.cos(a),Math.sin(a)];})(); // 固定光向:左上
 const ART_SIDE={blue:[90,167,255],red:[255,107,107],neutral:[160,170,185]};
-const ART_BUDGET=4; // 行星贴图每帧生成预算 ms
+const ART_BUDGET=4,ART_TBUD_MV=1.5; // 行星贴图每帧生成预算 ms;镜头在动时高档瓦片只用 1.5 ms(10-21 用户:放大后平移卡 —— 原来每帧都把 4 ms 用满)
 function artMix(a,b,k){return [a[0]+(b[0]-a[0])*k,a[1]+(b[1]-a[1])*k,a[2]+(b[2]-a[2])*k];}
 function artLit(c,k){return k>=0?artMix(c,[255,255,255],k):artMix(c,[0,0,0],-k);}
 function artCss(c,a){return 'rgba('+Math.round(c[0])+','+Math.round(c[1])+','+Math.round(c[2])+','+(a===undefined?1:a)+')';}
@@ -398,10 +398,11 @@ function artJob(key,M,pix){let e=ART_PJ.spr.get(key);if(e){e.t=ART_PJ.tick;if(e.
   e={c,g,im:g.createImageData(M,M),M,pix,row:0,done:false,t:ART_PJ.tick};ART_PJ.spr.set(key,e);ART_PJ.jobs.push(e);return null;}
 function artReady(key){const e=ART_PJ.spr.get(key);return !!(e&&e.done);}
 function artTick(){const t0=performance.now(),J=ART_PJ.jobs,D=window.devicePixelRatio||1;ART_PJ.tick++;ART_MNEW=0;if(D!==ART_D){ART_D=D;ART_MS.clear();ART_RK.clear();ART_IB.clear();}
-  while(J.length&&performance.now()-t0<ART_BUDGET){let bi=0;for(let i=1;i<J.length;i++)if(J[i].t>J[bi].t)bi=i;const e=J[bi],M=e.M,d=e.im.data,rEnd=Math.min(M,e.row+4);
-    if(e.rows)e.rows(e.row,rEnd,d);else for(let j=e.row;j<rEnd;j++)for(let i=0;i<M;i++)e.pix(i,j,d,(j*M+i)*4);e.row=rEnd;
-    if(e.row>=M){e.g.putImageData(e.im,0,0);e.im=null;e.pix=null;e.rows=null;e.done=true;J.splice(bi,1);if(e.tile)ART_PJ.td=true;else ART_PJ.ver++;}}
-  if(ART_PJ.td){const now=performance.now();if(now-(ART_PJ.tb||0)>150||!J.some(e=>e.tile)){ART_PJ.td=false;ART_PJ.tb=now;ART_PJ.ver++;}}} // 瓦片:攒着一起让 81-env 合成缓存重建(每张都重建 = 瓦片陆续到的那几秒每帧重建)
+  const mv=typeof cam==='object'&&(cam.x!==ART_PJ.cx||cam.y!==ART_PJ.cy||cam.zoom!==ART_PJ.cz);if(typeof cam==='object'){ART_PJ.cx=cam.x;ART_PJ.cy=cam.y;ART_PJ.cz=cam.zoom;}ART_PJ.mov=mv; // 镜头这一帧动没动
+  while(J.length&&performance.now()-t0<ART_BUDGET){let bi=0;for(let i=1;i<J.length;i++)if(J[i].t>J[bi].t)bi=i;const e=J[bi];if(e.tile&&mv&&performance.now()-t0>=ART_TBUD_MV)break; // 镜头在动:瓦片每帧最多 ART_TBUD_MV ms(停下来再用满预算)
+    const M=e.M,d=e.im.data,rEnd=Math.min(M,e.row+4);
+    if(e.rows){e.row=e.rows(e.row,rEnd,d)?M:rEnd;}else{for(let j=e.row;j<rEnd;j++)for(let i=0;i<M;i++)e.pix(i,j,d,(j*M+i)*4);e.row=rEnd;}
+    if(e.row>=M){if(e.solid!==undefined){if(e.solid!==null){const v=e.solid;e.g.fillStyle='rgb('+(v&255)+','+((v>>>8)&255)+','+((v>>>16)&255)+')';e.g.fillRect(0,0,M,M);}}else e.g.putImageData(e.im,0,0);e.im=null;e.pix=null;e.rows=null;e.d32=null;e.done=true;J.splice(bi,1);if(!e.tile)ART_PJ.ver++;}}} // 瓦片只给高档行星用,高档行星不进 81-env 合成缓存(每帧直接画),做好不用让缓存重建
 function artDisk(N,f){const R=N/2-1,h=N/2;return (i,j,d,o)=>{const dx=(i+0.5-h)/R,dy=(j+0.5-h)/R,d2=dx*dx+dy*dy;if(d2>1+4/R)return;const a=artC01((1-Math.sqrt(d2))*R+0.5);if(a<=0)return;f(dx,dy,Math.sqrt(Math.max(0,1-d2)),a,d,o);};}
 const ART_XC=-0.12,ART_HW=0.34,ART_HP=0.05; // 明暗:直线切分(光从 +x;切分线在 x = -0.12),交界往背光退 0.34 用网点接上,网点间距 0.05(都按行星半径算,同演示页)
 function artPSurf(type,sd,N){return artJob('s'+type+sd+'|'+N,N,artDisk(N,artSurfPix(type,sd,N/2-1)));}
@@ -446,7 +447,8 @@ function artPlSet(b,N){const ty=b.type||'gas',sd=b.seed|0,P=ART_PT[ty]||ART_PT.g
 /* ---------- 行星 LOD 高档(10-21 用户:新画法放大后粗糙;第二版:交界线奇怪、LOD 有问题) ----------
    屏上直径 > 512 设备像素(512 档贴图要被放大)时换高档:
    · 地表 / 城市灯火 / 熔岩裂缝按屏幕分辨率切 256 像素的瓦片,只建看得见、落在盘里的几块。档位 L:贴图直径 512·2^(L/2) ≥ 屏上直径(半档一级)。
-     生成按块(4 / 8 px):4 个角同一类(同一档颜色 / 都不是陆地…)、在盘内、没有经纬线经过就整块直接填,只在分界、盘边、经纬线处逐像素算(逐像素一块 25~40 ms)。
+     生成按块(4 / 8 px):4 个角同一类(同一档颜色 / 都不是陆地…)、在盘内、没有经纬线经过就整块直接填(32 位一次一个像素),只在分界、盘边、经纬线处逐像素算;
+     整张都是一种就直接 fillRect(或整张不画)。看得见的都好了再预备外面一圈,平移进来时已经好了。
      没好的那块:先找粗 1~4 档里已好的瓦片裁进它的范围垫着,都没有才露出底下拉伸的 512 档。
    · 明暗(背光实色 + 交界网点)不切瓦片,画矢量(artShadeHi):和贴图档同一比例、同一网格,拉近只变清楚、不变样子;不用等生成。
    · 大气 3 圈硬边光晕、色差细边、行星环直接画矢量。
@@ -454,18 +456,24 @@ function artPlSet(b,N){const ty=b.type||'gas',sd=b.seed|0,P=ART_PT[ty]||ART_PT.g
 const ART_TL=256,ART_TMAX=260,ART_TSTALE=90; // 瓦片边长;瓦片缓存上限(256² x 4B ≈ 256KB 一块,超了按最久没用的淘汰);ART_TSTALE 多少拍没人要的未完成瓦片丢掉
 function artTileLv(r){const D=artDpr(),L=Math.max(1,Math.ceil(2*Math.log2(2*r*D/512))),DL=Math.round(512*Math.pow(2,L/2));return {L,DL,RL:DL/2-1,h:DL/2,s:r/(DL/2-1),nT:Math.ceil(DL/ART_TL)};}
 function artTileKey(key,L,tx,ty){return 'T'+key+'|'+L+'|'+tx+','+ty;}
-function artTileJob(k,tx,ty,V,Y){ // Y = 这一层:cls(x,y,z) 分类(贵:噪声)/ put(c,x,y,z,a,d,o) 逐像素上色 / fill(c,d,o) 整块填一个像素(可无)/ skip(c) 这一类整块不画(可无)/ grat 经纬网(可无)
-  const T=ART_TL,RL=V.RL,h=V.h,b=RL>=1400?8:4,n=T/b+1,nb=T/b,cc=new Array(n*n),bk=new Array(nb*nb),in2=(1-3/RL)*(1-3/RL),G=Y.grat||null;
-  const X=i=>(tx*T+i+0.5-h)/RL,Yc=j=>(ty*T+j+0.5-h)/RL;
+const ART_PKM=new Map();function artPack(c){let v=ART_PKM.get(c);if(v===undefined){v=((255<<24)|(Math.round(c[2])<<16)|(Math.round(c[1])<<8)|Math.round(c[0]))>>>0;ART_PKM.set(c,v);}return v;} // 一档颜色 → ImageData 的 32 位像素(小端 = ABGR);另记一张表(往颜色数组上挂属性会改它的隐藏类,逐像素读颜色变慢一倍)
+function artTileJob(k,tx,ty,V,Y){ // Y = 这一层:cls(x,y,z) 分类(贵:噪声)/ put(c,x,y,z,a,d,o) 逐像素上色 / pk(c) 整块同色时的 32 位像素(可无:逐像素 put)/ skip(c) 这一类整块不画(可无)/ grat 经纬网(可无)
+  const T=ART_TL,RL=V.RL,h=V.h,b=RL>=1400?8:4,n=T/b+1,nb=T/b,cc=new Array(n*n),bk=new Array(nb*nb),in2=(1-3/RL)*(1-3/RL),G=Y.grat||null,x00=(tx*T+0.5-h)/RL,y00=(ty*T+0.5-h)/RL,du=1/RL;
+  const X=i=>x00+i*du,Yc=j=>y00+j*du;
   const cn=(ci,cj)=>{const q=cj*n+ci;let v=cc[q];if(v===undefined){const x=X(ci*b),y=Yc(cj*b),d2=x*x+y*y,z=d2<1?Math.sqrt(1-d2):0;v=cc[q]=d2>=1?null:{c:Y.cls(x,y,z),x,y,z,d2};}return v;};
   const blk=(bi,bj)=>{const q=bj*nb+bi;let m=bk[q];if(m!==undefined)return m;const A=cn(bi,bj),B=cn(bi+1,bj),C=cn(bi,bj+1),E=cn(bi+1,bj+1);
     const u=!!(A&&B&&C&&E&&A.c===B.c&&A.c===C.c&&A.c===E.c);m={u,c:u?A.c:null,fast:u&&A.d2<in2&&B.d2<in2&&C.d2<in2&&E.d2<in2&&!(G&&G.near(A,B,C,E))};return bk[q]=m;};
   artJob(k,T,null);const J=ART_PJ.spr.get(k);if(!J)return null;J.tile=true;
-  J.rows=(j0,j1,d)=>{for(let j=j0;j<j1;j++){const bj=(j/b)|0,y=Yc(j);
-    for(let bi=0;bi<nb;bi++){const m=blk(bi,bj),i0=bi*b,i1=i0+b;
-      if(m.fast){if(Y.skip&&Y.skip(m.c))continue;if(Y.fill)for(let i=i0;i<i1;i++)Y.fill(m.c,d,(j*T+i)*4);else for(let i=i0;i<i1;i++)Y.put(m.c,X(i),y,0,1,d,(j*T+i)*4);continue;}
-      for(let i=i0;i<i1;i++){const x=X(i),d2=x*x+y*y;if(d2>1+4/RL)continue;const a=artC01((1-Math.sqrt(d2))*RL+0.5);if(a<=0)continue;const z=Math.sqrt(Math.max(0,1-d2));
-        Y.put(m.u?m.c:Y.cls(x,y,z),x,y,z,a,d,(j*T+i)*4);}}}};
+  J.rows=(j0,j1,d)=>{
+    if(j0===0){let c0,one=true;for(let q=0;q<nb*nb&&one;q++){const m=blk(q%nb,(q/nb)|0);if(!m.fast||(q&&m.c!==c0))one=false;c0=m.c;} // 先看整张是不是一种(放大后多数瓦片如此)
+      if(one){if(Y.skip&&Y.skip(c0)){J.solid=null;return true;}if(Y.pk){J.solid=Y.pk(c0);return true;}}} // 整张一种:fillRect(solid = 32 位色)或整张不画(solid = null)就完,不逐像素;没有 pk 的层(城市灯火)照旧逐像素
+    const d32=J.d32||(J.d32=new Uint32Array(d.buffer));
+    for(let j=j0;j<j1;j++){const bj=(j/b)|0,y=Yc(j),row=j*T;
+      for(let bi=0;bi<nb;bi++){const m=blk(bi,bj),i0=bi*b,i1=i0+b;
+        if(m.fast){if(Y.skip&&Y.skip(m.c))continue;if(Y.pk){const v=Y.pk(m.c);for(let i=i0;i<i1;i++)d32[row+i]=v;}else for(let i=i0;i<i1;i++){const x=X(i);Y.put(m.c,x,y,Math.sqrt(Math.max(0,1-x*x-y*y)),1,d,(row+i)*4);}continue;}
+        for(let i=i0;i<i1;i++){const x=X(i),d2=x*x+y*y;if(d2>1+4/RL)continue;const a=artC01((1-Math.sqrt(d2))*RL+0.5);if(a<=0)continue;const z=Math.sqrt(Math.max(0,1-d2));
+          Y.put(m.u?m.c:Y.cls(x,y,z),x,y,z,a,d,(row+i)*4);}}}
+    return false;};
   return null;}
 function artTiles(g,key,x,y,r,mk){ // mk(RL) → 层(见 artTileJob);返回这一档看得见的瓦片是不是都好了
   const V=artTileLv(r),T=ART_TL,s=V.s,h=V.h,VW=(typeof mapVW==='function'?mapVW():W),VH=(typeof mapVH==='function'?mapVH():H),cl=v=>Math.max(0,Math.min(V.nT-1,Math.floor(v/T)));
@@ -476,7 +484,17 @@ function artTiles(g,key,x,y,r,mk){ // mk(RL) → 层(见 artTileJob);返回这�
     if(e){e.t=ART_PJ.tick;if(e.done)c=e.c;}else{F=F||mk(V.RL);c=artTileJob(k,tx,ty,V,F);}
     const X=x+(tx*T-h)*s,Y=y+(ty*T-h)*s,S=T*s;
     if(c)g.drawImage(c,X,Y,S+0.6,S+0.6);else{all=false;artTileUnder(g,key,V.L,x,y,r,X,Y,S);}}
+  if(all&&!ART_PJ.mov){const tk=ART_PJ.tick-1;for(let ty=y0-1;ty<=y1+1;ty++)for(let tx=x0-1;tx<=x1+1;tx++){ // 镜头停着、看得见的都好了:预备外面一圈(平移进来时已经好了),优先级低一档、每帧照样保活
+    if(tx>=x0&&tx<=x1&&ty>=y0&&ty<=y1)continue;if(tx<0||ty<0||tx>=V.nT||ty>=V.nT)continue;
+    const nx=Math.max(tx*T,Math.min(h,tx*T+T)),ny=Math.max(ty*T,Math.min(h,ty*T+T));if((nx-h)**2+(ny-h)**2>(V.RL+2)**2)continue;
+    const k=artTileKey(key,V.L,tx,ty),e=ART_PJ.spr.get(k);if(e){e.t=Math.max(e.t,tk);continue;}F=F||mk(V.RL);artTileJob(k,tx,ty,V,F);const J=ART_PJ.spr.get(k);if(J)J.t=tk;}}
   return all;}
+function artTilesReady(key,x,y,r){ // 看得见的这一档瓦片是不是都好了(只查不建)—— 都好了就不用画底下拉伸的 512 档
+  const V=artTileLv(r),T=ART_TL,s=V.s,h=V.h,VW=(typeof mapVW==='function'?mapVW():W),VH=(typeof mapVH==='function'?mapVH():H),cl=v=>Math.max(0,Math.min(V.nT-1,Math.floor(v/T)));
+  for(let ty=cl((-y)/s+h),y1=cl((VH-y)/s+h);ty<=y1;ty++)for(let tx=cl((-x)/s+h),x1=cl((VW-x)/s+h);tx<=x1;tx++){
+    const nx=Math.max(tx*T,Math.min(h,tx*T+T)),ny=Math.max(ty*T,Math.min(h,ty*T+T));if((nx-h)**2+(ny-h)**2>(V.RL+2)**2)continue;
+    const e=ART_PJ.spr.get(artTileKey(key,V.L,tx,ty));if(!e||!e.done)return false;}
+  return true;}
 function artTileUnder(g,key,L,x,y,r,X,Y,S){ // 这一块还没好:把粗 1~4 档里已经好了的瓦片裁进它的范围(只查不建)
   g.save();g.beginPath();g.rect(X,Y,S+0.6,S+0.6);g.clip();
   for(let dl=Math.min(4,L-1);dl>=1;dl--){const Lc=L-dl,DL=Math.round(512*Math.pow(2,Lc/2)),RL=DL/2-1,h=DL/2,s=r/RL,T=ART_TL,nT=Math.ceil(DL/T),cl=v=>Math.max(0,Math.min(nT-1,Math.floor(v/T)));
@@ -498,20 +516,21 @@ function artShadeHi(g,x,y,r,la,C){ // 高档明暗:与贴图档同一画法、�
     for(let q=Math.floor((a0-uc-off)/p),Q=Math.ceil((a1-uc-off)/p);q<=Q;q++){const cx=uc+q*p+off,rad=p*0.78*Math.sqrt(artC01((uc-cx)/hw));if(rad>pm){g.moveTo(cx+rad,cy);g.arc(cx,cy,rad,0,TAU);}}}
   g.fill();g.restore();}
 function artPlHi(g,b,x,y,r,la,S5){const ty=b.type||'gas',sd=b.seed|0,P=ART_PT[ty]||ART_PT.gas,dark=la===null,u=r/120,TAU=6.2832;artTileGc();
-  if(!dark&&P.atc){g.fillStyle=artCss(P.atc);for(const [k,al] of [[1.14,.06],[1.08,.09],[1.04,.13]]){g.globalAlpha=al;g.beginPath();g.arc(x,y,r*k,0,TAU);g.fill();}g.globalAlpha=1;} // 大气 3 圈硬边光晕
-  const rg=dark?null:artRingOf(b);
+  const VW=(typeof mapVW==='function'?mapVW():W),VH=(typeof mapVH==='function'?mapVH():H),R2=(r-2)*(r-2),inD=(qx,qy)=>(qx-x)*(qx-x)+(qy-y)*(qy-y)<R2,inside=inD(0,0)&&inD(VW,0)&&inD(0,VH)&&inD(VW,VH); // 画面整个在盘里(拉得很近):盘外的东西都看不见
+  if(!inside&&!dark&&P.atc){g.fillStyle=artCss(P.atc);for(const [k,al] of [[1.14,.06],[1.08,.09],[1.04,.13]]){g.globalAlpha=al;g.beginPath();g.arc(x,y,r*k,0,TAU);g.fill();}g.globalAlpha=1;} // 大气 3 圈硬边光晕
+  const rg=(dark||inside)?null:artRingOf(b);
   if(rg){g.save();g.translate(x,y);g.rotate(la);const band=(a0,a1)=>{const r0=r*(rg.k+a0*rg.w),r1=r*(rg.k+a1*rg.w);g.moveTo(r1,0);g.arc(0,0,r1,0,TAU);if(r0>0){g.moveTo(r0,0);g.arc(0,0,r0,0,TAU,true);}};
     for(const sh of [1,0.45]){g.save();g.beginPath();if(sh===1){g.rect(-1e5,-1e5,2e5,2e5);g.rect(0,-r,-1e5,2*r);g.clip('evenodd');}else{g.rect(-1e5,-r,1e5,2*r);g.clip();} // 背光那侧行星挡住的一条 = 影子
       for(const [a0,a1,q] of [[-1.948,-1.354,.16],[1.354,1.948,.16],[-1.354,-0.845,.32],[0.845,1.354,.32],[-0.845,0.845,.5]]){g.fillStyle=artCss([207*sh,198*sh,176*sh],q);g.beginPath();band(a0,a1);g.fill();}g.restore();}
     g.restore();} // 环:剖面 3 档硬边色带(同贴图版)
-  if(S5){const k=S5.N/(S5.N-2),rs=r*k;g.drawImage(S5.s,x-rs,y-rs,2*rs,2*rs);}                        // 512 档垫在最底下
-  artTiles(g,'s'+ty+sd,x,y,r,RL=>({cls:(xx,yy,zz)=>artSurf(ty,sd,xx,yy,zz),put:artSurfPut(ty,RL),fill:(c,d,o)=>{d[o]=c[0];d[o+1]=c[1];d[o+2]=c[2];d[o+3]=255;},grat:artGrat(ty,RL)}));
+  if(S5&&!artTilesReady('s'+ty+sd,x,y,r)){const k=S5.N/(S5.N-2),rs=r*k;g.drawImage(S5.s,x-rs,y-rs,2*rs,2*rs);} // 512 档垫在最底下(只在有瓦片还没好时)
+  artTiles(g,'s'+ty+sd,x,y,r,RL=>({cls:(xx,yy,zz)=>artSurf(ty,sd,xx,yy,zz),put:artSurfPut(ty,RL),pk:artPack,grat:artGrat(ty,RL)}));
   const C=P.night||ART_NIGHT,hw=ART_HW*r;
   if(dark){g.fillStyle=artCss(C,C[3]);g.beginPath();g.arc(x,y,r+0.5,0,TAU);g.fill();}
   else artShadeHi(g,x,y,r,la,C);
   if(ty==='terra'){g.save();if(!dark){g.translate(x,y);g.rotate(la);g.beginPath();g.rect(-3*r,-3*r,3*r+ART_XC*r-hw*0.5,6*r);g.clip();g.rotate(-la);g.translate(-x,-y);}artTiles(g,'c'+sd,x,y,r,RL=>({cls:artCityCls(sd),put:artCityPut(sd,RL),skip:c=>!c}));g.restore();} // 城市灯火只在背光那块(交界网点那段也不亮)
-  if(P.emc){const ec=P.emc;artTiles(g,'e'+ty+sd,x,y,r,()=>({cls:artEmitCls(sd),put:artEmitPut(ec),skip:c=>!c,fill:(c,d,o)=>{d[o]=ec[0];d[o+1]=ec[1];d[o+2]=ec[2];d[o+3]=255;}}));}
-  if(!dark){g.save();g.translate(x,y);g.rotate(la);g.beginPath();g.rect(ART_XC*r,-3*r,4*r,6*r);g.clip();                       // 受光那侧色差细边(玫瑰 + 青)
+  if(P.emc){const ec=P.emc;artTiles(g,'e'+ty+sd,x,y,r,()=>({cls:artEmitCls(sd),put:artEmitPut(ec),skip:c=>!c,pk:()=>artPack(ec)}));}
+  if(!dark&&!inside){g.save();g.translate(x,y);g.rotate(la);g.beginPath();g.rect(ART_XC*r,-3*r,4*r,6*r);g.clip();                       // 受光那侧色差细边(玫瑰 + 青)
     g.lineWidth=Math.max(1.1*u,1);g.strokeStyle='rgba(143,211,224,.55)';g.beginPath();g.arc(0,0,r+Math.max(3*u,2.6),0,TAU);g.stroke();
     g.lineWidth=Math.max(1.4*u,1.2);g.strokeStyle='rgba(229,143,158,.8)';g.beginPath();g.arc(0,0,r+Math.max(1.4*u,1.2),0,TAU);g.stroke();g.restore();}
   return true;}
