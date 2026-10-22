@@ -255,6 +255,7 @@ function drawChain(p0){ // 2026-10-03:只画在网上的(断链的成员我方�
    拉远到 shipMarkMode 起弹类换简易记号 —— 改美术前那套的形状(点 / 点群 / 紫点),都比船的记号(箭头 7 px、菱形 8 px)小,整组外框也小,用阵营色;
    雷原来是菱形,会和敌方接触的菱形混,改空心方块;主炮弹原来是白方块,改沿飞行方向的短划。 */
 const PROJ_MK={blue:'#5aa7ff',red:'#ff6b6b'},SEC_DIM=0.4; // SEC_DIM:副炮弹的透明度倍数(2026-10-17 用户:副炮显示优先级低)
+function secShown(){return vtCur===1||(typeof INSET!=='undefined'&&ctx===INSET.g);} // 2026-10-23 用户:副炮弹只在战术层(及更近)和特写窗口里画,拉远后主视角不画(密密麻麻);特写画的时候 ctx 换成 INSET.g
 function projMark(p,x,y,rot,side,cnt){
   const col=PROJ_MK[side];ctx.fillStyle=col;ctx.strokeStyle=col;
   if(p.type==='decoy'){ctx.lineWidth=1;ctx.beginPath();ctx.arc(x,y,2.4,0,6.283);ctx.stroke();ctx.fillStyle='rgba(200,120,255,.95)';ctx.beginPath();ctx.arc(x,y,1.5,0,6.283);ctx.fill();return;} // 紫点 + 阵营色圈,外径约 5.8 px
@@ -270,9 +271,9 @@ function projMark(p,x,y,rot,side,cnt){
 }
 function drawProjectiles(){ // 弹丸/导弹
   const mk=shipMarkMode(),SM=(selMissile||(selMissileHits&&selMissileHits.length))&&typeof mslSelAll==='function'?mslSelAll():null; // 2026-10-09 选中的导弹组全集(多选每组都画圈)
-  const PA=projAll();
+  const PA=projAll(),secOn=secShown();
   for(let ps=0;ps<2;ps++)for(const p of PA){ // LL5 连余像一起画(消失了、消失的光还没到我方的弹;关开关就是 projectiles)
-    if((p.type==='mac'&&!!p.sec)!==(ps===0))continue; // 2026-10-17 用户:副炮显示优先级低 —— 第一遍只画副炮弹(压在轴炮 / 导弹下面),第二遍画其余
+    if((p.type==='mac'&&!!p.sec)!==(ps===0)||(ps===0&&!secOn))continue; // 2026-10-17 用户:副炮显示优先级低 —— 第一遍只画副炮弹(压在轴炮 / 导弹下面),第二遍画其余
     if(!projSeen(p))continue; // 感知层 v4:普通模式敌方弹药只有被探测到才显示 v119:读缓存 TK4a:缓存在航迹表的目击集合里
     const q=projViewLook(p);if(!q)continue; // LL5 位置 / 速度 / lit / 颗数读我方看到的弹影
     const s=toScreen(q.pos[0],q.pos[1]);
@@ -326,7 +327,8 @@ function drawProjectiles(){ // 弹丸/导弹
   }
 }
 function drawMslPred(){ // 2026-09-30 推测弹标(weapons/54 MSL_PRED):我方断链又看不见的导弹、看不见的炮弹,在推测位置画暗淡的弹标;真弹看得见时不画
-  for(const g of MSL_PRED){if(g.side!==VIEW&&!adminMode)continue;if(g.src&&!g.src.done&&projSeen(g.src))continue;
+  const secOn=secShown();
+  for(const g of MSL_PRED){if(g.side!==VIEW&&!adminMode)continue;if(!secOn&&g.k==='mac'&&g.src&&g.src.sec)continue; // 副炮弹的推测弹标同副炮弹(secShown)if(g.src&&!g.src.done&&projSeen(g.src))continue;
     const P=mslPredPos(g,simTime+acc),s=toScreen(P[0],P[1]);if(s[0]<-10||s[0]>W+10||s[1]<-10||s[1]>H+10)continue;
     if(g.k==='mac'){ctx.fillStyle='rgba(255,255,255,.3)';ctx.fillRect(s[0]-2,s[1]-2,4,4);continue;}
     const mine=g.mine||(g.mineOk&&g.aim&&g.spd*(simTime+acc-g.t)>=Math.hypot(g.aim[0]-g.pos[0],g.aim[1]-g.pos[1],g.aim[2]-g.pos[2]));
