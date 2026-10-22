@@ -4,8 +4,8 @@
    设计在 demos/sensors/态势感知V3.html;这里是移植。
 
    ---- 按【屏幕像素】自动切,只在代表显示里切(2026-10-11 起真显示每艘都画,见 lodBuild 开头) ----
-     2026-10-23 用户:不再把船收成一个框 —— 船照画(阵型看得见),收进来的船不写舰名;阵型上方一道顶括号(宽 = 阵型的屏幕宽),
-     括号上面一行「名字 · 舰种构成」(同日用户选 A:原来写在阵型正中压着船,红蓝两块还挤在一起):
+     2026-10-23 用户:不再把船收成一个框 —— 船照画(阵型看得见),收进来的船不写舰名;成员外围一圈圆角包络(屏幕凸包外扩 PAD_PX),
+     包络最上端的上方一行「名字 · 舰种构成」(同日用户:原来写在阵型正中压着船;试过顶括号,竖着的一字长蛇上只剩一小段,改包络):
      舰队    我方一支编队的屏幕直径小于 FLEET_PX ⇒ 中间写编队名(formation/42 fmName),下面写舰种构成
      组      我方没编队的船、或敌方已定位的接触,屏幕间距小于 GROUP_PX 连成一串 ⇒ 中间写「组·N」+ 构成
              (编队之间不再合并;敌方不知道是不是一支舰队,默认就叫组)
@@ -28,7 +28,7 @@ const LOD = {
   GROUP_PX: 48,    // 两个框的屏幕间距小于它 ⇒ 聚成一组
   HYS: 0.15,       // 迟滞
   off: false,      // 显式关掉聚合(判定用,见 lodBuild)
-  BRK_PX: 14, F1: 'bold 12px "Microsoft YaHei"', F2: '10px Consolas', // 10-23 顶括号在成员包围盒上沿往上几像素(让开记号与记号上方的血条 / 护盾条);字体:名字 / 构成
+  PAD_PX: 12, F1: 'bold 12px "Microsoft YaHei"', F2: '10px Consolas', // 10-23 包络比成员凸包外扩几像素(让开记号与记号上方的血条 / 护盾条);字体:名字 / 构成;字体:名字 / 构成
   ANIM_S: 0.25,    // SN8 收拢 / 散开动画的时长(秒,墙钟)
   t: 0,            // 上一次 lodBuild 的墙钟时刻(算 dt 用)
 };
@@ -109,15 +109,16 @@ function lodBuild(dtIn) {   // dtIn:判据用的时钟覆盖(同 camZoomStep);�
     for (const m of ms) L.noLbl.add(m.id);
     L.aggs.push({ kind: 'rcluster', side: 'red', pts: gi.map(i => [ru[i].x, ru[i].y]), wx: wx / gi.length, wy: wy / gi.length, ships: ms });
   }
-  /* 排版:括号 = 成员屏幕包围盒上沿往上 BRK_PX,宽 = 包围盒宽(两头各多 4 px);字在括号上面居中。
-     几块字撞在一起,后排的往上挪一行(画一根细线连回自己的括号)。⚠ 落点与字宽都在【这里】定,拾取(lodAggAt)读同一组数 */
+  /* 排版:包络 = 成员屏幕点的凸包(lodHull);字在包络最上端的上方、按包围盒左右居中。
+     几块字撞在一起,后排的往上挪一行(画一根细线连回包络)。⚠ 落点与字宽都在【这里】定,拾取(lodAggAt)读同一组数 */
   const lab = [];
   for (const a of L.aggs) {
-    let x0 = 1e9, x1 = -1e9, y0 = 1e9; for (const q of a.pts) { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; }
-    a.bx0 = x0 - 4; a.bx1 = x1 + 4; a.by = y0 - LOD.BRK_PX;
+    a.hull = lodHull(a.pts);
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9; for (const q of a.hull) { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; }
+    a.top = y0 - LOD.PAD_PX;
     a.t1 = a.kind === 'fleet' ? a.name : ('组·' + a.ships.length); a.t2 = lodComp(a.ships, a.side === 'red');
     ctx.font = LOD.F1; const w1 = ctx.measureText(a.t1).width; ctx.font = LOD.F2; const w2 = ctx.measureText(' · ' + a.t2).width;
-    a.w1 = w1; a.lw = w1 + w2; a.x = (a.bx0 + a.bx1) / 2; a.y = a.by - 4; // a.x / a.y = 字的底边中点
+    a.w1 = w1; a.lw = w1 + w2; a.x = (x0 + x1) / 2; a.y = a.top - 4; // a.x / a.y = 字的底边中点
     for (let k = 0; k < 6; k++) { const hit = lab.some(b => Math.abs(b.x - a.x) < (b.lw + a.lw) / 2 + 6 && Math.abs(b.y - a.y) < 15); if (!hit) break; a.y -= 15; }
     lab.push(a);
   }
@@ -149,17 +150,33 @@ function lodComp(list, red) {
   const a = Object.keys(m).sort().map(k => k + '×' + m[k]); if (unk) a.push('?×' + unk);
   return a.join(' ');
 }
+/* 屏幕点的凸包(Andrew 单调链;共线的只留两头,两点就是一段)。顺序按坐标系里叉积为正 —— lodHullPath 的外法线与弧向都按这个约定 */
+function lodHull(P) {
+  const q = P.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]); if (q.length < 3) return q;
+  const cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]), lo = [], up = [];
+  for (const p of q) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+  for (let i = q.length - 1; i >= 0; i--) { const p = q[i]; while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); }
+  up.pop(); lo.pop(); return lo.concat(up);
+}
+/* 凸包外扩 R 的圆角轮廓:每条边沿外法线平移 R,顶点处用半径 R 的圆弧接上。一个点 = 圆,两个点 = 胶囊 */
+function lodHullPath(H, R) {
+  ctx.beginPath();
+  if (H.length === 1) { ctx.arc(H[0][0], H[0][1], R, 0, Math.PI * 2); return; }
+  const n = H.length, ang = (a, b) => Math.atan2(-(b[0] - a[0]), b[1] - a[1]); // 边 a→b 的外法线 (dy, -dx) 的方向角
+  for (let i = 0; i < n; i++) { const p = H[(i + n - 1) % n], v = H[i], q = H[(i + 1) % n]; ctx.arc(v[0], v[1], R, ang(p, v), ang(v, q), false); }
+  ctx.closePath();
+}
 /* 点在哪块标签上(拾取用)。读的是 lodBuild 排好的字的位置与宽度,与画的是同一组数 */
 function lodAggAt(sx, sy) {
-  for (const a of lodNow.aggs) if (Math.abs(sx - a.x) <= a.lw / 2 + 3 && sy >= a.y - 15 && sy <= a.by + 2) return a;
+  for (const a of lodNow.aggs) if (Math.abs(sx - a.x) <= a.lw / 2 + 3 && sy >= a.y - 15 && sy <= a.y + 3) return a;
   return null;
 }
-function drawAggs() { // 2026-10-23 用户选 A:顶括号 + 一行「名字 · 构成」,不压船
+function drawAggs() { // 2026-10-23 用户选 A:成员外围一圈圆角包络 + 包络上方一行「名字 · 构成」,不压船、不受阵型朝向影响
   for (const a of lodNow.aggs) {
     const col = a.side === 'blue' ? '#6fb7ff' : '#ff7b7b', sel = a.ships.some(m => selected.indexOf(m.id) >= 0);
-    ctx.save(); ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.globalAlpha = .75;
-    ctx.beginPath(); ctx.moveTo(a.bx0, a.by + 3); ctx.lineTo(a.bx0, a.by); ctx.lineTo(a.bx1, a.by); ctx.lineTo(a.bx1, a.by + 3); ctx.stroke(); // 顶括号:两头往下 3 px
-    if (a.y < a.by - 5) { ctx.globalAlpha = .45; ctx.beginPath(); ctx.moveTo(a.x, a.by); ctx.lineTo(a.x, a.y + 1); ctx.stroke(); } // 字被挤上去了:细线连回括号
+    ctx.save(); lodHullPath(a.hull, LOD.PAD_PX);
+    ctx.globalAlpha = .06; ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha = sel ? .9 : .55; ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.stroke();
+    if (a.y < a.top - 6) { ctx.globalAlpha = .45; ctx.beginPath(); ctx.moveTo(a.x, a.top); ctx.lineTo(a.x, a.y + 1); ctx.stroke(); } // 字被挤上去了:细线连回包络
     ctx.globalAlpha = 1; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left'; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(5,7,12,.85)';
     const x0 = a.x - a.lw / 2;
     ctx.font = LOD.F1; ctx.lineWidth = 3; ctx.strokeText(a.t1, x0, a.y); ctx.fillStyle = sel ? '#ffffff' : col; ctx.fillText(a.t1, x0, a.y);
