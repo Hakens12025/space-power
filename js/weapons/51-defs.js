@@ -74,6 +74,8 @@ CLS_LOADOUT.DD=['mac_light','sec_dd','msl_light','ssm_dd','icp_dd4','gun_dd','ch
 CLS_LOADOUT.CL=['sec_cl','msl_cl','icp_cl','gun_core','chf_core','lure_x2']; // 2026-10-11 加诱饵;加副炮 2 门、拦截弹 300 // 2026-10-07 用户:巡游舰没有轴炮、导弹一次两组
 const WPN_CAT={mac:'mac',msl:'msl',sec:'mac',ssm:'msl'}; // 2026-10-11 多武器:每种武器(kind)属于底栏哪一格(类)。一类的总开关 s[类+'Gate'] 与这一种的分开关 s[kind+'On'] 两层「与」
 function wpnOk(s,k){return s[k+'On']!==false;} // 2026-10-11 用户:这一种许不许开火(底栏行尾 绿 = 允许 / 红 = 禁止)。10-23 起开火门一律走下面 wpnOn(强制也要总开关),引擎里不再读它;手动点条照样能打
+function wpnBot(s){return s.side==='red'&&!(typeof LOCK!=='undefined'&&LOCK.on);} // 这艘船归红方 AI 管(core/05 只在单机跑 enemyAI('red');联机红方是人)
+function wpnFire(s,k){return wpnOn(s,k)&&(!!s.autoEngage||wpnBot(s));} // 2026-10-23 用户(靶场中键点空地副炮照打):开火许可 = 火控开 + 总开关 + 绿,同底栏显示的勾(render/88 wpnFcOn);roe 由调用方另判。AI 的船不经火控钮(红方 autoEngage 恒关、炮走 57 的自动开火)
 function wpnOn(s,k){const c=WPN_CAT[k];return s[k+'On']!==false&&!(c&&s[c+'Gate']===false);} // 这一种武器许不许开火(不含火控开没开)= 绿 + 这一类的大勾;57 四种武器的自动与强制开火(2026-10-23 用户:强制也守它)、74 / 89 的扇区都问它
 function resolveLoadout(cls,tier){ // 配装 → 扁平武器字段(逐字段过 applyTier/tierMul,与 shipStats 同一套乘数机制)
   const src={};const weapons=[],wp={};

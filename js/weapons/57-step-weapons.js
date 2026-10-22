@@ -118,17 +118,17 @@ function stepWeaponSystems(dt){
   // 锁定自动开火(10秒一轮):机头转到位(MAC_ALIGN)才开炮(不盲射);v125 ROE门控
   for(const s of ships){
     const roe=s.roe==='free'||(s.roe==='tight'&&s.roeCd>0),frc=typeof fcForce==='function'&&fcForce(s,'mac'); // free自由/tight被攻击才还击(roeCd=受击冷却)/hold不开火
-    const roeOK=wpnOn(s,'mac')&&roe; // 2026-10-23 用户:自动与强制同一道门 = 总开关 + 绿(wpnOn)+ roe;强制只免把握门(原来强制只看绿)
+    const roeOK=wpnFire(s,'mac')&&roe; // 2026-10-23 用户:自动与强制同一道门 = 火控开 + 总开关 + 绿(51 wpnFire)+ roe;强制只免把握门(原来强制只看绿、也不看火控开)
     const mt=(typeof fcActive==='function'&&fcActive(s))?(s.fcTgt&&s.fcTgt.mac):s.lockedTarget; // RF5 有序列则打序列解算的主炮目标:序列可能只许导弹打(allow.mac=false),这时 lockedTarget 虽被写成导弹目标,主炮也不许跟着开
     const fp=(s.fTgt&&s.fTgt.n.mac<FT_N&&hasMAC(s))?s.fTgt:null; // 2026-09-29 强制目标点插队:主炮勾着(roeOK)才转向带提前量的那个点,对准就开一炮
     s.ftAim=!!(fp&&roeOK&&!s.dead)||!!(s.forceMac&&s.forceMac.pt); // 主炮正朝一个点对准(强制目标点 / ⌖ 打空地):physics/31 的战斗转向让位,否则每拍朝向层转到位清掉 turnTarget、战斗转向又拉回锁定目标,来回拉锯永远对不准
     if(fp&&roeOK&&!s.dead){if(macShootPt(s,fp.pt))fp.n.mac++;}
-    else if(roeOK&&!s.dead&&mt&&!contactDead(mt,s.side)&&mt.side!==s.side&&macReady(s)>0&&hasMAC(s)&&macAligned(s,mt)){ // LL6 死活按这一方看见的 // WR1:自动开火只在把握 >= MAC_AUTO_P 时打(没有射程门了);距离按估计位置量。这一条【不看 autoEngage】,红方 bot 的开火实际走的就是它。2026-10-10 macCd<=0 改 macReady>0(双管:任一门就绪即可开)
+    else if(roeOK&&!s.dead&&mt&&!contactDead(mt,s.side)&&mt.side!==s.side&&macReady(s)>0&&hasMAC(s)&&macAligned(s,mt)){ // LL6 死活按这一方看见的 // WR1:自动开火只在把握 >= MAC_AUTO_P 时打(没有射程门了);距离按估计位置量。火控开只对玩家的船要求(51 wpnFire;红方 bot 的开火实际走的就是这一条,它的 autoEngage 恒关)。2026-10-10 macCd<=0 改 macReady>0(双管:任一门就绪即可开)
       const mp=macPred(s,mt); if(mp&&(frc||macHitProb(s,V.len(V.sub(mp,s.pos)),mt)>=MAC_AUTO_P))fireMAC(s,mt); // 2026-09-29 强制开火的序列不看把握门
     } // TIER1 主炮 舰种门改能力谓词
     const fps=(s.fTgt&&(s.fTgt.n.sec||0)<FT_N)?s.fTgt:null; // 2026-10-11 用户:强制开火时副炮也打 —— 中键点空地:就绪的门一起打过去,算一次
-    if(fps&&s.secCds&&!s.dead&&secReady(s)>0&&wpnOn(s,'sec')&&roe){while(secReady(s)>0&&fireSecAt(s,fps.pt));fps.n.sec=(fps.n.sec||0)+1;}
-    else if(s.secCds&&!s.dead&&secReady(s)>0&&wpnOn(s,'sec')&&roe&&mt&&!contactDead(mt,s.side)&&mt.side!==s.side){ // 强制(frc:同主炮那条序列 / 中键选定)不看把握门,许可门同自动(总开关 + 绿) // 2026-10-11 副炮:炮塔不看机头;同主炮这道门(roe + 总开关 / 分开关,不看 autoEngage —— 红方 bot 也走这里),把握 ≥ MAC_AUTO_P 才打
+    if(fps&&s.secCds&&!s.dead&&secReady(s)>0&&wpnFire(s,'sec')&&roe){while(secReady(s)>0&&fireSecAt(s,fps.pt));fps.n.sec=(fps.n.sec||0)+1;}
+    else if(s.secCds&&!s.dead&&secReady(s)>0&&wpnFire(s,'sec')&&roe&&mt&&!contactDead(mt,s.side)&&mt.side!==s.side){ // 强制(frc:同主炮那条序列 / 中键选定)不看把握门,许可门同自动(51 wpnFire) // 2026-10-11 副炮:炮塔不看机头;同主炮这道门(roe + 总开关 / 分开关,不看 autoEngage —— 红方 bot 也走这里),把握 ≥ MAC_AUTO_P 才打
       const mp=macPred(s,mt,SEC_SPD);if(mp&&(frc||secHitProb(s,V.len(V.sub(mp,s.pos)),mt)>=MAC_AUTO_P))fireSec(s,mt);}
     if(s.roeCd>0)s.roeCd-=dt;
   }
