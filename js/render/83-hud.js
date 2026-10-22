@@ -326,15 +326,21 @@ function drawProjectiles(){ // 弹丸/导弹
     }
   }
 }
-function drawMslPred(){ // 2026-09-30 推测弹标(weapons/54 MSL_PRED):我方断链又看不见的导弹、看不见的炮弹,在推测位置画暗淡的弹标;真弹看得见时不画
-  const secOn=secShown();
-  for(const g of MSL_PRED){if(g.side!==VIEW&&!adminMode)continue;if(!secOn&&g.k==='mac'&&g.src&&g.src.sec)continue; // 副炮弹的推测弹标同副炮弹(secShown)if(g.src&&!g.src.done&&projSeen(g.src))continue;
-    const P=mslPredPos(g,simTime+acc),s=toScreen(P[0],P[1]);if(s[0]<-10||s[0]>W+10||s[1]<-10||s[1]>H+10)continue;
-    if(g.k==='mac'){ctx.fillStyle='rgba(255,255,255,.3)';ctx.fillRect(s[0]-2,s[1]-2,4,4);continue;}
-    const mine=g.mine||(g.mineOk&&g.aim&&g.spd*(simTime+acc-g.t)>=Math.hypot(g.aim[0]-g.pos[0],g.aim[1]-g.pos[1],g.aim[2]-g.pos[2]));
-    if(mine){ctx.fillStyle='rgba(255,120,70,.3)';ctx.beginPath();ctx.moveTo(s[0],s[1]-6);ctx.lineTo(s[0]+6,s[1]);ctx.lineTo(s[0],s[1]+6);ctx.lineTo(s[0]-6,s[1]);ctx.closePath();ctx.fill();continue;}
-    ctx.strokeStyle='rgba(255,255,255,.25)';ctx.lineWidth=0.8;ctx.beginPath();ctx.arc(s[0],s[1],5,0,6.283);ctx.stroke();
-    ctx.fillStyle='rgba(255,209,102,.3)';ctx.beginPath();ctx.arc(s[0],s[1],2.5,0,6.283);ctx.fill();}
+const PRED_A=0.35; // 2026-10-23 用户:推测弹标「不画圈,变虚即可」—— 同真弹一样的画法(真显示美术 / 代表显示记号),整体透明度乘它;没有尾焰、尾迹
+function drawMslPred(){ // 2026-09-30 推测弹标(weapons/54 MSL_PRED):我方断链又看不见的导弹、看不见的炮弹,在推测位置画虚的弹;真弹看得见时不画
+  const secOn=secShown(),mk=shipMarkMode(),now=simTime+acc,ga=ctx.globalAlpha;
+  for(const g of MSL_PRED){if(g.side!==VIEW&&!adminMode)continue;if(!secOn&&g.k==='mac'&&g.src&&g.src.sec)continue;if(g.src&&!g.src.done&&projSeen(g.src))continue; /* 副炮弹的推测弹标同副炮弹(secShown) */
+    const P=mslPredPos(g,now),s=toScreen(P[0],P[1]);if(s[0]<-20||s[0]>W+20||s[1]<-20||s[1]>H+20)continue;
+    const p=g.src||{type:g.k==='mac'?'mac':'missile'},side=palSide(g.side);
+    let rot=0;if(g.k==='mac')rot=Math.atan2(g.vel[1],g.vel[0]);else if(g.aim){const dx=g.aim[0]-g.pos[0],dy=g.aim[1]-g.pos[1];rot=dx||dy?Math.atan2(dy,dx):Math.atan2(g.dir[1],g.dir[0]);}else rot=Math.atan2(g.dir[1],g.dir[0]);
+    const mine=g.k!=='mac'&&(g.mine||(g.mineOk&&g.aim&&g.spd*(now-g.t)>=Math.hypot(g.aim[0]-g.pos[0],g.aim[1]-g.pos[1],g.aim[2]-g.pos[2]))),cnt=Math.min(p.count||16,16);
+    ctx.globalAlpha=ga*PRED_A*(p.sec?SEC_DIM:1);
+    if(mk)projMark(mine&&!p.mine?{type:'missile',mine:true}:p,s[0],s[1],rot,side,cnt);
+    else if(g.k==='mac'){if(p.sec)artChem(ctx,s[0],s[1],rot,side);else artShell(ctx,s[0],s[1],rot,side);}
+    else if(mine)artMine(ctx,s[0],s[1],((p.group||0)*1.7%6)*0.17,side);
+    else if(p.ssm)artSsm(ctx,{cur:P,pts:[]},side,cnt,rot,false);
+    else artMsl(ctx,s[0],s[1],rot,{kind:'msl',side,count:cnt,burn:false,sd:(p.group||0)*1.7});}
+  ctx.globalAlpha=ga;
 }
 function drawSelection(){
   if(!selDrag)return;

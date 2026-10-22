@@ -144,7 +144,7 @@ function artFxSpr(k){if(ART_FX[k])return ART_FX[k];let c;
   else if(k==='ember')c=artRad([[0,'rgba(255,230,180,1)'],[0.35,'rgba(255,140,50,.8)'],[1,'rgba(255,90,20,0)']],32);
   else if(k==='ring'||k==='ringB'){const col=k==='ring'?'255,226,180':'120,190,255';c=artRad([[0,'rgba('+col+',0)'],[0.84,'rgba('+col+',0)'],[0.94,'rgba('+col+',.9)'],[1,'rgba('+col+',0)']],256);}
   return ART_FX[k]=c;}
-function artBlit(g,c,x,y,r,a,add){if(a<=0.003||r<=0.2)return;g.save();if(add)g.globalCompositeOperation='lighter';g.globalAlpha=Math.min(1,a);g.drawImage(c,x-r,y-r,2*r,2*r);g.restore();}
+function artBlit(g,c,x,y,r,a,add){if(a<=0.003||r<=0.2)return;const ga=g.globalAlpha;g.save();if(add)g.globalCompositeOperation='lighter';g.globalAlpha=Math.min(1,a)*ga; /* 2026-10-23 乘外层透明度(推测弹标整体变虚;其余调用方外层都是 1,不变) */g.drawImage(c,x-r,y-r,2*r,2*r);g.restore();}
 function artDecoy(g,x,y,rot,sd,side){const z=artZ(),L=0.38*artLFF(),fe=artFe(); // 2026-10-05 罐体改阵营色、罐长 0.38 倍最小舰长;紫色假热源光晕照旧(效果,不算物品);整个带边界羽化
   artFeathered(g,fe,x,y,7*z+L+8,function(q,cx,cy){const t=artNow(),k=0.75+0.25*Math.sin(t*9+sd)*Math.sin(t*5.3+sd),R=7*z*(0.85+0.15*k);
     artPlume(q,'side',1,cx-Math.cos(rot)*L*0.5,cy-Math.sin(rot)*L*0.5,rot+Math.PI,9*z*artFlick(t,sd),3*z,0.35);
