@@ -582,7 +582,7 @@ function wpkMouse(e,sx,sy){ // 70-input 左键最先问它:有选中的 = 把它
   wpkClear();wpkSync();return true;}
 function wpnStop(){const sel=selBlue();if(typeof clearPendings==='function')clearPendings();if(sel.length)cxStop(sel);updateSelPanel();} // 停火钮 / X
 const WPK_TRI=a=>a.length&&a.every(Boolean)?2:(a.some(Boolean)?1:0);
-function wpkPm(attr,v){return '<div class="ck pm'+(v===2?' ok':(v===1?' part':' no'))+'" '+attr+'><span></span></div>';} // 2026-10-11 用户:行尾 绿 = 允许开火 / 红 = 禁止(自动、强制都看它,手动点条照样能打;weapons/51 wpnOk),多选里一半一半画两色
+function wpkPm(attr,v){return '<div class="ck pm'+(v===2?' ok':(v===1?' part':' no'))+'" '+attr+'><span></span></div>';} // 2026-10-11 用户:行尾 绿 = 允许开火 / 红 = 禁止(自动、强制都看它,手动点条照样能打;weapons/51 wpnFire),多选里一半一半画两色
 function wpkCk(attr,v,gated){return '<div class="ck'+(v===2?' on':(v===1?' part':''))+(gated?' gated':'')+'" '+attr+'><span>'+(v===2?'✓':'')+'</span></div>';}
 function wpkNone(lb){return '<div class="wb none"><div class="hd"><span class="lb">'+lb+'</span></div><div class="na">无</div></div>';}
 function wpkAggHTML(k,U,sel){const R=WROW[k],T=U.length,rd=wkReady(k,sel).length,P=Math.min(WAGG.get(k)||0,rd),pc=v=>(T?v/T*100:0).toFixed(2)+'%',B=[0,0,0,0],rem=[];let rl=1;
