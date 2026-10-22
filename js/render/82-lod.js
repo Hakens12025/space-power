@@ -26,8 +26,6 @@
    ========================================================================= */
 const LOD = {
   HIT_KM: 400*CFG.scale,     // 标准目标(size=1)的命中判定半径 km,与 COV.MAC 同源 // 2026-09-26 x1/5(单局地图):原 2000,跟 MAC_HIT_R
-  FLEET_PX: 60,    // 舰队的屏幕直径小于它 ⇒ 塌成一个舰队框
-  GROUP_PX: 48,    // (10-23 起没人读,分组改按 GROUP_KM)
   GROUP_KM: 40000 / 0.6 * CFG.scale, // 10-23 两艘(没编队的我方船 / 敌方已定位接触)相距小于它就连进一组:约一个阵型的直径(写的是 scale 0.6 时的实际值 4 万 km)
   HYS: 0.15,       // 迟滞
   off: false,      // 显式关掉聚合(判定用,见 lodBuild)
@@ -35,14 +33,9 @@ const LOD = {
   ANIM_S: 0.25,    // SN8 收拢 / 散开动画的时长(秒,墙钟)
   t: 0,            // 上一次 lodBuild 的墙钟时刻(算 dt 用)
 };
-let lodPrev = { fleet: {}, pairsB: null, pairsR: null };
+let lodPrev = { pairsB: null, pairsR: null };
 let lodNow = { hideBlue: new Set(), hideRed: new Set(), aggs: [], live: false };
 
-/* 塌不塌:带迟滞的阈值 */
-function lodCollapsed(extPx, prev) {
-  const lo = LOD.FLEET_PX * (1 - LOD.HYS), hi = LOD.FLEET_PX * (1 + LOD.HYS);
-  return prev ? extPx < hi : extPx < lo;
-}
 /* 按真实距离(wx / wy,10-23 起;原来按屏幕距离)把 items 并查集聚类。pairs 记住"这一对上一帧是连着的",给迟滞用 */
 function lodCluster(items, prevPairs) {
   const n = items.length, par = []; for (let i = 0; i < n; i++) par[i] = i;
@@ -58,7 +51,7 @@ function lodCluster(items, prevPairs) {
 }
 function lodBuild(dtIn) {   // dtIn:判据用的时钟覆盖(同 camZoomStep);平时不传,走墙钟
   const L = { hideBlue: new Set(), hideRed: new Set(), noLbl: new Set(), aggs: [], live: false }; // noLbl:收进标签的船不写舰名(82-ship-icons drawShip 读);hideBlue / hideRed 10-23 起恒空(船不再藏)
-  const prev = lodPrev, next = { fleet: {}, pairsB: null, pairsR: null };
+  const prev = lodPrev, next = { pairsB: null, pairsR: null };
   /* 不聚合的情况:GM —— 那种模式要的就是"每一艘都看得见";
      LOD.off 是给【判定】用的显式开关:有几条探针按像素亮度量别的东西(跟随连线、站位图),
      聚合会把它们的采样场景收成一个框,于是被测代码一行没动、判据却红了。 */
@@ -81,7 +74,7 @@ function lodBuild(dtIn) {   // dtIn:判据用的时钟覆盖(同 camZoomStep);�
   for (const [fl, g] of fleets) {
     const ms = g.ms; if (ms.length < 2) { solo.push(...ms); continue; } // 编队里只剩一艘:当散船
     let cx = 0, cy = 0; for (const m of ms) { cx += m.pos[0]; cy += m.pos[1]; } cx /= ms.length; cy /= ms.length;
-    /* 2026-10-23 用户:一换成箭头(shipMarkMode,上面已判)就标舰队,不再等屏幕直径缩到 FLEET_PX 以下 */
+    /* 2026-10-23 用户:一换成箭头(shipMarkMode,上面已判)就标舰队,不再等编队的屏幕直径缩到某个像素以下 */
     for (const m of ms) L.noLbl.add(m.id);
     L.aggs.push({ kind: 'fleet', side: 'blue', pts: ms.map(m => toScreen(m.pos[0], m.pos[1])), wx: cx, wy: cy, ships: ms, fl: fl, name: (typeof fmName === 'function') ? fmName(g.F) : ('编队' + fl) });
   }
