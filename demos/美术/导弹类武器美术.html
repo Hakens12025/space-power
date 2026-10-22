@@ -53,6 +53,12 @@ ul b{color:var(--txt);font-weight:normal}
 </section>
 
 <section>
+<h2>推测弹标 <b style="color:#ff8f6b;font-weight:normal;font-size:12px">未进引擎 · 10-23 候选</b></h2>
+<p class="n">我方导弹断链、又不在任何一艘船的视野里时,引擎在推测位置画一个「推测弹标」(炮弹出了可见光圈也一样)。第一列是引擎现行画法,后三列是候选:<b>A</b> 同一个弹画成半透明虚像,外加随断链时间变大的虚线不确定圈;<b>B</b> 从最后一次回报点画一串渐淡的点到推算位置,弹头换成空心箭头(成组是双箭头);<b>C</b> 半透明弹 + 四角括号,括号随不确定度张开。每格断链 0 → 60 秒循环;不确定圈 = 速度 200 km/s x 断链秒 x 0.2(炮弹、停着的雷弹道确定,不画)。只画我方(蓝)。</p>
+<canvas id="pred"></canvas>
+</section>
+
+<section>
 <h2>特效随缩放</h2>
 <p class="n">每列一个比例尺,第一行是巡洋舰 T1(拉过切换点后是箭头),下面是同一时刻定格的特效。表头「船 x / 特效 x」都是相对战术落点的倍数。</p>
 <canvas id="fxc"></canvas>
@@ -805,6 +811,50 @@ function drawFxc(wt){const g=FG;g.setTransform(DPR,0,0,DPR,0,0);g.fillStyle='#05
       g.restore();g.font='10px "Microsoft YaHei"';g.textAlign='center';g.textBaseline='top';g.fillStyle='#5f7083';g.fillText(txt,cx,y+r.h-14);});
     y+=r.h;}}
 
+/* ---------- 推测弹标(2026-10-23 用户:「炮弹和导弹进入预测状态后渲染方式太古老、丑、不适配」;未进引擎)----------
+   推测 = 引擎 weapons/54 MSL_PRED:我方断链又看不见的导弹 / 突击弹、看不见的炮弹,按最后一次回报外推;引擎画法在 render/83 drawMslPred。
+   每行一种弹,每格从「最后一次回报」(左端)开始外推,断链时长 0 → PRED_AGE 秒循环。不确定圈:导弹类 = min(PRED_UK x 速度 x 断链秒, PRED_UMAX),炮弹 / 停着的雷 = 0(弹道确定)。 */
+const PRED_AGE=60,PRED_LOOP=8,PRED_V=200,PRED_UK=0.2,PRED_UMAX=30000; // 断链秒数上限、墙钟循环秒、导弹速度 km/s、不确定圈 = 速度 x 时间 x 这个比例(封顶 km)
+const PRED_SC=[{nm:'战术落点',sub:'比例尺 2.5 万 · 真显示',raw:0.55,kmpp:250},{nm:'舰队落点',sub:'比例尺 10 万 · 代表显示',raw:0.40,kmpp:1000}];
+const PRED_ST=[{k:'cur',nm:'现行'},{k:'A',nm:'A 虚像 + 虚线圈'},{k:'B',nm:'B 推算航迹'},{k:'C',nm:'C 角括号'}];
+const PRED_ROWS=[{nm:'反舰 1 枚',k:'msl',n:1,h:64},{nm:'反舰 3 枚一组',k:'msl',n:3,h:64},{nm:'突击弹一组 6 发',k:'ssm',n:6,h:64},{nm:'轴炮弹',k:'shell',h:56},{nm:'伏击雷(到点停)',k:'mine',h:60}];
+const PRED_CW=132,PRED_X0=118,PRED_HEAD=62;
+const PC=$('pred'),PG=PC.getContext('2d'),PWd=PRED_X0+PRED_CW*PRED_SC.length*PRED_ST.length,PHt=PRED_HEAD+PRED_ROWS.reduce((a,r)=>a+r.h,0)+4;
+PC.style.width=PWd+'px';PC.style.height=PHt+'px';PC.width=Math.round(PWd*DPR);PC.height=Math.round(PHt*DPR);
+function predUnc(r,age,kmpp){return (r.k==='msl'||r.k==='ssm')?Math.min(PRED_UMAX,PRED_UK*PRED_V*age)/kmpp:0;}
+function predDashRing(g,x,y,R,a){g.save();g.strokeStyle=sRgba(SIDE.blue,a);g.lineWidth=1;g.setLineDash([2,3]);g.beginPath();g.arc(x,y,R,0,6.283);g.stroke();g.restore();}
+function predChev(g,x,y,L,a,two){g.save();g.strokeStyle=sRgba(SIDE.blue,a);g.lineWidth=1.1;g.lineJoin='round';
+  for(let i=0;i<(two?2:1);i++){const o=-i*L*0.55;g.beginPath();g.moveTo(x+o-L*0.5,y-L*0.42);g.lineTo(x+o+L*0.5,y);g.lineTo(x+o-L*0.5,y+L*0.42);g.stroke();}g.restore();}
+function predBrk(g,x,y,hs,a){const c=Math.min(3,hs*0.6);g.save();g.strokeStyle=sRgba(SIDE.blue,a);g.lineWidth=1;g.beginPath();
+  for(const [sx,sy] of [[-1,-1],[1,-1],[1,1],[-1,1]]){const X=x+sx*hs,Y=y+sy*hs;g.moveTo(X-sx*c,Y);g.lineTo(X,Y);g.lineTo(X,Y-sy*c);}g.stroke();g.restore();}
+function predArt(g,r,x,y,zf,mk,wt){ // 真弹(参照画法):真显示画美术、代表显示画记号;推测没有尾焰
+  if(mk){if(r.k==='ssm')streamMark(g,tt=>[x+(tt-wt)*12,y,0],wt,'blue',r.n);else projMark(g,PMK[r.k]||'missile',r.k==='mine',x,y,0,'blue',r.n||1);return;}
+  if(r.k==='msl')drawHvy(g,x,y,0,'blue',r.n,false,zf,wt,1);else if(r.k==='ssm'){const L=LFF(zf);drawStream(g,tt=>[x-0.3*L+(tt-wt)*3*L,y,0],wt,'blue',r.n,zf);}
+  else if(r.k==='shell')drawShell(g,x,y,0,'blue',zf);else if(r.k==='mine')drawMine(g,x,y,0.3,'blue',zf,wt);}
+function predCell(g,r,sc,st,x,y,w,h,age,u,wt){const zf=colZf(sc),mk=sc.raw<HULL_ZOOM.MARK,cy=y+(h-14)/2,x0=x+16,mv=r.k==='mine'?Math.min(1,u*2.5):u,hx=x0+(w-40)*mv,
+  aR=mk?markPx(r)/2:bodyPx(r,zf)/2,uR=predUnc(r,age,sc.kmpp);let txt='';
+  if(st.k==='cur'){ // 引擎 render/83 drawMslPred 原样
+    if(r.k==='shell'){g.fillStyle='rgba(255,255,255,.3)';g.fillRect(hx-2,cy-2,4,4);txt='白方块 4 px';}
+    else if(r.k==='mine'){g.fillStyle='rgba(255,120,70,.3)';g.beginPath();g.moveTo(hx,cy-6);g.lineTo(hx+6,cy);g.lineTo(hx,cy+6);g.lineTo(hx-6,cy);g.closePath();g.fill();txt='橙菱形 12 px';}
+    else{g.strokeStyle='rgba(255,255,255,.25)';g.lineWidth=0.8;g.beginPath();g.arc(hx,cy,5,0,6.283);g.stroke();g.fillStyle='rgba(255,209,102,.3)';g.beginPath();g.arc(hx,cy,2.5,0,6.283);g.fill();txt='白圈 + 黄点 10 px';}}
+  else if(st.k==='A'){g.save();g.globalAlpha=0.35;predArt(g,r,hx,cy,zf,mk,wt);g.restore();
+    if(uR>0)predDashRing(g,hx,cy,Math.max(uR,aR+2),0.55);txt=uR>0?'圈 '+Math.max(uR,aR+2).toFixed(1)+' px':'不画圈(弹道确定)';}
+  else if(st.k==='B'){const n=Math.max(1,Math.floor((hx-x0)/4));g.fillStyle=sRgba(SIDE.blue,1);
+    for(let i=1;i<n;i++){const f=i/n;g.globalAlpha=0.45-0.33*f;g.beginPath();g.arc(x0+(hx-x0)*f,cy,0.75,0,6.283);g.fill();}g.globalAlpha=1;
+    g.strokeStyle=sRgba(SIDE.blue,0.55);g.lineWidth=1;g.beginPath();g.arc(x0,cy,2,0,6.283);g.stroke(); // 最后一次回报
+    if(r.k==='mine'){g.strokeStyle=sRgba(SIDE.blue,0.85);g.strokeRect(hx-2.5,cy-2.5,5,5);}
+    else predChev(g,hx,cy,mk?5:Math.max(5,Math.min(9,aR*1.6)),0.85,(r.n||1)>1);txt='回报点 → 推算位置';}
+  else{g.save();g.globalAlpha=mk?0.7:0.55;predArt(g,r,hx,cy,zf,mk,wt);g.restore();const hs=Math.max(aR+3,uR);predBrk(g,hx,cy,hs,0.8);txt='括号半宽 '+hs.toFixed(1)+' px';}
+  g.font='10px "Microsoft YaHei"';g.textAlign='center';g.textBaseline='top';g.fillStyle='#5f7083';g.fillText(txt,x+w/2,y+h-14);}
+function drawPred(wt){const g=PG;g.setTransform(DPR,0,0,DPR,0,0);g.fillStyle='#05070c';g.fillRect(0,0,PWd,PHt);
+  const u=(wt%PRED_LOOP)/PRED_LOOP,age=u*PRED_AGE;let x=PRED_X0;
+  g.font='11px "Microsoft YaHei"';g.textAlign='left';g.textBaseline='top';g.fillStyle='#ffc861';g.fillText('断链 '+age.toFixed(0)+' 秒',10,8);
+  PRED_SC.forEach(sc=>PRED_ST.forEach((st,j)=>{g.textAlign='center';g.font='12px "Microsoft YaHei"';g.fillStyle=st.k==='cur'?'#ff8f6b':'#5aa7ff';g.fillText(st.nm,x+PRED_CW/2,6);
+    g.font='10px "Microsoft YaHei"';g.fillStyle='#5f7083';g.fillText(sc.nm,x+PRED_CW/2,24);g.fillText(sc.sub,x+PRED_CW/2,38);
+    g.fillStyle=j===0?'#3a4a60':'#1e2836';g.fillRect(x,0,j===0?2:1,PHt);x+=PRED_CW;}));
+  let y=PRED_HEAD;for(const r of PRED_ROWS){g.fillStyle='#1e2836';g.fillRect(0,y,PWd,1);g.font='12px "Microsoft YaHei"';g.textAlign='left';g.textBaseline='middle';g.fillStyle='#c7d0dc';g.fillText(r.nm,10,y+r.h/2-4);
+    let x=PRED_X0;PRED_SC.forEach(sc=>PRED_ST.forEach(st=>{g.save();g.beginPath();g.rect(x+1,y+1,PRED_CW-1,r.h-1);g.clip();predCell(g,r,sc,st,x,y,PRED_CW,r.h,age,u,wt);g.restore();x+=PRED_CW;}));y+=r.h;}}
+
 /* ---------- 读数与操作 ---------- */
 let lastRead='';
 function readout(){const k=kmpp(),raw=rawZ(k),zf=trueZf(k),mk=raw<HULL_ZOOM.MARK;$('barV').textContent=fmtKm(V.bar);$('tkV').textContent='x'+V.tk.toFixed(2);
@@ -818,7 +868,7 @@ $('tk').addEventListener('input',e=>{V.tk=e.target.value/100;});
 document.querySelectorAll('button[data-z]').forEach(b=>b.addEventListener('click',()=>setBar(+b.dataset.z)));
 document.querySelectorAll('button[data-old]').forEach(b=>b.addEventListener('click',()=>{MSLV.old=!MSLV.old;b.classList.toggle('on',MSLV.old);}));
 document.querySelectorAll('button[data-k]').forEach(b=>b.addEventListener('click',()=>{const k=b.dataset.k;V[k]=!V[k];b.classList.toggle('on',V[k]);
-  const f=((V.gray?'grayscale(1) ':'')+(V.blur?'blur(1px)':'')).trim()||'none';SCN.style.filter=f;TC.style.filter=f;}));
+  const f=((V.gray?'grayscale(1) ':'')+(V.blur?'blur(1px)':'')).trim()||'none';SCN.style.filter=f;TC.style.filter=f;PC.style.filter=f;}));
 SCN.addEventListener('wheel',e=>{e.preventDefault();const r=SCN.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top,k0=kmpp(),wx=V.cx+(mx-SWd/2)*k0,wy=V.cy+(my-SHt/2)*k0;
   setBar(V.bar*Math.pow(1.0015,e.deltaY));const k1=kmpp();V.cx=wx-(mx-SWd/2)*k1;V.cy=wy-(my-SHt/2)*k1;},{passive:false});
 let drag=null;
@@ -829,7 +879,7 @@ addEventListener('resize',fitScene);
 fitScene();setBar(V.bar);
 let sT=0,last=performance.now(),frame=0;
 function loop(now){const dt=Math.min(0.1,(now-last)/1000);last=now;if(!V.pause)sT+=dt;const wt=now/1000;
-  drawScene(wt,sT);if(frame%3===0)drawTab(wt);if(frame%3===1)drawFxc(wt);frame++;readout();requestAnimationFrame(loop);}
+  drawScene(wt,sT);if(frame%3===0)drawTab(wt);if(frame%3===1)drawFxc(wt);drawPred(wt);frame++;readout();requestAnimationFrame(loop);}
 requestAnimationFrame(loop);
 </script>
 </body>
