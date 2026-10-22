@@ -108,12 +108,13 @@ function lodBuild(dtIn) {   // dtIn:判据用的时钟覆盖(同 camZoomStep);�
   const lab = [];
   for (const a of L.aggs) {
     a.hull = lodHull(a.pts);
-    let x0 = 1e9, x1 = -1e9, y0 = 1e9; for (const q of a.hull) { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; }
-    a.top = y0 - LOD.PAD_PX;
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9; for (const q of a.hull) { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1]; }
     a.t1 = a.kind === 'fleet' ? a.name : ('组·' + a.ships.length); a.t2 = lodComp(a.ships, a.side === 'red');
     ctx.font = LOD.F1; const w1 = ctx.measureText(a.t1).width; ctx.font = LOD.F2; const w2 = ctx.measureText(' · ' + a.t2).width;
-    a.w1 = w1; a.lw = w1 + w2; a.x = (x0 + x1) / 2; a.y = a.top - 4; // a.x / a.y = 字的底边中点
-    for (let k = 0; k < 6; k++) { const hit = lab.some(b => Math.abs(b.x - a.x) < (b.lw + a.lw) / 2 + 6 && Math.abs(b.y - a.y) < 15); if (!hit) break; a.y -= 15; }
+    /* 10-23 用户(缩放时「组·3」一直跳):我方的字写在包络上方、敌方写在下方 —— 红蓝两行基本撞不上;同侧真撞了按 lodSoftPush 平滑推开,不再整行跳 */
+    a.dir = a.side === 'blue' ? -1 : 1; a.anc = a.dir < 0 ? y0 - LOD.PAD_PX : y1 + LOD.PAD_PX; // 包络上 / 下沿(引线落点)
+    a.w1 = w1; a.lw = w1 + w2; a.x = (x0 + x1) / 2; a.y = a.dir < 0 ? a.anc - 4 : a.anc + 14; a.y0 = a.y; // a.x / a.y = 字的底边中点;y0 = 没被推之前
+    for (const b of lab) lodSoftPush(a, b, a.lw, b.lw, 15);
     lab.push(a);
   }
   for (const s of ships) s._lodE = undefined; LOD.t = nowMs(); // 箭头档船不收拢:lodDrawShip 照原样画(块档回来时从 0 起播)
@@ -189,8 +190,8 @@ function lodBlock(L, prev, next, dtIn) {
      ⚠ 落点在【这里】定,不在画的时候定 —— 拾取读的是同一个 a.x/a.y */
   const put = [];
   for (const a of L.aggs) {
-    a.ax = a.x; a.ay = a.y;
-    for (let k = 0; k < 8 && put.some(b => Math.abs(b.x - a.x) < 46 && Math.abs(b.y - a.y) < 34); k++) a.y += 34;
+    a.ax = a.x; a.ay = a.y; a.dir = 1;
+    for (const b of put) lodSoftPush(a, b, 46, 46, 34); // 10-23 撞了平滑往下推开(原来整格跳 34 px,缩放时一闪一闪)
     put.push(a);
   }
   /* ---- SN8 收拢 / 散开动画 ----
@@ -215,6 +216,13 @@ function lodBlock(L, prev, next, dtIn) {
   }
   for (const a of L.aggs) { let e = 0; for (const m of a.ships) e = Math.max(e, m._lodE || 0); a.alpha = e * e * (3 - 2 * e); }
   for (const a of L.aggs) a.block = true;
+}
+/* 两块标签 / 块的软碰撞:a 沿自己的方向(a.dir,-1 上 / +1 下)推开 b,推开量随水平重叠程度平滑变化 ——
+   水平上刚挨到时推 0、完全叠住时推满 H,所以缩放时只会平滑地挪,不会整格跳(10-23 用户:缩放时「组·3」一直跳)。wa / wb = 两块的宽 */
+function lodSoftPush(a, b, wa, wb, H) {
+  const M = 16, ov = (wa + wb) / 2 + M - Math.abs(a.x - b.x); if (ov <= 0) return;
+  const need = H * Math.min(1, ov / M), d = (a.y - b.y) * a.dir; // d:a 在自己的方向上已经离 b 多远
+  if (d < need && d > -H) a.y = b.y + a.dir * need;
 }
 /* 屏幕点的凸包(Andrew 单调链;共线的只留两头,两点就是一段)。顺序按坐标系里叉积为正 —— lodHullPath 的外法线与弧向都按这个约定 */
 function lodHull(P) {
@@ -246,7 +254,7 @@ function drawAggs() { // 2026-10-23 用户选 A:成员外围一圈圆角包络 +
     const col = a.side === 'blue' ? '#6fb7ff' : '#ff7b7b', sel = a.ships.some(m => selected.indexOf(m.id) >= 0);
     ctx.save(); lodHullPath(a.hull, LOD.PAD_PX);
     ctx.globalAlpha = .06; ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha = sel ? .9 : .55; ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.stroke();
-    if (a.y < a.top - 6) { ctx.globalAlpha = .45; ctx.beginPath(); ctx.moveTo(a.x, a.top); ctx.lineTo(a.x, a.y + 1); ctx.stroke(); } // 字被挤上去了:细线连回包络
+    if (Math.abs(a.y - a.y0) > 6) { ctx.globalAlpha = .45; ctx.beginPath(); ctx.moveTo(a.x, a.anc); ctx.lineTo(a.x, a.dir < 0 ? a.y + 1 : a.y - 12); ctx.stroke(); } // 字被推开了:细线连回包络
     ctx.globalAlpha = 1; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left'; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(5,7,12,.85)';
     const x0 = a.x - a.lw / 2;
     const ol = a.side !== 'blue'; // 10-23 用户:蓝字不要黑底(不描深色边);红字照描
