@@ -269,7 +269,7 @@ function drawShip(s){
     ctx.fillText(tag,p[0],p[1]-r-7);
   }
   // 名称(没认出显示"大/中/小热源",认出显示舰名)
-  if(cam.zoom>0.0008){
+  if(cam.zoom>0.0008&&!(lodNow.live&&lodNow.noLbl&&lodNow.noLbl.has(s.id))){ /* 2026-10-23 收进舰队 / 组标签的船不写舰名(82-lod) */
     const lbl=(shipIdentHull(s)==='UNK')?sigClassLabel(s):s.name; // ID1:名字与轮廓同一个口径 —— 轮廓打码了,名字就不许是真名(原来各判各的:identQ===1)
     if(SHIP_LBL.on)SHIP_LBL.list.push({t:lbl,x:p[0],y:p[1]+r+6,pri:selected.includes(s)?0:(s.side===VIEW?1:2)}); // 2026-10-08 特写窗:先收齐,画完舰船再统一摆(84 insetLabels:字号随缩放、撞上就并成「+N」)
     else{ctx.fillStyle='rgba(215,226,240,.8)';ctx.font='10px "Microsoft YaHei"';ctx.textAlign='center';ctx.textBaseline='top';
