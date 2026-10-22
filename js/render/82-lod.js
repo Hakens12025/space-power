@@ -29,7 +29,7 @@ const LOD = {
   GROUP_KM: 40000 / 0.6 * CFG.scale, // 10-23 两艘(没编队的我方船 / 敌方已定位接触)相距小于它就连进一组:约一个阵型的直径(写的是 scale 0.6 时的实际值 4 万 km)
   HYS: 0.15,       // 迟滞
   off: false,      // 显式关掉聚合(判定用,见 lodBuild)
-  PAD_PX: 18, F1: 'bold 12px "Microsoft YaHei"', F2: '10px Consolas', // 10-23 包络比成员凸包外扩几像素(让开记号与记号上方的血条 / 护盾条);字体:名字 / 构成;字体:名字 / 构成
+  PAD_PX: 18, F1: 'bold 12px "Microsoft YaHei"', F2: '10px Consolas', F3: '10px "Microsoft YaHei"', // F3:离队单艘船下的小编队名 // 10-23 包络比成员凸包外扩几像素(让开记号与记号上方的血条 / 护盾条);字体:名字 / 构成;字体:名字 / 构成
   ANIM_S: 0.25,    // SN8 收拢 / 散开动画的时长(秒,墙钟)
   t: 0,            // 上一次 lodBuild 的墙钟时刻(算 dt 用)
 };
@@ -73,10 +73,18 @@ function lodBuild(dtIn) {   // dtIn:判据用的时钟覆盖(同 camZoomStep);�
   }
   for (const [fl, g] of fleets) {
     const ms = g.ms; if (ms.length < 2) { solo.push(...ms); continue; } // 编队里只剩一艘:当散船
-    let cx = 0, cy = 0; for (const m of ms) { cx += m.pos[0]; cy += m.pos[1]; } cx /= ms.length; cy /= ms.length;
-    /* 2026-10-23 用户:一换成箭头(shipMarkMode,上面已判)就标舰队,不再等编队的屏幕直径缩到某个像素以下 */
+    /* 2026-10-23 用户:一换成箭头(shipMarkMode,上面已判)就标舰队,不再等编队的屏幕直径缩到某个像素以下。
+       同日用户(船拉得很开时包络圈出一大片空地方,选 A):编队里按 GROUP_KM 连成几段,最大那段画包络 + 「编队名 · 整支的构成」;
+       别的段两艘以上画包络 + 只写编队名,离队的单艘不画包络、船下写一个小编队名(替它的舰名) */
+    const nm = (typeof fmName === 'function') ? fmName(g.F) : ('编队' + fl);
+    const fu = ms.map(m => ({ id: 'F' + m.id, wx: m.pos[0], wy: m.pos[1], ship: m }));
+    const pf = prev.pairsF || {}, cf = lodCluster(fu, pf[fl]); (next.pairsF || (next.pairsF = {}))[fl] = cf.pairs;
+    const comps = cf.groups.map(gi => gi.map(i => fu[i].ship)).sort((u, v) => v.length - u.length);
     for (const m of ms) L.noLbl.add(m.id);
-    L.aggs.push({ kind: 'fleet', side: 'blue', pts: ms.map(m => toScreen(m.pos[0], m.pos[1])), wx: cx, wy: cy, ships: ms, fl: fl, name: (typeof fmName === 'function') ? fmName(g.F) : ('编队' + fl) });
+    comps.forEach((cm, k) => {
+      let cx = 0, cy = 0; for (const m of cm) { cx += m.pos[0]; cy += m.pos[1]; } cx /= cm.length; cy /= cm.length;
+      L.aggs.push({ kind: 'fleet', side: 'blue', pts: cm.map(m => toScreen(m.pos[0], m.pos[1])), wx: cx, wy: cy, ships: k === 0 ? ms : cm, fl: fl, name: nm, main: k === 0, solo: cm.length === 1 });
+    });
   }
   const bu = solo.map(s => { const p = toScreen(s.pos[0], s.pos[1]); return { id: 'B' + s.id, x: p[0], y: p[1], wx: s.pos[0], wy: s.pos[1], ship: s }; });
   const cb = lodCluster(bu, prev.pairsB); next.pairsB = cb.pairs;
@@ -107,12 +115,13 @@ function lodBuild(dtIn) {   // dtIn:判据用的时钟覆盖(同 camZoomStep);�
      几块字撞在一起,后排的往上挪一行(画一根细线连回包络)。⚠ 落点与字宽都在【这里】定,拾取(lodAggAt)读同一组数 */
   const lab = [];
   for (const a of L.aggs) {
-    a.hull = lodHull(a.pts);
-    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9; for (const q of a.hull) { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1]; }
-    a.t1 = a.kind === 'fleet' ? a.name : ('组·' + a.ships.length); a.t2 = lodComp(a.ships, a.side === 'red');
-    ctx.font = LOD.F1; const w1 = ctx.measureText(a.t1).width; ctx.font = LOD.F2; const w2 = ctx.measureText(' · ' + a.t2).width;
+    a.hull = a.solo ? null : lodHull(a.pts); // 离队的单艘不画包络
+    const H = a.hull || a.pts; let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9; for (const q of H) { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1]; }
+    a.t1 = a.kind === 'fleet' ? a.name : ('组·' + a.ships.length); a.t2 = (a.kind === 'fleet' && !a.main) ? '' : lodComp(a.ships, a.side === 'red'); // 编队的次要段只写名字
+    a.f1 = (a.solo && !a.main) ? LOD.F3 : LOD.F1; // 离队单艘的小编队名用小字
+    ctx.font = a.f1; const w1 = ctx.measureText(a.t1).width; ctx.font = LOD.F2; const w2 = a.t2 ? ctx.measureText(' · ' + a.t2).width : 0;
     /* 10-23 用户(缩放时「组·3」一直跳):我方的字写在包络上方、敌方写在下方 —— 红蓝两行基本撞不上;同侧真撞了按 lodSoftPush 平滑推开,不再整行跳 */
-    a.dir = a.side === 'blue' ? -1 : 1; a.anc = a.dir < 0 ? y0 - LOD.PAD_PX : y1 + LOD.PAD_PX; // 包络上 / 下沿(引线落点)
+    a.dir = (a.side === 'blue' && !a.solo) ? -1 : 1; a.anc = a.solo ? y1 + 6 : (a.dir < 0 ? y0 - LOD.PAD_PX : y1 + LOD.PAD_PX); // 包络上 / 下沿(引线落点);单艘写在船下面(舰名原来的位置)
     a.w1 = w1; a.lw = w1 + w2; a.x = (x0 + x1) / 2; a.y = a.dir < 0 ? a.anc - 4 : a.anc + 14; a.y0 = a.y; // a.x / a.y = 字的底边中点;y0 = 没被推之前
     for (const b of lab) lodSoftPush(a, b, a.lw, b.lw, 15);
     lab.push(a);
@@ -252,14 +261,15 @@ function drawAggs() { // 2026-10-23 用户选 A:成员外围一圈圆角包络 +
   for (const a of lodNow.aggs) {
     if (a.block) { drawAggBlock(a); continue; }
     const col = a.side === 'blue' ? '#6fb7ff' : '#ff7b7b', sel = a.ships.some(m => selected.indexOf(m.id) >= 0);
-    ctx.save(); lodHullPath(a.hull, LOD.PAD_PX);
-    ctx.globalAlpha = .06; ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha = sel ? .9 : .55; ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.stroke();
+    ctx.save(); ctx.strokeStyle = col; ctx.lineWidth = 1;
+    if (a.hull) { lodHullPath(a.hull, LOD.PAD_PX); ctx.globalAlpha = .06; ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha = sel ? .9 : .55; ctx.stroke(); }
     if (Math.abs(a.y - a.y0) > 6) { ctx.globalAlpha = .45; ctx.beginPath(); ctx.moveTo(a.x, a.anc); ctx.lineTo(a.x, a.dir < 0 ? a.y + 1 : a.y - 12); ctx.stroke(); } // 字被推开了:细线连回包络
     ctx.globalAlpha = 1; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left'; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(5,7,12,.85)';
     const x0 = a.x - a.lw / 2;
     const ol = a.side !== 'blue'; // 10-23 用户:蓝字不要黑底(不描深色边);红字照描
-    ctx.font = LOD.F1; ctx.lineWidth = 3; if (ol) ctx.strokeText(a.t1, x0, a.y); ctx.fillStyle = sel ? '#ffffff' : col; ctx.fillText(a.t1, x0, a.y);
-    ctx.font = LOD.F2; ctx.lineWidth = 2.5; if (ol) ctx.strokeText(' · ' + a.t2, x0 + a.w1, a.y); ctx.globalAlpha = .85; ctx.fillStyle = col; ctx.fillText(' · ' + a.t2, x0 + a.w1, a.y);
+    if (a.f1 === LOD.F3) ctx.globalAlpha = .8;
+    ctx.font = a.f1; ctx.lineWidth = 3; if (ol) ctx.strokeText(a.t1, x0, a.y); ctx.fillStyle = sel ? '#ffffff' : col; ctx.fillText(a.t1, x0, a.y);
+    if (a.t2) { ctx.font = LOD.F2; ctx.lineWidth = 2.5; if (ol) ctx.strokeText(' · ' + a.t2, x0 + a.w1, a.y); ctx.globalAlpha = .85; ctx.fillStyle = col; ctx.fillText(' · ' + a.t2, x0 + a.w1, a.y); }
     ctx.restore();
   }
 }
