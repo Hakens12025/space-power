@@ -8,7 +8,8 @@
      包络最上端的上方一行「名字 · 舰种构成」(同日用户:原来写在阵型正中压着船;试过顶括号,竖着的一字长蛇上只剩一小段,改包络):
      (舰队层及更远 vtCur >= 2 改画舰队块,见 lodBlock)
      舰队    船一换成箭头(代表显示)我方每支编队(≥ 2 艘)都标:编队名(formation/42 fmName)+ 舰种构成(10-23 起不再看屏幕直径)
-     组      我方没编队的船、或敌方已定位的接触,屏幕间距小于 GROUP_PX 连成一串 ⇒ 中间写「组·N」+ 构成
+     组      我方没编队的船、或敌方已定位的接触,彼此相距小于 GROUP_KM(真实距离,与缩放无关)连成一串 ⇒ 写「组·N」+ 构成
+             (10-23 用户「敌方没有遵守」:原来按屏幕像素,要拉得比编队远才连上;改真实距离后一换箭头就和编队一起标)
              (编队之间不再合并;敌方不知道是不是一支舰队,默认就叫组)
    为什么不绑在三级星图的层上:船画成什么样本来就该看它在屏幕上占几个像素 —— 同一层里,
    队形散开的时候该展开、挤在一起的时候该塌。绑层会让"我明明拉近了却还是个方框"。
@@ -26,7 +27,8 @@
 const LOD = {
   HIT_KM: 400*CFG.scale,     // 标准目标(size=1)的命中判定半径 km,与 COV.MAC 同源 // 2026-09-26 x1/5(单局地图):原 2000,跟 MAC_HIT_R
   FLEET_PX: 60,    // 舰队的屏幕直径小于它 ⇒ 塌成一个舰队框
-  GROUP_PX: 48,    // 两个框的屏幕间距小于它 ⇒ 聚成一组
+  GROUP_PX: 48,    // (10-23 起没人读,分组改按 GROUP_KM)
+  GROUP_KM: 40000 / 0.6 * CFG.scale, // 10-23 两艘(没编队的我方船 / 敌方已定位接触)相距小于它就连进一组:约一个阵型的直径(写的是 scale 0.6 时的实际值 4 万 km)
   HYS: 0.15,       // 迟滞
   off: false,      // 显式关掉聚合(判定用,见 lodBuild)
   PAD_PX: 18, F1: 'bold 12px "Microsoft YaHei"', F2: '10px Consolas', // 10-23 包络比成员凸包外扩几像素(让开记号与记号上方的血条 / 护盾条);字体:名字 / 构成;字体:名字 / 构成
@@ -41,15 +43,15 @@ function lodCollapsed(extPx, prev) {
   const lo = LOD.FLEET_PX * (1 - LOD.HYS), hi = LOD.FLEET_PX * (1 + LOD.HYS);
   return prev ? extPx < hi : extPx < lo;
 }
-/* 按屏幕距离把 items 并查集聚类。pairs 记住"这一对上一帧是连着的",给迟滞用 */
+/* 按真实距离(wx / wy,10-23 起;原来按屏幕距离)把 items 并查集聚类。pairs 记住"这一对上一帧是连着的",给迟滞用 */
 function lodCluster(items, prevPairs) {
   const n = items.length, par = []; for (let i = 0; i < n; i++) par[i] = i;
   const find = i => { while (par[i] !== i) { par[i] = par[par[i]]; i = par[i]; } return i; };
   const pairs = new Set();
   for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
     const key = items[i].id < items[j].id ? items[i].id + '|' + items[j].id : items[j].id + '|' + items[i].id;
-    const th = LOD.GROUP_PX * ((prevPairs && prevPairs.has(key)) ? 1 + LOD.HYS : 1 - LOD.HYS);
-    if (Math.hypot(items[i].x - items[j].x, items[i].y - items[j].y) < th) { pairs.add(key); par[find(i)] = find(j); }
+    const th = LOD.GROUP_KM * ((prevPairs && prevPairs.has(key)) ? 1 + LOD.HYS : 1 - LOD.HYS); // 10-23 按真实距离(wx / wy),与缩放无关
+    if (Math.hypot(items[i].wx - items[j].wx, items[i].wy - items[j].wy) < th) { pairs.add(key); par[find(i)] = find(j); }
   }
   const m = new Map(); for (let i = 0; i < n; i++) { const r = find(i); if (!m.has(r)) m.set(r, []); m.get(r).push(i); }
   return { groups: [...m.values()], pairs: pairs };
