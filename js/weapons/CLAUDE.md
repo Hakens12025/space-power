@@ -44,7 +44,7 @@
 - 新增顶层 const 前先全库 grep 同名(跨 script 重名会让整个文件语法报废)。weapons 在 formation 之后加载,载入期不许读 formation 的顶层量(改成惰性函数)。
 
 ## 火控序列
-- 序列是"许可"不是"命令":`fcGate` 只做减法,放不开 57 关着的东西。门:舰级开关(`autoEngage`+`roe`、武器开关 51 `wpnOn` = 这一种允许(底栏行尾绿 `s[kind+'On']`)且这一类的总开关 `s[类+'Gate']`,类表 `WPN_CAT`;2026-10-11 多武器,底栏一格 = 一类;强制开火(序列「强制」/ 中键选定 / 中键点空地,58 `fcForce` / `fTgt`)只看绿 `wpnOk`,副炮不看把握门、突击弹不看 `SSM_R`,中键点空地四种都打;手动点条不看开关)→ 定得出位置(`contactFix`)。
+- 序列是"许可"不是"命令":`fcGate` 只做减法,放不开 57 关着的东西。门:舰级开关(`autoEngage`+`roe`、武器开关 51 `wpnOn` = 这一种允许(底栏行尾绿 `s[kind+'On']`)且这一类的总开关 `s[类+'Gate']`,类表 `WPN_CAT`;2026-10-11 多武器,底栏一格 = 一类;强制开火(序列「强制」/ 中键选定 / 中键点空地,58 `fcForce` / `fTgt`)许可门与自动相同(`wpnOn`:总开关 + 绿,四种武器一样;10-23 用户),只免把握 / 射程门:主炮 / 副炮不看把握门、导弹不看射程、突击弹不看 `SSM_R`,中键点空地开着的都打;手动点条不看开关)→ 定得出位置(`contactFix`)。
 - 轮盘的 `radItems`(command/74)与 `radSolve`(render/89)必须与 `fcGate` 逐条同口径、同措辞。
 - `fcRuns(s,q)` 是"这条序列参不参与解算"的唯一真相,`fcSolve` / `fcActive` / `stepFireControl` 共用。
 - 逐武器各一个指针;`seq` 模式每次从 0 扫,`rr` 从 `rot` 扫并把 `rot` 钉在真正选中的那一项。按 pick 过滤时 `continue` 跳过,不许筛数组(`fcFrom` 存的是下标)。

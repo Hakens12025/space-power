@@ -73,8 +73,8 @@ CLS_LOADOUT.CV=['msl_heavy','icp_self','gun_self','chf_self'];
 CLS_LOADOUT.DD=['mac_light','sec_dd','msl_light','ssm_dd','icp_dd4','gun_dd','chf_core']; // 2026-10-11 加副炮(5 门)、突击弹(2 单元 / 30 组);拦截弹 400 // 2026-10-10 用户:舰种分化 —— 近防圈取 FF↔CA 正中(icp_dd/gun_dd),雷达中间档在 20-signature 的 SENS.CLS.DD;机动/舰体/导弹/数据链仍照护卫舰,想再分随时填真值
 CLS_LOADOUT.CL=['sec_cl','msl_cl','icp_cl','gun_core','chf_core','lure_x2']; // 2026-10-11 加诱饵;加副炮 2 门、拦截弹 300 // 2026-10-07 用户:巡游舰没有轴炮、导弹一次两组
 const WPN_CAT={mac:'mac',msl:'msl',sec:'mac',ssm:'msl'}; // 2026-10-11 多武器:每种武器(kind)属于底栏哪一格(类)。一类的总开关 s[类+'Gate'] 与这一种的分开关 s[kind+'On'] 两层「与」
-function wpnOk(s,k){return s[k+'On']!==false;} // 2026-10-11 用户:这一种许不许开火(底栏行尾 绿 = 允许 / 红 = 禁止)。强制开火(序列「强制」/ 中键选定 / 中键点空地)只看它;手动点条照样能打
-function wpnOn(s,k){const c=WPN_CAT[k];return s[k+'On']!==false&&!(c&&s[c+'Gate']===false);} // 这一种武器许不许自动开火(不含火控开没开)= 绿 + 这一类的大勾;57 的自动开火门、74 / 89 的扇区都问它
+function wpnOk(s,k){return s[k+'On']!==false;} // 2026-10-11 用户:这一种许不许开火(底栏行尾 绿 = 允许 / 红 = 禁止)。10-23 起开火门一律走下面 wpnOn(强制也要总开关),引擎里不再读它;手动点条照样能打
+function wpnOn(s,k){const c=WPN_CAT[k];return s[k+'On']!==false&&!(c&&s[c+'Gate']===false);} // 这一种武器许不许开火(不含火控开没开)= 绿 + 这一类的大勾;57 四种武器的自动与强制开火(2026-10-23 用户:强制也守它)、74 / 89 的扇区都问它
 function resolveLoadout(cls,tier){ // 配装 → 扁平武器字段(逐字段过 applyTier/tierMul,与 shipStats 同一套乘数机制)
   const src={};const weapons=[],wp={};
   for(const id of (CLS_LOADOUT[cls]||CLS_LOADOUT.FF)){
