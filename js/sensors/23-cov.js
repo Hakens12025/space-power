@@ -89,6 +89,8 @@ for(const k of ['optColdMin','radarMin','heardMin','optCross','lisCross','radarL
 LAD.RADAR_K=0.85; // 2026-10-08 用户:雷达的性能 x0.85 —— 我方主动雷达的发现、火控、认出、照射椭圆转向点、浮标雷达;同日:被静听的数值也随之下降 —— 雷达辐射弱了:被听见的距离(听见、巡游舰静听)乘 RADAR_K;耳朵没变,刚听到时的方位误差保持不变,所以静听交叉定位与听出型号乘 √RADAR_K(方位误差 ∝ 听见距离 / 交叉定位距离²)
 for(const k of ['radarMin','radarLook','radarIdent','actTurn','buoyAct','heardMin','clLis'])LAD[k]*=LAD.RADAR_K;
 for(const k of ['lisCross','lisIdent'])LAD[k]*=Math.sqrt(LAD.RADAR_K);
+LAD.DET_K=(()=>{const m=typeof location!=='undefined'&&location.search.match(/[?&]detk=([0-9.]+)/),v=m?+m[1]:1;return v>=0.25&&v<=10?v:1;})(); // 2026-10-22 用户:试「只拉开发现」(发现距离 ≈ 导弹射程,看见就够得着)—— 发现域再乘它:红外冷发现、雷达发现、被听见、巡游舰静听、浮标雷达;定位 / 火控 / 认出、武器、可见光圈不乘(远处只有粗方位,开火门仍是定位)。地址 ?detk=,缺省 1 = 不变。⚠ 联机两边必须同值(lockstep),现在没同步
+for(const k of ['optColdMin','radarMin','heardMin','clLis','buoyAct'])LAD[k]*=LAD.DET_K;
 
 /* 1 光秒 = 这么多公里。这个尺度上真正有意义的单位是光秒(主炮射程 15 万 = 0.5 光秒;2026-09-26 x1/5 后是 3 万 = 0.1 光秒),
    所以它不只给 COV.AMAX 用 —— 舰队层与战区层的地面刻度也读它。 */
@@ -359,7 +361,7 @@ function ladApply() {
   /* 发现域:三条律各一个锚,直接除掉参考对自己的缩放因子 */
   SENS.IR_DET = km(LAD.optColdMin) / Math.sqrt(R.size);
   SENS.ACT_DET = km(LAD.radarMin) / Math.pow(R.emit * R.recv * refl, 0.25);
-  SENS.JAM_REF = SENS.ACT_DET * 40000 / 150000; // 2026-10-09 干扰烧穿基准(烧穿距离 = JAM_REF / √ecmPower):保持 09-21 设计时与照射量程的比例(40000 : 150000,当时 DD 7.3 万 / CA 5.66 万),跟着距离阶梯缩放;现值护卫 / 巡游约 11.4 万、巡洋约 8.8 万
+  SENS.JAM_REF = SENS.ACT_DET * 40000 / 150000 / LAD.DET_K; // 2026-10-22 除掉 DET_K:烧穿管的是回波精度,不是发现,只拉开发现时它不动。 2026-10-09 干扰烧穿基准(烧穿距离 = JAM_REF / √ecmPower):保持 09-21 设计时与照射量程的比例(40000 : 150000,当时 DD 7.3 万 / CA 5.66 万),跟着距离阶梯缩放;现值护卫 / 巡游约 11.4 万、巡洋约 8.8 万
   SENS.LIS_DET = km(LAD.heardMin) / Math.sqrt(R.emit * SENS.EMIT_P.paint * R.recv);
   /* 定位域:σ⊥ = d^2*TH0/R(被动)、d^3*TH0/R^2(照射)。令它等于门,解出尺度 R */
   const Ro = LAD.optCross * LAD.optCross * COV.TH0.opt / mslG;
@@ -371,7 +373,7 @@ function ladApply() {
   /* 照射尺度:要让【稳态融合】之后的火控距离正好等于 LAD.radarLook。对数空间二分 */
   let Ra;
   {
-    let lo = 1e3, hi = 1e8; const od = km(LAD.optColdMin), ad = km(LAD.radarMin), Lsz = R.size * COV.L_REF;
+    let lo = 1e3, hi = 1e8; const od = km(LAD.optColdMin) / LAD.DET_K, ad = km(LAD.radarMin) / LAD.DET_K, Lsz = R.size * COV.L_REF; // 2026-10-22 除掉 DET_K:火控标定按 DET_K=1 的几何做,拉开发现时照射尺度逐位不变
     for (let i = 0; i < 60; i++) { const m = Math.sqrt(lo * hi); if (ladActGate(macG, { Ra: m, Ro: Ro, od: od, ad: ad, Lsz: Lsz }) < LAD.radarLook) lo = m; else hi = m; }
     Ra = Math.sqrt(lo * hi);
   }
