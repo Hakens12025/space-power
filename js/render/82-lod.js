@@ -4,7 +4,8 @@
    设计在 demos/sensors/态势感知V3.html;这里是移植。
 
    ---- 按【屏幕像素】自动切,只在代表显示里切(2026-10-11 起真显示每艘都画,见 lodBuild 开头) ----
-     2026-10-23 用户:不再把船收成一个框 —— 船照画(阵型看得见),只是收进来的船不写舰名,在中间写一块标签:
+     2026-10-23 用户:不再把船收成一个框 —— 船照画(阵型看得见),收进来的船不写舰名;阵型上方一道顶括号(宽 = 阵型的屏幕宽),
+     括号上面一行「名字 · 舰种构成」(同日用户选 A:原来写在阵型正中压着船,红蓝两块还挤在一起):
      舰队    我方一支编队的屏幕直径小于 FLEET_PX ⇒ 中间写编队名(formation/42 fmName),下面写舰种构成
      组      我方没编队的船、或敌方已定位的接触,屏幕间距小于 GROUP_PX 连成一串 ⇒ 中间写「组·N」+ 构成
              (编队之间不再合并;敌方不知道是不是一支舰队,默认就叫组)
@@ -27,6 +28,7 @@ const LOD = {
   GROUP_PX: 48,    // 两个框的屏幕间距小于它 ⇒ 聚成一组
   HYS: 0.15,       // 迟滞
   off: false,      // 显式关掉聚合(判定用,见 lodBuild)
+  BRK_PX: 14, F1: 'bold 12px "Microsoft YaHei"', F2: '10px Consolas', // 10-23 顶括号在成员包围盒上沿往上几像素(让开记号与记号上方的血条 / 护盾条);字体:名字 / 构成
   ANIM_S: 0.25,    // SN8 收拢 / 散开动画的时长(秒,墙钟)
   t: 0,            // 上一次 lodBuild 的墙钟时刻(算 dt 用)
 };
@@ -79,9 +81,8 @@ function lodBuild(dtIn) {   // dtIn:判据用的时钟覆盖(同 camZoomStep);�
     const col = lodCollapsed(2 * r * cam.zoom, prev.fleet[fl]);
     next.fleet[fl] = col;
     if (!col) continue;
-    const p = toScreen(cx, cy);
     for (const m of ms) L.noLbl.add(m.id);
-    L.aggs.push({ kind: 'fleet', side: 'blue', x: p[0], y: p[1], wx: cx, wy: cy, ships: ms, fl: fl, name: (typeof fmName === 'function') ? fmName(g.F) : ('编队' + fl) });
+    L.aggs.push({ kind: 'fleet', side: 'blue', pts: ms.map(m => toScreen(m.pos[0], m.pos[1])), wx: cx, wy: cy, ships: ms, fl: fl, name: (typeof fmName === 'function') ? fmName(g.F) : ('编队' + fl) });
   }
   const bu = solo.map(s => { const p = toScreen(s.pos[0], s.pos[1]); return { id: 'B' + s.id, x: p[0], y: p[1], wx: s.pos[0], wy: s.pos[1], ship: s }; });
   const cb = lodCluster(bu, prev.pairsB); next.pairsB = cb.pairs;
@@ -90,7 +91,7 @@ function lodBuild(dtIn) {   // dtIn:判据用的时钟覆盖(同 camZoomStep);�
     let x = 0, y = 0, wx = 0, wy = 0; const ms = gi.map(i => bu[i].ship);
     for (const i of gi) { x += bu[i].x; y += bu[i].y; wx += bu[i].wx; wy += bu[i].wy; }
     for (const m of ms) L.noLbl.add(m.id);
-    L.aggs.push({ kind: 'group', side: 'blue', x: x / gi.length, y: y / gi.length, wx: wx / gi.length, wy: wy / gi.length, ships: ms });
+    L.aggs.push({ kind: 'group', side: 'blue', pts: gi.map(i => [bu[i].x, bu[i].y]), wx: wx / gi.length, wy: wy / gi.length, ships: ms });
   }
   /* -- 红方:已定位的接触 → 组。未定位的不进来 -- */
   const ru = [];
@@ -106,17 +107,19 @@ function lodBuild(dtIn) {   // dtIn:判据用的时钟覆盖(同 camZoomStep);�
     let x = 0, y = 0, wx = 0, wy = 0; const ms = gi.map(i => ru[i].ship);
     for (const i of gi) { x += ru[i].x; y += ru[i].y; wx += ru[i].wx; wy += ru[i].wy; }
     for (const m of ms) L.noLbl.add(m.id);
-    L.aggs.push({ kind: 'rcluster', side: 'red', x: x / gi.length, y: y / gi.length, wx: wx / gi.length, wy: wy / gi.length, ships: ms });
+    L.aggs.push({ kind: 'rcluster', side: 'red', pts: gi.map(i => [ru[i].x, ru[i].y]), wx: wx / gi.length, wy: wy / gi.length, ships: ms });
   }
-  /* 敌我标签叠在一起时,把红方那块挪开并留一根引线指回原位。
-     ⚠ 落点在【这里】定,不在画的时候定 —— 拾取读的是同一个 a.x/a.y */
+  /* 排版:括号 = 成员屏幕包围盒上沿往上 BRK_PX,宽 = 包围盒宽(两头各多 4 px);字在括号上面居中。
+     几块字撞在一起,后排的往上挪一行(画一根细线连回自己的括号)。⚠ 落点与字宽都在【这里】定,拾取(lodAggAt)读同一组数 */
+  const lab = [];
   for (const a of L.aggs) {
-    a.ax = a.x; a.ay = a.y;
-    if (a.side !== 'red') continue;
-    for (const b of L.aggs) {
-      if (b.side !== 'blue' || Math.hypot(a.x - b.x, a.y - b.y) >= 46) continue;
-      a.x = b.x + 40; a.y = b.y - 30; break;
-    }
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9; for (const q of a.pts) { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; }
+    a.bx0 = x0 - 4; a.bx1 = x1 + 4; a.by = y0 - LOD.BRK_PX;
+    a.t1 = a.kind === 'fleet' ? a.name : ('组·' + a.ships.length); a.t2 = lodComp(a.ships, a.side === 'red');
+    ctx.font = LOD.F1; const w1 = ctx.measureText(a.t1).width; ctx.font = LOD.F2; const w2 = ctx.measureText(' · ' + a.t2).width;
+    a.w1 = w1; a.lw = w1 + w2; a.x = (a.bx0 + a.bx1) / 2; a.y = a.by - 4; // a.x / a.y = 字的底边中点
+    for (let k = 0; k < 6; k++) { const hit = lab.some(b => Math.abs(b.x - a.x) < (b.lw + a.lw) / 2 + 6 && Math.abs(b.y - a.y) < 15); if (!hit) break; a.y -= 15; }
+    lab.push(a);
   }
   for (const s of ships) s._lodE = undefined; // 10-23 船不再收拢:lodDrawShip 照原样画
   for (const a of L.aggs) a.alpha = 1;
@@ -146,30 +149,21 @@ function lodComp(list, red) {
   const a = Object.keys(m).sort().map(k => k + '×' + m[k]); if (unk) a.push('?×' + unk);
   return a.join(' ');
 }
-/* 点在哪块标签上(拾取用)。读的是 lodBuild 定好的 a.x/a.y 与 drawAggs 量好的字宽 a.hw,与画的是同一个数 */
+/* 点在哪块标签上(拾取用)。读的是 lodBuild 排好的字的位置与宽度,与画的是同一组数 */
 function lodAggAt(sx, sy) {
-  for (const a of lodNow.aggs) {
-    const hw = a.hw || 20;
-    if (Math.abs(sx - a.x) <= hw && sy >= a.y - 9 && sy <= a.y + 21) return a;
-  }
+  for (const a of lodNow.aggs) if (Math.abs(sx - a.x) <= a.lw / 2 + 3 && sy >= a.y - 15 && sy <= a.by + 2) return a;
   return null;
 }
-function drawAggs() { // 2026-10-23 用户:不画框、船照画;中间写名字(舰队 = 编队名,组 = 「组·N」),下面一行舰种构成
+function drawAggs() { // 2026-10-23 用户选 A:顶括号 + 一行「名字 · 构成」,不压船
   for (const a of lodNow.aggs) {
-    const col = a.side === 'blue' ? '#6fb7ff' : '#ff7b7b';
-    const sel = a.ships.some(m => selected.indexOf(m.id) >= 0);
-    if (a.ax !== a.x || a.ay !== a.y) {   // 被挪开过:留一根引线指回原位
-      ctx.save(); ctx.strokeStyle = col; ctx.globalAlpha = .5; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(a.ax, a.ay); ctx.lineTo(a.x, a.y); ctx.stroke(); ctx.restore();
-    }
-    const t1 = a.kind === 'fleet' ? a.name : ('组·' + a.ships.length), t2 = lodComp(a.ships, a.side === 'red');
-    ctx.save(); ctx.textAlign = 'center'; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(5,7,12,.85)';
-    ctx.font = 'bold 12px "Microsoft YaHei"'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3;
-    ctx.strokeText(t1, a.x, a.y); ctx.fillStyle = sel ? '#ffffff' : col; ctx.fillText(t1, a.x, a.y);
-    const w1 = ctx.measureText(t1).width;
-    ctx.font = '10px Consolas'; ctx.textBaseline = 'top'; ctx.lineWidth = 2.5;
-    ctx.strokeText(t2, a.x, a.y + 9); ctx.globalAlpha = .9; ctx.fillStyle = col; ctx.fillText(t2, a.x, a.y + 9);
-    a.hw = Math.max(w1, ctx.measureText(t2).width) / 2 + 3;
+    const col = a.side === 'blue' ? '#6fb7ff' : '#ff7b7b', sel = a.ships.some(m => selected.indexOf(m.id) >= 0);
+    ctx.save(); ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.globalAlpha = .75;
+    ctx.beginPath(); ctx.moveTo(a.bx0, a.by + 3); ctx.lineTo(a.bx0, a.by); ctx.lineTo(a.bx1, a.by); ctx.lineTo(a.bx1, a.by + 3); ctx.stroke(); // 顶括号:两头往下 3 px
+    if (a.y < a.by - 5) { ctx.globalAlpha = .45; ctx.beginPath(); ctx.moveTo(a.x, a.by); ctx.lineTo(a.x, a.y + 1); ctx.stroke(); } // 字被挤上去了:细线连回括号
+    ctx.globalAlpha = 1; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left'; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(5,7,12,.85)';
+    const x0 = a.x - a.lw / 2;
+    ctx.font = LOD.F1; ctx.lineWidth = 3; ctx.strokeText(a.t1, x0, a.y); ctx.fillStyle = sel ? '#ffffff' : col; ctx.fillText(a.t1, x0, a.y);
+    ctx.font = LOD.F2; ctx.lineWidth = 2.5; ctx.strokeText(' · ' + a.t2, x0 + a.w1, a.y); ctx.globalAlpha = .85; ctx.fillStyle = col; ctx.fillText(' · ' + a.t2, x0 + a.w1, a.y);
     ctx.restore();
   }
 }
