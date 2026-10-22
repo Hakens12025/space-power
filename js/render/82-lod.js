@@ -6,7 +6,8 @@
    ---- 按【屏幕像素】自动切,只在代表显示里切(2026-10-11 起真显示每艘都画,见 lodBuild 开头) ----
      2026-10-23 用户:不再把船收成一个框 —— 船照画(阵型看得见),收进来的船不写舰名;成员外围一圈圆角包络(屏幕凸包外扩 PAD_PX),
      包络最上端的上方一行「名字 · 舰种构成」(同日用户:原来写在阵型正中压着船;试过顶括号,竖着的一字长蛇上只剩一小段,改包络):
-     舰队    我方一支编队的屏幕直径小于 FLEET_PX ⇒ 中间写编队名(formation/42 fmName),下面写舰种构成
+     (舰队层及更远 vtCur >= 2 改画舰队块,见 lodBlock)
+     舰队    船一换成箭头(代表显示)我方每支编队(≥ 2 艘)都标:编队名(formation/42 fmName)+ 舰种构成(10-23 起不再看屏幕直径)
      组      我方没编队的船、或敌方已定位的接触,屏幕间距小于 GROUP_PX 连成一串 ⇒ 中间写「组·N」+ 构成
              (编队之间不再合并;敌方不知道是不是一支舰队,默认就叫组)
    为什么不绑在三级星图的层上:船画成什么样本来就该看它在屏幕上占几个像素 —— 同一层里,
@@ -28,7 +29,7 @@ const LOD = {
   GROUP_PX: 48,    // 两个框的屏幕间距小于它 ⇒ 聚成一组
   HYS: 0.15,       // 迟滞
   off: false,      // 显式关掉聚合(判定用,见 lodBuild)
-  PAD_PX: 12, F1: 'bold 12px "Microsoft YaHei"', F2: '10px Consolas', // 10-23 包络比成员凸包外扩几像素(让开记号与记号上方的血条 / 护盾条);字体:名字 / 构成;字体:名字 / 构成
+  PAD_PX: 18, F1: 'bold 12px "Microsoft YaHei"', F2: '10px Consolas', // 10-23 包络比成员凸包外扩几像素(让开记号与记号上方的血条 / 护盾条);字体:名字 / 构成;字体:名字 / 构成
   ANIM_S: 0.25,    // SN8 收拢 / 散开动画的时长(秒,墙钟)
   t: 0,            // 上一次 lodBuild 的墙钟时刻(算 dt 用)
 };
@@ -63,6 +64,7 @@ function lodBuild(dtIn) {   // dtIn:判据用的时钟覆盖(同 camZoomStep);�
      聚合只在代表显示里做(拉过 shipMarkMode 的切换点、船换成记号的那一档),真显示每艘都画(我方编队框同一条)。
      原因:FLEET_PX / GROUP_PX 是舰标还大的时候定的;现在战术层舰标只有 7~11 px,隔 48 px 早就不叠了,按像素聚等于在真显示里凭空多出第三档 */
   if (LOD.off || adminMode || !shipMarkMode()) { for (const s of ships) s._lodE = undefined; lodPrev = next; lodNow = L; return; }
+  if (vtCur >= 2) { lodBlock(L, prev, next, dtIn); L.live = true; lodPrev = next; lodNow = L; return; } // 舰队层及更远:舰队块(下面是战术层箭头档的包络 + 字)
   /* -- 蓝方:编队 → 舰队标签(按引擎的编队归属);没编队的船另外按屏幕距离连成组 -- */
   const fleets = new Map(), solo = [];
   for (const s of ships) {
@@ -77,10 +79,7 @@ function lodBuild(dtIn) {   // dtIn:判据用的时钟覆盖(同 camZoomStep);�
   for (const [fl, g] of fleets) {
     const ms = g.ms; if (ms.length < 2) { solo.push(...ms); continue; } // 编队里只剩一艘:当散船
     let cx = 0, cy = 0; for (const m of ms) { cx += m.pos[0]; cy += m.pos[1]; } cx /= ms.length; cy /= ms.length;
-    let r = 0; for (const m of ms) { const d = Math.hypot(m.pos[0] - cx, m.pos[1] - cy); if (d > r) r = d; }
-    const col = lodCollapsed(2 * r * cam.zoom, prev.fleet[fl]);
-    next.fleet[fl] = col;
-    if (!col) continue;
+    /* 2026-10-23 用户:一换成箭头(shipMarkMode,上面已判)就标舰队,不再等屏幕直径缩到 FLEET_PX 以下 */
     for (const m of ms) L.noLbl.add(m.id);
     L.aggs.push({ kind: 'fleet', side: 'blue', pts: ms.map(m => toScreen(m.pos[0], m.pos[1])), wx: cx, wy: cy, ships: ms, fl: fl, name: (typeof fmName === 'function') ? fmName(g.F) : ('编队' + fl) });
   }
@@ -122,7 +121,7 @@ function lodBuild(dtIn) {   // dtIn:判据用的时钟覆盖(同 camZoomStep);�
     for (let k = 0; k < 6; k++) { const hit = lab.some(b => Math.abs(b.x - a.x) < (b.lw + a.lw) / 2 + 6 && Math.abs(b.y - a.y) < 15); if (!hit) break; a.y -= 15; }
     lab.push(a);
   }
-  for (const s of ships) s._lodE = undefined; // 10-23 船不再收拢:lodDrawShip 照原样画
+  for (const s of ships) s._lodE = undefined; LOD.t = nowMs(); // 箭头档船不收拢:lodDrawShip 照原样画(块档回来时从 0 起播)
   for (const a of L.aggs) a.alpha = 1;
   L.live = true;
   lodPrev = next; lodNow = L;
@@ -150,6 +149,78 @@ function lodComp(list, red) {
   const a = Object.keys(m).sort().map(k => k + '×' + m[k]); if (unk) a.push('?×' + unk);
   return a.join(' ');
 }
+/* 2026-10-23 用户:舰队层(及更远,vtCur >= 2)绑定显示舰队块 —— 这一档照 10-23 前的画法:编队收成一个框(框里编队名、下面构成),
+   框挨得近再聚成「组·N队」,敌方已定位接触挤在一起收成菱形「群·N」;船收进框、带 0.25 秒收拢 / 散开动画(_lodE)。战术层的箭头档走 lodBuild 里的包络 + 字 */
+function lodBlock(L, prev, next, dtIn) {
+  /* -- 蓝方:每支编队(≥ 2 艘)一个块,编队之间不合并;没编队的船按屏幕距离连成「组」块(同箭头档的规矩) -- */
+  const fleets = new Map(), solo = [];
+  for (const s of ships) {
+    if (s.side !== VIEW || s.dead) continue; // 本视角的自己(VIEW;下面 blue / red 标签表角色:自己 / 对手)
+    const F0 = (typeof fmOf === 'function') ? fmOf(s) : null; // 分组键用编队的【id】(对象当属性名会全撞在 "[object Object]" 上)
+    if (!F0) { solo.push(s); continue; }
+    const k = String(F0.id); if (!fleets.has(k)) fleets.set(k, { F: F0, ms: [] }); fleets.get(k).ms.push(s);
+  }
+  for (const [fl, g] of fleets) {
+    const ms = g.ms; if (ms.length < 2) { solo.push(...ms); continue; }
+    let cx = 0, cy = 0; for (const m of ms) { cx += m.pos[0]; cy += m.pos[1]; } cx /= ms.length; cy /= ms.length;
+    const p = toScreen(cx, cy); for (const m of ms) L.hideBlue.add(m.id);
+    L.aggs.push({ kind: 'fleet', side: 'blue', x: p[0], y: p[1], wx: cx, wy: cy, ships: ms, fl: fl, name: (typeof fmName === 'function') ? fmName(g.F) : null });
+  }
+  const bu = solo.map(s => { const p = toScreen(s.pos[0], s.pos[1]); return { id: 'B' + s.id, x: p[0], y: p[1], wx: s.pos[0], wy: s.pos[1], ship: s }; });
+  const cb = lodCluster(bu, prev.pairsB); next.pairsB = cb.pairs;
+  for (const gi of cb.groups) {
+    if (gi.length < 2) continue;
+    let x = 0, y = 0, wx = 0, wy = 0; const ms = gi.map(i => bu[i].ship);
+    for (const i of gi) { x += bu[i].x; y += bu[i].y; wx += bu[i].wx; wy += bu[i].wy; }
+    for (const m of ms) L.hideBlue.add(m.id);
+    L.aggs.push({ kind: 'group', side: 'blue', x: x / gi.length, y: y / gi.length, wx: wx / gi.length, wy: wy / gi.length, ships: ms });
+  }
+  /* -- 红方:已定位的接触挤在一起 → 菱形「组」块。未定位的不进来 -- */
+  const ru = [];
+  trkEach(VIEW, (tk, st) => {
+    if (trkGone(tk) || st !== 'live' || !trkFoe(tk)) return; // TK4c:已确认的石头不进;SN6f:只聚实况接触
+    const s = trkSrc(tk), cp = trkPos(tk); if (!cp) return;
+    const p = toScreen(cp[0], cp[1]); ru.push({ id: 'R' + s.id, x: p[0], y: p[1], wx: cp[0], wy: cp[1], ship: s });
+  });
+  const cr = lodCluster(ru, prev.pairsR); next.pairsR = cr.pairs;
+  for (const gi of cr.groups) {
+    if (gi.length < 2) continue;
+    let x = 0, y = 0, wx = 0, wy = 0; const ms = gi.map(i => ru[i].ship);
+    for (const i of gi) { x += ru[i].x; y += ru[i].y; wx += ru[i].wx; wy += ru[i].wy; }
+    for (const m of ms) L.hideRed.add(m.id);
+    L.aggs.push({ kind: 'rcluster', side: 'red', x: x / gi.length, y: y / gi.length, wx: wx / gi.length, wy: wy / gi.length, ships: ms });
+  }
+  /* 块叠在一起时后排的往下错开一格,留一根引线指回原位(块 + 下面那行构成约 46 x 34 px)。
+     ⚠ 落点在【这里】定,不在画的时候定 —— 拾取读的是同一个 a.x/a.y */
+  const put = [];
+  for (const a of L.aggs) {
+    a.ax = a.x; a.ay = a.y;
+    for (let k = 0; k < 8 && put.some(b => Math.abs(b.x - a.x) < 46 && Math.abs(b.y - a.y) < 34); k++) a.y += 34;
+    put.push(a);
+  }
+  /* ---- SN8 收拢 / 散开动画 ----
+     聚合的【结论】(上面那几张表:谁被收进哪个框)照旧是即时的 —— 拾取、判据、迟滞都读它,不受动画影响。
+     动画只管"画成什么样":每艘船记一个收拢度 _lodE(0 = 在自己的位置上,1 = 完全收进框里),每帧朝结论走一步。
+       收拢  船的图标滑向框的位置并淡出,框同步淡入
+       散开  框当场消失,船从框原来的位置滑回自己的位置并淡入(_lodW 记着它上一次归属的框的【世界坐标】,镜头动了也不飘)
+     ⚠ 第一次见到的船直接落到结论上(不播动画):开局、换局、判据里现造的船都不该先"收拢一次"。
+     ⚠ 走墙钟:它是界面不是模拟,暂停时缩放地图照样要播。 */
+  const now = nowMs();
+  const dt = isFinite(dtIn) ? Math.max(0, dtIn) : Math.max(0, Math.min(0.1, (now - (LOD.t || now)) / 1000));
+  LOD.t = now;
+  const inAgg = new Map();
+  for (const a of L.aggs) for (const m of a.ships) inAgg.set(m, a);
+  const stepE = dt / LOD.ANIM_S;
+  for (const s of ships) {
+    const a = inAgg.get(s), tgt = a ? 1 : 0;
+    if (a) s._lodW = [a.wx, a.wy];
+    if (s._lodE === undefined || viewDead(s)) s._lodE = tgt; // LL6 沉没按我方看见的(render/83 viewDead)
+    else if (s._lodE < tgt) s._lodE = Math.min(tgt, s._lodE + stepE);
+    else if (s._lodE > tgt) s._lodE = Math.max(tgt, s._lodE - stepE);
+  }
+  for (const a of L.aggs) { let e = 0; for (const m of a.ships) e = Math.max(e, m._lodE || 0); a.alpha = e * e * (3 - 2 * e); }
+  for (const a of L.aggs) a.block = true;
+}
 /* 屏幕点的凸包(Andrew 单调链;共线的只留两头,两点就是一段)。顺序按坐标系里叉积为正 —— lodHullPath 的外法线与弧向都按这个约定 */
 function lodHull(P) {
   const q = P.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]); if (q.length < 3) return q;
@@ -168,19 +239,47 @@ function lodHullPath(H, R) {
 }
 /* 点在哪块标签上(拾取用)。读的是 lodBuild 排好的字的位置与宽度,与画的是同一组数 */
 function lodAggAt(sx, sy) {
-  for (const a of lodNow.aggs) if (Math.abs(sx - a.x) <= a.lw / 2 + 3 && sy >= a.y - 15 && sy <= a.y + 3) return a;
+  for (const a of lodNow.aggs) {
+    if (a.block) { const hw = a.kind === 'rcluster' ? 19 : (a.kind === 'group' ? 23 : 19), hh = a.kind === 'rcluster' ? 15 : (a.kind === 'group' ? 16 : 12); if (Math.abs(sx - a.x) <= hw && Math.abs(sy - a.y) <= hh) return a; continue; }
+    if (Math.abs(sx - a.x) <= a.lw / 2 + 3 && sy >= a.y - 15 && sy <= a.y + 3) return a;
+  }
   return null;
 }
 function drawAggs() { // 2026-10-23 用户选 A:成员外围一圈圆角包络 + 包络上方一行「名字 · 构成」,不压船、不受阵型朝向影响
   for (const a of lodNow.aggs) {
+    if (a.block) { drawAggBlock(a); continue; }
     const col = a.side === 'blue' ? '#6fb7ff' : '#ff7b7b', sel = a.ships.some(m => selected.indexOf(m.id) >= 0);
     ctx.save(); lodHullPath(a.hull, LOD.PAD_PX);
     ctx.globalAlpha = .06; ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha = sel ? .9 : .55; ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.stroke();
     if (a.y < a.top - 6) { ctx.globalAlpha = .45; ctx.beginPath(); ctx.moveTo(a.x, a.top); ctx.lineTo(a.x, a.y + 1); ctx.stroke(); } // 字被挤上去了:细线连回包络
     ctx.globalAlpha = 1; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left'; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(5,7,12,.85)';
     const x0 = a.x - a.lw / 2;
-    ctx.font = LOD.F1; ctx.lineWidth = 3; ctx.strokeText(a.t1, x0, a.y); ctx.fillStyle = sel ? '#ffffff' : col; ctx.fillText(a.t1, x0, a.y);
-    ctx.font = LOD.F2; ctx.lineWidth = 2.5; ctx.strokeText(' · ' + a.t2, x0 + a.w1, a.y); ctx.globalAlpha = .85; ctx.fillStyle = col; ctx.fillText(' · ' + a.t2, x0 + a.w1, a.y);
+    const ol = a.side !== 'blue'; // 10-23 用户:蓝字不要黑底(不描深色边);红字照描
+    ctx.font = LOD.F1; ctx.lineWidth = 3; if (ol) ctx.strokeText(a.t1, x0, a.y); ctx.fillStyle = sel ? '#ffffff' : col; ctx.fillText(a.t1, x0, a.y);
+    ctx.font = LOD.F2; ctx.lineWidth = 2.5; if (ol) ctx.strokeText(' · ' + a.t2, x0 + a.w1, a.y); ctx.globalAlpha = .85; ctx.fillStyle = col; ctx.fillText(' · ' + a.t2, x0 + a.w1, a.y);
     ctx.restore();
   }
+}
+function drawAggBlock(a) { // 舰队层的块(10-23 前的 drawAggs 原样)
+    const col = a.side === 'blue' ? '#6fb7ff' : '#ff7b7b';
+    const sel = a.ships.some(m => selected.indexOf(m.id) >= 0);
+    const al = (a.alpha === undefined) ? 1 : a.alpha;   // SN8 框随成员的收拢度淡入
+    if (al <= 0.01) return;
+    if (a.ax !== a.x || a.ay !== a.y) {   // 被挪开过:留一根引线指回原位
+      ctx.save(); ctx.strokeStyle = col; ctx.globalAlpha = .5 * al; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(a.ax, a.ay); ctx.lineTo(a.x, a.y); ctx.stroke();
+      ctx.globalAlpha = .9 * al; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(a.ax, a.ay, 2, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    }
+    ctx.save(); ctx.globalAlpha = al; ctx.translate(a.x, a.y); ctx.lineWidth = sel ? 2 : 1.3; ctx.strokeStyle = col; ctx.fillStyle = 'rgba(8,12,18,.82)';
+    if (a.kind === 'rcluster') {         // 敌方:菱形 —— 与我方的方框一眼分得开
+      ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(19, 0); ctx.lineTo(0, 15); ctx.lineTo(-19, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+    } else {                             // 我方:矩形框;舰队组再套一层外框
+      ctx.beginPath(); ctx.rect(-19, -12, 38, 24); ctx.fill(); ctx.stroke();
+      if (a.kind === 'group') { ctx.globalAlpha = .55 * al; ctx.strokeRect(-23, -16, 46, 32); ctx.globalAlpha = al; } // 组(没编队的船)再套一层外框,和编队块分开
+    }
+    ctx.fillStyle = col; ctx.font = '11px Consolas'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(a.kind === 'fleet' ? (a.name || ('编队' + a.fl)) : ('组·' + a.ships.length), 0, /* 10-23 用户:敌方不知道是不是舰队,叫组 */ 0);
+    ctx.font = '10px Consolas'; ctx.textBaseline = 'top'; ctx.globalAlpha = .9 * al;
+    ctx.fillText(lodComp(a.ships, a.side === 'red'), 0, a.kind === 'group' ? 20 : 17);
+    ctx.restore();
 }
