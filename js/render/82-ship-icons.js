@@ -49,6 +49,9 @@ function hullZoomF(){return Math.max(HULL_ZOOM.MARK,Math.min(HULL_ZOOM.MAX,hullZ
 const SHIP_K=0.6*1.5; // 2026-10-08 用户:美术整体缩放 1.3 → 1.45 → 1.5。2026-10-05 用户:美术资源缩放尺度 = 1.3(同日先定 1.5 又改 1.3;船、尾焰、弹、命中特效、残骸、浮标都跟这个系数一起放大,武器对船的倍数不变)。原注: 舰标 / 舰形轮廓再缩到 0.6(同演示页 红外效果.html;拉远换记号不变、石头不缩),免得船比行星还显眼
 function shipZoomF(){return hullZoomF()*SHIP_K;} // 舰船(活船、残骸、尾焰、锁定圈、虚影)用的系数
 function shipMarkMode(){return hullZoomRaw()<HULL_ZOOM.MARK;}
+const VEL_SEE=20,VEL_FIX0=new WeakMap(); // 2026-10-23 用户(定位热源之后为什么会显示方向):对方的速度箭头要连续定位满 VEL_SEE 游戏秒才画 —— 一次定位只知道位置,方向要看前后几次定位才推得出。只改显示(防泄露只做显示层);中途断了(或在画面外没画到)超过 2 秒就重新计时
+function velSeen(s,view){if(adminMode||s.side===VIEW)return true;if(view!=='live'){VEL_FIX0.delete(s);return false;}
+  let r=VEL_FIX0.get(s);if(!r||simTime-r[1]>2||simTime<r[1]){r=[simTime,simTime];VEL_FIX0.set(s,r);}r[1]=simTime;return simTime-r[0]>=VEL_SEE;}
 const SHIP_LBL={on:false,list:[]}; // 2026-10-08 舰名延后统一摆(特写窗用,见 84 insetLabels):on 时 drawShip 只登记不画
 function lblPut(t,x,y,pri,c){if(!SHIP_LBL.on)return false;SHIP_LBL.list.push({t:t,x:x,y:y,pri:pri,c:c});return true;} // 2026-10-08 用户:小窗里的名字走同一个通道(残骸 / 石头 / 物体 / 浮标同舰名);on 时登记、返回 true,调用方就不自己画
 const SHIP_MARK_MAX=1.35; // 2026-10-11 用户:我方箭头跟着舰船大小走 —— 最小那型(护卫 / 巡游 T2)= 原来的大小(最小值),别的按船体尺寸比开平方略大(驱逐约 1.12、巡洋约 1.2、航母约 1.31),封顶这个倍数;敌方菱形照旧不分大小(不漏舰种)
@@ -214,8 +217,8 @@ function drawShip(s){
   const bodyColor=(s.side!==VIEW&&shipIdentHull(s)==='UNK')?'#a0aab9':(palSide(s.side)==='red'?'#ff6b6b':'#5aa7ff'); // 阵营色(2026-10-08 相对:我方蓝、对方红);本视角没认出的对方画灰 // 2026-09-27 用户:未知热源用灰色(--side-neutral),认出是敌舰才红
 
   // 速度矢量箭头(2D投影)
-  const vn=V.len(L.vel);
-  if(vn>1){
+  const vn=V.len(L.vel),vSeen=velSeen(s,view); // 计时不看它动不动(停着的时候也在连续定位)
+  if(vn>1&&vSeen){
     const vl=Math.min(44,vn*60*cam.zoom);
     const dx=L.vel[0]/vn, dy=L.vel[1]/vn;
     const x2=p[0]+dx*vl, y2=p[1]+dy*vl;

@@ -134,7 +134,8 @@ const COV = {
      应该当场丢掉(跟踪里叫 track deletion)。
      ⚠ 上限落在【模型】上,不是画的时候偷偷裁 —— 裁的话圈与判据就不是一个数了。
      2026-09-26 整体 x1/5,上文 0.2 光秒按 1/5 读(现 0.04 光秒 ≈ 1.2 万 km)。 */
-  AMAX: 0.04 * C_LS * CFG.scale,  // 2026-09-26 x1/5(单局地图):原 0.2 * C_LS
+  AMAX: 0.04 * C_LS * CFG.scale,  // 2026-09-26 x1/5(单局地图):原 0.2 * C_LS。2026-10-23 起定位门看面积:两轴几何平均 < AMAX(且长轴 < AMAX x FIX_LONG)
+  FIX_LONG: 8,       // 2026-10-23 定位门的长轴上限 = AMAX 的几倍(约 5.8 万 km):面积门处编队交叉的长轴实测 / 估算 1~4.3 万,单条方位的长轴是发现距离(十几万起),拦得住
 
   MAC: 400 * CFG.scale,           // 梯子标定尺:命中判定半径(weapons/52 的 MAC_HIT_R,必须同一个数);radarLook = 椭圆收进它的距离。2026-09-26 x1/5(单局地图):原 2000
   MSL: 6000 * CFG.scale,
@@ -304,7 +305,7 @@ function stepCov(t, c, obs, el, idOut, kin) { // TK2.6:可选的 idOut 记下这
   const r = covSolve(J); let q1 = r[0]; const q2 = r[1]; c.th = r[2]; c.n = n;
   if (q1 > rBound) q1 = Math.max(rBound, q2);           // "它总在我够得着的范围里"
   /* 定不定得出位置,看【真实】轴长 —— 钳位是为了别让画出来的椭圆涨到无穷,它不代表知识。 */
-  c.r1 = q1; c.r2 = q2; c.fix = q1 < COV.AMAX;
+  c.r1 = q1; c.r2 = q2; c.fix = Math.sqrt(q1 * q2) < COV.AMAX && q1 < COV.AMAX * COV.FIX_LONG; // 2026-10-23 用户:看面积(两轴几何平均 < AMAX,= 与原来那个圆同面积),不看长轴 —— 编队交叉出来的细长椭圆横向已经很准,原来只因为长边超了就不算定位;长轴另封 FIX_LONG 倍(单条方位的长轴 = 发现距离的界,不能靠面积混成定位)
   c.a1 = Math.min(COV.AMAX, q1); c.a2 = Math.min(COV.AMAX, q2);
   /* 身份【闩住】:认出来之后,只要这条航迹还在就一直认得;航迹彻底断了(不再握着)才忘掉。
      与 coasting 的语义一致 —— 丢了航迹就不知道重新出现的是不是同一艘。 */
