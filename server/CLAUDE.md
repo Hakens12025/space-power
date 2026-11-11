@@ -3,7 +3,8 @@
 ## 文件
 - `relay.mjs` 一个 Node 进程两件事,不依赖 npm 包:发游戏页面(静态文件、gzip、按修改时间回 304)+ `/ws` 的 websocket 中转(按频道转发给同频道的其他人,语义同 Supabase 广播;协议 `{s:'sub'|'unsub'|'pub', ch, m}` → `{ch, m}`)。大厅 / 房间 / 锁步的协议都在 js/net,这里不懂它们
 - `space-power.service` systemd 单元:专用低权限用户 `spacepower`、文件系统只读
-- `deploy.sh` 部署:把已提交的 HEAD 整库发到 `/opt/space-power/www`,`relay.mjs` / 单元变了才重启服务(重启会断开正在打的联机,1 秒后自动重连)
+- `deploy.sh` 部署:把已提交的 HEAD 整库发到 `/opt/space-power/www`,`relay.mjs` / 单元变了才重启服务(重启会断开正在打的联机,1 秒后自动重连);`www/d2/` 换原版时原样留着
+- `deploy.sh d2`:把 art-d2 分支已提交的版本发到 `/opt/space-power/www/d2/`(美术修改版,开场菜单「单人游戏 → 美术修改版」跳过去),不重启服务
 
 ## 规矩
 - 服务器是阿里云深圳 120.79.201.198(用户口头叫「华为服务器」,实际是阿里云),root 免密登录;对外端口 18802(安全组已放行)。

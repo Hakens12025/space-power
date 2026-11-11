@@ -4,7 +4,7 @@
    本地 file:// 照旧直接进靶场、不弹菜单(地址加 ?menu=1 在本地也打开)。菜单开着时模拟本来就停着(core/01 running 默认 false),键盘不落到游戏上。
    对局同步(锁步)是第 4 步:现在两人进同一个房间后只显示「已就位」,不开打。传输与房间协议在 98-net。
    ============================================================================ */
-const SPM={el:null,view:'',key:'',note:''};
+const SPM={el:null,view:'',key:'',note:'',solo:false}; // solo:点了「单人游戏」,旁边展开 原版 / 美术修改版(2026-11-11 用户)
 function spmOnline(){return /^https?:$/.test(location.protocol)||/[?&]menu=1(&|$)/.test(location.search);}
 function spmIsOpen(){return !!SPM.el&&SPM.el.style.display!=='none';}
 function spmEsc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);} // 名字 / 房间名来自网上,一律转义
@@ -18,7 +18,9 @@ window.addEventListener('keydown',spmKeyGate,true);window.addEventListener('keyu
 function spmShow(view){SPM.view=view;SPM.key='';SPM.el.style.display=view?'flex':'none';if(view)spmRender();}
 function spmRender(){const c=document.getElementById('spmCard'),v=SPM.view;if(!c)return;
   if(v==='menu')c.innerHTML='<div class="spm-title">SPACE POWER</div><div class="spm-sub">太空舰队 · 战争迷雾</div><div class="spm-col">'
-    +'<button class="btn spm-big" data-a="solo">单人游戏</button><button class="btn spm-big" data-a="multi">多人游戏</button></div>';
+    +'<button class="btn spm-big'+(SPM.solo?' on':'')+'" data-a="solo">单人游戏</button>'
+    +(SPM.solo?'<div class="spm-pick"><button class="btn" data-a="soloA">原版</button><button class="btn" data-a="soloB">美术修改版<small>命运2 画风 · 只能单人</small></button></div>':'')
+    +'<button class="btn spm-big" data-a="multi">多人游戏</button></div>';
   else if(v==='lobby'){const me=NET.me||{name:netName()};
     c.innerHTML='<div class="spm-hd"><span>多人游戏 · 大厅</span><button class="btn" data-a="back">返回</button></div>'
       +'<div class="spm-row"><span class="spm-k">昵称</span><input id="spmName" maxlength="16" value="'+spmEsc(me.name)+'"></div>'
@@ -41,7 +43,9 @@ function spmList(L){if(SPM.view!=='lobby')return;const el=document.getElementByI
         +'<button class="btn'+(can?'':' is-dis')+'" data-a="join" data-v="'+spmEsc(r.id)+'"'+(can?'':' disabled')+'>加入</button></div>';}).join('')
     :'<div class="spm-empty">还没有房间,点「创建游戏」开一个</div>';}
 function spmAct(a,v){
-  if(a==='solo'){spmShow('');return;} // 单人游戏 = 现在的页面(靶场,空格开始)
+  if(a==='solo'){SPM.solo=!SPM.solo;spmRender();return;} // 单人游戏:先展开 原版 / 美术修改版
+  if(a==='soloA'){spmShow('');return;} // 原版 = 现在的页面(靶场,空格开始)
+  if(a==='soloB'){location.href='d2/?solo=1';return;} // 美术修改版 = 服务器 d2/ 下的 art-d2 分支(server/deploy.sh d2 发上去)
   if(a==='multi'){if(location.protocol==='https:'&&NET_CFG.SERVER&&!/[?&]sb=1/.test(location.search)){location.href=NET_CFG.SERVER;return;} // https 页面连不了服务器的 ws:跳到服务器发的那份页面(地址带 sb=1 才留在这里走 Supabase)
     SPM.note='';netStart(spmList,()=>{if(SPM.view==='lobby')spmRender();});NET.onRoom=spmRoomEv;spmShow('lobby');return;}
   if(a==='back'){netLeave();spmShow('menu');return;}

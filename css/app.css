@@ -807,6 +807,10 @@ body{background:var(--void);color:var(--txt);font-family:var(--ff-ui);font-size:
 #spMenu .spm-sub{color:var(--txt-dim);text-align:center;font-size:var(--fs-body);letter-spacing:var(--ls-label);margin-top:var(--sp-1)}
 #spMenu .spm-col{display:flex;flex-direction:column;gap:var(--sp-3);margin:var(--sp-6) auto 0;width:min(240px,100%)}
 #spMenu .spm-big{font-size:var(--fs-title);padding:var(--sp-3) var(--sp-5);color:var(--txt)}
+#spMenu .spm-big.on{border-color:var(--line-acc);color:var(--txt-hi)}
+#spMenu .spm-pick{display:flex;gap:var(--sp-2)}
+#spMenu .spm-pick .btn{flex:1;padding:var(--sp-2) var(--sp-3);font-size:var(--fs-read);color:var(--txt)}
+#spMenu .spm-pick small{display:block;font-size:var(--fs-label);color:var(--txt-dim);margin-top:2px}
 #spMenu .spm-hd{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);font-size:var(--fs-title);color:var(--txt-hi)}
 #spMenu .spm-row{display:flex;align-items:center;gap:var(--sp-3);margin-top:var(--sp-4)}
 #spMenu .spm-k{color:var(--txt-dim);font-size:var(--fs-label);letter-spacing:var(--ls-label);white-space:nowrap}
