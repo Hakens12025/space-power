@@ -45,7 +45,7 @@ function spmList(L){if(SPM.view!=='lobby')return;const el=document.getElementByI
 function spmAct(a,v){
   if(a==='solo'){SPM.solo=!SPM.solo;spmRender();return;} // 单人游戏:先展开 原版 / 美术修改版
   if(a==='soloA'){spmShow('');return;} // 原版 = 现在的页面(靶场,空格开始)
-  if(a==='soloB'){location.href='d2/?solo=1';return;} // 美术修改版 = 服务器 d2/ 下的 art-d2 分支(server/deploy.sh d2 发上去)
+  if(a==='soloB'){location.href=(location.protocol==='https:'&&NET_CFG.SERVER?NET_CFG.SERVER:'')+'d2/?solo=1';return;} // 美术修改版 = 服务器 d2/ 下的 art-d2 分支(server/deploy.sh d2 发上去);GitHub Pages(https)上没有 d2/,跳到服务器那份(同「多人游戏」)
   if(a==='multi'){if(location.protocol==='https:'&&NET_CFG.SERVER&&!/[?&]sb=1/.test(location.search)){location.href=NET_CFG.SERVER;return;} // https 页面连不了服务器的 ws:跳到服务器发的那份页面(地址带 sb=1 才留在这里走 Supabase)
     SPM.note='';netStart(spmList,()=>{if(SPM.view==='lobby')spmRender();});NET.onRoom=spmRoomEv;spmShow('lobby');return;}
   if(a==='back'){netLeave();spmShow('menu');return;}
