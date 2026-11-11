@@ -19,7 +19,7 @@ function spmShow(view){SPM.view=view;SPM.key='';SPM.el.style.display=view?'flex'
 function spmRender(){const c=document.getElementById('spmCard'),v=SPM.view;if(!c)return;
   if(v==='menu')c.innerHTML='<div class="spm-title">SPACE POWER</div><div class="spm-sub">太空舰队 · 战争迷雾</div><div class="spm-col">'
     +'<button class="btn spm-big'+(SPM.solo?' on':'')+'" data-a="solo">单人游戏</button>'
-    +(SPM.solo?'<div class="spm-pick"><button class="btn" data-a="soloA">原版</button><button class="btn" data-a="soloB">美术修改版<small>命运2 画风 · 只能单人</small></button></div>':'')
+    +(SPM.solo?'<div class="spm-pick"><button class="btn" data-a="soloA">原版</button><button class="btn" data-a="soloB">美术修改版</button></div>':'')
     +'<button class="btn spm-big" data-a="multi">多人游戏</button></div>';
   else if(v==='lobby'){const me=NET.me||{name:netName()};
     c.innerHTML='<div class="spm-hd"><span>多人游戏 · 大厅</span><button class="btn" data-a="back">返回</button></div>'
