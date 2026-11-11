@@ -18,7 +18,7 @@ window.addEventListener('keydown',spmKeyGate,true);window.addEventListener('keyu
 function spmShow(view){SPM.view=view;SPM.key='';SPM.el.style.display=view?'flex':'none';if(view)spmRender();}
 function spmRender(){const c=document.getElementById('spmCard'),v=SPM.view;if(!c)return;
   if(v==='menu')c.innerHTML='<div class="spm-title">SPACE POWER</div><div class="spm-sub">太空舰队 · 战争迷雾</div><div class="spm-col">'
-    +'<button class="btn spm-big" data-a="solo">单人游戏</button><button class="btn spm-big" data-a="multi">多人游戏</button></div>';
+    +'<button class="btn spm-big" data-a="solo">单人游戏</button></div>'; // 美术修改版只能单人(2026-11-11 用户:联机走原版)
   else if(v==='lobby'){const me=NET.me||{name:netName()};
     c.innerHTML='<div class="spm-hd"><span>多人游戏 · 大厅</span><button class="btn" data-a="back">返回</button></div>'
       +'<div class="spm-row"><span class="spm-k">昵称</span><input id="spmName" maxlength="16" value="'+spmEsc(me.name)+'"></div>'
@@ -56,4 +56,4 @@ function spmRoomEv(ev){
   if(ev.t==='joined'||ev.t==='peer'||ev.t==='left'){SPM.note='';spmShow('room');return;} // 第 4 步:peer 到齐(房主收 peer、加入方收 joined)时在这里开局
   if(ev.t==='closed'){SPM.note='房主离开了,房间已关闭';spmShow('lobby');return;}
   if(ev.t==='denied'){SPM.note=({full:'房间已满',ver:'版本不同:对方的页面和你的不是同一版,两边都刷新到最新再试',timeout:'房主没有回应'})[ev.why]||'加入失败';spmShow('lobby');}}
-if(spmOnline()){spmBuild();spmShow('menu');}
+if(spmOnline()){spmBuild();spmShow(/[?&]solo=1(&|$)/.test(location.search)?'':'menu');} // 原版菜单「单人游戏 → 美术修改版」带 ?solo=1 跳来:直接进单人

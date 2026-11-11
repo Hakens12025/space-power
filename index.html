@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Space Power · 骨架</title>
-<link rel="stylesheet" href="css/app.css?v=20261021x3">
+<link rel="stylesheet" href="css/app.css?v=20261111d2">
 </head>
 <body>
 <canvas id="cv"></canvas>
@@ -34,6 +34,7 @@
   <span class="hudTag gm" id="tagGM" title="全知开着:看到的是真值,不是我方感知(F8 关)">全知</span>
   <span class="hudTag rv" id="tagRV" title="画面从红方的感知看(选中与下令仍是蓝方)">红方视角</span>
   <button class="hbtn" id="btnTools" title="靶场工具:全知 / 视角 / 靶场参数 / 加船">靶场工具<i class="dd-car">▾</i></button>
+  <button class="hbtn" id="btnCdx" title="图鉴 · 阵营徽记与战报勋章(Esc 关闭)">图鉴</button>
   <button class="hbtn" id="btnTut" title="教程 · 指挥官手册(Esc 关闭)">?</button>
   <button class="hbtn primary" id="btnMatch" title="进入对局">开始对局</button>
 </div>
@@ -109,6 +110,17 @@
     <div class="tut-body" id="tutBody"></div>
   </div>
 </div>
+<!-- 图鉴模态(2026-11-11 用户,顶栏 #btnCdx 唤出):头部与正文借教程的 .tut-hd / .tut-body;内容由 render/89-codex.js 第一次打开时画进 #cdxBody -->
+<div id="cdxOverlay">
+  <div id="cdxPanel">
+    <div class="tut-hd">
+      <h2>图鉴</h2>
+      <span class="tut-hd-hint">阵营徽记与战报勋章 · Esc / 点遮罩 关闭 · 打开期间模拟暂停</span>
+      <button class="hbtn" id="cdxCloseBtn" title="关闭图鉴(Esc)">✕</button>
+    </div>
+    <div class="tut-body" id="cdxBody"></div>
+  </div>
+</div>
 
 <!-- FM4 舰队编组控制页(编队菜单的「编组控制」钮唤出)。几何抄 #tutOverlay:外层 flex 居中 + 卡片定高 + 内层独立滚动。
      内容由 render/89-fmpage.js 的 fmPageRender() 写进 #fpBody,
@@ -173,7 +185,7 @@
 <script src="js/command/68-cmd.js?v=20261012ic"></script><!-- 2026-10-08 联机第 3 步:操作命令层(界面发出的、会改模拟的操作一律变成可序列化的命令;单人立刻执行,联机交给锁步)-->
 <script src="js/command/69-entities.js?v=20261021x2"></script><!-- 2026-10-08 实体登记表:点选 / 双击跟随 / 靶场拖动 / 右栏只看信息 / 选中写入口 selSet 的统一入口;顶层只有声明 -->
 <script src="js/command/70-input.js?v=20261012ic"></script>
-<script src="js/command/71-keys.js?v=20261008wc"></script>
+<script src="js/command/71-keys.js?v=20261111d2"></script>
 <script src="js/command/74-targeting.js?v=20261021s1"></script><!-- RF5 悬停准星/吸附状态 xh + #xhTip 信息卡。按目录编号序归位在 command 块末尾;顶层只有 let/const/function,零顶层执行,跨文件引用全在运行期解析 -->
 <script src="js/render/80-viewtier.js?v=20261008me"></script><!-- SN6 三级星图:层界与缩放上下限由距离梯子推出;与 80-camera 共用编号(先例:85-settings/85-tutorial) -->
 <script src="js/render/80-camera.js?v=20260923"></script>
@@ -201,6 +213,7 @@
 <script src="js/render/88-selpanel.js?v=20261021x2"></script>
 <script src="js/render/88-pip.js?v=20261021v7"></script><!-- 2026-09-28 右栏小窗;运行期才读各层函数 -->
 <script src="js/render/89-radial.js?v=20261011mw"></script>
+<script src="js/render/89-codex.js?v=20261111d2"></script><!-- 2026-11-11 图鉴(徽记与勋章,画法抄 demos/ui 两页) -->
 <script src="js/render/89-fmpage.js?v=20261011rf"></script><!-- FM4 舰队编组控制页。与 89-radial 共用编号 89(先例:render/85-settings 与 85-tutorial)。顶层有 on(...) 委托挂载与两条 window 监听,故必须晚于 core/00;其余跨文件引用全在运行期解析 --><!-- RF5 Phase C 目标轮盘的几何与渲染:半径/角度/容量常量与 drawRadial/radialHit/radialInBand/radPages 全在这一份。必须晚于 88-selpanel(扇区射程读数走它的 KIND_INFO);顶层只有 const/let/function,零顶层执行 -->
 <script src="js/scenario/90-envs.js?v=20261017zc"></script>
 <script src="js/scenario/91-init.js?v=20261012ic"></script>
@@ -208,7 +221,7 @@
 <script src="js/scenario/96-spawn.js?v=20261020u2"></script><!-- FM7 测试用加船小条。放在 95 之后、core/99 之前:它顶层调 on(),而 on() 定义在 core/00 -->
 <script src="js/scenario/97-match.js?v=20261020u2"></script><!-- MT1 对局入口 / 红方摆位 / 结果卡片。顶层调 on(),须在 core/00 之后;matchPlaceRed 被 91-init 运行期调用 -->
 <script src="js/net/98-net.js?v=20261008jp"></script><!-- 2026-10-08 联机第 1 步:传输层(Supabase 广播 / 本机标签页 BroadcastChannel)与房间协议 -->
-<script src="js/net/98-lobby.js?v=20261008jp"></script><!-- 2026-10-08 开场菜单与大厅(在线版进来先出;本地 file:// 不出,?menu=1 可开)-->
+<script src="js/net/98-lobby.js?v=20261111d2"></script><!-- 2026-10-08 开场菜单与大厅(在线版进来先出;本地 file:// 不出,?menu=1 可开)-->
 <script src="js/net/98-lock.js?v=20261020u2"></script><!-- 2026-10-08 联机第 4 步:锁步(主机定节拍、命令排拍、校验和对账)-->
 <script src="js/core/99-main.js?v=20261008lk"></script>
 </body>

@@ -144,6 +144,7 @@ window.addEventListener('keydown',e=>{
   // 同一条路径上 C 开测距、G 下倒车令、Backspace 删命令点、F8 切 GM 全都发生在看不见的地方。
   // 排在两条 Esc 分岔【之后】:Esc 在上面已经处理完并 return,所以这里直接全拦,不必留白名单。
   if(typeof tutIsOpen==='function'&&tutIsOpen())return;
+  if(typeof cdxIsOpen==='function'&&cdxIsOpen()){if(e.key==='Escape'){e.preventDefault();cdxToggle(false);}return;} // 图鉴(render/89-codex):Esc 关,其余键全拦,同教程
   /* FM4 舰队编组控制页:Esc 优先级插在教程【之后】——两者不会同时开,顺序只是把链接下去;
      同样必须早于下面的 ACTIONS 匹配。
      全拦一条同教程:不拦的话每个键都穿过遮罩打在战场上——尤其本页带输入控件(select),
